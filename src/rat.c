@@ -1191,6 +1191,17 @@ static bool rat_has_algebraic_atom(const Expr* e) {
  * extension path — when no algebraic generator is present, the fraction is
  * already reduced (g = 1), or an exact division does not apply. */
 static Expr* flint_cancel_fraction(Expr* arg) {
+    /* Genuine-algebraic parametric tower Q(params)(alpha_1..alpha_r): reduce the
+     * whole expression modulo the generators' minimal-polynomial ideal (cube
+     * roots / polynomial radicands / roots of unity — the regime the sqrt-only
+     * and constant-radicand paths reject). Returns the integer 0 exactly when
+     * the expression is identically zero in the field (the Goursat
+     * D[Integrate[f],x]-f identity), else NULL, so this can only ADD the ability
+     * to reach 0 rigorously — never worsen an existing reduction. */
+    {
+        Expr* rz = flint_algebraic_field_normalize(arg);
+        if (rz) return rz;
+    }
     /* Parametric radical field Q(t..)(sqrt k): normalise the whole rational
      * function via fmpz_mpoly_q. This covers a Plus of fractions (a sum whose
      * Numerator/Denominator does not combine, so the extract-num/den path below
@@ -1199,6 +1210,18 @@ static Expr* flint_cancel_fraction(Expr* arg) {
     {
         Expr* fn = flint_parametric_field_normalize(arg);
         if (fn) return fn;
+    }
+    /* General radical tower (cube and higher roots of a symbol/polynomial):
+     * combine a Plus of radical fractions over a common denominator with the
+     * radicals treated as free kernels (WL-faithful — keeps radicals in the
+     * denominator, no rationalisation). Gated to Plus so it never pre-empts the
+     * relation-aware single-fraction GCD path below (which does the extra,
+     * relation-dependent cancellations like (x^3-k)/(x-k^(1/3))). */
+    if (arg->type == EXPR_FUNCTION && arg->data.function.head &&
+        arg->data.function.head->type == EXPR_SYMBOL &&
+        arg->data.function.head->data.symbol == SYM_Plus) {
+        Expr* ft = flint_algebraic_field_together(arg);
+        if (ft) return ft;
     }
     Expr* num; Expr* den;
     extract_num_den(arg, &num, &den);

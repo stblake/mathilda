@@ -287,6 +287,7 @@ set(COMMON_SRC
     ../src/poly/subresultants.c
     ../src/poly/subresultantpoly.c
     ../src/rat.c
+    ../src/rootreduce.c
     ../src/poly/facpoly.c
     ../src/parfrac.c
     ../src/contfrac.c
@@ -492,6 +493,10 @@ add_executable(zero_test_tests test_zero_test.c ${COMMON_SRC})
 target_link_libraries(zero_test_tests m)
 target_include_directories(zero_test_tests PRIVATE ../src)
 add_test(NAME zero_test_tests COMMAND zero_test_tests)
+
+add_executable(rootreduce_tests test_rootreduce.c ${COMMON_SRC})
+target_include_directories(rootreduce_tests PRIVATE ../src)
+add_test(NAME rootreduce_tests COMMAND rootreduce_tests)
 
 add_executable(flint_bridge_tests test_flint_bridge.c ${COMMON_SRC})
 target_include_directories(flint_bridge_tests PRIVATE ../src)

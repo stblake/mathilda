@@ -266,6 +266,86 @@ static void test_bail_out_of_scope(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Genuine-algebraic parametric tower reduction                       */
+/*  (flint_algebraic_field_normalize: cube roots / polynomial          */
+/*   radicands / roots of unity over Q(params))                        */
+/* ------------------------------------------------------------------ */
+
+/* Direct path: the reducer must return the integer 0 iff `input` is
+ * identically zero in the algebraic tower, else NULL (bail to classical). */
+static void check_ga_zero(const char* input) {
+    Expr* e = eval_str(input);
+    Expr* r = flint_algebraic_field_normalize(e);
+    if (r == NULL || !(r->type == EXPR_INTEGER && r->data.integer == 0)) {
+        char* s = r ? expr_to_string(r) : NULL;
+        fprintf(stderr, "FAIL: flint_algebraic_field_normalize(%s) expected 0, "
+                        "got %s\n", input, r ? s : "NULL");
+        if (s) free(s);
+        exit(1);
+    }
+    expr_free(r);
+    expr_free(e);
+}
+
+static void check_ga_null(const char* input) {
+    Expr* e = eval_str(input);
+    Expr* r = flint_algebraic_field_normalize(e);
+    if (r != NULL) {
+        char* s = expr_to_string(r);
+        fprintf(stderr, "FAIL: flint_algebraic_field_normalize(%s) expected NULL "
+                        "(non-zero / out of scope), got %s\n", input, s);
+        free(s);
+        exit(1);
+    }
+    expr_free(e);
+}
+
+static void test_algebraic_field_normalize(void) {
+    /* Zeros that SURVIVE ordinary evaluation (the evaluator does not expand
+     * inside a radical, so these stay as two-term Plus expressions) and are
+     * caught only by the ideal reduction after Expand-canonicalising the
+     * radicand -- the cube-root relation alpha^3 = radicand at work. */
+    check_ga_zero("(x*(1-x)*(1-k*x))^(1/3) - (x - x^2 - k*x^2 + k*x^3)^(1/3)");
+    check_ga_zero("(x*(-1+x)*(-1+k*x))^(1/3) - (x*(1-x)*(1-k*x))^(1/3)");
+    check_ga_zero("(x*(1-x))^(1/3) - (x - x^2)^(1/3)");
+
+    /* Non-zero: must bail (NULL), never a spurious 0. */
+    check_ga_null("(x*(1-x)*(1-k*x))^(1/3) + k^(1/3)");
+    check_ga_null("k^(1/3) + (-1)^(1/3)*k^(1/3)");       /* (1+zeta) k^(1/3) != 0 */
+    check_ga_null("1 + (x*(1-x)*(1-k*x))^(1/3)");
+    check_ga_null("(x*(1-x))^(1/3) - (x + x^2)^(1/3)");  /* different radicand */
+    /* Out of scope / handled elsewhere: no genuine (symbol) radicand present,
+     * so the reducer defers to the classical number-field / cyclotomic path. */
+    check_ga_null("Sqrt[2] + x");                        /* pure number field */
+    check_ga_null("(-1)^(2/3) - (-1)^(1/3)");            /* roots of unity only */
+    check_ga_null("x^2 - 1");                            /* no radical at all */
+}
+
+/* End-to-end: the reported Goursat identity D[Integrate[f],x] - f reduces to 0
+ * through Together / Cancel / Simplify (rigorously, no numeric zero oracle). */
+static void test_goursat_identity_reduces(void) {
+    /* Unique symbol names so the global assignments do not collide with other
+     * tests (e.g. a bare `d` used later as a matrix entry). */
+    const char* setup =
+        "gaF = Integrate[(2 - (1 + k) x)/((1 - (1 + k) x) (x (1 - x) (1 - k x))^(1/3)), "
+        "               x, Method -> \"GoursatAlgebraic\"]; "
+        "gaf = (2 - (1 + k) x)/((1 - (1 + k) x) (x (1 - x) (1 - k x))^(1/3)); "
+        "gad = D[gaF, x] - gaf;";
+    Expr* s = eval_str(setup); expr_free(s);
+    check_builtin("Together[gad]", "0");
+    check_builtin("Cancel[gad]",   "0");
+    check_builtin("Simplify[gad]", "0");
+    /* And a perturbed (non-zero) variant must NOT collapse to 0. */
+    Expr* p = eval_str("Simplify[D[gaF, x] - 2 gaf]");
+    char* sp = expr_to_string(p);
+    if (strcmp(sp, "0") == 0) {
+        fprintf(stderr, "FAIL: Simplify[D[F,x]-2 f] wrongly reduced to 0\n");
+        exit(1);
+    }
+    free(sp); expr_free(p);
+}
+
+/* ------------------------------------------------------------------ */
 /*  Number field Q(sqrt d) (M2)                                        */
 /* ------------------------------------------------------------------ */
 
@@ -864,6 +944,8 @@ int main(void) {
     TEST(test_zero_and_identity);
     TEST(test_determinism);
     TEST(test_bail_out_of_scope);
+    TEST(test_algebraic_field_normalize);
+    TEST(test_goursat_identity_reduces);
     TEST(test_numberfield);
     TEST(test_cyclotomic);
     TEST(test_tower);

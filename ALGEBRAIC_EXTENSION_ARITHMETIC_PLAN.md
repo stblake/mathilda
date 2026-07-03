@@ -41,9 +41,25 @@ Cancel verified via `PossibleZeroQ`). Fixed a `flint_cancel_fraction` sign-unit
 artifact (numeric divided-out denominator now distributed). Tests: `test_parametric`
 in `test_flint_bridge.c`; regressions green; valgrind-clean.
 
-**Remaining:** the higher-degree / constant-algebraic parametric regime
-(`Q(t)(α)` with `α` a genuine algebraic number, needing the `fq_nmod` outer
-loop); number-field **factoring** over a tower (FLINT's `gr` layer cannot —
+✅ **Genuine-algebraic parametric tower — zero-reduction increment done**
+(2026-07-04). `flint_algebraic_field_normalize` (`src/poly/flint_bridge.c`) handles
+the higher-degree / polynomial-radicand parametric regime `Q(params)(α_1..α_r)`
+(cube roots, polynomial/symbol radicands, roots of unity — e.g. the Goursat tower
+`Q(x,k)(∛(x(1-x)(1-kx)), ∛k, (-1)^(1/3))`) by modelling `K = Q[params,gens]/I`
+with the monic minimal polynomials as a Gröbner basis (generators = leading LEX
+vars → pairwise-coprime leading monomials) and reducing via
+`fmpz_mpoly_divrem_ideal`. Wired into `flint_cancel_fraction` (Cancel/Together,
+hence Simplify): it returns `0` exactly when the input is identically zero in `K`
+(numerator reduces to 0 mod `I`, denominator not) — a **rigorous** field zero test
+with **no numeric oracle** and no primes/CRT, else `NULL` (classical fallback). So
+`Simplify[D[Integrate[f],x] - f] = 0` for the cube-root Goursat family, while
+`Sqrt[x^2]-x`, `(...)^(1/3)+k^(1/3)`, and perturbed variants stay put. This is a
+zero-reduction / Together increment, not full Cancel-to-lowest-terms.
+
+**Remaining:** full Cancel over the genuine-algebraic tower (rationalise the
+denominator: field inversion via tower conjugates / xgcd, or the `fq_nmod` outer
+loop with CRT — needed for the non-zero reduced form, not the zero test);
+number-field **factoring** over a tower (FLINT's `gr` layer cannot —
 `gr_poly_roots` → `GR_UNABLE`; Trager stays in `qafactor.c`); then re-measure the
 full Goursat `Cancel`/`Integrate` end-to-end (M7 acceptance).
 **Motivation:** the two classic Goursat named integrals (and a broad class of

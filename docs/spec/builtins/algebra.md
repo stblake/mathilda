@@ -114,6 +114,53 @@ Out[5]= -y^3 / (-1 + y)
 
 In[6]:= Together[1/(x - Sqrt[2]) + 1/(x + Sqrt[2]), Extension -> Sqrt[2]]
 Out[6]= (2 x)/(-2 + x^2)
+
+In[7]:= Together[1/(x - k^(1/3)) + 1/(x + k^(1/3))]
+Out[7]= (2 x)/(-k^(2/3) + x^2)
+```
+
+- **Cube-and-higher-root towers** (2026-07-04): a `Plus` of fractions over
+  radicals `Power[base, p/q]` of any index `q ≥ 2` whose radicand carries a free
+  symbol (e.g. `k^(1/3)`) is combined over a common denominator via FLINT
+  (`flint_algebraic_field_together`), with the radicals treated as free kernels —
+  WL-faithful: radicals stay in the denominator, no rationalisation. This
+  generalises the sqrt-only combiner to any index. The same path serves `Cancel`;
+  single-fraction relation-dependent cancellations (`(x^3-k)/(x-k^(1/3))`) still
+  go through the relation-aware GCD path.
+
+## RootReduce
+
+Rewrites an expression over an algebraic tower `Q(params)(radicals)` in canonical
+form, **rationalising** radical and root-of-unity denominators (clearing them of
+every radical). Unlike `Cancel`/`Together` (which keep radicals in the
+denominator), `RootReduce` produces the norm-denominator canonical representative.
+- `RootReduce[expr]`
+
+**Features**:
+- `Protected`, `Listable`.
+- Rigorous FLINT field arithmetic (2026-07-04, `flint_algebraic_field_canonical`):
+  the tower is a finite-dimensional `Q(params)`-vector space, multiplication by
+  the denominator is a linear map (products reduced modulo the generators'
+  minimal-polynomial ideal via `fmpz_mpoly_divrem_ideal`), and inverting it with
+  a solve over `Q(params)` (`gr_mat` over `fmpz_mpoly_q`) rationalises the
+  denominator to `Norm_{K/Q(params)}(D)`. No numeric zero oracle; complete when
+  the minimal polynomials are irreducible.
+- Handles radicals of any index (cube roots and higher), polynomial/symbol
+  radicands, roots of unity, and constant radicands (number fields). Leaves an
+  expression with no algebraic generator unchanged. Idempotent.
+
+```mathematica
+In[1]:= RootReduce[1/(1 + k^(1/3))]
+Out[1]= (1 - k^(1/3) + k^(2/3)) / (1 + k)
+
+In[2]:= RootReduce[1/(a + b k^(1/3))]
+Out[2]= (a^2 - a b k^(1/3) + b^2 k^(2/3)) / (a^3 + b^3 k)
+
+In[3]:= RootReduce[1/(1 + Sqrt[2])]
+Out[3]= -1 + Sqrt[2]
+
+In[4]:= RootReduce[1/(1 + 2^(1/3) + 2^(2/3))]
+Out[4]= -1 + 2^(1/3)
 ```
 
 ## Apart
