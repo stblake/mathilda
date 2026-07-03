@@ -520,6 +520,7 @@ void core_init(void) {
     airyai_init();
     airybi_init();
     bessel_init();
+    void besseljzero_init(void);    besseljzero_init();
     fibonacci_init();
     lucas_init();
     void hyperfactorial_init(void); hyperfactorial_init();

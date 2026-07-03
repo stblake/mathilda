@@ -169,10 +169,13 @@ static Expr* dispatch_def(SumMethod method, Expr* f, Expr* var,
             if (!r) r = try_def("Sum`Gosper", f, var, imin, imax);
             if (!r) r = try_def("Sum`Alternating", f, var, imin, imax);
             if (!r) r = try_def("Sum`Trigonometric", f, var, imin, imax);
+            if (!r) r = try_def("Sum`Dirichlet", f, var, imin, imax);
+            if (!r) r = try_def("Sum`ZetaSeries", f, var, imin, imax);
             if (!r) r = try_def("Sum`Rational", f, var, imin, imax);
             if (!r) r = try_def("Sum`LogZeta", f, var, imin, imax);
             if (!r) r = try_def("Sum`LogRational", f, var, imin, imax);
             if (!r) r = try_def("Sum`Euler", f, var, imin, imax);
+            if (!r) r = try_def("Sum`EulerNonlinear", f, var, imin, imax);
             if (!r) r = try_def("Sum`Hypergeometric", f, var, imin, imax);
             return r;
         }
@@ -448,10 +451,16 @@ void sum_init(void) {
     sum_rational_init();
     void sum_euler_init(void);
     sum_euler_init();
+    void sum_euler_nonlinear_init(void);
+    sum_euler_nonlinear_init();
     void sum_alternating_init(void);
     sum_alternating_init();
     void sum_trigonometric_init(void);
     sum_trigonometric_init();
+    void sum_dirichlet_init(void);
+    sum_dirichlet_init();
+    void sum_zetaseries_init(void);
+    sum_zetaseries_init();
     void sum_logzeta_init(void);
     sum_logzeta_init();
     void sum_logrational_init(void);

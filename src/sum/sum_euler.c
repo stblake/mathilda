@@ -29,6 +29,7 @@
  */
 
 #include "sum_internal.h"
+#include "sum_euler_internal.h"
 #include "symtab.h"
 #include "eval.h"
 #include "expr.h"
@@ -39,18 +40,18 @@
 #include <stdio.h>
 
 /* Zeta[n] as an unevaluated node. */
-static Expr* eu_zeta(int n) {
+Expr* eu_zeta(int n) {
     return expr_new_function(expr_new_symbol(SYM_Zeta), (Expr*[]){ sum_int(n) }, 1);
 }
 
 /* 1/2 as Power[2, -1]. */
-static Expr* eu_half(void) {
+Expr* eu_half(void) {
     return expr_new_function(expr_new_symbol(SYM_Power),
                (Expr*[]){ sum_int(2), sum_int(-1) }, 2);
 }
 
 /* Euler's formula for Sum_{k>=1} H_k / k^q  (q >= 2), returned unevaluated. */
-static Expr* euler_order1(int q) {
+Expr* euler_order1(int q) {
     /* term1 = (q+2)/2 * Zeta[q+1] */
     Expr* coeff = expr_new_function(expr_new_symbol(SYM_Times),
         (Expr*[]){ sum_int(q + 2), eu_half() }, 2);
@@ -82,14 +83,14 @@ static Expr* euler_diag(int p) {
 
 static bool is_harmonic_factor(Expr* g, Expr* var, int* p_out);   /* defined below */
 
-static Expr* eu_times2(Expr* a, Expr* b) {
+Expr* eu_times2(Expr* a, Expr* b) {
     return expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ a, b }, 2);
 }
-static Expr* eu_plus2(Expr* a, Expr* b) {
+Expr* eu_plus2(Expr* a, Expr* b) {
     return expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ a, b }, 2);
 }
 /* Exact integer binomial C(n, k) (n, k small: weights <= ~15). */
-static int64_t eu_binom(int n, int k) {
+int64_t eu_binom(int n, int k) {
     if (k < 0 || k > n) return 0;
     if (k > n - k) k = n - k;
     int64_t r = 1;
@@ -102,7 +103,7 @@ static int64_t eu_binom(int n, int k) {
  *   Z(s,t) = 1/2 ((-1)^s C(w,s) - 1) Zeta[w]
  *          + Sum_{k=1}^{(w-3)/2} [C(w-2k-1,s-1)+C(w-2k-1,t-1)] Zeta[2k] Zeta[w-2k].
  */
-static Expr* euler_Z_odd(int s, int t) {
+Expr* euler_Z_odd(int s, int t) {
     int w = s + t;
     int64_t sign = (s % 2 == 0) ? 1 : -1;
     int64_t Anum = sign * eu_binom(w, s) - 1;         /* A = Anum/2 */

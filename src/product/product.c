@@ -173,6 +173,7 @@ static Expr* dispatch_def(ProdMethod method, Expr* f, Expr* var,
             if (!r) r = try_def("Product`Viete",     f, var, imin, imax);
             if (!r) r = try_def("Product`EulerPrime", f, var, imin, imax);
             if (!r) r = try_def("Product`RationalInfinite", f, var, imin, imax);
+            if (!r) r = try_def("Product`BesselZero", f, var, imin, imax);
             if (!r) r = try_def("Product`Infinite",  f, var, imin, imax);
             if (!r) r = try_def("Product`LogSum",    f, var, imin, imax);
             return r;
@@ -464,6 +465,8 @@ void product_init(void) {
     product_eulerprime_init();
     void product_rational_infinite_init(void);
     product_rational_infinite_init();
+    void product_besselzero_init(void);
+    product_besselzero_init();
     void product_logsum_init(void);
     product_logsum_init();
 }

@@ -59,9 +59,12 @@ Expr* builtin_sum_logzeta(Expr* res) {
                      (Expr*[]){ expr_new_integer(-1), expr_copy(var), dlogh }, 3); /* adopts dlogh */
     Expr* s = sum_eval("Simplify", (Expr*[]){ smul }, 1);          /* adopts smul */
 
-    /* Only s == 2 has an elementary (Glaisher) closed form. */
-    bool is_two = (s->type == EXPR_INTEGER && s->data.integer == 2);
-    if (!is_two || !sum_free_of(s, var)) { expr_free(s); expr_free(h); return NULL; }
+    /* Accept any integer s >= 2 (convergent).  s == 2 gets an elementary
+     * Glaisher closed form; higher s emit the inert -c Zeta'[s]. */
+    bool s_ok = (s->type == EXPR_INTEGER && s->data.integer >= 2 &&
+                 sum_free_of(s, var));
+    if (!s_ok) { expr_free(s); expr_free(h); return NULL; }
+    int64_t sval = s->data.integer;
 
     /* c = Simplify[h * var^s]  (the constant coefficient, must be free of var). */
     Expr* vs = expr_new_function(expr_new_symbol(SYM_Power),
@@ -69,37 +72,52 @@ Expr* builtin_sum_logzeta(Expr* res) {
     Expr* hc = expr_new_function(expr_new_symbol(SYM_Times),
                    (Expr*[]){ expr_copy(h), vs }, 2);              /* adopts vs */
     Expr* c = sum_eval("Simplify", (Expr*[]){ hc }, 1);            /* adopts hc */
-    expr_free(s); expr_free(h);
-    if (!sum_free_of(c, var)) { expr_free(c); return NULL; }
+    expr_free(h);
+    if (!sum_free_of(c, var)) { expr_free(c); expr_free(s); return NULL; }
 
-    /* -Zeta'[2] = (Pi^2/6)(12 Log[Glaisher] - EulerGamma - Log[2 Pi]). */
-    Expr* pi2 = expr_new_function(expr_new_symbol(SYM_Power),
-                    (Expr*[]){ expr_new_symbol("Pi"), expr_new_integer(2) }, 2);
-    Expr* pi2over6 = expr_new_function(expr_new_symbol(SYM_Times),
-                         (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Rational),
-                                        (Expr*[]){ expr_new_integer(1),
-                                                   expr_new_integer(6) }, 2),
-                                    pi2 }, 2);                     /* adopts pi2 */
-    Expr* logG = expr_new_function(expr_new_symbol("Log"),
-                     (Expr*[]){ expr_new_symbol("Glaisher") }, 1);
-    Expr* t1 = expr_new_function(expr_new_symbol(SYM_Times),
-                   (Expr*[]){ expr_new_integer(12), logG }, 2);    /* adopts logG */
-    Expr* t2 = expr_new_function(expr_new_symbol(SYM_Times),
-                   (Expr*[]){ expr_new_integer(-1), expr_new_symbol("EulerGamma") }, 2);
-    Expr* twopi = expr_new_function(expr_new_symbol(SYM_Times),
-                      (Expr*[]){ expr_new_integer(2), expr_new_symbol("Pi") }, 2);
-    Expr* log2pi = expr_new_function(expr_new_symbol("Log"),
-                       (Expr*[]){ twopi }, 1);                     /* adopts twopi */
-    Expr* t3 = expr_new_function(expr_new_symbol(SYM_Times),
-                   (Expr*[]){ expr_new_integer(-1), log2pi }, 2);  /* adopts log2pi */
-    Expr* bracket = expr_new_function(expr_new_symbol(SYM_Plus),
-                        (Expr*[]){ t1, t2, t3 }, 3);               /* adopts t1,t2,t3 */
-    Expr* negZ2 = expr_new_function(expr_new_symbol(SYM_Times),
-                      (Expr*[]){ pi2over6, bracket }, 2);          /* adopts both */
+    Expr* negZs;
+    if (sval == 2) {
+        /* -Zeta'[2] = (Pi^2/6)(12 Log[Glaisher] - EulerGamma - Log[2 Pi]). */
+        Expr* pi2 = expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ expr_new_symbol("Pi"), expr_new_integer(2) }, 2);
+        Expr* pi2over6 = expr_new_function(expr_new_symbol(SYM_Times),
+                             (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Rational),
+                                            (Expr*[]){ expr_new_integer(1),
+                                                       expr_new_integer(6) }, 2),
+                                        pi2 }, 2);                     /* adopts pi2 */
+        Expr* logG = expr_new_function(expr_new_symbol("Log"),
+                         (Expr*[]){ expr_new_symbol("Glaisher") }, 1);
+        Expr* t1 = expr_new_function(expr_new_symbol(SYM_Times),
+                       (Expr*[]){ expr_new_integer(12), logG }, 2);    /* adopts logG */
+        Expr* t2 = expr_new_function(expr_new_symbol(SYM_Times),
+                       (Expr*[]){ expr_new_integer(-1), expr_new_symbol("EulerGamma") }, 2);
+        Expr* twopi = expr_new_function(expr_new_symbol(SYM_Times),
+                          (Expr*[]){ expr_new_integer(2), expr_new_symbol("Pi") }, 2);
+        Expr* log2pi = expr_new_function(expr_new_symbol("Log"),
+                           (Expr*[]){ twopi }, 1);                     /* adopts twopi */
+        Expr* t3 = expr_new_function(expr_new_symbol(SYM_Times),
+                       (Expr*[]){ expr_new_integer(-1), log2pi }, 2);  /* adopts log2pi */
+        Expr* bracket = expr_new_function(expr_new_symbol(SYM_Plus),
+                            (Expr*[]){ t1, t2, t3 }, 3);               /* adopts t1,t2,t3 */
+        negZs = expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ pi2over6, bracket }, 2);               /* adopts both */
+    } else {
+        /* General s: -Zeta'[s] = -Derivative[1][Zeta][s] (inert first zeta
+         * derivative, matching the object D[Zeta[s],s] produces). */
+        Expr* op = expr_new_function(expr_new_symbol("Derivative"),
+                       (Expr*[]){ expr_new_integer(1) }, 1);          /* Derivative[1] */
+        Expr* op_z = expr_new_function(op,
+                         (Expr*[]){ expr_new_symbol(SYM_Zeta) }, 1);  /* Derivative[1][Zeta] */
+        Expr* zprime = expr_new_function(op_z,
+                           (Expr*[]){ expr_copy(s) }, 1);             /* Derivative[1][Zeta][s] */
+        negZs = expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ expr_new_integer(-1), zprime }, 2);    /* -Zeta'[s] */
+    }
+    expr_free(s);
 
-    /* result = c * (-Zeta'[2]). */
+    /* result = c * (-Zeta'[s]). */
     Expr* result_expr = expr_new_function(expr_new_symbol(SYM_Times),
-                            (Expr*[]){ c, negZ2 }, 2);             /* adopts c, negZ2 */
+                            (Expr*[]){ c, negZs }, 2);             /* adopts c, negZs */
     Expr* out = evaluate(result_expr);
     expr_free(result_expr);
     return out;
@@ -109,7 +127,7 @@ void sum_logzeta_init(void) {
     symtab_add_builtin("Sum`LogZeta", builtin_sum_logzeta);
     symtab_get_def("Sum`LogZeta")->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
     symtab_set_docstring("Sum`LogZeta",
-        "Sum`LogZeta[f, i, 1, Infinity] evaluates Sum[c Log[i]/i^s] = -c Zeta'[s]. "
-        "Returns an elementary Glaisher-constant closed form only for s==2; "
-        "otherwise returns unevaluated.");
+        "Sum`LogZeta[f, i, 1, Infinity] evaluates Sum[c Log[i]/i^s] = -c Zeta'[s] "
+        "for integer s>=2. s==2 yields an elementary Glaisher-constant closed form; "
+        "higher s yield the inert -c Derivative[1][Zeta][s].");
 }

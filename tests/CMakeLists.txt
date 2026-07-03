@@ -211,6 +211,7 @@ set(COMMON_SRC
     ../src/special_functions/hyperfactorial.c
     ../src/special_functions/barnesg.c
     ../src/special_functions/qpochhammer.c
+    ../src/special_functions/besseljzero.c
     ../src/power.c
     ../src/funcprog.c
     ../src/boolean.c
@@ -387,6 +388,9 @@ set(COMMON_SRC
     ../src/sum/sum_hypergeometric.c
     ../src/sum/sum_rational.c
     ../src/sum/sum_euler.c
+    ../src/sum/sum_euler_nonlinear.c
+    ../src/sum/sum_dirichlet.c
+    ../src/sum/sum_zetaseries.c
     ../src/sum/sum_alternating.c
     ../src/sum/sum_trigonometric.c
     ../src/sum/sum_logzeta.c
@@ -403,6 +407,7 @@ set(COMMON_SRC
     ../src/product/product_viete.c
     ../src/product/product_eulerprime.c
     ../src/product/product_rational_infinite.c
+    ../src/product/product_besselzero.c
     ../src/product/product_logsum.c
     ../src/root.c
     ../src/root_numeric.c
@@ -554,6 +559,10 @@ target_include_directories(sum_tests PRIVATE ../src)
 add_executable(sum_rational_tests test_sum_rational.c ${COMMON_SRC})
 target_link_libraries(sum_rational_tests m)
 target_include_directories(sum_rational_tests PRIVATE ../src)
+
+add_executable(sum_product_families_tests test_sum_product_families.c ${COMMON_SRC})
+target_link_libraries(sum_product_families_tests m)
+target_include_directories(sum_product_families_tests PRIVATE ../src)
 
 add_executable(sum_euler_tests test_sum_euler.c ${COMMON_SRC})
 target_link_libraries(sum_euler_tests m)

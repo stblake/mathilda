@@ -92,8 +92,10 @@ int main(void) {
     same("Sum[5 Log[k]/k^2, {k, 1, Infinity}]", "5 (" NEGZ2 ")");
     same("Sum[Log[k]/(2 k^2), {k, 1, Infinity}]", "(1/2)(" NEGZ2 ")");
     nclose(NEGZ2, "Sum[Log[k]/k^2, {k, 1, 3000}]", "10^-2");
-    /* s != 2 has no elementary Zeta' form -> held */
-    held("Sum[Log[k]/k^3, {k, 1, Infinity}]");
+    /* integer s > 2: no elementary form, emit inert -c Zeta'[s] */
+    check("Sum[Log[k]/k^3, {k, 1, Infinity}]", "-Derivative[1][Zeta][3]");
+    check("Sum[2 Log[k]/k^4, {k, 1, Infinity}]", "-2 Derivative[1][Zeta][4]");
+    /* non-integer s has no Zeta' form -> held */
     held("Sum[Log[k]/k^(3/2), {k, 1, Infinity}]");
     /* s <= 1 diverges -> held */
     held("Sum[Log[k]/k, {k, 1, Infinity}]");
