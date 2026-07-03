@@ -12,9 +12,12 @@
 (* Gamma[z+1] == z Gamma[z]  (recurrence; the engine reuses it both to       *)
 (* collapse Gamma[x+1]/Gamma[x] -> x and to lower integer-shifted gammas).   *)
 (* Recurrence Gamma[z+1] == z Gamma[z]: collapses Gamma[x+1]/Gamma[x] -> x and *)
-(* shifts integer-offset gammas. (The reflection identity Gamma[z]Gamma[1-z]   *)
-(* == Pi/Sin[Pi z] is intentionally omitted: it usually raises complexity and  *)
-(* emits spurious ComplexInfinity at integer z during the search.) *)
+(* shifts integer-offset gammas.                                              *)
+(*                                                                            *)
+(* The reflection / conjugate-pair identities below fire ONLY as PAIR rules   *)
+(* (both gammas must be present in the same Times), so they never raise the   *)
+(* gamma count, and each is guarded to avoid the spurious ComplexInfinity at  *)
+(* integer z that made a naive lone-gamma reflection unsafe during the search.*)
 RegisterTransforms[Gamma, {
     Function[e, Replace[e, Gamma[z_ + 1] :> z Gamma[z]]],
     (* Raising / consolidation: z Gamma[z] == Gamma[z+1]. Absorbs a factor   *)
@@ -22,7 +25,27 @@ RegisterTransforms[Gamma, {
     (* Orderless Times match lets the factor and the Gamma appear in any      *)
     (* position, and the leading r___ carries any unrelated cofactors along.  *)
     Function[e, Replace[e,
-        HoldPattern[Times[r___, z_, Gamma[z_]]] :> Gamma[z + 1] Times[r]]]
+        HoldPattern[Times[r___, z_, Gamma[z_]]] :> Gamma[z + 1] Times[r]]],
+    (* Reflection PAIR: Gamma[z] Gamma[1-z] == Pi / Sin[Pi z].  Fires only    *)
+    (* when the two arguments sum to 1 and z is not an integer (guard against *)
+    (* Sin[Pi n] == 0 -> ComplexInfinity).  e.g. Gamma[1/4] Gamma[3/4] ->     *)
+    (* Pi Sqrt[2].                                                            *)
+    Function[e, Replace[e,
+        HoldPattern[Times[r___, Gamma[z_], Gamma[w_]]] /;
+            (! IntegerQ[z]) && PossibleZeroQ[z + w - 1] :>
+            Pi / Sin[Pi z] Times[r]]],
+    (* Conjugate PAIR (Re == 1): Gamma[1+I b] Gamma[1-I b] == Pi b/Sinh[Pi b].*)
+    Function[e, Replace[e,
+        HoldPattern[Times[r___, Gamma[u_], Gamma[v_]]] /;
+            (! PossibleZeroQ[Im[u]]) && PossibleZeroQ[u - Conjugate[v]]
+            && PossibleZeroQ[Re[u] - 1] :>
+            (Pi Im[u] / Sinh[Pi Im[u]]) Times[r]]],
+    (* Conjugate PAIR (Re == 1/2): Gamma[1/2+I b] Gamma[1/2-I b] == Pi/Cosh[Pi b].*)
+    Function[e, Replace[e,
+        HoldPattern[Times[r___, Gamma[u_], Gamma[v_]]] /;
+            (! PossibleZeroQ[Im[u]]) && PossibleZeroQ[u - Conjugate[v]]
+            && PossibleZeroQ[Re[u] - 1/2] :>
+            (Pi / Cosh[Pi Im[u]]) Times[r]]]
 }];
 
 (* LogGamma[z+1] == Log[z] + LogGamma[z]. *)

@@ -386,6 +386,8 @@ set(COMMON_SRC
     ../src/sum/sum_euler.c
     ../src/sum/sum_alternating.c
     ../src/sum/sum_trigonometric.c
+    ../src/sum/sum_logzeta.c
+    ../src/sum/sum_logrational.c
     ../src/product/product.c
     ../src/product/product_util.c
     ../src/product/product_telescoping.c
@@ -394,6 +396,11 @@ set(COMMON_SRC
     ../src/product/product_qproduct.c
     ../src/product/product_special.c
     ../src/product/product_infinite.c
+    ../src/product/product_cantor.c
+    ../src/product/product_viete.c
+    ../src/product/product_eulerprime.c
+    ../src/product/product_rational_infinite.c
+    ../src/product/product_logsum.c
     ../src/root.c
     ../src/root_numeric.c
     ../src/radicals.c
@@ -559,6 +566,18 @@ target_include_directories(product_stress_tests PRIVATE ../src ../src/product)
 add_executable(product_special_tests test_product_special.c ${COMMON_SRC})
 target_link_libraries(product_special_tests m)
 target_include_directories(product_special_tests PRIVATE ../src ../src/special_functions)
+
+add_executable(product_infinite_families_tests test_product_infinite_families.c ${COMMON_SRC})
+target_link_libraries(product_infinite_families_tests m)
+target_include_directories(product_infinite_families_tests PRIVATE ../src ../src/product)
+
+add_executable(sum_log_tests test_sum_log.c ${COMMON_SRC})
+target_link_libraries(sum_log_tests m)
+target_include_directories(sum_log_tests PRIVATE ../src ../src/sum)
+
+add_executable(gamma_transforms_tests test_gamma_transforms.c ${COMMON_SRC})
+target_link_libraries(gamma_transforms_tests m)
+target_include_directories(gamma_transforms_tests PRIVATE ../src)
 
 add_executable(hypergeopfq_tests test_hypergeopfq.c ${COMMON_SRC})
 target_link_libraries(hypergeopfq_tests m)

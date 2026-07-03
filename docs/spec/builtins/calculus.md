@@ -1236,6 +1236,24 @@ In[3]:= Sum[Sin[k]/k^2, {k, 1, Infinity}]
 Out[3]= Im[PolyLog[2, E^I]]
 ```
 
+### Sum`LogZeta
+
+Log-weighted zeta series `Sum[c Log[k]/k^s, {k, 1, Infinity}] = -c Zeta'[s]`.
+Since there is no symbolic `Zeta'`, an elementary closed form is emitted only for
+`s == 2`, via the Glaisher bridge
+`-Zeta'[2] = (Pi^2/6)(12 Log[Glaisher] - EulerGamma - Log[2 Pi])`; other `s`
+stays unevaluated.  Unblocks `Product[k^(1/k^2)]` through `Product`LogSum`.
+
+### Sum`LogRational
+
+Convergent sums of a rational function plus a log of a rational function,
+`Sum[P(k) + Log R(k)]`, where the pieces may individually diverge but combine
+(`Sum[1/k + Log[(k-1)/k], {k, 2, Infinity}] = EulerGamma - 1`).  Uses matched
+digamma / `LogGamma` asymptotics: with `P` decomposed by `Apart` and `R`'s roots
+over `Q`, the value is `sum_{m>=2} c Zeta[m, imin-rho] - sum_{m==1} c PolyGamma[0,
+imin-rho] - sum_num e LogGamma[imin-a] + sum_den e LogGamma[imin-b]`, returned
+under the log-divergence-cancellation conditions (else unevaluated).
+
 ## DifferenceDelta
 
 `DifferenceDelta[f, i]` gives the forward difference
@@ -1314,7 +1332,10 @@ quadratic-or-higher factors.
 Factors `base^(p(i))` with `base` free of `i`, routed through `Sum`:
 `Product[base^p(i)] = base^Sum[p(i), {i, imin, imax}]`, multiplying any
 rational cofactor via `Product`Rational`.  The `base^...` factor is never
-passed to `Together`/`Factor` (which loop on a symbolic exponent).
+passed to `Together`/`Factor` (which loop on a symbolic exponent).  An
+**infinite** bound is allowed for a pure `base^(summable exponent)` product
+(no rational cofactor), the exponent closed by the shipped `Sum`:
+`Product[2^(k/2^k), {k, 1, Infinity}]` → `4` (since `Sum[k/2^k] = 2`).
 
 ### Product`QProduct
 
@@ -1334,6 +1355,58 @@ products; convergent ones are evaluated as the limit of the finite closed
 form, and the Weierstrass family `Product[1 + c/k^2, {k, 1, Infinity}]`
 → `Sinh[Pi Sqrt[c]]/(Pi Sqrt[c])` is recognised directly.  A divergent
 product prints `Product::div` and stays unevaluated.
+
+### Product`RationalInfinite
+
+Convergent infinite rational products with **complex-conjugate roots**, via the
+Gamma canonical form.  Numerator and denominator are factored over `Q` with
+irreducible quadratics resolved by the quadratic formula; under the convergence
+conditions (leading constant `1`, balanced degrees, balanced root sums) the
+product equals `Product_j Gamma(a - beta_j)^{n_j} / Product_i Gamma(a - alpha_i)^{m_i}`.
+The resulting Gamma product is reduced in C (integer shift, cancellation of
+equal arguments, conjugate pairs `Gamma[1+ib]Gamma[1-ib] = Pi b/Sinh[Pi b]` and
+`Gamma[1/2+ib]Gamma[1/2-ib] = Pi/Cosh[Pi b]`, real reflection) and the candidate
+is numerically checked against the raw Gamma product.  Fires only when a genuine
+complex root is present (all-real cases stay with `Product`Infinite`); an
+irreducible cubic-or-higher factor bails.
+
+```mathematica
+In[1]:= Product[(k^2 - 1)/(k^2 + 1), {k, 2, Infinity}]
+Out[1]= Pi Csch[Pi]
+In[2]:= Product[(k^3 - 1)/(k^3 + 1), {k, 2, Infinity}]
+Out[2]= 2/3
+```
+
+### Product`Cantor
+
+Double-exponential (Cantor) telescoping `Product[1 + x^(2^i), {i, imin, Infinity}]`
+`= 1/(1 - x^(2^imin))` for `|x| < 1` (the exponent must double each step).
+`Product[1 + (1/3)^(2^k), {k, 0, Infinity}]` → `3/2`.
+
+### Product`Viete
+
+Viète-type cosine products `Product[Cos[a(i)], {i, imin, Infinity}]` whose angle
+halves each step (`a(i+1) == a(i)/2`), giving `Sin[2 a(imin)]/(2 a(imin))`.
+`Product[Cos[Pi/2^(k+1)], {k, 1, Infinity}]` → `2/Pi`;
+`Product[Cos[x/2^k], {k, 1, Infinity}]` → `Sin[x]/x`.
+
+### Product`EulerPrime
+
+Euler products over the primes: bodies depending on the index only through
+`Prime[i]`.  `Product[1/(1 - Prime[i]^-s)]` → `Zeta[s]` (even `s` closes:
+`Pi^2/6`, `Pi^4/90`, …), and the `chi_4` product
+`Product[1/(1 - (-1)^((Prime[i]-1)/2)/Prime[i]), {i, 2, Infinity}]` → `Pi/4`
+(Dirichlet `L(1, chi_4)`).  A divergent (`s <= 1`) product stays unevaluated.
+
+### Product`LogSum
+
+The general Exp/log-sum bridge `Product[f] = Exp[Sum[Log[f]]]` (runs last).
+Engages on symbolic-power bodies; `PowerExpand[Log[f]]` is summed by the shipped
+`Sum` and re-exponentiated when it closes:
+`Product[Exp[(-1)^k/k], {k, 1, Infinity}]` → `1/2`,
+`Product[k^(1/k^2), {k, 1, Infinity}]` → `Exp[-Zeta'[2]]` (Glaisher form, via
+`Sum`LogZeta`), `Product[E^(1/k)(1 - 1/k), {k, 2, Infinity}]` → `E^(EulerGamma-1)`
+(via `Sum`LogRational`).
 
 
 ## FindRoot

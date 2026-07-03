@@ -228,7 +228,12 @@ Identities are organised into per-function-family libraries that are loaded
 special functions costs no more than `Simplify`, and the collection scales to
 many identities without slowing the common case. The first-cut libraries cover
 the gamma family (`Gamma`/`LogGamma`/`PolyGamma` recurrences,
-`Pochhammer`/`Beta`/`Factorial` → `Gamma`), the error functions
+`Pochhammer`/`Beta`/`Factorial` → `Gamma`, plus guarded **pair** reductions:
+reflection `Gamma[z] Gamma[1-z] -> Pi/Sin[Pi z]` for non-integer `z`, and
+conjugate pairs `Gamma[1±I b] -> Pi b/Sinh[Pi b]` and
+`Gamma[1/2±I b] -> Pi/Cosh[Pi b]` — so `FullSimplify[Gamma[1/4] Gamma[3/4]] ->
+Pi Sqrt[2]` and `FullSimplify[Gamma[1+I] Gamma[1-I]] -> Pi Csch[Pi]`), the error
+functions
 (`Erf[z] + Erfc[z] -> 1`), the dilogarithm (`PolyLog[2, z] + PolyLog[2, -z] ->
 PolyLog[2, z^2]/2`), and real radicals (`Surd[x, n]^n -> x`).
 
