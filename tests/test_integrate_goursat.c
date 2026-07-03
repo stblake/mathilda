@@ -265,6 +265,39 @@ static void test_plumbing(void) {
     check_eq("FreeQ[Integrate[t^2/(t^3-1)^(2/3), t], Integrate]", "True");
 }
 
+/* ------------------------------------------------------------------ */
+/* Third-kind cube-root logarithmic part.                             */
+/*                                                                    */
+/* When the order-3 eigendescent obstruction H1 != 0 but the cofactor */
+/* F has a pole at a NON-branch point, F/R^(1/3) is still elementary   */
+/* and its antiderivative is a sum of logs of R^(1/3) - omega^j kappa t.*/
+/* Closed forms carry complex Logs -> numeric differentiate-back.      */
+/* ------------------------------------------------------------------ */
+static void test_thirdkind(void) {
+    /* Numeric instance (k = 2) of the parametric family. */
+    okg_num("(2 - 3 t)/((1 - 3 t) (t (1 - t) (1 - 2 t))^(1/3))", "17/5");
+    /* A second numeric member (k = 3). */
+    okg_num("(2 - 4 t)/((1 - 4 t) (t (1 - t) (1 - 3 t))^(1/3))", "17/5");
+
+    /* Parametric radicand k: closes and differentiates back (k pinned for the
+     * decisive numeric check). */
+    check_eq("FreeQ[Integrate[(2 - (k+1) t)/((1 - (k+1) t) (t (1-t)(1-k t))^(1/3)),"
+             " t, Method -> \"GoursatAlgebraic\"], Integrate]", "True");
+    check_eq("N[Abs[(D[Integrate[(2 - (k+1) t)/((1 - (k+1) t) (t (1-t)(1-k t))^(1/3)),"
+             " t, Method -> \"GoursatAlgebraic\"], t]"
+             " - (2 - (k+1) t)/((1 - (k+1) t) (t (1-t)(1-k t))^(1/3)))"
+             " /. {k -> 3, t -> 17/5}], 20] < 1/100000000000", "True");
+
+    /* The Automatic cascade also lands the parametric integral (no Method). */
+    check_eq("FreeQ[Integrate[(2 - (k+1) t)/((1 - (k+1) t) (t (1-t)(1-k t))^(1/3)), t],"
+             " Integrate]", "True");
+
+    /* A polynomial cofactor (no non-branch pole) is genuinely second-kind /
+     * elliptic and must still DECLINE -- the third-kind ansatz must not
+     * over-reach and diff_back must reject a spurious log form. */
+    declines("t/(t^3-1)^(1/3)");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -273,6 +306,7 @@ int main(void) {
     TEST(test_cube);
     TEST(test_fourth);
     TEST(test_period3);
+    TEST(test_thirdkind);
     TEST(test_plumbing);
     TEST(test_graded);
 

@@ -419,7 +419,14 @@ monotonically down.
      is tried: an order-3 Mobius `S` fixes one ramification point and cycles the
      other three, and the integral is elementary when `F` is a non-trivial
      period-3 character `F(S) = Exp[2 Pi I/3] F` (so `(x-1)/((x+2) Sqrt[x^3-1])`
-     integrates).  The rational reductions are integrated recursively and
+     integrates).  For `p=1/3` with `R` a cubic, when the order-3 eigendescent is
+     obstructed (`H1 != 0`) but `F` has a pole at a non-branch point, a
+     constructive third-kind logarithmic-part reduction is tried instead: the
+     antiderivative is
+     `C Sum_{j=0..2} Exp[4 Pi I j/3] Log[R^(1/3) - Exp[2 Pi I j/3] (lead R)^(1/3) x]`,
+     so the parametric family
+     `(2-(k+1)x)/((1-(k+1)x) (x(1-x)(1-k x))^(1/3))` integrates over `Q(k)`.
+     The rational reductions are integrated recursively and
      back-substituted.  Obstructed (genuinely elliptic) integrands,
      non-harmonic quartics, and the cross-character A4 cases (Section 5, e.g.
      `t/((t^3+8) Sqrt[t^3-1])`) return `NULL`.  A differentiate-back guard rejects the

@@ -1295,6 +1295,169 @@ cleanup:
 }
 
 /* ---------------------------------------------------------------------- */
+/* Third-kind cube-root logarithmic part (Goursat cube-root, p = 1/3)      */
+/* ---------------------------------------------------------------------- */
+/*
+ * When the order-3 eigendescent criterion FAILS (the omega^1 eigencomponent
+ * H1 != 0) the integrand F(t)/R(t)^(1/3) is still elementary if the obstruction
+ * differential is of the THIRD kind -- i.e. F has a pole at a NON-branch point
+ * of the cube-root cover (a pole not at a root of R).  Its antiderivative is the
+ * logarithmic part, a sum of logs of the "linear-on-the-curve" functions
+ * y - omega^j kappa t (y = R^(1/3), kappa = (lead R)^(1/3), omega = e^(2 pi i/3)):
+ *
+ *     Integral F/R^(1/3) dt  =  C * Sum_{j=0..2} omega^(2 j) Log[R^(1/3) - omega^j kappa t].
+ *
+ * The three log arguments are canonical: their product (norm over the sheets)
+ * is  y^3 - kappa^3 t^3 = R(t) - (lead R) t^3 = N(t),  a polynomial of degree
+ * <= 2 whose finite roots are one branch point (a root of R) and one NON-branch
+ * point -- the latter forced to be F's pole.  The coefficient direction
+ * (1, omega^2, omega) = (omega^(2 j)) is fixed: it is the unique vector killing
+ * both the trace (V0) and the omega^1 (Y^1) components of the differential, so
+ * only the overall scale C is free.  Reducing d/dt of the ansatz modulo
+ * y^3 = R gives a Y-polynomial p0 + p1 Y + p2 Y^2 (rational in t); the two
+ * conditions p0 == 0, p1 == 0 are the elementarity test, and matching the
+ * remaining Y^2 slot to the integrand fixes  C = F * N / (R * p2)  -- which must
+ * be free of t.  This is a Trager-Rothstein logarithmic-part computation
+ * specialised to the cube-root-of-cubic curve; see the report in
+ * goursat/goursat_cube_root_preprint_*.tex (third-kind remark) and
+ * [[project_integrate_goursat]].
+ *
+ * Correct-by-verification: the eigenspace criterion does not certify this case,
+ * so the answer is checked with the differentiate-back guard (diff_back_ok) in
+ * gs_core.  Handles the m = 0 canonical linear form kappa t (F's pole a root of
+ * N); a general affine form kappa t + m is deferred.  Borrows F, R, t.
+ */
+static Expr* goursat_cubic_thirdkind(Expr* F, Expr* R, Expr* t, int pnum) {
+    if (pnum != 1) return NULL;                 /* p = 1/3 only for now */
+    if (get_degree_poly(R, t) != 3) return NULL;
+
+    Expr* lc = get_coeff(R, t, 3);              /* leading coefficient */
+    if (!lc || is_zero(lc)) { if (lc) expr_free(lc); return NULL; }
+
+    Expr* result = NULL;
+    Expr* Y = fresh_var();
+    Expr* w = mk_omega();
+    Expr* kappa = mk_pow_rat(expr_copy(lc), 1, 3);          /* (lead R)^(1/3) */
+    Expr* cubeR = mk_pow_rat(expr_copy(R), 1, 3);           /* R^(1/3)        */
+    Expr* a = gmul(expr_copy(kappa), expr_copy(t));         /* kappa t        */
+    Expr* Rp = eval_take(mk_fn2("D", expr_copy(R), expr_copy(t)));   /* R'   */
+    Expr* Ypc = canonic(gdiv(expr_copy(Rp), gmul(mk_int(3), expr_copy(R))));  /* R'/(3R) */
+    expr_free(Rp);
+
+    /* omega^j a for j = 0, 1, 2. */
+    Expr* wa[3] = {
+        expr_copy(a),
+        gmul(expr_copy(w), expr_copy(a)),
+        gmul(mk_pow_int(expr_copy(w), 2), expr_copy(a))
+    };
+    /* omega^j kappa for j = 0, 1, 2 (the derivative of omega^j a is omega^j kappa). */
+    Expr* wk[3] = {
+        expr_copy(kappa),
+        gmul(expr_copy(w), expr_copy(kappa)),
+        gmul(mk_pow_int(expr_copy(w), 2), expr_copy(kappa))
+    };
+    /* Coefficient direction omega^(2 j). */
+    Expr* w2[3] = {
+        mk_int(1),
+        mk_pow_int(expr_copy(w), 2),
+        mk_pow_int(expr_copy(w), 4)
+    };
+
+    /* P(Y) = Sum_j omega^(2 j) (Ypc*Y - omega^j kappa) * Prod_{i != j}(Y - omega^i a). */
+    Expr* P = mk_int(0);
+    for (int j = 0; j < 3; j++) {
+        int i1 = (j + 1) % 3, i2 = (j + 2) % 3;
+        Expr* prod2 = gmul(gsub(expr_copy(Y), expr_copy(wa[i1])),
+                           gsub(expr_copy(Y), expr_copy(wa[i2])));
+        Expr* lin = gsub(gmul(expr_copy(Ypc), expr_copy(Y)), expr_copy(wk[j]));
+        Expr* term = gmul(expr_copy(w2[j]), gmul(lin, prod2));
+        P = gadd(P, term);
+    }
+    Expr* Pexp = expand_e(P);                   /* expand in Y (and t) */
+    if (!Pexp) goto tk_cleanup;
+
+    /* Reduce mod Y^3 = R:  p0' = p0 + p3 R,  keep p1, p2. */
+    Expr* p0 = get_coeff(Pexp, Y, 0);
+    Expr* p1 = get_coeff(Pexp, Y, 1);
+    Expr* p2 = get_coeff(Pexp, Y, 2);
+    Expr* p3 = get_coeff(Pexp, Y, 3);
+    expr_free(Pexp);
+    if (!p0) p0 = mk_int(0);
+    if (!p1) p1 = mk_int(0);
+    if (!p2) p2 = mk_int(0);
+    if (!p3) p3 = mk_int(0);
+
+    /* Reduce mod Y^3 = R: the Y^0 slot becomes p0 + p3 R.  canonic (Cancel over
+     * Q(kappa, omega)) is needed before the zero test -- the raw coefficients
+     * carry uncollapsed cyclotomic sums (1 + omega^2 - omega, ...) that
+     * zero_test_decide cannot see through numerically. */
+    Expr* p0r = canonic(gadd(p0, gmul(p3, expr_copy(R))));   /* consumes p0, p3 */
+    Expr* p1r = canonic(p1);
+    Expr* p2r = canonic(p2);
+
+    /* Elementarity: the Y^0 and Y^1 slots of the reduced differential vanish. */
+    bool ok = (p0r && is_zero(p0r) && p1r && is_zero(p1r)
+               && p2r && !is_zero(p2r));
+    if (ok) {
+        /* N(t) = R - (lead R) t^3  (degree <= 2). */
+        Expr* N = expand_e(gsub(expr_copy(R),
+                        gmul(expr_copy(lc), mk_pow_int(expr_copy(t), 3))));
+        Expr* Craw = gdiv(gmul(expr_copy(F), N),
+                          gmul(expr_copy(R), expr_copy(p2r)));
+        /* The overall scale C = F N / (R p2r) is a CONSTANT; obtain it by
+         * substituting t -> t0
+         * (which removes t) then canonic-ing the resulting parameter-only
+         * algebraic number.  Sampling first is essential for a PARAMETRIC
+         * radicand: canonic on the full t-bearing Craw over Q(param)(kappa, omega)
+         * blows up, whereas the t-free sample is a cheap number-field Cancel.
+         * diff_back_ok is the correctness gate, so a sample landing on a pole
+         * (rejected here via ComplexInfinity / Indeterminate) or a spurious
+         * value simply fails verification and declines. */
+        Expr* C = NULL;
+        {
+            static const long sn[5] = { 1, 3, 2, 4, 5 };
+            static const long sd[5] = { 7, 7, 9, 9, 11 };
+            Expr* cinf = mk_sym("ComplexInfinity");
+            Expr* indet = mk_sym("Indeterminate");
+            for (int s = 0; s < 5 && !C; s++) {
+                Expr* cs = canonic(subst_eval(expr_copy(Craw), t,
+                                make_rational(sn[s], sd[s])));
+                if (cs && expr_free_of(cs, cinf) && expr_free_of(cs, indet))
+                    C = cs;
+                else if (cs) expr_free(cs);
+            }
+            expr_free(cinf); expr_free(indet);
+        }
+        expr_free(Craw);
+        if (C) {
+            /* G = C * Sum_j omega^(2 j) Log[R^(1/3) - omega^j kappa t]. */
+            Expr* G0 = mk_int(0);
+            for (int j = 0; j < 3; j++) {
+                Expr* arg = gsub(expr_copy(cubeR), expr_copy(wa[j]));
+                Expr* lg = mk_fn1("Log", arg);
+                G0 = gadd(G0, gmul(expr_copy(w2[j]), lg));
+            }
+            Expr* G = eval_take(gmul(C, G0));
+            /* integrand f = F R^(-1/3) for the differentiate-back guard. */
+            Expr* f = eval_take(gmul(expr_copy(F),
+                            mk_pow_rat(expr_copy(R), -1, 3)));
+            if (G && f && diff_back_ok(G, t, f)) result = expr_copy(G);
+            if (G) expr_free(G);
+            if (f) expr_free(f);
+        }
+    }
+    if (p0r) expr_free(p0r);
+    if (p1r) expr_free(p1r);
+    if (p2r) expr_free(p2r);
+
+tk_cleanup:
+    for (int j = 0; j < 3; j++) { expr_free(wa[j]); expr_free(wk[j]); expr_free(w2[j]); }
+    expr_free(Y); expr_free(w); expr_free(kappa); expr_free(cubeR);
+    expr_free(a); expr_free(Ypc); expr_free(lc);
+    return result;
+}
+
+/* ---------------------------------------------------------------------- */
 /* Period-3 case: sqrt(cubic) higher symmetry (Goursat 1887, Section 4)    */
 /*                                                                         */
 /* When R is a cubic linearly equivalent to t^3 - 1 there is an order-3    */
@@ -2310,8 +2473,21 @@ static Expr* gs_core(Expr* f, Expr* x) {
             result = goursat_period3(F, R, x);
         }
     } else if (pden == 3) {
-        gs_log("BRANCH: cube-root case -- order-3 Mobius eigendescent (p = %d/3)", pnum);
-        result = goursat_cubic(F, R, x, pnum);
+        gs_log("BRANCH: cube-root case (p = %d/3)", pnum);
+        /* Try the constructive THIRD-KIND logarithmic-part reduction first: it is
+         * cheap (no Mobius/Solve over the splitting field) and self-verifying
+         * (diff_back_ok), and it covers the F-with-a-non-branch-pole cases the
+         * order-3 eigendescent obstructs (H1 != 0).  Doing it first also avoids
+         * the eigendescent's expensive -- for a parametric radicand, budget-
+         * exhausting -- cyclic-Mobius canonicalisation on integrands it cannot
+         * close anyway.  Fall back to the eigendescent (Theorem: H1 == 0) when
+         * the log-sum ansatz does not verify. */
+        gs_log("trying third-kind logarithmic-part reduction");
+        result = goursat_cubic_thirdkind(F, R, x, pnum);
+        if (!result) {
+            gs_log("third-kind declined -- trying order-3 Mobius eigendescent");
+            result = goursat_cubic(F, R, x, pnum);
+        }
     } else if (pden == 4) {
         gs_log("BRANCH: fourth-root case -- order-4 Mobius eigendescent (p = %d/4)", pnum);
         result = goursat_quartic(F, R, x, pnum);

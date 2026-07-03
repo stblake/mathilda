@@ -465,7 +465,11 @@ static Expr* rat_symbolic_content(const Expr* e) {
         free(running);
         return r;
     }
+    /* expr_new_function copies the `running` array (memcpy), adopting the
+     * element pointers but not the buffer — free our buffer, as the
+     * n_running == 0 / == 1 branches above do. */
     Expr* r = expr_new_function(expr_new_symbol(SYM_Times), running, n_running);
+    free(running);
     return r;
 }
 
@@ -492,7 +496,9 @@ static Expr* rat_div_distribute(Expr* e, const Expr* divisor) {
                 expr_new_symbol(SYM_Times),
                 (Expr*[]){expr_copy(e->data.function.args[i]), inv}, 2));
         }
-        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), new_args, n));
+        Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), new_args, n));
+        free(new_args);  /* expr_new_function copies the buffer */
+        return r;
     }
     Expr* inv = eval_and_free(expr_new_function(
         expr_new_symbol(SYM_Power),
@@ -543,7 +549,10 @@ static void rat_strip_symbolic_common(Expr** num_io, Expr** den_io) {
         common = num_factors[0];
         free(num_factors);
     } else {
+        /* expr_new_function copies the buffer (adopting the elements); free
+         * our `num_factors` buffer as the num_nf == 1 branch does. */
         common = expr_new_function(expr_new_symbol(SYM_Times), num_factors, num_nf);
+        free(num_factors);
     }
 
     Expr* new_num = rat_div_distribute(*num_io, common);
@@ -875,6 +884,37 @@ static Expr* cancel_with_extension(const Expr* arg, const Expr* alpha) {
         return num;
     }
 
+    /* Expand num and den into genuine polynomials before the GCD.
+     *
+     * Numerator[arg]/Denominator[arg] frequently return UNEXPANDED products
+     * -- e.g. when `arg` is a product of algebraic-coefficient fractions
+     * (the cube-root Goursat descent's R(t(z))(1-z)^3 with the order-3
+     * Mobius's Q(Sqrt[-3]) fixed points is exactly this shape).  Fed an
+     * unexpanded product, PolynomialGCD[.,.,Extension -> alpha] only
+     * partially reduces (its qaupoly path needs a coefficient list, so a
+     * Times of factors -- especially one whose factors carry inner rational
+     * or algebraic denominators -- yields a spuriously low-degree gcd or a
+     * bare 1).  Expanding first turns both sides into proper Q(alpha)[x]
+     * polynomials, after which the gcd and the two quotient divisions run in
+     * the intended substrate.  (Cancel[Together[e, Extension -> Automatic],
+     * Extension -> Automatic] previously left such an input unreduced.) */
+    {
+        Expr* num_call = expr_new_function(
+            expr_new_symbol(SYM_Expand), (Expr*[]){ num }, 1);
+        num = evaluate(num_call);   /* num_call adopts old num */
+        expr_free(num_call);        /* frees the wrapper and the old num */
+
+        Expr* den_call = expr_new_function(
+            expr_new_symbol(SYM_Expand), (Expr*[]){ den }, 1);
+        den = evaluate(den_call);
+        expr_free(den_call);
+
+        if (den->type == EXPR_INTEGER && den->data.integer == 1) {
+            expr_free(den);
+            return num;
+        }
+    }
+
     /* Compute g = PolynomialGCD[num, den, Extension -> alpha]. */
     Expr* gcd_call = expr_new_function(
         expr_new_symbol(SYM_PolynomialGCD),
@@ -982,6 +1022,103 @@ static Expr* cancel_with_extension(const Expr* arg, const Expr* alpha) {
     return result;
 }
 
+/* Extension -> Automatic Cancel via PolynomialGCD + PolynomialQuotient.
+ *
+ * A robust fallback for the multi-generator tower case.  When the input's
+ * splitting field needs several algebraic generators (e.g. Q(I, Sqrt[3]) =
+ * Q(zeta_12), the field an order-3 Mobius map's fixed points live in),
+ * qa_cancel_with_tower's gamma-substitution can decline (returns NULL) even
+ * though PolynomialGCD[num, den, Extension -> Automatic] and
+ * PolynomialQuotient[.., Extension -> Automatic] both reduce the input
+ * correctly -- those builtins re-run extension_autodetect internally and pick
+ * a working primitive element, whereas a single-generator cancel_with_extension
+ * over just one of the generators cannot see the cross relations.
+ *
+ * This helper mirrors cancel_with_extension but threads Extension -> Automatic
+ * (not a fixed alpha) through the inner polynomial calls, so it works for any
+ * tower.  It expects `arg` to already be a single fraction P(x)/Q(x) (the
+ * routing sends Plus inputs through together_recursive_ext first).  Returns the
+ * reduced fraction, or NULL when the gcd is trivial / a quotient collapses /
+ * no polynomial variable is present (caller falls back to the un-cancelled
+ * form).  Borrows arg. */
+static Expr* cancel_auto_gcd_quotient(const Expr* arg) {
+    /* num = Expand[Numerator[arg]], den = Expand[Denominator[arg]]. */
+    Expr* num_call = expr_new_function(expr_new_symbol(SYM_Numerator),
+                                       (Expr*[]){expr_copy((Expr*)arg)}, 1);
+    Expr* num0 = evaluate(num_call); expr_free(num_call);
+    Expr* den_call = expr_new_function(expr_new_symbol(SYM_Denominator),
+                                       (Expr*[]){expr_copy((Expr*)arg)}, 1);
+    Expr* den0 = evaluate(den_call); expr_free(den_call);
+
+    Expr* nx = expr_new_function(expr_new_symbol(SYM_Expand), (Expr*[]){num0}, 1);
+    Expr* num = evaluate(nx); expr_free(nx);
+    Expr* dx = expr_new_function(expr_new_symbol(SYM_Expand), (Expr*[]){den0}, 1);
+    Expr* den = evaluate(dx); expr_free(dx);
+
+    if (den->type == EXPR_INTEGER && den->data.integer == 1) {
+        expr_free(den);
+        return num;
+    }
+
+    /* Pick a polynomial variable (first non-alpha-render symbol in arg). */
+    Expr* var = NULL;
+    {
+        size_t vc = 0, vcap = 8;
+        Expr** vars = malloc(sizeof(Expr*) * vcap);
+        collect_variables((Expr*)arg, &vars, &vc, &vcap);
+        /* Skip the algebraic-atom render symbols (I, Sqrt[..], Power[c,p/q]);
+         * collect_variables only returns bare EXPR_SYMBOLs, and the algebraic
+         * atoms surface as Sqrt[]/Power[] functions or the symbol I, so the
+         * first plain non-I symbol is the polynomial variable. */
+        for (size_t i = 0; i < vc; i++) {
+            if (vars[i]->type == EXPR_SYMBOL
+                && vars[i]->data.symbol == SYM_I) continue;
+            if (!var) var = expr_copy(vars[i]);
+        }
+        for (size_t i = 0; i < vc; i++) expr_free(vars[i]);
+        free(vars);
+    }
+    if (!var) { expr_free(num); expr_free(den); return NULL; }
+
+    /* g = PolynomialGCD[num, den, Extension -> Automatic]. */
+    Expr* gcd_call = expr_new_function(expr_new_symbol(SYM_PolynomialGCD),
+        (Expr*[]){ expr_copy(num), expr_copy(den),
+            expr_new_function(expr_new_symbol(SYM_Rule),
+                (Expr*[]){ expr_new_symbol(SYM_Extension),
+                           expr_new_symbol(SYM_Automatic) }, 2) }, 3);
+    Expr* g = evaluate(gcd_call); expr_free(gcd_call);
+
+    bool trivial = (g->type == EXPR_INTEGER && g->data.integer == 1)
+                   || head_is(g, SYM_PolynomialGCD);
+    if (trivial) { expr_free(g); expr_free(num); expr_free(den); expr_free(var); return NULL; }
+
+    /* num/g and den/g via PolynomialQuotient[.., Extension -> Automatic]. */
+    Expr* nq_call = expr_new_function(expr_new_symbol(SYM_PolynomialQuotient),
+        (Expr*[]){ num, expr_copy(g), expr_copy(var),
+            expr_new_function(expr_new_symbol(SYM_Rule),
+                (Expr*[]){ expr_new_symbol(SYM_Extension),
+                           expr_new_symbol(SYM_Automatic) }, 2) }, 4);
+    Expr* nq = evaluate(nq_call); expr_free(nq_call);
+
+    Expr* dq_call = expr_new_function(expr_new_symbol(SYM_PolynomialQuotient),
+        (Expr*[]){ den, g, expr_copy(var),
+            expr_new_function(expr_new_symbol(SYM_Rule),
+                (Expr*[]){ expr_new_symbol(SYM_Extension),
+                           expr_new_symbol(SYM_Automatic) }, 2) }, 4);
+    Expr* dq = evaluate(dq_call); expr_free(dq_call);
+    expr_free(var);
+
+    if ((dq->type == EXPR_INTEGER && dq->data.integer == 0)
+        || (dq->type == EXPR_REAL && dq->data.real == 0.0)) {
+        expr_free(nq); expr_free(dq); return NULL;
+    }
+
+    Expr* inv_den = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+        (Expr*[]){ dq, expr_new_integer(-1) }, 2));
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ nq, inv_den }, 2));
+}
+
 /* Count subnodes of `e` that mention any of `target`'s leaves. Used by
  * pick_best_tower_generator to rank tower generators by how much of
  * the input they "touch". The metric is "subnodes where target appears
@@ -1025,6 +1162,29 @@ static int pick_best_tower_generator(const Expr* arg, const QATower* t) {
 }
 
 #ifdef USE_FLINT
+/* True if `e` contains an algebraic-number atom: I, Sqrt[..], Complex[..], or
+ * Power[base, p/q] with a non-integer rational exponent.  Distinguishes an
+ * over-an-extension fraction from a plain rational one. */
+static bool rat_has_algebraic_atom(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol == SYM_I;
+    if (e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h && h->type == EXPR_SYMBOL) {
+        if (h->data.symbol == SYM_Sqrt || h->data.symbol == SYM_Complex)
+            return true;
+        if (h->data.symbol == SYM_Power && e->data.function.arg_count == 2) {
+            int64_t p, q;
+            if (is_rational(e->data.function.args[1], &p, &q) && q != 1)
+                return true;
+        }
+    }
+    if (rat_has_algebraic_atom(h)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rat_has_algebraic_atom(e->data.function.args[i])) return true;
+    return false;
+}
+
 /* Cancel a single fraction rigorously over a detected algebraic-extension field
  * (Q(sqrt d), Q(zeta_n), radical tower) using the FLINT engine: g = gcd(num,den)
  * then num/g, den/g by exact division. Returns NULL — deferring to the classical
@@ -1137,6 +1297,32 @@ static Expr* builtin_cancel_compute(Expr* res) {
     Expr* arg = res->data.function.args[0];
 
 #ifdef USE_FLINT
+    /* Proven reduction first for a single algebraic-coefficient fraction:
+     * PolynomialGCD + PolynomialQuotient with Extension -> Automatic reduce it
+     * correctly because they each re-detect the whole splitting field, whereas
+     * both FLINT's number-field GCD (flint_cancel_fraction below) and the QA
+     * tower path can leave such a fraction un-cancelled -- notably when the
+     * numerator carries algebraic coefficient denominators like 1/Sqrt[3], the
+     * shape the cube-root Goursat descent's Cancel[Together[R(t(z))(1-z)^3,
+     * Extension], Extension] produces over Q(I, Sqrt[3]).  Gated on an actual
+     * algebraic atom (plain-rational Cancel is untouched) and taken only on a
+     * strict leaf-count shrink, so already-reduced inputs fall through to the
+     * FLINT normalisation below. */
+    if (auto_flag && rat_has_algebraic_atom(arg)) {
+        bool is_sum = (arg->type == EXPR_FUNCTION && arg->data.function.head
+                       && arg->data.function.head->type == EXPR_SYMBOL
+                       && arg->data.function.head->data.symbol == SYM_Plus);
+        if (!is_sum) {
+            Expr* red = cancel_auto_gcd_quotient(arg);
+            if (red) {
+                int64_t in_sz  = leaf_count_internal((Expr*)arg, true);
+                int64_t out_sz = leaf_count_internal(red, true);
+                if (out_sz < in_sz) return red;
+                expr_free(red);
+            }
+        }
+    }
+
     /* Also route the Cancel[e, Extension -> ...] form (2-arg, after option
      * stripping) through FLINT — the QA autodetect path below does not detect a
      * symbolic radicand Sqrt[k] (parametric Q(a,b,k)(Sqrt k)) and the multivariate
@@ -1268,6 +1454,34 @@ static Expr* builtin_cancel_compute(Expr* res) {
         /* Fall back to non-extension cancel on failure. */
         if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
         if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
+    }
+
+    /* General Extension -> Automatic fallback for a single fraction P(x)/Q(x).
+     *
+     * The per-alpha paths above can miss the full splitting field: the
+     * single-generator autodetect drops a generator (notably I), and the
+     * multi-generator qa_cancel_with_tower can decline outright.  But
+     * PolynomialGCD and PolynomialQuotient with Extension -> Automatic each
+     * re-run extension_autodetect internally and reduce over a working
+     * primitive element -- so cancelling a single fraction directly through
+     * them succeeds where the routing above returned the input unreduced
+     * (e.g. Cancel[P/Q, Extension -> Automatic] with P carrying both I and
+     * Sqrt[3] coefficients, the shape the cube-root Goursat descent produces).
+     * Accept only when it strictly shrinks the input, matching the guided
+     * fallback's contract; on no-change, fall through to the legacy paths. */
+    if (auto_flag) {
+        bool is_sum = (arg->type == EXPR_FUNCTION && arg->data.function.head
+                       && arg->data.function.head->type == EXPR_SYMBOL
+                       && arg->data.function.head->data.symbol == SYM_Plus);
+        if (!is_sum) {
+            Expr* red = cancel_auto_gcd_quotient(arg);
+            if (red) {
+                int64_t in_size = leaf_count_internal((Expr*)arg, true);
+                int64_t lc = leaf_count_internal(red, true);
+                if (lc < in_size) return red;
+                expr_free(red);
+            }
+        }
     }
 
     /* Phase E: single-generator polynomial-radicand path.  Triggered
