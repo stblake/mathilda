@@ -597,6 +597,49 @@ In[6]:= MoebiusMu[5 + 6 I]
 Out[6]= -1
 ```
 
+## LiouvilleLambda
+
+- `LiouvilleLambda[n]`: the Liouville function `lambda(n) = (-1)^Omega(n)`, where
+  `Omega(n)` is the number of prime factors of `n` counted **with multiplicity**.
+  For `n = u p_1^k_1 ... p_m^k_m` with `u` a unit and `p_i` primes,
+  `lambda(n) = (-1)^(k_1 + ... + k_m)`. Equivalently `lambda(1) = 1`, and
+  `lambda` is `1` when `n` is a product of an even number of primes and `-1`
+  otherwise.
+
+**Features**:
+- `Listable`, `Protected`.
+- Completely multiplicative: `lambda(m n) = lambda(m) lambda(n)`.
+- Computed directly from the prime factorisation (machine integers and GMP
+  bigints handled uniformly); the result is always `1` or `-1`.
+- The sign of `n` is ignored (`lambda(-n) = lambda(n)`).
+- Gaussian integers: `LiouvilleLambda[n, GaussianIntegers -> True]`, or a
+  non-real Gaussian-integer argument `Complex[a, b]`, factors `n` over `Z[i]`
+  and counts the Gaussian prime factors with multiplicity. Because `2` factors
+  as `-i (1 + i)^2` in `Z[i]`, e.g. `LiouvilleLambda[2, GaussianIntegers -> True]`
+  is `1` while `LiouvilleLambda[2]` is `-1`.
+- Non-integer or zero `n` is left unevaluated; a wrong argument count issues a
+  `LiouvilleLambda::argt` message.
+
+```mathematica
+In[1]:= LiouvilleLambda[8]
+Out[1]= -1
+
+In[2]:= LiouvilleLambda[9]
+Out[2]= 1
+
+In[3]:= LiouvilleLambda[{1, 2, 3, 4, 5, 6}]
+Out[3]= {1, -1, -1, 1, -1, 1}
+
+In[4]:= LiouvilleLambda[10^30 + 1]
+Out[4]= -1
+
+In[5]:= LiouvilleLambda[2 + I]
+Out[5]= -1
+
+In[6]:= LiouvilleLambda[8, GaussianIntegers -> True]
+Out[6]= 1
+```
+
 ## EulerPhi
 
 Gives the Euler totient function $\phi(n)$.

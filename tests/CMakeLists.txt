@@ -172,6 +172,7 @@ set(COMMON_SRC
     ../src/numbertheory/divisors.c
     ../src/numbertheory/divisorsigma.c
     ../src/numbertheory/moebiusmu.c
+    ../src/numbertheory/liouvillelambda.c
     ../src/numbertheory/jacobisymbol.c
     ../src/numbertheory/prime.c
     ../src/numbertheory/primecount.c
@@ -523,6 +524,10 @@ add_test(NAME divisorsigma_tests COMMAND divisorsigma_tests)
 add_executable(moebiusmu_tests test_moebiusmu.c ${COMMON_SRC})
 target_include_directories(moebiusmu_tests PRIVATE ../src)
 add_test(NAME moebiusmu_tests COMMAND moebiusmu_tests)
+
+add_executable(liouvillelambda_tests test_liouvillelambda.c ${COMMON_SRC})
+target_include_directories(liouvillelambda_tests PRIVATE ../src)
+add_test(NAME liouvillelambda_tests COMMAND liouvillelambda_tests)
 
 add_executable(prime_tests test_prime.c ${COMMON_SRC})
 target_include_directories(prime_tests PRIVATE ../src)

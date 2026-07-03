@@ -3269,6 +3269,7 @@ void info_init(void) {
     symtab_set_docstring("Divisors", "Divisors[n] gives a list of the integers that divide n. Divisors[n, GaussianIntegers -> True] includes Gaussian-integer divisors.");
     symtab_set_docstring("DivisorSigma", "DivisorSigma[k, n] gives the divisor function sigma_k(n), the sum of the k-th powers of the divisors of n. DivisorSigma[k, n, GaussianIntegers -> True] sums over Gaussian-integer divisors.");
     symtab_set_docstring("MoebiusMu", "MoebiusMu[n] gives the Moebius function mu(n): 0 if n has a squared prime factor, otherwise (-1)^k where k is the number of distinct primes. A non-real Gaussian-integer argument is handled over Z[i].");
+    symtab_set_docstring("LiouvilleLambda", "LiouvilleLambda[n] gives the Liouville function lambda(n) = (-1)^Omega(n), where Omega(n) counts the prime factors of n with multiplicity. Completely multiplicative. A non-real Gaussian-integer argument, or GaussianIntegers -> True, is handled over Z[i].");
     symtab_set_docstring("FactorInteger", "FactorInteger[n] gives a list of the prime factors of the integer n, together with their exponents.");
     symtab_set_docstring("EulerPhi", "EulerPhi[n] gives the Euler totient function phi(n).");
     symtab_set_docstring("PrimePi", "PrimePi[x] gives the number of primes less than or equal to x, exact for x up to 5*10^13 (larger x is left unevaluated). The option Method -> m selects the algorithm: Automatic (default), \"Sieve\", \"Legendre\", \"Meissel\", \"Lehmer\", \"LMO\" (Lagarias-Miller-Odlyzko), \"DelegliseRivat\", or \"LucyHedgehog\".");
