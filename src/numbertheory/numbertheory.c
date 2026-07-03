@@ -30,6 +30,7 @@ void numbertheory_init(void) {
     symtab_add_builtin("MoebiusMu", builtin_moebiusmu);
     symtab_add_builtin("LiouvilleLambda", builtin_liouvillelambda);
     symtab_add_builtin("PrimeOmega", builtin_primeomega);
+    symtab_add_builtin("PrimeNu", builtin_primenu);
     symtab_add_builtin("Prime", builtin_prime);
     symtab_add_builtin("PrimePi", builtin_primepi);
 
@@ -54,6 +55,7 @@ void numbertheory_init(void) {
     symtab_get_def("MoebiusMu")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
     symtab_get_def("LiouvilleLambda")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
     symtab_get_def("PrimeOmega")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
+    symtab_get_def("PrimeNu")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
     symtab_get_def("Prime")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
     symtab_get_def("PrimePi")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
 }

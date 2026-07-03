@@ -174,6 +174,7 @@ set(COMMON_SRC
     ../src/numbertheory/moebiusmu.c
     ../src/numbertheory/liouvillelambda.c
     ../src/numbertheory/primeomega.c
+    ../src/numbertheory/primenu.c
     ../src/numbertheory/jacobisymbol.c
     ../src/numbertheory/prime.c
     ../src/numbertheory/primecount.c
@@ -533,6 +534,10 @@ add_test(NAME liouvillelambda_tests COMMAND liouvillelambda_tests)
 add_executable(primeomega_tests test_primeomega.c ${COMMON_SRC})
 target_include_directories(primeomega_tests PRIVATE ../src)
 add_test(NAME primeomega_tests COMMAND primeomega_tests)
+
+add_executable(primenu_tests test_primenu.c ${COMMON_SRC})
+target_include_directories(primenu_tests PRIVATE ../src)
+add_test(NAME primenu_tests COMMAND primenu_tests)
 
 add_executable(prime_tests test_prime.c ${COMMON_SRC})
 target_include_directories(prime_tests PRIVATE ../src)

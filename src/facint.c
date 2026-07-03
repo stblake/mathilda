@@ -5,6 +5,7 @@
 #include "symtab.h"
 #include "attr.h"
 #include "sym_names.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
@@ -266,6 +267,24 @@ static void add_factor_mpz(FactorMpz* factors, int* num_factors, mpz_t p, int64_
     mpz_init_set(factors[*num_factors].p, p);
     factors[*num_factors].count = count;
     (*num_factors)++;
+}
+
+/* Warn that a known-composite number is being returned unfactored.  The
+ * Automatic method reaches this only for hard composites (e.g. a semiprime of
+ * two large distinct primes) that survive trial division, Pollard rho and ECM
+ * within the search bounds: perfect powers are peeled off earlier, so `n` here
+ * is genuinely composite but with no factor found.  It is added with exponent
+ * 1, which looks like a prime — the warning makes that non-obvious compromise
+ * explicit rather than silent. */
+static void factint_warn_incomplete(const mpz_t n) {
+    if (arith_warnings_muted()) return;
+    char* s = mpz_get_str(NULL, 10, n);
+    fprintf(stderr,
+            "FactorInteger::nofac: %s is composite but no factor was found "
+            "within the search bounds; it is returned unfactored with "
+            "exponent 1.\n",
+            s ? s : "The argument");
+    free(s);
 }
 
 
@@ -878,6 +897,60 @@ static void factorize_mpz(mpz_t n, FactorMpz* factors, int* num_factors, int* k_
         return;
     }
 
+    /* Perfect-power reduction.  A prime power p^k of a large prime defeats the
+     * general search methods below: Pollard rho collides on the repeated factor
+     * (gcd steps yield only 1 or n), and ECM has no small cofactor to grab and
+     * cannot crack the large p directly.  Without this branch the fallbacks
+     * below would mislabel a composite such as (2^61-1)^2 as prime^1.  Peel the
+     * exponent off explicitly: reduce n = base^mult to a primitive base (not
+     * itself a perfect power), factor that once, and scale every exponent by
+     * mult. */
+    if (mpz_perfect_power_p(n)) {
+        int64_t mult = 1;
+        mpz_t base, root;
+        mpz_init_set(base, n);
+        mpz_init(root);
+        /* Extract exact e-th roots to a fixpoint.  Restarting the e-scan after
+         * every hit accumulates the full exponent (e.g. p^6 -> p via 2 then 3)
+         * and leaves base primitive. */
+        for (int reduced = 1; reduced; ) {
+            reduced = 0;
+            unsigned long emax = (unsigned long)mpz_sizeinbase(base, 2);
+            for (unsigned long e = 2; e <= emax; e++) {
+                if (mpz_root(root, base, e)) {   /* exact -> base is an e-th power */
+                    mpz_set(base, root);
+                    mult *= (int64_t)e;
+                    reduced = 1;
+                    break;
+                }
+            }
+        }
+        mpz_clear(root);
+
+        /* Factor the primitive base into a private list (full factorization,
+         * independent of the caller's k_limit), then merge scaled counts.  Using
+         * a private list keeps add_factor_mpz's merge-by-prime correct even when
+         * the base shares primes with factors already collected. */
+        FactorMpz* bfac = malloc(sizeof(FactorMpz) * 1024);
+        int bn = 0;
+        int bl = -1;
+        if (bfac) {
+            factorize_mpz(base, bfac, &bn, &bl, method, method_opt);
+            for (int i = 0; i < bn; i++) {
+                /* Honour the caller's factor-count cap (FactorInteger[n, k]). */
+                if (!(*k_limit > 0 && *num_factors >= *k_limit))
+                    add_factor_mpz(factors, num_factors, bfac[i].p, bfac[i].count * mult);
+                mpz_clear(bfac[i].p);
+            }
+            free(bfac);
+        } else {
+            /* Allocation failure: fall back to the (imperfect) whole-n factor. */
+            add_factor_mpz(factors, num_factors, n, 1);
+        }
+        mpz_clear(base);
+        return;
+    }
+
 
     if (method == METHOD_SQUFOF) {
         mpz_t f;
@@ -1081,6 +1154,7 @@ static void factorize_mpz(mpz_t n, FactorMpz* factors, int* num_factors, int* k_
 
         if (found) {
             if (mpz_cmp_ui(f, 1) == 0 || mpz_cmp(f, n) == 0) {
+                if (method == METHOD_AUTOMATIC) factint_warn_incomplete(n);
                 add_factor_mpz(factors, num_factors, n, 1);
                 mpz_clear(f);
                 return;
@@ -1088,12 +1162,13 @@ static void factorize_mpz(mpz_t n, FactorMpz* factors, int* num_factors, int* k_
             mpz_t n_f;
             mpz_init(n_f);
             mpz_divexact(n_f, n, f);
-            
+
             factorize_mpz(f, factors, num_factors, k_limit, method, method_opt);
             factorize_mpz(n_f, factors, num_factors, k_limit, method, method_opt);
             mpz_clear(n_f);
         } else {
             // If it fails to find a factor within reasonable bounds, just add n as a factor
+            if (method == METHOD_AUTOMATIC) factint_warn_incomplete(n);
             add_factor_mpz(factors, num_factors, n, 1);
         }
     }
@@ -1105,6 +1180,7 @@ static void factorize_mpz(mpz_t n, FactorMpz* factors, int* num_factors, int* k_
         return;
     }
     if (method == METHOD_AUTOMATIC) {
+        factint_warn_incomplete(n);
         add_factor_mpz(factors, num_factors, n, 1);
     }
     mpz_clear(f);

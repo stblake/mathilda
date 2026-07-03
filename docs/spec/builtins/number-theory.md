@@ -440,6 +440,17 @@ Out[3]= {4, 25}
 - `Listable`, `Protected`.
 - Supports negative integers (includes `{-1, 1}`).
 - Supports rational numbers (denominator factors have negative exponents).
+- Perfect powers are reduced before the general search: `n = base^m` is peeled
+  to a primitive base, factored once, and the exponents scaled by `m`. This is
+  what makes prime powers of a large prime (e.g. `(2^61-1)^2`) factor correctly
+  rather than being mislabelled as prime — Pollard rho and ECM alone cannot
+  split such powers.
+- `FactorInteger::nofac`: under the default `Automatic` method, a hard composite
+  (e.g. a semiprime of two large distinct primes) that survives trial division,
+  Pollard rho and ECM within the search bounds is returned unfactored with
+  exponent 1 — which looks like a prime factor. A warning is emitted to make
+  that compromise explicit rather than silent. It is suppressed inside routines
+  that mute arithmetic warnings (numeric integration, `Limit`, `Series`, …).
 
 ```mathematica
 In[1]:= FactorInteger[12]
@@ -680,6 +691,53 @@ Out[5]= 2
 
 In[6]:= PrimeOmega[12, GaussianIntegers -> True]
 Out[6]= 5
+```
+
+## PrimeNu
+
+- `PrimeNu[n]`: the number of **distinct** prime factors of `n`, `nu(n)`. For
+  `n = u p_1^k_1 ... p_m^k_m` with `u` a unit and `p_i` distinct primes,
+  `PrimeNu[n] = m` (independent of the exponents). `nu` and `Omega`
+  (`PrimeOmega`) coincide exactly when `n` is square-free; for a prime power
+  `PrimeNu[n]` is `1`.
+
+**Features**:
+- `Listable`, `Protected`.
+- Additive on coprime arguments: `nu(m n) = nu(m) + nu(n)` when
+  `GCD[m, n] == 1`.
+- Computed directly from the prime factorisation (machine integers and GMP
+  bigints handled uniformly).
+- `PrimeNu[1]` (and `PrimeNu[-1]`) is `0`; the sign of `n` is ignored
+  (`nu(-n) = nu(n)`).
+- Gaussian integers: `PrimeNu[n, GaussianIntegers -> True]`, or a non-real
+  Gaussian-integer argument `Complex[a, b]`, factors `n` over `Z[i]` and counts
+  the distinct Gaussian prime factors. Because a rational prime `p ≡ 1 (mod 4)`
+  splits into two conjugate Gaussian primes, e.g.
+  `PrimeNu[105, GaussianIntegers -> True]` is `4` (from `3`, the split pair over
+  `5`, and `7`) while `PrimeNu[105]` is `3`.
+- Non-integer or zero `n` is left unevaluated; a wrong argument count issues a
+  `PrimeNu::argt` message.
+- Relations: for a square-free `n`, `MoebiusMu[n] == (-1)^PrimeNu[n]` and
+  `LiouvilleLambda[n] == (-1)^PrimeNu[n]`.
+
+```mathematica
+In[1]:= PrimeNu[24]
+Out[1]= 2
+
+In[2]:= PrimeNu[105]
+Out[2]= 3
+
+In[3]:= PrimeNu[{4, 28, 180}]
+Out[3]= {1, 2, 3}
+
+In[4]:= PrimeNu[50!]
+Out[4]= 15
+
+In[5]:= PrimeNu[3 + I]
+Out[5]= 2
+
+In[6]:= PrimeNu[105, GaussianIntegers -> True]
+Out[6]= 4
 ```
 
 ## EulerPhi
