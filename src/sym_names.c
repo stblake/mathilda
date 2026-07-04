@@ -571,6 +571,19 @@ const char* SYM_DollarruSimplify = NULL;
 const char* SYM_Graphics = NULL;
 const char* SYM_Point = NULL;
 const char* SYM_Line = NULL;
+
+/* Graph subsystem (src/graph/). */
+const char* SYM_Graph = NULL;
+const char* SYM_Graph3D = NULL;
+const char* SYM_Graphics3D = NULL;
+const char* SYM_DirectedEdge = NULL;
+const char* SYM_UndirectedEdge = NULL;
+const char* SYM_TwoWayRule = NULL;
+const char* SYM_GraphLayout = NULL;
+const char* SYM_VertexStyle = NULL;
+const char* SYM_EdgeStyle = NULL;
+const char* SYM_VertexLabels = NULL;
+const char* SYM_VertexSize = NULL;
 const char* SYM_Rectangle = NULL;
 const char* SYM_Circle = NULL;
 const char* SYM_Disk = NULL;
@@ -1205,6 +1218,18 @@ void sym_names_init(void) {
     SYM_Point                      = intern_symbol("Point");
     SYM_Line                       = intern_symbol("Line");
     SYM_Rectangle                  = intern_symbol("Rectangle");
+
+    SYM_Graph                      = intern_symbol("Graph");
+    SYM_Graph3D                    = intern_symbol("Graph3D");
+    SYM_Graphics3D                 = intern_symbol("Graphics3D");
+    SYM_DirectedEdge               = intern_symbol("DirectedEdge");
+    SYM_UndirectedEdge             = intern_symbol("UndirectedEdge");
+    SYM_TwoWayRule                 = intern_symbol("TwoWayRule");
+    SYM_GraphLayout                = intern_symbol("GraphLayout");
+    SYM_VertexStyle                = intern_symbol("VertexStyle");
+    SYM_EdgeStyle                  = intern_symbol("EdgeStyle");
+    SYM_VertexLabels               = intern_symbol("VertexLabels");
+    SYM_VertexSize                 = intern_symbol("VertexSize");
     SYM_Circle                     = intern_symbol("Circle");
     SYM_Disk                       = intern_symbol("Disk");
     SYM_Polygon                    = intern_symbol("Polygon");

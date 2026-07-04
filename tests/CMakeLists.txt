@@ -111,6 +111,7 @@ include_directories(../src/special_functions)
 include_directories(../src/numerical_calculus)
 include_directories(../src/numerical_roots)
 include_directories(../src/graphics)
+include_directories(../src/graph)
 if(USE_ECM)
     include_directories(../src/external/ecm)
 endif()
@@ -455,6 +456,109 @@ set(COMMON_SRC
     ../src/graphics/plot.c
     ../src/graphics/listplot.c
     ../src/graphics/show.c
+    ../src/graph/graph.c
+    ../src/graph/graph_util.c
+    ../src/graph/construct.c
+    ../src/graph/graphq.c
+    ../src/graph/vertexlist.c
+    ../src/graph/edgelist.c
+    ../src/graph/counts.c
+    ../src/graph/adjlist.c
+    ../src/graph/degree.c
+    ../src/graph/directedq.c
+    ../src/graph/adjmat.c
+    ../src/graph/incmat.c
+    ../src/graph/adjgraph.c
+    ../src/graph/generators.c
+    ../src/graph/shortestpath.c
+    ../src/graph/components.c
+    ../src/graph/spanningtree.c
+    ../src/graph/connectivity.c
+    ../src/graph/graphplot.c
+    ../src/graph/layout.c
+    ../src/graph/highlight.c
+    ../src/graph/render3d.c
+    ../src/graph/bipartiteq.c
+    ../src/graph/metrics.c
+    ../src/graph/acyclic.c
+    ../src/graph/complement.c
+    ../src/graph/kirchhoff.c
+    ../src/graph/edgeconnectivity.c
+    ../src/graph/linegraph.c
+    ../src/graph/eulerianq.c
+    ../src/graph/centrality.c
+    ../src/graph/transitiveclosure.c
+    ../src/graph/betweenness.c
+    ../src/graph/findeuler.c
+    ../src/graph/findhamilton.c
+    ../src/graph/graphpower.c
+    ../src/graph/findcycle.c
+    ../src/graph/distmatrix.c
+    ../src/graph/density.c
+    ../src/graph/degreecentrality.c
+    ../src/graph/findhamiltonpath.c
+    ../src/graph/kcore.c
+    ../src/graph/clustering.c
+    ../src/graph/globalclustering.c
+    ../src/graph/meanclustering.c
+    ../src/graph/findclique.c
+    ../src/graph/findindependent.c
+    ../src/graph/findvertexcover.c
+    ../src/graph/reciprocity.c
+    ../src/graph/chromaticpoly.c
+    ../src/graph/chromaticnumber.c
+    ../src/graph/degreesequence.c
+    ../src/graph/treegraphq.c
+    ../src/graph/stronglyconnectedq.c
+    ../src/graph/hamiltonianq.c
+    ../src/graph/regulargraphq.c
+    ../src/graph/completegraphq.c
+    ../src/graph/graphunion.c
+    ../src/graph/graphintersection.c
+    ../src/graph/graphdifference.c
+    ../src/graph/graphreverse.c
+    ../src/graph/pathgraphq.c
+    ../src/graph/vertexcontract.c
+    ../src/graph/pagerank.c
+    ../src/graph/katzcentrality.c
+    ../src/graph/graphjoin.c
+    ../src/graph/indexgraph.c
+    ../src/graph/emptygraphq.c
+    ../src/graph/mixedgraphq.c
+    ../src/graph/graphproduct.c
+    ../src/graph/turangraph.c
+    ../src/graph/completekarytree.c
+    ../src/graph/circulantgraph.c
+    ../src/graph/laddergraph.c
+    ../src/graph/cocktailparty.c
+    ../src/graph/kneser.c
+    ../src/graph/generalizedpetersen.c
+    ../src/graph/friendshipgraph.c
+    ../src/graph/vertexcoreness.c
+    ../src/graph/transitivereduction.c
+    ../src/graph/subgraph.c
+    ../src/graph/vertexdelete.c
+    ../src/graph/edgedelete.c
+    ../src/graph/edgeadd.c
+    ../src/graph/vertexadd.c
+    ../src/graph/neighborhoodgraph.c
+    ../src/graph/graphdisjointunion.c
+    ../src/graph/edgecontract.c
+    ../src/graph/findmatching.c
+    ../src/graph/finddominatingset.c
+    ../src/graph/findedgecover.c
+    ../src/graph/findvertexcoloring.c
+    ../src/graph/graphassortativity.c
+    ../src/graph/incidencelist.c
+    ../src/graph/vertexcomponents.c
+    ../src/graph/antiprismgraph.c
+    ../src/graph/prismgraph.c
+    ../src/graph/sunletgraph.c
+    ../src/graph/helmgraph.c
+    ../src/graph/geargraph.c
+    ../src/graph/edgebetweenness.c
+    ../src/graph/dodecahedralgraph.c
+    ../src/graph/icosahedralgraph.c
 )
 
 # render.c / hershey_font.c need a live Raylib + display; only compiled
@@ -1693,6 +1797,11 @@ add_test(NAME graphics_sampling_tests COMMAND graphics_sampling_tests)
 add_executable(graphics_tests test_graphics.c ${COMMON_SRC})
 target_include_directories(graphics_tests PRIVATE ../src ../src/graphics)
 add_test(NAME graphics_tests COMMAND graphics_tests)
+
+add_executable(graph_tests test_graph.c ${COMMON_SRC})
+target_link_libraries(graph_tests m)
+target_include_directories(graph_tests PRIVATE ../src ../src/graph)
+add_test(NAME graph_tests COMMAND graph_tests)
 
 add_executable(context_tests test_context.c ${COMMON_SRC})
 target_include_directories(context_tests PRIVATE ../src)

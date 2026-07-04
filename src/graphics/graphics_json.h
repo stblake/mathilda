@@ -20,4 +20,16 @@
  */
 char* graphics_to_plotly_json(const Expr* g);
 
+/*
+ * graphics3d_to_plotly_json(g)
+ *
+ * Convert a Graphics3D[...] Expr (as produced by Graph3D) to a Plotly
+ * scatter3d scene JSON string. Handled primitives:
+ *   Line[List[List[x,y,z], List[x,y,z]]] — a 3D line segment (edge)
+ *   Point[List[List[x,y,z], ...]]        — 3D markers (vertices)
+ *   RGBColor[r, g, b]                    — current colour
+ * Returns a heap-allocated string (caller frees) or NULL.
+ */
+char* graphics3d_to_plotly_json(const Expr* g);
+
 #endif /* MATHILDA_GRAPHICS_JSON_H */

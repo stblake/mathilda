@@ -63,6 +63,14 @@ src/
   poly/             Polynomial subsystem (univariate, multivariate, factoring,
                     algebraic-number factoring, polynomial solving)
   linalg/           Dense linear algebra; eigen kernels split by algorithm
+  graph/            Graph subsystem: Graph[] construction/validation, queries
+                    (VertexList/EdgeList/degree/AdjacencyList), matrix views
+                    (Adjacency/Incidence/Kirchhoff/Distance), generators
+                    (Complete/Cycle/Path/Petersen/Random/...), algorithms
+                    (shortest path, components, spanning tree, connectivity,
+                    Euler/Hamilton, cliques, colouring), centrality (PageRank,
+                    Katz, betweenness, clustering) and GraphPlot/Graph3D
+                    (one builtin per file, mirrors linalg/)
   simp/             Simplify, trig simplification, trig rationalisation
   calculus/         D / Dt / Derivative, Series, Limit, Integrate, Risch-Norman
   special_functions/ Higher transcendental & special functions: Gamma, LogGamma,
@@ -265,7 +273,8 @@ return arg0;
 `*_init()` function: `parfrac`, `modular`, `facint`, `comparisons`, `boolean`,
 `list`, `replace`, `patterns`, `cond`, `iter`, `complex`, `trig`, `simp`,
 `hyperbolic`, `logexp`, `piecewise`, `attr`, `purefunc`, `stats`, `poly`,
-`facpoly`, `rat`, `expand`, `info`, `datetime`, `linalg`, `load`, `graphics`.
+`facpoly`, `rat`, `expand`, `info`, `datetime`, `linalg`, `load`, `graphics`,
+`graph`.
 
 After C-side init, `main()` loads `src/internal/init.m`, which `Get[]`s the
 remaining `.m` bootstrap files.

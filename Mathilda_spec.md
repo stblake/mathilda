@@ -51,6 +51,7 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | Pattern matching (`MatchQ`, `Cases`, `DeleteCases`, `Position`, `Count`, ...) | [`builtins/pattern-matching.md`](docs/spec/builtins/pattern-matching.md) |
 | File I/O (`Get`, `Put`, `PutAppend`, `>>`, `>>>`) | [`builtins/file-io.md`](docs/spec/builtins/file-io.md) |
 | Graphics (`Graphics`, `Show`, `Plot`, `Point`, `Line`, `Rectangle`, `Circle`, `Disk`, `Polygon`, `Text`, ...) | [`builtins/graphics.md`](docs/spec/builtins/graphics.md) |
+| Graphs (`Graph`, `VertexList`, `EdgeList`, `AdjacencyMatrix`, `FindShortestPath`, `ConnectedComponents`, `PageRank`, `GraphPlot`, ...) | [`builtins/graphs.md`](docs/spec/builtins/graphs.md) |
 | FLINT context (`` FLINT`PolynomialGCD ``, `` FLINT`Factor ``, `` FLINT`Det ``, `` FLINT`Zeta ``, ...) — direct access to the FLINT-backed kernels | [`builtins/flint.md`](docs/spec/builtins/flint.md) |
 
 ## Changelog

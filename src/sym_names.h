@@ -575,6 +575,21 @@ extern const char* SYM_DollarruSimplify;
 extern const char* SYM_Graphics;
 extern const char* SYM_Point;
 extern const char* SYM_Line;
+
+/* Graph subsystem (src/graph/): Graph[]/Graph3D[] heads, edge heads and their
+ * parse-time sugar (Rule/TwoWayRule normalize to Directed/UndirectedEdge), and
+ * graph rendering options consumed by GraphPlot. */
+extern const char* SYM_Graph;
+extern const char* SYM_Graph3D;
+extern const char* SYM_Graphics3D;
+extern const char* SYM_DirectedEdge;
+extern const char* SYM_UndirectedEdge;
+extern const char* SYM_TwoWayRule;
+extern const char* SYM_GraphLayout;
+extern const char* SYM_VertexStyle;
+extern const char* SYM_EdgeStyle;
+extern const char* SYM_VertexLabels;
+extern const char* SYM_VertexSize;
 extern const char* SYM_Rectangle;
 extern const char* SYM_Circle;
 extern const char* SYM_Disk;
