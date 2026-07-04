@@ -349,6 +349,7 @@ set(COMMON_SRC
     ../src/common.c
     ../src/poly/zupoly.c
     ../src/poly/flint_bridge.c
+    ../src/poly/flint_qqbar.c
     ../src/poly/bpoly.c
     ../src/poly/mpoly.c
     ../src/poly/mvfactor.c

@@ -130,37 +130,60 @@ Out[7]= (2 x)/(-k^(2/3) + x^2)
 
 ## RootReduce
 
-Rewrites an expression over an algebraic tower `Q(params)(radicals)` in canonical
-form, **rationalising** radical and root-of-unity denominators (clearing them of
-every radical). Unlike `Cancel`/`Together` (which keep radicals in the
-denominator), `RootReduce` produces the norm-denominator canonical representative.
+Canonicalises an algebraic expression. `RootReduce` dispatches between two
+rigorous FLINT engines by the shape of the input:
+
 - `RootReduce[expr]`
+- `RootReduce[expr, Method -> "Automatic" | "Recursive" | "NumberField"]`
+
+**Constant algebraic numbers** (no free symbol) — integers, rationals, radicals,
+roots of unity, the imaginary unit and `Root[]` objects combined by `+,-,*,/,^`
+— are canonicalised via FLINT `qqbar` (`src/poly/flint_qqbar.c`) to a single
+representative: a **rational number**, a **quadratic radical expression**, or a
+`Root[Function[minpoly&], k]` object (degree ≥ 3). The `Root` index `k` follows
+the Wolfram ordering (real roots ascending first, then non-real roots).
+
+**Algebraic functions** over a tower `Q(params)(radicals)` — radicals whose
+radicand carries a free variable (e.g. the Goursat `k^(1/3)` towers) — have
+their denominator **rationalised** by `flint_algebraic_field_canonical`
+(`src/poly/flint_bridge.c`): the tower is a finite-dimensional `Q(params)`-vector
+space, multiplication by the denominator is a linear map (products reduced modulo
+the generators' minimal-polynomial ideal via `fmpz_mpoly_divrem_ideal`), and
+inverting it with a solve over `Q(params)` (`gr_mat` over `fmpz_mpoly_q`)
+rationalises the denominator to `Norm_{K/Q(params)}(D)`. No numeric zero oracle.
 
 **Features**:
-- `Protected`, `Listable`.
-- Rigorous FLINT field arithmetic (2026-07-04, `flint_algebraic_field_canonical`):
-  the tower is a finite-dimensional `Q(params)`-vector space, multiplication by
-  the denominator is a linear map (products reduced modulo the generators'
-  minimal-polynomial ideal via `fmpz_mpoly_divrem_ideal`), and inverting it with
-  a solve over `Q(params)` (`gr_mat` over `fmpz_mpoly_q`) rationalises the
-  denominator to `Norm_{K/Q(params)}(D)`. No numeric zero oracle; complete when
-  the minimal polynomials are irreducible.
-- Handles radicals of any index (cube roots and higher), polynomial/symbol
-  radicands, roots of unity, and constant radicands (number fields). Leaves an
-  expression with no algebraic generator unchanged. Idempotent.
+- `Protected`, `Listable`. Threads over lists, and over equations, inequalities
+  and logic functions (`Equal`, `Unequal`, `Less`, `And`, ...); for
+  (in)equalities of constant algebraic numbers it decides the relation exactly
+  via `qqbar`.
+- `Method`: `"Recursive"`/`"Automatic"` fold `qqbar` arithmetic bottom-up;
+  `"NumberField"` re-expresses the value through a single primitive element of a
+  common number field (`qqbar_express_in_field`). All three yield the identical
+  canonical result. A `Root[]` object of degree ≤ 2 (or degree 1) auto-reduces
+  to a quadratic radical / rational.
+- One positional argument is required; other arg counts emit `RootReduce::argx`.
+  An unknown `Method` emits `RootReduce::mtd`. Idempotent.
 
 ```mathematica
-In[1]:= RootReduce[1/(1 + k^(1/3))]
-Out[1]= (1 - k^(1/3) + k^(2/3)) / (1 + k)
+In[1]:= RootReduce[Sqrt[2] + Sqrt[3]]
+Out[1]= Root[1 - 10 #1^2 + #1^4 &, 4]
 
-In[2]:= RootReduce[1/(a + b k^(1/3))]
-Out[2]= (a^2 - a b k^(1/3) + b^2 k^(2/3)) / (a^3 + b^3 k)
+In[2]:= RootReduce[(Sqrt[18] + Sqrt[27]) / Sqrt[5 + 2 Sqrt[6]]]
+Out[2]= 3
 
 In[3]:= RootReduce[1/(1 + Sqrt[2])]
 Out[3]= -1 + Sqrt[2]
 
 In[4]:= RootReduce[1/(1 + 2^(1/3) + 2^(2/3))]
-Out[4]= -1 + 2^(1/3)
+Out[4]= Root[-1 + 3 #1 + 3 #1^2 + #1^3 &, 1]
+
+In[5]:= RootReduce[Sqrt[2] + Sqrt[3] + Sqrt[5] ==
+          Sqrt[10 + 2 Sqrt[15] + 4 Sqrt[4 + Sqrt[15]]]]
+Out[5]= True
+
+In[6]:= RootReduce[1/(1 + k^(1/3))]        (* parametric tower *)
+Out[6]= (1 - k^(1/3) + k^(2/3)) / (1 + k)
 ```
 
 ## Apart

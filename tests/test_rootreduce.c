@@ -98,10 +98,14 @@ static void test_rootreduce_exact(void) {
     /* Two-parameter numerator: 1/(a + b k^(1/3)). */
     check("RootReduce[1/(a + b*k^(1/3))]",
           "(a^2 - a b k^(1/3) + b^2 k^(2/3))/(a^3 + b^3 k)");
-    /* Number field (constant radicand): 1/(1+Sqrt[2]) = Sqrt[2]-1. */
+    /* Constant algebraic number, degree 2 -> quadratic radical (qqbar path):
+     * 1/(1+Sqrt[2]) = Sqrt[2]-1. */
     check("RootReduce[1/(1 + Sqrt[2])]", "-1 + Sqrt[2]");
-    /* 1/(1 + 2^(1/3) + 2^(2/3)) telescopes to 2^(1/3) - 1. */
-    check("RootReduce[1/(1 + 2^(1/3) + 2^(2/3))]", "-1 + 2^(1/3)");
+    /* Constant algebraic number, degree 3 -> Root object (WL keeps degree >= 3
+     * as a Root, not a cubic radical). 1/(1+2^(1/3)+2^(2/3)) = 2^(1/3)-1, whose
+     * minimal polynomial is #^3 + 3#^2 + 3# - 1. */
+    check("RootReduce[1/(1 + 2^(1/3) + 2^(2/3))]",
+          "Root[-1 + 3 #1 + 3 #1^2 + #1^3 &, 1]");
     /* Free variable x with a constant-in-x cube root: cancels AND rationalises
      * (x - k^(1/3))/(x^2 - k^(2/3)) = 1/(x + k^(1/3)) -> rationalised. */
     check("RootReduce[(x - k^(1/3))/(x^2 - k^(2/3))]",
@@ -224,6 +228,79 @@ static void test_stress(void) {
     for (int i = 0; cases[i]; i++) check_preserves(cases[i]);
 }
 
+/* ------------------------------------------------------------------ */
+/*  G1/G2: constant algebraic numbers -> Root / quadratic radical / rational */
+/* ------------------------------------------------------------------ */
+
+static void test_qqbar_canonical(void) {
+    /* G1: numerator-only algebraic number -> single Root object (WL: degree 4,
+     * index 4 for Sqrt[2]+Sqrt[3]). */
+    check("RootReduce[Sqrt[2] + Sqrt[3]]", "Root[1 - 10 #1^2 + #1^4 &, 4]");
+    check("MinimalPolynomial[RootReduce[Sqrt[2] + Sqrt[3]], x]", "1 - 10 x^2 + x^4");
+    /* G1: three provably-equal nested radicals canonicalise to the SAME Root. */
+    check("RootReduce[Sqrt[2] + Sqrt[3] + Sqrt[5]] == "
+          "RootReduce[Sqrt[10 + 2 Sqrt[15] + 4 Sqrt[4 + Sqrt[15]]]]", "True");
+    /* G2: nested constant radicals reduce fully. */
+    check("RootReduce[(Sqrt[18] + Sqrt[27])/Sqrt[5 + 2 Sqrt[6]]]", "3");
+    check("RootReduce[(Sqrt[2] + Sqrt[3] + Sqrt[6] + 3)/Sqrt[5 + 2 Sqrt[6]]]",
+          "1 + Sqrt[3]");
+    check("RootReduce[Sqrt[7]/Sqrt[5 + 2 Sqrt[6]]]", "Root[49 - 70 #1^2 + #1^4 &, 3]");
+    /* Degree 1 -> rational; degree 2 -> quadratic radical. */
+    check("RootReduce[Sqrt[8] - 2 Sqrt[2]]", "0");
+    check("RootReduce[1/(1 + Sqrt[2])]", "-1 + Sqrt[2]");
+    /* Root-object arithmetic -> a single degree-15 Root (WL index 1). */
+    check("RootReduce[Root[#^5 + 11 # + 1 &, 1] Root[#^3 + # + 17 &, 1]]",
+          "Root[-1419857 + 918731 #1 + 111166451 #1^3 + 1446 #1^5 + 162316 #1^6 "
+          "+ 139997 #1^7 + 85 #1^10 + 22 #1^11 + #1^15 &, 1]");
+    /* Idempotence of a Root object (round-trips to its monic minimal poly). */
+    check("RootReduce[Root[Function[t, t^3 + t + 17], 1]]",
+          "Root[17 + #1 + #1^3 &, 1]");
+}
+
+/* ------------------------------------------------------------------ */
+/*  G4: threading over equations / inequalities / logic                */
+/* ------------------------------------------------------------------ */
+
+static void test_qqbar_threading(void) {
+    check("RootReduce[Sqrt[2] + Sqrt[3] + Sqrt[5] == "
+          "Sqrt[10 + 2 Sqrt[15] + 4 Sqrt[4 + Sqrt[15]]]]", "True");
+    check("RootReduce[Sqrt[2] == Sqrt[3]]", "False");
+    check("RootReduce[Sqrt[2] < Sqrt[3]]", "True");
+    check("RootReduce[Sqrt[3] <= Sqrt[3]]", "True");
+    check("RootReduce[Sqrt[2] != Sqrt[3]]", "True");
+    /* Logic threads: RootReduce maps into And, deciding each algebraic leaf. */
+    check("RootReduce[Sqrt[2] < Sqrt[3] && Sqrt[2] == Sqrt[2]]", "True");
+    /* Listable regression: threads over lists elementwise. */
+    check("RootReduce[{1/(1 + Sqrt[2]), 2}]", "{-1 + Sqrt[2], 2}");
+}
+
+/* ------------------------------------------------------------------ */
+/*  G3: argument-count / Method diagnostics leave the call unevaluated  */
+/* ------------------------------------------------------------------ */
+
+static void test_qqbar_argx(void) {
+    check("RootReduce[]", "RootReduce[]");
+    check("RootReduce[a, b]", "RootReduce[a, b]");
+    check("RootReduce[Sqrt[2], Method -> \"Bogus\"]",
+          "RootReduce[Sqrt[2], Method -> \"Bogus\"]");
+}
+
+/* ------------------------------------------------------------------ */
+/*  G5: Method -> "Recursive" / "NumberField" agree with Automatic      */
+/* ------------------------------------------------------------------ */
+
+static void test_qqbar_methods(void) {
+    /* The recursive-vs-numberfield example from the WL docs: c = 1. */
+    check("b = RootReduce[2^(1/3) + 3^(1/3) + 1]; "
+          "c = b - 2^(1/3) - 3^(1/3); RootReduce[c]", "1");
+    check("RootReduce[c, Method -> \"Recursive\"]", "1");
+    check("RootReduce[c, Method -> \"NumberField\"]", "1");
+    /* Degree-21 tower: all three methods produce the identical canonical Root. */
+    check("aa = 2 2^(1/3) + 3 3^(1/7) + 5 2^(1/3) 3^(1/7); "
+          "RootReduce[aa] == RootReduce[aa, Method -> \"NumberField\"] == "
+          "RootReduce[aa, Method -> \"Recursive\"]", "True");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -239,6 +316,10 @@ int main(void) {
     test_rootreduce_idempotent();
     test_together_cancel();
     test_stress();
+    test_qqbar_canonical();
+    test_qqbar_threading();
+    test_qqbar_argx();
+    test_qqbar_methods();
 
     printf("All RootReduce / algebraic-field tests passed.\n");
     return 0;
