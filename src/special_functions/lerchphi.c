@@ -141,8 +141,73 @@ static Expr* lp_z_one(Expr* s, Expr* a) {
     return eval_and_free(lp_zeta2(expr_copy(s), expr_copy(a)));
 }
 
-/* z = -1: Phi(-1, s, a) = 2^-s (Zeta[s, a/2] - Zeta[s, (a+1)/2]). */
+/* PolyGamma[0, x], x consumed. */
+static Expr* lp_digamma(Expr* x) {
+    return expr_new_function(expr_new_symbol(SYM_PolyGamma),
+               (Expr*[]){ expr_new_integer(0), x }, 2);
+}
+
+/* Dirichlet-beta reduction of Phi(-1, s, a) at half-integer a = num/2 (num odd,
+ * num >= 1) and integer s >= 2.  The base at a = 1/2 is Phi(-1,s,1/2) = 2^s beta(s):
+ *   s = 2  -> 4 Catalan;
+ *   s odd  -> (-1)^((s-1)/2) EulerE[s-1] Pi^s / (2 (s-1)!)  (a rational * Pi^s);
+ * even s >= 4 has no elementary beta value -> NULL (caller uses the Zeta form).
+ * Higher half-integers reduce to the base via  Phi(-1,s,b+1) = b^-s - Phi(-1,s,b). */
+static Expr* lp_beta_half(long s, int64_t num) {
+    Expr* base;
+    if (s == 2) {
+        base = lp_times(expr_new_integer(4), expr_new_symbol(SYM_Catalan));
+    } else if (s % 2 == 1) {
+        int sign = ((((s - 1) / 2) % 2) == 0) ? 1 : -1;
+        Expr* eulerE = expr_new_function(expr_new_symbol(SYM_EulerE),
+                           (Expr*[]){ expr_new_integer(s - 1) }, 1);
+        Expr* pis  = lp_pow(expr_new_symbol(SYM_Pi), expr_new_integer(s));
+        Expr* fact = expr_new_function(expr_new_symbol(SYM_Factorial),
+                         (Expr*[]){ expr_new_integer(s - 1) }, 1);
+        Expr* denom = lp_pow(lp_times(expr_new_integer(2), fact), expr_new_integer(-1));
+        base = lp_times(lp_times(expr_new_integer(sign), eulerE), lp_times(pis, denom));
+    } else {
+        return NULL;
+    }
+    int64_t m = (num - 1) / 2;   /* steps above a = 1/2 */
+    Expr* cur = base;
+    for (int64_t t = 0; t < m; t++) {
+        Expr* bnegs = lp_pow(make_rational(2 * t + 1, 2), expr_new_integer(-s));
+        cur = expr_new_function(expr_new_symbol(SYM_Plus),
+                  (Expr*[]){ bnegs, lp_times(expr_new_integer(-1), cur) }, 2);
+    }
+    return eval_and_free(cur);
+}
+
+/* z = -1: Phi(-1, s, a) = 2^-s (Zeta[s, a/2] - Zeta[s, (a+1)/2]).
+ *
+ * The s = 1 case is special: both Hurwitz zetas Zeta[1, .] are individually
+ * poles (the two-Zeta form is a 0/0 that N cannot resolve).  Their difference is
+ * finite and equals the digamma reduction
+ *   Phi(-1, 1, a) = Sum_{k>=0} (-1)^k/(k+a) = (1/2)(psi((a+1)/2) - psi(a/2)),
+ * which stays elementary (the Gauss digamma theorem then reduces rational a). */
 static Expr* lp_z_minus_one(Expr* s, Expr* a) {
+    if (lp_is_int(s, 1)) {
+        Expr* ap1 = expr_new_function(expr_new_symbol(SYM_Plus),
+                        (Expr*[]){ expr_copy(a), expr_new_integer(1) }, 2);
+        Expr* psi_hi = lp_digamma(lp_times(ap1, make_rational(1, 2)));       /* psi((a+1)/2) */
+        Expr* psi_lo = lp_digamma(lp_times(expr_copy(a), make_rational(1, 2))); /* psi(a/2) */
+        Expr* diff = expr_new_function(expr_new_symbol(SYM_Plus),
+                        (Expr*[]){ psi_hi, lp_times(expr_new_integer(-1), psi_lo) }, 2);
+        return eval_and_free(lp_times(make_rational(1, 2), diff));
+    }
+
+    /* Half-integer a with integer s >= 2: Dirichlet-beta closed form (Catalan for
+     * s = 2, rational*Pi^s for odd s) instead of the un-reducing two-Zeta form. */
+    {
+        int64_t rn, rd; long si;
+        if (lp_exact_int(s, &si) && si >= 2 && is_rational(a, &rn, &rd)
+            && rd == 2 && rn >= 1 && (rn % 2 == 1)) {
+            Expr* r = lp_beta_half(si, rn);
+            if (r) return r;
+        }
+    }
+
     Expr* twonegs = lp_pow(expr_new_integer(2), lp_neg_s(expr_copy(s)));
     Expr* ah  = lp_times(expr_copy(a), make_rational(1, 2));               /* a/2 */
     Expr* ap1 = expr_new_function(expr_new_symbol(SYM_Plus),

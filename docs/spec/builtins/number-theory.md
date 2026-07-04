@@ -440,6 +440,17 @@ Out[3]= {4, 25}
 - `Listable`, `Protected`.
 - Supports negative integers (includes `{-1, 1}`).
 - Supports rational numbers (denominator factors have negative exponents).
+- Perfect powers are reduced before the general search: `n = base^m` is peeled
+  to a primitive base, factored once, and the exponents scaled by `m`. This is
+  what makes prime powers of a large prime (e.g. `(2^61-1)^2`) factor correctly
+  rather than being mislabelled as prime — Pollard rho and ECM alone cannot
+  split such powers.
+- `FactorInteger::nofac`: under the default `Automatic` method, a hard composite
+  (e.g. a semiprime of two large distinct primes) that survives trial division,
+  Pollard rho and ECM within the search bounds is returned unfactored with
+  exponent 1 — which looks like a prime factor. A warning is emitted to make
+  that compromise explicit rather than silent. It is suppressed inside routines
+  that mute arithmetic warnings (numeric integration, `Limit`, `Series`, …).
 
 ```mathematica
 In[1]:= FactorInteger[12]
@@ -595,6 +606,138 @@ Out[5]= -1
 
 In[6]:= MoebiusMu[5 + 6 I]
 Out[6]= -1
+```
+
+## LiouvilleLambda
+
+- `LiouvilleLambda[n]`: the Liouville function `lambda(n) = (-1)^Omega(n)`, where
+  `Omega(n)` is the number of prime factors of `n` counted **with multiplicity**.
+  For `n = u p_1^k_1 ... p_m^k_m` with `u` a unit and `p_i` primes,
+  `lambda(n) = (-1)^(k_1 + ... + k_m)`. Equivalently `lambda(1) = 1`, and
+  `lambda` is `1` when `n` is a product of an even number of primes and `-1`
+  otherwise.
+
+**Features**:
+- `Listable`, `Protected`.
+- Completely multiplicative: `lambda(m n) = lambda(m) lambda(n)`.
+- Computed directly from the prime factorisation (machine integers and GMP
+  bigints handled uniformly); the result is always `1` or `-1`.
+- The sign of `n` is ignored (`lambda(-n) = lambda(n)`).
+- Gaussian integers: `LiouvilleLambda[n, GaussianIntegers -> True]`, or a
+  non-real Gaussian-integer argument `Complex[a, b]`, factors `n` over `Z[i]`
+  and counts the Gaussian prime factors with multiplicity. Because `2` factors
+  as `-i (1 + i)^2` in `Z[i]`, e.g. `LiouvilleLambda[2, GaussianIntegers -> True]`
+  is `1` while `LiouvilleLambda[2]` is `-1`.
+- Non-integer or zero `n` is left unevaluated; a wrong argument count issues a
+  `LiouvilleLambda::argt` message.
+
+```mathematica
+In[1]:= LiouvilleLambda[8]
+Out[1]= -1
+
+In[2]:= LiouvilleLambda[9]
+Out[2]= 1
+
+In[3]:= LiouvilleLambda[{1, 2, 3, 4, 5, 6}]
+Out[3]= {1, -1, -1, 1, -1, 1}
+
+In[4]:= LiouvilleLambda[10^30 + 1]
+Out[4]= -1
+
+In[5]:= LiouvilleLambda[2 + I]
+Out[5]= -1
+
+In[6]:= LiouvilleLambda[8, GaussianIntegers -> True]
+Out[6]= 1
+```
+
+## PrimeOmega
+
+- `PrimeOmega[n]`: the number of prime factors of `n` counted **with
+  multiplicity**, `Omega(n)`. For `n = u p_1^k_1 ... p_m^k_m` with `u` a unit
+  and `p_i` primes, `PrimeOmega[n] = k_1 + ... + k_m`. This is the exponent sum
+  that `LiouvilleLambda` reduces via `lambda(n) = (-1)^Omega(n)`.
+
+**Features**:
+- `Listable`, `Protected`.
+- Completely additive: `Omega(m n) = Omega(m) + Omega(n)`.
+- Computed directly from the prime factorisation (machine integers and GMP
+  bigints handled uniformly).
+- `PrimeOmega[1]` (and `PrimeOmega[-1]`) is `0`; the sign of `n` is ignored
+  (`Omega(-n) = Omega(n)`).
+- Gaussian integers: `PrimeOmega[n, GaussianIntegers -> True]`, or a non-real
+  Gaussian-integer argument `Complex[a, b]`, factors `n` over `Z[i]` and counts
+  the Gaussian prime factors with multiplicity. Because `2` factors as
+  `-i (1 + i)^2` in `Z[i]`, `PrimeOmega[12, GaussianIntegers -> True]` is `5`
+  (from `(1 + i)^4 3`) while `PrimeOmega[12]` is `3`.
+- Non-integer or zero `n` is left unevaluated; a wrong argument count issues a
+  `PrimeOmega::argt` message.
+
+```mathematica
+In[1]:= PrimeOmega[30]
+Out[1]= 3
+
+In[2]:= PrimeOmega[12]
+Out[2]= 3
+
+In[3]:= PrimeOmega[{4, 12, 24}]
+Out[3]= {2, 3, 4}
+
+In[4]:= PrimeOmega[30!]
+Out[4]= 59
+
+In[5]:= PrimeOmega[5 + 9 I]
+Out[5]= 2
+
+In[6]:= PrimeOmega[12, GaussianIntegers -> True]
+Out[6]= 5
+```
+
+## PrimeNu
+
+- `PrimeNu[n]`: the number of **distinct** prime factors of `n`, `nu(n)`. For
+  `n = u p_1^k_1 ... p_m^k_m` with `u` a unit and `p_i` distinct primes,
+  `PrimeNu[n] = m` (independent of the exponents). `nu` and `Omega`
+  (`PrimeOmega`) coincide exactly when `n` is square-free; for a prime power
+  `PrimeNu[n]` is `1`.
+
+**Features**:
+- `Listable`, `Protected`.
+- Additive on coprime arguments: `nu(m n) = nu(m) + nu(n)` when
+  `GCD[m, n] == 1`.
+- Computed directly from the prime factorisation (machine integers and GMP
+  bigints handled uniformly).
+- `PrimeNu[1]` (and `PrimeNu[-1]`) is `0`; the sign of `n` is ignored
+  (`nu(-n) = nu(n)`).
+- Gaussian integers: `PrimeNu[n, GaussianIntegers -> True]`, or a non-real
+  Gaussian-integer argument `Complex[a, b]`, factors `n` over `Z[i]` and counts
+  the distinct Gaussian prime factors. Because a rational prime `p ≡ 1 (mod 4)`
+  splits into two conjugate Gaussian primes, e.g.
+  `PrimeNu[105, GaussianIntegers -> True]` is `4` (from `3`, the split pair over
+  `5`, and `7`) while `PrimeNu[105]` is `3`.
+- Non-integer or zero `n` is left unevaluated; a wrong argument count issues a
+  `PrimeNu::argt` message.
+- Relations: for a square-free `n`, `MoebiusMu[n] == (-1)^PrimeNu[n]` and
+  `LiouvilleLambda[n] == (-1)^PrimeNu[n]`.
+
+```mathematica
+In[1]:= PrimeNu[24]
+Out[1]= 2
+
+In[2]:= PrimeNu[105]
+Out[2]= 3
+
+In[3]:= PrimeNu[{4, 28, 180}]
+Out[3]= {1, 2, 3}
+
+In[4]:= PrimeNu[50!]
+Out[4]= 15
+
+In[5]:= PrimeNu[3 + I]
+Out[5]= 2
+
+In[6]:= PrimeNu[105, GaussianIntegers -> True]
+Out[6]= 4
 ```
 
 ## EulerPhi

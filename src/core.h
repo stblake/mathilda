@@ -78,6 +78,12 @@ Expr* builtin_time_constrained(Expr* res);
  * its usual portability caveats. */
 void tc_check_deadline(void);
 
+/* Install GMP/MPFR memory functions guarded so the TimeConstrained SIGPROF
+ * siglongjmp is never taken while libmalloc holds a zone lock (which would
+ * leak the lock and trap the next allocation). Call once, before any GMP use;
+ * core_init() does this first. */
+void tc_install_alloc_guard(void);
+
 // Initialize core builtins
 void core_init(void);
 

@@ -549,6 +549,39 @@ static Expr* simp_try_rebalance_relation(const Expr* relation) {
     return out_eval;
 }
 
+/* Thread Simplify over the elements of a List, deciding numeric contagion
+ * independently per element. Numeric inexactness must not cross a List
+ * boundary: an exact element that merely shares a list with an inexact
+ * sibling stays exact (WL: `{1., 1} // Simplify` === `{1., 1}`). The blanket
+ * rationalise-then-numericalise path (see builtin_simplify below) would
+ * otherwise numericalise the whole result tree, turning every exact number
+ * in the list inexact. Trailing options / assumptions are preserved on each
+ * per-element call; nested lists (e.g. matrices) are handled by the
+ * recursive re-entry through the evaluator. */
+static Expr* simplify_thread_list(Expr* res) {
+    Expr*  list = res->data.function.args[0];
+    size_t n    = list->data.function.arg_count;
+    size_t argc = res->data.function.arg_count;
+
+    Expr** out = (n > 0) ? (Expr**)malloc(n * sizeof(Expr*)) : NULL;
+    for (size_t i = 0; i < n; i++) {
+        /* Build Simplify[el_i, opts...] and evaluate it. Re-entry lets each
+         * element take the inexact-or-exact branch on its own merits. */
+        Expr** call_args = (Expr**)malloc(argc * sizeof(Expr*));
+        call_args[0] = expr_copy(list->data.function.args[i]);
+        for (size_t j = 1; j < argc; j++)
+            call_args[j] = expr_copy(res->data.function.args[j]);
+        Expr* call = expr_new_function(expr_new_symbol(SYM_Simplify),
+                                       call_args, argc);
+        free(call_args);
+        out[i] = eval_and_free(call);
+    }
+
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, n);
+    if (out) free(out);
+    return result;
+}
+
 Expr* builtin_simplify(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -560,6 +593,13 @@ Expr* builtin_simplify(Expr* res) {
      * numericalise on the way out so callers still see inexact-in /
      * inexact-out semantics. */
     if (internal_args_contain_inexact(res)) {
+        /* Numeric contagion must not cross List boundaries: thread over the
+         * list so each element's inexactness is judged on its own, instead of
+         * numericalising the whole result tree (see simplify_thread_list). */
+        Expr* expr0 = res->data.function.args[0];
+        if (expr0->type == EXPR_FUNCTION && head_is(expr0, SYM_List)) {
+            return simplify_thread_list(res);
+        }
         return internal_rationalize_then_numericalize(res, builtin_simplify);
     }
 

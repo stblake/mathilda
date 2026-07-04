@@ -92,6 +92,13 @@ static int rational_converges(Expr* f, Expr* var) {
 static Expr* try_sinh_family(Expr* f, Expr* var, Expr* imin) {
     if (!(imin->type == EXPR_INTEGER && imin->data.integer == 1)) return NULL;
 
+    /* A genuine Weierstrass body 1 + c/k^2 (c free of k) never carries a
+     * symbolic power of the index; bodies like Exp[-x/k] = Power[E,-x/k] do.
+     * Skipping them here loses no coverage and avoids running Simplify on an
+     * expression whose intermediate forms evaluate Power[0,-1] (spurious
+     * Power::infy: 1/0 warnings). */
+    if (prod_has_symbolic_power(f, var)) return NULL;
+
     /* c = Simplify[(f - 1) * k^2]; the form holds iff c is free of k. */
     Expr* fm1 = expr_new_function(expr_new_symbol(SYM_Plus),
                     (Expr*[]){ expr_copy(f), expr_new_integer(-1) }, 2);
@@ -99,7 +106,11 @@ static Expr* try_sinh_family(Expr* f, Expr* var, Expr* imin) {
                    (Expr*[]){ expr_copy(var), expr_new_integer(2) }, 2);
     Expr* prod = expr_new_function(expr_new_symbol(SYM_Times),
                      (Expr*[]){ fm1, k2 }, 2);
+    /* Mute arithmetic warnings across the speculative Simplify (defense in
+     * depth: the gate above already excludes symbolic-power bodies). */
+    arith_warnings_mute_push();
     Expr* c = prod_eval("Simplify", (Expr*[]){ prod }, 1);   /* adopts prod */
+    arith_warnings_mute_pop();
 
     if (!prod_free_of(c, var)) { expr_free(c); return NULL; }
     if (c->type == EXPR_INTEGER && c->data.integer == 0) { expr_free(c); return NULL; }

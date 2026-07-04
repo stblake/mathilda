@@ -423,6 +423,13 @@ Behaviour:
   `Pi^(n+1)`: `PolyGamma[1, 1] = Pi^2/6`, `PolyGamma[3, 1] = Pi^4/15`,
   `PolyGamma[3, 5] = -22369/3456 + Pi^4/15`. For **even** order `n ≥ 1` the value
   involves ζ(odd) and stays symbolic, e.g. `PolyGamma[2, 1]`, `PolyGamma[4, 1]`.
+- **Exact at rational arguments (Gauss digamma theorem).** For order `n = 0` and
+  a positive rational `p/q`, `PolyGamma[0, p/q]` closes into an elementary form
+  `−EulerGamma − ln(2q) − (π/2) cot(πp/q) + 2 Σ cos(2πnp/q) ln(sin(nπ/q))`
+  (integer part folded back via `ψ(x+1) = ψ(x) + 1/x`), e.g.
+  `PolyGamma[0, 1/2] = -EulerGamma - Log[4]`,
+  `PolyGamma[0, 3/4] - PolyGamma[0, 1/4] = Pi`,
+  `PolyGamma[0, 2/3] - PolyGamma[0, 1/3] = Pi/Sqrt[3]`.
 - **Negative order.** `PolyGamma[-1, z] = LogGamma[z]` (the log-gamma function;
   see below). Orders ≤ −2 stay unevaluated.
 - **Numeric.** Inexact real arguments evaluate at machine precision (`Real`) or
@@ -529,7 +536,14 @@ HypergeometricPFQ[{a1,…,ap}, {b1,…,bq}, z]
 - Reduces to elementary functions for simple parameters: `0F0 -> E^z`,
   `1F0(a) -> (1-z)^(-a)`, `0F1(1/2) -> Cosh[2 Sqrt[z]]`,
   `0F1(3/2) -> Sinh[2 Sqrt[z]]/(2 Sqrt[z])`, `1F1(1;2) -> (E^z-1)/z`,
-  `2F1(1,1;2) -> -Log[1-z]/z`.
+  `2F1(1,1;2) -> -Log[1-z]/z`. The central-binomial / arcsin family also closes:
+  `2F1(1,1;1/2;z) -> 1/(1-z) + Sqrt[z] ArcSin[Sqrt[z]]/(1-z)^(3/2)`,
+  `2F1(1,1;3/2;z) -> ArcSin[Sqrt[z]]/(Sqrt[z] Sqrt[1-z])`,
+  `2F1(2,1;3/2;z) -> 1/(2(1-z)) + ArcSin[Sqrt[z]]/(2 Sqrt[z] (1-z)^(3/2))`.
+  A table-backed very-well-poised reduction closes the classic
+  central-binomial-cubed Ramanujan `1/Pi` series:
+  `4F3({1/2,1/2,1/2,5/4}, {1/4,1,1}, -1) -> 2/Pi` (general `1/Pi` summation is an
+  open problem, so this is a recognizer for the known class, not universal).
 - Numeric evaluation at machine, arbitrary (MPFR), and complex precision by
   direct series summation, with output precision tracking the input. The
   series is summed only where it converges — `p <= q` (entire) and `p == q+1`
@@ -842,7 +856,16 @@ Implemented in `src/special_functions/lerchphi.c`, registered via
   - `LerchPhi[0, s, a] = a^(-s)` (only the k = 0 term survives).
   - `LerchPhi[z, 0, a] = 1/(1 - z)` (the geometric sum, independent of `a`).
   - `LerchPhi[1, s, a] = Zeta[s, a]`; `LerchPhi[z, s, 1] = PolyLog[s, z]/z`.
-  - `LerchPhi[-1, s, 1/2] = 2^(-s) (Zeta[s, 1/4] - Zeta[s, 3/4])`.
+  - `LerchPhi[-1, 1, a] = (1/2)(PolyGamma[0, (a+1)/2] - PolyGamma[0, a/2])` (the
+    finite digamma reduction; the two-`Zeta` form is a `0/0` at `s = 1`). With the
+    Gauss digamma theorem this is elementary at rational `a`, e.g.
+    `LerchPhi[-1, 1, 1/2] = Pi/2`, `LerchPhi[-1, 1, 3/2] = 2 - Pi/2`.
+  - `LerchPhi[-1, s, a]` at half-integer `a` and integer `s ≥ 2` closes via the
+    Dirichlet beta function `LerchPhi[-1, s, 1/2] = 2^s β(s)` plus the recurrence
+    `Φ(-1,s,b+1) = b^(-s) - Φ(-1,s,b)`: `LerchPhi[-1, 2, 1/2] = 4 Catalan`,
+    `LerchPhi[-1, 3, 1/2] = Pi^3/4`, `LerchPhi[-1, 2, 3/2] = 4 - 4 Catalan`. Even
+    `s ≥ 4` (no elementary β) falls back to
+    `2^(-s) (Zeta[s, 1/4] - Zeta[s, 3/4])`.
   - A positive integer `a` shifts down to the `PolyLog` series, e.g.
     `LerchPhi[z, s, 2] = (PolyLog[s, z] - z)/z^2`.  This reduction is also taken
     for `z = -1` with integer `a`, so `LerchPhi[-1, 1, 1] = Log[2]` (the

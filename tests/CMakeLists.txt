@@ -172,6 +172,9 @@ set(COMMON_SRC
     ../src/numbertheory/divisors.c
     ../src/numbertheory/divisorsigma.c
     ../src/numbertheory/moebiusmu.c
+    ../src/numbertheory/liouvillelambda.c
+    ../src/numbertheory/primeomega.c
+    ../src/numbertheory/primenu.c
     ../src/numbertheory/jacobisymbol.c
     ../src/numbertheory/prime.c
     ../src/numbertheory/primecount.c
@@ -208,6 +211,7 @@ set(COMMON_SRC
     ../src/special_functions/hyperfactorial.c
     ../src/special_functions/barnesg.c
     ../src/special_functions/qpochhammer.c
+    ../src/special_functions/besseljzero.c
     ../src/power.c
     ../src/funcprog.c
     ../src/boolean.c
@@ -283,6 +287,7 @@ set(COMMON_SRC
     ../src/poly/subresultants.c
     ../src/poly/subresultantpoly.c
     ../src/rat.c
+    ../src/rootreduce.c
     ../src/poly/facpoly.c
     ../src/parfrac.c
     ../src/contfrac.c
@@ -383,6 +388,14 @@ set(COMMON_SRC
     ../src/sum/sum_gosper.c
     ../src/sum/sum_hypergeometric.c
     ../src/sum/sum_rational.c
+    ../src/sum/sum_euler.c
+    ../src/sum/sum_euler_nonlinear.c
+    ../src/sum/sum_dirichlet.c
+    ../src/sum/sum_zetaseries.c
+    ../src/sum/sum_alternating.c
+    ../src/sum/sum_trigonometric.c
+    ../src/sum/sum_logzeta.c
+    ../src/sum/sum_logrational.c
     ../src/product/product.c
     ../src/product/product_util.c
     ../src/product/product_telescoping.c
@@ -391,6 +404,12 @@ set(COMMON_SRC
     ../src/product/product_qproduct.c
     ../src/product/product_special.c
     ../src/product/product_infinite.c
+    ../src/product/product_cantor.c
+    ../src/product/product_viete.c
+    ../src/product/product_eulerprime.c
+    ../src/product/product_rational_infinite.c
+    ../src/product/product_besselzero.c
+    ../src/product/product_logsum.c
     ../src/root.c
     ../src/root_numeric.c
     ../src/radicals.c
@@ -419,6 +438,7 @@ set(COMMON_SRC
     ../src/numerical_calculus/gkadapt.c
     ../src/numerical_calculus/denint.c
     ../src/numerical_calculus/oscint.c
+    ../src/numerical_calculus/oscde.c
     ../src/numerical_calculus/mcint.c
     ../src/numerical_calculus/cubature.c
     ../src/numerical_calculus/ncrule.c
@@ -478,6 +498,10 @@ target_link_libraries(zero_test_tests m)
 target_include_directories(zero_test_tests PRIVATE ../src)
 add_test(NAME zero_test_tests COMMAND zero_test_tests)
 
+add_executable(rootreduce_tests test_rootreduce.c ${COMMON_SRC})
+target_include_directories(rootreduce_tests PRIVATE ../src)
+add_test(NAME rootreduce_tests COMMAND rootreduce_tests)
+
 add_executable(flint_bridge_tests test_flint_bridge.c ${COMMON_SRC})
 target_include_directories(flint_bridge_tests PRIVATE ../src)
 add_test(NAME flint_bridge_tests COMMAND flint_bridge_tests)
@@ -517,6 +541,18 @@ add_executable(moebiusmu_tests test_moebiusmu.c ${COMMON_SRC})
 target_include_directories(moebiusmu_tests PRIVATE ../src)
 add_test(NAME moebiusmu_tests COMMAND moebiusmu_tests)
 
+add_executable(liouvillelambda_tests test_liouvillelambda.c ${COMMON_SRC})
+target_include_directories(liouvillelambda_tests PRIVATE ../src)
+add_test(NAME liouvillelambda_tests COMMAND liouvillelambda_tests)
+
+add_executable(primeomega_tests test_primeomega.c ${COMMON_SRC})
+target_include_directories(primeomega_tests PRIVATE ../src)
+add_test(NAME primeomega_tests COMMAND primeomega_tests)
+
+add_executable(primenu_tests test_primenu.c ${COMMON_SRC})
+target_include_directories(primenu_tests PRIVATE ../src)
+add_test(NAME primenu_tests COMMAND primenu_tests)
+
 add_executable(prime_tests test_prime.c ${COMMON_SRC})
 target_include_directories(prime_tests PRIVATE ../src)
 add_test(NAME prime_tests COMMAND prime_tests)
@@ -533,6 +569,25 @@ add_executable(sum_rational_tests test_sum_rational.c ${COMMON_SRC})
 target_link_libraries(sum_rational_tests m)
 target_include_directories(sum_rational_tests PRIVATE ../src)
 
+add_executable(sum_product_families_tests test_sum_product_families.c ${COMMON_SRC})
+target_link_libraries(sum_product_families_tests m)
+target_include_directories(sum_product_families_tests PRIVATE ../src)
+
+add_executable(sum_euler_tests test_sum_euler.c ${COMMON_SRC})
+target_link_libraries(sum_euler_tests m)
+target_include_directories(sum_euler_tests PRIVATE ../src)
+add_test(NAME sum_euler_tests COMMAND sum_euler_tests)
+
+add_executable(sum_alternating_tests test_sum_alternating.c ${COMMON_SRC})
+target_link_libraries(sum_alternating_tests m)
+target_include_directories(sum_alternating_tests PRIVATE ../src)
+add_test(NAME sum_alternating_tests COMMAND sum_alternating_tests)
+
+add_executable(sum_trigonometric_tests test_sum_trigonometric.c ${COMMON_SRC})
+target_link_libraries(sum_trigonometric_tests m)
+target_include_directories(sum_trigonometric_tests PRIVATE ../src)
+add_test(NAME sum_trigonometric_tests COMMAND sum_trigonometric_tests)
+
 add_executable(product_tests test_product.c ${COMMON_SRC})
 target_link_libraries(product_tests m)
 target_include_directories(product_tests PRIVATE ../src ../src/product)
@@ -544,6 +599,18 @@ target_include_directories(product_stress_tests PRIVATE ../src ../src/product)
 add_executable(product_special_tests test_product_special.c ${COMMON_SRC})
 target_link_libraries(product_special_tests m)
 target_include_directories(product_special_tests PRIVATE ../src ../src/special_functions)
+
+add_executable(product_infinite_families_tests test_product_infinite_families.c ${COMMON_SRC})
+target_link_libraries(product_infinite_families_tests m)
+target_include_directories(product_infinite_families_tests PRIVATE ../src ../src/product)
+
+add_executable(sum_log_tests test_sum_log.c ${COMMON_SRC})
+target_link_libraries(sum_log_tests m)
+target_include_directories(sum_log_tests PRIVATE ../src ../src/sum)
+
+add_executable(gamma_transforms_tests test_gamma_transforms.c ${COMMON_SRC})
+target_link_libraries(gamma_transforms_tests m)
+target_include_directories(gamma_transforms_tests PRIVATE ../src)
 
 add_executable(hypergeopfq_tests test_hypergeopfq.c ${COMMON_SRC})
 target_link_libraries(hypergeopfq_tests m)

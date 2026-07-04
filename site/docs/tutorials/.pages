@@ -11,3 +11,5 @@ nav:
   - 08-calculus.md
   - 09-numerical-calculus.md
   - 10-special-functions.md
+  - 11-symbolic-summation.md
+  - 12-infinite-products.md

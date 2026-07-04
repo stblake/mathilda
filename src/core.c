@@ -183,6 +183,10 @@ static void system_constants_init(void) {
 }
 
 void core_init(void) {
+    /* Route GMP/MPFR allocation through the guarded wrappers before anything
+     * else can allocate a bignum, so TimeConstrained's async abort can never
+     * unwind out of a held libmalloc lock (see tc_install_alloc_guard). */
+    tc_install_alloc_guard();
     /* Cache canonical pointers for well-known symbol names. Doing this
      * before any other init step guarantees every later expr_new_symbol
      * with one of these names returns the same pointer the SYM_*
@@ -516,6 +520,7 @@ void core_init(void) {
     airyai_init();
     airybi_init();
     bessel_init();
+    void besseljzero_init(void);    besseljzero_init();
     fibonacci_init();
     lucas_init();
     void hyperfactorial_init(void); hyperfactorial_init();
@@ -568,6 +573,8 @@ void core_init(void) {
     void minpoly_init(void);
     minpoly_init();
     rat_init();
+    void rootreduce_init(void);
+    rootreduce_init();
     expand_init();
     expand_power_init();
     solve_init();
@@ -2986,6 +2993,27 @@ Expr* builtin_symbol(Expr* res) {
 static sigjmp_buf  tc_jmp_env;
 static volatile sig_atomic_t tc_timed_out = 0;
 
+/* Async-signal-safety guard for the timeout siglongjmp.
+ *
+ * TimeConstrained aborts an over-budget computation with a siglongjmp taken
+ * from the asynchronous SIGPROF handler.  SIGPROF can land on ANY instruction,
+ * including deep inside malloc/realloc/free while libmalloc holds an internal
+ * zone lock.  Unwinding past that point with siglongjmp never releases the
+ * lock, so the next allocation deadlocks -- on macOS libmalloc actively detects
+ * the still-owned lock and traps with _os_unfair_lock_recursive_abort (SIGILL).
+ * This was reproducible (~1 in 8 runs) on integrands whose algebraic-extension
+ * Together/Cancel churns giant GMP integers: the SIGPROF budget expires while a
+ * multi-megabyte __gmpz_mul is inside large_malloc.
+ *
+ * The large allocations that leak the lock originate exclusively from GMP (and
+ * MPFR, which shares GMP's allocators), so route GMP through a guarded
+ * allocator: while a real malloc/realloc/free is in flight tc_gmp_alloc_busy is
+ * set, and the handler DEFERS the jump instead of taking it mid-lock.  The
+ * allocator then takes the deferred jump from tc_alloc_safepoint(), once the
+ * real call has returned and released libmalloc's lock -- a safe point.  Code
+ * outside a GMP allocation keeps the immediate async jump. */
+static volatile sig_atomic_t tc_gmp_alloc_busy = 0;
+
 /* Cooperative-backstop state.  tc_deadline_active is read on every
  * rewrite step by tc_check_deadline; when zero, the check returns
  * immediately without even reading the clock.  Both fields are updated
@@ -2997,7 +3025,59 @@ static int             tc_deadline_active = 0;
 static void tc_sigprof_handler(int sig) {
     (void)sig;
     tc_timed_out = 1;
+    /* If the signal landed inside a GMP allocation, do NOT unwind here: that
+     * would abandon libmalloc's held zone lock.  Record the timeout and let
+     * tc_alloc_safepoint() take the jump the instant the allocator returns. */
+    if (tc_gmp_alloc_busy) return;
     siglongjmp(tc_jmp_env, 1);
+}
+
+/* Take the deferred timeout jump from a safe point (no allocator lock held).
+ * Called by the guarded GMP allocators right after the real malloc/realloc/free
+ * returns.  tc_timed_out is 1 only inside an active, timed-out TimeConstrained
+ * body -- it is reset on entry and saved/restored around nesting -- so outside
+ * that window this is a single-branch no-op that never touches tc_jmp_env. */
+static void tc_alloc_safepoint(void) {
+    if (tc_timed_out) siglongjmp(tc_jmp_env, 1);
+}
+
+/* GMP memory functions: the system allocator wrapped in the busy guard so an
+ * interrupting SIGPROF is deferred past libmalloc's critical section (see the
+ * tc_gmp_alloc_busy comment above).  Match __gmp_default_allocate's contract:
+ * GMP never passes a NULL pointer to realloc/free and requires allocate to
+ * abort rather than return NULL on exhaustion. */
+static void* tc_gmp_allocate(size_t size) {
+    tc_gmp_alloc_busy = 1;
+    void* p = malloc(size);
+    tc_gmp_alloc_busy = 0;
+    if (!p) { fputs("Mathilda: GMP memory exhausted\n", stderr); abort(); }
+    tc_alloc_safepoint();   /* deferred timeout jump, if any (leaks p -- bounded) */
+    return p;
+}
+
+static void* tc_gmp_reallocate(void* ptr, size_t old_size, size_t new_size) {
+    (void)old_size;
+    tc_gmp_alloc_busy = 1;
+    void* p = realloc(ptr, new_size);
+    tc_gmp_alloc_busy = 0;
+    if (!p && new_size) { fputs("Mathilda: GMP memory exhausted\n", stderr); abort(); }
+    tc_alloc_safepoint();
+    return p;
+}
+
+static void tc_gmp_deallocate(void* ptr, size_t size) {
+    (void)size;
+    tc_gmp_alloc_busy = 1;
+    free(ptr);
+    tc_gmp_alloc_busy = 0;
+    tc_alloc_safepoint();
+}
+
+/* Install the guarded GMP allocators.  Called once from core_init before any
+ * GMP/MPFR use.  The wrappers delegate to the same malloc/realloc/free the GMP
+ * default used, so memory allocated before this call is still freed correctly. */
+void tc_install_alloc_guard(void) {
+    mp_set_memory_functions(tc_gmp_allocate, tc_gmp_reallocate, tc_gmp_deallocate);
 }
 
 void tc_check_deadline(void) {

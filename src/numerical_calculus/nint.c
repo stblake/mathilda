@@ -19,6 +19,7 @@
 #include "denint.h"
 #include "dequad.h"
 #include "oscint.h"
+#include "oscde.h"
 #include "mcint.h"
 #include "cubature.h"
 #include "ncrule.h"
@@ -873,6 +874,54 @@ static Expr* levin_phase_derivative(const Expr* g, const char* var) {
     return gp;
 }
 
+#ifdef USE_MPFR
+/* Recognise a well-aligned Fourier-type integrand F(x) = amp(x)·{sin|cos}(ω x)
+ * whose oscillation has frequency ω (a positive real constant) and zero phase
+ * offset, so the Ooura–Mori DE nodes land on the oscillation's zeros kπ/ω (sine)
+ * or (k+½)π/ω (cosine).  On success sets *kind and *omega.  Anything else — a
+ * complex exponential kernel, a non-constant or offset phase, a non-numeric
+ * frequency — returns false so the caller uses the general (slower) method. */
+static bool ni_fourier_detect(const Expr* body, const char* var,
+                              OscDeKind* kind, double* omega) {
+    LevinKernel k; Expr* g = NULL; Expr* amp = NULL;
+    /* The held integrand is unevaluated, so its product is nested
+     * (Times[Times[x,Sin[x]],Power[…]]); flatten a copy so the single-level
+     * factor scan in levin_detect_kernel sees the trig factor. */
+    Expr* fb = expr_copy((Expr*)body);
+    eval_flatten_args(fb, SYM_Times);
+    bool ok = levin_detect_kernel(fb, var, &k, &g, &amp);
+    expr_free(fb);
+    if (!ok) return false;
+    expr_free(amp);
+    if (k != LEVIN_KERNEL_SIN && k != LEVIN_KERNEL_COS) { expr_free(g); return false; }
+
+    /* ω = d g / d var must be a nonzero real constant (linear phase). */
+    Expr* gp = levin_phase_derivative(g, var);
+    if (!gp || levin_occurs(gp, var)) { expr_free(g); expr_free(gp); return false; }
+    double w;
+    bool okw = ni_to_double_real(gp, &w);
+    expr_free(gp);
+    if (!okw || !(w != 0.0)) { expr_free(g); return false; }
+
+    /* Phase offset g|_{var=0} must vanish (mod π handling is out of scope; a
+     * misaligned phase falls back rather than risk a wrong "converged" answer). */
+    Expr* rargs[2] = { expr_new_symbol(var), expr_new_integer(0) };
+    Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule), rargs, 2);
+    Expr* raargs[2] = { expr_copy(g), rule };
+    Expr* g0 = eval_and_free(
+        expr_new_function(expr_new_symbol(SYM_ReplaceAll), raargs, 2));
+    expr_free(g);
+    double off;
+    bool oko = g0 && ni_to_double_real(g0, &off);
+    expr_free(g0);
+    if (!oko || fabs(off) > 1e-9) return false;
+
+    *omega = fabs(w);
+    *kind = (k == LEVIN_KERNEL_SIN) ? OSCDE_SIN : OSCDE_COS;
+    return true;
+}
+#endif /* USE_MPFR */
+
 /* Levin collocation on a finite real interval.  Detects the oscillatory kernel
  * in ctx->body, differentiates the phase symbolically, and runs the collocation
  * engine through the existing numeric sampler.  Restricted to the plain real
@@ -1273,9 +1322,53 @@ static Expr* ni_run_1d_halfline(Expr* body, const char* var, double a,
         mpfr_init2(am, bits); mpfr_init2(re, bits); mpfr_init2(im, bits);
         mpfr_set_d(am, a, MPFR_RNDN);
         double abserr;
-        bool conv = dequad_halfline_mpfr(ni_sample_mpfr, &ctx, am, bits,
-                                         ni_mpfr_reltol(o), ni_mpfr_levels(o),
-                                         re, im, &abserr);
+        double mreltol = ni_mpfr_reltol(o);
+        /* Geometry ctx: the zero-finding for the oscillatory fallback needs only
+         * a few correct digits, so it samples at machine precision — a shallow
+         * copy of ctx with the machine spec (borrowed pointers, never freed). */
+        NiCtx gctx = ctx;
+        gctx.spec = numeric_machine_spec();
+        bool conv = false;
+
+        /* Fast path: a well-aligned Fourier integrand ∫_0^∞ amp·{sin|cos}(ωx) dx
+         * is done by the Ooura–Mori double-exponential rule, whose nodes fall on
+         * the oscillation's zeros — a few thousand samples reach hundreds of
+         * digits, where integrate-between-the-zeros + Wynn needs one costly
+         * high-precision panel per half-period. */
+        if ((o->method == NI_AUTO || o->method == NI_LEVIN)
+            && !reflect && sign > 0.0 && a == 0.0) {
+            OscDeKind fkind; double fomega;
+            if (ni_fourier_detect(body, var, &fkind, &fomega))
+                conv = oscde_fourier_mpfr(ni_sample_mpfr, &ctx, fomega, fkind,
+                                          bits, mreltol, 16, re, im, &abserr);
+        }
+
+        if (!conv && o->method == NI_LEVIN) {
+            conv = osc_integrate_mpfr(ni_sample_machine, &gctx, ni_sample_mpfr, &ctx,
+                                      a, bits, mreltol, 600, ni_mpfr_levels(o),
+                                      re, im, &abserr);
+        } else if (!conv) {
+            conv = dequad_halfline_mpfr(ni_sample_mpfr, &ctx, am, bits,
+                                        mreltol, ni_mpfr_levels(o),
+                                        re, im, &abserr);
+            /* Oscillatory fallback: a slowly-decaying oscillatory tail
+             * (x Sin[x]/(x^2+a), Bessel functions, …) defeats exp-sinh at any
+             * precision.  Integrate between the zeros and accelerate the partial
+             * sums with the MPFR Wynn epsilon — the high-precision counterpart of
+             * the machine path's fallback. */
+            if (!conv && o->method == NI_AUTO) {
+                mpfr_t ore, oim;
+                mpfr_init2(ore, bits); mpfr_init2(oim, bits);
+                double oerr;
+                if (osc_integrate_mpfr(ni_sample_machine, &gctx, ni_sample_mpfr, &ctx,
+                                       a, bits, mreltol, 600, ni_mpfr_levels(o),
+                                       ore, oim, &oerr)) {
+                    mpfr_set(re, ore, MPFR_RNDN); mpfr_set(im, oim, MPFR_RNDN);
+                    abserr = oerr; conv = true;
+                }
+                mpfr_clears(ore, oim, (mpfr_ptr)0);
+            }
+        }
         if (sign < 0) { mpfr_neg(re, re, MPFR_RNDN); mpfr_neg(im, im, MPFR_RNDN); }
         ni_bind_restore(&bind);
         Expr* out = (mpfr_number_p(re) && mpfr_number_p(im))

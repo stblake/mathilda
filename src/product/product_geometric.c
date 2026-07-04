@@ -58,8 +58,13 @@ Expr* builtin_product_geometric(Expr* res) {
     Expr *f, *var, *imin, *imax;
     bool definite;
     if (!product_stage_args(res, &f, &var, &imin, &imax, &definite)) return NULL;
-    if (definite && imax->type == EXPR_SYMBOL && imax->data.symbol == SYM_Infinity)
-        return NULL;
+    /* Infinite bound is allowed, but only for a PURE base^(summable exponent)
+     * product (no rational cofactor): prod base^e(k) = base^Sum[e(k),{k,imin,Inf}].
+     * A non-trivial rational cofactor with an infinite bound cannot be closed by
+     * Product`Rational (finite-only), so we bail below and let Product`Infinite
+     * try instead. */
+    bool infinite = definite && imax->type == EXPR_SYMBOL
+                    && imax->data.symbol == SYM_Infinity;
 
     /* Geometric only engages when there is a genuine base^(involves k) factor;
      * pure rational inputs were already tried by Product`Rational. */
@@ -86,6 +91,11 @@ Expr* builtin_product_geometric(Expr* res) {
                 if (!prod_free_of(base, var)) { bail = true; break; }  /* k^k etc */
                 Expr* E = sum_exponent(expo, var, imin, imax, definite);
                 if (!E) { bail = true; break; }
+                /* For an INFINITE product the summed exponent must be a genuine
+                 * constant (free of k); a residual-var result would be a wrong
+                 * base^(...k...).  (An indefinite product's exponent-sum legiti-
+                 * mately involves k -- it is the antidifference.) */
+                if (infinite && !prod_free_of(E, var)) { expr_free(E); bail = true; break; }
                 out[ngeo++] = expr_new_function(expr_new_symbol(SYM_Power),
                                   (Expr*[]){ expr_copy(base), E }, 2);  /* adopts E */
                 continue;
@@ -111,6 +121,15 @@ Expr* builtin_product_geometric(Expr* res) {
     /* Rational cofactor closed form via Product`Rational (skip the trivial 1). */
     Expr* cof_result;
     bool cof_trivial = (cofactor->type == EXPR_INTEGER && cofactor->data.integer == 1);
+    /* An infinite bound only closes for a pure base^E product: Product`Rational
+     * cannot take imax==Infinity, so bail on any non-trivial cofactor and let
+     * Product`Infinite try the whole thing. */
+    if (infinite && !cof_trivial) {
+        for (size_t i = 0; i < ngeo; i++) expr_free(out[i]);
+        free(out);
+        expr_free(cofactor);
+        return NULL;
+    }
     if (cof_trivial) {
         cof_result = cofactor;   /* == 1 */
     } else {

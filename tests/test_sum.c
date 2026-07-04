@@ -146,6 +146,31 @@ int main(void) {
     check("Sum[2^k, {k, 0, Infinity}]", "Sum[2^k, {k, 0, Infinity}]");
     check("Sum[k, {k, 1, Infinity}]", "Sum[k, {k, 1, Infinity}]");
 
+    /* ---- Infinite polynomial * geometric, |r| < 1 (Sum`Geometric) ----
+     * p(k) r^k with |r| < 1 sums to the exact rational -F(imin) since the
+     * boundary term q(n+1) r^(n+1) -> 0.  Recognised for every surface form of
+     * the exponential (2^(-k), 1/2^k, (1/2)^k, ...). */
+    check("Sum[k^2/2^k, {k, 1, Infinity}]", "6");
+    check("Sum[k^2/2^k, {k, 0, Infinity}]", "6");
+    check("Sum[k^3/2^k, {k, 0, Infinity}]", "26");
+    check("Sum[1/2^k, {k, 0, Infinity}]", "2");
+    check("Sum[k/3^k, {k, 1, Infinity}]", "3/4");
+    check("Sum[(2/3)^k, {k, 0, Infinity}]", "3");
+    /* high-degree closed form matches a long truncation (numeric cross-check) */
+    check("Chop[N[Sum[k^5/2^k, {k, 1, Infinity}] - Sum[k^5/2^k, {k, 1, 200}]]]", "0");
+    /* |r| >= 1 diverges: stays held, never a false analytic continuation */
+    check("Sum[k 2^k, {k, 0, Infinity}]", "Sum[k 2^k, {k, 0, Infinity}]");
+
+    /* ---- Binomial / hypergeometric-term sums (Sum`Hypergeometric) ----
+     * Binomials expand to factorials so the term ratio is rational; the
+     * central-binomial 2F1 family then collapses to an elementary closed form. */
+    same("Sum[2^k/Binomial[2 k, k], {k, 1, Infinity}]", "1 + Pi/2");
+    same("Sum[2^k/Binomial[2 k, k], {k, 0, Infinity}]", "2 + Pi/2");
+    same("Sum[1/Binomial[2 k, k], {k, 0, Infinity}]", "4/3 + 2 Pi/(9 Sqrt[3])");
+
+    /* Very-well-poised Ramanujan 1/Pi series (table-backed VWP 4F3). */
+    check("Sum[(4 k + 1) Binomial[2 k, k]^3/(-64)^k, {k, 0, Infinity}]", "2/Pi");
+
     if (failures) {
         fprintf(stderr, "\n%d/%d sum checks FAILED\n", failures, checks);
         return 1;

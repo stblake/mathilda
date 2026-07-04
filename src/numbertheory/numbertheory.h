@@ -35,7 +35,10 @@ Expr* builtin_coprimeq(Expr* res);
 Expr* builtin_divisors(Expr* res);
 Expr* builtin_divisorsigma(Expr* res);
 Expr* builtin_moebiusmu(Expr* res);
+Expr* builtin_liouvillelambda(Expr* res);
 Expr* builtin_prime(Expr* res);
 Expr* builtin_primepi(Expr* res);
+Expr* builtin_primeomega(Expr* res);
+Expr* builtin_primenu(Expr* res);
 
 #endif

@@ -169,7 +169,13 @@ static Expr* dispatch_def(ProdMethod method, Expr* f, Expr* var,
             if (!r) r = try_def("Product`Geometric", f, var, imin, imax);
             if (!r) r = try_def("Product`QProduct",  f, var, imin, imax);
             if (!r) r = try_def("Product`Special",   f, var, imin, imax);
+            if (!r) r = try_def("Product`Cantor",    f, var, imin, imax);
+            if (!r) r = try_def("Product`Viete",     f, var, imin, imax);
+            if (!r) r = try_def("Product`EulerPrime", f, var, imin, imax);
+            if (!r) r = try_def("Product`RationalInfinite", f, var, imin, imax);
+            if (!r) r = try_def("Product`BesselZero", f, var, imin, imax);
             if (!r) r = try_def("Product`Infinite",  f, var, imin, imax);
+            if (!r) r = try_def("Product`LogSum",    f, var, imin, imax);
             return r;
         }
         case PROD_METHOD_TELESCOPING: return try_def("Product`Telescoping", f, var, imin, imax);
@@ -451,4 +457,16 @@ void product_init(void) {
     product_special_init();
     void product_infinite_init(void);
     product_infinite_init();
+    void product_cantor_init(void);
+    product_cantor_init();
+    void product_viete_init(void);
+    product_viete_init();
+    void product_eulerprime_init(void);
+    product_eulerprime_init();
+    void product_rational_infinite_init(void);
+    product_rational_infinite_init();
+    void product_besselzero_init(void);
+    product_besselzero_init();
+    void product_logsum_init(void);
+    product_logsum_init();
 }

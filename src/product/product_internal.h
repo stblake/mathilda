@@ -70,4 +70,14 @@ bool prod_linear_factors(Expr* e, Expr* var,
                          Expr*** roots_out, int** mults_out, size_t* n_out,
                          bool* all_linear_out);
 
+/* Like prod_linear_factors, but also resolves irreducible QUADRATIC factors to
+ * their (possibly complex-conjugate) roots via the quadratic formula.  Roots
+ * are exact (rational or rational +- rational I).  *ok_out is false iff an
+ * irreducible cubic-or-higher factor was present (its roots are not extracted).
+ * Used by Product`RationalInfinite for the Gamma canonical form. */
+bool prod_rational_roots(Expr* e, Expr* var,
+                         Expr** lead_out,
+                         Expr*** roots_out, int** mults_out, size_t* n_out,
+                         bool* ok_out);
+
 #endif

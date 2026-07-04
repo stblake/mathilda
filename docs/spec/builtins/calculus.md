@@ -419,7 +419,14 @@ monotonically down.
      is tried: an order-3 Mobius `S` fixes one ramification point and cycles the
      other three, and the integral is elementary when `F` is a non-trivial
      period-3 character `F(S) = Exp[2 Pi I/3] F` (so `(x-1)/((x+2) Sqrt[x^3-1])`
-     integrates).  The rational reductions are integrated recursively and
+     integrates).  For `p=1/3` with `R` a cubic, when the order-3 eigendescent is
+     obstructed (`H1 != 0`) but `F` has a pole at a non-branch point, a
+     constructive third-kind logarithmic-part reduction is tried instead: the
+     antiderivative is
+     `C Sum_{j=0..2} Exp[4 Pi I j/3] Log[R^(1/3) - Exp[2 Pi I j/3] (lead R)^(1/3) x]`,
+     so the parametric family
+     `(2-(k+1)x)/((1-(k+1)x) (x(1-x)(1-k x))^(1/3))` integrates over `Q(k)`.
+     The rational reductions are integrated recursively and
      back-substituted.  Obstructed (genuinely elliptic) integrands,
      non-harmonic quartics, and the cross-character A4 cases (Section 5, e.g.
      `t/((t^3+8) Sqrt[t^3-1])`) return `NULL`.  A differentiate-back guard rejects the
@@ -436,6 +443,15 @@ monotonically down.
      ω-eigencomponents, the period-3 trivial projection per fixed point), and the
      differentiate-back verdict.  The flag is latched once at the outermost call,
      so recursive genus-0 reductions share it and indent by depth.
+     Before returning (square-root case), the antiderivative is normalised so its
+     one radical is the single generator `Sqrt[R]`: any term left carrying `Sqrt[R]`
+     *split* across a numerator/denominator as a product of factor roots
+     (`Sqrt[x] Sqrt[(1-x)(1-k^2 x)] ...`) has its `x`-dependent half-power factors
+     recombined into one radicand and reduced over `R` (to a rational when it is a
+     perfect square, else `rational*Sqrt[R]`), removing the spurious branch point and
+     keeping a downstream `Simplify` to a single radical generator.  Constant radicals
+     are left intact, and the rewrite is kept only if the differentiate-back guard
+     still passes.
      A graded battery of worked examples (every exponent `p`, both numerator and
      denominator radicals, and every involution equation, with the negative
      controls that decline) is collected in
@@ -1004,9 +1020,9 @@ none applies the `Sum[...]` is returned unevaluated.  The cascade has no
 step-aware closed form, so a symbolic (or otherwise non-expandable) range
 with a non-unit step — e.g. `Sum[i, {i, 1, n, 2}]` — is returned
 unevaluated rather than reduced to the (wrong) unit-step result.
-`Method -> "Polynomial" | "Geometric" | "Gosper" | "Rational"` forces a
-single algorithm (strict, no fallback), and now also takes effect on finite
-unit-step integer ranges.
+`Method -> "Polynomial" | "Geometric" | "Gosper" | "Rational" | "Euler" |
+"Alternating"` forces a single algorithm (strict, no fallback), and now also
+takes effect on finite unit-step integer ranges.
 
 ```mathematica
 In[1]:= Sum[i^2, {i, 1, 100}]
@@ -1034,15 +1050,31 @@ Out[2]= 1/6 i (-1 + i) (-1 + 2 i)
 ### Sum`Geometric
 
 Summation of `p(i) r^i` with `p` polynomial in `i` and `r` free of `i`
-(the base of the exponential factors, combined across several `r^i`
-factors).  The antidifference has the form `q(i) r^i`; `q` solves
-`r q(i+1) - q(i) = p(i)` by undetermined coefficients.
+(the ratio of the geometric factors, combined across several such
+factors).  A factor is recognised as geometric by the ratio test —
+`g(i+1)/g(i)` free of `i` — so every surface form of the same
+exponential is caught alike (`r^i`, `r^(-i)`, `(r^i)^(-1)`, `2^(-k)`
+held as `(2^k)^(-1)`, `(1/2)^k`, `r^(a i + b)`, …).  The antidifference
+has the form `q(i) r^i`; `q` solves `r q(i+1) - q(i) = p(i)` by
+undetermined coefficients.
+
+For a finite range the definite sum is `F(imax+1) - F(imin)`.  For an
+**infinite** upper limit the sum converges iff `|r| < 1` (a polynomial
+times a decaying exponential), in which case the boundary term
+`q(n+1) r^(n+1) -> 0` and the sum collapses to `-F(imin)` — an exact
+rational.  An undecidable ratio (symbolic `r`) or `|r| >= 1` (including
+the divergent `r = -1` edge) is left unevaluated rather than assigned a
+false analytic continuation.
 
 ```mathematica
 In[1]:= Sum[a^i, i]
 Out[1]= a^i/(-1 + a)
 In[2]:= Sum[q1^i q2^i, i]
 Out[2]= (q1 q2)^i/(-1 + q1 q2)
+In[3]:= Sum[k^2/2^k, {k, 0, Infinity}]
+Out[3]= 6
+In[4]:= Sum[k^3/2^k, {k, 0, Infinity}]
+Out[4]= 26
 ```
 
 ### Sum`Gosper
@@ -1066,8 +1098,11 @@ Out[3]= 1 - 1/(1 + n)
 ### Sum`Hypergeometric
 
 Infinite sums `Sum[t(k), {k, imin, Infinity}]` (concrete integer `imin`)
-whose summand is a hypergeometric term — `t(k+1)/t(k)` rational in `k`. The
-reindexed term ratio is factored into monic linear factors over the rationals;
+whose summand is a hypergeometric term — `t(k+1)/t(k)` rational in `k`. Any
+`Binomial` in the summand is first expanded to factorials (whose ratios the
+simplifier reduces), so binomial terms such as `2^k/Binomial[2k, k]` are
+recognised. The reindexed term ratio is factored into monic linear factors over
+the rationals;
 the numerator roots give the upper parameters, the denominator roots minus the
 canonical `(m+1)` factorial factor give the lower parameters, and the
 leading-coefficient ratio is the argument `z`. The result
@@ -1084,6 +1119,10 @@ In[2]:= Sum[x^k, {k, 0, Infinity}]
 Out[2]= 1/(1 - x)
 In[3]:= Sum[z^k/(2 k)!, {k, 0, Infinity}]
 Out[3]= Cosh[2 Sqrt[1/4 z]]
+In[4]:= Sum[2^k/Binomial[2 k, k], {k, 1, Infinity}]
+Out[4]= 1 + Pi/2
+In[5]:= Sum[1/Binomial[2 k, k], {k, 0, Infinity}]
+Out[5]= 4/3 + 2 Pi/(9 Sqrt[3])
 ```
 
 ### Sum`Rational
@@ -1118,6 +1157,109 @@ Out[2]= 1/6 (3 + Pi^2 - 3 Pi Coth[Pi])
 In[3]:= Sum[1/(i (i^2 + 1)), {i, 1, Infinity}]
 Out[3]= 1/2 (2 EulerGamma + PolyGamma[0, 1 - I] + PolyGamma[0, 1 + I])
 ```
+
+### Sum`Alternating
+
+Infinite **alternating rational sums** `Sum[sigma (-1)^k R(k), {k, imin,
+Infinity}]` (concrete integer `imin`, `R` rational). The sign factor is
+recognised in any form `(-1)^(a k + b)` (`a` odd), with `sigma = (-1)^b`. `R` is
+partial-fractioned over the rationals; each linear pole term `c0/(b1 k + b0)^m`
+contributes `c0 b1^{-m} (-1)^imin LerchPhi[-1, m, imin - rho]` (`rho = -b0/b1`),
+since `Sum_{k>=imin} (-1)^k/(k+a)^m = (-1)^imin LerchPhi[-1, m, imin+a]`. The
+Lerch transcendent `Phi(-1, m, .)` reduces to elementary constants — `Log[2]`
+and `Pi` at `m = 1` (digamma / Gauss digamma), and `Catalan` / rational·`Pi^m`
+at half-integer arguments (Dirichlet beta). Convergence requires `deg q >= deg p
++ 1`. Irreducible-quadratic (complex) poles, radical poles, and divergent inputs
+are out of scope and left unevaluated. Dispatched in the `Automatic` cascade
+ahead of `Sum`Rational` (so the `(-1)^k` is peeled first); `Method ->
+"Alternating"` forces it.
+
+```mathematica
+In[1]:= Sum[(-1)^(k + 1)/k, {k, 1, Infinity}]
+Out[1]= Log[2]
+In[2]:= Sum[(-1)^k/(2 k + 1), {k, 1, Infinity}]
+Out[2]= 1/4 (-4 + Pi)
+In[3]:= Sum[(-1)^k/(2 k + 1)^2, {k, 0, Infinity}]
+Out[3]= Catalan
+```
+
+### Sum`Euler
+
+Infinite **linear Euler sums** `Sum[HarmonicNumber[k, p]/k^q, {k, 1, Infinity}]`
+(and the order-1 form `HarmonicNumber[k]`), times an optional constant, reduced
+to Riemann zeta values. Writing `sigma_h(p, q) = Sum_{k>=1} H_k^{(p)}/k^q`
+(converges for `q >= 2`):
+
+- **order 1** (`p = 1`), Euler's formula for any `q >= 2`:
+  `Sum H_k/k^q = (1 + q/2) Zeta[q+1] - (1/2) Sum_{j=1}^{q-2} Zeta[j+1] Zeta[q-j]`.
+- **diagonal** (`p = q`), from the reflection `sigma_h(p,q) + sigma_h(q,p) =
+  Zeta[p] Zeta[q] + Zeta[p+q]`: `Sum H_k^{(p)}/k^p = (Zeta[p]^2 + Zeta[2p])/2`.
+- **non-diagonal, odd weight** (`p != q`, `p, q >= 2`, `p + q` odd), via the
+  double-zeta reduction `sigma_h(p,q) = Z(q,p) + Zeta[p+q]` with the
+  Borwein–Borwein–Girgensohn closed form for `Z(s,t)` (odd `s`), and the
+  reflection for even outer `q`. E.g. `Sum H_k^{(2)}/k^3 = 3 Zeta[2] Zeta[3] -
+  9/2 Zeta[5]`. Even weight has no zeta reduction and stays unevaluated.
+- **quadratic** `Sum H_k^2/k^q` for `q = 2..5` (weight `<= 7`), from the rigorous
+  per-weight reduction: `q=2 -> 17/4 Zeta[4]`, `q=3 -> 7/2 Zeta[5] -
+  Zeta[2] Zeta[3]`, etc. At weight 8 (`q >= 6`) an irreducible multiple zeta
+  value appears and the sum stays unevaluated.
+
+Even zeta values collapse to powers of `Pi` automatically. Higher nonlinear
+sums, divergent `q < 1`, and finite/indefinite forms are out of scope and left
+unevaluated (never a fabricated value). Dispatched in the `Automatic` cascade
+after `Sum`Rational` and before `Sum`Hypergeometric`; `Method -> "Euler"` forces
+it.
+
+```mathematica
+In[1]:= Sum[HarmonicNumber[k]/k^2, {k, 1, Infinity}]
+Out[1]= 2 Zeta[3]
+In[2]:= Sum[HarmonicNumber[k, 2]/k^3, {k, 1, Infinity}]
+Out[2]= 3 Zeta[2] Zeta[3] - 9/2 Zeta[5]
+In[3]:= Sum[HarmonicNumber[k]^2/k^2, {k, 1, Infinity}]
+Out[3]= 17 Pi^4/360
+```
+
+### Sum`Trigonometric
+
+Infinite **Fourier-type sums** `Sum[T(k)/k^s, {k, imin, Infinity}]` where `T(k)`
+is a trigonometric polynomial in `k` (products/powers of `Sin`/`Cos` of
+arguments linear in `k`) and `s` is a positive integer. `T` is linearised with
+`TrigReduce` into single-angle terms `c_j {Sin|Cos}[a_j k + phi_j]`, each mapped
+via `Sum_{k>=1} Sin[a k]/k^s = Im PolyLog[s, e^{i a}]` and `Sum Cos[a k]/k^s =
+Re PolyLog[s, e^{i a}]`; constant terms give `c Zeta[s]` (for `s >= 2`). At
+`s = 1` with no phase and numeric `0 < a < 2 Pi` the result collapses to
+elementary form `Sum Sin[a k]/k = (Pi - a)/2`, `Sum Cos[a k]/k = -Log[2
+Sin[a/2]]`. For `s >= 2` (or a phase / symbolic / out-of-range coefficient) the
+`Im`/`Re` of a `PolyLog` is returned, exactly as Wolfram leaves it. A divergent
+DC term (`s = 1`) leaves the sum unevaluated. Dispatched after `Sum`Alternating`;
+`Method -> "Trigonometric"` forces it.
+
+```mathematica
+In[1]:= Sum[Sin[k]/k, {k, 1, Infinity}]
+Out[1]= 1/2 (-1 + Pi)
+In[2]:= Sum[Cos[k]/k, {k, 1, Infinity}]
+Out[2]= -(Log[2] + Log[Sin[1/2]])
+In[3]:= Sum[Sin[k]/k^2, {k, 1, Infinity}]
+Out[3]= Im[PolyLog[2, E^I]]
+```
+
+### Sum`LogZeta
+
+Log-weighted zeta series `Sum[c Log[k]/k^s, {k, 1, Infinity}] = -c Zeta'[s]`.
+Since there is no symbolic `Zeta'`, an elementary closed form is emitted only for
+`s == 2`, via the Glaisher bridge
+`-Zeta'[2] = (Pi^2/6)(12 Log[Glaisher] - EulerGamma - Log[2 Pi])`; other `s`
+stays unevaluated.  Unblocks `Product[k^(1/k^2)]` through `Product`LogSum`.
+
+### Sum`LogRational
+
+Convergent sums of a rational function plus a log of a rational function,
+`Sum[P(k) + Log R(k)]`, where the pieces may individually diverge but combine
+(`Sum[1/k + Log[(k-1)/k], {k, 2, Infinity}] = EulerGamma - 1`).  Uses matched
+digamma / `LogGamma` asymptotics: with `P` decomposed by `Apart` and `R`'s roots
+over `Q`, the value is `sum_{m>=2} c Zeta[m, imin-rho] - sum_{m==1} c PolyGamma[0,
+imin-rho] - sum_num e LogGamma[imin-a] + sum_den e LogGamma[imin-b]`, returned
+under the log-divergence-cancellation conditions (else unevaluated).
 
 ## DifferenceDelta
 
@@ -1197,7 +1339,10 @@ quadratic-or-higher factors.
 Factors `base^(p(i))` with `base` free of `i`, routed through `Sum`:
 `Product[base^p(i)] = base^Sum[p(i), {i, imin, imax}]`, multiplying any
 rational cofactor via `Product`Rational`.  The `base^...` factor is never
-passed to `Together`/`Factor` (which loop on a symbolic exponent).
+passed to `Together`/`Factor` (which loop on a symbolic exponent).  An
+**infinite** bound is allowed for a pure `base^(summable exponent)` product
+(no rational cofactor), the exponent closed by the shipped `Sum`:
+`Product[2^(k/2^k), {k, 1, Infinity}]` → `4` (since `Sum[k/2^k] = 2`).
 
 ### Product`QProduct
 
@@ -1217,6 +1362,58 @@ products; convergent ones are evaluated as the limit of the finite closed
 form, and the Weierstrass family `Product[1 + c/k^2, {k, 1, Infinity}]`
 → `Sinh[Pi Sqrt[c]]/(Pi Sqrt[c])` is recognised directly.  A divergent
 product prints `Product::div` and stays unevaluated.
+
+### Product`RationalInfinite
+
+Convergent infinite rational products with **complex-conjugate roots**, via the
+Gamma canonical form.  Numerator and denominator are factored over `Q` with
+irreducible quadratics resolved by the quadratic formula; under the convergence
+conditions (leading constant `1`, balanced degrees, balanced root sums) the
+product equals `Product_j Gamma(a - beta_j)^{n_j} / Product_i Gamma(a - alpha_i)^{m_i}`.
+The resulting Gamma product is reduced in C (integer shift, cancellation of
+equal arguments, conjugate pairs `Gamma[1+ib]Gamma[1-ib] = Pi b/Sinh[Pi b]` and
+`Gamma[1/2+ib]Gamma[1/2-ib] = Pi/Cosh[Pi b]`, real reflection) and the candidate
+is numerically checked against the raw Gamma product.  Fires only when a genuine
+complex root is present (all-real cases stay with `Product`Infinite`); an
+irreducible cubic-or-higher factor bails.
+
+```mathematica
+In[1]:= Product[(k^2 - 1)/(k^2 + 1), {k, 2, Infinity}]
+Out[1]= Pi Csch[Pi]
+In[2]:= Product[(k^3 - 1)/(k^3 + 1), {k, 2, Infinity}]
+Out[2]= 2/3
+```
+
+### Product`Cantor
+
+Double-exponential (Cantor) telescoping `Product[1 + x^(2^i), {i, imin, Infinity}]`
+`= 1/(1 - x^(2^imin))` for `|x| < 1` (the exponent must double each step).
+`Product[1 + (1/3)^(2^k), {k, 0, Infinity}]` → `3/2`.
+
+### Product`Viete
+
+Viète-type cosine products `Product[Cos[a(i)], {i, imin, Infinity}]` whose angle
+halves each step (`a(i+1) == a(i)/2`), giving `Sin[2 a(imin)]/(2 a(imin))`.
+`Product[Cos[Pi/2^(k+1)], {k, 1, Infinity}]` → `2/Pi`;
+`Product[Cos[x/2^k], {k, 1, Infinity}]` → `Sin[x]/x`.
+
+### Product`EulerPrime
+
+Euler products over the primes: bodies depending on the index only through
+`Prime[i]`.  `Product[1/(1 - Prime[i]^-s)]` → `Zeta[s]` (even `s` closes:
+`Pi^2/6`, `Pi^4/90`, …), and the `chi_4` product
+`Product[1/(1 - (-1)^((Prime[i]-1)/2)/Prime[i]), {i, 2, Infinity}]` → `Pi/4`
+(Dirichlet `L(1, chi_4)`).  A divergent (`s <= 1`) product stays unevaluated.
+
+### Product`LogSum
+
+The general Exp/log-sum bridge `Product[f] = Exp[Sum[Log[f]]]` (runs last).
+Engages on symbolic-power bodies; `PowerExpand[Log[f]]` is summed by the shipped
+`Sum` and re-exponentiated when it closes:
+`Product[Exp[(-1)^k/k], {k, 1, Infinity}]` → `1/2`,
+`Product[k^(1/k^2), {k, 1, Infinity}]` → `Exp[-Zeta'[2]]` (Glaisher form, via
+`Sum`LogZeta`), `Product[E^(1/k)(1 - 1/k), {k, 2, Infinity}]` → `E^(EulerGamma-1)`
+(via `Sum`LogRational`).
 
 
 ## FindRoot

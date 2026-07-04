@@ -344,10 +344,20 @@ Out[2]= -1/(-1 + x) + x^(1 + n)/(-1 + x)
 `In[1]` is the familiar `2^(n+1) - 1`. Rearranged, `In[2]` is `(x^(n+1) - 1)/(x - 1)`
 — the closed form for a finite geometric series, derived entirely symbolically.
 
-!!! note "Finite sums"
-    `Sum` in this build evaluates *finite* sums: the bounds (or a symbolic upper
-    bound like `n`) must be supplied. Infinite sums with an `Infinity` bound are
-    left unevaluated.
+`Sum` also evaluates *infinite* sums when the upper bound is `Infinity` —
+closing famous series like the Basel problem into constants:
+
+```mathematica
+In[1]:= Sum[1/k^2, {k, 1, Infinity}]
+Out[1]= 1/6 Pi^2
+```
+
+!!! tip "Going further"
+    Infinite summation and its companion, infinite products, are large enough
+    topics to have their own tutorials: [symbolic summation](11-symbolic-summation.md)
+    (telescoping, the zeta family, Euler sums, `π`-machines) and
+    [infinite products](12-infinite-products.md) (Wallis, Viète, Euler prime
+    products, and the Gamma/Glaisher constants).
 
 ## Numerical calculus
 
