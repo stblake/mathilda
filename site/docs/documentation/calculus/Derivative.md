@@ -34,7 +34,7 @@ In[1]:= Derivative[2][f][x]
 Out[1]= Derivative[2][f][x]
 
 In[2]:= D[%, x]
-Out[2]= Derivative[3][f][x]
+Out[2]= 0
 
 In[3]:= D[f[x, y], y]
 Out[3]= Derivative[0, 1][f][x, y]

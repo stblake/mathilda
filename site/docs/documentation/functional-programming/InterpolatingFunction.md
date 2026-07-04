@@ -23,7 +23,24 @@ In standard output only the domain is shown; the rest is <>.
 
 ## Examples
 
-_No verified examples yet for this function._
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= ifun = InterpolatingFunction[{{0, 5}}, {{0,0},{1,1},{2,3},{3,4},{4,3},{5,0}}]
+Out[1]= InterpolatingFunction[{{0, 5}}, <>]
+
+In[2]:= ifun[2.5]
+Out[2]= 3.6875
+
+In[3]:= ifun[2]
+Out[3]= 3
+
+In[4]:= ifun'[2.5]
+Out[4]= 1.04167
+
+In[5]:= Derivative[0, 1][f][1.5, 2.5]
+Out[5]= Derivative[0, 1][f][1.5, 2.5]
+```
 
 ## Implementation notes
 

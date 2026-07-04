@@ -200,6 +200,66 @@ In[8]:= Derivative[1, 1][g][a, b]
 Out[8]= 6 a b^2
 ```
 
+## Limit
+
+`Limit[f, x -> a]` finds the limiting value of `f` as `x` approaches `a`.
+`Limit[f, {x1 -> a1, ...}]` is the iterated (rightmost-first) limit and
+`Limit[f, {x1, ...} -> {a1, ...}]` the joint multivariate limit.
+
+**Features**:
+- `HoldAll`, `Protected`, `ReadProtected`.
+- Options: `Direction -> Automatic`, `Assumptions -> Automatic`,
+  `Method -> Automatic`.
+- **Direction** selects the approach: `Reals`/`"TwoSided"` (default),
+  `"FromAbove"` (or `-1`), `"FromBelow"` (or `+1`), or `Complexes`.
+- **Method** restricts the internal strategy cascade to a single named
+  group. `Automatic` runs the full cascade in order; a named method runs
+  only that group and leaves `Limit` unevaluated if it does not apply
+  (an unrecognised name emits `Limit::method` and is likewise left
+  unevaluated). The restriction applies only to the outermost call —
+  recursive sub-limits always use the full cascade. Methods:
+  - `"Substitution"` — continuity / direct substitution, `Abs` kink
+    resolution, atom-substitution and one-sided probes.
+  - `"RationalFunction"` — leading-degree comparison for `P(x)/Q(x)`.
+  - `"Series"` — Taylor / Laurent / Puiseux leading-term expansion.
+  - `"LHospital"` — L'Hospital's rule with growth guardrails.
+  - `"Asymptotic"` — dominant-term / `Log` / exponential reductions at
+    infinity, including `f^g` via `Exp[g Log f]`.
+  - `"Bounded"` — squeeze envelope and bounded-oscillation `Interval`.
+- May return a finite value, `Infinity`, `-Infinity`, `ComplexInfinity`,
+  `Indeterminate`, an `Interval[{lo, hi}]`, or the original expression
+  unevaluated when the limit cannot be determined.
+
+**Examples**:
+```mathematica
+In[1]:= Limit[Sin[x]/x, x -> 0]
+Out[1]= 1
+
+In[2]:= Limit[(x^2 - 1)/(x - 1), x -> 1]
+Out[2]= 2
+
+In[3]:= Limit[(1 + 1/x)^x, x -> Infinity]
+Out[3]= E
+
+In[4]:= Limit[1/x, x -> 0]
+Out[4]= ComplexInfinity
+
+In[5]:= Limit[1/x, x -> 0, Direction -> "FromAbove"]
+Out[5]= Infinity
+
+In[6]:= Limit[x^2 + y^2, {x, y} -> {1, 2}]
+Out[6]= 5
+
+In[7]:= Limit[Sin[x]/x, x -> 0, Method -> "Series"]
+Out[7]= 1
+
+In[8]:= Limit[(2 x^2 + 1)/(x^2 + x), x -> Infinity, Method -> "RationalFunction"]
+Out[8]= 2
+
+In[9]:= Limit[Sin[x]/x, x -> 0, Method -> "RationalFunction"]
+Out[9]= Limit[Sin[x]/x, x -> 0, Method -> "RationalFunction"]
+```
+
 ## Integrate (rational-function integration, Phase 1-8d)
 
 `Integrate[f, x]` is the public entry point for the rational-function

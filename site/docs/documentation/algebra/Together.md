@@ -35,6 +35,9 @@ Out[5]= -y^3/(-1 + y)
 
 In[6]:= Together[1/(x - Sqrt[2]) + 1/(x + Sqrt[2]), Extension -> Sqrt[2]]
 Out[6]= (2 x)/(-2 + x^2)
+
+In[7]:= Together[1/(x - k^(1/3)) + 1/(x + k^(1/3))]
+Out[7]= -(2 x)/(k^(2/3) - x^2)
 ```
 
 ## Implementation notes

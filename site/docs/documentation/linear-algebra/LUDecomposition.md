@@ -42,7 +42,15 @@ the call is left unevaluated.
 
 ## Examples
 
-_No verified examples yet for this function._
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= LUDecomposition[{{1, 1, 1}, {2, 4, 8}, {3, 9, 27}}]
+Out[1]= {{{1, 1, 1}, {2, 2, 6}, {3, 3, 6}}, {1, 2, 3}, 0}
+
+In[2]:= LUDecomposition[{{a, b}, {c, d}}]
+Out[2]= {{{a, b}, {c/a, (-b c + a d)/a}}, {1, 2}, 0}
+```
 
 ## Implementation notes
 

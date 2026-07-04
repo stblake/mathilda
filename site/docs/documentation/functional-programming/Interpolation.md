@@ -34,7 +34,21 @@ Works at machine or arbitrary (MPFR) precision, matching the data.
 
 ## Examples
 
-_No verified examples yet for this function._
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= f = Interpolation[{1, 2, 3, 5, 8, 5}]
+Out[1]= InterpolatingFunction[{{1, 6}}, <>]
+
+In[2]:= f[2.5]
+Out[2]= 2.4375
+
+In[3]:= Interpolation[{1, 5, 7, 2, 3, 1}, InterpolationOrder -> 1][2.5]
+Out[3]= 6.0
+
+In[4]:= Interpolation[{1, 4, 9, 16, 25}, Method -> "Hermite"][2.5]  (* x^2 *)
+Out[4]= 6.25
+```
 
 ## Implementation notes
 

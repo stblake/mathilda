@@ -65,7 +65,27 @@ LeastSquares[m, b] coincides with LinearSolve[m, b].
 
 ## Examples
 
-_No verified examples yet for this function._
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {7, 7, 8}]
+Out[1]= {19/3, 1/2}
+
+In[2]:= LeastSquares[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, {2, -4, 2}]
+Out[2]= {0, 0, 0}
+
+In[3]:= LeastSquares[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}, {10, 11, 12}}, {1, 2, 4, 8}]
+Out[3]= {157/180, 23/90, -13/36}
+
+In[4]:= LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {{7, 1}, {7, 2}, {8, 3}}]
+Out[4]= {{19/3, 0}, {1/2, 1}}
+
+In[5]:= LeastSquares[IdentityMatrix[4], {1, 2, 3, 4}]
+Out[5]= {1, 2, 3, 4}
+
+In[6]:= LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {7, 7, 8}, Method -> "Krylov"]
+Out[6]= {19/3, 1/2}
+```
 
 ## Implementation notes
 

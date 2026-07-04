@@ -1,12 +1,13 @@
 # Other & Advanced
 
-34 built-in function(s) in this category.
+35 built-in function(s) in this category.
 
 - [`$PlotLegendData`]($PlotLegendData.md) — $PlotLegendData[{color1, label1}, ...]  _(Stable)_
 - [`$PlotResample`]($PlotResample.md) — $PlotResample[var, {f...}, {plotPoints, maxRecursion, maxPlotPoints, mesh, regionFunction, exclusions, colorFunction, colorFunctionScaling, filling, fillingStyle}]  _(Experimental)_
 - [`AiryAiPrime`](AiryAiPrime.md) — AiryAiPrime[z]  _(Stable)_
 - [`AiryBiPrime`](AiryBiPrime.md) — AiryBiPrime[z]  _(Stable)_
 - [`AspectRatio`](AspectRatio.md) — AspectRatio  _(Experimental)_
+- [`BesselJZero`](BesselJZero.md) — BesselJZero[n, k] gives the k-th positive zero of BesselJ[n, x]. Stays symbolic for symbolic arguments.  _(Stable)_
 - [`Black`](Black.md) — Black  _(Experimental)_
 - [`Blue`](Blue.md) — Blue  _(Experimental)_
 - [`Brown`](Brown.md) — Brown  _(Experimental)_

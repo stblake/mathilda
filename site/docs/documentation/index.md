@@ -2,13 +2,13 @@
 
 Every public built-in function in Mathilda, grouped by category. Each page follows the same shape: **Description** (the function's docstring), **Examples** (verified against the current build), **Implementation notes**, **Implementation status**, and **References**.
 
-_525 functions across 29 categories. Use the search box (press `/`) to jump to any function._
+_530 functions across 29 categories. Use the search box (press `/`) to jump to any function._
 
 ## Categories
 
 ### [Algebra](algebra/index.md)
 
-[`Apart`](algebra/Apart.md)  [`Cancel`](algebra/Cancel.md)  [`Coefficient`](algebra/Coefficient.md)  [`CoefficientList`](algebra/CoefficientList.md)  [`Collect`](algebra/Collect.md)  [`Decompose`](algebra/Decompose.md)  [`Denominator`](algebra/Denominator.md)  [`Discriminant`](algebra/Discriminant.md)  [`Expand`](algebra/Expand.md)  [`ExpandDenominator`](algebra/ExpandDenominator.md)  [`ExpandNumerator`](algebra/ExpandNumerator.md)  [`Factor`](algebra/Factor.md)  [`FactorSquareFree`](algebra/FactorSquareFree.md)  [`FactorTerms`](algebra/FactorTerms.md)  [`FactorTermsList`](algebra/FactorTermsList.md)  [`GroebnerBasis`](algebra/GroebnerBasis.md)  [`HornerForm`](algebra/HornerForm.md)  [`IrreduciblePolynomialQ`](algebra/IrreduciblePolynomialQ.md)  [`MinimalPolynomial`](algebra/MinimalPolynomial.md)  [`Numerator`](algebra/Numerator.md)  [`PolynomialExtendedGCD`](algebra/PolynomialExtendedGCD.md)  [`PolynomialGCD`](algebra/PolynomialGCD.md)  [`PolynomialLCM`](algebra/PolynomialLCM.md)  [`PolynomialMod`](algebra/PolynomialMod.md)  [`PolynomialQ`](algebra/PolynomialQ.md)  [`PolynomialQuotient`](algebra/PolynomialQuotient.md)  [`PolynomialRemainder`](algebra/PolynomialRemainder.md)  [`PowerExpand`](algebra/PowerExpand.md)  [`Resultant`](algebra/Resultant.md)  [`SubresultantPolynomials`](algebra/SubresultantPolynomials.md)  [`Subresultants`](algebra/Subresultants.md)  [`Together`](algebra/Together.md)  [`Variables`](algebra/Variables.md)
+[`Apart`](algebra/Apart.md)  [`Cancel`](algebra/Cancel.md)  [`Coefficient`](algebra/Coefficient.md)  [`CoefficientList`](algebra/CoefficientList.md)  [`Collect`](algebra/Collect.md)  [`Decompose`](algebra/Decompose.md)  [`Denominator`](algebra/Denominator.md)  [`Discriminant`](algebra/Discriminant.md)  [`Expand`](algebra/Expand.md)  [`ExpandDenominator`](algebra/ExpandDenominator.md)  [`ExpandNumerator`](algebra/ExpandNumerator.md)  [`Factor`](algebra/Factor.md)  [`FactorSquareFree`](algebra/FactorSquareFree.md)  [`FactorTerms`](algebra/FactorTerms.md)  [`FactorTermsList`](algebra/FactorTermsList.md)  [`GroebnerBasis`](algebra/GroebnerBasis.md)  [`HornerForm`](algebra/HornerForm.md)  [`IrreduciblePolynomialQ`](algebra/IrreduciblePolynomialQ.md)  [`MinimalPolynomial`](algebra/MinimalPolynomial.md)  [`Numerator`](algebra/Numerator.md)  [`PolynomialExtendedGCD`](algebra/PolynomialExtendedGCD.md)  [`PolynomialGCD`](algebra/PolynomialGCD.md)  [`PolynomialLCM`](algebra/PolynomialLCM.md)  [`PolynomialMod`](algebra/PolynomialMod.md)  [`PolynomialQ`](algebra/PolynomialQ.md)  [`PolynomialQuotient`](algebra/PolynomialQuotient.md)  [`PolynomialRemainder`](algebra/PolynomialRemainder.md)  [`PowerExpand`](algebra/PowerExpand.md)  [`Resultant`](algebra/Resultant.md)  [`RootReduce`](algebra/RootReduce.md)  [`SubresultantPolynomials`](algebra/SubresultantPolynomials.md)  [`Subresultants`](algebra/Subresultants.md)  [`Together`](algebra/Together.md)  [`Variables`](algebra/Variables.md)
 
 ### [Arithmetic](arithmetic/index.md)
 
@@ -64,7 +64,7 @@ _525 functions across 29 categories. Use the search box (press `/`) to jump to a
 
 ### [Number Theory](number-theory/index.md)
 
-[`ContinuedFraction`](number-theory/ContinuedFraction.md)  [`CoprimeQ`](number-theory/CoprimeQ.md)  [`Divisible`](number-theory/Divisible.md)  [`DivisorSigma`](number-theory/DivisorSigma.md)  [`Divisors`](number-theory/Divisors.md)  [`EulerPhi`](number-theory/EulerPhi.md)  [`ExtendedGCD`](number-theory/ExtendedGCD.md)  [`FactorInteger`](number-theory/FactorInteger.md)  [`FromContinuedFraction`](number-theory/FromContinuedFraction.md)  [`GCD`](number-theory/GCD.md)  [`IntegerPartitions`](number-theory/IntegerPartitions.md)  [`JacobiSymbol`](number-theory/JacobiSymbol.md)  [`LCM`](number-theory/LCM.md)  [`MoebiusMu`](number-theory/MoebiusMu.md)  [`MultiplicativeOrder`](number-theory/MultiplicativeOrder.md)  [`NextPrime`](number-theory/NextPrime.md)  [`PartitionsP`](number-theory/PartitionsP.md)  [`PartitionsQ`](number-theory/PartitionsQ.md)  [`PowerMod`](number-theory/PowerMod.md)  [`Prime`](number-theory/Prime.md)  [`PrimePi`](number-theory/PrimePi.md)  [`PrimeQ`](number-theory/PrimeQ.md)  [`PrimitiveRoot`](number-theory/PrimitiveRoot.md)  [`PrimitiveRootList`](number-theory/PrimitiveRootList.md)  [`SquareFreeQ`](number-theory/SquareFreeQ.md)
+[`ContinuedFraction`](number-theory/ContinuedFraction.md)  [`CoprimeQ`](number-theory/CoprimeQ.md)  [`Divisible`](number-theory/Divisible.md)  [`DivisorSigma`](number-theory/DivisorSigma.md)  [`Divisors`](number-theory/Divisors.md)  [`EulerPhi`](number-theory/EulerPhi.md)  [`ExtendedGCD`](number-theory/ExtendedGCD.md)  [`FactorInteger`](number-theory/FactorInteger.md)  [`FromContinuedFraction`](number-theory/FromContinuedFraction.md)  [`GCD`](number-theory/GCD.md)  [`IntegerPartitions`](number-theory/IntegerPartitions.md)  [`JacobiSymbol`](number-theory/JacobiSymbol.md)  [`LCM`](number-theory/LCM.md)  [`LiouvilleLambda`](number-theory/LiouvilleLambda.md)  [`MoebiusMu`](number-theory/MoebiusMu.md)  [`MultiplicativeOrder`](number-theory/MultiplicativeOrder.md)  [`NextPrime`](number-theory/NextPrime.md)  [`PartitionsP`](number-theory/PartitionsP.md)  [`PartitionsQ`](number-theory/PartitionsQ.md)  [`PowerMod`](number-theory/PowerMod.md)  [`Prime`](number-theory/Prime.md)  [`PrimeNu`](number-theory/PrimeNu.md)  [`PrimeOmega`](number-theory/PrimeOmega.md)  [`PrimePi`](number-theory/PrimePi.md)  [`PrimeQ`](number-theory/PrimeQ.md)  [`PrimitiveRoot`](number-theory/PrimitiveRoot.md)  [`PrimitiveRootList`](number-theory/PrimitiveRootList.md)  [`SquareFreeQ`](number-theory/SquareFreeQ.md)
 
 ### [Numerical Calculus](numerical-calculus/index.md)
 
@@ -116,7 +116,7 @@ _525 functions across 29 categories. Use the search box (press `/`) to jump to a
 
 ### [Other & Advanced](other-advanced/index.md)
 
-[`$PlotLegendData`](other-advanced/$PlotLegendData.md)  [`$PlotResample`](other-advanced/$PlotResample.md)  [`AiryAiPrime`](other-advanced/AiryAiPrime.md)  [`AiryBiPrime`](other-advanced/AiryBiPrime.md)  [`AspectRatio`](other-advanced/AspectRatio.md)  [`Black`](other-advanced/Black.md)  [`Blue`](other-advanced/Blue.md)  [`Brown`](other-advanced/Brown.md)  [`Cyan`](other-advanced/Cyan.md)  [`Frame`](other-advanced/Frame.md)  [`FrameStyle`](other-advanced/FrameStyle.md)  [`FrameTicks`](other-advanced/FrameTicks.md)  [`Gray`](other-advanced/Gray.md)  [`Green`](other-advanced/Green.md)  [`ImageSize`](other-advanced/ImageSize.md)  [`LightBlue`](other-advanced/LightBlue.md)  [`LightBrown`](other-advanced/LightBrown.md)  [`LightCyan`](other-advanced/LightCyan.md)  [`LightGray`](other-advanced/LightGray.md)  [`LightGreen`](other-advanced/LightGreen.md)  [`LightMagenta`](other-advanced/LightMagenta.md)  [`LightOrange`](other-advanced/LightOrange.md)  [`LightPink`](other-advanced/LightPink.md)  [`LightPurple`](other-advanced/LightPurple.md)  [`LightRed`](other-advanced/LightRed.md)  [`LightYellow`](other-advanced/LightYellow.md)  [`List`](other-advanced/List.md)  [`Magenta`](other-advanced/Magenta.md)  [`Orange`](other-advanced/Orange.md)  [`Pink`](other-advanced/Pink.md)  [`Purple`](other-advanced/Purple.md)  [`Red`](other-advanced/Red.md)  [`White`](other-advanced/White.md)  [`Yellow`](other-advanced/Yellow.md)
+[`$PlotLegendData`](other-advanced/$PlotLegendData.md)  [`$PlotResample`](other-advanced/$PlotResample.md)  [`AiryAiPrime`](other-advanced/AiryAiPrime.md)  [`AiryBiPrime`](other-advanced/AiryBiPrime.md)  [`AspectRatio`](other-advanced/AspectRatio.md)  [`BesselJZero`](other-advanced/BesselJZero.md)  [`Black`](other-advanced/Black.md)  [`Blue`](other-advanced/Blue.md)  [`Brown`](other-advanced/Brown.md)  [`Cyan`](other-advanced/Cyan.md)  [`Frame`](other-advanced/Frame.md)  [`FrameStyle`](other-advanced/FrameStyle.md)  [`FrameTicks`](other-advanced/FrameTicks.md)  [`Gray`](other-advanced/Gray.md)  [`Green`](other-advanced/Green.md)  [`ImageSize`](other-advanced/ImageSize.md)  [`LightBlue`](other-advanced/LightBlue.md)  [`LightBrown`](other-advanced/LightBrown.md)  [`LightCyan`](other-advanced/LightCyan.md)  [`LightGray`](other-advanced/LightGray.md)  [`LightGreen`](other-advanced/LightGreen.md)  [`LightMagenta`](other-advanced/LightMagenta.md)  [`LightOrange`](other-advanced/LightOrange.md)  [`LightPink`](other-advanced/LightPink.md)  [`LightPurple`](other-advanced/LightPurple.md)  [`LightRed`](other-advanced/LightRed.md)  [`LightYellow`](other-advanced/LightYellow.md)  [`List`](other-advanced/List.md)  [`Magenta`](other-advanced/Magenta.md)  [`Orange`](other-advanced/Orange.md)  [`Pink`](other-advanced/Pink.md)  [`Purple`](other-advanced/Purple.md)  [`Red`](other-advanced/Red.md)  [`White`](other-advanced/White.md)  [`Yellow`](other-advanced/Yellow.md)
 
 ### [FLINT context](flint/index.md)
 
@@ -169,6 +169,7 @@ _525 functions across 29 categories. Use the search box (press `/`) to jump to a
 - [`BernoulliB`](special-functions/BernoulliB.md)
 - [`BesselI`](special-functions/BesselI.md)
 - [`BesselJ`](special-functions/BesselJ.md)
+- [`BesselJZero`](other-advanced/BesselJZero.md)
 - [`BesselK`](special-functions/BesselK.md)
 - [`BesselY`](special-functions/BesselY.md)
 - [`Beta`](special-functions/Beta.md)
@@ -401,6 +402,7 @@ _525 functions across 29 categories. Use the search box (press `/`) to jump to a
 - [`LightYellow`](other-advanced/LightYellow.md)
 - [`Limit`](calculus/Limit.md)
 - [`LinearSolve`](linear-algebra/LinearSolve.md)
+- [`LiouvilleLambda`](number-theory/LiouvilleLambda.md)
 - [`List`](other-advanced/List.md)
 - [`ListPlot`](graphics/ListPlot.md)
 - [`ListQ`](expression-information/ListQ.md)
@@ -503,6 +505,8 @@ _525 functions across 29 categories. Use the search box (press `/`) to jump to a
 - [`Precision`](arithmetic/Precision.md)
 - [`Prepend`](structural-manipulation/Prepend.md)
 - [`Prime`](number-theory/Prime.md)
+- [`PrimeNu`](number-theory/PrimeNu.md)
+- [`PrimeOmega`](number-theory/PrimeOmega.md)
 - [`PrimePi`](number-theory/PrimePi.md)
 - [`PrimeQ`](number-theory/PrimeQ.md)
 - [`PrimitiveRoot`](number-theory/PrimitiveRoot.md)
@@ -550,6 +554,7 @@ _525 functions across 29 categories. Use the search box (press `/`) to jump to a
 - [`Reverse`](structural-manipulation/Reverse.md)
 - [`Root`](solutions-of-equations/Root.md)
 - [`RootMeanSquare`](statistics/RootMeanSquare.md)
+- [`RootReduce`](algebra/RootReduce.md)
 - [`RootSum`](solutions-of-equations/RootSum.md)
 - [`RotateLeft`](structural-manipulation/RotateLeft.md)
 - [`RotateRight`](structural-manipulation/RotateRight.md)

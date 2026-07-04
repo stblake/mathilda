@@ -21,7 +21,27 @@ Eliminate[eqns, vars]
 
 ## Examples
 
-_No verified examples yet for this function._
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= Eliminate[{x == 2 + y, y == z}, y]
+Out[1]= 2 + z == x
+
+In[2]:= Eliminate[{f == x^5 + y^5, a == x + y, b == x y}, {x, y}]
+Out[2]= a^5 + 5 a b^2 == 5 a^3 b + f
+
+In[3]:= Eliminate[(2 x + 3 y + 4 z == 1) && (9 x + 8 y + 7 z == 2), z]
+Out[3]= 22 x + 11 y == 1
+
+In[4]:= Eliminate[{x - a == 0, x - b == 0}, x]  (* common-root condition *)
+Out[4]= b == a
+
+In[5]:= Eliminate[1 == 2, x]                    (* inconsistent -> False *)
+Out[5]= False
+
+In[6]:= Eliminate[x + y == 0, y]                (* solvable -> True *)
+Out[6]= True
+```
 
 ## Implementation notes
 

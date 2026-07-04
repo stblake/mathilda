@@ -12,12 +12,7 @@ Show[graphics, opts...]
 
 ## Examples
 
-All examples below are verified against the current Mathilda build.
-
-```mathematica
-In[1]:= Show[Graphics[{Point[{0,0}]}], Axes -> True]
-Out[1]= -Graphics-
-```
+_No verified examples yet for this function._
 
 ## Implementation notes
 

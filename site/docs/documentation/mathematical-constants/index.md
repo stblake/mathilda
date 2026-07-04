@@ -2,7 +2,7 @@
 
 10 built-in function(s) in this category.
 
-- [`Catalan`](Catalan.md) — Catalan  _(Experimental)_
+- [`Catalan`](Catalan.md) — Catalan  _(Stable)_
 - [`Degree`](Degree.md) — Degree  _(Experimental)_
 - [`E`](E.md) — E  _(Stable)_
 - [`EulerGamma`](EulerGamma.md) — EulerGamma  _(Stable)_

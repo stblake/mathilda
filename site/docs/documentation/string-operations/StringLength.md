@@ -12,7 +12,21 @@ StringLength["string"]
 
 ## Examples
 
-_No verified examples yet for this function._
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= StringLength["tiger"]
+Out[1]= 5
+
+In[2]:= StringLength[""]
+Out[2]= 0
+
+In[3]:= StringLength["hello world"]
+Out[3]= 11
+
+In[4]:= StringLength[x]
+Out[4]= StringLength[x]
+```
 
 ## Implementation notes
 

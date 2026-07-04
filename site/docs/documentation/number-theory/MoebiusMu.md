@@ -27,7 +27,7 @@ In[4]:= MoebiusMu[{4, 10, 17, 20}]
 Out[4]= {0, 1, -1, 0}
 
 In[5]:= MoebiusMu[10^50 + 1]
-Out[5]= -1
+Out[5]= 1
 
 In[6]:= MoebiusMu[5 + 6 I]
 Out[6]= -1

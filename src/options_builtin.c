@@ -601,6 +601,7 @@ void options_register_defaults(void) {
     ob_init(&b);
     ob_add(&b, r_sym("Direction", "Automatic"));
     ob_add(&b, r_sym("Assumptions", "Automatic"));
+    ob_add(&b, r_sym("Method", "Automatic"));
     ob_commit(&b, "Limit");
 
     ob_init(&b);

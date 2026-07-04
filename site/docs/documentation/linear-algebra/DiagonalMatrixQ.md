@@ -27,7 +27,30 @@ empty (i.e. {}), or higher-rank tensor inputs; an n-by-0 matrix
 
 ## Examples
 
-_No verified examples yet for this function._
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= DiagonalMatrixQ[{{a, 0, 0}, {0, b, 0}, {0, 0, c}}]
+Out[1]= True
+
+In[2]:= DiagonalMatrixQ[{{1, 0, 0}, {0, 0, 2}, {3, 0, 0}}]
+Out[2]= False
+
+In[3]:= DiagonalMatrixQ[{{0, a, 0}, {0, 0, b}, {0, 0, 0}}, 1]
+Out[3]= True
+
+In[4]:= DiagonalMatrixQ[{{0, 0, 0}, {a, 0, 0}, {0, b, 0}}, -1]
+Out[4]= True
+
+In[5]:= DiagonalMatrixQ[{{1, 0, 0}, {0, 2, 0}}]
+Out[5]= True
+
+In[6]:= DiagonalMatrixQ[{{1, 0}, {0, 2}, {0, 0}}]
+Out[6]= True
+
+In[7]:= DiagonalMatrixQ[IdentityMatrix[5]]
+Out[7]= True
+```
 
 ## Implementation notes
 

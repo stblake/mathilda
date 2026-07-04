@@ -23,7 +23,21 @@ complex symmetric matrix need not be Hermitian.
 
 ## Examples
 
-_No verified examples yet for this function._
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= SymmetricMatrixQ[{{1, 2}, {2, 3}}]
+Out[1]= True
+
+In[2]:= SymmetricMatrixQ[{{a, b, c}, {b, d, e}, {c, e, f}}]
+Out[2]= True
+
+In[3]:= SymmetricMatrixQ[{{1 + I, 2 - 3 I}, {2 - 3 I, 2 - 3 I}}]
+Out[3]= True
+
+In[4]:= SymmetricMatrixQ[{{1, 3 + 4 I}, {3 - 4 I, 2}}]   (* Hermitian, not symmetric *)
+Out[4]= False
+```
 
 ## Implementation notes
 

@@ -14,7 +14,21 @@ FactorTermsList[poly, {x1, x2, ...}]
 
 ## Examples
 
-_No verified examples yet for this function._
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= FactorTermsList[3 + 6 x + 3 x^2]
+Out[1]= {3, 1 + 2 x + x^2}
+
+In[2]:= FactorTermsList[14 x + 21 y + 35 x y + 63]
+Out[2]= {7, 9 + 2 x + 3 y + 5 x y}
+
+In[3]:= FactorTermsList[3 + 3 a + 6 a x + 6 x + 12 a x^2 + 12 x^2, x]
+Out[3]= {3, 1 + a, 1 + 2 x + 4 x^2}
+
+In[4]:= Times @@ FactorTermsList[14 x + 21 y + 35 x y + 63]
+Out[4]= 7 (9 + 2 x + 3 y + 5 x y)
+```
 
 ## Implementation notes
 

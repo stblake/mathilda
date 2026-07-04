@@ -38,6 +38,7 @@ Out[4]= {{2, 2}}
 - `Listable`, `Protected`.
 - Supports negative integers (includes `{-1, 1}`).
 - Supports rational numbers (denominator factors have negative exponents).
+- Perfect powers are reduced before the general search: `n = base^m` is peeled
 
 **Attributes:** `Listable`, `Protected`.
 

@@ -12,7 +12,12 @@ Plot[f, {x, xmin, xmax}, opts...]
 
 ## Examples
 
-_No verified examples yet for this function._
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= Plot[Sin[x], {x, a, b}]
+Out[1]= Plot[Sin[x], {x, a, b}]
+```
 
 ## Implementation notes
 

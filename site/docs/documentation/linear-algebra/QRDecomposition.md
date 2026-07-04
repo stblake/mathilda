@@ -50,7 +50,15 @@ release and currently leaves the call unevaluated.
 
 ## Examples
 
-_No verified examples yet for this function._
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= QRDecomposition[{{1, 2}, {3, 4}}]
+Out[1]= {{{1/Sqrt[10], 3/Sqrt[10]}, {3/5/Sqrt[(2 - (2/Sqrt[10] + 6 Sqrt[2/5])/Sqrt[10])^2 + (4 - 3 (2/Sqrt[10] + 6 Sqrt[2/5])/Sqrt[10])^2], -1/5/Sqrt[(2 - (2/Sqrt[10] + 6 Sqrt[2/5])/Sqrt[10])^2 + (4 - 3 (2/Sqrt[10] + 6 Sqrt[2/5])/Sqrt[10])^2]}}, {{Sqrt[10], 2/Sqrt[10] + 6 Sqrt[2/5]}, {0, Sqrt[(2 - (2/Sqrt[10] + 6 Sqrt[2/5])/Sqrt[10])^2 + (4 - 3 (2/Sqrt[10] + 6 Sqrt[2/5])/Sqrt[10])^2]}}}
+
+In[2]:= QRDecomposition[{{1, 2}, {3, 4}}, Pivoting -> True]
+Out[2]= {{{1/Sqrt[5], 2/Sqrt[5]}, {-2/Sqrt[5], 1/Sqrt[5]}}, {{2 Sqrt[5], 7/Sqrt[5]}, {0, 1/Sqrt[5]}}, {{0, 1}, {1, 0}}}
+```
 
 ## Implementation notes
 

@@ -119,7 +119,18 @@ rature node, or non-convergence within MaxIterations.
 
 ## Examples
 
-_No verified examples yet for this function._
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= Eigenvalues[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
+Out[1]= {1/2 (15 + 3 Sqrt[33]), 1/2 (15 - 3 Sqrt[33]), 0}
+
+In[2]:= Eigenvalues[{{a, b}, {c, d}}]
+Out[2]= {1/2 (a + d + Sqrt[(-a - d)^2 - 4 (-b c + a d)]), 1/2 (a + d - Sqrt[(-a - d)^2 - 4 (-b c + a d)])}
+
+In[3]:= Eigenvalues[IdentityMatrix[12]]
+Out[3]= {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
+```
 
 ## Implementation notes
 

@@ -37,6 +37,7 @@
 #include "symtab.h"
 #include "attr.h"
 #include "common.h"
+#include "print.h"       /* expr_to_string -- Method::method diagnostic */
 #include "rationalize.h"
 #include "arithmetic.h"  /* arith_warnings_mute_push/pop -- silences the
                           * Power::infy / Infinity::indet messages that our
@@ -100,6 +101,24 @@
 #define LIMIT_DIR_IMAGINARY  4
 
 /* ---------------------------------------------------------------------- */
+/* Method selection (the Method -> m option)                               */
+/* ---------------------------------------------------------------------- */
+/* The compute_limit cascade is a sequence of strategy layers. By default  */
+/* (Automatic) all of them run in order. A named Method restricts the      */
+/* *outermost* compute_limit call to a single strategy group; if that      */
+/* group produces no answer the whole Limit is left unevaluated. The       */
+/* restriction is deliberately confined to the top-level call (see the     */
+/* depth==1 gate in compute_limit) so recursive sub-limits -- one-sided    */
+/* probes, L'Hospital, Abs splitting -- keep the full cascade.             */
+#define LIMIT_M_AUTOMATIC     0
+#define LIMIT_M_SUBSTITUTION  1
+#define LIMIT_M_RATIONAL      2
+#define LIMIT_M_ASYMPTOTIC    3
+#define LIMIT_M_BOUNDED       4
+#define LIMIT_M_SERIES        5
+#define LIMIT_M_LHOSPITAL     6
+
+/* ---------------------------------------------------------------------- */
 /* LimitCtx -- threaded through the pipeline                               */
 /* ---------------------------------------------------------------------- */
 typedef struct {
@@ -107,6 +126,7 @@ typedef struct {
     Expr* point;   /* limit point, borrowed */
     int   dir;     /* one of LIMIT_DIR_* */
     int   depth;   /* recursion depth guard */
+    int   method;  /* one of LIMIT_M_*; enforced only at depth==1 */
 } LimitCtx;
 
 /* ---------------------------------------------------------------------- */
@@ -591,6 +611,25 @@ static bool parse_direction(Expr* dir, int* out) {
      * LIMIT_DIR_IMAGINARY so the branch-cut post-pass in builtin_limit
      * can flip the imaginary part for Sqrt/Log etc. */
     if (is_imaginary_direction(dir)) { *out = LIMIT_DIR_IMAGINARY; return true; }
+    return false;
+}
+
+/* Translate a user-facing Method value to the internal method tag. Accepts
+ * the symbol Automatic and the six strategy-group names (as strings).
+ * Returns true on success; false for an unrecognised value.               */
+static bool parse_method(Expr* m, int* out) {
+    if (!m) { *out = LIMIT_M_AUTOMATIC; return true; }
+    if (is_sym(m, "Automatic")) { *out = LIMIT_M_AUTOMATIC; return true; }
+    if (m->type == EXPR_STRING) {
+        const char* s = m->data.string;
+        if (strcmp(s, "Automatic")        == 0) { *out = LIMIT_M_AUTOMATIC;    return true; }
+        if (strcmp(s, "Substitution")     == 0) { *out = LIMIT_M_SUBSTITUTION; return true; }
+        if (strcmp(s, "RationalFunction") == 0) { *out = LIMIT_M_RATIONAL;     return true; }
+        if (strcmp(s, "Asymptotic")       == 0) { *out = LIMIT_M_ASYMPTOTIC;   return true; }
+        if (strcmp(s, "Bounded")          == 0) { *out = LIMIT_M_BOUNDED;      return true; }
+        if (strcmp(s, "Series")           == 0) { *out = LIMIT_M_SERIES;       return true; }
+        if (strcmp(s, "LHospital")        == 0) { *out = LIMIT_M_LHOSPITAL;    return true; }
+    }
     return false;
 }
 
@@ -1109,7 +1148,7 @@ static Expr* layer2_series(Expr* f, LimitCtx* ctx) {
             (Expr*[]){ expr_copy(x_use), expr_copy(x0_use), mk_int(k) }, 3);
         Expr* call = mk_fn2("Series", expr_copy(f_use), spec);
         Expr* s    = simp(call);
-        LimitCtx leaf = { x_use, x0_use, effective_dir, ctx->depth };
+        LimitCtx leaf = { x_use, x0_use, effective_dir, ctx->depth, ctx->method };
         result = read_leading_term_limit(s, &leaf);
         /* If the series expansion still mentions the limit variable in
          * its coefficients (asymptotic shapes like Log[E^x-E^a] at x->a
@@ -1987,7 +2026,7 @@ static Expr* layer_atom_substitute(Expr* f, LimitCtx* ctx) {
      * (e.g. Infinity or 0) driven by the direction on x, but once we're
      * asking for Limit in u the approach is along the real line of u
      * itself. */
-    LimitCtx sub2 = { u_sym, atom_lim, LIMIT_DIR_TWOSIDED, ctx->depth };
+    LimitCtx sub2 = { u_sym, atom_lim, LIMIT_DIR_TWOSIDED, ctx->depth, ctx->method };
     Expr* result = compute_limit(f_sub, &sub2);
     expr_free(f_sub); expr_free(u_sym); expr_free(atom_lim);
     return result;
@@ -2064,7 +2103,7 @@ static int sign_at_finite_zero(Expr* g, LimitCtx* ctx) {
  * to 0 (undetermined) when the inner limit cannot be resolved or the
  * value still depends on x. */
 static int sign_via_inner_limit(Expr* g, LimitCtx* ctx) {
-    LimitCtx sub = { ctx->x, ctx->point, ctx->dir, ctx->depth };
+    LimitCtx sub = { ctx->x, ctx->point, ctx->dir, ctx->depth, ctx->method };
     Expr* g_lim = compute_limit(g, &sub);
     if (!g_lim) return 0;
     int sgn = 0;
@@ -2174,7 +2213,7 @@ static Expr* layer_abs_rewrite(Expr* f, LimitCtx* ctx) {
      * intermediate -g that the rest of the pipeline cannot simplify. */
     if (head_is(f, SYM_Abs) && f->data.function.arg_count == 1 &&
         expr_contains(f->data.function.args[0], ctx->x)) {
-        LimitCtx sub = { ctx->x, ctx->point, ctx->dir, ctx->depth };
+        LimitCtx sub = { ctx->x, ctx->point, ctx->dir, ctx->depth, ctx->method };
         Expr* g_lim = compute_limit(f->data.function.args[0], &sub);
         if (g_lim) {
             if (is_infinity_sym(g_lim) || is_neg_infinity(g_lim) ||
@@ -2214,8 +2253,8 @@ static Expr* layer_abs_rewrite(Expr* f, LimitCtx* ctx) {
      * don't reroute every two-sided limit through the disagree pair. */
     if (ctx->dir == LIMIT_DIR_TWOSIDED || ctx->dir == LIMIT_DIR_REALS) {
         if (ctx->depth > LIMIT_MAX_DEPTH - 4) return NULL;
-        LimitCtx left  = { ctx->x, ctx->point, LIMIT_DIR_FROMBELOW, ctx->depth };
-        LimitCtx right = { ctx->x, ctx->point, LIMIT_DIR_FROMABOVE, ctx->depth };
+        LimitCtx left  = { ctx->x, ctx->point, LIMIT_DIR_FROMBELOW, ctx->depth, ctx->method };
+        LimitCtx right = { ctx->x, ctx->point, LIMIT_DIR_FROMABOVE, ctx->depth, ctx->method };
         Expr* L = compute_limit(f, &left);
         if (!L) return NULL;
         if (expr_contains(L, ctx->x) || is_indeterminate(L)) {
@@ -2254,8 +2293,8 @@ static Expr* layer_onesided_disagree(Expr* f, LimitCtx* ctx) {
      * direction, so the early dir!=TWOSIDED check above prevents re-entry. */
     if (ctx->depth > 3) return NULL;
 
-    LimitCtx left  = { ctx->x, ctx->point, LIMIT_DIR_FROMBELOW, ctx->depth };
-    LimitCtx right = { ctx->x, ctx->point, LIMIT_DIR_FROMABOVE, ctx->depth };
+    LimitCtx left  = { ctx->x, ctx->point, LIMIT_DIR_FROMBELOW, ctx->depth, ctx->method };
+    LimitCtx right = { ctx->x, ctx->point, LIMIT_DIR_FROMABOVE, ctx->depth, ctx->method };
 
     Expr* L = compute_limit(f, &left);
     if (!L) return NULL;
@@ -2333,79 +2372,79 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
 
     Expr* r = NULL;
 
+    /* Method gating. `only` is 0 (unrestricted) unless a specific Method
+     * was requested AND this is the outermost call (depth==1). Restricting
+     * only at the top level keeps recursive sub-limits on the full cascade.
+     * TRY runs a layer if it belongs to the selected group, and short-
+     * circuits the whole function on the first success. */
+    int only = (ctx->method != LIMIT_M_AUTOMATIC && ctx->depth == 1)
+               ? ctx->method : 0;
+    #define TRY(grp, call) do {                                  \
+        if (!only || only == (grp)) {                            \
+            r = (call);                                          \
+            if (r) { expr_free(f); ctx->depth--; return r; }     \
+        } } while (0)
+
     /* Layer 1: structural fast paths, including continuous substitution. */
-    r = layer1_fast_paths(f, ctx);
-    if (r) { expr_free(f); ctx->depth--; return r; }
+    TRY(LIMIT_M_SUBSTITUTION, layer1_fast_paths(f, ctx));
 
     /* Abs[g(x)] direction-aware rewrite. Runs early so the kink at the
      * zero of g is resolved before L'Hospital / Series can latch onto
      * Derivative[1][Abs][...] as a "clean" answer. */
-    r = layer_abs_rewrite(f, ctx);
-    if (r) { expr_free(f); ctx->depth--; return r; }
+    TRY(LIMIT_M_SUBSTITUTION, layer_abs_rewrite(f, ctx));
 
     /* ArcTan / ArcCot of a divergent inner argument. */
-    r = layer_arctan_infinity(f, ctx);
-    if (r) { expr_free(f); ctx->depth--; return r; }
+    TRY(LIMIT_M_ASYMPTOTIC, layer_arctan_infinity(f, ctx));
 
     /* Layer 3: rational function short-cut (P(x)/Q(x) classical forms). */
-    r = layer3_rational(f, ctx);
-    if (r) { expr_free(f); ctx->depth--; return r; }
+    TRY(LIMIT_M_RATIONAL, layer3_rational(f, ctx));
 
     /* Log[g(x)] at infinity when g has a finite inner limit. Runs before
      * Series because Series can miss Log[1 + decay] at infinity shapes. */
-    r = layer_log_of_finite(f, ctx);
-    if (r) { expr_free(f); ctx->depth--; return r; }
+    TRY(LIMIT_M_ASYMPTOTIC, layer_log_of_finite(f, ctx));
 
     /* Gruntz-lite: Log[sum] at Infinity with a unique dominant summand. */
-    r = layer_gruntz_iterated_log(f, ctx);
-    if (r) { expr_free(f); ctx->depth--; return r; }
+    TRY(LIMIT_M_ASYMPTOTIC, layer_gruntz_iterated_log(f, ctx));
 
     /* Log + linear merge at infinity for shapes like -x + Log[2 + E^x],
      * which individually diverge but combine to a finite Log. */
-    r = layer_log_merge(f, ctx);
-    if (r) { expr_free(f); ctx->depth--; return r; }
+    TRY(LIMIT_M_ASYMPTOTIC, layer_log_merge(f, ctx));
 
     /* Plus at infinity where every summand has a finite limit; sum them. */
-    r = layer_plus_termwise(f, ctx);
-    if (r) { expr_free(f); ctx->depth--; return r; }
+    TRY(LIMIT_M_ASYMPTOTIC, layer_plus_termwise(f, ctx));
 
     /* Layer 5.3: f^g log reduction. Must run before Series because
      * Series does not have a kernel for Power[base, exp] where exp is
      * itself an expression in x (e.g. (1 + a/x)^(b x)). */
-    r = layer5_log_reduction(f, ctx);
-    if (r) { expr_free(f); ctx->depth--; return r; }
+    TRY(LIMIT_M_ASYMPTOTIC, layer5_log_reduction(f, ctx));
 
     /* Bounded envelope before Series. Series often blows up on bounded
      * heads at infinity (Sin[t^2] has no Taylor expansion at infinity),
      * so we try to squeeze to 0 first. Gating is enforced inside the
      * layer (currently only fires at +Infinity). */
-    r = layer_bounded_envelope(f, ctx);
-    if (r) { expr_free(f); ctx->depth--; return r; }
+    TRY(LIMIT_M_BOUNDED, layer_bounded_envelope(f, ctx));
 
     /* Layer 2: series-based evaluation -- the workhorse. */
-    r = layer2_series(f, ctx);
-    if (r) { expr_free(f); ctx->depth--; return r; }
+    TRY(LIMIT_M_SERIES, layer2_series(f, ctx));
 
     /* Layer 5.1: L'Hospital's rule with guardrails. */
-    r = layer5_lhospital(f, ctx);
-    if (r) { expr_free(f); ctx->depth--; return r; }
+    TRY(LIMIT_M_LHOSPITAL, layer5_lhospital(f, ctx));
 
     /* Layer 6: bounded-oscillation Interval. */
-    r = layer6_bounded(f, ctx);
-    if (r) { expr_free(f); ctx->depth--; return r; }
+    TRY(LIMIT_M_BOUNDED, layer6_bounded(f, ctx));
 
     /* Atom substitution: rewrite a Power[b, e(x)] subterm as a fresh
      * symbol u and recurse on the u-limit. Catches shapes like
      * (-1 + 3^(2/x))/(1 + 3^(2/x)) at x -> 0 one-sided, where Series
      * hits the essential singularity but the ratio is polynomial-in-u. */
-    r = layer_atom_substitute(f, ctx);
-    if (r) { expr_free(f); ctx->depth--; return r; }
+    TRY(LIMIT_M_SUBSTITUTION, layer_atom_substitute(f, ctx));
 
     /* Last-resort one-sided disagreement probe for two-sided limits at a
      * finite numeric point with an x-bearing exponent. Returns
      * Indeterminate for the 3^(1/x)-family shapes. */
-    r = layer_onesided_disagree(f, ctx);
-    if (r) { expr_free(f); ctx->depth--; return r; }
+    TRY(LIMIT_M_SUBSTITUTION, layer_onesided_disagree(f, ctx));
+
+    #undef TRY
 
     expr_free(f);
     ctx->depth--;
@@ -2613,16 +2652,31 @@ static Expr* find_direction_opt(Expr** opts, size_t nopts) {
     return NULL;
 }
 
+/* Extract the `Method -> ...` option (if any) from a list of option
+ * arguments. Returns the raw option value (borrowed from opts) or NULL
+ * when no Method option was supplied. */
+static Expr* find_method_opt(Expr** opts, size_t nopts) {
+    for (size_t i = 0; i < nopts; i++) {
+        Expr* o = opts[i];
+        if ((head_is(o, SYM_Rule) || head_is(o, SYM_RuleDelayed)) &&
+            o->data.function.arg_count == 2 &&
+            is_sym(o->data.function.args[0], "Method")) {
+            return o->data.function.args[1];
+        }
+    }
+    return NULL;
+}
+
 /* Handle Limit[f, {x1 -> a1, ..., xn -> an}] by iterated right-to-left
  * folding: the innermost (rightmost) rule's Limit is computed first. */
-static Expr* run_iterated(Expr* f, Expr* rule_list, int dir, int depth) {
+static Expr* run_iterated(Expr* f, Expr* rule_list, int dir, int method, int depth) {
     Expr* current = expr_copy(f);
     size_t n = rule_list->data.function.arg_count;
     for (size_t i = n; i-- > 0; ) {
         Expr* rule = rule_list->data.function.args[i];
         Expr *var, *point;
         if (!split_rule(rule, &var, &point)) { expr_free(current); return NULL; }
-        LimitCtx ctx = { var, point, dir, depth };
+        LimitCtx ctx = { var, point, dir, depth, method };
         Expr* next = compute_limit(current, &ctx);
         expr_free(current);
         if (!next) return NULL;
@@ -2660,7 +2714,7 @@ static bool all_points_are(Expr* points, int kind) {
  * NULL if the inner limit cannot be resolved. */
 static Expr* limit_r_fromabove(Expr* f_polar, Expr* r_sym, int kind) {
     Expr* point = (kind == 0) ? mk_int(0) : mk_sym("Infinity");
-    LimitCtx sub = { r_sym, point, LIMIT_DIR_FROMABOVE, 0 };
+    LimitCtx sub = { r_sym, point, LIMIT_DIR_FROMABOVE, 0, LIMIT_M_AUTOMATIC };
     Expr* res = compute_limit(f_polar, &sub);
     expr_free(point);
     return res;
@@ -2788,7 +2842,7 @@ static Expr* sample_joint_limit(Expr* f, Expr** vars, size_t n, int kind) {
         if (!skip) {
             Expr* f_path = subst_all(f, vars, values, n);
             Expr* point = (kind == 0) ? mk_int(0) : mk_sym("Infinity");
-            LimitCtx sub = { t_sym, point, LIMIT_DIR_FROMABOVE, 0 };
+            LimitCtx sub = { t_sym, point, LIMIT_DIR_FROMABOVE, 0, LIMIT_M_AUTOMATIC };
             Expr* v = compute_limit(f_path, &sub);
             expr_free(point);
             expr_free(f_path);
@@ -3078,6 +3132,21 @@ static Expr* builtin_limit_impl(Expr* res) {
         return NULL;
     }
 
+    /* Method -> m selects the internal strategy. Automatic (the default)
+     * runs the full cascade; a named method restricts the top-level call
+     * to one strategy group and leaves Limit unevaluated if it fails. An
+     * unrecognised value is reported and left unevaluated. */
+    Expr* method_opt = find_method_opt(opts, nopts);
+    int method = LIMIT_M_AUTOMATIC;
+    if (method_opt && !parse_method(method_opt, &method)) {
+        char* s = expr_to_string(method_opt);
+        fprintf(stderr,
+                "Limit::method: %s is not a recognised setting for Method.\n",
+                s ? s : "?");
+        free(s);
+        return NULL;
+    }
+
     /* Targeted Assumptions support: Limit[Power[B, var], var -> ±Infinity,
      * Assumptions -> Abs[B] R c]. The standard Limit machinery doesn't
      * carry assumption context, so we dispatch this specific (but useful)
@@ -3112,7 +3181,7 @@ static Expr* builtin_limit_impl(Expr* res) {
         if (inner_dir == LIMIT_DIR_IMAGINARY || inner_dir == LIMIT_DIR_COMPLEX) {
             inner_dir = LIMIT_DIR_TWOSIDED;
         }
-        LimitCtx ctx = { var, point, inner_dir, 0 };
+        LimitCtx ctx = { var, point, inner_dir, 0, method };
         Expr* base = compute_limit(f, &ctx);
         if (!base) return NULL;
 
@@ -3155,7 +3224,7 @@ static Expr* builtin_limit_impl(Expr* res) {
         for (size_t i = 0; i < n; i++) {
             if (!head_is(spec->data.function.args[i], SYM_Rule)) return NULL;
         }
-        return run_iterated(f, spec, dir, 0);
+        return run_iterated(f, spec, dir, method, 0);
     }
 
     return NULL;
@@ -3207,6 +3276,16 @@ void limit_init(void) {
         "\t  \"FromAbove\" or -1   -- approach from above (x -> a^+)\n"
         "\t  \"FromBelow\" or +1   -- approach from below (x -> a^-)\n"
         "\t  Complexes           -- limit over all complex directions\n"
+        "Limit[f, x -> a, Method -> m]\n"
+        "\tselects the internal strategy:\n"
+        "\t  Automatic          -- (default) try all strategies in order\n"
+        "\t  \"Substitution\"     -- continuity, Abs kink, atom/one-sided probes\n"
+        "\t  \"RationalFunction\" -- degree comparison for P(x)/Q(x)\n"
+        "\t  \"Series\"           -- Taylor/Laurent/Puiseux leading term\n"
+        "\t  \"LHospital\"        -- L'Hospital's rule for 0/0 and Inf/Inf\n"
+        "\t  \"Asymptotic\"       -- dominant-term / log / exp reductions\n"
+        "\t  \"Bounded\"          -- squeeze and bounded-oscillation Interval\n"
+        "\tA named method leaves Limit unevaluated when it does not apply.\n"
         "\n"
         "May return a finite value, Infinity, -Infinity, ComplexInfinity,\n"
         "Indeterminate, Interval[{lo, hi}], or the original unevaluated\n"

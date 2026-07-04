@@ -38,6 +38,14 @@ In[6]:= Product[k^k, {k, 1, n}]
 Out[6]= Hyperfactorial[n]
 ```
 
+```mathematica
+In[1]:= Product[(k^2 - 1)/(k^2 + 1), {k, 2, Infinity}]
+Out[1]= Pi Csch[Pi]
+
+In[2]:= Product[(k^3 - 1)/(k^3 + 1), {k, 2, Infinity}]
+Out[2]= 2/3
+```
+
 ## Implementation notes
 
 **Attributes:** `HoldAll`, `Protected`.

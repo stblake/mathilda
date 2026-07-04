@@ -14,7 +14,21 @@ Options: WorkingPrecision (Automatic | n | Infinity), FitRegularization ({"Tikho
 
 ## Examples
 
-_No verified examples yet for this function._
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= Fit[{{0,1},{1,0},{3,2},{5,4}}, {1, x}, x]
+Out[1]= 0.186441 + 0.694915 x
+
+In[2]:= Fit[{{0,1},{1,0},{3,2},{5,4}}, {1, x, x^2}, x, WorkingPrecision -> Infinity]
+Out[2]= 135/199 - 53/199 x + 38/199 x^2
+
+In[3]:= Fit[{N[HilbertMatrix[4]], Range[4]}]
+Out[3]= {-64.0, 900.0, -2520.0, 1820.0}
+
+In[4]:= Fit[{{0,0,0},{1,0,1},{0,1,2},{1,1,0},{1/2,1/2,1}}, {1, x, y}, {x, y}]
+Out[4]= 0.8 - 0.5 x + 0.5 y
+```
 
 ## Implementation notes
 

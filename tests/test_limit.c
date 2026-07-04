@@ -765,6 +765,45 @@ static void test_special_log_leading(void) {
     check_equiv("Limit[Log[x], x -> 0]", "-Infinity");
 }
 
+/* ----------------------------------------------------------------- */
+/* Method option                                                      */
+/*                                                                    */
+/* Method -> Automatic (default) runs the full cascade; a named       */
+/* method restricts the top-level call to a single strategy group and */
+/* leaves Limit unevaluated when that group does not apply.           */
+/* ----------------------------------------------------------------- */
+static void test_method(void) {
+    /* Options[Limit] advertises Method -> Automatic. */
+    check("MemberQ[Options[Limit], Method -> Automatic]", "True");
+
+    /* Default is unchanged by the Method plumbing. */
+    check("Limit[Sin[x]/x, x -> 0]", "1");
+    check("Limit[Sin[x]/x, x -> 0, Method -> Automatic]", "1");
+
+    /* Each named method resolves the shape it is meant for. */
+    check("Limit[Sin[x]/x, x -> 0, Method -> \"Series\"]", "1");
+    check("Limit[(2 x^2 + 1)/(x^2 + x), x -> Infinity, Method -> \"RationalFunction\"]", "2");
+    check("Limit[(x^2 - 1)/(x - 1), x -> 1, Method -> \"Substitution\"]", "2");
+    check("Limit[(Exp[x] - 1)/x, x -> 0, Method -> \"LHospital\"]", "1");
+    check("Limit[(1 + 1/x)^x, x -> Infinity, Method -> \"Asymptotic\"]", "E");
+    check("Limit[Sin[x^2]/x, x -> Infinity, Method -> \"Bounded\"]", "0");
+
+    /* A named method that does not apply to this shape leaves the whole
+     * expression unevaluated (the RationalFunction shortcut cannot see a
+     * transcendental numerator). */
+    check("Limit[Sin[x]/x, x -> 0, Method -> \"RationalFunction\"]",
+          "Limit[Sin[x]/x, x -> 0, Method -> \"RationalFunction\"]");
+
+    /* An unrecognised method value is left unevaluated. */
+    check("Limit[Sin[x]/x, x -> 0, Method -> \"Bogus\"]",
+          "Limit[Sin[x]/x, x -> 0, Method -> \"Bogus\"]");
+
+    /* The restriction is confined to the outermost call: the two-sided
+     * probe recurses into one-sided sub-limits that run the full cascade,
+     * so Series still resolves the pole at Pi/2. */
+    check("Limit[Tan[x], x -> Pi/2, Method -> \"Series\"]", "ComplexInfinity");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -798,6 +837,7 @@ int main(void) {
     TEST(test_wp7_gruntz_log_sum);
     TEST(test_abs_directional);
     TEST(test_special_log_leading);
+    TEST(test_method);
 
     printf("All limit tests passed.\n");
     return 0;

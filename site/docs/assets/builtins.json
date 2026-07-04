@@ -360,6 +360,14 @@
     "url": "documentation/special-functions/BesselJ/"
   },
   {
+    "name": "BesselJZero",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "BesselJZero[n, k] gives the k-th positive zero of BesselJ[n, x]. Stays symbolic for symbolic arguments.",
+    "url": "documentation/other-advanced/BesselJZero/"
+  },
+  {
     "name": "BesselK",
     "category": "Special Functions",
     "slug": "special-functions",
@@ -491,7 +499,7 @@
     "name": "Catalan",
     "category": "Mathematical Constants",
     "slug": "mathematical-constants",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "Catalan",
     "url": "documentation/mathematical-constants/Catalan/"
   },
@@ -2216,6 +2224,14 @@
     "url": "documentation/linear-algebra/LinearSolve/"
   },
   {
+    "name": "LiouvilleLambda",
+    "category": "Number Theory",
+    "slug": "number-theory",
+    "status": "Stable",
+    "summary": "LiouvilleLambda[n] gives the Liouville function lambda(n) = (-1)^Omega(n), where Omega(n) counts the prime factors of n with multiplicity. Completely multiplicative. A non-real Gaussian-integer argument, or GaussianIntegers -> True, is handled over Z[i].",
+    "url": "documentation/number-theory/LiouvilleLambda/"
+  },
+  {
     "name": "List",
     "category": "Other & Advanced",
     "slug": "other-advanced",
@@ -3032,6 +3048,22 @@
     "url": "documentation/number-theory/Prime/"
   },
   {
+    "name": "PrimeNu",
+    "category": "Number Theory",
+    "slug": "number-theory",
+    "status": "Stable",
+    "summary": "PrimeNu[n] gives the number of distinct prime factors of n, nu(n). PrimeNu[n, GaussianIntegers -> True] (or a non-real Gaussian-integer n) counts distinct Gaussian prime factors over Z[i]. PrimeNu[1] is 0; PrimeNu[0] is left unevaluated.",
+    "url": "documentation/number-theory/PrimeNu/"
+  },
+  {
+    "name": "PrimeOmega",
+    "category": "Number Theory",
+    "slug": "number-theory",
+    "status": "Stable",
+    "summary": "PrimeOmega[n] gives the number of prime factors of n counted with multiplicity, Omega(n). PrimeOmega[n, GaussianIntegers -> True] (or a non-real Gaussian-integer n) counts Gaussian prime factors over Z[i]. PrimeOmega[1] is 0; PrimeOmega[0] is left unevaluated.",
+    "url": "documentation/number-theory/PrimeOmega/"
+  },
+  {
     "name": "PrimePi",
     "category": "Number Theory",
     "slug": "number-theory",
@@ -3406,6 +3438,14 @@
     "status": "Stable",
     "summary": "RootMeanSquare[list] gives the root mean square of values in list.",
     "url": "documentation/statistics/RootMeanSquare/"
+  },
+  {
+    "name": "RootReduce",
+    "category": "Algebra",
+    "slug": "algebra",
+    "status": "Stable",
+    "summary": "RootReduce[expr] canonicalises an algebraic expression: a constant algebraic number becomes a rational, a quadratic radical, or a Root object; a rational function over a radical tower has its denominator rationalised. Threads over lists, equations, inequalities and logic. Option: Method -> \"Automatic\" | \"Recursive\" | \"NumberField\".",
+    "url": "documentation/algebra/RootReduce/"
   },
   {
     "name": "RootSum",

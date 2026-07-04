@@ -38,11 +38,9 @@ Out[1]= a^i/(-1 + a)
 
 In[2]:= Sum[q1^i q2^i, i]
 Out[2]= (q1 q2)^i/(-1 + q1 q2)
-```
 
-```mathematica
-In[1]:= Sum[k k!, k]
-Out[1]= Factorial[k]
+In[3]:= Sum[k^2/2^k, {k, 0, Infinity}]
+Out[3]= 6
 ```
 
 ## Implementation notes
