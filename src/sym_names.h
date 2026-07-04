@@ -672,6 +672,13 @@ extern const char* SYM_StreamStyle;    /* style directives for streams */
 extern const char* SYM_StreamColorFunction; /* color by position/speed */
 extern const char* SYM_StreamColorBar;      /* internal: color-scale bar metadata */
 
+/* ContourPlot[f, {x,...}, {y,...}, opts...] */
+extern const char* SYM_ContourPlot;
+extern const char* SYM_Contours;        /* integer or list of explicit levels */
+extern const char* SYM_ContourStyle;    /* style directive(s) for the contour lines */
+extern const char* SYM_ContourLabels;   /* True/False: draw z-value labels on contours */
+extern const char* SYM_ContourShading;  /* True/False/Automatic: fill between contours */
+
 /* FLINT` context: direct REPL access to the FLINT-backed kernels that also
  * accelerate the corresponding System` builtins transparently. Each is a thin
  * wrapper over src/poly/flint_bridge.c (and, later, the matrix / numeric

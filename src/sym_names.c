@@ -659,6 +659,11 @@ const char* SYM_StreamScale = NULL;
 const char* SYM_StreamStyle = NULL;
 const char* SYM_StreamColorFunction = NULL;
 const char* SYM_StreamColorBar = NULL;
+const char* SYM_ContourPlot = NULL;
+const char* SYM_Contours = NULL;
+const char* SYM_ContourStyle = NULL;
+const char* SYM_ContourLabels = NULL;
+const char* SYM_ContourShading = NULL;
 
 void sym_names_init(void) {
     /* intern_symbol is idempotent and stable, so this can run multiple
@@ -1299,6 +1304,11 @@ void sym_names_init(void) {
     SYM_StreamStyle                = intern_symbol("StreamStyle");
     SYM_StreamColorFunction        = intern_symbol("StreamColorFunction");
     SYM_StreamColorBar             = intern_symbol("$StreamColorBar");
+    SYM_ContourPlot                = intern_symbol("ContourPlot");
+    SYM_Contours                   = intern_symbol("Contours");
+    SYM_ContourStyle               = intern_symbol("ContourStyle");
+    SYM_ContourLabels              = intern_symbol("ContourLabels");
+    SYM_ContourShading             = intern_symbol("ContourShading");
 
     /* System symbols that have no kernel implementation and no cached SYM_*
      * pointer, but must still be recognized as System` (not qualified into a

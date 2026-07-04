@@ -1915,6 +1915,17 @@ void graphics_show(const Expr* graphics_expr) {
 
         PlotRange2D visible = compute_visible_range(camera, (int)opts.width, (int)opts.height);
 
+        /* Flush any OS events (window-close button, Escape) that may have
+         * arrived since the last EndDrawing().  Without this, the window can
+         * feel stuck: if the user clicks close while a previous frame's
+         * plot_resample() was still running, the close event sits in the OS
+         * queue until the next EndDrawing() – which may be several seconds
+         * away for a complex function.  Polling here lets us break before we
+         * commit to another potentially-long resample. */
+        PollInputEvents();
+        if (WindowShouldClose()) break;
+        if (IsKeyPressed(KEY_ESCAPE)) break;
+
         /* Re-sample the curve for the current x-window when the view has
          * moved enough -- zoomed past ~30% (resolution change) or panned to
          * the edge of what we last sampled (new territory). Held off while a

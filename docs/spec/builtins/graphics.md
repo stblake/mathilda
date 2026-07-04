@@ -843,3 +843,103 @@ Out[9]= -Graphics-
   order, using the first form that returns a recognized color.
 - Arrow arrowhead size is viewport-relative: it stays visible regardless
   of `PlotRange` scale or interactive zoom.
+
+## ContourPlot
+Generates iso-contour lines of a 2-D function `f(x, y)` using the marching
+squares algorithm and returns a `Graphics[...]` object (auto-displayed).
+
+```mathematica
+ContourPlot[f, {x, xmin, xmax}, {y, ymin, ymax}]
+ContourPlot[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
+```
+
+`ContourPlot` is `HoldAll`: `f` is held unevaluated until `x` and `y` are
+given numeric values, exactly like `Plot`'s function body.
+
+**Algorithm**: evaluates `f` on a `(PlotPoints+1) × (PlotPoints+1)` grid,
+then for each contour level runs marching squares over the `PlotPoints ×
+PlotPoints` grid of cells, linearly interpolating the exact crossing points on
+cell edges. Saddle cells (where both pairs of opposite corners straddle the
+level) use the bilinear cell-centre value to choose the correct diagonal. If
+`ContourShading` is active, each grid cell is filled with a coloured
+`Rectangle[]` primitive whose colour corresponds to the cell's average `z`
+value via `ColorFunction` or the built-in blue-cyan-yellow-red thermal ramp.
+
+**Options**
+
+| Option | Default | Meaning |
+|---|---|---|
+| `Contours` | `10` | Integer `n`: `n` evenly spaced auto levels in `[zmin, zmax]`; or `{c1, c2, ...}` to set levels explicitly |
+| `ContourStyle` | `Automatic` | Style directive(s) for the contour lines. `Automatic`: each level is coloured by its height using the thermal ramp. A single directive is applied to all levels; a `List` of directives cycles through the levels. `None`/`False` suppresses lines entirely |
+| `ContourLabels` | `False` | `True`: draws the level's `z` value as a `Text[]` at the midpoint of each level's first visible grid-segment |
+| `ContourShading` | `Automatic` | `True`: fill each grid cell with a colour derived from its average `z`. `False`/`None`: lines only. `Automatic`: enable shading when `ColorFunction` is set, otherwise lines only |
+| `ColorFunction` | `None` | `"Rainbow"` (Hue ramp), `"Temperature"` (blue-cyan-yellow-red), or a function `f[t]` with `t ∈ [0,1]` after scaling. Applied to both the cell shading and the auto contour-line colours |
+| `ColorFunctionScaling` | `True` | `True`: normalise `z` to `[0,1]` before calling `ColorFunction`; `False`: pass raw `z` |
+| `PlotPoints` | `25` | Grid resolution per axis; increase for smoother contours |
+| `RegionFunction` | `None` | `f[x,y]` mask; cells whose centre lies outside return `False` are neither shaded nor contoured |
+| `Axes` | `True` | Coordinate axes (same Plot/StreamPlot default) |
+| `AspectRatio` | `1` | Default square aspect (both axes equally important) |
+
+All other `Graphics` options (`Frame`, `PlotRange`, `AxesLabel`, `GridLines`,
+`PlotLabel`, `Background`, `ImageSize`, `Prolog`, `Epilog`, …) pass through
+to the `Graphics[...]` result.
+
+**Features**:
+- `HoldAll`, `Protected`.
+- Declines to evaluate if bounds aren't numeric or the function argument
+  does not have exactly two iterator specs.
+- Marching squares handles all 16 cell states, including the two saddle
+  cases (5 and 10), with bilinear centre disambiguation.
+- An explicit `PlotRange` passed in options suppresses the auto-range
+  injection (which otherwise pins the range to `{xmin,xmax}` × `{ymin,ymax}`
+  so the axes match the sampling domain).
+
+```mathematica
+(* --- Basic contour plots --- *)
+In[1]:= ContourPlot[Sin[x] + Cos[y], {x, -3, 3}, {y, -3, 3}]
+Out[1]= -Graphics-  (* 10 auto-levels, coloured by height *)
+
+In[2]:= ContourPlot[x^2 + y^2, {x, -2, 2}, {y, -2, 2}, Contours -> 5]
+Out[2]= -Graphics-  (* 5 circular contours *)
+
+(* --- Explicit contour values --- *)
+In[3]:= ContourPlot[x^2 - y^2, {x, -2, 2}, {y, -2, 2}, Contours -> {-2, -1, 0, 1, 2}]
+Out[3]= -Graphics-  (* hyperbolas at specified levels *)
+
+(* --- Shading with ColorFunction --- *)
+In[4]:= ContourPlot[Sin[x + y], {x, -3, 3}, {y, -3, 3},
+          ColorFunction -> "Rainbow", ContourShading -> True]
+Out[4]= -Graphics-  (* rainbow-filled density with contour lines *)
+
+In[5]:= ContourPlot[x^2 + y^2, {x, -2, 2}, {y, -2, 2},
+          ContourShading -> True, Contours -> 8]
+Out[5]= -Graphics-  (* thermal-gradient fill, 8 levels *)
+
+(* --- Lines only --- *)
+In[6]:= ContourPlot[Sin[x] Cos[y], {x, -Pi, Pi}, {y, -Pi, Pi},
+          ContourShading -> False, ContourStyle -> {Thickness[0.006]},
+          PlotPoints -> 40]
+Out[6]= -Graphics-
+
+(* --- Labels --- *)
+In[7]:= ContourPlot[x^2 + y^2, {x, -2, 2}, {y, -2, 2},
+          ContourLabels -> True, Contours -> 5]
+Out[7]= -Graphics-  (* level values annotated at first segment *)
+
+(* --- RegionFunction: circular mask --- *)
+In[8]:= ContourPlot[x^2 + y^2, {x, -3, 3}, {y, -3, 3},
+          RegionFunction -> Function[{x, y}, x^2 + y^2 < 4],
+          ContourShading -> True]
+Out[8]= -Graphics-
+
+(* --- ContourStyle: cycle explicit colours --- *)
+In[9]:= ContourPlot[Sin[x + y], {x, -3, 3}, {y, -3, 3},
+          ContourStyle -> {Red, Blue, Green}, Contours -> 6]
+Out[9]= -Graphics-  (* cycles Red, Blue, Green across 6 levels *)
+
+(* --- Suppress lines, shading only --- *)
+In[10]:= ContourPlot[Sin[x] + Cos[y], {x, -3, 3}, {y, -3, 3},
+           ContourStyle -> None, ContourShading -> True,
+           ColorFunction -> "Temperature"]
+Out[10]= -Graphics-
+```

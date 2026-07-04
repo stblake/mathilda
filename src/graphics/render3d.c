@@ -492,6 +492,12 @@ void graphics3d_show(const Expr* graphics3d_expr) {
         if (IsKeyPressed(KEY_S)) TakeScreenshot("mathilda_plot.png");
         if (IsKeyPressed(KEY_ESCAPE)) break;
 
+        /* Flush OS events before drawing so a close request that arrived
+         * while the previous frame was rendering is caught immediately. */
+        PollInputEvents();
+        if (WindowShouldClose()) break;
+        if (IsKeyPressed(KEY_ESCAPE)) break;
+
         camera.position = (Vector3){
             (float)(camera.target.x + distance * cos(elevation) * cos(azimuth)),
             (float)(camera.target.y + distance * sin(elevation)),

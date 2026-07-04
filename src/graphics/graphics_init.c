@@ -295,6 +295,60 @@ void graphics_init(void) {
         "Lighting -> None (or False): disables shading and draws surfaces in their "
         "raw PlotStyle/ColorFunction color.");
 
+    symtab_add_builtin("ContourPlot", builtin_contourplot);
+    symtab_get_def("ContourPlot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("ContourPlot",
+        "ContourPlot[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]\n"
+        "\tGenerates iso-contour lines of f(x,y) using the marching squares algorithm\n"
+        "\tand returns a Graphics[...] object (auto-displayed). ContourPlot is HoldAll:\n"
+        "\tf is held unevaluated until x and y are bound to numeric values.\n"
+        "\n"
+        "\tOptions:\n"
+        "\t  Contours         - Integer n (n evenly spaced auto levels, default 10), or\n"
+        "\t                     {c1, c2, ...} (explicit contour values).\n"
+        "\t  ContourStyle     - Style directive(s) for the contour lines. A single\n"
+        "\t                     directive is applied to all levels; a List cycles through\n"
+        "\t                     the levels. Automatic (default) colours by height.\n"
+        "\t                     None/False suppresses lines (leaves only shading).\n"
+        "\t  ContourLabels    - True: draw the z value at the midpoint of each level's\n"
+        "\t                     first visible segment. Default False.\n"
+        "\t  ContourShading   - True: fill each grid cell by its z value (via\n"
+        "\t                     ColorFunction or the built-in thermal gradient).\n"
+        "\t                     False/None: lines only. Automatic (default): shade when\n"
+        "\t                     ColorFunction is set, otherwise lines only.\n"
+        "\t  ColorFunction    - A function f[t] → color (t in [0,1] after scaling), or\n"
+        "\t                     a string: \"Rainbow\" (Hue ramp) or \"Temperature\" (blue-\n"
+        "\t                     cyan-yellow-red). Applied to shading and auto line colors.\n"
+        "\t  ColorFunctionScaling - True (default): normalise z to [0,1] before calling\n"
+        "\t                         ColorFunction. False: pass raw z.\n"
+        "\t  PlotPoints       - Grid resolution per axis (default 25; increase for\n"
+        "\t                     smoother contours).\n"
+        "\t  RegionFunction   - f[x,y] mask: cells where the function is False are\n"
+        "\t                     skipped (neither shaded nor contoured).\n"
+        "\t  Standard Graphics options (Axes, AspectRatio, Frame, PlotRange,\n"
+        "\t  AxesLabel, GridLines, ImageSize, Background, PlotLabel, Prolog,\n"
+        "\t  Epilog, ...) pass through to the Graphics[...] result.");
+
+    /* ContourStyle, Contours, ContourLabels, ContourShading are inert option
+     * keywords that print and ?-document but carry no value of their own. */
+    symtab_get_def("Contours")->attributes     |= ATTR_PROTECTED;
+    symtab_set_docstring("Contours",
+        "Contours\n\tContourPlot option: integer count of auto-levels or explicit "
+        "list of contour values.");
+    symtab_get_def("ContourStyle")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ContourStyle",
+        "ContourStyle\n\tContourPlot option: style directive(s) for contour lines. "
+        "A list cycles through the levels; Automatic colours by height; None suppresses lines.");
+    symtab_get_def("ContourLabels")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ContourLabels",
+        "ContourLabels\n\tContourPlot option: True draws z-value text labels at the "
+        "first visible point of each contour level. Default False.");
+    symtab_get_def("ContourShading")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ContourShading",
+        "ContourShading\n\tContourPlot option: True/False/Automatic — fills cells "
+        "by z value using ColorFunction or the built-in blue-cyan-yellow-red thermal "
+        "ramp. Automatic enables shading only when ColorFunction is set.");
+
     symtab_add_builtin("StreamPlot", builtin_streamplot);
     symtab_get_def("StreamPlot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_set_docstring("StreamPlot",

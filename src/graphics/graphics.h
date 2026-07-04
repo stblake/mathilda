@@ -14,6 +14,7 @@
 #include "parametricplot3d.h"
 #include "listplot.h"
 #include "streamplot.h"
+#include "contourplot.h"
 #include "show.h"
 
 void graphics_init(void);
