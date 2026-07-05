@@ -287,6 +287,41 @@ static bool call_parent(MatchEnv* env, ParentMatch* parent) {
     return true;
 }
 
+/* True iff `e` is a two-argument Rule/RuleDelayed. */
+static bool kvp_is_rule2(Expr* e) {
+    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           (e->data.function.head->data.symbol == SYM_Rule ||
+            e->data.function.head->data.symbol == SYM_RuleDelayed) &&
+           e->data.function.arg_count == 2;
+}
+
+/* Backtracking matcher for KeyValuePattern requirements: assign requirement
+ * `ri` to some entry of `subj` whose key matches ki and value matches pi, then
+ * recurse to the next requirement; on failure, undo the bindings and try
+ * another entry. When all requirements are satisfied (ri == nreq), call_parent
+ * finalizes — and if that fails, the search backtracks to try other
+ * assignments. This makes e.g. KeyValuePattern[{k_ -> _, _ -> k_}] solvable. */
+static bool kvp_match_reqs(Expr** reqs, size_t nreq, size_t ri, Expr* subj,
+                           MatchEnv* env, ParentMatch* parent) {
+    if (ri == nreq) return call_parent(env, parent);
+    Expr* rule = reqs[ri];
+    if (!kvp_is_rule2(rule)) return false;
+    Expr* kpat = rule->data.function.args[0];
+    Expr* vpat = rule->data.function.args[1];
+    for (size_t i = 0; i < subj->data.function.arg_count; i++) {
+        Expr* entry = subj->data.function.args[i];
+        if (!kvp_is_rule2(entry)) continue;
+        size_t es = env->count;
+        if (match_internal(entry->data.function.args[0], kpat, env, NULL) &&
+            match_internal(entry->data.function.args[1], vpat, env, NULL) &&
+            kvp_match_reqs(reqs, nreq, ri + 1, subj, env, parent)) {
+            return true;
+        }
+        env_rollback(env, es);
+    }
+    return false;
+}
+
 
 static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch* parent) {
     if (!pattern) return false;
@@ -305,9 +340,10 @@ static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch
     /* KeyValuePattern[{k1 -> p1, ...}] (or a single k -> p) matches an
      * association — or a list of rules — that contains, for each required
      * ki -> pi, an entry whose key matches ki and whose value matches pi.
-     * Requirements are matched greedily against the entries; bindings from
-     * matched keys/values persist. An empty spec matches any association.
-     * This is a new pattern head, so it cannot affect existing matching. */
+     * Requirements are matched with backtracking (kvp_match_reqs), so a
+     * consistent assignment is found whenever one exists even when requirements
+     * share bound variables. An empty spec matches any association. This is a
+     * new pattern head, so it cannot affect existing matching. */
     if (pattern->type == EXPR_FUNCTION && pattern->data.function.head->type == EXPR_SYMBOL &&
         pattern->data.function.head->data.symbol == SYM_KeyValuePattern &&
         pattern->data.function.arg_count == 1) {
@@ -327,33 +363,9 @@ static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch
         }
 
         size_t saved = env->count;
-        for (size_t r = 0; r < nreq; r++) {
-            Expr* rule = reqs[r];
-            if (!(rule->type == EXPR_FUNCTION && rule->data.function.head->type == EXPR_SYMBOL &&
-                  (rule->data.function.head->data.symbol == SYM_Rule ||
-                   rule->data.function.head->data.symbol == SYM_RuleDelayed) &&
-                  rule->data.function.arg_count == 2)) {
-                env_rollback(env, saved); return false;
-            }
-            Expr* kpat = rule->data.function.args[0];
-            Expr* vpat = rule->data.function.args[1];
-            bool found = false;
-            for (size_t i = 0; i < subj->data.function.arg_count; i++) {
-                Expr* entry = subj->data.function.args[i];
-                if (!(entry->type == EXPR_FUNCTION && entry->data.function.head->type == EXPR_SYMBOL &&
-                      (entry->data.function.head->data.symbol == SYM_Rule ||
-                       entry->data.function.head->data.symbol == SYM_RuleDelayed) &&
-                      entry->data.function.arg_count == 2)) continue;
-                size_t es = env->count;
-                if (match_internal(entry->data.function.args[0], kpat, env, NULL) &&
-                    match_internal(entry->data.function.args[1], vpat, env, NULL)) {
-                    found = true; break;
-                }
-                env_rollback(env, es);
-            }
-            if (!found) { env_rollback(env, saved); return false; }
-        }
-        return call_parent(env, parent);
+        if (kvp_match_reqs(reqs, nreq, 0, subj, env, parent)) return true;
+        env_rollback(env, saved);
+        return false;
     }
 
     // Handle Except
@@ -413,7 +425,8 @@ static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch
                 || ih == SYM_BlankSequence || ih == SYM_BlankNullSequence
                 || ih == SYM_Alternatives || ih == SYM_Optional
                 || ih == SYM_Repeated || ih == SYM_RepeatedNull
-                || ih == SYM_Shortest || ih == SYM_Longest) {
+                || ih == SYM_Shortest || ih == SYM_Longest
+                || ih == SYM_Except || ih == SYM_KeyValuePattern) {
                 inner_is_wrapper = true;
             }
         }

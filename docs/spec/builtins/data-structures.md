@@ -466,6 +466,14 @@ In[3]:= Cases[{<|"t" -> 1|>, <|"t" -> 2|>, <|"x" -> 3|>}, KeyValuePattern[{"t" -
 Out[3]= {<|"t" -> 1|>, <|"t" -> 2|>}
 ```
 
+Requirements are matched with backtracking (so shared bound variables resolve),
+and the pattern composes with a `/;` condition over its bindings:
+
+```mathematica
+In[4]:= Cases[{<|"p" -> 3|>, <|"p" -> 9|>}, KeyValuePattern[{"p" -> v_}] /; v > 5 :> v]
+Out[4]= {9}
+```
+
 `KeyValuePattern` also works in function definitions, so associations can be
 destructured directly in a rule's left-hand side:
 

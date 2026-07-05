@@ -771,6 +771,24 @@ void test_kvp_cases_record_filter() {
                    "{<|\"t\" -> 1|>, <|\"t\" -> 2|>}", 0);
 }
 
+void test_kvp_backtracking() {
+    /* Shared bound variable across requirements needs backtracking to solve. */
+    assert_eval_eq("MatchQ[<|x -> y, y -> 1|>, KeyValuePattern[{k_ -> _, _ -> k_}]]", "True", 0);
+}
+
+void test_kvp_with_condition() {
+    /* KeyValuePattern composes with a /; condition over its bindings. */
+    assert_eval_eq("MatchQ[<|x -> 1, y -> 2|>, KeyValuePattern[{a_ -> 1, b_ -> 2}] /; (a =!= b)]",
+                   "True", 0);
+    assert_eval_eq("MatchQ[<|x -> 1, y -> 2|>, KeyValuePattern[{a_ -> 1, b_ -> 2}] /; (a === b)]",
+                   "False", 0);
+}
+
+void test_kvp_cases_condition() {
+    assert_eval_eq("Cases[{<|\"p\" -> 3|>, <|\"p\" -> 9|>, <|\"q\" -> 1|>}, KeyValuePattern[{\"p\" -> v_}] /; v > 5 :> v]",
+                   "{9}", 0);
+}
+
 /* ---------- Association as accessor: assoc[key] ---------- */
 
 void test_accessor_present() {
@@ -1161,6 +1179,9 @@ int main() {
     TEST(test_kvp_binding_extraction);
     TEST(test_kvp_on_list_of_rules);
     TEST(test_kvp_cases_record_filter);
+    TEST(test_kvp_backtracking);
+    TEST(test_kvp_with_condition);
+    TEST(test_kvp_cases_condition);
 
     TEST(test_accessor_present);
     TEST(test_accessor_missing);
