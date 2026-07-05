@@ -153,11 +153,14 @@ Out[2]= <|"a" -> 1, "b" -> 2|>
 
 ## Counts
 Tallies each distinct element of a list, giving `<|element -> count, ...|>`.
-Hash-indexed: a single `O(n)` pass.
+Hash-indexed: a single `O(n)` pass. Over an association it tallies the values.
 
 ```mathematica
 In[1]:= Counts[{1, 2, 2, 3, 3, 3}]
 Out[1]= <|1 -> 1, 2 -> 2, 3 -> 3|>
+
+In[2]:= Counts[<|"a" -> 1, "b" -> 1, "c" -> 2|>]
+Out[2]= <|1 -> 2, 2 -> 1|>
 ```
 
 ## GroupBy

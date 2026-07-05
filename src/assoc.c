@@ -448,6 +448,8 @@ Expr* builtin_associationthread(Expr* res) {
 Expr* builtin_counts(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
     Expr* list = res->data.function.args[0];
+    /* Counts over an association tallies its values (Counts[Values[assoc]]). */
+    if (is_association(list)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
     if (!head_is(list, SYM_List)) return NULL;
     size_t n = list->data.function.arg_count;
 
@@ -944,6 +946,8 @@ Expr* builtin_countsby(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* list = res->data.function.args[0];
     Expr* f    = res->data.function.args[1];
+    /* CountsBy over an association tallies its values by f. */
+    if (is_association(list)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
     if (!head_is(list, SYM_List)) return NULL;
     size_t n = list->data.function.arg_count;
 

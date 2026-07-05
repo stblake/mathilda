@@ -237,6 +237,15 @@ void test_counts_empty() {
     assert_eval_eq("Counts[{}]", "<||>", 0);
 }
 
+void test_counts_over_association_values() {
+    assert_eval_eq("Counts[<|\"a\" -> 1, \"b\" -> 1, \"c\" -> 2|>]", "<|1 -> 2, 2 -> 1|>", 0);
+}
+
+void test_countsby_over_association_values() {
+    assert_eval_eq("CountsBy[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3, \"d\" -> 4|>, EvenQ]",
+                   "<|False -> 2, True -> 2|>", 0);
+}
+
 /* ---------- GroupBy ---------- */
 
 void test_groupby_parity() {
@@ -1138,6 +1147,8 @@ int main() {
     TEST(test_counts_basic);
     TEST(test_counts_strings);
     TEST(test_counts_empty);
+    TEST(test_counts_over_association_values);
+    TEST(test_countsby_over_association_values);
 
     TEST(test_groupby_parity);
 
