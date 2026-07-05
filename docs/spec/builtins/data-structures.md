@@ -406,3 +406,11 @@ Out[2]= 5
 In[3]:= Cases[{<|"t" -> 1|>, <|"t" -> 2|>, <|"x" -> 3|>}, KeyValuePattern[{"t" -> _}]]
 Out[3]= {<|"t" -> 1|>, <|"t" -> 2|>}
 ```
+
+`KeyValuePattern` also works in function definitions, so associations can be
+destructured directly in a rule's left-hand side:
+
+```mathematica
+In[4]:= area[KeyValuePattern[{"w" -> w_, "h" -> h_}]] := w h; area[<|"w" -> 3, "h" -> 4|>]
+Out[4]= 12
+```

@@ -218,6 +218,7 @@ export function loadStartupContent() {
     { cells: [{ type: 'section', source: 'Pattern matching' }] },
     { cells: [{ type: 'text',    source: 'Destructure and filter associations with KeyValuePattern.' }] },
     { cells: [{ type: 'code',    source: 'Cases[{<|"t" -> 1|>, <|"t" -> 2|>, <|"x" -> 3|>}, KeyValuePattern[{"t" -> _}]]' }] },
+    { cells: [{ type: 'code',    source: 'area[KeyValuePattern[{"w" -> w_, "h" -> h_}]] := w h; area[<|"w" -> 3, "h" -> 4|>]' }] },
   ]);
 }
 

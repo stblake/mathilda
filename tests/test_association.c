@@ -743,6 +743,29 @@ void test_accessor_tabular() {
                    "4", 0);
 }
 
+/* ---------- KeyValuePattern in function definitions (DownValues) ---------- */
+
+void test_kvp_downvalue_binding() {
+    assert_eval_eq("(pdv[KeyValuePattern[{\"x\" -> x_}]] := got[x]; pdv[<|\"x\" -> 9, \"y\" -> 1|>])",
+                   "got[9]", 0);
+}
+
+void test_kvp_downvalue_multikey() {
+    assert_eval_eq("(area[KeyValuePattern[{\"w\" -> w_, \"h\" -> h_}]] := w h; area[<|\"w\" -> 3, \"h\" -> 4|>])",
+                   "12", 0);
+}
+
+void test_kvp_downvalue_no_match() {
+    assert_eval_eq("(pdv2[KeyValuePattern[{\"x\" -> _}]] := yes; pdv2[<|\"y\" -> 1|>])",
+                   "pdv2[<|\"y\" -> 1|>]", 0);
+}
+
+void test_except_downvalue() {
+    /* The same dispatch-filter fix also repairs Except in a DownValue LHS. */
+    assert_eval_eq("(qdv[Except[0]] := nonzero; {qdv[5], qdv[0]})",
+                   "{nonzero, qdv[0]}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -915,6 +938,11 @@ int main() {
     TEST(test_accessor_nested_first_key_only);
     TEST(test_accessor_nested_missing_first);
     TEST(test_accessor_tabular);
+
+    TEST(test_kvp_downvalue_binding);
+    TEST(test_kvp_downvalue_multikey);
+    TEST(test_kvp_downvalue_no_match);
+    TEST(test_except_downvalue);
 
     printf("All Association tests passed.\n");
     return 0;

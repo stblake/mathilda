@@ -263,6 +263,13 @@ static const char* pattern_arg_head_canon(const Expr* p) {
         }
         return acc;
     }
+    /* Except[...] matches by *excluding* a pattern, and KeyValuePattern[...]
+     * matches an association/list by its contents -- in neither case is the
+     * head a literal that the input's first-arg head must equal. Treat them as
+     * wildcards so the §3.5 dispatch filter never skips such rules. */
+    if (h == SYM_Except || h == SYM_KeyValuePattern) {
+        return NULL;
+    }
     /* Plain function call in a pattern -- head must match, UNLESS one of
      * its arguments is Optional. An omitted Optional collapses the call to
      * its base (e.g. Power[b_, n_.] matches a bare `b` as b^1, Times[a_., x_]
