@@ -843,6 +843,36 @@ Expr* assoc_delete_cases(const Expr* assoc, Expr* pattern) {
     return result;
 }
 
+/* DeleteDuplicates[assoc]: keep the first entry for each distinct value.
+ * The seen values are indexed in a transient hash table so the whole scan is
+ * O(n) rather than the O(n^2) of comparing every value against every kept one. */
+Expr* assoc_delete_duplicate_values(const Expr* assoc) {
+    size_t n = assoc->data.function.arg_count;
+    KeyIndex ki;
+    if (!ki_init(&ki, n)) return NULL;
+    Expr** seen = malloc(sizeof(Expr*) * (n ? n : 1)); /* borrowed distinct values */
+    size_t nseen = 0;
+    Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));  /* kept rule copies */
+    size_t nout = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* r = assoc->data.function.args[i];
+        if (!is_rule2(r)) { out[nout++] = expr_copy(r); continue; }
+        Expr* v = rule_val(r);
+        size_t slot, idx = ki_lookup(&ki, seen, v, &slot);
+        if (idx == SIZE_MAX) {          /* first time we see this value: keep it */
+            seen[nseen] = v;
+            ki_insert(&ki, slot, nseen);
+            nseen++;
+            out[nout++] = expr_copy(r);
+        }
+    }
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, nout);
+    free(out);
+    free(seen);
+    ki_free(&ki);
+    return result;
+}
+
 /* ======================================================================
  * KeySort[assoc] / KeySortBy[assoc, f] — order entries by key (or by f[key]).
  * ====================================================================== */

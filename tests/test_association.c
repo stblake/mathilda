@@ -444,6 +444,19 @@ void test_deletecases_over_values() {
                    "<|\"a\" -> 1|>", 0);
 }
 
+void test_deleteduplicates_over_values() {
+    /* Keeps the first entry for each distinct value; returns an association. */
+    assert_eval_eq("DeleteDuplicates[<|\"a\" -> 1, \"b\" -> 1, \"c\" -> 2, \"d\" -> 2, \"e\" -> 3|>]",
+                   "<|\"a\" -> 1, \"c\" -> 2, \"e\" -> 3|>", 0);
+    assert_eval_eq("DeleteDuplicates[<||>]", "<||>", 0);
+    assert_eval_eq("DeleteDuplicates[<|\"x\" -> 5|>]", "<|\"x\" -> 5|>", 0);
+    /* All-distinct values leave the association unchanged. */
+    assert_eval_eq("DeleteDuplicates[<|1 -> 10, 2 -> 20, 3 -> 30|>]",
+                   "<|1 -> 10, 2 -> 20, 3 -> 30|>", 0);
+    /* Lists are unaffected by the association path. */
+    assert_eval_eq("DeleteDuplicates[{1, 1, 2, 2, 3}]", "{1, 2, 3}", 0);
+}
+
 /* ---------- AllTrue / AnyTrue / NoneTrue (lists and association values) ---------- */
 
 void test_alltrue_list() {
@@ -1193,6 +1206,7 @@ int main() {
     TEST(test_cases_pattern_head);
     TEST(test_count_over_values);
     TEST(test_deletecases_over_values);
+    TEST(test_deleteduplicates_over_values);
 
     TEST(test_alltrue_list);
     TEST(test_anytrue_list);

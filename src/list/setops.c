@@ -1,5 +1,6 @@
 #include "list_common.h"
 #include "setops.h"
+#include "assoc.h"
 
 typedef struct HashNode {
     Expr* key;
@@ -231,7 +232,12 @@ Expr* builtin_deleteduplicates(Expr* res) {
     
     Expr* list = res->data.function.args[0];
     Expr* test = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
-    
+
+    /* DeleteDuplicates[assoc] keeps the first entry for each distinct value,
+     * returning an association (Wolfram semantics). Only the default (no custom
+     * test) case is hash-indexed here; a custom test falls through unhandled. */
+    if (test == NULL && is_association(list)) return assoc_delete_duplicate_values(list);
+
     if (list->type != EXPR_FUNCTION) return expr_copy(list);
     
     size_t count = list->data.function.arg_count;

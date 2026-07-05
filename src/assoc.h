@@ -64,6 +64,10 @@ Expr* assoc_sort_by_value(const Expr* assoc);
  * pattern (matching is done via MatchQ on each value). Caller owns the result. */
 Expr* assoc_delete_cases(const Expr* assoc, Expr* pattern);
 
+/* DeleteDuplicates[assoc]: keep the first entry for each distinct value
+ * (hash-indexed, O(n)). Caller owns the result. */
+Expr* assoc_delete_duplicate_values(const Expr* assoc);
+
 /* GatherBy[list, f]: group elements with equal f[element] into a list of
  * sublists (first-appearance order). Caller owns the result. */
 Expr* builtin_gatherby(Expr* res);

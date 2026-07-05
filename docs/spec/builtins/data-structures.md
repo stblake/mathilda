@@ -284,6 +284,16 @@ In[1]:= DeleteMissing[Lookup[<|"a" -> 1, "b" -> 2|>, {"a", "z", "b"}]]
 Out[1]= {1, 2}
 ```
 
+## DeleteDuplicates
+Over an association, keeps the first entry for each distinct value and returns
+an association (values are compared, keys along for the ride). Hash-indexed: a
+single `O(n)` pass.
+
+```mathematica
+In[1]:= DeleteDuplicates[<|"a" -> 1, "b" -> 1, "c" -> 2, "d" -> 2, "e" -> 3|>]
+Out[1]= <|"a" -> 1, "c" -> 2, "e" -> 3|>
+```
+
 ## ReplacePart
 `ReplacePart[assoc, {Key[k]} -> v]` (or bare `Key[k]`, or a positional `i`)
 replaces the value at that key; several positions may be given at once. It is
