@@ -588,6 +588,27 @@ void test_firstcase_missing() {
     assert_eval_eq("FirstCase[{a, b, c}, _Integer]", "Missing[\"NotFound\"]", 0);
 }
 
+/* ---------- DeleteMissing ---------- */
+
+void test_deletemissing_list() {
+    assert_eval_eq("DeleteMissing[{1, Missing[\"KeyAbsent\", \"x\"], 3, Missing[]}]",
+                   "{1, 3}", 0);
+}
+
+void test_deletemissing_lookup_result() {
+    assert_eval_eq("DeleteMissing[Lookup[<|\"a\" -> 1, \"b\" -> 2|>, {\"a\", \"z\", \"b\"}]]",
+                   "{1, 2}", 0);
+}
+
+void test_deletemissing_association() {
+    assert_eval_eq("DeleteMissing[<|\"a\" -> 1, \"b\" -> Missing[], \"c\" -> 3|>]",
+                   "<|\"a\" -> 1, \"c\" -> 3|>", 0);
+}
+
+void test_deletemissing_noop() {
+    assert_eval_eq("DeleteMissing[{1, 2, 3}]", "{1, 2, 3}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -725,6 +746,11 @@ int main() {
     TEST(test_firstcase_default);
     TEST(test_firstcase_association);
     TEST(test_firstcase_missing);
+
+    TEST(test_deletemissing_list);
+    TEST(test_deletemissing_lookup_result);
+    TEST(test_deletemissing_association);
+    TEST(test_deletemissing_noop);
 
     printf("All Association tests passed.\n");
     return 0;

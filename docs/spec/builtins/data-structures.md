@@ -228,6 +228,15 @@ In[1]:= MaximalBy[<|"a" -> 1, "b" -> 3, "c" -> 3|>, Identity]
 Out[1]= <|"b" -> 3, "c" -> 3|>
 ```
 
+## DeleteMissing
+Removes `Missing[...]` elements — the natural cleanup after a multi-key
+`Lookup`. Over an association it drops entries whose value is `Missing[...]`.
+
+```mathematica
+In[1]:= DeleteMissing[Lookup[<|"a" -> 1, "b" -> 2|>, {"a", "z", "b"}]]
+Out[1]= {1, 2}
+```
+
 ## Predicate tests on values (AllTrue, AnyTrue, NoneTrue, MemberQ)
 Predicate tests apply to the **values** of an association (and to the elements
 of a list). `AllTrue`/`AnyTrue`/`NoneTrue` are left unevaluated if a test

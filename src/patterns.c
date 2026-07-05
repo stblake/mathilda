@@ -105,6 +105,21 @@ Expr* builtin_first_case(Expr* res) {
     return expr_new_function(expr_new_symbol(SYM_Missing), margs, 1);
 }
 
+/* DeleteMissing[expr] — remove all Missing[...] elements. Equivalent to
+ * DeleteCases[expr, _Missing], so it inherits list and association-value
+ * handling (over an association it drops entries whose value is Missing[...]). */
+Expr* builtin_delete_missing(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    /* pattern _Missing == Blank[Missing] */
+    Expr* blank_args[1] = { expr_new_symbol(SYM_Missing) };
+    Expr* pattern = expr_new_function(expr_new_symbol(SYM_Blank), blank_args, 1);
+    Expr* dc_args[2] = { expr_copy(res->data.function.args[0]), pattern };
+    Expr* dc = expr_new_function(expr_new_symbol(SYM_DeleteCases), dc_args, 2);
+    Expr* result = evaluate(dc);
+    expr_free(dc);
+    return result;
+}
+
 Expr* builtin_cases(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -708,6 +723,12 @@ void patterns_init(void) {
         "\tOver an association, matches values and returns the first match.");
     symtab_add_builtin("DeleteCases", builtin_delete_cases);
     symtab_get_def("DeleteCases")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("DeleteMissing", builtin_delete_missing);
+    symtab_get_def("DeleteMissing")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("DeleteMissing",
+        "DeleteMissing[expr]\n\tRemoves all Missing[...] elements (equivalent to\n"
+        "\tDeleteCases[expr, _Missing]). Over an association, drops entries whose\n"
+        "\tvalue is Missing[...].");
     symtab_add_builtin("Position", builtin_position);
     symtab_get_def("Position")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Count", builtin_count);
