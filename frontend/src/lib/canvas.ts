@@ -190,6 +190,12 @@ export function loadStartupContent() {
     { cells: [{ type: 'code',    source: 'Counts[{1, 2, 2, 3, 3, 3, 1}]' }] },
     { cells: [{ type: 'code',    source: 'GroupBy[Range[10], EvenQ]' }] },
     { cells: [{ type: 'code',    source: 'Merge[{<|"a" -> 1|>, <|"a" -> 2, "b" -> 3|>}, Total]' }] },
+    { cells: [{ type: 'code',    source: 'PositionIndex[{a, b, a, c, a, b}]' }] },
+    { cells: [{ type: 'section', source: 'Functional threading' }] },
+    { cells: [{ type: 'text',    source: 'Map and Select thread over values, keeping keys (Wolfram style).' }] },
+    { cells: [{ type: 'code',    source: 'Map[#^2 &, <|"x" -> 3, "y" -> 4|>]' }] },
+    { cells: [{ type: 'code',    source: 'Select[<|"a" -> 1, "b" -> 2, "c" -> 3|>, # > 1 &]' }] },
+    { cells: [{ type: 'code',    source: 'KeySortBy[<|"bbb" -> 1, "a" -> 2, "cc" -> 3|>, StringLength]' }] },
   ]);
 }
 

@@ -242,6 +242,64 @@ void test_nested_association() {
                    "5", 0);
 }
 
+/* ---------- Map / Select thread over values (Wolfram semantics) ---------- */
+
+void test_map_over_values() {
+    assert_eval_eq("Map[f, <|\"a\" -> 1, \"b\" -> 2|>]",
+                   "<|\"a\" -> f[1], \"b\" -> f[2]|>", 0);
+}
+
+void test_map_square_values() {
+    assert_eval_eq("Map[#^2 &, <|\"x\" -> 3, \"y\" -> 4|>]",
+                   "<|\"x\" -> 9, \"y\" -> 16|>", 0);
+}
+
+void test_select_by_value() {
+    assert_eval_eq("Select[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>, # > 1 &]",
+                   "<|\"b\" -> 2, \"c\" -> 3|>", 0);
+}
+
+/* ---------- KeySort / KeySortBy ---------- */
+
+void test_keysort() {
+    assert_eval_eq("KeySort[<|\"c\" -> 3, \"a\" -> 1, \"b\" -> 2|>]",
+                   "<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>", 0);
+}
+
+void test_keysortby_length() {
+    assert_eval_eq("KeySortBy[<|\"bbb\" -> 1, \"a\" -> 2, \"cc\" -> 3|>, StringLength]",
+                   "<|\"a\" -> 2, \"cc\" -> 3, \"bbb\" -> 1|>", 0);
+}
+
+/* ---------- KeyMap / KeySelect ---------- */
+
+void test_keymap() {
+    assert_eval_eq("KeyMap[f, <|1 -> 10, 2 -> 20|>]",
+                   "<|f[1] -> 10, f[2] -> 20|>", 0);
+}
+
+void test_keyselect() {
+    assert_eval_eq("KeySelect[<|1 -> 10, 2 -> 20, 3 -> 30|>, EvenQ]",
+                   "<|2 -> 20|>", 0);
+}
+
+/* ---------- CountsBy / PositionIndex / AssociationMap ---------- */
+
+void test_countsby() {
+    assert_eval_eq("CountsBy[Range[10], EvenQ]",
+                   "<|False -> 5, True -> 5|>", 0);
+}
+
+void test_positionindex() {
+    assert_eval_eq("PositionIndex[{a, b, a, c, a, b}]",
+                   "<|a -> {1, 3, 5}, b -> {2, 6}, c -> {4}|>", 0);
+}
+
+void test_associationmap() {
+    assert_eval_eq("AssociationMap[#^2 &, {1, 2, 3, 4}]",
+                   "<|1 -> 1, 2 -> 4, 3 -> 9, 4 -> 16|>", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -300,6 +358,17 @@ int main() {
     TEST(test_length_of_association);
     TEST(test_association_equality);
     TEST(test_nested_association);
+
+    TEST(test_map_over_values);
+    TEST(test_map_square_values);
+    TEST(test_select_by_value);
+    TEST(test_keysort);
+    TEST(test_keysortby_length);
+    TEST(test_keymap);
+    TEST(test_keyselect);
+    TEST(test_countsby);
+    TEST(test_positionindex);
+    TEST(test_associationmap);
 
     printf("All Association tests passed.\n");
     return 0;

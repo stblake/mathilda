@@ -36,6 +36,16 @@ bool is_association(const Expr* e);
  * with last-value-wins while preserving first-occurrence order.  O(count). */
 Expr* assoc_from_rules(Expr** rules, size_t count);
 
+/* Thread `f` over the values of an association, preserving keys:
+ * <|k -> v|>  ->  <|k -> f[v]|>. The f[v] applications are left for the
+ * evaluator to reduce. Used by Map so associations flow through the functional
+ * toolchain the Wolfram way. Caller owns the result. */
+Expr* assoc_map_values(Expr* f, const Expr* assoc);
+
+/* Keep the entries whose value satisfies the predicate `pred` (pred[v] must
+ * evaluate to True). Preserves order. Caller owns the result. */
+Expr* assoc_select_values(Expr* pred, const Expr* assoc);
+
 /* Register every Association-family builtin, with attributes and docstrings. */
 void assoc_init(void);
 

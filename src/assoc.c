@@ -613,6 +613,234 @@ Expr* builtin_associate_to(Expr* res) {
     return updated;
 }
 
+/* Apply f to a single argument and evaluate: evaluate(f[arg]). Owns result. */
+static Expr* apply1(Expr* f, const Expr* arg) {
+    Expr* a = expr_copy((Expr*)arg);
+    Expr* call = expr_new_function(expr_copy(f), &a, 1);
+    Expr* r = evaluate(call);
+    expr_free(call);
+    return r;
+}
+
+/* ======================================================================
+ * Map / Select threading over association values (Wolfram semantics):
+ * Map[f, <|k -> v|>]     -> <|k -> f[v]|>   (keys preserved)
+ * Select[<|k -> v|>, p]  -> the entries where p[v] is True.
+ * ====================================================================== */
+Expr* assoc_map_values(Expr* f, const Expr* assoc) {
+    size_t n = assoc->data.function.arg_count;
+    Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        Expr* r = assoc->data.function.args[i];
+        Expr* fv_arg = expr_copy(rule_val(r));
+        Expr* fv = expr_new_function(expr_copy(f), &fv_arg, 1); /* f[v], evaluated later */
+        out[i] = make_rule(expr_copy(rule_key(r)), fv);
+    }
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, n);
+    free(out);
+    return result;
+}
+
+Expr* assoc_select_values(Expr* pred, const Expr* assoc) {
+    size_t n = assoc->data.function.arg_count;
+    Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
+    size_t nout = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* r = assoc->data.function.args[i];
+        Expr* verdict = apply1(pred, rule_val(r));
+        if (verdict->type == EXPR_SYMBOL && verdict->data.symbol == SYM_True)
+            out[nout++] = expr_copy(r);
+        expr_free(verdict);
+    }
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, nout);
+    free(out);
+    return result;
+}
+
+/* ======================================================================
+ * KeySort[assoc] / KeySortBy[assoc, f] — order entries by key (or by f[key]).
+ * ====================================================================== */
+static int rule_key_cmp(const void* a, const void* b) {
+    const Expr* ra = *(const Expr* const*)a;
+    const Expr* rb = *(const Expr* const*)b;
+    return expr_compare(rule_key(ra), rule_key(rb));
+}
+
+Expr* builtin_keysort(Expr* res) {
+    if (res->data.function.arg_count != 1) return NULL;
+    Expr* assoc = res->data.function.args[0];
+    if (!is_association(assoc)) return NULL;
+    size_t n = assoc->data.function.arg_count;
+    Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) out[i] = expr_copy(assoc->data.function.args[i]);
+    qsort(out, n, sizeof(Expr*), rule_key_cmp);   /* keys are distinct: total order */
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, n);
+    free(out);
+    return result;
+}
+
+Expr* builtin_keysortby(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* assoc = res->data.function.args[0];
+    Expr* f     = res->data.function.args[1];
+    if (!is_association(assoc)) return NULL;
+    size_t n = assoc->data.function.arg_count;
+
+    Expr** out  = malloc(sizeof(Expr*) * (n ? n : 1));
+    Expr** fkey = malloc(sizeof(Expr*) * (n ? n : 1)); /* f[key], owned */
+    for (size_t i = 0; i < n; i++) {
+        out[i]  = expr_copy(assoc->data.function.args[i]);
+        fkey[i] = apply1(f, rule_key(assoc->data.function.args[i]));
+    }
+    /* Stable insertion sort keyed by fkey (ties keep association order). */
+    for (size_t i = 1; i < n; i++) {
+        Expr* ro = out[i]; Expr* fo = fkey[i];
+        size_t j = i;
+        while (j > 0 && expr_compare(fkey[j - 1], fo) > 0) {
+            out[j] = out[j - 1]; fkey[j] = fkey[j - 1]; j--;
+        }
+        out[j] = ro; fkey[j] = fo;
+    }
+    for (size_t i = 0; i < n; i++) expr_free(fkey[i]);
+    free(fkey);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, n);
+    free(out);
+    return result;
+}
+
+/* ======================================================================
+ * KeyMap[f, assoc] — apply f to each key (values kept); re-canonicalise since
+ * f may map distinct keys together.
+ * ====================================================================== */
+Expr* builtin_keymap(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* f     = res->data.function.args[0];
+    Expr* assoc = res->data.function.args[1];
+    if (!is_association(assoc)) return NULL;
+    size_t n = assoc->data.function.arg_count;
+    Expr** rules = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        Expr* r = assoc->data.function.args[i];
+        Expr* newkey = apply1(f, rule_key(r));
+        rules[i] = make_rule(newkey, expr_copy(rule_val(r)));
+    }
+    Expr* result = assoc_from_rules(rules, n);
+    for (size_t i = 0; i < n; i++) expr_free(rules[i]);
+    free(rules);
+    return result;
+}
+
+/* ======================================================================
+ * KeySelect[assoc, pred] — keep entries whose key satisfies pred.
+ * ====================================================================== */
+Expr* builtin_keyselect(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* assoc = res->data.function.args[0];
+    Expr* pred  = res->data.function.args[1];
+    if (!is_association(assoc)) return NULL;
+    size_t n = assoc->data.function.arg_count;
+    Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
+    size_t nout = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* r = assoc->data.function.args[i];
+        Expr* verdict = apply1(pred, rule_key(r));
+        if (verdict->type == EXPR_SYMBOL && verdict->data.symbol == SYM_True)
+            out[nout++] = expr_copy(r);
+        expr_free(verdict);
+    }
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, nout);
+    free(out);
+    return result;
+}
+
+/* ======================================================================
+ * CountsBy[list, f] — <|f[x] -> count of elements with that f-value|>.
+ * ====================================================================== */
+Expr* builtin_countsby(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* list = res->data.function.args[0];
+    Expr* f    = res->data.function.args[1];
+    if (!head_is(list, SYM_List)) return NULL;
+    size_t n = list->data.function.arg_count;
+
+    KeyIndex ki;
+    if (!ki_init(&ki, n)) return NULL;
+    Expr** keys  = malloc(sizeof(Expr*) * (n ? n : 1)); /* owned f-values */
+    int64_t* cnt = malloc(sizeof(int64_t) * (n ? n : 1));
+    size_t nd = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* key = apply1(f, list->data.function.args[i]);
+        size_t slot, idx = ki_lookup(&ki, keys, key, &slot);
+        if (idx == SIZE_MAX) { keys[nd] = key; cnt[nd] = 1; ki_insert(&ki, slot, nd); nd++; }
+        else { cnt[idx]++; expr_free(key); }
+    }
+    Expr** rules = malloc(sizeof(Expr*) * (nd ? nd : 1));
+    for (size_t i = 0; i < nd; i++) rules[i] = make_rule(keys[i], expr_new_integer(cnt[i]));
+    Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association), rules, nd);
+    free(rules); free(keys); free(cnt); ki_free(&ki);
+    return assoc;
+}
+
+/* ======================================================================
+ * PositionIndex[list] — <|value -> {1-based positions}|>. Hash-indexed, O(n).
+ * ====================================================================== */
+Expr* builtin_positionindex(Expr* res) {
+    if (res->data.function.arg_count != 1) return NULL;
+    Expr* list = res->data.function.args[0];
+    if (!head_is(list, SYM_List)) return NULL;
+    size_t n = list->data.function.arg_count;
+
+    KeyIndex ki;
+    if (!ki_init(&ki, n)) return NULL;
+    Expr**  keys = malloc(sizeof(Expr*)  * (n ? n : 1)); /* borrowed */
+    Expr*** pos  = malloc(sizeof(Expr**) * (n ? n : 1)); /* owned integer positions */
+    size_t* pcap = malloc(sizeof(size_t) * (n ? n : 1));
+    size_t* pcnt = malloc(sizeof(size_t) * (n ? n : 1));
+    size_t nd = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* x = list->data.function.args[i];
+        size_t slot, idx = ki_lookup(&ki, keys, x, &slot);
+        if (idx == SIZE_MAX) {
+            keys[nd] = x; pcap[nd] = 4; pcnt[nd] = 0;
+            pos[nd] = malloc(sizeof(Expr*) * pcap[nd]);
+            ki_insert(&ki, slot, nd); idx = nd; nd++;
+        }
+        if (pcnt[idx] == pcap[idx]) { pcap[idx] *= 2; pos[idx] = realloc(pos[idx], sizeof(Expr*) * pcap[idx]); }
+        pos[idx][pcnt[idx]++] = expr_new_integer((int64_t)i + 1);
+    }
+    Expr** rules = malloc(sizeof(Expr*) * (nd ? nd : 1));
+    for (size_t i = 0; i < nd; i++) {
+        Expr* plist = make_list(pos[i], pcnt[i]);
+        rules[i] = make_rule(expr_copy(keys[i]), plist);
+        free(pos[i]);
+    }
+    Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association), rules, nd);
+    free(rules); free(keys); free(pos); free(pcap); free(pcnt); ki_free(&ki);
+    return assoc;
+}
+
+/* ======================================================================
+ * AssociationMap[f, {k1, ...}] — <|k1 -> f[k1], ...|>.
+ * ====================================================================== */
+Expr* builtin_associationmap(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* f    = res->data.function.args[0];
+    Expr* keys = res->data.function.args[1];
+    if (!head_is(keys, SYM_List)) return NULL;
+    size_t n = keys->data.function.arg_count;
+    Expr** rules = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        Expr* k = keys->data.function.args[i];
+        Expr* karg = expr_copy(k);
+        Expr* fv = expr_new_function(expr_copy(f), &karg, 1); /* f[k], evaluated later */
+        rules[i] = make_rule(expr_copy(k), fv);
+    }
+    Expr* assoc = assoc_from_rules(rules, n);
+    for (size_t i = 0; i < n; i++) expr_free(rules[i]);
+    free(rules);
+    return assoc;
+}
+
 /* ======================================================================
  * Registration.
  * ====================================================================== */
@@ -700,4 +928,41 @@ void assoc_init(void) {
         "AssociateTo[s, key -> val]  |  AssociateTo[s, {rules}]\n"
         "\tAdds or updates key-value pairs in the association held by symbol s,\n"
         "\tmodifying s in place.");
+
+    symtab_add_builtin("KeySort", builtin_keysort);
+    symtab_get_def("KeySort")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("KeySort",
+        "KeySort[assoc]\n\tSorts an association into canonical key order.");
+
+    symtab_add_builtin("KeySortBy", builtin_keysortby);
+    symtab_get_def("KeySortBy")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("KeySortBy",
+        "KeySortBy[assoc, f]\n\tSorts an association by f applied to each key (stable).");
+
+    symtab_add_builtin("KeyMap", builtin_keymap);
+    symtab_get_def("KeyMap")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("KeyMap",
+        "KeyMap[f, assoc]\n\tApplies f to every key, keeping values (keys that\n"
+        "\tcollide collapse with last-value-wins).");
+
+    symtab_add_builtin("KeySelect", builtin_keyselect);
+    symtab_get_def("KeySelect")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("KeySelect",
+        "KeySelect[assoc, pred]\n\tKeeps the entries whose key satisfies pred.");
+
+    symtab_add_builtin("CountsBy", builtin_countsby);
+    symtab_get_def("CountsBy")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("CountsBy",
+        "CountsBy[list, f]\n\tGives <|f[x] -> count, ...|> tallying elements by f[x].");
+
+    symtab_add_builtin("PositionIndex", builtin_positionindex);
+    symtab_get_def("PositionIndex")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("PositionIndex",
+        "PositionIndex[list]\n\tGives <|value -> {positions}|> mapping each distinct\n"
+        "\telement to the list of 1-based positions where it occurs. O(n).");
+
+    symtab_add_builtin("AssociationMap", builtin_associationmap);
+    symtab_get_def("AssociationMap")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("AssociationMap",
+        "AssociationMap[f, {k1, k2, ...}]\n\tGives <|k1 -> f[k1], k2 -> f[k2], ...|>.");
 }

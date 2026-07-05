@@ -154,3 +154,75 @@ the symbol in place (like `AppendTo`). Has attribute `HoldFirst`.
 In[1]:= asc = <|"a" -> 1|>; AssociateTo[asc, "b" -> 2]; asc
 Out[1]= <|"a" -> 1, "b" -> 2|>
 ```
+
+## Map, Select
+`Map` and `Select` thread over the **values** of an association, preserving keys
+(matching Wolfram semantics) — `Map[f, <|k -> v|>]` gives `<|k -> f[v]|>`, and
+`Select` keeps the entries whose value satisfies the predicate.
+
+```mathematica
+In[1]:= Map[#^2 &, <|"x" -> 3, "y" -> 4|>]
+Out[1]= <|"x" -> 9, "y" -> 16|>
+
+In[2]:= Select[<|"a" -> 1, "b" -> 2, "c" -> 3|>, # > 1 &]
+Out[2]= <|"b" -> 2, "c" -> 3|>
+```
+
+## KeySort
+Sorts an association into canonical key order.
+
+```mathematica
+In[1]:= KeySort[<|"c" -> 3, "a" -> 1, "b" -> 2|>]
+Out[1]= <|"a" -> 1, "b" -> 2, "c" -> 3|>
+```
+
+## KeySortBy
+Sorts an association by `f` applied to each key (stable on ties).
+
+```mathematica
+In[1]:= KeySortBy[<|"bbb" -> 1, "a" -> 2, "cc" -> 3|>, StringLength]
+Out[1]= <|"a" -> 2, "cc" -> 3, "bbb" -> 1|>
+```
+
+## KeyMap
+Applies `f` to every key, keeping values. Keys that collide collapse with
+last-value-wins.
+
+```mathematica
+In[1]:= KeyMap[f, <|1 -> 10, 2 -> 20|>]
+Out[1]= <|f[1] -> 10, f[2] -> 20|>
+```
+
+## KeySelect
+Keeps the entries whose **key** satisfies the predicate.
+
+```mathematica
+In[1]:= KeySelect[<|1 -> 10, 2 -> 20, 3 -> 30|>, EvenQ]
+Out[1]= <|2 -> 20|>
+```
+
+## CountsBy
+Tallies elements of a list by `f[element]`, giving `<|f[x] -> count, ...|>`.
+Hash-indexed, `O(n)`.
+
+```mathematica
+In[1]:= CountsBy[Range[10], EvenQ]
+Out[1]= <|False -> 5, True -> 5|>
+```
+
+## PositionIndex
+Maps each distinct element of a list to the list of 1-based positions where it
+occurs — `<|value -> {positions}|>`. Hash-indexed, `O(n)`.
+
+```mathematica
+In[1]:= PositionIndex[{a, b, a, c, a, b}]
+Out[1]= <|a -> {1, 3, 5}, b -> {2, 6}, c -> {4}|>
+```
+
+## AssociationMap
+Builds `<|k1 -> f[k1], k2 -> f[k2], ...|>` from a list of keys.
+
+```mathematica
+In[1]:= AssociationMap[#^2 &, {1, 2, 3, 4}]
+Out[1]= <|1 -> 1, 2 -> 4, 3 -> 9, 4 -> 16|>
+```

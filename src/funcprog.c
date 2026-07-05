@@ -5,6 +5,7 @@
 #include "arithmetic.h"
 #include "match.h"
 #include "sym_names.h"
+#include "assoc.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -169,7 +170,13 @@ Expr* builtin_map(Expr* res) {
 
     Expr* f = res->data.function.args[0];
     Expr* expr = res->data.function.args[1];
-    
+
+    /* Map over an association threads over its values, preserving keys:
+     * Map[f, <|k -> v|>] -> <|k -> f[v]|>. Only the default level (no explicit
+     * level spec) is special-cased; deeper level specs fall through. */
+    if (res->data.function.arg_count == 2 && is_association(expr))
+        return assoc_map_values(f, expr);
+
     Expr* ls = (res->data.function.arg_count >= 3) ? res->data.function.args[2] : NULL;
     if (ls && ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol == SYM_Rule) ls = NULL;
 
@@ -377,7 +384,12 @@ Expr* builtin_select(Expr* res) {
     
     Expr* list = res->data.function.args[0];
     Expr* crit = res->data.function.args[1];
-    
+
+    /* Select over an association filters by value, preserving keys:
+     * Select[<|k -> v|>, p] keeps the entries where p[v] is True. */
+    if (res->data.function.arg_count == 2 && is_association(list))
+        return assoc_select_values(crit, list);
+
     if (list->type != EXPR_FUNCTION) return NULL; // Can only select from compound expressions
     
     int64_t n_max = -1; // -1 means all
