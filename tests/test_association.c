@@ -725,6 +725,24 @@ void test_accessor_in_map() {
                    "{1, 2, 3}", 0);
 }
 
+void test_accessor_nested_multikey() {
+    assert_eval_eq("<|\"a\" -> <|\"b\" -> 5|>|>[\"a\", \"b\"]", "5", 0);
+}
+
+void test_accessor_nested_first_key_only() {
+    assert_eval_eq("<|\"a\" -> <|\"b\" -> 5|>|>[\"a\"]", "<|\"b\" -> 5|>", 0);
+}
+
+void test_accessor_nested_missing_first() {
+    assert_eval_eq("<|\"a\" -> <|\"b\" -> 5|>|>[\"z\", \"b\"]",
+                   "Missing[\"KeyAbsent\", \"z\"]", 0);
+}
+
+void test_accessor_tabular() {
+    assert_eval_eq("(tab = <|\"r1\" -> <|\"x\" -> 1, \"y\" -> 2|>, \"r2\" -> <|\"x\" -> 3, \"y\" -> 4|>|>; tab[\"r2\", \"y\"])",
+                   "4", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -893,6 +911,10 @@ int main() {
     TEST(test_accessor_key_wrapper);
     TEST(test_accessor_bound_symbol);
     TEST(test_accessor_in_map);
+    TEST(test_accessor_nested_multikey);
+    TEST(test_accessor_nested_first_key_only);
+    TEST(test_accessor_nested_missing_first);
+    TEST(test_accessor_tabular);
 
     printf("All Association tests passed.\n");
     return 0;

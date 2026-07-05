@@ -183,6 +183,7 @@ export function loadStartupContent() {
     { cells: [{ type: 'code',    source: 'data = <|"apples" -> 3, "pears" -> 5, "plums" -> 2|>' }] },
     { cells: [{ type: 'code',    source: 'data[["pears"]]' }] },
     { cells: [{ type: 'code',    source: 'data["plums"]' }] },
+    { cells: [{ type: 'code',    source: 'nested = <|"r1" -> <|"x" -> 1, "y" -> 2|>|>; nested["r1", "y"]' }] },
     { cells: [{ type: 'code',    source: 'Keys[data]' }] },
     { cells: [{ type: 'code',    source: 'Values[data]' }] },
     { cells: [{ type: 'code',    source: 'Lookup[data, "figs", 0]' }] },

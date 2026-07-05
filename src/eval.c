@@ -993,10 +993,12 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 }
             } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
                        head->data.function.head->data.symbol == SYM_Association &&
-                       res->data.function.arg_count == 1) {
+                       res->data.function.arg_count >= 1) {
                 /* 7a. Association as accessor: <|...|>[key] (or [Key[key]]) looks
                  * the key up, giving the value or Missing["KeyAbsent", key] --
-                 * the idiomatic Wolfram accessor, complementing Lookup and Part. */
+                 * the idiomatic Wolfram accessor, complementing Lookup and Part.
+                 * Multi-key <|...|>[k1, k2, ...] is nested lookup: the value for
+                 * k1 is then applied to the remaining keys. */
                 Expr* keyarg = res->data.function.args[0];
                 Expr* lookup_key = keyarg;
                 if (keyarg->type == EXPR_FUNCTION && keyarg->data.function.head->type == EXPR_SYMBOL &&
@@ -1019,6 +1021,18 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 } else {
                     Expr* margs[2] = { expr_new_string("KeyAbsent"), expr_copy(lookup_key) };
                     out = expr_new_function(expr_new_symbol(SYM_Missing), margs, 2);
+                }
+                size_t nkeys = res->data.function.arg_count;
+                if (nkeys > 1 && found) {
+                    /* Apply the retrieved value to the remaining keys and let the
+                     * evaluator continue (nested associations recurse here). */
+                    size_t rest = nkeys - 1;
+                    Expr** rest_args = malloc(sizeof(Expr*) * rest);
+                    for (size_t i = 0; i < rest; i++)
+                        rest_args[i] = expr_copy(res->data.function.args[i + 1]);
+                    Expr* nested = expr_new_function(out, rest_args, rest);
+                    free(rest_args);
+                    out = nested;
                 }
                 expr_free(res);
                 *changed = true;
