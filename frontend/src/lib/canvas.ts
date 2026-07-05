@@ -196,6 +196,11 @@ export function loadStartupContent() {
     { cells: [{ type: 'code',    source: 'Map[#^2 &, <|"x" -> 3, "y" -> 4|>]' }] },
     { cells: [{ type: 'code',    source: 'Select[<|"a" -> 1, "b" -> 2, "c" -> 3|>, # > 1 &]' }] },
     { cells: [{ type: 'code',    source: 'KeySortBy[<|"bbb" -> 1, "a" -> 2, "cc" -> 3|>, StringLength]' }] },
+    { cells: [{ type: 'section', source: 'Aggregation & mutation' }] },
+    { cells: [{ type: 'text',    source: 'Total/Min/Max/Mean reduce over values; Part assignment updates in place.' }] },
+    { cells: [{ type: 'code',    source: 'Total[<|"a" -> 3, "b" -> 1, "c" -> 2|>]' }] },
+    { cells: [{ type: 'code',    source: 'Sort[<|"a" -> 3, "b" -> 1, "c" -> 2|>]' }] },
+    { cells: [{ type: 'code',    source: 'inv = <|"gold" -> 3|>; inv[["silver"]] = 10; inv[["gold"]] = inv[["gold"]] + 1; inv' }] },
   ]);
 }
 

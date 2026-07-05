@@ -33,7 +33,53 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
     }
     Expr* new_head = expr_copy(expr->data.function.head);
 
-    if (idx->type == EXPR_INTEGER) {
+    if (is_association(expr)) {
+        /* assoc[[key]] = v  (or assoc[[Key[k]]] = v): update the value for an
+         * existing key, or append a new Rule[key, v] when the key is absent.
+         * assoc[[i]] = v updates the i-th value positionally. */
+        Expr* lookup_key = NULL; bool positional = false; int64_t pos = 0;
+        if (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
+            idx->data.function.head->data.symbol == SYM_Key && idx->data.function.arg_count == 1) {
+            lookup_key = idx->data.function.args[0];
+        } else if (idx->type == EXPR_INTEGER) {
+            positional = true; pos = idx->data.integer;
+        } else {
+            lookup_key = idx;
+        }
+
+        if (positional) {
+            if (pos < 0) pos = (int64_t)len + pos + 1;
+            if (pos >= 1 && pos <= (int64_t)len) {
+                Expr* rule = new_args[pos - 1];
+                if (rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2) {
+                    Expr* nv = expr_part_assign_rec(rule->data.function.args[1], rest, nrest, rhs, rhs_idx, is_rhs_list);
+                    expr_free(rule->data.function.args[1]);
+                    rule->data.function.args[1] = nv;
+                }
+            }
+        } else {
+            int64_t found = -1;
+            for (size_t i = 0; i < len; i++) {
+                Expr* rule = new_args[i];
+                if (rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2 &&
+                    expr_eq(rule->data.function.args[0], lookup_key)) { found = (int64_t)i; break; }
+            }
+            if (found >= 0) {
+                Expr* rule = new_args[found];
+                Expr* nv = expr_part_assign_rec(rule->data.function.args[1], rest, nrest, rhs, rhs_idx, is_rhs_list);
+                expr_free(rule->data.function.args[1]);
+                rule->data.function.args[1] = nv;
+            } else if (nrest == 0) {
+                /* nrest == 0 -> the recursive call returns the RHS value. */
+                Expr* nv = expr_part_assign_rec(new_head, rest, nrest, rhs, rhs_idx, is_rhs_list);
+                Expr* krule_args[2] = { expr_copy(lookup_key), nv };
+                Expr* nrule = expr_new_function(expr_new_symbol(SYM_Rule), krule_args, 2);
+                new_args = realloc(new_args, sizeof(Expr*) * (len + 1));
+                new_args[len] = nrule;
+                len++;
+            }
+        }
+    } else if (idx->type == EXPR_INTEGER) {
         int64_t k = idx->data.integer;
         if (k == 0) {
             Expr* replaced = expr_part_assign_rec(new_head, rest, nrest, rhs, rhs_idx, is_rhs_list);

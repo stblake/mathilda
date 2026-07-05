@@ -325,6 +325,49 @@ void test_join_merges_associations() {
                    "<|\"a\" -> 1, \"b\" -> 3, \"c\" -> 4|>", 0);
 }
 
+/* ---------- Part assignment: assoc[[key]] = val ---------- */
+
+void test_part_assign_update() {
+    assert_eval_eq("(pa = <|\"x\" -> 1, \"y\" -> 2|>; pa[[\"x\"]] = 99; pa)",
+                   "<|\"x\" -> 99, \"y\" -> 2|>", 0);
+}
+
+void test_part_assign_add_key() {
+    assert_eval_eq("(pb = <|\"x\" -> 1|>; pb[[\"z\"]] = 5; pb)",
+                   "<|\"x\" -> 1, \"z\" -> 5|>", 0);
+}
+
+void test_part_assign_key_wrapper() {
+    assert_eval_eq("(pc = <|1 -> 10, 2 -> 20|>; pc[[Key[2]]] = 200; pc)",
+                   "<|1 -> 10, 2 -> 200|>", 0);
+}
+
+void test_part_assign_positional() {
+    assert_eval_eq("(pd = <|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>; pd[[2]] = 20; pd)",
+                   "<|\"a\" -> 1, \"b\" -> 20, \"c\" -> 3|>", 0);
+}
+
+void test_part_assign_read_modify_write() {
+    assert_eval_eq("(pe = <|\"x\" -> 1|>; pe[[\"x\"]] = pe[[\"x\"]] + 1; pe)",
+                   "<|\"x\" -> 2|>", 0);
+}
+
+void test_part_assign_nested_multi_index() {
+    assert_eval_eq("(pf = <|\"p\" -> <|\"q\" -> 1|>|>; pf[[\"p\", \"q\"]] = 42; pf)",
+                   "<|\"p\" -> <|\"q\" -> 42|>|>", 0);
+}
+
+void test_part_assign_into_list_value() {
+    assert_eval_eq("(pg = <|\"a\" -> {1, 2, 3}|>; pg[[\"a\", 2]] = 20; pg)",
+                   "<|\"a\" -> {1, 20, 3}|>", 0);
+}
+
+/* ---------- Mean over values ---------- */
+
+void test_mean_of_values() {
+    assert_eval_eq("Mean[<|\"a\" -> 2, \"b\" -> 4, \"c\" -> 6|>]", "4", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -400,6 +443,15 @@ int main() {
     TEST(test_total_exact_rationals);
     TEST(test_min_max_of_values);
     TEST(test_join_merges_associations);
+
+    TEST(test_part_assign_update);
+    TEST(test_part_assign_add_key);
+    TEST(test_part_assign_key_wrapper);
+    TEST(test_part_assign_positional);
+    TEST(test_part_assign_read_modify_write);
+    TEST(test_part_assign_nested_multi_index);
+    TEST(test_part_assign_into_list_value);
+    TEST(test_mean_of_values);
 
     printf("All Association tests passed.\n");
     return 0;

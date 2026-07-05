@@ -6,6 +6,7 @@
 #include "arithmetic.h"
 #include "complex.h"
 #include "sym_names.h"
+#include "assoc.h"
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -57,6 +58,9 @@ static Expr* apply_columnwise(const char* func_name, Expr* matrix) {
 Expr* builtin_mean(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* data = res->data.function.args[0];
+
+    /* Mean[assoc] is the mean of the association's values. */
+    if (is_association(data)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
 
     // Check if it's a matrix
     Expr* matrixq_args[1] = { expr_copy(data) };

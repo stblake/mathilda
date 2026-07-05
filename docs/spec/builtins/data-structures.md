@@ -155,6 +155,31 @@ In[1]:= asc = <|"a" -> 1|>; AssociateTo[asc, "b" -> 2]; asc
 Out[1]= <|"a" -> 1, "b" -> 2|>
 ```
 
+## Part assignment
+Associations support in-place update through `Part`: `a[[key]] = val` updates an
+existing key or adds a new one, `a[[Key[k]]] = val` targets a key explicitly,
+and `a[[i]] = val` updates the i-th value positionally. Multi-index assignment
+descends into nested associations and lists (`a[[k1, k2]] = val`).
+
+```mathematica
+In[1]:= a = <|"x" -> 1, "y" -> 2|>; a[["x"]] = 99; a
+Out[1]= <|"x" -> 99, "y" -> 2|>
+
+In[2]:= a[["z"]] = 5; a
+Out[2]= <|"x" -> 99, "y" -> 2, "z" -> 5|>
+
+In[3]:= n = <|"p" -> <|"q" -> 1|>|>; n[["p", "q"]] = 42; n
+Out[3]= <|"p" -> <|"q" -> 42|>|>
+```
+
+## Mean
+`Mean[assoc]` averages the association's values (like `Total`/`Min`/`Max`).
+
+```mathematica
+In[1]:= Mean[<|"a" -> 2, "b" -> 4, "c" -> 6|>]
+Out[1]= 4
+```
+
 ## Map, Select
 `Map` and `Select` thread over the **values** of an association, preserving keys
 (matching Wolfram semantics) — `Map[f, <|k -> v|>]` gives `<|k -> f[v]|>`, and
