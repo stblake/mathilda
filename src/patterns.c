@@ -458,27 +458,45 @@ Expr* builtin_position(Expr* res) {
 
     if (argc < 2) return NULL;
 
-    /* Position[assoc, patt] reports the positions of matching *values* as
-     * {Key[k]} (Wolfram semantics), rather than raw {ruleIndex, valueSlot}. */
+    /* Position[assoc, patt] reports positions inside the *values* as
+     * {Key[k], subpos...} (Wolfram semantics). Delegate to Position over
+     * Values[assoc] (which handles nested descent and head positions), then
+     * remap each result's leading value-index to Key[key]. */
     if (argc == 2 && is_association(res->data.function.args[0])) {
         Expr* assoc = res->data.function.args[0];
-        Expr* patt  = res->data.function.args[1];
         size_t na = assoc->data.function.arg_count;
-        Expr** out = malloc(sizeof(Expr*) * (na ? na : 1));
+        Expr* vals = assoc_values_list(assoc);                     /* List of values */
+        Expr* pargs[2] = { vals, expr_copy(res->data.function.args[1]) };
+        Expr* pcall = expr_new_function(expr_new_symbol(SYM_Position), pargs, 2);
+        Expr* raw = evaluate(pcall);                               /* {{i, sub...}, ...} */
+        expr_free(pcall);
+        if (!(raw && raw->type == EXPR_FUNCTION &&
+              raw->data.function.head->data.symbol == SYM_List)) return raw;
+
+        size_t nr = raw->data.function.arg_count;
+        Expr** out = malloc(sizeof(Expr*) * (nr ? nr : 1));
         size_t nout = 0;
-        for (size_t i = 0; i < na; i++) {
-            Expr* rule = assoc->data.function.args[i];
+        for (size_t i = 0; i < nr; i++) {
+            Expr* pl = raw->data.function.args[i];
+            /* Position lists look like {idx, sub...}; idx is the 1-based value
+             * index. idx == 0 is the synthetic Values-list head — not a real
+             * entry — so drop it. */
+            if (!(pl->type == EXPR_FUNCTION && pl->data.function.head->data.symbol == SYM_List &&
+                  pl->data.function.arg_count >= 1 &&
+                  pl->data.function.args[0]->type == EXPR_INTEGER)) continue;
+            int64_t vi = pl->data.function.args[0]->data.integer;
+            if (vi < 1 || vi > (int64_t)na) continue;
+            Expr* rule = assoc->data.function.args[vi - 1];
             if (!(rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2)) continue;
-            MatchEnv* env = env_new();
-            bool m = match(rule->data.function.args[1], patt, env);
-            env_free(env);
-            if (m) {
-                Expr* kargs[1] = { expr_copy(rule->data.function.args[0]) };
-                Expr* keyw = expr_new_function(expr_new_symbol(SYM_Key), kargs, 1);
-                Expr* pos_args[1] = { keyw };
-                out[nout++] = expr_new_function(expr_new_symbol(SYM_List), pos_args, 1);
-            }
+            size_t plen = pl->data.function.arg_count;
+            Expr** np = malloc(sizeof(Expr*) * plen);
+            Expr* kargs[1] = { expr_copy(rule->data.function.args[0]) };
+            np[0] = expr_new_function(expr_new_symbol(SYM_Key), kargs, 1);
+            for (size_t j = 1; j < plen; j++) np[j] = expr_copy(pl->data.function.args[j]);
+            out[nout++] = expr_new_function(expr_new_symbol(SYM_List), np, plen);
+            free(np);
         }
+        expr_free(raw);
         Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, nout);
         free(out);
         return result;

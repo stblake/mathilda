@@ -276,12 +276,19 @@ Out[1]= {1, 2}
 ```
 
 ## Position
-`Position[assoc, patt]` gives the positions of matching **values** as `{Key[k]}`
-(Wolfram semantics), which round-trip through `Part`/`Extract`.
+`Position[assoc, patt]` gives the positions of matches inside the **values** as
+`{Key[k], subpos...}` (Wolfram semantics), descending into nested values; the
+positions round-trip through `Part`/`Extract`.
 
 ```mathematica
 In[1]:= Position[<|"a" -> 1, "b" -> 2, "c" -> 1|>, 1]
 Out[1]= {{Key["a"]}, {Key["c"]}}
+
+In[2]:= Position[<|"a" -> {1, 2}, "b" -> 3, "c" -> 1|>, 1]
+Out[2]= {{Key["a"], 1}, {Key["c"]}}
+
+In[3]:= Extract[<|"a" -> {10, 20}|>, {Key["a"], 2}]
+Out[3]= 20
 ```
 
 ## Predicate tests on values (AllTrue, AnyTrue, NoneTrue, MemberQ)
