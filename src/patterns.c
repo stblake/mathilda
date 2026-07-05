@@ -4,6 +4,7 @@
 #include "match.h"
 #include "core.h"
 #include "sym_names.h"
+#include "assoc.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -87,7 +88,12 @@ Expr* builtin_cases(Expr* res) {
         Expr* func_args[1] = { inner_cases };
         return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }
-    
+
+    /* Cases[assoc, patt, ...] collects matching values (Cases[Values[assoc], ...]). */
+    if (argc >= 2 && is_association(res->data.function.args[0])) {
+        Expr* r = assoc_apply_over_values(res); if (r) return r;
+    }
+
     if (argc < 2) return NULL;
 
     Expr* expr = res->data.function.args[0];
@@ -279,6 +285,11 @@ Expr* builtin_delete_cases(Expr* res) {
         Expr* func_args[1] = { inner_dc };
         return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }
+
+    /* DeleteCases[assoc, patt] drops entries whose value matches patt, keeping
+     * the result an association. */
+    if (argc == 2 && is_association(res->data.function.args[0]))
+        return assoc_delete_cases(res->data.function.args[0], res->data.function.args[1]);
 
     if (argc < 2) return NULL;
 
@@ -504,7 +515,12 @@ Expr* builtin_count(Expr* res) {
         Expr* func_args[1] = { inner_count };
         return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }
-    
+
+    /* Count[assoc, patt] counts matching values (Count[Values[assoc], patt]). */
+    if (argc >= 2 && is_association(res->data.function.args[0])) {
+        Expr* r = assoc_apply_over_values(res); if (r) return r;
+    }
+
     if (argc < 2) return NULL;
 
     Expr* expr = res->data.function.args[0];

@@ -368,6 +368,26 @@ void test_mean_of_values() {
     assert_eval_eq("Mean[<|\"a\" -> 2, \"b\" -> 4, \"c\" -> 6|>]", "4", 0);
 }
 
+/* ---------- Cases / Count / DeleteCases over values ---------- */
+
+void test_cases_over_values() {
+    assert_eval_eq("Cases[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>, x_ /; x > 1]",
+                   "{2, 3}", 0);
+}
+
+void test_cases_pattern_head() {
+    assert_eval_eq("Cases[<|\"a\" -> 1, \"b\" -> 2|>, _Integer]", "{1, 2}", 0);
+}
+
+void test_count_over_values() {
+    assert_eval_eq("Count[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>, x_ /; x > 1]", "2", 0);
+}
+
+void test_deletecases_over_values() {
+    assert_eval_eq("DeleteCases[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>, x_ /; x > 1]",
+                   "<|\"a\" -> 1|>", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -452,6 +472,11 @@ int main() {
     TEST(test_part_assign_nested_multi_index);
     TEST(test_part_assign_into_list_value);
     TEST(test_mean_of_values);
+
+    TEST(test_cases_over_values);
+    TEST(test_cases_pattern_head);
+    TEST(test_count_over_values);
+    TEST(test_deletecases_over_values);
 
     printf("All Association tests passed.\n");
     return 0;

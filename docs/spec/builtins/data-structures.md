@@ -180,6 +180,22 @@ In[1]:= Mean[<|"a" -> 2, "b" -> 4, "c" -> 6|>]
 Out[1]= 4
 ```
 
+## Cases, Count, DeleteCases
+Pattern operations act on the **values** of an association. `Cases` returns the
+list of matching values, `Count` their number, and `DeleteCases` returns the
+association with the matching-value entries removed.
+
+```mathematica
+In[1]:= Cases[<|"a" -> 1, "b" -> 2, "c" -> 3|>, x_ /; x > 1]
+Out[1]= {2, 3}
+
+In[2]:= Count[<|"a" -> 1, "b" -> 2, "c" -> 3|>, x_ /; x > 1]
+Out[2]= 2
+
+In[3]:= DeleteCases[<|"a" -> 1, "b" -> 2, "c" -> 3|>, x_ /; x > 1]
+Out[3]= <|"a" -> 1|>
+```
+
 ## Map, Select
 `Map` and `Select` thread over the **values** of an association, preserving keys
 (matching Wolfram semantics) — `Map[f, <|k -> v|>]` gives `<|k -> f[v]|>`, and

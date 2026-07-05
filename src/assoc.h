@@ -59,6 +59,10 @@ Expr* assoc_apply_over_values(Expr* res);
  * values). Caller owns the result. */
 Expr* assoc_sort_by_value(const Expr* assoc);
 
+/* DeleteCases[assoc, pattern]: keep the entries whose value does NOT match the
+ * pattern (matching is done via MatchQ on each value). Caller owns the result. */
+Expr* assoc_delete_cases(const Expr* assoc, Expr* pattern);
+
 /* Register every Association-family builtin, with attributes and docstrings. */
 void assoc_init(void);
 

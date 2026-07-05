@@ -10,6 +10,7 @@
 
 #include "assoc.h"
 #include "sym_names.h"
+#include "sym_intern.h"
 #include "symtab.h"
 #include "attr.h"
 #include "common.h"
@@ -703,6 +704,27 @@ Expr* assoc_sort_by_value(const Expr* assoc) {
     for (size_t i = 0; i < n; i++) out[i] = expr_copy(assoc->data.function.args[i]);
     qsort(out, n, sizeof(Expr*), rule_value_cmp);
     Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, n);
+    free(out);
+    return result;
+}
+
+/* DeleteCases[assoc, patt] — drop entries whose VALUE matches patt, testing each
+ * value with MatchQ[value, patt]. */
+Expr* assoc_delete_cases(const Expr* assoc, Expr* pattern) {
+    size_t n = assoc->data.function.arg_count;
+    Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
+    size_t nout = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* r = assoc->data.function.args[i];
+        Expr* mq_args[2] = { expr_copy(rule_val(r)), expr_copy(pattern) };
+        Expr* mq = expr_new_function(expr_new_symbol(intern_symbol("MatchQ")), mq_args, 2);
+        Expr* verdict = evaluate(mq);
+        expr_free(mq);
+        bool matches = (verdict->type == EXPR_SYMBOL && verdict->data.symbol == SYM_True);
+        expr_free(verdict);
+        if (!matches) out[nout++] = expr_copy(r);
+    }
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, nout);
     free(out);
     return result;
 }
