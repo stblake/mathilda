@@ -31,7 +31,8 @@ or `Association[k1 -> v1, ...]`.
 - Arguments may be rules, lists of rules, or other associations (which are spliced).
 - Duplicate keys collapse with last-value-wins, preserving first-occurrence order.
 - `assoc[[key]]`, `assoc[[Key[key]]]` and `assoc[[i]]` extract values (a missing
-  key gives `Missing["KeyAbsent", key]`).
+  key gives `Missing["KeyAbsent", key]`); `assoc[[{k1, k2, ...}]]` gives the list
+  of those values.
 - **`assoc[key]`** — an association applied as a function looks the key up (the
   idiomatic accessor), giving the value or `Missing["KeyAbsent", key]`; `assoc[Key[k]]`
   is the explicit form.

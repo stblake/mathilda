@@ -147,6 +147,20 @@ void test_part_missing_key() {
                    "Missing[\"KeyAbsent\", \"z\"]", 0);
 }
 
+void test_part_key_list() {
+    assert_eval_eq("<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>[[{\"a\", \"c\"}]]", "{1, 3}", 0);
+}
+
+void test_part_key_list_missing() {
+    assert_eval_eq("<|\"a\" -> 1, \"b\" -> 2|>[[{\"a\", \"z\"}]]",
+                   "{1, Missing[\"KeyAbsent\", \"z\"]}", 0);
+}
+
+void test_part_key_list_nested() {
+    assert_eval_eq("<|\"a\" -> {10, 20}, \"b\" -> {30, 40}|>[[{\"a\", \"b\"}, 2]]",
+                   "{20, 40}", 0);
+}
+
 void test_part_zero_gives_head() {
     /* assoc[[0]] is the head (as for any expression); an integer key needs Key[]. */
     assert_eval_eq("<|7 -> 5|>[[0]]", "Association", 0);
@@ -993,6 +1007,9 @@ int main() {
     TEST(test_part_key_wrapper);
     TEST(test_part_positional);
     TEST(test_part_missing_key);
+    TEST(test_part_key_list);
+    TEST(test_part_key_list_missing);
+    TEST(test_part_key_list_nested);
     TEST(test_part_zero_gives_head);
 
     TEST(test_keydrop_single);
