@@ -1004,6 +1004,33 @@ void test_sum_over_association() {
     assert_eval_eq("Sum[v, {v, <|\"a\" -> 10, \"b\" -> 20|>}]", "30", 0);
 }
 
+/* ---------- MapAt on associations (composes with Position) ---------- */
+
+void test_mapat_key() {
+    assert_eval_eq("MapAt[f, <|\"a\" -> 1, \"b\" -> 2|>, {Key[\"a\"]}]",
+                   "<|\"a\" -> f[1], \"b\" -> 2|>", 0);
+}
+
+void test_mapat_string_key() {
+    assert_eval_eq("MapAt[#^2 &, <|\"a\" -> 3, \"b\" -> 4|>, \"b\"]",
+                   "<|\"a\" -> 3, \"b\" -> 16|>", 0);
+}
+
+void test_mapat_positional() {
+    assert_eval_eq("MapAt[f, <|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>, 2]",
+                   "<|\"a\" -> 1, \"b\" -> f[2], \"c\" -> 3|>", 0);
+}
+
+void test_mapat_nested() {
+    assert_eval_eq("MapAt[g, <|\"a\" -> <|\"x\" -> 5|>|>, {Key[\"a\"], Key[\"x\"]}]",
+                   "<|\"a\" -> <|\"x\" -> g[5]|>|>", 0);
+}
+
+void test_mapat_position_composition() {
+    assert_eval_eq("(mp = <|\"a\" -> 1, \"b\" -> 9|>; MapAt[neg, mp, First[Position[mp, 9]]])",
+                   "<|\"a\" -> 1, \"b\" -> neg[9]|>", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -1228,6 +1255,12 @@ int main() {
     TEST(test_table_over_association);
     TEST(test_do_over_association);
     TEST(test_sum_over_association);
+
+    TEST(test_mapat_key);
+    TEST(test_mapat_string_key);
+    TEST(test_mapat_positional);
+    TEST(test_mapat_nested);
+    TEST(test_mapat_position_composition);
 
     TEST(test_capstone_pipeline);
     TEST(test_capstone_counts_top);

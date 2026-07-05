@@ -237,7 +237,39 @@ static Expr* mapat_at_path(Expr* f, Expr* expr, Expr** path, size_t plen) {
     }
     Expr* new_head = expr_copy(expr->data.function.head);
 
-    if (idx->type == EXPR_INTEGER) {
+    if (is_association(expr)) {
+        /* MapAt into an association applies f to the value at a key
+         * (assoc[[Key[k]]]/["str"]) or the i-th value positionally, matching the
+         * {Key[k]} positions that Position returns. */
+        Expr* key = NULL; bool positional = false; int64_t p = 0;
+        if (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
+            idx->data.function.head->data.symbol == SYM_Key && idx->data.function.arg_count == 1) {
+            key = idx->data.function.args[0];
+        } else if (idx->type == EXPR_INTEGER) {
+            positional = true; p = idx->data.integer;
+        } else {
+            key = idx;
+        }
+        int64_t target = -1;
+        if (positional) {
+            if (p < 0) p = (int64_t)len + p + 1;
+            if (p >= 1 && p <= (int64_t)len) target = p - 1;
+        } else {
+            for (size_t i = 0; i < len; i++) {
+                Expr* rule = new_args[i];
+                if (rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2 &&
+                    expr_eq(rule->data.function.args[0], key)) { target = (int64_t)i; break; }
+            }
+        }
+        if (target >= 0) {
+            Expr* rule = new_args[target];
+            if (rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2) {
+                Expr* nv = mapat_at_path(f, rule->data.function.args[1], path + 1, plen - 1);
+                expr_free(rule->data.function.args[1]);
+                rule->data.function.args[1] = nv;
+            }
+        }
+    } else if (idx->type == EXPR_INTEGER) {
         int64_t k = idx->data.integer;
         if (k == 0) {
             Expr* r = mapat_at_path(f, expr->data.function.head, path + 1, plen - 1);

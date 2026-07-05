@@ -277,6 +277,19 @@ In[1]:= DeleteMissing[Lookup[<|"a" -> 1, "b" -> 2|>, {"a", "z", "b"}]]
 Out[1]= {1, 2}
 ```
 
+## MapAt
+`MapAt[f, assoc, key]` (or `Key[k]`, a positional index, or a nested position
+`{Key[k1], Key[k2]}`) applies `f` to the value at that position — composing with
+the `{Key[k]}` positions `Position` returns.
+
+```mathematica
+In[1]:= MapAt[#^2 &, <|"a" -> 3, "b" -> 4|>, "b"]
+Out[1]= <|"a" -> 3, "b" -> 16|>
+
+In[2]:= p = <|"a" -> 1, "b" -> 9|>; MapAt[Minus, p, First[Position[p, 9]]]
+Out[2]= <|"a" -> 1, "b" -> -9|>
+```
+
 ## Position
 `Position[assoc, patt]` gives the positions of matches inside the **values** as
 `{Key[k], subpos...}` (Wolfram semantics), descending into nested values; the
