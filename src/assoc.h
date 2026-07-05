@@ -46,6 +46,19 @@ Expr* assoc_map_values(Expr* f, const Expr* assoc);
  * evaluate to True). Preserves order. Caller owns the result. */
 Expr* assoc_select_values(Expr* pred, const Expr* assoc);
 
+/* The values of an association as a List (deep copies). Caller owns it. */
+Expr* assoc_values_list(const Expr* assoc);
+
+/* If res is `head[assoc, rest...]`, rebuild it as `head[Values[assoc], rest...]`
+ * and evaluate — so aggregations (Total, Min, Max, Mean, ...) act on the values
+ * of an association. Returns NULL (leave to the caller) when the first argument
+ * is not an association. Caller owns any returned result. */
+Expr* assoc_apply_over_values(Expr* res);
+
+/* An association reordered by its values in canonical order (keys follow their
+ * values). Caller owns the result. */
+Expr* assoc_sort_by_value(const Expr* assoc);
+
 /* Register every Association-family builtin, with attributes and docstrings. */
 void assoc_init(void);
 

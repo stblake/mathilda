@@ -300,6 +300,31 @@ void test_associationmap() {
                    "<|1 -> 1, 2 -> 4, 3 -> 9, 4 -> 16|>", 0);
 }
 
+/* ---------- Sort / Total / Min / Max thread over values ---------- */
+
+void test_sort_by_value() {
+    assert_eval_eq("Sort[<|\"a\" -> 3, \"b\" -> 1, \"c\" -> 2|>]",
+                   "<|\"b\" -> 1, \"c\" -> 2, \"a\" -> 3|>", 0);
+}
+
+void test_total_of_values() {
+    assert_eval_eq("Total[<|\"a\" -> 3, \"b\" -> 1, \"c\" -> 2|>]", "6", 0);
+}
+
+void test_total_exact_rationals() {
+    assert_eval_eq("Total[<|\"a\" -> 1/2, \"b\" -> 1/3|>]", "5/6", 0);
+}
+
+void test_min_max_of_values() {
+    assert_eval_eq("Min[<|\"a\" -> 3, \"b\" -> 1, \"c\" -> 2|>]", "1", 0);
+    assert_eval_eq("Max[<|\"a\" -> 3, \"b\" -> 1, \"c\" -> 2|>]", "3", 0);
+}
+
+void test_join_merges_associations() {
+    assert_eval_eq("Join[<|\"a\" -> 1, \"b\" -> 2|>, <|\"b\" -> 3, \"c\" -> 4|>]",
+                   "<|\"a\" -> 1, \"b\" -> 3, \"c\" -> 4|>", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -369,6 +394,12 @@ int main() {
     TEST(test_countsby);
     TEST(test_positionindex);
     TEST(test_associationmap);
+
+    TEST(test_sort_by_value);
+    TEST(test_total_of_values);
+    TEST(test_total_exact_rationals);
+    TEST(test_min_max_of_values);
+    TEST(test_join_merges_associations);
 
     printf("All Association tests passed.\n");
     return 0;

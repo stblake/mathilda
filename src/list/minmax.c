@@ -1,10 +1,16 @@
 #include "list_common.h"
 #include "minmax.h"
+#include "assoc.h"
 
 Expr* builtin_min(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t n = res->data.function.arg_count;
     if (n == 0) return expr_new_symbol(SYM_Infinity);
+
+    /* Min[assoc] is the minimum of the association's values. */
+    if (n == 1 && is_association(res->data.function.args[0])) {
+        Expr* r = assoc_apply_over_values(res); if (r) return r;
+    }
     
     // Check for List arguments to flatten
     bool has_list = false;
@@ -121,7 +127,12 @@ Expr* builtin_max(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t n = res->data.function.arg_count;
     if (n == 0) return make_minus_infinity();
-    
+
+    /* Max[assoc] is the maximum of the association's values. */
+    if (n == 1 && is_association(res->data.function.args[0])) {
+        Expr* r = assoc_apply_over_values(res); if (r) return r;
+    }
+
     // Check for List arguments to flatten
     bool has_list = false;
     for (size_t i = 0; i < n; i++) {

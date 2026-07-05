@@ -658,6 +658,56 @@ Expr* assoc_select_values(Expr* pred, const Expr* assoc) {
 }
 
 /* ======================================================================
+ * Aggregation over values: Total / Min / Max / Mean / ... act on the values
+ * of an association. assoc_apply_over_values rewrites head[assoc, rest] as
+ * head[Values[assoc], rest] and re-evaluates, reusing the existing builtin.
+ * ====================================================================== */
+Expr* assoc_values_list(const Expr* assoc) {
+    size_t n = assoc->data.function.arg_count;
+    Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++)
+        out[i] = expr_copy(rule_val(assoc->data.function.args[i]));
+    Expr* list = make_list(out, n);
+    free(out);
+    return list;
+}
+
+Expr* assoc_apply_over_values(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+    if (!is_association(res->data.function.args[0])) return NULL;
+    size_t argc = res->data.function.arg_count;
+    Expr** args = malloc(sizeof(Expr*) * argc);
+    args[0] = assoc_values_list(res->data.function.args[0]);
+    for (size_t i = 1; i < argc; i++) args[i] = expr_copy(res->data.function.args[i]);
+    Expr* call = expr_new_function(expr_copy(res->data.function.head), args, argc);
+    free(args);
+    Expr* r = evaluate(call);
+    expr_free(call);
+    return r;
+}
+
+/* ======================================================================
+ * Sort[assoc] — reorder entries by their values in canonical order.
+ * ====================================================================== */
+static int rule_value_cmp(const void* a, const void* b) {
+    const Expr* ra = *(const Expr* const*)a;
+    const Expr* rb = *(const Expr* const*)b;
+    int c = expr_compare(rule_val(ra), rule_val(rb));
+    if (c != 0) return c;
+    return expr_compare(rule_key(ra), rule_key(rb)); /* tie-break by key: deterministic */
+}
+
+Expr* assoc_sort_by_value(const Expr* assoc) {
+    size_t n = assoc->data.function.arg_count;
+    Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) out[i] = expr_copy(assoc->data.function.args[i]);
+    qsort(out, n, sizeof(Expr*), rule_value_cmp);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, n);
+    free(out);
+    return result;
+}
+
+/* ======================================================================
  * KeySort[assoc] / KeySortBy[assoc, f] — order entries by key (or by f[key]).
  * ====================================================================== */
 static int rule_key_cmp(const void* a, const void* b) {

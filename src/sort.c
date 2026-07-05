@@ -3,6 +3,7 @@
 #include "symtab.h"
 #include "sym_names.h"
 #include "arithmetic.h"
+#include "assoc.h"
 #include <ctype.h>
 #include <math.h>
 #include <stdbool.h>
@@ -355,7 +356,11 @@ Expr* builtin_sort(Expr* res) {
     if (list->type != EXPR_FUNCTION) {
         return expr_copy(list);
     }
-    
+
+    /* Sort[assoc] orders the entries by their values (keys follow). */
+    if (res->data.function.arg_count == 1 && is_association(list))
+        return assoc_sort_by_value(list);
+
     Expr* p = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
     
     size_t count = list->data.function.arg_count;
