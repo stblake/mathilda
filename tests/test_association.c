@@ -421,6 +421,35 @@ void test_memberq_over_values() {
     assert_eval_eq("MemberQ[<|\"a\" -> 1, \"b\" -> 2|>, 5]", "False", 0);
 }
 
+/* ---------- SortBy (lists and associations) ---------- */
+
+void test_sortby_list_identity() {
+    assert_eval_eq("SortBy[{5, 1, 3, 2}, Identity]", "{1, 2, 3, 5}", 0);
+}
+
+void test_sortby_list_abs() {
+    assert_eval_eq("SortBy[{-3, 1, -2, 4}, Abs]", "{1, -2, -3, 4}", 0);
+}
+
+void test_sortby_list_stringlength() {
+    assert_eval_eq("SortBy[{\"ccc\", \"a\", \"bb\"}, StringLength]",
+                   "{\"a\", \"bb\", \"ccc\"}", 0);
+}
+
+void test_sortby_association() {
+    assert_eval_eq("SortBy[<|\"a\" -> 3, \"b\" -> 1, \"c\" -> 2|>, Identity]",
+                   "<|\"b\" -> 1, \"c\" -> 2, \"a\" -> 3|>", 0);
+}
+
+void test_sortby_association_by_first() {
+    assert_eval_eq("SortBy[<|\"a\" -> {9}, \"b\" -> {1}|>, First]",
+                   "<|\"b\" -> {1}, \"a\" -> {9}|>", 0);
+}
+
+void test_sortby_operator_form() {
+    assert_eval_eq("SortBy[Abs][{-3, 1, -2}]", "{1, -2, -3}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -517,6 +546,13 @@ int main() {
     TEST(test_alltrue_over_values);
     TEST(test_alltrue_indeterminate_unevaluated);
     TEST(test_memberq_over_values);
+
+    TEST(test_sortby_list_identity);
+    TEST(test_sortby_list_abs);
+    TEST(test_sortby_list_stringlength);
+    TEST(test_sortby_association);
+    TEST(test_sortby_association_by_first);
+    TEST(test_sortby_operator_form);
 
     printf("All Association tests passed.\n");
     return 0;

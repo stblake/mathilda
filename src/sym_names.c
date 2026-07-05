@@ -447,6 +447,7 @@ const char* SYM_Solve = NULL;
 const char* SYM_SolveAlways = NULL;
 const char* SYM_SolvePolynomialEquality = NULL;
 const char* SYM_Sort = NULL;
+const char* SYM_SortBy = NULL;
 const char* SYM_Span = NULL;
 const char* SYM_Split = NULL;
 const char* SYM_Sqrt = NULL;
@@ -1104,6 +1105,7 @@ void sym_names_init(void) {
     SYM_SolveAlways                = intern_symbol("SolveAlways");
     SYM_SolvePolynomialEquality    = intern_symbol("Solve`SolvePolynomialEquality");
     SYM_Sort                       = intern_symbol("Sort");
+    SYM_SortBy                     = intern_symbol("SortBy");
     SYM_Span                       = intern_symbol("Span");
     SYM_Split                      = intern_symbol("Split");
     SYM_Sqrt                       = intern_symbol("Sqrt");

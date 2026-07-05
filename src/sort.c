@@ -383,7 +383,69 @@ Expr* builtin_sort(Expr* res) {
     
     Expr* result = expr_new_function(expr_copy(list->data.function.head), sorted_args, count);
     free(sorted_args);
-    
+
+    return result;
+}
+
+/* ------------------- SortBy ------------------- */
+
+/* A payload paired with the sort key f[payload], for a key-once qsort
+ * (avoids re-evaluating f during every comparison). */
+typedef struct { Expr* payload; Expr* key; } SortByPair;
+
+static int sortby_pair_cmp(const void* a, const void* b) {
+    return expr_compare(((const SortByPair*)a)->key, ((const SortByPair*)b)->key);
+}
+
+/* SortBy[list, f]  — sort list elements by canonical order of f[element].
+ * SortBy[assoc, f] — sort association entries by f[value] (keys follow).
+ * SortBy[f]        — operator form: SortBy[f][expr] == SortBy[expr, f].
+ * The key f[...] is evaluated once per element. */
+Expr* builtin_sort_by(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+
+    if (argc == 1) {
+        /* Operator form: SortBy[f] -> Function[SortBy[#, f]]. */
+        Expr* slot_args[1] = { expr_new_integer(1) };
+        Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot), slot_args, 1);
+        Expr* inner_args[2] = { slot, expr_copy(res->data.function.args[0]) };
+        Expr* inner = expr_new_function(expr_new_symbol(SYM_SortBy), inner_args, 2);
+        Expr* func_args[1] = { inner };
+        return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
+    }
+    if (argc != 2) return NULL;
+
+    Expr* coll = res->data.function.args[0];
+    Expr* f    = res->data.function.args[1];
+    if (coll->type != EXPR_FUNCTION) return expr_copy(coll);
+
+    bool assoc = is_association(coll);
+    size_t n = coll->data.function.arg_count;
+    if (n == 0) return expr_copy(coll);
+
+    SortByPair* pairs = malloc(sizeof(SortByPair) * n);
+    for (size_t i = 0; i < n; i++) {
+        Expr* elem = coll->data.function.args[i];
+        /* For an association, sort by f applied to the value; else by f[elem]. */
+        Expr* subject = elem;
+        if (assoc && elem->type == EXPR_FUNCTION && elem->data.function.arg_count == 2)
+            subject = elem->data.function.args[1];
+        Expr* call_args[1] = { expr_copy(subject) };
+        Expr* call = expr_new_function(expr_copy(f), call_args, 1);
+        pairs[i].payload = expr_copy(elem);
+        pairs[i].key = evaluate(call);
+        expr_free(call);
+    }
+
+    qsort(pairs, n, sizeof(SortByPair), sortby_pair_cmp);
+
+    Expr** out = malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) { out[i] = pairs[i].payload; expr_free(pairs[i].key); }
+    free(pairs);
+
+    Expr* result = expr_new_function(expr_copy(coll->data.function.head), out, n);
+    free(out);
     return result;
 }
 

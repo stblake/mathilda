@@ -771,3 +771,20 @@ Out[2]= True
 In[3]:= NoneTrue[{1, 3, 5}, EvenQ]
 Out[3]= True
 ```
+
+## SortBy
+Sort by a key function.
+- `SortBy[list, f]`: sorts the elements of `list` by the canonical order of `f[element]` (the key is evaluated once per element).
+- `SortBy[assoc, f]`: sorts an association by `f` applied to each value (keys follow their values).
+- `SortBy[f]`: operator form — `SortBy[f][expr]` is `SortBy[expr, f]`.
+
+```mathematica
+In[1]:= SortBy[{-3, 1, -2, 4}, Abs]
+Out[1]= {1, -2, -3, 4}
+
+In[2]:= SortBy[{"ccc", "a", "bb"}, StringLength]
+Out[2]= {"a", "bb", "ccc"}
+
+In[3]:= SortBy[Abs][{-3, 1, -2}]
+Out[3]= {1, -2, -3}
+```

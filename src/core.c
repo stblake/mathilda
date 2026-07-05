@@ -438,6 +438,13 @@ void core_init(void) {
         "\t(True for an empty list). Over an association, tests the values.");
     symtab_add_builtin("FreeQ", builtin_freeq);
     symtab_add_builtin("Sort", builtin_sort);
+    symtab_add_builtin("SortBy", builtin_sort_by);
+    symtab_get_def("SortBy")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("SortBy",
+        "SortBy[list, f]\n\tSorts the elements of list by the canonical order of\n"
+        "\tf applied to each element.\n"
+        "SortBy[assoc, f]\n\tSorts an association by f applied to each value.\n"
+        "SortBy[f]\n\tOperator form: SortBy[f][expr] is SortBy[expr, f].");
     symtab_add_builtin("OrderedQ", builtin_orderedq);
     symtab_get_def("OrderedQ")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("PolynomialQ", builtin_polynomialq);

@@ -204,6 +204,7 @@ export function loadStartupContent() {
     { cells: [{ type: 'code',    source: 'Cases[<|"a" -> 1, "b" -> 2, "c" -> 3|>, x_ /; x > 1]' }] },
     { cells: [{ type: 'code',    source: 'DeleteCases[<|"a" -> 1, "b" -> 2, "c" -> 3|>, x_ /; x > 1]' }] },
     { cells: [{ type: 'code',    source: 'AllTrue[<|"a" -> 2, "b" -> 4, "c" -> 6|>, EvenQ]' }] },
+    { cells: [{ type: 'code',    source: 'SortBy[<|"a" -> 3, "b" -> 1, "c" -> 2|>, Identity]' }] },
   ]);
 }
 

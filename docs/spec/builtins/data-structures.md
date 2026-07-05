@@ -228,20 +228,24 @@ In[2]:= Select[<|"a" -> 1, "b" -> 2, "c" -> 3|>, # > 1 &]
 Out[2]= <|"b" -> 2, "c" -> 3|>
 ```
 
-## Sort, Total, Min, Max, Join
+## Sort, SortBy, Total, Min, Max, Join
 Ordering and aggregation act on the **values** of an association: `Sort` orders
-the entries by value (keys follow), and `Total`/`Min`/`Max` reduce over the
-values. `Join` merges associations (later values win).
+the entries by value and `SortBy[assoc, f]` by `f` of each value (keys follow),
+while `Total`/`Min`/`Max` reduce over the values. `Join` merges associations
+(later values win).
 
 ```mathematica
 In[1]:= Sort[<|"a" -> 3, "b" -> 1, "c" -> 2|>]
 Out[1]= <|"b" -> 1, "c" -> 2, "a" -> 3|>
 
-In[2]:= Total[<|"a" -> 3, "b" -> 1, "c" -> 2|>]
-Out[2]= 6
+In[2]:= SortBy[<|"a" -> {9}, "b" -> {1}|>, First]
+Out[2]= <|"b" -> {1}, "a" -> {9}|>
 
-In[3]:= Join[<|"a" -> 1, "b" -> 2|>, <|"b" -> 3, "c" -> 4|>]
-Out[3]= <|"a" -> 1, "b" -> 3, "c" -> 4|>
+In[3]:= Total[<|"a" -> 3, "b" -> 1, "c" -> 2|>]
+Out[3]= 6
+
+In[4]:= Join[<|"a" -> 1, "b" -> 2|>, <|"b" -> 3, "c" -> 4|>]
+Out[4]= <|"a" -> 1, "b" -> 3, "c" -> 4|>
 ```
 
 ## KeySort
