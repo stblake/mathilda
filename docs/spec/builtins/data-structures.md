@@ -190,11 +190,15 @@ Out[1]= {{1, 3, 5}, {2, 4, 6}}
 
 ## Merge
 Combines several associations, applying `f` to the list of values collected for
-each key (in first-seen key order).
+each key (in first-seen key order). The first argument may be a list *or* an
+association of associations.
 
 ```mathematica
 In[1]:= Merge[{<|"a" -> 1|>, <|"a" -> 2, "b" -> 3|>}, Total]
 Out[1]= <|"a" -> 3, "b" -> 3|>
+
+In[2]:= Merge[<|"g1" -> <|"a" -> 1|>, "g2" -> <|"a" -> 2, "b" -> 3|>|>, Total]
+Out[2]= <|"a" -> 3, "b" -> 3|>
 ```
 
 ## AssociateTo

@@ -256,6 +256,11 @@ void test_merge_list() {
                    "<|\"a\" -> {1, 2}|>", 0);
 }
 
+void test_merge_association_of_associations() {
+    assert_eval_eq("Merge[<|\"g1\" -> <|\"a\" -> 1|>, \"g2\" -> <|\"a\" -> 2, \"b\" -> 3|>|>, Total]",
+                   "<|\"a\" -> 3, \"b\" -> 3|>", 0);
+}
+
 /* ---------- AssociateTo (in-place) ---------- */
 
 void test_associate_to_add() {
@@ -1138,6 +1143,7 @@ int main() {
 
     TEST(test_merge_total);
     TEST(test_merge_list);
+    TEST(test_merge_association_of_associations);
 
     TEST(test_associate_to_add);
     TEST(test_associate_to_update);

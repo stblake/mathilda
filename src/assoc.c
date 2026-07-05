@@ -613,7 +613,19 @@ Expr* builtin_merge(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* col = res->data.function.args[0];
     Expr* f   = res->data.function.args[1];
-    if (!head_is(col, SYM_List)) return NULL;
+    if (!head_is(col, SYM_List)) {
+        /* Merge also accepts an association *of* associations — merge its
+         * values. Delegate to the list form via Merge[Values[col], f]. */
+        if (is_association(col)) {
+            Expr* vals = assoc_values_list(col);
+            Expr* margs[2] = { vals, expr_copy(f) };
+            Expr* call = expr_new_function(expr_new_symbol(SYM_Merge), margs, 2);
+            Expr* r = evaluate(call);
+            expr_free(call);
+            return r;
+        }
+        return NULL;
+    }
 
     /* Upper bound on distinct keys = total rules across all associations. */
     size_t total = 0;
