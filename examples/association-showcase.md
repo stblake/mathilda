@@ -73,3 +73,9 @@ A single, coherent data pipeline touched: `Table`/`Part` (column extraction via
 `[[All, k]]`), `Counts`, `GroupBy` (with reducer), `Total`, `Mean`,
 `ReverseSort`, `TakeLargest` — all operating on associations with Wolfram-faithful
 semantics.
+
+## Loadable notebook
+
+A guided, four-notebook tour of the association toolchain is available as a
+loadable library: [`associations.lb`](associations.lb) — open it in the Mathilda
+app to explore basics, aggregation, transform/rank, and pattern matching interactively.
