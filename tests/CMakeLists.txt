@@ -421,6 +421,7 @@ set(COMMON_SRC
     ../src/findmin.c
     ../src/poly/solvepoly.c
     ../src/solvelinsys.c
+    ../src/solvenlsys.c
     ../src/solverad.c
     ../src/solveinv.c
     ../src/solvetrig.c
@@ -820,6 +821,9 @@ target_include_directories(solvealways_tests PRIVATE ../src)
 
 add_executable(solveradicals_tests test_solveradicals.c ${COMMON_SRC})
 target_include_directories(solveradicals_tests PRIVATE ../src)
+
+add_executable(solvenlsys_tests test_solvenlsys.c ${COMMON_SRC})
+target_include_directories(solvenlsys_tests PRIVATE ../src)
 
 add_executable(factor_phase0_tests test_factor_phase0.c ${COMMON_SRC})
 target_include_directories(factor_phase0_tests PRIVATE ../src)

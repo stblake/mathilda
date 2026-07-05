@@ -24,8 +24,11 @@ Options:
     VerifySolutions     -> Automatic (reserved)
 
 Solves single polynomial equalities, radical equations, linear
-systems, and -- via the inverse-function specialist -- single-
-variable equations whose outermost dependence is an elementary
+systems, zero-dimensional nonlinear polynomial systems (via a
+lexicographic Groebner basis and triangular back-substitution;
+positive-dimensional systems emit Solve::nsdim and stay
+unevaluated), and -- via the inverse-function specialist --
+single-variable equations whose outermost dependence is an elementary
 invertible head (Log, Exp, Sin/Cos/Tan/Cot/Sec/Csc, their
 hyperbolic counterparts, the inverse trig/hyperbolic forms,
 and Power[g, n] for integer n >= 2).  Multi-branch heads
@@ -118,6 +121,14 @@ Out[1]= {{x -> 2, y -> 1}}
 ```
 
 ```mathematica
+In[1]:= Solve[x y == 1 && x + y == 3, {x, y}]
+Out[1]= {{x -> 1/2 (3 - Sqrt[5]), y -> 1/2 (3 + Sqrt[5])}, {x -> 1/2 (3 + Sqrt[5]), y -> 1/2 (3 - Sqrt[5])}}
+
+In[2]:= Solve[x y == 6 && x + y == 5, {x, y}, Integers]
+Out[2]= {{x -> 3, y -> 2}, {x -> 2, y -> 3}}
+```
+
+```mathematica
 In[1]:= Solve[a x^2 + b x + c == 0, x]
 Out[1]= {{x -> (1/2 (-b + Sqrt[b^2 - 4 a c]))/a}, {x -> (1/2 (-b - Sqrt[b^2 - 4 a c]))/a}}
 ```
@@ -139,3 +150,9 @@ back in exact radical form (`±Sqrt[2]`). Linear systems are solved directly
 and return a single rule-list. Cubic roots are reported using `(-1)^(1/3)`
 style radicals; pass `Cubics -> False` / `Quartics -> False` to suppress
 explicit radical forms when desired.
+
+Nonlinear polynomial systems with finitely many solutions (a zero-dimensional
+ideal) are solved via a lexicographic Gröbner basis and triangular
+back-substitution, honouring the `Reals` / `Integers` domain. Systems with
+infinitely many solutions (positive-dimensional ideals, e.g.
+`Solve[x^2 - y^2 == 0, {x, y}]`) emit `Solve::nsdim` and are left unevaluated.
