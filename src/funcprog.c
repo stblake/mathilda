@@ -431,6 +431,52 @@ Expr* builtin_select(Expr* res) {
     return result;
 }
 
+/* ------------------- AllTrue / AnyTrue / NoneTrue -------------------
+ *
+ * mode 0 = AllTrue  (True iff test[e] is True for every element)
+ * mode 1 = AnyTrue  (True iff test[e] is True for some element)
+ * mode 2 = NoneTrue (True iff test[e] is True for no element)
+ *
+ * Over an association these test the values (via assoc_apply_over_values).
+ * If any test result is neither True nor False the whole call is left
+ * unevaluated (return NULL), matching Wolfram; short-circuits otherwise. */
+static Expr* all_any_none_true(Expr* res, int mode) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* coll = res->data.function.args[0];
+    Expr* test = res->data.function.args[1];
+
+    if (is_association(coll)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
+    if (coll->type != EXPR_FUNCTION) return NULL;
+
+    size_t n = coll->data.function.arg_count;
+    bool indeterminate = false;
+    for (size_t i = 0; i < n; i++) {
+        Expr* call_args[1] = { expr_copy(coll->data.function.args[i]) };
+        Expr* call = expr_new_function(expr_copy(test), call_args, 1);
+        Expr* v = evaluate(call);
+        expr_free(call);
+        bool is_true  = (v->type == EXPR_SYMBOL && v->data.symbol == SYM_True);
+        bool is_false = (v->type == EXPR_SYMBOL && v->data.symbol == SYM_False);
+        expr_free(v);
+
+        if (is_true) {
+            if (mode == 1) return expr_new_symbol(SYM_True);   /* AnyTrue short-circuit */
+            if (mode == 2) return expr_new_symbol(SYM_False);  /* NoneTrue short-circuit */
+        } else if (is_false) {
+            if (mode == 0) return expr_new_symbol(SYM_False);  /* AllTrue short-circuit */
+        } else {
+            indeterminate = true;
+        }
+    }
+    if (indeterminate) return NULL;  /* leave unevaluated */
+    /* No short-circuit fired: All -> True, Any -> False, None -> True. */
+    return expr_new_symbol(mode == 1 ? SYM_False : SYM_True);
+}
+
+Expr* builtin_all_true(Expr* res)  { return all_any_none_true(res, 0); }
+Expr* builtin_any_true(Expr* res)  { return all_any_none_true(res, 1); }
+Expr* builtin_none_true(Expr* res) { return all_any_none_true(res, 2); }
+
 /* ------------------- Through ------------------- */
 
 static Expr* transform_head(Expr* head, Expr* h_spec, Expr** args, size_t arg_count, bool* transformed) {

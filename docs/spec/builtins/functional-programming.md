@@ -752,3 +752,22 @@ In[2]:= Select[{1, 2, 4, 7, 6, 2}, # > 2 &, 1]
 Out[2]= {4}
 ```
 
+
+## AllTrue, AnyTrue, NoneTrue
+Test a predicate across the elements of a list (or the values of an association).
+- `AllTrue[list, test]`: `True` if `test[e]` is `True` for every element (and for an empty list).
+- `AnyTrue[list, test]`: `True` if `test[e]` is `True` for some element.
+- `NoneTrue[list, test]`: `True` if `test[e]` is `True` for no element.
+
+Left unevaluated when a test result is neither `True` nor `False`.
+
+```mathematica
+In[1]:= AllTrue[{2, 4, 6}, EvenQ]
+Out[1]= True
+
+In[2]:= AnyTrue[{1, 3, 4}, EvenQ]
+Out[2]= True
+
+In[3]:= NoneTrue[{1, 3, 5}, EvenQ]
+Out[3]= True
+```

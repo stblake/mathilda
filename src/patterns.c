@@ -614,7 +614,12 @@ Expr* builtin_memberq(Expr* res) {
         Expr* func_args[1] = { inner_memberq };
         return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }
-    
+
+    /* MemberQ[assoc, form] tests the association's values. */
+    if (argc >= 2 && is_association(res->data.function.args[0])) {
+        Expr* r = assoc_apply_over_values(res); if (r) return r;
+    }
+
     if (argc < 2) return NULL;
 
     Expr* expr = res->data.function.args[0];

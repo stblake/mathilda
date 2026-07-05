@@ -388,6 +388,39 @@ void test_deletecases_over_values() {
                    "<|\"a\" -> 1|>", 0);
 }
 
+/* ---------- AllTrue / AnyTrue / NoneTrue (lists and association values) ---------- */
+
+void test_alltrue_list() {
+    assert_eval_eq("AllTrue[{2, 4, 6}, EvenQ]", "True", 0);
+    assert_eval_eq("AllTrue[{2, 3, 6}, EvenQ]", "False", 0);
+    assert_eval_eq("AllTrue[{}, EvenQ]", "True", 0);
+}
+
+void test_anytrue_list() {
+    assert_eval_eq("AnyTrue[{1, 3, 4}, EvenQ]", "True", 0);
+    assert_eval_eq("AnyTrue[{1, 3, 5}, EvenQ]", "False", 0);
+}
+
+void test_nonetrue_list() {
+    assert_eval_eq("NoneTrue[{1, 3, 5}, EvenQ]", "True", 0);
+    assert_eval_eq("NoneTrue[{1, 2, 5}, EvenQ]", "False", 0);
+}
+
+void test_alltrue_over_values() {
+    assert_eval_eq("AllTrue[<|\"a\" -> 2, \"b\" -> 4|>, EvenQ]", "True", 0);
+    assert_eval_eq("AnyTrue[<|\"a\" -> 2, \"b\" -> 3|>, OddQ]", "True", 0);
+    assert_eval_eq("NoneTrue[<|\"a\" -> 1, \"b\" -> 3|>, EvenQ]", "True", 0);
+}
+
+void test_alltrue_indeterminate_unevaluated() {
+    assert_eval_eq("AllTrue[{2, x, 6}, # > 0 &]", "AllTrue[{2, x, 6}, #1 > 0 &]", 0);
+}
+
+void test_memberq_over_values() {
+    assert_eval_eq("MemberQ[<|\"a\" -> 1, \"b\" -> 2|>, 2]", "True", 0);
+    assert_eval_eq("MemberQ[<|\"a\" -> 1, \"b\" -> 2|>, 5]", "False", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -477,6 +510,13 @@ int main() {
     TEST(test_cases_pattern_head);
     TEST(test_count_over_values);
     TEST(test_deletecases_over_values);
+
+    TEST(test_alltrue_list);
+    TEST(test_anytrue_list);
+    TEST(test_nonetrue_list);
+    TEST(test_alltrue_over_values);
+    TEST(test_alltrue_indeterminate_unevaluated);
+    TEST(test_memberq_over_values);
 
     printf("All Association tests passed.\n");
     return 0;

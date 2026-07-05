@@ -203,6 +203,7 @@ export function loadStartupContent() {
     { cells: [{ type: 'code',    source: 'inv = <|"gold" -> 3|>; inv[["silver"]] = 10; inv[["gold"]] = inv[["gold"]] + 1; inv' }] },
     { cells: [{ type: 'code',    source: 'Cases[<|"a" -> 1, "b" -> 2, "c" -> 3|>, x_ /; x > 1]' }] },
     { cells: [{ type: 'code',    source: 'DeleteCases[<|"a" -> 1, "b" -> 2, "c" -> 3|>, x_ /; x > 1]' }] },
+    { cells: [{ type: 'code',    source: 'AllTrue[<|"a" -> 2, "b" -> 4, "c" -> 6|>, EvenQ]' }] },
   ]);
 }
 

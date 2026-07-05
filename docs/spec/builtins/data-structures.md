@@ -196,6 +196,25 @@ In[3]:= DeleteCases[<|"a" -> 1, "b" -> 2, "c" -> 3|>, x_ /; x > 1]
 Out[3]= <|"a" -> 1|>
 ```
 
+## Predicate tests on values (AllTrue, AnyTrue, NoneTrue, MemberQ)
+Predicate tests apply to the **values** of an association (and to the elements
+of a list). `AllTrue`/`AnyTrue`/`NoneTrue` are left unevaluated if a test
+result is neither `True` nor `False`.
+
+```mathematica
+In[1]:= AllTrue[<|"a" -> 2, "b" -> 4|>, EvenQ]
+Out[1]= True
+
+In[2]:= AnyTrue[{1, 3, 4}, EvenQ]
+Out[2]= True
+
+In[3]:= NoneTrue[{1, 3, 5}, EvenQ]
+Out[3]= True
+
+In[4]:= MemberQ[<|"a" -> 1, "b" -> 2|>, 2]
+Out[4]= True
+```
+
 ## Map, Select
 `Map` and `Select` thread over the **values** of an association, preserving keys
 (matching Wolfram semantics) — `Map[f, <|k -> v|>]` gives `<|k -> f[v]|>`, and

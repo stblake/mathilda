@@ -421,6 +421,21 @@ void core_init(void) {
     symtab_add_builtin("Permutations", builtin_permutations);
     symtab_get_def("Permutations")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Select", builtin_select);
+    symtab_add_builtin("AllTrue", builtin_all_true);
+    symtab_get_def("AllTrue")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("AllTrue",
+        "AllTrue[list, test]\n\tGives True if test[e] is True for every element e\n"
+        "\t(True for an empty list). Over an association, tests the values.");
+    symtab_add_builtin("AnyTrue", builtin_any_true);
+    symtab_get_def("AnyTrue")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("AnyTrue",
+        "AnyTrue[list, test]\n\tGives True if test[e] is True for some element e\n"
+        "\t(False for an empty list). Over an association, tests the values.");
+    symtab_add_builtin("NoneTrue", builtin_none_true);
+    symtab_get_def("NoneTrue")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("NoneTrue",
+        "NoneTrue[list, test]\n\tGives True if test[e] is True for no element e\n"
+        "\t(True for an empty list). Over an association, tests the values.");
     symtab_add_builtin("FreeQ", builtin_freeq);
     symtab_add_builtin("Sort", builtin_sort);
     symtab_add_builtin("OrderedQ", builtin_orderedq);
