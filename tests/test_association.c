@@ -702,6 +702,29 @@ void test_kvp_cases_record_filter() {
                    "{<|\"t\" -> 1|>, <|\"t\" -> 2|>}", 0);
 }
 
+/* ---------- Association as accessor: assoc[key] ---------- */
+
+void test_accessor_present() {
+    assert_eval_eq("<|\"a\" -> 1, \"b\" -> 2|>[\"a\"]", "1", 0);
+}
+
+void test_accessor_missing() {
+    assert_eval_eq("<|\"a\" -> 1|>[\"z\"]", "Missing[\"KeyAbsent\", \"z\"]", 0);
+}
+
+void test_accessor_key_wrapper() {
+    assert_eval_eq("<|1 -> 10, 2 -> 20|>[Key[2]]", "20", 0);
+}
+
+void test_accessor_bound_symbol() {
+    assert_eval_eq("(acc = <|\"x\" -> 42|>; acc[\"x\"])", "42", 0);
+}
+
+void test_accessor_in_map() {
+    assert_eval_eq("Map[#[\"a\"] &, {<|\"a\" -> 1|>, <|\"a\" -> 2|>, <|\"a\" -> 3|>}]",
+                   "{1, 2, 3}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -864,6 +887,12 @@ int main() {
     TEST(test_kvp_binding_extraction);
     TEST(test_kvp_on_list_of_rules);
     TEST(test_kvp_cases_record_filter);
+
+    TEST(test_accessor_present);
+    TEST(test_accessor_missing);
+    TEST(test_accessor_key_wrapper);
+    TEST(test_accessor_bound_symbol);
+    TEST(test_accessor_in_map);
 
     printf("All Association tests passed.\n");
     return 0;

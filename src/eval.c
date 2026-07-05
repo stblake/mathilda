@@ -992,6 +992,38 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                     return applied;
                 }
             } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
+                       head->data.function.head->data.symbol == SYM_Association &&
+                       res->data.function.arg_count == 1) {
+                /* 7a. Association as accessor: <|...|>[key] (or [Key[key]]) looks
+                 * the key up, giving the value or Missing["KeyAbsent", key] --
+                 * the idiomatic Wolfram accessor, complementing Lookup and Part. */
+                Expr* keyarg = res->data.function.args[0];
+                Expr* lookup_key = keyarg;
+                if (keyarg->type == EXPR_FUNCTION && keyarg->data.function.head->type == EXPR_SYMBOL &&
+                    keyarg->data.function.head->data.symbol == SYM_Key &&
+                    keyarg->data.function.arg_count == 1) {
+                    lookup_key = keyarg->data.function.args[0];
+                }
+                Expr* found = NULL;
+                for (size_t i = 0; i < head->data.function.arg_count; i++) {
+                    Expr* rule = head->data.function.args[i];
+                    if (rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2 &&
+                        expr_eq(rule->data.function.args[0], lookup_key)) {
+                        found = rule->data.function.args[1];
+                        break;
+                    }
+                }
+                Expr* out;
+                if (found) {
+                    out = expr_copy(found);
+                } else {
+                    Expr* margs[2] = { expr_new_string("KeyAbsent"), expr_copy(lookup_key) };
+                    out = expr_new_function(expr_new_symbol(SYM_Missing), margs, 2);
+                }
+                expr_free(res);
+                *changed = true;
+                return out;
+            } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
                        head->data.function.head->data.symbol == SYM_Derivative &&
                        res->data.function.arg_count == 1 &&
                        res->data.function.args[0]->type == EXPR_FUNCTION &&

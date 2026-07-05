@@ -13,6 +13,9 @@ or `Association[k1 -> v1, ...]`.
 - Duplicate keys collapse with last-value-wins, preserving first-occurrence order.
 - `assoc[[key]]`, `assoc[[Key[key]]]` and `assoc[[i]]` extract values (a missing
   key gives `Missing["KeyAbsent", key]`).
+- **`assoc[key]`** — an association applied as a function looks the key up (the
+  idiomatic accessor), giving the value or `Missing["KeyAbsent", key]`; `assoc[Key[k]]`
+  is the explicit form.
 
 ```mathematica
 In[1]:= <|"a" -> 1, "b" -> 2|>
@@ -23,6 +26,9 @@ Out[2]= <|"a" -> 99, "b" -> 2|>
 
 In[3]:= <|"a" -> 10, "b" -> 20|>[["b"]]
 Out[3]= 20
+
+In[4]:= <|"a" -> 10, "b" -> 20|>["a"]
+Out[4]= 10
 ```
 
 ## AssociationQ
