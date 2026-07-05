@@ -277,6 +277,17 @@ In[1]:= DeleteMissing[Lookup[<|"a" -> 1, "b" -> 2|>, {"a", "z", "b"}]]
 Out[1]= {1, 2}
 ```
 
+## ReplacePart
+`ReplacePart[assoc, {Key[k]} -> v]` (or bare `Key[k]`, or a positional `i`)
+replaces the value at that key; several positions may be given at once. It is
+replace-only — an absent key is left unchanged (unlike Part assignment, which
+would add it).
+
+```mathematica
+In[1]:= ReplacePart[<|"a" -> 1, "b" -> 2, "c" -> 3|>, {{Key["a"]} -> 10, {Key["c"]} -> 30}]
+Out[1]= <|"a" -> 10, "b" -> 2, "c" -> 30|>
+```
+
 ## Delete
 `Delete[assoc, {Key[k]}]` removes an entry by key position; a nested position
 (`{Key[k1], Key[k2]}`) descends into inner associations, and a list of positions

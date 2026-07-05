@@ -1031,6 +1031,32 @@ void test_mapat_position_composition() {
                    "<|\"a\" -> 1, \"b\" -> neg[9]|>", 0);
 }
 
+/* ---------- ReplacePart by Key position on associations ---------- */
+
+void test_replacepart_key() {
+    assert_eval_eq("ReplacePart[<|\"a\" -> 1, \"b\" -> 2|>, {Key[\"a\"]} -> 99]",
+                   "<|\"a\" -> 99, \"b\" -> 2|>", 0);
+}
+
+void test_replacepart_bare_key() {
+    assert_eval_eq("ReplacePart[<|\"a\" -> 1, \"b\" -> 2|>, Key[\"b\"] -> 99]",
+                   "<|\"a\" -> 1, \"b\" -> 99|>", 0);
+}
+
+void test_replacepart_multiple() {
+    assert_eval_eq("ReplacePart[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>, {{Key[\"a\"]} -> 10, {Key[\"c\"]} -> 30}]",
+                   "<|\"a\" -> 10, \"b\" -> 2, \"c\" -> 30|>", 0);
+}
+
+void test_replacepart_positional() {
+    assert_eval_eq("ReplacePart[<|\"a\" -> 1, \"b\" -> 2|>, 2 -> 99]",
+                   "<|\"a\" -> 1, \"b\" -> 99|>", 0);
+}
+
+void test_replacepart_absent_key_noop() {
+    assert_eval_eq("ReplacePart[<|\"a\" -> 1|>, {Key[\"z\"]} -> 5]", "<|\"a\" -> 1|>", 0);
+}
+
 /* ---------- Delete by Key position on associations ---------- */
 
 void test_delete_key() {
@@ -1283,6 +1309,12 @@ int main() {
     TEST(test_mapat_positional);
     TEST(test_mapat_nested);
     TEST(test_mapat_position_composition);
+
+    TEST(test_replacepart_key);
+    TEST(test_replacepart_bare_key);
+    TEST(test_replacepart_multiple);
+    TEST(test_replacepart_positional);
+    TEST(test_replacepart_absent_key_noop);
 
     TEST(test_delete_key);
     TEST(test_delete_keys_multiple);
