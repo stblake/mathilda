@@ -53,7 +53,7 @@ void test_assoc_symbol_keys() {
 
 void test_assoc_implicit_multiplication() {
     /* An association literal is a valid right operand of implicit Times. */
-    assert_eval_eq("FullForm[2 <|\"a\" -> 1|>]", "Times[2, Association[Rule[\"a\", 1]]]", 1);
+    assert_eval_eq("2 <|\"a\" -> 1|>", "Times[2, Association[Rule[\"a\", 1]]]", 1);
     assert_eval_eq("3 <|\"x\" -> 4|>[\"x\"]", "12", 0);
 }
 
