@@ -944,6 +944,21 @@ void test_review_lookup_rule_list() {
     assert_eval_eq("Lookup[{p -> 1, q -> 2}, q]", "2", 0);
 }
 
+/* ---------- Iterating an association (Table/Do/Sum) walks its values ---------- */
+
+void test_table_over_association() {
+    assert_eval_eq("Table[v^2, {v, <|\"a\" -> 2, \"b\" -> 3|>}]", "{4, 9}", 0);
+}
+
+void test_do_over_association() {
+    assert_eval_eq("(sd = 0; Do[sd = sd + v, {v, <|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>}]; sd)",
+                   "6", 0);
+}
+
+void test_sum_over_association() {
+    assert_eval_eq("Sum[v, {v, <|\"a\" -> 10, \"b\" -> 20|>}]", "30", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -1156,6 +1171,10 @@ int main() {
     TEST(test_review_select_three_arg);
     TEST(test_review_sort_stable);
     TEST(test_review_lookup_rule_list);
+
+    TEST(test_table_over_association);
+    TEST(test_do_over_association);
+    TEST(test_sum_over_association);
 
     TEST(test_capstone_pipeline);
     TEST(test_capstone_counts_top);

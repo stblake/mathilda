@@ -206,6 +206,7 @@ export function loadStartupContent() {
     { cells: [{ type: 'text',    source: 'Total/Min/Max/Mean reduce over values; Part assignment updates in place.' }] },
     { cells: [{ type: 'code',    source: 'Total[<|"a" -> 3, "b" -> 1, "c" -> 2|>]' }] },
     { cells: [{ type: 'code',    source: 'Fold[Plus, 0, <|"a" -> 1, "b" -> 2, "c" -> 3|>]' }] },
+    { cells: [{ type: 'code',    source: 'Table[v^2, {v, <|"a" -> 2, "b" -> 3|>}]' }] },
     { cells: [{ type: 'code',    source: 'Sort[<|"a" -> 3, "b" -> 1, "c" -> 2|>]' }] },
     { cells: [{ type: 'code',    source: 'inv = <|"gold" -> 3|>; inv[["silver"]] = 10; inv[["gold"]] = inv[["gold"]] + 1; inv' }] },
     { cells: [{ type: 'code',    source: 'Cases[<|"a" -> 1, "b" -> 2, "c" -> 3|>, x_ /; x > 1]' }] },

@@ -18,7 +18,7 @@ grouping and lookup.
 | **Transform** | `Map`, `Select`, `KeySelect`, `KeyTake`, `KeyDrop`, `DeleteMissing` |
 | **Aggregate** | `Total`, `Min`, `Max`, `Mean`, `Counts`, `CountsBy`, `GroupBy` (+reducer, `key->val`), `GatherBy`, `Merge`, `PositionIndex` |
 | **Order / rank** | `Sort`, `SortBy` (multi-key), `ReverseSort`, `ReverseSortBy`, `KeySort`, `KeySortBy`, `MaximalBy`, `MinimalBy`, `TakeLargest`(`By`), `TakeSmallest`(`By`), `Reverse` |
-| **Iterate / reduce** | `Fold`, `FoldList`, `Scan`, `Cases`, `Count`, `DeleteCases`, `Position`, `SelectFirst`, `FirstCase`, `AllTrue`, `AnyTrue`, `NoneTrue` |
+| **Iterate / reduce** | `Table`/`Do`/`Sum`/`Product` (`{v, assoc}`), `Fold`, `FoldList`, `Scan`, `Cases`, `Count`, `DeleteCases`, `Position`, `SelectFirst`, `FirstCase`, `AllTrue`, `AnyTrue`, `NoneTrue` |
 | **Structural** | `First`, `Last`, `Rest`, `Most`, `Take`, `Drop`, `Length` |
 | **Patterns** | `KeyValuePattern` (destructure/match, incl. in function definitions) |
 
@@ -400,6 +400,18 @@ Builds `<|k1 -> f[k1], k2 -> f[k2], ...|>` from a list of keys.
 ```mathematica
 In[1]:= AssociationMap[#^2 &, {1, 2, 3, 4}]
 Out[1]= <|1 -> 1, 2 -> 4, 3 -> 9, 4 -> 16|>
+```
+
+## Iterating an association
+Iterator-driven builtins (`Table`, `Do`, `Sum`, `Product`) walk an association's
+**values** when given `{var, assoc}`.
+
+```mathematica
+In[1]:= Table[v^2, {v, <|"a" -> 2, "b" -> 3|>}]
+Out[1]= {4, 9}
+
+In[2]:= Sum[v, {v, <|"a" -> 10, "b" -> 20|>}]
+Out[2]= 30
 ```
 
 ## Design notes: value threading
