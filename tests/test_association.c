@@ -609,6 +609,48 @@ void test_deletemissing_noop() {
     assert_eval_eq("DeleteMissing[{1, 2, 3}]", "{1, 2, 3}", 0);
 }
 
+/* ---------- Integration: multi-builtin pipelines ---------- */
+
+void test_pipeline_counts_takelargest() {
+    /* word frequency -> top 2 */
+    assert_eval_eq("TakeLargest[Counts[{a, b, a, c, a, b}], 2]",
+                   "<|a -> 3, b -> 2|>", 0);
+}
+
+void test_pipeline_select_keys() {
+    assert_eval_eq("Keys[Select[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>, # > 1 &]]",
+                   "{\"b\", \"c\"}", 0);
+}
+
+void test_pipeline_map_total() {
+    assert_eval_eq("Total[Map[#^2 &, <|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>]]", "14", 0);
+}
+
+void test_pipeline_merge_counts() {
+    assert_eval_eq("Merge[{Counts[{a, b}], Counts[{b, c}]}, Total]",
+                   "<|a -> 1, b -> 2, c -> 1|>", 0);
+}
+
+void test_pipeline_groupby_reduce_rank() {
+    /* group transactions by key, sum amounts, rank descending */
+    assert_eval_eq("ReverseSort[GroupBy[{{\"x\", 1}, {\"y\", 2}, {\"x\", 3}}, First, Total[#[[All, 2]]] &]]",
+                   "<|\"x\" -> 4, \"y\" -> 2|>", 0);
+}
+
+void test_pipeline_lookup_deletemissing_total() {
+    assert_eval_eq("Total[DeleteMissing[Lookup[<|\"a\" -> 10, \"b\" -> 20|>, {\"a\", \"z\", \"b\"}]]]",
+                   "30", 0);
+}
+
+/* ---------- Edge cases: empty-collection reductions match list behaviour ---------- */
+
+void test_edge_empty_map_sort_keysort() {
+    assert_eval_eq("Map[f, <||>]", "<||>", 0);
+    assert_eval_eq("KeySort[<||>]", "<||>", 0);
+    assert_eval_eq("GroupBy[{}, EvenQ]", "<||>", 0);
+    assert_eval_eq("Merge[{}, Total]", "<||>", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -751,6 +793,14 @@ int main() {
     TEST(test_deletemissing_lookup_result);
     TEST(test_deletemissing_association);
     TEST(test_deletemissing_noop);
+
+    TEST(test_pipeline_counts_takelargest);
+    TEST(test_pipeline_select_keys);
+    TEST(test_pipeline_map_total);
+    TEST(test_pipeline_merge_counts);
+    TEST(test_pipeline_groupby_reduce_rank);
+    TEST(test_pipeline_lookup_deletemissing_total);
+    TEST(test_edge_empty_map_sort_keysort);
 
     printf("All Association tests passed.\n");
     return 0;

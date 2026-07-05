@@ -347,3 +347,24 @@ Builds `<|k1 -> f[k1], k2 -> f[k2], ...|>` from a list of keys.
 In[1]:= AssociationMap[#^2 &, {1, 2, 3, 4}]
 Out[1]= <|1 -> 1, 2 -> 4, 3 -> 9, 4 -> 16|>
 ```
+
+## Design notes: value threading
+
+A unifying principle runs through the association operations above: **functions
+that consume or reduce a collection operate on an association's values, keeping
+keys aligned**, matching the Wolfram Language.
+
+- Element-wise (`Map`, `Select`) return an association: `Map[f, <|k -> v|>]` is `<|k -> f[v]|>`.
+- Reductions (`Total`, `Min`, `Max`, `Mean`) return a scalar over the values — and are
+  defined to be exactly the list reduction over `Values[assoc]`, so empty-collection and
+  edge behaviour is identical to the list case (`Total[<||>]` behaves as `Total[{}]`).
+- Ordering (`Sort`, `SortBy`, `ReverseSort`, `MaximalBy`, `TakeLargest`) reorders/selects
+  entries by value, keeping the entries intact.
+- Pattern/predicate ops (`Cases`, `Count`, `DeleteCases`, `MemberQ`, `AllTrue`, `SelectFirst`,
+  `FirstCase`) test the values; `Cases`/`SelectFirst`/`FirstCase` return the matching values,
+  while `DeleteCases`/`Select` return the surviving entries as an association.
+
+Because these all thread through a single shared helper (`assoc_apply_over_values`)
+or the same key-preserving rebuild, they compose predictably into pipelines —
+e.g. `ReverseSort[GroupBy[txns, First, Total[#[[All, 2]]] &]]` groups, reduces
+and ranks in one expression (see [`../../../examples/association-showcase.md`](../../../examples/association-showcase.md)).
