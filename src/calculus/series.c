@@ -3029,6 +3029,17 @@ Expr* builtin_normal(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
 
+    /* Normal[assoc] converts an association to its list of rules. */
+    if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
+        arg->data.function.head->data.symbol == SYM_Association) {
+        size_t n = arg->data.function.arg_count;
+        Expr** rules = malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t i = 0; i < n; i++) rules[i] = expr_copy(arg->data.function.args[i]);
+        Expr* list = expr_new_function(expr_new_symbol(SYM_List), rules, n);
+        free(rules);
+        return list;
+    }
+
     /* Drop the O-term from every SeriesData, including those nested inside the
      * Plus/Times wrappers produced by expansions at +-Infinity. The rebuilt
      * tree is re-evaluated by the evaluator, which recombines the factors. */

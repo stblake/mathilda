@@ -51,9 +51,10 @@ const _nb6 = makeCard('Linear Algebra',    2290,  50);
 // Cluster 3 — Special Topics (bottom center)
 const _nb7 = makeCard('Special Functions',  750,1650);
 const _nb8 = makeCard('Applied Math',      1430,1650);
+const _nb9 = makeCard('Associations',      2110,1650);
 
 export const canvasState = writable({
-  notebooks: [_nb1,_nb2,_nb3,_nb4,_nb5,_nb6,_nb7,_nb8] as CanvasNotebook[],
+  notebooks: [_nb1,_nb2,_nb3,_nb4,_nb5,_nb6,_nb7,_nb8,_nb9] as CanvasNotebook[],
   panX: 0,
   panY: 0,
   zoom:  1.0,
@@ -64,7 +65,7 @@ export const canvasState = writable({
 export function loadStartupContent() {
   const s = get(canvasState);
 
-  const [nb1,nb2,nb3,nb4,nb5,nb6,nb7,nb8] = s.notebooks;
+  const [nb1,nb2,nb3,nb4,nb5,nb6,nb7,nb8,nb9] = s.notebooks;
 
   // Cluster 1 — Calculus
   if (nb1) nb1.store.load([
@@ -174,6 +175,21 @@ export function loadStartupContent() {
     { cells: [{ type: 'section', source: 'Rational Functions' }] },
     { cells: [{ type: 'code',    source: 'Apart[1/(x^2 - 1)]' }] },
     { cells: [{ type: 'code',    source: 'Apart[(x^2+1)/((x-1)(x+2))]' }] },
+  ]);
+
+  if (nb9) nb9.store.load([
+    { cells: [{ type: 'section', source: 'Associations' }] },
+    { cells: [{ type: 'text',    source: 'Key-value data: <|key -> value, ...|>. Keys are unique and ordered.' }] },
+    { cells: [{ type: 'code',    source: 'data = <|"apples" -> 3, "pears" -> 5, "plums" -> 2|>' }] },
+    { cells: [{ type: 'code',    source: 'data[["pears"]]' }] },
+    { cells: [{ type: 'code',    source: 'Keys[data]' }] },
+    { cells: [{ type: 'code',    source: 'Values[data]' }] },
+    { cells: [{ type: 'code',    source: 'Lookup[data, "figs", 0]' }] },
+    { cells: [{ type: 'section', source: 'Aggregation' }] },
+    { cells: [{ type: 'text',    source: 'Counts, GroupBy and Merge are hash-backed — O(n) over large lists.' }] },
+    { cells: [{ type: 'code',    source: 'Counts[{1, 2, 2, 3, 3, 3, 1}]' }] },
+    { cells: [{ type: 'code',    source: 'GroupBy[Range[10], EvenQ]' }] },
+    { cells: [{ type: 'code',    source: 'Merge[{<|"a" -> 1|>, <|"a" -> 2, "b" -> 3|>}, Total]' }] },
   ]);
 }
 

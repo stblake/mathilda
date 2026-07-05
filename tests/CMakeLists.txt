@@ -150,6 +150,7 @@ set(COMMON_SRC
     ../src/symtab.c
     ../src/match.c
     ../src/part.c
+    ../src/assoc.c
     ../src/print.c
     ../src/plus.c
     ../src/times.c
@@ -620,6 +621,11 @@ target_include_directories(cond_tests PRIVATE ../src)
 add_executable(boolean_tests test_boolean.c ${COMMON_SRC})
 target_link_libraries(boolean_tests m)
 target_include_directories(boolean_tests PRIVATE ../src)
+
+add_executable(association_tests test_association.c ${COMMON_SRC})
+target_link_libraries(association_tests m)
+target_include_directories(association_tests PRIVATE ../src)
+add_test(NAME association_tests COMMAND association_tests)
 
 add_executable(patterns_tests test_patterns.c ${COMMON_SRC})
 target_link_libraries(patterns_tests m)
@@ -1911,6 +1917,7 @@ if(USE_ECM)
     add_dependencies(iter_tests build_ecm)
     add_dependencies(cond_tests build_ecm)
     add_dependencies(boolean_tests build_ecm)
+    add_dependencies(association_tests build_ecm)
     add_dependencies(patterns_tests build_ecm)
     add_dependencies(replace_tests build_ecm)
     add_dependencies(core_tests build_ecm)

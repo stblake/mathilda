@@ -22,6 +22,23 @@ static void print_standard(Expr* e, int parent_prec);
 static void print_series_data(Expr* e, int parent_prec);
 static void print_tex(Expr* e, int parent_prec);
 
+/* True when every argument of `e` is a two-argument Rule/RuleDelayed, i.e. a
+ * well-formed association that should print in <| ... |> form. An Association
+ * node with any non-rule argument (e.g. an unevaluated Association[x]) falls
+ * back to ordinary head[args] printing, matching Wolfram behaviour. */
+static bool assoc_prints_special(const Expr* e) {
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        const Expr* a = e->data.function.args[i];
+        if (!(a->type == EXPR_FUNCTION &&
+              a->data.function.head->type == EXPR_SYMBOL &&
+              (a->data.function.head->data.symbol == SYM_Rule ||
+               a->data.function.head->data.symbol == SYM_RuleDelayed) &&
+              a->data.function.arg_count == 2))
+            return false;
+    }
+    return true;
+}
+
 /* Returns a fresh expression holding -b, where b is a bigint node. The result
  * is normalised back to a machine int when it fits. Used by the Plus printers
  * to pull the sign of a negative bigint term onto the operator. */
@@ -630,6 +647,16 @@ static void print_standard(Expr* e, int parent_prec) {
                 print_standard(e->data.function.args[i], 0);
             }
             printf("}");
+        }
+        else if (head == SYM_Association && assoc_prints_special(e)) {
+            /* <|k1 -> v1, k2 -> v2|>. Each arg is a Rule[k,v] that
+             * print_standard already renders as "k -> v". */
+            printf("<|");
+            for (size_t i = 0; i < e->data.function.arg_count; i++) {
+                if (i > 0) printf(", ");
+                print_standard(e->data.function.args[i], 0);
+            }
+            printf("|>");
         }
         else if (head == SYM_Blank && e->data.function.arg_count <= 1) {
             printf("_");
@@ -1438,6 +1465,14 @@ static void print_tex(Expr* e, int parent_prec) {
                 print_tex(e->data.function.args[i], 0);
             }
             printf("\\}");
+        }
+        else if (head == SYM_Association && assoc_prints_special(e)) {
+            printf("\\left\\langle\\!\\left|");
+            for (size_t i = 0; i < argc; i++) {
+                if (i > 0) printf(",\\,");
+                print_tex(e->data.function.args[i], 0);
+            }
+            printf("\\right|\\!\\right\\rangle");
         }
         else if (head == SYM_Inequality && argc >= 3 && (argc & 1u) == 1) {
             for (size_t i = 0; i < argc; i++) {

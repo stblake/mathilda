@@ -44,6 +44,7 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | Special functions (`Gamma`, `Pochhammer`, `HypergeometricPFQ`, `Hypergeometric0F1`/`1F1`/`2F1`, ...) | [`builtins/special-functions.md`](docs/spec/builtins/special-functions.md) |
 | Numerical calculus (`ND`, `NIntegrate`, `NSum`, `NProduct`, `NLimit`, `NSeries`, `NResidue`) | [`builtins/numerical-calculus.md`](docs/spec/builtins/numerical-calculus.md) |
 | Lists and iteration (`Table`, `Range`, `Map`, `Do`, ...) | [`builtins/lists-and-iteration.md`](docs/spec/builtins/lists-and-iteration.md) |
+| Data structures (`Association`/`<\|...\|>`, `Keys`, `Values`, `Lookup`, `Counts`, `GroupBy`, `Merge`, ...) | [`builtins/data-structures.md`](docs/spec/builtins/data-structures.md) |
 | Functional programming (`Function`, `Apply`, `Select`, ...) | [`builtins/functional-programming.md`](docs/spec/builtins/functional-programming.md) |
 | Control flow (`If`, `Which`, `Switch`, `For`, `While`) | [`builtins/control-flow.md`](docs/spec/builtins/control-flow.md) |
 | Assignment and rules (`Set`, `SetDelayed`, `Rule`, `RuleDelayed`) | [`builtins/assignment-and-rules.md`](docs/spec/builtins/assignment-and-rules.md) |

@@ -3,6 +3,7 @@
 #include "eval.h"
 #include "symtab.h"
 #include "sym_names.h"
+#include "assoc.h"
 
 static bool is_atomic(Expr* e);
 
@@ -192,6 +193,52 @@ Expr* expr_part(Expr* expr, Expr** indices, size_t nindices) {
     Expr* idx = indices[0];
     Expr** rest = indices + 1;
     size_t nrest = nindices - 1;
+
+    /* Association indexing: assoc[[Key[k]]] / assoc[["strkey"]] look a key up
+     * by value; assoc[[i]] with a positive/negative integer is positional
+     * over the values (Wolfram semantics). A missing key yields
+     * Missing["KeyAbsent", key]. */
+    if (is_association(expr)) {
+        size_t na = expr->data.function.arg_count;
+        Expr* lookup_key = NULL;   /* borrowed */
+        bool positional = false;
+        int64_t pos = 0;
+
+        if (idx->type == EXPR_FUNCTION &&
+            idx->data.function.head->data.symbol == SYM_Key &&
+            idx->data.function.arg_count == 1) {
+            lookup_key = idx->data.function.args[0];
+        } else if (idx->type == EXPR_INTEGER) {
+            positional = true;
+            pos = idx->data.integer;
+        } else {
+            lookup_key = idx;  /* strings and other literal keys */
+        }
+
+        if (positional) {
+            if (pos == 0) {
+                /* assoc[[0]] gives the head Association (as for any expression);
+                 * an integer *key* must be requested with Key[k]. */
+                Expr* head = expr_head(expr);
+                if (!head) return NULL;
+                Expr* result = expr_part(head, rest, nrest);
+                expr_free(head);
+                return result;
+            }
+            if (pos < 0) pos = (int64_t)na + pos + 1;
+            if (pos < 1 || pos > (int64_t)na) return NULL;
+            Expr* rule = expr->data.function.args[pos - 1];
+            return expr_part(rule->data.function.args[1], rest, nrest);
+        }
+        for (size_t i = 0; i < na; i++) {
+            Expr* rule = expr->data.function.args[i];
+            if (expr_eq(rule->data.function.args[0], lookup_key))
+                return expr_part(rule->data.function.args[1], rest, nrest);
+        }
+        /* Key absent. */
+        Expr* margs[2] = { expr_new_string("KeyAbsent"), expr_copy(lookup_key) };
+        return expr_new_function(expr_new_symbol(SYM_Missing), margs, 2);
+    }
 
     // Handle integer index
     if (idx->type == EXPR_INTEGER) {

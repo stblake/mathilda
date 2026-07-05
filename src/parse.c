@@ -631,6 +631,51 @@ static Expr* parse_list(ParserState* s) {
     return list;
 }
 
+/* Parses associations: <|a -> 1, b -> 2|>  ->  Association[Rule[a,1], Rule[b,2]].
+ * Each entry is parsed as an ordinary expression; because `->`/`:>` are normal
+ * operators (precedence 120) the `k -> v` shape becomes a Rule automatically.
+ * The `<|` and `|>` delimiters are recognised as OP_NONE by get_operator, so
+ * value parsing halts exactly at `|>`. Semantic validation (entries must be
+ * rules, duplicate-key collapse) is left to builtin_association. */
+static Expr* parse_association(ParserState* s) {
+    s->pos += 2;  // Skip '<|'
+    size_t cap = 16;
+    Expr** entries = malloc(cap * sizeof(Expr*));
+    size_t count = 0;
+
+    skip_whitespace(s);
+    while (*s->pos && strncmp(s->pos, "|>", 2) != 0) {
+        if (*s->pos == ',') s->pos++;
+        skip_whitespace(s);
+        if (strncmp(s->pos, "|>", 2) == 0) break;  /* tolerate trailing comma */
+
+        Expr* entry = parse_expression_state(s);
+        if (!entry) {
+            while (count--) expr_free(entries[count]);
+            free(entries);
+            return NULL;
+        }
+        if (count >= cap) {
+            cap *= 2;
+            entries = realloc(entries, cap * sizeof(Expr*));
+        }
+        entries[count++] = entry;
+        skip_whitespace(s);
+    }
+
+    if (strncmp(s->pos, "|>", 2) != 0) {
+        fprintf(stderr, "Expected '|>' to close association\n");
+        while (count--) expr_free(entries[count]);
+        free(entries);
+        return NULL;
+    }
+    s->pos += 2;  // Skip '|>'
+
+    Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association), entries, count);
+    free(entries);
+    return assoc;
+}
+
 // Parses functions: f[x,y]
 static Expr* parse_function(ParserState* s, Expr* head) {
     s->pos++;  // Skip '['
@@ -750,7 +795,13 @@ typedef struct {
 
 static OperatorDef get_operator(const char* pos) {
     OperatorDef def = {OP_NONE, -1, 0, NULL, 0};
-    
+
+    /* Association delimiters `<|` and `|>` are never operators: they are
+     * handled structurally by parse_association. Returning OP_NONE here stops
+     * the Pratt binary loop cleanly at a `|>` (rather than lexing `|` as
+     * Alternatives / `>` as Greater) and prevents `<|` being read as Less. */
+    if (strncmp(pos, "<|", 2) == 0 || strncmp(pos, "|>", 2) == 0) return def;
+
     if (strncmp(pos, ">>>", 3) == 0) {
         /* PutAppend (expr >>> file). Lower than Set (40) so `a = 5 >>> "f"`
          * parses as Set[a, PutAppend[5, "f"]] — matches Mathematica. */
@@ -1043,7 +1094,8 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
      * prefix and is also left alone. */
     if (*s->pos == ']' || *s->pos == '}' || *s->pos == ')' || *s->pos == ',' ||
         *s->pos == '*' || *s->pos == '/' || *s->pos == '^' || *s->pos == '=' ||
-        *s->pos == '<' || *s->pos == '>' || *s->pos == '|' || *s->pos == '&' ||
+        (*s->pos == '<' && s->pos[1] != '|') || /* '<|' begins an association */
+        *s->pos == '>' || *s->pos == '|' || *s->pos == '&' ||
         *s->pos == ':' || *s->pos == '@' ||
         (*s->pos == ';' && s->pos[1] != ';')) return NULL;
 
@@ -1058,7 +1110,11 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         return left; // ?symbol is top-level only usually
     }
 
-    if (strncmp(s->pos, ";;", 2) == 0) {
+    if (strncmp(s->pos, "<|", 2) == 0) {
+        /* Association literal. Assigning to `left` (rather than returning)
+         * lets postfix forms like <|...|>[[key]] and <|...|>[args] parse. */
+        left = parse_association(s);
+    } else if (strncmp(s->pos, ";;", 2) == 0) {
         left = expr_new_integer(1);
     } else if (strncmp(s->pos, "++", 2) == 0) {
         s->pos += 2;

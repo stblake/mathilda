@@ -416,6 +416,34 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
         return;
     }
 
+    /* ---- Association[k->v, ...] → ⟨| k → v, ... |⟩ ---- */
+    if (hname == SYM_Association) {
+        bool all_rules = true;
+        for (size_t i = 0; i < argc; i++) {
+            const Expr* r = args[i];
+            if (!((head_is(r, SYM_Rule) || head_is(r, SYM_RuleDelayed)) &&
+                  r->data.function.arg_count == 2)) { all_rules = false; break; }
+        }
+      if (all_rules) {
+        lb_cat(b, "\\left\\langle\\!\\left|\\, ");
+        for (size_t i = 0; i < argc; i++) {
+            if (i) lb_cat(b, ",\\; ");
+            const Expr* rule = args[i];
+            if ((head_is(rule, SYM_Rule) || head_is(rule, SYM_RuleDelayed)) &&
+                rule->data.function.arg_count == 2) {
+                to_latex_prec(b, rule->data.function.args[0], PREC_ATOM);
+                lb_cat(b, " \\to ");
+                to_latex_prec(b, rule->data.function.args[1], PREC_ADD);
+            } else {
+                to_latex_prec(b, rule, PREC_ADD);
+            }
+        }
+        lb_cat(b, "\\, \\right|\\!\\right\\rangle");
+        return;
+      }
+      /* else fall through to generic head[args] printing below */
+    }
+
     /* ---- Factorial[n] → n! ---- */
     if (hname == SYM_Factorial && argc == 1) {
         to_latex_maybe_paren(b, args[0], PREC_POW);

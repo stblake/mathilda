@@ -44,6 +44,7 @@
 #include "comparisons.h"
 #include "boolean.h"
 #include "list.h"
+#include "assoc.h"
 #include "replace.h"
 #include "patterns.h"
 #include "cond.h"
@@ -538,6 +539,7 @@ void core_init(void) {
     comparisons_init();
     boolean_init();
     list_init();
+    assoc_init();
     replace_init();
     patterns_init();
     cond_init();
