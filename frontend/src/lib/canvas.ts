@@ -206,6 +206,7 @@ export function loadStartupContent() {
     { cells: [{ type: 'code',    source: 'AllTrue[<|"a" -> 2, "b" -> 4, "c" -> 6|>, EvenQ]' }] },
     { cells: [{ type: 'code',    source: 'SortBy[<|"a" -> 3, "b" -> 1, "c" -> 2|>, Identity]' }] },
     { cells: [{ type: 'code',    source: 'MaximalBy[<|"a" -> 1, "b" -> 3, "c" -> 3|>, Identity]' }] },
+    { cells: [{ type: 'code',    source: 'TakeLargest[<|"a" -> 3, "b" -> 9, "c" -> 1, "d" -> 6|>, 2]' }] },
   ]);
 }
 

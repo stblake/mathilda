@@ -457,6 +457,30 @@ void core_init(void) {
         "MinimalBy[list, f]\n\tGives the element(s) of list for which f is minimal\n"
         "\t(all ties, in order). Over an association, gives the entries whose\n"
         "\tvalue minimises f. MinimalBy[f] is the operator form.");
+    symtab_add_builtin("TakeLargest", builtin_take_largest);
+    symtab_get_def("TakeLargest")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("TakeLargest",
+        "TakeLargest[list, n]\n\tGives the n largest elements of list, in\n"
+        "\tdescending order. Over an association, gives the n entries with the\n"
+        "\tlargest values (as an association).");
+    symtab_add_builtin("TakeSmallest", builtin_take_smallest);
+    symtab_get_def("TakeSmallest")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("TakeSmallest",
+        "TakeSmallest[list, n]\n\tGives the n smallest elements of list, in\n"
+        "\tascending order. Over an association, gives the n entries with the\n"
+        "\tsmallest values (as an association).");
+    symtab_add_builtin("TakeLargestBy", builtin_take_largest_by);
+    symtab_get_def("TakeLargestBy")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("TakeLargestBy",
+        "TakeLargestBy[list, f, n]\n\tGives the n elements of list for which f is\n"
+        "\tlargest, in descending order of f. Over an association, ranks by f of\n"
+        "\teach value.");
+    symtab_add_builtin("TakeSmallestBy", builtin_take_smallest_by);
+    symtab_get_def("TakeSmallestBy")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("TakeSmallestBy",
+        "TakeSmallestBy[list, f, n]\n\tGives the n elements of list for which f is\n"
+        "\tsmallest, in ascending order of f. Over an association, ranks by f of\n"
+        "\teach value.");
     symtab_add_builtin("OrderedQ", builtin_orderedq);
     symtab_get_def("OrderedQ")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("PolynomialQ", builtin_polynomialq);

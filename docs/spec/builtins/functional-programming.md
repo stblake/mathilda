@@ -803,3 +803,22 @@ Out[1]= {-5, -5}
 In[2]:= MinimalBy[<|"a" -> 1, "b" -> 3, "c" -> 2|>, Identity]
 Out[2]= <|"a" -> 1|>
 ```
+
+## TakeLargest, TakeSmallest, TakeLargestBy, TakeSmallestBy
+Take the ranked extreme elements.
+- `TakeLargest[list, n]`: the `n` largest elements, in descending order.
+- `TakeSmallest[list, n]`: the `n` smallest, in ascending order.
+- `TakeLargestBy[list, f, n]` / `TakeSmallestBy[list, f, n]`: rank by `f[element]`.
+- Over an association these rank by value (or `f[value]`), returning an association.
+- If `n` exceeds the length, all elements are returned (still ranked).
+
+```mathematica
+In[1]:= TakeLargest[{3, 1, 4, 1, 5, 9, 2, 6}, 3]
+Out[1]= {9, 6, 5}
+
+In[2]:= TakeLargest[<|"a" -> 3, "b" -> 9, "c" -> 1, "d" -> 6|>, 2]
+Out[2]= <|"b" -> 9, "d" -> 6|>
+
+In[3]:= TakeLargestBy[{-9, 2, -3, 5}, Abs, 2]
+Out[3]= {-9, 5}
+```

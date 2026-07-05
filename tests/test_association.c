@@ -474,6 +474,39 @@ void test_maximalby_operator_form() {
     assert_eval_eq("MaximalBy[Abs][{1, -5, 3}]", "{-5}", 0);
 }
 
+/* ---------- TakeLargest / TakeSmallest (+By), lists and associations ---------- */
+
+void test_takelargest_list() {
+    assert_eval_eq("TakeLargest[{3, 1, 4, 1, 5, 9, 2, 6}, 3]", "{9, 6, 5}", 0);
+}
+
+void test_takesmallest_list() {
+    assert_eval_eq("TakeSmallest[{3, 1, 4, 1, 5, 9, 2, 6}, 3]", "{1, 1, 2}", 0);
+}
+
+void test_takelargest_association() {
+    assert_eval_eq("TakeLargest[<|\"a\" -> 3, \"b\" -> 9, \"c\" -> 1, \"d\" -> 6|>, 2]",
+                   "<|\"b\" -> 9, \"d\" -> 6|>", 0);
+}
+
+void test_takesmallest_association() {
+    assert_eval_eq("TakeSmallest[<|\"a\" -> 3, \"b\" -> 9, \"c\" -> 1|>, 1]",
+                   "<|\"c\" -> 1|>", 0);
+}
+
+void test_takelargestby_list() {
+    assert_eval_eq("TakeLargestBy[{-9, 2, -3, 5}, Abs, 2]", "{-9, 5}", 0);
+}
+
+void test_takelargestby_association() {
+    assert_eval_eq("TakeLargestBy[<|\"a\" -> {1}, \"b\" -> {9}, \"c\" -> {4}|>, First, 2]",
+                   "<|\"b\" -> {9}, \"c\" -> {4}|>", 0);
+}
+
+void test_takelargest_more_than_length() {
+    assert_eval_eq("TakeLargest[{1, 2}, 5]", "{2, 1}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -583,6 +616,14 @@ int main() {
     TEST(test_maximalby_association);
     TEST(test_minimalby_association);
     TEST(test_maximalby_operator_form);
+
+    TEST(test_takelargest_list);
+    TEST(test_takesmallest_list);
+    TEST(test_takelargest_association);
+    TEST(test_takesmallest_association);
+    TEST(test_takelargestby_list);
+    TEST(test_takelargestby_association);
+    TEST(test_takelargest_more_than_length);
 
     printf("All Association tests passed.\n");
     return 0;

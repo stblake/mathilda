@@ -196,6 +196,16 @@ In[3]:= DeleteCases[<|"a" -> 1, "b" -> 2, "c" -> 3|>, x_ /; x > 1]
 Out[3]= <|"a" -> 1|>
 ```
 
+## Top-N by value (TakeLargest, TakeSmallest)
+`TakeLargest[assoc, n]` / `TakeSmallest[assoc, n]` return the `n` entries with
+the largest / smallest values (as an association, ranked). `TakeLargestBy` /
+`TakeSmallestBy` rank by `f` of each value.
+
+```mathematica
+In[1]:= TakeLargest[<|"a" -> 3, "b" -> 9, "c" -> 1, "d" -> 6|>, 2]
+Out[1]= <|"b" -> 9, "d" -> 6|>
+```
+
 ## Extremes by value (MaximalBy, MinimalBy)
 `MaximalBy[assoc, f]` / `MinimalBy[assoc, f]` return the entries whose value
 maximises / minimises `f` (all ties), as an association.

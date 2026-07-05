@@ -514,6 +514,81 @@ static Expr* maximal_minimal_by(Expr* res, int mode) {
 Expr* builtin_maximal_by(Expr* res) { return maximal_minimal_by(res, 0); }
 Expr* builtin_minimal_by(Expr* res) { return maximal_minimal_by(res, 1); }
 
+/* ------------------- TakeLargest / TakeSmallest (+By) ------------------- */
+
+/* Take the `nreq` extreme elements of `coll` ranked by a key.
+ *   largest = true  -> the largest, returned in descending order
+ *   largest = false -> the smallest, returned in ascending order
+ * The key is `f[subject]` when f != NULL, else `subject` itself, where
+ * `subject` is each list element, or each value for an association. For an
+ * association the result is an association of the corresponding entries. */
+static Expr* take_extreme(Expr* coll, Expr* f, int64_t nreq, bool largest) {
+    if (coll->type != EXPR_FUNCTION || nreq < 0) return NULL;
+    bool assoc = is_association(coll);
+    size_t n = coll->data.function.arg_count;
+
+    SortByPair* pairs = malloc(sizeof(SortByPair) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        Expr* elem = coll->data.function.args[i];
+        Expr* subject = elem;
+        if (assoc && elem->type == EXPR_FUNCTION && elem->data.function.arg_count == 2)
+            subject = elem->data.function.args[1];
+        pairs[i].payload = expr_copy(elem);
+        if (f) {
+            Expr* call_args[1] = { expr_copy(subject) };
+            Expr* call = expr_new_function(expr_copy(f), call_args, 1);
+            pairs[i].key = evaluate(call);
+            expr_free(call);
+        } else {
+            pairs[i].key = expr_copy(subject);
+        }
+    }
+
+    qsort(pairs, n, sizeof(SortByPair), sortby_pair_cmp);  /* ascending by key */
+
+    size_t k = ((int64_t)n < nreq) ? n : (size_t)nreq;
+    Expr** out = malloc(sizeof(Expr*) * (k ? k : 1));
+    for (size_t j = 0; j < k; j++) {
+        /* largest: walk from the top (descending); smallest: from the bottom. */
+        size_t src = largest ? (n - 1 - j) : j;
+        out[j] = expr_copy(pairs[src].payload);
+    }
+    for (size_t i = 0; i < n; i++) { expr_free(pairs[i].payload); expr_free(pairs[i].key); }
+    free(pairs);
+
+    Expr* result = expr_new_function(expr_copy(coll->data.function.head), out, k);
+    free(out);
+    return result;
+}
+
+Expr* builtin_take_largest(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* nexpr = res->data.function.args[1];
+    if (nexpr->type != EXPR_INTEGER) return NULL;
+    return take_extreme(res->data.function.args[0], NULL, nexpr->data.integer, true);
+}
+
+Expr* builtin_take_smallest(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* nexpr = res->data.function.args[1];
+    if (nexpr->type != EXPR_INTEGER) return NULL;
+    return take_extreme(res->data.function.args[0], NULL, nexpr->data.integer, false);
+}
+
+Expr* builtin_take_largest_by(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    Expr* nexpr = res->data.function.args[2];
+    if (nexpr->type != EXPR_INTEGER) return NULL;
+    return take_extreme(res->data.function.args[0], res->data.function.args[1], nexpr->data.integer, true);
+}
+
+Expr* builtin_take_smallest_by(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    Expr* nexpr = res->data.function.args[2];
+    if (nexpr->type != EXPR_INTEGER) return NULL;
+    return take_extreme(res->data.function.args[0], res->data.function.args[1], nexpr->data.integer, false);
+}
+
 Expr* builtin_orderedq(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) {
         return NULL;
