@@ -186,6 +186,7 @@ export function loadStartupContent() {
     { cells: [{ type: 'code',    source: 'nested = <|"r1" -> <|"x" -> 1, "y" -> 2|>|>; nested["r1", "y"]' }] },
     { cells: [{ type: 'code',    source: 'Keys[data]' }] },
     { cells: [{ type: 'code',    source: 'Values[data]' }] },
+    { cells: [{ type: 'code',    source: 'First[data]' }] },
     { cells: [{ type: 'code',    source: 'Lookup[data, "figs", 0]' }] },
     { cells: [{ type: 'section', source: 'Aggregation' }] },
     { cells: [{ type: 'text',    source: 'Counts, GroupBy and Merge are hash-backed — O(n) over large lists.' }] },

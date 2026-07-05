@@ -547,18 +547,29 @@ Expr* builtin_extract(Expr* res) {
         return extract_single(expr, pos, h);
     }
 }
+/* For an association entry (a Rule[k,v]), the "element" First/Last yields is the
+ * value v, not the whole rule -- matching Wolfram. Returns the entry unchanged
+ * for non-associations. */
+static Expr* first_last_element(Expr* container, Expr* entry) {
+    if (is_association(container) && entry->type == EXPR_FUNCTION &&
+        entry->data.function.arg_count == 2) {
+        return entry->data.function.args[1];
+    }
+    return entry;
+}
+
 Expr* builtin_first(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
     if (is_atomic(arg) || arg->data.function.arg_count < 1) return NULL;
-    return expr_copy(arg->data.function.args[0]);
+    return expr_copy(first_last_element(arg, arg->data.function.args[0]));
 }
 
 Expr* builtin_last(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
     if (is_atomic(arg) || arg->data.function.arg_count < 1) return NULL;
-    return expr_copy(arg->data.function.args[arg->data.function.arg_count - 1]);
+    return expr_copy(first_last_element(arg, arg->data.function.args[arg->data.function.arg_count - 1]));
 }
 
 Expr* builtin_most(Expr* res) {

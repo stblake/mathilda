@@ -420,3 +420,19 @@ destructured directly in a rule's left-hand side:
 In[4]:= area[KeyValuePattern[{"w" -> w_, "h" -> h_}]] := w h; area[<|"w" -> 3, "h" -> 4|>]
 Out[4]= 12
 ```
+
+## First, Last, Rest, Most, Take, Drop
+Structural extractors follow Wolfram semantics on associations: `First`/`Last`
+give the first/last **value**, while `Rest`/`Most`/`Take`/`Drop` slice **entries**
+and return an association (order preserved).
+
+```mathematica
+In[1]:= First[<|"a" -> 10, "b" -> 20|>]
+Out[1]= 10
+
+In[2]:= Rest[<|"a" -> 10, "b" -> 20, "c" -> 30|>]
+Out[2]= <|"b" -> 20, "c" -> 30|>
+
+In[3]:= Take[<|"a" -> 1, "b" -> 2, "c" -> 3|>, 2]
+Out[3]= <|"a" -> 1, "b" -> 2|>
+```

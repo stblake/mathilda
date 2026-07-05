@@ -817,6 +817,36 @@ void test_scan_returns_null() {
     assert_eval_eq("Scan[Identity, <|\"a\" -> 1|>]", "Null", 0);
 }
 
+/* ---------- Structural extractors on associations ---------- */
+
+void test_first_value() {
+    assert_eval_eq("First[<|\"a\" -> 10, \"b\" -> 20|>]", "10", 0);
+}
+
+void test_last_value() {
+    assert_eval_eq("Last[<|\"a\" -> 10, \"b\" -> 20|>]", "20", 0);
+}
+
+void test_rest_entries() {
+    assert_eval_eq("Rest[<|\"a\" -> 10, \"b\" -> 20, \"c\" -> 30|>]",
+                   "<|\"b\" -> 20, \"c\" -> 30|>", 0);
+}
+
+void test_most_entries() {
+    assert_eval_eq("Most[<|\"a\" -> 10, \"b\" -> 20, \"c\" -> 30|>]",
+                   "<|\"a\" -> 10, \"b\" -> 20|>", 0);
+}
+
+void test_take_entries() {
+    assert_eval_eq("Take[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>, 2]",
+                   "<|\"a\" -> 1, \"b\" -> 2|>", 0);
+}
+
+void test_drop_entries() {
+    assert_eval_eq("Drop[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>, 1]",
+                   "<|\"b\" -> 2, \"c\" -> 3|>", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -1005,6 +1035,13 @@ int main() {
     TEST(test_foldlist_over_values);
     TEST(test_scan_over_values);
     TEST(test_scan_returns_null);
+
+    TEST(test_first_value);
+    TEST(test_last_value);
+    TEST(test_rest_entries);
+    TEST(test_most_entries);
+    TEST(test_take_entries);
+    TEST(test_drop_entries);
 
     printf("All Association tests passed.\n");
     return 0;
