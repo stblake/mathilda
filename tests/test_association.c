@@ -793,6 +793,30 @@ void test_except_downvalue() {
                    "{nonzero, qdv[0]}", 0);
 }
 
+/* ---------- Fold / FoldList / Scan over association values ---------- */
+
+void test_fold_over_values() {
+    assert_eval_eq("Fold[Plus, 0, <|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>]", "6", 0);
+}
+
+void test_fold_seed_from_values() {
+    assert_eval_eq("Fold[Plus, <|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>]", "6", 0);
+}
+
+void test_foldlist_over_values() {
+    assert_eval_eq("FoldList[Plus, 0, <|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>]",
+                   "{0, 1, 3, 6}", 0);
+}
+
+void test_scan_over_values() {
+    assert_eval_eq("(sc = 0; Scan[(sc = sc + #) &, <|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>]; sc)",
+                   "6", 0);
+}
+
+void test_scan_returns_null() {
+    assert_eval_eq("Scan[Identity, <|\"a\" -> 1|>]", "Null", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -975,6 +999,12 @@ int main() {
     TEST(test_kvp_downvalue_multikey);
     TEST(test_kvp_downvalue_no_match);
     TEST(test_except_downvalue);
+
+    TEST(test_fold_over_values);
+    TEST(test_fold_seed_from_values);
+    TEST(test_foldlist_over_values);
+    TEST(test_scan_over_values);
+    TEST(test_scan_returns_null);
 
     printf("All Association tests passed.\n");
     return 0;

@@ -421,6 +421,11 @@ void core_init(void) {
     symtab_add_builtin("Permutations", builtin_permutations);
     symtab_get_def("Permutations")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Select", builtin_select);
+    symtab_add_builtin("Scan", builtin_scan);
+    symtab_get_def("Scan")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Scan",
+        "Scan[f, expr]\n\tApplies f to each element of expr for its side effects\n"
+        "\tand returns Null. Over an association, applies f to each value.");
     symtab_add_builtin("SelectFirst", builtin_select_first);
     symtab_get_def("SelectFirst")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("SelectFirst",

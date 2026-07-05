@@ -464,6 +464,32 @@ Expr* builtin_select_first(Expr* res) {
     return expr_new_function(expr_new_symbol(SYM_Missing), margs, 1);
 }
 
+/* ------------------- Scan -------------------
+ *
+ * Scan[f, expr] applies f to each element of expr for its side effects and
+ * returns Null. Over an association it applies f to each value. */
+Expr* builtin_scan(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* f = res->data.function.args[0];
+    Expr* coll = res->data.function.args[1];
+    if (coll->type != EXPR_FUNCTION) return NULL;
+
+    bool assoc = is_association(coll);
+    size_t n = coll->data.function.arg_count;
+    for (size_t i = 0; i < n; i++) {
+        Expr* elem = coll->data.function.args[i];
+        /* Over an association, scan the values. */
+        if (assoc && elem->type == EXPR_FUNCTION && elem->data.function.arg_count == 2)
+            elem = elem->data.function.args[1];
+        Expr* call_args[1] = { expr_copy(elem) };
+        Expr* call = expr_new_function(expr_copy(f), call_args, 1);
+        Expr* r = evaluate(call);
+        expr_free(call);
+        if (r) expr_free(r);   /* result discarded; f is run for effect */
+    }
+    return expr_new_symbol(SYM_Null);
+}
+
 /* ------------------- AllTrue / AnyTrue / NoneTrue -------------------
  *
  * mode 0 = AllTrue  (True iff test[e] is True for every element)
@@ -1594,6 +1620,21 @@ static Expr* fold_impl(Expr* res, bool as_list) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc != 2 && argc != 3) return NULL;
+
+    /* Folding over an association folds over its values: rebuild the call with
+     * the association replaced by Values[assoc] and re-evaluate. */
+    size_t coll_idx = (argc == 3) ? 2 : 1;
+    if (is_association(res->data.function.args[coll_idx])) {
+        Expr** na = malloc(sizeof(Expr*) * argc);
+        for (size_t i = 0; i < argc; i++)
+            na[i] = (i == coll_idx) ? assoc_values_list(res->data.function.args[i])
+                                    : expr_copy(res->data.function.args[i]);
+        Expr* call = expr_new_function(expr_copy(res->data.function.head), na, argc);
+        free(na);
+        Expr* r = evaluate(call);
+        expr_free(call);
+        return r;
+    }
 
     Expr* f = res->data.function.args[0];
     Expr* seed_src;

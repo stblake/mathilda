@@ -857,3 +857,23 @@ Out[2]= 2
 In[3]:= SelectFirst[{1, 3, 5}, EvenQ, None]
 Out[3]= None
 ```
+
+## Scan
+`Scan[f, expr]` applies `f` to each element of `expr` for its side effects and
+returns `Null`. Over an association it applies `f` to each value.
+
+```mathematica
+In[1]:= s = 0; Scan[(s = s + #) &, <|"a" -> 1, "b" -> 2, "c" -> 3|>]; s
+Out[1]= 6
+```
+
+## Fold, FoldList over associations
+`Fold`/`FoldList` fold over an association's **values** (in key order).
+
+```mathematica
+In[1]:= Fold[Plus, 0, <|"a" -> 1, "b" -> 2, "c" -> 3|>]
+Out[1]= 6
+
+In[2]:= FoldList[Plus, 0, <|"a" -> 1, "b" -> 2, "c" -> 3|>]
+Out[2]= {0, 1, 3, 6}
+```
