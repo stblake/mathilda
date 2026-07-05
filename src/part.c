@@ -800,8 +800,43 @@ static Expr* delete_path(Expr* expr, Expr** path, size_t path_len) {
     if (path_len == 0) {
         return expr_new_function(expr_new_symbol(SYM_Sequence), NULL, 0);
     }
-    
+
     if (is_atomic(expr)) return expr_copy(expr);
+
+    /* Association: a non-integer index is a key (Key[k] or a literal key). Find
+     * the entry, then either drop it (last index) or recurse into its value. */
+    if (is_association(expr) && path[0]->type != EXPR_INTEGER) {
+        Expr* key = path[0];
+        if (path[0]->type == EXPR_FUNCTION && path[0]->data.function.head->type == EXPR_SYMBOL &&
+            path[0]->data.function.head->data.symbol == SYM_Key && path[0]->data.function.arg_count == 1)
+            key = path[0]->data.function.args[0];
+        size_t len = expr->data.function.arg_count;
+        int64_t t = -1;
+        for (size_t i = 0; i < len; i++) {
+            Expr* rule = expr->data.function.args[i];
+            if (rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2 &&
+                expr_eq(rule->data.function.args[0], key)) { t = (int64_t)i; break; }
+        }
+        if (t < 0) return expr_copy(expr);
+        if (path_len == 1) {
+            Expr** na = (len > 1) ? malloc(sizeof(Expr*) * (len - 1)) : NULL;
+            size_t j = 0;
+            for (size_t i = 0; i < len; i++)
+                if ((int64_t)i != t) na[j++] = expr_copy(expr->data.function.args[i]);
+            Expr* result = expr_new_function(expr_copy(expr->data.function.head), na, len - 1);
+            if (na) free(na);
+            return result;
+        }
+        Expr** na = malloc(sizeof(Expr*) * len);
+        for (size_t i = 0; i < len; i++) na[i] = expr_copy(expr->data.function.args[i]);
+        Expr* rule = na[t];
+        Expr* nv = delete_path(rule->data.function.args[1], path + 1, path_len - 1);
+        expr_free(rule->data.function.args[1]);
+        rule->data.function.args[1] = nv;
+        Expr* result = expr_new_function(expr_copy(expr->data.function.head), na, len);
+        free(na);
+        return result;
+    }
 
     int64_t n = 0;
     if (path[0]->type != EXPR_INTEGER) return expr_copy(expr);
@@ -881,12 +916,17 @@ static Expr* delete_path(Expr* expr, Expr** path, size_t path_len) {
 
 Expr* expr_delete(Expr* expr, Expr* pos) {
     if (!expr || !pos) return NULL;
-    
+
     // Case 3: List of positions
     if (pos->type == EXPR_FUNCTION && pos->data.function.head->data.symbol == SYM_List) {
-        bool all_lists = true;
+        /* Multiple-paths iff every element is itself a List (a sub-path).
+         * A non-List step such as Key[k] means `pos` is a single path, e.g.
+         * {Key["a"], Key["x"]} is one nested path, not two. */
+        bool all_lists = pos->data.function.arg_count > 0;
         for (size_t i = 0; i < pos->data.function.arg_count; i++) {
-            if (pos->data.function.args[i]->type != EXPR_FUNCTION) {
+            Expr* e = pos->data.function.args[i];
+            if (!(e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+                  e->data.function.head->data.symbol == SYM_List)) {
                 all_lists = false;
                 break;
             }

@@ -1031,6 +1031,28 @@ void test_mapat_position_composition() {
                    "<|\"a\" -> 1, \"b\" -> neg[9]|>", 0);
 }
 
+/* ---------- Delete by Key position on associations ---------- */
+
+void test_delete_key() {
+    assert_eval_eq("Delete[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>, {Key[\"b\"]}]",
+                   "<|\"a\" -> 1, \"c\" -> 3|>", 0);
+}
+
+void test_delete_keys_multiple() {
+    assert_eval_eq("Delete[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>, {{Key[\"a\"]}, {Key[\"c\"]}}]",
+                   "<|\"b\" -> 2|>", 0);
+}
+
+void test_delete_key_nested() {
+    assert_eval_eq("Delete[<|\"a\" -> <|\"x\" -> 5, \"y\" -> 6|>|>, {Key[\"a\"], Key[\"x\"]}]",
+                   "<|\"a\" -> <|\"y\" -> 6|>|>", 0);
+}
+
+void test_delete_key_absent() {
+    assert_eval_eq("Delete[<|\"a\" -> 1, \"b\" -> 2|>, {Key[\"z\"]}]",
+                   "<|\"a\" -> 1, \"b\" -> 2|>", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -1261,6 +1283,11 @@ int main() {
     TEST(test_mapat_positional);
     TEST(test_mapat_nested);
     TEST(test_mapat_position_composition);
+
+    TEST(test_delete_key);
+    TEST(test_delete_keys_multiple);
+    TEST(test_delete_key_nested);
+    TEST(test_delete_key_absent);
 
     TEST(test_capstone_pipeline);
     TEST(test_capstone_counts_top);

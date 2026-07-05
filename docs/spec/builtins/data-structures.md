@@ -277,6 +277,20 @@ In[1]:= DeleteMissing[Lookup[<|"a" -> 1, "b" -> 2|>, {"a", "z", "b"}]]
 Out[1]= {1, 2}
 ```
 
+## Delete
+`Delete[assoc, {Key[k]}]` removes an entry by key position; a nested position
+(`{Key[k1], Key[k2]}`) descends into inner associations, and a list of positions
+(`{{Key[k1]}, {Key[k2]}}`) removes several. (`KeyDrop` is the key-oriented
+equivalent.)
+
+```mathematica
+In[1]:= Delete[<|"a" -> 1, "b" -> 2, "c" -> 3|>, {Key["b"]}]
+Out[1]= <|"a" -> 1, "c" -> 3|>
+
+In[2]:= Delete[<|"a" -> <|"x" -> 5, "y" -> 6|>|>, {Key["a"], Key["x"]}]
+Out[2]= <|"a" -> <|"y" -> 6|>|>
+```
+
 ## MapAt
 `MapAt[f, assoc, key]` (or `Key[k]`, a positional index, or a nested position
 `{Key[k1], Key[k2]}`) applies `f` to the value at that position — composing with
