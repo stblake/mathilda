@@ -325,22 +325,23 @@ Expr* builtin_keyexistsq(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* assoc = res->data.function.args[0];
     Expr* key   = res->data.function.args[1];
-    if (!is_association(assoc)) return NULL;
+    if (!is_assoc_or_rule_list(assoc)) return NULL;
     return expr_new_symbol(assoc_scan(assoc, key) ? SYM_True : SYM_False);
 }
 
-/* KeyMemberQ[assoc, key] == KeyExistsQ; KeyFreeQ[assoc, key] is its complement. */
+/* KeyMemberQ[assoc, key] == KeyExistsQ; KeyFreeQ[assoc, key] is its complement.
+ * All three accept an association or a bare list of rules (like Lookup). */
 Expr* builtin_keymemberq(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* assoc = res->data.function.args[0];
-    if (!is_association(assoc)) return NULL;
+    if (!is_assoc_or_rule_list(assoc)) return NULL;
     return expr_new_symbol(assoc_scan(assoc, res->data.function.args[1]) ? SYM_True : SYM_False);
 }
 
 Expr* builtin_keyfreeq(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* assoc = res->data.function.args[0];
-    if (!is_association(assoc)) return NULL;
+    if (!is_assoc_or_rule_list(assoc)) return NULL;
     return expr_new_symbol(assoc_scan(assoc, res->data.function.args[1]) ? SYM_False : SYM_True);
 }
 

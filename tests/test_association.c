@@ -121,6 +121,13 @@ void test_keyfreeq() {
     assert_eval_eq("KeyFreeQ[<|\"a\" -> 1|>, \"z\"]", "True", 0);
 }
 
+void test_key_predicates_rule_list() {
+    /* KeyExistsQ/KeyMemberQ/KeyFreeQ accept a bare list of rules, like Lookup. */
+    assert_eval_eq("KeyExistsQ[{p -> 1, q -> 2}, q]", "True", 0);
+    assert_eval_eq("KeyMemberQ[{p -> 1}, p]", "True", 0);
+    assert_eval_eq("KeyFreeQ[{p -> 1, q -> 2}, r]", "True", 0);
+}
+
 void test_reverse_association() {
     assert_eval_eq("Reverse[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>]",
                    "<|\"c\" -> 3, \"b\" -> 2, \"a\" -> 1|>", 0);
@@ -1007,6 +1014,7 @@ int main() {
     TEST(test_keyexistsq);
     TEST(test_keymemberq);
     TEST(test_keyfreeq);
+    TEST(test_key_predicates_rule_list);
     TEST(test_reverse_association);
     TEST(test_associationq);
 

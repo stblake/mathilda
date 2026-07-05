@@ -99,7 +99,8 @@ Out[2]= 0
 
 ## KeyExistsQ, KeyMemberQ, KeyFreeQ
 `KeyExistsQ`/`KeyMemberQ` test whether a key is present; `KeyFreeQ` is the
-complement (True when the key is absent).
+complement (True when the key is absent). All three accept an association or a
+bare list of rules.
 
 ```mathematica
 In[1]:= KeyExistsQ[<|"a" -> 1|>, "a"]
