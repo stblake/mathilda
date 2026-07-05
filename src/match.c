@@ -302,6 +302,60 @@ static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch
         return match_internal(expr, pattern->data.function.args[0], env, parent);
     }
 
+    /* KeyValuePattern[{k1 -> p1, ...}] (or a single k -> p) matches an
+     * association — or a list of rules — that contains, for each required
+     * ki -> pi, an entry whose key matches ki and whose value matches pi.
+     * Requirements are matched greedily against the entries; bindings from
+     * matched keys/values persist. An empty spec matches any association.
+     * This is a new pattern head, so it cannot affect existing matching. */
+    if (pattern->type == EXPR_FUNCTION && pattern->data.function.head->type == EXPR_SYMBOL &&
+        pattern->data.function.head->data.symbol == SYM_KeyValuePattern &&
+        pattern->data.function.arg_count == 1) {
+        Expr* subj = expr;
+        bool subj_ok = subj->type == EXPR_FUNCTION && subj->data.function.head->type == EXPR_SYMBOL &&
+            (subj->data.function.head->data.symbol == SYM_Association ||
+             subj->data.function.head->data.symbol == SYM_List);
+        if (!subj_ok) return false;
+
+        Expr* spec = pattern->data.function.args[0];
+        Expr** reqs; size_t nreq;
+        if (spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL &&
+            spec->data.function.head->data.symbol == SYM_List) {
+            reqs = spec->data.function.args; nreq = spec->data.function.arg_count;
+        } else {
+            reqs = &spec; nreq = 1;   /* a single rule */
+        }
+
+        size_t saved = env->count;
+        for (size_t r = 0; r < nreq; r++) {
+            Expr* rule = reqs[r];
+            if (!(rule->type == EXPR_FUNCTION && rule->data.function.head->type == EXPR_SYMBOL &&
+                  (rule->data.function.head->data.symbol == SYM_Rule ||
+                   rule->data.function.head->data.symbol == SYM_RuleDelayed) &&
+                  rule->data.function.arg_count == 2)) {
+                env_rollback(env, saved); return false;
+            }
+            Expr* kpat = rule->data.function.args[0];
+            Expr* vpat = rule->data.function.args[1];
+            bool found = false;
+            for (size_t i = 0; i < subj->data.function.arg_count; i++) {
+                Expr* entry = subj->data.function.args[i];
+                if (!(entry->type == EXPR_FUNCTION && entry->data.function.head->type == EXPR_SYMBOL &&
+                      (entry->data.function.head->data.symbol == SYM_Rule ||
+                       entry->data.function.head->data.symbol == SYM_RuleDelayed) &&
+                      entry->data.function.arg_count == 2)) continue;
+                size_t es = env->count;
+                if (match_internal(entry->data.function.args[0], kpat, env, NULL) &&
+                    match_internal(entry->data.function.args[1], vpat, env, NULL)) {
+                    found = true; break;
+                }
+                env_rollback(env, es);
+            }
+            if (!found) { env_rollback(env, saved); return false; }
+        }
+        return call_parent(env, parent);
+    }
+
     // Handle Except
     if (pattern->type == EXPR_FUNCTION && pattern->data.function.head->type == EXPR_SYMBOL &&
         pattern->data.function.head->data.symbol == SYM_Except) {

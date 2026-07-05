@@ -217,6 +217,7 @@ const char* SYM_HoldComplete = NULL;
 const char* SYM_HoldFirst = NULL;
 const char* SYM_HoldForm = NULL;
 const char* SYM_HoldPattern = NULL;
+const char* SYM_KeyValuePattern = NULL;
 const char* SYM_HoldRest = NULL;
 const char* SYM_I = NULL;
 const char* SYM_Identity = NULL;
@@ -877,6 +878,7 @@ void sym_names_init(void) {
     SYM_HoldFirst                  = intern_symbol("HoldFirst");
     SYM_HoldForm                   = intern_symbol("HoldForm");
     SYM_HoldPattern                = intern_symbol("HoldPattern");
+    SYM_KeyValuePattern            = intern_symbol("KeyValuePattern");
     SYM_HoldRest                   = intern_symbol("HoldRest");
     SYM_I                          = intern_symbol("I");
     SYM_Identity                   = intern_symbol("Identity");

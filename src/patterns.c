@@ -725,6 +725,14 @@ void patterns_init(void) {
     symtab_get_def("DeleteCases")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("DeleteMissing", builtin_delete_missing);
     symtab_get_def("DeleteMissing")->attributes |= ATTR_PROTECTED;
+    /* KeyValuePattern is an inert pattern head (handled by the matcher, no
+     * builtin); mark it Protected and give it a docstring. */
+    symtab_get_def("KeyValuePattern")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("KeyValuePattern",
+        "KeyValuePattern[{k1 -> p1, ...}]\n\tA pattern matching an association (or\n"
+        "\tlist of rules) that contains keys matching k1, ... with values matching\n"
+        "\tp1, .... Value patterns may bind (e.g. KeyValuePattern[{\"a\" -> v_}]).\n"
+        "\tKeyValuePattern[k -> p] is the single-key form.");
     symtab_set_docstring("DeleteMissing",
         "DeleteMissing[expr]\n\tRemoves all Missing[...] elements (equivalent to\n"
         "\tDeleteCases[expr, _Missing]). Over an association, drops entries whose\n"

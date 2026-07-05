@@ -221,6 +221,7 @@ extern const char* SYM_HoldComplete;
 extern const char* SYM_HoldFirst;
 extern const char* SYM_HoldForm;
 extern const char* SYM_HoldPattern;
+extern const char* SYM_KeyValuePattern;
 extern const char* SYM_HoldRest;
 extern const char* SYM_I;
 extern const char* SYM_Identity;

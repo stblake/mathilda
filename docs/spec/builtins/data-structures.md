@@ -368,3 +368,32 @@ Because these all thread through a single shared helper (`assoc_apply_over_value
 or the same key-preserving rebuild, they compose predictably into pipelines —
 e.g. `ReverseSort[GroupBy[txns, First, Total[#[[All, 2]]] &]]` groups, reduces
 and ranks in one expression (see [`../../../examples/association-showcase.md`](../../../examples/association-showcase.md)).
+
+## Append, Prepend
+`Append`/`Prepend` extend an association with new entries (non-mutating siblings
+of `AssociateTo`); an existing key is updated in place, preserving order.
+
+```mathematica
+In[1]:= Append[<|"a" -> 1, "b" -> 2|>, "c" -> 3]
+Out[1]= <|"a" -> 1, "b" -> 2, "c" -> 3|>
+
+In[2]:= Append[<|"a" -> 1|>, "a" -> 99]
+Out[2]= <|"a" -> 99|>
+```
+
+## KeyValuePattern
+`KeyValuePattern[{k1 -> p1, ...}]` is a **pattern** that matches an association
+(or a list of rules) containing keys matching `k1, ...` with values matching
+`p1, ...`. Value patterns may bind, so associations can be destructured in rules
+and used to filter records.
+
+```mathematica
+In[1]:= MatchQ[<|"a" -> 1, "b" -> 2|>, KeyValuePattern[{"a" -> _}]]
+Out[1]= True
+
+In[2]:= Replace[<|"a" -> 5, "b" -> 2|>, KeyValuePattern[{"a" -> v_}] :> v]
+Out[2]= 5
+
+In[3]:= Cases[{<|"t" -> 1|>, <|"t" -> 2|>, <|"x" -> 3|>}, KeyValuePattern[{"t" -> _}]]
+Out[3]= {<|"t" -> 1|>, <|"t" -> 2|>}
+```

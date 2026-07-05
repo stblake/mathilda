@@ -651,6 +651,57 @@ void test_edge_empty_map_sort_keysort() {
     assert_eval_eq("Merge[{}, Total]", "<||>", 0);
 }
 
+/* ---------- Append / Prepend on associations ---------- */
+
+void test_append_association() {
+    assert_eval_eq("Append[<|\"a\" -> 1, \"b\" -> 2|>, \"c\" -> 3]",
+                   "<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>", 0);
+}
+
+void test_append_association_updates() {
+    assert_eval_eq("Append[<|\"a\" -> 1|>, \"a\" -> 99]", "<|\"a\" -> 99|>", 0);
+}
+
+void test_prepend_association() {
+    assert_eval_eq("Prepend[<|\"a\" -> 1|>, \"b\" -> 2]", "<|\"b\" -> 2, \"a\" -> 1|>", 0);
+}
+
+/* ---------- KeyValuePattern: destructuring associations in patterns ---------- */
+
+void test_kvp_key_present() {
+    assert_eval_eq("MatchQ[<|\"a\" -> 1, \"b\" -> 2|>, KeyValuePattern[{\"a\" -> _}]]", "True", 0);
+}
+
+void test_kvp_multiple_keys() {
+    assert_eval_eq("MatchQ[<|\"a\" -> 1, \"b\" -> 2|>, KeyValuePattern[{\"a\" -> _, \"b\" -> _}]]", "True", 0);
+}
+
+void test_kvp_absent_key() {
+    assert_eval_eq("MatchQ[<|\"a\" -> 1|>, KeyValuePattern[{\"z\" -> _}]]", "False", 0);
+}
+
+void test_kvp_value_constraint() {
+    assert_eval_eq("MatchQ[<|\"a\" -> 1, \"b\" -> 2|>, KeyValuePattern[{\"b\" -> 2}]]", "True", 0);
+    assert_eval_eq("MatchQ[<|\"a\" -> 1, \"b\" -> 2|>, KeyValuePattern[{\"b\" -> 3}]]", "False", 0);
+}
+
+void test_kvp_single_rule_form() {
+    assert_eval_eq("MatchQ[<|\"a\" -> 1|>, KeyValuePattern[\"a\" -> _Integer]]", "True", 0);
+}
+
+void test_kvp_binding_extraction() {
+    assert_eval_eq("Replace[<|\"a\" -> 5, \"b\" -> 2|>, KeyValuePattern[{\"a\" -> v_}] :> v]", "5", 0);
+}
+
+void test_kvp_on_list_of_rules() {
+    assert_eval_eq("MatchQ[{\"a\" -> 1, \"b\" -> 2}, KeyValuePattern[{\"a\" -> _}]]", "True", 0);
+}
+
+void test_kvp_cases_record_filter() {
+    assert_eval_eq("Cases[{<|\"t\" -> 1|>, <|\"t\" -> 2|>, <|\"x\" -> 3|>}, KeyValuePattern[{\"t\" -> _}]]",
+                   "{<|\"t\" -> 1|>, <|\"t\" -> 2|>}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -801,6 +852,18 @@ int main() {
     TEST(test_pipeline_groupby_reduce_rank);
     TEST(test_pipeline_lookup_deletemissing_total);
     TEST(test_edge_empty_map_sort_keysort);
+
+    TEST(test_append_association);
+    TEST(test_append_association_updates);
+    TEST(test_prepend_association);
+    TEST(test_kvp_key_present);
+    TEST(test_kvp_multiple_keys);
+    TEST(test_kvp_absent_key);
+    TEST(test_kvp_value_constraint);
+    TEST(test_kvp_single_rule_form);
+    TEST(test_kvp_binding_extraction);
+    TEST(test_kvp_on_list_of_rules);
+    TEST(test_kvp_cases_record_filter);
 
     printf("All Association tests passed.\n");
     return 0;
