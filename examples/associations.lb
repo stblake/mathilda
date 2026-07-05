@@ -34,9 +34,11 @@
         {"cells": [{"type": "code", "source": "GroupBy[{{\"x\", 1}, {\"y\", 2}, {\"x\", 3}}, First -> Last, Total]"}]},
         {"cells": [{"type": "code", "source": "Merge[{<|\"a\" -> 1|>, <|\"a\" -> 2, \"b\" -> 3|>}, Total]"}]},
         {"cells": [{"type": "section", "source": "Reducing over values"}]},
-        {"cells": [{"type": "text", "source": "Total, Mean, Min, Max, Fold and Scan act on an association's values."}]},
+        {"cells": [{"type": "text", "source": "Total, Mean, Median, Variance, Min, Max, Fold and Scan act on an association's values; Tally counts them."}]},
         {"cells": [{"type": "code", "source": "Total[<|\"a\" -> 3, \"b\" -> 1, \"c\" -> 2|>]"}]},
         {"cells": [{"type": "code", "source": "Mean[<|\"a\" -> 2, \"b\" -> 4, \"c\" -> 6|>]"}]},
+        {"cells": [{"type": "code", "source": "Median[<|\"a\" -> 1, \"b\" -> 3, \"c\" -> 5|>]"}]},
+        {"cells": [{"type": "code", "source": "Tally[<|\"a\" -> 1, \"b\" -> 1, \"c\" -> 2|>]"}]},
         {"cells": [{"type": "code", "source": "Fold[Plus, 0, <|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>]"}]},
         {"cells": [{"type": "code", "source": "PositionIndex[{a, b, a, c, a, b}]"}]}
       ]

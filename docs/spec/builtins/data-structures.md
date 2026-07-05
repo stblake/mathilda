@@ -240,6 +240,34 @@ In[1]:= Mean[<|"a" -> 2, "b" -> 4, "c" -> 6|>]
 Out[1]= 4
 ```
 
+## Median, Variance, StandardDeviation
+The rest of the descriptive-statistics family reduces over an association's
+values too, matching `Mean`.
+
+```mathematica
+In[1]:= Median[<|"a" -> 1, "b" -> 3, "c" -> 5|>]
+Out[1]= 3
+
+In[2]:= Variance[<|"a" -> 2, "b" -> 4, "c" -> 6|>]
+Out[2]= 4
+
+In[3]:= StandardDeviation[<|"a" -> 2, "b" -> 4, "c" -> 6|>]
+Out[3]= 2
+```
+
+## Tally, Commonest
+`Tally[assoc]` tallies the association's values as `{value, count}` pairs, and
+`Commonest[assoc]` returns the most frequent value(s) — the value-oriented
+siblings of `Counts` / `CountsBy`.
+
+```mathematica
+In[1]:= Tally[<|"a" -> 1, "b" -> 1, "c" -> 2|>]
+Out[1]= {{1, 2}, {2, 1}}
+
+In[2]:= Commonest[<|"a" -> 1, "b" -> 1, "c" -> 2|>]
+Out[2]= {1}
+```
+
 ## Cases, Count, DeleteCases
 Pattern operations act on the **values** of an association. `Cases` returns the
 list of matching values, `Count` their number, and `DeleteCases` returns the

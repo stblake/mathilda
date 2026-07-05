@@ -156,12 +156,15 @@ Expr* builtin_tally(Expr* res) {
     
     Expr* list = res->data.function.args[0];
     Expr* test = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
-    
+
+    /* Tally[assoc] (and Tally[assoc, test]) tallies the association's values. */
+    if (is_association(list)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
+
     if (list->type != EXPR_FUNCTION) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
-    
+
     size_t count = list->data.function.arg_count;
     if (count == 0) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
-    
+
     Expr** unique_elems = malloc(sizeof(Expr*) * count);
     int64_t* multiplicities = malloc(sizeof(int64_t) * count);
     size_t unique_count = 0;
@@ -313,8 +316,12 @@ Expr* builtin_commonest(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     
     Expr* list = res->data.function.args[0];
+
+    /* Commonest[assoc] (and Commonest[assoc, n]) uses the association's values. */
+    if (is_association(list)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
+
     if (list->type != EXPR_FUNCTION) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
-    
+
     size_t count = list->data.function.arg_count;
     if (count == 0) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
 

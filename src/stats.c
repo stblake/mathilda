@@ -275,6 +275,9 @@ Expr* builtin_variance(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* data = res->data.function.args[0];
 
+    /* Variance[assoc] is the variance of the association's values. */
+    if (is_association(data)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
+
     // Check if it's a matrix
     Expr* matrixq_args[1] = { expr_copy(data) };
     Expr* matrixq_call = expr_new_function(expr_new_symbol(SYM_MatrixQ), matrixq_args, 1);
@@ -414,6 +417,9 @@ Expr* builtin_standard_deviation(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* data = res->data.function.args[0];
 
+    /* StandardDeviation[assoc] uses the association's values. */
+    if (is_association(data)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
+
     // Check if it's a matrix
     Expr* matrixq_args[1] = { expr_copy(data) };
     Expr* matrixq_call = expr_new_function(expr_new_symbol(SYM_MatrixQ), matrixq_args, 1);
@@ -491,6 +497,9 @@ static bool is_real_numeric(Expr* e) {
 Expr* builtin_median(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* data = res->data.function.args[0];
+
+    /* Median[assoc] is the median of the association's values. */
+    if (is_association(data)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
 
     // Check if it's a vector or tensor. If it's empty or not a list, return NULL.
     if (data->type != EXPR_FUNCTION || data->data.function.head->type != EXPR_SYMBOL || data->data.function.head->data.symbol != SYM_List) {

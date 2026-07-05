@@ -444,6 +444,19 @@ void test_deletecases_over_values() {
                    "<|\"a\" -> 1|>", 0);
 }
 
+void test_stats_over_association_values() {
+    /* The statistics family reduces over an association's values. */
+    assert_eval_eq("Variance[<|\"a\" -> 2, \"b\" -> 4, \"c\" -> 6|>]", "4", 0);
+    assert_eval_eq("StandardDeviation[<|\"a\" -> 2, \"b\" -> 4, \"c\" -> 6|>]", "2", 0);
+    assert_eval_eq("Median[<|\"a\" -> 1, \"b\" -> 3, \"c\" -> 5|>]", "3", 0);
+    assert_eval_eq("Median[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3, \"d\" -> 4|>]", "5/2", 0);
+}
+
+void test_tally_commonest_over_association_values() {
+    assert_eval_eq("Tally[<|\"a\" -> 1, \"b\" -> 1, \"c\" -> 2|>]", "{{1, 2}, {2, 1}}", 0);
+    assert_eval_eq("Commonest[<|\"a\" -> 1, \"b\" -> 1, \"c\" -> 2|>]", "{1}", 0);
+}
+
 void test_deleteduplicates_over_values() {
     /* Keeps the first entry for each distinct value; returns an association. */
     assert_eval_eq("DeleteDuplicates[<|\"a\" -> 1, \"b\" -> 1, \"c\" -> 2, \"d\" -> 2, \"e\" -> 3|>]",
@@ -1206,6 +1219,8 @@ int main() {
     TEST(test_cases_pattern_head);
     TEST(test_count_over_values);
     TEST(test_deletecases_over_values);
+    TEST(test_stats_over_association_values);
+    TEST(test_tally_commonest_over_association_values);
     TEST(test_deleteduplicates_over_values);
 
     TEST(test_alltrue_list);
