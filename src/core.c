@@ -481,6 +481,16 @@ void core_init(void) {
         "TakeSmallestBy[list, f, n]\n\tGives the n elements of list for which f is\n"
         "\tsmallest, in ascending order of f. Over an association, ranks by f of\n"
         "\teach value.");
+    symtab_add_builtin("ReverseSort", builtin_reverse_sort);
+    symtab_get_def("ReverseSort")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ReverseSort",
+        "ReverseSort[list]\n\tSorts into descending order (Reverse of Sort).\n"
+        "\tOver an association, sorts the entries by value, descending.");
+    symtab_add_builtin("ReverseSortBy", builtin_reverse_sort_by);
+    symtab_get_def("ReverseSortBy")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ReverseSortBy",
+        "ReverseSortBy[list, f]\n\tSorts by f in descending order. Over an\n"
+        "\tassociation, sorts by f of each value, descending.");
     symtab_add_builtin("OrderedQ", builtin_orderedq);
     symtab_get_def("OrderedQ")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("PolynomialQ", builtin_polynomialq);

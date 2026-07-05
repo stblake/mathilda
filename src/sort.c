@@ -514,6 +514,31 @@ static Expr* maximal_minimal_by(Expr* res, int mode) {
 Expr* builtin_maximal_by(Expr* res) { return maximal_minimal_by(res, 0); }
 Expr* builtin_minimal_by(Expr* res) { return maximal_minimal_by(res, 1); }
 
+/* ------------------- ReverseSort / ReverseSortBy ------------------- */
+
+/* Reverse the top-level arguments of a freshly-built (owned) expression. */
+static Expr* reverse_top_level(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return e;
+    Expr** a = e->data.function.args;
+    size_t n = e->data.function.arg_count;
+    for (size_t i = 0; i < n / 2; i++) { Expr* t = a[i]; a[i] = a[n - 1 - i]; a[n - 1 - i] = t; }
+    return e;
+}
+
+/* ReverseSort[list] / ReverseSort[assoc] — descending order (by value for an
+ * association), i.e. Reverse of Sort. */
+Expr* builtin_reverse_sort(Expr* res) {
+    Expr* asc = builtin_sort(res);   /* borrows res, returns a new expr */
+    return reverse_top_level(asc);
+}
+
+/* ReverseSortBy[coll, f] — descending by f (of each value for an association). */
+Expr* builtin_reverse_sort_by(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* asc = builtin_sort_by(res);
+    return reverse_top_level(asc);
+}
+
 /* ------------------- TakeLargest / TakeSmallest (+By) ------------------- */
 
 /* Take the `nreq` extreme elements of `coll` ranked by a key.

@@ -822,3 +822,17 @@ Out[2]= <|"b" -> 9, "d" -> 6|>
 In[3]:= TakeLargestBy[{-9, 2, -3, 5}, Abs, 2]
 Out[3]= {-9, 5}
 ```
+
+## ReverseSort, ReverseSortBy
+Sort into descending order.
+- `ReverseSort[list]`: descending order (Reverse of `Sort`).
+- `ReverseSortBy[list, f]`: descending by `f[element]`.
+- Over an association, sort the entries by value (or `f` of value), descending.
+
+```mathematica
+In[1]:= ReverseSort[{3, 1, 4, 1, 5, 9, 2}]
+Out[1]= {9, 5, 4, 3, 2, 1, 1}
+
+In[2]:= ReverseSort[<|"a" -> 3, "b" -> 1, "c" -> 2|>]
+Out[2]= <|"a" -> 3, "c" -> 2, "b" -> 1|>
+```

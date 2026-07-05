@@ -534,6 +534,26 @@ void test_gatherby_stringlength() {
                    "{{\"aa\", \"cc\"}, {\"b\", \"d\"}}", 0);
 }
 
+/* ---------- ReverseSort / ReverseSortBy ---------- */
+
+void test_reversesort_list() {
+    assert_eval_eq("ReverseSort[{3, 1, 4, 1, 5, 9, 2}]", "{9, 5, 4, 3, 2, 1, 1}", 0);
+}
+
+void test_reversesort_association() {
+    assert_eval_eq("ReverseSort[<|\"a\" -> 3, \"b\" -> 1, \"c\" -> 2|>]",
+                   "<|\"a\" -> 3, \"c\" -> 2, \"b\" -> 1|>", 0);
+}
+
+void test_reversesortby_list() {
+    assert_eval_eq("ReverseSortBy[{-9, 2, -3, 5}, Abs]", "{-9, 5, -3, 2}", 0);
+}
+
+void test_reversesortby_association() {
+    assert_eval_eq("ReverseSortBy[<|\"a\" -> 1, \"b\" -> 9, \"c\" -> 4|>, Identity]",
+                   "<|\"b\" -> 9, \"c\" -> 4, \"a\" -> 1|>", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -657,6 +677,11 @@ int main() {
     TEST(test_groupby_reducer_mean);
     TEST(test_gatherby_parity);
     TEST(test_gatherby_stringlength);
+
+    TEST(test_reversesort_list);
+    TEST(test_reversesort_association);
+    TEST(test_reversesortby_list);
+    TEST(test_reversesortby_association);
 
     printf("All Association tests passed.\n");
     return 0;
