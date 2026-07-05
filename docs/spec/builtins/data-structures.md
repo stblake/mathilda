@@ -6,6 +6,25 @@ first occurrence fixes a key's position, the last occurrence its value), and
 bulk operations are backed by a hash index for amortised `O(n)` construction,
 grouping and lookup.
 
+### The association toolchain at a glance
+
+| Category | Operations |
+|----------|------------|
+| **Construct** | `Association` / `<\|…\|>`, `AssociationThread`, `AssociationMap`, `Association[{rules}]` (splice) |
+| **Access** | `assoc[key]`, `assoc[k1, k2]` (nested), `assoc[[key]]` / `[[Key[k]]]` / `[[i]]`, `Lookup`, `Normal` |
+| **Write** | `assoc[[key]] = v`, `AssociateTo`, `Append`, `Prepend`, `Join` (merge) |
+| **Keys & values** | `Keys`, `Values`, `KeyMap`, `KeyValueMap` |
+| **Presence** | `KeyExistsQ`, `KeyMemberQ`, `KeyFreeQ`, `MemberQ` |
+| **Transform** | `Map`, `Select`, `KeySelect`, `KeyTake`, `KeyDrop`, `DeleteMissing` |
+| **Aggregate** | `Total`, `Min`, `Max`, `Mean`, `Counts`, `CountsBy`, `GroupBy` (+reducer, `key->val`), `GatherBy`, `Merge`, `PositionIndex` |
+| **Order / rank** | `Sort`, `SortBy` (multi-key), `ReverseSort`, `ReverseSortBy`, `KeySort`, `KeySortBy`, `MaximalBy`, `MinimalBy`, `TakeLargest`(`By`), `TakeSmallest`(`By`), `Reverse` |
+| **Iterate / reduce** | `Fold`, `FoldList`, `Scan`, `Cases`, `Count`, `DeleteCases`, `SelectFirst`, `FirstCase`, `AllTrue`, `AnyTrue`, `NoneTrue` |
+| **Structural** | `First`, `Last`, `Rest`, `Most`, `Take`, `Drop`, `Length` |
+| **Patterns** | `KeyValuePattern` (destructure/match, incl. in function definitions) |
+
+Functions that consume or reduce a collection operate on an association's
+**values**, keeping keys aligned (see *Design notes: value threading* below).
+
 ## Association
 Represents a mapping from keys to values, written `<|k1 -> v1, k2 -> v2, ...|>`
 or `Association[k1 -> v1, ...]`.

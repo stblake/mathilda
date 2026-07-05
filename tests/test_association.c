@@ -862,6 +862,24 @@ void test_drop_entries() {
                    "<|\"b\" -> 2, \"c\" -> 3|>", 0);
 }
 
+/* ---------- Capstone: a full pipeline chaining many categories ---------- */
+
+void test_capstone_pipeline() {
+    /* Build spend-by-category from transactions, rank descending, and read the
+     * top category's total back with the accessor -- construct, group+reduce,
+     * order, and access all in one expression. */
+    assert_eval_eq(
+        "First[Values[ReverseSort[GroupBy[{{\"a\", 5}, {\"b\", 2}, {\"a\", 3}, {\"c\", 9}}, First -> Last, Total]]]]",
+        "9", 0);
+}
+
+void test_capstone_counts_top() {
+    /* Most frequent element via Counts + TakeLargest + accessor. */
+    assert_eval_eq(
+        "First[Keys[TakeLargest[Counts[{x, y, x, z, x, y}], 1]]]",
+        "x", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -1060,6 +1078,9 @@ int main() {
     TEST(test_most_entries);
     TEST(test_take_entries);
     TEST(test_drop_entries);
+
+    TEST(test_capstone_pipeline);
+    TEST(test_capstone_counts_top);
 
     printf("All Association tests passed.\n");
     return 0;
