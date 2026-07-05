@@ -130,11 +130,24 @@ Out[1]= <|1 -> 1, 2 -> 2, 3 -> 3|>
 
 ## GroupBy
 Groups the elements of a list by the value of `f` applied to each element.
-Hash-indexed grouping in `O(n)` plus the cost of `f`.
+Hash-indexed grouping in `O(n)` plus the cost of `f`. With a third argument
+`GroupBy[list, f, g]` applies the reducer `g` to each group (split-apply-combine).
 
 ```mathematica
 In[1]:= GroupBy[{1, 2, 3, 4, 5, 6}, EvenQ]
 Out[1]= <|False -> {1, 3, 5}, True -> {2, 4, 6}|>
+
+In[2]:= GroupBy[Range[10], EvenQ, Total]
+Out[2]= <|False -> 25, True -> 30|>
+```
+
+## GatherBy
+Gathers the elements with equal `f[element]` into sublists, in first-appearance
+order (like `GroupBy` but returning the groups as a plain list of lists).
+
+```mathematica
+In[1]:= GatherBy[{1, 2, 3, 4, 5, 6}, EvenQ]
+Out[1]= {{1, 3, 5}, {2, 4, 6}}
 ```
 
 ## Merge

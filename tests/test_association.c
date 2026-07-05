@@ -507,6 +507,33 @@ void test_takelargest_more_than_length() {
     assert_eval_eq("TakeLargest[{1, 2}, 5]", "{2, 1}", 0);
 }
 
+/* ---------- GroupBy reducer form + GatherBy ---------- */
+
+void test_groupby_reducer_total() {
+    assert_eval_eq("GroupBy[Range[10], EvenQ, Total]",
+                   "<|False -> 25, True -> 30|>", 0);
+}
+
+void test_groupby_reducer_length() {
+    assert_eval_eq("GroupBy[{1, 2, 3, 4, 5, 6}, Mod[#, 3] &, Length]",
+                   "<|1 -> 2, 2 -> 2, 0 -> 2|>", 0);
+}
+
+void test_groupby_reducer_mean() {
+    assert_eval_eq("GroupBy[{1, 2, 3, 4}, EvenQ, Mean]",
+                   "<|False -> 2, True -> 3|>", 0);
+}
+
+void test_gatherby_parity() {
+    assert_eval_eq("GatherBy[{1, 2, 3, 4, 5, 6}, EvenQ]",
+                   "{{1, 3, 5}, {2, 4, 6}}", 0);
+}
+
+void test_gatherby_stringlength() {
+    assert_eval_eq("GatherBy[{\"aa\", \"b\", \"cc\", \"d\"}, StringLength]",
+                   "{{\"aa\", \"cc\"}, {\"b\", \"d\"}}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -624,6 +651,12 @@ int main() {
     TEST(test_takelargestby_list);
     TEST(test_takelargestby_association);
     TEST(test_takelargest_more_than_length);
+
+    TEST(test_groupby_reducer_total);
+    TEST(test_groupby_reducer_length);
+    TEST(test_groupby_reducer_mean);
+    TEST(test_gatherby_parity);
+    TEST(test_gatherby_stringlength);
 
     printf("All Association tests passed.\n");
     return 0;

@@ -462,9 +462,11 @@ Expr* builtin_counts(Expr* res) {
  * hash-indexed, so the whole operation is O(n) plus f's cost.
  * ====================================================================== */
 Expr* builtin_groupby(Expr* res) {
-    if (res->data.function.arg_count != 2) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 2 && argc != 3) return NULL;
     Expr* list = res->data.function.args[0];
     Expr* f    = res->data.function.args[1];
+    Expr* reducer = (argc == 3) ? res->data.function.args[2] : NULL;
     if (!head_is(list, SYM_List)) return NULL;
     size_t n = list->data.function.arg_count;
 
@@ -505,12 +507,66 @@ Expr* builtin_groupby(Expr* res) {
     Expr** rules = malloc(sizeof(Expr*) * (ngroups ? ngroups : 1));
     for (size_t i = 0; i < ngroups; i++) {
         Expr* group_list = make_list(groups[i], gcnt[i]);
-        rules[i] = make_rule(keys[i], group_list); /* adopts key + list */
+        /* GroupBy[list, f, g] applies the reducer g to each group; the
+         * g[{group}] application is left for the evaluator to reduce. */
+        Expr* value = reducer
+            ? expr_new_function(expr_copy(reducer), &group_list, 1)
+            : group_list;
+        rules[i] = make_rule(keys[i], value); /* adopts key + value */
         free(groups[i]);
     }
     Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association), rules, ngroups);
     free(rules); free(keys); free(groups); free(gcap); free(gcnt); ki_free(&ki);
     return assoc;
+}
+
+/* ======================================================================
+ * GatherBy[list, f] — {group1, group2, ...}: gather elements with equal f[x]
+ * into sublists, in first-appearance order (like GroupBy but returning the
+ * groups as a plain list of lists). Hash-indexed, O(n) plus the cost of f.
+ * ====================================================================== */
+Expr* builtin_gatherby(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* list = res->data.function.args[0];
+    Expr* f    = res->data.function.args[1];
+    if (!head_is(list, SYM_List)) return NULL;
+    size_t n = list->data.function.arg_count;
+
+    KeyIndex ki;
+    if (!ki_init(&ki, n)) return NULL;
+    Expr**  keys   = malloc(sizeof(Expr*)  * (n ? n : 1)); /* owned f-values */
+    Expr*** groups = malloc(sizeof(Expr**) * (n ? n : 1)); /* owned element copies */
+    size_t* gcap   = malloc(sizeof(size_t) * (n ? n : 1));
+    size_t* gcnt   = malloc(sizeof(size_t) * (n ? n : 1));
+    size_t ng = 0;
+
+    for (size_t i = 0; i < n; i++) {
+        Expr* x = list->data.function.args[i];
+        Expr* fx_args[1] = { expr_copy(x) };
+        Expr* fx = expr_new_function(expr_copy(f), fx_args, 1);
+        Expr* key = evaluate(fx);
+        expr_free(fx);
+        size_t slot, idx = ki_lookup(&ki, keys, key, &slot);
+        if (idx == SIZE_MAX) {
+            keys[ng] = key; gcap[ng] = 4; gcnt[ng] = 0;
+            groups[ng] = malloc(sizeof(Expr*) * gcap[ng]);
+            ki_insert(&ki, slot, ng); idx = ng; ng++;
+        } else {
+            expr_free(key);
+        }
+        if (gcnt[idx] == gcap[idx]) { gcap[idx] *= 2; groups[idx] = realloc(groups[idx], sizeof(Expr*) * gcap[idx]); }
+        groups[idx][gcnt[idx]++] = expr_copy(x);
+    }
+
+    Expr** outer = malloc(sizeof(Expr*) * (ng ? ng : 1));
+    for (size_t i = 0; i < ng; i++) {
+        outer[i] = make_list(groups[i], gcnt[i]);
+        expr_free(keys[i]);   /* GatherBy discards the keys */
+        free(groups[i]);
+    }
+    Expr* result = make_list(outer, ng);
+    free(outer); free(keys); free(groups); free(gcap); free(gcnt); ki_free(&ki);
+    return result;
 }
 
 /* ======================================================================
@@ -985,7 +1041,15 @@ void assoc_init(void) {
     symtab_get_def("GroupBy")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("GroupBy",
         "GroupBy[list, f]\n\tGroups the elements of list by the value of f[element],\n"
-        "\tgiving <|f[x] -> {matching elements}, ...|>.");
+        "\tgiving <|f[x] -> {matching elements}, ...|>.\n"
+        "GroupBy[list, f, g]\n\tApplies the reducer g to each group, giving\n"
+        "\t<|f[x] -> g[{matching elements}], ...|> (split-apply-combine).");
+
+    symtab_add_builtin("GatherBy", builtin_gatherby);
+    symtab_get_def("GatherBy")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("GatherBy",
+        "GatherBy[list, f]\n\tGathers elements with equal f[element] into sublists,\n"
+        "\tin first-appearance order: {{group1}, {group2}, ...}.");
 
     symtab_add_builtin("Merge", builtin_merge);
     symtab_get_def("Merge")->attributes |= ATTR_PROTECTED;

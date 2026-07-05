@@ -63,6 +63,10 @@ Expr* assoc_sort_by_value(const Expr* assoc);
  * pattern (matching is done via MatchQ on each value). Caller owns the result. */
 Expr* assoc_delete_cases(const Expr* assoc, Expr* pattern);
 
+/* GatherBy[list, f]: group elements with equal f[element] into a list of
+ * sublists (first-appearance order). Caller owns the result. */
+Expr* builtin_gatherby(Expr* res);
+
 /* Register every Association-family builtin, with attributes and docstrings. */
 void assoc_init(void);
 
