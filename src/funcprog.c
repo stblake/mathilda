@@ -431,6 +431,39 @@ Expr* builtin_select(Expr* res) {
     return result;
 }
 
+/* ------------------- SelectFirst -------------------
+ *
+ * SelectFirst[list, pred]           first e with pred[e] === True, else Missing["NotFound"]
+ * SelectFirst[list, pred, default]  default when none match
+ * Over an association, tests the values and returns the first matching value. */
+Expr* builtin_select_first(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 2 && argc != 3) return NULL;
+
+    Expr* coll = res->data.function.args[0];
+    Expr* pred = res->data.function.args[1];
+    Expr* deflt = (argc == 3) ? res->data.function.args[2] : NULL;
+
+    if (is_association(coll)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
+    if (coll->type != EXPR_FUNCTION) return NULL;
+
+    size_t n = coll->data.function.arg_count;
+    for (size_t i = 0; i < n; i++) {
+        Expr* elem = coll->data.function.args[i];
+        Expr* call_args[1] = { expr_copy(elem) };
+        Expr* call = expr_new_function(expr_copy(pred), call_args, 1);
+        Expr* v = evaluate(call);
+        expr_free(call);
+        bool is_true = (v->type == EXPR_SYMBOL && v->data.symbol == SYM_True);
+        expr_free(v);
+        if (is_true) return expr_copy(elem);
+    }
+    if (deflt) return expr_copy(deflt);
+    Expr* margs[1] = { expr_new_string("NotFound") };
+    return expr_new_function(expr_new_symbol(SYM_Missing), margs, 1);
+}
+
 /* ------------------- AllTrue / AnyTrue / NoneTrue -------------------
  *
  * mode 0 = AllTrue  (True iff test[e] is True for every element)

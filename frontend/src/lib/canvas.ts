@@ -209,6 +209,7 @@ export function loadStartupContent() {
     { cells: [{ type: 'code',    source: 'TakeLargest[<|"a" -> 3, "b" -> 9, "c" -> 1, "d" -> 6|>, 2]' }] },
     { cells: [{ type: 'code',    source: 'GroupBy[Range[10], EvenQ, Total]' }] },
     { cells: [{ type: 'code',    source: 'ReverseSort[<|"a" -> 3, "b" -> 1, "c" -> 2|>]' }] },
+    { cells: [{ type: 'code',    source: 'SelectFirst[<|"a" -> 1, "b" -> 4, "c" -> 6|>, EvenQ]' }] },
   ]);
 }
 

@@ -836,3 +836,20 @@ Out[1]= {9, 5, 4, 3, 2, 1, 1}
 In[2]:= ReverseSort[<|"a" -> 3, "b" -> 1, "c" -> 2|>]
 Out[2]= <|"a" -> 3, "c" -> 2, "b" -> 1|>
 ```
+
+## SelectFirst, FirstCase
+Find the first match, with a fallback.
+- `SelectFirst[list, pred]`: the first element for which `pred` is `True`, else `Missing["NotFound"]`; `SelectFirst[list, pred, default]` uses `default`.
+- `FirstCase[expr, patt]`: the first element matching `patt`, else `Missing["NotFound"]`; `FirstCase[expr, patt, default]` uses `default`.
+- Over an association both test the values and return the first matching value.
+
+```mathematica
+In[1]:= SelectFirst[{1, 3, 4, 5, 6}, EvenQ]
+Out[1]= 4
+
+In[2]:= FirstCase[{1, 2, 3, 4}, _?EvenQ]
+Out[2]= 2
+
+In[3]:= SelectFirst[{1, 3, 5}, EvenQ, None]
+Out[3]= None
+```

@@ -421,6 +421,12 @@ void core_init(void) {
     symtab_add_builtin("Permutations", builtin_permutations);
     symtab_get_def("Permutations")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Select", builtin_select);
+    symtab_add_builtin("SelectFirst", builtin_select_first);
+    symtab_get_def("SelectFirst")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("SelectFirst",
+        "SelectFirst[list, pred]\n\tGives the first element e of list for which\n"
+        "\tpred[e] is True, or Missing[\"NotFound\"]. SelectFirst[list, pred, default]\n"
+        "\tuses default. Over an association, tests values and returns the first match.");
     symtab_add_builtin("AllTrue", builtin_all_true);
     symtab_get_def("AllTrue")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("AllTrue",

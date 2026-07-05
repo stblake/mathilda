@@ -554,6 +554,40 @@ void test_reversesortby_association() {
                    "<|\"b\" -> 9, \"c\" -> 4, \"a\" -> 1|>", 0);
 }
 
+/* ---------- SelectFirst / FirstCase (lists and association values) ---------- */
+
+void test_selectfirst_found() {
+    assert_eval_eq("SelectFirst[{1, 3, 4, 5, 6}, EvenQ]", "4", 0);
+}
+
+void test_selectfirst_missing() {
+    assert_eval_eq("SelectFirst[{1, 3, 5}, EvenQ]", "Missing[\"NotFound\"]", 0);
+}
+
+void test_selectfirst_default() {
+    assert_eval_eq("SelectFirst[{1, 3, 5}, EvenQ, none]", "none", 0);
+}
+
+void test_selectfirst_association() {
+    assert_eval_eq("SelectFirst[<|\"a\" -> 1, \"b\" -> 4, \"c\" -> 6|>, EvenQ]", "4", 0);
+}
+
+void test_firstcase_found() {
+    assert_eval_eq("FirstCase[{1, 2, 3, 4}, _?EvenQ]", "2", 0);
+}
+
+void test_firstcase_default() {
+    assert_eval_eq("FirstCase[{1, 3, 5}, _?EvenQ, none]", "none", 0);
+}
+
+void test_firstcase_association() {
+    assert_eval_eq("FirstCase[<|\"a\" -> 1, \"b\" -> 2|>, _?EvenQ]", "2", 0);
+}
+
+void test_firstcase_missing() {
+    assert_eval_eq("FirstCase[{a, b, c}, _Integer]", "Missing[\"NotFound\"]", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -682,6 +716,15 @@ int main() {
     TEST(test_reversesort_association);
     TEST(test_reversesortby_list);
     TEST(test_reversesortby_association);
+
+    TEST(test_selectfirst_found);
+    TEST(test_selectfirst_missing);
+    TEST(test_selectfirst_default);
+    TEST(test_selectfirst_association);
+    TEST(test_firstcase_found);
+    TEST(test_firstcase_default);
+    TEST(test_firstcase_association);
+    TEST(test_firstcase_missing);
 
     printf("All Association tests passed.\n");
     return 0;

@@ -76,6 +76,35 @@ static void do_cases_at_level(Expr* e, int64_t current_level, int64_t min_l, int
     }
 }
 
+/* FirstCase[expr, patt] / FirstCase[expr, patt, default] — the first element
+ * matching patt (or the first matching value, for an association), else the
+ * default or Missing["NotFound"]. Reuses Cases (which already handles the
+ * pattern and association-value threading) and takes the first match. */
+Expr* builtin_first_case(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 2 && argc != 3) return NULL;
+
+    Expr* cases_args[2] = { expr_copy(res->data.function.args[0]),
+                            expr_copy(res->data.function.args[1]) };
+    Expr* cases = expr_new_function(expr_new_symbol(SYM_Cases), cases_args, 2);
+    Expr* matches = evaluate(cases);
+    expr_free(cases);
+
+    Expr* result = NULL;
+    if (matches && matches->type == EXPR_FUNCTION &&
+        matches->data.function.head->data.symbol == SYM_List &&
+        matches->data.function.arg_count >= 1) {
+        result = expr_copy(matches->data.function.args[0]);
+    }
+    if (matches) expr_free(matches);
+    if (result) return result;
+
+    if (argc == 3) return expr_copy(res->data.function.args[2]);
+    Expr* margs[1] = { expr_new_string("NotFound") };
+    return expr_new_function(expr_new_symbol(SYM_Missing), margs, 1);
+}
+
 Expr* builtin_cases(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -671,6 +700,12 @@ Expr* builtin_memberq(Expr* res) {
 void patterns_init(void) {
     symtab_add_builtin("Cases", builtin_cases);
     symtab_get_def("Cases")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("FirstCase", builtin_first_case);
+    symtab_get_def("FirstCase")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("FirstCase",
+        "FirstCase[expr, patt]\n\tGives the first element of expr matching patt,\n"
+        "\tor Missing[\"NotFound\"]. FirstCase[expr, patt, default] uses default.\n"
+        "\tOver an association, matches values and returns the first match.");
     symtab_add_builtin("DeleteCases", builtin_delete_cases);
     symtab_get_def("DeleteCases")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Position", builtin_position);

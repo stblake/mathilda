@@ -17,6 +17,7 @@ Expr* builtin_fixedpoint(Expr* res);
 Expr* builtin_fold(Expr* res);
 Expr* builtin_foldlist(Expr* res);
 Expr* builtin_select(Expr* res);
+Expr* builtin_select_first(Expr* res);
 Expr* builtin_all_true(Expr* res);
 Expr* builtin_any_true(Expr* res);
 Expr* builtin_none_true(Expr* res);

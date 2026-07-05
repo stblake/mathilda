@@ -4,6 +4,7 @@
 #include "expr.h"
 
 Expr* builtin_cases(Expr* res);
+Expr* builtin_first_case(Expr* res);
 Expr* builtin_delete_cases(Expr* res);
 Expr* builtin_position(Expr* res);
 Expr* builtin_count(Expr* res);
