@@ -18,7 +18,7 @@ grouping and lookup.
 | **Transform** | `Map`, `Select`, `KeySelect`, `KeyTake`, `KeyDrop`, `DeleteMissing` |
 | **Aggregate** | `Total`, `Min`, `Max`, `Mean`, `Counts`, `CountsBy`, `GroupBy` (+reducer, `key->val`), `GatherBy`, `Merge`, `PositionIndex` |
 | **Order / rank** | `Sort`, `SortBy` (multi-key), `ReverseSort`, `ReverseSortBy`, `KeySort`, `KeySortBy`, `MaximalBy`, `MinimalBy`, `TakeLargest`(`By`), `TakeSmallest`(`By`), `Reverse` |
-| **Iterate / reduce** | `Fold`, `FoldList`, `Scan`, `Cases`, `Count`, `DeleteCases`, `SelectFirst`, `FirstCase`, `AllTrue`, `AnyTrue`, `NoneTrue` |
+| **Iterate / reduce** | `Fold`, `FoldList`, `Scan`, `Cases`, `Count`, `DeleteCases`, `Position`, `SelectFirst`, `FirstCase`, `AllTrue`, `AnyTrue`, `NoneTrue` |
 | **Structural** | `First`, `Last`, `Rest`, `Most`, `Take`, `Drop`, `Length` |
 | **Patterns** | `KeyValuePattern` (destructure/match, incl. in function definitions) |
 
@@ -270,6 +270,15 @@ Removes `Missing[...]` elements — the natural cleanup after a multi-key
 ```mathematica
 In[1]:= DeleteMissing[Lookup[<|"a" -> 1, "b" -> 2|>, {"a", "z", "b"}]]
 Out[1]= {1, 2}
+```
+
+## Position
+`Position[assoc, patt]` gives the positions of matching **values** as `{Key[k]}`
+(Wolfram semantics), which round-trip through `Part`/`Extract`.
+
+```mathematica
+In[1]:= Position[<|"a" -> 1, "b" -> 2, "c" -> 1|>, 1]
+Out[1]= {{Key["a"]}, {Key["c"]}}
 ```
 
 ## Predicate tests on values (AllTrue, AnyTrue, NoneTrue, MemberQ)

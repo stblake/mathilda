@@ -862,6 +862,22 @@ void test_drop_entries() {
                    "<|\"b\" -> 2, \"c\" -> 3|>", 0);
 }
 
+/* ---------- Position on associations returns {Key[k]} ---------- */
+
+void test_position_association() {
+    assert_eval_eq("Position[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 1|>, 1]",
+                   "{{Key[\"a\"]}, {Key[\"c\"]}}", 0);
+}
+
+void test_position_association_pattern() {
+    assert_eval_eq("Position[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>, _?(# > 1 &)]",
+                   "{{Key[\"b\"]}, {Key[\"c\"]}}", 0);
+}
+
+void test_position_association_none() {
+    assert_eval_eq("Position[<|\"a\" -> 1|>, 99]", "{}", 0);
+}
+
 /* ---------- Capstone: a full pipeline chaining many categories ---------- */
 
 void test_capstone_pipeline() {
@@ -1078,6 +1094,10 @@ int main() {
     TEST(test_most_entries);
     TEST(test_take_entries);
     TEST(test_drop_entries);
+
+    TEST(test_position_association);
+    TEST(test_position_association_pattern);
+    TEST(test_position_association_none);
 
     TEST(test_capstone_pipeline);
     TEST(test_capstone_counts_top);

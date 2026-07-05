@@ -455,8 +455,34 @@ Expr* builtin_position(Expr* res) {
         Expr* func_args[1] = { inner_pos };
         return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }
-    
+
     if (argc < 2) return NULL;
+
+    /* Position[assoc, patt] reports the positions of matching *values* as
+     * {Key[k]} (Wolfram semantics), rather than raw {ruleIndex, valueSlot}. */
+    if (argc == 2 && is_association(res->data.function.args[0])) {
+        Expr* assoc = res->data.function.args[0];
+        Expr* patt  = res->data.function.args[1];
+        size_t na = assoc->data.function.arg_count;
+        Expr** out = malloc(sizeof(Expr*) * (na ? na : 1));
+        size_t nout = 0;
+        for (size_t i = 0; i < na; i++) {
+            Expr* rule = assoc->data.function.args[i];
+            if (!(rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2)) continue;
+            MatchEnv* env = env_new();
+            bool m = match(rule->data.function.args[1], patt, env);
+            env_free(env);
+            if (m) {
+                Expr* kargs[1] = { expr_copy(rule->data.function.args[0]) };
+                Expr* keyw = expr_new_function(expr_new_symbol(SYM_Key), kargs, 1);
+                Expr* pos_args[1] = { keyw };
+                out[nout++] = expr_new_function(expr_new_symbol(SYM_List), pos_args, 1);
+            }
+        }
+        Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, nout);
+        free(out);
+        return result;
+    }
 
     Expr* expr = res->data.function.args[0];
     Expr* pattern = res->data.function.args[1];
