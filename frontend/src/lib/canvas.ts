@@ -188,6 +188,7 @@ export function loadStartupContent() {
     { cells: [{ type: 'code',    source: 'Values[data]' }] },
     { cells: [{ type: 'code',    source: 'First[data]' }] },
     { cells: [{ type: 'code',    source: 'Lookup[data, "figs", 0]' }] },
+    { cells: [{ type: 'code',    source: 'KeyFreeQ[data, "figs"]' }] },
     { cells: [{ type: 'section', source: 'Aggregation' }] },
     { cells: [{ type: 'text',    source: 'Counts, GroupBy and Merge are hash-backed — O(n) over large lists.' }] },
     { cells: [{ type: 'code',    source: 'Counts[{1, 2, 2, 3, 3, 3, 1}]' }] },

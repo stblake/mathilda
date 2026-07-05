@@ -76,15 +76,16 @@ In[2]:= Lookup[<|"a" -> 1|>, "z", 0]
 Out[2]= 0
 ```
 
-## KeyExistsQ
-Tests whether a key is present in an association.
+## KeyExistsQ, KeyMemberQ, KeyFreeQ
+`KeyExistsQ`/`KeyMemberQ` test whether a key is present; `KeyFreeQ` is the
+complement (True when the key is absent).
 
 ```mathematica
 In[1]:= KeyExistsQ[<|"a" -> 1|>, "a"]
 Out[1]= True
 
-In[2]:= KeyExistsQ[<|"a" -> 1|>, "b"]
-Out[2]= False
+In[2]:= KeyFreeQ[<|"a" -> 1|>, "b"]
+Out[2]= True
 ```
 
 ## KeyDrop

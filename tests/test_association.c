@@ -105,6 +105,21 @@ void test_keyexistsq() {
     assert_eval_eq("KeyExistsQ[<|\"a\" -> 1|>, \"b\"]", "False", 0);
 }
 
+void test_keymemberq() {
+    assert_eval_eq("KeyMemberQ[<|\"a\" -> 1|>, \"a\"]", "True", 0);
+    assert_eval_eq("KeyMemberQ[<|\"a\" -> 1|>, \"z\"]", "False", 0);
+}
+
+void test_keyfreeq() {
+    assert_eval_eq("KeyFreeQ[<|\"a\" -> 1|>, \"a\"]", "False", 0);
+    assert_eval_eq("KeyFreeQ[<|\"a\" -> 1|>, \"z\"]", "True", 0);
+}
+
+void test_reverse_association() {
+    assert_eval_eq("Reverse[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>]",
+                   "<|\"c\" -> 3, \"b\" -> 2, \"a\" -> 1|>", 0);
+}
+
 void test_associationq() {
     assert_eval_eq("AssociationQ[<|\"a\" -> 1|>]", "True", 0);
     assert_eval_eq("AssociationQ[<||>]", "True", 0);
@@ -872,6 +887,9 @@ int main() {
     TEST(test_lookup_list_of_keys);
 
     TEST(test_keyexistsq);
+    TEST(test_keymemberq);
+    TEST(test_keyfreeq);
+    TEST(test_reverse_association);
     TEST(test_associationq);
 
     TEST(test_part_string_key);

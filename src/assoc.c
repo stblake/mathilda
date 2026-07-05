@@ -323,6 +323,21 @@ Expr* builtin_keyexistsq(Expr* res) {
     return expr_new_symbol(assoc_scan(assoc, key) ? SYM_True : SYM_False);
 }
 
+/* KeyMemberQ[assoc, key] == KeyExistsQ; KeyFreeQ[assoc, key] is its complement. */
+Expr* builtin_keymemberq(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* assoc = res->data.function.args[0];
+    if (!is_association(assoc)) return NULL;
+    return expr_new_symbol(assoc_scan(assoc, res->data.function.args[1]) ? SYM_True : SYM_False);
+}
+
+Expr* builtin_keyfreeq(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* assoc = res->data.function.args[0];
+    if (!is_association(assoc)) return NULL;
+    return expr_new_symbol(assoc_scan(assoc, res->data.function.args[1]) ? SYM_False : SYM_True);
+}
+
 /* ======================================================================
  * KeyDrop[assoc, key|{keys}] / KeyTake[assoc, key|{keys}].
  * Both preserve association order; a drop/keep set is indexed once.
@@ -1021,6 +1036,18 @@ void assoc_init(void) {
     symtab_get_def("KeyExistsQ")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("KeyExistsQ",
         "KeyExistsQ[assoc, key]\n\tGives True if key is present in assoc, else False.");
+
+    symtab_add_builtin("KeyMemberQ", builtin_keymemberq);
+    symtab_get_def("KeyMemberQ")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("KeyMemberQ",
+        "KeyMemberQ[assoc, key]\n\tGives True if key is present in assoc (same as\n"
+        "\tKeyExistsQ), else False.");
+
+    symtab_add_builtin("KeyFreeQ", builtin_keyfreeq);
+    symtab_get_def("KeyFreeQ")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("KeyFreeQ",
+        "KeyFreeQ[assoc, key]\n\tGives True if key is absent from assoc (the\n"
+        "\tcomplement of KeyExistsQ), else False.");
 
     symtab_add_builtin("KeyDrop", builtin_keydrop);
     symtab_get_def("KeyDrop")->attributes |= ATTR_PROTECTED;
