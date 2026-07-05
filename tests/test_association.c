@@ -450,6 +450,18 @@ void test_sortby_operator_form() {
     assert_eval_eq("SortBy[Abs][{-3, 1, -2}]", "{1, -2, -3}", 0);
 }
 
+void test_sortby_multi_criteria() {
+    /* sort by First, break ties by Last */
+    assert_eval_eq("SortBy[{{1, 3}, {1, 1}, {2, 0}, {1, 2}}, {First, Last}]",
+                   "{{1, 1}, {1, 2}, {1, 3}, {2, 0}}", 0);
+}
+
+void test_sortby_multi_criteria_strings() {
+    /* by length, then alphabetically */
+    assert_eval_eq("SortBy[{\"bb\", \"a\", \"cc\", \"d\"}, {StringLength, Identity}]",
+                   "{\"a\", \"d\", \"bb\", \"cc\"}", 0);
+}
+
 /* ---------- MaximalBy / MinimalBy (lists and associations) ---------- */
 
 void test_maximalby_list_ties() {
@@ -884,6 +896,8 @@ int main() {
     TEST(test_sortby_association);
     TEST(test_sortby_association_by_first);
     TEST(test_sortby_operator_form);
+    TEST(test_sortby_multi_criteria);
+    TEST(test_sortby_multi_criteria_strings);
 
     TEST(test_maximalby_list_ties);
     TEST(test_minimalby_list_ties);

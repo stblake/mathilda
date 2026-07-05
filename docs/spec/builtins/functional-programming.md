@@ -775,6 +775,7 @@ Out[3]= True
 ## SortBy
 Sort by a key function.
 - `SortBy[list, f]`: sorts the elements of `list` by the canonical order of `f[element]` (the key is evaluated once per element).
+- `SortBy[list, {f1, f2, ...}]`: sorts by `f1`, breaking ties with `f2`, and so on.
 - `SortBy[assoc, f]`: sorts an association by `f` applied to each value (keys follow their values).
 - `SortBy[f]`: operator form — `SortBy[f][expr]` is `SortBy[expr, f]`.
 
@@ -787,6 +788,9 @@ Out[2]= {"a", "bb", "ccc"}
 
 In[3]:= SortBy[Abs][{-3, 1, -2}]
 Out[3]= {1, -2, -3}
+
+In[4]:= SortBy[{{1, 3}, {1, 1}, {2, 0}, {1, 2}}, {First, Last}]
+Out[4]= {{1, 1}, {1, 2}, {1, 3}, {2, 0}}
 ```
 
 ## MaximalBy, MinimalBy

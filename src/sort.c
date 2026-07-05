@@ -425,17 +425,36 @@ Expr* builtin_sort_by(Expr* res) {
     if (n == 0) return expr_copy(coll);
 
     SortByPair* pairs = malloc(sizeof(SortByPair) * n);
+    /* SortBy[list, {f1, f2, ...}] sorts by f1, breaking ties with f2, ... .
+     * The per-element key becomes the tuple {f1[e], ...}; expr_compare orders
+     * equal-length lists lexicographically, giving exactly that behaviour. */
+    bool multi = (f->type == EXPR_FUNCTION && f->data.function.head->type == EXPR_SYMBOL &&
+                  f->data.function.head->data.symbol == SYM_List);
+
     for (size_t i = 0; i < n; i++) {
         Expr* elem = coll->data.function.args[i];
         /* For an association, sort by f applied to the value; else by f[elem]. */
         Expr* subject = elem;
         if (assoc && elem->type == EXPR_FUNCTION && elem->data.function.arg_count == 2)
             subject = elem->data.function.args[1];
-        Expr* call_args[1] = { expr_copy(subject) };
-        Expr* call = expr_new_function(expr_copy(f), call_args, 1);
         pairs[i].payload = expr_copy(elem);
-        pairs[i].key = evaluate(call);
-        expr_free(call);
+        if (multi) {
+            size_t nc = f->data.function.arg_count;
+            Expr** keyparts = malloc(sizeof(Expr*) * (nc ? nc : 1));
+            for (size_t c = 0; c < nc; c++) {
+                Expr* ca[1] = { expr_copy(subject) };
+                Expr* call = expr_new_function(expr_copy(f->data.function.args[c]), ca, 1);
+                keyparts[c] = evaluate(call);
+                expr_free(call);
+            }
+            pairs[i].key = expr_new_function(expr_new_symbol(SYM_List), keyparts, nc);
+            free(keyparts);
+        } else {
+            Expr* call_args[1] = { expr_copy(subject) };
+            Expr* call = expr_new_function(expr_copy(f), call_args, 1);
+            pairs[i].key = evaluate(call);
+            expr_free(call);
+        }
     }
 
     qsort(pairs, n, sizeof(SortByPair), sortby_pair_cmp);

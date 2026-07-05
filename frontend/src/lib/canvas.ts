@@ -198,6 +198,7 @@ export function loadStartupContent() {
     { cells: [{ type: 'code',    source: 'Map[#^2 &, <|"x" -> 3, "y" -> 4|>]' }] },
     { cells: [{ type: 'code',    source: 'Select[<|"a" -> 1, "b" -> 2, "c" -> 3|>, # > 1 &]' }] },
     { cells: [{ type: 'code',    source: 'KeySortBy[<|"bbb" -> 1, "a" -> 2, "cc" -> 3|>, StringLength]' }] },
+    { cells: [{ type: 'code',    source: 'SortBy[{{1, 3}, {1, 1}, {2, 0}, {1, 2}}, {First, Last}]' }] },
     { cells: [{ type: 'section', source: 'Aggregation & mutation' }] },
     { cells: [{ type: 'text',    source: 'Total/Min/Max/Mean reduce over values; Part assignment updates in place.' }] },
     { cells: [{ type: 'code',    source: 'Total[<|"a" -> 3, "b" -> 1, "c" -> 2|>]' }] },
