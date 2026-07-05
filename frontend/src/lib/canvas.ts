@@ -214,7 +214,7 @@ export function loadStartupContent() {
     { cells: [{ type: 'code',    source: 'SelectFirst[<|"a" -> 1, "b" -> 4, "c" -> 6|>, EvenQ]' }] },
     { cells: [{ type: 'code',    source: 'DeleteMissing[Lookup[<|"a" -> 1, "b" -> 2|>, {"a", "z", "b"}]]' }] },
     { cells: [{ type: 'text',    source: 'Pipelines compose: group by key, sum amounts, rank descending.' }] },
-    { cells: [{ type: 'code',    source: 'ReverseSort[GroupBy[{{"x", 1}, {"y", 2}, {"x", 3}}, First, Total[#[[All, 2]]] &]]' }] },
+    { cells: [{ type: 'code',    source: 'ReverseSort[GroupBy[{{"x", 1}, {"y", 2}, {"x", 3}}, First -> Last, Total]]' }] },
     { cells: [{ type: 'section', source: 'Pattern matching' }] },
     { cells: [{ type: 'text',    source: 'Destructure and filter associations with KeyValuePattern.' }] },
     { cells: [{ type: 'code',    source: 'Cases[{<|"t" -> 1|>, <|"t" -> 2|>, <|"x" -> 3|>}, KeyValuePattern[{"t" -> _}]]' }] },

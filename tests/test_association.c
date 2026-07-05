@@ -524,6 +524,21 @@ void test_groupby_reducer_mean() {
                    "<|False -> 2, True -> 3|>", 0);
 }
 
+void test_groupby_key_value_transform() {
+    assert_eval_eq("GroupBy[{{\"x\", 1}, {\"y\", 2}, {\"x\", 3}}, First -> Last]",
+                   "<|\"x\" -> {1, 3}, \"y\" -> {2}|>", 0);
+}
+
+void test_groupby_key_value_reduce() {
+    assert_eval_eq("GroupBy[{{\"x\", 1}, {\"y\", 2}, {\"x\", 3}}, First -> Last, Total]",
+                   "<|\"x\" -> 4, \"y\" -> 2|>", 0);
+}
+
+void test_groupby_key_value_mean() {
+    assert_eval_eq("GroupBy[{{\"a\", 5}, {\"a\", 7}, {\"b\", 2}}, First -> Last, Mean]",
+                   "<|\"a\" -> 6, \"b\" -> 2|>", 0);
+}
+
 void test_gatherby_parity() {
     assert_eval_eq("GatherBy[{1, 2, 3, 4, 5, 6}, EvenQ]",
                    "{{1, 3, 5}, {2, 4, 6}}", 0);
@@ -887,6 +902,9 @@ int main() {
     TEST(test_groupby_reducer_total);
     TEST(test_groupby_reducer_length);
     TEST(test_groupby_reducer_mean);
+    TEST(test_groupby_key_value_transform);
+    TEST(test_groupby_key_value_reduce);
+    TEST(test_groupby_key_value_mean);
     TEST(test_gatherby_parity);
     TEST(test_gatherby_stringlength);
 

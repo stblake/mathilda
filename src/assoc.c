@@ -470,6 +470,12 @@ Expr* builtin_groupby(Expr* res) {
     if (!head_is(list, SYM_List)) return NULL;
     size_t n = list->data.function.arg_count;
 
+    /* GroupBy[list, keyfn -> valfn, ...]: group by keyfn[x] but collect
+     * valfn[x] in each group (Wolfram's key -> value transform form). */
+    Expr* keyfn = f;
+    Expr* valfn = NULL;
+    if (is_rule2(f)) { keyfn = rule_key(f); valfn = rule_val(f); }
+
     KeyIndex ki;
     if (!ki_init(&ki, n)) return NULL;
     Expr** keys   = malloc(sizeof(Expr*) * (n ? n : 1)); /* owned group keys */
@@ -481,7 +487,7 @@ Expr* builtin_groupby(Expr* res) {
     for (size_t i = 0; i < n; i++) {
         Expr* x = list->data.function.args[i];
         Expr* fx_args[1] = { expr_copy(x) };
-        Expr* fx = expr_new_function(expr_copy(f), fx_args, 1);
+        Expr* fx = expr_new_function(expr_copy(keyfn), fx_args, 1);
         Expr* key = evaluate(fx);      /* the group key */
         expr_free(fx);
 
@@ -501,7 +507,15 @@ Expr* builtin_groupby(Expr* res) {
             gcap[idx] *= 2;
             groups[idx] = realloc(groups[idx], sizeof(Expr*) * gcap[idx]);
         }
-        groups[idx][gcnt[idx]++] = expr_copy(x);
+        /* Collect valfn[x] when a value transform was given, else x itself. */
+        if (valfn) {
+            Expr* vx_args[1] = { expr_copy(x) };
+            Expr* vx = expr_new_function(expr_copy(valfn), vx_args, 1);
+            groups[idx][gcnt[idx]++] = evaluate(vx);
+            expr_free(vx);
+        } else {
+            groups[idx][gcnt[idx]++] = expr_copy(x);
+        }
     }
 
     Expr** rules = malloc(sizeof(Expr*) * (ngroups ? ngroups : 1));
