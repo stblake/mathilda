@@ -72,6 +72,10 @@ Expr* assoc_delete_duplicate_values(const Expr* assoc);
  * sublists (first-appearance order). Caller owns the result. */
 Expr* builtin_gatherby(Expr* res);
 
+/* KeyUnion[{assoc1, ...}]: pad every association to the union of all keys,
+ * filling absent values with Missing["KeyAbsent", key]. Caller owns result. */
+Expr* builtin_keyunion(Expr* res);
+
 /* Register every Association-family builtin, with attributes and docstrings. */
 void assoc_init(void);
 

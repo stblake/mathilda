@@ -33,6 +33,7 @@
         {"cells": [{"type": "code", "source": "GroupBy[Range[10], EvenQ, Total]"}]},
         {"cells": [{"type": "code", "source": "GroupBy[{{\"x\", 1}, {\"y\", 2}, {\"x\", 3}}, First -> Last, Total]"}]},
         {"cells": [{"type": "code", "source": "Merge[{<|\"a\" -> 1|>, <|\"a\" -> 2, \"b\" -> 3|>}, Total]"}]},
+        {"cells": [{"type": "code", "source": "KeyUnion[{<|\"a\" -> 1, \"b\" -> 2|>, <|\"b\" -> 3, \"c\" -> 4|>}]"}]},
         {"cells": [{"type": "section", "source": "Reducing over values"}]},
         {"cells": [{"type": "text", "source": "Total, Mean, Median, Variance, Min, Max, Fold and Scan act on an association's values; Tally counts them."}]},
         {"cells": [{"type": "code", "source": "Total[<|\"a\" -> 3, \"b\" -> 1, \"c\" -> 2|>]"}]},

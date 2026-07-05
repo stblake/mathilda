@@ -129,6 +129,19 @@ In[1]:= KeyTake[<|"a" -> 1, "b" -> 2, "c" -> 3|>, {"c", "a"}]
 Out[1]= <|"a" -> 1, "c" -> 3|>
 ```
 
+## KeyUnion
+`KeyUnion[{assoc1, assoc2, ...}]` pads every association to the union of all
+their keys (in first-appearance order), filling a key absent from an
+association with `Missing["KeyAbsent", key]`. The result is the list of
+equalised associations — a common preparation step before row-wise or tabular
+processing. Hash-indexed: the union and every rebuild are `O(n)`.
+
+```mathematica
+In[1]:= KeyUnion[{<|"a" -> 1, "b" -> 2|>, <|"b" -> 3, "c" -> 4|>}]
+Out[1]= {<|"a" -> 1, "b" -> 2, "c" -> Missing["KeyAbsent", "c"]|>,
+         <|"a" -> Missing["KeyAbsent", "a"], "b" -> 3, "c" -> 4|>}
+```
+
 ## KeyValueMap
 Applies `f` to each key–value pair, giving `{f[k1, v1], f[k2, v2], ...}`.
 

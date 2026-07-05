@@ -277,6 +277,7 @@ extern const char* SYM_Lookup;
 extern const char* SYM_KeyExistsQ;
 extern const char* SYM_KeyDrop;
 extern const char* SYM_KeyTake;
+extern const char* SYM_KeyUnion;
 extern const char* SYM_KeyValueMap;
 extern const char* SYM_AssociateTo;
 extern const char* SYM_Merge;

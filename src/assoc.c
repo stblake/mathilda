@@ -391,6 +391,78 @@ Expr* builtin_keydrop(Expr* res) { return key_drop_take(res, false); }
 Expr* builtin_keytake(Expr* res) { return key_drop_take(res, true);  }
 
 /* ======================================================================
+ * KeyUnion[{assoc1, assoc2, ...}] — pad every association to the shared key
+ * set (the union of all keys, in first-appearance order). A key absent from a
+ * given association is filled with Missing["KeyAbsent", key]. Returns the list
+ * of equalised associations, ready for row-wise / tabular processing.
+ *
+ * The union is collected in one O(sum of sizes) hash pass; each association is
+ * then rebuilt against a hash index of its own keys, so the whole operation is
+ * linear rather than the O(keys * entries) of repeated membership scans.
+ * ====================================================================== */
+Expr* builtin_keyunion(Expr* res) {
+    if (res->data.function.arg_count != 1) return NULL;   /* list form only */
+    Expr* lst = res->data.function.args[0];
+    if (!head_is(lst, SYM_List)) return NULL;
+    size_t m = lst->data.function.arg_count;
+    for (size_t j = 0; j < m; j++)
+        if (!is_association(lst->data.function.args[j])) return NULL;
+
+    /* Upper bound on distinct keys: the total number of entries. */
+    size_t total = 0;
+    for (size_t j = 0; j < m; j++)
+        total += lst->data.function.args[j]->data.function.arg_count;
+
+    KeyIndex uki;
+    if (!ki_init(&uki, total)) return NULL;
+    Expr** ukeys = malloc(sizeof(Expr*) * (total ? total : 1)); /* borrowed */
+    size_t nu = 0;
+    for (size_t j = 0; j < m; j++) {
+        Expr* a = lst->data.function.args[j];
+        size_t na = a->data.function.arg_count;
+        for (size_t i = 0; i < na; i++) {
+            Expr* k = rule_key(a->data.function.args[i]);
+            size_t slot;
+            if (ki_lookup(&uki, ukeys, k, &slot) == SIZE_MAX) {
+                ukeys[nu] = k; ki_insert(&uki, slot, nu); nu++;
+            }
+        }
+    }
+
+    Expr** outer = malloc(sizeof(Expr*) * (m ? m : 1));
+    for (size_t j = 0; j < m; j++) {
+        Expr* a = lst->data.function.args[j];
+        size_t na = a->data.function.arg_count;
+        /* Index this association's own keys so each union key is one lookup. */
+        KeyIndex jki;
+        ki_init(&jki, na);
+        Expr** jkeys = malloc(sizeof(Expr*) * (na ? na : 1)); /* borrowed */
+        for (size_t i = 0; i < na; i++) {
+            Expr* k = rule_key(a->data.function.args[i]);
+            size_t slot;
+            if (ki_lookup(&jki, jkeys, k, &slot) == SIZE_MAX) {
+                jkeys[i] = k; ki_insert(&jki, slot, i);
+            }
+        }
+        Expr** entries = malloc(sizeof(Expr*) * (nu ? nu : 1));
+        for (size_t u = 0; u < nu; u++) {
+            Expr* k = ukeys[u];
+            size_t slot, idx = ki_lookup(&jki, jkeys, k, &slot);
+            Expr* val = (idx == SIZE_MAX)
+                ? make_missing(k)
+                : expr_copy(rule_val(a->data.function.args[idx]));
+            Expr* rargs[2] = { expr_copy(k), val };
+            entries[u] = expr_new_function(expr_new_symbol(SYM_Rule), rargs, 2);
+        }
+        outer[j] = expr_new_function(expr_new_symbol(SYM_Association), entries, nu);
+        free(entries); free(jkeys); ki_free(&jki);
+    }
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), outer, m);
+    free(outer); free(ukeys); ki_free(&uki);
+    return result;
+}
+
+/* ======================================================================
  * KeyValueMap[f, assoc] — List[f[k1,v1], f[k2,v2], ...].
  * The applications are left for the evaluator to reduce.
  * ====================================================================== */
@@ -1121,6 +1193,13 @@ void assoc_init(void) {
     symtab_set_docstring("KeyTake",
         "KeyTake[assoc, {k1, ...}]\n"
         "\tGives the association of only the specified keys (order preserved).");
+
+    symtab_add_builtin("KeyUnion", builtin_keyunion);
+    symtab_get_def("KeyUnion")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("KeyUnion",
+        "KeyUnion[{assoc1, assoc2, ...}]\n"
+        "\tGives the list of associations padded to the union of all their keys;\n"
+        "\ta key absent from an association is filled with Missing[\"KeyAbsent\", key].");
 
     symtab_add_builtin("KeyValueMap", builtin_keyvaluemap);
     symtab_get_def("KeyValueMap")->attributes |= ATTR_PROTECTED;

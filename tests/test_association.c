@@ -197,6 +197,23 @@ void test_keytake_list() {
                    "<|\"a\" -> 1, \"c\" -> 3|>", 0);  /* association order preserved */
 }
 
+void test_keyunion() {
+    /* Pad both associations to the union of keys (first-appearance order),
+     * filling absent values with Missing["KeyAbsent", key]. */
+    assert_eval_eq("KeyUnion[{<|\"a\" -> 1, \"b\" -> 2|>, <|\"b\" -> 3, \"c\" -> 4|>}]",
+                   "{<|\"a\" -> 1, \"b\" -> 2, \"c\" -> Missing[\"KeyAbsent\", \"c\"]|>, "
+                   "<|\"a\" -> Missing[\"KeyAbsent\", \"a\"], \"b\" -> 3, \"c\" -> 4|>}", 0);
+    /* Shared key set: nothing to pad. */
+    assert_eval_eq("KeyUnion[{<|\"a\" -> 1|>, <|\"a\" -> 2|>}]",
+                   "{<|\"a\" -> 1|>, <|\"a\" -> 2|>}", 0);
+    /* An empty association is padded to the others' keys. */
+    assert_eval_eq("KeyUnion[{<||>, <|\"x\" -> 9|>}]",
+                   "{<|\"x\" -> Missing[\"KeyAbsent\", \"x\"]|>, <|\"x\" -> 9|>}", 0);
+    /* A single association is returned unchanged. */
+    assert_eval_eq("KeyUnion[{<|\"a\" -> 1, \"b\" -> 2|>}]",
+                   "{<|\"a\" -> 1, \"b\" -> 2|>}", 0);
+}
+
 /* ---------- KeyValueMap ---------- */
 
 void test_keyvaluemap() {
@@ -1163,6 +1180,7 @@ int main() {
     TEST(test_keydrop_single);
     TEST(test_keydrop_list);
     TEST(test_keytake_list);
+    TEST(test_keyunion);
 
     TEST(test_keyvaluemap);
     TEST(test_keyvaluemap_plus);

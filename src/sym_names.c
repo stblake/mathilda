@@ -274,6 +274,7 @@ const char* SYM_Lookup = NULL;
 const char* SYM_KeyExistsQ = NULL;
 const char* SYM_KeyDrop = NULL;
 const char* SYM_KeyTake = NULL;
+const char* SYM_KeyUnion = NULL;
 const char* SYM_KeyValueMap = NULL;
 const char* SYM_AssociateTo = NULL;
 const char* SYM_Merge = NULL;
@@ -936,6 +937,7 @@ void sym_names_init(void) {
     SYM_KeyExistsQ                 = intern_symbol("KeyExistsQ");
     SYM_KeyDrop                    = intern_symbol("KeyDrop");
     SYM_KeyTake                    = intern_symbol("KeyTake");
+    SYM_KeyUnion                   = intern_symbol("KeyUnion");
     SYM_KeyValueMap                = intern_symbol("KeyValueMap");
     SYM_AssociateTo                = intern_symbol("AssociateTo");
     SYM_Merge                      = intern_symbol("Merge");
