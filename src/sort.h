@@ -5,6 +5,8 @@
 
 Expr* builtin_sort(Expr* res);
 Expr* builtin_sort_by(Expr* res);
+Expr* builtin_maximal_by(Expr* res);
+Expr* builtin_minimal_by(Expr* res);
 Expr* builtin_orderedq(Expr* res);
 
 #endif // SORT_H

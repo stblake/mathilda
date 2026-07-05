@@ -450,6 +450,30 @@ void test_sortby_operator_form() {
     assert_eval_eq("SortBy[Abs][{-3, 1, -2}]", "{1, -2, -3}", 0);
 }
 
+/* ---------- MaximalBy / MinimalBy (lists and associations) ---------- */
+
+void test_maximalby_list_ties() {
+    assert_eval_eq("MaximalBy[{1, -5, 3, -5, 2}, Abs]", "{-5, -5}", 0);
+}
+
+void test_minimalby_list_ties() {
+    assert_eval_eq("MinimalBy[{3, 1, 4, 1, 5}, Identity]", "{1, 1}", 0);
+}
+
+void test_maximalby_association() {
+    assert_eval_eq("MaximalBy[<|\"a\" -> 1, \"b\" -> 3, \"c\" -> 3|>, Identity]",
+                   "<|\"b\" -> 3, \"c\" -> 3|>", 0);
+}
+
+void test_minimalby_association() {
+    assert_eval_eq("MinimalBy[<|\"a\" -> 1, \"b\" -> 3, \"c\" -> 2|>, Identity]",
+                   "<|\"a\" -> 1|>", 0);
+}
+
+void test_maximalby_operator_form() {
+    assert_eval_eq("MaximalBy[Abs][{1, -5, 3}]", "{-5}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -553,6 +577,12 @@ int main() {
     TEST(test_sortby_association);
     TEST(test_sortby_association_by_first);
     TEST(test_sortby_operator_form);
+
+    TEST(test_maximalby_list_ties);
+    TEST(test_minimalby_list_ties);
+    TEST(test_maximalby_association);
+    TEST(test_minimalby_association);
+    TEST(test_maximalby_operator_form);
 
     printf("All Association tests passed.\n");
     return 0;

@@ -301,6 +301,8 @@ const char* SYM_MachineNumberQ = NULL;
 const char* SYM_MachinePrecision = NULL;
 const char* SYM_MantissaExponent = NULL;
 const char* SYM_Max = NULL;
+const char* SYM_MaximalBy = NULL;
+const char* SYM_MinimalBy = NULL;
 const char* SYM_MaxIterations = NULL;
 const char* SYM_MaxPoints = NULL;
 const char* SYM_MaxRecursion = NULL;
@@ -959,6 +961,8 @@ void sym_names_init(void) {
     SYM_MachinePrecision           = intern_symbol("MachinePrecision");
     SYM_MantissaExponent           = intern_symbol("MantissaExponent");
     SYM_Max                        = intern_symbol("Max");
+    SYM_MaximalBy                  = intern_symbol("MaximalBy");
+    SYM_MinimalBy                  = intern_symbol("MinimalBy");
     SYM_MaxIterations              = intern_symbol("MaxIterations");
     SYM_MaxPoints                  = intern_symbol("MaxPoints");
     SYM_MaxRecursion               = intern_symbol("MaxRecursion");

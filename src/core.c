@@ -445,6 +445,18 @@ void core_init(void) {
         "\tf applied to each element.\n"
         "SortBy[assoc, f]\n\tSorts an association by f applied to each value.\n"
         "SortBy[f]\n\tOperator form: SortBy[f][expr] is SortBy[expr, f].");
+    symtab_add_builtin("MaximalBy", builtin_maximal_by);
+    symtab_get_def("MaximalBy")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("MaximalBy",
+        "MaximalBy[list, f]\n\tGives the element(s) of list for which f is maximal\n"
+        "\t(all ties, in order). Over an association, gives the entries whose\n"
+        "\tvalue maximises f. MaximalBy[f] is the operator form.");
+    symtab_add_builtin("MinimalBy", builtin_minimal_by);
+    symtab_get_def("MinimalBy")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("MinimalBy",
+        "MinimalBy[list, f]\n\tGives the element(s) of list for which f is minimal\n"
+        "\t(all ties, in order). Over an association, gives the entries whose\n"
+        "\tvalue minimises f. MinimalBy[f] is the operator form.");
     symtab_add_builtin("OrderedQ", builtin_orderedq);
     symtab_get_def("OrderedQ")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("PolynomialQ", builtin_polynomialq);

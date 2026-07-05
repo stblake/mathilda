@@ -196,6 +196,15 @@ In[3]:= DeleteCases[<|"a" -> 1, "b" -> 2, "c" -> 3|>, x_ /; x > 1]
 Out[3]= <|"a" -> 1|>
 ```
 
+## Extremes by value (MaximalBy, MinimalBy)
+`MaximalBy[assoc, f]` / `MinimalBy[assoc, f]` return the entries whose value
+maximises / minimises `f` (all ties), as an association.
+
+```mathematica
+In[1]:= MaximalBy[<|"a" -> 1, "b" -> 3, "c" -> 3|>, Identity]
+Out[1]= <|"b" -> 3, "c" -> 3|>
+```
+
 ## Predicate tests on values (AllTrue, AnyTrue, NoneTrue, MemberQ)
 Predicate tests apply to the **values** of an association (and to the elements
 of a list). `AllTrue`/`AnyTrue`/`NoneTrue` are left unevaluated if a test

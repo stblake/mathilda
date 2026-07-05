@@ -450,6 +450,70 @@ Expr* builtin_sort_by(Expr* res) {
 }
 
 
+/* ------------------- MaximalBy / MinimalBy ------------------- */
+
+/* mode 0 = MaximalBy, mode 1 = MinimalBy.
+ * MaximalBy[list, f]  -> the element(s) e maximising f[e] (all ties, in order).
+ * MaximalBy[assoc, f] -> the entries whose value maximises f[value] (an assoc).
+ * MaximalBy[f]        -> operator form. */
+static Expr* maximal_minimal_by(Expr* res, int mode) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+
+    if (argc == 1) {
+        const char* head = (mode == 0) ? SYM_MaximalBy : SYM_MinimalBy;
+        Expr* slot_args[1] = { expr_new_integer(1) };
+        Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot), slot_args, 1);
+        Expr* inner_args[2] = { slot, expr_copy(res->data.function.args[0]) };
+        Expr* inner = expr_new_function(expr_new_symbol(head), inner_args, 2);
+        Expr* func_args[1] = { inner };
+        return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
+    }
+    if (argc != 2) return NULL;
+
+    Expr* coll = res->data.function.args[0];
+    Expr* f    = res->data.function.args[1];
+    if (coll->type != EXPR_FUNCTION) return NULL;
+
+    bool assoc = is_association(coll);
+    size_t n = coll->data.function.arg_count;
+    if (n == 0) return expr_copy(coll);  /* empty in, empty out */
+
+    Expr** keys = malloc(sizeof(Expr*) * n);   /* f-value per element (owned) */
+    for (size_t i = 0; i < n; i++) {
+        Expr* elem = coll->data.function.args[i];
+        Expr* subject = elem;
+        if (assoc && elem->type == EXPR_FUNCTION && elem->data.function.arg_count == 2)
+            subject = elem->data.function.args[1];
+        Expr* call_args[1] = { expr_copy(subject) };
+        Expr* call = expr_new_function(expr_copy(f), call_args, 1);
+        keys[i] = evaluate(call);
+        expr_free(call);
+    }
+
+    size_t best = 0;
+    for (size_t i = 1; i < n; i++) {
+        int c = expr_compare(keys[i], keys[best]);
+        if ((mode == 0 && c > 0) || (mode == 1 && c < 0)) best = i;
+    }
+
+    Expr** out = malloc(sizeof(Expr*) * n);
+    size_t nout = 0;
+    for (size_t i = 0; i < n; i++)
+        if (expr_compare(keys[i], keys[best]) == 0)
+            out[nout++] = expr_copy(coll->data.function.args[i]);
+
+    for (size_t i = 0; i < n; i++) expr_free(keys[i]);
+    free(keys);
+
+    Expr* result = expr_new_function(expr_copy(coll->data.function.head), out, nout);
+    free(out);
+    return result;
+}
+
+Expr* builtin_maximal_by(Expr* res) { return maximal_minimal_by(res, 0); }
+Expr* builtin_minimal_by(Expr* res) { return maximal_minimal_by(res, 1); }
+
 Expr* builtin_orderedq(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) {
         return NULL;

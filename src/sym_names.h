@@ -302,6 +302,8 @@ extern const char* SYM_MachineNumberQ;
 extern const char* SYM_MachinePrecision;
 extern const char* SYM_MantissaExponent;
 extern const char* SYM_Max;
+extern const char* SYM_MaximalBy;
+extern const char* SYM_MinimalBy;
 extern const char* SYM_MaxIterations;
 extern const char* SYM_MaxPoints;
 extern const char* SYM_MaxRecursion;

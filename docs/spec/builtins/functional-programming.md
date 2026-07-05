@@ -788,3 +788,18 @@ Out[2]= {"a", "bb", "ccc"}
 In[3]:= SortBy[Abs][{-3, 1, -2}]
 Out[3]= {1, -2, -3}
 ```
+
+## MaximalBy, MinimalBy
+Select the extreme elements by a key function.
+- `MaximalBy[list, f]`: the element(s) of `list` for which `f` is maximal (all ties, in order).
+- `MinimalBy[list, f]`: the element(s) for which `f` is minimal.
+- Over an association, gives the entries whose value maximises/minimises `f` (an association).
+- `MaximalBy[f]` / `MinimalBy[f]`: operator forms.
+
+```mathematica
+In[1]:= MaximalBy[{1, -5, 3, -5, 2}, Abs]
+Out[1]= {-5, -5}
+
+In[2]:= MinimalBy[<|"a" -> 1, "b" -> 3, "c" -> 2|>, Identity]
+Out[2]= <|"a" -> 1|>
+```
