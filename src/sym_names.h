@@ -285,6 +285,7 @@ extern const char* SYM_Counts;
 extern const char* SYM_CountsBy;
 extern const char* SYM_GroupBy;
 extern const char* SYM_Missing;
+extern const char* SYM_MatchQ;
 extern const char* SYM_KeySort;
 extern const char* SYM_KeySortBy;
 extern const char* SYM_KeyMap;

@@ -86,6 +86,7 @@ Looks up the value stored under a key.
 - `Lookup[assoc, key, default]` uses `default` when the key is absent.
 - `Lookup[assoc, {k1, k2, ...}]` looks up several keys with a single hash-index
   build (`O(n + m)`).
+- Also accepts a bare list of rules (like `Keys`/`Values`).
 
 ```mathematica
 In[1]:= Lookup[<|"a" -> 1, "b" -> 2|>, "b"]
@@ -206,8 +207,10 @@ Out[1]= <|"a" -> 1, "b" -> 2|>
 ## Part assignment
 Associations support in-place update through `Part`: `a[[key]] = val` updates an
 existing key or adds a new one, `a[[Key[k]]] = val` targets a key explicitly,
-and `a[[i]] = val` updates the i-th value positionally. Multi-index assignment
-descends into nested associations and lists (`a[[k1, k2]] = val`).
+and `a[[i]] = val` updates the i-th value positionally. `a[[All]] = val`,
+`a[[i ;; j]] = val` and `a[[{k1, ...}]] = val` assign into every / spanned /
+listed entry's value. Multi-index assignment descends into nested associations
+and lists (`a[[k1, k2]] = val`).
 
 ```mathematica
 In[1]:= a = <|"x" -> 1, "y" -> 2|>; a[["x"]] = 99; a

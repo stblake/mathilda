@@ -10,7 +10,6 @@
 
 #include "assoc.h"
 #include "sym_names.h"
-#include "sym_intern.h"
 #include "symtab.h"
 #include "attr.h"
 #include "common.h"
@@ -268,9 +267,15 @@ Expr* builtin_values(Expr* res) { return keys_or_values(res, false); }
 static Expr* assoc_scan(const Expr* assoc, const Expr* key) {
     for (size_t i = 0; i < assoc->data.function.arg_count; i++) {
         Expr* r = assoc->data.function.args[i];
-        if (expr_eq(rule_key(r), key)) return rule_val(r);
+        if (is_rule2(r) && expr_eq(rule_key(r), key)) return rule_val(r);
     }
     return NULL;
+}
+
+/* Lookup / KeyExistsQ accept an association or a bare list of rules (like
+ * Keys/Values). A list with non-rule elements simply has no matching keys. */
+static bool is_assoc_or_rule_list(const Expr* e) {
+    return is_association(e) || head_is(e, SYM_List);
 }
 
 Expr* builtin_lookup(Expr* res) {
@@ -279,7 +284,7 @@ Expr* builtin_lookup(Expr* res) {
     Expr* assoc = res->data.function.args[0];
     Expr* key   = res->data.function.args[1];
     Expr* deflt = argc == 3 ? res->data.function.args[2] : NULL;
-    if (!is_association(assoc)) return NULL;
+    if (!is_assoc_or_rule_list(assoc)) return NULL;
 
     /* Lookup over a list of keys: single index build, then O(1) per key. */
     if (head_is(key, SYM_List)) {
@@ -290,6 +295,7 @@ Expr* builtin_lookup(Expr* res) {
         Expr** akeys = malloc(sizeof(Expr*) * (na ? na : 1));
         for (size_t i = 0; i < na; i++) {
             Expr* r = assoc->data.function.args[i];
+            if (!is_rule2(r)) continue;
             size_t slot, idx = ki_lookup(&ki, akeys, rule_key(r), &slot);
             if (idx == SIZE_MAX) { akeys[i] = rule_key(r); ki_insert(&ki, slot, i); }
         }
@@ -727,11 +733,12 @@ Expr* assoc_map_values(Expr* f, const Expr* assoc) {
     return result;
 }
 
-Expr* assoc_select_values(Expr* pred, const Expr* assoc) {
+Expr* assoc_select_values(Expr* pred, const Expr* assoc, int64_t max) {
     size_t n = assoc->data.function.arg_count;
     Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
     size_t nout = 0;
     for (size_t i = 0; i < n; i++) {
+        if (max >= 0 && (int64_t)nout >= max) break;
         Expr* r = assoc->data.function.args[i];
         Expr* verdict = apply1(pred, rule_val(r));
         if (verdict->type == EXPR_SYMBOL && verdict->data.symbol == SYM_True)
@@ -775,21 +782,28 @@ Expr* assoc_apply_over_values(Expr* res) {
 /* ======================================================================
  * Sort[assoc] — reorder entries by their values in canonical order.
  * ====================================================================== */
-static int rule_value_cmp(const void* a, const void* b) {
-    const Expr* ra = *(const Expr* const*)a;
-    const Expr* rb = *(const Expr* const*)b;
-    int c = expr_compare(rule_val(ra), rule_val(rb));
+/* A rule paired with its original position, so ties can be broken by position
+ * — giving a stable sort by value (Sort[assoc] preserves input order for
+ * equal values, matching Wolfram). */
+typedef struct { Expr* rule; size_t idx; } RuleWithIndex;
+
+static int rule_value_stable_cmp(const void* a, const void* b) {
+    const RuleWithIndex* ra = (const RuleWithIndex*)a;
+    const RuleWithIndex* rb = (const RuleWithIndex*)b;
+    int c = expr_compare(rule_val(ra->rule), rule_val(rb->rule));
     if (c != 0) return c;
-    return expr_compare(rule_key(ra), rule_key(rb)); /* tie-break by key: deterministic */
+    return (ra->idx < rb->idx) ? -1 : (ra->idx > rb->idx ? 1 : 0);
 }
 
 Expr* assoc_sort_by_value(const Expr* assoc) {
     size_t n = assoc->data.function.arg_count;
+    RuleWithIndex* pairs = malloc(sizeof(RuleWithIndex) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) { pairs[i].rule = assoc->data.function.args[i]; pairs[i].idx = i; }
+    qsort(pairs, n, sizeof(RuleWithIndex), rule_value_stable_cmp);
     Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
-    for (size_t i = 0; i < n; i++) out[i] = expr_copy(assoc->data.function.args[i]);
-    qsort(out, n, sizeof(Expr*), rule_value_cmp);
+    for (size_t i = 0; i < n; i++) out[i] = expr_copy(pairs[i].rule);
     Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, n);
-    free(out);
+    free(out); free(pairs);
     return result;
 }
 
@@ -802,7 +816,7 @@ Expr* assoc_delete_cases(const Expr* assoc, Expr* pattern) {
     for (size_t i = 0; i < n; i++) {
         Expr* r = assoc->data.function.args[i];
         Expr* mq_args[2] = { expr_copy(rule_val(r)), expr_copy(pattern) };
-        Expr* mq = expr_new_function(expr_new_symbol(intern_symbol("MatchQ")), mq_args, 2);
+        Expr* mq = expr_new_function(expr_new_symbol(SYM_MatchQ), mq_args, 2);
         Expr* verdict = evaluate(mq);
         expr_free(mq);
         bool matches = (verdict->type == EXPR_SYMBOL && verdict->data.symbol == SYM_True);

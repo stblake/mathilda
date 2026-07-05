@@ -896,6 +896,40 @@ void test_capstone_counts_top() {
         "x", 0);
 }
 
+/* ---------- Regression tests from code review ---------- */
+
+void test_review_part_assign_all() {
+    /* a[[All]] = v sets every value (was appending a bogus All -> v key). */
+    assert_eval_eq("(ra = <|\"x\" -> 1, \"y\" -> 2|>; ra[[All]] = 9; ra)",
+                   "<|\"x\" -> 9, \"y\" -> 9|>", 0);
+}
+
+void test_review_part_assign_span() {
+    assert_eval_eq("(rb = <|\"x\" -> 1, \"y\" -> 2, \"z\" -> 3|>; rb[[1 ;; 2]] = 0; rb)",
+                   "<|\"x\" -> 0, \"y\" -> 0, \"z\" -> 3|>", 0);
+}
+
+void test_review_part_assign_key_list() {
+    assert_eval_eq("(rc = <|\"x\" -> 1, \"y\" -> 2, \"z\" -> 3|>; rc[[{\"x\", \"z\"}]] = 5; rc)",
+                   "<|\"x\" -> 5, \"y\" -> 2, \"z\" -> 5|>", 0);
+}
+
+void test_review_select_three_arg() {
+    /* Select[assoc, pred, n] filters values, first n (was operating on rules). */
+    assert_eval_eq("Select[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3, \"d\" -> 4|>, EvenQ, 1]",
+                   "<|\"b\" -> 2|>", 0);
+}
+
+void test_review_sort_stable() {
+    /* Sort[assoc] preserves input order for equal values. */
+    assert_eval_eq("Sort[<|\"b\" -> 1, \"a\" -> 1, \"c\" -> 0|>]",
+                   "<|\"c\" -> 0, \"b\" -> 1, \"a\" -> 1|>", 0);
+}
+
+void test_review_lookup_rule_list() {
+    assert_eval_eq("Lookup[{p -> 1, q -> 2}, q]", "2", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -1098,6 +1132,13 @@ int main() {
     TEST(test_position_association);
     TEST(test_position_association_pattern);
     TEST(test_position_association_none);
+
+    TEST(test_review_part_assign_all);
+    TEST(test_review_part_assign_span);
+    TEST(test_review_part_assign_key_list);
+    TEST(test_review_select_three_arg);
+    TEST(test_review_sort_stable);
+    TEST(test_review_lookup_rule_list);
 
     TEST(test_capstone_pipeline);
     TEST(test_capstone_counts_top);

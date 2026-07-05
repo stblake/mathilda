@@ -43,8 +43,9 @@ Expr* assoc_from_rules(Expr** rules, size_t count);
 Expr* assoc_map_values(Expr* f, const Expr* assoc);
 
 /* Keep the entries whose value satisfies the predicate `pred` (pred[v] must
- * evaluate to True). Preserves order. Caller owns the result. */
-Expr* assoc_select_values(Expr* pred, const Expr* assoc);
+ * evaluate to True), up to `max` of them (max < 0 means no limit). Preserves
+ * order. Caller owns the result. */
+Expr* assoc_select_values(Expr* pred, const Expr* assoc, int64_t max);
 
 /* The values of an association as a List (deep copies). Caller owns it. */
 Expr* assoc_values_list(const Expr* assoc);

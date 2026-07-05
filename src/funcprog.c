@@ -385,13 +385,6 @@ Expr* builtin_select(Expr* res) {
     Expr* list = res->data.function.args[0];
     Expr* crit = res->data.function.args[1];
 
-    /* Select over an association filters by value, preserving keys:
-     * Select[<|k -> v|>, p] keeps the entries where p[v] is True. */
-    if (res->data.function.arg_count == 2 && is_association(list))
-        return assoc_select_values(crit, list);
-
-    if (list->type != EXPR_FUNCTION) return NULL; // Can only select from compound expressions
-    
     int64_t n_max = -1; // -1 means all
     if (res->data.function.arg_count == 3) {
         Expr* n_expr = res->data.function.args[2];
@@ -401,6 +394,14 @@ Expr* builtin_select(Expr* res) {
             return NULL; // Invalid n
         }
     }
+
+    /* Select over an association filters by value, preserving keys:
+     * Select[<|k -> v|>, p] keeps the entries where p[v] is True;
+     * Select[<|k -> v|>, p, n] keeps the first n such entries. */
+    if (is_association(list))
+        return assoc_select_values(crit, list, n_max);
+
+    if (list->type != EXPR_FUNCTION) return NULL; // Can only select from compound expressions
     
     size_t count = list->data.function.arg_count;
     Expr** kept_args = NULL;

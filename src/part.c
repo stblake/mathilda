@@ -6,6 +6,17 @@
 #include "assoc.h"
 
 static bool is_atomic(Expr* e);
+static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, Expr* rhs, size_t* rhs_idx, bool is_rhs_list);
+
+/* Assign into the value slot (args[1]) of association entry `rule`, recursing
+ * for any remaining indices. No-op if `rule` is not a 2-argument rule. */
+static void assoc_assign_value(Expr* rule, Expr** rest, size_t nrest, Expr* rhs, size_t* rhs_idx, bool is_rhs_list) {
+    if (rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2) {
+        Expr* nv = expr_part_assign_rec(rule->data.function.args[1], rest, nrest, rhs, rhs_idx, is_rhs_list);
+        expr_free(rule->data.function.args[1]);
+        rule->data.function.args[1] = nv;
+    }
+}
 
 static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, Expr* rhs, size_t* rhs_idx, bool is_rhs_list) {
     if (nindices == 0) {
@@ -34,30 +45,61 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
     Expr* new_head = expr_copy(expr->data.function.head);
 
     if (is_association(expr)) {
-        /* assoc[[key]] = v  (or assoc[[Key[k]]] = v): update the value for an
-         * existing key, or append a new Rule[key, v] when the key is absent.
-         * assoc[[i]] = v updates the i-th value positionally. */
-        Expr* lookup_key = NULL; bool positional = false; int64_t pos = 0;
-        if (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
-            idx->data.function.head->data.symbol == SYM_Key && idx->data.function.arg_count == 1) {
-            lookup_key = idx->data.function.args[0];
-        } else if (idx->type == EXPR_INTEGER) {
-            positional = true; pos = idx->data.integer;
-        } else {
-            lookup_key = idx;
-        }
-
-        if (positional) {
-            if (pos < 0) pos = (int64_t)len + pos + 1;
-            if (pos >= 1 && pos <= (int64_t)len) {
-                Expr* rule = new_args[pos - 1];
-                if (rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2) {
-                    Expr* nv = expr_part_assign_rec(rule->data.function.args[1], rest, nrest, rhs, rhs_idx, is_rhs_list);
-                    expr_free(rule->data.function.args[1]);
-                    rule->data.function.args[1] = nv;
+        /* Association assignment always targets entry *values*:
+         *   a[[Key[k]]]/a[["s"]] = v  update (or append when absent),
+         *   a[[i]] = v                positional value,
+         *   a[[All]] = v              every value,
+         *   a[[i;;j]] = v             spanned values,
+         *   a[[{k1,k2,...}]] = v      the listed keys'/positions' values.
+         * Non-key structural indices must NOT be appended as literal keys. */
+        if (idx->type == EXPR_SYMBOL && idx->data.symbol == SYM_All) {
+            for (size_t i = 0; i < len; i++)
+                assoc_assign_value(new_args[i], rest, nrest, rhs, rhs_idx, is_rhs_list);
+        } else if (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
+                   idx->data.function.head->data.symbol == SYM_Span) {
+            int64_t start = 1, end = (int64_t)len, step = 1;
+            size_t sa = idx->data.function.arg_count;
+            if (sa >= 1 && idx->data.function.args[0]->type == EXPR_INTEGER) {
+                start = idx->data.function.args[0]->data.integer; if (start < 0) start = (int64_t)len + start + 1;
+            }
+            if (sa >= 2 && idx->data.function.args[1]->type == EXPR_INTEGER) {
+                end = idx->data.function.args[1]->data.integer; if (end < 0) end = (int64_t)len + end + 1;
+            }
+            if (sa >= 3 && idx->data.function.args[2]->type == EXPR_INTEGER) {
+                step = idx->data.function.args[2]->data.integer;
+            }
+            if (step > 0)
+                for (int64_t i = start; i <= end && i >= 1 && i <= (int64_t)len; i += step)
+                    assoc_assign_value(new_args[i - 1], rest, nrest, rhs, rhs_idx, is_rhs_list);
+        } else if (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
+                   idx->data.function.head->data.symbol == SYM_List) {
+            for (size_t j = 0; j < idx->data.function.arg_count; j++) {
+                Expr* sub = idx->data.function.args[j];
+                if (sub->type == EXPR_INTEGER) {
+                    int64_t p = sub->data.integer; if (p < 0) p = (int64_t)len + p + 1;
+                    if (p >= 1 && p <= (int64_t)len)
+                        assoc_assign_value(new_args[p - 1], rest, nrest, rhs, rhs_idx, is_rhs_list);
+                } else {
+                    Expr* k = (sub->type == EXPR_FUNCTION && sub->data.function.head->type == EXPR_SYMBOL &&
+                               sub->data.function.head->data.symbol == SYM_Key && sub->data.function.arg_count == 1)
+                              ? sub->data.function.args[0] : sub;
+                    for (size_t i = 0; i < len; i++)
+                        if (new_args[i]->type == EXPR_FUNCTION && new_args[i]->data.function.arg_count == 2 &&
+                            expr_eq(new_args[i]->data.function.args[0], k)) {
+                            assoc_assign_value(new_args[i], rest, nrest, rhs, rhs_idx, is_rhs_list); break;
+                        }
                 }
             }
+        } else if (idx->type == EXPR_INTEGER) {
+            int64_t pos = idx->data.integer;
+            if (pos < 0) pos = (int64_t)len + pos + 1;
+            if (pos >= 1 && pos <= (int64_t)len)
+                assoc_assign_value(new_args[pos - 1], rest, nrest, rhs, rhs_idx, is_rhs_list);
         } else {
+            /* Single key: Key[k] (unwrapped) or a literal key. */
+            Expr* lookup_key = (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
+                                idx->data.function.head->data.symbol == SYM_Key && idx->data.function.arg_count == 1)
+                               ? idx->data.function.args[0] : idx;
             int64_t found = -1;
             for (size_t i = 0; i < len; i++) {
                 Expr* rule = new_args[i];
@@ -65,10 +107,7 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
                     expr_eq(rule->data.function.args[0], lookup_key)) { found = (int64_t)i; break; }
             }
             if (found >= 0) {
-                Expr* rule = new_args[found];
-                Expr* nv = expr_part_assign_rec(rule->data.function.args[1], rest, nrest, rhs, rhs_idx, is_rhs_list);
-                expr_free(rule->data.function.args[1]);
-                rule->data.function.args[1] = nv;
+                assoc_assign_value(new_args[found], rest, nrest, rhs, rhs_idx, is_rhs_list);
             } else if (nrest == 0) {
                 /* nrest == 0 -> the recursive call returns the RHS value. */
                 Expr* nv = expr_part_assign_rec(new_head, rest, nrest, rhs, rhs_idx, is_rhs_list);
