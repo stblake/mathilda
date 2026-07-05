@@ -51,6 +51,12 @@ void test_assoc_symbol_keys() {
     assert_eval_eq("<|a -> 1, b -> 2|>", "<|a -> 1, b -> 2|>", 0);
 }
 
+void test_assoc_implicit_multiplication() {
+    /* An association literal is a valid right operand of implicit Times. */
+    assert_eval_eq("FullForm[2 <|\"a\" -> 1|>]", "Times[2, Association[Rule[\"a\", 1]]]", 1);
+    assert_eval_eq("3 <|\"x\" -> 4|>[\"x\"]", "12", 0);
+}
+
 void test_assoc_invalid_unevaluated() {
     /* A non-rule argument leaves Association unevaluated. */
     assert_eval_eq("Association[x]", "Association[x]", 0);
@@ -985,6 +991,7 @@ int main() {
     TEST(test_assoc_splice_list_of_rules);
     TEST(test_assoc_splice_nested_association);
     TEST(test_assoc_symbol_keys);
+    TEST(test_assoc_implicit_multiplication);
     TEST(test_assoc_invalid_unevaluated);
 
     TEST(test_keys_basic);

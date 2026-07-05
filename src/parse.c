@@ -1153,7 +1153,9 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         OperatorDef op_def = get_operator(s->pos);
         
         // Handle implicit multiplication: if no explicit operator but another expression follows
-        if (op_def.type == OP_NONE && can_start_primary(*s->pos)) {
+        // (an association literal `<|...|>` begins with `<|`, which is not a
+        // can_start_primary char, so admit it explicitly).
+        if (op_def.type == OP_NONE && (can_start_primary(*s->pos) || strncmp(s->pos, "<|", 2) == 0)) {
             // Implicit Times has same precedence as explicit Times (400)
             if (400 < min_prec) break;
             op_def.type = OP_TIMES;
