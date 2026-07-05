@@ -311,7 +311,7 @@ the `{Key[k]}` positions `Position` returns.
 In[1]:= MapAt[#^2 &, <|"a" -> 3, "b" -> 4|>, "b"]
 Out[1]= <|"a" -> 3, "b" -> 16|>
 
-In[2]:= p = <|"a" -> 1, "b" -> 9|>; MapAt[Minus, p, First[Position[p, 9]]]
+In[2]:= p = <|"a" -> 1, "b" -> 9|>; MapAt[-# &, p, First[Position[p, 9]]]
 Out[2]= <|"a" -> 1, "b" -> -9|>
 ```
 

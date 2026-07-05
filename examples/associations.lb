@@ -73,6 +73,22 @@
         {"cells": [{"type": "code", "source": "ReverseSort[GroupBy[txns, First -> Last, Total]]"}]},
         {"cells": [{"type": "code", "source": "TakeLargest[GroupBy[txns, First -> Last, Total], 1]"}]}
       ]
+    },
+    {
+      "id": "nb-505", "title": "Associations V — Positions & edits", "x": 1510, "y": 50, "width": 680, "collapsed": false,
+      "rows": [
+        {"cells": [{"type": "section", "source": "Positions by key"}]},
+        {"cells": [{"type": "text", "source": "Position reports matches as {Key[k]} positions that flow into Extract, MapAt, Delete and ReplacePart."}]},
+        {"cells": [{"type": "code", "source": "inv = <|\"gold\" -> 5, \"silver\" -> 12, \"bronze\" -> 3|>"}]},
+        {"cells": [{"type": "code", "source": "Position[inv, x_ /; x > 4]"}]},
+        {"cells": [{"type": "code", "source": "Extract[inv, {Key[\"silver\"]}]"}]},
+        {"cells": [{"type": "section", "source": "Structural edits"}]},
+        {"cells": [{"type": "text", "source": "MapAt transforms a value in place; Delete removes an entry; ReplacePart replaces (never adds)."}]},
+        {"cells": [{"type": "code", "source": "MapAt[# * 2 &, inv, Key[\"gold\"]]"}]},
+        {"cells": [{"type": "code", "source": "Delete[inv, {Key[\"bronze\"]}]"}]},
+        {"cells": [{"type": "code", "source": "ReplacePart[inv, Key[\"silver\"] -> 0]"}]},
+        {"cells": [{"type": "code", "source": "MapAt[-# &, inv, First[Position[inv, 12]]]"}]}
+      ]
     }
   ]
 }
