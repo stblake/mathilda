@@ -470,7 +470,9 @@ Returns the numerically smallest or largest elements.
 - `Min[]` returns `Infinity`.
 - `Max[]` returns `-Infinity`.
 - Handles `Infinity` and `-Infinity`.
-- Simplifies numeric arguments to a single value.
+- Simplifies numeric arguments to a single value; a single element reduces to
+  itself (`Min[5]` is `5`, `Max[x]` is `x`).
+- Over an association, uses the values (`Min[<|"a" -> 3, "b" -> 1|>]` is `1`).
 
 ```mathematica
 In[1]:= Min[9, 2]
@@ -481,6 +483,19 @@ Out[2]= 1
 
 In[3]:= Max[Infinity, 5]
 Out[3]= Infinity
+```
+
+## MinMax
+`MinMax[list]` gives `{Min[list], Max[list]}` in one shot — the range of the
+data, handy for plot bounds. Over an association it uses the values. Delegates
+to `Min` / `Max`, so it inherits their numeric handling.
+
+```mathematica
+In[1]:= MinMax[{3, 1, 4, 1, 5, 9, 2}]
+Out[1]= {1, 9}
+
+In[2]:= MinMax[<|"a" -> 3, "b" -> 1, "c" -> 9|>]
+Out[2]= {1, 9}
 ```
 
 ## Append, Prepend

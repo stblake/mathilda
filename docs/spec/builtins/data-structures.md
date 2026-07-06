@@ -245,6 +245,15 @@ In[3]:= n = <|"p" -> <|"q" -> 1|>|>; n[["p", "q"]] = 42; n
 Out[3]= <|"p" -> <|"q" -> 42|>|>
 ```
 
+## Min, Max, MinMax
+`Min[assoc]` / `Max[assoc]` give the extreme values; `MinMax[assoc]` gives
+`{min, max}` in one shot (the value-range, e.g. for plot bounds).
+
+```mathematica
+In[1]:= MinMax[<|"a" -> 3, "b" -> 1, "c" -> 9|>]
+Out[1]= {1, 9}
+```
+
 ## Mean
 `Mean[assoc]` averages the association's values (like `Total`/`Min`/`Max`).
 

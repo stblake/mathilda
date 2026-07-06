@@ -461,6 +461,20 @@ void test_deletecases_over_values() {
                    "<|\"a\" -> 1|>", 0);
 }
 
+void test_minmax() {
+    /* Lists: {min, max} in one shot. */
+    assert_eval_eq("MinMax[{3, 1, 4, 1, 5, 9, 2}]", "{1, 9}", 0);
+    assert_eval_eq("MinMax[{2.5, -1, 7}]", "{-1, 7}", 0);
+    assert_eval_eq("MinMax[{{1, 2}, {3, 4}}]", "{1, 4}", 0);  /* flattens like Min/Max */
+    assert_eval_eq("MinMax[{5}]", "{5, 5}", 0);
+    /* Association: over the values. */
+    assert_eval_eq("MinMax[<|\"a\" -> 3, \"b\" -> 1, \"c\" -> 9|>]", "{1, 9}", 0);
+    /* Min/Max of a single element now reduce (Min[5] -> 5, Max[x] -> x). */
+    assert_eval_eq("Min[5]", "5", 0);
+    assert_eval_eq("Min[{5}]", "5", 0);
+    assert_eval_eq("Max[x]", "x", 0);
+}
+
 void test_takewhile_lengthwhile() {
     /* Lists: the longest leading run for which crit is True. */
     assert_eval_eq("TakeWhile[{1, 2, 3, 5, 1}, # < 3 &]", "{1, 2}", 0);
@@ -1278,6 +1292,7 @@ int main() {
     TEST(test_cases_pattern_head);
     TEST(test_count_over_values);
     TEST(test_deletecases_over_values);
+    TEST(test_minmax);
     TEST(test_takewhile_lengthwhile);
     TEST(test_foldlist_over_association_values);
     TEST(test_accumulate_over_association_values);

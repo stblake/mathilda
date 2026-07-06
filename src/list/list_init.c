@@ -36,6 +36,11 @@ void list_init(void) {
     symtab_add_builtin("Commonest", builtin_commonest);
     symtab_add_builtin("Min", builtin_min);
     symtab_add_builtin("Max", builtin_max);
+    symtab_add_builtin("MinMax", builtin_minmax);
+    symtab_get_def("MinMax")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("MinMax",
+        "MinMax[list]\n\tGives {Min[list], Max[list]}. Over an association, uses\n"
+        "\tthe values.");
     symtab_add_builtin("ListQ", builtin_listq);
     symtab_add_builtin("VectorQ", builtin_vectorq);
     symtab_add_builtin("MatrixQ", builtin_matrixq);
