@@ -461,6 +461,19 @@ void test_deletecases_over_values() {
                    "<|\"a\" -> 1|>", 0);
 }
 
+void test_catenate() {
+    /* Lists concatenate one level (elements must share a head). */
+    assert_eval_eq("Catenate[{{1, 2}, {3, 4}, {5}}]", "{1, 2, 3, 4, 5}", 0);
+    assert_eval_eq("Catenate[{}]", "{}", 0);
+    assert_eval_eq("Catenate[{f[1, 2], f[3]}]", "f[1, 2, 3]", 0);
+    /* A list of associations merges into one (later keys win). */
+    assert_eval_eq("Catenate[{<|\"a\" -> 1, \"b\" -> 2|>, <|\"b\" -> 3, \"c\" -> 4|>}]",
+                   "<|\"a\" -> 1, \"b\" -> 3, \"c\" -> 4|>", 0);
+    assert_eval_eq("Catenate[{<||>, <|\"a\" -> 1|>}]", "<|\"a\" -> 1|>", 0);
+    /* Composes with GroupBy: flatten the grouped buckets back to one list. */
+    assert_eval_eq("Catenate[Values[GroupBy[Range[6], EvenQ]]]", "{1, 3, 5, 2, 4, 6}", 0);
+}
+
 void test_minmax() {
     /* Lists: {min, max} in one shot. */
     assert_eval_eq("MinMax[{3, 1, 4, 1, 5, 9, 2}]", "{1, 9}", 0);
@@ -1292,6 +1305,7 @@ int main() {
     TEST(test_cases_pattern_head);
     TEST(test_count_over_values);
     TEST(test_deletecases_over_values);
+    TEST(test_catenate);
     TEST(test_minmax);
     TEST(test_takewhile_lengthwhile);
     TEST(test_foldlist_over_association_values);

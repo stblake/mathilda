@@ -281,6 +281,28 @@ In[6]:= Join[{{x}}, {{1, 2}, {3, 4}}, 2]
 Out[6]= {{x, 1, 2}, {3, 4}}
 ```
 
+## Catenate
+`Catenate[{e1, e2, ...}]` takes a single list and flattens one level: the `ei`
+must share a head, and their elements are concatenated under it. A list of
+associations merges into one association (later keys win) — so `Catenate`
+composes with `GroupBy` / `Merge` pipelines that yield a list of associations.
+
+**Features**:
+- `Protected`.
+- All elements must share a head; returns unevaluated for mixed heads.
+- `Catenate[{}]` gives `{}`.
+
+```mathematica
+In[1]:= Catenate[{{1, 2}, {3, 4}, {5}}]
+Out[1]= {1, 2, 3, 4, 5}
+
+In[2]:= Catenate[{<|"a" -> 1, "b" -> 2|>, <|"b" -> 3, "c" -> 4|>}]
+Out[2]= <|"a" -> 1, "b" -> 3, "c" -> 4|>
+
+In[3]:= Catenate[Values[GroupBy[Range[6], EvenQ]]]
+Out[3]= {1, 3, 5, 2, 4, 6}
+```
+
 ## Partition
 Partitions a list into sublists.
 - `Partition[list, n]`: Non-overlapping sublists of length `n`.
