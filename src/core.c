@@ -275,6 +275,11 @@ void core_init(void) {
     symtab_add_builtin("Sqrt", builtin_sqrt);
     symtab_add_builtin("Apply", builtin_apply);
     symtab_add_builtin("Map", builtin_map);
+    symtab_add_builtin("MapIndexed", builtin_mapindexed);
+    symtab_get_def("MapIndexed")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("MapIndexed",
+        "MapIndexed[f, list]\n\tGives {f[e1, {1}], f[e2, {2}], ...}. Over an\n"
+        "\tassociation, f[value, {Key[k]}] keeping keys.");
     symtab_add_builtin("MapAll", builtin_map_all);
     symtab_add_builtin("MapAt", builtin_map_at);
     symtab_get_def("MapAt")->attributes |= ATTR_PROTECTED;

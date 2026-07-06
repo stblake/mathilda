@@ -186,6 +186,55 @@ Expr* builtin_map(Expr* res) {
     return map_at_level(f, expr, 0, spec);
 }
 
+/* ------------------- MapIndexed -------------------
+ *
+ * MapIndexed[f, list]   {f[e1, {1}], f[e2, {2}], ...}
+ * MapIndexed[f, assoc]  <|k1 -> f[v1, {Key[k1]}], ...|>
+ *
+ * The index passed as the second argument to f is a position: {i} for a list
+ * element, {Key[k]} for an association value — the same {Key[k]} shape Position
+ * reports, so the two compose. The f[...] applications are left for the
+ * evaluator to reduce (matching Map). */
+Expr* builtin_mapindexed(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* f    = res->data.function.args[0];
+    Expr* expr = res->data.function.args[1];
+    bool assoc = is_association(expr);
+    if (!assoc && expr->type != EXPR_FUNCTION) return NULL;
+
+    size_t n = expr->data.function.arg_count;
+    Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        Expr* elem = expr->data.function.args[i];
+        Expr* value = assoc ? elem->data.function.args[1] : elem;  /* rule value */
+
+        /* Position index: {Key[k]} for an association, {i + 1} for a list. */
+        Expr* pos_inner;
+        if (assoc) {
+            Expr* karg[1] = { expr_copy(elem->data.function.args[0]) };
+            pos_inner = expr_new_function(expr_new_symbol(SYM_Key), karg, 1);
+        } else {
+            pos_inner = expr_new_integer((int64_t)(i + 1));
+        }
+        Expr* pos = expr_new_function(expr_new_symbol(SYM_List), &pos_inner, 1);
+
+        Expr* fargs[2] = { expr_copy(value), pos };
+        Expr* applied = expr_new_function(expr_copy(f), fargs, 2);
+
+        if (assoc) {
+            Expr* rargs[2] = { expr_copy(elem->data.function.args[0]), applied };
+            out[i] = expr_new_function(expr_new_symbol(SYM_Rule), rargs, 2);
+        } else {
+            out[i] = applied;
+        }
+    }
+    Expr* head = assoc ? expr_new_symbol(SYM_Association)
+                       : expr_copy(expr->data.function.head);
+    Expr* result = expr_new_function(head, out, n);
+    free(out);
+    return result;
+}
+
 /* ------------------- MapAt ------------------- */
 
 /* Build evaluate(f[arg]) returning a new owned Expr*. */

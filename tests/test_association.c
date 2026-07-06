@@ -461,6 +461,22 @@ void test_deletecases_over_values() {
                    "<|\"a\" -> 1|>", 0);
 }
 
+void test_mapindexed() {
+    /* Lists: the second argument is the position {i}. */
+    assert_eval_eq("MapIndexed[f, {10, 20, 30}]",
+                   "{f[10, {1}], f[20, {2}], f[30, {3}]}", 0);
+    assert_eval_eq("MapIndexed[f, {}]", "{}", 0);
+    /* Associations: f[value, {Key[k]}], keys preserved. */
+    assert_eval_eq("MapIndexed[f, <|\"a\" -> 10, \"b\" -> 20|>]",
+                   "<|\"a\" -> f[10, {Key[\"a\"]}], \"b\" -> f[20, {Key[\"b\"]}]|>", 0);
+    /* #1 is the value, #2 the {Key[...]} position. */
+    assert_eval_eq("MapIndexed[#1 &, <|\"a\" -> 10, \"b\" -> 20|>]",
+                   "<|\"a\" -> 10, \"b\" -> 20|>", 0);
+    assert_eval_eq("MapIndexed[#2 &, <|\"a\" -> 10, \"b\" -> 20|>]",
+                   "<|\"a\" -> {Key[\"a\"]}, \"b\" -> {Key[\"b\"]}|>", 0);
+    assert_eval_eq("MapIndexed[f, <||>]", "<||>", 0);
+}
+
 void test_catenate() {
     /* Lists concatenate one level (elements must share a head). */
     assert_eval_eq("Catenate[{{1, 2}, {3, 4}, {5}}]", "{1, 2, 3, 4, 5}", 0);
@@ -1305,6 +1321,7 @@ int main() {
     TEST(test_cases_pattern_head);
     TEST(test_count_over_values);
     TEST(test_deletecases_over_values);
+    TEST(test_mapindexed);
     TEST(test_catenate);
     TEST(test_minmax);
     TEST(test_takewhile_lengthwhile);

@@ -231,6 +231,19 @@ Out[8]= {0.557674, 0.557674, 0.557674}
 ## Map (/@)
 - `f /@ expr` or `Map[f, expr]`
 
+## MapIndexed
+Maps `f` over the elements together with their positions.
+- `MapIndexed[f, list]`: gives `{f[e1, {1}], f[e2, {2}], ...}` — the second argument is the position `{i}`.
+- `MapIndexed[f, assoc]`: gives `<|k -> f[v, {Key[k]}]|>` — the criterion sees each value and its `{Key[k]}` position (the same shape `Position` reports), keys preserved.
+
+```mathematica
+In[1]:= MapIndexed[f, {10, 20, 30}]
+Out[1]= {f[10, {1}], f[20, {2}], f[30, {3}]}
+
+In[2]:= MapIndexed[f, <|"a" -> 10, "b" -> 20|>]
+Out[2]= <|"a" -> f[10, {Key["a"]}], "b" -> f[20, {Key["b"]}]|>
+```
+
 ## Apply (@@, @@@)
 - `f @@ expr`: Level 0.
 - `f @@@ expr`: Level 1.

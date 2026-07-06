@@ -6,6 +6,7 @@
 
 Expr* builtin_apply(Expr* res);
 Expr* builtin_map(Expr* res);
+Expr* builtin_mapindexed(Expr* res);
 Expr* builtin_map_all(Expr* res);
 Expr* builtin_map_at(Expr* res);
 Expr* builtin_nest(Expr* res);

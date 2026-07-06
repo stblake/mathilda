@@ -54,6 +54,7 @@
         {"cells": [{"type": "section", "source": "Map & Select thread over values"}]},
         {"cells": [{"type": "text", "source": "Functional operations keep keys aligned and thread over values (Wolfram semantics)."}]},
         {"cells": [{"type": "code", "source": "Map[#^2 &, <|\"x\" -> 3, \"y\" -> 4|>]"}]},
+        {"cells": [{"type": "code", "source": "MapIndexed[{#2, #1} &, <|\"x\" -> 3, \"y\" -> 4|>]"}]},
         {"cells": [{"type": "code", "source": "Select[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>, # > 1 &]"}]},
         {"cells": [{"type": "code", "source": "TakeWhile[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 5, \"d\" -> 1|>, # < 3 &]"}]},
         {"cells": [{"type": "code", "source": "KeyMap[ToString, <|1 -> 10, 2 -> 20|>]"}]},
