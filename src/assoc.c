@@ -381,6 +381,31 @@ static Expr* key_drop_take(Expr* res, bool take) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* assoc = res->data.function.args[0];
     Expr* karg  = res->data.function.args[1];
+
+    /* Thread over a (non-empty) list of associations, dropping/keeping the keys
+     * in each: KeyDrop[{a1, a2, ...}, keys] -> {KeyDrop[a1, keys], ...}. This is
+     * the column-of-records form (matching Wolfram and Lookup's threading). Each
+     * element is delegated to the same builtin, so a single key or a key-list
+     * both thread. */
+    if (head_is(assoc, SYM_List) && assoc->data.function.arg_count > 0) {
+        bool all_assoc = true;
+        for (size_t i = 0; i < assoc->data.function.arg_count; i++)
+            if (!is_association(assoc->data.function.args[i])) { all_assoc = false; break; }
+        if (all_assoc) {
+            size_t m = assoc->data.function.arg_count;
+            Expr** out = malloc(sizeof(Expr*) * m);
+            for (size_t i = 0; i < m; i++) {
+                Expr* a2[2] = { expr_copy(assoc->data.function.args[i]), expr_copy(karg) };
+                Expr* call = expr_new_function(expr_copy(res->data.function.head), a2, 2);
+                out[i] = evaluate(call);
+                expr_free(call);
+            }
+            Expr* list = make_list(out, m);
+            free(out);
+            return list;
+        }
+    }
+
     if (!is_association(assoc)) return NULL;
 
     /* Normalise the key argument to an array of key pointers. */

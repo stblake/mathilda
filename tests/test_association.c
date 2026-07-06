@@ -249,6 +249,20 @@ void test_keytake_list() {
                    "<|\"a\" -> 1, \"c\" -> 3|>", 0);  /* association order preserved */
 }
 
+void test_keydrop_keytake_over_records() {
+    /* KeyDrop / KeyTake thread over a list of associations (a column of records). */
+    assert_eval_eq("KeyDrop[{<|\"a\" -> 1, \"b\" -> 2|>, <|\"a\" -> 3, \"b\" -> 4|>}, \"b\"]",
+                   "{<|\"a\" -> 1|>, <|\"a\" -> 3|>}", 0);
+    assert_eval_eq("KeyTake[{<|\"a\" -> 1, \"b\" -> 2|>, <|\"a\" -> 3, \"b\" -> 4|>}, {\"a\"}]",
+                   "{<|\"a\" -> 1|>, <|\"a\" -> 3|>}", 0);
+    /* A key-list threads per record. */
+    assert_eval_eq("KeyDrop[{<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>}, {\"a\", \"c\"}]",
+                   "{<|\"b\" -> 2|>}", 0);
+    /* Single-association forms are unchanged. */
+    assert_eval_eq("KeyDrop[<|\"a\" -> 1, \"b\" -> 2|>, \"b\"]", "<|\"a\" -> 1|>", 0);
+    assert_eval_eq("KeyTake[<|\"a\" -> 1, \"b\" -> 2|>, {\"a\"}]", "<|\"a\" -> 1|>", 0);
+}
+
 void test_keyunion() {
     /* Pad both associations to the union of keys (first-appearance order),
      * filling absent values with Missing["KeyAbsent", key]. */
@@ -1329,6 +1343,7 @@ int main() {
     TEST(test_keydrop_single);
     TEST(test_keydrop_list);
     TEST(test_keytake_list);
+    TEST(test_keydrop_keytake_over_records);
     TEST(test_keyunion);
 
     TEST(test_keyvaluemap);

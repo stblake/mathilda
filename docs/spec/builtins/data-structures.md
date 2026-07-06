@@ -131,12 +131,24 @@ In[2]:= KeyDrop[<|"a" -> 1, "b" -> 2, "c" -> 3|>, {"a", "c"}]
 Out[2]= <|"b" -> 2|>
 ```
 
+`KeyDrop` (like `KeyTake`) also threads over a list of associations — dropping
+the keys from each record:
+
+```mathematica
+In[3]:= KeyDrop[{<|"a" -> 1, "b" -> 2|>, <|"a" -> 3, "b" -> 4|>}, "b"]
+Out[3]= {<|"a" -> 1|>, <|"a" -> 3|>}
+```
+
 ## KeyTake
 Gives the association of only the specified keys (association order preserved).
+Over a list of associations it threads, keeping the keys in each record.
 
 ```mathematica
 In[1]:= KeyTake[<|"a" -> 1, "b" -> 2, "c" -> 3|>, {"c", "a"}]
 Out[1]= <|"a" -> 1, "c" -> 3|>
+
+In[2]:= KeyTake[{<|"a" -> 1, "b" -> 2|>, <|"a" -> 3, "b" -> 4|>}, {"a"}]
+Out[2]= {<|"a" -> 1|>, <|"a" -> 3|>}
 ```
 
 ## KeyUnion
