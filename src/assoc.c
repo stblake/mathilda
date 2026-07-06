@@ -616,7 +616,13 @@ Expr* builtin_groupby(Expr* res) {
     Expr* list = res->data.function.args[0];
     Expr* f    = res->data.function.args[1];
     Expr* reducer = (argc == 3) ? res->data.function.args[2] : NULL;
-    if (!head_is(list, SYM_List)) return NULL;
+    /* GroupBy[assoc, f]: group the entries by f[value] into sub-associations
+     * (keys preserved); GroupBy[assoc, f, red] reduces each sub-association. The
+     * keyfn -> valfn transform form is list-only, so leave it unevaluated on an
+     * association. */
+    bool assoc_in = is_association(list);
+    if (!head_is(list, SYM_List) && !assoc_in) return NULL;
+    if (assoc_in && is_rule2(f)) return NULL;
     size_t n = list->data.function.arg_count;
 
     /* GroupBy[list, keyfn -> valfn, ...]: group by keyfn[x] but collect
@@ -635,7 +641,10 @@ Expr* builtin_groupby(Expr* res) {
 
     for (size_t i = 0; i < n; i++) {
         Expr* x = list->data.function.args[i];
-        Expr* fx_args[1] = { expr_copy(x) };
+        /* For an association, group by f applied to the value; the entry (the
+         * whole Rule) is what gets collected so keys survive in each group. */
+        Expr* key_input = assoc_in ? rule_val(x) : x;
+        Expr* fx_args[1] = { expr_copy(key_input) };
         Expr* fx = expr_new_function(expr_copy(keyfn), fx_args, 1);
         Expr* key = evaluate(fx);      /* the group key */
         expr_free(fx);
@@ -669,7 +678,10 @@ Expr* builtin_groupby(Expr* res) {
 
     Expr** rules = malloc(sizeof(Expr*) * (ngroups ? ngroups : 1));
     for (size_t i = 0; i < ngroups; i++) {
-        Expr* group_list = make_list(groups[i], gcnt[i]);
+        /* Each group is a sub-association for an association input, else a list. */
+        Expr* group_list = assoc_in
+            ? expr_new_function(expr_new_symbol(SYM_Association), groups[i], gcnt[i])
+            : make_list(groups[i], gcnt[i]);
         /* GroupBy[list, f, g] applies the reducer g to each group; the
          * g[{group}] application is left for the evaluator to reduce. */
         Expr* value = reducer

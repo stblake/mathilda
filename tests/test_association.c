@@ -821,6 +821,19 @@ void test_groupby_key_value_mean() {
                    "<|\"a\" -> 6, \"b\" -> 2|>", 0);
 }
 
+void test_groupby_over_association() {
+    /* GroupBy[assoc, f] groups the entries by f[value] into sub-associations
+     * (keys preserved). */
+    assert_eval_eq("GroupBy[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3, \"d\" -> 4|>, EvenQ]",
+                   "<|False -> <|\"a\" -> 1, \"c\" -> 3|>, True -> <|\"b\" -> 2, \"d\" -> 4|>|>", 0);
+    /* The reducer runs on each sub-association (composing with value-threading). */
+    assert_eval_eq("GroupBy[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3, \"d\" -> 4|>, EvenQ, Total]",
+                   "<|False -> 4, True -> 6|>", 0);
+    assert_eval_eq("GroupBy[<|\"x\" -> 10, \"y\" -> 20, \"z\" -> 10|>, Identity]",
+                   "<|10 -> <|\"x\" -> 10, \"z\" -> 10|>, 20 -> <|\"y\" -> 20|>|>", 0);
+    assert_eval_eq("GroupBy[<||>, EvenQ]", "<||>", 0);
+}
+
 void test_gatherby_parity() {
     assert_eval_eq("GatherBy[{1, 2, 3, 4, 5, 6}, EvenQ]",
                    "{{1, 3, 5}, {2, 4, 6}}", 0);
@@ -1473,6 +1486,7 @@ int main() {
     TEST(test_groupby_key_value_transform);
     TEST(test_groupby_key_value_reduce);
     TEST(test_groupby_key_value_mean);
+    TEST(test_groupby_over_association);
     TEST(test_gatherby_parity);
     TEST(test_gatherby_stringlength);
 

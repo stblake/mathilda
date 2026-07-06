@@ -205,6 +205,11 @@ Hash-indexed grouping in `O(n)` plus the cost of `f`.
 - `GroupBy[list, keyfn -> valfn]` groups by `keyfn[x]` but collects `valfn[x]` in
   each group; `GroupBy[list, keyfn -> valfn, g]` then reduces — the full
   group / extract / reduce pipeline in one call.
+- `GroupBy[assoc, f]` groups an association's **entries** by `f[value]` into
+  sub-associations (keys preserved); `GroupBy[assoc, f, g]` reduces each
+  sub-association (so `GroupBy[assoc, f, Total]` composes with value-threading
+  `Total`). Distinct from `GroupBy[records, Key["field"]]`, which groups a
+  *list* of record-associations by a field.
 
 ```mathematica
 In[1]:= GroupBy[{1, 2, 3, 4, 5, 6}, EvenQ]
@@ -215,6 +220,12 @@ Out[2]= <|False -> 25, True -> 30|>
 
 In[3]:= GroupBy[{{"x", 1}, {"y", 2}, {"x", 3}}, First -> Last, Total]
 Out[3]= <|"x" -> 4, "y" -> 2|>
+
+In[4]:= GroupBy[<|"a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4|>, EvenQ]
+Out[4]= <|False -> <|"a" -> 1, "c" -> 3|>, True -> <|"b" -> 2, "d" -> 4|>|>
+
+In[5]:= GroupBy[<|"a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4|>, EvenQ, Total]
+Out[5]= <|False -> 4, True -> 6|>
 ```
 
 ## GatherBy
