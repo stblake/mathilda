@@ -551,9 +551,23 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
         }
     }
 
-    /* ---- Generic function: head[a, b, ...] → \text{head}(a, b, ...) ---- */
+    /* ---- Generic function: head[a, b, ...] ---- */
     fallback: {
-        /* Use expr_to_string as final fallback */
+        /* For a symbol-headed function, render Name[arg, ...] with each argument
+         * in LaTeX, so nested strings (curly quotes via \text), fractions, etc.
+         * render properly rather than dumping the plain re-parseable form (which
+         * would show straight quotes, e.g. Key["a"]). */
+        if (e->type == EXPR_FUNCTION && head && head->type == EXPR_SYMBOL) {
+            lb_cat(b, sym_latex(head->data.symbol));
+            lb_cat(b, "[");
+            for (size_t i = 0; i < argc; i++) {
+                if (i) lb_cat(b, ", ");
+                to_latex_prec(b, args[i], 0);
+            }
+            lb_cat(b, "]");
+            return;
+        }
+        /* Non-symbol head or atom: fall back to the plain string form. */
         char* s = expr_to_string((Expr*)e);  /* const cast: expr_to_string doesn't modify */
         if (s) { lb_cat(b, s); free(s); }
     }
