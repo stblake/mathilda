@@ -326,19 +326,25 @@ The makefile auto-discovers `src/*.c`. ECM is built and linked by default
 ### Performance regression gate
 
 `tests/bench_assoc.c` guards against the Association operations silently
-degrading — the failure mode that matters over time is an `O(n)` op quietly
-becoming `O(n^2)`. It times each hash-backed op at size *n* and *2n* and checks
-the **doubling ratio** `t(2n)/t(n)`: ~2 for `O(n)`, ~4 for `O(n^2)`. The ratio is
-machine-independent, so it is a robust gate; it fails (nonzero exit) if any op
-exceeds 3.3. It also prints absolute ns/element so constant-factor drift can be
-eyeballed across runs.
+degrading, with two machine-independent gates (nonzero exit on failure):
+
+1. **Scaling** — the failure mode that matters most is an `O(n)` op quietly
+   becoming `O(n^2)`. It times each hash-backed op at size *n* and *2n* and checks
+   the **doubling ratio** `t(2n)/t(n)`: ~2 for `O(n)`, ~4 for `O(n^2)`. Fails if
+   any ratio exceeds 3.3.
+2. **Absolute cost** — a "much slower" tripwire for constant-factor regressions.
+   Absolute wall times are machine-dependent, so each op's per-element time is
+   normalized against a runtime calibration (a plain `Total[list]` of the same
+   size); that ratio is machine-independent. Fails if any op exceeds **2.5×** its
+   checked-in baseline cost.
 
 ```bash
 cd tests/build && make bench_assoc && ./bench_assoc
 ```
 
-Reference (Apple M-series, `USE_ECM=OFF`, 2026-07-06): every op ratio ≈ 2.0;
-`Counts` ~29 ns/elem, `Lookup` (bulk) ~360 ns/elem, `Merge` ~3.1 µs/elem.
+Baselines (Apple M-series, `USE_ECM=OFF`, 2026-07-06) live in `bench_assoc.c` as
+`baseline_norm`; every op currently sits at ~1.0× and ratios at ≈2.0. Re-record
+the baselines only after an *intended* performance change.
 
 ---
 

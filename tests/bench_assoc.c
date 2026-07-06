@@ -93,19 +93,32 @@ static double median_us(const char* expr) {
     return s[N_TRIALS / 2];
 }
 
-/* Each op is a printf format with one %d for the size suffix. */
-typedef struct { const char* label; const char* fmt; } Op;
+/* Each op has a scaling format (one %d for the size suffix) and an absolute-cost
+ * baseline, expressed in "calibration units" -- its per-element time divided by
+ * the per-element time of a plain list sum measured on the *same* run. That ratio
+ * is machine-independent (a slow box scales both numerator and denominator), so
+ * comparing it to a checked-in baseline gives a portable "much slower" tripwire.
+ * baseline_norm is the value recorded on the reference machine; SLOWDOWN_MAX is
+ * how many times worse than that we tolerate before failing. */
+typedef struct { const char* label; const char* fmt; double baseline_norm; } Op;
 
-static const Op OPS[] = {
-    { "Association @@ rules", "Association @@ rules%d" },
-    { "Counts",               "Counts[vals%d]" },
-    { "CountsBy",             "CountsBy[keys%d, EvenQ]" },
-    { "GroupBy",              "GroupBy[keys%d, Mod[#, 100] &]" },
-    { "Merge (Total)",        "Merge[{assoc%d, assoc2%d}, Total]" },
-    { "KeyUnion",             "KeyUnion[{assoc%d, assoc2%d}]" },
-    { "Lookup (bulk keys)",   "Lookup[assoc%d, keys%d]" },
-    { "Map over values",      "Map[# + 1 &, assoc%d]" },
-    { "KeySort",              "KeySort[assoc%d]" },
+/* Fail an op only if it is this many times slower (relative to the calibration)
+ * than its recorded baseline -- loose enough to absorb machine/measurement
+ * variation, tight enough to catch a real "it got much slower" regression. */
+#define SLOWDOWN_MAX 2.5
+
+/* baseline_norm recorded on an Apple M-series build, USE_ECM=OFF, 2026-07-06.
+ * Stable to a few percent across runs; the SLOWDOWN_MAX margin swamps that. */
+static Op OPS[] = {
+    { "Association @@ rules", "Association @@ rules%d", 7.2 },
+    { "Counts",               "Counts[vals%d]",         0.35 },
+    { "CountsBy",             "CountsBy[keys%d, EvenQ]", 5.1 },
+    { "GroupBy",              "GroupBy[keys%d, Mod[#, 100] &]", 6.4 },
+    { "Merge (Total)",        "Merge[{assoc%d, assoc2%d}, Total]", 39.0 },
+    { "KeyUnion",             "KeyUnion[{assoc%d, assoc2%d}]", 23.0 },
+    { "Lookup (bulk keys)",   "Lookup[assoc%d, keys%d]", 4.4 },
+    { "Map over values",      "Map[# + 1 &, assoc%d]",   17.2 },
+    { "KeySort",              "KeySort[assoc%d]",         4.7 },
 };
 #define N_OPS ((int)(sizeof(OPS) / sizeof(OPS[0])))
 
@@ -131,12 +144,14 @@ int main(void) {
     printf("--------------------------------------------------------------------\n");
 
     int failures = 0;
+    double us_large_of[N_OPS];   /* remembered for the absolute-cost check below */
     char expr[256];
     for (int i = 0; i < N_OPS; i++) {
         format_op(expr, sizeof(expr), OPS[i].fmt, N_SMALL);
         double us_small = median_us(expr);
         format_op(expr, sizeof(expr), OPS[i].fmt, N_LARGE);
         double us_large = median_us(expr);
+        us_large_of[i] = us_large;
 
         double ratio = (us_small > 0.0) ? us_large / us_small : 0.0;
         double ns_per_elem = (us_large * 1000.0) / (double)N_LARGE;
@@ -155,6 +170,46 @@ int main(void) {
                failures, RATIO_MAX);
         return 1;
     }
-    printf("PASS: all operations scaled linearly (ratio < %.1f)\n", RATIO_MAX);
+    printf("PASS: all operations scaled linearly (ratio < %.1f)\n\n", RATIO_MAX);
+
+    /* ---- Absolute-cost check (machine-normalized) ----------------------------
+     * Calibrate against a plain list sum of the same size, then express each op's
+     * per-element cost as a multiple of that. This "cost in calibration units" is
+     * machine-independent, so we can gate on it: fail if an op is > SLOWDOWN_MAX x
+     * its recorded baseline. */
+    char calib_expr[64];
+    snprintf(calib_expr, sizeof(calib_expr), "Total[keys%d]", N_LARGE);
+    double calib_us = median_us(calib_expr);
+    if (calib_us <= 0.0) calib_us = 1e-6;    /* guard against a zero divide */
+
+    printf("Absolute cost vs. calibration (Total[list] of the same size)\n");
+    printf("  fail if an op is > %.1fx its recorded baseline cost\n\n", SLOWDOWN_MAX);
+    printf("%-22s %10s %10s %8s\n", "operation", "norm", "baseline", "x base");
+    printf("--------------------------------------------------------------------\n");
+
+    int slow = 0;
+    for (int i = 0; i < N_OPS; i++) {
+        double norm = us_large_of[i] / calib_us;   /* cost in calibration units */
+        if (OPS[i].baseline_norm <= 0.0) {
+            /* Baseline not yet recorded: report the measured value, do not gate. */
+            printf("%-22s %10.2f %10s %8s   (record as baseline)\n",
+                   OPS[i].label, norm, "-", "-");
+            continue;
+        }
+        double x = norm / OPS[i].baseline_norm;
+        int bad = (x > SLOWDOWN_MAX);
+        printf("%-22s %10.2f %10.2f %8.2f%s\n",
+               OPS[i].label, norm, OPS[i].baseline_norm, x,
+               bad ? "  <== MUCH SLOWER" : "");
+        if (bad) slow++;
+    }
+
+    printf("--------------------------------------------------------------------\n");
+    if (slow) {
+        printf("FAIL: %d operation(s) more than %.1fx slower than baseline\n",
+               slow, SLOWDOWN_MAX);
+        return 1;
+    }
+    printf("PASS: no operation exceeded %.1fx its baseline cost\n", SLOWDOWN_MAX);
     return 0;
 }
