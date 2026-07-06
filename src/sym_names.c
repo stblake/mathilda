@@ -550,6 +550,7 @@ const char* SYM_Resultant = NULL;
 const char* SYM_RowReduce = NULL;
 const char* SYM_Simplify = NULL;
 const char* SYM_StringPart = NULL;
+const char* SYM_StringReverse = NULL;
 const char* SYM_StringTake = NULL;
 const char* SYM_SubresultantPolynomialRemainders = NULL;
 const char* SYM_Subtract = NULL;
@@ -1183,6 +1184,7 @@ void sym_names_init(void) {
     SYM_RowReduce                  = intern_symbol("RowReduce");
     SYM_Simplify                   = intern_symbol("Simplify");
     SYM_StringPart                 = intern_symbol("StringPart");
+    SYM_StringReverse              = intern_symbol("StringReverse");
     SYM_StringTake                 = intern_symbol("StringTake");
     SYM_SubresultantPolynomialRemainders = intern_symbol("SubresultantPolynomialRemainders");
     SYM_Subtract                   = intern_symbol("Subtract");

@@ -184,3 +184,31 @@ In[11]:= StringTake[x, 1]
 Out[11]= StringTake[x, 1]
 ```
 
+## StringReverse
+
+Reverses the order of the characters in a string.
+
+- `StringReverse["string"]`: Reverses the order of the characters in `"string"`.
+- `StringReverse[{s1, s2, ...}]`: Gives the list of results for each of the si (via `Listable`).
+- Returns unevaluated for non-string arguments.
+- A call with any number of arguments other than one emits `StringReverse::argx` and is left unevaluated.
+- **Attributes**: `Listable`, `Protected`.
+
+```mathematica
+In[1]:= StringReverse["abcdef"]
+Out[1]= "fedcba"
+
+In[2]:= StringReverse[{"cat", "dog", "fish", "coelenterate"}]
+Out[2]= {"tac", "god", "hsif", "etaretneleoc"}
+
+In[3]:= StringReverse[""]
+Out[3]= ""
+
+In[4]:= StringReverse[x]
+Out[4]= StringReverse[x]
+
+In[5]:= StringReverse[]
+StringReverse::argx: StringReverse called with 0 arguments; 1 argument is expected.
+Out[5]= StringReverse[]
+```
+

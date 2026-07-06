@@ -3486,4 +3486,11 @@ void info_init(void) {
         "LightPink\n\tThe named colour RGBColor[1, 0.925, 0.925].");
     symtab_set_docstring("LightPurple",
         "LightPurple\n\tThe named colour RGBColor[0.94, 0.88, 0.94].");
+
+    symtab_set_docstring("StringReverse",
+        "StringReverse[\"string\"]\n"
+        "\tReverses the order of the characters in \"string\".\n"
+        "StringReverse[{s1, s2, ...}]\n"
+        "\tGives the list of results for each of the si.\n\n"
+        "\tStringReverse is Listable, so it threads automatically over lists.");
 }

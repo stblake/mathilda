@@ -552,6 +552,83 @@ void test_length_of_characters() {
     assert_eval_eq("Length[Characters[\"tiger\"]]", "5", 0);
 }
 
+/* ===== StringReverse tests ===== */
+
+void test_stringreverse_basic() {
+    assert_eval_eq("StringReverse[\"abcdef\"]", "\"fedcba\"", 0);
+}
+
+void test_stringreverse_single_char() {
+    assert_eval_eq("StringReverse[\"a\"]", "\"a\"", 0);
+}
+
+void test_stringreverse_empty() {
+    assert_eval_eq("StringReverse[\"\"]", "\"\"", 0);
+}
+
+void test_stringreverse_palindrome() {
+    assert_eval_eq("StringReverse[\"racecar\"]", "\"racecar\"", 0);
+}
+
+void test_stringreverse_with_spaces() {
+    assert_eval_eq("StringReverse[\"a b c\"]", "\"c b a\"", 0);
+}
+
+void test_stringreverse_digits() {
+    assert_eval_eq("StringReverse[\"12345\"]", "\"54321\"", 0);
+}
+
+void test_stringreverse_special_chars() {
+    /* Parser treats \n as the literal char 'n' (no escape interpretation),
+     * so "a\nb" is the 3-char string "anb", which reverses to "bna". */
+    assert_eval_eq("StringReverse[\"a\\nb\"]", "\"bna\"", 0);
+}
+
+void test_stringreverse_long() {
+    assert_eval_eq("StringReverse[\"abcdefghijklmnopqrstuvwxyz\"]",
+                   "\"zyxwvutsrqponmlkjihgfedcba\"", 0);
+}
+
+/* Involution: reversing twice gives the original. */
+void test_stringreverse_involution() {
+    assert_eval_eq("StringReverse[StringReverse[\"coelenterate\"]]",
+                   "\"coelenterate\"", 0);
+}
+
+/* Listable: threads automatically over a list of strings. */
+void test_stringreverse_listable() {
+    assert_eval_eq("StringReverse[{\"cat\", \"dog\", \"fish\", \"coelenterate\"}]",
+                   "{\"tac\", \"god\", \"hsif\", \"etaretneleoc\"}", 0);
+}
+
+void test_stringreverse_listable_empty_elements() {
+    assert_eval_eq("StringReverse[{\"\", \"ab\", \"\"}]",
+                   "{\"\", \"ba\", \"\"}", 0);
+}
+
+/* Composes with StringJoin. */
+void test_stringreverse_of_stringjoin() {
+    assert_eval_eq("StringReverse[\"abc\" <> \"def\"]", "\"fedcba\"", 0);
+}
+
+/* Non-string argument: left unevaluated (symbolic flow-through). */
+void test_stringreverse_symbolic() {
+    assert_eval_eq("StringReverse[x]", "StringReverse[x]", 0);
+}
+
+void test_stringreverse_integer_arg() {
+    assert_eval_eq("StringReverse[12345]", "StringReverse[12345]", 0);
+}
+
+/* Wrong argument counts: StringReverse::argx, call left unevaluated. */
+void test_stringreverse_no_args() {
+    assert_eval_eq("StringReverse[]", "StringReverse[]", 0);
+}
+
+void test_stringreverse_two_args() {
+    assert_eval_eq("StringReverse[\"a\", \"b\"]", "StringReverse[\"a\", \"b\"]", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -689,6 +766,24 @@ int main() {
     TEST(test_stringlength_of_stringjoin);
     TEST(test_stringlength_of_characters);
     TEST(test_length_of_characters);
+
+    /* StringReverse tests */
+    TEST(test_stringreverse_basic);
+    TEST(test_stringreverse_single_char);
+    TEST(test_stringreverse_empty);
+    TEST(test_stringreverse_palindrome);
+    TEST(test_stringreverse_with_spaces);
+    TEST(test_stringreverse_digits);
+    TEST(test_stringreverse_special_chars);
+    TEST(test_stringreverse_long);
+    TEST(test_stringreverse_involution);
+    TEST(test_stringreverse_listable);
+    TEST(test_stringreverse_listable_empty_elements);
+    TEST(test_stringreverse_of_stringjoin);
+    TEST(test_stringreverse_symbolic);
+    TEST(test_stringreverse_integer_arg);
+    TEST(test_stringreverse_no_args);
+    TEST(test_stringreverse_two_args);
 
     printf("All string tests passed!\n");
     return 0;
