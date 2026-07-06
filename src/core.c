@@ -421,6 +421,17 @@ void core_init(void) {
     symtab_add_builtin("Permutations", builtin_permutations);
     symtab_get_def("Permutations")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Select", builtin_select);
+    symtab_add_builtin("TakeWhile", builtin_takewhile);
+    symtab_get_def("TakeWhile")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("TakeWhile",
+        "TakeWhile[list, crit]\n\tGives the longest leading run of elements e for\n"
+        "\twhich crit[e] is True. Over an association, tests the values and keeps\n"
+        "\tthe matching leading entries (keys preserved).");
+    symtab_add_builtin("LengthWhile", builtin_lengthwhile);
+    symtab_get_def("LengthWhile")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("LengthWhile",
+        "LengthWhile[list, crit]\n\tGives the length of the longest leading run of\n"
+        "\telements e for which crit[e] is True. Over an association, tests values.");
     symtab_add_builtin("Scan", builtin_scan);
     symtab_get_def("Scan")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Scan",

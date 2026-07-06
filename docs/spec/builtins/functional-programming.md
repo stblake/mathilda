@@ -752,6 +752,23 @@ In[2]:= Select[{1, 2, 4, 7, 6, 2}, # > 2 &, 1]
 Out[2]= {4}
 ```
 
+## TakeWhile, LengthWhile
+Act on the *leading* run of elements satisfying a criterion.
+- `TakeWhile[list, crit]`: the longest leading run of elements `e` for which `crit[e]` is `True` (same head as `list`).
+- `LengthWhile[list, crit]`: the length of that run.
+- Over an association the criterion tests the values: `TakeWhile` keeps the matching leading entries (keys preserved), `LengthWhile` counts them.
+
+```mathematica
+In[1]:= TakeWhile[{1, 2, 3, 5, 1}, # < 3 &]
+Out[1]= {1, 2}
+
+In[2]:= LengthWhile[{1, 2, 3, 5, 1}, # < 3 &]
+Out[2]= 2
+
+In[3]:= TakeWhile[<|"a" -> 1, "b" -> 2, "c" -> 5|>, # < 3 &]
+Out[3]= <|"a" -> 1, "b" -> 2|>
+```
+
 
 ## AllTrue, AnyTrue, NoneTrue
 Test a predicate across the elements of a list (or the values of an association).

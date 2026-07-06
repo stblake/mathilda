@@ -300,6 +300,19 @@ In[2]:= Commonest[<|"a" -> 1, "b" -> 1, "c" -> 2|>]
 Out[2]= {1}
 ```
 
+## TakeWhile, LengthWhile
+Act on the leading run of **values**. `TakeWhile[assoc, crit]` keeps the leading
+entries whose value satisfies `crit` (keys preserved); `LengthWhile[assoc, crit]`
+counts them. (See functional-programming for the list forms.)
+
+```mathematica
+In[1]:= TakeWhile[<|"a" -> 1, "b" -> 2, "c" -> 5, "d" -> 1|>, # < 3 &]
+Out[1]= <|"a" -> 1, "b" -> 2|>
+
+In[2]:= LengthWhile[<|"a" -> 1, "b" -> 2, "c" -> 5|>, # < 3 &]
+Out[2]= 2
+```
+
 ## Cases, Count, DeleteCases
 Pattern operations act on the **values** of an association. `Cases` returns the
 list of matching values, `Count` their number, and `DeleteCases` returns the

@@ -460,8 +460,66 @@ Expr* builtin_select(Expr* res) {
     
     Expr* result = expr_new_function(expr_copy(list->data.function.head), kept_args, kept_count);
     if (kept_args) free(kept_args);
-    
+
     return result;
+}
+
+/* ------------------- TakeWhile / LengthWhile -------------------
+ *
+ * TakeWhile[list, crit]    the longest leading run of elements e with crit[e] === True
+ * LengthWhile[list, crit]  the length of that run
+ *
+ * Over an association the criterion is applied to the values; TakeWhile keeps
+ * the matching leading entries as an association (keys preserved), LengthWhile
+ * counts them. */
+
+/* Length of the longest leading run for which crit[e] evaluates to True. When
+ * `over_values` the elements are Rule[k, v] nodes and the test uses v. */
+static size_t leading_run_length(Expr* crit, Expr** elems, size_t n, bool over_values) {
+    size_t k = 0;
+    for (; k < n; k++) {
+        Expr* e = over_values ? elems[k]->data.function.args[1] : elems[k];
+        Expr* call_args[1] = { expr_copy(e) };
+        Expr* call = expr_new_function(expr_copy(crit), call_args, 1);
+        Expr* v = evaluate(call);
+        expr_free(call);
+        bool ok = (v->type == EXPR_SYMBOL && v->data.symbol == SYM_True);
+        expr_free(v);
+        if (!ok) break;
+    }
+    return k;
+}
+
+Expr* builtin_takewhile(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* coll = res->data.function.args[0];
+    Expr* crit = res->data.function.args[1];
+    bool assoc = is_association(coll);
+    if (!assoc && coll->type != EXPR_FUNCTION) return NULL;
+
+    size_t n = coll->data.function.arg_count;
+    Expr** elems = coll->data.function.args;
+    size_t k = leading_run_length(crit, elems, n, assoc);
+
+    Expr** out = malloc(sizeof(Expr*) * (k ? k : 1));
+    for (size_t i = 0; i < k; i++) out[i] = expr_copy(elems[i]);
+    Expr* head = assoc ? expr_new_symbol(SYM_Association)
+                       : expr_copy(coll->data.function.head);
+    Expr* result = expr_new_function(head, out, k);
+    free(out);
+    return result;
+}
+
+Expr* builtin_lengthwhile(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* coll = res->data.function.args[0];
+    Expr* crit = res->data.function.args[1];
+    bool assoc = is_association(coll);
+    if (!assoc && coll->type != EXPR_FUNCTION) return NULL;
+
+    size_t k = leading_run_length(crit, coll->data.function.args,
+                                  coll->data.function.arg_count, assoc);
+    return expr_new_integer((int64_t)k);
 }
 
 /* ------------------- SelectFirst -------------------

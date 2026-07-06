@@ -461,6 +461,21 @@ void test_deletecases_over_values() {
                    "<|\"a\" -> 1|>", 0);
 }
 
+void test_takewhile_lengthwhile() {
+    /* Lists: the longest leading run for which crit is True. */
+    assert_eval_eq("TakeWhile[{1, 2, 3, 5, 1}, # < 3 &]", "{1, 2}", 0);
+    assert_eval_eq("LengthWhile[{1, 2, 3, 5, 1}, # < 3 &]", "2", 0);
+    assert_eval_eq("TakeWhile[{2, 4, 6}, EvenQ]", "{2, 4, 6}", 0);
+    assert_eval_eq("LengthWhile[{}, EvenQ]", "0", 0);
+    /* Associations: the criterion tests values; TakeWhile keeps the leading
+     * entries (keys preserved), LengthWhile counts them. */
+    assert_eval_eq("TakeWhile[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 5, \"d\" -> 1|>, # < 3 &]",
+                   "<|\"a\" -> 1, \"b\" -> 2|>", 0);
+    assert_eval_eq("LengthWhile[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 5|>, # < 3 &]", "2", 0);
+    assert_eval_eq("TakeWhile[<|\"a\" -> 5, \"b\" -> 1|>, # < 3 &]", "<||>", 0);
+    assert_eval_eq("TakeWhile[<||>, # < 3 &]", "<||>", 0);
+}
+
 void test_foldlist_over_association_values() {
     /* FoldList keeps the keys, pairing each with its running result (n -> n);
      * Fold still collapses to a scalar. */
@@ -1263,6 +1278,7 @@ int main() {
     TEST(test_cases_pattern_head);
     TEST(test_count_over_values);
     TEST(test_deletecases_over_values);
+    TEST(test_takewhile_lengthwhile);
     TEST(test_foldlist_over_association_values);
     TEST(test_accumulate_over_association_values);
     TEST(test_differences_over_association_values);
