@@ -268,6 +268,21 @@ In[3]:= StandardDeviation[<|"a" -> 2, "b" -> 4, "c" -> 6|>]
 Out[3]= 2
 ```
 
+## Accumulate, Differences
+These windowed transforms act on the values but — unlike `Total`, which
+collapses — keep the association shape. `Accumulate[assoc]` gives the running
+totals with every key retained; `Differences[assoc]` gives the successive
+differences, keyed by the trailing key of each pair (so the leading key drops,
+`n` entries → `n - 1`).
+
+```mathematica
+In[1]:= Accumulate[<|"a" -> 1, "b" -> 2, "c" -> 3|>]
+Out[1]= <|"a" -> 1, "b" -> 3, "c" -> 6|>
+
+In[2]:= Differences[<|"a" -> 1, "b" -> 4, "c" -> 9|>]
+Out[2]= <|"b" -> 3, "c" -> 5|>
+```
+
 ## Tally, Commonest
 `Tally[assoc]` tallies the association's values as `{value, count}` pairs, and
 `Commonest[assoc]` returns the most frequent value(s) — the value-oriented

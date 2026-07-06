@@ -40,6 +40,7 @@
         {"cells": [{"type": "code", "source": "Mean[<|\"a\" -> 2, \"b\" -> 4, \"c\" -> 6|>]"}]},
         {"cells": [{"type": "code", "source": "Median[<|\"a\" -> 1, \"b\" -> 3, \"c\" -> 5|>]"}]},
         {"cells": [{"type": "code", "source": "Tally[<|\"a\" -> 1, \"b\" -> 1, \"c\" -> 2|>]"}]},
+        {"cells": [{"type": "code", "source": "Accumulate[<|\"jan\" -> 10, \"feb\" -> 20, \"mar\" -> 5|>]"}]},
         {"cells": [{"type": "code", "source": "Fold[Plus, 0, <|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>]"}]},
         {"cells": [{"type": "code", "source": "PositionIndex[{a, b, a, c, a, b}]"}]}
       ]

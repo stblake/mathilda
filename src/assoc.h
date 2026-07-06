@@ -60,6 +60,14 @@ Expr* assoc_apply_over_values(Expr* res);
  * values). Caller owns the result. */
 Expr* assoc_sort_by_value(const Expr* assoc);
 
+/* For windowed value transforms (Accumulate, Differences) whose result is a
+ * List parallel to the entries: rewrite head[assoc, rest...] as
+ * head[Values[assoc], rest...], evaluate, then re-pair the resulting values
+ * with the trailing keys (so a dropped leading value drops the leading key).
+ * Returns NULL when the first argument is not an association or the transform
+ * did not yield a same-or-shorter List. Caller owns any returned result. */
+Expr* assoc_rekey_over_values(Expr* res);
+
 /* DeleteCases[assoc, pattern]: keep the entries whose value does NOT match the
  * pattern (matching is done via MatchQ on each value). Caller owns the result. */
 Expr* assoc_delete_cases(const Expr* assoc, Expr* pattern);

@@ -461,6 +461,21 @@ void test_deletecases_over_values() {
                    "<|\"a\" -> 1|>", 0);
 }
 
+void test_accumulate_over_association_values() {
+    /* Running totals of the values; every key kept, aligned with its sum. */
+    assert_eval_eq("Accumulate[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>]",
+                   "<|\"a\" -> 1, \"b\" -> 3, \"c\" -> 6|>", 0);
+    assert_eval_eq("Accumulate[<|\"x\" -> 5|>]", "<|\"x\" -> 5|>", 0);
+    assert_eval_eq("Accumulate[<||>]", "<||>", 0);
+}
+
+void test_differences_over_association_values() {
+    /* Successive differences of the values; the leading key drops (n -> n-1). */
+    assert_eval_eq("Differences[<|\"a\" -> 1, \"b\" -> 4, \"c\" -> 9|>]",
+                   "<|\"b\" -> 3, \"c\" -> 5|>", 0);
+    assert_eval_eq("Differences[<|\"x\" -> 5|>]", "<||>", 0);
+}
+
 void test_stats_over_association_values() {
     /* The statistics family reduces over an association's values. */
     assert_eval_eq("Variance[<|\"a\" -> 2, \"b\" -> 4, \"c\" -> 6|>]", "4", 0);
@@ -1237,6 +1252,8 @@ int main() {
     TEST(test_cases_pattern_head);
     TEST(test_count_over_values);
     TEST(test_deletecases_over_values);
+    TEST(test_accumulate_over_association_values);
+    TEST(test_differences_over_association_values);
     TEST(test_stats_over_association_values);
     TEST(test_tally_commonest_over_association_values);
     TEST(test_deleteduplicates_over_values);
