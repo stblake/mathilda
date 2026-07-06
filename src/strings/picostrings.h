@@ -3,6 +3,11 @@
 
 #include "expr.h"
 
+/*
+ * String manipulation builtins for Mathilda. Each builtin lives in its own
+ * translation unit under src/strings/; strings_init (strings_init.c) registers
+ * them all with their attributes and docstrings.
+ */
 Expr* builtin_stringlength(Expr* res);
 Expr* builtin_characters(Expr* res);
 Expr* builtin_stringjoin(Expr* res);

@@ -111,6 +111,7 @@ include_directories(../src/special_functions)
 include_directories(../src/numerical_calculus)
 include_directories(../src/numerical_roots)
 include_directories(../src/graphics)
+include_directories(../src/strings)
 if(USE_ECM)
     include_directories(../src/external/ecm)
 endif()
@@ -338,7 +339,16 @@ set(COMMON_SRC
     ../src/cond.c
     ../src/default_helper.c
     ../src/random.c
-    ../src/picostrings.c
+    ../src/strings/stringlength.c
+    ../src/strings/characters.c
+    ../src/strings/stringjoin.c
+    ../src/strings/stringpart.c
+    ../src/strings/stringtake.c
+    ../src/strings/stringdrop.c
+    ../src/strings/stringreverse.c
+    ../src/strings/stringinsert.c
+    ../src/strings/stringreplacepart.c
+    ../src/strings/strings_init.c
     ../src/calculus/series.c
     ../src/calculus/deriv.c
     ../src/calculus/limit.c
