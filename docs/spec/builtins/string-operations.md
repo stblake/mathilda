@@ -184,6 +184,55 @@ In[11]:= StringTake[x, 1]
 Out[11]= StringTake[x, 1]
 ```
 
+## StringDrop
+
+Gives a string with a specified subset of its characters removed. `StringDrop`
+is the complement of `StringTake`: the same standard Wolfram Language sequence
+specification selects the characters to *remove*, and the remaining characters
+are concatenated in order.
+
+- `StringDrop["string", n]`: Gives `"string"` with its first n characters dropped.
+- `StringDrop["string", -n]`: Gives `"string"` with its last n characters dropped.
+- `StringDrop["string", {n}]`: Gives `"string"` with its nth character dropped.
+- `StringDrop["string", {m, n}]`: Gives `"string"` with characters m through n dropped.
+- `StringDrop["string", {m, n, s}]`: Drops characters m through n in steps of s.
+- `StringDrop["string", UpTo[n]]`: Drops n characters, or as many as are available.
+- `StringDrop[{s1, s2, ...}, spec]`: Gives the list of results for each of the si.
+- In `StringDrop["string", {m, n, s}]`, m, n, and/or s can be negative.
+- A decreasing range (m > n) is empty and drops nothing.
+- A call whose argument count is not two emits `StringDrop::argrx` and is left unevaluated.
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringDrop["abcdefghijklm", 4]
+Out[1]= "efghijklm"
+
+In[2]:= StringDrop["abcdefghijklm", -4]
+Out[2]= "abcdefghi"
+
+In[3]:= StringDrop["abcdefghijklm", {5, 10}]
+Out[3]= "abcdklm"
+
+In[4]:= StringDrop["abcdefghijklm", {3}]
+Out[4]= "abdefghijklm"
+
+In[5]:= StringDrop["abcdefghijklm", {1, -1, 2}]
+Out[5]= "bdfhjl"
+
+In[6]:= StringDrop[{"abcdef", "xyzw", "stuv"}, -2]
+Out[6]= {"abcd", "xy", "st"}
+
+In[7]:= StringDrop["abc", UpTo[4]]
+Out[7]= ""
+
+In[8]:= StringDrop["abcdefghijklm", {5, -4}]
+Out[8]= "abcdklm"
+
+In[9]:= StringDrop[]
+StringDrop::argrx: StringDrop called with 0 arguments; 2 arguments are expected.
+Out[9]= StringDrop[]
+```
+
 ## StringReverse
 
 Reverses the order of the characters in a string.

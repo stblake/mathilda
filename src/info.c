@@ -3487,6 +3487,23 @@ void info_init(void) {
     symtab_set_docstring("LightPurple",
         "LightPurple\n\tThe named colour RGBColor[0.94, 0.88, 0.94].");
 
+    symtab_set_docstring("StringDrop",
+        "StringDrop[\"string\", n]\n"
+        "\tGives \"string\" with its first n characters dropped.\n"
+        "StringDrop[\"string\", -n]\n"
+        "\tGives \"string\" with its last n characters dropped.\n"
+        "StringDrop[\"string\", {n}]\n"
+        "\tGives \"string\" with its nth character dropped.\n"
+        "StringDrop[\"string\", {m, n}]\n"
+        "\tGives \"string\" with characters m through n dropped.\n"
+        "StringDrop[\"string\", {m, n, s}]\n"
+        "\tDrops characters m through n in steps of s.\n"
+        "StringDrop[\"string\", UpTo[n]]\n"
+        "\tDrops n characters, or as many as are available.\n"
+        "StringDrop[{s1, s2, ...}, spec]\n"
+        "\tGives the list of results for each of the si.\n\n"
+        "\tNegative indices count from the end.");
+
     symtab_set_docstring("StringReverse",
         "StringReverse[\"string\"]\n"
         "\tReverses the order of the characters in \"string\".\n"

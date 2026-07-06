@@ -629,6 +629,213 @@ void test_stringreverse_two_args() {
     assert_eval_eq("StringReverse[\"a\", \"b\"]", "StringReverse[\"a\", \"b\"]", 0);
 }
 
+/* ===== StringDrop tests ===== */
+
+/* StringDrop["string", n] - drop the first n characters */
+void test_stringdrop_first_n() {
+    assert_eval_eq("StringDrop[\"abcdefghijklm\", 4]", "\"efghijklm\"", 0);
+}
+
+void test_stringdrop_first_1() {
+    assert_eval_eq("StringDrop[\"abcdef\", 1]", "\"bcdef\"", 0);
+}
+
+void test_stringdrop_first_all() {
+    /* Dropping every character yields the empty string. */
+    assert_eval_eq("StringDrop[\"abc\", 3]", "\"\"", 0);
+}
+
+void test_stringdrop_zero() {
+    /* Dropping zero characters returns the whole string. */
+    assert_eval_eq("StringDrop[\"abc\", 0]", "\"abc\"", 0);
+}
+
+/* StringDrop["string", -n] - drop the last n characters */
+void test_stringdrop_last_n() {
+    assert_eval_eq("StringDrop[\"abcdefghijklm\", -4]", "\"abcdefghi\"", 0);
+}
+
+void test_stringdrop_last_1() {
+    assert_eval_eq("StringDrop[\"abcdef\", -1]", "\"abcde\"", 0);
+}
+
+void test_stringdrop_last_all() {
+    assert_eval_eq("StringDrop[\"abc\", -3]", "\"\"", 0);
+}
+
+/* StringDrop["string", {n}] - drop the nth character */
+void test_stringdrop_single_char() {
+    assert_eval_eq("StringDrop[\"abcdefghijklm\", {3}]", "\"abdefghijklm\"", 0);
+}
+
+void test_stringdrop_single_first() {
+    assert_eval_eq("StringDrop[\"abcdef\", {1}]", "\"bcdef\"", 0);
+}
+
+void test_stringdrop_single_last() {
+    assert_eval_eq("StringDrop[\"abcdef\", {-1}]", "\"abcde\"", 0);
+}
+
+void test_stringdrop_single_negative() {
+    assert_eval_eq("StringDrop[\"abcdef\", {-3}]", "\"abcef\"", 0);
+}
+
+/* StringDrop["string", {m, n}] - drop characters m through n */
+void test_stringdrop_range() {
+    assert_eval_eq("StringDrop[\"abcdefghijklm\", {5, 10}]", "\"abcdklm\"", 0);
+}
+
+void test_stringdrop_range_from_start() {
+    assert_eval_eq("StringDrop[\"abcdef\", {1, 3}]", "\"def\"", 0);
+}
+
+void test_stringdrop_range_to_end() {
+    assert_eval_eq("StringDrop[\"abcdef\", {4, 6}]", "\"abc\"", 0);
+}
+
+void test_stringdrop_range_single() {
+    assert_eval_eq("StringDrop[\"abcdef\", {3, 3}]", "\"abdef\"", 0);
+}
+
+void test_stringdrop_range_negative() {
+    assert_eval_eq("StringDrop[\"abcdef\", {-3, -1}]", "\"abc\"", 0);
+}
+
+void test_stringdrop_range_mixed_signs() {
+    /* {5, -4} on a 13-char string drops positions 5..10. */
+    assert_eval_eq("StringDrop[\"abcdefghijklm\", {5, -4}]", "\"abcdklm\"", 0);
+}
+
+void test_stringdrop_range_all() {
+    assert_eval_eq("StringDrop[\"abcdef\", {1, 6}]", "\"\"", 0);
+}
+
+void test_stringdrop_range_empty() {
+    /* A decreasing range is empty and drops nothing. */
+    assert_eval_eq("StringDrop[\"abc\", {5, 4}]", "\"abc\"", 0);
+}
+
+void test_stringdrop_range_empty_in_bounds() {
+    assert_eval_eq("StringDrop[\"abcdef\", {4, 2}]", "\"abcdef\"", 0);
+}
+
+/* StringDrop["string", {m, n, s}] - drop range with step */
+void test_stringdrop_step() {
+    assert_eval_eq("StringDrop[\"abcdefghijklm\", {1, -1, 2}]", "\"bdfhjl\"", 0);
+}
+
+void test_stringdrop_step_3() {
+    assert_eval_eq("StringDrop[\"abcdefghijklm\", {1, -1, 3}]", "\"bcefhikl\"", 0);
+}
+
+void test_stringdrop_step_negative() {
+    /* Dropping positions 5,4,3,2,1 leaves the tail. */
+    assert_eval_eq("StringDrop[\"abcde\", {5, 1, -1}]", "\"\"", 0);
+}
+
+void test_stringdrop_step_range() {
+    assert_eval_eq("StringDrop[\"abcdefghij\", {2, 8, 2}]", "\"acegij\"", 0);
+}
+
+/* StringDrop["string", UpTo[n]] */
+void test_stringdrop_upto_enough() {
+    assert_eval_eq("StringDrop[\"abcdef\", UpTo[4]]", "\"ef\"", 0);
+}
+
+void test_stringdrop_upto_more_than_available() {
+    assert_eval_eq("StringDrop[\"abc\", UpTo[4]]", "\"\"", 0);
+}
+
+void test_stringdrop_upto_exact() {
+    assert_eval_eq("StringDrop[\"abc\", UpTo[3]]", "\"\"", 0);
+}
+
+void test_stringdrop_upto_one() {
+    assert_eval_eq("StringDrop[\"abc\", UpTo[1]]", "\"bc\"", 0);
+}
+
+void test_stringdrop_upto_large() {
+    assert_eval_eq("StringDrop[\"abc\", UpTo[100]]", "\"\"", 0);
+}
+
+/* StringDrop[{s1, s2, ...}, spec] - list of strings */
+void test_stringdrop_list_strings() {
+    assert_eval_eq("StringDrop[{\"abcdef\", \"xyzw\", \"stuv\"}, -2]",
+                   "{\"abcd\", \"xy\", \"st\"}", 0);
+}
+
+void test_stringdrop_list_strings_first() {
+    assert_eval_eq("StringDrop[{\"abcdef\", \"xyz\"}, 2]",
+                   "{\"cdef\", \"z\"}", 0);
+}
+
+void test_stringdrop_list_strings_range() {
+    assert_eval_eq("StringDrop[{\"abcdef\", \"ghijkl\"}, {2, 4}]",
+                   "{\"aef\", \"gkl\"}", 0);
+}
+
+/* Newline (parsed as literal 'n') counts as a single character. */
+void test_stringdrop_newline() {
+    assert_eval_eq("StringDrop[\"abc\\ndef\", 4]", "\"def\"", 0);
+}
+
+/* Consistency with Drop over Characters (both sides are evaluated). */
+void test_stringdrop_matches_drop_characters() {
+    assert_eval_eq("StringDrop[\"abcdefghijklm\", {5, -4}] === "
+                   "StringJoin[Drop[Characters[\"abcdefghijklm\"], {5, -4}]]",
+                   "True", 0);
+}
+
+/* Edge cases - out of bounds / unevaluated */
+void test_stringdrop_out_of_bounds() {
+    assert_eval_eq("StringDrop[\"abc\", 5]", "StringDrop[\"abc\", 5]", 0);
+}
+
+void test_stringdrop_out_of_bounds_negative() {
+    assert_eval_eq("StringDrop[\"abc\", -5]", "StringDrop[\"abc\", -5]", 0);
+}
+
+void test_stringdrop_single_out_of_bounds() {
+    assert_eval_eq("StringDrop[\"abc\", {5}]", "StringDrop[\"abc\", {5}]", 0);
+}
+
+void test_stringdrop_range_out_of_bounds() {
+    assert_eval_eq("StringDrop[\"abc\", {2, 9}]", "StringDrop[\"abc\", {2, 9}]", 0);
+}
+
+void test_stringdrop_step_zero() {
+    assert_eval_eq("StringDrop[\"abc\", {1, 3, 0}]", "StringDrop[\"abc\", {1, 3, 0}]", 0);
+}
+
+void test_stringdrop_unevaluated_symbolic() {
+    assert_eval_eq("StringDrop[x, 1]", "StringDrop[x, 1]", 0);
+}
+
+void test_stringdrop_unevaluated_symbolic_spec() {
+    assert_eval_eq("StringDrop[\"abc\", x]", "StringDrop[\"abc\", x]", 0);
+}
+
+void test_stringdrop_no_args() {
+    /* StringDrop::argrx, left unevaluated. */
+    assert_eval_eq("StringDrop[]", "StringDrop[]", 0);
+}
+
+void test_stringdrop_one_arg() {
+    assert_eval_eq("StringDrop[\"abc\"]", "StringDrop[\"abc\"]", 0);
+}
+
+void test_stringdrop_three_args() {
+    assert_eval_eq("StringDrop[\"abc\", 1, 2]", "StringDrop[\"abc\", 1, 2]", 0);
+}
+
+void test_stringdrop_empty_string_zero() {
+    assert_eval_eq("StringDrop[\"\", 0]", "\"\"", 0);
+}
+
+void test_stringdrop_empty_string_upto() {
+    assert_eval_eq("StringDrop[\"\", UpTo[5]]", "\"\"", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -766,6 +973,54 @@ int main() {
     TEST(test_stringlength_of_stringjoin);
     TEST(test_stringlength_of_characters);
     TEST(test_length_of_characters);
+
+    /* StringDrop tests */
+    TEST(test_stringdrop_first_n);
+    TEST(test_stringdrop_first_1);
+    TEST(test_stringdrop_first_all);
+    TEST(test_stringdrop_zero);
+    TEST(test_stringdrop_last_n);
+    TEST(test_stringdrop_last_1);
+    TEST(test_stringdrop_last_all);
+    TEST(test_stringdrop_single_char);
+    TEST(test_stringdrop_single_first);
+    TEST(test_stringdrop_single_last);
+    TEST(test_stringdrop_single_negative);
+    TEST(test_stringdrop_range);
+    TEST(test_stringdrop_range_from_start);
+    TEST(test_stringdrop_range_to_end);
+    TEST(test_stringdrop_range_single);
+    TEST(test_stringdrop_range_negative);
+    TEST(test_stringdrop_range_mixed_signs);
+    TEST(test_stringdrop_range_all);
+    TEST(test_stringdrop_range_empty);
+    TEST(test_stringdrop_range_empty_in_bounds);
+    TEST(test_stringdrop_step);
+    TEST(test_stringdrop_step_3);
+    TEST(test_stringdrop_step_negative);
+    TEST(test_stringdrop_step_range);
+    TEST(test_stringdrop_upto_enough);
+    TEST(test_stringdrop_upto_more_than_available);
+    TEST(test_stringdrop_upto_exact);
+    TEST(test_stringdrop_upto_one);
+    TEST(test_stringdrop_upto_large);
+    TEST(test_stringdrop_list_strings);
+    TEST(test_stringdrop_list_strings_first);
+    TEST(test_stringdrop_list_strings_range);
+    TEST(test_stringdrop_newline);
+    TEST(test_stringdrop_matches_drop_characters);
+    TEST(test_stringdrop_out_of_bounds);
+    TEST(test_stringdrop_out_of_bounds_negative);
+    TEST(test_stringdrop_single_out_of_bounds);
+    TEST(test_stringdrop_range_out_of_bounds);
+    TEST(test_stringdrop_step_zero);
+    TEST(test_stringdrop_unevaluated_symbolic);
+    TEST(test_stringdrop_unevaluated_symbolic_spec);
+    TEST(test_stringdrop_no_args);
+    TEST(test_stringdrop_one_arg);
+    TEST(test_stringdrop_three_args);
+    TEST(test_stringdrop_empty_string_zero);
+    TEST(test_stringdrop_empty_string_upto);
 
     /* StringReverse tests */
     TEST(test_stringreverse_basic);
