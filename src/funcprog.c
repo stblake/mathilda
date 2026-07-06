@@ -1655,9 +1655,12 @@ static Expr* fold_impl(Expr* res, bool as_list) {
     if (argc != 2 && argc != 3) return NULL;
 
     /* Folding over an association folds over its values: rebuild the call with
-     * the association replaced by Values[assoc] and re-evaluate. */
+     * the association replaced by Values[assoc] and re-evaluate. Fold collapses
+     * to a scalar; FoldList[f, assoc] keeps the keys, pairing each with its
+     * running result (n -> n). */
     size_t coll_idx = (argc == 3) ? 2 : 1;
     if (is_association(res->data.function.args[coll_idx])) {
+        Expr* assoc = res->data.function.args[coll_idx];
         Expr** na = malloc(sizeof(Expr*) * argc);
         for (size_t i = 0; i < argc; i++)
             na[i] = (i == coll_idx) ? assoc_values_list(res->data.function.args[i])
@@ -1666,6 +1669,10 @@ static Expr* fold_impl(Expr* res, bool as_list) {
         free(na);
         Expr* r = evaluate(call);
         expr_free(call);
+        if (as_list && argc == 2) {              /* FoldList[f, assoc] -> keyed */
+            Expr* keyed = assoc_rekey_from_list(assoc, r);
+            if (keyed) { expr_free(r); return keyed; }
+        }
         return r;
     }
 

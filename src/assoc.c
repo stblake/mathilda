@@ -866,37 +866,42 @@ Expr* assoc_apply_over_values(Expr* res) {
     return r;
 }
 
-/* Like assoc_apply_over_values, but for windowed value transforms whose result
- * is a List that stays parallel to the association's entries (Accumulate keeps
- * every entry; Differences drops the leading one). The transformed values are
- * re-paired with the *trailing* keys — length n_result aligns with the last
- * n_result keys — so key alignment holds whether or not the front was dropped.
- * Returns NULL (leave to the caller) when the first argument is not an
- * association or the transform did not yield a same-or-shorter List. */
-Expr* assoc_rekey_over_values(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
-    Expr* assoc = res->data.function.args[0];
-    if (!is_association(assoc)) return NULL;
-    size_t na = assoc->data.function.arg_count;
-
-    Expr* out = assoc_apply_over_values(res);      /* head[Values[assoc], ...] */
-    if (!out) return NULL;
-    if (!head_is(out, SYM_List) || out->data.function.arg_count > na) {
-        expr_free(out);
-        return NULL;
-    }
-    size_t nres = out->data.function.arg_count;
+/* Re-pair the elements of a values List with the *trailing* keys of assoc,
+ * producing an association: length n_result aligns with the last n_result keys,
+ * so a windowed transform that dropped leading values drops the leading keys.
+ * Returns NULL when `values` is not a List or is longer than assoc. */
+Expr* assoc_rekey_from_list(const Expr* assoc, const Expr* values) {
+    if (!head_is(values, SYM_List)) return NULL;
+    size_t na   = assoc->data.function.arg_count;
+    size_t nres = values->data.function.arg_count;
+    if (nres > na) return NULL;
     size_t offset = na - nres;                     /* leading keys dropped, if any */
     Expr** entries = malloc(sizeof(Expr*) * (nres ? nres : 1));
     for (size_t i = 0; i < nres; i++) {
         Expr* key = rule_key(assoc->data.function.args[offset + i]);
-        Expr* rargs[2] = { expr_copy(key), expr_copy(out->data.function.args[i]) };
+        Expr* rargs[2] = { expr_copy(key), expr_copy(values->data.function.args[i]) };
         entries[i] = expr_new_function(expr_new_symbol(SYM_Rule), rargs, 2);
     }
-    expr_free(out);
     Expr* result = expr_new_function(expr_new_symbol(SYM_Association), entries, nres);
     free(entries);
     return result;
+}
+
+/* Like assoc_apply_over_values, but for windowed value transforms whose result
+ * is a List that stays parallel to the association's entries (Accumulate keeps
+ * every entry; Differences drops the leading one). Returns NULL (leave to the
+ * caller) when the first argument is not an association or the transform did
+ * not yield a same-or-shorter List. */
+Expr* assoc_rekey_over_values(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+    Expr* assoc = res->data.function.args[0];
+    if (!is_association(assoc)) return NULL;
+
+    Expr* out = assoc_apply_over_values(res);      /* head[Values[assoc], ...] */
+    if (!out) return NULL;
+    Expr* result = assoc_rekey_from_list(assoc, out);
+    expr_free(out);
+    return result;                                 /* NULL if out was not a valid List */
 }
 
 /* ======================================================================

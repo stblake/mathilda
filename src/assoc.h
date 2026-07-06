@@ -68,6 +68,12 @@ Expr* assoc_sort_by_value(const Expr* assoc);
  * did not yield a same-or-shorter List. Caller owns any returned result. */
 Expr* assoc_rekey_over_values(Expr* res);
 
+/* Re-pair the elements of a values List with the trailing keys of assoc,
+ * giving an association (used when the collection is not the first argument,
+ * e.g. FoldList[f, assoc]). Returns NULL when `values` is not a List or is
+ * longer than assoc. Caller owns any returned result. */
+Expr* assoc_rekey_from_list(const Expr* assoc, const Expr* values);
+
 /* DeleteCases[assoc, pattern]: keep the entries whose value does NOT match the
  * pattern (matching is done via MatchQ on each value). Caller owns the result. */
 Expr* assoc_delete_cases(const Expr* assoc, Expr* pattern);
