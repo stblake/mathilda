@@ -844,6 +844,17 @@ void test_gatherby_stringlength() {
                    "{{\"aa\", \"cc\"}, {\"b\", \"d\"}}", 0);
 }
 
+void test_gatherby_over_association() {
+    /* GatherBy[assoc, f] gathers entries by f[value] into sub-associations
+     * (keys preserved), as a list in first-appearance order. */
+    assert_eval_eq("GatherBy[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3, \"d\" -> 4|>, EvenQ]",
+                   "{<|\"a\" -> 1, \"c\" -> 3|>, <|\"b\" -> 2, \"d\" -> 4|>}", 0);
+    assert_eval_eq("GatherBy[<|\"x\" -> 10, \"y\" -> 20, \"z\" -> 10|>, Identity]",
+                   "{<|\"x\" -> 10, \"z\" -> 10|>, <|\"y\" -> 20|>}", 0);
+    assert_eval_eq("GatherBy[<||>, EvenQ]", "{}", 0);
+    assert_eval_eq("GatherBy[<|\"a\" -> 1|>, EvenQ]", "{<|\"a\" -> 1|>}", 0);
+}
+
 /* ---------- ReverseSort / ReverseSortBy ---------- */
 
 void test_reversesort_list() {
@@ -1489,6 +1500,7 @@ int main() {
     TEST(test_groupby_over_association);
     TEST(test_gatherby_parity);
     TEST(test_gatherby_stringlength);
+    TEST(test_gatherby_over_association);
 
     TEST(test_reversesort_list);
     TEST(test_reversesort_association);

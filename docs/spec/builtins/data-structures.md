@@ -230,11 +230,16 @@ Out[5]= <|False -> 4, True -> 6|>
 
 ## GatherBy
 Gathers the elements with equal `f[element]` into sublists, in first-appearance
-order (like `GroupBy` but returning the groups as a plain list of lists).
+order (like `GroupBy` but returning the groups as a plain list of lists). Over an
+association it gathers the **entries** by `f[value]` into sub-associations (keys
+preserved), returned as a list — `GroupBy[assoc, f]` without the outer keys.
 
 ```mathematica
 In[1]:= GatherBy[{1, 2, 3, 4, 5, 6}, EvenQ]
 Out[1]= {{1, 3, 5}, {2, 4, 6}}
+
+In[2]:= GatherBy[<|"a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4|>, EvenQ]
+Out[2]= {<|"a" -> 1, "c" -> 3|>, <|"b" -> 2, "d" -> 4|>}
 ```
 
 ## Merge

@@ -704,7 +704,11 @@ Expr* builtin_gatherby(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* list = res->data.function.args[0];
     Expr* f    = res->data.function.args[1];
-    if (!head_is(list, SYM_List)) return NULL;
+    /* GatherBy[assoc, f] gathers the entries by f[value] into sub-associations
+     * (keys preserved), returned as a list in first-appearance order -- like
+     * GroupBy[assoc, f] but without the outer group keys. */
+    bool assoc_in = is_association(list);
+    if (!head_is(list, SYM_List) && !assoc_in) return NULL;
     size_t n = list->data.function.arg_count;
 
     KeyIndex ki;
@@ -717,7 +721,8 @@ Expr* builtin_gatherby(Expr* res) {
 
     for (size_t i = 0; i < n; i++) {
         Expr* x = list->data.function.args[i];
-        Expr* fx_args[1] = { expr_copy(x) };
+        Expr* key_input = assoc_in ? rule_val(x) : x;   /* group by f[value] */
+        Expr* fx_args[1] = { expr_copy(key_input) };
         Expr* fx = expr_new_function(expr_copy(f), fx_args, 1);
         Expr* key = evaluate(fx);
         expr_free(fx);
@@ -735,7 +740,9 @@ Expr* builtin_gatherby(Expr* res) {
 
     Expr** outer = malloc(sizeof(Expr*) * (ng ? ng : 1));
     for (size_t i = 0; i < ng; i++) {
-        outer[i] = make_list(groups[i], gcnt[i]);
+        outer[i] = assoc_in
+            ? expr_new_function(expr_new_symbol(SYM_Association), groups[i], gcnt[i])
+            : make_list(groups[i], gcnt[i]);
         expr_free(keys[i]);   /* GatherBy discards the keys */
         free(groups[i]);
     }
