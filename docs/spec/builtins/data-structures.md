@@ -283,13 +283,14 @@ In[3]:= StandardDeviation[<|"a" -> 2, "b" -> 4, "c" -> 6|>]
 Out[3]= 2
 ```
 
-## Accumulate, Differences, FoldList
+## Accumulate, Differences, Ratios, FoldList
 These windowed transforms act on the values but — unlike `Total` or `Fold`,
 which collapse — keep the association shape. `Accumulate[assoc]` gives the
-running totals with every key retained; `Differences[assoc]` gives the
-successive differences, keyed by the trailing key of each pair (so the leading
-key drops, `n` entries → `n - 1`); `FoldList[f, assoc]` pairs each key with the
-running result of `f` (`n → n`), the general form of `Accumulate`.
+running totals with every key retained; `Differences[assoc]` and `Ratios[assoc]`
+give the successive differences / ratios, keyed by the trailing key of each pair
+(so the leading key drops, `n` entries → `n - 1`); `FoldList[f, assoc]` pairs
+each key with the running result of `f` (`n → n`), the general form of
+`Accumulate`. All share one `assoc_rekey_over_values` mechanism.
 
 ```mathematica
 In[1]:= Accumulate[<|"a" -> 1, "b" -> 2, "c" -> 3|>]
@@ -298,8 +299,11 @@ Out[1]= <|"a" -> 1, "b" -> 3, "c" -> 6|>
 In[2]:= Differences[<|"a" -> 1, "b" -> 4, "c" -> 9|>]
 Out[2]= <|"b" -> 3, "c" -> 5|>
 
-In[3]:= FoldList[Times, <|"a" -> 2, "b" -> 3, "c" -> 4|>]
-Out[3]= <|"a" -> 2, "b" -> 6, "c" -> 24|>
+In[3]:= Ratios[<|"a" -> 1, "b" -> 2, "c" -> 6|>]
+Out[3]= <|"b" -> 2, "c" -> 3|>
+
+In[4]:= FoldList[Times, <|"a" -> 2, "b" -> 3, "c" -> 4|>]
+Out[4]= <|"a" -> 2, "b" -> 6, "c" -> 24|>
 ```
 
 ## Tally, Commonest

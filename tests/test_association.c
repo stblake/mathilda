@@ -558,6 +558,15 @@ void test_differences_over_association_values() {
     assert_eval_eq("Differences[<|\"x\" -> 5|>]", "<||>", 0);
 }
 
+void test_ratios_over_association_values() {
+    /* Successive ratios of the values; the leading key drops (n -> n-1). */
+    assert_eval_eq("Ratios[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 6|>]",
+                   "<|\"b\" -> 2, \"c\" -> 3|>", 0);
+    assert_eval_eq("Ratios[<|\"a\" -> 2, \"b\" -> 6, \"c\" -> 3|>]",
+                   "<|\"b\" -> 3, \"c\" -> 1/2|>", 0);
+    assert_eval_eq("Ratios[<|\"x\" -> 5|>]", "<||>", 0);
+}
+
 void test_stats_over_association_values() {
     /* The statistics family reduces over an association's values. */
     assert_eval_eq("Variance[<|\"a\" -> 2, \"b\" -> 4, \"c\" -> 6|>]", "4", 0);
@@ -1342,6 +1351,7 @@ int main() {
     TEST(test_foldlist_over_association_values);
     TEST(test_accumulate_over_association_values);
     TEST(test_differences_over_association_values);
+    TEST(test_ratios_over_association_values);
     TEST(test_stats_over_association_values);
     TEST(test_tally_commonest_over_association_values);
     TEST(test_deleteduplicates_over_values);

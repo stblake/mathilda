@@ -46,6 +46,7 @@
         {"cells": [{"type": "code", "source": "Accumulate[<|\"jan\" -> 10, \"feb\" -> 20, \"mar\" -> 5|>]"}]},
         {"cells": [{"type": "code", "source": "Fold[Plus, 0, <|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>]"}]},
         {"cells": [{"type": "code", "source": "FoldList[Plus, <|\"q1\" -> 10, \"q2\" -> 20, \"q3\" -> 15|>]"}]},
+        {"cells": [{"type": "code", "source": "Ratios[<|\"q1\" -> 10, \"q2\" -> 20, \"q3\" -> 15|>]"}]},
         {"cells": [{"type": "code", "source": "PositionIndex[{a, b, a, c, a, b}]"}]}
       ]
     },
