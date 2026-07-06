@@ -10,6 +10,7 @@ Expr* builtin_stringpart(Expr* res);
 Expr* builtin_stringtake(Expr* res);
 Expr* builtin_stringdrop(Expr* res);
 Expr* builtin_stringreverse(Expr* res);
+Expr* builtin_stringinsert(Expr* res);
 
 void strings_init(void);
 

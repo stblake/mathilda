@@ -836,6 +836,161 @@ void test_stringdrop_empty_string_upto() {
     assert_eval_eq("StringDrop[\"\", UpTo[5]]", "\"\"", 0);
 }
 
+/* ===== StringInsert tests ===== */
+
+/* StringInsert["string", "snew", n] - insert before position n */
+void test_stringinsert_basic() {
+    assert_eval_eq("StringInsert[\"abcdefghijklm\", \"XYZ\", 4]",
+                   "\"abcXYZdefghijklm\"", 0);
+}
+
+void test_stringinsert_at_front() {
+    /* Position 1 makes the first char of snew the first char of the result. */
+    assert_eval_eq("StringInsert[\"abc\", \"XY\", 1]", "\"XYabc\"", 0);
+}
+
+void test_stringinsert_at_end() {
+    /* Position len+1 appends snew at the very end. */
+    assert_eval_eq("StringInsert[\"abc\", \"XY\", 4]", "\"abcXY\"", 0);
+}
+
+void test_stringinsert_single_char_string() {
+    assert_eval_eq("StringInsert[\"abc\", \"X\", 2]", "\"aXbc\"", 0);
+}
+
+void test_stringinsert_empty_insertion() {
+    /* Inserting the empty string leaves "string" unchanged. */
+    assert_eval_eq("StringInsert[\"abc\", \"\", 2]", "\"abc\"", 0);
+}
+
+void test_stringinsert_into_empty_string() {
+    /* The only valid position for "" is 1 (== len+1 with len 0). */
+    assert_eval_eq("StringInsert[\"\", \"XY\", 1]", "\"XY\"", 0);
+}
+
+/* StringInsert["string", "snew", -n] - count from the end */
+void test_stringinsert_negative_basic() {
+    assert_eval_eq("StringInsert[\"abcdefghijklm\", \"XYZ\", -4]",
+                   "\"abcdefghijXYZklm\"", 0);
+}
+
+void test_stringinsert_negative_one() {
+    /* -1 makes the last char of snew the last char of the result: append. */
+    assert_eval_eq("StringInsert[\"abc\", \"XY\", -1]", "\"abcXY\"", 0);
+}
+
+void test_stringinsert_negative_full() {
+    /* -(len+1) inserts at the very front. */
+    assert_eval_eq("StringInsert[\"abc\", \"XY\", -4]", "\"XYabc\"", 0);
+}
+
+/* StringInsert["string", "snew", {n1, n2, ...}] - multiple positions */
+void test_stringinsert_multi_positions() {
+    assert_eval_eq("StringInsert[\"abcdefghijklm\", \"XYZ\", {2, 3, 7}]",
+                   "\"aXYZbXYZcdefXYZghijklm\"", 0);
+}
+
+void test_stringinsert_multi_range() {
+    assert_eval_eq("StringInsert[\"1234567890123456\", \".\", Range[4, 16, 3]]",
+                   "\"123.456.789.012.345.6\"", 0);
+}
+
+void test_stringinsert_multi_range_negative() {
+    assert_eval_eq("StringInsert[\"1234567890123456\", \".\", Range[-16, -4, 3]]",
+                   "\"1.234.567.890.123.456\"", 0);
+}
+
+void test_stringinsert_multi_positions_refer_to_original() {
+    /* {2,3,7} refers to the original string, not the growing result. */
+    assert_eval_eq("StringInsert[\"abcdefghijklm\", \"XYZ\", {2, 3, 7}]",
+                   "\"aXYZbXYZcdefXYZghijklm\"", 0);
+}
+
+void test_stringinsert_multi_empty_list() {
+    /* No positions: the string is returned unchanged. */
+    assert_eval_eq("StringInsert[\"abc\", \"XY\", {}]", "\"abc\"", 0);
+}
+
+void test_stringinsert_multi_duplicate_position() {
+    /* Two insertions at the same position give two copies. */
+    assert_eval_eq("StringInsert[\"abc\", \"X\", {2, 2}]", "\"aXXbc\"", 0);
+}
+
+void test_stringinsert_multi_mixed_signs() {
+    /* 1 -> front, -1 -> end, both against the original string. */
+    assert_eval_eq("StringInsert[\"abc\", \"X\", {1, -1}]", "\"XabcX\"", 0);
+}
+
+/* StringInsert[{s1, s2, ...}, "snew", spec] - map over the list of strings */
+void test_stringinsert_list_strings() {
+    assert_eval_eq("StringInsert[{\"abc\", \"de\"}, \"X\", 2]",
+                   "{\"aXbc\", \"dXe\"}", 0);
+}
+
+void test_stringinsert_list_strings_multi_pos() {
+    assert_eval_eq("StringInsert[{\"abc\", \"wxyz\"}, \"-\", {1, -1}]",
+                   "{\"-abc-\", \"-wxyz-\"}", 0);
+}
+
+/* Out-of-range positions leave the call unevaluated. */
+void test_stringinsert_out_of_range_high() {
+    assert_eval_eq("StringInsert[\"abc\", \"XY\", 5]",
+                   "StringInsert[\"abc\", \"XY\", 5]", 0);
+}
+
+void test_stringinsert_out_of_range_low() {
+    assert_eval_eq("StringInsert[\"abc\", \"XY\", -5]",
+                   "StringInsert[\"abc\", \"XY\", -5]", 0);
+}
+
+void test_stringinsert_position_zero() {
+    /* Position 0 is invalid; the call is left unevaluated. */
+    assert_eval_eq("StringInsert[\"abc\", \"XY\", 0]",
+                   "StringInsert[\"abc\", \"XY\", 0]", 0);
+}
+
+void test_stringinsert_out_of_range_in_list() {
+    /* One bad position invalidates the whole multi-position call. */
+    assert_eval_eq("StringInsert[\"abc\", \"XY\", {2, 9}]",
+                   "StringInsert[\"abc\", \"XY\", {2, 9}]", 0);
+}
+
+/* Symbolic / non-string arguments flow through unchanged. */
+void test_stringinsert_symbolic_string() {
+    assert_eval_eq("StringInsert[x, \"XY\", 1]",
+                   "StringInsert[x, \"XY\", 1]", 0);
+}
+
+void test_stringinsert_symbolic_insertion() {
+    assert_eval_eq("StringInsert[\"abc\", y, 1]",
+                   "StringInsert[\"abc\", y, 1]", 0);
+}
+
+void test_stringinsert_symbolic_position() {
+    assert_eval_eq("StringInsert[\"abc\", \"XY\", n]",
+                   "StringInsert[\"abc\", \"XY\", n]", 0);
+}
+
+/* Wrong argument counts emit StringInsert::argrx and stay unevaluated. */
+void test_stringinsert_no_args() {
+    assert_eval_eq("StringInsert[]", "StringInsert[]", 0);
+}
+
+void test_stringinsert_two_args() {
+    assert_eval_eq("StringInsert[\"abc\", \"XY\"]",
+                   "StringInsert[\"abc\", \"XY\"]", 0);
+}
+
+void test_stringinsert_four_args() {
+    assert_eval_eq("StringInsert[\"abc\", \"XY\", 1, 2]",
+                   "StringInsert[\"abc\", \"XY\", 1, 2]", 0);
+}
+
+/* Special characters are preserved verbatim. */
+void test_stringinsert_newline() {
+    assert_eval_eq("StringInsert[\"ab\", \"\\n\", 2]", "\"a\\nb\"", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -1039,6 +1194,37 @@ int main() {
     TEST(test_stringreverse_integer_arg);
     TEST(test_stringreverse_no_args);
     TEST(test_stringreverse_two_args);
+
+    /* StringInsert tests */
+    TEST(test_stringinsert_basic);
+    TEST(test_stringinsert_at_front);
+    TEST(test_stringinsert_at_end);
+    TEST(test_stringinsert_single_char_string);
+    TEST(test_stringinsert_empty_insertion);
+    TEST(test_stringinsert_into_empty_string);
+    TEST(test_stringinsert_negative_basic);
+    TEST(test_stringinsert_negative_one);
+    TEST(test_stringinsert_negative_full);
+    TEST(test_stringinsert_multi_positions);
+    TEST(test_stringinsert_multi_range);
+    TEST(test_stringinsert_multi_range_negative);
+    TEST(test_stringinsert_multi_positions_refer_to_original);
+    TEST(test_stringinsert_multi_empty_list);
+    TEST(test_stringinsert_multi_duplicate_position);
+    TEST(test_stringinsert_multi_mixed_signs);
+    TEST(test_stringinsert_list_strings);
+    TEST(test_stringinsert_list_strings_multi_pos);
+    TEST(test_stringinsert_out_of_range_high);
+    TEST(test_stringinsert_out_of_range_low);
+    TEST(test_stringinsert_position_zero);
+    TEST(test_stringinsert_out_of_range_in_list);
+    TEST(test_stringinsert_symbolic_string);
+    TEST(test_stringinsert_symbolic_insertion);
+    TEST(test_stringinsert_symbolic_position);
+    TEST(test_stringinsert_no_args);
+    TEST(test_stringinsert_two_args);
+    TEST(test_stringinsert_four_args);
+    TEST(test_stringinsert_newline);
 
     printf("All string tests passed!\n");
     return 0;

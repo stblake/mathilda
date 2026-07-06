@@ -3510,4 +3510,17 @@ void info_init(void) {
         "StringReverse[{s1, s2, ...}]\n"
         "\tGives the list of results for each of the si.\n\n"
         "\tStringReverse is Listable, so it threads automatically over lists.");
+
+    symtab_set_docstring("StringInsert",
+        "StringInsert[\"string\", \"snew\", n]\n"
+        "\tInserts \"snew\" so its first character is the nth character of the\n"
+        "\tresult.\n"
+        "StringInsert[\"string\", \"snew\", -n]\n"
+        "\tInserts \"snew\" so its last character is the nth character from the\n"
+        "\tend of the result.\n"
+        "StringInsert[\"string\", \"snew\", {n1, n2, ...}]\n"
+        "\tInserts a copy of \"snew\" at each of the positions ni.\n"
+        "StringInsert[{s1, s2, ...}, \"snew\", spec]\n"
+        "\tGives the list of results for each of the si.\n\n"
+        "\tPositions refer to \"string\" before any insertion is done.");
 }

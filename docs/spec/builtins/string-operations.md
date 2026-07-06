@@ -261,3 +261,40 @@ StringReverse::argx: StringReverse called with 0 arguments; 1 argument is expect
 Out[5]= StringReverse[]
 ```
 
+## StringInsert
+
+Inserts one string into another at one or more positions.
+
+- `StringInsert["string", "snew", n]`: Makes the first character of `"snew"` the nth character of the result (i.e. inserts before the original nth character).
+- `StringInsert["string", "snew", -n]`: Makes the last character of `"snew"` the nth character from the end of the result.
+- `StringInsert["string", "snew", {n1, n2, ...}]`: Inserts a copy of `"snew"` at each of the positions ni.
+- `StringInsert[{s1, s2, ...}, "snew", spec]`: Gives the list of results for each of the si.
+- The ni all refer to positions in `"string"` *before* any insertion is done. Negative positions count from the end.
+- A position n is valid for `1 <= n <= StringLength["string"] + 1` (or the corresponding negative range); an out-of-range or non-integer position leaves the call unevaluated.
+- A call whose argument count is not three emits `StringInsert::argrx` and is left unevaluated.
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringInsert["abcdefghijklm", "XYZ", 4]
+Out[1]= "abcXYZdefghijklm"
+
+In[2]:= StringInsert["abcdefghijklm", "XYZ", -4]
+Out[2]= "abcdefghijXYZklm"
+
+In[3]:= StringInsert["abcdefghijklm", "XYZ", {2, 3, 7}]
+Out[3]= "aXYZbXYZcdefXYZghijklm"
+
+In[4]:= StringInsert["1234567890123456", ".", Range[4, 16, 3]]
+Out[4]= "123.456.789.012.345.6"
+
+In[5]:= StringInsert["1234567890123456", ".", Range[-16, -4, 3]]
+Out[5]= "1.234.567.890.123.456"
+
+In[6]:= StringInsert[{"abc", "de"}, "X", 2]
+Out[6]= {"aXbc", "dXe"}
+
+In[7]:= StringInsert[]
+StringInsert::argrx: StringInsert called with 0 arguments; 3 arguments are expected.
+Out[7]= StringInsert[]
+```
+

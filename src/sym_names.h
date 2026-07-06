@@ -551,6 +551,7 @@ extern const char* SYM_Resultant;
 extern const char* SYM_RowReduce;
 extern const char* SYM_Simplify;
 extern const char* SYM_StringDrop;
+extern const char* SYM_StringInsert;
 extern const char* SYM_StringPart;
 extern const char* SYM_StringReverse;
 extern const char* SYM_StringTake;
