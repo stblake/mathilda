@@ -627,6 +627,13 @@ target_link_libraries(association_tests m)
 target_include_directories(association_tests PRIVATE ../src)
 add_test(NAME association_tests COMMAND association_tests)
 
+# Association performance regression gate: fails if a hash-backed op scales
+# worse than O(n) (doubling-ratio check; machine-independent).
+add_executable(bench_assoc bench_assoc.c ${COMMON_SRC})
+target_link_libraries(bench_assoc m)
+target_include_directories(bench_assoc PRIVATE ../src)
+add_test(NAME bench_assoc COMMAND bench_assoc)
+
 add_executable(patterns_tests test_patterns.c ${COMMON_SRC})
 target_link_libraries(patterns_tests m)
 target_include_directories(patterns_tests PRIVATE ../src)
@@ -1918,6 +1925,7 @@ if(USE_ECM)
     add_dependencies(cond_tests build_ecm)
     add_dependencies(boolean_tests build_ecm)
     add_dependencies(association_tests build_ecm)
+    add_dependencies(bench_assoc build_ecm)
     add_dependencies(patterns_tests build_ecm)
     add_dependencies(replace_tests build_ecm)
     add_dependencies(core_tests build_ecm)

@@ -323,6 +323,23 @@ valgrind --leak-check=full ./Mathilda
 The makefile auto-discovers `src/*.c`. ECM is built and linked by default
 (`USE_ECM=1`).
 
+### Performance regression gate
+
+`tests/bench_assoc.c` guards against the Association operations silently
+degrading — the failure mode that matters over time is an `O(n)` op quietly
+becoming `O(n^2)`. It times each hash-backed op at size *n* and *2n* and checks
+the **doubling ratio** `t(2n)/t(n)`: ~2 for `O(n)`, ~4 for `O(n^2)`. The ratio is
+machine-independent, so it is a robust gate; it fails (nonzero exit) if any op
+exceeds 3.3. It also prints absolute ns/element so constant-factor drift can be
+eyeballed across runs.
+
+```bash
+cd tests/build && make bench_assoc && ./bench_assoc
+```
+
+Reference (Apple M-series, `USE_ECM=OFF`, 2026-07-06): every op ratio ≈ 2.0;
+`Counts` ~29 ns/elem, `Lookup` (bulk) ~360 ns/elem, `Merge` ~3.1 µs/elem.
+
 ---
 
 ## 10. Coding Standards
