@@ -286,8 +286,46 @@ Expr* builtin_deleteduplicates(Expr* res) {
     
     Expr* result = expr_new_function(expr_copy(list->data.function.head), unique_args, unique_count);
     if (unique_args) free(unique_args);
-    
+
     return result;
+}
+
+/* DeleteDuplicatesBy[expr, f] keeps the first element for each distinct value of
+ * f[element], preserving order. Over an association f is applied to each value
+ * and the surviving entries are returned as an association (keys preserved).
+ * The distinct f-values seen so far are compared directly (expr_eq); the count
+ * of survivors is typically small, so this stays well within budget. */
+Expr* builtin_deleteduplicatesby(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* coll = res->data.function.args[0];
+    Expr* f    = res->data.function.args[1];
+    bool assoc = is_association(coll);
+    if (!assoc && coll->type != EXPR_FUNCTION) return NULL;
+
+    size_t n = coll->data.function.arg_count;
+    Expr** kept = malloc(sizeof(Expr*) * (n ? n : 1));   /* surviving elements/rules */
+    Expr** keys = malloc(sizeof(Expr*) * (n ? n : 1));   /* their f-values (owned) */
+    size_t nkept = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* elem = coll->data.function.args[i];
+        Expr* val  = assoc ? elem->data.function.args[1] : elem;  /* value for assoc */
+        Expr* fcall = expr_new_function(expr_copy(f), (Expr*[]){ expr_copy(val) }, 1);
+        Expr* fk = evaluate(fcall);
+        expr_free(fcall);
+        bool dup = false;
+        for (size_t j = 0; j < nkept; j++)
+            if (expr_eq(fk, keys[j])) { dup = true; break; }
+        if (dup) { expr_free(fk); continue; }
+        keys[nkept] = fk;
+        kept[nkept] = expr_copy(elem);
+        nkept++;
+    }
+    Expr* head = assoc ? expr_new_symbol(SYM_Association)
+                       : expr_copy(coll->data.function.head);
+    Expr* out = expr_new_function(head, kept, nkept);
+    for (size_t j = 0; j < nkept; j++) expr_free(keys[j]);
+    free(keys); free(kept);
+    return out;
 }
 
 typedef struct {

@@ -633,6 +633,18 @@ void test_tally_commonest_over_association_values() {
     assert_eval_eq("Commonest[<|\"a\" -> 1, \"b\" -> 1, \"c\" -> 2|>]", "{1}", 0);
 }
 
+void test_deleteduplicatesby() {
+    /* Keep the first element for each distinct f[element]. */
+    assert_eval_eq("DeleteDuplicatesBy[{1, 12, 3, 14, 5}, EvenQ]", "{1, 12}", 0);
+    assert_eval_eq("DeleteDuplicatesBy[{\"aa\", \"b\", \"cc\", \"d\"}, StringLength]",
+                   "{\"aa\", \"b\"}", 0);
+    /* Over an association f tests the values; surviving entries keep their keys. */
+    assert_eval_eq("DeleteDuplicatesBy[<|\"a\" -> 1, \"b\" -> 12, \"c\" -> 3|>, EvenQ]",
+                   "<|\"a\" -> 1, \"b\" -> 12|>", 0);
+    assert_eval_eq("DeleteDuplicatesBy[<||>, EvenQ]", "<||>", 0);
+    assert_eval_eq("DeleteDuplicatesBy[{5}, EvenQ]", "{5}", 0);
+}
+
 void test_deleteduplicates_over_values() {
     /* Keeps the first entry for each distinct value; returns an association. */
     assert_eval_eq("DeleteDuplicates[<|\"a\" -> 1, \"b\" -> 1, \"c\" -> 2, \"d\" -> 2, \"e\" -> 3|>]",
@@ -1411,6 +1423,7 @@ int main() {
     TEST(test_ratios_over_association_values);
     TEST(test_stats_over_association_values);
     TEST(test_tally_commonest_over_association_values);
+    TEST(test_deleteduplicatesby);
     TEST(test_deleteduplicates_over_values);
 
     TEST(test_alltrue_list);

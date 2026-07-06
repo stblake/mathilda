@@ -63,6 +63,7 @@
         {"cells": [{"type": "code", "source": "KeyMap[ToString, <|1 -> 10, 2 -> 20|>]"}]},
         {"cells": [{"type": "code", "source": "KeySelect[<|1 -> 10, 2 -> 20, 3 -> 30|>, EvenQ]"}]},
         {"cells": [{"type": "code", "source": "DeleteDuplicates[<|\"a\" -> 1, \"b\" -> 1, \"c\" -> 2|>]"}]},
+        {"cells": [{"type": "code", "source": "DeleteDuplicatesBy[<|\"a\" -> 1, \"b\" -> 12, \"c\" -> 3|>, EvenQ]"}]},
         {"cells": [{"type": "section", "source": "Ordering & top-N"}]},
         {"cells": [{"type": "text", "source": "Sort/SortBy/ReverseSort order entries by value; TakeLargest / MaximalBy select extremes."}]},
         {"cells": [{"type": "code", "source": "ReverseSort[<|\"a\" -> 3, \"b\" -> 9, \"c\" -> 1, \"d\" -> 6|>]"}]},

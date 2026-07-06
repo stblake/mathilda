@@ -415,6 +415,19 @@ In[1]:= DeleteDuplicates[<|"a" -> 1, "b" -> 1, "c" -> 2, "d" -> 2, "e" -> 3|>]
 Out[1]= <|"a" -> 1, "c" -> 2, "e" -> 3|>
 ```
 
+## DeleteDuplicatesBy
+`DeleteDuplicatesBy[expr, f]` keeps the first element for each distinct
+`f[element]`, preserving order. Over an association, `f` is applied to the
+values and the surviving entries keep their keys.
+
+```mathematica
+In[1]:= DeleteDuplicatesBy[{1, 12, 3, 14, 5}, EvenQ]
+Out[1]= {1, 12}
+
+In[2]:= DeleteDuplicatesBy[<|"a" -> 1, "b" -> 12, "c" -> 3|>, EvenQ]
+Out[2]= <|"a" -> 1, "b" -> 12|>
+```
+
 ## ReplacePart
 `ReplacePart[assoc, {Key[k]} -> v]` (or bare `Key[k]`, or a positional `i`)
 replaces the value at that key; several positions may be given at once. It is

@@ -34,6 +34,12 @@ void list_init(void) {
     symtab_add_builtin("Tally", builtin_tally);
     symtab_add_builtin("Union", builtin_union);
     symtab_add_builtin("DeleteDuplicates", builtin_deleteduplicates);
+    symtab_add_builtin("DeleteDuplicatesBy", builtin_deleteduplicatesby);
+    symtab_get_def("DeleteDuplicatesBy")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("DeleteDuplicatesBy",
+        "DeleteDuplicatesBy[expr, f]\n\tKeeps the first element for each distinct\n"
+        "\tf[element], preserving order. Over an association, f is applied to the\n"
+        "\tvalues and the surviving entries are kept (keys preserved).");
     symtab_add_builtin("Split", builtin_split);
     symtab_add_builtin("Total", builtin_total);
     symtab_add_builtin("Accumulate", builtin_accumulate);
