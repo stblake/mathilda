@@ -3542,4 +3542,53 @@ void info_init(void) {
         "\t\"string\" before any replacement is done. Negative positions count\n"
         "\tfrom the end. Positions may not overlap. An empty new string\n"
         "\tdeletes the selected characters.");
+
+    symtab_set_docstring("RegularExpression",
+        "RegularExpression[\"regex\"]\n"
+        "\tRepresents a class of strings given by the PCRE regular expression\n"
+        "\t\"regex\", for use in StringMatchQ, StringCases, StringReplace and\n"
+        "\tStringSplit.  It is an inert head: it evaluates to itself.\n\n"
+        "\tSupported syntax includes . [c1c2] [c1-c2] [^...] p* p+ p? p{m,n},\n"
+        "\tnon-greedy *? +? ??, groups (...) and alternation |; the classes\n"
+        "\t\\d \\D \\s \\S \\w \\W and [[:name:]]; the anchors ^ $ \\b \\B; and\n"
+        "\tinline options (?i) (?m) (?s).  In a replacement right-hand side $n\n"
+        "\tstands for the n-th captured group and $0 for the whole match.");
+
+    symtab_set_docstring("StringMatchQ",
+        "StringMatchQ[\"string\", patt]\n"
+        "\tGives True if the whole \"string\" matches patt, and False otherwise.\n"
+        "StringMatchQ[{s1, s2, ...}, patt]\n"
+        "\tGives the list of results for each of the si.\n\n"
+        "\tpatt may be RegularExpression[\"re\"], a literal string, or a list of\n"
+        "\talternatives.");
+
+    symtab_set_docstring("StringCases",
+        "StringCases[\"string\", patt]\n"
+        "\tGives the list of non-overlapping substrings of \"string\" that match\n"
+        "\tpatt, from left to right.\n"
+        "StringCases[\"string\", patt -> rhs]\n"
+        "\tGives the rhs for each match, with $n replaced by the n-th captured\n"
+        "\tgroup and $0 by the whole match.\n"
+        "StringCases[{s1, s2, ...}, patt]\n"
+        "\tGives the list of results for each of the si.");
+
+    symtab_set_docstring("StringReplace",
+        "StringReplace[\"string\", patt -> rep]\n"
+        "\tReplaces each non-overlapping match of patt in \"string\" by rep,\n"
+        "\twith $n replaced by the n-th captured group and $0 by the whole\n"
+        "\tmatch.\n"
+        "StringReplace[\"string\", {patt1 -> rep1, patt2 -> rep2, ...}]\n"
+        "\tApplies a list of replacement rules; at each position the leftmost\n"
+        "\tmatch wins, ties broken by rule order.\n"
+        "StringReplace[{s1, s2, ...}, rules]\n"
+        "\tGives the list of results for each of the si.");
+
+    symtab_set_docstring("StringSplit",
+        "StringSplit[\"string\", patt]\n"
+        "\tSplits \"string\" into the substrings between non-overlapping matches\n"
+        "\tof the delimiter patt.  Empty pieces are dropped.\n"
+        "StringSplit[{s1, s2, ...}, patt]\n"
+        "\tGives the list of results for each of the si.\n\n"
+        "\tpatt may be RegularExpression[\"re\"], a literal string, or a list of\n"
+        "\talternative delimiters.");
 }

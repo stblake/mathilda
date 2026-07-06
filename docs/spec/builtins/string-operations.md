@@ -342,3 +342,112 @@ StringReplacePart::argt: StringReplacePart called with 0 arguments; 2 or 3 argum
 Out[8]= StringReplacePart[]
 ```
 
+## RegularExpression
+
+Represents a class of strings given by a PCRE regular expression, for use in
+`StringMatchQ`, `StringCases`, `StringReplace`, and `StringSplit`. Backed by
+PCRE2 (the same engine the Wolfram Language uses).
+
+- `RegularExpression["regex"]`: an inert head that evaluates to itself and
+  carries the pattern.
+- Supported syntax: `.` `[c1c2]` `[c1-c2]` `[^...]`, quantifiers `p*` `p+` `p?`
+  `p{m,n}` and their non-greedy forms `*?` `+?` `??`, groups `(...)`, and
+  alternation `p1|p2`; classes `\d \D \s \S \w \W` and `[[:name:]]` (alnum,
+  alpha, ascii, blank, cntrl, digit, graph, lower, print, punct, space, upper,
+  word, xdigit); anchors `^ $ \b \B`; and inline options `(?i)` `(?m)` `(?s)`.
+- In a replacement right-hand side, `$n` stands for the n-th captured group and
+  `$0` for the whole match; `$$` is a literal `$`.
+- Requires PCRE2 at build time; without it these builtins warn and stay
+  unevaluated.
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringCases["adefgh12c34", RegularExpression["[a-e]+"]]
+Out[1]= {"ade", "c"}
+
+In[2]:= StringCases["a23b4222c63333d80", RegularExpression["\\d+"]]
+Out[2]= {"23", "4222", "63333", "80"}
+```
+
+## StringMatchQ
+
+Tests whether a whole string matches a pattern.
+
+- `StringMatchQ["string", patt]`: `True` if all of `"string"` matches `patt`
+  (the pattern is anchored to the whole string), else `False`.
+- `StringMatchQ[{s1, s2, ...}, patt]`: gives the list of results for each `si`.
+- `patt` may be `RegularExpression["re"]`, a literal string (exact match), or a
+  list of alternatives. A non-string subject leaves the call unevaluated.
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringMatchQ["12345", RegularExpression["\\d+"]]
+Out[1]= True
+
+In[2]:= StringMatchQ[{"12", "x"}, RegularExpression["\\d+"]]
+Out[2]= {True, False}
+```
+
+## StringCases
+
+Extracts the substrings of a string that match a pattern.
+
+- `StringCases["string", patt]`: the list of non-overlapping substrings that
+  match `patt`, from left to right.
+- `StringCases["string", patt -> rhs]`: the `rhs` for each match, with `$n`
+  replaced by the n-th captured group and `$0` by the whole match.
+- `StringCases[{s1, s2, ...}, patt]`: gives the list of results for each `si`.
+- `patt` may be `RegularExpression["re"]`, a literal string, or a list of
+  patterns/rules (leftmost match wins, ties broken by order).
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringCases["a13b12c17a32", RegularExpression["[^a1]"]]
+Out[1]= {"3", "b", "2", "c", "7", "3", "2"}
+
+In[2]:= StringCases["AaBBccDDeefG", RegularExpression["[[:upper:]]+"]]
+Out[2]= {"A", "BB", "DD", "G"}
+```
+
+## StringReplace
+
+Replaces matches of a pattern in a string.
+
+- `StringReplace["string", patt -> rep]`: replaces each non-overlapping match
+  of `patt` by `rep`, with `$n`/`$0` expanded; unmatched text is copied.
+- `StringReplace["string", {patt1 -> rep1, ...}]`: applies a list of rules; at
+  each position the leftmost match wins, ties broken by rule order.
+- `StringReplace[{s1, s2, ...}, rules]`: gives the list of results for each
+  `si`.
+- Zero-width matches (e.g. `\b`) insert `rep` at each boundary without dropping
+  characters.
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringReplace["a13b12c1da32efg", RegularExpression["(\\d+)"] -> "[$1]"]
+Out[1]= "a[13]b[12]c[1]da[32]efg"
+
+In[2]:= StringReplace["123 45 6 789", RegularExpression["\\b"] :> "X"]
+Out[2]= "X123X X45X X6X X789X"
+```
+
+## StringSplit
+
+Splits a string at matches of a delimiter pattern.
+
+- `StringSplit["string", patt]`: the list of substrings between non-overlapping
+  matches of the delimiter `patt`; empty pieces are dropped.
+- `StringSplit[{s1, s2, ...}, patt]`: gives the list of results for each `si`.
+- `patt` may be `RegularExpression["re"]`, a literal string, or a list of
+  alternative delimiters. Zero-width delimiters (e.g. `(?m)^`) split at
+  positions.
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringSplit["1.23, 4.56  7.89", RegularExpression["(\\s|,)+"]]
+Out[1]= {"1.23", "4.56", "7.89"}
+
+In[2]:= StringSplit["a,b,c", ","]
+Out[2]= {"a", "b", "c"}
+```
+

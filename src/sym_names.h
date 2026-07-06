@@ -545,6 +545,7 @@ extern const char* SYM_PreIncrement;
 extern const char* SYM_Quartiles;
 extern const char* SYM_RandomInteger;
 extern const char* SYM_RandomSeeding;
+extern const char* SYM_RegularExpression;
 extern const char* SYM_ReplaceAll;
 extern const char* SYM_ReplaceRepeated;
 extern const char* SYM_Resultant;

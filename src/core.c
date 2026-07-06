@@ -626,6 +626,7 @@ void core_init(void) {
     files_init();
     random_init();
     strings_init();
+    regex_init();
     series_init();
     deriv_init();
     limit_init();

@@ -3,6 +3,7 @@ USE_MPFR ?= 1
 USE_LAPACK ?= 1
 USE_GRAPHICS ?= 1
 USE_FLINT ?= 1
+USE_REGEX ?= 1
 
 # Platform detection — used for readline and other OS-specific choices.
 # On Windows under MSYS2/MinGW, uname returns "MINGW64_NT-*" or similar;
@@ -15,7 +16,7 @@ else
 endif
 
 CC = gcc
-CFLAGS = -O3 -std=c99 -Wall -Wextra -g -I./src -I./src/list -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/strings -I/usr/local/include
+CFLAGS = -O3 -std=c99 -Wall -Wextra -g -I./src -I./src/list -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/strings -I./src/strings/regex -I/usr/local/include
 
 # Readline is available on macOS and Linux but not on Windows (MinGW).
 # Build with USE_READLINE=0 to disable it explicitly (e.g. for cross-builds
@@ -145,8 +146,28 @@ ifeq ($(USE_FLINT), 1)
   endif
 endif
 
+# PCRE2 (Perl-Compatible Regular Expressions, 8-bit code units) backs
+# RegularExpression[] and the regex-aware string functions (StringMatchQ,
+# StringCases, StringReplace, StringSplit). This is the same engine the
+# Wolfram Language uses, so RegularExpression syntax is faithful. System
+# library only (BSD-licensed) — never vendored. Autodetected via pkg-config;
+# when absent the build still succeeds and those builtins warn and stay
+# unevaluated at runtime, matching the USE_MPFR=0 / USE_LAPACK=0 graceful-
+# degrade policy.
+ifeq ($(USE_REGEX), 1)
+  ifneq ($(shell $(PKG_CONFIG) --exists libpcre2-8 2>/dev/null && echo y),)
+    CFLAGS  += -DUSE_REGEX -DPCRE2_CODE_UNIT_WIDTH=8 $(shell $(PKG_CONFIG) --cflags libpcre2-8)
+    LDFLAGS += $(shell $(PKG_CONFIG) --libs libpcre2-8)
+  else
+    $(warning PCRE2 not detected; building with USE_REGEX=0 (RegularExpression/StringMatchQ/StringCases/StringReplace/StringSplit warn and stay unevaluated))
+    $(warning   macOS (Homebrew): brew install pcre2)
+    $(warning   Ubuntu/Debian:    sudo apt install libpcre2-dev)
+    override USE_REGEX := 0
+  endif
+endif
+
 SRC_DIR = src
-SRC = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/list/*.c) $(wildcard $(SRC_DIR)/linalg/*.c) $(wildcard $(SRC_DIR)/numbertheory/*.c) $(wildcard $(SRC_DIR)/poly/*.c) $(wildcard $(SRC_DIR)/simp/*.c) $(wildcard $(SRC_DIR)/calculus/*.c) $(wildcard $(SRC_DIR)/sum/*.c) $(wildcard $(SRC_DIR)/product/*.c) $(wildcard $(SRC_DIR)/special_functions/*.c) $(wildcard $(SRC_DIR)/numerical_calculus/*.c) $(wildcard $(SRC_DIR)/numerical_roots/*.c) $(wildcard $(SRC_DIR)/graphics/*.c) $(wildcard $(SRC_DIR)/strings/*.c)
+SRC = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/list/*.c) $(wildcard $(SRC_DIR)/linalg/*.c) $(wildcard $(SRC_DIR)/numbertheory/*.c) $(wildcard $(SRC_DIR)/poly/*.c) $(wildcard $(SRC_DIR)/simp/*.c) $(wildcard $(SRC_DIR)/calculus/*.c) $(wildcard $(SRC_DIR)/sum/*.c) $(wildcard $(SRC_DIR)/product/*.c) $(wildcard $(SRC_DIR)/special_functions/*.c) $(wildcard $(SRC_DIR)/numerical_calculus/*.c) $(wildcard $(SRC_DIR)/numerical_roots/*.c) $(wildcard $(SRC_DIR)/graphics/*.c) $(wildcard $(SRC_DIR)/strings/*.c) $(wildcard $(SRC_DIR)/strings/regex/*.c)
 ifneq ($(USE_GRAPHICS), 1)
 SRC := $(filter-out $(SRC_DIR)/graphics/render.c $(SRC_DIR)/graphics/hershey_font.c, $(SRC))
 endif

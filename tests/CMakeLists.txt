@@ -6,6 +6,7 @@ option(USE_MPFR "Use MPFR for arbitrary-precision reals (N[expr, prec])" ON)
 option(USE_LAPACK "Use BLAS/LAPACK for fast machine-precision linear algebra" ON)
 option(USE_GRAPHICS "Use Raylib for the 2D graphics engine (Graphics[]/Show[]/Plot[] rendering)" ON)
 option(USE_FLINT "Use FLINT (>= 3.0) for algebraic-extension polynomial arithmetic" ON)
+option(USE_REGEX "Use PCRE2 for RegularExpression[] and regex string functions" ON)
 
 if(USE_MPFR)
     add_compile_definitions(USE_MPFR)
@@ -99,6 +100,31 @@ if(USE_FLINT)
     endif()
 endif()
 
+# PCRE2 autodetection — mirror the makefile's libpcre2-8 pkg-config probe with
+# graceful degrade: when absent, the regex engine wrapper compiles to stubs and
+# the regex string builtins warn and stay unevaluated at runtime.
+if(USE_REGEX)
+    if(APPLE)
+        set(ENV{PKG_CONFIG_PATH}
+            "/opt/homebrew/lib/pkgconfig:/usr/local/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+    endif()
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(PCRE2 QUIET libpcre2-8)
+    endif()
+    if(PCRE2_FOUND)
+        add_compile_definitions(USE_REGEX PCRE2_CODE_UNIT_WIDTH=8)
+        include_directories(${PCRE2_INCLUDE_DIRS})
+        link_directories(${PCRE2_LIBRARY_DIRS})
+        link_libraries(${PCRE2_LIBRARIES})
+    else()
+        message(WARNING "PCRE2 not detected; building tests with USE_REGEX=OFF")
+        message(WARNING "  macOS (Homebrew): brew install pcre2")
+        message(WARNING "  Ubuntu/Debian:    sudo apt install libpcre2-dev")
+        set(USE_REGEX OFF)
+    endif()
+endif()
+
 include_directories(/usr/local/include)
 include_directories(../src/list)
 include_directories(../src/linalg)
@@ -112,6 +138,7 @@ include_directories(../src/numerical_calculus)
 include_directories(../src/numerical_roots)
 include_directories(../src/graphics)
 include_directories(../src/strings)
+include_directories(../src/strings/regex)
 if(USE_ECM)
     include_directories(../src/external/ecm)
 endif()
@@ -349,6 +376,14 @@ set(COMMON_SRC
     ../src/strings/stringinsert.c
     ../src/strings/stringreplacepart.c
     ../src/strings/strings_init.c
+    ../src/strings/regex/regex_engine.c
+    ../src/strings/regex/regex_common.c
+    ../src/strings/regex/regularexpression.c
+    ../src/strings/regex/stringmatchq.c
+    ../src/strings/regex/stringcases.c
+    ../src/strings/regex/stringreplace.c
+    ../src/strings/regex/stringsplit.c
+    ../src/strings/regex/regex_init.c
     ../src/calculus/series.c
     ../src/calculus/deriv.c
     ../src/calculus/limit.c
@@ -1729,6 +1764,12 @@ target_include_directories(unevaluated_tests PRIVATE ../src)
 add_executable(strings_tests test_strings.c ${COMMON_SRC})
 target_include_directories(strings_tests PRIVATE ../src)
 
+add_executable(regex_tests test_regex.c ${COMMON_SRC})
+target_include_directories(regex_tests PRIVATE ../src ../src/strings ../src/strings/regex)
+
+add_executable(stringfns_tests test_stringfns.c ${COMMON_SRC})
+target_include_directories(stringfns_tests PRIVATE ../src ../src/strings ../src/strings/regex)
+
 add_executable(series_tests test_series.c ${COMMON_SRC})
 target_include_directories(series_tests PRIVATE ../src)
 
@@ -1976,6 +2017,8 @@ if(USE_ECM)
     add_dependencies(releasehold_tests build_ecm)
     add_dependencies(unevaluated_tests build_ecm)
     add_dependencies(strings_tests build_ecm)
+    add_dependencies(regex_tests build_ecm)
+    add_dependencies(stringfns_tests build_ecm)
     add_dependencies(series_tests build_ecm)
     add_dependencies(series_twoterm_tests build_ecm)
     add_dependencies(deriv_tests build_ecm)
