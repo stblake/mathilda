@@ -36,6 +36,10 @@ or `Association[k1 -> v1, ...]`.
 - **`assoc[key]`** — an association applied as a function looks the key up (the
   idiomatic accessor), giving the value or `Missing["KeyAbsent", key]`; `assoc[Key[k]]`
   is the explicit form.
+- **`Key[k][assoc]`** — the curried complement: `Key[k]` applied to an association
+  extracts the value at `k`. This is the record-field extractor for pipelines —
+  `GroupBy[records, Key["field"]]`, `SortBy[records, Key["field"]]`,
+  `Map[Key["field"], records]`.
 
 ```mathematica
 In[1]:= <|"a" -> 1, "b" -> 2|>

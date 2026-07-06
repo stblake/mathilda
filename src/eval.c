@@ -1038,6 +1038,39 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 *changed = true;
                 return out;
             } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
+                       head->data.function.head->data.symbol == SYM_Key &&
+                       head->data.function.arg_count == 1 &&
+                       res->data.function.arg_count == 1 &&
+                       res->data.function.args[0]->type == EXPR_FUNCTION &&
+                       res->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
+                       res->data.function.args[0]->data.function.head->data.symbol == SYM_Association) {
+                /* 7a'. Key[k][assoc] operator form: extract the value at key k,
+                 * giving the value or Missing["KeyAbsent", k]. This is the
+                 * curried complement of assoc[Key[k]], and it is what makes
+                 * record pipelines like GroupBy[records, Key["field"]] and
+                 * SortBy[records, Key["field"]] work. */
+                Expr* key   = head->data.function.args[0];
+                Expr* assoc = res->data.function.args[0];
+                Expr* found = NULL;
+                for (size_t i = 0; i < assoc->data.function.arg_count; i++) {
+                    Expr* rule = assoc->data.function.args[i];
+                    if (rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2 &&
+                        expr_eq(rule->data.function.args[0], key)) {
+                        found = rule->data.function.args[1];
+                        break;
+                    }
+                }
+                Expr* out;
+                if (found) {
+                    out = expr_copy(found);
+                } else {
+                    Expr* margs[2] = { expr_new_string("KeyAbsent"), expr_copy(key) };
+                    out = expr_new_function(expr_new_symbol(SYM_Missing), margs, 2);
+                }
+                expr_free(res);
+                *changed = true;
+                return out;
+            } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
                        head->data.function.head->data.symbol == SYM_Derivative &&
                        res->data.function.arg_count == 1 &&
                        res->data.function.args[0]->type == EXPR_FUNCTION &&

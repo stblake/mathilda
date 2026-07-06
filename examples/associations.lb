@@ -84,7 +84,11 @@
         {"cells": [{"type": "text", "source": "Group transactions by category, sum amounts, rank descending, take the top one — construct, group+reduce, order and access composed together."}]},
         {"cells": [{"type": "code", "source": "txns = {{\"food\", 12}, {\"rent\", 40}, {\"food\", 8}, {\"fun\", 15}, {\"rent\", 5}}"}]},
         {"cells": [{"type": "code", "source": "ReverseSort[GroupBy[txns, First -> Last, Total]]"}]},
-        {"cells": [{"type": "code", "source": "TakeLargest[GroupBy[txns, First -> Last, Total], 1]"}]}
+        {"cells": [{"type": "code", "source": "TakeLargest[GroupBy[txns, First -> Last, Total], 1]"}]},
+        {"cells": [{"type": "text", "source": "Key[field] extracts a field, so records (a list of associations) group and sort by field directly."}]},
+        {"cells": [{"type": "code", "source": "people = {<|\"name\" -> \"Ada\", \"team\" -> \"A\"|>, <|\"name\" -> \"Alan\", \"team\" -> \"B\"|>, <|\"name\" -> \"Grace\", \"team\" -> \"A\"|>}"}]},
+        {"cells": [{"type": "code", "source": "GroupBy[people, Key[\"team\"]]"}]},
+        {"cells": [{"type": "code", "source": "Key[\"name\"] /@ people"}]}
       ]
     },
     {

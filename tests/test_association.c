@@ -51,6 +51,24 @@ void test_assoc_symbol_keys() {
     assert_eval_eq("<|a -> 1, b -> 2|>", "<|a -> 1, b -> 2|>", 0);
 }
 
+void test_key_operator_form() {
+    /* Key[k][assoc] extracts the value at k (the curried complement of
+     * assoc[Key[k]]); missing keys give Missing["KeyAbsent", k]. */
+    assert_eval_eq("Key[\"name\"][<|\"name\" -> \"Ada\", \"age\" -> 36|>]", "\"Ada\"", 0);
+    assert_eval_eq("Key[2][<|1 -> 10, 2 -> 20|>]", "20", 0);
+    assert_eval_eq("Key[\"z\"][<|\"a\" -> 1|>]", "Missing[\"KeyAbsent\", \"z\"]", 0);
+    /* Enables record pipelines: group / sort a list of records by a field. */
+    assert_eval_eq("GroupBy[{<|\"g\" -> 1, \"v\" -> 10|>, <|\"g\" -> 1, \"v\" -> 20|>, "
+                   "<|\"g\" -> 2, \"v\" -> 5|>}, Key[\"g\"]]",
+                   "<|1 -> {<|\"g\" -> 1, \"v\" -> 10|>, <|\"g\" -> 1, \"v\" -> 20|>}, "
+                   "2 -> {<|\"g\" -> 2, \"v\" -> 5|>}|>", 0);
+    assert_eval_eq("SortBy[{<|\"age\" -> 41|>, <|\"age\" -> 36|>}, Key[\"age\"]]",
+                   "{<|\"age\" -> 36|>, <|\"age\" -> 41|>}", 0);
+    assert_eval_eq("Map[Key[\"v\"], {<|\"v\" -> 1|>, <|\"v\" -> 2|>}]", "{1, 2}", 0);
+    /* The existing accessor assoc[Key[k]] is unchanged. */
+    assert_eval_eq("<|\"a\" -> 1|>[Key[\"a\"]]", "1", 0);
+}
+
 void test_apply_over_association_values() {
     /* Apply (@@) uses the association's values as arguments: f @@ assoc is
      * f[v1, v2, ...] (matching Wolfram; Total = Plus @@ assoc). */
@@ -1275,6 +1293,7 @@ int main() {
     TEST(test_assoc_splice_list_of_rules);
     TEST(test_assoc_splice_nested_association);
     TEST(test_assoc_symbol_keys);
+    TEST(test_key_operator_form);
     TEST(test_apply_over_association_values);
     TEST(test_unicode_arrow_rule);
     TEST(test_assoc_implicit_multiplication);

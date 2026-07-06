@@ -233,6 +233,8 @@ export function loadStartupContent() {
     { cells: [{ type: 'section', source: 'Records & alignment' }] },
     { cells: [{ type: 'text',    source: 'Lookup pulls a field across records; KeyUnion aligns key sets; Catenate merges a list of associations.' }] },
     { cells: [{ type: 'code',    source: 'Lookup[{<|"name" -> "Ada", "age" -> 36|>, <|"name" -> "Alan", "age" -> 41|>}, "age"]' }] },
+    { cells: [{ type: 'code',    source: 'GroupBy[{<|"team" -> "A", "pts" -> 3|>, <|"team" -> "B", "pts" -> 5|>, <|"team" -> "A", "pts" -> 4|>}, Key["team"]]' }] },
+    { cells: [{ type: 'code',    source: 'SortBy[{<|"n" -> "b", "age" -> 41|>, <|"n" -> "a", "age" -> 36|>}, Key["age"]]' }] },
     { cells: [{ type: 'code',    source: 'KeyUnion[{<|"a" -> 1, "b" -> 2|>, <|"b" -> 3, "c" -> 4|>}]' }] },
     { cells: [{ type: 'code',    source: 'Catenate[{<|"a" -> 1, "b" -> 2|>, <|"b" -> 3, "c" -> 4|>}]' }] },
     { cells: [{ type: 'code',    source: 'TakeWhile[<|"a" -> 1, "b" -> 2, "c" -> 5, "d" -> 1|>, # < 3 &]' }] },
