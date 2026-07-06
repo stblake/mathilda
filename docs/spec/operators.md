@@ -16,10 +16,16 @@
 | `*`      | `Times` | 400 | Left |
 | `/`      | `Divide`| 470 | Left |
 | `+`, `-` | `Plus`  | 310 | Left |
+| `->`, `→` | `Rule` | 120 | Right |
+| `:>`     | `RuleDelayed` | 120 | Right |
 | `==`     | `Equal` | 290 | None |
 | `===`    | `SameQ` | 290 | None |
 | `=`      | `Set`   | 40 | Right |
 | `:=`     | `SetDelayed` | 40 | Right |
 | `=.`     | `Unset` (postfix) | 40 | None |
 | `;`      | `CompoundExpression` | 10 | Left |
+
+The Unicode rightwards arrow `→` (U+2192, Wolfram `\[Rule]`) is accepted as a
+synonym for `->`, so Wolfram-Language rules and associations paste and parse
+directly.
 

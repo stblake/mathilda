@@ -830,6 +830,12 @@ static OperatorDef get_operator(const char* pos) {
         def.type = OP_RULEDELAYED; def.prec = 120; def.right_assoc = 1; def.head_name = "RuleDelayed"; def.len = 2;
     } else if (strncmp(pos, "->", 2) == 0) {
         def.type = OP_RULE; def.prec = 120; def.right_assoc = 1; def.head_name = "Rule"; def.len = 2;
+    } else if ((unsigned char)pos[0] == 0xE2 && (unsigned char)pos[1] == 0x86 &&
+               (unsigned char)pos[2] == 0x92) {
+        /* Unicode → (U+2192, Wolfram \[Rule]) is a synonym for `->`, so pasted
+         * Wolfram-Language rules and associations parse directly. Three UTF-8
+         * bytes E2 86 92. */
+        def.type = OP_RULE; def.prec = 120; def.right_assoc = 1; def.head_name = "Rule"; def.len = 3;
     } else if (strncmp(pos, "/;", 2) == 0) {
         def.type = OP_CONDITION; def.prec = 130; def.right_assoc = 1; def.head_name = "Condition"; def.len = 2;
     } else if (strncmp(pos, ";;", 2) == 0) {

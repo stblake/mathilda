@@ -51,6 +51,16 @@ void test_assoc_symbol_keys() {
     assert_eval_eq("<|a -> 1, b -> 2|>", "<|a -> 1, b -> 2|>", 0);
 }
 
+void test_unicode_arrow_rule() {
+    /* The Unicode arrow "\xe2\x86\x92" (U+2192, Wolfram \[Rule]) is a synonym for
+     * `->`, so pasted Wolfram-Language rules and associations parse directly. */
+    assert_eval_eq("a \xe2\x86\x92 b", "a -> b", 0);
+    assert_eval_eq("<|\"gold\" \xe2\x86\x92 5, \"silver\" \xe2\x86\x92 12|>",
+                   "<|\"gold\" -> 5, \"silver\" -> 12|>", 0);
+    assert_eval_eq("Association[1 \xe2\x86\x92 10, 2 \xe2\x86\x92 20][2]", "20", 0);
+    assert_eval_eq("{1, 2, 3} /. 2 \xe2\x86\x92 99", "{1, 99, 3}", 0);
+}
+
 void test_assoc_implicit_multiplication() {
     /* An association literal is a valid right operand of implicit Times. */
     assert_eval_eq("2 <|\"a\" -> 1|>", "Times[2, Association[Rule[\"a\", 1]]]", 1);
@@ -1254,6 +1264,7 @@ int main() {
     TEST(test_assoc_splice_list_of_rules);
     TEST(test_assoc_splice_nested_association);
     TEST(test_assoc_symbol_keys);
+    TEST(test_unicode_arrow_rule);
     TEST(test_assoc_implicit_multiplication);
     TEST(test_assoc_invalid_unevaluated);
 
