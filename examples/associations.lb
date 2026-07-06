@@ -1,0 +1,116 @@
+{
+  "version": "1",
+  "type": "mathilda-library",
+  "title": "Associations",
+  "notebooks": [
+    {
+      "id": "nb-501", "title": "Associations I — Basics", "x": 50, "y": 50, "width": 680, "collapsed": false,
+      "rows": [
+        {"cells": [{"type": "section", "source": "Key-value data"}]},
+        {"cells": [{"type": "text", "source": "An association <|key -> value, ...|> maps keys to values with unique, insertion-ordered keys. It is Mathilda's dictionary / record type."}]},
+        {"cells": [{"type": "code", "source": "data = <|\"apples\" -> 3, \"pears\" -> 5, \"plums\" -> 2|>"}]},
+        {"cells": [{"type": "code", "source": "data[\"pears\"]"}]},
+        {"cells": [{"type": "code", "source": "data[[\"plums\"]]"}]},
+        {"cells": [{"type": "code", "source": "Lookup[data, \"figs\", 0]"}]},
+        {"cells": [{"type": "code", "source": "First[<||>, \"empty\"]"}]},
+        {"cells": [{"type": "code", "source": "Lookup[{<|\"name\" -> \"Ada\", \"age\" -> 36|>, <|\"name\" -> \"Alan\", \"age\" -> 41|>}, \"age\"]"}]},
+        {"cells": [{"type": "code", "source": "Keys[data]"}]},
+        {"cells": [{"type": "code", "source": "Values[data]"}]},
+        {"cells": [{"type": "section", "source": "Building & updating"}]},
+        {"cells": [{"type": "text", "source": "Duplicate keys collapse (last wins); Append/AssociateTo and Part assignment update or extend."}]},
+        {"cells": [{"type": "code", "source": "<|\"a\" -> 1, \"b\" -> 2, \"a\" -> 99|>"}]},
+        {"cells": [{"type": "code", "source": "Append[<|\"a\" -> 1|>, \"b\" -> 2]"}]},
+        {"cells": [{"type": "code", "source": "inv = <|\"gold\" -> 3|>; inv[[\"silver\"]] = 10; inv[[\"gold\"]] = inv[[\"gold\"]] + 1; inv"}]},
+        {"cells": [{"type": "code", "source": "AssociationThread[{\"x\", \"y\", \"z\"}, {1, 2, 3}]"}]}
+      ]
+    },
+    {
+      "id": "nb-502", "title": "Associations II — Aggregation", "x": 780, "y": 50, "width": 680, "collapsed": false,
+      "rows": [
+        {"cells": [{"type": "section", "source": "Counting & grouping"}]},
+        {"cells": [{"type": "text", "source": "Counts, GroupBy and Merge are hash-backed and run in O(n). GroupBy takes an optional value transform and reducer: keyfn -> valfn, reducer."}]},
+        {"cells": [{"type": "code", "source": "Counts[{1, 2, 2, 3, 3, 3, 1}]"}]},
+        {"cells": [{"type": "code", "source": "CountsBy[Range[12], Mod[#, 3] &]"}]},
+        {"cells": [{"type": "code", "source": "GroupBy[Range[10], EvenQ]"}]},
+        {"cells": [{"type": "code", "source": "GroupBy[Range[10], EvenQ, Total]"}]},
+        {"cells": [{"type": "code", "source": "GroupBy[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3, \"d\" -> 4|>, EvenQ]"}]},
+        {"cells": [{"type": "code", "source": "GatherBy[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3, \"d\" -> 4|>, EvenQ]"}]},
+        {"cells": [{"type": "code", "source": "GroupBy[{{\"x\", 1}, {\"y\", 2}, {\"x\", 3}}, First -> Last, Total]"}]},
+        {"cells": [{"type": "code", "source": "Merge[{<|\"a\" -> 1|>, <|\"a\" -> 2, \"b\" -> 3|>}, Total]"}]},
+        {"cells": [{"type": "code", "source": "KeyUnion[{<|\"a\" -> 1, \"b\" -> 2|>, <|\"b\" -> 3, \"c\" -> 4|>}]"}]},
+        {"cells": [{"type": "code", "source": "Catenate[{<|\"a\" -> 1, \"b\" -> 2|>, <|\"b\" -> 3, \"c\" -> 4|>}]"}]},
+        {"cells": [{"type": "section", "source": "Reducing over values"}]},
+        {"cells": [{"type": "text", "source": "Total, Mean, Median, Variance, Min, Max, Fold and Scan act on an association's values; Tally counts them."}]},
+        {"cells": [{"type": "code", "source": "Total[<|\"a\" -> 3, \"b\" -> 1, \"c\" -> 2|>]"}]},
+        {"cells": [{"type": "code", "source": "Plus @@ <|\"a\" -> 3, \"b\" -> 1, \"c\" -> 2|>"}]},
+        {"cells": [{"type": "code", "source": "Mean[<|\"a\" -> 2, \"b\" -> 4, \"c\" -> 6|>]"}]},
+        {"cells": [{"type": "code", "source": "Median[<|\"a\" -> 1, \"b\" -> 3, \"c\" -> 5|>]"}]},
+        {"cells": [{"type": "code", "source": "MinMax[<|\"a\" -> 3, \"b\" -> 1, \"c\" -> 9|>]"}]},
+        {"cells": [{"type": "code", "source": "Tally[<|\"a\" -> 1, \"b\" -> 1, \"c\" -> 2|>]"}]},
+        {"cells": [{"type": "code", "source": "Accumulate[<|\"jan\" -> 10, \"feb\" -> 20, \"mar\" -> 5|>]"}]},
+        {"cells": [{"type": "code", "source": "Fold[Plus, 0, <|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>]"}]},
+        {"cells": [{"type": "code", "source": "FoldList[Plus, <|\"q1\" -> 10, \"q2\" -> 20, \"q3\" -> 15|>]"}]},
+        {"cells": [{"type": "code", "source": "Ratios[<|\"q1\" -> 10, \"q2\" -> 20, \"q3\" -> 15|>]"}]},
+        {"cells": [{"type": "code", "source": "PositionIndex[{a, b, a, c, a, b}]"}]}
+      ]
+    },
+    {
+      "id": "nb-503", "title": "Associations III — Transform & rank", "x": 50, "y": 720, "width": 680, "collapsed": false,
+      "rows": [
+        {"cells": [{"type": "section", "source": "Map & Select thread over values"}]},
+        {"cells": [{"type": "text", "source": "Functional operations keep keys aligned and thread over values (Wolfram semantics)."}]},
+        {"cells": [{"type": "code", "source": "Map[#^2 &, <|\"x\" -> 3, \"y\" -> 4|>]"}]},
+        {"cells": [{"type": "code", "source": "MapIndexed[{#2, #1} &, <|\"x\" -> 3, \"y\" -> 4|>]"}]},
+        {"cells": [{"type": "code", "source": "Select[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>, # > 1 &]"}]},
+        {"cells": [{"type": "code", "source": "TakeWhile[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 5, \"d\" -> 1|>, # < 3 &]"}]},
+        {"cells": [{"type": "code", "source": "KeyMap[ToString, <|1 -> 10, 2 -> 20|>]"}]},
+        {"cells": [{"type": "code", "source": "KeySelect[<|1 -> 10, 2 -> 20, 3 -> 30|>, EvenQ]"}]},
+        {"cells": [{"type": "code", "source": "DeleteDuplicates[<|\"a\" -> 1, \"b\" -> 1, \"c\" -> 2|>]"}]},
+        {"cells": [{"type": "code", "source": "DeleteDuplicatesBy[<|\"a\" -> 1, \"b\" -> 12, \"c\" -> 3|>, EvenQ]"}]},
+        {"cells": [{"type": "section", "source": "Ordering & top-N"}]},
+        {"cells": [{"type": "text", "source": "Sort/SortBy/ReverseSort order entries by value; TakeLargest / MaximalBy select extremes."}]},
+        {"cells": [{"type": "code", "source": "ReverseSort[<|\"a\" -> 3, \"b\" -> 9, \"c\" -> 1, \"d\" -> 6|>]"}]},
+        {"cells": [{"type": "code", "source": "TakeLargest[<|\"a\" -> 3, \"b\" -> 9, \"c\" -> 1, \"d\" -> 6|>, 2]"}]},
+        {"cells": [{"type": "code", "source": "MaximalBy[<|\"a\" -> 1, \"b\" -> 3, \"c\" -> 3|>, Identity]"}]},
+        {"cells": [{"type": "code", "source": "SortBy[{{1, 3}, {1, 1}, {2, 0}, {1, 2}}, {First, Last}]"}]}
+      ]
+    },
+    {
+      "id": "nb-504", "title": "Associations IV — Patterns & pipelines", "x": 780, "y": 720, "width": 680, "collapsed": false,
+      "rows": [
+        {"cells": [{"type": "section", "source": "Pattern matching on records"}]},
+        {"cells": [{"type": "text", "source": "KeyValuePattern matches and destructures associations — in Cases, in rules, and in function definitions."}]},
+        {"cells": [{"type": "code", "source": "Cases[{<|\"t\" -> 1|>, <|\"t\" -> 2|>, <|\"x\" -> 3|>}, KeyValuePattern[{\"t\" -> _}]]"}]},
+        {"cells": [{"type": "code", "source": "Replace[<|\"a\" -> 5, \"b\" -> 2|>, KeyValuePattern[{\"a\" -> v_}] :> v]"}]},
+        {"cells": [{"type": "code", "source": "area[KeyValuePattern[{\"w\" -> w_, \"h\" -> h_}]] := w h; area[<|\"w\" -> 3, \"h\" -> 4|>]"}]},
+        {"cells": [{"type": "code", "source": "Position[<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 1|>, 1]"}]},
+        {"cells": [{"type": "section", "source": "A one-line pipeline"}]},
+        {"cells": [{"type": "text", "source": "Group transactions by category, sum amounts, rank descending, take the top one — construct, group+reduce, order and access composed together."}]},
+        {"cells": [{"type": "code", "source": "txns = {{\"food\", 12}, {\"rent\", 40}, {\"food\", 8}, {\"fun\", 15}, {\"rent\", 5}}"}]},
+        {"cells": [{"type": "code", "source": "ReverseSort[GroupBy[txns, First -> Last, Total]]"}]},
+        {"cells": [{"type": "code", "source": "TakeLargest[GroupBy[txns, First -> Last, Total], 1]"}]},
+        {"cells": [{"type": "text", "source": "Key[field] extracts a field, so records (a list of associations) group and sort by field directly."}]},
+        {"cells": [{"type": "code", "source": "people = {<|\"name\" -> \"Ada\", \"team\" -> \"A\"|>, <|\"name\" -> \"Alan\", \"team\" -> \"B\"|>, <|\"name\" -> \"Grace\", \"team\" -> \"A\"|>}"}]},
+        {"cells": [{"type": "code", "source": "GroupBy[people, Key[\"team\"]]"}]},
+        {"cells": [{"type": "code", "source": "Key[\"name\"] /@ people"}]},
+        {"cells": [{"type": "code", "source": "KeyDrop[people, \"team\"]"}]}
+      ]
+    },
+    {
+      "id": "nb-505", "title": "Associations V — Positions & edits", "x": 1510, "y": 50, "width": 680, "collapsed": false,
+      "rows": [
+        {"cells": [{"type": "section", "source": "Positions by key"}]},
+        {"cells": [{"type": "text", "source": "Position reports matches as {Key[k]} positions that flow into Extract, MapAt, Delete and ReplacePart."}]},
+        {"cells": [{"type": "code", "source": "inv = <|\"gold\" -> 5, \"silver\" -> 12, \"bronze\" -> 3|>"}]},
+        {"cells": [{"type": "code", "source": "Position[inv, x_ /; x > 4]"}]},
+        {"cells": [{"type": "code", "source": "Extract[inv, {Key[\"silver\"]}]"}]},
+        {"cells": [{"type": "section", "source": "Structural edits"}]},
+        {"cells": [{"type": "text", "source": "MapAt transforms a value in place; Delete removes an entry; ReplacePart replaces (never adds)."}]},
+        {"cells": [{"type": "code", "source": "MapAt[# * 2 &, inv, Key[\"gold\"]]"}]},
+        {"cells": [{"type": "code", "source": "Delete[inv, {Key[\"bronze\"]}]"}]},
+        {"cells": [{"type": "code", "source": "ReplacePart[inv, Key[\"silver\"] -> 0]"}]},
+        {"cells": [{"type": "code", "source": "MapAt[-# &, inv, First[Position[inv, 12]]]"}]}
+      ]
+    }
+  ]
+}

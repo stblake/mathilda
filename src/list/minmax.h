@@ -5,5 +5,6 @@
 
 Expr* builtin_min(Expr* res);
 Expr* builtin_max(Expr* res);
+Expr* builtin_minmax(Expr* res);
 
 #endif /* MINMAX_H */

@@ -1,0 +1,709 @@
+# Data Structures
+
+Associations (`<| key -> value, ... |>`) are Mathilda's key–value data structure,
+modelled on the Wolfram Language. Keys are unique and insertion-ordered (the
+first occurrence fixes a key's position, the last occurrence its value), and
+bulk operations are backed by a hash index for amortised `O(n)` construction,
+grouping and lookup.
+
+### The association toolchain at a glance
+
+| Category | Operations |
+|----------|------------|
+| **Construct** | `Association` / `<\|…\|>`, `AssociationThread`, `AssociationMap`, `Association[{rules}]` (splice) |
+| **Access** | `assoc[key]`, `assoc[k1, k2]` (nested), `assoc[[key]]` / `[[Key[k]]]` / `[[i]]`, `Lookup`, `Normal` |
+| **Write** | `assoc[[key]] = v`, `AssociateTo`, `Append`, `Prepend`, `Join` (merge) |
+| **Keys & values** | `Keys`, `Values`, `KeyMap`, `KeyValueMap` |
+| **Presence** | `KeyExistsQ`, `KeyMemberQ`, `KeyFreeQ`, `MemberQ` |
+| **Transform** | `Map`, `Select`, `KeySelect`, `KeyTake`, `KeyDrop`, `DeleteMissing` |
+| **Aggregate** | `Total`, `Min`, `Max`, `Mean`, `Counts`, `CountsBy`, `GroupBy` (+reducer, `key->val`), `GatherBy`, `Merge`, `PositionIndex` |
+| **Order / rank** | `Sort`, `SortBy` (multi-key), `ReverseSort`, `ReverseSortBy`, `KeySort`, `KeySortBy`, `MaximalBy`, `MinimalBy`, `TakeLargest`(`By`), `TakeSmallest`(`By`), `Reverse` |
+| **Iterate / reduce** | `Table`/`Do`/`Sum`/`Product` (`{v, assoc}`), `Fold`, `FoldList`, `Scan`, `Cases`, `Count`, `DeleteCases`, `Position`, `SelectFirst`, `FirstCase`, `AllTrue`, `AnyTrue`, `NoneTrue` |
+| **Structural** | `First`, `Last`, `Rest`, `Most`, `Take`, `Drop`, `Length` |
+| **Patterns** | `KeyValuePattern` (destructure/match, incl. in function definitions) |
+
+Functions that consume or reduce a collection operate on an association's
+**values**, keeping keys aligned (see *Design notes: value threading* below).
+
+## Association
+Represents a mapping from keys to values, written `<|k1 -> v1, k2 -> v2, ...|>`
+or `Association[k1 -> v1, ...]`.
+- Arguments may be rules, lists of rules, or other associations (which are spliced).
+- Duplicate keys collapse with last-value-wins, preserving first-occurrence order.
+- `assoc[[key]]`, `assoc[[Key[key]]]` and `assoc[[i]]` extract values (a missing
+  key gives `Missing["KeyAbsent", key]`); `assoc[[{k1, k2, ...}]]` gives the list
+  of those values.
+- **`assoc[key]`** — an association applied as a function looks the key up (the
+  idiomatic accessor), giving the value or `Missing["KeyAbsent", key]`; `assoc[Key[k]]`
+  is the explicit form.
+- **`Key[k][assoc]`** — the curried complement: `Key[k]` applied to an association
+  extracts the value at `k`. This is the record-field extractor for pipelines —
+  `GroupBy[records, Key["field"]]`, `SortBy[records, Key["field"]]`,
+  `Map[Key["field"], records]`.
+
+```mathematica
+In[1]:= <|"a" -> 1, "b" -> 2|>
+Out[1]= <|"a" -> 1, "b" -> 2|>
+
+In[2]:= <|"a" -> 1, "b" -> 2, "a" -> 99|>
+Out[2]= <|"a" -> 99, "b" -> 2|>
+
+In[3]:= <|"a" -> 10, "b" -> 20|>[["b"]]
+Out[3]= 20
+
+In[4]:= <|"a" -> 10, "b" -> 20|>["a"]
+Out[4]= 10
+
+In[5]:= <|"a" -> <|"b" -> 5|>|>["a", "b"]
+Out[5]= 5
+```
+
+## AssociationQ
+Tests whether an expression is an association.
+
+```mathematica
+In[1]:= AssociationQ[<|"a" -> 1|>]
+Out[1]= True
+
+In[2]:= AssociationQ[{1, 2, 3}]
+Out[2]= False
+```
+
+## Keys
+Gives the list of keys of an association (or a list of rules).
+
+```mathematica
+In[1]:= Keys[<|"a" -> 1, "b" -> 2|>]
+Out[1]= {"a", "b"}
+```
+
+## Values
+Gives the list of values of an association (or a list of rules).
+
+```mathematica
+In[1]:= Values[<|"a" -> 1, "b" -> 2|>]
+Out[1]= {1, 2}
+```
+
+## Lookup
+Looks up the value stored under a key.
+- `Lookup[assoc, key]` gives the value, or `Missing["KeyAbsent", key]`.
+- `Lookup[assoc, key, default]` uses `default` when the key is absent.
+- `Lookup[assoc, {k1, k2, ...}]` looks up several keys with a single hash-index
+  build (`O(n + m)`).
+- `Lookup[{a1, a2, ...}, key]` threads over a list of associations, extracting
+  the key from each (a key/default thread through) — handy for pulling one field
+  out of a column of records.
+- Also accepts a bare list of rules (like `Keys`/`Values`).
+
+```mathematica
+In[1]:= Lookup[<|"a" -> 1, "b" -> 2|>, "b"]
+Out[1]= 2
+
+In[2]:= Lookup[<|"a" -> 1|>, "z", 0]
+Out[2]= 0
+
+In[3]:= Lookup[{<|"a" -> 1, "b" -> 2|>, <|"a" -> 3|>}, "a", 0]
+Out[3]= {1, 3}
+```
+
+## KeyExistsQ, KeyMemberQ, KeyFreeQ
+`KeyExistsQ`/`KeyMemberQ` test whether a key is present; `KeyFreeQ` is the
+complement (True when the key is absent). All three accept an association or a
+bare list of rules.
+
+```mathematica
+In[1]:= KeyExistsQ[<|"a" -> 1|>, "a"]
+Out[1]= True
+
+In[2]:= KeyFreeQ[<|"a" -> 1|>, "b"]
+Out[2]= True
+```
+
+## KeyDrop
+Gives an association with the specified key or keys removed (order preserved).
+
+```mathematica
+In[1]:= KeyDrop[<|"a" -> 1, "b" -> 2, "c" -> 3|>, "b"]
+Out[1]= <|"a" -> 1, "c" -> 3|>
+
+In[2]:= KeyDrop[<|"a" -> 1, "b" -> 2, "c" -> 3|>, {"a", "c"}]
+Out[2]= <|"b" -> 2|>
+```
+
+`KeyDrop` (like `KeyTake`) also threads over a list of associations — dropping
+the keys from each record:
+
+```mathematica
+In[3]:= KeyDrop[{<|"a" -> 1, "b" -> 2|>, <|"a" -> 3, "b" -> 4|>}, "b"]
+Out[3]= {<|"a" -> 1|>, <|"a" -> 3|>}
+```
+
+## KeyTake
+Gives the association of only the specified keys (association order preserved).
+Over a list of associations it threads, keeping the keys in each record.
+
+```mathematica
+In[1]:= KeyTake[<|"a" -> 1, "b" -> 2, "c" -> 3|>, {"c", "a"}]
+Out[1]= <|"a" -> 1, "c" -> 3|>
+
+In[2]:= KeyTake[{<|"a" -> 1, "b" -> 2|>, <|"a" -> 3, "b" -> 4|>}, {"a"}]
+Out[2]= {<|"a" -> 1|>, <|"a" -> 3|>}
+```
+
+## KeyUnion
+`KeyUnion[{assoc1, assoc2, ...}]` pads every association to the union of all
+their keys (in first-appearance order), filling a key absent from an
+association with `Missing["KeyAbsent", key]`. The result is the list of
+equalised associations — a common preparation step before row-wise or tabular
+processing. Hash-indexed: the union and every rebuild are `O(n)`.
+
+```mathematica
+In[1]:= KeyUnion[{<|"a" -> 1, "b" -> 2|>, <|"b" -> 3, "c" -> 4|>}]
+Out[1]= {<|"a" -> 1, "b" -> 2, "c" -> Missing["KeyAbsent", "c"]|>,
+         <|"a" -> Missing["KeyAbsent", "a"], "b" -> 3, "c" -> 4|>}
+```
+
+## KeyValueMap
+Applies `f` to each key–value pair, giving `{f[k1, v1], f[k2, v2], ...}`.
+
+```mathematica
+In[1]:= KeyValueMap[f, <|a -> 1, b -> 2|>]
+Out[1]= {f[a, 1], f[b, 2]}
+
+In[2]:= KeyValueMap[Plus, <|1 -> 10, 2 -> 20|>]
+Out[2]= {11, 22}
+```
+
+## AssociationThread
+Builds an association from parallel key and value lists.
+
+```mathematica
+In[1]:= AssociationThread[{"a", "b"}, {1, 2}]
+Out[1]= <|"a" -> 1, "b" -> 2|>
+
+In[2]:= AssociationThread[{"a", "b"} -> {1, 2}]
+Out[2]= <|"a" -> 1, "b" -> 2|>
+```
+
+## Counts
+Tallies each distinct element of a list, giving `<|element -> count, ...|>`.
+Hash-indexed: a single `O(n)` pass. Over an association it tallies the values.
+
+```mathematica
+In[1]:= Counts[{1, 2, 2, 3, 3, 3}]
+Out[1]= <|1 -> 1, 2 -> 2, 3 -> 3|>
+
+In[2]:= Counts[<|"a" -> 1, "b" -> 1, "c" -> 2|>]
+Out[2]= <|1 -> 2, 2 -> 1|>
+```
+
+## GroupBy
+Groups the elements of a list by the value of `f` applied to each element.
+Hash-indexed grouping in `O(n)` plus the cost of `f`.
+- `GroupBy[list, f, g]` applies the reducer `g` to each group (split-apply-combine).
+- `GroupBy[list, keyfn -> valfn]` groups by `keyfn[x]` but collects `valfn[x]` in
+  each group; `GroupBy[list, keyfn -> valfn, g]` then reduces — the full
+  group / extract / reduce pipeline in one call.
+- `GroupBy[assoc, f]` groups an association's **entries** by `f[value]` into
+  sub-associations (keys preserved); `GroupBy[assoc, f, g]` reduces each
+  sub-association (so `GroupBy[assoc, f, Total]` composes with value-threading
+  `Total`). Distinct from `GroupBy[records, Key["field"]]`, which groups a
+  *list* of record-associations by a field.
+
+```mathematica
+In[1]:= GroupBy[{1, 2, 3, 4, 5, 6}, EvenQ]
+Out[1]= <|False -> {1, 3, 5}, True -> {2, 4, 6}|>
+
+In[2]:= GroupBy[Range[10], EvenQ, Total]
+Out[2]= <|False -> 25, True -> 30|>
+
+In[3]:= GroupBy[{{"x", 1}, {"y", 2}, {"x", 3}}, First -> Last, Total]
+Out[3]= <|"x" -> 4, "y" -> 2|>
+
+In[4]:= GroupBy[<|"a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4|>, EvenQ]
+Out[4]= <|False -> <|"a" -> 1, "c" -> 3|>, True -> <|"b" -> 2, "d" -> 4|>|>
+
+In[5]:= GroupBy[<|"a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4|>, EvenQ, Total]
+Out[5]= <|False -> 4, True -> 6|>
+```
+
+## GatherBy
+Gathers the elements with equal `f[element]` into sublists, in first-appearance
+order (like `GroupBy` but returning the groups as a plain list of lists). Over an
+association it gathers the **entries** by `f[value]` into sub-associations (keys
+preserved), returned as a list — `GroupBy[assoc, f]` without the outer keys.
+
+```mathematica
+In[1]:= GatherBy[{1, 2, 3, 4, 5, 6}, EvenQ]
+Out[1]= {{1, 3, 5}, {2, 4, 6}}
+
+In[2]:= GatherBy[<|"a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4|>, EvenQ]
+Out[2]= {<|"a" -> 1, "c" -> 3|>, <|"b" -> 2, "d" -> 4|>}
+```
+
+## Merge
+Combines several associations, applying `f` to the list of values collected for
+each key (in first-seen key order). The first argument may be a list *or* an
+association of associations.
+
+```mathematica
+In[1]:= Merge[{<|"a" -> 1|>, <|"a" -> 2, "b" -> 3|>}, Total]
+Out[1]= <|"a" -> 3, "b" -> 3|>
+
+In[2]:= Merge[<|"g1" -> <|"a" -> 1|>, "g2" -> <|"a" -> 2, "b" -> 3|>|>, Total]
+Out[2]= <|"a" -> 3, "b" -> 3|>
+```
+
+## AssociateTo
+Adds or updates key–value pairs in the association held by a symbol, modifying
+the symbol in place (like `AppendTo`). Has attribute `HoldFirst`.
+
+```mathematica
+In[1]:= asc = <|"a" -> 1|>; AssociateTo[asc, "b" -> 2]; asc
+Out[1]= <|"a" -> 1, "b" -> 2|>
+```
+
+## Part assignment
+Associations support in-place update through `Part`: `a[[key]] = val` updates an
+existing key or adds a new one, `a[[Key[k]]] = val` targets a key explicitly,
+and `a[[i]] = val` updates the i-th value positionally. `a[[All]] = val`,
+`a[[i ;; j]] = val` and `a[[{k1, ...}]] = val` assign into every / spanned /
+listed entry's value. Multi-index assignment descends into nested associations
+and lists (`a[[k1, k2]] = val`).
+
+```mathematica
+In[1]:= a = <|"x" -> 1, "y" -> 2|>; a[["x"]] = 99; a
+Out[1]= <|"x" -> 99, "y" -> 2|>
+
+In[2]:= a[["z"]] = 5; a
+Out[2]= <|"x" -> 99, "y" -> 2, "z" -> 5|>
+
+In[3]:= n = <|"p" -> <|"q" -> 1|>|>; n[["p", "q"]] = 42; n
+Out[3]= <|"p" -> <|"q" -> 42|>|>
+```
+
+## Min, Max, MinMax
+`Min[assoc]` / `Max[assoc]` give the extreme values; `MinMax[assoc]` gives
+`{min, max}` in one shot (the value-range, e.g. for plot bounds).
+
+```mathematica
+In[1]:= MinMax[<|"a" -> 3, "b" -> 1, "c" -> 9|>]
+Out[1]= {1, 9}
+```
+
+## Apply (@@)
+`f @@ assoc` uses the association's **values** as `f`'s arguments —
+`f @@ <|k1 -> v1, ...|>` is `f[v1, ...]` (so `Total[assoc]` is `Plus @@ assoc`,
+and `Apply[List, assoc]` is `Values[assoc]`).
+
+```mathematica
+In[1]:= Plus @@ <|"a" -> 1, "b" -> 2, "c" -> 3|>
+Out[1]= 6
+
+In[2]:= Apply[List, <|"a" -> 1, "b" -> 2|>]
+Out[2]= {1, 2}
+```
+
+## Mean
+`Mean[assoc]` averages the association's values (like `Total`/`Min`/`Max`).
+
+```mathematica
+In[1]:= Mean[<|"a" -> 2, "b" -> 4, "c" -> 6|>]
+Out[1]= 4
+```
+
+## Median, Variance, StandardDeviation
+The rest of the descriptive-statistics family reduces over an association's
+values too, matching `Mean`.
+
+```mathematica
+In[1]:= Median[<|"a" -> 1, "b" -> 3, "c" -> 5|>]
+Out[1]= 3
+
+In[2]:= Variance[<|"a" -> 2, "b" -> 4, "c" -> 6|>]
+Out[2]= 4
+
+In[3]:= StandardDeviation[<|"a" -> 2, "b" -> 4, "c" -> 6|>]
+Out[3]= 2
+```
+
+## Accumulate, Differences, Ratios, FoldList
+These windowed transforms act on the values but — unlike `Total` or `Fold`,
+which collapse — keep the association shape. `Accumulate[assoc]` gives the
+running totals with every key retained; `Differences[assoc]` and `Ratios[assoc]`
+give the successive differences / ratios, keyed by the trailing key of each pair
+(so the leading key drops, `n` entries → `n - 1`); `FoldList[f, assoc]` pairs
+each key with the running result of `f` (`n → n`), the general form of
+`Accumulate`. All share one `assoc_rekey_over_values` mechanism.
+
+```mathematica
+In[1]:= Accumulate[<|"a" -> 1, "b" -> 2, "c" -> 3|>]
+Out[1]= <|"a" -> 1, "b" -> 3, "c" -> 6|>
+
+In[2]:= Differences[<|"a" -> 1, "b" -> 4, "c" -> 9|>]
+Out[2]= <|"b" -> 3, "c" -> 5|>
+
+In[3]:= Ratios[<|"a" -> 1, "b" -> 2, "c" -> 6|>]
+Out[3]= <|"b" -> 2, "c" -> 3|>
+
+In[4]:= FoldList[Times, <|"a" -> 2, "b" -> 3, "c" -> 4|>]
+Out[4]= <|"a" -> 2, "b" -> 6, "c" -> 24|>
+```
+
+## Tally, Commonest
+`Tally[assoc]` tallies the association's values as `{value, count}` pairs, and
+`Commonest[assoc]` returns the most frequent value(s) — the value-oriented
+siblings of `Counts` / `CountsBy`.
+
+```mathematica
+In[1]:= Tally[<|"a" -> 1, "b" -> 1, "c" -> 2|>]
+Out[1]= {{1, 2}, {2, 1}}
+
+In[2]:= Commonest[<|"a" -> 1, "b" -> 1, "c" -> 2|>]
+Out[2]= {1}
+```
+
+## TakeWhile, LengthWhile
+Act on the leading run of **values**. `TakeWhile[assoc, crit]` keeps the leading
+entries whose value satisfies `crit` (keys preserved); `LengthWhile[assoc, crit]`
+counts them. (See functional-programming for the list forms.)
+
+```mathematica
+In[1]:= TakeWhile[<|"a" -> 1, "b" -> 2, "c" -> 5, "d" -> 1|>, # < 3 &]
+Out[1]= <|"a" -> 1, "b" -> 2|>
+
+In[2]:= LengthWhile[<|"a" -> 1, "b" -> 2, "c" -> 5|>, # < 3 &]
+Out[2]= 2
+```
+
+## Cases, Count, DeleteCases
+Pattern operations act on the **values** of an association. `Cases` returns the
+list of matching values, `Count` their number, and `DeleteCases` returns the
+association with the matching-value entries removed.
+
+```mathematica
+In[1]:= Cases[<|"a" -> 1, "b" -> 2, "c" -> 3|>, x_ /; x > 1]
+Out[1]= {2, 3}
+
+In[2]:= Count[<|"a" -> 1, "b" -> 2, "c" -> 3|>, x_ /; x > 1]
+Out[2]= 2
+
+In[3]:= DeleteCases[<|"a" -> 1, "b" -> 2, "c" -> 3|>, x_ /; x > 1]
+Out[3]= <|"a" -> 1|>
+```
+
+## Top-N by value (TakeLargest, TakeSmallest)
+`TakeLargest[assoc, n]` / `TakeSmallest[assoc, n]` return the `n` entries with
+the largest / smallest values (as an association, ranked). `TakeLargestBy` /
+`TakeSmallestBy` rank by `f` of each value.
+
+```mathematica
+In[1]:= TakeLargest[<|"a" -> 3, "b" -> 9, "c" -> 1, "d" -> 6|>, 2]
+Out[1]= <|"b" -> 9, "d" -> 6|>
+```
+
+## Extremes by value (MaximalBy, MinimalBy)
+`MaximalBy[assoc, f]` / `MinimalBy[assoc, f]` return the entries whose value
+maximises / minimises `f` (all ties), as an association.
+
+```mathematica
+In[1]:= MaximalBy[<|"a" -> 1, "b" -> 3, "c" -> 3|>, Identity]
+Out[1]= <|"b" -> 3, "c" -> 3|>
+```
+
+## DeleteMissing
+Removes `Missing[...]` elements — the natural cleanup after a multi-key
+`Lookup`. Over an association it drops entries whose value is `Missing[...]`.
+
+```mathematica
+In[1]:= DeleteMissing[Lookup[<|"a" -> 1, "b" -> 2|>, {"a", "z", "b"}]]
+Out[1]= {1, 2}
+```
+
+## DeleteDuplicates
+Over an association, keeps the first entry for each distinct value and returns
+an association (values are compared, keys along for the ride). Hash-indexed: a
+single `O(n)` pass.
+
+```mathematica
+In[1]:= DeleteDuplicates[<|"a" -> 1, "b" -> 1, "c" -> 2, "d" -> 2, "e" -> 3|>]
+Out[1]= <|"a" -> 1, "c" -> 2, "e" -> 3|>
+```
+
+## DeleteDuplicatesBy
+`DeleteDuplicatesBy[expr, f]` keeps the first element for each distinct
+`f[element]`, preserving order. Over an association, `f` is applied to the
+values and the surviving entries keep their keys.
+
+```mathematica
+In[1]:= DeleteDuplicatesBy[{1, 12, 3, 14, 5}, EvenQ]
+Out[1]= {1, 12}
+
+In[2]:= DeleteDuplicatesBy[<|"a" -> 1, "b" -> 12, "c" -> 3|>, EvenQ]
+Out[2]= <|"a" -> 1, "b" -> 12|>
+```
+
+## ReplacePart
+`ReplacePart[assoc, {Key[k]} -> v]` (or bare `Key[k]`, or a positional `i`)
+replaces the value at that key; several positions may be given at once. It is
+replace-only — an absent key is left unchanged (unlike Part assignment, which
+would add it).
+
+```mathematica
+In[1]:= ReplacePart[<|"a" -> 1, "b" -> 2, "c" -> 3|>, {{Key["a"]} -> 10, {Key["c"]} -> 30}]
+Out[1]= <|"a" -> 10, "b" -> 2, "c" -> 30|>
+```
+
+## Delete
+`Delete[assoc, {Key[k]}]` removes an entry by key position; a nested position
+(`{Key[k1], Key[k2]}`) descends into inner associations, and a list of positions
+(`{{Key[k1]}, {Key[k2]}}`) removes several. (`KeyDrop` is the key-oriented
+equivalent.)
+
+```mathematica
+In[1]:= Delete[<|"a" -> 1, "b" -> 2, "c" -> 3|>, {Key["b"]}]
+Out[1]= <|"a" -> 1, "c" -> 3|>
+
+In[2]:= Delete[<|"a" -> <|"x" -> 5, "y" -> 6|>|>, {Key["a"], Key["x"]}]
+Out[2]= <|"a" -> <|"y" -> 6|>|>
+```
+
+## MapAt
+`MapAt[f, assoc, key]` (or `Key[k]`, a positional index, or a nested position
+`{Key[k1], Key[k2]}`) applies `f` to the value at that position — composing with
+the `{Key[k]}` positions `Position` returns.
+
+```mathematica
+In[1]:= MapAt[#^2 &, <|"a" -> 3, "b" -> 4|>, "b"]
+Out[1]= <|"a" -> 3, "b" -> 16|>
+
+In[2]:= p = <|"a" -> 1, "b" -> 9|>; MapAt[-# &, p, First[Position[p, 9]]]
+Out[2]= <|"a" -> 1, "b" -> -9|>
+```
+
+## Position
+`Position[assoc, patt]` gives the positions of matches inside the **values** as
+`{Key[k], subpos...}` (Wolfram semantics), descending into nested values; the
+positions round-trip through `Part`/`Extract`.
+
+```mathematica
+In[1]:= Position[<|"a" -> 1, "b" -> 2, "c" -> 1|>, 1]
+Out[1]= {{Key["a"]}, {Key["c"]}}
+
+In[2]:= Position[<|"a" -> {1, 2}, "b" -> 3, "c" -> 1|>, 1]
+Out[2]= {{Key["a"], 1}, {Key["c"]}}
+
+In[3]:= Extract[<|"a" -> {10, 20}|>, {Key["a"], 2}]
+Out[3]= 20
+```
+
+## Predicate tests on values (AllTrue, AnyTrue, NoneTrue, MemberQ)
+Predicate tests apply to the **values** of an association (and to the elements
+of a list). `AllTrue`/`AnyTrue`/`NoneTrue` are left unevaluated if a test
+result is neither `True` nor `False`.
+
+```mathematica
+In[1]:= AllTrue[<|"a" -> 2, "b" -> 4|>, EvenQ]
+Out[1]= True
+
+In[2]:= AnyTrue[{1, 3, 4}, EvenQ]
+Out[2]= True
+
+In[3]:= NoneTrue[{1, 3, 5}, EvenQ]
+Out[3]= True
+
+In[4]:= MemberQ[<|"a" -> 1, "b" -> 2|>, 2]
+Out[4]= True
+```
+
+## Map, Select
+`Map` and `Select` thread over the **values** of an association, preserving keys
+(matching Wolfram semantics) — `Map[f, <|k -> v|>]` gives `<|k -> f[v]|>`, and
+`Select` keeps the entries whose value satisfies the predicate.
+
+```mathematica
+In[1]:= Map[#^2 &, <|"x" -> 3, "y" -> 4|>]
+Out[1]= <|"x" -> 9, "y" -> 16|>
+
+In[2]:= Select[<|"a" -> 1, "b" -> 2, "c" -> 3|>, # > 1 &]
+Out[2]= <|"b" -> 2, "c" -> 3|>
+```
+
+## Sort, SortBy, Total, Min, Max, Join
+Ordering and aggregation act on the **values** of an association: `Sort` orders
+the entries by value and `SortBy[assoc, f]` by `f` of each value (keys follow),
+while `Total`/`Min`/`Max` reduce over the values. `Join` merges associations
+(later values win).
+
+```mathematica
+In[1]:= Sort[<|"a" -> 3, "b" -> 1, "c" -> 2|>]
+Out[1]= <|"b" -> 1, "c" -> 2, "a" -> 3|>
+
+In[2]:= SortBy[<|"a" -> {9}, "b" -> {1}|>, First]
+Out[2]= <|"b" -> {1}, "a" -> {9}|>
+
+In[3]:= Total[<|"a" -> 3, "b" -> 1, "c" -> 2|>]
+Out[3]= 6
+
+In[4]:= Join[<|"a" -> 1, "b" -> 2|>, <|"b" -> 3, "c" -> 4|>]
+Out[4]= <|"a" -> 1, "b" -> 3, "c" -> 4|>
+```
+
+## KeySort
+Sorts an association into canonical key order.
+
+```mathematica
+In[1]:= KeySort[<|"c" -> 3, "a" -> 1, "b" -> 2|>]
+Out[1]= <|"a" -> 1, "b" -> 2, "c" -> 3|>
+```
+
+## KeySortBy
+Sorts an association by `f` applied to each key (stable on ties).
+
+```mathematica
+In[1]:= KeySortBy[<|"bbb" -> 1, "a" -> 2, "cc" -> 3|>, StringLength]
+Out[1]= <|"a" -> 2, "cc" -> 3, "bbb" -> 1|>
+```
+
+## KeyMap
+Applies `f` to every key, keeping values. Keys that collide collapse with
+last-value-wins.
+
+```mathematica
+In[1]:= KeyMap[f, <|1 -> 10, 2 -> 20|>]
+Out[1]= <|f[1] -> 10, f[2] -> 20|>
+```
+
+## KeySelect
+Keeps the entries whose **key** satisfies the predicate.
+
+```mathematica
+In[1]:= KeySelect[<|1 -> 10, 2 -> 20, 3 -> 30|>, EvenQ]
+Out[1]= <|2 -> 20|>
+```
+
+## CountsBy
+Tallies elements of a list by `f[element]`, giving `<|f[x] -> count, ...|>`.
+Hash-indexed, `O(n)`.
+
+```mathematica
+In[1]:= CountsBy[Range[10], EvenQ]
+Out[1]= <|False -> 5, True -> 5|>
+```
+
+## PositionIndex
+Maps each distinct element of a list to the list of 1-based positions where it
+occurs — `<|value -> {positions}|>`. Hash-indexed, `O(n)`.
+
+```mathematica
+In[1]:= PositionIndex[{a, b, a, c, a, b}]
+Out[1]= <|a -> {1, 3, 5}, b -> {2, 6}, c -> {4}|>
+```
+
+## AssociationMap
+Builds `<|k1 -> f[k1], k2 -> f[k2], ...|>` from a list of keys.
+
+```mathematica
+In[1]:= AssociationMap[#^2 &, {1, 2, 3, 4}]
+Out[1]= <|1 -> 1, 2 -> 4, 3 -> 9, 4 -> 16|>
+```
+
+## Iterating an association
+Iterator-driven builtins (`Table`, `Do`, `Sum`, `Product`) walk an association's
+**values** when given `{var, assoc}`.
+
+```mathematica
+In[1]:= Table[v^2, {v, <|"a" -> 2, "b" -> 3|>}]
+Out[1]= {4, 9}
+
+In[2]:= Sum[v, {v, <|"a" -> 10, "b" -> 20|>}]
+Out[2]= 30
+```
+
+## Design notes: value threading
+
+A unifying principle runs through the association operations above: **functions
+that consume or reduce a collection operate on an association's values, keeping
+keys aligned**, matching the Wolfram Language.
+
+- Element-wise (`Map`, `Select`) return an association: `Map[f, <|k -> v|>]` is `<|k -> f[v]|>`.
+- Reductions (`Total`, `Min`, `Max`, `Mean`) return a scalar over the values — and are
+  defined to be exactly the list reduction over `Values[assoc]`, so empty-collection and
+  edge behaviour is identical to the list case (`Total[<||>]` behaves as `Total[{}]`).
+- Ordering (`Sort`, `SortBy`, `ReverseSort`, `MaximalBy`, `TakeLargest`) reorders/selects
+  entries by value, keeping the entries intact.
+- Pattern/predicate ops (`Cases`, `Count`, `DeleteCases`, `MemberQ`, `AllTrue`, `SelectFirst`,
+  `FirstCase`) test the values; `Cases`/`SelectFirst`/`FirstCase` return the matching values,
+  while `DeleteCases`/`Select` return the surviving entries as an association.
+
+Because these all thread through a single shared helper (`assoc_apply_over_values`)
+or the same key-preserving rebuild, they compose predictably into pipelines —
+e.g. `ReverseSort[GroupBy[txns, First, Total[#[[All, 2]]] &]]` groups, reduces
+and ranks in one expression (see [`../../../examples/association-showcase.md`](../../../examples/association-showcase.md)).
+
+## Append, Prepend
+`Append`/`Prepend` extend an association with new entries (non-mutating siblings
+of `AssociateTo`); an existing key is updated in place, preserving order.
+
+```mathematica
+In[1]:= Append[<|"a" -> 1, "b" -> 2|>, "c" -> 3]
+Out[1]= <|"a" -> 1, "b" -> 2, "c" -> 3|>
+
+In[2]:= Append[<|"a" -> 1|>, "a" -> 99]
+Out[2]= <|"a" -> 99|>
+```
+
+## KeyValuePattern
+`KeyValuePattern[{k1 -> p1, ...}]` is a **pattern** that matches an association
+(or a list of rules) containing keys matching `k1, ...` with values matching
+`p1, ...`. Value patterns may bind, so associations can be destructured in rules
+and used to filter records.
+
+```mathematica
+In[1]:= MatchQ[<|"a" -> 1, "b" -> 2|>, KeyValuePattern[{"a" -> _}]]
+Out[1]= True
+
+In[2]:= Replace[<|"a" -> 5, "b" -> 2|>, KeyValuePattern[{"a" -> v_}] :> v]
+Out[2]= 5
+
+In[3]:= Cases[{<|"t" -> 1|>, <|"t" -> 2|>, <|"x" -> 3|>}, KeyValuePattern[{"t" -> _}]]
+Out[3]= {<|"t" -> 1|>, <|"t" -> 2|>}
+```
+
+Requirements are matched with backtracking (so shared bound variables resolve),
+and the pattern composes with a `/;` condition over its bindings:
+
+```mathematica
+In[4]:= Cases[{<|"p" -> 3|>, <|"p" -> 9|>}, KeyValuePattern[{"p" -> v_}] /; v > 5 :> v]
+Out[4]= {9}
+```
+
+`KeyValuePattern` also works in function definitions, so associations can be
+destructured directly in a rule's left-hand side:
+
+```mathematica
+In[4]:= area[KeyValuePattern[{"w" -> w_, "h" -> h_}]] := w h; area[<|"w" -> 3, "h" -> 4|>]
+Out[4]= 12
+```
+
+## First, Last, Rest, Most, Take, Drop
+Structural extractors follow Wolfram semantics on associations: `First`/`Last`
+give the first/last **value**, while `Rest`/`Most`/`Take`/`Drop` slice **entries**
+and return an association (order preserved). `First[expr, default]` and
+`Last[expr, default]` return `default` when `expr` has no elements (an empty
+association, empty list, or an atom) — this works for lists too.
+
+```mathematica
+In[1]:= First[<|"a" -> 10, "b" -> 20|>]
+Out[1]= 10
+
+In[1b]:= First[<||>, 0]
+Out[1b]= 0
+
+In[2]:= Rest[<|"a" -> 10, "b" -> 20, "c" -> 30|>]
+Out[2]= <|"b" -> 20, "c" -> 30|>
+
+In[3]:= Take[<|"a" -> 1, "b" -> 2, "c" -> 3|>, 2]
+Out[3]= <|"a" -> 1, "b" -> 2|>
+```

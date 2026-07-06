@@ -1,5 +1,6 @@
 #include "list_common.h"
 #include "accumulate.h"
+#include "assoc.h"
 
 /* Accumulate[list] returns the running cumulative totals of list, with the
  * same head and the same length as the input. The intermediate sums are
@@ -38,6 +39,11 @@ Expr* builtin_accumulate(Expr* res) {
     if (argc < 1 || argc > 2) return NULL;
 
     Expr* lst = res->data.function.args[0];
+
+    /* Accumulate[assoc] gives the running totals of the values, keeping every
+     * key aligned with its cumulative sum. */
+    if (is_association(lst)) { Expr* r = assoc_rekey_over_values(res); if (r) return r; }
+
     if (lst->type != EXPR_FUNCTION) return NULL;
 
     bool kahan_requested = false;

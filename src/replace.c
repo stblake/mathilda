@@ -3,6 +3,7 @@
 #include "eval.h"
 #include "match.h"
 #include "sym_names.h"
+#include "assoc.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -215,6 +216,56 @@ Expr* builtin_replace_part(Expr* res) {
         if (num_rules == 0) {
             free(rules);
             return expr_copy(expr);
+        }
+
+        /* Association: replace values by key position (single-level Key[k] /
+         * "str" / positional i, or wrapped in a one-element list). Replace-only,
+         * matching Wolfram (absent keys are left unchanged, not added). */
+        if (is_association(expr)) {
+            Expr* result = expr_copy(expr);
+            size_t len = result->data.function.arg_count;
+            for (size_t r = 0; r < num_rules; r++) {
+                Expr* s = rules[r].pos_spec;
+                if (s->type == EXPR_FUNCTION && s->data.function.head->type == EXPR_SYMBOL &&
+                    s->data.function.head->data.symbol == SYM_List && s->data.function.arg_count == 1)
+                    s = s->data.function.args[0];   /* unwrap {X} */
+                Expr* key = NULL; bool positional = false; int64_t p = 0;
+                if (s->type == EXPR_FUNCTION && s->data.function.head->type == EXPR_SYMBOL &&
+                    s->data.function.head->data.symbol == SYM_Key && s->data.function.arg_count == 1) {
+                    key = s->data.function.args[0];
+                } else if (s->type == EXPR_INTEGER) {
+                    positional = true; p = s->data.integer;
+                } else if (!(s->type == EXPR_FUNCTION && s->data.function.head->type == EXPR_SYMBOL &&
+                             s->data.function.head->data.symbol == SYM_List)) {
+                    key = s;   /* a literal key */
+                } else {
+                    continue;  /* multi-element/nested spec: unsupported here */
+                }
+                int64_t t = -1;
+                if (positional) {
+                    if (p < 0) p = (int64_t)len + p + 1;
+                    if (p >= 1 && p <= (int64_t)len) t = p - 1;
+                } else {
+                    for (size_t i = 0; i < len; i++) {
+                        Expr* rule = result->data.function.args[i];
+                        if (rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2 &&
+                            expr_eq(rule->data.function.args[0], key)) { t = (int64_t)i; break; }
+                    }
+                }
+                if (t < 0) continue;   /* replace-only: leave absent keys */
+                Expr* rule = result->data.function.args[t];
+                if (rule->type != EXPR_FUNCTION || rule->data.function.arg_count != 2) continue;
+                Expr* val = rules[r].delayed ? evaluate(rules[r].replacement)
+                                             : expr_copy(rules[r].replacement);
+                expr_free(rule->data.function.args[1]);
+                rule->data.function.args[1] = val;
+            }
+            for (size_t i = 0; i < num_rules; i++) {
+                expr_free(rules[i].pos_spec);
+                expr_free(rules[i].replacement);
+            }
+            free(rules);
+            return result;
         }
 
         Expr* result = replace_part_rec(expr, rules, num_rules, NULL, 0);

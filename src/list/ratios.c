@@ -1,5 +1,6 @@
 #include "list_common.h"
 #include "ratios.h"
+#include "assoc.h"
 
 /* ---- Ratios ----------------------------------------------------------------
  *
@@ -95,6 +96,11 @@ Expr* builtin_ratios(Expr* res) {
     if (argc < 1 || argc > 2) return NULL;
 
     Expr* lst = res->data.function.args[0];
+
+    /* Ratios[assoc] gives the successive value ratios, keyed by the trailing key
+     * of each pair (the leading key drops, as in Wolfram and like Differences). */
+    if (is_association(lst)) { Expr* r = assoc_rekey_over_values(res); if (r) return r; }
+
     if (lst->type != EXPR_FUNCTION) return NULL;
 
     /* Ratios[list, {n1, n2, ...}] — per-level ratios. */

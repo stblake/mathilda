@@ -3,6 +3,7 @@
 #include "symtab.h"
 #include "sym_names.h"
 #include "arithmetic.h"
+#include "assoc.h"
 #include <ctype.h>
 #include <math.h>
 #include <stdbool.h>
@@ -355,7 +356,11 @@ Expr* builtin_sort(Expr* res) {
     if (list->type != EXPR_FUNCTION) {
         return expr_copy(list);
     }
-    
+
+    /* Sort[assoc] orders the entries by their values (keys follow). */
+    if (res->data.function.arg_count == 1 && is_association(list))
+        return assoc_sort_by_value(list);
+
     Expr* p = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
     
     size_t count = list->data.function.arg_count;
@@ -378,10 +383,255 @@ Expr* builtin_sort(Expr* res) {
     
     Expr* result = expr_new_function(expr_copy(list->data.function.head), sorted_args, count);
     free(sorted_args);
-    
+
     return result;
 }
 
+/* ------------------- SortBy ------------------- */
+
+/* A payload paired with the sort key f[payload], for a key-once qsort
+ * (avoids re-evaluating f during every comparison). */
+typedef struct { Expr* payload; Expr* key; } SortByPair;
+
+static int sortby_pair_cmp(const void* a, const void* b) {
+    return expr_compare(((const SortByPair*)a)->key, ((const SortByPair*)b)->key);
+}
+
+/* SortBy[list, f]  — sort list elements by canonical order of f[element].
+ * SortBy[assoc, f] — sort association entries by f[value] (keys follow).
+ * SortBy[f]        — operator form: SortBy[f][expr] == SortBy[expr, f].
+ * The key f[...] is evaluated once per element. */
+Expr* builtin_sort_by(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+
+    if (argc == 1) {
+        /* Operator form: SortBy[f] -> Function[SortBy[#, f]]. */
+        Expr* slot_args[1] = { expr_new_integer(1) };
+        Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot), slot_args, 1);
+        Expr* inner_args[2] = { slot, expr_copy(res->data.function.args[0]) };
+        Expr* inner = expr_new_function(expr_new_symbol(SYM_SortBy), inner_args, 2);
+        Expr* func_args[1] = { inner };
+        return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
+    }
+    if (argc != 2) return NULL;
+
+    Expr* coll = res->data.function.args[0];
+    Expr* f    = res->data.function.args[1];
+    if (coll->type != EXPR_FUNCTION) return expr_copy(coll);
+
+    bool assoc = is_association(coll);
+    size_t n = coll->data.function.arg_count;
+    if (n == 0) return expr_copy(coll);
+
+    SortByPair* pairs = malloc(sizeof(SortByPair) * n);
+    /* SortBy[list, {f1, f2, ...}] sorts by f1, breaking ties with f2, ... .
+     * The per-element key becomes the tuple {f1[e], ...}; expr_compare orders
+     * equal-length lists lexicographically, giving exactly that behaviour. */
+    bool multi = (f->type == EXPR_FUNCTION && f->data.function.head->type == EXPR_SYMBOL &&
+                  f->data.function.head->data.symbol == SYM_List);
+
+    for (size_t i = 0; i < n; i++) {
+        Expr* elem = coll->data.function.args[i];
+        /* For an association, sort by f applied to the value; else by f[elem]. */
+        Expr* subject = elem;
+        if (assoc && elem->type == EXPR_FUNCTION && elem->data.function.arg_count == 2)
+            subject = elem->data.function.args[1];
+        pairs[i].payload = expr_copy(elem);
+        if (multi) {
+            size_t nc = f->data.function.arg_count;
+            Expr** keyparts = malloc(sizeof(Expr*) * (nc ? nc : 1));
+            for (size_t c = 0; c < nc; c++) {
+                Expr* ca[1] = { expr_copy(subject) };
+                Expr* call = expr_new_function(expr_copy(f->data.function.args[c]), ca, 1);
+                keyparts[c] = evaluate(call);
+                expr_free(call);
+            }
+            pairs[i].key = expr_new_function(expr_new_symbol(SYM_List), keyparts, nc);
+            free(keyparts);
+        } else {
+            Expr* call_args[1] = { expr_copy(subject) };
+            Expr* call = expr_new_function(expr_copy(f), call_args, 1);
+            pairs[i].key = evaluate(call);
+            expr_free(call);
+        }
+    }
+
+    qsort(pairs, n, sizeof(SortByPair), sortby_pair_cmp);
+
+    Expr** out = malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) { out[i] = pairs[i].payload; expr_free(pairs[i].key); }
+    free(pairs);
+
+    Expr* result = expr_new_function(expr_copy(coll->data.function.head), out, n);
+    free(out);
+    return result;
+}
+
+
+/* ------------------- MaximalBy / MinimalBy ------------------- */
+
+/* mode 0 = MaximalBy, mode 1 = MinimalBy.
+ * MaximalBy[list, f]  -> the element(s) e maximising f[e] (all ties, in order).
+ * MaximalBy[assoc, f] -> the entries whose value maximises f[value] (an assoc).
+ * MaximalBy[f]        -> operator form. */
+static Expr* maximal_minimal_by(Expr* res, int mode) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+
+    if (argc == 1) {
+        const char* head = (mode == 0) ? SYM_MaximalBy : SYM_MinimalBy;
+        Expr* slot_args[1] = { expr_new_integer(1) };
+        Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot), slot_args, 1);
+        Expr* inner_args[2] = { slot, expr_copy(res->data.function.args[0]) };
+        Expr* inner = expr_new_function(expr_new_symbol(head), inner_args, 2);
+        Expr* func_args[1] = { inner };
+        return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
+    }
+    if (argc != 2) return NULL;
+
+    Expr* coll = res->data.function.args[0];
+    Expr* f    = res->data.function.args[1];
+    if (coll->type != EXPR_FUNCTION) return NULL;
+
+    bool assoc = is_association(coll);
+    size_t n = coll->data.function.arg_count;
+    if (n == 0) return expr_copy(coll);  /* empty in, empty out */
+
+    Expr** keys = malloc(sizeof(Expr*) * n);   /* f-value per element (owned) */
+    for (size_t i = 0; i < n; i++) {
+        Expr* elem = coll->data.function.args[i];
+        Expr* subject = elem;
+        if (assoc && elem->type == EXPR_FUNCTION && elem->data.function.arg_count == 2)
+            subject = elem->data.function.args[1];
+        Expr* call_args[1] = { expr_copy(subject) };
+        Expr* call = expr_new_function(expr_copy(f), call_args, 1);
+        keys[i] = evaluate(call);
+        expr_free(call);
+    }
+
+    size_t best = 0;
+    for (size_t i = 1; i < n; i++) {
+        int c = expr_compare(keys[i], keys[best]);
+        if ((mode == 0 && c > 0) || (mode == 1 && c < 0)) best = i;
+    }
+
+    Expr** out = malloc(sizeof(Expr*) * n);
+    size_t nout = 0;
+    for (size_t i = 0; i < n; i++)
+        if (expr_compare(keys[i], keys[best]) == 0)
+            out[nout++] = expr_copy(coll->data.function.args[i]);
+
+    for (size_t i = 0; i < n; i++) expr_free(keys[i]);
+    free(keys);
+
+    Expr* result = expr_new_function(expr_copy(coll->data.function.head), out, nout);
+    free(out);
+    return result;
+}
+
+Expr* builtin_maximal_by(Expr* res) { return maximal_minimal_by(res, 0); }
+Expr* builtin_minimal_by(Expr* res) { return maximal_minimal_by(res, 1); }
+
+/* ------------------- ReverseSort / ReverseSortBy ------------------- */
+
+/* Reverse the top-level arguments of a freshly-built (owned) expression. */
+static Expr* reverse_top_level(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return e;
+    Expr** a = e->data.function.args;
+    size_t n = e->data.function.arg_count;
+    for (size_t i = 0; i < n / 2; i++) { Expr* t = a[i]; a[i] = a[n - 1 - i]; a[n - 1 - i] = t; }
+    return e;
+}
+
+/* ReverseSort[list] / ReverseSort[assoc] — descending order (by value for an
+ * association), i.e. Reverse of Sort. */
+Expr* builtin_reverse_sort(Expr* res) {
+    Expr* asc = builtin_sort(res);   /* borrows res, returns a new expr */
+    return reverse_top_level(asc);
+}
+
+/* ReverseSortBy[coll, f] — descending by f (of each value for an association). */
+Expr* builtin_reverse_sort_by(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* asc = builtin_sort_by(res);
+    return reverse_top_level(asc);
+}
+
+/* ------------------- TakeLargest / TakeSmallest (+By) ------------------- */
+
+/* Take the `nreq` extreme elements of `coll` ranked by a key.
+ *   largest = true  -> the largest, returned in descending order
+ *   largest = false -> the smallest, returned in ascending order
+ * The key is `f[subject]` when f != NULL, else `subject` itself, where
+ * `subject` is each list element, or each value for an association. For an
+ * association the result is an association of the corresponding entries. */
+static Expr* take_extreme(Expr* coll, Expr* f, int64_t nreq, bool largest) {
+    if (coll->type != EXPR_FUNCTION || nreq < 0) return NULL;
+    bool assoc = is_association(coll);
+    size_t n = coll->data.function.arg_count;
+
+    SortByPair* pairs = malloc(sizeof(SortByPair) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        Expr* elem = coll->data.function.args[i];
+        Expr* subject = elem;
+        if (assoc && elem->type == EXPR_FUNCTION && elem->data.function.arg_count == 2)
+            subject = elem->data.function.args[1];
+        pairs[i].payload = expr_copy(elem);
+        if (f) {
+            Expr* call_args[1] = { expr_copy(subject) };
+            Expr* call = expr_new_function(expr_copy(f), call_args, 1);
+            pairs[i].key = evaluate(call);
+            expr_free(call);
+        } else {
+            pairs[i].key = expr_copy(subject);
+        }
+    }
+
+    qsort(pairs, n, sizeof(SortByPair), sortby_pair_cmp);  /* ascending by key */
+
+    size_t k = ((int64_t)n < nreq) ? n : (size_t)nreq;
+    Expr** out = malloc(sizeof(Expr*) * (k ? k : 1));
+    for (size_t j = 0; j < k; j++) {
+        /* largest: walk from the top (descending); smallest: from the bottom. */
+        size_t src = largest ? (n - 1 - j) : j;
+        out[j] = expr_copy(pairs[src].payload);
+    }
+    for (size_t i = 0; i < n; i++) { expr_free(pairs[i].payload); expr_free(pairs[i].key); }
+    free(pairs);
+
+    Expr* result = expr_new_function(expr_copy(coll->data.function.head), out, k);
+    free(out);
+    return result;
+}
+
+Expr* builtin_take_largest(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* nexpr = res->data.function.args[1];
+    if (nexpr->type != EXPR_INTEGER) return NULL;
+    return take_extreme(res->data.function.args[0], NULL, nexpr->data.integer, true);
+}
+
+Expr* builtin_take_smallest(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* nexpr = res->data.function.args[1];
+    if (nexpr->type != EXPR_INTEGER) return NULL;
+    return take_extreme(res->data.function.args[0], NULL, nexpr->data.integer, false);
+}
+
+Expr* builtin_take_largest_by(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    Expr* nexpr = res->data.function.args[2];
+    if (nexpr->type != EXPR_INTEGER) return NULL;
+    return take_extreme(res->data.function.args[0], res->data.function.args[1], nexpr->data.integer, true);
+}
+
+Expr* builtin_take_smallest_by(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    Expr* nexpr = res->data.function.args[2];
+    if (nexpr->type != EXPR_INTEGER) return NULL;
+    return take_extreme(res->data.function.args[0], res->data.function.args[1], nexpr->data.integer, false);
+}
 
 Expr* builtin_orderedq(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) {

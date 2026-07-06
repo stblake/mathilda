@@ -4,6 +4,7 @@
 #include "match.h"
 #include "core.h"
 #include "sym_names.h"
+#include "assoc.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -75,6 +76,50 @@ static void do_cases_at_level(Expr* e, int64_t current_level, int64_t min_l, int
     }
 }
 
+/* FirstCase[expr, patt] / FirstCase[expr, patt, default] — the first element
+ * matching patt (or the first matching value, for an association), else the
+ * default or Missing["NotFound"]. Reuses Cases (which already handles the
+ * pattern and association-value threading) and takes the first match. */
+Expr* builtin_first_case(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 2 && argc != 3) return NULL;
+
+    Expr* cases_args[2] = { expr_copy(res->data.function.args[0]),
+                            expr_copy(res->data.function.args[1]) };
+    Expr* cases = expr_new_function(expr_new_symbol(SYM_Cases), cases_args, 2);
+    Expr* matches = evaluate(cases);
+    expr_free(cases);
+
+    Expr* result = NULL;
+    if (matches && matches->type == EXPR_FUNCTION &&
+        matches->data.function.head->data.symbol == SYM_List &&
+        matches->data.function.arg_count >= 1) {
+        result = expr_copy(matches->data.function.args[0]);
+    }
+    if (matches) expr_free(matches);
+    if (result) return result;
+
+    if (argc == 3) return expr_copy(res->data.function.args[2]);
+    Expr* margs[1] = { expr_new_string("NotFound") };
+    return expr_new_function(expr_new_symbol(SYM_Missing), margs, 1);
+}
+
+/* DeleteMissing[expr] — remove all Missing[...] elements. Equivalent to
+ * DeleteCases[expr, _Missing], so it inherits list and association-value
+ * handling (over an association it drops entries whose value is Missing[...]). */
+Expr* builtin_delete_missing(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    /* pattern _Missing == Blank[Missing] */
+    Expr* blank_args[1] = { expr_new_symbol(SYM_Missing) };
+    Expr* pattern = expr_new_function(expr_new_symbol(SYM_Blank), blank_args, 1);
+    Expr* dc_args[2] = { expr_copy(res->data.function.args[0]), pattern };
+    Expr* dc = expr_new_function(expr_new_symbol(SYM_DeleteCases), dc_args, 2);
+    Expr* result = evaluate(dc);
+    expr_free(dc);
+    return result;
+}
+
 Expr* builtin_cases(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -87,7 +132,12 @@ Expr* builtin_cases(Expr* res) {
         Expr* func_args[1] = { inner_cases };
         return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }
-    
+
+    /* Cases[assoc, patt, ...] collects matching values (Cases[Values[assoc], ...]). */
+    if (argc >= 2 && is_association(res->data.function.args[0])) {
+        Expr* r = assoc_apply_over_values(res); if (r) return r;
+    }
+
     if (argc < 2) return NULL;
 
     Expr* expr = res->data.function.args[0];
@@ -280,6 +330,11 @@ Expr* builtin_delete_cases(Expr* res) {
         return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }
 
+    /* DeleteCases[assoc, patt] drops entries whose value matches patt, keeping
+     * the result an association. */
+    if (argc == 2 && is_association(res->data.function.args[0]))
+        return assoc_delete_cases(res->data.function.args[0], res->data.function.args[1]);
+
     if (argc < 2) return NULL;
 
     Expr* expr = res->data.function.args[0];
@@ -400,8 +455,52 @@ Expr* builtin_position(Expr* res) {
         Expr* func_args[1] = { inner_pos };
         return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }
-    
+
     if (argc < 2) return NULL;
+
+    /* Position[assoc, patt] reports positions inside the *values* as
+     * {Key[k], subpos...} (Wolfram semantics). Delegate to Position over
+     * Values[assoc] (which handles nested descent and head positions), then
+     * remap each result's leading value-index to Key[key]. */
+    if (argc == 2 && is_association(res->data.function.args[0])) {
+        Expr* assoc = res->data.function.args[0];
+        size_t na = assoc->data.function.arg_count;
+        Expr* vals = assoc_values_list(assoc);                     /* List of values */
+        Expr* pargs[2] = { vals, expr_copy(res->data.function.args[1]) };
+        Expr* pcall = expr_new_function(expr_new_symbol(SYM_Position), pargs, 2);
+        Expr* raw = evaluate(pcall);                               /* {{i, sub...}, ...} */
+        expr_free(pcall);
+        if (!(raw && raw->type == EXPR_FUNCTION &&
+              raw->data.function.head->data.symbol == SYM_List)) return raw;
+
+        size_t nr = raw->data.function.arg_count;
+        Expr** out = malloc(sizeof(Expr*) * (nr ? nr : 1));
+        size_t nout = 0;
+        for (size_t i = 0; i < nr; i++) {
+            Expr* pl = raw->data.function.args[i];
+            /* Position lists look like {idx, sub...}; idx is the 1-based value
+             * index. idx == 0 is the synthetic Values-list head — not a real
+             * entry — so drop it. */
+            if (!(pl->type == EXPR_FUNCTION && pl->data.function.head->data.symbol == SYM_List &&
+                  pl->data.function.arg_count >= 1 &&
+                  pl->data.function.args[0]->type == EXPR_INTEGER)) continue;
+            int64_t vi = pl->data.function.args[0]->data.integer;
+            if (vi < 1 || vi > (int64_t)na) continue;
+            Expr* rule = assoc->data.function.args[vi - 1];
+            if (!(rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2)) continue;
+            size_t plen = pl->data.function.arg_count;
+            Expr** np = malloc(sizeof(Expr*) * plen);
+            Expr* kargs[1] = { expr_copy(rule->data.function.args[0]) };
+            np[0] = expr_new_function(expr_new_symbol(SYM_Key), kargs, 1);
+            for (size_t j = 1; j < plen; j++) np[j] = expr_copy(pl->data.function.args[j]);
+            out[nout++] = expr_new_function(expr_new_symbol(SYM_List), np, plen);
+            free(np);
+        }
+        expr_free(raw);
+        Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, nout);
+        free(out);
+        return result;
+    }
 
     Expr* expr = res->data.function.args[0];
     Expr* pattern = res->data.function.args[1];
@@ -504,7 +603,12 @@ Expr* builtin_count(Expr* res) {
         Expr* func_args[1] = { inner_count };
         return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }
-    
+
+    /* Count[assoc, patt] counts matching values (Count[Values[assoc], patt]). */
+    if (argc >= 2 && is_association(res->data.function.args[0])) {
+        Expr* r = assoc_apply_over_values(res); if (r) return r;
+    }
+
     if (argc < 2) return NULL;
 
     Expr* expr = res->data.function.args[0];
@@ -598,7 +702,12 @@ Expr* builtin_memberq(Expr* res) {
         Expr* func_args[1] = { inner_memberq };
         return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }
-    
+
+    /* MemberQ[assoc, form] tests the association's values. */
+    if (argc >= 2 && is_association(res->data.function.args[0])) {
+        Expr* r = assoc_apply_over_values(res); if (r) return r;
+    }
+
     if (argc < 2) return NULL;
 
     Expr* expr = res->data.function.args[0];
@@ -650,8 +759,28 @@ Expr* builtin_memberq(Expr* res) {
 void patterns_init(void) {
     symtab_add_builtin("Cases", builtin_cases);
     symtab_get_def("Cases")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("FirstCase", builtin_first_case);
+    symtab_get_def("FirstCase")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("FirstCase",
+        "FirstCase[expr, patt]\n\tGives the first element of expr matching patt,\n"
+        "\tor Missing[\"NotFound\"]. FirstCase[expr, patt, default] uses default.\n"
+        "\tOver an association, matches values and returns the first match.");
     symtab_add_builtin("DeleteCases", builtin_delete_cases);
     symtab_get_def("DeleteCases")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("DeleteMissing", builtin_delete_missing);
+    symtab_get_def("DeleteMissing")->attributes |= ATTR_PROTECTED;
+    /* KeyValuePattern is an inert pattern head (handled by the matcher, no
+     * builtin); mark it Protected and give it a docstring. */
+    symtab_get_def("KeyValuePattern")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("KeyValuePattern",
+        "KeyValuePattern[{k1 -> p1, ...}]\n\tA pattern matching an association (or\n"
+        "\tlist of rules) that contains keys matching k1, ... with values matching\n"
+        "\tp1, .... Value patterns may bind (e.g. KeyValuePattern[{\"a\" -> v_}]).\n"
+        "\tKeyValuePattern[k -> p] is the single-key form.");
+    symtab_set_docstring("DeleteMissing",
+        "DeleteMissing[expr]\n\tRemoves all Missing[...] elements (equivalent to\n"
+        "\tDeleteCases[expr, _Missing]). Over an association, drops entries whose\n"
+        "\tvalue is Missing[...].");
     symtab_add_builtin("Position", builtin_position);
     symtab_get_def("Position")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Count", builtin_count);

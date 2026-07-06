@@ -44,6 +44,7 @@
 #include "comparisons.h"
 #include "boolean.h"
 #include "list.h"
+#include "assoc.h"
 #include "replace.h"
 #include "patterns.h"
 #include "cond.h"
@@ -274,6 +275,11 @@ void core_init(void) {
     symtab_add_builtin("Sqrt", builtin_sqrt);
     symtab_add_builtin("Apply", builtin_apply);
     symtab_add_builtin("Map", builtin_map);
+    symtab_add_builtin("MapIndexed", builtin_mapindexed);
+    symtab_get_def("MapIndexed")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("MapIndexed",
+        "MapIndexed[f, list]\n\tGives {f[e1, {1}], f[e2, {2}], ...}. Over an\n"
+        "\tassociation, f[value, {Key[k]}] keeping keys.");
     symtab_add_builtin("MapAll", builtin_map_all);
     symtab_add_builtin("MapAt", builtin_map_at);
     symtab_get_def("MapAt")->attributes |= ATTR_PROTECTED;
@@ -420,8 +426,98 @@ void core_init(void) {
     symtab_add_builtin("Permutations", builtin_permutations);
     symtab_get_def("Permutations")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Select", builtin_select);
+    symtab_add_builtin("TakeWhile", builtin_takewhile);
+    symtab_get_def("TakeWhile")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("TakeWhile",
+        "TakeWhile[list, crit]\n\tGives the longest leading run of elements e for\n"
+        "\twhich crit[e] is True. Over an association, tests the values and keeps\n"
+        "\tthe matching leading entries (keys preserved).");
+    symtab_add_builtin("LengthWhile", builtin_lengthwhile);
+    symtab_get_def("LengthWhile")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("LengthWhile",
+        "LengthWhile[list, crit]\n\tGives the length of the longest leading run of\n"
+        "\telements e for which crit[e] is True. Over an association, tests values.");
+    symtab_add_builtin("Scan", builtin_scan);
+    symtab_get_def("Scan")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Scan",
+        "Scan[f, expr]\n\tApplies f to each element of expr for its side effects\n"
+        "\tand returns Null. Over an association, applies f to each value.");
+    symtab_add_builtin("SelectFirst", builtin_select_first);
+    symtab_get_def("SelectFirst")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("SelectFirst",
+        "SelectFirst[list, pred]\n\tGives the first element e of list for which\n"
+        "\tpred[e] is True, or Missing[\"NotFound\"]. SelectFirst[list, pred, default]\n"
+        "\tuses default. Over an association, tests values and returns the first match.");
+    symtab_add_builtin("AllTrue", builtin_all_true);
+    symtab_get_def("AllTrue")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("AllTrue",
+        "AllTrue[list, test]\n\tGives True if test[e] is True for every element e\n"
+        "\t(True for an empty list). Over an association, tests the values.");
+    symtab_add_builtin("AnyTrue", builtin_any_true);
+    symtab_get_def("AnyTrue")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("AnyTrue",
+        "AnyTrue[list, test]\n\tGives True if test[e] is True for some element e\n"
+        "\t(False for an empty list). Over an association, tests the values.");
+    symtab_add_builtin("NoneTrue", builtin_none_true);
+    symtab_get_def("NoneTrue")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("NoneTrue",
+        "NoneTrue[list, test]\n\tGives True if test[e] is True for no element e\n"
+        "\t(True for an empty list). Over an association, tests the values.");
     symtab_add_builtin("FreeQ", builtin_freeq);
     symtab_add_builtin("Sort", builtin_sort);
+    symtab_add_builtin("SortBy", builtin_sort_by);
+    symtab_get_def("SortBy")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("SortBy",
+        "SortBy[list, f]\n\tSorts the elements of list by the canonical order of\n"
+        "\tf applied to each element.\n"
+        "SortBy[assoc, f]\n\tSorts an association by f applied to each value.\n"
+        "SortBy[f]\n\tOperator form: SortBy[f][expr] is SortBy[expr, f].");
+    symtab_add_builtin("MaximalBy", builtin_maximal_by);
+    symtab_get_def("MaximalBy")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("MaximalBy",
+        "MaximalBy[list, f]\n\tGives the element(s) of list for which f is maximal\n"
+        "\t(all ties, in order). Over an association, gives the entries whose\n"
+        "\tvalue maximises f. MaximalBy[f] is the operator form.");
+    symtab_add_builtin("MinimalBy", builtin_minimal_by);
+    symtab_get_def("MinimalBy")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("MinimalBy",
+        "MinimalBy[list, f]\n\tGives the element(s) of list for which f is minimal\n"
+        "\t(all ties, in order). Over an association, gives the entries whose\n"
+        "\tvalue minimises f. MinimalBy[f] is the operator form.");
+    symtab_add_builtin("TakeLargest", builtin_take_largest);
+    symtab_get_def("TakeLargest")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("TakeLargest",
+        "TakeLargest[list, n]\n\tGives the n largest elements of list, in\n"
+        "\tdescending order. Over an association, gives the n entries with the\n"
+        "\tlargest values (as an association).");
+    symtab_add_builtin("TakeSmallest", builtin_take_smallest);
+    symtab_get_def("TakeSmallest")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("TakeSmallest",
+        "TakeSmallest[list, n]\n\tGives the n smallest elements of list, in\n"
+        "\tascending order. Over an association, gives the n entries with the\n"
+        "\tsmallest values (as an association).");
+    symtab_add_builtin("TakeLargestBy", builtin_take_largest_by);
+    symtab_get_def("TakeLargestBy")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("TakeLargestBy",
+        "TakeLargestBy[list, f, n]\n\tGives the n elements of list for which f is\n"
+        "\tlargest, in descending order of f. Over an association, ranks by f of\n"
+        "\teach value.");
+    symtab_add_builtin("TakeSmallestBy", builtin_take_smallest_by);
+    symtab_get_def("TakeSmallestBy")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("TakeSmallestBy",
+        "TakeSmallestBy[list, f, n]\n\tGives the n elements of list for which f is\n"
+        "\tsmallest, in ascending order of f. Over an association, ranks by f of\n"
+        "\teach value.");
+    symtab_add_builtin("ReverseSort", builtin_reverse_sort);
+    symtab_get_def("ReverseSort")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ReverseSort",
+        "ReverseSort[list]\n\tSorts into descending order (Reverse of Sort).\n"
+        "\tOver an association, sorts the entries by value, descending.");
+    symtab_add_builtin("ReverseSortBy", builtin_reverse_sort_by);
+    symtab_get_def("ReverseSortBy")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ReverseSortBy",
+        "ReverseSortBy[list, f]\n\tSorts by f in descending order. Over an\n"
+        "\tassociation, sorts by f of each value, descending.");
     symtab_add_builtin("OrderedQ", builtin_orderedq);
     symtab_get_def("OrderedQ")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("PolynomialQ", builtin_polynomialq);
@@ -538,6 +634,7 @@ void core_init(void) {
     comparisons_init();
     boolean_init();
     list_init();
+    assoc_init();
     replace_init();
     patterns_init();
     cond_init();

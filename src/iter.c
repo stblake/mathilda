@@ -44,6 +44,7 @@
 #include "core.h"
 #include "arithmetic.h"
 #include "sym_names.h"
+#include "assoc.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -95,6 +96,11 @@ bool iter_spec_parse(Expr* spec, IterSpec* out) {
             if (is_list_expr(bound)) {
                 out->kind = ITER_KIND_LIST;
                 out->list = bound;
+            } else if (is_association(bound)) {
+                /* {i, assoc}: iterate over the association's values. */
+                out->kind = ITER_KIND_LIST;
+                out->list = assoc_values_list(bound);
+                expr_free(bound);
             } else {
                 out->kind = ITER_KIND_RANGE;
                 out->imin = expr_new_integer(1);

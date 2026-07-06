@@ -231,6 +231,19 @@ Out[8]= {0.557674, 0.557674, 0.557674}
 ## Map (/@)
 - `f /@ expr` or `Map[f, expr]`
 
+## MapIndexed
+Maps `f` over the elements together with their positions.
+- `MapIndexed[f, list]`: gives `{f[e1, {1}], f[e2, {2}], ...}` — the second argument is the position `{i}`.
+- `MapIndexed[f, assoc]`: gives `<|k -> f[v, {Key[k]}]|>` — the criterion sees each value and its `{Key[k]}` position (the same shape `Position` reports), keys preserved.
+
+```mathematica
+In[1]:= MapIndexed[f, {10, 20, 30}]
+Out[1]= {f[10, {1}], f[20, {2}], f[30, {3}]}
+
+In[2]:= MapIndexed[f, <|"a" -> 10, "b" -> 20|>]
+Out[2]= <|"a" -> f[10, {Key["a"]}], "b" -> f[20, {Key["b"]}]|>
+```
+
 ## Apply (@@, @@@)
 - `f @@ expr`: Level 0.
 - `f @@@ expr`: Level 1.
@@ -752,3 +765,145 @@ In[2]:= Select[{1, 2, 4, 7, 6, 2}, # > 2 &, 1]
 Out[2]= {4}
 ```
 
+## TakeWhile, LengthWhile
+Act on the *leading* run of elements satisfying a criterion.
+- `TakeWhile[list, crit]`: the longest leading run of elements `e` for which `crit[e]` is `True` (same head as `list`).
+- `LengthWhile[list, crit]`: the length of that run.
+- Over an association the criterion tests the values: `TakeWhile` keeps the matching leading entries (keys preserved), `LengthWhile` counts them.
+
+```mathematica
+In[1]:= TakeWhile[{1, 2, 3, 5, 1}, # < 3 &]
+Out[1]= {1, 2}
+
+In[2]:= LengthWhile[{1, 2, 3, 5, 1}, # < 3 &]
+Out[2]= 2
+
+In[3]:= TakeWhile[<|"a" -> 1, "b" -> 2, "c" -> 5|>, # < 3 &]
+Out[3]= <|"a" -> 1, "b" -> 2|>
+```
+
+
+## AllTrue, AnyTrue, NoneTrue
+Test a predicate across the elements of a list (or the values of an association).
+- `AllTrue[list, test]`: `True` if `test[e]` is `True` for every element (and for an empty list).
+- `AnyTrue[list, test]`: `True` if `test[e]` is `True` for some element.
+- `NoneTrue[list, test]`: `True` if `test[e]` is `True` for no element.
+
+Left unevaluated when a test result is neither `True` nor `False`.
+
+```mathematica
+In[1]:= AllTrue[{2, 4, 6}, EvenQ]
+Out[1]= True
+
+In[2]:= AnyTrue[{1, 3, 4}, EvenQ]
+Out[2]= True
+
+In[3]:= NoneTrue[{1, 3, 5}, EvenQ]
+Out[3]= True
+```
+
+## SortBy
+Sort by a key function.
+- `SortBy[list, f]`: sorts the elements of `list` by the canonical order of `f[element]` (the key is evaluated once per element).
+- `SortBy[list, {f1, f2, ...}]`: sorts by `f1`, breaking ties with `f2`, and so on.
+- `SortBy[assoc, f]`: sorts an association by `f` applied to each value (keys follow their values).
+- `SortBy[f]`: operator form — `SortBy[f][expr]` is `SortBy[expr, f]`.
+
+```mathematica
+In[1]:= SortBy[{-3, 1, -2, 4}, Abs]
+Out[1]= {1, -2, -3, 4}
+
+In[2]:= SortBy[{"ccc", "a", "bb"}, StringLength]
+Out[2]= {"a", "bb", "ccc"}
+
+In[3]:= SortBy[Abs][{-3, 1, -2}]
+Out[3]= {1, -2, -3}
+
+In[4]:= SortBy[{{1, 3}, {1, 1}, {2, 0}, {1, 2}}, {First, Last}]
+Out[4]= {{1, 1}, {1, 2}, {1, 3}, {2, 0}}
+```
+
+## MaximalBy, MinimalBy
+Select the extreme elements by a key function.
+- `MaximalBy[list, f]`: the element(s) of `list` for which `f` is maximal (all ties, in order).
+- `MinimalBy[list, f]`: the element(s) for which `f` is minimal.
+- Over an association, gives the entries whose value maximises/minimises `f` (an association).
+- `MaximalBy[f]` / `MinimalBy[f]`: operator forms.
+
+```mathematica
+In[1]:= MaximalBy[{1, -5, 3, -5, 2}, Abs]
+Out[1]= {-5, -5}
+
+In[2]:= MinimalBy[<|"a" -> 1, "b" -> 3, "c" -> 2|>, Identity]
+Out[2]= <|"a" -> 1|>
+```
+
+## TakeLargest, TakeSmallest, TakeLargestBy, TakeSmallestBy
+Take the ranked extreme elements.
+- `TakeLargest[list, n]`: the `n` largest elements, in descending order.
+- `TakeSmallest[list, n]`: the `n` smallest, in ascending order.
+- `TakeLargestBy[list, f, n]` / `TakeSmallestBy[list, f, n]`: rank by `f[element]`.
+- Over an association these rank by value (or `f[value]`), returning an association.
+- If `n` exceeds the length, all elements are returned (still ranked).
+
+```mathematica
+In[1]:= TakeLargest[{3, 1, 4, 1, 5, 9, 2, 6}, 3]
+Out[1]= {9, 6, 5}
+
+In[2]:= TakeLargest[<|"a" -> 3, "b" -> 9, "c" -> 1, "d" -> 6|>, 2]
+Out[2]= <|"b" -> 9, "d" -> 6|>
+
+In[3]:= TakeLargestBy[{-9, 2, -3, 5}, Abs, 2]
+Out[3]= {-9, 5}
+```
+
+## ReverseSort, ReverseSortBy
+Sort into descending order.
+- `ReverseSort[list]`: descending order (Reverse of `Sort`).
+- `ReverseSortBy[list, f]`: descending by `f[element]`.
+- Over an association, sort the entries by value (or `f` of value), descending.
+
+```mathematica
+In[1]:= ReverseSort[{3, 1, 4, 1, 5, 9, 2}]
+Out[1]= {9, 5, 4, 3, 2, 1, 1}
+
+In[2]:= ReverseSort[<|"a" -> 3, "b" -> 1, "c" -> 2|>]
+Out[2]= <|"a" -> 3, "c" -> 2, "b" -> 1|>
+```
+
+## SelectFirst, FirstCase
+Find the first match, with a fallback.
+- `SelectFirst[list, pred]`: the first element for which `pred` is `True`, else `Missing["NotFound"]`; `SelectFirst[list, pred, default]` uses `default`.
+- `FirstCase[expr, patt]`: the first element matching `patt`, else `Missing["NotFound"]`; `FirstCase[expr, patt, default]` uses `default`.
+- Over an association both test the values and return the first matching value.
+
+```mathematica
+In[1]:= SelectFirst[{1, 3, 4, 5, 6}, EvenQ]
+Out[1]= 4
+
+In[2]:= FirstCase[{1, 2, 3, 4}, _?EvenQ]
+Out[2]= 2
+
+In[3]:= SelectFirst[{1, 3, 5}, EvenQ, None]
+Out[3]= None
+```
+
+## Scan
+`Scan[f, expr]` applies `f` to each element of `expr` for its side effects and
+returns `Null`. Over an association it applies `f` to each value.
+
+```mathematica
+In[1]:= s = 0; Scan[(s = s + #) &, <|"a" -> 1, "b" -> 2, "c" -> 3|>]; s
+Out[1]= 6
+```
+
+## Fold, FoldList over associations
+`Fold`/`FoldList` fold over an association's **values** (in key order).
+
+```mathematica
+In[1]:= Fold[Plus, 0, <|"a" -> 1, "b" -> 2, "c" -> 3|>]
+Out[1]= 6
+
+In[2]:= FoldList[Plus, 0, <|"a" -> 1, "b" -> 2, "c" -> 3|>]
+Out[2]= {0, 1, 3, 6}
+```
