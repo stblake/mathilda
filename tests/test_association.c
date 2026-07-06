@@ -104,6 +104,19 @@ void test_lookup_list_of_keys() {
                    "{1, 2, -1}", 0);
 }
 
+void test_lookup_over_list_of_associations() {
+    /* Lookup threads over a list of associations (extract a column). */
+    assert_eval_eq("Lookup[{<|\"a\" -> 1, \"b\" -> 2|>, <|\"a\" -> 3|>}, \"a\"]",
+                   "{1, 3}", 0);
+    /* Default threads to each element. */
+    assert_eval_eq("Lookup[{<|\"a\" -> 1|>, <|\"b\" -> 2|>}, \"a\", 0]", "{1, 0}", 0);
+    /* A key-list threads per association. */
+    assert_eval_eq("Lookup[{<|\"a\" -> 1, \"b\" -> 2|>, <|\"a\" -> 3, \"b\" -> 4|>}, {\"a\", \"b\"}]",
+                   "{{1, 2}, {3, 4}}", 0);
+    /* A bare rule-list is still treated as one association (not threaded). */
+    assert_eval_eq("Lookup[{\"a\" -> 1, \"b\" -> 2}, \"a\"]", "1", 0);
+}
+
 /* ---------- KeyExistsQ / AssociationQ ---------- */
 
 void test_keyexistsq() {
@@ -1244,6 +1257,7 @@ int main() {
     TEST(test_lookup_missing);
     TEST(test_lookup_default);
     TEST(test_lookup_list_of_keys);
+    TEST(test_lookup_over_list_of_associations);
 
     TEST(test_keyexistsq);
     TEST(test_keymemberq);

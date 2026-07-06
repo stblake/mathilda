@@ -12,6 +12,7 @@
         {"cells": [{"type": "code", "source": "data[\"pears\"]"}]},
         {"cells": [{"type": "code", "source": "data[[\"plums\"]]"}]},
         {"cells": [{"type": "code", "source": "Lookup[data, \"figs\", 0]"}]},
+        {"cells": [{"type": "code", "source": "Lookup[{<|\"name\" -> \"Ada\", \"age\" -> 36|>, <|\"name\" -> \"Alan\", \"age\" -> 41|>}, \"age\"]"}]},
         {"cells": [{"type": "code", "source": "Keys[data]"}]},
         {"cells": [{"type": "code", "source": "Values[data]"}]},
         {"cells": [{"type": "section", "source": "Building & updating"}]},

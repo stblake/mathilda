@@ -87,6 +87,9 @@ Looks up the value stored under a key.
 - `Lookup[assoc, key, default]` uses `default` when the key is absent.
 - `Lookup[assoc, {k1, k2, ...}]` looks up several keys with a single hash-index
   build (`O(n + m)`).
+- `Lookup[{a1, a2, ...}, key]` threads over a list of associations, extracting
+  the key from each (a key/default thread through) — handy for pulling one field
+  out of a column of records.
 - Also accepts a bare list of rules (like `Keys`/`Values`).
 
 ```mathematica
@@ -95,6 +98,9 @@ Out[1]= 2
 
 In[2]:= Lookup[<|"a" -> 1|>, "z", 0]
 Out[2]= 0
+
+In[3]:= Lookup[{<|"a" -> 1, "b" -> 2|>, <|"a" -> 3|>}, "a", 0]
+Out[3]= {1, 3}
 ```
 
 ## KeyExistsQ, KeyMemberQ, KeyFreeQ

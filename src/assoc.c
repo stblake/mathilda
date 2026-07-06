@@ -286,6 +286,34 @@ Expr* builtin_lookup(Expr* res) {
     Expr* deflt = argc == 3 ? res->data.function.args[2] : NULL;
     if (!is_assoc_or_rule_list(assoc)) return NULL;
 
+    /* Lookup threads over a (non-empty) list of associations, extracting the
+     * key from each: Lookup[{a1, a2, ...}, key] -> {Lookup[a1, key], ...}. This
+     * is distinct from the rule-list form (whose elements are Rules, not
+     * associations). Each element is delegated to Lookup, so a key-list and a
+     * default thread through unchanged. */
+    if (head_is(assoc, SYM_List) && assoc->data.function.arg_count > 0) {
+        bool all_assoc = true;
+        for (size_t i = 0; i < assoc->data.function.arg_count; i++)
+            if (!is_association(assoc->data.function.args[i])) { all_assoc = false; break; }
+        if (all_assoc) {
+            size_t m = assoc->data.function.arg_count;
+            Expr** out = malloc(sizeof(Expr*) * m);
+            for (size_t i = 0; i < m; i++) {
+                Expr** largs = malloc(sizeof(Expr*) * argc);
+                largs[0] = expr_copy(assoc->data.function.args[i]);
+                largs[1] = expr_copy(key);
+                if (argc == 3) largs[2] = expr_copy(deflt);
+                Expr* call = expr_new_function(expr_copy(res->data.function.head), largs, argc);
+                free(largs);
+                out[i] = evaluate(call);
+                expr_free(call);
+            }
+            Expr* list = make_list(out, m);
+            free(out);
+            return list;
+        }
+    }
+
     /* Lookup over a list of keys: single index build, then O(1) per key. */
     if (head_is(key, SYM_List)) {
         size_t na = assoc->data.function.arg_count;
