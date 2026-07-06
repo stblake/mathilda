@@ -260,6 +260,19 @@ In[1]:= MinMax[<|"a" -> 3, "b" -> 1, "c" -> 9|>]
 Out[1]= {1, 9}
 ```
 
+## Apply (@@)
+`f @@ assoc` uses the association's **values** as `f`'s arguments —
+`f @@ <|k1 -> v1, ...|>` is `f[v1, ...]` (so `Total[assoc]` is `Plus @@ assoc`,
+and `Apply[List, assoc]` is `Values[assoc]`).
+
+```mathematica
+In[1]:= Plus @@ <|"a" -> 1, "b" -> 2, "c" -> 3|>
+Out[1]= 6
+
+In[2]:= Apply[List, <|"a" -> 1, "b" -> 2|>]
+Out[2]= {1, 2}
+```
+
 ## Mean
 `Mean[assoc]` averages the association's values (like `Total`/`Min`/`Max`).
 

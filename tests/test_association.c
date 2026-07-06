@@ -51,6 +51,17 @@ void test_assoc_symbol_keys() {
     assert_eval_eq("<|a -> 1, b -> 2|>", "<|a -> 1, b -> 2|>", 0);
 }
 
+void test_apply_over_association_values() {
+    /* Apply (@@) uses the association's values as arguments: f @@ assoc is
+     * f[v1, v2, ...] (matching Wolfram; Total = Plus @@ assoc). */
+    assert_eval_eq("Plus @@ <|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>", "6", 0);
+    assert_eval_eq("Times @@ <|\"a\" -> 2, \"b\" -> 3, \"c\" -> 4|>", "24", 0);
+    assert_eval_eq("f @@ <|\"a\" -> 1, \"b\" -> 2|>", "f[1, 2]", 0);
+    assert_eval_eq("Apply[List, <|\"a\" -> 1, \"b\" -> 2|>]", "{1, 2}", 0);
+    assert_eval_eq("Max @@ <|\"a\" -> 3, \"b\" -> 9, \"c\" -> 1|>", "9", 0);
+    assert_eval_eq("Plus @@ <||>", "0", 0);   /* Plus[] -> 0 */
+}
+
 void test_unicode_arrow_rule() {
     /* The Unicode arrow "\xe2\x86\x92" (U+2192, Wolfram \[Rule]) is a synonym for
      * `->`, so pasted Wolfram-Language rules and associations parse directly. */
@@ -1264,6 +1275,7 @@ int main() {
     TEST(test_assoc_splice_list_of_rules);
     TEST(test_assoc_splice_nested_association);
     TEST(test_assoc_symbol_keys);
+    TEST(test_apply_over_association_values);
     TEST(test_unicode_arrow_rule);
     TEST(test_assoc_implicit_multiplication);
     TEST(test_assoc_invalid_unevaluated);

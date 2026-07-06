@@ -115,9 +115,25 @@ Expr* builtin_apply(Expr* res) {
     
     Expr* f = res->data.function.args[0];
     Expr* expr = res->data.function.args[1];
-    
+
     Expr* ls = (res->data.function.arg_count >= 3) ? res->data.function.args[2] : NULL;
     if (ls && ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol == SYM_Rule) ls = NULL;
+
+    /* Apply[f, assoc] uses the association's values as f's arguments:
+     * f @@ <|k1 -> v1, ...|> is f[v1, ...] (matching Wolfram, and consistent
+     * with Total = Plus @@ assoc). Only the default level applies here; an
+     * explicit level spec falls through to the generic traversal. */
+    if (ls == NULL && is_association(expr)) {
+        size_t n = expr->data.function.arg_count;
+        Expr** vargs = malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t i = 0; i < n; i++)
+            vargs[i] = expr_copy(expr->data.function.args[i]->data.function.args[1]);
+        Expr* call = expr_new_function(expr_copy(f), vargs, n);
+        free(vargs);
+        Expr* r = evaluate(call);
+        expr_free(call);
+        return r;
+    }
 
     LevelSpec spec = parse_level_spec(ls, 0, 0);
     parse_options(res, ls ? 3 : 2, &spec);

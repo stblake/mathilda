@@ -39,6 +39,7 @@
         {"cells": [{"type": "section", "source": "Reducing over values"}]},
         {"cells": [{"type": "text", "source": "Total, Mean, Median, Variance, Min, Max, Fold and Scan act on an association's values; Tally counts them."}]},
         {"cells": [{"type": "code", "source": "Total[<|\"a\" -> 3, \"b\" -> 1, \"c\" -> 2|>]"}]},
+        {"cells": [{"type": "code", "source": "Plus @@ <|\"a\" -> 3, \"b\" -> 1, \"c\" -> 2|>"}]},
         {"cells": [{"type": "code", "source": "Mean[<|\"a\" -> 2, \"b\" -> 4, \"c\" -> 6|>]"}]},
         {"cells": [{"type": "code", "source": "Median[<|\"a\" -> 1, \"b\" -> 3, \"c\" -> 5|>]"}]},
         {"cells": [{"type": "code", "source": "MinMax[<|\"a\" -> 3, \"b\" -> 1, \"c\" -> 9|>]"}]},
