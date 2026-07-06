@@ -1115,6 +1115,17 @@ void test_last_value() {
     assert_eval_eq("Last[<|\"a\" -> 10, \"b\" -> 20|>]", "20", 0);
 }
 
+void test_first_last_default() {
+    /* First[expr, def] / Last[expr, def] return def when expr has no elements. */
+    assert_eval_eq("First[<|\"a\" -> 1, \"b\" -> 2|>, 0]", "1", 0);
+    assert_eval_eq("First[<||>, 0]", "0", 0);
+    assert_eval_eq("Last[<||>, \"none\"]", "\"none\"", 0);
+    assert_eval_eq("First[{5, 6}, 0]", "5", 0);
+    assert_eval_eq("First[{}, 0]", "0", 0);
+    assert_eval_eq("Last[{7, 8, 9}, -1]", "9", 0);
+    assert_eval_eq("First[5, 99]", "99", 0);   /* atomic -> default */
+}
+
 void test_rest_entries() {
     assert_eval_eq("Rest[<|\"a\" -> 10, \"b\" -> 20, \"c\" -> 30|>]",
                    "<|\"b\" -> 20, \"c\" -> 30|>", 0);
@@ -1530,6 +1541,7 @@ int main() {
 
     TEST(test_first_value);
     TEST(test_last_value);
+    TEST(test_first_last_default);
     TEST(test_rest_entries);
     TEST(test_most_entries);
     TEST(test_take_entries);

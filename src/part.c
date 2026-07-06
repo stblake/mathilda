@@ -623,16 +623,24 @@ static Expr* first_last_element(Expr* container, Expr* entry) {
 }
 
 Expr* builtin_first(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION ||
+        res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     Expr* arg = res->data.function.args[0];
-    if (is_atomic(arg) || arg->data.function.arg_count < 1) return NULL;
+    Expr* deflt = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
+    /* First[expr, def] returns def when expr has no elements (or is atomic);
+     * with no default the 1-arg form is left unevaluated, as before. */
+    if (is_atomic(arg) || arg->data.function.arg_count < 1)
+        return deflt ? expr_copy(deflt) : NULL;
     return expr_copy(first_last_element(arg, arg->data.function.args[0]));
 }
 
 Expr* builtin_last(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION ||
+        res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     Expr* arg = res->data.function.args[0];
-    if (is_atomic(arg) || arg->data.function.arg_count < 1) return NULL;
+    Expr* deflt = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
+    if (is_atomic(arg) || arg->data.function.arg_count < 1)
+        return deflt ? expr_copy(deflt) : NULL;
     return expr_copy(first_last_element(arg, arg->data.function.args[arg->data.function.arg_count - 1]));
 }
 

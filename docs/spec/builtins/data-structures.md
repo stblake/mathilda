@@ -674,11 +674,16 @@ Out[4]= 12
 ## First, Last, Rest, Most, Take, Drop
 Structural extractors follow Wolfram semantics on associations: `First`/`Last`
 give the first/last **value**, while `Rest`/`Most`/`Take`/`Drop` slice **entries**
-and return an association (order preserved).
+and return an association (order preserved). `First[expr, default]` and
+`Last[expr, default]` return `default` when `expr` has no elements (an empty
+association, empty list, or an atom) — this works for lists too.
 
 ```mathematica
 In[1]:= First[<|"a" -> 10, "b" -> 20|>]
 Out[1]= 10
+
+In[1b]:= First[<||>, 0]
+Out[1b]= 0
 
 In[2]:= Rest[<|"a" -> 10, "b" -> 20, "c" -> 30|>]
 Out[2]= <|"b" -> 20, "c" -> 30|>
