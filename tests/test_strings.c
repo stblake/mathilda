@@ -991,6 +991,174 @@ void test_stringinsert_newline() {
     assert_eval_eq("StringInsert[\"ab\", \"\\n\", 2]", "\"a\\nb\"", 0);
 }
 
+/* ===== StringReplacePart tests ===== */
+
+/* Replace a single range m through n with a new string. */
+void test_stringreplacepart_basic() {
+    assert_eval_eq("StringReplacePart[\"abcdefghijk\", \"ABCDEFGH\", {2, 5}]",
+                   "\"aABCDEFGHfghijk\"", 0);
+}
+
+/* Replace several ranges with one broadcast new string. */
+void test_stringreplacepart_multi_broadcast() {
+    assert_eval_eq(
+        "StringReplacePart[\"abcdefghijk\", \"ABCDEFGH\", {{1,1},{3,5},{-3,-1}}]",
+        "\"ABCDEFGHbABCDEFGHfghABCDEFGH\"", 0);
+}
+
+/* Negative positions count from the end. */
+void test_stringreplacepart_negative_range() {
+    assert_eval_eq("StringReplacePart[\"abcdefghijk\", \"ABCDEFGH\", {-3, -2}]",
+                   "\"abcdefghABCDEFGHk\"", 0);
+}
+
+/* A list of new strings replaces each range one-for-one. */
+void test_stringreplacepart_multi_strings() {
+    assert_eval_eq(
+        "StringReplacePart[\"abcdefghijk\", {\"XYZ\", \"ABCD\"}, {{2,3},{-2,-2}}]",
+        "\"aXYZdefghiABCDk\"", 0);
+}
+
+/* Operator form with a single new string. */
+void test_stringreplacepart_operator_single() {
+    assert_eval_eq("StringReplacePart[\"ABCDEFGH\", {2, 5}][\"abcdefghijk\"]",
+                   "\"aABCDEFGHfghijk\"", 0);
+}
+
+/* Operator form with a list of new strings. */
+void test_stringreplacepart_operator_multi() {
+    assert_eval_eq(
+        "StringReplacePart[{\"XYZ\", \"ABCD\"}, {{2,3},{-2,-2}}][\"abcdefghijk\"]",
+        "\"aXYZdefghiABCDk\"", 0);
+}
+
+/* Overlapping ranges: the later one is dropped (StringReplacePart::ovlp). */
+void test_stringreplacepart_overlap() {
+    assert_eval_eq("StringReplacePart[\"abcde\", \"XYZ\", {{1,3},{3,5}}]",
+                   "\"XYZde\"", 0);
+}
+
+/* Overlap in the middle of a list of new strings keeps the rest. */
+void test_stringreplacepart_overlap_middle() {
+    assert_eval_eq(
+        "StringReplacePart[\"abcde\", {\"1\",\"2\",\"3\"}, {{1,2},{2,3},{4,5}}]",
+        "\"1c3\"", 0);
+}
+
+/* An empty new string deletes the selected characters. */
+void test_stringreplacepart_delete() {
+    assert_eval_eq("StringReplacePart[\"abcde\", \"\", {2, 4}]", "\"ae\"", 0);
+}
+
+/* Deleting several single characters. */
+void test_stringreplacepart_delete_multi() {
+    assert_eval_eq("StringReplacePart[\"abcdef\", \"\", {{1,1},{3,3},{5,5}}]",
+                   "\"bdf\"", 0);
+}
+
+/* Deleting the entire string. */
+void test_stringreplacepart_delete_all() {
+    assert_eval_eq("StringReplacePart[\"abc\", \"\", {1, 3}]", "\"\"", 0);
+}
+
+/* A single range given in nested form {{m,n}}. */
+void test_stringreplacepart_single_nested() {
+    assert_eval_eq("StringReplacePart[\"abcde\", \"XY\", {{2, 3}}]",
+                   "\"aXYde\"", 0);
+}
+
+/* Replacing the whole string. */
+void test_stringreplacepart_full_replace() {
+    assert_eval_eq("StringReplacePart[\"abc\", \"XYZ\", {1, 3}]", "\"XYZ\"", 0);
+}
+
+/* Replacing just the first character. */
+void test_stringreplacepart_first_char() {
+    assert_eval_eq("StringReplacePart[\"abc\", \"X\", {1, 1}]", "\"Xbc\"", 0);
+}
+
+/* Replacing just the last character. */
+void test_stringreplacepart_last_char() {
+    assert_eval_eq("StringReplacePart[\"abc\", \"X\", {3, 3}]", "\"abX\"", 0);
+}
+
+/* Full replace via an all-negative range. */
+void test_stringreplacepart_negative_full() {
+    assert_eval_eq("StringReplacePart[\"abcde\", \"XY\", {-5, -1}]", "\"XY\"", 0);
+}
+
+/* Adjacent (non-overlapping) ranges are both applied. */
+void test_stringreplacepart_adjacent() {
+    assert_eval_eq(
+        "StringReplacePart[\"abcdef\", {\"X\",\"Y\"}, {{1,2},{3,4}}]",
+        "\"XYef\"", 0);
+}
+
+/* An empty position list makes no replacements. */
+void test_stringreplacepart_empty_positions() {
+    assert_eval_eq("StringReplacePart[\"abc\", \"X\", {}]", "\"abc\"", 0);
+}
+
+/* Maps over a list of strings in the first argument. */
+void test_stringreplacepart_list_strings_map() {
+    assert_eval_eq("StringReplacePart[{\"abc\", \"xyz\"}, \"Q\", {2, 2}]",
+                   "{\"aQc\", \"xQz\"}", 0);
+}
+
+/* Operator form used to delete a substring. */
+void test_stringreplacepart_operator_delete() {
+    assert_eval_eq("StringReplacePart[\"\", {2, 3}][\"abcde\"]", "\"ade\"", 0);
+}
+
+/* Spaces and punctuation in the new string are preserved verbatim. */
+void test_stringreplacepart_special_chars() {
+    assert_eval_eq("StringReplacePart[\"a-c\", \" ! \", {2, 2}]", "\"a ! c\"", 0);
+}
+
+/* Wrong argument counts emit StringReplacePart::argt and stay unevaluated. */
+void test_stringreplacepart_no_args() {
+    assert_eval_eq("StringReplacePart[]", "StringReplacePart[]", 0);
+}
+
+void test_stringreplacepart_one_arg() {
+    assert_eval_eq("StringReplacePart[\"abc\"]", "StringReplacePart[\"abc\"]", 0);
+}
+
+void test_stringreplacepart_four_args() {
+    assert_eval_eq("StringReplacePart[\"abc\", \"X\", {1, 1}, extra]",
+                   "StringReplacePart[\"abc\", \"X\", {1, 1}, extra]", 0);
+}
+
+/* A symbolic first argument leaves the call unevaluated. */
+void test_stringreplacepart_symbolic_string() {
+    assert_eval_eq("StringReplacePart[x, \"Y\", {1, 1}]",
+                   "StringReplacePart[x, \"Y\", {1, 1}]", 0);
+}
+
+/* A symbolic (non-list) position spec leaves the call unevaluated. */
+void test_stringreplacepart_symbolic_position() {
+    assert_eval_eq("StringReplacePart[\"abc\", \"X\", n]",
+                   "StringReplacePart[\"abc\", \"X\", n]", 0);
+}
+
+/* An out-of-range position leaves the call unevaluated. */
+void test_stringreplacepart_out_of_range() {
+    assert_eval_eq("StringReplacePart[\"abc\", \"X\", {2, 5}]",
+                   "StringReplacePart[\"abc\", \"X\", {2, 5}]", 0);
+}
+
+/* A reversed range (m > n) leaves the call unevaluated. */
+void test_stringreplacepart_reversed_range() {
+    assert_eval_eq("StringReplacePart[\"abcde\", \"X\", {4, 2}]",
+                   "StringReplacePart[\"abcde\", \"X\", {4, 2}]", 0);
+}
+
+/* A new-string/position length mismatch leaves the call unevaluated. */
+void test_stringreplacepart_length_mismatch() {
+    assert_eval_eq("StringReplacePart[\"abcde\", {\"X\", \"Y\"}, {{1, 1}}]",
+                   "StringReplacePart[\"abcde\", {\"X\", \"Y\"}, {{1, 1}}]", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -1225,6 +1393,37 @@ int main() {
     TEST(test_stringinsert_two_args);
     TEST(test_stringinsert_four_args);
     TEST(test_stringinsert_newline);
+
+    /* StringReplacePart tests */
+    TEST(test_stringreplacepart_basic);
+    TEST(test_stringreplacepart_multi_broadcast);
+    TEST(test_stringreplacepart_negative_range);
+    TEST(test_stringreplacepart_multi_strings);
+    TEST(test_stringreplacepart_operator_single);
+    TEST(test_stringreplacepart_operator_multi);
+    TEST(test_stringreplacepart_overlap);
+    TEST(test_stringreplacepart_overlap_middle);
+    TEST(test_stringreplacepart_delete);
+    TEST(test_stringreplacepart_delete_multi);
+    TEST(test_stringreplacepart_delete_all);
+    TEST(test_stringreplacepart_single_nested);
+    TEST(test_stringreplacepart_full_replace);
+    TEST(test_stringreplacepart_first_char);
+    TEST(test_stringreplacepart_last_char);
+    TEST(test_stringreplacepart_negative_full);
+    TEST(test_stringreplacepart_adjacent);
+    TEST(test_stringreplacepart_empty_positions);
+    TEST(test_stringreplacepart_list_strings_map);
+    TEST(test_stringreplacepart_operator_delete);
+    TEST(test_stringreplacepart_special_chars);
+    TEST(test_stringreplacepart_no_args);
+    TEST(test_stringreplacepart_one_arg);
+    TEST(test_stringreplacepart_four_args);
+    TEST(test_stringreplacepart_symbolic_string);
+    TEST(test_stringreplacepart_symbolic_position);
+    TEST(test_stringreplacepart_out_of_range);
+    TEST(test_stringreplacepart_reversed_range);
+    TEST(test_stringreplacepart_length_mismatch);
 
     printf("All string tests passed!\n");
     return 0;

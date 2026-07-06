@@ -298,3 +298,47 @@ StringInsert::argrx: StringInsert called with 0 arguments; 3 arguments are expec
 Out[7]= StringInsert[]
 ```
 
+## StringReplacePart
+
+Replaces one or more ranges of characters in a string with new strings.
+
+- `StringReplacePart["string", "snew", {m, n}]`: Replaces the characters at positions m through n by `"snew"`.
+- `StringReplacePart["string", "snew", {{m1, n1}, {m2, n2}, ...}]`: Inserts a copy of `"snew"` at each of the given ranges.
+- `StringReplacePart["string", {"snew1", "snew2", ...}, {{m1, n1}, ...}]`: Replaces the characters at each range by the corresponding new string. The list of new strings must be the same length as the list of positions.
+- `StringReplacePart[{s1, s2, ...}, snew, part]`: Gives the list of results for each of the si.
+- `StringReplacePart[new, part][old]`: Operator form, equivalent to `StringReplacePart[old, new, part]`.
+- Position specifications use the form returned by `StringPosition`: each is a pair `{m, n}` of first/last character positions. Negative positions count from the end. All positions refer to `"string"` *before* any replacement is done.
+- Positions are not allowed to overlap: a range that overlaps a previously accepted one emits `StringReplacePart::ovlp` and its new string is not inserted.
+- `StringReplacePart["string", "", ...]` deletes the selected characters.
+- A malformed or out-of-range position, or a new-string/position length mismatch, leaves the call unevaluated.
+- A call whose argument count is not two (operator form) or three emits `StringReplacePart::argt` and is left unevaluated.
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringReplacePart["abcdefghijk", "ABCDEFGH", {2, 5}]
+Out[1]= "aABCDEFGHfghijk"
+
+In[2]:= StringReplacePart["abcdefghijk", "ABCDEFGH", {{1, 1}, {3, 5}, {-3, -1}}]
+Out[2]= "ABCDEFGHbABCDEFGHfghABCDEFGH"
+
+In[3]:= StringReplacePart["abcdefghijk", "ABCDEFGH", {-3, -2}]
+Out[3]= "abcdefghABCDEFGHk"
+
+In[4]:= StringReplacePart["abcdefghijk", {"XYZ", "ABCD"}, {{2, 3}, {-2, -2}}]
+Out[4]= "aXYZdefghiABCDk"
+
+In[5]:= StringReplacePart["ABCDEFGH", {2, 5}]["abcdefghijk"]
+Out[5]= "aABCDEFGHfghijk"
+
+In[6]:= StringReplacePart["abcde", "", {2, 4}]
+Out[6]= "ae"
+
+In[7]:= StringReplacePart["abcde", "XYZ", {{1, 3}, {3, 5}}]
+StringReplacePart::ovlp: Position {3,5} overlaps previous positions; new string XYZ will not be inserted.
+Out[7]= "XYZde"
+
+In[8]:= StringReplacePart[]
+StringReplacePart::argt: StringReplacePart called with 0 arguments; 2 or 3 arguments are expected.
+Out[8]= StringReplacePart[]
+```
+
