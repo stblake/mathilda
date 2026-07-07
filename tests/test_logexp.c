@@ -124,6 +124,13 @@ void test_logexp_forward() {
         {"Log[2, 2^(1/3)]", "1/3"},
         {"Log[E, E^4]", "4"},
         {"Table[Exp[I * n * Pi / 2], {n, 0, 4}]", "{1, I, -1, -I, 1}"},
+        /* Exact pure-imaginary arguments: Log[b I] = Log[|b|] + Sign[b] I Pi/2 */
+        {"Log[I]", "(1/2*I) Pi"},
+        {"Log[-I]", "(-1/2*I) Pi"},
+        {"Log[2 I]", "Log[2] + (1/2*I) Pi"},
+        {"Log[-3 I]", "Log[3] + (-1/2*I) Pi"},
+        {"Log[I/2]", "Log[1/2] + (1/2*I) Pi"},
+        {"Log[2 + 3 I]", "Log[2 + 3*I]"},
         {NULL, NULL}
     };
 

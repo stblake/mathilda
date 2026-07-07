@@ -34,7 +34,7 @@ Out[1]= 1/4*Pi
 
 ## Exponential and Logarithmic Functions
 - `Exp[z]`: Natural exponential. Canonicalizes `Exp[I*q*Pi]` (rational `q`) to `(-1)^q`, matching Mathematica — e.g. `Exp[I Pi/5] -> (-1)^(1/5)`, `Exp[I Pi] -> -1`, `Exp[I Pi/2] -> I`. `Power[-1, q]` reduces the half/integer cases itself and leaves irreducible roots intact instead of over-eagerly expanding into trig radicals.
-- `Log[z]`: Natural logarithm. For a negative integer `n` (including `BigInt`), rewrites `Log[n]` as `I Pi + Log[-n]` (principal branch). For a negative MPFR real or any `Complex[MPFR, MPFR]`, evaluates `log(hypot) + i atan2` at MPFR precision.
+- `Log[z]`: Natural logarithm. For a negative integer `n` (including `BigInt`), rewrites `Log[n]` as `I Pi + Log[-n]` (principal branch). For an exact pure-imaginary argument `Complex[0, b]` with `b` a real numeric, rewrites `Log[b I]` as `Log[Abs[b]] + Sign[b] (I Pi)/2` on the principal branch (e.g. `Log[I] = (I Pi)/2`, `Log[-3 I] = -((I Pi)/2) + Log[3]`); inexact imaginaries fall through to the numeric path. For a negative MPFR real or any `Complex[MPFR, MPFR]`, evaluates `log(hypot) + i atan2` at MPFR precision.
 - `Log[b, z]`: Logarithm to base `b`.
 
 **Zero arguments.** `Log` distinguishes exact zero (a directed limit) from
