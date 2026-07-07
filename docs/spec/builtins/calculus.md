@@ -602,15 +602,17 @@ exposed explicitly as `Integrate\`NewtonLeibniz[f, {x, xmin, xmax}]` and as
 1. Antidifferentiate `f` with the ordinary indefinite cascade to get `F`.  If
    no closed antiderivative exists, the definite integral is left unevaluated
    — never assigned a wrong value.
-2. Locate the real poles of `f` and `F` strictly inside `(xmin, xmax)` via
-   `Integrate\`SingularPoints` (roots of `Denominator[Together[·]]`).
+2. Locate the real poles of the **integrand** `f` strictly inside
+   `(xmin, xmax)` via `Integrate\`SingularPoints` (roots of
+   `Denominator[Together[f]]`).  A continuous `f` has an antiderivative that is
+   pole-free where `f` is, so only `f`'s own poles bound the segments.
 3. Split `[xmin, xmax]` at those poles and form the telescoping sum
    `Σ (F(p_{i+1}⁻) − F(p_i⁺))`, evaluating each boundary through the `Limit`
    engine: a plain limit at infinite endpoints, a one-sided limit
    (`Direction -> "FromBelow"/"FromAbove"`) at interior poles, and direct
    substitution at ordinary finite endpoints.  Improper integrals thereby
-   acquire their correct finite value; genuinely divergent ones return
-   `Infinity` / `ComplexInfinity` / `Indeterminate`.
+   acquire their correct finite value; a genuinely divergent integral emits
+   `Integrate::idiv` and is left unevaluated (matching Mathematica).
 
 `Integrate[f, {x, a, b}, {y, c, d}, …]` gives the iterated multiple integral,
 reduced innermost-first (the last spec is the inner integral), so an inner
@@ -619,12 +621,16 @@ bound may depend on an outer variable.
 `Integrate\`SingularPoints[expr, {x, a, b}]` returns the sorted list of the
 interior real poles used for the split — exposed for inspection and reuse.
 
-**Scope of this pass.** The pole detector covers denominator (rational) poles.
-Branch-cut discontinuities of `F` that are *not* poles (e.g. an antiderivative
-built from `Tan[x/2]` whose jump is not visible as a denominator root) are out
-of scope; when the pole positions cannot be decided (symbolic coefficients, or
-a transcendental denominator that `Solve` cannot place), the integral is left
-unevaluated rather than risking a wrong value.
+**Continuous branch-form antiderivatives.** Many continuous periodic integrands
+(e.g. `1/(2 + Cos[x])`) antidifferentiate to a Weierstrass branch form that is
+*already continuous* — an `ArcTan[Tan[x/2] …]` term whose jump is exactly
+cancelled by an accompanying `Floor` step — so `F(b) − F(a)` by direct
+substitution is the correct value with no interior split.  To stay correct when
+an antiderivative could instead carry a genuine *uncorrected* branch jump, a
+result built from a step head (`Floor`, `Sign`, …) or an inverse-trig node over
+a pole-bearing trig head is accepted only when a numeric `NIntegrate`
+cross-check agrees; otherwise the integral is left unevaluated rather than
+risking a wrong value.
 
 **Examples**:
 ```mathematica
@@ -637,14 +643,18 @@ Out[2]= 1/2 Pi
 In[3]:= Integrate[1/Sqrt[x], {x, 0, 1}]            (* improper, convergent *)
 Out[3]= 2
 
-In[4]:= Integrate[1/x^2, {x, -1, 1}]               (* interior pole, divergent *)
-Out[4]= Infinity
+In[4]:= Integrate[1/(2 + Cos[x]), {x, 0, 2 Pi}]    (* continuous branch form *)
+Out[4]= (2 Pi)/Sqrt[3]
 
-In[5]:= Integrate[x y, {x, 0, 1}, {y, 0, 1}]       (* iterated *)
-Out[5]= 1/4
+In[5]:= Integrate[1/x, {x, -1, 1}]                 (* divergent *)
+Integrate::idiv: Integral of 1/x does not converge on {-1, 1}.
+Out[5]= Integrate[1/x, {x, -1, 1}]
 
-In[6]:= Integrate`SingularPoints[1/((x - 1)(x - 2)), {x, 0, 3}]
-Out[6]= {1, 2}
+In[6]:= Integrate[x y, {x, 0, 1}, {y, 0, 1}]       (* iterated *)
+Out[6]= 1/4
+
+In[7]:= Integrate`SingularPoints[1/((x - 1)(x - 2)), {x, 0, 3}]
+Out[7]= {1, 2}
 ```
 
 The `Integrate`` package also exposes the lower-level helpers

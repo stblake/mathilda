@@ -97,13 +97,28 @@ static void test_improper(void) {
 }
 
 /* ------------------------------------------------------------------ */
-/* 4. Divergent integrals: interior pole -> a divergence sentinel.      */
+/* 4. Divergent integrals: interior pole -> Integrate::idiv + unevaluated. */
 /* ------------------------------------------------------------------ */
 static void test_divergent(void) {
-    /* Even-order interior pole -> +Infinity. */
-    check_eq("Integrate[1/x^2, {x, -1, 1}]",     "Infinity");
-    /* Odd-order interior pole -> Indeterminate (NOT a spurious finite). */
-    check_eq("Integrate[1/x, {x, -1, 1}]",       "Indeterminate");
+    /* Genuine divergence emits Integrate::idiv (to stderr) and leaves the
+     * integral unevaluated, matching Mathematica.  The warning does not affect
+     * the printed result compared here. */
+    check_eq("Integrate[1/x^2, {x, -1, 1}]", "Integrate[1/x^2, {x, -1, 1}]");
+    check_eq("Integrate[1/x, {x, -1, 1}]",   "Integrate[1/x, {x, -1, 1}]");
+}
+
+/* ------------------------------------------------------------------ */
+/* 4b. Continuous branch-form antiderivatives (Weierstrass): the Floor-  */
+/*     corrected antiderivative is continuous, so F(b)-F(a) is exact once */
+/*     spurious F-denominator poles are ignored and the value is          */
+/*     cross-checked against NIntegrate.                                  */
+/* ------------------------------------------------------------------ */
+static void test_continuous_periodic(void) {
+    check_eq("Integrate[1/(2 + Cos[x]), {x, 0, 2 Pi}]",   "(2 Pi)/Sqrt[3]");
+    check_eq("Integrate[1/(5 + 4 Cos[x]), {x, 0, 2 Pi}]", "2/3 Pi");
+    check_eq("Integrate[1/(3 + 2 Sin[x]), {x, 0, 2 Pi}]", "(2 Pi)/Sqrt[5]");
+    check_eq("Integrate[Cos[x]^2, {x, 0, 2 Pi}]",         "Pi");
+    check_eq("Integrate[Sin[x]^2, {x, 0, 2 Pi}]",         "Pi");
 }
 
 /* ------------------------------------------------------------------ */
@@ -158,6 +173,10 @@ static void test_stress_numeric(void) {
     /* Pole of the integrand outside the interval: still proper. */
     num_match("1/(1 - x)",     "2",  "5");
     num_match("1/x^3",         "1",  "3");
+    /* Continuous branch-form (Weierstrass) antiderivatives. */
+    num_match("1/(2 + Cos[x])",   "0", "2 Pi");
+    num_match("1/(5 + 4 Cos[x])", "0", "2 Pi");
+    num_match("1/(3 + 2 Sin[x])", "0", "2 Pi");
 }
 
 int main(void) {
@@ -168,6 +187,7 @@ int main(void) {
     TEST(test_proper);
     TEST(test_improper);
     TEST(test_divergent);
+    TEST(test_continuous_periodic);
     TEST(test_iterated);
     TEST(test_entry_points);
     TEST(test_unevaluated);

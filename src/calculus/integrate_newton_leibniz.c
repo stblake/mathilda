@@ -25,9 +25,19 @@
  *      and genuinely divergent ones surface Infinity / ComplexInfinity /
  *      Indeterminate.
  *
- * Branch-cut discontinuities of F that are NOT poles (e.g. ArcTan[Tan[x]])
- * are out of scope for this first pass; they would plug into the same
- * one-sided-limit segment machinery once a detector for them exists.
+ * Branch-form antiderivatives.  Many continuous integrands (e.g. 1/(2+Cos[x]))
+ * antidifferentiate to an ALREADY-CONTINUOUS branch form: the Weierstrass
+ * integrator emits F = ArcTan[Tan[x/2]...] + K Floor[(x-b)/(2Pi)], where the
+ * Floor step exactly cancels the ArcTan jump so F is continuous on (a, b).  For
+ * such F, F(b)-F(a) by plain substitution is already the correct value; there
+ * is no interior discontinuity to split at (and the Limit engine could not take
+ * a one-sided limit through Floor anyway).  We therefore (i) detect poles on the
+ * integrand f ONLY -- a continuous f has an antiderivative with no poles of its
+ * own -- and (ii) guard the result: antiderivatives that could carry a genuine
+ * UNCORRECTED branch jump (step heads, or an inverse-trig node sitting over a
+ * pole-bearing trig head) are cross-checked against NIntegrate and bail rather
+ * than return a wrong number.  A genuinely divergent integral emits
+ * Integrate::idiv and is left unevaluated (Mathematica-faithful).
  */
 
 #include "integrate_newton_leibniz.h"
@@ -37,10 +47,12 @@
 #include "attr.h"
 #include "arithmetic.h"
 #include "sym_names.h"
+#include "print.h"
 
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include <math.h>
 
 /* -------------------------------------------------------------------------
@@ -93,6 +105,45 @@ static bool contains_symbol(const Expr* e, const Expr* x) {
     if (contains_symbol(e->data.function.head, x)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         if (contains_symbol(e->data.function.args[i], x)) return true;
+    return false;
+}
+
+/* True iff some subexpression is `heads[i][...]` (any i) AND contains `x`. */
+static bool contains_any_head_over_x(const Expr* e, const Expr* x,
+                                     const char* const* heads, size_t nh) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < nh; i++)
+        if (head_name_is(e, heads[i]) && contains_symbol(e, x)) return true;
+    if (contains_any_head_over_x(e->data.function.head, x, heads, nh)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (contains_any_head_over_x(e->data.function.args[i], x, heads, nh))
+            return true;
+    return false;
+}
+
+/* Step / piecewise heads over x: the pieces the Floor continuity-correction is
+ * built from, and what the Limit engine cannot see through. */
+static bool nl_has_step_head(const Expr* F, const Expr* x) {
+    static const char* const H[] = { "Floor", "Ceiling", "Round", "Sign",
+                                     "UnitStep", "Piecewise", "Mod", "Quotient" };
+    return contains_any_head_over_x(F, x, H, sizeof H / sizeof *H);
+}
+
+/* An inverse-circular/hyperbolic node whose subtree contains a pole-bearing
+ * trig head over x (e.g. ArcTan[Tan[x/2]/Sqrt[3]]).  This is the fingerprint of
+ * a branch antiderivative whose jump may be uncorrected (no accompanying step
+ * term), so it must be validated before we trust F(b)-F(a). */
+static bool nl_has_arctrig_over_pole(const Expr* e, const Expr* x) {
+    static const char* const INV[]  = { "ArcTan", "ArcCot", "ArcTanh", "ArcCoth" };
+    static const char* const POLE[] = { "Tan", "Cot", "Sec", "Csc" };
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < sizeof INV / sizeof *INV; i++)
+        if (head_name_is(e, INV[i]) &&
+            contains_any_head_over_x(e, x, POLE, sizeof POLE / sizeof *POLE))
+            return true;
+    if (nl_has_arctrig_over_pole(e->data.function.head, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (nl_has_arctrig_over_pole(e->data.function.args[i], x)) return true;
     return false;
 }
 
@@ -295,11 +346,26 @@ static bool nl_is_infinite(Expr* e) {
            is_complex_infinity_sym(e);
 }
 
+/* True iff any subexpression of `e` is a singular sentinel (Infinity /
+ * -Infinity / ComplexInfinity / Indeterminate).  A boundary substitution that
+ * merely *contains* one -- e.g. ArcTan[ComplexInfinity/Sqrt[3]] from evaluating
+ * a Weierstrass antiderivative exactly on a Tan[x/2] pole -- is not a usable
+ * closed form and must fall back to a one-sided limit. */
+static bool nl_contains_singular(const Expr* e) {
+    if (!e) return false;
+    if (nl_is_infinite((Expr*)e) || is_indeterminate_sym((Expr*)e)) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (nl_contains_singular(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (nl_contains_singular(e->data.function.args[i])) return true;
+    return false;
+}
+
 /* A boundary value is usable directly only if it is a finite closed form:
- * free of x, and not one of the singular sentinels. */
+ * free of x, and free of any singular sentinel / unresolved Limit or Integrate. */
 static bool nl_is_finite_closed(Expr* v, const Expr* x) {
     if (!v) return false;
-    if (is_indeterminate_sym(v) || nl_is_infinite(v)) return false;
+    if (nl_contains_singular(v)) return false;
     if (head_name_is(v, "Interval")) return false;
     if (contains_head(v, "Limit") || contains_head(v, "Integrate")) return false;
     if (contains_symbol(v, x)) return false;
@@ -345,6 +411,93 @@ static Expr* nl_eval_at(Expr* F, Expr* x, Expr* target, NLDir dir) {
 }
 
 /* -------------------------------------------------------------------------
+ * Divergence reporting + continuity cross-check.
+ * ---------------------------------------------------------------------- */
+
+/* Emit the Mathematica-style Integrate::idiv warning to stderr, naming the
+ * integrand and interval. */
+static void nl_emit_idiv(Expr* f, Expr* a, Expr* b) {
+    char* fs = expr_to_string(f);
+    char* as = expr_to_string(a);
+    char* bs = expr_to_string(b);
+    fprintf(stderr,
+            "Integrate::idiv: Integral of %s does not converge on {%s, %s}.\n",
+            fs ? fs : "?", as ? as : "?", bs ? bs : "?");
+    free(fs); free(as); free(bs);
+}
+
+/* Numerically cross-check a symbolic definite value `V` against NIntegrate.
+ * Returns true iff both are finite reals agreeing to a loose relative
+ * tolerance -- an uncorrected branch jump is a large (O(Pi/period)) discrepancy
+ * far above the tolerance, while quadrature noise sits far below it, so this
+ * catches every value-affecting jump without being fooled by NIntegrate's own
+ * inaccuracy.  Returns false (reject) if NIntegrate cannot produce a value. */
+static bool nl_crosscheck_ok(Expr* f, Expr* x, Expr* a, Expr* b, Expr* V) {
+    double vd;
+    if (nl_numeric(V, &vd) != 1) return false;   /* V not a finite real */
+
+    arith_warnings_mute_push();
+    Expr* spec = mk_fn3("List", expr_copy(x), expr_copy(a), expr_copy(b));
+    Expr* ni   = eval_take(mk_fn2("NIntegrate", expr_copy(f), spec)); /* spec consumed */
+    arith_warnings_mute_pop();
+
+    double nd;
+    int k = ni ? nl_numeric(ni, &nd) : 0;
+    if (ni) expr_free(ni);
+    if (k != 1) return false;                     /* cannot validate -> reject */
+    return fabs(vd - nd) <= 1e-3 * (1.0 + fabs(vd));
+}
+
+/* Evaluate `expr` with x := xv (a machine real), classifying like nl_numeric:
+ * 0 = not a real number, 1 = finite real (in *out), 2/3 = +/-Infinity. */
+static int nl_eval_num_at(Expr* expr, Expr* x, double xv, double* out) {
+    Expr* sub = eval_take(mk_fn2("ReplaceAll", expr_copy(expr),
+                                 mk_fn2("Rule", expr_copy(x), expr_new_real(xv))));
+    if (!sub) return 0;
+    int k = nl_numeric(sub, out);
+    expr_free(sub);
+    return k;
+}
+
+/* Numeric resolution of an undecidable pole set: scan Denominator[Together[f]]
+ * across (a, b) for a real root.  Solve sometimes returns spurious complex
+ * conditional roots for a nowhere-vanishing trig denominator (e.g. 2+Cos[x]),
+ * flagging the pole set undecidable when there is in fact no real pole; a direct
+ * sign-change / near-tangency scan settles it.  Returns
+ *    1 = a real root lies strictly inside (a, b) (genuine interior pole),
+ *    0 = no real root found on the grid,
+ *   -1 = cannot scan (non-numeric/infinite bounds, or den not real on the grid). */
+static int nl_denominator_interior_root_scan(Expr* f, Expr* x, Expr* a, Expr* b) {
+    Expr* tog = eval_take(mk_fn1("Together", expr_copy(f)));
+    if (!tog) return -1;
+    Expr* den = eval_take(mk_fn1("Denominator", tog));   /* tog consumed */
+    if (!den) return -1;
+    if (!contains_symbol(den, x)) { expr_free(den); return 0; }
+
+    double av, bv;
+    if (nl_numeric(a, &av) != 1 || nl_numeric(b, &bv) != 1) { expr_free(den); return -1; }
+    if (bv < av) { double t = av; av = bv; bv = t; }
+
+    const int N = 512;
+    double span = bv - av;
+    double prev = 0.0;
+    bool have_prev = false;
+    int result = 0;
+    for (int i = 0; i <= N && result == 0; i++) {
+        double xv = av + span * ((double)i / (double)N);
+        double dv;
+        int k = nl_eval_num_at(den, x, xv, &dv);
+        if (k != 1) { result = -1; break; }        /* den not real -> undecidable */
+        bool interior = (i != 0 && i != N);
+        if (interior && fabs(dv) < 1e-9) { result = 1; break; }   /* tangency */
+        if (have_prev && prev * dv < 0.0)  { result = 1; break; } /* sign change */
+        prev = dv; have_prev = true;
+    }
+    expr_free(den);
+    return result;
+}
+
+/* -------------------------------------------------------------------------
  * Core Newton-Leibniz driver.
  * ---------------------------------------------------------------------- */
 
@@ -364,11 +517,28 @@ Expr* integrate_newton_leibniz_try(Expr* f, Expr* x, Expr* a, Expr* b,
     if (!F) return NULL;
     if (contains_head(F, "Integrate")) { expr_free(F); return NULL; }
 
-    /* 2. Interior poles of f and of F, unioned. */
+    /* 2. Interior poles of the INTEGRAND f only.  A continuous f has an
+     * antiderivative that is C^1 (hence pole-free) wherever f is, so the only
+     * breakpoints that matter are f's own real poles.  Detecting on F as well
+     * would manufacture spurious singularities from its representation (e.g.
+     * Cos[x/2] inside a Weierstrass ArcTan[Tan[x/2]]), which are not
+     * discontinuities of F -- that is handled by the continuity guard below. */
     PoleSet poles; poleset_init(&poles);
     nl_collect_poles(f, x, a, b, &poles);
-    nl_collect_poles(F, x, a, b, &poles);
-    if (poles.undecidable) { poleset_free(&poles); expr_free(F); return NULL; }
+    bool force_validate = false;
+    if (poles.undecidable) {
+        /* Solve could not place the poles symbolically.  Try to settle it
+         * numerically: if the denominator has no real root in (a, b) the
+         * "poles" were spurious (complex conditional roots of a nowhere-zero
+         * trig denominator); proceed but force the numeric cross-check since
+         * detection was incomplete.  Any real interior root, or an unscannable
+         * denominator, is left unevaluated. */
+        if (nl_denominator_interior_root_scan(f, x, a, b) != 0) {
+            poleset_free(&poles); expr_free(F); return NULL;
+        }
+        poles.undecidable = false;
+        force_validate = true;
+    }
 
     /* 3. Breakpoints [a, poles..., b] and the telescoping sum. */
     size_t nbp = poles.n + 2;
@@ -397,17 +567,45 @@ Expr* integrate_newton_leibniz_try(Expr* f, Expr* x, Expr* a, Expr* b,
 
     free(bp);
     poleset_free(&poles);
+
+    /* Capture F's continuity-risk fingerprint before releasing it: a step head
+     * or an inverse-trig node over a pole-bearing trig head means F could carry
+     * an uncorrected branch jump and must be cross-checked. */
+    bool F_triggers = nl_has_step_head(F, x) || nl_has_arctrig_over_pole(F, x);
     expr_free(F);
 
     if (failed || !total) { if (total) expr_free(total); return NULL; }
 
-    /* 4. Classify.  An unresolved Limit/Integrate, a stray x, or an Interval
-     * means the engine could not decide -- leave the integral unevaluated.
-     * Otherwise return the value (finite, or a divergence sentinel). */
-    if (contains_head(total, "Limit") || contains_head(total, "Integrate") ||
-        head_name_is(total, "Interval") || contains_symbol(total, x)) {
+    /* 4a. Genuine divergence: an interior pole (or a boundary blow-up) leaves a
+     * divergence sentinel.  Warn as Mathematica does and leave the integral
+     * unevaluated. */
+    if (nl_is_infinite(total) || is_indeterminate_sym(total)) {
+        nl_emit_idiv(f, a, b);
         expr_free(total);
         return NULL;
+    }
+
+    /* 4b. An unresolved Limit/Integrate, a stray x, an Interval, or a residual
+     * singular sentinel buried inside the result means the engine could not
+     * decide -- leave the integral unevaluated. */
+    if (contains_head(total, "Limit") || contains_head(total, "Integrate") ||
+        head_name_is(total, "Interval") || contains_symbol(total, x) ||
+        nl_contains_singular(total)) {
+        expr_free(total);
+        return NULL;
+    }
+
+    /* 4c. Continuity guard.  A finite value is trusted only if a numeric
+     * NIntegrate cross-check agrees when either the antiderivative is jump-risk
+     * (branch/step form) or pole detection was incomplete (bounds must be
+     * numeric or +/-Infinity); otherwise bail rather than risk a wrong number. */
+    if (F_triggers || force_validate) {
+        double av, bv;
+        bool bounds_num = nl_numeric(a, &av) && nl_numeric(b, &bv);
+        if (!bounds_num || !nl_crosscheck_ok(f, x, a, b, total)) {
+            expr_free(total);
+            return NULL;
+        }
     }
     return total;
 }
