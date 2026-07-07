@@ -26,6 +26,7 @@
 #include "integrate_goursat.h"
 #include "integrate_jeffrey.h"
 #include "integrate_newton_leibniz.h"
+#include "integrate_line.h"
 #include "intrat.h"
 #include "intrischnorman.h"
 #include "intsimp.h"
@@ -392,16 +393,6 @@ static IntegrateMethod parse_method_option(Expr* opt, Expr** out_sub) {
     return method_from_string(rhs->data.string);
 }
 
-/* True iff `e` is a definite-integral range spec `{x, a, b}`: a 3-element
- * List whose first element is a symbol. */
-static bool is_range_spec(const Expr* e) {
-    return e && e->type == EXPR_FUNCTION &&
-           e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol == SYM_List &&
-           e->data.function.arg_count == 3 &&
-           e->data.function.args[0]->type == EXPR_SYMBOL;
-}
-
 /* Parse a definite integral's trailing `Method -> "..."` option for the
  * Newton-Leibniz path.  `*name` is set to a borrowed method-name string to
  * pass through to the inner indefinite Integrate (NULL for Automatic and for
@@ -434,9 +425,12 @@ static Expr* integrate_definite(Expr* res) {
     size_t argc = res->data.function.arg_count;
     Expr* f = res->data.function.args[0];
 
-    /* Leading run of range specs, then at most one trailing Method option. */
+    /* Leading run of range / contour specs, then at most one trailing Method
+     * option.  A contour spec `{x, z0, ..., zn}` (polyline, or any non-real
+     * endpoint) is a superset of the real 3-element range spec. */
     size_t nspecs = 0;
-    while (1 + nspecs < argc && is_range_spec(res->data.function.args[1 + nspecs]))
+    while (1 + nspecs < argc &&
+           integrate_line_is_contour_spec(res->data.function.args[1 + nspecs]))
         nspecs++;
     if (nspecs == 0) return NULL;
 
@@ -461,10 +455,17 @@ static Expr* integrate_definite(Expr* res) {
     Expr* cur = expr_copy(f);
     for (size_t k = nspecs; k >= 1; k--) {
         Expr* spec = res->data.function.args[1 + (k - 1)];
-        Expr* x = spec->data.function.args[0];
-        Expr* a = spec->data.function.args[1];
-        Expr* b = spec->data.function.args[2];
-        Expr* r = integrate_newton_leibniz_try(cur, x, a, b, method);
+        Expr* r;
+        if (integrate_line_spec_is_complex(spec)) {
+            /* Complex line / contour integral (non-real endpoint or polyline). */
+            r = integrate_line_from_spec(cur, spec, method);
+        } else {
+            /* Real-axis definite integral via the fundamental theorem. */
+            Expr* x = spec->data.function.args[0];
+            Expr* a = spec->data.function.args[1];
+            Expr* b = spec->data.function.args[2];
+            r = integrate_newton_leibniz_try(cur, x, a, b, method);
+        }
         expr_free(cur);
         if (!r) return NULL;
         cur = r;
@@ -479,9 +480,10 @@ Expr* builtin_integrate(Expr* res) {
 
     Expr* f = res->data.function.args[0];
 
-    /* Definite form: the second argument is a `{x, a, b}` range spec.
-     * Handles the iterated multi-spec form too. */
-    if (is_range_spec(res->data.function.args[1]))
+    /* Definite form: the second argument is a `{x, a, b}` range spec or a
+     * `{x, z0, ..., zn}` complex line/contour spec.  Handles the iterated
+     * multi-spec form too. */
+    if (integrate_line_is_contour_spec(res->data.function.args[1]))
         return integrate_definite(res);
 
     if (argc > 3) return NULL;
@@ -719,6 +721,10 @@ void integrate_init(void) {
     /* Definite integration by the fundamental theorem of calculus:
      * Integrate`NewtonLeibniz and the pole detector Integrate`SingularPoints. */
     integrate_newton_leibniz_init();
+
+    /* Complex line / contour integration: Integrate`LineIntegral and the
+     * on-path singularity detector Integrate`PathSingularPoints. */
+    integrate_line_init();
 
     /* Initialise the parallel-Risch / Risch-Norman heuristic
      * (Bronstein's pmint).  Provides `Integrate`RischNorman[f, x]`,

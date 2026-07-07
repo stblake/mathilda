@@ -657,6 +657,58 @@ In[7]:= Integrate`SingularPoints[1/((x - 1)(x - 2)), {x, 0, 3}]
 Out[7]= {1, 2}
 ```
 
+### Complex line / contour integration
+
+When a `{x, a, b}` spec has a **non-real endpoint**, or when a spec lists more
+than two points `{x, z0, z1, …, zn}`, `Integrate` evaluates the **contour
+integral** of `f` along the straight segments `z0 → z1 → … → zn` in the complex
+plane (`src/calculus/integrate_line.c`, exposed explicitly as
+`Integrate\`LineIntegral[f, {x, z0, …, zn}]`).  Real-endpoint two-point specs
+still go through the real-axis Newton-Leibniz path above.
+
+Each segment `a → b` is parametrised by a **real** parameter,
+`γ(t) = a + t (b − a)`, `t ∈ [0, 1]`, which reduces the complex problem to the
+real machinery already in place:
+
+1. Antidifferentiate `f` in `x` to get `F` (bail if unknown).
+2. **On-path singularities** become real roots `t* ∈ (0, 1)` of
+   `Denominator[Together[f(γ(t))]]` — a singularity strictly on the contour
+   makes the integral divergent (`Integrate::idiv`, left unevaluated).
+   `Integrate\`PathSingularPoints[f, {x, z0, …, zn}]` returns those points.
+3. The segment value is the continuous change of `F` along the segment, with
+   endpoint values taken as **real one-sided limits in `t`** when substitution
+   is singular (so a complex-ray approach is a real one-sided limit the `Limit`
+   engine can take).  For rational integrands whose antiderivative is a sum of
+   logarithms / inverse-tangents of **affine** arguments, the branch-correct
+   value is recovered by combining each into a single principal `Log` of a ratio
+   `Log[(u(b))/(u(a))]` — exact because a straight segment subtends an angle
+   `< π` at any point off it, so closed-contour residues come out exactly.
+4. Every segment value is numerically cross-checked against a complex quadrature
+   of `f(γ(t)) γ'(t)`; an uncorrectable branch crossing leaves the integral
+   unevaluated rather than returning a wrong branch.
+
+**Examples**:
+```mathematica
+In[1]:= Integrate[1/x, {x, 1 - I, 2 + 3 I}]
+Out[1]= Log[2 + 3 I] - Log[1 - I]
+
+In[2]:= Integrate[z^2, {z, 0, 1 + I}]
+Out[2]= -2/3 + 2/3 I
+
+In[3]:= Integrate[1/Sqrt[z], {z, 0, 1 + I}]        (* branch-point endpoint *)
+Out[3]= 2 Sqrt[1 + I]
+
+In[4]:= Integrate`PathSingularPoints[1/z, {z, -1 - I, 1 + I}]
+Out[4]= {0}
+
+In[5]:= Integrate[1/z, {z, -1 - I, 1 + I}]         (* pole on the path *)
+Integrate::idiv: Integral of 1/z does not converge on the contour {-1 - I, 1 + I}.
+Out[5]= Integrate[1/z, {z, -1 - I, 1 + I}]
+
+In[6]:= Chop[N[Integrate[1/z, {z, 1, I, -1, -I, 1}]]]   (* CCW loop about 0 *)
+Out[6]= 0.0 + 6.28319 I                                 (* = 2 Pi I *)
+```
+
 The `Integrate`` package also exposes the lower-level helpers
 `Integrate`HermiteReduce`, `Integrate`IntegratePolynomial`,
 `Integrate`BronsteinRational` (the explicit form),
