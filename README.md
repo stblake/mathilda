@@ -2,7 +2,7 @@
 
 Mathilda is a small, open source computer algebra system (CAS) heavily inspired by the core architecture and evaluation semantics of Mathematica (the Wolfram Language). Written entirely in C99 and its own language, it implements a recursive expression model, structural pattern matching with backtracking, rewriting rules, and an extensive library of built-in mathematical functions. 
 
-Today Mathilda spans roughly **232,000 lines of C99** across **340 source modules**, exposing **~575 built-in functions** organized into **29 functional categories** — from arbitrary-precision arithmetic and symbolic calculus to polynomial factorization, dense linear algebra, and integer factorization.
+Today Mathilda spans roughly **232,000 lines of C99** across **340 source modules**, exposing **~575 built-in functions** organized into **29 functional categories** — from arbitrary-precision arithmetic and symbolic calculus to polynomial factorization, dense linear algebra, integer factorization, and interactive 2D/3D graphics.
 
 ## 🌟 Key Features
 
@@ -27,6 +27,13 @@ Today Mathilda spans roughly **232,000 lines of C99** across **340 source module
 **Number theory & factorization**
 * **Number theory:** `GCD`, `LCM`, `ExtendedGCD`, `PowerMod`, `Divisors`, `EulerPhi`, `MoebiusMu`, `PrimitiveRoot`, continued fractions, and more.
 * **Integer factorization:** a unified, automatic pipeline alongside explicit algorithms — Pollard's Rho, Pollard's $P-1$, Williams' $P+1$, Fermat, CFRAC, Dixon's Method, and the Elliptic Curve Method (ECM).
+
+**Graphics & visualization** *(requires [Raylib](https://www.raylib.com/); gracefully omitted otherwise)*
+* **2D plots:** `Plot` with adaptive sampling and re-sampling on zoom/pan; `ParametricPlot` for curves and filled regions; `StreamPlot` for vector fields with speed-gradient colouring; `ListPlot`/`ListLinePlot` for discrete data; `ContourPlot` for iso-contours with marching-squares (equation form `f == c`, list of equations `{eq1, eq2, …}`, and numeric-body shading with `ContourShading`/`ColorFunction`).
+* **3D plots:** `Plot3D` for surface meshes; `ParametricPlot3D` for parametric space curves and surface patches; both rendered with per-face Lambertian shading in an interactive orbit camera (drag to rotate, scroll to zoom, right-drag to pan).
+* **Graphics primitives:** hand-built `Graphics[…]` and `Graphics3D[…]` objects using `Line`, `Point`, `Arrow`, `Disk`, `Rectangle`, `Polygon`, `Text`, `RGBColor`, `Opacity`, `Thickness`, and more; combined with `Show`.
+* **Legends and labels:** `PlotLegends -> Automatic` adds a colour-scale bar (contour/stream plots) or per-curve swatch box; `AxesLabel`, `PlotLabel`, `GridLines`, `Frame`, `Ticks` all pass through to the renderer.
+* **Interactive window:** toolbar with close, screenshot save, and view-reset buttons; Escape or the OS close button exits cleanly.
 
 **Programming & utilities**
 * **Functional programming:** `Map`, `Apply`, `Fold`, `Nest`, `Through`, `Composition`, and pure functions (`&` / `#`).
@@ -58,6 +65,7 @@ The complete reference (~575 functions) lives in [`Mathilda_spec.md`](Mathilda_s
 * Statistics
 * Random Number Generation
 * Time and Date
+* Graphics & Visualization
 
 Weekly change summaries are recorded under [`docs/spec/changelog/`](docs/spec/changelog/).
 
@@ -76,16 +84,18 @@ To build and run Mathilda you need:
 * **FLINT** ≥ 3.0 (`libflint` / `flint-dev`) — fast, rigorous polynomial arithmetic over algebraic extensions and rigorous `acb` numerics *(optional, auto-detected)*
 * **GMP-ECM** (`gmp-ecm` / `libecm-dev`) — Elliptic Curve Method integer factorization *(optional, auto-detected)*
 * **LAPACK / BLAS** — fast machine-precision linear algebra *(optional, auto-detected)*
+* **Raylib** ≥ 4.0 — interactive graphics window for `Plot`, `Plot3D`, `ContourPlot`, etc. *(optional, auto-detected via `pkg-config`; falls back to a text placeholder when absent)*
 * **CMake** — only required to build the test suite
 
 The optional backends are controlled by build-time flags and **degrade gracefully** when disabled or absent:
 
 | Flag | Default | Effect when on |
 |------|---------|----------------|
-| `USE_MPFR`  | `1` | Arbitrary-precision reals: `N[expr, prec]`, `Precision`/`Accuracy`, precision literals. Build without it via `make USE_MPFR=0`. |
-| `USE_FLINT` | `1` | Fast, rigorous FLINT (≥ 3.0) kernels: multivariate polynomial GCD/factoring over ℚ, univariate GCD/factoring over number fields ℚ(α) (via the `gr` layer + ANTIC), the finite-field workhorse behind parametric ℚ(t)(α) work, and rigorous `acb` numerics (`Zeta`, `HurwitzZeta`, `PolyGamma`, `StieltjesGamma`). Auto-detected via `pkg-config` with a ≥ 3.0 version floor. Falls back to the classical (slower but still rigorous) path (`USE_FLINT=0`) when absent. |
-| `USE_LAPACK`| `1` | Fast machine-precision linear algebra. Auto-detected: Apple **Accelerate** on macOS, `lapacke`/`lapack`/`blas` on Linux. Falls back to the pure-C path (`USE_LAPACK=0`) if none is found. |
-| `USE_ECM`   | `1` | Elliptic Curve Method factorization via the system GMP-ECM library. Auto-detected via a compile-link probe; install `gmp-ecm` / `libecm-dev`. Falls back to disabled (`USE_ECM=0`) when absent. |
+| `USE_MPFR`     | `1` | Arbitrary-precision reals: `N[expr, prec]`, `Precision`/`Accuracy`, precision literals. Build without it via `make USE_MPFR=0`. |
+| `USE_FLINT`    | `1` | Fast, rigorous FLINT (≥ 3.0) kernels: multivariate polynomial GCD/factoring over ℚ, univariate GCD/factoring over number fields ℚ(α) (via the `gr` layer + ANTIC), the finite-field workhorse behind parametric ℚ(t)(α) work, and rigorous `acb` numerics (`Zeta`, `HurwitzZeta`, `PolyGamma`, `StieltjesGamma`). Auto-detected via `pkg-config` with a ≥ 3.0 version floor. Falls back to the classical (slower but still rigorous) path (`USE_FLINT=0`) when absent. |
+| `USE_LAPACK`   | `1` | Fast machine-precision linear algebra. Auto-detected: Apple **Accelerate** on macOS, `lapacke`/`lapack`/`blas` on Linux. Falls back to the pure-C path (`USE_LAPACK=0`) if none is found. |
+| `USE_ECM`      | `1` | Elliptic Curve Method factorization via the system GMP-ECM library. Auto-detected via a compile-link probe; install `gmp-ecm` / `libecm-dev`. Falls back to disabled (`USE_ECM=0`) when absent. |
+| `USE_GRAPHICS` | `1` | Interactive 2D/3D plot windows via Raylib. Auto-detected via `pkg-config raylib`. When absent, `Show`/`Plot`/`Plot3D`/`ContourPlot`/etc. print a text placeholder and return normally. Build without it via `make USE_GRAPHICS=0`. |
 
 #### Installing dependencies
 
@@ -105,6 +115,10 @@ sudo apt install libecm-dev
 
 # Optional: LAPACK / BLAS for fast machine-precision linear algebra
 sudo apt install liblapacke-dev libopenblas-dev
+
+# Optional: Raylib for interactive plot windows (Plot, Plot3D, ContourPlot, ...)
+sudo apt install libraylib-dev      # Ubuntu 24.04+ / Debian Bookworm+
+# or build from source: https://github.com/raysan5/raylib
 
 # Optional: CMake, only needed to build the test suite
 sudo apt install cmake
@@ -126,6 +140,8 @@ On Fedora/RHEL the equivalents are `gmp-devel`, `mpfr-devel`, `readline-devel`,
 brew install gmp mpfr readline cmake
 # Optional: FLINT (>= 3.0) for fast, rigorous algebraic-extension arithmetic:
 brew install flint
+# Optional: Raylib for interactive plot windows:
+brew install raylib
 # Optional: GMP-ECM for advanced integer factorization:
 brew install gmp-ecm
 ```
@@ -202,6 +218,7 @@ Larger mathematical domains live in dedicated subdirectories of `src/`:
 | `calculus/` | `D`/`Dt`/`Derivative`, `Series`, `Limit`, `Integrate` (incl. Risch–Norman) |
 | `simp/`     | `Simplify`, trigonometric simplification, radical denesting, assumptions |
 | `sum/`      | Symbolic summation (polynomial, geometric, Gosper) |
+| `graphics/` | 2D/3D plot engine: adaptive sampler, marching-squares contours, Raylib renderer, vector font; `Plot`, `Plot3D`, `ParametricPlot`, `ParametricPlot3D`, `StreamPlot`, `ContourPlot`, `ListPlot`, `Show` |
 | `internal/` | Mathematica-syntax bootstrap `.m` files (init, integral tables) loaded at startup |
 
 A recurring design pattern is **C for performance, rules for mathematics**: hot

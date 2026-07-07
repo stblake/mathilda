@@ -151,6 +151,7 @@ extern const char* SYM_Evaluate;
 extern const char* SYM_EvaluationMonitor;
 extern const char* SYM_Except;
 extern const char* SYM_Exclusions;
+extern const char* SYM_ExclusionStyle;
 extern const char* SYM_Exp;
 extern const char* SYM_ExtendedGCD;
 extern const char* SYM_Extension;
@@ -608,6 +609,7 @@ extern const char* SYM_DollarruSimplify;
  * Graphics[]/Show[]/Plot[] plus Plot's option names. MaxRecursion is
  * shared with the existing NIntegrate/ND option of the same name above. */
 extern const char* SYM_Graphics;
+extern const char* SYM_Graphics3D;
 extern const char* SYM_Point;
 extern const char* SYM_Line;
 extern const char* SYM_Rectangle;
@@ -617,6 +619,10 @@ extern const char* SYM_Polygon;
 extern const char* SYM_Text;
 extern const char* SYM_Show;
 extern const char* SYM_Plot;
+extern const char* SYM_Plot3D;
+extern const char* SYM_ParametricPlot;
+extern const char* SYM_ParametricPlot3D;
+extern const char* SYM_Lighting;
 extern const char* SYM_RGBColor;
 extern const char* SYM_GrayLevel;
 extern const char* SYM_CMYKColor;
@@ -694,6 +700,22 @@ extern const char* SYM_ListPlot;     /* ListPlot[data, opts...] */
 extern const char* SYM_Joined;       /* ListPlot option: connect points */
 extern const char* SYM_DataRange;    /* ListPlot option: x-range for heights */
 extern const char* SYM_PlotMarkers;  /* ListPlot option: point glyphs */
+
+/* StreamPlot[{fx,fy}, {x,...}, {y,...}, opts...] */
+extern const char* SYM_StreamPlot;
+extern const char* SYM_Arrow;          /* Arrow[{{x1,y1},...}] primitive */
+extern const char* SYM_StreamPoints;   /* seed density/placement */
+extern const char* SYM_StreamScale;    /* stream length control */
+extern const char* SYM_StreamStyle;    /* style directives for streams */
+extern const char* SYM_StreamColorFunction; /* color by position/speed */
+extern const char* SYM_StreamColorBar;      /* internal: color-scale bar metadata */
+
+/* ContourPlot[f, {x,...}, {y,...}, opts...] */
+extern const char* SYM_ContourPlot;
+extern const char* SYM_Contours;        /* integer or list of explicit levels */
+extern const char* SYM_ContourStyle;    /* style directive(s) for the contour lines */
+extern const char* SYM_ContourLabels;   /* True/False: draw z-value labels on contours */
+extern const char* SYM_ContourShading;  /* True/False/Automatic: fill between contours */
 
 /* FLINT` context: direct REPL access to the FLINT-backed kernels that also
  * accelerate the corresponding System` builtins transparently. Each is a thin

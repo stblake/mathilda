@@ -151,6 +151,7 @@ const char* SYM_InverseErf = NULL;
 const char* SYM_InverseErfc = NULL;
 const char* SYM_Except = NULL;
 const char* SYM_Exclusions = NULL;
+const char* SYM_ExclusionStyle = NULL;
 const char* SYM_Exp = NULL;
 const char* SYM_ExtendedGCD = NULL;
 const char* SYM_Extension = NULL;
@@ -603,6 +604,7 @@ const char* SYM_DollarSimplifyDebug = NULL;
 const char* SYM_DollarruSimplify = NULL;
 
 const char* SYM_Graphics = NULL;
+const char* SYM_Graphics3D = NULL;
 const char* SYM_Point = NULL;
 const char* SYM_Line = NULL;
 const char* SYM_Rectangle = NULL;
@@ -612,6 +614,10 @@ const char* SYM_Polygon = NULL;
 const char* SYM_Text = NULL;
 const char* SYM_Show = NULL;
 const char* SYM_Plot = NULL;
+const char* SYM_Plot3D = NULL;
+const char* SYM_ParametricPlot = NULL;
+const char* SYM_ParametricPlot3D = NULL;
+const char* SYM_Lighting = NULL;
 const char* SYM_RGBColor = NULL;
 const char* SYM_GrayLevel = NULL;
 const char* SYM_CMYKColor = NULL;
@@ -683,6 +689,18 @@ const char* SYM_ListPlot = NULL;
 const char* SYM_Joined = NULL;
 const char* SYM_DataRange = NULL;
 const char* SYM_PlotMarkers = NULL;
+const char* SYM_StreamPlot = NULL;
+const char* SYM_Arrow = NULL;
+const char* SYM_StreamPoints = NULL;
+const char* SYM_StreamScale = NULL;
+const char* SYM_StreamStyle = NULL;
+const char* SYM_StreamColorFunction = NULL;
+const char* SYM_StreamColorBar = NULL;
+const char* SYM_ContourPlot = NULL;
+const char* SYM_Contours = NULL;
+const char* SYM_ContourStyle = NULL;
+const char* SYM_ContourLabels = NULL;
+const char* SYM_ContourShading = NULL;
 
 void sym_names_init(void) {
     /* intern_symbol is idempotent and stable, so this can run multiple
@@ -816,6 +834,7 @@ void sym_names_init(void) {
     SYM_InverseErfc                = intern_symbol("InverseErfc");
     SYM_Except                     = intern_symbol("Except");
     SYM_Exclusions                 = intern_symbol("Exclusions");
+    SYM_ExclusionStyle             = intern_symbol("ExclusionStyle");
     SYM_Exp                        = intern_symbol("Exp");
     SYM_ExtendedGCD                = intern_symbol("ExtendedGCD");
     SYM_Extension                  = intern_symbol("Extension");
@@ -1270,6 +1289,7 @@ void sym_names_init(void) {
     SYM_DollarruSimplify           = intern_symbol("$ruSimplify");
 
     SYM_Graphics                   = intern_symbol("Graphics");
+    SYM_Graphics3D                 = intern_symbol("Graphics3D");
     SYM_Point                      = intern_symbol("Point");
     SYM_Line                       = intern_symbol("Line");
     SYM_Rectangle                  = intern_symbol("Rectangle");
@@ -1279,6 +1299,10 @@ void sym_names_init(void) {
     SYM_Text                       = intern_symbol("Text");
     SYM_Show                       = intern_symbol("Show");
     SYM_Plot                       = intern_symbol("Plot");
+    SYM_Plot3D                     = intern_symbol("Plot3D");
+    SYM_ParametricPlot             = intern_symbol("ParametricPlot");
+    SYM_ParametricPlot3D           = intern_symbol("ParametricPlot3D");
+    SYM_Lighting                   = intern_symbol("Lighting");
     SYM_RGBColor                   = intern_symbol("RGBColor");
     SYM_GrayLevel                  = intern_symbol("GrayLevel");
     SYM_CMYKColor                  = intern_symbol("CMYKColor");
@@ -1347,6 +1371,18 @@ void sym_names_init(void) {
     SYM_Joined                     = intern_symbol("Joined");
     SYM_DataRange                  = intern_symbol("DataRange");
     SYM_PlotMarkers                = intern_symbol("PlotMarkers");
+    SYM_StreamPlot                 = intern_symbol("StreamPlot");
+    SYM_Arrow                      = intern_symbol("Arrow");
+    SYM_StreamPoints               = intern_symbol("StreamPoints");
+    SYM_StreamScale                = intern_symbol("StreamScale");
+    SYM_StreamStyle                = intern_symbol("StreamStyle");
+    SYM_StreamColorFunction        = intern_symbol("StreamColorFunction");
+    SYM_StreamColorBar             = intern_symbol("$StreamColorBar");
+    SYM_ContourPlot                = intern_symbol("ContourPlot");
+    SYM_Contours                   = intern_symbol("Contours");
+    SYM_ContourStyle               = intern_symbol("ContourStyle");
+    SYM_ContourLabels              = intern_symbol("ContourLabels");
+    SYM_ContourShading             = intern_symbol("ContourShading");
 
     /* System symbols that have no kernel implementation and no cached SYM_*
      * pointer, but must still be recognized as System` (not qualified into a

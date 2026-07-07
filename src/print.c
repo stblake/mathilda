@@ -205,6 +205,9 @@ static void print_standard(Expr* e, int parent_prec) {
         else if (head == SYM_Graphics && e->data.function.arg_count >= 1 && g_inputform_depth == 0) {
             printf("-Graphics-");
         }
+        else if (head == SYM_Graphics3D && e->data.function.arg_count >= 1 && g_inputform_depth == 0) {
+            printf("-Graphics3D-");
+        }
         else if (head == SYM_Rational && e->data.function.arg_count == 2) {
             print_standard(e->data.function.args[0], 470);
             printf("/");

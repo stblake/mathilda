@@ -9,7 +9,12 @@
 #include "primitives.h"
 #include "sampling.h"
 #include "plot.h"
+#include "plot3d.h"
+#include "parametricplot.h"
+#include "parametricplot3d.h"
 #include "listplot.h"
+#include "streamplot.h"
+#include "contourplot.h"
 #include "show.h"
 
 void graphics_init(void);

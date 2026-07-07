@@ -4,6 +4,7 @@
  * below) so there's exactly one definition either way. */
 
 #include "show.h"
+#include "render3d.h"
 #include "sym_names.h"
 #include <stdlib.h>
 
@@ -15,10 +16,13 @@ static bool is_rule_arg(const Expr* e) {
         && e->data.function.arg_count == 2;
 }
 
+/* Show[] accepts either container head -- Graphics[...] (2D) or
+ * Graphics3D[...] (Plot3D's output) -- and preserves whichever one it got. */
 static bool is_graphics(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Graphics
+        && (e->data.function.head->data.symbol == SYM_Graphics
+            || e->data.function.head->data.symbol == SYM_Graphics3D)
         && e->data.function.arg_count >= 1;
 }
 
@@ -71,7 +75,7 @@ Expr* builtin_show(Expr* res) {
     for (size_t i = 0; i < n; i++) gargs[1 + i] = opts[i];
     free(opts);
 
-    Expr* merged = expr_new_function(expr_new_symbol(SYM_Graphics), gargs, 1 + n);
+    Expr* merged = expr_new_function(expr_copy(g->data.function.head), gargs, 1 + n);
     free(gargs);
 
     return merged;
@@ -82,6 +86,11 @@ Expr* builtin_show(Expr* res) {
 void graphics_show(const Expr* graphics_expr) {
     (void)graphics_expr;
     printf("Graphics: not rendered -- graphics support not compiled in "
+           "(install raylib and rebuild).\n");
+}
+void graphics3d_show(const Expr* graphics3d_expr) {
+    (void)graphics3d_expr;
+    printf("Graphics3D: not rendered -- graphics support not compiled in "
            "(install raylib and rebuild).\n");
 }
 #endif

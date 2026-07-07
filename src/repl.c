@@ -7,6 +7,7 @@
 #include "repl_hooks.h"
 #include "sym_names.h"
 #include "show.h"
+#include "render3d.h"
 #include "graphics_json.h"
 #include "print_latex.h"
 #include <stdio.h>
@@ -130,19 +131,20 @@ void process_input(const char* input, int line_number) {
     expr_print(to_print);
     printf("\n"); // extra blank line
 
-    /* Mathematica's front end auto-displays a top-level Graphics[...]
-     * result. This REPL is the sole "front end", so it owns rendering:
-     * Show[]/Plot[] merely return a Graphics[...] object and we render it
-     * here. Routing every display through one path means `g // Graphics`,
-     * Show[...] and Plot[...] all render identically, and a trailing `;`
-     * (which yields Null) correctly suppresses the window. graphics_show
-     * borrows the expr (no ownership transfer); on a non-graphics build
-     * its stub prints a one-line "install raylib" hint instead. */
+    /* Mathematica's front end auto-displays a top-level Graphics[...] (or
+     * Graphics3D[...], from Plot3D) result. This REPL is the sole "front
+     * end", so it owns rendering: Show[]/Plot[]/Plot3D[] merely return such
+     * an object and we render it here. Routing every display through one
+     * path means `g // Graphics`, Show[...], Plot[...] and Plot3D[...] all
+     * render identically, and a trailing `;` (which yields Null) correctly
+     * suppresses the window. graphics_show/graphics3d_show borrow the expr
+     * (no ownership transfer); on a non-graphics build their stubs print a
+     * one-line "install raylib" hint instead. */
     if (to_print && to_print->type == EXPR_FUNCTION
         && to_print->data.function.head->type == EXPR_SYMBOL
-        && to_print->data.function.head->data.symbol == SYM_Graphics
         && to_print->data.function.arg_count >= 1) {
-        graphics_show(to_print);
+        if (to_print->data.function.head->data.symbol == SYM_Graphics) graphics_show(to_print);
+        else if (to_print->data.function.head->data.symbol == SYM_Graphics3D) graphics3d_show(to_print);
     }
 
     expr_free(to_print);
