@@ -12,6 +12,7 @@
 #include "arithmetic.h"
 #include "context.h"
 #include "sym_names.h"
+#include "graph.h"   /* graph_is_list, for the Graph[...] summary form */
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
@@ -67,6 +68,7 @@ static int get_expr_prec(Expr* e) {
     if (head == SYM_Set || head == SYM_SetDelayed) return 40;
     if (head == SYM_MessageName) return 780;
     if (head == SYM_Rule || head == SYM_RuleDelayed) return 120;
+    if (head == SYM_DirectedEdge || head == SYM_UndirectedEdge) return 120;
     if (head == SYM_Condition) return 130;
     if (head == SYM_Alternatives) return 160;
     if (head == SYM_Repeated || head == SYM_RepeatedNull) return 170;
@@ -207,6 +209,26 @@ static void print_standard(Expr* e, int parent_prec) {
         }
         else if (head == SYM_Graphics3D && e->data.function.arg_count >= 1 && g_inputform_depth == 0) {
             printf("-Graphics3D-");
+        }
+        else if ((head == SYM_DirectedEdge || head == SYM_UndirectedEdge)
+                 && e->data.function.arg_count == 2) {
+            /* u -> v (directed) / u <-> v (undirected). Infix in both Standard
+             * and Input forms so the literal round-trips through the parser. */
+            print_standard(e->data.function.args[0], my_prec);
+            printf("%s", head == SYM_DirectedEdge ? " -> " : " <-> ");
+            print_standard(e->data.function.args[1], my_prec);
+        }
+        else if (head == SYM_Graph && e->data.function.arg_count == 2
+                 && g_inputform_depth == 0
+                 && graph_is_list(e->data.function.args[0])
+                 && graph_is_list(e->data.function.args[1])) {
+            /* Terse summary in standard output; InputForm/FullForm fall through
+             * to the literal Graph[{...}, {...}] constructor (round-trippable). */
+            unsigned long nv = (unsigned long)e->data.function.args[0]->data.function.arg_count;
+            unsigned long ne = (unsigned long)e->data.function.args[1]->data.function.arg_count;
+            printf("Graph[<%lu %s, %lu %s>]",
+                   nv, nv == 1 ? "vertex" : "vertices",
+                   ne, ne == 1 ? "edge" : "edges");
         }
         else if (head == SYM_Rational && e->data.function.arg_count == 2) {
             print_standard(e->data.function.args[0], 470);

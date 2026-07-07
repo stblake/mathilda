@@ -1,0 +1,49 @@
+(* Content-type: application/vnd.wolfram.mathematica *)
+
+(*** Wolfram Notebook File ***)
+(* http://www.wolfram.com/nb *)
+
+(* CreatedBy='Mathematica 14.0' *)
+
+(*CacheID: 234*)
+(* Internal cache information:
+NotebookFileLineBreakTest
+NotebookFileLineBreakTest
+NotebookDataPosition[       158,          7]
+NotebookDataLength[      1104,         39]
+NotebookOptionsPosition[       757,         25]
+NotebookOutlinePosition[      1153,         41]
+CellTagsIndexPosition[      1110,         38]
+WindowFrame->Normal*)
+
+(* Beginning of Notebook Content *)
+Notebook[{
+Cell["Claude attempts at Goursat\[CloseCurlyQuote]s method", "Title",
+ CellChangeTimes->{{3.986109130057722*^9, 
+  3.986109138904889*^9}},ExpressionUUID->"a9c551d4-0775-46c6-b5c5-\
+c6f60f69ce02"]
+},
+WindowSize->{808, 897},
+WindowMargins->{{44, Automatic}, {0, Automatic}},
+FrontEndVersion->"14.0 for Mac OS X x86 (64-bit) (December 12, 2023)",
+StyleDefinitions->"Default.nb",
+ExpressionUUID->"7b6706cf-ef03-4e67-8436-597809145d29"
+]
+(* End of Notebook Content *)
+
+(* Internal cache information *)
+(*CellTagsOutline
+CellTagsIndex->{}
+*)
+(*CellTagsIndex
+CellTagsIndex->{}
+*)
+(*NotebookFileOutline
+Notebook[{
+Cell[558, 20, 195, 3, 200, "Title",ExpressionUUID->"a9c551d4-0775-46c6-b5c5-c6f60f69ce02"]
+}
+]
+*)
+
+(* End of internal cache information *)
+

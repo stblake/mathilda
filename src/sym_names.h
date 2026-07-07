@@ -737,6 +737,41 @@ extern const char* SYM_FLINT_HurwitzZeta;     /* FLINT`HurwitzZeta[s,a]   */
 extern const char* SYM_FLINT_PolyGamma;       /* FLINT`PolyGamma[n,z]     */
 extern const char* SYM_FLINT_StieltjesGamma;  /* FLINT`StieltjesGamma[n]  */
 
+/* Graph subsystem (src/graph/): the Graph head, its edge constructors, and
+ * every builtin head. Graphs are ordinary Expr trees
+ * Graph[List[verts...], List[edges...]]; no new EXPR_* tag. SYM_Rule and
+ * SYM_Graphics primitives (Line/Point/Disk/Text) are reused, not re-declared. */
+extern const char* SYM_Graph;
+extern const char* SYM_DirectedEdge;
+extern const char* SYM_UndirectedEdge;
+extern const char* SYM_TwoWayRule;
+extern const char* SYM_GraphQ;
+extern const char* SYM_DirectedGraphQ;
+extern const char* SYM_ConnectedGraphQ;
+extern const char* SYM_VertexList;
+extern const char* SYM_EdgeList;
+extern const char* SYM_VertexCount;
+extern const char* SYM_EdgeCount;
+extern const char* SYM_AdjacencyList;
+extern const char* SYM_VertexDegree;
+extern const char* SYM_VertexInDegree;
+extern const char* SYM_VertexOutDegree;
+extern const char* SYM_AdjacencyMatrix;
+extern const char* SYM_IncidenceMatrix;
+extern const char* SYM_AdjacencyGraph;
+extern const char* SYM_CompleteGraph;
+extern const char* SYM_CycleGraph;
+extern const char* SYM_PathGraph;
+extern const char* SYM_RandomGraph;
+extern const char* SYM_FindShortestPath;
+extern const char* SYM_GraphDistance;
+extern const char* SYM_ConnectedComponents;
+extern const char* SYM_WeaklyConnectedComponents;
+extern const char* SYM_StronglyConnectedComponents;
+extern const char* SYM_FindSpanningTree;
+extern const char* SYM_VertexConnectivity;
+extern const char* SYM_GraphPlot;
+
 /* Populate every SYM_* by interning its name string. Idempotent: safe
  * to call repeatedly. Must run before any consumer reads a SYM_*
  * pointer; in practice it is called from core_init(). */

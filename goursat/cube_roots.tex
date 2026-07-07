@@ -1,0 +1,46 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+
+\title{\textbf{A Deduced Theorem for Goursat-Type Integrals with Cube Roots}}
+\author{}
+\date{}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newcommand{\Fcal}{\mathfrak{F}}
+
+\begin{document}
+\maketitle
+
+\begin{theorem}[Analog for Cube Roots]
+Let $R(t)$ be a cubic polynomial with distinct roots. An integral of the form 
+$$ I = \int \frac{\Fcal(t)}{R(t)^{1/3}} dt \quad \text{or} \quad I = \int \frac{\Fcal(t)}{R(t)^{2/3}} dt $$
+is elementary if it belongs to the family of Goursat-type pseudo-elliptic integrals[cite: 1]. Such an integral can be reduced by either a single substitution or by splitting the rational part $\Fcal(t)$ into at most two components, where each resulting integral is reducible by a single substitution.
+\end{theorem}
+
+\begin{proof}
+The proof is a deduction based on the assertions presented in the source text[cite: 1]. The argument follows the structure established for the square-root case, adapted to the specific rules for cube roots as described.
+
+\subsubsection*{1. Detection of Reducibility Type}
+The text states that prescriptions analogous to those in Goursat's 1887 paper exist for the cube root case. These allow one to detect whether the integral can be solved with a single substitution or if the rational part, $\Fcal(t)$, must be split.
+
+\subsubsection*{2. Case 1: No Splitting Required}
+If the detection method indicates no splitting is needed, the text asserts that the integral can be rationalized by a single substitution. This substitution transforms the original integral into an elementary form. The resulting elementary integral will be of the type:
+$$ \int R_1(u^3) du \quad \text{or} \quad \int u \cdot R_2(u^3) du $$
+where $R_1$ and $R_2$ are rational functions. These are integrable using standard methods.
+
+\subsubsection*{3. Case 2: Splitting Required}
+If the detection method indicates that splitting is necessary, the text states that $\Fcal(t)$ must be decomposed into two components:
+$$ \Fcal(t) = \Fcal_1(t) + \Fcal_2(t) $$
+The text explicitly notes that "three components are never needed," which is a key distinction from the square root case involving the Klein four-group of involutions. The original integral is thus broken into two separate integrals:
+$$ I = \int \frac{\Fcal_1(t)}{R(t)^{n/3}} dt + \int \frac{\Fcal_2(t)}{R(t)^{n/3}} dt \quad (n=1 \text{ or } 2)$$
+Each of these two component integrals then falls under Case 1, where each succumbs to a single rationalizing substitution.
+
+\subsubsection*{Conclusion}
+Since any integral of this type can be reduced to elementary forms—either directly (Case 1) or via a two-part decomposition where each part is reducible (Case 2)—the theorem is established as described by the source text.
+\end{proof}
+
+\end{document}

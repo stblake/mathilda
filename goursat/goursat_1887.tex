@@ -1,0 +1,451 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+
+\usepackage{xcolor}
+
+\begin{document}
+
+\title{\textbf{Note on Some Pseudo-Elliptic Integrals} \\ \large{\textnormal{by E. Goursat}}}
+\author{}
+\date{Session of March 16, 1887 \\ \textit{\small{Originally published in the Bulletin de la S. M. F., tome 15 (1887), p. 106-120}}}
+\maketitle
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newtheorem*{theorem*}{Theorem}
+\newtheorem{theorem}{Theorem}
+\newcommand{\Fcal}{\mathfrak{F}}
+
+\section*{1}
+
+Consider a differential of the form
+\begin{equation}
+f(x)\frac{dx}{\sqrt{Ax^{2}+Bx+C}},
+\end{equation}
+where $f(x)$ denotes an arbitrary rational function and $Ax^{2}+Bx+C$ is a second-degree trinomial that is not a perfect square, which may, as a special case, reduce to a linear expression. Let us pose the substitution
+\begin{equation}
+x=\frac{at^{2}+bt+c}{a^{\prime}t^{2}+b^{\prime}t+c^{\prime}}=\varphi(t);
+\end{equation}
+the numerator and the denominator of $\varphi(t)$ are assumed to be coprime, and at least one is of the second degree. By this substitution, the differential (1) becomes
+\begin{equation}
+\Fcal(t)\frac{dt}{\sqrt{R(t)}}
+\end{equation}
+where
+\begin{align*}
+\Fcal(t) &= f\left(\frac{at^{2}+bt+c}{a^{\prime}t^{2}+b^{\prime}t+c^{\prime}}\right)\frac{Lt^{2}-2Nt+M}{(a^{\prime}t^{2}+b^{\prime}t+c^{\prime})^{2}} \\
+L &= ab^{\prime}-ba^{\prime}, \quad M=bc^{\prime}-cb^{\prime}, \quad N=ca^{\prime}-ac^{\prime}, \\
+R(t) &= A(at^{2}+bt+c)^{2}+B(at^{2}+bt+c)(a^{\prime}t^{2}+b^{\prime}t+c^{\prime})+C(a^{\prime}t^{2}+b^{\prime}t+c^{\prime})^{2}.
+\end{align*}
+The two roots $t_{1}$, $t_{2}$ of the equation $\varphi(t)=\lambda$ satisfy, for any $\lambda$, the involution relation
+\begin{equation*}
+L t_{1}t_{2}-N(t_{1}+t_{2})+M=0,
+\end{equation*}
+obtained by eliminating $\lambda$ between the two equations
+\begin{align*}
+a(t_{1}+t_{2})+b-\lambda[a^{\prime}(t_{1}+t_{2})+b^{\prime}] &= 0, \\
+at_{1}t_{2}-c-\lambda[a^{\prime}t_{1}t_{2}-c^{\prime}] &= 0.
+\end{align*}
+It follows that if, in $\varphi(t)$, we make the linear substitution
+\begin{equation}
+Ltz - N(t+z) + M = 0, \quad \text{or} \quad t = \frac{Nz-M}{Lz-N},
+\end{equation}
+we will have identically $\varphi(t)=\varphi(z)$. Indeed, one can verify without any difficulty the identities below:
+\begin{align*}
+at^{2}+bt+c &= (N^{2}-LM)\frac{az^{2}+bz+c}{(Lz-N)^{2}}; \\
+a^{\prime}t^{2}+b^{\prime}t+c^{\prime} &= (N^{2}-LM)\frac{a^{\prime}z^{2}+b^{\prime}z+c^{\prime}}{(Lz-N)^{2}}; \\
+Lt^{2}-2Nt+M &= (LM-N^{2})\frac{Lz^{2}-2Nz+M}{(Lz-N)^{2}}.
+\end{align*}
+We therefore have
+\begin{align*}
+\frac{dt}{\sqrt{R(t)}} &= \frac{(LM-N^{2})dz}{\sqrt{(N^{2}-LM)^{2}R(z)}} = \frac{dz}{\sqrt{R(z)}}, \\
+f\left(\frac{at^{2}+bt+c}{a^{\prime}t^{2}+b^{\prime}t+c^{\prime}}\right) &= f\left(\frac{az^{2}+bz+c}{a^{\prime}z^{2}+b^{\prime}z+c^{\prime}}\right); \\
+\frac{Lt^{2}-2Nt+M}{(a^{\prime}t^{2}+b^{\prime}t+c^{\prime})^2} &= -\frac{Lz^{2}-2Nz+M}{(a^{\prime}z^{2}+b^{\prime}z+c^{\prime})^2}.
+\end{align*}
+It follows that
+\begin{equation*}
+\Fcal(t) = f\left(\frac{at^{2}+bt+c}{a^{\prime}t^{2}+b^{\prime}t+c^{\prime}}\right)\frac{Lt^{2}-2Nt+M}{(a^{\prime}t^{2}+b^{\prime}t+c^{\prime})^{2}} = -f\left(\frac{az^{2}+bz+c}{a^{\prime}z^{2}+b^{\prime}z+c^{\prime}}\right)\frac{Lz^{2}-2Nz+M}{(a^{\prime}z^{2}+b^{\prime}z+c^{\prime})^{2}} = -\Fcal(z).
+\end{equation*}
+The differential (3) therefore enjoys the following property: \\
+
+\textit{There exists an involutive linear substitution $t=\frac{Nz-M}{Lz-N}$, which permutes the roots of the equation $R(t)=0$ in pairs, such that we identically have $\Fcal\left(\frac{Nz-M}{Lz-N}\right)=-\Fcal(z)$.}
+
+\section*{2}
+
+Conversely, let $R(t)$ be a fourth-degree polynomial having four distinct roots $a, b, c, d$, and let
+\begin{equation*}
+Lt_{1}t_{2}-N(t_{1}+t_{2})+M=0
+\end{equation*}
+be an involutive linear substitution which permutes the roots $a, b, c, d$ in pairs. If a rational function $\Fcal(t)$ is such that we identically have
+\begin{equation*}
+\Fcal(t_{1})+\Fcal(t_{2})=0,
+\end{equation*}
+the integral
+\begin{equation*}
+\int\Fcal(t)\frac{dt}{\sqrt{R(t)}}
+\end{equation*}
+is a pseudo-elliptic integral. Let us indeed denote by $\alpha$ and $\beta$ the double points of the preceding involution; the relation between $t_1$ and $t_2$ can be written
+\begin{equation*}
+\frac{t_{1}-\alpha}{t_{1}-\beta}+\frac{t_{2}-\alpha}{t_{2}-\beta}=0.
+\end{equation*}
+Let's make the change of variable,
+\begin{equation*}
+\frac{t-\alpha}{t-\beta}=u;
+\end{equation*}
+the differential $\frac{dt}{\sqrt{R(t)}}$ is changed into a differential of the form $\frac{du}{\sqrt{R_{1}(u)}}$, where the polynomial $R_{1}(u)$ has only terms of even degree; because the relation between the values $u_{1}$, $u_{2}$ of $u$, which correspond to the values $t_{1}$, $t_{2}$ of $t$, is precisely $u_{1}+u_{2}=0$. Similarly, the rational function $\Fcal(t)$ is changed into a certain rational function $F(u)$, and the relation
+\begin{equation*}
+\Fcal(t_{1})+\Fcal(t_{2})=0
+\end{equation*}
+becomes
+\begin{equation*}
+F(u_{1})+F(u_{2})=0, \quad \text{that is} \quad F(u)+F(-u)=0.
+\end{equation*}
+It follows from this that $F(u)$ will be of the form $uF_{1}(u^{2})$, and it will suffice to set $u^{2}=x$ to reduce the differential
+\begin{equation*}
+\frac{u F_{1}(u^{2})du}{\sqrt{R_{1}(u)}}
+\end{equation*}
+to a differential of the form (1). We can therefore state the following theorem:
+
+\begin{theorem}
+Let $\left[t,\frac{Nt-M}{Lt-N}\right]$ be a substitution of period 2 permuting the four roots $a, b, c, d$ of the equation $R(t)=0$ in pairs, and let $\Fcal(t)$ be a rational function such that one identically has
+\begin{equation*}
+\Fcal(t)+\Fcal\left(\frac{Nt-M}{Lt-N}\right)=0;
+\end{equation*}
+the integral
+\begin{equation*}
+\int\Fcal(t)\frac{dt}{\sqrt{R(t)}}
+\end{equation*}
+is a pseudo-elliptic integral.
+\end{theorem}
+This result was obtained in another way by M. Raffy (see Bulletin, t. XII, p. 51); the above process furthermore gives the means of effecting the reduction. The preceding statement still applies when $R(t)$ is of the third degree, provided one regards one of the four roots $a, b, c, d$ as infinite.
+
+\bigskip
+
+\hrule
+
+{
+  \color{blue}
+\medskip
+
+\begin{definition}[Involution]
+An \textbf{involution} is a function $S$ that is its own inverse; that is, $S(S(t)) = t$ for all $t$ in its domain. In the context of this theorem, we consider an involution that is a non-trivial \textit{linear fractional transformation}, having the form:
+$$ S(t) = \frac{at+b}{ct+d}, \quad ad-bc \neq 0 $$
+Such a transformation always has two fixed points (which may coincide or include $\infty$), given by the solutions to $S(t)=t$.
+\end{definition}
+
+\begin{theorem*}[thm. 1. Goursat, 1887]
+Let $R(t)$ be a quartic polynomial with distinct roots, and let $S(t)$ be a non-trivial involution that permutes the roots of $R(t)$. If the rational function $\Fcal(t)$ satisfies the anti-invariance condition $\Fcal(t) + \Fcal(S(t)) = 0$, then the integral
+$$ I = \int \frac{\Fcal(t)}{\sqrt{R(t)}} dt $$
+is elementary.
+\end{theorem*}
+
+\begin{proof}
+Let the two fixed points of the involution $S(t)$ be $\alpha$ and $\beta$. We introduce the change of variable
+$$ u = \frac{t - \alpha}{t - \beta} $$
+Under this transformation, the involution $S$ on $t$ corresponds to the simple reflection $u \mapsto -u$. Let us examine the effect of this substitution on the integrand.
+
+The rational function $\Fcal(t)$ transforms into a new rational function $F(u) = \Fcal(t(u))$. The condition $\Fcal(t) + \Fcal(S(t)) = 0$ becomes $F(u) + F(-u) = 0$, which implies that $F(u)$ is an odd function of $u$.
+
+The polynomial $R(t)$ transforms into a new expression $R_1(u)$ under the radical. Since $S$ permutes the roots of $R(t)$, the mapping $u \mapsto -u$ must permute the roots of $R_1(u)$. A polynomial whose roots occur in opposite pairs must be an even function. Thus, $R_1(u)$ is a polynomial in $u^2$, which we denote by $R_2(u^2)$.
+
+The differential form $\frac{dt}{\sqrt{R(t)}}$ can likewise be shown to transform into an even function of $u$. The integral therefore becomes
+$$ I = \int F(u) \cdot (\text{even function of } u) \, du = \int (\text{odd function of } u) \, du $$
+The resulting integrand must have the structure $\frac{u \cdot H(u^2)}{\sqrt{R_2(u^2)}}$ for some rational function $H$.
+
+We now apply a second substitution:
+$$ x = u^2 \implies dx = 2u\,du $$
+The integral is reduced to:
+$$ I = \int \frac{H(x)}{2\sqrt{R_2(x)}} dx $$
+Since $R(t)$ is a quartic, $R_1(u)$ is also a quartic, and therefore $R_2(x)$ must be a quadratic polynomial in $x$. The final integral is of the form $\int G(x) / \sqrt{ax^2+bx+c} \, dx$ for a rational function $G(x)$. Such an integral is known to be elementary.
+\end{proof}
+}
+\medskip
+
+\hrule
+
+\bigskip
+
+\section*{3}
+The four roots $a, b, c, d$ being arbitrary, there exist three linear substitutions of period 2, which permute these roots in pairs. For example, the substitution
+\begin{equation*}
+\left\{t,\frac{(ab-cd)t+(a+b)cd-(c+d)ab}{[(a+b)-(c+d)]t-(ab-cd)}\right\}
+\end{equation*}
+permutes the two roots $a$ and $b$ and the two roots $c$ and $d$. The other two substitutions are deduced from this one, by successively taking any two of the roots for $a$ and $b$, and the other two for $c$ and $d$. Let us denote by $S_{1}$, $S_{2}$, $S_{3}$ these three substitutions; with the identical substitution $I(t)=t$, they form a group of four substitutions, and we have the relations
+\begin{align*}
+S_{1}^{2}=S_{2}^{2}=S_{3}^{2}&=I, \\
+S_{1}S_{2}=S_{2}S_{1}=S_{3}, \\
+S_{1}S_{3}=S_{3}S_{1}=S_{2}, \\
+S_{2}S_{3}=S_{3}S_{2}&=S_{1}.
+\end{align*}
+Let $S\left[t,\frac{Nt-M}{Lt-N}\right]$ be in general a linear substitution and $F(t)$ a rational function of $t$; I will denote, for short, by $F(S)$ the rational function $F\left(\frac{Nt-M}{Lt-N}\right)$.
+
+Given any polynomial of the fourth degree $R(t)$, we know from the above of three types of pseudo-elliptic integrals, relative to this polynomial,
+\begin{equation*}
+\int f(t)\frac{dt}{\sqrt{R(t)}}, \quad \int\varphi(t)\frac{dt}{\sqrt{R(t)}}, \quad \int\psi(t)\frac{dt}{\sqrt{R(t)}},
+\end{equation*}
+the rational functions $f(t)$, $\varphi(t)$, $\psi(t)$ respectively satisfying the relations
+\begin{equation*}
+f(S_{1})+f=0, \quad \varphi(S_{2})+\varphi=0, \quad \psi(S_{3})+\psi=0,
+\end{equation*}
+which are equivalent to these:
+\begin{equation*}
+f(S_{2})+f(S_{3})=0, \quad \varphi(S_{1})+\varphi(S_{3})=0, \quad \psi(S_{1})+\psi(S_{2})=0.
+\end{equation*}
+It is clear that by adding these three integrals, we still get a pseudo-elliptic integral
+\begin{equation*}
+\int\Fcal(t)\frac{dt}{\sqrt{R(t)}};
+\end{equation*}
+where $\Fcal(t)=f(t)+\varphi(t)+\psi(t)$. The preceding relationships, which are satisfied by the functions $f, \varphi, \psi$, give us, for the function $\Fcal(t)$, the relation
+\begin{equation}
+\Fcal+\Fcal(S_{1})+\Fcal(S_{2})+\Fcal(S_{3})=0.
+\end{equation}
+Conversely, let $\Fcal(t)$ be a rational function satisfying this condition (5). Let us set
+\begin{equation*}
+f=\frac{\Fcal-\Fcal(S_{1})+\Fcal(S_{2})-\Fcal(S_{3})}{4}, \quad \varphi=\frac{\Fcal+\Fcal(S_{1})-\Fcal(S_{2})-\Fcal(S_{3})}{4}, \quad \dots
+\end{equation*}
+We can therefore state the following theorem:
+
+\begin{theorem}
+Let $S_{1}$, $S_{2}$, $S_{3}$ be the three linear period 2 substitutions that permute the four roots of the equation $R(t)=0$ in pairs, and let $\Fcal(t)$ be a rational function such that one identically has
+\begin{equation*}
+\Fcal+\Fcal(S_{1})+\Fcal(S_{2})+\Fcal(S_{3})=0;
+\end{equation*}
+the integral
+\begin{equation*}
+\int\Fcal(t)\frac{dt}{\sqrt{R(t)}}
+\end{equation*}
+is a pseudo-elliptic integral.
+\end{theorem}
+
+\bigskip
+
+\hrule
+
+\medskip
+
+{
+\color{blue}
+
+\begin{theorem*}[Goursat's Second Theorem]
+Let $R(t)$ be a quartic polynomial with distinct roots, and let $S_1, S_2, S_3$ be the three distinct involutions that permute the roots of $R(t)$. If a rational function $\Fcal(t)$ satisfies the summation condition
+$$ \Fcal(t) + \Fcal(S_1(t)) + \Fcal(S_2(t)) + \Fcal(S_3(t)) = 0 $$
+then the integral $I = \int \frac{\Fcal(t)}{\sqrt{R(t)}} dt$ is elementary.
+\end{theorem*}
+
+\begin{proof}
+The set of transformations $G = \{I, S_1, S_2, S_3\}$, where $I$ is the identity map, forms a group isomorphic to the Klein four-group ($V_4$). The group properties include $S_1^2=I$, $S_1 S_2 = S_3$, $S_2 S_1 = S_3$, etc.
+
+The core of the proof is to decompose $\Fcal(t)$ into a sum of functions, each of which satisfies the simpler condition of Theorem 1. We can project $\Fcal(t)$ onto the subspaces corresponding to the non-trivial characters of $V_4$.
+
+Let us define three components of $\Fcal(t)$:
+\begin{align*}
+\Fcal_1(t) &= \frac{1}{4} \left( \Fcal(t) - \Fcal(S_1 t) - \Fcal(S_2 t) + \Fcal(S_3 t) \right) \\
+\Fcal_2(t) &= \frac{1}{4} \left( \Fcal(t) - \Fcal(S_1 t) + \Fcal(S_2 t) - \Fcal(S_3 t) \right) \\
+\Fcal_3(t) &= \frac{1}{4} \left( \Fcal(t) + \Fcal(S_1 t) - \Fcal(S_2 t) - \Fcal(S_3 t) \right)
+\end{align*}
+The summation condition given in the theorem statement, $\Fcal + \Fcal(S_1) + \Fcal(S_2) + \Fcal(S_3) = 0$, ensures that $\Fcal(t)$ is the sum of these three components:
+$$ \Fcal(t) = \Fcal_1(t) + \Fcal_2(t) + \Fcal_3(t) $$
+Therefore, the integral can be split into three parts:
+$$ I = \int \frac{\Fcal_1(t)}{\sqrt{R(t)}} dt + \int \frac{\Fcal_2(t)}{\sqrt{R(t)}} dt + \int \frac{\Fcal_3(t)}{\sqrt{R(t)}} dt $$
+The proof is complete if we can show that each of these three integrals is elementary. We do this by showing that each component $\Fcal_i$ satisfies the anti-invariance condition of Theorem 1 for at least one involution.
+
+Let's check $\Fcal_1(t)$ for anti-invariance under $S_1$:
+\begin{align*}
+4(\Fcal_1(t) + \Fcal_1(S_1 t)) &= \left( \Fcal - \Fcal S_1 - \Fcal S_2 + \Fcal S_3 \right) + \left( \Fcal S_1 - \Fcal S_1^2 - \Fcal S_2 S_1 + \Fcal S_3 S_1 \right) \\
+&= \left( \Fcal - \Fcal S_1 - \Fcal S_2 + \Fcal S_3 \right) + \left( \Fcal S_1 - \Fcal - \Fcal S_3 + \Fcal S_2 \right) \\
+&= 0
+\end{align*}
+Thus, $\Fcal_1(t) + \Fcal_1(S_1 t) = 0$. By Theorem 1, the integral $\int \frac{\Fcal_1(t)}{\sqrt{R(t)}} dt$ is elementary.
+
+Similarly, we can show:
+\begin{itemize}
+    \item $\Fcal_2(t)$ is anti-invariant under $S_2$: $\Fcal_2(t) + \Fcal_2(S_2 t) = 0$.
+    \item $\Fcal_3(t)$ is anti-invariant under $S_3$: $\Fcal_3(t) + \Fcal_3(S_3 t) = 0$.
+\end{itemize}
+Therefore, the integrals for $\Fcal_2$ and $\Fcal_3$ are also elementary by Theorem 1.
+
+Since the original integral $I$ is a sum of three elementary integrals, it is itself elementary.
+\end{proof}
+}
+
+\medskip
+      
+\hrule
+
+\bigskip
+
+The theorem still applies when $R(t)$ is of the third degree, provided we look at one of the roots $a, b, c, d$ as infinite. The sum $\Fcal+\Fcal(S_{1})+\Fcal(S_{2})+\Fcal(S_{3})$ is a symmetric function of the quantities $a, b, c, d$; one will be able to recognize if it is null without knowing the roots of the polynomial under the radical.
+
+\subsection*{Examples}
+Let $R(t)=(1-t^{2})(1-k^{2}t^{2})$. The integral
+\begin{equation*}
+\int f(t)\frac{dt}{\sqrt{(1-t^{2})(1-k^{2}t^{2})}}
+\end{equation*}
+will be pseudo-elliptic, provided that we have
+\begin{equation*}
+f(t)+f(-t)+f\left(\frac{1}{kt}\right)+f\left(-\frac{1}{kt}\right)=0.
+\end{equation*}
+The same will be true of the integral
+\begin{equation*}
+\int\frac{f(x^{2})dx}{\sqrt{(1-x^{2})(1-k^{2}x^{2})}},
+\end{equation*}
+provided that one has
+\begin{equation*}
+f(x^{2})+f\left[\frac{1-k^{2}x^{2}}{k^{2}(1-x^{2})}\right]+f\left(\frac{1}{k^{2}x^{2}}\right)+f\left(\frac{1-x^{2}}{1-k^{2}x^{2}}\right)=0.
+\end{equation*}
+(See HERMITE, Journal de Liouville, 1880; RAFFY, loc. cit., p. 71.)
+
+\section*{4}
+
+The preceding analysis shows us a relationship between some pseudo-elliptic integrals and the linear substitutions that permute the roots of the equation $R(t)=0$. If the quantities $a, b, c, d$ are arbitrary, there are no other linear substitutions than the three previous ones that permute these four roots. But, for some special forms of $R(t)$, there will be other substitutions of this kind. It is natural to wonder whether one can also attach pseudo-elliptic integrals to these new substitutions. This is indeed what happens.
+
+Several assumptions can be made about these substitutions. Let $a, b, c, d$ always be the roots of $R(t)=0$; it may be that there is a linear substitution that does not change the point $a$ and permutes the other three roots $b, c, d$ circularly. This substitution will necessarily be of period 3.
+
+Let $S$ be such a substitution. Now let $F(t)$ be a rational function of $t$ having the property expressed by the equation
+\begin{equation*}
+F(S)=\alpha F \quad \text{where} \quad \alpha=e^{\frac{2i\pi}{3}},
+\end{equation*}
+the integral
+\begin{equation*}
+\int F(t)\frac{dt}{\sqrt{R(t)}}
+\end{equation*}
+is pseudo-elliptic. Let's first do the transformation $z = \frac{t-a}{t-a_1}$, where $a, a_1$ are the fixed points of $S$. The transform of $S$ by this substitution is $S^{\prime}[z; \alpha z]$. The differential $\frac{dt}{\sqrt{R(t)}}$ turns into a differential of the form
+\begin{equation*}
+\frac{dz}{\sqrt{z(Az^{3}+B)}},
+\end{equation*}
+since the three non-zero roots of the new polynomial under the radical must be circularly permuted by the substitution $S'$. The rational function $F(t)$ changes into a rational function $F_1(z)$ verifying the relationship
+\begin{equation*}
+F_{1}(\alpha z)=\alpha F_{1}(z),
+\end{equation*}
+which will, therefore, be in the form
+\begin{equation*}
+F_{1}(z)=z\varphi(z^{3}).
+\end{equation*}
+The preceding differential becomes
+\begin{equation*}
+\frac{\varphi(z^{3})z\,dz}{\sqrt{z(Az^{3}+B)}}.
+\end{equation*}
+It now suffices to set $z^{3}=x$ to be reduced to a differential of the form (1); from which results the theorem stated above.
+
+One can link to this case of reduction a rather famous integral, studied by Legendre and Clausen. If there is a linear substitution of period 3 leaving one of the roots $a, b, c, d$ fixed and permuting the others circularly, one can always, by a linear substitution, bring $R(t)$ to the form $R(t)=t^{3}-1$; which amounts to supposing $a=\infty$, $b=1$, $c=\alpha$, $d=\alpha^{2}$. There are eight period 3 substitutions, which permute three of these roots and leave the fourth fixed. To the four substitutions fixing one finite root correspond four types of pseudo-elliptic integrals. The substitutions to reduce these integrals are respectively
+\begin{equation*}
+t^{3}=x, \quad \left(\frac{t-1}{t+2}\right)^{3}=x, \quad \left(\frac{t-\alpha}{t+2\alpha}\right)^{3}=x, \quad \left(\frac{t-\alpha^{2}}{t+2\alpha^{2}}\right)^{3}=x.
+\end{equation*}
+The first is immediate. As for the second, an easy calculation allows one to verify that by setting $x=\left(\frac{t-1}{t+2}\right)^{3}$, we have
+\begin{equation*}
+\frac{1}{3}\frac{dx}{\sqrt{x(1-x)}}=\frac{t-1}{t+2}\frac{dt}{\sqrt{t^{3}-1}}.
+\end{equation*}
+Let A, B, C be three arbitrary constants; the integral
+\begin{equation*}
+\int\left(A\frac{t-1}{t+2}+B\frac{t-\alpha^{2}}{t+2\alpha^{2}}+C\frac{t-\alpha}{t+2\alpha}\right)\frac{dt}{\sqrt{t^{3}-1}}
+\end{equation*}
+will be expressed in finite terms using elementary symbols. This integral can be written
+\begin{equation*}
+\int\frac{\lambda(t^{3}-4)+\mu t^{2}+\nu t}{t^{3}+8}\frac{dt}{\sqrt{t^{3}-1}}
+\end{equation*}
+where $\lambda=A+B+C$, $\mu=-3(A+B\alpha^{2}+C\alpha)$, $\nu=6(A+B\alpha+C\alpha^{2})$. The coefficients $\lambda, \mu, \nu$ are, like A, B, C, arbitrary. Therefore the integrals
+\begin{equation*}
+\int\frac{(t^{3}-4)dt}{(t^{3}+8)\sqrt{t^{3}-1}}, \quad \int\frac{t^2 dt}{(t^{3}+8)\sqrt{t^{3}-1}}, \quad \int\frac{t\,dt}{(t^{3}+8)\sqrt{t^{3}-1}}
+\end{equation*}
+are pseudo-elliptic integrals; the last one is precisely the integral of Legendre and Clausen.
+
+\section*{5}
+The linear substitutions which permute the four quantities $\infty, 1, \alpha, \alpha^{2}$ form a group of twelve substitutions isomorphic to the group formed by the rotations which bring a regular tetrahedron onto itself.
+Let $S_{i}$ be one of the twelve substitutions and $\mu_{i}$ the corresponding multiplier. Let us take a rational function $F(t)$ satisfying the two relations
+\begin{equation}
+\begin{cases}
+\sum_{i=1}^{12}F(S_{i})=0, \\
+\sum_{i=1}^{12}\frac{1}{\mu_i}F(S_{i})=0;
+\end{cases}
+\end{equation}
+the integral
+\begin{equation*}
+\int F(t)\frac{dt}{\sqrt{t^{3}-1}}
+\end{equation*}
+is a pseudo-elliptic integral. To demonstrate this, I set
+\begin{align*}
+F(t)+F\left(\frac{t+2}{t-1}\right)+F\left(\frac{t+2\alpha}{\alpha^{2}t-1}\right)+F\left(\frac{t+2\alpha^{2}}{\alpha t-1}\right) &= 4\varphi(t), \\
+F(t)-F\left(\frac{t+2}{t-1}\right)+F\left(\frac{t+2\alpha}{\alpha^{2}t-1}\right)-F\left(\frac{t+2\alpha^{2}}{\alpha t-1}\right) &= 4\varphi_{1}(t), \\
+F(t)-F\left(\frac{t+2}{t-1}\right)-F\left(\frac{t+2\alpha}{\alpha^{2}t-1}\right)+F\left(\frac{t+2\alpha^{2}}{\alpha t-1}\right) &= 4\varphi_{2}(t), \\
+F(t)+F\left(\frac{t+2}{t-1}\right)-F\left(\frac{t+2\alpha}{\alpha^{2}t-1}\right)-F\left(\frac{t+2\alpha^{2}}{\alpha t-1}\right) &= 4\varphi_{3}(t);
+\end{align*}
+from which we deduce
+\begin{equation*}
+F(t)=\varphi(t)+\varphi_{1}(t)+\varphi_{2}(t)+\varphi_{3}(t).
+\end{equation*}
+But the functions $\varphi_{1}, \varphi_{2}, \varphi_{3}$ respectively satisfy the relations
+\begin{equation*}
+\varphi_{1}\left(\frac{t+2}{t-1}\right)+\varphi_{1}(t)=0, \quad \varphi_{2}\left(\frac{t+2\alpha}{\alpha^{2}t-1}\right)+\varphi_{2}(t)=0, \quad \varphi_{3}\left(\frac{t+2\alpha^{2}}{\alpha t-1}\right)+\varphi_{3}(t)=0,
+\end{equation*}
+so that, according to the proposition of n°2, the three integrals
+\begin{equation*}
+\int\varphi_{1}(t)\frac{dt}{\sqrt{t^{3}-1}}, \quad \int\varphi_{2}(t)\frac{dt}{\sqrt{t^{3}-1}}, \quad \int\varphi_{3}(t)\frac{dt}{\sqrt{t^{3}-1}}
+\end{equation*}
+are pseudo-elliptic integrals. We still have to consider the integral $\int\varphi(t)\frac{dt}{\sqrt{t^{3}-1}}$, but, taking into account the relations (6), we will have
+\begin{equation*}
+\varphi(t)+\varphi(\alpha t)+\varphi(\alpha^{2}t)=0, \quad \varphi(t)+\alpha^{2}\varphi(\alpha t)+\alpha\varphi(\alpha^{2}t)=0,
+\end{equation*}
+so that $\varphi(t)$ will be of the form $\varphi(t)=t^{2}\psi(t^{3})$, and the considered differential takes the form
+\begin{equation*}
+t^{2}\psi(t^{3})\frac{dt}{\sqrt{t^{3}-1}},
+\end{equation*}
+which one reduces immediately to the form (1), by setting $t^{3}=x$.
+
+\section*{6}
+
+One can still make two hypotheses on the linear substitutions which permute the four roots $a, b, c, d$:
+\begin{enumerate}
+    \item It may be that a substitution, having for its double points two of these roots, permutes the other two.
+    \item It may happen that there exists a linear substitution, circularly permuting the four roots.
+\end{enumerate}
+In the first case, the differential $\frac{dt}{\sqrt{R(t)}}$ can be reduced, by a linear substitution, to the form $\frac{dt}{\sqrt{t(t^{2}+1)}}$, and, in the second case, to the form $\frac{dt}{\sqrt{t^{4}-1}}$. Besides, one passes from the first to the second by changing $t$ into $\frac{1-t}{1+t}$. It is therefore sufficient to consider the second form. There exist eight substitutions permuting the four quantities $+1, -1, +i, -i$; they are the following:
+\begin{gather*}
+[t;t], \quad [t;it], \quad [t;-t], \quad [t;-it], \\
+\left[t;\frac{1}{t}\right], \quad \left[t;\frac{i}{t}\right], \quad \left[t;-\frac{1}{t}\right], \quad \left[t;-\frac{i}{t}\right];
+\end{gather*}
+they form a group isomorphic to the group formed by the rotations which bring a system of two rectangular diameters of the sphere back upon itself. One can make correspond to these substitutions the following types of reducible integrals:
+\begin{equation*}
+\int t \varphi(t^2) \frac{dt}{\sqrt{t^4-1}}, \quad \int (t \mp \frac{1}{t}) \varphi(t \pm \frac{1}{t}) \frac{dt}{\sqrt{t^4-1}}, \quad \dots
+\end{equation*}
+but it should be noted that the substitutions of period 4 do not provide new pseudo-elliptic integrals.
+
+\section*{7}
+
+Given a polynomial $R(t)$ of degree higher than the fourth, having only simple linear factors, there does not in general exist a linear substitution permuting the roots of the equation $R(t)=0$. If such substitutions exist, one can make correspond to them ultra-elliptic integrals of the form
+\begin{equation*}
+\int f[t,\sqrt{R(t)}]dt,
+\end{equation*}
+which it is possible to reduce, by an algebraic substitution, to integrals of a lower genus. Without entering into all the details here, I will recall the two following examples, which are well known.
+
+If one is dealing with a sixth-degree polynomial whose roots are in involution, one knows that one can, by a linear substitution, reduce it to the form
+\begin{equation*}
+R(u)=au^{6}+bu^{4}+cu^{2}+d,
+\end{equation*}
+and the two integrals of the first and second kind
+\begin{equation*}
+\int\frac{du}{\sqrt{R(u)}}, \quad \int\frac{u^2 du}{\sqrt{R(u)}}
+\end{equation*}
+are reduced by the substitution $u^{2}=x$ to elliptic integrals. This is basically the case of reduction found by Jacobi (Crelle's Journal, t. 8).
+
+As another example, let us take $R(t)=t(t^{4}-1)$; the six quantities $0, \infty, \pm1, \pm i$ are permuted by a group of twenty-four linear substitutions, derived from the two substitutions
+\begin{equation*}
+[t;it], \quad \left[t;\frac{1-t}{1+t}\right];
+\end{equation*}
+this group is isomorphic to the group formed by the rotations which bring a regular octahedron back upon itself. The substitutions of period 2, which permute the roots in pairs, are four in number:
+\begin{equation*}
+\left[t;\frac{1-t}{1+t}\right], \quad \left[t;\frac{1+t}{1-t}\right], \quad \dots
+\end{equation*}
+To each of them correspond two integrals of the first kind, having only two distinct periods,
+\begin{equation*}
+\int\frac{(t\pm1\pm\sqrt{2})dt}{\sqrt{t(t^{4}-1)}}, \quad \dots
+\end{equation*}
+According to a theorem due to M. Poincaré, one concludes from this that there will be an infinity of integrals of the form
+\begin{equation*}
+\int\frac{(\alpha t+\beta)dt}{\sqrt{t(t^{4}-1)}}
+\end{equation*}
+having only two distinct periods.
+
+\end{document}

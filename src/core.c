@@ -752,6 +752,8 @@ void core_init(void) {
     zero_test_init();
     void graphics_init(void);
     graphics_init();
+    void graph_init(void);
+    graph_init();
 
     /* Options/SetOptions/OptionValue + the default-options registry. Runs last
      * so every option-name symbol used by the registry is already interned. */

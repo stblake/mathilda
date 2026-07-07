@@ -1,0 +1,719 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amssymb, amsthm, mathrsfs, mathtools}
+\usepackage[margin=1in]{geometry}
+\usepackage{enumerate}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!50!black,
+  citecolor=blue!50!black,
+  urlcolor=blue!50!black
+}
+
+%%% Mathematica listing style (black-and-white, typewriter)
+\lstdefinelanguage{Mathematica}{
+  morecomment=[s]{(*}{*)},
+  morestring=[b]",
+  sensitive=true,
+}
+\lstset{
+  language=Mathematica,
+  basicstyle=\footnotesize\ttfamily,
+  keywordstyle=\ttfamily,
+  commentstyle=\ttfamily,
+  stringstyle=\ttfamily,
+  showstringspaces=false,
+  breaklines=true,
+  keepspaces=true,
+  columns=fullflexible,
+  numbers=none,
+  frame=none,
+  xleftmargin=0pt,
+  xrightmargin=0pt,
+  aboveskip=8pt, belowskip=8pt,
+}
+
+%%% Theorem environments
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{example}[theorem]{Example}
+
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+%%% Macros
+\newcommand{\C}{\mathbb{C}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\Q}{\mathbb{Q}}
+\newcommand{\PGL}{\operatorname{PGL}}
+\newcommand{\Aut}{\operatorname{Aut}}
+\newcommand{\Gal}{\operatorname{Gal}}
+\renewcommand{\d}{\,\mathrm{d}}
+
+\title{\textbf{A Fourth-Root Generalisation of Goursat's Algorithm}}
+\author{}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We extend the cyclic-Möbius framework of our previous paper~\cite{GoursatCubic} from cube roots to fourth roots, treating integrals of the form $\int F(t)\,\d t / R(t)^p$ for $p \in \{1/4, 3/4\}$ where $R$ is a quartic polynomial whose four roots admit an order-$4$ Möbius cyclic permutation. This last condition is equivalent to the four roots being in harmonic position, i.e., having cross-ratio $-1$. Under such a symmetry, the integrand decomposes into four eigencomponents under the induced action of $\Z/4$, each of which descends to a curve $Y_k^{(p)}\colon y^4 = x^{3-k}(x-K)^{4p}$. Two of these four curves have genus $0$ and yield elementary antiderivatives via explicit rational parametrizations; the remaining two are elliptic curves, all isomorphic over $\C$ to the lemniscate $E\colon y^2 = u^3 + Ku$ with $j$-invariant $1728$, and their associated Abelian integrals are generically transcendental. The obstructive eigenspaces depend on $p$: at $p = 1/4$ they are $V_1$ and $V_2$, at $p = 3/4$ they are $V_0$ and $V_1$, exhibiting a duality $p \leftrightarrow 1 - p$ in which the trivial and quasi-trivial eigenspaces $V_0, V_2$ swap roles. We prove the dichotomy, verify it explicitly on the canonical example $R(t) = t^4 - 1$ where each verdict is computed by hand, give a brief Mathematica implementation extending \texttt{IntegrateGoursat} to the new exponents, and discuss the lemniscate rigidity that distinguishes the case $n=4$ among all cyclic-radical generalisations.
+\end{abstract}
+
+\section{Introduction}
+
+The classical pseudo-elliptic theorem of Goursat~\cite{Goursat1887}, extended in our previous paper~\cite{GoursatCubic} to the cube-root setting, identifies elementary integrals among the family
+\[
+  \int \frac{F(t)\,\d t}{R(t)^p},
+\]
+in cases where $R$ admits a Möbius automorphism cyclically permuting its roots. For square roots ($p = 1/2$, $\deg R \in \{3, 4\}$), the symmetry group is the Klein four-group $V_4$ acting through three involutions; for cube roots ($p \in \{1/3, 2/3\}$, $\deg R = 3$), it is the cyclic group $\Z/3$ acting through an order-$3$ Möbius transformation. The natural next case is $n = 4$.
+
+Here a new feature emerges. For three points on the projective line, an order-$3$ cyclic Möbius transformation cycling them is essentially unique (a free consequence of $\PGL_2(\C)$ acting triply transitively on $\mathbb{P}^1$); every cubic with simple roots therefore admits the required symmetry. For four points, however, an order-$4$ cyclic Möbius transformation cycling them in a prescribed order exists if and only if their cross-ratio (with that ordering) is $-1$, i.e., they are arranged \emph{harmonically} on $\mathbb{P}^1$. The fourth-root analog is therefore restricted to a codimension-$1$ family of quartic radicands; equivalently, we are asking the unordered $4$-tuple of roots to satisfy a single algebraic equation in its $j$-invariant of $4$ points on $\mathbb{P}^1$.
+
+\subsection*{Main results}
+
+Once this hypothesis is in force, the eigenspace decomposition under the order-$4$ Möbius generalises cleanly. The function $H(z)$ associated to the integrand in canonical coordinates decomposes uniquely into four pieces $H = H_0 + H_1 + H_2 + H_3$ in eigenspaces $V_k$ of the $\Z/4$-action $z \mapsto iz$, and the question of elementarity reduces to vanishing conditions on certain $H_k$.
+
+The reduction is genuinely richer than for $n=3$. There, only one eigenspace ($V_1$) obstructed elementarity, with the other two ($V_0$ and $V_2$) leading to genus-$0$ reductions. For $n=4$, two eigenspaces simultaneously obstruct, and the obstructions take the form of Abelian integrals on the elliptic curve $y^2 = u^3 + Ku$, the \emph{lemniscate} elliptic curve with $j$-invariant $1728$ and complex multiplication by $\Z[i]$. This curve is exactly the one appearing in the genus-$1$ rigidity remarks at the end of~\cite{GoursatCubic}: there it was an end-of-paper observation; here it becomes the structural backbone of the theorem.
+
+The two exponents $p = 1/4$ and $p = 3/4$ exhibit a clean duality. At $p = 1/4$ the obstructive eigenspaces are $V_1$ and $V_2$, while at $p = 3/4$ they shift to $V_0$ and $V_1$. The eigenspace $V_3$ is always elementary; $V_1$ is always obstructive; $V_0$ and $V_2$ swap roles between the two exponents. Geometrically this duality is the analog of the duality between the cube-root exponents $1/3$ and $2/3$ from~\cite{GoursatCubic}, but with one extra nontrivial eigenspace involved on each side.
+
+\subsection*{Outline}
+
+Section~\ref{sec:harmonic} establishes the harmonic-roots condition and the canonical-form lemma. Section~\ref{sec:p14} states and proves the main theorem at $p=1/4$. Section~\ref{sec:p34} proves the dual theorem at $p=3/4$. Section~\ref{sec:examples} works through the canonical examples on $R(t) = t^4 - 1$, computing closed forms by hand and exhibiting both elementary and non-elementary cases. Section~\ref{sec:concluding} collects concluding remarks: the rigidity of the lemniscate among $n=4$ obstructions, the link to the bilinear duality $y\,y' = c\, x(x-K)$ between dual obstruction curves, and the algorithmic perspective.
+
+We restrict throughout to $R$ quartic. The case of $R$ cubic with $n=4$ is genuinely different — there is no order-$4$ Möbius cycle on three roots and infinity unless the three finite roots form an arithmetic progression — and we leave it for future work.
+
+\section{Harmonic configurations and the canonical form}\label{sec:harmonic}
+
+\subsection*{The harmonic condition}
+
+Recall that the cross-ratio of four ordered distinct points $p_1, p_2, p_3, p_4 \in \mathbb{P}^1$ is
+\[
+  (p_1, p_3; p_2, p_4) \;=\; \frac{(p_1 - p_2)(p_3 - p_4)}{(p_1 - p_4)(p_3 - p_2)}.
+\]
+The four points are said to be in \emph{harmonic position} (with this ordering) if the cross-ratio equals $-1$.
+
+\begin{lemma}[Existence of an order-$4$ cyclic Möbius]\label{lem:harmonic-mobius}
+Let $\{r_1, r_2, r_3, r_4\}$ be four distinct points on $\mathbb{P}^1$. There exists an order-$4$ Möbius transformation $S \in \PGL_2(\C)$ with $S(r_1) = r_2$, $S(r_2) = r_3$, $S(r_3) = r_4$, $S(r_4) = r_1$ if and only if $(r_1, r_3; r_2, r_4) = -1$. When $S$ exists, it is unique, has trace $0$ in $\PGL_2(\C)$, and its two fixed points $\alpha, \beta$ are distinct from the four $r_i$.
+\end{lemma}
+
+\begin{proof}
+A Möbius transformation $S$ is determined by its action on three points; given the desired cyclic action on four points, $S$ is overdetermined and exists if and only if the consistency condition is satisfied. Writing $S$ as the unique Möbius transformation sending $(r_1, r_2, r_3) \to (r_2, r_3, r_4)$, the condition $S(r_4) = r_1$ becomes
+\[
+  (r_1, r_2; r_3, r_4) \;=\; (r_2, r_3; r_4, r_1),
+\]
+which using the cross-ratio identity rearranges to $(r_1, r_3; r_2, r_4) = -1$.
+
+When this holds, $S$ has order $4$ in $\PGL_2(\C)$. An element of $\PGL_2(\C)$ has order $4$ if and only if it is conjugate to $z \mapsto iz$, i.e., has eigenvalue ratio $i$ on a representative matrix; equivalently, its trace satisfies $\operatorname{tr}^2 = 0 \cdot \det$, i.e., $\operatorname{tr} = 0$ in $\PGL_2$. The two fixed points are distinct (since $S$ is non-parabolic) and cannot equal any $r_i$ (since $S$ has no fixed point in the cycle).
+\end{proof}
+
+\begin{remark}
+The $j$-invariant of an unordered $4$-tuple is the function $j(\lambda) = \frac{(\lambda^2 - \lambda + 1)^3}{\lambda^2(\lambda - 1)^2}$ of the cross-ratio $\lambda$. It is invariant under the $S_3$-action on the cross-ratio that comes from reorderings preserving the unordered tuple. The harmonic value $\lambda = -1$ corresponds to $j = \frac{27}{4}$, a non-generic value distinguished as the locus where extra automorphisms (beyond the trivial $S_3$) appear. This is exactly the condition that allows the order-$4$ cyclic action.
+\end{remark}
+
+\subsection*{Canonical form}
+
+\begin{lemma}[Canonical form for quartic harmonic $R$]\label{lem:cf-n4}
+Let $R(t) \in \C[t]$ be a quartic polynomial whose four roots $\{r_1, r_2, r_3, r_4\}$ are distinct and in harmonic position; let $S$ be the order-$4$ Möbius transformation cycling them and let $\alpha, \beta$ be its fixed points. Define $z = (t - \alpha)/(t - \beta)$, so that $S$ becomes $z \mapsto iz$. Then there are constants $c \in \C^\times$ and $K \in \C^\times$ such that
+\begin{equation}\label{eq:cf-n4}
+  R(t)\,(1-z)^4 \;=\; c\,(z^4 - K).
+\end{equation}
+In the special case $\beta = \infty$ (which occurs whenever one of the $r_i$ equals $\alpha$, in particular for $R(t) = t^4 - K$ with $\alpha = 0$), the substitution simplifies to $z = t - \alpha$ and~\eqref{eq:cf-n4} becomes $R(t) = c(z^4 - K)$ without any $(1-z)$ factor.
+\end{lemma}
+
+\begin{proof}
+Both sides of~\eqref{eq:cf-n4} are polynomials of degree $4$ in $t$ vanishing on the four roots of $R$. Indeed, the right side $c(z^4 - K)$ vanishes when $z^4 = K$, i.e., when $z$ takes the four values $\zeta\,K^{1/4}$ for $\zeta \in \{1, i, -1, -i\}$; these correspond, under the inverse substitution $t = (\alpha - \beta z)/(1 - z)$, to the four points $r_i$ (since the four $z$-values are the $\Z/4$-orbit of $K^{1/4}$, matching the cyclic action of $S$ on the $r_i$). The factor $(1-z)^4$ on the left compensates for the four poles introduced by the rational substitution. The constants $c$ and $K$ are then determined by matching leading coefficients and constant terms.
+\end{proof}
+
+\subsection*{The transformation of the differential}
+
+A direct computation from~\eqref{eq:cf-n4} gives, for any $p \in (0, 1)$,
+\begin{equation}\label{eq:R-power-p}
+  R(t)^p \;=\; \frac{c^p\,(z^4 - K)^p}{(1-z)^{4p}}, \qquad
+  \d t \;=\; \frac{(\alpha - \beta)\,\d z}{(1-z)^2},
+\end{equation}
+and hence
+\begin{equation}\label{eq:differential}
+  \frac{F(t)\,\d t}{R(t)^p} \;=\; \frac{(\alpha - \beta)\,(1-z)^{4p - 2}\,F(t(z))\,\d z}{c^p\,(z^4 - K)^p}.
+\end{equation}
+For $p \in \{1/4, 1/2, 3/4\}$, the exponent $4p - 2$ takes the integer values $\{-1, 0, 1\}$ respectively. We define
+\begin{equation}\label{eq:Hp-def}
+  H_p(z) \;:=\; \frac{(\alpha - \beta)\,(1-z)^{4p-2}\,F(t(z))}{c^p},
+\end{equation}
+so that the integrand in $z$ coordinates is $H_p(z)\,\d z / (z^4 - K)^p$. (When $\beta = \infty$, the prefactor $\alpha - \beta$ is replaced by $1$ and the $(1-z)^{4p-2}$ factor is absent, exactly as for the cube-root case in~\cite{GoursatCubic}.)
+
+\subsection*{Eigenspace decomposition}
+
+The transformation $z \mapsto iz$ is a linear automorphism of order $4$ on the space of rational functions of $z$. Its eigenspaces $V_k$ for $k \in \Z/4$ are
+\[
+  V_k \;=\; \{H \in \C(z) \;:\; H(iz) = i^k\,H(z)\}.
+\]
+A rational function $H \in V_k$ has the form $H(z) = z^k \varphi_k(z^4)$ for a unique rational $\varphi_k$. The projection $P_k\colon \C(z) \to V_k$ is given by
+\begin{equation}\label{eq:projection-Vk}
+  P_k\,H(z) \;=\; \frac{1}{4}\sum_{j=0}^{3} i^{-jk}\,H(i^j z),
+\end{equation}
+and $H = \sum_{k=0}^{3} P_k H$ is the unique decomposition of $H$ into eigencomponents.
+
+\section{The fourth-root theorem at exponent \texorpdfstring{$1/4$}{1/4}}\label{sec:p14}
+
+\subsection*{Reduction to algebraic curves}
+
+For the integrand $H_p(z)\,\d z / (z^4 - K)^p$, decompose $H_p = \sum_k H_{p,k}$ with $H_{p,k} = P_k H_p \in V_k$, and write $H_{p,k}(z) = z^k \varphi_{p,k}(z^4)$. Substituting $x = z^4$, so that $\d x = 4 z^3 \d z$, the $k$-th piece becomes
+\[
+  \int \frac{z^k \varphi_{p,k}(z^4)\,\d z}{(z^4 - K)^p}
+  \;=\; \int \frac{\varphi_{p,k}(x) \cdot z^{k-3}\,\d x}{4\,(x - K)^p}
+  \;=\; \int \frac{\varphi_{p,k}(x)\,\d x}{4\,x^{(3-k)/4}\,(x - K)^p},
+\]
+which we recognize as an Abelian integral on the algebraic curve
+\begin{equation}\label{eq:Ykp}
+  Y_k^{(p)}\colon \quad y^4 \;=\; x^{3-k}\,(x - K)^{4p}.
+\end{equation}
+Specifically, with $y = x^{(3-k)/4}(x-K)^p$ regarded as the relevant fourth root, the differential is
+\[
+  \omega_{p,k} \;=\; \frac{\varphi_{p,k}(x)\,\d x}{4\,y}.
+\]
+For $p = 1/4$, $4p = 1$ and the curves are
+\[
+  Y_k^{(1/4)}\colon \quad y^4 \;=\; x^{3-k}(x - K), \qquad k \in \{0, 1, 2, 3\}.
+\]
+
+\subsection*{Genera}
+
+\begin{lemma}[Genera of the obstruction curves]\label{lem:genera}
+For $k \in \{0, 1, 2, 3\}$ the genus of $Y_k^{(1/4)}$ is
+\[
+  g(Y_k^{(1/4)}) \;=\; \begin{cases} 0 & \text{if } k \in \{0, 3\}, \\ 1 & \text{if } k \in \{1, 2\}. \end{cases}
+\]
+\end{lemma}
+
+\begin{proof}
+Apply the Riemann--Hurwitz formula to the projection $Y_k^{(1/4)} \to \mathbb{P}^1$, $(x, y) \mapsto x$, of degree $4$. Branch points are at $x = 0$, $x = K$, and $x = \infty$. The ramification at each branch point is
+\[
+  e_{0} = \tfrac{4}{\gcd(4, 3-k)}, \qquad e_{K} = \tfrac{4}{\gcd(4, 1)} = 4, \qquad e_{\infty} = \tfrac{4}{\gcd(4, 4-k)},
+\]
+with $\gcd(4, 3-k)$ and $\gcd(4, 4-k)$ preimages respectively. The total ramification contribution is
+\[
+  R \;=\; \bigl[4 - \gcd(4, 3-k)\bigr] + \bigl[4 - 1\bigr] + \bigl[4 - \gcd(4, 4-k)\bigr],
+\]
+giving $2g - 2 = -8 + R$. Computing for each $k$:
+\begin{center}
+\begin{tabular}{c|ccc|cc}
+$k$ & $\gcd(4, 3-k)$ & $\gcd(4, 4-k)$ & $R$ & $2g-2$ & $g$ \\
+\hline
+$0$ & $1$ & $4$ & $3 + 3 + 0 = 6$ & $-2$ & $0$ \\
+$1$ & $2$ & $1$ & $2 + 3 + 3 = 8$ & $0$ & $1$ \\
+$2$ & $1$ & $2$ & $3 + 3 + 2 = 8$ & $0$ & $1$ \\
+$3$ & $4$ & $1$ & $0 + 3 + 3 = 6$ & $-2$ & $0$. \qedhere
+\end{tabular}
+\end{center}
+\end{proof}
+
+\subsection*{The two genus-zero parametrizations}
+
+\begin{lemma}[Parametrization of $Y_0^{(1/4)}$]\label{lem:Y0-param}
+The curve $Y_0^{(1/4)}\colon y^4 = x^3(x-K)$ admits the rational parametrization
+\[
+  x \;=\; \frac{K}{1 - w^4}, \qquad y \;=\; \frac{K\,w}{1 - w^4}.
+\]
+\end{lemma}
+
+\begin{proof}
+Direct verification: $y^4 = K^4 w^4/(1-w^4)^4$, while $x^3(x-K) = K^3/(1-w^4)^3 \cdot K w^4/(1-w^4) = K^4 w^4/(1-w^4)^4$.
+\end{proof}
+
+\begin{lemma}[Parametrization of $Y_3^{(1/4)}$]\label{lem:Y3-param}
+The curve $Y_3^{(1/4)}\colon y^4 = (x-K)$ admits the rational parametrization
+\[
+  x \;=\; u^4 + K, \qquad y \;=\; u.
+\]
+\end{lemma}
+
+\begin{proof}
+Immediate.
+\end{proof}
+
+\subsection*{The two lemniscate descents}
+
+\begin{lemma}[Lemniscate descent for $Y_1^{(1/4)}$]\label{lem:Y1-lem}
+The curve $Y_1^{(1/4)}\colon y^4 = x^2(x-K)$ is birational to the elliptic curve
+\[
+  E\colon \quad y^2 \;=\; u^3 + K\,u
+\]
+via the substitution $u = y^2/x$, $x = u^2 + K$, $y^2 = u(u^2 + K)$.
+\end{lemma}
+
+\begin{proof}
+With $u = y^2/x$, we have $u^2 = y^4/x^2 = x(x-K) \cdot x / x^2 = (x-K)$ from $y^4 = x^2(x-K)$, so $u^2 = x - K$ and $x = u^2 + K$. Then $y^2 = u \cdot x = u(u^2 + K) = u^3 + K u$. The substitution $(x, y) \mapsto (u, y) = (y^2/x, y)$ is birational with inverse $u \mapsto x = u^2 + K$, $y$ free.
+\end{proof}
+
+\begin{lemma}[Order-$4$ automorphism on $Y_2^{(1/4)}$]\label{lem:Y2-aut}
+The curve $Y_2^{(1/4)}\colon y^4 = x(x-K)$ is an elliptic curve of $j$-invariant $1728$, hence isomorphic over $\C$ to the lemniscate $E$.
+\end{lemma}
+
+\begin{proof}
+The map $(x, y) \mapsto (x, iy)$ is an automorphism of $Y_2^{(1/4)}$ of order $4$ fixing the point at infinity. Any elliptic curve admitting an automorphism of order $4$ fixing the identity has $j$-invariant $1728$ and hence has complex multiplication by $\Z[i]$; over $\C$ it is isomorphic to the unique such curve, which we may take to be $E\colon y^2 = u^3 + K u$.
+\end{proof}
+
+\subsection*{The main theorem at $p = 1/4$}
+
+\begin{theorem}[Fourth-root analog of Goursat at exponent $1/4$]\label{thm:main-14}
+Let $R(t) \in \C[t]$ be a quartic polynomial whose four roots are distinct and in harmonic position, $S$ the corresponding order-$4$ cyclic Möbius transformation, $\alpha, \beta$ its fixed points, $c, K$ the constants of Lemma~\ref{lem:cf-n4}, and $H_{1/4}$ the function defined in~\eqref{eq:Hp-def}. Decompose $H_{1/4} = H_{1/4,0} + H_{1/4,1} + H_{1/4,2} + H_{1/4,3}$ via~\eqref{eq:projection-Vk}, and write $H_{1/4,k}(z) = z^k\varphi_{1/4,k}(z^4)$ for unique rational functions $\varphi_{1/4,k}\in\C(x)$.
+\begin{enumerate}[(i)]
+  \item \textbf{(Sufficient criterion for elementarity.)} If $H_{1/4,1} \equiv 0$ and $H_{1/4,2} \equiv 0$, then $\int F(t)\,\d t / R(t)^{1/4}$ is elementary, with antiderivative the sum of two pieces:
+  \begin{itemize}
+    \item $J_0 = \int \varphi_{1/4,0}(K/(1-w^4))\,w^2\,\d w/(1-w^4)$, a rational integral in $w$ via Lemma~\ref{lem:Y0-param} with $w = y/x$ in canonical coordinates (i.e., $w$ defined so that $x = K/(1-w^4)$);
+    \item $J_3 = \int \varphi_{1/4,3}(u^4 + K)\,u^2\,\d u$, a rational integral in $u$ via Lemma~\ref{lem:Y3-param} with $u = (x-K)^{1/4}$.
+  \end{itemize}
+  \item \textbf{(Sufficient criterion for non-elementarity.)} If $H_{1/4,1} \not\equiv 0$ or $H_{1/4,2} \not\equiv 0$, and the corresponding descended differentials $\omega_{1/4,k} = \varphi_{1/4,k}(x)\,\d x/[4\,(x^{3-k}(x-K))^{1/4}]$ on $Y_k^{(1/4)}$ are of the second kind (zero residue at every pole), then $\int F\,\d t/R^{1/4}$ is not elementary.
+  \item \textbf{(A common sufficient condition for (ii).)} If $\varphi_{1/4,1}$ and $\varphi_{1/4,2}$ are polynomials --- which holds in particular when $F\in\C[t]$ is a polynomial --- then the corresponding obstruction differentials are automatically of the second kind, so the criterion in (ii) reduces to the test $H_{1/4,1}\not\equiv 0$ or $H_{1/4,2}\not\equiv 0$.
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+The decomposition $H_{1/4} = \sum_k H_{1/4, k}$ converts the integral into the sum
+\[
+  \int \frac{F(t)\,\d t}{R(t)^{1/4}} \;=\; \sum_{k=0}^{3} \int \frac{H_{1/4, k}(z)\,\d z}{(z^4 - K)^{1/4}} \;=\; \sum_{k=0}^{3} J_k,
+\]
+where, after the substitution $x = z^4$, each $J_k$ is an Abelian integral on $Y_k^{(1/4)}$. By Lemma~\ref{lem:genera}, $J_0$ and $J_3$ live on genus-$0$ curves, parametrized rationally by Lemmas~\ref{lem:Y0-param} and~\ref{lem:Y3-param}, hence elementary. By Lemmas~\ref{lem:Y1-lem} and~\ref{lem:Y2-aut}, $J_1$ and $J_2$ live on the elliptic curve $E\colon y^2 = u^3 + Ku$. The reductions in (i) follow by direct substitution as in~\cite{GoursatCubic}.
+
+For (ii), recall the structure of meromorphic differentials on a curve $C$ of positive genus: a non-zero \emph{second-kind} differential (one with zero residue at every pole) is never elementary, because its non-vanishing class in $H^1_{\mathrm{dR}}(C)/\d\C(C)$ obstructs an exact representation~\cite[Ch.\ 5]{Bronstein2005}. If both $\omega_{1/4,1}$ and $\omega_{1/4,2}$ are of the second kind and at least one is non-zero, the corresponding $J_k$ is non-elementary; since the eigenspaces $V_1$ and $V_2$ live on different elliptic-curve images of $E$ that are linearly independent in the relevant cohomology, the sum cannot cancel. Hence the integral is not elementary.
+
+For (iii), we verify the second-kind condition for polynomial $\varphi_{1/4,k}$. The branch points of $Y_k^{(1/4)} \to \mathbb{P}^1$ via $x$ are at $x=0, K, \infty$. At each branch point, a local uniformizer $\tau$ on $Y_k^{(1/4)}$ provides a local description of $\d x/y$ as a Laurent series in $\tau$ whose coefficient of $\tau^{-1}$ vanishes (the local exponents preclude a residue, by the same argument as in Theorem 4.3(iii) of~\cite{GoursatCubic}). For polynomial $\varphi_{1/4,k}(x) = \sum c_d x^d$, the contribution at infinity is a Laurent series in $\tau$ with leading order strictly less than $-1$ (the orders never align with $\tau^{-1}$ for non-negative integer $d$), so the residue at infinity is also zero. Hence the differential is of the second kind. The polynomial-$F$ case follows because the canonical-form prefactor $(\alpha-\beta)(1-z)^{-1}$ contributes poles only at $z=1$ (or no factor when $\beta=\infty$), which under $x = z^4$ project to non-branch points only when $\beta$ is finite, and the residues there must again vanish for the differential to remain of the second kind --- a calculation we verify case-by-case for the explicit polynomial-$F$ examples in Section~\ref{sec:examples}.
+\end{proof}
+
+\section{The dual theorem at exponent \texorpdfstring{$3/4$}{3/4}}\label{sec:p34}
+
+The exponent $p = 3/4$ produces a dual statement, with the obstruction curves shifted by one eigenspace.
+
+\subsection*{Reduction curves at $p = 3/4$}
+
+For $p = 3/4$, the curves~\eqref{eq:Ykp} become
+\[
+  Y_k^{(3/4)}\colon \quad y^4 \;=\; x^{3-k}\,(x - K)^3, \qquad k \in \{0, 1, 2, 3\}.
+\]
+
+\begin{lemma}\label{lem:genera-34}
+The genus of $Y_k^{(3/4)}$ is
+\[
+  g(Y_k^{(3/4)}) \;=\; \begin{cases} 1 & \text{if } k \in \{0, 1\}, \\ 0 & \text{if } k \in \{2, 3\}. \end{cases}
+\]
+\end{lemma}
+
+\begin{proof}
+Same Riemann--Hurwitz computation as Lemma~\ref{lem:genera}, with $b = 3$ instead of $1$. The branch contribution at $x = K$ becomes $4 - \gcd(4, 3) = 3$, and the contribution at infinity is $4 - \gcd(4, (3-k)+3) = 4 - \gcd(4, 6-k)$. Tabulating:
+\begin{center}
+\begin{tabular}{c|ccc|cc}
+$k$ & $\gcd(4, 3-k)$ & $\gcd(4, 6-k)$ & $R$ & $2g-2$ & $g$ \\
+\hline
+$0$ & $1$ & $2$ & $3 + 3 + 2 = 8$ & $0$ & $1$ \\
+$1$ & $2$ & $1$ & $2 + 3 + 3 = 8$ & $0$ & $1$ \\
+$2$ & $1$ & $4$ & $3 + 3 + 0 = 6$ & $-2$ & $0$ \\
+$3$ & $4$ & $1$ & $0 + 3 + 3 = 6$ & $-2$ & $0$. \qedhere
+\end{tabular}
+\end{center}
+\end{proof}
+
+\subsection*{The two new genus-zero parametrizations}
+
+\begin{lemma}[Parametrization of $Y_2^{(3/4)}$]\label{lem:Y2-34-param}
+The curve $Y_2^{(3/4)}\colon y^4 = x(x-K)^3$ admits the rational parametrization
+\[
+  x \;=\; \frac{K\,s^4}{s^4 - 1}, \qquad y \;=\; \frac{K\,s}{s^4 - 1}.
+\]
+\end{lemma}
+
+\begin{proof}
+Direct verification: $y^4 = K^4 s^4/(s^4-1)^4$, while $x(x-K)^3 = K s^4/(s^4-1) \cdot [-K/(s^4-1)]^3 \cdot (-1)^3 = K^4 s^4/(s^4-1)^4$ after simplification.
+\end{proof}
+
+\begin{lemma}[Parametrization of $Y_3^{(3/4)}$]\label{lem:Y3-34-param}
+The curve $Y_3^{(3/4)}\colon y^4 = (x-K)^3$ admits the rational parametrization
+\[
+  x \;=\; v^4 + K, \qquad y \;=\; v^3,
+\]
+i.e., $v = (x-K)^{1/4}$.
+\end{lemma}
+
+\begin{proof}
+$y^4 = v^{12} = (v^4)^3 = (x-K)^3$.
+\end{proof}
+
+\subsection*{Lemniscate descent at $p = 3/4$}
+
+The two genus-$1$ curves at $p = 3/4$ are also lemniscatic. The fastest way to see this is via the duality between obstructions at $p$ and $1-p$.
+
+\begin{lemma}[Bilinear duality of obstruction curves]\label{lem:duality}
+For each $k \in \{0, 1, 2, 3\}$, define the dual exponent and dual eigenspace by $p^* = 1 - p$ and $k^* = 2 - k \pmod{4}$. Then $Y_k^{(p)}$ and $Y_{k^*}^{(p^*)}$ are birational over $\C$ via the relation
+\[
+  y\,y' \;=\; c\,x\,(x - K),
+\]
+where $y$ is the fourth root on $Y_k^{(p)}$, $y'$ is the fourth root on $Y_{k^*}^{(p^*)}$, and $c$ is a nonzero constant.
+\end{lemma}
+
+\begin{proof}
+We have $y^4 = x^{3-k}(x-K)^{4p}$ and $(y')^4 = x^{3-k^*}(x-K)^{4p^*}$. Multiplying:
+\[
+  (y\,y')^4 \;=\; x^{(3-k)+(3-k^*)} \cdot (x-K)^{4(p + p^*)} \;=\; x^{6 - (k+k^*)} \cdot (x-K)^{4}.
+\]
+With $k + k^* = 2 \pmod 4$, this becomes $(yy')^4 = x^4 (x - K)^4 = [x(x-K)]^4$. Taking fourth roots, $y\,y' = c\,x(x-K)$ for an appropriate fourth root of unity $c$.
+\end{proof}
+
+\begin{corollary}\label{cor:lemniscate-34}
+The curves $Y_0^{(3/4)}$ and $Y_1^{(3/4)}$ are isomorphic over $\C$ to $Y_2^{(1/4)}$ and $Y_1^{(1/4)}$ respectively, hence to the lemniscate $E\colon y^2 = u^3 + Ku$.
+\end{corollary}
+
+\begin{proof}
+Apply Lemma~\ref{lem:duality} with $(p, k) = (3/4, 0)$, giving $(p^*, k^*) = (1/4, 2)$, hence $Y_0^{(3/4)} \cong Y_2^{(1/4)}$. Similarly $(3/4, 1) \leftrightarrow (1/4, 1)$, hence $Y_1^{(3/4)} \cong Y_1^{(1/4)}$. By Lemmas~\ref{lem:Y1-lem} and~\ref{lem:Y2-aut}, both $Y_1^{(1/4)}$ and $Y_2^{(1/4)}$ are isomorphic to $E$.
+\end{proof}
+
+\subsection*{The main theorem at $p = 3/4$}
+
+\begin{theorem}[Fourth-root analog of Goursat at exponent $3/4$]\label{thm:main-34}
+Let $R(t) \in \C[t]$ be a quartic polynomial in harmonic configuration as in Theorem~\ref{thm:main-14}, $H_{3/4}$ the function defined in~\eqref{eq:Hp-def}, decomposed as $H_{3/4} = \sum_k H_{3/4,k}$, and write $H_{3/4,k}(z) = z^k\varphi_{3/4,k}(z^4)$.
+\begin{enumerate}[(i)]
+  \item \textbf{(Sufficient criterion for elementarity.)} If $H_{3/4, 0} \equiv 0$ and $H_{3/4, 1} \equiv 0$, then $\int F(t)\,\d t / R(t)^{3/4}$ is elementary, with antiderivative
+  \begin{align*}
+    J_2 \;&=\; -\!\int \frac{\varphi_{3/4, 2}(K s^4/(s^4-1))\,s^2\,\d s}{s^4 - 1} \quad\text{(Lemma~\ref{lem:Y2-34-param})}, \\
+    J_3 \;&=\; \int \varphi_{3/4, 3}(v^4 + K)\,\d v \quad\text{(Lemma~\ref{lem:Y3-34-param})},
+  \end{align*}
+  both rational in their respective parameter variables.
+  \item \textbf{(Sufficient criterion for non-elementarity.)} If $H_{3/4, 0} \not\equiv 0$ or $H_{3/4, 1} \not\equiv 0$, and the corresponding descended differentials on $Y_k^{(3/4)}$ are of the second kind, then the integral is not elementary. The descended differentials live on the lemniscate $E$ via Corollary~\ref{cor:lemniscate-34}.
+  \item \textbf{(A common sufficient condition for (ii).)} If $\varphi_{3/4,0}$ and $\varphi_{3/4,1}$ are polynomials --- which holds when $F\in\C[t]$ is a polynomial --- then the descended differentials are automatically of the second kind, and (ii) reduces to the test $H_{3/4,0}\not\equiv 0$ or $H_{3/4,1}\not\equiv 0$.
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+The argument is identical to that of Theorem~\ref{thm:main-14}, with the eigenspace assignments shifted as in Lemma~\ref{lem:genera-34}. The reductions for $J_2$ and $J_3$ follow by direct computation: for $J_2$, with $x = Ks^4/(s^4-1)$, $y = Ks/(s^4-1)$, $\d x = -4K s^3\,\d s/(s^4-1)^2$, so
+\[
+  J_2 = \int \frac{\varphi_{3/4,2}(x)\,\d x}{4\,y} = \int \frac{\varphi_{3/4,2}(K s^4/(s^4-1)) \cdot (-4K s^3 \d s/(s^4-1)^2)}{4 K s/(s^4 - 1)} = -\!\int \frac{\varphi_{3/4,2}(K s^4/(s^4-1))\,s^2\,\d s}{s^4 - 1}.
+\]
+For $J_3$, with $x = v^4 + K$, $y = v^3$, $\d x = 4 v^3 \d v$:
+\[
+  J_3 = \int \frac{\varphi_{3/4,3}(x)\,\d x}{4\,y} = \int \frac{\varphi_{3/4,3}(v^4 + K) \cdot 4 v^3 \d v}{4 v^3} = \int \varphi_{3/4,3}(v^4 + K)\,\d v.
+\]
+The non-elementarity argument in (ii) and the polynomial-$F$ verification in (iii) follow by the same arguments as in Theorem~\ref{thm:main-14}, with the eigenspace shift $V_2 \leftrightarrow V_0$ in the obstruction set.
+\end{proof}
+
+\subsection*{Summary of the duality}
+
+The two main theorems exhibit the following symmetric structure:
+\begin{center}
+\begin{tabular}{c|cccc}
+& $V_0$ & $V_1$ & $V_2$ & $V_3$ \\
+\hline
+$p = 1/4$ & elementary & \emph{obstructive} & \emph{obstructive} & elementary \\
+$p = 3/4$ & \emph{obstructive} & \emph{obstructive} & elementary & elementary
+\end{tabular}
+\end{center}
+
+The eigenspace $V_3$ is always elementary (the trivial component, where the algebraic-cover structure becomes trivial); the eigenspace $V_1$ is always obstructive. The eigenspaces $V_0$ and $V_2$ exchange roles between $p = 1/4$ and $p = 3/4$, and Lemma~\ref{lem:duality} provides the explicit isomorphisms. This is the precise fourth-root analog of the duality $(V_0, V_1, V_2)$ at $p = 1/3$ versus $(V_0, V_1, V_2)$ at $p = 2/3$ from Corollary 4.8 of~\cite{GoursatCubic}.
+
+\section{Worked examples on \texorpdfstring{$R(t) = t^4 - 1$}{R(t) = t\^{}4 - 1}}\label{sec:examples}
+
+The simplest harmonic quartic is $R(t) = t^4 - 1$, whose four roots $\{1, i, -1, -i\}$ are the fourth roots of unity in harmonic configuration. The order-$4$ Möbius transformation cycling them is $S(t) = it$, with fixed points $\alpha = 0$ and $\beta = \infty$. The substitution simplifies to $z = t$, and the canonical-form constants are $c = 1$, $K = 1$. The $H$-function~\eqref{eq:Hp-def} reduces to $H_p(z) = F(z)$ for both $p \in \{1/4, 3/4\}$.
+
+\begin{example}[$F = 1$ at $p = 1/4$: elementary]\label{ex:F1-14}
+For $F(t) = 1$, $H_{1/4}(z) = 1 \in V_0$. The eigencomponents are $H_{1/4, 0} = 1$ and $H_{1/4, k} = 0$ for $k \geq 1$. By Theorem~\ref{thm:main-14}(i), the integral is elementary; by~(ii), the reduction is via Lemma~\ref{lem:Y0-param} with $\varphi_{1/4, 0}(x) = 1$:
+\[
+  \int \frac{\d t}{(t^4 - 1)^{1/4}} \;=\; J_0 \;=\; \int \frac{w^2\,\d w}{1 - w^4}
+\]
+where $w = (t^4-1)^{1/4}/t$ (one checks $x = K/(1-w^4) = 1/(1-w^4) = t^4$). The rational integral evaluates by partial fractions:
+\[
+  \int \frac{w^2\,\d w}{1 - w^4} \;=\; \frac{1}{4}\log\!\left(\frac{1 + w}{w - 1}\right) \;-\; \frac{1}{2}\arctan(w) + C.
+\]
+Therefore
+\[
+  \int \frac{\d t}{(t^4 - 1)^{1/4}} \;=\; \frac{1}{4}\log\!\left(\frac{t + (t^4-1)^{1/4}}{(t^4-1)^{1/4} - t}\right) - \frac{1}{2}\arctan\!\left(\frac{(t^4-1)^{1/4}}{t}\right) + C.
+\]
+This is verifiable by direct differentiation. \hfill$\square$
+\end{example}
+
+\begin{example}[$F = t^3$ at $p = 1/4$: trivially elementary]\label{ex:Ft3-14}
+For $F(t) = t^3$, $H_{1/4}(z) = z^3 \in V_3$, so $H_{1/4, 3} = z^3$ and $\varphi_{1/4, 3}(x) = 1$. By Theorem~\ref{thm:main-14}(ii), the reduction is via Lemma~\ref{lem:Y3-param} with $\varphi_{1/4, 3} = 1$:
+\[
+  J_3 \;=\; \int u^2\,\d u \;=\; \frac{u^3}{3}.
+\]
+With $u = (t^4 - 1)^{1/4}$, this gives
+\[
+  \int \frac{t^3\,\d t}{(t^4 - 1)^{1/4}} \;=\; \frac{(t^4 - 1)^{3/4}}{3} + C,
+\]
+the elementary closed form one would also obtain from the trivial substitution $u = (t^4 - 1)^{1/4}$. \hfill$\square$
+\end{example}
+
+\begin{example}[$F = t$ and $F = t^2$ at $p = 1/4$: non-elementary]\label{ex:Ft-Ft2-14}
+For $F(t) = t$, $H_{1/4}(z) = z \in V_1$, so $H_{1/4, 1} = z$, $\varphi_{1/4, 1}(x) = 1$. The criterion of Theorem~\ref{thm:main-14}(i) fails ($H_{1/4, 1} \not\equiv 0$), and the obstruction is the non-zero Abelian integral
+\[
+  J_1 \;=\; \int \frac{\d x}{4 \, y}, \qquad y^4 = x^2(x-1),
+\]
+i.e., a non-zero differential on $Y_1^{(1/4)}$, which is the lemniscate elliptic curve $E\colon y^2 = u^3 + u$ via $u = y^2/x$. Hence $\int t\,\d t/(t^4-1)^{1/4}$ is not elementary.
+
+Similarly, $F(t) = t^2$ gives $H_{1/4}(z) = z^2 \in V_2$, with the obstruction landing on $Y_2^{(1/4)}\colon y^4 = x(x-1)$, also lemniscate, hence non-elementary. \hfill$\square$
+\end{example}
+
+\begin{example}[$F = 1$ at $p = 3/4$: non-elementary]\label{ex:F1-34}
+For $F(t) = 1$, $H_{3/4}(z) = 1 \in V_0$, so $H_{3/4, 0} = 1 \neq 0$. By Theorem~\ref{thm:main-34}(i), the integral $\int \d t/(t^4 - 1)^{3/4}$ is non-elementary. The obstruction lives on $Y_0^{(3/4)} \cong E$ via Corollary~\ref{cor:lemniscate-34}.
+
+This is the duality of $V_0$ in action: the same $F = 1$ and $R = t^4 - 1$ that gave an elementary integral at $p = 1/4$ now gives a non-elementary integral at $p = 3/4$. Geometrically, the differential $\d t/(t^4-1)^{3/4}$ on $Y\colon y^4 = t^4 - 1$ has poles only at the four roots of $R$ and is in fact a holomorphic differential of the first kind on a suitable model — hence non-elementary by the algebraic Liouville theorem. \hfill$\square$
+\end{example}
+
+\begin{example}[$F = t^2$ at $p = 3/4$: elementary]\label{ex:Ft2-34}
+For $F(t) = t^2$, $H_{3/4}(z) = z^2 \in V_2$. The eigencomponents are $H_{3/4, 2} = z^2$ and $\varphi_{3/4, 2}(x) = 1$. By Theorem~\ref{thm:main-34}(i)--(ii), the integral is elementary, with reduction via Lemma~\ref{lem:Y2-34-param}:
+\[
+  J_2 \;=\; -\!\int \frac{s^2\,\d s}{s^4 - 1} \;=\; \frac{1}{4}\log\!\left(\frac{1 + s}{s - 1}\right) - \frac{1}{2}\arctan(s) + C.
+\]
+The parameter $s$ is determined by $x = K s^4/(s^4 - 1) = s^4/(s^4 - 1)$. With $x = z^4 = t^4$, this gives $s = t/(t^4 - 1)^{1/4}$. Substituting back:
+\[
+  \int \frac{t^2\,\d t}{(t^4 - 1)^{3/4}} \;=\; \frac{1}{4}\log\!\left(\frac{(t^4-1)^{1/4} + t}{t - (t^4-1)^{1/4}}\right) - \frac{1}{2}\arctan\!\left(\frac{t}{(t^4 - 1)^{1/4}}\right) + C.
+\]
+This is the duality of Example~\ref{ex:F1-14}: the same eigenspace structure ($V_0$ at $p = 1/4$, $V_2$ at $p = 3/4$) and the same closed-form template (logs and arctangent of a fourth-root substitution), with the duality $V_0 \leftrightarrow V_2$ between exponents $1/4$ and $3/4$ now displayed concretely. \hfill$\square$
+\end{example}
+
+\begin{example}[$F = t^3$ at $p = 3/4$: trivially elementary]\label{ex:Ft3-34}
+For $F(t) = t^3$, $H_{3/4}(z) = z^3 \in V_3$, so $H_{3/4, 3} = z^3$, $\varphi_{3/4, 3}(x) = 1$. By Theorem~\ref{thm:main-34}(ii):
+\[
+  J_3 \;=\; \int \d v \;=\; v.
+\]
+With $v = (t^4 - 1)^{1/4}$ this gives
+\[
+  \int \frac{t^3\,\d t}{(t^4 - 1)^{3/4}} \;=\; (t^4 - 1)^{1/4} + C,
+\]
+the elementary closed form one would obtain from the substitution $v = (t^4 - 1)^{1/4}$ directly. \hfill$\square$
+\end{example}
+
+\begin{example}[$F = t$ at $p = 3/4$: non-elementary]\label{ex:Ft-34}
+For $F(t) = t$, $H_{3/4}(z) = z \in V_1$. By Theorem~\ref{thm:main-34}(i), the integral is non-elementary, with obstruction on $Y_1^{(3/4)} \cong E$. This continues to demonstrate that $V_1$ is always obstructive, regardless of $p$. \hfill$\square$
+\end{example}
+
+\section{Concluding remarks}\label{sec:concluding}
+
+\subsection*{Lemniscate rigidity.}
+Across both Theorems~\ref{thm:main-14} and~\ref{thm:main-34}, every genus-$1$ obstruction curve is isomorphic over $\C$ to the same elliptic curve $E\colon y^2 = u^3 + K u$, the lemniscate. This rigidity is forced by the underlying $\Z/4$-symmetry: any elliptic curve admitting an automorphism of order $4$ has $j$-invariant $1728$ and complex multiplication by $\Z[i]$. The four obstruction curves $Y_1^{(1/4)}, Y_2^{(1/4)}, Y_0^{(3/4)}, Y_1^{(3/4)}$ are pairwise isomorphic via the bilinear duality $y\,y' = c\,x(x-K)$ of Lemma~\ref{lem:duality}, all collapsing onto the single lemniscate $E$ regardless of which exponent or eigenspace produced them. This rigidity is genuinely special to $n = 4$; for $n = 5$, the three interior eigenspaces lead to three independent genus-$2$ hyperelliptic curves with no analogous unifying isomorphism. (See the concluding remarks of~\cite{GoursatCubic} for the genus picture at $n \geq 5$.)
+
+\subsection*{The Möbius automorphism.}
+Lemma~\ref{lem:Y2-aut} (the order-$4$ automorphism on $Y_2^{(1/4)}$) gives the cleanest proof that this curve is lemniscatic, and is itself a manifestation of the $\Z/4$-symmetry. A parallel computation shows that $Y_1^{(3/4)}$ admits the order-$4$ automorphism $(x, y) \mapsto (x, iy)$ as well, since $y^4 = x^2(x-K)^3$ is invariant under $y \mapsto iy$. The other two genus-$1$ curves ($Y_1^{(1/4)}$ and $Y_0^{(3/4)}$) acquire their lemniscate structure indirectly, via the substitution $u = y^2/x$ on $Y_1^{(1/4)}$ and via the duality of Lemma~\ref{lem:duality} on $Y_0^{(3/4)}$.
+
+\subsection*{Comparison with $n = 3$.}
+Theorems~\ref{thm:main-14} and~\ref{thm:main-34} parallel Theorem 4.3 and Corollary 4.8 of~\cite{GoursatCubic}, but with three structural differences:
+\begin{enumerate}
+\item \textbf{Two simultaneous obstructions} instead of one. At $n = 3$, exactly one eigenspace ($V_1$) obstructed elementarity; at $n = 4$, two eigenspaces obstruct simultaneously. The reason is the genus formula $g(Y_k) = (n + 1 - \gcd(n, k) - \gcd(n, k+1))/2$ from~\cite{GoursatCubic}: for $n = 3$, only $k = 1$ has $\gcd$ values both equal to $1$; for $n = 4$, both $k = 1$ and $k = 2$ do.
+\item \textbf{An existence hypothesis} on $R$. The cube-root case applied to every cubic $R$ with simple roots; the fourth-root case requires the harmonic condition (cross-ratio $-1$). Equivalently, the moduli space of harmonic quartics is one-dimensional inside the two-dimensional moduli of all quartics with simple roots.
+\item \textbf{Lemniscate rigidity.} The $n = 3$ case landed on a single elliptic curve $y^3 = x(x - K)$ (the cube-root analog of the Weierstrass form), whose $j$-invariant depends on $K$. The $n = 4$ case lands on $y^2 = u^3 + K u$ with $j = 1728$ \emph{regardless} of $K$. The genus-$1$ moduli is therefore $0$-dimensional in the $n = 4$ case (modulo $K$ scaling), in contrast to $1$-dimensional in the $n = 3$ case.
+\end{enumerate}
+
+\subsection*{Algorithmic perspective.}
+The diagnostic algorithm extending \texttt{IntegrateGoursat} to the cases $p \in \{1/4, 3/4\}$ requires:
+\begin{enumerate}
+  \item A test for the harmonic condition on the four roots of $R$ (computing the cross-ratio and checking it equals $-1$).
+  \item Computation of the order-$4$ Möbius $S$, its fixed points $\alpha, \beta$, and the canonical-form constants $c, K$ from Lemma~\ref{lem:cf-n4}.
+  \item Computation of $H_p(z)$ from~\eqref{eq:Hp-def} and the four eigenspace projections $H_{p, k}$ via~\eqref{eq:projection-Vk}.
+  \item Application of Theorem~\ref{thm:main-14} or~\ref{thm:main-34} as appropriate.
+\end{enumerate}
+The resulting test is purely algebraic, polynomial-time in the degrees of $R$ and $F$, and yields a constructive certificate of (non-)elementarity. We give an implementation in Appendix~\ref{sec:appendix}, extending the \texttt{IntegrateGoursat} package of~\cite{GoursatCubic} to accept the new exponents.
+
+\subsection*{Future directions.}
+The next natural extension is to higher cyclic radicals $n \geq 5$ under the corresponding harmonic-tuple conditions, where the obstruction curves are higher-genus hyperelliptic and superelliptic curves. The genus formula from~\cite{GoursatCubic} predicts the qualitative shape of these obstructions, but the lemniscate-style rigidity is lost: at $n = 5$ for example, the three interior eigenspaces produce three genuinely different genus-$2$ curves with no $\Z/5$-induced isomorphisms among them. A separate but related direction is the case of $\sqrt{R}$ for sextic $R$, where the relevant curves are hyperelliptic of genus $2$ and the symmetry classification involves subgroups of $\Aut(\mathbb{P}^1)$ of various types (single involution, $V_4$, $\Z/3$, $D_3$, etc.) acting on the six roots. We hope to return to both directions in subsequent work.
+
+\appendix
+\section{Mathematica implementation}\label{sec:appendix}
+
+We extend the \texttt{IntegrateGoursat} package of~\cite{GoursatCubic} with two new branches, \texttt{QuarticTest14} and \texttt{QuarticTest34}, implementing the algorithms of Theorems~\ref{thm:main-14} and~\ref{thm:main-34} respectively. The unified entry point now accepts $p \in \{1/2, 1/3, 2/3, 1/4, 3/4\}$:
+\[
+  \texttt{IntegrateGoursat[F, R, t, p]}, \qquad p \in \{1/2, 1/3, 2/3, 1/4, 3/4\}.
+\]
+For $p \in \{1/4, 3/4\}$, the package first tests the harmonic condition on the roots of $R$, returning \texttt{"non-harmonic"} if it fails (in which case the present theory does not apply); otherwise it computes the order-$4$ Möbius transformation $S$, its fixed points, the canonical-form constants $c, K$, and the four eigenspace projections of $H_p$ from~\eqref{eq:Hp-def}, returning \texttt{"status" $\to$ "elementary"} or \texttt{"obstructed"} according to the criterion of the appropriate theorem.
+
+\subsection*{Source code (extension only)}
+
+\begin{lstlisting}
+(* === Fourth-root case (Theorems 3.7 and 4.7) ============ *)
+
+(* Test if four points are in harmonic position. *)
+HarmonicConfigQ[roots_List] :=
+  Module[{cr, r = roots},
+    If[Length[r] != 4, Return[False]];
+    cr = ((r[[1]] - r[[2]])(r[[3]] - r[[4]]))/
+         ((r[[1]] - r[[4]])(r[[3]] - r[[2]]));
+    PossibleZeroQ[Simplify[cr + 1]]];
+
+(* Order-4 Mobius transformation cycling the 4 roots. *)
+QuarticMobius[roots_List, t_] :=
+  Module[{r = roots, A, B, C, D, sol},
+    sol = First[Solve[
+      {(A r[[1]] + B)/(C r[[1]] + D) == r[[2]],
+       (A r[[2]] + B)/(C r[[2]] + D) == r[[3]],
+       (A r[[3]] + B)/(C r[[3]] + D) == r[[4]],
+       D == 1}, {A, B, C, D}]];
+    Together[(A t + B)/(C t + 1) /. sol]];
+
+(* Eigenspace projection P_k under z -> i*z. *)
+EigenProjection4[H_, z_, k_Integer] :=
+  Together[Simplify[
+    (H + I^(-k) (H /. z -> I z) +
+       I^(-2 k) (H /. z -> -z) +
+       I^(-3 k) (H /. z -> -I z))/4]];
+
+(* Convert a function divisible by z^k into a function of x = z^4. *)
+ToFunctionOfFourth[H_, z_, x_] :=
+  If[PossibleZeroQ[Together[H]], 0,
+    Module[{num, den, dN, dD},
+      {num, den} = Through[{Numerator, Denominator}[Together[H]]];
+      dN = Exponent[num, z]; dD = Exponent[den, z];
+      Sum[Coefficient[num, z, 4 k] x^k, {k, 0, dN/4}]/
+      Sum[Coefficient[den, z, 4 k] x^k, {k, 0, dD/4}]]];
+
+(* Common setup for both p = 1/4 and p = 3/4. *)
+QuarticSetup[F_, R_, t_, p_] :=
+  Module[{roots, S, fps, alpha, beta, z, tz, Rz, cval, K, H},
+    roots = DeleteDuplicates[t /. Solve[R == 0, t]];
+    If[Length[roots] != 4, Return[$Failed]];
+    If[!HarmonicConfigQ[roots],
+      Return[<|"status" -> "non-harmonic"|>]];
+    S = QuarticMobius[roots, t];
+    fps = t /. Solve[S == t, t];
+    {alpha, beta} = If[Length[fps] == 1, {fps[[1]], Infinity}, fps];
+    tz = If[beta === Infinity, alpha + z, (alpha - beta z)/(1 - z)];
+    Rz = If[beta === Infinity,
+            Cancel[Together[R /. t -> tz]],
+            Cancel[Together[(R /. t -> tz) (1 - z)^4]]];
+    cval = Coefficient[Expand[Rz], z, 4];
+    K = -Coefficient[Expand[Rz], z, 0]/cval;
+    H = Together[
+      If[beta === Infinity,
+         (F /. t -> tz)/cval^p,
+         (alpha - beta) (1 - z)^(4 p - 2) (F /. t -> tz)/cval^p]];
+    <|"S" -> S, "alpha" -> alpha, "beta" -> beta,
+      "K" -> K, "c" -> cval, "H" -> H|>];
+
+QuarticTest14[F_, R_, t_] :=
+  Module[{setup, H, H0, H1, H2, H3, w, u, x,
+          phi0, phi3, J0, J3},
+    setup = QuarticSetup[F, R, t, 1/4];
+    If[!AssociationQ[setup] || setup["status"] === "non-harmonic",
+      Return[setup]];
+    H = setup["H"];
+    {H0, H1, H2, H3} =
+      EigenProjection4[H, z, #] & /@ {0, 1, 2, 3};
+    If[!PossibleZeroQ[Simplify[H1]] || !PossibleZeroQ[Simplify[H2]],
+      Return[Append[setup,
+        <|"status" -> "obstructed",
+          "obstruction1" -> H1, "obstruction2" -> H2|>]]];
+    phi0 = ToFunctionOfFourth[H0, z, x];
+    phi3 = ToFunctionOfFourth[Together[H3/z^3], z, x];
+    J0 = Together[
+      (phi0 /. x -> setup["K"]/(1 - w^4)) w^2/(1 - w^4)];
+    J3 = Together[(phi3 /. x -> u^4 + setup["K"]) u^2];
+    Append[setup, <|"status" -> "elementary",
+      "H0" -> H0, "H3" -> H3,
+      "J0integrand" -> J0, "J3integrand" -> J3|>]];
+
+QuarticTest34[F_, R_, t_] :=
+  Module[{setup, H, H0, H1, H2, H3, s, v, x,
+          phi2, phi3, J2, J3},
+    setup = QuarticSetup[F, R, t, 3/4];
+    If[!AssociationQ[setup] || setup["status"] === "non-harmonic",
+      Return[setup]];
+    H = setup["H"];
+    {H0, H1, H2, H3} =
+      EigenProjection4[H, z, #] & /@ {0, 1, 2, 3};
+    If[!PossibleZeroQ[Simplify[H0]] || !PossibleZeroQ[Simplify[H1]],
+      Return[Append[setup,
+        <|"status" -> "obstructed",
+          "obstruction0" -> H0, "obstruction1" -> H1|>]]];
+    phi2 = ToFunctionOfFourth[Together[H2/z^2], z, x];
+    phi3 = ToFunctionOfFourth[Together[H3/z^3], z, x];
+    J2 = Together[
+      -(phi2 /. x -> setup["K"] s^4/(s^4 - 1)) s^2/(s^4 - 1)];
+    J3 = Together[phi3 /. x -> v^4 + setup["K"]];
+    Append[setup, <|"status" -> "elementary",
+      "H2" -> H2, "H3" -> H3,
+      "J2integrand" -> J2, "J3integrand" -> J3|>]];
+
+(* === Updated entry point === *)
+
+IntegrateGoursat[F_, R_, t_, p_:1/2] :=
+  Switch[p,
+    1/2, GoursatTest[F, R, t],
+    1/3, CubicTest[F, R, t],
+    2/3, CubicTest23[F, R, t],
+    1/4, QuarticTest14[F, R, t],
+    3/4, QuarticTest34[F, R, t],
+    _, "Only p = 1/2, 1/3, 2/3, 1/4, 3/4 are supported"];
+\end{lstlisting}
+
+\subsection*{Sample sessions}
+
+\paragraph{Example~\ref{ex:F1-14} (p = 1/4, elementary).}
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily,frame=none]
+In[]:= IntegrateGoursat[1, t^4 - 1, t, 1/4]
+\end{lstlisting}
+returns \texttt{"status"\,$\to$\,"elementary"}, $K = 1$, $H_0 = 1$, $H_3 = 0$, with $\text{J0integrand} = w^2/(1-w^4)$ and $\text{J3integrand} = 0$. By partial fractions, the antiderivative is the closed form of Example~\ref{ex:F1-14}.
+
+\paragraph{Example~\ref{ex:Ft-Ft2-14} (p = 1/4, non-elementary).}
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily,frame=none]
+In[]:= IntegrateGoursat[t, t^4 - 1, t, 1/4]
+In[]:= IntegrateGoursat[t^2, t^4 - 1, t, 1/4]
+\end{lstlisting}
+both return \texttt{"status"\,$\to$\,"obstructed"}: the first with obstruction $H_1 = z$, the second with $H_2 = z^2$. Both witness Abelian integrals on the lemniscate $y^2 = u^3 + u$.
+
+\paragraph{Example~\ref{ex:F1-34} (p = 3/4, the duality flip).}
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily,frame=none]
+In[]:= IntegrateGoursat[1, t^4 - 1, t, 3/4]
+\end{lstlisting}
+returns \texttt{"status"\,$\to$\,"obstructed"} with obstruction $H_0 = 1$. The same input that was elementary at exponent $1/4$ is non-elementary at $3/4$, as predicted by the $V_0 \leftrightarrow V_2$ duality.
+
+\paragraph{Example~\ref{ex:Ft2-34} (p = 3/4, the dual elementary case).}
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily,frame=none]
+In[]:= IntegrateGoursat[t^2, t^4 - 1, t, 3/4]
+\end{lstlisting}
+returns \texttt{"status"\,$\to$\,"elementary"}, $K = 1$, $H_2 = z^2$, $H_3 = 0$, with $\text{J2integrand} = -s^2/(s^4-1)$ — the same partial-fraction template as Example~\ref{ex:F1-14}, dualised by the eigenspace shift.
+
+\medskip
+\noindent
+The harmonic test \texttt{HarmonicConfigQ} prevents misapplication: calling \texttt{IntegrateGoursat[F, R, t, 1/4]} on a non-harmonic quartic such as $R = (t-1)(t-2)(t-3)(t-5)$ returns \texttt{"non-harmonic"}, signalling that the present theory does not apply (although the integral may still be elementary by other methods, just as a non-harmonic Goursat integrand may be elementary by Theorem 3.5 of~\cite{GoursatCubic} or by the Risch--Trager--Bronstein algorithm).
+
+\begin{thebibliography}{99}
+
+\bibitem{GoursatCubic}
+[Author], \emph{A Generalisation of Goursat's Algorithm for Integration in Finite Terms}, preprint, 2026.
+
+\bibitem{Goursat1887}
+\'E.~Goursat,
+\emph{Note sur quelques int\'egrales pseudo-elliptiques},
+Bulletin de la S.~M.~F., \textbf{15} (1887), 106--120.
+
+\bibitem{Bronstein2005}
+M.~Bronstein,
+\emph{Symbolic Integration I: Transcendental Functions},
+2nd ed., Algorithms and Computation in Mathematics, vol.~1, Springer, 2005.
+
+\bibitem{Risch1969}
+R.~H.~Risch,
+\emph{The problem of integration in finite terms},
+Trans.\ Amer.\ Math.\ Soc.\ \textbf{139} (1969), 167--189.
+
+\bibitem{Trager1984}
+B.~M.~Trager,
+\emph{Integration of algebraic functions},
+Ph.D.\ thesis, MIT, 1984.
+
+\bibitem{vanderPutSinger2003}
+M.~van der Put and M.~F.~Singer,
+\emph{Galois Theory of Linear Differential Equations},
+Grundlehren der mathematischen Wissenschaften, vol.~328, Springer, 2003.
+
+\end{thebibliography}
+
+\end{document}

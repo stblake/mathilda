@@ -137,6 +137,7 @@ include_directories(../src/special_functions)
 include_directories(../src/numerical_calculus)
 include_directories(../src/numerical_roots)
 include_directories(../src/graphics)
+include_directories(../src/graph)
 include_directories(../src/strings)
 include_directories(../src/strings/regex)
 if(EXISTS "/opt/homebrew/include")
@@ -510,8 +511,30 @@ set(COMMON_SRC
     ../src/graphics/plot.c
     ../src/graphics/plot3d.c
     ../src/graphics/parametricplot.c
+    ../src/graphics/parametricplot3d.c
+    ../src/graphics/contourplot.c
+    ../src/graphics/streamplot.c
     ../src/graphics/listplot.c
     ../src/graphics/show.c
+    ../src/graph/graph.c
+    ../src/graph/graph_util.c
+    ../src/graph/construct.c
+    ../src/graph/graphq.c
+    ../src/graph/vertexlist.c
+    ../src/graph/edgelist.c
+    ../src/graph/counts.c
+    ../src/graph/adjlist.c
+    ../src/graph/degree.c
+    ../src/graph/directedq.c
+    ../src/graph/adjmat.c
+    ../src/graph/incmat.c
+    ../src/graph/adjgraph.c
+    ../src/graph/generators.c
+    ../src/graph/shortestpath.c
+    ../src/graph/components.c
+    ../src/graph/spanningtree.c
+    ../src/graph/connectivity.c
+    ../src/graph/graphplot.c
 )
 
 # render.c / render3d.c / hershey_font.c need a live Raylib + display; only
@@ -547,6 +570,11 @@ target_include_directories(regression_tests PRIVATE ../src)
 
 add_executable(comparisons_tests test_comparisons.c ${COMMON_SRC})
 target_include_directories(comparisons_tests PRIVATE ../src)
+
+add_executable(graph_tests test_graph.c ${COMMON_SRC})
+target_link_libraries(graph_tests m)
+target_include_directories(graph_tests PRIVATE ../src ../src/graph)
+add_test(NAME graph_tests COMMAND graph_tests)
 
 add_executable(zero_test_tests test_zero_test.c ${COMMON_SRC})
 target_link_libraries(zero_test_tests m)
