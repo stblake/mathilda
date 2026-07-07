@@ -35,13 +35,30 @@ endif
 
 LDFLAGS = $(READLINE_LIBS) -L/usr/local/lib -lgmp -lm
 
+# GMP-ECM for advanced integer factorisation (facint.c: ecm_init/ecm_factor via
+# the public ecm.h). System library only — no longer vendored as a submodule.
+# GMP-ECM ships no pkg-config .pc file, so detection is a compile+link probe
+# against the shared libecm (its transitive deps — primesieve, libomp — resolve
+# automatically). When absent the build still succeeds with a runtime-degraded
+# factoriser, matching the USE_FLINT=0 / USE_MPFR=0 graceful-degrade policy.
+#   macOS (Homebrew): brew install gmp-ecm
+#   Ubuntu/Debian:    sudo apt install libecm-dev
 ifeq ($(USE_ECM), 1)
-CFLAGS += -I./src/external/ecm
-LDFLAGS := src/external/ecm/.libs/libecm.a $(LDFLAGS)
-ECM_TARGET = src/external/ecm/.libs/libecm.a
-else
+  ECM_PROBE := $(shell printf '\#include <ecm.h>\nint main(void){ecm_params p;ecm_init(p);return 0;}\n' > /tmp/mathilda_ecmprobe.c 2>/dev/null && \
+    $(CC) /tmp/mathilda_ecmprobe.c -o /tmp/mathilda_ecmprobe -I/usr/local/include -I/opt/homebrew/include \
+      -L/usr/local/lib -L/opt/homebrew/lib -lecm -lgmp 2>/dev/null && echo y; \
+    rm -f /tmp/mathilda_ecmprobe.c /tmp/mathilda_ecmprobe)
+  ifeq ($(ECM_PROBE), y)
+    LDFLAGS += -lecm
+  else
+    $(warning GMP-ECM not detected; building with USE_ECM=0 (advanced factorisation disabled))
+    $(warning   macOS (Homebrew): brew install gmp-ecm)
+    $(warning   Ubuntu/Debian:    sudo apt install libecm-dev)
+    override USE_ECM := 0
+  endif
+endif
+ifneq ($(USE_ECM), 1)
 CFLAGS += -DNO_ECM
-ECM_TARGET =
 endif
 
 # Arbitrary-precision reals (MPFR) — enables N[expr, prec], Precision/
@@ -183,10 +200,7 @@ all: $(TARGET)
 $(TARGET): $(OBJ)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-src/external/ecm/.libs/libecm.a:
-	./build_ecm.sh
-
-$(SRC_DIR)/%.o: $(SRC_DIR)/%.c $(ECM_TARGET)
+$(SRC_DIR)/%.o: $(SRC_DIR)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(SRC_DIR)/boolean.o: $(SRC_DIR)/boolean.c
