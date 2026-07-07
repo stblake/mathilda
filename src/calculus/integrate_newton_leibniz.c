@@ -1,0 +1,481 @@
+/* integrate_newton_leibniz.c
+ *
+ * Definite integration by the Newton-Leibniz rule (the fundamental theorem
+ * of calculus).  See integrate_newton_leibniz.h for the overview.
+ *
+ * Pipeline for Integrate[f, {x, a, b}]:
+ *
+ *   1. F = Integrate[f, x]            -- reuse the indefinite cascade.
+ *      If F still contains an unevaluated Integrate, bail (NULL): we never
+ *      fabricate a value for an integrand we cannot antidifferentiate.
+ *
+ *   2. Locate the real singular points of f and F strictly inside (a, b)
+ *      (poles of the rational part -- denominator roots).  If any pole's
+ *      position is undecidable (symbolic coefficients / bounds), bail (NULL)
+ *      rather than risk a wrong answer.
+ *
+ *   3. Split [a, b] at the interior poles into segments [p_i, p_{i+1}] and
+ *      form the telescoping sum
+ *          Sum_i ( F(p_{i+1}^-) - F(p_i^+) ).
+ *      Each boundary is evaluated with the Limit engine: a plain limit at
+ *      infinite endpoints, a one-sided limit ("FromBelow"/"FromAbove") at
+ *      interior poles, and direct substitution at ordinary finite endpoints
+ *      (falling back to a one-sided limit when substitution is singular).
+ *      This is where improper integrals acquire their correct finite value
+ *      and genuinely divergent ones surface Infinity / ComplexInfinity /
+ *      Indeterminate.
+ *
+ * Branch-cut discontinuities of F that are NOT poles (e.g. ArcTan[Tan[x]])
+ * are out of scope for this first pass; they would plug into the same
+ * one-sided-limit segment machinery once a detector for them exists.
+ */
+
+#include "integrate_newton_leibniz.h"
+#include "expr.h"
+#include "eval.h"
+#include "symtab.h"
+#include "attr.h"
+#include "arithmetic.h"
+#include "sym_names.h"
+
+#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+
+/* -------------------------------------------------------------------------
+ * Small expression-construction / evaluation helpers.
+ * ---------------------------------------------------------------------- */
+
+static Expr* mk_sym(const char* s) { return expr_new_symbol(s); }
+
+static Expr* mk_fn1(const char* head, Expr* a) {
+    return expr_new_function(mk_sym(head), (Expr*[]){ a }, 1);
+}
+static Expr* mk_fn2(const char* head, Expr* a, Expr* b) {
+    return expr_new_function(mk_sym(head), (Expr*[]){ a, b }, 2);
+}
+static Expr* mk_fn3(const char* head, Expr* a, Expr* b, Expr* c) {
+    return expr_new_function(mk_sym(head), (Expr*[]){ a, b, c }, 3);
+}
+
+/* Evaluate `call`, free the call expression, return the result. */
+static Expr* eval_take(Expr* call) {
+    Expr* r = evaluate(call);
+    expr_free(call);
+    return r;
+}
+
+/* True iff `e` is the compound `name[...]` (by head name, not interned ptr). */
+static bool head_name_is(const Expr* e, const char* name) {
+    return e && e->type == EXPR_FUNCTION &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           strcmp(e->data.function.head->data.symbol, name) == 0;
+}
+
+/* True iff any subexpression of `e` is a call with head `name`. */
+static bool contains_head(const Expr* e, const char* name) {
+    if (!e) return false;
+    if (head_name_is(e, name)) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (contains_head(e->data.function.head, name)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (contains_head(e->data.function.args[i], name)) return true;
+    return false;
+}
+
+/* True iff the symbol `x` occurs anywhere in `e`. */
+static bool contains_symbol(const Expr* e, const Expr* x) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL)
+        return e->data.symbol == x->data.symbol;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (contains_symbol(e->data.function.head, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (contains_symbol(e->data.function.args[i], x)) return true;
+    return false;
+}
+
+/* -------------------------------------------------------------------------
+ * Numeric classification of bounds / roots.
+ * ---------------------------------------------------------------------- */
+
+/* Extract a machine double from an already-numeric leaf.  Returns false for
+ * anything that is not a concrete real number. */
+static bool nl_real_double(const Expr* e, double* out) {
+    switch (e->type) {
+        case EXPR_INTEGER: *out = (double)e->data.integer; return true;
+        case EXPR_REAL:    *out = e->data.real;            return true;
+        case EXPR_BIGINT:  *out = mpz_get_d(e->data.bigint); return true;
+#ifdef USE_MPFR
+        case EXPR_MPFR:    *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true;
+#endif
+        default: break;
+    }
+    int64_t n, d;
+    if (is_rational((Expr*)e, &n, &d) && d != 0) {
+        *out = (double)n / (double)d;
+        return true;
+    }
+    return false;
+}
+
+/* Classify `e` numerically via N[e].
+ *   0 = not a real number (symbolic, or genuinely complex);
+ *   1 = finite real  (value in *val);
+ *   2 = +Infinity;
+ *   3 = -Infinity.                                                        */
+static int nl_numeric(Expr* e, double* val) {
+    if (is_infinity_sym(e))      return 2;
+    if (is_neg_infinity_form(e)) return 3;
+
+    Expr* n = eval_take(mk_fn1("N", expr_copy(e)));
+    if (!n) return 0;
+
+    int r = 0;
+    if (is_infinity_sym(n))           r = 2;
+    else if (is_neg_infinity_form(n)) r = 3;
+    else {
+        Expr* re = NULL; Expr* im = NULL;
+        if (is_complex(n, &re, &im)) {
+            /* On the real axis only when the imaginary part vanishes. */
+            if (expr_numeric_sign(im) == 0 && nl_real_double(re, val)) r = 1;
+        } else if (nl_real_double(n, val)) {
+            r = 1;
+        }
+    }
+    expr_free(n);
+    return r;
+}
+
+/* Interval classification of a finite real root `rv` against [a, b]. */
+typedef enum { NL_EXTERIOR = 0, NL_INTERIOR = 1, NL_UNKNOWN = 2 } NLClass;
+
+/* Small relative tolerance for endpoint coincidence. */
+static bool nl_close(double u, double v) {
+    double s = fabs(u) + fabs(v) + 1.0;
+    return fabs(u - v) <= 1e-12 * s;
+}
+
+static NLClass nl_classify(double rv, Expr* a, Expr* b) {
+    double av, bv;
+    int ak = nl_numeric(a, &av);
+    int bk = nl_numeric(b, &bv);
+
+    /* Lower bound: -Infinity always below; +Infinity as a lower bound is
+     * degenerate (empty interval); symbolic => undecidable. */
+    bool lo_ok;
+    if      (ak == 3) lo_ok = true;
+    else if (ak == 2) lo_ok = false;
+    else if (ak == 1) lo_ok = (av < rv) && !nl_close(av, rv);
+    else              return NL_UNKNOWN;
+
+    bool hi_ok;
+    if      (bk == 2) hi_ok = true;
+    else if (bk == 3) hi_ok = false;
+    else if (bk == 1) hi_ok = (rv < bv) && !nl_close(rv, bv);
+    else              return NL_UNKNOWN;
+
+    return (lo_ok && hi_ok) ? NL_INTERIOR : NL_EXTERIOR;
+}
+
+/* -------------------------------------------------------------------------
+ * Interior-pole detection.
+ * ---------------------------------------------------------------------- */
+
+typedef struct {
+    Expr** pts;   /* owned copies of the interior pole expressions           */
+    double* vals; /* their numeric values, used for ordering / dedup         */
+    size_t n, cap;
+    bool undecidable; /* a pole exists whose interior-ness we cannot decide  */
+} PoleSet;
+
+static void poleset_init(PoleSet* s) {
+    s->pts = NULL; s->vals = NULL; s->n = 0; s->cap = 0; s->undecidable = false;
+}
+
+static void poleset_free(PoleSet* s) {
+    for (size_t i = 0; i < s->n; i++) expr_free(s->pts[i]);
+    free(s->pts); free(s->vals);
+    poleset_init(s);
+}
+
+/* Insert `val` (an owned Expr, numeric value `v`) keeping the array sorted
+ * ascending and free of duplicates.  Consumes `val` (frees it on dedup). */
+static void poleset_insert(PoleSet* s, Expr* val, double v) {
+    for (size_t i = 0; i < s->n; i++) {
+        if (nl_close(s->vals[i], v)) { expr_free(val); return; }
+    }
+    if (s->n == s->cap) {
+        size_t nc = s->cap ? s->cap * 2 : 4;
+        s->pts  = realloc(s->pts,  nc * sizeof(*s->pts));
+        s->vals = realloc(s->vals, nc * sizeof(*s->vals));
+        s->cap = nc;
+    }
+    /* Find sorted insertion point. */
+    size_t k = s->n;
+    while (k > 0 && s->vals[k - 1] > v) {
+        s->pts[k]  = s->pts[k - 1];
+        s->vals[k] = s->vals[k - 1];
+        k--;
+    }
+    s->pts[k]  = val;
+    s->vals[k] = v;
+    s->n++;
+}
+
+/* The RHS of the (single) `Rule[x, val]` inside a Solve solution element,
+ * or NULL if `el` is not of that shape.  Returns a borrowed pointer. */
+static Expr* nl_rule_rhs_for(Expr* el, const Expr* x) {
+    /* el may be `List[Rule[x, val], ...]` (univariate Solve) or a bare Rule. */
+    if (head_name_is(el, "Rule") && el->data.function.arg_count == 2) {
+        Expr* lhs = el->data.function.args[0];
+        if (lhs->type == EXPR_SYMBOL && lhs->data.symbol == x->data.symbol)
+            return el->data.function.args[1];
+        return NULL;
+    }
+    if (head_name_is(el, "List")) {
+        for (size_t i = 0; i < el->data.function.arg_count; i++) {
+            Expr* rr = nl_rule_rhs_for(el->data.function.args[i], x);
+            if (rr) return rr;
+        }
+    }
+    return NULL;
+}
+
+/* Collect the interior real poles of `expr` (as a function of `x`) into `s`.
+ * A pole is a real root of Denominator[Together[expr]] lying strictly in
+ * (a, b).  Sets s->undecidable if a pole exists whose classification cannot
+ * be decided. */
+static void nl_collect_poles(Expr* expr, Expr* x, Expr* a, Expr* b, PoleSet* s) {
+    Expr* tog = eval_take(mk_fn1("Together", expr_copy(expr)));
+    if (!tog) return;
+    Expr* den = eval_take(mk_fn1("Denominator", tog));   /* tog consumed */
+    if (!den) return;
+
+    if (!contains_symbol(den, x)) { expr_free(den); return; }  /* no poles */
+
+    /* Solve[den == 0, x, Reals] -- restrict to real roots up front. */
+    Expr* eq    = mk_fn2("Equal", den, expr_new_integer(0));   /* den consumed */
+    Expr* solve = mk_fn3("Solve", eq, expr_copy(x), mk_sym("Reals"));
+    Expr* sols  = eval_take(solve);
+    if (!sols) { s->undecidable = true; return; }
+
+    if (!head_name_is(sols, "List")) {   /* unevaluated Solve / condition */
+        s->undecidable = true;
+        expr_free(sols);
+        return;
+    }
+
+    for (size_t i = 0; i < sols->data.function.arg_count; i++) {
+        Expr* val = nl_rule_rhs_for(sols->data.function.args[i], x);
+        if (!val) { s->undecidable = true; continue; }
+
+        double rv;
+        int rk = nl_numeric(val, &rv);
+        if (rk == 0) { s->undecidable = true; continue; }  /* symbolic root */
+        if (rk != 1) continue;                             /* infinite root: skip */
+
+        NLClass cls = nl_classify(rv, a, b);
+        if (cls == NL_INTERIOR)      poleset_insert(s, expr_copy(val), rv);
+        else if (cls == NL_UNKNOWN)  s->undecidable = true;
+        /* NL_EXTERIOR: ignore */
+    }
+    expr_free(sols);
+}
+
+/* -------------------------------------------------------------------------
+ * Boundary evaluation of the antiderivative.
+ * ---------------------------------------------------------------------- */
+
+typedef enum { NL_DIR_NONE, NL_DIR_ABOVE, NL_DIR_BELOW } NLDir;
+
+static bool nl_is_infinite(Expr* e) {
+    return is_infinity_sym(e) || is_neg_infinity_form(e) ||
+           is_complex_infinity_sym(e);
+}
+
+/* A boundary value is usable directly only if it is a finite closed form:
+ * free of x, and not one of the singular sentinels. */
+static bool nl_is_finite_closed(Expr* v, const Expr* x) {
+    if (!v) return false;
+    if (is_indeterminate_sym(v) || nl_is_infinite(v)) return false;
+    if (head_name_is(v, "Interval")) return false;
+    if (contains_head(v, "Limit") || contains_head(v, "Integrate")) return false;
+    if (contains_symbol(v, x)) return false;
+    return true;
+}
+
+/* Limit[F, x -> target, Direction -> dir]. */
+static Expr* nl_limit(Expr* F, Expr* x, Expr* target, NLDir dir) {
+    Expr* rule = mk_fn2("Rule", expr_copy(x), expr_copy(target));
+    Expr* call;
+    if (dir == NL_DIR_NONE) {
+        call = mk_fn2("Limit", expr_copy(F), rule);
+    } else {
+        Expr* d = mk_fn2("Rule", mk_sym("Direction"),
+                         expr_new_string(dir == NL_DIR_ABOVE ? "FromAbove"
+                                                             : "FromBelow"));
+        call = mk_fn3("Limit", expr_copy(F), rule, d);
+    }
+    return eval_take(call);
+}
+
+/* Evaluate F at `target`, approaching per `dir`.  Uses direct substitution
+ * at ordinary finite points and the Limit engine at infinite / singular
+ * points (or when substitution is itself singular). */
+static Expr* nl_eval_at(Expr* F, Expr* x, Expr* target, NLDir dir) {
+    arith_warnings_mute_push();
+    Expr* out;
+    if (nl_is_infinite(target)) {
+        out = nl_limit(F, x, target, NL_DIR_NONE);
+    } else {
+        Expr* sub = eval_take(mk_fn2("ReplaceAll", expr_copy(F),
+                                     mk_fn2("Rule", expr_copy(x),
+                                            expr_copy(target))));
+        if (nl_is_finite_closed(sub, x)) {
+            out = sub;
+        } else {
+            if (sub) expr_free(sub);
+            out = nl_limit(F, x, target, dir);
+        }
+    }
+    arith_warnings_mute_pop();
+    return out;
+}
+
+/* -------------------------------------------------------------------------
+ * Core Newton-Leibniz driver.
+ * ---------------------------------------------------------------------- */
+
+Expr* integrate_newton_leibniz_try(Expr* f, Expr* x, Expr* a, Expr* b,
+                                   const char* method) {
+    if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
+
+    /* 1. Antiderivative via the indefinite cascade. */
+    Expr* F;
+    if (method) {
+        F = eval_take(mk_fn3("Integrate", expr_copy(f), expr_copy(x),
+                             mk_fn2("Rule", mk_sym("Method"),
+                                    expr_new_string(method))));
+    } else {
+        F = eval_take(mk_fn2("Integrate", expr_copy(f), expr_copy(x)));
+    }
+    if (!F) return NULL;
+    if (contains_head(F, "Integrate")) { expr_free(F); return NULL; }
+
+    /* 2. Interior poles of f and of F, unioned. */
+    PoleSet poles; poleset_init(&poles);
+    nl_collect_poles(f, x, a, b, &poles);
+    nl_collect_poles(F, x, a, b, &poles);
+    if (poles.undecidable) { poleset_free(&poles); expr_free(F); return NULL; }
+
+    /* 3. Breakpoints [a, poles..., b] and the telescoping sum. */
+    size_t nbp = poles.n + 2;
+    Expr** bp = malloc(nbp * sizeof(*bp));
+    bp[0] = a;                                  /* borrowed */
+    for (size_t i = 0; i < poles.n; i++) bp[i + 1] = poles.pts[i]; /* borrowed */
+    bp[nbp - 1] = b;                            /* borrowed */
+
+    Expr* total = expr_new_integer(0);
+    bool failed = false;
+    for (size_t i = 0; i + 1 < nbp && !failed; i++) {
+        Expr* lo = nl_eval_at(F, x, bp[i],     NL_DIR_ABOVE);
+        Expr* hi = nl_eval_at(F, x, bp[i + 1], NL_DIR_BELOW);
+        if (!lo || !hi) {
+            if (lo) expr_free(lo);
+            if (hi) expr_free(hi);
+            failed = true;
+            break;
+        }
+        arith_warnings_mute_push();
+        Expr* contrib = eval_take(mk_fn2("Plus", hi,
+                                         mk_fn2("Times", expr_new_integer(-1), lo)));
+        total = eval_take(mk_fn2("Plus", total, contrib));
+        arith_warnings_mute_pop();
+    }
+
+    free(bp);
+    poleset_free(&poles);
+    expr_free(F);
+
+    if (failed || !total) { if (total) expr_free(total); return NULL; }
+
+    /* 4. Classify.  An unresolved Limit/Integrate, a stray x, or an Interval
+     * means the engine could not decide -- leave the integral unevaluated.
+     * Otherwise return the value (finite, or a divergence sentinel). */
+    if (contains_head(total, "Limit") || contains_head(total, "Integrate") ||
+        head_name_is(total, "Interval") || contains_symbol(total, x)) {
+        expr_free(total);
+        return NULL;
+    }
+    return total;
+}
+
+/* -------------------------------------------------------------------------
+ * Spec parsing + builtins.
+ * ---------------------------------------------------------------------- */
+
+/* Extract (x, a, b) from a `{x, a, b}` List spec.  Returns borrowed
+ * pointers; false if the spec is malformed. */
+static bool nl_parse_spec(Expr* spec, Expr** x, Expr** a, Expr** b) {
+    if (!head_name_is(spec, "List") || spec->data.function.arg_count != 3)
+        return false;
+    Expr* v = spec->data.function.args[0];
+    if (v->type != EXPR_SYMBOL) return false;
+    *x = v;
+    *a = spec->data.function.args[1];
+    *b = spec->data.function.args[2];
+    return true;
+}
+
+Expr* builtin_integrate_newton_leibniz(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2)
+        return NULL;
+    Expr* f = res->data.function.args[0];
+    Expr* x; Expr* a; Expr* b;
+    if (!nl_parse_spec(res->data.function.args[1], &x, &a, &b)) return NULL;
+    return integrate_newton_leibniz_try(f, x, a, b, NULL);
+}
+
+Expr* builtin_integrate_singular_points(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2)
+        return NULL;
+    Expr* expr = res->data.function.args[0];
+    Expr* x; Expr* a; Expr* b;
+    if (!nl_parse_spec(res->data.function.args[1], &x, &a, &b)) return NULL;
+
+    PoleSet poles; poleset_init(&poles);
+    nl_collect_poles(expr, x, a, b, &poles);
+    /* The detector returns only the confirmed interior poles; the
+     * undecidable flag is what makes the *integrator* bail, not this. */
+
+    Expr** args = poles.n ? malloc(poles.n * sizeof(*args)) : NULL;
+    for (size_t i = 0; i < poles.n; i++) args[i] = expr_copy(poles.pts[i]);
+    Expr* out = expr_new_function(mk_sym("List"), args, poles.n);
+    free(args);
+    poleset_free(&poles);
+    return out;
+}
+
+void integrate_newton_leibniz_init(void) {
+    symtab_add_builtin("Integrate`NewtonLeibniz", builtin_integrate_newton_leibniz);
+    symtab_get_def("Integrate`NewtonLeibniz")->attributes |=
+        ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_set_docstring("Integrate`NewtonLeibniz",
+        "Integrate`NewtonLeibniz[f, {x, a, b}] evaluates the definite integral "
+        "of f over x from a to b by the fundamental theorem of calculus: it "
+        "antidifferentiates f, then forms F(b)-F(a) via the Limit engine, "
+        "splitting at interior poles and taking one-sided limits so improper "
+        "integrals converge and divergent ones return Infinity / "
+        "ComplexInfinity / Indeterminate.  Returns unevaluated when the "
+        "antiderivative is unknown or a pole position is undecidable.");
+
+    symtab_add_builtin("Integrate`SingularPoints", builtin_integrate_singular_points);
+    symtab_get_def("Integrate`SingularPoints")->attributes |=
+        ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_set_docstring("Integrate`SingularPoints",
+        "Integrate`SingularPoints[expr, {x, a, b}] returns the sorted list of "
+        "real poles of expr (roots of Denominator[Together[expr]]) lying "
+        "strictly inside the interval (a, b).");
+}

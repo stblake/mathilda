@@ -433,6 +433,7 @@ set(COMMON_SRC
     ../src/calculus/integrate_chebychev.c
     ../src/calculus/integrate_goursat.c
     ../src/calculus/integrate_jeffrey.c
+    ../src/calculus/integrate_newton_leibniz.c
     ../src/calculus/intrat.c
     ../src/calculus/intrischnorman.c
     ../src/calculus/intsimp.c
@@ -1765,6 +1766,15 @@ else()
     target_link_libraries(integrate_goursat_tests gmp m)
 endif()
 add_test(NAME integrate_goursat_tests COMMAND integrate_goursat_tests)
+
+add_executable(integrate_newton_leibniz_tests test_integrate_newton_leibniz.c ${COMMON_SRC})
+target_include_directories(integrate_newton_leibniz_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_newton_leibniz_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(integrate_newton_leibniz_tests gmp m)
+endif()
+add_test(NAME integrate_newton_leibniz_tests COMMAND integrate_newton_leibniz_tests)
 
 add_executable(integrate_jeffrey_tests test_integrate_jeffrey.c ${COMMON_SRC})
 target_include_directories(integrate_jeffrey_tests PRIVATE ../src)

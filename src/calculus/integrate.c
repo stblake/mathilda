@@ -25,6 +25,7 @@
 #include "integrate_chebychev.h"
 #include "integrate_goursat.h"
 #include "integrate_jeffrey.h"
+#include "integrate_newton_leibniz.h"
 #include "intrat.h"
 #include "intrischnorman.h"
 #include "intsimp.h"
@@ -308,6 +309,7 @@ typedef enum {
     METHOD_RISCH,
     METHOD_CRCTABLE,
     METHOD_UNDEFINED,
+    METHOD_NEWTON_LEIBNIZ,   /* definite-only: selects the FTC mechanism      */
     METHOD_INVALID
 } IntegrateMethod;
 
@@ -325,6 +327,7 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "RischNorman") == 0) return METHOD_RISCH;
     if (strcmp(s, "CRCTable")    == 0) return METHOD_CRCTABLE;
     if (strcmp(s, "Undefined")   == 0) return METHOD_UNDEFINED;
+    if (strcmp(s, "NewtonLeibniz") == 0) return METHOD_NEWTON_LEIBNIZ;
     return METHOD_INVALID;
 }
 
@@ -389,12 +392,100 @@ static IntegrateMethod parse_method_option(Expr* opt, Expr** out_sub) {
     return method_from_string(rhs->data.string);
 }
 
+/* True iff `e` is a definite-integral range spec `{x, a, b}`: a 3-element
+ * List whose first element is a symbol. */
+static bool is_range_spec(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol == SYM_List &&
+           e->data.function.arg_count == 3 &&
+           e->data.function.args[0]->type == EXPR_SYMBOL;
+}
+
+/* Parse a definite integral's trailing `Method -> "..."` option for the
+ * Newton-Leibniz path.  `*name` is set to a borrowed method-name string to
+ * pass through to the inner indefinite Integrate (NULL for Automatic and for
+ * "NewtonLeibniz", which selects the FTC mechanism itself).  Returns false on
+ * a malformed / unrecognised option. */
+static bool definite_parse_method(Expr* opt, const char** name) {
+    *name = NULL;
+    if (opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2)
+        return false;
+    if (opt->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* hd = opt->data.function.head->data.symbol;
+    if (hd != SYM_Rule && hd != SYM_RuleDelayed) return false;
+    Expr* lhs = opt->data.function.args[0];
+    Expr* rhs = opt->data.function.args[1];
+    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol != SYM_Method) return false;
+    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic) return true;
+    if (rhs->type != EXPR_STRING) return false;
+    IntegrateMethod m = method_from_string(rhs->data.string);
+    if (m == METHOD_INVALID) return false;
+    if (m == METHOD_AUTOMATIC || m == METHOD_NEWTON_LEIBNIZ) return true;
+    *name = rhs->data.string;   /* borrowed: valid while `res` is alive */
+    return true;
+}
+
+/* Definite / iterated integration Integrate[f, {x,a,b}, {y,c,d}, ..., opts].
+ * Reduces innermost-first (the last spec is the inner integral) so an inner
+ * bound may depend on an outer variable.  Returns NULL (unevaluated) if any
+ * stage cannot be evaluated. */
+static Expr* integrate_definite(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    Expr* f = res->data.function.args[0];
+
+    /* Leading run of range specs, then at most one trailing Method option. */
+    size_t nspecs = 0;
+    while (1 + nspecs < argc && is_range_spec(res->data.function.args[1 + nspecs]))
+        nspecs++;
+    if (nspecs == 0) return NULL;
+
+    const char* method = NULL;
+    size_t tail = 1 + nspecs;
+    if (tail < argc) {
+        if (tail != argc - 1) return NULL;   /* stray extra arguments */
+        if (!definite_parse_method(res->data.function.args[tail], &method)) {
+            static uint64_t last_warned_hash = 0;
+            uint64_t h = expr_hash(res);
+            if (h != last_warned_hash) {
+                fprintf(stderr,
+                    "Integrate::method: Method option value is not a "
+                    "recognised integration method name.\n");
+                last_warned_hash = h;
+            }
+            return NULL;
+        }
+    }
+
+    /* Fold from the innermost (last) spec outward. */
+    Expr* cur = expr_copy(f);
+    for (size_t k = nspecs; k >= 1; k--) {
+        Expr* spec = res->data.function.args[1 + (k - 1)];
+        Expr* x = spec->data.function.args[0];
+        Expr* a = spec->data.function.args[1];
+        Expr* b = spec->data.function.args[2];
+        Expr* r = integrate_newton_leibniz_try(cur, x, a, b, method);
+        expr_free(cur);
+        if (!r) return NULL;
+        cur = r;
+    }
+    return cur;
+}
+
 Expr* builtin_integrate(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
-    if (argc < 2 || argc > 3) return NULL;
+    if (argc < 2) return NULL;
 
     Expr* f = res->data.function.args[0];
+
+    /* Definite form: the second argument is a `{x, a, b}` range spec.
+     * Handles the iterated multi-spec form too. */
+    if (is_range_spec(res->data.function.args[1]))
+        return integrate_definite(res);
+
+    if (argc > 3) return NULL;
+
     Expr* x = res->data.function.args[1];
 
     /* The integration variable must be a (single) symbol so we can
@@ -440,7 +531,7 @@ Expr* builtin_integrate(Expr* res) {
                     "\"LinearRatioRadicals\", \"ChebychevAlgebraic\", "
                     "\"GoursatAlgebraic\", "
                     "\"Weierstrass\", \"RischNorman\", "
-                    "\"CRCTable\".\n");
+                    "\"CRCTable\", \"NewtonLeibniz\".\n");
                 last_warned_hash = h;
             }
             return NULL;
@@ -532,6 +623,10 @@ Expr* builtin_integrate(Expr* res) {
         case METHOD_UNDEFINED:
             result = try_undefined(effective_f, x);
             break;
+        case METHOD_NEWTON_LEIBNIZ:
+            /* Definite-only mechanism.  Meaningless on the indefinite form
+             * Integrate[f, x, Method -> "NewtonLeibniz"]; leave unevaluated. */
+            break;
         case METHOD_INVALID:
             break;  /* unreachable: handled above */
     }
@@ -559,13 +654,17 @@ void integrate_init(void) {
     symtab_add_builtin("Integrate", builtin_integrate);
     /* NOT Listable: Listable would thread over a definite-integral range
      * spec `{x, a, b}` element-wise (producing garbage like
-     * {Integrate[f,x], Integrate[f,a], Integrate[f,b]}).  Definite
-     * integration is not yet supported, so the `{x,a,b}` form falls through
-     * the EXPR_SYMBOL variable check in builtin_integrate and stays
-     * unevaluated. */
+     * {Integrate[f,x], Integrate[f,a], Integrate[f,b]}).  The `{x,a,b}` form
+     * is recognised explicitly at the top of builtin_integrate and routed to
+     * the definite (Newton-Leibniz) path. */
     symtab_get_def("Integrate")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Integrate",
         "Integrate[f, x] gives the indefinite integral of f with respect to x.\n"
+        "Integrate[f, {x, xmin, xmax}] gives the definite integral by the\n"
+        "fundamental theorem of calculus (Method -> \"NewtonLeibniz\").\n"
+        "Integrate[f, {x, xmin, xmax}, {y, ymin, ymax}, ...] gives the iterated\n"
+        "multiple integral (innermost/last spec integrated first; inner bounds\n"
+        "may depend on outer variables).  See also Integrate`SingularPoints.\n"
         "Integrate[f, x, Method -> \"<name>\"] dispatches directly to a single\n"
         "subroutine, bypassing the default cascade.  Accepted method names:\n"
         "  \"Automatic\"          — try BronsteinRational, then RischNorman, then CRCTable (default)\n"
@@ -580,6 +679,7 @@ void integrate_init(void) {
         "  \"RischNorman\"        — Integrate`RischNorman (Bronstein pmint heuristic)\n"
         "  \"CRCTable\"           — Integrate`CRCTable (lazy-loaded CRC integral table)\n"
         "  \"Undefined\"          — Integrate`Undefined (unknown functions u[x], u'[x]; Roach §1.7)\n"
+        "  \"NewtonLeibniz\"       — definite integrals via F(b)-F(a) (implicit for the {x,a,b} form)\n"
         "Method -> {\"DerivativeDivides\", \"Substitution\" -> u} pins the kernel u(x),\n"
         "trialing only that substitution.\n"
         "Named methods are strict: failure returns unevaluated, with no fallback.\n"
@@ -615,6 +715,10 @@ void integrate_init(void) {
     /* Continuous Weierstrass substitution (Jeffrey & Rich 1994):
      * Integrate`Weierstrass. */
     integrate_jeffrey_init();
+
+    /* Definite integration by the fundamental theorem of calculus:
+     * Integrate`NewtonLeibniz and the pole detector Integrate`SingularPoints. */
+    integrate_newton_leibniz_init();
 
     /* Initialise the parallel-Risch / Risch-Norman heuristic
      * (Bronstein's pmint).  Provides `Integrate`RischNorman[f, x]`,

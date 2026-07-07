@@ -553,6 +553,10 @@ monotonically down.
   - `"RischNorman"` — `Integrate\`RischNorman[f, x]`.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.
+  - `"NewtonLeibniz"` — the definite-integral mechanism (implicit for the
+    `{x, a, b}` form); see **Definite integration** below.  On a definite
+    integral, any *other* method name is passed through to the inner
+    indefinite integration that produces the antiderivative.
   Unknown method names emit `Integrate::method` and bubble back.
 - Universal correctness predicate: `Cancel[Together[D[Integrate[f,x],x] - f]] === 0`.
 
@@ -586,6 +590,61 @@ Out[8]= -Cos[x]
 
 In[9]:= Integrate[x^3, x, Method -> "BronsteinRational"]
 Out[9]= 1/4 x^4
+```
+
+### Definite integration (Newton-Leibniz)
+
+`Integrate[f, {x, xmin, xmax}]` gives the definite integral by the
+**fundamental theorem of calculus** (`src/calculus/integrate_newton_leibniz.c`,
+exposed explicitly as `Integrate\`NewtonLeibniz[f, {x, xmin, xmax}]` and as
+`Method -> "NewtonLeibniz"`).  The mechanism:
+
+1. Antidifferentiate `f` with the ordinary indefinite cascade to get `F`.  If
+   no closed antiderivative exists, the definite integral is left unevaluated
+   — never assigned a wrong value.
+2. Locate the real poles of `f` and `F` strictly inside `(xmin, xmax)` via
+   `Integrate\`SingularPoints` (roots of `Denominator[Together[·]]`).
+3. Split `[xmin, xmax]` at those poles and form the telescoping sum
+   `Σ (F(p_{i+1}⁻) − F(p_i⁺))`, evaluating each boundary through the `Limit`
+   engine: a plain limit at infinite endpoints, a one-sided limit
+   (`Direction -> "FromBelow"/"FromAbove"`) at interior poles, and direct
+   substitution at ordinary finite endpoints.  Improper integrals thereby
+   acquire their correct finite value; genuinely divergent ones return
+   `Infinity` / `ComplexInfinity` / `Indeterminate`.
+
+`Integrate[f, {x, a, b}, {y, c, d}, …]` gives the iterated multiple integral,
+reduced innermost-first (the last spec is the inner integral), so an inner
+bound may depend on an outer variable.
+
+`Integrate\`SingularPoints[expr, {x, a, b}]` returns the sorted list of the
+interior real poles used for the split — exposed for inspection and reuse.
+
+**Scope of this pass.** The pole detector covers denominator (rational) poles.
+Branch-cut discontinuities of `F` that are *not* poles (e.g. an antiderivative
+built from `Tan[x/2]` whose jump is not visible as a denominator root) are out
+of scope; when the pole positions cannot be decided (symbolic coefficients, or
+a transcendental denominator that `Solve` cannot place), the integral is left
+unevaluated rather than risking a wrong value.
+
+**Examples**:
+```mathematica
+In[1]:= Integrate[x^2, {x, 0, 1}]
+Out[1]= 1/3
+
+In[2]:= Integrate[1/(1 + x^2), {x, 0, Infinity}]
+Out[2]= 1/2 Pi
+
+In[3]:= Integrate[1/Sqrt[x], {x, 0, 1}]            (* improper, convergent *)
+Out[3]= 2
+
+In[4]:= Integrate[1/x^2, {x, -1, 1}]               (* interior pole, divergent *)
+Out[4]= Infinity
+
+In[5]:= Integrate[x y, {x, 0, 1}, {y, 0, 1}]       (* iterated *)
+Out[5]= 1/4
+
+In[6]:= Integrate`SingularPoints[1/((x - 1)(x - 2)), {x, 0, 3}]
+Out[6]= {1, 2}
 ```
 
 The `Integrate`` package also exposes the lower-level helpers
