@@ -120,10 +120,19 @@ static void test_negative_controls(void) {
     /* Branch point (not rational): the residue method must not fire. */
     check_eq("Integrate[1/Sqrt[1+x^4], {x, -Infinity, Infinity}]",
              "Integrate[1/Sqrt[1 + x^4], {x, -Infinity, Infinity}]");
-    /* Rational integrand with a real-axis pole: only a principal value exists,
-     * which plain Integrate does not compute -- strict "Residue" is unevaluated. */
+    /* Rational integrand with a real-axis pole (Family A): the ordinary integral
+     * genuinely diverges (only a principal value would exist).  The residue
+     * method now flags this conclusively, so the dispatcher emits Integrate::idiv
+     * (to stderr) and leaves the integral unevaluated for both the explicit
+     * "Residue" method and the Automatic path. */
     check_eq("Integrate[1/(x^2-1), {x, -Infinity, Infinity}, Method -> \"Residue\"]",
              "Integrate[1/(-1 + x^2), {x, -Infinity, Infinity}, Method -> \"Residue\"]");
+    check_eq("Integrate[1/(x^2-1), {x, -Infinity, Infinity}]",
+             "Integrate[1/(-1 + x^2), {x, -Infinity, Infinity}]");
+    /* Trig integrand whose denominator vanishes on the real axis (Family C):
+     * the periodic integral diverges -> unevaluated. */
+    check_eq("Integrate[1/(1-Cos[x]), {x, 0, 2 Pi}, Method -> \"Residue\"]",
+             "Integrate[1/(1 - Cos[x]), {x, 0, 2 Pi}, Method -> \"Residue\"]");
 }
 
 static void test_regression_finite(void) {

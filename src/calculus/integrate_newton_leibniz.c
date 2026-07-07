@@ -434,8 +434,9 @@ static Expr* nl_eval_at(Expr* F, Expr* x, Expr* target, NLDir dir) {
  * ---------------------------------------------------------------------- */
 
 /* Emit the Mathematica-style Integrate::idiv warning to stderr, naming the
- * integrand and interval. */
-static void nl_emit_idiv(Expr* f, Expr* a, Expr* b) {
+ * integrand and interval.  Shared (declared in the header) so other definite
+ * mechanisms can report divergence with the same diagnostic. */
+void integrate_emit_idiv(Expr* f, Expr* a, Expr* b) {
     char* fs = expr_to_string(f);
     char* as = expr_to_string(a);
     char* bs = expr_to_string(b);
@@ -599,7 +600,7 @@ Expr* integrate_newton_leibniz_try(Expr* f, Expr* x, Expr* a, Expr* b,
      * divergence sentinel.  Warn as Mathematica does and leave the integral
      * unevaluated. */
     if (nl_is_infinite(total) || is_indeterminate_sym(total)) {
-        nl_emit_idiv(f, a, b);
+        integrate_emit_idiv(f, a, b);
         expr_free(total);
         return NULL;
     }

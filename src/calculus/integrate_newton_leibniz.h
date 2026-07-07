@@ -43,6 +43,12 @@
 Expr* integrate_newton_leibniz_try(Expr* f, Expr* x, Expr* a, Expr* b,
                                    const char* method);
 
+/* Emit the Mathematica-style `Integrate::idiv: Integral of <f> does not
+ * converge on {<a>, <b>}.` warning to stderr.  Shared so other definite
+ * mechanisms (e.g. the residue method) report a conclusively divergent
+ * integral with the same diagnostic. */
+void integrate_emit_idiv(Expr* f, Expr* a, Expr* b);
+
 /* `Integrate`NewtonLeibniz[f, {x, a, b}]` builtin.  Strict: returns NULL on
  * any non-applicable input. */
 Expr* builtin_integrate_newton_leibniz(Expr* res);

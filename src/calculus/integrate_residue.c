@@ -369,7 +369,8 @@ static bool res_kernel_vanishes_at(Expr* kernel, Expr* x, Expr* r) {
  * Family A -- rational integrands on (-Inf, Inf).
  * ---------------------------------------------------------------------- */
 
-static Expr* residue_family_rational(Expr* f, Expr* x, Expr* a, Expr* b) {
+static Expr* residue_family_rational(Expr* f, Expr* x, Expr* a, Expr* b,
+                                     bool* diverges) {
     if (!is_neg_pos_infinity(a, b)) return NULL;
 
     Expr* P; Expr* Q;
@@ -386,19 +387,25 @@ static Expr* residue_family_rational(Expr* f, Expr* x, Expr* a, Expr* b) {
 
     /* Sum the upper-half-plane residues.  A pole ON the real axis is a genuine
      * pole of the rational integrand (Together has already cancelled any common
-     * factor), so the ordinary improper integral does not converge -- leave it
-     * for Newton-Leibniz rather than silently returning a principal value. */
-    bool bad = false;
-    for (size_t i = 0; i < roots.n && !bad; i++) {
+     * factor) and, since the degree gate above guarantees convergence at
+     * infinity, the ONLY obstruction: the ordinary improper integral does not
+     * converge.  Flag that conclusively (the dispatcher emits Integrate::idiv)
+     * -- distinct from an undecidable symbolic root, which stays a plain bail. */
+    bool real_pole = false, undecidable = false;
+    for (size_t i = 0; i < roots.n; i++) {
         double re, im;
-        if (!res_reim(roots.v[i], &re, &im)) { bad = true; break; }   /* symbolic root */
+        if (!res_reim(roots.v[i], &re, &im)) { undecidable = true; break; } /* symbolic root */
         double mag = 1.0 + fabs(re) + fabs(im);
         if (im > RES_TOL * mag)          ev_push(&keep, expr_copy(roots.v[i])); /* UHP */
         else if (im < -RES_TOL * mag)    { /* lower half-plane: ignore */ }
-        else                             { bad = true; break; }        /* real pole */
+        else                             { real_pole = true; break; }   /* real-axis pole */
     }
     ev_free(&roots);
-    if (bad || keep.n == 0) { expr_free(Q); ev_free(&keep); return NULL; }
+    if (real_pole) {
+        if (diverges) *diverges = true;
+        expr_free(Q); ev_free(&keep); return NULL;
+    }
+    if (undecidable || keep.n == 0) { expr_free(Q); ev_free(&keep); return NULL; }
     expr_free(Q);
 
     Expr** poles = malloc(keep.n * sizeof(*poles));
@@ -599,7 +606,8 @@ static Expr* residue_family_fourier(Expr* f, Expr* x, Expr* a, Expr* b) {
  * Family C -- rational-in-{Sin,Cos} integrands over a full period.
  * ---------------------------------------------------------------------- */
 
-static Expr* residue_family_trig(Expr* f, Expr* x, Expr* a, Expr* b) {
+static Expr* residue_family_trig(Expr* f, Expr* x, Expr* a, Expr* b,
+                                 bool* diverges) {
     if (!is_full_period(a, b)) return NULL;
 
     Expr* z = mk_sym(RES_W);
@@ -636,18 +644,26 @@ static Expr* residue_family_trig(Expr* f, Expr* x, Expr* a, Expr* b) {
     ExprVec roots; ExprVec keep; ev_init(&keep);
     if (!solve_roots(Q, z, &roots)) { expr_free(z); expr_free(Fz); expr_free(Q); return NULL; }
 
-    bool bad = false;
-    for (size_t i = 0; i < roots.n && !bad; i++) {
+    /* A pole ON the unit circle |z|=1 is a pole on the real x-axis where the
+     * trig denominator vanishes: the periodic integral does not converge.  Flag
+     * it conclusively (dispatcher emits Integrate::idiv); a symbolic root is a
+     * plain undecidable bail. */
+    bool circle_pole = false, undecidable = false;
+    for (size_t i = 0; i < roots.n; i++) {
         double re, im;
-        if (!res_reim(roots.v[i], &re, &im)) { bad = true; break; }
+        if (!res_reim(roots.v[i], &re, &im)) { undecidable = true; break; }
         double mag = sqrt(re * re + im * im);
         if (mag < 1.0 - RES_TOL)      ev_push(&keep, expr_copy(roots.v[i]));  /* inside disk */
         else if (mag > 1.0 + RES_TOL) { /* outside: skip */ }
-        else { bad = true; break; }   /* on the unit circle: real-axis pole -> divergent */
+        else { circle_pole = true; break; }   /* on the unit circle -> divergent */
     }
     ev_free(&roots);
     expr_free(Q);
-    if (bad || keep.n == 0) { expr_free(z); expr_free(Fz); ev_free(&keep); return NULL; }
+    if (circle_pole) {
+        if (diverges) *diverges = true;
+        expr_free(z); expr_free(Fz); ev_free(&keep); return NULL;
+    }
+    if (undecidable || keep.n == 0) { expr_free(z); expr_free(Fz); ev_free(&keep); return NULL; }
 
     Expr** poles = malloc(keep.n * sizeof(*poles));
     int* weight  = malloc(keep.n * sizeof(*weight));
@@ -683,14 +699,17 @@ static bool is_even_in(Expr* f, Expr* x) {
     return ok;
 }
 
-static Expr* residue_half_line(Expr* f, Expr* x, Expr* a, Expr* b) {
+static Expr* residue_half_line(Expr* f, Expr* x, Expr* a, Expr* b,
+                               bool* diverges) {
     if (!is_zero_pos_infinity(a, b)) return NULL;
     if (!is_even_in(f, x)) return NULL;
 
     /* -Infinity as DirectedInfinity[-1] via -1 * Infinity. */
     Expr* neg = eval_take(mk_fn2("Times", mk_int(-1), mk_sym(SYM_Infinity)));
     Expr* pos = mk_sym(SYM_Infinity);
-    Expr* full = integrate_residue_try(f, x, neg, pos);   /* recurse: full line */
+    /* Recurse over the full line: a divergent full-line even integrand means the
+     * half-line [0, Inf) diverges too, so propagate the flag. */
+    Expr* full = integrate_residue_try(f, x, neg, pos, diverges);
     expr_free(neg); expr_free(pos);
     if (!full) return NULL;
 
@@ -708,21 +727,22 @@ static Expr* residue_half_line(Expr* f, Expr* x, Expr* a, Expr* b) {
  * Master entry + builtin.
  * ---------------------------------------------------------------------- */
 
-Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b) {
+Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b, bool* diverges) {
+    if (diverges) *diverges = false;
     if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
 
     /* Full period (0,2Pi)/(-Pi,Pi): the unit-circle trig-substitution family. */
-    if (is_full_period(a, b)) return residue_family_trig(f, x, a, b);
+    if (is_full_period(a, b)) return residue_family_trig(f, x, a, b, diverges);
 
     /* Whole line: Fourier/Jordan if a trig/exp kernel is present, else rational. */
     if (is_neg_pos_infinity(a, b)) {
         Expr* r = residue_family_fourier(f, x, a, b);
         if (r) return r;
-        return residue_family_rational(f, x, a, b);
+        return residue_family_rational(f, x, a, b, diverges);
     }
 
     /* Half-line [0,Inf) for even integrands. */
-    if (is_zero_pos_infinity(a, b)) return residue_half_line(f, x, a, b);
+    if (is_zero_pos_infinity(a, b)) return residue_half_line(f, x, a, b, diverges);
 
     return NULL;
 }
@@ -736,7 +756,7 @@ Expr* builtin_integrate_contour_residue(Expr* res) {
     if (x->type != EXPR_SYMBOL) return NULL;
     Expr* a = spec->data.function.args[1];
     Expr* b = spec->data.function.args[2];
-    return integrate_residue_try(f, x, a, b);
+    return integrate_residue_try(f, x, a, b, NULL);
 }
 
 void integrate_residue_init(void) {

@@ -38,6 +38,7 @@
 #ifndef MATHILDA_INTEGRATE_RESIDUE_H
 #define MATHILDA_INTEGRATE_RESIDUE_H
 
+#include <stdbool.h>
 #include "expr.h"
 
 /*
@@ -46,8 +47,16 @@
  * Expr* (the verified closed-form value) when a recognizer fires and its value
  * passes the numeric crosscheck, or NULL to leave the integral for the
  * Newton-Leibniz path (no family matched, closure failed, or crosscheck rejected).
+ *
+ * `diverges` (may be NULL) is an out-flag, set to true only when a family
+ * CONCLUSIVELY determines the ordinary integral does not converge -- a genuine
+ * (non-removable) pole on the integration contour, i.e. the real axis for the
+ * rational family or the unit circle for the trig family.  The dispatcher uses
+ * it to emit Integrate::idiv and stop, rather than silently falling through.  It
+ * is left false for a merely-unrecognized integrand (an undecidable/symbolic
+ * pole, closure failure, etc.), which stays eligible for the Newton-Leibniz path.
  */
-Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b);
+Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b, bool* diverges);
 
 /* `Integrate`ContourResidue[f, {x, a, b}]` builtin.  Strict: NULL on any
  * non-applicable input (no fallback). */

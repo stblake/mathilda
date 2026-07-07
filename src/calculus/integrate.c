@@ -485,8 +485,18 @@ static Expr* integrate_definite(Expr* res) {
             Expr* a = spec->data.function.args[1];
             Expr* b = spec->data.function.args[2];
             r = NULL;
+            bool diverges = false;
             if (mech == METHOD_AUTOMATIC || mech == METHOD_RESIDUE)
-                r = integrate_residue_try(cur, x, a, b);
+                r = integrate_residue_try(cur, x, a, b, &diverges);
+            /* The residue method conclusively found a pole on the integration
+             * contour: the integral does not converge.  Emit Integrate::idiv
+             * and stop -- do NOT fall through to Newton-Leibniz (which would
+             * re-derive the same divergence and emit a duplicate warning). */
+            if (!r && diverges) {
+                integrate_emit_idiv(cur, a, b);
+                expr_free(cur);
+                return NULL;
+            }
             if (!r && mech != METHOD_RESIDUE)
                 r = integrate_newton_leibniz_try(cur, x, a, b, method);
         }
