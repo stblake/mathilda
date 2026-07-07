@@ -28,7 +28,30 @@ empty (i.e. {}), or higher-rank tensor inputs; an n-by-0 matrix
 
 ## Examples
 
-_No verified examples yet for this function._
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= UpperTriangularMatrixQ[{{a, b, c}, {0, e, f}, {0, 0, g}}]
+Out[1]= True
+
+In[2]:= UpperTriangularMatrixQ[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
+Out[2]= False
+
+In[3]:= UpperTriangularMatrixQ[{{0, 1, 2}, {0, 0, 3}, {0, 0, 0}}, 1]
+Out[3]= True
+
+In[4]:= UpperTriangularMatrixQ[{{1, 2, 3}, {4, 5, 6}, {0, 7, 9}}, -1]
+Out[4]= True
+
+In[5]:= UpperTriangularMatrixQ[{{1, 2, 3}, {0, 4, 5}}]
+Out[5]= True
+
+In[6]:= UpperTriangularMatrixQ[{{1, 2}, {0, 4}, {0, 0}}]
+Out[6]= True
+
+In[7]:= UpperTriangularMatrixQ[IdentityMatrix[5]]
+Out[7]= True
+```
 
 ## Implementation notes
 

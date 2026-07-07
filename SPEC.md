@@ -19,8 +19,9 @@ PICOMATH-80.
 **External dependencies:**
 - **GMP** — arbitrary-precision integers.
 - **GNU Readline** — interactive line editing and history.
-- **GMP-ECM** — advanced integer factorization (vendored in `src/external/ecm/`,
-  do not modify).
+- **GMP-ECM** — advanced integer factorization. System library
+  (`brew install gmp-ecm` / `apt install libecm-dev`), autodetected via a
+  compile-link probe; the build degrades gracefully (`NO_ECM`) when absent.
 - **Raylib** (optional, `USE_GRAPHICS`) — windowing/rendering backend for
   `Graphics[]`/`Show[]`/`Plot[]`. Autodetected via `pkg-config`; the build
   degrades gracefully to a text placeholder when absent.
@@ -72,7 +73,6 @@ src/
   graphics/         2D graphics engine: Graphics[]/Show[]/Plot[] primitives,
                     adaptive sampler, Raylib renderer (USE_GRAPHICS), vector font
   internal/         .m bootstrap scripts (init.m, deriv.m, integral tables)
-  external/ecm/     Vendored GMP-ECM (DO NOT MODIFY)
 tests/              CMake-built unit suite (test_*.c)
 makefile            Primary build system
 ```
@@ -320,8 +320,33 @@ for t in *_tests; do ./$t; done
 valgrind --leak-check=full ./Mathilda
 ```
 
-The makefile auto-discovers `src/*.c`. ECM is built and linked by default
-(`USE_ECM=1`).
+The makefile auto-discovers `src/*.c`. GMP-ECM is linked by default when the
+system library is present (`USE_ECM=1`, autodetected); install it with
+`brew install gmp-ecm` (macOS) or `sudo apt install libecm-dev` (Debian/Ubuntu),
+or build without it via `make USE_ECM=0`.
+
+### Performance regression gate
+
+`tests/bench_assoc.c` guards against the Association operations silently
+degrading, with two machine-independent gates (nonzero exit on failure):
+
+1. **Scaling** — the failure mode that matters most is an `O(n)` op quietly
+   becoming `O(n^2)`. It times each hash-backed op at size *n* and *2n* and checks
+   the **doubling ratio** `t(2n)/t(n)`: ~2 for `O(n)`, ~4 for `O(n^2)`. Fails if
+   any ratio exceeds 3.3.
+2. **Absolute cost** — a "much slower" tripwire for constant-factor regressions.
+   Absolute wall times are machine-dependent, so each op's per-element time is
+   normalized against a runtime calibration (a plain `Total[list]` of the same
+   size); that ratio is machine-independent. Fails if any op exceeds **2.5×** its
+   checked-in baseline cost.
+
+```bash
+cd tests/build && make bench_assoc && ./bench_assoc
+```
+
+Baselines (Apple M-series, `USE_ECM=OFF`, 2026-07-06) live in `bench_assoc.c` as
+`baseline_norm`; every op currently sits at ~1.0× and ratios at ≈2.0. Re-record
+the baselines only after an *intended* performance change.
 
 ---
 
@@ -332,7 +357,8 @@ The makefile auto-discovers `src/*.c`. ECM is built and linked by default
   C99-safe fallbacks. `<math.h>` constants like `M_PI` are POSIX, not C99 —
   guard with `#ifndef M_PI` fallbacks (see `src/trig.c`, `src/numeric.c`).
 - **Memory safety.** Trace ownership; valgrind regularly. See §4.
-- **No edits under `src/external/`.** ECM is vendored.
+- **GMP-ECM is a system dependency**, not vendored — do not re-add it to the
+  tree.
 - **Docstrings.** Every builtin must have one via `symtab_set_docstring()`. Keep
   them terse — examples live in `docs/spec/...`.
 - **Attributes.** Every builtin gets appropriate attributes in its module

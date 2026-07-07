@@ -146,11 +146,6 @@ static int is_neg_one(const Expr* e) {
     return e && e->type == EXPR_INTEGER && e->data.integer == -1;
 }
 
-/* True if e is the integer 1 */
-static int is_one(const Expr* e) {
-    return e && e->type == EXPR_INTEGER && e->data.integer == 1;
-}
-
 /* Get the numeric value of an atom; returns 0 and sets ok=0 on failure */
 static double atom_value(const Expr* e, int* ok) {
     *ok = 1;
@@ -184,24 +179,6 @@ static int is_denom_factor(const Expr* e) {
 /* Collect numerator and denominator factors from a Times expression.
  * caller passes fixed-size arrays; returns 0 if not a fraction. */
 #define MAX_FACTORS 32
-
-static int split_fraction(const Expr* times,
-                          const Expr** num, int* nnum,
-                          const Expr** den, int* nden) {
-    *nnum = 0; *nden = 0;
-    if (!head_is(times, SYM_Times)) return 0;
-    size_t argc = times->data.function.arg_count;
-    for (size_t i = 0; i < argc && i < MAX_FACTORS; i++) {
-        const Expr* f = times->data.function.args[i];
-        if (is_denom_factor(f)) {
-            /* Strip the negative exponent */
-            den[(*nden)++] = (void*)f;  /* store the whole Power[x,-n] for rendering */
-        } else {
-            num[(*nnum)++] = f;
-        }
-    }
-    return *nden > 0;
-}
 
 /* Render a denominator factor: Power[x, -n] → x^{n} (with positive exponent) */
 static void render_denom_factor(LBuf* b, const Expr* pow_expr) {
@@ -301,9 +278,12 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
         return;
     }
     if (e->type == EXPR_STRING) {
-        lb_cat(b, "\\text{\"");
+        /* Use a directional quote pair so the opening quote is a left double
+         * quote: a straight " renders as a closing quote in the math font, so
+         * "apples" would show as ”apples”. U+201C / U+201D give “apples”. */
+        lb_cat(b, "\\text{\xe2\x80\x9c");
         lb_cat(b, e->data.string);
-        lb_cat(b, "\"}");
+        lb_cat(b, "\xe2\x80\x9d}");
         return;
     }
 
@@ -414,6 +394,34 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
         }
         lb_cat(b, "\\}");
         return;
+    }
+
+    /* ---- Association[k->v, ...] → ⟨| k → v, ... |⟩ ---- */
+    if (hname == SYM_Association) {
+        bool all_rules = true;
+        for (size_t i = 0; i < argc; i++) {
+            const Expr* r = args[i];
+            if (!((head_is(r, SYM_Rule) || head_is(r, SYM_RuleDelayed)) &&
+                  r->data.function.arg_count == 2)) { all_rules = false; break; }
+        }
+      if (all_rules) {
+        lb_cat(b, "\\left\\langle\\!\\left|\\, ");
+        for (size_t i = 0; i < argc; i++) {
+            if (i) lb_cat(b, ",\\; ");
+            const Expr* rule = args[i];
+            if ((head_is(rule, SYM_Rule) || head_is(rule, SYM_RuleDelayed)) &&
+                rule->data.function.arg_count == 2) {
+                to_latex_prec(b, rule->data.function.args[0], PREC_ATOM);
+                lb_cat(b, " \\to ");
+                to_latex_prec(b, rule->data.function.args[1], PREC_ADD);
+            } else {
+                to_latex_prec(b, rule, PREC_ADD);
+            }
+        }
+        lb_cat(b, "\\, \\right|\\!\\right\\rangle");
+        return;
+      }
+      /* else fall through to generic head[args] printing below */
     }
 
     /* ---- Factorial[n] → n! ---- */
@@ -543,9 +551,23 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
         }
     }
 
-    /* ---- Generic function: head[a, b, ...] → \text{head}(a, b, ...) ---- */
+    /* ---- Generic function: head[a, b, ...] ---- */
     fallback: {
-        /* Use expr_to_string as final fallback */
+        /* For a symbol-headed function, render Name[arg, ...] with each argument
+         * in LaTeX, so nested strings (curly quotes via \text), fractions, etc.
+         * render properly rather than dumping the plain re-parseable form (which
+         * would show straight quotes, e.g. Key["a"]). */
+        if (e->type == EXPR_FUNCTION && head && head->type == EXPR_SYMBOL) {
+            lb_cat(b, sym_latex(head->data.symbol));
+            lb_cat(b, "[");
+            for (size_t i = 0; i < argc; i++) {
+                if (i) lb_cat(b, ", ");
+                to_latex_prec(b, args[i], 0);
+            }
+            lb_cat(b, "]");
+            return;
+        }
+        /* Non-symbol head or atom: fall back to the plain string form. */
         char* s = expr_to_string((Expr*)e);  /* const cast: expr_to_string doesn't modify */
         if (s) { lb_cat(b, s); free(s); }
     }
@@ -665,7 +687,6 @@ static void render_times(LBuf* b, const Expr* e, int ctx_prec) {
             if (i > 0) {
                 /* No \cdot between number and symbol, but yes between two symbols */
                 const Expr* prev = num_f[i-1];
-                const Expr* cur  = num_f[i];
                 int prev_num = (prev->type == EXPR_INTEGER || prev->type == EXPR_REAL ||
                                 prev->type == EXPR_BIGINT  || head_is(prev, SYM_Rational));
                 (void)prev_num;

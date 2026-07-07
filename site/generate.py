@@ -301,30 +301,36 @@ OUT_RE = re.compile(r"^Out\[\d+\]=\s?(.*)$")
 
 
 def run_session(lines, timeout=60):
-    """Feed `lines` to ./Mathilda, return the list of Out[] values in order.
-    Each evaluated input yields exactly one Out[] line (verified)."""
-    inp = "\n".join(lines) + "\n"
+    """Feed `lines` to ./Mathilda and return the printed output value for each
+    input line, in order (empty string when an input produced no value).
+    Returns None on timeout.
+
+    When stdin is not a terminal the REPL speaks a line-based NDJSON protocol
+    (see src/repl.c): each request ``{"id": N, "expr": "..."}`` yields one or
+    more response objects, the value carried by ``{"id": N, "type": "expr",
+    "payload": "..."}``. Aligning replies by id is exact even for inputs that
+    print nothing, so this is more robust than scraping ``Out[]=`` banners
+    (which the pipe protocol no longer emits)."""
+    reqs = [json.dumps({"id": i, "expr": line}) for i, line in enumerate(lines, 1)]
+    reqs.append(json.dumps({"type": "quit"}))
+    inp = "\n".join(reqs) + "\n"
     try:
         proc = subprocess.run([str(MATHILDA)], input=inp, capture_output=True,
                               text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         return None
-    outs = []
-    sl = proc.stdout.splitlines()
-    i = 0
-    while i < len(sl):
-        m = OUT_RE.match(sl[i])
-        if m:
-            buf = [m.group(1)]
-            i += 1
-            while (i < len(sl) and sl[i].strip() != ""
-                   and not sl[i].startswith("Out[") and not sl[i].startswith("In[")):
-                buf.append(sl[i])
-                i += 1
-            outs.append("\n".join(buf).rstrip())
-        else:
-            i += 1
-    return outs
+    payloads = {}
+    for raw in proc.stdout.splitlines():
+        raw = raw.strip()
+        if not raw or raw[0] != "{":
+            continue
+        try:
+            msg = json.loads(raw)
+        except ValueError:
+            continue
+        if isinstance(msg, dict) and msg.get("type") == "expr" and "payload" in msg:
+            payloads[msg.get("id")] = msg["payload"]
+    return [payloads.get(i, "") for i in range(1, len(lines) + 1)]
 
 
 def get_attributes(names):

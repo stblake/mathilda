@@ -5,6 +5,7 @@
 #include "arithmetic.h"
 #include "match.h"
 #include "sym_names.h"
+#include "assoc.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -114,9 +115,25 @@ Expr* builtin_apply(Expr* res) {
     
     Expr* f = res->data.function.args[0];
     Expr* expr = res->data.function.args[1];
-    
+
     Expr* ls = (res->data.function.arg_count >= 3) ? res->data.function.args[2] : NULL;
     if (ls && ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol == SYM_Rule) ls = NULL;
+
+    /* Apply[f, assoc] uses the association's values as f's arguments:
+     * f @@ <|k1 -> v1, ...|> is f[v1, ...] (matching Wolfram, and consistent
+     * with Total = Plus @@ assoc). Only the default level applies here; an
+     * explicit level spec falls through to the generic traversal. */
+    if (ls == NULL && is_association(expr)) {
+        size_t n = expr->data.function.arg_count;
+        Expr** vargs = malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t i = 0; i < n; i++)
+            vargs[i] = expr_copy(expr->data.function.args[i]->data.function.args[1]);
+        Expr* call = expr_new_function(expr_copy(f), vargs, n);
+        free(vargs);
+        Expr* r = evaluate(call);
+        expr_free(call);
+        return r;
+    }
 
     LevelSpec spec = parse_level_spec(ls, 0, 0);
     parse_options(res, ls ? 3 : 2, &spec);
@@ -169,7 +186,13 @@ Expr* builtin_map(Expr* res) {
 
     Expr* f = res->data.function.args[0];
     Expr* expr = res->data.function.args[1];
-    
+
+    /* Map over an association threads over its values, preserving keys:
+     * Map[f, <|k -> v|>] -> <|k -> f[v]|>. Only the default level (no explicit
+     * level spec) is special-cased; deeper level specs fall through. */
+    if (res->data.function.arg_count == 2 && is_association(expr))
+        return assoc_map_values(f, expr);
+
     Expr* ls = (res->data.function.arg_count >= 3) ? res->data.function.args[2] : NULL;
     if (ls && ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol == SYM_Rule) ls = NULL;
 
@@ -177,6 +200,55 @@ Expr* builtin_map(Expr* res) {
     parse_options(res, ls ? 3 : 2, &spec);
 
     return map_at_level(f, expr, 0, spec);
+}
+
+/* ------------------- MapIndexed -------------------
+ *
+ * MapIndexed[f, list]   {f[e1, {1}], f[e2, {2}], ...}
+ * MapIndexed[f, assoc]  <|k1 -> f[v1, {Key[k1]}], ...|>
+ *
+ * The index passed as the second argument to f is a position: {i} for a list
+ * element, {Key[k]} for an association value — the same {Key[k]} shape Position
+ * reports, so the two compose. The f[...] applications are left for the
+ * evaluator to reduce (matching Map). */
+Expr* builtin_mapindexed(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* f    = res->data.function.args[0];
+    Expr* expr = res->data.function.args[1];
+    bool assoc = is_association(expr);
+    if (!assoc && expr->type != EXPR_FUNCTION) return NULL;
+
+    size_t n = expr->data.function.arg_count;
+    Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        Expr* elem = expr->data.function.args[i];
+        Expr* value = assoc ? elem->data.function.args[1] : elem;  /* rule value */
+
+        /* Position index: {Key[k]} for an association, {i + 1} for a list. */
+        Expr* pos_inner;
+        if (assoc) {
+            Expr* karg[1] = { expr_copy(elem->data.function.args[0]) };
+            pos_inner = expr_new_function(expr_new_symbol(SYM_Key), karg, 1);
+        } else {
+            pos_inner = expr_new_integer((int64_t)(i + 1));
+        }
+        Expr* pos = expr_new_function(expr_new_symbol(SYM_List), &pos_inner, 1);
+
+        Expr* fargs[2] = { expr_copy(value), pos };
+        Expr* applied = expr_new_function(expr_copy(f), fargs, 2);
+
+        if (assoc) {
+            Expr* rargs[2] = { expr_copy(elem->data.function.args[0]), applied };
+            out[i] = expr_new_function(expr_new_symbol(SYM_Rule), rargs, 2);
+        } else {
+            out[i] = applied;
+        }
+    }
+    Expr* head = assoc ? expr_new_symbol(SYM_Association)
+                       : expr_copy(expr->data.function.head);
+    Expr* result = expr_new_function(head, out, n);
+    free(out);
+    return result;
 }
 
 /* ------------------- MapAt ------------------- */
@@ -230,7 +302,39 @@ static Expr* mapat_at_path(Expr* f, Expr* expr, Expr** path, size_t plen) {
     }
     Expr* new_head = expr_copy(expr->data.function.head);
 
-    if (idx->type == EXPR_INTEGER) {
+    if (is_association(expr)) {
+        /* MapAt into an association applies f to the value at a key
+         * (assoc[[Key[k]]]/["str"]) or the i-th value positionally, matching the
+         * {Key[k]} positions that Position returns. */
+        Expr* key = NULL; bool positional = false; int64_t p = 0;
+        if (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
+            idx->data.function.head->data.symbol == SYM_Key && idx->data.function.arg_count == 1) {
+            key = idx->data.function.args[0];
+        } else if (idx->type == EXPR_INTEGER) {
+            positional = true; p = idx->data.integer;
+        } else {
+            key = idx;
+        }
+        int64_t target = -1;
+        if (positional) {
+            if (p < 0) p = (int64_t)len + p + 1;
+            if (p >= 1 && p <= (int64_t)len) target = p - 1;
+        } else {
+            for (size_t i = 0; i < len; i++) {
+                Expr* rule = new_args[i];
+                if (rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2 &&
+                    expr_eq(rule->data.function.args[0], key)) { target = (int64_t)i; break; }
+            }
+        }
+        if (target >= 0) {
+            Expr* rule = new_args[target];
+            if (rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2) {
+                Expr* nv = mapat_at_path(f, rule->data.function.args[1], path + 1, plen - 1);
+                expr_free(rule->data.function.args[1]);
+                rule->data.function.args[1] = nv;
+            }
+        }
+    } else if (idx->type == EXPR_INTEGER) {
         int64_t k = idx->data.integer;
         if (k == 0) {
             Expr* r = mapat_at_path(f, expr->data.function.head, path + 1, plen - 1);
@@ -377,9 +481,7 @@ Expr* builtin_select(Expr* res) {
     
     Expr* list = res->data.function.args[0];
     Expr* crit = res->data.function.args[1];
-    
-    if (list->type != EXPR_FUNCTION) return NULL; // Can only select from compound expressions
-    
+
     int64_t n_max = -1; // -1 means all
     if (res->data.function.arg_count == 3) {
         Expr* n_expr = res->data.function.args[2];
@@ -389,6 +491,14 @@ Expr* builtin_select(Expr* res) {
             return NULL; // Invalid n
         }
     }
+
+    /* Select over an association filters by value, preserving keys:
+     * Select[<|k -> v|>, p] keeps the entries where p[v] is True;
+     * Select[<|k -> v|>, p, n] keeps the first n such entries. */
+    if (is_association(list))
+        return assoc_select_values(crit, list, n_max);
+
+    if (list->type != EXPR_FUNCTION) return NULL; // Can only select from compound expressions
     
     size_t count = list->data.function.arg_count;
     Expr** kept_args = NULL;
@@ -415,9 +525,172 @@ Expr* builtin_select(Expr* res) {
     
     Expr* result = expr_new_function(expr_copy(list->data.function.head), kept_args, kept_count);
     if (kept_args) free(kept_args);
-    
+
     return result;
 }
+
+/* ------------------- TakeWhile / LengthWhile -------------------
+ *
+ * TakeWhile[list, crit]    the longest leading run of elements e with crit[e] === True
+ * LengthWhile[list, crit]  the length of that run
+ *
+ * Over an association the criterion is applied to the values; TakeWhile keeps
+ * the matching leading entries as an association (keys preserved), LengthWhile
+ * counts them. */
+
+/* Length of the longest leading run for which crit[e] evaluates to True. When
+ * `over_values` the elements are Rule[k, v] nodes and the test uses v. */
+static size_t leading_run_length(Expr* crit, Expr** elems, size_t n, bool over_values) {
+    size_t k = 0;
+    for (; k < n; k++) {
+        Expr* e = over_values ? elems[k]->data.function.args[1] : elems[k];
+        Expr* call_args[1] = { expr_copy(e) };
+        Expr* call = expr_new_function(expr_copy(crit), call_args, 1);
+        Expr* v = evaluate(call);
+        expr_free(call);
+        bool ok = (v->type == EXPR_SYMBOL && v->data.symbol == SYM_True);
+        expr_free(v);
+        if (!ok) break;
+    }
+    return k;
+}
+
+Expr* builtin_takewhile(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* coll = res->data.function.args[0];
+    Expr* crit = res->data.function.args[1];
+    bool assoc = is_association(coll);
+    if (!assoc && coll->type != EXPR_FUNCTION) return NULL;
+
+    size_t n = coll->data.function.arg_count;
+    Expr** elems = coll->data.function.args;
+    size_t k = leading_run_length(crit, elems, n, assoc);
+
+    Expr** out = malloc(sizeof(Expr*) * (k ? k : 1));
+    for (size_t i = 0; i < k; i++) out[i] = expr_copy(elems[i]);
+    Expr* head = assoc ? expr_new_symbol(SYM_Association)
+                       : expr_copy(coll->data.function.head);
+    Expr* result = expr_new_function(head, out, k);
+    free(out);
+    return result;
+}
+
+Expr* builtin_lengthwhile(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* coll = res->data.function.args[0];
+    Expr* crit = res->data.function.args[1];
+    bool assoc = is_association(coll);
+    if (!assoc && coll->type != EXPR_FUNCTION) return NULL;
+
+    size_t k = leading_run_length(crit, coll->data.function.args,
+                                  coll->data.function.arg_count, assoc);
+    return expr_new_integer((int64_t)k);
+}
+
+/* ------------------- SelectFirst -------------------
+ *
+ * SelectFirst[list, pred]           first e with pred[e] === True, else Missing["NotFound"]
+ * SelectFirst[list, pred, default]  default when none match
+ * Over an association, tests the values and returns the first matching value. */
+Expr* builtin_select_first(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 2 && argc != 3) return NULL;
+
+    Expr* coll = res->data.function.args[0];
+    Expr* pred = res->data.function.args[1];
+    Expr* deflt = (argc == 3) ? res->data.function.args[2] : NULL;
+
+    if (is_association(coll)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
+    if (coll->type != EXPR_FUNCTION) return NULL;
+
+    size_t n = coll->data.function.arg_count;
+    for (size_t i = 0; i < n; i++) {
+        Expr* elem = coll->data.function.args[i];
+        Expr* call_args[1] = { expr_copy(elem) };
+        Expr* call = expr_new_function(expr_copy(pred), call_args, 1);
+        Expr* v = evaluate(call);
+        expr_free(call);
+        bool is_true = (v->type == EXPR_SYMBOL && v->data.symbol == SYM_True);
+        expr_free(v);
+        if (is_true) return expr_copy(elem);
+    }
+    if (deflt) return expr_copy(deflt);
+    Expr* margs[1] = { expr_new_string("NotFound") };
+    return expr_new_function(expr_new_symbol(SYM_Missing), margs, 1);
+}
+
+/* ------------------- Scan -------------------
+ *
+ * Scan[f, expr] applies f to each element of expr for its side effects and
+ * returns Null. Over an association it applies f to each value. */
+Expr* builtin_scan(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* f = res->data.function.args[0];
+    Expr* coll = res->data.function.args[1];
+    if (coll->type != EXPR_FUNCTION) return NULL;
+
+    bool assoc = is_association(coll);
+    size_t n = coll->data.function.arg_count;
+    for (size_t i = 0; i < n; i++) {
+        Expr* elem = coll->data.function.args[i];
+        /* Over an association, scan the values. */
+        if (assoc && elem->type == EXPR_FUNCTION && elem->data.function.arg_count == 2)
+            elem = elem->data.function.args[1];
+        Expr* call_args[1] = { expr_copy(elem) };
+        Expr* call = expr_new_function(expr_copy(f), call_args, 1);
+        Expr* r = evaluate(call);
+        expr_free(call);
+        if (r) expr_free(r);   /* result discarded; f is run for effect */
+    }
+    return expr_new_symbol(SYM_Null);
+}
+
+/* ------------------- AllTrue / AnyTrue / NoneTrue -------------------
+ *
+ * mode 0 = AllTrue  (True iff test[e] is True for every element)
+ * mode 1 = AnyTrue  (True iff test[e] is True for some element)
+ * mode 2 = NoneTrue (True iff test[e] is True for no element)
+ *
+ * Over an association these test the values (via assoc_apply_over_values).
+ * If any test result is neither True nor False the whole call is left
+ * unevaluated (return NULL), matching Wolfram; short-circuits otherwise. */
+static Expr* all_any_none_true(Expr* res, int mode) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* coll = res->data.function.args[0];
+    Expr* test = res->data.function.args[1];
+
+    if (is_association(coll)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
+    if (coll->type != EXPR_FUNCTION) return NULL;
+
+    size_t n = coll->data.function.arg_count;
+    bool indeterminate = false;
+    for (size_t i = 0; i < n; i++) {
+        Expr* call_args[1] = { expr_copy(coll->data.function.args[i]) };
+        Expr* call = expr_new_function(expr_copy(test), call_args, 1);
+        Expr* v = evaluate(call);
+        expr_free(call);
+        bool is_true  = (v->type == EXPR_SYMBOL && v->data.symbol == SYM_True);
+        bool is_false = (v->type == EXPR_SYMBOL && v->data.symbol == SYM_False);
+        expr_free(v);
+
+        if (is_true) {
+            if (mode == 1) return expr_new_symbol(SYM_True);   /* AnyTrue short-circuit */
+            if (mode == 2) return expr_new_symbol(SYM_False);  /* NoneTrue short-circuit */
+        } else if (is_false) {
+            if (mode == 0) return expr_new_symbol(SYM_False);  /* AllTrue short-circuit */
+        } else {
+            indeterminate = true;
+        }
+    }
+    if (indeterminate) return NULL;  /* leave unevaluated */
+    /* No short-circuit fired: All -> True, Any -> False, None -> True. */
+    return expr_new_symbol(mode == 1 ? SYM_False : SYM_True);
+}
+
+Expr* builtin_all_true(Expr* res)  { return all_any_none_true(res, 0); }
+Expr* builtin_any_true(Expr* res)  { return all_any_none_true(res, 1); }
+Expr* builtin_none_true(Expr* res) { return all_any_none_true(res, 2); }
 
 /* ------------------- Through ------------------- */
 
@@ -1503,6 +1776,28 @@ static Expr* fold_impl(Expr* res, bool as_list) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc != 2 && argc != 3) return NULL;
+
+    /* Folding over an association folds over its values: rebuild the call with
+     * the association replaced by Values[assoc] and re-evaluate. Fold collapses
+     * to a scalar; FoldList[f, assoc] keeps the keys, pairing each with its
+     * running result (n -> n). */
+    size_t coll_idx = (argc == 3) ? 2 : 1;
+    if (is_association(res->data.function.args[coll_idx])) {
+        Expr* assoc = res->data.function.args[coll_idx];
+        Expr** na = malloc(sizeof(Expr*) * argc);
+        for (size_t i = 0; i < argc; i++)
+            na[i] = (i == coll_idx) ? assoc_values_list(res->data.function.args[i])
+                                    : expr_copy(res->data.function.args[i]);
+        Expr* call = expr_new_function(expr_copy(res->data.function.head), na, argc);
+        free(na);
+        Expr* r = evaluate(call);
+        expr_free(call);
+        if (as_list && argc == 2) {              /* FoldList[f, assoc] -> keyed */
+            Expr* keyed = assoc_rekey_from_list(assoc, r);
+            if (keyed) { expr_free(r); return keyed; }
+        }
+        return r;
+    }
 
     Expr* f = res->data.function.args[0];
     Expr* seed_src;

@@ -1,39 +1,68 @@
 #include "list_common.h"
 #include "minmax.h"
+#include "assoc.h"
+
+/* MinMax[list] gives {Min[list], Max[list]} in the natural single pass a caller
+ * would otherwise write by hand. Over an association it uses the values (Min and
+ * Max already thread there). Delegating to Min / Max keeps the numeric handling
+ * — bignums, reals, symbolic extrema, empty-list Infinity — in exactly one place. */
+Expr* builtin_minmax(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    Expr* arg = res->data.function.args[0];
+    bool is_list = arg->type == EXPR_FUNCTION &&
+                   arg->data.function.head->type == EXPR_SYMBOL &&
+                   arg->data.function.head->data.symbol == SYM_List;
+    if (!is_list && !is_association(arg)) return NULL;
+
+    Expr* min_arg[1] = { expr_copy(arg) };
+    Expr* min_call = expr_new_function(expr_new_symbol(SYM_Min), min_arg, 1);
+    Expr* max_arg[1] = { expr_copy(arg) };
+    Expr* max_call = expr_new_function(expr_new_symbol(SYM_Max), max_arg, 1);
+    Expr* mn = evaluate(min_call); expr_free(min_call);
+    Expr* mx = evaluate(max_call); expr_free(max_call);
+
+    Expr* items[2] = { mn, mx };
+    return expr_new_function(expr_new_symbol(SYM_List), items, 2);
+}
 
 Expr* builtin_min(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t n = res->data.function.arg_count;
     if (n == 0) return expr_new_symbol(SYM_Infinity);
-    
+
+    /* Min[assoc] is the minimum of the association's values. */
+    if (n == 1 && is_association(res->data.function.args[0])) {
+        Expr* r = assoc_apply_over_values(res); if (r) return r;
+    }
+
     // Check for List arguments to flatten
     bool has_list = false;
     for (size_t i = 0; i < n; i++) {
         Expr* arg = res->data.function.args[i];
-        if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && 
+        if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
             arg->data.function.head->data.symbol == SYM_List) {
             has_list = true;
             break;
         }
     }
-    
+
     if (has_list) {
         size_t new_count = 0;
         for (size_t i = 0; i < n; i++) {
             Expr* arg = res->data.function.args[i];
-            if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && 
+            if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
                 arg->data.function.head->data.symbol == SYM_List) {
                 new_count += arg->data.function.arg_count;
             } else {
                 new_count++;
             }
         }
-        
+
         Expr** new_args = malloc(sizeof(Expr*) * new_count);
         size_t k = 0;
         for (size_t i = 0; i < n; i++) {
             Expr* arg = res->data.function.args[i];
-            if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && 
+            if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
                 arg->data.function.head->data.symbol == SYM_List) {
                 for (size_t j = 0; j < arg->data.function.arg_count; j++) {
                     new_args[k++] = expr_copy(arg->data.function.args[j]);
@@ -46,7 +75,11 @@ Expr* builtin_min(Expr* res) {
         free(new_args);
         return ret;
     }
-    
+
+    /* Min of a single element is that element (Min[5] -> 5, Min[x] -> x). Lists
+     * were flattened above, so a lone argument here is a genuine scalar. */
+    if (n == 1) return expr_copy(res->data.function.args[0]);
+
     // Check for Overflow[] and -Infinity
     for (size_t i = 0; i < n; i++) {
         Expr* arg = res->data.function.args[i];
@@ -121,7 +154,12 @@ Expr* builtin_max(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t n = res->data.function.arg_count;
     if (n == 0) return make_minus_infinity();
-    
+
+    /* Max[assoc] is the maximum of the association's values. */
+    if (n == 1 && is_association(res->data.function.args[0])) {
+        Expr* r = assoc_apply_over_values(res); if (r) return r;
+    }
+
     // Check for List arguments to flatten
     bool has_list = false;
     for (size_t i = 0; i < n; i++) {
@@ -162,7 +200,11 @@ Expr* builtin_max(Expr* res) {
         free(new_args);
         return ret;
     }
-    
+
+    /* Max of a single element is that element (Max[5] -> 5, Max[x] -> x). Lists
+     * were flattened above, so a lone argument here is a genuine scalar. */
+    if (n == 1) return expr_copy(res->data.function.args[0]);
+
     // Check for Overflow[] and Infinity
     for (size_t i = 0; i < n; i++) {
         Expr* arg = res->data.function.args[i];

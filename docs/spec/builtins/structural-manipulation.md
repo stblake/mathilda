@@ -281,6 +281,28 @@ In[6]:= Join[{{x}}, {{1, 2}, {3, 4}}, 2]
 Out[6]= {{x, 1, 2}, {3, 4}}
 ```
 
+## Catenate
+`Catenate[{e1, e2, ...}]` takes a single list and flattens one level: the `ei`
+must share a head, and their elements are concatenated under it. A list of
+associations merges into one association (later keys win) — so `Catenate`
+composes with `GroupBy` / `Merge` pipelines that yield a list of associations.
+
+**Features**:
+- `Protected`.
+- All elements must share a head; returns unevaluated for mixed heads.
+- `Catenate[{}]` gives `{}`.
+
+```mathematica
+In[1]:= Catenate[{{1, 2}, {3, 4}, {5}}]
+Out[1]= {1, 2, 3, 4, 5}
+
+In[2]:= Catenate[{<|"a" -> 1, "b" -> 2|>, <|"b" -> 3, "c" -> 4|>}]
+Out[2]= <|"a" -> 1, "b" -> 3, "c" -> 4|>
+
+In[3]:= Catenate[Values[GroupBy[Range[6], EvenQ]]]
+Out[3]= {1, 3, 5, 2, 4, 6}
+```
+
 ## Partition
 Partitions a list into sublists.
 - `Partition[list, n]`: Non-overlapping sublists of length `n`.
@@ -470,7 +492,9 @@ Returns the numerically smallest or largest elements.
 - `Min[]` returns `Infinity`.
 - `Max[]` returns `-Infinity`.
 - Handles `Infinity` and `-Infinity`.
-- Simplifies numeric arguments to a single value.
+- Simplifies numeric arguments to a single value; a single element reduces to
+  itself (`Min[5]` is `5`, `Max[x]` is `x`).
+- Over an association, uses the values (`Min[<|"a" -> 3, "b" -> 1|>]` is `1`).
 
 ```mathematica
 In[1]:= Min[9, 2]
@@ -481,6 +505,19 @@ Out[2]= 1
 
 In[3]:= Max[Infinity, 5]
 Out[3]= Infinity
+```
+
+## MinMax
+`MinMax[list]` gives `{Min[list], Max[list]}` in one shot — the range of the
+data, handy for plot bounds. Over an association it uses the values. Delegates
+to `Min` / `Max`, so it inherits their numeric handling.
+
+```mathematica
+In[1]:= MinMax[{3, 1, 4, 1, 5, 9, 2}]
+Out[1]= {1, 9}
+
+In[2]:= MinMax[<|"a" -> 3, "b" -> 1, "c" -> 9|>]
+Out[2]= {1, 9}
 ```
 
 ## Append, Prepend

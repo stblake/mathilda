@@ -1,5 +1,6 @@
 #include "list_common.h"
 #include "differences.h"
+#include "assoc.h"
 
 /* ---- Differences ----------------------------------------------------------
  *
@@ -96,6 +97,11 @@ Expr* builtin_differences(Expr* res) {
     if (argc < 1 || argc > 3) return NULL;
 
     Expr* lst = res->data.function.args[0];
+
+    /* Differences[assoc] gives the successive value differences, keyed by the
+     * trailing key of each pair (so the leading key drops, as in Wolfram). */
+    if (is_association(lst)) { Expr* r = assoc_rekey_over_values(res); if (r) return r; }
+
     if (lst->type != EXPR_FUNCTION) return NULL;
 
     /* Differences[list, {n1, n2, ...}] — per-level differences. */

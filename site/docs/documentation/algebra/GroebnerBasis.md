@@ -35,7 +35,24 @@ TimeConstrained[GroebnerBasis[...], t] aborts cleanly via the
 
 ## Examples
 
-_No verified examples yet for this function._
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= GroebnerBasis[{x^2 - 2 y^2, x y - 3}, {x, y}]
+Out[1]= {-9 + 2 y^4, 3 x - 2 y^3}
+
+In[2]:= GroebnerBasis[{x + y, x^2 - 1, y^2 - 2 x}, {x, y}]
+Out[2]= {1}
+
+In[3]:= GroebnerBasis[{(x-1)(x-2), (x-2)(x-3)}, x]
+Out[3]= {-2 + x}
+
+In[4]:= GroebnerBasis[{x^2 - 2 y^2 == 1, x y == 3}, {x, y}]
+Out[4]= {-9 + y^2 + 2 y^4, 3 x - y - 2 y^3}
+
+In[5]:= GroebnerBasis[{a x^2 + 5 x - 1, 2 x + 3 x y + y^2}, {x, y}]
+Out[5]= {-4 - 12 y - 19 y^2 - 15 y^3 + a y^4, 18 + 4 a x + 27 y + 45 y^2 + 2 a y^2 - 3 a y^3, 2 x + 3 x y + y^2}
+```
 
 ## Implementation notes
 

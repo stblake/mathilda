@@ -15,6 +15,19 @@ export type CellData = {
   source: string;
 };
 
+/** Undo the typographic substitutions a WebView (or a paste from a word
+ *  processor) may have applied, so the kernel always receives ASCII source:
+ *  curly quotes → straight, en/em/minus dashes → hyphen, `→` → `->`. These
+ *  characters have no distinct meaning in Mathilda input, and leaving them in
+ *  would turn `->` into `–>` (a parse error) or break string delimiters. */
+export function normalizeInput(expr: string): string {
+  return expr
+    .replace(/[‘’‛]/g, "'")     // ‘ ’ ‛ → '
+    .replace(/[“”‟]/g, '"')     // “ ” ‟ → "
+    .replace(/→/g, '->')                  // → (rightwards arrow) → ->
+    .replace(/[–—−]/g, '-');    // – — − → -
+}
+
 /** Evaluate a Mathilda expression, calling `onMessage` for each
  *  streamed output until the kernel signals "done". */
 export async function evaluateCell(
@@ -23,7 +36,7 @@ export async function evaluateCell(
 ): Promise<void> {
   const channel = new Channel<OutputMessage>();
   channel.onmessage = onMessage;
-  await invoke<void>('evaluate_cell', { expr, channel });
+  await invoke<void>('evaluate_cell', { expr: normalizeInput(expr), channel });
 }
 
 export async function restartKernel(): Promise<void> {

@@ -23,7 +23,15 @@ numeric matrices).
 
 ## Examples
 
-_No verified examples yet for this function._
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= HermitianMatrixQ[{{1, 3 + 4 I}, {3 - 4 I, 2}}]
+Out[1]= True
+
+In[2]:= HermitianMatrixQ[{{1, 2 I}, {2 I, 3}}]
+Out[2]= False
+```
 
 ## Implementation notes
 

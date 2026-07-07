@@ -28,7 +28,7 @@ In[1]:= Symbol["x"]
 Out[1]= x
 
 In[2]:= Head[%]
-Out[2]= Symbol
+Out[2]= Out
 
 In[3]:= {f[x], f["x"], f[2]} /. f[s_Symbol] :> g[s]
 Out[3]= {g[x], f["x"], f[2]}

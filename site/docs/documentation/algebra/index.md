@@ -1,6 +1,6 @@
 # Algebra
 
-33 built-in function(s) in this category.
+34 built-in function(s) in this category.
 
 - [`Apart`](Apart.md) — Apart[expr] rewrites a rational expression as a sum of terms with minimal denominators.  _(Stable)_
 - [`Cancel`](Cancel.md) — Cancel[expr] cancels out common factors in the numerator and denominator of expr.  _(Stable)_
@@ -31,6 +31,7 @@
 - [`PolynomialRemainder`](PolynomialRemainder.md) — PolynomialRemainder[p, q, x] gives the remainder from dividing p by q, treated as polynomials in x.  _(Stable)_
 - [`PowerExpand`](PowerExpand.md) — PowerExpand[expr]  _(Stable)_
 - [`Resultant`](Resultant.md) — Resultant[p, q, var]  _(Stable)_
+- [`RootReduce`](RootReduce.md) — RootReduce[expr] canonicalises an algebraic expression: a constant algebraic number becomes a rational, a quadratic radical, or a Root object; a rational function over a radical tower has its denominator rationalised. Threads over lists, equations, inequalities and logic. Option: Method -> "Automatic" | "Recursive" | "NumberField".  _(Stable)_
 - [`SubresultantPolynomials`](SubresultantPolynomials.md) — SubresultantPolynomials[poly1, poly2, var]  _(Stable)_
 - [`Subresultants`](Subresultants.md) — Subresultants[poly1, poly2, var]  _(Stable)_
 - [`Together`](Together.md) — Together[expr] combines fractions over a common denominator, then cancels.  _(Stable)_

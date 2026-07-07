@@ -304,6 +304,35 @@ Out[2]= ComplexInfinity
 runs to `+∞` from the right but `-∞` from the left, so it has no ordinary
 two-sided limit — Mathilda reports `ComplexInfinity` to signal exactly that.
 
+### Choosing a strategy
+
+Under the hood `Limit` tries a cascade of strategies — direct substitution, a
+rational-function shortcut, series expansion, L'Hôpital's rule, asymptotic
+reductions, and squeeze arguments — stopping at the first that succeeds. The
+`Method` option lets you pin a single one. `Method -> Automatic` (the default)
+runs the whole cascade; a named method runs *only* that strategy, and leaves the
+`Limit` unevaluated if it does not apply:
+
+```mathematica
+In[1]:= Limit[Sin[x]/x, x -> 0, Method -> "Series"]
+Out[1]= 1
+
+In[2]:= Limit[(2 x^2 + 1)/(x^2 + x), x -> Infinity, Method -> "RationalFunction"]
+Out[2]= 2
+
+In[3]:= Limit[Sin[x]/x, x -> 0, Method -> "RationalFunction"]
+Out[3]= Limit[Sin[x]/x, x -> 0, Method -> "RationalFunction"]
+```
+
+`In[1]` forces the series-expansion route; `In[2]` uses the leading-degree
+comparison for rational functions. `In[3]` asks for that same rational shortcut
+on a transcendental ratio it cannot handle, so the limit comes back untouched.
+The available methods are `"Substitution"`, `"RationalFunction"`, `"Series"`,
+`"LHospital"`, `"Asymptotic"` and `"Bounded"` (see the [`Limit`](../documentation/calculus/Limit.md)
+reference for what each covers). Pinning a method is mainly useful for teaching
+and for isolating which strategy handles a given limit; for everyday work,
+`Automatic` is the right choice.
+
 ## Sums
 
 `Sum[expr, {k, lo, hi}]` adds up `expr` as the index `k` runs from `lo` to `hi`.

@@ -1,5 +1,6 @@
 #include "list_common.h"
 #include "join.h"
+#include "assoc.h"
 
 /* ------------------- Join ------------------- */
 
@@ -120,4 +121,58 @@ Expr* builtin_join(Expr* res) {
     if (!result) return NULL;
 
     return result;
+}
+
+/* Catenate[{e1, e2, ...}] flattens one level: the ei must share a head, and
+ * their elements are concatenated under it. A list of associations merges into
+ * one association (later keys win, like Join), so it composes with GroupBy /
+ * Merge pipelines that produce a list of associations. Returns NULL (leave
+ * unevaluated) for a non-list argument or mixed heads. */
+Expr* builtin_catenate(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    Expr* lst = res->data.function.args[0];
+    if (!(lst->type == EXPR_FUNCTION && lst->data.function.head->type == EXPR_SYMBOL &&
+          lst->data.function.head->data.symbol == SYM_List))
+        return NULL;
+
+    size_t m = lst->data.function.arg_count;
+    Expr** els = lst->data.function.args;
+    if (m == 0) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+
+    /* All associations: merge their rules (assoc_from_rules copies and collapses
+     * duplicate keys with last-value-wins, preserving first-occurrence order). */
+    bool all_assoc = true;
+    for (size_t i = 0; i < m; i++)
+        if (!is_association(els[i])) { all_assoc = false; break; }
+    if (all_assoc) {
+        size_t total = 0;
+        for (size_t i = 0; i < m; i++) total += els[i]->data.function.arg_count;
+        Expr** rules = malloc(sizeof(Expr*) * (total ? total : 1));
+        size_t k = 0;
+        for (size_t i = 0; i < m; i++)
+            for (size_t j = 0; j < els[i]->data.function.arg_count; j++)
+                rules[k++] = els[i]->data.function.args[j];   /* borrowed; copied inside */
+        Expr* out = assoc_from_rules(rules, total);
+        free(rules);
+        return out;
+    }
+
+    /* Otherwise every element must be a function sharing a common head; their
+     * arguments are concatenated under it ({{1,2},{3,4}} -> {1,2,3,4}). */
+    if (els[0]->type != EXPR_FUNCTION) return NULL;
+    Expr* head = els[0]->data.function.head;
+    for (size_t i = 1; i < m; i++)
+        if (els[i]->type != EXPR_FUNCTION || !expr_eq(els[i]->data.function.head, head))
+            return NULL;
+
+    size_t total = 0;
+    for (size_t i = 0; i < m; i++) total += els[i]->data.function.arg_count;
+    Expr** out_args = malloc(sizeof(Expr*) * (total ? total : 1));
+    size_t k = 0;
+    for (size_t i = 0; i < m; i++)
+        for (size_t j = 0; j < els[i]->data.function.arg_count; j++)
+            out_args[k++] = expr_copy(els[i]->data.function.args[j]);
+    Expr* out = expr_new_function(expr_copy(head), out_args, total);
+    free(out_args);
+    return out;
 }

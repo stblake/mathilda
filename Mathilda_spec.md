@@ -44,6 +44,7 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | Special functions (`Gamma`, `Pochhammer`, `HypergeometricPFQ`, `Hypergeometric0F1`/`1F1`/`2F1`, ...) | [`builtins/special-functions.md`](docs/spec/builtins/special-functions.md) |
 | Numerical calculus (`ND`, `NIntegrate`, `NSum`, `NProduct`, `NLimit`, `NSeries`, `NResidue`) | [`builtins/numerical-calculus.md`](docs/spec/builtins/numerical-calculus.md) |
 | Lists and iteration (`Table`, `Range`, `Map`, `Do`, ...) | [`builtins/lists-and-iteration.md`](docs/spec/builtins/lists-and-iteration.md) |
+| Data structures (`Association`/`<\|...\|>`, `Keys`, `Values`, `Lookup`, `Counts`, `GroupBy`, `Merge`, ...) | [`builtins/data-structures.md`](docs/spec/builtins/data-structures.md) |
 | Functional programming (`Function`, `Apply`, `Select`, ...) | [`builtins/functional-programming.md`](docs/spec/builtins/functional-programming.md) |
 | Control flow (`If`, `Which`, `Switch`, `For`, `While`) | [`builtins/control-flow.md`](docs/spec/builtins/control-flow.md) |
 | Assignment and rules (`Set`, `SetDelayed`, `Rule`, `RuleDelayed`) | [`builtins/assignment-and-rules.md`](docs/spec/builtins/assignment-and-rules.md) |
@@ -70,5 +71,6 @@ Detailed feature-addition and bug-fix notes, organized by week (Mon – Sun, key
 | 2026-06-15 → 2026-06-21 | [`changelog/2026-06-15.md`](docs/spec/changelog/2026-06-15.md) |
 | 2026-06-22 → 2026-06-28 | [`changelog/2026-06-22.md`](docs/spec/changelog/2026-06-22.md) |
 | 2026-06-29 → 2026-07-05 | [`changelog/2026-06-29.md`](docs/spec/changelog/2026-06-29.md) |
+| 2026-07-06 → 2026-07-12 | [`changelog/2026-07-06.md`](docs/spec/changelog/2026-07-06.md) |
 
 New entries land in the file for the current week (use the Monday-date of that week as the filename, format `YYYY-MM-DD.md`). When a change touches a built-in's documented behavior, the corresponding `docs/spec/builtins/*.md` file is updated as well; the changelog records the rationale and timing.

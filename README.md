@@ -2,7 +2,7 @@
 
 Mathilda is a small, open source computer algebra system (CAS) heavily inspired by the core architecture and evaluation semantics of Mathematica (the Wolfram Language). Written entirely in C99 and its own language, it implements a recursive expression model, structural pattern matching with backtracking, rewriting rules, and an extensive library of built-in mathematical functions. 
 
-Today Mathilda spans roughly **159,000 lines of C99** across **176 source modules**, exposing **~365 built-in functions** organized into **20 functional categories** — from arbitrary-precision arithmetic and symbolic calculus to polynomial factorization, dense linear algebra, integer factorization, and interactive 2D/3D graphics.
+Today Mathilda spans roughly **232,000 lines of C99** across **340 source modules**, exposing **~575 built-in functions** organized into **29 functional categories** — from arbitrary-precision arithmetic and symbolic calculus to polynomial factorization, dense linear algebra, integer factorization, and interactive 2D/3D graphics.
 
 ## 🌟 Key Features
 
@@ -44,7 +44,7 @@ Today Mathilda spans roughly **159,000 lines of C99** across **176 source module
 
 ## 📚 Function Categories
 
-The complete reference (~365 functions) lives in [`Mathilda_spec.md`](Mathilda_spec.md), which indexes the per-category pages under [`docs/spec/builtins/`](docs/spec/builtins/):
+The complete reference (~575 functions) lives in [`Mathilda_spec.md`](Mathilda_spec.md), which indexes the per-category pages under [`docs/spec/builtins/`](docs/spec/builtins/):
 
 * Arithmetic and Algebra
 * Calculus
@@ -82,6 +82,7 @@ To build and run Mathilda you need:
 * **GNU Readline** (`libreadline` / `readline-dev`) — interactive line editing *(required)*
 * **MPFR** (`libmpfr` / `mpfr-dev`) — arbitrary-precision reals *(enabled by default)*
 * **FLINT** ≥ 3.0 (`libflint` / `flint-dev`) — fast, rigorous polynomial arithmetic over algebraic extensions and rigorous `acb` numerics *(optional, auto-detected)*
+* **GMP-ECM** (`gmp-ecm` / `libecm-dev`) — Elliptic Curve Method integer factorization *(optional, auto-detected)*
 * **LAPACK / BLAS** — fast machine-precision linear algebra *(optional, auto-detected)*
 * **Raylib** ≥ 4.0 — interactive graphics window for `Plot`, `Plot3D`, `ContourPlot`, etc. *(optional, auto-detected via `pkg-config`; falls back to a text placeholder when absent)*
 * **CMake** — only required to build the test suite
@@ -93,7 +94,7 @@ The optional backends are controlled by build-time flags and **degrade gracefull
 | `USE_MPFR`     | `1` | Arbitrary-precision reals: `N[expr, prec]`, `Precision`/`Accuracy`, precision literals. Build without it via `make USE_MPFR=0`. |
 | `USE_FLINT`    | `1` | Fast, rigorous FLINT (≥ 3.0) kernels: multivariate polynomial GCD/factoring over ℚ, univariate GCD/factoring over number fields ℚ(α) (via the `gr` layer + ANTIC), the finite-field workhorse behind parametric ℚ(t)(α) work, and rigorous `acb` numerics (`Zeta`, `HurwitzZeta`, `PolyGamma`, `StieltjesGamma`). Auto-detected via `pkg-config` with a ≥ 3.0 version floor. Falls back to the classical (slower but still rigorous) path (`USE_FLINT=0`) when absent. |
 | `USE_LAPACK`   | `1` | Fast machine-precision linear algebra. Auto-detected: Apple **Accelerate** on macOS, `lapacke`/`lapack`/`blas` on Linux. Falls back to the pure-C path (`USE_LAPACK=0`) if none is found. |
-| `USE_ECM`      | `1` | Elliptic Curve Method factorization via the vendored GMP-ECM (`src/external/ecm/`), built automatically. |
+| `USE_ECM`      | `1` | Elliptic Curve Method factorization via the system GMP-ECM library. Auto-detected via a compile-link probe; install `gmp-ecm` / `libecm-dev`. Falls back to disabled (`USE_ECM=0`) when absent. |
 | `USE_GRAPHICS` | `1` | Interactive 2D/3D plot windows via Raylib. Auto-detected via `pkg-config raylib`. When absent, `Show`/`Plot`/`Plot3D`/`ContourPlot`/etc. print a text placeholder and return normally. Build without it via `make USE_GRAPHICS=0`. |
 
 #### Installing dependencies
@@ -101,9 +102,6 @@ The optional backends are controlled by build-time flags and **degrade gracefull
 **Linux (Debian / Ubuntu):**
 
 ```bash
-# Build tools for the vendored GMP-ECM (autoconf/automake/libtool)
-sudo apt install autoconf automake libtool
-
 # Required libraries
 sudo apt install libgmp-dev        # GMP — arbitrary-precision integers
 sudo apt install libmpfr-dev       # MPFR — arbitrary-precision reals
@@ -111,6 +109,9 @@ sudo apt install libreadline-dev   # GNU Readline — interactive REPL
 
 # Optional: FLINT (>= 3.0) for fast, rigorous algebraic-extension arithmetic
 sudo apt install libflint-dev      # Debian Bookworm+/Ubuntu 24.04+ ship >= 3.0
+
+# Optional: GMP-ECM for advanced integer factorization
+sudo apt install libecm-dev
 
 # Optional: LAPACK / BLAS for fast machine-precision linear algebra
 sudo apt install liblapacke-dev libopenblas-dev
@@ -124,8 +125,8 @@ sudo apt install cmake
 ```
 
 On Fedora/RHEL the equivalents are `gmp-devel`, `mpfr-devel`, `readline-devel`,
-`flint-devel` (≥ 3.0), `lapack-devel`/`openblas-devel`, plus
-`autoconf automake libtool cmake`.
+`flint-devel` (≥ 3.0), `gmp-ecm-devel`, `lapack-devel`/`openblas-devel`, plus
+`cmake`.
 
 > **Note on FLINT versions.** Mathilda requires **FLINT ≥ 3.0** (the release that
 > merged ANTIC for number-field arithmetic). Distributions that only package
@@ -141,8 +142,8 @@ brew install gmp mpfr readline cmake
 brew install flint
 # Optional: Raylib for interactive plot windows:
 brew install raylib
-# autoconf/automake/libtool are needed to build the vendored GMP-ECM:
-brew install autoconf automake libtool
+# Optional: GMP-ECM for advanced integer factorization:
+brew install gmp-ecm
 ```
 
 LAPACK/BLAS need not be installed on macOS — the build auto-detects Apple's
@@ -152,15 +153,16 @@ LAPACK/BLAS need not be installed on macOS — the build auto-detects Apple's
 
 The `makefile` auto-discovers `src/*.c`, configures and compiles internal dependencies, then links the main executable (`-std=c99 -O3`).
 
-1. Clone the repository (including the bundled GMP-ECM submodule):
+1. Clone the repository:
    ```bash
-   git clone --recurse-submodules https://github.com/stblake/Mathilda.git
+   git clone https://github.com/stblake/Mathilda.git
    cd Mathilda
    ```
-   If you already cloned without `--recurse-submodules`, run
-   `git submodule update --init --recursive` from inside the repo before
-   building. (The build script will also attempt this automatically if it
-   detects an uninitialized submodule.)
+   Install GMP-ECM (used for advanced integer factorization) from your package
+   manager — `brew install gmp-ecm` on macOS or `sudo apt install libecm-dev`
+   on Debian/Ubuntu. The build autodetects it and links `-lecm`; if it is
+   absent, the build still succeeds with advanced factorization disabled
+   (equivalent to `make USE_ECM=0`).
 2. Build the project:
    ```bash
    make -j$(nproc)
@@ -218,7 +220,6 @@ Larger mathematical domains live in dedicated subdirectories of `src/`:
 | `sum/`      | Symbolic summation (polynomial, geometric, Gosper) |
 | `graphics/` | 2D/3D plot engine: adaptive sampler, marching-squares contours, Raylib renderer, vector font; `Plot`, `Plot3D`, `ParametricPlot`, `ParametricPlot3D`, `StreamPlot`, `ContourPlot`, `ListPlot`, `Show` |
 | `internal/` | Mathematica-syntax bootstrap `.m` files (init, integral tables) loaded at startup |
-| `external/ecm/` | Vendored GMP-ECM (do **not** modify) |
 
 A recurring design pattern is **C for performance, rules for mathematics**: hot
 paths (parser, evaluator, matcher, arithmetic) are C, while higher-level

@@ -16,6 +16,12 @@ void list_init(void) {
     symtab_add_builtin("PadRight", builtin_padright);
     symtab_add_builtin("PadLeft", builtin_padleft);
     symtab_add_builtin("Join", builtin_join);
+    symtab_add_builtin("Catenate", builtin_catenate);
+    symtab_get_def("Catenate")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Catenate",
+        "Catenate[{e1, e2, ...}]\n\tConcatenates the ei (which must share a head)\n"
+        "\tinto one, flattening a single level. A list of associations merges into\n"
+        "\tone association (later keys win).");
     symtab_get_def("Join")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Join",
         "Join[list1, list2, ...]\n"
@@ -28,6 +34,12 @@ void list_init(void) {
     symtab_add_builtin("Tally", builtin_tally);
     symtab_add_builtin("Union", builtin_union);
     symtab_add_builtin("DeleteDuplicates", builtin_deleteduplicates);
+    symtab_add_builtin("DeleteDuplicatesBy", builtin_deleteduplicatesby);
+    symtab_get_def("DeleteDuplicatesBy")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("DeleteDuplicatesBy",
+        "DeleteDuplicatesBy[expr, f]\n\tKeeps the first element for each distinct\n"
+        "\tf[element], preserving order. Over an association, f is applied to the\n"
+        "\tvalues and the surviving entries are kept (keys preserved).");
     symtab_add_builtin("Split", builtin_split);
     symtab_add_builtin("Total", builtin_total);
     symtab_add_builtin("Accumulate", builtin_accumulate);
@@ -36,6 +48,11 @@ void list_init(void) {
     symtab_add_builtin("Commonest", builtin_commonest);
     symtab_add_builtin("Min", builtin_min);
     symtab_add_builtin("Max", builtin_max);
+    symtab_add_builtin("MinMax", builtin_minmax);
+    symtab_get_def("MinMax")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("MinMax",
+        "MinMax[list]\n\tGives {Min[list], Max[list]}. Over an association, uses\n"
+        "\tthe values.");
     symtab_add_builtin("ListQ", builtin_listq);
     symtab_add_builtin("VectorQ", builtin_vectorq);
     symtab_add_builtin("MatrixQ", builtin_matrixq);

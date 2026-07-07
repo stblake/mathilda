@@ -1,5 +1,6 @@
 #include "list_common.h"
 #include "total.h"
+#include "assoc.h"
 
 static int64_t get_depth_for_total(Expr* e) {
     if (e->type != EXPR_FUNCTION) return 1;
@@ -43,7 +44,10 @@ static Expr* total_at_exactly_level_k(Expr* e, int64_t k) {
 
 Expr* builtin_total(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
-    
+
+    /* Total[assoc] sums the association's values. */
+    { Expr* r = assoc_apply_over_values(res); if (r) return r; }
+
     Expr* list = res->data.function.args[0];
     Expr* level_spec = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
 

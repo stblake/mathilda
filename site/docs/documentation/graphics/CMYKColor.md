@@ -17,12 +17,7 @@ converted to RGB as r=(1-c)(1-k), g=(1-m)(1-k), b=(1-y)(1-k).
 
 ## Examples
 
-All examples below are verified against the current Mathilda build.
-
-```mathematica
-In[1]:= Graphics[{CMYKColor[1, 0, 0, 0], Disk[]}]   (* a cyan disk *)
-Out[1]= -Graphics-
-```
+_No verified examples yet for this function._
 
 ## Implementation notes
 

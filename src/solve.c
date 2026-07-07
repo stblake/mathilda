@@ -29,6 +29,7 @@
 #include "print.h"
 #include "solveinv.h"
 #include "solvelinsys.h"
+#include "solvenlsys.h"
 #include "solvepoly.h"
 #include "solverad.h"
 #include "solvetrig.h"
@@ -581,6 +582,14 @@ Expr* builtin_solve(Expr* res) {
             vars_list = expr_copy(vars);
         }
         out = solvelinsys_solve_linear_system(expr, vars_list, dom);
+        /* Non-affine systems fall through to the nonlinear specialist,
+         * which solves zero-dimensional polynomial systems via a lex
+         * Gröbner basis and triangular back-substitution.  `expr` and
+         * `vars_list` are still owned here and borrowed by the call. */
+        if (!out) {
+            out = solvenlsys_solve_nonlinear_system(expr, vars_list, dom,
+                                                    &opts.poly);
+        }
         expr_free(vars_list);
         expr_free(expr);
     } else {
@@ -676,8 +685,11 @@ void solve_init(void) {
         "    VerifySolutions     -> Automatic (reserved)\n"
         "\n"
         "Solves single polynomial equalities, radical equations, linear\n"
-        "systems, and -- via the inverse-function specialist -- single-\n"
-        "variable equations whose outermost dependence is an elementary\n"
+        "systems, zero-dimensional nonlinear polynomial systems (via a\n"
+        "lexicographic Groebner basis and triangular back-substitution;\n"
+        "positive-dimensional systems emit Solve::nsdim and stay\n"
+        "unevaluated), and -- via the inverse-function specialist --\n"
+        "single-variable equations whose outermost dependence is an elementary\n"
         "invertible head (Log, Exp, Sin/Cos/Tan/Cot/Sec/Csc, their\n"
         "hyperbolic counterparts, the inverse trig/hyperbolic forms,\n"
         "and Power[g, n] for integer n >= 2).  Multi-branch heads\n"
@@ -715,6 +727,7 @@ void solve_init(void) {
 
     solvepoly_init();
     solvelinsys_init();
+    solvenlsys_init();
     solverad_init();
     solveinv_init();
     solvetrig_init();

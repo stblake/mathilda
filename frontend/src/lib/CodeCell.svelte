@@ -35,6 +35,14 @@
         extensions: [
           history(),
           syntaxHighlighting(defaultHighlightStyle),
+          // Disable the WebView's automatic text substitution (macOS WKWebView
+          // "smart dashes"/"smart quotes") so typing `->` is not mangled into
+          // `–>` and `"` into curly quotes — either would break the parser.
+          EditorView.contentAttributes.of({
+            autocorrect: 'off',
+            autocapitalize: 'off',
+            spellcheck: 'false',
+          }),
           keymap.of([
             { key: 'Shift-Enter', run() { dispatch('run', { id: cellId }); return true; } },
             { key: 'Mod-Enter',   run() { dispatch('run', { id: cellId }); dispatch('addBelow', { id: cellId }); return true; } },

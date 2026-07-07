@@ -1,6 +1,6 @@
 # Number Theory
 
-25 built-in function(s) in this category.
+28 built-in function(s) in this category.
 
 - [`ContinuedFraction`](ContinuedFraction.md) — ContinuedFraction[x, n]  _(Stable)_
 - [`CoprimeQ`](CoprimeQ.md) — CoprimeQ[n1, n2, ...]  _(Stable)_
@@ -15,6 +15,7 @@
 - [`IntegerPartitions`](IntegerPartitions.md) — IntegerPartitions[n]  _(Stable)_
 - [`JacobiSymbol`](JacobiSymbol.md) — JacobiSymbol[n, m]  _(Stable)_
 - [`LCM`](LCM.md) — LCM[n1, n2, ...]  _(Stable)_
+- [`LiouvilleLambda`](LiouvilleLambda.md) — LiouvilleLambda[n] gives the Liouville function lambda(n) = (-1)^Omega(n), where Omega(n) counts the prime factors of n with multiplicity. Completely multiplicative. A non-real Gaussian-integer argument, or GaussianIntegers -> True, is handled over Z[i].  _(Stable)_
 - [`MoebiusMu`](MoebiusMu.md) — MoebiusMu[n] gives the Moebius function mu(n): 0 if n has a squared prime factor, otherwise (-1)^k where k is the number of distinct primes. A non-real Gaussian-integer argument is handled over Z[i].  _(Stable)_
 - [`MultiplicativeOrder`](MultiplicativeOrder.md) — MultiplicativeOrder[k, n]  _(Stable)_
 - [`NextPrime`](NextPrime.md) — NextPrime[x] gives the next prime after x.  _(Stable)_
@@ -22,6 +23,8 @@
 - [`PartitionsQ`](PartitionsQ.md) — PartitionsQ[n]  _(Stable)_
 - [`PowerMod`](PowerMod.md) — PowerMod[a, b, m] gives a^b mod m.  _(Stable)_
 - [`Prime`](Prime.md) — Prime[n] gives the nth prime number. Listable. Small n is read from a sieve table; large n inverts PrimePi via an asymptotic estimate refined against the exact prime counter. Defined for positive integers up to n ~ 1.4*10^12; non-positive-integer arguments give Prime::intpp.  _(Stable)_
+- [`PrimeNu`](PrimeNu.md) — PrimeNu[n] gives the number of distinct prime factors of n, nu(n). PrimeNu[n, GaussianIntegers -> True] (or a non-real Gaussian-integer n) counts distinct Gaussian prime factors over Z[i]. PrimeNu[1] is 0; PrimeNu[0] is left unevaluated.  _(Stable)_
+- [`PrimeOmega`](PrimeOmega.md) — PrimeOmega[n] gives the number of prime factors of n counted with multiplicity, Omega(n). PrimeOmega[n, GaussianIntegers -> True] (or a non-real Gaussian-integer n) counts Gaussian prime factors over Z[i]. PrimeOmega[1] is 0; PrimeOmega[0] is left unevaluated.  _(Stable)_
 - [`PrimePi`](PrimePi.md) — PrimePi[x] gives the number of primes less than or equal to x, exact for x up to 5*10^13 (larger x is left unevaluated). The option Method -> m selects the algorithm: Automatic (default), "Sieve", "Legendre", "Meissel", "Lehmer", "LMO" (Lagarias-Miller-Odlyzko), "DelegliseRivat", or "LucyHedgehog".  _(Stable)_
 - [`PrimeQ`](PrimeQ.md) — PrimeQ[n]  _(Stable)_
 - [`PrimitiveRoot`](PrimitiveRoot.md) — PrimitiveRoot[n]  _(Stable)_

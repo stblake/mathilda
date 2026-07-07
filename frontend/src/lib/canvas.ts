@@ -51,9 +51,10 @@ const _nb6 = makeCard('Linear Algebra',    2290,  50);
 // Cluster 3 — Special Topics (bottom center)
 const _nb7 = makeCard('Special Functions',  750,1650);
 const _nb8 = makeCard('Applied Math',      1430,1650);
+const _nb9 = makeCard('Associations',      2110,1650);
 
 export const canvasState = writable({
-  notebooks: [_nb1,_nb2,_nb3,_nb4,_nb5,_nb6,_nb7,_nb8] as CanvasNotebook[],
+  notebooks: [_nb1,_nb2,_nb3,_nb4,_nb5,_nb6,_nb7,_nb8,_nb9] as CanvasNotebook[],
   panX: 0,
   panY: 0,
   zoom:  1.0,
@@ -64,7 +65,7 @@ export const canvasState = writable({
 export function loadStartupContent() {
   const s = get(canvasState);
 
-  const [nb1,nb2,nb3,nb4,nb5,nb6,nb7,nb8] = s.notebooks;
+  const [nb1,nb2,nb3,nb4,nb5,nb6,nb7,nb8,nb9] = s.notebooks;
 
   // Cluster 1 — Calculus
   if (nb1) nb1.store.load([
@@ -174,6 +175,76 @@ export function loadStartupContent() {
     { cells: [{ type: 'section', source: 'Rational Functions' }] },
     { cells: [{ type: 'code',    source: 'Apart[1/(x^2 - 1)]' }] },
     { cells: [{ type: 'code',    source: 'Apart[(x^2+1)/((x-1)(x+2))]' }] },
+  ]);
+
+  if (nb9) nb9.store.load([
+    { cells: [{ type: 'section', source: 'Associations' }] },
+    { cells: [{ type: 'text',    source: 'Key-value data: <|key -> value, ...|>. Keys are unique and ordered.' }] },
+    { cells: [{ type: 'code',    source: 'data = <|"apples" -> 3, "pears" -> 5, "plums" -> 2|>' }] },
+    { cells: [{ type: 'code',    source: 'data[["pears"]]' }] },
+    { cells: [{ type: 'code',    source: 'data["plums"]' }] },
+    { cells: [{ type: 'code',    source: 'nested = <|"r1" -> <|"x" -> 1, "y" -> 2|>|>; nested["r1", "y"]' }] },
+    { cells: [{ type: 'code',    source: 'Keys[data]' }] },
+    { cells: [{ type: 'code',    source: 'Values[data]' }] },
+    { cells: [{ type: 'code',    source: 'First[data]' }] },
+    { cells: [{ type: 'code',    source: 'Lookup[data, "figs", 0]' }] },
+    { cells: [{ type: 'code',    source: 'KeyFreeQ[data, "figs"]' }] },
+    { cells: [{ type: 'section', source: 'Aggregation' }] },
+    { cells: [{ type: 'text',    source: 'Counts, GroupBy and Merge are hash-backed — O(n) over large lists.' }] },
+    { cells: [{ type: 'code',    source: 'Counts[{1, 2, 2, 3, 3, 3, 1}]' }] },
+    { cells: [{ type: 'code',    source: 'GroupBy[Range[10], EvenQ]' }] },
+    { cells: [{ type: 'code',    source: 'Merge[{<|"a" -> 1|>, <|"a" -> 2, "b" -> 3|>}, Total]' }] },
+    { cells: [{ type: 'code',    source: 'PositionIndex[{a, b, a, c, a, b}]' }] },
+    { cells: [{ type: 'code',    source: 'Position[<|"a" -> 1, "b" -> 2, "c" -> 1|>, 1]' }] },
+    { cells: [{ type: 'code',    source: 'MapAt[-# &, <|"a" -> 1, "b" -> 9|>, First[Position[<|"a" -> 1, "b" -> 9|>, 9]]]' }] },
+    { cells: [{ type: 'section', source: 'Functional threading' }] },
+    { cells: [{ type: 'text',    source: 'Map and Select thread over values, keeping keys (Wolfram style).' }] },
+    { cells: [{ type: 'code',    source: 'Map[#^2 &, <|"x" -> 3, "y" -> 4|>]' }] },
+    { cells: [{ type: 'code',    source: 'Select[<|"a" -> 1, "b" -> 2, "c" -> 3|>, # > 1 &]' }] },
+    { cells: [{ type: 'code',    source: 'KeySortBy[<|"bbb" -> 1, "a" -> 2, "cc" -> 3|>, StringLength]' }] },
+    { cells: [{ type: 'code',    source: 'SortBy[{{1, 3}, {1, 1}, {2, 0}, {1, 2}}, {First, Last}]' }] },
+    { cells: [{ type: 'section', source: 'Aggregation & mutation' }] },
+    { cells: [{ type: 'text',    source: 'Total/Min/Max/Mean reduce over values; Part assignment updates in place.' }] },
+    { cells: [{ type: 'code',    source: 'Total[<|"a" -> 3, "b" -> 1, "c" -> 2|>]' }] },
+    { cells: [{ type: 'code',    source: 'Fold[Plus, 0, <|"a" -> 1, "b" -> 2, "c" -> 3|>]' }] },
+    { cells: [{ type: 'code',    source: 'Table[v^2, {v, <|"a" -> 2, "b" -> 3|>}]' }] },
+    { cells: [{ type: 'code',    source: 'Sort[<|"a" -> 3, "b" -> 1, "c" -> 2|>]' }] },
+    { cells: [{ type: 'code',    source: 'inv = <|"gold" -> 3|>; inv[["silver"]] = 10; inv[["gold"]] = inv[["gold"]] + 1; inv' }] },
+    { cells: [{ type: 'code',    source: 'Cases[<|"a" -> 1, "b" -> 2, "c" -> 3|>, x_ /; x > 1]' }] },
+    { cells: [{ type: 'code',    source: 'DeleteCases[<|"a" -> 1, "b" -> 2, "c" -> 3|>, x_ /; x > 1]' }] },
+    { cells: [{ type: 'code',    source: 'AllTrue[<|"a" -> 2, "b" -> 4, "c" -> 6|>, EvenQ]' }] },
+    { cells: [{ type: 'code',    source: 'SortBy[<|"a" -> 3, "b" -> 1, "c" -> 2|>, Identity]' }] },
+    { cells: [{ type: 'code',    source: 'MaximalBy[<|"a" -> 1, "b" -> 3, "c" -> 3|>, Identity]' }] },
+    { cells: [{ type: 'code',    source: 'TakeLargest[<|"a" -> 3, "b" -> 9, "c" -> 1, "d" -> 6|>, 2]' }] },
+    { cells: [{ type: 'code',    source: 'GroupBy[Range[10], EvenQ, Total]' }] },
+    { cells: [{ type: 'code',    source: 'ReverseSort[<|"a" -> 3, "b" -> 1, "c" -> 2|>]' }] },
+    { cells: [{ type: 'code',    source: 'SelectFirst[<|"a" -> 1, "b" -> 4, "c" -> 6|>, EvenQ]' }] },
+    { cells: [{ type: 'code',    source: 'DeleteMissing[Lookup[<|"a" -> 1, "b" -> 2|>, {"a", "z", "b"}]]' }] },
+    { cells: [{ type: 'text',    source: 'Pipelines compose: group by key, sum amounts, rank descending.' }] },
+    { cells: [{ type: 'code',    source: 'ReverseSort[GroupBy[{{"x", 1}, {"y", 2}, {"x", 3}}, First -> Last, Total]]' }] },
+    { cells: [{ type: 'section', source: 'Windowed & statistical' }] },
+    { cells: [{ type: 'text',    source: 'MinMax/Median/Variance/Tally reduce over values; Accumulate/Ratios keep the keys aligned (leading key drops for Ratios).' }] },
+    { cells: [{ type: 'code',    source: 'MinMax[<|"a" -> 3, "b" -> 1, "c" -> 9|>]' }] },
+    { cells: [{ type: 'code',    source: 'Median[<|"a" -> 1, "b" -> 3, "c" -> 5|>]' }] },
+    { cells: [{ type: 'code',    source: 'Tally[<|"a" -> 1, "b" -> 1, "c" -> 2|>]' }] },
+    { cells: [{ type: 'code',    source: 'Accumulate[<|"jan" -> 10, "feb" -> 20, "mar" -> 5|>]' }] },
+    { cells: [{ type: 'code',    source: 'Ratios[<|"q1" -> 10, "q2" -> 20, "q3" -> 15|>]' }] },
+    { cells: [{ type: 'code',    source: 'Plus @@ <|"a" -> 1, "b" -> 2, "c" -> 3|>' }] },
+    { cells: [{ type: 'section', source: 'Records & alignment' }] },
+    { cells: [{ type: 'text',    source: 'Lookup pulls a field across records; KeyUnion aligns key sets; Catenate merges a list of associations.' }] },
+    { cells: [{ type: 'code',    source: 'Lookup[{<|"name" -> "Ada", "age" -> 36|>, <|"name" -> "Alan", "age" -> 41|>}, "age"]' }] },
+    { cells: [{ type: 'code',    source: 'GroupBy[{<|"team" -> "A", "pts" -> 3|>, <|"team" -> "B", "pts" -> 5|>, <|"team" -> "A", "pts" -> 4|>}, Key["team"]]' }] },
+    { cells: [{ type: 'code',    source: 'SortBy[{<|"n" -> "b", "age" -> 41|>, <|"n" -> "a", "age" -> 36|>}, Key["age"]]' }] },
+    { cells: [{ type: 'code',    source: 'KeyUnion[{<|"a" -> 1, "b" -> 2|>, <|"b" -> 3, "c" -> 4|>}]' }] },
+    { cells: [{ type: 'code',    source: 'Catenate[{<|"a" -> 1, "b" -> 2|>, <|"b" -> 3, "c" -> 4|>}]' }] },
+    { cells: [{ type: 'code',    source: 'TakeWhile[<|"a" -> 1, "b" -> 2, "c" -> 5, "d" -> 1|>, # < 3 &]' }] },
+    { cells: [{ type: 'code',    source: 'MapIndexed[{#2, #1} &, <|"x" -> 3, "y" -> 4|>]' }] },
+    { cells: [{ type: 'text',    source: 'The Unicode arrow → (\\[Rule]) parses as ->, so pasted Wolfram code just works.' }] },
+    { cells: [{ type: 'code',    source: '<|"gold" → 5, "silver" → 12|>' }] },
+    { cells: [{ type: 'section', source: 'Pattern matching' }] },
+    { cells: [{ type: 'text',    source: 'Destructure and filter associations with KeyValuePattern.' }] },
+    { cells: [{ type: 'code',    source: 'Cases[{<|"t" -> 1|>, <|"t" -> 2|>, <|"x" -> 3|>}, KeyValuePattern[{"t" -> _}]]' }] },
+    { cells: [{ type: 'code',    source: 'area[KeyValuePattern[{"w" -> w_, "h" -> h_}]] := w h; area[<|"w" -> 3, "h" -> 4|>]' }] },
   ]);
 }
 

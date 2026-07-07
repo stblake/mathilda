@@ -22,7 +22,24 @@ ToRadicals automatically threads over lists, equations, inequalities,
 
 ## Examples
 
-_No verified examples yet for this function._
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= ToRadicals[Root[Function[#^2 + 3 # + 5], 1]]
+Out[1]= 1/2 (-3 - I Sqrt[11])
+
+In[2]:= ToRadicals[Root[Function[#^2 + 3 # + 5], 2]]
+Out[2]= 1/2 (-3 + I Sqrt[11])
+
+In[3]:= ToRadicals[Root[Function[#^5 - 2], 3]]
+Out[3]= (-1)^(4/5) 2^(1/5)
+
+In[4]:= ToRadicals[Root[Function[#^5 - # - 1], 1]]      (* non-binomial deg 5 *)
+Out[4]= Root[#1^5 - #1 - 1 &, 1]
+
+In[5]:= ToRadicals[Root[Function[#^2 - 2], 2] < 3]      (* threading *)
+Out[5]= True
+```
 
 ## Implementation notes
 
