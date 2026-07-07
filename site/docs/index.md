@@ -20,9 +20,9 @@ Mathilda is a small computer algebra system that recreates the **core
 architecture and evaluation semantics of the Mathematica programming language** — a recursive
 expression model, attribute-driven evaluation, structural pattern matching with
 backtracking, and a rewrite-rule engine — together with an extensive library of
-**~435 built-in functions**.
+**~540 built-in functions**.
 
-It spans roughly **159,000 lines of C99**, uses **GMP** for arbitrary-precision
+It spans roughly **232,000 lines of C99**, uses **GMP** for arbitrary-precision
 integers and **MPFR** for arbitrary-precision reals, and is licensed under
 **GPLv3**.
 
