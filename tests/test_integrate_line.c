@@ -56,6 +56,13 @@ static void test_detection(void) {
              "{-I, I}");
     /* Poles +/-I are off the real-axis segment. */
     check_eq("Integrate`PathSingularPoints[1/(z^2 + 1), {z, -2, 2}]", "{}");
+    /* Regression: the horizontal segment I-1 -> I+1 passes through the pole at
+     * I.  The parametrised denominator is quadratic in t with COMPLEX
+     * coefficients; Solve[..., Reals] wrongly drops its real root t=1/2, so the
+     * detector must solve over C and keep the real root -- otherwise the
+     * divergence goes unreported. */
+    check_eq("Integrate`PathSingularPoints[1/(z^2 + 1), {z, I - 1, I + 1}]",
+             "{I}");
 }
 
 /* -------------------------------------------------------------------------
@@ -100,6 +107,11 @@ static void test_divergence(void) {
              "Integrate[1/z, {z, -1 - I, 1 + I}]");
     /* Pole at the endpoint 0: also divergent. */
     check_eq("Integrate[1/z, {z, I, 0}]", "Integrate[1/z, {z, I, 0}]");
+    /* Segment through the pole at I of a QUADRATIC denominator (complex-
+     * coefficient parametrisation): divergent -> unevaluated, not a spurious
+     * finite value. */
+    check_eq("Integrate[1/(z^2 + 1), {z, I - 1, I + 1}]",
+             "Integrate[1/(1 + z^2), {z, -1 + I, 1 + I}]");
 }
 
 /* -------------------------------------------------------------------------

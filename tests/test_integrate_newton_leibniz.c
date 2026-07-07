@@ -66,6 +66,11 @@ static void test_detector(void) {
     /* Sorted ascending, several interior. */
     check_eq("Integrate`SingularPoints[1/((x + 1) x (x - 1)), {x, -2, 2}]",
              "{-1, 0, 1}");
+    /* Reversed limits (a > b): interior classification is orientation-
+     * independent, so the pole between the bounds is still detected. */
+    check_eq("Integrate`SingularPoints[1/(x - 1), {x, 3, 0}]",  "{1}");
+    check_eq("Integrate`SingularPoints[1/((x - 1)(x - 2)), {x, 3, 0}]", "{1, 2}");
+    check_eq("Integrate`SingularPoints[1/(x - 1), {x, 3, 2}]",  "{}");
 }
 
 /* ------------------------------------------------------------------ */
@@ -105,6 +110,25 @@ static void test_divergent(void) {
      * the printed result compared here. */
     check_eq("Integrate[1/x^2, {x, -1, 1}]", "Integrate[1/x^2, {x, -1, 1}]");
     check_eq("Integrate[1/x, {x, -1, 1}]",   "Integrate[1/x, {x, -1, 1}]");
+    /* Reversed limits (a > b) with an interior pole are equally divergent:
+     * the pole at 0 lies between the bounds regardless of orientation, so this
+     * must NOT collapse to a spurious finite branch value (e.g. I Pi). */
+    check_eq("Integrate[1/x, {x, 1, -1}]",    "Integrate[1/x, {x, 1, -1}]");
+    check_eq("Integrate[1/x, {x, 2, -2}]",    "Integrate[1/x, {x, 2, -2}]");
+    check_eq("Integrate[1/(x - 3), {x, 5, 1}]",
+             "Integrate[1/(-3 + x), {x, 5, 1}]");
+}
+
+/* ------------------------------------------------------------------ */
+/* 4c. Reversed limits without an interior pole: Integrate[.,{x,a,b}]    */
+/*     with a > b is the negation of the forward integral.               */
+/* ------------------------------------------------------------------ */
+static void test_reversed_limits(void) {
+    check_eq("Integrate[x^2, {x, 1, 0}]",     "-1/3");
+    check_eq("Integrate[Sin[x], {x, Pi, 0}]", "-2");
+    check_eq("Integrate[1/x, {x, E, 1}]",     "-1");
+    /* Reversed with a pole strictly OUTSIDE [min,max]: still proper. */
+    check_eq("Integrate[1/x^2, {x, 2, 1}]",   "-1/2");
 }
 
 /* ------------------------------------------------------------------ */
@@ -187,6 +211,7 @@ int main(void) {
     TEST(test_proper);
     TEST(test_improper);
     TEST(test_divergent);
+    TEST(test_reversed_limits);
     TEST(test_continuous_periodic);
     TEST(test_iterated);
     TEST(test_entry_points);

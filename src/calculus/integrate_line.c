@@ -332,7 +332,12 @@ static int line_segment_singularities(Expr* f, Expr* x, Expr* a, Expr* b,
         status = 0;                                    /* no t in denominator */
     } else {
         Expr* eq   = mk_fn2("Equal", expr_copy(den), expr_new_integer(0));
-        Expr* sols = eval_take(mk_fn3("Solve", eq, expr_copy(t), mk_sym("Reals")));
+        /* Solve over C, NOT Reals: den is a polynomial in the real parameter t
+         * but with COMPLEX coefficients (gamma(t) is complex-valued), so its
+         * genuinely-real roots -- the on-path singularities -- are dropped by
+         * Solve[..., Reals] for complex-coefficient equations.  We solve over C
+         * and keep only the real roots via the im ~ 0 numeric filter below. */
+        Expr* sols = eval_take(mk_fn2("Solve", eq, expr_copy(t)));
         bool undecidable = false;
         bool found = false;
         if (sols && head_name_is(sols, "List")) {

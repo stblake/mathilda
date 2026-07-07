@@ -208,26 +208,37 @@ static bool nl_close(double u, double v) {
     return fabs(u - v) <= 1e-12 * s;
 }
 
+/* Is finite `rv` strictly greater than the bound classified by (kind, val)?
+ * kind: 1 finite (value in val), 2 +Infinity, 3 -Infinity.  A finite rv is
+ * always above -Infinity and never above +Infinity. */
+static bool nl_rv_above(double rv, int kind, double val) {
+    if (kind == 3) return true;     /* rv > -Infinity */
+    if (kind == 2) return false;    /* rv > +Infinity is impossible */
+    return (rv > val) && !nl_close(rv, val);
+}
+
+/* Is finite `rv` strictly less than the bound (kind, val)? */
+static bool nl_rv_below(double rv, int kind, double val) {
+    if (kind == 3) return false;    /* rv < -Infinity is impossible */
+    if (kind == 2) return true;     /* rv < +Infinity */
+    return (rv < val) && !nl_close(rv, val);
+}
+
+/* Classify a finite real root `rv` against the integration endpoints a, b.
+ * Order-INDEPENDENT: the pole is interior iff it lies strictly between a and b
+ * regardless of whether a < b or a > b (reversed limits), so a divergent
+ * integral is caught for both orientations rather than silently producing a
+ * wrong (branch-form) value for the reversed case. */
 static NLClass nl_classify(double rv, Expr* a, Expr* b) {
     double av, bv;
     int ak = nl_numeric(a, &av);
     int bk = nl_numeric(b, &bv);
+    if (ak == 0 || bk == 0) return NL_UNKNOWN;   /* symbolic bound */
 
-    /* Lower bound: -Infinity always below; +Infinity as a lower bound is
-     * degenerate (empty interval); symbolic => undecidable. */
-    bool lo_ok;
-    if      (ak == 3) lo_ok = true;
-    else if (ak == 2) lo_ok = false;
-    else if (ak == 1) lo_ok = (av < rv) && !nl_close(av, rv);
-    else              return NL_UNKNOWN;
-
-    bool hi_ok;
-    if      (bk == 2) hi_ok = true;
-    else if (bk == 3) hi_ok = false;
-    else if (bk == 1) hi_ok = (rv < bv) && !nl_close(rv, bv);
-    else              return NL_UNKNOWN;
-
-    return (lo_ok && hi_ok) ? NL_INTERIOR : NL_EXTERIOR;
+    /* Strictly between a and b in either orientation. */
+    bool between = (nl_rv_above(rv, ak, av) && nl_rv_below(rv, bk, bv)) ||
+                   (nl_rv_below(rv, ak, av) && nl_rv_above(rv, bk, bv));
+    return between ? NL_INTERIOR : NL_EXTERIOR;
 }
 
 /* -------------------------------------------------------------------------

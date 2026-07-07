@@ -52,6 +52,7 @@
 #define PMINT_MAX_MONOMIALS   5000
 #define PMINT_MAX_REWRITE_DEPTH 32      /* convert_to_tan giveup depth */
 #define PMINT_MAX_INDETS      32        /* hard cap on indet set size  */
+#define PMINT_MAX_SPLIT_DEPTH 128       /* split_factor recursion guard */
 
 #ifndef PMINT_TRACE
 #define PMINT_TRACE 0
@@ -1549,11 +1550,20 @@ static void vars_in_poly(Expr* p, Expr** vars, size_t n,
  * spl_c[1]]; else recurse on q/s.
  *
  * On entry `vars` are the fresh vars currently considered; `l` are
- * their scaled derivatives. */
-static int split_factor(Expr* p,
-                         Expr** vars, Expr** l, size_t n,
-                         Expr** out_s, Expr** out_h) {
+ * their scaled derivatives.
+ *
+ * `depth` guards against unbounded recursion: content extraction is
+ * expected to strip one indeterminate per level, but a pathological
+ * integrand (e.g. an inexact-base exponential such as `2.71828^(-x)`,
+ * as produced by N[] over an Exp integrand) can fail to reduce and
+ * recurse without bound, overflowing the C stack.  Beyond
+ * PMINT_MAX_SPLIT_DEPTH we return failure so the pmint driver gives up
+ * and the integral is left unevaluated rather than crashing the process. */
+static int split_factor_rec(Expr* p,
+                            Expr** vars, Expr** l, size_t n,
+                            Expr** out_s, Expr** out_h, int depth) {
     *out_s = NULL; *out_h = NULL;
+    if (depth > PMINT_MAX_SPLIT_DEPTH) return 1;
 
     /* Find a var x in p. */
     size_t idx_buf[PMINT_MAX_INDETS];
@@ -1591,7 +1601,7 @@ static int split_factor(Expr* p,
     /* Recurse on content. */
     Expr* spl_c_s = NULL;
     Expr* spl_c_h = NULL;
-    if (split_factor(content, vars, l, n, &spl_c_s, &spl_c_h) != 0) {
+    if (split_factor_rec(content, vars, l, n, &spl_c_s, &spl_c_h, depth + 1) != 0) {
         expr_free(content); expr_free(q);
         return 1;
     }
@@ -1625,7 +1635,7 @@ static int split_factor(Expr* p,
     expr_free(q);
     Expr* splh_s = NULL;
     Expr* splh_h = NULL;
-    if (split_factor(q_over_s, vars, l, n, &splh_s, &splh_h) != 0) {
+    if (split_factor_rec(q_over_s, vars, l, n, &splh_s, &splh_h, depth + 1) != 0) {
         expr_free(q_over_s); expr_free(s);
         expr_free(spl_c_s); expr_free(spl_c_h);
         return 1;
@@ -1644,6 +1654,13 @@ static int split_factor(Expr* p,
     *out_s = s_final;
     *out_h = h_final;
     return 0;
+}
+
+/* Public entry: split_factor with the recursion depth counter started at 0. */
+static int split_factor(Expr* p,
+                        Expr** vars, Expr** l, size_t n,
+                        Expr** out_s, Expr** out_h) {
+    return split_factor_rec(p, vars, l, n, out_s, out_h, 0);
 }
 
 /* deflation(p) — pmint.maple lines 92-98.

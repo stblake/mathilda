@@ -310,7 +310,8 @@ typedef enum {
     METHOD_RISCH,
     METHOD_CRCTABLE,
     METHOD_UNDEFINED,
-    METHOD_NEWTON_LEIBNIZ,   /* definite-only: selects the FTC mechanism      */
+    METHOD_NEWTON_LEIBNIZ,   /* definite-only: selects the real-axis FTC mechanism */
+    METHOD_LINE_INTEGRAL,    /* definite-only: selects the complex contour mechanism */
     METHOD_INVALID
 } IntegrateMethod;
 
@@ -329,6 +330,7 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "CRCTable")    == 0) return METHOD_CRCTABLE;
     if (strcmp(s, "Undefined")   == 0) return METHOD_UNDEFINED;
     if (strcmp(s, "NewtonLeibniz") == 0) return METHOD_NEWTON_LEIBNIZ;
+    if (strcmp(s, "LineIntegral") == 0) return METHOD_LINE_INTEGRAL;
     return METHOD_INVALID;
 }
 
@@ -412,7 +414,11 @@ static bool definite_parse_method(Expr* opt, const char** name) {
     if (rhs->type != EXPR_STRING) return false;
     IntegrateMethod m = method_from_string(rhs->data.string);
     if (m == METHOD_INVALID) return false;
-    if (m == METHOD_AUTOMATIC || m == METHOD_NEWTON_LEIBNIZ) return true;
+    /* NewtonLeibniz / LineIntegral name the definite mechanism itself (real
+     * axis / complex contour); the actual mechanism is chosen from the spec
+     * type, so they pass NULL through to the inner indefinite Integrate. */
+    if (m == METHOD_AUTOMATIC || m == METHOD_NEWTON_LEIBNIZ ||
+        m == METHOD_LINE_INTEGRAL) return true;
     *name = rhs->data.string;   /* borrowed: valid while `res` is alive */
     return true;
 }
@@ -533,7 +539,7 @@ Expr* builtin_integrate(Expr* res) {
                     "\"LinearRatioRadicals\", \"ChebychevAlgebraic\", "
                     "\"GoursatAlgebraic\", "
                     "\"Weierstrass\", \"RischNorman\", "
-                    "\"CRCTable\", \"NewtonLeibniz\".\n");
+                    "\"CRCTable\", \"NewtonLeibniz\", \"LineIntegral\".\n");
                 last_warned_hash = h;
             }
             return NULL;
@@ -626,8 +632,10 @@ Expr* builtin_integrate(Expr* res) {
             result = try_undefined(effective_f, x);
             break;
         case METHOD_NEWTON_LEIBNIZ:
-            /* Definite-only mechanism.  Meaningless on the indefinite form
-             * Integrate[f, x, Method -> "NewtonLeibniz"]; leave unevaluated. */
+        case METHOD_LINE_INTEGRAL:
+            /* Definite-only mechanisms.  Meaningless on the indefinite form
+             * Integrate[f, x, Method -> "NewtonLeibniz" / "LineIntegral"];
+             * leave unevaluated. */
             break;
         case METHOD_INVALID:
             break;  /* unreachable: handled above */
@@ -681,7 +689,8 @@ void integrate_init(void) {
         "  \"RischNorman\"        — Integrate`RischNorman (Bronstein pmint heuristic)\n"
         "  \"CRCTable\"           — Integrate`CRCTable (lazy-loaded CRC integral table)\n"
         "  \"Undefined\"          — Integrate`Undefined (unknown functions u[x], u'[x]; Roach §1.7)\n"
-        "  \"NewtonLeibniz\"       — definite integrals via F(b)-F(a) (implicit for the {x,a,b} form)\n"
+        "  \"NewtonLeibniz\"       — real definite integrals via F(b)-F(a) (implicit for the {x,a,b} form)\n"
+        "  \"LineIntegral\"        — complex contour integrals (implicit for the {x,z0,...,zn} form)\n"
         "Method -> {\"DerivativeDivides\", \"Substitution\" -> u} pins the kernel u(x),\n"
         "trialing only that substitution.\n"
         "Named methods are strict: failure returns unevaluated, with no fallback.\n"

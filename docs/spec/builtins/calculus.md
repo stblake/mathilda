@@ -553,10 +553,15 @@ monotonically down.
   - `"RischNorman"` — `Integrate\`RischNorman[f, x]`.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.
-  - `"NewtonLeibniz"` — the definite-integral mechanism (implicit for the
-    `{x, a, b}` form); see **Definite integration** below.  On a definite
-    integral, any *other* method name is passed through to the inner
-    indefinite integration that produces the antiderivative.
+  - `"NewtonLeibniz"` — the real-axis definite-integral mechanism (implicit for
+    the `{x, a, b}` form); see **Definite integration** below.
+  - `"LineIntegral"` — the complex contour mechanism (implicit for the
+    `{x, z0, …, zn}` form); see **Complex line integration** below.
+  The two definite mechanisms name themselves only: the actual mechanism is
+  chosen from the spec type, so on a definite integral any *other* method name
+  is passed through to the inner indefinite integration that produces the
+  antiderivative, and either definite-mechanism name on the indefinite
+  `Integrate[f, x, …]` form is a no-op (stays unevaluated).
   Unknown method names emit `Integrate::method` and bubble back.
 - Universal correctness predicate: `Cancel[Together[D[Integrate[f,x],x] - f]] === 0`.
 
