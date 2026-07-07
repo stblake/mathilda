@@ -309,6 +309,29 @@ static void fresh_uy(Expr** u, Expr** y) {
 /* Strategy 1: direct quotient                                            */
 /* ---------------------------------------------------------------------- */
 
+/* If `w` is a pure unit root of the integration variable, w = x^(1/n)
+ * (n >= 2), return n; else 0.  For such a kernel the substitution u = x^(1/n)
+ * inverts cleanly as x = u^n, which lets the direct-quotient strategy replace
+ * the residual x that a bare w -> u leaves behind (e.g. Sqrt[x + Sqrt[x]] with
+ * kernel Sqrt[x] gives 2 u Sqrt[u + x]; closing x -> u^2 yields the clean
+ * 2 u Sqrt[u + u^2], keeping the antiderivative in the integrand's own radical
+ * Sqrt[x + Sqrt[x]] rather than introducing x^(1/4) generators). */
+static int64_t kernel_root_degree(const Expr* w, const Expr* x) {
+    if (!w || w->type != EXPR_FUNCTION) return 0;
+    if (!head_is((Expr*)w, SYM_Power) || w->data.function.arg_count != 2) return 0;
+    if (!expr_eq(w->data.function.args[0], (Expr*)x)) return 0;
+    const Expr* e = w->data.function.args[1];
+    if (e->type == EXPR_FUNCTION && head_is((Expr*)e, SYM_Rational)
+        && e->data.function.arg_count == 2) {
+        const Expr* a = e->data.function.args[0];
+        const Expr* b = e->data.function.args[1];
+        if (a->type == EXPR_INTEGER && b->type == EXPR_INTEGER
+            && a->data.integer == 1 && b->data.integer >= 2)
+            return b->data.integer;
+    }
+    return 0;
+}
+
 /* Try kernel `w` via  q = Cancel[Together[f / D[w, x]]]; q /. w -> u.
  * Returns a verified antiderivative or NULL.  Borrows everything. */
 static Expr* try_direct_kernel(const Expr* f, const Expr* x, const Expr* w) {
@@ -323,6 +346,29 @@ static Expr* try_direct_kernel(const Expr* f, const Expr* x, const Expr* w) {
 
     Expr* u; Expr* y; fresh_uy(&u, &y);
     Expr* qu = replace_one(q, w, u);                        /* consumes q */
+
+    /* A bare w -> u can leave the variable behind when w is a root of x (the
+     * radicand still mentions x, e.g. Sqrt[x + Sqrt[x]] -> 2 u Sqrt[u + x]).
+     * For a unit root w = x^(1/n) the inverse x = u^n closes the substitution
+     * without introducing foreign radical generators; differentiate-back still
+     * gates correctness. */
+    if (qu && !expr_free_of(qu, x)) {
+        int64_t n = kernel_root_degree(w, x);
+        if (n >= 2) {
+            Expr* upow = mk_fn2("Power", expr_copy(u), mk_int(n));
+            qu = replace_one(qu, x, upow);                  /* consumes qu */
+            expr_free(upow);
+            /* PowerExpand collapses the (u^n)^(p/n) powers the x -> u^n
+             * substitution creates (e.g. from x^(5/2) -> (u^2)^(5/2)) down to
+             * u^p, under u = x^(1/n) >= 0 (the integration-positivity
+             * convention).  It leaves genuine radicals of polynomials in u --
+             * Sqrt[u^2 + u] etc. -- untouched, so the reduced integrand stays a
+             * clean function of the integrand's own radical.  differentiate-back
+             * against the original f re-verifies, so a branch-crossing expansion
+             * is rejected rather than trusted. */
+            if (qu) qu = eval_take(mk_fn1("PowerExpand", qu));
+        }
+    }
 
     Expr* result = NULL;
     if (qu && expr_free_of(qu, x)) {
