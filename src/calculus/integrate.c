@@ -514,6 +514,30 @@ Expr* builtin_integrate(Expr* res) {
 
     Expr* f = res->data.function.args[0];
 
+    /* Thread over a list integrand: Integrate[{f1, ..., fn}, spec...] gives
+     * {Integrate[f1, spec...], ..., Integrate[fn, spec...]}.  Integrate is
+     * deliberately NOT Listable (that would also thread over a `{x, a, b}`
+     * range spec), so the integrand-only threading is handled explicitly here.
+     * We build the List of sub-Integrate calls and let the evaluator recurse
+     * into each element (which stays symbolic if a piece cannot be done). */
+    if (f->type == EXPR_FUNCTION &&
+        f->data.function.head->type == EXPR_SYMBOL &&
+        f->data.function.head->data.symbol == SYM_List) {
+        size_t n = f->data.function.arg_count;
+        Expr** elems = malloc(n * sizeof(Expr*));
+        for (size_t i = 0; i < n; i++) {
+            Expr** sub = malloc(argc * sizeof(Expr*));
+            sub[0] = expr_copy(f->data.function.args[i]);
+            for (size_t j = 1; j < argc; j++)
+                sub[j] = expr_copy(res->data.function.args[j]);
+            elems[i] = expr_new_function(expr_new_symbol(SYM_Integrate), sub, argc);
+            free(sub);
+        }
+        Expr* out = expr_new_function(expr_new_symbol(SYM_List), elems, n);
+        free(elems);
+        return out;
+    }
+
     /* Definite form: the second argument is a `{x, a, b}` range spec or a
      * `{x, z0, ..., zn}` complex line/contour spec.  Handles the iterated
      * multi-spec form too. */

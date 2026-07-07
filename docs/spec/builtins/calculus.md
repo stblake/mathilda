@@ -328,6 +328,12 @@ integrator implemented in `src/calculus/integrate.c` (System dispatcher) and
 `IntegrateRational.m` port (see `plans/INTEGRATE_PLAN.md`) closes the
 following classes of integrand:
 
+A **list integrand** threads element-wise: `Integrate[{f1, ..., fn}, spec...]`
+returns `{Integrate[f1, spec...], ..., Integrate[fn, spec...]}` for both the
+indefinite `x` and the definite `{x, a, b}` / contour spec forms.  (`Integrate`
+is deliberately not `Listable`, which would wrongly also thread over the range
+spec; the integrand-only threading is handled explicitly.)
+
 - **Polynomials in `x`** — term-by-term integration via
   `Integrate`IntegratePolynomial`: `a x^n -> a x^(n+1)/(n+1)` for
   `n != -1`, `a/x -> a Log[x]`.
