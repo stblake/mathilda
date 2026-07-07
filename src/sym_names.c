@@ -330,6 +330,7 @@ const char* SYM_NHoldRest = NULL;
 const char* SYM_NIntegrate = NULL;
 const char* SYM_NLimit = NULL;
 const char* SYM_NResidue = NULL;
+const char* SYM_Residue = NULL;
 const char* SYM_NRoots = NULL;
 const char* SYM_NSolve = NULL;
 const char* SYM_NSeries = NULL;
@@ -1048,6 +1049,7 @@ void sym_names_init(void) {
     SYM_NIntegrate                 = intern_symbol("NIntegrate");
     SYM_NLimit                     = intern_symbol("NLimit");
     SYM_NResidue                   = intern_symbol("NResidue");
+    SYM_Residue                    = intern_symbol("Residue");
     SYM_NRoots                     = intern_symbol("NRoots");
     SYM_NSolve                     = intern_symbol("NSolve");
     SYM_NSeries                    = intern_symbol("NSeries");

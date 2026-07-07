@@ -727,6 +727,8 @@ void core_init(void) {
     series_init();
     deriv_init();
     limit_init();
+    void residue_init(void);
+    residue_init();
     numeric_init();
     precision_init();
     rationalize_init();

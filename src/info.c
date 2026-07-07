@@ -252,6 +252,15 @@ void info_init(void) {
         "Options: Radius (contour radius, default 1/100, or Automatic), WorkingPrecision, "
         "PrecisionGoal, MaxRecursion (max contour refinements, default 10), "
         "Method ('Trapezoidal').");
+    symtab_set_docstring("Residue",
+        "Residue[f, {z, z0}]\n"
+        "\tgives the residue of f at the isolated singularity z = z0 -- the "
+        "coefficient of (z - z0)^-1 in the Laurent expansion of f.\n\n"
+        "Computed by power-series expansion, so a residue is found only where f "
+        "admits a Laurent series at z0. Returns unevaluated at branch points "
+        "(fractional-power expansions) and when no series can be produced. See "
+        "NResidue for a numerical alternative that also handles essential "
+        "singularities.");
     symtab_set_docstring("ND",
         "ND[expr, x, x0]\n"
         "\tgives a numerical approximation to the derivative of expr with respect "

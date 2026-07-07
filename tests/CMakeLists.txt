@@ -396,6 +396,7 @@ set(COMMON_SRC
     ../src/calculus/series.c
     ../src/calculus/deriv.c
     ../src/calculus/limit.c
+    ../src/calculus/residue.c
     ../src/context.c
     ../src/numeric.c
     ../src/precision.c
@@ -1785,6 +1786,15 @@ else()
     target_link_libraries(integrate_line_tests gmp m)
 endif()
 add_test(NAME integrate_line_tests COMMAND integrate_line_tests)
+
+add_executable(residue_tests test_residue.c ${COMMON_SRC})
+target_include_directories(residue_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(residue_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(residue_tests gmp m)
+endif()
+add_test(NAME residue_tests COMMAND residue_tests)
 
 add_executable(integrate_jeffrey_tests test_integrate_jeffrey.c ${COMMON_SRC})
 target_include_directories(integrate_jeffrey_tests PRIVATE ../src)

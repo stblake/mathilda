@@ -331,6 +331,7 @@ extern const char* SYM_NHoldRest;
 extern const char* SYM_NIntegrate;
 extern const char* SYM_NLimit;
 extern const char* SYM_NResidue;
+extern const char* SYM_Residue;
 extern const char* SYM_NRoots;
 extern const char* SYM_NSolve;
 extern const char* SYM_NSeries;

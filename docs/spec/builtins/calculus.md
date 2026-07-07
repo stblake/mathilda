@@ -260,6 +260,57 @@ In[9]:= Limit[Sin[x]/x, x -> 0, Method -> "RationalFunction"]
 Out[9]= Limit[Sin[x]/x, x -> 0, Method -> "RationalFunction"]
 ```
 
+## Residue
+
+`Residue[f, {z, z0}]` gives the residue of `f` at the isolated singularity
+`z = z0` — the coefficient of `(z - z0)^-1` in the Laurent expansion of `f`
+(`src/calculus/residue.c`). Attribute: `Protected`. The numerical counterpart is
+[`NResidue`](../builtins/numerical-calculus.md); the symbolic engine here is
+exact but needs `f` to admit a Laurent series at `z0`.
+
+**Method.** The residue is read straight out of `Series[f, {z, z0, 0}]`: an
+order-0 expansion spans exponent `-1` for most integrands, and its `-1`
+coefficient is the residue. When the pole's leading behaviour is carried by an
+unknown function (e.g. `f[z]/z^5`), the series engine truncates relative to that
+function's depth, so `Residue` raises the expansion order until the `-1`
+coefficient is among the explicit terms (bounded, to stay safe at essential
+singularities). A fractional-power (Puiseux) expansion, `den > 1`, signals a
+**branch point**, where the residue is undefined — the call is left unevaluated.
+
+```
+In[1]:= Residue[1/z, {z, 0}]
+Out[1]= 1
+
+In[2]:= Residue[1/z^2, {z, 0}]
+Out[2]= 0
+
+In[3]:= Residue[1/Sin[z]^5, {z, 0}]
+Out[3]= 3/8
+
+In[4]:= Residue[(z + 1)/(z^2 (z - 2)), {z, 0}]      (* order-2 pole *)
+Out[4]= -3/4
+
+In[5]:= Residue[1/(z^2 + 1), {z, I}]                (* complex pole *)
+Out[5]= -I/2
+
+In[6]:= Residue[x^3/(x^4 - 2), {x, 2^(1/4)}]        (* algebraic pole *)
+Out[6]= 1/4
+
+In[7]:= Residue[f[z]/z^5, {z, 0}]                   (* unknown numerator *)
+Out[7]= 1/24 Derivative[4][f][0]
+
+In[8]:= Residue[Zeta[z]/(z - 1)^10, {z, 1}]
+Out[8]= -StieltjesGamma[9]/362880
+
+In[9]:= Residue[1/Sqrt[z], {z, 0}]                  (* branch point *)
+Out[9]= Residue[1/Sqrt[z], {z, 0}]
+```
+
+Consistency with Cauchy's theorem: for a contour enclosing only the pole,
+`NIntegrate[f, {z, ...loop...}]/(2 Pi I)` agrees with `Residue`; e.g.
+`Residue[1/Sin[z]^7, {z, 0}]` is `5/16`, matching `NResidue[1/Sin[z]^7, {z, 0}]`
+≈ `0.3125`.
+
 ## Integrate (rational-function integration, Phase 1-8d)
 
 `Integrate[f, x]` is the public entry point for the rational-function
