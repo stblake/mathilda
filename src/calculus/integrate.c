@@ -27,6 +27,7 @@
 #include "integrate_jeffrey.h"
 #include "integrate_newton_leibniz.h"
 #include "integrate_line.h"
+#include "integrate_residue.h"
 #include "intrat.h"
 #include "intrischnorman.h"
 #include "intsimp.h"
@@ -312,6 +313,7 @@ typedef enum {
     METHOD_UNDEFINED,
     METHOD_NEWTON_LEIBNIZ,   /* definite-only: selects the real-axis FTC mechanism */
     METHOD_LINE_INTEGRAL,    /* definite-only: selects the complex contour mechanism */
+    METHOD_RESIDUE,          /* definite-only: selects the residue-theorem mechanism */
     METHOD_INVALID
 } IntegrateMethod;
 
@@ -331,6 +333,8 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "Undefined")   == 0) return METHOD_UNDEFINED;
     if (strcmp(s, "NewtonLeibniz") == 0) return METHOD_NEWTON_LEIBNIZ;
     if (strcmp(s, "LineIntegral") == 0) return METHOD_LINE_INTEGRAL;
+    if (strcmp(s, "Residue") == 0 || strcmp(s, "ContourResidue") == 0)
+        return METHOD_RESIDUE;
     return METHOD_INVALID;
 }
 
@@ -395,13 +399,17 @@ static IntegrateMethod parse_method_option(Expr* opt, Expr** out_sub) {
     return method_from_string(rhs->data.string);
 }
 
-/* Parse a definite integral's trailing `Method -> "..."` option for the
- * Newton-Leibniz path.  `*name` is set to a borrowed method-name string to
- * pass through to the inner indefinite Integrate (NULL for Automatic and for
- * "NewtonLeibniz", which selects the FTC mechanism itself).  Returns false on
- * a malformed / unrecognised option. */
-static bool definite_parse_method(Expr* opt, const char** name) {
+/* Parse a definite integral's trailing `Method -> "..."` option.  `*name` is set
+ * to a borrowed method-name string to pass through to the inner indefinite
+ * Integrate (NULL for Automatic and for the definite mechanisms NewtonLeibniz /
+ * LineIntegral / Residue, which select the mechanism itself).  `*mech` is set to
+ * the chosen definite mechanism so the dispatcher knows whether to engage the
+ * residue method and/or fall through to Newton-Leibniz.  Returns false on a
+ * malformed / unrecognised option. */
+static bool definite_parse_method(Expr* opt, const char** name,
+                                  IntegrateMethod* mech) {
     *name = NULL;
+    *mech = METHOD_AUTOMATIC;
     if (opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2)
         return false;
     if (opt->data.function.head->type != EXPR_SYMBOL) return false;
@@ -414,11 +422,12 @@ static bool definite_parse_method(Expr* opt, const char** name) {
     if (rhs->type != EXPR_STRING) return false;
     IntegrateMethod m = method_from_string(rhs->data.string);
     if (m == METHOD_INVALID) return false;
-    /* NewtonLeibniz / LineIntegral name the definite mechanism itself (real
-     * axis / complex contour); the actual mechanism is chosen from the spec
-     * type, so they pass NULL through to the inner indefinite Integrate. */
+    *mech = m;
+    /* NewtonLeibniz / LineIntegral / Residue name the definite mechanism itself;
+     * the actual mechanism is chosen from the spec type, so they pass NULL
+     * through to the inner indefinite Integrate. */
     if (m == METHOD_AUTOMATIC || m == METHOD_NEWTON_LEIBNIZ ||
-        m == METHOD_LINE_INTEGRAL) return true;
+        m == METHOD_LINE_INTEGRAL || m == METHOD_RESIDUE) return true;
     *name = rhs->data.string;   /* borrowed: valid while `res` is alive */
     return true;
 }
@@ -441,10 +450,11 @@ static Expr* integrate_definite(Expr* res) {
     if (nspecs == 0) return NULL;
 
     const char* method = NULL;
+    IntegrateMethod mech = METHOD_AUTOMATIC;
     size_t tail = 1 + nspecs;
     if (tail < argc) {
         if (tail != argc - 1) return NULL;   /* stray extra arguments */
-        if (!definite_parse_method(res->data.function.args[tail], &method)) {
+        if (!definite_parse_method(res->data.function.args[tail], &method, &mech)) {
             static uint64_t last_warned_hash = 0;
             uint64_t h = expr_hash(res);
             if (h != last_warned_hash) {
@@ -466,11 +476,19 @@ static Expr* integrate_definite(Expr* res) {
             /* Complex line / contour integral (non-real endpoint or polyline). */
             r = integrate_line_from_spec(cur, spec, method);
         } else {
-            /* Real-axis definite integral via the fundamental theorem. */
+            /* Real-axis definite integral.  Under Automatic (or an explicit
+             * Method -> "Residue") try the residue-theorem method first: for
+             * improper / periodic forms it yields cleaner, NIntegrate-verified
+             * closed forms.  On NULL it falls through to Newton-Leibniz, except
+             * when the user pinned "Residue" (strict: no fallback). */
             Expr* x = spec->data.function.args[0];
             Expr* a = spec->data.function.args[1];
             Expr* b = spec->data.function.args[2];
-            r = integrate_newton_leibniz_try(cur, x, a, b, method);
+            r = NULL;
+            if (mech == METHOD_AUTOMATIC || mech == METHOD_RESIDUE)
+                r = integrate_residue_try(cur, x, a, b);
+            if (!r && mech != METHOD_RESIDUE)
+                r = integrate_newton_leibniz_try(cur, x, a, b, method);
         }
         expr_free(cur);
         if (!r) return NULL;
@@ -633,9 +651,10 @@ Expr* builtin_integrate(Expr* res) {
             break;
         case METHOD_NEWTON_LEIBNIZ:
         case METHOD_LINE_INTEGRAL:
+        case METHOD_RESIDUE:
             /* Definite-only mechanisms.  Meaningless on the indefinite form
-             * Integrate[f, x, Method -> "NewtonLeibniz" / "LineIntegral"];
-             * leave unevaluated. */
+             * Integrate[f, x, Method -> "NewtonLeibniz" / "LineIntegral" /
+             * "Residue"]; leave unevaluated. */
             break;
         case METHOD_INVALID:
             break;  /* unreachable: handled above */
@@ -691,6 +710,9 @@ void integrate_init(void) {
         "  \"Undefined\"          — Integrate`Undefined (unknown functions u[x], u'[x]; Roach §1.7)\n"
         "  \"NewtonLeibniz\"       — real definite integrals via F(b)-F(a) (implicit for the {x,a,b} form)\n"
         "  \"LineIntegral\"        — complex contour integrals (implicit for the {x,z0,...,zn} form)\n"
+        "  \"Residue\"             — improper/periodic real definite integrals by the residue theorem\n"
+        "                          (rational/Fourier on (-Inf,Inf), rational-in-Sin/Cos over a period,\n"
+        "                          principal values, even half-lines); tried before NewtonLeibniz under Automatic\n"
         "Method -> {\"DerivativeDivides\", \"Substitution\" -> u} pins the kernel u(x),\n"
         "trialing only that substitution.\n"
         "Named methods are strict: failure returns unevaluated, with no fallback.\n"
@@ -734,6 +756,10 @@ void integrate_init(void) {
     /* Complex line / contour integration: Integrate`LineIntegral and the
      * on-path singularity detector Integrate`PathSingularPoints. */
     integrate_line_init();
+
+    /* Definite integration by the residue theorem: Integrate`ContourResidue.
+     * Engaged before Newton-Leibniz for a single real spec under Automatic. */
+    integrate_residue_init();
 
     /* Initialise the parallel-Risch / Risch-Norman heuristic
      * (Bronstein's pmint).  Provides `Integrate`RischNorman[f, x]`,

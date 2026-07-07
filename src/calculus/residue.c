@@ -10,6 +10,18 @@
  * A fractional-power (Puiseux) expansion, den > 1, signals a branch point,
  * where the residue is undefined -- we leave the call unevaluated, matching
  * Mathematica (e.g. Residue[1/Sqrt[z], {z, 0}]).
+ *
+ * Algebraic pole locations.  The series engine decides whether z0 is a pole by
+ * evaluating the denominator there and testing it against zero; but for a pole
+ * whose location is a SUM of radicals (e.g. z0 = -2 + Sqrt[3], a root of
+ * 1 + 4 z + z^2), Denominator(z0) is an expression like
+ * 1 + 4 (-2 + Sqrt[3]) + (-2 + Sqrt[3])^2 that does not auto-simplify to 0, so
+ * the pole is missed and the residue wrongly comes out 0.  We defeat this by
+ * expanding about z0 EXPLICITLY: substitute z -> z0 + w, then Expand the
+ * denominator of the result -- polynomial expansion collapses the radical
+ * arithmetic (Sqrt[3]^2 -> 3, ...) so the vanishing constant term becomes a
+ * literal 0 and the w-factor of the pole is exposed.  Reading the (z-z0)^-1
+ * coefficient is then a plain Series-at-0 of the expanded form.
  */
 
 #include "residue.h"
@@ -18,6 +30,7 @@
 #include "symtab.h"
 #include "attr.h"
 #include "sym_names.h"
+#include "internal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -54,35 +67,86 @@ static Expr* residue_series(Expr* expr, Expr* z, Expr* z0, int64_t order) {
     return eval_and_free(series_call);
 }
 
-Expr* builtin_residue(Expr* res) {
-    if (!res || res->type != EXPR_FUNCTION) return NULL;
-    size_t argc = res->data.function.arg_count;
-    if (argc < 2) return residue_emit_argcount(argc);
-    if (argc != 2) return NULL;   /* only the two-argument form is handled */
+/* Build head[a] and evaluate it, freeing the call.  `a` is consumed. */
+static Expr* residue_eval1(const char* head, Expr* a) {
+    Expr** args = calloc(1, sizeof(Expr*));
+    if (!args) { expr_free(a); return NULL; }
+    args[0] = a;
+    Expr* call = expr_new_function(expr_new_symbol(head), args, 1);
+    free(args);
+    return eval_and_free(call);
+}
 
-    Expr* expr = res->data.function.args[0];
-    Expr* spec = res->data.function.args[1];
+/* Rewrite `f` so that the singularity at z = z0 is expanded about w = 0 with an
+ * EXPANDED denominator: returns Numerator[Together[f/.z->z0+w]] /
+ * Expand[Denominator[Together[f/.z->z0+w]]] in the fresh variable `w`.  This is
+ * what makes an algebraic pole location (z0 a sum of radicals) detectable: the
+ * expansion collapses the radical arithmetic in the denominator's constant term
+ * to a literal 0.  Returns an owned Expr* (in the variable `w`) or NULL.  `f`,
+ * `z`, `z0`, `w` are borrowed. */
+static Expr* residue_shift_form(Expr* f, Expr* z, Expr* z0, Expr* w) {
+    /* g = f /. z -> z0 + w */
+    Expr* shift = expr_new_function(expr_new_symbol(SYM_Plus),
+                      (Expr*[]){ expr_copy(z0), expr_copy(w) }, 2);
+    Expr* rule  = expr_new_function(expr_new_symbol(SYM_Rule),
+                      (Expr*[]){ expr_copy(z), shift }, 2);
+    Expr* repl  = expr_new_function(expr_new_symbol("ReplaceAll"),
+                      (Expr*[]){ expr_copy(f), rule }, 2);
+    Expr* g = eval_and_free(repl);
+    if (!g) return NULL;
 
-    /* The location spec must be List[z, z0] with z a symbol. */
-    if (spec->type != EXPR_FUNCTION ||
-        spec->data.function.head->type != EXPR_SYMBOL ||
-        spec->data.function.head->data.symbol != SYM_List ||
-        spec->data.function.arg_count != 2)
-        return NULL;
-    Expr* z  = spec->data.function.args[0];
-    Expr* z0 = spec->data.function.args[1];
-    if (z->type != EXPR_SYMBOL) return NULL;
+    Expr* tog = residue_eval1("Together", g);          /* consumes g */
+    if (!tog) return NULL;
+    Expr* num = residue_eval1("Numerator", expr_copy(tog));
+    Expr* den = residue_eval1("Denominator", tog);     /* consumes tog */
+    if (!num || !den) { if (num) expr_free(num); if (den) expr_free(den); return NULL; }
+    Expr* denx = residue_eval1("Expand", den);         /* consumes den */
+    if (!denx) { expr_free(num); return NULL; }
 
-    /* Expand to order (z-z0)^0 and read the coefficient of (z-z0)^-1. Order 0
-     * spans exponent -1 for most integrands, but when the leading behaviour is
-     * carried by an unknown function (e.g. f[z]/z^5) the series engine truncates
-     * relative to that function's depth and the O-term can land at an exponent
-     * <= -1, leaving -1 unknown. In that case we raise the requested order until
-     * the -1 coefficient is inside the explicit terms (bounded, to stay safe on
-     * essential singularities where it never resolves). */
+    /* form = num * denx^-1 */
+    Expr* denpow = expr_new_function(expr_new_symbol(SYM_Power),
+                      (Expr*[]){ denx, expr_new_integer(-1) }, 2);
+    Expr* form   = expr_new_function(expr_new_symbol(SYM_Times),
+                      (Expr*[]){ num, denpow }, 2);
+    return form;
+}
+
+/* True iff PolynomialQ[p, z]. */
+static bool residue_polyq(Expr* p, Expr* z) {
+    Expr* call = internal_polynomialq(
+        (Expr*[]){ expr_copy(p), expr_copy(z) }, 2);
+    Expr* v = eval_and_free(call);
+    bool ok = v && v->type == EXPR_SYMBOL && v->data.symbol == SYM_True;
+    if (v) expr_free(v);
+    return ok;
+}
+
+/* True iff f is a rational function of z: Together[f] has polynomial numerator
+ * AND polynomial denominator in z.  The shift+Expand pole-detection preprocessing
+ * is applied ONLY in this case; for transcendental / special-function integrands
+ * (Cot, Zeta near its pole, unknown f[z], ...) the series engine's built-in
+ * knowledge of the expansion at z0 is preferable, and shifting the argument would
+ * defeat it. */
+static bool residue_is_rational_in(Expr* f, Expr* z) {
+    Expr* tog = residue_eval1("Together", expr_copy(f));
+    if (!tog) return false;
+    Expr* num = residue_eval1("Numerator", expr_copy(tog));
+    Expr* den = residue_eval1("Denominator", tog);   /* consumes tog */
+    if (!num || !den) { if (num) expr_free(num); if (den) expr_free(den); return false; }
+    bool ok = residue_polyq(num, z) && residue_polyq(den, z);
+    expr_free(num);
+    expr_free(den);
+    return ok;
+}
+
+/* Adaptive Laurent-coefficient extraction: expand `expr` about `spt` in `svar`
+ * to order 0 (raising it when an unknown-function leading term hides exponent
+ * -1) and return an owned copy of the (svar-spt)^-1 coefficient, 0 at an analytic
+ * point, or NULL at a branch point / when no series can be produced. */
+static Expr* residue_extract(Expr* expr, Expr* svar, Expr* spt) {
     int64_t order = 0;
     for (int attempt = 0; attempt < 8; attempt++) {
-        Expr* sd = residue_series(expr, z, z0, order);
+        Expr* sd = residue_series(expr, svar, spt, order);
         if (!sd) return NULL;
 
         /* Series must have produced a SeriesData; otherwise it could not expand. */
@@ -111,7 +175,7 @@ Expr* builtin_residue(Expr* res) {
         int64_t index = -1 - nmin;
 
         if (index < 0) {
-            /* nmin > -1: f is analytic at z0 (no principal part) -> residue 0. */
+            /* nmin > -1: analytic (no principal part) -> residue 0. */
             expr_free(sd);
             return expr_new_integer(0);
         }
@@ -130,6 +194,51 @@ Expr* builtin_residue(Expr* res) {
         order = next;
     }
     return NULL;
+}
+
+Expr* residue_compute(Expr* f, Expr* z, Expr* z0) {
+    if (!f || !z || !z0 || z->type != EXPR_SYMBOL) return NULL;
+
+    if (residue_is_rational_in(f, z)) {
+        /* Rational integrand: expand about z0 with an EXPANDED denominator so an
+         * algebraic pole location (z0 a sum of radicals) is exposed as a w-factor. */
+        Expr* w = expr_new_symbol("Residue`$w");
+        Expr* form = residue_shift_form(f, z, z0, w);
+        if (!form) { expr_free(w); return NULL; }
+        Expr* zero = expr_new_integer(0);
+        Expr* result = residue_extract(form, w, zero);
+        expr_free(form);
+        expr_free(w);
+        expr_free(zero);
+        return result;
+    }
+
+    /* Transcendental / special-function integrand: expand directly about z0 so
+     * the series engine can use its knowledge of the function's Laurent series
+     * there (e.g. Zeta at 1, Cot / 1/Sin^n at 0, unknown f[z]/z^n). */
+    return residue_extract(f, z, z0);
+}
+
+Expr* builtin_residue(Expr* res) {
+    if (!res || res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 2) return residue_emit_argcount(argc);
+    if (argc != 2) return NULL;   /* only the two-argument form is handled */
+
+    Expr* expr = res->data.function.args[0];
+    Expr* spec = res->data.function.args[1];
+
+    /* The location spec must be List[z, z0] with z a symbol. */
+    if (spec->type != EXPR_FUNCTION ||
+        spec->data.function.head->type != EXPR_SYMBOL ||
+        spec->data.function.head->data.symbol != SYM_List ||
+        spec->data.function.arg_count != 2)
+        return NULL;
+    Expr* z  = spec->data.function.args[0];
+    Expr* z0 = spec->data.function.args[1];
+    if (z->type != EXPR_SYMBOL) return NULL;
+
+    return residue_compute(expr, z, z0);
 }
 
 void residue_init(void) {

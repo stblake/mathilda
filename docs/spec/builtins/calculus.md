@@ -277,6 +277,15 @@ coefficient is among the explicit terms (bounded, to stay safe at essential
 singularities). A fractional-power (Puiseux) expansion, `den > 1`, signals a
 **branch point**, where the residue is undefined — the call is left unevaluated.
 
+For a **rational** integrand the expansion is taken about `z0` with an *expanded*
+denominator (`z -> z0 + w`, then `Expand`): this collapses the radical arithmetic
+in the denominator's constant term (`Sqrt[3]^2 -> 3`, …) so a pole whose location
+is a **sum of radicals** — e.g. `z0 = -2 + Sqrt[3]`, a root of `1 + 4 z + z^2` —
+is detected (a naïve `Series` would evaluate `Denominator(z0)` to a non-simplified
+nonzero form and wrongly report residue `0`). Transcendental / special-function
+integrands keep the direct expansion, which uses the engine's own knowledge of
+the Laurent series at `z0` (e.g. `Zeta` at `1`).
+
 ```
 In[1]:= Residue[1/z, {z, 0}]
 Out[1]= 1
@@ -764,6 +773,75 @@ Out[5]= Integrate[1/z, {z, -1 - I, 1 + I}]
 In[6]:= Chop[N[Integrate[1/z, {z, 1, I, -1, -I, 1}]]]   (* CCW loop about 0 *)
 Out[6]= 0.0 + 6.28319 I                                 (* = 2 Pi I *)
 ```
+
+### Contour / residue-theorem definite integration
+
+For the classical families of **improper** and **periodic** real integrals that
+complex analysis dispatches by summing residues over the poles enclosed by a
+standard contour, `Integrate[f, {x, a, b}]` runs a residue-theorem method
+**before** Newton-Leibniz (also reachable as `Method -> "Residue"` or
+`Integrate`ContourResidue[f, {x, a, b}]`).  Each answer is
+**correct-by-construction**: once a family's structural gates hold, the residue
+theorem gives the exact value, so there is *no* numeric quadrature crosscheck.
+The only post-hoc gate is a self-consistency check that the residue sum closed to
+a scalar (no surviving `x`/`Root`) and — for the real-valued families — that its
+imaginary part vanishes (a residual `Im` would betray a mis-classified pole); a
+failure returns unevaluated and the Newton-Leibniz path takes over.  Four
+recognizers:
+
+- **Rational on `(-∞, ∞)`** — `f = P/Q` with `deg Q ≥ deg P + 2` and **no real
+  pole**: value `= 2 π i · Σ Res` over the poles in the upper half-plane.
+- **Fourier / Jordan on `(-∞, ∞)`** — `f = R(x) · K` with
+  `K ∈ {Cos[a x], Sin[a x], Exp[I a x]}`, `R` rational with `deg`-drop `≥ 1`,
+  `a` a nonzero real: with `J = 2 π i · Σ_UHP Res[R Exp[I a x]]` (for `a > 0`),
+  `∫ R Cos = Re[J]` and `∫ R Sin = Im[J]` (only the decaying exponential is
+  closed — `Cos`/`Sin` are **not** split).
+- **Rational-in-`{Sin, Cos}` over a full period** `(0, 2π)` or `(-π, π)` — via
+  `z = Exp[I x]` on the unit circle: value `= 2 π i · Σ Res` over the poles
+  inside the unit disk.
+- **Removable axis singularity (Fourier)** — a **simple** real-axis pole of `R`
+  at which the kernel vanishes (so `f = R·K` is analytic there, e.g. `Sin[x]/x`
+  at `0`) contributes a **half residue** `π i · Res`, the indented-contour value,
+  giving `∫ Sin[x]/x = π`.  A *genuine* axis pole (kernel nonzero there, e.g.
+  `Cos[x]/x`) makes the ordinary integral diverge and returns unevaluated —
+  plain `Integrate` does not compute a principal value.
+
+A one-line **half-line** add-on covers even integrands:
+`∫₀^∞ f = ½ ∫₋∞^∞ f`.
+
+```
+In[1]:= Integrate[1/(1 + x^4), {x, -Infinity, Infinity}]
+Out[1]= Pi/Sqrt[2]
+
+In[2]:= Integrate[1/(1 + x^2)^2, {x, -Infinity, Infinity}]   (* order-2 pole *)
+Out[2]= 1/2 Pi
+
+In[3]:= Integrate[Cos[x]/(1 + x^2), {x, -Infinity, Infinity}]
+Out[3]= Pi/E
+
+In[4]:= Integrate[1/(2 + Cos[x]), {x, 0, 2 Pi}]
+Out[4]= (2 Pi)/Sqrt[3]
+
+In[5]:= Integrate[Sin[x]/x, {x, -Infinity, Infinity}]        (* principal value *)
+Out[5]= Pi
+
+In[6]:= Integrate[1/(1 + x^4), {x, 0, Infinity}]             (* even half-line *)
+Out[6]= (1/2 Pi)/Sqrt[2]
+```
+
+The residue sums are closed with `RootReduce` (algebraic families) or the
+`Conjugate` identities for `Re[J]`/`Im[J]` (the Fourier family); a value that
+still contains an unreduced `Root`, or a surviving imaginary part, is treated as
+a mis-fire and returned unevaluated.  Negative controls such as
+`Integrate[1/(1 + x^3), {x, -Infinity, Infinity}]` and
+`Integrate[1/(x^2 - 1), {x, -Infinity, Infinity}, Method -> "Residue"]`
+(genuine real-axis poles),
+`Integrate[Cos[x]/x, {x, -Infinity, Infinity}, Method -> "Residue"]`
+(genuine axis pole, kernel nonzero),
+`Integrate[1/Sqrt[1 + x^4], {x, -Infinity, Infinity}]` (branch point, not
+rational), and `Integrate[1/(2 + Cos[x]), {x, 0, Pi}]` (not a full period) all
+stay unevaluated.  Keyhole / branch-cut contours (`∫₀^∞ x^{s-1}/(1+x)`) are out
+of scope for the rational recognizer.
 
 The `Integrate`` package also exposes the lower-level helpers
 `Integrate`HermiteReduce`, `Integrate`IntegratePolynomial`,
