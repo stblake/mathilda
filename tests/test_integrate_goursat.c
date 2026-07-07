@@ -161,6 +161,22 @@ static void test_sqrt(void) {
      * integral unevaluated with a 1/0 message. */
     ok("(t^4 + 2 t^3 - 4)/(t^2 Sqrt[(t^2-1)(t^2-4)])");
 
+    /* Regression: Integrate[Sqrt[1+t^4]/(1-t^4), t] via the V4 square-root
+     * descent.  The eigendescent emits the radical in denominator positions as
+     * Power[g, -1/2] inside the ArcTan/ArcTanh arguments; the radical-over-R
+     * normalisation (reexpress_over_radical) used to heal only the +1/2 form,
+     * leaving a spurious nested radical
+     *   Sqrt[2(1 + (1+t)^4/(-1+t)^4 + 6(1+t)^2/(-1+t)^2)]
+     * that is really 4 Sqrt[1+t^4]/(-1+t)^2.  Assert the closed form
+     * differentiates back numerically AND carries no t-dependent half-power
+     * radical other than Sqrt[1+t^4] (both signs substituted away first). */
+    okg_num("Sqrt[1 + t^4]/(1 - t^4)", "3/7");
+    check_eq("FreeQ[Integrate[Sqrt[1 + t^4]/(1 - t^4), t,"
+             " Method -> \"GoursatAlgebraic\"]"
+             " /. {Power[1 + t^4, 1/2] -> q, Power[1 + t^4, -1/2] -> p},"
+             " Power[b_ /; MemberQ[Variables[b], t], 1/2]"
+             " | Power[b_ /; MemberQ[Variables[b], t], -1/2]]", "True");
+
     declines("t^2/Sqrt[(t^2-1)(t^2-4)]");         /* V4-invariant: elliptic */
     declines("t/Sqrt[t^3+1]");                    /* cubic radicand: elliptic */
     declines("t/Sqrt[t^4+t+1]");                  /* irreducible quartic: elliptic */
