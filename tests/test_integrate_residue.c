@@ -66,6 +66,28 @@ static void test_family_fourier(void) {
     check_eq("Integrate[Cos[2 x]/(x^2+9), {x, -Infinity, Infinity}]", "(1/3 Pi)/E^6");
     /* x Sin[x]/(x^2+4) = Pi/E^2. */
     check_eq("Chop[N[Integrate[x Sin[x]/(x^2+4), {x, -Infinity, Infinity}] - Pi/E^2]]", "0");
+    /* Higher-order (double) complex poles: Cos[a x]/(x^2+1)^2 = (Pi/2)(1+a) e^{-a}.
+     * Regression for the Laurent-pad bug that under-expanded the Taylor factor at
+     * a complex pole (I = Complex[0,1]) and dropped the residue's product-rule
+     * cross term -- gave (Pi/2) a e^{-a} instead of (Pi/2)(1+a) e^{-a}. */
+    check_eq("Integrate[Cos[x]/(x^2+1)^2, {x, -Infinity, Infinity}]", "Pi/E");
+    check_eq("Integrate[Cos[3 x]/(x^2+1)^2, {x, -Infinity, Infinity}]", "(2 Pi)/E^3");
+    check_eq("Chop[N[Integrate[Cos[2 x]/(x^2+1)^2, {x, -Infinity, Infinity}] "
+             "- (Pi/2)(1+2)/E^2]]", "0");
+    /* Triple pole (order-3): Cos[x]/(x^2+1)^3 = 7 Pi/(8 E) (matches NIntegrate). */
+    check_eq("Integrate[Cos[x]/(x^2+1)^3, {x, -Infinity, Infinity}]", "(7/8 Pi)/E");
+
+    /* Bare complex-exponential kernel Exp[I k x], which the evaluator normalises
+     * to Power[E, .] rather than an Exp[.] head. Both spellings must match. */
+    check_eq("Integrate[Exp[I x]/(x^2+1), {x, -Infinity, Infinity}]", "Pi/E");
+    check_eq("Integrate[E^(I x)/(x^2+1), {x, -Infinity, Infinity}]", "Pi/E");
+    check_eq("Integrate[Exp[2 I x]/(x^2+1), {x, -Infinity, Infinity}]", "Pi/E^2");
+    /* Lower-half-plane closure (negative frequency). */
+    check_eq("Integrate[Exp[-I x]/(x^2+1), {x, -Infinity, Infinity}]", "Pi/E");
+    /* Double pole through the Exp kernel path. */
+    check_eq("Integrate[Exp[I x]/(x^2+1)^2, {x, -Infinity, Infinity}]", "Pi/E");
+    /* Complex-valued result: Re part is odd (0), Im part = Pi/E. */
+    check_eq("Integrate[x Exp[I x]/(x^2+1), {x, -Infinity, Infinity}]", "(I Pi)/E");
 }
 
 /* -------------------------------------------------------------------------
@@ -143,6 +165,135 @@ static void test_regression_finite(void) {
     check_eq("Integrate[x^2, {x, 0, 1}]", "1/3");
 }
 
+/* =========================================================================
+ * Assumptions-driven / new contour families.  A parametric closed form is
+ * pinned numerically via a rational substitution + Chop[N[value - reference]]
+ * (exact string matching a symbolic surface form is brittle); purely numeric
+ * closed forms are matched exactly.
+ * ====================================================================== */
+
+/* -------------------------------------------------------------------------
+ * Option plumbing: Integrate accepts `Assumptions -> ...` (no Integrate::method
+ * error), in any order, alongside Method, on definite and indefinite forms.
+ * ---------------------------------------------------------------------- */
+static void test_assumptions_option(void) {
+    /* Assumptions accepted on a numeric definite integral (option ignored, value
+     * unchanged) -- and combined with Method, in either order. */
+    check_eq("Integrate[1/(1+x^4), {x, -Infinity, Infinity}, Assumptions -> a > 0]",
+             "Pi/Sqrt[2]");
+    check_eq("Integrate[1/(1+x^4), {x, -Infinity, Infinity}, "
+             "Method -> \"Residue\", Assumptions -> a > 0]", "Pi/Sqrt[2]");
+    check_eq("Integrate[1/(1+x^4), {x, -Infinity, Infinity}, "
+             "Assumptions -> a > 0, Method -> \"Residue\"]", "Pi/Sqrt[2]");
+    /* Indefinite form accepts (and ignores) Assumptions rather than mis-reading
+     * it as a Method value. */
+    check_eq("Integrate[x^2, x, Assumptions -> a > 0]", "1/3 x^3");
+    /* A genuinely unrecognised trailing option is still rejected (unevaluated). */
+    check_eq("Integrate[1/(1+x^4), {x, -Infinity, Infinity}, Bogus -> 3]",
+             "Integrate[1/(1 + x^4), {x, -Infinity, Infinity}, Bogus -> 3]");
+}
+
+/* -------------------------------------------------------------------------
+ * Family B with symbolic parameters (Fourier/Jordan under Assumptions).
+ * ---------------------------------------------------------------------- */
+static void test_fourier_symbolic(void) {
+    /* Integrate[Cos[k x]/(x^2+a^2)] = (Pi/a) E^{-a k},  a>0, k>0. */
+    check_eq("Integrate[Cos[k x]/(x^2+a^2), {x, -Infinity, Infinity}, "
+             "Assumptions -> {a > 0, k > 0}]", "(Pi E^(-a k))/a");
+    /* Sin is odd -> 0. */
+    check_eq("Integrate[Sin[k x]/(x^2+a^2), {x, -Infinity, Infinity}, "
+             "Assumptions -> {a > 0, k > 0}]", "0");
+    /* Numeric confirmation at a generic rational point. */
+    check_eq("Chop[N[(Integrate[Cos[k x]/(x^2+a^2), {x, -Infinity, Infinity}, "
+             "Assumptions -> {a > 0, k > 0}] - Pi E^(-a k)/a) /. {a -> 13/10, k -> 7/10}]]",
+             "0");
+    /* A different denominator scale. */
+    check_eq("Chop[N[(Integrate[Cos[k x]/(x^2+b^2), {x, -Infinity, Infinity}, "
+             "Assumptions -> {b > 0, k > 0}] - Pi E^(-b k)/b) /. {b -> 9/5, k -> 2}]]",
+             "0");
+    /* Bare complex-exponential kernel Exp[I k x] with symbolic parameters:
+     * Integrate[Exp[I k x]/(x^2+a^2)] = (Pi/a) E^{-a k},  a>0, k>0. */
+    check_eq("Integrate[Exp[I k x]/(x^2+a^2), {x, -Infinity, Infinity}, "
+             "Assumptions -> {a > 0, k > 0}]", "(Pi E^(-a k))/a");
+    check_eq("Chop[N[(Integrate[Exp[I k x]/(x^2+a^2), {x, -Infinity, Infinity}, "
+             "Assumptions -> {a > 0, k > 0}] - Pi E^(-a k)/a) /. {a -> 12/10, k -> 9/10}]]",
+             "0");
+}
+
+/* -------------------------------------------------------------------------
+ * Rectangular contour: quasi-periodic Exp[c x] R(Exp[x]) on (-Inf, Inf).
+ * ---------------------------------------------------------------------- */
+static void test_rectangular(void) {
+    /* Integrate[Exp[a x]/(Exp[x]+1)] = Pi/Sin[Pi a],  0 < a < 1. */
+    check_eq("Integrate[Exp[a x]/(Exp[x]+1), {x, -Infinity, Infinity}, "
+             "Assumptions -> 0 < a < 1]", "Pi Csc[Pi a]");
+    check_eq("Chop[N[(Integrate[Exp[a x]/(Exp[x]+1), {x, -Infinity, Infinity}, "
+             "Assumptions -> 0 < a < 1] - Pi/Sin[Pi a]) /. a -> 37/100]]", "0");
+    /* Exp[a x]/(Exp[x]-1) style denominator is a genuine axis pole (Exp[x]=1 at
+     * x=0): no clean value -> stays unevaluated. */
+    check_eq("Integrate[Exp[a x]/(Exp[x]-1), {x, -Infinity, Infinity}, "
+             "Assumptions -> 0 < a < 1]",
+             "Integrate[E^(a x)/(-1 + E^x), {x, -Infinity, Infinity}, Assumptions -> 0 < a < 1]");
+}
+
+/* -------------------------------------------------------------------------
+ * Keyhole / Mellin: branch power x^p R(x) on (0, Inf).
+ * ---------------------------------------------------------------------- */
+static void test_mellin(void) {
+    check_eq("Integrate[x^(1/3)/(x^2+1), {x, 0, Infinity}]", "Pi/Sqrt[3]");
+    check_eq("Integrate[Sqrt[x]/(x^2+1), {x, 0, Infinity}]", "Pi/Sqrt[2]");
+    /* x^{-1/2}/(1+x) = Pi. */
+    check_eq("Chop[N[Integrate[1/(Sqrt[x] (1+x)), {x, 0, Infinity}] - Pi]]", "0");
+    /* Divergent branch power (s = 7/2 exceeds the decay order 2): unevaluated. */
+    check_eq("Integrate[x^(5/2)/(x^2+1), {x, 0, Infinity}]",
+             "Integrate[x^(5/2)/(1 + x^2), {x, 0, Infinity}]");
+}
+
+/* -------------------------------------------------------------------------
+ * Sector contour: x^m/(c + x^n), symbolic exponent n.
+ * ---------------------------------------------------------------------- */
+static void test_sector(void) {
+    /* Integrate[1/(1+x^n)] = (Pi/n) Csc[Pi/n],  n > 1. */
+    check_eq("Integrate[1/(1+x^n), {x, 0, Infinity}, Assumptions -> n > 1]",
+             "(Pi Csc[Pi/n])/n");
+    check_eq("Chop[N[(Integrate[1/(1+x^n), {x, 0, Infinity}, Assumptions -> n > 1] "
+             "- Pi/(n Sin[Pi/n])) /. n -> 23/10]]", "0");
+    /* Numeric n, monomial numerator. */
+    check_eq("Chop[N[Integrate[x/(1+x^4), {x, 0, Infinity}] - Pi/4]]", "0");
+    check_eq("Chop[N[Integrate[1/(1+x^3), {x, 0, Infinity}] - 2 Pi/(3 Sqrt[3])]]", "0");
+    /* Under-constrained exponent (only n > 0, so n <= 1 possible -> divergence
+     * not excluded): must not fire. */
+    check_eq("Integrate[1/(1+x^n), {x, 0, Infinity}, Assumptions -> n > 0]",
+             "Integrate[1/(1 + x^n), {x, 0, Infinity}, Assumptions -> n > 0]");
+}
+
+/* -------------------------------------------------------------------------
+ * Negative controls specific to the symbolic-parameter path.
+ * ---------------------------------------------------------------------- */
+static void test_symbolic_negative_controls(void) {
+    /* Strict Method -> "Residue" (no Newton-Leibniz fallback) isolates the
+     * residue method's own decision.  A free parameter left two-sided unbounded
+     * by the assumptions does not determine the pole sign -> refuse. */
+    check_eq("Integrate[Cos[k x]/(x^2+a^2), {x, -Infinity, Infinity}, "
+             "Method -> \"Residue\", Assumptions -> k > 0]",
+             "Integrate[Cos[k x]/(a^2 + x^2), {x, -Infinity, Infinity}, "
+             "Method -> \"Residue\", Assumptions -> k > 0]");
+    /* No assumptions at all: symbolic poles are undecidable -> refuse. */
+    check_eq("Integrate[Cos[k x]/(x^2+a^2), {x, -Infinity, Infinity}, Method -> \"Residue\"]",
+             "Integrate[Cos[k x]/(a^2 + x^2), {x, -Infinity, Infinity}, Method -> \"Residue\"]");
+}
+
+/* -------------------------------------------------------------------------
+ * Family A (rational) also fires for symbolic parameters under Assumptions and
+ * closes to a clean rational form (not a Sqrt[-4 a^2] surface).
+ * ---------------------------------------------------------------------- */
+static void test_rational_symbolic(void) {
+    check_eq("Integrate[1/(x^2+a^2), {x, -Infinity, Infinity}, Assumptions -> a > 0]",
+             "Pi/a");
+    check_eq("Chop[N[(Integrate[1/(x^2+a^2)^2, {x, -Infinity, Infinity}, "
+             "Assumptions -> a > 0] - Pi/(2 a^3)) /. a -> 7/5]]", "0");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -155,6 +306,13 @@ int main(void) {
     TEST(test_dispatch);
     TEST(test_negative_controls);
     TEST(test_regression_finite);
+    TEST(test_assumptions_option);
+    TEST(test_fourier_symbolic);
+    TEST(test_rectangular);
+    TEST(test_mellin);
+    TEST(test_sector);
+    TEST(test_rational_symbolic);
+    TEST(test_symbolic_negative_controls);
 
     printf("All Integrate ContourResidue tests passed!\n");
     return 0;

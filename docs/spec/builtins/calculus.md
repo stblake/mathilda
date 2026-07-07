@@ -800,8 +800,12 @@ recognizers:
 - **Fourier / Jordan on `(-∞, ∞)`** — `f = R(x) · K` with
   `K ∈ {Cos[a x], Sin[a x], Exp[I a x]}`, `R` rational with `deg`-drop `≥ 1`,
   `a` a nonzero real: with `J = 2 π i · Σ_UHP Res[R Exp[I a x]]` (for `a > 0`),
-  `∫ R Cos = Re[J]` and `∫ R Sin = Im[J]` (only the decaying exponential is
-  closed — `Cos`/`Sin` are **not** split).
+  `∫ R Cos = Re[J]` and `∫ R Sin = Im[J]`. The bare complex-exponential kernel is
+  recognised in both spellings — `Exp[I a x]` and the evaluator-normalised
+  `Power[E, I a x]` — and returns `J` directly (`∫ R Exp[I a x] = J`); for
+  negative `a` the lower half-plane is closed. Real-exponent `Exp[a x]` is *not*
+  a Fourier kernel (it routes to the rectangular family). `Cos`/`Sin` are closed
+  via `Re`/`Im` of the single decaying exponential, not split into two.
 - **Rational-in-`{Sin, Cos}` over a full period** `(0, 2π)` or `(-π, π)` — via
   `z = Exp[I x]` on the unit circle: value `= 2 π i · Σ Res` over the poles
   inside the unit disk.
@@ -813,9 +817,57 @@ recognizers:
   plain `Integrate` does not compute a principal value.
 
 A one-line **half-line** add-on covers even integrands:
-`∫₀^∞ f = ½ ∫₋∞^∞ f`.
+`∫₀^∞ f = ½ ∫₋∞^∞ f`.  Three further recognizers handle branch-cut and
+symbolic-exponent contours:
+
+- **Keyhole / Mellin on `(0, ∞)`** — a branch power times a rational function,
+  `f = x^p R(x)` with `p` non-integer (so `s = p + 1 ∉ ℤ`): value
+  `= −π · Σ_k [ z_k^{s-1} Res(R, z_k) ] · e^{−iπs} / sin(π s)` over the poles
+  `z_k` of `R`, with `z_k^{s-1}` on the branch `arg ∈ (0, 2π)`.  The
+  `e^{−iπs}/sin(π s)` prefactor is the exact reduction of the keyhole jump
+  `1/(1 − e^{2πi s})`, landing a numeric `s` on an algebraic multiple of `π`
+  (e.g. `∫₀^∞ x^{1/3}/(x²+1) = π/√3`).  Requires `0 < Re(s) < deg Q − deg P`.
+- **Sector on `(0, ∞)`** — `f = x^m/(c + x^n)` with the exponent `n` possibly a
+  **symbolic parameter**: the wedge of angle `2π/n` gives
+  `(π/n) c^{s/n − 1} csc(π s/n)`, `s = m + 1`.  This is the one family admitting a
+  symbolic `n` (the keyhole cannot enumerate `n` poles), powering
+  `Integrate[1/(1 + x^n), {x, 0, ∞}, Assumptions -> n > 1] = (π/n) csc(π/n)`.
+- **Rectangular / quasi-periodic on `(-∞, ∞)`** — `f = Exp[c x] R(Exp[x])`
+  (period `2πi`): reduced to the keyhole core by `w = Exp[x]`
+  (`∫_{-∞}^∞ f dx = ∫₀^∞ f(Log w)/w dw = ∫₀^∞ w^{c-1} R(w) dw`), so e.g.
+  `Integrate[Exp[a x]/(Exp[x]+1), {x, -∞, ∞}, Assumptions -> 0 < a < 1] = π csc(π a)`.
+
+**Assumptions and symbolic parameters.**  An `Integrate[f, {x, a, b},
+Assumptions -> …]` option lets the residue families evaluate integrals whose
+parameters are symbolic (`a > 0`, `0 < a < 1`, `n > 1`, …).  The recognizers
+classify a parameter-dependent pole or kernel frequency by reading its sign at a
+single generic point of the region the assumptions pin (a sign-consistent
+instantiation), while the residue arithmetic stays fully symbolic — so the
+closed form is still **correct by construction, with no numeric crosscheck**.
+Convergence/applicability gates (`n > m + 1`, `0 < s < deg`-drop, `c > 0`) are
+verified against the assumption-**guaranteed** interval bounds, not the sample
+point, so an under-constrained problem (e.g. only `n > 0` for the sector family)
+is refused rather than guessed; a parameter the assumptions leave two-sided
+unbounded is likewise refused.  Radical pole locations are `PowerExpand`-cleaned
+under all-positive parameters (`Sqrt[-4 a²] → 2 I a`) so a rational answer closes
+to `π/a` rather than a `Sqrt[-4 a²]` surface, and real-parameter conjugation
+uses `I → −I` (the symbolic `Conjugate` would not reduce).
 
 ```
+In[0a]:= Integrate[Cos[k x]/(x^2 + a^2), {x, -Infinity, Infinity},
+           Assumptions -> {a > 0, k > 0}]
+Out[0a]= (Pi E^(-a k))/a
+
+In[0b]:= Integrate[x^(1/3)/(x^2 + 1), {x, 0, Infinity}]     (* keyhole/Mellin *)
+Out[0b]= Pi/Sqrt[3]
+
+In[0c]:= Integrate[1/(1 + x^n), {x, 0, Infinity}, Assumptions -> n > 1]  (* sector *)
+Out[0c]= (Pi Csc[Pi/n])/n
+
+In[0d]:= Integrate[Exp[a x]/(Exp[x] + 1), {x, -Infinity, Infinity},
+           Assumptions -> 0 < a < 1]                         (* rectangular *)
+Out[0d]= Pi Csc[Pi a]
+
 In[1]:= Integrate[1/(1 + x^4), {x, -Infinity, Infinity}]
 Out[1]= Pi/Sqrt[2]
 
@@ -846,8 +898,11 @@ a mis-fire and returned unevaluated.  Negative controls such as
 (genuine axis pole, kernel nonzero),
 `Integrate[1/Sqrt[1 + x^4], {x, -Infinity, Infinity}]` (branch point, not
 rational), and `Integrate[1/(2 + Cos[x]), {x, 0, Pi}]` (not a full period) all
-stay unevaluated.  Keyhole / branch-cut contours (`∫₀^∞ x^{s-1}/(1+x)`) are out
-of scope for the rational recognizer.
+stay unevaluated.  The keyhole/Mellin, sector and rectangular families
+described above extend the reach to branch-cut and symbolic-exponent contours;
+a log-keyhole (`∫₀^∞ Log[x] R(x)`) with symbolic on-circle poles remains out of
+scope (it needs assumption-aware `Arg`/`Log` branch reasoning that Mathilda does
+not yet have).
 
 The `Integrate`` package also exposes the lower-level helpers
 `Integrate`HermiteReduce`, `Integrate`IntegratePolynomial`,

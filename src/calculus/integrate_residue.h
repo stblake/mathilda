@@ -44,9 +44,9 @@
 /*
  * Master entry for the Integrate dispatcher's definite real-spec path.  f, x, a,
  * b are borrowed (not consumed); x must be a symbol.  Returns a freshly-allocated
- * Expr* (the verified closed-form value) when a recognizer fires and its value
- * passes the numeric crosscheck, or NULL to leave the integral for the
- * Newton-Leibniz path (no family matched, closure failed, or crosscheck rejected).
+ * Expr* (the closed-form value) when a recognizer fires and its value closes to a
+ * scalar, or NULL to leave the integral for the Newton-Leibniz path (no family
+ * matched, or closure failed).
  *
  * `diverges` (may be NULL) is an out-flag, set to true only when a family
  * CONCLUSIVELY determines the ordinary integral does not converge -- a genuine
@@ -55,8 +55,20 @@
  * it to emit Integrate::idiv and stop, rather than silently falling through.  It
  * is left false for a merely-unrecognized integrand (an undecidable/symbolic
  * pole, closure failure, etc.), which stays eligible for the Newton-Leibniz path.
+ *
+ * `assumptions` (may be NULL) is the borrowed value of the caller's
+ * `Assumptions -> ...` option -- a fact expression (And / List of relations such
+ * as `a > 0`, `0 < a < 1`, `n > 1`) constraining the integrand's free
+ * parameters.  When present, the recognizers classify poles and frequencies that
+ * depend on symbolic parameters by reading their sign at a single generic point
+ * of the region the assumptions pin (a sign-consistent instantiation), while the
+ * residue arithmetic stays symbolic -- so the closed form is correct BY
+ * CONSTRUCTION, with no numeric quadrature crosscheck.  A parameter the
+ * assumptions leave two-sided unbounded is refused (its sign is undetermined).
+ * Without assumptions the classification stays purely numeric (unchanged).
  */
-Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b, bool* diverges);
+Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
+                            Expr* assumptions, bool* diverges);
 
 /* `Integrate`ContourResidue[f, {x, a, b}]` builtin.  Strict: NULL on any
  * non-applicable input (no fallback). */

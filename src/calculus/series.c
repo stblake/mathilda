@@ -2813,9 +2813,11 @@ static SeriesObj* operand_to_series(Expr* op, Expr* x, Expr* x0,
         /* Anything else: expand it as a series about (x, x0). Pad the internal
          * order the same way builtin_series does so Laurent/Puiseux operands
          * survive. */
-        bool x0_is_numeric = (x0->type == EXPR_INTEGER ||
-                              x0->type == EXPR_REAL ||
-                              x0->type == EXPR_BIGINT);
+        /* A concrete number -- including Complex[num, num] (every UHP pole) and
+         * Rational -- keeps so_inv's convolution coefficients numeric and
+         * bounded, so it earns the full Laurent pad. Only a free/symbolic x0
+         * risks the O(N^2) symbolic-coefficient blow-up the tight pad guards. */
+        bool x0_is_numeric = expr_is_numeric_like(x0);
         int64_t target = order_num > 0 ? order_num : 1;
         int64_t pad = x0_is_numeric ? 12 : 2;
         SeriesCtx ctx = {
@@ -4852,9 +4854,13 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
      * {x, a, 1}] with pad=12 would grow unbounded. Cap pad tight in that
      * case -- real poles/roots at a symbolic point are uncommon, and
      * compound expressions still get a couple of correction slots. */
-    bool x0_is_numeric = (x0_use->type == EXPR_INTEGER ||
-                          x0_use->type == EXPR_REAL ||
-                          x0_use->type == EXPR_BIGINT);
+    /* Complex[num, num] (every upper-half-plane pole) and Rational are concrete
+     * numbers: so_inv keeps their coefficients numeric and bounded, so they earn
+     * the full Laurent pad. Restricting to INTEGER/REAL/BIGINT wrongly demoted a
+     * complex pole like I = Complex[0,1] to pad=2, one term short -- the residue
+     * at a double/triple complex pole (Fourier/Jordan family) then dropped its
+     * product-rule cross term. Only a free/symbolic x0 keeps the tight pad. */
+    bool x0_is_numeric = expr_is_numeric_like(x0_use);
     int64_t pad = x0_is_numeric ? 12 : 2;
     int64_t internal_order = order + pad;
 

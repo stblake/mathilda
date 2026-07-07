@@ -432,6 +432,16 @@ static bool definite_parse_method(Expr* opt, const char** name,
     return true;
 }
 
+/* True iff `opt` is a Rule/RuleDelayed whose LHS is the symbol `sym`. */
+static bool option_lhs_is(Expr* opt, const char* sym) {
+    if (opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2) return false;
+    if (opt->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* hd = opt->data.function.head->data.symbol;
+    if (hd != SYM_Rule && hd != SYM_RuleDelayed) return false;
+    Expr* lhs = opt->data.function.args[0];
+    return lhs->type == EXPR_SYMBOL && lhs->data.symbol == sym;
+}
+
 /* Definite / iterated integration Integrate[f, {x,a,b}, {y,c,d}, ..., opts].
  * Reduces innermost-first (the last spec is the inner integral) so an inner
  * bound may depend on an outer variable.  Returns NULL (unevaluated) if any
@@ -451,20 +461,29 @@ static Expr* integrate_definite(Expr* res) {
 
     const char* method = NULL;
     IntegrateMethod mech = METHOD_AUTOMATIC;
+    Expr* assumptions = NULL;   /* borrowed from res: the Assumptions option value */
     size_t tail = 1 + nspecs;
-    if (tail < argc) {
-        if (tail != argc - 1) return NULL;   /* stray extra arguments */
-        if (!definite_parse_method(res->data.function.args[tail], &method, &mech)) {
-            static uint64_t last_warned_hash = 0;
-            uint64_t h = expr_hash(res);
-            if (h != last_warned_hash) {
-                fprintf(stderr,
-                    "Integrate::method: Method option value is not a "
-                    "recognised integration method name.\n");
-                last_warned_hash = h;
-            }
-            return NULL;
+    /* Trailing options, in any order: `Method -> ...` and/or `Assumptions -> ...`.
+     * Any other trailing argument (unknown option, stray expression) is rejected
+     * with the Integrate::method diagnostic, leaving the call unevaluated. */
+    for (size_t t = tail; t < argc; t++) {
+        Expr* opt = res->data.function.args[t];
+        if (option_lhs_is(opt, SYM_Assumptions)) {
+            assumptions = opt->data.function.args[1];   /* borrowed */
+            continue;
         }
+        if (option_lhs_is(opt, SYM_Method)) {
+            if (definite_parse_method(opt, &method, &mech)) continue;
+        }
+        static uint64_t last_warned_hash = 0;
+        uint64_t h = expr_hash(res);
+        if (h != last_warned_hash) {
+            fprintf(stderr,
+                "Integrate::method: Method option value is not a "
+                "recognised integration method name.\n");
+            last_warned_hash = h;
+        }
+        return NULL;
     }
 
     /* Fold from the innermost (last) spec outward. */
@@ -487,7 +506,7 @@ static Expr* integrate_definite(Expr* res) {
             r = NULL;
             bool diverges = false;
             if (mech == METHOD_AUTOMATIC || mech == METHOD_RESIDUE)
-                r = integrate_residue_try(cur, x, a, b, &diverges);
+                r = integrate_residue_try(cur, x, a, b, assumptions, &diverges);
             /* The residue method conclusively found a pole on the integration
              * contour: the integral does not converge.  Emit Integrate::idiv
              * and stop -- do NOT fall through to Newton-Leibniz (which would
@@ -578,7 +597,11 @@ Expr* builtin_integrate(Expr* res) {
      * it is freed below alongside `coerced`. */
     IntegrateMethod method = METHOD_AUTOMATIC;
     Expr* method_sub = NULL;
-    if (argc == 3) {
+    /* An `Assumptions -> ...` option is accepted on the indefinite form for
+     * surface compatibility (it constrains parameter domains); the indefinite
+     * cascade does not yet consume it, so it is simply skipped here rather than
+     * mis-parsed as a Method value. */
+    if (argc == 3 && !option_lhs_is(res->data.function.args[2], SYM_Assumptions)) {
         method = parse_method_option(res->data.function.args[2], &method_sub);
         if (method == METHOD_INVALID) {
             static uint64_t last_warned_hash = 0;

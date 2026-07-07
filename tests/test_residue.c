@@ -57,6 +57,12 @@ static void test_higher_order_poles(void) {
     check_eq("Residue[(z + 1)/(z^2 (z - 2)), {z, 0}]", "-3/4");
     /* Exp[z]/z^3: residue = coefficient of z^2 in Exp[z] = 1/2. */
     check_eq("Residue[Exp[z]/z^3, {z, 0}]", "1/2");
+    /* Order-2 pole at a COMPLEX point where the denominator is a non-monomial
+     * (x^2+1)^2, so the series engine must expand and invert the base at z=I.
+     * Regression: the Laurent pad wrongly treated I=Complex[0,1] as symbolic
+     * (pad=2), truncating the Taylor factor one term short and halving the
+     * product-rule cross term -- residue came out -I/(4E) instead of -I/(2E). */
+    check_eq("Residue[Exp[I z]/(z^2 + 1)^2, {z, I}]", "(-1/2*I)/E");
 }
 
 /* Poles of transcendental functions, resolved through the series engine. */

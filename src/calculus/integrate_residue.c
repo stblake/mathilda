@@ -127,9 +127,45 @@ static bool res_real_double(const Expr* e, double* out) {
     return false;
 }
 
-/* Numeric real & imaginary parts of e (via N, then Re/Im).  Returns false unless
- * both parts are finite reals. */
-static bool res_reim(Expr* e, double* re, double* im) {
+/* -------------------------------------------------------------------------
+ * Symbolic-parameter mode: sign-consistent numeric instantiation.
+ *
+ * When Integrate is called with an `Assumptions -> ...` option that constrains
+ * the integrand's free parameters (e.g. `a > 0`, `0 < a < 1`, `n > 1`), a family
+ * cannot classify a parameter-dependent pole or kernel frequency by a direct
+ * numeric evaluation -- N[I a] stays symbolic.  Instead we pick ONE generic
+ * value for each parameter consistent with the assumptions (`g_inst`, a List of
+ * Rule[param, value]) and classify at that point, while the residue arithmetic
+ * stays fully symbolic.  A single generic representative determines the
+ * half-plane / sign whenever the assumptions pin it on a connected region (a
+ * pole that stayed off the contour cannot have crossed it), so the resulting
+ * symbolic closed form is correct by construction -- there is no numeric
+ * quadrature crosscheck.  Convergence/applicability gates that could vary across
+ * the region are instead checked against the assumption-guaranteed bounds (see
+ * param_interval), so an under-constrained problem is refused, not guessed.
+ *
+ * g_inst is NULL outside symbolic-parameter mode, so every helper below behaves
+ * exactly as before when no assumptions are supplied.
+ * ---------------------------------------------------------------------- */
+static Expr* g_inst = NULL;   /* List[Rule[param, Real], ...] or NULL */
+static bool  g_all_pos = false;  /* true iff every instantiated parameter is > 0 */
+/* The assumption-guaranteed interval of each parameter (mirrors g_inst), so a
+ * family can verify a convergence/applicability gate holds over the WHOLE
+ * assumed region -- not merely at the single instantiation point (which would
+ * wrongly accept e.g. n > 0 for a gate that needs n > 1). */
+typedef struct { const char* sym; double lo, hi; } ParamBound;
+static ParamBound g_bounds[16];
+static size_t     g_nbounds = 0;
+
+/* e with the parameter instantiation applied and evaluated (owned), or NULL if
+ * no instantiation is active. */
+static Expr* apply_inst(Expr* e) {
+    if (!g_inst) return NULL;
+    return eval_take(mk_fn2("ReplaceAll", expr_copy(e), expr_copy(g_inst)));
+}
+
+/* Numeric real & imaginary parts of a CONCRETE numeric e (via N, then Re/Im). */
+static bool res_reim_direct(Expr* e, double* re, double* im) {
     Expr* n = ev1("N", expr_copy(e));
     if (!n) return false;
     if (is_infinity_sym(n) || is_neg_infinity_form(n) ||
@@ -140,6 +176,41 @@ static bool res_reim(Expr* e, double* re, double* im) {
     if (rr) expr_free(rr);
     if (ii) expr_free(ii);
     return ok;
+}
+
+/* Numeric real & imaginary parts of e.  Tries a direct evaluation first; when
+ * that leaves a symbolic residue and a parameter instantiation is active, it
+ * retries under the instantiation, so a parameter-dependent quantity (a pole
+ * `I a`, a kernel slope `k`) classifies at the generic point.  Returns false
+ * unless both parts come out as finite reals. */
+static bool res_reim(Expr* e, double* re, double* im) {
+    if (res_reim_direct(e, re, im)) return true;
+    if (g_inst) {
+        Expr* s = apply_inst(e);
+        if (s) { bool ok = res_reim_direct(s, re, im); expr_free(s); return ok; }
+    }
+    return false;
+}
+
+/* PowerExpand e when all parameters are known positive -- exposes the imaginary
+ * unit inside radical pole locations (Sqrt[-4 a^2] -> 2 I a) so downstream
+ * residue arithmetic and conjugation stay explicit.  Consumes e, returns owned;
+ * a no-op outside all-positive symbolic-parameter mode. */
+static Expr* res_powerclean(Expr* e) {
+    if (g_inst && g_all_pos) return ev1("PowerExpand", e);
+    return e;
+}
+
+/* Complex conjugate of J.  In symbolic-parameter mode the parameters are real
+ * and the imaginaries are the explicit unit I (after res_powerclean), so
+ * conjugation is J with I -> -I; the symbolic Conjugate head would not reduce.
+ * Outside that mode, the ordinary Conjugate head (numeric params resolve it). */
+static Expr* res_conjugate(Expr* J) {
+    if (g_inst)
+        return eval_take(mk_fn2("ReplaceAll", expr_copy(J),
+                                mk_fn2("Rule", mk_sym(SYM_I),
+                                       mk_fn2("Times", mk_int(-1), mk_sym(SYM_I)))));
+    return mk_fn1("Conjugate", expr_copy(J));
 }
 
 /* Bound classification: 0 = symbolic/complex, 1 = finite (value in *v), 2 = +Inf,
@@ -408,11 +479,16 @@ static Expr* residue_family_rational(Expr* f, Expr* x, Expr* a, Expr* b,
     if (undecidable || keep.n == 0) { expr_free(Q); ev_free(&keep); return NULL; }
     expr_free(Q);
 
+    /* Owned pole copies, PowerExpand-cleaned under all-positive symbolic-
+     * parameter mode so a radical location becomes an explicit I a and the
+     * residue closes to a clean rational form (Pi/a rather than a Sqrt[-4a^2]
+     * surface). */
     Expr** poles = malloc(keep.n * sizeof(*poles));
     int* weight  = malloc(keep.n * sizeof(*weight));
-    for (size_t i = 0; i < keep.n; i++) { poles[i] = keep.v[i]; weight[i] = 2; }
+    for (size_t i = 0; i < keep.n; i++) { poles[i] = res_powerclean(expr_copy(keep.v[i])); weight[i] = 2; }
 
     Expr* S = sum_residues(f, x, poles, weight, keep.n);
+    for (size_t i = 0; i < keep.n; i++) expr_free(poles[i]);
     free(poles); free(weight);
     if (!S) { ev_free(&keep); return NULL; }
 
@@ -431,13 +507,33 @@ static Expr* residue_family_rational(Expr* f, Expr* x, Expr* a, Expr* b,
 
 typedef enum { KERN_NONE, KERN_COS, KERN_SIN, KERN_EXP } KernelKind;
 
-/* If `e` is a trig/exp kernel Cos[a x] / Sin[a x] / Exp[I a x] with a a nonzero
- * real constant, set *kind and *a (the real frequency) and return true. */
+/* The "phase argument" u of a Fourier kernel: Cos[u] / Sin[u] / Exp[u] carry it
+ * as args[0], while the evaluator normalises Exp[I a x] to the Power form
+ * Power[E, u] (u the exponent, args[1]).  Returns a borrowed pointer to u, or
+ * NULL if `e` is not one of these shapes.  Power is accepted ONLY with base E,
+ * so ordinary powers (x^2, denominators (1+x^2)^-1) are rejected. */
+static Expr* kernel_arg(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    if (head_name_is(e, "Cos") || head_name_is(e, "Sin") || head_name_is(e, "Exp")) {
+        if (e->data.function.arg_count != 1) return NULL;
+        return e->data.function.args[0];
+    }
+    if (head_name_is(e, "Power") && e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        if (base->type == EXPR_SYMBOL && base->data.symbol == SYM_E)
+            return e->data.function.args[1];
+    }
+    return NULL;
+}
+
+/* If `e` is a trig/exp kernel Cos[a x] / Sin[a x] / Exp[I a x] (in either the
+ * Exp[.] or the normalised Power[E, .] spelling) with a a nonzero real constant,
+ * set *kind and *a (the real frequency) and return true. */
 static bool match_kernel(Expr* e, Expr* x, KernelKind* kind, double* a) {
-    if (!head_name_is(e, "Cos") && !head_name_is(e, "Sin") && !head_name_is(e, "Exp"))
-        return false;
-    if (e->data.function.arg_count != 1) return false;
-    Expr* u = e->data.function.args[0];
+    Expr* u = kernel_arg(e);
+    if (!u) return false;
+    /* Exp-form kernels: literal Exp[.] or the normalised Power[E, .]. */
+    bool is_exp = head_name_is(e, "Exp") || head_name_is(e, "Power");
     if (!contains_symbol(u, x)) return false;
 
     /* u must be linear in x with zero constant term. */
@@ -454,7 +550,7 @@ static bool match_kernel(Expr* e, Expr* x, KernelKind* kind, double* a) {
     if (!okc0 || !okc1) return false;
     if (fabs(c0r) > 1e-9 || fabs(c0i) > 1e-9) return false;   /* nonzero offset */
 
-    if (head_name_is(e, "Exp")) {
+    if (is_exp) {
         /* slope must be purely imaginary I a: a = Im(slope), Re ~ 0. */
         if (fabs(c1r) > 1e-9 || fabs(c1i) < 1e-9) return false;
         *kind = KERN_EXP; *a = c1i;
@@ -513,8 +609,8 @@ static Expr* residue_family_fourier(Expr* f, Expr* x, Expr* a, Expr* b) {
     /* g = R * Exp[expo] (the Jordan integrand), where expo is the EXACT exponent
      * built from the kernel's own argument u (u = a x): Cos/Sin -> I u, Exp -> u.
      * Using the exact u (not the numeric freq) keeps residues exact. */
-    Expr* kernel = factors[kidx];   /* borrowed: the original Cos/Sin/Exp factor */
-    Expr* u = kernel->data.function.args[0];
+    Expr* kernel = factors[kidx];   /* borrowed: original Cos/Sin/Exp/Power[E,.] factor */
+    Expr* u = kernel_arg(kernel);   /* args[0] for Cos/Sin/Exp; the exponent for Power[E,.] */
     Expr* expo = (kind == KERN_EXP) ? expr_copy(u)
                                     : mk_fn2("Times", mk_sym(SYM_I), expr_copy(u));
     Expr* g = eval_take(mk_fn2("Times", expr_copy(R), mk_fn1("Exp", expo)));
@@ -554,14 +650,19 @@ static Expr* residue_family_fourier(Expr* f, Expr* x, Expr* a, Expr* b) {
         expr_free(g); ev_free(&keep); ev_free(&realp); return NULL;
     }
 
+    /* Owned pole copies, PowerExpand-cleaned under symbolic-parameter mode so a
+     * radical location (Sqrt[-4 a^2]/2) becomes the explicit I a: the residue at
+     * an explicit purely-imaginary pole reduces to a clean real form, and the
+     * Conjugate closure below can conjugate it via I -> -I. */
     size_t nk = keep.n + realp.n;
     Expr** poles = malloc(nk * sizeof(*poles));
     int* weight = malloc(nk * sizeof(*weight));
     size_t kk = 0;
-    for (size_t i = 0; i < keep.n; i++)  { poles[kk] = keep.v[i];  weight[kk] = 2; kk++; }
-    for (size_t i = 0; i < realp.n; i++) { poles[kk] = realp.v[i]; weight[kk] = 1; kk++; }
+    for (size_t i = 0; i < keep.n; i++)  { poles[kk] = res_powerclean(expr_copy(keep.v[i]));  weight[kk] = 2; kk++; }
+    for (size_t i = 0; i < realp.n; i++) { poles[kk] = res_powerclean(expr_copy(realp.v[i])); weight[kk] = 1; kk++; }
 
     Expr* S = sum_residues(g, x, poles, weight, nk);
+    for (size_t i = 0; i < nk; i++) expr_free(poles[i]);
     free(poles); free(weight);
     expr_free(g);
     ev_free(&keep); ev_free(&realp);
@@ -584,10 +685,10 @@ static Expr* residue_family_fourier(Expr* f, Expr* x, Expr* a, Expr* b) {
     } else if (kind == KERN_COS) {
         value = ev1("Simplify",
                     mk_fn2("Times", mk_fn2("Power", mk_int(2), mk_int(-1)),
-                           mk_fn2("Plus", expr_copy(J), mk_fn1("Conjugate", expr_copy(J)))));
+                           mk_fn2("Plus", expr_copy(J), res_conjugate(J))));
     } else { /* KERN_SIN */
         Expr* diff = mk_fn2("Plus", expr_copy(J),
-                            mk_fn2("Times", mk_int(-1), mk_fn1("Conjugate", expr_copy(J))));
+                            mk_fn2("Times", mk_int(-1), res_conjugate(J)));
         value = ev1("Simplify", mk_fn2("Times", diff,
                         mk_fn2("Power", mk_fn2("Times", mk_int(2), mk_sym(SYM_I)), mk_int(-1))));
     }
@@ -709,7 +810,7 @@ static Expr* residue_half_line(Expr* f, Expr* x, Expr* a, Expr* b,
     Expr* pos = mk_sym(SYM_Infinity);
     /* Recurse over the full line: a divergent full-line even integrand means the
      * half-line [0, Inf) diverges too, so propagate the flag. */
-    Expr* full = integrate_residue_try(f, x, neg, pos, diverges);
+    Expr* full = integrate_residue_try(f, x, neg, pos, NULL, diverges);
     expr_free(neg); expr_free(pos);
     if (!full) return NULL;
 
@@ -724,27 +825,523 @@ static Expr* residue_half_line(Expr* f, Expr* x, Expr* a, Expr* b,
 }
 
 /* -------------------------------------------------------------------------
+ * Symbolic-parameter instantiation (built from Assumptions).
+ * ---------------------------------------------------------------------- */
+
+/* Real machine value of a concrete numeric leaf/expression (via N), real part
+ * only.  Returns false for anything that does not reduce to a finite real -- in
+ * particular a genuinely symbolic parameter (which is what we want to detect). */
+static bool numeric_double(Expr* e, double* out) {
+    Expr* n = ev1("N", expr_copy(e));
+    if (!n) return false;
+    bool ok = res_real_double(n, out);
+    expr_free(n);
+    return ok;
+}
+
+/* Collect the distinct free-parameter symbols of `e` (symbols in argument
+ * position that are neither the integration variable `x`, the imaginary unit,
+ * nor a numeric constant like Pi/E) into `pb` (up to `cap`).  Function heads are
+ * skipped.  Returns the count. */
+static size_t collect_params(const Expr* e, const Expr* x, ParamBound* pb,
+                             size_t cap, size_t n) {
+    if (!e) return n;
+    if (e->type == EXPR_SYMBOL) {
+        if (e->data.symbol == x->data.symbol) return n;
+        if (e->data.symbol == SYM_I) return n;
+        for (size_t i = 0; i < n; i++)
+            if (pb[i].sym == e->data.symbol) return n;   /* already seen */
+        double tmp;
+        if (numeric_double((Expr*)e, &tmp)) return n;    /* a numeric constant */
+        if (n < cap) { pb[n].sym = e->data.symbol; pb[n].lo = -HUGE_VAL; pb[n].hi = HUGE_VAL; n++; }
+        return n;
+    }
+    if (e->type != EXPR_FUNCTION) return n;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        n = collect_params(e->data.function.args[i], x, pb, cap, n);
+    return n;
+}
+
+/* Tighten the bound of the parameter named by `var` given `var op const`.
+ * `dir` = +1 for a lower bound (var > c / var >= c), -1 for an upper bound. */
+static void bound_apply(ParamBound* pb, size_t np, const char* var, double c, int dir) {
+    for (size_t i = 0; i < np; i++) {
+        if (pb[i].sym != var) continue;
+        if (dir > 0) { if (c > pb[i].lo) pb[i].lo = c; }
+        else         { if (c < pb[i].hi) pb[i].hi = c; }
+        return;
+    }
+}
+
+/* Absorb a single ordered relation `L op R` (op one of Less/LessEqual/Greater/
+ * GreaterEqual) into the parameter bounds: whichever side is a bare parameter
+ * and the other a numeric constant tightens that parameter's interval. */
+static void relation_apply(ParamBound* pb, size_t np, const char* op,
+                           Expr* L, Expr* R) {
+    bool lt = (strcmp(op, "Less") == 0 || strcmp(op, "LessEqual") == 0);
+    bool gt = (strcmp(op, "Greater") == 0 || strcmp(op, "GreaterEqual") == 0);
+    if (!lt && !gt) return;
+    double c;
+    if (L->type == EXPR_SYMBOL && numeric_double(R, &c))
+        bound_apply(pb, np, L->data.symbol, c, lt ? -1 : +1);   /* L<c: upper; L>c: lower */
+    else if (R->type == EXPR_SYMBOL && numeric_double(L, &c))
+        bound_apply(pb, np, R->data.symbol, c, lt ? +1 : -1);   /* c<R: lower; c>R: upper */
+}
+
+/* Walk an assumption fact expression, tightening parameter bounds.  Handles
+ * And / List conjunctions, chained Inequality[e,op,e,op,e,...], and the four
+ * ordered binary relations. */
+static void absorb_fact(ParamBound* pb, size_t np, Expr* fact) {
+    if (!fact || fact->type != EXPR_FUNCTION) return;
+    if (fact->data.function.head->type != EXPR_SYMBOL) return;
+    const char* h = fact->data.function.head->data.symbol;
+    size_t ac = fact->data.function.arg_count;
+    if (strcmp(h, "And") == 0 || strcmp(h, "List") == 0) {
+        for (size_t i = 0; i < ac; i++) absorb_fact(pb, np, fact->data.function.args[i]);
+        return;
+    }
+    if (strcmp(h, "Inequality") == 0 && ac >= 3) {
+        /* e0 op1 e1 op2 e2 ...: each (e_{2i}, op_{2i+1}, e_{2i+2}) is a relation. */
+        for (size_t i = 0; i + 2 < ac; i += 2) {
+            Expr* opsym = fact->data.function.args[i + 1];
+            if (opsym->type != EXPR_SYMBOL) continue;
+            relation_apply(pb, np, opsym->data.symbol,
+                           fact->data.function.args[i], fact->data.function.args[i + 2]);
+        }
+        return;
+    }
+    if (ac == 2) relation_apply(pb, np, h,
+                                fact->data.function.args[0], fact->data.function.args[1]);
+}
+
+/* A generic representative strictly inside [lo, hi], distinct per index to avoid
+ * accidental coincidences (a value where two poles collide or a residue happens
+ * to vanish).  Deterministic (no RNG): reproducible instantiations. */
+static double pick_representative(double lo, double hi, size_t idx) {
+    static const double FRACS[] = { 0.4142136, 0.6180340, 0.3183099, 0.5857864,
+                                    0.2679492, 0.7320508, 0.5411961 };
+    static const double SEEDS[] = { 1.3172, 2.7391, 0.6180, 3.1490,
+                                    1.4213, 2.2360, 0.8177 };
+    const size_t NF = sizeof(FRACS) / sizeof(FRACS[0]);
+    double frac = FRACS[idx % NF], seed = SEEDS[idx % NF];
+    bool lo_fin = lo > -HUGE_VAL, hi_fin = hi < HUGE_VAL;
+    if (lo_fin && hi_fin) return lo + (hi - lo) * frac;
+    if (lo_fin)           return lo + seed;
+    if (hi_fin)           return hi - seed;
+    return seed;                 /* unbounded: a generic positive value */
+}
+
+/* Build the parameter instantiation `List[Rule[p, val], ...]` from the integrand
+ * and the assumptions.  The value chosen for each parameter is a generic point
+ * of the interval the assumptions pin it to; it is used ONLY to read off the
+ * signs (pole half-plane, kernel frequency) that decide which residues the
+ * contour encloses -- the residue arithmetic itself stays symbolic, so the
+ * closed form is correct by construction, with no numeric crosscheck.
+ *
+ * Returns NULL (declining symbolic-parameter mode, so the integral stays
+ * unevaluated) when the integrand has no free parameters, OR when any parameter
+ * is left two-sided unbounded by the assumptions: an unconstrained parameter
+ * does not determine the sign of a pole that depends on it, so the
+ * classification would be a guess.  A one-sided or interval constraint pins the
+ * relevant sign on a connected region, which a single interior point reads off
+ * correctly. */
+static Expr* build_instantiation(Expr* f, Expr* x, Expr* assumptions) {
+    ParamBound pb[16];
+    size_t np = collect_params(f, x, pb, 16, 0);
+    if (np == 0) return NULL;
+    if (assumptions) absorb_fact(pb, np, assumptions);
+
+    for (size_t i = 0; i < np; i++)
+        if (pb[i].lo <= -HUGE_VAL && pb[i].hi >= HUGE_VAL) return NULL;  /* unconstrained */
+
+    /* All-positive parameters licence a PowerExpand-based simplification of
+     * radical pole locations (Sqrt[-4 a^2] -> 2 I a) and real-parameter
+     * conjugation, which need the positivity branch. */
+    g_all_pos = true;
+    for (size_t i = 0; i < np; i++)
+        if (pb[i].lo < 0.0) { g_all_pos = false; break; }
+
+    /* Record the guaranteed intervals for the convergence/applicability gates. */
+    g_nbounds = np;
+    for (size_t i = 0; i < np; i++) g_bounds[i] = pb[i];
+
+    Expr** rules = malloc(np * sizeof(*rules));
+    for (size_t i = 0; i < np; i++) {
+        double v = pick_representative(pb[i].lo, pb[i].hi, i);
+        rules[i] = mk_fn2("Rule", mk_sym(pb[i].sym), expr_new_real(v));
+    }
+    Expr* lst = expr_new_function(mk_sym("List"), rules, np);
+    free(rules);
+    return lst;
+}
+
+/* Guaranteed [lo, hi] of `e` over the assumed region: the recorded interval for
+ * a parameter symbol, the exact value for a numeric constant, else unbounded.
+ * A family uses this (not the single instantiation point) to confirm a
+ * convergence gate holds everywhere the assumptions permit. */
+static void param_interval(Expr* e, double* lo, double* hi) {
+    *lo = -HUGE_VAL; *hi = HUGE_VAL;
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t i = 0; i < g_nbounds; i++)
+            if (g_bounds[i].sym == e->data.symbol) {
+                *lo = g_bounds[i].lo; *hi = g_bounds[i].hi; return;
+            }
+    }
+    double v;
+    if (numeric_double(e, &v)) { *lo = v; *hi = v; }
+}
+
+/* -------------------------------------------------------------------------
+ * New contour families (implemented in the phases below).
+ * ---------------------------------------------------------------------- */
+static Expr* residue_family_rectangular(Expr* f, Expr* x, Expr* a, Expr* b);
+static Expr* residue_family_mellin(Expr* f, Expr* x, Expr* a, Expr* b);
+static Expr* residue_family_sector(Expr* f, Expr* x, Expr* a, Expr* b);
+
+/* -------------------------------------------------------------------------
+ * Keyhole / Mellin core -- Integrate[v^p R(v), {v, 0, Infinity}].
+ *
+ * For a branch power v^p (p non-integer, so s = p+1 is not an integer) times a
+ * rational R(v) with poles off the positive real axis, the keyhole contour that
+ * wraps the branch cut along [0, Inf) gives the Mellin transform
+ *
+ *      Int_0^Inf v^(s-1) R(v) dv = -Pi Sum_k [ z_k^(s-1) Res(R, z_k) ] e^(-i Pi s)
+ *                                              / Sin(Pi s),          s = p + 1,
+ *
+ * where z_k ranges over the poles of R and z_k^(s-1) uses the branch arg in
+ * (0, 2Pi) (so a pole at z_k is |z_k|^(s-1) e^(i theta_k (s-1)), theta_k in
+ * (0,2Pi)).  The e^(-i Pi s)/Sin(Pi s) prefactor is the exact reduction of the
+ * keyhole's 1/(1 - e^(2 Pi i s)) jump, which lands the value on a Sin (so a
+ * numeric s reduces to an algebraic multiple of Pi).  Simple poles only.
+ * ---------------------------------------------------------------------- */
+
+/* Split F = v^p R(v) with R rational in v and p a v-free NON-integer exponent.
+ * On success *p_out and *R_out are owned; returns false (nothing owned) if there
+ * is no such branch power or the remaining factor is not rational in v. */
+static bool mellin_split(Expr* F, Expr* v, Expr** p_out, Expr** R_out) {
+    *p_out = *R_out = NULL;
+    Expr** fac; size_t nf; Expr* one[1];
+    if (head_name_is(F, "Times")) { fac = F->data.function.args; nf = F->data.function.arg_count; }
+    else { one[0] = F; fac = one; nf = 1; }
+
+    Expr* p = NULL;
+    ExprVec rest; ev_init(&rest);
+    for (size_t i = 0; i < nf; i++) {
+        Expr* fe = fac[i];
+        bool is_branch = false;
+        if (head_name_is(fe, "Power") && fe->data.function.arg_count == 2) {
+            Expr* base = fe->data.function.args[0];
+            Expr* e    = fe->data.function.args[1];
+            if (base->type == EXPR_SYMBOL && base->data.symbol == v->data.symbol &&
+                !contains_symbol(e, v) && e->type != EXPR_INTEGER) {
+                if (p) { expr_free(p); ev_free(&rest); return false; }  /* two branch powers */
+                p = expr_copy(e);
+                is_branch = true;
+            }
+        }
+        if (!is_branch) ev_push(&rest, expr_copy(fe));
+    }
+    if (!p) { ev_free(&rest); return false; }
+
+    Expr* R;
+    if (rest.n == 0) R = mk_int(1);
+    else if (rest.n == 1) { R = rest.v[0]; rest.v[0] = NULL; }
+    else {
+        Expr** ra = malloc(rest.n * sizeof(*ra));
+        for (size_t i = 0; i < rest.n; i++) { ra[i] = rest.v[i]; rest.v[i] = NULL; }
+        R = eval_take(expr_new_function(mk_sym("Times"), ra, rest.n));
+        free(ra);
+    }
+    ev_free(&rest);
+    if (!R) { expr_free(p); return false; }
+
+    /* R must be rational in v. */
+    Expr* P; Expr* Q;
+    if (!res_num_den(R, &P, &Q) || !res_polyq(P, v) || !res_polyq(Q, v)) {
+        if (P) expr_free(P); if (Q) expr_free(Q);
+        expr_free(p); expr_free(R); return false;
+    }
+    expr_free(P); expr_free(Q);
+    *p_out = p; *R_out = R;
+    return true;
+}
+
+/* The branch value z^(s-1) with arg in (0, 2Pi): |z|^(s-1) Exp[I theta (s-1)],
+ * theta = Arg[z] shifted by 2Pi when it is <= 0 (lands a pole below/on the
+ * negative axis on the upper lip).  `pm1` is the exponent s-1 = p. */
+static Expr* mellin_branch(Expr* z, Expr* pm1) {
+    /* theta = Arg[z], lifted into (0, 2Pi]. */
+    double re, im;
+    Expr* theta = ev1("Arg", expr_copy(z));
+    if (!theta) return NULL;
+    if (res_reim(z, &re, &im) && atan2(im, re) <= RES_TOL)
+        theta = eval_take(mk_fn2("Plus", theta,
+                     mk_fn2("Times", mk_int(2), mk_sym(SYM_Pi))));
+    Expr* absz = ev1("Abs", expr_copy(z));
+    Expr* mag  = mk_fn2("Power", absz, expr_copy(pm1));       /* |z|^(s-1) */
+    Expr* phase = mk_fn1("Exp", mk_fn2("Times", mk_sym(SYM_I),
+                       mk_fn2("Times", theta, expr_copy(pm1))));
+    return eval_take(mk_fn2("Times", mag, phase));
+}
+
+static Expr* mellin_core(Expr* F, Expr* v) {
+    Expr* p; Expr* R;
+    if (!mellin_split(F, v, &p, &R)) return NULL;
+
+    /* s = p + 1.  Reject an integer s (Sin[Pi s] = 0: the keyhole degenerates,
+     * and an integer power is a job for the even/rational half-line families). */
+    Expr* s = eval_take(mk_fn2("Plus", expr_copy(p), mk_int(1)));
+    if (!s) { expr_free(p); expr_free(R); return NULL; }
+    { double sre, sim;
+      if (res_reim(s, &sre, &sim) && fabs(sim) < RES_TOL &&
+          fabs(sre - floor(sre + 0.5)) < RES_TOL) {
+          expr_free(p); expr_free(R); expr_free(s); return NULL;
+      } }
+
+    /* Poles of R: roots of its denominator, excluding v = 0.  Convergence needs
+     * 0 < Re(s) < deg(den R) - deg(num R): integrable at 0 (Re s > 0) and decay
+     * at Infinity (v^(s-1) v^(dNum-dDen) integrable). */
+    Expr* P; Expr* Q;
+    if (!res_num_den(R, &P, &Q)) { expr_free(p); expr_free(R); expr_free(s); return NULL; }
+    int dNum = res_degree(P, v), dDen = res_degree(Q, v);
+    expr_free(P);
+    /* Convergence over the whole assumed region: 0 < Re(s) < deg(den)-deg(num),
+     * checked against the guaranteed interval (a one-sided assumption like a > 0
+     * does not bound s above and must be refused).  s must also be real. */
+    { double slo, shi, sre, sim;
+      param_interval(s, &slo, &shi);
+      if (!res_reim(s, &sre, &sim) || fabs(sim) > RES_TOL ||
+          slo < -RES_TOL || shi > (double)(dDen - dNum) + RES_TOL) {
+          expr_free(Q); expr_free(p); expr_free(R); expr_free(s); return NULL;
+      } }
+    ExprVec roots;
+    if (!solve_roots(Q, v, &roots)) { expr_free(Q); expr_free(p); expr_free(R); expr_free(s); return NULL; }
+    expr_free(Q);
+
+    /* Sigma = Sum_k branch(z_k) * Res(R, z_k), simple poles off the positive
+     * real axis (a pole on (0,Inf) would sit on the contour -> not handled). */
+    Expr* Sigma = mk_int(0);
+    bool bad = false;
+    for (size_t i = 0; i < roots.n && !bad; i++) {
+        Expr* z = roots.v[i];
+        double zre, zim;
+        if (!res_reim(z, &zre, &zim)) { bad = true; break; }        /* symbolic pole */
+        if (zim > -RES_TOL && zim < RES_TOL && zre > RES_TOL) { bad = true; break; } /* on (0,Inf) */
+        Expr* br = mellin_branch(z, p);
+        Expr* rr = residue_compute(R, v, z);
+        if (!br || !rr) { if (br) expr_free(br); if (rr) expr_free(rr); bad = true; break; }
+        Sigma = eval_take(mk_fn2("Plus", Sigma, mk_fn2("Times", br, rr)));
+        if (!Sigma) { bad = true; break; }
+    }
+    ev_free(&roots);
+    if (bad || !Sigma) { if (Sigma) expr_free(Sigma); expr_free(p); expr_free(R); expr_free(s); return NULL; }
+    expr_free(R);
+
+    /* value = -Pi Sigma Exp[-I Pi s] / Sin[Pi s]. */
+    Expr* raw = mk_fn2("Times",
+        mk_fn2("Times", mk_int(-1), mk_sym(SYM_Pi)),
+        mk_fn2("Times",
+            mk_fn2("Times", Sigma, mk_fn1("Exp",
+                mk_fn2("Times", mk_int(-1), mk_fn2("Times", mk_sym(SYM_I),
+                    mk_fn2("Times", mk_sym(SYM_Pi), expr_copy(s)))))),
+            mk_fn2("Power", mk_fn1("Sin", mk_fn2("Times", mk_sym(SYM_Pi), expr_copy(s))), mk_int(-1))));
+    expr_free(s); expr_free(p);
+
+    /* Close: symbolic exponent -> Simplify (lands on Csc[Pi s]); numeric s makes
+     * the whole thing an algebraic multiple of Pi -> factor Pi and RootReduce. */
+    Expr* value;
+    if (g_inst) {
+        value = ev1("Simplify", raw);
+    } else {
+        Expr* alg = ev1("RootReduce",
+                        mk_fn2("Times", raw, mk_fn2("Power", mk_sym(SYM_Pi), mk_int(-1))));
+        value = alg ? ev1("Simplify", mk_fn2("Times", mk_sym(SYM_Pi), alg)) : NULL;
+    }
+    if (!value) return NULL;
+
+    double vv, re, im;
+    bool ok = res_is_real_scalar(value, v, &vv) || res_is_finite_scalar(value, v, &re, &im);
+    if (!ok) { expr_free(value); return NULL; }
+    return value;
+}
+
+/* Half-line [0, Inf) branch-power integrand v^p R(v): the keyhole/Mellin core. */
+static Expr* residue_family_mellin(Expr* f, Expr* x, Expr* a, Expr* b) {
+    if (!is_zero_pos_infinity(a, b)) return NULL;
+    return mellin_core(f, x);
+}
+
+/* Whole-line quasi-periodic integrand f(x) = Exp[c x] R(Exp[x]): the rectangular
+ * contour of height 2 Pi i.  Reduced to the keyhole/Mellin core by w = Exp[x]:
+ *   Int_{-Inf}^{Inf} f(x) dx = Int_0^Inf f(Log w) / w dw,
+ * and f(Log w)/w = w^(c-1) R(w) is exactly the Mellin integrand.  This keeps a
+ * single residue engine for both the strip and the branch cut. */
+static Expr* residue_family_rectangular(Expr* f, Expr* x, Expr* a, Expr* b) {
+    if (!is_neg_pos_infinity(a, b)) return NULL;
+    /* Only worth the substitution when Exp[x] actually occurs. */
+    if (!contains_head(f, "Exp") &&
+        !(contains_symbol(f, x)))  /* cheap guard; real check is the split below */
+        return NULL;
+
+    Expr* w = mk_sym("IntegrateResidue`$w");
+    /* g(w) = (f /. x -> Log[w]) / w. */
+    Expr* fl = eval_take(mk_fn2("ReplaceAll", expr_copy(f),
+                                mk_fn2("Rule", expr_copy(x), mk_fn1("Log", expr_copy(w)))));
+    if (!fl) { expr_free(w); return NULL; }
+    Expr* g = eval_take(mk_fn2("Times", fl, mk_fn2("Power", expr_copy(w), mk_int(-1))));
+    if (!g) { expr_free(w); return NULL; }
+
+    /* The substituted integrand must be a genuine branch-power * rational form
+     * (a stray Log[w] left over means f was not of the Exp[c x] R(Exp[x]) type). */
+    if (contains_head(g, "Log")) { expr_free(g); expr_free(w); return NULL; }
+    Expr* value = mellin_core(g, w);
+    expr_free(g); expr_free(w);
+    return value;
+}
+
+/* -------------------------------------------------------------------------
+ * Sector contour -- Integrate[x^m / (c + x^n), {x, 0, Infinity}], n possibly a
+ * symbolic parameter (n > m + 1 for convergence).  The wedge of angle 2Pi/n maps
+ * the ray back to itself scaled by Exp[2 Pi i/n], and the single enclosed pole
+ * gives the classical closed form
+ *
+ *      Int_0^Inf x^(s-1)/(c + x^n) dx = (Pi/n) c^(s/n - 1) / Sin(Pi s/n),
+ *      s = m + 1,   c > 0,   0 < Re(s) < n.
+ *
+ * This is the one family that admits a SYMBOLIC exponent n (the keyhole/Mellin
+ * residue sum cannot enumerate n poles), so it is what powers Integrate[1/(1 +
+ * x^n), ...].  A monomial numerator C x^m carries a constant factor C through. */
+
+/* Split a monomial C * v^m (C free of v, m a nonnegative integer): on success
+ * *C_out is owned, *m_out is the integer exponent.  Returns false otherwise. */
+static bool monomial_split(Expr* num, Expr* v, Expr** C_out, int* m_out) {
+    if (!contains_symbol(num, v)) { *C_out = expr_copy(num); *m_out = 0; return true; }
+    if (num->type == EXPR_SYMBOL && num->data.symbol == v->data.symbol) {
+        *C_out = mk_int(1); *m_out = 1; return true;
+    }
+    if (head_name_is(num, "Power") && num->data.function.arg_count == 2 &&
+        num->data.function.args[0]->type == EXPR_SYMBOL &&
+        num->data.function.args[0]->data.symbol == v->data.symbol &&
+        num->data.function.args[1]->type == EXPR_INTEGER) {
+        *C_out = mk_int(1);
+        *m_out = (int)num->data.function.args[1]->data.integer;
+        return true;
+    }
+    if (head_name_is(num, "Times")) {
+        Expr* C = mk_int(1); int m = -1;
+        for (size_t i = 0; i < num->data.function.arg_count; i++) {
+            Expr* fe = num->data.function.args[i];
+            if (!contains_symbol(fe, v)) { C = eval_take(mk_fn2("Times", C, expr_copy(fe))); continue; }
+            if (m >= 0) { expr_free(C); return false; }            /* two v-factors */
+            if (fe->type == EXPR_SYMBOL && fe->data.symbol == v->data.symbol) m = 1;
+            else if (head_name_is(fe, "Power") &&
+                     fe->data.function.args[0]->type == EXPR_SYMBOL &&
+                     fe->data.function.args[0]->data.symbol == v->data.symbol &&
+                     fe->data.function.args[1]->type == EXPR_INTEGER)
+                m = (int)fe->data.function.args[1]->data.integer;
+            else { expr_free(C); return false; }
+        }
+        if (m < 0) m = 0;
+        *C_out = C; *m_out = m; return true;
+    }
+    return false;
+}
+
+static Expr* residue_family_sector(Expr* f, Expr* x, Expr* a, Expr* b) {
+    if (!is_zero_pos_infinity(a, b)) return NULL;
+
+    Expr* num; Expr* den;
+    if (!res_num_den(f, &num, &den)) return NULL;
+
+    /* Denominator must be exactly c + x^n: a Plus of an x-free constant c and a
+     * power x^n (n free of x). */
+    if (!head_name_is(den, "Plus") || den->data.function.arg_count != 2) {
+        expr_free(num); expr_free(den); return NULL;
+    }
+    Expr* c = NULL; Expr* n = NULL;
+    for (int i = 0; i < 2; i++) {
+        Expr* t = den->data.function.args[i];
+        if (!contains_symbol(t, x)) c = t;
+        else if (head_name_is(t, "Power") && t->data.function.arg_count == 2 &&
+                 t->data.function.args[0]->type == EXPR_SYMBOL &&
+                 t->data.function.args[0]->data.symbol == x->data.symbol &&
+                 !contains_symbol(t->data.function.args[1], x))
+            n = t->data.function.args[1];
+    }
+    if (!c || !n) { expr_free(num); expr_free(den); return NULL; }
+
+    Expr* C; int m;
+    if (!monomial_split(num, x, &C, &m)) { expr_free(num); expr_free(den); return NULL; }
+
+    /* Convergence / positivity gates that must hold over the WHOLE assumed
+     * region (guaranteed interval bounds, not the instantiation point): c > 0
+     * and n > m + 1 (so 0 < s = m+1 < n).  n must also be real. */
+    double clo, chi, nlo, nhi, nim, nre;
+    param_interval(c, &clo, &chi);
+    param_interval(n, &nlo, &nhi);
+    bool okc = clo > RES_TOL;                                   /* c > 0 guaranteed */
+    bool okn = nlo >= (double)(m + 1) &&                        /* n > m+1 guaranteed */
+               res_reim(n, &nre, &nim) && fabs(nim) < RES_TOL;  /* n real */
+    if (!okc || !okn) { expr_free(C); expr_free(num); expr_free(den); return NULL; }
+
+    /* value = C (Pi/n) c^(s/n - 1) Csc[Pi s/n], s = m + 1. */
+    Expr* s   = mk_int(m + 1);
+    Expr* son = mk_fn2("Times", expr_copy(s), mk_fn2("Power", expr_copy(n), mk_int(-1)));  /* s/n */
+    Expr* cpow = mk_fn2("Power", expr_copy(c),
+                        mk_fn2("Plus", expr_copy(son), mk_int(-1)));                        /* c^(s/n-1) */
+    Expr* csc = mk_fn2("Power", mk_fn1("Sin", mk_fn2("Times", mk_sym(SYM_Pi), expr_copy(son))), mk_int(-1));
+    Expr* raw = mk_fn2("Times", C,
+                    mk_fn2("Times", mk_fn2("Times", mk_sym(SYM_Pi), mk_fn2("Power", expr_copy(n), mk_int(-1))),
+                           mk_fn2("Times", cpow, csc)));
+    expr_free(s); expr_free(son);
+    expr_free(num); expr_free(den);
+
+    Expr* value = ev1("Simplify", raw);
+    double vv, re, im;
+    bool ok = value && (res_is_real_scalar(value, x, &vv) || res_is_finite_scalar(value, x, &re, &im));
+    if (!ok) { if (value) expr_free(value); return NULL; }
+    return value;
+}
+
+/* -------------------------------------------------------------------------
  * Master entry + builtin.
  * ---------------------------------------------------------------------- */
 
-Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b, bool* diverges) {
+Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
+                            Expr* assumptions, bool* diverges) {
     if (diverges) *diverges = false;
     if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
 
-    /* Full period (0,2Pi)/(-Pi,Pi): the unit-circle trig-substitution family. */
-    if (is_full_period(a, b)) return residue_family_trig(f, x, a, b, diverges);
-
-    /* Whole line: Fourier/Jordan if a trig/exp kernel is present, else rational. */
-    if (is_neg_pos_infinity(a, b)) {
-        Expr* r = residue_family_fourier(f, x, a, b);
-        if (r) return r;
-        return residue_family_rational(f, x, a, b, diverges);
+    /* Enter symbolic-parameter mode when assumptions are supplied and we are the
+     * outermost call (g_inst not already set by an enclosing call -- the even
+     * half-line family recurses through here).  Only the frame that built the
+     * instantiation frees it. */
+    bool built_here = false;
+    if (assumptions && !g_inst) {
+        g_inst = build_instantiation(f, x, assumptions);
+        built_here = (g_inst != NULL);
     }
 
-    /* Half-line [0,Inf) for even integrands. */
-    if (is_zero_pos_infinity(a, b)) return residue_half_line(f, x, a, b, diverges);
+    Expr* value = NULL;
+    if (is_full_period(a, b)) {
+        /* Full period (0,2Pi)/(-Pi,Pi): unit-circle trig-substitution family. */
+        value = residue_family_trig(f, x, a, b, diverges);
+    } else if (is_neg_pos_infinity(a, b)) {
+        /* Whole line: Fourier/Jordan if a trig/exp kernel is present, then the
+         * quasi-periodic (rectangular-contour) family, else rational. */
+        value = residue_family_fourier(f, x, a, b);
+        if (!value) value = residue_family_rectangular(f, x, a, b);
+        if (!value) value = residue_family_rational(f, x, a, b, diverges);
+    } else if (is_zero_pos_infinity(a, b)) {
+        /* Half-line [0,Inf): even symmetry first (exact), then the keyhole/Mellin
+         * (branch-power / log) and sector (1/(1+x^n)) families. */
+        value = residue_half_line(f, x, a, b, diverges);
+        if (!value) value = residue_family_mellin(f, x, a, b);
+        if (!value) value = residue_family_sector(f, x, a, b);
+    }
 
-    return NULL;
+    if (built_here) { expr_free(g_inst); g_inst = NULL; g_nbounds = 0; }
+    return value;
 }
 
 Expr* builtin_integrate_contour_residue(Expr* res) {
@@ -756,7 +1353,7 @@ Expr* builtin_integrate_contour_residue(Expr* res) {
     if (x->type != EXPR_SYMBOL) return NULL;
     Expr* a = spec->data.function.args[1];
     Expr* b = spec->data.function.args[2];
-    return integrate_residue_try(f, x, a, b, NULL);
+    return integrate_residue_try(f, x, a, b, NULL, NULL);
 }
 
 void integrate_residue_init(void) {
@@ -769,8 +1366,9 @@ void integrate_residue_init(void) {
         "(-Infinity, Infinity), Fourier/Jordan integrands R(x) {Cos|Sin|Exp[I .]}"
         "(a x), rational-in-{Sin,Cos} integrands over a full period (0,2Pi) or "
         "(-Pi,Pi), and their principal-value (simple real-axis pole) and even "
-        "half-line [0,Infinity) variants.  Sums enclosed residues and verifies "
-        "the closed form against NIntegrate; returns unevaluated when no family "
-        "applies, the residue sum does not close to a scalar, or the crosscheck "
-        "fails.");
+        "half-line [0,Infinity) variants.  Sums the enclosed residues; the value "
+        "is correct by construction (no numeric crosscheck) and returned "
+        "unevaluated when no family applies or the residue sum does not close to "
+        "a scalar.  Symbolic-parameter integrals reach the keyhole/Mellin, sector "
+        "and rectangular families through Integrate[f, spec, Assumptions -> ...].");
 }
