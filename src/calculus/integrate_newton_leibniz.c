@@ -410,7 +410,15 @@ static Expr* nl_eval_at(Expr* F, Expr* x, Expr* target, NLDir dir) {
         Expr* sub = eval_take(mk_fn2("ReplaceAll", expr_copy(F),
                                      mk_fn2("Rule", expr_copy(x),
                                             expr_copy(target))));
-        if (nl_is_finite_closed(sub, x)) {
+        if (sub && nl_is_infinite(sub)) {
+            /* Direct substitution lands on a bare directed infinity: F itself
+             * blows up at this interior finite point (e.g. F = -ArcTanh[x] at
+             * x = 1, where ArcTanh[1] = Infinity).  That is a genuine boundary
+             * divergence -- keep the sentinel so it propagates to the idiv
+             * path -- and it is a strictly better answer than the one-sided
+             * Limit, which the engine may leave unevaluated. */
+            out = sub;
+        } else if (nl_is_finite_closed(sub, x)) {
             out = sub;
         } else {
             if (sub) expr_free(sub);

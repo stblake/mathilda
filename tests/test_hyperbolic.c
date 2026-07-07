@@ -48,6 +48,10 @@ void test_hyperbolic_inverse() {
         {"ArcSinh[0]", "0"},
         {"ArcCosh[1]", "0"},
         {"ArcTanh[0]", "0"},
+        {"ArcTanh[1]", "Infinity"},                  /* genuine pole */
+        {"ArcTanh[-1]", "Times[-1, Infinity]"},      /* -Infinity, via odd fold */
+        {"ArcCoth[1]", "Infinity"},                  /* genuine pole */
+        {"ArcCoth[-1]", "Times[-1, Infinity]"},
         {"ArcCoth[Infinity]", "0"},
         {"ArcSech[1]", "0"},
         {"ArcSinh[Infinity]", "Infinity"},

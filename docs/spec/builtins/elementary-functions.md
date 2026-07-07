@@ -132,6 +132,29 @@ In[11]:= ArcSin[Sin[x]]
 Out[11]= ArcSin[Sin[x]]
 ```
 
+### Singular special values
+
+`ArcTanh` and `ArcCoth` have poles at `±1`, and Mathilda evaluates them to the
+corresponding directed infinities (matching Mathematica):
+
+```mathematica
+In[12]:= ArcTanh[1]
+Out[12]= Infinity
+
+In[13]:= ArcTanh[-1]
+Out[13]= -Infinity
+
+In[14]:= ArcCoth[1]
+Out[14]= Infinity
+```
+
+The negative cases are reached through the odd-function fold
+(`ArcTanh[-1] -> -ArcTanh[1] -> -Infinity`). These closed-form values let the
+definite integrator (`Integrate`, Newton–Leibniz) detect that an antiderivative
+such as `-ArcTanh[x]` blows up at an interior pole, so a divergent integral like
+`Integrate[1/(x^2-1), {x, -Infinity, Infinity}]` correctly warns
+`Integrate::idiv` and returns unevaluated instead of a spurious finite value.
+
 
 ## TrigToExp
 Converts trigonometric and hyperbolic functions in `expr` to exponentials.

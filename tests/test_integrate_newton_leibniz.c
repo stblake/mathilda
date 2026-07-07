@@ -117,6 +117,17 @@ static void test_divergent(void) {
     check_eq("Integrate[1/x, {x, 2, -2}]",    "Integrate[1/x, {x, 2, -2}]");
     check_eq("Integrate[1/(x - 3), {x, 5, 1}]",
              "Integrate[1/(-3 + x), {x, 5, 1}]");
+    /* Interior poles at x = +/-1 with F = -ArcTanh[x]: the one-sided boundary
+     * values are +/-ArcTanh[1] = +/-Infinity.  These must NOT cancel to a
+     * spurious finite branch residue (regression: previously returned -I Pi). */
+    check_eq("Integrate[1/(x^2 - 1), {x, -Infinity, Infinity}]",
+             "Integrate[1/(-1 + x^2), {x, -Infinity, Infinity}]");
+    check_eq("Integrate[1/(x^2 - 1), {x, -Infinity, Infinity}, "
+             "Method -> \"NewtonLeibniz\"]",
+             "Integrate[1/(-1 + x^2), {x, -Infinity, Infinity}, "
+             "Method -> \"NewtonLeibniz\"]");
+    check_eq("Integrate[1/(1 - x^2), {x, 0, 2}]",
+             "Integrate[1/(1 - x^2), {x, 0, 2}]");
 }
 
 /* ------------------------------------------------------------------ */
