@@ -216,6 +216,22 @@
     "url": "documentation/other-advanced/AiryBiPrime/"
   },
   {
+    "name": "AllTrue",
+    "category": "Functional Programming",
+    "slug": "functional-programming",
+    "status": "Stable",
+    "summary": "AllTrue[list, test]",
+    "url": "documentation/functional-programming/AllTrue/"
+  },
+  {
+    "name": "AnyTrue",
+    "category": "Functional Programming",
+    "slug": "functional-programming",
+    "status": "Stable",
+    "summary": "AnyTrue[list, test]",
+    "url": "documentation/functional-programming/AnyTrue/"
+  },
+  {
     "name": "Apart",
     "category": "Algebra",
     "slug": "algebra",
@@ -225,19 +241,19 @@
   },
   {
     "name": "Append",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "Append[expr, elem] adds elem to the end of expr.",
-    "url": "documentation/structural-manipulation/Append/"
+    "url": "documentation/data-structures/Append/"
   },
   {
     "name": "Apply",
-    "category": "Functional Programming",
-    "slug": "functional-programming",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "f @@ expr or Apply[f, expr]",
-    "url": "documentation/functional-programming/Apply/"
+    "url": "documentation/data-structures/Apply/"
   },
   {
     "name": "ArcCos",
@@ -286,6 +302,46 @@
     "status": "Experimental",
     "summary": "AspectRatio",
     "url": "documentation/other-advanced/AspectRatio/"
+  },
+  {
+    "name": "AssociateTo",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "AssociateTo[s, key -> val]  |  AssociateTo[s, {rules}]",
+    "url": "documentation/data-structures/AssociateTo/"
+  },
+  {
+    "name": "Association",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "Association[key1 -> val1, key2 -> val2, ...]  (also written <|...|>)",
+    "url": "documentation/data-structures/Association/"
+  },
+  {
+    "name": "AssociationMap",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "AssociationMap[f, {k1, k2, ...}]",
+    "url": "documentation/data-structures/AssociationMap/"
+  },
+  {
+    "name": "AssociationQ",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "AssociationQ[expr]",
+    "url": "documentation/data-structures/AssociationQ/"
+  },
+  {
+    "name": "AssociationThread",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "AssociationThread[{k...}, {v...}]  |  AssociationThread[keys -> values]",
+    "url": "documentation/data-structures/AssociationThread/"
   },
   {
     "name": "Assuming",
@@ -489,11 +545,11 @@
   },
   {
     "name": "Cases",
-    "category": "Pattern Matching",
-    "slug": "pattern-matching",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "Cases[{e1, e2, ...}, pattern] gives a list of the ei that match the pattern.",
-    "url": "documentation/pattern-matching/Cases/"
+    "url": "documentation/data-structures/Cases/"
   },
   {
     "name": "Catalan",
@@ -502,6 +558,14 @@
     "status": "Stable",
     "summary": "Catalan",
     "url": "documentation/mathematical-constants/Catalan/"
+  },
+  {
+    "name": "Catenate",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "Catenate[{e1, e2, ...}]",
+    "url": "documentation/structural-manipulation/Catenate/"
   },
   {
     "name": "Ceiling",
@@ -697,11 +761,27 @@
   },
   {
     "name": "Count",
-    "category": "Pattern Matching",
-    "slug": "pattern-matching",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "Count[list, pattern] gives the number of elements in list that match pattern.",
-    "url": "documentation/pattern-matching/Count/"
+    "url": "documentation/data-structures/Count/"
+  },
+  {
+    "name": "Counts",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "Counts[list]",
+    "url": "documentation/data-structures/Counts/"
+  },
+  {
+    "name": "CountsBy",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "CountsBy[list, f]",
+    "url": "documentation/data-structures/CountsBy/"
   },
   {
     "name": "Cross",
@@ -777,27 +857,43 @@
   },
   {
     "name": "Delete",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "Delete[expr, n] deletes the element at position n in expr.",
-    "url": "documentation/structural-manipulation/Delete/"
+    "url": "documentation/data-structures/Delete/"
   },
   {
     "name": "DeleteCases",
-    "category": "Pattern Matching",
-    "slug": "pattern-matching",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "DeleteCases[expr, pattern] removes all elements of expr that match pattern.",
-    "url": "documentation/pattern-matching/DeleteCases/"
+    "url": "documentation/data-structures/DeleteCases/"
   },
   {
     "name": "DeleteDuplicates",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "DeleteDuplicates[list]",
-    "url": "documentation/structural-manipulation/DeleteDuplicates/"
+    "url": "documentation/data-structures/DeleteDuplicates/"
+  },
+  {
+    "name": "DeleteDuplicatesBy",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "DeleteDuplicatesBy[expr, f]",
+    "url": "documentation/data-structures/DeleteDuplicatesBy/"
+  },
+  {
+    "name": "DeleteMissing",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "DeleteMissing[expr]",
+    "url": "documentation/data-structures/DeleteMissing/"
   },
   {
     "name": "Denominator",
@@ -961,11 +1057,11 @@
   },
   {
     "name": "Drop",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "Drop[list, n]",
-    "url": "documentation/structural-manipulation/Drop/"
+    "url": "documentation/data-structures/Drop/"
   },
   {
     "name": "Dt",
@@ -1417,11 +1513,19 @@
   },
   {
     "name": "First",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "First[expr] gives the first element of expr.",
-    "url": "documentation/structural-manipulation/First/"
+    "url": "documentation/data-structures/First/"
+  },
+  {
+    "name": "FirstCase",
+    "category": "Functional Programming",
+    "slug": "functional-programming",
+    "status": "Stable",
+    "summary": "FirstCase[expr, patt]",
+    "url": "documentation/functional-programming/FirstCase/"
   },
   {
     "name": "Fit",
@@ -1481,11 +1585,11 @@
   },
   {
     "name": "FoldList",
-    "category": "Functional Programming",
-    "slug": "functional-programming",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "FoldList[f, x, list]",
-    "url": "documentation/functional-programming/FoldList/"
+    "url": "documentation/data-structures/FoldList/"
   },
   {
     "name": "For",
@@ -1576,6 +1680,14 @@
     "url": "documentation/special-functions/Gamma/"
   },
   {
+    "name": "GatherBy",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "GatherBy[list, f]",
+    "url": "documentation/data-structures/GatherBy/"
+  },
+  {
     "name": "GeneratedParameters",
     "category": "Solutions of Equations",
     "slug": "solutions-of-equations",
@@ -1654,6 +1766,14 @@
     "status": "Stable",
     "summary": "GroebnerBasis[{p1, p2, ...}, {x1, x2, ...}]",
     "url": "documentation/algebra/GroebnerBasis/"
+  },
+  {
+    "name": "GroupBy",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "GroupBy[list, f]",
+    "url": "documentation/data-structures/GroupBy/"
   },
   {
     "name": "HankelMatrix",
@@ -2009,11 +2129,115 @@
   },
   {
     "name": "Join",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "Join[list1, list2, ...]",
-    "url": "documentation/structural-manipulation/Join/"
+    "url": "documentation/data-structures/Join/"
+  },
+  {
+    "name": "KeyDrop",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "KeyDrop[assoc, key]  |  KeyDrop[assoc, {k1, ...}]",
+    "url": "documentation/data-structures/KeyDrop/"
+  },
+  {
+    "name": "KeyExistsQ",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "KeyExistsQ[assoc, key]",
+    "url": "documentation/data-structures/KeyExistsQ/"
+  },
+  {
+    "name": "KeyFreeQ",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "KeyFreeQ[assoc, key]",
+    "url": "documentation/data-structures/KeyFreeQ/"
+  },
+  {
+    "name": "KeyMap",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "KeyMap[f, assoc]",
+    "url": "documentation/data-structures/KeyMap/"
+  },
+  {
+    "name": "KeyMemberQ",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "KeyMemberQ[assoc, key]",
+    "url": "documentation/data-structures/KeyMemberQ/"
+  },
+  {
+    "name": "KeySelect",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "KeySelect[assoc, pred]",
+    "url": "documentation/data-structures/KeySelect/"
+  },
+  {
+    "name": "KeySort",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "KeySort[assoc]",
+    "url": "documentation/data-structures/KeySort/"
+  },
+  {
+    "name": "KeySortBy",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "KeySortBy[assoc, f]",
+    "url": "documentation/data-structures/KeySortBy/"
+  },
+  {
+    "name": "KeyTake",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "KeyTake[assoc, {k1, ...}]",
+    "url": "documentation/data-structures/KeyTake/"
+  },
+  {
+    "name": "KeyUnion",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "KeyUnion[{assoc1, assoc2, ...}]",
+    "url": "documentation/data-structures/KeyUnion/"
+  },
+  {
+    "name": "KeyValueMap",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "KeyValueMap[f, assoc]",
+    "url": "documentation/data-structures/KeyValueMap/"
+  },
+  {
+    "name": "KeyValuePattern",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "KeyValuePattern[{k1 -> p1, ...}]",
+    "url": "documentation/data-structures/KeyValuePattern/"
+  },
+  {
+    "name": "Keys",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "Keys[assoc]",
+    "url": "documentation/data-structures/Keys/"
   },
   {
     "name": "Khinchin",
@@ -2041,11 +2265,11 @@
   },
   {
     "name": "Last",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "Last[expr] gives the last element of expr.",
-    "url": "documentation/structural-manipulation/Last/"
+    "url": "documentation/data-structures/Last/"
   },
   {
     "name": "LatticeReduce",
@@ -2086,6 +2310,14 @@
     "status": "Stable",
     "summary": "Length[expr]",
     "url": "documentation/structural-manipulation/Length/"
+  },
+  {
+    "name": "LengthWhile",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "LengthWhile[list, crit]",
+    "url": "documentation/data-structures/LengthWhile/"
   },
   {
     "name": "LerchPhi",
@@ -2296,6 +2528,14 @@
     "url": "documentation/pattern-matching/Longest/"
   },
   {
+    "name": "Lookup",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "Lookup[assoc, key]",
+    "url": "documentation/data-structures/Lookup/"
+  },
+  {
     "name": "LucasL",
     "category": "Arithmetic",
     "slug": "arithmetic",
@@ -2329,11 +2569,11 @@
   },
   {
     "name": "Map",
-    "category": "Functional Programming",
-    "slug": "functional-programming",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "f /@ expr or Map[f, expr]",
-    "url": "documentation/functional-programming/Map/"
+    "url": "documentation/data-structures/Map/"
   },
   {
     "name": "MapAll",
@@ -2345,11 +2585,19 @@
   },
   {
     "name": "MapAt",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "MapAt[f, expr, n]",
+    "url": "documentation/data-structures/MapAt/"
+  },
+  {
+    "name": "MapIndexed",
     "category": "Functional Programming",
     "slug": "functional-programming",
     "status": "Stable",
-    "summary": "MapAt[f, expr, n]",
-    "url": "documentation/functional-programming/MapAt/"
+    "summary": "MapIndexed[f, list]",
+    "url": "documentation/functional-programming/MapIndexed/"
   },
   {
     "name": "MatchQ",
@@ -2385,27 +2633,35 @@
   },
   {
     "name": "Max",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "Max[x1, x2, ...]",
-    "url": "documentation/structural-manipulation/Max/"
+    "url": "documentation/data-structures/Max/"
+  },
+  {
+    "name": "MaximalBy",
+    "category": "Functional Programming",
+    "slug": "functional-programming",
+    "status": "Stable",
+    "summary": "MaximalBy[list, f]",
+    "url": "documentation/functional-programming/MaximalBy/"
   },
   {
     "name": "Mean",
-    "category": "Statistics",
-    "slug": "statistics",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "Mean[data] gives the mean estimate of the elements in data.",
-    "url": "documentation/statistics/Mean/"
+    "url": "documentation/data-structures/Mean/"
   },
   {
     "name": "Median",
-    "category": "Statistics",
-    "slug": "statistics",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "Median[data]",
-    "url": "documentation/statistics/Median/"
+    "url": "documentation/data-structures/Median/"
   },
   {
     "name": "MemberQ",
@@ -2416,12 +2672,36 @@
     "url": "documentation/expression-information/MemberQ/"
   },
   {
+    "name": "Merge",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "Merge[{assoc1, assoc2, ...}, f]",
+    "url": "documentation/data-structures/Merge/"
+  },
+  {
     "name": "Min",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "Min[x1, x2, ...]",
-    "url": "documentation/structural-manipulation/Min/"
+    "url": "documentation/data-structures/Min/"
+  },
+  {
+    "name": "MinMax",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "MinMax[list]",
+    "url": "documentation/data-structures/MinMax/"
+  },
+  {
+    "name": "MinimalBy",
+    "category": "Functional Programming",
+    "slug": "functional-programming",
+    "status": "Stable",
+    "summary": "MinimalBy[list, f]",
+    "url": "documentation/functional-programming/MinimalBy/"
   },
   {
     "name": "MinimalPolynomial",
@@ -2449,11 +2729,11 @@
   },
   {
     "name": "Most",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "Most[expr] gives all but the last element of expr.",
-    "url": "documentation/structural-manipulation/Most/"
+    "url": "documentation/data-structures/Most/"
   },
   {
     "name": "MovingAverage",
@@ -2630,6 +2910,14 @@
     "status": "Stable",
     "summary": "NonPositive[x]",
     "url": "documentation/expression-information/NonPositive/"
+  },
+  {
+    "name": "NoneTrue",
+    "category": "Functional Programming",
+    "slug": "functional-programming",
+    "status": "Stable",
+    "summary": "NoneTrue[list, test]",
+    "url": "documentation/functional-programming/NoneTrue/"
   },
   {
     "name": "Norm",
@@ -2953,11 +3241,19 @@
   },
   {
     "name": "Position",
-    "category": "Pattern Matching",
-    "slug": "pattern-matching",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "Position[expr, pattern] gives a list of the positions at which objects matching pattern appear in expr.",
-    "url": "documentation/pattern-matching/Position/"
+    "url": "documentation/data-structures/Position/"
+  },
+  {
+    "name": "PositionIndex",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "PositionIndex[list]",
+    "url": "documentation/data-structures/PositionIndex/"
   },
   {
     "name": "Positive",
@@ -3033,11 +3329,11 @@
   },
   {
     "name": "Prepend",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "Prepend[expr, elem] adds elem to the beginning of expr.",
-    "url": "documentation/structural-manipulation/Prepend/"
+    "url": "documentation/data-structures/Prepend/"
   },
   {
     "name": "Prime",
@@ -3304,6 +3600,14 @@
     "url": "documentation/other-advanced/Red/"
   },
   {
+    "name": "RegularExpression",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "RegularExpression[\"regex\"]",
+    "url": "documentation/string-operations/RegularExpression/"
+  },
+  {
     "name": "ReleaseHold",
     "category": "Expression Information",
     "slug": "expression-information",
@@ -3393,11 +3697,11 @@
   },
   {
     "name": "Rest",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "Rest[expr] gives all but the first element of expr.",
-    "url": "documentation/structural-manipulation/Rest/"
+    "url": "documentation/data-structures/Rest/"
   },
   {
     "name": "Resultant",
@@ -3422,6 +3726,22 @@
     "status": "Stable",
     "summary": "Reverse[expr] reverses the order of elements in expr.",
     "url": "documentation/structural-manipulation/Reverse/"
+  },
+  {
+    "name": "ReverseSort",
+    "category": "Functional Programming",
+    "slug": "functional-programming",
+    "status": "Stable",
+    "summary": "ReverseSort[list]",
+    "url": "documentation/functional-programming/ReverseSort/"
+  },
+  {
+    "name": "ReverseSortBy",
+    "category": "Functional Programming",
+    "slug": "functional-programming",
+    "status": "Stable",
+    "summary": "ReverseSortBy[list, f]",
+    "url": "documentation/functional-programming/ReverseSortBy/"
   },
   {
     "name": "Root",
@@ -3512,6 +3832,14 @@
     "url": "documentation/comparisons/SameQ/"
   },
   {
+    "name": "Scan",
+    "category": "Functional Programming",
+    "slug": "functional-programming",
+    "status": "Stable",
+    "summary": "Scan[f, expr]",
+    "url": "documentation/functional-programming/Scan/"
+  },
+  {
     "name": "Sec",
     "category": "Elementary Functions",
     "slug": "elementary-functions",
@@ -3529,11 +3857,19 @@
   },
   {
     "name": "Select",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "Select[list, crit]",
+    "url": "documentation/data-structures/Select/"
+  },
+  {
+    "name": "SelectFirst",
     "category": "Functional Programming",
     "slug": "functional-programming",
     "status": "Stable",
-    "summary": "Select[list, crit]",
-    "url": "documentation/functional-programming/Select/"
+    "summary": "SelectFirst[list, pred]",
+    "url": "documentation/functional-programming/SelectFirst/"
   },
   {
     "name": "Series",
@@ -3705,11 +4041,19 @@
   },
   {
     "name": "Sort",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "Sort[list] sorts the elements of list into canonical order.",
-    "url": "documentation/structural-manipulation/Sort/"
+    "url": "documentation/data-structures/Sort/"
+  },
+  {
+    "name": "SortBy",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "SortBy[list, f]",
+    "url": "documentation/data-structures/SortBy/"
   },
   {
     "name": "Span",
@@ -3753,11 +4097,11 @@
   },
   {
     "name": "StandardDeviation",
-    "category": "Statistics",
-    "slug": "statistics",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "StandardDeviation[data] gives the standard deviation estimate of the elements in data.",
-    "url": "documentation/statistics/StandardDeviation/"
+    "url": "documentation/data-structures/StandardDeviation/"
   },
   {
     "name": "StieltjesGamma",
@@ -3766,6 +4110,30 @@
     "status": "Stable",
     "summary": "StieltjesGamma[n]",
     "url": "documentation/special-functions/StieltjesGamma/"
+  },
+  {
+    "name": "StringCases",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringCases[\"string\", patt]",
+    "url": "documentation/string-operations/StringCases/"
+  },
+  {
+    "name": "StringDrop",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringDrop[\"string\", n]",
+    "url": "documentation/string-operations/StringDrop/"
+  },
+  {
+    "name": "StringInsert",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringInsert[\"string\", \"snew\", n]",
+    "url": "documentation/string-operations/StringInsert/"
   },
   {
     "name": "StringJoin",
@@ -3784,12 +4152,52 @@
     "url": "documentation/string-operations/StringLength/"
   },
   {
+    "name": "StringMatchQ",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringMatchQ[\"string\", patt]",
+    "url": "documentation/string-operations/StringMatchQ/"
+  },
+  {
     "name": "StringPart",
     "category": "String Operations",
     "slug": "string-operations",
     "status": "Stable",
     "summary": "StringPart[\"string\", n]",
     "url": "documentation/string-operations/StringPart/"
+  },
+  {
+    "name": "StringReplace",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringReplace[\"string\", patt -> rep]",
+    "url": "documentation/string-operations/StringReplace/"
+  },
+  {
+    "name": "StringReplacePart",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringReplacePart[\"string\", \"snew\", {m, n}]",
+    "url": "documentation/string-operations/StringReplacePart/"
+  },
+  {
+    "name": "StringReverse",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringReverse[\"string\"]",
+    "url": "documentation/string-operations/StringReverse/"
+  },
+  {
+    "name": "StringSplit",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringSplit[\"string\", patt]",
+    "url": "documentation/string-operations/StringSplit/"
   },
   {
     "name": "StringTake",
@@ -3881,19 +4289,59 @@
   },
   {
     "name": "Take",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "Take[list, n]",
-    "url": "documentation/structural-manipulation/Take/"
+    "url": "documentation/data-structures/Take/"
+  },
+  {
+    "name": "TakeLargest",
+    "category": "Functional Programming",
+    "slug": "functional-programming",
+    "status": "Stable",
+    "summary": "TakeLargest[list, n]",
+    "url": "documentation/functional-programming/TakeLargest/"
+  },
+  {
+    "name": "TakeLargestBy",
+    "category": "Functional Programming",
+    "slug": "functional-programming",
+    "status": "Stable",
+    "summary": "TakeLargestBy[list, f, n]",
+    "url": "documentation/functional-programming/TakeLargestBy/"
+  },
+  {
+    "name": "TakeSmallest",
+    "category": "Functional Programming",
+    "slug": "functional-programming",
+    "status": "Stable",
+    "summary": "TakeSmallest[list, n]",
+    "url": "documentation/functional-programming/TakeSmallest/"
+  },
+  {
+    "name": "TakeSmallestBy",
+    "category": "Functional Programming",
+    "slug": "functional-programming",
+    "status": "Stable",
+    "summary": "TakeSmallestBy[list, f, n]",
+    "url": "documentation/functional-programming/TakeSmallestBy/"
+  },
+  {
+    "name": "TakeWhile",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "TakeWhile[list, crit]",
+    "url": "documentation/data-structures/TakeWhile/"
   },
   {
     "name": "Tally",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "Tally[list] counts the number of occurrences of each distinct element in list.",
-    "url": "documentation/structural-manipulation/Tally/"
+    "url": "documentation/data-structures/Tally/"
   },
   {
     "name": "Tan",
@@ -4152,6 +4600,14 @@
     "url": "documentation/linear-algebra/UpperTriangularMatrixQ/"
   },
   {
+    "name": "Values",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "Values[assoc]",
+    "url": "documentation/data-structures/Values/"
+  },
+  {
     "name": "VandermondeMatrix",
     "category": "Linear Algebra",
     "slug": "linear-algebra",
@@ -4169,11 +4625,11 @@
   },
   {
     "name": "Variance",
-    "category": "Statistics",
-    "slug": "statistics",
+    "category": "Data Structures",
+    "slug": "data-structures",
     "status": "Stable",
     "summary": "Variance[data] gives the unbiased variance estimate of the elements in data.",
-    "url": "documentation/statistics/Variance/"
+    "url": "documentation/data-structures/Variance/"
   },
   {
     "name": "VectorQ",
