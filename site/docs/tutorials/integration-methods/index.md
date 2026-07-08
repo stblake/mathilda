@@ -40,6 +40,12 @@ dispatch would reach for a slower or less appropriate one.
     numbers, branch-correct logarithms, and the residue theorem worked
     constructively, with a numerical crosscheck on every segment.
 
+-   :material-function-variant: __[Differentiation under the integral sign](diffunderint.md)__
+
+    The Leibniz rule / "Feynman's trick" for parameter-dependent integrals —
+    introduce a parameter, differentiate, integrate back, and fix the constant,
+    with a symbolic proof of every result. Frullani, sinc, and Gaussian families.
+
 </div>
 
 !!! note "More methods coming"
