@@ -6,6 +6,7 @@
 #include "sym_names.h"
 #include "trig_canon.h"
 #include "series.h"
+#include "matrix.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -244,6 +245,16 @@ Expr* builtin_times(Expr* res) {
     size_t n = res->data.function.arg_count;
     if (n == 0) return expr_new_integer(1);
     if (n == 1) return expr_copy(res->data.function.args[0]);
+
+    /* Matrix fast path: n same-shape Matrix operands multiply elementwise
+     * over raw double buffers (mirrors Listable Times over Lists). NULL
+     * (not all Matrix, or shapes disagree) falls through to the generic
+     * path, which treats mismatched Matrix operands as opaque non-numeric
+     * factors. */
+    {
+        Expr* fast = matrix_elementwise(res->data.function.args, n, false);
+        if (fast) return fast;
+    }
 
     /* SeriesData arithmetic: if any factor is a power series, fold the whole
      * Times through the series algebra. Runs before inexact contagion, which

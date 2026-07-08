@@ -9,6 +9,7 @@
 #include "eval.h"
 #include "print.h"
 #include "sym_names.h"
+#include "matrix.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -30,13 +31,47 @@ static Expr* build_tensor(int64_t* dims, int rank, Expr** flat, size_t* idx) {
 }
 
 Expr* dot2(Expr* a, Expr* b, bool* error_printed) {
+    /* Fast path: both operands are dense Matrix ndarrays of rank <= 2 —
+     * contract directly over the flat double buffers, no symbolic
+     * Times/Plus per element. Higher-rank Matrix operands fall through to
+     * the generic tensor path below via a nested-List conversion. */
+    if (a->type == EXPR_MATRIX && b->type == EXPR_MATRIX) {
+        bool shape_error = false;
+        Expr* fast = matrix_dot2(a, b, &shape_error);
+        if (fast) return fast;
+        if (shape_error) {
+            if (!*error_printed) {
+                char* a_str = expr_to_string_fullform(a);
+                char* b_str = expr_to_string_fullform(b);
+                fprintf(stderr, "Dot::dotsh: Tensors %s and %s have incompatible shapes.\n", a_str, b_str);
+                free(a_str);
+                free(b_str);
+                *error_printed = true;
+            }
+            return NULL;
+        }
+    }
+
+    Expr* conv_a = NULL;
+    Expr* conv_b = NULL;
+    if (a->type == EXPR_MATRIX) { conv_a = matrix_to_nested_list(a); a = conv_a; }
+    if (b->type == EXPR_MATRIX) { conv_b = matrix_to_nested_list(b); b = conv_b; }
+
     int64_t dimsA[64];
     int rankA = get_tensor_dims(a, dimsA);
-    if (rankA <= 0) return NULL; // Not a tensor, or jagged
+    if (rankA <= 0) { // Not a tensor, or jagged
+        if (conv_a) expr_free(conv_a);
+        if (conv_b) expr_free(conv_b);
+        return NULL;
+    }
 
     int64_t dimsB[64];
     int rankB = get_tensor_dims(b, dimsB);
-    if (rankB <= 0) return NULL;
+    if (rankB <= 0) {
+        if (conv_a) expr_free(conv_a);
+        if (conv_b) expr_free(conv_b);
+        return NULL;
+    }
 
     int64_t K = dimsA[rankA - 1];
     if (K != dimsB[0]) {
@@ -48,6 +83,8 @@ Expr* dot2(Expr* a, Expr* b, bool* error_printed) {
             free(b_str);
             *error_printed = true;
         }
+        if (conv_a) expr_free(conv_a);
+        if (conv_b) expr_free(conv_b);
         return NULL;
     }
 
@@ -101,6 +138,8 @@ Expr* dot2(Expr* a, Expr* b, bool* error_printed) {
         free(flatC);
     }
 
+    if (conv_a) expr_free(conv_a);
+    if (conv_b) expr_free(conv_b);
     return result;
 }
 
@@ -121,7 +160,9 @@ Expr* builtin_dot(Expr* res) {
         Expr* b = new_args[i+1];
 
         int64_t dA[64], dB[64];
-        if (get_tensor_dims(a, dA) > 0 && get_tensor_dims(b, dB) > 0) {
+        bool a_is_tensor = (a->type == EXPR_MATRIX) || get_tensor_dims(a, dA) > 0;
+        bool b_is_tensor = (b->type == EXPR_MATRIX) || get_tensor_dims(b, dB) > 0;
+        if (a_is_tensor && b_is_tensor) {
             Expr* d = dot2(a, b, &error_printed);
             if (d) {
                 expr_free(a);

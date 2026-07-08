@@ -32,6 +32,7 @@
 #include "poly.h"
 #include "rationalize.h"
 #include "sym_names.h"
+#include "matrix.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -573,7 +574,7 @@ static bool so_is_purely_numeric(Expr* e) {
         case EXPR_MPFR:
 #endif
             return true;
-        case EXPR_SYMBOL: case EXPR_STRING: return false;
+        case EXPR_SYMBOL: case EXPR_STRING: case EXPR_MATRIX: return false;
         case EXPR_FUNCTION: {
             Expr* h = e->data.function.head;
             if (h->type != EXPR_SYMBOL) return false;
@@ -3028,6 +3029,11 @@ static Expr* normal_recurse(Expr* e) {
 Expr* builtin_normal(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
+
+    /* Normal[matrix] converts a Matrix back to its equivalent nested List. */
+    if (arg->type == EXPR_MATRIX) {
+        return matrix_to_nested_list(arg);
+    }
 
     /* Normal[assoc] converts an association to its list of rules. */
     if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
