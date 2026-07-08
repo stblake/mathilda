@@ -53,6 +53,13 @@ Work through them in order if you're new — each one builds on the last.
     Differentiate and integrate, expand power series, take limits, evaluate
     symbolic sums, and find roots and extrema numerically.
 
+-   :material-transfer: __[Integration methods](integration-methods/index.md)__
+
+    Advanced, per-method deep dives into `Integrate`'s cascade — the **Mellin
+    transform** engine for half-line integrals \(\int_0^\infty x^{s-1} f\,dx\)
+    and the **residue theorem** engine for improper, periodic, and contour
+    integrals. Algorithm, references, and worked examples.
+
 -   :material-calculator-variant: __[9. Numerical calculus](09-numerical-calculus.md)__
 
     When there is no closed form: numerical integration, differentiation,

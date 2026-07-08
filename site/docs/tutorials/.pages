@@ -9,6 +9,7 @@ nav:
   - 06-algebra.md
   - 07-solutions-of-equations.md
   - 08-calculus.md
+  - integration-methods
   - 09-numerical-calculus.md
   - 10-special-functions.md
   - 11-symbolic-summation.md
