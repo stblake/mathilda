@@ -421,6 +421,7 @@ set(COMMON_SRC
     ../src/poly/eliminate.c
     ../src/sym_intern.c
     ../src/sym_names.c
+    ../src/version.c
     ../src/repl_hooks.c
     ../src/options.c
     ../src/options_builtin.c

@@ -605,6 +605,8 @@ extern const char* SYM_DollarModuleNumber;
 extern const char* SYM_DollarRecursionLimit;
 extern const char* SYM_DollarSimplifyDebug;
 extern const char* SYM_DollarruSimplify;
+extern const char* SYM_DollarVersion;
+extern const char* SYM_DollarVersionNumber;
 
 /* Graphics engine (src/graphics/): primitives, style directives, and
  * Graphics[]/Show[]/Plot[] plus Plot's option names. MaxRecursion is

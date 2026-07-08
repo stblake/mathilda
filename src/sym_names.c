@@ -603,6 +603,8 @@ const char* SYM_DollarModuleNumber = NULL;
 const char* SYM_DollarRecursionLimit = NULL;
 const char* SYM_DollarSimplifyDebug = NULL;
 const char* SYM_DollarruSimplify = NULL;
+const char* SYM_DollarVersion = NULL;
+const char* SYM_DollarVersionNumber = NULL;
 
 const char* SYM_Graphics = NULL;
 const char* SYM_Graphics3D = NULL;
@@ -1321,6 +1323,8 @@ void sym_names_init(void) {
     SYM_DollarRecursionLimit       = intern_symbol("$RecursionLimit");
     SYM_DollarSimplifyDebug        = intern_symbol("$SimplifyDebug");
     SYM_DollarruSimplify           = intern_symbol("$ruSimplify");
+    SYM_DollarVersion              = intern_symbol("$Version");
+    SYM_DollarVersionNumber        = intern_symbol("$VersionNumber");
 
     SYM_Graphics                   = intern_symbol("Graphics");
     SYM_Graphics3D                 = intern_symbol("Graphics3D");
