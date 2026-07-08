@@ -438,6 +438,7 @@ set(COMMON_SRC
     ../src/calculus/integrate_newton_leibniz.c
     ../src/calculus/integrate_line.c
     ../src/calculus/integrate_residue.c
+    ../src/calculus/integrate_diffunderint.c
     ../src/calculus/intrat.c
     ../src/calculus/intrischnorman.c
     ../src/calculus/intsimp.c
@@ -1797,6 +1798,15 @@ else()
     target_link_libraries(integrate_residue_tests gmp m)
 endif()
 add_test(NAME integrate_residue_tests COMMAND integrate_residue_tests)
+
+add_executable(integrate_diffunderint_tests test_integrate_diffunderint.c ${COMMON_SRC})
+target_include_directories(integrate_diffunderint_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_diffunderint_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(integrate_diffunderint_tests gmp m)
+endif()
+add_test(NAME integrate_diffunderint_tests COMMAND integrate_diffunderint_tests)
 
 add_executable(residue_tests test_residue.c ${COMMON_SRC})
 target_include_directories(residue_tests PRIVATE ../src)

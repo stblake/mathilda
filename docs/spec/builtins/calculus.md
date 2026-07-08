@@ -623,6 +623,11 @@ monotonically down.
     the `{x, a, b}` form); see **Definite integration** below.
   - `"LineIntegral"` — the complex contour mechanism (implicit for the
     `{x, z0, …, zn}` form); see **Complex line integration** below.
+  - `"DiffUnderInt"` (alias `"DifferentiationUnderIntegral"`) — definite
+    integration by differentiation under the integral sign (Feynman's trick);
+    `Integrate\`DiffUnderInt[f, {x, a, b}]`. Tried last in the definite cascade
+    (after residue and Newton-Leibniz). See **Differentiation under the integral
+    sign** below.
   The two definite mechanisms name themselves only: the actual mechanism is
   chosen from the spec type, so on a definite integral any *other* method name
   is passed through to the inner indefinite integration that produces the
@@ -630,6 +635,34 @@ monotonically down.
   `Integrate[f, x, …]` form is a no-op (stays unevaluated).
   Unknown method names emit `Integrate::method` and bubble back.
 - Universal correctness predicate: `Cancel[Together[D[Integrate[f,x],x] - f]] === 0`.
+
+#### Differentiation under the integral sign (`Integrate\`DiffUnderInt`)
+
+For a parameter-dependent definite integral `I(p) = Integrate[f(x,p), {x,a,b}]`,
+this method (Leibniz rule / "Feynman's trick") differentiates the integrand with
+respect to a free parameter `p`, evaluates the resulting simpler definite
+integral `J(p) = Integrate[D[f,p], {x,a,b}]`, integrates `J(p)` back over the
+parameter, and fixes the constant of integration from an **exact** base value
+`I(p0)` (a `p` where `f` vanishes identically, or reduces to a directly-
+integrable form). Every case is the first-order ODE `I'(p) = J(p)`
+(Boulnois 2023). Verification is symbolic and correct-by-construction
+(`Simplify[D[I,p] - J] === 0` plus the exact base) — there is **no** numeric
+crosscheck. Assumptions (`a > 0`, …) are honoured and used to clean the closed
+forms.
+
+Because the general integrator is slow/hangs on the parameter-dependent inner
+integrals Feynman's trick produces, `DiffUnderInt` evaluates the standard
+families itself with closed-form formulas: the **Laplace/Fourier half-line**
+`∫₀^∞ xⁿ e^{-p x}{1,cos,sin} dx`, the **sinc/Frullani** `∫₀^∞ …/x dx`, and the
+**even-rational half-line** `∫₀^∞ P(x)/Q(x²) dx`. Forms outside these families
+(Gaussians, finite-period trig, piecewise/`Min`-`Max` results) are declined —
+the integral is returned unevaluated, fast, never a wrong value.
+
+Worked examples that close:
+`Integrate[(x^a-1)/Log[x], {x,0,1}]` → `Log[1+a]`;
+`Integrate[Exp[-a x] Sin[b x]/x, {x,0,Infinity}, Assumptions->a>0]` → `ArcTan[b/a]`;
+`Integrate[Sin[a x]^2/x^2, {x,0,Infinity}, Assumptions->a>0]` → `π a/2`;
+`Integrate[Log[1+a^2 x^2]/(1+x^2), {x,0,Infinity}, Assumptions->a>0]` → `π Log[1+a]`.
 
 **Examples**:
 ```mathematica

@@ -1,5 +1,25 @@
 # Lessons learned
 
+## No NIntegrate crosscheck inside Integrate — verify correct-by-construction (2026-07-08)
+
+The definite-integral methods in `Integrate` must NEVER validate a symbolic
+result against `NIntegrate` (or any numeric quadrature). The project philosophy
+(see the residue method `integrate_residue.c` and the cascade-ordering lesson) is
+**correct-by-construction**: deterministic methods gated by symbolic
+convergence/assumption conditions, with symbolic self-verification only
+(`PossibleZeroQ`, `Simplify`, exact base values).
+
+For the DiffUnderInt (Feynman) method specifically, this is both a rule and a
+gift: the Conrad §12 conditional-convergence trap (differentiating `∫sin(tx)/x`
+into the divergent `∫cos(tx)`) is caught automatically because the inner
+`Integrate[∂_p f, {x,a,b}]` fails to close / returns divergent under the engine's
+own gates — so we skip that parameter. Verification = symbolic derivative check
+`PossibleZeroQ[D[I,p] − J]` + an EXACT base value `I(p0)` (zero-integrand or the
+engine's exact `Integrate` of `f|_{p→p0}`), never a numeric compare.
+
+Test-side numeric comparison (`N[result - expected]` in `test_*.c`) is fine — the
+prohibition is on numerics *inside* the `Integrate` code path.
+
 ## Carving a C file into regions: grep ALL return types, not just the obvious one (2026-06-07)
 
 When splitting `arithmetic.c` into `numbertheory.c`, I mapped function

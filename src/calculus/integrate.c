@@ -28,6 +28,7 @@
 #include "integrate_newton_leibniz.h"
 #include "integrate_line.h"
 #include "integrate_residue.h"
+#include "integrate_diffunderint.h"
 #include "intrat.h"
 #include "intrischnorman.h"
 #include "intsimp.h"
@@ -314,6 +315,7 @@ typedef enum {
     METHOD_NEWTON_LEIBNIZ,   /* definite-only: selects the real-axis FTC mechanism */
     METHOD_LINE_INTEGRAL,    /* definite-only: selects the complex contour mechanism */
     METHOD_RESIDUE,          /* definite-only: selects the residue-theorem mechanism */
+    METHOD_DIFF_UNDER_INT,   /* definite-only: differentiation under the integral sign */
     METHOD_INVALID
 } IntegrateMethod;
 
@@ -335,6 +337,9 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "LineIntegral") == 0) return METHOD_LINE_INTEGRAL;
     if (strcmp(s, "Residue") == 0 || strcmp(s, "ContourResidue") == 0)
         return METHOD_RESIDUE;
+    if (strcmp(s, "DiffUnderInt") == 0 ||
+        strcmp(s, "DifferentiationUnderIntegral") == 0)
+        return METHOD_DIFF_UNDER_INT;
     return METHOD_INVALID;
 }
 
@@ -423,11 +428,12 @@ static bool definite_parse_method(Expr* opt, const char** name,
     IntegrateMethod m = method_from_string(rhs->data.string);
     if (m == METHOD_INVALID) return false;
     *mech = m;
-    /* NewtonLeibniz / LineIntegral / Residue name the definite mechanism itself;
-     * the actual mechanism is chosen from the spec type, so they pass NULL
-     * through to the inner indefinite Integrate. */
+    /* NewtonLeibniz / LineIntegral / Residue / DiffUnderInt name the definite
+     * mechanism itself; the actual mechanism is chosen from the spec type, so
+     * they pass NULL through to the inner indefinite Integrate. */
     if (m == METHOD_AUTOMATIC || m == METHOD_NEWTON_LEIBNIZ ||
-        m == METHOD_LINE_INTEGRAL || m == METHOD_RESIDUE) return true;
+        m == METHOD_LINE_INTEGRAL || m == METHOD_RESIDUE ||
+        m == METHOD_DIFF_UNDER_INT) return true;
     *name = rhs->data.string;   /* borrowed: valid while `res` is alive */
     return true;
 }
@@ -516,8 +522,15 @@ static Expr* integrate_definite(Expr* res) {
                 expr_free(cur);
                 return NULL;
             }
-            if (!r && mech != METHOD_RESIDUE)
+            /* Newton-Leibniz (FTC) unless the user pinned Residue or the
+             * parameter-differentiation mechanism. */
+            if (!r && mech != METHOD_RESIDUE && mech != METHOD_DIFF_UNDER_INT)
                 r = integrate_newton_leibniz_try(cur, x, a, b, method);
+            /* Differentiation under the integral sign: last resort under
+             * Automatic (parameter-dependent improper/periodic integrals that
+             * residue and FTC cannot close), or the pinned mechanism. */
+            if (!r && (mech == METHOD_AUTOMATIC || mech == METHOD_DIFF_UNDER_INT))
+                r = integrate_diffunderint_try(cur, x, a, b, assumptions);
         }
         expr_free(cur);
         if (!r) return NULL;
@@ -709,9 +722,10 @@ Expr* builtin_integrate(Expr* res) {
         case METHOD_NEWTON_LEIBNIZ:
         case METHOD_LINE_INTEGRAL:
         case METHOD_RESIDUE:
+        case METHOD_DIFF_UNDER_INT:
             /* Definite-only mechanisms.  Meaningless on the indefinite form
              * Integrate[f, x, Method -> "NewtonLeibniz" / "LineIntegral" /
-             * "Residue"]; leave unevaluated. */
+             * "Residue" / "DiffUnderInt"]; leave unevaluated. */
             break;
         case METHOD_INVALID:
             break;  /* unreachable: handled above */
@@ -770,6 +784,10 @@ void integrate_init(void) {
         "  \"Residue\"             — improper/periodic real definite integrals by the residue theorem\n"
         "                          (rational/Fourier on (-Inf,Inf), rational-in-Sin/Cos over a period,\n"
         "                          principal values, even half-lines); tried before NewtonLeibniz under Automatic\n"
+        "  \"DiffUnderInt\"         — parameter-dependent definite integrals by differentiation under the\n"
+        "  (\"DifferentiationUnderIntegral\") integral sign (Feynman's trick): Integrate`DiffUnderInt;\n"
+        "                          Laplace/Fourier, sinc, and even-rational half-line families;\n"
+        "                          tried last in the definite cascade, after Residue and NewtonLeibniz\n"
         "Method -> {\"DerivativeDivides\", \"Substitution\" -> u} pins the kernel u(x),\n"
         "trialing only that substitution.\n"
         "Named methods are strict: failure returns unevaluated, with no fallback.\n"
@@ -817,6 +835,11 @@ void integrate_init(void) {
     /* Definite integration by the residue theorem: Integrate`ContourResidue.
      * Engaged before Newton-Leibniz for a single real spec under Automatic. */
     integrate_residue_init();
+
+    /* Definite integration by differentiation under the integral sign
+     * (Feynman's trick): Integrate`DiffUnderInt.  Last resort in the definite
+     * cascade, after residue and Newton-Leibniz. */
+    integrate_diffunderint_init();
 
     /* Initialise the parallel-Risch / Risch-Norman heuristic
      * (Bronstein's pmint).  Provides `Integrate`RischNorman[f, x]`,
