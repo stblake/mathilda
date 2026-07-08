@@ -23,6 +23,7 @@
 #include "eval.h"
 #include "symtab.h"
 #include "attr.h"
+#include "arithmetic.h"   /* arith_warnings_mute_push/pop */
 #include "sym_names.h"
 
 #include <stdbool.h>
@@ -67,6 +68,14 @@ static Expr* mk_fn2(const char* head, Expr* a, Expr* b) {
 static Expr* mk_fn3(const char* head, Expr* a, Expr* b, Expr* c) {
     return expr_new_function(mk_sym(head), (Expr*[]){ a, b, c }, 3);
 }
+
+/* Small unevaluated arithmetic constructors (consume their args), used to build
+ * the closed-form family expressions before a single Simplify at the end. */
+static Expr* t_add(Expr* a, Expr* b) { return mk_fn2("Plus", a, b); }
+static Expr* t_mul(Expr* a, Expr* b) { return mk_fn2("Times", a, b); }
+static Expr* t_neg(Expr* a)          { return mk_fn2("Times", mk_int(-1), a); }
+static Expr* t_pow(Expr* a, long n)  { return mk_fn2("Power", a, mk_int(n)); }
+static Expr* t_rat(long p, long q)   { return mk_fn2("Rational", mk_int(p), mk_int(q)); }
 
 /* Evaluate `call`, free the call expression, return the (owned) result. */
 static Expr* eval_take(Expr* call) {
@@ -275,10 +284,18 @@ static Expr* integrate_definite_of(const Expr* g, const Expr* x, const Expr* a,
     return eval_take(call);
 }
 
+/* Gaussian parameter back-integration -> Erf (the engine cannot integrate a
+ * Gaussian).  Forward-declared here; defined with the Gaussian family below. */
+static Expr* integrate_gaussian_param(const Expr* J, const Expr* p);
+
 /* Indefinite integral Integrate[J, p] over the parameter.  Borrows both.  J is a
  * closed form from a family (rational / arctan / log-like), so integrating it
- * over the parameter is elementary and fast. */
+ * over the parameter is elementary and fast -- EXCEPT a Gaussian J = c e^{-k p^2}
+ * (from the Gaussian cosine-moment family), whose antiderivative is an Erf the
+ * engine does not produce; that case is handled directly. */
 static Expr* integrate_over_param(const Expr* J, const Expr* p) {
+    Expr* gp = integrate_gaussian_param(J, p);
+    if (gp) return gp;
     return ev2("Integrate", expr_copy((Expr*)J), expr_copy((Expr*)p));
 }
 
@@ -611,6 +628,9 @@ static long x_deg_signed(const Expr* e, const Expr* x, bool* ok) {
 static Expr* rational_halfline(const Expr* g, const Expr* x,
                                const ParamBound* pb, size_t np,
                                const Expr* assumptions);   /* forward decl */
+static Expr* rational_halfline_general(const Expr* g, const Expr* s,
+                                       const ParamBound* pb, size_t np,
+                                       const Expr* assumptions);   /* forward decl */
 
 /* Sinc / Frullani half-line: ∫₀^∞ H(x)/x^k dx (k >= 1), for an integrand that
  * after TrigToExp+Expand is a sum of c * x^n * e^{alpha x} terms with some n < 0.
@@ -702,7 +722,11 @@ static Expr* laplace_sinc_halfline(const Expr* g, const Expr* x,
     }
     Expr* Ms = simplify_with(M, assumptions);
     expr_free(M);
+    /* Oscillatory M (pure imaginary poles) is even in s -> even family; a genuine
+     * decay (Re(alpha) < 0) makes M non-even -> the general real-rational family,
+     * which returns real ArcTan/Log directly. */
     Expr* res = Ms ? rational_halfline(Ms, s, pb, np, assumptions) : NULL;
+    if (!res && Ms) res = rational_halfline_general(Ms, s, pb, np, assumptions);
 #ifdef DIUI_DEBUG
     fprintf(stderr, "DIUI:   sinc: rational_halfline(M) -> %s\n", res ? "HIT" : "miss");
 #endif
@@ -820,6 +844,294 @@ static Expr* rational_halfline(const Expr* g, const Expr* x,
     return NULL;
 }
 
+/* Simplify[Coefficient[e, v, k]]. */
+static Expr* coeff_of(const Expr* e, const Expr* v, long k) {
+    return ev1("Simplify", mk_fn3("Coefficient", expr_copy((Expr*)e),
+                                  expr_copy((Expr*)v), mk_int(k)));
+}
+
+/* General real-rational half-line: ∫₀^∞ R(s) ds for a REAL rational R with no
+ * poles on [0,∞) and a degree drop >= 2, WITHOUT the evenness restriction of
+ * rational_halfline.  Partial-fractions R over s; each simple real factor
+ * (s+r)^m (r>0) and irreducible quadratic factor ((s+β0)^2 + γ^2) (m = 1)
+ * integrates to a rational / Log / ArcTan boundary value.  The Log(s->∞) pieces
+ * must cancel (their coefficients sum to zero, guaranteed by the degree drop);
+ * otherwise the integral diverges and we return NULL.  Produces REAL ArcTan/Log
+ * output directly (no complex-Log reduction needed) -- this is what unlocks the
+ * DECAYING sinc ∫₀^∞ e^{-p x} Sin[q x]/x dx = ArcTan[q/p], whose Laplace image
+ * M(s) = q/((s+p)^2+q^2) is a non-even rational the even family declines. */
+static Expr* rational_halfline_general(const Expr* g, const Expr* s,
+                                       const ParamBound* pb, size_t np,
+                                       const Expr* assumptions) {
+    Expr* ap = ev2("Apart", expr_copy((Expr*)g), expr_copy((Expr*)s));
+    if (!ap) return NULL;
+
+    size_t nt; Expr** terms; Expr* single[1];
+    if (head_name_is(ap, "Plus")) { nt = ap->data.function.arg_count; terms = ap->data.function.args; }
+    else { nt = 1; single[0] = ap; terms = single; }
+
+    Expr* total    = mk_int(0);   /* finite boundary value accumulator */
+    Expr* logcoeff = mk_int(0);   /* sum of Log(s->∞) coefficients; must vanish */
+    bool ok = true;
+
+    for (size_t t = 0; t < nt && ok; t++) {
+        Expr* T = terms[t];
+        Expr* den = ev1("Denominator", expr_copy(T));
+        if (!contains_symbol(den, s)) {            /* polynomial / constant part */
+            expr_free(den);
+            if (!is_zero_q(T)) ok = false;         /* nonzero const -> divergent */
+            continue;
+        }
+        Expr* num = ev1("Numerator", expr_copy(T));
+        /* den = base^m (base linear or irreducible quadratic in s). */
+        Expr* base; long m;
+        if (head_name_is(den, "Power") && den->data.function.arg_count == 2 &&
+            den->data.function.args[1]->type == EXPR_INTEGER &&
+            den->data.function.args[1]->data.integer >= 1) {
+            base = ev1("Expand", expr_copy(den->data.function.args[0]));
+            m = (long)den->data.function.args[1]->data.integer;
+        } else { base = ev1("Expand", expr_copy(den)); m = 1; }
+        expr_free(den);
+
+        Expr* a2  = coeff_of(base, s, 2);
+        Expr* a1  = coeff_of(base, s, 1);
+        Expr* a0  = coeff_of(base, s, 0);
+        Expr* B   = coeff_of(num,  s, 1);
+        Expr* C   = coeff_of(num,  s, 0);
+        Expr* nHi = coeff_of(num,  s, 2);
+        expr_free(base); expr_free(num);
+        bool numlin = nHi && is_zero_q(nHi) && B && C &&
+                      !contains_symbol(B, s) && !contains_symbol(C, s);
+        if (nHi) expr_free(nHi);
+        bool quad = a2 && !is_zero_q(a2);
+        if (!numlin || !a1 || !a0) {
+            if (a2) expr_free(a2); if (a1) expr_free(a1); if (a0) expr_free(a0);
+            if (B) expr_free(B); if (C) expr_free(C); ok = false; break;
+        }
+
+        if (quad) {
+            /* base = a2[(s+β0)^2 + γ2], β0 = a1/(2 a2), γ2 = a0/a2 - β0^2 > 0. */
+            if (m != 1) { expr_free(a2);expr_free(a1);expr_free(a0);expr_free(B);expr_free(C); ok=false; break; }
+            Expr* beta0 = ev1("Simplify", t_mul(a1, t_pow(t_mul(mk_int(2), expr_copy(a2)), -1)));
+            Expr* g2    = ev1("Simplify", t_add(t_mul(a0, t_pow(expr_copy(a2), -1)),
+                                                t_neg(t_pow(expr_copy(beta0), 2))));
+            if (!beta0 || !g2 || !real_positive(g2, pb, np)) {
+                if (beta0) expr_free(beta0); if (g2) expr_free(g2);
+                expr_free(a2); expr_free(B); expr_free(C); ok = false; break;
+            }
+            Expr* gam = ev1("Simplify", mk_fn2("Power", expr_copy(g2), t_rat(1, 2)));
+            /* logcoeff += B/a2  (Log((s+β0)^2+γ^2) ~ 2 Log s at ∞). */
+            logcoeff = t_add(logcoeff, t_mul(expr_copy(B), t_pow(expr_copy(a2), -1)));
+            /* finite log at 0: -(B/(2 a2)) Log(β0^2 + γ^2). */
+            total = t_add(total,
+                t_mul(t_neg(t_mul(expr_copy(B), t_pow(t_mul(mk_int(2), expr_copy(a2)), -1))),
+                      mk_fn1("Log", t_add(t_pow(expr_copy(beta0), 2), expr_copy(g2)))));
+            /* ArcTan part: coef * [ArcTan((s+β0)/γ)]_0^∞ = coef*(π/2 - ArcTan(β0/γ)),
+             * coef = (C - B β0)/(a2 γ).  For β0 > 0 present the boundary value in
+             * the reciprocal-free form ArcTan(γ/β0) (= π/2 - ArcTan(β0/γ)); this
+             * keeps a decaying-sinc result as ArcTan[q/p] rather than
+             * π/2 - ArcTan[p/q], which the parameter back-integration cannot
+             * integrate (the engine chokes on ArcTan of a reciprocal argument). */
+            Expr* coef = t_mul(t_add(expr_copy(C), t_neg(t_mul(expr_copy(B), expr_copy(beta0)))),
+                               t_pow(t_mul(expr_copy(a2), expr_copy(gam)), -1));
+            Expr* atval;
+            if (real_positive(beta0, pb, np))
+                atval = mk_fn1("ArcTan", t_mul(expr_copy(gam), t_pow(expr_copy(beta0), -1)));
+            else
+                atval = t_add(t_mul(t_rat(1, 2), mk_sym("Pi")),
+                              t_neg(mk_fn1("ArcTan", t_mul(expr_copy(beta0), t_pow(expr_copy(gam), -1)))));
+            total = t_add(total, t_mul(coef, atval));
+            expr_free(a2); expr_free(B); expr_free(C);
+            expr_free(beta0); expr_free(g2); expr_free(gam);
+        } else {
+            /* Simple real factor: (s+r)^m, r = a0/a1 > 0 (pole off [0,∞)); after
+             * Apart a linear-power term has a CONSTANT numerator (B == 0). */
+            expr_free(a2);
+            Expr* r = ev1("Simplify", t_mul(expr_copy(a0), t_pow(expr_copy(a1), -1)));
+            if (!is_zero_q(B) || !r || !real_positive(r, pb, np)) {
+                expr_free(a1); expr_free(a0); expr_free(B); expr_free(C);
+                if (r) expr_free(r); ok = false; break;
+            }
+            if (m == 1) {
+                Expr* co = ev1("Simplify", t_mul(expr_copy(C), t_pow(expr_copy(a1), -1))); /* A/a1 */
+                logcoeff = t_add(logcoeff, expr_copy(co));
+                total = t_add(total, t_neg(t_mul(co, mk_fn1("Log", expr_copy(r)))));
+            } else {
+                /* (A/a1^m) r^{1-m}/(m-1). */
+                total = t_add(total,
+                    t_mul(t_mul(expr_copy(C), t_pow(expr_copy(a1), -m)),
+                          t_mul(t_pow(expr_copy(r), 1 - m), t_rat(1, m - 1))));
+            }
+            expr_free(a1); expr_free(a0); expr_free(B); expr_free(C); expr_free(r);
+        }
+    }
+    expr_free(ap);
+    if (ok && !is_zero_with(logcoeff, assumptions)) ok = false;   /* divergent */
+    expr_free(logcoeff);
+    if (!ok) { expr_free(total); return NULL; }
+    Expr* res = simplify_with(total, assumptions);
+    expr_free(total);
+    if (res && is_finite_value(res) && !contains_symbol(res, s)) return res;
+    if (res) expr_free(res);
+    return NULL;
+}
+
+/* Gaussian moment half-line: ∫₀^∞ c x^n e^{-p x^2} {1 | Cos[q x]} dx (p > 0),
+ *   no trig:      (c/2) Γ((n+1)/2) p^{-(n+1)/2}   [n = 0 gives (c/2) Sqrt(π/p)],
+ *   cosine, n=0:  (c/2) Sqrt(π/p) e^{-q^2/(4 p)}.
+ * The Sin moment is a Dawson/Erfi form and is deliberately declined: the
+ * DiffUnderInt targets differentiate the Sin away (∫₀^∞ e^{-x^2} Sin[a x]/x dx
+ * differentiates to the cosine moment).  Returns NULL for any other form. */
+static Expr* gaussian_halfline(const Expr* g, const Expr* x,
+                               const ParamBound* pb, size_t np,
+                               const Expr* assumptions) {
+    if (!contains_gaussian_exp(g, x)) return NULL;    /* fast reject non-Gaussian */
+    Expr* gg = ev1("Expand", expr_copy((Expr*)g));
+    if (!gg) return NULL;
+    size_t nt; Expr** terms; Expr* single[1];
+    if (head_name_is(gg, "Plus")) { nt = gg->data.function.arg_count; terms = gg->data.function.args; }
+    else { nt = 1; single[0] = gg; terms = single; }
+
+    Expr* total = mk_int(0);
+    bool ok = true;
+    for (size_t t = 0; t < nt && ok; t++) {
+        Expr* T = terms[t];
+        Expr* facbuf[64];
+        size_t nf = collect_factors(T, facbuf, 64, 0);
+        Expr* exparg = NULL;             /* the -p x^2 (+off) exponent */
+        Expr* qcos   = NULL;             /* q x from a single Cos[q x] factor */
+        bool sawsin = false, multi_exp = false, multi_trig = false;
+        Expr* rest = mk_int(1);
+        for (size_t i = 0; i < nf; i++) {
+            Expr* F = facbuf[i];
+            const Expr* ea = NULL;
+            if (head_name_is(F, "Exp") && F->data.function.arg_count == 1) ea = F->data.function.args[0];
+            else if (head_name_is(F, "Power") && F->data.function.arg_count == 2 &&
+                     F->data.function.args[0]->type == EXPR_SYMBOL &&
+                     strcmp(F->data.function.args[0]->data.symbol, "E") == 0) ea = F->data.function.args[1];
+            if (ea) { if (exparg) multi_exp = true; else exparg = expr_copy((Expr*)ea); continue; }
+            if ((head_name_is(F, "Cos") || head_name_is(F, "Sin")) &&
+                F->data.function.arg_count == 1 && contains_symbol(F->data.function.args[0], x)) {
+                if (qcos || sawsin) multi_trig = true;
+                if (head_name_is(F, "Sin")) sawsin = true;
+                else qcos = expr_copy(F->data.function.args[0]);
+                continue;
+            }
+            rest = t_mul(rest, expr_copy(F));
+        }
+        if (!exparg || multi_exp || multi_trig || sawsin) {
+            if (exparg) expr_free(exparg); if (qcos) expr_free(qcos); expr_free(rest);
+            ok = false; break;
+        }
+        /* exponent = -p x^2 + off, no linear term. */
+        Expr* p   = ev1("Simplify", t_neg(mk_fn3("Coefficient", expr_copy(exparg), expr_copy((Expr*)x), mk_int(2))));
+        Expr* lin = ev1("Simplify", mk_fn3("Coefficient", expr_copy(exparg), expr_copy((Expr*)x), mk_int(1)));
+        Expr* off = ev1("Simplify", mk_fn3("Coefficient", expr_copy(exparg), expr_copy((Expr*)x), mk_int(0)));
+        expr_free(exparg);
+        bool pform = lin && is_zero_q(lin) && p && real_positive(p, pb, np);
+        if (lin) expr_free(lin);
+        /* rest = c x^n. */
+        Expr* restc = ev1("Simplify", rest);
+        long n = x_monomial_degree(restc, x);
+        Expr* one = mk_int(1);
+        Expr* c = (n >= 0) ? subst(restc, x, one) : NULL;
+        expr_free(one); expr_free(restc);
+        if (!pform || n < 0 || !c || contains_symbol(c, x)) {
+            if (c) expr_free(c); if (p) expr_free(p); if (off) expr_free(off);
+            if (qcos) expr_free(qcos); ok = false; break;
+        }
+        Expr* ce = t_mul(c, mk_fn1("Exp", off));   /* c e^{off} */
+        Expr* ti = NULL;
+        if (qcos) {
+            /* q x must be pure linear: q = Coefficient[.,x,1], no constant part. */
+            Expr* q  = ev1("Simplify", mk_fn3("Coefficient", expr_copy(qcos), expr_copy((Expr*)x), mk_int(1)));
+            Expr* q0 = ev1("Simplify", mk_fn3("Coefficient", qcos, expr_copy((Expr*)x), mk_int(0)));
+            bool qok = n == 0 && q && q0 && is_zero_q(q0) && !contains_symbol(q, x);
+            if (q0) expr_free(q0);
+            if (!qok) { if (q) expr_free(q); expr_free(ce); expr_free(p); ok = false; break; }
+            /* (c e^{off}/2) Sqrt(π/p) e^{-q^2/(4 p)} */
+            ti = t_mul(t_mul(t_rat(1, 2), ce),
+                   t_mul(mk_fn2("Power", t_mul(mk_sym("Pi"), t_pow(expr_copy(p), -1)), t_rat(1, 2)),
+                         mk_fn1("Exp", t_mul(t_rat(-1, 4), t_mul(t_pow(q, 2), t_pow(expr_copy(p), -1))))));
+            expr_free(p);
+        } else {
+            /* (c e^{off}/2) Γ((n+1)/2) p^{-(n+1)/2} */
+            ti = t_mul(t_mul(t_rat(1, 2), ce),
+                   t_mul(mk_fn1("Gamma", t_rat(n + 1, 2)),
+                         mk_fn2("Power", p, t_rat(-(n + 1), 2))));
+        }
+        total = t_add(total, ti);
+    }
+    expr_free(gg);
+    if (!ok) { expr_free(total); return NULL; }
+    Expr* res = simplify_with(total, assumptions);
+    expr_free(total);
+    if (res && is_finite_value(res) && !contains_symbol(res, x)) return res;
+    if (res) expr_free(res);
+    return NULL;
+}
+
+/* Gaussian parameter back-integration: ∫ c e^{-k p^2} dp = c (1/2) Sqrt(π/k) Erf(Sqrt(k) p),
+ * for a J that is a sum of pure Gaussian-in-p terms (k a positive real constant).
+ * The engine does not produce this Erf antiderivative, so DiffUnderInt supplies
+ * it directly; NULL for anything non-Gaussian (the engine handles those). */
+static Expr* integrate_gaussian_param(const Expr* J, const Expr* p) {
+    if (!contains_gaussian_exp(J, p)) return NULL;
+    Expr* jj = ev1("Expand", expr_copy((Expr*)J));
+    if (!jj) return NULL;
+    size_t nt; Expr** terms; Expr* single[1];
+    if (head_name_is(jj, "Plus")) { nt = jj->data.function.arg_count; terms = jj->data.function.args; }
+    else { nt = 1; single[0] = jj; terms = single; }
+
+    Expr* total = mk_int(0);
+    bool ok = true;
+    for (size_t t = 0; t < nt && ok; t++) {
+        Expr* T = terms[t];
+        Expr* facbuf[64];
+        size_t nf = collect_factors(T, facbuf, 64, 0);
+        Expr* exparg = NULL; bool multi_exp = false;
+        Expr* rest = mk_int(1);
+        for (size_t i = 0; i < nf; i++) {
+            Expr* F = facbuf[i];
+            const Expr* ea = NULL;
+            if (head_name_is(F, "Exp") && F->data.function.arg_count == 1) ea = F->data.function.args[0];
+            else if (head_name_is(F, "Power") && F->data.function.arg_count == 2 &&
+                     F->data.function.args[0]->type == EXPR_SYMBOL &&
+                     strcmp(F->data.function.args[0]->data.symbol, "E") == 0) ea = F->data.function.args[1];
+            if (ea) { if (exparg) multi_exp = true; else exparg = expr_copy((Expr*)ea); continue; }
+            rest = t_mul(rest, expr_copy(F));
+        }
+        if (!exparg || multi_exp) { if (exparg) expr_free(exparg); expr_free(rest); ok = false; break; }
+        /* exponent = -k p^2 + off, no linear term, k a positive constant. */
+        Expr* k   = ev1("Simplify", t_neg(mk_fn3("Coefficient", expr_copy(exparg), expr_copy((Expr*)p), mk_int(2))));
+        Expr* lin = ev1("Simplify", mk_fn3("Coefficient", expr_copy(exparg), expr_copy((Expr*)p), mk_int(1)));
+        Expr* off = ev1("Simplify", mk_fn3("Coefficient", expr_copy(exparg), expr_copy((Expr*)p), mk_int(0)));
+        expr_free(exparg);
+        double kv;
+        bool kok = lin && is_zero_q(lin) && k && numeric_double(k, &kv) && kv > 1e-12;
+        if (lin) expr_free(lin);
+        /* rest must be a p-free constant c (poly x Gaussian antiderivatives are
+         * not elementary in general). */
+        Expr* c = ev1("Simplify", rest);
+        if (!kok || !c || contains_symbol(c, p)) {
+            if (c) expr_free(c); if (k) expr_free(k); if (off) expr_free(off);
+            ok = false; break;
+        }
+        Expr* ce = t_mul(c, mk_fn1("Exp", off));
+        /* c e^{off} (1/2) Sqrt(π/k) Erf(Sqrt(k) p) */
+        Expr* ti = t_mul(t_mul(t_rat(1, 2), ce),
+                     t_mul(mk_fn2("Power", t_mul(mk_sym("Pi"), t_pow(expr_copy(k), -1)), t_rat(1, 2)),
+                           mk_fn1("Erf", t_mul(mk_fn2("Power", k, t_rat(1, 2)), expr_copy((Expr*)p)))));
+        total = t_add(total, ti);
+    }
+    expr_free(jj);
+    if (!ok) { expr_free(total); return NULL; }
+    Expr* res = ev1("Simplify", total);
+    if (res && is_finite_value(res)) return res;
+    if (res) expr_free(res);
+    return NULL;
+}
+
 /* Region-aware inner definite integral.
  *
  * The general integrator HANGS (uninterruptibly from inside this builtin --
@@ -837,6 +1149,8 @@ static Expr* inner_definite(const Expr* g, const Expr* x, const Expr* a,
         Expr* r = laplace_halfline(g, x, pb, np, assumptions);
         if (!r) r = laplace_sinc_halfline(g, x, pb, np, assumptions);
         if (!r) r = rational_halfline(g, x, pb, np, assumptions);
+        if (!r) r = rational_halfline_general(g, x, pb, np, assumptions);
+        if (!r) r = gaussian_halfline(g, x, pb, np, assumptions);
 #ifdef DIUI_DEBUG
         fprintf(stderr, "DIUI:   [%.0fms] half-line family -> %s\n",
                 diui_ms(), r ? "HIT" : "miss");
@@ -899,6 +1213,24 @@ static bool find_base(const Expr* f, const Expr* x, const Expr* a, const Expr* b
     }
     for (size_t i = 0; i < nc; i++) expr_free(cands[i]);
     return found;
+}
+
+/* Output cleanup.  Simplify canonicalises c*Log[w] into the contracted
+ * Log[w^c] form (e.g. -(1/2)Log[u] + (1/2)Log[v] -> Log[1/Sqrt[u]] + Log[Sqrt[v]]),
+ * which reads poorly for the Frullani/Laplace family results.  1-arg PowerExpand
+ * pulls those powers back out; we keep the expanded form ONLY when it is provably
+ * equal to the verified answer (Simplify[clean - I] === 0 under the assumptions),
+ * so a branch-changing PowerExpand can never corrupt a correct result.  Borrows
+ * `I`; returns an owned cleaned copy, or NULL to keep `I` as-is. */
+static Expr* diui_finalize(const Expr* I, const Expr* assumptions) {
+    Expr* clean = ev1("PowerExpand", expr_copy((Expr*)I));
+    if (!clean) return NULL;
+    Expr* diff = t_add(expr_copy(clean), t_neg(expr_copy((Expr*)I)));
+    bool same = is_zero_with(diff, assumptions);
+    expr_free(diff);
+    if (same && is_finite_value(clean)) return clean;
+    expr_free(clean);
+    return NULL;
 }
 
 /* -------------------------------------------------------------------------
@@ -981,7 +1313,11 @@ static Expr* stage_quadrature(const Expr* f, const Expr* x, const Expr* a,
         fprintf(stderr, "DIUI:   [%.0fms] verify D[I,p]-J==0 : %s\n", diui_ms(), ok ? "PASS" : "FAIL");
 #endif
         expr_free(J); expr_free(p);
-        if (ok) return I;
+        if (ok) {
+            Expr* cl = diui_finalize(I, assumptions);
+            if (cl) { expr_free(I); return cl; }
+            return I;
+        }
         if (I) expr_free(I);
     }
     return NULL;
@@ -995,11 +1331,13 @@ Expr* integrate_diffunderint_try(Expr* f, Expr* x, Expr* a, Expr* b,
     if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
     if (!contains_symbol(f, x)) return NULL;          /* no x: not our business */
     if (diui_depth >= DIUI_MAX_DEPTH) return NULL;
-    /* Decline Gaussian / singular-exponent integrands: the underlying
-     * integrator hangs on Exp[nonlinear-in-x], so attempting the inner
-     * differentiated integral would never return.  (These need a dedicated
-     * Gaussian moment-integral closer -- see the Stage D follow-up.) */
-    if (contains_gaussian_exp(f, x)) return NULL;
+    /* Gaussian integrands (Exp[-p x^2], ...) are now handled: the half-line inner
+     * integrals go only to the closed-form families (never the general engine,
+     * which hangs on Exp[nonlinear-in-x]), gaussian_halfline supplies the moment
+     * integrals, and integrate_gaussian_param supplies the Erf back-integration.
+     * A finite-region Gaussian is still declined inside inner_definite (it would
+     * hand the engine a hanging form), so such f simply finds no closing
+     * parameter and returns unevaluated -- no hang. */
 
     /* Free parameters of the integrand (besides x). */
     ParamBound pb[16];
@@ -1007,8 +1345,14 @@ Expr* integrate_diffunderint_try(Expr* f, Expr* x, Expr* a, Expr* b,
     if (np == 0) return NULL;                         /* no parameter to vary */
     if (assumptions) absorb_fact(pb, np, assumptions);
 
+    /* The method probes many divergent candidate sub-expressions (Limit at a
+     * pole, 1/0 in a degenerate family M(s), ...).  Those arithmetic warnings
+     * are spurious search noise -- mute them like Limit does, keeping the return
+     * values (ComplexInfinity/Indeterminate) that gate the search unchanged. */
     diui_depth++;
+    arith_warnings_mute_push();
     Expr* result = stage_quadrature(f, x, a, b, assumptions, pb, np);
+    arith_warnings_mute_pop();
     diui_depth--;
     return result;
 }

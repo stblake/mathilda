@@ -663,16 +663,24 @@ forms.
 Because the general integrator is slow/hangs on the parameter-dependent inner
 integrals Feynman's trick produces, `DiffUnderInt` evaluates the standard
 families itself with closed-form formulas: the **Laplace/Fourier half-line**
-`∫₀^∞ xⁿ e^{-p x}{1,cos,sin} dx`, the **sinc/Frullani** `∫₀^∞ …/x dx`, and the
-**even-rational half-line** `∫₀^∞ P(x)/Q(x²) dx`. Forms outside these families
-(Gaussians, finite-period trig, piecewise/`Min`-`Max` results) are declined —
-the integral is returned unevaluated, fast, never a wrong value.
+`∫₀^∞ xⁿ e^{-p x}{1,cos,sin} dx`, the **sinc/Frullani** `∫₀^∞ …/x dx`, the
+**even-rational half-line** `∫₀^∞ P(x)/Q(x²) dx`, the **general (non-even)
+rational half-line** `∫₀^∞ R(s) ds` (real `ArcTan`/`Log` boundary values — this
+is what closes a *decaying* sinc such as `∫₀^∞ e^{-p x} Sin[q x]/x dx = ArcTan[q/p]`
+whose Laplace image is non-even), and the **Gaussian moment** family
+`∫₀^∞ xⁿ e^{-p x²}{1,cos} dx` in `Sqrt[Pi]`/`e^{-q²/4p}`. The Gaussian
+parameter back-integration `∫ c e^{-k p²} dp` is supplied directly as an `Erf`
+(the engine does not produce it). Forms outside these families (finite-period
+trig, piecewise/`Min`-`Max` results, the Sin-Gaussian Dawson/Erfi moment) are
+declined — the integral is returned unevaluated, fast, never a wrong value.
 
 Worked examples that close:
 `Integrate[(x^a-1)/Log[x], {x,0,1}]` → `Log[1+a]`;
 `Integrate[Exp[-a x] Sin[b x]/x, {x,0,Infinity}, Assumptions->a>0]` → `ArcTan[b/a]`;
 `Integrate[Sin[a x]^2/x^2, {x,0,Infinity}, Assumptions->a>0]` → `π a/2`;
-`Integrate[Log[1+a^2 x^2]/(1+x^2), {x,0,Infinity}, Assumptions->a>0]` → `π Log[1+a]`.
+`Integrate[Log[1+a^2 x^2]/(1+x^2), {x,0,Infinity}, Assumptions->a>0]` → `π Log[1+a]`;
+`Integrate[Exp[-c x](1-Cos[a x])/x^2, {x,0,Infinity}, Assumptions->{a>0,c>0}]` → `a ArcTan[a/c] − (c/2) Log[1+a²/c²]`;
+`Integrate[Exp[-x^2] Sin[a x]/x, {x,0,Infinity}]` → `(π/2) Erf[a/2]`.
 
 #### Mellin / Ramanujan Master Theorem (`Integrate\`RamanujanMasterTheorem`)
 

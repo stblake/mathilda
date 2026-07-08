@@ -113,6 +113,25 @@ static void test_rational_halfline(void) {
                   "Pi (a - Log[1 + a])", "a > 0");
 }
 
+/* Non-even (decaying) rational half-line: the differentiated inner integral is a
+ * DECAYING sinc ∫₀^∞ e^{-c x} Sin[a x]/x dx = ArcTan[a/c], whose Laplace image
+ * M(s) = a/((s+c)^2+a^2) is non-even -> rational_halfline_general, producing a
+ * real ArcTan directly (no complex-Log reduction). */
+static void test_rational_halfline_general(void) {
+    assert_closes("Integrate[Exp[-c x] (1 - Cos[a x])/x^2, {x, 0, Infinity}, "
+                  "Method -> \"DiffUnderInt\", Assumptions -> {a > 0, c > 0}]",
+                  "a ArcTan[a/c] - c/2 Log[1 + a^2/c^2]", "a > 0 && c > 0");
+}
+
+/* Gaussian moment family + Erf back-integration: differentiating removes the 1/x
+ * to leave the cosine moment ∫₀^∞ e^{-x^2} Cos[a x] dx = (Sqrt[Pi]/2) e^{-a^2/4},
+ * whose parameter integral is an Erf the engine cannot produce. */
+static void test_gaussian(void) {
+    assert_closes("Integrate[Exp[-x^2] Sin[a x]/x, {x, 0, Infinity}, "
+                  "Method -> \"DiffUnderInt\"]",
+                  "Pi/2 Erf[a/2]", "");
+}
+
 /* Reachable three ways: Method string, the alias, and the direct builtin. */
 static void test_routing(void) {
     assert_closes("Integrate[(x^a - 1)/Log[x], {x, 0, 1}, "
@@ -130,7 +149,10 @@ static void test_routing(void) {
 /* Safety: integrands the method cannot yet close return the input unevaluated
  * *fast* (never hang) rather than a wrong value. */
 static void test_declines_cleanly(void) {
-    /* Gaussian: declined up front (engine cannot integrate e^{-x^2}). */
+    /* Gaussian cosine moment: DiffUnderInt differentiates the parameter into a
+     * Sin-Gaussian (a Dawson/Erfi form the moment family declines), so no
+     * parameter closes and it returns unevaluated fast -- this integrand is
+     * directly integrable by a Gaussian family, not a Feynman target. */
     assert_head_unevaluated(
         "Integrate[Exp[-x^2] Cos[2 a x], {x, 0, Infinity}, "
         "Method -> \"DiffUnderInt\"]", "Integrate");
@@ -147,6 +169,8 @@ void test_integrate_diffunderint(void) {
     TEST(test_laplace_fourier);
     TEST(test_sinc);
     TEST(test_rational_halfline);
+    TEST(test_rational_halfline_general);
+    TEST(test_gaussian);
     TEST(test_routing);
     TEST(test_declines_cleanly);
 
