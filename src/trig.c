@@ -1153,6 +1153,10 @@ Expr* builtin_arctan(Expr* res) {
         // ArcTan[I y] -> I ArcTanh[y]
         { Expr* f = trig_i_fold(arg, "ArcTanh", +1); if (f) return f; }
 
+        // ArcTan[Infinity] = Pi/2  (ArcTan[-Infinity] -> -Pi/2 via the odd fold above)
+        if (is_infinity_sym(arg))
+            return make_times(make_rational(1, 2), expr_new_symbol(SYM_Pi));
+
         // Attempt exact inverse evaluation
         Expr* exact = exact_arctan(arg);
         if (exact) return exact;
@@ -1250,6 +1254,9 @@ Expr* builtin_arccot(Expr* res) {
     // ArcCot[I y] -> -I ArcCoth[y]
     { Expr* f = trig_i_fold(arg, "ArcCoth", -1); if (f) return f; }
 
+    // ArcCot[Infinity] = 0  (ArcCot[-Infinity] -> 0 via the odd fold above)
+    if (is_infinity_sym(arg)) return expr_new_integer(0);
+
     // Attempt exact inverse evaluation
     Expr* exact = exact_arccot(arg);
     if (exact) return exact;
@@ -1286,6 +1293,10 @@ Expr* builtin_arcsec(Expr* res) {
 
     // ArcSec[-x] -> Pi - ArcSec[x]
     { Expr* f = arc_pi_minus_fold(arg, "ArcSec"); if (f) return f; }
+
+    // ArcSec[+-Infinity] = Pi/2  (ArcSec[-Infinity] -> Pi - Pi/2 via the fold above)
+    if (is_infinity_sym(arg))
+        return make_times(make_rational(1, 2), expr_new_symbol(SYM_Pi));
 
     // Attempt exact inverse evaluation
     Expr* exact = exact_arcsec(arg);
@@ -1326,6 +1337,9 @@ Expr* builtin_arccsc(Expr* res) {
 
     // ArcCsc[I y] -> -I ArcCsch[y]
     { Expr* f = trig_i_fold(arg, "ArcCsch", -1); if (f) return f; }
+
+    // ArcCsc[Infinity] = 0  (ArcCsc[-Infinity] -> 0 via the odd fold above)
+    if (is_infinity_sym(arg)) return expr_new_integer(0);
 
     // Attempt exact inverse evaluation
     Expr* exact = exact_arccsc(arg);

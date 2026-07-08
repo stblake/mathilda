@@ -3360,6 +3360,93 @@ static Expr* try_series_ei_at_infinity(Expr* f, Expr* x, int64_t n) {
     return mk_times(mk_fn1("Exp", expr_copy(x)), series);
 }
 
+/* Shared multiplier for the error-function asymptotic expansions at x = Infinity
+ * (DLMF 7.12.1). Each of Erf/Erfc/Erfi is  prefactor(Exp[±x^2]) times a series
+ *
+ *   Sum_{k>=0} a_k / x^(2k+1),   a_0 = lead_sign / Sqrt[Pi],
+ *   a_k = a_{k-1} * ratio_sign * (2k-1)/2.
+ *
+ * Only the odd 1/x powers (2k+1) are populated; the even slots are 0. The result
+ * is a Laurent series in 1/x, matching Mathilda's Infinity convention (expansion
+ * variable Power[x,-1], x0 = 0). Order n fills 1/x exponents 1..n with an O-term
+ * at n+1, mirroring the ExpIntegralEi hook above. */
+static Expr* erf_family_series(Expr* x, int64_t n, int lead_sign, int ratio_sign) {
+    if (n < 1) n = 1;
+    size_t ncoef = (size_t)n;                 /* 1/x exponents 1 .. n */
+    Expr** coefs = calloc(ncoef, sizeof(Expr*));
+    for (size_t i = 0; i < ncoef; i++) coefs[i] = expr_new_integer(0);
+
+    /* a_0 = lead_sign * Pi^(-1/2), living at 1/x exponent 1 (index 0). */
+    Expr* ak = eval_and_free(mk_times(expr_new_integer(lead_sign),
+                                      mk_power(mk_symbol("Pi"), make_rational(-1, 2))));
+    for (int64_t k = 0; ; k++) {
+        size_t idx = (size_t)(2 * k + 1 - 1); /* exponent 2k+1, nmin = 1 */
+        if (idx >= ncoef) { expr_free(ak); break; }
+        expr_free(coefs[idx]);
+        coefs[idx] = expr_copy(ak);
+        /* a_{k+1} = a_k * ratio_sign * (2(k+1)-1)/2 = a_k * ratio_sign*(2k+1)/2. */
+        ak = eval_and_free(mk_times(ak, make_rational(ratio_sign * (2 * k + 1), 2)));
+    }
+
+    Expr* coef_list = expr_new_function(mk_symbol("List"), coefs, ncoef);
+    free(coefs);
+
+    Expr** sd = calloc(6, sizeof(Expr*));
+    sd[0] = mk_power(expr_copy(x), expr_new_integer(-1)); /* expansion var 1/x */
+    sd[1] = expr_new_integer(0);                          /* x0 (in 1/x)       */
+    sd[2] = coef_list;                                    /* coefficients      */
+    sd[3] = expr_new_integer(1);                          /* nmin              */
+    sd[4] = expr_new_integer(n + 1);                      /* nmax (O-term)     */
+    sd[5] = expr_new_integer(1);                          /* denominator       */
+    Expr* series = expr_new_function(mk_symbol("SeriesData"), sd, 6);
+    free(sd);
+    return series;
+}
+
+/* Build the Exp[±x^2] essential-singularity prefactor. */
+static Expr* erf_exp_prefactor(Expr* x, int sign) {
+    Expr* xsq = mk_power(expr_copy(x), expr_new_integer(2));
+    if (sign < 0) xsq = mk_times(expr_new_integer(-1), xsq);
+    return mk_fn1("Exp", xsq);
+}
+
+/* Asymptotic expansion of Erf[x] at x = Infinity (DLMF 7.12.1):
+ *
+ *   Erf(x) ~ 1 - E^(-x^2)/Sqrt[Pi] (1/x - 1/(2x^3) + 3/(4x^5) - ...).
+ *
+ * The constant 1 is the limit; the E^(-x^2) essential singularity stays a
+ * symbolic prefactor multiplying a Laurent series in 1/x, so the result is
+ *   Plus[1, Times[Exp[-x^2], SeriesData[1/x, 0, {-1/Sqrt[Pi], 0, ...}, 1, n+1, 1]]].
+ * Returns NULL unless f is exactly Erf[x] in the expansion variable. */
+static Expr* try_series_erf_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "Erf") || f->data.function.arg_count != 1) return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+    Expr* mult = erf_family_series(x, n, -1, -1);   /* -1/Sqrt[Pi], alternating */
+    return mk_plus(expr_new_integer(1),
+                   mk_times(erf_exp_prefactor(x, -1), mult));
+}
+
+/* Erfc(x) = 1 - Erf(x) ~ E^(-x^2)/Sqrt[Pi] (1/x - 1/(2x^3) + ...). No constant
+ * term (Erfc -> 0); the multiplier is the negation of Erf's. */
+static Expr* try_series_erfc_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "Erfc") || f->data.function.arg_count != 1) return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+    Expr* mult = erf_family_series(x, n, +1, -1);   /* +1/Sqrt[Pi], alternating */
+    return mk_times(erf_exp_prefactor(x, -1), mult);
+}
+
+/* Erfi(x) = -I Erf(I x) ~ E^(x^2)/Sqrt[Pi] (1/x + 1/(2x^3) + 3/(4x^5) + ...).
+ * All-positive coefficients, growing prefactor Exp[+x^2] (Erfi -> Infinity). */
+static Expr* try_series_erfi_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "Erfi") || f->data.function.arg_count != 1) return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+    Expr* mult = erf_family_series(x, n, +1, +1);   /* +1/Sqrt[Pi], all positive */
+    return mk_times(erf_exp_prefactor(x, +1), mult);
+}
+
 /* Asymptotic expansion of AiryAi[x] at x = Infinity (DLMF 9.7.5):
  *
  *   Ai(x) ~ E^(-zeta) / (2 Sqrt[Pi] x^(1/4)) Sum_{k>=0} (-1)^k u_k / zeta^k,
@@ -4678,6 +4765,26 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
             expr_free(f_eval);
             expr_free(x0_eval);
             return by;
+        }
+        /* Error functions at Infinity: DLMF 7.12.1 asymptotic expansions,
+         * each an Exp[±x^2] essential singularity times a Laurent series. */
+        Expr* erf = try_series_erf_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (erf) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return erf;
+        }
+        Expr* erfc = try_series_erfc_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (erfc) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return erfc;
+        }
+        Expr* erfi = try_series_erfi_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (erfi) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return erfi;
         }
         /* ProductLog[x] at Infinity: nested-logarithm asymptotic expansion
          * (the x^0 coefficient), not a power series in 1/x. */

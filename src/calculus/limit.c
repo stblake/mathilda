@@ -322,7 +322,7 @@ static Expr* layer3_rational(Expr* f, LimitCtx* ctx);
 static Expr* layer5_lhospital(Expr* f, LimitCtx* ctx);
 static Expr* layer5_log_reduction(Expr* f, LimitCtx* ctx);
 static Expr* layer6_bounded(Expr* f, LimitCtx* ctx);
-static Expr* layer_arctan_infinity(Expr* f, LimitCtx* ctx);
+static Expr* layer_compose_at_infinity(Expr* f, LimitCtx* ctx);
 static Expr* layer_bounded_envelope(Expr* f, LimitCtx* ctx);
 static Expr* layer_log_merge(Expr* f, LimitCtx* ctx);
 static Expr* layer_log_of_finite(Expr* f, LimitCtx* ctx);
@@ -358,6 +358,16 @@ static int64_t growth_exponent_upper(Expr* e, Expr* x);
 /* 1 + E^x/2 - E^-x/2 and division by E^x cancels to E^-x + 1/2 - ...,    */
 /* which the termwise-Plus layer then folds to 1/2.                       */
 /* ---------------------------------------------------------------------- */
+/* True iff e is a single-argument application of a hyperbolic head that has a
+ * well-defined value at Infinity (so the compose-at-infinity layer can fold it
+ * directly instead of going through the exp rewrite). */
+static bool is_bare_hyperbolic_call(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 1)
+        return false;
+    return head_is(e, SYM_Sinh) || head_is(e, SYM_Cosh) || head_is(e, SYM_Tanh) ||
+           head_is(e, SYM_Coth) || head_is(e, SYM_Sech) || head_is(e, SYM_Csch);
+}
+
 static Expr* rewrite_hyperbolic_to_exp(Expr* e) {
     if (!e) return NULL;
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
@@ -1473,44 +1483,65 @@ static Expr* layer6_bounded(Expr* f, LimitCtx* ctx) {
     return mk_sym("Indeterminate");
 }
 
+/* Recursively true iff any node of `e` is a function application whose head is
+ * the interned symbol `head_sym`. Used to decide whether `head[Infinity]`
+ * actually reduced (head gone) or stayed unevaluated. */
+static bool contains_head_symbol(Expr* e, const char* head_sym) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == head_sym) return true;
+    if (contains_head_symbol(e->data.function.head, head_sym)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (contains_head_symbol(e->data.function.args[i], head_sym)) return true;
+    return false;
+}
+
 /* ---------------------------------------------------------------------- */
-/* Layer -- ArcTan / ArcCot at +/-Infinity                                 */
+/* Layer -- f[g(x)] at +/-Infinity via the head's own value at Infinity     */
 /*                                                                         */
-/*     ArcTan[h(x)] as x -> a, where h(x) -> +Infinity  ->  Pi/2           */
-/*                                             -Infinity -> -Pi/2          */
-/*     ArcCot[h(x)] as x -> a, where h(x) -> +Infinity  ->  0              */
-/*                                             -Infinity -> Pi             */
-/* Series cannot see through ArcTan at an infinite inner argument, so we   */
-/* intercept this shape early.                                             */
+/* Generalises the old ArcTan/ArcCot special case. For a single-argument   */
+/* f[inner] whose inner argument diverges to +/-Infinity, apply f to that   */
+/* infinite limit and let the builtin fold it:                             */
+/*     Erf[Infinity] = 1,   Tanh[Infinity] = 1,   ArcTan[Infinity] = Pi/2,  */
+/*     Exp[Infinity] = Infinity,   Gamma[Infinity] = Infinity,   ...        */
+/* This is exact for every f that self-evaluates at Infinity -- precisely   */
+/* the functions that have a well-defined value there. Series cannot see    */
+/* through such heads at an infinite inner argument, so we intercept early. */
+/* Oscillatory heads (Sin, Cos) leave f[Infinity] unevaluated, so the       */
+/* residual-head guard rejects them and we fall through to the bounded/     */
+/* Interval layers (which return Indeterminate). Restricting to +/-Infinity  */
+/* (not ComplexInfinity) avoids direction-ambiguous folds.                  */
 /* ---------------------------------------------------------------------- */
-static Expr* layer_arctan_infinity(Expr* f, LimitCtx* ctx) {
-    if ((!head_is(f, SYM_ArcTan) && !head_is(f, SYM_ArcCot)) ||
-        f->data.function.arg_count != 1) {
-        return NULL;
-    }
+static Expr* layer_compose_at_infinity(Expr* f, LimitCtx* ctx) {
+    if (f->type != EXPR_FUNCTION || f->data.function.arg_count != 1) return NULL;
+    Expr* head = f->data.function.head;
+    if (!head || head->type != EXPR_SYMBOL) return NULL;
     Expr* inner = f->data.function.args[0];
     if (free_of(inner, ctx->x)) return NULL;
 
     LimitCtx sub = *ctx; sub.depth += 1;
     Expr* lim_inner = compute_limit(inner, &sub);
     if (!lim_inner) return NULL;
-
-    /* Preserve pending x by refusing if the inner limit kept x. */
     if (expr_contains(lim_inner, ctx->x)) { expr_free(lim_inner); return NULL; }
 
-    bool pos = is_infinity_sym(lim_inner);
-    bool neg = is_neg_infinity(lim_inner);
-    if (!pos && !neg) { expr_free(lim_inner); return NULL; }
-    expr_free(lim_inner);
-
-    if (head_is(f, SYM_ArcTan)) {
-        Expr* halfpi = mk_fn2("Times", mk_fn2("Power", mk_int(2), mk_int(-1)),
-                                       mk_sym("Pi"));
-        return pos ? halfpi : simp(mk_neg(halfpi));
+    if (!is_infinity_sym(lim_inner) && !is_neg_infinity(lim_inner)) {
+        expr_free(lim_inner);
+        return NULL;
     }
-    /* ArcCot */
-    if (pos) return mk_int(0);
-    return mk_sym("Pi");
+
+    /* Apply the head to the infinite inner limit and let the builtin evaluate
+     * it. mk_fn1 adopts lim_inner (via expr_new_function). */
+    Expr* val = simp(mk_fn1(head->data.symbol, lim_inner));
+
+    /* Accept only when the head actually resolved (no residual head[...] and no
+     * pending x). Rejects Sin[Infinity], Cos[Infinity], ... that stay symbolic. */
+    if (val && !contains_head_symbol(val, head->data.symbol) &&
+        !expr_contains(val, ctx->x)) {
+        return val;
+    }
+    expr_free(val);
+    return NULL;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -2334,19 +2365,30 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
         return NULL;
     }
 
-    /* Normalize reciprocal trig up-front. This is cheap (one tree walk +
-     * one evaluate) and rescues the continuous-substitution path on
-     * shapes like x Csc[x], x Cot[a x], Sec[2x] (1 - Tan[x]), etc. */
-    Expr* rewritten = rewrite_reciprocal_trig(f_in);
+    /* At an infinite point, a *bare* single hyperbolic call (Tanh[g], Coth[g],
+     * Sech[g], Csch[g], Sinh[g], Cosh[g]) is left completely intact -- both the
+     * reciprocal-trig normalization and the exp rewrite are skipped -- so
+     * layer_compose_at_infinity can fold it via the head's own value at
+     * Infinity (Tanh[Infinity]=1, Sech[Infinity]=0, Sinh[Infinity]=Infinity...).
+     * rewrite_reciprocal_trig would otherwise turn Tanh/Coth/Sech/Csch into
+     * Sinh/Cosh ratios, which the exp rewrite then expands into an
+     * asymptotically opaque quotient that the Series/termwise layers miss. */
+    bool at_inf = is_infinity_sym(ctx->point) || is_neg_infinity(ctx->point);
+    bool bare_hyp_at_inf = at_inf && is_bare_hyperbolic_call(f_in);
 
-    /* At Infinity the Sinh/Cosh/Tanh series kernels are misleading
-     * because their leading behaviour is dominated by a single Exp term.
-     * Rewrite them in exponential form so Series can see the dominant
-     * growth and the term-wise Plus layer can cancel decaying tails.
-     * We also Expand so shapes like `E^(-x) (1 + (E^x - E^-x)/2)` fold
-     * into `1/2 - E^(-2x)/2 + E^(-x)`, which the term-wise Plus layer
-     * can directly sum (each summand has a finite limit). */
-    if (is_infinity_sym(ctx->point) || is_neg_infinity(ctx->point)) {
+    /* Normalize reciprocal trig up-front. This is cheap (one tree walk + one
+     * evaluate) and rescues the continuous-substitution path on shapes like
+     * x Csc[x], x Cot[a x], Sec[2x] (1 - Tan[x]), etc. */
+    Expr* rewritten = bare_hyp_at_inf ? expr_copy(f_in)
+                                      : rewrite_reciprocal_trig(f_in);
+
+    /* At Infinity the Sinh/Cosh/Tanh series kernels are misleading because
+     * their leading behaviour is dominated by a single Exp term. Rewrite them
+     * in exponential form so Series can see the dominant growth and the
+     * term-wise Plus layer can cancel decaying tails. We also Expand so shapes
+     * like `E^(-x) (1 + (E^x - E^-x)/2)` fold into `1/2 - E^(-2x)/2 + E^(-x)`,
+     * which the term-wise Plus layer can directly sum. */
+    if (at_inf && !bare_hyp_at_inf) {
         Expr* r2 = rewrite_hyperbolic_to_exp(rewritten);
         expr_free(rewritten);
         rewritten = simp(mk_fn1("Expand", r2));
@@ -2393,8 +2435,9 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
      * Derivative[1][Abs][...] as a "clean" answer. */
     TRY(LIMIT_M_SUBSTITUTION, layer_abs_rewrite(f, ctx));
 
-    /* ArcTan / ArcCot of a divergent inner argument. */
-    TRY(LIMIT_M_ASYMPTOTIC, layer_arctan_infinity(f, ctx));
+    /* f[g(x)] at +/-Infinity via the head's own value there (Erf, Tanh,
+     * ArcTan, Exp, Gamma, ...). Generalises the old ArcTan/ArcCot rule. */
+    TRY(LIMIT_M_ASYMPTOTIC, layer_compose_at_infinity(f, ctx));
 
     /* Layer 3: rational function short-cut (P(x)/Q(x) classical forms). */
     TRY(LIMIT_M_RATIONAL, layer3_rational(f, ctx));

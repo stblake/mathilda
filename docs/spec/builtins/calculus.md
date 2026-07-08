@@ -224,7 +224,12 @@ Out[8]= 6 a b^2
   - `"Series"` — Taylor / Laurent / Puiseux leading-term expansion.
   - `"LHospital"` — L'Hospital's rule with growth guardrails.
   - `"Asymptotic"` — dominant-term / `Log` / exponential reductions at
-    infinity, including `f^g` via `Exp[g Log f]`.
+    infinity, including `f^g` via `Exp[g Log f]`, and the compose-at-infinity
+    rule: for `f[g(x)]` whose inner argument diverges to `±Infinity`, apply the
+    builtin's own value at Infinity (`Erf[Infinity] = 1`, `Tanh[Infinity] = 1`,
+    `ArcTan[Infinity] = Pi/2`, `Gamma[Infinity] = Infinity`, …). Functions that
+    do not self-evaluate there (oscillatory `Sin`, `Cos`) fall through and yield
+    `Indeterminate`.
   - `"Bounded"` — squeeze envelope and bounded-oscillation `Interval`.
 - May return a finite value, `Infinity`, `-Infinity`, `ComplexInfinity`,
   `Indeterminate`, an `Interval[{lo, hi}]`, or the original expression

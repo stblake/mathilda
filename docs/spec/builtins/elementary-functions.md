@@ -155,6 +155,28 @@ such as `-ArcTanh[x]` blows up at an interior pole, so a divergent integral like
 `Integrate[1/(x^2-1), {x, -Infinity, Infinity}]` correctly warns
 `Integrate::idiv` and returns unevaluated instead of a spurious finite value.
 
+### Values at Infinity
+
+The inverse-trig functions fold at `±Infinity` (Wolfram-faithful), so that both
+top-level evaluation and `Limit` return closed forms:
+
+```mathematica
+In[15]:= ArcTan[Infinity]
+Out[15]= Pi/2
+
+In[16]:= ArcCot[-Infinity]
+Out[16]= 0
+
+In[17]:= ArcSec[Infinity]
+Out[17]= Pi/2
+```
+
+`ArcTan[±Infinity] = ±Pi/2`, `ArcCot[±Infinity] = 0` (odd), `ArcSec[±Infinity] =
+Pi/2`, `ArcCsc[Infinity] = 0`; negative arguments are reached through the
+odd/`Pi`-minus fold. The circular functions `Sin`, `Cos`, `Tan`, … stay
+unevaluated at real infinities (they oscillate). See `Limit` in the calculus
+reference for how these feed the compose-at-infinity rule.
+
 
 ## TrigToExp
 Converts trigonometric and hyperbolic functions in `expr` to exponentials.
