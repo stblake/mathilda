@@ -1,3 +1,8 @@
+/* fileno()/isatty() are POSIX, hidden by glibc under -std=c99; request them. */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "expr.h"
 #include "parse.h"
 #include "print.h"

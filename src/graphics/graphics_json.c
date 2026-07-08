@@ -177,9 +177,12 @@ static void rgba_str(char* out, size_t outsz, double r, double g, double b, doub
     int ri = (int)(r * 255.0 + 0.5);
     int gi = (int)(g * 255.0 + 0.5);
     int bi = (int)(b * 255.0 + 0.5);
-    if (ri < 0) ri = 0; if (ri > 255) ri = 255;
-    if (gi < 0) gi = 0; if (gi > 255) gi = 255;
-    if (bi < 0) bi = 0; if (bi > 255) bi = 255;
+    if (ri < 0) ri = 0;
+    if (ri > 255) ri = 255;
+    if (gi < 0) gi = 0;
+    if (gi > 255) gi = 255;
+    if (bi < 0) bi = 0;
+    if (bi > 255) bi = 255;
     snprintf(out, outsz, "rgba(%d,%d,%d,%.3f)", ri, gi, bi, a);
 }
 

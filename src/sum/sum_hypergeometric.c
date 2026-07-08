@@ -57,7 +57,7 @@ static bool hg_contains_pfq(Expr* e) {
  * not Binomial/Gamma/Pochhammer ratios, so this exposes the rational term ratio
  * of a binomial hypergeometric term (e.g. 2^k/Binomial[2k,k]) to the detector. */
 static Expr* hg_expand_binomial(const Expr* e) {
-    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     const Expr* h = e->data.function.head;
     size_t n = e->data.function.arg_count;
     if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol, "Binomial") == 0 && n == 2) {
@@ -79,7 +79,7 @@ static Expr* hg_expand_binomial(const Expr* e) {
     }
     Expr** nargs = malloc(sizeof(Expr*) * (n ? n : 1));
     for (size_t i = 0; i < n; i++) nargs[i] = hg_expand_binomial(e->data.function.args[i]);
-    Expr* out = expr_new_function(expr_copy(h), nargs, n);
+    Expr* out = expr_new_function(expr_copy((Expr*)h), nargs, n);
     free(nargs);
     return out;
 }

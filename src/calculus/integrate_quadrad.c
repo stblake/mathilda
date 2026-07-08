@@ -413,15 +413,21 @@ static bool qr_split(Expr* f, Expr* rad, Expr* x, Expr** E_out, Expr** H_out) {
     expr_free(exy);
     Expr* vars2[2] = { x, y };
     if (!num || !den || !is_polynomial(num, vars2, 2) || !is_polynomial(den, vars2, 2)) {
-        if (num) expr_free(num); if (den) expr_free(den); expr_free(y); return false;
+        if (num) expr_free(num);
+        if (den) expr_free(den);
+        expr_free(y);
+        return false;
     }
 
     Expr* n0 = qr_fold_y(num, y, rad, 0), *n1 = qr_fold_y(num, y, rad, 1);
     Expr* d0 = qr_fold_y(den, y, rad, 0), *d1 = qr_fold_y(den, y, rad, 1);
     expr_free(num); expr_free(den); expr_free(y);
     if (!n0 || !n1 || !d0 || !d1) {
-        if (n0) expr_free(n0); if (n1) expr_free(n1);
-        if (d0) expr_free(d0); if (d1) expr_free(d1); return false;
+        if (n0) expr_free(n0);
+        if (n1) expr_free(n1);
+        if (d0) expr_free(d0);
+        if (d1) expr_free(d1);
+        return false;
     }
 
     /* denom = d0^2 - rad d1^2 (the norm of the conjugate). */
@@ -602,7 +608,9 @@ static Expr* qr_direct(Expr* f, Expr* x, Expr* rad, Expr* a, Expr* b, Expr* c) {
         expr_free(dent);
         Expr* numt = eval_take(mk_fn1("Numerator", expr_copy(t)));
         if (!A1 || !A0 || !numt || !expr_free_of(numt, x)) {
-            if (A1) expr_free(A1); if (A0) expr_free(A0); if (numt) expr_free(numt);
+            if (A1) expr_free(A1);
+            if (A0) expr_free(A0);
+            if (numt) expr_free(numt);
             okflag = false; break;
         }
         /* term = numt/(A1 x + A0) = (numt/A1)/(x - p), p = -A0/A1. */

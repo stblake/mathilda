@@ -119,7 +119,8 @@ Expr* builtin_product_rational_infinite(Expr* res) {
     if (!gotN || !gotD || !okN || !okD) {
         if (gotN) free_roots(rootsN, multsN, nN);
         if (gotD) free_roots(rootsD, multsD, nD);
-        if (leadN) expr_free(leadN); if (leadD) expr_free(leadD);
+        if (leadN) expr_free(leadN);
+        if (leadD) expr_free(leadD);
         return NULL;
     }
 

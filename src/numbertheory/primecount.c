@@ -140,7 +140,7 @@ typedef struct {
 static int pitable_build(PiTable *t, int64_t B) {
     t->words = NULL; t->cnt = NULL; t->B = B;
     t->nwords = (B >> 6) + 1;
-    t->words = malloc((size_t)t->nwords * sizeof(uint64_t));
+    t->words = calloc((size_t)t->nwords, sizeof(uint64_t));
     t->cnt   = malloc((size_t)t->nwords * sizeof(uint32_t));
     if (!t->words || !t->cnt) { free(t->words); free(t->cnt); return 0; }
 

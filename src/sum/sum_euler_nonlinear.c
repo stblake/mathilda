@@ -64,7 +64,8 @@ static bool word_eq(const Word* a, const Word* b) {
     return true;
 }
 static int64_t nl_gcd(int64_t a, int64_t b) {
-    if (a < 0) a = -a; if (b < 0) b = -b;
+    if (a < 0) a = -a;
+    if (b < 0) b = -b;
     while (b) { int64_t t = a % b; a = b; b = t; }
     return a ? a : 1;
 }

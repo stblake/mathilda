@@ -178,7 +178,8 @@ Expr* builtin_sum_logrational(Expr* res) {
         if (rootsN) { for (size_t _i=0;_i<nN;_i++) expr_free(rootsN[_i]); free(rootsN); } \
         if (rootsD) { for (size_t _i=0;_i<nD;_i++) expr_free(rootsD[_i]); free(rootsD); } \
         free(multsN); free(multsD); \
-        if (leadN) expr_free(leadN); if (leadD) expr_free(leadD); \
+        if (leadN) expr_free(leadN); \
+        if (leadD) expr_free(leadD); \
     } while (0)
 
     if (!okN || !okD || !linN || !linD) { LR_FREE_ROOTS(); expr_free(P); return NULL; }
