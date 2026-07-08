@@ -29,6 +29,7 @@
 #include "integrate_line.h"
 #include "integrate_residue.h"
 #include "integrate_diffunderint.h"
+#include "integrate_ramanujan.h"
 #include "intrat.h"
 #include "intrischnorman.h"
 #include "intsimp.h"
@@ -316,6 +317,7 @@ typedef enum {
     METHOD_LINE_INTEGRAL,    /* definite-only: selects the complex contour mechanism */
     METHOD_RESIDUE,          /* definite-only: selects the residue-theorem mechanism */
     METHOD_DIFF_UNDER_INT,   /* definite-only: differentiation under the integral sign */
+    METHOD_RAMANUJAN,        /* definite-only: Mellin / Ramanujan Master Theorem (half-line) */
     METHOD_INVALID
 } IntegrateMethod;
 
@@ -340,6 +342,8 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "DiffUnderInt") == 0 ||
         strcmp(s, "DifferentiationUnderIntegral") == 0)
         return METHOD_DIFF_UNDER_INT;
+    if (strcmp(s, "RamanujanMasterTheorem") == 0 || strcmp(s, "Mellin") == 0)
+        return METHOD_RAMANUJAN;
     return METHOD_INVALID;
 }
 
@@ -433,7 +437,7 @@ static bool definite_parse_method(Expr* opt, const char** name,
      * they pass NULL through to the inner indefinite Integrate. */
     if (m == METHOD_AUTOMATIC || m == METHOD_NEWTON_LEIBNIZ ||
         m == METHOD_LINE_INTEGRAL || m == METHOD_RESIDUE ||
-        m == METHOD_DIFF_UNDER_INT) return true;
+        m == METHOD_DIFF_UNDER_INT || m == METHOD_RAMANUJAN) return true;
     *name = rhs->data.string;   /* borrowed: valid while `res` is alive */
     return true;
 }
@@ -522,10 +526,18 @@ static Expr* integrate_definite(Expr* res) {
                 expr_free(cur);
                 return NULL;
             }
-            /* Newton-Leibniz (FTC) unless the user pinned Residue or the
-             * parameter-differentiation mechanism. */
-            if (!r && mech != METHOD_RESIDUE && mech != METHOD_DIFF_UNDER_INT)
+            /* Newton-Leibniz (FTC) unless the user pinned Residue, the
+             * parameter-differentiation mechanism, or the Ramanujan/Mellin
+             * mechanism. */
+            if (!r && mech != METHOD_RESIDUE && mech != METHOD_DIFF_UNDER_INT &&
+                mech != METHOD_RAMANUJAN)
                 r = integrate_newton_leibniz_try(cur, x, a, b, method);
+            /* Mellin / Ramanujan Master Theorem: half-line ∫₀^∞ x^(s-1) f(x) dx
+             * of a transcendental f (Gaussian moments, Gamma/Bessel/trig
+             * transforms) that residue and FTC do not close.  Under Automatic it
+             * runs before DiffUnderInt; the pinned mechanism has no fallback. */
+            if (!r && (mech == METHOD_AUTOMATIC || mech == METHOD_RAMANUJAN))
+                r = integrate_ramanujan_try(cur, x, a, b, assumptions);
             /* Differentiation under the integral sign: last resort under
              * Automatic (parameter-dependent improper/periodic integrals that
              * residue and FTC cannot close), or the pinned mechanism. */
@@ -723,9 +735,11 @@ Expr* builtin_integrate(Expr* res) {
         case METHOD_LINE_INTEGRAL:
         case METHOD_RESIDUE:
         case METHOD_DIFF_UNDER_INT:
+        case METHOD_RAMANUJAN:
             /* Definite-only mechanisms.  Meaningless on the indefinite form
              * Integrate[f, x, Method -> "NewtonLeibniz" / "LineIntegral" /
-             * "Residue" / "DiffUnderInt"]; leave unevaluated. */
+             * "Residue" / "DiffUnderInt" / "RamanujanMasterTheorem"]; leave
+             * unevaluated. */
             break;
         case METHOD_INVALID:
             break;  /* unreachable: handled above */
@@ -787,7 +801,13 @@ void integrate_init(void) {
         "  \"DiffUnderInt\"         — parameter-dependent definite integrals by differentiation under the\n"
         "  (\"DifferentiationUnderIntegral\") integral sign (Feynman's trick): Integrate`DiffUnderInt;\n"
         "                          Laplace/Fourier, sinc, and even-rational half-line families;\n"
-        "                          tried last in the definite cascade, after Residue and NewtonLeibniz\n"
+        "                          tried after Residue and NewtonLeibniz in the definite cascade\n"
+        "  \"RamanujanMasterTheorem\" — half-line Int_0^Inf x^(s-1) f(x) dx by the Mellin transform /\n"
+        "  (\"Mellin\")              Ramanujan Master Theorem: Integrate`RamanujanMasterTheorem;\n"
+        "                          exp/Gaussian/algebraic/Cos/Sin/ArcTan/Log/BesselJ/pFq/PolyLog\n"
+        "                          kernels (monomial x^k substitution; Erf, incomplete Gamma, BesselJ^2\n"
+        "                          reduced to pFq); strip-gated, yielding a ConditionalExpression when\n"
+        "                          Assumptions do not prove convergence; after NewtonLeibniz under Automatic\n"
         "Method -> {\"DerivativeDivides\", \"Substitution\" -> u} pins the kernel u(x),\n"
         "trialing only that substitution.\n"
         "Named methods are strict: failure returns unevaluated, with no fallback.\n"
@@ -840,6 +860,7 @@ void integrate_init(void) {
      * (Feynman's trick): Integrate`DiffUnderInt.  Last resort in the definite
      * cascade, after residue and Newton-Leibniz. */
     integrate_diffunderint_init();
+    integrate_ramanujan_init();
 
     /* Initialise the parallel-Risch / Risch-Norman heuristic
      * (Bronstein's pmint).  Provides `Integrate`RischNorman[f, x]`,

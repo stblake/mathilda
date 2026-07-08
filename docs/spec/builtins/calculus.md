@@ -633,7 +633,12 @@ monotonically down.
     `Integrate\`DiffUnderInt[f, {x, a, b}]`. Tried last in the definite cascade
     (after residue and Newton-Leibniz). See **Differentiation under the integral
     sign** below.
-  The two definite mechanisms name themselves only: the actual mechanism is
+  - `"RamanujanMasterTheorem"` (alias `"Mellin"`) — half-line `∫₀^∞ x^{s-1} f(x) dx`
+    by the Mellin-transform / Ramanujan Master Theorem method;
+    `Integrate\`RamanujanMasterTheorem[f, {x, 0, Infinity}]`. Under Automatic it
+    runs after Newton-Leibniz and before DiffUnderInt. See **Mellin / Ramanujan
+    Master Theorem** below.
+  The definite mechanisms name themselves only: the actual mechanism is
   chosen from the spec type, so on a definite integral any *other* method name
   is passed through to the inner indefinite integration that produces the
   antiderivative, and either definite-mechanism name on the indefinite
@@ -668,6 +673,65 @@ Worked examples that close:
 `Integrate[Exp[-a x] Sin[b x]/x, {x,0,Infinity}, Assumptions->a>0]` → `ArcTan[b/a]`;
 `Integrate[Sin[a x]^2/x^2, {x,0,Infinity}, Assumptions->a>0]` → `π a/2`;
 `Integrate[Log[1+a^2 x^2]/(1+x^2), {x,0,Infinity}, Assumptions->a>0]` → `π Log[1+a]`.
+
+#### Mellin / Ramanujan Master Theorem (`Integrate\`RamanujanMasterTheorem`)
+
+The series/transform-based mechanism for half-line integrals
+`∫₀^∞ x^{s-1} f(x) dx` of a *transcendental* `f` (the class residue and FTC do
+not close). By Ramanujan's Master Theorem, if `f(x) = Σ (-1)^k φ(k) x^k / k!`
+then the Mellin transform is `Γ(s) φ(-s)` on the fundamental strip. The
+integrand is Expanded and, term by term, decomposed into `C · x^ρ · f(λx)`; the
+kernel `f` is matched against a table of proven base Mellin transforms and the
+power prefactor sets `s = ρ + 1`:
+
+| kernel `f` | `∫₀^∞ x^{s-1} f dx` | strip |
+|------------|--------------------|-------|
+| `Exp[c x]`, `Re c<0` | `Γ(s) (-c)^{-s}` | `0<Re s` |
+| `Exp[c x^2]`, `Re c<0` | `½ (-c)^{-s/2} Γ(s/2)` | `0<Re s` |
+| `(p + q x^m)^{-a}`, `p,q>0` | `(1/m) p^{s/m-a} q^{-s/m} B(s/m, a-s/m)` | `0<Re s<m Re a` |
+| `Cos[λ x]`, `λ>0` | `π / (2 Sin(πs/2) Γ(1-s)) λ^{-s}` | `0<Re s<1` |
+| `Sin[λ x]`, `λ>0` | `π / (2 Cos(πs/2) Γ(1-s)) λ^{-s}` | `-1<Re s<1` |
+| `Log[1 + λ x]`, `λ>0` | `π / (s Sin(π s)) λ^{-s}` | `-1<Re s<0` |
+| `ArcTan[λ x]`, `λ>0` | `-π / (2 s Cos(πs/2)) λ^{-s}` | `-1<Re s<0` |
+| `BesselJ[ν, λ x]`, `λ>0` | `2^{s-1} λ^{-s} Γ((ν+s)/2)/Γ((ν-s)/2+1)` | `-Re ν<Re s<3/2` |
+| `pFq[{a}; {b}; -λ x]`, `λ>0` | `(∏Γ(b_j)/∏Γ(a_i)) Γ(s) (∏Γ(a_i-s)/∏Γ(b_j-s)) λ^{-s}` | `0<Re s<min Re a_i` |
+| `PolyLog[ν, -λ x]`, `λ>0` | `π (-s)^{-ν} λ^{-s} / Sin(π s)` | `-1<Re s<0` |
+
+Four operational layers extend the table:
+
+- **Monomial substitution** `g(x^k)` (`k≠1`) via `y = x^k`:
+  `∫ x^{s-1} g(x^k) = (1/k) ∫ y^{s/k-1} g(y)`, so `Sin[√x]`, `BesselJ[ν,2√x]`,
+  `ArcTan[√x]`, `Cos[x²]` reduce to the linear table at `s/k`.
+- **Hypergeometric reduction** (applied before Expand, so a cancellation kernel
+  is never split): `Erf[u] → u·₁F₁`, `Γ[a]-Γ[a,x] → x^a/a·₁F₁` (lower incomplete
+  gamma), and the product `BesselJ[ν,·]² → ₁F₂` (a Mellin convolution closed via
+  the `J²` identity rather than a Barnes integral).
+- **Parametric differentiation** for `Log[1+λx]^n (1+λx)^{-w₀}`:
+  `M = (-1)^n ∂ⁿ_w[λ^{-s} B(s, w-s)]|_{w=w₀}`, strip `-n<Re s<w₀`.
+- The `pFq` transform is the master kernel — `1F1`, `2F1`, `3F2`, … close
+  uniformly (`Hypergeometric1F1`/`2F1` are stored as `HypergeometricPFQ`).
+
+Each application is **gated on its convergence strip** — checked by `Simplify`
+(numerically for a numeric `s`, or against the supplied `Assumptions` for a
+symbolic `s`), so every result is correct by construction. **When the
+assumptions do not prove the strip, the value is returned as a
+`ConditionalExpression[value, strip]`** (matching Wolfram) — it collapses to the
+bare value once the strip is proved and to `Undefined` if it is refuted. A
+provably-violated strip declines. Verification is symbolic; there is **no**
+numeric crosscheck (the trig/PolyLog transforms use reflection-formula forms
+regular at `s=0`, so e.g. `∫₀^∞ Sin[x]/x dx = π/2` falls out with no limit). A
+sum is integrated term by term (each term must converge on its own). Out of
+scope — products of three or more transcendental kernels, finite intervals, and
+two-sided reductions — return unevaluated, never a wrong value.
+
+Worked examples that close:
+`Integrate[Exp[-x^2], {x,0,Infinity}]` → `√π/2`;
+`Integrate[x^(s-1) Exp[-x], {x,0,Infinity}]` → `ConditionalExpression[Γ[s], s>0]`;
+`Integrate[x^(s-1) BesselJ[ν,2√x]/x^(ν/2), {x,0,Infinity}]` → `Γ[s]/Γ[1+ν-s]` (Ramanujan's canonical example);
+`Integrate[x^(s-1) (Γ[a]-Γ[a,x])/x^a, {x,0,Infinity}]` → `Γ[s]/(a-s)`;
+`Integrate[x^(s-1) Hypergeometric2F1[a,b,c,-x], {x,0,Infinity}]` → `Γ[c]Γ[s]Γ[a-s]Γ[b-s]/(Γ[a]Γ[b]Γ[c-s])`;
+`Integrate[Sin[x]/x, {x,0,Infinity}]` → `π/2`;
+`Integrate[BesselJ[0, x], {x,0,Infinity}]` → `1`.
 
 **Examples**:
 ```mathematica

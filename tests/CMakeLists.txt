@@ -439,6 +439,7 @@ set(COMMON_SRC
     ../src/calculus/integrate_line.c
     ../src/calculus/integrate_residue.c
     ../src/calculus/integrate_diffunderint.c
+    ../src/calculus/integrate_ramanujan.c
     ../src/calculus/intrat.c
     ../src/calculus/intrischnorman.c
     ../src/calculus/intsimp.c
@@ -1807,6 +1808,15 @@ else()
     target_link_libraries(integrate_diffunderint_tests gmp m)
 endif()
 add_test(NAME integrate_diffunderint_tests COMMAND integrate_diffunderint_tests)
+
+add_executable(integrate_ramanujan_tests test_integrate_ramanujan.c ${COMMON_SRC})
+target_include_directories(integrate_ramanujan_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_ramanujan_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(integrate_ramanujan_tests gmp m)
+endif()
+add_test(NAME integrate_ramanujan_tests COMMAND integrate_ramanujan_tests)
 
 add_executable(residue_tests test_residue.c ${COMMON_SRC})
 target_include_directories(residue_tests PRIVATE ../src)

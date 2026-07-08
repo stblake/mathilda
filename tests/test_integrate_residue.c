@@ -262,9 +262,12 @@ static void test_sector(void) {
     check_eq("Chop[N[Integrate[x/(1+x^4), {x, 0, Infinity}] - Pi/4]]", "0");
     check_eq("Chop[N[Integrate[1/(1+x^3), {x, 0, Infinity}] - 2 Pi/(3 Sqrt[3])]]", "0");
     /* Under-constrained exponent (only n > 0, so n <= 1 possible -> divergence
-     * not excluded): must not fire. */
+     * not excluded): the sector residue method must not fire.  The Mellin /
+     * Ramanujan method, which runs later in the Automatic cascade, does close it
+     * -- as a ConditionalExpression that states the missing convergence bound
+     * (n > 1), matching Wolfram.  (Beta[1/n, 1-1/n]/n = (Pi/n) Csc[Pi/n].) */
     check_eq("Integrate[1/(1+x^n), {x, 0, Infinity}, Assumptions -> n > 0]",
-             "Integrate[1/(1 + x^n), {x, 0, Infinity}, Assumptions -> n > 0]");
+             "ConditionalExpression[Beta[1/n, 1 - 1/n]/n, 1/n > 0 && 1/n < 1]");
 }
 
 /* -------------------------------------------------------------------------
