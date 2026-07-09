@@ -227,6 +227,76 @@ static void test_parametric_differentiation(void) {
         "(2 Pi (EulerGamma + PolyGamma[0, 2 - s]))/((2 - s) Sin[Pi s])", "{s -> 1/2}");
 }
 
+/* Exponential-geometric kernel 1/(e^(c x) + gamma): Bose-Einstein (Gamma Zeta),
+ * Fermi-Dirac (Gamma eta), and general fugacity (Gamma PolyLog). */
+static void test_bose_fermi(void) {
+    /* Bose-Einstein / Debye: Gamma(4) Zeta(4) = Pi^4/15. */
+    assert_closes("Integrate[x^3/(Exp[x]-1), {x,0,Infinity}, "
+                  "Method -> \"RamanujanMasterTheorem\"]", "Pi^4/15", NULL);
+    /* Bose s = 2. */
+    assert_closes("Integrate[x/(Exp[x]-1), {x,0,Infinity}, "
+                  "Method -> \"RamanujanMasterTheorem\"]", "Pi^2/6", NULL);
+    /* Fermi-Dirac: Gamma(4) eta(4) = 7 Pi^4/120. */
+    assert_closes("Integrate[x^3/(Exp[x]+1), {x,0,Infinity}, "
+                  "Method -> \"RamanujanMasterTheorem\"]", "7 Pi^4/120", NULL);
+    /* Fermi s = 1: the -PolyLog(s,-1) form stays finite where (1-2^(1-s))Zeta(s)
+     * would be 0*Infinity. */
+    assert_closes("Integrate[1/(Exp[x]+1), {x,0,Infinity}, "
+                  "Method -> \"RamanujanMasterTheorem\"]", "Log[2]", NULL);
+    /* Scaled rate c = 2: c^(-s) factor -> Pi^4/240. */
+    assert_closes("Integrate[x^3/(Exp[2 x]-1), {x,0,Infinity}, "
+                  "Method -> \"RamanujanMasterTheorem\"]", "Pi^4/240", NULL);
+    /* Symbolic order (Bose): Gamma(s) Zeta(s), strip s > 1 discharged. */
+    assert_cond_closes("Integrate[x^(s-1)/(Exp[x]-1), {x,0,Infinity}, "
+                       "Method -> \"RamanujanMasterTheorem\", Assumptions -> s > 1]",
+                       "Gamma[s] Zeta[s]", "s > 1");
+    /* Monomial substitution: 1/(e^Sqrt[x]-1) -> 2 Zeta(2) = Pi^2/3. */
+    assert_closes("Integrate[1/(Exp[Sqrt[x]]-1), {x,0,Infinity}, "
+                  "Method -> \"RamanujanMasterTheorem\"]", "Pi^2/3", NULL);
+    /* Out of scope: |gamma'| = 2 > 1 -> unevaluated (never a wrong value). */
+    assert_head_unevaluated(
+        "Integrate`RamanujanMasterTheorem[1/(Exp[x]-2), {x,0,Infinity}]",
+        "Integrate`RamanujanMasterTheorem");
+    /* Divergent Bose at s = 1 (strip s > 1 excludes it) -> unevaluated. */
+    assert_head_unevaluated(
+        "Integrate`RamanujanMasterTheorem[1/(Exp[x]-1), {x,0,Infinity}]",
+        "Integrate`RamanujanMasterTheorem");
+}
+
+/* Frullani integrals: Integrate[(f(a x) - f(b x))/x] = (f(0) - f(Inf)) Log(b/a). */
+static void test_frullani(void) {
+    /* Classic exp Frullani. */
+    assert_closes("Integrate[(Exp[-2 x]-Exp[-5 x])/x, {x,0,Infinity}, "
+                  "Method -> \"RamanujanMasterTheorem\"]", "Log[5/2]", NULL);
+    /* Symbolic scales (output form is Log[b] - Log[a]). */
+    assert_closes("Integrate[(Exp[-a x]-Exp[-b x])/x, {x,0,Infinity}, "
+                  "Method -> \"RamanujanMasterTheorem\", Assumptions -> a>0 && b>0]",
+                  "Log[b] - Log[a]", "a>0 && b>0");
+    /* ArcTan Frullani: f(0)=0, f(Inf)=Pi/2 -> (Pi/2) Log(5/2).  Verified
+     * numerically: Simplify does not combine Log[2/5] and Log[5/2] under a Pi
+     * coefficient, though the value is exact. */
+    assert_eval_eq(
+        "Chop[N[Integrate[(ArcTan[5 x]-ArcTan[2 x])/x, {x,0,Infinity}, "
+        "Method -> \"RamanujanMasterTheorem\"]] - N[(Pi/2) Log[5/2]]]", "0", 0);
+}
+
+/* Log-weighted Mellin: Integrate[x^(s-1) Log[x]^k R(x)] = d^k/ds^k M_R(s). */
+static void test_log_weighted(void) {
+    /* Odd Log weight over a transform symmetric about its centre -> 0. */
+    assert_closes("Integrate[Log[x]/(1+x^2), {x,0,Infinity}, "
+                  "Method -> \"RamanujanMasterTheorem\"]", "0", NULL);
+    assert_closes("Integrate[Log[x]/(1+x)^2, {x,0,Infinity}, "
+                  "Method -> \"RamanujanMasterTheorem\"]", "0", NULL);
+    /* Nonzero: Integrate[x Log[x] e^(-x)] = Gamma'(2) = 1 - EulerGamma. */
+    assert_closes("Integrate[x Log[x] Exp[-x], {x,0,Infinity}, "
+                  "Method -> \"RamanujanMasterTheorem\"]", "1 - EulerGamma", NULL);
+    /* Log^2 weight = Pi^3/8 (exact closed form 1/4 Pi PolyGamma[1,1/2]; Mathilda
+     * does not reduce PolyGamma[1,1/2] = Pi^2/2, so verify numerically). */
+    assert_eval_eq(
+        "Chop[N[Integrate[Log[x]^2/(1+x^2), {x,0,Infinity}, "
+        "Method -> \"RamanujanMasterTheorem\"]] - N[Pi^3/8]]", "0", 0);
+}
+
 /* Safety: out-of-scope / non-half-line inputs return unevaluated, never wrong,
  * and never hang. */
 static void test_declines_cleanly(void) {
@@ -260,6 +330,9 @@ void test_integrate_ramanujan(void) {
     TEST(test_reductions);
     TEST(test_polylog);
     TEST(test_parametric_differentiation);
+    TEST(test_bose_fermi);
+    TEST(test_frullani);
+    TEST(test_log_weighted);
     TEST(test_declines_cleanly);
 
     printf("All Integrate Ramanujan Master Theorem tests passed!\n");

@@ -556,6 +556,98 @@ static bool rec_polylog(const Expr* K, const Expr* x, const Expr* sv,
     return true;
 }
 
+/* 1/(A e^(c x) + gamma), A e^(c0) > 0, c > 0, gamma real with -1 <= gamma' <= 1
+ * (gamma' = gamma / A_eff, A_eff = A e^(c0)):  the exponential-geometric kernel of
+ * the Bose-Einstein / Fermi-Dirac / general-fugacity integrals.  With u = e^(-c x),
+ *   1/(e^(c x)+g') = u/(1+g' u) = (-1/g') sum_{j>=1} (-g')^j u^j    (|g'| e^(-c x) < 1)
+ * and Integrate[x^(sv-1) u^j] = Gamma(sv) (j c)^(-sv), so term-by-term
+ *   M = (1/A_eff) Gamma(sv) c^(-sv) (-1/g') PolyLog(sv, -g').
+ * Special cases:  g' = -1 (Bose) -> Gamma(sv) c^(-sv) Zeta(sv), strip Re sv > 1;
+ *                 g' = +1 (Fermi) -> Gamma(sv) c^(-sv) (-PolyLog(sv,-1)) = ... eta(sv),
+ *                 strip Re sv > 0 (the -PolyLog form stays finite at sv=1, unlike
+ *                 (1-2^(1-sv)) Zeta(sv) which is 0*Infinity there).
+ * No interior pole on (0,Inf) for |g'| <= 1 (e^(c x) = -g' has x = ln(-g')/c <= 0);
+ * at x=0 the denominator is A_eff(1+g'), zero only for g' = -1, hence the extra
+ * Re sv > 1 there.  The keyhole/reflection identity PolyLog(sv,1) = Zeta(sv) is
+ * used to land the Bose case on the canonical Zeta head (Simplify does not do this
+ * for a symbolic sv). */
+static bool rec_expgeom(const Expr* K, const Expr* x, const Expr* sv,
+                        Expr** M, Expr** P) {
+    if (!head_name_is(K, "Power") || K->data.function.arg_count != 2) return false;
+    Expr* base = K->data.function.args[0];
+    Expr* ex   = K->data.function.args[1];
+    if (ex->type != EXPR_INTEGER || ex->data.integer != -1) return false;  /* K = 1/base */
+    if (!head_name_is(base, "Plus")) return false;
+
+    /* Split base into x-free constant gamma and exactly one x-dependent term. */
+    Expr* gamma = mk_int(0);
+    Expr* expterm = NULL;                              /* borrowed A e^(...) summand */
+    for (size_t i = 0; i < base->data.function.arg_count; i++) {
+        Expr* ai = base->data.function.args[i];
+        if (free_of_x_now(ai, x)) { gamma = Pls(gamma, cp(ai)); continue; }
+        if (expterm) { expr_free(gamma); return false; }        /* two x-terms */
+        expterm = ai;
+    }
+    gamma = simp(gamma);
+    if (!expterm) { expr_free(gamma); return false; }
+
+    /* expterm = A * Exp[arg], A x-free, arg = c x + c0 linear in x. */
+    Expr* facs[32];
+    size_t nf = collect_factors((Expr*)expterm, facs, 32, 0);
+    Expr* A = mk_int(1);
+    Expr* earg = NULL;
+    for (size_t i = 0; i < nf; i++) {
+        Expr* F = facs[i];
+        if (free_of_x_now(F, x)) { A = Tms(A, cp(F)); continue; }
+        Expr* a = exp_exponent(F);                              /* Exp[a] / Power[E,a] */
+        if (!a || earg) { expr_free(A); if (earg) expr_free(earg); expr_free(gamma); return false; }
+        earg = cp(a);
+    }
+    if (!earg) { expr_free(A); expr_free(gamma); return false; }
+
+    Expr* c1 = dx(earg, x);                                     /* rate c = d(arg)/dx */
+    if (!free_of_x_now(c1, x)) { expr_free(c1); expr_free(earg); expr_free(A); expr_free(gamma); return false; }
+    Expr* c0 = simp(Pls(cp(earg), Neg(Tms(cp(c1), cp(x)))));    /* constant offset */
+    expr_free(earg);
+    if (!free_of_x_now(c0, x)) { expr_free(c0); expr_free(c1); expr_free(A); expr_free(gamma); return false; }
+
+    Expr* Aeff = simp(Tms(cp(A), ExpE(cp(c0))));               /* A_eff = A e^(c0) */
+    expr_free(A); expr_free(c0);
+    if (!prove_true(Gt(cp(c1), mk_int(0)), NULL) ||
+        !prove_true(Gt(cp(Aeff), mk_int(0)), NULL)) {
+        expr_free(c1); expr_free(Aeff); expr_free(gamma); return false;
+    }
+
+    Expr* gp = simp(Tms(cp(gamma), Pw(cp(Aeff), mk_int(-1))));  /* gamma' = gamma/A_eff */
+    expr_free(gamma);
+    /* Real gamma' with -1 <= gamma' <= 1 (a complex gamma' leaves the inequalities
+     * unevaluated, so prove_true is False -> declined). */
+    if (!prove_true(And2(mk_fn2("GreaterEqual", cp(gp), mk_int(-1)),
+                         mk_fn2("LessEqual", cp(gp), mk_int(1))), NULL)) {
+        expr_free(c1); expr_free(Aeff); expr_free(gp); return false;
+    }
+
+    Expr* gpp1 = simp(Pls(cp(gp), mk_int(1)));
+    bool bose = is_zero_now(gpp1);                              /* gamma' == -1 */
+    expr_free(gpp1);
+
+    /* closed = (-1/gamma') PolyLog(sv, -gamma'), canonicalised to Zeta for Bose. */
+    Expr* closed = bose
+        ? mk_fn1("Zeta", cp(sv))
+        : Tms(Tms(mk_int(-1), Pw(cp(gp), mk_int(-1))),
+              mk_fn2("PolyLog", cp(sv), Neg(cp(gp))));
+    *M = Tms(Pw(cp(Aeff), mk_int(-1)),
+             Tms3(Gamma_(cp(sv)), Pw(cp(c1), Neg(cp(sv))), closed));
+    /* Strip: Re sv > 0, tightened to Re sv > 1 for the Bose case (denominator
+     * zero at x=0).  sv > 1 already implies sv > 0, so the Bose bound is stated
+     * alone -- carrying the redundant sv > 0 would survive Simplify (which does
+     * not detect the subsumption) and wrongly claim validity on 0 < sv <= 1. */
+    Expr* strip = Gt(cp(sv), mk_int(bose ? 1 : 0));
+    *P = And2(Gt(cp(c1), mk_int(0)), strip);
+    expr_free(c1); expr_free(Aeff); expr_free(gp);
+    return true;
+}
+
 /* ---- monomial internal substitution K = g(x^k) ------------------------- */
 
 /* Record exponent `e` (an owned Simplify'd copy) into out[] if not present. */
@@ -612,6 +704,7 @@ static bool try_recognizers(const Expr* K, const Expr* x, const Expr* sv,
     if (rec_arctan(K, x, sv, M, P))    return true;
     if (rec_pfq(K, x, sv, M, P))       return true;
     if (rec_polylog(K, x, sv, M, P))   return true;
+    if (rec_expgeom(K, x, sv, M, P))   return true;
     return false;
 }
 
@@ -640,26 +733,51 @@ static bool dispatch_kernel(const Expr* K, const Expr* x, const Expr* sv,
     return ok;
 }
 
-/* Decompose `term` into C (x-free), rho (net power of x), and the list of
- * x-dependent non-(x-power) kernel factors (borrowed pointers into `term`).
+/* If F is Log[x] or Power[Log[x], k] (k a positive integer) whose argument is
+ * exactly the variable x, return the log weight k (>= 1); else 0.  Only the bare
+ * Log[x] qualifies -- Log[1+x] / Log[a x] are ordinary kernels, not weights. */
+static long log_x_weight(const Expr* F, const Expr* x) {
+    const Expr* logf;
+    long k;
+    if (head_name_is(F, "Log") && F->data.function.arg_count == 1) { logf = F; k = 1; }
+    else if (head_name_is(F, "Power") && F->data.function.arg_count == 2 &&
+             head_name_is(F->data.function.args[0], "Log") &&
+             F->data.function.args[0]->data.function.arg_count == 1) {
+        Expr* e = F->data.function.args[1];
+        if (e->type != EXPR_INTEGER || e->data.integer <= 0) return 0;
+        logf = F->data.function.args[0];
+        k = (long)e->data.integer;
+    } else return 0;
+    Expr* arg = logf->data.function.args[0];
+    return (arg->type == EXPR_SYMBOL && x->type == EXPR_SYMBOL &&
+            strcmp(arg->data.symbol, x->data.symbol) == 0) ? k : 0;
+}
+
+/* Decompose `term` into C (x-free), rho (net power of x), a Log[x] weight kw
+ * (the total power of a bare Log[x] factor), and the list of x-dependent
+ * non-(x-power, non-Log[x]) kernel factors (borrowed pointers into `term`).
  * Returns false only on kernel-list overflow. */
 static bool split_term(Expr* term, const Expr* x, Expr** C_out, Expr** rho_out,
-                       Expr** kernels, size_t* nk, size_t cap) {
+                       Expr** kernels, size_t* nk, size_t cap, long* kw_out) {
     Expr* facs[64];
     size_t nf = collect_factors(term, facs, 64, 0);
     Expr* C = mk_int(1);
     Expr* rho = mk_int(0);
+    long kw = 0;
     *nk = 0;
     for (size_t i = 0; i < nf; i++) {
         Expr* F = facs[i];
         if (!contains_symbol(F, x)) { C = Tms(C, cp(F)); continue; }
         Expr* e = x_power_exponent(F, x);
         if (e) { rho = Pls(rho, e); continue; }
+        long lw = log_x_weight(F, x);
+        if (lw > 0) { kw += lw; continue; }
         if (*nk >= cap) { expr_free(C); expr_free(rho); return false; }
         kernels[(*nk)++] = F;
     }
     *C_out = simp(C);
     *rho_out = simp(rho);
+    *kw_out = kw;
     return true;
 }
 
@@ -773,16 +891,31 @@ static Expr* mellin_term(Expr* term, const Expr* x, Expr* assumptions,
                          Expr** cond_out) {
     *cond_out = NULL;
     Expr *C = NULL, *rho = NULL;
-    Expr* kernels[16]; size_t nk = 0;
-    if (!split_term(term, x, &C, &rho, kernels, &nk, 16)) return NULL;
-    if (nk == 0) { expr_free(C); expr_free(rho); return NULL; }  /* pure power diverges */
+    Expr* kernels[16]; size_t nk = 0; long kw = 0;
+    if (!split_term(term, x, &C, &rho, kernels, &nk, 16, &kw)) return NULL;
+    if (nk == 0) { expr_free(C); expr_free(rho); return NULL; }  /* pure (log)power diverges */
 
     Expr* s = simp(Pls(cp(rho), mk_int(1)));             /* s = rho + 1 */
     expr_free(rho);
 
     Expr *M = NULL, *P = NULL;
-    if (!dispatch_term(kernels, nk, x, s, &M, &P)) {
-        expr_free(C); expr_free(s); return NULL;
+    if (kw == 0) {
+        if (!dispatch_term(kernels, nk, x, s, &M, &P)) {
+            expr_free(C); expr_free(s); return NULL;
+        }
+    } else {
+        /* x^rho Log[x]^kw R(x): since d/ds x^(s-1) = x^(s-1) Log x, a Log[x]^kw
+         * weight is the kw-th s-derivative of the base transform M_R(s).  Build
+         * M_R in a fresh spectral symbol, differentiate kw times, then set s.
+         * Log^kw is dominated by x^(+-eps), so R's OPEN strip carries unchanged. */
+        Expr* sv = mk_sym("RmtLogSpectral");
+        if (!dispatch_term(kernels, nk, x, sv, &M, &P)) {
+            expr_free(sv); expr_free(C); expr_free(s); return NULL;
+        }
+        for (long i = 0; i < kw; i++) M = ev2("D", M, cp(sv));
+        M = ev2("ReplaceAll", M, mk_fn2("Rule", cp(sv), cp(s)));
+        P = ev2("ReplaceAll", P, mk_fn2("Rule", cp(sv), cp(s)));
+        expr_free(sv);
     }
     /* Reduce the strip against the assumptions.  True -> discharged; False ->
      * provably divergent (decline); otherwise carry it as a residual. */
@@ -838,6 +971,103 @@ static Expr* reduce_to_hypergeometric(const Expr* f) {
 }
 
 /* -------------------------------------------------------------------------
+ * Frullani integrals -- Integrate[(f(a x) - f(b x))/x, {x, 0, Infinity}]
+ *                         = (f(0+) - f(Infinity)) Log(b/a),   a, b > 0.
+ *
+ * A whole-integrand pre-pass (BEFORE Expand splits the sum): each half of a
+ * Frullani integrand is individually divergent, so the term-by-term Mellin path
+ * cannot see it -- it must be recognised as a single unit.  The scale ratio
+ * rho = b/a is read off the two terms structurally and the pairing is verified
+ * by the exact identity (t1 /. x -> rho x) + t2 == 0; the two boundary values
+ * are the finite limits of f.  Correct-by-construction (Frullani's theorem).
+ * ---------------------------------------------------------------------- */
+
+/* The x-scale k of a Frullani term t = C f(k x): C, k x-free, k != 0, with a
+ * single x-dependent factor that is Exp[k x] or a unary g[k x] whose argument is
+ * exactly k x (no constant offset).  Returns k (owned) or NULL. */
+static Expr* frullani_scale(const Expr* t, const Expr* x) {
+    Expr* facs[32];
+    size_t nf = collect_factors((Expr*)t, facs, 32, 0);
+    Expr* F = NULL;                                    /* the sole x-dependent factor */
+    for (size_t i = 0; i < nf; i++) {
+        if (free_of_x_now(facs[i], x)) continue;
+        if (F) return NULL;                            /* more than one x-factor */
+        F = facs[i];
+    }
+    if (!F) return NULL;
+    Expr* arg = exp_exponent(F);                       /* Exp[..] / Power[E,..] */
+    if (!arg) {
+        if (F->type == EXPR_FUNCTION && F->data.function.arg_count == 1)
+            arg = F->data.function.args[0];            /* unary g[arg] */
+        else return NULL;
+    }
+    Expr* k = dx(arg, x);
+    if (!free_of_x_now(k, x) || is_zero_now(k)) { expr_free(k); return NULL; }
+    Expr* off = simp(Pls(cp(arg), Neg(Tms(cp(k), cp(x)))));   /* arg - k x */
+    bool linear = is_zero_now(off);
+    expr_free(off);
+    if (!linear) { expr_free(k); return NULL; }
+    return k;
+}
+
+/* Integrate[(f(a x) - f(b x))/x, {x, 0, Infinity}].  Borrows f, x, assumptions;
+ * returns the owned value or NULL (out of scope / boundary limits not finite). */
+static Expr* frullani_try(Expr* f, const Expr* x, Expr* assumptions) {
+    Expr* G = ev1("Expand", Tms(cp((Expr*)x), cp(f)));        /* x f = f(a x) - f(b x) */
+    if (!G || !head_name_is(G, "Plus") || G->data.function.arg_count != 2) {
+        if (G) expr_free(G); return NULL;
+    }
+    Expr* t1 = G->data.function.args[0];
+    Expr* t2 = G->data.function.args[1];
+    Expr* k1 = frullani_scale(t1, x);
+    Expr* k2 = frullani_scale(t2, x);
+    Expr* result = NULL;
+    if (k1 && k2) {
+        Expr* rho = simp(Tms(cp(k2), Pw(cp(k1), mk_int(-1))));    /* b/a */
+        Expr* rm1 = simp(Pls(cp(rho), mk_int(-1)));
+        /* rho > 0  <=>  k1, k2 have the same sign.  Prove each scale's sign
+         * separately in the ">0" orientation: Simplify discharges a linear sign
+         * against the assumptions, but not the ratio b/a > 0 directly (nor a
+         * "-a < 0" form, which it normalises to "a > 0" without re-discharging). */
+        bool both_pos = prove_true(Gt(cp(k1), mk_int(0)), assumptions) &&
+                        prove_true(Gt(cp(k2), mk_int(0)), assumptions);
+        bool both_neg = prove_true(Gt(Neg(cp(k1)), mk_int(0)), assumptions) &&
+                        prove_true(Gt(Neg(cp(k2)), mk_int(0)), assumptions);
+        bool ok = (both_pos || both_neg) && !is_zero_now(rm1);
+        expr_free(rm1);
+        if (ok) {
+            /* Verify the pairing: (t1 /. x -> rho x) + t2 == 0 (either split order
+             * gives the same value, so one check suffices). */
+            Expr* subst = ev2("ReplaceAll", cp(t1),
+                              mk_fn2("Rule", cp((Expr*)x), Tms(cp(rho), cp((Expr*)x))));
+            Expr* chk = simp(Pls(subst, cp(t2)));
+            bool identity = is_zero_now(chk);
+            expr_free(chk);
+            if (identity) {
+                Expr* f0   = ev2("Limit", cp(t1), mk_fn2("Rule", cp((Expr*)x), mk_int(0)));
+                Expr* finf = ev2("Limit", cp(t1),
+                                 mk_fn2("Rule", cp((Expr*)x), mk_sym("Infinity")));
+                if (is_finite_value(f0) && is_finite_value(finf) &&
+                    !contains_symbol(f0, x) && !contains_symbol(finf, x)) {
+                    result = simp2(Tms(Pls(cp(f0), Neg(cp(finf))),
+                                       mk_fn1("Log", cp(rho))), assumptions);
+                    if (!is_finite_value(result) || contains_symbol(result, x)) {
+                        if (result) expr_free(result); result = NULL;
+                    }
+                }
+                if (f0) expr_free(f0);
+                if (finf) expr_free(finf);
+            }
+        }
+        expr_free(rho);
+    }
+    if (k1) expr_free(k1);
+    if (k2) expr_free(k2);
+    expr_free(G);
+    return result;
+}
+
+/* -------------------------------------------------------------------------
  * Public entry point.
  * ---------------------------------------------------------------------- */
 Expr* integrate_ramanujan_try(Expr* f, Expr* x, Expr* a, Expr* b,
@@ -845,6 +1075,11 @@ Expr* integrate_ramanujan_try(Expr* f, Expr* x, Expr* a, Expr* b,
     if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
     if (!is_zero_expr(a) || !is_pos_inf(b)) return NULL;   /* half-line only */
     if (!contains_symbol(f, x)) return NULL;
+
+    /* Frullani pre-pass: (f(a x) - f(b x))/x must match as a whole (each half is
+     * individually divergent, so the term-by-term Mellin path below cannot). */
+    Expr* fru = frullani_try(f, x, assumptions);
+    if (fru) return fru;
 
     Expr* fr = reduce_to_hypergeometric(f);
     if (!fr) return NULL;
@@ -934,11 +1169,16 @@ void integrate_ramanujan_init(void) {
         "Theorem method: the integrand is split term-by-term into a power of x "
         "times a base kernel whose Mellin transform is known in closed form -- "
         "exponential, Gaussian, algebraic binomial, Cos, Sin, ArcTan, Log[1+x], "
-        "BesselJ, HypergeometricPFQ, or PolyLog -- with a monomial substitution "
-        "for x^k arguments (e.g. Sin[Sqrt[x]]) and parametric differentiation "
-        "for Log-power kernels.  Erf, the lower incomplete gamma, and BesselJ^2 "
-        "are reduced to pFq form first.  Each transform is gated on its "
-        "convergence strip; when Assumptions do not prove the strip the result "
-        "is a ConditionalExpression stating it.  Returns unevaluated when the "
-        "integrand is out of scope or provably divergent.");
+        "BesselJ, HypergeometricPFQ, PolyLog, or the exponential-geometric kernel "
+        "1/(e^(c x)+g) -> Gamma PolyLog (Bose-Einstein 1/(e^x-1) -> Gamma Zeta, "
+        "Fermi-Dirac 1/(e^x+1) -> Gamma eta) -- with a monomial substitution for "
+        "x^k arguments (e.g. Sin[Sqrt[x]]), a Log[x]^k weight handled as the k-th "
+        "s-derivative of the base transform, and parametric differentiation for "
+        "Log[1+x]-power kernels.  A whole-integrand Frullani pre-pass evaluates "
+        "(f(a x)-f(b x))/x -> (f(0)-f(Infinity)) Log(b/a).  Erf, the lower "
+        "incomplete gamma, and BesselJ^2 are reduced to pFq form first.  Each "
+        "transform is gated on its convergence strip; when Assumptions do not "
+        "prove the strip the result is a ConditionalExpression stating it.  "
+        "Returns unevaluated when the integrand is out of scope or provably "
+        "divergent.");
 }

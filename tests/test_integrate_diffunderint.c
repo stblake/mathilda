@@ -159,6 +159,13 @@ static void test_declines_cleanly(void) {
     /* No free parameter -> not applicable. */
     assert_head_unevaluated(
         "Integrate`DiffUnderInt[Sin[x]/x, {x, 0, Infinity}]", "Integrate`DiffUnderInt");
+    /* Whole-line integrand with a real axis pole (Exp[x]-1 = 0 at x = 0): the
+     * integral diverges (principal value only), so DiffUnderInt declines up front
+     * rather than pursue the non-terminating Integrate[x^k f] escalation that
+     * used to run for minutes.  Must return fast + unevaluated. */
+    assert_head_unevaluated(
+        "Integrate`DiffUnderInt[Exp[a x]/(Exp[x]-1), {x, -Infinity, Infinity}, "
+        "Assumptions -> 0 < a < 1]", "Integrate`DiffUnderInt");
 }
 
 void test_integrate_diffunderint(void) {

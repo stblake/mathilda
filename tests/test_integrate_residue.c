@@ -247,6 +247,13 @@ static void test_mellin(void) {
     /* Divergent branch power (s = 7/2 exceeds the decay order 2): unevaluated. */
     check_eq("Integrate[x^(5/2)/(x^2+1), {x, 0, Infinity}]",
              "Integrate[x^(5/2)/(1 + x^2), {x, 0, Infinity}]");
+    /* Higher-order poles: the keyhole sum is over residues of the FULL integrand
+     * x^(s-1) R(x), not x_k^(s-1) Res(R).  A pure double pole has Res(R) = 0, so
+     * the old formula silently returned 0 -- these guard that regression.
+     * B(3/2,1/2) = Pi/2, B(3/2,3/2) = Pi/8, B(4/3,2/3) = 2 Pi/(3 Sqrt[3]). */
+    check_eq("Chop[N[Integrate[Sqrt[x]/(1+x)^2, {x, 0, Infinity}] - Pi/2]]", "0");
+    check_eq("Chop[N[Integrate[Sqrt[x]/(1+x)^3, {x, 0, Infinity}] - Pi/8]]", "0");
+    check_eq("Chop[N[Integrate[x^(1/3)/(1+x)^2, {x, 0, Infinity}] - 2 Pi/(3 Sqrt[3])]]", "0");
 }
 
 /* -------------------------------------------------------------------------

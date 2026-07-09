@@ -704,6 +704,16 @@ power prefactor sets `s = ρ + 1`:
 | `BesselJ[ν, λ x]`, `λ>0` | `2^{s-1} λ^{-s} Γ((ν+s)/2)/Γ((ν-s)/2+1)` | `-Re ν<Re s<3/2` |
 | `pFq[{a}; {b}; -λ x]`, `λ>0` | `(∏Γ(b_j)/∏Γ(a_i)) Γ(s) (∏Γ(a_i-s)/∏Γ(b_j-s)) λ^{-s}` | `0<Re s<min Re a_i` |
 | `PolyLog[ν, -λ x]`, `λ>0` | `π (-s)^{-ν} λ^{-s} / Sin(π s)` | `-1<Re s<0` |
+| `1/(e^{c x}+γ)`, `c>0`, `-1≤γ≤1` | `c^{-s} Γ(s) (-1/γ) PolyLog(s, -γ)` | `0<Re s` (`1<Re s` if `γ=-1`) |
+
+The last row is the **exponential-geometric** kernel of the statistical-mechanics
+integrals: expanding `1/(e^{cx}+γ) = (-1/γ) Σ_{j≥1} (-γ)^j e^{-jcx}` and
+integrating term by term lands on `PolyLog`. Its two headline specialisations are
+`γ=-1` **Bose–Einstein** `∫₀^∞ x^{s-1}/(e^{cx}-1) = c^{-s} Γ(s) ζ(s)` (Planck /
+Debye; the denominator zero at `x=0` tightens the strip to `Re s>1`) and `γ=+1`
+**Fermi–Dirac** `∫₀^∞ x^{s-1}/(e^{cx}+1) = c^{-s} Γ(s) η(s)` (emitted as
+`-Γ(s) PolyLog(s,-1)`, which stays finite at `s=1` where `(1-2^{1-s})ζ(s)` would
+be `0·∞`).
 
 Four operational layers extend the table:
 
@@ -716,8 +726,20 @@ Four operational layers extend the table:
   the `J²` identity rather than a Barnes integral).
 - **Parametric differentiation** for `Log[1+λx]^n (1+λx)^{-w₀}`:
   `M = (-1)^n ∂ⁿ_w[λ^{-s} B(s, w-s)]|_{w=w₀}`, strip `-n<Re s<w₀`.
+- **`Log[x]^k` weight** (a bare `Log[x]`, distinct from the `Log[1+λx]` kernel):
+  since `∂_s x^{s-1} = x^{s-1} Log x`, a `Log[x]^k` factor is the `k`-th
+  `s`-derivative of the base transform `M_R(s)`. The open strip carries unchanged
+  (`Log^k` is dominated by `x^{±ε}`), so e.g. `∫₀^∞ Log[x]/(1+x²) dx = 0` and
+  `∫₀^∞ x Log[x] e^{-x} dx = Γ'(2) = 1-γ`.
 - The `pFq` transform is the master kernel — `1F1`, `2F1`, `3F2`, … close
   uniformly (`Hypergeometric1F1`/`2F1` are stored as `HypergeometricPFQ`).
+
+A **Frullani pre-pass** (run on the whole integrand before Expand, since each
+half is individually divergent) recognises `(f(a x)-f(b x))/x` and returns
+`(f(0⁺)-f(∞)) Log(b/a)` (`a,b>0`): the scale ratio is read structurally and the
+pairing verified by the exact identity `(t₁ /. x→ρx)+t₂ = 0`; the boundary values
+are the finite limits of `f`. So `∫₀^∞ (e^{-2x}-e^{-5x})/x dx = Log(5/2)` and
+`∫₀^∞ (ArcTan(5x)-ArcTan(2x))/x dx = (π/2) Log(5/2)`.
 
 Each application is **gated on its convergence strip** — checked by `Simplify`
 (numerically for a numeric `s`, or against the supplied `Assumptions` for a
@@ -739,7 +761,12 @@ Worked examples that close:
 `Integrate[x^(s-1) (Γ[a]-Γ[a,x])/x^a, {x,0,Infinity}]` → `Γ[s]/(a-s)`;
 `Integrate[x^(s-1) Hypergeometric2F1[a,b,c,-x], {x,0,Infinity}]` → `Γ[c]Γ[s]Γ[a-s]Γ[b-s]/(Γ[a]Γ[b]Γ[c-s])`;
 `Integrate[Sin[x]/x, {x,0,Infinity}]` → `π/2`;
-`Integrate[BesselJ[0, x], {x,0,Infinity}]` → `1`.
+`Integrate[BesselJ[0, x], {x,0,Infinity}]` → `1`;
+`Integrate[x^3/(Exp[x]-1), {x,0,Infinity}]` → `π⁴/15` (Debye);
+`Integrate[x^3/(Exp[x]+1), {x,0,Infinity}]` → `7π⁴/120` (Fermi–Dirac);
+`Integrate[x^(s-1)/(Exp[x]-1), {x,0,Infinity}, Assumptions→s>1]` → `Γ[s] ζ[s]`;
+`Integrate[(Exp[-2x]-Exp[-5x])/x, {x,0,Infinity}]` → `Log[5/2]` (Frullani);
+`Integrate[Log[x]/(1+x^2), {x,0,Infinity}]` → `0`.
 
 **Examples**:
 ```mathematica
@@ -932,11 +959,16 @@ symbolic-exponent contours:
 
 - **Keyhole / Mellin on `(0, ∞)`** — a branch power times a rational function,
   `f = x^p R(x)` with `p` non-integer (so `s = p + 1 ∉ ℤ`): value
-  `= −π · Σ_k [ z_k^{s-1} Res(R, z_k) ] · e^{−iπs} / sin(π s)` over the poles
-  `z_k` of `R`, with `z_k^{s-1}` on the branch `arg ∈ (0, 2π)`.  The
-  `e^{−iπs}/sin(π s)` prefactor is the exact reduction of the keyhole jump
-  `1/(1 − e^{2πi s})`, landing a numeric `s` on an algebraic multiple of `π`
-  (e.g. `∫₀^∞ x^{1/3}/(x²+1) = π/√3`).  Requires `0 < Re(s) < deg Q − deg P`.
+  `= −π · Σ_k Res[ z^{s-1} R(z), z_k ] · e^{−iπs} / sin(π s)` over the poles
+  `z_k` of `R`, with `z^{s-1}` on the branch `arg ∈ (0, 2π)`.  The residue is of
+  the **full** integrand `z^{s-1} R(z)` — for a simple pole this equals
+  `z_k^{s-1} Res(R, z_k)`, but for an order-≥2 pole it does not (a pure double
+  pole has `Res(R)=0`), so poles of any order are handled by shifting `w=z−z_k`
+  and expanding the analytic factor `(1+w/z_k)^{s-1}`.  The `e^{−iπs}/sin(π s)`
+  prefactor is the exact reduction of the keyhole jump `1/(1 − e^{2πi s})`,
+  landing a numeric `s` on an algebraic multiple of `π` (e.g.
+  `∫₀^∞ x^{1/3}/(x²+1) = π/√3`, `∫₀^∞ √x/(1+x)² = π/2`).  Requires
+  `0 < Re(s) < deg Q − deg P`.
 - **Sector on `(0, ∞)`** — `f = x^m/(c + x^n)` with the exponent `n` possibly a
   **symbolic parameter**: the wedge of angle `2π/n` gives
   `(π/n) c^{s/n − 1} csc(π s/n)`, `s = m + 1`.  This is the one family admitting a

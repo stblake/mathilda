@@ -444,6 +444,21 @@ static bool is_pos_inf(const Expr* b) {
     return false;
 }
 
+/* a == -Infinity (DirectedInfinity[-1] or Times[-1, Infinity]) */
+static bool is_neg_inf(const Expr* a) {
+    if (!a) return false;
+    if (head_name_is(a, "DirectedInfinity") && a->data.function.arg_count == 1) {
+        Expr* d = a->data.function.args[0];
+        return d->type == EXPR_INTEGER && d->data.integer == -1;
+    }
+    if (head_name_is(a, "Times") && a->data.function.arg_count == 2) {
+        Expr* c = a->data.function.args[0];
+        return c->type == EXPR_INTEGER && c->data.integer == -1 &&
+               is_pos_inf(a->data.function.args[1]);
+    }
+    return false;
+}
+
 /* Structural degree of a MONOMIAL in x: 0 if x-free, else sum of x-powers over a
  * Times, k for Power[x,k] (k a nonneg integer), 1 for x.  Returns -1 if `e` is
  * not a clean monomial with a nonnegative integer power of x. */
@@ -1326,11 +1341,49 @@ static Expr* stage_quadrature(const Expr* f, const Expr* x, const Expr* a,
 /* -------------------------------------------------------------------------
  * Public entry point.
  * ---------------------------------------------------------------------- */
+/* Whole-line divergence gate.  Integrate[f, {x,-Inf,Inf}] with a real pole of f
+ * on the axis diverges (only a principal value exists), so DiffUnderInt cannot
+ * help -- and pursuing it drives a non-terminating escalation (Integrate[x^k f],
+ * plus Exp->Cosh/Sinh rewrites that swell the Risch-Norman linear system to
+ * minutes).  Detect a real pole by a numeric sign-change / zero scan of the
+ * x-only denominator: Solve is unreliable on transcendental denominators (for
+ * Exp[x]-1 vs Exp[x]+1 it returns the same complex family under Reals).  Gated to
+ * a parameter-free denominator; conservative (returns false) otherwise, and the
+ * numerator being nonzero at an Exp-tower root is implicit (a genuine pole). */
+static bool whole_line_divergent_pole(const Expr* f, const Expr* x) {
+    Expr* T = ev1("Together", expr_copy((Expr*)f));
+    if (!T) return false;
+    Expr* den = ev1("Denominator", T);                /* consumes T */
+    if (!den) return false;
+    if (!contains_symbol(den, x)) { expr_free(den); return false; }
+    ParamBound pb[4];
+    if (collect_params(den, x, pb, 4, 0) > 0) { expr_free(den); return false; }
+    bool pole = false, have_prev = false; double prev = 0.0;
+    for (int k = -40; k <= 40 && !pole; k++) {
+        Expr* at = eval_take(mk_fn2("ReplaceAll", expr_copy(den),
+                       mk_fn2("Rule", expr_copy((Expr*)x), mk_int(k))));
+        double v;
+        bool got = at && numeric_double(at, &v);
+        if (at) expr_free(at);
+        if (!got) { have_prev = false; continue; }
+        if (v == 0.0) { pole = true; break; }
+        if (have_prev && ((prev < 0.0) != (v < 0.0))) pole = true;   /* sign change */
+        prev = v; have_prev = true;
+    }
+    expr_free(den);
+    return pole;
+}
+
 Expr* integrate_diffunderint_try(Expr* f, Expr* x, Expr* a, Expr* b,
                                  Expr* assumptions) {
     if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
     if (!contains_symbol(f, x)) return NULL;          /* no x: not our business */
     if (diui_depth >= DIUI_MAX_DEPTH) return NULL;
+    /* Divergent whole-line integrand (real axis pole): decline before the
+     * escalation.  Only the pure two-sided-infinite case; half-line / finite
+     * integrals keep their behaviour (a boundary singularity is not interior). */
+    if (is_neg_inf(a) && is_pos_inf(b) && whole_line_divergent_pole(f, x))
+        return NULL;
     /* Gaussian integrands (Exp[-p x^2], ...) are now handled: the half-line inner
      * integrals go only to the closed-form families (never the general engine,
      * which hangs on Exp[nonlinear-in-x]), gaussian_halfline supplies the moment

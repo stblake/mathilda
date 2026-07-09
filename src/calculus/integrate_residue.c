@@ -1012,7 +1012,9 @@ static Expr* residue_family_sector(Expr* f, Expr* x, Expr* a, Expr* b);
  * (0, 2Pi) (so a pole at z_k is |z_k|^(s-1) e^(i theta_k (s-1)), theta_k in
  * (0,2Pi)).  The e^(-i Pi s)/Sin(Pi s) prefactor is the exact reduction of the
  * keyhole's 1/(1 - e^(2 Pi i s)) jump, which lands the value on a Sin (so a
- * numeric s reduces to an algebraic multiple of Pi).  Simple poles only.
+ * numeric s reduces to an algebraic multiple of Pi).  Poles of any order are
+ * summed via mellin_pole_contribution (the residue of the FULL integrand
+ * z^(s-1) R(z), not z_k^(s-1) Res(R,z_k) which holds for simple poles only).
  * ---------------------------------------------------------------------- */
 
 /* Split F = v^p R(v) with R rational in v and p a v-free NON-integer exponent.
@@ -1084,6 +1086,40 @@ static Expr* mellin_branch(Expr* z, Expr* pm1) {
     return eval_take(mk_fn2("Times", mag, phase));
 }
 
+/* Res[ z^(s-1) R(z), z_k ] for a pole z_k of ANY order, off the positive real
+ * axis.  The keyhole formula sums the residues of the FULL integrand z^(s-1)R(z);
+ * for a simple pole this is z_k^(s-1) Res(R,z_k), but for order >= 2 the two
+ * differ (z^(s-1) contributes derivative terms) -- summing z_k^(s-1) Res(R,z_k)
+ * there is WRONG (a pure double pole has Res(R)=0, silently zeroing the answer).
+ *
+ * Shift w = z - z_k:  z^(s-1) = z_k^(s-1) (1 + w/z_k)^(s-1).  The branch value
+ * z_k^(s-1) (keyhole arg in (0,2Pi)) is mellin_branch; (1 + w/z_k)^(s-1) is
+ * analytic at w=0 (regular binomial series, value 1 there -- NOT a Puiseux
+ * expansion in w), so the contribution is
+ *      z_k^(s-1) * Res_{w=0}[ (1 + w/z_k)^(s-1) R(w + z_k) ],
+ * computed by the ordinary residue engine, correct for any pole order (the
+ * simple-pole case falls out as m=1).  pm1 = s-1 = p.  Borrows R, v, z, pm1. */
+static Expr* mellin_pole_contribution(Expr* R, Expr* v, Expr* z, Expr* pm1) {
+    Expr* B = mellin_branch(z, pm1);                          /* z_k^(s-1), keyhole */
+    if (!B) return NULL;
+    /* Rshift = R /. v -> v + z  (moves the pole to w = 0). */
+    Expr* Rshift = eval_take(mk_fn2("ReplaceAll", expr_copy(R),
+                       mk_fn2("Rule", expr_copy(v),
+                              mk_fn2("Plus", expr_copy(v), expr_copy(z)))));
+    /* analytic = (1 + v/z)^pm1, regular at v = 0. */
+    Expr* analytic = mk_fn2("Power",
+        mk_fn2("Plus", mk_int(1),
+            mk_fn2("Times", expr_copy(v), mk_fn2("Power", expr_copy(z), mk_int(-1)))),
+        expr_copy(pm1));
+    Expr* prod = eval_take(mk_fn2("Times", analytic, Rshift));
+    Expr* zero = mk_int(0);
+    Expr* r0 = prod ? residue_compute(prod, v, zero) : NULL;  /* any-order residue */
+    if (prod) expr_free(prod);
+    expr_free(zero);
+    if (!r0) { expr_free(B); return NULL; }
+    return eval_take(mk_fn2("Times", B, r0));
+}
+
 static Expr* mellin_core(Expr* F, Expr* v) {
     Expr* p; Expr* R;
     if (!mellin_split(F, v, &p, &R)) return NULL;
@@ -1116,10 +1152,16 @@ static Expr* mellin_core(Expr* F, Expr* v) {
       } }
     ExprVec roots;
     if (!solve_roots(Q, v, &roots)) { expr_free(Q); expr_free(p); expr_free(R); expr_free(s); return NULL; }
-    expr_free(Q);
+    /* dQ = Q'(v), for the simple-pole test (Q'(z_k) != 0  <=>  z_k is a simple
+     * pole).  Consumes Q. */
+    Expr* dQ = eval_take(mk_fn2("D", Q, expr_copy(v)));
 
-    /* Sigma = Sum_k branch(z_k) * Res(R, z_k), simple poles off the positive
-     * real axis (a pole on (0,Inf) would sit on the contour -> not handled). */
+    /* Sigma = Sum_k Res[ z^(s-1) R(z), z_k ] over poles z_k off the positive real
+     * axis (a pole on (0,Inf) would sit on the contour -> not handled).  A simple
+     * pole takes the fast closed form z_k^(s-1) Res(R, z_k); an order >= 2 pole
+     * (where that form is WRONG) takes the general full-integrand residue, which
+     * is heavier (a Series of the shifted fractional-power integrand) so it is
+     * reserved for exactly the poles that need it. */
     Expr* Sigma = mk_int(0);
     bool bad = false;
     for (size_t i = 0; i < roots.n && !bad; i++) {
@@ -1127,13 +1169,28 @@ static Expr* mellin_core(Expr* F, Expr* v) {
         double zre, zim;
         if (!res_reim(z, &zre, &zim)) { bad = true; break; }        /* symbolic pole */
         if (zim > -RES_TOL && zim < RES_TOL && zre > RES_TOL) { bad = true; break; } /* on (0,Inf) */
-        Expr* br = mellin_branch(z, p);
-        Expr* rr = residue_compute(R, v, z);
-        if (!br || !rr) { if (br) expr_free(br); if (rr) expr_free(rr); bad = true; break; }
-        Sigma = eval_take(mk_fn2("Plus", Sigma, mk_fn2("Times", br, rr)));
+        /* Simple iff Q'(z) != 0 (numeric z, dQ a polynomial -> numeric value). */
+        Expr* dQz = dQ ? eval_take(mk_fn2("ReplaceAll", expr_copy(dQ),
+                            mk_fn2("Rule", expr_copy(v), expr_copy(z)))) : NULL;
+        double dre, dim;
+        bool simple = dQz && res_reim(dQz, &dre, &dim) &&
+                      (fabs(dre) > RES_TOL || fabs(dim) > RES_TOL);
+        if (dQz) expr_free(dQz);
+        Expr* contrib;
+        if (simple) {
+            Expr* br = mellin_branch(z, p);
+            Expr* rr = residue_compute(R, v, z);
+            if (!br || !rr) { if (br) expr_free(br); if (rr) expr_free(rr); bad = true; break; }
+            contrib = eval_take(mk_fn2("Times", br, rr));
+        } else {
+            contrib = mellin_pole_contribution(R, v, z, p);
+        }
+        if (!contrib) { bad = true; break; }
+        Sigma = eval_take(mk_fn2("Plus", Sigma, contrib));
         if (!Sigma) { bad = true; break; }
     }
     ev_free(&roots);
+    if (dQ) expr_free(dQ);
     if (bad || !Sigma) { if (Sigma) expr_free(Sigma); expr_free(p); expr_free(R); expr_free(s); return NULL; }
     expr_free(R);
 
