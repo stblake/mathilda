@@ -9,7 +9,7 @@
 #include "eval.h"
 #include "print.h"
 #include "sym_names.h"
-#include "matrix.h"
+#include "ndarray.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -31,13 +31,13 @@ static Expr* build_tensor(int64_t* dims, int rank, Expr** flat, size_t* idx) {
 }
 
 Expr* dot2(Expr* a, Expr* b, bool* error_printed) {
-    /* Fast path: both operands are dense Matrix ndarrays of rank <= 2 —
+    /* Fast path: both operands are dense NDArray values of rank <= 2 —
      * contract directly over the flat double buffers, no symbolic
-     * Times/Plus per element. Higher-rank Matrix operands fall through to
+     * Times/Plus per element. Higher-rank NDArray operands fall through to
      * the generic tensor path below via a nested-List conversion. */
-    if (a->type == EXPR_MATRIX && b->type == EXPR_MATRIX) {
+    if (a->type == EXPR_NDARRAY && b->type == EXPR_NDARRAY) {
         bool shape_error = false;
-        Expr* fast = matrix_dot2(a, b, &shape_error);
+        Expr* fast = ndarray_dot2(a, b, &shape_error);
         if (fast) return fast;
         if (shape_error) {
             if (!*error_printed) {
@@ -54,8 +54,8 @@ Expr* dot2(Expr* a, Expr* b, bool* error_printed) {
 
     Expr* conv_a = NULL;
     Expr* conv_b = NULL;
-    if (a->type == EXPR_MATRIX) { conv_a = matrix_to_nested_list(a); a = conv_a; }
-    if (b->type == EXPR_MATRIX) { conv_b = matrix_to_nested_list(b); b = conv_b; }
+    if (a->type == EXPR_NDARRAY) { conv_a = ndarray_to_nested_list(a); a = conv_a; }
+    if (b->type == EXPR_NDARRAY) { conv_b = ndarray_to_nested_list(b); b = conv_b; }
 
     int64_t dimsA[64];
     int rankA = get_tensor_dims(a, dimsA);
@@ -160,8 +160,8 @@ Expr* builtin_dot(Expr* res) {
         Expr* b = new_args[i+1];
 
         int64_t dA[64], dB[64];
-        bool a_is_tensor = (a->type == EXPR_MATRIX) || get_tensor_dims(a, dA) > 0;
-        bool b_is_tensor = (b->type == EXPR_MATRIX) || get_tensor_dims(b, dB) > 0;
+        bool a_is_tensor = (a->type == EXPR_NDARRAY) || get_tensor_dims(a, dA) > 0;
+        bool b_is_tensor = (b->type == EXPR_NDARRAY) || get_tensor_dims(b, dB) > 0;
         if (a_is_tensor && b_is_tensor) {
             Expr* d = dot2(a, b, &error_printed);
             if (d) {

@@ -139,17 +139,17 @@ Expr* expr_new_bigint_from_str(const char* str) {
     return e;
 }
 
-Expr* expr_new_matrix(int rank, const int64_t* dims, double* data) {
+Expr* expr_new_ndarray(int rank, const int64_t* dims, double* data) {
     Expr* e = malloc(sizeof(Expr));
     if (!e) return NULL;
-    e->type = EXPR_MATRIX;
+    e->type = EXPR_NDARRAY;
     e->refcount = 1;
     e->last_evaluated_at = 0;
-    e->data.matrix.rank = rank;
-    e->data.matrix.dims = malloc(sizeof(int64_t) * (size_t)rank);
-    if (!e->data.matrix.dims) { free(e); return NULL; }
-    memcpy(e->data.matrix.dims, dims, sizeof(int64_t) * (size_t)rank);
-    e->data.matrix.data = data;
+    e->data.ndarray.rank = rank;
+    e->data.ndarray.dims = malloc(sizeof(int64_t) * (size_t)rank);
+    if (!e->data.ndarray.dims) { free(e); return NULL; }
+    memcpy(e->data.ndarray.dims, dims, sizeof(int64_t) * (size_t)rank);
+    e->data.ndarray.data = data;
     return e;
 }
 
@@ -307,15 +307,15 @@ Expr* expr_unshare(Expr* e) {
             mpz_init(fresh->data.bigint);
             mpz_set(fresh->data.bigint, e->data.bigint);
             break;
-        case EXPR_MATRIX: {
-            int rank = e->data.matrix.rank;
+        case EXPR_NDARRAY: {
+            int rank = e->data.ndarray.rank;
             size_t n = 1;
-            for (int i = 0; i < rank; i++) n *= (size_t)e->data.matrix.dims[i];
-            fresh->data.matrix.rank = rank;
-            fresh->data.matrix.dims = malloc(sizeof(int64_t) * (size_t)rank);
-            memcpy(fresh->data.matrix.dims, e->data.matrix.dims, sizeof(int64_t) * (size_t)rank);
-            fresh->data.matrix.data = malloc(sizeof(double) * n);
-            memcpy(fresh->data.matrix.data, e->data.matrix.data, sizeof(double) * n);
+            for (int i = 0; i < rank; i++) n *= (size_t)e->data.ndarray.dims[i];
+            fresh->data.ndarray.rank = rank;
+            fresh->data.ndarray.dims = malloc(sizeof(int64_t) * (size_t)rank);
+            memcpy(fresh->data.ndarray.dims, e->data.ndarray.dims, sizeof(int64_t) * (size_t)rank);
+            fresh->data.ndarray.data = malloc(sizeof(double) * n);
+            memcpy(fresh->data.ndarray.data, e->data.ndarray.data, sizeof(double) * n);
             break;
         }
 #ifdef USE_MPFR
@@ -383,9 +383,9 @@ void expr_free(Expr* e) {
         case EXPR_BIGINT:
             mpz_clear(e->data.bigint);
             break;
-        case EXPR_MATRIX:
-            free(e->data.matrix.dims);
-            free(e->data.matrix.data);
+        case EXPR_NDARRAY:
+            free(e->data.ndarray.dims);
+            free(e->data.ndarray.data);
             break;
 #ifdef USE_MPFR
         case EXPR_MPFR:
@@ -456,14 +456,14 @@ bool expr_eq(const Expr* a, const Expr* b) {
         }
         case EXPR_BIGINT:
             return mpz_cmp(a->data.bigint, b->data.bigint) == 0;
-        case EXPR_MATRIX: {
-            if (a->data.matrix.rank != b->data.matrix.rank) return false;
+        case EXPR_NDARRAY: {
+            if (a->data.ndarray.rank != b->data.ndarray.rank) return false;
             size_t n = 1;
-            for (int i = 0; i < a->data.matrix.rank; i++) {
-                if (a->data.matrix.dims[i] != b->data.matrix.dims[i]) return false;
-                n *= (size_t)a->data.matrix.dims[i];
+            for (int i = 0; i < a->data.ndarray.rank; i++) {
+                if (a->data.ndarray.dims[i] != b->data.ndarray.dims[i]) return false;
+                n *= (size_t)a->data.ndarray.dims[i];
             }
-            return memcmp(a->data.matrix.data, b->data.matrix.data, sizeof(double) * n) == 0;
+            return memcmp(a->data.ndarray.data, b->data.ndarray.data, sizeof(double) * n) == 0;
         }
 #ifdef USE_MPFR
         case EXPR_MPFR:
@@ -533,18 +533,18 @@ uint64_t expr_hash(const Expr* e) {
             }
             break;
         }
-        case EXPR_MATRIX: {
-            h ^= (uint64_t)e->data.matrix.rank;
+        case EXPR_NDARRAY: {
+            h ^= (uint64_t)e->data.ndarray.rank;
             h *= prime;
             size_t n = 1;
-            for (int i = 0; i < e->data.matrix.rank; i++) {
-                h ^= (uint64_t)e->data.matrix.dims[i];
+            for (int i = 0; i < e->data.ndarray.rank; i++) {
+                h ^= (uint64_t)e->data.ndarray.dims[i];
                 h *= prime;
-                n *= (size_t)e->data.matrix.dims[i];
+                n *= (size_t)e->data.ndarray.dims[i];
             }
             for (size_t i = 0; i < n; i++) {
                 uint64_t v;
-                memcpy(&v, &e->data.matrix.data[i], 8);
+                memcpy(&v, &e->data.ndarray.data[i], 8);
                 h ^= v; h *= prime;
             }
             break;

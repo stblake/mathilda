@@ -45,7 +45,7 @@
 #include "boolean.h"
 #include "list.h"
 #include "assoc.h"
-#include "matrix.h"
+#include "ndarray.h"
 #include "replace.h"
 #include "patterns.h"
 #include "cond.h"
@@ -649,7 +649,7 @@ void core_init(void) {
     boolean_init();
     list_init();
     assoc_init();
-    matrix_init();
+    ndarray_init();
     replace_init();
     patterns_init();
     cond_init();
@@ -1038,6 +1038,9 @@ Expr* builtin_length(Expr* res) {
         int64_t len = 0;
         if (arg->type == EXPR_FUNCTION) {
             len = (int64_t)arg->data.function.arg_count;
+        } else if (arg->type == EXPR_NDARRAY) {
+            /* numpy len(): the leading-axis length (rank >= 1 always). */
+            len = arg->data.ndarray.dims[0];
         }
         return expr_new_integer(len);
     }
@@ -1113,11 +1116,11 @@ Expr* builtin_dimensions(Expr* res) {
     Expr* arg = res->data.function.args[0];
     int depth = 0;
     int64_t dims[DIMENSIONS_MAX_DEPTH];
-    if (arg->type == EXPR_MATRIX) {
+    if (arg->type == EXPR_NDARRAY) {
         /* O(1): rank/dims are already stored directly, no probing needed. */
-        depth = arg->data.matrix.rank;
+        depth = arg->data.ndarray.rank;
         if (depth > max_depth) depth = max_depth;
-        for (int i = 0; i < depth; i++) dims[i] = arg->data.matrix.dims[i];
+        for (int i = 0; i < depth; i++) dims[i] = arg->data.ndarray.dims[i];
     } else if (max_depth > 0 && arg->type == EXPR_FUNCTION &&
         arg->data.function.head->type == EXPR_SYMBOL) {
         depth = get_dimensions(arg, dims, max_depth, arg->data.function.head->data.symbol);
@@ -2568,6 +2571,9 @@ Expr* builtin_quotient(Expr* res) {
 }
 
 static int64_t get_expr_depth(Expr* e, bool heads) {
+    /* An NDArray is the flat-storage equivalent of a rank-deep nested List,
+     * so its Depth matches: a rank-r array has depth r + 1 (the atom level). */
+    if (e->type == EXPR_NDARRAY) return (int64_t)e->data.ndarray.rank + 1;
     if (e->type != EXPR_FUNCTION) return 1;
 
     // Rational and Complex are considered atomic in terms of Depth/Length in Mathematica

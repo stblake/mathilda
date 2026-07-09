@@ -702,6 +702,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
         case EXPR_REAL:
         case EXPR_STRING:
         case EXPR_BIGINT:
+        case EXPR_NDARRAY:        /* dense ndarray: an atomic value */
 #ifdef USE_MPFR
         case EXPR_MPFR:
 #endif

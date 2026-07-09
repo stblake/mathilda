@@ -309,25 +309,25 @@ int expr_compare(const Expr* a, const Expr* b) {
     }
 
     /* 5. Matrices: rank, then dims, then row-major data, lexicographic. */
-    if (a->type == EXPR_MATRIX && b->type == EXPR_MATRIX) {
-        if (a->data.matrix.rank != b->data.matrix.rank) {
-            return (a->data.matrix.rank < b->data.matrix.rank) ? -1 : 1;
+    if (a->type == EXPR_NDARRAY && b->type == EXPR_NDARRAY) {
+        if (a->data.ndarray.rank != b->data.ndarray.rank) {
+            return (a->data.ndarray.rank < b->data.ndarray.rank) ? -1 : 1;
         }
         size_t n = 1;
-        for (int i = 0; i < a->data.matrix.rank; i++) {
-            int64_t da = a->data.matrix.dims[i], db = b->data.matrix.dims[i];
+        for (int i = 0; i < a->data.ndarray.rank; i++) {
+            int64_t da = a->data.ndarray.dims[i], db = b->data.ndarray.dims[i];
             if (da != db) return (da < db) ? -1 : 1;
             n *= (size_t)da;
         }
         for (size_t i = 0; i < n; i++) {
-            double da = a->data.matrix.data[i], db = b->data.matrix.data[i];
+            double da = a->data.ndarray.data[i], db = b->data.ndarray.data[i];
             if (da < db) return -1;
             if (da > db) return 1;
         }
         return 0;
     }
-    if (a->type == EXPR_MATRIX) return 1;
-    if (b->type == EXPR_MATRIX) return -1;
+    if (a->type == EXPR_NDARRAY) return 1;
+    if (b->type == EXPR_NDARRAY) return -1;
 
     return 0;
 }

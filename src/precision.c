@@ -94,6 +94,9 @@ static Expr* precision_of(const Expr* e) {
         case EXPR_SYMBOL:
             /* Numeric constants (Pi, E, …) are exact when left symbolic. */
             return make_infinity();
+        case EXPR_NDARRAY:
+            /* Dense machine-precision ndarray: every entry is a double. */
+            return make_machineprecision();
         case EXPR_FUNCTION: {
             /* Rational is exact; Complex reduces to min of parts;
              * anything else — conservatively take the min across parts. */
@@ -186,6 +189,23 @@ static Expr* accuracy_of(const Expr* e) {
             return expr_new_real(prec_digits - expr_log10_abs(e));
         }
 #endif
+        case EXPR_NDARRAY: {
+            /* Machine-precision doubles: minimum accuracy across all entries,
+             * matching the per-component minimum taken for lists. */
+            size_t n = 1;
+            for (int i = 0; i < e->data.ndarray.rank; ++i) {
+                n *= (size_t)e->data.ndarray.dims[i];
+            }
+            Expr* best = make_infinity();
+            for (size_t i = 0; i < n; ++i) {
+                double v = e->data.ndarray.data[i];
+                double acc = (v == 0.0)
+                    ? accuracy_of_machine_zero()
+                    : NUMERIC_MACHINE_PRECISION_DIGITS - log10(fabs(v));
+                best = precision_min(best, expr_new_real(acc));
+            }
+            return best;
+        }
         case EXPR_FUNCTION: {
             /* Exact rationals with numerator 0 are exact zero → Infinity;
              * otherwise rationals are exact and also → Infinity. */

@@ -6,7 +6,7 @@
 #include "numeric.h"
 #include "sym_names.h"
 #include "series.h"
-#include "matrix.h"
+#include "ndarray.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -321,14 +321,17 @@ Expr* builtin_plus(Expr* res) {
     if (n == 0) return expr_new_integer(0);
     if (n == 1) return expr_copy(res->data.function.args[0]);
 
-    /* Matrix fast path: n same-shape Matrix operands add elementwise over
-     * raw double buffers, skipping the coefficient/base grouping below
-     * entirely. NULL (not all Matrix, or shapes disagree) falls through —
-     * mismatched Matrix operands are then treated as opaque non-numeric
-     * terms, same as any other unequal symbolic bases. */
+    /* NDArray fast path: n same-shape NDArray operands add elementwise over
+     * raw double buffers, skipping the coefficient/base grouping below. If the
+     * operands are all NDArrays but of disagreeing shape, warn (NDArray::shape)
+     * and leave the sum unevaluated, like Dot::dotsh. A NULL from a mixed
+     * NDArray/scalar operand set falls through to the generic grouping, which
+     * treats the NDArrays as opaque non-numeric terms. */
     {
-        Expr* fast = matrix_elementwise(res->data.function.args, n, true);
+        Expr* fast = ndarray_elementwise(res->data.function.args, n, true);
         if (fast) return fast;
+        if (ndarray_warn_shape_mismatch(res->data.function.args, n, "added"))
+            return NULL;
     }
 
     /* Distribute Times[-1, Plus[...]] over the outer Plus. This is

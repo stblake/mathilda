@@ -692,6 +692,7 @@ Expr* numericalize(const Expr* e, NumericSpec spec) {
 #endif
             return expr_new_real(e->data.real);
         case EXPR_STRING:  return expr_copy((Expr*)e);
+        case EXPR_NDARRAY:  return expr_copy((Expr*)e); /* already machine-precision */
         case EXPR_SYMBOL:  return numericalize_symbol(e, spec);
         case EXPR_FUNCTION: return numericalize_function(e, spec);
 #ifdef USE_MPFR
