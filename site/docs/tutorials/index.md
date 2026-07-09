@@ -84,6 +84,18 @@ Work through them in order if you're new — each one builds on the last.
     Wallis/Viète trigonometric factorizations, Euler prime products for `ζ`,
     and the exponential products for `e`, `γ`, and Glaisher's constant.
 
+-   :material-grid: __[13. BLAS kernels](13-blas.md)__
+
+    Call the machine-precision BLAS kernels directly through the `` BLAS` ``
+    context: dot products and norms, `dgemv`, `dgemm`, the symmetric and
+    triangular Level-3 routines, and their complex `z*` counterparts.
+
+-   :material-table-large: __[14. LAPACK drivers](14-lapack.md)__
+
+    Solve systems and least squares, factor matrices (LU, QR, Cholesky),
+    compute the SVD, and solve symmetric and general eigenproblems with the
+    `` LAPACK` `` context.
+
 </div>
 
 !!! tip "Following along"

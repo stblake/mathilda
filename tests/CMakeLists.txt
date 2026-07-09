@@ -361,6 +361,9 @@ set(COMMON_SRC
     ../src/linalg/svdecomp_machine.c
     ../src/linalg/svdecomp_mpfr.c
     ../src/linalg/lapack.c
+    ../src/linalg/numarray.c
+    ../src/linalg/blas_bridge.c
+    ../src/linalg/lapack_bridge.c
     ../src/linalg/posdef_q.c
     ../src/linalg/negdef_q.c
     ../src/linalg/eigen.c
@@ -1296,6 +1299,27 @@ else()
     target_link_libraries(lapack_tests gmp m)
 endif()
 add_test(NAME lapack_tests COMMAND lapack_tests)
+
+# BLAS` / LAPACK` context builtins (blas_bridge.c / lapack_bridge.c).
+add_executable(blas_tests test_blas.c ${COMMON_SRC})
+target_include_directories(blas_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(blas_tests gmp m ${ECM_LIB})
+    add_dependencies(blas_tests build_ecm)
+else()
+    target_link_libraries(blas_tests gmp m)
+endif()
+add_test(NAME blas_tests COMMAND blas_tests)
+
+add_executable(lapack_builtin_tests test_lapack_builtin.c ${COMMON_SRC})
+target_include_directories(lapack_builtin_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(lapack_builtin_tests gmp m ${ECM_LIB})
+    add_dependencies(lapack_builtin_tests build_ecm)
+else()
+    target_link_libraries(lapack_builtin_tests gmp m)
+endif()
+add_test(NAME lapack_builtin_tests COMMAND lapack_builtin_tests)
 
 add_executable(conjugate_transpose_tests test_conjugate_transpose.c ${COMMON_SRC})
 target_include_directories(conjugate_transpose_tests PRIVATE ../src)
