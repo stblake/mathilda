@@ -233,6 +233,31 @@ static void test_bounded_envelope(void) {
      * vanishing base blows up, so this too stays unevaluated.            */
     check("Limit[(Sin[1/x]/2)^(-1/x^2), x -> 0]",
           "Limit[(Sin[1/x]/2)^(-1/x^2), x -> 0]");
+
+    /* Shrinking (x-dependent) magnitude bound: |x Sin[1/x]/2| <= Abs[x]/2,
+     * whose limit is 0 < 1, so the squeeze fires even though the bound is
+     * not a constant.                                                    */
+    check_equiv("Limit[(x Sin[1/x]/2)^(1/x^2), x -> 0]",     "0");
+
+    /* Base bounded below by a constant > 1 (band [3/2, 5/2], positive):
+     * base^(1/x^2) -> +Infinity as the exponent -> +Infinity.           */
+    check("Limit[(2 + Sin[1/x]/2)^(1/x^2), x -> 0]",         "Infinity");
+
+    /* Bounded base with a *linearly divergent* exponent at Infinity. The
+     * general log-reduction/Series path used to recurse without progress
+     * (magnitude bound keeps the oscillator inside Abs[Log[..]]) and hang;
+     * the squeeze now settles both quickly.                              */
+    check_equiv("Limit[(Cos[x]/2)^x, x -> Infinity]",        "0");
+    check_equiv("Limit[(Sin[x]/2)^x, x -> Infinity]",        "0");
+
+    /* Genuine 1^Infinity with an unbounded-oscillation log (x Sin[x] has no
+     * limit): must terminate and stay unevaluated, not hang.            */
+    check("Limit[(1 + Sin[x]/x)^(x^2), x -> Infinity]",
+          "Limit[(1 + Sin[x]/x)^x^2, x -> Infinity]");
+
+    /* Convergent 1^Infinity through a bounded head (Cos[1/x] -> 1): once
+     * the squeeze stops the hang, Series recovers the true value E^(-1/2). */
+    check_equiv("Limit[Cos[1/x]^(x^2), x -> Infinity]",      "1/Sqrt[E]");
 }
 
 /* ----------------------------------------------------------------- */

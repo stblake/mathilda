@@ -231,9 +231,12 @@ Out[8]= 6 a b^2
     do not self-evaluate there (oscillatory `Sin`, `Cos`) fall through and yield
     `Indeterminate`.
   - `"Bounded"` — squeeze envelope and bounded-oscillation `Interval`. Also
-    covers a bounded base raised to a divergent positive power (e.g.
-    `(Sin[1/x]/2)^(1/x^2) -> 0` at `x -> 0`, via `|base|^exp <= B^exp` with
-    `B` the base's constant magnitude bound and `exp -> +Infinity`).
+    covers a bounded base raised to a divergent positive power (`exp -> +Infinity`):
+    with `B >= |base|` the pointwise magnitude bound, the limit is `0` when
+    `Limit[B]` lies in `[0, 1)` (e.g. `(Sin[1/x]/2)^(1/x^2) -> 0` and the
+    shrinking-bound `(x Sin[1/x]/2)^(1/x^2) -> 0` at `x -> 0`), and `Infinity`
+    when the base is bounded below by a constant `> 1` and positive (e.g.
+    `(2 + Sin[1/x]/2)^(1/x^2) -> Infinity`).
 - May return a finite value, `Infinity`, `-Infinity`, `ComplexInfinity`,
   `Indeterminate`, an `Interval[{lo, hi}]`, or the original expression
   unevaluated when the limit cannot be determined.

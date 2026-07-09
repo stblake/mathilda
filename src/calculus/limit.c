@@ -329,7 +329,7 @@ static Expr* layer_log_of_finite(Expr* f, LimitCtx* ctx);
 static Expr* layer_plus_termwise(Expr* f, LimitCtx* ctx);
 static Expr* layer_abs_rewrite(Expr* f, LimitCtx* ctx);
 static Expr* rewrite_reciprocal_trig(Expr* e);
-static Expr* magnitude_upper_bound(Expr* e, Expr* x);
+static Expr* magnitude_upper_bound(Expr* e, Expr* x, bool var_abs);
 static bool  contains_bounded_head(Expr* e);
 #define LIMIT_UNKNOWN_GROWTH INT64_MAX
 static int64_t growth_exponent_upper(Expr* e, Expr* x);
@@ -504,16 +504,19 @@ static bool contains_bounded_head(Expr* e) {
     return false;
 }
 
-static Expr* magnitude_upper_bound(Expr* e, Expr* x) {
+static Expr* magnitude_upper_bound(Expr* e, Expr* x, bool var_abs) {
     if (!e) return mk_int(0);
     if (free_of(e, x)) return mk_fn1("Abs", expr_copy(e));
     if (e->type != EXPR_FUNCTION) {
-        /* Bare variable: return `x` (not Abs[x]). The caller only invokes
-         * this for limits at +Infinity, where `x` is eventually positive
-         * and its magnitude equals itself. Keeping Abs around causes
-         * Limit[1/Abs[x], x->Infinity] to bottom out through L'Hospital
-         * on a non-polynomial denominator with no useful progress. */
-        return expr_copy(e);
+        /* Bare variable. With var_abs the true magnitude |x| = Abs[x] is
+         * returned, so the bound is sound at a finite point too (used by
+         * envelope_bounded_power for shapes like x Sin[1/x] at x -> 0).
+         * Without it we return `x` (not Abs[x]): the +Infinity-only general
+         * squeeze relies on `x` being eventually positive, and keeping Abs
+         * around causes Limit[1/Abs[x], x->Infinity] to bottom out through
+         * L'Hospital on a non-polynomial denominator with no useful
+         * progress. */
+        return var_abs ? mk_fn1("Abs", expr_copy(e)) : expr_copy(e);
     }
 
     if (head_is(e, SYM_Sin) || head_is(e, SYM_Cos) || head_is(e, SYM_Tanh)) {
@@ -528,7 +531,7 @@ static Expr* magnitude_upper_bound(Expr* e, Expr* x) {
         Expr* sum = mk_int(0);
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             sum = mk_fn2("Plus", sum, magnitude_upper_bound(
-                                            e->data.function.args[i], x));
+                                            e->data.function.args[i], x, var_abs));
         }
         return simp(sum);
     }
@@ -537,7 +540,7 @@ static Expr* magnitude_upper_bound(Expr* e, Expr* x) {
         Expr* prod = mk_int(1);
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             prod = mk_times(prod, magnitude_upper_bound(
-                                        e->data.function.args[i], x));
+                                        e->data.function.args[i], x, var_abs));
         }
         return simp(prod);
     }
@@ -548,11 +551,11 @@ static Expr* magnitude_upper_bound(Expr* e, Expr* x) {
         if (exp->type == EXPR_INTEGER) {
             int64_t n = exp->data.integer;
             if (n >= 0) {
-                Expr* bb = magnitude_upper_bound(base, x);
+                Expr* bb = magnitude_upper_bound(base, x, var_abs);
                 return simp(mk_fn2("Power", bb, mk_int(n)));
             }
             /* negative integer: |1/base^|n|| = 1/|base|^|n| -- keep Abs wrap. */
-            Expr* bb = magnitude_upper_bound(base, x);
+            Expr* bb = magnitude_upper_bound(base, x, var_abs);
             return simp(mk_fn2("Power", bb, mk_int(n)));
         }
         /* Exp[bounded]: bound by E. */
@@ -1568,6 +1571,27 @@ static Expr* layer_compose_at_infinity(Expr* f, LimitCtx* ctx) {
 /* point as well as at Infinity.                                            */
 /* Example: (Sin[1/x]/2)^(1/x^2) at x -> 0  =>  <= (1/2)^(1/x^2) -> 0.      */
 /* ---------------------------------------------------------------------- */
+/* True iff `e` is a concrete real number in [0, 1). Symbolic values fail
+ * the comparison (stay unevaluated, not True), so only comparable literals
+ * -- Integer, Real, Rational -- can satisfy it. */
+static bool lit_in_unit_interval(Expr* e) {
+    if (!e) return false;
+    Expr* lo = simp(mk_fn2("GreaterEqual", expr_copy(e), mk_int(0)));
+    Expr* hi = simp(mk_fn2("Less",         expr_copy(e), mk_int(1)));
+    bool ok = is_sym(lo, "True") && is_sym(hi, "True");
+    expr_free(lo); expr_free(hi);
+    return ok;
+}
+
+/* True iff `e` is a concrete real number strictly greater than 1. */
+static bool lit_gt_one(Expr* e) {
+    if (!e) return false;
+    Expr* hi = simp(mk_fn2("Greater", expr_copy(e), mk_int(1)));
+    bool ok = is_sym(hi, "True");
+    expr_free(hi);
+    return ok;
+}
+
 static Expr* envelope_bounded_power(Expr* f, LimitCtx* ctx) {
     if (!head_is(f, SYM_Power) || f->data.function.arg_count != 2) return NULL;
     Expr* base = f->data.function.args[0];
@@ -1577,11 +1601,11 @@ static Expr* envelope_bounded_power(Expr* f, LimitCtx* ctx) {
     if (!contains_bounded_head(base)) return NULL;
     if (free_of(exp, ctx->x)) return NULL;
 
-    /* Require exp -> +Infinity. This makes exp eventually positive (so
-     * |base|^exp <= B^exp is a genuine upper bound) and is the only regime
-     * in which B^exp can decay to 0. A -Infinity or finite exponent limit
-     * is rejected: for exp < 0 the inequality flips and a vanishing base
-     * would blow up instead. */
+    /* Require exp -> +Infinity. This makes exp eventually positive (so the
+     * squeeze direction is fixed): B^exp -> 0 forces base^exp -> 0, and a
+     * base bounded below by a constant > 1 forces base^exp -> Infinity. A
+     * -Infinity or finite exponent limit is rejected: the inequalities flip
+     * and neither conclusion holds. */
     LimitCtx sub = *ctx; sub.depth += 1;
     Expr* lim_exp = compute_limit(exp, &sub);
     if (!lim_exp) return NULL;
@@ -1589,23 +1613,57 @@ static Expr* envelope_bounded_power(Expr* f, LimitCtx* ctx) {
     expr_free(lim_exp);
     if (!pos_inf) return NULL;
 
-    /* B = pointwise magnitude bound of the base (e.g. Sin[1/x]/2 -> 1/2).
-     * Restrict to an x-free constant bound: an x-dependent bound would
-     * re-introduce the bare-variable magnitude subtleties this shortcut is
-     * meant to sidestep, so we conservatively defer those. */
-    Expr* B = magnitude_upper_bound(base, ctx->x);
-    if (!B) return NULL;
-    if (!free_of(B, ctx->x)) { expr_free(B); return NULL; }
+    /* --- Upper-bound squeeze to 0 ---------------------------------------
+     * B(x) >= |base(x)| pointwise (var_abs makes the bare-variable bound
+     * sound at a finite point, e.g. |x Sin[1/x]/2| <= Abs[x]/2). When
+     * Limit[B] = L with 0 <= L < 1 then eventually B < r < 1, so
+     * |base^exp| = |base|^exp <= B^exp <= r^exp -> 0 (exp -> +Infinity).
+     * The two-sided complex limit is then 0 (magnitude vanishes even where
+     * base < 0). Firing on Limit[B] rather than Limit[B^exp] lets a
+     * *shrinking* x-dependent bound (Limit[B] = 0) succeed, not just a
+     * constant one. */
+    Expr* B = magnitude_upper_bound(base, ctx->x, /*var_abs=*/true);
+    if (B) {
+        Expr* lim_B = compute_limit(B, &sub);
+        expr_free(B);
+        if (lim_B) {
+            bool decays = lit_in_unit_interval(lim_B);
+            expr_free(lim_B);
+            if (decays) return mk_int(0);
+        }
+    }
 
-    /* bound = B^exp; mk_fn2("Power", ...) adopts B and the copied exp. */
-    Expr* bound = simp(mk_fn2("Power", B, expr_copy(exp)));
-    Expr* lim_bound = compute_limit(bound, &sub);
-    expr_free(bound);
-    if (!lim_bound) return NULL;
+    /* --- Lower-bound blow-up to Infinity --------------------------------
+     * For base = c + g(x) with c an x-free real constant and g the bounded
+     * oscillatory remainder, |base| >= |c| - U where U >= |g|. If
+     * |c| - U -> L > 1 and c > 0, then base is eventually positive and
+     * base >= L > 1, so base^exp -> +Infinity (exp -> +Infinity). */
+    if (head_is(base, SYM_Plus)) {
+        Expr* c    = mk_int(0);   /* sum of x-free terms   */
+        Expr* rest = mk_int(0);   /* sum of x-bearing terms */
+        for (size_t i = 0; i < base->data.function.arg_count; i++) {
+            Expr* t = base->data.function.args[i];
+            if (free_of(t, ctx->x))
+                c    = mk_fn2("Plus", c,    expr_copy(t));
+            else
+                rest = mk_fn2("Plus", rest, expr_copy(t));
+        }
+        c = simp(c); rest = simp(rest);
 
-    bool zero = is_lit_zero(lim_bound);
-    expr_free(lim_bound);
-    return zero ? mk_int(0) : NULL;
+        if (literal_sign(c) > 0) {
+            Expr* U     = magnitude_upper_bound(rest, ctx->x, /*var_abs=*/true);
+            Expr* lower = simp(mk_fn2("Plus", mk_fn1("Abs", expr_copy(c)),
+                                              mk_neg(U)));
+            Expr* lim_L = compute_limit(lower, &sub);
+            expr_free(lower);
+            bool blows_up = lim_L && lit_gt_one(lim_L);
+            if (lim_L) expr_free(lim_L);
+            if (blows_up) { expr_free(c); expr_free(rest); return mk_sym("Infinity"); }
+        }
+        expr_free(c); expr_free(rest);
+    }
+
+    return NULL;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1623,11 +1681,19 @@ static Expr* layer_bounded_envelope(Expr* f, LimitCtx* ctx) {
      * be transformed via x -> -y. */
     if (!is_infinity_sym(ctx->point)) return NULL;
 
-    Expr* bound = magnitude_upper_bound(f, ctx->x);
+    Expr* bound = magnitude_upper_bound(f, ctx->x, /*var_abs=*/false);
     if (!bound) return NULL;
 
-    /* Guard: if the bound itself still mentions a bounded head we can't
-     * reason about (e.g. Abs[E^(Sin[..])]) we don't learn anything.      */
+    /* Guard: if the bound itself still mentions a bounded head, the
+     * magnitude reduction failed to replace the oscillator by its constant
+     * envelope -- it survived buried inside an Abs[Log[..]] / Abs[E^(..)]
+     * default wrap. Recursing compute_limit on such a bound re-enters this
+     * layer and re-wraps another Abs each level down to the depth cap (an
+     * expensive simp per level), so bail: the squeeze cannot make progress.
+     * This is what makes Limit[x Log[Sin[x]/2], x->Infinity] terminate,
+     * and thereby unblocks the (Sin[x]/2)^x / (1+Sin[x]/x)^(x^2) families. */
+    if (contains_bounded_head(bound)) { expr_free(bound); return NULL; }
+
     LimitCtx sub = *ctx; sub.depth += 1;
     Expr* lim_bound = compute_limit(bound, &sub);
     expr_free(bound);
