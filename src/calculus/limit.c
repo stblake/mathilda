@@ -1554,12 +1554,73 @@ static Expr* layer_compose_at_infinity(Expr* f, LimitCtx* ctx) {
 /* Sin[h(x)]/p(x), (1 +/- Cos[x])/x, x Sin[x]/(5 + x^2) family at infinity */
 /* as well as x^2 Sin[1/x] at 0.                                           */
 /* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
+/* Bounded base raised to a divergent positive power                       */
+/*                                                                         */
+/* Handles f = base^exp where `base` carries a bounded oscillatory head    */
+/* (Sin/Cos/Tanh/ArcTan/ArcCot) and exp -> +Infinity at the limit point.   */
+/* For real exp, |base^exp| = |base|^exp, and because exp is eventually     */
+/* positive the magnitude is bounded above by B^exp, with B the *constant*  */
+/* magnitude bound of the base. When B^exp -> 0 the squeeze forces f -> 0   */
+/* (the value is complex where base < 0, but its magnitude still vanishes,  */
+/* so the two-sided complex limit is 0). Unlike the general envelope this   */
+/* uses no bare-variable magnitude reasoning, so it is valid at a finite    */
+/* point as well as at Infinity.                                            */
+/* Example: (Sin[1/x]/2)^(1/x^2) at x -> 0  =>  <= (1/2)^(1/x^2) -> 0.      */
+/* ---------------------------------------------------------------------- */
+static Expr* envelope_bounded_power(Expr* f, LimitCtx* ctx) {
+    if (!head_is(f, SYM_Power) || f->data.function.arg_count != 2) return NULL;
+    Expr* base = f->data.function.args[0];
+    Expr* exp  = f->data.function.args[1];
+
+    /* The base must be the oscillatory factor; the exponent must vary. */
+    if (!contains_bounded_head(base)) return NULL;
+    if (free_of(exp, ctx->x)) return NULL;
+
+    /* Require exp -> +Infinity. This makes exp eventually positive (so
+     * |base|^exp <= B^exp is a genuine upper bound) and is the only regime
+     * in which B^exp can decay to 0. A -Infinity or finite exponent limit
+     * is rejected: for exp < 0 the inequality flips and a vanishing base
+     * would blow up instead. */
+    LimitCtx sub = *ctx; sub.depth += 1;
+    Expr* lim_exp = compute_limit(exp, &sub);
+    if (!lim_exp) return NULL;
+    bool pos_inf = is_infinity_sym(lim_exp);
+    expr_free(lim_exp);
+    if (!pos_inf) return NULL;
+
+    /* B = pointwise magnitude bound of the base (e.g. Sin[1/x]/2 -> 1/2).
+     * Restrict to an x-free constant bound: an x-dependent bound would
+     * re-introduce the bare-variable magnitude subtleties this shortcut is
+     * meant to sidestep, so we conservatively defer those. */
+    Expr* B = magnitude_upper_bound(base, ctx->x);
+    if (!B) return NULL;
+    if (!free_of(B, ctx->x)) { expr_free(B); return NULL; }
+
+    /* bound = B^exp; mk_fn2("Power", ...) adopts B and the copied exp. */
+    Expr* bound = simp(mk_fn2("Power", B, expr_copy(exp)));
+    Expr* lim_bound = compute_limit(bound, &sub);
+    expr_free(bound);
+    if (!lim_bound) return NULL;
+
+    bool zero = is_lit_zero(lim_bound);
+    expr_free(lim_bound);
+    return zero ? mk_int(0) : NULL;
+}
+
+/* ---------------------------------------------------------------------- */
 static Expr* layer_bounded_envelope(Expr* f, LimitCtx* ctx) {
     if (!contains_bounded_head(f)) return NULL;
-    /* Only +Infinity for now: magnitude_upper_bound returns `x` (not
-     * Abs[x]) for the bare variable, which is only an actual upper bound
-     * on |x| when x is positive. Negative-infinity limits must first be
-     * transformed via x -> -y. */
+
+    /* Bounded base raised to a divergent positive power. Valid at finite
+     * points too, so it runs before the +Infinity-only general squeeze. */
+    Expr* bp = envelope_bounded_power(f, ctx);
+    if (bp) return bp;
+
+    /* General squeeze is +Infinity-only: magnitude_upper_bound returns `x`
+     * (not Abs[x]) for the bare variable, which is only an actual upper
+     * bound on |x| when x is positive. Negative-infinity limits must first
+     * be transformed via x -> -y. */
     if (!is_infinity_sym(ctx->point)) return NULL;
 
     Expr* bound = magnitude_upper_bound(f, ctx->x);

@@ -230,7 +230,10 @@ Out[8]= 6 a b^2
     `ArcTan[Infinity] = Pi/2`, `Gamma[Infinity] = Infinity`, …). Functions that
     do not self-evaluate there (oscillatory `Sin`, `Cos`) fall through and yield
     `Indeterminate`.
-  - `"Bounded"` — squeeze envelope and bounded-oscillation `Interval`.
+  - `"Bounded"` — squeeze envelope and bounded-oscillation `Interval`. Also
+    covers a bounded base raised to a divergent positive power (e.g.
+    `(Sin[1/x]/2)^(1/x^2) -> 0` at `x -> 0`, via `|base|^exp <= B^exp` with
+    `B` the base's constant magnitude bound and `exp -> +Infinity`).
 - May return a finite value, `Infinity`, `-Infinity`, `ComplexInfinity`,
   `Indeterminate`, an `Interval[{lo, hi}]`, or the original expression
   unevaluated when the limit cannot be determined.
