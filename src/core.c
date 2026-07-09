@@ -45,6 +45,7 @@
 #include "boolean.h"
 #include "list.h"
 #include "assoc.h"
+#include "matrix.h"
 #include "replace.h"
 #include "patterns.h"
 #include "cond.h"
@@ -648,6 +649,7 @@ void core_init(void) {
     boolean_init();
     list_init();
     assoc_init();
+    matrix_init();
     replace_init();
     patterns_init();
     cond_init();
@@ -1111,7 +1113,12 @@ Expr* builtin_dimensions(Expr* res) {
     Expr* arg = res->data.function.args[0];
     int depth = 0;
     int64_t dims[DIMENSIONS_MAX_DEPTH];
-    if (max_depth > 0 && arg->type == EXPR_FUNCTION &&
+    if (arg->type == EXPR_MATRIX) {
+        /* O(1): rank/dims are already stored directly, no probing needed. */
+        depth = arg->data.matrix.rank;
+        if (depth > max_depth) depth = max_depth;
+        for (int i = 0; i < depth; i++) dims[i] = arg->data.matrix.dims[i];
+    } else if (max_depth > 0 && arg->type == EXPR_FUNCTION &&
         arg->data.function.head->type == EXPR_SYMBOL) {
         depth = get_dimensions(arg, dims, max_depth, arg->data.function.head->data.symbol);
     }

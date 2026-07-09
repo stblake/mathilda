@@ -1,5 +1,66 @@
 # Linear Algebra
 
+## Matrix
+A first-class, visibly-distinct dense machine-precision ndarray.
+- `Matrix[list]`: packs a rectangular, machine-precision (`Integer`/`Real`)
+  nested list of any rank into a dense `EXPR_MATRIX` value, storing a flat
+  row-major `double` buffer plus rank/dims directly on the node instead of a
+  nested `List[List[...]]` tree.
+- Unlike Mathematica's packed arrays -- an invisible internal optimization a
+  list may or may not have -- `Matrix[...]` is always exactly what it says:
+  `Head[Matrix[{{1, 2}, {3, 4}}]]` is `Matrix`, never `List`; `MatrixQ`,
+  `VectorQ`, and `ListQ` never disagree about which one a value is; and it
+  always prints as `Matrix[{{1.0, 2.0}, {3.0, 4.0}}]`, never as bare
+  `{{1.0, 2.0}, {3.0, 4.0}}`.
+- `Dot` and elementwise `Plus`/`Times` recognize `Matrix` operands and use a
+  fast C-level path that loops directly over the raw `double` buffers,
+  skipping symbolic `Times`/`Plus` construction per element entirely.
+- Machine precision only. Any input or fast-path result that would need a
+  non-machine-precision entry (a symbol, an exact/rational number, a BigInt,
+  an MPFR value) is left unpacked/unevaluated instead of forcing a lossy
+  conversion -- `Matrix[...]` degrades to an ordinary nested `List` rather
+  than hiding a representation change from the user.
+- `Normal[Matrix[...]]` converts back to the equivalent nested `List`.
+
+**Features**:
+- `Protected`.
+- `Matrix[list]` gives `$Failed`-free unevaluated output (stays
+  `Matrix[list]`) if `list` is jagged, empty, contains a
+  non-machine-precision entry, or isn't a list at all.
+- `Dimensions[Matrix[...]]` reads `rank`/`dims` directly (O(1)), rather than
+  recursively probing shape as it does for a nested `List`.
+- `Dot[Matrix[a], Matrix[b]]` contracts the trailing axis of `a` with the
+  leading axis of `b` over raw doubles for rank <= 2 operands, giving a new
+  `Matrix` (or a bare machine `Real` for a vector.vector contraction). Falls
+  back to converting through `Normal` and using the generic tensor path for
+  higher-rank operands or a rank mismatch; a genuine shape mismatch (inner
+  dimensions disagree) prints `Dot::dotsh` and leaves the call unevaluated.
+- `Matrix[a] + Matrix[b]` / `Matrix[a] * Matrix[b]` compute elementwise
+  `+`/`*` over raw doubles when both operands are `Matrix` values of
+  identical shape. Falls back to the generic symbolic `Plus`/`Times` path
+  (treating the `Matrix` values as opaque terms) when shapes disagree.
+
+```mathematica
+In[1]:= Matrix[{{1, 2}, {3, 4}}]
+Out[1]= Matrix[{{1.0, 2.0}, {3.0, 4.0}}]
+
+In[2]:= Dimensions[Matrix[{{1, 2}, {3, 4}}]]
+Out[2]= {2, 2}
+
+In[3]:= Dot[Matrix[{{1, 2}, {3, 4}}], Matrix[{{5, 6}, {7, 8}}]]
+Out[3]= Matrix[{{19.0, 22.0}, {43.0, 50.0}}]
+
+In[4]:= Matrix[{{1, 2}, {3, 4}}] + Matrix[{{5, 6}, {7, 8}}]
+Out[4]= Matrix[{{6.0, 8.0}, {10.0, 12.0}}]
+
+In[5]:= Normal[Matrix[{1, 2, 3}]]
+Out[5]= {1.0, 2.0, 3.0}
+
+In[6]:= Matrix[{{1, x}, {3, 4}}]
+Out[6]= Matrix[{{1, x}, {3, 4}}]
+```
+
+
 ## HermitianMatrixQ
 Tests whether a matrix is explicitly Hermitian (self-adjoint).
 - `HermitianMatrixQ[m]`: `True` if `m == ConjugateTranspose[m]` under

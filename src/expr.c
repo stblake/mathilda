@@ -139,6 +139,20 @@ Expr* expr_new_bigint_from_str(const char* str) {
     return e;
 }
 
+Expr* expr_new_matrix(int rank, const int64_t* dims, double* data) {
+    Expr* e = malloc(sizeof(Expr));
+    if (!e) return NULL;
+    e->type = EXPR_MATRIX;
+    e->refcount = 1;
+    e->last_evaluated_at = 0;
+    e->data.matrix.rank = rank;
+    e->data.matrix.dims = malloc(sizeof(int64_t) * (size_t)rank);
+    if (!e->data.matrix.dims) { free(e); return NULL; }
+    memcpy(e->data.matrix.dims, dims, sizeof(int64_t) * (size_t)rank);
+    e->data.matrix.data = data;
+    return e;
+}
+
 #ifdef USE_MPFR
 /* MPFR constructors. All allocate an Expr and initialize the payload
  * `mpfr_t` at the requested precision; the caller owns the result and
@@ -293,6 +307,17 @@ Expr* expr_unshare(Expr* e) {
             mpz_init(fresh->data.bigint);
             mpz_set(fresh->data.bigint, e->data.bigint);
             break;
+        case EXPR_MATRIX: {
+            int rank = e->data.matrix.rank;
+            size_t n = 1;
+            for (int i = 0; i < rank; i++) n *= (size_t)e->data.matrix.dims[i];
+            fresh->data.matrix.rank = rank;
+            fresh->data.matrix.dims = malloc(sizeof(int64_t) * (size_t)rank);
+            memcpy(fresh->data.matrix.dims, e->data.matrix.dims, sizeof(int64_t) * (size_t)rank);
+            fresh->data.matrix.data = malloc(sizeof(double) * n);
+            memcpy(fresh->data.matrix.data, e->data.matrix.data, sizeof(double) * n);
+            break;
+        }
 #ifdef USE_MPFR
         case EXPR_MPFR:
             mpfr_init2(fresh->data.mpfr, mpfr_get_prec(e->data.mpfr));
@@ -357,6 +382,10 @@ void expr_free(Expr* e) {
             break;
         case EXPR_BIGINT:
             mpz_clear(e->data.bigint);
+            break;
+        case EXPR_MATRIX:
+            free(e->data.matrix.dims);
+            free(e->data.matrix.data);
             break;
 #ifdef USE_MPFR
         case EXPR_MPFR:
@@ -427,6 +456,15 @@ bool expr_eq(const Expr* a, const Expr* b) {
         }
         case EXPR_BIGINT:
             return mpz_cmp(a->data.bigint, b->data.bigint) == 0;
+        case EXPR_MATRIX: {
+            if (a->data.matrix.rank != b->data.matrix.rank) return false;
+            size_t n = 1;
+            for (int i = 0; i < a->data.matrix.rank; i++) {
+                if (a->data.matrix.dims[i] != b->data.matrix.dims[i]) return false;
+                n *= (size_t)a->data.matrix.dims[i];
+            }
+            return memcmp(a->data.matrix.data, b->data.matrix.data, sizeof(double) * n) == 0;
+        }
 #ifdef USE_MPFR
         case EXPR_MPFR:
             /* Equal iff same precision AND same value (matches SameQ
@@ -492,6 +530,22 @@ uint64_t expr_hash(const Expr* e) {
             for (size_t i = 0; i < nlimbs; i++) {
                 h ^= mpz_getlimbn(e->data.bigint, i);
                 h *= prime;
+            }
+            break;
+        }
+        case EXPR_MATRIX: {
+            h ^= (uint64_t)e->data.matrix.rank;
+            h *= prime;
+            size_t n = 1;
+            for (int i = 0; i < e->data.matrix.rank; i++) {
+                h ^= (uint64_t)e->data.matrix.dims[i];
+                h *= prime;
+                n *= (size_t)e->data.matrix.dims[i];
+            }
+            for (size_t i = 0; i < n; i++) {
+                uint64_t v;
+                memcpy(&v, &e->data.matrix.data[i], 8);
+                h ^= v; h *= prime;
             }
             break;
         }

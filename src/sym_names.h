@@ -268,6 +268,8 @@ extern const char* SYM_PrimeNu;
 extern const char* SYM_List;
 extern const char* SYM_Listable;
 extern const char* SYM_ListQ;
+/* Matrix (dense machine-precision ndarray) data-structure family. */
+extern const char* SYM_Matrix;
 /* Association (Wolfram-Language <| ... |>) data-structure family. */
 extern const char* SYM_Association;
 extern const char* SYM_AssociationQ;

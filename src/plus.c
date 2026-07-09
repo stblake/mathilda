@@ -6,6 +6,7 @@
 #include "numeric.h"
 #include "sym_names.h"
 #include "series.h"
+#include "matrix.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -319,6 +320,16 @@ Expr* builtin_plus(Expr* res) {
     size_t n = res->data.function.arg_count;
     if (n == 0) return expr_new_integer(0);
     if (n == 1) return expr_copy(res->data.function.args[0]);
+
+    /* Matrix fast path: n same-shape Matrix operands add elementwise over
+     * raw double buffers, skipping the coefficient/base grouping below
+     * entirely. NULL (not all Matrix, or shapes disagree) falls through —
+     * mismatched Matrix operands are then treated as opaque non-numeric
+     * terms, same as any other unequal symbolic bases. */
+    {
+        Expr* fast = matrix_elementwise(res->data.function.args, n, true);
+        if (fast) return fast;
+    }
 
     /* Distribute Times[-1, Plus[...]] over the outer Plus. This is
      * the cancellation-enabling step that lets `Plus[A, -A]` evaluate

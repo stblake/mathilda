@@ -22,11 +22,23 @@ typedef enum {
     EXPR_SYMBOL,
     EXPR_STRING,
     EXPR_FUNCTION,
-    EXPR_BIGINT
+    EXPR_BIGINT,
+    EXPR_MATRIX                /* dense machine-precision ndarray, see matrix.h */
 #ifdef USE_MPFR
     , EXPR_MPFR                /* arbitrary-precision real (MPFR) */
 #endif
 } ExprType;
+
+/* Dense machine-precision ndarray payload for EXPR_MATRIX. Row-major flat
+ * storage: `data` has dims[0]*dims[1]*...*dims[rank-1] entries. Always
+ * privately owned (dims/data are never aliased between Expr nodes) so C
+ * fast paths can read/write the buffer directly without copy-on-write
+ * bookkeeping beyond the usual expr_unshare at the Expr level. */
+typedef struct {
+    int rank;        /* >= 1 */
+    int64_t* dims;   /* rank entries, owned */
+    double* data;    /* owned, row-major */
+} MatrixData;
 
 typedef struct Expr {
     ExprType type;
@@ -63,6 +75,7 @@ typedef struct Expr {
             size_t arg_count;
         } function;
         mpz_t bigint;
+        MatrixData matrix;
 #ifdef USE_MPFR
         mpfr_t mpfr;          /* carries its own precision in bits */
 #endif
@@ -101,6 +114,12 @@ uint64_t expr_hash(const Expr* e);
 Expr* expr_new_bigint_from_mpz(const mpz_t val);
 Expr* expr_new_bigint_from_int64(int64_t val);
 Expr* expr_new_bigint_from_str(const char* str);
+
+/* Matrix constructor. Takes ownership of `dims` (copied internally, caller
+ * keeps its own copy) and `data` (moved, not copied — caller must not free
+ * or reuse it afterwards). `rank` >= 1, `dims[i]` >= 1, `data` must have
+ * exactly product(dims) entries. */
+Expr* expr_new_matrix(int rank, const int64_t* dims, double* data);
 
 #ifdef USE_MPFR
 /* MPFR constructors. Each allocates an Expr whose payload `mpfr_t` is

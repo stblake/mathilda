@@ -266,6 +266,7 @@ const char* SYM_LiouvilleLambda = NULL;
 const char* SYM_PrimeOmega = NULL;
 const char* SYM_PrimeNu = NULL;
 const char* SYM_List = NULL;
+const char* SYM_Matrix = NULL;
 const char* SYM_Association = NULL;
 const char* SYM_AssociationQ = NULL;
 const char* SYM_Keys = NULL;
@@ -987,6 +988,7 @@ void sym_names_init(void) {
     SYM_PrimeOmega                 = intern_symbol("PrimeOmega");
     SYM_PrimeNu                    = intern_symbol("PrimeNu");
     SYM_List                       = intern_symbol("List");
+    SYM_Matrix                     = intern_symbol("Matrix");
     SYM_Association                = intern_symbol("Association");
     SYM_AssociationQ               = intern_symbol("AssociationQ");
     SYM_Keys                       = intern_symbol("Keys");

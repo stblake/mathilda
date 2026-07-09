@@ -12,6 +12,7 @@
 #include "arithmetic.h"
 #include "context.h"
 #include "sym_names.h"
+#include "matrix.h"
 #include "graph.h"   /* graph_is_list, for the Graph[...] summary form */
 #include <stdio.h>
 #include <stdarg.h>
@@ -137,6 +138,18 @@ void expr_print_fullform(Expr* e) {
         case EXPR_SYMBOL: printf("%s", context_display_name(e->data.symbol)); break;
         case EXPR_STRING: printf("\"%s\"", e->data.string); break;
         case EXPR_FUNCTION: print_function_fullform(e); break;
+        case EXPR_MATRIX: {
+            /* Always wrapped in Matrix[...] so it can never be mistaken
+             * for a bare nested List, even in FullForm/InputForm. The
+             * inner braces use the standard {..} rendering (not a further
+             * List[...] FullForm expansion) so the payload stays readable. */
+            printf("Matrix[");
+            Expr* nested = matrix_to_nested_list(e);
+            print_standard(nested, 0);
+            expr_free(nested);
+            printf("]");
+            break;
+        }
         case EXPR_BIGINT: {
             char* str = mpz_get_str(NULL, 10, e->data.bigint);
             printf("%s", str);
@@ -1204,6 +1217,14 @@ static void print_tex(Expr* e, int parent_prec) {
     }
     if (e->type == EXPR_SYMBOL) { print_tex_symbol(e->data.symbol); return; }
     if (e->type == EXPR_STRING) { printf("\\text{\"%s\"}", e->data.string); return; }
+    if (e->type == EXPR_MATRIX) {
+        printf("\\text{Matrix}\\left[");
+        Expr* nested = matrix_to_nested_list(e);
+        print_tex(nested, 0);
+        expr_free(nested);
+        printf("\\right]");
+        return;
+    }
     if (e->type != EXPR_FUNCTION) return;
 
     int my_prec = get_expr_prec(e);

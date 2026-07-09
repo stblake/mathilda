@@ -187,6 +187,7 @@ set(COMMON_SRC
     ../src/match.c
     ../src/part.c
     ../src/assoc.c
+    ../src/matrix.c
     ../src/print.c
     ../src/plus.c
     ../src/times.c
@@ -727,6 +728,11 @@ add_executable(bench_assoc bench_assoc.c ${COMMON_SRC})
 target_link_libraries(bench_assoc m)
 target_include_directories(bench_assoc PRIVATE ../src)
 add_test(NAME bench_assoc COMMAND bench_assoc)
+
+add_executable(matrix_tests test_matrix.c ${COMMON_SRC})
+target_link_libraries(matrix_tests m)
+target_include_directories(matrix_tests PRIVATE ../src)
+add_test(NAME matrix_tests COMMAND matrix_tests)
 
 add_executable(patterns_tests test_patterns.c ${COMMON_SRC})
 target_link_libraries(patterns_tests m)
@@ -2128,6 +2134,7 @@ if(USE_ECM)
     add_dependencies(boolean_tests build_ecm)
     add_dependencies(association_tests build_ecm)
     add_dependencies(bench_assoc build_ecm)
+    add_dependencies(matrix_tests build_ecm)
     add_dependencies(patterns_tests build_ecm)
     add_dependencies(replace_tests build_ecm)
     add_dependencies(core_tests build_ecm)
