@@ -5,8 +5,10 @@
  *
  *   1. Collect the distinct radical bases B_1..B_n (each B_k appears as
  *      B_k^(p/q_k) with q_k > 1).  Require n >= 2 (single-generator inputs
- *      are already handled by Together/Cancel) and every B_k provably
- *      positive (so B_k^(p/q) -> g_k^p is branch-safe).
+ *      are already handled by Together/Cancel) and every B_k real-valued
+ *      (symbols assumed real; only explicit complex constants are rejected)
+ *      -- the reduction is an exact principal-branch rewrite for any real
+ *      radicand regardless of sign.
  *   2. Substitute, outer-base-first, B_k and all its powers to a fresh
  *      polynomial generator g_k (poly_subst_radical_to_gen).
  *   3. Build the relation g_k^{q_k} - V_k for each compound base, where V_k
@@ -59,33 +61,35 @@ static int64_t rr_lcm(int64_t a, int64_t b) {
 
 /* ---- positive-base convention (branch safety) --------------------- */
 
-/* True when `e` is provably positive under the symbol-positive
- * convention: symbols are treated as positive, positive numbers are
- * positive, and sums / products / powers of positive things are
- * positive.  Negative or complex numeric bases return false so we never
- * cross a branch cut (the bug class that caused false corpus DIFFs in the
- * intsimp work). */
-static bool rr_pos_base(const Expr* e) {
+/* True when `e` is a real-valued radicand under the symbol-is-real
+ * convention: symbols and real numbers are real, and functions of real
+ * things are real.  We reject only bases carrying an explicit complex
+ * constant (a `Complex[..]` node or the imaginary unit `I`), which is the
+ * one situation where the principal branch could genuinely differ.
+ *
+ * Positivity is deliberately NOT required: radrat's whole algorithm is an
+ * exact rewrite on the principal branch — each radical B^(p/q) is mapped
+ * to a fresh generator via the identity (B^(1/q))^q = B, generators are
+ * never merged across distinct bases, and the radicals are reconstructed
+ * verbatim before the final Cancel/Factor.  So the reduction is valid for
+ * any real base regardless of sign (e.g. `1 - x`, negative for x > 1),
+ * and the earlier positive-only gate merely blocked legitimate
+ * sign-indefinite radicands such as the nested `1 + Sqrt[1 - x]`. */
+static bool rr_real_base(const Expr* e) {
     if (!e) return false;
     switch (e->type) {
-        case EXPR_INTEGER: return e->data.integer > 0;
-        case EXPR_REAL:    return e->data.real > 0.0;
-        case EXPR_BIGINT:  return mpz_sgn(e->data.bigint) > 0;
-        case EXPR_SYMBOL:  return true;
+        case EXPR_INTEGER:
+        case EXPR_REAL:
+        case EXPR_BIGINT:  return true;
+        case EXPR_SYMBOL:  return strcmp(e->data.symbol, "I") != 0;
         case EXPR_FUNCTION: {
             const Expr* h = e->data.function.head;
-            if (h->type != EXPR_SYMBOL) return false;
-            const char* hn = h->data.symbol;
-            int64_t n, d;
-            if (is_rational(e, &n, &d)) return (n > 0) == (d > 0) && n != 0;
-            if (strcmp(hn, "Plus") == 0 || strcmp(hn, "Times") == 0) {
-                for (size_t i = 0; i < e->data.function.arg_count; i++)
-                    if (!rr_pos_base(e->data.function.args[i])) return false;
-                return e->data.function.arg_count > 0;
-            }
-            if (strcmp(hn, "Power") == 0 && e->data.function.arg_count == 2)
-                return rr_pos_base(e->data.function.args[0]);
-            return false;
+            if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol, "Complex") == 0)
+                return false;
+            if (!rr_real_base(h)) return false;
+            for (size_t i = 0; i < e->data.function.arg_count; i++)
+                if (!rr_real_base(e->data.function.args[i])) return false;
+            return true;
         }
         default: return false;
     }
@@ -138,7 +142,7 @@ static void rr_collect(const Expr* e, RRGen* gens, int* n, bool* overflow) {
     const Expr* base = NULL;
     int64_t q = 0;
     if (rr_parse_radical(e, &base, &q) && rr_has_symbol(base)) {
-        if (!rr_pos_base(base)) { *overflow = true; return; }
+        if (!rr_real_base(base)) { *overflow = true; return; }
         int found = -1;
         for (int i = 0; i < *n; i++)
             if (expr_eq(gens[i].base, (Expr*)base)) { found = i; break; }
