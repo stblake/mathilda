@@ -19,8 +19,9 @@ PICOMATH-80.
 **External dependencies:**
 - **GMP** — arbitrary-precision integers.
 - **GNU Readline** — interactive line editing and history.
-- **GMP-ECM** — advanced integer factorization (vendored in `src/external/ecm/`,
-  do not modify).
+- **GMP-ECM** — advanced integer factorization. System library
+  (`brew install gmp-ecm` / `apt install libecm-dev`), autodetected via a
+  compile-link probe; the build degrades gracefully (`NO_ECM`) when absent.
 - **Raylib** (optional, `USE_GRAPHICS`) — windowing/rendering backend for
   `Graphics[]`/`Show[]`/`Plot[]`. Autodetected via `pkg-config`; the build
   degrades gracefully to a text placeholder when absent.
@@ -72,7 +73,6 @@ src/
   graphics/         2D graphics engine: Graphics[]/Show[]/Plot[] primitives,
                     adaptive sampler, Raylib renderer (USE_GRAPHICS), vector font
   internal/         .m bootstrap scripts (init.m, deriv.m, integral tables)
-  external/ecm/     Vendored GMP-ECM (DO NOT MODIFY)
 tests/              CMake-built unit suite (test_*.c)
 makefile            Primary build system
 ```
@@ -320,8 +320,10 @@ for t in *_tests; do ./$t; done
 valgrind --leak-check=full ./Mathilda
 ```
 
-The makefile auto-discovers `src/*.c`. ECM is built and linked by default
-(`USE_ECM=1`).
+The makefile auto-discovers `src/*.c`. GMP-ECM is linked by default when the
+system library is present (`USE_ECM=1`, autodetected); install it with
+`brew install gmp-ecm` (macOS) or `sudo apt install libecm-dev` (Debian/Ubuntu),
+or build without it via `make USE_ECM=0`.
 
 ### Performance regression gate
 
@@ -355,7 +357,8 @@ the baselines only after an *intended* performance change.
   C99-safe fallbacks. `<math.h>` constants like `M_PI` are POSIX, not C99 —
   guard with `#ifndef M_PI` fallbacks (see `src/trig.c`, `src/numeric.c`).
 - **Memory safety.** Trace ownership; valgrind regularly. See §4.
-- **No edits under `src/external/`.** ECM is vendored.
+- **GMP-ECM is a system dependency**, not vendored — do not re-add it to the
+  tree.
 - **Docstrings.** Every builtin must have one via `symtab_set_docstring()`. Keep
   them terse — examples live in `docs/spec/...`.
 - **Attributes.** Every builtin gets appropriate attributes in its module

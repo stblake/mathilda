@@ -89,8 +89,10 @@ static bool ncr_estimate(GkSampleMachine f, void* ctx, double a, double b,
     }
 
     if (kind == NCR_TRAPEZOIDAL) {
-        if (!f(ctx, a, &v)) return false; acc += 0.5 * v;
-        if (!f(ctx, b, &v)) return false; acc += 0.5 * v;
+        if (!f(ctx, a, &v)) return false;
+        acc += 0.5 * v;
+        if (!f(ctx, b, &v)) return false;
+        acc += 0.5 * v;
         for (long k = 1; k < n; k++) {
             double x = a + ((double)k / (double)n) * span;
             if (!f(ctx, x, &v)) return false;

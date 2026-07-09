@@ -25,6 +25,13 @@
 #include "integrate_chebychev.h"
 #include "integrate_goursat.h"
 #include "integrate_jeffrey.h"
+#include "integrate_newton_leibniz.h"
+#include "integrate_symmetry.h"
+#include "integrate_beta.h"
+#include "integrate_line.h"
+#include "integrate_residue.h"
+#include "integrate_diffunderint.h"
+#include "integrate_ramanujan.h"
 #include "intrat.h"
 #include "intrischnorman.h"
 #include "intsimp.h"
@@ -35,6 +42,7 @@
 #include "symtab.h"
 #include "attr.h"
 #include "internal.h"
+#include "loadmodule.h"
 #include "sym_intern.h"
 #include "sym_names.h"
 #include "series.h"
@@ -49,6 +57,37 @@
  * predicates we call below return either True or False. */
 static bool is_true_symbol(const Expr* e) {
     return e && e->type == EXPR_SYMBOL && e->data.symbol == SYM_True;
+}
+
+/* True iff `f` contains `x` as a subexpression (structural FreeQ negation). */
+static bool depends_on_var(const Expr* f, const Expr* x) {
+    if (expr_eq((Expr*)f, (Expr*)x)) return true;
+    if (f->type == EXPR_FUNCTION) {
+        if (depends_on_var(f->data.function.head, x)) return true;
+        for (size_t i = 0; i < f->data.function.arg_count; i++)
+            if (depends_on_var(f->data.function.args[i], x)) return true;
+    }
+    return false;
+}
+
+/* True iff `f` contains a Power[b, e] whose base involves `x` and whose
+ * exponent is not a concrete number -- a symbolic-exponent power such as x^k,
+ * x^(k-1) or (1-x)^l.  Such an integrand is provably not a rational function of
+ * x, yet feeding it to the Together / PolynomialGCD rationality probe (or the
+ * derivative-divides quotient normalisation) drives a pseudo-remainder-sequence
+ * blow-up over the symbolic powers as independent generators.  Callers use it
+ * to decline those Together-backed paths structurally, up front. */
+static bool has_symbolic_power_in(const Expr* f, const Expr* x) {
+    if (!f || f->type != EXPR_FUNCTION) return false;
+    if (head_is((Expr*)f, SYM_Power) && f->data.function.arg_count == 2) {
+        const Expr* b = f->data.function.args[0];
+        const Expr* e = f->data.function.args[1];
+        if (depends_on_var(b, x) && !expr_is_numeric_like(e)) return true;
+    }
+    if (has_symbolic_power_in(f->data.function.head, x)) return true;
+    for (size_t i = 0; i < f->data.function.arg_count; i++)
+        if (has_symbolic_power_in(f->data.function.args[i], x)) return true;
+    return false;
 }
 
 /* Test whether `f` is a polynomial in `x`.  Calls the existing
@@ -136,6 +175,10 @@ static Expr* try_undefined(Expr* f, Expr* x) {
 /* Stage 1: rational-function integrator.  Returns the antiderivative on
  * success, NULL when the integrand is non-rational or pmint gives up. */
 static Expr* try_rational(Expr* f, Expr* x) {
+    /* A symbolic-exponent power of x (x^k, (1-x)^l, ...) is never rational in
+     * x; decline structurally so the Together-based rationality probe below is
+     * never handed an integrand that sends PolynomialGCD into a blow-up. */
+    if (has_symbolic_power_in(f, x)) return NULL;
     if (!is_polynomial_in(f, x) && !is_rational_in(f, x)) return NULL;
     Expr* result = call_stage("Integrate`BronsteinRational", f, x);
     if (!result) return NULL;
@@ -233,32 +276,28 @@ static int crc_depth = 0;
 static bool crc_load_attempted = false;
 static bool crc_load_succeeded  = false;
 
-/* Try Get["src/internal/CRCMathTablesIntegrals.m"]; tolerate the same
- * relative-then-fallback pattern test_integrals.c uses so it works
- * from any CWD with a sane layout. */
+/* Load the CRC integral table lazily. Path resolution (mathilda_resolve_
+ * internal) is CWD-independent and matches what LoadModule uses, so this works
+ * from a relocated/installed binary as well as from the repo root or tests/. */
 static void crc_lazy_load(void) {
     if (crc_load_attempted) return;
     crc_load_attempted = true;
 
-    const char* paths[] = {
-        "Get[\"src/internal/CRCMathTablesIntegrals.m\"]",
-        "Get[\"../src/internal/CRCMathTablesIntegrals.m\"]",
-        "Get[\"../../src/internal/CRCMathTablesIntegrals.m\"]",
-        NULL
-    };
-    for (const char** p = paths; *p; p++) {
-        Expr* parsed = parse_expression(*p);
-        if (!parsed) continue;
-        Expr* res = evaluate(parsed);
-        expr_free(parsed);
-        bool failed = res && res->type == EXPR_SYMBOL
-                          && strcmp(res->data.symbol, "$Failed") == 0;
-        if (res) expr_free(res);
-        if (!failed) { crc_load_succeeded = true; return; }
+    char path[2048];
+    if (!mathilda_resolve_internal("CRCMathTablesIntegrals.m",
+                                   path, sizeof(path))) {
+        fprintf(stderr,
+            "Integrate`CRCTable::nofile: cannot locate "
+            "src/internal/CRCMathTablesIntegrals.m on disk.\n");
+        return;
     }
-    fprintf(stderr,
-        "Integrate`CRCTable::nofile: cannot locate "
-        "src/internal/CRCMathTablesIntegrals.m on disk.\n");
+
+    int opened = 0;
+    Expr* res = mathilda_run_file(path, &opened);
+    bool failed = res && res->type == EXPR_SYMBOL
+                      && strcmp(res->data.symbol, "$Failed") == 0;
+    if (res) expr_free(res);
+    if (opened && !failed) crc_load_succeeded = true;
 }
 
 static Expr* try_crctable(Expr* f, Expr* x) {
@@ -308,6 +347,17 @@ typedef enum {
     METHOD_RISCH,
     METHOD_CRCTABLE,
     METHOD_UNDEFINED,
+    METHOD_NEWTON_LEIBNIZ,   /* definite-only: selects the real-axis FTC mechanism */
+    METHOD_LINE_INTEGRAL,    /* definite-only: selects the complex contour mechanism */
+    METHOD_RESIDUE,          /* definite-only: selects the residue-theorem mechanism */
+    METHOD_DIFF_UNDER_INT,   /* definite-only: differentiation under the integral sign */
+    METHOD_RAMANUJAN,        /* definite-only: Mellin / Ramanujan Master Theorem (half-line) */
+    METHOD_SYMMETRY,         /* definite-only: origin-symmetry (odd -> 0, even -> 2 half) */
+    METHOD_BETA,             /* definite-only: Euler-Beta on [0,1] */
+    METHOD_TRIG_POWER,       /* definite-only: Sin^m Cos^n over [0,Pi/2]/[0,Pi]/[0,2Pi] */
+    METHOD_SINPOW_MONO,      /* definite-only: Sin[r x]^k / x^m on [0,Inf) */
+    METHOD_OSC_POWER,        /* definite-only: Cos/Sin[b x^n] on [0,Inf) */
+    METHOD_RATIONAL_LOG,     /* definite-only: R(x) Log[x]^n on [0,Inf) */
     METHOD_INVALID
 } IntegrateMethod;
 
@@ -325,6 +375,21 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "RischNorman") == 0) return METHOD_RISCH;
     if (strcmp(s, "CRCTable")    == 0) return METHOD_CRCTABLE;
     if (strcmp(s, "Undefined")   == 0) return METHOD_UNDEFINED;
+    if (strcmp(s, "NewtonLeibniz") == 0) return METHOD_NEWTON_LEIBNIZ;
+    if (strcmp(s, "LineIntegral") == 0) return METHOD_LINE_INTEGRAL;
+    if (strcmp(s, "Residue") == 0 || strcmp(s, "ContourResidue") == 0)
+        return METHOD_RESIDUE;
+    if (strcmp(s, "DiffUnderInt") == 0 ||
+        strcmp(s, "DifferentiationUnderIntegral") == 0)
+        return METHOD_DIFF_UNDER_INT;
+    if (strcmp(s, "Symmetry") == 0) return METHOD_SYMMETRY;
+    if (strcmp(s, "Beta") == 0) return METHOD_BETA;
+    if (strcmp(s, "TrigPower") == 0) return METHOD_TRIG_POWER;
+    if (strcmp(s, "SinPowerMonomial") == 0) return METHOD_SINPOW_MONO;
+    if (strcmp(s, "OscillatoryPower") == 0) return METHOD_OSC_POWER;
+    if (strcmp(s, "RationalLog") == 0) return METHOD_RATIONAL_LOG;
+    if (strcmp(s, "RamanujanMasterTheorem") == 0 || strcmp(s, "Mellin") == 0)
+        return METHOD_RAMANUJAN;
     return METHOD_INVALID;
 }
 
@@ -389,12 +454,235 @@ static IntegrateMethod parse_method_option(Expr* opt, Expr** out_sub) {
     return method_from_string(rhs->data.string);
 }
 
+/* Parse a definite integral's trailing `Method -> "..."` option.  `*name` is set
+ * to a borrowed method-name string to pass through to the inner indefinite
+ * Integrate (NULL for Automatic and for the definite mechanisms NewtonLeibniz /
+ * LineIntegral / Residue, which select the mechanism itself).  `*mech` is set to
+ * the chosen definite mechanism so the dispatcher knows whether to engage the
+ * residue method and/or fall through to Newton-Leibniz.  Returns false on a
+ * malformed / unrecognised option. */
+static bool definite_parse_method(Expr* opt, const char** name,
+                                  IntegrateMethod* mech) {
+    *name = NULL;
+    *mech = METHOD_AUTOMATIC;
+    if (opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2)
+        return false;
+    if (opt->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* hd = opt->data.function.head->data.symbol;
+    if (hd != SYM_Rule && hd != SYM_RuleDelayed) return false;
+    Expr* lhs = opt->data.function.args[0];
+    Expr* rhs = opt->data.function.args[1];
+    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol != SYM_Method) return false;
+    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic) return true;
+    if (rhs->type != EXPR_STRING) return false;
+    IntegrateMethod m = method_from_string(rhs->data.string);
+    if (m == METHOD_INVALID) return false;
+    *mech = m;
+    /* NewtonLeibniz / LineIntegral / Residue / DiffUnderInt name the definite
+     * mechanism itself; the actual mechanism is chosen from the spec type, so
+     * they pass NULL through to the inner indefinite Integrate. */
+    if (m == METHOD_AUTOMATIC || m == METHOD_NEWTON_LEIBNIZ ||
+        m == METHOD_LINE_INTEGRAL || m == METHOD_RESIDUE ||
+        m == METHOD_DIFF_UNDER_INT || m == METHOD_RAMANUJAN ||
+        m == METHOD_SYMMETRY || m == METHOD_BETA ||
+        m == METHOD_TRIG_POWER || m == METHOD_SINPOW_MONO ||
+        m == METHOD_OSC_POWER || m == METHOD_RATIONAL_LOG) return true;
+    *name = rhs->data.string;   /* borrowed: valid while `res` is alive */
+    return true;
+}
+
+/* True iff `opt` is a Rule/RuleDelayed whose LHS is the symbol `sym`. */
+static bool option_lhs_is(Expr* opt, const char* sym) {
+    if (opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2) return false;
+    if (opt->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* hd = opt->data.function.head->data.symbol;
+    if (hd != SYM_Rule && hd != SYM_RuleDelayed) return false;
+    Expr* lhs = opt->data.function.args[0];
+    return lhs->type == EXPR_SYMBOL && lhs->data.symbol == sym;
+}
+
+/* Definite / iterated integration Integrate[f, {x,a,b}, {y,c,d}, ..., opts].
+ * Reduces innermost-first (the last spec is the inner integral) so an inner
+ * bound may depend on an outer variable.  Returns NULL (unevaluated) if any
+ * stage cannot be evaluated. */
+static Expr* integrate_definite(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    Expr* f = res->data.function.args[0];
+
+    /* Leading run of range / contour specs, then at most one trailing Method
+     * option.  A contour spec `{x, z0, ..., zn}` (polyline, or any non-real
+     * endpoint) is a superset of the real 3-element range spec. */
+    size_t nspecs = 0;
+    while (1 + nspecs < argc &&
+           integrate_line_is_contour_spec(res->data.function.args[1 + nspecs]))
+        nspecs++;
+    if (nspecs == 0) return NULL;
+
+    const char* method = NULL;
+    IntegrateMethod mech = METHOD_AUTOMATIC;
+    Expr* assumptions = NULL;   /* borrowed from res: the Assumptions option value */
+    bool principal_value = false;
+    size_t tail = 1 + nspecs;
+    /* Trailing options, in any order: `Method -> ...` and/or `Assumptions -> ...`.
+     * Any other trailing argument (unknown option, stray expression) is rejected
+     * with the Integrate::method diagnostic, leaving the call unevaluated. */
+    for (size_t t = tail; t < argc; t++) {
+        Expr* opt = res->data.function.args[t];
+        if (option_lhs_is(opt, SYM_Assumptions)) {
+            assumptions = opt->data.function.args[1];   /* borrowed */
+            continue;
+        }
+        /* PrincipalValue -> True / False (not an interned system symbol; match
+         * by name).  Selects the Cauchy principal value for interior poles. */
+        if (opt->type == EXPR_FUNCTION && opt->data.function.arg_count == 2 &&
+            opt->data.function.head->type == EXPR_SYMBOL &&
+            (opt->data.function.head->data.symbol == SYM_Rule ||
+             opt->data.function.head->data.symbol == SYM_RuleDelayed) &&
+            opt->data.function.args[0]->type == EXPR_SYMBOL &&
+            strcmp(opt->data.function.args[0]->data.symbol, "PrincipalValue") == 0) {
+            Expr* rhs = opt->data.function.args[1];
+            principal_value = (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_True);
+            continue;
+        }
+        if (option_lhs_is(opt, SYM_Method)) {
+            if (definite_parse_method(opt, &method, &mech)) continue;
+        }
+        static uint64_t last_warned_hash = 0;
+        uint64_t h = expr_hash(res);
+        if (h != last_warned_hash) {
+            fprintf(stderr,
+                "Integrate::method: Method option value is not a "
+                "recognised integration method name.\n");
+            last_warned_hash = h;
+        }
+        return NULL;
+    }
+
+    /* Fold from the innermost (last) spec outward. */
+    Expr* cur = expr_copy(f);
+    for (size_t k = nspecs; k >= 1; k--) {
+        Expr* spec = res->data.function.args[1 + (k - 1)];
+        Expr* r;
+        if (integrate_line_spec_is_complex(spec)) {
+            /* Complex line / contour integral (non-real endpoint or polyline). */
+            r = integrate_line_from_spec(cur, spec, method);
+        } else {
+            /* Real-axis definite integral.  Under Automatic (or an explicit
+             * Method -> "Residue") try the residue-theorem method first: for
+             * improper / periodic forms it yields cleaner, NIntegrate-verified
+             * closed forms.  On NULL it falls through to Newton-Leibniz, except
+             * when the user pinned "Residue" (strict: no fallback). */
+            Expr* x = spec->data.function.args[0];
+            Expr* a = spec->data.function.args[1];
+            Expr* b = spec->data.function.args[2];
+            r = NULL;
+            bool diverges = false;
+            if (mech == METHOD_AUTOMATIC || mech == METHOD_RESIDUE)
+                r = integrate_residue_try(cur, x, a, b, assumptions, &diverges);
+            /* The residue method conclusively found a pole on the integration
+             * contour: the integral does not converge.  Emit Integrate::idiv
+             * and stop -- do NOT fall through to Newton-Leibniz (which would
+             * re-derive the same divergence and emit a duplicate warning). */
+            if (!r && diverges) {
+                integrate_emit_idiv(cur, a, b);
+                expr_free(cur);
+                return NULL;
+            }
+            /* Origin-symmetry reduction, after residue (which keeps its clean
+             * closed forms for the families it owns) but before the general FTC:
+             * an odd integrand over a symmetric interval is 0 with no
+             * antiderivative, and an even one halves the interval -- often
+             * unlocking the half-line Ramanujan/Mellin path for a non-rational
+             * even integrand that residue does not own.  It only claims a value
+             * once the half converges, so a divergent principal value is never
+             * reported as 0, and NULL always falls through unchanged. */
+            if (!r && (mech == METHOD_AUTOMATIC || mech == METHOD_SYMMETRY))
+                r = integrate_symmetry_try(cur, x, a, b, assumptions);
+            /* Newton-Leibniz (FTC) unless the user pinned Residue, the
+             * parameter-differentiation mechanism, the Ramanujan/Mellin
+             * mechanism, the symmetry mechanism, or a Beta mechanism. */
+            if (!r && mech != METHOD_RESIDUE && mech != METHOD_DIFF_UNDER_INT &&
+                mech != METHOD_RAMANUJAN && mech != METHOD_SYMMETRY &&
+                mech != METHOD_BETA && mech != METHOD_TRIG_POWER &&
+                mech != METHOD_SINPOW_MONO && mech != METHOD_OSC_POWER &&
+                mech != METHOD_RATIONAL_LOG)
+                r = integrate_newton_leibniz_try_pv(cur, x, a, b, method,
+                                                    principal_value);
+            /* Euler-Beta reductions: x^(k-1)(1-x)^(l-1) on [0,1] and
+             * Sin^m Cos^n over a canonical trig interval -- non-elementary
+             * antiderivatives (incomplete Beta) that FTC cannot reach.  After
+             * Newton-Leibniz (which owns the integer-power cases via an
+             * elementary antiderivative), before Ramanujan. */
+            if (!r && (mech == METHOD_AUTOMATIC || mech == METHOD_BETA))
+                r = integrate_beta_try(cur, x, a, b, assumptions);
+            if (!r && (mech == METHOD_AUTOMATIC || mech == METHOD_TRIG_POWER))
+                r = integrate_trigpower_try(cur, x, a, b, assumptions);
+            /* Mellin / Ramanujan Master Theorem: half-line ∫₀^∞ x^(s-1) f(x) dx
+             * of a transcendental f (Gaussian moments, Gamma/Bessel/trig
+             * transforms) that residue and FTC do not close.  Under Automatic it
+             * runs before DiffUnderInt; the pinned mechanism has no fallback. */
+            if (!r && (mech == METHOD_AUTOMATIC || mech == METHOD_RAMANUJAN ||
+                       mech == METHOD_OSC_POWER))
+                r = integrate_ramanujan_try(cur, x, a, b, assumptions);
+            /* Sin[r x]^k / x^m half-line (ssp) and R(x) Log[x]^n (log*rat):
+             * under Automatic these are pre-passes inside Ramanujan; the pinned
+             * methods route directly here. */
+            if (!r && mech == METHOD_SINPOW_MONO)
+                r = integrate_sinpowmono_try(cur, x, a, b, assumptions);
+            if (!r && mech == METHOD_RATIONAL_LOG)
+                r = integrate_ratlogpow_try(cur, x, a, b, assumptions);
+            /* Differentiation under the integral sign: last resort under
+             * Automatic (parameter-dependent improper/periodic integrals that
+             * residue and FTC cannot close), or the pinned mechanism. */
+            if (!r && (mech == METHOD_AUTOMATIC || mech == METHOD_DIFF_UNDER_INT))
+                r = integrate_diffunderint_try(cur, x, a, b, assumptions);
+        }
+        expr_free(cur);
+        if (!r) return NULL;
+        cur = r;
+    }
+    return cur;
+}
+
 Expr* builtin_integrate(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
-    if (argc < 2 || argc > 3) return NULL;
+    if (argc < 2) return NULL;
 
     Expr* f = res->data.function.args[0];
+
+    /* Thread over a list integrand: Integrate[{f1, ..., fn}, spec...] gives
+     * {Integrate[f1, spec...], ..., Integrate[fn, spec...]}.  Integrate is
+     * deliberately NOT Listable (that would also thread over a `{x, a, b}`
+     * range spec), so the integrand-only threading is handled explicitly here.
+     * We build the List of sub-Integrate calls and let the evaluator recurse
+     * into each element (which stays symbolic if a piece cannot be done). */
+    if (f->type == EXPR_FUNCTION &&
+        f->data.function.head->type == EXPR_SYMBOL &&
+        f->data.function.head->data.symbol == SYM_List) {
+        size_t n = f->data.function.arg_count;
+        Expr** elems = malloc(n * sizeof(Expr*));
+        for (size_t i = 0; i < n; i++) {
+            Expr** sub = malloc(argc * sizeof(Expr*));
+            sub[0] = expr_copy(f->data.function.args[i]);
+            for (size_t j = 1; j < argc; j++)
+                sub[j] = expr_copy(res->data.function.args[j]);
+            elems[i] = expr_new_function(expr_new_symbol(SYM_Integrate), sub, argc);
+            free(sub);
+        }
+        Expr* out = expr_new_function(expr_new_symbol(SYM_List), elems, n);
+        free(elems);
+        return out;
+    }
+
+    /* Definite form: the second argument is a `{x, a, b}` range spec or a
+     * `{x, z0, ..., zn}` complex line/contour spec.  Handles the iterated
+     * multi-spec form too. */
+    if (integrate_line_is_contour_spec(res->data.function.args[1]))
+        return integrate_definite(res);
+
+    if (argc > 3) return NULL;
+
     Expr* x = res->data.function.args[1];
 
     /* The integration variable must be a (single) symbol so we can
@@ -427,7 +715,11 @@ Expr* builtin_integrate(Expr* res) {
      * it is freed below alongside `coerced`. */
     IntegrateMethod method = METHOD_AUTOMATIC;
     Expr* method_sub = NULL;
-    if (argc == 3) {
+    /* An `Assumptions -> ...` option is accepted on the indefinite form for
+     * surface compatibility (it constrains parameter domains); the indefinite
+     * cascade does not yet consume it, so it is simply skipped here rather than
+     * mis-parsed as a Method value. */
+    if (argc == 3 && !option_lhs_is(res->data.function.args[2], SYM_Assumptions)) {
         method = parse_method_option(res->data.function.args[2], &method_sub);
         if (method == METHOD_INVALID) {
             static uint64_t last_warned_hash = 0;
@@ -440,7 +732,7 @@ Expr* builtin_integrate(Expr* res) {
                     "\"LinearRatioRadicals\", \"ChebychevAlgebraic\", "
                     "\"GoursatAlgebraic\", "
                     "\"Weierstrass\", \"RischNorman\", "
-                    "\"CRCTable\".\n");
+                    "\"CRCTable\", \"NewtonLeibniz\", \"LineIntegral\".\n");
                 last_warned_hash = h;
             }
             return NULL;
@@ -532,6 +824,22 @@ Expr* builtin_integrate(Expr* res) {
         case METHOD_UNDEFINED:
             result = try_undefined(effective_f, x);
             break;
+        case METHOD_NEWTON_LEIBNIZ:
+        case METHOD_LINE_INTEGRAL:
+        case METHOD_RESIDUE:
+        case METHOD_DIFF_UNDER_INT:
+        case METHOD_RAMANUJAN:
+        case METHOD_SYMMETRY:
+        case METHOD_BETA:
+        case METHOD_TRIG_POWER:
+        case METHOD_SINPOW_MONO:
+        case METHOD_OSC_POWER:
+        case METHOD_RATIONAL_LOG:
+            /* Definite-only mechanisms.  Meaningless on the indefinite form
+             * Integrate[f, x, Method -> "NewtonLeibniz" / "LineIntegral" /
+             * "Residue" / "DiffUnderInt" / "RamanujanMasterTheorem"]; leave
+             * unevaluated. */
+            break;
         case METHOD_INVALID:
             break;  /* unreachable: handled above */
     }
@@ -559,13 +867,17 @@ void integrate_init(void) {
     symtab_add_builtin("Integrate", builtin_integrate);
     /* NOT Listable: Listable would thread over a definite-integral range
      * spec `{x, a, b}` element-wise (producing garbage like
-     * {Integrate[f,x], Integrate[f,a], Integrate[f,b]}).  Definite
-     * integration is not yet supported, so the `{x,a,b}` form falls through
-     * the EXPR_SYMBOL variable check in builtin_integrate and stays
-     * unevaluated. */
+     * {Integrate[f,x], Integrate[f,a], Integrate[f,b]}).  The `{x,a,b}` form
+     * is recognised explicitly at the top of builtin_integrate and routed to
+     * the definite (Newton-Leibniz) path. */
     symtab_get_def("Integrate")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Integrate",
         "Integrate[f, x] gives the indefinite integral of f with respect to x.\n"
+        "Integrate[f, {x, xmin, xmax}] gives the definite integral by the\n"
+        "fundamental theorem of calculus (Method -> \"NewtonLeibniz\").\n"
+        "Integrate[f, {x, xmin, xmax}, {y, ymin, ymax}, ...] gives the iterated\n"
+        "multiple integral (innermost/last spec integrated first; inner bounds\n"
+        "may depend on outer variables).  See also Integrate`SingularPoints.\n"
         "Integrate[f, x, Method -> \"<name>\"] dispatches directly to a single\n"
         "subroutine, bypassing the default cascade.  Accepted method names:\n"
         "  \"Automatic\"          — try BronsteinRational, then RischNorman, then CRCTable (default)\n"
@@ -580,6 +892,24 @@ void integrate_init(void) {
         "  \"RischNorman\"        — Integrate`RischNorman (Bronstein pmint heuristic)\n"
         "  \"CRCTable\"           — Integrate`CRCTable (lazy-loaded CRC integral table)\n"
         "  \"Undefined\"          — Integrate`Undefined (unknown functions u[x], u'[x]; Roach §1.7)\n"
+        "  \"NewtonLeibniz\"       — real definite integrals via F(b)-F(a) (implicit for the {x,a,b} form)\n"
+        "  \"LineIntegral\"        — complex contour integrals (implicit for the {x,z0,...,zn} form)\n"
+        "  \"Residue\"             — improper/periodic real definite integrals by the residue theorem\n"
+        "                          (rational/Fourier on (-Inf,Inf), rational-in-Sin/Cos over a period,\n"
+        "                          principal values, even half-lines); tried before NewtonLeibniz under Automatic\n"
+        "  \"DiffUnderInt\"         — parameter-dependent definite integrals by differentiation under the\n"
+        "  (\"DifferentiationUnderIntegral\") integral sign (Feynman's trick): Integrate`DiffUnderInt;\n"
+        "                          Laplace/Fourier, sinc, and even-rational half-line families;\n"
+        "                          tried after Residue and NewtonLeibniz in the definite cascade\n"
+        "  \"RamanujanMasterTheorem\" — half-line Int_0^Inf x^(s-1) f(x) dx by the Mellin transform /\n"
+        "  (\"Mellin\")              Ramanujan Master Theorem: Integrate`RamanujanMasterTheorem;\n"
+        "                          exp/Gaussian/algebraic/Cos/Sin/ArcTan/Log/BesselJ/pFq/PolyLog\n"
+        "                          kernels (monomial x^k substitution; Erf, incomplete Gamma, BesselJ^2\n"
+        "                          reduced to pFq); also the exp-geometric kernel 1/(E^(c x)+g)\n"
+        "                          (Bose-Einstein / Fermi-Dirac -> Gamma*PolyLog), a Frullani pre-pass\n"
+        "                          (f(a x)-f(b x))/x -> (f(0)-f(Inf)) Log[b/a], and a Log[x]^k weight;\n"
+        "                          strip-gated, yielding a ConditionalExpression when\n"
+        "                          Assumptions do not prove convergence; after NewtonLeibniz under Automatic\n"
         "Method -> {\"DerivativeDivides\", \"Substitution\" -> u} pins the kernel u(x),\n"
         "trialing only that substitution.\n"
         "Named methods are strict: failure returns unevaluated, with no fallback.\n"
@@ -615,6 +945,32 @@ void integrate_init(void) {
     /* Continuous Weierstrass substitution (Jeffrey & Rich 1994):
      * Integrate`Weierstrass. */
     integrate_jeffrey_init();
+
+    /* Definite integration by the fundamental theorem of calculus:
+     * Integrate`NewtonLeibniz and the pole detector Integrate`SingularPoints. */
+    integrate_newton_leibniz_init();
+
+    /* Origin-symmetry reduction: Integrate`Symmetry (odd -> 0, even -> 2 half).
+     * Tried first in the definite dispatch. */
+    integrate_symmetry_init();
+
+    /* Euler-Beta reductions: Integrate`Beta ([0,1]) and Integrate`TrigPower
+     * (Sin^m Cos^n over a canonical trig interval). */
+    integrate_beta_init();
+
+    /* Complex line / contour integration: Integrate`LineIntegral and the
+     * on-path singularity detector Integrate`PathSingularPoints. */
+    integrate_line_init();
+
+    /* Definite integration by the residue theorem: Integrate`ContourResidue.
+     * Engaged before Newton-Leibniz for a single real spec under Automatic. */
+    integrate_residue_init();
+
+    /* Definite integration by differentiation under the integral sign
+     * (Feynman's trick): Integrate`DiffUnderInt.  Last resort in the definite
+     * cascade, after residue and Newton-Leibniz. */
+    integrate_diffunderint_init();
+    integrate_ramanujan_init();
 
     /* Initialise the parallel-Risch / Risch-Norman heuristic
      * (Bronstein's pmint).  Provides `Integrate`RischNorman[f, x]`,

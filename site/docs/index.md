@@ -20,9 +20,9 @@ Mathilda is a small computer algebra system that recreates the **core
 architecture and evaluation semantics of the Mathematica programming language** — a recursive
 expression model, attribute-driven evaluation, structural pattern matching with
 backtracking, and a rewrite-rule engine — together with an extensive library of
-**~435 built-in functions**.
+**~575 built-in functions**.
 
-It spans roughly **159,000 lines of C99**, uses **GMP** for arbitrary-precision
+It spans roughly **232,000 lines of C99**, uses **GMP** for arbitrary-precision
 integers and **MPFR** for arbitrary-precision reals, and is licensed under
 **GPLv3**.
 
@@ -127,23 +127,24 @@ Out[9]= {{193707721, 1}, {761838257287, 1}}
 ## Build & run
 
 Mathilda builds with a C99 toolchain and links GMP, MPFR and GNU Readline.
-FLINT (≥ 3.0) and LAPACK/BLAS are optional (both auto-detected): FLINT provides
-fast, rigorous algebraic-extension arithmetic and `acb` numerics, and LAPACK/BLAS
-accelerates machine-precision linear algebra.
+FLINT (≥ 3.0), GMP-ECM and LAPACK/BLAS are optional (all auto-detected): FLINT
+provides fast, rigorous algebraic-extension arithmetic and `acb` numerics,
+GMP-ECM powers advanced integer factorization, and LAPACK/BLAS accelerates
+machine-precision linear algebra.
 
 ### Install dependencies
 
 === "Linux (Debian / Ubuntu)"
 
     ```bash
-    # Build tools for the vendored GMP-ECM
-    sudo apt install autoconf automake libtool
-
     # Required libraries
     sudo apt install libgmp-dev libmpfr-dev libreadline-dev
 
     # Optional: FLINT (>= 3.0) for fast, rigorous algebraic-extension arithmetic
     sudo apt install libflint-dev
+
+    # Optional: GMP-ECM for advanced integer factorization
+    sudo apt install libecm-dev
 
     # Optional: LAPACK/BLAS (fast linear algebra) and CMake (test suite)
     sudo apt install liblapacke-dev libopenblas-dev cmake
@@ -154,14 +155,14 @@ accelerates machine-precision linear algebra.
     ```bash
     brew install gmp mpfr readline cmake
     brew install flint                       # optional: FLINT-backed kernels
-    brew install autoconf automake libtool   # for the vendored GMP-ECM
+    brew install gmp-ecm                      # optional: advanced integer factorization
     # LAPACK/BLAS is provided by Apple's Accelerate framework — no install needed.
     ```
 
 ### Clone, build, run
 
 ```bash
-git clone --recurse-submodules https://github.com/stblake/mathilda.git
+git clone https://github.com/stblake/mathilda.git
 cd mathilda
 make -j            # builds ./Mathilda
 ./Mathilda         # start the interactive REPL
@@ -174,6 +175,13 @@ make -j            # builds ./Mathilda
     off with `make USE_FLINT=0`, and confirm the installed version with
     `pkg-config --modversion flint`. See the
     [FLINT context](documentation/flint/index.md) for the routines it powers.
+
+!!! tip "Building with GMP-ECM"
+    GMP-ECM (the Elliptic Curve Method for integer factorization) is a plain
+    system library — install `gmp-ecm` (Homebrew) or `libecm-dev` (Debian/Ubuntu)
+    and the build autodetects it via a compile-link probe and links `-lecm`. When
+    it is absent the build still succeeds with advanced factorization disabled;
+    force that with `make USE_ECM=0`.
 
 Then type an expression and press Return. Ask for help on any function with
 `?Name`:

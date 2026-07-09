@@ -735,7 +735,10 @@ static Expr* reduce_v4_piece(Expr* Fj, Expr* R, Expr* t, Expr* S) {
     Expr* gx = gu ? to_function_of_power(gu, u, x, 2) : NULL;
     if (gu) expr_free(gu);
     if (!gx || !Q) {
-        if (gx) expr_free(gx); if (Q) expr_free(Q); expr_free(lc); goto done;
+        if (gx) expr_free(gx);
+        if (Q) expr_free(Q);
+        expr_free(lc);
+        goto done;
     }
 
     /* prefactor = (binf ? 1 : alpha-beta) / (2 Sqrt[lc]). */
@@ -1284,11 +1287,18 @@ static Expr* goursat_cubic(Expr* F, Expr* R, Expr* t, int pnum) {
     if (total) result = eval_take(total);
 
 cleanup:
-    if (z) expr_free(z); if (x) expr_free(x); if (uOut) expr_free(uOut);
-    if (alpha) expr_free(alpha); if (beta) expr_free(beta);
-    if (tz) expr_free(tz); if (H) expr_free(H);
-    if (H0) expr_free(H0); if (H1) expr_free(H1); if (H2) expr_free(H2);
-    if (cval) expr_free(cval); if (K) expr_free(K);
+    if (z) expr_free(z);
+    if (x) expr_free(x);
+    if (uOut) expr_free(uOut);
+    if (alpha) expr_free(alpha);
+    if (beta) expr_free(beta);
+    if (tz) expr_free(tz);
+    if (H) expr_free(H);
+    if (H0) expr_free(H0);
+    if (H1) expr_free(H1);
+    if (H2) expr_free(H2);
+    if (cval) expr_free(cval);
+    if (K) expr_free(K);
     for (size_t i = 0; i < nr; i++) expr_free(roots[i]);
     if (roots) free(roots);
     return result;
@@ -1575,7 +1585,8 @@ static Expr* period3_reduce(Expr* Fk, Expr* R, Expr* t, Expr* a, Expr* a1) {
         Expr* phi_sub = subst_eval(expr_copy(phi), x,
                                    gdiv(expr_copy(x), expr_copy(lc)));   /* phi(w/lc) */
         if (!monicrad || !phi_sub) {
-            if (monicrad) expr_free(monicrad); if (phi_sub) expr_free(phi_sub);
+            if (monicrad) expr_free(monicrad);
+            if (phi_sub) expr_free(phi_sub);
             expr_free(lc); goto done;
         }
         /* Pull the constant prefactor 1/(3 Sqrt[lc]) OUT of the integral: a
@@ -1698,7 +1709,8 @@ static Expr* goursat_period3(Expr* F, Expr* R, Expr* t) {
          * fixed-point orders covers alpha vs alpha^2. */
         result = period3_reduce_either(F, R, t, a, a1);
 
-        if (a) expr_free(a); if (a1) expr_free(a1);
+        if (a) expr_free(a);
+        if (a1) expr_free(a1);
     }
 
     for (size_t i = 0; i < nr; i++) expr_free(roots[i]);
@@ -2018,12 +2030,19 @@ static Expr* goursat_quartic(Expr* F, Expr* R, Expr* t, int pnum) {
 
 cleanup:
     if (S) expr_free(S);
-    if (z) expr_free(z); if (x) expr_free(x); if (uOut) expr_free(uOut);
-    if (alpha) expr_free(alpha); if (beta) expr_free(beta);
-    if (tz) expr_free(tz); if (H) expr_free(H);
-    if (H0) expr_free(H0); if (H1) expr_free(H1);
-    if (H2) expr_free(H2); if (H3) expr_free(H3);
-    if (cval) expr_free(cval); if (K) expr_free(K);
+    if (z) expr_free(z);
+    if (x) expr_free(x);
+    if (uOut) expr_free(uOut);
+    if (alpha) expr_free(alpha);
+    if (beta) expr_free(beta);
+    if (tz) expr_free(tz);
+    if (H) expr_free(H);
+    if (H0) expr_free(H0);
+    if (H1) expr_free(H1);
+    if (H2) expr_free(H2);
+    if (H3) expr_free(H3);
+    if (cval) expr_free(cval);
+    if (K) expr_free(K);
     for (size_t i = 0; i < nr; i++) expr_free(roots[i]);
     if (roots) free(roots);
     return result;
@@ -2165,15 +2184,16 @@ static bool is_half_power(const Expr* e, int64_t* two_e) {
     return true;
 }
 
-/* Collect distinct radicands g of Power[g, 1/2] subexpressions of e.  Pointers
- * are borrowed into e; *out is realloc'd (caller free()s the array only). */
+/* Collect distinct radicands g of half-integer powers Power[g, m/2] of e --
+ * both the numerator radical Sqrt[g] (m = +1) and the denominator radical
+ * 1/Sqrt[g] = Power[g, -1/2] (m = -1) the eigendescent emits inside
+ * ArcTan/ArcTanh arguments.  Pointers are borrowed into e; *out is realloc'd
+ * (caller free()s the array only). */
 static void collect_sqrt_radicands(Expr* e, Expr*** out, size_t* n, size_t* cap) {
     if (!e || e->type != EXPR_FUNCTION) return;
     if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
-        Expr* half = make_rational(1, 2);
-        bool m = expr_eq(e->data.function.args[1], half);
-        expr_free(half);
-        if (m) {
+        int64_t two_e;
+        if (is_half_power(e->data.function.args[1], &two_e)) {
             Expr* g = e->data.function.args[0];
             bool dup = false;
             for (size_t i = 0; i < *n; i++)
@@ -2260,10 +2280,19 @@ static Expr* reexpress_over_radical(Expr* res, Expr* R, Expr* x) {
         if (expr_eq(g, R)) continue;            /* already over Sqrt[R] */
         Expr* cand = sqrt_over_R(g, R, x);
         if (!cand) continue;
-        Expr* rule = mk_rule(mk_sqrt_expr(expr_copy(g)), cand);   /* consumes cand */
+        /* Rewrite BOTH the numerator and denominator radicals of g: the
+         * eigendescent emits it in denominator positions as Power[g, -1/2]
+         * (e.g. inside the ArcTan/ArcTanh arguments), which a Sqrt[g] -> cand
+         * rule alone leaves nested.  Sqrt[g] -> cand and 1/Sqrt[g] -> 1/cand
+         * together heal both.  cand equals +Sqrt[g] (sign fixed in
+         * sqrt_over_R), so its reciprocal equals 1/Sqrt[g] with the same sign. */
+        Expr* rules = mk_fn2("List",
+                          mk_rule(mk_sqrt_expr(expr_copy(g)), expr_copy(cand)),
+                          mk_rule(mk_pow_rat(expr_copy(g), -1, 2),
+                                  mk_inv(cand)));                 /* consumes cand */
         Expr* base = out ? out : res;
         Expr* nx = eval_take(internal_replace_all(
-                       (Expr*[]){ expr_copy(base), rule }, 2));
+                       (Expr*[]){ expr_copy(base), rules }, 2));
         if (out) expr_free(out);
         out = nx;
     }

@@ -1,6 +1,7 @@
 #ifndef LOADMODULE_H
 #define LOADMODULE_H
 
+#include <stddef.h>   /* size_t */
 #include "expr.h"
 
 /*
@@ -30,18 +31,30 @@
 Expr* mathilda_run_file(const char* path, int* opened);
 
 /*
- * Locate the internal module named by `relpath` (e.g. "simp/FullSimplify.m",
- * relative to the source tree's src/internal directory) and load it exactly
- * once. Resolution tries, in order:
- *   1. $MATHILDA_HOME/<relpath>            (env var pointing at src/internal)
- *   2. ./src/internal/<relpath>            (running from the repo root)
- *   3. ../src/internal/<relpath>           (running from tests/)
- *   4. ../../src/internal/<relpath>        (running from tests/build/)
- *   5. ../../../src/internal/<relpath>     (one level deeper still)
- * The first candidate that opens wins. Repeat calls with the same `relpath`
- * are no-ops (the module is loaded only once, preventing duplicate rule
- * registration). Returns 1 if the module is loaded (now or previously),
- * 0 if it could not be located.
+ * Resolve the internal module named by `relpath` (e.g. "simp/FullSimplify.m",
+ * relative to the source tree's src/internal directory) to a readable file on
+ * disk, writing the located path into `out` (a buffer of `outsz` bytes).
+ * Returns 1 and fills `out` if found, 0 (leaving `out` untouched) otherwise.
+ *
+ * Resolution is independent of the current working directory so a relocated or
+ * installed binary still finds its bundled modules. It tries, in order:
+ *   1. $MATHILDA_HOME/<relpath>                     (env var -> src/internal)
+ *   2. <exe_dir>/src/internal/<relpath>             (binary carries the tree)
+ *   3. <exe_dir>/../share/mathilda/internal/<...>   (installed layout)
+ *   4. MATHILDA_PREFIX/share/mathilda/internal/<..> (compile-time, if defined)
+ *   5. {., .., ../.., ../../..}/src/internal/<...>  (CWD ladder: repo root,
+ *                                                    tests/, tests/build/, …)
+ * The first candidate that opens wins; its base directory is cached so later
+ * lookups skip the search.
+ */
+int mathilda_resolve_internal(const char* relpath, char* out, size_t outsz);
+
+/*
+ * Locate (via mathilda_resolve_internal) and load the internal module named by
+ * `relpath` exactly once. Repeat calls with the same `relpath` are no-ops (the
+ * module is loaded only once, preventing duplicate rule registration). Returns
+ * 1 if the module is loaded (now or previously), 0 if it could not be located
+ * (a LoadModule::nofile diagnostic is printed to stderr in that case).
  */
 int mathilda_load_module(const char* relpath);
 

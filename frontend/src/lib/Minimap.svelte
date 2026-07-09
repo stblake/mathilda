@@ -60,7 +60,7 @@
       y: toMapY(nb.y),
       w: Math.max(6, nb.width * scale),
       h: Math.max(4, h * scale),
-      color: PALETTE[i % PALETTE.length],
+      color: PALETTE[parseInt(nb.id.replace('nb-', ''), 10) % PALETTE.length] ?? PALETTE[i % PALETTE.length],
       label: nb.title.slice(0, 18),
     };
   });

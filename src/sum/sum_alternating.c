@@ -59,7 +59,7 @@ static bool alt_neg_power(Expr* e, Expr** base, int* m) {
     return true;
 }
 /* Find the (single) var-dependent pole factor of a partial-fraction term,
- * descending into nested Times.  Returns count; records base/mult in *fb/*fm. */
+ * descending into nested Times.  Returns count; records base/mult in fb, fm. */
 static int alt_find_pole(Expr* e, Expr* var, Expr** fb, int* fm) {
     Expr* b; int mm;
     if (alt_neg_power(e, &b, &mm) && !sum_free_of(b, var)) { *fb = b; *fm = mm; return 1; }

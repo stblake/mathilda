@@ -1,3 +1,8 @@
+/* fileno()/isatty() are POSIX, hidden by glibc under -std=c99; request them. */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "expr.h"
 #include "parse.h"
 #include "print.h"
@@ -7,6 +12,7 @@
 #include "repl_hooks.h"
 #include "sym_names.h"
 #include "show.h"
+#include "render3d.h"
 #include "graphics_json.h"
 #include "print_latex.h"
 #include <stdio.h>
@@ -130,19 +136,20 @@ void process_input(const char* input, int line_number) {
     expr_print(to_print);
     printf("\n"); // extra blank line
 
-    /* Mathematica's front end auto-displays a top-level Graphics[...]
-     * result. This REPL is the sole "front end", so it owns rendering:
-     * Show[]/Plot[] merely return a Graphics[...] object and we render it
-     * here. Routing every display through one path means `g // Graphics`,
-     * Show[...] and Plot[...] all render identically, and a trailing `;`
-     * (which yields Null) correctly suppresses the window. graphics_show
-     * borrows the expr (no ownership transfer); on a non-graphics build
-     * its stub prints a one-line "install raylib" hint instead. */
+    /* Mathematica's front end auto-displays a top-level Graphics[...] (or
+     * Graphics3D[...], from Plot3D) result. This REPL is the sole "front
+     * end", so it owns rendering: Show[]/Plot[]/Plot3D[] merely return such
+     * an object and we render it here. Routing every display through one
+     * path means `g // Graphics`, Show[...], Plot[...] and Plot3D[...] all
+     * render identically, and a trailing `;` (which yields Null) correctly
+     * suppresses the window. graphics_show/graphics3d_show borrow the expr
+     * (no ownership transfer); on a non-graphics build their stubs print a
+     * one-line "install raylib" hint instead. */
     if (to_print && to_print->type == EXPR_FUNCTION
         && to_print->data.function.head->type == EXPR_SYMBOL
-        && to_print->data.function.head->data.symbol == SYM_Graphics
         && to_print->data.function.arg_count >= 1) {
-        graphics_show(to_print);
+        if (to_print->data.function.head->data.symbol == SYM_Graphics) graphics_show(to_print);
+        else if (to_print->data.function.head->data.symbol == SYM_Graphics3D) graphics3d_show(to_print);
     }
 
     expr_free(to_print);
@@ -274,6 +281,7 @@ void repl_loop(void) {
 #endif
 
 #include "core.h"
+#include "loadmodule.h"
 
 /* =====================================================================
  * Minimal NDJSON pipe-mode protocol
@@ -373,12 +381,34 @@ static void json_escape(const char* s, char* out, size_t outlen) {
 static void pipe_process_input(const char* input, int id) {
     Expr* parsed = parse_expression(input);
     if (!parsed) {
-        char buf[256];
-        snprintf(buf, sizeof(buf),
-                 "{\"id\":%d,\"type\":\"error\",\"message\":\"Parse error\"}", id);
-        pipe_emit(buf);
-        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\"}", id);
-        pipe_emit(buf);
+        /* Echo the exact received input in the error so a stray/invisible
+         * character or bracket mismatch in the caller's text is diagnosable
+         * rather than an opaque "Parse error". */
+        size_t esc_cap = strlen(input) * 6 + 8;
+        char* esc = malloc(esc_cap);
+        char* buf = NULL;
+        if (esc) {
+            json_escape(input, esc, esc_cap);
+            size_t bcap = esc_cap + 128;
+            buf = malloc(bcap);
+            if (buf)
+                snprintf(buf, bcap,
+                    "{\"id\":%d,\"type\":\"error\",\"message\":\"Parse error: %s\"}",
+                    id, esc);
+        }
+        if (buf) {
+            pipe_emit(buf);
+        } else {
+            char sbuf[128];
+            snprintf(sbuf, sizeof(sbuf),
+                "{\"id\":%d,\"type\":\"error\",\"message\":\"Parse error\"}", id);
+            pipe_emit(sbuf);
+        }
+        free(esc);
+        free(buf);
+        char dbuf[64];
+        snprintf(dbuf, sizeof(dbuf), "{\"id\":%d,\"type\":\"done\"}", id);
+        pipe_emit(dbuf);
         return;
     }
 
@@ -522,17 +552,12 @@ int main(void) {
     symtab_init();
     core_init();
 
-    /* Load internal init.m silently if it exists. */
-    FILE* check_fp = fopen("./src/internal/init.m", "r");
-    if (check_fp) {
-        fclose(check_fp);
-        Expr* init_call = parse_expression("Get[\"./src/internal/init.m\"]");
-        if (init_call) {
-            Expr* res = evaluate(init_call);
-            expr_free(init_call);
-            if (res) expr_free(res);
-        }
-    }
+    /* Load the internal bootstrap (init.m). Path resolution is independent of
+     * the current working directory (see mathilda_load_module), so a relocated
+     * or installed binary still finds its bundled src/internal tree. If it
+     * cannot be located the loader prints a LoadModule::nofile diagnostic —
+     * far better than the previous silent load of a non-functional kernel. */
+    mathilda_load_module("init.m");
 
     if (pipe_mode) {
         pipe_mode_loop();

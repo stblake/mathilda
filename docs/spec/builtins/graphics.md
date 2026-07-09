@@ -17,6 +17,12 @@ time -- `brew install raylib` on macOS, `apt install libraylib-dev` on
 Debian/Ubuntu). When Raylib isn't available, the build still succeeds;
 `Show`/`Plot` print a one-line message instead of opening a window.
 
+A small 3D extension lives alongside this: `Plot3D[]` builds a
+`Graphics3D[...]` object (rendered with an orbit camera) the same way `Plot[]`
+builds a `Graphics[...]`, reusing the same primitive heads (`Polygon`, `Line`,
+color directives) with 3-coordinate `{x,y,z}` points instead of 2-coordinate
+`{x,y}` ones -- see `Graphics3D` and `Plot3D` below.
+
 ## Graphics
 A symbolic 2D graphics object.
 - `Graphics[primitives]`: wraps a (possibly nested) list of primitives and
@@ -399,6 +405,291 @@ In[8]:= Plot[{Sin[x], Cos[x]}, {x, 0, 2 Pi}, PlotLegends -> "Expressions"]
 Out[8]= -Graphics-
 ```
 
+## Graphics3D
+A symbolic 3D graphics object, as built by `Plot3D[]`.
+- `Graphics3D[primitives]`: wraps a (possibly nested) list of primitives and
+  style directives -- the *same* heads `Graphics[]` uses (`Polygon`, `Line`,
+  `RGBColor`/`GrayLevel`/`Hue`, `Opacity`), but with 3-coordinate `{x,y,z}`
+  points instead of 2-coordinate `{x,y}` ones, exactly mirroring how
+  Mathematica itself reuses primitive heads between `Graphics`/`Graphics3D`.
+- `Graphics3D[primitives, opt1 -> val1, ...]`: as above, with options (see
+  `Plot3D` below).
+- Like `Graphics`, it is an inert structural head -- nothing renders until
+  `Show[]`/`Plot3D[]` is called on it.
+- Rendered in an orbit-camera window: drag to rotate, scroll to zoom,
+  right-drag (or middle-drag) to pan, `R` to reset the view, `S` to save a
+  screenshot, `Esc` to close. There is no live re-sampling on
+  rotate/zoom -- unlike a 2D pan/zoom, orbiting the camera never changes
+  which `(x,y)` domain was sampled, so there is nothing to re-sample.
+
+**Features**:
+- `Protected`.
+- Prints as `-Graphics3D-` (use `FullForm[]` to inspect the underlying
+  expression).
+
+```mathematica
+In[1]:= Graphics3D[{Polygon[{{0,0,0}, {1,0,0}, {1,1,1}, {0,1,1}}]}]
+Out[1]= -Graphics3D-
+```
+
+## Plot3D
+Samples and displays a function of two real variables as a surface.
+- `Plot3D[f, {x, xmin, xmax}, {y, ymin, ymax}]`: samples `f` over a uniform
+  grid on `[xmin,xmax] x [ymin,ymax]`, opens an orbit-camera window showing
+  the surface, and returns it as a `Graphics3D[{Polygon[...], ...}, opts]`
+  object. Each grid cell becomes one quad `Polygon[]`; a cell with any
+  corner that doesn't evaluate to a finite real (or fails `RegionFunction`)
+  is simply omitted, leaving a hole in the surface.
+- `Plot3D[{f1, f2, ...}, {x,...}, {y,...}]`: plots several surfaces over the
+  same domain, each in a distinct palette colour (the same `ColorData[97]`
+  palette `Plot` uses).
+- `Plot3D[f, {x,...}, {y,...}, opts...]`: as above, with options below.
+- `HoldAll`: `f` and both iterator specs are not pre-evaluated.
+
+`Plot3D` reuses `Plot`'s option *semantics* wherever a 3D analogue makes
+sense, sharing the actual evaluation code (`src/graphics/plot_common.c`) for
+`RegionFunction`, `ColorFunction`, and the multi-curve/multi-surface palette:
+
+| Option | Default | Meaning |
+|---|---|---|
+| `PlotPoints` | `25` | initial per-axis grid resolution (an `n x n` grid) |
+| `MaxRecursion` | `2` | doubles the *whole* grid's resolution (up to this many times, capped at 200 points/axis) while a cell-center-vs-bilinear-interpolant flatness check fails -- a global, crack-free analogue of `Plot`'s per-interval adaptive bisection (a per-cell quadtree would leave T-junction cracks where differently-refined cells meet) |
+| `Mesh` | `True` | overlays the grid wireframe on the surface (unlike `Plot`'s default `None` -- Mathematica's `Plot3D` shows mesh lines out of the box too); `None`/`False` draws the filled surface only. **Only interior grid lines are drawn** -- the perimeter edges of the domain are omitted, giving a smooth boundary silhouette |
+| `PlotStyle` | `RGBColor[0.2,0.4,0.8]` | the surface's fill color. For a single surface, a direct color literal; for multi-surface plots (`{f1,f2,...}`), a `List` of colors is indexed per surface (cycling if shorter than the surface count), or a single literal applies to all. Ignored per-cell where `ColorFunction` overrides |
+| `ColorFunction` | none | a function returning a color literal, evaluated at the center of each grid cell. **Calling convention** (tried in order): `f[xs, ys, zs]` (Mathematica's 3D convention), then `f[xs, zs]` (height ramp), then `f[zs]` (univariate height). The string `"Rainbow"` is built-in: it maps z-height to a blue-to-red hue sweep (`Hue[(1-t)*0.8]` where `t = (z-zmin)/(zmax-zmin)`) |
+| `ColorFunctionScaling` | `True` | when `True`, the arguments passed to `ColorFunction` are scaled to `[0,1]` within the data range; `False` passes raw coordinate values |
+| `RegionFunction` | none | `f[x,y,z]` (Mathematica's `Plot3D` convention) tried first; falls back to `Plot`'s `f[x,y]`/`f[x]` forms if that doesn't resolve to `True`/`False`, so a `RegionFunction` written for `Plot` keeps working |
+| `ExclusionStyle` | `GrayLevel[0.35]` | style directive (a color literal or `Thickness[...]` etc.) used to draw the boundary edges between included and excluded grid cells when `RegionFunction` is active |
+| `PlotRange` | `Automatic` | an explicit `{zmin,zmax}` (or the last `{zmin,zmax}` of a longer nested list) feeds the same flatness check `MaxRecursion` uses, and bounds the rendered box |
+| `Axes` | `True` | draws a wireframe bounding box with tick labels |
+| `Lighting` | `Automatic` | surface shading model. `Automatic` (default): per-face Lambertian flat shading — each polygon's face normal is dotted with a directional light that is **fixed relative to the camera** (upper-right-front in view space: `0.3 right + 1.0 up + 0.5 forward`, normalised), so the lit/dark pattern updates as you orbit. Intensity `I = 0.3 + 0.7 × |n·L|` (ambient 0.3 + diffuse 0.7, two-sided so back faces are lit too). `None` or `False`: disables shading and draws surfaces in their raw `PlotStyle`/`ColorFunction` color |
+
+Other options (`PlotLabel`, `Background`, `ImageSize`, `AxesLabel`, ...) are
+evaluated once (since `Plot3D` is `HoldAll`) and copied through onto the
+`Graphics3D[...]` result, exactly like `Plot`'s fallback branch. 2D-only
+chrome with no 3D analogue in this engine (`Filling`, `FillingStyle`,
+`Exclusions`, `Frame*`, `GridLines*`, `PlotLegends`) is likewise not
+specially recognized -- it passes through inertly rather than erroring, so
+copying a `Plot[]` option list onto `Plot3D[]` by habit doesn't break
+anything, it just has no effect for those names.
+
+**Features**:
+- `HoldAll`, `Protected`.
+- Declines to evaluate if either iterator spec isn't `{var, min, max}` with
+  numeric (possibly symbolic-but-numeric) bounds, if `PlotPoints -> 1` (or
+  any other malformed sampling option), or if no grid cell is valid (e.g. a
+  `RegionFunction` that excludes every sampled point).
+- Auto-displays, exactly like `Graphics`/`Plot`.
+
+```mathematica
+In[1]:= Plot3D[Sin[x] Cos[y], {x, -3, 3}, {y, -3, 3}]
+Out[1]= -Graphics3D-
+
+In[2]:= Plot3D[x^2 - y^2, {x, -2, 2}, {y, -2, 2}, ColorFunction -> "Rainbow", Mesh -> None]
+Out[2]= -Graphics3D-  (* Rainbow maps z-height to hue *)
+
+In[3]:= Plot3D[x + y, {x, -2, 2}, {y, -2, 2}, RegionFunction -> Function[{x, y, z}, x^2 + y^2 < 4]]
+Out[3]= -Graphics3D-  (* exclusion boundary drawn in default GrayLevel[0.35] *)
+
+In[4]:= Plot3D[x + y, {x,-2,2}, {y,-2,2},RegionFunction -> Function[{x,y,z}, x^2+y^2 <4],ExclusionStyle -> RGBColor[1, 0.3, 0]]
+Out[4]= -Graphics3D-  (* exclusion boundary in orange *)
+
+In[5]:= Plot3D[{Sin[x + y], Cos[x - y]}, {x, -2, 2}, {y, -2, 2}]
+Out[5]= -Graphics3D-  (* palette colors for each surface *)
+
+In[6]:= Plot3D[{x^2, x^2 + 1}, {x,-2,2}, {y,-2,2},PlotStyle -> {Blue, Red}]
+Out[6]= -Graphics3D-  (* explicit per-surface colors *)
+```
+
+## ParametricPlot
+Samples and displays a parametric planar curve or filled region.
+
+**One-iterator form** — parametric curve:
+- `ParametricPlot[body, {t, tmin, tmax}]`: evaluates `body` (which must
+  produce a 2-element numeric list `{x, y}`) for each sampled `t` value;
+  returns `Graphics[{Line[...], ...}, opts]`. `body` may be a literal `{fx,
+  fy}` or any expression that evaluates to `{x, y}` (e.g. `r {Cos[t], Sin[t]}`
+  with `r` set to a number elsewhere).
+- `ParametricPlot[{{body1}, {body2}, ...}, {t, tmin, tmax}]`: plots multiple
+  curves over the same parameter range in distinct palette colours.
+
+**Two-iterator form** — filled parametric region:
+- `ParametricPlot[body, {t, tmin, tmax}, {r, rmin, rmax}]`: samples a
+  `PlotPoints × PlotPoints` grid of `(t, r)` pairs, maps each pair to `(x, y)`
+  via `body`, and emits filled `Polygon[{p00,p10,p11,p01}]` quads for each
+  valid grid cell.  Produces `Graphics[{Polygon[...], ...}, opts]`.  `Mesh ->
+  All` overlays the grid lines.  The fill is **solid** by default; use
+  `PlotStyle -> {color, Opacity[a]}` to get a transparent region.
+
+`HoldAll`: the body and all iterator specs are not pre-evaluated.
+
+Adaptive sampling (1-iterator form) uses a 2D chord-deviation test in `(x, y)`
+space: the midpoint of each candidate segment is checked for Euclidean
+displacement from the linear interpolant of the two endpoints, normalised by the
+bounding-box diagonal.  Three interior probes per interval (quarter-point and
+midpoint) avoid aliasing against periodic curves.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `PlotPoints` | `25` | initial uniform sample count (1-iter) or grid size (2-iter) |
+| `MaxRecursion` | `6` | maximum adaptive-subdivision depth (1-iter only) |
+| `MaxPlotPoints` | `Infinity` | overall point cap (1-iter only) |
+| `Mesh` | `None` | `All` overlays sample dots (1-iter) or grid lines (2-iter) |
+| `PlotLegends` | none | `Automatic` or `"Expressions"` labels each curve with its body expression; an explicit `{l1, l2, ...}` uses those labels. Embeds `$PlotLegendData` in the Graphics result for the renderer to draw a legend box. |
+| `ColorFunction` | none | colors by parameter; `"Rainbow"` sweeps hue; a function `f[t_scaled]` (1-iter) or `f[t_scaled, r_scaled]` (2-iter). With `ColorFunctionScaling -> True` (default) inputs are scaled to `[0,1]` |
+| `ColorFunctionScaling` | `True` | whether to scale parameters before `ColorFunction` |
+| `RegionFunction` | none | `f[x,y]` mask; points where it returns `False` are excluded |
+| `PlotStyle` | `RGBColor[0.2,0.4,0.8]` | curve/polygon color; a `List` of directives is accepted, so `PlotStyle -> {Blue, Opacity[0.4]}` gives a semi-transparent fill for the two-iterator form |
+| `AspectRatio` | `1` | square by default (both axes equally important) |
+| `Axes` | `True` | draws coordinate axes |
+
+All other display options (`PlotRange`, `PlotRangePadding`, `AxesLabel`,
+`AxesOrigin`, `AxesStyle`, `Frame`, `FrameLabel`, `FrameStyle`, `FrameTicks`,
+`GridLines`, `GridLinesStyle`, `Prolog`, `Epilog`, `PlotLabel`, `Background`,
+`ImageSize`, `TicksStyle`, `LabelStyle`, `RotateLabel`) are evaluated and
+passed through to the `Graphics[...]` result, where the renderer interprets
+them identically to how it does for bare `Graphics[]` objects.
+
+**Features**:
+- `HoldAll`, `Protected`.
+- Declines to evaluate if bounds aren't numeric or `PlotPoints < 2`.
+- Auto-displays exactly like `Graphics`/`Plot`.
+
+```mathematica
+(* --- One-iterator: curves --- *)
+In[1]:= ParametricPlot[{Cos[t], Sin[t]}, {t, 0, 2 Pi}]
+Out[1]= -Graphics-  (* unit circle, AspectRatio -> 1 *)
+
+In[2]:= ParametricPlot[{Sin[2 t], Sin[3 t]}, {t, 0, 2 Pi}]
+Out[2]= -Graphics-  (* Lissajous figure *)
+
+In[3]:= ParametricPlot[{{Cos[t], Sin[t]}, {2 Cos[t], Sin[t]}}, {t, 0, 2 Pi}]
+Out[3]= -Graphics-  (* two curves in palette colours *)
+
+In[4]:= ParametricPlot[{Cos[t], Sin[t]}, {t, 0, 2 Pi},
+          ColorFunction -> (Hue[#] &)]
+Out[4]= -Graphics-  (* rainbow-colored circle *)
+
+In[5]:= ParametricPlot[{Cos[t], Sin[t]}, {t, 0, 2 Pi},
+          RegionFunction -> Function[{x, y}, x > 0]]
+Out[5]= -Graphics-  (* right semicircle only *)
+
+In[6]:= ParametricPlot[2 {Cos[t], Sin[t]}, {t, 0, 2 Pi}]
+Out[6]= -Graphics-  (* computed body (not a literal List) -- works fine *)
+
+(* --- Two-iterator: filled regions --- *)
+In[7]:= ParametricPlot[{r Cos[t], r Sin[t]}, {t, 0, 2 Pi}, {r, 1, 2}]
+Out[7]= -Graphics-  (* annular region, r from 1 to 2 *)
+
+In[8]:= ParametricPlot[r^2 {Sqrt[t] Cos[t], Sin[t]},
+          {t, 0, 3 Pi/2}, {r, 1, 2}]
+Out[8]= -Graphics-  (* weighted spiral region *)
+
+In[9]:= ParametricPlot[{r Cos[t], r Sin[t]}, {t, 0, 2 Pi}, {r, 1, 2},
+          Mesh -> All]
+Out[9]= -Graphics-  (* with grid lines overlaid *)
+```
+
+## ParametricPlot3D
+Samples and displays a parametric 3D space curve or surface patch, returning
+a `Graphics3D[...]` object rendered in an orbit-camera window.
+
+**One-iterator form** — parametric space curve:
+- `ParametricPlot3D[body, {t, tmin, tmax}]`: evaluates `body` (which must
+  produce a 3-element numeric list `{x, y, z}`) for each sampled `t` value;
+  returns `Graphics3D[{Line[...], ...}, opts]`. `body` may be a literal
+  `{fx, fy, fz}` or any expression that evaluates to `{x, y, z}`.
+- `ParametricPlot3D[{{body1}, {body2}, ...}, {t, tmin, tmax}]`: plots
+  multiple space curves over the same parameter range in distinct palette
+  colours.
+
+**Two-iterator form** — parametric 3D surface patch:
+- `ParametricPlot3D[body, {t, tmin, tmax}, {u, umin, umax}]`: samples a
+  `PlotPoints × PlotPoints` grid of `(t, u)` pairs, maps each to `{x, y, z}`
+  via `body`, and emits filled `Polygon[{p00,p10,p11,p01}]` quads for each
+  valid grid cell. Produces `Graphics3D[{Polygon[...], ...}, opts]`.
+
+`HoldAll`: the body and all iterator specs are not pre-evaluated.
+
+Adaptive sampling (1-iterator form) uses a 3D Euclidean chord-deviation test
+in `(x, y, z)` space, normalized by the curve's bounding-box diagonal. Three
+interior probes per interval prevent aliasing against periodic curves, exactly
+mirroring `ParametricPlot`'s 2D algorithm extended to 3D.
+
+`ColorFunction` receives **scaled spatial coordinates** `{xs, ys, zs}` (in
+`[0,1]` over the sampled range when `ColorFunctionScaling -> True`), not
+parameter values — this matches `Plot3D`'s convention and means a function
+like `Function[{x,y,z}, Hue[z]]` colors by height. `"Rainbow"` maps hue to
+the z-extent for surfaces and to z-range for curves. `RegionFunction` is
+tried as `f[x,y,z]` first, then falls back to `f[x,y]` forms.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `PlotPoints` | `25` | initial uniform sample count (1-iter) or grid size (2-iter) |
+| `MaxRecursion` | `6` | maximum adaptive-subdivision depth (1-iter only) |
+| `MaxPlotPoints` | `Infinity` | overall point cap (1-iter only) |
+| `Mesh` | `None` | `All`/`True` overlays sample dots (1-iter) or grid lines (2-iter) |
+| `PlotLegends` | none | `Automatic` or `"Expressions"` labels each curve; an explicit `{l1,...}` uses those labels |
+| `ColorFunction` | none | `"Rainbow"` or `f[x,y,z]`/`f[x,z]`/`f[z]` (scaled spatial); colors per segment (1-iter) or per cell (2-iter) |
+| `ColorFunctionScaling` | `True` | whether spatial coords are scaled to `[0,1]` before `ColorFunction` |
+| `RegionFunction` | none | `f[x,y,z]` mask; points where it returns `False` are excluded |
+| `PlotStyle` | `RGBColor[0.2,0.4,0.8]` | curve/surface color; a `List` of directives is accepted, so `PlotStyle -> {Blue, Opacity[0.4]}` gives a semi-transparent surface for the two-iterator form |
+| `Axes` | `True` | draws the 3D bounding-box wireframe with tick labels |
+| `Lighting` | `Automatic` | `Automatic`: per-face Lambertian shading (same model as `Plot3D`); `None`/`False`: raw flat color |
+
+All other options (`PlotRange`, `AxesLabel`, `PlotLabel`, `Background`,
+`ImageSize`, ...) are evaluated and passed through to the `Graphics3D[...]`
+result. `AspectRatio` is silently ignored (the orbit camera has no fixed
+aspect ratio). Interactive controls are the same as `Plot3D` (drag to rotate,
+scroll to zoom, `R` to reset, `S` for screenshot, `Esc` to close).
+
+**Features**:
+- `HoldAll`, `Protected`.
+- Declines to evaluate if bounds aren't numeric or `PlotPoints < 2`.
+- Auto-displays exactly like `Graphics3D`/`Plot3D`.
+
+```mathematica
+(* --- One-iterator: space curves --- *)
+In[1]:= ParametricPlot3D[{Cos[t], Sin[t], t/5}, {t, 0, 4 Pi}]
+Out[1]= -Graphics3D-  (* helix *)
+
+In[2]:= ParametricPlot3D[{Sin[2 t] Cos[t], Sin[2 t] Sin[t], Cos[t]}, {t, 0, 2 Pi}]
+Out[2]= -Graphics3D-  (* spherical Lissajous *)
+
+In[3]:= ParametricPlot3D[{{Cos[t], Sin[t], 0}, {Cos[t], 0, Sin[t]}}, {t, 0, 2 Pi}]
+Out[3]= -Graphics3D-  (* two circles in different planes *)
+
+In[4]:= ParametricPlot3D[{Cos[t], Sin[t], t/5}, {t, 0, 4 Pi},
+          ColorFunction -> "Rainbow"]
+Out[4]= -Graphics3D-  (* hue sweeps with z-height *)
+
+In[5]:= ParametricPlot3D[{Cos[t], Sin[t], t/5}, {t, 0, 4 Pi}, Mesh -> All]
+Out[5]= -Graphics3D-  (* with sample dots *)
+
+(* --- Two-iterator: surface patches --- *)
+In[6]:= ParametricPlot3D[{Cos[u] Sin[v], Sin[u] Sin[v], Cos[v]},
+          {u, 0, 2 Pi}, {v, 0, Pi}]
+Out[6]= -Graphics3D-  (* unit sphere *)
+
+In[7]:= ParametricPlot3D[{(2 + Cos[v]) Cos[u], (2 + Cos[v]) Sin[u], Sin[v]},
+          {u, 0, 2 Pi}, {v, 0, 2 Pi}]
+Out[7]= -Graphics3D-  (* torus, R=2, r=1 *)
+
+In[8]:= ParametricPlot3D[{u Cos[v], u Sin[v], u},
+          {u, 0, 2}, {v, 0, 2 Pi},
+          ColorFunction -> "Rainbow", Mesh -> All]
+Out[8]= -Graphics3D-  (* cone with rainbow coloring and mesh *)
+
+In[9]:= ParametricPlot3D[{{Cos[u] Sin[v], Sin[u] Sin[v], Cos[v]},
+          {2 Cos[u] Sin[v], 2 Sin[u] Sin[v], 2 Cos[v]}},
+          {u, 0, 2 Pi}, {v, 0, Pi}]
+Out[9]= -Graphics3D-  (* two concentric spheres in palette colours *)
+
+In[10]:= ParametricPlot3D[{Cos[u] Sin[v], Sin[u] Sin[v], Cos[v]},
+           {u, 0, 2 Pi}, {v, 0, Pi}, Lighting -> None]
+Out[10]= -Graphics3D-  (* flat color, no shading *)
+```
+
 ## ListPlot
 Plots explicit data as a point (scatter) plot, returning a
 `Graphics[{Point[...], ...}, opts]` object rendered through the same engine
@@ -462,4 +753,193 @@ Out[4]= -Graphics-
 
 In[5]:= ListPlot[{1, 4, 9, 16}, Filling -> Axis]
 Out[5]= -Graphics-
+```
+
+## StreamPlot
+
+Traces streamlines of a 2-D vector field `{vx, vy}` by RK4 integration
+from a uniform grid of seed points, renders each stream as an
+`Arrow[...]` primitive (a directed polyline with an arrowhead at its
+end), and returns a `Graphics[...]` object (auto-displayed).
+
+`StreamPlot` is `HoldAll`: the field components `vx`, `vy` and the
+iterator specs are held unevaluated — `x` and `y` have no values until
+the sampler substitutes numeric coordinates, exactly like `Plot`'s
+function body.
+
+```mathematica
+StreamPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}]
+StreamPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
+```
+
+**Options**
+
+| Option | Default | Meaning |
+|---|---|---|
+| `StreamPoints` | `Automatic` (15×15 grid) | Integer `n` for an n×n seed grid; `Automatic` uses the default 15×15 |
+| `StreamScale` | `Automatic` | `Automatic` limits each stream to ≈ 8% of the domain diagonal; `None` lets streams run until they leave the domain; a positive real sets the fraction of the diagonal |
+| `StreamStyle` | *(thin steel-blue)* | A style directive or list applied to every stream (e.g. `Thickness[0.003]`, `RGBColor[...]`) |
+| `StreamColorFunction` | `None` | `f[x,y,vx,vy,speed]` (or fewer args) → color directive per stream at its midpoint; `"Rainbow"` maps scaled speed to hue |
+| `ColorFunction` | `None` | Alias for `StreamColorFunction` |
+| `RegionFunction` | `None` | `f[x,y]` mask; seeds and integration steps outside the region are skipped |
+| `PlotLegends` | `None` | `Automatic` / `"Expressions"` / explicit list |
+| `PlotPoints` | — | Alias for `StreamPoints` (integer only) |
+
+All other options (`PlotRange`, `Axes`, `AspectRatio`, `Frame`, `AxesLabel`,
+`GridLines`, `PlotLabel`, `Background`, `ImageSize`, …) pass through to the
+`Graphics[...]` result.
+
+Default style: `Axes -> True`, `AspectRatio -> 1` (square domain).
+
+**Arrow primitive** — `Arrow[{{x1,y1}, ..., {xn,yn}}]` draws a directed
+polyline with a filled arrowhead triangle at the final point. The
+arrowhead size scales with line thickness and viewport size so it remains
+visible at any zoom level. `Arrow` is an inert protected head (like `Line`
+or `Polygon`) and can be used directly inside `Graphics[...]`.
+
+```mathematica
+(* --- Basic stream plots --- *)
+In[1]:= StreamPlot[{-y, x}, {x, -2, 2}, {y, -2, 2}]
+Out[1]= -Graphics-   (* circular rotation *)
+
+In[2]:= StreamPlot[{1 - y^2, x}, {x, -3, 3}, {y, -2, 2}]
+Out[2]= -Graphics-   (* nonlinear field *)
+
+In[3]:= StreamPlot[{Sin[x + y], Cos[x - y]}, {x, 0, 2 Pi}, {y, 0, 2 Pi}]
+Out[3]= -Graphics-
+
+(* --- Denser seeding --- *)
+In[4]:= StreamPlot[{-y, x}, {x, -2, 2}, {y, -2, 2}, StreamPoints -> 25]
+Out[4]= -Graphics-
+
+(* --- StreamScale: let streams run freely --- *)
+In[5]:= StreamPlot[{-y, x}, {x, -2, 2}, {y, -2, 2}, StreamScale -> None]
+Out[5]= -Graphics-
+
+(* --- Speed-colored streams --- *)
+In[6]:= StreamPlot[{-y, x}, {x, -2, 2}, {y, -2, 2}, StreamColorFunction -> "Rainbow"]
+Out[6]= -Graphics-
+
+(* --- Custom style --- *)
+In[7]:= StreamPlot[{x, -y}, {x, -2, 2}, {y, -2, 2}, StreamStyle -> {Thickness[0.004], RGBColor[0.8, 0.2, 0.1]}]
+Out[7]= -Graphics-
+
+(* --- RegionFunction: mask to a disk --- *)
+In[8]:= StreamPlot[{-y, x}, {x, -2, 2}, {y, -2, 2}, RegionFunction -> Function[{x, y}, x^2 + y^2 < 1.5^2]]
+Out[8]= -Graphics-
+
+(* --- Arrow primitive directly --- *)
+In[9]:= Graphics[{Blue, Arrow[{{0,0}, {1,0}, {1,1}}]}]
+Out[9]= -Graphics-
+```
+
+**Features**:
+- `HoldAll`, `Protected`.
+- RK4 integration; step size adapts to seed density and domain size.
+- Declines to evaluate if the field arg is not a 2-element List, or if
+  bounds aren't numeric.
+- `StreamColorFunction` is evaluated at each stream's midpoint; tries
+  `f[x,y,vx,vy,speed]` → `f[x,y,vx,vy]` → `f[x,y]` → `f[speed]` in
+  order, using the first form that returns a recognized color.
+- Arrow arrowhead size is viewport-relative: it stays visible regardless
+  of `PlotRange` scale or interactive zoom.
+
+## ContourPlot
+Generates iso-contour lines of a 2-D function `f(x, y)` using the marching
+squares algorithm and returns a `Graphics[...]` object (auto-displayed).
+
+```mathematica
+ContourPlot[f, {x, xmin, xmax}, {y, ymin, ymax}]
+ContourPlot[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
+```
+
+`ContourPlot` is `HoldAll`: `f` is held unevaluated until `x` and `y` are
+given numeric values, exactly like `Plot`'s function body.
+
+**Algorithm**: evaluates `f` on a `(PlotPoints+1) × (PlotPoints+1)` grid,
+then for each contour level runs marching squares over the `PlotPoints ×
+PlotPoints` grid of cells, linearly interpolating the exact crossing points on
+cell edges. Saddle cells (where both pairs of opposite corners straddle the
+level) use the bilinear cell-centre value to choose the correct diagonal. If
+`ContourShading` is active, each grid cell is filled with a coloured
+`Rectangle[]` primitive whose colour corresponds to the cell's average `z`
+value via `ColorFunction` or the built-in blue-cyan-yellow-red thermal ramp.
+
+**Options**
+
+| Option | Default | Meaning |
+|---|---|---|
+| `Contours` | `10` | Integer `n`: `n` evenly spaced auto levels in `[zmin, zmax]`; or `{c1, c2, ...}` to set levels explicitly |
+| `ContourStyle` | `Automatic` | Style directive(s) for the contour lines. `Automatic`: each level is coloured by its height using the thermal ramp. A single directive is applied to all levels; a `List` of directives cycles through the levels. `None`/`False` suppresses lines entirely |
+| `ContourLabels` | `False` | `True`: draws the level's `z` value as a `Text[]` at the midpoint of each level's first visible grid-segment |
+| `ContourShading` | `Automatic` | `True`: fill each grid cell with a colour derived from its average `z`. `False`/`None`: lines only. `Automatic`: enable shading when `ColorFunction` is set, otherwise lines only |
+| `ColorFunction` | `None` | `"Rainbow"` (Hue ramp), `"Temperature"` (blue-cyan-yellow-red), or a function `f[t]` with `t ∈ [0,1]` after scaling. Applied to both the cell shading and the auto contour-line colours |
+| `ColorFunctionScaling` | `True` | `True`: normalise `z` to `[0,1]` before calling `ColorFunction`; `False`: pass raw `z` |
+| `PlotPoints` | `25` | Grid resolution per axis; increase for smoother contours |
+| `RegionFunction` | `None` | `f[x,y]` mask; cells whose centre lies outside return `False` are neither shaded nor contoured |
+| `Axes` | `True` | Coordinate axes (same Plot/StreamPlot default) |
+| `AspectRatio` | `1` | Default square aspect (both axes equally important) |
+
+All other `Graphics` options (`Frame`, `PlotRange`, `AxesLabel`, `GridLines`,
+`PlotLabel`, `Background`, `ImageSize`, `Prolog`, `Epilog`, …) pass through
+to the `Graphics[...]` result.
+
+**Features**:
+- `HoldAll`, `Protected`.
+- Declines to evaluate if bounds aren't numeric or the function argument
+  does not have exactly two iterator specs.
+- Marching squares handles all 16 cell states, including the two saddle
+  cases (5 and 10), with bilinear centre disambiguation.
+- An explicit `PlotRange` passed in options suppresses the auto-range
+  injection (which otherwise pins the range to `{xmin,xmax}` × `{ymin,ymax}`
+  so the axes match the sampling domain).
+
+```mathematica
+(* --- Basic contour plots --- *)
+In[1]:= ContourPlot[Sin[x] + Cos[y], {x, -3, 3}, {y, -3, 3}]
+Out[1]= -Graphics-  (* 10 auto-levels, coloured by height *)
+
+In[2]:= ContourPlot[x^2 + y^2, {x, -2, 2}, {y, -2, 2}, Contours -> 5]
+Out[2]= -Graphics-  (* 5 circular contours *)
+
+(* --- Explicit contour values --- *)
+In[3]:= ContourPlot[x^2 - y^2, {x, -2, 2}, {y, -2, 2}, Contours -> {-2, -1, 0, 1, 2}]
+Out[3]= -Graphics-  (* hyperbolas at specified levels *)
+
+(* --- Shading with ColorFunction --- *)
+In[4]:= ContourPlot[Sin[x + y], {x, -3, 3}, {y, -3, 3},
+          ColorFunction -> "Rainbow", ContourShading -> True]
+Out[4]= -Graphics-  (* rainbow-filled density with contour lines *)
+
+In[5]:= ContourPlot[x^2 + y^2, {x, -2, 2}, {y, -2, 2},
+          ContourShading -> True, Contours -> 8]
+Out[5]= -Graphics-  (* thermal-gradient fill, 8 levels *)
+
+(* --- Lines only --- *)
+In[6]:= ContourPlot[Sin[x] Cos[y], {x, -Pi, Pi}, {y, -Pi, Pi},
+          ContourShading -> False, ContourStyle -> {Thickness[0.006]},
+          PlotPoints -> 40]
+Out[6]= -Graphics-
+
+(* --- Labels --- *)
+In[7]:= ContourPlot[x^2 + y^2, {x, -2, 2}, {y, -2, 2},
+          ContourLabels -> True, Contours -> 5]
+Out[7]= -Graphics-  (* level values annotated at first segment *)
+
+(* --- RegionFunction: circular mask --- *)
+In[8]:= ContourPlot[x^2 + y^2, {x, -3, 3}, {y, -3, 3},
+          RegionFunction -> Function[{x, y}, x^2 + y^2 < 4],
+          ContourShading -> True]
+Out[8]= -Graphics-
+
+(* --- ContourStyle: cycle explicit colours --- *)
+In[9]:= ContourPlot[Sin[x + y], {x, -3, 3}, {y, -3, 3},
+          ContourStyle -> {Red, Blue, Green}, Contours -> 6]
+Out[9]= -Graphics-  (* cycles Red, Blue, Green across 6 levels *)
+
+(* --- Suppress lines, shading only --- *)
+In[10]:= ContourPlot[Sin[x] + Cos[y], {x, -3, 3}, {y, -3, 3},
+           ContourStyle -> None, ContourShading -> True,
+           ColorFunction -> "Temperature"]
+Out[10]= -Graphics-
 ```

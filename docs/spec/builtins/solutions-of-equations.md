@@ -44,8 +44,14 @@ Attempts to solve an equation or system of equations for one or more variables.
     (also below).  The linear-system specialist accepts the same input shapes
     that the router uses to decide dispatch; it canonicalises each equation
     `lhs_i == rhs_i` to `lhs_i - rhs_i` and refuses (returns `NULL`) when the
-    system is not affine in the variables, in which case the router leaves
-    `Solve` unevaluated.
+    system is not affine in the variables.
+  - When the linear-system specialist declines a non-affine system ->
+    `Solve`SolveNonlinearSystem` (also below).  This handles genuinely
+    nonlinear polynomial systems whose solution set is zero-dimensional
+    (finitely many solutions) via a lexicographic Gröbner basis and
+    triangular back-substitution.  Positive-dimensional systems (infinitely
+    many solutions) emit `Solve::nsdim` and leave `Solve` unevaluated;
+    non-polynomial systems also stay unevaluated.
 - Inequalities and multi-equation transcendental systems are reserved for
   future work and currently leave `Solve[...]` unevaluated.  When the
   inverse-function specialist's outermost peel succeeds but the inner
@@ -411,6 +417,67 @@ In[3]:= Solve`SolveLinearSystem[
             {x + y + z == 6, 2 x - y + z == 3, x + 2 y - z == 2},
             {x, y, z}]
 Out[3]= {{x -> 1, y -> 2, z -> 3}}
+```
+
+## Solve`SolveNonlinearSystem
+
+The nonlinear polynomial-system specialist invoked by `Solve` when the
+linear-system specialist declines a non-affine system.  Reachable directly via
+its context-qualified name.
+- `Solve`SolveNonlinearSystem[eqns, vars]`
+- `Solve`SolveNonlinearSystem[eqns, vars, dom]`
+
+**Features**:
+- `Protected`.
+- `eqns` may be a single `Equal[lhs, rhs]`, `And[Equal[...], ...]`, or
+  `List[Equal[...], ...]`.  `vars` must be a `List` of distinct symbols.
+- Each equation is canonicalised to `lhs - rhs`.  Every residual must be a
+  polynomial over Q in `vars` (a transcendental head, a radical / non-integer
+  power, or a foreign symbol makes the specialist decline -> `NULL`).
+- A lexicographic Gröbner basis is computed via the Gröbner walk
+  (`gb_groebner_walk`).  For a zero-dimensional ideal this basis is
+  triangular: the univariate generator in the last variable is solved with
+  `Solve`SolvePolynomialEquality` (forwarding the domain and the
+  `Cubics` / `Quartics` flags), each root is back-substituted, and the search
+  recurses variable by variable.  Every completed tuple is verified against
+  the original equations (via `zero_test_decide`) before being accepted;
+  duplicate tuples are removed.
+- Output shape:
+  - Finite solutions: `{{v1 -> a1, ...}, {v1 -> b1, ...}, ...}`.
+  - Provably inconsistent system (unit ideal, or no domain points): `{}`.
+  - Empty equation list (`Solve[True, vars]`): `{{}}` (tautology).
+- Correctness policy: an empty `{}` is returned **only** when the ideal is
+  provably inconsistent or a fully-solved zero-dimensional ideal has no
+  solutions in the requested domain.  A branch on which no triangular
+  generator can be found, or on which the univariate solver cannot reduce the
+  generator, marks the search incomplete and the specialist returns `NULL`
+  (Solve stays unevaluated) rather than emit a false `{}`.
+- **Positive-dimensional ideals** (not every variable owns a pure-power
+  leading monomial -> infinitely many solutions) are detected and left
+  unevaluated with the advisory `Solve::nsdim`.  Solving in terms of free
+  variables is reserved for future work.
+- Domain filtering: `dom = Complexes` (default), `Reals`, or `Integers`.
+  The domain is forwarded to the univariate step at every level, and a final
+  per-tuple pass drops any solution with a non-real `Complex[_, _]` RHS
+  (`Reals`) or a non-integer RHS (`Integers`).
+- Safety: a per-generator total-degree gate (60) declines systems that could
+  make the Gröbner computation blow up.
+
+```mathematica
+In[1]:= Solve[x y == 1 && x + y == 3, {x, y}]
+Out[1]= {{x -> (1/2) (3 - Sqrt[5]), y -> (1/2) (3 + Sqrt[5])},
+         {x -> (1/2) (3 + Sqrt[5]), y -> (1/2) (3 - Sqrt[5])}}
+
+In[2]:= Solve[x^2 + y^2 == 1 && x == y, {x, y}]
+Out[2]= {{x -> -1/Sqrt[2], y -> -1/Sqrt[2]}, {x -> 1/Sqrt[2], y -> 1/Sqrt[2]}}
+
+In[3]:= Solve[x y == 6 && x + y == 5, {x, y}, Integers]
+Out[3]= {{x -> 3, y -> 2}, {x -> 2, y -> 3}}
+
+In[4]:= Solve[x^2 - y^2 == 0, {x, y}]
+Solve::nsdim: The solution set is not zero-dimensional (infinitely many
+solutions); Solve returned unevaluated.
+Out[4]= Solve[x^2 - y^2 == 0, {x, y}]
 ```
 
 ## Solve`SolvePolynomialEquality

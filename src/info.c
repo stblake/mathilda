@@ -252,6 +252,15 @@ void info_init(void) {
         "Options: Radius (contour radius, default 1/100, or Automatic), WorkingPrecision, "
         "PrecisionGoal, MaxRecursion (max contour refinements, default 10), "
         "Method ('Trapezoidal').");
+    symtab_set_docstring("Residue",
+        "Residue[f, {z, z0}]\n"
+        "\tgives the residue of f at the isolated singularity z = z0 -- the "
+        "coefficient of (z - z0)^-1 in the Laurent expansion of f.\n\n"
+        "Computed by power-series expansion, so a residue is found only where f "
+        "admits a Laurent series at z0. Returns unevaluated at branch points "
+        "(fractional-power expansions) and when no series can be produced. See "
+        "NResidue for a numerical alternative that also handles essential "
+        "singularities.");
     symtab_set_docstring("ND",
         "ND[expr, x, x0]\n"
         "\tgives a numerical approximation to the derivative of expr with respect "
@@ -3486,4 +3495,109 @@ void info_init(void) {
         "LightPink\n\tThe named colour RGBColor[1, 0.925, 0.925].");
     symtab_set_docstring("LightPurple",
         "LightPurple\n\tThe named colour RGBColor[0.94, 0.88, 0.94].");
+
+    symtab_set_docstring("StringDrop",
+        "StringDrop[\"string\", n]\n"
+        "\tGives \"string\" with its first n characters dropped.\n"
+        "StringDrop[\"string\", -n]\n"
+        "\tGives \"string\" with its last n characters dropped.\n"
+        "StringDrop[\"string\", {n}]\n"
+        "\tGives \"string\" with its nth character dropped.\n"
+        "StringDrop[\"string\", {m, n}]\n"
+        "\tGives \"string\" with characters m through n dropped.\n"
+        "StringDrop[\"string\", {m, n, s}]\n"
+        "\tDrops characters m through n in steps of s.\n"
+        "StringDrop[\"string\", UpTo[n]]\n"
+        "\tDrops n characters, or as many as are available.\n"
+        "StringDrop[{s1, s2, ...}, spec]\n"
+        "\tGives the list of results for each of the si.\n\n"
+        "\tNegative indices count from the end.");
+
+    symtab_set_docstring("StringReverse",
+        "StringReverse[\"string\"]\n"
+        "\tReverses the order of the characters in \"string\".\n"
+        "StringReverse[{s1, s2, ...}]\n"
+        "\tGives the list of results for each of the si.\n\n"
+        "\tStringReverse is Listable, so it threads automatically over lists.");
+
+    symtab_set_docstring("StringInsert",
+        "StringInsert[\"string\", \"snew\", n]\n"
+        "\tInserts \"snew\" so its first character is the nth character of the\n"
+        "\tresult.\n"
+        "StringInsert[\"string\", \"snew\", -n]\n"
+        "\tInserts \"snew\" so its last character is the nth character from the\n"
+        "\tend of the result.\n"
+        "StringInsert[\"string\", \"snew\", {n1, n2, ...}]\n"
+        "\tInserts a copy of \"snew\" at each of the positions ni.\n"
+        "StringInsert[{s1, s2, ...}, \"snew\", spec]\n"
+        "\tGives the list of results for each of the si.\n\n"
+        "\tPositions refer to \"string\" before any insertion is done.");
+
+    symtab_set_docstring("StringReplacePart",
+        "StringReplacePart[\"string\", \"snew\", {m, n}]\n"
+        "\tReplaces the characters at positions m through n in \"string\" by\n"
+        "\t\"snew\".\n"
+        "StringReplacePart[\"string\", \"snew\", {{m1, n1}, {m2, n2}, ...}]\n"
+        "\tInserts copies of \"snew\" at several positions.\n"
+        "StringReplacePart[\"string\", {\"snew1\", \"snew2\", ...}, {{m1, n1}, ...}]\n"
+        "\tReplaces the characters at each range by the corresponding new\n"
+        "\tstring; the two lists must be the same length.\n"
+        "StringReplacePart[{s1, s2, ...}, snew, part]\n"
+        "\tGives the list of results for each of the si.\n"
+        "StringReplacePart[new, part]\n"
+        "\tis the operator form: StringReplacePart[new, part][old] ==\n"
+        "\tStringReplacePart[old, new, part].\n\n"
+        "\tPositions use the form returned by StringPosition and refer to\n"
+        "\t\"string\" before any replacement is done. Negative positions count\n"
+        "\tfrom the end. Positions may not overlap. An empty new string\n"
+        "\tdeletes the selected characters.");
+
+    symtab_set_docstring("RegularExpression",
+        "RegularExpression[\"regex\"]\n"
+        "\tRepresents a class of strings given by the PCRE regular expression\n"
+        "\t\"regex\", for use in StringMatchQ, StringCases, StringReplace and\n"
+        "\tStringSplit.  It is an inert head: it evaluates to itself.\n\n"
+        "\tSupported syntax includes . [c1c2] [c1-c2] [^...] p* p+ p? p{m,n},\n"
+        "\tnon-greedy *? +? ??, groups (...) and alternation |; the classes\n"
+        "\t\\d \\D \\s \\S \\w \\W and [[:name:]]; the anchors ^ $ \\b \\B; and\n"
+        "\tinline options (?i) (?m) (?s).  In a replacement right-hand side $n\n"
+        "\tstands for the n-th captured group and $0 for the whole match.");
+
+    symtab_set_docstring("StringMatchQ",
+        "StringMatchQ[\"string\", patt]\n"
+        "\tGives True if the whole \"string\" matches patt, and False otherwise.\n"
+        "StringMatchQ[{s1, s2, ...}, patt]\n"
+        "\tGives the list of results for each of the si.\n\n"
+        "\tpatt may be RegularExpression[\"re\"], a literal string, or a list of\n"
+        "\talternatives.");
+
+    symtab_set_docstring("StringCases",
+        "StringCases[\"string\", patt]\n"
+        "\tGives the list of non-overlapping substrings of \"string\" that match\n"
+        "\tpatt, from left to right.\n"
+        "StringCases[\"string\", patt -> rhs]\n"
+        "\tGives the rhs for each match, with $n replaced by the n-th captured\n"
+        "\tgroup and $0 by the whole match.\n"
+        "StringCases[{s1, s2, ...}, patt]\n"
+        "\tGives the list of results for each of the si.");
+
+    symtab_set_docstring("StringReplace",
+        "StringReplace[\"string\", patt -> rep]\n"
+        "\tReplaces each non-overlapping match of patt in \"string\" by rep,\n"
+        "\twith $n replaced by the n-th captured group and $0 by the whole\n"
+        "\tmatch.\n"
+        "StringReplace[\"string\", {patt1 -> rep1, patt2 -> rep2, ...}]\n"
+        "\tApplies a list of replacement rules; at each position the leftmost\n"
+        "\tmatch wins, ties broken by rule order.\n"
+        "StringReplace[{s1, s2, ...}, rules]\n"
+        "\tGives the list of results for each of the si.");
+
+    symtab_set_docstring("StringSplit",
+        "StringSplit[\"string\", patt]\n"
+        "\tSplits \"string\" into the substrings between non-overlapping matches\n"
+        "\tof the delimiter patt.  Empty pieces are dropped.\n"
+        "StringSplit[{s1, s2, ...}, patt]\n"
+        "\tGives the list of results for each of the si.\n\n"
+        "\tpatt may be RegularExpression[\"re\"], a literal string, or a list of\n"
+        "\talternative delimiters.");
 }

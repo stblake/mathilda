@@ -29,6 +29,7 @@
 #include "intrischnorman.h"
 
 #include "expr.h"
+#include "core.h"
 #include "eval.h"
 #include "parse.h"
 #include "symtab.h"
@@ -43,6 +44,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <string.h>
 
 /* ------------------------------------------------------------------ */
@@ -52,6 +54,30 @@
 #define PMINT_MAX_MONOMIALS   5000
 #define PMINT_MAX_REWRITE_DEPTH 32      /* convert_to_tan giveup depth */
 #define PMINT_MAX_INDETS      32        /* hard cap on indet set size  */
+#define PMINT_MAX_SPLIT_DEPTH 128       /* split_factor recursion guard */
+
+/* Guards on the symbolic-RowReduce slow path (Phase 4 linear solve), which can
+ * suffer expression swell — polynomial-in-parameter matrix entries whose size
+ * explodes during Gaussian elimination.  Two backstops, both leaving the
+ * integral unevaluated (always a safe result):
+ *
+ *   1. A size cap on the augmented matrix.  Legitimate parametric closures top
+ *      out around 132x37 / ~5500 leaf nodes (e.g. Integrate[Exp[a x] Cos[b x]]);
+ *      a runaway such as the Cosh/Sinh rewrite of Exp[a x]/(Exp[x]-1) reaches
+ *      237x42 / 11000+ leaves.  Abandoning the ansatz above the cap avoids the
+ *      minutes-long RowReduce without touching any closing case.
+ *   2. A cooperative per-call wall-clock deadline, checked before each RowReduce,
+ *      to catch an accumulation of individually-small-but-swelling systems.
+ *
+ * These bound the DiffUnderInt escalation on Integrate[x^k Exp[a x]/(Exp[x]-1)],
+ * which otherwise costs minutes and stalled the whole-line residue test suite. */
+#define PMINT_MAX_SOLVE_ROWS   180
+#define PMINT_MAX_SOLVE_LEAVES 8000
+#define PMINT_BUDGET_SEC 4.0
+static clock_t pm_budget_deadline = 0;
+static bool pm_over_budget(void) {
+    return pm_budget_deadline != 0 && clock() > pm_budget_deadline;
+}
 
 #ifndef PMINT_TRACE
 #define PMINT_TRACE 0
@@ -1549,11 +1575,20 @@ static void vars_in_poly(Expr* p, Expr** vars, size_t n,
  * spl_c[1]]; else recurse on q/s.
  *
  * On entry `vars` are the fresh vars currently considered; `l` are
- * their scaled derivatives. */
-static int split_factor(Expr* p,
-                         Expr** vars, Expr** l, size_t n,
-                         Expr** out_s, Expr** out_h) {
+ * their scaled derivatives.
+ *
+ * `depth` guards against unbounded recursion: content extraction is
+ * expected to strip one indeterminate per level, but a pathological
+ * integrand (e.g. an inexact-base exponential such as `2.71828^(-x)`,
+ * as produced by N[] over an Exp integrand) can fail to reduce and
+ * recurse without bound, overflowing the C stack.  Beyond
+ * PMINT_MAX_SPLIT_DEPTH we return failure so the pmint driver gives up
+ * and the integral is left unevaluated rather than crashing the process. */
+static int split_factor_rec(Expr* p,
+                            Expr** vars, Expr** l, size_t n,
+                            Expr** out_s, Expr** out_h, int depth) {
     *out_s = NULL; *out_h = NULL;
+    if (depth > PMINT_MAX_SPLIT_DEPTH) return 1;
 
     /* Find a var x in p. */
     size_t idx_buf[PMINT_MAX_INDETS];
@@ -1591,7 +1626,7 @@ static int split_factor(Expr* p,
     /* Recurse on content. */
     Expr* spl_c_s = NULL;
     Expr* spl_c_h = NULL;
-    if (split_factor(content, vars, l, n, &spl_c_s, &spl_c_h) != 0) {
+    if (split_factor_rec(content, vars, l, n, &spl_c_s, &spl_c_h, depth + 1) != 0) {
         expr_free(content); expr_free(q);
         return 1;
     }
@@ -1625,7 +1660,7 @@ static int split_factor(Expr* p,
     expr_free(q);
     Expr* splh_s = NULL;
     Expr* splh_h = NULL;
-    if (split_factor(q_over_s, vars, l, n, &splh_s, &splh_h) != 0) {
+    if (split_factor_rec(q_over_s, vars, l, n, &splh_s, &splh_h, depth + 1) != 0) {
         expr_free(q_over_s); expr_free(s);
         expr_free(spl_c_s); expr_free(spl_c_h);
         return 1;
@@ -1644,6 +1679,13 @@ static int split_factor(Expr* p,
     *out_s = s_final;
     *out_h = h_final;
     return 0;
+}
+
+/* Public entry: split_factor with the recursion depth counter started at 0. */
+static int split_factor(Expr* p,
+                        Expr** vars, Expr** l, size_t n,
+                        Expr** out_s, Expr** out_h) {
+    return split_factor_rec(p, vars, l, n, out_s, out_h, 0);
 }
 
 /* deflation(p) — pmint.maple lines 92-98.
@@ -2953,6 +2995,17 @@ static int solve_linear_undet(Expr* equation_numer,
                                        mat_rows, lb.nrows);
     free(mat_rows);
 
+    /* Size / budget guard: abandon a swell-prone symbolic RowReduce rather than
+     * let it run away (the integral is simply left unevaluated).  See the
+     * PMINT_MAX_SOLVE_* / PMINT_BUDGET_SEC notes above. */
+    if (lb.nrows > PMINT_MAX_SOLVE_ROWS ||
+        leaf_count_internal(matrix, true) > PMINT_MAX_SOLVE_LEAVES ||
+        pm_over_budget()) {
+        expr_free(matrix);
+        *out_solution_rules = NULL;
+        *out_status = -1;
+        return 1;
+    }
     /* Call RowReduce.  Result is also a nested List. */
     PM_PHB(rr_t);
     Expr* rr = eval_and_free(mk_unary("RowReduce", matrix));
@@ -3496,6 +3549,8 @@ static int64_t total_degree(Expr* p, Expr** vars, size_t n) {
 static Expr* rischnorman_integrate(Expr* f, Expr* x) {
     PMTRACE("entry\n");
     pm_phase_arm();
+    /* Arm the per-call wall-clock budget (see PMINT_BUDGET_SEC). */
+    pm_budget_deadline = clock() + (clock_t)(PMINT_BUDGET_SEC * CLOCKS_PER_SEC);
     /* Phase 4 pipeline (no log candidates yet): */
     /*   1. convert_to_tan(f, x)                                     */
     /*   2. collect_indets_closed                                    */

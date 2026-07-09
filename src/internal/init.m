@@ -10,4 +10,4 @@
 (* Symbolic transformation rules for BesselJ (half-integer -> elementary,
    negative-integer-order reflection). Numeric evaluation is in the C
    builtin; these rules only fire for symbolic / exact arguments. *)
-Get["./src/internal/bessel.m"];
+LoadModule["bessel.m"];

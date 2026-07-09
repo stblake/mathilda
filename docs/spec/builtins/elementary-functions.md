@@ -34,7 +34,7 @@ Out[1]= 1/4*Pi
 
 ## Exponential and Logarithmic Functions
 - `Exp[z]`: Natural exponential. Canonicalizes `Exp[I*q*Pi]` (rational `q`) to `(-1)^q`, matching Mathematica — e.g. `Exp[I Pi/5] -> (-1)^(1/5)`, `Exp[I Pi] -> -1`, `Exp[I Pi/2] -> I`. `Power[-1, q]` reduces the half/integer cases itself and leaves irreducible roots intact instead of over-eagerly expanding into trig radicals.
-- `Log[z]`: Natural logarithm. For a negative integer `n` (including `BigInt`), rewrites `Log[n]` as `I Pi + Log[-n]` (principal branch). For a negative MPFR real or any `Complex[MPFR, MPFR]`, evaluates `log(hypot) + i atan2` at MPFR precision.
+- `Log[z]`: Natural logarithm. For a negative integer `n` (including `BigInt`), rewrites `Log[n]` as `I Pi + Log[-n]` (principal branch). For an exact pure-imaginary argument `Complex[0, b]` with `b` a real numeric, rewrites `Log[b I]` as `Log[Abs[b]] + Sign[b] (I Pi)/2` on the principal branch (e.g. `Log[I] = (I Pi)/2`, `Log[-3 I] = -((I Pi)/2) + Log[3]`); inexact imaginaries fall through to the numeric path. For a negative MPFR real or any `Complex[MPFR, MPFR]`, evaluates `log(hypot) + i atan2` at MPFR precision.
 - `Log[b, z]`: Logarithm to base `b`.
 
 **Zero arguments.** `Log` distinguishes exact zero (a directed limit) from
@@ -131,6 +131,51 @@ Out[10]= z
 In[11]:= ArcSin[Sin[x]]
 Out[11]= ArcSin[Sin[x]]
 ```
+
+### Singular special values
+
+`ArcTanh` and `ArcCoth` have poles at `±1`, and Mathilda evaluates them to the
+corresponding directed infinities (matching Mathematica):
+
+```mathematica
+In[12]:= ArcTanh[1]
+Out[12]= Infinity
+
+In[13]:= ArcTanh[-1]
+Out[13]= -Infinity
+
+In[14]:= ArcCoth[1]
+Out[14]= Infinity
+```
+
+The negative cases are reached through the odd-function fold
+(`ArcTanh[-1] -> -ArcTanh[1] -> -Infinity`). These closed-form values let the
+definite integrator (`Integrate`, Newton–Leibniz) detect that an antiderivative
+such as `-ArcTanh[x]` blows up at an interior pole, so a divergent integral like
+`Integrate[1/(x^2-1), {x, -Infinity, Infinity}]` correctly warns
+`Integrate::idiv` and returns unevaluated instead of a spurious finite value.
+
+### Values at Infinity
+
+The inverse-trig functions fold at `±Infinity` (Wolfram-faithful), so that both
+top-level evaluation and `Limit` return closed forms:
+
+```mathematica
+In[15]:= ArcTan[Infinity]
+Out[15]= Pi/2
+
+In[16]:= ArcCot[-Infinity]
+Out[16]= 0
+
+In[17]:= ArcSec[Infinity]
+Out[17]= Pi/2
+```
+
+`ArcTan[±Infinity] = ±Pi/2`, `ArcCot[±Infinity] = 0` (odd), `ArcSec[±Infinity] =
+Pi/2`, `ArcCsc[Infinity] = 0`; negative arguments are reached through the
+odd/`Pi`-minus fold. The circular functions `Sin`, `Cos`, `Tan`, … stay
+unevaluated at real infinities (they oscillate). See `Limit` in the calculus
+reference for how these feed the compose-at-infinity rule.
 
 
 ## TrigToExp

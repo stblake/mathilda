@@ -204,6 +204,39 @@ Expr* builtin_log(Expr* res) {
             return expr_new_function(expr_new_symbol(SYM_Plus), plus_args, 2);
         }
 
+        // Pure imaginary exact argument: Log[Complex[0, b]] with b an exact
+        // real numeric. On the principal branch arg(b I) = +Pi/2 for b > 0 and
+        // -Pi/2 for b < 0, so
+        //   Log[b I] = Log[|b|] +/- (I Pi)/2.
+        // Restricting b to exact real numerics keeps us on the principal
+        // branch (inexact imaginaries fall through to the clog path below) and
+        // matches Mathematica: Log[I] = (I Pi)/2, Log[-3 I] = -((I Pi)/2)+Log[3].
+        {
+            Expr *cre, *cim;
+            if (is_complex(z, &cre, &cim) &&
+                cre->type == EXPR_INTEGER && cre->data.integer == 0 &&
+                is_real_numeric_expr(cim)) {
+                bool positive = is_positive_known(cim);
+                // Magnitude Log[|b|]. For b < 0 wrap Times[-1, b]; the evaluator
+                // folds it to a positive numeric before recursing into Log.
+                Expr* mag_arg;
+                if (positive) {
+                    mag_arg = expr_copy(cim);
+                } else {
+                    Expr* neg_args[2] = { expr_new_integer(-1), expr_copy(cim) };
+                    mag_arg = expr_new_function(expr_new_symbol(SYM_Times), neg_args, 2);
+                }
+                Expr* log_arg[1] = { mag_arg };
+                Expr* log_mag = expr_new_function(expr_new_symbol(SYM_Log), log_arg, 1);
+                // +/- (I Pi)/2 = Times[Rational[+/-1, 2], I, Pi].
+                Expr* half = make_rational(positive ? 1 : -1, 2);
+                Expr* ipi_args[3] = { half, expr_new_symbol(SYM_I), expr_new_symbol(SYM_Pi) };
+                Expr* ipi = expr_new_function(expr_new_symbol(SYM_Times), ipi_args, 3);
+                Expr* plus_args[2] = { log_mag, ipi };
+                return expr_new_function(expr_new_symbol(SYM_Plus), plus_args, 2);
+            }
+        }
+
         if (is_infinity(z)) {
             Expr* ret = expr_new_symbol(SYM_Infinity); // Log[Infinity] = Infinity
             return ret;

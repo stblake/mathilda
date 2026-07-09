@@ -23,6 +23,8 @@ brew install gmp readline
 brew install mpfr
 # Optional: FLINT (>= 3.0) — fast, rigorous algebraic-extension arithmetic + acb numerics
 brew install flint
+# Optional: GMP-ECM — advanced integer factorization
+brew install gmp-ecm
 # Optional: hardware-accelerated linear algebra (already in Xcode CLT as Accelerate)
 # Optional: 2D graphics rendering for Plot[]/Show[]
 brew install raylib
@@ -64,6 +66,9 @@ sudo apt-get install -y libmpfr-dev
 
 # Optional: FLINT (>= 3.0) for fast, rigorous algebraic-extension arithmetic
 sudo apt-get install -y libflint-dev    # needs >= 3.0 (Ubuntu 24.04+/Debian Bookworm+)
+
+# Optional: GMP-ECM for advanced integer factorization
+sudo apt-get install -y libecm-dev
 
 # Optional: graphics rendering for Plot[]/Show[]
 sudo apt-get install -y libraylib-dev   # or build raylib from source
@@ -180,7 +185,7 @@ cargo tauri dev
 
 | Flag | Default | Effect |
 |------|---------|--------|
-| `USE_ECM=0` | `1` | Disable GMP-ECM factorization (skips vendored ECM build) |
+| `USE_ECM=0` | `1` | Disable GMP-ECM factorization. When `1`, the build autodetects the system GMP-ECM library (`gmp-ecm` / `libecm-dev`) via a compile-link probe and links `-lecm`; auto-disabled when it is not found. |
 | `USE_MPFR=0` | `1` | Disable MPFR arbitrary-precision reals |
 | `USE_FLINT=0` | `1` | Disable FLINT (≥ 3.0) kernels (falls back to the classical algebraic-extension GCD/Factor and non-FLINT numerics). Auto-disabled when FLINT ≥ 3.0 is not found by `pkg-config`. |
 | `USE_READLINE=0` | `1` | Disable GNU Readline (required on Windows; auto-detected) |

@@ -1331,6 +1331,53 @@ static void test_series_expintegralei_at_infinity(void) {
         "SeriesData[Power[x, -1], 0, List[1, 1, 2, 6, 24], 1, 6, 1]]");
 }
 
+/* Asymptotic expansions of the error functions at Infinity (DLMF 7.12.1):
+ *   Erf(x)  ~ 1 - E^(-x^2)/Sqrt[Pi] (1/x - 1/(2x^3) + 3/(4x^5) - ...)
+ *   Erfc(x) ~     E^(-x^2)/Sqrt[Pi] (1/x - 1/(2x^3) + ...)      (= 1 - Erf)
+ *   Erfi(x) ~     E^(x^2)/Sqrt[Pi]  (1/x + 1/(2x^3) + ...)
+ * Each E^(±x^2) is an essential singularity kept as a symbolic prefactor
+ * multiplying a Laurent series in 1/x (odd powers only). Regression: these all
+ * returned unevaluated before the hooks were added. */
+static void test_series_erf_at_infinity(void) {
+    setup_full();
+    /* Order 2: leading -1/(Sqrt[Pi] x) term with O(1/x^3). */
+    assert_fullform(
+        "Series[Erf[x], {x, Infinity, 2}]",
+        "Plus[1, Times[Power[E, Times[-1, Power[x, 2]]], "
+        "SeriesData[Power[x, -1], 0, "
+        "List[Times[-1, Power[Pi, Rational[-1, 2]]], 0], 1, 3, 1]]]");
+    /* Order 5 exercises the 1/(2 Sqrt[Pi]) and -3/(4 Sqrt[Pi]) coefficients. */
+    assert_fullform(
+        "Series[Erf[x], {x, Infinity, 5}]",
+        "Plus[1, Times[Power[E, Times[-1, Power[x, 2]]], "
+        "SeriesData[Power[x, -1], 0, "
+        "List[Times[-1, Power[Pi, Rational[-1, 2]]], 0, "
+        "Times[Rational[1, 2], Power[Pi, Rational[-1, 2]]], 0, "
+        "Times[Rational[-3, 4], Power[Pi, Rational[-1, 2]]]], 1, 6, 1]]]");
+}
+
+static void test_series_erfc_at_infinity(void) {
+    setup_full();
+    /* Erfc's multiplier is the negation of Erf's; no additive constant. */
+    assert_fullform(
+        "Series[Erfc[x], {x, Infinity, 3}]",
+        "Times[Power[E, Times[-1, Power[x, 2]]], "
+        "SeriesData[Power[x, -1], 0, "
+        "List[Power[Pi, Rational[-1, 2]], 0, "
+        "Times[Rational[-1, 2], Power[Pi, Rational[-1, 2]]]], 1, 4, 1]]");
+}
+
+static void test_series_erfi_at_infinity(void) {
+    setup_full();
+    /* Erfi: all-positive coefficients and a growing Exp[+x^2] prefactor. */
+    assert_fullform(
+        "Series[Erfi[x], {x, Infinity, 3}]",
+        "Times[Power[E, Power[x, 2]], "
+        "SeriesData[Power[x, -1], 0, "
+        "List[Power[Pi, Rational[-1, 2]], 0, "
+        "Times[Rational[1, 2], Power[Pi, Rational[-1, 2]]]], 1, 4, 1]]");
+}
+
 /* LogIntegral[x] = Ei(Log[x]) at x = 0: a generalized asymptotic series whose
  * x^1 coefficient is a series in 1/Log[x] (2n+2 terms). Reproduces MMA's
  * Assumptions -> x > 0 output. Before the fix this returned unevaluated and
@@ -1807,6 +1854,9 @@ int main(void) {
 
     /* Regression: no $SeriesInvVar$ leakage for Series at Infinity. */
     TEST(test_series_expintegralei_at_infinity);
+    TEST(test_series_erf_at_infinity);
+    TEST(test_series_erfc_at_infinity);
+    TEST(test_series_erfi_at_infinity);
     TEST(test_series_logintegral_at_zero);
     TEST(test_series_expintegralei_at_zero);
     TEST(test_series_infinity_no_inv_var_leak);

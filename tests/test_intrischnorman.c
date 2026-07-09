@@ -233,6 +233,17 @@ static void test_phase1_unevaluated_returns_self(void) {
            "Integrate`RischNorman[E^x^2, x]");
 }
 
+/* Regression: an inexact-base exponential integrand (e.g. 2.71828^(-x), as
+ * produced by N[] over an Exp[] integrand) once drove split_factor into
+ * unbounded recursion and overflowed the C stack, killing the whole process.
+ * The recursion is now depth-guarded (PMINT_MAX_SPLIT_DEPTH): the integrator
+ * must give up gracefully and leave the integral unevaluated. */
+static void test_phase1_inexact_base_no_stack_overflow(void) {
+    run_eq("Head[Integrate[x*2.71828^(-x), x]]",         "Integrate");
+    run_eq("Head[Integrate[x^2*2.71828^(-x), x]]",       "Integrate");
+    run_eq("Head[N[Integrate[x*Exp[-x], {x, 0, Infinity}]]]", "Integrate");
+}
+
 /* Wrong arity must also bubble back unevaluated (the BuiltinFunc
  * returns NULL early). */
 static void test_phase1_wrong_arity_unevaluated(void) {
@@ -751,6 +762,7 @@ int main(void) {
     /* Phase 1. */
     TEST(test_phase1_symbol_registered);
     TEST(test_phase1_unevaluated_returns_self);
+    TEST(test_phase1_inexact_base_no_stack_overflow);
     TEST(test_phase1_wrong_arity_unevaluated);
     TEST(test_phase1_non_symbol_var);
     TEST(test_phase1_rational_unchanged);

@@ -151,6 +151,7 @@ extern const char* SYM_Evaluate;
 extern const char* SYM_EvaluationMonitor;
 extern const char* SYM_Except;
 extern const char* SYM_Exclusions;
+extern const char* SYM_ExclusionStyle;
 extern const char* SYM_Exp;
 extern const char* SYM_ExtendedGCD;
 extern const char* SYM_Extension;
@@ -332,6 +333,7 @@ extern const char* SYM_NHoldRest;
 extern const char* SYM_NIntegrate;
 extern const char* SYM_NLimit;
 extern const char* SYM_NResidue;
+extern const char* SYM_Residue;
 extern const char* SYM_NRoots;
 extern const char* SYM_NSolve;
 extern const char* SYM_NSeries;
@@ -577,12 +579,17 @@ extern const char* SYM_PreIncrement;
 extern const char* SYM_Quartiles;
 extern const char* SYM_RandomInteger;
 extern const char* SYM_RandomSeeding;
+extern const char* SYM_RegularExpression;
 extern const char* SYM_ReplaceAll;
 extern const char* SYM_ReplaceRepeated;
 extern const char* SYM_Resultant;
 extern const char* SYM_RowReduce;
 extern const char* SYM_Simplify;
+extern const char* SYM_StringDrop;
+extern const char* SYM_StringInsert;
 extern const char* SYM_StringPart;
+extern const char* SYM_StringReplacePart;
+extern const char* SYM_StringReverse;
 extern const char* SYM_StringTake;
 extern const char* SYM_SubresultantPolynomialRemainders;
 extern const char* SYM_Subtract;
@@ -600,11 +607,14 @@ extern const char* SYM_DollarModuleNumber;
 extern const char* SYM_DollarRecursionLimit;
 extern const char* SYM_DollarSimplifyDebug;
 extern const char* SYM_DollarruSimplify;
+extern const char* SYM_DollarVersion;
+extern const char* SYM_DollarVersionNumber;
 
 /* Graphics engine (src/graphics/): primitives, style directives, and
  * Graphics[]/Show[]/Plot[] plus Plot's option names. MaxRecursion is
  * shared with the existing NIntegrate/ND option of the same name above. */
 extern const char* SYM_Graphics;
+extern const char* SYM_Graphics3D;
 extern const char* SYM_Point;
 extern const char* SYM_Line;
 extern const char* SYM_Rectangle;
@@ -614,6 +624,10 @@ extern const char* SYM_Polygon;
 extern const char* SYM_Text;
 extern const char* SYM_Show;
 extern const char* SYM_Plot;
+extern const char* SYM_Plot3D;
+extern const char* SYM_ParametricPlot;
+extern const char* SYM_ParametricPlot3D;
+extern const char* SYM_Lighting;
 extern const char* SYM_RGBColor;
 extern const char* SYM_GrayLevel;
 extern const char* SYM_CMYKColor;
@@ -692,6 +706,22 @@ extern const char* SYM_Joined;       /* ListPlot option: connect points */
 extern const char* SYM_DataRange;    /* ListPlot option: x-range for heights */
 extern const char* SYM_PlotMarkers;  /* ListPlot option: point glyphs */
 
+/* StreamPlot[{fx,fy}, {x,...}, {y,...}, opts...] */
+extern const char* SYM_StreamPlot;
+extern const char* SYM_Arrow;          /* Arrow[{{x1,y1},...}] primitive */
+extern const char* SYM_StreamPoints;   /* seed density/placement */
+extern const char* SYM_StreamScale;    /* stream length control */
+extern const char* SYM_StreamStyle;    /* style directives for streams */
+extern const char* SYM_StreamColorFunction; /* color by position/speed */
+extern const char* SYM_StreamColorBar;      /* internal: color-scale bar metadata */
+
+/* ContourPlot[f, {x,...}, {y,...}, opts...] */
+extern const char* SYM_ContourPlot;
+extern const char* SYM_Contours;        /* integer or list of explicit levels */
+extern const char* SYM_ContourStyle;    /* style directive(s) for the contour lines */
+extern const char* SYM_ContourLabels;   /* True/False: draw z-value labels on contours */
+extern const char* SYM_ContourShading;  /* True/False/Automatic: fill between contours */
+
 /* FLINT` context: direct REPL access to the FLINT-backed kernels that also
  * accelerate the corresponding System` builtins transparently. Each is a thin
  * wrapper over src/poly/flint_bridge.c (and, later, the matrix / numeric
@@ -711,6 +741,41 @@ extern const char* SYM_FLINT_Zeta;            /* FLINT`Zeta[s]            */
 extern const char* SYM_FLINT_HurwitzZeta;     /* FLINT`HurwitzZeta[s,a]   */
 extern const char* SYM_FLINT_PolyGamma;       /* FLINT`PolyGamma[n,z]     */
 extern const char* SYM_FLINT_StieltjesGamma;  /* FLINT`StieltjesGamma[n]  */
+
+/* Graph subsystem (src/graph/): the Graph head, its edge constructors, and
+ * every builtin head. Graphs are ordinary Expr trees
+ * Graph[List[verts...], List[edges...]]; no new EXPR_* tag. SYM_Rule and
+ * SYM_Graphics primitives (Line/Point/Disk/Text) are reused, not re-declared. */
+extern const char* SYM_Graph;
+extern const char* SYM_DirectedEdge;
+extern const char* SYM_UndirectedEdge;
+extern const char* SYM_TwoWayRule;
+extern const char* SYM_GraphQ;
+extern const char* SYM_DirectedGraphQ;
+extern const char* SYM_ConnectedGraphQ;
+extern const char* SYM_VertexList;
+extern const char* SYM_EdgeList;
+extern const char* SYM_VertexCount;
+extern const char* SYM_EdgeCount;
+extern const char* SYM_AdjacencyList;
+extern const char* SYM_VertexDegree;
+extern const char* SYM_VertexInDegree;
+extern const char* SYM_VertexOutDegree;
+extern const char* SYM_AdjacencyMatrix;
+extern const char* SYM_IncidenceMatrix;
+extern const char* SYM_AdjacencyGraph;
+extern const char* SYM_CompleteGraph;
+extern const char* SYM_CycleGraph;
+extern const char* SYM_PathGraph;
+extern const char* SYM_RandomGraph;
+extern const char* SYM_FindShortestPath;
+extern const char* SYM_GraphDistance;
+extern const char* SYM_ConnectedComponents;
+extern const char* SYM_WeaklyConnectedComponents;
+extern const char* SYM_StronglyConnectedComponents;
+extern const char* SYM_FindSpanningTree;
+extern const char* SYM_VertexConnectivity;
+extern const char* SYM_GraphPlot;
 
 /* Populate every SYM_* by interning its name string. Idempotent: safe
  * to call repeatedly. Must run before any consumer reads a SYM_*

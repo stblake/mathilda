@@ -585,6 +585,10 @@ Expr* builtin_arctanh(Expr* res) {
     { Expr* f = hyp_i_fold(arg, "ArcTan", +1); if (f) return f; }
 
     if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_integer(0);
+    /* ArcTanh[1] = Infinity (a genuine pole).  ArcTanh[-1] is reached as
+     * -ArcTanh[1] via the odd fold above, giving -Infinity. */
+    if (arg->type == EXPR_INTEGER && arg->data.integer == 1)
+        return expr_new_symbol(SYM_Infinity);
 
     double complex c;
     bool inexact = false;
@@ -619,6 +623,10 @@ Expr* builtin_arccoth(Expr* res) {
     { Expr* f = hyp_i_fold(arg, "ArcCot", -1); if (f) return f; }
 
     if (is_infinity(arg) || is_minus_infinity(arg)) return expr_new_integer(0);
+    /* ArcCoth[1] = Infinity (a genuine pole).  ArcCoth[-1] is reached as
+     * -ArcCoth[1] via the odd fold above, giving -Infinity. */
+    if (arg->type == EXPR_INTEGER && arg->data.integer == 1)
+        return expr_new_symbol(SYM_Infinity);
 
     double complex c;
     bool inexact = false;

@@ -228,6 +228,60 @@ static void test_arctan_infinity(void) {
 }
 
 /* ----------------------------------------------------------------- */
+/* Asymptotic values of the builtin math functions at +/-Infinity.   */
+/*                                                                    */
+/* layer_compose_at_infinity applies f to the (infinite) inner limit  */
+/* and lets the builtin fold it. Every function that self-evaluates   */
+/* at Infinity is therefore covered by a single mechanism. Oscillatory */
+/* heads (Sin, Cos) stay Indeterminate.                               */
+/* ----------------------------------------------------------------- */
+static void test_asymptotic_at_infinity(void) {
+    /* Error functions -- the motivating gap. */
+    check("Limit[Erf[x], x -> Infinity]",   "1");
+    check("Limit[Erf[x], x -> -Infinity]",  "-1");
+    check("Limit[Erfc[x], x -> Infinity]",  "0");
+    check("Limit[Erfc[x], x -> -Infinity]", "2");
+    check("Limit[Erfi[x], x -> Infinity]",  "Infinity");
+    check("Limit[Erfi[x], x -> -Infinity]", "-Infinity");
+    /* Composed inner argument: inner limit is still +/-Infinity. */
+    check("Limit[Erf[3 x + 1], x -> Infinity]",  "1");
+    check("Limit[Erf[1 - x^3], x -> Infinity]",  "-1");
+
+    /* Exponential / logarithm. */
+    check("Limit[Exp[x], x -> Infinity]",   "Infinity");
+    check("Limit[Exp[x], x -> -Infinity]",  "0");
+    check("Limit[Log[x], x -> Infinity]",   "Infinity");
+
+    /* Hyperbolic + inverse hyperbolic. */
+    check("Limit[Sinh[x], x -> Infinity]",  "Infinity");
+    check("Limit[Cosh[x], x -> -Infinity]", "Infinity");
+    check("Limit[Tanh[x], x -> Infinity]",  "1");
+    check("Limit[Tanh[x], x -> -Infinity]", "-1");
+    check("Limit[Coth[x], x -> Infinity]",  "1");
+    check("Limit[Sech[x], x -> Infinity]",  "0");
+    check("Limit[Csch[x], x -> Infinity]",  "0");
+    check("Limit[ArcSinh[x], x -> Infinity]", "Infinity");
+    check("Limit[ArcCoth[x], x -> Infinity]", "0");
+
+    /* Inverse trig (values now self-evaluate in the builtins). */
+    check_equiv("Limit[ArcTan[x], x -> Infinity]",  "Pi/2");
+    check_equiv("Limit[ArcTan[x], x -> -Infinity]", "-Pi/2");
+    check("Limit[ArcCot[x], x -> Infinity]",  "0");
+    check("Limit[ArcCot[x], x -> -Infinity]", "0");   /* odd: 0 (not Pi) */
+    check_equiv("Limit[ArcSec[x], x -> Infinity]",  "Pi/2");
+    check("Limit[ArcCsc[x], x -> Infinity]",  "0");
+
+    /* Special functions. */
+    check("Limit[Gamma[x], x -> Infinity]",     "Infinity");
+    check("Limit[Zeta[x], x -> Infinity]",      "1");
+    check("Limit[ProductLog[x], x -> Infinity]", "Infinity");
+
+    /* Oscillatory heads have no limit at Infinity. */
+    check("Limit[Sin[x], x -> Infinity]", "Indeterminate");
+    check("Limit[Cos[x], x -> Infinity]", "Indeterminate");
+}
+
+/* ----------------------------------------------------------------- */
 /* Log-reduction of Power-in-x-exponent indeterminate forms          */
 /*                                                                    */
 /* Covers both the single-Power case (handled by the old code) and   */
@@ -821,6 +875,7 @@ int main(void) {
     TEST(test_reciprocal_trig);
     TEST(test_bounded_envelope);
     TEST(test_arctan_infinity);
+    TEST(test_asymptotic_at_infinity);
     TEST(test_exp_indeterminate);
     TEST(test_power_zero_folding);
     TEST(test_misc);

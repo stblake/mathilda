@@ -24,8 +24,95 @@
 
   // ---------------------------------------------------------------------------
   // Active notebook — the most recently clicked card renders on top (z-index)
-
   let activeNbId: string | null = null;
+
+  // ---------------------------------------------------------------------------
+  // Rubber-band selection — drag on empty canvas to select multiple notebooks
+
+  let selStart: { sx: number; sy: number } | null = null;  // screen coords
+  let selCur:   { sx: number; sy: number } | null = null;
+
+  // Compute the selection rect in screen coords for rendering
+  $: selRect = selStart && selCur ? {
+    x: Math.min(selStart.sx, selCur.sx),
+    y: Math.min(selStart.sy, selCur.sy),
+    w: Math.abs(selCur.sx - selStart.sx),
+    h: Math.abs(selCur.sy - selStart.sy),
+  } : null;
+
+  function startSelection(e: PointerEvent) {
+    selStart = { sx: e.clientX, sy: e.clientY };
+    selCur   = { sx: e.clientX, sy: e.clientY };
+    canvasState.update(s => ({ ...s, selectedIds: [] }));
+  }
+
+  function updateSelection(e: PointerEvent) {
+    if (!selStart) return;
+    selCur = { sx: e.clientX, sy: e.clientY };
+  }
+
+  function finishSelection() {
+    if (!selStart || !selCur) { selStart = selCur = null; return; }
+    const rect = canvasEl?.getBoundingClientRect() ?? { left: 0, top: 0 };
+    // Convert screen rect to world rect
+    const toWorld = (sx: number, sy: number) => ({
+      wx: (sx - rect.left - panX) / zoom,
+      wy: (sy - rect.top  - panY) / zoom,
+    });
+    const a = toWorld(selStart.sx, selStart.sy);
+    const b = toWorld(selCur.sx,   selCur.sy);
+    const minWx = Math.min(a.wx, b.wx), maxWx = Math.max(a.wx, b.wx);
+    const minWy = Math.min(a.wy, b.wy), maxWy = Math.max(a.wy, b.wy);
+    // Select notebooks whose bounding box overlaps the selection rect
+    const ids = get(canvasState).notebooks
+      .filter(nb => {
+        const h = nb.height ?? 400;
+        return nb.x < maxWx && nb.x + nb.width > minWx &&
+               nb.y < maxWy && nb.y + h > minWy;
+      })
+      .map(nb => nb.id);
+    canvasState.update(s => ({ ...s, selectedIds: ids }));
+    selStart = selCur = null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Group drag — when a selected notebook is dragged, move all selected ones
+
+  let groupDragActive = false;
+  let groupDragStart: { cx: number; cy: number } | null = null;
+  let groupDragOrigins: Map<string, { x: number; y: number }> = new Map();
+
+  function startGroupDrag(e: PointerEvent, nbId: string) {
+    if (!$canvasState.selectedIds.includes(nbId)) return;
+    groupDragActive = true;
+    groupDragStart  = { cx: e.clientX, cy: e.clientY };
+    groupDragOrigins = new Map(
+      $canvasState.notebooks
+        .filter(nb => $canvasState.selectedIds.includes(nb.id))
+        .map(nb => [nb.id, { x: nb.x, y: nb.y }])
+    );
+    canvasEl?.setPointerCapture(e.pointerId);
+  }
+
+  function updateGroupDrag(e: PointerEvent) {
+    if (!groupDragActive || !groupDragStart) return;
+    const dx = (e.clientX - groupDragStart.cx) / zoom;
+    const dy = (e.clientY - groupDragStart.cy) / zoom;
+    canvasState.update(s => ({
+      ...s,
+      notebooks: s.notebooks.map(nb => {
+        const origin = groupDragOrigins.get(nb.id);
+        if (!origin) return nb;
+        return { ...nb, x: origin.x + dx, y: origin.y + dy };
+      }),
+    }));
+  }
+
+  function endGroupDrag() {
+    groupDragActive = false;
+    groupDragStart  = null;
+    groupDragOrigins.clear();
+  }
 
   // ---------------------------------------------------------------------------
   // Animated display values — lerped towards store "targets" each rAF tick.
@@ -129,17 +216,35 @@
 
   function onPointerDown(e: PointerEvent) {
     if (e.button !== 0) return;
-    // Don't capture when clicking interactive elements (buttons, inputs, etc.)
-    if ((e.target as HTMLElement).closest('.nb-card, button, input, a, [role="button"]')) return;
-    dragging   = true;
-    dragStartX = e.clientX;
-    dragStartY = e.clientY;
-    dragPanX0  = targetPanX;
-    dragPanY0  = targetPanY;
+    const overCard = (e.target as HTMLElement).closest('.nb-card');
+    // Interactive elements inside cards — don't interfere
+    if ((e.target as HTMLElement).closest('button, input, a, [role="button"]')) return;
+
+    if (overCard) {
+      // Clicking a card: if it's already selected, start group drag
+      const wrapper = (e.target as HTMLElement).closest('[data-nb-id]') as HTMLElement | null;
+      if (wrapper) {
+        const nbId = wrapper.getAttribute('data-nb-id');
+        if (nbId) {
+          activeNbId = nbId;
+          if ($canvasState.selectedIds.includes(nbId)) {
+            startGroupDrag(e, nbId);
+            return;
+          }
+        }
+      }
+      return; // let NotebookCard handle normal single drag
+    }
+
+    // Empty canvas — plain drag draws a rubber-band selection rect.
+    // Two-finger pan and pinch-zoom are handled by onWheel (no pointer drag needed for pan).
+    startSelection(e);
     canvasEl.setPointerCapture(e.pointerId);
   }
 
   function onPointerMove(e: PointerEvent) {
+    if (groupDragActive) { updateGroupDrag(e); return; }
+    if (selStart) { updateSelection(e); return; }
     if (!dragging) return;
     canvasState.update(s => ({
       ...s,
@@ -149,6 +254,8 @@
   }
 
   function onPointerUp(_e: PointerEvent) {
+    if (groupDragActive) { endGroupDrag(); return; }
+    if (selStart) { finishSelection(); return; }
     dragging = false;
   }
 
@@ -287,13 +394,36 @@
         <!-- svelte-ignore a11y-no-static-element-interactions -->
         <div
           class="nb-card-wrapper"
+          data-nb-id={nb.id}
           style="left:{nb.x}px;top:{nb.y}px;width:{nb.width}px;z-index:{activeNbId===nb.id?10:1};"
           on:pointerdown|capture={() => activeNbId = nb.id}
         >
           <NotebookCard
             {nb}
             currentZoom={zoom}
+            isSelected={$canvasState.selectedIds.includes(nb.id)}
             on:focusNotebook={(e) => setFocused(e.detail.id)}
+            on:groupMoveEnd={() => groupDragOrigins.clear()}
+            on:groupMove={(e) => {
+              const { dx, dy, originX, originY, id } = e.detail;
+              // Lazy-init origins for all other selected notebooks on first move
+              if (groupDragOrigins.size === 0) {
+                const s = get(canvasState);
+                s.notebooks
+                  .filter(n => s.selectedIds.includes(n.id) && n.id !== id)
+                  .forEach(n => groupDragOrigins.set(n.id, { x: n.x, y: n.y }));
+              }
+              canvasState.update(s => ({
+                ...s,
+                notebooks: s.notebooks.map(n => {
+                  if (!s.selectedIds.includes(n.id)) return n;
+                  if (n.id === id) return { ...n, x: originX + dx, y: originY + dy };
+                  const origin = groupDragOrigins.get(n.id);
+                  if (!origin) return n;
+                  return { ...n, x: origin.x + dx, y: origin.y + dy };
+                }),
+              }));
+            }}
           />
         </div>
       {/each}
@@ -308,6 +438,14 @@
       <span class="hint-sep">·</span>
       <span>scroll pan · pinch zoom</span>
     </div>
+
+    <!-- Rubber-band selection rectangle -->
+    {#if selRect && selRect.w > 4 && selRect.h > 4}
+      <div
+        class="sel-rect"
+        style="left:{selRect.x}px;top:{selRect.y}px;width:{selRect.w}px;height:{selRect.h}px;"
+      ></div>
+    {/if}
   </div>
 
   <!-- Minimap: click a notebook rect to jump to it -->
@@ -345,6 +483,16 @@
 
   .nb-card-wrapper {
     position: absolute;
+  }
+
+  /* Rubber-band selection rectangle */
+  .sel-rect {
+    position: absolute;
+    pointer-events: none;
+    border: 1.5px dashed var(--accent, #89b4fa);
+    background: rgba(137, 180, 250, 0.08);
+    border-radius: 4px;
+    z-index: 9999;
   }
 
   /* Canvas hints must NOT scale with Cmd+/- — use px not rem */

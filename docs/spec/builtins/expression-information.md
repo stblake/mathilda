@@ -206,6 +206,28 @@ In[4]:= MachineNumberQ[$MaxNumber]   (* MPFR, not machine *)
 Out[4]= False
 ```
 
+## $Version, $VersionNumber
+Release identity of the running Mathilda. Both are read-only `Protected`
+symbols holding an `OwnValue`; redefining them emits `Set::wrsym`.
+
+- `$VersionNumber`: the Mathilda version as a `Real` (the single source of
+  truth for the release; currently `0.01`).
+- `$Version`: a string describing the running build. It is assembled
+  **at compile time** and lists the Mathilda version followed by the
+  versions of the libraries it was linked against — the C compiler, GMP,
+  MPFR, FLINT, and any optional components that were compiled in (GMP-ECM,
+  Raylib, the dense-LA backend, GNU Readline). Optional segments are guarded
+  by the same build flags the makefile emits, so the string names only what
+  is actually present.
+
+```mathematica
+In[1]:= $VersionNumber
+Out[1]= 0.01
+
+In[2]:= $Version
+Out[2]= "Mathilda 0.01 (Apple LLVM 17.0.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)"
+```
+
 ## ListQ, VectorQ, MatrixQ
 Predicates for testing lists and their structures.
 - `ListQ[expr]`: `True` if the head of `expr` is `List`.

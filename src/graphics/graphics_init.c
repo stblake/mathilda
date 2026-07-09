@@ -136,15 +136,17 @@ void graphics_init(void) {
 
     register_inert("Graphics",
         "Graphics[primitives, opts...]\n\tA symbolic 2D graphics object. "
-        "primitives is a (possibly nested) list of graphics primitives "
-        "(Point, Line, Rectangle, Circle, Disk, Polygon, Text) and style "
-        "directives (RGBColor, GrayLevel, Hue, Opacity, Thickness, "
-        "PointSize). Rendered on demand by Show[]. Prints as -Graphics-. "
-        "Options: AspectRatio, Axes, AxesLabel, AxesOrigin, AxesStyle, "
-        "Background, Epilog, Frame, FrameLabel, FrameStyle, FrameTicks, "
-        "GridLines, GridLinesStyle, ImageSize, LabelStyle, PlotLabel, "
-        "PlotRange, PlotRangePadding, PlotStyle, Prolog, RotateLabel, "
-        "TicksStyle.");
+        "primitives is a (possibly nested) list of graphics primitives and "
+        "style directives. Rendered on demand by Show[]. Prints as "
+        "-Graphics-.");
+    register_inert("Graphics3D",
+        "Graphics3D[primitives, opts...]\n\tA symbolic 3D graphics object, "
+        "as built by Plot3D[]. primitives is a (possibly nested) list of "
+        "the same primitives Graphics[] uses (Polygon, Line, color "
+        "directives, ...) but with 3-coordinate {x,y,z} points instead of "
+        "2-coordinate {x,y}. Rendered on demand by Show[] in an orbit-"
+        "camera window: drag to rotate, scroll to zoom, right-drag to pan, "
+        "R to reset, S to save a screenshot. Prints as -Graphics3D-.");
 
     /* Internal: Plot embeds $PlotResample[var, {bodies}, {opts...}] inside
      * the Graphics it returns so the renderer can re-sample on zoom. HoldAll
@@ -165,6 +167,17 @@ void graphics_init(void) {
     symtab_set_docstring("$PlotLegendData",
         "$PlotLegendData[{color1, label1}, ...]\n"
         "\tInternal Plot metadata read by the renderer to draw a legend box. "
+        "Not intended for direct use.");
+
+    /* Internal: StreamPlot embeds $StreamColorBar[spd_min, spd_max] when
+     * PlotLegends -> Automatic is set and speed-based coloring is active.
+     * The renderer draws a vertical gradient color scale bar from spd_min
+     * (dark blue-purple) to spd_max (bright yellow). */
+    symtab_get_def("$StreamColorBar")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("$StreamColorBar",
+        "$StreamColorBar[speed_min, speed_max]\n"
+        "\tInternal StreamPlot metadata. Instructs the renderer to draw a "
+        "vertical speed color scale bar (dark blue = slow, yellow = fast). "
         "Not intended for direct use.");
 
     symtab_add_builtin("Show", builtin_show);
@@ -223,4 +236,163 @@ void graphics_init(void) {
         "ColorFunctionScaling (default True), Filling (Axis/Bottom/Top/a "
         "number), FillingStyle, PlotLegends (Automatic/\"Expressions\"/an "
         "explicit list), RegionFunction, Exclusions.");
+
+    symtab_add_builtin("ParametricPlot", builtin_parametricplot);
+    symtab_get_def("ParametricPlot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("ParametricPlot",
+        "ParametricPlot[{fx, fy}, {t, tmin, tmax}, opts...]\n"
+        "\tAdaptively samples the parametric curve (fx(t), fy(t)) over "
+        "[tmin, tmax] and returns a Graphics[...] object (auto-displayed). "
+        "The body may be any expression that evaluates to a 2-element {x,y} "
+        "list (not just a literal {fx,fy}). Multiple curves: "
+        "ParametricPlot[{{fx1,fy1}, ...}, {t,...}]. Two-iterator (filled "
+        "region) form: ParametricPlot[body, {t,...}, {r,...}] samples a "
+        "PlotPoints x PlotPoints grid and emits Polygon[] quads. "
+        "Default AspectRatio -> 1 (both axes equally important). "
+        "Options: PlotPoints (default 25), MaxRecursion (default 6), "
+        "MaxPlotPoints, Mesh (All: dots for curves, grid lines for regions), "
+        "PlotLegends (Automatic/\"Expressions\"/{labels...}: draws a legend), "
+        "ColorFunction (\"Rainbow\" or f[t] / f[t,r]), ColorFunctionScaling "
+        "(default True), RegionFunction (f[x,y] mask), PlotStyle, "
+        "AspectRatio, Axes, PlotRange, PlotRangePadding, AxesLabel, "
+        "AxesOrigin, Frame, FrameLabel, GridLines, Prolog, Epilog, "
+        "PlotLabel, Background, ImageSize (all passed through to Graphics).");
+
+    symtab_add_builtin("ParametricPlot3D", builtin_parametricplot3d);
+    symtab_get_def("ParametricPlot3D")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("ParametricPlot3D",
+        "ParametricPlot3D[{fx, fy, fz}, {t, tmin, tmax}, opts...]\n"
+        "\tAdaptively samples the parametric 3D space curve (fx(t), fy(t), fz(t)) "
+        "over [tmin, tmax] and returns a Graphics3D[...] object (auto-displayed in "
+        "an orbit-camera window). The body may be any expression that evaluates to "
+        "a 3-element {x,y,z} list. Multiple curves: "
+        "ParametricPlot3D[{{fx1,fy1,fz1}, ...}, {t,...}].\n"
+        "ParametricPlot3D[{fx, fy, fz}, {t, tmin, tmax}, {u, umin, umax}, opts...]\n"
+        "\tTwo-iterator form: samples a PlotPoints x PlotPoints grid of (t,u) "
+        "pairs, maps each to {x,y,z}, and emits Polygon[] quads — a parametric "
+        "3D surface patch. Options: "
+        "PlotPoints (initial sample count/grid size, default 25), "
+        "MaxRecursion (adaptive refinement depth for curves, default 6), "
+        "MaxPlotPoints (overall point cap, default Infinity), "
+        "Mesh (All/True: overlays sample dots for curves or grid lines for "
+        "surfaces; default None), "
+        "PlotLegends (Automatic/\"Expressions\"/{labels...}), "
+        "ColorFunction (\"Rainbow\" or f[x,y,z] receiving scaled spatial coords, "
+        "or f[x,z] / f[z] for height-based coloring), "
+        "ColorFunctionScaling (default True), "
+        "RegionFunction (f[x,y,z] mask; falls back to f[x,y] forms), "
+        "PlotStyle, Axes, PlotRange, AxesLabel, PlotLabel, Background, ImageSize "
+        "(all passed through to Graphics3D). "
+        "Lighting -> None disables shading (flat colors); default is Automatic "
+        "(Lambertian shading, same as Plot3D).");
+
+    /* Lighting is an inert option keyword recognised by the renderer. */
+    symtab_get_def("Lighting")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Lighting",
+        "Lighting\n\tA Graphics3D / Plot3D / ParametricPlot3D option controlling "
+        "surface shading. Lighting -> Automatic (default): per-face Lambertian "
+        "(flat) shading with a fixed directional light; ambient 0.3, diffuse 0.7. "
+        "Lighting -> None (or False): disables shading and draws surfaces in their "
+        "raw PlotStyle/ColorFunction color.");
+
+    symtab_add_builtin("ContourPlot", builtin_contourplot);
+    symtab_get_def("ContourPlot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("ContourPlot",
+        "ContourPlot[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]\n"
+        "\tGenerates iso-contour lines of f(x,y) using the marching squares algorithm\n"
+        "\tand returns a Graphics[...] object (auto-displayed). ContourPlot is HoldAll:\n"
+        "\tf is held unevaluated until x and y are bound to numeric values.\n"
+        "\n"
+        "\tOptions:\n"
+        "\t  Contours         - Integer n (n evenly spaced auto levels, default 10), or\n"
+        "\t                     {c1, c2, ...} (explicit contour values).\n"
+        "\t  ContourStyle     - Style directive(s) for the contour lines. A single\n"
+        "\t                     directive is applied to all levels; a List cycles through\n"
+        "\t                     the levels. Automatic (default) colours by height.\n"
+        "\t                     None/False suppresses lines (leaves only shading).\n"
+        "\t  ContourLabels    - True: draw the z value at the midpoint of each level's\n"
+        "\t                     first visible segment. Default False.\n"
+        "\t  ContourShading   - True: fill each grid cell by its z value (via\n"
+        "\t                     ColorFunction or the built-in thermal gradient).\n"
+        "\t                     False/None: lines only. Automatic (default): shade when\n"
+        "\t                     ColorFunction is set, otherwise lines only.\n"
+        "\t  ColorFunction    - A function f[t] → color (t in [0,1] after scaling), or\n"
+        "\t                     a string: \"Rainbow\" (Hue ramp) or \"Temperature\" (blue-\n"
+        "\t                     cyan-yellow-red). Applied to shading and auto line colors.\n"
+        "\t  ColorFunctionScaling - True (default): normalise z to [0,1] before calling\n"
+        "\t                         ColorFunction. False: pass raw z.\n"
+        "\t  PlotPoints       - Grid resolution per axis (default 25; increase for\n"
+        "\t                     smoother contours).\n"
+        "\t  RegionFunction   - f[x,y] mask: cells where the function is False are\n"
+        "\t                     skipped (neither shaded nor contoured).\n"
+        "\t  Standard Graphics options (Axes, AspectRatio, Frame, PlotRange,\n"
+        "\t  AxesLabel, GridLines, ImageSize, Background, PlotLabel, Prolog,\n"
+        "\t  Epilog, ...) pass through to the Graphics[...] result.");
+
+    /* ContourStyle, Contours, ContourLabels, ContourShading are inert option
+     * keywords that print and ?-document but carry no value of their own. */
+    symtab_get_def("Contours")->attributes     |= ATTR_PROTECTED;
+    symtab_set_docstring("Contours",
+        "Contours\n\tContourPlot option: integer count of auto-levels or explicit "
+        "list of contour values.");
+    symtab_get_def("ContourStyle")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ContourStyle",
+        "ContourStyle\n\tContourPlot option: style directive(s) for contour lines. "
+        "A list cycles through the levels; Automatic colours by height; None suppresses lines.");
+    symtab_get_def("ContourLabels")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ContourLabels",
+        "ContourLabels\n\tContourPlot option: True draws z-value text labels at the "
+        "first visible point of each contour level. Default False.");
+    symtab_get_def("ContourShading")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ContourShading",
+        "ContourShading\n\tContourPlot option: True/False/Automatic — fills cells "
+        "by z value using ColorFunction or the built-in blue-cyan-yellow-red thermal "
+        "ramp. Automatic enables shading only when ColorFunction is set.");
+
+    symtab_add_builtin("StreamPlot", builtin_streamplot);
+    symtab_get_def("StreamPlot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("StreamPlot",
+        "StreamPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}, opts...]\n"
+        "\tTraces streamlines of the 2-D vector field {vx, vy} by RK4 integration\n"
+        "\tfrom a grid of seed points, and returns a Graphics[{Arrow[...], ...}, opts]\n"
+        "\tobject (auto-displayed). StreamPlot is HoldAll: vx, vy, and the iterator\n"
+        "\tspecs are held unevaluated until x and y are given numeric values.\n"
+        "\n"
+        "\tOptions:\n"
+        "\t  StreamPoints  - Integer n (n x n seed grid) or Automatic (default 15 x 15).\n"
+        "\t  StreamScale   – Automatic (8%% of domain diagonal, default), None (full run),\n"
+        "\t                   or a real fraction of the domain diagonal.\n"
+        "\t  StreamStyle   – Style directive(s) applied to all streams.\n"
+        "\t  StreamColorFunction / ColorFunction\n"
+        "\t                 – f[x,y,vx,vy,speed] (or fewer args) returning a color,\n"
+        "\t                   or \"Rainbow\" (hue = scaled speed).\n"
+        "\t  RegionFunction – f[x,y] mask; seeds outside the region are skipped.\n"
+        "\t  PlotLegends   – Automatic / \"Expressions\" / explicit label list.\n"
+        "\t  Standard Graphics options (PlotRange, Axes, AspectRatio, Frame, …)\n"
+        "\t                   pass through to the Graphics[...] result.");
+
+    register_inert("Arrow",
+        "Arrow[{{x1,y1}, {x2,y2}, ...}]\n"
+        "\tA graphics primitive: a directed polyline with an arrowhead at its\n"
+        "\tlast point. Used by StreamPlot to draw streamlines.");
+
+    symtab_add_builtin("Plot3D", builtin_plot3d);
+    symtab_get_def("Plot3D")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("Plot3D",
+        "Plot3D[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]\n\tSamples f "
+        "over a uniform grid on [xmin,xmax] x [ymin,ymax], displays the "
+        "resulting surface in an interactive orbit-camera window, and "
+        "returns it as a Graphics3D[...] object. A list of functions "
+        "Plot3D[{f1, f2, ...}, {x,...}, {y,...}] draws each surface in a "
+        "distinct palette colour. Shares Plot's option semantics where "
+        "they apply: PlotPoints (per-axis grid resolution, default 25), "
+        "MaxRecursion (doubles the whole grid's resolution while a "
+        "flatness check fails, default 2 -- a global, crack-free analogue "
+        "of Plot's adaptive bisection), Mesh (overlay the grid wireframe; "
+        "default True, unlike Plot's None), PlotStyle, ColorFunction (a "
+        "function of scaled-x and z, or \"Rainbow\"), ColorFunctionScaling "
+        "(default True), RegionFunction (f[x,y,z], or Plot's f[x,y]/f[x] "
+        "forms), PlotRange (an explicit {zmin,zmax} z-band), Axes, "
+        "PlotLabel, Background, ImageSize, "
+        "Lighting (Automatic (default, Lambertian shading) or None to disable).");
 }
