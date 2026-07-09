@@ -521,8 +521,51 @@ static int nl_denominator_interior_root_scan(Expr* f, Expr* x, Expr* a, Expr* b)
  * Core Newton-Leibniz driver.
  * ---------------------------------------------------------------------- */
 
+/* Cauchy principal value over [a, b] given the antiderivative F and the interior
+ * pole set: valid only when every interior pole is odd-order, detected by a sign
+ * change of f across it (odd -> one-sided divergences cancel; even -> no PV).
+ * PV = Re[F(b) - F(a)] with F's real branch: the branch-cut crossing at each odd
+ * pole contributes a purely imaginary I*Pi*residue that Re removes, leaving the
+ * finite real principal value.  Returns NULL when the gate fails or the value is
+ * not a finite real. */
+static Expr* nl_principal_value(Expr* F, Expr* f, Expr* x, Expr* a, Expr* b,
+                                PoleSet* poles) {
+    double av, bv;
+    if (nl_numeric(a, &av) != 1 || nl_numeric(b, &bv) != 1) return NULL;
+    if (bv < av) { double t = av; av = bv; bv = t; }
+
+    /* Odd-order gate: sign of f must flip across every interior pole. */
+    for (size_t i = 0; i < poles->n; i++) {
+        double pv = poles->vals[i];
+        /* delta = a small fraction of the distance to the nearest breakpoint. */
+        double near = fmin(pv - av, bv - pv);
+        for (size_t j = 0; j < poles->n; j++)
+            if (j != i) near = fmin(near, fabs(pv - poles->vals[j]));
+        if (!(near > 0.0)) return NULL;
+        double delta = near * 1e-3;
+        double fl, fr;
+        if (nl_eval_num_at(f, x, pv - delta, &fl) != 1) return NULL;
+        if (nl_eval_num_at(f, x, pv + delta, &fr) != 1) return NULL;
+        if (fl == 0.0 || fr == 0.0 || fl * fr > 0.0) return NULL;   /* even order / flat */
+    }
+
+    Expr* Fa = nl_eval_at(F, x, a, NL_DIR_ABOVE);
+    Expr* Fb = nl_eval_at(F, x, b, NL_DIR_BELOW);
+    if (!Fa || !Fb) { if (Fa) expr_free(Fa); if (Fb) expr_free(Fb); return NULL; }
+
+    Expr* diff = mk_fn2("Plus", Fb, mk_fn2("Times", expr_new_integer(-1), Fa));
+    Expr* pvval = eval_take(mk_fn1("Simplify", mk_fn1("Re", diff)));
+    if (!nl_is_finite_closed(pvval, x)) { if (pvval) expr_free(pvval); return NULL; }
+    return pvval;
+}
+
 Expr* integrate_newton_leibniz_try(Expr* f, Expr* x, Expr* a, Expr* b,
                                    const char* method) {
+    return integrate_newton_leibniz_try_pv(f, x, a, b, method, false);
+}
+
+Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
+                                      const char* method, bool principal_value) {
     if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
 
     /* 1. Antiderivative via the indefinite cascade. */
@@ -558,6 +601,18 @@ Expr* integrate_newton_leibniz_try(Expr* f, Expr* x, Expr* a, Expr* b,
         }
         poles.undecidable = false;
         force_validate = true;
+    }
+
+    /* 2b. Principal value: with interior poles present, compute the Cauchy PV
+     * (gated on odd-order poles) instead of the telescoping sum, which would
+     * diverge.  With no interior pole the ordinary FTC path below already gives
+     * the correct value, so PV falls through to it. */
+    if (principal_value && poles.n > 0) {
+        Expr* pv = nl_principal_value(F, f, x, a, b, &poles);
+        poleset_free(&poles);
+        expr_free(F);
+        if (!pv) integrate_emit_idiv(f, a, b);   /* even-order pole: no PV */
+        return pv;
     }
 
     /* 3. Breakpoints [a, poles..., b] and the telescoping sum. */

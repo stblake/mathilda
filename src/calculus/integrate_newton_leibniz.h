@@ -28,6 +28,7 @@
 #define MATHILDA_INTEGRATE_NEWTON_LEIBNIZ_H
 
 #include "expr.h"
+#include <stdbool.h>
 
 /*
  * Core entry point for the Integrate dispatcher's definite path.
@@ -42,6 +43,16 @@
  */
 Expr* integrate_newton_leibniz_try(Expr* f, Expr* x, Expr* a, Expr* b,
                                    const char* method);
+
+/* As above, but when `principal_value` is true and the integrand has interior
+ * real poles, computes the Cauchy principal value: valid only when every
+ * interior pole is of odd order (the integrand changes sign across it, so the
+ * one-sided divergences cancel), in which case PV = Re[F(b) - F(a)] with the
+ * real-branch antiderivative.  An even-order interior pole has no principal
+ * value and yields NULL (Integrate::idiv).  With no interior pole this is just
+ * the ordinary definite integral. */
+Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
+                                      const char* method, bool principal_value);
 
 /* Emit the Mathematica-style `Integrate::idiv: Integral of <f> does not
  * converge on {<a>, <b>}.` warning to stderr.  Shared so other definite

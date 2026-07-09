@@ -912,3 +912,27 @@ Lessons:
   elementary via Chebyshev's binomial mechanism, NOT the Goursat reduction — the
   WL reference `CubicRootElementaryQ` rejects it too. Hand-derived
   `H1 = -2(-4)^(-1/3) z/(1+z^3) ≠ 0` confirms it's inherent, not a code bug.
+
+## Integrate hang on symbolic-exponent integrands (2026-07-09)
+- **Symptom**: `Integrate[x^(k-1)(1-x)^(l-1),{x,0,1}]` (and indefinite
+  `Integrate[x^k+x^(k-1),x]`, `Integrate[x^(k-1)(1-x),x]`) hung forever.
+- **Root cause**: an integrand with a symbolic-exponent power of x (`x^k`,
+  `x^(k-1)`) reaches `Together`/`Cancel` → `PolynomialGCD`, which treats the
+  symbolic powers as independent polynomial generators and blows the
+  pseudo-remainder sequence up (unbounded). Two entry points hit it: the
+  rational-integration classifier `is_rational_in` (its `Together` *probe*, before
+  BronsteinRational even runs) and the derivative-divides quotient
+  `cancel_together`. `sample <pid>` pinpointed `pseudo_rem`/`poly_gcd_internal`.
+- **Fix**: decline these Together-backed paths structurally, up front — a
+  `Power[b,e]` with `b` depending on x and non-numeric `e` (`expr_is_numeric_like`
+  rejects it) is provably not rational in x and never a productive u-substitution
+  kernel. Guards: `has_symbolic_power_in` (integrate.c `try_rational`),
+  `has_symbolic_power_of` (integrate_derivdivides.c `dd_core`).
+- **Lesson**: when Integrate/Simplify/Together *hangs* (not wrong-answer), it is
+  almost always PolynomialGCD/pseudo-remainder on symbolic exponents (see also
+  `together_layer4_design.md`, the a^i Together hang). Use macOS `sample <pid> 2`
+  on the live process to get the loop; the fix belongs at the *classifier gate*
+  (reject before the expensive probe), not inside PolynomialGCD.
+- **Process**: `./Mathilda` in pipe mode (non-tty) speaks NDJSON, not bare exprs —
+  drive it with `{"id":1,"expr":"..."}` + `{"type":"quit"}`, and beware `| head -1`
+  masking the real exit code (use `${PIPESTATUS}` / capture then grep).

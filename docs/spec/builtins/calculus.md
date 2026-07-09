@@ -624,6 +624,20 @@ monotonically down.
   - `"RischNorman"` — `Integrate\`RischNorman[f, x]`.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.
+  - `"Symmetry"` — origin-symmetry reduction for an interval `[-c, c]`
+    (`Integrate\`Symmetry[f, {x, -c, c}]`): an odd integrand integrates to `0`,
+    an even one to `2 Integrate[f, {x, 0, c}]`. The parity is proved by
+    `Simplify`, and a value is claimed only when the half integral converges, so
+    a divergent principal value is never reported as `0`. Under Automatic it runs
+    after residue and before Newton-Leibniz.
+  - `"Beta"` — Euler-Beta reduction on `[0,1]`
+    (`Integrate\`Beta[f, {x, 0, 1}]`): `x^(k-1) (1-x)^(l-1) → Beta[k, l]`, with
+    `Log[x]^i Log[1-x]^j` weights giving the mixed parameter derivative of
+    `Beta`. Gated on `Re[k] > 0 && Re[l] > 0`.
+  - `"TrigPower"` — `Sin[x]^m Cos[x]^n` over a canonical trig interval
+    (`Integrate\`TrigPower[f, {x, 0, c}]`): over `[0, Pi/2]` it is
+    `Beta[(m+1)/2, (n+1)/2]/2`; over `[0, Pi]`/`[0, 2Pi]` the standard parity
+    multipliers apply (an odd power integrates to `0`).
   - `"NewtonLeibniz"` — the real-axis definite-integral mechanism (implicit for
     the `{x, a, b}` form); see **Definite integration** below.
   - `"LineIntegral"` — the complex contour mechanism (implicit for the
@@ -633,6 +647,12 @@ monotonically down.
     `Integrate\`DiffUnderInt[f, {x, a, b}]`. Tried last in the definite cascade
     (after residue and Newton-Leibniz). See **Differentiation under the integral
     sign** below.
+  - `"SinPowerMonomial"` — `Sin[r x]^k / x^m` on `[0, Infinity)` (the ssp
+    family); `Integrate\`SinPowerMonomial[f, {x, 0, Infinity}]`.
+  - `"OscillatoryPower"` — Fresnel-type `Cos[b x^n]` / `Sin[b x^n]` on
+    `[0, Infinity)`; `Integrate\`OscillatoryPower[f, {x, 0, Infinity}]`.
+  - `"RationalLog"` — `R(x) Log[x]^n` on `[0, Infinity)` for a proper rational
+    `R` with negative-real-axis poles; `Integrate\`RationalLog[f, {x, 0, Infinity}]`.
   - `"RamanujanMasterTheorem"` (alias `"Mellin"`) — half-line `∫₀^∞ x^{s-1} f(x) dx`
     by the Mellin-transform / Ramanujan Master Theorem method;
     `Integrate\`RamanujanMasterTheorem[f, {x, 0, Infinity}]`. Under Automatic it
@@ -840,6 +860,16 @@ bound may depend on an outer variable.
 
 `Integrate\`SingularPoints[expr, {x, a, b}]` returns the sorted list of the
 interior real poles used for the split — exposed for inspection and reuse.
+
+**Cauchy principal value.** `Integrate[f, {x, a, b}, PrincipalValue -> True]`
+computes the Cauchy principal value across an interior pole. It is defined only
+for **odd-order** poles (the integrand changes sign across the pole, so the
+symmetric one-sided divergences cancel); the value is then `Re[F(b) − F(a)]`
+with the real-branch antiderivative — the branch-cut crossing at each pole
+contributes a purely imaginary `I Pi` (residue) that `Re` removes. An
+**even-order** interior pole has no principal value and emits `Integrate::idiv`.
+With no interior pole the option is a no-op. Examples: `∫₋₁¹ dx/x = 0`,
+`∫₀³ dx/(x−2) = −Log 2`, `∫₀² x/(x²−1) dx = ½ Log 3`.
 
 **Continuous branch-form antiderivatives.** Many continuous periodic integrands
 (e.g. `1/(2 + Cos[x])`) antidifferentiate to a Weierstrass branch form that is

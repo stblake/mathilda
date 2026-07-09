@@ -26,6 +26,8 @@
 #include "integrate_goursat.h"
 #include "integrate_jeffrey.h"
 #include "integrate_newton_leibniz.h"
+#include "integrate_symmetry.h"
+#include "integrate_beta.h"
 #include "integrate_line.h"
 #include "integrate_residue.h"
 #include "integrate_diffunderint.h"
@@ -54,6 +56,37 @@
  * predicates we call below return either True or False. */
 static bool is_true_symbol(const Expr* e) {
     return e && e->type == EXPR_SYMBOL && e->data.symbol == SYM_True;
+}
+
+/* True iff `f` contains `x` as a subexpression (structural FreeQ negation). */
+static bool depends_on_var(const Expr* f, const Expr* x) {
+    if (expr_eq((Expr*)f, (Expr*)x)) return true;
+    if (f->type == EXPR_FUNCTION) {
+        if (depends_on_var(f->data.function.head, x)) return true;
+        for (size_t i = 0; i < f->data.function.arg_count; i++)
+            if (depends_on_var(f->data.function.args[i], x)) return true;
+    }
+    return false;
+}
+
+/* True iff `f` contains a Power[b, e] whose base involves `x` and whose
+ * exponent is not a concrete number -- a symbolic-exponent power such as x^k,
+ * x^(k-1) or (1-x)^l.  Such an integrand is provably not a rational function of
+ * x, yet feeding it to the Together / PolynomialGCD rationality probe (or the
+ * derivative-divides quotient normalisation) drives a pseudo-remainder-sequence
+ * blow-up over the symbolic powers as independent generators.  Callers use it
+ * to decline those Together-backed paths structurally, up front. */
+static bool has_symbolic_power_in(const Expr* f, const Expr* x) {
+    if (!f || f->type != EXPR_FUNCTION) return false;
+    if (head_is((Expr*)f, SYM_Power) && f->data.function.arg_count == 2) {
+        const Expr* b = f->data.function.args[0];
+        const Expr* e = f->data.function.args[1];
+        if (depends_on_var(b, x) && !expr_is_numeric_like(e)) return true;
+    }
+    if (has_symbolic_power_in(f->data.function.head, x)) return true;
+    for (size_t i = 0; i < f->data.function.arg_count; i++)
+        if (has_symbolic_power_in(f->data.function.args[i], x)) return true;
+    return false;
 }
 
 /* Test whether `f` is a polynomial in `x`.  Calls the existing
@@ -141,6 +174,10 @@ static Expr* try_undefined(Expr* f, Expr* x) {
 /* Stage 1: rational-function integrator.  Returns the antiderivative on
  * success, NULL when the integrand is non-rational or pmint gives up. */
 static Expr* try_rational(Expr* f, Expr* x) {
+    /* A symbolic-exponent power of x (x^k, (1-x)^l, ...) is never rational in
+     * x; decline structurally so the Together-based rationality probe below is
+     * never handed an integrand that sends PolynomialGCD into a blow-up. */
+    if (has_symbolic_power_in(f, x)) return NULL;
     if (!is_polynomial_in(f, x) && !is_rational_in(f, x)) return NULL;
     Expr* result = call_stage("Integrate`BronsteinRational", f, x);
     if (!result) return NULL;
@@ -318,6 +355,12 @@ typedef enum {
     METHOD_RESIDUE,          /* definite-only: selects the residue-theorem mechanism */
     METHOD_DIFF_UNDER_INT,   /* definite-only: differentiation under the integral sign */
     METHOD_RAMANUJAN,        /* definite-only: Mellin / Ramanujan Master Theorem (half-line) */
+    METHOD_SYMMETRY,         /* definite-only: origin-symmetry (odd -> 0, even -> 2 half) */
+    METHOD_BETA,             /* definite-only: Euler-Beta on [0,1] */
+    METHOD_TRIG_POWER,       /* definite-only: Sin^m Cos^n over [0,Pi/2]/[0,Pi]/[0,2Pi] */
+    METHOD_SINPOW_MONO,      /* definite-only: Sin[r x]^k / x^m on [0,Inf) */
+    METHOD_OSC_POWER,        /* definite-only: Cos/Sin[b x^n] on [0,Inf) */
+    METHOD_RATIONAL_LOG,     /* definite-only: R(x) Log[x]^n on [0,Inf) */
     METHOD_INVALID
 } IntegrateMethod;
 
@@ -342,6 +385,12 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "DiffUnderInt") == 0 ||
         strcmp(s, "DifferentiationUnderIntegral") == 0)
         return METHOD_DIFF_UNDER_INT;
+    if (strcmp(s, "Symmetry") == 0) return METHOD_SYMMETRY;
+    if (strcmp(s, "Beta") == 0) return METHOD_BETA;
+    if (strcmp(s, "TrigPower") == 0) return METHOD_TRIG_POWER;
+    if (strcmp(s, "SinPowerMonomial") == 0) return METHOD_SINPOW_MONO;
+    if (strcmp(s, "OscillatoryPower") == 0) return METHOD_OSC_POWER;
+    if (strcmp(s, "RationalLog") == 0) return METHOD_RATIONAL_LOG;
     if (strcmp(s, "RamanujanMasterTheorem") == 0 || strcmp(s, "Mellin") == 0)
         return METHOD_RAMANUJAN;
     return METHOD_INVALID;
@@ -437,7 +486,10 @@ static bool definite_parse_method(Expr* opt, const char** name,
      * they pass NULL through to the inner indefinite Integrate. */
     if (m == METHOD_AUTOMATIC || m == METHOD_NEWTON_LEIBNIZ ||
         m == METHOD_LINE_INTEGRAL || m == METHOD_RESIDUE ||
-        m == METHOD_DIFF_UNDER_INT || m == METHOD_RAMANUJAN) return true;
+        m == METHOD_DIFF_UNDER_INT || m == METHOD_RAMANUJAN ||
+        m == METHOD_SYMMETRY || m == METHOD_BETA ||
+        m == METHOD_TRIG_POWER || m == METHOD_SINPOW_MONO ||
+        m == METHOD_OSC_POWER || m == METHOD_RATIONAL_LOG) return true;
     *name = rhs->data.string;   /* borrowed: valid while `res` is alive */
     return true;
 }
@@ -472,6 +524,7 @@ static Expr* integrate_definite(Expr* res) {
     const char* method = NULL;
     IntegrateMethod mech = METHOD_AUTOMATIC;
     Expr* assumptions = NULL;   /* borrowed from res: the Assumptions option value */
+    bool principal_value = false;
     size_t tail = 1 + nspecs;
     /* Trailing options, in any order: `Method -> ...` and/or `Assumptions -> ...`.
      * Any other trailing argument (unknown option, stray expression) is rejected
@@ -480,6 +533,18 @@ static Expr* integrate_definite(Expr* res) {
         Expr* opt = res->data.function.args[t];
         if (option_lhs_is(opt, SYM_Assumptions)) {
             assumptions = opt->data.function.args[1];   /* borrowed */
+            continue;
+        }
+        /* PrincipalValue -> True / False (not an interned system symbol; match
+         * by name).  Selects the Cauchy principal value for interior poles. */
+        if (opt->type == EXPR_FUNCTION && opt->data.function.arg_count == 2 &&
+            opt->data.function.head->type == EXPR_SYMBOL &&
+            (opt->data.function.head->data.symbol == SYM_Rule ||
+             opt->data.function.head->data.symbol == SYM_RuleDelayed) &&
+            opt->data.function.args[0]->type == EXPR_SYMBOL &&
+            strcmp(opt->data.function.args[0]->data.symbol, "PrincipalValue") == 0) {
+            Expr* rhs = opt->data.function.args[1];
+            principal_value = (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_True);
             continue;
         }
         if (option_lhs_is(opt, SYM_Method)) {
@@ -526,18 +591,49 @@ static Expr* integrate_definite(Expr* res) {
                 expr_free(cur);
                 return NULL;
             }
+            /* Origin-symmetry reduction, after residue (which keeps its clean
+             * closed forms for the families it owns) but before the general FTC:
+             * an odd integrand over a symmetric interval is 0 with no
+             * antiderivative, and an even one halves the interval -- often
+             * unlocking the half-line Ramanujan/Mellin path for a non-rational
+             * even integrand that residue does not own.  It only claims a value
+             * once the half converges, so a divergent principal value is never
+             * reported as 0, and NULL always falls through unchanged. */
+            if (!r && (mech == METHOD_AUTOMATIC || mech == METHOD_SYMMETRY))
+                r = integrate_symmetry_try(cur, x, a, b, assumptions);
             /* Newton-Leibniz (FTC) unless the user pinned Residue, the
-             * parameter-differentiation mechanism, or the Ramanujan/Mellin
-             * mechanism. */
+             * parameter-differentiation mechanism, the Ramanujan/Mellin
+             * mechanism, the symmetry mechanism, or a Beta mechanism. */
             if (!r && mech != METHOD_RESIDUE && mech != METHOD_DIFF_UNDER_INT &&
-                mech != METHOD_RAMANUJAN)
-                r = integrate_newton_leibniz_try(cur, x, a, b, method);
+                mech != METHOD_RAMANUJAN && mech != METHOD_SYMMETRY &&
+                mech != METHOD_BETA && mech != METHOD_TRIG_POWER &&
+                mech != METHOD_SINPOW_MONO && mech != METHOD_OSC_POWER &&
+                mech != METHOD_RATIONAL_LOG)
+                r = integrate_newton_leibniz_try_pv(cur, x, a, b, method,
+                                                    principal_value);
+            /* Euler-Beta reductions: x^(k-1)(1-x)^(l-1) on [0,1] and
+             * Sin^m Cos^n over a canonical trig interval -- non-elementary
+             * antiderivatives (incomplete Beta) that FTC cannot reach.  After
+             * Newton-Leibniz (which owns the integer-power cases via an
+             * elementary antiderivative), before Ramanujan. */
+            if (!r && (mech == METHOD_AUTOMATIC || mech == METHOD_BETA))
+                r = integrate_beta_try(cur, x, a, b, assumptions);
+            if (!r && (mech == METHOD_AUTOMATIC || mech == METHOD_TRIG_POWER))
+                r = integrate_trigpower_try(cur, x, a, b, assumptions);
             /* Mellin / Ramanujan Master Theorem: half-line ∫₀^∞ x^(s-1) f(x) dx
              * of a transcendental f (Gaussian moments, Gamma/Bessel/trig
              * transforms) that residue and FTC do not close.  Under Automatic it
              * runs before DiffUnderInt; the pinned mechanism has no fallback. */
-            if (!r && (mech == METHOD_AUTOMATIC || mech == METHOD_RAMANUJAN))
+            if (!r && (mech == METHOD_AUTOMATIC || mech == METHOD_RAMANUJAN ||
+                       mech == METHOD_OSC_POWER))
                 r = integrate_ramanujan_try(cur, x, a, b, assumptions);
+            /* Sin[r x]^k / x^m half-line (ssp) and R(x) Log[x]^n (log*rat):
+             * under Automatic these are pre-passes inside Ramanujan; the pinned
+             * methods route directly here. */
+            if (!r && mech == METHOD_SINPOW_MONO)
+                r = integrate_sinpowmono_try(cur, x, a, b, assumptions);
+            if (!r && mech == METHOD_RATIONAL_LOG)
+                r = integrate_ratlogpow_try(cur, x, a, b, assumptions);
             /* Differentiation under the integral sign: last resort under
              * Automatic (parameter-dependent improper/periodic integrals that
              * residue and FTC cannot close), or the pinned mechanism. */
@@ -736,6 +832,12 @@ Expr* builtin_integrate(Expr* res) {
         case METHOD_RESIDUE:
         case METHOD_DIFF_UNDER_INT:
         case METHOD_RAMANUJAN:
+        case METHOD_SYMMETRY:
+        case METHOD_BETA:
+        case METHOD_TRIG_POWER:
+        case METHOD_SINPOW_MONO:
+        case METHOD_OSC_POWER:
+        case METHOD_RATIONAL_LOG:
             /* Definite-only mechanisms.  Meaningless on the indefinite form
              * Integrate[f, x, Method -> "NewtonLeibniz" / "LineIntegral" /
              * "Residue" / "DiffUnderInt" / "RamanujanMasterTheorem"]; leave
@@ -850,6 +952,14 @@ void integrate_init(void) {
     /* Definite integration by the fundamental theorem of calculus:
      * Integrate`NewtonLeibniz and the pole detector Integrate`SingularPoints. */
     integrate_newton_leibniz_init();
+
+    /* Origin-symmetry reduction: Integrate`Symmetry (odd -> 0, even -> 2 half).
+     * Tried first in the definite dispatch. */
+    integrate_symmetry_init();
+
+    /* Euler-Beta reductions: Integrate`Beta ([0,1]) and Integrate`TrigPower
+     * (Sin^m Cos^n over a canonical trig interval). */
+    integrate_beta_init();
 
     /* Complex line / contour integration: Integrate`LineIntegral and the
      * on-path singularity detector Integrate`PathSingularPoints. */

@@ -116,6 +116,30 @@ static bool contains_unintegrated(const Expr* e) {
     return false;
 }
 
+/* True if `f` contains a Power[b, e] whose base `b` involves x and whose
+ * exponent `e` is not a concrete number -- a symbolic-exponent monomial such
+ * as x^k, x^(k-1) or x^(a+b).
+ *
+ * DerivativeDivides forms the quotient f / u'(x) and normalises it with
+ * Together/Cancel.  When x carries a symbolic exponent, that normalisation
+ * feeds PolynomialGCD a pseudo-remainder sequence over the symbolic powers as
+ * independent generators, which blows up (unbounded time) -- and such a
+ * monomial is never a productive u-substitution kernel here anyway.  Bailing
+ * early keeps the cascade responsive; the integral falls through to the
+ * methods that own these forms (rational / Euler-Beta reductions, tables). */
+static bool has_symbolic_power_of(const Expr* f, const Expr* x) {
+    if (!f || f->type != EXPR_FUNCTION) return false;
+    if (head_is((Expr*)f, SYM_Power) && f->data.function.arg_count == 2) {
+        const Expr* b = f->data.function.args[0];
+        const Expr* e = f->data.function.args[1];
+        if (!expr_free_of(b, x) && !expr_is_numeric_like(e)) return true;
+    }
+    if (!expr_free_of(f->data.function.head, x)) return true;
+    for (size_t i = 0; i < f->data.function.arg_count; i++)
+        if (has_symbolic_power_of(f->data.function.args[i], x)) return true;
+    return false;
+}
+
 /* D[expr, x]; borrows, returns owned (evaluated). */
 static Expr* deriv_dx(const Expr* expr, const Expr* x) {
     return eval_take(mk_fn2("D", expr_copy((Expr*)expr), expr_copy((Expr*)x)));
@@ -475,6 +499,10 @@ static Expr* dd_core(Expr* f, Expr* x, bool use_eliminate,
     if (x->type != EXPR_SYMBOL) return NULL;
     if (expr_free_of(f, x))      return NULL;   /* nothing to integrate in x */
     if (dd_depth >= DD_MAX_DEPTH) return NULL;
+    /* Symbolic-exponent monomials (x^k, x^(k-1), ...) send the Together/Cancel
+     * quotient normalisation into a PolynomialGCD pseudo-remainder blow-up and
+     * are never a productive substitution kernel -- decline them up front. */
+    if (has_symbolic_power_of(f, x)) return NULL;
 
     bool outermost = (dd_depth == 0);
 

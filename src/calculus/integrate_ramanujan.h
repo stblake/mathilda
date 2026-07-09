@@ -56,10 +56,34 @@
 Expr* integrate_ramanujan_try(Expr* f, Expr* x, Expr* a, Expr* b,
                               Expr* assumptions);
 
+/* Sin[r x]^k / x^m on [0, Infinity) (the ssp family), via TrigReduce + the
+ * analytically-continued Mellin transforms of cos / sin.  Borrowed args;
+ * assumptions may be NULL.  Returns a fresh value or NULL to fall through. */
+Expr* integrate_sinpowmono_try(Expr* f, Expr* x, Expr* a, Expr* b,
+                               Expr* assumptions);
+
+/* R(x) Log[x]^n on [0, Infinity) for a proper rational R with negative-real-axis
+ * poles (the log*rat family), via the Mellin transform of R and its n-th
+ * s-derivative at s = 1.  Borrowed args; assumptions may be NULL.  Returns a
+ * fresh value or NULL to fall through. */
+Expr* integrate_ratlogpow_try(Expr* f, Expr* x, Expr* a, Expr* b,
+                              Expr* assumptions);
+
 /* `Integrate`RamanujanMasterTheorem[f, {x,0,Infinity}]` (optionally with
  * Assumptions -> ...) builtin.  Strict: returns NULL on any non-applicable
  * input. */
 Expr* builtin_integrate_ramanujan(Expr* res);
+
+/* `Integrate`SinPowerMonomial[f, {x,0,Infinity}]` builtin.  Strict. */
+Expr* builtin_integrate_sinpowmono(Expr* res);
+
+/* `Integrate`OscillatoryPower[f, {x,0,Infinity}]` builtin: Cos/Sin[b x^n] on
+ * the half line -- a thin wrapper over the Ramanujan/Mellin engine, which
+ * already closes these via its monomial-substitution path.  Strict. */
+Expr* builtin_integrate_oscpower(Expr* res);
+
+/* `Integrate`RationalLog[f, {x,0,Infinity}]` builtin.  Strict. */
+Expr* builtin_integrate_ratlogpow(Expr* res);
 
 /* Register the package builtin + attributes + docstring. */
 void integrate_ramanujan_init(void);

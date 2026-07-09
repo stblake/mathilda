@@ -139,9 +139,12 @@ static void test_negative_controls(void) {
     /* Real-axis pole of a non-PV integrand: not a clean residue answer. */
     check_eq("Integrate[1/(1+x^3), {x, -Infinity, Infinity}]",
              "Integrate[1/(1 + x^3), {x, -Infinity, Infinity}]");
-    /* Branch point (not rational): the residue method must not fire. */
-    check_eq("Integrate[1/Sqrt[1+x^4], {x, -Infinity, Infinity}]",
-             "Integrate[1/Sqrt[1 + x^4], {x, -Infinity, Infinity}]");
+    /* Branch point (not rational): the residue method must not fire.  (Under
+     * strict Method -> "Residue" it stays unevaluated; the auto-dispatch now
+     * closes the even integrand via the symmetry reduction -> half-line, giving
+     * Gamma[1/4]^2/(2 Sqrt[Pi]).) */
+    check_eq("Integrate[1/Sqrt[1+x^4], {x, -Infinity, Infinity}, Method -> \"Residue\"]",
+             "Integrate[1/Sqrt[1 + x^4], {x, -Infinity, Infinity}, Method -> \"Residue\"]");
     /* Rational integrand with a real-axis pole (Family A): the ordinary integral
      * genuinely diverges (only a principal value would exist).  The residue
      * method now flags this conclusively, so the dispatcher emits Integrate::idiv

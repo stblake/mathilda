@@ -1288,6 +1288,277 @@ static Expr* frullani_try(Expr* f, const Expr* x, Expr* assumptions) {
 }
 
 /* -------------------------------------------------------------------------
+ * Sin[r x]^k / x^m on [0, Inf) -- the ssp family (Wang pp. 86-87).
+ *
+ * Reduce the power with TrigReduce (Sin^k -> a sum of 1 / cos(c x) / sin(c x))
+ * and apply the analytically-continued Mellin transforms of cos / sin,
+ *   Int_0^Inf x^(s-1) cos(c x) dx = Gamma(s) cos(pi s/2) c^(-s),
+ *   Int_0^Inf x^(s-1) sin(c x) dx = Gamma(s) sin(pi s/2) c^(-s),   c > 0,
+ * at s = 1 - m.  Gamma(s) has a pole at the non-positive integer s, cancelled
+ * by the trig zero exactly in the convergent regime; the reflection forms
+ *   Gamma(s) cos(pi s/2) = pi / (2 sin(pi s/2) Gamma(1-s)),
+ *   Gamma(s) sin(pi s/2) = pi / (2 cos(pi s/2) Gamma(1-s))
+ * make that finite value manifest (and blow up to Infinity for a divergent
+ * integrand, which the finiteness gate then rejects).  The scaleless constant
+ * term of TrigReduce (c = 0) has no Mellin transform and is dropped.
+ * ---------------------------------------------------------------------- */
+
+/* Coefficient c of x in a purely-linear argument c*x (c free of x, and
+ * arg - c*x simplifies to 0).  Returns NULL if arg is not of that form. */
+static Expr* linear_coeff(const Expr* arg, const Expr* x) {
+    Expr* c = simp(mk_fn2("Divide", cp((Expr*)arg), cp((Expr*)x)));
+    if (!c || contains_symbol(c, x)) { if (c) expr_free(c); return NULL; }
+    Expr* resid = simp(mk_fn2("Subtract", cp((Expr*)arg), Tms(cp(c), cp((Expr*)x))));
+    bool zero = resid && ((resid->type == EXPR_INTEGER && resid->data.integer == 0) ||
+                          (resid->type == EXPR_REAL && resid->data.real == 0.0));
+    if (resid) expr_free(resid);
+    if (!zero) { expr_free(c); return NULL; }
+    return c;
+}
+
+/* Mellin contribution of one TrigReduce term `coeff * trig(c x)` at s = 1 - m,
+ * or the constant/zero term (returns 0), or NULL if the term is not of the
+ * expected form.  `sExpr` is the (owned-by-caller) exponent 1 - m. */
+static Expr* sinpow_term(Expr* term, const Expr* x, const Expr* sExpr) {
+    /* Split the term into an x-free coefficient and the trig kernel. */
+    size_t nf; Expr** fs; Expr* one[1];
+    if (head_name_is(term, "Times")) { nf = term->data.function.arg_count; fs = term->data.function.args; }
+    else { nf = 1; one[0] = term; fs = one; }
+
+    Expr* coeff = mk_int(1);
+    Expr* kernel = NULL;                 /* the Cos[..]/Sin[..] factor */
+    for (size_t i = 0; i < nf; i++) {
+        Expr* g = fs[i];
+        if (!contains_symbol(g, x)) { coeff = Tms(coeff, cp(g)); continue; }
+        if ((head_name_is(g, "Cos") || head_name_is(g, "Sin")) &&
+            g->data.function.arg_count == 1 && !kernel) {
+            kernel = g; continue;
+        }
+        expr_free(coeff); return NULL;   /* x-dependent non-trig factor */
+    }
+    if (!kernel) { expr_free(coeff); return mk_int(0); }   /* scaleless constant -> drop */
+
+    Expr* c = linear_coeff(kernel->data.function.args[0], x);
+    if (!c) { expr_free(coeff); return NULL; }
+
+    /* Reflection-form bracket, finite in the convergent regime. */
+    bool is_cos = head_name_is(kernel, "Cos");
+    Expr* halfPis = Tms(Rat(1, 2), Tms(mk_sym("Pi"), cp(sExpr)));   /* pi s / 2 */
+    Expr* trig_denom = is_cos ? mk_fn1("Sin", cp(halfPis)) : mk_fn1("Cos", cp(halfPis));
+    expr_free(halfPis);
+    Expr* bracket = mk_fn2("Divide", mk_sym("Pi"),
+        Tms(mk_int(2), Tms(trig_denom, Gamma_(mk_fn2("Subtract", mk_int(1), cp(sExpr))))));
+    /* coeff * bracket * c^(-s). */
+    Expr* term_val = Tms3(coeff, bracket, Pw(c, Neg(cp(sExpr))));
+    return term_val;
+}
+
+Expr* integrate_sinpowmono_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
+    if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
+    if (!is_zero_expr(a) || !is_pos_inf(b)) return NULL;
+    if (!contains_symbol(f, x)) return NULL;
+
+    /* Parse f = C * Sin[r x]^k * x^(-m), C free of x, r > 0, k>=1, m>=1 ints. */
+    size_t nf; Expr** fs; Expr* one[1];
+    if (head_name_is(f, "Times")) { nf = f->data.function.arg_count; fs = f->data.function.args; }
+    else { nf = 1; one[0] = f; fs = one; }
+
+    Expr* Cc = mk_int(1);
+    Expr* rarg = NULL;         /* Sin argument */
+    long k = 0, m = 0;
+    bool ok = true;
+    for (size_t i = 0; i < nf && ok; i++) {
+        Expr* g = fs[i];
+        if (!contains_symbol(g, x)) { Cc = Tms(Cc, cp(g)); continue; }
+        /* Sin[arg] or Sin[arg]^k */
+        if (head_name_is(g, "Sin") && g->data.function.arg_count == 1 && !rarg) {
+            rarg = g->data.function.args[0]; k = 1; continue;
+        }
+        if (head_name_is(g, "Power") && g->data.function.arg_count == 2) {
+            Expr* base = g->data.function.args[0];
+            Expr* e    = g->data.function.args[1];
+            if (head_name_is(base, "Sin") && base->data.function.arg_count == 1 &&
+                e->type == EXPR_INTEGER && e->data.integer >= 1 && !rarg) {
+                rarg = base->data.function.args[0]; k = e->data.integer; continue;
+            }
+            if (base->type == EXPR_SYMBOL && base->data.symbol == x->data.symbol &&
+                e->type == EXPR_INTEGER && e->data.integer < 0 && m == 0) {
+                m = -e->data.integer; continue;
+            }
+        }
+        ok = false;
+    }
+    if (!ok || !rarg || k < 1 || m < 1) { expr_free(Cc); return NULL; }
+
+    Expr* r = linear_coeff(rarg, x);
+    if (!r) { expr_free(Cc); return NULL; }
+    /* Need r > 0 for c^(-s) to be real/well-defined. */
+    if (!prove_pos(r, assumptions)) { expr_free(Cc); expr_free(r); return NULL; }
+    expr_free(r);
+
+    Expr* sExpr = mk_int(1 - m);                       /* s = 1 - m */
+    /* G = Expand[TrigReduce[Sin[r x]^k]] -- TrigReduce returns a *factored*
+     * form like (1/2)(1 - Cos[2x]); Expand distributes it into a sum of
+     * coefficient*harmonic terms the loop below can split. */
+    Expr* sink = Pw(mk_fn1("Sin", cp(rarg)), mk_int(k));
+    Expr* G = ev1("Expand", mk_fn1("TrigReduce", sink));
+    if (!G) { expr_free(Cc); expr_free(sExpr); return NULL; }
+
+    size_t nt; Expr** terms; Expr* single[1];
+    if (head_name_is(G, "Plus")) { nt = G->data.function.arg_count; terms = G->data.function.args; }
+    else { nt = 1; single[0] = G; terms = single; }
+
+    Expr* total = mk_int(0);
+    bool good = true;
+    for (size_t t = 0; t < nt && good; t++) {
+        Expr* v = sinpow_term(terms[t], x, sExpr);
+        if (!v) { good = false; break; }
+        total = Pls(total, v);
+    }
+    expr_free(G); expr_free(sExpr);
+    if (!good) { expr_free(total); expr_free(Cc); return NULL; }
+
+    Expr* value = fullsimp2(Tms(Cc, total), assumptions);
+    if (!value || !is_finite_value(value) || contains_symbol(value, x)) {
+        if (value) expr_free(value);
+        return NULL;
+    }
+    return value;
+}
+
+/* -------------------------------------------------------------------------
+ * R(x) Log[x]^n on [0, Inf) with R a proper rational whose poles are all on the
+ * negative real axis (real linear factors) -- the log*rat / logquad0 family for
+ * multi-pole R that the single-generator (a + x^m)^(-p) Mellin path does not
+ * cover.  Uses the Mellin transform of a shifted pole,
+ *   Int_0^Inf x^(s-1)/(x+a)^p dx = a^(s-p) B(s, p-s)   (a > 0, 0 < Re s < p),
+ * summed over the partial fractions of R to give M(s); then
+ *   Int_0^Inf R(x) Log[x]^n dx = d^n/ds^n M(s) |_{s=1}.
+ * Each per-term Mellin converges on 0 < Re s < p even where the log-weighted
+ * integral's partial fractions individually diverge, so M(s) is analytic and
+ * the derivative-at-1 is the finite answer.
+ * ---------------------------------------------------------------------- */
+
+/* Parse one Apart term `c * (x + a)^(-p)` (a > 0 real, p >= 1 int, c free of x).
+ * On success returns the Mellin contribution c * a^(s-p) * Beta[s, p-s] (with
+ * the caller's symbolic `s`), else NULL. */
+static Expr* ratlog_term(Expr* term, const Expr* x, const Expr* s, Expr* as) {
+    size_t nf; Expr** fs; Expr* one[1];
+    if (head_name_is(term, "Times")) { nf = term->data.function.arg_count; fs = term->data.function.args; }
+    else { nf = 1; one[0] = term; fs = one; }
+
+    Expr* c = mk_int(1);
+    Expr* a = NULL; long p = 0;
+    for (size_t i = 0; i < nf; i++) {
+        Expr* g = fs[i];
+        if (!contains_symbol(g, x)) { c = Tms(c, cp(g)); continue; }
+        if (head_name_is(g, "Power") && g->data.function.arg_count == 2 &&
+            g->data.function.args[1]->type == EXPR_INTEGER &&
+            g->data.function.args[1]->data.integer < 0 && !a) {
+            Expr* base = g->data.function.args[0];
+            /* base must be x + a with unit x-coefficient. */
+            Expr* slope = simp(mk_fn2("D", cp(base), cp((Expr*)x)));
+            bool unit = slope && slope->type == EXPR_INTEGER && slope->data.integer == 1;
+            if (slope) expr_free(slope);
+            if (!unit) { expr_free(c); return NULL; }
+            Expr* aval = simp(mk_fn2("Subtract", cp(base), cp((Expr*)x)));   /* a = base - x */
+            if (!aval || contains_symbol(aval, x)) { if (aval) expr_free(aval); expr_free(c); return NULL; }
+            a = aval; p = -g->data.function.args[1]->data.integer;
+            continue;
+        }
+        expr_free(c); return NULL;                 /* polynomial part or unexpected factor */
+    }
+    if (!a) { expr_free(c); return NULL; }          /* pole-free term -> divergent */
+    if (!prove_pos(a, as)) { expr_free(c); expr_free(a); return NULL; }
+
+    /* c * a^(s-p) * Beta[s, p-s].  For a simple pole (p = 1) Beta[s, 1-s] is
+     * singular at s = 1 and the Limit engine cannot resolve the derivative
+     * there, so use the reflection form Beta[s, 1-s] = Pi/Sin[Pi s], which it
+     * handles; for p >= 2 the Beta is finite at s = 1 and needs no rewrite. */
+    Expr* sp = mk_int(p);
+    Expr* kernel = (p == 1)
+        ? mk_fn2("Divide", mk_sym("Pi"), mk_fn1("Sin", Tms(mk_sym("Pi"), cp(s))))
+        : Beta_(cp(s), mk_fn2("Subtract", cp(sp), cp(s)));
+    Expr* contrib = Tms3(c, Pw(a, mk_fn2("Subtract", cp(s), cp(sp))), kernel);
+    expr_free(sp);
+    return contrib;
+}
+
+Expr* integrate_ratlogpow_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
+    if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
+    if (!is_zero_expr(a) || !is_pos_inf(b)) return NULL;
+    if (!contains_symbol(f, x)) return NULL;
+
+    /* Separate the Log[x]^n weight from the rational part R. */
+    size_t nf; Expr** fs; Expr* one[1];
+    if (head_name_is(f, "Times")) { nf = f->data.function.arg_count; fs = f->data.function.args; }
+    else { nf = 1; one[0] = f; fs = one; }
+
+    long n = 0;
+    Expr* R = mk_int(1);
+    bool ok = true;
+    for (size_t i = 0; i < nf && ok; i++) {
+        Expr* g = fs[i];
+        if (head_name_is(g, "Log") && g->data.function.arg_count == 1 &&
+            g->data.function.args[0]->type == EXPR_SYMBOL &&
+            g->data.function.args[0]->data.symbol == x->data.symbol && n == 0) {
+            n = 1; continue;
+        }
+        if (head_name_is(g, "Power") && g->data.function.arg_count == 2) {
+            Expr* base = g->data.function.args[0];
+            Expr* e    = g->data.function.args[1];
+            if (head_name_is(base, "Log") && base->data.function.arg_count == 1 &&
+                base->data.function.args[0]->type == EXPR_SYMBOL &&
+                base->data.function.args[0]->data.symbol == x->data.symbol &&
+                e->type == EXPR_INTEGER && e->data.integer >= 1 && n == 0) {
+                n = e->data.integer; continue;
+            }
+        }
+        if (contains_symbol_name(g, "Log")) { ok = false; break; }   /* other Log -> out of scope */
+        R = Tms(R, cp(g));
+    }
+    if (!ok || n < 1) { expr_free(R); return NULL; }
+
+    /* Partial-fraction R over x (Together first so a product of factors becomes
+     * a single fraction Apart can decompose). */
+    Expr* Rtog = ev1("Together", R);          /* consumes R */
+    Expr* Ap = Rtog ? ev2("Apart", Rtog, cp((Expr*)x)) : NULL;
+    if (!Ap) return NULL;
+
+    Expr* s = mk_sym("Integrate`RL`s");
+    size_t nt; Expr** terms; Expr* single[1];
+    if (head_name_is(Ap, "Plus")) { nt = Ap->data.function.arg_count; terms = Ap->data.function.args; }
+    else { nt = 1; single[0] = Ap; terms = single; }
+
+    Expr* M = mk_int(0);
+    bool good = true;
+    for (size_t t = 0; t < nt && good; t++) {
+        Expr* v = ratlog_term(terms[t], x, s, assumptions);
+        if (!v) { good = false; break; }
+        M = Pls(M, v);
+    }
+    expr_free(Ap);
+    if (!good) { expr_free(M); expr_free(s); return NULL; }
+
+    /* Int R Log^n = M^(n)(1) = n! * [coefficient of (s-1)^n in M(s)].  The
+     * SeriesCoefficient handles the removable singularity of M at s = 1 (where
+     * the individual reflection factors Pi/Sin[Pi s] blow up but the residue sum
+     * stays analytic) more robustly than a repeated-derivative Limit. */
+    Expr* spec = expr_new_function(expr_new_symbol("List"),
+        (Expr*[]){ cp(s), mk_int(1), mk_int(n) }, 3);
+    Expr* coef = eval_take(mk_fn2("SeriesCoefficient", M, spec));   /* consumes M */
+    Expr* ats1 = Tms(mk_fn1("Factorial", mk_int(n)), coef);
+    expr_free(s);
+
+    Expr* value = fullsimp2(ats1, assumptions);
+    if (!value || !is_finite_value(value) || contains_symbol_name(value, "Integrate`RL`s")) {
+        if (value) expr_free(value);
+        return NULL;
+    }
+    return value;
+}
+
+/* -------------------------------------------------------------------------
  * Public entry point.
  * ---------------------------------------------------------------------- */
 Expr* integrate_ramanujan_try(Expr* f, Expr* x, Expr* a, Expr* b,
@@ -1300,6 +1571,18 @@ Expr* integrate_ramanujan_try(Expr* f, Expr* x, Expr* a, Expr* b,
      * individually divergent, so the term-by-term Mellin path below cannot). */
     Expr* fru = frullani_try(f, x, assumptions);
     if (fru) return fru;
+
+    /* Sin[r x]^k / x^m pre-pass (the ssp family): the constant TrigReduce term is
+     * scaleless and the individual cos/sin terms straddle a Gamma pole, so this
+     * too must be summed as a whole rather than through the term loop below. */
+    Expr* ssp = integrate_sinpowmono_try(f, x, a, b, assumptions);
+    if (ssp) return ssp;
+
+    /* R(x) Log[x]^n pre-pass (log*rat): the partial fractions of R Log^n are
+     * individually divergent, so the Mellin-derivative M^(n)(1) is summed as a
+     * whole rather than through the term loop. */
+    Expr* rlp = integrate_ratlogpow_try(f, x, a, b, assumptions);
+    if (rlp) return rlp;
 
     Expr* fr = reduce_to_hypergeometric(f);
     if (!fr) return NULL;
@@ -1378,7 +1661,93 @@ Expr* builtin_integrate_ramanujan(Expr* res) {
     return integrate_ramanujan_try(f, x, a, b, assumptions);
 }
 
+/* Shared spec parse for the half-line builtins: head[f, {x,0,Inf}, Assumptions].
+ * Returns false on malformed input; on success sets the borrowed pointers. */
+static bool half_line_parse(Expr* res, Expr** f, Expr** x, Expr** a, Expr** b,
+                            Expr** assumptions) {
+    if (res->type != EXPR_FUNCTION) return false;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 2) return false;
+    *f = res->data.function.args[0];
+    Expr* spec = res->data.function.args[1];
+    if (!head_name_is(spec, "List") || spec->data.function.arg_count != 3) return false;
+    *x = spec->data.function.args[0];
+    *a = spec->data.function.args[1];
+    *b = spec->data.function.args[2];
+    if ((*x)->type != EXPR_SYMBOL) return false;
+    *assumptions = NULL;
+    for (size_t t = 2; t < argc; t++) {
+        Expr* opt = res->data.function.args[t];
+        if (opt->type == EXPR_FUNCTION && opt->data.function.arg_count == 2 &&
+            opt->data.function.head->type == EXPR_SYMBOL &&
+            (opt->data.function.head->data.symbol == SYM_Rule ||
+             opt->data.function.head->data.symbol == SYM_RuleDelayed)) {
+            Expr* lhs = opt->data.function.args[0];
+            if (lhs->type == EXPR_SYMBOL && strcmp(lhs->data.symbol, "Assumptions") == 0) {
+                *assumptions = opt->data.function.args[1];
+                continue;
+            }
+        }
+        return false;
+    }
+    return true;
+}
+
+Expr* builtin_integrate_sinpowmono(Expr* res) {
+    Expr *f, *x, *a, *b, *as;
+    if (!half_line_parse(res, &f, &x, &a, &b, &as)) return NULL;
+    return integrate_sinpowmono_try(f, x, a, b, as);
+}
+
+Expr* builtin_integrate_oscpower(Expr* res) {
+    Expr *f, *x, *a, *b, *as;
+    if (!half_line_parse(res, &f, &x, &a, &b, &as)) return NULL;
+    /* Cos/Sin[b x^n] is closed by the Mellin engine's monomial-substitution
+     * path; this builtin is the named entry point / Method for that family. */
+    return integrate_ramanujan_try(f, x, a, b, as);
+}
+
+Expr* builtin_integrate_ratlogpow(Expr* res) {
+    Expr *f, *x, *a, *b, *as;
+    if (!half_line_parse(res, &f, &x, &a, &b, &as)) return NULL;
+    return integrate_ratlogpow_try(f, x, a, b, as);
+}
+
 void integrate_ramanujan_init(void) {
+    symtab_add_builtin("Integrate`SinPowerMonomial", builtin_integrate_sinpowmono);
+    symtab_get_def("Integrate`SinPowerMonomial")->attributes |=
+        ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_set_docstring("Integrate`SinPowerMonomial",
+        "Integrate`SinPowerMonomial[f, {x, 0, Infinity}] evaluates Sin[r x]^k / "
+        "x^m over the half line (the ssp family): TrigReduce lowers the power to "
+        "a sum of cos/sin harmonics and the analytically-continued Mellin "
+        "transforms of cos and sin (reflection form, so the Gamma pole cancels "
+        "against the trig zero) are summed.  Returns unevaluated when the "
+        "integrand is not of this form or the result is not finite (divergent).");
+
+    symtab_add_builtin("Integrate`RationalLog", builtin_integrate_ratlogpow);
+    symtab_get_def("Integrate`RationalLog")->attributes |=
+        ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_set_docstring("Integrate`RationalLog",
+        "Integrate`RationalLog[f, {x, 0, Infinity}] evaluates R(x) Log[x]^n over "
+        "the half line for a proper rational R whose poles all lie on the "
+        "negative real axis: the Mellin transform M(s) = Integrate[x^(s-1) R(x)] "
+        "is summed over the partial fractions of R (each pole x = -a contributing "
+        "a^(s-p) Beta[s, p-s]) and the integral is the n-th s-derivative of M at "
+        "s = 1.  Returns unevaluated when R has a positive-real / complex pole, is "
+        "improper, or the result is not finite.");
+
+    symtab_add_builtin("Integrate`OscillatoryPower", builtin_integrate_oscpower);
+    symtab_get_def("Integrate`OscillatoryPower")->attributes |=
+        ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_set_docstring("Integrate`OscillatoryPower",
+        "Integrate`OscillatoryPower[f, {x, 0, Infinity}] evaluates the Fresnel-"
+        "type oscillatory integrals Cos[b x^n] and Sin[b x^n] over the half line "
+        "to Gamma[1/n]/(n b^(1/n)) {Cos,Sin}[Pi/(2 n)] (b > 0, n > 1).  It is the "
+        "named entry point for this family, which the Mellin / Ramanujan engine "
+        "closes via its monomial-substitution path.  Returns unevaluated "
+        "otherwise.");
+
     symtab_add_builtin("Integrate`RamanujanMasterTheorem",
                        builtin_integrate_ramanujan);
     symtab_get_def("Integrate`RamanujanMasterTheorem")->attributes |=
