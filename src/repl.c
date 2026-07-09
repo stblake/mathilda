@@ -281,6 +281,7 @@ void repl_loop(void) {
 #endif
 
 #include "core.h"
+#include "loadmodule.h"
 
 /* =====================================================================
  * Minimal NDJSON pipe-mode protocol
@@ -551,17 +552,12 @@ int main(void) {
     symtab_init();
     core_init();
 
-    /* Load internal init.m silently if it exists. */
-    FILE* check_fp = fopen("./src/internal/init.m", "r");
-    if (check_fp) {
-        fclose(check_fp);
-        Expr* init_call = parse_expression("Get[\"./src/internal/init.m\"]");
-        if (init_call) {
-            Expr* res = evaluate(init_call);
-            expr_free(init_call);
-            if (res) expr_free(res);
-        }
-    }
+    /* Load the internal bootstrap (init.m). Path resolution is independent of
+     * the current working directory (see mathilda_load_module), so a relocated
+     * or installed binary still finds its bundled src/internal tree. If it
+     * cannot be located the loader prints a LoadModule::nofile diagnostic —
+     * far better than the previous silent load of a non-functional kernel. */
+    mathilda_load_module("init.m");
 
     if (pipe_mode) {
         pipe_mode_loop();

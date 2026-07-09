@@ -42,6 +42,7 @@
 #include "symtab.h"
 #include "attr.h"
 #include "internal.h"
+#include "loadmodule.h"
 #include "sym_intern.h"
 #include "sym_names.h"
 #include "series.h"
@@ -275,32 +276,28 @@ static int crc_depth = 0;
 static bool crc_load_attempted = false;
 static bool crc_load_succeeded  = false;
 
-/* Try Get["src/internal/CRCMathTablesIntegrals.m"]; tolerate the same
- * relative-then-fallback pattern test_integrals.c uses so it works
- * from any CWD with a sane layout. */
+/* Load the CRC integral table lazily. Path resolution (mathilda_resolve_
+ * internal) is CWD-independent and matches what LoadModule uses, so this works
+ * from a relocated/installed binary as well as from the repo root or tests/. */
 static void crc_lazy_load(void) {
     if (crc_load_attempted) return;
     crc_load_attempted = true;
 
-    const char* paths[] = {
-        "Get[\"src/internal/CRCMathTablesIntegrals.m\"]",
-        "Get[\"../src/internal/CRCMathTablesIntegrals.m\"]",
-        "Get[\"../../src/internal/CRCMathTablesIntegrals.m\"]",
-        NULL
-    };
-    for (const char** p = paths; *p; p++) {
-        Expr* parsed = parse_expression(*p);
-        if (!parsed) continue;
-        Expr* res = evaluate(parsed);
-        expr_free(parsed);
-        bool failed = res && res->type == EXPR_SYMBOL
-                          && strcmp(res->data.symbol, "$Failed") == 0;
-        if (res) expr_free(res);
-        if (!failed) { crc_load_succeeded = true; return; }
+    char path[2048];
+    if (!mathilda_resolve_internal("CRCMathTablesIntegrals.m",
+                                   path, sizeof(path))) {
+        fprintf(stderr,
+            "Integrate`CRCTable::nofile: cannot locate "
+            "src/internal/CRCMathTablesIntegrals.m on disk.\n");
+        return;
     }
-    fprintf(stderr,
-        "Integrate`CRCTable::nofile: cannot locate "
-        "src/internal/CRCMathTablesIntegrals.m on disk.\n");
+
+    int opened = 0;
+    Expr* res = mathilda_run_file(path, &opened);
+    bool failed = res && res->type == EXPR_SYMBOL
+                      && strcmp(res->data.symbol, "$Failed") == 0;
+    if (res) expr_free(res);
+    if (opened && !failed) crc_load_succeeded = true;
 }
 
 static Expr* try_crctable(Expr* f, Expr* x) {

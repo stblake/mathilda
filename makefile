@@ -35,6 +35,22 @@ endif
 
 LDFLAGS = $(READLINE_LIBS) -L/usr/local/lib -lgmp -lm
 
+# Site-specific link libraries, appended verbatim to the link line. Some
+# distributions need extra libraries the autodetection can't infer — e.g. on
+# certain Ubuntu setups a statically-linked raylib pulls in `-lX11`, or a
+# minimal LAPACKE package needs `-llapack` spelled out. Pass them on the
+# command line rather than editing this file:
+#   make EXTRA_LIBS="-llapack -lX11"
+EXTRA_LIBS ?=
+
+# Optional compile-time install prefix. When set, the kernel also looks for its
+# bundled src/internal tree under $(PREFIX)/share/mathilda/internal, so a binary
+# installed to $(PREFIX)/bin finds its modules with no MATHILDA_HOME needed:
+#   make PREFIX=/usr/local && cp Mathilda /usr/local/bin
+ifdef PREFIX
+CFLAGS += -DMATHILDA_PREFIX=\"$(PREFIX)\"
+endif
+
 # GMP-ECM for advanced integer factorisation (facint.c: ecm_init/ecm_factor via
 # the public ecm.h). System library only — no longer vendored as a submodule.
 # GMP-ECM ships no pkg-config .pc file, so detection is a compile+link probe
@@ -198,7 +214,7 @@ CMAKE_TEST_BINARIES = comparisons_tests eval_tests expr_tests match_tests match_
 all: $(TARGET)
 
 $(TARGET): $(OBJ)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(EXTRA_LIBS)
 
 $(SRC_DIR)/%.o: $(SRC_DIR)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
