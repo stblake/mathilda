@@ -263,6 +263,39 @@ static void test_bose_fermi(void) {
         "Integrate`RamanujanMasterTheorem");
 }
 
+/* Symbolic fugacity: the general Bose integral 1/(z^-1 e^x - 1) with a SYMBOLIC
+ * z admitted by the interval-bound gate when the Assumptions confine gamma' to
+ * (-1, 1].  Int_0^Inf x^(s-1)/(z^-1 e^x - 1) dx = Gamma(s) PolyLog(s, z). */
+static void test_symbolic_fugacity(void) {
+    /* The reported case: fugacity form 1/(z^-1 e^x - 1) -> Gamma(s) PolyLog(s, z),
+     * under Re[s] > 1 && 0 < z < 1 (gamma' = -z is proved into (-1, 0) by the
+     * interval gate; the assumption engine cannot discharge -1 <= -z <= 1). */
+    assert_cond_closes(
+        "Integrate[x^(s-1)/(z^-1 Exp[x]-1), {x,0,Infinity}, "
+        "Method -> \"RamanujanMasterTheorem\", Assumptions -> Re[s] > 1 && 0 < z < 1]",
+        "Gamma[s] PolyLog[s, z]", "Re[s] > 1 && 0 < z < 1");
+    /* Equivalent denominator form e^x - z (A_eff = 1 constant): the extra 1/z. */
+    assert_cond_closes(
+        "Integrate[x^(s-1)/(Exp[x]-z), {x,0,Infinity}, "
+        "Method -> \"RamanujanMasterTheorem\", Assumptions -> Re[s] > 1 && 0 < z < 1]",
+        "Gamma[s] PolyLog[s, z]/z", "Re[s] > 1 && 0 < z < 1");
+    /* Concrete fugacity, symbolic order: 2 Gamma(s) PolyLog(s, 1/2). */
+    assert_cond_closes(
+        "Integrate[x^(s-1)/(Exp[x]-1/2), {x,0,Infinity}, "
+        "Method -> \"RamanujanMasterTheorem\", Assumptions -> Re[s] > 1]",
+        "2 Gamma[s] PolyLog[s, 1/2]", "Re[s] > 1");
+    /* Soundness of the interval gate: with NO bound on z it cannot prove the
+     * fugacity is admissible -> declines (never a wrong value). */
+    assert_head_unevaluated(
+        "Integrate`RamanujanMasterTheorem[x^(s-1)/(z^-1 Exp[x]-1), {x,0,Infinity}]",
+        "Integrate`RamanujanMasterTheorem");
+    /* Provably out-of-range fugacity (z > 2 => |gamma'| > 1, divergent) -> declines. */
+    assert_head_unevaluated(
+        "Integrate`RamanujanMasterTheorem[x^(s-1)/(Exp[x]-z), {x,0,Infinity}, "
+        "Assumptions -> Re[s] > 1 && z > 2]",
+        "Integrate`RamanujanMasterTheorem");
+}
+
 /* Frullani integrals: Integrate[(f(a x) - f(b x))/x] = (f(0) - f(Inf)) Log(b/a). */
 static void test_frullani(void) {
     /* Classic exp Frullani. */
@@ -331,6 +364,7 @@ void test_integrate_ramanujan(void) {
     TEST(test_polylog);
     TEST(test_parametric_differentiation);
     TEST(test_bose_fermi);
+    TEST(test_symbolic_fugacity);
     TEST(test_frullani);
     TEST(test_log_weighted);
     TEST(test_declines_cleanly);

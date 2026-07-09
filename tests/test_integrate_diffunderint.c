@@ -166,6 +166,26 @@ static void test_declines_cleanly(void) {
     assert_head_unevaluated(
         "Integrate`DiffUnderInt[Exp[a x]/(Exp[x]-1), {x, -Infinity, Infinity}, "
         "Assumptions -> 0 < a < 1]", "Integrate`DiffUnderInt");
+    /* Half-line exponential-geometric (fugacity) integrand with two parameters:
+     * differentiating w.r.t. z gives an inner integrand that is NOT rational in x
+     * (it still carries e^x and x^(s-1)).  Feeding it to rational_halfline_general's
+     * Apart[g, x] used to drive a non-terminating rewrite (the query ran until
+     * ^C).  The is_rational_in_x gate now declines it up front -- fast and
+     * unevaluated; this is Mellin/Ramanujan territory, not a Feynman target. */
+    assert_head_unevaluated(
+        "Integrate`DiffUnderInt[x^(s-1)/(z^-1 Exp[x]-1), {x, 0, Infinity}, "
+        "Assumptions -> Re[s] > 1 && 0 < z < 1]", "Integrate`DiffUnderInt");
+}
+
+/* The reported case, end to end: the FULL Automatic cascade must reach the
+ * Ramanujan kernel (not hang in DiffUnderInt) and return the general Bose
+ * integral Gamma(s) PolyLog(s, z). */
+static void test_fugacity_cascade(void) {
+    assert_eval_eq(
+        "Simplify[((Integrate[x^(s-1)/(z^-1 Exp[x]-1), {x, 0, Infinity}, "
+        "Assumptions -> Re[s] > 1 && z < 1 && z > 0]) "
+        "/. ConditionalExpression[cv_, cc_] :> cv) - Gamma[s] PolyLog[s, z], "
+        "Re[s] > 1 && 0 < z < 1]", "0", 0);
 }
 
 void test_integrate_diffunderint(void) {
@@ -180,6 +200,7 @@ void test_integrate_diffunderint(void) {
     TEST(test_gaussian);
     TEST(test_routing);
     TEST(test_declines_cleanly);
+    TEST(test_fugacity_cascade);
 
     printf("All Integrate DiffUnderInt tests passed!\n");
 }

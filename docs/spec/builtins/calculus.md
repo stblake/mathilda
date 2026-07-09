@@ -672,7 +672,12 @@ whose Laplace image is non-even), and the **Gaussian moment** family
 parameter back-integration `∫ c e^{-k p²} dp` is supplied directly as an `Erf`
 (the engine does not produce it). Forms outside these families (finite-period
 trig, piecewise/`Min`-`Max` results, the Sin-Gaussian Dawson/Erfi moment) are
-declined — the integral is returned unevaluated, fast, never a wrong value.
+declined — the integral is returned unevaluated, fast, never a wrong value. The
+two rational half-line families gate on the inner integrand being a **rational
+function of `x`**: a differentiated exp-geometric/Mellin form (still carrying
+`e^x` or `x^{s-1}`) is not, and feeding it to `Apart[·, x]` otherwise drives a
+non-terminating rewrite — so such forms are declined up front and left for the
+Ramanujan/Mellin method.
 
 Worked examples that close:
 `Integrate[(x^a-1)/Log[x], {x,0,1}]` → `Log[1+a]`;
@@ -713,7 +718,14 @@ integrating term by term lands on `PolyLog`. Its two headline specialisations ar
 Debye; the denominator zero at `x=0` tightens the strip to `Re s>1`) and `γ=+1`
 **Fermi–Dirac** `∫₀^∞ x^{s-1}/(e^{cx}+1) = c^{-s} Γ(s) η(s)` (emitted as
 `-Γ(s) PolyLog(s,-1)`, which stays finite at `s=1` where `(1-2^{1-s})ζ(s)` would
-be `0·∞`).
+be `0·∞`). A **symbolic fugacity** is admitted too — the general Bose integral
+`∫₀^∞ x^{s-1}/(z^{-1} e^x - 1) dx = Γ(s) PolyLog(s, z)` closes for a symbolic `z`
+whenever the `Assumptions` confine `γ' = -z` to `(-1, 1]`. The built-in
+assumption engine only discharges syntactic matches (it proves neither `1/z>0`
+nor `-1≤-z≤1` from `0<z<1`), so the `-1<γ'≤1` gate is decided by a small **sound
+interval-bound prover** over the parameter box read off the `Assumptions`:
+interval arithmetic yields a guaranteed enclosure, so the gate never accepts an
+inadmissible fugacity (an unbounded or out-of-range `z` simply declines).
 
 Four operational layers extend the table:
 

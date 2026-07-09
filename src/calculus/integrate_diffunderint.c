@@ -203,6 +203,34 @@ static bool has_radical_of_x(const Expr* e, const Expr* x) {
     return false;
 }
 
+/* True iff `e` is a RATIONAL function of x: x appears only inside Plus/Times and
+ * as the base of an INTEGER-exponent Power.  A transcendental kernel of x
+ * (Exp[x] = Power[E, x], Log[x], Sin[x], ...) or an x-dependent / non-integer
+ * exponent (a^x, x^(s-1), Sqrt[x]) is NOT rational.  The rational half-line
+ * families below feed g to Apart[g, x], which is only meaningful -- and only
+ * terminates cheaply -- for a rational g; a symbolic-exponent or exp-geometric
+ * integrand (Mellin/Ramanujan territory) otherwise drives Apart into an
+ * expensive non-terminating rewrite.  Conservative: an x-dependent head we do
+ * not model returns false (decline), never a spurious accept. */
+static bool is_rational_in_x(const Expr* e, const Expr* x) {
+    if (!e || !contains_symbol(e, x)) return true;         /* x-free coefficient */
+    if (e->type == EXPR_SYMBOL) return true;               /* the bare x itself */
+    if (e->type != EXPR_FUNCTION) return true;
+    if (head_name_is(e, "Plus") || head_name_is(e, "Times")) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!is_rational_in_x(e->data.function.args[i], x)) return false;
+        return true;
+    }
+    if (head_name_is(e, "Power") && e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        Expr* ex   = e->data.function.args[1];
+        if (contains_symbol(ex, x)) return false;          /* a^x, x^x */
+        if (ex->type != EXPR_INTEGER) return false;        /* x^(s-1), Sqrt[x] */
+        return is_rational_in_x(base, x);
+    }
+    return false;                                          /* Exp/Log/Sin/... of x */
+}
+
 /* True unless `e` carries a non-finite / undecided marker (infinities,
  * Indeterminate, an unresolved Integrate, ...): the base value and the
  * antiderivative-at-base must be genuine finite closed forms. */
@@ -778,6 +806,7 @@ static bool real_positive(const Expr* e, const ParamBound* pb, size_t np) {
 static Expr* rational_halfline(const Expr* g, const Expr* x,
                                const ParamBound* pb, size_t np,
                                const Expr* assumptions) {
+    if (!is_rational_in_x(g, x)) return NULL;   /* not our family (see is_rational_in_x) */
     /* Evenness: g(x) - g(-x) === 0. */
     Expr* negx = mk_fn2("Times", mk_int(-1), expr_copy((Expr*)x));
     Expr* gneg = subst(g, x, negx);
@@ -878,6 +907,7 @@ static Expr* coeff_of(const Expr* e, const Expr* v, long k) {
 static Expr* rational_halfline_general(const Expr* g, const Expr* s,
                                        const ParamBound* pb, size_t np,
                                        const Expr* assumptions) {
+    if (!is_rational_in_x(g, s)) return NULL;   /* rational-in-s only; else Apart hangs */
     Expr* ap = ev2("Apart", expr_copy((Expr*)g), expr_copy((Expr*)s));
     if (!ap) return NULL;
 

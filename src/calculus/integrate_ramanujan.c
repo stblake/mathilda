@@ -49,6 +49,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <math.h>
 
 /* -------------------------------------------------------------------------
  * Small expression-construction / evaluation helpers (mirrors the idiom in
@@ -556,6 +557,222 @@ static bool rec_polylog(const Expr* K, const Expr* x, const Expr* sv,
     return true;
 }
 
+/* -------------------------------------------------------------------------
+ * Interval-arithmetic bound prover -- the assumption gate for a SYMBOLIC
+ * fugacity in the exponential-geometric kernel below.
+ *
+ * The built-in assumption engine (Simplify[pred, as]) discharges only a
+ * predicate that syntactically matches an assumption atom: from `0 < z < 1` it
+ * proves neither `1/z > 0` (reciprocal sign) nor `-1 <= -z <= 1` (strict ->
+ * nonstrict + transitivity).  So no reformulation of prove_true closes the
+ * general Bose integral 1/(z^-1 e^x - 1) with a symbolic z.
+ *
+ * Instead we prove the two sign / interval conditions on A_eff and gamma' by a
+ * small, sound interval evaluation over the parameter box read off the
+ * Assumptions.  Interval arithmetic yields a guaranteed ENCLOSURE of the true
+ * value set, so a proof is never a false positive; a dependency (a symbol
+ * occurring more than once) only widens the enclosure, which can at worst make
+ * the gate decline -- it can never wrongly accept.  Endpoint openness is
+ * tracked (and propagated conservatively) so a strict bound `gamma' > -1` --
+ * needed to exclude the Bose boundary z = 1 where the convergence strip changes
+ * -- can be certified from an open assumption box.
+ * ---------------------------------------------------------------------- */
+
+typedef struct { double lo, hi; bool lo_open, hi_open; } Iv;
+
+/* Machine value of a concrete numeric expression (Integer/Real/Rational/...),
+ * else false for a symbolic one. */
+static bool num_dbl(const Expr* e, double* out) {
+    Expr* n = ev1("N", cp(e));
+    bool ok = false;
+    if (n) {
+        if (n->type == EXPR_INTEGER) { *out = (double)n->data.integer; ok = true; }
+        else if (n->type == EXPR_REAL) { *out = n->data.real; ok = true; }
+        expr_free(n);
+    }
+    return ok;
+}
+
+/* Tighten `iv` by one binary relation.  `op` is a comparison head; the relation
+ * is (sym op c) when sym_on_left, else (c op sym). */
+static void iv_tighten(Iv* iv, const char* op, double c, bool sym_on_left) {
+    bool lt = (strcmp(op, "Less") == 0 || strcmp(op, "LessEqual") == 0);
+    bool gt = (strcmp(op, "Greater") == 0 || strcmp(op, "GreaterEqual") == 0);
+    bool strict = (strcmp(op, "Less") == 0 || strcmp(op, "Greater") == 0);
+    if (!lt && !gt) return;
+    bool upper = sym_on_left ? lt : gt;              /* sym < c => c bounds above */
+    if (upper) {
+        if (c < iv->hi) { iv->hi = c; iv->hi_open = strict; }
+        else if (c == iv->hi && strict) iv->hi_open = true;
+    } else {
+        if (c > iv->lo) { iv->lo = c; iv->lo_open = strict; }
+        else if (c == iv->lo && strict) iv->lo_open = true;
+    }
+}
+
+/* Read the tightest box [lo, hi] the Assumptions impose on the bare symbol
+ * `sym` (And/List conjunctions, chained Inequality, the four binary relations).
+ * Returns the box; an absent bound stays +-inf (open at infinity). */
+static Iv sym_bound(const Expr* fact, const char* sym) {
+    Iv iv = { -HUGE_VAL, HUGE_VAL, true, true };
+    if (!fact || fact->type != EXPR_FUNCTION) return iv;
+    const Expr* head = fact->data.function.head;
+    if (head->type != EXPR_SYMBOL) return iv;
+    const char* h = head->data.symbol;
+    size_t ac = fact->data.function.arg_count;
+    if (strcmp(h, "And") == 0 || strcmp(h, "List") == 0) {
+        for (size_t i = 0; i < ac; i++) {
+            Iv sub = sym_bound(fact->data.function.args[i], sym);
+            if (sub.lo > iv.lo) { iv.lo = sub.lo; iv.lo_open = sub.lo_open; }
+            else if (sub.lo == iv.lo && sub.lo_open) iv.lo_open = true;
+            if (sub.hi < iv.hi) { iv.hi = sub.hi; iv.hi_open = sub.hi_open; }
+            else if (sub.hi == iv.hi && sub.hi_open) iv.hi_open = true;
+        }
+        return iv;
+    }
+    if (strcmp(h, "Inequality") == 0 && ac >= 3) {
+        for (size_t i = 0; i + 2 < ac; i += 2) {
+            Expr* L = fact->data.function.args[i];
+            Expr* opE = fact->data.function.args[i + 1];
+            Expr* R = fact->data.function.args[i + 2];
+            double c;
+            if (opE->type != EXPR_SYMBOL) continue;
+            if (L->type == EXPR_SYMBOL && strcmp(L->data.symbol, sym) == 0 && num_dbl(R, &c))
+                iv_tighten(&iv, opE->data.symbol, c, true);
+            else if (R->type == EXPR_SYMBOL && strcmp(R->data.symbol, sym) == 0 && num_dbl(L, &c))
+                iv_tighten(&iv, opE->data.symbol, c, false);
+        }
+        return iv;
+    }
+    if (ac == 2) {
+        Expr* L = fact->data.function.args[0];
+        Expr* R = fact->data.function.args[1];
+        double c;
+        if (L->type == EXPR_SYMBOL && strcmp(L->data.symbol, sym) == 0 && num_dbl(R, &c))
+            iv_tighten(&iv, h, c, true);
+        else if (R->type == EXPR_SYMBOL && strcmp(R->data.symbol, sym) == 0 && num_dbl(L, &c))
+            iv_tighten(&iv, h, c, false);
+    }
+    return iv;
+}
+
+static bool iv_finite(double v) { return v > -HUGE_VAL && v < HUGE_VAL; }
+
+/* c = a * b.  When one operand is a nonzero exact point, openness carries
+ * exactly; otherwise (both genuine intervals) endpoints are marked CLOSED --
+ * a sound over-approximation of attainment (never claims a strict bound it
+ * cannot guarantee). */
+static bool iv_mul(Iv a, Iv b, Iv* out) {
+    bool a_pt = (a.lo == a.hi && !a.lo_open && !a.hi_open);
+    bool b_pt = (b.lo == b.hi && !b.lo_open && !b.hi_open);
+    if (a_pt || b_pt) {
+        Iv pt = a_pt ? a : b, iv = a_pt ? b : a;
+        double k = pt.lo;
+        if (k == 0.0) { out->lo = out->hi = 0.0; out->lo_open = out->hi_open = false; return true; }
+        if (k > 0) { out->lo = k * iv.lo; out->hi = k * iv.hi;
+                     out->lo_open = iv.lo_open; out->hi_open = iv.hi_open; }
+        else       { out->lo = k * iv.hi; out->hi = k * iv.lo;
+                     out->lo_open = iv.hi_open; out->hi_open = iv.lo_open; }
+        return true;
+    }
+    if (!iv_finite(a.lo) || !iv_finite(a.hi) || !iv_finite(b.lo) || !iv_finite(b.hi))
+        return false;
+    double c[4] = { a.lo * b.lo, a.lo * b.hi, a.hi * b.lo, a.hi * b.hi };
+    double mn = c[0], mx = c[0];
+    for (int i = 1; i < 4; i++) { if (c[i] < mn) mn = c[i]; if (c[i] > mx) mx = c[i]; }
+    out->lo = mn; out->hi = mx; out->lo_open = out->hi_open = false;
+    return true;
+}
+
+/* c = a + b.  The sum-min is attained only when both mins are attained, so an
+ * open endpoint on either side makes the sum endpoint open (sound even under a
+ * shared symbol: a > a.lo forces a + b > a.lo + b.lo). */
+static bool iv_add(Iv a, Iv b, Iv* out) {
+    out->lo = a.lo + b.lo; out->hi = a.hi + b.hi;
+    out->lo_open = a.lo_open || b.lo_open;
+    out->hi_open = a.hi_open || b.hi_open;
+    return true;
+}
+
+/* out = 1 / r.  Requires r sign-definite away from 0; 1/x is decreasing on each
+ * sign, so 1/[lo,hi] = [1/hi, 1/lo] with openness swapped (0 -> +-inf). */
+static bool iv_recip(Iv r, Iv* out) {
+    bool pos = (r.lo > 0.0) || (r.lo == 0.0 && r.lo_open);
+    bool neg = (r.hi < 0.0) || (r.hi == 0.0 && r.hi_open);
+    if (!pos && !neg) return false;                  /* straddles 0 */
+    out->lo = (r.hi == 0.0) ? -HUGE_VAL : (iv_finite(r.hi) ? 1.0 / r.hi : 0.0);
+    out->hi = (r.lo == 0.0) ?  HUGE_VAL : (iv_finite(r.lo) ? 1.0 / r.lo : 0.0);
+    out->lo_open = r.hi_open;
+    out->hi_open = r.lo_open;
+    return true;
+}
+
+/* Sound interval enclosure of `e` over the Assumptions box.  Supports numeric
+ * constants, bounded symbols, Plus, Times, and Power[base, +-1]; declines
+ * (returns false) on anything else -- which only forfeits a proof, never
+ * fabricates one. */
+static bool iv_eval(const Expr* e, const Expr* as, Iv* out) {
+    double v;
+    if (num_dbl(e, &v)) { out->lo = out->hi = v; out->lo_open = out->hi_open = false; return true; }
+    if (e->type == EXPR_SYMBOL) {
+        Iv b = sym_bound(as, e->data.symbol);
+        if (!iv_finite(b.lo) && !iv_finite(b.hi)) return false;    /* unbounded */
+        *out = b;
+        return true;
+    }
+    if (head_name_is(e, "Power") && e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        Expr* ex = e->data.function.args[1];
+        if (ex->type != EXPR_INTEGER) return false;
+        long n = (long)ex->data.integer;
+        Iv b;
+        if (!iv_eval(base, as, &b)) return false;
+        if (n == 1) { *out = b; return true; }
+        if (n == -1) return iv_recip(b, out);
+        return false;                                              /* |n| >= 2: decline */
+    }
+    if (head_name_is(e, "Times")) {
+        Iv acc = { 1.0, 1.0, false, false };
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            Iv f;
+            if (!iv_eval(e->data.function.args[i], as, &f)) return false;
+            if (!iv_mul(acc, f, &acc)) return false;
+        }
+        *out = acc; return true;
+    }
+    if (head_name_is(e, "Plus")) {
+        Iv acc = { 0.0, 0.0, false, false };
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            Iv t;
+            if (!iv_eval(e->data.function.args[i], as, &t)) return false;
+            if (!iv_add(acc, t, &acc)) return false;
+        }
+        *out = acc; return true;
+    }
+    return false;
+}
+
+/* Prove `e > 0` everywhere on the Assumptions box (lower enclosure end > 0). */
+static bool iv_prove_pos(const Expr* e, const Expr* as) {
+    Iv v;
+    return iv_eval(e, as, &v) && ((v.lo > 0.0) || (v.lo == 0.0 && v.lo_open));
+}
+
+/* Prove the fugacity gate -1 < e <= 1 on the box: the lower bound is STRICT
+ * (exclude the Bose boundary gamma' = -1, whose convergence strip differs),
+ * the upper is nonstrict (the Fermi boundary gamma' = 1 keeps Re s > 0). */
+static bool iv_prove_fugacity(const Expr* e, const Expr* as) {
+    Iv v;
+    if (!iv_eval(e, as, &v)) return false;
+    bool lower = (v.lo > -1.0) || (v.lo == -1.0 && v.lo_open);
+    return lower && (v.hi <= 1.0);
+}
+
+/* A_eff > 0: engine proof, else the interval gate (symbolic fugacity). */
+static bool prove_pos(const Expr* e, Expr* as) {
+    return prove_true(Gt(cp(e), mk_int(0)), as) || iv_prove_pos(e, as);
+}
+
 /* 1/(A e^(c x) + gamma), A e^(c0) > 0, c > 0, gamma real with -1 <= gamma' <= 1
  * (gamma' = gamma / A_eff, A_eff = A e^(c0)):  the exponential-geometric kernel of
  * the Bose-Einstein / Fermi-Dirac / general-fugacity integrals.  With u = e^(-c x),
@@ -572,7 +789,7 @@ static bool rec_polylog(const Expr* K, const Expr* x, const Expr* sv,
  * used to land the Bose case on the canonical Zeta head (Simplify does not do this
  * for a symbolic sv). */
 static bool rec_expgeom(const Expr* K, const Expr* x, const Expr* sv,
-                        Expr** M, Expr** P) {
+                        Expr* assumptions, Expr** M, Expr** P) {
     if (!head_name_is(K, "Power") || K->data.function.arg_count != 2) return false;
     Expr* base = K->data.function.args[0];
     Expr* ex   = K->data.function.args[1];
@@ -613,17 +830,20 @@ static bool rec_expgeom(const Expr* K, const Expr* x, const Expr* sv,
 
     Expr* Aeff = simp(Tms(cp(A), ExpE(cp(c0))));               /* A_eff = A e^(c0) */
     expr_free(A); expr_free(c0);
-    if (!prove_true(Gt(cp(c1), mk_int(0)), NULL) ||
-        !prove_true(Gt(cp(Aeff), mk_int(0)), NULL)) {
+    if (!prove_pos(c1, assumptions) || !prove_pos(Aeff, assumptions)) {
         expr_free(c1); expr_free(Aeff); expr_free(gamma); return false;
     }
 
     Expr* gp = simp(Tms(cp(gamma), Pw(cp(Aeff), mk_int(-1))));  /* gamma' = gamma/A_eff */
     expr_free(gamma);
     /* Real gamma' with -1 <= gamma' <= 1 (a complex gamma' leaves the inequalities
-     * unevaluated, so prove_true is False -> declined). */
+     * unevaluated, so prove_true is False -> declined).  A concrete gamma' is
+     * discharged by the engine; a SYMBOLIC fugacity is admitted by the interval
+     * gate when the Assumptions bound it into (-1, 1] (e.g. 0 < z < 1 proves the
+     * general Bose integral 1/(z^-1 e^x - 1) -> Gamma[s] PolyLog[s, z]). */
     if (!prove_true(And2(mk_fn2("GreaterEqual", cp(gp), mk_int(-1)),
-                         mk_fn2("LessEqual", cp(gp), mk_int(1))), NULL)) {
+                         mk_fn2("LessEqual", cp(gp), mk_int(1))), assumptions) &&
+        !iv_prove_fugacity(gp, assumptions)) {
         expr_free(c1); expr_free(Aeff); expr_free(gp); return false;
     }
 
@@ -694,7 +914,7 @@ static Expr* single_distinct_x_exponent(const Expr* K, const Expr* x) {
 
 /* Try every base recognizer at spectral variable sv. */
 static bool try_recognizers(const Expr* K, const Expr* x, const Expr* sv,
-                            Expr** M, Expr** P) {
+                            Expr* assumptions, Expr** M, Expr** P) {
     if (rec_exp(K, x, sv, M, P))       return true;
     if (rec_gauss(K, x, sv, M, P))     return true;
     if (rec_algebraic(K, x, sv, M, P)) return true;
@@ -704,7 +924,7 @@ static bool try_recognizers(const Expr* K, const Expr* x, const Expr* sv,
     if (rec_arctan(K, x, sv, M, P))    return true;
     if (rec_pfq(K, x, sv, M, P))       return true;
     if (rec_polylog(K, x, sv, M, P))   return true;
-    if (rec_expgeom(K, x, sv, M, P))   return true;
+    if (rec_expgeom(K, x, sv, assumptions, M, P)) return true;
     return false;
 }
 
@@ -714,9 +934,9 @@ static bool try_recognizers(const Expr* K, const Expr* x, const Expr* sv,
  * so the transform is the base transform evaluated at sv/k, scaled by 1/k, and
  * the convergence strip transfers verbatim (an exact change of variables). */
 static bool dispatch_kernel(const Expr* K, const Expr* x, const Expr* sv,
-                            Expr** M, Expr** P) {
+                            Expr* assumptions, Expr** M, Expr** P) {
     *M = *P = NULL;
-    if (try_recognizers(K, x, sv, M, P)) return true;
+    if (try_recognizers(K, x, sv, assumptions, M, P)) return true;
 
     Expr* k = single_distinct_x_exponent(K, x);
     if (!k) return false;
@@ -725,7 +945,7 @@ static bool dispatch_kernel(const Expr* K, const Expr* x, const Expr* sv,
     Expr* rule   = mk_fn2("Rule", Pw(cp(x), cp(k)), cp(x));   /* x^k -> x */
     Expr* Klin   = ev2("ReplaceAll", cp(K), rule);
     Expr* sv_eff = simp(Tms(cp(sv), Pw(cp(k), mk_int(-1))));  /* sv / k */
-    bool ok = Klin && try_recognizers(Klin, x, sv_eff, M, P);
+    bool ok = Klin && try_recognizers(Klin, x, sv_eff, assumptions, M, P);
     if (ok) *M = Tms(Pw(cp(k), mk_int(-1)), *M);             /* x (1/k) */
     if (Klin) expr_free(Klin);
     expr_free(sv_eff);
@@ -871,9 +1091,9 @@ static bool rec_logpow(Expr** kernels, size_t nk, const Expr* x, const Expr* sv,
 /* Build (M, P) for a whole term's kernel list: single-kernel base recognizers
  * (with the monomial wrapper), else the parametric-differentiation family. */
 static bool dispatch_term(Expr** kernels, size_t nk, const Expr* x,
-                          const Expr* sv, Expr** M, Expr** P) {
+                          const Expr* sv, Expr* assumptions, Expr** M, Expr** P) {
     *M = *P = NULL;
-    if (nk == 1 && dispatch_kernel(kernels[0], x, sv, M, P)) return true;
+    if (nk == 1 && dispatch_kernel(kernels[0], x, sv, assumptions, M, P)) return true;
     if (rec_logpow(kernels, nk, x, sv, M, P)) return true;
     return false;
 }
@@ -900,7 +1120,7 @@ static Expr* mellin_term(Expr* term, const Expr* x, Expr* assumptions,
 
     Expr *M = NULL, *P = NULL;
     if (kw == 0) {
-        if (!dispatch_term(kernels, nk, x, s, &M, &P)) {
+        if (!dispatch_term(kernels, nk, x, s, assumptions, &M, &P)) {
             expr_free(C); expr_free(s); return NULL;
         }
     } else {
@@ -909,7 +1129,7 @@ static Expr* mellin_term(Expr* term, const Expr* x, Expr* assumptions,
          * M_R in a fresh spectral symbol, differentiate kw times, then set s.
          * Log^kw is dominated by x^(+-eps), so R's OPEN strip carries unchanged. */
         Expr* sv = mk_sym("RmtLogSpectral");
-        if (!dispatch_term(kernels, nk, x, sv, &M, &P)) {
+        if (!dispatch_term(kernels, nk, x, sv, assumptions, &M, &P)) {
             expr_free(sv); expr_free(C); expr_free(s); return NULL;
         }
         for (long i = 0; i < kw; i++) M = ev2("D", M, cp(sv));
