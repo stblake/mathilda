@@ -8,6 +8,7 @@
 #include "trig_canon.h"
 #include "internal.h"
 #include "series.h"
+#include "ndarray.h"
 #include <math.h>
 #include <complex.h>
 #include <stdio.h>
@@ -512,6 +513,28 @@ static Expr* simplify_exp_log(Expr* base, Expr* exp) {
         (Expr*[]){ expr_copy(a), coeff }, 2));
 }
 
+/* Decode a scalar exponent Expr into a (re, im) pair for the NDArray power fast
+ * path: Integer/Real → real, Complex[re, im] with Integer/Real parts → complex.
+ * Returns false for anything else (symbolic, Rational, BigInt, MPFR), so those
+ * fall through to the generic symbolic Power. */
+static bool power_scalar_components(const Expr* e, double* re, double* im) {
+    *im = 0.0;
+    if (e->type == EXPR_INTEGER) { *re = (double)e->data.integer; return true; }
+    if (e->type == EXPR_REAL)    { *re = e->data.real; return true; }
+    if (head_is(e, SYM_Complex) && e->data.function.arg_count == 2) {
+        const Expr* a = e->data.function.args[0];
+        const Expr* b = e->data.function.args[1];
+        double ar, br;
+        if ((a->type == EXPR_INTEGER ? (ar = (double)a->data.integer, true)
+             : a->type == EXPR_REAL  ? (ar = a->data.real, true) : false) &&
+            (b->type == EXPR_INTEGER ? (br = (double)b->data.integer, true)
+             : b->type == EXPR_REAL  ? (br = b->data.real, true) : false)) {
+            *re = ar; *im = br; return true;
+        }
+    }
+    return false;
+}
+
 Expr* builtin_power(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
 
@@ -535,6 +558,32 @@ Expr* builtin_power(Expr* res) {
 
     Expr* base = res->data.function.args[0];
     Expr* exp = res->data.function.args[1];
+
+    /* NDArray fast path: elementwise A^B (same shape) or A^scalar. Uses raw
+     * C-level complex power over the flat buffer; promotes the result dtype to
+     * complex when a real base with a non-integer exponent leaves the real axis
+     * (e.g. (-1.0)^0.5). A mixed NDArray/symbolic case falls through. */
+    if (is_ndarray(base)) {
+        if (is_ndarray(exp)) {
+            Expr* fast = ndarray_elementwise_power(base, exp);
+            if (fast) return fast;
+            Expr* pair[2] = { base, exp };
+            if (ndarray_warn_shape_mismatch(pair, 2, "raised to a power"))
+                return NULL;
+        } else {
+            double er, ei;
+            if (power_scalar_components(exp, &er, &ei)) {
+                Expr* fast = ndarray_scalar_power(base, er, ei);
+                if (fast) return fast;
+            }
+        }
+    } else if (is_ndarray(exp)) {
+        double br, bi;
+        if (power_scalar_components(base, &br, &bi)) {
+            Expr* fast = ndarray_base_scalar_power(br, bi, exp);
+            if (fast) return fast;
+        }
+    }
 
     /* Infinity / Indeterminate preprocessing.
      *

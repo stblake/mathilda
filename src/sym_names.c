@@ -96,6 +96,7 @@ const char* SYM_Csc = NULL;
 const char* SYM_Csch = NULL;
 const char* SYM_Cubics = NULL;
 const char* SYM_DampingFactor = NULL;
+const char* SYM_DataType = NULL;
 const char* SYM_Degree = NULL;
 const char* SYM_DesignMatrix = NULL;
 const char* SYM_DegreeLexicographic = NULL;
@@ -815,6 +816,7 @@ void sym_names_init(void) {
     SYM_Csch                       = intern_symbol("Csch");
     SYM_Cubics                     = intern_symbol("Cubics");
     SYM_DampingFactor              = intern_symbol("DampingFactor");
+    SYM_DataType                   = intern_symbol("DataType");
     SYM_Degree                     = intern_symbol("Degree");
     SYM_DesignMatrix               = intern_symbol("DesignMatrix");
     SYM_DegreeLexicographic        = intern_symbol("DegreeLexicographic");

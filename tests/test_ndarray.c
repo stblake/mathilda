@@ -193,6 +193,116 @@ void test_ndarray_plus_shape_mismatch_degrades() {
                    "NDArray[{1.0, 2.0}] + NDArray[{1.0, 2.0, 3.0}]", 0);
 }
 
+/* ---------- DataType (dtype) ---------- */
+
+void test_ndarray_datatype_default() {
+    /* Default dtype is float64; DataType[] reports it. */
+    assert_eval_eq("DataType[NDArray[{1, 2, 3}]] === \"float64\"", "True", 0);
+    /* DataType stays symbolic on a non-array. */
+    assert_eval_eq("DataType[5]", "DataType[5]", 0);
+}
+
+void test_ndarray_datatype_options() {
+    /* The option is surfaced by Options[NDArray]. */
+    assert_eval_eq("Options[NDArray] === {DataType -> \"float64\"}", "True", 0);
+}
+
+void test_ndarray_construct_dtypes() {
+    assert_eval_eq("NDArrayQ[NDArray[{1, 2, 3}, DataType -> \"float32\"]]", "True", 0);
+    assert_eval_eq("DataType[NDArray[{1, 2, 3}, DataType -> \"float32\"]] === \"float32\"", "True", 0);
+    assert_eval_eq("NDArrayQ[NDArray[{Complex[1, 2]}, DataType -> \"complex64\"]]", "True", 0);
+    assert_eval_eq("DataType[NDArray[{Complex[1, 2]}, DataType -> \"complex32\"]] === \"complex32\"", "True", 0);
+    /* A complex dtype accepts bare real leaves too (im = 0). */
+    assert_eval_eq("NDArrayQ[NDArray[{1, 2}, DataType -> \"complex64\"]]", "True", 0);
+}
+
+void test_ndarray_dtype_roundtrip() {
+    /* float32 values that are exactly representable round-trip cleanly. */
+    assert_eval_eq("Normal[NDArray[{1.5, 2.5}, DataType -> \"float32\"]]", "{1.5, 2.5}", 0);
+    /* Complex dtypes rebuild Complex[] leaves on Normal. */
+    assert_eval_eq("Normal[NDArray[{Complex[1, 2], Complex[3, 4]}, DataType -> \"complex32\"]]",
+                   "{1.0 + 2.0*I, 3.0 + 4.0*I}", 0);
+}
+
+void test_ndarray_dtype_narrowing() {
+    /* 0.1 isn't representable in float32, so the stored value differs from the
+     * float64 literal. */
+    assert_eval_eq("First[Normal[NDArray[{0.1}, DataType -> \"float32\"]]] == 0.1", "False", 0);
+}
+
+void test_ndarray_dtype_equality_distinguishes() {
+    /* Same values, different dtype -> not SameQ (dtype is part of identity). */
+    assert_eval_eq("NDArray[{1, 2}, DataType -> \"float32\"] === NDArray[{1, 2}, DataType -> \"float64\"]",
+                   "False", 0);
+    assert_eval_eq("NDArray[{1, 2}, DataType -> \"float32\"] === NDArray[{1, 2}, DataType -> \"float32\"]",
+                   "True", 0);
+}
+
+void test_ndarray_complex_plus() {
+    assert_eval_eq("NDArray[{Complex[1, 1]}, DataType -> \"complex64\"] + "
+                   "NDArray[{Complex[2, 3]}, DataType -> \"complex64\"]",
+                   "NDArray[{3.0 + 4.0*I}]", 0);
+}
+
+void test_ndarray_mixed_dtype_promotion() {
+    assert_eval_eq("DataType[NDArray[{1, 2}, DataType -> \"float32\"] + NDArray[{3, 4}]] === \"float64\"",
+                   "True", 0);
+    assert_eval_eq("DataType[NDArray[{1, 2}, DataType -> \"float32\"] + "
+                   "NDArray[{3, 4}, DataType -> \"float32\"]] === \"float32\"", "True", 0);
+}
+
+/* ---------- Scalar broadcasting (numpy-style) ---------- */
+
+void test_ndarray_scalar_broadcast_plus() {
+    assert_eval_eq("1 + NDArray[{1, 2, 3}]", "NDArray[{2.0, 3.0, 4.0}]", 0);
+    /* Weak scalar: an integer/real scalar keeps the array's float width. */
+    assert_eval_eq("DataType[1 + NDArray[{1, 2}, DataType -> \"float32\"]] === \"float32\"", "True", 0);
+    /* A complex scalar moves the array onto the complex axis (same width). */
+    assert_eval_eq("DataType[I + NDArray[{1, 2}, DataType -> \"float32\"]] === \"complex32\"", "True", 0);
+}
+
+void test_ndarray_scalar_broadcast_times() {
+    assert_eval_eq("3 * NDArray[{1., 2., 3.}]", "NDArray[{3.0, 6.0, 9.0}]", 0);
+    /* Subtraction of arrays reduces via Plus + broadcast Times[-1, .]. */
+    assert_eval_eq("NDArray[{1., 2., 3.}] - NDArray[{1., 1., 1.}]", "NDArray[{0.0, 1.0, 2.0}]", 0);
+}
+
+/* ---------- Power fast path ---------- */
+
+void test_ndarray_power_scalar() {
+    assert_eval_eq("NDArray[{2., 3.}]^2", "NDArray[{4.0, 9.0}]", 0);
+    assert_eval_eq("NDArray[{4., 9.}]^0.5", "NDArray[{2.0, 3.0}]", 0);
+    /* A negative real base with a fractional exponent promotes to complex. */
+    assert_eval_eq("DataType[NDArray[{-1.0}]^0.5] === \"complex64\"", "True", 0);
+}
+
+void test_ndarray_power_complex_exact() {
+    /* I^2 == -1 exactly (integer exponent uses exact complex multiplication). */
+    assert_eval_eq("NDArray[{Complex[0, 1]}, DataType -> \"complex64\"]^2",
+                   "NDArray[{-1.0 + 0.0*I}]", 0);
+}
+
+void test_ndarray_power_elementwise_and_scalar_base() {
+    assert_eval_eq("NDArray[{2., 3.}]^NDArray[{3., 2.}]", "NDArray[{8.0, 9.0}]", 0);
+    assert_eval_eq("2^NDArray[{1., 2., 3.}]", "NDArray[{2.0, 4.0, 8.0}]", 0);
+}
+
+/* ---------- Complex Dot / BLAS closed system ---------- */
+
+void test_ndarray_complex_dot() {
+    /* (1+i, 2) . (1, i) = (1+i) + 2 i = 1 + 3 i. */
+    assert_eval_eq("NDArray[{Complex[1, 1], 2}, DataType -> \"complex64\"] . "
+                   "NDArray[{1, Complex[0, 1]}, DataType -> \"complex64\"]",
+                   "1.0 + 3.0*I", 0);
+}
+
+void test_ndarray_float32_dot() {
+    assert_eval_eq("DataType[NDArray[{{1., 2.}, {3., 4.}}, DataType -> \"float32\"] . "
+                   "NDArray[{1., 1.}, DataType -> \"float32\"]] === \"float32\"", "True", 0);
+    assert_eval_eq("Normal[NDArray[{{1., 2.}, {3., 4.}}, DataType -> \"float32\"] . "
+                   "NDArray[{1., 1.}, DataType -> \"float32\"]]", "{3.0, 7.0}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -230,6 +340,25 @@ int main() {
     TEST(test_ndarray_plus_matches_list_path);
     TEST(test_ndarray_times_matches_list_path);
     TEST(test_ndarray_plus_shape_mismatch_degrades);
+
+    TEST(test_ndarray_datatype_default);
+    TEST(test_ndarray_datatype_options);
+    TEST(test_ndarray_construct_dtypes);
+    TEST(test_ndarray_dtype_roundtrip);
+    TEST(test_ndarray_dtype_narrowing);
+    TEST(test_ndarray_dtype_equality_distinguishes);
+    TEST(test_ndarray_complex_plus);
+    TEST(test_ndarray_mixed_dtype_promotion);
+
+    TEST(test_ndarray_scalar_broadcast_plus);
+    TEST(test_ndarray_scalar_broadcast_times);
+
+    TEST(test_ndarray_power_scalar);
+    TEST(test_ndarray_power_complex_exact);
+    TEST(test_ndarray_power_elementwise_and_scalar_base);
+
+    TEST(test_ndarray_complex_dot);
+    TEST(test_ndarray_float32_dot);
 
     printf("All NDArray tests passed.\n");
     return 0;

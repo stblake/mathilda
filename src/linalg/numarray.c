@@ -95,15 +95,21 @@ bool na_load_vector(const Expr* e, bool want_complex, int* n, double** buf)
     if (!e) return false;
     size_t stride = want_complex ? 2 : 1;
 
-    /* NDArray rank-1 fast path (real data only). */
+    /* NDArray rank-1 fast path (all dtypes; float32 widens to double, complex
+     * marshals into the interleaved buffer). */
     if (is_ndarray(e)) {
         if (e->data.ndarray.rank != 1) return false;
         int len = (int)e->data.ndarray.dims[0];
         if (len <= 0) return false;
+        NDType dt = e->data.ndarray.dtype;
         double* out = (double*)malloc(stride * (size_t)len * sizeof(double));
         if (!out) return false;
-        for (int i = 0; i < len; i++)
-            na_put(out, (size_t)i, e->data.ndarray.data[i], 0.0, want_complex);
+        for (int i = 0; i < len; i++) {
+            double re, im;
+            ndt_get(e->data.ndarray.data, (size_t)i, dt, &re, &im);
+            if (!want_complex && im != 0.0) { free(out); return false; }
+            na_put(out, (size_t)i, re, im, want_complex);
+        }
         *n = len; *buf = out;
         return true;
     }
@@ -144,18 +150,22 @@ bool na_load_matrix(const Expr* e, bool want_complex, bool colmajor,
     if (!e) return false;
     size_t stride = want_complex ? 2 : 1;
 
-    /* NDArray rank-2 fast path (real data, source is row-major). */
+    /* NDArray rank-2 fast path (all dtypes; source is row-major). */
     if (is_ndarray(e)) {
         if (e->data.ndarray.rank != 2) return false;
         int r = (int)e->data.ndarray.dims[0];
         int c = (int)e->data.ndarray.dims[1];
         if (r <= 0 || c <= 0) return false;
+        NDType dt = e->data.ndarray.dtype;
         double* out = (double*)malloc(stride * (size_t)r * (size_t)c * sizeof(double));
         if (!out) return false;
         for (int i = 0; i < r; i++)
             for (int j = 0; j < c; j++) {
-                double v = e->data.ndarray.data[(size_t)i * (size_t)c + (size_t)j];
-                na_put(out, na_index(i, j, r, c, colmajor), v, 0.0, want_complex);
+                double re, im;
+                ndt_get(e->data.ndarray.data,
+                        (size_t)i * (size_t)c + (size_t)j, dt, &re, &im);
+                if (!want_complex && im != 0.0) { free(out); return false; }
+                na_put(out, na_index(i, j, r, c, colmajor), re, im, want_complex);
             }
         *rows = r; *cols = c; *buf = out;
         return true;
@@ -209,14 +219,15 @@ Expr* na_build_vector(const double* buf, int n, bool is_complex)
         if (!data) return NULL;
         memcpy(data, buf, (size_t)n * sizeof(double));
         int64_t dims[1] = { n };
-        return expr_new_ndarray(1, dims, data);   /* moves `data` */
+        return expr_new_ndarray(1, dims, data, NDT_FLOAT64);   /* moves `data` */
     }
-    Expr** el = (Expr**)malloc((size_t)n * sizeof(Expr*));
-    for (int i = 0; i < n; i++)
-        el[i] = na_scalar(buf[2 * i], buf[2 * i + 1]);
-    Expr* out = expr_new_function(expr_new_symbol("List"), el, (size_t)n);
-    free(el);
-    return out;
+    /* Complex result → complex64 NDArray (interleaved re,im matches `buf`),
+     * keeping NDArray a closed system under the linalg bridges. */
+    double* data = (double*)malloc((size_t)n * 2 * sizeof(double));
+    if (!data) return NULL;
+    memcpy(data, buf, (size_t)n * 2 * sizeof(double));
+    int64_t dims[1] = { n };
+    return expr_new_ndarray(1, dims, data, NDT_COMPLEX64);     /* moves `data` */
 }
 
 Expr* na_build_matrix(const double* buf, int rows, int cols, bool is_complex,
@@ -232,20 +243,20 @@ Expr* na_build_matrix(const double* buf, int rows, int cols, bool is_complex,
                 data[(size_t)i * (size_t)cols + (size_t)j] =
                     buf[na_index(i, j, rows, cols, colmajor)];
         int64_t dims[2] = { rows, cols };
-        return expr_new_ndarray(2, dims, data);    /* moves `data` */
+        return expr_new_ndarray(2, dims, data, NDT_FLOAT64);    /* moves `data` */
     }
 
-    Expr** row_exprs = (Expr**)malloc((size_t)rows * sizeof(Expr*));
-    for (int i = 0; i < rows; i++) {
-        Expr** el = (Expr**)malloc((size_t)cols * sizeof(Expr*));
+    /* Complex result → complex64 NDArray (row-major, interleaved re,im),
+     * keeping NDArray a closed system under the linalg bridges. */
+    double* data = (double*)malloc((size_t)rows * (size_t)cols * 2 * sizeof(double));
+    if (!data) return NULL;
+    for (int i = 0; i < rows; i++)
         for (int j = 0; j < cols; j++) {
             size_t off = 2 * na_index(i, j, rows, cols, colmajor);
-            el[j] = na_scalar(buf[off], buf[off + 1]);
+            size_t dst = 2 * ((size_t)i * (size_t)cols + (size_t)j);
+            data[dst]     = buf[off];
+            data[dst + 1] = buf[off + 1];
         }
-        row_exprs[i] = expr_new_function(expr_new_symbol("List"), el, (size_t)cols);
-        free(el);
-    }
-    Expr* out = expr_new_function(expr_new_symbol("List"), row_exprs, (size_t)rows);
-    free(row_exprs);
-    return out;
+    int64_t dims[2] = { rows, cols };
+    return expr_new_ndarray(2, dims, data, NDT_COMPLEX64);     /* moves `data` */
 }

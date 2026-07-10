@@ -321,12 +321,12 @@ Expr* builtin_plus(Expr* res) {
     if (n == 0) return expr_new_integer(0);
     if (n == 1) return expr_copy(res->data.function.args[0]);
 
-    /* NDArray fast path: n same-shape NDArray operands add elementwise over
-     * raw double buffers, skipping the coefficient/base grouping below. If the
-     * operands are all NDArrays but of disagreeing shape, warn (NDArray::shape)
-     * and leave the sum unevaluated, like Dot::dotsh. A NULL from a mixed
-     * NDArray/scalar operand set falls through to the generic grouping, which
-     * treats the NDArrays as opaque non-numeric terms. */
+    /* NDArray fast path: same-shape NDArray operands add elementwise over raw
+     * buffers, with numpy-style broadcasting of numeric scalars (1 + NDArray).
+     * If the array operands disagree in shape, warn (NDArray::shape) and leave
+     * the sum unevaluated, like Dot::dotsh. A NULL (a symbolic operand, or no
+     * NDArray at all) falls through to the generic grouping, which treats any
+     * NDArrays as opaque non-numeric terms. */
     {
         Expr* fast = ndarray_elementwise(res->data.function.args, n, true);
         if (fast) return fast;

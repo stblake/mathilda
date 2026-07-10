@@ -98,6 +98,7 @@ extern const char* SYM_Csc;
 extern const char* SYM_Csch;
 extern const char* SYM_Cubics;
 extern const char* SYM_DampingFactor;
+extern const char* SYM_DataType;
 extern const char* SYM_Degree;
 extern const char* SYM_DesignMatrix;
 extern const char* SYM_DegreeLexicographic;

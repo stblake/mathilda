@@ -22,6 +22,13 @@ void info_init(void) {
         "are reduced exactly (repeated squaring on GMP); Rational and Real\n"
         "exponents evaluate numerically when the base is numeric; Power[0, 0]\n"
         "stays Indeterminate; Power[x, 1/2] is canonicalised to Sqrt[x].");
+    symtab_set_docstring("DataType",
+        "DataType[a]\n"
+        "\tgives the element data type of the NDArray a as a string: one of\n"
+        "\t\"float64\", \"float32\", \"complex64\", or \"complex32\". Set the type\n"
+        "\twhen constructing with NDArray[list, DataType -> \"float32\"]; the\n"
+        "\tfour types map onto BLAS's s/d/c/z precisions. Returns unevaluated\n"
+        "\tfor a non-NDArray argument.");
     symtab_set_docstring("Subtract",
         "x - y or Subtract[x, y] represents x - y; rewritten by the evaluator\n"
         "to Plus[x, Times[-1, y]] so it inherits Plus's flattening and ordering.");

@@ -2,6 +2,7 @@
 #include "arithmetic.h"
 #include "sym_intern.h"
 #include "sym_names.h"
+#include "ndarray.h"   /* ndt_elem_size for dtype-aware copy/eq/hash */
 #include <stdbool.h>
 #include <math.h>
 #include <ctype.h>
@@ -139,7 +140,7 @@ Expr* expr_new_bigint_from_str(const char* str) {
     return e;
 }
 
-Expr* expr_new_ndarray(int rank, const int64_t* dims, double* data) {
+Expr* expr_new_ndarray(int rank, const int64_t* dims, void* data, NDType dtype) {
     Expr* e = malloc(sizeof(Expr));
     if (!e) return NULL;
     e->type = EXPR_NDARRAY;
@@ -150,6 +151,7 @@ Expr* expr_new_ndarray(int rank, const int64_t* dims, double* data) {
     if (!e->data.ndarray.dims) { free(e); return NULL; }
     memcpy(e->data.ndarray.dims, dims, sizeof(int64_t) * (size_t)rank);
     e->data.ndarray.data = data;
+    e->data.ndarray.dtype = dtype;
     return e;
 }
 
@@ -309,13 +311,16 @@ Expr* expr_unshare(Expr* e) {
             break;
         case EXPR_NDARRAY: {
             int rank = e->data.ndarray.rank;
+            NDType dt = e->data.ndarray.dtype;
             size_t n = 1;
             for (int i = 0; i < rank; i++) n *= (size_t)e->data.ndarray.dims[i];
+            size_t bytes = ndt_elem_size(dt) * n;
             fresh->data.ndarray.rank = rank;
+            fresh->data.ndarray.dtype = dt;
             fresh->data.ndarray.dims = malloc(sizeof(int64_t) * (size_t)rank);
             memcpy(fresh->data.ndarray.dims, e->data.ndarray.dims, sizeof(int64_t) * (size_t)rank);
-            fresh->data.ndarray.data = malloc(sizeof(double) * n);
-            memcpy(fresh->data.ndarray.data, e->data.ndarray.data, sizeof(double) * n);
+            fresh->data.ndarray.data = malloc(bytes);
+            memcpy(fresh->data.ndarray.data, e->data.ndarray.data, bytes);
             break;
         }
 #ifdef USE_MPFR
@@ -457,13 +462,18 @@ bool expr_eq(const Expr* a, const Expr* b) {
         case EXPR_BIGINT:
             return mpz_cmp(a->data.bigint, b->data.bigint) == 0;
         case EXPR_NDARRAY: {
+            /* dtype is part of identity (a float32 array is not SameQ to a
+             * float64 one with equal values, matching the MPFR-precision rule
+             * below). */
+            if (a->data.ndarray.dtype != b->data.ndarray.dtype) return false;
             if (a->data.ndarray.rank != b->data.ndarray.rank) return false;
             size_t n = 1;
             for (int i = 0; i < a->data.ndarray.rank; i++) {
                 if (a->data.ndarray.dims[i] != b->data.ndarray.dims[i]) return false;
                 n *= (size_t)a->data.ndarray.dims[i];
             }
-            return memcmp(a->data.ndarray.data, b->data.ndarray.data, sizeof(double) * n) == 0;
+            size_t bytes = ndt_elem_size(a->data.ndarray.dtype) * n;
+            return memcmp(a->data.ndarray.data, b->data.ndarray.data, bytes) == 0;
         }
 #ifdef USE_MPFR
         case EXPR_MPFR:
@@ -536,16 +546,20 @@ uint64_t expr_hash(const Expr* e) {
         case EXPR_NDARRAY: {
             h ^= (uint64_t)e->data.ndarray.rank;
             h *= prime;
+            h ^= (uint64_t)e->data.ndarray.dtype;
+            h *= prime;
             size_t n = 1;
             for (int i = 0; i < e->data.ndarray.rank; i++) {
                 h ^= (uint64_t)e->data.ndarray.dims[i];
                 h *= prime;
                 n *= (size_t)e->data.ndarray.dims[i];
             }
-            for (size_t i = 0; i < n; i++) {
-                uint64_t v;
-                memcpy(&v, &e->data.ndarray.data[i], 8);
-                h ^= v; h *= prime;
+            /* Hash the raw buffer as bytes so all dtypes (incl. 4-byte float /
+             * float32-complex) hash correctly. */
+            const unsigned char* bytes = (const unsigned char*)e->data.ndarray.data;
+            size_t nbytes = ndt_elem_size(e->data.ndarray.dtype) * n;
+            for (size_t i = 0; i < nbytes; i++) {
+                h ^= (uint64_t)bytes[i]; h *= prime;
             }
             break;
         }

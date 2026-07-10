@@ -24,7 +24,7 @@ Expr* builtin_vectorq(Expr* res) {
         if (arg->data.ndarray.rank != 1) return expr_new_symbol(SYM_False);
         Expr* test = res->data.function.args[1];
         for (int64_t i = 0; i < arg->data.ndarray.dims[0]; i++) {
-            Expr* call_args[1] = { expr_new_real(arg->data.ndarray.data[i]) };
+            Expr* call_args[1] = { ndarray_element_to_expr(arg, (size_t)i) };
             Expr* call = expr_new_function(expr_copy(test), call_args, 1);
             Expr* eval_res = evaluate(call);
             bool is_true = (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol == SYM_True);
@@ -66,7 +66,7 @@ Expr* builtin_matrixq(Expr* res) {
         Expr* test = res->data.function.args[1];
         size_t n = ndarray_size(arg);
         for (size_t i = 0; i < n; i++) {
-            Expr* call_args[1] = { expr_new_real(arg->data.ndarray.data[i]) };
+            Expr* call_args[1] = { ndarray_element_to_expr(arg, i) };
             Expr* call = expr_new_function(expr_copy(test), call_args, 1);
             Expr* eval_res = evaluate(call);
             bool is_true = (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol == SYM_True);

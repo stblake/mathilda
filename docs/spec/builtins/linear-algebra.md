@@ -3,25 +3,48 @@
 ## NDArray
 A first-class, visibly-distinct dense machine-precision N-dimensional array,
 modelled on numpy's `ndarray`.
-- `NDArray[list]`: packs a rectangular, machine-precision (`Integer`/`Real`)
-  nested list of any rank into a dense `EXPR_NDARRAY` value, storing a flat
-  row-major (C-order) `double` buffer plus rank/dims directly on the node
-  instead of a nested `List[List[...]]` tree. N-dimensional indexing is
-  computed against the flat buffer.
+- `NDArray[list]`: packs a rectangular, machine-precision nested list of any
+  rank into a dense `EXPR_NDARRAY` value, storing a flat row-major (C-order)
+  numeric buffer plus rank/dims/dtype directly on the node instead of a nested
+  `List[List[...]]` tree. N-dimensional indexing is computed against the flat
+  buffer.
+- `NDArray[list, DataType -> "float32"]`: packs at a chosen element data type
+  (dtype), analogous to numpy's `dtype`. Four types, mapping one-to-one onto
+  BLAS's `s`/`d`/`c`/`z` precisions (the suffix is the per-component bit width):
+  `"float64"` (`double`, the default), `"float32"` (`float`), `"complex64"`
+  (2×`double`), `"complex32"` (2×`float`). Real dtypes accept `Integer`/`Real`
+  leaves; complex dtypes additionally accept `Complex[...]` (and bare reals).
+  `Options[NDArray]` is `{DataType -> "float64"}`; `DataType[a]` gives an
+  array's dtype as a string. dtype is part of an array's identity, so
+  `NDArray[{1,2},DataType->"float32"]` is not `SameQ` to the `"float64"` one.
 - Unlike Mathematica's packed arrays -- an invisible internal optimization a
   list may or may not have -- `NDArray[...]` is always exactly what it says:
   `Head[NDArray[{{1, 2}, {3, 4}}]]` is `NDArray`, never `List`; `NDArrayQ`,
   `MatrixQ`, `VectorQ`, and `ListQ` never disagree about which one a value is;
   and it always prints as `NDArray[{{1.0, 2.0}, {3.0, 4.0}}]`, never as bare
   `{{1.0, 2.0}, {3.0, 4.0}}`.
-- `Dot` and elementwise `Plus`/`Times` recognize `NDArray` operands and use a
-  fast C-level path that loops directly over the raw `double` buffers,
-  skipping symbolic `Times`/`Plus` construction per element entirely.
+- `Dot`, elementwise `Plus`/`Times`/`Power` recognize `NDArray` operands and use
+  a fast C-level path that loops directly over the raw buffers, per dtype,
+  skipping symbolic construction per element. The result dtype follows a
+  promotion lattice (complex dominates real; 64-bit component dominates 32-bit),
+  so e.g. `float32 + float64 -> float64` and any complex operand yields a complex
+  result. The float64 real case keeps a dedicated tight `double` loop (no
+  regression). `Power` promotes to complex when a real base with a non-integer
+  exponent leaves the real axis (`NDArray[{-1.0}]^0.5` is complex); integer
+  exponents on complex bases are exact (`I^2 == -1`).
+- **numpy-style scalar broadcasting.** A numeric scalar combines with an array
+  elementwise: `1 + NDArray[{1,2,3}]`, `3 * NDArray[...]`, `2 ^ NDArray[...]`,
+  and `-A` / `A - B`. Scalars are "weak": an `Integer`/`Real` scalar keeps the
+  array's float width (`float32 + 1 -> float32`), while a `Complex` scalar moves
+  it onto the complex axis at the same width (`float32 + I -> complex32`).
 - Machine precision only. Any input or fast-path result that would need a
   non-machine-precision entry (a symbol, an exact/rational number, a BigInt,
   an MPFR value) is left unpacked/unevaluated instead of forcing a lossy
   conversion -- `NDArray[...]` degrades to an ordinary nested `List` rather
   than hiding a representation change from the user.
+- The linalg BLAS/LAPACK bridges accept all four dtypes as input and return
+  results as dtyped `NDArray`s (real results as a real array, complex results
+  as a `complex64` array), keeping `NDArray` a closed system under those ops.
 - `Normal[NDArray[...]]` converts back to the equivalent nested `List`.
 
 **Introspection** (numpy correspondence):
@@ -31,6 +54,8 @@ modelled on numpy's `ndarray`.
   (matching the equivalent nested `List`; the `+1` counts the atom level).
 - `Length[NDArray[...]]` is the leading-axis length (numpy `len`, = `shape[0]`).
 - `NDArrayQ[expr]` is `True` iff `expr` is an `NDArray` value.
+- `DataType[NDArray[...]]` is the element dtype string (numpy `.dtype`);
+  unevaluated on a non-array.
 - `MatrixQ`/`VectorQ` answer per rank (2 / 1).
 
 **Features**:

@@ -4,6 +4,7 @@
 #include "sym_names.h"
 #include "arithmetic.h"
 #include "assoc.h"
+#include "ndarray.h"   /* ndt_get for NDArray canonical ordering */
 #include <ctype.h>
 #include <math.h>
 #include <stdbool.h>
@@ -308,8 +309,11 @@ int expr_compare(const Expr* a, const Expr* b) {
         return 0;
     }
 
-    /* 5. Matrices: rank, then dims, then row-major data, lexicographic. */
+    /* 5. NDArrays: dtype, then rank, then dims, then row-major data (re then
+     * im), lexicographic — a stable total order across dtypes. */
     if (a->type == EXPR_NDARRAY && b->type == EXPR_NDARRAY) {
+        NDType dta = a->data.ndarray.dtype, dtb = b->data.ndarray.dtype;
+        if (dta != dtb) return (dta < dtb) ? -1 : 1;
         if (a->data.ndarray.rank != b->data.ndarray.rank) {
             return (a->data.ndarray.rank < b->data.ndarray.rank) ? -1 : 1;
         }
@@ -320,9 +324,13 @@ int expr_compare(const Expr* a, const Expr* b) {
             n *= (size_t)da;
         }
         for (size_t i = 0; i < n; i++) {
-            double da = a->data.ndarray.data[i], db = b->data.ndarray.data[i];
-            if (da < db) return -1;
-            if (da > db) return 1;
+            double are, aim, bre, bim;
+            ndt_get(a->data.ndarray.data, i, dta, &are, &aim);
+            ndt_get(b->data.ndarray.data, i, dtb, &bre, &bim);
+            if (are < bre) return -1;
+            if (are > bre) return 1;
+            if (aim < bim) return -1;
+            if (aim > bim) return 1;
         }
         return 0;
     }

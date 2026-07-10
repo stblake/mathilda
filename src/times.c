@@ -246,12 +246,13 @@ Expr* builtin_times(Expr* res) {
     if (n == 0) return expr_new_integer(1);
     if (n == 1) return expr_copy(res->data.function.args[0]);
 
-    /* NDArray fast path: n same-shape NDArray operands multiply elementwise
-     * over raw double buffers (mirrors Listable Times over Lists). If they are
-     * all NDArrays but of disagreeing shape, warn (NDArray::shape) and leave
-     * the product unevaluated, like Dot::dotsh. A NULL from a mixed
-     * NDArray/scalar operand set falls through to the generic path, which
-     * treats the NDArrays as opaque non-numeric factors. */
+    /* NDArray fast path: same-shape NDArray operands multiply elementwise over
+     * raw buffers, with numpy-style broadcasting of numeric scalars (3 * NDArray;
+     * this is also how -NDArray and NDArray - NDArray reduce). If the array
+     * operands disagree in shape, warn (NDArray::shape) and leave the product
+     * unevaluated, like Dot::dotsh. A NULL (a symbolic operand, or no NDArray at
+     * all) falls through to the generic path, which treats any NDArrays as
+     * opaque non-numeric factors. */
     {
         Expr* fast = ndarray_elementwise(res->data.function.args, n, false);
         if (fast) return fast;

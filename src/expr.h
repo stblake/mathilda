@@ -29,15 +29,36 @@ typedef enum {
 #endif
 } ExprType;
 
+/* Element data type of an EXPR_NDARRAY, analogous to numpy's dtype. The four
+ * types map one-to-one onto BLAS's four precisions (s/d/c/z), where the numeric
+ * suffix is the *per-component* bit width:
+ *   NDT_FLOAT64   double            (BLAS d) — DEFAULT, value 0 so a
+ *                                   zero-initialized/legacy struct behaves as
+ *                                   today's double-only NDArray.
+ *   NDT_FLOAT32   float             (BLAS s)
+ *   NDT_COMPLEX64 2x double (re,im) (BLAS z)
+ *   NDT_COMPLEX32 2x float  (re,im) (BLAS c)
+ * Complex is stored as interleaved (re, im) plain floats/doubles — no
+ * <complex.h>, matching the existing BLAS interleaved-buffer convention and
+ * keeping the code strict-C99 portable. See ndarray.h for the ndt_* helpers. */
+typedef enum {
+    NDT_FLOAT64 = 0,
+    NDT_FLOAT32,
+    NDT_COMPLEX64,
+    NDT_COMPLEX32
+} NDType;
+
 /* Dense machine-precision ndarray payload for EXPR_NDARRAY. Row-major flat
- * storage: `data` has dims[0]*dims[1]*...*dims[rank-1] entries. Always
- * privately owned (dims/data are never aliased between Expr nodes) so C
- * fast paths can read/write the buffer directly without copy-on-write
- * bookkeeping beyond the usual expr_unshare at the Expr level. */
+ * storage: `data` holds dims[0]*dims[1]*...*dims[rank-1] elements of type
+ * `dtype` (each element is ndt_elem_size(dtype) bytes). Always privately owned
+ * (dims/data are never aliased between Expr nodes) so C fast paths can
+ * read/write the buffer directly without copy-on-write bookkeeping beyond the
+ * usual expr_unshare at the Expr level. */
 typedef struct {
     int rank;        /* >= 1 */
     int64_t* dims;   /* rank entries, owned */
-    double* data;    /* owned, row-major */
+    void* data;      /* owned, row-major; element type given by dtype */
+    NDType dtype;    /* element data type */
 } NDArrayData;
 
 typedef struct Expr {
@@ -118,8 +139,8 @@ Expr* expr_new_bigint_from_str(const char* str);
 /* NDArray constructor. Takes ownership of `dims` (copied internally, caller
  * keeps its own copy) and `data` (moved, not copied — caller must not free
  * or reuse it afterwards). `rank` >= 1, `dims[i]` >= 1, `data` must have
- * exactly product(dims) entries. */
-Expr* expr_new_ndarray(int rank, const int64_t* dims, double* data);
+ * exactly product(dims) elements of `dtype` (ndt_elem_size(dtype) bytes each). */
+Expr* expr_new_ndarray(int rank, const int64_t* dims, void* data, NDType dtype);
 
 #ifdef USE_MPFR
 /* MPFR constructors. Each allocates an Expr whose payload `mpfr_t` is

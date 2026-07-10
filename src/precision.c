@@ -22,6 +22,7 @@
 #include "precision.h"
 
 #include "arithmetic.h"
+#include "ndarray.h"   /* ndt_get / ndt_is_complex for NDArray accuracy */
 #include "attr.h"
 #include "numeric.h"
 #include "symtab.h"
@@ -197,12 +198,21 @@ static Expr* accuracy_of(const Expr* e) {
                 n *= (size_t)e->data.ndarray.dims[i];
             }
             Expr* best = make_infinity();
+            NDType dt = e->data.ndarray.dtype;
             for (size_t i = 0; i < n; ++i) {
-                double v = e->data.ndarray.data[i];
-                double acc = (v == 0.0)
-                    ? accuracy_of_machine_zero()
-                    : NUMERIC_MACHINE_PRECISION_DIGITS - log10(fabs(v));
-                best = precision_min(best, expr_new_real(acc));
+                double re, im;
+                ndt_get(e->data.ndarray.data, i, dt, &re, &im);
+                /* Take the per-component minimum accuracy so a complex entry is
+                 * treated like Complex[re, im] would be as a list element. */
+                int comps = ndt_is_complex(dt) ? 2 : 1;
+                double parts[2] = { re, im };
+                for (int c = 0; c < comps; ++c) {
+                    double v = parts[c];
+                    double acc = (v == 0.0)
+                        ? accuracy_of_machine_zero()
+                        : NUMERIC_MACHINE_PRECISION_DIGITS - log10(fabs(v));
+                    best = precision_min(best, expr_new_real(acc));
+                }
             }
             return best;
         }
