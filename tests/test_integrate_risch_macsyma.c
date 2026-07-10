@@ -335,14 +335,20 @@ static void test_recursive_tower_case(void) {
         "(2 Log[x]/x) E^(Log[x]^2)/(1 + E^(Log[x]^2))");   /* Log[1+E^(Log[x]^2)] */
     assert_head_unevaluated(
         "Integrate`RischMacsyma[1/(1 + E^(Log[x]^2)), x]", "Integrate`RischMacsyma");
-    /* General field Risch DE with a RATIONAL lower-field solution (q = 1/Log[x],
-     * a Log[x] in the denominator) — beyond the coupled ansatz's polynomial
-     * coefficients; solved by the bounded lower-field Laurent RDE ansatz. */
+    /* General field Risch DE with a RATIONAL lower-field solution: q = 1/Log[x]
+     * (monomial denominator) and q = 1/(1+Log[x]) (NON-monomial denominator) —
+     * both beyond the coupled ansatz's polynomial coefficients, solved by the
+     * q = h/Denominator[p] field-RDE ansatz. */
     assert_rm_diff_zero(
         "(2/x - 1/(x Log[x]^2)) E^(Log[x]^2)");            /* E^(Log[x]^2)/Log[x] */
-    /* A field RDE with no monomial-Laurent solution is non-elementary and declines. */
+    assert_rm_diff_zero(
+        "(2 Log[x]/(x (1 + Log[x])) - 1/(x (1 + Log[x])^2)) E^(Log[x]^2)");
+                                                           /* E^(Log[x]^2)/(1+Log[x]) */
+    /* Field RDEs with no elementary solution decline (never a wrong answer). */
     assert_head_unevaluated(
         "Integrate`RischMacsyma[E^(Log[x]^2), x]", "Integrate`RischMacsyma");
+    assert_head_unevaluated(
+        "Integrate`RischMacsyma[E^(Log[x]^2)/(1 + Log[x]), x]", "Integrate`RischMacsyma");
     /* Non-elementary mixed integrands decline cleanly (never a wrong form):
      * E^x Log[x] needs ExpIntegralEi; Log[x] Log[Log[x]] is non-elementary. */
     assert_head_unevaluated(

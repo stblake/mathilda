@@ -2973,35 +2973,54 @@ static Expr* rm_field_rde(Expr* p, long i, RmTower* T, long L, Expr* x) {
         if (!rm_free_of_x(w, T->t[j]) || !rm_free_of_x(p, T->t[j])) base = false;
     if (base) return rm_solve_rde(p, i, w, x);
 
-    if (L < 1) return NULL;
+    /* By the RDE denominator theorem, denom(q) | denom(p) (a pole of q would give a
+     * higher-order pole in q' + i Dcoef q = p that nothing cancels), so
+     * q = h / pd with pd = Denominator[p] and h a bounded POLYNOMIAL numerator over
+     * {x, t_0..t_{L-1}}.  This is strictly more general than a monomial-Laurent
+     * ansatz — it captures a NON-monomial denominator such as 1/(1+Log[x]) — and
+     * subsumes it (pd carries every pole).  Solve h by SolveAlways. */
     Expr* Dcoef = T->Dcoef[L];
+    Expr* pg = rm_eval1("Together", expr_copy(p));
+    Expr* pd = pg ? rm_eval1("Denominator", expr_copy(pg)) : NULL;
+    Expr* pn = pg ? rm_eval1("Numerator", expr_copy(pg)) : NULL;
+    if (pg) expr_free(pg);
+    if (!pd || !pn) { if (pd) expr_free(pd); if (pn) expr_free(pn); return NULL; }
+
     size_t nlv = (size_t)L + 1;
     Expr** lv = malloc(nlv * sizeof(Expr*));
     long* bd = malloc(nlv * sizeof(long));
-    long* lo = malloc(nlv * sizeof(long));
-    lv[0] = x; lo[0] = -2; bd[0] = 4;                 /* x: Laurent -2..2 */
-    for (long j = 0; j < L; j++) { lv[j + 1] = T->t[j]; lo[j + 1] = -2; bd[j + 1] = 4; }
+    lv[0] = x;
+    for (long j = 0; j < L; j++) lv[j + 1] = T->t[j];
+    for (size_t j = 0; j < nlv; j++) {
+        long a2 = rm_degree(pd, lv[j]); if (a2 < 0) a2 = 0;
+        long b2 = rm_degree(pn, lv[j]); if (b2 < 0) b2 = 0;
+        long d = a2 + b2 + 1; if (d > 5) d = 5;
+        bd[j] = d;
+    }
     long nmono = 1;
     for (size_t j = 0; j < nlv; j++) nmono *= (bd[j] + 1);
 
     Expr* result = NULL;
-    if (nmono > 0 && nmono <= 40) {
-        Expr** qterms = malloc((size_t)nmono * sizeof(Expr*));
+    if (nmono > 0 && nmono <= 60) {
+        Expr** hterms = malloc((size_t)nmono * sizeof(Expr*));
         Expr** syms = malloc((size_t)nmono * sizeof(Expr*));
         size_t ntq = 0, nsym = 0;
         long* ev = malloc(nlv * sizeof(long));
         for (long m = 0; m < nmono; m++) {
             char nm[40]; snprintf(nm, sizeof(nm), "rmRd%ld", m);
             rm_decode_mono(m, bd, nlv, ev);
-            for (size_t j = 0; j < nlv; j++) ev[j] += lo[j];   /* Laurent shift */
             Expr* mono = rm_build_monomial(lv, ev, nlv);
             syms[nsym++] = expr_new_symbol(nm);
-            qterms[ntq++] = expr_new_function(expr_new_symbol("Times"),
+            hterms[ntq++] = expr_new_function(expr_new_symbol("Times"),
                 (Expr*[]){ expr_new_symbol(nm), mono }, 2);
         }
         free(ev);
-        Expr* q = expr_new_function(expr_new_symbol("Plus"), qterms, ntq);
-        free(qterms);
+        Expr* h = expr_new_function(expr_new_symbol("Plus"), hterms, ntq);
+        free(hterms);
+        /* q = h / pd. */
+        Expr* q = expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ h, expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_copy(pd), expr_new_integer(-1) }, 2) }, 2);
 
         Expr* dq = rm_tower_deriv(q, T, x);
         Expr* iq = expr_new_function(expr_new_symbol("Times"),
@@ -3049,7 +3068,11 @@ static Expr* rm_field_rde(Expr* p, long i, RmTower* T, long L, Expr* x) {
         free(syms);
         expr_free(q);
     }
-    free(lv); free(bd); free(lo);
+    /* Cancel the h/pd fraction (e.g. x(1+t)/(x(1+t)^2) -> 1/(1+t)) so the
+     * assembled antiderivative stays in lowest terms. */
+    if (result) result = rm_eval1("Cancel", result);
+    free(lv); free(bd);
+    expr_free(pd); expr_free(pn);
     return result;
 }
 
