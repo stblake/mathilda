@@ -450,6 +450,7 @@ set(COMMON_SRC
     ../src/calculus/integrate_ramanujan.c
     ../src/calculus/intrat.c
     ../src/calculus/intrischnorman.c
+    ../src/calculus/integrate_risch_macsyma.c
     ../src/calculus/intsimp.c
     ../src/sum/sum.c
     ../src/sum/sum_util.c
@@ -1775,6 +1776,15 @@ else()
     target_link_libraries(integrate_derivdivides_tests gmp m)
 endif()
 add_test(NAME integrate_derivdivides_tests COMMAND integrate_derivdivides_tests)
+
+add_executable(integrate_risch_macsyma_tests test_integrate_risch_macsyma.c ${COMMON_SRC})
+target_include_directories(integrate_risch_macsyma_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_risch_macsyma_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(integrate_risch_macsyma_tests gmp m)
+endif()
+add_test(NAME integrate_risch_macsyma_tests COMMAND integrate_risch_macsyma_tests)
 
 add_executable(integrate_linrad_tests test_integrate_linrad.c ${COMMON_SRC})
 target_include_directories(integrate_linrad_tests PRIVATE ../src)

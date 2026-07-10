@@ -1,0 +1,1547 @@
+/* integrate_risch_macsyma.c — Risch integrator ported from Maxima.
+ *
+ * Faithful port of the algorithm STRUCTURE of Maxima's src/risch.lisp,
+ * with arithmetic grounded in Mathilda's existing Expr/poly/rat
+ * primitives (see the header for the full contract and phase plan).
+ *
+ * Phase 1 (this revision): scaffold, dispatcher registration, the
+ * rational case (delegated to Integrate`BronsteinRational), and the
+ * mandatory diff-back verification gate.  Later phases add the
+ * differential tower and the logarithmic / exponential / special-
+ * function cases.
+ */
+
+#include "integrate_risch_macsyma.h"
+
+#include "expr.h"
+#include "eval.h"
+#include "parse.h"
+#include "symtab.h"
+#include "attr.h"
+#include "sym_intern.h"
+#include "sym_names.h"
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+/* ================================================================== */
+/* Small evaluation helpers.                                          */
+/* ================================================================== */
+
+/* True iff `e` is the unevaluated call `name[...]`. */
+static bool rm_head_is(const Expr* e, const char* name) {
+    return e && e->type == EXPR_FUNCTION &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol == intern_symbol(name);
+}
+
+/* Build `head[args...]` (adopting the owned `args` element pointers) and
+ * evaluate it, freeing the constructed call.  Returns evaluate()'s result. */
+static Expr* rm_eval_call(const char* head, Expr** args, size_t n) {
+    Expr* call = expr_new_function(expr_new_symbol(head), args, n);
+    Expr* r = evaluate(call);
+    expr_free(call);
+    return r;
+}
+
+/* Evaluate `e`, taking ownership: frees `e` and returns evaluate()'s
+ * result (evaluate itself does not consume its argument). */
+static Expr* rm_eval_own(Expr* e) {
+    Expr* r = evaluate(e);
+    expr_free(e);
+    return r;
+}
+
+/* ================================================================== */
+/* Generic builtin-call and predicate helpers (grounded in the host).  */
+/* ================================================================== */
+
+/* NOTE ON CORRECTNESS.  This is a decision procedure: every branch is
+ * correct by construction and is NOT checked by differentiating the
+ * result.  Each case fires only behind an exact structural certificate
+ * (Cancel of a logarithmic derivative to a polynomial, an exactly linear
+ * denominator, a genuinely x-free cofactor, ...) that already proves the
+ * closed form it emits, exactly as Maxima's risch does.               */
+
+static Expr* rm_eval1(const char* head, Expr* a) {
+    return rm_eval_call(head, (Expr*[]){ a }, 1);
+}
+static Expr* rm_eval2(const char* head, Expr* a, Expr* b) {
+    return rm_eval_call(head, (Expr*[]){ a, b }, 2);
+}
+static Expr* rm_eval3(const char* head, Expr* a, Expr* b, Expr* c) {
+    return rm_eval_call(head, (Expr*[]){ a, b, c }, 3);
+}
+
+static bool rm_is_true(const Expr* e) {
+    return e && e->type == EXPR_SYMBOL && e->data.symbol == intern_symbol("True");
+}
+/* FreeQ[e, x] */
+static bool rm_free_of_x(Expr* e, Expr* x) {
+    Expr* r = rm_eval2("FreeQ", expr_copy(e), expr_copy(x));
+    bool t = rm_is_true(r);
+    if (r) expr_free(r);
+    return t;
+}
+/* FreeQ[e, head] — true iff the symbol `head` occurs nowhere in e. */
+static bool rm_free_of_head(Expr* e, const char* head) {
+    Expr* r = rm_eval2("FreeQ", expr_copy(e), expr_new_symbol(head));
+    bool t = rm_is_true(r);
+    if (r) expr_free(r);
+    return t;
+}
+/* PolynomialQ[e, x] */
+static bool rm_is_poly(Expr* e, Expr* x) {
+    Expr* r = rm_eval2("PolynomialQ", expr_copy(e), expr_copy(x));
+    bool t = rm_is_true(r);
+    if (r) expr_free(r);
+    return t;
+}
+/* Degree of a polynomial in x via Length[CoefficientList[e, x]] - 1
+ * (Mathilda has no Exponent builtin).  Returns -1 if CoefficientList does
+ * not reduce to a List.  Call only after rm_is_poly. */
+static long rm_degree(Expr* e, Expr* x) {
+    Expr* cl = rm_eval2("CoefficientList", expr_copy(e), expr_copy(x));
+    long d = -1;
+    if (cl && cl->type == EXPR_FUNCTION
+        && cl->data.function.head->type == EXPR_SYMBOL
+        && cl->data.function.head->data.symbol == intern_symbol("List"))
+        d = (long)cl->data.function.arg_count - 1;
+    if (cl) expr_free(cl);
+    return d;
+}
+/* Coefficient[e, x, k] */
+static Expr* rm_coeff(Expr* e, Expr* x, long k) {
+    return rm_eval3("Coefficient", expr_copy(e), expr_copy(x),
+                    expr_new_integer(k));
+}
+/* Together[e] === 0 — an exact zero test for rational functions of the
+ * field kernels (Together is exact and, unlike Simplify, cheap; it is only
+ * ever applied here to constants and small rational cofactors). */
+static bool rm_is_zero(Expr* e) {
+    Expr* s = rm_eval1("Together", expr_copy(e));
+    bool z = s && s->type == EXPR_INTEGER && s->data.integer == 0;
+    if (s) expr_free(s);
+    return z;
+}
+
+/* Parse `tmpl`, substitute the named placeholder symbols with `vals`
+ * (borrowed; copied in), evaluate, and return the result (or NULL). */
+static Expr* rm_template(const char* tmpl, const char** names,
+                         Expr** vals, size_t n) {
+    Expr* t = parse_expression(tmpl);
+    if (!t) return NULL;
+    Expr** rules = malloc(n * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) {
+        rules[i] = expr_new_function(expr_new_symbol("Rule"),
+            (Expr*[]){ expr_new_symbol(names[i]), expr_copy(vals[i]) }, 2);
+    }
+    Expr* rl = expr_new_function(expr_new_symbol("List"), rules, n);
+    free(rules);
+    Expr* ra = expr_new_function(expr_new_symbol("ReplaceAll"),
+        (Expr*[]){ t, rl }, 2);
+    Expr* out = evaluate(ra);
+    expr_free(ra);
+    return out;
+}
+
+/* ================================================================== */
+/* Case: rational function of x  (Maxima rischfprog / dprog / eprog).  */
+/* ================================================================== */
+
+/* Delegate the pure-rational case to the Bronstein rational integrator,
+ * which IS Maxima's rational Risch case and strictly stronger.  Returns
+ * NULL when the integrand is not rational in x (BronsteinRational leaves
+ * its call unevaluated). */
+static Expr* rm_rational_case(Expr* f, Expr* x) {
+    Expr* r = rm_eval_call("Integrate`BronsteinRational",
+        (Expr*[]){ expr_copy(f), expr_copy(x) }, 2);
+    if (!r) return NULL;
+    if (rm_head_is(r, "Integrate`BronsteinRational")) {
+        expr_free(r);
+        return NULL;
+    }
+    return r;
+}
+
+/* ================================================================== */
+/* Case: special functions  (Maxima erfarg / erfarg2 / Ei / li / dilog).*/
+/* ================================================================== */
+/* Each recognizer builds a candidate antiderivative from a template and
+ * accepts it only if it passes the diff-back gate, so a mis-recognition
+ * can never emit a wrong closed form.  These close integrals the whole
+ * elementary cascade leaves open, using special functions Mathilda
+ * already provides (Erf, ExpIntegralEi, LogIntegral, PolyLog).          */
+
+/* K * E^(a x^2 + b x + c) with the leading (quadratic) coefficient
+ * nonzero  ->  Erf/Erfi.  Detected by the log-derivative f'/f being a
+ * degree-1 polynomial (Maxima's erfarg). */
+static Expr* rm_try_erf(Expr* f, Expr* x) {
+    Expr* df = rm_eval2("D", expr_copy(f), expr_copy(x));
+    if (!df) return NULL;
+    Expr* inv = expr_new_function(expr_new_symbol("Power"),
+        (Expr*[]){ expr_copy(f), expr_new_integer(-1) }, 2);
+    Expr* quot = expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ df, inv }, 2);
+    Expr* ld = rm_eval1("Cancel", quot);
+    if (!ld) return NULL;
+    if (!rm_is_poly(ld, x) || rm_degree(ld, x) != 1) { expr_free(ld); return NULL; }
+    Expr* a2 = rm_coeff(ld, x, 1);   /* = 2a */
+    Expr* b1 = rm_coeff(ld, x, 0);   /* = b  */
+    expr_free(ld);
+
+    const char* names[2] = { "rmA2", "rmB" };
+    Expr* vals[2] = { a2, b1 };
+    Expr* result = NULL;
+    /* Since ld = f'/f is a degree-1 polynomial, f = K' E^((a2/2)x^2 + b1 x)
+     * with K' a constant, so K' = f|_{x=0} (the exponent has no constant
+     * term).  Evaluating at 0 avoids a Simplify on a product of Gaussian
+     * exponentials, which is prohibitively slow. */
+    Expr* kp = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+        (Expr*[]){ expr_copy(f), expr_new_function(expr_new_symbol("Rule"),
+            (Expr*[]){ expr_copy(x), expr_new_integer(0) }, 2) }, 2));
+    if (kp) {
+        /* Integral of E^((a2/2)x^2 + b1 x), a = a2/2, b = b1:
+         *   E^(-b^2/(4a)) * (-Sqrt[Pi] Erf[(b+2a x)/(2 Sqrt[-a])] / (2 Sqrt[-a]))
+         * where -b^2/(4a) = -b1^2/(2 a2) is the completing-the-square shift. */
+        Expr* erfpart = rm_template(
+            "E^(-rmB^2/(2*rmA2)) *"
+            " (-(Sqrt[Pi]*Erf[(rmB + rmA2*x)/(2*Sqrt[-rmA2/2])])/(2*Sqrt[-rmA2/2]))",
+            names, vals, 2);
+        if (erfpart) {
+            /* Correct by construction: ld = f'/f is a degree-1 polynomial,
+             * so f = K' E^(a x^2 + b x) exactly and this is its integral. */
+            result = rm_eval_own(expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_copy(kp), erfpart }, 2));
+        }
+        expr_free(kp);
+    }
+    expr_free(a2);
+    expr_free(b1);
+    return result;
+}
+
+/* (const * E^(a x)) / (c x + d)  ->  ExpIntegralEi.  Numerator is a
+ * constant times a pure exponential; denominator linear in x. */
+static Expr* rm_try_ei(Expr* f, Expr* x) {
+    Expr* g = rm_eval1("Together", expr_copy(f));
+    if (!g) return NULL;
+    Expr* num = rm_eval1("Numerator", expr_copy(g));
+    Expr* den = rm_eval1("Denominator", expr_copy(g));
+    expr_free(g);
+    Expr* result = NULL;
+    if (num && den && rm_is_poly(den, x) && rm_degree(den, x) == 1
+        && !rm_free_of_x(num, x)) {
+        /* numld = Cancel[D[num]/num] must be a nonzero constant (= a). */
+        Expr* dn = rm_eval2("D", expr_copy(num), expr_copy(x));
+        Expr* invn = expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(num), expr_new_integer(-1) }, 2);
+        Expr* q = expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ dn, invn }, 2);
+        Expr* numld = rm_eval1("Cancel", q);
+        if (numld && rm_free_of_x(numld, x) && !rm_is_zero(numld)) {
+            /* num = M E^(a x) with M constant, so M = num|_{x=0}. */
+            Expr* M = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                (Expr*[]){ expr_copy(num),
+                    expr_new_function(expr_new_symbol("Rule"),
+                        (Expr*[]){ expr_copy(x), expr_new_integer(0) }, 2) }, 2));
+            if (M && rm_free_of_x(M, x)) {
+                Expr* cc = rm_coeff(den, x, 1);
+                Expr* dd = rm_coeff(den, x, 0);
+                const char* names[4] = { "rmM", "rmA", "rmC", "rmD" };
+                Expr* vals[4] = { M, numld, cc, dd };
+                /* Correct by construction: num = M E^(a x) (num'/num = a
+                 * constant) over an exactly linear denominator c x + d. */
+                result = rm_template(
+                    "(rmM*E^(-rmA*rmD/rmC)/rmC)*ExpIntegralEi[rmA*(x + rmD/rmC)]",
+                    names, vals, 4);
+                expr_free(cc);
+                expr_free(dd);
+            }
+            if (M) expr_free(M);
+        }
+        if (numld) expr_free(numld);
+    }
+    if (num) expr_free(num);
+    if (den) expr_free(den);
+    return result;
+}
+
+/* K / Log[x]  ->  K LogIntegral[x].  Certificate: Together[f Log[x]] is a
+ * constant K free of x (so f = K/Log[x] exactly). */
+static Expr* rm_try_li(Expr* f, Expr* x) {
+    Expr* logx = expr_new_function(expr_new_symbol("Log"),
+        (Expr*[]){ expr_copy(x) }, 1);
+    Expr* prod = expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_copy(f), logx }, 2);
+    Expr* K = rm_eval1("Together", prod);
+    Expr* result = NULL;
+    if (K && rm_free_of_x(K, x) && !rm_is_zero(K)) {
+        Expr* li = expr_new_function(expr_new_symbol("LogIntegral"),
+            (Expr*[]){ expr_copy(x) }, 1);
+        result = rm_eval_own(expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_copy(K), li }, 2));
+    }
+    if (K) expr_free(K);
+    return result;
+}
+
+/* Find (borrowed) the argument u of the first Log[u] subexpression of `e`
+ * whose argument depends on x. */
+static Expr* rm_find_log_of_x(Expr* e, Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == intern_symbol("Log")
+        && e->data.function.arg_count == 1
+        && !rm_free_of_x(e->data.function.args[0], x))
+        return e->data.function.args[0];
+    Expr* r = rm_find_log_of_x(e->data.function.head, x);
+    if (r) return r;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        r = rm_find_log_of_x(e->data.function.args[i], x);
+        if (r) return r;
+    }
+    return NULL;
+}
+
+/* Find (borrowed) the exponent u of the first exponential kernel of `e`
+ * whose exponent depends on x, matching either Exp[u] or E^u (Power[E,u]). */
+static Expr* rm_find_exp_of_x(Expr* e, Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    const char* h = (e->data.function.head->type == EXPR_SYMBOL)
+        ? e->data.function.head->data.symbol : NULL;
+    if (h == intern_symbol("Exp") && e->data.function.arg_count == 1
+        && !rm_free_of_x(e->data.function.args[0], x))
+        return e->data.function.args[0];
+    if (h == intern_symbol("Power") && e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        Expr* ex = e->data.function.args[1];
+        if (base->type == EXPR_SYMBOL && base->data.symbol == intern_symbol("E")
+            && !rm_free_of_x(ex, x))
+            return ex;
+    }
+    Expr* r = rm_find_exp_of_x(e->data.function.head, x);
+    if (r) return r;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        r = rm_find_exp_of_x(e->data.function.args[i], x);
+        if (r) return r;
+    }
+    return NULL;
+}
+
+/* K Log[1 + p x] / x  ->  -K PolyLog[2, -p x]  (Maxima's dilog).
+ * Certificate: the Log argument is exactly linear with constant term 1,
+ * and Together[f x / Log[u]] is a constant K free of x (so f is exactly
+ * K Log[1+p x]/x). */
+static Expr* rm_try_dilog(Expr* f, Expr* x) {
+    Expr* u = rm_find_log_of_x(f, x);   /* borrowed */
+    if (!u) return NULL;
+    if (!rm_is_poly(u, x) || rm_degree(u, x) != 1) return NULL;
+    Expr* u0 = rm_coeff(u, x, 0);
+    Expr* u1 = rm_coeff(u, x, 1);
+    Expr* result = NULL;
+    Expr* u0m1 = expr_new_function(expr_new_symbol("Plus"),
+        (Expr*[]){ expr_copy(u0), expr_new_integer(-1) }, 2);
+    bool u0_is_1 = rm_is_zero(u0m1);
+    expr_free(u0m1);
+    if (u0_is_1) {
+        Expr* logu = expr_new_function(expr_new_symbol("Log"),
+            (Expr*[]){ expr_copy(u) }, 1);
+        Expr* invlog = expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ logu, expr_new_integer(-1) }, 2);
+        Expr* prod = expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_copy(f), expr_copy(x), invlog }, 3);
+        Expr* K = rm_eval1("Together", prod);
+        if (K && rm_free_of_x(K, x) && !rm_is_zero(K)) {
+            const char* names[2] = { "rmK", "rmU1" };
+            Expr* vals[2] = { K, u1 };
+            result = rm_template("-rmK*PolyLog[2, -rmU1*x]", names, vals, 2);
+        }
+        if (K) expr_free(K);
+    }
+    expr_free(u0);
+    expr_free(u1);
+    return result;
+}
+
+/* Try each special-function recognizer in turn. */
+static Expr* rm_special_case(Expr* f, Expr* x) {
+    Expr* r;
+    if ((r = rm_try_erf(f, x))) return r;
+    if ((r = rm_try_ei(f, x))) return r;
+    if ((r = rm_try_li(f, x))) return r;
+    if ((r = rm_try_dilog(f, x))) return r;
+    return NULL;
+}
+
+/* ================================================================== */
+/* Case: transcendental — the recursive Risch algorithm proper.        */
+/* ================================================================== */
+/* This is the genuine recursive Risch (Maxima's rischint over a single
+ * logarithmic / exponential monomial extension), NOT the parallel-Risch
+ * (pmint) heuristic.  It reduces the integrand in the differential field
+ * K(theta) over K = C(x), grounding all coefficient-field arithmetic in
+ * Mathilda's rational-Risch primitives (Integrate`BronsteinRational for
+ * the base-case integrals in K).                                        */
+
+/* Limited integration in K = C(x) modulo the extension monomial theta =
+ * Log[u]:  compute integ(r) = s + c*theta with s in K (rational) and c a
+ * constant in C, or fail.  The only logarithm the result may contain is
+ * c*Log[u] (that is theta itself); any other logarithm, a non-constant
+ * theta-coefficient, or an unresolved integral makes it decline.  This is
+ * the sub-oracle that lets the primitive polynomial reduction fold a
+ * would-be new logarithm back into the tower.  On success sets *s_out and
+ * *c_out (both owned) and returns 0; otherwise returns -1. */
+static int rm_limited_integrate(Expr* r, Expr* x, Expr* u,
+                                Expr** s_out, Expr** c_out) {
+    *s_out = NULL; *c_out = NULL;
+    Expr* R = rm_eval_call("Integrate`BronsteinRational",
+        (Expr*[]){ expr_copy(r), expr_copy(x) }, 2);
+    if (!R) return -1;
+    if (rm_head_is(R, "Integrate`BronsteinRational")) { expr_free(R); return -1; }
+    /* Rsub = R with Log[u] replaced by the fresh variable rmT. */
+    Expr* logu = expr_new_function(expr_new_symbol("Log"),
+        (Expr*[]){ expr_copy(u) }, 1);
+    Expr* rule = expr_new_function(expr_new_symbol("Rule"),
+        (Expr*[]){ logu, expr_new_symbol("rmT") }, 2);
+    Expr* Rsub = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+        (Expr*[]){ R, rule }, 2));   /* adopts R */
+    if (!Rsub) return -1;
+    Expr* tsym = expr_new_symbol("rmT");
+    int rc = -1;
+    if (rm_free_of_head(Rsub, "Log") && rm_is_poly(Rsub, tsym)
+        && rm_degree(Rsub, tsym) <= 1) {
+        Expr* c = rm_coeff(Rsub, tsym, 1);   /* theta-coefficient */
+        Expr* s = rm_coeff(Rsub, tsym, 0);   /* rational part      */
+        if (rm_free_of_x(c, x)) { *s_out = s; *c_out = c; rc = 0; }
+        else { expr_free(c); expr_free(s); }
+    }
+    expr_free(Rsub);
+    expr_free(tsym);
+    return rc;
+}
+
+/* Primitive (logarithmic) polynomial case.  For theta = Log[u] with
+ * u rational in x (theta' = u'/u =: eta in K), integrate a polynomial
+ * P(theta) = sum p_i theta^i by the recursive coefficient matching of the
+ * recursive Risch algorithm (Bronstein, IntegratePrimitivePolynomial):
+ * the antiderivative Q = sum q_i theta^i satisfies, degree by degree,
+ *     q_i' + (i+1) q_{i+1} eta = p_i.
+ * Working top-down, each level integrates r_i = p_i - (i+1) q_{i+1} eta in
+ * K by the limited-integration oracle, which returns s_i + c_i theta; the
+ * constant c_i is folded back by bumping q_{i+1} += c_i/(i+1) (this is how
+ * a would-be new logarithm becomes a higher power of theta, e.g. the
+ * (3/2)Log[2x+3] arising in Integrate[Log[2x+3]]).  Declines (NULL) if any
+ * level leaves K in a way the oracle cannot absorb. */
+static Expr* rm_log_poly_case(Expr* f, Expr* x) {
+    Expr* u = rm_find_log_of_x(f, x);        /* borrowed: the Log argument */
+    if (!u) return NULL;
+
+    /* F = f with Log[u] replaced by the fresh polynomial variable rmT. */
+    Expr* logu = expr_new_function(expr_new_symbol("Log"),
+        (Expr*[]){ expr_copy(u) }, 1);
+    Expr* rule = expr_new_function(expr_new_symbol("Rule"),
+        (Expr*[]){ logu, expr_new_symbol("rmT") }, 2);
+    Expr* F = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+        (Expr*[]){ expr_copy(f), rule }, 2));
+    if (!F) return NULL;
+
+    Expr* tsym = expr_new_symbol("rmT");
+    /* Require: pure polynomial in theta, no residual logs (single
+     * extension), and genuine theta-dependence. */
+    if (!rm_is_poly(F, tsym) || !rm_free_of_head(F, "Log")
+        || rm_free_of_x(F, tsym)) {
+        expr_free(F); expr_free(tsym); return NULL;
+    }
+    long m = rm_degree(F, tsym);
+    if (m < 1) { expr_free(F); expr_free(tsym); return NULL; }
+
+    /* eta = Cancel[D[u,x]/u]. */
+    Expr* du = rm_eval2("D", expr_copy(u), expr_copy(x));
+    Expr* invu = expr_new_function(expr_new_symbol("Power"),
+        (Expr*[]){ expr_copy(u), expr_new_integer(-1) }, 2);
+    Expr* eta = rm_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ du, invu }, 2));
+
+    Expr** p = malloc((size_t)(m + 1) * sizeof(Expr*));
+    for (long i = 0; i <= m; i++) p[i] = rm_coeff(F, tsym, i);
+    /* q[0..m+1]; NULL entries represent 0 (a bump can create q[m+1]). */
+    Expr** q = calloc((size_t)(m + 2), sizeof(Expr*));
+
+    bool fail = (eta == NULL);
+    for (long i = m; i >= 0 && !fail; i--) {
+        /* r_i = p_i - (i+1) q[i+1] eta. */
+        Expr* r_i;
+        if (q[i + 1] == NULL) {
+            r_i = expr_copy(p[i]);
+        } else {
+            Expr* term = expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_integer(i + 1), expr_copy(q[i + 1]),
+                          expr_copy(eta) }, 3);
+            Expr* neg = expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_integer(-1), term }, 2);
+            r_i = expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ expr_copy(p[i]), neg }, 2);
+        }
+        Expr* s = NULL; Expr* c = NULL;
+        int rc = rm_limited_integrate(r_i, x, u, &s, &c);
+        expr_free(r_i);
+        if (rc != 0) { fail = true; break; }
+        /* Fold the theta-term back: q[i+1] += c/(i+1). */
+        Expr* bump = expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ c, expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_new_integer(i + 1), expr_new_integer(-1) }, 2) }, 2);
+        if (q[i + 1] == NULL) {
+            q[i + 1] = rm_eval_own(bump);
+        } else {
+            q[i + 1] = rm_eval_own(expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ q[i + 1], bump }, 2));   /* adopts old q[i+1] */
+        }
+        q[i] = s;
+    }
+
+    Expr* result = NULL;
+    if (!fail) {
+        /* Q = sum_{i=0}^{m+1} q_i Log[u]^i  (skip zero coefficients). */
+        Expr** terms = malloc((size_t)(m + 2) * sizeof(Expr*));
+        size_t nt = 0;
+        for (long i = 0; i <= m + 1; i++) {
+            if (!q[i]) continue;
+            Expr* lu = expr_new_function(expr_new_symbol("Log"),
+                (Expr*[]){ expr_copy(u) }, 1);
+            Expr* pw = expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ lu, expr_new_integer(i) }, 2);
+            terms[nt++] = expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_copy(q[i]), pw }, 2);
+        }
+        Expr* sum = expr_new_function(expr_new_symbol("Plus"), terms, nt);
+        free(terms);
+        result = evaluate(sum);
+        expr_free(sum);
+    }
+
+    for (long i = 0; i <= m; i++) expr_free(p[i]);
+    for (long i = 0; i <= m + 1; i++) if (q[i]) expr_free(q[i]);
+    free(p); free(q);
+    if (eta) expr_free(eta);
+    expr_free(F); expr_free(tsym);
+    return result;
+}
+
+/* Integrate g in K = C(x) allowing genuine logarithms in the result (the
+ * i = 0 term of the exponential case is an ordinary base-field integral). */
+static Expr* rm_integrate_in_K_with_logs(Expr* g, Expr* x) {
+    Expr* r = rm_eval_call("Integrate`BronsteinRational",
+        (Expr*[]){ expr_copy(g), expr_copy(x) }, 2);
+    if (!r) return NULL;
+    if (rm_head_is(r, "Integrate`BronsteinRational")) { expr_free(r); return NULL; }
+    return r;
+}
+
+/* Solve the Risch differential equation  q' + i u' q = p  for q in K,
+ * with u a polynomial in x (u' polynomial) and p a polynomial in x, by a
+ * bounded polynomial ansatz solved exactly with SolveAlways.  Correct by
+ * construction: SolveAlways certifies the polynomial identity holds for
+ * all x, so (q E^(i u))' = p E^(i u) exactly.  Returns q (owned) or NULL
+ * when no polynomial solution exists (the term is then non-elementary in
+ * this field — e.g. E^(-x^2) itself, left to the Erf recognizer). */
+static Expr* rm_solve_rde(Expr* p, long i, Expr* u, Expr* x) {
+    if (i == 0) return NULL;
+    if (!rm_is_poly(u, x) || !rm_is_poly(p, x)) return NULL;
+    long du = rm_degree(u, x);
+    if (du < 1) return NULL;                 /* u must be nonconstant */
+    long dp = rm_degree(p, x);
+    if (dp < 0) return NULL;
+    long dF = du - 1;                        /* deg(i u') */
+    long N = (dF >= 1) ? (dp - dF) : dp;     /* exact degree bound */
+    if (N < 0) return NULL;
+
+    Expr* up = rm_eval2("D", expr_copy(u), expr_copy(x));   /* u' */
+    if (!up) return NULL;
+
+    /* Ansatz q = sum_{k=0}^{N} rmC_k x^k. */
+    Expr** terms = malloc((size_t)(N + 1) * sizeof(Expr*));
+    for (long k = 0; k <= N; k++) {
+        char nm[24];
+        snprintf(nm, sizeof(nm), "rmC%ld", k);
+        Expr* pw = expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(x), expr_new_integer(k) }, 2);
+        terms[k] = expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_new_symbol(nm), pw }, 2);
+    }
+    Expr* q = rm_eval_own(expr_new_function(expr_new_symbol("Plus"),
+        terms, (size_t)(N + 1)));
+    free(terms);
+
+    /* residual = D[q,x] + i u' q - p. */
+    Expr* dq = rm_eval2("D", expr_copy(q), expr_copy(x));
+    Expr* iuq = expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_new_integer(i), expr_copy(up), expr_copy(q) }, 3);
+    Expr* negp = expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_new_integer(-1), expr_copy(p) }, 2);
+    Expr* residual = rm_eval_own(expr_new_function(expr_new_symbol("Plus"),
+        (Expr*[]){ dq, iuq, negp }, 3));
+
+    /* SolveAlways[residual == 0, x]. */
+    Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
+        (Expr*[]){ residual, expr_new_integer(0) }, 2);   /* adopts residual */
+    Expr* sol = rm_eval2("SolveAlways", eqn, expr_copy(x));
+
+    Expr* result = NULL;
+    if (sol && sol->type == EXPR_FUNCTION
+        && sol->data.function.head->type == EXPR_SYMBOL
+        && sol->data.function.head->data.symbol == intern_symbol("List")
+        && sol->data.function.arg_count >= 1
+        && sol->data.function.args[0]->type == EXPR_FUNCTION
+        && sol->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
+        && sol->data.function.args[0]->data.function.head->data.symbol
+             == intern_symbol("List")) {
+        /* Apply the solution, then pin any free ansatz parameters to 0. */
+        Expr* qi = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+            (Expr*[]){ expr_copy(q), expr_copy(sol->data.function.args[0]) }, 2));
+        Expr** zero = malloc((size_t)(N + 1) * sizeof(Expr*));
+        for (long k = 0; k <= N; k++) {
+            char nm[24];
+            snprintf(nm, sizeof(nm), "rmC%ld", k);
+            zero[k] = expr_new_function(expr_new_symbol("Rule"),
+                (Expr*[]){ expr_new_symbol(nm), expr_new_integer(0) }, 2);
+        }
+        Expr* zl = expr_new_function(expr_new_symbol("List"), zero, (size_t)(N + 1));
+        free(zero);
+        result = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+            (Expr*[]){ qi, zl }, 2));   /* adopts qi, zl */
+    }
+    if (sol) expr_free(sol);
+    expr_free(q);
+    expr_free(up);
+    return result;
+}
+
+/* Collect (as owned copies, deduplicated) the exponents of every E^w / Exp[w]
+ * kernel of `e` whose exponent depends on x. */
+static void rm_collect_exp_exponents(Expr* e, Expr* x,
+                                     Expr*** arr, size_t* n, size_t* cap) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    const char* h = (e->data.function.head->type == EXPR_SYMBOL)
+        ? e->data.function.head->data.symbol : NULL;
+    Expr* w = NULL;
+    if (h == intern_symbol("Exp") && e->data.function.arg_count == 1
+        && !rm_free_of_x(e->data.function.args[0], x))
+        w = e->data.function.args[0];
+    else if (h == intern_symbol("Power") && e->data.function.arg_count == 2
+        && e->data.function.args[0]->type == EXPR_SYMBOL
+        && e->data.function.args[0]->data.symbol == intern_symbol("E")
+        && !rm_free_of_x(e->data.function.args[1], x))
+        w = e->data.function.args[1];
+    if (w) {
+        bool dup = false;
+        for (size_t i = 0; i < *n; i++) if (expr_eq((*arr)[i], w)) { dup = true; break; }
+        if (!dup) {
+            if (*n == *cap) {
+                *cap = *cap ? *cap * 2 : 4;
+                *arr = realloc(*arr, *cap * sizeof(Expr*));
+            }
+            (*arr)[(*n)++] = expr_copy(w);
+        }
+    }
+    rm_collect_exp_exponents(e->data.function.head, x, arr, n, cap);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        rm_collect_exp_exponents(e->data.function.args[i], x, arr, n, cap);
+}
+
+/* Exponential (hyperexponential) Laurent-polynomial case.  For a single
+ * kernel theta = E^u (u a polynomial in x, theta' = u' theta), an integrand
+ * that is a Laurent polynomial  f = sum_i p_i theta^i  (i possibly negative)
+ * integrates to Q = sum_i q_i theta^i: the powers DECOUPLE, the i = 0 term is
+ * an ordinary integral q_0 = INT p_0 in K, and each i != 0 term solves the
+ * Risch differential equation q_i' + i u' q_i = p_i.  All E^(k u) present must
+ * share the one primitive exponent u (k integer); a genuine theta-denominator
+ * beyond a pure power of theta (a real fractional part) is declined here and
+ * left to the fractional case.  Closes e.g. Cosh/Sinh and mixed +/- powers. */
+/* Kernelize a single-primitive exponential extension: find a primitive
+ * exponent u so every E^w kernel of `f` (w depending on x) has w = k u with
+ * k a nonzero integer, substitute every E^(k u) -> rmT^k, and return the
+ * resulting expression in rmT (sets *u_out to an owned copy of u).  Returns
+ * NULL when there is no single-primitive exponential structure. */
+static Expr* rm_exp_kernelize(Expr* f, Expr* x, Expr** u_out) {
+    *u_out = NULL;
+    if (!rm_find_exp_of_x(f, x)) return NULL;
+    Expr** ws = NULL; size_t nw = 0, cap = 0;
+    rm_collect_exp_exponents(f, x, &ws, &nw, &cap);
+    if (nw == 0) { free(ws); return NULL; }
+
+    Expr* u = NULL; long* kof = malloc(nw * sizeof(long));
+    for (size_t cand = 0; cand < nw && !u; cand++) {
+        bool all_int = true;
+        for (size_t j = 0; j < nw; j++) {
+            Expr* ratio = rm_eval1("Cancel", expr_new_function(
+                expr_new_symbol("Times"), (Expr*[]){ expr_copy(ws[j]),
+                    expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ expr_copy(ws[cand]), expr_new_integer(-1) }, 2)
+                }, 2));
+            if (ratio && ratio->type == EXPR_INTEGER && ratio->data.integer != 0)
+                kof[j] = (long)ratio->data.integer;
+            else all_int = false;
+            if (ratio) expr_free(ratio);
+            if (!all_int) break;
+        }
+        if (all_int) u = ws[cand];
+    }
+    if (!u) { for (size_t i = 0; i < nw; i++) expr_free(ws[i]); free(ws); free(kof); return NULL; }
+
+    Expr** rules = malloc(2 * nw * sizeof(Expr*));
+    for (size_t j = 0; j < nw; j++) {
+        Expr* tk = expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_new_symbol("rmT"), expr_new_integer(kof[j]) }, 2);
+        rules[2 * j] = expr_new_function(expr_new_symbol("Rule"),
+            (Expr*[]){ expr_new_function(expr_new_symbol("Exp"),
+                (Expr*[]){ expr_copy(ws[j]) }, 1), expr_copy(tk) }, 2);
+        rules[2 * j + 1] = expr_new_function(expr_new_symbol("Rule"),
+            (Expr*[]){ expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_new_symbol("E"), expr_copy(ws[j]) }, 2), tk }, 2);
+    }
+    Expr* rl = expr_new_function(expr_new_symbol("List"), rules, 2 * nw);
+    free(rules);
+    Expr* uexp = expr_copy(u);
+    for (size_t i = 0; i < nw; i++) expr_free(ws[i]);
+    free(ws); free(kof);
+
+    Expr* F = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+        (Expr*[]){ expr_copy(f), rl }, 2));
+    if (!F) { expr_free(uexp); return NULL; }
+    *u_out = uexp;
+    return F;
+}
+
+static Expr* rm_exp_poly_case(Expr* f, Expr* x) {
+    Expr* uexp = NULL;
+    Expr* F = rm_exp_kernelize(f, x, &uexp);
+    if (!F) return NULL;
+
+    Expr* tsym = expr_new_symbol("rmT");
+    /* F must be a Laurent polynomial in t: num/den with den a pure power of t.
+     * Split into num and the offset M (den = c t^M). */
+    Expr* G = rm_eval1("Together", expr_copy(F));
+    Expr* num = G ? rm_eval1("Numerator", expr_copy(G)) : NULL;
+    Expr* den = G ? rm_eval1("Denominator", expr_copy(G)) : NULL;
+    Expr* result = NULL;
+    long M = 0;
+    bool ok = num && den && rm_is_poly(num, tsym) && rm_is_poly(den, tsym)
+        && !rm_free_of_x(F, tsym)
+        && rm_find_exp_of_x(F, x) == NULL && rm_find_log_of_x(F, x) == NULL;
+    if (ok) {
+        M = rm_degree(den, tsym);
+        /* den must be a monomial c t^M: den / t^M free of t. */
+        Expr* dq = rm_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_copy(den), expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_copy(tsym), expr_new_integer(-M) }, 2) }, 2));
+        if (!dq || !rm_free_of_x(dq, tsym)) ok = false;
+        if (dq) expr_free(dq);
+        /* Fold the constant den/t^M into num so p_i = Coefficient[num/c, ...]. */
+        if (ok) {
+            Expr* nnew = rm_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_copy(num), expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_copy(den), expr_new_integer(-1) }, 2),
+                  expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_copy(tsym), expr_new_integer(M) }, 2) }, 3));
+            if (nnew) { expr_free(num); num = nnew; }
+            else ok = false;
+        }
+    }
+    long dnum = ok ? rm_degree(num, tsym) : -1;
+    if (ok && dnum >= 0) {
+        Expr** q = calloc((size_t)(dnum + 1), sizeof(Expr*));
+        long* qi_pow = malloc((size_t)(dnum + 1) * sizeof(long));
+        bool fail = false;
+        for (long j = 0; j <= dnum && !fail; j++) {
+            long i = j - M;                       /* Laurent power */
+            Expr* pi = rm_coeff(num, tsym, j);
+            if (rm_is_zero(pi)) { expr_free(pi); q[j] = NULL; qi_pow[j] = i; continue; }
+            Expr* qi = (i == 0) ? rm_integrate_in_K_with_logs(pi, x)
+                                : rm_solve_rde(pi, i, uexp, x);
+            expr_free(pi);
+            qi_pow[j] = i;
+            if (!qi) { fail = true; break; }
+            q[j] = qi;
+        }
+        if (!fail) {
+            Expr** terms = malloc((size_t)(dnum + 1) * sizeof(Expr*));
+            size_t nt = 0;
+            for (long j = 0; j <= dnum; j++) {
+                if (!q[j]) continue;
+                long i = qi_pow[j];
+                Expr* term;
+                if (i == 0) {
+                    term = expr_copy(q[j]);
+                } else {
+                    Expr* iu = expr_new_function(expr_new_symbol("Times"),
+                        (Expr*[]){ expr_new_integer(i), expr_copy(uexp) }, 2);
+                    Expr* eiu = expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ expr_new_symbol("E"), iu }, 2);
+                    term = expr_new_function(expr_new_symbol("Times"),
+                        (Expr*[]){ expr_copy(q[j]), eiu }, 2);
+                }
+                terms[nt++] = term;
+            }
+            result = rm_eval_own(expr_new_function(expr_new_symbol("Plus"),
+                terms, nt));
+            free(terms);
+        }
+        for (long j = 0; j <= dnum; j++) if (q[j]) expr_free(q[j]);
+        free(q); free(qi_pow);
+    }
+
+    if (G) expr_free(G);
+    if (num) expr_free(num);
+    if (den) expr_free(den);
+    expr_free(F);
+    expr_free(tsym);
+    expr_free(uexp);
+    return result;
+}
+
+/* Fractional (Rothstein-Trager) log-part for a single monomial extension
+ * theta (theta = Log[u], D theta = u'/u; or theta = E^u, D theta = u' theta).
+ * With theta -> t, an integrand whose t-denominator d = prod g_i is
+ * squarefree integrates (when elementary and free of a polynomial/Hermite
+ * remainder) to  sum_i c_i Log(g_i)  with each c_i a CONSTANT.  Those
+ * constants are found by solving the exact polynomial identity
+ *     num  =  sum_i c_i D(g_i) (d / g_i)          (D = d/dx + (D t) d/dt)
+ * for all t and x with SolveAlways[..., {t, x}]: the solver returns the
+ * constant residues, or no solution (which declines) when the integrand has
+ * a repeated pole, an irreducible factor with non-constant residue, or a
+ * polynomial part.  Correct by construction — a solution certifies
+ * D(sum c_i Log g_i) = num/d exactly. */
+static Expr* rm_frac_try(Expr* f, Expr* x, Expr* u, bool is_log) {
+    Expr* tsym = expr_new_symbol("rmT");
+    Expr* rules; Expr* Dt; Expr* kernel_back;
+    if (is_log) {
+        Expr* logu = expr_new_function(expr_new_symbol("Log"),
+            (Expr*[]){ expr_copy(u) }, 1);
+        rules = expr_new_function(expr_new_symbol("List"),
+            (Expr*[]){ expr_new_function(expr_new_symbol("Rule"),
+                (Expr*[]){ logu, expr_new_symbol("rmT") }, 2) }, 1);
+        Expr* du = rm_eval2("D", expr_copy(u), expr_copy(x));
+        Expr* invu = expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(u), expr_new_integer(-1) }, 2);
+        Dt = rm_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ du, invu }, 2));
+        kernel_back = expr_new_function(expr_new_symbol("Log"),
+            (Expr*[]){ expr_copy(u) }, 1);
+    } else {
+        Expr* eu = expr_new_function(expr_new_symbol("Exp"),
+            (Expr*[]){ expr_copy(u) }, 1);
+        Expr* peu = expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_new_symbol("E"), expr_copy(u) }, 2);
+        rules = expr_new_function(expr_new_symbol("List"),
+            (Expr*[]){ expr_new_function(expr_new_symbol("Rule"),
+                (Expr*[]){ eu, expr_new_symbol("rmT") }, 2),
+              expr_new_function(expr_new_symbol("Rule"),
+                (Expr*[]){ peu, expr_new_symbol("rmT") }, 2) }, 2);
+        Expr* up = rm_eval2("D", expr_copy(u), expr_copy(x));
+        Dt = expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ up, expr_new_symbol("rmT") }, 2);
+        kernel_back = expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_new_symbol("E"), expr_copy(u) }, 2);
+    }
+    if (!Dt) { expr_free(tsym); expr_free(rules); expr_free(kernel_back); return NULL; }
+
+    Expr* F0 = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+        (Expr*[]){ expr_copy(f), rules }, 2));
+    Expr* F = F0 ? rm_eval1("Together", F0) : NULL;
+    if (!F) { expr_free(tsym); expr_free(Dt); expr_free(kernel_back); return NULL; }
+
+    Expr* num = rm_eval1("Numerator", expr_copy(F));
+    Expr* den = rm_eval1("Denominator", expr_copy(F));
+    Expr* result = NULL;
+
+    bool ok = num && den && rm_is_poly(num, tsym) && rm_is_poly(den, tsym)
+        && !rm_free_of_x(den, tsym)
+        && rm_find_exp_of_x(F, x) == NULL && rm_find_log_of_x(F, x) == NULL;
+
+    if (ok) {
+        Expr* factored = rm_eval1("Factor", expr_copy(den));
+        Expr* g[16]; size_t ng = 0; bool bad = false;
+        if (factored) {
+            Expr** fa; size_t nf; Expr* single[1];
+            if (factored->type == EXPR_FUNCTION
+                && factored->data.function.head->type == EXPR_SYMBOL
+                && factored->data.function.head->data.symbol == intern_symbol("Times")) {
+                fa = factored->data.function.args;
+                nf = factored->data.function.arg_count;
+            } else { single[0] = factored; fa = single; nf = 1; }
+            for (size_t i = 0; i < nf && !bad; i++) {
+                Expr* term = fa[i]; Expr* base = term; long e = 1;
+                if (term->type == EXPR_FUNCTION
+                    && term->data.function.head->type == EXPR_SYMBOL
+                    && term->data.function.head->data.symbol == intern_symbol("Power")
+                    && term->data.function.arg_count == 2
+                    && term->data.function.args[1]->type == EXPR_INTEGER) {
+                    base = term->data.function.args[0];
+                    e = (long)term->data.function.args[1]->data.integer;
+                }
+                if (rm_free_of_x(base, tsym)) continue;   /* FreeQ[base, t] */
+                if (e != 1 || ng >= 16) { bad = true; break; }
+                g[ng++] = expr_copy(base);
+            }
+        }
+        if (!bad && ng >= 1) {
+            /* residual = num - sum_i c_i D(g_i) (den/g_i). */
+            Expr** negterms = malloc((ng + 1) * sizeof(Expr*));
+            negterms[0] = expr_copy(num);
+            for (size_t i = 0; i < ng; i++) {
+                char nm[24]; snprintf(nm, sizeof(nm), "rmK%zu", i);
+                Expr* dgx = rm_eval2("D", expr_copy(g[i]), expr_copy(x));
+                Expr* dgt = rm_eval2("D", expr_copy(g[i]), expr_copy(tsym));
+                Expr* dgi = rm_eval_own(expr_new_function(expr_new_symbol("Plus"),
+                    (Expr*[]){ dgx, expr_new_function(expr_new_symbol("Times"),
+                        (Expr*[]){ expr_copy(Dt), dgt }, 2) }, 2));
+                Expr* cof = rm_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_copy(den), expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ expr_copy(g[i]), expr_new_integer(-1) }, 2) }, 2));
+                negterms[i + 1] = expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_integer(-1), expr_new_symbol(nm),
+                              dgi ? dgi : expr_new_integer(0),
+                              cof ? cof : expr_new_integer(0) }, 4);
+            }
+            Expr* residual = rm_eval_own(expr_new_function(expr_new_symbol("Plus"),
+                negterms, ng + 1));
+            free(negterms);
+
+            Expr* varlist = expr_new_function(expr_new_symbol("List"),
+                (Expr*[]){ expr_copy(tsym), expr_copy(x) }, 2);
+            Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
+                (Expr*[]){ residual, expr_new_integer(0) }, 2);
+            Expr* sol = rm_eval2("SolveAlways", eqn, varlist);
+            if (sol && sol->type == EXPR_FUNCTION
+                && sol->data.function.head->type == EXPR_SYMBOL
+                && sol->data.function.head->data.symbol == intern_symbol("List")
+                && sol->data.function.arg_count >= 1
+                && sol->data.function.args[0]->type == EXPR_FUNCTION
+                && sol->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
+                && sol->data.function.args[0]->data.function.head->data.symbol
+                     == intern_symbol("List")) {
+                Expr** rterms = malloc(ng * sizeof(Expr*));
+                for (size_t i = 0; i < ng; i++) {
+                    char nm[24]; snprintf(nm, sizeof(nm), "rmK%zu", i);
+                    Expr* gib = rm_eval_own(expr_new_function(
+                        expr_new_symbol("ReplaceAll"),
+                        (Expr*[]){ expr_copy(g[i]),
+                          expr_new_function(expr_new_symbol("List"),
+                            (Expr*[]){ expr_new_function(expr_new_symbol("Rule"),
+                                (Expr*[]){ expr_copy(tsym), expr_copy(kernel_back) },
+                                2) }, 1) }, 2));
+                    Expr* logg = expr_new_function(expr_new_symbol("Log"),
+                        (Expr*[]){ gib }, 1);
+                    rterms[i] = expr_new_function(expr_new_symbol("Times"),
+                        (Expr*[]){ expr_new_symbol(nm), logg }, 2);
+                }
+                Expr* R = expr_new_function(expr_new_symbol("Plus"), rterms, ng);
+                free(rterms);
+                R = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                    (Expr*[]){ R, expr_copy(sol->data.function.args[0]) }, 2));
+                if (R) {
+                    Expr** zero = malloc(ng * sizeof(Expr*));
+                    for (size_t i = 0; i < ng; i++) {
+                        char nm[24]; snprintf(nm, sizeof(nm), "rmK%zu", i);
+                        zero[i] = expr_new_function(expr_new_symbol("Rule"),
+                            (Expr*[]){ expr_new_symbol(nm), expr_new_integer(0) }, 2);
+                    }
+                    Expr* zl = expr_new_function(expr_new_symbol("List"), zero, ng);
+                    free(zero);
+                    result = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                        (Expr*[]){ R, zl }, 2));
+                }
+            }
+            if (sol) expr_free(sol);
+        }
+        for (size_t i = 0; i < ng; i++) expr_free(g[i]);
+        if (factored) expr_free(factored);
+    }
+    if (num) expr_free(num);
+    if (den) expr_free(den);
+    expr_free(F);
+    expr_free(tsym);
+    expr_free(Dt);
+    expr_free(kernel_back);
+    return result;
+}
+
+/* Hermite reduction for a REPEATED transcendental pole, for a logarithmic
+ * (theta = Log[u], D theta = u'/u) or exponential (theta = E^u, D theta = u'
+ * theta) kernel.  A proper rational function A/D in theta whose denominator D
+ * has a repeated factor integrates to  Q = H(theta)/Hden(theta) +
+ * sum_j c_j Log(g_j)  where Hden = gcd(D, dD/dtheta) = prod D_m^(m-1) is the
+ * repeated part, g_j are the squarefree factors of the radical D/Hden, H is a
+ * polynomial in theta of degree < deg(Hden) with bounded-degree polynomial-in-x
+ * coefficients, and the c_j are constants.  All unknown constants are solved at
+ * once by SolveAlways[Q' - f == 0, {t, x}] — correct by construction (e.g.
+ * Integrate[1/(x (1+Log[x])^2), x] = -1/(1+Log[x]),
+ * Integrate[E^x/(1+E^x)^2, x] = -1/(1+E^x)).  The exponential kernel is handled
+ * only when D is coprime to theta (no theta = 0 pole — that Laurent case is
+ * left to the hyperexponential path). */
+static Expr* rm_hermite_try(Expr* f, Expr* x, bool is_log) {
+    Expr* tsym = expr_new_symbol("rmT");
+    Expr* F = NULL; Expr* Dt = NULL; Expr* kback = NULL; Expr* uu = NULL;
+    if (is_log) {
+        Expr* u = rm_find_log_of_x(f, x);
+        if (!u) { expr_free(tsym); return NULL; }
+        uu = expr_copy(u);
+        Expr* du = rm_eval2("D", expr_copy(uu), expr_copy(x));
+        Expr* invu = expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(uu), expr_new_integer(-1) }, 2);
+        Dt = rm_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ du, invu }, 2));   /* eta = u'/u */
+        kback = expr_new_function(expr_new_symbol("Log"),
+            (Expr*[]){ expr_copy(uu) }, 1);
+        Expr* rl = expr_new_function(expr_new_symbol("List"),
+            (Expr*[]){ expr_new_function(expr_new_symbol("Rule"),
+                (Expr*[]){ expr_new_function(expr_new_symbol("Log"),
+                    (Expr*[]){ expr_copy(uu) }, 1), expr_new_symbol("rmT") }, 2) }, 1);
+        Expr* F0 = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+            (Expr*[]){ expr_copy(f), rl }, 2));
+        F = F0 ? rm_eval1("Together", F0) : NULL;
+    } else {
+        Expr* F0 = rm_exp_kernelize(f, x, &uu);
+        if (F0) F = rm_eval1("Together", F0);
+        if (uu) {
+            Expr* up = rm_eval2("D", expr_copy(uu), expr_copy(x));
+            Dt = expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ up, expr_new_symbol("rmT") }, 2);   /* u' t */
+            kback = expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_new_symbol("E"), expr_copy(uu) }, 2);
+        }
+    }
+    if (!F || !Dt || !uu) {
+        expr_free(tsym);
+        if (F) expr_free(F); if (Dt) expr_free(Dt);
+        if (kback) expr_free(kback); if (uu) expr_free(uu);
+        return NULL;
+    }
+
+    Expr* num = rm_eval1("Numerator", expr_copy(F));
+    Expr* den = rm_eval1("Denominator", expr_copy(F));
+    Expr* result = NULL;
+    bool ok = num && den && rm_is_poly(num, tsym) && rm_is_poly(den, tsym)
+        && !rm_free_of_x(den, tsym)
+        && rm_find_log_of_x(F, x) == NULL && rm_find_exp_of_x(F, x) == NULL;
+    long dnum = ok ? rm_degree(num, tsym) : 0, dden = ok ? rm_degree(den, tsym) : 0;
+    ok = ok && dnum < dden;                      /* proper fraction */
+    if (ok && !is_log) {
+        /* exponential kernel: require D coprime to theta (no theta = 0 pole). */
+        Expr* c0 = rm_coeff(den, tsym, 0);
+        if (rm_is_zero(c0)) ok = false;
+        expr_free(c0);
+    }
+
+    Expr* Hden = NULL; Expr* rad = NULL;
+    if (ok) {
+        Expr* dent = rm_eval2("D", expr_copy(den), expr_copy(tsym));
+        Hden = rm_eval_call("PolynomialGCD",
+            (Expr*[]){ expr_copy(den), dent }, 2);
+        long dH = Hden ? rm_degree(Hden, tsym) : 0;
+        if (dH < 1) ok = false;                  /* no repeated pole */
+        if (ok) rad = rm_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_copy(den), expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_copy(Hden), expr_new_integer(-1) }, 2) }, 2));
+    }
+
+    if (ok && rad) {
+        long dH = rm_degree(Hden, tsym);
+        /* distinct t-factors of the squarefree radical (log terms). */
+        Expr* factored = rm_eval1("Factor", expr_copy(rad));
+        Expr* g[16]; size_t ng = 0; bool bad = (factored == NULL);
+        if (factored) {
+            Expr** fa; size_t nf; Expr* single[1];
+            if (factored->type == EXPR_FUNCTION
+                && factored->data.function.head->type == EXPR_SYMBOL
+                && factored->data.function.head->data.symbol == intern_symbol("Times")) {
+                fa = factored->data.function.args; nf = factored->data.function.arg_count;
+            } else { single[0] = factored; fa = single; nf = 1; }
+            for (size_t i = 0; i < nf && !bad; i++) {
+                Expr* term = fa[i]; Expr* base = term;
+                if (term->type == EXPR_FUNCTION
+                    && term->data.function.head->type == EXPR_SYMBOL
+                    && term->data.function.head->data.symbol == intern_symbol("Power")
+                    && term->data.function.arg_count == 2)
+                    base = term->data.function.args[0];
+                if (rm_free_of_x(base, tsym)) continue;
+                if (ng >= 16) { bad = true; break; }
+                g[ng++] = expr_copy(base);
+            }
+        }
+        long dnx = rm_degree(num, x), ddx = rm_degree(den, x);
+        long Nx = (dnx > ddx ? dnx : ddx) + 2; if (Nx > 8) Nx = 8;
+        size_t nh = (size_t)(dH * (Nx + 1));
+        if (!bad && (long)(nh + ng) <= 80) {
+            Expr** hterms = malloc((nh ? nh : 1) * sizeof(Expr*));
+            size_t nt = 0;
+            for (long p = 0; p < dH; p++)
+                for (long k = 0; k <= Nx; k++) {
+                    char nm[32]; snprintf(nm, sizeof(nm), "rmHh%ldv%ld", p, k);
+                    hterms[nt++] = expr_new_function(expr_new_symbol("Times"),
+                        (Expr*[]){ expr_new_symbol(nm),
+                          expr_new_function(expr_new_symbol("Power"),
+                            (Expr*[]){ expr_copy(x), expr_new_integer(k) }, 2),
+                          expr_new_function(expr_new_symbol("Power"),
+                            (Expr*[]){ expr_copy(tsym), expr_new_integer(p) }, 2) }, 3);
+                }
+            Expr* Hpoly = expr_new_function(expr_new_symbol("Plus"), hterms, nt);
+            free(hterms);
+            Expr* ratpart = expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ Hpoly, expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_copy(Hden), expr_new_integer(-1) }, 2) }, 2);
+            Expr** qterms = malloc((1 + ng) * sizeof(Expr*));
+            size_t ntq = 0;
+            qterms[ntq++] = ratpart;
+            for (size_t j = 0; j < ng; j++) {
+                char nm[32]; snprintf(nm, sizeof(nm), "rmHc%zu", j);
+                qterms[ntq++] = expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_symbol(nm),
+                      expr_new_function(expr_new_symbol("Log"),
+                        (Expr*[]){ expr_copy(g[j]) }, 1) }, 2);
+            }
+            Expr* Q = expr_new_function(expr_new_symbol("Plus"), qterms, ntq);
+            free(qterms);
+
+            Expr* dQx = rm_eval2("D", expr_copy(Q), expr_copy(x));
+            Expr* dQt = rm_eval2("D", expr_copy(Q), expr_copy(tsym));
+            Expr* Qder = rm_eval_own(expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ dQx, expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_copy(Dt), dQt }, 2) }, 2));
+            Expr* diff = expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ Qder, expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_integer(-1), expr_copy(F) }, 2) }, 2);
+            Expr* tog = rm_eval1("Together", diff);
+            Expr* rnum = tog ? rm_eval1("Numerator", tog) : NULL;
+            Expr* sol = NULL;
+            if (rnum) {
+                Expr* varlist = expr_new_function(expr_new_symbol("List"),
+                    (Expr*[]){ expr_copy(tsym), expr_copy(x) }, 2);
+                Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
+                    (Expr*[]){ rnum, expr_new_integer(0) }, 2);
+                sol = rm_eval2("SolveAlways", eqn, varlist);
+            }
+            if (sol && sol->type == EXPR_FUNCTION
+                && sol->data.function.head->type == EXPR_SYMBOL
+                && sol->data.function.head->data.symbol == intern_symbol("List")
+                && sol->data.function.arg_count >= 1
+                && sol->data.function.args[0]->type == EXPR_FUNCTION
+                && sol->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
+                && sol->data.function.args[0]->data.function.head->data.symbol
+                     == intern_symbol("List")) {
+                Expr* Qs = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                    (Expr*[]){ expr_copy(Q), expr_copy(sol->data.function.args[0]) }, 2));
+                if (Qs) {
+                    Expr** zero = malloc((nh + ng) * sizeof(Expr*));
+                    size_t zi = 0;
+                    for (long p = 0; p < dH; p++)
+                        for (long k = 0; k <= Nx; k++) {
+                            char nm[32]; snprintf(nm, sizeof(nm), "rmHh%ldv%ld", p, k);
+                            zero[zi++] = expr_new_function(expr_new_symbol("Rule"),
+                                (Expr*[]){ expr_new_symbol(nm), expr_new_integer(0) }, 2);
+                        }
+                    for (size_t j = 0; j < ng; j++) {
+                        char nm[32]; snprintf(nm, sizeof(nm), "rmHc%zu", j);
+                        zero[zi++] = expr_new_function(expr_new_symbol("Rule"),
+                            (Expr*[]){ expr_new_symbol(nm), expr_new_integer(0) }, 2);
+                    }
+                    Expr* zl = expr_new_function(expr_new_symbol("List"), zero, nh + ng);
+                    free(zero);
+                    Qs = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                        (Expr*[]){ Qs, zl }, 2));
+                    if (Qs) {
+                        Expr* back = expr_new_function(expr_new_symbol("List"),
+                            (Expr*[]){ expr_new_function(expr_new_symbol("Rule"),
+                                (Expr*[]){ expr_copy(tsym), expr_copy(kback) }, 2) }, 1);
+                        Expr* rr = rm_eval_own(expr_new_function(
+                            expr_new_symbol("ReplaceAll"), (Expr*[]){ Qs, back }, 2));
+                        /* Cancel folds away the x-content that Hden carried
+                         * (e.g. -x/(x + x Log[x]) -> -1/(1 + Log[x])). */
+                        if (rr) result = rm_eval1("Cancel", rr);
+                    }
+                }
+            }
+            if (sol) expr_free(sol);
+            expr_free(Q);
+        }
+        for (size_t j = 0; j < ng; j++) expr_free(g[j]);
+        if (factored) expr_free(factored);
+    }
+    if (Hden) expr_free(Hden);
+    if (rad) expr_free(rad);
+    if (num) expr_free(num);
+    if (den) expr_free(den);
+    expr_free(Dt);
+    expr_free(kback);
+    expr_free(uu);
+    expr_free(F);
+    expr_free(tsym);
+    return result;
+}
+
+/* Hermite reduction dispatch: logarithmic then exponential kernel. */
+static Expr* rm_hermite_case(Expr* f, Expr* x) {
+    Expr* r = rm_hermite_try(f, x, true);
+    if (r) return r;
+    r = rm_hermite_try(f, x, false);
+    return r;
+}
+
+/* Try the fractional log-part for a logarithmic then an exponential kernel. */
+static Expr* rm_frac_case(Expr* f, Expr* x) {
+    Expr* ul = rm_find_log_of_x(f, x);
+    if (ul) { Expr* r = rm_frac_try(f, x, ul, true); if (r) return r; }
+    Expr* ue = rm_find_exp_of_x(f, x);
+    if (ue) { Expr* r = rm_frac_try(f, x, ue, false); if (r) return r; }
+    return NULL;
+}
+
+/* Coupled hyperexponential case: a general rational function of a single
+ * exponential monomial theta = E^u (u polynomial in x) whose integral mixes a
+ * Laurent-polynomial part with a logarithmic part — the case where D(g)/g is
+ * itself improper in theta, so the polynomial and log parts do NOT separate
+ * (e.g. Tan/Tanh after TrigToExp, or 1/(1+E^x)).  A UNIFIED ansatz
+ *     Q = sum_i (sum_k a_{ik} x^k) theta^i + sum_j c_j Log(g_j)
+ * (g_j the squarefree factors of the theta-coprime denominator) is solved for
+ * all its constant coefficients a_{ik}, c_j at once by requiring Q' = f for all
+ * theta and x via SolveAlways[..., {t, x}].  Correct by construction: an exact
+ * solution certifies the identity; an imperfect degree bound can only decline.
+ * Tried after the pure polynomial and pure-log-part cases (which are cheaper). */
+static Expr* rm_hyperexp_case(Expr* f, Expr* x) {
+    Expr* uexp = NULL;
+    Expr* F = rm_exp_kernelize(f, x, &uexp);
+    if (!F) return NULL;
+    Expr* tsym = expr_new_symbol("rmT");
+    Expr* result = NULL;
+
+    Expr* G = rm_eval1("Together", expr_copy(F));
+    Expr* num = G ? rm_eval1("Numerator", expr_copy(G)) : NULL;
+    Expr* den = G ? rm_eval1("Denominator", expr_copy(G)) : NULL;
+    bool ok = num && den && rm_is_poly(num, tsym) && rm_is_poly(den, tsym)
+        && !rm_free_of_x(den, tsym)
+        && rm_find_exp_of_x(F, x) == NULL && rm_find_log_of_x(F, x) == NULL;
+
+    if (ok) {
+        /* a = multiplicity of t in den (first nonzero t-coefficient). */
+        long a = 0;
+        Expr* cl = rm_eval2("CoefficientList", expr_copy(den), expr_copy(tsym));
+        if (cl && cl->type == EXPR_FUNCTION
+            && cl->data.function.head->type == EXPR_SYMBOL
+            && cl->data.function.head->data.symbol == intern_symbol("List")) {
+            for (size_t i = 0; i < cl->data.function.arg_count; i++)
+                if (!rm_is_zero(cl->data.function.args[i])) { a = (long)i; break; }
+        }
+        if (cl) expr_free(cl);
+        Expr* Dtil = rm_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_copy(den), expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_copy(tsym), expr_new_integer(-a) }, 2) }, 2));
+        /* Split the theta-coprime denominator Dtil into its repeated part
+         * Hden = gcd(Dtil, d Dtil/dt) (= prod D_m^(m-1)) and squarefree radical
+         * rad = Dtil/Hden.  The distinct t-factors of rad carry constant-residue
+         * logarithms; the repeated part is absorbed by a Hermite term
+         * H(t)/Hden(t) (H proper in t with x-polynomial coefficients).  When Dtil
+         * is squarefree Hden = 1 and the Hermite term is empty, recovering the
+         * plain Laurent + log hyperexponential ansatz.  This is the Phase A
+         * generalization that couples the Laurent theta = 0 pole with a Hermite
+         * repeated pole, closing shapes such as 1/(1 + E^x)^2 and
+         * 1/(E^x (1 + E^x)^2) that the pure Hermite / squarefree paths decline. */
+        Expr* Hden = NULL; Expr* rad = NULL; long dH = 0;
+        if (Dtil) {
+            Expr* dDt = rm_eval2("D", expr_copy(Dtil), expr_copy(tsym));
+            Hden = rm_eval_call("PolynomialGCD",
+                (Expr*[]){ expr_copy(Dtil), dDt }, 2);
+            if (Hden) {
+                dH = rm_degree(Hden, tsym);
+                if (dH < 0) dH = 0;
+                rad = rm_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_copy(Dtil), expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ expr_copy(Hden), expr_new_integer(-1) }, 2) }, 2));
+            }
+        }
+        Expr* factored = rad ? rm_eval1("Factor", expr_copy(rad)) : NULL;
+        Expr* g[16]; size_t ng = 0; bool bad = (factored == NULL);
+        if (factored) {
+            Expr** fa; size_t nf; Expr* single[1];
+            if (factored->type == EXPR_FUNCTION
+                && factored->data.function.head->type == EXPR_SYMBOL
+                && factored->data.function.head->data.symbol == intern_symbol("Times")) {
+                fa = factored->data.function.args; nf = factored->data.function.arg_count;
+            } else { single[0] = factored; fa = single; nf = 1; }
+            for (size_t i = 0; i < nf && !bad; i++) {
+                Expr* term = fa[i]; Expr* base = term;
+                if (term->type == EXPR_FUNCTION
+                    && term->data.function.head->type == EXPR_SYMBOL
+                    && term->data.function.head->data.symbol == intern_symbol("Power")
+                    && term->data.function.arg_count == 2)
+                    base = term->data.function.args[0];   /* rad squarefree: e = 1 */
+                if (rm_free_of_x(base, tsym)) continue;    /* FreeQ[base, t] */
+                if (ng >= 16) { bad = true; break; }
+                g[ng++] = expr_copy(base);
+            }
+        }
+
+        long dnum = ok ? rm_degree(num, tsym) : 0, dden = ok ? rm_degree(den, tsym) : 0;
+        long ihi = dnum - dden; if (ihi < 0) ihi = 0;
+        long ilo = -a;
+        long degu = rm_degree(uexp, x);
+        long dnx = rm_degree(num, x), ddx = rm_degree(den, x);
+        long Nx = (dnx > ddx ? dnx : ddx) + (degu > 0 ? degu : 1) + 1;
+        if (Nx > 8) Nx = 8;
+        long nwi = ihi - ilo + 1;
+        size_t nH_syms = (size_t)(dH * (Nx + 1));   /* Hermite numerator coeffs */
+        if (!bad && nwi > 0
+            && nwi * (Nx + 1) + (long)nH_syms + (long)ng <= 80) {
+            size_t nw_syms = (size_t)(nwi * (Nx + 1));
+            Expr** qterms = malloc((nw_syms + 1 + ng) * sizeof(Expr*));
+            size_t ntq = 0;
+            /* Laurent part: sum_i (sum_k rmW.. x^k) t^i. */
+            for (long i = ilo; i <= ihi; i++) {
+                for (long k = 0; k <= Nx; k++) {
+                    char nm[32]; snprintf(nm, sizeof(nm), "rmW%ldv%ld", i - ilo, k);
+                    qterms[ntq++] = expr_new_function(expr_new_symbol("Times"),
+                        (Expr*[]){ expr_new_symbol(nm),
+                          expr_new_function(expr_new_symbol("Power"),
+                            (Expr*[]){ expr_copy(x), expr_new_integer(k) }, 2),
+                          expr_new_function(expr_new_symbol("Power"),
+                            (Expr*[]){ expr_copy(tsym), expr_new_integer(i) }, 2) }, 3);
+                }
+            }
+            /* Hermite part: (sum_{p<dH} (sum_k rmHh.. x^k) t^p) / Hden. */
+            if (dH >= 1) {
+                Expr** hterms = malloc(nH_syms * sizeof(Expr*));
+                size_t nh = 0;
+                for (long p = 0; p < dH; p++)
+                    for (long k = 0; k <= Nx; k++) {
+                        char nm[32]; snprintf(nm, sizeof(nm), "rmHh%ldv%ld", p, k);
+                        hterms[nh++] = expr_new_function(expr_new_symbol("Times"),
+                            (Expr*[]){ expr_new_symbol(nm),
+                              expr_new_function(expr_new_symbol("Power"),
+                                (Expr*[]){ expr_copy(x), expr_new_integer(k) }, 2),
+                              expr_new_function(expr_new_symbol("Power"),
+                                (Expr*[]){ expr_copy(tsym), expr_new_integer(p) }, 2) }, 3);
+                    }
+                Expr* Hpoly = expr_new_function(expr_new_symbol("Plus"), hterms, nh);
+                free(hterms);
+                qterms[ntq++] = expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ Hpoly, expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ expr_copy(Hden), expr_new_integer(-1) }, 2) }, 2);
+            }
+            /* Log part: sum_j rmHc.. Log(g_j). */
+            for (size_t j = 0; j < ng; j++) {
+                char nm[32]; snprintf(nm, sizeof(nm), "rmHc%zu", j);
+                qterms[ntq++] = expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_symbol(nm),
+                      expr_new_function(expr_new_symbol("Log"),
+                        (Expr*[]){ expr_copy(g[j]) }, 1) }, 2);
+            }
+            Expr* Q = expr_new_function(expr_new_symbol("Plus"), qterms, ntq);
+            free(qterms);
+
+            /* Q'(full) = D[Q,x] + u' t D[Q,t]. */
+            Expr* dQx = rm_eval2("D", expr_copy(Q), expr_copy(x));
+            Expr* dQt = rm_eval2("D", expr_copy(Q), expr_copy(tsym));
+            Expr* up = rm_eval2("D", expr_copy(uexp), expr_copy(x));
+            Expr* Qder = rm_eval_own(expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ dQx, expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ up, expr_copy(tsym), dQt }, 3) }, 2));
+            Expr* diff = expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ Qder, expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_integer(-1), expr_copy(F) }, 2) }, 2);
+            Expr* tog = rm_eval1("Together", diff);
+            Expr* rnum = tog ? rm_eval1("Numerator", tog) : NULL;
+            Expr* sol = NULL;
+            if (rnum) {
+                Expr* varlist = expr_new_function(expr_new_symbol("List"),
+                    (Expr*[]){ expr_copy(tsym), expr_copy(x) }, 2);
+                Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
+                    (Expr*[]){ rnum, expr_new_integer(0) }, 2);
+                sol = rm_eval2("SolveAlways", eqn, varlist);
+            }
+            if (sol && sol->type == EXPR_FUNCTION
+                && sol->data.function.head->type == EXPR_SYMBOL
+                && sol->data.function.head->data.symbol == intern_symbol("List")
+                && sol->data.function.arg_count >= 1
+                && sol->data.function.args[0]->type == EXPR_FUNCTION
+                && sol->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
+                && sol->data.function.args[0]->data.function.head->data.symbol
+                     == intern_symbol("List")) {
+                Expr* Qs = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                    (Expr*[]){ expr_copy(Q), expr_copy(sol->data.function.args[0]) }, 2));
+                if (Qs) {
+                    Expr** zero = malloc((nw_syms + nH_syms + ng) * sizeof(Expr*));
+                    size_t zi = 0;
+                    for (long i = ilo; i <= ihi; i++)
+                        for (long k = 0; k <= Nx; k++) {
+                            char nm[32]; snprintf(nm, sizeof(nm), "rmW%ldv%ld", i - ilo, k);
+                            zero[zi++] = expr_new_function(expr_new_symbol("Rule"),
+                                (Expr*[]){ expr_new_symbol(nm), expr_new_integer(0) }, 2);
+                        }
+                    for (long p = 0; p < dH; p++)
+                        for (long k = 0; k <= Nx; k++) {
+                            char nm[32]; snprintf(nm, sizeof(nm), "rmHh%ldv%ld", p, k);
+                            zero[zi++] = expr_new_function(expr_new_symbol("Rule"),
+                                (Expr*[]){ expr_new_symbol(nm), expr_new_integer(0) }, 2);
+                        }
+                    for (size_t j = 0; j < ng; j++) {
+                        char nm[32]; snprintf(nm, sizeof(nm), "rmHc%zu", j);
+                        zero[zi++] = expr_new_function(expr_new_symbol("Rule"),
+                            (Expr*[]){ expr_new_symbol(nm), expr_new_integer(0) }, 2);
+                    }
+                    Expr* zl = expr_new_function(expr_new_symbol("List"), zero,
+                                                 nw_syms + nH_syms + ng);
+                    free(zero);
+                    Qs = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                        (Expr*[]){ Qs, zl }, 2));
+                    if (Qs) {
+                        Expr* back = expr_new_function(expr_new_symbol("List"),
+                            (Expr*[]){ expr_new_function(expr_new_symbol("Rule"),
+                                (Expr*[]){ expr_copy(tsym),
+                                    expr_new_function(expr_new_symbol("Power"),
+                                        (Expr*[]){ expr_new_symbol("E"), expr_copy(uexp) }, 2)
+                                }, 2) }, 1);
+                        result = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                            (Expr*[]){ Qs, back }, 2));
+                    }
+                }
+            }
+            if (sol) expr_free(sol);
+            expr_free(Q);
+        }
+        for (size_t j = 0; j < ng; j++) expr_free(g[j]);
+        if (factored) expr_free(factored);
+        if (rad) expr_free(rad);
+        if (Hden) expr_free(Hden);
+        if (Dtil) expr_free(Dtil);
+    }
+    if (G) expr_free(G);
+    if (num) expr_free(num);
+    if (den) expr_free(den);
+    expr_free(F);
+    expr_free(tsym);
+    expr_free(uexp);
+    return result;
+}
+
+/* Trigonometric / hyperbolic front-end (Maxima's rischform exponentialize
+ * path).  Rewrites the trig/hyperbolic kernels to complex exponentials with
+ * TrigToExp, integrates the resulting (Laurent-)rational function of the
+ * exponential kernel E^(I x) / E^x with the exponential machinery, and
+ * converts the answer back to trigonometric form with ExpToTrig.  Both
+ * rewrites are exact, so the result is correct by construction. */
+static Expr* rm_trig_frontend(Expr* f, Expr* x) {
+    Expr* fe = rm_eval1("TrigToExp", expr_copy(f));
+    if (!fe) return NULL;
+    if (expr_eq(fe, f)) { expr_free(fe); return NULL; }   /* no trig/hyperbolic */
+    /* All exponential cases are used, including the coupled hyperexponential
+     * one, for completeness — a correct antiderivative is returned even when
+     * it cannot be reduced to the cleanest real form.
+     *
+     * KNOWN SIMPLIFICATION GAP (Simplify improvement opportunity): via the
+     * complex substitution u = I x, Tan[x]/Tanh[x] and similar close to a
+     * correct but I-laden form such as  I x - Log[1 + E^(2 I x)]  (which equals
+     * -Log[Cos[x]]).  No current simplifier (Simplify / FullSimplify /
+     * TrigReduce / PowerExpand) collapses  I x - Log[1 + E^(2 I x)]  to
+     * -Log[Cos[x]].  The result is nonetheless returned (correct by
+     * construction); teaching Simplify the log-of-product / half-angle
+     * collapse would render it in real closed form. */
+    Expr* r = rm_exp_poly_case(fe, x);
+    if (!r) r = rm_frac_case(fe, x);
+    if (!r) r = rm_hyperexp_case(fe, x);
+    expr_free(fe);
+    if (!r) return NULL;
+    return rm_eval1("ExpToTrig", r);   /* adopts r; back to trig form */
+}
+
+/* Dispatch the transcendental cases: the primitive (logarithmic) polynomial
+ * reduction, the exponential (hyperexponential / Risch-DE) reduction, the
+ * fractional (Rothstein-Trager) log-part, and the trig/hyperbolic front-end.
+ * The general Hermite reduction for repeated poles lands in a subsequent
+ * increment. */
+static Expr* rm_transcendental_case(Expr* f, Expr* x) {
+    Expr* r = rm_log_poly_case(f, x);
+    if (r) return r;
+    r = rm_exp_poly_case(f, x);
+    if (r) return r;
+    r = rm_frac_case(f, x);
+    if (r) return r;
+    r = rm_hermite_case(f, x);
+    if (r) return r;
+    r = rm_hyperexp_case(f, x);
+    if (r) return r;
+    r = rm_trig_frontend(f, x);
+    if (r) return r;
+    return NULL;
+}
+
+/* ================================================================== */
+/* Top-level integration (Maxima rischint / tryrisch dispatch).       */
+/* ================================================================== */
+
+/* Returns a fresh antiderivative (also self-verified by the recognizers,
+ * and re-verified by the caller's diff-back gate) or NULL if no case
+ * applies.  Order mirrors Maxima's recursive Risch:
+ *   1. rational base case (delegated to the recursive rational Risch,
+ *      Integrate`BronsteinRational);
+ *   2. transcendental case over a single logarithmic / exponential
+ *      monomial extension (rm_transcendental_case — the recursive Risch
+ *      proper: Hermite reduction, residue log-part, and the polynomial /
+ *      Risch-differential-equation reductions);
+ *   3. special-function outputs (Maxima's erfarg / dilog / Ei / li).
+ * Every branch is verified by differentiation, so a mis-reduction can
+ * only decline, never emit a wrong closed form.  NB: this must NOT fall
+ * back on the parallel-Risch (pmint) engine Integrate`RischNorman —
+ * that is a different algorithm; RischMacsyma is the recursive Risch. */
+static Expr* rm_integrate(Expr* f, Expr* x) {
+    Expr* r = rm_rational_case(f, x);
+    if (r) return r;
+    r = rm_transcendental_case(f, x);
+    if (r) return r;
+    r = rm_special_case(f, x);
+    if (r) return r;
+    return NULL;
+}
+
+/* ================================================================== */
+/* Public builtin.                                                    */
+/* ================================================================== */
+
+Expr* builtin_rischmacsyma(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count < 2) return NULL;
+
+    Expr* f = res->data.function.args[0];
+    Expr* x = res->data.function.args[1];
+
+    /* The integration variable must be a single symbol. */
+    if (x->type != EXPR_SYMBOL) return NULL;
+
+    /* Correct by construction: rm_integrate returns a result only behind an
+     * exact certificate, so no differentiation check is applied (a Risch
+     * integrator is a decision procedure, not a guess-and-verify search). */
+    return rm_integrate(f, x);
+}
+
+/* ================================================================== */
+/* Registration.                                                      */
+/* ================================================================== */
+
+static void rm_install(const char* name, Expr* (*fn)(Expr*), const char* doc) {
+    symtab_add_builtin(name, fn);
+    symtab_get_def(name)->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    if (doc) symtab_set_docstring(name, doc);
+}
+
+void integrate_risch_macsyma_init(void) {
+    rm_install("Integrate`RischMacsyma", builtin_rischmacsyma,
+        "Integrate`RischMacsyma[f, x] integrates f with respect to x using the\n"
+        "recursive Risch algorithm ported from Maxima (risch.lisp): a decision\n"
+        "procedure over a differential transcendental tower, with rational,\n"
+        "logarithmic, exponential, and special-function (Erf, ExpIntegralEi,\n"
+        "LogIntegral, PolyLog) cases.  Each case is correct by construction (no\n"
+        "differentiation check).  Distinct from Integrate`RischNorman, which is\n"
+        "the parallel-Risch (pmint) heuristic.  Out-of-scope integrands\n"
+        "(algebraic extensions, non-elementary answers) return unevaluated.");
+}

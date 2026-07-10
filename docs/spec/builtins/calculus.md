@@ -602,8 +602,14 @@ monotonically down.
      continuous antiderivative rather than a complex-logarithm form.
   9. `Integrate\`DerivativeDivides[f, x]` — substitution `u(x)`; in the
      cascade the quiet, branch-correct **direct quotient** strategy only.
-  10. `Integrate\`RischNorman[f, x]` — Bronstein pmint, all integrands.
-  11. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
+  10. `Integrate\`RischNorman[f, x]` — Bronstein pmint (parallel Risch), all
+     integrands.
+  11. `Integrate\`RischMacsyma[f, x]` — the **recursive** Risch algorithm
+     ported from Maxima (`risch.lisp`); runs after RischNorman and only adds
+     closed forms the earlier stages missed.  Correct by construction (no
+     differentiation check).  Handles logarithmic polynomials and the
+     special-function cases below (Erf, ExpIntegralEi, LogIntegral, PolyLog).
+  12. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
      from `src/internal/CRCMathTablesIntegrals.m` on first call).
   If every stage gives up the call bubbles back unevaluated.
 - `Method -> "<name>"` option (3rd argument) bypasses the cascade and
@@ -627,7 +633,58 @@ monotonically down.
   - `"Weierstrass"` — `Integrate\`Weierstrass[f, x]` (no denominator gate: applies
     to any rational function of the trig/hyperbolic kernels of `x`, including
     polynomial trig).
-  - `"RischNorman"` — `Integrate\`RischNorman[f, x]`.
+  - `"RischNorman"` — `Integrate\`RischNorman[f, x]` (parallel Risch / pmint).
+  - `"RischMacsyma"` — `Integrate\`RischMacsyma[f, x]`, the recursive Risch
+    algorithm ported from Maxima (`src/calculus/integrate_risch_macsyma.c`).
+    A decision procedure over a differential transcendental tower, distinct
+    from the parallel-Risch heuristic `"RischNorman"`.  Every case is correct
+    by construction — it fires only behind an exact structural certificate, so
+    the result is not checked by differentiation.  Cases:
+      - rational: delegated to `Integrate\`BronsteinRational`;
+      - logarithmic polynomial `P(x, Log[u])`: the recursive primitive-
+        polynomial coefficient matching, with a limited-integration oracle that
+        folds a would-be new logarithm back into the tower (e.g.
+        `Integrate[Log[2 x + 3], x]`, `Integrate[Log[x]/x, x]`);
+      - exponential (Laurent) polynomial `sum_i p_i(x) E^(i u)`, `u` polynomial
+        in `x`, `i` positive or negative: the powers of `E^u` decouple and each
+        `i != 0` term solves the Risch differential equation
+        `q_i' + i u' q_i = p_i` by a polynomial ansatz
+        (`Integrate[x E^x, x] = (x-1) E^x`, `Integrate[x E^(x^2), x] = E^(x^2)/2`,
+        `Integrate[(E^x+E^(-x))/2, x] = Sinh[x]`);
+      - Hermite reduction for a repeated pole of `theta = Log[u]` or
+        `theta = E^u` (the latter when `D` is coprime to `theta`):
+        `Q = H(theta)/Hden(theta) + sum_j c_j Log(g_j)` with
+        `Hden = gcd(D, dD/dtheta)`, solved by `SolveAlways` over `theta` and `x`
+        (`Integrate[1/(x (1+Log[x])^2), x] = -1/(1+Log[x])`,
+        `Integrate[E^x/(1+E^x)^2, x] = -1/(1+E^x)`);
+      - a coupled hyperexponential case (a unified ansatz
+        `Q = sum_i w_i(x) E^(i u) + H(E^u)/Hden(E^u) + sum_j c_j Log(g_j)` solved
+        by `SolveAlways` over `theta` and `x`) that closes mixed
+        polynomial-plus-log exponentials such as
+        `Integrate[1/(1 + E^x), x] = x - Log[1 + E^x]`, and — with the Hermite
+        term `H/Hden` fused in (the `theta`-coprime denominator split into its
+        repeated part `Hden = gcd(Dtil, dDtil/dtheta)` and squarefree radical) —
+        the repeated / `theta = 0` exponential poles
+        `Integrate[1/(1 + E^x)^2, x] = x + 1/(1 + E^x) - Log[1 + E^x]`,
+        `Integrate[1/(E^x (1 + E^x)^2), x]`, `Integrate[1/(1 + E^x)^3, x]`;
+      - a trig/hyperbolic front-end (`TrigToExp` -> exponential machinery ->
+        `ExpToTrig`) that closes `Sin`, `Cos`, `Sinh`, `Cosh`, `Sin[x]^2`,
+        `Sin[x] Cos[x]`, `Tan`, `Tanh`, ...; through the complex substitution
+        `Tan`/`Tanh` come out in a correct but I-laden form (e.g.
+        `I x - Log[1 + E^(2 I x)] = -Log[Cos[x]]`) that no current simplifier
+        reduces to real closed form (a `Simplify` improvement opportunity);
+      - `K E^(a x^2 + b x + c)` (`a != 0`) → `Erf`/`Erfi` (Maxima's `erfarg`);
+      - `(const E^(a x))/(c x + d)` → `ExpIntegralEi`;
+      - `K/Log[x]` → `LogIntegral`;
+      - `K Log[1 + p x]/x` → `PolyLog[2, -p x]` (Maxima's `dilog`);
+      - fractional (Rothstein–Trager) log-part: a proper rational function of
+        `theta` with squarefree denominator `prod g_i` gives `sum_i c_i Log(g_i)`,
+        the constant residues `c_i` solved from `num = sum_i c_i D(g_i)(d/g_i)`
+        via `SolveAlways` over `theta` and `x` (`Integrate[1/(x(1+Log[x])),x] =
+        Log[1+Log[x]]`, `Integrate[E^x/(1+E^x),x] = Log[1+E^x]`).
+    The general Hermite reduction (repeated poles), a mixed polynomial-plus-
+    fractional split, and the rational-`u` / multi-kernel cases are not yet
+    implemented, so integrands needing them return unevaluated.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.
   - `"Symmetry"` — origin-symmetry reduction for an interval `[-c, c]`
