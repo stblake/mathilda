@@ -286,6 +286,28 @@ static void test_log_tower_case(void) {
         "Integrate`RischMacsyma");
 }
 
+/* ---------------- Phase B (third increment): nested exponential towers ----- */
+/* Dual of the log tower for a chain of nested exponentials t_i = E^(u_i), with
+ * the exponential tower derivation Dt_i = (D[u_i,x]|_{->t}) t_i and a Laurent
+ * ansatz (the inner exp kernels are invertible, so their coefficient exponents
+ * are Laurent).  These are bounded-ansatz searches, so the result is diff-back
+ * verified (rm_verify_antideriv) — a non-elementary integrand declines rather
+ * than emitting a spurious closed form. */
+static void test_exp_tower_case(void) {
+    assert_rm_diff_zero("E^x E^(E^x)");            /* E^(E^x)                */
+    assert_rm_diff_zero("E^(2 E^x) E^x");          /* (1/2) E^(2 E^x)        */
+    /* Non-elementary nested exponentials decline cleanly (never a wrong form). */
+    assert_head_unevaluated(
+        "Integrate`RischMacsyma[E^(E^x), x]", "Integrate`RischMacsyma");
+    /* REGRESSION (pre-existing single-kernel bug, fixed by rm_kernel_simple):
+     * E^(E^x)/(1+E^(E^x)) is NON-elementary, but rm_frac_case used to substitute
+     * only the outer kernel and, with the inner E^x left in the derivation as a
+     * free SolveAlways parameter, certified the WRONG answer Log[1+E^(E^x)]/E^x.
+     * It must now decline. */
+    assert_head_unevaluated(
+        "Integrate`RischMacsyma[E^(E^x)/(1 + E^(E^x)), x]", "Integrate`RischMacsyma");
+}
+
 /* ---------------- Automatic cascade now closes special functions ------- */
 static void test_cascade_default(void) {
     /* The cascade insertion adds capability by default (WL-faithful):
@@ -347,6 +369,7 @@ void test_integrate_risch_macsyma(void) {
     TEST(test_trig_frontend);
     TEST(test_multikernel_case);
     TEST(test_log_tower_case);
+    TEST(test_exp_tower_case);
     TEST(test_special_functions);
     TEST(test_cascade_default);
     TEST(test_method_plumbing);
