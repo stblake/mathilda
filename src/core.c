@@ -2669,6 +2669,24 @@ static int64_t byte_count_internal(Expr* e) {
                 }
             }
             break;
+        case EXPR_BIGINT:
+            /* GMP significand: mpz_size limbs of mp_limb_t each. */
+            total += (int64_t)(mpz_size(e->data.bigint) * sizeof(mp_limb_t));
+            break;
+        case EXPR_NDARRAY:
+            /* Two owned allocations beyond the Expr node: the dims[] array
+             * (rank int64_t entries) and the flat row-major data buffer
+             * (element count * bytes-per-element for the dtype). The buffer
+             * is the dominant cost and the whole point of the object. */
+            total += (int64_t)((size_t)e->data.ndarray.rank * sizeof(int64_t));
+            total += (int64_t)(ndarray_size(e) * ndt_elem_size(e->data.ndarray.dtype));
+            break;
+#ifdef USE_MPFR
+        case EXPR_MPFR:
+            /* Significand storage scales with the value's precision in bits. */
+            total += (int64_t)mpfr_custom_get_size(mpfr_get_prec(e->data.mpfr));
+            break;
+#endif
         default:
             break;
     }
