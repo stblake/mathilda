@@ -2354,6 +2354,192 @@ static int   rm_limited_field_integrate(Expr* r, RmTower* T, long L, Expr* x,
 static Expr* rm_int_primitive_poly(Expr* num, Expr* den, RmTower* T, long L, Expr* x);
 static Expr* rm_int_hyperexp_poly(Expr* num, Expr* den, RmTower* T, long L, Expr* x);
 static Expr* rm_field_rde(Expr* p, long i, RmTower* T, long L, Expr* x);
+static Expr* rm_field_ratint(Expr* num, Expr* den, RmTower* T, long L, Expr* x);
+
+/* Tower derivation D_tower[e] = D[e,x] + sum_i Dt_i D[e,t_i], with Dt_i =
+ * Dcoef_i (log) or Dcoef_i * t_i (exp).  Owned result. */
+static Expr* rm_tower_deriv(Expr* e, RmTower* T, Expr* x) {
+    Expr** terms = malloc((T->n + 1) * sizeof(Expr*));
+    terms[0] = rm_eval2("D", expr_copy(e), expr_copy(x));
+    for (size_t i = 0; i < T->n; i++) {
+        Expr* dei = rm_eval2("D", expr_copy(e), expr_copy(T->t[i]));
+        Expr* dti = (T->kind[i] == RM_LOG)
+            ? expr_copy(T->Dcoef[i])
+            : expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_copy(T->Dcoef[i]), expr_copy(T->t[i]) }, 2);
+        terms[i + 1] = expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ dti, dei }, 2);
+    }
+    Expr* r = rm_eval_own(expr_new_function(expr_new_symbol("Plus"), terms, T->n + 1));
+    free(terms);
+    return r;
+}
+
+/* Proper rational part in t = t_L (deg_t num < deg_t den, coefficients in the
+ * lower field K_{L-1}): integrate to  Q = H(t)/Hden(t) + sum_j c_j Log(g_j),
+ * where Hden = gcd(den, d den/dt) is the repeated part, g_j the distinct
+ * t-dependent factors of the squarefree radical rad = den/Hden (Rothstein-Trager
+ * log arguments), H a polynomial in t of degree < deg(Hden) with bounded-degree
+ * lower-field (x, t_1..t_{L-1}) polynomial coefficients, and c_j constants.  All
+ * unknowns are solved at once by requiring D_tower[Q] = num/den for every tower
+ * variable via SolveAlways — the constant-residue and denominator-structure
+ * certificates are exactly Hermite reduction + the residue criterion, lifted to
+ * the tower derivation.  (A genuinely rational Hermite numerator coefficient and
+ * the pure resultant LRT remain a later refinement; a bounded ansatz that misses
+ * them declines, and the caller diff-back verifies.)  Returns Q (tower-variable
+ * form, owned) or NULL. */
+static Expr* rm_field_ratint(Expr* num, Expr* den, RmTower* T, long L, Expr* x) {
+    Expr* t = T->t[L];
+    Expr* dden = rm_eval2("D", expr_copy(den), expr_copy(t));
+    Expr* Hden = dden ? rm_eval_call("PolynomialGCD",
+        (Expr*[]){ expr_copy(den), dden }, 2) : NULL;
+    if (!Hden) return NULL;
+    long dH = rm_degree(Hden, t); if (dH < 0) dH = 0;
+    Expr* rad = rm_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_copy(den), expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(Hden), expr_new_integer(-1) }, 2) }, 2));
+
+    /* Distinct t-dependent factors of the squarefree radical (log arguments). */
+    Expr* factored = rad ? rm_eval1("Factor", expr_copy(rad)) : NULL;
+    Expr* g[16]; size_t ng = 0; bool bad = (factored == NULL);
+    if (factored) {
+        Expr** fa; size_t nf; Expr* single[1];
+        if (factored->type == EXPR_FUNCTION
+            && factored->data.function.head->type == EXPR_SYMBOL
+            && factored->data.function.head->data.symbol == intern_symbol("Times")) {
+            fa = factored->data.function.args; nf = factored->data.function.arg_count;
+        } else { single[0] = factored; fa = single; nf = 1; }
+        for (size_t i = 0; i < nf && !bad; i++) {
+            Expr* term = fa[i]; Expr* base = term;
+            if (term->type == EXPR_FUNCTION
+                && term->data.function.head->type == EXPR_SYMBOL
+                && term->data.function.head->data.symbol == intern_symbol("Power")
+                && term->data.function.arg_count == 2)
+                base = term->data.function.args[0];       /* rad squarefree: e = 1 */
+            if (rm_free_of_x(base, t)) continue;
+            if (ng >= 16) { bad = true; break; }
+            g[ng++] = expr_copy(base);
+        }
+    }
+
+    /* Lower-field variables {x, t_0..t_{L-1}} and per-variable degree bounds. */
+    size_t nlv = (size_t)L + 1;
+    Expr** lv = malloc(nlv * sizeof(Expr*));
+    long* bd = malloc(nlv * sizeof(long));
+    lv[0] = x;
+    for (long i = 0; i < L; i++) lv[i + 1] = T->t[i];
+    for (size_t j = 0; j < nlv; j++) {
+        long a = rm_degree(num, lv[j]); if (a < 0) a = 0;
+        long b = rm_degree(den, lv[j]); if (b < 0) b = 0;
+        long d = (a > b ? a : b) + 1; if (d > 3) d = 3;
+        bd[j] = d;
+    }
+    long nmono = 1;
+    for (size_t j = 0; j < nlv; j++) nmono *= (bd[j] + 1);
+    long nunk = dH * nmono + (long)ng;
+
+    Expr* result = NULL;
+    if (!bad && nunk > 0 && nunk <= 60) {
+        size_t nq = (size_t)nunk;
+        Expr** qterms = malloc(nq * sizeof(Expr*));
+        Expr** syms = malloc(nq * sizeof(Expr*));
+        size_t ntq = 0, nsym = 0;
+        long* ev = malloc(nlv * sizeof(long));
+        /* Hermite numerator H(t)/Hden: sum_{p<dH} (sum_mono a x^..) t^p. */
+        for (long p = 0; p < dH; p++)
+            for (long m = 0; m < nmono; m++) {
+                char nm[40]; snprintf(nm, sizeof(nm), "rmGh%ld_%ld", p, m);
+                rm_decode_mono(m, bd, nlv, ev);
+                Expr* mono = rm_build_monomial(lv, ev, nlv);
+                syms[nsym++] = expr_new_symbol(nm);
+                qterms[ntq++] = expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_symbol(nm), mono,
+                      expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ expr_copy(t), expr_new_integer(p) }, 2) }, 3);
+            }
+        free(ev);
+        Expr* Hpoly = NULL;
+        if (dH >= 1) {
+            Hpoly = expr_new_function(expr_new_symbol("Plus"),
+                qterms, ntq);           /* adopts the H-term array contents */
+            /* rebuild qterms as: [ Hpoly/Hden, c_j Log(g_j)... ] */
+            Expr** q2 = malloc((1 + ng) * sizeof(Expr*));
+            size_t n2 = 0;
+            q2[n2++] = expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ Hpoly, expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_copy(Hden), expr_new_integer(-1) }, 2) }, 2);
+            free(qterms);
+            qterms = q2; ntq = n2;
+        } else {
+            ntq = 0;                    /* no Hermite part */
+        }
+        for (size_t j = 0; j < ng; j++) {
+            char nm[40]; snprintf(nm, sizeof(nm), "rmGc%zu", j);
+            syms[nsym++] = expr_new_symbol(nm);
+            qterms[ntq++] = expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_symbol(nm),
+                  expr_new_function(expr_new_symbol("Log"),
+                    (Expr*[]){ expr_copy(g[j]) }, 1) }, 2);
+        }
+        Expr* Q = expr_new_function(expr_new_symbol("Plus"), qterms, ntq);
+        free(qterms);
+
+        /* residual = Numerator[Together[D_tower[Q] - num/den]]. */
+        Expr* target = expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_copy(num), expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_copy(den), expr_new_integer(-1) }, 2) }, 2);
+        Expr* Qder = rm_tower_deriv(Q, T, x);
+        Expr* diff = expr_new_function(expr_new_symbol("Plus"),
+            (Expr*[]){ Qder, expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_integer(-1), target }, 2) }, 2);
+        Expr* tog = rm_eval1("Together", diff);
+        Expr* rnum = tog ? rm_eval1("Numerator", tog) : NULL;
+
+        Expr* sol = NULL;
+        if (rnum) {
+            Expr** vl = malloc((T->n + 1) * sizeof(Expr*));
+            for (size_t i = 0; i < T->n; i++) vl[i] = expr_copy(T->t[T->n - 1 - i]);
+            vl[T->n] = expr_copy(x);
+            Expr* varlist = expr_new_function(expr_new_symbol("List"), vl, T->n + 1);
+            free(vl);
+            Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
+                (Expr*[]){ rnum, expr_new_integer(0) }, 2);
+            sol = rm_eval2("SolveAlways", eqn, varlist);
+        }
+        if (sol && sol->type == EXPR_FUNCTION
+            && sol->data.function.head->type == EXPR_SYMBOL
+            && sol->data.function.head->data.symbol == intern_symbol("List")
+            && sol->data.function.arg_count >= 1
+            && sol->data.function.args[0]->type == EXPR_FUNCTION
+            && sol->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
+            && sol->data.function.args[0]->data.function.head->data.symbol
+                 == intern_symbol("List")) {
+            Expr* Qs = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                (Expr*[]){ expr_copy(Q), expr_copy(sol->data.function.args[0]) }, 2));
+            if (Qs) {
+                Expr** zero = malloc((nsym ? nsym : 1) * sizeof(Expr*));
+                for (size_t j = 0; j < nsym; j++)
+                    zero[j] = expr_new_function(expr_new_symbol("Rule"),
+                        (Expr*[]){ expr_copy(syms[j]), expr_new_integer(0) }, 2);
+                Expr* zl = expr_new_function(expr_new_symbol("List"), zero, nsym);
+                free(zero);
+                result = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                    (Expr*[]){ Qs, zl }, 2));
+            }
+        }
+        if (sol) expr_free(sol);
+        for (size_t j = 0; j < nsym; j++) expr_free(syms[j]);
+        free(syms);
+        expr_free(Q);
+    }
+
+    for (size_t j = 0; j < ng; j++) expr_free(g[j]);
+    if (factored) expr_free(factored);
+    free(lv); free(bd);
+    if (rad) expr_free(rad);
+    expr_free(Hden);
+    return result;
+}
 
 /* Integrate F (a rational function of x, t_1..t_L in tower-variable form) with
  * respect to the tower derivation, returning an antiderivative in tower-variable
@@ -2375,10 +2561,33 @@ static Expr* rm_field_integrate(Expr* F, RmTower* T, long L, Expr* x) {
     Expr* result = NULL;
     if (num && den) {
         if (T->kind[L] == RM_LOG) {
-            /* Logarithmic monomial: the polynomial part has den free of t (a
-             * t-pole would be a proper fraction — deferred). */
-            if (rm_free_of_x(den, t))
+            if (rm_free_of_x(den, t)) {
+                /* Pure polynomial in t: primitive-polynomial recursion. */
                 result = rm_int_primitive_poly(num, den, T, L, x);
+            } else {
+                /* Split the polynomial part (recursion) from the proper rational
+                 * part in t (Hermite reduction + Rothstein-Trager log part). */
+                Expr* Pp = rm_eval_call("PolynomialQuotient",
+                    (Expr*[]){ expr_copy(num), expr_copy(den), expr_copy(t) }, 3);
+                Expr* Rr = rm_eval_call("PolynomialRemainder",
+                    (Expr*[]){ expr_copy(num), expr_copy(den), expr_copy(t) }, 3);
+                if (Pp && Rr) {
+                    Expr* one = expr_new_integer(1);
+                    Expr* poly_int = rm_int_primitive_poly(Pp, one, T, L, x);
+                    expr_free(one);
+                    Expr* prop_int = rm_is_zero(Rr) ? expr_new_integer(0)
+                                                    : rm_field_ratint(Rr, den, T, L, x);
+                    if (poly_int && prop_int)
+                        result = rm_eval_own(expr_new_function(expr_new_symbol("Plus"),
+                            (Expr*[]){ poly_int, prop_int }, 2));
+                    else {
+                        if (poly_int) expr_free(poly_int);
+                        if (prop_int) expr_free(prop_int);
+                    }
+                }
+                if (Pp) expr_free(Pp);
+                if (Rr) expr_free(Rr);
+            }
         } else {
             result = rm_int_hyperexp_poly(num, den, T, L, x);
         }
@@ -2605,6 +2814,9 @@ static Expr* rm_recursive_tower_case(Expr* f, Expr* x) {
                 free(back);
                 result = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
                     (Expr*[]){ Q, bl }, 2));                       /* adopts Q, bl */
+                /* Tidy the Hermite rational part (e.g. -x Log[x]/(x Log[x](1+t)) ->
+                 * -1/(1+t)); Cancel treats the Log/exp kernels as opaque atoms. */
+                if (result) result = rm_eval1("Cancel", result);
             }
         }
     }

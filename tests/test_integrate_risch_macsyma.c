@@ -318,6 +318,16 @@ static void test_recursive_tower_case(void) {
     /* RATIONAL lower-field coefficient (answer's t_n coefficient is 1/x, not a
      * polynomial) — impossible for the flat ansatz, natural for the recursion. */
     assert_rm_diff_zero("1/(x^2 Log[x]) - Log[Log[x]]/x^2");  /* Log[Log[x]]/x */
+    /* PROPER rational part in the top kernel: tower Hermite (repeated pole) and
+     * the polynomial-part + proper-part split with new-log fold-back. */
+    assert_rm_diff_zero("1/(x Log[x] (1 + Log[Log[x]])^2)");  /* -1/(1+Log[Log[x]]) */
+    assert_rm_diff_zero("1/(x (1 + Log[x])) + E^x");          /* E^x + Log[1+Log[x]] */
+    assert_rm_diff_zero(
+        "Log[Log[x]]/(x Log[x] (1 + Log[Log[x]]))");   /* Log[Log[x]] - Log[1+Log[Log[x]]] */
+    /* A proper fraction whose Rothstein-Trager residue is non-constant is
+     * non-elementary and must decline (never certify a wrong constant residue). */
+    assert_head_unevaluated(
+        "Integrate`RischMacsyma[1/(Log[x] (1 + Log[Log[x]])), x]", "Integrate`RischMacsyma");
     /* Non-elementary mixed integrands decline cleanly (never a wrong form):
      * E^x Log[x] needs ExpIntegralEi; Log[x] Log[Log[x]] is non-elementary. */
     assert_head_unevaluated(

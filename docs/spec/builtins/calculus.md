@@ -698,7 +698,13 @@ monotonically down.
         `Integrate[E^x/x + E^x Log[x], x] = E^x Log[x]`,
         `Integrate[Log[1+E^x] + x E^x/(1+E^x), x] = x Log[1+E^x]`,
         `Integrate[1/(x^2 Log[x]) - Log[Log[x]]/x^2, x] = Log[Log[x]]/x`; diff-back
-        verified, so non-elementary mixed integrands (`E^x Log[x]`) decline;
+        verified, so non-elementary mixed integrands (`E^x Log[x]`) decline.  A
+        **proper rational part** at a logarithmic top level (a genuine `t_n`-pole)
+        is integrated by tower **Hermite reduction + Rothstein–Trager**
+        (`H(t)/Hden + sum_j c_j Log(g_j)`, `Hden = gcd(den, d den/dt_n)`, constant
+        residues), closing `Integrate[1/(x Log[x] (1+Log[Log[x]])^2), x] =
+        -1/(1+Log[Log[x]])` and `Integrate[1/(x(1+Log[x])) + E^x, x] = E^x +
+        Log[1+Log[x]]` (a non-constant residue declines);
       - a trig/hyperbolic front-end (`TrigToExp` -> exponential machinery ->
         `ExpToTrig`) that closes `Sin`, `Cos`, `Sinh`, `Cosh`, `Sin[x]^2`,
         `Sin[x] Cos[x]`, `Tan`, `Tanh`, ...; through the complex substitution
@@ -714,10 +720,11 @@ monotonically down.
         the constant residues `c_i` solved from `num = sum_i c_i D(g_i)(d/g_i)`
         via `SolveAlways` over `theta` and `x` (`Integrate[1/(x(1+Log[x])),x] =
         Log[1+Log[x]]`, `Integrate[E^x/(1+E^x),x] = Log[1+E^x]`).
-    A nonzero proper rational part at a tower level (tower Hermite / Rothstein–
-    Trager over the lower field) and the general field Risch DE, repeated top-kernel
-    poles, rational-argument exponentials (`E^(1/x)`), and algebraic extensions are
-    not yet implemented, so integrands needing them return unevaluated.
+    A genuinely rational Hermite numerator coefficient, the pure resultant LRT, the
+    exponential-top proper (coupled hyperexponential) case at a tower level, the
+    general field Risch DE, rational-argument exponentials (`E^(1/x)`), and algebraic
+    extensions are not yet implemented, so integrands needing them return
+    unevaluated.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.
   - `"Symmetry"` — origin-symmetry reduction for an interval `[-c, c]`
