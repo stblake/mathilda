@@ -83,6 +83,12 @@ SymbolDef* symtab_get_def(const char* symbol_name);
 // Used by the context resolver to test whether a qualified name exists.
 SymbolDef* symtab_lookup(const char* symbol_name);
 
+// Visit every symbol currently in the table, in unspecified order. `name` is
+// the interned (borrowed) symbol name -- do not free it. `user` is passed
+// through untouched. Used by Names[] to enumerate the symbol namespace.
+void symtab_for_each(void (*visit)(const char* name, SymbolDef* def,
+                                   void* user), void* user);
+
 // Register a built-in C function for a symbol
 void symtab_add_builtin(const char* symbol_name, BuiltinFunc func);
 

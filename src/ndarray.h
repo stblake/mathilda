@@ -142,6 +142,18 @@ Expr* ndarray_base_scalar_power(double br, double bi, const Expr* exp_arr);
  * stays quiet inside internal computations. */
 bool ndarray_warn_shape_mismatch(Expr** args, size_t n, const char* verb);
 
+/* When at least one operand in args[0..n) is an NDArray and at least one other
+ * operand is symbolic (not itself an NDArray and not numeric per
+ * expr_is_numeric_like — e.g. a bare symbol, or any non-numeric expression),
+ * print a one-line `NDArray::sym` warning (verb is the operation, e.g.
+ * "added"/"multiplied"/"raised to a power") and return true. NDArray objects
+ * are purely numeric, so such a combination can never be carried out
+ * elementwise; the caller leaves the expression unevaluated. Returns false
+ * (nothing to warn about) when there is no NDArray operand, or every non-array
+ * operand is a numeric scalar that broadcasts. Respects the arithmetic-warning
+ * mute so it stays quiet inside internal computations. */
+bool ndarray_warn_symbolic(Expr** args, size_t n, const char* verb);
+
 /* Register NDArray's builtins, attributes, and docstring. */
 void ndarray_init(void);
 

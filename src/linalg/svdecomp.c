@@ -34,6 +34,7 @@
 #include "qrdecomp.h"
 #include "qrdecomp_internal.h"
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "eval.h"
 #include "symtab.h"
 #include "attr.h"
@@ -1364,6 +1365,7 @@ Expr* svd_dispatch(const SvdArgs* args, int n, int p, int n_a) {
  *  Public entry.                                                      *
  * ------------------------------------------------------------------ */
 Expr* builtin_singularvaluedecomposition(Expr* res) {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 1) return NULL;

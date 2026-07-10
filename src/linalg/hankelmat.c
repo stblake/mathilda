@@ -22,6 +22,7 @@
  */
 
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "sym_names.h"
 #include "print.h"
 #include <stdio.h>
@@ -79,6 +80,7 @@ static Expr* hk_build(int64_t m, int64_t n,
 }
 
 Expr* builtin_hankelmatrix(Expr* res) {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
 

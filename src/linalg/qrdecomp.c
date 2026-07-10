@@ -72,6 +72,7 @@
 #include "qrdecomp.h"
 #include "qrdecomp_internal.h"
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "linsolve.h"
 #include "eval.h"
 #include "symtab.h"
@@ -706,6 +707,7 @@ Expr* qr_dispatch(Expr* m, int n, int p, const QrOpts* opts) {
  *  Public entry.                                                      *
  * ------------------------------------------------------------------ */
 Expr* builtin_qrdecomposition(Expr* res) {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 1) return NULL;

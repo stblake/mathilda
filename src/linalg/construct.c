@@ -5,6 +5,7 @@
  */
 
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "sym_names.h"
 #include <stdlib.h>
 
@@ -50,6 +51,7 @@ Expr* builtin_identitymatrix(Expr* res) {
 }
 
 Expr* builtin_diagonalmatrix(Expr* res) {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 3) return NULL;
 
     Expr* list = res->data.function.args[0];

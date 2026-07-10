@@ -33,6 +33,7 @@
 
 #include "linsolve.h"
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "eval.h"
 #include "symtab.h"
 #include "attr.h"
@@ -996,6 +997,7 @@ static Expr* linearsolve_cofactor(Expr* m, Expr* b,
  * ------------------------------------------------------------------ */
 Expr* builtin_rowreduce(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return NULL;
 
@@ -1026,6 +1028,7 @@ Expr* builtin_rowreduce(Expr* res) {
 
 Expr* builtin_linearsolve(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    if (linalg_call_has_ndarray(res)) return ndla_linearsolve(res);
     size_t argc = res->data.function.arg_count;
     if (argc < 2 || argc > 3) return NULL;
 

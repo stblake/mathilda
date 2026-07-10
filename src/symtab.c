@@ -885,6 +885,16 @@ bool symtab_remove_matching_rule(const char* symbol_name, const Expr* lhs,
     return removed;
 }
 
+void symtab_for_each(void (*visit)(const char* name, SymbolDef* def,
+                                   void* user), void* user) {
+    if (!visit) return;
+    for (int i = 0; i < SYMTAB_SIZE; i++) {
+        for (SymEntry* entry = symtab[i]; entry; entry = entry->next) {
+            visit(entry->def->symbol_name, entry->def, user);
+        }
+    }
+}
+
 void symtab_clear(void) {
     for (int i = 0; i < SYMTAB_SIZE; i++) {
         SymEntry* entry = symtab[i];

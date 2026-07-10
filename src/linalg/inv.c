@@ -41,6 +41,7 @@
 
 #include "inv.h"
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "linsolve.h"
 #include "eval.h"
 #include "symtab.h"
@@ -518,6 +519,7 @@ static Expr* inverse_cofactor(Expr* arg, int n) {
  * ------------------------------------------------------------------ */
 Expr* builtin_inverse(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    if (linalg_call_has_ndarray(res)) return ndla_inverse(res);
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return NULL;
 
@@ -829,6 +831,7 @@ static Expr* pseudoinverse_exact(Expr* a, int m, int n) {
  * ------------------------------------------------------------------ */
 Expr* builtin_pseudoinverse(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     size_t argc = res->data.function.arg_count;
     if (argc < 1) return NULL;
 

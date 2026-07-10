@@ -1,6 +1,7 @@
 #include "eigen.h"
 #include "eigen_internal.h"
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "eval.h"
 #include "symtab.h"
 #include "attr.h"
@@ -139,6 +140,7 @@ static Expr** eigen_compute_eigenvalues_full(Expr* m, Expr* a,
 }
 
 Expr* builtin_eigenvalues(Expr* res) {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     EigenOpts opts;
     if (!eigen_parse_args(res, &opts)) return NULL;
 
@@ -299,6 +301,7 @@ static Expr* eigen_normalize_vector(Expr* v) {
 }
 
 Expr* builtin_eigenvectors(Expr* res) {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     EigenOpts opts;
     if (!eigen_parse_args(res, &opts)) return NULL;
 

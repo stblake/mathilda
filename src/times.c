@@ -258,6 +258,10 @@ Expr* builtin_times(Expr* res) {
         if (fast) return fast;
         if (ndarray_warn_shape_mismatch(res->data.function.args, n, "multiplied"))
             return NULL;
+        /* NDArray combined with a symbolic factor (c * NDArray): purely numeric,
+         * so it can't be multiplied elementwise. Warn, then fall through to
+         * leave the product unevaluated. */
+        ndarray_warn_symbolic(res->data.function.args, n, "multiplied");
     }
 
     /* SeriesData arithmetic: if any factor is a power series, fold the whole

@@ -193,6 +193,21 @@ void test_ndarray_plus_shape_mismatch_degrades() {
                    "NDArray[{1.0, 2.0}] + NDArray[{1.0, 2.0, 3.0}]", 0);
 }
 
+void test_ndarray_symbolic_combine_degrades() {
+    /* NDArray is purely numeric: combining with a symbolic term prints an
+     * NDArray::sym warning (to stderr, not checked here) and stays unevaluated.
+     * A numeric scalar still broadcasts (no warning), which is verified by the
+     * scalar-broadcast tests. */
+    assert_eval_eq("NDArray[{1., 3.}] + a",
+                   "a + NDArray[{1.0, 3.0}]", 0);
+    assert_eval_eq("c * NDArray[{1., 3.}]",
+                   "c NDArray[{1.0, 3.0}]", 0);
+    assert_eval_eq("NDArray[{1., 3.}] ^ n",
+                   "NDArray[{1.0, 3.0}]^n", 0);
+    assert_eval_eq("b ^ NDArray[{1., 3.}]",
+                   "b^NDArray[{1.0, 3.0}]", 0);
+}
+
 /* ---------- DataType (dtype) ---------- */
 
 void test_ndarray_datatype_default() {
@@ -340,6 +355,7 @@ int main() {
     TEST(test_ndarray_plus_matches_list_path);
     TEST(test_ndarray_times_matches_list_path);
     TEST(test_ndarray_plus_shape_mismatch_degrades);
+    TEST(test_ndarray_symbolic_combine_degrades);
 
     TEST(test_ndarray_datatype_default);
     TEST(test_ndarray_datatype_options);

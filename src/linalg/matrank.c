@@ -42,6 +42,7 @@
 
 #include "matrank.h"
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "linsolve.h"
 #include "eval.h"
 #include "symtab.h"
@@ -368,6 +369,7 @@ static int count_nonzero_rows(Expr* rref, int rows, int cols) {
  * ------------------------------------------------------------------ */
 Expr* builtin_matrixrank(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    if (linalg_call_has_ndarray(res)) return ndla_matrixrank(res);
     size_t argc = res->data.function.arg_count;
     if (argc < 1) return NULL;
 

@@ -2578,6 +2578,12 @@ void info_init(void) {
     symtab_set_docstring("Orderless", "Orderless is an attribute that can be assigned to a symbol f to indicate that the elements e_i in expressions of the form f[e_1, e_2, ...] should automatically be sorted into canonical order. This property is accounted for in pattern matching.");
     symtab_set_docstring("OneIdentity", "OneIdentity is an attribute that can be assigned to a symbol f to indicate that f[x], f[f[x]], etc. are all equivalent to x for the purpose of pattern matching.");
     symtab_set_docstring("Information", "Information[symbol] or ?symbol returns information on symbol.");
+    symtab_set_docstring("Names",
+        "Names[\"string\"] gives a sorted list of the names of symbols matching "
+        "the string. Names[patt] matches a string pattern with metacharacters "
+        "* (zero or more characters) and @ (one or more non-uppercase "
+        "characters), or a RegularExpression[\"re\"]. Names[{p1, p2, ...}] "
+        "matches any of the patterns. Names[] lists all symbol names.");
     symtab_set_docstring("OwnValues", "OwnValues[s] gives a list of own-value rules for s.");
     symtab_set_docstring("DownValues", "DownValues[s] gives a list of down-value rules for s.");
     symtab_set_docstring("Attributes", "Attributes[s] gives the list of attributes for s.");

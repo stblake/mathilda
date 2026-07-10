@@ -10,6 +10,7 @@
  */
 
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "eval.h"
 #include "sym_names.h"
 #include <stdlib.h>
@@ -17,6 +18,7 @@
 
 Expr* builtin_norm(Expr* res) {
     if (res->type != EXPR_FUNCTION || (res->data.function.arg_count != 1 && res->data.function.arg_count != 2)) return NULL;
+    if (linalg_call_has_ndarray(res)) return ndla_norm(res);
 
     Expr* expr = res->data.function.args[0];
     Expr* p = NULL;

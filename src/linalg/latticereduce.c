@@ -46,6 +46,7 @@
  */
 
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "symtab.h"
 #include "attr.h"
 #include "print.h"
@@ -427,6 +428,7 @@ static int lll_reduce(GRat* B, int n, int d, mpq_t* min_gso2) {
  *  Public builtin.                                                    *
  * ------------------------------------------------------------------ */
 Expr* builtin_latticereduce(Expr* res) {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc != 1) {
@@ -676,6 +678,7 @@ static void finv_msg(const char* tag, const char* body, Expr* list) {
 }
 
 Expr* builtin_findintegernullvector(Expr* res) {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     Expr** av = res->data.function.args;

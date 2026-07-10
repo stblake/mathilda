@@ -6,6 +6,7 @@
  */
 
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "eval.h"
 #include "sym_names.h"
 #include <stdlib.h>
@@ -37,6 +38,7 @@ static Expr* extract_diagonal_element(Expr* list, int64_t n, size_t index) {
 
 Expr* builtin_tr(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    if (linalg_call_has_ndarray(res)) return ndla_tr(res);
     size_t count = res->data.function.arg_count;
     if (count < 1 || count > 3) return NULL;
 

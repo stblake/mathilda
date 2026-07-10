@@ -5,6 +5,7 @@
  */
 
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "eval.h"
 #include "print.h"
 #include "sym_names.h"
@@ -40,6 +41,7 @@ Expr* laplace_det(Expr** flat, int original_n, int n, int row, int* cols) {
 
 Expr* builtin_det(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (linalg_call_has_ndarray(res)) return ndla_det(res);
     Expr* arg = res->data.function.args[0];
 
     int64_t dims[64];

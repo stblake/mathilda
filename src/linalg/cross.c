@@ -7,6 +7,7 @@
  */
 
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "eval.h"
 #include "sym_names.h"
 #include <stdio.h>
@@ -14,6 +15,7 @@
 
 Expr* builtin_cross(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    if (linalg_call_has_ndarray(res)) return ndla_cross(res);
     size_t m = res->data.function.arg_count;
     if (m == 0) return NULL;
 

@@ -23,6 +23,17 @@ modelled on numpy's `ndarray`.
   `MatrixQ`, `VectorQ`, and `ListQ` never disagree about which one a value is;
   and it always prints as `NDArray[{{1.0, 2.0}, {3.0, 4.0}}]`, never as bare
   `{{1.0, 2.0}, {3.0, 4.0}}`.
+- **Every linear-algebra routine accepts `NDArray` input** (see
+  `src/linalg/ndlinalg.c`). The heavy/common consumers — `Det`, `Inverse`,
+  `LinearSolve`, `MatrixRank`, `Tr`, `Norm`, `Normalize`, `Cross` — take a fast
+  C-level path over the flat buffer and return a closed-system `NDArray` (or a
+  scalar `Real`/`Complex`); the real `Det`/`Inverse`/`LinearSolve`/`MatrixRank`
+  path uses an in-house partial-pivot `double` LU, so `Det[NDArray[...]]` is
+  O(n³) even without LAPACK. The factorisations, predicates, constructors, and
+  lattice routines (`Eigenvalues`, `QRDecomposition`, `SingularValueDecomposition`,
+  `PositiveDefiniteMatrixQ`, `DiagonalMatrix`, `LatticeReduce`, ...) convert the
+  `NDArray` argument to a `List` and re-evaluate, routing through their existing
+  numeric kernels.
 - `Dot`, elementwise `Plus`/`Times`/`Power` recognize `NDArray` operands and use
   a fast C-level path that loops directly over the raw buffers, per dtype,
   skipping symbolic construction per element. The result dtype follows a
@@ -81,6 +92,12 @@ modelled on numpy's `ndarray`.
   generic symbolic `Plus`/`Times` path, treating the `NDArray` as an opaque
   term. numpy-style broadcasting (scalar/array, shape-compatible) is not yet
   implemented.
+- Because an `NDArray` is purely numeric, combining one with a **symbolic**
+  operand (a bare symbol or any non-numeric expression) can never be carried
+  out elementwise. `Plus`/`Times`/`Power` print a one-line `NDArray::sym`
+  warning and leave the expression unevaluated: `NDArray[{1., 3.}] + a`,
+  `c NDArray[{1., 3.}]`, `NDArray[{1., 3.}]^n`. A numeric scalar operand
+  (Integer/Real/Rational/Complex) still broadcasts silently and is unaffected.
 
 ```mathematica
 In[1]:= NDArray[{{1, 2}, {3, 4}}]

@@ -6,6 +6,7 @@
  */
 
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "eval.h"
 #include "print.h"
 #include "sym_names.h"
@@ -21,6 +22,7 @@ static Expr* mat_dot(Expr* a, Expr* b) {
 }
 
 Expr* builtin_matrixpower(Expr* res) {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 2 || argc > 3) return NULL;

@@ -582,6 +582,22 @@ bool ndarray_warn_shape_mismatch(Expr** args, size_t n, const char* verb) {
     return false;
 }
 
+bool ndarray_warn_symbolic(Expr** args, size_t n, const char* verb) {
+    bool has_nd = false, has_sym = false;
+    for (size_t i = 0; i < n; i++) {
+        if (args[i]->type == EXPR_NDARRAY) has_nd = true;
+        else if (!expr_is_numeric_like(args[i])) has_sym = true;
+    }
+    if (!has_nd || !has_sym) return false;
+    char msg[300];
+    snprintf(msg, sizeof msg,
+        "NDArray::sym: NDArray objects are purely numeric and cannot be %s "
+        "with a symbolic expression; the expression is left unevaluated.\n",
+        verb);
+    ndarray_warn_once(msg);
+    return true;
+}
+
 /* Structural shape probe independent of leaf numeric-ness: returns the depth
  * of `e` treating any non-List as a depth-0 leaf, writing the shape into dims,
  * or -1 if `e` is internally ragged (siblings of differing shape, or a mix of

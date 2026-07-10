@@ -43,6 +43,7 @@
 #include "bessel.h"
 #include "comparisons.h"
 #include "boolean.h"
+#include "names.h"
 #include "list.h"
 #include "assoc.h"
 #include "ndarray.h"
@@ -647,6 +648,7 @@ void core_init(void) {
     
     comparisons_init();
     boolean_init();
+    names_init();
     list_init();
     assoc_init();
     ndarray_init();

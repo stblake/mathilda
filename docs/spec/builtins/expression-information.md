@@ -679,6 +679,45 @@ Range[n, m, d]
 	uses step d."
 ```
 
+## Names
+Gives a canonically sorted list of the names (as strings) of symbols in the
+symbol table that match a pattern.
+- `Names["string"]` &rarr; names matching the string pattern. Same list as
+  `?string`.
+- `Names[patt]` &rarr; names matching an arbitrary string pattern `patt`.
+- `Names[{p1, p2, ...}]` &rarr; names matching any of the `p_i`.
+- `Names[]` &rarr; every name in the symbol table.
+
+A string pattern is matched against the **whole** name (anchored) and supports
+two metacharacters:
+
+| Metacharacter | Matches |
+|---------------|---------|
+| `*` | zero or more characters |
+| `@` | one or more characters that are **not** uppercase letters |
+
+Every other character (including the `` ` `` used in context prefixes) is
+literal. A pattern element may instead be `RegularExpression["re"]`, matched
+against the whole name via the PCRE2 engine; when Mathilda is built without
+PCRE2 a `RegularExpression` pattern emits `Names::regavail` and stays
+unevaluated. The result is always ordered so that `Names[patt]` is identical to
+`Sort[Names[patt]]`.
+
+**Features**: `Protected`. All symbols are candidates — builtins are stored
+under bare `System`` names, so context-prefix patterns match the raw stored
+name.
+
+```mathematica
+In[1]:= Names["List*"]
+Out[1]= {"List", "ListPlot", "ListQ"}
+
+In[2]:= Names["Ar@"]
+Out[2]= {"Arg", "Array", "Arrow"}          (* @ stops at the uppercase in ArcSin *)
+
+In[3]:= Names[RegularExpression["Si."]]
+Out[3]= {"Sin"}
+```
+
 ## MessageName
 Associates a named text string (a "message") with a symbol, written with the
 `::` operator.

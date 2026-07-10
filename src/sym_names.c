@@ -560,6 +560,7 @@ const char* SYM_Mean = NULL;
 const char* SYM_Median = NULL;
 const char* SYM_MemberQ = NULL;
 const char* SYM_N = NULL;
+const char* SYM_Names = NULL;
 const char* SYM_Norm = NULL;
 const char* SYM_Numerator = NULL;
 const char* SYM_NumericQ = NULL;
@@ -1282,6 +1283,7 @@ void sym_names_init(void) {
     SYM_Median                     = intern_symbol("Median");
     SYM_MemberQ                    = intern_symbol("MemberQ");
     SYM_N                          = intern_symbol("N");
+    SYM_Names                      = intern_symbol("Names");
     SYM_Norm                       = intern_symbol("Norm");
     SYM_Numerator                  = intern_symbol("Numerator");
     SYM_NumericQ                   = intern_symbol("NumericQ");

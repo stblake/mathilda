@@ -563,6 +563,7 @@ extern const char* SYM_Mean;
 extern const char* SYM_Median;
 extern const char* SYM_MemberQ;
 extern const char* SYM_N;
+extern const char* SYM_Names;
 extern const char* SYM_Norm;
 extern const char* SYM_Numerator;
 extern const char* SYM_NumericQ;

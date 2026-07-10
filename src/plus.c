@@ -332,6 +332,10 @@ Expr* builtin_plus(Expr* res) {
         if (fast) return fast;
         if (ndarray_warn_shape_mismatch(res->data.function.args, n, "added"))
             return NULL;
+        /* NDArray combined with a symbolic term (NDArray + a): purely numeric,
+         * so it can't be added elementwise. Warn, then fall through to leave
+         * the sum unevaluated. */
+        ndarray_warn_symbolic(res->data.function.args, n, "added");
     }
 
     /* Distribute Times[-1, Plus[...]] over the outer Plus. This is

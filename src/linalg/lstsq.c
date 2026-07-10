@@ -90,6 +90,7 @@
 
 #include "lstsq.h"
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "eval.h"
 #include "symtab.h"
 #include "attr.h"
@@ -1029,6 +1030,7 @@ static Expr* lsqr_solve(Expr* m, Expr* b, Expr* tol_opt_or_null,
  * and Krylov currently dispatch to Direct (see the file header).
  * ------------------------------------------------------------------ */
 Expr* builtin_leastsquares(Expr* res) {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 2) return NULL;

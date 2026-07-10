@@ -253,6 +253,7 @@ set(COMMON_SRC
     ../src/power.c
     ../src/funcprog.c
     ../src/boolean.c
+    ../src/names.c
     ../src/list/table.c
     ../src/list/range.c
     ../src/list/array.c
@@ -362,6 +363,7 @@ set(COMMON_SRC
     ../src/linalg/svdecomp_mpfr.c
     ../src/linalg/lapack.c
     ../src/linalg/numarray.c
+    ../src/linalg/ndlinalg.c
     ../src/linalg/blas_bridge.c
     ../src/linalg/lapack_bridge.c
     ../src/linalg/posdef_q.c
@@ -720,6 +722,10 @@ add_executable(boolean_tests test_boolean.c ${COMMON_SRC})
 target_link_libraries(boolean_tests m)
 target_include_directories(boolean_tests PRIVATE ../src)
 
+add_executable(names_tests test_names.c ${COMMON_SRC})
+target_link_libraries(names_tests m)
+target_include_directories(names_tests PRIVATE ../src)
+
 add_executable(association_tests test_association.c ${COMMON_SRC})
 target_link_libraries(association_tests m)
 target_include_directories(association_tests PRIVATE ../src)
@@ -732,10 +738,20 @@ target_link_libraries(bench_assoc m)
 target_include_directories(bench_assoc PRIVATE ../src)
 add_test(NAME bench_assoc COMMAND bench_assoc)
 
+add_executable(bench_ndarray_linalg bench_ndarray_linalg.c ${COMMON_SRC})
+target_link_libraries(bench_ndarray_linalg m)
+target_include_directories(bench_ndarray_linalg PRIVATE ../src)
+add_test(NAME bench_ndarray_linalg COMMAND bench_ndarray_linalg)
+
 add_executable(ndarray_tests test_ndarray.c ${COMMON_SRC})
 target_link_libraries(ndarray_tests m)
 target_include_directories(ndarray_tests PRIVATE ../src)
 add_test(NAME ndarray_tests COMMAND ndarray_tests)
+
+add_executable(ndarray_linalg_tests test_ndarray_linalg.c ${COMMON_SRC})
+target_link_libraries(ndarray_linalg_tests m)
+target_include_directories(ndarray_linalg_tests PRIVATE ../src)
+add_test(NAME ndarray_linalg_tests COMMAND ndarray_linalg_tests)
 
 add_executable(patterns_tests test_patterns.c ${COMMON_SRC})
 target_link_libraries(patterns_tests m)
@@ -2156,9 +2172,12 @@ if(USE_ECM)
     add_dependencies(iter_tests build_ecm)
     add_dependencies(cond_tests build_ecm)
     add_dependencies(boolean_tests build_ecm)
+    add_dependencies(names_tests build_ecm)
     add_dependencies(association_tests build_ecm)
     add_dependencies(bench_assoc build_ecm)
+    add_dependencies(bench_ndarray_linalg build_ecm)
     add_dependencies(ndarray_tests build_ecm)
+    add_dependencies(ndarray_linalg_tests build_ecm)
     add_dependencies(patterns_tests build_ecm)
     add_dependencies(replace_tests build_ecm)
     add_dependencies(core_tests build_ecm)
