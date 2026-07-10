@@ -687,6 +687,18 @@ monotonically down.
         integrand declines rather than returning a spurious form); a whole-tower
         rationality gate and a single-kernel nesting gate keep the other cases
         from ever certifying a wrong nested answer;
+      - the **genuine one-extension-at-a-time recursion** (Bronstein ch. 5 / Maxima
+        `risch.lisp`), which the flat tower ansatz above cannot express: it builds
+        the ordered differential tower (structure-theorem triangularity check) and
+        peels one kernel at a time, integrating the polynomial/Laurent part in the
+        top kernel *coefficient by coefficient* — each coefficient integral is an
+        integration in the LOWER field (the recursion), bottoming out in `C(x)`.
+        This closes **mixed exp/log towers** and **rational lower-field
+        coefficients** the single-kind flat cases decline, e.g.
+        `Integrate[E^x/x + E^x Log[x], x] = E^x Log[x]`,
+        `Integrate[Log[1+E^x] + x E^x/(1+E^x), x] = x Log[1+E^x]`,
+        `Integrate[1/(x^2 Log[x]) - Log[Log[x]]/x^2, x] = Log[Log[x]]/x`; diff-back
+        verified, so non-elementary mixed integrands (`E^x Log[x]`) decline;
       - a trig/hyperbolic front-end (`TrigToExp` -> exponential machinery ->
         `ExpToTrig`) that closes `Sin`, `Cos`, `Sinh`, `Cosh`, `Sin[x]^2`,
         `Sin[x] Cos[x]`, `Tan`, `Tanh`, ...; through the complex substitution
@@ -702,9 +714,10 @@ monotonically down.
         the constant residues `c_i` solved from `num = sum_i c_i D(g_i)(d/g_i)`
         via `SolveAlways` over `theta` and `x` (`Integrate[1/(x(1+Log[x])),x] =
         Log[1+Log[x]]`, `Integrate[E^x/(1+E^x),x] = Log[1+E^x]`).
-    Mixed exp-log towers, repeated top-kernel poles, rational-argument
-    exponentials (`E^(1/x)`), and algebraic extensions are not yet implemented, so
-    integrands needing them return unevaluated.
+    A nonzero proper rational part at a tower level (tower Hermite / Rothstein–
+    Trager over the lower field) and the general field Risch DE, repeated top-kernel
+    poles, rational-argument exponentials (`E^(1/x)`), and algebraic extensions are
+    not yet implemented, so integrands needing them return unevaluated.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.
   - `"Symmetry"` — origin-symmetry reduction for an interval `[-c, c]`

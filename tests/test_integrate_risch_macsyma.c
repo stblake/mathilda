@@ -308,6 +308,27 @@ static void test_exp_tower_case(void) {
         "Integrate`RischMacsyma[E^(E^x)/(1 + E^(E^x)), x]", "Integrate`RischMacsyma");
 }
 
+/* ---------------- Genuine one-extension recursion (mixed / rational) ---- */
+static void test_recursive_tower_case(void) {
+    /* MIXED exp/log tower, independent kernels — the flat single-kind tower
+     * cases cannot model a chain with both an E^x and a Log[x]. */
+    assert_rm_diff_zero("E^x/x + E^x Log[x]");        /* E^x Log[x]            */
+    /* Nested mixed tower (a logarithm of an exponential expression). */
+    assert_rm_diff_zero("Log[1 + E^x] + x E^x/(1 + E^x)");   /* x Log[1+E^x]   */
+    /* RATIONAL lower-field coefficient (answer's t_n coefficient is 1/x, not a
+     * polynomial) — impossible for the flat ansatz, natural for the recursion. */
+    assert_rm_diff_zero("1/(x^2 Log[x]) - Log[Log[x]]/x^2");  /* Log[Log[x]]/x */
+    /* Non-elementary mixed integrands decline cleanly (never a wrong form):
+     * E^x Log[x] needs ExpIntegralEi; Log[x] Log[Log[x]] is non-elementary. */
+    assert_head_unevaluated(
+        "Integrate`RischMacsyma[E^x Log[x], x]", "Integrate`RischMacsyma");
+    assert_head_unevaluated(
+        "Integrate`RischMacsyma[Log[x] Log[Log[x]], x]", "Integrate`RischMacsyma");
+    /* A non-rational kernel of an inner argument must not certify a wrong form. */
+    assert_head_unevaluated(
+        "Integrate`RischMacsyma[Sin[Log[x]] Log[Log[x]], x]", "Integrate`RischMacsyma");
+}
+
 /* ---------------- Automatic cascade now closes special functions ------- */
 static void test_cascade_default(void) {
     /* The cascade insertion adds capability by default (WL-faithful):
@@ -370,6 +391,7 @@ void test_integrate_risch_macsyma(void) {
     TEST(test_multikernel_case);
     TEST(test_log_tower_case);
     TEST(test_exp_tower_case);
+    TEST(test_recursive_tower_case);
     TEST(test_special_functions);
     TEST(test_cascade_default);
     TEST(test_method_plumbing);
