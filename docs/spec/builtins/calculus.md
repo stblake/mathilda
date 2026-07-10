@@ -675,6 +675,14 @@ monotonically down.
         `Integrate[x E^x Sin[x], x]`, `Integrate[E^(2x) Cos[3x], x]`, ... (via
         the complex exponentials the answer is left in an I-laden `Cosh`/`Sinh`
         form, a `Simplify` opportunity; the diff-back is exactly `0`);
+      - a nested **logarithmic tower** case: a rational function of a chain of
+        nested logarithms (`Log[x]`, `Log[Log[x]]`, ...) is integrated over the
+        triangular tower derivation `D = d/dx + sum_i Dt_i d/dt_i` by one unified
+        `SolveAlways` ansatz over all tower variables, closing
+        `Integrate[1/(x Log[x] Log[Log[x]]), x] = Log[Log[Log[x]]]`,
+        `Integrate[Log[Log[x]]/(x Log[x]), x] = Log[Log[x]]^2/2`, ... (guarded by
+        a whole-tower rationality gate — non-rational inner kernels decline rather
+        than emit a wrong answer);
       - a trig/hyperbolic front-end (`TrigToExp` -> exponential machinery ->
         `ExpToTrig`) that closes `Sin`, `Cos`, `Sinh`, `Cosh`, `Sin[x]^2`,
         `Sin[x] Cos[x]`, `Tan`, `Tanh`, ...; through the complex substitution
@@ -690,10 +698,9 @@ monotonically down.
         the constant residues `c_i` solved from `num = sum_i c_i D(g_i)(d/g_i)`
         via `SolveAlways` over `theta` and `x` (`Integrate[1/(x(1+Log[x])),x] =
         Log[1+Log[x]]`, `Integrate[E^x/(1+E^x),x] = Log[1+E^x]`).
-    Genuinely nested towers (a later extension depending on an earlier one, e.g.
-    `1/(x Log[x] Log[Log[x]])`), rational-argument exponentials (`E^(1/x)`), and
-    algebraic extensions are not yet implemented, so integrands needing them
-    return unevaluated.
+    Nested exponential / mixed exp-log towers, repeated top-kernel poles,
+    rational-argument exponentials (`E^(1/x)`), and algebraic extensions are not
+    yet implemented, so integrands needing them return unevaluated.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.
   - `"Symmetry"` — origin-symmetry reduction for an interval `[-c, c]`

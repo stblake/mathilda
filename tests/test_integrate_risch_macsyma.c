@@ -260,6 +260,32 @@ static void test_multikernel_case(void) {
         "Integrate`RischMacsyma");
 }
 
+/* ---------------- Phase B (second increment): nested logarithmic towers ---- */
+/* A rational function of a chain of NESTED logarithms t_1 = Log[u_1](x),
+ * t_2 = Log[u_2](x,t_1), ... is integrated by generalizing the single-kernel
+ * derivation D = d/dx + Dt d/dt to the whole tower D = d/dx + sum_i Dt_i d/dt_i
+ * and solving one unified ansatz over all tower variables (rm_log_tower_case).
+ * Correct by construction (SolveAlways certifies the polynomial identity in the
+ * algebraically independent transcendentals). */
+static void test_log_tower_case(void) {
+    assert_rm_diff_zero("1/(x Log[x] Log[Log[x]])");   /* Log[Log[Log[x]]]   */
+    assert_rm_diff_zero("Log[Log[x]]/(x Log[x])");     /* Log[Log[x]]^2/2    */
+    assert_rm_diff_zero("Log[Log[x]]/x");              /* Log[x](Log[Log[x]]-1) */
+    assert_rm_diff_zero("1/(x Log[x] Log[Log[x]] Log[Log[Log[x]]])"); /* depth 3 */
+    /* Independent (non-nested) logs are also a valid triangular tower. */
+    assert_rm_diff_zero("Log[x] + Log[x + 1]");
+    /* CRITICAL: a residual NON-rational kernel of an inner argument
+     * (Sin[Log[x]] -> Sin[t_1]) must make the case DECLINE, never certify a
+     * wrong closed form.  Same for a genuinely non-elementary nested integrand
+     * (Log[x] Log[Log[x]] needs ExpIntegralEi). */
+    assert_head_unevaluated(
+        "Integrate`RischMacsyma[Sin[Log[x]] Log[Log[x]], x]",
+        "Integrate`RischMacsyma");
+    assert_head_unevaluated(
+        "Integrate`RischMacsyma[Log[x] Log[Log[x]], x]",
+        "Integrate`RischMacsyma");
+}
+
 /* ---------------- Automatic cascade now closes special functions ------- */
 static void test_cascade_default(void) {
     /* The cascade insertion adds capability by default (WL-faithful):
@@ -320,6 +346,7 @@ void test_integrate_risch_macsyma(void) {
     TEST(test_hyperexponential_case);
     TEST(test_trig_frontend);
     TEST(test_multikernel_case);
+    TEST(test_log_tower_case);
     TEST(test_special_functions);
     TEST(test_cascade_default);
     TEST(test_method_plumbing);

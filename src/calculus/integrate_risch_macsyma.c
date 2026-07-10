@@ -1550,6 +1550,324 @@ static Expr* rm_expsum_case(Expr* f, Expr* x) {
     return result;
 }
 
+/* ================================================================== */
+/* Case: nested logarithmic tower (Phase B, second increment).         */
+/* ================================================================== */
+/* Collect (owned, deduplicated) every Log[u] kernel of `e` whose argument
+ * depends on x. */
+static void rm_collect_logs(Expr* e, Expr* x, Expr*** arr, size_t* n, size_t* cap) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == intern_symbol("Log")
+        && e->data.function.arg_count == 1
+        && !rm_free_of_x(e->data.function.args[0], x)) {
+        bool dup = false;
+        for (size_t i = 0; i < *n; i++) if (expr_eq((*arr)[i], e)) { dup = true; break; }
+        if (!dup) {
+            if (*n == *cap) { *cap = *cap ? *cap * 2 : 4;
+                              *arr = realloc(*arr, *cap * sizeof(Expr*)); }
+            (*arr)[(*n)++] = expr_copy(e);
+        }
+    }
+    rm_collect_logs(e->data.function.head, x, arr, n, cap);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        rm_collect_logs(e->data.function.args[i], x, arr, n, cap);
+}
+
+/* Structural containment: does `big` contain `small` as a subexpression? */
+static bool rm_contains(Expr* big, Expr* small) {
+    if (!big) return false;
+    if (expr_eq(big, small)) return true;
+    if (big->type != EXPR_FUNCTION) return false;
+    if (rm_contains(big->data.function.head, small)) return true;
+    for (size_t i = 0; i < big->data.function.arg_count; i++)
+        if (rm_contains(big->data.function.args[i], small)) return true;
+    return false;
+}
+
+/* Build the monomial  prod_j lv[j]^e[j]  (a Times of Powers; owned). */
+static Expr* rm_build_monomial(Expr** lv, const long* e, size_t nlv) {
+    Expr** fs = malloc((nlv ? nlv : 1) * sizeof(Expr*));
+    size_t nf = 0;
+    for (size_t j = 0; j < nlv; j++) {
+        if (e[j] == 0) continue;
+        fs[nf++] = expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(lv[j]), expr_new_integer(e[j]) }, 2);
+    }
+    Expr* m;
+    if (nf == 0) m = expr_new_integer(1);
+    else if (nf == 1) m = fs[0];
+    else m = expr_new_function(expr_new_symbol("Times"), fs, nf);
+    free(fs);
+    return m;
+}
+
+/* Decode the flat monomial index `idx` into the exponent vector `e` over the
+ * per-variable degree bounds `bd` (odometer, lowest var fastest). */
+static void rm_decode_mono(long idx, const long* bd, size_t nlv, long* e) {
+    for (size_t j = 0; j < nlv; j++) {
+        long base = bd[j] + 1;
+        e[j] = idx % base;
+        idx /= base;
+    }
+}
+
+/* Nested logarithmic tower.  When the integrand is a rational function of a
+ * chain of NESTED logarithms  t_1 = Log[u_1](x), t_2 = Log[u_2](x, t_1), ...,
+ * t_n = Log[u_n](x, t_1..t_{n-1})  (n >= 2), the single-extension cases (which
+ * model one kernel over C(x)) do not apply.  Generalize the single-kernel
+ * derivation  D = d/dx + Dt d/dt  to the full tower
+ *   D_tower = d/dx + sum_i Dt_i d/dt_i,   Dt_i = Cancel[D[u_i,x]/u_i] |_{ker->t}
+ * (triangular: Dt_i lies in C(x, t_1..t_{i-1})), and solve ONE unified ansatz
+ *   Q = sum_{k=0}^{Ntop} P_k(x, t_1..t_{n-1}) t_n^k  +  sum_j c_j Log(g_j)
+ * (P_k bounded-degree polynomials with unknown constant coefficients, g_j the
+ * squarefree t_n-denominator factors, c_j constants) by requiring
+ * D_tower[Q] = f for all {t_n,...,t_1,x} via SolveAlways.  Correct by
+ * construction (an exact solution certifies the identity).  Closes e.g.
+ * Integrate[1/(x Log[x] Log[Log[x]]), x] = Log[Log[Log[x]]] and
+ * Integrate[Log[Log[x]]/(x Log[x]), x] = Log[Log[x]]^2/2.  Declines cleanly
+ * when the tower is not a valid nested chain, the top denominator has a
+ * repeated pole (tower Hermite — later), or a lower-field coefficient must be
+ * rational (the full recursion — later). */
+static Expr* rm_log_tower_case(Expr* f, Expr* x) {
+    Expr** logs = NULL; size_t nl = 0, lcap = 0;
+    rm_collect_logs(f, x, &logs, &nl, &lcap);
+    if (nl < 2 || nl > 4) { for (size_t i = 0; i < nl; i++) expr_free(logs[i]);
+                            free(logs); return NULL; }
+
+    /* Order innermost-first: if logs[i] contains logs[k], logs[k] is deeper. */
+    for (size_t i = 0; i < nl; i++)
+        for (size_t k = i + 1; k < nl; k++)
+            if (rm_contains(logs[i], logs[k])) {
+                Expr* t = logs[i]; logs[i] = logs[k]; logs[k] = t;
+            }
+
+    /* t-symbols and substitution rules kernel_i -> t_i. */
+    Expr** ts = malloc(nl * sizeof(Expr*));
+    Expr** rules = malloc(nl * sizeof(Expr*));
+    for (size_t i = 0; i < nl; i++) {
+        char nm[16]; snprintf(nm, sizeof(nm), "rmtw%zu", i);
+        ts[i] = expr_new_symbol(nm);
+        rules[i] = expr_new_function(expr_new_symbol("Rule"),
+            (Expr*[]){ expr_copy(logs[i]), expr_copy(ts[i]) }, 2);
+    }
+    Expr* rl = expr_new_function(expr_new_symbol("List"), rules, nl);
+    free(rules);
+
+    Expr* F = rm_eval1("Together", rm_eval_own(expr_new_function(
+        expr_new_symbol("ReplaceAll"), (Expr*[]){ expr_copy(f), expr_copy(rl) }, 2)));
+    Expr* top = ts[nl - 1];
+    Expr* num = NULL; Expr* den = NULL;
+    Expr** Dt = NULL;
+    Expr* result = NULL;
+
+    bool ok = F && rm_find_log_of_x(F, x) == NULL && rm_find_exp_of_x(F, x) == NULL;
+    if (ok) {
+        num = rm_eval1("Numerator", expr_copy(F));
+        den = rm_eval1("Denominator", expr_copy(F));
+        /* F must be a genuine RATIONAL function of the whole tower {x, t_1..t_n}
+         * — i.e. num and den are multivariate polynomials in those variables and
+         * nothing else.  Without this, a residual non-rational kernel of an inner
+         * argument (e.g. Sin[Log[x]] -> Sin[t_1]) would slip through the per-top-
+         * variable test and the ansatz could certify a WRONG closed form. */
+        Expr** vv = malloc((nl + 1) * sizeof(Expr*));
+        vv[0] = expr_copy(x);
+        for (size_t i = 0; i < nl; i++) vv[i + 1] = expr_copy(ts[i]);
+        Expr* vlist = expr_new_function(expr_new_symbol("List"), vv, nl + 1);
+        free(vv);
+        Expr* pqn = num ? rm_eval2("PolynomialQ", expr_copy(num), expr_copy(vlist)) : NULL;
+        Expr* pqd = den ? rm_eval2("PolynomialQ", expr_copy(den), expr_copy(vlist)) : NULL;
+        ok = num && den && rm_is_true(pqn) && rm_is_true(pqd)
+             && !rm_free_of_x(F, top);
+        if (pqn) expr_free(pqn);
+        if (pqd) expr_free(pqd);
+        expr_free(vlist);
+    }
+
+    /* Tower derivation coefficients Dt_i, checked triangular. */
+    if (ok) {
+        Dt = calloc(nl, sizeof(Expr*));
+        for (size_t i = 0; i < nl && ok; i++) {
+            Expr* arg = logs[i]->data.function.args[0];
+            Expr* darg = rm_eval2("D", expr_copy(arg), expr_copy(x));
+            Expr* q = expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ darg, expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_copy(arg), expr_new_integer(-1) }, 2) }, 2);
+            Expr* dc = rm_eval1("Cancel", q);
+            Dt[i] = dc ? rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                (Expr*[]){ dc, expr_copy(rl) }, 2)) : NULL;
+            if (!Dt[i]) { ok = false; break; }
+            for (size_t j = i; j < nl; j++)
+                if (!rm_free_of_x(Dt[i], ts[j])) { ok = false; break; }
+        }
+    }
+
+    if (ok) {
+        long dtn_num = rm_degree(num, top), dtn_den = rm_degree(den, top);
+        long Ntop = dtn_num - dtn_den + 1;
+        if (Ntop < 0) Ntop = 0; if (Ntop > 4) Ntop = 4;
+
+        /* Lower field variables: x, t_1..t_{n-1}. */
+        size_t nlv = nl;                 /* x plus (nl-1) inner kernels */
+        Expr** lv = malloc(nlv * sizeof(Expr*));
+        long* bd = malloc(nlv * sizeof(long));
+        lv[0] = x;
+        for (size_t i = 0; i + 1 < nl; i++) lv[i + 1] = ts[i];
+        for (size_t j = 0; j < nlv; j++) {
+            long a = rm_degree(num, lv[j]); if (a < 0) a = 0;
+            long b = rm_degree(den, lv[j]); if (b < 0) b = 0;
+            long d = a + b + 1; if (d > 3) d = 3;
+            bd[j] = d;
+        }
+        long nmono = 1;
+        for (size_t j = 0; j < nlv; j++) nmono *= (bd[j] + 1);
+
+        /* Squarefree t_n-dependent factors of den -> log terms. */
+        Expr* g[16]; size_t ng = 0; bool bad = false;
+        Expr* factored = rm_eval1("Factor", expr_copy(den));
+        if (!factored) bad = true;
+        else {
+            Expr** fa; size_t nf; Expr* single[1];
+            if (factored->type == EXPR_FUNCTION
+                && factored->data.function.head->type == EXPR_SYMBOL
+                && factored->data.function.head->data.symbol == intern_symbol("Times")) {
+                fa = factored->data.function.args; nf = factored->data.function.arg_count;
+            } else { single[0] = factored; fa = single; nf = 1; }
+            for (size_t i = 0; i < nf && !bad; i++) {
+                Expr* term = fa[i]; Expr* base = term; long e = 1;
+                if (term->type == EXPR_FUNCTION
+                    && term->data.function.head->type == EXPR_SYMBOL
+                    && term->data.function.head->data.symbol == intern_symbol("Power")
+                    && term->data.function.arg_count == 2
+                    && term->data.function.args[1]->type == EXPR_INTEGER) {
+                    base = term->data.function.args[0];
+                    e = (long)term->data.function.args[1]->data.integer;
+                }
+                if (rm_free_of_x(base, top)) continue;     /* not a t_n factor */
+                if (e != 1 || ng >= 16) { bad = true; break; }  /* repeated: later */
+                g[ng++] = expr_copy(base);
+            }
+        }
+
+        long nunk = (Ntop + 1) * nmono + (long)ng;
+        if (!bad && nunk > 0 && nunk <= 80) {
+            /* Build Q = sum_{k,mono} rmLp{k}_{m} (mono) t_n^k + sum_j rmLc{j} Log(g_j). */
+            size_t nq = (size_t)((Ntop + 1) * nmono + (long)ng);
+            Expr** qterms = malloc(nq * sizeof(Expr*));
+            size_t ntq = 0;
+            long* ev = malloc(nlv * sizeof(long));
+            for (long k = 0; k <= Ntop; k++)
+                for (long m = 0; m < nmono; m++) {
+                    char nm[32]; snprintf(nm, sizeof(nm), "rmLp%ld_%ld", k, m);
+                    rm_decode_mono(m, bd, nlv, ev);
+                    Expr* mono = rm_build_monomial(lv, ev, nlv);
+                    qterms[ntq++] = expr_new_function(expr_new_symbol("Times"),
+                        (Expr*[]){ expr_new_symbol(nm), mono,
+                          expr_new_function(expr_new_symbol("Power"),
+                            (Expr*[]){ expr_copy(top), expr_new_integer(k) }, 2) }, 3);
+                }
+            for (size_t j = 0; j < ng; j++) {
+                char nm[32]; snprintf(nm, sizeof(nm), "rmLc%zu", j);
+                qterms[ntq++] = expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_symbol(nm),
+                      expr_new_function(expr_new_symbol("Log"),
+                        (Expr*[]){ expr_copy(g[j]) }, 1) }, 2);
+            }
+            Expr* Q = expr_new_function(expr_new_symbol("Plus"), qterms, ntq);
+            free(qterms);
+
+            /* D_tower[Q] = D[Q,x] + sum_i Dt_i D[Q,t_i]. */
+            Expr** dterms = malloc((nl + 1) * sizeof(Expr*));
+            dterms[0] = rm_eval2("D", expr_copy(Q), expr_copy(x));
+            for (size_t i = 0; i < nl; i++) {
+                Expr* dqi = rm_eval2("D", expr_copy(Q), expr_copy(ts[i]));
+                dterms[i + 1] = expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_copy(Dt[i]), dqi }, 2);
+            }
+            Expr* Qder = rm_eval_own(expr_new_function(expr_new_symbol("Plus"),
+                dterms, nl + 1));
+            free(dterms);
+
+            Expr* diff = expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ Qder, expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_integer(-1), expr_copy(F) }, 2) }, 2);
+            Expr* tog = rm_eval1("Together", diff);
+            Expr* rnum = tog ? rm_eval1("Numerator", tog) : NULL;
+
+            /* SolveAlways over {t_n, ..., t_1, x}. */
+            Expr* sol = NULL;
+            if (rnum) {
+                Expr** vl = malloc((nl + 1) * sizeof(Expr*));
+                for (size_t i = 0; i < nl; i++) vl[i] = expr_copy(ts[nl - 1 - i]);
+                vl[nl] = expr_copy(x);
+                Expr* varlist = expr_new_function(expr_new_symbol("List"), vl, nl + 1);
+                free(vl);
+                Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
+                    (Expr*[]){ rnum, expr_new_integer(0) }, 2);
+                sol = rm_eval2("SolveAlways", eqn, varlist);
+            }
+            if (sol && sol->type == EXPR_FUNCTION
+                && sol->data.function.head->type == EXPR_SYMBOL
+                && sol->data.function.head->data.symbol == intern_symbol("List")
+                && sol->data.function.arg_count >= 1
+                && sol->data.function.args[0]->type == EXPR_FUNCTION
+                && sol->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
+                && sol->data.function.args[0]->data.function.head->data.symbol
+                     == intern_symbol("List")) {
+                Expr* Qs = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                    (Expr*[]){ expr_copy(Q), expr_copy(sol->data.function.args[0]) }, 2));
+                if (Qs) {
+                    /* Pin any free ansatz parameters to 0. */
+                    Expr** zero = malloc(nq * sizeof(Expr*));
+                    size_t zi = 0;
+                    for (long k = 0; k <= Ntop; k++)
+                        for (long m = 0; m < nmono; m++) {
+                            char nm[32]; snprintf(nm, sizeof(nm), "rmLp%ld_%ld", k, m);
+                            zero[zi++] = expr_new_function(expr_new_symbol("Rule"),
+                                (Expr*[]){ expr_new_symbol(nm), expr_new_integer(0) }, 2);
+                        }
+                    for (size_t j = 0; j < ng; j++) {
+                        char nm[32]; snprintf(nm, sizeof(nm), "rmLc%zu", j);
+                        zero[zi++] = expr_new_function(expr_new_symbol("Rule"),
+                            (Expr*[]){ expr_new_symbol(nm), expr_new_integer(0) }, 2);
+                    }
+                    Expr* zl = expr_new_function(expr_new_symbol("List"), zero, zi);
+                    free(zero);
+                    Qs = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                        (Expr*[]){ Qs, zl }, 2));
+                    if (Qs) {
+                        /* Back-substitute t_i -> Log kernels (innermost first so a
+                         * t appearing inside a Log argument is restored too). */
+                        Expr** back = malloc(nl * sizeof(Expr*));
+                        for (size_t i = 0; i < nl; i++)
+                            back[i] = expr_new_function(expr_new_symbol("Rule"),
+                                (Expr*[]){ expr_copy(ts[i]), expr_copy(logs[i]) }, 2);
+                        Expr* bl = expr_new_function(expr_new_symbol("List"), back, nl);
+                        free(back);
+                        result = rm_eval_own(expr_new_function(
+                            expr_new_symbol("ReplaceAll"), (Expr*[]){ Qs, bl }, 2));
+                    }
+                }
+            }
+            if (sol) expr_free(sol);
+            free(ev);
+            expr_free(Q);
+        }
+        for (size_t j = 0; j < ng; j++) expr_free(g[j]);
+        if (factored) expr_free(factored);
+        free(lv); free(bd);
+    }
+
+    if (Dt) { for (size_t i = 0; i < nl; i++) if (Dt[i]) expr_free(Dt[i]); free(Dt); }
+    if (num) expr_free(num);
+    if (den) expr_free(den);
+    if (F) expr_free(F);
+    expr_free(rl);
+    for (size_t i = 0; i < nl; i++) { expr_free(ts[i]); expr_free(logs[i]); }
+    free(ts); free(logs);
+    return result;
+}
+
 /* Trigonometric / hyperbolic front-end (Maxima's rischform exponentialize
  * path).  Rewrites the trig/hyperbolic kernels to complex exponentials with
  * TrigToExp, integrates the resulting (Laurent-)rational function of the
@@ -1601,6 +1919,8 @@ static Expr* rm_transcendental_case(Expr* f, Expr* x) {
     r = rm_hyperexp_case(f, x);
     if (r) return r;
     r = rm_expsum_case(f, x);   /* direct multi-kernel exponential sums */
+    if (r) return r;
+    r = rm_log_tower_case(f, x);   /* nested logarithmic tower (depth > 1) */
     if (r) return r;
     r = rm_trig_frontend(f, x);
     if (r) return r;
