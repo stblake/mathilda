@@ -328,6 +328,13 @@ static void test_recursive_tower_case(void) {
      * non-elementary and must decline (never certify a wrong constant residue). */
     assert_head_unevaluated(
         "Integrate`RischMacsyma[1/(Log[x] (1 + Log[Log[x]])), x]", "Integrate`RischMacsyma");
+    /* EXPONENTIAL top level with a proper part (t_n-pole): the Laurent and log
+     * parts couple, so a unified coupled hyperexponential ansatz over the tower
+     * derivation is needed (t_n = E^(Log[x]^2), a nested exp over a log). */
+    assert_rm_diff_zero(
+        "(2 Log[x]/x) E^(Log[x]^2)/(1 + E^(Log[x]^2))");   /* Log[1+E^(Log[x]^2)] */
+    assert_head_unevaluated(
+        "Integrate`RischMacsyma[1/(1 + E^(Log[x]^2)), x]", "Integrate`RischMacsyma");
     /* Non-elementary mixed integrands decline cleanly (never a wrong form):
      * E^x Log[x] needs ExpIntegralEi; Log[x] Log[Log[x]] is non-elementary. */
     assert_head_unevaluated(

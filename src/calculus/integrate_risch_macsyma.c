@@ -2355,6 +2355,7 @@ static Expr* rm_int_primitive_poly(Expr* num, Expr* den, RmTower* T, long L, Exp
 static Expr* rm_int_hyperexp_poly(Expr* num, Expr* den, RmTower* T, long L, Expr* x);
 static Expr* rm_field_rde(Expr* p, long i, RmTower* T, long L, Expr* x);
 static Expr* rm_field_ratint(Expr* num, Expr* den, RmTower* T, long L, Expr* x);
+static Expr* rm_field_hyperexp_coupled(Expr* num, Expr* den, RmTower* T, long L, Expr* x);
 
 /* Tower derivation D_tower[e] = D[e,x] + sum_i Dt_i D[e,t_i], with Dt_i =
  * Dcoef_i (log) or Dcoef_i * t_i (exp).  Owned result. */
@@ -2541,6 +2542,196 @@ static Expr* rm_field_ratint(Expr* num, Expr* den, RmTower* T, long L, Expr* x) 
     return result;
 }
 
+/* Coupled hyperexponential proper part (exponential top level t = t_L = E^(w_L)).
+ * Unlike the logarithmic case, an exponential kernel's Laurent part and log part do
+ * NOT separate — D_tower[Log(g)] = D_tower[g]/g and D_tower[t] = w' t, so a single
+ * Log(1 + t) contributes to both the t^0 Laurent coefficient and the proper part.
+ * So (as in the single-kernel rm_hyperexp_case, lifted here to the tower derivation)
+ * a UNIFIED ansatz is solved at once:
+ *   Q = sum_{i=ilo}^{ihi} w_i t^i + H(t)/Hden(t) + sum_j c_j Log(g_j)
+ * where ilo = -(mult. of t at 0 in den), Hden = gcd(Dtil, dDtil/dt) is the repeated
+ * part of the t-coprime denominator Dtil = den/t^a, g_j the distinct t-factors of
+ * the squarefree radical Dtil/Hden, the w_i and the numerator H are bounded-degree
+ * lower-field polynomials, and the c_j constants — all found by SolveAlways over
+ * every tower variable of D_tower[Q] = num/den.  Correct by construction; the
+ * caller diff-back verifies.  Tried only when the Laurent recursion
+ * (rm_int_hyperexp_poly) declines because a genuine proper part is present. */
+static Expr* rm_field_hyperexp_coupled(Expr* num, Expr* den, RmTower* T, long L, Expr* x) {
+    Expr* t = T->t[L];
+    long a = 0;
+    Expr* cl = rm_eval2("CoefficientList", expr_copy(den), expr_copy(t));
+    if (cl && cl->type == EXPR_FUNCTION
+        && cl->data.function.head->type == EXPR_SYMBOL
+        && cl->data.function.head->data.symbol == intern_symbol("List")) {
+        for (size_t i = 0; i < cl->data.function.arg_count; i++)
+            if (!rm_is_zero(cl->data.function.args[i])) { a = (long)i; break; }
+    }
+    if (cl) expr_free(cl);
+    Expr* Dtil = rm_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_copy(den), expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(t), expr_new_integer(-a) }, 2) }, 2));
+    if (!Dtil) return NULL;
+
+    Expr* dDt = rm_eval2("D", expr_copy(Dtil), expr_copy(t));
+    Expr* Hden = dDt ? rm_eval_call("PolynomialGCD",
+        (Expr*[]){ expr_copy(Dtil), dDt }, 2) : NULL;
+    long dH = Hden ? rm_degree(Hden, t) : 0; if (dH < 0) dH = 0;
+    Expr* rad = Hden ? rm_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_copy(Dtil), expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(Hden), expr_new_integer(-1) }, 2) }, 2)) : NULL;
+
+    Expr* factored = rad ? rm_eval1("Factor", expr_copy(rad)) : NULL;
+    Expr* g[16]; size_t ng = 0; bool bad = (factored == NULL);
+    if (factored) {
+        Expr** fa; size_t nf; Expr* single[1];
+        if (factored->type == EXPR_FUNCTION
+            && factored->data.function.head->type == EXPR_SYMBOL
+            && factored->data.function.head->data.symbol == intern_symbol("Times")) {
+            fa = factored->data.function.args; nf = factored->data.function.arg_count;
+        } else { single[0] = factored; fa = single; nf = 1; }
+        for (size_t i = 0; i < nf && !bad; i++) {
+            Expr* term = fa[i]; Expr* base = term;
+            if (term->type == EXPR_FUNCTION
+                && term->data.function.head->type == EXPR_SYMBOL
+                && term->data.function.head->data.symbol == intern_symbol("Power")
+                && term->data.function.arg_count == 2)
+                base = term->data.function.args[0];
+            if (rm_free_of_x(base, t)) continue;
+            if (ng >= 16) { bad = true; break; }
+            g[ng++] = expr_copy(base);
+        }
+    }
+
+    long dnum = rm_degree(num, t), dden = rm_degree(den, t);
+    long ihi = dnum - dden; if (ihi < 0) ihi = 0; if (ihi > 4) ihi = 4;
+    long ilo = -a; if (ilo < -4) ilo = -4;
+    long nwi = ihi - ilo + 1;
+
+    size_t nlv = (size_t)L + 1;
+    Expr** lv = malloc(nlv * sizeof(Expr*));
+    long* bd = malloc(nlv * sizeof(long));
+    lv[0] = x;
+    for (long i = 0; i < L; i++) lv[i + 1] = T->t[i];
+    for (size_t j = 0; j < nlv; j++) {
+        long p = rm_degree(num, lv[j]); if (p < 0) p = 0;
+        long q = rm_degree(den, lv[j]); if (q < 0) q = 0;
+        long d = (p > q ? p : q) + 1; if (d > 3) d = 3;
+        bd[j] = d;
+    }
+    long nmono = 1;
+    for (size_t j = 0; j < nlv; j++) nmono *= (bd[j] + 1);
+    long nunk = nwi * nmono + dH * nmono + (long)ng;
+
+    Expr* result = NULL;
+    if (!bad && nwi > 0 && nunk > 0 && nunk <= 60) {
+        size_t nq = (size_t)(nwi * nmono + dH * nmono + (long)ng);
+        Expr** qterms = malloc(nq * sizeof(Expr*));
+        Expr** syms = malloc(nq * sizeof(Expr*));
+        size_t ntq = 0, nsym = 0;
+        long* ev = malloc(nlv * sizeof(long));
+        /* Laurent part: sum_i (sum_mono aW mono) t^i. */
+        for (long i = ilo; i <= ihi; i++)
+            for (long m = 0; m < nmono; m++) {
+                char nm[40]; snprintf(nm, sizeof(nm), "rmXw%ld_%ld", i - ilo, m);
+                rm_decode_mono(m, bd, nlv, ev);
+                Expr* mono = rm_build_monomial(lv, ev, nlv);
+                syms[nsym++] = expr_new_symbol(nm);
+                qterms[ntq++] = expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_symbol(nm), mono,
+                      expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ expr_copy(t), expr_new_integer(i) }, 2) }, 3);
+            }
+        /* Hermite part: (sum_{p<dH} (sum_mono aH mono) t^p) / Hden. */
+        if (dH >= 1) {
+            Expr** hterms = malloc((size_t)(dH * nmono) * sizeof(Expr*));
+            size_t nh = 0;
+            for (long p = 0; p < dH; p++)
+                for (long m = 0; m < nmono; m++) {
+                    char nm[40]; snprintf(nm, sizeof(nm), "rmXh%ld_%ld", p, m);
+                    rm_decode_mono(m, bd, nlv, ev);
+                    Expr* mono = rm_build_monomial(lv, ev, nlv);
+                    syms[nsym++] = expr_new_symbol(nm);
+                    hterms[nh++] = expr_new_function(expr_new_symbol("Times"),
+                        (Expr*[]){ expr_new_symbol(nm), mono,
+                          expr_new_function(expr_new_symbol("Power"),
+                            (Expr*[]){ expr_copy(t), expr_new_integer(p) }, 2) }, 3);
+                }
+            Expr* Hpoly = expr_new_function(expr_new_symbol("Plus"), hterms, nh);
+            free(hterms);
+            qterms[ntq++] = expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ Hpoly, expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_copy(Hden), expr_new_integer(-1) }, 2) }, 2);
+        }
+        /* Log part: sum_j c_j Log(g_j). */
+        for (size_t j = 0; j < ng; j++) {
+            char nm[40]; snprintf(nm, sizeof(nm), "rmXc%zu", j);
+            syms[nsym++] = expr_new_symbol(nm);
+            qterms[ntq++] = expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_symbol(nm),
+                  expr_new_function(expr_new_symbol("Log"),
+                    (Expr*[]){ expr_copy(g[j]) }, 1) }, 2);
+        }
+        free(ev);
+        Expr* Q = expr_new_function(expr_new_symbol("Plus"), qterms, ntq);
+        free(qterms);
+
+        Expr* target = expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_copy(num), expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_copy(den), expr_new_integer(-1) }, 2) }, 2);
+        Expr* Qder = rm_tower_deriv(Q, T, x);
+        Expr* diff = expr_new_function(expr_new_symbol("Plus"),
+            (Expr*[]){ Qder, expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_integer(-1), target }, 2) }, 2);
+        Expr* tog = rm_eval1("Together", diff);
+        Expr* rnum = tog ? rm_eval1("Numerator", tog) : NULL;
+
+        Expr* sol = NULL;
+        if (rnum) {
+            Expr** vl = malloc((T->n + 1) * sizeof(Expr*));
+            for (size_t i = 0; i < T->n; i++) vl[i] = expr_copy(T->t[T->n - 1 - i]);
+            vl[T->n] = expr_copy(x);
+            Expr* varlist = expr_new_function(expr_new_symbol("List"), vl, T->n + 1);
+            free(vl);
+            Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
+                (Expr*[]){ rnum, expr_new_integer(0) }, 2);
+            sol = rm_eval2("SolveAlways", eqn, varlist);
+        }
+        if (sol && sol->type == EXPR_FUNCTION
+            && sol->data.function.head->type == EXPR_SYMBOL
+            && sol->data.function.head->data.symbol == intern_symbol("List")
+            && sol->data.function.arg_count >= 1
+            && sol->data.function.args[0]->type == EXPR_FUNCTION
+            && sol->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
+            && sol->data.function.args[0]->data.function.head->data.symbol
+                 == intern_symbol("List")) {
+            Expr* Qs = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                (Expr*[]){ expr_copy(Q), expr_copy(sol->data.function.args[0]) }, 2));
+            if (Qs) {
+                Expr** zero = malloc((nsym ? nsym : 1) * sizeof(Expr*));
+                for (size_t j = 0; j < nsym; j++)
+                    zero[j] = expr_new_function(expr_new_symbol("Rule"),
+                        (Expr*[]){ expr_copy(syms[j]), expr_new_integer(0) }, 2);
+                Expr* zl = expr_new_function(expr_new_symbol("List"), zero, nsym);
+                free(zero);
+                result = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                    (Expr*[]){ Qs, zl }, 2));
+            }
+        }
+        if (sol) expr_free(sol);
+        for (size_t j = 0; j < nsym; j++) expr_free(syms[j]);
+        free(syms);
+        expr_free(Q);
+    }
+
+    for (size_t j = 0; j < ng; j++) expr_free(g[j]);
+    if (factored) expr_free(factored);
+    free(lv); free(bd);
+    if (rad) expr_free(rad);
+    if (Hden) expr_free(Hden);
+    expr_free(Dtil);
+    return result;
+}
+
 /* Integrate F (a rational function of x, t_1..t_L in tower-variable form) with
  * respect to the tower derivation, returning an antiderivative in tower-variable
  * form (owned) or NULL.  L < 0 is the rational base case C(x). */
@@ -2589,7 +2780,12 @@ static Expr* rm_field_integrate(Expr* F, RmTower* T, long L, Expr* x) {
                 if (Rr) expr_free(Rr);
             }
         } else {
+            /* Exponential top: the pure-Laurent recursion first (genuine RDE,
+             * rational lower-field coefficients); if it declines because a proper
+             * part is present, the coupled hyperexponential ansatz. */
             result = rm_int_hyperexp_poly(num, den, T, L, x);
+            if (!result)
+                result = rm_field_hyperexp_coupled(num, den, T, L, x);
         }
     }
     if (num) expr_free(num);
