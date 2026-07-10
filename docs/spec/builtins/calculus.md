@@ -708,7 +708,11 @@ monotonically down.
         top level the Laurent and log parts couple, so a proper `t_n`-pole is closed
         by a unified coupled-hyperexponential ansatz over the tower derivation, e.g.
         `Integrate[(2 Log[x]/x) E^(Log[x]^2)/(1+E^(Log[x]^2)), x] =
-        Log[1+E^(Log[x]^2)]`;
+        Log[1+E^(Log[x]^2)]`.  The exponential Laurent step solves a **field Risch
+        differential equation** `q_i' + i w_n' q_i = p_i` in the lower field for each
+        power; a `q_i` that is rational there (monomial denominator, e.g. `1/Log[x]`)
+        is found by a bounded lower-field Laurent ansatz, closing
+        `Integrate[(2/x - 1/(x Log[x]^2)) E^(Log[x]^2), x] = E^(Log[x]^2)/Log[x]`;
       - a trig/hyperbolic front-end (`TrigToExp` -> exponential machinery ->
         `ExpToTrig`) that closes `Sin`, `Cos`, `Sinh`, `Cosh`, `Sin[x]^2`,
         `Sin[x] Cos[x]`, `Tan`, `Tanh`, ...; through the complex substitution
@@ -724,9 +728,9 @@ monotonically down.
         the constant residues `c_i` solved from `num = sum_i c_i D(g_i)(d/g_i)`
         via `SolveAlways` over `theta` and `x` (`Integrate[1/(x(1+Log[x])),x] =
         Log[1+Log[x]]`, `Integrate[E^x/(1+E^x),x] = Log[1+E^x]`).
-    A genuinely rational Hermite numerator coefficient, the pure resultant LRT, the
-    general field Risch DE (mixed exponential-top towers with lower-field structure),
-    rational-argument exponentials (`E^(1/x)`), and algebraic extensions are not yet
+    A genuinely rational Hermite numerator coefficient, the pure resultant LRT, a
+    field Risch DE with a non-monomial denominator (the full Bronstein SPDE),
+    rational-argument exponents (`E^(1/x)`), and algebraic extensions are not yet
     implemented, so integrands needing them return unevaluated.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.

@@ -2959,15 +2959,98 @@ static Expr* rm_int_hyperexp_poly(Expr* num, Expr* den, RmTower* T, long L, Expr
 
 /* Risch differential equation q' + i w_L' q = p for q in the lower field K_L.
  * Base case (w_L and p both in C(x)): the bounded polynomial-in-x ansatz of
- * rm_solve_rde.  The general field RDE (lower-field coefficients) is a later
- * increment and declines. */
+ * rm_solve_rde.  General case: q lives in K_L = C(x, t_0..t_{L-1}) and may be
+ * rational there (a monomial denominator, e.g. 1/Log[x]), which the coupled-
+ * hyperexponential polynomial coefficients cannot express — solve by a bounded
+ * LAURENT ansatz over {x, t_0..t_{L-1}} (each variable ranging over negative powers
+ * too), requiring D_tower[q] + i Dcoef_L q = p for every lower tower variable via
+ * SolveAlways.  A non-monomial denominator (needing the full Bronstein SPDE) is out
+ * of a monomial-Laurent ansatz's reach and declines. */
 static Expr* rm_field_rde(Expr* p, long i, RmTower* T, long L, Expr* x) {
     Expr* w = T->arg[L];
     bool base = rm_is_poly(w, x) && rm_is_poly(p, x);
     for (size_t j = 0; j < T->n && base; j++)
         if (!rm_free_of_x(w, T->t[j]) || !rm_free_of_x(p, T->t[j])) base = false;
     if (base) return rm_solve_rde(p, i, w, x);
-    return NULL;
+
+    if (L < 1) return NULL;
+    Expr* Dcoef = T->Dcoef[L];
+    size_t nlv = (size_t)L + 1;
+    Expr** lv = malloc(nlv * sizeof(Expr*));
+    long* bd = malloc(nlv * sizeof(long));
+    long* lo = malloc(nlv * sizeof(long));
+    lv[0] = x; lo[0] = -2; bd[0] = 4;                 /* x: Laurent -2..2 */
+    for (long j = 0; j < L; j++) { lv[j + 1] = T->t[j]; lo[j + 1] = -2; bd[j + 1] = 4; }
+    long nmono = 1;
+    for (size_t j = 0; j < nlv; j++) nmono *= (bd[j] + 1);
+
+    Expr* result = NULL;
+    if (nmono > 0 && nmono <= 40) {
+        Expr** qterms = malloc((size_t)nmono * sizeof(Expr*));
+        Expr** syms = malloc((size_t)nmono * sizeof(Expr*));
+        size_t ntq = 0, nsym = 0;
+        long* ev = malloc(nlv * sizeof(long));
+        for (long m = 0; m < nmono; m++) {
+            char nm[40]; snprintf(nm, sizeof(nm), "rmRd%ld", m);
+            rm_decode_mono(m, bd, nlv, ev);
+            for (size_t j = 0; j < nlv; j++) ev[j] += lo[j];   /* Laurent shift */
+            Expr* mono = rm_build_monomial(lv, ev, nlv);
+            syms[nsym++] = expr_new_symbol(nm);
+            qterms[ntq++] = expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_symbol(nm), mono }, 2);
+        }
+        free(ev);
+        Expr* q = expr_new_function(expr_new_symbol("Plus"), qterms, ntq);
+        free(qterms);
+
+        Expr* dq = rm_tower_deriv(q, T, x);
+        Expr* iq = expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_new_integer(i), expr_copy(Dcoef), expr_copy(q) }, 3);
+        Expr* residual = expr_new_function(expr_new_symbol("Plus"),
+            (Expr*[]){ dq, iq, expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_integer(-1), expr_copy(p) }, 2) }, 3);
+        Expr* tog = rm_eval1("Together", residual);
+        Expr* rnum = tog ? rm_eval1("Numerator", tog) : NULL;
+
+        Expr* sol = NULL;
+        if (rnum) {
+            Expr** vl = malloc(nlv * sizeof(Expr*));
+            for (long j = 0; j < L; j++) vl[j] = expr_copy(T->t[L - 1 - j]);
+            vl[L] = expr_copy(x);
+            Expr* varlist = expr_new_function(expr_new_symbol("List"), vl, nlv);
+            free(vl);
+            Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
+                (Expr*[]){ rnum, expr_new_integer(0) }, 2);
+            sol = rm_eval2("SolveAlways", eqn, varlist);
+        }
+        if (sol && sol->type == EXPR_FUNCTION
+            && sol->data.function.head->type == EXPR_SYMBOL
+            && sol->data.function.head->data.symbol == intern_symbol("List")
+            && sol->data.function.arg_count >= 1
+            && sol->data.function.args[0]->type == EXPR_FUNCTION
+            && sol->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
+            && sol->data.function.args[0]->data.function.head->data.symbol
+                 == intern_symbol("List")) {
+            Expr* qs = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                (Expr*[]){ expr_copy(q), expr_copy(sol->data.function.args[0]) }, 2));
+            if (qs) {
+                Expr** zero = malloc((nsym ? nsym : 1) * sizeof(Expr*));
+                for (size_t j = 0; j < nsym; j++)
+                    zero[j] = expr_new_function(expr_new_symbol("Rule"),
+                        (Expr*[]){ expr_copy(syms[j]), expr_new_integer(0) }, 2);
+                Expr* zl = expr_new_function(expr_new_symbol("List"), zero, nsym);
+                free(zero);
+                result = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                    (Expr*[]){ qs, zl }, 2));
+            }
+        }
+        if (sol) expr_free(sol);
+        for (size_t j = 0; j < nsym; j++) expr_free(syms[j]);
+        free(syms);
+        expr_free(q);
+    }
+    free(lv); free(bd); free(lo);
+    return result;
 }
 
 /* Recursive-tower case: build the differential tower of f, substitute all kernels
