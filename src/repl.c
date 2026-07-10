@@ -394,14 +394,18 @@ static void pipe_process_input(const char* input, int id) {
         return;
     }
 
-    /* Graphics[...] → serialize as Plotly JSON for the notebook frontend. */
+    /* Graphics[...] / Graphics3D[...] → Plotly JSON for the notebook. */
     if (evaluated->type == EXPR_FUNCTION
         && evaluated->data.function.head
-        && evaluated->data.function.head->type == EXPR_SYMBOL
-        && evaluated->data.function.head->data.symbol == SYM_Graphics) {
-        char* plotly = graphics_to_plotly_json(evaluated);
-        expr_free(evaluated);
+        && evaluated->data.function.head->type == EXPR_SYMBOL) {
+        const char* head_sym = evaluated->data.function.head->data.symbol;
+        char* plotly = NULL;
+        if (head_sym == SYM_Graphics)
+            plotly = graphics_to_plotly_json(evaluated);
+        else if (head_sym == SYM_Graphics3D)
+            plotly = graphics3d_to_plotly_json(evaluated);
         if (plotly) {
+            expr_free(evaluated);
             size_t json_len = strlen(plotly) + 64;
             char* json_line = malloc(json_len);
             if (json_line) {
@@ -415,11 +419,19 @@ static void pipe_process_input(const char* input, int id) {
                 free(json_line);
             }
             free(plotly);
+            char done[64];
+            snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\"}", id);
+            pipe_emit(done);
+            return;
         }
-        char done[64];
-        snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\"}", id);
-        pipe_emit(done);
-        return;
+        /* plotly == NULL (e.g. empty Graphics3D): fall through to text. */
+        if (head_sym == SYM_Graphics || head_sym == SYM_Graphics3D) {
+            expr_free(evaluated);
+            char done[64];
+            snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\"}", id);
+            pipe_emit(done);
+            return;
+        }
     }
 
     char* result_str = expr_to_string(evaluated);

@@ -101,42 +101,135 @@ transcribed from the historical Hershey dataset (`tools/hershey.dat`) by
 ## RGBColor / GrayLevel / Opacity / Thickness / PointSize
 Style directives. Placed alongside primitives in a `Graphics[]` primitive
 list, each affects every primitive that follows it (left to right), exactly
-like Mathematica's directive semantics.
+like Mathematica's directive semantics. See also `Hue` and `CMYKColor` below,
+and the **Named color constants** section above for the 24 pre-defined color
+symbols.
+
 - `RGBColor[r, g, b]` / `RGBColor[r, g, b, a]`: color, components in `[0,1]`.
-- `GrayLevel[g]` / `GrayLevel[g, a]`: a shade of gray.
-- `Opacity[a]`: opacity in `[0,1]`.
+- `GrayLevel[g]` / `GrayLevel[g, a]`: a shade of gray (0 = black, 1 = white).
+- `Opacity[a]`: fill opacity in `[0,1]` (does not affect line alpha; use the
+  4-argument `RGBColor`/`GrayLevel`/`Hue` forms for full RGBA control).
 - `Thickness[t]`: line thickness (plot coordinates) for `Line`/`Circle`.
 - `PointSize[s]`: point radius (plot coordinates) for `Point`.
 
 ```mathematica
 In[1]:= Graphics[{RGBColor[1, 0, 0], Point[{0, 0}], Line[{{0,0},{1,1}}]}]
 Out[1]= -Graphics-
+
+In[2]:= Graphics[{GrayLevel[0.3], Disk[{0, 0}], GrayLevel[0.8], Disk[{2, 0}]}]
+Out[2]= -Graphics-
+
+In[3]:= Graphics[{Blue, Opacity[0.5], Polygon[{{0,0},{1,0},{0.5,1}}],
+                  Red,  Opacity[0.5], Polygon[{{0.5,0},{1.5,0},{1,1}}]}]
+Out[3]= -Graphics-  (* two overlapping semi-transparent triangles *)
 ```
 
 ## Named color constants
-`Red`, `Green`, `Blue`, `Black`, `White`, `Gray`, `Cyan`, `Magenta`,
-`Yellow`, `Brown`, `Orange`, `Pink`, `Purple` and their light variants
-`LightRed`, `LightGreen`, `LightBlue`, `LightGray`, `LightCyan`,
-`LightMagenta`, `LightYellow`, `LightBrown`, `LightOrange`, `LightPink`,
-`LightPurple` are ordinary protected `OwnValue`s evaluating to an
-`RGBColor[...]`/`GrayLevel[...]` literal (e.g. `Red` is exactly
-`RGBColor[1, 0, 0]`, `Black` is `GrayLevel[0]`) -- usable anywhere a
-color literal is, including `PlotStyle`, `Background`, `FrameStyle`,
-`AxesStyle`, `TicksStyle`, `GridLinesStyle`, and as a style directive
-directly inside a primitive list (`Graphics[{Blue, Point[{0,0}]}]`).
 
-Because `Plot`/`Show` are `HoldAll`/inert respectively, a non-`Held`
-`Graphics[...]`'s arguments evaluate normally (so `Blue` resolves the
-instant it's parsed), while `Plot` evaluates each of its own option values
-once before storing them, specifically so a named color used inside e.g.
-`Epilog -> {Red, ...}` resolves the same way.
+All 24 named color constants are protected `OwnValue`s that evaluate to an
+`RGBColor[r,g,b]` or `GrayLevel[g]` literal. They are usable anywhere a
+color literal is accepted: as a style directive inside a primitive list,
+as the value of `PlotStyle`, `Background`, `FrameStyle`, `AxesStyle`,
+`TicksStyle`, `GridLinesStyle`, `ColorFunction` return values, and so on.
+
+Because `Graphics[...]` is not held, its arguments evaluate at construction
+time — a bare `Red` inside a primitive list is immediately replaced by
+`RGBColor[1, 0, 0]`. `Plot`/`ParametricPlot`/etc. are `HoldAll` but
+evaluate each option value once before storing it on the result, so a
+named color in any option (e.g. `PlotStyle -> Orange` or
+`Epilog -> {Blue, Disk[{0,0}]}`) resolves identically.
+
+All four color forms — `RGBColor`, `GrayLevel`, `Hue`, `CMYKColor` — are
+recognised as style directives in both the Raylib CLI renderer and the
+Plotly notebook frontend.
+
+**Color table** (24 constants):
+
+| Name | Evaluates to | Approx. swatch |
+|---|---|---|
+| `Black` | `GrayLevel[0]` | black |
+| `White` | `GrayLevel[1]` | white |
+| `Gray` | `GrayLevel[0.5]` | mid-gray |
+| `LightGray` | `GrayLevel[0.85]` | pale gray |
+| `Red` | `RGBColor[1, 0, 0]` | pure red |
+| `Green` | `RGBColor[0, 1, 0]` | lime green |
+| `Blue` | `RGBColor[0, 0, 1]` | pure blue |
+| `Cyan` | `RGBColor[0, 1, 1]` | cyan |
+| `Magenta` | `RGBColor[1, 0, 1]` | magenta |
+| `Yellow` | `RGBColor[1, 1, 0]` | yellow |
+| `Brown` | `RGBColor[0.6, 0.4, 0.2]` | brown |
+| `Orange` | `RGBColor[1, 0.5, 0]` | orange |
+| `Pink` | `RGBColor[1, 0.5, 0.5]` | pink |
+| `Purple` | `RGBColor[0.5, 0, 0.5]` | purple |
+| `LightRed` | `RGBColor[1, 0.85, 0.85]` | pale red |
+| `LightGreen` | `RGBColor[0.88, 1, 0.88]` | pale green |
+| `LightBlue` | `RGBColor[0.87, 0.94, 1]` | pale blue |
+| `LightCyan` | `RGBColor[0.9, 1, 1]` | pale cyan |
+| `LightMagenta` | `RGBColor[1, 0.9, 1]` | pale magenta |
+| `LightYellow` | `RGBColor[1, 1, 0.85]` | pale yellow |
+| `LightBrown` | `RGBColor[0.94, 0.91, 0.88]` | pale brown |
+| `LightOrange` | `RGBColor[1, 0.9, 0.8]` | pale orange |
+| `LightPink` | `RGBColor[1, 0.925, 0.925]` | pale pink |
+| `LightPurple` | `RGBColor[0.94, 0.88, 0.94]` | pale purple |
 
 ```mathematica
+(* Named colors evaluate to their literal form *)
 In[1]:= Red
 Out[1]= RGBColor[1, 0, 0]
 
-In[2]:= Plot[Sin[x], {x, 0, 2 Pi}, PlotStyle -> Green, Background -> LightGray]
-Out[2]= -Graphics-
+In[2]:= Black
+Out[2]= GrayLevel[0]
+
+In[3]:= {Red, Green, Blue, Black, White, Gray}
+Out[3]= {RGBColor[1, 0, 0], RGBColor[0, 1, 0], RGBColor[0, 0, 1],
+         GrayLevel[0], GrayLevel[1], GrayLevel[0.5]}
+
+(* Style directive inside a primitive list *)
+In[4]:= Graphics[{Red, Disk[{0, 0}], Blue, Disk[{2, 0}], Green, Disk[{4, 0}]}]
+Out[4]= -Graphics-
+
+(* As PlotStyle / Background options *)
+In[5]:= Plot[Sin[x], {x, 0, 2 Pi}, PlotStyle -> Orange, Background -> LightGray]
+Out[5]= -Graphics-
+
+(* Per-color Disk grid — all 24 named colors *)
+In[6]:= With[{cols = {Red, Green, Blue, Black, White, Gray,
+                       Cyan, Magenta, Yellow, Brown, Orange, Pink,
+                       Purple, LightRed, LightGreen, LightBlue, LightGray,
+                       LightCyan, LightMagenta, LightYellow, LightBrown,
+                       LightOrange, LightPink, LightPurple}},
+         Table[{cols[[n]], Disk[{Mod[n - 1, 6] * 2, -Floor[(n - 1) / 6] * 2}]},
+               {n, Length[cols]}]] // Graphics
+Out[6]= -Graphics-
+
+(* Named colors in multi-curve PlotStyle *)
+In[7]:= Plot[{Sin[x], Cos[x], Sin[2 x]}, {x, 0, 2 Pi},PlotStyle -> {Red, Blue, Green}]
+Out[7]= -Graphics-
+
+(* Named colors in Epilog *)
+In[8]:= Plot[Sin[x], {x, 0, 2 Pi},
+          Epilog -> {Orange, PointSize[0.02], Point[{Pi/2, 1}],
+                     Purple, PointSize[0.02], Point[{3 Pi/2, -1}]}]
+Out[8]= -Graphics-
+
+(* AxesStyle / GridLinesStyle *)
+In[9]:= Plot[x^2, {x, -2, 2}, GridLines -> Automatic,
+          GridLinesStyle -> LightBlue, AxesStyle -> Gray]
+Out[9]= -Graphics-
+
+(* Combining named colors with Opacity *)
+In[10]:= Graphics[{Red, Opacity[0.4], Disk[{0, 0}],
+                   Blue, Opacity[0.4], Disk[{1, 0}],
+                   Green, Opacity[0.4], Disk[{0.5, 0.866}]}]
+Out[10]= -Graphics-  (* three overlapping translucent disks *)
+
+(* ParametricPlot with named color *)
+In[11]:= ParametricPlot[{Cos[t], Sin[t]}, {t, 0, 2 Pi}, PlotStyle -> Purple]
+Out[11]= -Graphics-
+
+(* Plot3D with named color surface *)
+In[12]:= Plot3D[Sin[x] Cos[y], {x, -3, 3}, {y, -3, 3}, PlotStyle -> Cyan, Mesh -> None]
+Out[12]= -Graphics3D-
 ```
 
 ## Hue
@@ -589,6 +682,59 @@ In[9]:= ParametricPlot[{r Cos[t], r Sin[t]}, {t, 0, 2 Pi}, {r, 1, 2},
           Mesh -> All]
 Out[9]= -Graphics-  (* with grid lines overlaid *)
 ```
+
+## PolarPlot
+Plots one or more curves given in polar coordinates `r(theta)`, converting
+to Cartesian `{r*Cos[theta], r*Sin[theta]}` and sampling adaptively.  Returns a
+`Graphics[...]` object (auto-displayed).
+
+- `PolarPlot[r, {theta, tmin, tmax}]` — single polar curve.
+- `PolarPlot[{r1, r2, ...}, {theta, tmin, tmax}]` — multiple curves in
+  distinct palette colours.
+
+`PolarPlot` is `HoldAll`: `r` and the iterator spec are held unevaluated
+until sampling begins. Negative `r` values are allowed (they plot in the
+opposite direction, matching standard polar convention). Default
+`AspectRatio -> 1` (equal axes, so circles look round).
+
+**Options** (same as `ParametricPlot` — see that section for details):
+
+| Option | Default | Description |
+|---|---|---|
+| `PlotPoints` | `75` | Initial sample count per curve |
+| `MaxRecursion` | `6` | Adaptive refinement depth |
+| `MaxPlotPoints` | `Infinity` | Total point cap |
+| `Mesh` | `None` | `All` overlays evaluation dots |
+| `ColorFunction` | `None` | `f[t]` or `"Rainbow"` (sweeps scaled theta) |
+| `ColorFunctionScaling` | `True` | Normalise theta to `[0,1]` |
+| `RegionFunction` | `None` | `f[x,y]` mask |
+| `PlotStyle` | palette | Color/style directives |
+| `PlotLegends` | `None` | `Automatic` / `"Expressions"` / label list |
+| `PolarAxes` | `False` | Accepted; polar grid overlay not yet rendered |
+| `AspectRatio` | `1` | Equal axes (unlike `Plot`'s 1/GoldenRatio) |
+| `Axes`, `Frame`, `PlotRange`, `GridLines`, `PlotLabel`, … | — | Pass through to `Graphics[...]` |
+
+```mathematica
+In[1]:= PolarPlot[1, {t, 0, 2Pi}]
+Out[1]= -Graphics-  (* unit circle *)
+
+In[2]:= PolarPlot[Sin[2t], {t, 0, 2Pi}]
+Out[2]= -Graphics-  (* four-petal rose *)
+
+In[3]:= PolarPlot[{1, 2}, {t, 0, 2Pi}, PlotStyle -> {Blue, Red}]
+Out[3]= -Graphics-  (* two concentric circles *)
+
+In[4]:= PolarPlot[t, {t, 0, 4Pi}, ColorFunction -> "Rainbow"]
+Out[4]= -Graphics-  (* Archimedean spiral, rainbow-coloured *)
+
+In[5]:= PolarPlot[Sin[2t], {t, 0, 2Pi}, Mesh -> All, PlotLabel -> "Rose"]
+Out[5]= -Graphics-  (* rose with sample-point overlay and title *)
+```
+
+## PolarAxes
+`PolarPlot` option: `True` requests a polar grid overlay (radial circles at
+regular intervals plus angular degree/radian labels). Currently accepted and
+documented but not yet rendered; Cartesian axes are drawn instead.
 
 ## ParametricPlot3D
 Samples and displays a parametric 3D space curve or surface patch, returning

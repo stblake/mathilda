@@ -330,7 +330,7 @@ static bool split_options_param3d(Expr* res, size_t opts_start, long default_plo
         pass[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
     }
     if (!have_style) {
-        Expr* rgb_a[3] = { expr_new_real(0.2), expr_new_real(0.4), expr_new_real(0.8) };
+        Expr* rgb_a[3] = { expr_new_real(0.4), expr_new_real(0.7), expr_new_real(1.0) };
         Expr* rgb = expr_new_function(expr_new_symbol(SYM_RGBColor), rgb_a, 3);
         Expr* a[2] = { expr_new_symbol(SYM_PlotStyle), expr_copy(rgb) };
         pass[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);

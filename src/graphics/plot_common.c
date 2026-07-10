@@ -101,10 +101,9 @@ bool eval_region(Expr* region_fn, double x, double y) {
 }
 
 static bool is_color_head(const Expr* e) {
-    return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-        && (e->data.function.head->data.symbol == SYM_RGBColor
-            || e->data.function.head->data.symbol == SYM_GrayLevel
-            || e->data.function.head->data.symbol == SYM_Hue);
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol;
+    return h == SYM_RGBColor || h == SYM_GrayLevel || h == SYM_Hue || h == SYM_CMYKColor;
 }
 
 Expr* eval_color_function(Expr* color_fn, double x, double y,

@@ -13,6 +13,7 @@
 #include "parametricplot.h"
 #include "parametricplot3d.h"
 #include "listplot.h"
+#include "polarplot.h"
 #include "streamplot.h"
 #include "contourplot.h"
 #include "show.h"

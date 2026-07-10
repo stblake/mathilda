@@ -349,6 +349,43 @@ void graphics_init(void) {
         "by z value using ColorFunction or the built-in blue-cyan-yellow-red thermal "
         "ramp. Automatic enables shading only when ColorFunction is set.");
 
+    symtab_add_builtin("PolarPlot", builtin_polarplot);
+    symtab_get_def("PolarPlot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("PolarPlot",
+        "PolarPlot[r, {theta, tmin, tmax}, opts...]\n"
+        "\tPlots the polar curve r(theta) by converting to Cartesian\n"
+        "\tcoordinates {r*Cos[theta], r*Sin[theta]} and sampling adaptively\n"
+        "\tover [tmin, tmax]. Returns a Graphics[...] object (auto-displayed).\n"
+        "PolarPlot[{r1, r2, ...}, {theta, tmin, tmax}, opts...]\n"
+        "\tMultiple polar curves in distinct palette colours.\n"
+        "\n"
+        "\tNegative r values are plotted in the opposite direction (standard\n"
+        "\tpolar convention). Default AspectRatio -> 1 (equal axes).\n"
+        "\n"
+        "\tOptions (same as ParametricPlot):\n"
+        "\t  PlotPoints          - initial sample count per curve (default 75)\n"
+        "\t  MaxRecursion        - adaptive refinement depth (default 6)\n"
+        "\t  MaxPlotPoints       - total point cap (default Infinity)\n"
+        "\t  Mesh                - All/True: overlay evaluation dots; None (default)\n"
+        "\t  ColorFunction       - f[t] or \"Rainbow\" (sweeps scaled theta)\n"
+        "\t  ColorFunctionScaling - True (default): normalise theta to [0,1]\n"
+        "\t  RegionFunction      - f[x,y] mask\n"
+        "\t  PlotStyle           - color/style directive(s)\n"
+        "\t  PlotLegends         - Automatic / \"Expressions\" / label list\n"
+        "\t  PolarAxes           - option keyword (accepted; polar grid overlay\n"
+        "\t                        not yet rendered)\n"
+        "\t  Standard Graphics options (AspectRatio, Axes, PlotRange,\n"
+        "\t  AxesLabel, Frame, GridLines, PlotLabel, Background, ImageSize,\n"
+        "\t  Prolog, Epilog) pass through to the Graphics[...] result.");
+
+    /* PolarAxes is an inert option keyword -- recognised and documented but
+     * actual polar grid overlay is not yet rendered. */
+    symtab_get_def("PolarAxes")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("PolarAxes",
+        "PolarAxes\n\tPolarPlot option: True requests a polar grid overlay\n"
+        "\t(radial circles + angle labels). Currently accepted but not yet\n"
+        "\trendered; Cartesian axes are drawn instead.");
+
     symtab_add_builtin("StreamPlot", builtin_streamplot);
     symtab_get_def("StreamPlot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_set_docstring("StreamPlot",
