@@ -667,6 +667,14 @@ monotonically down.
         the repeated / `theta = 0` exponential poles
         `Integrate[1/(1 + E^x)^2, x] = x + 1/(1 + E^x) - Log[1 + E^x]`,
         `Integrate[1/(E^x (1 + E^x)^2), x]`, `Integrate[1/(1 + E^x)^3, x]`;
+      - a multi-kernel **sum-of-exponentials** case: an integrand that
+        exponentializes to a sum `sum_k p_k(x) E^(W_k)` of NON-commensurate
+        exponentials `E^(W_k)` (e.g. the `(1 ± I) x` pair from `E^x Sin[x]`)
+        decouples — each term integrates by its own Risch DE
+        `q_k' + W_k' q_k = p_k` — closing `Integrate[E^x Sin[x], x]`,
+        `Integrate[x E^x Sin[x], x]`, `Integrate[E^(2x) Cos[3x], x]`, ... (via
+        the complex exponentials the answer is left in an I-laden `Cosh`/`Sinh`
+        form, a `Simplify` opportunity; the diff-back is exactly `0`);
       - a trig/hyperbolic front-end (`TrigToExp` -> exponential machinery ->
         `ExpToTrig`) that closes `Sin`, `Cos`, `Sinh`, `Cosh`, `Sin[x]^2`,
         `Sin[x] Cos[x]`, `Tan`, `Tanh`, ...; through the complex substitution
@@ -682,9 +690,10 @@ monotonically down.
         the constant residues `c_i` solved from `num = sum_i c_i D(g_i)(d/g_i)`
         via `SolveAlways` over `theta` and `x` (`Integrate[1/(x(1+Log[x])),x] =
         Log[1+Log[x]]`, `Integrate[E^x/(1+E^x),x] = Log[1+E^x]`).
-    The general Hermite reduction (repeated poles), a mixed polynomial-plus-
-    fractional split, and the rational-`u` / multi-kernel cases are not yet
-    implemented, so integrands needing them return unevaluated.
+    Genuinely nested towers (a later extension depending on an earlier one, e.g.
+    `1/(x Log[x] Log[Log[x]])`), rational-argument exponentials (`E^(1/x)`), and
+    algebraic extensions are not yet implemented, so integrands needing them
+    return unevaluated.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.
   - `"Symmetry"` — origin-symmetry reduction for an interval `[-c, c]`

@@ -234,6 +234,32 @@ static void test_trig_frontend(void) {
     assert_rm_diff_zero("Tanh[x]");
 }
 
+/* ---------------- Phase B (first increment): multi-kernel exponential sums --- */
+/* Integrands that exponentialize to a sum of NON-commensurate exponentials
+ * E^((a +/- b I) x) — e.g. a real exponential times a trig factor — are two
+ * independent transcendental extensions.  The distinct exponentials decouple
+ * (d/dx never mixes them), so each term p_k(x) E^(W_k) integrates via its own
+ * Risch DE q_k' + W_k' q_k = p_k (rm_expsum_case).  The single-primitive
+ * exponential cases cannot kernelize them.  Correct by construction (each q_k
+ * is SolveAlways-certified); through the complex exponentials the ExpToTrig
+ * output is left in an I-laden Cosh/Sinh form (a Simplify opportunity), but the
+ * diff-back is exactly 0. */
+static void test_multikernel_case(void) {
+    assert_rm_diff_zero("Exp[x] Sin[x]");        /* (E^x/2)(Sin[x] - Cos[x]) */
+    assert_rm_diff_zero("Exp[x] Cos[x]");
+    assert_rm_diff_zero("x Exp[x] Sin[x]");      /* polynomial coefficient   */
+    assert_rm_diff_zero("Exp[2 x] Sin[3 x]");    /* non-unit real/imag parts */
+    assert_rm_diff_zero("Exp[2 x] Cos[3 x]");
+    assert_rm_diff_zero("x^2 Exp[x] Cos[x]");
+    /* Directly as a sum of independent exponentials (no trig front-end). */
+    assert_rm_diff_zero("Exp[x] + Exp[2 x] Sin[x]");
+    /* A non-elementary term (E^(x^2)) inside the sum makes the whole case
+     * decline cleanly rather than emit a partial/garbage answer. */
+    assert_head_unevaluated(
+        "Integrate`RischMacsyma[Exp[x] Sin[x] + Exp[x^2], x]",
+        "Integrate`RischMacsyma");
+}
+
 /* ---------------- Automatic cascade now closes special functions ------- */
 static void test_cascade_default(void) {
     /* The cascade insertion adds capability by default (WL-faithful):
@@ -293,6 +319,7 @@ void test_integrate_risch_macsyma(void) {
     TEST(test_hermite_case);
     TEST(test_hyperexponential_case);
     TEST(test_trig_frontend);
+    TEST(test_multikernel_case);
     TEST(test_special_functions);
     TEST(test_cascade_default);
     TEST(test_method_plumbing);

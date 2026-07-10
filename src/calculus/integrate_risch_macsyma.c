@@ -1425,6 +1425,131 @@ static Expr* rm_hyperexp_case(Expr* f, Expr* x) {
     return result;
 }
 
+/* ================================================================== */
+/* Case: sum of NON-COMMENSURATE exponentials (Phase B, first tower    */
+/* increment) — several independent primitive exponential extensions.  */
+/* ================================================================== */
+/* Split one multiplicative term T = p(x) * prod_k E^(w_k) into the total
+ * x-dependent exponential exponent W = sum_k w_k (over every E^w / Exp[w]
+ * factor whose exponent depends on x) and the exponential-free cofactor p.
+ * Returns 0 on success with *W_out and *p_out owned; -1 if the cofactor still
+ * carries an x-dependent exponential (a shape this simple splitter declines). */
+/* Recursively accumulate the factors of a term (descending into nested,
+ * un-flattened Times nodes — Expand can leave Times[2, Times[x, E^w]]): every
+ * x-dependent exponential exponent is summed into *W; every other factor is
+ * appended (as an owned copy) to the growable array *pf. */
+static void rm_accum_factors(Expr* T, Expr* x, Expr** W,
+                             Expr*** pf, size_t* npf, size_t* cap) {
+    if (T->type == EXPR_FUNCTION
+        && T->data.function.head->type == EXPR_SYMBOL
+        && T->data.function.head->data.symbol == intern_symbol("Times")) {
+        for (size_t i = 0; i < T->data.function.arg_count; i++)
+            rm_accum_factors(T->data.function.args[i], x, W, pf, npf, cap);
+        return;
+    }
+    Expr* w = NULL;   /* borrowed exponent if T is an x-dependent exp kernel */
+    const char* h = (T->type == EXPR_FUNCTION
+        && T->data.function.head->type == EXPR_SYMBOL)
+        ? T->data.function.head->data.symbol : NULL;
+    if (h == intern_symbol("Exp") && T->data.function.arg_count == 1
+        && !rm_free_of_x(T->data.function.args[0], x))
+        w = T->data.function.args[0];
+    else if (h == intern_symbol("Power") && T->data.function.arg_count == 2
+        && T->data.function.args[0]->type == EXPR_SYMBOL
+        && T->data.function.args[0]->data.symbol == intern_symbol("E")
+        && !rm_free_of_x(T->data.function.args[1], x))
+        w = T->data.function.args[1];
+    if (w) {
+        *W = rm_eval_own(expr_new_function(expr_new_symbol("Plus"),
+            (Expr*[]){ *W, expr_copy(w) }, 2));
+    } else {
+        if (*npf == *cap) {
+            *cap = *cap ? *cap * 2 : 4;
+            *pf = realloc(*pf, *cap * sizeof(Expr*));
+        }
+        (*pf)[(*npf)++] = expr_copy(T);
+    }
+}
+
+static int rm_split_exp_term(Expr* T, Expr* x, Expr** W_out, Expr** p_out) {
+    Expr* W = expr_new_integer(0);
+    Expr** pf = NULL; size_t npf = 0, cap = 0;
+    rm_accum_factors(T, x, &W, &pf, &npf, &cap);
+
+    Expr* p;
+    if (npf == 0) p = expr_new_integer(1);
+    else if (npf == 1) p = pf[0];                          /* adopt sole factor */
+    else p = expr_new_function(expr_new_symbol("Times"), pf, npf);  /* adopts */
+    free(pf);
+
+    if (rm_find_exp_of_x(p, x) != NULL) {   /* nested/residual exp in cofactor */
+        expr_free(W); expr_free(p);
+        return -1;
+    }
+    *W_out = W; *p_out = p;
+    return 0;
+}
+
+/* Sum-of-exponentials case.  When TrigToExp (or the raw integrand) yields a sum
+ *   f = sum_k p_k(x) E^(W_k)
+ * of exponentials whose exponents W_k are NOT integer multiples of a single
+ * primitive (e.g. (1 +/- I) x from E^x Sin[x]), the distinct exponentials are
+ * independent transcendental extensions.  Because d/dx maps each E^(W_k) to a
+ * multiple of itself and never mixes distinct exponents, the terms DECOUPLE:
+ *   INT p_k E^(W_k) dx = q_k E^(W_k),   q_k' + W_k' q_k = p_k  (a Risch DE)
+ * with W_k polynomial in x, plus any exponential-free (W_k = 0) terms handled by
+ * the base-field integral.  Each q_k is found exactly (SolveAlways certificate),
+ * so d/dx(sum_k q_k E^(W_k)) = sum_k p_k E^(W_k) = f by linearity — correct by
+ * construction.  Declines (whole) if any term is not rational-coefficient over a
+ * polynomial exponent (e.g. E^(x^2), left to the Erf recognizer) or carries a
+ * residual log / non-elementary cofactor.  Runs after the single-primitive
+ * exponential cases, so it only fires on genuinely multi-kernel integrands. */
+static Expr* rm_expsum_case(Expr* f, Expr* x) {
+    if (!rm_find_exp_of_x(f, x)) return NULL;   /* need at least one exp kernel */
+    Expr* fe = rm_eval1("Expand", expr_copy(f));
+    if (!fe) return NULL;
+
+    Expr** terms; size_t nt; Expr* single[1];
+    if (fe->type == EXPR_FUNCTION
+        && fe->data.function.head->type == EXPR_SYMBOL
+        && fe->data.function.head->data.symbol == intern_symbol("Plus")) {
+        terms = fe->data.function.args; nt = fe->data.function.arg_count;
+    } else { single[0] = fe; terms = single; nt = 1; }
+
+    Expr** outs = malloc((nt ? nt : 1) * sizeof(Expr*));
+    size_t no = 0;
+    bool fail = false, any_exp = false;
+    for (size_t i = 0; i < nt && !fail; i++) {
+        Expr* W = NULL; Expr* p = NULL;
+        if (rm_split_exp_term(terms[i], x, &W, &p) != 0) { fail = true; break; }
+        bool wdep = !rm_free_of_x(W, x);
+        Expr* qi = NULL;
+        if (!wdep) {
+            /* E^W is a constant coefficient: INT p E^W dx = E^W INT p dx. */
+            qi = rm_integrate_in_K_with_logs(p, x);
+        } else if (rm_is_poly(W, x)) {
+            qi = rm_solve_rde(p, 1, W, x);   /* q' + W' q = p */
+            if (qi) any_exp = true;
+        }   /* rational (non-polynomial) W is Phase C: qi stays NULL -> decline */
+        expr_free(p);
+        if (!qi) { expr_free(W); fail = true; break; }
+        Expr* eW = expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_new_symbol("E"), W }, 2);   /* adopts W; E^0 -> 1 */
+        outs[no++] = expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ qi, eW }, 2);                    /* adopts qi, eW */
+    }
+
+    Expr* result = NULL;
+    if (!fail && any_exp) {
+        result = rm_eval_own(expr_new_function(expr_new_symbol("Plus"), outs, no));
+    } else {
+        for (size_t i = 0; i < no; i++) expr_free(outs[i]);
+    }
+    free(outs);
+    expr_free(fe);
+    return result;
+}
+
 /* Trigonometric / hyperbolic front-end (Maxima's rischform exponentialize
  * path).  Rewrites the trig/hyperbolic kernels to complex exponentials with
  * TrigToExp, integrates the resulting (Laurent-)rational function of the
@@ -1450,6 +1575,10 @@ static Expr* rm_trig_frontend(Expr* f, Expr* x) {
     Expr* r = rm_exp_poly_case(fe, x);
     if (!r) r = rm_frac_case(fe, x);
     if (!r) r = rm_hyperexp_case(fe, x);
+    /* Multi-kernel decoupling (Phase B): e.g. Sin/Cos times a real exponential
+     * exponentialize to a sum of two non-commensurate exponentials E^((a +/- b I) x)
+     * that the single-primitive cases cannot kernelize. */
+    if (!r) r = rm_expsum_case(fe, x);
     expr_free(fe);
     if (!r) return NULL;
     return rm_eval1("ExpToTrig", r);   /* adopts r; back to trig form */
@@ -1470,6 +1599,8 @@ static Expr* rm_transcendental_case(Expr* f, Expr* x) {
     r = rm_hermite_case(f, x);
     if (r) return r;
     r = rm_hyperexp_case(f, x);
+    if (r) return r;
+    r = rm_expsum_case(f, x);   /* direct multi-kernel exponential sums */
     if (r) return r;
     r = rm_trig_frontend(f, x);
     if (r) return r;
