@@ -936,3 +936,38 @@ Lessons:
 - **Process**: `./Mathilda` in pipe mode (non-tty) speaks NDJSON, not bare exprs —
   drive it with `{"id":1,"expr":"..."}` + `{"type":"quit"}`, and beware `| head -1`
   masking the real exit code (use `${PIPESTATUS}` / capture then grep).
+
+## Completeness over aesthetics: don't gate out correct results (2026-07-10)
+
+- **Correction**: For `Integrate\`RischMacsyma`, I added a `FreeQ[_, I]` gate that
+  DECLINED `Tan[x]`/`Tanh[x]` because their coupled-hyperexponential answer, via
+  the complex substitution `u = I x`, came out I-laden (`I x - Log[1 + E^(2 I x)]`
+  `= -Log[Cos[x]]`) and no simplifier reduced it to real form. The user's rule:
+  **favour completeness — return the correct antiderivative even when unsimplified,
+  and FLAG the case as a `Simplify` improvement opportunity** rather than silently
+  declining it.
+- **Rule for myself**: a Risch/integration branch that is correct by construction
+  must NOT be suppressed just because the output isn't in the prettiest form. If
+  the answer is correct (diff-back 0 / SolveAlways-certified), ship it. Record the
+  un-simplified shapes as explicit known-gaps (code comment + changelog +
+  docs "Simplify improvement opportunity"), so the aesthetic fix can be done in
+  `Simplify`, not by dropping capability from the integrator.
+
+## Generalizing an RDE/ansatz solver: gate on genuine rational functions (2026-07-11)
+
+- **Bug I introduced & fixed**: extending the base Risch-DE solver `rm_solve_rde`
+  to rational exponents (Phase C, `E^(1/x)`) via a `q = h/Denominator[p]` ansatz, I
+  routed every non-polynomial `p` to it. But `rm_exp_poly_case` passes the
+  exponential's *coefficient* as `p` — for raw `E^x Sin[x]`, `p = Sin[x]`
+  (transcendental). `SolveAlways` then certified a spurious `q = 0`, so
+  `Integrate[E^x Sin[x]]` wrongly returned `0` (broke every multi-kernel test).
+- **Rule for myself**: when a `SolveAlways`/denominator-theorem ansatz is fed a
+  coefficient that may be transcendental, GATE it: require `p` (and `u'`) to be a
+  genuine rational function of `x` — `PolynomialQ` on both `Numerator` and
+  `Denominator` of `Together[·]`. A transcendental kernel (Sin, Log, another exp)
+  must be rejected so the integrand falls through to the case that actually models
+  it (expsum / trig front-end), never certified against a truncated ansatz.
+- **Build gotcha**: after editing a `src/*.c` that the cmake test binary compiles
+  via `COMMON_SRC`, a bare `make` (top-level) and `cmake --build` can run a STALE
+  object if a `git stash`/`pop` reordered mtimes — I chased a phantom regression
+  from a stale binary. `touch src/<file>.c` (or clean) before trusting test output.

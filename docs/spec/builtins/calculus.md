@@ -716,7 +716,13 @@ monotonically down.
         `Integrate[(2/x - 1/(x Log[x]^2)) E^(Log[x]^2), x] = E^(Log[x]^2)/Log[x]`
         (`q = 1/Log[x]`) and
         `Integrate[(2 Log[x]/(x(1+Log[x])) - 1/(x(1+Log[x])^2)) E^(Log[x]^2), x] =
-        E^(Log[x]^2)/(1+Log[x])` (`q = 1/(1+Log[x])`, non-monomial denominator);
+        E^(Log[x]^2)/(1+Log[x])` (`q = 1/(1+Log[x])`, non-monomial denominator).
+        A structural pre-pass re-splits an **evaluator-merged exponential monomial**
+        `E^(a+b) -> E^a E^b` (the evaluator folds `E^x E^(E^x)` into `E^(x+E^x)`,
+        whose exponent carries the foreign kernel `E^x` and breaks tower
+        independence), restoring the independent basis `{E^x, E^(E^x)}` and closing
+        `Integrate[E^x E^(E^x)/(1+E^(E^x)), x] = Log[1+E^(E^x)]` (the non-elementary
+        `E^(E^x)/(1+E^(E^x))` still declines);
       - a trig/hyperbolic front-end (`TrigToExp` -> exponential machinery ->
         `ExpToTrig`) that closes `Sin`, `Cos`, `Sinh`, `Cosh`, `Sin[x]^2`,
         `Sin[x] Cos[x]`, `Tan`, `Tanh`, ...; through the complex substitution

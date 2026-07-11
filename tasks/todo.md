@@ -1,54 +1,44 @@
-# Rename Matrix[...] → NDArray[...] + N-dimensional (numpy conventions)
+# Integrate`RischMacsyma — Phase B, fourth increment: genuine one-extension recursion
 
-Decisions: full internal rename; introspection now, broadcasting/higher-rank Dot later.
+Goal: replace the flat "SolveAlways over all tower vars at once" ansatz with the
+genuine **one-extension-at-a-time recursion** (Bronstein/Maxima risch.lisp): peel
+the top kernel, integrate the polynomial/Laurent part by recursing into the lower
+field for each coefficient, verify by construction. Closes what the flat towers
+cannot: **mixed exp/log towers** and **rational lower-field coefficients**.
 
-## Phase 1 — Full rename (Matrix → NDArray)
-- [ ] git mv src/matrix.c → src/ndarray.c, src/matrix.h → src/ndarray.h
-- [ ] Rewrite ndarray.h/.c: guard MATHILDA_NDARRAY_H, fns ndarray_* , builtin_ndarray,
-      ndarray_init, register "NDArray", NDARRAY_MAX_RANK, docstring
-- [ ] expr.h: EXPR_MATRIX→EXPR_NDARRAY, MatrixData→NDArrayData, .matrix→.ndarray,
-      expr_new_matrix→expr_new_ndarray
-- [ ] expr.c: same identifiers
-- [ ] Targeted edits (EXPR_MATRIX / data.matrix / API fns / include): eval.c, match.c,
-      numeric.c, precision.c, print.c, part.c, sort.c, simp/simp_complexity.c, core.c,
-      plus.c, times.c, linalg/dot.c, list/listpredicates.c, calculus/series.c
-- [ ] sym_names.{c,h}: SYM_Matrix→SYM_NDArray, intern "NDArray"
-- [ ] Do NOT touch: MatrixQ / MatrixPower / MatrixRank / MatrixForm / *Matrix builtins,
-      stats.c `is_matrix` local, vm_is_matrix
+Target closures (currently decline, verified elementary):
+- T1  ∫ (E^x/x + E^x Log[x]) dx = E^x Log[x]         (independent mixed)
+- T2' ∫ (Log[1+E^x] + x E^x/(1+E^x)) dx = x Log[1+E^x] (nested log-over-exp)
+- T3  ∫ (1/(x^2 Log[x]) - Log[Log[x]]/x^2) dx = Log[Log[x]]/x (rational coeff)
 
-## Phase 2 — N-dim correctness + numpy introspection
-- [ ] Fix Length[NDArray] → shape[0] (numpy len; currently 0)
-- [ ] Add ArrayDepth (ndim for NDArray; rectangular depth for lists) — reuse get_dimensions
-- [ ] Add ArrayQ (True for NDArray; rectangular full-depth list)
-- [ ] Keep VectorQ(rank 1)/MatrixQ(rank 2); Dimensions=shape (exists)
+## Design (validated in REPL)
+- `RmTower`: ordered kernels (kind LOG/EXP, kernel, arg, t-symbol, Dcoef), + subrules.
+- `rm_tower_build`: collect logs+exps, order innermost-first (containment; tiebreak
+  EXP-deeper so primitive recursion sits on top / RDEs bottom out in C(x)),
+  structure-theorem check (each Dcoef in K_{i-1}: triangular + no foreign kernel).
+- `rm_field_integrate(F, T, L, x)`: recursive.
+  - L<0 → BronsteinRational (base field C(x)).
+  - LOG top → `rm_int_primitive_poly`: q_i' + (i+1)q_{i+1}Dt = p_i, each solve is
+    `rm_limited_field_integrate` at level L-1 (recursion) with new-log fold-back.
+  - EXP top → `rm_int_hyperexp_poly`: Laurent; i=0 recurse L-1, i≠0 `rm_field_rde`.
+  - proper rational part (nonzero remainder) → DECLINE this increment (tower Hermite/
+    Rothstein-Trager later); all three targets have zero proper part at every level.
+- `rm_field_rde`: base (Dcoef,p in C(x)) → rm_solve_rde; else NULL (general field
+  RDE later).
+- Wrapper `rm_recursive_tower_case`: build, substitute, whole-tower rational gate,
+  integrate, back-substitute t→kernels, **diff-back verify** (search, not decision).
+- Wire after rm_exp_tower_case, before rm_trig_frontend.
 
-## Phase 3 — docs / tests / changelog
-- [ ] test_matrix.c → test_ndarray.c; rename symbols; add rank-3/4 cases
-- [ ] tests/CMakeLists.txt: src/matrix.c→src/ndarray.c; matrix_tests→ndarray_tests (3 sites)
-- [ ] docs/spec/builtins/linear-algebra.md: ## Matrix → ## NDArray (ndim, ArrayDepth, ArrayQ)
-- [ ] docs/spec/changelog/2026-07-06.md: rename + ndim entry
-- [ ] docstrings + attributes for NDArray/ArrayDepth/ArrayQ
+## Steps
+- [ ] RmTower + rm_tower_build + rm_tower_free (structure theorem)
+- [ ] rm_field_integrate + rm_int_primitive_poly + rm_limited_field_integrate
+- [ ] rm_int_hyperexp_poly + rm_field_rde
+- [ ] rm_recursive_tower_case wrapper + wire in
+- [ ] tests (T1/T2'/T3 diff-back=0 + decline regressions) + valgrind
+- [ ] docs: RISCH_STATUS §3.12/§6, calculus.md, changelog; memory
+- [ ] commit + push to main
 
-## Phase 4 — build + verify
-- [ ] make clean && make (clean: stale-object ABI trap on expr.h change)
-- [ ] ndarray_tests pass
-- [ ] Smoke: rank 1/2/3/4 construct, Dimensions, ArrayDepth, ArrayQ, Length, Head,
-      MatrixQ/VectorQ, Dot, Plus/Times elementwise, Normal, Precision/Accuracy/MatchQ
-
-## Deferred (follow-up, noted in changelog)
-- numpy broadcasting (scalar+array, shape-compatible elementwise)
-- higher-rank Dot / matmul batching
-
-## Review (done 2026-07-09)
-- Full internal rename Matrix→NDArray: EXPR_NDARRAY, NDArrayData, data.ndarray,
-  src/ndarray.{c,h}, ndarray_*, SYM_NDArray. MatrixQ/MatrixPower/MatrixRank etc.
-  untouched. Two printer literals ("Matrix[" fullform, "\text{Matrix}" tex) were
-  string-literals the token-sed missed — fixed by hand (user caught one).
-- Per user course-corrections: dropped ArrayDepth (use Depth[NDArray]=rank+1);
-  ArrayQ→NDArrayQ (simple type predicate); no Part indexing (over-design);
-  Length[NDArray]=shape[0] kept.
-- NDArray::shape warning on incompatible-shape Plus/Times (all-NDArray operands),
-  leave unevaluated like Dot::dotsh; deduped per-eval via eval clock.
-- Verified: clean build (0 warnings), 29 ndarray_tests, valgrind clean (no
-  NDArray frames), full functional battery. assert_eval_eq is NDEBUG-hollow —
-  real verification via pipe protocol.
+## Non-goals (this increment)
+- Nonzero proper rational part at any level (tower Hermite / Rothstein-Trager).
+- General field RDE (mixed exp-top towers with lower-field structure).
+- Algebraically dependent kernels the evaluator merged (E^x E^(E^x)→E^(x+E^x)).

@@ -3176,13 +3176,95 @@ static Expr* rm_field_rde(Expr* p, long i, RmTower* T, long L, Expr* x) {
  * integrate by the one-extension recursion, back-substitute, and diff-back verify.
  * Closes mixed exp/log towers and rational lower-field coefficients that the flat
  * tower cases decline; runs after them, before the trig front-end. */
-static Expr* rm_recursive_tower_case(Expr* f, Expr* x) {
-    RmTower T;
-    if (!rm_tower_build(f, x, &T)) { rm_tower_free(&T); return NULL; }
+/* Structural pre-pass for the recursive tower: expand a MERGED exponential
+ * monomial  E^(a + b + ...)  into the product  E^a E^b ...,  built directly
+ * (NOT evaluated) so the evaluator cannot re-merge it.  The evaluator
+ * automatically combines a product of exponentials into one power with a
+ * summed exponent (E^x E^(E^x) -> E^(x + E^x)); that merged exponent is not a
+ * valid tower monomial — its argument x + E^x contains the foreign kernel E^x,
+ * so rm_tower_build's structure-theorem check rejects the tower and the case
+ * declines.  Splitting E^(x + E^x) back to E^x E^(E^x) restores the
+ * independent tower basis {E^x, E^(E^x)}, so integrands the evaluator merged
+ * (e.g. E^x E^(E^x)/(1+E^(E^x)) = E^(x+E^x)/(1+E^(E^x))) close instead.  The
+ * rewrite is exact (E^(a+b) = E^a E^b) and the whole recursive case is
+ * diff-back verified, so it can never ship a wrong form.  Returns a
+ * freshly-owned tree (caller frees). */
+static Expr* rm_expand_exp_sums(Expr* e) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    const char* h = (e->data.function.head->type == EXPR_SYMBOL)
+        ? e->data.function.head->data.symbol : NULL;
+    Expr* expo = NULL;
+    if (h == intern_symbol("Power") && e->data.function.arg_count == 2
+        && e->data.function.args[0]->type == EXPR_SYMBOL
+        && e->data.function.args[0]->data.symbol == intern_symbol("E"))
+        expo = e->data.function.args[1];
+    else if (h == intern_symbol("Exp") && e->data.function.arg_count == 1)
+        expo = e->data.function.args[0];
+    if (expo && rm_head_is(expo, "Plus") && expo->data.function.arg_count >= 2) {
+        size_t m = expo->data.function.arg_count;
+        Expr** facs = malloc(m * sizeof(Expr*));
+        for (size_t i = 0; i < m; i++) {
+            Expr* part = rm_expand_exp_sums(expo->data.function.args[i]);
+            facs[i] = expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_new_symbol("E"), part }, 2);
+        }
+        Expr* prod = expr_new_function(expr_new_symbol("Times"), facs, m);
+        free(facs);
+        return prod;
+    }
+    Expr* nh = rm_expand_exp_sums(e->data.function.head);
+    size_t k = e->data.function.arg_count;
+    Expr** na = malloc((k ? k : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < k; i++)
+        na[i] = rm_expand_exp_sums(e->data.function.args[i]);
+    Expr* r = expr_new_function(nh, na, k);
+    free(na);
+    return r;
+}
 
-    Expr* F = rm_eval1("Together", rm_eval_own(expr_new_function(
-        expr_new_symbol("ReplaceAll"),
-        (Expr*[]){ expr_copy(f), expr_copy(T.subrules) }, 2)));
+/* Structural (non-evaluating) kernel substitution: replace each tower-kernel
+ * subtree (E^arg_i / Log[arg_i], plus the Exp[arg_i] spelling) by its tower
+ * variable t_i, top-down (a matched node is not descended into).  Unlike an
+ * evaluated ReplaceAll this never lets the evaluator re-merge a split
+ * exponential product (E^x E^(E^x) -> E^(x+E^x)) before the kernels are
+ * aliased; because the kernels were collected from the very tree being
+ * substituted, structural equality holds by construction.  Returns a
+ * freshly-owned tree (caller frees). */
+static Expr* rm_subst_kernels(Expr* e, RmTower* T) {
+    if (!e) return NULL;
+    for (size_t i = 0; i < T->n; i++) {
+        if (expr_eq(e, T->kernel[i])) return expr_copy(T->t[i]);
+        if (T->kind[i] == RM_EXP
+            && e->type == EXPR_FUNCTION
+            && e->data.function.head->type == EXPR_SYMBOL
+            && e->data.function.head->data.symbol == intern_symbol("Exp")
+            && e->data.function.arg_count == 1
+            && expr_eq(e->data.function.args[0], T->arg[i]))
+            return expr_copy(T->t[i]);
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    Expr* nh = rm_subst_kernels(e->data.function.head, T);
+    size_t k = e->data.function.arg_count;
+    Expr** na = malloc((k ? k : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < k; i++)
+        na[i] = rm_subst_kernels(e->data.function.args[i], T);
+    Expr* r = expr_new_function(nh, na, k);
+    free(na);
+    return r;
+}
+
+static Expr* rm_recursive_tower_case(Expr* f, Expr* x) {
+    /* Split any evaluator-merged exponential monomial back into an independent
+     * tower basis before building the tower (see rm_expand_exp_sums). */
+    Expr* fx = rm_expand_exp_sums(f);
+    RmTower T;
+    if (!rm_tower_build(fx, x, &T)) { rm_tower_free(&T); expr_free(fx); return NULL; }
+
+    /* Alias the kernels to tower variables structurally (NOT via an evaluated
+     * ReplaceAll, which would re-merge a split exponential product before
+     * substitution — see rm_subst_kernels), then normalise with Together. */
+    Expr* F = rm_eval1("Together", rm_subst_kernels(fx, &T));
     Expr* result = NULL;
     if (F && rm_find_exp_of_x(F, x) == NULL && rm_find_log_of_x(F, x) == NULL) {
         Expr* num = rm_eval1("Numerator", expr_copy(F));
@@ -3219,10 +3301,12 @@ static Expr* rm_recursive_tower_case(Expr* f, Expr* x) {
     }
     if (F) expr_free(F);
 
-    /* Diff-back safety gate (bounded search, not a decision procedure). */
+    /* Diff-back safety gate (bounded search, not a decision procedure).
+     * Verify against the ORIGINAL integrand f (== fx mathematically). */
     if (result && !rm_verify_antideriv(result, f, x)) { expr_free(result); result = NULL; }
 
     rm_tower_free(&T);
+    expr_free(fx);
     return result;
 }
 
