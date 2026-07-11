@@ -971,3 +971,14 @@ Lessons:
   via `COMMON_SRC`, a bare `make` (top-level) and `cmake --build` can run a STALE
   object if a `git stash`/`pop` reordered mtimes — I chased a phantom regression
   from a stale binary. `touch src/<file>.c` (or clean) before trusting test output.
+
+## Eliminate inverse-substitution: don't intercept what the forward pass owns (2026-07-11)
+When adding a new pre-pass that keys off a function head, check whether an
+existing pass already handles that head *better*. The inverse-function
+substitution pass initially included `Log`, which regressed `test_log_power`:
+`u==Log[x]` got rewritten to `x->E^M` (a main-variable exponential the Groebner
+atomiser can't decompose -> spurious nlin), whereas the pre-existing forward
+exp/log algebraisation resolved `Log[x^n] -> n Log[x]` cleanly. Rule: a new
+head-triggered transform must be disjoint from existing ones, or measurably
+better on their cases. Always run the *existing* target test binary before
+declaring done.

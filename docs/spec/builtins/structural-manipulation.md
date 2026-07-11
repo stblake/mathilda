@@ -1474,6 +1474,27 @@ elimination ideal collapses to `True` and an inconsistent system to
   integration-by-substitution pattern
   `Eliminate[{Dt[y] == Cos[x] Sqrt[1-Sin[x]] Dt[x], u == Sin[x],
   Dt[u] == Cos[x] Dt[x]}, {x, Dt[x]}]` return `Dt[y]^2 == (1-u) Dt[u]^2`.
+- An inverse-function substitution pre-pass handles the mirror shape,
+  where an *inverse* trig / hyperbolic function of an elim variable sits
+  buried inside a product (so the single-layer inverse pre-pass cannot
+  reach it) but a *defining* equation `M == ArcF[x]` is present (`M`
+  elim-free, `x` a single elim symbol, `ArcF` in `{ArcSin, ArcCos,
+  ArcTan, ArcSinh, ArcCosh, ArcTanh}`).  The pass propagates
+  `ArcF[x] -> M` through the whole system, rewrites the companion radical
+  to the co-function of the *main* angle (`Sqrt[1-x^2] -> Cos[M]` for
+  ArcSin, `-> Sin[M]` for ArcCos, `Sqrt[1+x^2] -> Cosh[M]` for ArcSinh,
+  `Sqrt[x^2-1] -> Sinh[M]` for ArcCosh, `-> Sec[M]`/`Sech[M]` for
+  ArcTan/ArcTanh), and pins `x == F[M]` (F the forward function).  Because
+  the co-function is a trig call of the retained variable `M`, any factor
+  of it left after elimination is a main-variable monomial that is divided
+  out cleanly — so the u-substitution shape
+  `Eliminate[{Dt[y] == x ArcSin[x]/Sqrt[1-x^2] Dt[x], u == ArcSin[x],
+  Dt[u] == Dt[x]/Sqrt[1-x^2]}, {x, Dt[x]}]` returns
+  `u Sin[u] Dt[u] == Dt[y]` (with `Eliminate::ifun`).  `Log[x]` is left to
+  the forward exp/log pass (substituting `x -> E^M` would introduce a
+  main-variable exponential the Groebner atomiser cannot decompose).  This
+  is the pass that unlocks `Integrate[x ArcSin[x]/Sqrt[1-x^2], x]` and its
+  inverse-trig / inverse-hyperbolic kin through `DerivativeDivides`.
 - Equations are normalised through `Numerator[Together[lhs - rhs]]`
   before Buchberger, clearing any `Power[t, -k]` denominators
   introduced by the algebraisation pre-passes.  Surviving basis

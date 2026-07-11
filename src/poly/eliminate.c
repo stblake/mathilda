@@ -1358,6 +1358,212 @@ static void emit_alg(const Expr* res) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Inverse-function substitution pre-pass                             */
+/* ------------------------------------------------------------------ */
+
+/* The forward transcendental pass (Sin/Cos/Exp/Log of an *elim* variable)
+ * and the top-level inverse-rewrite (`f[u]==v` -> `u==f^-1[v]`) do not
+ * cover the u-substitution shape that arises when integrating by parts /
+ * by substitution, e.g.
+ *
+ *   Eliminate[{Dt[y] == x ArcSin[x]/Sqrt[1-x^2] Dt[x],
+ *              u == ArcSin[x],
+ *              Dt[u] == Dt[x]/Sqrt[1-x^2]}, {x, Dt[x]}]
+ *
+ * Here `ArcSin[x]` sits *inside a product* in the first equation, so it is
+ * an opaque function-atom still mentioning the elim variable `x` -> the
+ * pipeline bails `nlin`.  Yet the second equation *defines* the inverse
+ * function: `u == ArcSin[x]`.
+ *
+ * This pass exploits such a defining equation.  Given `M == ArcF[x]` with
+ * `M` elim-free and `x` a single elim symbol, it rewrites the whole system
+ * so the elim variable appears only polynomially:
+ *
+ *   (1) replace every `ArcF[x]` by the main expression `M` (from the
+ *       defining equation), everywhere;
+ *   (2) replace the companion radical `(1 -/+ x^2)^(p/2)` (or `(x^2-1)^(p/2)`)
+ *       by `coFn[M]^(co_sign*p)`, where `coFn` is the trigonometric
+ *       co-function of `ArcF` -- e.g. `Sqrt[1-x^2] -> Cos[M]` for ArcSin.
+ *       Because `coFn[M]` is a trig call of the *main* variable `M`, it is
+ *       an ordinary (non-eliminated) polynomial atom, so any factor of it
+ *       left over after elimination is divided out by
+ *       `gb_poly_strip_monomial`.  (Algebraising the radical as an
+ *       independent aux instead would leave a squared / branch-ambiguous
+ *       factor and a messy answer.)
+ *   (3) replace the defining equation with `x == F[M]` (F the forward
+ *       function), tying the elim variable to a main-variable trig atom.
+ *
+ * The result is exactly the hand-substituted system a human would write
+ * before running the Groebner elimination, and it reduces to Mathematica's
+ * `Eliminate::ifun`-flagged answer.  Principal branches are assumed (hence
+ * the `ifun` advisory), matching the forward pass's soundness contract. */
+
+/* One inverse-function family. `arc`/`fwd`/`co` are interned head symbols;
+ * `has_comp` gates the companion-radical rewrite; `const_term`/`x2_sign`
+ * build the companion base `const_term + x2_sign*x^2`. */
+typedef struct {
+    const char* fwd;      /* forward function head (Sin/Cos/.../Exp)       */
+    const char* co;       /* co-function head for the companion radical    */
+    bool        has_comp; /* false for Log (no companion radical)          */
+    int         const_term; /* +1 / -1  : the constant of the comp base    */
+    int         x2_sign;    /* +1 / -1  : sign of x^2 in the comp base     */
+    int         co_sign;    /* +1 / -1  : radical == co[M]^(co_sign*p)      */
+} InvEntry;
+
+/* Map an inverse-function head symbol to its family record. Uses the
+ * runtime-interned SYM_* pointers (valid once core_init() has run), so it
+ * cannot be a compile-time table. Returns false for non-inverse heads. */
+static bool inv_lookup(const char* h, InvEntry* out) {
+    if (h == SYM_ArcSin)  { *out = (InvEntry){ SYM_Sin,  SYM_Cos,  true,  1, -1, +1 }; return true; }
+    if (h == SYM_ArcCos)  { *out = (InvEntry){ SYM_Cos,  SYM_Sin,  true,  1, -1, +1 }; return true; }
+    if (h == SYM_ArcTan)  { *out = (InvEntry){ SYM_Tan,  SYM_Cos,  true,  1, +1, -1 }; return true; }
+    if (h == SYM_ArcSinh) { *out = (InvEntry){ SYM_Sinh, SYM_Cosh, true,  1, +1, +1 }; return true; }
+    if (h == SYM_ArcCosh) { *out = (InvEntry){ SYM_Cosh, SYM_Sinh, true, -1, +1, +1 }; return true; }
+    if (h == SYM_ArcTanh) { *out = (InvEntry){ SYM_Tanh, SYM_Cosh, true,  1, -1, -1 }; return true; }
+    /* Log is deliberately NOT handled here: the forward Exp/Log
+     * algebraisation pass already resolves `Log[x]` kernels of elim
+     * variables (including `Log[x^n] -> n Log[x]`), and substituting
+     * `x -> E^M` would instead introduce a main-variable exponential that
+     * the Groebner atomiser cannot decompose (spurious `nlin`). */
+    return false;
+}
+
+/* Build the (evaluated, canonical) companion base `const_term + x2_sign*x^2`
+ * for the elim symbol `xsym`, ready for `expr_eq` matching against radical
+ * bases in the tree. */
+static Expr* inv_build_comp_base(const char* xsym, const InvEntry* e) {
+    Expr* x2 = expr_new_function(expr_new_symbol(SYM_Power),
+        (Expr*[]){ expr_new_symbol(xsym), expr_new_integer(2) }, 2);
+    Expr* x2term = (e->x2_sign < 0)
+        ? expr_new_function(expr_new_symbol(SYM_Times),
+              (Expr*[]){ expr_new_integer(-1), x2 }, 2)
+        : x2;
+    Expr* base = expr_new_function(expr_new_symbol(SYM_Plus),
+        (Expr*[]){ expr_new_integer(e->const_term), x2term }, 2);
+    Expr* ev = evaluate(base);
+    expr_free(base);
+    return ev;
+}
+
+/* Recursively rewrite `e`: `ArcF[xsym] -> M`, and (when comp_base != NULL)
+ * `Power[comp_base, Rational[p,2]] -> co[M]^(co_sign*p)`.  Returns a fresh
+ * tree the caller owns.  `arc` is the inverse-function head being matched. */
+static Expr* inv_rewrite(const Expr* e, const char* xsym, const Expr* M,
+                         const char* arc, const Expr* comp_base,
+                         const char* co, int co_sign) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    /* (1) ArcF[x] -> M */
+    if (head_is(e, arc) && e->data.function.arg_count == 1) {
+        Expr* a = e->data.function.args[0];
+        if (a && a->type == EXPR_SYMBOL && a->data.symbol == xsym) {
+            return expr_copy((Expr*)M);
+        }
+    }
+    /* (2) companion radical (comp_base)^(p/2) -> co[M]^(co_sign*p) */
+    if (comp_base && co && head_is(e, SYM_Power)
+        && e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        Expr* exp  = e->data.function.args[1];
+        int64_t p, q;
+        if (is_rational(exp, &p, &q) && q == 2 && expr_eq(base, comp_base)) {
+            int64_t np = (int64_t)co_sign * p;
+            Expr* com = expr_new_function(expr_new_symbol(co),
+                (Expr*[]){ expr_copy((Expr*)M) }, 1);
+            if (np == 1) return com;
+            return expr_new_function(expr_new_symbol(SYM_Power),
+                (Expr*[]){ com, expr_new_integer(np) }, 2);
+        }
+    }
+
+    Expr* new_head = inv_rewrite(e->data.function.head, xsym, M, arc,
+                                 comp_base, co, co_sign);
+    size_t n = e->data.function.arg_count;
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        new_args[i] = inv_rewrite(e->data.function.args[i], xsym, M, arc,
+                                  comp_base, co, co_sign);
+    }
+    Expr* r = expr_new_function(new_head, new_args, n);
+    free(new_args);
+    return r;
+}
+
+/* Scan `eqs` for a defining equation `M == ArcF[x]` (either side): ArcF an
+ * invertible transcendental, `x` a single elim symbol, `M` elim-free.  On a
+ * hit, fill `*fe`, `*arc` (the interned arc head), `*xsym`, and an *owned*
+ * copy `*M_out` (the tree it points into is about to be rewritten), then
+ * return the equation index.  Returns -1 when none applies. */
+static int inv_detect(Expr** eqs, size_t n_eq, Expr** elim, size_t n_elim,
+                      InvEntry* fe, const char** arc, const char** xsym,
+                      Expr** M_out) {
+    for (size_t i = 0; i < n_eq; i++) {
+        Expr* eq = eqs[i];
+        if (!is_equal(eq) || eq->data.function.arg_count != 2) continue;
+        for (int s = 0; s < 2; s++) {
+            Expr* side  = eq->data.function.args[s];
+            Expr* other = eq->data.function.args[1 - s];
+            if (!side || side->type != EXPR_FUNCTION
+                || side->data.function.arg_count != 1) continue;
+            Expr* h = side->data.function.head;
+            if (!h || h->type != EXPR_SYMBOL) continue;
+            if (!inv_lookup(h->data.symbol, fe)) continue;
+            Expr* a = side->data.function.args[0];
+            if (!a || a->type != EXPR_SYMBOL) continue;
+            if (!var_in_list(a, elim, n_elim)) continue;
+            if (contains_any_var(other, elim, n_elim)) continue;
+            *arc    = h->data.symbol;
+            *xsym   = a->data.symbol;
+            *M_out  = expr_copy(other);
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+/* Drive the inverse-function substitution to a fixed point over `eqs`
+ * (owned array of `n_eq` owned `Equal[]` trees; rewritten in place).  Each
+ * round handles one defining equation.  Returns true if any rewrite fired
+ * (so the caller emits `ifun`).  `n_eq` is unchanged: each round overwrites
+ * exactly the defining-equation slot with `x == F[M]`. */
+static bool inv_substitute_all(Expr** eqs, size_t n_eq,
+                               Expr** elim, size_t n_elim) {
+    bool fired = false;
+    /* Bound the loop generously: each round removes one inverse-function
+     * kernel from play; the elim count caps how many distinct ones matter. */
+    for (size_t round = 0; round < n_elim + n_eq + 4; round++) {
+        InvEntry fe;
+        const char* arc = NULL;
+        const char* xsym = NULL;
+        Expr* M = NULL;
+        int di = inv_detect(eqs, n_eq, elim, n_elim, &fe, &arc, &xsym, &M);
+        if (di < 0) break;
+        fired = true;
+
+        Expr* comp = fe.has_comp ? inv_build_comp_base(xsym, &fe) : NULL;
+
+        for (size_t i = 0; i < n_eq; i++) {
+            Expr* r = inv_rewrite(eqs[i], xsym, M, arc, comp, fe.co, fe.co_sign);
+            expr_free(eqs[i]);
+            eqs[i] = r;
+        }
+
+        /* Overwrite the defining slot with `x == F[M]` (F the forward fn). */
+        Expr* fwd = expr_new_function(expr_new_symbol(fe.fwd),
+            (Expr*[]){ expr_copy(M) }, 1);
+        Expr* neweq = expr_new_function(expr_new_symbol(SYM_Equal),
+            (Expr*[]){ expr_new_symbol(xsym), fwd }, 2);
+        expr_free(eqs[di]);
+        eqs[di] = neweq;
+
+        if (comp) expr_free(comp);
+        expr_free(M);
+    }
+    return fired;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Builtin entry                                                      */
 /* ------------------------------------------------------------------ */
 
@@ -1454,6 +1660,18 @@ Expr* builtin_eliminate(Expr* res) {
     bool fired_ifun = false;
     KernelState ker; kernel_init(&ker);
     Expr** ker_elim_array = NULL;
+
+    /* ----- Inverse-function substitution pre-pass -----
+     * When a defining equation `M == ArcF[x]` is present (M elim-free, x a
+     * single elim symbol), propagate `ArcF[x] -> M` and the companion
+     * radical `Sqrt[1-x^2] -> Cos[M]` (etc.) through the whole system, then
+     * pin `x == F[M]`.  This turns u-substitution shapes (with the inverse
+     * buried inside a product) into a system that is polynomial in the elim
+     * variables, which the forward/radical passes and Buchberger then solve.
+     * See the section header above for the full rationale + identity table. */
+    if (inv_substitute_all(eq_work, n_eq, elim_items, n_elim)) {
+        fired_ifun = true;
+    }
 
     /* ----- Transcendental algebraisation pre-pass -----
      * When an elim variable sits inside a circular/hyperbolic trig, an

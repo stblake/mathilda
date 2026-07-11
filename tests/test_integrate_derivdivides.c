@@ -117,6 +117,45 @@ static void test_radical_substitution_cot(void) {
         " < 0.000001", "True", 0);
 }
 
+/* Inverse-function substitution.  These u-substitution integrands put the
+ * inverse function (ArcSin/ArcCos/ArcSinh/ArcTan) inside a product with its
+ * own companion radical, so u = ArcF[x] is the substitution kernel and the
+ * Eliminate step must propagate `ArcF[x] -> u` plus `Sqrt[1-x^2] -> Cos[u]`
+ * (etc.) through the differential relations.  Before the inverse-function
+ * substitution pre-pass in Eliminate these bubbled back unevaluated.
+ *
+ *   Integrate[x ArcSin[x]/Sqrt[1-x^2], x]  = x - Sqrt[1-x^2] ArcSin[x]
+ *   Integrate[ArcSinh[x]/Sqrt[1+x^2], x]   = ArcSinh[x]^2/2
+ *   Integrate[x ArcCos[x]/Sqrt[1-x^2], x]  = x - Sqrt[1-x^2] ArcCos[x]  (sign)
+ *   Integrate[ArcTan[x]/(1+x^2), x]        = ArcTan[x]^2/2
+ *
+ * Verified by the universal differentiation predicate. */
+static void test_inverse_trig_substitution(void) {
+    /* Headline: closes from the Automatic cascade, the explicit method, and
+     * the package head. */
+    assert_eval_eq(
+        "Simplify[D[Integrate[x ArcSin[x]/Sqrt[1-x^2], x], x]"
+        " - x ArcSin[x]/Sqrt[1-x^2]]", "0", 0);
+    assert_eval_eq(
+        "Simplify[D[Integrate[x ArcSin[x]/Sqrt[1-x^2], x,"
+        " Method -> \"DerivativeDivides\"], x] - x ArcSin[x]/Sqrt[1-x^2]]", "0", 0);
+    assert_eval_eq(
+        "Simplify[D[Integrate`DerivativeDivides[x ArcSin[x]/Sqrt[1-x^2], x], x]"
+        " - x ArcSin[x]/Sqrt[1-x^2]]", "0", 0);
+    /* ArcCos (companion Sqrt[1-x^2] -> Sin[u], sign flip). */
+    assert_eval_eq(
+        "Simplify[D[Integrate[x ArcCos[x]/Sqrt[1-x^2], x,"
+        " Method -> \"DerivativeDivides\"], x] - x ArcCos[x]/Sqrt[1-x^2]]", "0", 0);
+    /* ArcSinh (hyperbolic companion Sqrt[1+x^2] -> Cosh[u]). */
+    assert_eval_eq(
+        "Simplify[D[Integrate[ArcSinh[x]/Sqrt[1+x^2], x,"
+        " Method -> \"DerivativeDivides\"], x] - ArcSinh[x]/Sqrt[1+x^2]]", "0", 0);
+    /* ArcTan (rational companion 1+x^2, no radical). */
+    assert_eval_eq(
+        "Simplify[D[Integrate[ArcTan[x]/(1+x^2), x,"
+        " Method -> \"DerivativeDivides\"], x] - ArcTan[x]/(1+x^2)]", "0", 0);
+}
+
 /* Method plumbing: both the option string and the explicit package head
  * route to the routine and close the headline case. */
 static void test_method_plumbing(void) {
@@ -187,6 +226,7 @@ void test_integrate_derivdivides(void) {
     TEST(test_explicit_eliminate);
     TEST(test_radical_substitution);
     TEST(test_radical_substitution_cot);
+    TEST(test_inverse_trig_substitution);
     TEST(test_method_plumbing);
     TEST(test_strict_no_fallback);
     TEST(test_substitution_option);

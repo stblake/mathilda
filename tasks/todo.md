@@ -1,44 +1,61 @@
-# Integrate`RischMacsyma — Phase B, fourth increment: genuine one-extension recursion
+# Task: Eliminate inverse-function substitution pass
 
-Goal: replace the flat "SolveAlways over all tower vars at once" ansatz with the
-genuine **one-extension-at-a-time recursion** (Bronstein/Maxima risch.lisp): peel
-the top kernel, integrate the polynomial/Laurent part by recursing into the lower
-field for each coefficient, verify by construction. Closes what the flat towers
-cannot: **mixed exp/log towers** and **rational lower-field coefficients**.
+## Goal
+`Eliminate[{Dt[y]==(x ArcSin[x])/Sqrt[1-x^2] Dt[x], u==ArcSin[x], Dt[u]==Dt[x]/Sqrt[1-x^2]}, {x, Dt[x]}]`
+must return `u Dt[u] Sin[u] == Dt[y]` (FullForm `Equal[Times[u, Dt[u], Sin[u]], Dt[y]]`).
+Fully general across all inverse transcendental functions.
 
-Target closures (currently decline, verified elementary):
-- T1  ∫ (E^x/x + E^x Log[x]) dx = E^x Log[x]         (independent mixed)
-- T2' ∫ (Log[1+E^x] + x E^x/(1+E^x)) dx = x Log[1+E^x] (nested log-over-exp)
-- T3  ∫ (1/(x^2 Log[x]) - Log[Log[x]]/x^2) dx = Log[Log[x]]/x (rational coeff)
+## Root cause (verified)
+`ArcSin[x]` buried inside eq1 is an opaque function-atom containing elim var `x`
+=> `nlin` bail. `try_inverse_rewrite` only inverts a top-level `f[u]==v`; it never
+propagates `ArcSin[x] -> u` into other equations.
 
-## Design (validated in REPL)
-- `RmTower`: ordered kernels (kind LOG/EXP, kernel, arg, t-symbol, Dcoef), + subrules.
-- `rm_tower_build`: collect logs+exps, order innermost-first (containment; tiebreak
-  EXP-deeper so primitive recursion sits on top / RDEs bottom out in C(x)),
-  structure-theorem check (each Dcoef in K_{i-1}: triangular + no foreign kernel).
-- `rm_field_integrate(F, T, L, x)`: recursive.
-  - L<0 → BronsteinRational (base field C(x)).
-  - LOG top → `rm_int_primitive_poly`: q_i' + (i+1)q_{i+1}Dt = p_i, each solve is
-    `rm_limited_field_integrate` at level L-1 (recursion) with new-log fold-back.
-  - EXP top → `rm_int_hyperexp_poly`: Laurent; i=0 recurse L-1, i≠0 `rm_field_rde`.
-  - proper rational part (nonzero remainder) → DECLINE this increment (tower Hermite/
-    Rothstein-Trager later); all three targets have zero proper part at every level.
-- `rm_field_rde`: base (Dcoef,p in C(x)) → rm_solve_rde; else NULL (general field
-  RDE later).
-- Wrapper `rm_recursive_tower_case`: build, substitute, whole-tower rational gate,
-  integrate, back-substitute t→kernels, **diff-back verify** (search, not decision).
-- Wire after rm_exp_tower_case, before rm_trig_frontend.
+## Design (validated empirically)
+Feeding the hand-transformed system
+`{Dt[y]==x u Dt[x]/Cos[u], Dt[u]==Dt[x]/Cos[u], x==Sin[u]}` into current Eliminate
+already yields the exact target. Add a pre-pass that performs that transform.
+
+For a defining eq `M == ArcF[x]` (M elim-free, x single elim symbol, ArcF invertible):
+1. globally replace `ArcF[x] -> M`;
+2. globally replace companion radical `(comp_base)^(p/2) -> coFn[M]^(co_sign*p)`
+   (keeps denominators as main-var monomials -> gb_poly_strip_monomial divides out);
+3. replace defining-eq slot with `x == F[M]`;
+4. emit Eliminate::ifun.
+
+### Identity table
+ArcSin  Sin   1-x^2   Cos   +1
+ArcCos  Cos   1-x^2   Sin   +1
+ArcTan  Tan   1+x^2   Cos   -1  (Sec)
+ArcSinh Sinh  1+x^2   Cosh  +1
+ArcCosh Cosh  x^2-1   Sinh  +1
+ArcTanh Tanh  1-x^2   Cosh  -1  (Sech)
+Log     Exp   none    none      (main-var E^M -> nlin downstream, known limit)
 
 ## Steps
-- [ ] RmTower + rm_tower_build + rm_tower_free (structure theorem)
-- [ ] rm_field_integrate + rm_int_primitive_poly + rm_limited_field_integrate
-- [ ] rm_int_hyperexp_poly + rm_field_rde
-- [ ] rm_recursive_tower_case wrapper + wire in
-- [ ] tests (T1/T2'/T3 diff-back=0 + decline regressions) + valgrind
-- [ ] docs: RISCH_STATUS §3.12/§6, calculus.md, changelog; memory
-- [ ] commit + push to main
+- [ ] Implement pre-pass in src/poly/eliminate.c
+- [ ] Wire in before forward transcendental pass
+- [ ] Verify headline example exact target
+- [ ] No regression in eliminate_tests
+- [ ] Add extensive unit tests
+- [ ] Update docs/spec + changelog
+- [ ] valgrind smoke
 
-## Non-goals (this increment)
-- Nonzero proper rational part at any level (tower Hermite / Rothstein-Trager).
-- General field RDE (mixed exp-top towers with lower-field structure).
-- Algebraically dependent kernels the evaluator merged (E^x E^(E^x)→E^(x+E^x)).
+## Review
+(to fill in)
+
+## Review (DONE 2026-07-11)
+Implemented `inv_substitute_all` + helpers in src/poly/eliminate.c, wired in
+before the forward transcendental pass. All 6 inverse families + both Dt forms
++ shorthand verified. Exact target `Equal[Times[u, Dt[u], Sin[u]], Dt[y]]`.
+- eliminate_tests: PASS (13 new tests, 0 regressions)
+- integrate_derivdivides_tests: PASS (new test_inverse_trig_substitution)
+- integrate_dispatch_tests: PASS
+- Unlocked Integrate[x ArcSin[x]/Sqrt[1-x^2], x] = x - Sqrt[1-x^2] ArcSin[x]
+  (+ ArcCos/ArcSinh/ArcTan kin), D[]-verify to 0.
+- leaks-clean (0 bytes / 30 iters); strict C99 -Wall -Wextra clean.
+- Docs: structural-manipulation.md bullet + changelog 2026-07-06.md.
+
+### Correction handled mid-task
+Initial table included Log -> regressed test_log_power (`u==Log[x]` was
+intercepted and substituted x->E^M, an un-atomizable main-var exponential).
+Fix: exclude Log; the forward exp/log pass already handles it.
