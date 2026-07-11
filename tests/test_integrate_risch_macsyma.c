@@ -189,6 +189,12 @@ static void test_fractional_log_case(void) {
     assert_rm_diff_zero("1/(x (Log[x]^2 - 1))");
     assert_rm_diff_zero("1/(x (Log[x]^2 - 4))");
     assert_rm_diff_zero("1/(x (Log[x]^2 + Log[x]))");
+    /* Pure resultant LRT: irreducible quadratic in Log[x] with ALGEBRAIC
+     * (complex-conjugate) residues -> ArcTan[Log[x]] form, which the
+     * single-constant-per-factor SolveAlways path cannot produce. */
+    assert_rm_diff_zero("1/(x (Log[x]^2 + 1))");
+    assert_rm_diff_zero("1/(x (Log[x]^2 + 4))");
+    assert_rm_diff_zero("1/(x (Log[x]^2 + 2 Log[x] + 2))");
 }
 
 /* ================= HERMITE (repeated poles) LOG =================
@@ -254,6 +260,10 @@ static void test_fractional_exp_case(void) {
     assert_rm_diff_zero("Exp[x]/(1 + 2 Exp[x])");
     assert_rm_diff_zero("2 Exp[x]/(1 + Exp[x])");
     assert_rm_diff_zero("Exp[x]/(2 + 3 Exp[x])");
+    /* Pure resultant LRT: an irreducible quadratic in theta = E^x with
+     * ALGEBRAIC residues (E^(2x) kernelised to theta^2) -> ArcTan[E^x] form. */
+    assert_rm_diff_zero("Exp[x]/(Exp[2 x] + 1)");
+    assert_rm_diff_zero("Exp[x]/(Exp[2 x] + 4)");
 }
 
 /* ================= HERMITE (repeated poles) EXP =================
@@ -388,6 +398,15 @@ static void test_recursive_tower_case(void) {
     assert_rm_diff_zero("(2 Log[x]/x) E^(Log[x]^2)/(1 + E^(Log[x]^2))");
     assert_rm_diff_zero("(2/x - 1/(x Log[x]^2)) E^(Log[x]^2)");
     assert_rm_diff_zero("(2 Log[x]/(x (1 + Log[x])) - 1/(x (1 + Log[x])^2)) E^(Log[x]^2)");
+    /* Pure resultant Lazard-Rioboo-Trager log part at a LOGARITHMIC tower top:
+     * a proper fraction of Log[Log[x]] whose Rothstein-Trager residues are
+     * ALGEBRAIC constants (the +-I/2 that split t^2+1 into ArcTan) — the class
+     * the bounded single-constant SolveAlways ansatz cannot express, closed by
+     * lifting rm_frac_lrt into rm_field_ratint (gate free of x and Log[x]). */
+    assert_rm_diff_zero("1/(x Log[x] (Log[Log[x]]^2 + 1))");
+    assert_rm_diff_zero("1/(x Log[x] (Log[Log[x]]^2 + 4))");
+    assert_rm_diff_zero("(1 + Log[Log[x]])/(x Log[x] (Log[Log[x]]^2 + 1))");
+    assert_rm_diff_zero("1/(x Log[x] (Log[Log[x]]^3 + 1))");
 }
 
 /* ================= SPECIAL FUNCTIONS =================
@@ -410,8 +429,20 @@ static void test_special_functions(void) {
     assert_rm_num("Exp[3 x]/x");
     assert_rm_num("Exp[x]/(2 x + 1)");
     assert_rm_num("Exp[x]/(x + 1)");
+    /* Widened Ei recognizer (extracts the E^v kernel directly, so a<0 and a
+     * nonzero exponent constant b close): E^(-x)/x -> ExpIntegralEi[-x]. */
+    assert_rm_num("Exp[-x]/x");
+    assert_rm_num("Exp[-2 x]/x");
+    assert_rm_num("Exp[-x]/(x + 1)");
     assert_rm_num("1/Log[x]");
     assert_rm_num("3/Log[x]");
+    /* Widened li recognizer (c w^(p-1) w'/Log[w] -> c LogIntegral[w^p]): a
+     * scaled/affine log argument (1/Log[2x] -> LogIntegral[2x]/2, p=1) and a
+     * monomial numerator (x/Log[x] -> LogIntegral[x^2], p=2). */
+    assert_rm_num("1/Log[2 x]");
+    assert_rm_num("1/Log[3 x + 1]");
+    assert_rm_num("x/Log[x]");
+    assert_rm_num("x^2/Log[x]");
     assert_rm_num("Log[1 - x]/x");
     assert_rm_num("Log[1 + x]/x");
     assert_rm_num("Log[1 - 2 x]/x");
@@ -433,13 +464,9 @@ static void test_strict_unevaluated(void) {
      * Ei-type integrand with a NON-linear denominator (unimplemented). */
     assert_head_unevaluated("Integrate`RischMacsyma[Exp[1/x], x]", "Integrate`RischMacsyma");
     assert_head_unevaluated("Integrate`RischMacsyma[Exp[x]/x^2, x]", "Integrate`RischMacsyma");
-    /* Ei / li recognizer gaps (correct decline, not wrong): the special-function
-     * recognizers match (const E^(a x))/(c x+d) and K/Log[x] only, so E^(-x)/x
-     * (Ei with a<0), 1/Log[2x] (li of a scaled arg), and x/Log[x] (non-constant
-     * numerator) fall through.  Documented narrowness of rm_special_case. */
-    assert_head_unevaluated("Integrate`RischMacsyma[Exp[-x]/x, x]", "Integrate`RischMacsyma");
-    assert_head_unevaluated("Integrate`RischMacsyma[1/Log[2 x], x]", "Integrate`RischMacsyma");
-    assert_head_unevaluated("Integrate`RischMacsyma[x/Log[x], x]", "Integrate`RischMacsyma");
+    /* Ei-type integrand with a NON-linear (quadratic) denominator remains out of
+     * scope: the widened Ei recognizer requires an exactly linear c x + d. */
+    assert_head_unevaluated("Integrate`RischMacsyma[Exp[x]/(x^2 + 1), x]", "Integrate`RischMacsyma");
     /* Non-elementary nested-log integrands (need Ei/li of a log); and a residual
      * NON-rational inner kernel (Sin[Log[x]]) must DECLINE, never certify a wrong
      * form (the whole-tower rationality gate). */
@@ -453,6 +480,10 @@ static void test_strict_unevaluated(void) {
     /* Proper tower fraction with a NON-constant Rothstein-Trager residue is
      * non-elementary (must not certify a wrong constant residue). */
     assert_head_unevaluated("Integrate`RischMacsyma[1/(Log[x] (1 + Log[Log[x]])), x]", "Integrate`RischMacsyma");
+    /* Algebraic-residue tower LRT gate: 1/x Log[x] missing makes the residues
+     * of the Log[Log[x]]^2+1 factor depend on x (not constants of the tower
+     * derivation), so the resultant LRT must DECLINE, not certify a wrong form. */
+    assert_head_unevaluated("Integrate`RischMacsyma[1/(Log[x] (Log[Log[x]]^2 + 1)), x]", "Integrate`RischMacsyma");
     /* Field Risch DE with no elementary solution (E^(Log[x]^2) and its coupled
      * fraction) declines rather than forcing a bounded ansatz to a wrong answer. */
     assert_head_unevaluated("Integrate`RischMacsyma[E^(Log[x]^2), x]", "Integrate`RischMacsyma");
@@ -516,6 +547,17 @@ static void test_strict_misc(void) {
     /* Fresnel / Si / Ci non-elementary integrands bubble back unevaluated. */
     assert_head_unevaluated(
         "Integrate`RischMacsyma[Cos[x^2], x]", "Integrate`RischMacsyma");
+    /* The LRT frac path fires only with a genuine derivation factor: the
+     * ArcTan-family integrands above carry 1/x (log) or E^x (exp).  Without
+     * it the integral is non-elementary (li / Ei family), so the LRT must
+     * DECLINE, not certify a wrong closed form. */
+    assert_head_unevaluated(
+        "Integrate`RischMacsyma[1/(Log[x]^2 + 1), x]", "Integrate`RischMacsyma");
+    /* x-dependent residues (the resultant does not become free of x after the
+     * content strip): the x-content gate must reject rather than certify. */
+    assert_head_unevaluated(
+        "Integrate`RischMacsyma[1/(x^2 (Log[x]^2 + 1)), x]",
+        "Integrate`RischMacsyma");
 }
 
 void test_integrate_risch_macsyma(void) {

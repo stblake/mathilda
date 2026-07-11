@@ -1624,40 +1624,91 @@ static Expr* intrat_naive_log_part(Expr* f, Expr* x) {
     return result;
 }
 
+/* Divide p by the polynomial GCD of its NONZERO coefficients viewed as a
+ * polynomial in cvar (the content of p in cvar).  internal PolynomialGCD
+ * bails to a held call when handed a zero argument (PolynomialGCD[x^2, 0,
+ * 4 x^2] returns 1, not x^2), so zero coefficients are filtered first.
+ * Returns Cancel[p / content] when the content is a non-trivial polynomial,
+ * else a copy of p.  Borrows p; caller owns the result.  Used by the
+ * transcendental log-part path to strip the x-only content that the
+ * denominator-clearing scaling introduces into the Rothstein-Trager
+ * resultant, exposing the (constant-residue) polynomial in the residue
+ * variable. */
+static Expr* intrat_strip_content_var(Expr* p, Expr* cvar) {
+    Expr* cl = eval_and_free(internal_coefficientlist(
+        (Expr*[]){expr_copy(p), expr_copy(cvar)}, 2));
+    if (!cl || cl->type != EXPR_FUNCTION
+        || cl->data.function.head->type != EXPR_SYMBOL
+        || cl->data.function.head->data.symbol != SYM_List
+        || cl->data.function.arg_count == 0) {
+        if (cl) expr_free(cl);
+        return expr_copy(p);
+    }
+    size_t n = cl->data.function.arg_count;
+    Expr** nz = (Expr**)malloc(sizeof(Expr*) * n);
+    size_t nnz = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* c = cl->data.function.args[i];
+        if (!is_zero_poly(c)) nz[nnz++] = expr_copy(c);
+    }
+    expr_free(cl);
+    if (nnz == 0) { free(nz); return expr_copy(p); }
+    Expr* content = (nnz == 1) ? nz[0] : internal_polynomialgcd(nz, nnz);
+    free(nz);
+    if (head_is(content, SYM_PolynomialGCD)
+        || (content->type == EXPR_INTEGER
+            && (content->data.integer == 1 || content->data.integer == -1))) {
+        expr_free(content);
+        return expr_copy(p);
+    }
+    Expr* div = internal_divide((Expr*[]){expr_copy(p), content}, 2);
+    return eval_and_free(internal_cancel((Expr*[]){div}, 1));
+}
+
 /* IntRationalLogPart core. Returns either the {Q, S} pair list
  * (root_sum=false) or the symbolic RootSum sum (root_sum=true).
  * On algorithmic failure returns NULL.
  *
+ * `a`, `d` are the (owned) numerator / denominator in the main variable `x`
+ * with squarefree `d`; `t` is the residue variable.  Two optional hooks
+ * generalise the pure-rational computation to a transcendental monomial
+ * extension (the recursive-Risch Lazard-Rioboo-Trager log part):
+ *   - `dprime_override != NULL` injects the monomial derivation `D(d)` in
+ *     place of the ordinary `d/dx` (here `x` is the monomial variable);
+ *   - `xgate != NULL` strips the x-only content that denominator-clearing
+ *     leaves in the resultant and requires the residues (roots of the
+ *     resultant) to be free of `xgate`, else the integral is not elementary
+ *     in this log form and the routine declines (NULL).
+ * With both NULL this is the original pure-rational log part.
+ *
  * Direct port of IntegrateRational.m:751-801. */
-static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
-                                          bool root_sum) {
-    intrat_trace("IntRationalLogPart", "IN", f);
-
-    /* Together-canonicalise f so the numerator and denominator are
-     * clean polynomials with no internal fractions in parametric
-     * coefficients.  Apart pieces like
-     *   (-b/(2 a^2) - x/(2 a)) / (a^2 + b^2 x^2)
-     * arrive with rational coefficients in (a, b); without this
-     * normalisation the resultant chain emits held PolynomialGCD
-     * calls that pollute the downstream (Q, S) pair. */
-    Expr* tg_call = internal_together((Expr*[]){expr_copy(f)}, 1);
-    Expr* fc = eval_and_free(tg_call);
-
-    /* a = Numerator[fc], d = Denominator[fc]. */
-    Expr* a_raw = intrat_numerator(fc);
-    Expr* a = eval_and_free(a_raw);
-    Expr* d_raw = intrat_denominator(fc);
-    Expr* d = expr_expand(d_raw); expr_free(d_raw);
-    expr_free(fc);
-
-    /* prs = SubresultantPolynomialRemainders[d, a - t*D[d,x], x] */
-    Expr* dprime = intrat_d(d, x);
-    Expr* dprime_e = expr_expand(dprime); expr_free(dprime);
+static Expr* intrat_log_part_core(Expr* a, Expr* d, Expr* x, Expr* t,
+                                  bool root_sum, Expr* dprime_override,
+                                  Expr* xgate) {
+    /* prs = SubresultantPolynomialRemainders[d, a - t*D(d), x] */
+    Expr* dprime_e;
+    if (dprime_override) {
+        dprime_e = expr_expand(dprime_override);
+    } else {
+        Expr* dprime = intrat_d(d, x);
+        dprime_e = expr_expand(dprime); expr_free(dprime);
+    }
     Expr* tdprime = internal_times(
         (Expr*[]){expr_copy(t), dprime_e}, 2);
     Expr* atdp_raw = internal_subtract(
         (Expr*[]){expr_copy(a), tdprime}, 2);
-    Expr* atdp = expr_expand(atdp_raw); expr_free(atdp_raw);
+    Expr* atdp;
+    if (dprime_override) {
+        /* the monomial derivation D(d) can carry x-denominators (e.g. the
+         * u'/u of a logarithmic kernel); clear them so the resultant / PRS
+         * operate on genuine polynomials.  The x-only denominator scales the
+         * resultant by a unit that the x-content strip below removes. */
+        Expr* tg = eval_and_free(internal_together((Expr*[]){atdp_raw}, 1));
+        Expr* nn = intrat_numerator(tg);
+        atdp = expr_expand(nn); expr_free(nn); expr_free(tg);
+    } else {
+        atdp = expr_expand(atdp_raw); expr_free(atdp_raw);
+    }
 
     Expr* prs_args[3] = { expr_copy(d), expr_copy(atdp), expr_copy(x) };
     Expr* prs_call = expr_new_function(
@@ -1691,6 +1742,38 @@ static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
     }
     Expr* resultant = intrat_primitive(resultant_raw, t);
     expr_free(resultant_raw);
+
+    if (xgate) {
+        /* Strip the lower-field content the denominator-clearing scaling
+         * leaves, then require the residues (roots of the resultant) to be
+         * constants of the derivation (free of every lower-field variable in
+         * `xgate`).  A single symbol gates a single-kernel extension; a `List`
+         * of symbols gates a tower proper part, where the constants must be
+         * free of x AND every lower tower variable t_0..t_{L-1}.  A residue
+         * that genuinely depends on a lower-field variable means the integral
+         * is not elementary in this log form — decline rather than certify a
+         * wrong closed form. */
+        Expr* stripped = intrat_strip_content_var(resultant, t);
+        expr_free(resultant);
+        resultant = stripped;
+        bool free_all;
+        if (xgate->type == EXPR_FUNCTION
+            && xgate->data.function.head->type == EXPR_SYMBOL
+            && xgate->data.function.head->data.symbol == SYM_List) {
+            free_all = true;
+            for (size_t gi = 0;
+                 gi < xgate->data.function.arg_count && free_all; gi++)
+                if (!intrat_freeq_test(resultant,
+                                       xgate->data.function.args[gi]))
+                    free_all = false;
+        } else {
+            free_all = intrat_freeq_test(resultant, xgate);
+        }
+        if (!free_all) {
+            expr_free(resultant); expr_free(a); expr_free(d); expr_free(prs);
+            return NULL;
+        }
+    }
 
     /* Q = SquareFree[resultant]: list of {poly_i, mult_i}. */
     Expr* Q = intrat_squarefree_list(resultant);
@@ -1825,6 +1908,49 @@ static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
     free(pairs);
     intrat_trace("IntRationalLogPart", "OUT", result);
     return result;
+}
+
+/* Pure-rational log part: Together-canonicalise f, split into a/d, and run
+ * the core with the ordinary derivation (no transcendental hooks). */
+static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
+                                          bool root_sum) {
+    intrat_trace("IntRationalLogPart", "IN", f);
+    /* Together-canonicalise f so the numerator and denominator are clean
+     * polynomials with no internal fractions in parametric coefficients. */
+    Expr* fc = eval_and_free(internal_together((Expr*[]){expr_copy(f)}, 1));
+    Expr* a = eval_and_free(intrat_numerator(fc));
+    Expr* d_raw = intrat_denominator(fc);
+    Expr* d = expr_expand(d_raw); expr_free(d_raw);
+    expr_free(fc);
+    return intrat_log_part_core(a, d, x, t, root_sum, NULL, NULL);
+}
+
+/* Defined below (Phase 4 consumer); forward-declared for the transcendental
+ * log part which hands its {Q_i, S_i} pairs straight to Rioboo's LogToReal. */
+static Expr* intrat_log_to_real_pairs(Expr* pair_list, Expr* x, Expr* t);
+
+/* Transcendental (recursive-Risch) Lazard-Rioboo-Trager log part.
+ *
+ * Integrates the PROPER, SQUAREFREE-denominator fraction  a(tau)/d(tau)  of a
+ * single transcendental monomial extension tau (= Log[u] or E^u over Q(x)),
+ * whose log part carries ALGEBRAIC (non-rational) residues — the class the
+ * single-constant-per-factor SolveAlways ansatz cannot express.  `Dd` is the
+ * monomial derivation D(d) = d/dx(d) + (D tau) d/dtau(d), computed by the
+ * caller.  The residues are the roots of the Rothstein-Trager resultant
+ * Res_tau(a - z Dd, d) (z = the residue variable); each squarefree factor
+ * Q_i(z) with its log argument S_i(z, tau) is converted to real Log + ArcTan
+ * form by Rioboo's LogToReal.  Returns the antiderivative as a function of
+ * `tau` (the caller substitutes tau -> kernel), or NULL when the integral is
+ * not elementary in this form / a factor exceeds LogToReal's bounded scope.
+ * `a`, `d`, `Dd`, `tau`, `z`, `xreal` are all borrowed. */
+static Expr* intrat_transcendental_log_part(Expr* a, Expr* d, Expr* tau,
+                                            Expr* z, Expr* Dd, Expr* xreal) {
+    Expr* pairs = intrat_log_part_core(expr_copy(a), expr_copy(d), tau, z,
+                                       /*root_sum=*/false, Dd, xreal);
+    if (!pairs) return NULL;
+    Expr* real = intrat_log_to_real_pairs(pairs, tau, z);
+    expr_free(pairs);
+    return real;   /* NULL if LogToReal could not close a factor */
 }
 
 /* ====================================================================
@@ -3556,6 +3682,28 @@ Expr* builtin_intrat_logtoreal(Expr* res) {
     return intrat_log_to_real(r, s, x, t);
 }
 
+Expr* builtin_intrat_transcendental_log_part(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 6)
+        return NULL;
+    Expr* a    = res->data.function.args[0];
+    Expr* d    = res->data.function.args[1];
+    Expr* tau  = res->data.function.args[2];
+    Expr* z    = res->data.function.args[3];
+    Expr* Dd   = res->data.function.args[4];
+    Expr* xreal = res->data.function.args[5];
+    if (tau->type != EXPR_SYMBOL || z->type != EXPR_SYMBOL)
+        return NULL;
+    /* `xreal` is the residue-constant gate: a single symbol (single-kernel
+     * extension) or a List of symbols (tower proper part — free of x and every
+     * lower tower variable). */
+    bool gate_ok = (xreal->type == EXPR_SYMBOL)
+        || (xreal->type == EXPR_FUNCTION
+            && xreal->data.function.head->type == EXPR_SYMBOL
+            && xreal->data.function.head->data.symbol == SYM_List);
+    if (!gate_ok) return NULL;
+    return intrat_transcendental_log_part(a, d, tau, z, Dd, xreal);
+}
+
 Expr* builtin_intrat_logtoarctanh(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* e = res->data.function.args[0];
@@ -3684,6 +3832,20 @@ void intrat_init(void) {
             "discriminant -> Log + LogToAtan-derived ArcTan). Returns the\n"
             "call unevaluated when r has factors of degree > 2 in t (the\n"
             "bounded-Solve scope of Phase 4).");
+
+    /* Recursive-Risch transcendental LRT log part (consumed by
+     * Integrate`RischMacsyma; not a user-facing surface form). */
+    install("Integrate`TranscendentalLogPart",
+            builtin_intrat_transcendental_log_part,
+            "Integrate`TranscendentalLogPart[a, d, tau, z, Dd, g] computes the\n"
+            "logarithmic part of Integrate[a/d] for a transcendental monomial\n"
+            "tau (a/d proper with squarefree d in tau), where Dd is the monomial\n"
+            "derivation D(d), z is the residue variable, and g is the residue-\n"
+            "constant gate: a symbol (single kernel) or a List of symbols (tower\n"
+            "proper part, gating x and every lower tower variable). Returns the\n"
+            "real Log + ArcTan form as a function of tau (Rothstein-Trager\n"
+            "resultant + Rioboo LogToReal), or unevaluated when the integral is\n"
+            "not elementary in this form.");
 
     /* Phase 8b — NaiveLogPart RootSum fallback. */
     install("Integrate`NaiveLogPart",

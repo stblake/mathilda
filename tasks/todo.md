@@ -1,61 +1,60 @@
-# Task: Eliminate inverse-function substitution pass
+# Task: Lift the pure resultant LRT into the tower-level proper part
 
 ## Goal
-`Eliminate[{Dt[y]==(x ArcSin[x])/Sqrt[1-x^2] Dt[x], u==ArcSin[x], Dt[u]==Dt[x]/Sqrt[1-x^2]}, {x, Dt[x]}]`
-must return `u Dt[u] Sin[u] == Dt[y]` (FullForm `Equal[Times[u, Dt[u], Sin[u]], Dt[y]]`).
-Fully general across all inverse transcendental functions.
+The single-kernel pure resultant Lazard–Rioboo–Trager log part (`rm_frac_lrt`,
+prior increment) closes frac integrands with **algebraic (non-rational)
+residues** (`1/(x(Log[x]^2+1)) → ArcTan[Log[x]]`).  The tower proper part
+(`rm_field_ratint` log top, `rm_field_hyperexp_coupled` exp top) still used the
+bounded single-constant `SolveAlways` ansatz, so a *nested* algebraic-residue log
+part declined.  Lift the resultant LRT into the tower recursion.
 
-## Root cause (verified)
-`ArcSin[x]` buried inside eq1 is an opaque function-atom containing elim var `x`
-=> `nlin` bail. `try_inverse_rewrite` only inverts a top-level `f[u]==v`; it never
-propagates `ArcSin[x] -> u` into other equations.
+Target (was declining; full `Integrate[]` closes it):
+- `Integrate`RischMacsyma[1/(x Log[x] (Log[Log[x]]^2+1)), x]` → `ArcTan[Log[Log[x]]]`
 
-## Design (validated empirically)
-Feeding the hand-transformed system
-`{Dt[y]==x u Dt[x]/Cos[u], Dt[u]==Dt[x]/Cos[u], x==Sin[u]}` into current Eliminate
-already yields the exact target. Add a pre-pass that performs that transform.
+## Key insight
+The tower log part is the SAME `Integrate`TranscendentalLogPart` as the
+single-kernel case, with two changes: the monomial derivation becomes the **tower**
+derivation `D_tower[rad]` (`rm_tower_deriv`), and the residue-constant gate must be
+free of **every** lower-field variable `{x, t_0, …, t_{L-1}}`, not just `x`.  The
+resultant's content strip (over the residue variable) already removes the
+multi-variable content that clearing the tower denominators introduces, so only
+the final `FreeQ` gate needed generalizing to a List.
 
-For a defining eq `M == ArcF[x]` (M elim-free, x single elim symbol, ArcF invertible):
-1. globally replace `ArcF[x] -> M`;
-2. globally replace companion radical `(comp_base)^(p/2) -> coFn[M]^(co_sign*p)`
-   (keeps denominators as main-var monomials -> gb_poly_strip_monomial divides out);
-3. replace defining-eq slot with `x == F[M]`;
-4. emit Eliminate::ifun.
-
-### Identity table
-ArcSin  Sin   1-x^2   Cos   +1
-ArcCos  Cos   1-x^2   Sin   +1
-ArcTan  Tan   1+x^2   Cos   -1  (Sec)
-ArcSinh Sinh  1+x^2   Cosh  +1
-ArcCosh Cosh  x^2-1   Sinh  +1
-ArcTanh Tanh  1-x^2   Cosh  -1  (Sech)
-Log     Exp   none    none      (main-var E^M -> nlin downstream, known limit)
-
-## Steps
-- [ ] Implement pre-pass in src/poly/eliminate.c
-- [ ] Wire in before forward transcendental pass
-- [ ] Verify headline example exact target
-- [ ] No regression in eliminate_tests
-- [ ] Add extensive unit tests
-- [ ] Update docs/spec + changelog
-- [ ] valgrind smoke
-
-## Review
-(to fill in)
+## Plan
+- [x] `intrat.c`: generalize the `xgate` in `intrat_log_part_core` to accept a
+      `List` of gate variables (require freeness of each); relax the
+      `Integrate`TranscendentalLogPart` builtin to accept a symbol OR a List.
+- [x] `integrate_risch_macsyma.c`: add `rm_field_lrt_logpart(Rr, den, T, L, x)` —
+      strip the t-free content (squarefree case, dH==0), build `D_tower[rad]`,
+      gate `{x, t_0..t_{L-1}}`, call the builtin; wire it as the fallback after
+      the `SolveAlways` ansatz declines in `rm_field_ratint` and (gated `a==0`)
+      `rm_field_hyperexp_coupled`.
+- [x] Tests: log-tower algebraic-residue closures + a non-elementary decline pin.
+- [x] Docs: RISCH_STATUS.md (table, §3.12, §6.1 item 2, "not yet implemented"),
+      changelog 2026-07-06.md, calculus.md (frac bullet + builtin ref).
 
 ## Review (DONE 2026-07-11)
-Implemented `inv_substitute_all` + helpers in src/poly/eliminate.c, wired in
-before the forward transcendental pass. All 6 inverse families + both Dt forms
-+ shorthand verified. Exact target `Equal[Times[u, Dt[u], Sin[u]], Dt[y]]`.
-- eliminate_tests: PASS (13 new tests, 0 regressions)
-- integrate_derivdivides_tests: PASS (new test_inverse_trig_substitution)
-- integrate_dispatch_tests: PASS
-- Unlocked Integrate[x ArcSin[x]/Sqrt[1-x^2], x] = x - Sqrt[1-x^2] ArcSin[x]
-  (+ ArcCos/ArcSinh/ArcTan kin), D[]-verify to 0.
-- leaks-clean (0 bytes / 30 iters); strict C99 -Wall -Wextra clean.
-- Docs: structural-manipulation.md bullet + changelog 2026-07-06.md.
+- **Closes (log tower, diff-back verified):**
+  `1/(x Log[x] (Log[Log[x]]^2+1)) → ArcTan[Log[Log[x]]]`,
+  `1/(x Log[x] (Log[Log[x]]^2+4))`, mixed `ArcTan`+`Log` numerators,
+  cubic denominators (`Log` + `Log`/`ArcTan` mix).
+- **Declines (verified):** `1/(Log[x](Log[Log[x]]^2+1))` — residues depend on `x`,
+  caught by the gate list.
+- **Exp tower:** the fallback is wired into `rm_field_hyperexp_coupled` and the
+  `Integrate`TranscendentalLogPart` builtin handles the exp derivation directly
+  (verified: `[a b, 1+b^2, b, z, 2 a b^2, {x,a}] → ArcTan[b]`), but the concrete
+  targets (`E^x E^(E^x)/(E^(2 E^x)+1)`) build a depth-3 tower with `E^(2 E^x)` as a
+  SEPARATE commensurate kernel rather than `(E^(E^x))^2`.  That is the
+  commensurate-exponent tower-builder gap (RISCH_STATUS §6.1 item 3), upstream of
+  and orthogonal to the LRT — left as the next refinement.
+- Tests: `integrate_risch_macsyma_tests` + `intrat_tests` + `integrals_tests` all
+  green; single-kernel LRT + rational-residue tower cases unchanged.
+- Build clean (`-std=c99 -Wall -Wextra`); valgrind byte-identical to the `Sin[1.0]`
+  baseline (13,440 B / 420 blocks, zero module frames) on both the closing and the
+  declining paths.
 
-### Correction handled mid-task
-Initial table included Log -> regressed test_log_power (`u==Log[x]` was
-intercepted and substituted x->E^M, an un-atomizable main-var exponential).
-Fix: exclude Log; the forward exp/log pass already handles it.
+## Remaining refinement (out of scope)
+- Commensurate-exponent kernelization inside `rm_tower_build` (`E^(k u) → t^k`),
+  which would let the exp-tower LRT fallback fire (§6.1 item 3).
+- Full Bronstein SPDE for the tower Hermite numerator (repeated-pole + algebraic
+  residue combined; `rm_field_lrt_logpart` handles only the squarefree case).

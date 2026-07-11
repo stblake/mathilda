@@ -76,6 +76,10 @@ Expr* builtin_intrat_logtoreal(Expr* res);
 /* Phase 6 — Log → ArcTanh / combined Log post-processing. */
 Expr* builtin_intrat_logtoarctanh(Expr* res);
 
+/* Recursive-Risch transcendental Lazard-Rioboo-Trager log part.  Consumed by
+ * Integrate`RischMacsyma for frac-case integrands with algebraic residues. */
+Expr* builtin_intrat_transcendental_log_part(Expr* res);
+
 /* Phase 8b — NaiveLogPart RootSum fallback.  Direct port of
  * IntegrateRational.m:1116-1124.  Returns the held-symbolic
  * RootSum form of the log part of Integrate[a/d, x]:

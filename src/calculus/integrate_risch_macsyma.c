@@ -175,6 +175,14 @@ static Expr* rm_rational_case(Expr* f, Expr* x) {
  * elementary cascade leaves open, using special functions Mathilda
  * already provides (Erf, ExpIntegralEi, LogIntegral, PolyLog).          */
 
+/* Forward decls: the Ei/li recognizers extract the exponential/log kernel
+ * directly (defined below alongside the transcendental-case machinery). */
+static Expr* rm_find_log_of_x(Expr* e, Expr* x);
+static Expr* rm_find_exp_of_x(Expr* e, Expr* x);
+/* Diff-back verifier (defined with the tower machinery); used by the
+ * pure-resultant LRT frac path, whose reuse crosses content boundaries. */
+static bool rm_verify_antideriv(Expr* result, Expr* f, Expr* x);
+
 /* K * E^(a x^2 + b x + c) with the leading (quadratic) coefficient
  * nonzero  ->  Erf/Erfi.  Detected by the log-derivative f'/f being a
  * degree-1 polynomial (Maxima's erfarg). */
@@ -223,68 +231,99 @@ static Expr* rm_try_erf(Expr* f, Expr* x) {
     return result;
 }
 
-/* (const * E^(a x)) / (c x + d)  ->  ExpIntegralEi.  Numerator is a
- * constant times a pure exponential; denominator linear in x. */
+/* (M * E^(a x + b)) / (c x + d)  ->  ExpIntegralEi.  A constant M times a
+ * pure exponential with an EXACTLY LINEAR exponent v = a x + b (a != 0), over
+ * a linear denominator c x + d.  The exponential kernel E^v is extracted
+ * DIRECTLY (via rm_find_exp_of_x) rather than by Together: a negative leading
+ * coefficient (E^(-x)/x) would otherwise be pushed into the denominator by
+ * Together, making the denominator x E^x (non-polynomial) and hiding the Ei
+ * shape.  Extracting E^v and reducing the rational cofactor R = f E^(-v)
+ * handles a < 0 and a nonzero constant term b uniformly.
+ *
+ * Sub w = c x + d in M INT E^(a x + b)/(c x + d) dx:
+ *   = (M/c) E^(b - a d/c) ExpIntegralEi[a x + a d/c].
+ * Correct by construction: R free of x with a linear denominator proves
+ * f = M E^v/(c x + d) exactly, so this is its antiderivative. */
 static Expr* rm_try_ei(Expr* f, Expr* x) {
-    Expr* g = rm_eval1("Together", expr_copy(f));
-    if (!g) return NULL;
-    Expr* num = rm_eval1("Numerator", expr_copy(g));
-    Expr* den = rm_eval1("Denominator", expr_copy(g));
-    expr_free(g);
+    Expr* v = rm_find_exp_of_x(f, x);          /* borrowed exponent of E^v */
+    if (!v) return NULL;
+    if (!rm_is_poly(v, x) || rm_degree(v, x) != 1) return NULL;
+    /* R = Together[f E^(-v)]: the rational cofactor after peeling E^v. */
+    Expr* emv = expr_new_function(expr_new_symbol("Power"),
+        (Expr*[]){ expr_new_symbol("E"),
+            expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_integer(-1), expr_copy(v) }, 2) }, 2);
+    Expr* R = rm_eval1("Together", expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_copy(f), emv }, 2));
+    if (!R) return NULL;
+    Expr* num = rm_eval1("Numerator", expr_copy(R));
+    Expr* den = rm_eval1("Denominator", expr_copy(R));
+    expr_free(R);
     Expr* result = NULL;
-    if (num && den && rm_is_poly(den, x) && rm_degree(den, x) == 1
-        && !rm_free_of_x(num, x)) {
-        /* numld = Cancel[D[num]/num] must be a nonzero constant (= a). */
-        Expr* dn = rm_eval2("D", expr_copy(num), expr_copy(x));
-        Expr* invn = expr_new_function(expr_new_symbol("Power"),
-            (Expr*[]){ expr_copy(num), expr_new_integer(-1) }, 2);
-        Expr* q = expr_new_function(expr_new_symbol("Times"),
-            (Expr*[]){ dn, invn }, 2);
-        Expr* numld = rm_eval1("Cancel", q);
-        if (numld && rm_free_of_x(numld, x) && !rm_is_zero(numld)) {
-            /* num = M E^(a x) with M constant, so M = num|_{x=0}. */
-            Expr* M = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
-                (Expr*[]){ expr_copy(num),
-                    expr_new_function(expr_new_symbol("Rule"),
-                        (Expr*[]){ expr_copy(x), expr_new_integer(0) }, 2) }, 2));
-            if (M && rm_free_of_x(M, x)) {
-                Expr* cc = rm_coeff(den, x, 1);
-                Expr* dd = rm_coeff(den, x, 0);
-                const char* names[4] = { "rmM", "rmA", "rmC", "rmD" };
-                Expr* vals[4] = { M, numld, cc, dd };
-                /* Correct by construction: num = M E^(a x) (num'/num = a
-                 * constant) over an exactly linear denominator c x + d. */
-                result = rm_template(
-                    "(rmM*E^(-rmA*rmD/rmC)/rmC)*ExpIntegralEi[rmA*(x + rmD/rmC)]",
-                    names, vals, 4);
-                expr_free(cc);
-                expr_free(dd);
-            }
-            if (M) expr_free(M);
-        }
-        if (numld) expr_free(numld);
+    if (num && den && rm_free_of_x(num, x) && !rm_is_zero(num)
+        && rm_is_poly(den, x) && rm_degree(den, x) == 1) {
+        Expr* aa = rm_coeff(v, x, 1);   /* a */
+        Expr* bb = rm_coeff(v, x, 0);   /* b */
+        Expr* cc = rm_coeff(den, x, 1); /* c */
+        Expr* dd = rm_coeff(den, x, 0); /* d */
+        const char* names[5] = { "rmM", "rmA", "rmB", "rmC", "rmD" };
+        Expr* vals[5] = { num, aa, bb, cc, dd };
+        result = rm_template(
+            "(rmM*E^(rmB - rmA*rmD/rmC)/rmC)"
+            "*ExpIntegralEi[rmA*x + rmA*rmD/rmC]",
+            names, vals, 5);
+        expr_free(aa);
+        expr_free(bb);
+        expr_free(cc);
+        expr_free(dd);
     }
     if (num) expr_free(num);
     if (den) expr_free(den);
     return result;
 }
 
-/* K / Log[x]  ->  K LogIntegral[x].  Certificate: Together[f Log[x]] is a
- * constant K free of x (so f = K/Log[x] exactly). */
+/* c * w^(p-1) * w'(x) / Log[w]  ->  c LogIntegral[w^p]  for a Log[w] kernel
+ * whose argument w depends on x, a positive integer p, and a nonzero constant
+ * c.  Certificate: cand = Together[f Log[w] / (w^(p-1) w')] is a constant free
+ * of x, which proves f = cand d/dx LogIntegral[w^p] exactly (using the
+ * standard branch Log[w^p] = p Log[w], the convention under which
+ * LogIntegral answers are stated).  This subsumes the bare K/Log[x] -> K
+ * LogIntegral[x] form (p = 1, w = x) and adds a scaled/affine argument
+ * (1/Log[2x] -> LogIntegral[2x]/2, p = 1, w = 2x) and a monomial numerator
+ * (x/Log[x] -> LogIntegral[x^2], p = 2, w = x). */
 static Expr* rm_try_li(Expr* f, Expr* x) {
-    Expr* logx = expr_new_function(expr_new_symbol("Log"),
-        (Expr*[]){ expr_copy(x) }, 1);
-    Expr* prod = expr_new_function(expr_new_symbol("Times"),
-        (Expr*[]){ expr_copy(f), logx }, 2);
-    Expr* K = rm_eval1("Together", prod);
+    Expr* w = rm_find_log_of_x(f, x);          /* borrowed argument of Log[w] */
+    if (!w) return NULL;
+    Expr* dw = rm_eval2("D", expr_copy(w), expr_copy(x));   /* w'(x) */
+    if (!dw) return NULL;
+    if (rm_is_zero(dw)) { expr_free(dw); return NULL; }
+    Expr* logw = expr_new_function(expr_new_symbol("Log"),
+        (Expr*[]){ expr_copy(w) }, 1);
     Expr* result = NULL;
-    if (K && rm_free_of_x(K, x) && !rm_is_zero(K)) {
-        Expr* li = expr_new_function(expr_new_symbol("LogIntegral"),
-            (Expr*[]){ expr_copy(x) }, 1);
-        result = rm_eval_own(expr_new_function(expr_new_symbol("Times"),
-            (Expr*[]){ expr_copy(K), li }, 2));
+    const int MAXP = 6;
+    for (int p = 1; p <= MAXP && !result; p++) {
+        /* cand = Together[f Log[w] / (w^(p-1) w')] must be a nonzero constant. */
+        Expr* wp1 = expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(w), expr_new_integer(p - 1) }, 2);
+        Expr* denom = expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ wp1, expr_copy(dw) }, 2);
+        Expr* frac = expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_copy(f), expr_copy(logw),
+                expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ denom, expr_new_integer(-1) }, 2) }, 3);
+        Expr* cand = rm_eval1("Together", frac);
+        if (cand && rm_free_of_x(cand, x) && !rm_is_zero(cand)) {
+            Expr* wp = expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_copy(w), expr_new_integer(p) }, 2);
+            Expr* li = expr_new_function(expr_new_symbol("LogIntegral"),
+                (Expr*[]){ wp }, 1);
+            result = rm_eval_own(expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_copy(cand), li }, 2));
+        }
+        if (cand) expr_free(cand);
     }
-    if (K) expr_free(K);
+    expr_free(dw);
+    expr_free(logw);
     return result;
 }
 
@@ -1033,6 +1072,24 @@ static Expr* rm_frac_try(Expr* f, Expr* x, Expr* u, bool is_log) {
                 && sol->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
                 && sol->data.function.args[0]->data.function.head->data.symbol
                      == intern_symbol("List")) {
+                /* Rothstein-Trager residues MUST be constants.  SolveAlways can
+                 * return an x-dependent pseudo-solution for a residual with a
+                 * constant-term structure (e.g. k -> x + c for the residual
+                 * 1 - k/(x + c) of 1/Log[x + c]); accepting it would certify a
+                 * WRONG polynomial-coefficient logarithm ((x+c) Log[Log[x+c]]).
+                 * Require every residue free of x and t, else decline. */
+                Expr* srules = sol->data.function.args[0];
+                bool const_res = true;
+                for (size_t si = 0;
+                     si < srules->data.function.arg_count && const_res; si++) {
+                    Expr* rule = srules->data.function.args[si];
+                    if (rule->type == EXPR_FUNCTION
+                        && rule->data.function.arg_count == 2
+                        && (!rm_free_of_x(rule->data.function.args[1], x)
+                            || !rm_free_of_x(rule->data.function.args[1], tsym)))
+                        const_res = false;
+                }
+                if (const_res) {
                 Expr** rterms = malloc(ng * sizeof(Expr*));
                 for (size_t i = 0; i < ng; i++) {
                     char nm[24]; snprintf(nm, sizeof(nm), "rmK%zu", i);
@@ -1064,12 +1121,139 @@ static Expr* rm_frac_try(Expr* f, Expr* x, Expr* u, bool is_log) {
                     result = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
                         (Expr*[]){ R, zl }, 2));
                 }
+                }
             }
             if (sol) expr_free(sol);
         }
         for (size_t i = 0; i < ng; i++) expr_free(g[i]);
         if (factored) expr_free(factored);
     }
+    if (num) expr_free(num);
+    if (den) expr_free(den);
+    expr_free(F);
+    expr_free(tsym);
+    expr_free(Dt);
+    expr_free(kernel_back);
+    return result;
+}
+
+/* Pure resultant Lazard-Rioboo-Trager log part for a single monomial
+ * extension theta (theta = Log[u] or E^u), for the residue class the
+ * SolveAlways single-constant-per-factor ansatz of rm_frac_try cannot
+ * express: an irreducible-over-Q denominator factor in theta whose
+ * Rothstein-Trager residues are ALGEBRAIC (non-rational) constants — e.g.
+ * the +-I/2 residues of 1/(x (Log[x]^2+1)) that split the irreducible
+ * theta^2+1 into a conjugate log pair (= ArcTan[Log[x]]).
+ *
+ * With theta -> t (rmT) and D t = u'/u (log) or u' t (exp), a PROPER,
+ * SQUAREFREE-denominator fraction a(t)/d(t) has log part
+ *   sum over roots c of Res_t(a - z D(d), d):  c Log(gcd_t(a - c D(d), d)),
+ * where D(d) = d/dx(d) + (D t) d/dt(d) is the monomial derivation.  The
+ * exact resultant + Rioboo LogToReal real-form collapse are delegated to
+ * Integrate`TranscendentalLogPart (intrat.c), which reuses the tested
+ * rational-LRT subresultant machinery; this routine just builds the
+ * monomial derivation, hands off, substitutes t -> kernel, and DIFF-BACK
+ * VERIFIES (the reuse crosses content/denominator boundaries, so — like the
+ * tower cases — a mis-reduction must decline, never ship a wrong form).
+ * Runs only after rm_frac_try declines. */
+static Expr* rm_frac_lrt(Expr* f, Expr* x, Expr* u, bool is_log) {
+    Expr* tsym = expr_new_symbol("rmT");
+    Expr* Dt = NULL; Expr* kernel_back = NULL; Expr* F = NULL;
+    if (is_log) {
+        /* Log[u] -> t; Log[u]^k is Power[Log[u], k] so the inner rewrite
+         * lifts to t^k automatically. */
+        Expr* rules = expr_new_function(expr_new_symbol("List"),
+            (Expr*[]){ expr_new_function(expr_new_symbol("Rule"),
+                (Expr*[]){ expr_new_function(expr_new_symbol("Log"),
+                    (Expr*[]){ expr_copy(u) }, 1), expr_new_symbol("rmT") }, 2) }, 1);
+        Expr* du = rm_eval2("D", expr_copy(u), expr_copy(x));
+        Expr* invu = expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(u), expr_new_integer(-1) }, 2);
+        Dt = rm_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ du, invu }, 2));                 /* eta = u'/u */
+        kernel_back = expr_new_function(expr_new_symbol("Log"),
+            (Expr*[]){ expr_copy(u) }, 1);
+        Expr* F0 = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+            (Expr*[]){ expr_copy(f), rules }, 2));
+        F = F0 ? rm_eval1("Together", F0) : NULL;
+    } else {
+        /* Kernelize so multiplicatively commensurate exponents collapse onto
+         * one primitive t = E^uexp (E^(2x) -> t^2), which a plain E^x -> t
+         * substitution cannot do. */
+        Expr* uexp = NULL;
+        Expr* Fk = rm_exp_kernelize(f, x, &uexp);
+        if (Fk && uexp) {
+            Expr* up = rm_eval2("D", expr_copy(uexp), expr_copy(x));
+            Dt = expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ up, expr_new_symbol("rmT") }, 2);   /* u' t */
+            kernel_back = expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_new_symbol("E"), expr_copy(uexp) }, 2);
+            F = rm_eval1("Together", Fk);
+        } else if (Fk) { expr_free(Fk); }
+        if (uexp) expr_free(uexp);
+    }
+    (void)u;   /* exp branch derives its own primitive via rm_exp_kernelize */
+    if (!Dt || !F) {
+        expr_free(tsym); if (Dt) expr_free(Dt);
+        if (kernel_back) expr_free(kernel_back); if (F) expr_free(F);
+        return NULL;
+    }
+
+    Expr* num = rm_eval1("Numerator", expr_copy(F));
+    Expr* den = rm_eval1("Denominator", expr_copy(F));
+    Expr* result = NULL;
+
+    /* Gates: proper squarefree rational function of the single kernel t,
+     * with the kernel fully substituted (no residual nested exp/log of x —
+     * that would let the resultant treat it as a free parameter). */
+    bool ok = num && den && rm_is_poly(num, tsym) && rm_is_poly(den, tsym)
+        && !rm_free_of_x(den, tsym)
+        && rm_find_exp_of_x(F, x) == NULL && rm_find_log_of_x(F, x) == NULL
+        && rm_degree(num, tsym) < rm_degree(den, tsym);
+
+    if (ok) {
+        /* Squarefree denominator: gcd(d, dd/dt) constant. */
+        Expr* ddt0 = rm_eval2("D", expr_copy(den), expr_copy(tsym));
+        Expr* g = ddt0 ? rm_eval_call("PolynomialGCD",
+            (Expr*[]){ expr_copy(den), ddt0 }, 2) : NULL;
+        bool squarefree = g && rm_degree(g, tsym) <= 0;
+        if (g) expr_free(g);
+
+        if (squarefree) {
+            /* Monomial derivation D(d) = d/dx(d) + (D t) d/dt(d). */
+            Expr* ddx = rm_eval2("D", expr_copy(den), expr_copy(x));
+            Expr* ddt = rm_eval2("D", expr_copy(den), expr_copy(tsym));
+            Expr* Dd = rm_eval_own(expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ ddx, expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_copy(Dt), ddt }, 2) }, 2));
+            if (Dd) {
+                Expr* logpart = rm_eval_call("Integrate`TranscendentalLogPart",
+                    (Expr*[]){ expr_copy(num), expr_copy(den), expr_copy(tsym),
+                              expr_new_symbol("rmZ"), Dd, expr_copy(x) }, 6);
+                /* Unevaluated (declined) iff the head is unchanged. */
+                bool declined = !logpart
+                    || (logpart->type == EXPR_FUNCTION
+                        && logpart->data.function.head->type == EXPR_SYMBOL
+                        && logpart->data.function.head->data.symbol
+                             == intern_symbol("Integrate`TranscendentalLogPart"));
+                if (!declined) {
+                    /* Substitute t -> kernel(x) and diff-back verify. */
+                    Expr* Q = rm_eval_own(expr_new_function(
+                        expr_new_symbol("ReplaceAll"),
+                        (Expr*[]){ logpart,
+                          expr_new_function(expr_new_symbol("List"),
+                            (Expr*[]){ expr_new_function(expr_new_symbol("Rule"),
+                                (Expr*[]){ expr_copy(tsym),
+                                          expr_copy(kernel_back) }, 2) }, 1) }, 2));
+                    if (Q && rm_verify_antideriv(Q, f, x)) result = Q;
+                    else if (Q) expr_free(Q);
+                } else if (logpart) {
+                    expr_free(logpart);
+                }
+            }
+        }
+    }
+
     if (num) expr_free(num);
     if (den) expr_free(den);
     expr_free(F);
@@ -1309,6 +1493,14 @@ static Expr* rm_frac_case(Expr* f, Expr* x) {
     Expr* ue = rm_find_exp_of_x(f, x);
     if (ue && rm_kernel_simple(ue, x)) {
         Expr* r = rm_frac_try(f, x, ue, false); if (r) return r;
+    }
+    /* Pure resultant LRT for algebraic (non-rational) residues — runs only
+     * when the rational-residue SolveAlways path above declines. */
+    if (ul && rm_kernel_simple(ul, x)) {
+        Expr* r = rm_frac_lrt(f, x, ul, true); if (r) return r;
+    }
+    if (ue && rm_kernel_simple(ue, x)) {
+        Expr* r = rm_frac_lrt(f, x, ue, false); if (r) return r;
     }
     return NULL;
 }
@@ -2471,6 +2663,77 @@ static Expr* rm_tower_deriv(Expr* e, RmTower* T, Expr* x) {
     return r;
 }
 
+/* Pure resultant Lazard-Rioboo-Trager log part for a TOWER proper rational
+ * part Rr/den in t = t_L (deg_t Rr < deg_t den), lifting rm_frac_lrt's single-
+ * kernel algebraic-residue closure to the recursive-Risch tower.  The bounded
+ * SolveAlways ansatz in rm_field_ratint / rm_field_hyperexp_coupled expresses
+ * exactly one CONSTANT residue per squarefree t-factor, so it cannot integrate
+ * a factor whose Rothstein-Trager residues are ALGEBRAIC (e.g. the +-I/2
+ * residues that split t^2+1 into a conjugate log pair = ArcTan) — this closes
+ * exactly that class at the tower level, e.g.
+ *   1/(x Log[x] (Log[Log[x]]^2+1)) -> ArcTan[Log[Log[x]]].
+ *
+ * Only the squarefree case (den has no repeated t-factor) is handled: den
+ * factors as cont(x, t_0..t_{L-1}) * rad with rad squarefree in t, and the log
+ * part is
+ *   Integrate`TranscendentalLogPart[Rr/cont, rad, t, z, D_tower[rad],
+ *                                   {x, t_0, ..., t_{L-1}}],
+ * whose gate list requires the residues to be constants of the tower derivation
+ * (free of every lower-field variable).  A genuine Hermite (repeated-pole) part
+ * is left to the coupled ansatz.  Returns the log part in tower-variable form
+ * (owned, in terms of the t_L symbol), or NULL.  The top-level caller diff-back
+ * verifies, so an incomplete reduction (e.g. an exponential Laurent part not
+ * captured here) declines rather than shipping a wrong form. */
+static Expr* rm_field_lrt_logpart(Expr* Rr, Expr* den, RmTower* T, long L,
+                                  Expr* x) {
+    Expr* t = T->t[L];
+    long dn = rm_degree(Rr, t), dd = rm_degree(den, t);
+    if (dn < 0 || dd <= 0 || dn >= dd) return NULL;   /* proper, den depends on t */
+
+    /* Strip the t-free content of den: Hden = gcd(den, dden/dt); when den is
+     * squarefree in t this is exactly the t-free factor (dH == 0). */
+    Expr* dden = rm_eval2("D", expr_copy(den), expr_copy(t));
+    if (!dden) return NULL;
+    Expr* Hden = rm_eval_call("PolynomialGCD",
+        (Expr*[]){ expr_copy(den), dden }, 2);
+    if (!Hden) return NULL;
+    if (rm_degree(Hden, t) != 0) { expr_free(Hden); return NULL; }  /* repeated pole */
+
+    /* rad = den / Hden (squarefree in t); a = Rr / Hden. */
+    Expr* rad = rm_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_copy(den), expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(Hden), expr_new_integer(-1) }, 2) }, 2));
+    Expr* a = rm_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_copy(Rr), expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(Hden), expr_new_integer(-1) }, 2) }, 2));
+    expr_free(Hden);
+    if (!rad || !a) { if (rad) expr_free(rad); if (a) expr_free(a); return NULL; }
+
+    /* Monomial (tower) derivation of the squarefree radical. */
+    Expr* Dd = rm_tower_deriv(rad, T, x);
+    if (!Dd) { expr_free(rad); expr_free(a); return NULL; }
+
+    /* Gate list {x, t_0, ..., t_{L-1}}: residues must be constants of D_tower. */
+    size_t ng = (size_t)L + 1;
+    Expr** gv = malloc(ng * sizeof(Expr*));
+    gv[0] = expr_copy(x);
+    for (long i = 0; i < L; i++) gv[i + 1] = expr_copy(T->t[i]);
+    Expr* gate = expr_new_function(expr_new_symbol("List"), gv, ng);
+    free(gv);
+
+    Expr* logpart = rm_eval_call("Integrate`TranscendentalLogPart",
+        (Expr*[]){ a, rad, expr_copy(t), expr_new_symbol("rmZ"), Dd, gate }, 6);
+    /* Declined iff the head is unchanged (a, rad, Dd, gate adopted by the call). */
+    if (logpart && logpart->type == EXPR_FUNCTION
+        && logpart->data.function.head->type == EXPR_SYMBOL
+        && logpart->data.function.head->data.symbol
+             == intern_symbol("Integrate`TranscendentalLogPart")) {
+        expr_free(logpart);
+        return NULL;
+    }
+    return logpart;   /* tower-variable form (in terms of the t_L symbol) */
+}
+
 /* Proper rational part in t = t_L (deg_t num < deg_t den, coefficients in the
  * lower field K_{L-1}): integrate to  Q = H(t)/Hden(t) + sum_j c_j Log(g_j),
  * where Hden = gcd(den, d den/dt) is the repeated part, g_j the distinct
@@ -2628,6 +2891,12 @@ static Expr* rm_field_ratint(Expr* num, Expr* den, RmTower* T, long L, Expr* x) 
         free(syms);
         expr_free(Q);
     }
+
+    /* Algebraic-residue log part (pure resultant Lazard-Rioboo-Trager): the
+     * bounded ansatz above expresses only rational (single-constant) residues;
+     * when it declines, close a squarefree-denominator factor whose residues
+     * are algebraic constants of the tower derivation. */
+    if (!result) result = rm_field_lrt_logpart(num, den, T, L, x);
 
     for (size_t j = 0; j < ng; j++) expr_free(g[j]);
     if (factored) expr_free(factored);
@@ -2817,6 +3086,13 @@ static Expr* rm_field_hyperexp_coupled(Expr* num, Expr* den, RmTower* T, long L,
         free(syms);
         expr_free(Q);
     }
+
+    /* Algebraic-residue log part (pure resultant LRT): when the coupled ansatz
+     * declines and there is no Laurent principal part (a == 0, so num/den is a
+     * pure proper fraction and the LRT log part is complete), close a squarefree
+     * factor with algebraic constant residues.  The top-level caller diff-back
+     * verifies, so a case with a hidden Laurent part declines harmlessly. */
+    if (!result && a == 0) result = rm_field_lrt_logpart(num, den, T, L, x);
 
     for (size_t j = 0; j < ng; j++) expr_free(g[j]);
     if (factored) expr_free(factored);

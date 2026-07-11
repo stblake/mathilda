@@ -730,20 +730,45 @@ monotonically down.
         `I x - Log[1 + E^(2 I x)] = -Log[Cos[x]]`) that no current simplifier
         reduces to real closed form (a `Simplify` improvement opportunity);
       - `K E^(a x^2 + b x + c)` (`a != 0`) → `Erf`/`Erfi` (Maxima's `erfarg`);
-      - `(const E^(a x))/(c x + d)` → `ExpIntegralEi`;
-      - `K/Log[x]` → `LogIntegral`;
+      - `(M E^(a x + b))/(c x + d)` → `ExpIntegralEi` — the `E^v` kernel is
+        extracted directly, so a negative leading coefficient (`E^(-x)/x →
+        ExpIntegralEi[-x]`) and a nonzero exponent constant close uniformly;
+      - `c w^(p-1) w'/Log[w]` → `c LogIntegral[w^p]` — subsumes `K/Log[x] → K
+        LogIntegral[x]` and adds a scaled/affine argument (`1/Log[2x] →
+        LogIntegral[2x]/2`) and a monomial numerator (`x/Log[x] →
+        LogIntegral[x^2]`);
       - `K Log[1 + p x]/x` → `PolyLog[2, -p x]` (Maxima's `dilog`);
       - fractional (Rothstein–Trager) log-part: a proper rational function of
         `theta` with squarefree denominator `prod g_i` gives `sum_i c_i Log(g_i)`,
         the constant residues `c_i` solved from `num = sum_i c_i D(g_i)(d/g_i)`
         via `SolveAlways` over `theta` and `x` (`Integrate[1/(x(1+Log[x])),x] =
-        Log[1+Log[x]]`, `Integrate[E^x/(1+E^x),x] = Log[1+E^x]`).
+        Log[1+Log[x]]`, `Integrate[E^x/(1+E^x),x] = Log[1+E^x]`); the residues are
+        verified constant (an `x`-dependent `SolveAlways` pseudo-solution is
+        rejected so `1/Log[c x+d]` is never mis-closed with a polynomial-coefficient
+        logarithm);
+      - **pure resultant Lazard–Rioboo–Trager** log-part (when the `SolveAlways`
+        path above declines): an irreducible-over-Q denominator factor in `theta`
+        with **algebraic (non-rational) residues** is closed by the exact resultant
+        `Res_t(a - z D(d), d)` (residues) + Rioboo `LogToReal` (real `Log + ArcTan`
+        form), delegated to the internal `Integrate`TranscendentalLogPart` (reuses
+        the rational-LRT machinery with the monomial derivation), closing
+        `Integrate[1/(x(Log[x]^2+1)),x] = ArcTan[Log[x]]`,
+        `Integrate[E^x/(E^(2x)+1),x] = ArcTan[E^x]`, mixed
+        `Integrate[(1+Log[x])/(x(Log[x]^2+1)),x] = ArcTan[Log[x]] + Log[1+Log[x]^2]/2`
+        and higher-degree denominators; diff-back verified, so non-elementary
+        siblings (`1/(Log[x]^2+1)`, `1/(x^2(Log[x]^2+1))`) decline; this same
+        resultant LRT is **lifted into the tower recursion** at a logarithmic top,
+        so a nested-log proper part with algebraic residues closes too —
+        `Integrate[1/(x Log[x] (Log[Log[x]]^2+1)),x] = ArcTan[Log[Log[x]]]` — with
+        the residues gated free of *every* lower-field variable (`{x, Log[x], …}`),
+        and `1/(Log[x](Log[Log[x]]^2+1))` (x-dependent residues) declining;
     Rational-argument exponents such as `E^(1/x)` are handled (`Integrate[-E^(1/x)/
-    x^2, x] = E^(1/x)`) via the `q = h/Denominator[p]` RDE ansatz.  A genuinely
-    rational Hermite numerator coefficient, the pure resultant LRT, the recursive
+    x^2, x] = E^(1/x)`) via the `q = h/Denominator[p]` RDE ansatz.  The recursive
     degree-reduction half of the Bronstein SPDE (the field RDE uses a bounded
-    polynomial numerator ansatz), and algebraic extensions are not yet implemented,
-    so integrands needing them return unevaluated.
+    polynomial numerator ansatz), the tower-level resultant LRT at an *exponential*
+    top (blocked by commensurate-exponent kernelization, `E^(2 u) = (E^u)^2`), and
+    algebraic extensions are not yet implemented, so integrands needing them return
+    unevaluated.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.
   - `"Symmetry"` — origin-symmetry reduction for an interval `[-c, c]`
@@ -1627,6 +1652,35 @@ Out[2]= {{1 - t^2, -3/2 - 1/2 t + x}}
 
 In[3]:= Integrate`IntRationalLogPart[1/(x^2+1), x, t, RootSum -> True]
 Out[3]= RootSum[Function[t, 1 + 4 t^2], Function[t, t Log[2 t + x]]]
+```
+
+## Integrate`TranscendentalLogPart
+
+The transcendental (recursive-Risch) Lazard-Rioboo-Trager log part —
+the monomial-extension generalisation of `Integrate`IntRationalLogPart`,
+consumed by `Integrate`RischMacsyma` for frac-case integrands with
+algebraic residues.
+
+- `Integrate`TranscendentalLogPart[a, d, tau, z, Dd, g]` integrates the
+  proper, squarefree-denominator fraction `a(tau)/d(tau)` of a
+  transcendental monomial `tau` (= `Log[u]` or `E^u`), where `Dd` is the
+  monomial derivation `D(d)`, `z` is the residue variable, and `g` is the
+  residue-constant gate.  The residues are the roots of
+  `Res_tau(a - z Dd, d)`; each squarefree factor with its log argument is
+  converted to real `Log + ArcTan` form by Rioboo's `LogToReal`.  The gate
+  `g` is either a **symbol** (single-kernel extension over `Q(x)`, residues
+  required free of `x`) or a **List of symbols** (a tower proper part,
+  residues required free of `x` and every lower tower variable
+  `t_0, …, t_{L-1}` — i.e. constants of the whole tower derivation).
+  Returns the antiderivative as a function of `tau` (the caller substitutes
+  `tau -> kernel`), or unevaluated when the integral is not elementary in
+  this form (a residue depending on a gate variable) / a factor exceeds
+  `LogToReal`'s bounded scope.
+
+```mathematica
+(* 1/(x (Log[x]^2+1)): tau = Log[x], D(d) = (1+t)^2 *)
+In[1]:= Integrate`TranscendentalLogPart[1, x + x t^2, t, z, 1 + 2 t + t^2, x]
+Out[1]= ArcTan[t]
 ```
 
 ## PolynomialQuotientRemainder

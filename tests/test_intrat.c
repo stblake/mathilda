@@ -208,9 +208,10 @@ static void test_integrate_unevaluated(void) {
     /* Genuinely non-elementary integrand: stays as Integrate[...].
      * (Sin[x] used to bubble back unevaluated; with the
      * Integrate`RischNorman dispatcher hook it now closes to a
-     * Tan[x/2]-form antiderivative.  Replace with a known
-     * non-elementary case.) */
-    run_eq("Integrate[1/Log[x], x]", "Integrate[1/Log[x], x]");
+     * Tan[x/2]-form antiderivative.  1/Log[x] likewise now closes to
+     * LogIntegral[x] via the widened li recognizer, so use a nested-log
+     * integrand with no elementary/special-function antiderivative.) */
+    run_eq("Integrate[1/Log[Log[x]], x]", "Integrate[1/Log[Log[x]], x]");
 }
 
 /* ------------------------------------------------------------------ */
