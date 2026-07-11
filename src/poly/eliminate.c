@@ -828,6 +828,176 @@ static Expr* log_expand(const Expr* e, Expr** elim, size_t n_elim) {
     return r;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Commensurate-exponent folding                                      */
+/* ------------------------------------------------------------------ */
+
+/* `exp_expand` above splits sum exponents and factors *integer* multiples
+ * onto a common atomic kernel (`b^(k m) -> (b^m)^k`).  This pass is its
+ * fractional sibling: exponentials whose exponents differ only by a
+ * *rational* factor of a shared monomial are commensurate and must collapse
+ * onto one atomic kernel, e.g. `E^(x/3)` and `E^(x/2)` are both powers of
+ * `E^(x/6)` (`E^(x/3) = (E^(x/6))^2`, `E^(x/2) = (E^(x/6))^3`).  Without
+ * this the three kernels register as algebraically-independent auxes and
+ * Gate A rejects the system as `nlin`.
+ *
+ * The atomic exponent for a `(base, monomial)` group is `(1/L) * monomial`
+ * where `L` is the LCM of the denominators of every rational coefficient
+ * seen for that group; each `base^((p/q) m)` then rewrites to
+ * `(base^((1/L) m))^(p L / q)` with an integer outer power (since q | L).
+ * This subsumes the integer case (q = 1 => L unaffected), so it composes
+ * cleanly with whatever `exp_expand` already produced. */
+
+/* Decompose an exponent into a rational scalar coefficient `num/den`
+ * (den > 0) and the remaining monomial (fresh owned tree).  A leading
+ * Integer or Rational factor of a `Times` is peeled as the coefficient;
+ * anything else yields coefficient 1 and monomial = copy(exp).  Generalises
+ * `times_split_int` to fractional coefficients. */
+static void exp_split_rational(const Expr* exp, int64_t* num, int64_t* den,
+                               Expr** mono_out) {
+    *num = 1; *den = 1;
+    if (is_times(exp) && exp->data.function.arg_count >= 2) {
+        const Expr* lead = exp->data.function.args[0];
+        int64_t p, q;
+        if (is_rational(lead, &p, &q)) {
+            if (q < 0) { q = -q; p = -p; }
+            *num = p; *den = q;
+            size_t n = exp->data.function.arg_count;
+            if (n == 2) { *mono_out = expr_copy(exp->data.function.args[1]); return; }
+            Expr** rest = (Expr**)malloc(sizeof(Expr*) * (n - 1));
+            for (size_t i = 1; i < n; i++) {
+                rest[i - 1] = expr_copy(exp->data.function.args[i]);
+            }
+            *mono_out = expr_new_function(expr_new_symbol(SYM_Times), rest, n - 1);
+            free(rest);
+            return;
+        }
+    }
+    *mono_out = expr_copy((Expr*)exp);
+}
+
+/* Build the atomic exponent `(1/L) * monomial` as a flat `Times`, or just
+ * `monomial` when L == 1.  Deterministic so every rewrite of the same
+ * (base, monomial) group yields a structurally identical inner exponent
+ * (the invariant the downstream kernel dedup relies on). */
+static Expr* make_scaled_monomial(int64_t L, const Expr* mono) {
+    if (L == 1) return expr_copy((Expr*)mono);
+    Expr* coeff = expr_new_function(expr_new_symbol(SYM_Rational),
+        (Expr*[]){ expr_new_integer(1), expr_new_integer(L) }, 2);
+    if (is_times(mono)) {
+        size_t n = mono->data.function.arg_count;
+        Expr** args = (Expr**)malloc(sizeof(Expr*) * (n + 1));
+        args[0] = coeff;
+        for (size_t i = 0; i < n; i++) args[i + 1] = expr_copy(mono->data.function.args[i]);
+        Expr* r = expr_new_function(expr_new_symbol(SYM_Times), args, n + 1);
+        free(args);
+        return r;
+    }
+    return expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ coeff, expr_copy((Expr*)mono) }, 2);
+}
+
+/* Per-(base, monomial) LCM of exponent-coefficient denominators. */
+typedef struct {
+    Expr**   base;
+    Expr**   mono;
+    int64_t* lcms;
+    size_t   n;
+    size_t   cap;
+} ExpLcmState;
+
+static void explcm_init(ExpLcmState* s) {
+    s->base = NULL; s->mono = NULL; s->lcms = NULL; s->n = 0; s->cap = 0;
+}
+
+static void explcm_free(ExpLcmState* s) {
+    if (s->base) for (size_t i = 0; i < s->n; i++) expr_free(s->base[i]);
+    if (s->mono) for (size_t i = 0; i < s->n; i++) expr_free(s->mono[i]);
+    free(s->base); free(s->mono); free(s->lcms);
+    explcm_init(s);
+}
+
+static void explcm_add(ExpLcmState* s, const Expr* base, const Expr* mono,
+                       int64_t den) {
+    if (den < 0) den = -den;
+    if (den == 0) den = 1;
+    for (size_t i = 0; i < s->n; i++) {
+        if (expr_eq(s->base[i], base) && expr_eq(s->mono[i], mono)) {
+            s->lcms[i] = lcm(s->lcms[i], den);
+            return;
+        }
+    }
+    if (s->n == s->cap) {
+        s->cap = s->cap ? s->cap * 2 : 4;
+        s->base = (Expr**)realloc(s->base, sizeof(Expr*) * s->cap);
+        s->mono = (Expr**)realloc(s->mono, sizeof(Expr*) * s->cap);
+        s->lcms = (int64_t*)realloc(s->lcms, sizeof(int64_t) * s->cap);
+    }
+    s->base[s->n] = expr_copy((Expr*)base);
+    s->mono[s->n] = expr_copy((Expr*)mono);
+    s->lcms[s->n] = den;
+    s->n++;
+}
+
+/* Walk `e`, registering the coefficient denominator of every exponential
+ * kernel `base^(coeff*monomial)` under its (base, monomial) group. */
+static void explcm_collect(const Expr* e, ExpLcmState* s,
+                           Expr** elim, size_t n_elim) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    Expr* base = NULL;
+    Expr* exp  = NULL;
+    if (exp_kernel(e, elim, n_elim, &base, &exp)) {
+        int64_t num, den;
+        Expr* mono = NULL;
+        exp_split_rational(exp, &num, &den, &mono);
+        explcm_add(s, base, mono, den);
+        expr_free(mono);
+    }
+    if (e->data.function.head) explcm_collect(e->data.function.head, s, elim, n_elim);
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        explcm_collect(e->data.function.args[i], s, elim, n_elim);
+    }
+}
+
+/* Rewrite each exponential kernel `base^((p/q) m)` to `(base^((1/L) m))^k`
+ * with `k = p L / q` an integer.  Returns a fresh tree the caller owns. */
+static Expr* exp_commensurate(const Expr* e, const ExpLcmState* s,
+                              Expr** elim, size_t n_elim) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    Expr* base = NULL;
+    Expr* exp  = NULL;
+    if (exp_kernel(e, elim, n_elim, &base, &exp)) {
+        int64_t num, den;
+        Expr* mono = NULL;
+        exp_split_rational(exp, &num, &den, &mono);
+        int64_t L = den;  /* den itself divides the group LCM */
+        for (size_t i = 0; i < s->n; i++) {
+            if (expr_eq(s->base[i], base) && expr_eq(s->mono[i], mono)) {
+                L = s->lcms[i];
+                break;
+            }
+        }
+        Expr* inner_exp = make_scaled_monomial(L, mono);
+        expr_free(mono);
+        Expr* inner = make_power(expr_copy(base), inner_exp);
+        int64_t k = (num * L) / den;  /* den | L => exact */
+        if (k == 1) return inner;
+        return make_power(inner, expr_new_integer(k));
+    }
+
+    Expr* new_head = exp_commensurate(e->data.function.head, s, elim, n_elim);
+    size_t n = e->data.function.arg_count;
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        new_args[i] = exp_commensurate(e->data.function.args[i], s, elim, n_elim);
+    }
+    Expr* r = expr_new_function(new_head, new_args, n);
+    free(new_args);
+    return r;
+}
+
 /* Kernel families handled by the transcendental algebraisation pass.
  * CIRC / HYP carry an aux pair (Sin/Cos) plus a Pythagorean constraint;
  * EXP / LOG carry a single aux and no constraint. */
@@ -1420,11 +1590,15 @@ static bool inv_lookup(const char* h, InvEntry* out) {
     if (h == SYM_ArcSinh) { *out = (InvEntry){ SYM_Sinh, SYM_Cosh, true,  1, +1, +1 }; return true; }
     if (h == SYM_ArcCosh) { *out = (InvEntry){ SYM_Cosh, SYM_Sinh, true, -1, +1, +1 }; return true; }
     if (h == SYM_ArcTanh) { *out = (InvEntry){ SYM_Tanh, SYM_Cosh, true,  1, -1, -1 }; return true; }
-    /* Log is deliberately NOT handled here: the forward Exp/Log
-     * algebraisation pass already resolves `Log[x]` kernels of elim
-     * variables (including `Log[x^n] -> n Log[x]`), and substituting
-     * `x -> E^M` would instead introduce a main-variable exponential that
-     * the Groebner atomiser cannot decompose (spurious `nlin`). */
+    /* Log: forward function is Exp, no companion radical.  Enabled only as a
+     * *fallback* — `inv_detect` restricts a `M == Log[x]` defining equation
+     * to the case where `x` also occurs polynomially (so the forward Log
+     * algebraisation alone would trip Gate B).  When `x` appears solely
+     * inside logs, the forward pass gives a tidier answer, so we defer to it.
+     * Pinning `x == E^M` (rather than substituting `x -> E^M`) keeps `E^M`
+     * as a single main-variable atom, sidestepping the exponential-blowup the
+     * naive substitution would cause. */
+    if (h == SYM_Log)     { *out = (InvEntry){ SYM_Exp,  NULL,     false, 0,  0,  0 }; return true; }
     return false;
 }
 
@@ -1513,6 +1687,17 @@ static int inv_detect(Expr** eqs, size_t n_eq, Expr** elim, size_t n_elim,
             if (!a || a->type != EXPR_SYMBOL) continue;
             if (!var_in_list(a, elim, n_elim)) continue;
             if (contains_any_var(other, elim, n_elim)) continue;
+            /* Log fallback gate: only take the inverse-substitution route
+             * when `x` also appears as a genuine polynomial atom somewhere
+             * (e.g. `1/x`), which is exactly when the forward Log pass would
+             * fail.  Otherwise leave `M == Log[x]` for the forward pass. */
+            if (h->data.symbol == SYM_Log) {
+                bool poly = false;
+                for (size_t j = 0; j < n_eq && !poly; j++) {
+                    if (poly_atom_occurs(eqs[j], a)) poly = true;
+                }
+                if (!poly) continue;
+            }
             *arc    = h->data.symbol;
             *xsym   = a->data.symbol;
             *M_out  = expr_copy(other);
@@ -1710,6 +1895,23 @@ Expr* builtin_eliminate(Expr* res) {
         for (size_t i = 0; i < n_eq; i++) {
             Expr* r = log_expand(eq_work[i], elim_items, n_elim);
             expr_free(eq_work[i]); eq_work[i] = r;
+        }
+        /* (b') fold commensurate rational exponents (E^(x/3), E^(x/2))
+         *      onto one atomic kernel E^(x/L) so they share a single aux
+         *      instead of tripping Gate A as independent groups. */
+        {
+            ExpLcmState el; explcm_init(&el);
+            for (size_t i = 0; i < n_eq; i++) {
+                explcm_collect(eq_work[i], &el, elim_items, n_elim);
+            }
+            if (el.n > 0) {
+                for (size_t i = 0; i < n_eq; i++) {
+                    Expr* r = exp_commensurate(eq_work[i], &el,
+                                               elim_items, n_elim);
+                    expr_free(eq_work[i]); eq_work[i] = r;
+                }
+            }
+            explcm_free(&el);
         }
         /* (c) collect distinct kernel groups. */
         for (size_t i = 0; i < n_eq; i++) {

@@ -1460,7 +1460,13 @@ elimination ideal collapses to `True` and an inconsistent system to
   `b^(p+q) -> b^p b^q`, `b^(k m) -> (b^m)^k` for exp; `Log[a b] ->
   Log[a]+Log[b]`, `Log[a^n] -> n Log[a]` for log) so every kernel lands
   on an *atomic* argument; thus `Sin[x]` and `Sin[3x]`, or `Exp[x]` and
-  `Exp[2x]`, collapse onto one shared aux.  Each `Sin[θ]`/`Cos[θ]`
+  `Exp[2x]`, collapse onto one shared aux.  Exponentials whose exponents
+  differ only by a *rational* factor of a shared monomial are commensurate
+  and also collapse: for each `(base, monomial)` group the atomic kernel is
+  `base^((1/L) m)` with `L` the LCM of the coefficient denominators, so
+  `E^(x/3)` and `E^(x/2)` both become powers of `E^(x/6)`
+  (`E^(x/3) = (E^(x/6))^2`, `E^(x/2) = (E^(x/6))^3`) — without this they
+  register as independent kernels and Gate A rejects the system as `nlin`.  Each `Sin[θ]`/`Cos[θ]`
   (resp. `Sinh`/`Cosh`) becomes a fresh aux pair `$tsN$`,`$tcN$` with
   the Pythagorean constraint `s^2 + c^2 == 1` (circular) /
   `c^2 - s^2 == 1` (hyperbolic); each `b^θ` / `Log[θ]` becomes a single
@@ -1490,11 +1496,21 @@ elimination ideal collapses to `True` and an inconsistent system to
   out cleanly — so the u-substitution shape
   `Eliminate[{Dt[y] == x ArcSin[x]/Sqrt[1-x^2] Dt[x], u == ArcSin[x],
   Dt[u] == Dt[x]/Sqrt[1-x^2]}, {x, Dt[x]}]` returns
-  `u Sin[u] Dt[u] == Dt[y]` (with `Eliminate::ifun`).  `Log[x]` is left to
-  the forward exp/log pass (substituting `x -> E^M` would introduce a
-  main-variable exponential the Groebner atomiser cannot decompose).  This
-  is the pass that unlocks `Integrate[x ArcSin[x]/Sqrt[1-x^2], x]` and its
-  inverse-trig / inverse-hyperbolic kin through `DerivativeDivides`.
+  `u Sin[u] Dt[u] == Dt[y]` (with `Eliminate::ifun`).  A `Log` defining
+  equation `M == Log[x]` is handled by the same pass (forward function
+  `Exp`, no companion radical) — but only as a *fallback*, when `x` also
+  occurs as a genuine polynomial atom (e.g. `1/x`), which is exactly the
+  case the forward log pass cannot capture (Gate B).  Rather than
+  substituting `x -> E^M`, it pins `x == E^M` so `E^M` stays a single
+  main-variable atom (the Groebner term reader treats a `Power[base, exp]`
+  with symbolic exponent as one opaque indeterminate); when `x` appears
+  solely inside logs the forward pass gives a tidier answer and is used
+  instead.  So `Eliminate[{Dt[y] == Log[x]/x Dt[x], u == Log[x],
+  Dt[u] == -Dt[x]/x^2}, {x, Dt[x]}]` returns `u Dt[u] E^u + Dt[y] == 0`
+  (i.e. `-Dt[y] == E^u u Dt[u]`).  This is the pass that unlocks
+  `Integrate[x ArcSin[x]/Sqrt[1-x^2], x]` and its inverse-trig /
+  inverse-hyperbolic kin — and now `Integrate[Log[x]/x, x]`-style log
+  substitutions — through `DerivativeDivides`.
 - Equations are normalised through `Numerator[Together[lhs - rhs]]`
   before Buchberger, clearing any `Power[t, -k]` denominators
   introduced by the algebraisation pre-passes.  Surviving basis

@@ -514,6 +514,50 @@ static void test_log_squared(void) {
              "Equal[w, Power[u, 2]]");
 }
 
+static void test_exp_commensurate_fractions(void) {
+    /* Commensurate *fractional* exponents: E^(x/2) and E^(x/3) are both
+     * powers of the atomic kernel E^(x/6) (lcm(2,3)=6), so they collapse
+     * onto one aux: u=E^(x/2)=(E^(x/6))^3, v=E^(x/3)=(E^(x/6))^2 -> v^3==u^2.
+     * Before the commensurate-folding pass these registered as independent
+     * kernels and Gate A rejected the system as `nlin`. */
+    mute_stderr_once();
+    check_eq("Eliminate[{u == E^(x/2), v == E^(x/3)}, x]",
+             "Equal[Power[v, 3], Power[u, 2]]");
+}
+
+static void test_exp_commensurate_dt_substitution(void) {
+    /* Headline example: an integration-by-substitution shape whose three
+     * exponentials E^(x/3), E^(x/2), E^(x/6) are commensurate through the
+     * atomic kernel E^(x/6).  Eliminating {x, Dt[x]} yields the differential
+     * relation 6 Dt[u] == u^3 Dt[y] + u^4 Dt[y]. */
+    mute_stderr_once();
+    check_eq("Eliminate[{Dt[y] == 1/(E^(1/3 x) + E^(1/2 x)) Dt[x],"
+             " u == E^(x/6), Dt[u == E^(x/6)]}, {x, Dt[x]}]",
+             "Equal[Times[6, Dt[u]], Plus[Times[Power[u, 3], Dt[y]],"
+             " Times[Power[u, 4], Dt[y]]]]");
+}
+
+static void test_log_inverse_poly(void) {
+    /* A defining `u == Log[x]` with `x` ALSO occurring polynomially routes
+     * through the inverse-substitution pass (`x == E^u`), keeping E^u as a
+     * single main-variable atom:  w == x  ->  w == E^u.  The forward Log
+     * pass alone would trip Gate B here (x is both log-bound and a poly
+     * atom). */
+    mute_stderr_once();
+    check_eq("Eliminate[{u == Log[x], w == x}, x]",
+             "Equal[w, Power[E, u]]");
+}
+
+static void test_log_inverse_dt_substitution(void) {
+    /* Headline example: `Integrate[Log[x]/x, x]` substitution shape.  With
+     * u = Log[x] (so x = E^u) and Dt[u] == -Dt[x]/x^2, eliminating
+     * {x, Dt[x]} gives  u Dt[u] E^u + Dt[y] == 0  (i.e. -Dt[y] == E^u u Dt[u]). */
+    mute_stderr_once();
+    check_eq("Eliminate[{Dt[y] == Log[x]/x Dt[x], u == Log[x],"
+             " Dt[u == 1/x]}, {x, Dt[x]}]",
+             "Equal[Plus[Times[u, Dt[u], Power[E, u]], Dt[y]], 0]");
+}
+
 static void test_trig_memory_smoke(void) {
     /* Re-run the headline trig example to surface TrigState / aux-symbol
      * cleanup leaks across the multi-exit cleanup paths. */
@@ -687,6 +731,10 @@ int main(void) {
     TEST(test_exp_integration_substitution);
     TEST(test_log_power);
     TEST(test_log_squared);
+    TEST(test_exp_commensurate_fractions);
+    TEST(test_exp_commensurate_dt_substitution);
+    TEST(test_log_inverse_poly);
+    TEST(test_log_inverse_dt_substitution);
     TEST(test_trig_memory_smoke);
     TEST(test_inv_arcsin_dt_substitution);
     TEST(test_inv_arcsin_dt_held_equation);

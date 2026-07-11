@@ -1560,7 +1560,11 @@ static bool expr_term(struct Expr* e, struct Expr** vars, int n_vars,
         return expr_to_mpq(e, coef_out);
     }
 
-    /* Power[var, k] with k >= 0. */
+    /* Power[var, k] with k >= 0.  When the base is a registered variable and
+     * the exponent a non-negative integer, this is `var^k`.  Otherwise fall
+     * through: the whole `Power[...]` may itself be a registered opaque
+     * indeterminate (e.g. `E^u`, pinned by Eliminate's inverse-Log pass, or a
+     * symbolic-exponent atom), matched by the last-ditch check below. */
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
         e->data.function.head->data.symbol == SYM_Power &&
@@ -1568,10 +1572,10 @@ static bool expr_term(struct Expr* e, struct Expr** vars, int n_vars,
         struct Expr* base = e->data.function.args[0];
         struct Expr* exp  = e->data.function.args[1];
         int vi = find_var_index(base, vars, n_vars);
-        if (vi < 0) return false;
-        if (exp->type != EXPR_INTEGER || exp->data.integer < 0) return false;
-        exps_out[vi] = (int)exp->data.integer;
-        return true;
+        if (vi >= 0 && exp->type == EXPR_INTEGER && exp->data.integer >= 0) {
+            exps_out[vi] = (int)exp->data.integer;
+            return true;
+        }
     }
 
     /* Times[...] -- multiply contributions. */
