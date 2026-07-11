@@ -143,8 +143,10 @@ static RGBA8 rgba_from_hue(const Expr* e) {
     if (n >= 3) { expr_to_d(e->data.function.args[1], &s); expr_to_d(e->data.function.args[2], &v); }
     if (n >= 4) expr_to_d(e->data.function.args[3], &a);
     h = h - floor(h); /* wrap to [0,1), matching Mathematica's Hue */
-    if (s < 0) s = 0; if (s > 1) s = 1;
-    if (v < 0) v = 0; if (v > 1) v = 1;
+    if (s < 0) s = 0;
+    if (s > 1) s = 1;
+    if (v < 0) v = 0;
+    if (v > 1) v = 1;
     double r, g, b;
     if (s <= 0.0) {
         r = g = b = v;

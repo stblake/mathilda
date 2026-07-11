@@ -351,7 +351,7 @@ static bool rec_algebraic(const Expr* K, const Expr* x, const Expr* sv,
     }
     q = simp(q);
     if (!m || !prove_true(Gt(cp(m), mk_int(0)), NULL)) {
-        if (m) expr_free(m); expr_free(q); expr_free(p); expr_free(a); return false;
+        if (m) { expr_free(m); } expr_free(q); expr_free(p); expr_free(a); return false;
     }
 
     Expr* sm = simp(Tms(cp(sv), Pw(cp(m), mk_int(-1))));   /* s/m */
@@ -1235,7 +1235,7 @@ static Expr* frullani_scale(const Expr* t, const Expr* x) {
 static Expr* frullani_try(Expr* f, const Expr* x, Expr* assumptions) {
     Expr* G = ev1("Expand", Tms(cp((Expr*)x), cp(f)));        /* x f = f(a x) - f(b x) */
     if (!G || !head_name_is(G, "Plus") || G->data.function.arg_count != 2) {
-        if (G) expr_free(G); return NULL;
+        if (G) { expr_free(G); } return NULL;
     }
     Expr* t1 = G->data.function.args[0];
     Expr* t2 = G->data.function.args[1];
@@ -1272,7 +1272,7 @@ static Expr* frullani_try(Expr* f, const Expr* x, Expr* assumptions) {
                     result = simp2(Tms(Pls(cp(f0), Neg(cp(finf))),
                                        mk_fn1("Log", cp(rho))), assumptions);
                     if (!is_finite_value(result) || contains_symbol(result, x)) {
-                        if (result) expr_free(result); result = NULL;
+                        if (result) { expr_free(result); } result = NULL;
                     }
                 }
                 if (f0) expr_free(f0);

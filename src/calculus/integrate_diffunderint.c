@@ -734,7 +734,7 @@ static Expr* laplace_sinc_halfline(const Expr* g, const Expr* x,
                 (int)lin, (int)degok, n, c!=NULL, c?(int)contains_symbol(c,x):-1, (int)ang);
 #endif
         if (!lin || !degok || !c || contains_symbol(c, x) || !ang) {
-            if (c) expr_free(c); expr_free(alpha); expr_free(off); ok = false; break;
+            if (c) { expr_free(c); } expr_free(alpha); expr_free(off); ok = false; break;
         }
         C[m]  = mk_fn2("Times", c, mk_fn1("Exp", off));   /* c * e^{off} */
         AL[m] = alpha; N[m] = n; m++;
@@ -863,8 +863,8 @@ static Expr* rational_halfline(const Expr* g, const Expr* x,
                         mk_fn2("Power", expr_copy(alpha), mk_int(-1)))) : NULL;
         if (!lin || !alpha || !d || contains_symbol(num, v) ||
             !real_positive(d, pb, np)) {
-            if (num) expr_free(num); if (alpha) expr_free(alpha);
-            if (beta) expr_free(beta); if (d) expr_free(d);
+            if (num) { expr_free(num); } if (alpha) { expr_free(alpha); }
+            if (beta) { expr_free(beta); } if (d) { expr_free(d); }
             ok = false; break;
         }
         expr_free(beta);
@@ -950,8 +950,8 @@ static Expr* rational_halfline_general(const Expr* g, const Expr* s,
         if (nHi) expr_free(nHi);
         bool quad = a2 && !is_zero_q(a2);
         if (!numlin || !a1 || !a0) {
-            if (a2) expr_free(a2); if (a1) expr_free(a1); if (a0) expr_free(a0);
-            if (B) expr_free(B); if (C) expr_free(C); ok = false; break;
+            if (a2) { expr_free(a2); } if (a1) { expr_free(a1); } if (a0) { expr_free(a0); }
+            if (B) { expr_free(B); } if (C) { expr_free(C); } ok = false; break;
         }
 
         if (quad) {
@@ -961,7 +961,7 @@ static Expr* rational_halfline_general(const Expr* g, const Expr* s,
             Expr* g2    = ev1("Simplify", t_add(t_mul(a0, t_pow(expr_copy(a2), -1)),
                                                 t_neg(t_pow(expr_copy(beta0), 2))));
             if (!beta0 || !g2 || !real_positive(g2, pb, np)) {
-                if (beta0) expr_free(beta0); if (g2) expr_free(g2);
+                if (beta0) { expr_free(beta0); } if (g2) { expr_free(g2); }
                 expr_free(a2); expr_free(B); expr_free(C); ok = false; break;
             }
             Expr* gam = ev1("Simplify", mk_fn2("Power", expr_copy(g2), t_rat(1, 2)));
@@ -995,7 +995,7 @@ static Expr* rational_halfline_general(const Expr* g, const Expr* s,
             Expr* r = ev1("Simplify", t_mul(expr_copy(a0), t_pow(expr_copy(a1), -1)));
             if (!is_zero_q(B) || !r || !real_positive(r, pb, np)) {
                 expr_free(a1); expr_free(a0); expr_free(B); expr_free(C);
-                if (r) expr_free(r); ok = false; break;
+                if (r) { expr_free(r); } ok = false; break;
             }
             if (m == 1) {
                 Expr* co = ev1("Simplify", t_mul(expr_copy(C), t_pow(expr_copy(a1), -1))); /* A/a1 */
@@ -1065,7 +1065,7 @@ static Expr* gaussian_halfline(const Expr* g, const Expr* x,
             rest = t_mul(rest, expr_copy(F));
         }
         if (!exparg || multi_exp || multi_trig || sawsin) {
-            if (exparg) expr_free(exparg); if (qcos) expr_free(qcos); expr_free(rest);
+            if (exparg) { expr_free(exparg); } if (qcos) { expr_free(qcos); } expr_free(rest);
             ok = false; break;
         }
         /* exponent = -p x^2 + off, no linear term. */
@@ -1082,8 +1082,8 @@ static Expr* gaussian_halfline(const Expr* g, const Expr* x,
         Expr* c = (n >= 0) ? subst(restc, x, one) : NULL;
         expr_free(one); expr_free(restc);
         if (!pform || n < 0 || !c || contains_symbol(c, x)) {
-            if (c) expr_free(c); if (p) expr_free(p); if (off) expr_free(off);
-            if (qcos) expr_free(qcos); ok = false; break;
+            if (c) { expr_free(c); } if (p) { expr_free(p); } if (off) { expr_free(off); }
+            if (qcos) { expr_free(qcos); } ok = false; break;
         }
         Expr* ce = t_mul(c, mk_fn1("Exp", off));   /* c e^{off} */
         Expr* ti = NULL;
@@ -1159,7 +1159,7 @@ static Expr* integrate_gaussian_param(const Expr* J, const Expr* p) {
          * not elementary in general). */
         Expr* c = ev1("Simplify", rest);
         if (!kok || !c || contains_symbol(c, p)) {
-            if (c) expr_free(c); if (k) expr_free(k); if (off) expr_free(off);
+            if (c) { expr_free(c); } if (k) { expr_free(k); } if (off) { expr_free(off); }
             ok = false; break;
         }
         Expr* ce = t_mul(c, mk_fn1("Exp", off));
@@ -1296,7 +1296,7 @@ static Expr* stage_quadrature(const Expr* f, const Expr* x, const Expr* a,
 #ifdef DIUI_DEBUG
             fprintf(stderr, "DIUI:   g is zero / null -> skip\n");
 #endif
-            if (g) expr_free(g); expr_free(p); continue; }
+            if (g) { expr_free(g); } expr_free(p); continue; }
 
         /* J(p) = Integrate[g, {x,a,b}].  Must close to a finite closed form.
          * Simplify collapses the FTC boundary artifacts (e.g. the lower-limit
@@ -1309,7 +1309,7 @@ static Expr* stage_quadrature(const Expr* f, const Expr* x, const Expr* a,
 #ifdef DIUI_DEBUG
             fprintf(stderr, "DIUI:   [%.0fms] J did not close / non-finite -> skip\n", diui_ms());
 #endif
-            if (J) expr_free(J); expr_free(p); continue;
+            if (J) { expr_free(J); } expr_free(p); continue;
         }
 
         /* G(p) = Integrate[J, p]  (antiderivative over the parameter). */
@@ -1318,7 +1318,7 @@ static Expr* stage_quadrature(const Expr* f, const Expr* x, const Expr* a,
 #ifdef DIUI_DEBUG
             fprintf(stderr, "DIUI:   [%.0fms] G did not close -> skip\n", diui_ms());
 #endif
-            if (G) expr_free(G); expr_free(J); expr_free(p); continue;
+            if (G) { expr_free(G); } expr_free(J); expr_free(p); continue;
         }
 
         /* Base point with an exact known value I(p0). */

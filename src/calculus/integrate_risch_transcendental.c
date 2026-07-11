@@ -1395,7 +1395,7 @@ static Expr* rt_frac_lrt(Expr* f, Expr* x, Expr* u, bool is_log) {
     (void)u;   /* exp branch derives its own primitive via rt_exp_kernelize */
     if (!Dt || !F) {
         expr_free(tsym); if (Dt) expr_free(Dt);
-        if (kernel_back) expr_free(kernel_back); if (F) expr_free(F);
+        if (kernel_back) { expr_free(kernel_back); } if (F) { expr_free(F); }
         return NULL;
     }
 
@@ -1510,8 +1510,8 @@ static Expr* rt_hermite_try(Expr* f, Expr* x, bool is_log) {
     }
     if (!F || !Dt || !uu) {
         expr_free(tsym);
-        if (F) expr_free(F); if (Dt) expr_free(Dt);
-        if (kback) expr_free(kback); if (uu) expr_free(uu);
+        if (F) { expr_free(F); } if (Dt) { expr_free(Dt); }
+        if (kback) { expr_free(kback); } if (uu) { expr_free(uu); }
         return NULL;
     }
 
@@ -1574,7 +1574,7 @@ static Expr* rt_hermite_try(Expr* f, Expr* x, bool is_log) {
             size_t nt = 0;
             for (long p = 0; p < dH; p++)
                 for (long k = 0; k <= Nx; k++) {
-                    char nm[32]; snprintf(nm, sizeof(nm), "rmHh%ldv%ld", p, k);
+                    char nm[64]; snprintf(nm, sizeof(nm), "rmHh%ldv%ld", p, k);
                     hterms[nt++] = expr_new_function(expr_new_symbol("Times"),
                         (Expr*[]){ expr_new_symbol(nm),
                           expr_new_function(expr_new_symbol("Power"),
@@ -1633,7 +1633,7 @@ static Expr* rt_hermite_try(Expr* f, Expr* x, bool is_log) {
                     size_t zi = 0;
                     for (long p = 0; p < dH; p++)
                         for (long k = 0; k <= Nx; k++) {
-                            char nm[32]; snprintf(nm, sizeof(nm), "rmHh%ldv%ld", p, k);
+                            char nm[64]; snprintf(nm, sizeof(nm), "rmHh%ldv%ld", p, k);
                             zero[zi++] = expr_new_function(expr_new_symbol("Rule"),
                                 (Expr*[]){ expr_new_symbol(nm), expr_new_integer(0) }, 2);
                         }
@@ -1824,7 +1824,7 @@ static Expr* rt_hyperexp_case(Expr* f, Expr* x) {
                 size_t nh = 0;
                 for (long p = 0; p < dH; p++)
                     for (long k = 0; k <= Nx; k++) {
-                        char nm[32]; snprintf(nm, sizeof(nm), "rmHh%ldv%ld", p, k);
+                        char nm[64]; snprintf(nm, sizeof(nm), "rmHh%ldv%ld", p, k);
                         hterms[nh++] = expr_new_function(expr_new_symbol("Times"),
                             (Expr*[]){ expr_new_symbol(nm),
                               expr_new_function(expr_new_symbol("Power"),
@@ -1890,7 +1890,7 @@ static Expr* rt_hyperexp_case(Expr* f, Expr* x) {
                         }
                     for (long p = 0; p < dH; p++)
                         for (long k = 0; k <= Nx; k++) {
-                            char nm[32]; snprintf(nm, sizeof(nm), "rmHh%ldv%ld", p, k);
+                            char nm[64]; snprintf(nm, sizeof(nm), "rmHh%ldv%ld", p, k);
                             zero[zi++] = expr_new_function(expr_new_symbol("Rule"),
                                 (Expr*[]){ expr_new_symbol(nm), expr_new_integer(0) }, 2);
                         }
@@ -2180,7 +2180,7 @@ static Expr* rt_log_tower_case(Expr* f, Expr* x) {
     Expr** ts = malloc(nl * sizeof(Expr*));
     Expr** rules = malloc(nl * sizeof(Expr*));
     for (size_t i = 0; i < nl; i++) {
-        char nm[16]; snprintf(nm, sizeof(nm), "rmtw%zu", i);
+        char nm[32]; snprintf(nm, sizeof(nm), "rmtw%zu", i);
         ts[i] = expr_new_symbol(nm);
         rules[i] = expr_new_function(expr_new_symbol("Rule"),
             (Expr*[]){ expr_copy(logs[i]), expr_copy(ts[i]) }, 2);
@@ -2294,7 +2294,7 @@ static Expr* rt_log_tower_case(Expr* f, Expr* x) {
             long* ev = malloc(nlv * sizeof(long));
             for (long k = 0; k <= Ntop; k++)
                 for (long m = 0; m < nmono; m++) {
-                    char nm[32]; snprintf(nm, sizeof(nm), "rmLp%ld_%ld", k, m);
+                    char nm[64]; snprintf(nm, sizeof(nm), "rmLp%ld_%ld", k, m);
                     rt_decode_mono(m, bd, nlv, ev);
                     Expr* mono = rt_build_monomial(lv, ev, nlv);
                     qterms[ntq++] = expr_new_function(expr_new_symbol("Times"),
@@ -2358,7 +2358,7 @@ static Expr* rt_log_tower_case(Expr* f, Expr* x) {
                     size_t zi = 0;
                     for (long k = 0; k <= Ntop; k++)
                         for (long m = 0; m < nmono; m++) {
-                            char nm[32]; snprintf(nm, sizeof(nm), "rmLp%ld_%ld", k, m);
+                            char nm[64]; snprintf(nm, sizeof(nm), "rmLp%ld_%ld", k, m);
                             zero[zi++] = expr_new_function(expr_new_symbol("Rule"),
                                 (Expr*[]){ expr_new_symbol(nm), expr_new_integer(0) }, 2);
                         }
@@ -2509,7 +2509,7 @@ static Expr* rt_exp_tower_case(Expr* f, Expr* x) {
     Expr** ts = malloc(nl * sizeof(Expr*));
     Expr** rules = malloc(2 * nl * sizeof(Expr*));
     for (size_t i = 0; i < nl; i++) {
-        char nm[16]; snprintf(nm, sizeof(nm), "rmte%zu", i);
+        char nm[32]; snprintf(nm, sizeof(nm), "rmte%zu", i);
         ts[i] = expr_new_symbol(nm);
         rules[2 * i] = expr_new_function(expr_new_symbol("Rule"),
             (Expr*[]){ expr_new_function(expr_new_symbol("Exp"),
@@ -3127,7 +3127,7 @@ static Expr* rt_field_ratint(Expr* num, Expr* den, RtTower* T, long L, Expr* x) 
         /* Hermite numerator H(t)/Hden: sum_{p<dH} (sum_mono a x^..) t^p. */
         for (long p = 0; p < dH; p++)
             for (long m = 0; m < nmono; m++) {
-                char nm[40]; snprintf(nm, sizeof(nm), "rmGh%ld_%ld", p, m);
+                char nm[64]; snprintf(nm, sizeof(nm), "rmGh%ld_%ld", p, m);
                 rt_decode_mono(m, bd, nlv, ev);
                 Expr* mono = rt_build_monomial(lv, ev, nlv);
                 syms[nsym++] = expr_new_symbol(nm);
@@ -3333,7 +3333,7 @@ static Expr* rt_field_hyperexp_coupled(Expr* num, Expr* den, RtTower* T, long L,
             size_t nh = 0;
             for (long p = 0; p < dH; p++)
                 for (long m = 0; m < nmono; m++) {
-                    char nm[40]; snprintf(nm, sizeof(nm), "rmXh%ld_%ld", p, m);
+                    char nm[64]; snprintf(nm, sizeof(nm), "rmXh%ld_%ld", p, m);
                     rt_decode_mono(m, bd, nlv, ev);
                     Expr* mono = rt_build_monomial(lv, ev, nlv);
                     syms[nsym++] = expr_new_symbol(nm);

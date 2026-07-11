@@ -55,6 +55,11 @@ void ndt_get(const void* buf, size_t k, NDType dt, double* re, double* im) {
         case NDT_COMPLEX32:
             *re = (double)((const float*)buf)[2 * k];
             *im = (double)((const float*)buf)[2 * k + 1]; break;
+        default:
+            /* Unreachable for a valid dtype, but makes the switch total so the
+             * compiler can prove re and im are always written — otherwise every
+             * caller reading re and im warns under -O3 -Wmaybe-uninitialized. */
+            *re = 0.0; *im = 0.0; break;
     }
 }
 

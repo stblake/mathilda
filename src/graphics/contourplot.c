@@ -605,7 +605,7 @@ Expr* builtin_contourplot(Expr* res) {
                 Expr* ca[3] = { expr_new_real(clr[0]), expr_new_real(clr[1]),
                                  expr_new_real(clr[2]) };
                 Expr* color = expr_new_function(expr_new_symbol(SYM_RGBColor), ca, 3);
-                char lbuf[16];
+                char lbuf[32];
                 snprintf(lbuf, sizeof(lbuf), "%zu", eq_i + 1);
                 Expr* en[2] = { color, expr_new_string(lbuf) };
                 entries[eq_i] = expr_new_function(expr_new_symbol(SYM_List), en, 2);

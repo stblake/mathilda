@@ -15,7 +15,7 @@ else
   BUILD_PLATFORM := Windows
 endif
 
-CC = gcc
+CC = gcc-16
 CFLAGS = -O3 -std=c99 -Wall -Wextra -g -I./src -I./src/list -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/graph -I./src/strings -I./src/strings/regex -I/usr/local/include
 
 # Readline is available on macOS and Linux but not on Windows (MinGW).
@@ -122,7 +122,13 @@ endif
 # `git clone && make` always succeeds, no matter the host environment.
 ifeq ($(USE_LAPACK), 1)
   ifeq ($(BUILD_PLATFORM),Darwin)
-    CFLAGS  += -DUSE_LAPACK -DMATHILDA_USE_ACCELERATE
+    # Apple's vecLib/vBasicOps.h headers (pulled in by Accelerate.h) pass typed
+    # SSE vectors (vUInt16, vUInt32, ...) into the compiler's _mm_* intrinsics,
+    # which under GCC are declared with strict __m128i parameters. Clang permits
+    # the implicit vector conversion; GCC needs -flax-vector-conversions or the
+    # Accelerate include fails to compile. Harmless to our own code (it uses no
+    # vector types) and scoped to the Darwin/Accelerate path only.
+    CFLAGS  += -DUSE_LAPACK -DMATHILDA_USE_ACCELERATE -flax-vector-conversions
     LDFLAGS += -framework Accelerate
   else ifneq ($(shell pkg-config --exists lapacke 2>/dev/null && echo y),)
     CFLAGS  += -DUSE_LAPACK $(shell pkg-config --cflags lapacke)

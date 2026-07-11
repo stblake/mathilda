@@ -539,7 +539,7 @@ static bool match_kernel(Expr* e, Expr* x, KernelKind* kind, double* a) {
     /* u must be linear in x with zero constant term. */
     Expr* cl = eval_take(mk_fn2("CoefficientList", expr_copy(u), expr_copy(x)));
     if (!cl || !head_name_is(cl, "List") || cl->data.function.arg_count != 2) {
-        if (cl) expr_free(cl); return false;
+        if (cl) { expr_free(cl); } return false;
     }
     Expr* c0 = cl->data.function.args[0];   /* constant term (must be 0)   */
     Expr* c1 = expr_copy(cl->data.function.args[1]);   /* slope             */
@@ -1060,7 +1060,7 @@ static bool mellin_split(Expr* F, Expr* v, Expr** p_out, Expr** R_out) {
     /* R must be rational in v. */
     Expr* P; Expr* Q;
     if (!res_num_den(R, &P, &Q) || !res_polyq(P, v) || !res_polyq(Q, v)) {
-        if (P) expr_free(P); if (Q) expr_free(Q);
+        if (P) { expr_free(P); } if (Q) { expr_free(Q); }
         expr_free(p); expr_free(R); return false;
     }
     expr_free(P); expr_free(Q);

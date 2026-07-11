@@ -189,9 +189,12 @@ static ParamPt3D* param3d_sample(Param3DEvalCtx* ctx,
         gt[i] = t;
         gok[i] = param3d_eval(t, ctx, &gx[i], &gy[i], &gz[i]);
         if (gok[i]) {
-            if (gx[i] < xlo) xlo = gx[i]; if (gx[i] > xhi) xhi = gx[i];
-            if (gy[i] < ylo) ylo = gy[i]; if (gy[i] > yhi) yhi = gy[i];
-            if (gz[i] < zlo) zlo = gz[i]; if (gz[i] > zhi) zhi = gz[i];
+            if (gx[i] < xlo) xlo = gx[i];
+            if (gx[i] > xhi) xhi = gx[i];
+            if (gy[i] < ylo) ylo = gy[i];
+            if (gy[i] > yhi) yhi = gy[i];
+            if (gz[i] < zlo) zlo = gz[i];
+            if (gz[i] > zhi) zhi = gz[i];
         }
     }
     double xspan = (xhi > xlo) ? (xhi - xlo) : 1.0;
@@ -381,9 +384,12 @@ static Expr** build_param3d_curve(Expr* body, Expr* var1,
     double ylo = pts[0].y, yhi = pts[0].y;
     double zlo = pts[0].z, zhi = pts[0].z;
     for (size_t j = 1; j < npts; j++) {
-        if (pts[j].x < xlo) xlo = pts[j].x; if (pts[j].x > xhi) xhi = pts[j].x;
-        if (pts[j].y < ylo) ylo = pts[j].y; if (pts[j].y > yhi) yhi = pts[j].y;
-        if (pts[j].z < zlo) zlo = pts[j].z; if (pts[j].z > zhi) zhi = pts[j].z;
+        if (pts[j].x < xlo) xlo = pts[j].x;
+        if (pts[j].x > xhi) xhi = pts[j].x;
+        if (pts[j].y < ylo) ylo = pts[j].y;
+        if (pts[j].y > yhi) yhi = pts[j].y;
+        if (pts[j].z < zlo) zlo = pts[j].z;
+        if (pts[j].z > zhi) zhi = pts[j].z;
     }
 
     /* Generous capacity: one color + one Line per segment at most, plus mesh. */
@@ -485,9 +491,12 @@ static Expr** build_param3d_surface(Expr* body, Expr* var1, Expr* var2,
             GridPt3DParam* p = &grid[i * n + j];
             p->valid = eval_body_xyz(&ctx, &p->x, &p->y, &p->z);
             if (p->valid) {
-                if (p->x < xlo) xlo = p->x; if (p->x > xhi) xhi = p->x;
-                if (p->y < ylo) ylo = p->y; if (p->y > yhi) yhi = p->y;
-                if (p->z < zlo) zlo = p->z; if (p->z > zhi) zhi = p->z;
+                if (p->x < xlo) xlo = p->x;
+                if (p->x > xhi) xhi = p->x;
+                if (p->y < ylo) ylo = p->y;
+                if (p->y > yhi) yhi = p->y;
+                if (p->z < zlo) zlo = p->z;
+                if (p->z > zhi) zhi = p->z;
             }
         }
     }
