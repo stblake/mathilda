@@ -180,6 +180,49 @@ static bool is_repeated(Expr* e, Expr** rep_pat, int* min_len, int* max_len) {
     return true;
 }
 
+/* True when pattern element `p` matches a *variable* number of subject
+ * elements -- a BlankSequence (__) or BlankNullSequence (___), optionally
+ * wrapped in Pattern[name, ...]. These are the elements whose Orderless
+ * subset enumeration is exponential, so for an Orderless head they must be
+ * matched only after the fixed-arity elements have pruned. */
+static bool pat_is_variable_seq(Expr* p) {
+    Expr* sym = NULL;
+    Expr* inner = NULL;
+    if (!is_pattern(p, &sym, &inner)) inner = p;
+    Expr* h = NULL;
+    int ml = 0;
+    return is_sequence_blank(inner, &h, &ml);
+}
+
+/* True when pattern element `p` is (or wraps) an Optional -- x_. or
+ * Optional[...]. Optional carries a *positional* default resolved via
+ * get_default_value(pat_head, original_index, ...), so a pattern list that
+ * contains one must NOT be reordered: the index would shift. */
+static bool pat_has_optional(Expr* p) {
+    Expr* cur = p;
+    while (cur && cur->type == EXPR_FUNCTION
+           && cur->data.function.head
+           && cur->data.function.head->type == EXPR_SYMBOL
+           && cur->data.function.arg_count >= 1) {
+        const char* h = cur->data.function.head->data.symbol;
+        if (h == SYM_Optional) return true;
+        if (h == SYM_Pattern && cur->data.function.arg_count == 2) {
+            cur = cur->data.function.args[1];
+        } else if (h == SYM_Shortest || h == SYM_Longest) {
+            cur = cur->data.function.args[0];
+        } else {
+            break;
+        }
+    }
+    return false;
+}
+
+/* Cap on the top-level pattern-element count for which the Orderless
+ * constraint-reordering buffer is stack-allocated. Real patterns have a
+ * handful of top-level elements; above this we skip the (purely
+ * performance) reordering and match in source order. */
+#define MATCH_REORDER_CAP 64
+
 typedef struct ParentMatch {
     Expr** exprs;
     size_t n_exprs;
@@ -641,8 +684,42 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
         return call_parent(env, parent);
     }
 
+    /* Constraint ordering for Orderless AC-matching.  In an Orderless head a
+     * leading variable-length sequence blank (__/___) forces the matcher to
+     * enumerate every subset of the subject for that blank *before* a later,
+     * highly-selective fixed element gets a chance to fail-fast -- making the
+     * match exponential on large sums/products.  (Concretely, the trig
+     * Pythagorean simplification rules `Cosh[x_]^2 - Sinh[x_]^2 + r___`
+     * applied to a ~20-term expansion cost ~2 s per rule, and the enclosing
+     * Simplify hung.)  Pattern-element order is semantically irrelevant for an
+     * Orderless head, so stably move the variable-length sequence blanks to
+     * the end; the fixed elements then prune first (O(n) instead of O(2^n)).
+     * Skipped when any element carries an Optional positional default, whose
+     * index would shift under reordering. */
+    Expr* reorder_storage[MATCH_REORDER_CAP];
+    if (n_pats >= 2 && n_pats <= MATCH_REORDER_CAP
+        && pat_head && pat_head->type == EXPR_SYMBOL) {
+        SymbolDef* hd = symtab_get_def(pat_head->data.symbol);
+        if (hd && (hd->attributes & ATTR_ORDERLESS)) {
+            bool any_opt = false, need = false, seen_seq = false;
+            for (size_t i = 0; i < n_pats; i++) {
+                if (pat_has_optional(pats[i])) { any_opt = true; break; }
+                if (pat_is_variable_seq(pats[i])) seen_seq = true;
+                else if (seen_seq) need = true;  /* fixed element after a blank */
+            }
+            if (!any_opt && need) {
+                size_t w = 0;
+                for (size_t i = 0; i < n_pats; i++)
+                    if (!pat_is_variable_seq(pats[i])) reorder_storage[w++] = pats[i];
+                for (size_t i = 0; i < n_pats; i++)
+                    if (pat_is_variable_seq(pats[i])) reorder_storage[w++] = pats[i];
+                pats = reorder_storage;
+            }
+        }
+    }
+
     Expr* p = pats[0];
-    
+
     bool is_optional = false;
     bool is_shortest = false;
     bool is_longest = false;
@@ -825,6 +902,17 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
                     max_k = (n_exprs > 0) ? 1 : 0;
                 }
             }
+        } else if (inner_p && inner_p->type != EXPR_FUNCTION) {
+            /* A literal atom (integer/real/symbol/string/bigint) as a
+             * pattern element can only match a single subject element that
+             * is structurally equal to it: a constructed pat_head[subset]
+             * with k > 1 is a Function and can never equal an atom, so the
+             * Flat subset enumeration (max_k = n_exprs) is pure wasted work,
+             * exponential in the argument count. Cap it at 1. This is the
+             * atomic analogue of the Function-pattern pruning above; e.g.
+             * the Pythagorean rule `1 - Cos[x_]^2 + r___`, whose literal `1`
+             * element otherwise drove a 2^n subset scan over a large sum. */
+            max_k = (n_exprs > 0) ? 1 : 0;
         }
     } else {
         min_k = 1;

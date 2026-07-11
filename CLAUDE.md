@@ -53,7 +53,7 @@
 
 ## Project Specifics
 
-The goal of this project is to use Gemini cli to create a small (pico) computer algebra system (CAS), called Mathilda. The CAS should be a faithful recreation of the core architecture (parser, pattern matcher, symbol table, evaluator) of Mathematica (or the Wolfram Language) and a recreation of the core simple mathematical functions of Mathematica (Plus, Times, Power, Divide, etc.)
+The goal of this project is to use Claude to create a highly capable and efficeient computer algebra system (CAS), called Mathilda. The CAS should be a faithful recreation of the core architecture (parser, pattern matcher, symbol table, evaluator) of Mathematica (or the Wolfram Language) and a recreation of the core simple mathematical functions of Mathematica (Plus, Times, Power, Divide, etc.)
 
 -- When working on a task, do not pause to ask for feedback. Proceed through the plan continuously. If tests pass, move to the next phase immediately.
 
