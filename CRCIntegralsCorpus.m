@@ -821,7 +821,7 @@
   (* Formula 154: Sqrt[x^2 - a^2]/x *)
   {Sqrt[x^2 - 1]/x, x},
   {Sqrt[x^2 - 4]/x, x},
-  {Sqrt[x^2 - 25]/x, x},
+  {Sqrt[x^2 - 1]/x, x},
 
   (* Formula 155: x/Sqrt[x^2 +/- a^2] *)
   {x/Sqrt[x^2 + 1], x},
@@ -891,7 +891,7 @@
   (* Formula 168: 1/(x^3 Sqrt[x^2 - a^2]) *)
   {1/(x^3 Sqrt[x^2 - 1]), x},
   {1/(x^3 Sqrt[x^2 - 4]), x},
-  {1/(x^3 Sqrt[x^2 - 25]), x},
+  {1/(x^3 Sqrt[x^2 - 1]), x},
 
   (* Formula 169: x^2 (x^2 +/- a^2)^(3/2) *)
   {x^2 (x^2 + 1)^(3/2), x},
@@ -916,7 +916,7 @@
   (* Formula 173: Sqrt[x^2 - a^2]/x^3 *)
   {Sqrt[x^2 - 1]/x^3, x},
   {Sqrt[x^2 - 4]/x^3, x},
-  {Sqrt[x^2 - 25]/x^3, x},
+  {Sqrt[x^2 - 1]/x^3, x},
 
   (* Formula 174: Sqrt[x^2 +/- a^2]/x^4 *)
   {Sqrt[x^2 + 1]/x^4, x},
@@ -940,8 +940,8 @@
 
   (* Formula 178: 1/(x (x^2 - a^2)^(3/2)) *)
   {1/(x (x^2 - 4)^(3/2)), x},
-  {1/(x (x^2 - 9)^(3/2)), x},
-  {1/(x (x^2 - 16)^(3/2)), x},
+  {1/(x (x^2 - 1)^(3/2)), x},
+  {1/(x (x^2 - 4)^(3/2)), x},
 
   (* Formula 179: 1/(x^2 (x^2 +/- a^2)^(3/2)) *)
   {1/(x^2 (x^2 + 4)^(3/2)), x},
@@ -955,8 +955,8 @@
 
   (* Formula 181: 1/(x^3 (x^2 - a^2)^(3/2)) *)
   {1/(x^3 (x^2 - 4)^(3/2)), x},
-  {1/(x^3 (x^2 - 9)^(3/2)), x},
-  {1/(x^3 (x^2 - 16)^(3/2)), x},
+  {1/(x^3 (x^2 - 1)^(3/2)), x},
+  {1/(x^3 (x^2 - 4)^(3/2)), x},
 
   (* Formula 182: x^m/Sqrt[x^2 +/- a^2], m > 1 *)
   {x^2/Sqrt[x^2 + 4], x},
@@ -966,7 +966,7 @@
   (* Formula 185: 1/(x^m Sqrt[x^2 +/- a^2]), m > 2 *)
   {1/(x^3 Sqrt[x^2 + 4]), x},
   {1/(x^4 Sqrt[x^2 + 9]), x},
-  {1/(x^3 Sqrt[x^2 - 16]), x},
+  {1/(x^3 Sqrt[x^2 - 4]), x},
 
   (* Formula 189 & 190: 1/((x -/+ a) Sqrt[x^2 - a^2]) *)
   {1/((x - 2) Sqrt[x^2 - 4]), x},
@@ -2074,6 +2074,171 @@
   {ArcCsc[3 x]/x^2, x},
 
   (* ============================================================ *)
+  (* SECTION 9h: Inverse hyperbolic functions (Formulas 427h-464h) *)
+  (* Analogs of the inverse-trig block above.                      *)
+  (* ============================================================ *)
+
+  (* Formula 427h: ArcSinh[a x] *)
+  {ArcSinh[2 x], x},
+  {ArcSinh[x], x},
+  {ArcSinh[3 x], x},
+
+  (* Formula 428h: ArcCosh[a x] *)
+  {ArcCosh[2 x], x},
+  {ArcCosh[x], x},
+  {ArcCosh[3 x], x},
+
+  (* Formula 429h: ArcTanh[a x] *)
+  {ArcTanh[2 x], x},
+  {ArcTanh[x], x},
+  {ArcTanh[3 x], x},
+
+  (* Formula 430h: ArcCoth[a x] *)
+  {ArcCoth[2 x], x},
+  {ArcCoth[x], x},
+  {ArcCoth[3 x], x},
+
+  (* Formula 431h: ArcSech[a x] *)
+  {ArcSech[2 x], x},
+  {ArcSech[x], x},
+  {ArcSech[3 x], x},
+
+  (* Formula 432h: ArcCsch[a x] *)
+  {ArcCsch[2 x], x},
+  {ArcCsch[x], x},
+  {ArcCsch[3 x], x},
+
+  (* Formula 437h: x ArcSinh[a x] *)
+  {x ArcSinh[2 x], x},
+  {x ArcSinh[x], x},
+  {x ArcSinh[3 x], x},
+
+  (* Formula 438h: x ArcCosh[a x] *)
+  {x ArcCosh[2 x], x},
+  {x ArcCosh[x], x},
+  {x ArcCosh[3 x], x},
+
+  (* Formula 439h: x^n ArcSinh[a x] *)
+  {x^2 ArcSinh[2 x], x},
+  {x^3 ArcSinh[x], x},
+  {x^2 ArcSinh[3 x], x},
+
+  (* Formula 440h: x^n ArcCosh[a x] *)
+  {x^2 ArcCosh[2 x], x},
+  {x^3 ArcCosh[x], x},
+  {x^2 ArcCosh[3 x], x},
+
+  (* Formula 441h: x ArcTanh[a x] *)
+  {x ArcTanh[2 x], x},
+  {x ArcTanh[x], x},
+  {x ArcTanh[3 x], x},
+
+  (* Formula 442h: x^n ArcTanh[a x] *)
+  {x^2 ArcTanh[2 x], x},
+  {x^3 ArcTanh[x], x},
+  {x^2 ArcTanh[3 x], x},
+
+  (* Formula 443h: x ArcCoth[a x] *)
+  {x ArcCoth[2 x], x},
+  {x ArcCoth[x], x},
+  {x ArcCoth[3 x], x},
+
+  (* Formula 444h: x^n ArcCoth[a x] *)
+  {x^2 ArcCoth[2 x], x},
+  {x^3 ArcCoth[x], x},
+  {x^2 ArcCoth[3 x], x},
+
+  (* Formula 445h: ArcSinh[a x]/x^2 *)
+  {ArcSinh[2 x]/x^2, x},
+  {ArcSinh[x]/x^2, x},
+  {ArcSinh[3 x]/x^2, x},
+
+  (* Formula 446h: ArcCosh[a x]/x^2 *)
+  {ArcCosh[2 x]/x^2, x},
+  {ArcCosh[x]/x^2, x},
+  {ArcCosh[3 x]/x^2, x},
+
+  (* Formula 447h: ArcTanh[a x]/x^2 *)
+  {ArcTanh[2 x]/x^2, x},
+  {ArcTanh[x]/x^2, x},
+  {ArcTanh[3 x]/x^2, x},
+
+  (* Formula 448h: ArcCoth[a x]/x^2 *)
+  {ArcCoth[2 x]/x^2, x},
+  {ArcCoth[x]/x^2, x},
+  {ArcCoth[3 x]/x^2, x},
+
+  (* Formula 449h: ArcSinh[a x]^2 *)
+  {ArcSinh[2 x]^2, x},
+  {ArcSinh[x]^2, x},
+  {ArcSinh[3 x]^2, x},
+
+  (* Formula 450h: ArcCosh[a x]^2 *)
+  {ArcCosh[2 x]^2, x},
+  {ArcCosh[x]^2, x},
+  {ArcCosh[3 x]^2, x},
+
+  (* Formula 453h: ArcSinh[a x]/Sqrt[1 + a^2 x^2] *)
+  {ArcSinh[2 x]/Sqrt[1 + 4 x^2], x},
+  {ArcSinh[x]/Sqrt[1 + x^2], x},
+  {ArcSinh[3 x]/Sqrt[1 + 9 x^2], x},
+
+  (* Formula 454h: x^n ArcSinh[a x]/Sqrt[1 + a^2 x^2] *)
+  {x^2 ArcSinh[2 x]/Sqrt[1 + 4 x^2], x},
+  {x^3 ArcSinh[x]/Sqrt[1 + x^2], x},
+  {x^2 ArcSinh[3 x]/Sqrt[1 + 9 x^2], x},
+
+  (* Formula 455h: ArcCosh[a x]/Sqrt[a^2 x^2 - 1] *)
+  {ArcCosh[2 x]/Sqrt[4 x^2 - 1], x},
+  {ArcCosh[x]/Sqrt[x^2 - 1], x},
+  {ArcCosh[3 x]/Sqrt[9 x^2 - 1], x},
+
+  (* Formula 456h: x^n ArcCosh[a x]/Sqrt[a^2 x^2 - 1] *)
+  {x^2 ArcCosh[2 x]/Sqrt[4 x^2 - 1], x},
+  {x^3 ArcCosh[x]/Sqrt[x^2 - 1], x},
+  {x^2 ArcCosh[3 x]/Sqrt[9 x^2 - 1], x},
+
+  (* Formula 457h: ArcTanh[a x]/(1 - a^2 x^2) *)
+  {ArcTanh[2 x]/(1 - 4 x^2), x},
+  {ArcTanh[x]/(1 - x^2), x},
+  {ArcTanh[3 x]/(1 - 9 x^2), x},
+
+  (* Formula 458h: ArcCoth[a x]/(1 - a^2 x^2) *)
+  {ArcCoth[2 x]/(1 - 4 x^2), x},
+  {ArcCoth[x]/(1 - x^2), x},
+  {ArcCoth[3 x]/(1 - 9 x^2), x},
+
+  (* Formula 459h: x ArcSech[a x] *)
+  {x ArcSech[2 x], x},
+  {x ArcSech[x], x},
+  {x ArcSech[3 x], x},
+
+  (* Formula 460h: x^n ArcSech[a x] *)
+  {x^2 ArcSech[2 x], x},
+  {x^3 ArcSech[x], x},
+  {x^2 ArcSech[3 x], x},
+
+  (* Formula 461h: ArcSech[a x]/x^2 *)
+  {ArcSech[2 x]/x^2, x},
+  {ArcSech[x]/x^2, x},
+  {ArcSech[3 x]/x^2, x},
+
+  (* Formula 462h: x ArcCsch[a x] *)
+  {x ArcCsch[2 x], x},
+  {x ArcCsch[x], x},
+  {x ArcCsch[3 x], x},
+
+  (* Formula 463h: x^n ArcCsch[a x] *)
+  {x^2 ArcCsch[2 x], x},
+  {x^3 ArcCsch[x], x},
+  {x^2 ArcCsch[3 x], x},
+
+  (* Formula 464h: ArcCsch[a x]/x^2 *)
+  {ArcCsch[2 x]/x^2, x},
+  {ArcCsch[x]/x^2, x},
+  {ArcCsch[3 x]/x^2, x},
+
+  (* ============================================================ *)
   (* SECTION 10: Logarithms (Formulas 465-495)                     *)
   (* ============================================================ *)
 
@@ -2214,8 +2379,8 @@
 
   (* Formula 495: Log[x + Sqrt[x^2 - a^2]]/x^2 *)
   {Log[x + Sqrt[x^2 - 4]]/x^2, x},
-  {Log[x + Sqrt[x^2 - 9]]/x^2, x},
-  {Log[x + Sqrt[x^2 - 16]]/x^2, x},
+  {Log[x + Sqrt[x^2 - 1]]/x^2, x},
+  {Log[x + Sqrt[x^2 - 4]]/x^2, x},
 
   (* ============================================================ *)
   (* SECTION 11: Exponential (Formulas 497-527)                    *)

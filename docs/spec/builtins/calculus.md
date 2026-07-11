@@ -1283,10 +1283,15 @@ the C dispatcher caps CRC-rule recursion depth at 256 levels and
 emits `Integrate`CRCTable::depth` rather than locking up on any rule
 that escapes the audit.
 
-The table currently fires on only a small subset of inputs because
-Mathilda's pattern matcher does not yet fully support `/;`-guarded
-multi-argument rules; this is a separate issue tracked under the
-matcher work.
+The table covers the inverse-trig and inverse-hyperbolic families
+(Formulas 427–464 and their `427h`–`464h` analogs) among many others.
+Rules whose denominator carries a *squared* coefficient
+(`Sqrt[1 ∓ a^2 x^2]`, `(1 ± a^2 x^2)`) bind that coefficient linearly as
+`a_` via `c_ + a_. x_^2` and recover the linear coefficient as `Sqrt[±a]`
+on the RHS (with a `Condition` linking it to the numerator coefficient) —
+the matcher does not invert a square, so `a_^2` in a pattern will not
+bind. Some more elaborate multi-argument `/;`-guarded rules still do not
+fire; this is a separate issue tracked under the matcher work.
 
 ### Integrate`Undefined
 

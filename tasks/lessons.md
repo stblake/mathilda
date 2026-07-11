@@ -996,3 +996,53 @@ ceiling. Correctness is already guaranteed by SolveAlways-certification + diff-b
 the bound only affects completeness — which is exactly why it must be principled, not
 capped. When a whole family of ansatz sites shares the same hack pattern, say so and
 clean them all (or scope explicitly), don't leave siblings capped.
+
+## Pattern rules can't re-use a var nonlinearly (a_^2) — bind linearly, Sqrt on RHS (2026-07-11)
+Adding inverse-hyperbolic analogs to the CRC integral table, I first mirrored the
+existing trig rules verbatim, e.g. `IntegrateTable[ArcSinh[a_. x_]/Sqrt[1 + a_^2 x_^2]]`.
+These NEVER fired — and neither did the trig originals (453–458) they copied. I called it
+a "matcher bug"; the user corrected me twice: "That's not a matcher bug, you need to match
+to a_ and use Sqrt[a_] on the RHS of the rule," then "All rules in the table should be
+updated in this way to fix this issue." Root cause: a pattern that binds `a_` from the
+numerator (`ArcSinh[a_. x_]`, a_=2) and then writes `a_^2` in the denominator asks the
+matcher to confirm `2^2 == 4` — it does NOT evaluate/invert pattern-var powers, so the
+rule silently fails to match (except the trivial a=1 case via the optional default). The
+rules "passed" in normal `Integrate` only because the general cascade (DerivativeDivides /
+Risch) solved them by another route; through `Method -> "CRCTable"` they were dead.
+Fix (apply to EVERY rule with this shape): bind the *quadratic* coefficient linearly as
+`a_` using `c_ + a_. x_^2` (the `c_ +` form is required — `1 - a_ x_^2` won't bind the
+coefficient because of sign fusion; `c_ + a_. x_^2` binds c=1, a=-4 cleanly), pin the
+constant with a `Condition` (`c === 1`), link the numerator coefficient `b_` with
+`a === ±b^2`, and recover the linear coefficient as `Sqrt[±a]` on the RHS. For x^n
+recurrences use the optional exponent `x_^n_.` so bare `x` (n=1) matches and odd powers
+bottom out (the n=1 recurrence term vanishes since its coefficient is n-1=0, and
+`0*IntegrateTable[…] -> 0`). Rule: when a table rule "doesn't fire," first check whether the
+pattern re-uses a bound variable under a nonlinear op (`a_^2`, `Sqrt[a_]` against a literal)
+— the matcher can't invert those. Bind linearly + Condition + reconstruct on the RHS. And
+verify rules fire through their ACTUAL dispatch path (`Method -> "CRCTable"` /
+`IntegrateTable[...]` directly), not just via top-level `Integrate`, which can mask a dead
+rule by solving it another way.
+
+## Squared/cubed pattern constants never match numeric args — sweep the whole table (2026-07-11)
+After fixing the inverse-trig/hyperbolic `a_^2 x^2` rules, the user pointed at Formula 488
+(`Log[x_^2 + a_^2]`) and said "there are still many cases that will fail for the same reason
+... We need to fix every rule in the table that has this issue!" Root cause (general): ANY
+IntegrateTable pattern that reuses a constant under a power — `a_^2`, `b_^2`, `c_^3`, `c_^4`
+— cannot bind against a numeric argument (the matcher does not invert the power), so the rule
+silently never fires for concrete input; it only ever matched symbolic squares. ~169 rule
+heads were affected across every family. Fix recipe: bind the constant linearly (`a_^2 -> a_`),
+recover the linear part via `Sqrt[a]` on the RHS (even powers halve: a^2->a, a^4->a^2, a^6->a^3;
+Abs[a]->Sqrt[a]). Signs: `x_^2 - a_` will NOT bind a_ to a negative literal (verified in Sqrt,
+1/(...), (...)^(3/2), Log, and trig contexts), so match BOTH signs with `x_^2 + a_` — even-RHS
+pairs merge into one unguarded rule (negative a reproduces the minus form); odd-RHS pairs split
+on `Not[TrueQ[a<0]]`/`TrueQ[a<0]` with Sqrt[-a]. `Not[TrueQ[a<0]]` fires for positive-numeric
+AND symbolic a but excludes negative, preventing the greedy plus rule from shadowing the minus
+sibling. Many squared-constant rules turned out REDUNDANT with linear `a_. + b_. x_^n_` forms
+that already fire (c^2 block 43-51, 62, 66, single-power c^3/c^4, 356) — delete those rather than
+convert. Two pre-existing CRC transcription bugs (Formulas 181, 216) surfaced only once the rules
+began firing — re-derive, don't faithfully copy the bug. Separate pre-existing issues NOT in
+scope: `1/(...)^n_` reductions (pattern exponent: `Power[Power[E,n],-1]` != `Power[E,-k]`; explicit
+`^2` works) and `1/(x^m Sqrt[...])` form-matching. Verify every rule fires through its real
+dispatch (`Method -> "CRCTable"`), not top-level `Integrate` which can mask a dead rule by solving
+it another way. General lesson: when a table rule "doesn't fire," first check for a bound variable
+reused under a nonlinear op.

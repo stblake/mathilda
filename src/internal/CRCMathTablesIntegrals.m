@@ -105,35 +105,14 @@ IntegrateTable[1/(x_^2 (a_ + b_. x_)^2), x_] /; FreeQ[{a, b}, x] := -(a + 2 b x)
 
 (* --- Section 5.4.3: Forms containing c^2 ± x^2 and x^2 - c^2 --- *)
 
-(* Formula 43 *)
-IntegrateTable[1/(c_^2 + x_^2), x_] /; FreeQ[c, x] := 1/c ArcTan[x/c];
-
-(* Formula 44 *)
-IntegrateTable[1/(c_^2 - x_^2), x_] /; FreeQ[c, x] := 1/(2 c) Log[(c + x)/(c - x)];
-
-(* Formula 45 *)
-IntegrateTable[1/(x_^2 - c_^2), x_] /; FreeQ[c, x] := 1/(2 c) Log[(x - c)/(x + c)];
-
-(* Formula 46: Split into + and - variations *)
-IntegrateTable[x_/(c_^2 + x_^2), x_] /; FreeQ[c, x] := 1/2 Log[c^2 + x^2];
-IntegrateTable[x_/(c_^2 - x_^2), x_] /; FreeQ[c, x] := -1/2 Log[c^2 - x^2];
-
-(* Formula 47: Adapted pattern to match m instead of n+1 for better matching *)
-IntegrateTable[x_/(c_^2 + x_^2)^m_, x_] /; FreeQ[{c, m}, x] && m =!= 1 := -1/(2 (m - 1) (c^2 + x^2)^(m - 1));
-IntegrateTable[x_/(c_^2 - x_^2)^m_, x_] /; FreeQ[{c, m}, x] && m =!= 1 := 1/(2 (m - 1) (c^2 - x^2)^(m - 1));
-
-(* Formula 48: Split into + and - variations *)
-IntegrateTable[1/(c_^2 + x_^2)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(2 c^2 (n - 1)) (x/(c^2 + x^2)^(n - 1) + (2 n - 3) IntegrateTable[1/(c^2 + x^2)^(n - 1), x]);
-IntegrateTable[1/(c_^2 - x_^2)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(2 c^2 (n - 1)) (x/(c^2 - x^2)^(n - 1) + (2 n - 3) IntegrateTable[1/(c^2 - x^2)^(n - 1), x]);
-
-(* Formula 49 *)
-IntegrateTable[1/(x_^2 - c_^2)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(2 c^2 (n - 1)) (-x/(x^2 - c^2)^(n - 1) - (2 n - 3) IntegrateTable[1/(x^2 - c^2)^(n - 1), x]);
-
-(* Formula 50 *)
-IntegrateTable[x_/(x_^2 - c_^2), x_] /; FreeQ[c, x] := 1/2 Log[x^2 - c^2];
-
-(* Formula 51: Adapted pattern to match m instead of n+1 *)
-IntegrateTable[x_/(x_^2 - c_^2)^m_, x_] /; FreeQ[{c, m}, x] && m =!= 1 := -1/(2 (m - 1) (x^2 - c^2)^(m - 1));
+(* Formulas 43-51 (c_^2 ± x_^2, x_^2 - c_^2 and their powers) are omitted:
+   with a squared pattern constant `c_^2` they never matched a numeric
+   argument, and every one of their integrands is already handled — for
+   symbolic and numeric constants alike — by the linear-coefficient forms
+   `1/(a_. + b_. x_^2)` (Formulas 60/61), `x_/(a_. + b_. x_^2)` (63),
+   `1/(a_ + b_. x_^2)^m_` (67) and `x_/(a_ + b_. x_^2)^m_` (68) below, which
+   bind the constant term as a_ and so fire for e.g. 1/(9 + x^2) or
+   1/(x^2 - 9)^2 directly. *)
 
 (* --- Section 5.4.4: Forms containing a + bx and c + dx --- *)
 
@@ -168,8 +147,9 @@ IntegrateTable[(a_. + b_. x_^2)^-1, x_] /; FreeQ[{a, b}, x] && a b > 0 := 1/Sqrt
 (* Formula 61 *)
 IntegrateTable[(a_. + b_. x_^2)^-1, x_] /; FreeQ[{a, b}, x] && a b < 0 := 1/(2 Sqrt[-a b]) Log[(a + x Sqrt[-a b])/(a - x Sqrt[-a b])];
 
-(* Formula 62 *)
-IntegrateTable[(a_^2 + b_^2 x_^2)^-1, x_] /; FreeQ[{a, b}, x] := 1/(a b) ArcTan[(b x)/a];
+(* Formula 62 ((a_^2 + b_^2 x_^2)^-1) omitted: squared pattern constants never
+   matched a numeric argument, and the integrand is already covered by
+   Formula 60, `(a_. + b_. x_^2)^-1` with a b > 0. *)
 
 (* Formula 63 *)
 IntegrateTable[x_ (a_. + b_. x_^2)^-1, x_] /; FreeQ[{a, b}, x] := 1/(2 b) Log[a + b x^2];
@@ -180,8 +160,9 @@ IntegrateTable[x_^2 (a_. + b_. x_^2)^-1, x_] /; FreeQ[{a, b}, x] := x/b - a/b In
 (* Formula 65 *)
 IntegrateTable[1/(a_ + b_. x_^2)^2, x_] /; FreeQ[{a, b}, x] := x/(2 a (a + b x^2)) + 1/(2 a) IntegrateTable[1/(a + b x^2), x];
 
-(* Formula 66 *)
-IntegrateTable[1/(a_^2 - b_^2 x_^2), x_] /; FreeQ[{a, b}, x] := 1/(2 a b) Log[(a + b x)/(a - b x)];
+(* Formula 66 (1/(a_^2 - b_^2 x_^2)) omitted: squared pattern constants never
+   matched a numeric argument, and the integrand is already covered by
+   Formula 61, `(a_. + b_. x_^2)^-1` with a b < 0. *)
 
 (* Formula 67: Mapped n+1 to m *)
 IntegrateTable[1/(a_ + b_. x_^2)^m_, x_] /; FreeQ[{a, b, m}, x] && m =!= 1 && IntegerQ[m] && m > 1 := x/(2 a (m - 1) (a + b x^2)^(m - 1)) + (2 m - 3)/(2 a (m - 1)) IntegrateTable[1/(a + b x^2)^(m - 1), x];
@@ -253,93 +234,58 @@ IntegrateTable[1/(x_^m_ (a_ + b_. x_^n_)^p_), x_] /; FreeQ[{a, b, n, m, p}, x] &
 (* Formula 87: Form 1 *)
 IntegrateTable[x_^m_ (a_ + b_. x_^n_)^p_, x_] /; FreeQ[{a, b, n, m, p}, x] && IntegerQ[m] && IntegerQ[n] && n > 0 && m >= n && n p + m + 1 =!= 0 := 1/(b (n p + m + 1)) (x^(m - n + 1) (a + b x^n)^(p + 1) - a (m - n + 1) IntegrateTable[x^(m - n) (a + b x^n)^p, x]);
 
-(* Formula 88 *)
-IntegrateTable[1/(c_^3 + x_^3), x_] /; FreeQ[c, x] := 1/(6 c^2) Log[(c + x)^3/(c^3 + x^3)] + 1/(c^2 Sqrt[3]) ArcTan[(2 x - c)/(c Sqrt[3])];
-
-IntegrateTable[1/(c_^3 - x_^3), x_] /; FreeQ[c, x] := -1/(6 c^2) Log[(c - x)^3/(c^3 - x^3)] + 1/(c^2 Sqrt[3]) ArcTan[(2 x + c)/(c Sqrt[3])];
+(* Formulas 88-106 (c^3 ± x^3, c^4 ± x^4 and their powers).  Squared/cubed
+   pattern constants c_^3, c_^4 never matched a numeric argument.  The
+   single-power members (88, 91, 94, 96, 101-106) are already handled by the
+   linear-coefficient forms above — Formula 74 `1/(a_ + b_. x_^3)`, 75, 76,
+   83 `1/(x_ (a_ + b_. x_^n_))`, and 77-82 for x^4 — which bind the constant as
+   a_ and so fire for e.g. 1/(8 + x^3), x/(16 + x^4).  The higher-power
+   reductions below are kept, with the cubed constant bound linearly as c_
+   (c^3 -> c, c^6 -> c^2); their recursion bottoms out in the linear forms. *)
 
 (* Formula 89 *)
-IntegrateTable[1/(c_^3 + x_^3)^2, x_] /; FreeQ[c, x] := x/(3 c^3 (c^3 + x^3)) + 2/(3 c^3) IntegrateTable[1/(c^3 + x^3), x];
+IntegrateTable[1/(c_ + x_^3)^2, x_] /; FreeQ[c, x] := x/(3 c (c + x^3)) + 2/(3 c) IntegrateTable[1/(c + x^3), x];
+IntegrateTable[1/(c_ - x_^3)^2, x_] /; FreeQ[c, x] := x/(3 c (c - x^3)) + 2/(3 c) IntegrateTable[1/(c - x^3), x];
 
-IntegrateTable[1/(c_^3 - x_^3)^2, x_] /; FreeQ[c, x] := x/(3 c^3 (c^3 - x^3)) + 2/(3 c^3) IntegrateTable[1/(c^3 - x^3), x];
-
-(* Formula 90: Mapped n+1 to n *)
-IntegrateTable[1/(c_^3 + x_^3)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(3 (n - 1) c^3) (x/(c^3 + x^3)^(n - 1) + (3 n - 4) IntegrateTable[1/(c^3 + x^3)^(n - 1), x]);
-
-IntegrateTable[1/(c_^3 - x_^3)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(3 (n - 1) c^3) (x/(c^3 - x^3)^(n - 1) + (3 n - 4) IntegrateTable[1/(c^3 - x^3)^(n - 1), x]);
-
-(* Formula 91 *)
-IntegrateTable[x_/(c_^3 + x_^3), x_] /; FreeQ[c, x] := 1/(6 c) Log[(c^3 + x^3)/(c + x)^3] + 1/(c Sqrt[3]) ArcTan[(2 x - c)/(c Sqrt[3])];
-
-IntegrateTable[x_/(c_^3 - x_^3), x_] /; FreeQ[c, x] := 1/(6 c) Log[(c^3 - x^3)/(c - x)^3] - 1/(c Sqrt[3]) ArcTan[(2 x + c)/(c Sqrt[3])];
+(* Formula 90 *)
+IntegrateTable[1/(c_ + x_^3)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(3 (n - 1) c) (x/(c + x^3)^(n - 1) + (3 n - 4) IntegrateTable[1/(c + x^3)^(n - 1), x]);
+IntegrateTable[1/(c_ - x_^3)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(3 (n - 1) c) (x/(c - x^3)^(n - 1) + (3 n - 4) IntegrateTable[1/(c - x^3)^(n - 1), x]);
 
 (* Formula 92 *)
-IntegrateTable[x_/(c_^3 + x_^3)^2, x_] /; FreeQ[c, x] := x^2/(3 c^3 (c^3 + x^3)) + 1/(3 c^3) IntegrateTable[x/(c^3 + x^3), x];
+IntegrateTable[x_/(c_ + x_^3)^2, x_] /; FreeQ[c, x] := x^2/(3 c (c + x^3)) + 1/(3 c) IntegrateTable[x/(c + x^3), x];
+IntegrateTable[x_/(c_ - x_^3)^2, x_] /; FreeQ[c, x] := x^2/(3 c (c - x^3)) + 1/(3 c) IntegrateTable[x/(c - x^3), x];
 
-IntegrateTable[x_/(c_^3 - x_^3)^2, x_] /; FreeQ[c, x] := x^2/(3 c^3 (c^3 - x^3)) + 1/(3 c^3) IntegrateTable[x/(c^3 - x^3), x];
+(* Formula 93 *)
+IntegrateTable[x_/(c_ + x_^3)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(3 (n - 1) c) (x^2/(c + x^3)^(n - 1) + (3 n - 5) IntegrateTable[x/(c + x^3)^(n - 1), x]);
+IntegrateTable[x_/(c_ - x_^3)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(3 (n - 1) c) (x^2/(c - x^3)^(n - 1) + (3 n - 5) IntegrateTable[x/(c - x^3)^(n - 1), x]);
 
-(* Formula 93: Mapped n+1 to n *)
-IntegrateTable[x_/(c_^3 + x_^3)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(3 (n - 1) c^3) (x^2/(c^3 + x^3)^(n - 1) + (3 n - 5) IntegrateTable[x/(c^3 + x^3)^(n - 1), x]);
-
-IntegrateTable[x_/(c_^3 - x_^3)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(3 (n - 1) c^3) (x^2/(c^3 - x^3)^(n - 1) + (3 n - 5) IntegrateTable[x/(c^3 - x^3)^(n - 1), x]);
-
-(* Formula 94 *)
-IntegrateTable[x_^2/(c_^3 + x_^3), x_] /; FreeQ[c, x] := 1/3 Log[c^3 + x^3];
-
-IntegrateTable[x_^2/(c_^3 - x_^3), x_] /; FreeQ[c, x] := -1/3 Log[c^3 - x^3];
-
-(* Formula 95: Mapped n+1 to n *)
-IntegrateTable[x_^2/(c_^3 + x_^3)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 := -1/(3 (n - 1) (c^3 + x^3)^(n - 1));
-
-IntegrateTable[x_^2/(c_^3 - x_^3)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 := 1/(3 (n - 1) (c^3 - x^3)^(n - 1));
-
-(* Formula 96 *)
-IntegrateTable[1/(x_ (c_^3 + x_^3)), x_] /; FreeQ[c, x] := 1/(3 c^3) Log[x^3/(c^3 + x^3)];
-
-IntegrateTable[1/(x_ (c_^3 - x_^3)), x_] /; FreeQ[c, x] := 1/(3 c^3) Log[x^3/(c^3 - x^3)];
+(* Formula 95.  (An explicit n = 2 form is given alongside the general n_ rule:
+   a pattern exponent `(c_ + x_^3)^n_` in a denominator does not match a
+   literal negative power, whereas the explicit `^2` canonicalises and does.) *)
+IntegrateTable[x_^2/(c_ + x_^3)^2, x_] /; FreeQ[c, x] := -1/(3 (c + x^3));
+IntegrateTable[x_^2/(c_ - x_^3)^2, x_] /; FreeQ[c, x] := 1/(3 (c - x^3));
+IntegrateTable[x_^2/(c_ + x_^3)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 := -1/(3 (n - 1) (c + x^3)^(n - 1));
+IntegrateTable[x_^2/(c_ - x_^3)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 := 1/(3 (n - 1) (c - x^3)^(n - 1));
 
 (* Formula 97 *)
-IntegrateTable[1/(x_ (c_^3 + x_^3)^2), x_] /; FreeQ[c, x] := 1/(3 c^3 (c^3 + x^3)) + 1/(3 c^6) Log[x^3/(c^3 + x^3)];
+IntegrateTable[1/(x_ (c_ + x_^3)^2), x_] /; FreeQ[c, x] := 1/(3 c (c + x^3)) + 1/(3 c^2) Log[x^3/(c + x^3)];
+IntegrateTable[1/(x_ (c_ - x_^3)^2), x_] /; FreeQ[c, x] := 1/(3 c (c - x^3)) + 1/(3 c^2) Log[x^3/(c - x^3)];
 
-IntegrateTable[1/(x_ (c_^3 - x_^3)^2), x_] /; FreeQ[c, x] := 1/(3 c^3 (c^3 - x^3)) + 1/(3 c^6) Log[x^3/(c^3 - x^3)];
-
-(* Formula 98: Mapped n+1 to n *)
-IntegrateTable[1/(x_ (c_^3 + x_^3)^n_), x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(3 (n - 1) c^3 (c^3 + x^3)^(n - 1)) + 1/c^3 IntegrateTable[1/(x (c^3 + x^3)^(n - 1)), x];
-
-IntegrateTable[1/(x_ (c_^3 - x_^3)^n_), x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(3 (n - 1) c^3 (c^3 - x^3)^(n - 1)) + 1/c^3 IntegrateTable[1/(x (c^3 - x^3)^(n - 1)), x];
+(* Formula 98 *)
+IntegrateTable[1/(x_ (c_ + x_^3)^n_), x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(3 (n - 1) c (c + x^3)^(n - 1)) + 1/c IntegrateTable[1/(x (c + x^3)^(n - 1)), x];
+IntegrateTable[1/(x_ (c_ - x_^3)^n_), x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(3 (n - 1) c (c - x^3)^(n - 1)) + 1/c IntegrateTable[1/(x (c - x^3)^(n - 1)), x];
 
 (* Formula 99 *)
-IntegrateTable[1/(x_^2 (c_^3 + x_^3)), x_] /; FreeQ[c, x] := -1/(c^3 x) - 1/c^3 IntegrateTable[x/(c^3 + x^3), x];
+IntegrateTable[1/(x_^2 (c_ + x_^3)), x_] /; FreeQ[c, x] := -1/(c x) - 1/c IntegrateTable[x/(c + x^3), x];
+IntegrateTable[1/(x_^2 (c_ - x_^3)), x_] /; FreeQ[c, x] := -1/(c x) + 1/c IntegrateTable[x/(c - x^3), x];
 
-IntegrateTable[1/(x_^2 (c_^3 - x_^3)), x_] /; FreeQ[c, x] := -1/(c^3 x) + 1/c^3 IntegrateTable[x/(c^3 - x^3), x];
+(* Formula 100 *)
+IntegrateTable[1/(x_^2 (c_ + x_^3)^n_), x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/c IntegrateTable[1/(x^2 (c + x^3)^(n - 1)), x] - 1/c IntegrateTable[x/(c + x^3)^n, x];
+IntegrateTable[1/(x_^2 (c_ - x_^3)^n_), x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/c IntegrateTable[1/(x^2 (c - x^3)^(n - 1)), x] + 1/c IntegrateTable[x/(c - x^3)^n, x];
 
-(* Formula 100: Mapped n+1 to n *)
-IntegrateTable[1/(x_^2 (c_^3 + x_^3)^n_), x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/c^3 IntegrateTable[1/(x^2 (c^3 + x^3)^(n - 1)), x] - 1/c^3 IntegrateTable[x/(c^3 + x^3)^n, x];
-
-IntegrateTable[1/(x_^2 (c_^3 - x_^3)^n_), x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/c^3 IntegrateTable[1/(x^2 (c^3 - x^3)^(n - 1)), x] + 1/c^3 IntegrateTable[x/(c^3 - x^3)^n, x];
-
-(* Formula 101 *)
-IntegrateTable[1/(c_^4 + x_^4), x_] /; FreeQ[c, x] := 1/(2 c^3 Sqrt[2]) (1/2 Log[(x^2 + c x Sqrt[2] + c^2)/(x^2 - c x Sqrt[2] + c^2)] + ArcTan[(c x Sqrt[2])/(c^2 - x^2)]);
-
-(* Formula 102 *)
-IntegrateTable[1/(c_^4 - x_^4), x_] /; FreeQ[c, x] := 1/(2 c^3) (1/2 Log[(c + x)/(c - x)] + ArcTan[x/c]);
-
-(* Formula 103 *)
-IntegrateTable[x_/(c_^4 + x_^4), x_] /; FreeQ[c, x] := 1/(2 c^2) ArcTan[x^2/c^2];
-
-(* Formula 104 *)
-IntegrateTable[x_/(c_^4 - x_^4), x_] /; FreeQ[c, x] := 1/(4 c^2) Log[(c^2 + x^2)/(c^2 - x^2)];
-
-(* Formula 105 *)
-IntegrateTable[x_^2/(c_^4 + x_^4), x_] /; FreeQ[c, x] := 1/(2 c Sqrt[2]) (1/2 Log[(x^2 - c x Sqrt[2] + c^2)/(x^2 + c x Sqrt[2] + c^2)] + ArcTan[(c x Sqrt[2])/(c^2 - x^2)]);
-
-(* Formula 106 *)
-IntegrateTable[x_^2/(c_^4 - x_^4), x_] /; FreeQ[c, x] := 1/(2 c) (1/2 Log[(c + x)/(c - x)] - ArcTan[x/c]);
-
-(* Formula 107 *)
-IntegrateTable[x_^3/(c_^4 + x_^4), x_] /; FreeQ[c, x] := 1/4 Log[c^4 + x^4];
-
-IntegrateTable[x_^3/(c_^4 - x_^4), x_] /; FreeQ[c, x] := -1/4 Log[c^4 - x^4];
+(* Formula 107 (x_^3/(c_^4 ± x_^4)) omitted: the squared pattern constant never
+   matched a numeric argument, and the integrand is already covered by
+   Formula 82, `x_^3/(a_ + b_. x_^4)`, which binds the constant as a_. *)
 
 (* Formula 108 *)
 IntegrateTable[1/(a_ + b_. x_ + c_. x_^2), x_] /; FreeQ[{a, b, c}, x] && 4 a c - b^2 > 0 := With[{q = 4 a c - b^2}, 2/Sqrt[q] ArcTan[(2 c x + b)/Sqrt[q]]];
@@ -502,248 +448,229 @@ IntegrateTable[1/((c_ + d_. x_)^m_ Sqrt[a_ + b_. x_]), x_] /; FreeQ[{a, b, c, d,
 IntegrateTable[(c_ + d_. x_)^m_/Sqrt[a_ + b_. x_], x_] /; FreeQ[{a, b, c, d, m}, x] && IntegerQ[m] && m > 0 := With[{u = a + b x, v = c + d x, k = a d - b c},
     2/(b (2 m + 1)) (v^m Sqrt[u] - m k IntegrateTable[v^(m - 1)/Sqrt[u], x])];
 
-(* Formula 149 *)
-IntegrateTable[Sqrt[x_^2 + a_^2], x_] /; FreeQ[a, x] := 1/2 (x Sqrt[x^2 + a^2] + a^2 Log[x + Sqrt[x^2 + a^2]]);
+(* Formulas 149-190.  The squared constant a_^2 (which the matcher cannot
+   bind against a numeric argument) is replaced by a single a_ bound to the
+   constant, with the linear part re-expressed via Sqrt[a].  Both signs are
+   matched by the `x_^2 + a_` form: when the RHS is even in the original
+   constant a single unguarded rule reproduces the `x^2 - a^2` case for
+   a < 0 automatically; when odd (Abs[a], ArcSec, 1/a) the plus and minus
+   cases are split by `Not[TrueQ[a < 0]]` / `TrueQ[a < 0]`. *)
 
-IntegrateTable[Sqrt[x_^2 - a_^2], x_] /; FreeQ[a, x] := 1/2 (x Sqrt[x^2 - a^2] - a^2 Log[x + Sqrt[x^2 - a^2]]);
+(* Formula 149 *)
+IntegrateTable[Sqrt[x_^2 + a_], x_] /; FreeQ[a, x] := 1/2 (x Sqrt[x^2 + a] + a Log[x + Sqrt[x^2 + a]]);
 
 (* Formula 150 *)
-IntegrateTable[1/Sqrt[x_^2 + a_^2], x_] /; FreeQ[a, x] := Log[x + Sqrt[x^2 + a^2]];
-
-IntegrateTable[1/Sqrt[x_^2 - a_^2], x_] /; FreeQ[a, x] := Log[x + Sqrt[x^2 - a^2]];
-
-(* Formula 151 *)
-IntegrateTable[1/(x_ Sqrt[x_^2 - a_^2]), x_] /; FreeQ[a, x] := 1/Abs[a] ArcSec[x/a];
+IntegrateTable[1/Sqrt[x_^2 + a_], x_] /; FreeQ[a, x] := Log[x + Sqrt[x^2 + a]];
 
 (* Formula 152 *)
-IntegrateTable[1/(x_ Sqrt[x_^2 + a_^2]), x_] /; FreeQ[a, x] := -1/a Log[(a + Sqrt[x^2 + a^2])/x];
+IntegrateTable[1/(x_ Sqrt[x_^2 + a_]), x_] /; FreeQ[a, x] && Not[TrueQ[a < 0]] := -1/Sqrt[a] Log[(Sqrt[a] + Sqrt[x^2 + a])/x];
+(* Formula 151 *)
+IntegrateTable[1/(x_ Sqrt[x_^2 + a_]), x_] /; FreeQ[a, x] && TrueQ[a < 0] := 1/Sqrt[-a] ArcSec[x/Sqrt[-a]];
 
 (* Formula 153 *)
-IntegrateTable[Sqrt[x_^2 + a_^2]/x_, x_] /; FreeQ[a, x] := Sqrt[x^2 + a^2] - a Log[(a + Sqrt[x^2 + a^2])/x];
-
+IntegrateTable[Sqrt[x_^2 + a_]/x_, x_] /; FreeQ[a, x] && Not[TrueQ[a < 0]] := Sqrt[x^2 + a] - Sqrt[a] Log[(Sqrt[a] + Sqrt[x^2 + a])/x];
 (* Formula 154 *)
-IntegrateTable[Sqrt[x_^2 - a_^2]/x_, x_] /; FreeQ[a, x] := Sqrt[x^2 - a^2] - Abs[a] ArcSec[x/a];
+IntegrateTable[Sqrt[x_^2 + a_]/x_, x_] /; FreeQ[a, x] && TrueQ[a < 0] := Sqrt[x^2 + a] - Sqrt[-a] ArcSec[x/Sqrt[-a]];
 
 (* Formula 155 *)
-IntegrateTable[x_/Sqrt[x_^2 + a_^2], x_] /; FreeQ[a, x] := Sqrt[x^2 + a^2];
-IntegrateTable[x_/Sqrt[x_^2 - a_^2], x_] /; FreeQ[a, x] := Sqrt[x^2 - a^2];
+IntegrateTable[x_/Sqrt[x_^2 + a_], x_] /; FreeQ[a, x] := Sqrt[x^2 + a];
 
 (* Formula 156 *)
-IntegrateTable[x_ Sqrt[x_^2 + a_^2], x_] /; FreeQ[a, x] := 1/3 (x^2 + a^2)^(3/2);
-IntegrateTable[x_ Sqrt[x_^2 - a_^2], x_] /; FreeQ[a, x] := 1/3 (x^2 - a^2)^(3/2);
+IntegrateTable[x_ Sqrt[x_^2 + a_], x_] /; FreeQ[a, x] := 1/3 (x^2 + a)^(3/2);
 
 (* Formula 157 *)
-IntegrateTable[(x_^2 + a_^2)^(3/2), x_] /; FreeQ[a, x] := 1/4 (x (x^2 + a^2)^(3/2) + (3 a^2 x)/2 Sqrt[x^2 + a^2] + (3 a^4)/2 Log[x + Sqrt[x^2 + a^2]]);
-
-IntegrateTable[(x_^2 - a_^2)^(3/2), x_] /; FreeQ[a, x] := 1/4 (x (x^2 - a^2)^(3/2) - (3 a^2 x)/2 Sqrt[x^2 - a^2] + (3 a^4)/2 Log[x + Sqrt[x^2 - a^2]]);
+IntegrateTable[(x_^2 + a_)^(3/2), x_] /; FreeQ[a, x] := 1/4 (x (x^2 + a)^(3/2) + (3 a x)/2 Sqrt[x^2 + a] + (3 a^2)/2 Log[x + Sqrt[x^2 + a]]);
 
 (* Formula 158 *)
-IntegrateTable[1/(x_^2 + a_^2)^(3/2), x_] /; FreeQ[a, x] := x/(a^2 Sqrt[x^2 + a^2]);
-IntegrateTable[1/(x_^2 - a_^2)^(3/2), x_] /; FreeQ[a, x] := -x/(a^2 Sqrt[x^2 - a^2]);
+IntegrateTable[1/(x_^2 + a_)^(3/2), x_] /; FreeQ[a, x] := x/(a Sqrt[x^2 + a]);
 
 (* Formula 159 *)
-IntegrateTable[x_/(x_^2 + a_^2)^(3/2), x_] /; FreeQ[a, x] := -1/Sqrt[x^2 + a^2];
-IntegrateTable[x_/(x_^2 - a_^2)^(3/2), x_] /; FreeQ[a, x] := -1/Sqrt[x^2 - a^2];
+IntegrateTable[x_/(x_^2 + a_)^(3/2), x_] /; FreeQ[a, x] := -1/Sqrt[x^2 + a];
 
 (* Formula 160 *)
-IntegrateTable[x_ (x_^2 + a_^2)^(3/2), x_] /; FreeQ[a, x] := 1/5 (x^2 + a^2)^(5/2);
-IntegrateTable[x_ (x_^2 - a_^2)^(3/2), x_] /; FreeQ[a, x] := 1/5 (x^2 - a^2)^(5/2);
+IntegrateTable[x_ (x_^2 + a_)^(3/2), x_] /; FreeQ[a, x] := 1/5 (x^2 + a)^(5/2);
 
 (* Formula 161 *)
-IntegrateTable[x_^2 Sqrt[x_^2 + a_^2], x_] /; FreeQ[a, x] := x/4 (x^2 + a^2)^(3/2) - (a^2 x)/8 Sqrt[x^2 + a^2] - a^4/8 Log[x + Sqrt[x^2 + a^2]];
+IntegrateTable[x_^2 Sqrt[x_^2 + a_], x_] /; FreeQ[a, x] := x/4 (x^2 + a)^(3/2) - (a x)/8 Sqrt[x^2 + a] - a^2/8 Log[x + Sqrt[x^2 + a]];
 
-IntegrateTable[x_^2 Sqrt[x_^2 - a_^2], x_] /; FreeQ[a, x] := x/4 (x^2 - a^2)^(3/2) + (a^2 x)/8 Sqrt[x^2 - a^2] - a^4/8 Log[x + Sqrt[x^2 - a^2]];
-
-(* Formula 162 *)
-IntegrateTable[x_^3 Sqrt[x_^2 + a_^2], x_] /; FreeQ[a, x] := 1/15 (3 x^2 - 2 a^2) (x^2 + a^2)^(3/2);
-
-(* Formula 163 *)
-IntegrateTable[x_^3 Sqrt[x_^2 - a_^2], x_] /; FreeQ[a, x] := 1/5 (x^2 - a^2)^(5/2) + a^2/3 (x^2 - a^2)^(3/2);
+(* Formula 162 & 163 *)
+IntegrateTable[x_^3 Sqrt[x_^2 + a_], x_] /; FreeQ[a, x] := 1/15 (3 x^2 - 2 a) (x^2 + a)^(3/2);
 
 (* Formula 164 *)
-IntegrateTable[x_^2/Sqrt[x_^2 + a_^2], x_] /; FreeQ[a, x] := x/2 Sqrt[x^2 + a^2] - a^2/2 Log[x + Sqrt[x^2 + a^2]];
-
-IntegrateTable[x_^2/Sqrt[x_^2 - a_^2], x_] /; FreeQ[a, x] := x/2 Sqrt[x^2 - a^2] + a^2/2 Log[x + Sqrt[x^2 - a^2]];
+IntegrateTable[x_^2/Sqrt[x_^2 + a_], x_] /; FreeQ[a, x] := x/2 Sqrt[x^2 + a] - a/2 Log[x + Sqrt[x^2 + a]];
 
 (* Formula 165 *)
-IntegrateTable[x_^3/Sqrt[x_^2 + a_^2], x_] /; FreeQ[a, x] := 1/3 (x^2 + a^2)^(3/2) - a^2 Sqrt[x^2 + a^2];
-IntegrateTable[x_^3/Sqrt[x_^2 - a_^2], x_] /; FreeQ[a, x] := 1/3 (x^2 - a^2)^(3/2) + a^2 Sqrt[x^2 - a^2];
+IntegrateTable[x_^3/Sqrt[x_^2 + a_], x_] /; FreeQ[a, x] := 1/3 (x^2 + a)^(3/2) - a Sqrt[x^2 + a];
 
 (* Formula 166 *)
-IntegrateTable[1/(x_^2 Sqrt[x_^2 + a_^2]), x_] /; FreeQ[a, x] := -Sqrt[x^2 + a^2]/(a^2 x);
-IntegrateTable[1/(x_^2 Sqrt[x_^2 - a_^2]), x_] /; FreeQ[a, x] := Sqrt[x^2 - a^2]/(a^2 x);
+IntegrateTable[1/(x_^2 Sqrt[x_^2 + a_]), x_] /; FreeQ[a, x] := -Sqrt[x^2 + a]/(a x);
 
 (* Formula 167 *)
-IntegrateTable[1/(x_^3 Sqrt[x_^2 + a_^2]), x_] /; FreeQ[a, x] := -Sqrt[x^2 + a^2]/(2 a^2 x^2) + 1/(2 a^3) Log[(a + Sqrt[x^2 + a^2])/x];
-
+IntegrateTable[1/(x_^3 Sqrt[x_^2 + a_]), x_] /; FreeQ[a, x] && Not[TrueQ[a < 0]] := -Sqrt[x^2 + a]/(2 a x^2) + 1/(2 a Sqrt[a]) Log[(Sqrt[a] + Sqrt[x^2 + a])/x];
 (* Formula 168 *)
-IntegrateTable[1/(x_^3 Sqrt[x_^2 - a_^2]), x_] /; FreeQ[a, x] := Sqrt[x^2 - a^2]/(2 a^2 x^2) + 1/(2 Abs[a]^3) ArcSec[x/a];
+IntegrateTable[1/(x_^3 Sqrt[x_^2 + a_]), x_] /; FreeQ[a, x] && TrueQ[a < 0] := -Sqrt[x^2 + a]/(2 a x^2) + 1/(2 (-a) Sqrt[-a]) ArcSec[x/Sqrt[-a]];
 
 (* Formula 169 *)
-IntegrateTable[x_^2 (x_^2 + a_^2)^(3/2), x_] /; FreeQ[a, x] := x/6 (x^2 + a^2)^(5/2) - (a^2 x)/24 (x^2 + a^2)^(3/2) - (a^4 x)/16 Sqrt[x^2 + a^2] - a^6/16 Log[x + Sqrt[x^2 + a^2]];
-
-IntegrateTable[x_^2 (x_^2 - a_^2)^(3/2), x_] /; FreeQ[a, x] := x/6 (x^2 - a^2)^(5/2) + (a^2 x)/24 (x^2 - a^2)^(3/2) - (a^4 x)/16 Sqrt[x^2 - a^2] + a^6/16 Log[x + Sqrt[x^2 - a^2]];
+IntegrateTable[x_^2 (x_^2 + a_)^(3/2), x_] /; FreeQ[a, x] := x/6 (x^2 + a)^(5/2) - (a x)/24 (x^2 + a)^(3/2) - (a^2 x)/16 Sqrt[x^2 + a] - a^3/16 Log[x + Sqrt[x^2 + a]];
 
 (* Formula 170 *)
-IntegrateTable[x_^3 (x_^2 + a_^2)^(3/2), x_] /; FreeQ[a, x] := 1/7 (x^2 + a^2)^(7/2) - a^2/5 (x^2 + a^2)^(5/2);
-IntegrateTable[x_^3 (x_^2 - a_^2)^(3/2), x_] /; FreeQ[a, x] := 1/7 (x^2 - a^2)^(7/2) + a^2/5 (x^2 - a^2)^(5/2);
+IntegrateTable[x_^3 (x_^2 + a_)^(3/2), x_] /; FreeQ[a, x] := 1/7 (x^2 + a)^(7/2) - a/5 (x^2 + a)^(5/2);
 
 (* Formula 171 *)
-IntegrateTable[Sqrt[x_^2 + a_^2]/x_^2, x_] /; FreeQ[a, x] := -Sqrt[x^2 + a^2]/x + Log[x + Sqrt[x^2 + a^2]];
-IntegrateTable[Sqrt[x_^2 - a_^2]/x_^2, x_] /; FreeQ[a, x] := -Sqrt[x^2 - a^2]/x + Log[x + Sqrt[x^2 - a^2]];
+IntegrateTable[Sqrt[x_^2 + a_]/x_^2, x_] /; FreeQ[a, x] := -Sqrt[x^2 + a]/x + Log[x + Sqrt[x^2 + a]];
 
 (* Formula 172 *)
-IntegrateTable[Sqrt[x_^2 + a_^2]/x_^3, x_] /; FreeQ[a, x] := -Sqrt[x^2 + a^2]/(2 x^2) - 1/(2 a) Log[(a + Sqrt[x^2 + a^2])/x];
-
+IntegrateTable[Sqrt[x_^2 + a_]/x_^3, x_] /; FreeQ[a, x] && Not[TrueQ[a < 0]] := -Sqrt[x^2 + a]/(2 x^2) - 1/(2 Sqrt[a]) Log[(Sqrt[a] + Sqrt[x^2 + a])/x];
 (* Formula 173 *)
-IntegrateTable[Sqrt[x_^2 - a_^2]/x_^3, x_] /; FreeQ[a, x] := -Sqrt[x^2 - a^2]/(2 x^2) + 1/(2 Abs[a]) ArcSec[x/a];
+IntegrateTable[Sqrt[x_^2 + a_]/x_^3, x_] /; FreeQ[a, x] && TrueQ[a < 0] := -Sqrt[x^2 + a]/(2 x^2) + 1/(2 Sqrt[-a]) ArcSec[x/Sqrt[-a]];
 
 (* Formula 174 *)
-IntegrateTable[Sqrt[x_^2 + a_^2]/x_^4, x_] /; FreeQ[a, x] := -(x^2 + a^2)^(3/2)/(3 a^2 x^3);
-IntegrateTable[Sqrt[x_^2 - a_^2]/x_^4, x_] /; FreeQ[a, x] := (x^2 - a^2)^(3/2)/(3 a^2 x^3);
+IntegrateTable[Sqrt[x_^2 + a_]/x_^4, x_] /; FreeQ[a, x] := -(x^2 + a)^(3/2)/(3 a x^3);
 
 (* Formula 175 *)
-IntegrateTable[x_^2/(x_^2 + a_^2)^(3/2), x_] /; FreeQ[a, x] := -x/Sqrt[x^2 + a^2] + Log[x + Sqrt[x^2 + a^2]];
-IntegrateTable[x_^2/(x_^2 - a_^2)^(3/2), x_] /; FreeQ[a, x] := -x/Sqrt[x^2 - a^2] + Log[x + Sqrt[x^2 - a^2]];
+IntegrateTable[x_^2/(x_^2 + a_)^(3/2), x_] /; FreeQ[a, x] := -x/Sqrt[x^2 + a] + Log[x + Sqrt[x^2 + a]];
 
 (* Formula 176 *)
-IntegrateTable[x_^3/(x_^2 + a_^2)^(3/2), x_] /; FreeQ[a, x] := Sqrt[x^2 + a^2] + a^2/Sqrt[x^2 + a^2];
-IntegrateTable[x_^3/(x_^2 - a_^2)^(3/2), x_] /; FreeQ[a, x] := Sqrt[x^2 - a^2] - a^2/Sqrt[x^2 - a^2];
+IntegrateTable[x_^3/(x_^2 + a_)^(3/2), x_] /; FreeQ[a, x] := Sqrt[x^2 + a] + a/Sqrt[x^2 + a];
 
 (* Formula 177 *)
-IntegrateTable[1/(x_ (x_^2 + a_^2)^(3/2)), x_] /; FreeQ[a, x] := 1/(a^2 Sqrt[x^2 + a^2]) - 1/a^3 Log[(a + Sqrt[x^2 + a^2])/x];
-
+IntegrateTable[1/(x_ (x_^2 + a_)^(3/2)), x_] /; FreeQ[a, x] && Not[TrueQ[a < 0]] := 1/(a Sqrt[x^2 + a]) - 1/(a Sqrt[a]) Log[(Sqrt[a] + Sqrt[x^2 + a])/x];
 (* Formula 178 *)
-IntegrateTable[1/(x_ (x_^2 - a_^2)^(3/2)), x_] /; FreeQ[a, x] := -1/(a^2 Sqrt[x^2 - a^2]) - 1/Abs[a]^3 ArcSec[x/a];
+IntegrateTable[1/(x_ (x_^2 + a_)^(3/2)), x_] /; FreeQ[a, x] && TrueQ[a < 0] := 1/(a Sqrt[x^2 + a]) - 1/((-a) Sqrt[-a]) ArcSec[x/Sqrt[-a]];
 
 (* Formula 179 *)
-IntegrateTable[1/(x_^2 (x_^2 + a_^2)^(3/2)), x_] /; FreeQ[a, x] := -1/a^4 (Sqrt[x^2 + a^2]/x + x/Sqrt[x^2 + a^2]);
-IntegrateTable[1/(x_^2 (x_^2 - a_^2)^(3/2)), x_] /; FreeQ[a, x] := -1/a^4 (Sqrt[x^2 - a^2]/x + x/Sqrt[x^2 - a^2]);
+IntegrateTable[1/(x_^2 (x_^2 + a_)^(3/2)), x_] /; FreeQ[a, x] := -1/a^2 (Sqrt[x^2 + a]/x + x/Sqrt[x^2 + a]);
 
 (* Formula 180 *)
-IntegrateTable[1/(x_^3 (x_^2 + a_^2)^(3/2)), x_] /; FreeQ[a, x] := -1/(2 a^2 x^2 Sqrt[x^2 + a^2]) - 3/(2 a^4 Sqrt[x^2 + a^2]) + 3/(2 a^5) Log[(a + Sqrt[x^2 + a^2])/x];
-
-(* Formula 181 *)
-IntegrateTable[1/(x_^3 (x_^2 - a_^2)^(3/2)), x_] /; FreeQ[a, x] := 
-  Sqrt[x^2 - a^2]/(2 a^2 x^2) - 3/(2 a^4 Sqrt[x^2 - a^2]) - 3/(2 Abs[a]^5) ArcSec[x/a];
+IntegrateTable[1/(x_^3 (x_^2 + a_)^(3/2)), x_] /; FreeQ[a, x] && Not[TrueQ[a < 0]] := -1/(2 a x^2 Sqrt[x^2 + a]) - 3/(2 a^2 Sqrt[x^2 + a]) + 3/(2 a^2 Sqrt[a]) Log[(Sqrt[a] + Sqrt[x^2 + a])/x];
+(* Formula 181.  (The CRC reference prints the first term as
+   Sqrt[x^2-a^2]/(2 a^2 x^2); that is a transcription error — mirroring the
+   x^2+a^2 sibling 180 and re-deriving gives 1/(2 a^2 x^2 Sqrt[...]).) *)
+IntegrateTable[1/(x_^3 (x_^2 + a_)^(3/2)), x_] /; FreeQ[a, x] && TrueQ[a < 0] :=
+  -1/(2 a x^2 Sqrt[x^2 + a]) - 3/(2 a^2 Sqrt[x^2 + a]) - 3/(2 a^2 Sqrt[-a]) ArcSec[x/Sqrt[-a]];
 
 (* Formula 182: Recursive reductions for positive powers *)
-IntegrateTable[x_^m_/Sqrt[x_^2 + a_^2], x_] /; FreeQ[{a, m}, x] && m =!= 0 && IntegerQ[m] && m > 1 := x^(m - 1)/m Sqrt[x^2 + a^2] - ((m - 1) a^2)/m IntegrateTable[x^(m - 2)/Sqrt[x^2 + a^2], x];
-
-IntegrateTable[x_^m_/Sqrt[x_^2 - a_^2], x_] /; FreeQ[{a, m}, x] && m =!= 0 && IntegerQ[m] && m > 1 := x^(m - 1)/m Sqrt[x^2 - a^2] + ((m - 1) a^2)/m IntegrateTable[x^(m - 2)/Sqrt[x^2 - a^2], x];
+IntegrateTable[x_^m_/Sqrt[x_^2 + a_], x_] /; FreeQ[{a, m}, x] && m =!= 0 && IntegerQ[m] && m > 1 := x^(m - 1)/m Sqrt[x^2 + a] - ((m - 1) a)/m IntegrateTable[x^(m - 2)/Sqrt[x^2 + a], x];
 
 (* Formula 185: Recursive reductions for negative powers *)
-IntegrateTable[1/(x_^m_ Sqrt[x_^2 + a_^2]), x_] /; FreeQ[{a, m}, x] && m =!= 1 && IntegerQ[m] && m > 2 := -Sqrt[x^2 + a^2]/((m - 1) a^2 x^(m - 1)) - (m - 2)/((m - 1) a^2) IntegrateTable[1/(x^(m - 2) Sqrt[x^2 + a^2]), x];
+IntegrateTable[1/(x_^m_ Sqrt[x_^2 + a_]), x_] /; FreeQ[{a, m}, x] && m =!= 1 && IntegerQ[m] && m > 2 := -Sqrt[x^2 + a]/((m - 1) a x^(m - 1)) - (m - 2)/((m - 1) a) IntegrateTable[1/(x^(m - 2) Sqrt[x^2 + a]), x];
 
-IntegrateTable[1/(x_^m_ Sqrt[x_^2 - a_^2]), x_] /; FreeQ[{a, m}, x] && m =!= 1 && IntegerQ[m] && m > 2 := Sqrt[x^2 - a^2]/((m - 1) a^2 x^(m - 1)) + (m - 2)/((m - 1) a^2) IntegrateTable[1/(x^(m - 2) Sqrt[x^2 - a^2]), x];
+(* Formula 189 & 190.  Here a_ is bound linearly from (x -+ a_), but the
+   matcher still cannot verify the `a_^2` inside the radical, so the radical
+   constant is matched separately as b_ (= -a^2) and the plus form is used. *)
+IntegrateTable[1/((x_ - a_) Sqrt[x_^2 + b_]), x_] /; FreeQ[{a, b}, x] && b === -a^2 := -Sqrt[x^2 + b]/(a (x - a));
+IntegrateTable[1/((x_ + a_) Sqrt[x_^2 + b_]), x_] /; FreeQ[{a, b}, x] && b === -a^2 := Sqrt[x^2 + b]/(a (x + a));
 
-(* Formula 189 & 190 *)
-IntegrateTable[1/((x_ - a_) Sqrt[x_^2 - a_^2]), x_] /; FreeQ[a, x] := -Sqrt[x^2 - a^2]/(a (x - a));
-IntegrateTable[1/((x_ + a_) Sqrt[x_^2 - a_^2]), x_] /; FreeQ[a, x] := Sqrt[x^2 - a^2]/(a (x + a));
+(* Formulas 191-220.  The constant a_^2 is always positive here (a^2 - x^2),
+   so it is bound as a single a_ (= a^2 > 0) and the linear part recovered as
+   Sqrt[a]; `a_ - x_^2` binds cleanly against a numeric constant and no sign
+   guard is needed.  a^2 -> a, a^4 -> a^2, a^6 -> a^3, Abs[a] -> Sqrt[a]. *)
 
 (* Formula 191 *)
-IntegrateTable[Sqrt[a_^2 - x_^2], x_] /; FreeQ[a, x] := 
-  1/2 (x Sqrt[a^2 - x^2] + a^2 ArcSin[x/Abs[a]]);
+IntegrateTable[Sqrt[a_ - x_^2], x_] /; FreeQ[a, x] :=
+  1/2 (x Sqrt[a - x^2] + a ArcSin[x/Sqrt[a]]);
 
 (* Formula 192 *)
-IntegrateTable[1/Sqrt[a_^2 - x_^2], x_] /; FreeQ[a, x] := ArcSin[x/Abs[a]];
+IntegrateTable[1/Sqrt[a_ - x_^2], x_] /; FreeQ[a, x] := ArcSin[x/Sqrt[a]];
 
 (* Formula 193 *)
-IntegrateTable[1/(x_ Sqrt[a_^2 - x_^2]), x_] /; FreeQ[a, x] := -1/a Log[(a + Sqrt[a^2 - x^2])/x];
+IntegrateTable[1/(x_ Sqrt[a_ - x_^2]), x_] /; FreeQ[a, x] := -1/Sqrt[a] Log[(Sqrt[a] + Sqrt[a - x^2])/x];
 
 (* Formula 194 *)
-IntegrateTable[Sqrt[a_^2 - x_^2]/x_, x_] /; FreeQ[a, x] := Sqrt[a^2 - x^2] - a Log[(a + Sqrt[a^2 - x^2])/x];
+IntegrateTable[Sqrt[a_ - x_^2]/x_, x_] /; FreeQ[a, x] := Sqrt[a - x^2] - Sqrt[a] Log[(Sqrt[a] + Sqrt[a - x^2])/x];
 
 (* Formula 195 & 196 *)
-IntegrateTable[x_/Sqrt[a_^2 - x_^2], x_] /; FreeQ[a, x] := -Sqrt[a^2 - x^2];
-IntegrateTable[x_ Sqrt[a_^2 - x_^2], x_] /; FreeQ[a, x] := -1/3 (a^2 - x^2)^(3/2);
+IntegrateTable[x_/Sqrt[a_ - x_^2], x_] /; FreeQ[a, x] := -Sqrt[a - x^2];
+IntegrateTable[x_ Sqrt[a_ - x_^2], x_] /; FreeQ[a, x] := -1/3 (a - x^2)^(3/2);
 
 (* Formula 197 *)
-IntegrateTable[(a_^2 - x_^2)^(3/2), x_] /; FreeQ[a, x] := 
-  1/4 (x (a^2 - x^2)^(3/2) + (3 a^2 x)/2 Sqrt[a^2 - x^2] + (3 a^4)/2 ArcSin[x/Abs[a]]);
+IntegrateTable[(a_ - x_^2)^(3/2), x_] /; FreeQ[a, x] :=
+  1/4 (x (a - x^2)^(3/2) + (3 a x)/2 Sqrt[a - x^2] + (3 a^2)/2 ArcSin[x/Sqrt[a]]);
 
 (* Formula 198 & 199 *)
-IntegrateTable[1/(a_^2 - x_^2)^(3/2), x_] /; FreeQ[a, x] := x/(a^2 Sqrt[a^2 - x^2]);
-IntegrateTable[x_/(a_^2 - x_^2)^(3/2), x_] /; FreeQ[a, x] := 1/Sqrt[a^2 - x^2];
+IntegrateTable[1/(a_ - x_^2)^(3/2), x_] /; FreeQ[a, x] := x/(a Sqrt[a - x^2]);
+IntegrateTable[x_/(a_ - x_^2)^(3/2), x_] /; FreeQ[a, x] := 1/Sqrt[a - x^2];
 
 (* Formula 200 *)
-IntegrateTable[x_ (a_^2 - x_^2)^(3/2), x_] /; FreeQ[a, x] := -1/5 (a^2 - x^2)^(5/2);
+IntegrateTable[x_ (a_ - x_^2)^(3/2), x_] /; FreeQ[a, x] := -1/5 (a - x^2)^(5/2);
 
 (* Formula 201 *)
-IntegrateTable[x_^2 Sqrt[a_^2 - x_^2], x_] /; FreeQ[a, x] := 
-  -x/4 (a^2 - x^2)^(3/2) + a^2/8 (x Sqrt[a^2 - x^2] + a^2 ArcSin[x/Abs[a]]);
+IntegrateTable[x_^2 Sqrt[a_ - x_^2], x_] /; FreeQ[a, x] :=
+  -x/4 (a - x^2)^(3/2) + a/8 (x Sqrt[a - x^2] + a ArcSin[x/Sqrt[a]]);
 
 (* Formula 202 *)
-IntegrateTable[x_^3 Sqrt[a_^2 - x_^2], x_] /; FreeQ[a, x] := (-1/5 x^2 - 2/15 a^2) (a^2 - x^2)^(3/2);
+IntegrateTable[x_^3 Sqrt[a_ - x_^2], x_] /; FreeQ[a, x] := (-1/5 x^2 - 2/15 a) (a - x^2)^(3/2);
 
 (* Formula 203 *)
-IntegrateTable[x_^2 (a_^2 - x_^2)^(3/2), x_] /; FreeQ[a, x] := 
-  -1/6 x (a^2 - x^2)^(5/2) + (a^2 x)/24 (a^2 - x^2)^(3/2) + (a^4 x)/16 Sqrt[a^2 - x^2] + a^6/16 ArcSin[x/Abs[a]];
+IntegrateTable[x_^2 (a_ - x_^2)^(3/2), x_] /; FreeQ[a, x] :=
+  -1/6 x (a - x^2)^(5/2) + (a x)/24 (a - x^2)^(3/2) + (a^2 x)/16 Sqrt[a - x^2] + a^3/16 ArcSin[x/Sqrt[a]];
 
 (* Formula 204 *)
-IntegrateTable[x_^3 (a_^2 - x_^2)^(3/2), x_] /; FreeQ[a, x] := 1/7 (a^2 - x^2)^(7/2) - a^2/5 (a^2 - x^2)^(5/2);
+IntegrateTable[x_^3 (a_ - x_^2)^(3/2), x_] /; FreeQ[a, x] := 1/7 (a - x^2)^(7/2) - a/5 (a - x^2)^(5/2);
 
 (* Formula 205 *)
-IntegrateTable[x_^2/Sqrt[a_^2 - x_^2], x_] /; FreeQ[a, x] := 
-  -x/2 Sqrt[a^2 - x^2] + a^2/2 ArcSin[x/Abs[a]];
+IntegrateTable[x_^2/Sqrt[a_ - x_^2], x_] /; FreeQ[a, x] :=
+  -x/2 Sqrt[a - x^2] + a/2 ArcSin[x/Sqrt[a]];
 
 (* Formula 206 *)
-IntegrateTable[1/(x_^2 Sqrt[a_^2 - x_^2]), x_] /; FreeQ[a, x] := -Sqrt[a^2 - x^2]/(a^2 x);
+IntegrateTable[1/(x_^2 Sqrt[a_ - x_^2]), x_] /; FreeQ[a, x] := -Sqrt[a - x^2]/(a x);
 
 (* Formula 207 *)
-IntegrateTable[Sqrt[a_^2 - x_^2]/x_^2, x_] /; FreeQ[a, x] := -Sqrt[a^2 - x^2]/x - ArcSin[x/Abs[a]];
+IntegrateTable[Sqrt[a_ - x_^2]/x_^2, x_] /; FreeQ[a, x] := -Sqrt[a - x^2]/x - ArcSin[x/Sqrt[a]];
 
 (* Formula 208 *)
-IntegrateTable[Sqrt[a_^2 - x_^2]/x_^3, x_] /; FreeQ[a, x] := 
-  -Sqrt[a^2 - x^2]/(2 x^2) + 1/(2 a) Log[(a + Sqrt[a^2 - x^2])/x];
+IntegrateTable[Sqrt[a_ - x_^2]/x_^3, x_] /; FreeQ[a, x] :=
+  -Sqrt[a - x^2]/(2 x^2) + 1/(2 Sqrt[a]) Log[(Sqrt[a] + Sqrt[a - x^2])/x];
 
 (* Formula 209 *)
-IntegrateTable[Sqrt[a_^2 - x_^2]/x_^4, x_] /; FreeQ[a, x] := -(a^2 - x^2)^(3/2)/(3 a^2 x^3);
+IntegrateTable[Sqrt[a_ - x_^2]/x_^4, x_] /; FreeQ[a, x] := -(a - x^2)^(3/2)/(3 a x^3);
 
 (* Formula 210 *)
-IntegrateTable[x_^2/(a_^2 - x_^2)^(3/2), x_] /; FreeQ[a, x] := x/Sqrt[a^2 - x^2] - ArcSin[x/Abs[a]];
+IntegrateTable[x_^2/(a_ - x_^2)^(3/2), x_] /; FreeQ[a, x] := x/Sqrt[a - x^2] - ArcSin[x/Sqrt[a]];
 
 (* Formula 211 *)
-IntegrateTable[x_^3/Sqrt[a_^2 - x_^2], x_] /; FreeQ[a, x] := -2/3 (a^2 - x^2)^(3/2) - x^2 Sqrt[a^2 - x^2];
+IntegrateTable[x_^3/Sqrt[a_ - x_^2], x_] /; FreeQ[a, x] := -2/3 (a - x^2)^(3/2) - x^2 Sqrt[a - x^2];
 
 (* Formula 212 *)
-IntegrateTable[x_^3/(a_^2 - x_^2)^(3/2), x_] /; FreeQ[a, x] := 2 Sqrt[a^2 - x^2] + x^2/Sqrt[a^2 - x^2];
+IntegrateTable[x_^3/(a_ - x_^2)^(3/2), x_] /; FreeQ[a, x] := 2 Sqrt[a - x^2] + x^2/Sqrt[a - x^2];
 
 (* Formula 213 *)
-IntegrateTable[1/(x_^3 Sqrt[a_^2 - x_^2]), x_] /; FreeQ[a, x] := 
-  -Sqrt[a^2 - x^2]/(2 a^2 x^2) - 1/(2 a^3) Log[(a + Sqrt[a^2 - x^2])/x];
+IntegrateTable[1/(x_^3 Sqrt[a_ - x_^2]), x_] /; FreeQ[a, x] :=
+  -Sqrt[a - x^2]/(2 a x^2) - 1/(2 a Sqrt[a]) Log[(Sqrt[a] + Sqrt[a - x^2])/x];
 
 (* Formula 214 *)
-IntegrateTable[1/(x_ (a_^2 - x_^2)^(3/2)), x_] /; FreeQ[a, x] := 
-  1/(a^2 Sqrt[a^2 - x^2]) - 1/a^3 Log[(a + Sqrt[a^2 - x^2])/x];
+IntegrateTable[1/(x_ (a_ - x_^2)^(3/2)), x_] /; FreeQ[a, x] :=
+  1/(a Sqrt[a - x^2]) - 1/(a Sqrt[a]) Log[(Sqrt[a] + Sqrt[a - x^2])/x];
 
 (* Formula 215 *)
-IntegrateTable[1/(x_^2 (a_^2 - x_^2)^(3/2)), x_] /; FreeQ[a, x] := 
-  1/a^4 (-Sqrt[a^2 - x^2]/x + x/Sqrt[a^2 - x^2]);
+IntegrateTable[1/(x_^2 (a_ - x_^2)^(3/2)), x_] /; FreeQ[a, x] :=
+  1/a^2 (-Sqrt[a - x^2]/x + x/Sqrt[a - x^2]);
 
-(* Formula 216 *)
-IntegrateTable[1/(x_^3 (a_^2 - x_^2)^(3/2)), x_] /; FreeQ[a, x] := 
-  (3 x^2 - 2 a^2)/(2 a^4 Sqrt[a^2 - x^2]) - 3/(2 a^5) Log[(a + Sqrt[a^2 - x^2])/x];
+(* Formula 216.  (The CRC reference numerator/denominator and log argument are
+   mis-transcribed; re-derived here from the antiderivative.) *)
+IntegrateTable[1/(x_^3 (a_ - x_^2)^(3/2)), x_] /; FreeQ[a, x] :=
+  (3 x^2 - a)/(2 a^2 x^2 Sqrt[a - x^2]) - 3/(4 a^2 Sqrt[a]) Log[(Sqrt[a] + Sqrt[a - x^2])/(Sqrt[a] - Sqrt[a - x^2])];
 
 (* Formula 217 & 220: General Reduction Rules *)
-IntegrateTable[x_^m_/Sqrt[a_^2 - x_^2], x_] /; FreeQ[{a, m}, x] && m =!= 0 && IntegerQ[m] && m > 1 :=
-  -x^(m - 1)/m Sqrt[a^2 - x^2] + ((m - 1) a^2)/m IntegrateTable[x^(m - 2)/Sqrt[a^2 - x^2], x];
-IntegrateTable[1/(x_^m_ Sqrt[a_^2 - x_^2]), x_] /; FreeQ[{a, m}, x] && m =!= 1 && IntegerQ[m] && m > 2 :=
-  -Sqrt[a^2 - x^2]/((m - 1) a^2 x^(m - 1)) + (m - 2)/((m - 1) a^2) IntegrateTable[1/(x^(m - 2) Sqrt[a^2 - x^2]), x];
+IntegrateTable[x_^m_/Sqrt[a_ - x_^2], x_] /; FreeQ[{a, m}, x] && m =!= 0 && IntegerQ[m] && m > 1 :=
+  -x^(m - 1)/m Sqrt[a - x^2] + ((m - 1) a)/m IntegrateTable[x^(m - 2)/Sqrt[a - x^2], x];
+IntegrateTable[1/(x_^m_ Sqrt[a_ - x_^2]), x_] /; FreeQ[{a, m}, x] && m =!= 1 && IntegerQ[m] && m > 2 :=
+  -Sqrt[a - x^2]/((m - 1) a x^(m - 1)) + (m - 2)/((m - 1) a) IntegrateTable[1/(x^(m - 2) Sqrt[a - x^2]), x];
 
-(* Formula 223 *)
-IntegrateTable[1/((b_^2 - x_^2) Sqrt[a_^2 - x_^2]), x_] /; FreeQ[{a, b}, x] && a^2 > b^2 := 
-  1/(2 b Sqrt[a^2 - b^2]) Log[(b Sqrt[a^2 - x^2] + x Sqrt[a^2 - b^2])/(b Sqrt[a^2 - x^2] - x Sqrt[a^2 - b^2])];
-IntegrateTable[1/((b_^2 - x_^2) Sqrt[a_^2 - x_^2]), x_] /; FreeQ[{a, b}, x] && b^2 > a^2 := 
-  1/(b Sqrt[b^2 - a^2]) ArcTan[(x Sqrt[b^2 - a^2])/(b Sqrt[a^2 - x^2])];
+(* Formula 223.  Both squared constants a_^2, b_^2 become linear a_, b_ (each
+   positive), recovered via Sqrt on the RHS; a^2 > b^2 <-> a > b. *)
+IntegrateTable[1/((b_ - x_^2) Sqrt[a_ - x_^2]), x_] /; FreeQ[{a, b}, x] && a > b :=
+  1/(2 Sqrt[b] Sqrt[a - b]) Log[(Sqrt[b] Sqrt[a - x^2] + x Sqrt[a - b])/(Sqrt[b] Sqrt[a - x^2] - x Sqrt[a - b])];
+IntegrateTable[1/((b_ - x_^2) Sqrt[a_ - x_^2]), x_] /; FreeQ[{a, b}, x] && b > a :=
+  1/(Sqrt[b] Sqrt[b - a]) ArcTan[(x Sqrt[b - a])/(Sqrt[b] Sqrt[a - x^2])];
 
 (* Formula 224 *)
-IntegrateTable[1/((b_^2 + x_^2) Sqrt[a_^2 - x_^2]), x_] /; FreeQ[{a, b}, x] := 
-  1/(b Sqrt[a^2 + b^2]) ArcTan[(x Sqrt[a^2 + b^2])/(b Sqrt[a^2 - x^2])];
+IntegrateTable[1/((b_ + x_^2) Sqrt[a_ - x_^2]), x_] /; FreeQ[{a, b}, x] && Not[TrueQ[b < 0]] :=
+  1/(Sqrt[b] Sqrt[a + b]) ArcTan[(x Sqrt[a + b])/(Sqrt[b] Sqrt[a - x^2])];
 
 (* Formula 225 *)
-IntegrateTable[Sqrt[a_^2 - x_^2]/(b_^2 + x_^2), x_] /; FreeQ[{a, b}, x] := 
-  Sqrt[a^2 + b^2]/Abs[b] ArcSin[(x Sqrt[a^2 + b^2])/(Abs[a] Sqrt[x^2 + b^2])] - ArcSin[x/Abs[a]];
+IntegrateTable[Sqrt[a_ - x_^2]/(b_ + x_^2), x_] /; FreeQ[{a, b}, x] && Not[TrueQ[b < 0]] :=
+  Sqrt[a + b]/Sqrt[b] ArcSin[(x Sqrt[a + b])/(Sqrt[a] Sqrt[x^2 + b])] - ArcSin[x/Sqrt[a]];
 
 (* Formula 226 *)
 IntegrateTable[1/Sqrt[a_ + b_. x_ + c_. x_^2], x_] /; FreeQ[{a, b, c}, x] && c > 0 := 
@@ -970,17 +897,18 @@ IntegrateTable[(1 + x_^2)/((1 - x_^2) Sqrt[1 + x_^4]), x_] :=
 IntegrateTable[(1 - x_^2)/((1 + x_^2) Sqrt[1 + x_^4]), x_] := 
   1/Sqrt[2] ArcTan[(x Sqrt[2])/Sqrt[1 + x^4]];
 
-(* Formula 270 *)
-IntegrateTable[1/(x_ Sqrt[x_^n_ + a_^2]), x_] /; FreeQ[{a, n}, x] := 
-  -2/(n a) Log[(a + Sqrt[x^n + a^2])/Sqrt[x^n]];
+(* Formula 270.  Squared constant a_^2 -> linear a_ (Sqrt[a] on the RHS); the
+   x^n - a^2 sibling (271) shares the x_^n_ + a_ form under TrueQ[a < 0]. *)
+IntegrateTable[1/(x_ Sqrt[x_^n_ + a_]), x_] /; FreeQ[{a, n}, x] && Not[TrueQ[a < 0]] :=
+  -2/(n Sqrt[a]) Log[(Sqrt[a] + Sqrt[x^n + a])/Sqrt[x^n]];
 
 (* Formula 271 *)
-IntegrateTable[1/(x_ Sqrt[x_^n_ - a_^2]), x_] /; FreeQ[{a, n}, x] := 
-  -2/(n a) ArcSin[a/Sqrt[x^n]];
+IntegrateTable[1/(x_ Sqrt[x_^n_ + a_]), x_] /; FreeQ[{a, n}, x] && TrueQ[a < 0] :=
+  -2/(n Sqrt[-a]) ArcSin[Sqrt[-a]/Sqrt[x^n]];
 
-(* Formula 272 *)
-IntegrateTable[Sqrt[x_/(a_^3 - x_^3)], x_] /; FreeQ[a, x] := 
-  2/3 ArcSin[(x/a)^(3/2)];
+(* Formula 272.  Cubed constant a_^3 -> linear a_; (x/a_orig)^(3/2) = Sqrt[x^3/a]. *)
+IntegrateTable[Sqrt[x_/(a_ - x_^3)], x_] /; FreeQ[a, x] :=
+  2/3 ArcSin[Sqrt[x^3/a]];
 
 (* Formula 273 *)
 IntegrateTable[Sin[a_. x_], x_] /; FreeQ[a, x] := -Cos[a x]/a;
@@ -1141,8 +1069,8 @@ IntegrateTable[1/(a_ + b_. Cos[x_]), x_] /; FreeQ[{a, b}, x] && b^2 > a^2 :=
   1/Sqrt[b^2 - a^2] Log[(Sqrt[b^2 - a^2] Tan[x/2] + a + b)/(Sqrt[b^2 - a^2] Tan[x/2] - a - b)];
 
 (* Formula 327 *)
-IntegrateTable[1/(a_^2 Cos[x_]^2 + b_^2 Sin[x_]^2), x_] /; FreeQ[{a, b}, x] := 
-  1/(a b) ArcTan[(b Tan[x])/a];
+IntegrateTable[1/(a_ Cos[x_]^2 + b_ Sin[x_]^2), x_] /; FreeQ[{a, b}, x] :=
+  1/(Sqrt[a] Sqrt[b]) ArcTan[(Sqrt[b] Tan[x])/Sqrt[a]];
 
 (* Formula 329 *)
 IntegrateTable[(Sin[c_. x_] Cos[c_. x_])/(a_ Cos[c_. x_]^2 + b_ Sin[c_. x_]^2), x_] /; FreeQ[{a, b, c}, x] && a =!= b := 
@@ -1193,12 +1121,12 @@ IntegrateTable[1/(a_ + b_. Sin[x_])^2, x_] /; FreeQ[{a, b}, x] && a^2 =!= b^2 :=
   (b Cos[x])/((a^2 - b^2) (a + b Sin[x])) + a/(a^2 - b^2) IntegrateTable[1/(a + b Sin[x]), x];
 
 (* Formula 342 & 343 *)
-IntegrateTable[1/(a_^2 + b_^2 Sin[c_. x_]^2), x_] /; FreeQ[{a, b, c}, x] := 
-  1/(a c Sqrt[a^2 + b^2]) ArcTan[(Sqrt[a^2 + b^2] Tan[c x])/a];
-IntegrateTable[1/(a_^2 - b_^2 Sin[c_. x_]^2), x_] /; FreeQ[{a, b, c}, x] && a^2 > b^2 := 
-  1/(a c Sqrt[a^2 - b^2]) ArcTan[(Sqrt[a^2 - b^2] Tan[c x])/a];
-IntegrateTable[1/(a_^2 - b_^2 Sin[c_. x_]^2), x_] /; FreeQ[{a, b, c}, x] && b^2 > a^2 := 
-  1/(2 a c Sqrt[b^2 - a^2]) Log[(Sqrt[b^2 - a^2] Tan[c x] + a)/(Sqrt[b^2 - a^2] Tan[c x] - a)];
+IntegrateTable[1/(a_ + b_ Sin[c_. x_]^2), x_] /; FreeQ[{a, b, c}, x] && Not[TrueQ[b < 0]] :=
+  1/(Sqrt[a] c Sqrt[a + b]) ArcTan[(Sqrt[a + b] Tan[c x])/Sqrt[a]];
+IntegrateTable[1/(a_ + b_ Sin[c_. x_]^2), x_] /; FreeQ[{a, b, c}, x] && TrueQ[b < 0] && a + b > 0 :=
+  1/(Sqrt[a] c Sqrt[a + b]) ArcTan[(Sqrt[a + b] Tan[c x])/Sqrt[a]];
+IntegrateTable[1/(a_ + b_ Sin[c_. x_]^2), x_] /; FreeQ[{a, b, c}, x] && TrueQ[b < 0] && a + b < 0 :=
+  1/(2 Sqrt[a] c Sqrt[-a - b]) Log[(Sqrt[-a - b] Tan[c x] + Sqrt[a])/(Sqrt[-a - b] Tan[c x] - Sqrt[a])];
 
 (* Formula 344 & 345 *)
 IntegrateTable[Cos[a_. x_]/(1 + Cos[a_. x_]), x_] /; FreeQ[a, x] := 
@@ -1240,17 +1168,17 @@ IntegrateTable[1/(a_ + b_. Cos[x_])^2, x_] /; FreeQ[{a, b}, x] && a^2 =!= b^2 :=
 IntegrateTable[Cos[x_]/(a_ + b_. Cos[x_])^2, x_] /; FreeQ[{a, b}, x] && a^2 =!= b^2 := 
   (a Sin[x])/((a^2 - b^2) (a + b Cos[x])) - b/(a^2 - b^2) IntegrateTable[1/(a + b Cos[x]), x];
 
-(* Formula 356 *)
-IntegrateTable[1/(a_^2 + b_^2 - 2 a_ b_ Cos[c_. x_]), x_] /; FreeQ[{a, b, c}, x] := 
-  2/(c (a^2 - b^2)) ArcTan[((a + b) Tan[(c x)/2])/(a - b)];
+(* Formula 356 (1/(a_^2 + b_^2 - 2 a_ b_ Cos[c x])) omitted: the squared/product
+   pattern constants never matched a numeric argument, and once expanded the
+   integrand is an ordinary 1/(p + q Cos[c x]) form already handled above. *)
 
 (* Formula 357 & 358 *)
-IntegrateTable[1/(a_^2 + b_^2 Cos[c_. x_]^2), x_] /; FreeQ[{a, b, c}, x] := 
-  1/(a c Sqrt[a^2 + b^2]) ArcTan[(a Tan[c x])/Sqrt[a^2 + b^2]];
-IntegrateTable[1/(a_^2 - b_^2 Cos[c_. x_]^2), x_] /; FreeQ[{a, b, c}, x] && a^2 > b^2 := 
-  1/(a c Sqrt[a^2 - b^2]) ArcTan[(a Tan[c x])/Sqrt[a^2 - b^2]];
-IntegrateTable[1/(a_^2 - b_^2 Cos[c_. x_]^2), x_] /; FreeQ[{a, b, c}, x] && b^2 > a^2 := 
-  1/(2 a c Sqrt[b^2 - a^2]) Log[(a Tan[c x] - Sqrt[b^2 - a^2])/(a Tan[c x] + Sqrt[b^2 - a^2])];
+IntegrateTable[1/(a_ + b_ Cos[c_. x_]^2), x_] /; FreeQ[{a, b, c}, x] && Not[TrueQ[b < 0]] :=
+  1/(Sqrt[a] c Sqrt[a + b]) ArcTan[(Sqrt[a] Tan[c x])/Sqrt[a + b]];
+IntegrateTable[1/(a_ + b_ Cos[c_. x_]^2), x_] /; FreeQ[{a, b, c}, x] && TrueQ[b < 0] && a + b > 0 :=
+  1/(Sqrt[a] c Sqrt[a + b]) ArcTan[(Sqrt[a] Tan[c x])/Sqrt[a + b]];
+IntegrateTable[1/(a_ + b_ Cos[c_. x_]^2), x_] /; FreeQ[{a, b, c}, x] && TrueQ[b < 0] && a + b < 0 :=
+  1/(2 Sqrt[a] c Sqrt[-a - b]) Log[(Sqrt[a] Tan[c x] - Sqrt[-a - b])/(Sqrt[a] Tan[c x] + Sqrt[-a - b])];
 
 (* Formula 359 *)
 IntegrateTable[Sin[a_. x_]/(1 + Cos[a_. x_]), x_] /; FreeQ[a, x] := -1/a Log[1 + Cos[a x]];
@@ -1311,8 +1239,8 @@ IntegrateTable[1/(1 + Cos[a_. x_] - Sin[a_. x_]), x_] /; FreeQ[a, x] :=
   -1/a Log[1 - Tan[(a x)/2]];
 
 (* Formula 370 *)
-IntegrateTable[1/(a_^2 Cos[c_. x_]^2 - b_^2 Sin[c_. x_]^2), x_] /; FreeQ[{a, b, c}, x] := 
-  1/(2 a b c) Log[(b Tan[c x] + a)/(b Tan[c x] - a)];
+IntegrateTable[1/(a_ Cos[c_. x_]^2 + b_ Sin[c_. x_]^2), x_] /; FreeQ[{a, b, c}, x] && TrueQ[b < 0] :=
+  1/(2 Sqrt[a] Sqrt[-b] c) Log[(Sqrt[-b] Tan[c x] + Sqrt[a])/(Sqrt[-b] Tan[c x] - Sqrt[a])];
 
 (* Formula 371 *)
 IntegrateTable[x_ Sin[a_. x_], x_] /; FreeQ[a, x] := 
@@ -1491,37 +1419,43 @@ IntegrateTable[x_/Cos[a_. x_]^2, x_] /; FreeQ[a, x] :=
 IntegrateTable[x_/Cos[a_. x_]^n_, x_] /; FreeQ[{a, n}, x] && n =!= 1 && n =!= 2 && IntegerQ[n] && n > 2 :=
   (x Sin[a x])/(a (n - 1) Cos[a x]^(n - 1)) - 1/(a^2 (n - 1) (n - 2) Cos[a x]^(n - 2)) + (n - 2)/(n - 1) IntegrateTable[x/Cos[a x]^(n - 2), x];
 
+(* Formulas 414-421.  The squared coefficient b_^2 (which never matched a numeric
+   argument) is bound linearly as b_ and recovered via Sqrt[b]; a_ is the
+   frequency (already linear).  The 1 - b^2 Sin^2 members are matched by the same
+   1 + b_ Sin^2 form under TrueQ[b < 0] (Sqrt[-b]), since a `1 - b_ Sin^2` pattern
+   will not bind b_ to a negative literal. *)
+
 (* Formula 414 *)
-IntegrateTable[Sin[a_. x_]/Sqrt[1 + b_^2 Sin[a_. x_]^2], x_] /; FreeQ[{a, b}, x] := 
-  -1/(a b) ArcSin[(b Cos[a x])/Sqrt[1 + b^2]];
+IntegrateTable[Sin[a_. x_]/Sqrt[1 + b_ Sin[a_. x_]^2], x_] /; FreeQ[{a, b}, x] && Not[TrueQ[b < 0]] :=
+  -1/(a Sqrt[b]) ArcSin[(Sqrt[b] Cos[a x])/Sqrt[1 + b]];
 
 (* Formula 415 *)
-IntegrateTable[Sin[a_. x_]/Sqrt[1 - b_^2 Sin[a_. x_]^2], x_] /; FreeQ[{a, b}, x] := 
-  -1/(a b) Log[b Cos[a x] + Sqrt[1 - b^2 Sin[a x]^2]];
+IntegrateTable[Sin[a_. x_]/Sqrt[1 + b_ Sin[a_. x_]^2], x_] /; FreeQ[{a, b}, x] && TrueQ[b < 0] :=
+  -1/(a Sqrt[-b]) Log[Sqrt[-b] Cos[a x] + Sqrt[1 + b Sin[a x]^2]];
 
 (* Formula 416 *)
-IntegrateTable[Sin[a_. x_] Sqrt[1 + b_^2 Sin[a_. x_]^2], x_] /; FreeQ[{a, b}, x] := 
-  -(Cos[a x]/(2 a)) Sqrt[1 + b^2 Sin[a x]^2] - (1 + b^2)/(2 a b) ArcSin[(b Cos[a x])/Sqrt[1 + b^2]];
+IntegrateTable[Sin[a_. x_] Sqrt[1 + b_ Sin[a_. x_]^2], x_] /; FreeQ[{a, b}, x] && Not[TrueQ[b < 0]] :=
+  -(Cos[a x]/(2 a)) Sqrt[1 + b Sin[a x]^2] - (1 + b)/(2 a Sqrt[b]) ArcSin[(Sqrt[b] Cos[a x])/Sqrt[1 + b]];
 
 (* Formula 417 *)
-IntegrateTable[Sin[a_. x_] Sqrt[1 - b_^2 Sin[a_. x_]^2], x_] /; FreeQ[{a, b}, x] := 
-  -(Cos[a x]/(2 a)) Sqrt[1 - b^2 Sin[a x]^2] - (1 - b^2)/(2 a b) Log[b Cos[a x] + Sqrt[1 - b^2 Sin[a x]^2]];
+IntegrateTable[Sin[a_. x_] Sqrt[1 + b_ Sin[a_. x_]^2], x_] /; FreeQ[{a, b}, x] && TrueQ[b < 0] :=
+  -(Cos[a x]/(2 a)) Sqrt[1 + b Sin[a x]^2] - (1 + b)/(2 a Sqrt[-b]) Log[Sqrt[-b] Cos[a x] + Sqrt[1 + b Sin[a x]^2]];
 
 (* Formula 418 *)
-IntegrateTable[Cos[a_. x_]/Sqrt[1 + b_^2 Sin[a_. x_]^2], x_] /; FreeQ[{a, b}, x] := 
-  1/(a b) Log[b Sin[a x] + Sqrt[1 + b^2 Sin[a x]^2]];
+IntegrateTable[Cos[a_. x_]/Sqrt[1 + b_ Sin[a_. x_]^2], x_] /; FreeQ[{a, b}, x] && Not[TrueQ[b < 0]] :=
+  1/(a Sqrt[b]) Log[Sqrt[b] Sin[a x] + Sqrt[1 + b Sin[a x]^2]];
 
 (* Formula 419 *)
-IntegrateTable[Cos[a_. x_]/Sqrt[1 - b_^2 Sin[a_. x_]^2], x_] /; FreeQ[{a, b}, x] := 
-  1/(a b) ArcSin[b Sin[a x]];
+IntegrateTable[Cos[a_. x_]/Sqrt[1 + b_ Sin[a_. x_]^2], x_] /; FreeQ[{a, b}, x] && TrueQ[b < 0] :=
+  1/(a Sqrt[-b]) ArcSin[Sqrt[-b] Sin[a x]];
 
 (* Formula 420 *)
-IntegrateTable[Cos[a_. x_] Sqrt[1 + b_^2 Sin[a_. x_]^2], x_] /; FreeQ[{a, b}, x] := 
-  (Sin[a x]/(2 a)) Sqrt[1 + b^2 Sin[a x]^2] + 1/(2 a b) Log[b Sin[a x] + Sqrt[1 + b^2 Sin[a x]^2]];
+IntegrateTable[Cos[a_. x_] Sqrt[1 + b_ Sin[a_. x_]^2], x_] /; FreeQ[{a, b}, x] && Not[TrueQ[b < 0]] :=
+  (Sin[a x]/(2 a)) Sqrt[1 + b Sin[a x]^2] + 1/(2 a Sqrt[b]) Log[Sqrt[b] Sin[a x] + Sqrt[1 + b Sin[a x]^2]];
 
 (* Formula 421 *)
-IntegrateTable[Cos[a_. x_] Sqrt[1 - b_^2 Sin[a_. x_]^2], x_] /; FreeQ[{a, b}, x] := 
-  (Sin[a x]/(2 a)) Sqrt[1 - b^2 Sin[a x]^2] + 1/(2 a b) ArcSin[b Sin[a x]];
+IntegrateTable[Cos[a_. x_] Sqrt[1 + b_ Sin[a_. x_]^2], x_] /; FreeQ[{a, b}, x] && TrueQ[b < 0] :=
+  (Sin[a x]/(2 a)) Sqrt[1 + b Sin[a x]^2] + 1/(2 a Sqrt[-b]) ArcSin[Sqrt[-b] Sin[a x]];
 
 (* Formula 422: Primary Branch *)
 IntegrateTable[1/Sqrt[a_ + b_. Tan[c_. x_]^2], x_] /; FreeQ[{a, b, c}, x] && a > Abs[b] := 
@@ -1607,29 +1541,35 @@ IntegrateTable[ArcSin[a_. x_]^2, x_] /; FreeQ[a, x] :=
 IntegrateTable[ArcCos[a_. x_]^2, x_] /; FreeQ[a, x] := 
   x ArcCos[a x]^2 - 2 x - (2 Sqrt[1 - a^2 x^2])/a ArcCos[a x];
 
-(* Formula 453 *)
-IntegrateTable[ArcSin[a_. x_]/Sqrt[1 - a_^2 x_^2], x_] /; FreeQ[a, x] := 
-  ArcSin[a x]^2/(2 a);
+(* Formula 453.  The quadratic coefficient is matched as a_ (= -b^2) and the *)
+(* linear coefficient is recovered as Sqrt[-a] on the RHS: matching a_^2 in    *)
+(* the pattern would require the matcher to invert a square, which it does not *)
+(* do, so the coefficient is bound linearly and re-squared via the Condition.  *)
+IntegrateTable[ArcSin[b_. x_]/Sqrt[c_ + a_. x_^2], x_] /; FreeQ[{a, b, c}, x] && c === 1 && a === -b^2 :=
+  ArcSin[Sqrt[-a] x]^2/(2 Sqrt[-a]);
 
-(* Formula 454: Mapped explicitly from the integral recurrence relation *)
-IntegrateTable[x_^n_ ArcSin[a_. x_]/Sqrt[1 - a_^2 x_^2], x_] /; FreeQ[{a, n}, x] && n =!= 0 && IntegerQ[n] && n > 1 :=
-  -(x^(n - 1)/(n a^2)) Sqrt[1 - a^2 x^2] ArcSin[a x] + x^n/(n^2 a) + (n - 1)/(n a^2) IntegrateTable[(x^(n - 2) ArcSin[a x])/Sqrt[1 - a^2 x^2], x];
+(* Formula 454: Mapped explicitly from the integral recurrence relation.  The  *)
+(* optional exponent x_^n_. also matches the bare x (n = 1), where the trailing *)
+(* recurrence term vanishes (coefficient n - 1 = 0), so odd powers bottom out   *)
+(* cleanly without a separate n = 1 rule. *)
+IntegrateTable[x_^n_. ArcSin[b_. x_]/Sqrt[c_ + a_. x_^2], x_] /; FreeQ[{a, b, c, n}, x] && c === 1 && a === -b^2 && IntegerQ[n] && n > 0 :=
+  -(x^(n - 1)/(n (-a))) Sqrt[1 + a x^2] ArcSin[Sqrt[-a] x] + x^n/(n^2 Sqrt[-a]) + (n - 1)/(n (-a)) IntegrateTable[(x^(n - 2) ArcSin[Sqrt[-a] x])/Sqrt[1 + a x^2], x];
 
 (* Formula 455 *)
-IntegrateTable[ArcCos[a_. x_]/Sqrt[1 - a_^2 x_^2], x_] /; FreeQ[a, x] := 
-  -ArcCos[a x]^2/(2 a);
+IntegrateTable[ArcCos[b_. x_]/Sqrt[c_ + a_. x_^2], x_] /; FreeQ[{a, b, c}, x] && c === 1 && a === -b^2 :=
+  -ArcCos[Sqrt[-a] x]^2/(2 Sqrt[-a]);
 
 (* Formula 456 *)
-IntegrateTable[x_^n_ ArcCos[a_. x_]/Sqrt[1 - a_^2 x_^2], x_] /; FreeQ[{a, n}, x] && n =!= 0 && IntegerQ[n] && n > 1 :=
-  -(x^(n - 1)/(n a^2)) Sqrt[1 - a^2 x^2] ArcCos[a x] - x^n/(n^2 a) + (n - 1)/(n a^2) IntegrateTable[(x^(n - 2) ArcCos[a x])/Sqrt[1 - a^2 x^2], x];
+IntegrateTable[x_^n_. ArcCos[b_. x_]/Sqrt[c_ + a_. x_^2], x_] /; FreeQ[{a, b, c, n}, x] && c === 1 && a === -b^2 && IntegerQ[n] && n > 0 :=
+  -(x^(n - 1)/(n (-a))) Sqrt[1 + a x^2] ArcCos[Sqrt[-a] x] - x^n/(n^2 Sqrt[-a]) + (n - 1)/(n (-a)) IntegrateTable[(x^(n - 2) ArcCos[Sqrt[-a] x])/Sqrt[1 + a x^2], x];
 
 (* Formula 457 *)
-IntegrateTable[ArcTan[a_. x_]/(1 + a_^2 x_^2), x_] /; FreeQ[a, x] := 
-  ArcTan[a x]^2/(2 a);
+IntegrateTable[ArcTan[b_. x_]/(c_ + a_. x_^2), x_] /; FreeQ[{a, b, c}, x] && c === 1 && a === b^2 :=
+  ArcTan[Sqrt[a] x]^2/(2 Sqrt[a]);
 
 (* Formula 458 *)
-IntegrateTable[ArcCot[a_. x_]/(1 + a_^2 x_^2), x_] /; FreeQ[a, x] := 
-  -ArcCot[a x]^2/(2 a);
+IntegrateTable[ArcCot[b_. x_]/(c_ + a_. x_^2), x_] /; FreeQ[{a, b, c}, x] && c === 1 && a === b^2 :=
+  -ArcCot[Sqrt[a] x]^2/(2 Sqrt[a]);
 
 (* Formula 459 *)
 IntegrateTable[x_ ArcSec[a_. x_], x_] /; FreeQ[a, x] := 
@@ -1652,8 +1592,152 @@ IntegrateTable[x_^n_ ArcCsc[a_. x_], x_] /; FreeQ[{a, n}, x] && n =!= -1 :=
   x^(n + 1)/(n + 1) ArcCsc[a x] + 1/(n + 1) IntegrateTable[x^n/Sqrt[a^2 x^2 - 1], x];
 
 (* Formula 464 *)
-IntegrateTable[ArcCsc[a_. x_]/x_^2, x_] /; FreeQ[a, x] := 
+IntegrateTable[ArcCsc[a_. x_]/x_^2, x_] /; FreeQ[a, x] :=
   -ArcCsc[a x]/x - Sqrt[a^2 x^2 - 1]/x;
+
+(* ============================================================ *)
+(* Inverse-hyperbolic analogs of Formulas 427-464.              *)
+(* Each rule below mirrors the inverse-trig entry immediately   *)
+(* above, obtained by the substitutions                         *)
+(*   ArcSin -> ArcSinh, ArcCos -> ArcCosh, ArcTan -> ArcTanh,   *)
+(*   ArcCot -> ArcCoth, ArcSec -> ArcSech, ArcCsc -> ArcCsch,   *)
+(* with the radicand / denominator sign flips forced by the     *)
+(* inverse-hyperbolic derivatives:                              *)
+(*   D[ArcSinh[u]] = 1/Sqrt[1+u^2],  D[ArcCosh[u]] = 1/Sqrt[u^2-1], *)
+(*   D[ArcTanh[u]] = D[ArcCoth[u]] = 1/(1-u^2).                  *)
+(* Every rule is diff-back verified (D[F,x]-integrand -> 0) by  *)
+(* the CRC corpus runner; the ArcSech/ArcCsch entries carry a   *)
+(* |x| branch factor that closes numerically on the positive    *)
+(* real axis.                                                   *)
+(* ============================================================ *)
+
+(* Formula 427h *)
+IntegrateTable[ArcSinh[a_. x_], x_] /; FreeQ[a, x] :=
+  x ArcSinh[a x] - Sqrt[1 + a^2 x^2]/a;
+
+(* Formula 428h *)
+IntegrateTable[ArcCosh[a_. x_], x_] /; FreeQ[a, x] :=
+  x ArcCosh[a x] - Sqrt[a^2 x^2 - 1]/a;
+
+(* Formula 429h *)
+IntegrateTable[ArcTanh[a_. x_], x_] /; FreeQ[a, x] :=
+  x ArcTanh[a x] + 1/(2 a) Log[1 - a^2 x^2];
+
+(* Formula 430h *)
+IntegrateTable[ArcCoth[a_. x_], x_] /; FreeQ[a, x] :=
+  x ArcCoth[a x] + 1/(2 a) Log[a^2 x^2 - 1];
+
+(* Formula 431h *)
+IntegrateTable[ArcSech[a_. x_], x_] /; FreeQ[a, x] :=
+  x ArcSech[a x] + 1/a ArcSin[a x];
+
+(* Formula 432h *)
+IntegrateTable[ArcCsch[a_. x_], x_] /; FreeQ[a, x] :=
+  x ArcCsch[a x] + 1/a ArcSinh[a x];
+
+(* Formula 437h *)
+IntegrateTable[x_ ArcSinh[a_. x_], x_] /; FreeQ[a, x] :=
+  1/(4 a^2) ((2 a^2 x^2 + 1) ArcSinh[a x] - a x Sqrt[1 + a^2 x^2]);
+
+(* Formula 438h *)
+IntegrateTable[x_ ArcCosh[a_. x_], x_] /; FreeQ[a, x] :=
+  1/(4 a^2) ((2 a^2 x^2 - 1) ArcCosh[a x] - a x Sqrt[a^2 x^2 - 1]);
+
+(* Formula 439h *)
+IntegrateTable[x_^n_ ArcSinh[a_. x_], x_] /; FreeQ[{a, n}, x] && n =!= -1 :=
+  x^(n + 1)/(n + 1) ArcSinh[a x] - a/(n + 1) IntegrateTable[x^(n + 1)/Sqrt[1 + a^2 x^2], x];
+
+(* Formula 440h *)
+IntegrateTable[x_^n_ ArcCosh[a_. x_], x_] /; FreeQ[{a, n}, x] && n =!= -1 :=
+  x^(n + 1)/(n + 1) ArcCosh[a x] - a/(n + 1) IntegrateTable[x^(n + 1)/Sqrt[a^2 x^2 - 1], x];
+
+(* Formula 441h *)
+IntegrateTable[x_ ArcTanh[a_. x_], x_] /; FreeQ[a, x] :=
+  (a^2 x^2 - 1)/(2 a^2) ArcTanh[a x] + x/(2 a);
+
+(* Formula 442h *)
+IntegrateTable[x_^n_ ArcTanh[a_. x_], x_] /; FreeQ[{a, n}, x] && n =!= -1 :=
+  x^(n + 1)/(n + 1) ArcTanh[a x] - a/(n + 1) IntegrateTable[x^(n + 1)/(1 - a^2 x^2), x];
+
+(* Formula 443h *)
+IntegrateTable[x_ ArcCoth[a_. x_], x_] /; FreeQ[a, x] :=
+  (a^2 x^2 - 1)/(2 a^2) ArcCoth[a x] + x/(2 a);
+
+(* Formula 444h *)
+IntegrateTable[x_^n_ ArcCoth[a_. x_], x_] /; FreeQ[{a, n}, x] && n =!= -1 :=
+  x^(n + 1)/(n + 1) ArcCoth[a x] - a/(n + 1) IntegrateTable[x^(n + 1)/(1 - a^2 x^2), x];
+
+(* Formula 445h *)
+IntegrateTable[ArcSinh[a_. x_]/x_^2, x_] /; FreeQ[a, x] :=
+  -ArcSinh[a x]/x - a Log[(1 + Sqrt[1 + a^2 x^2])/x];
+
+(* Formula 446h *)
+IntegrateTable[ArcCosh[a_. x_]/x_^2, x_] /; FreeQ[a, x] :=
+  -ArcCosh[a x]/x + a ArcTan[Sqrt[a^2 x^2 - 1]];
+
+(* Formula 447h *)
+IntegrateTable[ArcTanh[a_. x_]/x_^2, x_] /; FreeQ[a, x] :=
+  -ArcTanh[a x]/x - a/2 Log[(1 - a^2 x^2)/x^2];
+
+(* Formula 448h *)
+IntegrateTable[ArcCoth[a_. x_]/x_^2, x_] /; FreeQ[a, x] :=
+  -ArcCoth[a x]/x + a/2 Log[x^2/(1 - a^2 x^2)];
+
+(* Formula 449h *)
+IntegrateTable[ArcSinh[a_. x_]^2, x_] /; FreeQ[a, x] :=
+  x ArcSinh[a x]^2 + 2 x - (2 Sqrt[1 + a^2 x^2])/a ArcSinh[a x];
+
+(* Formula 450h *)
+IntegrateTable[ArcCosh[a_. x_]^2, x_] /; FreeQ[a, x] :=
+  x ArcCosh[a x]^2 + 2 x - (2 Sqrt[a^2 x^2 - 1])/a ArcCosh[a x];
+
+(* Formula 453h *)
+IntegrateTable[ArcSinh[b_. x_]/Sqrt[c_ + a_. x_^2], x_] /; FreeQ[{a, b, c}, x] && c === 1 && a === b^2 :=
+  ArcSinh[Sqrt[a] x]^2/(2 Sqrt[a]);
+
+(* Formula 454h *)
+IntegrateTable[x_^n_. ArcSinh[b_. x_]/Sqrt[c_ + a_. x_^2], x_] /; FreeQ[{a, b, c, n}, x] && c === 1 && a === b^2 && IntegerQ[n] && n > 0 :=
+  (x^(n - 1)/(n a)) Sqrt[1 + a x^2] ArcSinh[Sqrt[a] x] - x^n/(n^2 Sqrt[a]) - (n - 1)/(n a) IntegrateTable[(x^(n - 2) ArcSinh[Sqrt[a] x])/Sqrt[1 + a x^2], x];
+
+(* Formula 455h *)
+IntegrateTable[ArcCosh[b_. x_]/Sqrt[c_ + a_. x_^2], x_] /; FreeQ[{a, b, c}, x] && c === -1 && a === b^2 :=
+  ArcCosh[Sqrt[a] x]^2/(2 Sqrt[a]);
+
+(* Formula 456h *)
+IntegrateTable[x_^n_. ArcCosh[b_. x_]/Sqrt[c_ + a_. x_^2], x_] /; FreeQ[{a, b, c, n}, x] && c === -1 && a === b^2 && IntegerQ[n] && n > 0 :=
+  (x^(n - 1)/(n a)) Sqrt[a x^2 - 1] ArcCosh[Sqrt[a] x] - x^n/(n^2 Sqrt[a]) + (n - 1)/(n a) IntegrateTable[(x^(n - 2) ArcCosh[Sqrt[a] x])/Sqrt[a x^2 - 1], x];
+
+(* Formula 457h *)
+IntegrateTable[ArcTanh[b_. x_]/(c_ + a_. x_^2), x_] /; FreeQ[{a, b, c}, x] && c === 1 && a === -b^2 :=
+  ArcTanh[Sqrt[-a] x]^2/(2 Sqrt[-a]);
+
+(* Formula 458h *)
+IntegrateTable[ArcCoth[b_. x_]/(c_ + a_. x_^2), x_] /; FreeQ[{a, b, c}, x] && c === 1 && a === -b^2 :=
+  ArcCoth[Sqrt[-a] x]^2/(2 Sqrt[-a]);
+
+(* Formula 459h *)
+IntegrateTable[x_ ArcSech[a_. x_], x_] /; FreeQ[a, x] :=
+  x^2/2 ArcSech[a x] - 1/(2 a^2) Sqrt[1 - a^2 x^2];
+
+(* Formula 460h *)
+IntegrateTable[x_^n_ ArcSech[a_. x_], x_] /; FreeQ[{a, n}, x] && n =!= -1 :=
+  x^(n + 1)/(n + 1) ArcSech[a x] + 1/(n + 1) IntegrateTable[x^n/Sqrt[1 - a^2 x^2], x];
+
+(* Formula 461h *)
+IntegrateTable[ArcSech[a_. x_]/x_^2, x_] /; FreeQ[a, x] :=
+  -ArcSech[a x]/x + Sqrt[1 - a^2 x^2]/x;
+
+(* Formula 462h *)
+IntegrateTable[x_ ArcCsch[a_. x_], x_] /; FreeQ[a, x] :=
+  x^2/2 ArcCsch[a x] + 1/(2 a^2) Sqrt[1 + a^2 x^2];
+
+(* Formula 463h *)
+IntegrateTable[x_^n_ ArcCsch[a_. x_], x_] /; FreeQ[{a, n}, x] && n =!= -1 :=
+  x^(n + 1)/(n + 1) ArcCsch[a x] + 1/(n + 1) IntegrateTable[x^n/Sqrt[1 + a^2 x^2], x];
+
+(* Formula 464h *)
+IntegrateTable[ArcCsch[a_. x_]/x_^2, x_] /; FreeQ[a, x] :=
+  -ArcCsch[a x]/x + Sqrt[1 + a^2 x^2]/x;
 
 (* Formula 465 *)
 IntegrateTable[Log[x_], x_] := 
@@ -1735,43 +1819,49 @@ IntegrateTable[x_^n_ Log[a_ + b_. x_ + c_. x_^2], x_] /; FreeQ[{a, b, c, n}, x] 
     x^(n + 1)/(n + 1) Log[X] - (2 c)/(n + 1) IntegrateTable[x^(n + 2)/X, x] - b/(n + 1) IntegrateTable[x^(n + 1)/X, x]
   ];
 
+(* Formulas 488-495.  These rules matched a squared constant as `a_^2`,
+   which the pattern matcher cannot bind against a numeric argument (it
+   does not invert the square), so they never fired for concrete inputs.
+   Rewritten to bind the constant linearly as `a_` and re-express the
+   linear part via Sqrt[a].  Because `x_^2 - a_` will not bind `a_` to a
+   negative literal, BOTH signs are matched with the single `x_^2 + a_`
+   form, disambiguated by the guard: `Not[TrueQ[a < 0]]` for the plus rule
+   (also admits a symbolic `a`), `TrueQ[a < 0]` for the minus rule (using
+   Sqrt[-a]).  When the RHS is even in the original constant (only a^2
+   appears, e.g. 490-493) the negative-a plus form already reproduces the
+   minus case, so a single unguarded rule covers both. *)
+
 (* Formula 488 *)
-IntegrateTable[Log[x_^2 + a_^2], x_] /; FreeQ[a, x] := 
-  x Log[x^2 + a^2] - 2 x + 2 a ArcTan[x/a];
+IntegrateTable[Log[x_^2 + a_], x_] /; FreeQ[a, x] && Not[TrueQ[a < 0]] :=
+  x Log[x^2 + a] - 2 x + 2 Sqrt[a] ArcTan[x/Sqrt[a]];
 
 (* Formula 489 *)
-IntegrateTable[Log[x_^2 - a_^2], x_] /; FreeQ[a, x] := 
-  x Log[x^2 - a^2] - 2 x + a Log[(x + a)/(x - a)];
+IntegrateTable[Log[x_^2 + a_], x_] /; FreeQ[a, x] && TrueQ[a < 0] :=
+  x Log[x^2 + a] - 2 x + Sqrt[-a] Log[(x + Sqrt[-a])/(x - Sqrt[-a])];
 
 (* Formula 490 *)
-IntegrateTable[x_ Log[x_^2 + a_^2], x_] /; FreeQ[a, x] := 
-  1/2 (x^2 + a^2) Log[x^2 + a^2] - x^2/2;
+IntegrateTable[x_ Log[x_^2 + a_], x_] /; FreeQ[a, x] :=
+  1/2 (x^2 + a) Log[x^2 + a] - x^2/2;
 
 (* Formula 491 *)
-IntegrateTable[Log[x_ + Sqrt[x_^2 + a_^2]], x_] /; FreeQ[a, x] := 
-  x Log[x + Sqrt[x^2 + a^2]] - Sqrt[x^2 + a^2];
-IntegrateTable[Log[x_ + Sqrt[x_^2 - a_^2]], x_] /; FreeQ[a, x] := 
-  x Log[x + Sqrt[x^2 - a^2]] - Sqrt[x^2 - a^2];
+IntegrateTable[Log[x_ + Sqrt[x_^2 + a_]], x_] /; FreeQ[a, x] :=
+  x Log[x + Sqrt[x^2 + a]] - Sqrt[x^2 + a];
 
 (* Formula 492 *)
-IntegrateTable[x_ Log[x_ + Sqrt[x_^2 + a_^2]], x_] /; FreeQ[a, x] := 
-  (x^2/2 + a^2/4) Log[x + Sqrt[x^2 + a^2]] - (x Sqrt[x^2 + a^2])/4;
-IntegrateTable[x_ Log[x_ + Sqrt[x_^2 - a_^2]], x_] /; FreeQ[a, x] := 
-  (x^2/2 - a^2/4) Log[x + Sqrt[x^2 - a^2]] - (x Sqrt[x^2 - a^2])/4;
+IntegrateTable[x_ Log[x_ + Sqrt[x_^2 + a_]], x_] /; FreeQ[a, x] :=
+  (x^2/2 + a/4) Log[x + Sqrt[x^2 + a]] - (x Sqrt[x^2 + a])/4;
 
 (* Formula 493 *)
-IntegrateTable[x_^m_ Log[x_ + Sqrt[x_^2 + a_^2]], x_] /; FreeQ[{a, m}, x] := 
-  x^(m + 1)/(m + 1) Log[x + Sqrt[x^2 + a^2]] - 1/(m + 1) IntegrateTable[x^(m + 1)/Sqrt[x^2 + a^2], x];
-IntegrateTable[x_^m_ Log[x_ + Sqrt[x_^2 - a_^2]], x_] /; FreeQ[{a, m}, x] := 
-  x^(m + 1)/(m + 1) Log[x + Sqrt[x^2 - a^2]] - 1/(m + 1) IntegrateTable[x^(m + 1)/Sqrt[x^2 - a^2], x];
+IntegrateTable[x_^m_ Log[x_ + Sqrt[x_^2 + a_]], x_] /; FreeQ[{a, m}, x] :=
+  x^(m + 1)/(m + 1) Log[x + Sqrt[x^2 + a]] - 1/(m + 1) IntegrateTable[x^(m + 1)/Sqrt[x^2 + a], x];
 
 (* Formula 494 *)
-IntegrateTable[Log[x_ + Sqrt[x_^2 + a_^2]]/x_^2, x_] /; FreeQ[a, x] := 
-  -Log[x + Sqrt[x^2 + a^2]]/x - 1/a Log[(a + Sqrt[x^2 + a^2])/x];
+IntegrateTable[Log[x_ + Sqrt[x_^2 + a_]]/x_^2, x_] /; FreeQ[a, x] && Not[TrueQ[a < 0]] :=
+  -Log[x + Sqrt[x^2 + a]]/x - 1/Sqrt[a] Log[(Sqrt[a] + Sqrt[x^2 + a])/x];
 
 (* Formula 495 *)
-IntegrateTable[Log[x_ + Sqrt[x_^2 - a_^2]]/x_^2, x_] /; FreeQ[a, x] := 
-  -Log[x + Sqrt[x^2 - a^2]]/x + 1/Abs[a] ArcSec[x/a];
+IntegrateTable[Log[x_ + Sqrt[x_^2 + a_]]/x_^2, x_] /; FreeQ[a, x] && TrueQ[a < 0] :=
+  -Log[x + Sqrt[x^2 + a]]/x + 1/Sqrt[-a] ArcSec[x/Sqrt[-a]];
 
 (* Formula 497 *)
 IntegrateTable[E^x_, x_] := E^x;
