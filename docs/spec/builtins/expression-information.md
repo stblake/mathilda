@@ -703,9 +703,16 @@ PCRE2 a `RegularExpression` pattern emits `Names::regavail` and stays
 unevaluated. The result is always ordered so that `Names[patt]` is identical to
 `Sort[Names[patt]]`.
 
-**Features**: `Protected`. All symbols are candidates — builtins are stored
-under bare `System`` names, so context-prefix patterns match the raw stored
-name.
+**Context handling.** Symbols are stored under bare names for the `System`` and
+`Global`` contexts (builtins and unqualified user symbols). A pattern that
+contains a `` ` `` is matched against — and returns — each symbol's fully
+context-qualified name (`System`Sin`, `Global`x`, …); a plain pattern (no
+backtick) is matched against, and returns, the stored short name. This is what
+makes `Names["System`*"]` enumerate all builtins.
+
+**Features**: `Protected`. All symbols are candidates. A symbol's home context
+is `System`` when it is a builtin (or a kernel-interned System symbol) and
+`Global`` otherwise, mirroring `Context[]`.
 
 ```mathematica
 In[1]:= Names["List*"]
@@ -716,6 +723,9 @@ Out[2]= {"Arg", "Array", "Arrow"}          (* @ stops at the uppercase in ArcSin
 
 In[3]:= Names[RegularExpression["Si."]]
 Out[3]= {"Sin"}
+
+In[4]:= MemberQ[Names["System`*"], "System`Sin"]
+Out[4]= True
 ```
 
 ## MessageName

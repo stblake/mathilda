@@ -91,6 +91,29 @@ void test_names_regular_expression() {
     assert_eval_eq("Names[RegularExpression[\"Sin|Cos\"]]", "{\"Cos\", \"Sin\"}", 0);
 }
 
+/* ---- a context-qualified pattern enumerates that context ---- */
+void test_names_system_context() {
+    /* The reported bug: Names["System`*"] used to return {} because nothing is
+     * stored under a literal "System`" prefix. It must now list the builtins. */
+    assert_eval_eq("Length[Names[\"System`*\"]] > 0", "True", 0);
+    assert_eval_eq("MemberQ[Names[\"System`*\"], \"System`Sin\"]", "True", 0);
+    assert_eval_eq("MemberQ[Names[\"System`*\"], \"System`Plus\"]", "True", 0);
+    /* Results are the fully-qualified names, not the bare ones. */
+    assert_eval_eq("MemberQ[Names[\"System`*\"], \"Sin\"]", "False", 0);
+    /* An exact context-qualified literal selects just that symbol. */
+    assert_eval_eq("Names[\"System`Sin\"]", "{\"System`Sin\"}", 0);
+    /* Still canonically sorted. */
+    assert_eval_eq("Names[\"System`*\"] === Sort[Names[\"System`*\"]]", "True", 0);
+}
+
+/* ---- Global` context reflects user-assigned symbols ---- */
+void test_names_global_context() {
+    assert_eval_eq("myNamesVar = 5; MemberQ[Names[\"Global`*\"], \"Global`myNamesVar\"]",
+                   "True", 0);
+    /* A builtin is not in Global`. */
+    assert_eval_eq("MemberQ[Names[\"Global`*\"], \"Global`Sin\"]", "False", 0);
+}
+
 /* ---- arity / bad argument: stays unevaluated ---- */
 void test_names_unevaluated() {
     assert_eval_eq("Names[5]", "Names[5]", 0);
@@ -117,6 +140,8 @@ int main() {
     TEST(test_names_all);
     TEST(test_names_returns_strings);
     TEST(test_names_regular_expression);
+    TEST(test_names_system_context);
+    TEST(test_names_global_context);
     TEST(test_names_unevaluated);
     TEST(test_names_protected);
 

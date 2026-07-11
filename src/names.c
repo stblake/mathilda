@@ -19,11 +19,22 @@
  * The result is a List of Strings sorted ascending by byte value (strcmp),
  * matching Wolfram-Language ordering for the common ASCII case.  All symbols in
  * the table are candidates -- there is no filtering of internal helper symbols.
+ *
+ * Context handling: symbols are stored under bare names for the System` and
+ * Global` contexts (builtins and unqualified user symbols) and under explicit
+ * backtick-qualified names for other contexts.  A pattern element that itself
+ * contains a backtick (e.g. "System`*") is matched against -- and returns --
+ * each symbol's fully context-qualified name (System`Sin, Global`x, ...); a
+ * plain pattern (no backtick) is matched against, and returns, the stored name
+ * exactly as before.  This is what makes Names["System`*"] enumerate the
+ * builtins instead of returning {} (nothing is stored with a literal "System`"
+ * prefix).
  */
 
 #include "names.h"
 #include "symtab.h"
 #include "sym_names.h"
+#include "sym_intern.h"
 #include "attr.h"
 #include "regex_engine.h"
 
@@ -138,6 +149,41 @@ static int pat_matches(const NamePat* p, const char* name) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Context-qualified name helpers                                     */
+/* ------------------------------------------------------------------ */
+
+/* C99-safe strdup replacement (strdup is POSIX, not C99). */
+static char* name_strdup(const char* s) {
+    size_t n = strlen(s) + 1;
+    char* r = (char*)malloc(n);
+    if (r) memcpy(r, s, n);
+    return r;
+}
+
+static int name_has_backtick(const char* s) {
+    for (; *s; s++) if (*s == '`') return 1;
+    return 0;
+}
+
+/* Fully context-qualified name of a symbol (caller frees). Names that already
+ * carry an explicit context prefix are returned verbatim; bare names are
+ * qualified with "System`" when the symbol is a builtin (or a kernel-interned
+ * System symbol) and "Global`" otherwise, mirroring Context[]'s home-context
+ * rule. */
+static char* full_qualified_name(const char* nm, SymbolDef* def) {
+    if (name_has_backtick(nm)) return name_strdup(nm);
+    const char* ctx =
+        (def && (def->builtin_func != NULL || intern_is_system(nm)))
+            ? "System`" : "Global`";
+    size_t nc = strlen(ctx), nn = strlen(nm);
+    char* r = (char*)malloc(nc + nn + 1);
+    if (!r) return NULL;
+    memcpy(r, ctx, nc);
+    memcpy(r + nc, nm, nn + 1);
+    return r;
+}
+
+/* ------------------------------------------------------------------ */
 /* Collector: gather matching names during symtab_for_each            */
 /* ------------------------------------------------------------------ */
 
@@ -145,26 +191,53 @@ typedef struct {
     const NamePat* pats;
     int            npats;
     int            match_all;   /* Names[] with no argument: take every name */
-    const char**   names;       /* borrowed interned names (not owned) */
+    char**         names;       /* owned emit strings (bare or context-qualified) */
     size_t         count, cap;
 } NameCollect;
 
+/* Determine the string to return for `name` under a single pattern, or NULL if
+ * it does not match.  A glob containing a backtick matches (and yields) the
+ * fully-qualified name; a plain glob matches (and yields) the stored name.  A
+ * regex is tried against the stored name first, then the qualified name, so a
+ * context-bearing regex works too.  `*full` caches the qualified name across
+ * the caller's pattern loop; the caller frees it. */
+static char* match_one(const char* name, SymbolDef* def,
+                       const NamePat* p, char** full) {
+    if (!p->is_regex && p->glob && name_has_backtick(p->glob)) {
+        if (!*full) *full = full_qualified_name(name, def);
+        return (*full && pat_matches(p, *full)) ? name_strdup(*full) : NULL;
+    }
+    if (!p->is_regex) {
+        return pat_matches(p, name) ? name_strdup(name) : NULL;
+    }
+    /* regex */
+    if (pat_matches(p, name)) return name_strdup(name);
+    if (!*full) *full = full_qualified_name(name, def);
+    return (*full && pat_matches(p, *full)) ? name_strdup(*full) : NULL;
+}
+
 static void collect_visit(const char* name, SymbolDef* def, void* user) {
-    (void)def;
     NameCollect* c = (NameCollect*)user;
-    int keep = c->match_all;
-    for (int i = 0; !keep && i < c->npats; i++)
-        if (pat_matches(&c->pats[i], name)) keep = 1;
-    if (!keep) return;
+    char* emit = NULL;
+
+    if (c->match_all) {
+        emit = name_strdup(name);
+    } else {
+        char* full = NULL;   /* lazily built, reused across patterns */
+        for (int i = 0; !emit && i < c->npats; i++)
+            emit = match_one(name, def, &c->pats[i], &full);
+        free(full);
+    }
+    if (!emit) return;
 
     if (c->count == c->cap) {
         size_t nc = c->cap ? c->cap * 2 : 64;
-        const char** np = realloc(c->names, nc * sizeof(const char*));
-        if (!np) return;   /* OOM: drop this name rather than crash */
+        char** np = realloc(c->names, nc * sizeof(char*));
+        if (!np) { free(emit); return; }  /* OOM: drop this name rather than crash */
         c->names = np;
         c->cap = nc;
     }
-    c->names[c->count++] = name;
+    c->names[c->count++] = emit;
 }
 
 /* Order two String Exprs by Mathilda's canonical comparison, so that the
@@ -225,7 +298,11 @@ Expr* builtin_names(Expr* res) {
     Expr** items = NULL;
     if (c.count > 0) {
         items = malloc(c.count * sizeof(Expr*));
-        if (!items) { free(c.names); return NULL; }
+        if (!items) {
+            for (size_t i = 0; i < c.count; i++) free(c.names[i]);
+            free(c.names);
+            return NULL;
+        }
         for (size_t i = 0; i < c.count; i++)
             items[i] = expr_new_string(c.names[i]);
         /* Sort by canonical order so Names[p] === Sort[Names[p]]. */
@@ -234,6 +311,7 @@ Expr* builtin_names(Expr* res) {
     }
     Expr* out = expr_new_function(expr_new_symbol(SYM_List), items, c.count);
     free(items);
+    for (size_t i = 0; i < c.count; i++) free(c.names[i]);
     free(c.names);
     return out;
 }
