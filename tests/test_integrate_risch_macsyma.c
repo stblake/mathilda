@@ -366,6 +366,12 @@ static void test_log_tower_case(void) {
     assert_rm_diff_zero("Log[x] + Log[x + 1]");
     assert_rm_diff_zero("1/(x Log[x] (1 + Log[Log[x]]))");
     assert_rm_diff_zero("1/(x Log[x] (1 + Log[Log[x]])^2)");
+    /* Cap-free top-degree bound: these need Ntop = 6 and 8 in the top log kernel
+     * Log[Log[x]] — the former arbitrary `Ntop > 4 -> 4` cap declined them.  The
+     * bound Ntop = deg_top(f) + 1 is now exact/uncapped (a LOG kernel lowers degree
+     * under D), so ALL top degrees close. */
+    assert_rm_diff_zero("Log[Log[x]]^5/(x Log[x])");   /* -> Log[Log[x]]^6/6 */
+    assert_rm_diff_zero("Log[Log[x]]^7/(x Log[x])");   /* -> Log[Log[x]]^8/8 */
 }
 
 /* ================= NESTED EXP TOWERS + MERGED MONOMIAL =================
@@ -379,6 +385,22 @@ static void test_exp_tower_case(void) {
     assert_rm_diff_zero("E^x E^(E^x)");
     assert_rm_diff_zero("E^(2 E^x) E^x");
     assert_rm_diff_zero("E^x E^(E^x)/(1 + E^(E^x))");
+    /* Multiplicatively commensurate merged kernels (§6.1 item 3): E^(2 E^x) =
+     * (E^(E^x))^2 is a power of another tower kernel, so the commensurate
+     * reduction in rm_tower_build keeps only the primitive E^(E^x) as an
+     * extension and aliases E^(2 E^x) -> t^2.  Without it the dependent kernel
+     * would spuriously add an extension and the tower declined. */
+    assert_rm_diff_zero("E^x E^(2 E^x)/(1 + E^(E^x))");        /* -> E^(E^x) - Log[1+E^(E^x)] */
+    assert_rm_diff_zero("E^x E^(3 E^x)/(1 + E^(E^x))");
+    assert_rm_diff_zero("E^x E^(2 E^x)/(1 + E^(2 E^x))");
+    /* Exp-top algebraic-residue LRT unblocked by the reduction (den = t^2+1). */
+    assert_rm_diff_zero("E^x E^(E^x)/(1 + E^(2 E^x))");        /* -> ArcTan[E^(E^x)] */
+    assert_rm_diff_zero("E^x E^(E^x)/(4 + E^(2 E^x))");
+    /* Cap-free top Laurent extent: the antiderivative is a degree-5 Laurent
+     * polynomial in the top exp kernel E^(E^x) — beyond the former arbitrary
+     * `ihi > 4 -> 4` cap, which declined it.  The top Laurent range is now the
+     * exact deg_top(num) - deg_top(den) (an EXP kernel preserves degree under D). */
+    assert_rm_diff_zero("E^x E^(6 E^x)/(1 + E^(E^x))");
 }
 
 /* ================= RECURSIVE / MIXED =================
@@ -398,6 +420,16 @@ static void test_recursive_tower_case(void) {
     assert_rm_diff_zero("(2 Log[x]/x) E^(Log[x]^2)/(1 + E^(Log[x]^2))");
     assert_rm_diff_zero("(2/x - 1/(x Log[x]^2)) E^(Log[x]^2)");
     assert_rm_diff_zero("(2 Log[x]/(x (1 + Log[x])) - 1/(x (1 + Log[x])^2)) E^(Log[x]^2)");
+    /* Exact field-RDE degree bound (§6.1 item 1, rm_rde_var_bound): the RDE solver
+     * works for ALL degrees — the exponential-Laurent coefficient q = Log[x]^k has
+     * lower-variable degree k, found EXACTLY (deg(q) = deg(p) - deg(Dcoef)) with NO
+     * arbitrary degree cap or monomial ceiling.  There is nothing special about any
+     * particular k; deg-6/-8/-12/-20 all close (these formerly declined at the
+     * removed cap-at-5). */
+    assert_rm_diff_zero("(6 Log[x]^5 + 2 Log[x]^7)/x E^(Log[x]^2)");   /* q = Log[x]^6 */
+    assert_rm_diff_zero("(8 Log[x]^7 + 2 Log[x]^9)/x E^(Log[x]^2)");   /* q = Log[x]^8 */
+    assert_rm_diff_zero("(12 Log[x]^11 + 2 Log[x]^13)/x E^(Log[x]^2)"); /* q = Log[x]^12 */
+    assert_rm_diff_zero("(20 Log[x]^19 + 2 Log[x]^21)/x E^(Log[x]^2)"); /* q = Log[x]^20 */
     /* Pure resultant Lazard-Rioboo-Trager log part at a LOGARITHMIC tower top:
      * a proper fraction of Log[Log[x]] whose Rothstein-Trager residues are
      * ALGEBRAIC constants (the +-I/2 that split t^2+1 into ArcTan) — the class
@@ -477,6 +509,11 @@ static void test_strict_unevaluated(void) {
      * leaving the inner E^x as a free SolveAlways parameter (fixed by rm_kernel_simple). */
     assert_head_unevaluated("Integrate`RischMacsyma[E^(E^x), x]", "Integrate`RischMacsyma");
     assert_head_unevaluated("Integrate`RischMacsyma[E^(E^x)/(1 + E^(E^x)), x]", "Integrate`RischMacsyma");
+    /* Commensurate-reduction siblings that stay non-elementary: no E^x derivation
+     * factor to supply dt for the E^(2 E^x)=t^2 denominator, so they decline even
+     * though the reduction now lets the tower build (§6.1 item 3, never wrong). */
+    assert_head_unevaluated("Integrate`RischMacsyma[E^(E^x)/(1 + E^(2 E^x)), x]", "Integrate`RischMacsyma");
+    assert_head_unevaluated("Integrate`RischMacsyma[E^(2 E^x)/(1 + E^(E^x)), x]", "Integrate`RischMacsyma");
     /* Proper tower fraction with a NON-constant Rothstein-Trager residue is
      * non-elementary (must not certify a wrong constant residue). */
     assert_head_unevaluated("Integrate`RischMacsyma[1/(Log[x] (1 + Log[Log[x]])), x]", "Integrate`RischMacsyma");

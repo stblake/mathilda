@@ -763,12 +763,25 @@ monotonically down.
         the residues gated free of *every* lower-field variable (`{x, Log[x], …}`),
         and `1/(Log[x](Log[Log[x]]^2+1))` (x-dependent residues) declining;
     Rational-argument exponents such as `E^(1/x)` are handled (`Integrate[-E^(1/x)/
-    x^2, x] = E^(1/x)`) via the `q = h/Denominator[p]` RDE ansatz.  The recursive
-    degree-reduction half of the Bronstein SPDE (the field RDE uses a bounded
-    polynomial numerator ansatz), the tower-level resultant LRT at an *exponential*
-    top (blocked by commensurate-exponent kernelization, `E^(2 u) = (E^u)^2`), and
-    algebraic extensions are not yet implemented, so integrands needing them return
-    unevaluated.
+    x^2, x] = E^(1/x)`) via the `q = h/Denominator[p]` RDE ansatz.  **Multiplicatively
+    commensurate merged kernels** are reduced in the tower builder — a collected
+    exponential whose exponent is an integer multiple of a class primitive
+    (`E^(2 E^x) = (E^(E^x))^2`) becomes a power of the primitive's tower variable
+    instead of a spurious extra extension — so towers with `E^(k u)` close and the
+    exp-top algebraic-residue LRT is unblocked
+    (`Integrate[E^x E^(E^x)/(1+E^(2 E^x)), x] = ArcTan[E^(E^x)]`,
+    `Integrate[E^x E^(2 E^x)/(1+E^(E^x)), x] = E^(E^x) - Log[1+E^(E^x)]`); a class
+    with no integer-ratio primitive declines.  The **RDE-solver degree bounds** are
+    Bronstein's exact `RdeBoundDegree` (leading-degree balance,
+    `deg_v(q) = deg_v(p) − deg_v(f)` where the exponential dominates), with **no
+    arbitrary cap**, so an exponential-Laurent coefficient of any degree closes
+    (`Integrate[(6 Log[x]^5 + 2 Log[x]^7)/x E^(Log[x]^2), x] = Log[x]^6 E^(Log[x]^2)`,
+    and deg-20 …).  The **flat-tower and proper-part Hermite ansätze are likewise
+    cap-free**: exact top-kernel log/exp Laurent bounds and derived inner-exp windows,
+    so all top degrees close (`Integrate[Log[Log[x]]^5/(x Log[x]), x] =
+    Log[Log[x]]^6/6`, `Integrate[E^x E^(6 E^x)/(1+E^(E^x)), x]`).  Only the deep
+    cancellation half of the Bronstein SPDE and algebraic extensions are not yet
+    implemented, so integrands needing them return unevaluated.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.
   - `"Symmetry"` — origin-symmetry reduction for an interval `[-c, c]`

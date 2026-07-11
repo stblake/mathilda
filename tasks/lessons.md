@@ -982,3 +982,17 @@ exp/log algebraisation resolved `Log[x^n] -> n Log[x]` cleanly. Rule: a new
 head-triggered transform must be disjoint from existing ones, or measurably
 better on their cases. Always run the *existing* target test binary before
 declaring done.
+
+## No arbitrary caps / hacks in decision procedures (2026-07-11)
+User reaction to shipping a Risch field-RDE degree bound behind an arbitrary
+`if(d>5)d=5` cap (and a leftover `nmono<=128` ceiling): "Mathilda should be hack
+free! The RDE solver should work for all degrees." A magic-constant degree cap in a
+*decision procedure* is not an acceptable "increment" — it silently rejects valid
+integrals. Rule: never introduce or leave a magic-number degree cap / resource
+ceiling in the Risch (or any decision-procedure) code. Derive the bound from the
+problem (here Bronstein RdeBoundDegree: leading-degree balance, monomial-type-aware —
+log/x lower degree under D, exp preserves it), shared in a documented helper, with NO
+ceiling. Correctness is already guaranteed by SolveAlways-certification + diff-back, so
+the bound only affects completeness — which is exactly why it must be principled, not
+capped. When a whole family of ansatz sites shares the same hack pattern, say so and
+clean them all (or scope explicitly), don't leave siblings capped.

@@ -37,6 +37,25 @@ static bool rm_head_is(const Expr* e, const char* name) {
            e->data.function.head->data.symbol == intern_symbol(name);
 }
 
+/* True iff `e` is a nonzero integer constant; writes its value to *out. */
+static bool rm_is_int_const(const Expr* e, long* out) {
+    if (e && e->type == EXPR_INTEGER && e->data.integer != 0) {
+        *out = (long)e->data.integer; return true;
+    }
+    return false;
+}
+
+/* True iff `e` is a nonzero rational number constant (Integer, BigInt, or
+ * Rational[p, q]) — used to group multiplicatively commensurate exponents. */
+static bool rm_is_rat_const(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER) return e->data.integer != 0;
+    if (e->type == EXPR_BIGINT) return true;
+    return e->type == EXPR_FUNCTION &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol == intern_symbol("Rational");
+}
+
 /* Build `head[args...]` (adopting the owned `args` element pointers) and
  * evaluate it, freeing the constructed call.  Returns evaluate()'s result. */
 static Expr* rm_eval_call(const char* head, Expr** args, size_t n) {
@@ -590,6 +609,57 @@ static Expr* rm_integrate_in_K_with_logs(Expr* g, Expr* x) {
     return r;
 }
 
+/* Exact degree bound for the solution q of a Risch DE  D[q] + f q = p, in a single
+ * monomial variable v (Bronstein RdeBoundDegree, leading-degree balance).  Returns an
+ * UPPER bound on deg_v(q) with NO arbitrary cap — it is a function of the equation's
+ * degrees alone.  `deriv_lowers` is true when D lowers deg_v by one (v = x under
+ * d/dx, or a LOGARITHMIC monomial), false when D preserves deg_v (an EXPONENTIAL
+ * monomial, whose self-derivative D[t^k] = k w' t^k keeps the degree).  dpv =
+ * deg_v(p), dfv = deg_v(f) (each as deg(numerator) - deg(denominator)).
+ *
+ * Derivation.  Match the top v-degree of D[q] + f q = p.  For a deriv-lowering v,
+ * deg_v(D[q]) = deg_v(q) - 1 and deg_v(f q) = dfv + deg_v(q); when dfv >= 0 the f q
+ * term strictly dominates (distinct degrees, no cancellation) so deg_v(q) = dpv - dfv
+ * exactly, and when dfv < 0 the balance is between D[q] (integration raises degree by
+ * one: dpv + 1) and a possible pole in f (dpv - dfv), so the bound is their max.  For
+ * a deriv-preserving (exponential) v, both terms sit at deg_v(q) + max(0, dfv), giving
+ * deg_v(q) = dpv - dfv.  The only sub-cases this misses are genuine leading-coefficient
+ * cancellations (dfv = -1 for a deriv-lowering v; dfv = 0 with an integer resonance for
+ * an exponential v) — Bronstein's recursive degree reduction — and those can ONLY make
+ * the SolveAlways ansatz decline, never mis-solve (the solution is SolveAlways-certified
+ * and the caller diff-back verifies). */
+static long rm_rde_var_bound(long dpv, long dfv, bool deriv_lowers) {
+    long bq;
+    if (deriv_lowers) {
+        if (dfv >= 0) {
+            bq = dpv - dfv;                         /* f q dominates: exact */
+        } else {                                   /* integration rise vs pole in f */
+            long a = dpv + 1, b = dpv - dfv;
+            bq = (a > b) ? a : b;
+        }
+    } else {                                       /* exponential: derivation preserves deg */
+        bq = dpv - dfv;
+    }
+    return (bq < 0) ? 0 : bq;
+}
+
+/* Multiplicity of the variable v at 0 in the polynomial p: the lowest power of v
+ * that appears with a nonzero coefficient (0 if v does not divide p).  This is the
+ * exact negative Laurent extent for an EXPONENTIAL kernel v — the order of the pole
+ * that v contributes to a proper fraction — derived from the input, no cap. */
+static long rm_var_mult_at_zero(Expr* p, Expr* v) {
+    long a = 0;
+    Expr* cl = rm_eval2("CoefficientList", expr_copy(p), expr_copy(v));
+    if (cl && cl->type == EXPR_FUNCTION
+        && cl->data.function.head->type == EXPR_SYMBOL
+        && cl->data.function.head->data.symbol == intern_symbol("List")) {
+        for (size_t i = 0; i < cl->data.function.arg_count; i++)
+            if (!rm_is_zero(cl->data.function.args[i])) { a = (long)i; break; }
+    }
+    if (cl) expr_free(cl);
+    return a;
+}
+
 /* Risch differential equation q' + i u' q = p when the exponent u OR the
  * coefficient p is RATIONAL in x (so the polynomial ansatz below does not apply —
  * e.g. u = 1/x for E^(1/x), or p = 1/x - 1/x^2).  By the denominator theorem the
@@ -620,9 +690,25 @@ static Expr* rm_solve_rde_rational(Expr* p, long i, Expr* u, Expr* x) {
     if (upn) expr_free(upn);
     if (upd) expr_free(upd);
     if (!ratl) { expr_free(up); expr_free(pd); expr_free(pn); return NULL; }
+    /* Exact numerator degree bound (no cap).  q = h/pd solves q' + i u' q = p over
+     * C(x); deg_x(h) = deg_x(q) + deg_x(pd) with deg_x(q) from the leading balance of
+     * q' against i u' q (rm_rde_var_bound, x is deriv-lowering).  f = i u' has
+     * deg_x(f) = deg(Numerator[u']) - deg(Denominator[u']). */
     long dpd = rm_degree(pd, x); if (dpd < 0) dpd = 0;
     long dpn = rm_degree(pn, x); if (dpn < 0) dpn = 0;
-    long N = dpd + dpn + 2; if (N > 10) N = 10;
+    Expr* ung = rm_eval1("Together", expr_copy(up));
+    Expr* unn = ung ? rm_eval1("Numerator", expr_copy(ung)) : NULL;
+    Expr* und = ung ? rm_eval1("Denominator", expr_copy(ung)) : NULL;
+    if (ung) expr_free(ung);
+    long dfx = 0;
+    if (unn && und) {
+        long a = rm_degree(unn, x); if (a < 0) a = 0;
+        long b = rm_degree(und, x); if (b < 0) b = 0;
+        dfx = a - b;
+    }
+    if (unn) expr_free(unn);
+    if (und) expr_free(und);
+    long N = rm_rde_var_bound(dpn - dpd, dfx, true) + dpd;   /* deg_x(h) */
 
     Expr** terms = malloc((size_t)(N + 1) * sizeof(Expr*));
     for (long k = 0; k <= N; k++) {
@@ -1367,9 +1453,9 @@ static Expr* rm_hermite_try(Expr* f, Expr* x, bool is_log) {
             }
         }
         long dnx = rm_degree(num, x), ddx = rm_degree(den, x);
-        long Nx = (dnx > ddx ? dnx : ddx) + 2; if (Nx > 8) Nx = 8;
+        long Nx = (dnx > ddx ? dnx : ddx) + 2;   /* derived Hermite x-degree, no cap */
         size_t nh = (size_t)(dH * (Nx + 1));
-        if (!bad && (long)(nh + ng) <= 80) {
+        if (!bad && (long)(nh + ng) > 0) {
             Expr** hterms = malloc((nh ? nh : 1) * sizeof(Expr*));
             size_t nt = 0;
             for (long p = 0; p < dH; p++)
@@ -1594,12 +1680,15 @@ static Expr* rm_hyperexp_case(Expr* f, Expr* x) {
         long ilo = -a;
         long degu = rm_degree(uexp, x);
         long dnx = rm_degree(num, x), ddx = rm_degree(den, x);
+        /* x-degree bound of the coefficient polynomials — derived from the numerator/
+         * denominator degrees and the exponent degree, NO cap.  Generous but a
+         * function of the input; a too-large bound only slows SolveAlways (every
+         * solution is certified + diff-back verified), never mis-solves. */
         long Nx = (dnx > ddx ? dnx : ddx) + (degu > 0 ? degu : 1) + 1;
-        if (Nx > 8) Nx = 8;
         long nwi = ihi - ilo + 1;
         size_t nH_syms = (size_t)(dH * (Nx + 1));   /* Hermite numerator coeffs */
-        if (!bad && nwi > 0
-            && nwi * (Nx + 1) + (long)nH_syms + (long)ng <= 80) {
+        long nunk = nwi * (Nx + 1) + (long)nH_syms + (long)ng;
+        if (!bad && nwi > 0 && nunk > 0) {
             size_t nw_syms = (size_t)(nwi * (Nx + 1));
             Expr** qterms = malloc((nw_syms + 1 + ng) * sizeof(Expr*));
             size_t ntq = 0;
@@ -2035,8 +2124,10 @@ static Expr* rm_log_tower_case(Expr* f, Expr* x) {
 
     if (ok) {
         long dtn_num = rm_degree(num, top), dtn_den = rm_degree(den, top);
+        /* Exact top-degree bound: t_n is a LOGARITHM (D lowers deg_{t_n} by 1), so
+         * deg_{t_n}(Q) = deg_{t_n}(f) + 1.  No cap. */
         long Ntop = dtn_num - dtn_den + 1;
-        if (Ntop < 0) Ntop = 0; if (Ntop > 4) Ntop = 4;
+        if (Ntop < 0) Ntop = 0;
 
         /* Lower field variables: x, t_1..t_{n-1}. */
         size_t nlv = nl;                 /* x plus (nl-1) inner kernels */
@@ -2047,7 +2138,7 @@ static Expr* rm_log_tower_case(Expr* f, Expr* x) {
         for (size_t j = 0; j < nlv; j++) {
             long a = rm_degree(num, lv[j]); if (a < 0) a = 0;
             long b = rm_degree(den, lv[j]); if (b < 0) b = 0;
-            long d = a + b + 1; if (d > 3) d = 3;
+            long d = a + b + 1;              /* derived lower-field proxy, no cap */
             bd[j] = d;
         }
         long nmono = 1;
@@ -2081,7 +2172,7 @@ static Expr* rm_log_tower_case(Expr* f, Expr* x) {
         }
 
         long nunk = (Ntop + 1) * nmono + (long)ng;
-        if (!bad && nunk > 0 && nunk <= 80) {
+        if (!bad && nunk > 0) {
             /* Build Q = sum_{k,mono} rmLp{k}_{m} (mono) t_n^k + sum_j rmLc{j} Log(g_j). */
             size_t nq = (size_t)((Ntop + 1) * nmono + (long)ng);
             Expr** qterms = malloc(nq * sizeof(Expr*));
@@ -2354,15 +2445,7 @@ static Expr* rm_exp_tower_case(Expr* f, Expr* x) {
 
     if (ok) {
         /* a = multiplicity of t_n at 0 in den (Laurent negative extent). */
-        long a = 0;
-        Expr* cl = rm_eval2("CoefficientList", expr_copy(den), expr_copy(top));
-        if (cl && cl->type == EXPR_FUNCTION
-            && cl->data.function.head->type == EXPR_SYMBOL
-            && cl->data.function.head->data.symbol == intern_symbol("List")) {
-            for (size_t i = 0; i < cl->data.function.arg_count; i++)
-                if (!rm_is_zero(cl->data.function.args[i])) { a = (long)i; break; }
-        }
-        if (cl) expr_free(cl);
+        long a = rm_var_mult_at_zero(den, top);
         Expr* Dtil = rm_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
             (Expr*[]){ expr_copy(den), expr_new_function(expr_new_symbol("Power"),
                 (Expr*[]){ expr_copy(top), expr_new_integer(-a) }, 2) }, 2));
@@ -2395,8 +2478,11 @@ static Expr* rm_exp_tower_case(Expr* f, Expr* x) {
         }
 
         long dtn_num = rm_degree(num, top), dtn_den = rm_degree(den, top);
-        long ihi = dtn_num - dtn_den; if (ihi > 4) ihi = 4;
-        long ilo = -a; if (ilo < -4) ilo = -4;
+        /* Top kernel t_n is an EXPONENTIAL (D preserves deg_{t_n}), so Q's Laurent
+         * range in t_n matches f's: high extent deg_{t_n}(num) - deg_{t_n}(den),
+         * low extent -(multiplicity of t_n at 0 in den).  Exact, no cap. */
+        long ihi = dtn_num - dtn_den;
+        long ilo = -a;
 
         size_t nlv = nl;                 /* x plus (nl-1) inner kernels */
         Expr** lv = malloc(nlv * sizeof(Expr*));
@@ -2404,23 +2490,45 @@ static Expr* rm_exp_tower_case(Expr* f, Expr* x) {
         long* lo = malloc(nlv * sizeof(long));   /* per-var lowest exponent       */
         lv[0] = x; lo[0] = 0;                    /* x: polynomial, degree >= 0     */
         for (size_t i = 0; i + 1 < nl; i++) lv[i + 1] = ts[i];
-        /* x is polynomial (0..bd); the inner kernels t_1..t_{n-1} are EXPONENTIALS
-         * and invertible, so their coefficient exponents are LAURENT (-h..h) — the
-         * antiderivative can carry a negative power the integrand lacks, e.g.
-         * INT E^(x+E^x) dx = E^(E^x) = t_2 / t_1. */
         {
+            /* x is polynomial; degree bound derived from num/den, no cap. */
             long p = rm_degree(num, x); if (p < 0) p = 0;
             long q = rm_degree(den, x); if (q < 0) q = 0;
-            long d = p + q + 1; if (d > 2) d = 2;
+            long d = p + q + 1;
             bd[0] = d;
         }
-        for (size_t j = 1; j < nlv; j++) { lo[j] = -2; bd[j] = 4; }  /* t_i in -2..2 */
+        /* Inner kernels t_1..t_{n-1} are EXPONENTIALS and invertible, so their
+         * coefficient exponents are LAURENT — the antiderivative can carry a power
+         * the integrand lacks (e.g. INT E^(x+E^x) dx = E^(E^x)).  Each inner window
+         * is f's own per-kernel Laurent extent WIDENED by the reach of the top
+         * derivation coefficient w' = D[u_n] (Dt[top] = w' t_n): one factor of w'
+         * enters via t_n^i in D_tower[Q], shifting inner-kernel exponents by up to
+         * deg_{t_j}(w') upward and w''s t_j-pole order downward.  Fully derived from
+         * the input — no hardcoded window. */
+        Expr* wtop = rm_eval1("Together", expr_copy(Dt[nl - 1]));
+        Expr* wnum = wtop ? rm_eval1("Numerator", expr_copy(wtop)) : NULL;
+        Expr* wden = wtop ? rm_eval1("Denominator", expr_copy(wtop)) : NULL;
+        for (size_t j = 1; j < nlv; j++) {
+            long hij = rm_degree(num, ts[j - 1]) - rm_degree(den, ts[j - 1]);
+            if (hij < 0) hij = 0;
+            long loj = -rm_var_mult_at_zero(den, ts[j - 1]);
+            long wr = 0;
+            if (wnum && wden) {
+                long wu = rm_degree(wnum, ts[j - 1]); if (wu < 0) wu = 0;
+                wr = wu + rm_var_mult_at_zero(wden, ts[j - 1]);
+            }
+            lo[j] = loj - wr;
+            bd[j] = (hij + wr) - (loj - wr);       /* odometer count-1 (>= 0) */
+        }
+        if (wtop) expr_free(wtop);
+        if (wnum) expr_free(wnum);
+        if (wden) expr_free(wden);
         long nmono = 1;
         for (size_t j = 0; j < nlv; j++) nmono *= (bd[j] + 1);
         long nwi = (ihi >= ilo) ? (ihi - ilo + 1) : 0;
         long nunk = nwi * nmono + (long)ng;
 
-        if (!bad && nwi > 0 && nunk > 0 && nunk <= 80) {
+        if (!bad && nwi > 0 && nunk > 0) {
             size_t nq = (size_t)nunk;
             Expr** qterms = malloc(nq * sizeof(Expr*));
             Expr** syms = malloc(nq * sizeof(Expr*));
@@ -2519,6 +2627,15 @@ typedef struct {
     Expr* t[RM_MAXK];        /* fresh tower variable t_i                 (owned) */
     Expr* Dcoef[RM_MAXK];    /* log: u'/u ; exp: w' — in t-vars, in K_{i-1} (owned) */
     Expr* subrules;          /* List of all kernel -> t_i rules          (owned) */
+    /* Multiplicatively commensurate non-primitive exp members: a collected
+     * kernel E^w whose exponent w = mmult * arg[mprim] is NOT an independent
+     * extension — it is (E^arg[mprim])^mmult = t[mprim]^mmult.  Recorded here so
+     * rm_subst_kernels can alias it to a power of the primitive's tower var
+     * instead of leaving it as a foreign kernel. */
+    size_t nm;
+    Expr* marg[2 * RM_MAXK]; /* the member exponent w                    (owned) */
+    long  mprim[2 * RM_MAXK];/* tower index of the class primitive              */
+    long  mmult[2 * RM_MAXK];/* integer multiplier k (w = k * arg[mprim])       */
 } RmTower;
 
 static void rm_tower_free(RmTower* T) {
@@ -2529,7 +2646,9 @@ static void rm_tower_free(RmTower* T) {
         if (T->Dcoef[i]) expr_free(T->Dcoef[i]);
     }
     if (T->subrules) expr_free(T->subrules);
-    T->n = 0; T->subrules = NULL;
+    for (size_t i = 0; i < T->nm; i++)
+        if (T->marg[i]) expr_free(T->marg[i]);
+    T->n = 0; T->nm = 0; T->subrules = NULL;
 }
 
 /* Build the ordered differential tower of f over C(x).  Collect every
@@ -2550,8 +2669,66 @@ static bool rm_tower_build(Expr* f, Expr* x, RmTower* T) {
     Expr** logs = NULL; size_t nl = 0, lc = 0; rm_collect_logs(f, x, &logs, &nl, &lc);
     Expr** exps = NULL; size_t ne = 0, ec = 0;
     rm_collect_exp_exponents(f, x, &exps, &ne, &ec);
-    size_t n = nl + ne;
-    if (n < 2 || n > RM_MAXK) {
+    T->nm = 0;
+
+    /* --- Multiplicatively commensurate reduction of the exponential kernels. ---
+     * Collected exponents w_i, w_j define algebraically DEPENDENT kernels
+     * E^w_i, E^w_j when w_i/w_j is a nonzero rational: then E^w = (E^prim)^k for
+     * a class primitive `prim` and integer k (e.g. E^(2 E^x) = (E^(E^x))^2).
+     * Partition the exponents into such commensurability classes, pick a
+     * primitive whose integer multiples cover its whole class, and keep ONLY the
+     * primitives as tower extensions; each remaining member is recorded as an
+     * integer power of a primitive's tower variable (T->m*).  Without this a
+     * dependent kernel would spuriously add an extension, breaking independence.
+     * A class with no integer-ratio primitive (e.g. exponents E^x/2 and E^x/3)
+     * is out of scope and declines the whole tower (never wrong). */
+    long* clsrep = malloc((ne ? ne : 1) * sizeof(long));
+    long* primof = malloc((ne ? ne : 1) * sizeof(long));
+    long* multof = malloc((ne ? ne : 1) * sizeof(long));
+    for (size_t i = 0; i < ne; i++) { clsrep[i] = -1; primof[i] = -1; multof[i] = 1; }
+    bool okc = (ne <= 2 * RM_MAXK);                 /* member-array bound */
+    for (size_t i = 0; i < ne && okc; i++) {        /* group by commensurability */
+        if (clsrep[i] != -1) continue;
+        clsrep[i] = (long)i;
+        for (size_t j = i + 1; j < ne; j++) {
+            if (clsrep[j] != -1) continue;
+            Expr* r = rm_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_copy(exps[j]), expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_copy(exps[i]), expr_new_integer(-1) }, 2) }, 2));
+            if (rm_is_rat_const(r)) clsrep[j] = (long)i;
+            if (r) expr_free(r);
+        }
+    }
+    for (size_t rep = 0; rep < ne && okc; rep++) {  /* integer primitive per class */
+        if (clsrep[rep] != (long)rep) continue;
+        long chosen = -1;
+        long* ktmp = malloc((ne ? ne : 1) * sizeof(long));
+        for (size_t cand = 0; cand < ne && chosen < 0; cand++) {
+            if (clsrep[cand] != (long)rep) continue;
+            bool good = true;
+            for (size_t m = 0; m < ne && good; m++) {
+                if (clsrep[m] != (long)rep) continue;
+                Expr* r = rm_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_copy(exps[m]), expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ expr_copy(exps[cand]), expr_new_integer(-1) }, 2) }, 2));
+                long k;
+                if (rm_is_int_const(r, &k)) ktmp[m] = k; else good = false;
+                if (r) expr_free(r);
+            }
+            if (good) {
+                chosen = (long)cand;
+                for (size_t m = 0; m < ne; m++)
+                    if (clsrep[m] == (long)rep) { primof[m] = chosen; multof[m] = ktmp[m]; }
+            }
+        }
+        free(ktmp);
+        if (chosen < 0) okc = false;
+    }
+    size_t np = 0;
+    for (size_t i = 0; i < ne; i++) if (primof[i] == (long)i) np++;
+    size_t n = nl + np;
+    if (!okc || n < 2 || n > RM_MAXK) {
+        free(clsrep); free(primof); free(multof);
         for (size_t i = 0; i < nl; i++) expr_free(logs[i]);
         for (size_t i = 0; i < ne; i++) expr_free(exps[i]);
         free(logs); free(exps);
@@ -2567,13 +2744,19 @@ static bool rm_tower_build(Expr* f, Expr* x, RmTower* T) {
     }
     free(logs);
     for (size_t i = 0; i < ne; i++) {
-        T->kind[idx] = RM_EXP;
-        T->arg[idx] = exps[i];                                     /* adopt w */
-        T->kernel[idx] = expr_new_function(expr_new_symbol("Power"),
-            (Expr*[]){ expr_new_symbol("E"), expr_copy(exps[i]) }, 2);
-        idx++;
+        if (primof[i] == (long)i) {                                /* class primitive */
+            T->kind[idx] = RM_EXP;
+            T->arg[idx] = expr_copy(exps[i]);                      /* primitive w */
+            T->kernel[idx] = expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_new_symbol("E"), expr_copy(exps[i]) }, 2);
+            idx++;
+        } else {                                                   /* dependent member */
+            T->marg[T->nm] = expr_copy(exps[i]);                   /* member exponent w */
+            T->mmult[T->nm] = multof[i];                           /* w = k * arg[prim] */
+            T->mprim[T->nm] = primof[i];        /* exps[] index; remapped to t-idx below */
+            T->nm++;
+        }
     }
-    free(exps);
     T->n = n;
 
     /* Order innermost-first (deepest at index 0); tie-break EXP before LOG. */
@@ -2590,8 +2773,11 @@ static bool rm_tower_build(Expr* f, Expr* x, RmTower* T) {
             }
         }
 
-    /* Tower variables t_i and the combined substitution rule list. */
-    Expr** rules = malloc(2 * n * sizeof(Expr*)); size_t nr = 0;
+    /* Tower variables t_i and the combined substitution rule list.  Each member
+     * kernel E^(marg) contributes a rule E^(marg) -> t[prim]^mmult (both the
+     * Exp[] and Power[E,] spellings); mprim is remapped from an exps[] index to
+     * the primitive's post-ordering tower index by matching its exponent. */
+    Expr** rules = malloc((2 * n + 2 * T->nm) * sizeof(Expr*)); size_t nr = 0;
     for (size_t i = 0; i < n; i++) {
         char nm[16]; snprintf(nm, sizeof(nm), "rmR%zu", i);
         T->t[i] = expr_new_symbol(nm);
@@ -2606,8 +2792,26 @@ static bool rm_tower_build(Expr* f, Expr* x, RmTower* T) {
                 (Expr*[]){ expr_copy(T->kernel[i]), expr_copy(T->t[i]) }, 2);
         }
     }
+    for (size_t m = 0; m < T->nm; m++) {
+        Expr* pw = exps[T->mprim[m]];              /* primitive exponent value */
+        long ti = -1;
+        for (size_t i = 0; i < n; i++)
+            if (T->kind[i] == RM_EXP && expr_eq(T->arg[i], pw)) { ti = (long)i; break; }
+        T->mprim[m] = ti;                          /* now a tower index (>= 0) */
+        Expr* tk = expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(T->t[ti]), expr_new_integer(T->mmult[m]) }, 2);
+        rules[nr++] = expr_new_function(expr_new_symbol("Rule"),
+            (Expr*[]){ expr_new_function(expr_new_symbol("Exp"),
+                (Expr*[]){ expr_copy(T->marg[m]) }, 1), expr_copy(tk) }, 2);
+        rules[nr++] = expr_new_function(expr_new_symbol("Rule"),
+            (Expr*[]){ expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_new_symbol("E"), expr_copy(T->marg[m]) }, 2), tk }, 2);
+    }
     T->subrules = expr_new_function(expr_new_symbol("List"), rules, nr);
     free(rules);
+    free(clsrep); free(primof); free(multof);
+    for (size_t i = 0; i < ne; i++) expr_free(exps[i]);
+    free(exps);
 
     /* Derivation coefficients + structure-theorem (triangularity) soundness. */
     bool ok = true;
@@ -2790,7 +2994,7 @@ static Expr* rm_field_ratint(Expr* num, Expr* den, RmTower* T, long L, Expr* x) 
     for (size_t j = 0; j < nlv; j++) {
         long a = rm_degree(num, lv[j]); if (a < 0) a = 0;
         long b = rm_degree(den, lv[j]); if (b < 0) b = 0;
-        long d = (a > b ? a : b) + 1; if (d > 3) d = 3;
+        long d = (a > b ? a : b) + 1;    /* derived lower-field proxy, no cap */
         bd[j] = d;
     }
     long nmono = 1;
@@ -2798,7 +3002,7 @@ static Expr* rm_field_ratint(Expr* num, Expr* den, RmTower* T, long L, Expr* x) 
     long nunk = dH * nmono + (long)ng;
 
     Expr* result = NULL;
-    if (!bad && nunk > 0 && nunk <= 60) {
+    if (!bad && nunk > 0) {
         size_t nq = (size_t)nunk;
         Expr** qterms = malloc(nq * sizeof(Expr*));
         Expr** syms = malloc(nq * sizeof(Expr*));
@@ -2967,8 +3171,10 @@ static Expr* rm_field_hyperexp_coupled(Expr* num, Expr* den, RmTower* T, long L,
     }
 
     long dnum = rm_degree(num, t), dden = rm_degree(den, t);
-    long ihi = dnum - dden; if (ihi < 0) ihi = 0; if (ihi > 4) ihi = 4;
-    long ilo = -a; if (ilo < -4) ilo = -4;
+    /* Single EXP kernel t (D preserves deg_t): Laurent range = f's own extent,
+     * high = deg_t(num) - deg_t(den), low = -(mult of t at 0 in den).  No cap. */
+    long ihi = dnum - dden; if (ihi < 0) ihi = 0;
+    long ilo = -a;
     long nwi = ihi - ilo + 1;
 
     size_t nlv = (size_t)L + 1;
@@ -2979,7 +3185,7 @@ static Expr* rm_field_hyperexp_coupled(Expr* num, Expr* den, RmTower* T, long L,
     for (size_t j = 0; j < nlv; j++) {
         long p = rm_degree(num, lv[j]); if (p < 0) p = 0;
         long q = rm_degree(den, lv[j]); if (q < 0) q = 0;
-        long d = (p > q ? p : q) + 1; if (d > 3) d = 3;
+        long d = (p > q ? p : q) + 1;    /* derived lower-field proxy, no cap */
         bd[j] = d;
     }
     long nmono = 1;
@@ -2987,7 +3193,7 @@ static Expr* rm_field_hyperexp_coupled(Expr* num, Expr* den, RmTower* T, long L,
     long nunk = nwi * nmono + dH * nmono + (long)ng;
 
     Expr* result = NULL;
-    if (!bad && nwi > 0 && nunk > 0 && nunk <= 60) {
+    if (!bad && nwi > 0 && nunk > 0) {
         size_t nq = (size_t)(nwi * nmono + dH * nmono + (long)ng);
         Expr** qterms = malloc(nq * sizeof(Expr*));
         Expr** syms = malloc(nq * sizeof(Expr*));
@@ -3362,17 +3568,41 @@ static Expr* rm_field_rde(Expr* p, long i, RmTower* T, long L, Expr* x) {
     long* bd = malloc(nlv * sizeof(long));
     lv[0] = x;
     for (long j = 0; j < L; j++) lv[j + 1] = T->t[j];
+
+    /* Exact degree bound (no cap) for the numerator h, where q = h/pd solves
+     * D_tower[q] + i Dcoef q = p.  Per lower variable v the bound is the leading-degree
+     * balance rm_rde_var_bound(deg_v(p), deg_v(i Dcoef), deriv_lowers) + deg_v(pd),
+     * where deriv_lowers distinguishes a LOGARITHMIC / base-x monomial (D lowers deg_v)
+     * from an EXPONENTIAL one (D preserves deg_v via the self-derivative D[t^k] =
+     * k w' t^k).  This replaces the former arbitrary cap-at-5 proxy — the bound is a
+     * function of the equation's degrees alone, so an exponential-Laurent coefficient
+     * of ANY degree is found rather than declined.  Correctness is SolveAlways-certified
+     * and the caller diff-back verifies, so the bound only affects completeness/perf. */
+    Expr* dcg = rm_eval1("Together", expr_copy(Dcoef));
+    Expr* dcn = dcg ? rm_eval1("Numerator", expr_copy(dcg)) : NULL;
+    Expr* dcd = dcg ? rm_eval1("Denominator", expr_copy(dcg)) : NULL;
+    if (dcg) expr_free(dcg);
     for (size_t j = 0; j < nlv; j++) {
-        long a2 = rm_degree(pd, lv[j]); if (a2 < 0) a2 = 0;
-        long b2 = rm_degree(pn, lv[j]); if (b2 < 0) b2 = 0;
-        long d = a2 + b2 + 1; if (d > 5) d = 5;
-        bd[j] = d;
+        long dpn = rm_degree(pn, lv[j]); if (dpn < 0) dpn = 0;
+        long dpd = rm_degree(pd, lv[j]); if (dpd < 0) dpd = 0;
+        long dfv = 0;                              /* deg_v(i Dcoef) = deg_v(Dcoef) */
+        if (dcn && dcd) {
+            long dn = rm_degree(dcn, lv[j]); if (dn < 0) dn = 0;
+            long dd = rm_degree(dcd, lv[j]); if (dd < 0) dd = 0;
+            dfv = dn - dd;
+        }
+        /* v = x (j == 0) and logarithmic kernels lower deg_v under D; exponential
+         * kernels preserve it. */
+        bool deriv_lowers = (j == 0) || (T->kind[j - 1] == RM_LOG);
+        bd[j] = rm_rde_var_bound(dpn - dpd, dfv, deriv_lowers) + dpd;
     }
+    if (dcn) expr_free(dcn);
+    if (dcd) expr_free(dcd);
     long nmono = 1;
     for (size_t j = 0; j < nlv; j++) nmono *= (bd[j] + 1);
 
     Expr* result = NULL;
-    if (nmono > 0 && nmono <= 60) {
+    if (nmono > 0) {
         Expr** hterms = malloc((size_t)nmono * sizeof(Expr*));
         Expr** syms = malloc((size_t)nmono * sizeof(Expr*));
         size_t ntq = 0, nsym = 0;
@@ -3518,6 +3748,24 @@ static Expr* rm_subst_kernels(Expr* e, RmTower* T) {
             && e->data.function.arg_count == 1
             && expr_eq(e->data.function.args[0], T->arg[i]))
             return expr_copy(T->t[i]);
+    }
+    /* Multiplicatively commensurate member kernel E^(marg) = t[mprim]^mmult. */
+    for (size_t m = 0; m < T->nm; m++) {
+        if (e->type == EXPR_FUNCTION && e->data.function.arg_count >= 1
+            && e->data.function.head->type == EXPR_SYMBOL) {
+            const char* h = e->data.function.head->data.symbol;
+            Expr* w = NULL;
+            if (h == intern_symbol("Exp") && e->data.function.arg_count == 1)
+                w = e->data.function.args[0];
+            else if (h == intern_symbol("Power") && e->data.function.arg_count == 2
+                     && e->data.function.args[0]->type == EXPR_SYMBOL
+                     && e->data.function.args[0]->data.symbol == intern_symbol("E"))
+                w = e->data.function.args[1];
+            if (w && expr_eq(w, T->marg[m]))
+                return expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_copy(T->t[T->mprim[m]]),
+                               expr_new_integer(T->mmult[m]) }, 2);
+        }
     }
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
     Expr* nh = rm_subst_kernels(e->data.function.head, T);
