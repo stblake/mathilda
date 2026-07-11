@@ -779,9 +779,13 @@ monotonically down.
     and deg-20 …).  The **flat-tower and proper-part Hermite ansätze are likewise
     cap-free**: exact top-kernel log/exp Laurent bounds and derived inner-exp windows,
     so all top degrees close (`Integrate[Log[Log[x]]^5/(x Log[x]), x] =
-    Log[Log[x]]^6/6`, `Integrate[E^x E^(6 E^x)/(1+E^(E^x)), x]`).  Only the deep
-    cancellation half of the Bronstein SPDE and algebraic extensions are not yet
-    implemented, so integrands needing them return unevaluated.
+    Log[Log[x]]^6/6`, `Integrate[E^x E^(6 E^x)/(1+E^(E^x)), x]`).  The
+    **leading-coefficient cancellation / resonance** sub-case of `RdeBoundDegree`
+    completes the SPDE degree machinery — the bound is widened monotonically to
+    `max(naive, m_res)` at the Bronstein resonance integer `m_res` (detected live for the
+    exponential top), correct by the same certification-and-diff-back gate.  Only
+    algebraic extensions (`Sqrt`, `RootSum`) remain unimplemented, so integrands needing
+    them return unevaluated.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.
   - `"Symmetry"` — origin-symmetry reduction for an interval `[-c, c]`

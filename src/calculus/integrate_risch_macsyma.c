@@ -610,25 +610,49 @@ static Expr* rm_integrate_in_K_with_logs(Expr* g, Expr* x) {
 }
 
 /* Exact degree bound for the solution q of a Risch DE  D[q] + f q = p, in a single
- * monomial variable v (Bronstein RdeBoundDegree, leading-degree balance).  Returns an
- * UPPER bound on deg_v(q) with NO arbitrary cap — it is a function of the equation's
- * degrees alone.  `deriv_lowers` is true when D lowers deg_v by one (v = x under
- * d/dx, or a LOGARITHMIC monomial), false when D preserves deg_v (an EXPONENTIAL
- * monomial, whose self-derivative D[t^k] = k w' t^k keeps the degree).  dpv =
- * deg_v(p), dfv = deg_v(f) (each as deg(numerator) - deg(denominator)).
+ * monomial variable v (Bronstein RdeBoundDegree).  Returns an UPPER bound on deg_v(q)
+ * with NO arbitrary cap — a function of the equation's degrees alone (plus the exact
+ * cancellation/resonance sub-case, below).  `deriv_lowers` is true when D lowers deg_v
+ * by one (v = x under d/dx, or a LOGARITHMIC monomial), false when D preserves deg_v (an
+ * EXPONENTIAL monomial, whose self-derivative D[t^k] = k w' t^k keeps the degree).
+ * dpv = deg_v(p), dfv = deg_v(f) (each as deg(numerator) - deg(denominator)).
  *
- * Derivation.  Match the top v-degree of D[q] + f q = p.  For a deriv-lowering v,
- * deg_v(D[q]) = deg_v(q) - 1 and deg_v(f q) = dfv + deg_v(q); when dfv >= 0 the f q
- * term strictly dominates (distinct degrees, no cancellation) so deg_v(q) = dpv - dfv
- * exactly, and when dfv < 0 the balance is between D[q] (integration raises degree by
- * one: dpv + 1) and a possible pole in f (dpv - dfv), so the bound is their max.  For
- * a deriv-preserving (exponential) v, both terms sit at deg_v(q) + max(0, dfv), giving
- * deg_v(q) = dpv - dfv.  The only sub-cases this misses are genuine leading-coefficient
- * cancellations (dfv = -1 for a deriv-lowering v; dfv = 0 with an integer resonance for
- * an exponential v) — Bronstein's recursive degree reduction — and those can ONLY make
- * the SolveAlways ansatz decline, never mis-solve (the solution is SolveAlways-certified
- * and the caller diff-back verifies). */
-static long rm_rde_var_bound(long dpv, long dfv, bool deriv_lowers) {
+ * Leading-degree balance.  Match the top v-degree of D[q] + f q = p.  For a
+ * deriv-lowering v, deg_v(D[q]) = deg_v(q) - 1 and deg_v(f q) = dfv + deg_v(q); when
+ * dfv >= 0 the f q term strictly dominates (distinct degrees, no cancellation) so
+ * deg_v(q) = dpv - dfv exactly, and when dfv < 0 the balance is between D[q]
+ * (integration raises degree by one: dpv + 1) and a pole in f (dpv - dfv), so the bound
+ * is their max.  For a deriv-preserving (exponential) v, both terms sit at
+ * deg_v(q) + max(0, dfv), giving deg_v(q) = dpv - dfv.
+ *
+ * Cancellation / resonance (Bronstein's recursive degree reduction).  The leading-degree
+ * balance is exact EXCEPT where the two leading coefficients cancel, so the top term of
+ * D[q] + f q vanishes and deg_v(q) can exceed the naive value.  This happens in exactly
+ * two configurations, each keyed by an integer `m_res` (the Bronstein resonance integer,
+ * or -1 when none):
+ *   - deriv-PRESERVING v (exponential), dfv == 0: D[c v^n] + f(c v^n) has leading
+ *     coefficient (n D[v]/v + f) c, which vanishes when n = -f/(D[v]/v) is a
+ *     nonnegative integer m_res; then deg_v(q) can reach m_res, so bound = max(naive,
+ *     m_res).  m_res is supplied by the caller (rm_resonance_int), which alone has the
+ *     coefficients.
+ *   - deriv-LOWERING v (base x / logarithmic), dfv == -1: the primitive
+ *     leading-coefficient cancellation, whose homogeneous-solution degree can likewise
+ *     reach m_res, so bound = max(naive, m_res).
+ * The widening is MONOTONE (only ever raises the bound), so a spurious m_res can never
+ * ship a wrong result (the solution stays SolveAlways-certified and the enclosing tower
+ * case diff-back verifies); a missed one merely declines.  Pass m_res = -1 to disable.
+ *
+ * Reachability note.  In the current tower architecture BOTH cancellation configurations
+ * are pre-empted, so m_res is -1 on every reachable call: (a) an exponential resonance
+ * n = -(i w_L')/w_j' being an integer means the top and lower exp exponents are
+ * commensurate, and the commensurate-exponent reduction in rm_tower_build collapses such
+ * kernels to one primitive before any RDE solve; (b) dfv == -1 requires a simple pole in
+ * f = i Dcoef, which a rational tower element's derivative cannot have (it would
+ * integrate to a Log), and the only kernel that could — a log top with Dcoef = u'/u —
+ * never routes through the field RDE (it uses the primitive-polynomial recursion).  The
+ * detection is nonetheless computed live and folded in here so the degree bound is exact
+ * per Bronstein should a future kernel type expose either configuration. */
+long rm_rde_var_bound(long dpv, long dfv, bool deriv_lowers, long m_res) {
     long bq;
     if (deriv_lowers) {
         if (dfv >= 0) {
@@ -636,11 +660,37 @@ static long rm_rde_var_bound(long dpv, long dfv, bool deriv_lowers) {
         } else {                                   /* integration rise vs pole in f */
             long a = dpv + 1, b = dpv - dfv;
             bq = (a > b) ? a : b;
+            /* primitive leading-coefficient cancellation (dfv == -1) */
+            if (dfv == -1 && m_res >= 0 && m_res > bq) bq = m_res;
         }
     } else {                                       /* exponential: derivation preserves deg */
         bq = dpv - dfv;
+        /* exponential integer resonance (dfv == 0) */
+        if (dfv == 0 && m_res >= 0 && m_res > bq) bq = m_res;
     }
     return (bq < 0) ? 0 : bq;
+}
+
+/* Bronstein resonance integer for an EXPONENTIAL lower monomial v = t_k in the Risch DE
+ * D[q] + f q = p with f = i Dcoef_L (Dcoef_L = D[t_L]/t_L = w_L' the top exp kernel's
+ * derivation coefficient) and Dcoef_v = D[v]/v = w_k'.  The leading coefficient of
+ * D[c v^n] + f (c v^n) is (n Dcoef_v + f) c v^n; it cancels — allowing deg_v(q) to reach
+ * n beyond the naive bound — exactly when n = -f/Dcoef_v = -(i Dcoef_L)/Dcoef_v is a
+ * nonnegative integer.  Returns that n, or -1 when the ratio is not a nonnegative integer
+ * constant (no resonance).  Feeds rm_rde_var_bound's monotone widening, so a value here
+ * can only ever raise the bound: never a wrong result (SolveAlways certifies, caller
+ * diff-back verifies), at worst wasted ansatz terms. */
+static long rm_resonance_int(long i, Expr* DcoefL, Expr* Dcoefv) {
+    if (!DcoefL || !Dcoefv || rm_is_zero(Dcoefv)) return -1;
+    Expr* ratio = rm_eval1("Simplify", expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_new_integer(-i), expr_copy(DcoefL),
+            expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_copy(Dcoefv), expr_new_integer(-1) }, 2) }, 3));
+    long m = -1;
+    if (ratio && ratio->type == EXPR_INTEGER && ratio->data.integer >= 0)
+        m = (long)ratio->data.integer;
+    if (ratio) expr_free(ratio);
+    return m;
 }
 
 /* Multiplicity of the variable v at 0 in the polynomial p: the lowest power of v
@@ -708,7 +758,10 @@ static Expr* rm_solve_rde_rational(Expr* p, long i, Expr* u, Expr* x) {
     }
     if (unn) expr_free(unn);
     if (und) expr_free(und);
-    long N = rm_rde_var_bound(dpn - dpd, dfx, true) + dpd;   /* deg_x(h) */
+    /* v = x is deriv-lowering; its primitive cancellation config (dfv == -1) is
+     * unreachable here — a rational exponent u has u' with pole order >= 2 (or >= 0),
+     * never a simple pole — so no resonance integer applies (m_res = -1). */
+    long N = rm_rde_var_bound(dpn - dpd, dfx, true, -1) + dpd;   /* deg_x(h) */
 
     Expr** terms = malloc((size_t)(N + 1) * sizeof(Expr*));
     for (long k = 0; k <= N; k++) {
@@ -3594,7 +3647,15 @@ static Expr* rm_field_rde(Expr* p, long i, RmTower* T, long L, Expr* x) {
         /* v = x (j == 0) and logarithmic kernels lower deg_v under D; exponential
          * kernels preserve it. */
         bool deriv_lowers = (j == 0) || (T->kind[j - 1] == RM_LOG);
-        bd[j] = rm_rde_var_bound(dpn - dpd, dfv, deriv_lowers) + dpd;
+        /* Live cancellation/resonance detection (Bronstein recursive degree reduction).
+         * For an EXPONENTIAL lower monomial at deg_v(f) == 0 the leading coefficients of
+         * D[q] and f q can cancel at an integer resonance n = -(i Dcoef_L)/Dcoef_v; feed
+         * that n to widen the bound exactly.  (deriv-lowering v has no reachable dfv==-1
+         * config in this architecture — see rm_rde_var_bound's reachability note.) */
+        long m_res = -1;
+        if (!deriv_lowers && dfv == 0)
+            m_res = rm_resonance_int(i, Dcoef, T->Dcoef[j - 1]);
+        bd[j] = rm_rde_var_bound(dpn - dpd, dfv, deriv_lowers, m_res) + dpd;
     }
     if (dcn) expr_free(dcn);
     if (dcd) expr_free(dcd);

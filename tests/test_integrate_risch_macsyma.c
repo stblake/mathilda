@@ -30,6 +30,7 @@
 #include "eval.h"
 #include "parse.h"
 #include "symtab.h"
+#include "calculus/integrate_risch_macsyma.h"  /* rm_rde_var_bound (white-box) */
 
 #include <stdio.h>
 #include <string.h>
@@ -597,10 +598,82 @@ static void test_strict_misc(void) {
         "Integrate`RischMacsyma");
 }
 
+/* ================= UNIT: rm_rde_var_bound (degree arithmetic) =================
+ * White-box tests of the Bronstein RdeBoundDegree leading-degree bound used by the
+ * exponential-Laurent field Risch DE (rm_field_rde) and the rational-exponent RDE
+ * (rm_solve_rde_rational).  This is a pure integer function of the equation's degrees
+ * (dpv = deg_v(p), dfv = deg_v(f)), the monomial kind (deriv_lowers), and the Bronstein
+ * resonance integer (m_res); testing it directly pins the "no arbitrary caps" contract
+ * and the cancellation/resonance widening without having to construct an integrand that
+ * reaches each configuration (both cancellation configs are pre-empted in the current
+ * tower architecture — see the reachability note in integrate_risch_macsyma.c).
+ *
+ * Contract recap (bound on deg_v(q) for D[q] + f q = p, clamped at 0):
+ *   deriv-lowering v (base x / log):  dfv >= 0 -> dpv - dfv                (f q dominates)
+ *                                     dfv <  0 -> max(dpv+1, dpv-dfv)      (rise vs pole)
+ *                                     dfv == -1 & m_res >= 0 -> widened to max(.., m_res)
+ *   deriv-preserving v (exp):         dpv - dfv                            (both at deg q)
+ *                                     dfv == 0 & m_res >= 0 -> widened to max(dpv, m_res)
+ * The m_res widening is MONOTONE (never lowers the bound) and fires ONLY in its exact
+ * configuration.  m_res == -1 disables it. */
+static void chk_bound(long dpv, long dfv, bool dl, long m_res, long expect) {
+    long got = rm_rde_var_bound(dpv, dfv, dl, m_res);
+    ASSERT_MSG(got == expect,
+        "rm_rde_var_bound(dpv=%ld, dfv=%ld, deriv_lowers=%d, m_res=%ld) = %ld, expected %ld",
+        dpv, dfv, (int)dl, m_res, got, expect);
+}
+
+static void test_rde_var_bound(void) {
+    /* --- deriv-lowering (primitive: base x / log), dfv >= 0: f q dominates, exact. --- */
+    chk_bound(3, 1, true, -1, 2);      /* dpv - dfv */
+    chk_bound(2, 0, true, -1, 2);      /* f a nonzero constant */
+    chk_bound(5, 2, true, -1, 3);
+    chk_bound(0, 0, true, -1, 0);
+    chk_bound(1, 5, true, -1, 0);      /* dpv - dfv = -4 -> clamp to 0 */
+    chk_bound(2, 7, true, -1, 0);      /* clamp */
+
+    /* --- deriv-lowering, dfv < 0: max(dpv+1 integration rise, dpv-dfv pole in f). --- */
+    chk_bound(2, -2, true, -1, 4);     /* max(3, 4) = 4 (order-2 pole dominates) */
+    chk_bound(0, -3, true, -1, 3);     /* max(1, 3) = 3 */
+    chk_bound(3, -1, true, -1, 4);     /* max(4, 4) = 4 (simple pole, no resonance) */
+    chk_bound(-2, -1, true, -1, 0);    /* max(-1, -1) = -1 -> clamp 0 */
+    chk_bound(1, -4, true, -1, 5);     /* max(2, 5) = 5 */
+
+    /* --- deriv-lowering primitive cancellation (dfv == -1) resonance widening. --- */
+    chk_bound(2, -1, true, 10, 10);    /* naive max(3,3)=3, widen to m_res=10 */
+    chk_bound(2, -1, true, 3, 3);      /* m_res == naive: unchanged */
+    chk_bound(2, -1, true, 1, 3);      /* MONOTONE: m_res < naive never lowers -> 3 */
+    chk_bound(2, -1, true, 0, 3);      /* m_res=0 < naive -> 3 */
+    chk_bound(-2, -1, true, 2, 2);     /* naive clamps to 0; widen to 2 */
+    /* widening fires ONLY at dfv == -1, not at other poles. */
+    chk_bound(2, -2, true, 100, 4);    /* dfv=-2: m_res ignored -> max(3,4)=4 */
+    chk_bound(3, -3, true, 100, 6);    /* dfv=-3: m_res ignored -> max(4,6)=6 */
+
+    /* --- deriv-preserving (exponential): dpv - dfv, both leading terms at deg q. --- */
+    chk_bound(3, 1, false, -1, 2);
+    chk_bound(2, 2, false, -1, 0);
+    chk_bound(5, 0, false, -1, 5);
+    chk_bound(1, 3, false, -1, 0);     /* -2 -> clamp 0 */
+    chk_bound(2, -2, false, -1, 4);    /* dpv - dfv = 4 (pole raises the exp bound) */
+
+    /* --- exponential integer resonance (dfv == 0) widening: max(dpv, m_res). --- */
+    chk_bound(2, 0, false, 7, 7);      /* max(2, 7) = 7 */
+    chk_bound(0, 0, false, 3, 3);      /* max(0, 3) = 3 */
+    chk_bound(2, 0, false, 2, 2);      /* m_res == naive */
+    chk_bound(2, 0, false, 1, 2);      /* MONOTONE: m_res < naive -> unchanged */
+    chk_bound(5, 0, false, 3, 5);      /* naive dpv=5 already exceeds m_res=3 */
+    chk_bound(2, 0, false, -1, 2);     /* disabled */
+    /* widening fires ONLY at dfv == 0, not at other exp degrees. */
+    chk_bound(2, 1, false, 100, 1);    /* dfv=1: m_res ignored -> dpv-dfv=1 */
+    chk_bound(3, 2, false, 100, 1);    /* dfv=2: m_res ignored -> 1 */
+}
+
 void test_integrate_risch_macsyma(void) {
     symtab_init();
     core_init();
 
+    /* Unit: degree-bound arithmetic. */
+    TEST(test_rde_var_bound);
     /* Base case. */
     TEST(test_rational_case);
     TEST(test_rational_agreement);

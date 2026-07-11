@@ -19,8 +19,9 @@ Automatic cascade **after** `Integrate`RischNorman`.
 
 **Compiles clean** under the project's strict flags (`gcc -std=c99 -Wall -Wextra`,
 no warnings from the module).  **Tests green:** the **extensive** suite in
-`tests/test_integrate_risch_macsyma.c` — 19 `TEST` functions, ~260 assertions, one
-per case / sub-case / sub-sub-case of the tower (see §7) — passes in ~15 s; the
+`tests/test_integrate_risch_macsyma.c` — 20 `TEST` functions, ~290 assertions, one
+per case / sub-case / sub-sub-case of the tower (see §7), plus a white-box unit test
+of the `rm_rde_var_bound` degree arithmetic — passes in ~15 s; the
 broader `integrals_tests` and `intrat_tests` suites are unaffected (the resultant
 LRT reuses `intrat.c`'s log-part core additively, so the pure-rational path is
 byte-identical); `valgrind` shows **no leak stack through the module** (the LRT
@@ -56,12 +57,14 @@ pinned.
 | Special functions — `Erf`/`Erfi`, `ExpIntegralEi`, `LogIntegral`, `PolyLog` | ✅ |
 
 **Not yet implemented** (integrands needing these decline; see §6 for detail):
-the remainder of the full Bronstein **SPDE** — the **RDE-solver degree bounds and the
-flat-tower / proper-part Hermite ansatz bounds are now principled and cap-free**
+The full Bronstein **SPDE** degree machinery is now **complete** — the **RDE-solver degree
+bounds and the flat-tower / proper-part Hermite ansatz bounds are principled and cap-free**
 (Bronstein `RdeBoundDegree` via `rm_rde_var_bound`; exact top-kernel log/exp Laurent
 bounds; derived inner-kernel windows via `rm_var_mult_at_zero`; all degrees — §3.12,
-§6.1 item 1), leaving only the deep leading-coefficient *cancellation* sub-case (weak
-normalization + normal/special split); **Phase D** algebraic extensions
+§6.1 item 1), **including the leading-coefficient *cancellation/resonance* sub-case**
+(Bronstein's recursive degree reduction), now folded into `rm_rde_var_bound` as a monotone
+resonance-aware widening with live caller-side detection (`rm_resonance_int`) in the
+exponential-top field RDE (§3.12).  Remaining: **Phase D** algebraic extensions
 (`Sqrt`, `RootSum`); **Phase E** Maxima option/flag parity; and **Phase F** `Simplify`
 post-processing for the I-laden / unfactored outputs.
 
@@ -472,9 +475,33 @@ enclosing tower case diff-back verified, so a bound can only ever *decline*, nev
 wrong closed form.  Closes exponential-Laurent coefficients of arbitrary degree
 (`(6 Log[x]^5 + 2 Log[x]^7)/x · E^(Log[x]^2) → Log[x]^6 E^(Log[x]^2)`, and the deg-8 /
 -12 / -20 analogues), and keeps `-E^(1/x)/x^2 → E^(1/x)` exact; the non-elementary
-`E^(Log[x]^2)`, `E^(1/x)` still decline.  The only sub-case a per-variable bound leaves
-to the caller's diff-back gate is a genuine leading-coefficient *cancellation/resonance*
-(Bronstein's recursive degree reduction) — decline-only.
+`E^(Log[x]^2)`, `E^(1/x)` still decline.
+
+**Leading-coefficient cancellation / resonance (2026-07-11) — `rm_resonance_int` +
+`rm_rde_var_bound` widening.**  The leading-degree balance above is exact except where the
+two leading coefficients of `D[q]` and `f q` *cancel*, letting `deg_v(q)` exceed the naive
+value (Bronstein's recursive degree reduction).  This is now handled at the bound level in
+two configurations, keyed by the integer `m_res` (the Bronstein resonance integer, or `-1`
+when none): an **exponential** monomial at `deg_v(f) = 0` cancels when
+`n = -(i·Dcoef_L)/Dcoef_v` is a nonnegative integer (`rm_resonance_int` computes it live in
+the exp-top field RDE), and a **primitive** monomial at `deg_v(f) = -1` cancels at the
+homogeneous-solution degree; in each case the bound is widened to `max(naive, m_res)`.  The
+widening is **monotone** (only ever *raises* the bound), so it can never ship a wrong result
+— every solution stays `SolveAlways`-certified and the enclosing case diff-back verified —
+and a spurious `m_res` at worst adds unused ansatz terms.
+
+*Reachability.*  In the current tower both cancellation configurations are provably
+pre-empted, so `m_res = -1` on every reachable call: (a) an exponential resonance
+`n = -(i w_L')/w_j'` being an integer means the top and lower exp exponents are
+**commensurate**, and the commensurate-exponent reduction in `rm_tower_build` (§3.11)
+collapses such kernels to one primitive *before* any RDE solve; (b) `deg_v(f) = -1` needs a
+*simple* pole in `f = i·Dcoef`, which a rational tower element's derivative cannot have (it
+would integrate to a `Log`) and the only kernel that could — a log top with `Dcoef = u'/u`
+— never routes through the field RDE (it uses the primitive-polynomial recursion).  The
+detection is computed live regardless, so the degree bound is exact per Bronstein should a
+future kernel type ever expose either configuration.  The pure bound arithmetic — every
+branch plus the resonance widening — is unit-tested directly (`test_rde_var_bound`,
+`rm_rde_var_bound` exposed in the header) without needing an integrand to reach each config.
 
 **Cap-free Hermite / flat-tower ansätze (2026-07-11) — SPDE §6.1 item 1, companion.**
 The seven remaining flat-ansatz sites that truncated a *derived* bound with a magic
@@ -724,10 +751,19 @@ until done.
    Laurent bounds, derived inner-exp windows (`rm_var_mult_at_zero` + top-coefficient
    reach), uncapped lower-field proxies, `nunk > 0` overflow guards replacing the
    `≤ 60/80` ceilings.  Closes `Log[Log[x]]^5/(x Log[x]) → Log[Log[x]]^6/6` (`Ntop=6`)
-   and `E^x E^(6 E^x)/(1+E^(E^x))` (top Laurent deg 5).  **Still to do:** the deep
-   leading-coefficient *cancellation/resonance* sub-case (Bronstein's recursive degree
-   reduction, weak normalization → normal/special denominator split).  *Deepest
-   remaining recursion piece; rare in practice.*
+   and `E^x E^(6 E^x)/(1+E^(E^x))` (top Laurent deg 5).  *Third increment DONE
+   (2026-07-11) — leading-coefficient cancellation/resonance.*  The last SPDE degree
+   piece: `rm_rde_var_bound` now takes the Bronstein resonance integer `m_res` and, in
+   the two cancellation configs (exponential `deg_v(f)=0`; primitive `deg_v(f)=-1`),
+   widens the bound monotonically to `max(naive, m_res)`; the exp resonance integer
+   `n = -(i·Dcoef_L)/Dcoef_v` is detected live by `rm_resonance_int` in the exp-top field
+   RDE (§3.12).  The widening only ever *raises* the bound, so it is never-wrong by the
+   same `SolveAlways` + diff-back gate.  Both configs are provably pre-empted in the
+   current tower (exp resonance ⟺ commensurability, already reduced; a rational element's
+   derivative has no simple pole), so `m_res = -1` on every reachable call — the detection
+   hardens the bound to be exact per Bronstein for future kernel types, and the pure bound
+   arithmetic (all branches + widening) is unit-tested directly (`test_rde_var_bound`).
+   The Bronstein SPDE degree machinery is now **complete**.
 2. ~~**Pure resultant Lazard–Rioboo–Trager.**~~ **DONE (2026-07-11).**  The
    single-kernel frac case now runs the exact resultant LRT (`rm_frac_lrt` →
    `Integrate`TranscendentalLogPart`, §3.4) when its `SolveAlways` rational-residue
@@ -804,10 +840,16 @@ re-factoring so the correct-but-unsimplified outputs render cleanly. Belongs in
 
 ## 7. Testing & verification
 
-- `tests/test_integrate_risch_macsyma.c` — an **extensive** suite (19 `TEST`
-  functions, ~250 assertions) with a dedicated function per case, sub-case and
+- `tests/test_integrate_risch_macsyma.c` — an **extensive** suite (20 `TEST`
+  functions, ~290 assertions) with a dedicated function per case, sub-case and
   sub-sub-case of the transcendental tower, each with many representative
   integrands:
+  - **Unit — degree bound:** `rde_var_bound` white-boxes the pure `rm_rde_var_bound`
+    arithmetic (exposed in the header): every branch of the Bronstein leading-degree
+    bound (deriv-lowering `dfv≥0` / `dfv<0`; deriv-preserving; the clamp at 0) plus the
+    cancellation/resonance widening — monotonicity (never lowers the bound) and that
+    `m_res` fires only in its exact config (exp `dfv=0`, primitive `dfv=-1`).  Pins the
+    "no arbitrary caps" contract directly, without needing an integrand per config.
   - **Base:** `rational_case` (polynomials; distinct / repeated real poles;
     irreducible quadratics; higher-degree denominators; repeated quadratics;
     improper fractions), `rational_agreement` (matches `BronsteinRational`).
