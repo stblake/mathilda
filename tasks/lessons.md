@@ -939,7 +939,7 @@ Lessons:
 
 ## Completeness over aesthetics: don't gate out correct results (2026-07-10)
 
-- **Correction**: For `Integrate\`RischMacsyma`, I added a `FreeQ[_, I]` gate that
+- **Correction**: For `Integrate\`RischTranscendental`, I added a `FreeQ[_, I]` gate that
   DECLINED `Tan[x]`/`Tanh[x]` because their coupled-hyperexponential answer, via
   the complex substitution `u = I x`, came out I-laden (`I x - Log[1 + E^(2 I x)]`
   `= -Log[Cos[x]]`) and no simplifier reduced it to real form. The user's rule:
@@ -955,9 +955,9 @@ Lessons:
 
 ## Generalizing an RDE/ansatz solver: gate on genuine rational functions (2026-07-11)
 
-- **Bug I introduced & fixed**: extending the base Risch-DE solver `rm_solve_rde`
+- **Bug I introduced & fixed**: extending the base Risch-DE solver `rt_solve_rde`
   to rational exponents (Phase C, `E^(1/x)`) via a `q = h/Denominator[p]` ansatz, I
-  routed every non-polynomial `p` to it. But `rm_exp_poly_case` passes the
+  routed every non-polynomial `p` to it. But `rt_exp_poly_case` passes the
   exponential's *coefficient* as `p` — for raw `E^x Sin[x]`, `p = Sin[x]`
   (transcendental). `SolveAlways` then certified a spurious `q = 0`, so
   `Integrate[E^x Sin[x]]` wrongly returned `0` (broke every multi-kernel test).

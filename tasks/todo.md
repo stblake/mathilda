@@ -1,33 +1,33 @@
-# Task: RischMacsyma — remove arbitrary caps from the proper-part Hermite / flat-tower ansätze
+# Task: RischTranscendental — remove arbitrary caps from the proper-part Hermite / flat-tower ansätze
 
 ## Goal
 Extend the "no arbitrary caps" principle (already applied to both RDE solvers via
-`rm_rde_var_bound`) to the remaining ansatz sites that still truncate a *derived*
+`rt_rde_var_bound`) to the remaining ansatz sites that still truncate a *derived*
 degree bound with a magic constant (`if(d>N)d=N`) or gate the SolveAlways system
 with a magic completeness ceiling (`nunk <= 60/80`). Every degree/Laurent bound
 must be a **function of the input's degrees**, not a hardcoded constant.
 
 ## Why correct-by-construction (never wrong regardless of the bound)
 Each of these ansätze is SolveAlways-certified AND the enclosing case is diff-back
-verified (`rm_verify_antideriv`: `Simplify[D[result,x]-f]===0`). So a bound can only
+verified (`rt_verify_antideriv`: `Simplify[D[result,x]-f]===0`). So a bound can only
 DECLINE (too small) or waste SolveAlways time (too large) — never ship a wrong
 closed form. Truncating a derived bound with a magic constant is therefore pure
 incompleteness for no principled reason: a hack. Removing the truncation strictly
 WIDENS the search → never regresses a currently-closing integrand.
 
 ## The capped sites (grep)
-1. `rm_field_hyperexp_coupled` (~1662): `Nx = …; if(Nx>8)Nx=8` + `… <= 80` ceiling.
-2. `rm_log_tower_case` (~2107): `Ntop>4→4`, lower-var `d = a+b+1; if(d>3)d=3`, `nunk<=80`.
-3. `rm_exp_tower_case` (~2467): `ihi>4→4`, `ilo<-4→-4`, x-deg `d>2→2`,
+1. `rt_field_hyperexp_coupled` (~1662): `Nx = …; if(Nx>8)Nx=8` + `… <= 80` ceiling.
+2. `rt_log_tower_case` (~2107): `Ntop>4→4`, lower-var `d = a+b+1; if(d>3)d=3`, `nunk<=80`.
+3. `rt_exp_tower_case` (~2467): `ihi>4→4`, `ilo<-4→-4`, x-deg `d>2→2`,
    **inner exp kernels hardcoded `lo[j]=-2; bd[j]=4` (range -2..2)**, `nunk<=80`.
 4. single-kernel Hermite (~2958): lower-var `d = max(a,b)+1; if(d>3)d=3`, `nunk<=60`.
 5. single-kernel hyperexp (~3135): `ihi>4→4`, `ilo<-4→-4`, `d>3→3`, `nunk<=60`.
 
 ## Plan
-- [ ] Add helper `rm_var_mult_at_zero(p, v)` (lowest power of v with nonzero coeff;
+- [ ] Add helper `rt_var_mult_at_zero(p, v)` (lowest power of v with nonzero coeff;
       factors out the inline `a`-computation already in the exp cases).
 - [ ] Site 1: drop `if(Nx>8)Nx=8`; replace `<=80` ceiling with the `nunk>0`
-      overflow guard (matching the `rm_field_rde` precedent).
+      overflow guard (matching the `rt_field_rde` precedent).
 - [ ] Site 2: drop `if(Ntop>4)Ntop=4` (Ntop=deg+1 is the exact log bound) and
       `if(d>3)d=3` (keep derived `a+b+1`); `<=80` → `nunk>0`.
 - [ ] Site 3: drop `ihi/ilo` truncations (ihi=dnum-dden, ilo=-a are the exact top
@@ -40,7 +40,7 @@ WIDENS the search → never regresses a currently-closing integrand.
       completeness caps.
 
 ## Verification (empirical is the arbiter — diff-back protects correctness)
-- [ ] `integrate_risch_macsyma_tests` green — CRUCIAL guards:
+- [ ] `integrate_risch_transcendental_tests` green — CRUCIAL guards:
       - must STILL CLOSE: coupled exp towers `E^x E^(E^x)` … `E^x E^(E^x)/(4+E^(2E^x))`
         (lines 379-392); log towers (362-368); Hermite/hyperexp coupled cases.
       - must STILL DECLINE: non-elementary `E^(E^x)`, `E^(E^x)/(1+E^(E^x))`,
@@ -53,10 +53,10 @@ WIDENS the search → never regresses a currently-closing integrand.
 ## Review
 
 Done (2026-07-11).  All seven capped flat-ansatz / Hermite sites in
-`src/calculus/integrate_risch_macsyma.c` are now cap-free — the companion to the
+`src/calculus/integrate_risch_transcendental.c` are now cap-free — the companion to the
 RDE-solver change, extending the same "no arbitrary caps" principle.
 
-- **New shared helper** `rm_var_mult_at_zero(p, v)` (lowest power of `v` with a
+- **New shared helper** `rt_var_mult_at_zero(p, v)` (lowest power of `v` with a
   nonzero coeff = exact negative Laurent extent for an exp kernel); also factors out
   the inline `a`-computation the exp cases already had.
 - **Top-kernel bounds now exact** (were truncated at 4): LOG top `Ntop = deg_top(f)+1`
@@ -74,7 +74,7 @@ RDE-solver change, extending the same "no arbitrary caps" principle.
   towers are the recursive engine's job), `ng < 16`, `if(d<0)d=0`, `Ntop≥0`, `ihi≥0`.
 
 Verified:
-- `integrate_risch_macsyma_tests` green (all 19 tests), incl. new cap-free anchors
+- `integrate_risch_transcendental_tests` green (all 19 tests), incl. new cap-free anchors
   `Log[Log[x]]^{5,7}/(x Log[x])` (Ntop 6/8) and `E^x E^(6 E^x)/(1+E^(E^x))`
   (top Laurent deg 5); coupled towers `E^x E^(E^x)` … `E^x E^(E^x)/(4+E^(2E^x))` and
   the `E^(E^x)` / `E^(E^x)/(1+E^(E^x))` decline guards all hold.

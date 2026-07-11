@@ -604,8 +604,8 @@ monotonically down.
      cascade the quiet, branch-correct **direct quotient** strategy only.
   10. `Integrate\`RischNorman[f, x]` — Bronstein pmint (parallel Risch), all
      integrands.
-  11. `Integrate\`RischMacsyma[f, x]` — the **recursive** Risch algorithm
-     ported from Maxima (`risch.lisp`); runs after RischNorman and only adds
+  11. `Integrate\`RischTranscendental[f, x]` — the **recursive** transcendental
+     Risch algorithm; runs after RischNorman and only adds
      closed forms the earlier stages missed.  Correct by construction (no
      differentiation check).  Handles logarithmic polynomials and the
      special-function cases below (Erf, ExpIntegralEi, LogIntegral, PolyLog).
@@ -634,8 +634,8 @@ monotonically down.
     to any rational function of the trig/hyperbolic kernels of `x`, including
     polynomial trig).
   - `"RischNorman"` — `Integrate\`RischNorman[f, x]` (parallel Risch / pmint).
-  - `"RischMacsyma"` — `Integrate\`RischMacsyma[f, x]`, the recursive Risch
-    algorithm ported from Maxima (`src/calculus/integrate_risch_macsyma.c`).
+  - `"RischTranscendental"` — `Integrate\`RischTranscendental[f, x]`, the recursive
+    transcendental Risch algorithm (`src/calculus/integrate_risch_transcendental.c`).
     A decision procedure over a differential transcendental tower, distinct
     from the parallel-Risch heuristic `"RischNorman"`.  Every case is correct
     by construction — it fires only behind an exact structural certificate, so
@@ -687,8 +687,8 @@ monotonically down.
         integrand declines rather than returning a spurious form); a whole-tower
         rationality gate and a single-kernel nesting gate keep the other cases
         from ever certifying a wrong nested answer;
-      - the **genuine one-extension-at-a-time recursion** (Bronstein ch. 5 / Maxima
-        `risch.lisp`), which the flat tower ansatz above cannot express: it builds
+      - the **genuine one-extension-at-a-time recursion** (Bronstein ch. 5),
+        which the flat tower ansatz above cannot express: it builds
         the ordered differential tower (structure-theorem triangularity check) and
         peels one kernel at a time, integrating the polynomial/Laurent part in the
         top kernel *coefficient by coefficient* — each coefficient integral is an
@@ -729,7 +729,7 @@ monotonically down.
         `Tan`/`Tanh` come out in a correct but I-laden form (e.g.
         `I x - Log[1 + E^(2 I x)] = -Log[Cos[x]]`) that no current simplifier
         reduces to real closed form (a `Simplify` improvement opportunity);
-      - `K E^(a x^2 + b x + c)` (`a != 0`) → `Erf`/`Erfi` (Maxima's `erfarg`);
+      - `K E^(a x^2 + b x + c)` (`a != 0`) → `Erf`/`Erfi`;
       - `(M E^(a x + b))/(c x + d)` → `ExpIntegralEi` — the `E^v` kernel is
         extracted directly, so a negative leading coefficient (`E^(-x)/x →
         ExpIntegralEi[-x]`) and a nonzero exponent constant close uniformly;
@@ -737,7 +737,7 @@ monotonically down.
         LogIntegral[x]` and adds a scaled/affine argument (`1/Log[2x] →
         LogIntegral[2x]/2`) and a monomial numerator (`x/Log[x] →
         LogIntegral[x^2]`);
-      - `K Log[1 + p x]/x` → `PolyLog[2, -p x]` (Maxima's `dilog`);
+      - `K Log[1 + p x]/x` → `PolyLog[2, -p x]` (dilogarithm);
       - fractional (Rothstein–Trager) log-part: a proper rational function of
         `theta` with squarefree denominator `prod g_i` gives `sum_i c_i Log(g_i)`,
         the constant residues `c_i` solved from `num = sum_i c_i D(g_i)(d/g_i)`
@@ -1680,7 +1680,7 @@ Out[3]= RootSum[Function[t, 1 + 4 t^2], Function[t, t Log[2 t + x]]]
 
 The transcendental (recursive-Risch) Lazard-Rioboo-Trager log part —
 the monomial-extension generalisation of `Integrate`IntRationalLogPart`,
-consumed by `Integrate`RischMacsyma` for frac-case integrands with
+consumed by `Integrate`RischTranscendental` for frac-case integrands with
 algebraic residues.
 
 - `Integrate`TranscendentalLogPart[a, d, tau, z, Dd, g]` integrates the

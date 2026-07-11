@@ -34,7 +34,7 @@
 #include "integrate_ramanujan.h"
 #include "intrat.h"
 #include "intrischnorman.h"
-#include "integrate_risch_macsyma.h"
+#include "integrate_risch_transcendental.h"
 #include "intsimp.h"
 #include "common.h"
 #include "expr.h"
@@ -270,17 +270,17 @@ static Expr* try_risch(Expr* f, Expr* x) {
     return result;
 }
 
-/* Stage 2b: recursive Risch integrator ported from Maxima (risch.lisp).
+/* Stage 2b: recursive transcendental Risch integrator.
  * A decision procedure over a differential transcendental tower, with
  * rational / logarithmic / exponential / special-function cases, each
  * correct by construction (it fires only behind an exact certificate, so
  * it emits no wrong closed forms and needs no differentiation check).
  * Distinct from the parallel-Risch (pmint) heuristic Integrate`RischNorman
  * run just above it. */
-static Expr* try_rischmacsyma(Expr* f, Expr* x) {
-    Expr* result = call_stage("Integrate`RischMacsyma", f, x);
+static Expr* try_rischtranscendental(Expr* f, Expr* x) {
+    Expr* result = call_stage("Integrate`RischTranscendental", f, x);
     if (!result) return NULL;
-    if (result_is_unresolved(result, "Integrate`RischMacsyma")) {
+    if (result_is_unresolved(result, "Integrate`RischTranscendental")) {
         expr_free(result);
         return NULL;
     }
@@ -363,7 +363,7 @@ typedef enum {
     METHOD_GOURSAT,
     METHOD_WEIERSTRASS,
     METHOD_RISCH,
-    METHOD_RISCH_MACSYMA,
+    METHOD_RISCH_TRANSCENDENTAL,
     METHOD_CRCTABLE,
     METHOD_UNDEFINED,
     METHOD_NEWTON_LEIBNIZ,   /* definite-only: selects the real-axis FTC mechanism */
@@ -392,7 +392,7 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "GoursatAlgebraic") == 0) return METHOD_GOURSAT;
     if (strcmp(s, "Weierstrass") == 0) return METHOD_WEIERSTRASS;
     if (strcmp(s, "RischNorman") == 0) return METHOD_RISCH;
-    if (strcmp(s, "RischMacsyma") == 0) return METHOD_RISCH_MACSYMA;
+    if (strcmp(s, "RischTranscendental") == 0) return METHOD_RISCH_TRANSCENDENTAL;
     if (strcmp(s, "CRCTable")    == 0) return METHOD_CRCTABLE;
     if (strcmp(s, "Undefined")   == 0) return METHOD_UNDEFINED;
     if (strcmp(s, "NewtonLeibniz") == 0) return METHOD_NEWTON_LEIBNIZ;
@@ -751,7 +751,7 @@ Expr* builtin_integrate(Expr* res) {
                     "\"LinearRadicals\", \"QuadraticRadicals\", "
                     "\"LinearRatioRadicals\", \"ChebychevAlgebraic\", "
                     "\"GoursatAlgebraic\", "
-                    "\"Weierstrass\", \"RischNorman\", \"RischMacsyma\", "
+                    "\"Weierstrass\", \"RischNorman\", \"RischTranscendental\", "
                     "\"CRCTable\", \"NewtonLeibniz\", \"LineIntegral\".\n");
                 last_warned_hash = h;
             }
@@ -803,12 +803,12 @@ Expr* builtin_integrate(Expr* res) {
             if (!result) result = try_weierstrass(effective_f, x);
             if (!result) result = try_derivdivides(effective_f, x);
             if (!result) result = try_risch(effective_f, x);
-            /* Maxima-ported recursive Risch: runs after the pmint heuristic
+            /* Recursive transcendental Risch: runs after the pmint heuristic
              * and is correct by construction, so it only adds closed forms
              * the earlier stages missed (logarithmic polynomials, Gaussians
              * -> Erf, exp/x -> ExpIntegralEi, 1/Log -> LogIntegral,
              * Log[1+ax]/x -> PolyLog), never changing an existing answer. */
-            if (!result) result = try_rischmacsyma(effective_f, x);
+            if (!result) result = try_rischtranscendental(effective_f, x);
             if (!result) result = try_crctable(effective_f, x);
             break;
         case METHOD_RATIONAL:
@@ -844,8 +844,8 @@ Expr* builtin_integrate(Expr* res) {
         case METHOD_RISCH:
             result = try_risch(effective_f, x);
             break;
-        case METHOD_RISCH_MACSYMA:
-            result = try_rischmacsyma(effective_f, x);
+        case METHOD_RISCH_TRANSCENDENTAL:
+            result = try_rischtranscendental(effective_f, x);
             break;
         case METHOD_CRCTABLE:
             result = try_crctable(effective_f, x);
@@ -919,7 +919,7 @@ void integrate_init(void) {
         "  \"GoursatAlgebraic\"   — Integrate`GoursatAlgebraic (pseudo-elliptic F/R^p, p in {1/2,1/3,2/3,1/4,3/4}, via Mobius eigendescent)\n"
         "  \"Weierstrass\"        — Integrate`Weierstrass (continuous tan(x/2) / tanh(x/2) substitution)\n"
         "  \"RischNorman\"        — Integrate`RischNorman (Bronstein pmint heuristic)\n"
-        "  \"RischMacsyma\"       — Integrate`RischMacsyma (recursive Risch, ported from Maxima; correct by construction)\n"
+        "  \"RischTranscendental\"       — Integrate`RischTranscendental (recursive transcendental Risch; correct by construction)\n"
         "  \"CRCTable\"           — Integrate`CRCTable (lazy-loaded CRC integral table)\n"
         "  \"Undefined\"          — Integrate`Undefined (unknown functions u[x], u'[x]; Roach §1.7)\n"
         "  \"NewtonLeibniz\"       — real definite integrals via F(b)-F(a) (implicit for the {x,a,b} form)\n"
@@ -1007,10 +1007,10 @@ void integrate_init(void) {
      * the fall-through for transcendental integrands. */
     intrischnorman_init();
 
-    /* Recursive Risch integrator ported from Maxima (risch.lisp):
-     * Integrate`RischMacsyma.  Correct by construction; inserted into the
+    /* Recursive transcendental Risch integrator:
+     * Integrate`RischTranscendental.  Correct by construction; inserted into the
      * Automatic cascade after the parallel-Risch RischNorman. */
-    integrate_risch_macsyma_init();
+    integrate_risch_transcendental_init();
 
     /* Pre-register Integrate`CRCTable so ?Integrate`CRCTable shows a
      * docstring even before the lazy load fires.  The actual rule

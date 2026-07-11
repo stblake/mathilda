@@ -1,14 +1,14 @@
-/* test_integrate_risch_macsyma.c
+/* test_integrate_risch_transcendental.c
  *
- * EXTENSIVE test suite for the Maxima-ported recursive Risch integrator
- * (Integrate`RischMacsyma, Method -> "RischMacsyma").  Correctness is asserted
+ * EXTENSIVE test suite for the recursive transcendental Risch integrator
+ * (Integrate`RischTranscendental, Method -> "RischTranscendental").  Correctness is asserted
  * by the universal predicate Simplify[D[Integrate[f, x], x] - f] === 0 (via
  * assert_rm_diff_zero) rather than by fixed output strings, so the tests
  * survive surface-form changes; the special-function and trig/hyperbolic
  * outputs (Erf/Ei/li/PolyLog and I-laden Cosh/Sinh forms) whose exact Simplify
  * is slower are verified numerically at interior points (assert_rm_num).  Every
  * integrand below was empirically classified against the built integrator
- * (tests/rm_probe.sh over tests/rm_candidates.txt): the assert_rm_* cases close
+ * (tests/rt_probe.sh over tests/rt_candidates.txt): the assert_rm_* cases close
  * with a diff-back of exactly 0, and the assert_head_unevaluated cases decline
  * cleanly (never a wrong closed form — correct by construction).
  *
@@ -30,7 +30,7 @@
 #include "eval.h"
 #include "parse.h"
 #include "symtab.h"
-#include "calculus/integrate_risch_macsyma.h"  /* rm_rde_var_bound (white-box) */
+#include "calculus/integrate_risch_transcendental.h"  /* rt_rde_var_bound (white-box) */
 
 #include <stdio.h>
 #include <string.h>
@@ -50,12 +50,12 @@ static void assert_head_unevaluated(const char* input, const char* head) {
     expr_free(result);
 }
 
-/* Assert Simplify[D[Integrate`RischMacsyma[f, x], x] - (f)] === 0, i.e.
+/* Assert Simplify[D[Integrate`RischTranscendental[f, x], x] - (f)] === 0, i.e.
  * the explicit package head produces a correct antiderivative. */
 static void assert_rm_diff_zero(const char* f) {
     char buf[1024];
     snprintf(buf, sizeof(buf),
-        "Simplify[D[Integrate`RischMacsyma[%s, x], x] - (%s)]", f, f);
+        "Simplify[D[Integrate`RischTranscendental[%s, x], x] - (%s)]", f, f);
     assert_eval_eq(buf, "0", 0);
 }
 
@@ -63,7 +63,7 @@ static void assert_rm_diff_zero(const char* f) {
 static void assert_rm_method_diff_zero(const char* f) {
     char buf[1024];
     snprintf(buf, sizeof(buf),
-        "Simplify[D[Integrate[%s, x, Method -> \"RischMacsyma\"], x] - (%s)]",
+        "Simplify[D[Integrate[%s, x, Method -> \"RischTranscendental\"], x] - (%s)]",
         f, f);
     assert_eval_eq(buf, "0", 0);
 }
@@ -75,9 +75,9 @@ static void assert_rm_method_diff_zero(const char* f) {
 static void assert_rm_num(const char* f) {
     char buf[1400];
     snprintf(buf, sizeof(buf),
-        "Abs[N[(D[Integrate`RischMacsyma[%s, x], x] - (%s)) /. x -> 13/10]] +"
-        " Abs[N[(D[Integrate`RischMacsyma[%s, x], x] - (%s)) /. x -> 17/10]] +"
-        " Abs[N[(D[Integrate`RischMacsyma[%s, x], x] - (%s)) /. x -> 9/10]]"
+        "Abs[N[(D[Integrate`RischTranscendental[%s, x], x] - (%s)) /. x -> 13/10]] +"
+        " Abs[N[(D[Integrate`RischTranscendental[%s, x], x] - (%s)) /. x -> 17/10]] +"
+        " Abs[N[(D[Integrate`RischTranscendental[%s, x], x] - (%s)) /. x -> 9/10]]"
         " < 1/100000", f, f, f, f, f, f);
     assert_eval_eq(buf, "True", 0);
 }
@@ -336,7 +336,7 @@ static void test_trig_frontend(void) {
  * Integrands that exponentialize to a sum sum_k p_k(x) E^(W_k) of
  * NON-commensurate exponentials (e.g. the (1 +/- I) x pair from E^x Sin[x]).
  * The distinct exponentials are independent extensions and DECOUPLE: each term
- * closes by its own Risch DE q_k' + W_k' q_k = p_k (rm_expsum_case) without a
+ * closes by its own Risch DE q_k' + W_k' q_k = p_k (rt_expsum_case) without a
  * coupled tower.  Real exponential times trig, polynomial coefficients, and
  * non-unit frequency pairs. */
 static void test_multikernel_case(void) {
@@ -356,7 +356,7 @@ static void test_multikernel_case(void) {
 /* ================= NESTED LOG TOWERS =================
  * Rational function of a chain of nested logarithms Log[x], Log[Log[x]], ...
  * integrated over the triangular tower derivation D = d/dx + sum_i Dt_i d/dt_i
- * by one unified SolveAlways ansatz over all tower variables (rm_log_tower_case),
+ * by one unified SolveAlways ansatz over all tower variables (rt_log_tower_case),
  * up to depth 4, plus independent (non-nested) log chains.  A whole-tower
  * rationality gate makes non-rational inner kernels decline (see declines). */
 static void test_log_tower_case(void) {
@@ -380,7 +380,7 @@ static void test_log_tower_case(void) {
  * ansatz over the exp tower derivation, diff-back verified.  The third case is
  * an EVALUATOR-MERGED monomial: the evaluator folds E^x E^(E^x) into
  * E^(x + E^x), whose exponent carries the foreign kernel E^x; the
- * rm_expand_exp_sums pre-pass re-splits E^(a+b) -> E^a E^b to restore the
+ * rt_expand_exp_sums pre-pass re-splits E^(a+b) -> E^a E^b to restore the
  * independent basis, and the coupled hyperexponential proper part closes it. */
 static void test_exp_tower_case(void) {
     assert_rm_diff_zero("E^x E^(E^x)");
@@ -388,7 +388,7 @@ static void test_exp_tower_case(void) {
     assert_rm_diff_zero("E^x E^(E^x)/(1 + E^(E^x))");
     /* Multiplicatively commensurate merged kernels (§6.1 item 3): E^(2 E^x) =
      * (E^(E^x))^2 is a power of another tower kernel, so the commensurate
-     * reduction in rm_tower_build keeps only the primitive E^(E^x) as an
+     * reduction in rt_tower_build keeps only the primitive E^(E^x) as an
      * extension and aliases E^(2 E^x) -> t^2.  Without it the dependent kernel
      * would spuriously add an extension and the tower declined. */
     assert_rm_diff_zero("E^x E^(2 E^x)/(1 + E^(E^x))");        /* -> E^(E^x) - Log[1+E^(E^x)] */
@@ -405,8 +405,8 @@ static void test_exp_tower_case(void) {
 }
 
 /* ================= RECURSIVE / MIXED =================
- * The genuine one-extension-at-a-time recursion (Bronstein ch. 5 / Maxima
- * risch.lisp) that the flat single-kind tower ansatz cannot express: MIXED
+ * The genuine one-extension-at-a-time recursion (Bronstein ch. 5) that the
+ * flat single-kind tower ansatz cannot express: MIXED
  * exp/log towers, RATIONAL lower-field coefficients, a proper rational part at
  * a logarithmic top (tower Hermite + Rothstein-Trager), the coupled
  * hyperexponential proper part at an exponential top, and the general field
@@ -421,7 +421,7 @@ static void test_recursive_tower_case(void) {
     assert_rm_diff_zero("(2 Log[x]/x) E^(Log[x]^2)/(1 + E^(Log[x]^2))");
     assert_rm_diff_zero("(2/x - 1/(x Log[x]^2)) E^(Log[x]^2)");
     assert_rm_diff_zero("(2 Log[x]/(x (1 + Log[x])) - 1/(x (1 + Log[x])^2)) E^(Log[x]^2)");
-    /* Exact field-RDE degree bound (§6.1 item 1, rm_rde_var_bound): the RDE solver
+    /* Exact field-RDE degree bound (§6.1 item 1, rt_rde_var_bound): the RDE solver
      * works for ALL degrees — the exponential-Laurent coefficient q = Log[x]^k has
      * lower-variable degree k, found EXACTLY (deg(q) = deg(p) - deg(Dcoef)) with NO
      * arbitrary degree cap or monomial ceiling.  There is nothing special about any
@@ -435,7 +435,7 @@ static void test_recursive_tower_case(void) {
      * a proper fraction of Log[Log[x]] whose Rothstein-Trager residues are
      * ALGEBRAIC constants (the +-I/2 that split t^2+1 into ArcTan) — the class
      * the bounded single-constant SolveAlways ansatz cannot express, closed by
-     * lifting rm_frac_lrt into rm_field_ratint (gate free of x and Log[x]). */
+     * lifting rt_frac_lrt into rt_field_ratint (gate free of x and Log[x]). */
     assert_rm_diff_zero("1/(x Log[x] (Log[Log[x]]^2 + 1))");
     assert_rm_diff_zero("1/(x Log[x] (Log[Log[x]]^2 + 4))");
     assert_rm_diff_zero("(1 + Log[Log[x]])/(x Log[x] (Log[Log[x]]^2 + 1))");
@@ -443,7 +443,7 @@ static void test_recursive_tower_case(void) {
 }
 
 /* ================= SPECIAL FUNCTIONS =================
- * Maxima erfarg / Ei / li / dilog: integrals the elementary cascade leaves open,
+ * Erf / Ei / li / dilog forms: integrals the elementary cascade leaves open,
  * closed with special functions Mathilda provides, each behind an exact
  * structural certificate.  Gaussian K E^(a x^2 + b x + c) -> Erf/Erfi (with the
  * completing-the-square constant), (const E^(a x))/(c x + d) -> ExpIntegralEi,
@@ -490,54 +490,54 @@ static void test_special_functions(void) {
  * of them trips here. */
 static void test_strict_unevaluated(void) {
     /* Genuinely non-elementary: Fresnel S, sine/cosine integral. */
-    assert_head_unevaluated("Integrate`RischMacsyma[Sin[x^2], x]", "Integrate`RischMacsyma");
-    assert_head_unevaluated("Integrate`RischMacsyma[Sin[x]/x, x]", "Integrate`RischMacsyma");
-    assert_head_unevaluated("Integrate`RischMacsyma[Cos[x]/x, x]", "Integrate`RischMacsyma");
+    assert_head_unevaluated("Integrate`RischTranscendental[Sin[x^2], x]", "Integrate`RischTranscendental");
+    assert_head_unevaluated("Integrate`RischTranscendental[Sin[x]/x, x]", "Integrate`RischTranscendental");
+    assert_head_unevaluated("Integrate`RischTranscendental[Cos[x]/x, x]", "Integrate`RischTranscendental");
     /* Exponential of a rational whose Risch DE has no rational solution, and an
      * Ei-type integrand with a NON-linear denominator (unimplemented). */
-    assert_head_unevaluated("Integrate`RischMacsyma[Exp[1/x], x]", "Integrate`RischMacsyma");
-    assert_head_unevaluated("Integrate`RischMacsyma[Exp[x]/x^2, x]", "Integrate`RischMacsyma");
+    assert_head_unevaluated("Integrate`RischTranscendental[Exp[1/x], x]", "Integrate`RischTranscendental");
+    assert_head_unevaluated("Integrate`RischTranscendental[Exp[x]/x^2, x]", "Integrate`RischTranscendental");
     /* Ei-type integrand with a NON-linear (quadratic) denominator remains out of
      * scope: the widened Ei recognizer requires an exactly linear c x + d. */
-    assert_head_unevaluated("Integrate`RischMacsyma[Exp[x]/(x^2 + 1), x]", "Integrate`RischMacsyma");
+    assert_head_unevaluated("Integrate`RischTranscendental[Exp[x]/(x^2 + 1), x]", "Integrate`RischTranscendental");
     /* Non-elementary nested-log integrands (need Ei/li of a log); and a residual
      * NON-rational inner kernel (Sin[Log[x]]) must DECLINE, never certify a wrong
      * form (the whole-tower rationality gate). */
-    assert_head_unevaluated("Integrate`RischMacsyma[Log[x] Log[Log[x]], x]", "Integrate`RischMacsyma");
-    assert_head_unevaluated("Integrate`RischMacsyma[Sin[Log[x]] Log[Log[x]], x]", "Integrate`RischMacsyma");
+    assert_head_unevaluated("Integrate`RischTranscendental[Log[x] Log[Log[x]], x]", "Integrate`RischTranscendental");
+    assert_head_unevaluated("Integrate`RischTranscendental[Sin[Log[x]] Log[Log[x]], x]", "Integrate`RischTranscendental");
     /* Non-elementary nested exponentials.  E^(E^x)/(1+E^(E^x)) is a REGRESSION
      * guard: a single-kernel case once certified the WRONG Log[1+E^(E^x)]/E^x by
-     * leaving the inner E^x as a free SolveAlways parameter (fixed by rm_kernel_simple). */
-    assert_head_unevaluated("Integrate`RischMacsyma[E^(E^x), x]", "Integrate`RischMacsyma");
-    assert_head_unevaluated("Integrate`RischMacsyma[E^(E^x)/(1 + E^(E^x)), x]", "Integrate`RischMacsyma");
+     * leaving the inner E^x as a free SolveAlways parameter (fixed by rt_kernel_simple). */
+    assert_head_unevaluated("Integrate`RischTranscendental[E^(E^x), x]", "Integrate`RischTranscendental");
+    assert_head_unevaluated("Integrate`RischTranscendental[E^(E^x)/(1 + E^(E^x)), x]", "Integrate`RischTranscendental");
     /* Commensurate-reduction siblings that stay non-elementary: no E^x derivation
      * factor to supply dt for the E^(2 E^x)=t^2 denominator, so they decline even
      * though the reduction now lets the tower build (§6.1 item 3, never wrong). */
-    assert_head_unevaluated("Integrate`RischMacsyma[E^(E^x)/(1 + E^(2 E^x)), x]", "Integrate`RischMacsyma");
-    assert_head_unevaluated("Integrate`RischMacsyma[E^(2 E^x)/(1 + E^(E^x)), x]", "Integrate`RischMacsyma");
+    assert_head_unevaluated("Integrate`RischTranscendental[E^(E^x)/(1 + E^(2 E^x)), x]", "Integrate`RischTranscendental");
+    assert_head_unevaluated("Integrate`RischTranscendental[E^(2 E^x)/(1 + E^(E^x)), x]", "Integrate`RischTranscendental");
     /* Proper tower fraction with a NON-constant Rothstein-Trager residue is
      * non-elementary (must not certify a wrong constant residue). */
-    assert_head_unevaluated("Integrate`RischMacsyma[1/(Log[x] (1 + Log[Log[x]])), x]", "Integrate`RischMacsyma");
+    assert_head_unevaluated("Integrate`RischTranscendental[1/(Log[x] (1 + Log[Log[x]])), x]", "Integrate`RischTranscendental");
     /* Algebraic-residue tower LRT gate: 1/x Log[x] missing makes the residues
      * of the Log[Log[x]]^2+1 factor depend on x (not constants of the tower
      * derivation), so the resultant LRT must DECLINE, not certify a wrong form. */
-    assert_head_unevaluated("Integrate`RischMacsyma[1/(Log[x] (Log[Log[x]]^2 + 1)), x]", "Integrate`RischMacsyma");
+    assert_head_unevaluated("Integrate`RischTranscendental[1/(Log[x] (Log[Log[x]]^2 + 1)), x]", "Integrate`RischTranscendental");
     /* Field Risch DE with no elementary solution (E^(Log[x]^2) and its coupled
      * fraction) declines rather than forcing a bounded ansatz to a wrong answer. */
-    assert_head_unevaluated("Integrate`RischMacsyma[E^(Log[x]^2), x]", "Integrate`RischMacsyma");
-    assert_head_unevaluated("Integrate`RischMacsyma[E^(Log[x]^2)/(1 + Log[x]), x]", "Integrate`RischMacsyma");
+    assert_head_unevaluated("Integrate`RischTranscendental[E^(Log[x]^2), x]", "Integrate`RischTranscendental");
+    assert_head_unevaluated("Integrate`RischTranscendental[E^(Log[x]^2)/(1 + Log[x]), x]", "Integrate`RischTranscendental");
 }
 
 /* ================= Supplementary: engine agreement ================= */
-/* On the rational base case RischMacsyma must agree with the dedicated
+/* On the rational base case RischTranscendental must agree with the dedicated
  * rational Risch engine (Integrate`BronsteinRational) that it delegates to. */
 static void test_rational_agreement(void) {
     assert_eval_eq(
-        "Simplify[Integrate[1/(x^2 - 1), x, Method -> \"RischMacsyma\"]"
+        "Simplify[Integrate[1/(x^2 - 1), x, Method -> \"RischTranscendental\"]"
         " - Integrate[1/(x^2 - 1), x, Method -> \"BronsteinRational\"]]",
         "0", 0);
     assert_eval_eq(
-        "Simplify[Integrate[(x^3 + 1)/(x^2 + 1), x, Method -> \"RischMacsyma\"]"
+        "Simplify[Integrate[(x^3 + 1)/(x^2 + 1), x, Method -> \"RischTranscendental\"]"
         " - Integrate[(x^3 + 1)/(x^2 + 1), x, Method -> \"BronsteinRational\"]]",
         "0", 0);
 }
@@ -572,8 +572,8 @@ static void test_method_plumbing(void) {
     assert_rm_method_diff_zero("1/(x (1 + Log[x]))");
     /* The two forms produce the same antiderivative. */
     assert_eval_eq(
-        "Simplify[Integrate[1/(x^2 - 1), x, Method -> \"RischMacsyma\"]"
-        " - Integrate`RischMacsyma[1/(x^2 - 1), x]]",
+        "Simplify[Integrate[1/(x^2 - 1), x, Method -> \"RischTranscendental\"]"
+        " - Integrate`RischTranscendental[1/(x^2 - 1), x]]",
         "0", 0);
 }
 
@@ -581,32 +581,32 @@ static void test_method_plumbing(void) {
 static void test_strict_misc(void) {
     /* A non-symbol integration variable is rejected (never garbage). */
     assert_head_unevaluated(
-        "Integrate`RischMacsyma[1/x, x + 1]", "Integrate`RischMacsyma");
+        "Integrate`RischTranscendental[1/x, x + 1]", "Integrate`RischTranscendental");
     /* Fresnel / Si / Ci non-elementary integrands bubble back unevaluated. */
     assert_head_unevaluated(
-        "Integrate`RischMacsyma[Cos[x^2], x]", "Integrate`RischMacsyma");
+        "Integrate`RischTranscendental[Cos[x^2], x]", "Integrate`RischTranscendental");
     /* The LRT frac path fires only with a genuine derivation factor: the
      * ArcTan-family integrands above carry 1/x (log) or E^x (exp).  Without
      * it the integral is non-elementary (li / Ei family), so the LRT must
      * DECLINE, not certify a wrong closed form. */
     assert_head_unevaluated(
-        "Integrate`RischMacsyma[1/(Log[x]^2 + 1), x]", "Integrate`RischMacsyma");
+        "Integrate`RischTranscendental[1/(Log[x]^2 + 1), x]", "Integrate`RischTranscendental");
     /* x-dependent residues (the resultant does not become free of x after the
      * content strip): the x-content gate must reject rather than certify. */
     assert_head_unevaluated(
-        "Integrate`RischMacsyma[1/(x^2 (Log[x]^2 + 1)), x]",
-        "Integrate`RischMacsyma");
+        "Integrate`RischTranscendental[1/(x^2 (Log[x]^2 + 1)), x]",
+        "Integrate`RischTranscendental");
 }
 
-/* ================= UNIT: rm_rde_var_bound (degree arithmetic) =================
+/* ================= UNIT: rt_rde_var_bound (degree arithmetic) =================
  * White-box tests of the Bronstein RdeBoundDegree leading-degree bound used by the
- * exponential-Laurent field Risch DE (rm_field_rde) and the rational-exponent RDE
- * (rm_solve_rde_rational).  This is a pure integer function of the equation's degrees
+ * exponential-Laurent field Risch DE (rt_field_rde) and the rational-exponent RDE
+ * (rt_solve_rde_rational).  This is a pure integer function of the equation's degrees
  * (dpv = deg_v(p), dfv = deg_v(f)), the monomial kind (deriv_lowers), and the Bronstein
  * resonance integer (m_res); testing it directly pins the "no arbitrary caps" contract
  * and the cancellation/resonance widening without having to construct an integrand that
  * reaches each configuration (both cancellation configs are pre-empted in the current
- * tower architecture — see the reachability note in integrate_risch_macsyma.c).
+ * tower architecture — see the reachability note in integrate_risch_transcendental.c).
  *
  * Contract recap (bound on deg_v(q) for D[q] + f q = p, clamped at 0):
  *   deriv-lowering v (base x / log):  dfv >= 0 -> dpv - dfv                (f q dominates)
@@ -617,9 +617,9 @@ static void test_strict_misc(void) {
  * The m_res widening is MONOTONE (never lowers the bound) and fires ONLY in its exact
  * configuration.  m_res == -1 disables it. */
 static void chk_bound(long dpv, long dfv, bool dl, long m_res, long expect) {
-    long got = rm_rde_var_bound(dpv, dfv, dl, m_res);
+    long got = rt_rde_var_bound(dpv, dfv, dl, m_res);
     ASSERT_MSG(got == expect,
-        "rm_rde_var_bound(dpv=%ld, dfv=%ld, deriv_lowers=%d, m_res=%ld) = %ld, expected %ld",
+        "rt_rde_var_bound(dpv=%ld, dfv=%ld, deriv_lowers=%d, m_res=%ld) = %ld, expected %ld",
         dpv, dfv, (int)dl, m_res, got, expect);
 }
 
@@ -668,7 +668,7 @@ static void test_rde_var_bound(void) {
     chk_bound(3, 2, false, 100, 1);    /* dfv=2: m_res ignored -> 1 */
 }
 
-void test_integrate_risch_macsyma(void) {
+void test_integrate_risch_transcendental(void) {
     symtab_init();
     core_init();
 
@@ -701,10 +701,10 @@ void test_integrate_risch_macsyma(void) {
     TEST(test_strict_unevaluated);
     TEST(test_strict_misc);
 
-    printf("All Integrate RischMacsyma tests passed!\n");
+    printf("All Integrate RischTranscendental tests passed!\n");
 }
 
 int main(void) {
-    test_integrate_risch_macsyma();
+    test_integrate_risch_transcendental();
     return 0;
 }

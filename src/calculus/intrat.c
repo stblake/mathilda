@@ -3834,7 +3834,7 @@ void intrat_init(void) {
             "bounded-Solve scope of Phase 4).");
 
     /* Recursive-Risch transcendental LRT log part (consumed by
-     * Integrate`RischMacsyma; not a user-facing surface form). */
+     * Integrate`RischTranscendental; not a user-facing surface form). */
     install("Integrate`TranscendentalLogPart",
             builtin_intrat_transcendental_log_part,
             "Integrate`TranscendentalLogPart[a, d, tau, z, Dd, g] computes the\n"
