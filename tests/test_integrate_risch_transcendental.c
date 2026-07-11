@@ -298,6 +298,13 @@ static void test_hyperexponential_case(void) {
     assert_rm_diff_zero("1/(1 + Exp[x])^3");
     assert_rm_diff_zero("Exp[x]/(1 + Exp[x])^3");
     assert_rm_diff_zero("Exp[2 x]/(1 + Exp[x])^2");
+    /* Non-integer multiplicatively-commensurate exponents (§6.1 item 3): the two
+     * kernels E^(x/2), E^(x/3) share no integer-ratio member primitive, so the
+     * old kernelizer declined; the synthesized primitive E^(x/6) (x/2 = 3 x/6,
+     * x/3 = 2 x/6) collapses them onto one tower variable and closes them. */
+    assert_rm_diff_zero("1/(Exp[x/2] + Exp[x/3])");
+    assert_rm_diff_zero("1/(Exp[x/2] + Exp[x/3])^2");
+    assert_rm_diff_zero("Exp[x/6]/(1 + Exp[x/2] + Exp[x/3])");
 }
 
 /* ================= TRIG / HYPERBOLIC FRONT-END =================
@@ -402,6 +409,14 @@ static void test_exp_tower_case(void) {
      * `ihi > 4 -> 4` cap, which declined it.  The top Laurent range is now the
      * exact deg_top(num) - deg_top(den) (an EXP kernel preserves degree under D). */
     assert_rm_diff_zero("E^x E^(6 E^x)/(1 + E^(E^x))");
+    /* Non-integer multiplicatively-commensurate nested exponents (§6.1 item 3):
+     * the class {7 E^x/6, 2 E^x/3, E^x/2} has NO integer-ratio member primitive
+     * (ratios 7/3, 4/3, 7/4, ...), so the old tower builder declined.  The
+     * SYNTHESIZED (non-member) primitive E^(x/6) of the inner exponent — here
+     * E^(E^x/6) — collapses the class onto one tower variable (E^(2 E^x/3) = t^4,
+     * E^(E^x/2) = t^3) and the coupled hyperexponential proper part closes it.
+     * Integrand is d/dx of the elementary E^(E^x/2)/(1 + E^(2 E^x/3)). */
+    assert_rm_diff_zero("D[E^(E^x/2)/(1 + E^(2 E^x/3)), x]");
 }
 
 /* ================= RECURSIVE / MIXED =================

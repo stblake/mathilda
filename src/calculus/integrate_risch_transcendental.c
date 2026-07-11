@@ -58,6 +58,37 @@ static bool rt_is_rat_const(const Expr* e) {
            e->data.function.head->data.symbol == intern_symbol("Rational");
 }
 
+/* Numerator / denominator (den > 0) of a rational-constant Expr (Integer or
+ * Rational[p, q]).  Returns false if `e` is not a small rational constant
+ * (BigInt rationals are out of range here and decline).  Used to synthesize a
+ * commensurability-class primitive exponent from non-integer rational ratios. */
+static bool rt_rat_num_den(const Expr* e, long* num, long* den) {
+    long i;
+    if (rt_is_int_const(e, &i)) { *num = i; *den = 1; return true; }
+    if (e && e->type == EXPR_FUNCTION && rt_head_is(e, "Rational") &&
+        e->data.function.arg_count == 2) {
+        const Expr* p = e->data.function.args[0];
+        const Expr* q = e->data.function.args[1];
+        if (p && p->type == EXPR_INTEGER && q && q->type == EXPR_INTEGER &&
+            q->data.integer != 0) {
+            long a = (long)p->data.integer, b = (long)q->data.integer;
+            if (b < 0) { a = -a; b = -b; }
+            *num = a; *den = b; return true;
+        }
+    }
+    return false;
+}
+
+static long rt_gcd_l(long a, long b) {
+    a = labs(a); b = labs(b);
+    while (b) { long t = a % b; a = b; b = t; }
+    return a;
+}
+static long rt_lcm_l(long a, long b) {
+    if (a == 0 || b == 0) return 0;
+    return labs(a / rt_gcd_l(a, b) * b);
+}
+
 /* Build `head[args...]` (adopting the owned `args` element pointers) and
  * evaluate it, freeing the constructed call.  Returns evaluate()'s result. */
 static Expr* rt_eval_call(const char* head, Expr** args, size_t n) {
@@ -94,6 +125,43 @@ static Expr* rt_eval2(const char* head, Expr* a, Expr* b) {
 }
 static Expr* rt_eval3(const char* head, Expr* a, Expr* b, Expr* c) {
     return rt_eval_call(head, (Expr*[]){ a, b, c }, 3);
+}
+
+/* Given a commensurability class of x-dependent exponents `ws[0..nw-1]` (every
+ * ratio ws[j]/ws[0] a rational constant), synthesize the class *primitive*
+ * exponent p = ws[0] / M (M = lcm of the ratio denominators) so that every
+ * E^(ws[j]) = (E^p)^(kof[j]) with kof[j] a nonzero integer.  This generalizes
+ * the earlier "some member is an integer multiple of every other" test — which
+ * only handled integer ratios (E^(2u) = (E^u)^2) — to genuine rational ratios
+ * (E^(x/2), E^(x/3) → primitive E^(x/6), k = 3, 2).  Returns an owned,
+ * Cancel-normalized primitive Expr* and fills kof[], or NULL if any ratio is
+ * not a small rational constant (genuinely independent kernels — a tower /
+ * sum, handled elsewhere) or on arithmetic overflow. */
+static Expr* rt_class_primitive(Expr** ws, size_t nw, long* kof) {
+    if (nw == 0) return NULL;
+    long* nums = malloc(nw * sizeof(long));
+    long* dens = malloc(nw * sizeof(long));
+    long M = 1;
+    bool ok = true;
+    for (size_t j = 0; j < nw && ok; j++) {
+        Expr* ratio = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_copy(ws[j]), expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_copy(ws[0]), expr_new_integer(-1) }, 2) }, 2));
+        long a, b;
+        if (ratio && rt_rat_num_den(ratio, &a, &b) && a != 0) {
+            nums[j] = a; dens[j] = b; M = rt_lcm_l(M, b);
+        } else ok = false;
+        if (ratio) expr_free(ratio);
+    }
+    Expr* prim = NULL;
+    if (ok && M > 0) {
+        for (size_t j = 0; j < nw; j++) kof[j] = nums[j] * (M / dens[j]);
+        prim = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_copy(ws[0]), expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_new_integer(M), expr_new_integer(-1) }, 2) }, 2));
+    }
+    free(nums); free(dens);
+    return prim;
 }
 
 static bool rt_is_true(const Expr* e) {
@@ -959,27 +1027,17 @@ static Expr* rt_exp_kernelize(Expr* f, Expr* x, Expr** u_out) {
     rt_collect_exp_exponents(f, x, &ws, &nw, &cap);
     if (nw == 0) { free(ws); return NULL; }
 
-    Expr* u = NULL; long* kof = malloc(nw * sizeof(long));
-    for (size_t cand = 0; cand < nw && !u; cand++) {
-        bool all_int = true;
-        for (size_t j = 0; j < nw; j++) {
-            Expr* ratio = rt_eval1("Cancel", expr_new_function(
-                expr_new_symbol("Times"), (Expr*[]){ expr_copy(ws[j]),
-                    expr_new_function(expr_new_symbol("Power"),
-                        (Expr*[]){ expr_copy(ws[cand]), expr_new_integer(-1) }, 2)
-                }, 2));
-            if (ratio && ratio->type == EXPR_INTEGER && ratio->data.integer != 0)
-                kof[j] = (long)ratio->data.integer;
-            else all_int = false;
-            if (ratio) expr_free(ratio);
-            if (!all_int) break;
-        }
-        if (all_int) u = ws[cand];
-    }
+    /* Synthesize the single primitive exponent u so every E^(w_j) = (E^u)^k_j
+     * (k_j integer): u = ws[0]/lcm(ratio denominators).  Handles integer ratios
+     * (E^(2u) = (E^u)^2) and genuine rational ratios (E^(x/2), E^(x/3) → E^(x/6))
+     * alike; declines (NULL) when the exponents are not all a rational multiple
+     * of one another — genuinely independent kernels (a sum / tower). */
+    long* kof = malloc(nw * sizeof(long));
+    Expr* u = rt_class_primitive(ws, nw, kof);   /* owned primitive, or NULL */
     /* The primitive exponent must be rational in x alone; a nested exponent
      * (e.g. u = E^x in E^(E^x)) is a two-extension tower left to rt_exp_tower_case
      * (else the single-kernel RDE would carry the inner kernel as a free param). */
-    if (u && !rt_kernel_simple(u, x)) u = NULL;
+    if (u && !rt_kernel_simple(u, x)) { expr_free(u); u = NULL; }
     if (!u) { for (size_t i = 0; i < nw; i++) expr_free(ws[i]); free(ws); free(kof); return NULL; }
 
     Expr** rules = malloc(2 * nw * sizeof(Expr*));
@@ -995,7 +1053,7 @@ static Expr* rt_exp_kernelize(Expr* f, Expr* x, Expr** u_out) {
     }
     Expr* rl = expr_new_function(expr_new_symbol("List"), rules, 2 * nw);
     free(rules);
-    Expr* uexp = expr_copy(u);
+    Expr* uexp = u;                       /* adopt the synthesized primitive */
     for (size_t i = 0; i < nw; i++) expr_free(ws[i]);
     free(ws); free(kof);
 
@@ -2726,22 +2784,24 @@ static bool rt_tower_build(Expr* f, Expr* x, RtTower* T) {
     Expr** exps = NULL; size_t ne = 0, ec = 0;
     rt_collect_exp_exponents(f, x, &exps, &ne, &ec);
     T->nm = 0;
+    Expr* mprim_pexp[2 * RT_MAXK];       /* per-member class-primitive exponent (borrowed) */
 
     /* --- Multiplicatively commensurate reduction of the exponential kernels. ---
      * Collected exponents w_i, w_j define algebraically DEPENDENT kernels
      * E^w_i, E^w_j when w_i/w_j is a nonzero rational: then E^w = (E^prim)^k for
-     * a class primitive `prim` and integer k (e.g. E^(2 E^x) = (E^(E^x))^2).
-     * Partition the exponents into such commensurability classes, pick a
-     * primitive whose integer multiples cover its whole class, and keep ONLY the
-     * primitives as tower extensions; each remaining member is recorded as an
-     * integer power of a primitive's tower variable (T->m*).  Without this a
+     * a class primitive exponent `prim` and integer k (e.g. E^(2 E^x) =
+     * (E^(E^x))^2).  Partition the exponents into such commensurability classes,
+     * SYNTHESIZE one primitive exponent per class (prim = member/lcm(ratio
+     * denominators), possibly NOT itself a member — e.g. E^x for {2 E^x, 3 E^x},
+     * or E^(x/6) for {E^(x/2), E^(x/3)}), keep ONLY the synthesized primitives as
+     * tower extensions, and record each dependent member as the integer power
+     * E^w -> t[prim]^k of its primitive's tower variable (T->m*).  Without this a
      * dependent kernel would spuriously add an extension, breaking independence.
-     * A class with no integer-ratio primitive (e.g. exponents E^x/2 and E^x/3)
-     * is out of scope and declines the whole tower (never wrong). */
+     * A class whose members are not all rational multiples of one another has no
+     * common primitive and declines the whole tower (never wrong). */
     long* clsrep = malloc((ne ? ne : 1) * sizeof(long));
-    long* primof = malloc((ne ? ne : 1) * sizeof(long));
     long* multof = malloc((ne ? ne : 1) * sizeof(long));
-    for (size_t i = 0; i < ne; i++) { clsrep[i] = -1; primof[i] = -1; multof[i] = 1; }
+    for (size_t i = 0; i < ne; i++) { clsrep[i] = -1; multof[i] = 1; }
     bool okc = (ne <= 2 * RT_MAXK);                 /* member-array bound */
     for (size_t i = 0; i < ne && okc; i++) {        /* group by commensurability */
         if (clsrep[i] != -1) continue;
@@ -2755,36 +2815,31 @@ static bool rt_tower_build(Expr* f, Expr* x, RtTower* T) {
             if (r) expr_free(r);
         }
     }
-    for (size_t rep = 0; rep < ne && okc; rep++) {  /* integer primitive per class */
+    /* Synthesize one primitive exponent per class (clsprim[rep], owned) and the
+     * per-member integer multiplier multof[i] (w_i = multof[i] * clsprim[rep]). */
+    Expr** clsprim = calloc((ne ? ne : 1), sizeof(Expr*));
+    for (size_t rep = 0; rep < ne && okc; rep++) {
         if (clsrep[rep] != (long)rep) continue;
-        long chosen = -1;
-        long* ktmp = malloc((ne ? ne : 1) * sizeof(long));
-        for (size_t cand = 0; cand < ne && chosen < 0; cand++) {
-            if (clsrep[cand] != (long)rep) continue;
-            bool good = true;
-            for (size_t m = 0; m < ne && good; m++) {
-                if (clsrep[m] != (long)rep) continue;
-                Expr* r = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
-                    (Expr*[]){ expr_copy(exps[m]), expr_new_function(expr_new_symbol("Power"),
-                        (Expr*[]){ expr_copy(exps[cand]), expr_new_integer(-1) }, 2) }, 2));
-                long k;
-                if (rt_is_int_const(r, &k)) ktmp[m] = k; else good = false;
-                if (r) expr_free(r);
-            }
-            if (good) {
-                chosen = (long)cand;
-                for (size_t m = 0; m < ne; m++)
-                    if (clsrep[m] == (long)rep) { primof[m] = chosen; multof[m] = ktmp[m]; }
-            }
+        Expr** cls = malloc((ne ? ne : 1) * sizeof(Expr*));
+        size_t* idxs = malloc((ne ? ne : 1) * sizeof(size_t));
+        size_t cm = 0;
+        for (size_t m = 0; m < ne; m++)
+            if (clsrep[m] == (long)rep) { cls[cm] = exps[m]; idxs[cm] = m; cm++; }
+        long* kk = malloc((cm ? cm : 1) * sizeof(long));
+        Expr* p = rt_class_primitive(cls, cm, kk);   /* owned primitive, or NULL */
+        if (!p) okc = false;
+        else {
+            clsprim[rep] = p;
+            for (size_t c = 0; c < cm; c++) multof[idxs[c]] = kk[c];
         }
-        free(ktmp);
-        if (chosen < 0) okc = false;
+        free(cls); free(idxs); free(kk);
     }
     size_t np = 0;
-    for (size_t i = 0; i < ne; i++) if (primof[i] == (long)i) np++;
+    for (size_t rep = 0; rep < ne; rep++) if (clsrep[rep] == (long)rep) np++;
     size_t n = nl + np;
     if (!okc || n < 2 || n > RT_MAXK) {
-        free(clsrep); free(primof); free(multof);
+        for (size_t rep = 0; rep < ne; rep++) if (clsprim[rep]) expr_free(clsprim[rep]);
+        free(clsprim); free(clsrep); free(multof);
         for (size_t i = 0; i < nl; i++) expr_free(logs[i]);
         for (size_t i = 0; i < ne; i++) expr_free(exps[i]);
         free(logs); free(exps);
@@ -2799,19 +2854,23 @@ static bool rt_tower_build(Expr* f, Expr* x, RtTower* T) {
         idx++;
     }
     free(logs);
+    /* One EXP tower kernel per synthesized class primitive. */
+    for (size_t rep = 0; rep < ne; rep++) {
+        if (clsrep[rep] != (long)rep) continue;
+        T->kind[idx] = RT_EXP;
+        T->arg[idx] = expr_copy(clsprim[rep]);                     /* primitive exponent */
+        T->kernel[idx] = expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_new_symbol("E"), expr_copy(clsprim[rep]) }, 2);
+        idx++;
+    }
+    /* Every exp member that is not itself the class primitive is an alias
+     * E^w -> t[prim]^k; store its primitive exponent for the post-reorder remap. */
     for (size_t i = 0; i < ne; i++) {
-        if (primof[i] == (long)i) {                                /* class primitive */
-            T->kind[idx] = RT_EXP;
-            T->arg[idx] = expr_copy(exps[i]);                      /* primitive w */
-            T->kernel[idx] = expr_new_function(expr_new_symbol("Power"),
-                (Expr*[]){ expr_new_symbol("E"), expr_copy(exps[i]) }, 2);
-            idx++;
-        } else {                                                   /* dependent member */
-            T->marg[T->nm] = expr_copy(exps[i]);                   /* member exponent w */
-            T->mmult[T->nm] = multof[i];                           /* w = k * arg[prim] */
-            T->mprim[T->nm] = primof[i];        /* exps[] index; remapped to t-idx below */
-            T->nm++;
-        }
+        if (expr_eq(exps[i], clsprim[clsrep[i]])) continue;   /* realized by the primitive kernel */
+        T->marg[T->nm] = expr_copy(exps[i]);                  /* member exponent w */
+        T->mmult[T->nm] = multof[i];                          /* w = k * clsprim[rep]  */
+        mprim_pexp[T->nm] = clsprim[clsrep[i]];               /* borrowed; remapped below */
+        T->nm++;
     }
     T->n = n;
 
@@ -2849,7 +2908,7 @@ static bool rt_tower_build(Expr* f, Expr* x, RtTower* T) {
         }
     }
     for (size_t m = 0; m < T->nm; m++) {
-        Expr* pw = exps[T->mprim[m]];              /* primitive exponent value */
+        Expr* pw = mprim_pexp[m];                  /* class primitive exponent value */
         long ti = -1;
         for (size_t i = 0; i < n; i++)
             if (T->kind[i] == RT_EXP && expr_eq(T->arg[i], pw)) { ti = (long)i; break; }
@@ -2865,7 +2924,8 @@ static bool rt_tower_build(Expr* f, Expr* x, RtTower* T) {
     }
     T->subrules = expr_new_function(expr_new_symbol("List"), rules, nr);
     free(rules);
-    free(clsrep); free(primof); free(multof);
+    for (size_t rep = 0; rep < ne; rep++) if (clsprim[rep]) expr_free(clsprim[rep]);
+    free(clsprim); free(clsrep); free(multof);
     for (size_t i = 0; i < ne; i++) expr_free(exps[i]);
     free(exps);
 

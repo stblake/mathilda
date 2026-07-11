@@ -770,8 +770,13 @@ monotonically down.
     instead of a spurious extra extension — so towers with `E^(k u)` close and the
     exp-top algebraic-residue LRT is unblocked
     (`Integrate[E^x E^(E^x)/(1+E^(2 E^x)), x] = ArcTan[E^(E^x)]`,
-    `Integrate[E^x E^(2 E^x)/(1+E^(E^x)), x] = E^(E^x) - Log[1+E^(E^x)]`); a class
-    with no integer-ratio primitive declines.  The **RDE-solver degree bounds** are
+    `Integrate[E^x E^(2 E^x)/(1+E^(E^x)), x] = E^(E^x) - Log[1+E^(E^x)]`).  The class
+    primitive is **synthesized** (`p = w_0/lcm(ratio denominators)`) rather than
+    required to be a member, so *non-integer* commensurate exponents close too:
+    `Integrate[1/(E^(x/2)+E^(x/3)), x]` (primitive `E^(x/6)`) and the nested
+    `Integrate[D[E^(E^x/2)/(1+E^(2 E^x/3)), x], x]` (primitive `E^(E^x/6)`); only a
+    class whose members are not all rational multiples of one another declines.
+    The **RDE-solver degree bounds** are
     Bronstein's exact `RdeBoundDegree` (leading-degree balance,
     `deg_v(q) = deg_v(p) − deg_v(f)` where the exponential dominates), with **no
     arbitrary cap**, so an exponential-Laurent coefficient of any degree closes

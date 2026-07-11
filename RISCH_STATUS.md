@@ -20,7 +20,7 @@ Automatic cascade **after** `Integrate`RischNorman`.
 
 **Compiles clean** under the project's strict flags (`gcc -std=c99 -Wall -Wextra`,
 no warnings from the module).  **Tests green:** the **extensive** suite in
-`tests/test_integrate_risch_transcendental.c` — 20 `TEST` functions, ~290 assertions, one
+`tests/test_integrate_risch_transcendental.c` — 20 `TEST` functions, ~294 assertions, one
 per case / sub-case / sub-sub-case of the tower (see §7), plus a white-box unit test
 of the `rt_rde_var_bound` degree arithmetic — passes in ~15 s; the
 broader `integrals_tests` and `intrat_tests` suites are unaffected (the resultant
@@ -547,9 +547,10 @@ now partitions the exp exponents into commensurability classes, keeps only a
 primitive (whose integer multiples cover its class) as a tower variable, and
 aliases each remaining member `E^w` to the integer power `t_p^k` of the
 primitive's variable — new `RtTower.marg/mprim/mmult` fields populated in
-`rt_tower_build` and consumed by `rt_subst_kernels`.  A class with no
-integer-ratio primitive (e.g. exponents `E^x/2` and `E^x/3`) is out of scope and
-declines the whole tower (never wrong).  Closes the merged-kernel class and, since
+`rt_tower_build` and consumed by `rt_subst_kernels`.  The class primitive is now
+**synthesized** rather than required to be a class member (eleventh increment,
+below), so both the integer case and genuine rational ratios close.  Closes the
+merged-kernel class and, since
 its targets carry a degree-≥2 exp denominator `E^(2 u) = t^2`, **unblocks the
 exponential-top algebraic-residue LRT** (`rt_field_lrt_logpart`):
 `Integrate[E^x E^(2 E^x)/(1+E^(E^x)), x] = E^(E^x) - Log[1+E^(E^x)]`,
@@ -560,11 +561,28 @@ tower *build* but which lack an `E^x` derivation factor
 (`E^(E^x)/(1+E^(2 E^x))`, `E^(2 E^x)/(1+E^(E^x))`) still decline via the diff-back
 gate.
 
+**Non-integer multiplicatively commensurate exponents (eleventh increment,
+2026-07-11) — synthesized class primitive.**  The tenth increment picked
+the class primitive from the *existing members* (some member had to be an integer
+multiple of every other), so a class whose members are only *rational* multiples
+of one another — no member primitive, e.g. `{E^(x/2), E^(x/3)}` (ratio `3/2`) or
+the nested `{7 E^x/6, 2 E^x/3, E^x/2}` (ratios `7/3`, `4/3`, `7/4`) — declined.
+The primitive is now **synthesized** as `p = w_0 / lcm(ratio denominators)`
+(shared `rt_class_primitive`), which need not be a member (`E^(x/6)`, `E^(E^x/6)`),
+so every rational-ratio class collapses onto one tower variable.  Applied at both
+the single-kernel kernelizer (`rt_exp_kernelize`) and the tower builder
+(`rt_tower_build`).  Closes `Integrate[1/(E^(x/2)+E^(x/3)), x]` (single kernel,
+via the coupled hyperexponential) and the nested
+`Integrate[D[E^(E^x/2)/(1+E^(2 E^x/3)), x], x] = E^(E^x/2)/(1+E^(2 E^x/3))`
+(tower, synthesized non-member primitive `E^(E^x/6)`).  Diff-back verified;
+valgrind adds no leak blocks over the baseline.
+
 **Still deferred (declines cleanly):** a genuinely *rational* Hermite numerator
-coefficient; the recursive degree-reduction half of the Bronstein SPDE (bounded
-polynomial numerator ansatz here); and **non-integer** multiplicatively
-commensurate exponents (a class whose members have no common integer-ratio
-primitive), which the reduction declines.
+coefficient; and the recursive degree-reduction half of the Bronstein SPDE
+(bounded polynomial numerator ansatz here).  (In practice the recursive tower
+path already closes many rational-Hermite-coefficient integrands — e.g.
+`Integrate[D[(1/x)/(1+E^x)^2, x], x]` — when the result is elementary; the
+deferred cases are the residual single-kernel-only shapes.)
 
 ### 3.7 Trig / hyperbolic front-end  (`rt_trig_frontend`)
 `TrigToExp` -> the exponential machinery -> `ExpToTrig`. Both rewrites exact.
@@ -788,9 +806,13 @@ until done.
    reduction in `rt_tower_build`** (tenth increment, §3.11): each commensurability
    class of exp exponents keeps one primitive as a tower variable and aliases the
    rest to integer powers `t^k` of it.  Closes `E^x E^(2 E^x)/(1+E^(E^x))` and
-   unblocks the exp-top LRT `E^x E^(E^x)/(1+E^(2 E^x)) → ArcTan[E^(E^x)]`.  Only
-   *non-integer* commensurate exponents (no common integer-ratio primitive)
-   remain out of scope.
+   unblocks the exp-top LRT `E^x E^(E^x)/(1+E^(2 E^x)) → ArcTan[E^(E^x)]`.
+   **Non-integer commensurate exponents are now handled too (eleventh increment,
+   §3.11): the class primitive is *synthesized* (`p = w_0/lcm(ratio denoms)`,
+   shared `rt_class_primitive`) rather than required to be a member, at both the
+   single-kernel kernelizer and the tower builder — closing
+   `1/(E^(x/2)+E^(x/3))` (primitive `E^(x/6)`) and the nested
+   `D[E^(E^x/2)/(1+E^(2 E^x/3))]` (primitive `E^(E^x/6)`).**  This item is complete.
 4. **Phase D — algebraic extensions** (`Sqrt`, `n`-th roots, `RootSum`).  A separate,
    large subsystem (Bronstein Ch. 2–4 / Trager); Mathilda's radical/Goursat
    integrators already cover important algebraic families in the main cascade, so
@@ -843,7 +865,7 @@ re-factoring so the correct-but-unsimplified outputs render cleanly. Belongs in
 ## 7. Testing & verification
 
 - `tests/test_integrate_risch_transcendental.c` — an **extensive** suite (20 `TEST`
-  functions, ~290 assertions) with a dedicated function per case, sub-case and
+  functions, ~294 assertions) with a dedicated function per case, sub-case and
   sub-sub-case of the transcendental tower, each with many representative
   integrands:
   - **Unit — degree bound:** `rde_var_bound` white-boxes the pure `rt_rde_var_bound`
