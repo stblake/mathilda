@@ -197,6 +197,13 @@ static void test_exponential_case(void) {
     assert_rm_diff_zero("x Exp[-x^2]");         /* -(1/2) E^(-x^2)        */
     assert_rm_diff_zero("x Exp[3 x + 1]");
     assert_rm_diff_zero("x + x Exp[x]");        /* i=0 and i=1 terms      */
+    /* Rational exponent (u = 1/x) and rational coefficient (p rational in x):
+     * the RDE is solved by the q = h/Denominator[p] ansatz (rm_solve_rde_rational). */
+    assert_rm_diff_zero("-Exp[1/x]/x^2");       /* E^(1/x)                */
+    assert_rm_diff_zero("Exp[x]/x - Exp[x]/x^2"); /* E^x/x                */
+    /* E^(1/x) itself is non-elementary (its RDE has no rational solution). */
+    assert_head_unevaluated(
+        "Integrate`RischMacsyma[Exp[1/x], x]", "Integrate`RischMacsyma");
     /* E^(-x^2) itself has no polynomial RDE solution (N < 0): the exp case
      * declines and the Erf recognizer takes over.  Confirm it still closes
      * (to an Erf form) rather than being wrongly forced through the DE. */

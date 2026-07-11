@@ -732,11 +732,12 @@ monotonically down.
         the constant residues `c_i` solved from `num = sum_i c_i D(g_i)(d/g_i)`
         via `SolveAlways` over `theta` and `x` (`Integrate[1/(x(1+Log[x])),x] =
         Log[1+Log[x]]`, `Integrate[E^x/(1+E^x),x] = Log[1+E^x]`).
-    A genuinely rational Hermite numerator coefficient, the pure resultant LRT, the
-    recursive degree-reduction half of the Bronstein SPDE (the field RDE uses a
-    bounded polynomial numerator ansatz), rational-argument exponents (`E^(1/x)`),
-    and algebraic extensions are not yet implemented, so integrands needing them
-    return unevaluated.
+    Rational-argument exponents such as `E^(1/x)` are handled (`Integrate[-E^(1/x)/
+    x^2, x] = E^(1/x)`) via the `q = h/Denominator[p]` RDE ansatz.  A genuinely
+    rational Hermite numerator coefficient, the pure resultant LRT, the recursive
+    degree-reduction half of the Bronstein SPDE (the field RDE uses a bounded
+    polynomial numerator ansatz), and algebraic extensions are not yet implemented,
+    so integrands needing them return unevaluated.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.
   - `"Symmetry"` — origin-symmetry reduction for an interval `[-c, c]`

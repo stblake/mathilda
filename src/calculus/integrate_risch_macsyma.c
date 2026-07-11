@@ -551,16 +551,111 @@ static Expr* rm_integrate_in_K_with_logs(Expr* g, Expr* x) {
     return r;
 }
 
+/* Risch differential equation q' + i u' q = p when the exponent u OR the
+ * coefficient p is RATIONAL in x (so the polynomial ansatz below does not apply —
+ * e.g. u = 1/x for E^(1/x), or p = 1/x - 1/x^2).  By the denominator theorem the
+ * denominator of q divides Denominator[p], so q = h/pd with pd = Denominator[p]
+ * and h a bounded polynomial in x, solved exactly by SolveAlways.  Correct by
+ * construction (the SolveAlways certificate proves (q E^(i u))' = p E^(i u));
+ * NULL when no such q exists (the term is non-elementary, e.g. E^(1/x) itself).
+ * Closes Integrate[-E^(1/x)/x^2, x] = E^(1/x), Integrate[E^x/x - E^x/x^2, x] =
+ * E^x/x. */
+static Expr* rm_solve_rde_rational(Expr* p, long i, Expr* u, Expr* x) {
+    Expr* up = rm_eval2("D", expr_copy(u), expr_copy(x));
+    if (!up) return NULL;
+    Expr* pg = rm_eval1("Together", expr_copy(p));
+    Expr* pd = pg ? rm_eval1("Denominator", expr_copy(pg)) : NULL;
+    Expr* pn = pg ? rm_eval1("Numerator", expr_copy(pg)) : NULL;
+    if (pg) expr_free(pg);
+    if (!pd || !pn) { expr_free(up); if (pd) expr_free(pd); if (pn) expr_free(pn); return NULL; }
+    /* p and u' must be genuine RATIONAL FUNCTIONS of x — else a transcendental
+     * coefficient (e.g. p = Sin[x], the E^x coefficient of a raw Sin[x] product)
+     * would let SolveAlways certify a spurious q (it once returned q = 0 for
+     * E^x Sin[x]).  Such integrands belong to the trig front-end / expsum path. */
+    Expr* upg = rm_eval1("Together", expr_copy(up));
+    Expr* upn = upg ? rm_eval1("Numerator", expr_copy(upg)) : NULL;
+    Expr* upd = upg ? rm_eval1("Denominator", expr_copy(upg)) : NULL;
+    if (upg) expr_free(upg);
+    bool ratl = upn && upd && rm_is_poly(pn, x) && rm_is_poly(pd, x)
+                && rm_is_poly(upn, x) && rm_is_poly(upd, x);
+    if (upn) expr_free(upn);
+    if (upd) expr_free(upd);
+    if (!ratl) { expr_free(up); expr_free(pd); expr_free(pn); return NULL; }
+    long dpd = rm_degree(pd, x); if (dpd < 0) dpd = 0;
+    long dpn = rm_degree(pn, x); if (dpn < 0) dpn = 0;
+    long N = dpd + dpn + 2; if (N > 10) N = 10;
+
+    Expr** terms = malloc((size_t)(N + 1) * sizeof(Expr*));
+    for (long k = 0; k <= N; k++) {
+        char nm[24]; snprintf(nm, sizeof(nm), "rmRq%ld", k);
+        terms[k] = expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_new_symbol(nm), expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_copy(x), expr_new_integer(k) }, 2) }, 2);
+    }
+    Expr* h = expr_new_function(expr_new_symbol("Plus"), terms, (size_t)(N + 1));
+    free(terms);
+    Expr* q = expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ h, expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(pd), expr_new_integer(-1) }, 2) }, 2);
+
+    Expr* dq = rm_eval2("D", expr_copy(q), expr_copy(x));
+    Expr* iuq = expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_new_integer(i), expr_copy(up), expr_copy(q) }, 3);
+    Expr* residual = rm_eval_own(expr_new_function(expr_new_symbol("Plus"),
+        (Expr*[]){ dq, iuq, expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_new_integer(-1), expr_copy(p) }, 2) }, 3));
+    Expr* tog = residual ? rm_eval1("Together", residual) : NULL;
+    Expr* rnum = tog ? rm_eval1("Numerator", expr_copy(tog)) : NULL;
+    if (tog) expr_free(tog);
+
+    Expr* result = NULL;
+    Expr* sol = NULL;
+    if (rnum) {
+        Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
+            (Expr*[]){ rnum, expr_new_integer(0) }, 2);              /* adopts rnum */
+        sol = rm_eval2("SolveAlways", eqn, expr_copy(x));
+    }
+    if (sol && sol->type == EXPR_FUNCTION
+        && sol->data.function.head->type == EXPR_SYMBOL
+        && sol->data.function.head->data.symbol == intern_symbol("List")
+        && sol->data.function.arg_count >= 1
+        && sol->data.function.args[0]->type == EXPR_FUNCTION
+        && sol->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
+        && sol->data.function.args[0]->data.function.head->data.symbol
+             == intern_symbol("List")) {
+        Expr* qi = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+            (Expr*[]){ expr_copy(q), expr_copy(sol->data.function.args[0]) }, 2));
+        if (qi) {
+            Expr** zero = malloc((size_t)(N + 1) * sizeof(Expr*));
+            for (long k = 0; k <= N; k++) {
+                char nm[24]; snprintf(nm, sizeof(nm), "rmRq%ld", k);
+                zero[k] = expr_new_function(expr_new_symbol("Rule"),
+                    (Expr*[]){ expr_new_symbol(nm), expr_new_integer(0) }, 2);
+            }
+            Expr* zl = expr_new_function(expr_new_symbol("List"), zero, (size_t)(N + 1));
+            free(zero);
+            result = rm_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                (Expr*[]){ qi, zl }, 2));
+            if (result) result = rm_eval1("Cancel", result);
+        }
+    }
+    if (sol) expr_free(sol);
+    expr_free(q); expr_free(up); expr_free(pd); expr_free(pn);
+    return result;
+}
+
 /* Solve the Risch differential equation  q' + i u' q = p  for q in K,
  * with u a polynomial in x (u' polynomial) and p a polynomial in x, by a
  * bounded polynomial ansatz solved exactly with SolveAlways.  Correct by
  * construction: SolveAlways certifies the polynomial identity holds for
  * all x, so (q E^(i u))' = p E^(i u) exactly.  Returns q (owned) or NULL
  * when no polynomial solution exists (the term is then non-elementary in
- * this field — e.g. E^(-x^2) itself, left to the Erf recognizer). */
+ * this field — e.g. E^(-x^2) itself, left to the Erf recognizer).  When u or p
+ * is rational in x, defers to rm_solve_rde_rational (E^(1/x) etc.). */
 static Expr* rm_solve_rde(Expr* p, long i, Expr* u, Expr* x) {
     if (i == 0) return NULL;
-    if (!rm_is_poly(u, x) || !rm_is_poly(p, x)) return NULL;
+    if (!rm_is_poly(u, x) || !rm_is_poly(p, x))
+        return rm_solve_rde_rational(p, i, u, x);
     long du = rm_degree(u, x);
     if (du < 1) return NULL;                 /* u must be nonconstant */
     long dp = rm_degree(p, x);
