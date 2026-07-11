@@ -1635,19 +1635,33 @@ static Expr* inv_rewrite(const Expr* e, const char* xsym, const Expr* M,
             return expr_copy((Expr*)M);
         }
     }
-    /* (2) companion radical (comp_base)^(p/2) -> co[M]^(co_sign*p) */
+    /* (2) companion power (comp_base)^(p/q) -> co[M]^(2 co_sign p / q).
+     *
+     * The companion base is exactly `co[M]^(2 co_sign)` (e.g. for ArcTan,
+     * x = Tan[M] gives 1 + x^2 = Sec[M]^2 = Cos[M]^-2, so co = Cos,
+     * co_sign = -1).  A half-integer exponent (q = 2) is the radical case
+     * `Sqrt[1-x^2] -> Cos[M]` that ArcSin/ArcSinh/... need; an integer
+     * exponent (q = 1) is the *rational-denominator* case `1/(1+x^2) ->
+     * Cos[M]^2` that ArcTan/ArcTanh need — without it the `1+x^2` /
+     * `1-x^2` factor survives elimination as a spurious `Sec/Sech`
+     * multiple.  Handling any q for which `2 co_sign p` divides evenly
+     * covers both (and is branch-safe: the identity is a squared one). */
     if (comp_base && co && head_is(e, SYM_Power)
         && e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp  = e->data.function.args[1];
         int64_t p, q;
-        if (is_rational(exp, &p, &q) && q == 2 && expr_eq(base, comp_base)) {
-            int64_t np = (int64_t)co_sign * p;
-            Expr* com = expr_new_function(expr_new_symbol(co),
-                (Expr*[]){ expr_copy((Expr*)M) }, 1);
-            if (np == 1) return com;
-            return expr_new_function(expr_new_symbol(SYM_Power),
-                (Expr*[]){ com, expr_new_integer(np) }, 2);
+        if (is_rational(exp, &p, &q) && expr_eq(base, comp_base)) {
+            int64_t numer = 2 * (int64_t)co_sign * p;
+            if (q != 0 && numer % q == 0) {
+                int64_t np = numer / q;
+                if (np == 0) return expr_new_integer(1);
+                Expr* com = expr_new_function(expr_new_symbol(co),
+                    (Expr*[]){ expr_copy((Expr*)M) }, 1);
+                if (np == 1) return com;
+                return expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ com, expr_new_integer(np) }, 2);
+            }
         }
     }
 

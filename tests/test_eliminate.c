@@ -654,6 +654,28 @@ static void test_inv_arcsinh_dt_substitution(void) {
              "Equal[Times[u, Dt[u]], Dt[y]]");
 }
 
+static void test_inv_arctan_dt_substitution(void) {
+    /* Rational-denominator companion 1/(1+x^2) -> Cos[u]^2 (integer power of
+     * the companion base, not a radical).  Integrate[ArcTan[x]/(1+x^2), x] =
+     * ArcTan[x]^2/2, so the substitution shape reduces to Dt[y] == u Dt[u].
+     * Before the companion rule accepted integer exponents this returned the
+     * unreduced u Dt[u](1+Tan[u]^2) == Dt[y](1+Tan[u]^2). */
+    mute_stderr_once();
+    check_eq("Eliminate[{Dt[y] == ArcTan[x]/(1+x^2) Dt[x], u == ArcTan[x],"
+             " Dt[u] == Dt[x]/(1+x^2)}, {x, Dt[x]}]",
+             "Equal[Times[u, Dt[u]], Dt[y]]");
+}
+
+static void test_inv_arctanh_dt_substitution(void) {
+    /* Hyperbolic rational-denominator companion 1/(1-x^2) -> Cosh[u]^2.
+     * Integrate[ArcTanh[x]/(1-x^2), x] = ArcTanh[x]^2/2 -> Dt[y] == u Dt[u].
+     * Third equation given held as Dt[u == ArcTanh[x]]. */
+    mute_stderr_once();
+    check_eq("Eliminate[{Dt[y] == ArcTanh[x]/(1-x^2) Dt[x], u == ArcTanh[x],"
+             " Dt[u == ArcTanh[x]]}, {x, Dt[x]}]",
+             "Equal[Times[u, Dt[u]], Dt[y]]");
+}
+
 static void test_inv_arccos_dt_substitution(void) {
     /* ArcCos companion radical Sqrt[1-x^2] -> Sin[u]; note the sign of
      * Dt[u] flips.  Integrate[x ArcCos[x]/Sqrt[1-x^2], x] shape gives
@@ -745,6 +767,8 @@ int main(void) {
     TEST(test_inv_arccosh_square);
     TEST(test_inv_arctanh_square);
     TEST(test_inv_arcsinh_dt_substitution);
+    TEST(test_inv_arctan_dt_substitution);
+    TEST(test_inv_arctanh_dt_substitution);
     TEST(test_inv_arccos_dt_substitution);
     TEST(test_inv_single_equation_shorthand);
     TEST(test_inv_memory_smoke);

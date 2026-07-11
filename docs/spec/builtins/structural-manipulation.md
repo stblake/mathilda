@@ -1486,17 +1486,23 @@ elimination ideal collapses to `True` and an inconsistent system to
   reach it) but a *defining* equation `M == ArcF[x]` is present (`M`
   elim-free, `x` a single elim symbol, `ArcF` in `{ArcSin, ArcCos,
   ArcTan, ArcSinh, ArcCosh, ArcTanh}`).  The pass propagates
-  `ArcF[x] -> M` through the whole system, rewrites the companion radical
-  to the co-function of the *main* angle (`Sqrt[1-x^2] -> Cos[M]` for
-  ArcSin, `-> Sin[M]` for ArcCos, `Sqrt[1+x^2] -> Cosh[M]` for ArcSinh,
-  `Sqrt[x^2-1] -> Sinh[M]` for ArcCosh, `-> Sec[M]`/`Sech[M]` for
-  ArcTan/ArcTanh), and pins `x == F[M]` (F the forward function).  Because
-  the co-function is a trig call of the retained variable `M`, any factor
-  of it left after elimination is a main-variable monomial that is divided
-  out cleanly — so the u-substitution shape
+  `ArcF[x] -> M` through the whole system, rewrites the companion base
+  `c + s·x^2 = co[M]^(2·co_sign)` to a power of the co-function of the
+  *main* angle for **any** rational exponent — the half-integer (radical)
+  case `Sqrt[1-x^2] -> Cos[M]` (ArcSin; `-> Sin[M]` ArcCos, `Sqrt[1+x^2]
+  -> Cosh[M]` ArcSinh, `Sqrt[x^2-1] -> Sinh[M]` ArcCosh, `-> Sec[M]`/
+  `Sech[M]` ArcTan/ArcTanh) **and** the integer (rational-denominator) case
+  `1/(1+x^2) -> Cos[M]^2` (ArcTan), `1/(1-x^2) -> Cosh[M]^2` (ArcTanh) — then
+  pins `x == F[M]` (F the forward function).  Because the co-function is a
+  trig call of the retained variable `M`, any factor of it left after
+  elimination is a main-variable monomial that is divided out cleanly (or
+  cancels directly in the Groebner step) — so the u-substitution shapes
   `Eliminate[{Dt[y] == x ArcSin[x]/Sqrt[1-x^2] Dt[x], u == ArcSin[x],
-  Dt[u] == Dt[x]/Sqrt[1-x^2]}, {x, Dt[x]}]` returns
-  `u Sin[u] Dt[u] == Dt[y]` (with `Eliminate::ifun`).  A `Log` defining
+  Dt[u] == Dt[x]/Sqrt[1-x^2]}, {x, Dt[x]}]` and
+  `Eliminate[{Dt[y] == ArcTan[x]/(1+x^2) Dt[x], u == ArcTan[x],
+  Dt[u] == Dt[x]/(1+x^2)}, {x, Dt[x]}]` return `u Sin[u] Dt[u] == Dt[y]`
+  and the fully-reduced `u Dt[u] == Dt[y]` respectively (with
+  `Eliminate::ifun`).  A `Log` defining
   equation `M == Log[x]` is handled by the same pass (forward function
   `Exp`, no companion radical) — but only as a *fallback*, when `x` also
   occurs as a genuine polynomial atom (e.g. `1/x`), which is exactly the
