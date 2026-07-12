@@ -451,6 +451,8 @@ set(COMMON_SRC
     ../src/calculus/intrat.c
     ../src/calculus/intrischnorman.c
     ../src/calculus/integrate_risch_transcendental.c
+    ../src/calculus/risch_field.c
+    ../src/calculus/risch_canonical.c
     ../src/calculus/intsimp.c
     ../src/sum/sum.c
     ../src/sum/sum_util.c
@@ -917,6 +919,10 @@ target_include_directories(backtrack_tests PRIVATE ../src)
 
 add_executable(poly_tests test_poly.c ${COMMON_SRC})
 target_include_directories(poly_tests PRIVATE ../src)
+
+add_executable(risch_canonical_tests test_risch_canonical.c ${COMMON_SRC})
+target_include_directories(risch_canonical_tests PRIVATE ../src ../src/calculus)
+add_test(NAME risch_canonical_tests COMMAND risch_canonical_tests)
 
 add_executable(subresultants_tests test_subresultants.c ${COMMON_SRC})
 target_include_directories(subresultants_tests PRIVATE ../src)

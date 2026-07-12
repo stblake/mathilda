@@ -35,6 +35,7 @@
 #include "intrat.h"
 #include "intrischnorman.h"
 #include "integrate_risch_transcendental.h"
+#include "risch_canonical.h"
 #include "intsimp.h"
 #include "common.h"
 #include "expr.h"
@@ -1011,6 +1012,11 @@ void integrate_init(void) {
      * Integrate`RischTranscendental.  Correct by construction; inserted into the
      * Automatic cascade after the parallel-Risch RischNorman. */
     integrate_risch_transcendental_init();
+
+    /* Bronstein differential-field foundation (Symbolic Integration I, Ch. 3):
+     * splitting factorization / canonical representation primitives, exposed as
+     * the Risch` internal builtins and reused by the recursive integrator. */
+    integrate_risch_canonical_init();
 
     /* Pre-register Integrate`CRCTable so ?Integrate`CRCTable shows a
      * docstring even before the lazy load fires.  The actual rule

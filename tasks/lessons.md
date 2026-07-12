@@ -1046,3 +1046,27 @@ scope: `1/(...)^n_` reductions (pattern exponent: `Power[Power[E,n],-1]` != `Pow
 dispatch (`Method -> "CRCTable"`), not top-level `Integrate` which can mask a dead rule by solving
 it another way. General lesson: when a table rule "doesn't fire," first check for a bound variable
 reused under a nonlinear op.
+
+## Bronstein Risch canonical rep (P0) — 2026-07-12
+
+Building `SplitFactor`/`SplitSquarefreeFactor` (risch_field.c / risch_canonical.c):
+
+- **`Together` does not expand its numerator.** A difference that is algebraically 0
+  can come back as an unexpanded, canceling sum. For zero-tests use
+  `Expand[Together[a - b]]`, not `Together[a - b]`. (First SplitFactor test "failed"
+  on a result that was actually correct.)
+- **Field gcd in `k[t]` must special-case a zero operand.** `PolynomialGCD[p, 0]` does
+  NOT reliably return `p` here; `gcd(c, 0)` came back as `1`, which made Yun's loop
+  never reduce `deg(c)` → infinite loop → `out[]` buffer overflow → heap corruption
+  (SIGABRT "free list damaged", detected asynchronously so the backtrace was useless).
+  Handle `gcd(a,0)=a`, `gcd(0,b)=b` explicitly (degree `-1` marks the zero poly).
+- **Splitting-factorization output is only unique up to units of the field `k=C(x)`.**
+  A monic-in-`t` gcd makes the factors monic (`t-1`, not Bronstein's `4x^2(t-1)`), and
+  the product of monic factors reconstructs `monic(p)`, not `p` (differ by `lc_t(p)`).
+  Test via reconstruction × content and normal/special classification, or pin the
+  canonical (monic) special part; don't string-match Bronstein's content-carrying forms.
+- **`expr_copy` is a refcount bump, not a deep copy** (`e->refcount++`); `expr_new_function`
+  copies the args *array* and *adopts* the element references. So `free(arr)` after
+  building a function node is correct and must NOT be paired with freeing the elements.
+- New `src/calculus/*.c` is auto-globbed by the makefile but must be added to
+  `tests/CMakeLists.txt` `COMMON_SRC` (and the test target added) or the test won't link.
