@@ -178,6 +178,22 @@ Same tactic, not yet applied:
 - Any remaining `rt_eval1("Expand", …)` inside a loop over tower levels or
   Laurent powers in the Risch engine.
 
+**Done this session — RischTranscendental dispatch reorder.** The repeated-pole
+Hermite reduction (`rt_hermite_case`) was intercepting rational-function-of-a-
+single-exp integrands (linear exponent, `F` free of `x`) and solving an
+`O(mult)`-variable `SolveAlways` ansatz for them (177 unknowns for
+`E^x/(1+E^x)^60`). Those integrands are closed by `rt_exp_ratreduce_case` —
+kernelize `t=E^u`, reduce to the pure rational integral `∫F/(u't)dt`, hand to
+the FLINT-accelerated rational integrator (`intrat`), diff-back verify — which
+now runs *before* `rt_hermite_case` (after `rt_frac_case`, so squarefree
+ArcTan/Log forms keep precedence). Declines to Hermite/tower for the genuinely
+coupled cases (`F` still carries `x`). `E^x/(1+E^x)^60`: **6.1 s → 0.85 s**;
+`E^(3x)/(1+E^x)^40`: **1.9 s → 0.75 s**. Suite green, output forms preserved.
+The deeper native-Hermite-over-Q(x)[t] reduction (for the still-`SolveAlways`
+`x`-coupled repeated-pole case, e.g. `x E^x/(1+E^x)^30` at ~4.5 s) remains
+candidate future work — the `gr_poly`-over-`fmpz_mpoly_q` infrastructure in
+`flint_bridge.c` (used by `flint_parametric_field_xgcd`) is the building block.
+
 **Done this session — `Apart` (plain rational over Q).** The classical `Apart`
 built an `S×(S+1)` coefficient matrix and `RowReduce`- d it symbolically
 (`O(S^2+)` Gaussian elimination over big rationals), the dominant cost on

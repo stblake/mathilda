@@ -284,6 +284,13 @@ static void test_hermite_exp_case(void) {
     assert_rm_diff_zero("Exp[x]/(1 - Exp[x])^2");
     assert_rm_diff_zero("Exp[x]/(2 + Exp[x])^2");
     assert_rm_diff_zero("Exp[x]/(1 + Exp[x])^3");
+    /* Higher-multiplicity repeated poles with a linear exponent: F is free of x,
+     * so these take the fast rational-of-a-single-exp path (rt_exp_ratreduce_case
+     * reduces to a pure rational integral in t) ahead of the O(mult)-variable
+     * Hermite SolveAlways ansatz.  Diff-back gated. */
+    assert_rm_diff_zero("Exp[x]/(1 + Exp[x])^8");
+    assert_rm_diff_zero("Exp[3 x]/(1 + Exp[x])^6");
+    assert_rm_diff_zero("Exp[2 x]/((1 + Exp[x])^4 (2 + Exp[x]))");
 }
 
 /* ================= COUPLED HYPEREXPONENTIAL =================

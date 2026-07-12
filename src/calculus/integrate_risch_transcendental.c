@@ -4502,6 +4502,17 @@ static Expr* rt_transcendental_case(Expr* f, Expr* x) {
     if (r) return r;
     r = rt_frac_case(f, x);
     if (r) return r;
+    /* Fast rational-of-a-single-exp path (kernelize -> pure rational integral in
+     * t, which the FLINT-accelerated rational integrator closes) BEFORE the
+     * repeated-pole Hermite ansatz: when the integrand is a rational function of
+     * one exponential with a linear exponent (F free of x, u' free of x), this
+     * closes it in O(deg) instead of the O(mult)-variable SolveAlways Hermite
+     * solve.  It declines (F still carries x, nonlinear exponent, multi-kernel)
+     * exactly when the genuine coupled/tower cases below are needed, so their
+     * cleaner forms still win; rt_frac_case above keeps precedence for the
+     * squarefree ArcTan/Log parts.  Correctness rests on the same diff-back gate. */
+    r = rt_exp_ratreduce_case(f, x);
+    if (r) return r;
     r = rt_hermite_case(f, x);
     if (r) return r;
     r = rt_hyperexp_case(f, x);
@@ -4513,8 +4524,6 @@ static Expr* rt_transcendental_case(Expr* f, Expr* x) {
     r = rt_exp_tower_case(f, x);    /* nested exponential tower (depth > 1) */
     if (r) return r;
     r = rt_recursive_tower_case(f, x);   /* one-extension recursion (mixed / rational coeff) */
-    if (r) return r;
-    r = rt_exp_ratreduce_case(f, x);   /* rational function of a single exp -> RootSum log part */
     if (r) return r;
     r = rt_trig_frontend(f, x);
     if (r) return r;
