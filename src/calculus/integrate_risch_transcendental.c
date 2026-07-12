@@ -211,7 +211,49 @@ static Expr* rt_coeff(Expr* e, Expr* x, long k) {
 /* Together[e] === 0 — an exact zero test for rational functions of the
  * field kernels (Together is exact and, unlike Simplify, cheap; it is only
  * ever applied here to constants and small rational cofactors). */
+/* Is `e` identically zero?  A structural recursion handles the shapes that
+ * dominate the Risch path — a single fraction Times[num, Power[den, -1]] or a
+ * polynomial — WITHOUT combining over a common denominator: a product is zero
+ * iff some factor is zero, and a reciprocal factor Power[g, negative] = 1/g is
+ * never zero, so its (possibly degree-2n) denominator is never examined. Only a
+ * Plus (whose terms might cancel) or an opaque head falls back to the exact
+ * Together test, and then only on the smaller numerator polynomials. This keeps
+ * the zero-test off the big rational denominators that made it cost ~0.5 s. */
 static bool rt_is_zero(Expr* e) {
+    if (!e) return false;
+    switch (e->type) {
+        case EXPR_INTEGER: return e->data.integer == 0;
+        case EXPR_REAL:    return e->data.real == 0.0;
+        case EXPR_BIGINT:  return false;   /* normalized: |value| >= 2^63 != 0 */
+        case EXPR_SYMBOL:
+        case EXPR_STRING:  return false;
+        default: break;
+    }
+    if (e->type == EXPR_FUNCTION && e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL) {
+        if (rt_head_is(e, "Times")) {
+            for (size_t i = 0; i < e->data.function.arg_count; i++) {
+                Expr* fac = e->data.function.args[i];
+                if (rt_head_is(fac, "Power") && fac->data.function.arg_count == 2) {
+                    Expr* ex = fac->data.function.args[1];
+                    if (ex->type == EXPR_INTEGER && ex->data.integer < 0) continue;
+                    if (rt_head_is(ex, "Rational") && ex->data.function.arg_count == 2 &&
+                        ex->data.function.args[0]->type == EXPR_INTEGER &&
+                        ex->data.function.args[0]->data.integer < 0) continue;
+                }
+                if (rt_is_zero(fac)) return true;
+            }
+            return false;
+        }
+        if (rt_head_is(e, "Power") && e->data.function.arg_count == 2) {
+            Expr* ex = e->data.function.args[1];
+            if (ex->type == EXPR_INTEGER && ex->data.integer < 0) return false;
+            if (rt_head_is(ex, "Rational") && ex->data.function.arg_count == 2 &&
+                ex->data.function.args[0]->type == EXPR_INTEGER &&
+                ex->data.function.args[0]->data.integer < 0) return false;
+            return rt_is_zero(e->data.function.args[0]);
+        }
+    }
     Expr* s = rt_eval1("Together", expr_copy(e));
     bool z = s && s->type == EXPR_INTEGER && s->data.integer == 0;
     if (s) expr_free(s);

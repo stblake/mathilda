@@ -69,18 +69,40 @@ Result: the base-field SPDE solve for In17 went from being the bottleneck to
 with the diff-back gate confirming correctness and the non-elementary siblings
 (`∫e^x/(x+2)^2` → `Ei`) still declining.
 
-## Candidate sites (same tactic, not yet applied)
+## Second worked example — `Together` on a plain rational
 
-The Risch engine still has Expr-level hot spots that fit this pattern exactly:
+After the RDE core was offloaded, In17's residual (~4-7 s) turned out to be a
+*different* consequence of the same problem: `rt_exp_poly_case`'s Laurent split
+and `rde_base`'s zero-test called `Together` (and `rt_is_zero`, which is built
+on `Together`) several times on the degree-102 rational, and `Together` itself
+cost ~0.5 s each. Two fixes, both instances of the tactic:
 
-- **`rt_exp_poly_case` Laurent splitting** — `Together`/`Numerator`/
-  `Denominator`/`Coefficient`/`PolynomialQ` on the integrand's `t = e^u`
-  Laurent form, whose `x`-coefficients are dense rationals. This is In17's
-  *remaining* cost (~7 s): the `CoefficientList` storm visible in the profile.
-  A bivariate `fmpq_mpoly` (or per-coefficient `fmpq_poly`) representation of
-  the Laurent polynomial would remove it.
-- Any `rt_eval1("Together"/"Cancel"/"Expand", …)` inside a loop over tower
-  levels or Laurent powers.
+- **`flint_rational_together`** (`src/poly/flint_bridge.c`) — `Together` for a
+  plain rational function over Q: convert to `fmpz_mpoly_q` (which stores the
+  fraction reduced automatically) and read back num/den. Dispatched in
+  `builtin_together_compute` after the algebraic/parametric normalizers decline.
+  Gated to fire only when the input actually has a denominator (a
+  denominator-free product stays factored) and only for genuine rationals (a
+  symbolic/fractional power such as `a^x` or `Sqrt[2]` makes the conversion
+  decline). Output matches the classical `Together` exactly (expanded, reduced).
+  `Together[(x-99)/(x+2)^102]`: **0.47 s → 0.0016 s** (~290×).
+
+- **structural `rt_is_zero`** (`integrate_risch_transcendental.c`) — a value is
+  zero iff its numerator is; a recursion over `Times`/`Power` never combines
+  over the big denominator (a reciprocal factor `1/g` is never zero), so
+  `Together` is confined to the small numerator polynomials, not the degree-2n
+  denominator.
+
+Net: In17 **~17 s → 0.66 s** (~26×), and the whole `Together`-heavy path across
+Mathilda (Simplify, Apart, every integrator) benefits from the same fast path.
+
+## More candidate sites (same tactic)
+
+- Any remaining `rt_eval1("Cancel"/"Expand", …)` inside a loop over tower levels
+  or Laurent powers.
+- `Cancel` could take the same plain-rational `fmpz_mpoly_q` fast path
+  (`flint_rational_together` is essentially a reduced-fraction normaliser that
+  Cancel could reuse).
 
 When adding one, follow the five steps above and keep the Expr path as the
 out-of-domain fallback.

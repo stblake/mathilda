@@ -2448,6 +2448,80 @@ Expr* flint_parametric_field_normalize(const Expr* e) {
     return out;
 }
 
+/* True if `e` carries an actual denominator to combine — a Power[base, k] with
+ * k a negative integer (or negative-numerator Rational) and base a symbol or
+ * compound (not a numeric literal, whose negative power is just a rational
+ * constant). Only such inputs are combined by Together; a denominator-free
+ * product/polynomial is left factored, so flint_rational_together declines it. */
+static int expr_has_denominator(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return 0;
+    if (fn_head_name(e) && strcmp(fn_head_name(e), "Power") == 0 &&
+        e->data.function.arg_count == 2) {
+        const Expr* base = e->data.function.args[0];
+        const Expr* ex   = e->data.function.args[1];
+        int neg = (ex->type == EXPR_INTEGER && ex->data.integer < 0);
+        if (!neg && ex->type == EXPR_FUNCTION && fn_head_name(ex) &&
+            strcmp(fn_head_name(ex), "Rational") == 0 && ex->data.function.arg_count == 2 &&
+            ex->data.function.args[0]->type == EXPR_INTEGER &&
+            ex->data.function.args[0]->data.integer < 0)
+            neg = 1;
+        if (neg && (base->type == EXPR_SYMBOL || base->type == EXPR_FUNCTION))
+            return 1;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (expr_has_denominator(e->data.function.args[i])) return 1;
+    return 0;
+}
+
+/*
+ * Together for a plain rational function over Q: combine into a single fraction
+ * in lowest terms via fmpz_mpoly_q (which stores num/den reduced automatically)
+ * and read it back. This is the fast path for the common case the algebraic /
+ * parametric normalizers above decline — an ordinary rational in symbols, whose
+ * classical together_recursive expands and GCDs a degree-2n denominator at
+ * O(seconds). Returns the reduced num/den Expr, or NULL when:
+ *   - the input has no denominator to combine (Together leaves a product /
+ *     polynomial factored — we must NOT expand it), or
+ *   - the input is not a plain rational over Q (a symbolic/fractional power such
+ *     as a^x or Sqrt[2], or a transcendental kernel — expr_to_mpolyq declines),
+ * in which case the caller keeps its classical path. Output form matches the
+ * classical Together (expanded, reduced num/den).
+ */
+Expr* flint_rational_together(const Expr* e) {
+    if (!e || !expr_has_denominator(e)) return NULL;
+    VarSet fvars;
+    memset(&fvars, 0, sizeof fvars);
+    collect_all_symbols(e, &fvars);
+    if (fvars.count == 0) { varset_free(&fvars); return NULL; }
+    qsort(fvars.names, fvars.count, sizeof(char*), cmp_str);
+
+    fmpz_mpoly_ctx_t mctx;
+    fmpz_mpoly_ctx_init(mctx, (slong)fvars.count, ORD_LEX);
+    fmpz_mpoly_q_t q;
+    fmpz_mpoly_q_init(q, mctx);
+
+    Expr* out = NULL;
+    if (expr_to_mpolyq(e, q, mctx, &fvars)) {
+        fmpz_mpoly_q_canonicalise(q, mctx);
+        Expr* num = fmpz_mpoly_to_expr(fmpz_mpoly_q_numref(q), mctx, &fvars);
+        if (fmpz_mpoly_is_one(fmpz_mpoly_q_denref(q), mctx)) {
+            out = eval_and_free(num);
+        } else {
+            Expr* den = fmpz_mpoly_to_expr(fmpz_mpoly_q_denref(q), mctx, &fvars);
+            Expr* deninv = expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ den, expr_new_integer(-1) }, 2);
+            Expr* r = expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ num, deninv }, 2);
+            out = eval_and_free(r);
+        }
+    }
+
+    fmpz_mpoly_q_clear(q, mctx);
+    fmpz_mpoly_ctx_clear(mctx);
+    varset_free(&fvars);
+    return out;
+}
+
 /* ================================================================== */
 /*  Genuine-algebraic parametric tower: reduction over Q(params)[gens] */
 /*                                                                     */
@@ -3395,6 +3469,7 @@ Expr* flint_multivariate_gcd(const Expr* a, const Expr* b) { (void)a; (void)b; r
 Expr* flint_algebraic_field_normalize(const Expr* e) { (void)e; return NULL; }
 Expr* flint_algebraic_field_canonical(const Expr* e) { (void)e; return NULL; }
 Expr* flint_algebraic_field_together(const Expr* e) { (void)e; return NULL; }
+Expr* flint_rational_together(const Expr* e) { (void)e; return NULL; }
 int   flint_rde_base_solve_fg(const Expr* f, const Expr* g,
                               const char* xvar, Expr** y_out) {
     (void)f; (void)g; (void)xvar;

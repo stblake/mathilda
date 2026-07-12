@@ -1862,6 +1862,17 @@ static Expr* builtin_together_compute(Expr* res) {
         Expr* fc = flint_cancel_fraction(arg);
         if (fc) return fc;
     }
+    /* Plain rational function over Q (no algebraic generator, so the extension
+     * paths above declined): combine into a single reduced fraction directly in
+     * fmpz_mpoly_q. This is the fast path for the ordinary case where the
+     * classical together_recursive expands and GCDs a high-degree denominator at
+     * O(seconds); the FLINT output is the same expanded/reduced num/den. Gated
+     * (inside) to fire only when there is a denominator to combine, so a
+     * denominator-free product/polynomial is still left factored. */
+    if (!alpha && !auto_flag) {
+        Expr* ft = flint_rational_together(arg);
+        if (ft) return ft;
+    }
 #endif
 
     Expr* alpha_auto = NULL;

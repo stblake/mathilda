@@ -242,6 +242,17 @@ Expr* flint_parametric_field_divrem(const Expr* a, const Expr* b, const Expr* va
 Expr* flint_parametric_field_normalize(const Expr* e);
 
 /*
+ * Together for a plain rational function over Q: combine into a single reduced
+ * fraction via fmpz_mpoly_q, the fast path for the ordinary rational-in-symbols
+ * case the algebraic/parametric normalizers decline. Returns the (expanded,
+ * reduced) num/den Expr — matching the classical Together output — or NULL when
+ * the input has no denominator to combine (a product/polynomial Together leaves
+ * factored) or is not a plain rational over Q (symbolic/fractional power,
+ * transcendental kernel). NULL without FLINT.
+ */
+Expr* flint_rational_together(const Expr* e);
+
+/*
  * Exact division a/b over the detected extension field. Returns the quotient, or
  * NULL when there is no algebraic generator or b ∤ a exactly (so Cancel's
  * divide-back can fall through to its classical path). NULL without FLINT.
