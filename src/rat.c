@@ -189,6 +189,33 @@ Expr* builtin_denominator(Expr* res) {
     return d;
 }
 
+#ifdef USE_FLINT
+/* Largest integer Power exponent anywhere in `e` (0 if none). Used to gate the
+ * FLINT exact-division fast paths below: on dense high-degree polynomials
+ * (the Bronstein RDE / high-order Laurent integrands, degree 100+), FLINT's
+ * packed fmpq_mpoly_divides is dramatically faster and overflow-free compared
+ * to the classical exact_poly_div's dense Expr arithmetic. Low-degree inputs
+ * stay on the classical path so their (often factored) output shape and the
+ * tests that pin it are undisturbed. */
+static int64_t rat_max_int_exponent(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return 0;
+    int64_t best = 0;
+    if (e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.arg_count == 2) {
+        const Expr* ex = e->data.function.args[1];
+        if (ex->type == EXPR_INTEGER && ex->data.integer > best)
+            best = ex->data.integer;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        int64_t sub = rat_max_int_exponent(e->data.function.args[i]);
+        if (sub > best) best = sub;
+    }
+    return best;
+}
+#endif
+
 /* Strict variant of cancel_exact_div: returns NULL when exact_poly_div
  * cannot perform the division in Q[vars] (i.e. the divisor doesn't
  * actually divide the dividend in the working multivariate polynomial
@@ -210,6 +237,21 @@ static Expr* cancel_exact_div_strict(Expr* num, Expr* den) {
 
     Expr* exp_num = expr_expand(num);
     Expr* exp_den = expr_expand(den);
+
+#ifdef USE_FLINT
+    /* Dense high-degree fast path: FLINT's fmpq_mpoly_divides settles exact
+     * divisibility over Q[vars] in packed form. It returns NULL (out of scope
+     * or not exactly divisible) for the same cases the classical path leaves
+     * uncancelled, so the strict NULL contract is preserved. */
+    if (rat_max_int_exponent(exp_num) >= 32 || rat_max_int_exponent(exp_den) >= 32) {
+        Expr* fq = flint_multivariate_divexact(exp_num, exp_den);
+        if (fq) {
+            expr_free(exp_num);
+            expr_free(exp_den);
+            return fq;
+        }
+    }
+#endif
 
     size_t v_count = 0, v_cap = 16;
     Expr** vars = malloc(sizeof(Expr*) * v_cap);
@@ -233,6 +275,24 @@ static Expr* cancel_exact_div_wrapper(Expr* num, Expr* den) {
 
     Expr* exp_num = expr_expand(num);
     Expr* exp_den = expr_expand(den);
+
+#ifdef USE_FLINT
+    /* Dense high-degree fast path: FLINT's fmpq_mpoly_divides performs the
+     * exact division in packed form, overflow-free and far faster than the
+     * classical exact_poly_div on degree-100+ numerators (the Bronstein RDE /
+     * high-order Laurent integrands). Here the divisor is the numerator/
+     * denominator GCD, so the division is always exact and FLINT returns the
+     * quotient; a NULL (out of scope) simply falls through to the classical
+     * path unchanged. */
+    if (rat_max_int_exponent(exp_num) >= 32 || rat_max_int_exponent(exp_den) >= 32) {
+        Expr* fq = flint_multivariate_divexact(exp_num, exp_den);
+        if (fq) {
+            expr_free(exp_num);
+            expr_free(exp_den);
+            return fq;
+        }
+    }
+#endif
 
     size_t v_count = 0, v_cap = 16;
     Expr** vars = malloc(sizeof(Expr*) * v_cap);

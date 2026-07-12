@@ -809,6 +809,12 @@ void test_integrate_risch_transcendental(void) {
 }
 
 int main(void) {
+    /* test_utils.h's constructor sets alarm(60). The Bronstein worst-case
+     * examples (In16/In17 at degree 100+) exercise the SPDE ladder's ~O(n)
+     * Together/expand steps and legitimately run for tens of seconds on a
+     * loaded machine, so 60s is too tight here. Extend it, matching the
+     * precedent in test_linearsolve.c. */
+    alarm(600);
     test_integrate_risch_transcendental();
     return 0;
 }
