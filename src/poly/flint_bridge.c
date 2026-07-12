@@ -2487,8 +2487,10 @@ static int expr_has_denominator(const Expr* e) {
  * in which case the caller keeps its classical path. Output form matches the
  * classical Together (expanded, reduced num/den).
  */
-Expr* flint_rational_together(const Expr* e) {
-    if (!e || !expr_has_denominator(e)) return NULL;
+/* Shared core: reduce the whole expression to a single fmpz_mpoly_q fraction
+ * (lowest terms) and read back num/den. Returns NULL if `e` is not a plain
+ * rational over Q. Callers apply their own structural gate first. */
+static Expr* flint_rational_normalize_core(const Expr* e) {
     VarSet fvars;
     memset(&fvars, 0, sizeof fvars);
     collect_all_symbols(e, &fvars);
@@ -2520,6 +2522,38 @@ Expr* flint_rational_together(const Expr* e) {
     fmpz_mpoly_ctx_clear(mctx);
     varset_free(&fvars);
     return out;
+}
+
+Expr* flint_rational_together(const Expr* e) {
+    if (!e || !expr_has_denominator(e)) return NULL;
+    return flint_rational_normalize_core(e);
+}
+
+/* True if any Plus node in `e` has a denominator (Power[sym|compound, neg]) in
+ * its subtree. Cancel — unlike Together — does NOT put a sum of fractions over
+ * a common denominator (Cancel[1/(x+1)+1/(x+2)] stays uncombined), so when a
+ * denominator sits inside a Plus the single-fraction fast path does not apply. */
+static int denom_inside_plus(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return 0;
+    const char* h = fn_head_name(e);
+    if (h && strcmp(h, "Plus") == 0 && expr_has_denominator(e)) return 1;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (denom_inside_plus(e->data.function.args[i])) return 1;
+    return 0;
+}
+
+/*
+ * Cancel for a plain rational function over Q — reduce num/den to lowest terms
+ * via fmpz_mpoly_q. Same fast core as flint_rational_together, but with the
+ * stricter Cancel gate: it fires only on a *single* fraction (a denominator
+ * present AND no denominator inside a Plus), because Cancel leaves a sum of
+ * fractions uncombined. A denominator-free product stays factored (no
+ * denominator), and a symbolic/fractional power declines in expr_to_mpolyq.
+ * Output matches classical Cancel (expanded, reduced num/den). NULL otherwise.
+ */
+Expr* flint_rational_cancel(const Expr* e) {
+    if (!e || !expr_has_denominator(e) || denom_inside_plus(e)) return NULL;
+    return flint_rational_normalize_core(e);
 }
 
 /* ================================================================== */
@@ -3470,6 +3504,7 @@ Expr* flint_algebraic_field_normalize(const Expr* e) { (void)e; return NULL; }
 Expr* flint_algebraic_field_canonical(const Expr* e) { (void)e; return NULL; }
 Expr* flint_algebraic_field_together(const Expr* e) { (void)e; return NULL; }
 Expr* flint_rational_together(const Expr* e) { (void)e; return NULL; }
+Expr* flint_rational_cancel(const Expr* e) { (void)e; return NULL; }
 int   flint_rde_base_solve_fg(const Expr* f, const Expr* g,
                               const char* xvar, Expr** y_out) {
     (void)f; (void)g; (void)xvar;

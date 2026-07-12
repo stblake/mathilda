@@ -96,13 +96,21 @@ cost ~0.5 s each. Two fixes, both instances of the tactic:
 Net: In17 **~17 s → 0.66 s** (~26×), and the whole `Together`-heavy path across
 Mathilda (Simplify, Apart, every integrator) benefits from the same fast path.
 
+`Cancel` takes the same `fmpz_mpoly_q` core via `flint_rational_cancel`, with a
+stricter gate (a lone fraction, no denominator under a `Plus`, since Cancel
+leaves a sum of fractions uncombined): `Cancel[(x-99)/(x+2)^102]` **0.24 s →
+0.0013 s** (~185×). The gate is the interesting part — the same packed
+representation serves both builtins, and the only difference is the structural
+predicate that decides when the fast path is *semantically* valid. When reusing
+a FLINT core across builtins, the correctness work is in that per-builtin gate,
+not the arithmetic.
+
 ## More candidate sites (same tactic)
 
-- Any remaining `rt_eval1("Cancel"/"Expand", …)` inside a loop over tower levels
-  or Laurent powers.
-- `Cancel` could take the same plain-rational `fmpz_mpoly_q` fast path
-  (`flint_rational_together` is essentially a reduced-fraction normaliser that
-  Cancel could reuse).
+- Any remaining `rt_eval1("Expand", …)` inside a loop over tower levels or
+  Laurent powers.
+- `Apart` and `PolynomialGCD`/`Resultant`-heavy passes that still route through
+  the classical multivariate Euclid on high-degree inputs.
 
 When adding one, follow the five steps above and keep the Expr path as the
 out-of-domain fallback.

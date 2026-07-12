@@ -253,6 +253,16 @@ Expr* flint_parametric_field_normalize(const Expr* e);
 Expr* flint_rational_together(const Expr* e);
 
 /*
+ * Cancel for a plain rational function over Q: reduce a single fraction's
+ * num/den to lowest terms via fmpz_mpoly_q. Like flint_rational_together but
+ * with Cancel's stricter gate — fires only when a denominator is present and NO
+ * denominator sits inside a Plus (Cancel, unlike Together, leaves a sum of
+ * fractions uncombined). Returns the (expanded, reduced) num/den Expr matching
+ * classical Cancel, or NULL out of scope. NULL without FLINT.
+ */
+Expr* flint_rational_cancel(const Expr* e);
+
+/*
  * Exact division a/b over the detected extension field. Returns the quotient, or
  * NULL when there is no algebraic generator or b ∤ a exactly (so Cancel's
  * divide-back can fall through to its classical path). NULL without FLINT.

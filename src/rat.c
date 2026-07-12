@@ -1448,6 +1448,14 @@ static Expr* builtin_cancel_compute(Expr* res) {
     if (res->data.function.arg_count == 1) {
         Expr* fc = flint_cancel_fraction(res->data.function.args[0]);
         if (fc) return fc;
+        /* Plain rational function over Q (no algebraic generator): reduce the
+         * single fraction directly in fmpz_mpoly_q — the same fast path Together
+         * uses, but with Cancel's gate (a lone fraction, no denominator under a
+         * Plus, since Cancel leaves a sum of fractions uncombined). Far faster
+         * than the classical extract/GCD/exact-divide on a high-degree
+         * denominator; output form (expanded, reduced num/den) is unchanged. */
+        Expr* rc = flint_rational_cancel(res->data.function.args[0]);
+        if (rc) return rc;
     }
 #endif
 
