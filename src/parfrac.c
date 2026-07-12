@@ -12,6 +12,7 @@
 #include "sym_names.h"
 #include "options.h"
 #include "qafactor.h"
+#include "flint_bridge.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -393,6 +394,24 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
             /* fast path bailed (Q consumed into a freed sum): rebuild Q=0 so the
              * classical path below still has a valid polynomial part. */
             Q = expr_new_integer(0);
+        }
+    }
+
+    /* FLINT-native partial fraction for a plain rational function over Q:
+     * distinct-factor CRT split + p-adic expansion, entirely in fmpq_poly.
+     * Replaces the O(S^2+) symbolic RowReduce below for the pure-Q case; the
+     * multivariate / radical case (any base or coefficient carrying another
+     * symbol) declines here and keeps the classical elimination path. */
+    if (var->type == EXPR_SYMBOL) {
+        Expr* frac = flint_apart_over_q(R, (const Expr* const*)bases, ks,
+                                        (int)m, C, var->data.symbol);
+        if (frac) {
+            Expr* res_pf = eval_and_free(expr_new_function(
+                expr_new_symbol(SYM_Plus), (Expr*[]){ Q, frac }, 2));
+            expr_free(R); expr_free(C); expr_free(f_den);
+            for (size_t i = 0; i < m; i++) expr_free(bases[i]);
+            free(bases); free(ks); expr_free(var);
+            return res_pf;
         }
     }
 

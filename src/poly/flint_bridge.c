@@ -2556,6 +2556,124 @@ Expr* flint_rational_cancel(const Expr* e) {
     return flint_rational_normalize_core(e);
 }
 
+/*
+ * FLINT-native partial fraction decomposition of a proper rational function
+ * R / (C * prod_i p_i^{k_i}) over Q, where the p_i are the distinct irreducible
+ * factors (as Exprs), k_i their multiplicities, and C the numeric leading
+ * content.  Returns the fractional part
+ *      sum_i sum_{j=1}^{k_i} A_{ij} / p_i^j ,   deg(A_{ij}) < deg(p_i),
+ * as an unsimplified Expr (the caller adds the polynomial part Q and lets the
+ * evaluator canonicalise), matching the classical RowReduce Apart output
+ * exactly.
+ *
+ * Method (all in fmpq_poly, O(M(n)) — no evaluator round-trip):
+ *   1. Distinct-factor split via CRT.  With q_i = p_i^{k_i}, D = prod q_i and
+ *      m_i = D/q_i, solve R/C = sum_i B_i * m_i by B_i = (R/C)*(m_i^{-1} mod q_i)
+ *      mod q_i, where m_i^{-1} mod q_i is the xgcd cofactor of m_i (q_i, m_i are
+ *      coprime, so the monic gcd is 1).  Then R/(C·D) = sum_i B_i/q_i.
+ *   2. p_i-adic expansion.  Writing B_i = c_0 + c_1 p_i + ... + c_{k-1} p_i^{k-1}
+ *      by iterated division, B_i/p_i^{k} = sum_j c_{k-j}/p_i^j, so A_{ij}=c_{k-j}.
+ *
+ * Gate: every operand must convert into Q(var) — a coefficient carrying another
+ * symbol, a radical, or a fractional power makes expr_accum_fmpq_poly fail, and
+ * the function returns NULL so the classical (multivariate-capable) RowReduce
+ * path runs.  Returns NULL without FLINT.
+ */
+Expr* flint_apart_over_q(const Expr* R, const Expr* const* bases,
+                         const int64_t* ks, int m,
+                         const Expr* C, const char* var) {
+    if (m < 1) return NULL;
+
+    /* R' = R / C as fmpq_poly over Q(var); C must be a nonzero constant. */
+    fmpq_poly_t Rp, Cp;
+    fmpq_poly_init(Rp); fmpq_poly_init(Cp);
+    if (!expr_accum_fmpq_poly(R, var, Rp) ||
+        !expr_accum_fmpq_poly(C, var, Cp) ||
+        fmpq_poly_degree(Cp) > 0) {
+        fmpq_poly_clear(Rp); fmpq_poly_clear(Cp); return NULL;
+    }
+    fmpq_t cval; fmpq_init(cval);
+    fmpq_poly_get_coeff_fmpq(cval, Cp, 0);
+    fmpq_poly_clear(Cp);
+    if (fmpq_is_zero(cval)) { fmpq_clear(cval); fmpq_poly_clear(Rp); return NULL; }
+    fmpq_poly_scalar_div_fmpq(Rp, Rp, cval);
+    fmpq_clear(cval);
+
+    /* Convert the irreducible bases p_i and form q_i = p_i^{k_i}. */
+    fmpq_poly_struct* P  = malloc((size_t)m * sizeof(fmpq_poly_struct));
+    fmpq_poly_struct* Qi = malloc((size_t)m * sizeof(fmpq_poly_struct));
+    int ok = 1, ninit = 0;
+    for (int i = 0; i < m; i++) {
+        fmpq_poly_init(&P[i]); fmpq_poly_init(&Qi[i]); ninit = i + 1;
+        if (ks[i] < 1 || !expr_accum_fmpq_poly(bases[i], var, &P[i]) ||
+            fmpq_poly_degree(&P[i]) < 1) { ok = 0; break; }
+        fmpq_poly_pow(&Qi[i], &P[i], (ulong)ks[i]);
+    }
+
+    Expr* result = NULL;
+    if (ok) {
+        fmpq_poly_t D; fmpq_poly_init(D); fmpq_poly_one(D);
+        for (int i = 0; i < m; i++) fmpq_poly_mul(D, D, &Qi[i]);
+
+        fmpq_poly_t mi, g, s, t, Bi, cur, quot, rem;
+        fmpq_poly_init(mi); fmpq_poly_init(g); fmpq_poly_init(s);
+        fmpq_poly_init(t);  fmpq_poly_init(Bi); fmpq_poly_init(cur);
+        fmpq_poly_init(quot); fmpq_poly_init(rem);
+
+        size_t cap = 8, nterms = 0;
+        Expr** terms = malloc(cap * sizeof(Expr*));
+
+        for (int i = 0; i < m; i++) {
+            /* B_i = (R' * (m_i^{-1} mod q_i)) mod q_i. */
+            fmpq_poly_div(mi, D, &Qi[i]);            /* m_i = D / q_i (exact) */
+            fmpq_poly_xgcd(g, s, t, &Qi[i], mi);     /* s q_i + t m_i = 1     */
+            fmpq_poly_mul(Bi, Rp, t);
+            fmpq_poly_rem(Bi, Bi, &Qi[i]);
+            /* p_i-adic digits c_0..c_{k-1}; A_{ij} = c_{k-j}. */
+            fmpq_poly_set(cur, Bi);
+            int64_t k = ks[i];
+            Expr** cexpr = malloc((size_t)k * sizeof(Expr*));
+            for (int64_t d = 0; d < k; d++) {
+                fmpq_poly_divrem(quot, rem, cur, &P[i]);
+                cexpr[d] = fmpq_poly_to_expr_x(rem, var);
+                fmpq_poly_set(cur, quot);
+            }
+            for (int64_t j = 1; j <= k; j++) {
+                Expr* Aij = cexpr[k - j];            /* ownership transferred */
+                if (Aij->type == EXPR_INTEGER && Aij->data.integer == 0) {
+                    expr_free(Aij); continue;
+                }
+                Expr* denom = (j == 1)
+                    ? expr_copy((Expr*)bases[i])
+                    : expr_new_function(expr_new_symbol("Power"),
+                          (Expr*[]){ expr_copy((Expr*)bases[i]),
+                                     expr_new_integer(j) }, 2);
+                Expr* inv = expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ denom, expr_new_integer(-1) }, 2);
+                Expr* term = expr_new_function(expr_new_symbol("Times"),
+                        (Expr*[]){ Aij, inv }, 2);
+                if (nterms == cap) { cap *= 2; terms = realloc(terms, cap * sizeof(Expr*)); }
+                terms[nterms++] = term;
+            }
+            free(cexpr);
+        }
+
+        if (nterms == 0)      result = expr_new_integer(0);
+        else if (nterms == 1) result = terms[0];
+        else result = expr_new_function(expr_new_symbol("Plus"), terms, nterms);
+        free(terms);
+
+        fmpq_poly_clear(D);  fmpq_poly_clear(mi);  fmpq_poly_clear(g);
+        fmpq_poly_clear(s);  fmpq_poly_clear(t);   fmpq_poly_clear(Bi);
+        fmpq_poly_clear(cur); fmpq_poly_clear(quot); fmpq_poly_clear(rem);
+    }
+
+    for (int i = 0; i < ninit; i++) { fmpq_poly_clear(&P[i]); fmpq_poly_clear(&Qi[i]); }
+    free(P); free(Qi);
+    fmpq_poly_clear(Rp);
+    return result;
+}
+
 /* ================================================================== */
 /*  Genuine-algebraic parametric tower: reduction over Q(params)[gens] */
 /*                                                                     */
@@ -3505,6 +3623,11 @@ Expr* flint_algebraic_field_canonical(const Expr* e) { (void)e; return NULL; }
 Expr* flint_algebraic_field_together(const Expr* e) { (void)e; return NULL; }
 Expr* flint_rational_together(const Expr* e) { (void)e; return NULL; }
 Expr* flint_rational_cancel(const Expr* e) { (void)e; return NULL; }
+Expr* flint_apart_over_q(const Expr* R, const Expr* const* bases,
+                         const int64_t* ks, int m,
+                         const Expr* C, const char* var) {
+    (void)R; (void)bases; (void)ks; (void)m; (void)C; (void)var; return NULL;
+}
 int   flint_rde_base_solve_fg(const Expr* f, const Expr* g,
                               const char* xvar, Expr** y_out) {
     (void)f; (void)g; (void)xvar;

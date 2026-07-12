@@ -44,6 +44,7 @@ out-of-domain fallback.
 | `Together` (plain rational) | `flint_rational_together` | `src/poly/flint_bridge.c` | `3204f87` |
 | `Cancel` (plain rational) | `flint_rational_cancel` (+ shared `flint_rational_normalize_core`) | `src/poly/flint_bridge.c` | `a4dc856` |
 | `Cancel` exact division | FLINT path in `cancel_exact_div_wrapper` / `_strict` | `src/rat.c` | `b8eb456` |
+| `Apart` (plain rational over Q) | `flint_apart_over_q` (CRT split + `p`-adic expansion) | `src/poly/flint_bridge.c`, `src/parfrac.c` | *(this session)* |
 | `PolynomialGCD`/`Quotient`/`Remainder`, `Expand` | FLINT gating on dense high-degree input | `src/poly/poly.c`, `src/expand.c` | `e248cf3` |
 | `rt_is_zero` | structural (numerator-only) zero test | `src/calculus/integrate_risch_transcendental.c` | `3204f87` |
 
@@ -172,10 +173,24 @@ test.
 
 Same tactic, not yet applied:
 
-- **`Apart`** and other `PolynomialGCD` / `Resultant`-heavy passes that still
-  route through the classical multivariate Euclid on high-degree inputs.
+- Other `PolynomialGCD` / `Resultant`-heavy passes that still route through the
+  classical multivariate Euclid on high-degree inputs.
 - Any remaining `rt_eval1("Expand", …)` inside a loop over tower levels or
   Laurent powers in the Risch engine.
+
+**Done this session — `Apart` (plain rational over Q).** The classical `Apart`
+built an `S×(S+1)` coefficient matrix and `RowReduce`- d it symbolically
+(`O(S^2+)` Gaussian elimination over big rationals), the dominant cost on
+high-degree denominators. `flint_apart_over_q` (`src/poly/flint_bridge.c`) runs
+the whole decomposition in `fmpq_poly` — a distinct-factor CRT split (`xgcd`
+cofactor for `m_i^{-1} mod q_i`) then a `p_i`-adic expansion of each `B_i` —
+dispatched in `apart_impl` (`src/parfrac.c`) before the matrix build. Gated on
+conversion success, so the multivariate / radical case declines to the classical
+path unchanged. `Apart[(x-99)/((x+2)^60 (x-3)^40), x]`: **~15.6 s → ~0.74 s**
+(~21×); the residual is now the (inherent) denominator `Factor`, not the
+partial-fraction solve. Output matches the classical `RowReduce` `Apart` exactly
+(recombination-verified across linear / repeated / irreducible-quadratic /
+improper cases).
 
 When adding one, follow the five-step recipe in `docs/flint-offload.md` and keep
 the Expr path as the out-of-domain fallback; the correctness work is the

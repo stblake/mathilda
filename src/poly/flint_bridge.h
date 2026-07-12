@@ -263,6 +263,23 @@ Expr* flint_rational_together(const Expr* e);
 Expr* flint_rational_cancel(const Expr* e);
 
 /*
+ * FLINT-native partial fraction decomposition over Q. Given a proper rational
+ * R / (C * prod_i bases[i]^{ks[i]}) with the bases[] the distinct irreducible
+ * factors of the denominator (Exprs), ks[] their multiplicities, C the numeric
+ * content, and var the fraction variable name, returns the fractional part
+ * sum_i sum_{j=1}^{ks[i]} A_{ij}/bases[i]^j (deg A_{ij} < deg bases[i]) as an
+ * unsimplified Expr — the caller adds the polynomial part and lets the evaluator
+ * canonicalise. Output matches the classical RowReduce Apart exactly. Computed
+ * entirely in fmpq_poly (distinct-factor CRT split + p-adic expansion), so it
+ * replaces the O(S^2+) symbolic Gaussian elimination for the pure-Q case.
+ * Returns NULL when any operand carries another symbol / radical / fractional
+ * power (the multivariate case keeps the classical path). NULL without FLINT.
+ */
+Expr* flint_apart_over_q(const Expr* R, const Expr* const* bases,
+                         const int64_t* ks, int m,
+                         const Expr* C, const char* var);
+
+/*
  * Exact division a/b over the detected extension field. Returns the quotient, or
  * NULL when there is no algebraic generator or b ∤ a exactly (so Cancel's
  * divide-back can fall through to its classical path). NULL without FLINT.
