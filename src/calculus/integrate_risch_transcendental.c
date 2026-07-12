@@ -23,6 +23,7 @@
 #include "sym_intern.h"
 #include "sym_names.h"
 #include "arithmetic.h"
+#include "flint_bridge.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -1092,6 +1093,24 @@ static Expr* rde_weak_normalizer(Expr* f, Expr* x) {
  * y = q / (h * w). */
 static Expr* rde_base(Expr* f, Expr* g, Expr* x) {
     if (rt_is_zero(g)) return expr_new_integer(0);
+
+#ifdef USE_FLINT
+    /* Native fast path: for the exponential tower the coefficient f is a
+     * polynomial over Q(x) and g is a rational function over Q(x); the whole
+     * base-field RDE (weak normalization is then a no-op) runs in fmpq_poly,
+     * converting f and g straight to FLINT with no evaluator Together/Cancel.
+     * This is the dominant, high-degree case (In16/In17/`poly·e^x`) — it
+     * collapses from seconds of Expr rational arithmetic to milliseconds. The
+     * verdict is authoritative: 1 -> y, 0 -> genuinely no solution (decline),
+     * -1 -> out of scope (f rational / not univariate over Q) -> fall through
+     * to the Expr path below. */
+    if (x->type == EXPR_SYMBOL) {
+        Expr* y = NULL;
+        int nr = flint_rde_base_solve_fg(f, g, x->data.symbol, &y);
+        if (nr >= 0) return y;              /* y is NULL on nr == 0 (decline) */
+    }
+#endif
+
     /* 1. Weak normalization: f <- f - Dw/w, g <- w g, y = z/w. */
     Expr* w = rde_weak_normalizer(f, x);
     Expr* fbar;
@@ -1163,7 +1182,9 @@ static Expr* rde_base(Expr* f, Expr* g, Expr* x) {
                 if (mmn) expr_free(mmn);
                 expr_free(lcb); expr_free(lca);
             }
-            /* 4. SPDE reduce, 5. solve bounded. */
+            /* 4. SPDE reduce, 5. solve bounded (Expr fallback path — the
+             * exponential common case is handled natively in fmpq_poly at the
+             * top of rde_base; see the flint_rde_base_solve_fg dispatch). */
             RdeSpde sp;
             if (rde_spde(aa, bb, cc, x, n, &sp)) {
                 Expr* H;

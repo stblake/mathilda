@@ -62,6 +62,26 @@ Expr* flint_multivariate_gcd_normalized(const Expr* a, const Expr* b);
 Expr* flint_multivariate_divexact(const Expr* a, const Expr* b);
 
 /*
+ * Native base-field Risch differential-equation solver for the exponential
+ * tower, over Q(xvar): solves  Dq + f q = g  (D = d/d(xvar)) for the solution
+ * y, where f is a polynomial (f = i·u' for e^u, u a polynomial in xvar, so
+ * WeakNormalizer is trivial) and g is a rational function over Q(xvar). Runs
+ * RdeNormalDenominator + RdeBoundDegreeBase + Bronstein's SPDE ladder +
+ * PolyRischDENoCancel entirely in fmpq_poly — f and g are converted straight to
+ * fmpq_poly, so NONE of the base-field arithmetic touches the generic evaluator
+ * (this is where the seconds of Together/Cancel on a degree-2n denominator go).
+ * Returns:
+ *    1  solved — *y_out = the reduced rational solution y as an Expr,
+ *    0  no solution of bounded degree exists (authoritative decline),
+ *   -1  out of scope — g not univariate over Q, or f not a polynomial (the
+ *       primitive/log tower, where weak normalization is non-trivial) — the
+ *       caller falls back to the Expr RDE path.
+ * Without FLINT this always returns -1.
+ */
+int flint_rde_base_solve_fg(const Expr* f, const Expr* g,
+                            const char* xvar, Expr** y_out);
+
+/*
  * Univariate GCD over a real quadratic number field Q(sqrt d) (M2, p=0, r=1).
  *
  * Recognises `a`, `b` as univariate polynomials in a single variable x whose
