@@ -178,6 +178,25 @@ Same tactic, not yet applied:
 - Any remaining `rt_eval1("Expand", …)` inside a loop over tower levels or
   Laurent powers in the Risch engine.
 
+**Done this session — `Together` / `Cancel` over transcendental kernels.** The
+FLINT plain-rational fast path (`flint_rational_normalize_core`, shared by
+`Together` and `Cancel`) accepted only bare-symbol generators, so a rational of
+a transcendental kernel (`Log[x]`, `E^x`, `ArcTan[x]`, …) declined to the
+classical symbolic-GCD path — ~50× slower (`Together` over a `Log[x]` atom:
+**0.93 s → 0.019 s**), and the dominant residual (`output_cleanup`, 63%) in the
+RischNorman `Log`-integrand case. The core now substitutes each kernel to a
+fresh symbol before the `fmpz_mpoly_q` reduction and restores it after:
+independent kernels (`Log`, inverse-trig, …) each become one generator;
+exponentials `E^(k·u)` map to integer powers `g^k` of a single `g = E^u` (so
+`(E^(2x)-1)/(E^x-1) → 1+E^x` still cancels). Declines — byte-identical to
+classical — on trig/hyperbolic kernels (the `1/Sin → Csc` evaluator
+canonicalisation diverges), non-`E` algebraic powers (`Sqrt[x]`, `a^x`, left to
+the algebraic normaliser), other heads, inexact reals, or non-commensurate Exp
+exponents. `∫1/(x(1+Log[x])^60)` RischNorman: **2.55 s → 0.97 s**. Output
+matches classical exactly on every accepted case, and two latent classical bugs
+(sums of `E`-kernel fractions left uncombined) are fixed. Valgrind-clean; new
+coverage in `test_rat.c::test_together_cancel_kernels`.
+
 **Done this session — RischTranscendental dispatch reorder.** The repeated-pole
 Hermite reduction (`rt_hermite_case`) was intercepting rational-function-of-a-
 single-exp integrands (linear exponent, `F` free of `x`) and solving an

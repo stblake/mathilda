@@ -172,6 +172,34 @@ void test_together_algebraic_generator() {
              "Times[Power[Log[r], Rational[-1, 2]], Plus[1, Power[Log[r], Rational[1, 6]]]]");
 }
 
+/* Together / Cancel over transcendental-kernel generators (Log, Exp,
+ * inverse-trig): the FLINT plain-rational fast path treats each kernel as an
+ * atomic generator instead of falling back to the ~50x slower symbolic GCD.
+ * Output must match the classical Together/Cancel exactly. */
+void test_together_cancel_kernels() {
+    /* Log[x] kernel: combines into one reduced fraction. */
+    run_test("Together[1/(1 + Log[x]) + 1/(2 + Log[x])]",
+             "Times[Plus[3, Times[2, Log[x]]], Power[Plus[2, Power[Log[x], 2], Times[3, Log[x]]], -1]]");
+    /* Inverse-trig kernel: same handling as Log. */
+    run_test("Together[1/(1 + ArcTan[x]) + 1/(2 + ArcTan[x])]",
+             "Times[Plus[3, Times[2, ArcTan[x]]], Power[Plus[2, Power[ArcTan[x], 2], Times[3, ArcTan[x]]], -1]]");
+    /* Exp kernel: E^(k x) is treated as (E^x)^k, so the sum combines correctly
+     * (the classical path left this uncombined — a latent bug now fixed). */
+    run_test("Together[1/(1 + E^x) + 1/(2 + E^x)]",
+             "Times[Plus[3, Times[2, Power[E, x]]], Power[Plus[2, Times[3, Power[E, x]], Power[E, Times[2, x]]], -1]]");
+    /* Exp cross-power cancellation depends on E^(2x) = (E^x)^2. */
+    run_test("Cancel[(E^(2 x) - 1)/(E^x - 1)]", "Plus[1, Power[E, x]]");
+    run_test("Cancel[(Log[x]^2 - 1)/(Log[x] - 1)]", "Plus[1, Log[x]]");
+    /* Nested independent Log kernels: Log[x] and Log[1+Log[x]] are distinct
+     * generators. */
+    run_test("Together[1/(1 + Log[1 + Log[x]]) + 1/Log[x]]",
+             "Times[Plus[1, Log[x], Log[Plus[1, Log[x]]]], "
+             "Power[Plus[Log[x], Times[Log[x], Log[Plus[1, Log[x]]]]], -1]]");
+    /* Trig kernels are declined to the classical path (1/Sin -> Csc form). */
+    run_test("Together[1/(1 + Cos[x]) + 1/Sin[x]]",
+             "Times[Power[Plus[1, Cos[x]], -1], Plus[1, Cot[x], Csc[x]]]");
+}
+
 void test_together() {
     run_test("Together[a/b + c/d]", "Times[Power[b, -1], Power[d, -1], Plus[Times[b, c], Times[a, d]]]");
     run_test("Together[x^2/(x^2 - 1) + x/(x^2 - 1)]", "Times[x, Power[Plus[-1, x], -1]]");
@@ -195,6 +223,7 @@ int main() {
     TEST(test_cancel_dependent_power_generators);
     TEST(test_together);
     TEST(test_together_algebraic_generator);
+    TEST(test_together_cancel_kernels);
     printf("All rat tests passed!\n");
 
     return 0;

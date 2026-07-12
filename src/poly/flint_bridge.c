@@ -2487,14 +2487,270 @@ static int expr_has_denominator(const Expr* e) {
  * in which case the caller keeps its classical path. Output form matches the
  * classical Together (expanded, reduced num/den).
  */
+/* ------------------------------------------------------------------ *
+ *  Transcendental-kernel generators for Together / Cancel.            *
+ *                                                                      *
+ *  flint_rational_normalize_core reduces a plain rational over Q       *
+ *  (symbol generators) via fmpz_mpoly_q.  These helpers EXTEND it to   *
+ *  rationals whose atoms include transcendental kernels — Log[u],      *
+ *  E^u, ArcTan[u], … — by substituting each kernel to a fresh symbol   *
+ *  BEFORE the reduction and restoring it after, so the whole reduction *
+ *  runs in the fast fmpz_mpoly_q path instead of the classical         *
+ *  symbolic GCD (Together over a Log[x] atom is ~50× slower).  Two     *
+ *  kernel classes need distinct treatment:                            *
+ *                                                                      *
+ *   - Independent kernels (Log[u], inverse-trig, …): each DISTINCT     *
+ *     kernel subexpression is one independent generator — a fresh      *
+ *     symbol.  Log[x] and Log[1+Log[x]] are two independent            *
+ *     generators; their arguments are opaque.                          *
+ *                                                                      *
+ *   - Exponentials E^e: NOT independent — E^(2u) is (E^u)^2.  All Exp  *
+ *     kernels whose exponents are integer multiples of a common        *
+ *     fundamental u map to integer powers g^k of a single fresh symbol *
+ *     g = E^u, so a cross-power cancellation like                      *
+ *     (E^(2x)-1)/(E^x-1) → 1+E^x reduces correctly, matching the       *
+ *     classical Together/Cancel (which treats E^(ku) as (E^u)^k).      *
+ *                                                                      *
+ *  DECLINES (km_build → 0, caller keeps its classical path) when a     *
+ *  trig/hyperbolic kernel is present (the evaluator's 1/Sin→Csc        *
+ *  canonicalisation would make readback+eval diverge from the          *
+ *  classical form), on a non-E algebraic power (Sqrt[x], a^x — left    *
+ *  to the algebraic normaliser), on any other non-allowlisted head,    *
+ *  on inexact reals, or when the Exp exponents share no common integer *
+ *  fundamental.  The result is byte-identical to the classical         *
+ *  Together/Cancel on every case the fast path accepts.               */
+
+/* Growable list of borrowed Expr* pointers into the input tree. */
+typedef struct { const Expr** v; size_t n, cap; } EPtrList;
+
+static int epl_push_unique(EPtrList* L, const Expr* e) {
+    for (size_t i = 0; i < L->n; i++) if (expr_eq(L->v[i], e)) return 1; /* dup */
+    if (L->n == L->cap) {
+        size_t nc = L->cap ? L->cap * 2 : 8;
+        const Expr** nv = realloc(L->v, nc * sizeof(*nv));
+        if (!nv) return 0;
+        L->v = nv; L->cap = nc;
+    }
+    L->v[L->n++] = e;
+    return 1;
+}
+static void epl_free(EPtrList* L) { free(L->v); L->v = NULL; L->n = L->cap = 0; }
+
+/* Independent-kernel head allowlist. Forward trig / hyperbolic are absent
+ * deliberately (their 1/Sin→Csc form diverges); Exp is handled via Power[E,·]. */
+static int km_is_generic_kernel_head(const char* h) {
+    static const char* const ok[] = {
+        "Log", "ArcSin", "ArcCos", "ArcTan", "ArcCot", "ArcSec", "ArcCsc",
+        "ArcSinh", "ArcCosh", "ArcTanh", "ArcCoth", "ArcSech", "ArcCsch", NULL };
+    for (int i = 0; ok[i]; i++) if (strcmp(h, ok[i]) == 0) return 1;
+    return 0;
+}
+
+/* Pass-1 walk: gather independent kernels into gk, Exp kernels into xk (both
+ * deduped structurally). Recurses only through the ring ops (Plus/Times and
+ * integer Power). Returns 0 to DECLINE on any unsupported atom. */
+static int km_walk(const Expr* e, EPtrList* gk, EPtrList* xk) {
+    switch (e->type) {
+        case EXPR_INTEGER: case EXPR_BIGINT:
+            return 1;
+        case EXPR_SYMBOL:
+            /* reserve the fresh-symbol namespace so backward-subst is unambiguous */
+            return strncmp(e->data.symbol, "$flk", 4) == 0 ? 0 : 1;
+        case EXPR_FUNCTION: {
+            const char* h = fn_head_name(e);
+            if (!h) return 0;
+            size_t n = e->data.function.arg_count;
+            if (strcmp(h, "Rational") == 0) return 1;            /* rational constant */
+            if (strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) {
+                for (size_t i = 0; i < n; i++)
+                    if (!km_walk(e->data.function.args[i], gk, xk)) return 0;
+                return 1;
+            }
+            if (strcmp(h, "Power") == 0) {
+                if (n != 2) return 0;
+                const Expr* base = e->data.function.args[0];
+                const Expr* ex   = e->data.function.args[1];
+                if (ex->type == EXPR_INTEGER)                    /* ring power */
+                    return km_walk(base, gk, xk);
+                /* non-integer exponent: only E^e (an exponential) is supported */
+                if (base->type == EXPR_SYMBOL && strcmp(base->data.symbol, "E") == 0)
+                    return epl_push_unique(xk, e);
+                return 0;                                        /* Sqrt[x], a^x, … */
+            }
+            if (km_is_generic_kernel_head(h))
+                return epl_push_unique(gk, e);                   /* opaque kernel */
+            return 0;   /* trig/hyperbolic, Complex, and every other head */
+        }
+        default:
+            return 0;   /* REAL, STRING, NDARRAY, MPFR */
+    }
+}
+
+/* Kernel substitution: forward maps each kernel subexpression to its
+ * replacement (a fresh symbol, or Power[fresh,k] for an Exp kernel); backward
+ * maps a fresh symbol back to the kernel atom it stands for. */
+typedef struct {
+    Expr** from; Expr** to;   size_t n,  cap;    /* forward: kernel  → replacement */
+    Expr** bsym; Expr** batom; size_t bn, bcap;  /* backward: fresh symbol → atom */
+    int ctr;
+} KernMap;
+
+static void km_init(KernMap* km) { memset(km, 0, sizeof *km); }
+static void km_free(KernMap* km) {
+    for (size_t i = 0; i < km->n;  i++) { expr_free(km->from[i]); expr_free(km->to[i]); }
+    for (size_t i = 0; i < km->bn; i++) { expr_free(km->bsym[i]); expr_free(km->batom[i]); }
+    free(km->from); free(km->to); free(km->bsym); free(km->batom);
+    memset(km, 0, sizeof *km);
+}
+static int km_add_fwd(KernMap* km, Expr* from, Expr* to) {
+    if (km->n == km->cap) {
+        size_t nc = km->cap ? km->cap * 2 : 8;
+        Expr** a = realloc(km->from, nc * sizeof(*a));
+        Expr** b = realloc(km->to,   nc * sizeof(*b));
+        if (a) km->from = a;
+        if (b) km->to   = b;
+        if (!a || !b) return 0;
+        km->cap = nc;
+    }
+    km->from[km->n] = from; km->to[km->n] = to; km->n++;
+    return 1;
+}
+static int km_add_bwd(KernMap* km, Expr* sym, Expr* atom) {
+    if (km->bn == km->bcap) {
+        size_t nc = km->bcap ? km->bcap * 2 : 8;
+        Expr** a = realloc(km->bsym,  nc * sizeof(*a));
+        Expr** b = realloc(km->batom, nc * sizeof(*b));
+        if (a) km->bsym  = a;
+        if (b) km->batom = b;
+        if (!a || !b) return 0;
+        km->bcap = nc;
+    }
+    km->bsym[km->bn] = sym; km->batom[km->bn] = atom; km->bn++;
+    return 1;
+}
+
+/* evaluate(a/b); return it (owned) iff it is a nonzero machine integer, else
+ * NULL. Used to test whether an Exp exponent is an integer multiple of the
+ * candidate fundamental. */
+static Expr* km_int_ratio(const Expr* a, const Expr* b) {
+    Expr* binv = expr_new_function(expr_new_symbol("Power"),
+        (Expr*[]){ expr_copy((Expr*)b), expr_new_integer(-1) }, 2);
+    Expr* prod = expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_copy((Expr*)a), binv }, 2);
+    Expr* r = eval_and_free(prod);
+    if (r && r->type == EXPR_INTEGER && r->data.integer != 0) return r;
+    if (r) expr_free(r);
+    return NULL;
+}
+
+/* Build the kernel map for `e`. Returns 0 to decline (see block comment). */
+static int km_build(const Expr* e, KernMap* km) {
+    EPtrList gk = {0}, xk = {0};
+    if (!km_walk(e, &gk, &xk)) { epl_free(&gk); epl_free(&xk); return 0; }
+
+    char buf[32];
+    /* Independent kernels: one fresh symbol each. */
+    for (size_t i = 0; i < gk.n; i++) {
+        snprintf(buf, sizeof buf, "$flk%d", km->ctr++);
+        Expr* sym = expr_new_symbol(buf);
+        if (!km_add_bwd(km, expr_copy(sym), expr_copy((Expr*)gk.v[i])) ||
+            !km_add_fwd(km, expr_copy((Expr*)gk.v[i]), sym)) goto fail;
+    }
+
+    /* Exp kernels: map E^(k·u) → g^k for a common fundamental exponent u. */
+    if (xk.n > 0) {
+        const Expr* u = NULL;
+        for (size_t c = 0; c < xk.n && !u; c++) {
+            const Expr* cand = xk.v[c]->data.function.args[1];
+            int good = 1;
+            for (size_t j = 0; j < xk.n && good; j++) {
+                Expr* k = km_int_ratio(xk.v[j]->data.function.args[1], cand);
+                if (!k) good = 0; else expr_free(k);
+            }
+            if (good) u = cand;
+        }
+        if (!u) goto fail;                       /* no common integer fundamental */
+        snprintf(buf, sizeof buf, "$flk%d", km->ctr++);
+        Expr* g  = expr_new_symbol(buf);
+        Expr* eu = expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_new_symbol("E"), expr_copy((Expr*)u) }, 2);
+        if (!km_add_bwd(km, g, eu)) { goto fail; }
+        for (size_t j = 0; j < xk.n; j++) {
+            Expr* kr = km_int_ratio(xk.v[j]->data.function.args[1], u);
+            long k = (long)kr->data.integer;
+            expr_free(kr);
+            Expr* repl = (k == 1)
+                ? expr_new_symbol(buf)
+                : expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_new_symbol(buf), expr_new_integer(k) }, 2);
+            if (!km_add_fwd(km, expr_copy((Expr*)xk.v[j]), repl)) goto fail;
+        }
+    }
+
+    epl_free(&gk); epl_free(&xk);
+    return 1;
+fail:
+    epl_free(&gk); epl_free(&xk);
+    return 0;
+}
+
+static int km_find_fwd(const KernMap* km, const Expr* e) {
+    for (size_t i = 0; i < km->n; i++) if (expr_eq(km->from[i], e)) return (int)i;
+    return -1;
+}
+/* Replace each maximal kernel subexpression of `e` by its forward image. */
+static Expr* km_forward(const Expr* e, const KernMap* km) {
+    int idx = km_find_fwd(km, e);
+    if (idx >= 0) return expr_copy(km->to[idx]);
+    if (e->type == EXPR_FUNCTION) {
+        size_t n = e->data.function.arg_count;
+        Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t i = 0; i < n; i++)
+            args[i] = km_forward(e->data.function.args[i], km);
+        Expr* r = expr_new_function(expr_copy(e->data.function.head), args, n);
+        free(args);
+        return r;
+    }
+    return expr_copy((Expr*)e);
+}
+/* Restore fresh generator symbols in `e` back to their kernel atoms. */
+static Expr* km_backward(const Expr* e, const KernMap* km) {
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t i = 0; i < km->bn; i++)
+            if (expr_eq(e, km->bsym[i])) return expr_copy(km->batom[i]);
+        return expr_copy((Expr*)e);
+    }
+    if (e->type == EXPR_FUNCTION) {
+        size_t n = e->data.function.arg_count;
+        Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t i = 0; i < n; i++)
+            args[i] = km_backward(e->data.function.args[i], km);
+        Expr* r = expr_new_function(expr_copy(e->data.function.head), args, n);
+        free(args);
+        return r;
+    }
+    return expr_copy((Expr*)e);
+}
+
 /* Shared core: reduce the whole expression to a single fmpz_mpoly_q fraction
- * (lowest terms) and read back num/den. Returns NULL if `e` is not a plain
- * rational over Q. Callers apply their own structural gate first. */
+ * (lowest terms) and read back num/den. Returns NULL if `e` is not a rational
+ * over Q in symbols and supported transcendental kernels. Callers apply their
+ * own structural gate first. */
 static Expr* flint_rational_normalize_core(const Expr* e) {
+    /* Substitute transcendental kernels to fresh symbols so the reduction runs
+     * in the plain-rational fmpz_mpoly_q path; restore them after. Declines
+     * (NULL) on any unsupported atom (see the km block comment above). */
+    KernMap km; km_init(&km);
+    if (!km_build(e, &km)) { km_free(&km); return NULL; }
+    Expr* work = km.n ? km_forward(e, &km) : NULL;
+    const Expr* target = work ? work : e;
+
     VarSet fvars;
     memset(&fvars, 0, sizeof fvars);
-    collect_all_symbols(e, &fvars);
-    if (fvars.count == 0) { varset_free(&fvars); return NULL; }
+    collect_all_symbols(target, &fvars);
+    if (fvars.count == 0) {
+        varset_free(&fvars); if (work) expr_free(work); km_free(&km); return NULL;
+    }
     qsort(fvars.names, fvars.count, sizeof(char*), cmp_str);
 
     fmpz_mpoly_ctx_t mctx;
@@ -2503,24 +2759,28 @@ static Expr* flint_rational_normalize_core(const Expr* e) {
     fmpz_mpoly_q_init(q, mctx);
 
     Expr* out = NULL;
-    if (expr_to_mpolyq(e, q, mctx, &fvars)) {
+    if (expr_to_mpolyq(target, q, mctx, &fvars)) {
         fmpz_mpoly_q_canonicalise(q, mctx);
         Expr* num = fmpz_mpoly_to_expr(fmpz_mpoly_q_numref(q), mctx, &fvars);
+        Expr* r;
         if (fmpz_mpoly_is_one(fmpz_mpoly_q_denref(q), mctx)) {
-            out = eval_and_free(num);
+            r = num;
         } else {
             Expr* den = fmpz_mpoly_to_expr(fmpz_mpoly_q_denref(q), mctx, &fvars);
             Expr* deninv = expr_new_function(expr_new_symbol("Power"),
                 (Expr*[]){ den, expr_new_integer(-1) }, 2);
-            Expr* r = expr_new_function(expr_new_symbol("Times"),
+            r = expr_new_function(expr_new_symbol("Times"),
                 (Expr*[]){ num, deninv }, 2);
-            out = eval_and_free(r);
         }
+        if (km.n) { Expr* rb = km_backward(r, &km); expr_free(r); r = rb; }
+        out = eval_and_free(r);
     }
 
     fmpz_mpoly_q_clear(q, mctx);
     fmpz_mpoly_ctx_clear(mctx);
     varset_free(&fvars);
+    if (work) expr_free(work);
+    km_free(&km);
     return out;
 }
 
