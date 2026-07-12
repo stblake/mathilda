@@ -22,6 +22,7 @@
 #include "attr.h"
 #include "sym_intern.h"
 #include "sym_names.h"
+#include "arithmetic.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -781,197 +782,430 @@ static long rt_var_mult_at_zero(Expr* p, Expr* v) {
     return a;
 }
 
-/* Risch differential equation q' + i u' q = p when the exponent u OR the
- * coefficient p is RATIONAL in x (so the polynomial ansatz below does not apply —
- * e.g. u = 1/x for E^(1/x), or p = 1/x - 1/x^2).  By the denominator theorem the
- * denominator of q divides Denominator[p], so q = h/pd with pd = Denominator[p]
- * and h a bounded polynomial in x, solved exactly by SolveAlways.  Correct by
- * construction (the SolveAlways certificate proves (q E^(i u))' = p E^(i u));
- * NULL when no such q exists (the term is non-elementary, e.g. E^(1/x) itself).
- * Closes Integrate[-E^(1/x)/x^2, x] = E^(1/x), Integrate[E^x/x - E^x/x^2, x] =
- * E^x/x. */
-static Expr* rt_solve_rde_rational(Expr* p, long i, Expr* u, Expr* x) {
-    Expr* up = rt_eval2("D", expr_copy(u), expr_copy(x));
-    if (!up) return NULL;
-    Expr* pg = rt_eval1("Together", expr_copy(p));
-    Expr* pd = pg ? rt_eval1("Denominator", expr_copy(pg)) : NULL;
-    Expr* pn = pg ? rt_eval1("Numerator", expr_copy(pg)) : NULL;
-    if (pg) expr_free(pg);
-    if (!pd || !pn) { expr_free(up); if (pd) expr_free(pd); if (pn) expr_free(pn); return NULL; }
-    /* p and u' must be genuine RATIONAL FUNCTIONS of x — else a transcendental
-     * coefficient (e.g. p = Sin[x], the E^x coefficient of a raw Sin[x] product)
-     * would let SolveAlways certify a spurious q (it once returned q = 0 for
-     * E^x Sin[x]).  Such integrands belong to the trig front-end / expsum path. */
-    Expr* upg = rt_eval1("Together", expr_copy(up));
-    Expr* upn = upg ? rt_eval1("Numerator", expr_copy(upg)) : NULL;
-    Expr* upd = upg ? rt_eval1("Denominator", expr_copy(upg)) : NULL;
-    if (upg) expr_free(upg);
-    bool ratl = upn && upd && rt_is_poly(pn, x) && rt_is_poly(pd, x)
-                && rt_is_poly(upn, x) && rt_is_poly(upd, x);
-    if (upn) expr_free(upn);
-    if (upd) expr_free(upd);
-    if (!ratl) { expr_free(up); expr_free(pd); expr_free(pn); return NULL; }
-    /* Exact numerator degree bound (no cap).  q = h/pd solves q' + i u' q = p over
-     * C(x); deg_x(h) = deg_x(q) + deg_x(pd) with deg_x(q) from the leading balance of
-     * q' against i u' q (rt_rde_var_bound, x is deriv-lowering).  f = i u' has
-     * deg_x(f) = deg(Numerator[u']) - deg(Denominator[u']). */
-    long dpd = rt_degree(pd, x); if (dpd < 0) dpd = 0;
-    long dpn = rt_degree(pn, x); if (dpn < 0) dpn = 0;
-    Expr* ung = rt_eval1("Together", expr_copy(up));
-    Expr* unn = ung ? rt_eval1("Numerator", expr_copy(ung)) : NULL;
-    Expr* und = ung ? rt_eval1("Denominator", expr_copy(ung)) : NULL;
-    if (ung) expr_free(ung);
-    long dfx = 0;
-    if (unn && und) {
-        long a = rt_degree(unn, x); if (a < 0) a = 0;
-        long b = rt_degree(und, x); if (b < 0) b = 0;
-        dfx = a - b;
-    }
-    if (unn) expr_free(unn);
-    if (und) expr_free(und);
-    /* v = x is deriv-lowering; its primitive cancellation config (dfv == -1) is
-     * unreachable here — a rational exponent u has u' with pole order >= 2 (or >= 0),
-     * never a simple pole — so no resonance integer applies (m_res = -1). */
-    long N = rt_rde_var_bound(dpn - dpd, dfx, true, -1) + dpd;   /* deg_x(h) */
+/* ==================================================================== */
+/* Bronstein Chapter 6 — the Risch differential equation  D y + f y = g. */
+/*                                                                       */
+/* Base field C(x) with D = d/dx (Stage A).  Replaces the undetermined-  */
+/* coefficient ansatz with the rational one-step-reduction algorithm     */
+/* (WeakNormalizer -> RdeNormalDenominator -> RdeBoundDegreeBase ->       */
+/* SPDE -> PolyRischDENoCancel1/2), all in polynomial-gcd time.  This is  */
+/* the fix for the Davenport-progressive-reduction blow-up of the former */
+/* SolveAlways ansatz (Bronstein, J. Symbolic Comput. 9 (1990) 49-60,    */
+/* and Symbolic Integration I, 2nd ed., Chapter 6).  In the base field    */
+/* every irreducible is normal for d/dx, so there is no special part and  */
+/* SplitFactor is the identity — the algorithms simplify accordingly.     */
+/* Correct by construction: SPDE's polynomial identity certifies          */
+/* (q E^(i u))' = p E^(i u); returns NULL for a genuinely non-elementary  */
+/* term.                                                                  */
+/* ==================================================================== */
 
-    Expr** terms = malloc((size_t)(N + 1) * sizeof(Expr*));
-    for (long k = 0; k <= N; k++) {
-        char nm[24]; snprintf(nm, sizeof(nm), "rmRq%ld", k);
-        terms[k] = expr_new_function(expr_new_symbol("Times"),
-            (Expr*[]){ expr_new_symbol(nm), expr_new_function(expr_new_symbol("Power"),
-                (Expr*[]){ expr_copy(x), expr_new_integer(k) }, 2) }, 2);
-    }
-    Expr* h = expr_new_function(expr_new_symbol("Plus"), terms, (size_t)(N + 1));
-    free(terms);
-    Expr* q = expr_new_function(expr_new_symbol("Times"),
-        (Expr*[]){ h, expr_new_function(expr_new_symbol("Power"),
-            (Expr*[]){ expr_copy(pd), expr_new_integer(-1) }, 2) }, 2);
+/* Numerator / Denominator of Together[e] (e not consumed). */
+static Expr* rde_num(Expr* e) {
+    return rt_eval1("Numerator", rt_eval1("Together", expr_copy(e)));
+}
+static Expr* rde_den(Expr* e) {
+    return rt_eval1("Denominator", rt_eval1("Together", expr_copy(e)));
+}
+/* Univariate polynomial primitives in x (args not consumed). */
+static Expr* rde_gcd(Expr* a, Expr* b, Expr* x) {
+    (void)x;   /* PolynomialGCD infers the variable; a third arg is a 3rd poly */
+    return rt_eval2("PolynomialGCD", expr_copy(a), expr_copy(b));
+}
+static Expr* rde_quot(Expr* a, Expr* b, Expr* x) {
+    return rt_eval3("PolynomialQuotient", expr_copy(a), expr_copy(b), expr_copy(x));
+}
+static Expr* rde_rem(Expr* a, Expr* b, Expr* x) {
+    return rt_eval3("PolynomialRemainder", expr_copy(a), expr_copy(b), expr_copy(x));
+}
+/* Expanded / cancelled arithmetic (args not consumed). */
+static Expr* rde_mul(Expr* a, Expr* b) {
+    return rt_eval1("Expand", expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_copy(a), expr_copy(b) }, 2));
+}
+static Expr* rde_add(Expr* a, Expr* b) {
+    return rt_eval1("Expand", expr_new_function(expr_new_symbol("Plus"),
+        (Expr*[]){ expr_copy(a), expr_copy(b) }, 2));
+}
+static Expr* rde_sub(Expr* a, Expr* b) {
+    return rt_eval1("Expand", expr_new_function(expr_new_symbol("Plus"),
+        (Expr*[]){ expr_copy(a), expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_new_integer(-1), expr_copy(b) }, 2) }, 2));
+}
+/* Field quotient a/b, cancelled (args not consumed). */
+static Expr* rde_divq(Expr* a, Expr* b) {
+    return rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_copy(a), expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(b), expr_new_integer(-1) }, 2) }, 2));
+}
+/* Leading coefficient of poly p in x (0 if p == 0). */
+static Expr* rde_lc(Expr* p, Expr* x) {
+    long d = rt_degree(p, x);
+    return d < 0 ? expr_new_integer(0) : rt_coeff(p, x, d);
+}
+/* d/dx (e not consumed). */
+static Expr* rde_dx(Expr* e, Expr* x) {
+    return rt_eval2("D", expr_copy(e), expr_copy(x));
+}
 
-    Expr* dq = rt_eval2("D", expr_copy(q), expr_copy(x));
-    Expr* iuq = expr_new_function(expr_new_symbol("Times"),
-        (Expr*[]){ expr_new_integer(i), expr_copy(up), expr_copy(q) }, 3);
-    Expr* residual = rt_eval_own(expr_new_function(expr_new_symbol("Plus"),
-        (Expr*[]){ dq, iuq, expr_new_function(expr_new_symbol("Times"),
-            (Expr*[]){ expr_new_integer(-1), expr_copy(p) }, 2) }, 3));
-    Expr* tog = residual ? rt_eval1("Together", residual) : NULL;
-    Expr* rnum = tog ? rt_eval1("Numerator", expr_copy(tog)) : NULL;
-    if (tog) expr_free(tog);
+/* SPDE result tuple: any solution q of a Dq + b q = c with deg(q) <= n is
+ * q = alpha*H + beta, where H in k[t], deg(H) <= m and D H + b' H = c'. */
+typedef struct { Expr* b; Expr* c; long m; Expr* alpha; Expr* beta; } RdeSpde;
+static void rde_spde_free(RdeSpde* s) {
+    if (s->b) expr_free(s->b);
+    if (s->c) expr_free(s->c);
+    if (s->alpha) expr_free(s->alpha);
+    if (s->beta) expr_free(s->beta);
+    s->b = s->c = s->alpha = s->beta = NULL;
+}
 
-    Expr* result = NULL;
-    Expr* sol = NULL;
-    if (rnum) {
-        Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
-            (Expr*[]){ rnum, expr_new_integer(0) }, 2);              /* adopts rnum */
-        sol = rt_eval2("SolveAlways", eqn, expr_copy(x));
-    }
-    if (sol && sol->type == EXPR_FUNCTION
-        && sol->data.function.head->type == EXPR_SYMBOL
-        && sol->data.function.head->data.symbol == intern_symbol("List")
-        && sol->data.function.arg_count >= 1
-        && sol->data.function.args[0]->type == EXPR_FUNCTION
-        && sol->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
-        && sol->data.function.args[0]->data.function.head->data.symbol
-             == intern_symbol("List")) {
-        Expr* qi = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
-            (Expr*[]){ expr_copy(q), expr_copy(sol->data.function.args[0]) }, 2));
-        if (qi) {
-            Expr** zero = malloc((size_t)(N + 1) * sizeof(Expr*));
-            for (long k = 0; k <= N; k++) {
-                char nm[24]; snprintf(nm, sizeof(nm), "rmRq%ld", k);
-                zero[k] = expr_new_function(expr_new_symbol("Rule"),
-                    (Expr*[]){ expr_new_symbol(nm), expr_new_integer(0) }, 2);
-            }
-            Expr* zl = expr_new_function(expr_new_symbol("List"), zero, (size_t)(N + 1));
-            free(zero);
-            result = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
-                (Expr*[]){ qi, zl }, 2));
-            if (result) result = rt_eval1("Cancel", result);
+/* SPDE(a, b, c, D=d/dx, n): Rothstein's degree-reducing recursion (Bronstein
+ * Thm 6.4.1 / algorithm SPDE, p.203).  Returns 1 and fills *out on success, or
+ * 0 for "no solution" (the equation has no solution of degree <= n in k[x]).
+ * Each level reduces the degree bound by deg(a) via one ExtendedEuclidean, so
+ * it terminates in O(n / deg(a)) steps — no dense linear solve. */
+static int rde_spde(Expr* a, Expr* b, Expr* c, Expr* x, long n, RdeSpde* out) {
+    out->b = out->c = out->alpha = out->beta = NULL; out->m = 0;
+    if (n < 0) {
+        if (rt_is_zero(c)) {
+            out->b = expr_new_integer(0); out->c = expr_new_integer(0);
+            out->m = 0; out->alpha = expr_new_integer(0); out->beta = expr_new_integer(0);
+            return 1;
         }
+        return 0;                                   /* c != 0, n < 0: no solution */
     }
-    if (sol) expr_free(sol);
-    expr_free(q); expr_free(up); expr_free(pd); expr_free(pn);
+    Expr* g = rde_gcd(a, b, x);
+    Expr* rem = rde_rem(c, g, x);
+    bool gdivc = rt_is_zero(rem);
+    expr_free(rem);
+    if (!gdivc) { expr_free(g); return 0; }         /* g does not divide c */
+    Expr* a1 = rde_quot(a, g, x);
+    Expr* b1 = rde_quot(b, g, x);
+    Expr* c1 = rde_quot(c, g, x);
+    expr_free(g);
+    long da = rt_degree(a1, x);
+    if (da == 0) {                                  /* a in k*: base of recursion */
+        out->b = rde_divq(b1, a1);
+        out->c = rde_divq(c1, a1);
+        out->m = n;              /* Bronstein SPDE: return (b/a, c/a, n, 1, 0) */
+        out->alpha = expr_new_integer(1);
+        out->beta = expr_new_integer(0);
+        expr_free(a1); expr_free(b1); expr_free(c1);
+        return 1;
+    }
+    /* (r, z) with b1 r + a1 z = c1, deg(r) < deg(a1); gcd(a1,b1)=1 so the
+     * ExtendedEuclidean cofactor s of b1 gives r = (s c1) mod a1. */
+    Expr* eg = rt_eval3("PolynomialExtendedGCD", expr_copy(b1), expr_copy(a1), expr_copy(x));
+    Expr* s = NULL;
+    if (eg && eg->type == EXPR_FUNCTION && eg->data.function.arg_count == 2) {
+        Expr* cof = eg->data.function.args[1];
+        if (cof && cof->type == EXPR_FUNCTION && cof->data.function.arg_count == 2)
+            s = cof->data.function.args[0];
+    }
+    if (!s) { if (eg) expr_free(eg); expr_free(a1); expr_free(b1); expr_free(c1); return 0; }
+    Expr* sc = rde_mul(s, c1);
+    Expr* r = rde_rem(sc, a1, x);
+    expr_free(sc);
+    if (eg) expr_free(eg);
+    /* z = (c1 - b1 r) / a1 (exact). */
+    Expr* b1r = rde_mul(b1, r);
+    Expr* c1_b1r = rde_sub(c1, b1r);
+    expr_free(b1r);
+    Expr* z = rde_quot(c1_b1r, a1, x);
+    expr_free(c1_b1r);
+    /* recurse SPDE(a1, b1 + Da1, z - Dr, n - da). */
+    Expr* da1 = rde_dx(a1, x);
+    Expr* b2 = rde_add(b1, da1);
+    expr_free(da1);
+    Expr* dr = rde_dx(r, x);
+    Expr* c2 = rde_sub(z, dr);
+    expr_free(dr); expr_free(z);
+    RdeSpde sub;
+    int rc = rde_spde(a1, b2, c2, x, n - da, &sub);
+    expr_free(b1); expr_free(c1); expr_free(b2); expr_free(c2);
+    if (!rc) { expr_free(a1); expr_free(r); return 0; }
+    /* q = a1*H + (a1*sub.alpha) H_sub + ...  ->  alpha = a1*sub.alpha,
+     *    beta = a1*sub.beta + r. */
+    out->b = sub.b; out->c = sub.c; out->m = sub.m;   /* adopt inner eqn */
+    out->alpha = rde_mul(a1, sub.alpha);
+    Expr* a1beta = rde_mul(a1, sub.beta);
+    out->beta = rde_add(a1beta, r);
+    expr_free(a1beta);
+    expr_free(sub.alpha); expr_free(sub.beta);
+    expr_free(a1); expr_free(r);
+    return 1;
+}
+
+/* PolyRischDENoCancel1(b, c, D=d/dx, n) with b != 0 (Bronstein p.208).  The
+ * leading terms of Dq and bq never cancel, so the solution is built top-down,
+ * one monomial per pass, the degree bound strictly decreasing.  Returns q
+ * (owned) or NULL for "no solution". */
+static Expr* rde_polyrischde_nocancel1(Expr* b, Expr* c, Expr* x, long n) {
+    long db = rt_degree(b, x);
+    Expr* lcb = rde_lc(b, x);
+    Expr* q = expr_new_integer(0);
+    Expr* cc = expr_copy(c);
+    bool fail = false;
+    while (!rt_is_zero(cc)) {
+        long dc = rt_degree(cc, x);
+        long m = dc - db;
+        if (n < 0 || m < 0 || m > n) { fail = true; break; }
+        Expr* lcc = rde_lc(cc, x);
+        Expr* coeff = rde_divq(lcc, lcb);           /* lc(c)/lc(b) */
+        expr_free(lcc);
+        Expr* p = rt_eval1("Expand", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ coeff, expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_copy(x), expr_new_integer(m) }, 2) }, 2));  /* adopts coeff */
+        Expr* nq = rde_add(q, p);
+        expr_free(q); q = nq;
+        /* c <- c - Dp - b p. */
+        Expr* dp = rde_dx(p, x);
+        Expr* bp = rde_mul(b, p);
+        Expr* t1 = rde_sub(cc, dp);
+        Expr* t2 = rde_sub(t1, bp);
+        expr_free(cc); cc = t2;
+        expr_free(dp); expr_free(bp); expr_free(t1); expr_free(p);
+        n = m - 1;
+    }
+    expr_free(cc); expr_free(lcb);
+    if (fail) { expr_free(q); return NULL; }
+    return q;
+}
+
+/* PolyRischDENoCancel2(b, c, D=d/dx, n) with b == 0 (Bronstein p.209, D=d/dt
+ * case): the equation is Dq = c, i.e. antidifferentiation of c.  Returns the
+ * polynomial antiderivative q with deg(q) <= n (owned), or NULL if c has no
+ * polynomial antiderivative of bounded degree.  (lambda(x) = lc(Dx) = 1,
+ * delta(x) = 0 for the base derivation.) */
+static Expr* rde_polyrischde_integrate(Expr* c, Expr* x, long n) {
+    Expr* q = expr_new_integer(0);
+    Expr* cc = expr_copy(c);
+    bool fail = false;
+    while (!rt_is_zero(cc)) {
+        long dc = rt_degree(cc, x);
+        long m = dc + 1;                            /* deg(c) - delta + 1 */
+        if (n < 0 || m < 0 || m > n) { fail = true; break; }
+        Expr* lcc = rde_lc(cc, x);
+        Expr* coeff = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ lcc, expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_new_integer(m), expr_new_integer(-1) }, 2) }, 2));  /* adopts lcc */
+        Expr* p = rt_eval1("Expand", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ coeff, expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_copy(x), expr_new_integer(m) }, 2) }, 2));
+        Expr* nq = rde_add(q, p);
+        expr_free(q); q = nq;
+        Expr* dp = rde_dx(p, x);
+        Expr* t1 = rde_sub(cc, dp);
+        expr_free(cc); cc = t1;
+        expr_free(dp); expr_free(p);
+        n = m - 1;
+    }
+    expr_free(cc);
+    if (fail) { expr_free(q); return NULL; }
+    return q;
+}
+
+/* WeakNormalizer(f, D=d/dx) in the base field (Bronstein p.183).  Returns w in
+ * k[x] such that f - Dw/w is weakly normalized (no normal irreducible with a
+ * positive-integer residue), so no spurious logarithm survives.  In the base
+ * field SplitFactor is the identity (every squarefree factor is normal).  The
+ * common case (no positive-integer residue) returns w = 1. */
+static Expr* rde_weak_normalizer(Expr* f, Expr* x) {
+    Expr* den = rde_den(f);
+    Expr* num = rde_num(f);
+    Expr* dden = rde_dx(den, x);
+    Expr* g = rde_gcd(den, dden, x);                /* gcd(dn, dn') */
+    Expr* dstar = rde_quot(den, g, x);              /* d* = dn / g  */
+    Expr* gds = rde_gcd(dstar, g, x);
+    Expr* d1 = rde_quot(dstar, gds, x);             /* d1 = d* / gcd(d*, g) */
+    expr_free(dden); expr_free(g); expr_free(dstar); expr_free(gds);
+    Expr* w = expr_new_integer(1);
+    long dd1 = rt_degree(d1, x);
+    if (dd1 >= 1) {
+        /* a with (den/d1) a  ==  num  (mod d1), deg(a) < deg(d1). */
+        Expr* A = rde_quot(den, d1, x);             /* den / d1 */
+        Expr* eg = rt_eval3("PolynomialExtendedGCD", expr_copy(A), expr_copy(d1), expr_copy(x));
+        Expr* s = NULL; Expr* gg = NULL;
+        if (eg && eg->type == EXPR_FUNCTION && eg->data.function.arg_count == 2) {
+            gg = eg->data.function.args[0];
+            Expr* cof = eg->data.function.args[1];
+            if (cof && cof->type == EXPR_FUNCTION && cof->data.function.arg_count == 2)
+                s = cof->data.function.args[0];
+        }
+        /* Only the common gg == 1 case yields the clean residue formula; else
+         * leave w = 1 (weak normalization is a no-op that at worst declines). */
+        if (s && gg && gg->type == EXPR_INTEGER && gg->data.integer == 1) {
+            Expr* sa = rde_mul(s, num);
+            Expr* a = rde_rem(sa, d1, x);           /* a = s*num mod d1 */
+            expr_free(sa);
+            /* r = resultant_x(a - z Dd1, d1), roots z = positive integers. */
+            Expr* dd1poly = rde_dx(d1, x);
+            Expr* zsym = expr_new_symbol("rmWNz");
+            Expr* azd = rt_eval1("Expand", expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ expr_copy(a), expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_integer(-1), zsym, dd1poly }, 3) }, 2));  /* adopts */
+            Expr* res = rt_eval3("Resultant", azd, expr_copy(d1), expr_copy(x));
+            /* Positive integer roots of res in rmWNz. */
+            Expr* roots = rt_eval2("Solve", expr_new_function(expr_new_symbol("Equal"),
+                (Expr*[]){ res, expr_new_integer(0) }, 2), expr_new_symbol("rmWNz"));
+            if (roots && roots->type == EXPR_FUNCTION
+                && roots->data.function.head->type == EXPR_SYMBOL
+                && roots->data.function.head->data.symbol == intern_symbol("List")) {
+                for (size_t ri = 0; ri < roots->data.function.arg_count; ri++) {
+                    Expr* sol = roots->data.function.args[ri];   /* {rmWNz -> val} */
+                    if (!sol || sol->type != EXPR_FUNCTION
+                        || sol->data.function.arg_count < 1) continue;
+                    Expr* rule = sol->data.function.args[0];
+                    if (!rt_head_is(rule, "Rule") || rule->data.function.arg_count != 2) continue;
+                    Expr* val = rule->data.function.args[1];
+                    long nv;
+                    if (val && val->type == EXPR_INTEGER && (nv = (long)val->data.integer) >= 1) {
+                        /* w *= gcd(a - nv*Dd1, d1)^nv. */
+                        Expr* nd = rde_dx(d1, x);
+                        Expr* an = rt_eval1("Expand", expr_new_function(expr_new_symbol("Plus"),
+                            (Expr*[]){ expr_copy(a), expr_new_function(expr_new_symbol("Times"),
+                                (Expr*[]){ expr_new_integer(-nv), nd }, 2) }, 2));  /* adopts nd */
+                        Expr* gpow = rde_gcd(an, d1, x);
+                        expr_free(an);
+                        for (long e = 0; e < nv; e++) {
+                            Expr* nw = rde_mul(w, gpow);
+                            expr_free(w); w = nw;
+                        }
+                        expr_free(gpow);
+                    }
+                }
+            }
+            if (roots) expr_free(roots);
+            expr_free(a);
+        }
+        if (eg) expr_free(eg);
+        expr_free(A);
+    }
+    expr_free(d1); expr_free(den); expr_free(num);
+    return w;
+}
+
+/* RischDE in the base field C(x): solve D y + f y = g for y in C(x).  Returns y
+ * (owned) or NULL for "no solution" (the term is non-elementary in this field).
+ * Pipeline: weak-normalize f, then RdeNormalDenominator reduces to the
+ * polynomial equation a Dq + b q = c (base field has no special denominator),
+ * RdeBoundDegreeBase bounds deg(q), SPDE + PolyRischDENoCancel solve it, and
+ * y = q / (h * w). */
+static Expr* rde_base(Expr* f, Expr* g, Expr* x) {
+    if (rt_is_zero(g)) return expr_new_integer(0);
+    /* 1. Weak normalization: f <- f - Dw/w, g <- w g, y = z/w. */
+    Expr* w = rde_weak_normalizer(f, x);
+    Expr* fbar;
+    if (rt_is_zero(w)) { expr_free(w); return NULL; }
+    if (w->type == EXPR_INTEGER && w->data.integer == 1) {
+        fbar = expr_copy(f);
+    } else {
+        Expr* dw = rde_dx(w, x);
+        Expr* dww = rde_divq(dw, w);
+        fbar = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Plus"),
+            (Expr*[]){ expr_copy(f), expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_integer(-1), dww }, 2) }, 2));   /* adopts dww */
+        expr_free(dw);
+    }
+    Expr* gbar = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_copy(w), expr_copy(g) }, 2));
+
+    /* 2. RdeNormalDenominator(fbar, gbar): base field, ds = es = 1. */
+    Expr* dn = rde_den(fbar);
+    Expr* en = rde_den(gbar);
+    Expr* p = rde_gcd(dn, en, x);
+    Expr* den_e = rde_dx(en, x);
+    Expr* den_num = rde_gcd(en, den_e, x);          /* gcd(en, en') */
+    Expr* den_p = rde_dx(p, x);
+    Expr* den_den = rde_gcd(p, den_p, x);           /* gcd(p, p')  */
+    expr_free(den_e); expr_free(den_p);
+    Expr* h = rde_quot(den_num, den_den, x);
+    expr_free(den_num); expr_free(den_den);
+    /* Guard: en | dn h^2  (else no solution). */
+    Expr* h2 = rde_mul(h, h);
+    Expr* dnh2 = rde_mul(dn, h2);
+    Expr* rem = rde_rem(dnh2, en, x);
+    bool ok = rt_is_zero(rem);
+    expr_free(rem); expr_free(h2);
+    Expr* result = NULL;
+    if (ok) {
+        /* a = dn h,  b = dn h fbar - dn Dh,  c = dn h^2 gbar.  These are all
+         * polynomials by construction; compute them as such (Numerator and
+         * exact PolynomialQuotient) rather than via Cancel of a rational, which
+         * can fail to reduce a factored/expanded mismatch (e.g. leaving
+         * (x+1)(x+2)^2/(x+2)^2 uncancelled). */
+        Expr* num_f = rde_num(fbar);                /* dn fbar = num_f (dn=den_f) */
+        Expr* num_g = rde_num(gbar);
+        Expr* aa = rde_mul(dn, h);                  /* dn h */
+        Expr* dh = rde_dx(h, x);
+        Expr* dndh = rde_mul(dn, dh);               /* dn Dh */
+        Expr* hnf = rde_mul(h, num_f);              /* dn h fbar = h num_f */
+        Expr* bb = rde_sub(hnf, dndh);
+        Expr* dnh2_en = rde_quot(dnh2, en, x);      /* dn h^2 / en (exact) */
+        Expr* cc = rde_mul(dnh2_en, num_g);         /* (dn h^2 / en) num_g */
+        expr_free(num_f); expr_free(num_g); expr_free(dh); expr_free(dndh);
+        expr_free(hnf); expr_free(dnh2_en);
+        if (rt_is_poly(aa, x) && rt_is_poly(bb, x) && rt_is_poly(cc, x)) {
+            /* 3. Degree bound (RdeBoundDegreeBase, p.199). */
+            long da = rt_degree(aa, x), db = rt_degree(bb, x), dc = rt_degree(cc, x);
+            long mx = (db > da - 1) ? db : (da - 1);
+            long n = dc - mx; if (n < 0) n = 0;
+            if (db == da - 1 && da >= 1) {
+                Expr* lcb = rde_lc(bb, x); Expr* lca = rde_lc(aa, x);
+                Expr* mm = rde_divq(lcb, lca);
+                Expr* mmn = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_integer(-1), mm }, 2));   /* -lc(b)/lc(a), adopts mm */
+                if (mmn && mmn->type == EXPR_INTEGER) {
+                    long mv = (long)mmn->data.integer;
+                    long cand = dc - db; if (cand < 0) cand = 0;
+                    if (mv > n) n = mv;
+                    if (cand > n) n = cand;
+                }
+                if (mmn) expr_free(mmn);
+                expr_free(lcb); expr_free(lca);
+            }
+            /* 4. SPDE reduce, 5. solve bounded. */
+            RdeSpde sp;
+            if (rde_spde(aa, bb, cc, x, n, &sp)) {
+                Expr* H;
+                if (rt_is_zero(sp.b))
+                    H = rde_polyrischde_integrate(sp.c, x, sp.m);
+                else
+                    H = rde_polyrischde_nocancel1(sp.b, sp.c, x, sp.m);
+                if (H) {
+                    Expr* aH = rde_mul(sp.alpha, H);
+                    Expr* q = rde_add(aH, sp.beta);
+                    expr_free(aH); expr_free(H);
+                    /* y = q / (h w). */
+                    Expr* hw = rde_mul(h, w);
+                    result = rde_divq(q, hw);
+                    expr_free(hw); expr_free(q);
+                }
+                rde_spde_free(&sp);
+            }
+        }
+        expr_free(aa); expr_free(bb); expr_free(cc);
+    }
+    expr_free(dnh2);
+    expr_free(dn); expr_free(en); expr_free(p); expr_free(h);
+    expr_free(fbar); expr_free(gbar); expr_free(w);
     return result;
 }
 
-/* Solve the Risch differential equation  q' + i u' q = p  for q in K,
- * with u a polynomial in x (u' polynomial) and p a polynomial in x, by a
- * bounded polynomial ansatz solved exactly with SolveAlways.  Correct by
- * construction: SolveAlways certifies the polynomial identity holds for
- * all x, so (q E^(i u))' = p E^(i u) exactly.  Returns q (owned) or NULL
- * when no polynomial solution exists (the term is then non-elementary in
- * this field — e.g. E^(-x^2) itself, left to the Erf recognizer).  When u or p
- * is rational in x, defers to rt_solve_rde_rational (E^(1/x) etc.). */
+/* Solve the Risch differential equation  q' + i u' q = p  for q in the base
+ * field C(x), via the Bronstein one-step-reduction algorithm above.  The
+ * coefficient is f = i u'; returns q (owned) or NULL when the term is
+ * non-elementary in this field (e.g. E^(-x^2), E^(1/x)).  Replaces the former
+ * SolveAlways ansatz (and its rational-denominator variant) with polynomial-
+ * gcd-time SPDE. */
 static Expr* rt_solve_rde(Expr* p, long i, Expr* u, Expr* x) {
     if (i == 0) return NULL;
-    if (!rt_is_poly(u, x) || !rt_is_poly(p, x))
-        return rt_solve_rde_rational(p, i, u, x);
-    long du = rt_degree(u, x);
-    if (du < 1) return NULL;                 /* u must be nonconstant */
-    long dp = rt_degree(p, x);
-    if (dp < 0) return NULL;
-    long dF = du - 1;                        /* deg(i u') */
-    long N = (dF >= 1) ? (dp - dF) : dp;     /* exact degree bound */
-    if (N < 0) return NULL;
-
     Expr* up = rt_eval2("D", expr_copy(u), expr_copy(x));   /* u' */
     if (!up) return NULL;
-
-    /* Ansatz q = sum_{k=0}^{N} rmC_k x^k. */
-    Expr** terms = malloc((size_t)(N + 1) * sizeof(Expr*));
-    for (long k = 0; k <= N; k++) {
-        char nm[24];
-        snprintf(nm, sizeof(nm), "rmC%ld", k);
-        Expr* pw = expr_new_function(expr_new_symbol("Power"),
-            (Expr*[]){ expr_copy(x), expr_new_integer(k) }, 2);
-        terms[k] = expr_new_function(expr_new_symbol("Times"),
-            (Expr*[]){ expr_new_symbol(nm), pw }, 2);
-    }
-    Expr* q = rt_eval_own(expr_new_function(expr_new_symbol("Plus"),
-        terms, (size_t)(N + 1)));
-    free(terms);
-
-    /* residual = D[q,x] + i u' q - p. */
-    Expr* dq = rt_eval2("D", expr_copy(q), expr_copy(x));
-    Expr* iuq = expr_new_function(expr_new_symbol("Times"),
-        (Expr*[]){ expr_new_integer(i), expr_copy(up), expr_copy(q) }, 3);
-    Expr* negp = expr_new_function(expr_new_symbol("Times"),
-        (Expr*[]){ expr_new_integer(-1), expr_copy(p) }, 2);
-    Expr* residual = rt_eval_own(expr_new_function(expr_new_symbol("Plus"),
-        (Expr*[]){ dq, iuq, negp }, 3));
-
-    /* SolveAlways[residual == 0, x]. */
-    Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
-        (Expr*[]){ residual, expr_new_integer(0) }, 2);   /* adopts residual */
-    Expr* sol = rt_eval2("SolveAlways", eqn, expr_copy(x));
-
-    Expr* result = NULL;
-    if (sol && sol->type == EXPR_FUNCTION
-        && sol->data.function.head->type == EXPR_SYMBOL
-        && sol->data.function.head->data.symbol == intern_symbol("List")
-        && sol->data.function.arg_count >= 1
-        && sol->data.function.args[0]->type == EXPR_FUNCTION
-        && sol->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
-        && sol->data.function.args[0]->data.function.head->data.symbol
-             == intern_symbol("List")) {
-        /* Apply the solution, then pin any free ansatz parameters to 0. */
-        Expr* qi = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
-            (Expr*[]){ expr_copy(q), expr_copy(sol->data.function.args[0]) }, 2));
-        Expr** zero = malloc((size_t)(N + 1) * sizeof(Expr*));
-        for (long k = 0; k <= N; k++) {
-            char nm[24];
-            snprintf(nm, sizeof(nm), "rmC%ld", k);
-            zero[k] = expr_new_function(expr_new_symbol("Rule"),
-                (Expr*[]){ expr_new_symbol(nm), expr_new_integer(0) }, 2);
-        }
-        Expr* zl = expr_new_function(expr_new_symbol("List"), zero, (size_t)(N + 1));
-        free(zero);
-        result = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
-            (Expr*[]){ qi, zl }, 2));   /* adopts qi, zl */
-    }
-    if (sol) expr_free(sol);
-    expr_free(q);
-    expr_free(up);
-    return result;
+    Expr* f = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_new_integer(i), up }, 2));          /* f = i u', adopts up */
+    Expr* q = rde_base(f, p, x);
+    expr_free(f);
+    return q;
 }
 
 /* Collect (as owned copies, deduplicated) the exponents of every E^w / Exp[w]
@@ -2998,19 +3232,27 @@ static bool rt_tower_build(Expr* f, Expr* x, RtTower* T) {
     /* Derivation coefficients + structure-theorem (triangularity) soundness. */
     bool ok = true;
     for (size_t i = 0; i < n && ok; i++) {
+        /* Compute the RAW derivative (Log: u'/u, Exp: w') WITHOUT normalising,
+         * substitute the kernels structurally, and ONLY THEN Cancel in the tower
+         * variables.  Cancelling first expands a factored kernel power such as
+         * (x + E^x)^2 into x^2 + 2 x E^x + E^(2 x); the E^(2 x) term is not the
+         * literal kernel E^x, so the substitution misses it and the structure
+         * check spuriously rejects a valid tower (e.g. Bronstein's own example
+         * E^((x^2-1)/x + 1/(x + E^x))).  Substituting on the unexpanded form maps
+         * (x + E^x)^2 -> (x + t_0)^2 cleanly. */
         Expr* d;
         if (T->kind[i] == RT_LOG) {
             Expr* du = rt_eval2("D", expr_copy(T->arg[i]), expr_copy(x));
-            Expr* q = expr_new_function(expr_new_symbol("Times"),
+            d = expr_new_function(expr_new_symbol("Times"),
                 (Expr*[]){ du, expr_new_function(expr_new_symbol("Power"),
                     (Expr*[]){ expr_copy(T->arg[i]), expr_new_integer(-1) }, 2) }, 2);
-            d = rt_eval1("Cancel", q);
         } else {
-            d = rt_eval1("Cancel", rt_eval2("D", expr_copy(T->arg[i]), expr_copy(x)));
+            d = rt_eval2("D", expr_copy(T->arg[i]), expr_copy(x));
         }
         if (!d) { ok = false; break; }
-        Expr* ds = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+        Expr* dsub = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
             (Expr*[]){ d, expr_copy(T->subrules) }, 2));           /* adopts d */
+        Expr* ds = dsub ? rt_eval1("Cancel", dsub) : NULL;
         if (!ds) { ok = false; break; }
         T->Dcoef[i] = ds;
         if (rt_find_exp_of_x(ds, x) != NULL || rt_find_log_of_x(ds, x) != NULL) ok = false;
@@ -3788,8 +4030,22 @@ static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x) {
     }
     if (dcn) expr_free(dcn);
     if (dcd) expr_free(dcd);
+    /* Per-variable LOW exponent.  An EXPONENTIAL lower monomial t_j is a unit
+     * (invertible), so the RDE solution may carry a SPECIAL pole there — a
+     * negative Laurent power NOT reflected in Denominator[p].  Bronstein's own
+     * three-level example integrates to q = t_1/t_0 (a t_0-pole absent from p's
+     * denominator x^2 (x+t_0)^2); a purely polynomial numerator over {x, t_j}
+     * cannot express it.  Give each exponential kernel the symmetric Laurent
+     * range [-bd, bd]; x and logarithmic kernels (whose derivation lowers
+     * degree, so no special pole) keep [0, bd].  The extra unknowns are
+     * certified to zero by SolveAlways, so this only widens completeness. */
+    long* lo = malloc(nlv * sizeof(long));
+    for (size_t j = 0; j < nlv; j++) {
+        bool is_exp = (j >= 1) && (T->kind[j - 1] == RT_EXP);
+        lo[j] = is_exp ? -bd[j] : 0;
+    }
     long nmono = 1;
-    for (size_t j = 0; j < nlv; j++) nmono *= (bd[j] + 1);
+    for (size_t j = 0; j < nlv; j++) nmono *= (bd[j] - lo[j] + 1);
 
     Expr* result = NULL;
     if (nmono > 0) {
@@ -3799,7 +4055,12 @@ static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x) {
         long* ev = malloc(nlv * sizeof(long));
         for (long m = 0; m < nmono; m++) {
             char nm[40]; snprintf(nm, sizeof(nm), "rmRd%ld", m);
-            rt_decode_mono(m, bd, nlv, ev);
+            long idx = m;                          /* mixed-radix decode with lo[] offset */
+            for (size_t j = 0; j < nlv; j++) {
+                long range = bd[j] - lo[j] + 1;
+                ev[j] = lo[j] + idx % range;
+                idx /= range;
+            }
             Expr* mono = rt_build_monomial(lv, ev, nlv);
             syms[nsym++] = expr_new_symbol(nm);
             hterms[ntq++] = expr_new_function(expr_new_symbol("Times"),
@@ -3862,7 +4123,7 @@ static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x) {
     /* Cancel the h/pd fraction (e.g. x(1+t)/(x(1+t)^2) -> 1/(1+t)) so the
      * assembled antiderivative stays in lowest terms. */
     if (result) result = rt_eval1("Cancel", result);
-    free(lv); free(bd);
+    free(lv); free(bd); free(lo);
     expr_free(pd); expr_free(pn);
     return result;
 }
@@ -3980,6 +4241,7 @@ static Expr* rt_recursive_tower_case(Expr* f, Expr* x) {
      * substitution — see rt_subst_kernels), then normalise with Together. */
     Expr* F = rt_eval1("Together", rt_subst_kernels(fx, &T));
     Expr* result = NULL;
+    bool tower_verified = false;
     if (F && rt_find_exp_of_x(F, x) == NULL && rt_find_log_of_x(F, x) == NULL) {
         Expr* num = rt_eval1("Numerator", expr_copy(F));
         Expr* den = rt_eval1("Denominator", expr_copy(F));
@@ -3999,25 +4261,53 @@ static Expr* rt_recursive_tower_case(Expr* f, Expr* x) {
         if (gate) {
             Expr* Q = rt_field_integrate(F, &T, (long)T.n - 1, x);
             if (Q) {
-                Expr** back = malloc(T.n * sizeof(Expr*));
-                for (size_t i = 0; i < T.n; i++)
-                    back[i] = expr_new_function(expr_new_symbol("Rule"),
-                        (Expr*[]){ expr_copy(T.t[i]), expr_copy(T.kernel[i]) }, 2);
-                Expr* bl = expr_new_function(expr_new_symbol("List"), back, T.n);
-                free(back);
-                result = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
-                    (Expr*[]){ Q, bl }, 2));                       /* adopts Q, bl */
-                /* Tidy the Hermite rational part (e.g. -x Log[x]/(x Log[x](1+t)) ->
-                 * -1/(1+t)); Cancel treats the Log/exp kernels as opaque atoms. */
-                if (result) result = rt_eval1("Cancel", result);
+                /* Reduce Q to lowest terms in the TOWER VARIABLES (each kernel
+                 * t_i an independent symbol) BEFORE back-substituting.  A common
+                 * factor like (1 + t_1) in Q = t_3 (1+t_1) / ((1+t_1) t_2)
+                 * cancels cleanly here, but not afterwards when t_1 = E^x
+                 * reappears inside t_2 = Log[1 + E^x] and blocks the gcd —
+                 * otherwise a correct answer (Log[x]/Log[1 + E^x]) is left in an
+                 * unrecognisable form.  Together first: Q is a SUM of Laurent/log
+                 * terms, which Cancel alone does not combine before reducing. */
+                Q = rt_eval1("Cancel", rt_eval1("Together", Q));
+                /* EXACT verification in the tower variables: D_tower[Q] must
+                 * equal F as a rational identity over C(x, t_0..t_{n-1}).  This
+                 * is decidable (Together the difference to 0) and replaces the
+                 * fragile Simplify diff-back, which cannot reduce the nested-
+                 * exponential closed forms (e.g. the big Laurent × E^(1/(1+E^x))
+                 * of In9) even when they are correct. */
+                Expr* DQ = rt_tower_deriv(Q, &T, x);
+                Expr* diff = DQ ? expr_new_function(expr_new_symbol("Plus"),
+                    (Expr*[]){ expr_copy(DQ), expr_new_function(expr_new_symbol("Times"),
+                        (Expr*[]){ expr_new_integer(-1), expr_copy(F) }, 2) }, 2) : NULL;
+                Expr* chk = diff ? rt_eval1("Together", diff) : NULL;
+                bool tower_ok = chk && rt_is_zero(chk);
+                if (DQ) expr_free(DQ);
+                if (chk) expr_free(chk);
+                if (tower_ok) {
+                    Expr** back = malloc(T.n * sizeof(Expr*));
+                    for (size_t i = 0; i < T.n; i++)
+                        back[i] = expr_new_function(expr_new_symbol("Rule"),
+                            (Expr*[]){ expr_copy(T.t[i]), expr_copy(T.kernel[i]) }, 2);
+                    Expr* bl = expr_new_function(expr_new_symbol("List"), back, T.n);
+                    free(back);
+                    result = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                        (Expr*[]){ Q, bl }, 2));                   /* adopts Q, bl */
+                    if (result) result = rt_eval1("Cancel", result);
+                    tower_verified = true;
+                } else {
+                    expr_free(Q);
+                }
             }
         }
     }
     if (F) expr_free(F);
 
-    /* Diff-back safety gate (bounded search, not a decision procedure).
-     * Verify against the ORIGINAL integrand f (== fx mathematically). */
-    if (result && !rt_verify_antideriv(result, f, x)) { expr_free(result); result = NULL; }
+    /* The tower-variable check above is exact; fall back to the (bounded)
+     * Simplify diff-back only if it was not reached (defensive). */
+    if (result && !tower_verified && !rt_verify_antideriv(result, f, x)) {
+        expr_free(result); result = NULL;
+    }
 
     rt_tower_free(&T);
     expr_free(fx);
@@ -4212,8 +4502,19 @@ Expr* builtin_rischtranscendental(Expr* res) {
 
     /* Correct by construction: rt_integrate returns a result only behind an
      * exact certificate, so no differentiation check is applied (a Risch
-     * integrator is a decision procedure, not a guess-and-verify search). */
-    return rt_integrate(f, x);
+     * integrator is a decision procedure, not a guess-and-verify search).
+     *
+     * Mute arithmetic warnings across the decision procedure: its internal
+     * algebraic manipulations (kernel substitutions, degree/coefficient probes,
+     * Together/Cancel on tower normal forms) legitimately form transient
+     * singular expressions — e.g. E^(x/E^(1/x))/E^(2/x) provokes a 1/0 while a
+     * candidate exponent is reduced — none of which are part of the returned
+     * antiderivative.  Surfacing Power::infy from them would be spurious (as it
+     * is in Mathematica's Integrate). */
+    arith_warnings_mute_push();
+    Expr* result = rt_integrate(f, x);
+    arith_warnings_mute_pop();
+    return result;
 }
 
 /* ================================================================== */

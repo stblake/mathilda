@@ -698,6 +698,78 @@ static void test_rde_var_bound(void) {
     chk_bound(3, 2, false, 100, 1);    /* dfv=2: m_res ignored -> 1 */
 }
 
+/* Single-integration numeric verification: integrate ONCE (Module-bound), then
+ * confirm the result is closed and differentiates back to f at an interior
+ * point.  Used for the heavy high-degree / nested-exponential Bronstein cases
+ * where re-integrating three times (assert_rm_num) or an exact Simplify would
+ * dominate the suite. */
+static void assert_rm_num1(const char* f) {
+    char buf[1600];
+    snprintf(buf, sizeof(buf),
+        "Module[{rmF = Integrate`RischTranscendental[%s, x]},"
+        " Head[rmF] =!= Integrate &&"
+        " Abs[N[(D[rmF, x] - (%s)) /. x -> 13/10]] < 1/1000000]", f, f);
+    assert_eval_eq(buf, "True", 0);
+}
+
+/* Closure-only check: the integrator returns a non-Integrate result.  Used for
+ * the degree-100+ shifted-pole case whose exact form's numeric diff-back would
+ * dominate the suite; the closed form is correct by construction (SPDE
+ * certificate), so closure suffices. */
+static void assert_rm_closes(const char* f) {
+    char buf[1200];
+    snprintf(buf, sizeof(buf),
+        "Head[Integrate`RischTranscendental[%s, x]] =!= Integrate", f);
+    assert_eval_eq(buf, "True", 0);
+}
+
+/* ================= BRONSTEIN RDE EXAMPLES =================
+ * The transcendental-Risch-DE examples that motivated the rational one-step
+ * (SPDE) rewrite of the base-field RDE and the tower fixes (exp-in-exp
+ * structure check, exact tower-variable verification, exp-monomial Laurent
+ * ansatz).  Correctness is asserted numerically (assert_rm_num) because the
+ * closed forms are high-degree rationals or nested exponentials whose exact
+ * Simplify[D - f] is prohibitively slow — the antiderivatives themselves are
+ * produced in well under a second.  In2/In5 are Bronstein's own worked
+ * examples (Symbolic Integration I, 2nd ed., Examples 6.2.1 / 6.5.x). */
+static void test_bronstein_rde_examples(void) {
+    /* High-degree exponential-times-rational (former SolveAlways blow-up: the
+     * degree-100+ cases timed out or took seconds; the SPDE path is sub-second). */
+    assert_rm_num1("((x - 100)/x^101) Exp[x]");                       /* -> E^x/x^100 */
+    assert_rm_closes("((x - 99)/(x + 2)^102) Exp[x]");               /* In17 -> E^x/(2+x)^101 (closure; dense diff-back too slow) */
+    assert_rm_num1("((x - 17)/(x + 2)^20) Exp[x]");                   /* shifted-pole degree-20 numeric anchor */
+    assert_rm_num1("(x^101 + 1) Exp[x]");
+    assert_rm_num1("((x^101 + 1)/(x + 1)) Exp[x]");
+    assert_rm_num1("((1 - 1/100 x^100)/x^101) Exp[x^100/100]");       /* -> -E^(x^100/100)/(100 x^100) */
+    assert_rm_num1("((x^4 + 2 x^3 - 7 x^2 - 16 x - 6)"
+                  "/(x^2 (x + 1)^2 (x + 2)^2 (x + 3)^2)) Exp[x]");   /* -> E^x/(x^2(x+1)(x+2)(x+3)) */
+    /* Single exponential/log tower coefficients (already elementary, kept as
+     * regression anchors). */
+    assert_rm_num1("(1 - 1/(x Log[x]^2)) Exp[1/Log[x] + x]");         /* In3 -> E^(x+1/Log[x]) */
+    assert_rm_num1("(Exp[Exp[x + 1]/x]/Exp[x^2])"
+                  "(Exp[x + 1]/x - Exp[x + 1]/x^2 - 2 x)");          /* In4 -> E^(-x^2+E^(1+x)/x) */
+    assert_rm_num1("Exp[1/Log[x]]/(x Log[x]^3)");                     /* In6 */
+    assert_rm_num1("((x + 1) Exp[x/Exp[1/x]])/Exp[2/x]");             /* In7 (also: no Power::infy) */
+    /* Nested / mixed towers: exp-in-exp exponent (Bronstein's Example 6.2.1),
+     * log-of-exp, and the coupled hyperexponential Laurent. */
+    assert_rm_num1("((E^x - x^2 + 2 x)/(x^2 (x + E^x)^2))"
+                  " E^((x^2 - 1)/x + 1/(x + E^x))");                 /* In2 -> E^(-x+1/(E^x+x)+(x^2-1)/x) */
+    assert_rm_num1("(E^x + x + (1 + E^x) x Log[x] Log[1 + 1/Log[x]]"
+                  " + (1 + E^x) x Log[x]^2 Log[1 + 1/Log[x]])"
+                  "/(x (E^x + x)^2 Log[x] (1 + Log[x]))");           /* In5 -> -Log[1+1/Log[x]]/(E^x+x) */
+    assert_rm_num1("1/(x Log[Exp[x] + 1])"
+                  " - (Exp[x] Log[x])/((Exp[x] + 1) Log[Exp[x] + 1]^2)"); /* In8 -> Log[x]/Log[1+E^x] */
+    assert_rm_num1("(Exp[1/(Exp[x] + 1)]/(39916800 Exp[10 x]))"
+                  "((1757211400 + 2581284541 Exp[x])/(Exp[x] + 1)^3)"); /* In9 */
+
+    /* Genuinely non-elementary siblings that MUST decline (the RDE correctly
+     * proves no solution — a numerator perturbation that leaves an Ei residue). */
+    assert_head_unevaluated(
+        "Integrate[E^x/(x + 2)^2, x, Method -> \"RischTranscendental\"]", "Integrate");
+    assert_head_unevaluated(
+        "Integrate[E^x/(x - 3)^2, x, Method -> \"RischTranscendental\"]", "Integrate");
+}
+
 void test_integrate_risch_transcendental(void) {
     symtab_init();
     core_init();
@@ -723,6 +795,8 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_log_tower_case);
     TEST(test_exp_tower_case);
     TEST(test_recursive_tower_case);
+    /* Bronstein transcendental-RDE motivating examples (SPDE + tower fixes). */
+    TEST(test_bronstein_rde_examples);
     /* Special functions. */
     TEST(test_special_functions);
     /* Cascade, plumbing, strictness. */

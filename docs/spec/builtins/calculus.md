@@ -609,6 +609,14 @@ monotonically down.
      closed forms the earlier stages missed.  Correct by construction (no
      differentiation check).  Handles logarithmic polynomials and the
      special-function cases below (Erf, ExpIntegralEi, LogIntegral, PolyLog).
+     Its Risch differential equation is solved by Bronstein's rational one-step
+     (SPDE) reduction (polynomial-gcd time, no undetermined-coefficient
+     blow-up), closing high-degree `R(x) e^x` forms and — via the
+     exponential special-denominator Laurent ansatz and an exact
+     tower-variable verification — nested exp/log towers such as
+     `∫((e^x−x²+2x)/(x²(x+e^x)²)) e^((x²−1)/x + 1/(x+e^x)) dx = e^(−x+1/(e^x+x)+(x²−1)/x)`
+     and `∫(1/(x log(1+e^x)) − …) dx = log(x)/log(1+e^x)`.  Arithmetic warnings
+     from transient internal singular expressions are muted (as in Mathematica).
   12. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
      from `src/internal/CRCMathTablesIntegrals.m` on first call).
   If every stage gives up the call bubbles back unevaluated.

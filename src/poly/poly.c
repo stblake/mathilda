@@ -1587,6 +1587,8 @@ static Expr* polynomialdivrem_with_extension(Expr* p, Expr* q, Expr* x,
     return result;
 }
 
+static int64_t poly_max_int_exponent(const Expr* e);   /* fwd: high-degree FLINT gate */
+
 Expr* builtin_polynomialquotient(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 3) return NULL;
 
@@ -1640,6 +1642,19 @@ Expr* builtin_polynomialquotient(Expr* res) {
             return quotient;
         }
         if (dr) expr_free(dr);
+    }
+    /* Plain rational Q[x..]: EXACT division via FLINT for dense, high-degree
+     * quotients (e.g. (x+2)^202 / (x+2)^102 during Risch integration), where the
+     * classical pseudo-division below is seconds-slow with big coefficients.
+     * Gated on high degree so ordinary low-degree quotients keep the classical
+     * output form; only fires when q divides p exactly (the integrator's case). */
+    if (poly_max_int_exponent(p) >= 32 || poly_max_int_exponent(q) >= 32) {
+        Expr* fq = flint_multivariate_divexact(p, q);
+        if (fq) {
+            if (alpha_auto) expr_free(alpha_auto);
+            if (auto_tower) qa_tower_free(auto_tower);
+            return fq;
+        }
     }
 #endif
 
@@ -1698,6 +1713,19 @@ Expr* builtin_polynomialremainder(Expr* res) {
             return remainder;
         }
         if (dr) expr_free(dr);
+    }
+    /* Plain rational Q[x..]: for dense, high-degree inputs the classical
+     * pseudo-remainder below is seconds-slow (e.g. (x+2)^202 mod (x+2)^102
+     * during Risch integration).  When FLINT proves q | p exactly, the
+     * remainder is 0 — the integrator's case; otherwise fall through. */
+    if (poly_max_int_exponent(p) >= 32 || poly_max_int_exponent(q) >= 32) {
+        Expr* fq = flint_multivariate_divexact(p, q);
+        if (fq) {                                  /* exact division => remainder 0 */
+            expr_free(fq);
+            if (alpha_auto) expr_free(alpha_auto);
+            if (auto_tower) qa_tower_free(auto_tower);
+            return expr_new_integer(0);
+        }
     }
 #endif
 
@@ -1882,6 +1910,24 @@ Expr* poly_gcd_internal(Expr* A, Expr* B, Expr** vars, size_t var_count) {
         return my_number_gcd(A, B);
     }
 
+#ifdef USE_FLINT
+    /* FLINT fmpq_mpoly_gcd fast path for genuine rational-coefficient inputs.
+     * The classical pseudo-remainder sequence below carries int64/bignum
+     * coefficients whose pseudo-division growth overflows or trips the size
+     * budget on dense, large-coefficient polynomials (e.g. the expanded
+     * (x+2)^40 that Together/Cancel produce during Risch integration), silently
+     * returning only the content GCD.  FLINT computes the exact GCD with no
+     * such blow-up.  It declines (NULL) for parametric / algebraic coefficient
+     * rings it does not model, falling through to the classical path — and the
+     * caller's structural base-product-list pass already handles factored
+     * inputs before reaching here, so this only intercepts the expanded case.
+     * Both paths return expr_expand'd, positive-leading-coefficient output. */
+    {
+        Expr* fg = flint_multivariate_gcd_normalized(A, B);
+        if (fg) return fg;
+    }
+#endif
+
     Expr* x = vars[var_count - 1];
 
     Expr* contA = poly_content(A, vars, var_count);
@@ -1967,11 +2013,20 @@ Expr* poly_gcd_internal(Expr* A, Expr* B, Expr** vars, size_t var_count) {
     }
     if (V) expr_free(V);
 
-    /* On budget exhaustion, return the content GCD alone — a valid
-     * (over-estimate-safe) divisor that lets the cancel pipeline
-     * proceed without coefficient explosion. */
+    /* On budget exhaustion the classical pseudo-remainder sequence hit
+     * coefficient explosion (a known weakness on dense, large-coefficient
+     * inputs, e.g. the expanded (x+2)^40 that Together/Cancel produce during
+     * Risch integration).  Rather than return the content GCD alone — a valid
+     * divisor, but a wrong result that silently under-reduces Cancel — delegate
+     * to FLINT's fmpq_mpoly_gcd, which has no such explosion.  Falls back to
+     * the content GCD only when FLINT is unavailable or declines (parametric /
+     * algebraic coefficient rings it does not model). */
     if (budget_blown) {
         expr_free(U);
+#ifdef USE_FLINT
+        Expr* fg = flint_multivariate_gcd_normalized(A, B);
+        if (fg) { expr_free(contGCD); return fg; }
+#endif
         return expr_expand(contGCD);
     }
     
@@ -2103,6 +2158,29 @@ static Expr* expr_rebuild_call(const Expr* original, Expr** args,
 /* Then defers to `poly_gcd_internal` for the symbolic remainder.       */
 /* The final result is `numG * common_factors * symbolic_gcd`.          */
 /*                                                                     */
+/* Largest integer Power-exponent anywhere in `e` (0 if none).  A cheap
+ * structural proxy for "this polynomial is high enough degree that the
+ * classical int64 pseudo-remainder GCD path risks coefficient overflow"
+ * — catches both the factored (x+2)^102 and its expanded x^102 term. */
+static int64_t poly_max_int_exponent(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return 0;
+    int64_t best = 0;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.arg_count == 2
+        && e->data.function.args[1]->type == EXPR_INTEGER) {
+        int64_t v = e->data.function.args[1]->data.integer;
+        if (v > best) best = v;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        int64_t v = poly_max_int_exponent(e->data.function.args[i]);
+        if (v > best) best = v;
+    }
+    int64_t hv = poly_max_int_exponent(e->data.function.head);
+    if (hv > best) best = hv;
+    return best;
+}
+
 /* Option `Extension -> α`: factor over Q(α) using the QAUPoly         */
 /* machinery (see polynomialgcd_with_extension above).  `Extension ->   */
 /* None` is accepted and treated as the default (no extension).         */
@@ -2142,6 +2220,25 @@ Expr* builtin_polynomialgcd(Expr* res) {
             if (alpha_auto) expr_free(alpha_auto);
             if (auto_tower) qa_tower_free(auto_tower);
             return fg;
+        }
+        /* Plain rational Q[x_1..x_n] GCD via FLINT fmpq_mpoly_gcd.  The classical
+         * pseudo-remainder / content path below carries int64 coefficients that
+         * overflow on dense, large-coefficient polynomials (e.g. the expanded
+         * (x+2)^40 and 40(x+2)^39 that Together/Cancel and the Risch integrator
+         * produce), silently returning only the content GCD (=1).  FLINT is
+         * exact and fast there; it declines (NULL) for parametric / algebraic
+         * rings, falling through to the classical structural path (which still
+         * handles factored inputs without expanding). */
+        if (!alpha && !auto_flag
+            && (poly_max_int_exponent(res->data.function.args[0]) >= 32
+                || poly_max_int_exponent(res->data.function.args[1]) >= 32)) {
+            Expr* fg2 = flint_multivariate_gcd_normalized(
+                res->data.function.args[0], res->data.function.args[1]);
+            if (fg2) {
+                if (alpha_auto) expr_free(alpha_auto);
+                if (auto_tower) qa_tower_free(auto_tower);
+                return fg2;
+            }
         }
     }
 #endif

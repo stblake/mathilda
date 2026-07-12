@@ -158,11 +158,34 @@ Expr* expr_expand_patt(Expr* e, Expr* patt) {
     if (strcmp(head, "Power") == 0 && e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp = e->data.function.args[1];
-        if (exp->type == EXPR_INTEGER && exp->data.integer > 0 && exp->data.integer < 100) {
+        if (exp->type == EXPR_INTEGER && exp->data.integer > 0) {
+            int64_t n = exp->data.integer;
             Expr* exp_base = expr_expand_patt(base, patt);
-            Expr* res = power_expand(exp_base, exp->data.integer);
+            /* Gate on the ESTIMATED result size, not a flat exponent cap: an
+             * m-term base raised to n expands to C(n+m-1, m-1) terms.  For a
+             * binomial (m = 2) that is just n + 1, so (x + 2)^102 (needed by the
+             * high-degree Risch denominators) expands cheaply, while a 5-term
+             * base at n = 100 (~4.5M terms) stays factored.  Replaces the former
+             * arbitrary `n < 100` ceiling. */
+            long m = 1;
+            if (exp_base->type == EXPR_FUNCTION
+                && exp_base->data.function.head->type == EXPR_SYMBOL
+                && strcmp(exp_base->data.function.head->data.symbol, "Plus") == 0)
+                m = (long)exp_base->data.function.arg_count;
+            bool do_expand = (m <= 1);
+            if (!do_expand) {
+                double est = 1.0;                 /* C(n+m-1, m-1), overflow-safe */
+                for (long i = 1; i <= m - 1 && est <= 2.0e5; i++)
+                    est *= (double)(n + i) / (double)i;
+                do_expand = (est <= 2.0e5);
+            }
+            if (do_expand) {
+                Expr* res = power_expand(exp_base, n);
+                expr_free(exp_base);
+                return res;
+            }
             expr_free(exp_base);
-            return res;
+            return expr_copy(e);
         }
         // For negative integer or non-integer power, we still don't go into subexpressions
         return expr_copy(e);

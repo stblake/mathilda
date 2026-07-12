@@ -372,7 +372,7 @@ Expr* flint_multivariate_gcd_normalized(const Expr* a, const Expr* b) {
 /* Multivariate exact division a / b over Q[x_1..x_n]. Returns the quotient
  * when b divides a exactly, NULL otherwise (or out of scope). Mirrors
  * flint_multivariate_gcd's recognition/conversion; uses fmpq_mpoly_divides. */
-static Expr* flint_multivariate_divexact(const Expr* a, const Expr* b) {
+Expr* flint_multivariate_divexact(const Expr* a, const Expr* b) {
     if (!a || !b) return NULL;
 
     VarSet vs;

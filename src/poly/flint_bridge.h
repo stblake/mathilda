@@ -55,6 +55,12 @@ Expr* flint_multivariate_gcd(const Expr* a, const Expr* b);
  */
 Expr* flint_multivariate_gcd_normalized(const Expr* a, const Expr* b);
 
+/* Exact division a / b over Q[x_1..x_n]: the quotient when b divides a exactly,
+ * else NULL (inexact, or out of scope — parametric / algebraic coefficients).
+ * Fast and overflow-free (fmpq_mpoly_divides); bypasses the classical
+ * pseudo-division that is quadratic-plus on dense, large-coefficient inputs. */
+Expr* flint_multivariate_divexact(const Expr* a, const Expr* b);
+
 /*
  * Univariate GCD over a real quadratic number field Q(sqrt d) (M2, p=0, r=1).
  *
