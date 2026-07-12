@@ -78,11 +78,84 @@ static void test_integrate_hypertangent_poly(void) {
 #undef IHP
 }
 
+/* ---- The §5.10 certificate p - D[q] - c D(t^2+1)/(t^2+1) in k --------- */
+/* IntegrateHypertangentPolynomial's output {q, c} satisfies (*): the residual
+ * is an element of k, i.e. FREE OF t (it need NOT be zero — a nonzero constant
+ * is the leftover base-field integrand ∫(element of k)). */
+static void run_certificate(const char* p, const char* deriv) {
+    char buf[4096];
+    snprintf(buf, sizeof buf,
+        "FreeQ[Expand[Together["
+        "(%s) - Risch`Derivation[Risch`IntegrateHypertangentPolynomial[%s, t, %s][[1]], %s] "
+        "- Risch`IntegrateHypertangentPolynomial[%s, t, %s][[2]] "
+        "Risch`Derivation[t^2 + 1, %s]/(t^2 + 1)]], t]",
+        p, p, deriv, deriv, p, deriv, deriv);
+    run_test(buf, "True");
+}
+
+/* ---- Higher-degree p and the Dc = 0 / Dc != 0 boundary ---------------- */
+static void test_hypertangent_higher_degree(void) {
+    /* The §5.10 certificate holds for a range of pure-t polynomials. */
+    run_certificate("t^3", HT);
+    run_certificate("t^4", HT);
+    run_certificate("t^5", HT);
+    run_certificate("t^6", HT);
+    run_certificate("t^4 + t^2 + 1", HT);
+    run_certificate("t^3 + 2 t^2 + t", HT);
+
+    /* Concrete values: ∫ t^3 -> {t^2/2, -1/2} (c constant: Dc = 0, elementary). */
+    run_zero("Risch`IntegrateHypertangentPolynomial[t^3, t, " HT "][[1]] - t^2/2");
+    run_zero("Risch`IntegrateHypertangentPolynomial[t^3, t, " HT "][[2]] + 1/2");
+    run_test("D[Risch`IntegrateHypertangentPolynomial[t^3, t, " HT "][[2]], x]", "0");
+    /* ∫ t^4 -> {-t + t^3/3, 0}. */
+    run_zero("Risch`IntegrateHypertangentPolynomial[t^4, t, " HT "][[1]] - (-t + t^3/3)");
+    run_test("Risch`IntegrateHypertangentPolynomial[t^4, t, " HT "][[2]]", "0");
+
+    /* Elementary: ∫ x t^2 -> {t x, -1/2}; the log coefficient is constant, Dc = 0. */
+    run_test("D[Risch`IntegrateHypertangentPolynomial[x t^2, t, " HT "][[2]], x]", "0");
+    /* Non-elementary boundary: the LINEAR-in-t term x t forces c = (x-1)/2, so
+     * Dc = 1/2 != 0 (the coefficient of the log term must be constant for an
+     * elementary integral — Liouville). */
+    run_test("D[Risch`IntegrateHypertangentPolynomial[x t^2 + x t, t, " HT "][[2]], x]", "Rational[1, 2]");
+    run_certificate("x t^2 + t^2 + x t + 1", HT);
+}
+
+/* ---- Scaling a: tan(a x), Dt = a (1 + t^2) ---------------------------- */
+static void test_hypertangent_scaling(void) {
+    /* ∫ t with Dt = a(1+t^2) -> c = 1/(2a): a=1 -> 1/2, a=2 -> 1/4, a=3 -> 1/6. */
+    run_test("Risch`IntegrateHypertangentPolynomial[t, t, {x -> 1, t -> 1 + t^2}]",
+             "List[0, Rational[1, 2]]");
+    run_test("Risch`IntegrateHypertangentPolynomial[t, t, {x -> 1, t -> 2 (1 + t^2)}]",
+             "List[0, Rational[1, 4]]");
+    run_test("Risch`IntegrateHypertangentPolynomial[t, t, {x -> 1, t -> 3 (1 + t^2)}]",
+             "List[0, Rational[1, 6]]");
+    /* Certificate still holds for a = 3. */
+    run_certificate("t^3 + t", "{x -> 1, t -> 3 (1 + t^2)}");
+}
+
+/* ---- Robustness: non-hypertangent monomial + malformed input ---------- */
+static void test_hypertangent_robustness(void) {
+    /* Exponential monomial is NOT hypertangent (Dt = t, not a(t^2+1)). */
+    run_test("Head[Risch`IntegrateHypertangentPolynomial[t^2, t, {x -> 1, t -> t}]] "
+             "=== Risch`IntegrateHypertangentPolynomial", "True");
+    /* Log monomial is not hypertangent either. */
+    run_test("Head[Risch`IntegrateHypertangentPolynomial[t, t, {x -> 1, t -> 1/x}]] "
+             "=== Risch`IntegrateHypertangentPolynomial", "True");
+    /* Wrong arity / malformed derivation. */
+    run_test("Head[Risch`IntegrateHypertangentPolynomial[t, t]] "
+             "=== Risch`IntegrateHypertangentPolynomial", "True");
+    run_test("Head[Risch`IntegrateHypertangentPolynomial[t, t, {x, t}]] "
+             "=== Risch`IntegrateHypertangentPolynomial", "True");
+}
+
 int main(void) {
     core_init();
 
     TEST(test_polynomial_reduce);
     TEST(test_integrate_hypertangent_poly);
+    TEST(test_hypertangent_higher_degree);
+    TEST(test_hypertangent_scaling);
+    TEST(test_hypertangent_robustness);
 
     printf("All risch_hypertangent tests passed.\n");
     return 0;

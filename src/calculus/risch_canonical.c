@@ -276,6 +276,64 @@ static Expr* builtin_risch_polydivide(Expr* res) {
     return expr_new_function(expr_new_symbol("List"), (Expr*[]){ q, r }, 2);
 }
 
+/* Risch`FieldGCD[a, b, t] -> monic-in-t gcd of a, b over k = C(other vars). */
+static Expr* builtin_risch_fieldgcd(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    const Expr* a = res->data.function.args[0];
+    const Expr* b = res->data.function.args[1];
+    const Expr* t = res->data.function.args[2];
+    if (t->type != EXPR_SYMBOL) return NULL;
+    return risch_field_gcd_t(a, b, t);
+}
+
+/* Risch`DivExact[a, b, t] -> a/b when it is a polynomial in t (else unevaluated). */
+static Expr* builtin_risch_divexact(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    const Expr* a = res->data.function.args[0];
+    const Expr* b = res->data.function.args[1];
+    const Expr* t = res->data.function.args[2];
+    if (t->type != EXPR_SYMBOL) return NULL;
+    return risch_field_divexact_t(a, b, t);   /* NULL when the quotient is not in k[t] */
+}
+
+/* Risch`NumDen[f, t] -> {a, d} with a/d = f, d monic in t (numerator/denominator
+ * of f as a rational function in t over k). */
+static Expr* builtin_risch_numden(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    const Expr* f = res->data.function.args[0];
+    const Expr* t = res->data.function.args[1];
+    if (t->type != EXPR_SYMBOL) return NULL;
+    Expr* a = NULL; Expr* den = NULL;
+    risch_field_num_den_t(f, t, &a, &den);
+    return expr_new_function(expr_new_symbol("List"), (Expr*[]){ a, den }, 2);
+}
+
+/* Risch`ExtendedEuclidean[a, b, t] -> {g, u, v} with u a + v b = g in k[t]. */
+static Expr* builtin_risch_xgcd(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    const Expr* a = res->data.function.args[0];
+    const Expr* b = res->data.function.args[1];
+    const Expr* t = res->data.function.args[2];
+    if (t->type != EXPR_SYMBOL) return NULL;
+    Expr* g = NULL; Expr* u = NULL; Expr* v = NULL;
+    risch_field_xgcd_t(a, b, t, &g, &u, &v);
+    return expr_new_function(expr_new_symbol("List"), (Expr*[]){ g, u, v }, 3);
+}
+
+/* Risch`Diophantine[dn, ds, r, t] -> {b, c} with b dn + c ds = r, deg_t(b) <
+ * deg_t(ds), for coprime dn, ds (Bronstein §3.5 / ExtendedEuclidean corollary). */
+static Expr* builtin_risch_diophantine(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 4) return NULL;
+    const Expr* dn = res->data.function.args[0];
+    const Expr* ds = res->data.function.args[1];
+    const Expr* r  = res->data.function.args[2];
+    const Expr* t  = res->data.function.args[3];
+    if (t->type != EXPR_SYMBOL) return NULL;
+    Expr* b = NULL; Expr* c = NULL;
+    risch_field_diophantine_t(dn, ds, r, t, &b, &c);
+    return expr_new_function(expr_new_symbol("List"), (Expr*[]){ b, c }, 2);
+}
+
 /* Risch`PolynomialReduce[p, t, deriv] -> {q, r} with p = D[q] + r,
  * deg_t(r) < deg_t(Dt) (Bronstein §5.4, nonlinear monomial). */
 static Expr* builtin_risch_polynomialreduce(Expr* res) {
@@ -336,6 +394,22 @@ void integrate_risch_canonical_init(void) {
         "Risch`PolyDivide[a, b, t] returns {q, r} with a = q b + r and\n"
         "deg_t(r) < deg_t(b), dividing in k[t] over the field of the other\n"
         "variables (the coefficient ring C(x, ...) is treated as a field).");
+    rc_install("Risch`FieldGCD", builtin_risch_fieldgcd,
+        "Risch`FieldGCD[a, b, t] returns the monic-in-t gcd of a and b over the\n"
+        "field k = C(other variables): pure-k factors are units, so the result is\n"
+        "1 when a and b share only a factor free of t.");
+    rc_install("Risch`DivExact", builtin_risch_divexact,
+        "Risch`DivExact[a, b, t] returns the exact quotient a/b when it is a\n"
+        "polynomial in t over k, and stays unevaluated otherwise.");
+    rc_install("Risch`NumDen", builtin_risch_numden,
+        "Risch`NumDen[f, t] returns {a, d} with a/d = f, d monic in t: the\n"
+        "numerator and denominator of f as a rational function in t over k.");
+    rc_install("Risch`ExtendedEuclidean", builtin_risch_xgcd,
+        "Risch`ExtendedEuclidean[a, b, t] returns {g, u, v} with u a + v b = g,\n"
+        "the extended gcd in k[t] over the field of the other variables.");
+    rc_install("Risch`Diophantine", builtin_risch_diophantine,
+        "Risch`Diophantine[dn, ds, r, t] returns {b, c} with b dn + c ds = r and\n"
+        "deg_t(b) < deg_t(ds), for coprime dn, ds in k[t].");
     rc_install("Risch`PolynomialReduce", builtin_risch_polynomialreduce,
         "Risch`PolynomialReduce[p, t, deriv] returns {q, r} with p = D[q] + r and\n"
         "deg_t(r) < deg_t(Dt), for a nonlinear monomial t (deg_t(Dt) >= 2) of the\n"

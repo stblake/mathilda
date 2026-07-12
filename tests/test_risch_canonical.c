@@ -173,6 +173,105 @@ static void test_canonical_representation(void) {
     run_test("Risch`NormalQ[Denominator[Together[" CRTAN "[[3]]]], t, " TAND "]", "True");
 }
 
+/* ---- SplitFactor: edge cases + the defining property ------------------ */
+#define LOGD "{x -> 1, t -> 1/x}"
+static void test_split_factor_edge(void) {
+    /* Pure special (exp): SplitFactor[t^3] = {1, t^3}. */
+    run_test("First[Risch`SplitFactor[t^3, t, " EXPD "]]", "1");
+    run_zero("Last[Risch`SplitFactor[t^3, t, " EXPD "]] - t^3");
+    /* Pure normal (exp): SplitFactor[t^2 + 1] = {t^2 + 1, 1}. */
+    run_test("Last[Risch`SplitFactor[t^2 + 1, t, " EXPD "]]", "1");
+    /* Constant: SplitFactor[5] = {5, 1}. */
+    run_test("First[Risch`SplitFactor[5, t, " EXPD "]]", "5");
+    run_test("Last[Risch`SplitFactor[5, t, " EXPD "]]", "1");
+    /* Mixed exp: t^2 (t - 1) -> normal t - 1, special t^2. */
+    run_zero("First[Risch`SplitFactor[t^2 (t - 1), t, " EXPD "]] - (t - 1)");
+    run_zero("Last[Risch`SplitFactor[t^2 (t - 1), t, " EXPD "]] - t^2");
+
+    /* DEFINING PROPERTY over a deeper exp case p = t^3 (t^2 + 1)^2:
+     * p_n p_s = p, p_s special, p_n has no non-constant special factor. */
+#define PDEEP "(t^3 (t^2 + 1)^2)"
+    run_zero("First[Risch`SplitFactor[" PDEEP ", t, " EXPD "]] "
+             "Last[Risch`SplitFactor[" PDEEP ", t, " EXPD "]] - " PDEEP);
+    run_test("Risch`SpecialQ[Last[Risch`SplitFactor[" PDEEP ", t, " EXPD "]], t, " EXPD "]", "True");
+    run_test("Risch`SpecialQ[First[Risch`SplitFactor[" PDEEP ", t, " EXPD "]], t, " EXPD "]", "False");
+    run_zero("Last[Risch`SplitFactor[" PDEEP ", t, " EXPD "]] - t^3");
+#undef PDEEP
+
+    /* Hypertangent with multiplicity: t (t^2 + 1)^2 -> normal t, special (t^2+1)^2. */
+    run_zero("First[Risch`SplitFactor[t (t^2 + 1)^2, t, " TAND "]] - t");
+    run_zero("Last[Risch`SplitFactor[t (t^2 + 1)^2, t, " TAND "]] - (t^2 + 1)^2");
+    run_test("Risch`SpecialQ[Last[Risch`SplitFactor[t (t^2 + 1)^2, t, " TAND "]], t, " TAND "]", "True");
+}
+
+/* ---- SplitSquarefreeFactor: three distinct multiplicities ------------- */
+static void test_split_squarefree_edge(void) {
+    /* Exp, all-normal: p = (t-1)(t-2)^2 (t-3)^3, multiplicities 1,2,3. */
+#define P3 "((t - 1)(t - 2)^2 (t - 3)^3)"
+#define SSF3 "Risch`SplitSquarefreeFactor[" P3 ", t, " EXPD "]"
+    run_test("Length[" SSF3 "[[1]]]", "3");
+    /* Reconstruction N1 N2^2 N3^3 = p (monic; content = 1). */
+    run_zero(SSF3 "[[1, 1]] " SSF3 "[[1, 2]]^2 " SSF3 "[[1, 3]]^3 - " P3);
+    /* Monic squarefree normal factors. */
+    run_zero(SSF3 "[[1, 1]] - (t - 1)");
+    run_zero(SSF3 "[[1, 2]] - (t - 2)");
+    run_zero(SSF3 "[[1, 3]] - (t - 3)");
+    /* No special factors (all-normal): each S_i = 1. */
+    run_test(SSF3 "[[2, 1]]", "1");
+    run_test(SSF3 "[[2, 2]]", "1");
+    run_test(SSF3 "[[2, 3]]", "1");
+    /* Each normal factor is normal. */
+    run_test("Risch`NormalQ[" SSF3 "[[1, 1]], t, " EXPD "]", "True");
+    run_test("Risch`NormalQ[" SSF3 "[[1, 3]], t, " EXPD "]", "True");
+#undef SSF3
+#undef P3
+}
+
+/* ---- CanonicalRepresentation across all monomial kinds ---------------- */
+static void test_canonical_all_kinds(void) {
+    /* Hypertangent, all three parts non-zero:
+     * f = t + (2t+1)/(t^2+1) + 1/(t-1)  ->  {t, (2t+1)/(t^2+1), 1/(t-1)}. */
+#define FT "(t + (2 t + 1)/(t^2 + 1) + 1/(t - 1))"
+#define CT "Risch`CanonicalRepresentation[" FT ", t, " TAND "]"
+    run_zero(CT "[[1]] + " CT "[[2]] + " CT "[[3]] - " FT);   /* reconstruction */
+    run_zero(CT "[[1]] - t");                                  /* f_p */
+    run_zero(CT "[[2]] - (2 t + 1)/(t^2 + 1)");                /* f_s (special denom) */
+    run_zero(CT "[[3]] - 1/(t - 1)");                          /* f_n (normal denom) */
+    run_test("Risch`SpecialQ[Denominator[Together[" CT "[[2]]]], t, " TAND "]", "True");
+    run_test("Risch`NormalQ[Denominator[Together[" CT "[[3]]]], t, " TAND "]", "True");
+#undef CT
+#undef FT
+
+    /* Log/primitive: NOTHING is special, so f_s = 0 always.
+     * f = t^2 + (t+1)/(t^2+1) -> {t^2, 0, (t+1)/(t^2+1)}. */
+#define FL "(t^2 + (t + 1)/(t^2 + 1))"
+#define CL "Risch`CanonicalRepresentation[" FL ", t, " LOGD "]"
+    run_zero(CL "[[1]] + " CL "[[2]] + " CL "[[3]] - " FL);
+    run_zero(CL "[[1]] - t^2");
+    run_zero(CL "[[2]]");                                      /* f_s = 0 */
+    run_zero(CL "[[3]] - (t + 1)/(t^2 + 1)");
+#undef CL
+#undef FL
+
+    /* Special-only (exp): f = (2t+3)/t^2 -> f_p = 0, f_n = 0. */
+    run_zero("Risch`CanonicalRepresentation[(2 t + 3)/t^2, t, " EXPD "][[1]]");
+    run_zero("Risch`CanonicalRepresentation[(2 t + 3)/t^2, t, " EXPD "][[3]]");
+    run_zero("Risch`CanonicalRepresentation[(2 t + 3)/t^2, t, " EXPD "][[2]] - (2 t + 3)/t^2");
+
+    /* Normal-only (exp): f = 1/(t^2+1) -> f_p = 0, f_s = 0. */
+    run_zero("Risch`CanonicalRepresentation[1/(t^2 + 1), t, " EXPD "][[1]]");
+    run_zero("Risch`CanonicalRepresentation[1/(t^2 + 1), t, " EXPD "][[2]]");
+    run_zero("Risch`CanonicalRepresentation[1/(t^2 + 1), t, " EXPD "][[3]] - 1/(t^2 + 1)");
+}
+
+/* ---- Robustness: malformed input stays unevaluated -------------------- */
+static void test_canonical_robustness(void) {
+    run_test("Head[Risch`SplitFactor[t, t, {x, t}]] === Risch`SplitFactor", "True");
+    run_test("Head[Risch`CanonicalRepresentation[t, t, {x, t}]] === Risch`CanonicalRepresentation", "True");
+    run_test("Head[Risch`SplitFactor[t, 5, " EXPD "]] === Risch`SplitFactor", "True");  /* t not symbol */
+    run_test("Head[Risch`NormalQ[t, t]] === Risch`NormalQ", "True");                     /* wrong arity */
+}
+
 int main(void) {
     core_init();
 
@@ -184,6 +283,10 @@ int main(void) {
     TEST(test_log_monomial);
     TEST(test_polydivide);
     TEST(test_canonical_representation);
+    TEST(test_split_factor_edge);
+    TEST(test_split_squarefree_edge);
+    TEST(test_canonical_all_kinds);
+    TEST(test_canonical_robustness);
 
     printf("All risch_canonical tests passed.\n");
     return 0;

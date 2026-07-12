@@ -922,6 +922,10 @@ target_include_directories(backtrack_tests PRIVATE ../src)
 add_executable(poly_tests test_poly.c ${COMMON_SRC})
 target_include_directories(poly_tests PRIVATE ../src)
 
+add_executable(risch_field_tests test_risch_field.c ${COMMON_SRC})
+target_include_directories(risch_field_tests PRIVATE ../src ../src/calculus)
+add_test(NAME risch_field_tests COMMAND risch_field_tests)
+
 add_executable(risch_canonical_tests test_risch_canonical.c ${COMMON_SRC})
 target_include_directories(risch_canonical_tests PRIVATE ../src ../src/calculus)
 add_test(NAME risch_canonical_tests COMMAND risch_canonical_tests)

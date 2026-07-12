@@ -93,6 +93,53 @@ static void test_mixed_tower(void) {
 #undef MIX
 }
 
+/* ---- RationalSpan: more coefficient shapes ---------------------------- */
+static void test_rational_span_more(void) {
+    /* Negative and mixed-sign rational coefficients. */
+    run_test("Risch`RationalSpan[5/x - 2/(x + 1), {1/x, 1/(x + 1)}, {x}]", "List[5, -2]");
+    run_test("Risch`RationalSpan[-1/x, {1/x}, {x}]", "List[-1]");
+    run_test("Risch`RationalSpan[1/(3 x) + 1/(2 (x + 1)), {1/x, 1/(x + 1)}, {x}]",
+             "List[Rational[1, 3], Rational[1, 2]]");
+    /* Three generators. */
+    run_test("Risch`RationalSpan[1/x + 1/(x + 1) + 1/(x + 2), "
+             "{1/x, 1/(x + 1), 1/(x + 2)}, {x}]", "List[1, 1, 1]");
+    /* Not in the span: an independent generator is missing. */
+    run_test("Risch`RationalSpan[1/(x + 2), {1/x, 1/(x + 1)}, {x}]", "False");
+    /* Zero target -> the zero combination. */
+    run_test("Risch`RationalSpan[0, {1/x, 1/(x + 1)}, {x}]", "List[0, 0]");
+}
+
+/* ---- Deeper towers + nested logs/exponentials ------------------------- */
+static void test_deep_tower(void) {
+    /* 3-deep tower {t1 = log x, t2 = log(x+1), t3 = exp x}. */
+#define T3 "{{t1, \"Log\", 1/x}, {t2, \"Log\", 1/(x + 1)}, {t3, \"Exp\", t3}}"
+    /* log(x(x+1)) = log x + log(x+1) -> {1, 1, 0}. */
+    run_test("Risch`LogReducible[x (x + 1), x, " T3 "]", "List[1, 1, 0]");
+    /* log(x^2(x+1)) = 2 log x + log(x+1) -> {2, 1, 0}. */
+    run_test("Risch`LogReducible[x^2 (x + 1), x, " T3 "]", "List[2, 1, 0]");
+    /* exp(2x) = exp(x)^2 -> {0, 0, 2}. */
+    run_test("Risch`ExpReducible[2 x, x, " T3 "]", "List[0, 0, 2]");
+    /* exp(x + log x + log(x+1)) reducible -> {1, 1, 1}. */
+    run_test("Risch`ExpReducible[x + t1 + t2, x, " T3 "]", "List[1, 1, 1]");
+    /* Genuinely new: log(x^2+1) is not a Q-combination of the log generators. */
+    run_test("Risch`LogReducible[x^2 + 1, x, " T3 "]", "False");
+    /* Genuinely new: exp(x^2). */
+    run_test("Risch`ExpReducible[x^2, x, " T3 "]", "False");
+#undef T3
+
+    /* Nested log(log x): over the tower {t1 = log x}, log(t1) is a NEW monomial
+     * (Da/a = (1/x)/t1 is not in the Q-span of {1/x}). */
+    run_test("Risch`LogReducible[t1, x, {{t1, \"Log\", 1/x}}]", "False");
+    /* Nested exp(exp x): over {t3 = exp x}, exp(t3) is NEW (Db = t3 not const). */
+    run_test("Risch`ExpReducible[t3, x, {{t3, \"Exp\", t3}}]", "False");
+}
+
+/* ---- Robustness ------------------------------------------------------- */
+static void test_structure_robustness(void) {
+    run_test("Head[Risch`LogReducible[x]] === Risch`LogReducible", "True");        /* arity */
+    run_test("Head[Risch`RationalSpan[1/x, {1/x}]] === Risch`RationalSpan", "True");/* arity */
+}
+
 int main(void) {
     core_init();
 
@@ -100,6 +147,9 @@ int main(void) {
     TEST(test_log_reducible);
     TEST(test_exp_reducible);
     TEST(test_mixed_tower);
+    TEST(test_rational_span_more);
+    TEST(test_deep_tower);
+    TEST(test_structure_robustness);
 
     printf("All risch_structure tests passed.\n");
     return 0;
