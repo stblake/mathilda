@@ -232,7 +232,8 @@ void graphics_init(void) {
         "AspectRatio, PlotStyle, Axes, AxesLabel, AxesOrigin, AxesStyle, "
         "TicksStyle, LabelStyle, Frame, FrameLabel, FrameStyle, FrameTicks, "
         "RotateLabel, GridLines, GridLinesStyle, Prolog, Epilog, PlotLabel, "
-        "Background, ImageSize, ColorFunction (a function, or \"Rainbow\"), "
+        "Background, ImageSize, ColorFunction (a function, or named ramp: "
+        "\"Rainbow\"/\"CoolTones\"/\"WarmTones\"/\"Greyscale\"/\"Temperature\"), "
         "ColorFunctionScaling (default True), Filling (Axis/Bottom/Top/a "
         "number), FillingStyle, PlotLegends (Automatic/\"Expressions\"/an "
         "explicit list), RegionFunction, Exclusions.");
@@ -317,8 +318,9 @@ void graphics_init(void) {
         "\t                     False/None: lines only. Automatic (default): shade when\n"
         "\t                     ColorFunction is set, otherwise lines only.\n"
         "\t  ColorFunction    - A function f[t] → color (t in [0,1] after scaling), or\n"
-        "\t                     a string: \"Rainbow\" (Hue ramp) or \"Temperature\" (blue-\n"
-        "\t                     cyan-yellow-red). Applied to shading and auto line colors.\n"
+        "\t                     a named ramp string: \"Rainbow\", \"Temperature\",\n"
+        "\t                     \"CoolTones\", \"WarmTones\", \"Greyscale\".\n"
+        "\t                     Applied to shading and auto line colors.\n"
         "\t  ColorFunctionScaling - True (default): normalise z to [0,1] before calling\n"
         "\t                         ColorFunction. False: pass raw z.\n"
         "\t  PlotPoints       - Grid resolution per axis (default 25; increase for\n"
@@ -386,6 +388,117 @@ void graphics_init(void) {
         "\t(radial circles + angle labels). Currently accepted but not yet\n"
         "\trendered; Cartesian axes are drawn instead.");
 
+    symtab_add_builtin("DensityPlot", builtin_densityplot);
+    symtab_get_def("DensityPlot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("DensityPlot",
+        "DensityPlot[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]\n"
+        "\tRenders f(x,y) as a heatmap: each grid cell is coloured by its\n"
+        "\tfunction value via ColorFunction (default: thermal blue→yellow ramp).\n"
+        "\tDensityPlot is HoldAll: f is held unevaluated until x and y are\n"
+        "\tbound to numeric values. Returns a Graphics[...] object.\n"
+        "\n"
+        "\tOptions:\n"
+        "\t  PlotPoints          grid resolution per axis (default 50)\n"
+        "\t  ColorFunction       named ramp string or f[t]→color (t in [0,1]).\n"
+        "\t                      Ramps: \"Rainbow\", \"CoolTones\", \"WarmTones\",\n"
+        "\t                      \"Greyscale\", \"Temperature\" (all keyed to\n"
+        "\t                      normalised z value, t∈[0,1])\n"
+        "\t  ColorFunctionScaling True (default): normalise z to [0,1] before\n"
+        "\t                       calling ColorFunction; False: pass raw z\n"
+        "\t  RegionFunction      f[x,y] mask; excluded cells are not drawn\n"
+        "\t  PlotLegends         Automatic: attach a vertical color scale bar\n"
+        "\t  Standard Graphics options (Axes, AspectRatio→1, Frame, PlotRange,\n"
+        "\t  AxesLabel, GridLines, ImageSize, Background, PlotLabel, …) pass\n"
+        "\t  through to the Graphics[...] result.");
+
+    symtab_add_builtin("BarChart", builtin_barchart);
+    symtab_get_def("BarChart")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("BarChart",
+        "BarChart[{v1, v2, ..., vn}, opts...]\n"
+        "\tDraws a vertical bar chart: n bars at x = 1..n with heights v1..vn.\n"
+        "BarChart[{{v1,...}, {w1,...}, ...}, opts...]\n"
+        "\tMultiple grouped datasets, each in a distinct palette colour.\n"
+        "\n"
+        "\tOptions:\n"
+        "\t  ChartStyle    color/style list cycling through bars (default: palette)\n"
+        "\t  ChartLabels   list of x-axis tick labels\n"
+        "\t  BarSpacing    gap fraction of bar width (default 0.2)\n"
+        "\t  Standard Graphics options (Axes, AspectRatio, Frame, PlotRange,\n"
+        "\t  PlotLabel, Background, ImageSize, …) pass through.");
+
+    symtab_add_builtin("Histogram", builtin_histogram);
+    symtab_get_def("Histogram")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Histogram",
+        "Histogram[data, opts...]\n"
+        "\tBins the numeric values in data and draws a frequency histogram.\n"
+        "\tBin count defaults to Sturges' rule: ceil(Log2[n]) + 1.\n"
+        "Histogram[data, k, opts...]\n"
+        "\tk equal-width bins.\n"
+        "Histogram[data, {step}, opts...]\n"
+        "\tBins of width step.\n"
+        "Histogram[data, {min, max, step}, opts...]\n"
+        "\tExplicit range and width.\n"
+        "\n"
+        "\tOptions:\n"
+        "\t  ChartStyle   color/style list cycling through bins\n"
+        "\t  BarSpacing   gap fraction of bin width (default 0.2)\n"
+        "\t  Standard Graphics options pass through.");
+
+    /* Option keyword inerts for BarChart/Histogram. */
+    symtab_get_def("BarSpacing")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("BarSpacing",
+        "BarSpacing\n\tBarChart/Histogram option: gap between bars as a fraction\n"
+        "\tof bar width (default 0.2). 0 = touching bars; 1 = all gap.");
+    symtab_get_def("ChartStyle")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ChartStyle",
+        "ChartStyle\n\tBarChart/Histogram option: color or list of colors cycling\n"
+        "\tthrough bars. Defaults to the standard palette.");
+    symtab_get_def("ChartLabels")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ChartLabels",
+        "ChartLabels\n\tBarChart option: list of label expressions drawn below\n"
+        "\teach bar on the x-axis.");
+
+    symtab_add_builtin("VectorPlot", builtin_vectorplot);
+    symtab_get_def("VectorPlot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("VectorPlot",
+        "VectorPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}, opts...]\n"
+        "\tDraws a grid of arrows showing the direction (and optionally\n"
+        "\tmagnitude) of the vector field {vx, vy} at each grid point.\n"
+        "\tVectorPlot is HoldAll: vx, vy are held unevaluated until x and y\n"
+        "\tare bound to numeric values. Returns a Graphics[...] object.\n"
+        "\n"
+        "\tOptions:\n"
+        "\t  VectorPoints   integer n → n×n grid (default 15); Automatic = 15\n"
+        "\t  VectorScale    Automatic: equal-length arrows (direction only)\n"
+        "\t                 None: proportional to magnitude\n"
+        "\t                 real f: arrow length = f × grid spacing\n"
+        "\t  VectorStyle    style directive(s) applied to all arrows\n"
+        "\t  ColorFunction  named ramp string (keyed to speed) or\n"
+        "\t                 f[vx,vy,speed]/f[speed]→color.\n"
+        "\t                 Ramps: \"Rainbow\", \"CoolTones\", \"WarmTones\",\n"
+        "\t                 \"Greyscale\", \"Temperature\"\n"
+        "\t  ColorFunctionScaling  True (default): normalise speed to [0,1]\n"
+        "\t  RegionFunction f[x,y] mask: skip grid points outside the region\n"
+        "\t  Standard Graphics options (Axes, AspectRatio→1, Frame, PlotRange,\n"
+        "\t  AxesLabel, GridLines, ImageSize, Background, PlotLabel, …) pass\n"
+        "\t  through to the Graphics[...] result.");
+
+    /* Option keyword inerts for VectorPlot. */
+    symtab_get_def("VectorPoints")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("VectorPoints",
+        "VectorPoints\n\tVectorPlot option: integer n specifies an n×n seed grid\n"
+        "\t(default 15). Automatic also uses 15.");
+    symtab_get_def("VectorScale")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("VectorScale",
+        "VectorScale\n\tVectorPlot option: controls arrow length.\n"
+        "\t  Automatic (default): all arrows drawn at equal length (direction only)\n"
+        "\t  None: length proportional to field magnitude\n"
+        "\t  real f: arrow length = f × grid spacing");
+    symtab_get_def("VectorStyle")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("VectorStyle",
+        "VectorStyle\n\tVectorPlot option: style directive(s) (RGBColor, Thickness, …)\n"
+        "\tapplied globally to all arrows. Overrides per-arrow ColorFunction.");
+
     symtab_add_builtin("StreamPlot", builtin_streamplot);
     symtab_get_def("StreamPlot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_set_docstring("StreamPlot",
@@ -402,7 +515,9 @@ void graphics_init(void) {
         "\t  StreamStyle   – Style directive(s) applied to all streams.\n"
         "\t  StreamColorFunction / ColorFunction\n"
         "\t                 – f[x,y,vx,vy,speed] (or fewer args) returning a color,\n"
-        "\t                   or \"Rainbow\" (hue = scaled speed).\n"
+        "\t                   or a named ramp: \"Rainbow\", \"CoolTones\",\n"
+        "\t                   \"WarmTones\", \"Greyscale\", \"Temperature\"\n"
+        "\t                   (all keyed to scaled speed).\n"
         "\t  RegionFunction – f[x,y] mask; seeds outside the region are skipped.\n"
         "\t  PlotLegends   – Automatic / \"Expressions\" / explicit label list.\n"
         "\t  Standard Graphics options (PlotRange, Axes, AspectRatio, Frame, …)\n"

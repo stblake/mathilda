@@ -16,6 +16,9 @@
 #include "polarplot.h"
 #include "streamplot.h"
 #include "contourplot.h"
+#include "densityplot.h"
+#include "barchart.h"
+#include "vectorplot.h"
 #include "show.h"
 
 void graphics_init(void);

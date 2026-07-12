@@ -696,11 +696,22 @@ const char* SYM_StreamScale = NULL;
 const char* SYM_StreamStyle = NULL;
 const char* SYM_StreamColorFunction = NULL;
 const char* SYM_StreamColorBar = NULL;
+const char* SYM_BarChartLabels = NULL;
 const char* SYM_ContourPlot = NULL;
 const char* SYM_Contours = NULL;
 const char* SYM_ContourStyle = NULL;
 const char* SYM_ContourLabels = NULL;
 const char* SYM_ContourShading = NULL;
+const char* SYM_DensityPlot = NULL;
+const char* SYM_BarChart = NULL;
+const char* SYM_Histogram = NULL;
+const char* SYM_BarSpacing = NULL;
+const char* SYM_ChartStyle = NULL;
+const char* SYM_ChartLabels = NULL;
+const char* SYM_VectorPlot = NULL;
+const char* SYM_VectorPoints = NULL;
+const char* SYM_VectorScale = NULL;
+const char* SYM_VectorStyle = NULL;
 
 void sym_names_init(void) {
     /* intern_symbol is idempotent and stable, so this can run multiple
@@ -1378,11 +1389,22 @@ void sym_names_init(void) {
     SYM_StreamStyle                = intern_symbol("StreamStyle");
     SYM_StreamColorFunction        = intern_symbol("StreamColorFunction");
     SYM_StreamColorBar             = intern_symbol("$StreamColorBar");
+    SYM_BarChartLabels             = intern_symbol("$BarChartLabels");
     SYM_ContourPlot                = intern_symbol("ContourPlot");
     SYM_Contours                   = intern_symbol("Contours");
     SYM_ContourStyle               = intern_symbol("ContourStyle");
     SYM_ContourLabels              = intern_symbol("ContourLabels");
     SYM_ContourShading             = intern_symbol("ContourShading");
+    SYM_DensityPlot                = intern_symbol("DensityPlot");
+    SYM_BarChart                   = intern_symbol("BarChart");
+    SYM_Histogram                  = intern_symbol("Histogram");
+    SYM_BarSpacing                 = intern_symbol("BarSpacing");
+    SYM_ChartStyle                 = intern_symbol("ChartStyle");
+    SYM_ChartLabels                = intern_symbol("ChartLabels");
+    SYM_VectorPlot                 = intern_symbol("VectorPlot");
+    SYM_VectorPoints               = intern_symbol("VectorPoints");
+    SYM_VectorScale                = intern_symbol("VectorScale");
+    SYM_VectorStyle                = intern_symbol("VectorStyle");
 
     /* System symbols that have no kernel implementation and no cached SYM_*
      * pointer, but must still be recognized as System` (not qualified into a

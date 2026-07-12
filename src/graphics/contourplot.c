@@ -38,16 +38,8 @@
 static Expr* contour_color(Expr* cfn, double t, double x, double y) {
     if (cfn) {
         if (cfn->type == EXPR_STRING) {
-            const char* nm = cfn->data.string;
-            if (strcmp(nm, "Rainbow") == 0) {
-                Expr* h_arg[1] = { expr_new_real(t * 0.8) };
-                return expr_new_function(expr_new_symbol(SYM_Hue), h_arg, 1);
-            }
-            if (strcmp(nm, "Temperature") == 0 || strcmp(nm, "Thermal") == 0) {
-                double rv, gv, bv; thermal_rgb(t, &rv, &gv, &bv);
-                Expr* a[3] = { expr_new_real(rv), expr_new_real(gv), expr_new_real(bv) };
-                return expr_new_function(expr_new_symbol(SYM_RGBColor), a, 3);
-            }
+            Expr* c = named_color_ramp(cfn->data.string, t);
+            if (c) return c;
         }
         /* Try f[t] then f[x,y,t] */
         static const int arities[] = { 1, 3 };
@@ -876,9 +868,12 @@ Expr* builtin_contourplot(Expr* res) {
         double bar_hi = isfinite(zmax) ? zmax : 1.0;
         if (bar_lo == bar_hi) bar_hi = bar_lo + 1.0;
         passthrough = realloc(passthrough, sizeof(Expr*) * (pt_count + 1));
-        Expr* cb_args[2] = { expr_new_real(bar_lo), expr_new_real(bar_hi) };
+        Expr* cfn_copy = co.color_function
+                         ? expr_copy(co.color_function)
+                         : expr_new_symbol(SYM_Automatic);
+        Expr* cb_args[3] = { expr_new_real(bar_lo), expr_new_real(bar_hi), cfn_copy };
         passthrough[pt_count++] =
-            expr_new_function(expr_new_symbol(SYM_StreamColorBar), cb_args, 2);
+            expr_new_function(expr_new_symbol(SYM_StreamColorBar), cb_args, 3);
     }
 
     Expr* prim_list = expr_new_function(expr_new_symbol(SYM_List), prims, nprim);

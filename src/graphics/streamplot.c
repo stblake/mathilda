@@ -75,11 +75,11 @@ static Expr* eval_stream_color(Expr* cfn,
                                double speed_min, double speed_max) {
     if (!cfn) return NULL;
 
-    if (cfn->type == EXPR_STRING && strcmp(cfn->data.string, "Rainbow") == 0) {
+    if (cfn->type == EXPR_STRING) {
         double t = (speed_max > speed_min)
             ? (speed - speed_min) / (speed_max - speed_min) : 0.5;
-        Expr* h_arg[1] = { expr_new_real(t * 0.8) }; /* 0 = red, 0.8 = violet */
-        return expr_new_function(expr_new_symbol(SYM_Hue), h_arg, 1);
+        Expr* c = named_color_ramp(cfn->data.string, t);
+        if (c) return c;
     }
 
     /* Try multi-arg forms, falling back to fewer args.
@@ -602,9 +602,12 @@ Expr* builtin_streamplot(Expr* res) {
                               || eval_legends->data.symbol == SYM_False));
         expr_free(eval_legends);
         if (want_legend) {
-            Expr* cb_args[2] = { expr_new_real(spd_min), expr_new_real(spd_max) };
+            Expr* cfn_copy = so.color_function
+                             ? expr_copy(so.color_function)
+                             : expr_new_symbol(SYM_Automatic);
+            Expr* cb_args[3] = { expr_new_real(spd_min), expr_new_real(spd_max), cfn_copy };
             color_bar_meta = expr_new_function(
-                expr_new_symbol(SYM_StreamColorBar), cb_args, 2);
+                expr_new_symbol(SYM_StreamColorBar), cb_args, 3);
         }
     }
 

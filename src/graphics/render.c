@@ -15,6 +15,7 @@
 #include "sym_names.h"
 #include "print.h"
 #include "eval.h"
+#include "plot_common.h"
 #include <raylib.h>
 #include <gmp.h>
 #ifdef USE_MPFR
@@ -892,7 +893,13 @@ static void draw_primitive(const Expr* node, DrawState* state) {
             label = owned ? owned : "";
         }
         float w = hershey_text_width(label, state->text_scale);
-        hershey_draw_text(label, (float)x - w / 2.0f, (float)(-y * state->yscale), state->text_scale, 0.0f, state->color);
+        /* Stroke thickness in world units: scale proportionally to the glyph
+         * size so caps never balloon to data-range scale.  The 0.5 factor
+         * matches hershey_draw_text_ex's cap_r = thickness*0.5 formula and
+         * keeps caps at ~1/14 of cap height, which is visually tight. */
+        float ws_thick = state->text_scale * 0.5f;
+        hershey_draw_text_ex(label, (float)x - w / 2.0f, (float)(-y * state->yscale),
+                             state->text_scale, 0.0f, state->color, ws_thick);
         if (owned) free(owned);
         return;
     }
@@ -1503,6 +1510,20 @@ static const Expr* find_legend_data(const Expr* graphics_expr) {
     return NULL;
 }
 
+/* Finds $BarChartLabels[{x1,label1},...] in the Graphics option list.
+ * Returns the node (borrowed) or NULL if absent. */
+static const Expr* find_bar_labels(const Expr* graphics_expr) {
+    size_t argc = graphics_expr->data.function.arg_count;
+    for (size_t i = 1; i < argc; i++) {
+        const Expr* a = graphics_expr->data.function.args[i];
+        if (a && a->type == EXPR_FUNCTION && a->data.function.head
+            && a->data.function.head->type == EXPR_SYMBOL
+            && a->data.function.head->data.symbol == SYM_BarChartLabels)
+            return a;
+    }
+    return NULL;
+}
+
 /* Finds $StreamColorBar[spd_min, spd_max] in the Graphics option list.
  * Returns the node (borrowed) or NULL if absent. */
 static const Expr* find_color_bar(const Expr* graphics_expr) {
@@ -1512,25 +1533,104 @@ static const Expr* find_color_bar(const Expr* graphics_expr) {
         if (a && a->type == EXPR_FUNCTION && a->data.function.head
             && a->data.function.head->type == EXPR_SYMBOL
             && a->data.function.head->data.symbol == SYM_StreamColorBar
-            && a->data.function.arg_count == 2)
+            && a->data.function.arg_count >= 2)
             return a;
     }
     return NULL;
 }
 
-/* Screen-space vertical color scale bar for StreamPlot's speed gradient.
+/* Screen-space category labels for BarChart/Histogram — drawn after EndMode2D
+ * so they are crisp (pixel-fixed size) and sit clearly below the axis ticks.
+ * Each element of bar_labels is {world_x, label_string_or_expr}.
+ *
+ * Placement: project world y=0 (bar baseline) to screen.  The axis tick
+ * numbers sit ~(gap + tick_cap) pixels below that; the category labels sit
+ * a further (label_gap + label_cap) pixels below the tick numbers. */
+static void draw_bar_chart_labels(const Expr* bar_labels, Camera2D camera) {
+    if (!bar_labels) return;
+    size_t n = bar_labels->data.function.arg_count;
+
+    /* tick row: scale=1.5, cap=10.5 px, gap=5 px → tick row bottom ≈ +15 px */
+    const float tick_scale = 1.5f;
+    const float tick_cap   = HERSHEY_CAP_HEIGHT * tick_scale; /* ~10.5 px */
+    const float tick_gap   = 5.0f;
+
+    /* category label row: scale=2.0, cap=14 px */
+    const float scale  = 2.0f;
+    const float cap    = HERSHEY_CAP_HEIGHT * scale; /* 14 px */
+    const float label_gap = 6.0f;
+
+    /* Screen y of the x-axis (world y=0, render y=0). */
+    Vector2 axis_screen = GetWorldToScreen2D((Vector2){ 0.0f, 0.0f }, camera);
+    /* Baseline of the tick-number row, then the category-label baseline. */
+    float tick_baseline = axis_screen.y + tick_gap + tick_cap;
+    float label_y = tick_baseline + label_gap + cap;
+
+    Color col = (Color){ 30, 30, 30, 255 };
+    for (size_t i = 0; i < n; i++) {
+        const Expr* pair = bar_labels->data.function.args[i];
+        if (!pair || pair->type != EXPR_FUNCTION || pair->data.function.arg_count < 2) continue;
+        double wx;
+        if (!expr_to_d(pair->data.function.args[0], &wx)) continue;
+        const Expr* lbl = pair->data.function.args[1];
+        char* owned = NULL;
+        const char* text;
+        if (lbl->type == EXPR_STRING) {
+            text = lbl->data.string;
+        } else {
+            owned = expr_to_string((Expr*)lbl);
+            text = owned ? owned : "?";
+        }
+        Vector2 sp = GetWorldToScreen2D((Vector2){ (float)wx, 0.0f }, camera);
+        float w = hershey_text_width(text, scale);
+        hershey_draw_text_ex(text, sp.x - w / 2.0f, label_y, scale, 0.0f, col, 1.5f);
+        if (owned) free(owned);
+    }
+}
+
+/* Screen-space vertical color scale bar.
  * bar_x/y: top-left of the strip; bar_w/bar_h: dimensions in pixels.
- * Labels are drawn to the right of the strip. */
+ * cfn: the ColorFunction option Expr (string name, pure function, or NULL/
+ * Automatic meaning default thermal ramp). Labels are drawn to the right. */
 static void draw_color_bar(float bar_x, float bar_y, float bar_w, float bar_h,
-                           double spd_min, double spd_max) {
+                           double spd_min, double spd_max, const Expr* cfn) {
     int bands = (int)bar_h;
     if (bands < 1) bands = 1;
+
+    /* Determine whether cfn is a usable string name or a callable Expr. */
+    const char* cfn_name = NULL;
+    bool cfn_is_callable = false;
+    if (cfn && cfn->type == EXPR_STRING) {
+        cfn_name = cfn->data.string;
+    } else if (cfn && cfn->type == EXPR_FUNCTION) {
+        /* Pure function or other callable — evaluated per band below. */
+        cfn_is_callable = true;
+    }
 
     /* Gradient strip — top = spd_max (t=1), bottom = spd_min (t=0). */
     for (int i = 0; i < bands; i++) {
         double t = 1.0 - (double)i / (double)(bands > 1 ? bands - 1 : 1);
         double rv, gv, bv;
-        thermal_rgb(t, &rv, &gv, &bv);
+        bool colored = false;
+
+        if (cfn_name && resolve_ramp_to_rgb(cfn_name, t, &rv, &gv, &bv)) {
+            colored = true;
+        } else if (cfn_is_callable) {
+            /* Evaluate cfn[t] and resolve the resulting color expression. */
+            Expr* targ[1] = { expr_new_real(t) };
+            Expr* call = expr_new_function(expr_copy((Expr*)cfn), targ, 1);
+            Expr* result = evaluate(call);
+            RGBA8 col;
+            if (result && resolve_color(result, &col)) {
+                rv = col.r / 255.0;
+                gv = col.g / 255.0;
+                bv = col.b / 255.0;
+                colored = true;
+            }
+            expr_free(result);
+        }
+        if (!colored) thermal_rgb(t, &rv, &gv, &bv);
+
         Color c = { (unsigned char)(rv * 255.0 + 0.5),
                     (unsigned char)(gv * 255.0 + 0.5),
                     (unsigned char)(bv * 255.0 + 0.5), 255 };
@@ -1639,6 +1739,7 @@ void graphics_show(const Expr* graphics_expr) {
     Expr* dyn_prims = NULL;
     bool resample_ok = true;          /* cleared if this isn't a Plot object */
     const Expr* color_bar_data = find_color_bar(graphics_expr);
+    const Expr* bar_labels_data = find_bar_labels(graphics_expr);
     /* The x-span currently sampled (with margin) and the visible width at the
      * last re-sample -- the loop re-samples once the view leaves either. */
     double cov_lo = 0.0, cov_hi = 0.0, ref_vw = -1.0;
@@ -1982,6 +2083,7 @@ void graphics_show(const Expr* graphics_expr) {
         if (opts.frame) EndScissorMode();
 
         if (opts.axes) draw_axes_labels(&visible, &range, camera, ysc, &opts);
+        if (bar_labels_data) draw_bar_chart_labels(bar_labels_data, camera);
         if (opts.frame) draw_frame(reg_x, reg_y, reg_w, reg_h, camera, ysc, &opts);
         if (opts.frame) draw_frame_label(reg_x, reg_y, reg_w, reg_h, &opts);
         draw_extra_labels(&opts, (int)opts.width, (int)opts.height);
@@ -1994,13 +2096,16 @@ void graphics_show(const Expr* graphics_expr) {
             const Expr* a1 = color_bar_data->data.function.args[1];
             if (a0->type == EXPR_REAL) cb_spd_min = a0->data.real;
             if (a1->type == EXPR_REAL) cb_spd_max = a1->data.real;
+            /* 3rd arg (optional): the ColorFunction expression. */
+            const Expr* cb_cfn = (color_bar_data->data.function.arg_count >= 3)
+                                 ? color_bar_data->data.function.args[2] : NULL;
             const float cb_margin = 50.0f;
             const float cb_w = 18.0f;
             float cb_h = opts.height - 2.0f * cb_margin;
             if (cb_h < 20.0f) cb_h = 20.0f;
             float cb_x = opts.width - 70.0f;
             float cb_y = cb_margin;
-            draw_color_bar(cb_x, cb_y, cb_w, cb_h, cb_spd_min, cb_spd_max);
+            draw_color_bar(cb_x, cb_y, cb_w, cb_h, cb_spd_min, cb_spd_max, cb_cfn);
         }
 
         /* On a capture frame suppress every bit of UI chrome so the saved

@@ -709,6 +709,7 @@ extern const char* SYM_StreamScale;    /* stream length control */
 extern const char* SYM_StreamStyle;    /* style directives for streams */
 extern const char* SYM_StreamColorFunction; /* color by position/speed */
 extern const char* SYM_StreamColorBar;      /* internal: color-scale bar metadata */
+extern const char* SYM_BarChartLabels;     /* internal: screen-space bar category labels */
 
 /* ContourPlot[f, {x,...}, {y,...}, opts...] */
 extern const char* SYM_ContourPlot;
@@ -716,6 +717,22 @@ extern const char* SYM_Contours;        /* integer or list of explicit levels */
 extern const char* SYM_ContourStyle;    /* style directive(s) for the contour lines */
 extern const char* SYM_ContourLabels;   /* True/False: draw z-value labels on contours */
 extern const char* SYM_ContourShading;  /* True/False/Automatic: fill between contours */
+
+/* DensityPlot[f, {x,...}, {y,...}, opts...] */
+extern const char* SYM_DensityPlot;
+
+/* BarChart[data, opts...] / Histogram[data, opts...] */
+extern const char* SYM_BarChart;
+extern const char* SYM_Histogram;
+extern const char* SYM_BarSpacing;    /* gap between bars (fraction of bar width) */
+extern const char* SYM_ChartStyle;    /* color/style list for bars */
+extern const char* SYM_ChartLabels;   /* x-axis label list */
+
+/* VectorPlot[{vx,vy}, {x,...}, {y,...}, opts...] */
+extern const char* SYM_VectorPlot;
+extern const char* SYM_VectorPoints;  /* integer grid density, or Automatic */
+extern const char* SYM_VectorScale;   /* Automatic (uniform) | None (prop.) | fraction */
+extern const char* SYM_VectorStyle;   /* style directive(s) for arrows */
 
 /* FLINT` context: direct REPL access to the FLINT-backed kernels that also
  * accelerate the corresponding System` builtins transparently. Each is a thin

@@ -58,10 +58,29 @@ Expr* eval_color_function3(Expr* color_fn,
                             double zmin, double zmax,
                             bool scaling);
 
-/* Thermal color ramp matching Mathematica's default StreamPlot palette:
- * dark blue-purple (t=0) → purple → red → orange → bright yellow (t=1).
- * r, g, b are written as [0,1] doubles. */
+/* Named color ramps — all take t ∈ [0,1], write r/g/b ∈ [0,1]. */
+
+/* Thermal: dark blue-purple (t=0) → purple → red → orange → bright yellow (t=1).
+ * Matches Mathematica's default StreamPlot speed colormap. */
 void thermal_rgb(double t, double* r, double* g, double* b);
+
+/* CoolTones: near-white ice blue (t=0) → sky blue → cornflower → deep navy (t=1). */
+void cool_tones_rgb(double t, double* r, double* g, double* b);
+
+/* WarmTones: pale cream (t=0) → amber → orange → deep crimson (t=1). */
+void warm_tones_rgb(double t, double* r, double* g, double* b);
+
+/* Resolve a ColorFunction name string + t ∈ [0,1] to a color Expr (caller
+ * owns).  Recognised names: "Rainbow", "Temperature"/"Thermal",
+ * "CoolTones"/"Cool", "WarmTones"/"Warm",
+ * "Greyscale"/"Grayscale"/"Grey"/"Gray".
+ * Returns NULL when the name is not recognised. */
+Expr* named_color_ramp(const char* name, double t);
+
+/* resolve_ramp_to_rgb — same lookup as named_color_ramp but writes raw RGB
+ * doubles [0,1] instead of constructing an Expr.  Returns 1 on success,
+ * 0 if the name is not recognised. */
+int resolve_ramp_to_rgb(const char* name, double t, double* r, double* g, double* b);
 
 /* Build the $PlotLegendData[{color1,label1}, ...] metadata node that the
  * renderer reads to draw a legend box.  `legends` is the already-evaluated

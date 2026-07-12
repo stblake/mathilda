@@ -108,10 +108,10 @@ static bool is_color_head(const Expr* e) {
 
 Expr* eval_color_function(Expr* color_fn, double x, double y,
                            double xmin, double xmax, bool scaling) {
-    if (color_fn->type == EXPR_STRING && strcmp(color_fn->data.string, "Rainbow") == 0) {
+    if (color_fn->type == EXPR_STRING) {
         double t = (xmax > xmin) ? (x - xmin) / (xmax - xmin) : 0.0;
-        Expr* a[1] = { expr_new_real(t * 0.8) }; /* stop short of wrapping back to red */
-        return expr_new_function(expr_new_symbol(SYM_Hue), a, 1);
+        Expr* c = named_color_ramp(color_fn->data.string, t);
+        if (c) return c;
     }
 
     double cx = (scaling && xmax > xmin) ? (x - xmin) / (xmax - xmin) : x;
@@ -140,12 +140,15 @@ Expr* eval_color_function3(Expr* color_fn,
                             double ymin, double ymax,
                             double zmin, double zmax,
                             bool scaling) {
-    if (color_fn->type == EXPR_STRING && strcmp(color_fn->data.string, "Rainbow") == 0) {
-        /* Height-based: cold blue → hot red, capped at 0.8 hue to avoid
-         * wrapping back to red from the violet end. */
+    if (color_fn->type == EXPR_STRING) {
         double t = (zmax > zmin) ? (z - zmin) / (zmax - zmin) : 0.0;
-        Expr* a[1] = { expr_new_real((1.0 - t) * 0.8) };
-        return expr_new_function(expr_new_symbol(SYM_Hue), a, 1);
+        if (strcmp(color_fn->data.string, "Rainbow") == 0) {
+            /* 3D Rainbow: inverted height-based sweep (cold blue at top → red at bottom). */
+            Expr* a[1] = { expr_new_real((1.0 - t) * 0.8) };
+            return expr_new_function(expr_new_symbol(SYM_Hue), a, 1);
+        }
+        Expr* c = named_color_ramp(color_fn->data.string, t);
+        if (c) return c;
     }
 
     double xs = (scaling && xmax > xmin) ? (x - xmin) / (xmax - xmin) : x;
@@ -240,4 +243,130 @@ void thermal_rgb(double t, double* r, double* g, double* b) {
     *r = stops[i][0] + f * (stops[i + 1][0] - stops[i][0]);
     *g = stops[i][1] + f * (stops[i + 1][1] - stops[i][1]);
     *b = stops[i][2] + f * (stops[i + 1][2] - stops[i][2]);
+}
+
+/* cool_tones_rgb — near-white ice blue (t=0) → deep navy/indigo (t=1). */
+void cool_tones_rgb(double t, double* r, double* g, double* b) {
+    static const double stops[5][3] = {
+        { 0.91, 0.96, 1.00 }, /* near-white, ice-blue tint */
+        { 0.53, 0.78, 0.96 }, /* light sky blue            */
+        { 0.18, 0.50, 0.83 }, /* cornflower blue           */
+        { 0.07, 0.23, 0.60 }, /* royal/cobalt blue         */
+        { 0.02, 0.08, 0.35 }, /* deep navy/indigo          */
+    };
+    if (t < 0.0) t = 0.0;
+    if (t > 1.0) t = 1.0;
+    double idx = t * 4.0;
+    int    i   = (int)idx;
+    if (i > 3) i = 3;
+    double f = idx - (double)i;
+    *r = stops[i][0] + f * (stops[i + 1][0] - stops[i][0]);
+    *g = stops[i][1] + f * (stops[i + 1][1] - stops[i][1]);
+    *b = stops[i][2] + f * (stops[i + 1][2] - stops[i][2]);
+}
+
+/* warm_tones_rgb — pale cream (t=0) → amber → orange → deep crimson (t=1). */
+void warm_tones_rgb(double t, double* r, double* g, double* b) {
+    static const double stops[5][3] = {
+        { 1.00, 0.97, 0.80 }, /* pale cream/yellow */
+        { 1.00, 0.80, 0.38 }, /* warm amber        */
+        { 0.95, 0.48, 0.08 }, /* orange            */
+        { 0.78, 0.14, 0.06 }, /* red-orange        */
+        { 0.45, 0.03, 0.03 }, /* deep crimson      */
+    };
+    if (t < 0.0) t = 0.0;
+    if (t > 1.0) t = 1.0;
+    double idx = t * 4.0;
+    int    i   = (int)idx;
+    if (i > 3) i = 3;
+    double f = idx - (double)i;
+    *r = stops[i][0] + f * (stops[i + 1][0] - stops[i][0]);
+    *g = stops[i][1] + f * (stops[i + 1][1] - stops[i][1]);
+    *b = stops[i][2] + f * (stops[i + 1][2] - stops[i][2]);
+}
+
+/* named_color_ramp — resolve a ColorFunction name string and a normalised
+ * parameter t ∈ [0,1] to a concrete color expression (caller owns).
+ * Returns NULL when the name is not recognised.
+ *
+ * Recognised names:
+ *   "Rainbow"               — Hue sweep (red→violet, stops short of wrap)
+ *   "Temperature"/"Thermal" — thermal blue-purple→yellow ramp
+ *   "CoolTones"/"Cool"      — ice-white → sky-blue → deep navy
+ *   "WarmTones"/"Warm"      — cream → amber → orange → crimson
+ *   "Greyscale"/"Grayscale" — white (t=0) → black (t=1)
+ */
+Expr* named_color_ramp(const char* name, double t) {
+    if (t < 0.0) t = 0.0;
+    if (t > 1.0) t = 1.0;
+
+    if (strcmp(name, "Rainbow") == 0) {
+        Expr* a[1] = { expr_new_real(t * 0.8) };
+        return expr_new_function(expr_new_symbol(SYM_Hue), a, 1);
+    }
+    if (strcmp(name, "Temperature") == 0 || strcmp(name, "Thermal") == 0) {
+        double rv, gv, bv; thermal_rgb(t, &rv, &gv, &bv);
+        Expr* a[3] = { expr_new_real(rv), expr_new_real(gv), expr_new_real(bv) };
+        return expr_new_function(expr_new_symbol(SYM_RGBColor), a, 3);
+    }
+    if (strcmp(name, "CoolTones") == 0 || strcmp(name, "Cool") == 0) {
+        double rv, gv, bv; cool_tones_rgb(t, &rv, &gv, &bv);
+        Expr* a[3] = { expr_new_real(rv), expr_new_real(gv), expr_new_real(bv) };
+        return expr_new_function(expr_new_symbol(SYM_RGBColor), a, 3);
+    }
+    if (strcmp(name, "WarmTones") == 0 || strcmp(name, "Warm") == 0) {
+        double rv, gv, bv; warm_tones_rgb(t, &rv, &gv, &bv);
+        Expr* a[3] = { expr_new_real(rv), expr_new_real(gv), expr_new_real(bv) };
+        return expr_new_function(expr_new_symbol(SYM_RGBColor), a, 3);
+    }
+    if (strcmp(name, "Greyscale") == 0 || strcmp(name, "Grayscale") == 0
+        || strcmp(name, "GrayScale") == 0 || strcmp(name, "GreyScale") == 0
+        || strcmp(name, "Grey") == 0 || strcmp(name, "Gray") == 0) {
+        Expr* a[1] = { expr_new_real(1.0 - t) }; /* white at t=0, black at t=1 */
+        return expr_new_function(expr_new_symbol(SYM_GrayLevel), a, 1);
+    }
+    return NULL;
+}
+
+/* hue_to_rgb — HSV → RGB with s=v=1 (pure saturated hue sweep). */
+static void hue_to_rgb(double h, double* r, double* g, double* b) {
+    h = h - floor(h);
+    double hh = h * 6.0;
+    int    i  = (int)floor(hh);
+    double f  = hh - (double)i;
+    double q  = 1.0 - f;
+    switch (((i % 6) + 6) % 6) {
+        case 0: *r = 1.0; *g = f;   *b = 0.0; break;
+        case 1: *r = q;   *g = 1.0; *b = 0.0; break;
+        case 2: *r = 0.0; *g = 1.0; *b = f;   break;
+        case 3: *r = 0.0; *g = q;   *b = 1.0; break;
+        case 4: *r = f;   *g = 0.0; *b = 1.0; break;
+        default: *r = 1.0; *g = 0.0; *b = q;  break;
+    }
+}
+
+/* resolve_ramp_to_rgb — same lookup table as named_color_ramp but writes raw
+ * RGB doubles instead of constructing an Expr.  Returns 1 on success, 0 if
+ * the name is not recognised. */
+int resolve_ramp_to_rgb(const char* name, double t, double* r, double* g, double* b) {
+    if (t < 0.0) t = 0.0;
+    if (t > 1.0) t = 1.0;
+    if (strcmp(name, "Rainbow") == 0) {
+        hue_to_rgb(t * 0.8, r, g, b); return 1;
+    }
+    if (strcmp(name, "Temperature") == 0 || strcmp(name, "Thermal") == 0) {
+        thermal_rgb(t, r, g, b); return 1;
+    }
+    if (strcmp(name, "CoolTones") == 0 || strcmp(name, "Cool") == 0) {
+        cool_tones_rgb(t, r, g, b); return 1;
+    }
+    if (strcmp(name, "WarmTones") == 0 || strcmp(name, "Warm") == 0) {
+        warm_tones_rgb(t, r, g, b); return 1;
+    }
+    if (strcmp(name, "Greyscale") == 0 || strcmp(name, "Grayscale") == 0
+        || strcmp(name, "GrayScale") == 0 || strcmp(name, "GreyScale") == 0
+        || strcmp(name, "Grey") == 0 || strcmp(name, "Gray") == 0) {
+        *r = *g = *b = 1.0 - t; return 1;
+    }
+    return 0;
 }

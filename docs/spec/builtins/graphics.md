@@ -232,6 +232,69 @@ In[12]:= Plot3D[Sin[x] Cos[y], {x, -3, 3}, {y, -3, 3}, PlotStyle -> Cyan, Mesh -
 Out[12]= -Graphics3D-
 ```
 
+## Named ColorFunction ramps
+
+All gradient-based plotters — `DensityPlot`, `ContourPlot`, `VectorPlot`,
+`StreamPlot`, `Plot`, `Plot3D`, `ParametricPlot`, `ParametricPlot3D` — accept
+`ColorFunction -> "name"` where `name` is one of the following built-in
+string ramps.  Each ramp is a continuous 5-stop RGB gradient parameterised
+by `t ∈ [0,1]` (normalised to the data range when
+`ColorFunctionScaling -> True`, the default).
+
+| Name | Aliases | Appearance |
+|------|---------|------------|
+| `"Rainbow"` | — | `Hue` sweep red → violet (stops at 0.8 to avoid wrapping back to red) |
+| `"Temperature"` | `"Thermal"` | dark blue-purple → purple → red → orange → bright yellow (Mathilda's default stream/contour ramp) |
+| `"CoolTones"` | `"Cool"` | near-white ice blue → sky blue → cornflower → deep navy/indigo |
+| `"WarmTones"` | `"Warm"` | pale cream → amber → orange → deep crimson |
+| `"Greyscale"` | `"Grayscale"`, `"Grey"`, `"Gray"` | white (t=0) → black (t=1) |
+
+**Calling convention by plotter:**
+
+| Plotter | `t` is derived from… |
+|---------|----------------------|
+| `Plot`, `ParametricPlot`, `PolarPlot` | position along curve: `(x − xmin)/(xmax − xmin)` |
+| `Plot3D`, `ParametricPlot3D` | z-height: `(z − zmin)/(zmax − zmin)` |
+| `DensityPlot`, `ContourPlot` | cell's normalised function value |
+| `VectorPlot`, `StreamPlot` | field magnitude (speed) |
+
+For custom function forms see the individual plotter's `ColorFunction` option
+table.
+
+```mathematica
+(* DensityPlot with each named ramp *)
+In[1]:= DensityPlot[Sin[x] Sin[y], {x, -4, 4}, {y, -3, 3},
+          ColorFunction -> "CoolTones"]
+Out[1]= -Graphics-
+
+In[2]:= DensityPlot[Sin[x] Sin[y], {x, -4, 4}, {y, -3, 3},
+          ColorFunction -> "WarmTones"]
+Out[2]= -Graphics-
+
+In[3]:= DensityPlot[Sin[x] Sin[y], {x, -4, 4}, {y, -3, 3},
+          ColorFunction -> "Greyscale"]
+Out[3]= -Graphics-
+
+In[4]:= DensityPlot[Sin[x] Sin[y], {x, -4, 4}, {y, -3, 3},
+          ColorFunction -> "Temperature"]
+Out[4]= -Graphics-
+
+(* ContourPlot with a warm ramp *)
+In[5]:= ContourPlot[x^2 + y^2, {x, -2, 2}, {y, -2, 2},
+          ContourShading -> True, ColorFunction -> "WarmTones"]
+Out[5]= -Graphics-
+
+(* VectorPlot with cool tones *)
+In[6]:= VectorPlot[{-y, x}, {x, -2, 2}, {y, -2, 2},
+          ColorFunction -> "CoolTones"]
+Out[6]= -Graphics-
+
+(* StreamPlot with greyscale speed coloring *)
+In[7]:= StreamPlot[{-y, x}, {x, -2, 2}, {y, -2, 2},
+          StreamColorFunction -> "Greyscale", PlotLegends -> Automatic]
+Out[7]= -Graphics-
+```
+
 ## Hue
 A style directive: `Hue[h]` (fully saturated, `h` in `[0,1]`, wrapping),
 `Hue[h, s, b]` (saturation, brightness), `Hue[h, s, b, a]` (with opacity) --
@@ -414,7 +477,7 @@ algorithm and option semantics will back future plotting functions
 | `Mesh` | `None` | `All` overlays a dot at every evaluation point (in the curve's colour); `None` draws the line only. `True`/`False` are accepted as synonyms |
 | `RegionFunction` | none | `f[x,y]` (or `f[x]`) -- a sample where this isn't `True` is dropped exactly like a singularity (the curve gaps there) |
 | `Exclusions` | `None` | `{x1, x2, ...}` or `{x == a, ...}`: forces a discontinuity at each given x, independent of curvature/singularity detection |
-| `ColorFunction` | none | a function `f[xscaled,yscaled]`/`f[xscaled]` returning a color literal (`RGBColor`/`GrayLevel`/`Hue`), applied per sampled segment -- or the string `"Rainbow"` for a built-in `Hue` sweep over x. Overrides `PlotStyle` for the curve itself |
+| `ColorFunction` | none | a function `f[xscaled,yscaled]`/`f[xscaled]` returning a color literal, applied per sampled segment; or a named ramp string: `"Rainbow"`, `"Temperature"`, `"CoolTones"`, `"WarmTones"`, `"Greyscale"` (see **Named ColorFunction ramps** section). Overrides `PlotStyle` for the curve itself |
 | `ColorFunctionScaling` | `True` | whether `ColorFunction` receives `x`/`y` scaled to `[0,1]` over the plot's range, or raw data values |
 | `Filling` | `None` | `Axis` (to `y=0`), `Bottom`/`Top` (to the run's own min/max y), or a number (to that y) -- a strip of small quad `Polygon[]`s (one per consecutive sampled-point pair) hugging the curve down to the baseline, under the curve's outline |
 | `FillingStyle` | none | color for the fill; default is the curve's own color at `Opacity[0.3]` |
@@ -549,7 +612,7 @@ sense, sharing the actual evaluation code (`src/graphics/plot_common.c`) for
 | `MaxRecursion` | `2` | doubles the *whole* grid's resolution (up to this many times, capped at 200 points/axis) while a cell-center-vs-bilinear-interpolant flatness check fails -- a global, crack-free analogue of `Plot`'s per-interval adaptive bisection (a per-cell quadtree would leave T-junction cracks where differently-refined cells meet) |
 | `Mesh` | `True` | overlays the grid wireframe on the surface (unlike `Plot`'s default `None` -- Mathematica's `Plot3D` shows mesh lines out of the box too); `None`/`False` draws the filled surface only. **Only interior grid lines are drawn** -- the perimeter edges of the domain are omitted, giving a smooth boundary silhouette |
 | `PlotStyle` | `RGBColor[0.2,0.4,0.8]` | the surface's fill color. For a single surface, a direct color literal; for multi-surface plots (`{f1,f2,...}`), a `List` of colors is indexed per surface (cycling if shorter than the surface count), or a single literal applies to all. Ignored per-cell where `ColorFunction` overrides |
-| `ColorFunction` | none | a function returning a color literal, evaluated at the center of each grid cell. **Calling convention** (tried in order): `f[xs, ys, zs]` (Mathematica's 3D convention), then `f[xs, zs]` (height ramp), then `f[zs]` (univariate height). The string `"Rainbow"` is built-in: it maps z-height to a blue-to-red hue sweep (`Hue[(1-t)*0.8]` where `t = (z-zmin)/(zmax-zmin)`) |
+| `ColorFunction` | none | a function returning a color literal, evaluated per grid cell. **Calling convention** (tried in order): `f[xs,ys,zs]`, then `f[xs,zs]`, then `f[zs]`. Named ramp strings: `"Rainbow"` (inverted height hue sweep), `"Temperature"`, `"CoolTones"`, `"WarmTones"`, `"Greyscale"` (see **Named ColorFunction ramps**) |
 | `ColorFunctionScaling` | `True` | when `True`, the arguments passed to `ColorFunction` are scaled to `[0,1]` within the data range; `False` passes raw coordinate values |
 | `RegionFunction` | none | `f[x,y,z]` (Mathematica's `Plot3D` convention) tried first; falls back to `Plot`'s `f[x,y]`/`f[x]` forms if that doesn't resolve to `True`/`False`, so a `RegionFunction` written for `Plot` keeps working |
 | `ExclusionStyle` | `GrayLevel[0.35]` | style directive (a color literal or `Thickness[...]` etc.) used to draw the boundary edges between included and excluded grid cells when `RegionFunction` is active |
@@ -629,7 +692,7 @@ midpoint) avoid aliasing against periodic curves.
 | `MaxPlotPoints` | `Infinity` | overall point cap (1-iter only) |
 | `Mesh` | `None` | `All` overlays sample dots (1-iter) or grid lines (2-iter) |
 | `PlotLegends` | none | `Automatic` or `"Expressions"` labels each curve with its body expression; an explicit `{l1, l2, ...}` uses those labels. Embeds `$PlotLegendData` in the Graphics result for the renderer to draw a legend box. |
-| `ColorFunction` | none | colors by parameter; `"Rainbow"` sweeps hue; a function `f[t_scaled]` (1-iter) or `f[t_scaled, r_scaled]` (2-iter). With `ColorFunctionScaling -> True` (default) inputs are scaled to `[0,1]` |
+| `ColorFunction` | none | named ramp string (`"Rainbow"`, `"CoolTones"`, `"WarmTones"`, `"Greyscale"`, `"Temperature"`) or a function `f[t_scaled]` (1-iter) / `f[t_scaled, r_scaled]` (2-iter). `t` is scaled to `[0,1]` when `ColorFunctionScaling -> True` |
 | `ColorFunctionScaling` | `True` | whether to scale parameters before `ColorFunction` |
 | `RegionFunction` | none | `f[x,y]` mask; points where it returns `False` are excluded |
 | `PlotStyle` | `RGBColor[0.2,0.4,0.8]` | curve/polygon color; a `List` of directives is accepted, so `PlotStyle -> {Blue, Opacity[0.4]}` gives a semi-transparent fill for the two-iterator form |
@@ -705,7 +768,7 @@ opposite direction, matching standard polar convention). Default
 | `MaxRecursion` | `6` | Adaptive refinement depth |
 | `MaxPlotPoints` | `Infinity` | Total point cap |
 | `Mesh` | `None` | `All` overlays evaluation dots |
-| `ColorFunction` | `None` | `f[t]` or `"Rainbow"` (sweeps scaled theta) |
+| `ColorFunction` | `None` | named ramp string or `f[t]`; `t` is scaled theta ∈ [0,1] (see **Named ColorFunction ramps**) |
 | `ColorFunctionScaling` | `True` | Normalise theta to `[0,1]` |
 | `RegionFunction` | `None` | `f[x,y]` mask |
 | `PlotStyle` | palette | Color/style directives |
@@ -776,7 +839,7 @@ tried as `f[x,y,z]` first, then falls back to `f[x,y]` forms.
 | `MaxPlotPoints` | `Infinity` | overall point cap (1-iter only) |
 | `Mesh` | `None` | `All`/`True` overlays sample dots (1-iter) or grid lines (2-iter) |
 | `PlotLegends` | none | `Automatic` or `"Expressions"` labels each curve; an explicit `{l1,...}` uses those labels |
-| `ColorFunction` | none | `"Rainbow"` or `f[x,y,z]`/`f[x,z]`/`f[z]` (scaled spatial); colors per segment (1-iter) or per cell (2-iter) |
+| `ColorFunction` | none | named ramp string or `f[x,y,z]`/`f[x,z]`/`f[z]` (scaled spatial); colors per segment (1-iter) or per cell (2-iter). Ramps: `"Rainbow"`, `"CoolTones"`, `"WarmTones"`, `"Greyscale"`, `"Temperature"` |
 | `ColorFunctionScaling` | `True` | whether spatial coords are scaled to `[0,1]` before `ColorFunction` |
 | `RegionFunction` | none | `f[x,y,z]` mask; points where it returns `False` are excluded |
 | `PlotStyle` | `RGBColor[0.2,0.4,0.8]` | curve/surface color; a `List` of directives is accepted, so `PlotStyle -> {Blue, Opacity[0.4]}` gives a semi-transparent surface for the two-iterator form |
@@ -925,7 +988,7 @@ StreamPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
 | `StreamPoints` | `Automatic` (15×15 grid) | Integer `n` for an n×n seed grid; `Automatic` uses the default 15×15 |
 | `StreamScale` | `Automatic` | `Automatic` limits each stream to ≈ 8% of the domain diagonal; `None` lets streams run until they leave the domain; a positive real sets the fraction of the diagonal |
 | `StreamStyle` | *(thin steel-blue)* | A style directive or list applied to every stream (e.g. `Thickness[0.003]`, `RGBColor[...]`) |
-| `StreamColorFunction` | `None` | `f[x,y,vx,vy,speed]` (or fewer args) → color directive per stream at its midpoint; `"Rainbow"` maps scaled speed to hue |
+| `StreamColorFunction` | `None` | `f[x,y,vx,vy,speed]` (or fewer args) → color directive per stream at midpoint; named ramp strings: `"Rainbow"`, `"CoolTones"`, `"WarmTones"`, `"Greyscale"`, `"Temperature"` (keyed to scaled speed) |
 | `ColorFunction` | `None` | Alias for `StreamColorFunction` |
 | `RegionFunction` | `None` | `f[x,y]` mask; seeds and integration steps outside the region are skipped |
 | `PlotLegends` | `None` | `Automatic` / `"Expressions"` / explicit list |
@@ -1019,7 +1082,7 @@ value via `ColorFunction` or the built-in blue-cyan-yellow-red thermal ramp.
 | `ContourStyle` | `Automatic` | Style directive(s) for the contour lines. `Automatic`: each level is coloured by its height using the thermal ramp. A single directive is applied to all levels; a `List` of directives cycles through the levels. `None`/`False` suppresses lines entirely |
 | `ContourLabels` | `False` | `True`: draws the level's `z` value as a `Text[]` at the midpoint of each level's first visible grid-segment |
 | `ContourShading` | `Automatic` | `True`: fill each grid cell with a colour derived from its average `z`. `False`/`None`: lines only. `Automatic`: enable shading when `ColorFunction` is set, otherwise lines only |
-| `ColorFunction` | `None` | `"Rainbow"` (Hue ramp), `"Temperature"` (blue-cyan-yellow-red), or a function `f[t]` with `t ∈ [0,1]` after scaling. Applied to both the cell shading and the auto contour-line colours |
+| `ColorFunction` | `None` | named ramp string (`"Rainbow"`, `"Temperature"`, `"CoolTones"`, `"WarmTones"`, `"Greyscale"`) or a function `f[t]` with `t ∈ [0,1]` after scaling. Applied to both cell shading and auto contour-line colours |
 | `ColorFunctionScaling` | `True` | `True`: normalise `z` to `[0,1]` before calling `ColorFunction`; `False`: pass raw `z` |
 | `PlotPoints` | `25` | Grid resolution per axis; increase for smoother contours |
 | `RegionFunction` | `None` | `f[x,y]` mask; cells whose centre lies outside return `False` are neither shaded nor contoured |
@@ -1088,4 +1151,186 @@ In[10]:= ContourPlot[Sin[x] + Cos[y], {x, -3, 3}, {y, -3, 3},
            ContourStyle -> None, ContourShading -> True,
            ColorFunction -> "Temperature"]
 Out[10]= -Graphics-
+```
+
+---
+
+## DensityPlot
+
+```
+DensityPlot[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
+```
+
+Renders `f(x,y)` as a heatmap by shading each grid cell with the colour
+corresponding to the cell's average `f` value.  Returns a `Graphics[...]`
+object (auto-displayed).  `DensityPlot` is `HoldAll`: `f` is held
+unevaluated until `x` and `y` are bound to numeric values.
+
+**Default ColourFunction:** thermal blue→yellow ramp (same as `StreamPlot`).
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `PlotPoints` | `50` | Grid resolution per axis |
+| `ColorFunction` | thermal | named ramp string or `f[t]→color` (`t∈[0,1]`). Ramps: `"Rainbow"`, `"Temperature"`, `"CoolTones"`, `"WarmTones"`, `"Greyscale"` |
+| `ColorFunctionScaling` | `True` | Normalise `z` to `[0,1]` before calling `ColorFunction` |
+| `RegionFunction` | none | `f[x,y]` mask; excluded cells are not drawn |
+| `PlotLegends` | none | `Automatic`: attach a vertical color-scale bar |
+| Standard `Graphics` options | | `Axes→True`, `AspectRatio→1`, `Frame`, `PlotRange`, … |
+
+**Examples:**
+
+```mathematica
+(* Basic heatmap *)
+In[1]:= DensityPlot[Sin[x] Sin[y], {x, -4, 4}, {y, -3, 3}]
+Out[1]= -Graphics-
+
+(* Rainbow colour scheme *)
+In[2]:= DensityPlot[x^2 - y^2, {x, -2, 2}, {y, -2, 2},
+          ColorFunction -> "Rainbow", PlotPoints -> 60]
+Out[2]= -Graphics-
+
+(* Custom ColorFunction + legend *)
+In[3]:= DensityPlot[Sin[x + y], {x, 0, 6}, {y, 0, 6},
+          ColorFunction -> (GrayLevel[#]&), PlotLegends -> Automatic]
+Out[3]= -Graphics-
+
+(* RegionFunction: circular mask *)
+In[4]:= DensityPlot[x^2 + y^2, {x, -3, 3}, {y, -3, 3},
+          RegionFunction -> Function[{x,y}, x^2 + y^2 < 4]]
+Out[4]= -Graphics-
+```
+
+---
+
+## BarChart
+
+```
+BarChart[{v1, v2, ..., vn}, opts...]
+BarChart[{{v1,...}, {w1,...}, ...}, opts...]
+```
+
+Draws a vertical bar chart.  Single-dataset form: `n` bars at `x = 1..n`
+with heights `v1..vn`.  Multi-dataset form: grouped bars — each inner list
+is one group, each group sub-bar uses a distinct palette colour.
+Returns a `Graphics[...]` object (auto-displayed).
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `ChartStyle` | palette | Color or `{color,...}` cycling through bars |
+| `ChartLabels` | none | `{label,...}` drawn below each bar on the x-axis |
+| `BarSpacing` | `0.2` | Gap as a fraction of bar width; `0` = touching |
+| Standard `Graphics` options | | `Axes→True`, `AspectRatio→0.618`, `Frame`, `PlotRange`, … |
+
+**Examples:**
+
+```mathematica
+(* Simple bar chart *)
+In[1]:= BarChart[{3, 1, 4, 1, 5, 9, 2, 6}]
+Out[1]= -Graphics-
+
+(* Custom colours and labels *)
+In[2]:= BarChart[{2.5, 4.1, 3.3, 5.7},
+          ChartStyle -> {Red, Blue, Green, Orange},
+          ChartLabels -> {"Q1", "Q2", "Q3", "Q4"}]
+Out[2]= -Graphics-
+
+(* Grouped datasets *)
+In[3]:= BarChart[{{1, 3, 2}, {4, 2, 5}}, BarSpacing -> 0.3]
+Out[3]= -Graphics-
+
+(* Negative values *)
+In[4]:= BarChart[{3, -1, 4, -1, 5}]
+Out[4]= -Graphics-
+```
+
+---
+
+## Histogram
+
+```
+Histogram[data, opts...]
+Histogram[data, k, opts...]
+Histogram[data, {step}, opts...]
+Histogram[data, {min, max, step}, opts...]
+```
+
+Bins numeric `data` and draws a frequency histogram.  The first form uses
+Sturges' rule (`⌈log₂(n)⌉ + 1` bins) by default.
+Returns a `Graphics[...]` object (auto-displayed).
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `ChartStyle` | palette | Color or `{color,...}` cycling through bins |
+| `BarSpacing` | `0.2` | Gap as a fraction of bin width |
+| Standard `Graphics` options | | `Axes→True`, `AspectRatio→0.618`, `Frame`, `PlotRange`, … |
+
+**Examples:**
+
+```mathematica
+(* Auto-binned histogram *)
+In[1]:= Histogram[Table[RandomReal[], {200}]]
+Out[1]= -Graphics-
+
+(* Bind data first, then vary bin specs *)
+In[2]:= data = Table[RandomReal[], {200}]
+
+(* Explicit bin count *)
+In[3]:= Histogram[data, 20]
+Out[3]= -Graphics-
+
+(* Fixed bin width *)
+In[4]:= Histogram[data, {0.1}]
+Out[4]= -Graphics-
+
+(* Explicit range and width *)
+In[5]:= Histogram[data, {0, 1, 0.05}]
+Out[5]= -Graphics-
+```
+
+---
+
+## VectorPlot
+
+```
+VectorPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
+```
+
+Draws a grid of arrows showing the direction (and optionally magnitude) of
+the vector field `{vx, vy}` at each grid point.  Returns a `Graphics[...]`
+object (auto-displayed).  `VectorPlot` is `HoldAll`: `vx`, `vy` are held
+unevaluated until `x` and `y` are bound to numeric values.
+
+**Default colour:** thermal ramp keyed to local field magnitude (speed).
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `VectorPoints` | `15` | Grid density per axis (`n` → `n×n` grid); `Automatic` = 15 |
+| `VectorScale` | `Automatic` | `Automatic`: equal-length arrows (direction only); `None`: proportional to magnitude; real `f`: arrow length = `f × grid_spacing` |
+| `VectorStyle` | — | Style directive(s) applied globally to all arrows |
+| `ColorFunction` | thermal | named ramp string (keyed to speed) or `f[vx,vy,speed]`/`f[speed]` → color. Ramps: `"Rainbow"`, `"CoolTones"`, `"WarmTones"`, `"Greyscale"`, `"Temperature"` |
+| `ColorFunctionScaling` | `True` | Normalise speed to `[0,1]` before calling `ColorFunction` |
+| `RegionFunction` | none | `f[x,y]` mask: skip grid points outside the region |
+| Standard `Graphics` options | | `Axes→True`, `AspectRatio→1`, `Frame`, `PlotRange`, … |
+
+**Examples:**
+
+```mathematica
+(* Simple rotation field *)
+In[1]:= VectorPlot[{-y, x}, {x, -2, 2}, {y, -2, 2}]
+Out[1]= -Graphics-
+
+(* Gradient field with Rainbow colouring *)
+In[2]:= VectorPlot[{x, y}, {x, -3, 3}, {y, -3, 3},
+          ColorFunction -> "Rainbow", VectorPoints -> 20]
+Out[2]= -Graphics-
+
+(* Magnitude-proportional arrows *)
+In[3]:= VectorPlot[{Sin[y], Cos[x]}, {x, 0, 2Pi}, {y, 0, 2Pi},
+          VectorScale -> None]
+Out[3]= -Graphics-
+
+(* RegionFunction: unit disk only *)
+In[4]:= VectorPlot[{-y, x}, {x, -1.5, 1.5}, {y, -1.5, 1.5},
+          RegionFunction -> Function[{x,y}, x^2 + y^2 < 1]]
+Out[4]= -Graphics-
 ```
