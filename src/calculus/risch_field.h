@@ -87,4 +87,14 @@ void risch_field_diophantine_t(const Expr* dn, const Expr* ds, const Expr* r,
 bool risch_field_is_normal(const Expr* p, const Expr* t, const RischDeriv* d);
 bool risch_field_is_special(const Expr* p, const Expr* t, const RischDeriv* d);
 
+/* Look up the derivative Dt of the monomial variable t within the derivation d
+ * (a borrowed pointer into d), or NULL if t is not listed. */
+const Expr* risch_deriv_lookup(const RischDeriv* d, const Expr* t);
+
+/* PolynomialReduce (Bronstein §5.4): for a NONLINEAR monomial t (deg_t(Dt) >= 2),
+ * write p = D[q] + r with deg_t(r) < deg_t(Dt).  Returns false if t is not a
+ * nonlinear monomial of d.  q, r owned. */
+bool risch_field_polynomial_reduce(const Expr* p, const Expr* t, const RischDeriv* d,
+                                   Expr** q, Expr** r);
+
 #endif /* MATHILDA_RISCH_FIELD_H */

@@ -37,6 +37,7 @@
 #include "integrate_risch_transcendental.h"
 #include "risch_canonical.h"
 #include "risch_structure.h"
+#include "risch_hypertangent.h"
 #include "intsimp.h"
 #include "common.h"
 #include "expr.h"
@@ -1023,6 +1024,10 @@ void integrate_init(void) {
      * decision of whether a proposed new exp/log monomial is algebraically
      * independent of the tower or reducible. */
     integrate_risch_structure_init();
+
+    /* Bronstein hypertangent case (Symbolic Integration I, §5.10): direct real
+     * integration over a tangent monomial (polynomial part). */
+    integrate_risch_hypertangent_init();
 
     /* Pre-register Integrate`CRCTable so ?Integrate`CRCTable shows a
      * docstring even before the lazy load fires.  The actual rule

@@ -276,6 +276,18 @@ static Expr* builtin_risch_polydivide(Expr* res) {
     return expr_new_function(expr_new_symbol("List"), (Expr*[]){ q, r }, 2);
 }
 
+/* Risch`PolynomialReduce[p, t, deriv] -> {q, r} with p = D[q] + r,
+ * deg_t(r) < deg_t(Dt) (Bronstein §5.4, nonlinear monomial). */
+static Expr* builtin_risch_polynomialreduce(Expr* res) {
+    const Expr *p, *t; RischDeriv d;
+    if (!rc_decode3(res, &p, &t, &d)) return NULL;
+    Expr* q = NULL; Expr* r = NULL;
+    bool ok = risch_field_polynomial_reduce(p, t, &d, &q, &r);
+    risch_deriv_free(&d);
+    if (!ok) return NULL;
+    return expr_new_function(expr_new_symbol("List"), (Expr*[]){ q, r }, 2);
+}
+
 /* Risch`NormalQ / Risch`SpecialQ. */
 static Expr* builtin_risch_normalq(Expr* res) {
     const Expr *p, *t; RischDeriv d;
@@ -324,6 +336,10 @@ void integrate_risch_canonical_init(void) {
         "Risch`PolyDivide[a, b, t] returns {q, r} with a = q b + r and\n"
         "deg_t(r) < deg_t(b), dividing in k[t] over the field of the other\n"
         "variables (the coefficient ring C(x, ...) is treated as a field).");
+    rc_install("Risch`PolynomialReduce", builtin_risch_polynomialreduce,
+        "Risch`PolynomialReduce[p, t, deriv] returns {q, r} with p = D[q] + r and\n"
+        "deg_t(r) < deg_t(Dt), for a nonlinear monomial t (deg_t(Dt) >= 2) of the\n"
+        "derivation deriv = {var -> Dvar, ...} (Bronstein, Symbolic Integration I, 5.4).");
     rc_install("Risch`NormalQ", builtin_risch_normalq,
         "Risch`NormalQ[p, t, deriv] tests whether the polynomial p is normal\n"
         "w.r.t. the derivation deriv, i.e. gcd(p, D[p]) has degree 0 in t.");

@@ -372,6 +372,15 @@ Replace `rt_class_primitive`+`rt_expand_logs` as the independence oracle where i
 `PolyRischDECancelTan` (§6). (d) `IntegrateHypertangent{Polynomial,Reduced}` (§5.10). Route `tan`
 through this **instead of** `TrigToExp`, yielding real `arctan`/`log(cos)` output. Closes
 **G-B1..G-B5**. Independent of P0/P1 in principle, but cleaner on top of P0.
+> **Status (2026-07-12): polynomial part done.** `risch_field_polynomial_reduce` (§5.4, the
+> nonlinear-monomial reduction) and `src/calculus/risch_hypertangent.{c,h}`
+> `IntegrateHypertangentPolynomial` (§5.10 d, polynomial part) land with builtins
+> `Risch\`PolynomialReduce` / `Risch\`IntegrateHypertangentPolynomial` and
+> `tests/test_risch_hypertangent.c` (Example 5.10.1, real `∫tan x`, the `Dc≠0` non-elementarity
+> certificate, `a=2` scaling), leak-clean — the first real tangent integration with no complex
+> exponentials. **Remaining:** the reduced part `IntegrateHypertangentReduced` (b) which needs
+> the coupled 2×2 system `CoupledDESystem` (§8.4), the RDE tangent branches (c), the `RT_TAN`
+> detection + Hermite/residue front-end (a/d), and routing `tan` through this in the integrator.
 
 **P3 — Residue-criterion decision half + tight degree bounds.**
 Return Booleans that *prove* non-elementarity (§5.6 Thm 5.6.1(ii), the `Dc≠0` tangent test,

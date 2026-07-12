@@ -287,6 +287,48 @@ void risch_field_xgcd_t(const Expr* a, const Expr* b, const Expr* t,
 /* Diophantine solve b dn + c ds = r with deg_t(b) < deg_t(ds).        */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/* Derivation lookup and PolynomialReduce (Bronstein §5.4).            */
+/* ------------------------------------------------------------------ */
+
+const Expr* risch_deriv_lookup(const RischDeriv* d, const Expr* t) {
+    if (!t || t->type != EXPR_SYMBOL) return NULL;
+    for (size_t i = 0; i < d->nvars; i++)
+        if (d->vars[i]->type == EXPR_SYMBOL && d->vars[i]->data.symbol == t->data.symbol)
+            return d->dvars[i];
+    return NULL;
+}
+
+bool risch_field_polynomial_reduce(const Expr* p, const Expr* t, const RischDeriv* d,
+                                   Expr** qo, Expr** ro) {
+    const Expr* Dt = risch_deriv_lookup(d, t);
+    if (!Dt) return false;
+    long delta = risch_field_degree_t(Dt, t);      /* delta(t) = deg_t(Dt) */
+    if (delta < 2) return false;                    /* requires a nonlinear monomial */
+    Expr* lambda = rf_coeff(Dt, t, delta);          /* lc_t(Dt) */
+
+    Expr* q = expr_new_integer(0);
+    Expr* r = rf_call1("Expand", rf_cp(p));
+    for (;;) {
+        long dr = risch_field_degree_t(r, t);
+        if (dr < delta) break;
+        long m = dr - delta + 1;
+        /* q0 = (lc_t(r) / (m lambda)) t^m ; D[q0] cancels the leading term of r. */
+        Expr* lcr = rf_coeff(r, t, dr);
+        Expr* mlam = rf_eval_adopt(rf_times(expr_new_integer(m), rf_cp(lambda)));
+        Expr* c = rf_call1("Cancel", rf_times(lcr, rf_pow(mlam, -1)));
+        Expr* q0 = rf_eval_adopt(rf_times(c, rf_pow(rf_cp(t), m)));  /* adopts c */
+        q = rf_add(q, rf_cp(q0));                                   /* q += q0 */
+        Expr* Dq0 = risch_field_deriv(q0, d);
+        expr_free(q0);
+        r = rf_call1("Expand", rf_add(r, rf_neg(Dq0)));            /* r -= D[q0] */
+    }
+    expr_free(lambda);
+    *qo = rf_call1("Cancel", q);
+    *ro = rf_call1("Cancel", r);
+    return true;
+}
+
 void risch_field_diophantine_t(const Expr* dn, const Expr* ds, const Expr* r,
                                const Expr* t, Expr** bo, Expr** co) {
     Expr *g = NULL, *u = NULL, *v = NULL;
