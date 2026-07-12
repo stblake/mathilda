@@ -15,8 +15,13 @@ else
   BUILD_PLATFORM := Windows
 endif
 
-CC = gcc-16
-CFLAGS = -O3 -std=c99 -Wall -Wextra -g -I./src -I./src/list -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/graph -I./src/strings -I./src/strings/regex -I/usr/local/include
+# Compiler. Defaults to the plain `gcc` on PATH; override on the command line
+# (e.g. `make CC=gcc-16`) if a specific version is needed. Do NOT hardcode a
+# versioned name here — not every host has it (Linux distros generally ship
+# `gcc` only, macOS Homebrew ships `gcc-NN`). A plain `=` (not `?=`) is required:
+# Make pre-defines CC=cc as a built-in, which would defeat `?=`.
+CC = gcc
+CFLAGS = -O3 -std=c99 -Wall -Wextra -g -I./src -I./src/list -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/graph -I./src/strings -I./src/strings/regex -I/usr/include -I/usr/local/include
 
 # Readline is available on macOS and Linux but not on Windows (MinGW).
 # Build with USE_READLINE=0 to disable it explicitly (e.g. for cross-builds
@@ -61,7 +66,7 @@ endif
 #   Ubuntu/Debian:    sudo apt install libecm-dev
 ifeq ($(USE_ECM), 1)
   ECM_PROBE := $(shell printf '\#include <ecm.h>\nint main(void){ecm_params p;ecm_init(p);return 0;}\n' > /tmp/mathilda_ecmprobe.c 2>/dev/null && \
-    $(CC) /tmp/mathilda_ecmprobe.c -o /tmp/mathilda_ecmprobe -I/usr/local/include -I/opt/homebrew/include \
+    $(CC) /tmp/mathilda_ecmprobe.c -o /tmp/mathilda_ecmprobe -I/usr/include -I/usr/local/include -I/opt/homebrew/include \
       -L/usr/local/lib -L/opt/homebrew/lib -lecm -lgmp 2>/dev/null && echo y; \
     rm -f /tmp/mathilda_ecmprobe.c /tmp/mathilda_ecmprobe)
   ifeq ($(ECM_PROBE), y)
