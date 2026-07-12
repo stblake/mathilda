@@ -265,6 +265,15 @@ static void test_fractional_exp_case(void) {
      * ALGEBRAIC residues (E^(2x) kernelised to theta^2) -> ArcTan[E^x] form. */
     assert_rm_diff_zero("Exp[x]/(Exp[2 x] + 1)");
     assert_rm_diff_zero("Exp[x]/(Exp[2 x] + 4)");
+    /* Higher (cubic+) irreducible denominators in the exp kernel: the residues
+     * are algebraic of degree >= 3, so the real Log/ArcTan Rothstein-Trager
+     * declines and the rational-reduction fallback (t = E^(a x),
+     * dx = dt/(a t) -> rational integral in t) closes them as RootSum.  The
+     * commensurate-exponent case E^(x/6)/(1+E^(x/2)+E^(x/3)) reduces onto the
+     * primitive t = E^(x/6) (den 1 + t^2 + t^3).  Diff-back verification relies
+     * on the generalized D[RootSum] collapse (src/root.c). */
+    assert_rm_diff_zero("1/(1 + Exp[2 x] + Exp[3 x])");
+    assert_rm_diff_zero("Exp[x/6]/(1 + Exp[x/2] + Exp[x/3])");
 }
 
 /* ================= HERMITE (repeated poles) EXP =================
@@ -380,6 +389,12 @@ static void test_log_tower_case(void) {
      * under D), so ALL top degrees close. */
     assert_rm_diff_zero("Log[Log[x]]^5/(x Log[x])");   /* -> Log[Log[x]]^6/6 */
     assert_rm_diff_zero("Log[Log[x]]^7/(x Log[x])");   /* -> Log[Log[x]]^8/8 */
+    /* Composite-argument logs (Log[x/Log[x]], Log[Log[x]/x]) are normalized to
+     * the minimal independent generator set {Log[x], Log[Log[x]]} before the
+     * ansatz is built (rt_expand_logs), collapsing a spurious depth-3 tower to
+     * depth 2 (~90x faster).  -> -x Log[Log[x]/x] - x/Log[x/Log[x]]. */
+    assert_rm_diff_zero("1 - (1 + 1/Log[x/Log[x]]^2)/Log[x] + 1/Log[x/Log[x]]^2 "
+                        "- 1/Log[x/Log[x]] - Log[Log[x]/x]");
 }
 
 /* ================= NESTED EXP TOWERS + MERGED MONOMIAL =================

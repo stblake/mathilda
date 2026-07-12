@@ -577,6 +577,77 @@ static void rat_strip_symbolic_common(Expr** num_io, Expr** den_io) {
  * user-facing evaluation. */
 int cancel_recursive_inside_gcd = 0;
 
+/* True when `exp` is a symbolic (variable-bearing) exponent — anything other
+ * than a numeric literal (integer / real / rational).  A Power with such an
+ * exponent is a transcendental generator, not a polynomial power. */
+static bool rat_exp_is_symbolic(Expr* exp) {
+    if (!exp) return false;
+    if (exp->type == EXPR_INTEGER || exp->type == EXPR_BIGINT ||
+        exp->type == EXPR_REAL) return false;
+    int64_t p, q;
+    if (is_rational(exp, &p, &q)) return false;   /* Rational[a, b] literal */
+    return true;
+}
+
+/* Structural subexpression test: does `hay` contain `needle`? */
+static bool rat_contains_expr(Expr* hay, Expr* needle) {
+    if (!hay) return false;
+    if (expr_eq(hay, needle)) return true;
+    if (hay->type != EXPR_FUNCTION) return false;
+    if (rat_contains_expr(hay->data.function.head, needle)) return true;
+    for (size_t i = 0; i < hay->data.function.arg_count; i++)
+        if (rat_contains_expr(hay->data.function.args[i], needle)) return true;
+    return false;
+}
+
+/* True when the generic multivariate GCD's variable set for num/den would
+ * contain ALGEBRAICALLY-DEPENDENT generators, on which the generic subresultant
+ * Euclid cannot make degree progress and loops forever.  Two shapes arise for a
+ * transcendental power Power[b, e] with a symbolic exponent e:
+ *   (1) its base b is itself another generator (e.g. the atom x^n alongside the
+ *       bare variable x, from x^n/(x(1+x^n)) — reached via Integrate[1/(1+x^n)]);
+ *   (2) another symbolic power shares its base b with a different exponent
+ *       (e.g. x^(n-1) and x^n).
+ * FLINT packs genuine Q-polynomials (including the commensurate x^n / x^(2n)
+ * generator case) and is tried first, so this gate — checked only when FLINT
+ * declined — never rejects a fraction that would actually cancel.  Bailing
+ * (leaving it uncancelled) is always correctness-preserving. */
+static bool rat_has_dependent_power_generators(Expr* num, Expr* den) {
+    size_t vc = 0, vp = 16;
+    Expr** vv = malloc(sizeof(Expr*) * vp);
+    collect_variables(num, &vv, &vc, &vp);
+    collect_variables(den, &vv, &vc, &vp);
+    bool dep = false;
+    for (size_t i = 0; i < vc && !dep; i++) {
+        Expr* v = vv[i];
+        if (v->type != EXPR_FUNCTION ||
+            v->data.function.head->type != EXPR_SYMBOL ||
+            v->data.function.head->data.symbol != SYM_Power ||
+            v->data.function.arg_count != 2 ||
+            !rat_exp_is_symbolic(v->data.function.args[1]))
+            continue;
+        Expr* base = v->data.function.args[0];
+        Expr* exp  = v->data.function.args[1];
+        for (size_t j = 0; j < vc && !dep; j++) {
+            if (j == i) continue;
+            Expr* w = vv[j];
+            /* (1) base b is (or contains) another generator. */
+            if (rat_contains_expr(base, w)) { dep = true; break; }
+            /* (2) another symbolic power of the same base, different exponent. */
+            if (w->type == EXPR_FUNCTION &&
+                w->data.function.head->type == EXPR_SYMBOL &&
+                w->data.function.head->data.symbol == SYM_Power &&
+                w->data.function.arg_count == 2 &&
+                rat_exp_is_symbolic(w->data.function.args[1]) &&
+                expr_eq(base, w->data.function.args[0]) &&
+                !expr_eq(exp, w->data.function.args[1])) { dep = true; break; }
+        }
+    }
+    for (size_t i = 0; i < vc; i++) expr_free(vv[i]);
+    free(vv);
+    return dep;
+}
+
 static Expr* cancel_recursive(Expr* e) {
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
@@ -642,10 +713,26 @@ static Expr* cancel_recursive(Expr* e) {
     g = flint_multivariate_gcd_normalized(num, den);
     if (g) g = eval_and_free(g);
 #endif
+    /* Soundness gate for the generic PolynomialGCD fallback.  When FLINT
+     * declined (g == NULL) the input is not a genuine polynomial over Q that
+     * FLINT could pack.  The generic Expr subresultant Euclid then treats each
+     * transcendental power Power[b, e] (symbolic exponent) as an independent
+     * generator; two incommensurate powers of the SAME base (e.g. x^(n-1) and
+     * x^n) are algebraically dependent yet look independent, so get_degree_poly
+     * cannot order them, no coefficient reduction makes progress, and the GCD /
+     * exact_poly_div loop runs forever (e.g. Cancel[x^(n-1)/(1+x^n)], reached
+     * from Integrate[1/(1+x^n), x]).  Leaving the fraction uncancelled is always
+     * correctness-preserving, and such fractions do not cancel anyway. */
+    if (!g && rat_has_dependent_power_generators(num, den)) {
+        cancel_recursive_inside_gcd--;
+        expr_free(num);
+        expr_free(den);
+        return expr_copy(e);
+    }
     if (!g)
         g = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialGCD), (Expr*[]){expr_copy(num), expr_copy(den)}, 2));
     cancel_recursive_inside_gcd--;
-    
+
     Expr* new_num = cancel_exact_div_wrapper(num, g);
     Expr* new_den = cancel_exact_div_wrapper(den, g);
     

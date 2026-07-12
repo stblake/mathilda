@@ -134,6 +134,23 @@ void test_cancel_nonsymbol_base() {
              "Plus[1, Power[Log[r], Rational[1, 3]]]");
 }
 
+/* A symbolic power x^n whose base x is ALSO a bare polynomial generator makes
+ * the generic multivariate PolynomialGCD's variable set algebraically
+ * dependent; before the rat_has_dependent_power_generators soundness gate this
+ * looped forever (e.g. reached from Integrate[1/(1+x^n), x]).  The gate leaves
+ * such fractions uncancelled (correctness-preserving); genuinely-cancellable
+ * commensurate generators still cancel via the FLINT path. */
+void test_cancel_dependent_power_generators() {
+    /* Terminates; nothing to cancel (x^(n-1) and x^n are incommensurate). */
+    run_test("Cancel[x^(n-1)/(1+x^n)]",
+             "Times[Power[x, Plus[-1, n]], Power[Plus[1, Power[x, n]], -1]]");
+    /* Commensurate generator: still cancels (FLINT). */
+    run_test("Cancel[(x^(2 n) - 1)/(x^n - 1)]", "Plus[1, Power[x, n]]");
+    /* Shared symbolic power with a bare-x cofactor: still cancels (FLINT). */
+    run_test("Cancel[x^n (x+1)/(x^n (x+2))]",
+             "Times[Plus[1, x], Power[Plus[2, x], -1]]");
+}
+
 /* Together must apply the same algebraic-generator pass.
  * The headline regression: y^(5/8) (y^(19/8) - y^(73/24)/(y^(2/3) - 1/y^(1/3)))
  * with denominators {8, 8, 24, 3, 3} yields lcm m = 24, and after substitution
@@ -175,6 +192,7 @@ int main() {
     TEST(test_cancel);
     TEST(test_cancel_algebraic_generator);
     TEST(test_cancel_nonsymbol_base);
+    TEST(test_cancel_dependent_power_generators);
     TEST(test_together);
     TEST(test_together_algebraic_generator);
     printf("All rat tests passed!\n");

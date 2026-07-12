@@ -2146,6 +2146,64 @@ static void rt_decode_mono(long idx, const long* bd, size_t nlv, long* e) {
     }
 }
 
+/* ------------------------------------------------------------------ */
+/* Logarithm-argument normalization for the tower builder.             */
+/* ------------------------------------------------------------------ */
+/* Rewrite  Log[a b ...] -> Log[a] + Log[b] + ...  and  Log[b^p] -> p Log[b]
+ * recursively, so a nested-log integrand presents the MINIMAL set of
+ * multiplicatively-independent Log generators to rt_collect_logs.  Without
+ * this, a composite kernel like Log[x/Log[x]] is treated as an INDEPENDENT
+ * transcendental on top of Log[x] and Log[Log[x]], inflating the tower depth
+ * (and hence the undetermined-coefficient ansatz — the dominant cost) by a
+ * spurious, functionally-redundant generator.
+ *
+ * The rewrite is exact for the DERIVATIVE (d/dx Log[u] = u'/u regardless of
+ * branch), which is all the tower's correct-by-construction certificate and
+ * the final diff-back gate (rt_verify_antideriv, against the ORIGINAL f)
+ * depend on; the branch-cut constants it drops are absorbed by the constant
+ * of integration.  Sums inside a Log are left intact (Log[a+b] does not
+ * split). */
+static Expr* rt_expand_logs(Expr* e);
+
+/* Expanded form of Log[a] (the argument `a` is borrowed). */
+static Expr* rt_log_of(Expr* a) {
+    if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = a->data.function.head->data.symbol;
+        if (h == intern_symbol("Times")) {
+            size_t m = a->data.function.arg_count;
+            Expr** ts = malloc((m ? m : 1) * sizeof(Expr*));
+            for (size_t i = 0; i < m; i++) ts[i] = rt_log_of(a->data.function.args[i]);
+            Expr* s = expr_new_function(expr_new_symbol("Plus"), ts, m);
+            free(ts);
+            return s;
+        }
+        if (h == intern_symbol("Power") && a->data.function.arg_count == 2) {
+            Expr* lb = rt_log_of(a->data.function.args[0]);
+            return expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ rt_expand_logs(a->data.function.args[1]), lb }, 2);
+        }
+    }
+    /* Atomic (or Plus) argument: keep the Log, but still expand logs nested
+     * inside the argument (e.g. the Log[x] inside Log[Log[x]]). */
+    return expr_new_function(expr_new_symbol("Log"),
+        (Expr*[]){ rt_expand_logs(a) }, 1);
+}
+
+static Expr* rt_expand_logs(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy(e);
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == intern_symbol("Log")
+        && e->data.function.arg_count == 1) {
+        return rt_log_of(e->data.function.args[0]);
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** args = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) args[i] = rt_expand_logs(e->data.function.args[i]);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), args, n);
+    free(args);
+    return r;
+}
+
 /* Nested logarithmic tower.  When the integrand is a rational function of a
  * chain of NESTED logarithms  t_1 = Log[u_1](x), t_2 = Log[u_2](x, t_1), ...,
  * t_n = Log[u_n](x, t_1..t_{n-1})  (n >= 2), the single-extension cases (which
@@ -2164,10 +2222,17 @@ static void rt_decode_mono(long idx, const long* bd, size_t nlv, long* e) {
  * repeated pole (tower Hermite — later), or a lower-field coefficient must be
  * rational (the full recursion — later). */
 static Expr* rt_log_tower_case(Expr* f, Expr* x) {
+    /* Normalize composite logs (Log[a b] -> Log a + Log b, Log[b^p] -> p Log b)
+     * so the tower is built over the MINIMAL independent generator set.  `fn`
+     * drives kernel collection and the ansatz; correctness is still gated by
+     * diff-back against the ORIGINAL `f` (rt_verify_antideriv, below). */
+    Expr* fn = rt_eval_own(rt_expand_logs(f));
+    if (!fn) fn = expr_copy(f);
+
     Expr** logs = NULL; size_t nl = 0, lcap = 0;
-    rt_collect_logs(f, x, &logs, &nl, &lcap);
+    rt_collect_logs(fn, x, &logs, &nl, &lcap);
     if (nl < 2 || nl > 4) { for (size_t i = 0; i < nl; i++) expr_free(logs[i]);
-                            free(logs); return NULL; }
+                            free(logs); expr_free(fn); return NULL; }
 
     /* Order innermost-first: if logs[i] contains logs[k], logs[k] is deeper. */
     for (size_t i = 0; i < nl; i++)
@@ -2189,7 +2254,7 @@ static Expr* rt_log_tower_case(Expr* f, Expr* x) {
     free(rules);
 
     Expr* F = rt_eval1("Together", rt_eval_own(expr_new_function(
-        expr_new_symbol("ReplaceAll"), (Expr*[]){ expr_copy(f), expr_copy(rl) }, 2)));
+        expr_new_symbol("ReplaceAll"), (Expr*[]){ expr_copy(fn), expr_copy(rl) }, 2)));
     Expr* top = ts[nl - 1];
     Expr* num = NULL; Expr* den = NULL;
     Expr** Dt = NULL;
@@ -2401,6 +2466,7 @@ static Expr* rt_log_tower_case(Expr* f, Expr* x) {
     if (num) expr_free(num);
     if (den) expr_free(den);
     if (F) expr_free(F);
+    expr_free(fn);
     expr_free(rl);
     for (size_t i = 0; i < nl; i++) { expr_free(ts[i]); expr_free(logs[i]); }
     free(ts); free(logs);
@@ -3992,6 +4058,85 @@ static Expr* rt_trig_frontend(Expr* f, Expr* x) {
     return rt_eval1("ExpToTrig", r);   /* adopts r; back to trig form */
 }
 
+/* True iff `e` contains, anywhere, a function node with head symbol `h`. */
+static bool rt_expr_has_head(Expr* e, const char* h) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == intern_symbol(h)) return true;
+    if (rt_expr_has_head(e->data.function.head, h)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rt_expr_has_head(e->data.function.args[i], h)) return true;
+    return false;
+}
+
+/* Rational-function-of-a-single-exponential fallback.  When the integrand is a
+ * rational function of one exponential kernel with a LINEAR exponent (so the
+ * commensurate primitive t = E^(a x) has constant logarithmic derivative
+ * u' = a), the substitution t = E^(a x), dx = dt/(a t) reduces the integral to
+ * the pure rational integral  ∫ R(t)/(a t) dt, which the rational integrator
+ * closes in full — including the algebraic-residue log parts it expresses as
+ * RootSum (e.g. the cubic 1 + t^2 + t^3 from E^(x/6)/(1 + E^(x/2) + E^(x/3))).
+ * Back-substitute t -> E^(a x) and diff-back verify.  This is the general
+ * closure for the cubic-and-higher residue cases that the structured real
+ * Log/ArcTan Rothstein-Trager log part (rt_frac_lrt) necessarily declines;
+ * it runs LAST among the exponential cases, so their cleaner ArcTan/radical
+ * forms win whenever they apply.  Correctness rests on the same
+ * correct-by-construction rational integrator plus the diff-back gate; the
+ * RootSum it emits is recognised by the generalized D[RootSum] collapse
+ * (src/root.c). */
+static Expr* rt_exp_ratreduce_case(Expr* f, Expr* x) {
+    Expr* uexp = NULL;
+    Expr* F = rt_exp_kernelize(f, x, &uexp);
+    if (!F || !uexp) { if (F) expr_free(F); if (uexp) expr_free(uexp); return NULL; }
+
+    Expr* t = expr_new_symbol("rmT");
+    Expr* up = rt_eval2("D", expr_copy(uexp), expr_copy(x));   /* u' = a */
+    Expr* result = NULL;
+
+    /* Gates: F is a rational function of the kernel t ALONE (no residual x, no
+     * nested exp/log of x), it genuinely depends on t, and u' is free of x
+     * (a linear exponent -> constant log-derivative, so the Jacobian 1/(u' t)
+     * is rational in t). */
+    bool ok = F && up
+        && rt_free_of_x(F, x)
+        && rt_find_exp_of_x(F, x) == NULL && rt_find_log_of_x(F, x) == NULL
+        && !rt_free_of_x(F, t)
+        && rt_free_of_x(up, x);
+
+    if (ok) {
+        /* G = F / (u' t). */
+        Expr* denom = expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_copy(up), expr_copy(t) }, 2);
+        Expr* G = rt_eval1("Together", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_copy(F),
+                expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ denom, expr_new_integer(-1) }, 2) }, 2));
+        /* Pure rational integral in t. */
+        Expr* A = G ? rt_eval2("Integrate", expr_copy(G), expr_copy(t)) : NULL;
+        bool declined = !A || rt_expr_has_head(A, "Integrate");
+        if (!declined) {
+            /* Back-substitute t -> E^u and diff-back verify against f. */
+            Expr* back = expr_new_function(expr_new_symbol("List"),
+                (Expr*[]){ expr_new_function(expr_new_symbol("Rule"),
+                    (Expr*[]){ expr_copy(t),
+                        expr_new_function(expr_new_symbol("Power"),
+                            (Expr*[]){ expr_new_symbol("E"), expr_copy(uexp) }, 2) }, 2) }, 1);
+            Expr* Q = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                (Expr*[]){ expr_copy(A), back }, 2));
+            if (Q && rt_verify_antideriv(Q, f, x)) result = Q;
+            else if (Q) expr_free(Q);
+        }
+        if (A) expr_free(A);
+        if (G) expr_free(G);
+    }
+
+    expr_free(t);
+    if (up) expr_free(up);
+    expr_free(F);
+    expr_free(uexp);
+    return result;
+}
+
 /* Dispatch the transcendental cases: the primitive (logarithmic) polynomial
  * reduction, the exponential (hyperexponential / Risch-DE) reduction, the
  * fractional (Rothstein-Trager) log-part, and the trig/hyperbolic front-end.
@@ -4015,6 +4160,8 @@ static Expr* rt_transcendental_case(Expr* f, Expr* x) {
     r = rt_exp_tower_case(f, x);    /* nested exponential tower (depth > 1) */
     if (r) return r;
     r = rt_recursive_tower_case(f, x);   /* one-extension recursion (mixed / rational coeff) */
+    if (r) return r;
+    r = rt_exp_ratreduce_case(f, x);   /* rational function of a single exp -> RootSum log part */
     if (r) return r;
     r = rt_trig_frontend(f, x);
     if (r) return r;
