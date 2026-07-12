@@ -64,8 +64,15 @@ endif
 # factoriser, matching the USE_FLINT=0 / USE_MPFR=0 graceful-degrade policy.
 #   macOS (Homebrew): brew install gmp-ecm
 #   Ubuntu/Debian:    sudo apt install libecm-dev
+# NOTE: the probe MUST include <stdio.h> before <ecm.h>. GMP-ECM's ecm.h uses
+# the FILE type (ecm_params has `FILE *os, *es;`) but on Debian/Ubuntu's 7.0.5
+# it does not include <stdio.h> itself — it relies on the includer. macOS system
+# headers pull in <stdio.h> transitively (masking the bug), Linux glibc does not,
+# so without this the probe fails to COMPILE on Linux and ECM is wrongly reported
+# "not detected" even when libecm-dev is installed. The multiarch lib dir is on
+# the default linker path, so -lecm resolves without an explicit -L there.
 ifeq ($(USE_ECM), 1)
-  ECM_PROBE := $(shell printf '\#include <ecm.h>\nint main(void){ecm_params p;ecm_init(p);return 0;}\n' > /tmp/mathilda_ecmprobe.c 2>/dev/null && \
+  ECM_PROBE := $(shell printf '\#include <stdio.h>\n\#include <ecm.h>\nint main(void){ecm_params p;ecm_init(p);return 0;}\n' > /tmp/mathilda_ecmprobe.c 2>/dev/null && \
     $(CC) /tmp/mathilda_ecmprobe.c -o /tmp/mathilda_ecmprobe -I/usr/include -I/usr/local/include -I/opt/homebrew/include \
       -L/usr/local/lib -L/opt/homebrew/lib -lecm -lgmp 2>/dev/null && echo y; \
     rm -f /tmp/mathilda_ecmprobe.c /tmp/mathilda_ecmprobe)
