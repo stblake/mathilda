@@ -63,6 +63,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "arithmetic.h"
 #include "attr.h"
 #include "eval.h"
 #include "expr.h"
@@ -356,6 +357,10 @@ static int gaussian_reduce(AugMat* A, size_t* pivot_row_for_col) {
 /* Emit `Solve::svars` to stderr.  Throttled to once per distinct
  * input hash, mirroring the `Solve::optx` idiom in solve.c. */
 static void warn_svars(uint64_t input_hash) {
+    /* Internal decision procedures (e.g. the Risch structure-theorem Q-span
+     * solve) legitimately hand SolveAlways underdetermined systems; honour the
+     * shared warnings-mute counter so those probes stay quiet. */
+    if (arith_warnings_muted()) return;
     static uint64_t last_warned_hash = 0;
     if (input_hash == last_warned_hash) return;
     last_warned_hash = input_hash;

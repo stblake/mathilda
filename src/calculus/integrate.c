@@ -36,6 +36,7 @@
 #include "intrischnorman.h"
 #include "integrate_risch_transcendental.h"
 #include "risch_canonical.h"
+#include "risch_structure.h"
 #include "intsimp.h"
 #include "common.h"
 #include "expr.h"
@@ -1017,6 +1018,11 @@ void integrate_init(void) {
      * splitting factorization / canonical representation primitives, exposed as
      * the Risch` internal builtins and reused by the recursive integrator. */
     integrate_risch_canonical_init();
+
+    /* Bronstein structure theorems (Symbolic Integration I, §9.3): the Q-linear
+     * decision of whether a proposed new exp/log monomial is algebraically
+     * independent of the tower or reducible. */
+    integrate_risch_structure_init();
 
     /* Pre-register Integrate`CRCTable so ?Integrate`CRCTable shows a
      * docstring even before the lazy load fires.  The actual rule

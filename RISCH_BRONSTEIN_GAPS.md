@@ -356,6 +356,15 @@ P1, P3, P4.
 Build the ℚ-linear system of Cor. 9.3.1/9.3.2 (and §5.12 `IsLogarithmicDerivativeOfRadical`).
 Replace `rt_class_primitive`+`rt_expand_logs` as the independence oracle where it matters. Closes
 **G-A2/G-A3/G-A4-depth**; prerequisite for both a real decision procedure and Cherry.
+> **Status (2026-07-12): core done (complex case).** `src/calculus/risch_structure.{c,h}` —
+> `risch_rational_span` (the ℚ-linear membership decision via `Numerator[Together[…]]` +
+> `SolveAlways`) and the structure-theorem front-ends `Risch\`LogReducible` / `Risch\`ExpReducible`
+> (Cor. 9.3.1(i)/(ii)), returning the rational coefficient vector or `False`. Builtins +
+> `tests/test_risch_structure.c` (log(x²)=2log x, exp(2x)=exp(x)², exp(x+log x)=x·eˣ, and
+> genuine-new cases), leak-clean. `warn_svars` now honours the mute counter. **Remaining:** the
+> **real/tangent case** (Cor. 9.3.2, eqs. 9.14/9.15 — the `T`/`A` index sets), the standalone
+> `IsLogarithmicDerivativeOfRadical` wrapper (`n·f = Du/u`), and replacing `rt_class_primitive`/
+> `rt_expand_logs` in the live integrator with this oracle.
 
 **P2 — Hypertangent extension (the tangent focus area).**
 (a) Add the `RT_TAN` monomial kind (`Dt/(t²+1) ∈ k`) and its detection. (b) Implement
