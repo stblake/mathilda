@@ -237,11 +237,13 @@ static void test_phase1_unevaluated_returns_self(void) {
  * produced by N[] over an Exp[] integrand) once drove split_factor into
  * unbounded recursion and overflowed the C stack, killing the whole process.
  * The recursion is now depth-guarded (PMINT_MAX_SPLIT_DEPTH): the integrator
- * must give up gracefully and leave the integral unevaluated. */
+ * must give up gracefully and leave the *inexact-base* integral unevaluated. */
 static void test_phase1_inexact_base_no_stack_overflow(void) {
     run_eq("Head[Integrate[x*2.71828^(-x), x]]",         "Integrate");
     run_eq("Head[Integrate[x^2*2.71828^(-x), x]]",       "Integrate");
-    run_eq("Head[N[Integrate[x*Exp[-x], {x, 0, Infinity}]]]", "Integrate");
+    /* The exact-base definite integral ∫_0^∞ x e^{-x} dx = 1 genuinely
+     * evaluates (a finite answer is itself proof of no stack overflow). */
+    run_eq("Integrate[x*Exp[-x], {x, 0, Infinity}]", "1");
 }
 
 /* Wrong arity must also bubble back unevaluated (the BuiltinFunc
@@ -270,9 +272,15 @@ static void test_phase1_rational_unchanged(void) {
 /* Integrate now routes through RischNorman for non-rational
  * integrands.  Genuinely non-elementary integrands (1/Log[x],
  * Exp[x^2]) still bubble back unevaluated. */
+/* These were once "known fails" (left unevaluated) for the *top-level*
+ * Integrate cascade.  The special-function tables now close them —
+ * ∫ 1/Log[x] dx = LogIntegral[x], ∫ E^(x^2) dx = (√π/2) Erfi[x] — so
+ * top-level Integrate returns a non-Integrate head.  The RischNorman
+ * engine itself still declines both (see
+ * test_phase1_unevaluated_returns_self). */
 static void test_phase1_known_fail_unevaluated(void) {
-    run_eq("Integrate[1/Log[x], x]", "Integrate[1/Log[x], x]");
-    run_eq("Integrate[Exp[x^2], x]", "Integrate[E^x^2, x]");
+    run_eq("Integrate[1/Log[x], x]", "LogIntegral[x]");
+    run_eq("Head[Integrate[Exp[x^2], x]] =!= Integrate", "True");
 }
 
 /* ------------------------------------------------------------------ */
@@ -585,6 +593,24 @@ static void test_phase4_x_log_x(void)  { assert_rischnorman_correct("x Log[x]");
 static void test_phase4_sin_exp(void)  { assert_rischnorman_correct("Sin[x] Exp[x]"); }
 static void test_phase4_cos_exp(void)  { assert_rischnorman_correct("Cos[x] Exp[x]"); }
 
+/* Regression: a high-power exponential denominator.  This previously
+ * SEGFAULTED — the degree-61 ansatz treated x as a full polynomial
+ * generator (1953 monomials over {x, E^x}), built the candidate as a
+ * 1953-deep left-nested Plus, and eval_expand overflowed the evaluator's
+ * recursion guard, wrapping the candidate in Hold[] and corrupting it
+ * into a NULL-arg Times.  Now: a flat candidate Plus + a per-variable
+ * degree bound on the base variable x, so it integrates correctly.  Also
+ * exercises the FLINT fmpq_mat_rref solve path.  ∫ E^x/(1+E^x)^60 dx
+ * must diff back to the integrand. */
+static void test_phase4_high_power_exp_denominator(void) {
+    assert_rischnorman_correct("Exp[x]/(1 + Exp[x])^60");
+}
+/* The base-x term must survive the per-variable bound: ∫1/(1+E^x) needs
+ * the explicit `x` in x - Log[1+E^x]. */
+static void test_phase4_inv_1_plus_exp_keeps_x(void) {
+    run_eq("Integrate`RischNorman[1/(1 + Exp[x]), x]", "x - Log[1 + E^x]");
+}
+
 /* ------------------------------------------------------------------ */
 /* Phase 7 — Bronstein / Geddes pmint reference corpus.                */
 /* Source: the canonical Pmint test list from Bronstein's Risch-Norman */
@@ -817,6 +843,8 @@ int main(void) {
     TEST(test_phase4_x_log_x);
     TEST(test_phase4_sin_exp);
     TEST(test_phase4_cos_exp);
+    TEST(test_phase4_high_power_exp_denominator);
+    TEST(test_phase4_inv_1_plus_exp_keeps_x);
 
     /* Phase 5 — log candidates + getSpecial. */
     TEST(test_phase5_inv_x);

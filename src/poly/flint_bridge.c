@@ -3575,6 +3575,91 @@ static Expr* builtin_flint_factorsquarefree(Expr* res) {
     return flint_polynomial_factor_squarefree(res->data.function.args[0]);
 }
 
+/* ------------------------------------------------------------------ */
+/*  Linear-system coefficient extraction (pmint parallel-Risch solve)  */
+/* ------------------------------------------------------------------ */
+
+int flint_linear_system_terms(const Expr* equation,
+                              Expr* const* vars, int nvars,
+                              Expr* const* unknowns, int nunk,
+                              flint_lsys_term_fn cb, void* user) {
+    if (!equation || !cb || nvars < 0 || nunk < 0) return 0;
+    int nv = nvars, nu = nunk, V = nv + nu;
+    if (V == 0) return 0;
+
+    /* Variable set = base vars (indices 0..nv-1) then unknowns
+     * (nv..nv+nu-1), in that fixed order.  to_mpoly() below fails on any
+     * symbol not in this set, so a foreign parameter (e.g. `a` in
+     * Exp[a x]) makes the whole path decline — exactly matching the
+     * Q-only domain of the hand-rolled pm_walk builder. */
+    VarSet vs = {0};
+    for (int i = 0; i < nv; i++) {
+        if (vars[i]->type != EXPR_SYMBOL || !varset_add(&vs, vars[i]->data.symbol)) {
+            varset_free(&vs); return 0;
+        }
+    }
+    for (int j = 0; j < nu; j++) {
+        if (unknowns[j]->type != EXPR_SYMBOL || !varset_add(&vs, unknowns[j]->data.symbol)) {
+            varset_free(&vs); return 0;
+        }
+    }
+    /* Any duplicate name (var repeated, or a var colliding with an
+     * unknown) collapses the set and misaligns the index map — bail. */
+    if ((int)vs.count != V) { varset_free(&vs); return 0; }
+
+    fmpq_mpoly_ctx_t ctx;
+    fmpq_mpoly_ctx_init(ctx, (slong)V, ORD_LEX);
+    fmpq_mpoly_t eq;
+    fmpq_mpoly_init(eq, ctx);
+
+    int ok = to_mpoly(equation, eq, ctx, &vs);
+    if (ok) {
+        slong nterms = fmpq_mpoly_length(eq, ctx);
+        ulong* exps = (ulong*)malloc(sizeof(ulong) * (size_t)V);
+        if (!exps) ok = 0;
+
+        /* Pass 1: validate linearity in the unknowns before emitting a
+         * single term, so a caller that resets nothing on failure never
+         * sees partial output. */
+        for (slong i = 0; ok && i < nterms; i++) {
+            fmpq_mpoly_get_term_exp_ui(exps, eq, i, ctx);
+            int seen = 0;
+            for (int j = 0; j < nu; j++) {
+                if (exps[nv + j] > 1) { ok = 0; break; }   /* unknown^2: nonlinear */
+                if (exps[nv + j] == 1) seen++;
+            }
+            if (seen > 1) ok = 0;                          /* product of two unknowns */
+        }
+
+        /* Pass 2: emit one callback per term. */
+        if (ok) {
+            long* base_exp = (long*)malloc(sizeof(long) * (size_t)(nv ? nv : 1));
+            fmpq_t c; fmpq_init(c);
+            mpq_t mc; mpq_init(mc);
+            if (!base_exp) ok = 0;
+            for (slong i = 0; ok && i < nterms; i++) {
+                fmpq_mpoly_get_term_exp_ui(exps, eq, i, ctx);
+                for (int k = 0; k < nv; k++) base_exp[k] = (long)exps[k];
+                int col = nu;                              /* default: unknown-free */
+                for (int j = 0; j < nu; j++) {
+                    if (exps[nv + j] == 1) { col = j; break; }
+                }
+                fmpq_mpoly_get_term_coeff_fmpq(c, eq, i, ctx);
+                fmpq_get_mpq(mc, c);
+                cb(base_exp, nv, col, mc, user);
+            }
+            mpq_clear(mc); fmpq_clear(c);
+            free(base_exp);
+        }
+        free(exps);
+    }
+
+    fmpq_mpoly_clear(eq, ctx);
+    fmpq_mpoly_ctx_clear(ctx);
+    varset_free(&vs);
+    return ok;
+}
+
 void flint_bridge_init(void) {
     /* FLINT keeps thread-local memory pools (fmpz temporaries, prime caches)
      * that it reuses across calls and only releases at thread/program teardown.
@@ -3633,6 +3718,14 @@ int   flint_rde_base_solve_fg(const Expr* f, const Expr* g,
     (void)f; (void)g; (void)xvar;
     if (y_out) *y_out = NULL;
     return -1;
+}
+int flint_linear_system_terms(const Expr* equation,
+                              Expr* const* vars, int nvars,
+                              Expr* const* unknowns, int nunk,
+                              flint_lsys_term_fn cb, void* user) {
+    (void)equation; (void)vars; (void)nvars; (void)unknowns; (void)nunk;
+    (void)cb; (void)user;
+    return 0;
 }
 void  flint_bridge_init(void) { /* no FLINT: nothing to register */ }
 

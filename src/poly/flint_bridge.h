@@ -331,6 +331,39 @@ Expr* flint_algebraic_field_canonical(const Expr* e);
  */
 Expr* flint_algebraic_field_together(const Expr* e);
 
+/*
+ * Callback invoked once per monomial term by flint_linear_system_terms.
+ *   base_exp[0..nbase-1] — exponents in the base variables (the row key).
+ *   col                  — 0-based unknown column (0..nunk-1), or nunk for
+ *                          the unknown-free (constant / RHS) part of the term.
+ *   coeff                — the term's rational coefficient (borrowed; valid
+ *                          only for the duration of the call).
+ */
+typedef void (*flint_lsys_term_fn)(const long* base_exp, int nbase,
+                                   int col, const mpq_t coeff, void* user);
+
+/*
+ * Extract the coefficient structure of a linear system encoded as a single
+ * polynomial `equation` that is linear in `unknowns` and polynomial over Q in
+ * `vars`. Converts `equation` to one fmpq_mpoly over {vars ∪ unknowns} — FLINT
+ * performs the (potentially large) product expansion far faster than a
+ * hand-rolled mpq distributor — then invokes `cb` once per resulting monomial
+ * term (see flint_lsys_term_fn). This is the fast replacement for a manual
+ * distribute-and-accumulate pass over a nested Plus/Times equation tree.
+ *
+ * All of `vars` and `unknowns` must be distinct symbols. Returns 1 on success
+ * (every term delivered to `cb`). Returns 0 WITHOUT invoking `cb` at all when:
+ * FLINT is absent; a var/unknown is not a symbol or the two sets overlap;
+ * `equation` contains a symbol outside vars∪unknowns, an inexact/irrational
+ * coefficient, or a negative/symbolic power (i.e. it is not in Q[vars∪unknowns]);
+ * or it is nonlinear in some unknown. The caller then falls back to its own
+ * builder. Does not take ownership of any argument.
+ */
+int flint_linear_system_terms(const Expr* equation,
+                              Expr* const* vars, int nvars,
+                              Expr* const* unknowns, int nunk,
+                              flint_lsys_term_fn cb, void* user);
+
 /* Registers the M1 scaffolding builtin(s). Called from core_init(). */
 void flint_bridge_init(void);
 

@@ -39,6 +39,8 @@
 #include "arithmetic.h"
 #include "sym_names.h"
 #include "sym_intern.h"
+#include "flint_mat_bridge.h"
+#include "flint_bridge.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -46,6 +48,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
+#include <limits.h>
 
 /* ------------------------------------------------------------------ */
 /* Performance caps.                                                    */
@@ -1730,14 +1733,27 @@ static Expr* deflation(Expr* p,
     return result;
 }
 
-/* enumerate_monomials(vars, nv, total_degree) — recursive build of
- * the set of monomials in vars[] of total degree ≤ total_degree.
+/* enumerate_monomials(vars, nv, total_degree, maxdeg) — recursive build
+ * of the set of monomials in vars[] of total degree ≤ total_degree.
  *
  * pmint.maple lines 69-78.
+ *
+ * `maxdeg` (optional; NULL = no per-variable cap) is a length-nv array
+ * giving an additional *per-variable* exponent ceiling: the exponent of
+ * vars[k] never exceeds maxdeg[k].  This tightens the pure total-degree
+ * bound for generators whose degree in the antiderivative is provably
+ * small — chiefly the base integration variable x (derivative ≡ 1),
+ * whose candidate-numerator degree is bounded by
+ *   deg_x(cden) + max(deg_x(numer), deg_x(denom)) + 1,
+ * a value typically far below the transcendental total-degree bound.
+ * Capping it collapses the monomial count (and the resulting linear
+ * system) from O(dg^nv) toward O(dg) without excluding any monomial the
+ * true answer can contain.
  *
  * Cap at PMINT_MAX_MONOMIALS; on overflow set *out_n = 0 and return 1
  * (caller bubbles back with ::overlarge). */
 static int enumerate_monomials(Expr** vars, size_t nv, int total_degree,
+                                const int* maxdeg,
                                 Expr*** out_monoms, size_t* out_n) {
     *out_monoms = NULL;
     *out_n = 0;
@@ -1757,9 +1773,15 @@ static int enumerate_monomials(Expr** vars, size_t nv, int total_degree,
      *            {vars[-1]^i * w : 1 ≤ i ≤ d, w ∈ enumerate({vars[:-1]}, d-i)} */
     Expr* x = vars[nv - 1];
 
+    /* Per-variable exponent ceiling for this variable (default: no
+     * extra cap beyond the total degree). */
+    int this_max = total_degree;
+    if (maxdeg && maxdeg[nv - 1] < this_max) this_max = maxdeg[nv - 1];
+
     Expr** lower = NULL;
     size_t lower_n = 0;
-    if (enumerate_monomials(vars, nv - 1, total_degree, &lower, &lower_n) != 0) {
+    if (enumerate_monomials(vars, nv - 1, total_degree, maxdeg,
+                             &lower, &lower_n) != 0) {
         return 1;
     }
 
@@ -1796,11 +1818,11 @@ static int enumerate_monomials(Expr** vars, size_t nv, int total_degree,
     }
     free(lower);
 
-    /* i = 1..total_degree. */
-    for (int i = 1; i <= total_degree; i++) {
+    /* i = 1..min(total_degree, this_max). */
+    for (int i = 1; i <= this_max; i++) {
         Expr** lower_i = NULL;
         size_t lower_i_n = 0;
-        if (enumerate_monomials(vars, nv - 1, total_degree - i,
+        if (enumerate_monomials(vars, nv - 1, total_degree - i, maxdeg,
                                  &lower_i, &lower_i_n) != 0) {
             for (size_t j = 0; j < accn; j++) expr_free(acc[j]);
             free(acc);
@@ -1864,15 +1886,25 @@ static int build_candidate(Expr** monomials, size_t nm,
     Expr** unknowns = (Expr**)calloc(nm, sizeof(Expr*));
     if (!names || !unknowns) { free(names); free(unknowns); return 1; }
 
-    Expr* sum = mk_int(0);
+    /* Build the candidate numerator as a *flat* Plus of nm terms.  A
+     * left-nested binary Plus (mk_plus2 accumulated in a loop) would be
+     * nm levels deep, and a large nm (thousands, for a high-degree
+     * ansatz) overflows the evaluator's recursion guard the moment
+     * eval_expand recurses into it — wrapping inner nodes in Hold[] and
+     * silently corrupting the candidate.  A single flat Plus node is
+     * depth-1 regardless of nm. */
+    Expr** term_args = (Expr**)malloc(sizeof(Expr*) * nm);
     for (size_t i = 0; i < nm; i++) {
         char buf[32];
         snprintf(buf, sizeof(buf), "pmint$A%zu", i + 1);
         names[i] = intern_symbol(buf);
         unknowns[i] = expr_new_symbol(names[i]);
-        Expr* term = mk_times2(expr_copy(unknowns[i]), expr_copy(monomials[i]));
-        sum = mk_plus2(sum, term);
+        term_args[i] = mk_times2(expr_copy(unknowns[i]), expr_copy(monomials[i]));
     }
+    Expr* sum = (nm == 1)
+        ? term_args[0]
+        : expr_new_function(expr_new_symbol(SYM_Plus), term_args, nm);
+    free(term_args);
     Expr* sum_eval = eval_expand(sum);
 
     *out_num = sum_eval;
@@ -2183,7 +2215,17 @@ static bool solve_and_emit_mpq(mpq_t* M,
     }
     for (size_t i = 0; i < nrows; i++) rowidx[i] = i;
 
-    gauss_jordan_mpq(M, rowidx, nrows, ncols, pivot_for_col);
+    /* FLINT fraction-free RREF (fmpq_mat_rref) is dramatically faster than
+     * the hand-rolled mpq_t Gauss-Jordan on the large, big-numerator systems
+     * pmint produces for high-degree ansätze — it dominates the profile
+     * (>99% of the solve for ∫E^x/(1+E^x)^n).  RREF is unique, so the FLINT
+     * result (written back in natural row order) decodes identically through
+     * emit_q_solution.  When FLINT is absent the helper returns 0 and we fall
+     * back to the portable Gauss-Jordan. */
+    if (nrows > (size_t)INT_MAX || ncols > (size_t)INT_MAX ||
+        !flint_rref_mpq_inplace(M, (int)nrows, (int)ncols, pivot_for_col)) {
+        gauss_jordan_mpq(M, rowidx, nrows, ncols, pivot_for_col);
+    }
     emit_q_solution(M, rowidx, pivot_for_col, ncols, unknowns, nunknowns,
                      out_solution_rules, out_status);
 
@@ -2789,6 +2831,29 @@ static Expr* builtin_pm_qmb_stress(Expr* res) {
     return expr_new_symbol(ok ? "True" : "False");
 }
 
+/* Sink for flint_linear_system_terms: lands each (base-monomial, column,
+ * coeff) contribution into the QMatBuild, matching pm_acc_commit's
+ * convention exactly — unknown columns accumulate +coeff, the unknown-free
+ * (constant) column nunk accumulates −coeff (the RHS side of E ≡ 0). */
+typedef struct {
+    QMatBuild* M;
+    size_t     nunk;
+    bool       ok;
+} FlintQmbSink;
+
+static void flint_qmb_term_cb(const long* base_exp, int nbase,
+                              int col, const mpq_t coeff, void* user) {
+    FlintQmbSink* s = (FlintQmbSink*)user;
+    if (!s->ok) return;
+    int64_t ev[PMINT_MAX_INDETS];
+    for (int k = 0; k < nbase; k++) ev[k] = (int64_t)base_exp[k];
+    size_t row = qmb_find_or_add(s->M, ev);
+    if (row == SIZE_MAX) { s->ok = false; return; }
+    mpq_t* cell = &s->M->rows[row].col[col];
+    if (col < (int)s->nunk) mpq_add(*cell, *cell, coeff);
+    else                    mpq_sub(*cell, *cell, coeff);
+}
+
 /* Attempt direct-from-expanded build + solve.
  * Returns false (no state mutated) if any term doesn't decompose. */
 static bool try_solve_direct_q(Expr* equation_numer,
@@ -2801,14 +2866,34 @@ static bool try_solve_direct_q(Expr* equation_numer,
     M.nv = nv; M.ncols = nunk + 1;
     M.buckets = NULL; M.bucket_cap = 0; M.bucket_mask = 0;
 
-    /* Fused walker: Plus forks the accumulator, Times sequences
+    /* FLINT-native fast path: convert the whole equation to one
+     * fmpq_mpoly over {vars ∪ unknowns} and read its terms straight into
+     * M.  FLINT's packed-monomial multiplication expands the product tree
+     * far faster than the mpq pm_walk distributor, which dominates the
+     * profile on high-degree ansätze (large denominators → ~10^29
+     * coefficients).  Declines (leaving M empty, no callback fired) on any
+     * non-Q-rational or nonlinear input — then the portable pm_walk
+     * builder below runs.  nv is capped at PMINT_MAX_INDETS upstream, so
+     * flint_qmb_term_cb's fixed exp buffer is safe. */
+    bool built = false;
+    if (nv <= PMINT_MAX_INDETS) {
+        FlintQmbSink sink = { &M, nunk, true };
+        if (flint_linear_system_terms(equation_numer, vars, (int)nv,
+                                      unknowns, (int)nunk,
+                                      flint_qmb_term_cb, &sink)) {
+            if (!sink.ok) { qmb_free(&M); return false; }  /* alloc failure */
+            built = true;
+        }
+    }
+
+    /* Fused walker fallback: Plus forks the accumulator, Times sequences
      * factors in, Power[Plus,k] unrolls.  Each distributed monomial
      * contribution lands directly in M; no flat Plus is ever
      * materialised.  `equation_numer` may arrive already expanded
      * (slow path) or as a still-nested tree (fast path) — both are
      * handled by the same walker. */
-    if (!pm_walk_into_qmb(equation_numer, &M,
-                           vars, nv, unknowns, nunk)) {
+    if (!built && !pm_walk_into_qmb(equation_numer, &M,
+                                     vars, nv, unknowns, nunk)) {
         qmb_free(&M);
         return false;
     }
@@ -3684,6 +3769,34 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
     int64_t deg_den    = total_degree(ff_denom, vars, n);
     int64_t dg = 1 + deg_splq_s + (deg_num > deg_den ? deg_num : deg_den);
     if (dg < 0) dg = 0;
+
+    /* Per-variable exponent ceiling for the candidate ansatz.  The base
+     * integration variable x (the generator whose derivative is the
+     * constant 1) can appear in the candidate numerator only up to
+     *   deg_x(cden) + max(deg_x(numer), deg_x(denom)) + 1,
+     * because the derivation lowers the x-degree by exactly one on the
+     * x-monomial that has no surviving transcendental derivative (the
+     * pure "∫ dx = x" term), and preserves it otherwise.  Bounding x by
+     * this small value — rather than the transcendental total-degree
+     * bound dg — is what keeps ∫ R(E^x) dx from enumerating a
+     * combinatorial O(dg^2) monomial grid over {x, E^x}.  All other
+     * generators keep the full total-degree bound.  A too-tight bound
+     * here can only cause the linear solve to find no antiderivative
+     * (→ unevaluated); it can never yield a wrong closed form, since the
+     * result is pinned by E ≡ 0. */
+    int* maxdeg = (int*)malloc(sizeof(int) * (n ? n : 1));
+    for (size_t k = 0; k < n; k++) maxdeg[k] = (int)dg;
+    for (size_t k = 0; k < n; k++) {
+        if (!expr_eq(si[k], x)) continue;           /* not the base var x */
+        int64_t dxc = eval_degree(expr_copy(cden), expr_copy(vars[k]));
+        int64_t dxn = eval_degree(expr_copy(ff_numer), expr_copy(vars[k]));
+        int64_t dxd = eval_degree(expr_copy(ff_denom), expr_copy(vars[k]));
+        int64_t dgx = dxc + (dxn > dxd ? dxn : dxd) + 1;
+        if (dgx < 0) dgx = 0;
+        if (dgx < dg) maxdeg[k] = (int)dgx;
+        break;
+    }
+
     expr_free(ff_numer); expr_free(ff_denom);
     PM_PHE(cd, PM_PH_CDEN);
 
@@ -3698,7 +3811,8 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
     /* Enumerate monomials. */
     Expr** monoms = NULL; size_t nmon = 0;
     PM_PHB(em);
-    int em_err = enumerate_monomials(vars, n, (int)dg, &monoms, &nmon);
+    int em_err = enumerate_monomials(vars, n, (int)dg, maxdeg, &monoms, &nmon);
+    free(maxdeg);
     PM_PHE(em, PM_PH_ENUM_MONOMS);
     if (em_err != 0 || nmon == 0) {
         expr_free(ff_fresh); expr_free(cden); expr_free(q);
@@ -4197,7 +4311,7 @@ static Expr* builtin_pm_enumerate_monoms(Expr* res) {
 
     Expr** monoms = NULL;
     size_t n = 0;
-    int err = enumerate_monomials(vars, nv, total_degree, &monoms, &n);
+    int err = enumerate_monomials(vars, nv, total_degree, NULL, &monoms, &n);
     free(vars);
     if (err) return NULL;
 
