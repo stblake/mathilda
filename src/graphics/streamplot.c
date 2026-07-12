@@ -194,6 +194,7 @@ typedef struct {
     Expr*  color_function;    /* borrowed; NULL = none */
     Expr*  region_function;   /* borrowed; NULL = none */
     Expr*  legends;           /* borrowed; NULL = none */
+    ScaleFnType sf_x, sf_y;   /* ScalingFunctions per-axis */
 } StreamOpts;
 
 static bool split_stream_options(Expr* res, StreamOpts* so,
@@ -204,6 +205,8 @@ static bool split_stream_options(Expr* res, StreamOpts* so,
     so->color_function = NULL;
     so->region_function = NULL;
     so->legends = NULL;
+    so->sf_x = SF_NONE;
+    so->sf_y = SF_NONE;
 
     size_t argc = res->data.function.arg_count;
     size_t cap = (argc > 3 ? argc - 3 : 0) + 4;
@@ -250,6 +253,10 @@ static bool split_stream_options(Expr* res, StreamOpts* so,
             so->region_function = rhs; /* borrowed */
         } else if (name == SYM_PlotLegends) {
             so->legends = rhs; /* borrowed */
+        } else if (name == SYM_ScalingFunctions) {
+            Expr* v = evaluate(expr_copy(rhs));
+            parse_scaling_functions(v, &so->sf_x, &so->sf_y);
+            expr_free(v);
         } else {
             /* Pass through to Graphics[...] */
             if (name == SYM_Axes)         have_axes   = true;
@@ -396,10 +403,13 @@ Expr* builtin_streamplot(Expr* res) {
         iter_spec_free(&xspec); iter_spec_free(&yspec); return NULL;
     }
 
-    /* Always embed an explicit PlotRange so the renderer uses the user's
-     * domain, not an auto-fit of stream endpoints (which cluster near
-     * attractors when StreamScale -> None is set). Skip if the user already
-     * passed their own PlotRange. */
+    /* World-space (scaled) axis bounds — integration happens in data space,
+     * but seed placement and PlotRange use world space. */
+    double u_xmin = scale_apply(so.sf_x, xmin), u_xmax = scale_apply(so.sf_x, xmax);
+    double u_ymin = scale_apply(so.sf_y, ymin), u_ymax = scale_apply(so.sf_y, ymax);
+
+    /* Always embed an explicit PlotRange (world coords) so the renderer uses
+     * the user's domain.  Skip if the user already passed their own PlotRange. */
     {
         bool have_pr = false;
         for (size_t i = 0; i < pt_count; i++) {
@@ -411,8 +421,8 @@ Expr* builtin_streamplot(Expr* res) {
         }
         if (!have_pr) {
             passthrough = realloc(passthrough, sizeof(Expr*) * (pt_count + 1));
-            Expr* xr[2] = { expr_new_real(xmin), expr_new_real(xmax) };
-            Expr* yr[2] = { expr_new_real(ymin), expr_new_real(ymax) };
+            Expr* xr[2] = { expr_new_real(u_xmin), expr_new_real(u_xmax) };
+            Expr* yr[2] = { expr_new_real(u_ymin), expr_new_real(u_ymax) };
             Expr* xrange = expr_new_function(expr_new_symbol(SYM_List), xr, 2);
             Expr* yrange = expr_new_function(expr_new_symbol(SYM_List), yr, 2);
             Expr* rlist[2] = { xrange, yrange };
@@ -423,6 +433,8 @@ Expr* builtin_streamplot(Expr* res) {
         }
     }
 
+    emit_scaling_meta(so.sf_x, so.sf_y, &passthrough, &pt_count);
+
     /* Shadow both iterator variables so the field sees no stray OwnValues. */
     Rule* old_x = iter_spec_shadow(xspec.var);
     Rule* old_y = iter_spec_shadow(yspec.var);
@@ -430,11 +442,9 @@ Expr* builtin_streamplot(Expr* res) {
     FieldCtx ctx = { .xvar = xspec.var, .yvar = yspec.var,
                      .vx = vx_body, .vy = vy_body };
 
-    /* Integration parameters.
-     * h: step size ≈ domain span / (stream_points * 20), so each seed's
-     *    stream traverses roughly 1/(stream_points) of the domain per step. */
-    double dx = xmax - xmin, dy = ymax - ymin;
-    double diag = sqrt(dx * dx + dy * dy);
+    /* Integration parameters in world space (for consistent arrow sizing). */
+    double w_dx = u_xmax - u_xmin, w_dy = u_ymax - u_ymin;
+    double diag = sqrt(w_dx * w_dx + w_dy * w_dy);
     double h = diag / (so.stream_points * 20.0);
     if (h <= 0) h = 1e-4;
 
@@ -449,13 +459,16 @@ Expr* builtin_streamplot(Expr* res) {
     int max_steps = (int)(max_arc / h) + 1;
     if (max_steps > 4000) max_steps = 4000;
 
-    /* Build seed list from a uniform grid, skipping masked points. */
+    /* Build seed list from a uniform grid in world space.  Convert seeds to
+     * data space for field evaluation; RegionFunction uses data coords. */
     int np = so.stream_points;
+    double du_x = (u_xmax - u_xmin) / np;
+    double du_y = (u_ymax - u_ymin) / np;
     SeedList seeds = { NULL, NULL, 0, 0 };
     for (int ix = 0; ix < np; ix++) {
-        double sx = xmin + (ix + 0.5) * dx / np;
+        double sx = scale_invert(so.sf_x, u_xmin + (ix + 0.5) * du_x);
         for (int iy = 0; iy < np; iy++) {
-            double sy = ymin + (iy + 0.5) * dy / np;
+            double sy = scale_invert(so.sf_y, u_ymin + (iy + 0.5) * du_y);
             if (so.region_function && !eval_region(so.region_function, sx, sy)) continue;
             /* Quick sanity: skip seeds where the field is zero (or fails). */
             double tvx, tvy;
@@ -479,12 +492,20 @@ Expr* builtin_streamplot(Expr* res) {
                                     true, so.region_function, &n_pts);
         if (n_pts < 2) { free(pts); continue; }
 
-        /* Midpoint speed for colorization. */
+        /* Midpoint speed for colorization (in data space, before scaling). */
         size_t mid = n_pts / 2;
         double svx, svy;
         double spd = 0.0;
         if (eval_field(&ctx, pts[mid].x, pts[mid].y, &svx, &svy))
             spd = sqrt(svx * svx + svy * svy);
+
+        /* Transform stream points from data space to world space. */
+        if (so.sf_x != SF_NONE || so.sf_y != SF_NONE) {
+            for (size_t k = 0; k < n_pts; k++) {
+                pts[k].x = scale_apply(so.sf_x, pts[k].x);
+                pts[k].y = scale_apply(so.sf_y, pts[k].y);
+            }
+        }
 
         all_streams[nstreams] = pts;
         all_lengths[nstreams] = n_pts;

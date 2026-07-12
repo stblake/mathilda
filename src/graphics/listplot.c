@@ -17,6 +17,7 @@
 
 #include "listplot.h"
 #include "plot.h"
+#include "plot_common.h"
 #include "eval.h"
 #include "symtab.h"
 #include "sym_names.h"
@@ -27,13 +28,7 @@
 
 /* ---- small structural predicates (kept local; trivial) ---- */
 
-static bool is_rule_arg(Expr* e) {
-    if (!e || e->type != EXPR_FUNCTION) return false;
-    Expr* h = e->data.function.head;
-    if (!h || h->type != EXPR_SYMBOL) return false;
-    return (h->data.symbol == SYM_Rule || h->data.symbol == SYM_RuleDelayed)
-        && e->data.function.arg_count == 2;
-}
+/* is_rule_arg provided by plot_common.h */
 
 static bool is_list(const Expr* e) {
     return e && e->type == EXPR_FUNCTION && e->data.function.head
@@ -157,6 +152,7 @@ typedef struct {
     Expr*  filling_style;   /* borrowed; held colour; NULL = default */
     bool   have_markers;    /* PlotMarkers given (accepted; glyphs not yet drawn) */
     DataRange dr;
+    ScaleFnType sf_x, sf_y; /* ScalingFunctions per-axis */
 } ListPlotOpts;
 
 static double stem_baseline(Expr* filling, double ymin, double ymax) {
@@ -187,6 +183,8 @@ static bool split_options(Expr* res, ListPlotOpts* o,
     o->dr.has_range = false;
     o->dr.xmin = o->dr.xmax = 0.0;
     o->dr.force_multi = false;
+    o->sf_x = SF_NONE;
+    o->sf_y = SF_NONE;
     *single_color_out = NULL;
     *legends_out = NULL;
 
@@ -228,6 +226,10 @@ static bool split_options(Expr* res, ListPlotOpts* o,
             } else if (!(rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic)) {
                 FAIL_CLEANUP();
             }
+        } else if (name == SYM_ScalingFunctions) {
+            Expr* v = evaluate(expr_copy(rhs));
+            parse_scaling_functions(v, &o->sf_x, &o->sf_y);
+            expr_free(v);
         } else if (name == SYM_PlotLegends) {
             if (*legends_out) expr_free(*legends_out);
             *legends_out = expr_copy(rhs);
@@ -366,7 +368,7 @@ static void emit_dataset(Expr** prims, size_t* pc, const PointSet* ps, size_t id
  * renderer's draw_legend(), mirroring plot.c. `legends` (the evaluated option
  * value) is an explicit {labels...} list or Automatic; Automatic labels each
  * dataset with its 1-based index. Returns NULL if legends is None/absent. */
-static Expr* build_legend_meta(Expr* legends, size_t nsets, Expr* single_color) {
+static Expr* build_listplot_legend_meta(Expr* legends, size_t nsets, Expr* single_color) {
     if (!legends) return NULL;
     if (legends->type == EXPR_SYMBOL && legends->data.symbol == SYM_None) return NULL;
 
@@ -422,6 +424,16 @@ Expr* builtin_listplot(Expr* res) {
 
     if (live == 0) { free(psets); goto fail_opts; }
 
+    /* Apply ScalingFunctions: transform coords to world space in-place. */
+    if (o.sf_x != SF_NONE || o.sf_y != SF_NONE) {
+        for (size_t i = 0; i < live; i++) {
+            for (size_t j = 0; j < psets[i].n; j++) {
+                psets[i].xs[j] = scale_apply(o.sf_x, psets[i].xs[j]);
+                psets[i].ys[j] = scale_apply(o.sf_y, psets[i].ys[j]);
+            }
+        }
+    }
+
     bool multi = (live > 1);
     /* Worst case per dataset: 1 palette colour + (filling: style + fill shapes
      * + close + restore) + 1 Point/Line. A Joined fill emits up to 2*(n-1)
@@ -440,7 +452,9 @@ Expr* builtin_listplot(Expr* res) {
     Expr* prim_list = expr_new_function(expr_new_symbol(SYM_List), prims, pc);
     free(prims);
 
-    Expr* legend_meta = build_legend_meta(legends, live, single_color);
+    emit_scaling_meta(o.sf_x, o.sf_y, &passthrough, &passthrough_count);
+
+    Expr* legend_meta = build_listplot_legend_meta(legends, live, single_color);
     expr_free(legends);
     expr_free(single_color);
 

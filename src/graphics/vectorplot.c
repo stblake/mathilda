@@ -44,6 +44,7 @@ typedef struct {
     Expr*        color_function;   /* borrowed; NULL = none */
     bool         color_function_scaling;
     Expr*        region_function;  /* borrowed; NULL = none */
+    ScaleFnType  sf_x, sf_y;      /* ScalingFunctions */
 } VecOpts;
 
 static bool split_vector_options(Expr* res, VecOpts* o,
@@ -55,6 +56,8 @@ static bool split_vector_options(Expr* res, VecOpts* o,
     o->color_function         = NULL;
     o->color_function_scaling = true;
     o->region_function        = NULL;
+    o->sf_x                   = SF_NONE;
+    o->sf_y                   = SF_NONE;
 
     size_t argc = res->data.function.arg_count;
     size_t cap  = (argc > 3 ? argc - 3 : 0) + 4;
@@ -108,6 +111,10 @@ static bool split_vector_options(Expr* res, VecOpts* o,
             expr_free(v);
         } else if (name == SYM_RegionFunction) {
             o->region_function = rhs; /* borrowed */
+        } else if (name == SYM_ScalingFunctions) {
+            Expr* v = evaluate(expr_copy(rhs));
+            parse_scaling_functions(v, &o->sf_x, &o->sf_y);
+            expr_free(v);
         } else {
             if (name == SYM_Axes)        have_axes   = true;
             if (name == SYM_AspectRatio) have_aspect = true;
@@ -240,11 +247,16 @@ Expr* builtin_vectorplot(Expr* res) {
         iter_spec_free(&xspec); iter_spec_free(&yspec); return NULL; }
 
     int    N   = opts.vector_points;
-    double dx  = (xmax - xmin) / (N - 1 > 0 ? N - 1 : 1);
-    double dy  = (ymax - ymin) / (N - 1 > 0 ? N - 1 : 1);
+
+    /* For ScalingFunctions, sample uniformly in scaled (world) space so the
+     * grid is evenly spaced on-screen.  u*/
+    double u_xmin = scale_apply(opts.sf_x, xmin), u_xmax = scale_apply(opts.sf_x, xmax);
+    double u_ymin = scale_apply(opts.sf_y, ymin), u_ymax = scale_apply(opts.sf_y, ymax);
+    double du_x = (u_xmax - u_xmin) / (N - 1 > 0 ? N - 1 : 1);
+    double du_y = (u_ymax - u_ymin) / (N - 1 > 0 ? N - 1 : 1);
 
     /* Evaluate the field on an N×N grid; collect vectors. */
-    typedef struct { double x, y, vx, vy; } Arrow;
+    typedef struct { double wx, wy, vx, vy; } Arrow;  /* wx/wy are WORLD coords */
     Arrow* arrows  = malloc(sizeof(Arrow) * (size_t)N * N);
     size_t n_arr   = 0;
     double spd_max = 0.0;
@@ -253,23 +265,59 @@ Expr* builtin_vectorplot(Expr* res) {
     Rule* old_y = iter_spec_shadow(yspec.var);
 
     for (int iy = 0; iy < N; iy++) {
-        double y = ymin + iy * dy;
+        double wy = u_ymin + iy * du_y;           /* world y */
+        double y  = scale_invert(opts.sf_y, wy);  /* data y  */
         for (int ix = 0; ix < N; ix++) {
-            double x = xmin + ix * dx;
+            double wx = u_xmin + ix * du_x;
+            double x  = scale_invert(opts.sf_x, wx);
             if (opts.region_function && !eval_region(opts.region_function, x, y)) continue;
             Vec2 v = vp_eval(xspec.var, yspec.var, vx_body, vy_body, x, y);
             if (!v.ok) continue;
-            double spd = sqrt(v.vx * v.vx + v.vy * v.vy);
+            /* Apply Jacobian of the scaling transform to arrow direction so it
+             * points correctly in world (rendered) coordinates.
+             * For SF_LOG:  d(ln x)/dx = 1/x  →  world_vx = data_vx / x.
+             * For SF_NONE: identity.  Division-by-zero guarded via |x| > 1e-12. */
+            double world_vx = v.vx, world_vy = v.vy;
+            if (opts.sf_x != SF_NONE && fabs(x) > 1e-12) {
+                /* finite-difference approximation of the Jacobian */
+                double wx2 = scale_apply(opts.sf_x, x + v.vx * 1e-6);
+                world_vx = (wx2 - wx) / 1e-6;
+            }
+            if (opts.sf_y != SF_NONE && fabs(y) > 1e-12) {
+                double wy2 = scale_apply(opts.sf_y, y + v.vy * 1e-6);
+                world_vy = (wy2 - wy) / 1e-6;
+            }
+            double spd = sqrt(world_vx * world_vx + world_vy * world_vy);
             if (spd > spd_max) spd_max = spd;
-            arrows[n_arr++] = (Arrow){ x, y, v.vx, v.vy };
+            arrows[n_arr++] = (Arrow){ wx, wy, world_vx, world_vy };
         }
     }
 
     iter_spec_restore(xspec.var, old_x);
     iter_spec_restore(yspec.var, old_y);
 
-    /* Arrow length scale: uniform grid spacing used as reference. */
-    double grid_step = (dx < dy ? dx : dy);
+    /* World axis ranges — needed for screen-normalised sizing. */
+    double wu_x = u_xmax - u_xmin;
+    double wu_y = u_ymax - u_ymin;
+    if (wu_x <= 0.0) wu_x = 1.0;
+    if (wu_y <= 0.0) wu_y = 1.0;
+
+    /* Compute screen-normalised speed max for VS_NONE proportional arrows.
+     * Screen-normalised speed = |(vx/wu_x, vy/wu_y)| — this reflects how
+     * large the arrow looks on screen when axes have different ranges. */
+    double sn_spd_max = 0.0;
+    for (size_t k = 0; k < n_arr; k++) {
+        double sn_vx = arrows[k].vx / wu_x;
+        double sn_vy = arrows[k].vy / wu_y;
+        double sn_spd = sqrt(sn_vx * sn_vx + sn_vy * sn_vy);
+        if (sn_spd > sn_spd_max) sn_spd_max = sn_spd;
+    }
+
+    /* Desired arrow half-length in screen-normalised units [0,1].
+     * 0.5/(N-1) ≈ half a grid cell on screen — matches the old behaviour
+     * exactly when both axes have the same world range, and fixes the
+     * visual-size collapse when one axis is log-scaled. */
+    double half_len_screen = 0.5 / (N > 1 ? N - 1 : 1);
 
     /* 3 prims per arrow: color directive + Thickness + Arrow. */
     size_t cap   = n_arr * 4 + 4;
@@ -289,8 +337,8 @@ Expr* builtin_vectorplot(Expr* res) {
     double spd_range = (spd_max > 0.0) ? spd_max : 1.0;
 
     for (size_t k = 0; k < n_arr; k++) {
-        Arrow* a   = &arrows[k];
-        double spd = sqrt(a->vx * a->vx + a->vy * a->vy);
+        Arrow* a    = &arrows[k];
+        double spd  = sqrt(a->vx * a->vx + a->vy * a->vy);
         double snorm = opts.color_function_scaling
                      ? (spd / spd_range) : spd;
         if (snorm < 0.0) snorm = 0.0;
@@ -298,26 +346,39 @@ Expr* builtin_vectorplot(Expr* res) {
 
         prims[np++] = vp_color(opts.color_function, snorm, a->vx, a->vy, spd);
 
-        /* Arrow half-length in plot coordinates. */
-        double len;
+        /* Screen-normalised direction: project world vector onto [0,1]² screen.
+         * Normalising in screen space (not world space) gives equal visual
+         * arrow lengths when x and y axes have very different ranges (e.g. log
+         * x, linear y). */
+        double sn_vx = a->vx / wu_x;
+        double sn_vy = a->vy / wu_y;
+        double sn_spd = sqrt(sn_vx * sn_vx + sn_vy * sn_vy);
+
+        /* Screen-unit direction (normalised). */
+        double nsx = 0.0, nsy = 0.0;
+        if (sn_spd > 0.0) { nsx = sn_vx / sn_spd; nsy = sn_vy / sn_spd; }
+
+        /* Arrow half-length in screen-normalised units. */
+        double len_screen;
         if (opts.scale_mode == VS_NONE) {
-            /* Proportional: normalise by spd_max then scale to grid_step/2. */
-            len = (spd_max > 0.0) ? (spd / spd_max) * grid_step * 0.5 : 0.0;
+            /* Proportional: arrow size ∝ screen-normalised field speed. */
+            len_screen = (sn_spd_max > 0.0)
+                         ? (sn_spd / sn_spd_max) * half_len_screen : 0.0;
         } else if (opts.scale_mode == VS_FRACTION) {
-            len = opts.scale_frac * grid_step;
+            len_screen = opts.scale_frac * half_len_screen * 2.0;
         } else {
-            /* Automatic: uniform length = grid_step * 0.5; show direction only. */
-            len = grid_step * 0.5;
+            /* Automatic: fixed screen size = half a grid cell. */
+            len_screen = half_len_screen;
         }
+        if (sn_spd <= 0.0) len_screen = 0.0;
 
-        double nx = 0.0, ny = 0.0;
-        if (spd > 0.0) { nx = a->vx / spd; ny = a->vy / spd; }
-        else           { len = 0.0; }
+        /* Convert screen-unit direction + screen length → world displacement. */
+        double world_dx = nsx * wu_x * len_screen;
+        double world_dy = nsy * wu_y * len_screen;
 
-        /* Centre the arrow on the grid point: tail at (x - len/2 * n),
-         * head at (x + len/2 * n). */
-        double tx = a->x - nx * len * 0.5, ty = a->y - ny * len * 0.5;
-        double hx = a->x + nx * len * 0.5, hy = a->y + ny * len * 0.5;
+        /* Centre the arrow on the world-space grid point. */
+        double tx = a->wx - world_dx, ty = a->wy - world_dy;
+        double hx = a->wx + world_dx, hy = a->wy + world_dy;
 
         Expr* tail_pt[2] = { expr_new_real(tx), expr_new_real(ty) };
         Expr* head_pt[2] = { expr_new_real(hx), expr_new_real(hy) };
@@ -343,8 +404,9 @@ Expr* builtin_vectorplot(Expr* res) {
         }
         if (!have_pr) {
             pt = realloc(pt, sizeof(Expr*) * (pt_n + 1));
-            Expr* xr[2] = { expr_new_real(xmin), expr_new_real(xmax) };
-            Expr* yr[2] = { expr_new_real(ymin), expr_new_real(ymax) };
+            /* PlotRange in world (scaled) coordinates */
+            Expr* xr[2] = { expr_new_real(u_xmin), expr_new_real(u_xmax) };
+            Expr* yr[2] = { expr_new_real(u_ymin), expr_new_real(u_ymax) };
             Expr* xrng  = expr_new_function(expr_new_symbol(SYM_List), xr, 2);
             Expr* yrng  = expr_new_function(expr_new_symbol(SYM_List), yr, 2);
             Expr* rl[2] = { xrng, yrng };
@@ -353,6 +415,8 @@ Expr* builtin_vectorplot(Expr* res) {
             pt[pt_n++]  = expr_new_function(expr_new_symbol(SYM_Rule), ra, 2);
         }
     }
+
+    emit_scaling_meta(opts.sf_x, opts.sf_y, &pt, &pt_n);
 
     Expr* plist = expr_new_function(expr_new_symbol(SYM_List), prims, np);
     free(prims);

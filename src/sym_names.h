@@ -710,6 +710,8 @@ extern const char* SYM_StreamStyle;    /* style directives for streams */
 extern const char* SYM_StreamColorFunction; /* color by position/speed */
 extern const char* SYM_StreamColorBar;      /* internal: color-scale bar metadata */
 extern const char* SYM_BarChartLabels;     /* internal: screen-space bar category labels */
+extern const char* SYM_ScalingFunctions;  /* axis-transform option                        */
+extern const char* SYM_ScalingMeta;       /* internal: $ScalingMeta[sf_x_int, sf_y_int]  */
 
 /* ContourPlot[f, {x,...}, {y,...}, opts...] */
 extern const char* SYM_ContourPlot;

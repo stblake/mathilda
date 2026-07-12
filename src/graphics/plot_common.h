@@ -82,6 +82,44 @@ Expr* named_color_ramp(const char* name, double t);
  * 0 if the name is not recognised. */
 int resolve_ramp_to_rgb(const char* name, double t, double* r, double* g, double* b);
 
+/* ---------------------------------------------------------------------- */
+/* Axis scaling (ScalingFunctions option)                                  */
+/* ---------------------------------------------------------------------- */
+
+/* Identifies one axis's scaling transform.  SF_NONE is the identity.
+ * Values are stored as EXPR_INTEGER inside $ScalingMeta[] metadata so
+ * the renderer can read them without any string parsing overhead. */
+typedef enum {
+    SF_NONE    = 0,
+    SF_LOG     = 1,   /* natural log: world = ln(data)  */
+    SF_LOG2    = 2,   /* log base 2:  world = log2(data) */
+    SF_LOG10   = 3,   /* log base 10: world = log10(data) */
+    SF_REVERSE = 4    /* mirror axis: world = -data */
+} ScaleFnType;
+
+/* Map a data-space coordinate to world space. */
+double scale_apply(ScaleFnType sf, double x);
+
+/* Inverse: world → data space. */
+double scale_invert(ScaleFnType sf, double w);
+
+/* Parse a ScalingFunctions spec expression (string or None/Automatic) to
+ * a ScaleFnType.  NULL or unrecognised → SF_NONE. */
+ScaleFnType parse_scale_fn(Expr* e);
+
+/* Parse ScalingFunctions RHS into (sf_x, sf_y).
+ * "Log" → both axes Log; {"Log","Log10"} → per-axis; None/Automatic → SF_NONE. */
+void parse_scaling_functions(Expr* rhs, ScaleFnType* sf_x, ScaleFnType* sf_y);
+
+/* Append the $ScalingMeta[sfx, sfy] metadata node to a Graphics options
+ * array (pt/pt_n) when at least one axis has a non-identity scale.
+ * Reallocates *pt by +1 when needed; caller must pass the current capacity
+ * (the array has capacity to hold at least pt_n+1 entries already) or set
+ * cap > pt_n to indicate there is room.  Pass cap=0 to always reallocate. */
+void emit_scaling_meta(ScaleFnType sf_x, ScaleFnType sf_y,
+                       Expr*** pt, size_t* pt_n);
+
+/* ---------------------------------------------------------------------- */
 /* Build the $PlotLegendData[{color1,label1}, ...] metadata node that the
  * renderer reads to draw a legend box.  `legends` is the already-evaluated
  * PlotLegends option value; `bodies` / `nfun` supply per-curve body exprs

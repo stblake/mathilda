@@ -257,6 +257,7 @@ typedef struct {
     RGBA8 grid_color;         /* GridLinesStyle */
     const Expr* prolog;       /* borrowed; drawn first, in data space */
     const Expr* epilog;       /* borrowed; drawn last, in data space */
+    ScaleFnType sf_x, sf_y;  /* ScalingFunctions; SF_NONE = linear (default) */
 } GfxOptions;
 
 /* True when `e` is the symbol True or All (the "on" forms for Frame and
@@ -320,6 +321,8 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
     o->grid_color = (RGBA8){ 210, 210, 210, 255 };
     o->prolog = NULL;
     o->epilog = NULL;
+    o->sf_x = SF_NONE;
+    o->sf_y = SF_NONE;
 
     size_t argc = graphics->data.function.arg_count;
 
@@ -498,6 +501,21 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
         } else if (name == SYM_Epilog) {
             o->epilog = rhs;
         }
+    }
+
+    /* Second pass: scan for the $ScalingMeta[sf_x_int, sf_y_int] metadata
+     * node emitted by plotters that support ScalingFunctions.  It is not a
+     * Rule, so the main option loop above skips it. */
+    for (size_t i = 1; i < argc; i++) {
+        const Expr* a = graphics->data.function.args[i];
+        if (!a || a->type != EXPR_FUNCTION || a->data.function.arg_count != 2) continue;
+        const Expr* ah = a->data.function.head;
+        if (!ah || ah->type != EXPR_SYMBOL || ah->data.symbol != SYM_ScalingMeta) continue;
+        const Expr* sx = a->data.function.args[0];
+        const Expr* sy = a->data.function.args[1];
+        if (sx->type == EXPR_INTEGER) o->sf_x = (ScaleFnType)sx->data.integer;
+        if (sy->type == EXPR_INTEGER) o->sf_y = (ScaleFnType)sy->data.integer;
+        break;
     }
 
     if (o->width < 100) o->width = 100;
@@ -984,28 +1002,87 @@ static void axes_origin_in_region(const PlotRange2D* vis, const PlotRange2D* dra
  * y ticks are placed at nice *data* values (data*ysc), so labels read true.
  * `zoom` is the camera zoom: the strokes are drawn 1.5 px wide on screen (to
  * match the frame's weight) by expressing the world-space width as 1.5/zoom. */
+/* Generate "nice" log-scale tick positions for a scaled axis.
+ * world_min/world_max are in world (scaled) space; sf is the active scale.
+ * Writes up to max_n ticks: world positions into ticks_w[], original
+ * (data-space) values into ticks_v[].  Returns the count.
+ *
+ * Ticks are placed at 1×, 2×, 5× per decade in the original domain when
+ * the visible span covers ≤4 decades; only at decade powers otherwise.
+ * This mirrors Mathematica's logarithmic tick placement. */
+static int gen_log_ticks(double world_min, double world_max, ScaleFnType sf,
+                          double* ticks_w, double* ticks_v, int max_n) {
+    double orig_min = scale_invert(sf, world_min);
+    double orig_max = scale_invert(sf, world_max);
+    if (orig_min <= 0.0 || orig_max <= 0.0 || orig_min >= orig_max) return 0;
+
+    double l10_min = floor(log10(orig_min));
+    double l10_max = ceil(log10(orig_max));
+    int n_decades = (int)(l10_max - l10_min);
+    if (n_decades < 1) n_decades = 1;
+
+    /* Sub-decade candidates per decade: 1, 2, 5 for narrow spans; 1 only wide */
+    static const double sub_narrow[] = { 1.0, 2.0, 5.0 };
+    static const double sub_wide[]   = { 1.0 };
+    const double* sub  = (n_decades <= 4) ? sub_narrow : sub_wide;
+    int           nsub = (n_decades <= 4) ? 3          : 1;
+
+    int n = 0;
+    for (int d = (int)l10_min - 1; d <= (int)l10_max; d++) {
+        double decade = pow(10.0, (double)d);
+        for (int s = 0; s < nsub; s++) {
+            double v = sub[s] * decade;
+            if (v < orig_min * (1.0 - 1e-9)) continue;
+            if (v > orig_max * (1.0 + 1e-9)) break;
+            double w = scale_apply(sf, v);
+            if (n < max_n) { ticks_w[n] = w; ticks_v[n] = v; n++; }
+        }
+    }
+    return n;
+}
+
 static void draw_axes_lines(const PlotRange2D* range, const PlotRange2D* drange,
                             double ysc, float zoom, const GfxOptions* o) {
     double ox, oy;
     axes_origin_in_region(range, drange, ysc, o, &ox, &oy);
-    float w = (zoom > 0.0f) ? 1.5f / zoom : 1.5f; /* world units -> 1.5 px on screen */
+    float w = (zoom > 0.0f) ? 1.5f / zoom : 1.5f;
     Color col = to_raylib(o->axes_color);
 
     DrawLineEx((Vector2){ (float)range->xmin, (float)-oy }, (Vector2){ (float)range->xmax, (float)-oy }, w, col);
     DrawLineEx((Vector2){ (float)ox, (float)-range->ymin }, (Vector2){ (float)ox, (float)-range->ymax }, w, col);
 
-    double xstep = nice_step(range->xmax - range->xmin, 8);
     double xtick = (range->ymax - range->ymin) * 0.015;
     double ytick = (range->xmax - range->xmin) * 0.015;
 
-    for (double tx = ceil(range->xmin / xstep) * xstep; tx <= range->xmax + 1e-9; tx += xstep) {
-        DrawLineEx((Vector2){ (float)tx, (float)-(oy - xtick) }, (Vector2){ (float)tx, (float)-(oy + xtick) }, w, col);
+    if (o->sf_x != SF_NONE) {
+        double tw[128]; double tv[128];
+        int nt = gen_log_ticks(range->xmin, range->xmax, o->sf_x, tw, tv, 128);
+        for (int i = 0; i < nt; i++)
+            DrawLineEx((Vector2){ (float)tw[i], (float)-(oy - xtick) },
+                       (Vector2){ (float)tw[i], (float)-(oy + xtick) }, w, col);
+    } else {
+        double xstep = nice_step(range->xmax - range->xmin, 8);
+        for (double tx = ceil(range->xmin / xstep) * xstep; tx <= range->xmax + 1e-9; tx += xstep)
+            DrawLineEx((Vector2){ (float)tx, (float)-(oy - xtick) },
+                       (Vector2){ (float)tx, (float)-(oy + xtick) }, w, col);
     }
+
     double dymin = range->ymin / ysc, dymax = range->ymax / ysc;
-    double ystep = nice_step(dymax - dymin, 6);
-    for (double ty = ceil(dymin / ystep) * ystep; ty <= dymax + 1e-9; ty += ystep) {
-        double ry = ty * ysc;
-        DrawLineEx((Vector2){ (float)(ox - ytick), (float)-ry }, (Vector2){ (float)(ox + ytick), (float)-ry }, w, col);
+    if (o->sf_y != SF_NONE) {
+        double tw[128]; double tv[128];
+        int nt = gen_log_ticks(dymin, dymax, o->sf_y, tw, tv, 128);
+        for (int i = 0; i < nt; i++) {
+            double ry = tw[i] * ysc;
+            DrawLineEx((Vector2){ (float)(ox - ytick), (float)-ry },
+                       (Vector2){ (float)(ox + ytick), (float)-ry }, w, col);
+        }
+    } else {
+        double ystep = nice_step(dymax - dymin, 6);
+        for (double ty = ceil(dymin / ystep) * ystep; ty <= dymax + 1e-9; ty += ystep) {
+            double ry = ty * ysc;
+            DrawLineEx((Vector2){ (float)(ox - ytick), (float)-ry },
+                       (Vector2){ (float)(ox + ytick), (float)-ry }, w, col);
+        }
     }
 }
 
@@ -1066,33 +1143,54 @@ static void draw_axes_labels(const PlotRange2D* range, const PlotRange2D* drange
     double ox, oy;
     axes_origin_in_region(range, drange, ysc, o, &ox, &oy);
     Color col = to_raylib(o->ticks_color);
-    double xstep = nice_step(range->xmax - range->xmin, 8);
-    /* y ticks are stepped in data space; render position is ty*ysc below. */
     double dymin = range->ymin / ysc, dymax = range->ymax / ysc;
-    double ystep = nice_step(dymax - dymin, 6);
-    /* World-space tick half-lengths, matching draw_axes_lines exactly. */
     double xtick = (range->ymax - range->ymin) * 0.015;
     double ytick = (range->xmax - range->xmin) * 0.015;
     const float scale = 1.5f;
-    const float cap = HERSHEY_CAP_HEIGHT * scale; /* glyph height in px */
-    const float gap = 5.0f;                       /* clearance past the tick end */
+    const float cap = HERSHEY_CAP_HEIGHT * scale;
+    const float gap = 5.0f;
     char buf[64];
 
-    for (double tx = ceil(range->xmin / xstep) * xstep; tx <= range->xmax + 1e-9; tx += xstep) {
-        if (fabs(tx) < 1e-9) tx = 0.0;
-        snprintf(buf, sizeof(buf), "%g", tx);
-        /* Screen position of the tick's lower (below-axis) end. */
-        Vector2 tip = GetWorldToScreen2D((Vector2){ (float)tx, (float)-(oy - xtick) }, camera);
-        float w = hershey_text_width(buf, scale);
-        hershey_draw_text_ex(buf, tip.x - w / 2.0f, tip.y + gap + cap, scale, 0.0f, col, 1.5f);
+    /* X tick labels */
+    if (o->sf_x != SF_NONE) {
+        double tw[128]; double tv[128];
+        int nt = gen_log_ticks(range->xmin, range->xmax, o->sf_x, tw, tv, 128);
+        for (int i = 0; i < nt; i++) {
+            snprintf(buf, sizeof(buf), "%g", tv[i]);
+            Vector2 tip = GetWorldToScreen2D((Vector2){ (float)tw[i], (float)-(oy - xtick) }, camera);
+            float lw = hershey_text_width(buf, scale);
+            hershey_draw_text_ex(buf, tip.x - lw / 2.0f, tip.y + gap + cap, scale, 0.0f, col, 1.5f);
+        }
+    } else {
+        double xstep = nice_step(range->xmax - range->xmin, 8);
+        for (double tx = ceil(range->xmin / xstep) * xstep; tx <= range->xmax + 1e-9; tx += xstep) {
+            if (fabs(tx) < 1e-9) tx = 0.0;
+            snprintf(buf, sizeof(buf), "%g", tx);
+            Vector2 tip = GetWorldToScreen2D((Vector2){ (float)tx, (float)-(oy - xtick) }, camera);
+            float lw = hershey_text_width(buf, scale);
+            hershey_draw_text_ex(buf, tip.x - lw / 2.0f, tip.y + gap + cap, scale, 0.0f, col, 1.5f);
+        }
     }
-    for (double ty = ceil(dymin / ystep) * ystep; ty <= dymax + 1e-9; ty += ystep) {
-        if (fabs(ty) < 1e-9) ty = 0.0;
-        snprintf(buf, sizeof(buf), "%g", ty);
-        /* Screen position of the tick's left (outside-axis) end. */
-        Vector2 tip = GetWorldToScreen2D((Vector2){ (float)(ox - ytick), (float)(-ty * ysc) }, camera);
-        float w = hershey_text_width(buf, scale);
-        hershey_draw_text_ex(buf, tip.x - w - gap, tip.y + cap / 2.0f, scale, 0.0f, col, 1.5f);
+
+    /* Y tick labels */
+    if (o->sf_y != SF_NONE) {
+        double tw[128]; double tv[128];
+        int nt = gen_log_ticks(dymin, dymax, o->sf_y, tw, tv, 128);
+        for (int i = 0; i < nt; i++) {
+            snprintf(buf, sizeof(buf), "%g", tv[i]);
+            Vector2 tip = GetWorldToScreen2D((Vector2){ (float)(ox - ytick), (float)(-tw[i] * ysc) }, camera);
+            float lw = hershey_text_width(buf, scale);
+            hershey_draw_text_ex(buf, tip.x - lw - gap, tip.y + cap / 2.0f, scale, 0.0f, col, 1.5f);
+        }
+    } else {
+        double ystep = nice_step(dymax - dymin, 6);
+        for (double ty = ceil(dymin / ystep) * ystep; ty <= dymax + 1e-9; ty += ystep) {
+            if (fabs(ty) < 1e-9) ty = 0.0;
+            snprintf(buf, sizeof(buf), "%g", ty);
+            Vector2 tip = GetWorldToScreen2D((Vector2){ (float)(ox - ytick), (float)(-ty * ysc) }, camera);
+            float lw = hershey_text_width(buf, scale);
+            hershey_draw_text_ex(buf, tip.x - lw - gap, tip.y + cap / 2.0f, scale, 0.0f, col, 1.5f);
+        }
     }
 }
 
@@ -1163,53 +1261,89 @@ static void draw_frame(float rx, float ry, float rw, float rh,
              : (o->frame_edge[FR_RIGHT] && o->frame_ticks[FR_RIGHT]) ? FR_RIGHT : -1;
 
     /* X ticks along the bottom and/or top edges. */
-    double xstep = nice_step(xR - xL, 8);
-    int xsub = frame_minor_divs(xstep);
-    double xm = xstep / xsub;
-    if (xm > 0) {
-        long i0 = (long)ceil(xL / xm - 1e-9), i1 = (long)floor(xR / xm + 1e-9);
-        for (long i = i0; i <= i1; i++) {
-            double tx = i * xm;
-            bool major = (i % xsub == 0);
-            float len = major ? maj : minr;
-            float sx = GetWorldToScreen2D((Vector2){ (float)tx, 0.0f }, camera).x;
+    if (o->sf_x != SF_NONE) {
+        double tw[128]; double tv[128];
+        int nt = gen_log_ticks(xL, xR, o->sf_x, tw, tv, 128);
+        for (int i = 0; i < nt; i++) {
+            float sx = GetWorldToScreen2D((Vector2){ (float)tw[i], 0.0f }, camera).x;
             if (sx < L - 0.5f || sx > R + 0.5f) continue;
             if (o->frame_edge[FR_BOTTOM] && o->frame_ticks[FR_BOTTOM])
-                DrawLineEx((Vector2){ sx, B }, (Vector2){ sx, B - len }, lw, col);
+                DrawLineEx((Vector2){ sx, B }, (Vector2){ sx, B - maj }, lw, col);
             if (o->frame_edge[FR_TOP] && o->frame_ticks[FR_TOP])
-                DrawLineEx((Vector2){ sx, T }, (Vector2){ sx, T + len }, lw, col);
-            if (major && xlab >= 0) {
-                snprintf(buf, sizeof(buf), "%g", fabs(tx) < 1e-9 ? 0.0 : tx);
-                float w = hershey_text_width(buf, scale);
-                /* Outside the frame: below the bottom edge, or above the top. */
+                DrawLineEx((Vector2){ sx, T }, (Vector2){ sx, T + maj }, lw, col);
+            if (xlab >= 0) {
+                snprintf(buf, sizeof(buf), "%g", tv[i]);
+                float fw = hershey_text_width(buf, scale);
                 float baseline = (xlab == FR_BOTTOM) ? (B + gap + cap) : (T - gap);
-                hershey_draw_text_ex(buf, sx - w / 2.0f, baseline, scale, 0.0f, col, lw);
+                hershey_draw_text_ex(buf, sx - fw / 2.0f, baseline, scale, 0.0f, col, lw);
+            }
+        }
+    } else {
+        double xstep = nice_step(xR - xL, 8);
+        int xsub = frame_minor_divs(xstep);
+        double xm = xstep / xsub;
+        if (xm > 0) {
+            long i0 = (long)ceil(xL / xm - 1e-9), i1 = (long)floor(xR / xm + 1e-9);
+            for (long i = i0; i <= i1; i++) {
+                double tx = i * xm;
+                bool major = (i % xsub == 0);
+                float len = major ? maj : minr;
+                float sx = GetWorldToScreen2D((Vector2){ (float)tx, 0.0f }, camera).x;
+                if (sx < L - 0.5f || sx > R + 0.5f) continue;
+                if (o->frame_edge[FR_BOTTOM] && o->frame_ticks[FR_BOTTOM])
+                    DrawLineEx((Vector2){ sx, B }, (Vector2){ sx, B - len }, lw, col);
+                if (o->frame_edge[FR_TOP] && o->frame_ticks[FR_TOP])
+                    DrawLineEx((Vector2){ sx, T }, (Vector2){ sx, T + len }, lw, col);
+                if (major && xlab >= 0) {
+                    snprintf(buf, sizeof(buf), "%g", fabs(tx) < 1e-9 ? 0.0 : tx);
+                    float fw = hershey_text_width(buf, scale);
+                    float baseline = (xlab == FR_BOTTOM) ? (B + gap + cap) : (T - gap);
+                    hershey_draw_text_ex(buf, sx - fw / 2.0f, baseline, scale, 0.0f, col, lw);
+                }
             }
         }
     }
 
     /* Y ticks along the left and/or right edges. */
-    double ystep = nice_step(dymax - dymin, 6);
-    int ysub = frame_minor_divs(ystep);
-    double ym = ystep / ysub;
-    if (ym > 0) {
-        long i0 = (long)ceil(dymin / ym - 1e-9), i1 = (long)floor(dymax / ym + 1e-9);
-        for (long i = i0; i <= i1; i++) {
-            double ty = i * ym;
-            bool major = (i % ysub == 0);
-            float len = major ? maj : minr;
-            float sy = GetWorldToScreen2D((Vector2){ 0.0f, (float)(-ty * ysc) }, camera).y;
+    if (o->sf_y != SF_NONE) {
+        double tw[128]; double tv[128];
+        int nt = gen_log_ticks(dymin, dymax, o->sf_y, tw, tv, 128);
+        for (int i = 0; i < nt; i++) {
+            float sy = GetWorldToScreen2D((Vector2){ 0.0f, (float)(-tw[i] * ysc) }, camera).y;
             if (sy < T - 0.5f || sy > B + 0.5f) continue;
             if (o->frame_edge[FR_LEFT] && o->frame_ticks[FR_LEFT])
-                DrawLineEx((Vector2){ L, sy }, (Vector2){ L + len, sy }, lw, col);
+                DrawLineEx((Vector2){ L, sy }, (Vector2){ L + maj, sy }, lw, col);
             if (o->frame_edge[FR_RIGHT] && o->frame_ticks[FR_RIGHT])
-                DrawLineEx((Vector2){ R, sy }, (Vector2){ R - len, sy }, lw, col);
-            if (major && ylab >= 0) {
-                snprintf(buf, sizeof(buf), "%g", fabs(ty) < 1e-9 ? 0.0 : ty);
-                float w = hershey_text_width(buf, scale);
-                /* Outside the frame: left of the left edge, or right of the right. */
-                float tx = (ylab == FR_LEFT) ? (L - gap - w) : (R + gap);
-                hershey_draw_text_ex(buf, tx, sy + cap / 2.0f, scale, 0.0f, col, lw);
+                DrawLineEx((Vector2){ R, sy }, (Vector2){ R - maj, sy }, lw, col);
+            if (ylab >= 0) {
+                snprintf(buf, sizeof(buf), "%g", tv[i]);
+                float fw = hershey_text_width(buf, scale);
+                float ftx = (ylab == FR_LEFT) ? (L - gap - fw) : (R + gap);
+                hershey_draw_text_ex(buf, ftx, sy + cap / 2.0f, scale, 0.0f, col, lw);
+            }
+        }
+    } else {
+        double ystep = nice_step(dymax - dymin, 6);
+        int ysub = frame_minor_divs(ystep);
+        double ym = ystep / ysub;
+        if (ym > 0) {
+            long i0 = (long)ceil(dymin / ym - 1e-9), i1 = (long)floor(dymax / ym + 1e-9);
+            for (long i = i0; i <= i1; i++) {
+                double ty = i * ym;
+                bool major = (i % ysub == 0);
+                float len = major ? maj : minr;
+                float sy = GetWorldToScreen2D((Vector2){ 0.0f, (float)(-ty * ysc) }, camera).y;
+                if (sy < T - 0.5f || sy > B + 0.5f) continue;
+                if (o->frame_edge[FR_LEFT] && o->frame_ticks[FR_LEFT])
+                    DrawLineEx((Vector2){ L, sy }, (Vector2){ L + len, sy }, lw, col);
+                if (o->frame_edge[FR_RIGHT] && o->frame_ticks[FR_RIGHT])
+                    DrawLineEx((Vector2){ R, sy }, (Vector2){ R - len, sy }, lw, col);
+                if (major && ylab >= 0) {
+                    snprintf(buf, sizeof(buf), "%g", fabs(ty) < 1e-9 ? 0.0 : ty);
+                    float fw = hershey_text_width(buf, scale);
+                    float ftx = (ylab == FR_LEFT) ? (L - gap - fw) : (R + gap);
+                    hershey_draw_text_ex(buf, ftx, sy + cap / 2.0f, scale, 0.0f, col, lw);
+                }
             }
         }
     }

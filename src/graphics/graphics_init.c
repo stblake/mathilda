@@ -499,6 +499,27 @@ void graphics_init(void) {
         "VectorStyle\n\tVectorPlot option: style directive(s) (RGBColor, Thickness, …)\n"
         "\tapplied globally to all arrows. Overrides per-arrow ColorFunction.");
 
+    symtab_get_def("ScalingFunctions")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ScalingFunctions",
+        "ScalingFunctions\n"
+        "\tOption for Plot, ListPlot, DensityPlot, ContourPlot, VectorPlot,\n"
+        "\tStreamPlot: applies a coordinate transform to one or both axes.\n"
+        "\n"
+        "\tForms:\n"
+        "\t  ScalingFunctions -> \"Log\"         both axes: natural log\n"
+        "\t  ScalingFunctions -> \"Log10\"        both axes: log base 10\n"
+        "\t  ScalingFunctions -> \"Log2\"         both axes: log base 2\n"
+        "\t  ScalingFunctions -> \"Reverse\"      both axes: mirror (negate)\n"
+        "\t  ScalingFunctions -> {\"Log\", None}  x-axis log, y-axis linear\n"
+        "\t  ScalingFunctions -> {None, \"Log\"}  x-axis linear, y-axis log\n"
+        "\t  ScalingFunctions -> None           identity (default)\n"
+        "\t  ScalingFunctions -> Automatic      identity (default)\n"
+        "\n"
+        "\tWhen a log scale is active, tick labels show original data-space\n"
+        "\tvalues (e.g. 1, 2, 5, 10, 20, …) at decade-based positions.\n"
+        "\tNon-positive values on a log-scaled axis are suppressed (mapped to\n"
+        "\t-1e30 in world space).");
+
     symtab_add_builtin("StreamPlot", builtin_streamplot);
     symtab_get_def("StreamPlot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_set_docstring("StreamPlot",

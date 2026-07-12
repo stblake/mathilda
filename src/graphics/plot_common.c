@@ -370,3 +370,67 @@ int resolve_ramp_to_rgb(const char* name, double t, double* r, double* g, double
     }
     return 0;
 }
+
+/* ---------------------------------------------------------------------- */
+/* Axis scaling helpers (ScalingFunctions)                                 */
+/* ---------------------------------------------------------------------- */
+
+double scale_apply(ScaleFnType sf, double x) {
+    switch (sf) {
+        case SF_LOG:     return (x > 0.0) ? log(x)   : -1e30;
+        case SF_LOG2:    return (x > 0.0) ? log2(x)  : -1e30;
+        case SF_LOG10:   return (x > 0.0) ? log10(x) : -1e30;
+        case SF_REVERSE: return -x;
+        default:         return x;
+    }
+}
+
+double scale_invert(ScaleFnType sf, double w) {
+    switch (sf) {
+        case SF_LOG:     return exp(w);
+        case SF_LOG2:    return pow(2.0, w);
+        case SF_LOG10:   return pow(10.0, w);
+        case SF_REVERSE: return -w;
+        default:         return w;
+    }
+}
+
+ScaleFnType parse_scale_fn(Expr* e) {
+    if (!e) return SF_NONE;
+    if (e->type == EXPR_SYMBOL) {
+        if (e->data.symbol == SYM_None || e->data.symbol == SYM_Automatic) return SF_NONE;
+    }
+    if (e->type == EXPR_STRING) {
+        const char* s = e->data.string;
+        if (strcmp(s, "Log")     == 0) return SF_LOG;
+        if (strcmp(s, "Log2")    == 0) return SF_LOG2;
+        if (strcmp(s, "Log10")   == 0) return SF_LOG10;
+        if (strcmp(s, "Reverse") == 0 || strcmp(s, "Reversed") == 0) return SF_REVERSE;
+    }
+    return SF_NONE;
+}
+
+void parse_scaling_functions(Expr* rhs, ScaleFnType* sf_x, ScaleFnType* sf_y) {
+    *sf_x = SF_NONE; *sf_y = SF_NONE;
+    if (!rhs) return;
+    /* {sfx, sfy} two-element List */
+    if (rhs->type == EXPR_FUNCTION
+        && rhs->data.function.head->type == EXPR_SYMBOL
+        && rhs->data.function.head->data.symbol == SYM_List
+        && rhs->data.function.arg_count == 2) {
+        *sf_x = parse_scale_fn(rhs->data.function.args[0]);
+        *sf_y = parse_scale_fn(rhs->data.function.args[1]);
+    } else {
+        /* Single spec applies to both axes */
+        *sf_x = *sf_y = parse_scale_fn(rhs);
+    }
+}
+
+void emit_scaling_meta(ScaleFnType sf_x, ScaleFnType sf_y,
+                       Expr*** pt, size_t* pt_n) {
+    if (sf_x == SF_NONE && sf_y == SF_NONE) return;
+    *pt = realloc(*pt, sizeof(Expr*) * (*pt_n + 1));
+    Expr* sm_args[2] = { expr_new_integer((int64_t)sf_x),
+                         expr_new_integer((int64_t)sf_y) };
+    (*pt)[(*pt_n)++] = expr_new_function(expr_new_symbol(SYM_ScalingMeta), sm_args, 2);
+}

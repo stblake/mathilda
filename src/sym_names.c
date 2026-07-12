@@ -697,6 +697,8 @@ const char* SYM_StreamStyle = NULL;
 const char* SYM_StreamColorFunction = NULL;
 const char* SYM_StreamColorBar = NULL;
 const char* SYM_BarChartLabels = NULL;
+const char* SYM_ScalingFunctions = NULL;
+const char* SYM_ScalingMeta = NULL;
 const char* SYM_ContourPlot = NULL;
 const char* SYM_Contours = NULL;
 const char* SYM_ContourStyle = NULL;
@@ -1390,6 +1392,8 @@ void sym_names_init(void) {
     SYM_StreamColorFunction        = intern_symbol("StreamColorFunction");
     SYM_StreamColorBar             = intern_symbol("$StreamColorBar");
     SYM_BarChartLabels             = intern_symbol("$BarChartLabels");
+    SYM_ScalingFunctions           = intern_symbol("ScalingFunctions");
+    SYM_ScalingMeta                = intern_symbol("$ScalingMeta");
     SYM_ContourPlot                = intern_symbol("ContourPlot");
     SYM_Contours                   = intern_symbol("Contours");
     SYM_ContourStyle               = intern_symbol("ContourStyle");

@@ -32,11 +32,12 @@
 /* ---- options ---- */
 
 typedef struct {
-    int   plot_points;
-    Expr* color_function;         /* borrowed; NULL = thermal default */
-    bool  color_function_scaling;
-    Expr* region_function;        /* borrowed; NULL = none */
-    bool  show_legend;
+    int         plot_points;
+    Expr*       color_function;         /* borrowed; NULL = thermal default */
+    bool        color_function_scaling;
+    Expr*       region_function;        /* borrowed; NULL = none */
+    bool        show_legend;
+    ScaleFnType sf_x, sf_y;
 } DensityOpts;
 
 static bool split_density_options(Expr* res, DensityOpts* o,
@@ -46,6 +47,8 @@ static bool split_density_options(Expr* res, DensityOpts* o,
     o->color_function_scaling = true;
     o->region_function        = NULL;
     o->show_legend            = false;
+    o->sf_x                   = SF_NONE;
+    o->sf_y                   = SF_NONE;
 
     size_t argc = res->data.function.arg_count;
     size_t cap  = (argc > 3 ? argc - 3 : 0) + 4;
@@ -80,6 +83,10 @@ static bool split_density_options(Expr* res, DensityOpts* o,
             o->show_legend = !(v->type == EXPR_SYMBOL
                                && (v->data.symbol == SYM_None
                                    || v->data.symbol == SYM_False));
+            expr_free(v);
+        } else if (name == SYM_ScalingFunctions) {
+            Expr* v = evaluate(expr_copy(rhs));
+            parse_scaling_functions(v, &o->sf_x, &o->sf_y);
             expr_free(v);
         } else {
             if      (name == SYM_Axes)        have_axes   = true;
@@ -189,8 +196,11 @@ Expr* builtin_densityplot(Expr* res) {
         iter_spec_free(&xspec); iter_spec_free(&yspec); return NULL; }
 
     int    N  = opts.plot_points;
-    double dx = (xmax - xmin) / N;
-    double dy = (ymax - ymin) / N;
+    /* Sample uniformly in world (scaled) space */
+    double u_xmin = scale_apply(opts.sf_x, xmin), u_xmax = scale_apply(opts.sf_x, xmax);
+    double u_ymin = scale_apply(opts.sf_y, ymin), u_ymax = scale_apply(opts.sf_y, ymax);
+    double du_x = (u_xmax - u_xmin) / N;
+    double du_y = (u_ymax - u_ymin) / N;
 
     double* grid = malloc(sizeof(double) * (size_t)(N + 1) * (size_t)(N + 1));
     if (!grid) {
@@ -204,9 +214,12 @@ Expr* builtin_densityplot(Expr* res) {
 
     double zmin =  1e300, zmax = -1e300;
     for (int iy = 0; iy <= N; iy++) {
-        double y = ymin + iy * dy;
+        double uy = u_ymin + iy * du_y;
+        double y  = scale_invert(opts.sf_y, uy);
         for (int ix = 0; ix <= N; ix++) {
-            double v = dp_eval(xspec.var, yspec.var, body, xmin + ix * dx, y);
+            double ux = u_xmin + ix * du_x;
+            double x  = scale_invert(opts.sf_x, ux);
+            double v  = dp_eval(xspec.var, yspec.var, body, x, y);
             grid[iy * (N + 1) + ix] = v;
             if (isfinite(v)) {
                 if (v < zmin) zmin = v;
@@ -226,9 +239,9 @@ Expr* builtin_densityplot(Expr* res) {
     size_t np    = 0;
 
     for (int iy = 0; iy < N; iy++) {
-        double y0 = ymin + iy * dy;
+        double uy0 = u_ymin + iy * du_y;
         for (int ix = 0; ix < N; ix++) {
-            double x0  = xmin + ix * dx;
+            double ux0 = u_xmin + ix * du_x;
             double v00 = grid[ iy      * (N + 1) + ix    ];
             double v10 = grid[ iy      * (N + 1) + ix + 1];
             double v11 = grid[(iy + 1) * (N + 1) + ix + 1];
@@ -237,7 +250,9 @@ Expr* builtin_densityplot(Expr* res) {
             if (!isfinite(v00) || !isfinite(v10) || !isfinite(v11) || !isfinite(v01))
                 continue;
 
-            double cx = x0 + dx * 0.5, cy = y0 + dy * 0.5;
+            /* Region check uses original data coordinates at cell center */
+            double cx = scale_invert(opts.sf_x, ux0 + du_x * 0.5);
+            double cy = scale_invert(opts.sf_y, uy0 + du_y * 0.5);
             if (opts.region_function && !eval_region(opts.region_function, cx, cy))
                 continue;
 
@@ -249,8 +264,9 @@ Expr* builtin_densityplot(Expr* res) {
 
             prims[np++] = dp_color(opts.color_function, t);
 
-            Expr* p1[2] = { expr_new_real(x0),      expr_new_real(y0) };
-            Expr* p2[2] = { expr_new_real(x0 + dx), expr_new_real(y0 + dy) };
+            /* Rectangle in world coordinates */
+            Expr* p1[2] = { expr_new_real(ux0),         expr_new_real(uy0) };
+            Expr* p2[2] = { expr_new_real(ux0 + du_x),  expr_new_real(uy0 + du_y) };
             Expr* ra[2] = { expr_new_function(expr_new_symbol(SYM_List), p1, 2),
                              expr_new_function(expr_new_symbol(SYM_List), p2, 2) };
             prims[np++] = expr_new_function(expr_new_symbol(SYM_Rectangle), ra, 2);
@@ -271,8 +287,8 @@ Expr* builtin_densityplot(Expr* res) {
         }
         if (!have_pr) {
             pt = realloc(pt, sizeof(Expr*) * (pt_n + 1));
-            Expr* xr[2]  = { expr_new_real(xmin), expr_new_real(xmax) };
-            Expr* yr[2]  = { expr_new_real(ymin), expr_new_real(ymax) };
+            Expr* xr[2]  = { expr_new_real(u_xmin), expr_new_real(u_xmax) };
+            Expr* yr[2]  = { expr_new_real(u_ymin), expr_new_real(u_ymax) };
             Expr* xrng   = expr_new_function(expr_new_symbol(SYM_List), xr, 2);
             Expr* yrng   = expr_new_function(expr_new_symbol(SYM_List), yr, 2);
             Expr* rl[2]  = { xrng, yrng };
@@ -281,6 +297,8 @@ Expr* builtin_densityplot(Expr* res) {
             pt[pt_n++]   = expr_new_function(expr_new_symbol(SYM_Rule), ra, 2);
         }
     }
+
+    emit_scaling_meta(opts.sf_x, opts.sf_y, &pt, &pt_n);
 
     /* PlotLegends -> Automatic: attach $StreamColorBar so the renderer draws
      * a vertical colour scale on the right of the plot. */
