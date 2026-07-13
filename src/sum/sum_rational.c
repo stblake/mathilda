@@ -112,7 +112,8 @@ static Expr* sr_residue(Expr* term, Expr* base, int k, Expr* var) {
  * base is linear in var: base = b1 var + b0, rho = -b0/b1, a = imin - rho, and
  * the effective residue is c = c0 * b1^(-k).  Returns an owned (unevaluated)
  * Expr*, or NULL if base is not linear in var (e.g. an irreducible quadratic
- * pole -- defer to the extension path). c0 is consumed. */
+ * pole -- defer to the extension path). c0 is consumed; base is borrowed (used
+ * only via copies here, so the caller retains ownership). */
 static Expr* sr_term_contribution(Expr* c0, Expr* base, int k,
                                   Expr* var, Expr* imin) {
     if (sr_pdeg(base, var) != 1) { expr_free(c0); return NULL; }
@@ -327,7 +328,7 @@ static Expr* sr_decompose(Expr* f, Expr* var, Expr* imin, Expr* ext,
         if (d == 1) {
             /* Linear pole: master identity (Hurwitz Zeta / digamma). */
             Expr* c0 = sr_residue(terms[i], base, k, var);
-            contrib = sr_term_contribution(c0, expr_copy(base), k, var, imin);
+            contrib = sr_term_contribution(c0, base, k, var, imin);
         } else if (d == 2 && !ext) {
             /* Irreducible quadratic over Q: complex-conjugate roots collapse to
              * a Coth / conjugate-digamma form (only k == 1).  Real radical roots

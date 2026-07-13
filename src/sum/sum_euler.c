@@ -196,7 +196,9 @@ Expr* builtin_sum_euler(Expr* res) {
     if (imin->type != EXPR_INTEGER || imin->data.integer != 1) return NULL;
 
     /* Canonicalise the held summand (1/k^q parses as (k^q)^(-1)). */
-    Expr* fn = evaluate(expr_copy(f));
+    Expr* fc = expr_copy(f);
+    Expr* fn = evaluate(fc);
+    expr_free(fc);   /* evaluate() borrows; free the copy we made */
 
     bool is_times = (fn->type == EXPR_FUNCTION
                      && fn->data.function.head->type == EXPR_SYMBOL

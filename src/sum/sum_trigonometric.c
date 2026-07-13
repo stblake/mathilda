@@ -176,7 +176,9 @@ Expr* builtin_sum_trigonometric(Expr* res) {
     if (imin->type != EXPR_INTEGER || imin->data.integer < 1) return NULL;
     int64_t k0 = imin->data.integer;
 
-    Expr* fn = evaluate(expr_copy(f));
+    Expr* fc = expr_copy(f);
+    Expr* fn = evaluate(fc);
+    expr_free(fc);   /* evaluate() borrows; free the copy we made */
     if (!tr_has_trig(fn, var)) { expr_free(fn); return NULL; }
 
     /* Split fn = (product of k-powers) * trigpart. */

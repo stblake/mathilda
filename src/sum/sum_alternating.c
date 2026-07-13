@@ -121,7 +121,9 @@ Expr* builtin_sum_alternating(Expr* res) {
     if (!is_infinity_sym(imax)) return NULL;
     if (imin->type != EXPR_INTEGER) return NULL;
 
-    Expr* fn = evaluate(expr_copy(f));
+    Expr* fc = expr_copy(f);
+    Expr* fn = evaluate(fc);
+    expr_free(fc);   /* evaluate() borrows; free the copy we made */
 
     /* Split fn into the sign exponent(s) (-1)^exp and the rest (R). */
     bool is_times = (fn->type == EXPR_FUNCTION

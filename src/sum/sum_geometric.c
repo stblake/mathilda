@@ -253,7 +253,9 @@ Expr* builtin_sum_geometric(Expr* res) {
      * part.  evaluate rewrites it to 2^(-k) (a var-free base), which cancels
      * cleanly.  This does not expand or run Together, so it is safe on the
      * symbolic r^var forms the memory warns about. */
-    Expr* fn = evaluate(expr_copy(f));
+    Expr* fc = expr_copy(f);
+    Expr* fn = evaluate(fc);
+    expr_free(fc);   /* evaluate() borrows; free the copy we made */
 
     Expr *r = NULL, *p = NULL;
     if (!find_geometric(fn, var, &r, &p)) { expr_free(fn); return NULL; }

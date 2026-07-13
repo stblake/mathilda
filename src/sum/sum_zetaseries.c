@@ -95,7 +95,9 @@ Expr* builtin_sum_zetaseries(Expr* res) {
     if (imin->type != EXPR_INTEGER) return NULL;
     int64_t k0 = imin->data.integer;
 
-    Expr* fn = evaluate(expr_copy(f));
+    Expr* fc = expr_copy(f);
+    Expr* fn = evaluate(fc);
+    expr_free(fc);   /* evaluate() borrows; free the copy we made */
 
     /* Split fn = C * G, where G is the additive group holding Zeta[linear]. */
     Expr* G = NULL;        /* alias into fn */
