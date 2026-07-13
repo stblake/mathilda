@@ -63,9 +63,9 @@ static Expr* contour_color(Expr* cfn, double t, double x, double y) {
             bool is_color = (result->type == EXPR_FUNCTION
                              && result->data.function.head
                              && result->data.function.head->type == EXPR_SYMBOL
-                             && (result->data.function.head->data.symbol == SYM_RGBColor
-                              || result->data.function.head->data.symbol == SYM_GrayLevel
-                              || result->data.function.head->data.symbol == SYM_Hue));
+                             && (result->data.function.head->data.symbol.name == SYM_RGBColor
+                              || result->data.function.head->data.symbol.name == SYM_GrayLevel
+                              || result->data.function.head->data.symbol.name == SYM_Hue));
             if (is_color) return result;
             expr_free(result);
         }
@@ -127,7 +127,7 @@ static bool split_contour_options(Expr* res, ContourOpts* co,
         if (!is_rule_arg(arg)) CP_FAIL();
         Expr* lhs = arg->data.function.args[0];
         Expr* rhs = arg->data.function.args[1];
-        const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol : NULL;
+        const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol.name : NULL;
 
         if (name == SYM_PlotPoints) {
             long v;
@@ -142,7 +142,7 @@ static bool split_contour_options(Expr* res, ContourOpts* co,
             } else if (v->type == EXPR_FUNCTION
                        && v->data.function.head
                        && v->data.function.head->type == EXPR_SYMBOL
-                       && v->data.function.head->data.symbol == SYM_List) {
+                       && v->data.function.head->data.symbol.name == SYM_List) {
                 /* Explicit list of levels. */
                 size_t nl = v->data.function.arg_count;
                 free(co->levels);
@@ -161,7 +161,7 @@ static bool split_contour_options(Expr* res, ContourOpts* co,
         } else if (name == SYM_ContourStyle) {
             Expr* v = evaluate(expr_copy(rhs));
             if (v->type == EXPR_SYMBOL
-                && (v->data.symbol == SYM_None || v->data.symbol == SYM_False)) {
+                && (v->data.symbol.name == SYM_None || v->data.symbol.name == SYM_False)) {
                 co->contour_style_none = true;
                 expr_free(v);
             } else {
@@ -171,15 +171,15 @@ static bool split_contour_options(Expr* res, ContourOpts* co,
         } else if (name == SYM_ContourLabels) {
             Expr* v = evaluate(expr_copy(rhs));
             co->contour_labels = !(v->type == EXPR_SYMBOL
-                                   && (v->data.symbol == SYM_False
-                                    || v->data.symbol == SYM_None));
+                                   && (v->data.symbol.name == SYM_False
+                                    || v->data.symbol.name == SYM_None));
             expr_free(v);
         } else if (name == SYM_ContourShading) {
             Expr* v = evaluate(expr_copy(rhs));
-            if (v->type == EXPR_SYMBOL && v->data.symbol == SYM_Automatic) {
+            if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Automatic) {
                 co->shading = -1;
             } else if (v->type == EXPR_SYMBOL
-                       && (v->data.symbol == SYM_False || v->data.symbol == SYM_None)) {
+                       && (v->data.symbol.name == SYM_False || v->data.symbol.name == SYM_None)) {
                 co->shading = 0;
             } else {
                 co->shading = 1;
@@ -190,7 +190,7 @@ static bool split_contour_options(Expr* res, ContourOpts* co,
         } else if (name == SYM_ColorFunctionScaling) {
             Expr* v = evaluate(expr_copy(rhs));
             co->color_function_scaling = !(v->type == EXPR_SYMBOL
-                                           && v->data.symbol == SYM_False);
+                                           && v->data.symbol.name == SYM_False);
             expr_free(v);
         } else if (name == SYM_RegionFunction) {
             co->region_function = rhs; /* borrowed */
@@ -198,8 +198,8 @@ static bool split_contour_options(Expr* res, ContourOpts* co,
             /* Automatic or True → show colour bar / swatches; None/False → off. */
             Expr* v = evaluate(expr_copy(rhs));
             co->show_legend = !(v->type == EXPR_SYMBOL
-                                && (v->data.symbol == SYM_None
-                                    || v->data.symbol == SYM_False));
+                                && (v->data.symbol.name == SYM_None
+                                    || v->data.symbol.name == SYM_False));
             expr_free(v);
         } else {
             /* Pass through to Graphics[...] */
@@ -207,7 +207,7 @@ static bool split_contour_options(Expr* res, ContourOpts* co,
             else if (name == SYM_AspectRatio) have_aspect = true;
             else if (name == SYM_Frame) {
                 if (!(rhs->type == EXPR_SYMBOL
-                      && (rhs->data.symbol == SYM_False || rhs->data.symbol == SYM_None)))
+                      && (rhs->data.symbol.name == SYM_False || rhs->data.symbol.name == SYM_None)))
                     have_frame = true;
             }
             Expr* val = evaluate(expr_copy(rhs));
@@ -246,8 +246,8 @@ typedef struct {
 static double eval_at(const GridCtx* ctx, double x, double y) {
     Expr* xv = expr_new_real(x);
     Expr* yv = expr_new_real(y);
-    symtab_add_own_value(ctx->xvar->data.symbol, ctx->xvar, xv);
-    symtab_add_own_value(ctx->yvar->data.symbol, ctx->yvar, yv);
+    symtab_add_own_value(ctx->xvar->data.symbol.name, ctx->xvar, xv);
+    symtab_add_own_value(ctx->yvar->data.symbol.name, ctx->yvar, yv);
     Expr* result = evaluate(ctx->body);
     double v;
     bool ok = expr_to_real_double(result, &v) && isfinite(v);
@@ -405,7 +405,7 @@ Expr* builtin_contourplot(Expr* res) {
     bool is_list_body = (body->type == EXPR_FUNCTION
         && body->data.function.head
         && body->data.function.head->type == EXPR_SYMBOL
-        && body->data.function.head->data.symbol == SYM_List);
+        && body->data.function.head->data.symbol.name == SYM_List);
 
     /* Support equation form: ContourPlot[lhs == rhs, ...]
      * Rewrite as body = lhs - rhs and plot the zero level set.
@@ -416,7 +416,7 @@ Expr* builtin_contourplot(Expr* res) {
         && body->type == EXPR_FUNCTION
         && body->data.function.head
         && body->data.function.head->type == EXPR_SYMBOL
-        && body->data.function.head->data.symbol == SYM_Equal
+        && body->data.function.head->data.symbol.name == SYM_Equal
         && body->data.function.arg_count == 2) {
         is_equation = true;
         Expr* lhs = body->data.function.args[0];
@@ -511,7 +511,7 @@ Expr* builtin_contourplot(Expr* res) {
             if (elem->type == EXPR_FUNCTION
                 && elem->data.function.head
                 && elem->data.function.head->type == EXPR_SYMBOL
-                && elem->data.function.head->data.symbol == SYM_Equal
+                && elem->data.function.head->data.symbol.name == SYM_Equal
                 && elem->data.function.arg_count == 2) {
                 Expr* elhs = elem->data.function.args[0];
                 Expr* erhs = elem->data.function.args[1];
@@ -580,7 +580,7 @@ Expr* builtin_contourplot(Expr* res) {
                 const Expr* e = passthrough[i];
                 if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
                     && e->data.function.args[0]->type == EXPR_SYMBOL
-                    && e->data.function.args[0]->data.symbol == SYM_PlotRange)
+                    && e->data.function.args[0]->data.symbol.name == SYM_PlotRange)
                 { have_pr = true; break; }
             }
             if (!have_pr) {
@@ -750,7 +750,7 @@ Expr* builtin_contourplot(Expr* res) {
         if (have_custom_style && !(co.contour_style->type == EXPR_FUNCTION
               && co.contour_style->data.function.head
               && co.contour_style->data.function.head->type == EXPR_SYMBOL
-              && co.contour_style->data.function.head->data.symbol == SYM_List)) {
+              && co.contour_style->data.function.head->data.symbol.name == SYM_List)) {
             ENSURE_CAP(2);
             prims[nprim++] = evaluate(expr_copy(co.contour_style));
         }
@@ -765,7 +765,7 @@ Expr* builtin_contourplot(Expr* res) {
                 && co.contour_style->type == EXPR_FUNCTION
                 && co.contour_style->data.function.head
                 && co.contour_style->data.function.head->type == EXPR_SYMBOL
-                && co.contour_style->data.function.head->data.symbol == SYM_List) {
+                && co.contour_style->data.function.head->data.symbol.name == SYM_List) {
                 /* Cycle through the list. */
                 size_t list_len = co.contour_style->data.function.arg_count;
                 if (list_len > 0) {
@@ -853,7 +853,7 @@ Expr* builtin_contourplot(Expr* res) {
             const Expr* e = passthrough[i];
             if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
                 && e->data.function.args[0]->type == EXPR_SYMBOL
-                && e->data.function.args[0]->data.symbol == SYM_PlotRange)
+                && e->data.function.args[0]->data.symbol.name == SYM_PlotRange)
                 { have_pr = true; break; }
         }
         if (!have_pr) {

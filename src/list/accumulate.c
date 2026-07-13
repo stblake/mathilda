@@ -16,12 +16,12 @@
 static bool accumulate_is_compensated_method(Expr* opt) {
     if (opt->type != EXPR_FUNCTION) return false;
     if (opt->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* hd = opt->data.function.head->data.symbol;
+    const char* hd = opt->data.function.head->data.symbol.name;
     if ((hd != SYM_Rule && hd != SYM_RuleDelayed) ||
         opt->data.function.arg_count != 2) return false;
     Expr* lhs = opt->data.function.args[0];
     Expr* rhs = opt->data.function.args[1];
-    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol != SYM_Method) return false;
+    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol.name != SYM_Method) return false;
     if (rhs->type != EXPR_STRING) return false;
     return strcmp(rhs->data.string, "CompensatedSummation") == 0;
 }

@@ -26,7 +26,7 @@ static Expr* array_helper(Expr* f, Expr** n_array, Expr** r_array, size_t dim_co
     Expr* a_expr = NULL;
     Expr* b_expr = NULL;
     
-    if (r_expr && r_expr->type == EXPR_FUNCTION && r_expr->data.function.head->type == EXPR_SYMBOL && r_expr->data.function.head->data.symbol == SYM_List && r_expr->data.function.arg_count == 2) {
+    if (r_expr && r_expr->type == EXPR_FUNCTION && r_expr->data.function.head->type == EXPR_SYMBOL && r_expr->data.function.head->data.symbol.name == SYM_List && r_expr->data.function.arg_count == 2) {
         is_range = 1;
         a_expr = r_expr->data.function.args[0];
         b_expr = r_expr->data.function.args[1];
@@ -79,7 +79,7 @@ Expr* builtin_array(Expr* res) {
     Expr* r_spec = res->data.function.arg_count == 3 ? res->data.function.args[2] : NULL;
     
     size_t dim_count = 1;
-    if (n_spec->type == EXPR_FUNCTION && n_spec->data.function.head->type == EXPR_SYMBOL && n_spec->data.function.head->data.symbol == SYM_List) {
+    if (n_spec->type == EXPR_FUNCTION && n_spec->data.function.head->type == EXPR_SYMBOL && n_spec->data.function.head->data.symbol.name == SYM_List) {
         dim_count = n_spec->data.function.arg_count;
         if (dim_count == 0) return NULL;
     }
@@ -87,14 +87,14 @@ Expr* builtin_array(Expr* res) {
     Expr** n_array = malloc(sizeof(Expr*) * dim_count);
     Expr** r_array = malloc(sizeof(Expr*) * dim_count);
     
-    if (n_spec->type == EXPR_FUNCTION && n_spec->data.function.head->type == EXPR_SYMBOL && n_spec->data.function.head->data.symbol == SYM_List) {
+    if (n_spec->type == EXPR_FUNCTION && n_spec->data.function.head->type == EXPR_SYMBOL && n_spec->data.function.head->data.symbol.name == SYM_List) {
         for(size_t i=0; i<dim_count; i++) n_array[i] = n_spec->data.function.args[i];
     } else {
         n_array[0] = n_spec;
     }
     
     if (r_spec) {
-        if (r_spec->type == EXPR_FUNCTION && r_spec->data.function.head->type == EXPR_SYMBOL && r_spec->data.function.head->data.symbol == SYM_List && r_spec->data.function.arg_count == dim_count) {
+        if (r_spec->type == EXPR_FUNCTION && r_spec->data.function.head->type == EXPR_SYMBOL && r_spec->data.function.head->data.symbol.name == SYM_List && r_spec->data.function.arg_count == dim_count) {
             for(size_t i=0; i<dim_count; i++) r_array[i] = r_spec->data.function.args[i];
         } else {
             for(size_t i=0; i<dim_count; i++) r_array[i] = r_spec;

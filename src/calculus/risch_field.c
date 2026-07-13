@@ -65,7 +65,7 @@ static Expr* rf_coeff(const Expr* p, const Expr* t, long k) {
 }
 
 static bool rf_is_true(const Expr* e) {
-    return e && e->type == EXPR_SYMBOL && e->data.symbol == intern_symbol("True");
+    return e && e->type == EXPR_SYMBOL && e->data.symbol.name == intern_symbol("True");
 }
 
 /* ------------------------------------------------------------------ */
@@ -76,7 +76,7 @@ bool risch_deriv_from_rules(const Expr* rules, RischDeriv* out) {
     out->nvars = 0; out->vars = NULL; out->dvars = NULL;
     if (!rules || rules->type != EXPR_FUNCTION) return false;
     const Expr* head = rules->data.function.head;
-    if (!(head && head->type == EXPR_SYMBOL && head->data.symbol == intern_symbol("List")))
+    if (!(head && head->type == EXPR_SYMBOL && head->data.symbol.name == intern_symbol("List")))
         return false;
     size_t n = rules->data.function.arg_count;
     if (n == 0) return false;
@@ -87,7 +87,7 @@ bool risch_deriv_from_rules(const Expr* rules, RischDeriv* out) {
         const Expr* ri = rules->data.function.args[i];
         if (!ri || ri->type != EXPR_FUNCTION ||
             ri->data.function.head->type != EXPR_SYMBOL ||
-            ri->data.function.head->data.symbol != intern_symbol("Rule") ||
+            ri->data.function.head->data.symbol.name != intern_symbol("Rule") ||
             ri->data.function.arg_count != 2) {
             free(vars); free(dvars); return false;
         }
@@ -132,7 +132,7 @@ long risch_field_degree_t(const Expr* p, const Expr* t) {
     long deg = -1;
     if (cl && cl->type == EXPR_FUNCTION &&
         cl->data.function.head->type == EXPR_SYMBOL &&
-        cl->data.function.head->data.symbol == intern_symbol("List")) {
+        cl->data.function.head->data.symbol.name == intern_symbol("List")) {
         deg = (long)cl->data.function.arg_count - 1;
     }
     expr_free(cl);
@@ -294,7 +294,7 @@ void risch_field_xgcd_t(const Expr* a, const Expr* b, const Expr* t,
 const Expr* risch_deriv_lookup(const RischDeriv* d, const Expr* t) {
     if (!t || t->type != EXPR_SYMBOL) return NULL;
     for (size_t i = 0; i < d->nvars; i++)
-        if (d->vars[i]->type == EXPR_SYMBOL && d->vars[i]->data.symbol == t->data.symbol)
+        if (d->vars[i]->type == EXPR_SYMBOL && d->vars[i]->data.symbol.name == t->data.symbol.name)
             return d->dvars[i];
     return NULL;
 }

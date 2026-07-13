@@ -81,7 +81,7 @@ static bool is_lit_zero(Expr* e) {
 static bool has_symbol_head(Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, name) == 0;
+           strcmp(e->data.function.head->data.symbol.name, name) == 0;
 }
 
 /* Cheap structural test for SeriesData[x, x0, {coefs}, nmin, nmax, den]. Uses
@@ -90,7 +90,7 @@ static bool has_symbol_head(Expr* e, const char* name) {
 bool is_series_data(const Expr* e) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol == SYM_SeriesData &&
+           e->data.function.head->data.symbol.name == SYM_SeriesData &&
            e->data.function.arg_count == 6;
 }
 
@@ -155,7 +155,7 @@ bool series_split_two_term(Expr* e, Expr* x,
     if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) {
         return false;
     }
-    const char* head = e->data.function.head->data.symbol;
+    const char* head = e->data.function.head->data.symbol.name;
     size_t n = e->data.function.arg_count;
 
     if (head == SYM_Plus) {
@@ -578,7 +578,7 @@ static bool so_is_purely_numeric(Expr* e) {
         case EXPR_FUNCTION: {
             Expr* h = e->data.function.head;
             if (h->type != EXPR_SYMBOL) return false;
-            const char* s = h->data.symbol;
+            const char* s = h->data.symbol.name;
             if (s != SYM_Rational && s != SYM_Complex &&
                 s != SYM_Times && s != SYM_Plus &&
                 s != SYM_Power) return false;
@@ -1373,7 +1373,7 @@ static Expr* make_imag_unit_signed(int sign) {
 static bool is_imag_unit(Expr* e, int sign) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
-    if (e->data.function.head->data.symbol != SYM_Complex) return false;
+    if (e->data.function.head->data.symbol.name != SYM_Complex) return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* re = e->data.function.args[0];
     Expr* im = e->data.function.args[1];
@@ -2002,14 +2002,14 @@ static SeriesObj* so_apply_sinh_or_cosh(SeriesObj* s, bool is_sinh) {
 static bool has_infinity(Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_SYMBOL) {
-        const char* s = e->data.symbol;
+        const char* s = e->data.symbol.name;
         return (s == SYM_Infinity ||
                 s == SYM_ComplexInfinity ||
                 s == SYM_Indeterminate);
     }
     if (e->type == EXPR_FUNCTION) {
         if (e->data.function.head->type == EXPR_SYMBOL) {
-            const char* h = e->data.function.head->data.symbol;
+            const char* h = e->data.function.head->data.symbol.name;
             if (h == SYM_DirectedInfinity ||
                 h == SYM_Indeterminate) return true;
         }
@@ -2119,7 +2119,7 @@ static bool is_known_elementary(Expr* e) {
 static Expr* rewrite_reciprocal_head(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 1) return NULL;
     if (e->data.function.head->type != EXPR_SYMBOL) return NULL;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     Expr* arg = expr_copy(e->data.function.args[0]);
     if (h == SYM_Sec) return mk_power(mk_fn1("Cos",  arg), expr_new_integer(-1));
     if (h == SYM_Csc) return mk_power(mk_fn1("Sin",  arg), expr_new_integer(-1));
@@ -2275,7 +2275,7 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
 
     if (e->type == EXPR_FUNCTION) {
         const char* head = (e->data.function.head->type == EXPR_SYMBOL)
-                               ? e->data.function.head->data.symbol : NULL;
+                               ? e->data.function.head->data.symbol.name : NULL;
         /* ---- Plus ---- */
         if (head && strcmp(head, "Plus") == 0) {
             SeriesObj* acc = NULL;
@@ -2741,13 +2741,13 @@ static bool expr_nonanalytic_in(const Expr* e, Expr* x) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (expr_free_of((Expr*)e, x)) return false;   /* no dependence -> safe */
     Expr* h = e->data.function.head;
-    if (h && h->type == EXPR_SYMBOL && h->data.symbol) {
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol.name) {
         static const char* const bad[] = {
             "Floor", "Ceiling", "Round", "IntegerPart", "FractionalPart",
             "Mod", "Quotient", "Sign", "Abs", "Arg", "UnitStep",
             "KroneckerDelta", "Boole", "Max", "Min", NULL };
         for (size_t i = 0; bad[i]; i++)
-            if (strcmp(h->data.symbol, bad[i]) == 0) return true;
+            if (strcmp(h->data.symbol.name, bad[i]) == 0) return true;
     }
     if (expr_nonanalytic_in(h, x)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
@@ -2767,7 +2767,7 @@ static Expr* series_base_var(Expr* x) {
     if (x->type == EXPR_SYMBOL) return x;
     if (x->type == EXPR_FUNCTION &&
         x->data.function.head->type == EXPR_SYMBOL &&
-        x->data.function.head->data.symbol == SYM_Power &&
+        x->data.function.head->data.symbol.name == SYM_Power &&
         x->data.function.arg_count == 2 &&
         x->data.function.args[0]->type == EXPR_SYMBOL)
         return x->data.function.args[0];
@@ -3039,7 +3039,7 @@ Expr* builtin_normal(Expr* res) {
 
     /* Normal[assoc] converts an association to its list of rules. */
     if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
-        arg->data.function.head->data.symbol == SYM_Association) {
+        arg->data.function.head->data.symbol.name == SYM_Association) {
         size_t n = arg->data.function.arg_count;
         Expr** rules = malloc(sizeof(Expr*) * (n ? n : 1));
         for (size_t i = 0; i < n; i++) rules[i] = expr_copy(arg->data.function.args[i]);
@@ -3217,7 +3217,7 @@ static bool has_negative_power_in(Expr* e, Expr* x) {
     if (!e) return false;
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp  = e->data.function.args[1];
@@ -3242,7 +3242,7 @@ static bool all_negative_powers_polynomial(Expr* e, Expr* x) {
     if (!e) return true;
     if (e->type != EXPR_FUNCTION) return true;
     if (e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp  = e->data.function.args[1];
@@ -3277,7 +3277,7 @@ static bool all_negative_powers_polynomial(Expr* e, Expr* x) {
 static bool has_non_rational_power_in(Expr* e, Expr* x) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp  = e->data.function.args[1];
@@ -4717,7 +4717,7 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
      * ExpIntegralEi) have no Laurent series there -- the generic x -> 1/u
      * substitution would hand a pole to naive Taylor. Emit their known
      * asymptotic expansions (with the E^x prefactor kept symbolic) directly. */
-    if (x0_eval->type == EXPR_SYMBOL && x0_eval->data.symbol == SYM_Infinity) {
+    if (x0_eval->type == EXPR_SYMBOL && x0_eval->data.symbol.name == SYM_Infinity) {
         Expr* ei = try_series_ei_at_infinity(f_eval, x, leading_only ? 1 : n);
         if (ei) {
             expr_free(f_eval);
@@ -4914,7 +4914,7 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
     bool at_zero_or_infinity =
         is_lit_zero(x0_eval) ||
         (x0_eval->type == EXPR_SYMBOL &&
-         x0_eval->data.symbol == SYM_Infinity);
+         x0_eval->data.symbol.name == SYM_Infinity);
     if (at_zero_or_infinity) {
         Expr* body = NULL;
         Expr* pf = try_factor_power_prefactor(f_eval, x, &body);
@@ -4927,7 +4927,7 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
 
     /* Handle expansion at Infinity by substituting x -> 1/u. */
     bool at_infinity = (x0_eval->type == EXPR_SYMBOL &&
-                        (x0_eval->data.symbol == SYM_Infinity));
+                        (x0_eval->data.symbol.name == SYM_Infinity));
     Expr* f_use  = f_used_for_expand;
     Expr* x_use  = x;
     Expr* x0_use = x0_eval;
@@ -5141,7 +5141,7 @@ Expr* builtin_series(Expr* res) {
         Expr* s = raw[i];
         if (has_symbol_head(s, "Rule") && s->data.function.arg_count == 2 &&
             s->data.function.args[0]->type == EXPR_SYMBOL &&
-            strcmp(s->data.function.args[0]->data.symbol, "Assumptions") == 0) {
+            strcmp(s->data.function.args[0]->data.symbol.name, "Assumptions") == 0) {
             assm = s->data.function.args[1];
             continue;
         }

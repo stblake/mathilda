@@ -6,7 +6,7 @@
 
 Expr* get_default_value(Expr* pat_head, int pos, int total_pats) {
     if (!pat_head || pat_head->type != EXPR_SYMBOL) return NULL;
-    const char* hn = pat_head->data.symbol;
+    const char* hn = pat_head->data.symbol.name;
 
     /* Fast path: when no user-defined Default rules exist, the three
      * evaluate(Default[...]) calls below would all return the constructed

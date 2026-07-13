@@ -760,7 +760,7 @@ static int count_top_level_factors(const Expr* fac) {
     if (fac->type == EXPR_FUNCTION
         && fac->data.function.head
         && fac->data.function.head->type == EXPR_SYMBOL
-        && fac->data.function.head->data.symbol == SYM_Times) {
+        && fac->data.function.head->data.symbol.name == SYM_Times) {
         return (int)fac->data.function.arg_count;
     }
     return 1;

@@ -246,7 +246,7 @@ static void test_real_indet_with_offset(void) {
     ASSERT(digits->data.function.args[0]->data.integer == 0);
     for (size_t i = 1; i < 20; i++) {
         Expr* d = digits->data.function.args[i];
-        ASSERT(d->type == EXPR_SYMBOL && d->data.symbol == SYM_Indeterminate);
+        ASSERT(d->type == EXPR_SYMBOL && d->data.symbol.name == SYM_Indeterminate);
     }
     ASSERT(expv->type == EXPR_INTEGER && expv->data.integer == -14);
     expr_free(e);

@@ -70,10 +70,10 @@ Expr* builtin_union(Expr* res) {
     for (size_t i = 0; i < res->data.function.arg_count; i++) {
         Expr* arg = res->data.function.args[i];
         if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
-            arg->data.function.head->data.symbol == SYM_Rule &&
+            arg->data.function.head->data.symbol.name == SYM_Rule &&
             arg->data.function.arg_count == 2 &&
             arg->data.function.args[0]->type == EXPR_SYMBOL &&
-            arg->data.function.args[0]->data.symbol == SYM_SameTest) {
+            arg->data.function.args[0]->data.symbol.name == SYM_SameTest) {
             same_test = arg->data.function.args[1];
             if (i < last_arg) last_arg = i;
         }
@@ -128,7 +128,7 @@ Expr* builtin_union(Expr* res) {
                 Expr* call_args[2] = { expr_copy(all_args[i]), expr_copy(unique_args[unique_count - 1]) };
                 Expr* call = expr_new_function(expr_copy(same_test), call_args, 2);
                 Expr* eval_res = evaluate(call);
-                if (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol == SYM_True) {
+                if (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol.name == SYM_True) {
                     is_dup = true;
                 }
                 expr_free(eval_res);
@@ -193,7 +193,7 @@ Expr* builtin_tally(Expr* res) {
                 Expr* call_args[2] = { expr_copy(elem), expr_copy(unique_elems[j]) };
                 Expr* call = expr_new_function(expr_copy(test), call_args, 2);
                 Expr* eval_res = evaluate(call);
-                if (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol == SYM_True) {
+                if (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol.name == SYM_True) {
                     found_idx = (int)j;
                     expr_free(eval_res);
                     expr_free(call);
@@ -269,7 +269,7 @@ Expr* builtin_deleteduplicates(Expr* res) {
                 Expr* call_args[2] = { expr_copy(elem), expr_copy(unique_args[j]) };
                 Expr* call = expr_new_function(expr_copy(test), call_args, 2);
                 Expr* eval_res = evaluate(call);
-                if (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol == SYM_True) {
+                if (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol.name == SYM_True) {
                     is_duplicate = true;
                     expr_free(eval_res);
                     expr_free(call);
@@ -370,7 +370,7 @@ Expr* builtin_commonest(Expr* res) {
         if (n_arg->type == EXPR_INTEGER) {
             n = n_arg->data.integer;
         } else if (n_arg->type == EXPR_FUNCTION && n_arg->data.function.head->type == EXPR_SYMBOL && 
-                   n_arg->data.function.head->data.symbol == SYM_UpTo && n_arg->data.function.arg_count == 1) {
+                   n_arg->data.function.head->data.symbol.name == SYM_UpTo && n_arg->data.function.arg_count == 1) {
             if (n_arg->data.function.args[0]->type == EXPR_INTEGER) {
                 n = n_arg->data.function.args[0]->data.integer;
                 n_upto = true;

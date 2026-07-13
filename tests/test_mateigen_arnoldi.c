@@ -57,7 +57,7 @@ static char* fmt_real_matrix(const double* A, size_t n) {
 static bool list_len_eq(Expr* e, size_t expected) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
-    if (strcmp(e->data.function.head->data.symbol, "List") != 0) return false;
+    if (strcmp(e->data.function.head->data.symbol.name, "List") != 0) return false;
     return e->data.function.arg_count == expected;
 }
 
@@ -68,7 +68,7 @@ static double extract_real(Expr* e) {
     if (e->type == EXPR_REAL)    return e->data.real;
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, "Complex") == 0
+        && strcmp(e->data.function.head->data.symbol.name, "Complex") == 0
         && e->data.function.arg_count == 2)
         return extract_real(e->data.function.args[0]);
     return NAN;
@@ -81,7 +81,7 @@ static double extract_abs(Expr* e) {
     if (e->type == EXPR_REAL)    return fabs(e->data.real);
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, "Complex") == 0
+        && strcmp(e->data.function.head->data.symbol.name, "Complex") == 0
         && e->data.function.arg_count == 2) {
         double a = extract_real(e->data.function.args[0]);
         double b = extract_real(e->data.function.args[1]);
@@ -447,7 +447,7 @@ static double extract_abs_any(Expr* e) {
 #endif
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, "Complex") == 0
+        && strcmp(e->data.function.head->data.symbol.name, "Complex") == 0
         && e->data.function.arg_count == 2) {
         double a = extract_abs_any(e->data.function.args[0]);
         double b = extract_abs_any(e->data.function.args[1]);

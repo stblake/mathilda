@@ -120,7 +120,7 @@ static bool numeric_abs_sq_as_mpq(Expr* e, mpq_t out_sq) {
 
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
 
         if (h == SYM_Rational && e->data.function.arg_count == 2) {
             Expr* num = e->data.function.args[0];

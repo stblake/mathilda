@@ -73,7 +73,7 @@ static void collect_known_symbols(const AssumeCtx* ctx,
         for (size_t j = 0; j < f->data.function.arg_count; j++) {
             Expr* a = f->data.function.args[j];
             if (a->type == EXPR_SYMBOL) {
-                const char* nm = a->data.symbol;
+                const char* nm = a->data.symbol.name;
                 if (assume_known_positive(ctx, a) && *npos < cap && !sym_already_listed(positives, *npos, nm)) {
                     positives[(*npos)++] = (char*)nm;
                 }
@@ -92,11 +92,11 @@ static void collect_known_symbols(const AssumeCtx* ctx,
             } else if (a->type == EXPR_FUNCTION &&
                        a->data.function.head &&
                        a->data.function.head->type == EXPR_SYMBOL &&
-                       a->data.function.head->data.symbol == SYM_Mod &&
+                       a->data.function.head->data.symbol.name == SYM_Mod &&
                        a->data.function.arg_count == 2 &&
                        a->data.function.args[0]->type == EXPR_SYMBOL) {
                 Expr* sym = a->data.function.args[0];
-                const char* nm = sym->data.symbol;
+                const char* nm = sym->data.symbol.name;
                 if (assume_known_even(ctx, sym) && *neven < cap && !sym_already_listed(evens, *neven, nm)) {
                     evens[(*neven)++] = (char*)nm;
                 }
@@ -277,7 +277,7 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         if (diff->type == EXPR_FUNCTION &&
             diff->data.function.head &&
             diff->data.function.head->type == EXPR_SYMBOL &&
-            diff->data.function.head->data.symbol == SYM_Plus &&
+            diff->data.function.head->data.symbol.name == SYM_Plus &&
             diff->data.function.arg_count >= 3) {
             for (size_t j = 0; j < diff->data.function.arg_count; j++) {
                 Expr* term = diff->data.function.args[j];
@@ -327,7 +327,7 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         if (diff->type == EXPR_FUNCTION &&
             diff->data.function.head &&
             diff->data.function.head->type == EXPR_SYMBOL &&
-            diff->data.function.head->data.symbol == SYM_Plus &&
+            diff->data.function.head->data.symbol.name == SYM_Plus &&
             diff->data.function.arg_count >= 3) {
             size_t n = diff->data.function.arg_count;
             /* Pick the first non-numeric term, breaking ties by canonical

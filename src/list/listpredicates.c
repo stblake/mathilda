@@ -27,7 +27,7 @@ Expr* builtin_vectorq(Expr* res) {
             Expr* call_args[1] = { ndarray_element_to_expr(arg, (size_t)i) };
             Expr* call = expr_new_function(expr_copy(test), call_args, 1);
             Expr* eval_res = evaluate(call);
-            bool is_true = (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol == SYM_True);
+            bool is_true = (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol.name == SYM_True);
             expr_free(eval_res);
             expr_free(call);
             if (!is_true) return expr_new_symbol(SYM_False);
@@ -46,7 +46,7 @@ Expr* builtin_vectorq(Expr* res) {
             Expr* call_args[1] = { expr_copy(elem) };
             Expr* call = expr_new_function(expr_copy(test), call_args, 1);
             Expr* eval_res = evaluate(call);
-            bool is_true = (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol == SYM_True);
+            bool is_true = (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol.name == SYM_True);
             expr_free(eval_res);
             expr_free(call);
             if (!is_true) return expr_new_symbol(SYM_False);
@@ -69,7 +69,7 @@ Expr* builtin_matrixq(Expr* res) {
             Expr* call_args[1] = { ndarray_element_to_expr(arg, i) };
             Expr* call = expr_new_function(expr_copy(test), call_args, 1);
             Expr* eval_res = evaluate(call);
-            bool is_true = (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol == SYM_True);
+            bool is_true = (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol.name == SYM_True);
             expr_free(eval_res);
             expr_free(call);
             if (!is_true) return expr_new_symbol(SYM_False);
@@ -104,7 +104,7 @@ Expr* builtin_matrixq(Expr* res) {
                 Expr* call_args[1] = { expr_copy(elem) };
                 Expr* call = expr_new_function(expr_copy(test), call_args, 1);
                 Expr* eval_res = evaluate(call);
-                bool is_true = (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol == SYM_True);
+                bool is_true = (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol.name == SYM_True);
                 expr_free(eval_res);
                 expr_free(call);
                 if (!is_true) return expr_new_symbol(SYM_False);

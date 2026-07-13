@@ -86,7 +86,7 @@ static int var_index(const VarSet* vs, const char* name) {
 static const char* fn_head_name(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return NULL;
     const Expr* h = e->data.function.head;
-    if (h && h->type == EXPR_SYMBOL) return h->data.symbol;
+    if (h && h->type == EXPR_SYMBOL) return h->data.symbol.name;
     return NULL;
 }
 
@@ -102,7 +102,7 @@ static int collect_vars(const Expr* e, VarSet* vs) {
         case EXPR_BIGINT:
             return 1;
         case EXPR_SYMBOL:
-            return varset_add(vs, e->data.symbol);
+            return varset_add(vs, e->data.symbol.name);
         case EXPR_FUNCTION: {
             const char* h = fn_head_name(e);
             if (!h) return 0;
@@ -152,7 +152,7 @@ static int to_mpoly(const Expr* e, fmpq_mpoly_t out,
             return 1;
         }
         case EXPR_SYMBOL: {
-            int idx = var_index(vs, e->data.symbol);
+            int idx = var_index(vs, e->data.symbol.name);
             if (idx < 0) return 0;
             fmpq_mpoly_gen(out, idx, ctx);
             return 1;
@@ -436,7 +436,7 @@ static int expr_accum_fmpq_poly(const Expr* e, const char* xname, fmpq_poly_t ou
             return 1;
         }
         case EXPR_SYMBOL:
-            if (strcmp(e->data.symbol, xname) != 0) return 0;   /* other symbol */
+            if (strcmp(e->data.symbol.name, xname) != 0) return 0;   /* other symbol */
             fmpq_poly_zero(out);
             fmpq_poly_set_coeff_si(out, 1, 1);                  /* out = x */
             return 1;
@@ -929,8 +929,8 @@ static void nf_detect(const Expr* e, NFDetect* st) {
         case EXPR_BIGINT:
             return;
         case EXPR_SYMBOL:
-            if (!st->xname) st->xname = e->data.symbol;
-            else if (strcmp(st->xname, e->data.symbol) != 0) st->multi_x = 1;
+            if (!st->xname) st->xname = e->data.symbol.name;
+            else if (strcmp(st->xname, e->data.symbol.name) != 0) st->multi_x = 1;
             return;
         case EXPR_FUNCTION: {
             const char* h = fn_head_name(e);
@@ -1019,7 +1019,7 @@ static int to_mpoly_gen(const Expr* e, fmpq_mpoly_t out,
             return 1;
         }
         case EXPR_SYMBOL:
-            if (strcmp(e->data.symbol, gs->xname) == 0) { fmpq_mpoly_gen(out, 0, ctx); return 1; }
+            if (strcmp(e->data.symbol.name, gs->xname) == 0) { fmpq_mpoly_gen(out, 0, ctx); return 1; }
             return 0;
         case EXPR_FUNCTION: {
             const char* h = fn_head_name(e);
@@ -1376,8 +1376,8 @@ static void cyc_detect(const Expr* e, CycDetect* st) {
         case EXPR_BIGINT:
             return;
         case EXPR_SYMBOL:
-            if (!st->xname) st->xname = e->data.symbol;
-            else if (strcmp(st->xname, e->data.symbol) != 0) st->multi_x = 1;
+            if (!st->xname) st->xname = e->data.symbol.name;
+            else if (strcmp(st->xname, e->data.symbol.name) != 0) st->multi_x = 1;
             return;
         case EXPR_FUNCTION: {
             const char* h = fn_head_name(e);
@@ -1467,8 +1467,8 @@ static void tower_detect(const Expr* e, TowerDetect* st) {
         case EXPR_BIGINT:
             return;
         case EXPR_SYMBOL:
-            if (!st->xname) st->xname = e->data.symbol;
-            else if (strcmp(st->xname, e->data.symbol) != 0) st->multi_x = 1;
+            if (!st->xname) st->xname = e->data.symbol.name;
+            else if (strcmp(st->xname, e->data.symbol.name) != 0) st->multi_x = 1;
             return;
         case EXPR_FUNCTION: {
             const char* h = fn_head_name(e);
@@ -1783,8 +1783,8 @@ static void ps_detect(const Expr* e, PSDetect* st) {
                 /* Fractional power: only sqrt of the single symbolic radicand. */
                 if (q != 2) { st->bad = 1; return; }
                 if (base->type != EXPR_SYMBOL) { st->bad = 1; return; }
-                if (!st->kname) st->kname = base->data.symbol;
-                else if (strcmp(st->kname, base->data.symbol) != 0) { st->bad = 1; return; }
+                if (!st->kname) st->kname = base->data.symbol.name;
+                else if (strcmp(st->kname, base->data.symbol.name) != 0) { st->bad = 1; return; }
                 st->has_sqrt = 1;
                 return;
             }
@@ -1810,7 +1810,7 @@ static Expr* ps_subst_in(const Expr* e, const char* kname) {
         case EXPR_BIGINT:
             return expr_copy((Expr*)e);
         case EXPR_SYMBOL:
-            if (strcmp(e->data.symbol, kname) == 0) {
+            if (strcmp(e->data.symbol.name, kname) == 0) {
                 Expr* pa[2] = { expr_new_symbol(PS_RADSYM), expr_new_integer(2) };
                 return expr_new_function(expr_new_symbol("Power"), pa, 2);
             }
@@ -1819,7 +1819,7 @@ static Expr* ps_subst_in(const Expr* e, const char* kname) {
             const char* h = fn_head_name(e);
             if (h && strcmp(h, "Power") == 0 && e->data.function.arg_count == 2 &&
                 e->data.function.args[0]->type == EXPR_SYMBOL &&
-                strcmp(e->data.function.args[0]->data.symbol, kname) == 0) {
+                strcmp(e->data.function.args[0]->data.symbol.name, kname) == 0) {
                 long p, q;
                 if (ps_as_ratio(e->data.function.args[1], &p, &q)) {
                     long s_exp = (q == 1) ? 2 * p : p;   /* k^m -> S^(2m); k^(p/2) -> S^p */
@@ -1850,7 +1850,7 @@ static Expr* ps_subst_out(const Expr* e, const char* kname) {
         case EXPR_BIGINT:
             return expr_copy((Expr*)e);
         case EXPR_SYMBOL:
-            if (strcmp(e->data.symbol, PS_RADSYM) == 0) {
+            if (strcmp(e->data.symbol.name, PS_RADSYM) == 0) {
                 Expr* ra[2] = { expr_new_integer(1), expr_new_integer(2) };
                 Expr* half = expr_new_function(expr_new_symbol("Rational"), ra, 2);
                 Expr* pa[2] = { expr_new_symbol(kname), half };
@@ -1954,12 +1954,12 @@ Expr* flint_parametric_sqrt_resultant(const Expr* a, const Expr* b,
     ps_detect(a, &st);
     ps_detect(b, &st);
     if (st.bad || !st.has_sqrt || !st.kname) return NULL;
-    if (strcmp(var->data.symbol, st.kname) == 0) return NULL;  /* var == radicand */
+    if (strcmp(var->data.symbol.name, st.kname) == 0) return NULL;  /* var == radicand */
 
     Expr* a2 = ps_subst_in(a, st.kname);
     Expr* b2 = ps_subst_in(b, st.kname);
     Expr* r = NULL;
-    if (a2 && b2) r = flint_multivariate_resultant(a2, b2, var->data.symbol);
+    if (a2 && b2) r = flint_multivariate_resultant(a2, b2, var->data.symbol.name);
     expr_free(a2);
     expr_free(b2);
     if (!r) return NULL;
@@ -2102,7 +2102,7 @@ Expr* flint_parametric_sqrt_factor_squarefree(const Expr* p) {
  * validate polynomial-ness — coefficients may be rational functions). */
 static void collect_all_symbols(const Expr* e, VarSet* vs) {
     if (!e) return;
-    if (e->type == EXPR_SYMBOL) { varset_add(vs, e->data.symbol); return; }
+    if (e->type == EXPR_SYMBOL) { varset_add(vs, e->data.symbol.name); return; }
     if (e->type == EXPR_FUNCTION)
         for (size_t i = 0; i < e->data.function.arg_count; i++)
             collect_all_symbols(e->data.function.args[i], vs);
@@ -2125,7 +2125,7 @@ static int expr_to_mpolyq(const Expr* e, fmpz_mpoly_q_t out,
             return 1;
         }
         case EXPR_SYMBOL: {
-            int idx = var_index(fvars, e->data.symbol);
+            int idx = var_index(fvars, e->data.symbol.name);
             if (idx < 0) return 0;
             fmpz_mpoly_q_gen(out, (slong)idx, mctx);
             return 1;
@@ -2319,7 +2319,7 @@ static Expr* parametric_field_op(const Expr* a, const Expr* b, const Expr* var,
     ps_detect(a, &st);
     ps_detect(b, &st);
     if (st.bad || !st.has_sqrt || !st.kname) return NULL;
-    const char* xname = var->data.symbol;
+    const char* xname = var->data.symbol.name;
     if (strcmp(xname, st.kname) == 0) return NULL;
 
     Expr* a2 = ps_subst_in(a, st.kname);
@@ -2555,7 +2555,7 @@ static int km_walk(const Expr* e, EPtrList* gk, EPtrList* xk) {
             return 1;
         case EXPR_SYMBOL:
             /* reserve the fresh-symbol namespace so backward-subst is unambiguous */
-            return strncmp(e->data.symbol, "$flk", 4) == 0 ? 0 : 1;
+            return strncmp(e->data.symbol.name, "$flk", 4) == 0 ? 0 : 1;
         case EXPR_FUNCTION: {
             const char* h = fn_head_name(e);
             if (!h) return 0;
@@ -2573,7 +2573,7 @@ static int km_walk(const Expr* e, EPtrList* gk, EPtrList* xk) {
                 if (ex->type == EXPR_INTEGER)                    /* ring power */
                     return km_walk(base, gk, xk);
                 /* non-integer exponent: only E^e (an exponential) is supported */
-                if (base->type == EXPR_SYMBOL && strcmp(base->data.symbol, "E") == 0)
+                if (base->type == EXPR_SYMBOL && strcmp(base->data.symbol.name, "E") == 0)
                     return epl_push_unique(xk, e);
                 return 0;                                        /* Sqrt[x], a^x, … */
             }
@@ -3282,7 +3282,7 @@ static Expr* ga_radical_of(const GAGen* g) {
 static Expr* ga_subst_back(const Expr* e, const GADetect* st) {
     if (e->type == EXPR_SYMBOL) {
         for (int i = 0; i < st->ngen; i++)
-            if (strcmp(e->data.symbol, st->gens[i].name) == 0)
+            if (strcmp(e->data.symbol.name, st->gens[i].name) == 0)
                 return ga_radical_of(&st->gens[i]);
         return expr_copy((Expr*)e);
     }
@@ -3679,7 +3679,7 @@ Expr* flint_extension_divexact(const Expr* a, const Expr* b) {
 
 Expr* flint_polynomial_resultant(const Expr* a, const Expr* b, const Expr* var) {
     if (!var || var->type != EXPR_SYMBOL) return NULL;
-    return flint_multivariate_resultant(a, b, var->data.symbol);
+    return flint_multivariate_resultant(a, b, var->data.symbol.name);
 }
 
 Expr* flint_polynomial_factor(const Expr* p) {
@@ -3854,12 +3854,12 @@ int flint_linear_system_terms(const Expr* equation,
      * Q-only domain of the hand-rolled pm_walk builder. */
     VarSet vs = {0};
     for (int i = 0; i < nv; i++) {
-        if (vars[i]->type != EXPR_SYMBOL || !varset_add(&vs, vars[i]->data.symbol)) {
+        if (vars[i]->type != EXPR_SYMBOL || !varset_add(&vs, vars[i]->data.symbol.name)) {
             varset_free(&vs); return 0;
         }
     }
     for (int j = 0; j < nu; j++) {
-        if (unknowns[j]->type != EXPR_SYMBOL || !varset_add(&vs, unknowns[j]->data.symbol)) {
+        if (unknowns[j]->type != EXPR_SYMBOL || !varset_add(&vs, unknowns[j]->data.symbol.name)) {
             varset_free(&vs); return 0;
         }
     }

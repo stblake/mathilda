@@ -33,7 +33,7 @@
 static bool tz_is_call(const Expr* e, const char* sym) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol == sym;
+           e->data.function.head->data.symbol.name == sym;
 }
 
 /* Parse a single positive machine integer (Integer > 0). */

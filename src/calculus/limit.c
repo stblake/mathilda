@@ -163,7 +163,7 @@ static Expr* simp(Expr* e) {
 /* ---------------------------------------------------------------------- */
 
 static bool is_sym(Expr* e, const char* name) {
-    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol, name) == 0;
+    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, name) == 0;
 }
 
 static int literal_sign(Expr* e);  /* forward */
@@ -275,7 +275,7 @@ static bool is_known_head_symbol(const char* name) {
 static bool contains_opaque_head_over(Expr* e, Expr* x) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL) {
-        const char* name = e->data.function.head->data.symbol;
+        const char* name = e->data.function.head->data.symbol.name;
         if (!is_known_head_symbol(name)) {
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 if (expr_contains(e->data.function.args[i], x)) return true;
@@ -374,7 +374,7 @@ static Expr* rewrite_hyperbolic_to_exp(Expr* e) {
 
     size_t n = e->data.function.arg_count;
     if (e->data.function.head->type == EXPR_SYMBOL && n == 1) {
-        const char* hn = e->data.function.head->data.symbol;
+        const char* hn = e->data.function.head->data.symbol.name;
         Expr* z = rewrite_hyperbolic_to_exp(e->data.function.args[0]);
         if (hn == SYM_Sinh) {
             /* (E^z - E^-z)/2 */
@@ -421,7 +421,7 @@ static Expr* rewrite_reciprocal_trig(Expr* e) {
     size_t n = e->data.function.arg_count;
 
     if (e->data.function.head->type == EXPR_SYMBOL && n == 1) {
-        const char* hn = e->data.function.head->data.symbol;
+        const char* hn = e->data.function.head->data.symbol.name;
         /* Recurse into the argument first so nested reciprocal-trig
          * expressions are all rewritten. */
         Expr* z = rewrite_reciprocal_trig(e->data.function.args[0]);
@@ -1493,7 +1493,7 @@ static bool contains_head_symbol(Expr* e, const char* head_sym) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == head_sym) return true;
+        e->data.function.head->data.symbol.name == head_sym) return true;
     if (contains_head_symbol(e->data.function.head, head_sym)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         if (contains_head_symbol(e->data.function.args[i], head_sym)) return true;
@@ -1535,11 +1535,11 @@ static Expr* layer_compose_at_infinity(Expr* f, LimitCtx* ctx) {
 
     /* Apply the head to the infinite inner limit and let the builtin evaluate
      * it. mk_fn1 adopts lim_inner (via expr_new_function). */
-    Expr* val = simp(mk_fn1(head->data.symbol, lim_inner));
+    Expr* val = simp(mk_fn1(head->data.symbol.name, lim_inner));
 
     /* Accept only when the head actually resolved (no residual head[...] and no
      * pending x). Rejects Sin[Infinity], Cos[Infinity], ... that stay symbolic. */
-    if (val && !contains_head_symbol(val, head->data.symbol) &&
+    if (val && !contains_head_symbol(val, head->data.symbol.name) &&
         !expr_contains(val, ctx->x)) {
         return val;
     }
@@ -2325,7 +2325,7 @@ static Expr* rewrite_abs_in_expr(Expr* e, LimitCtx* ctx, bool* changed) {
     free(args);
 
     if (current->data.function.head->type == EXPR_SYMBOL && n == 1 &&
-        current->data.function.head->data.symbol == SYM_Abs &&
+        current->data.function.head->data.symbol.name == SYM_Abs &&
         expr_contains(current->data.function.args[0], ctx->x)) {
         Expr* g = current->data.function.args[0];
         int s = sign_near_point(g, ctx);
@@ -2348,7 +2348,7 @@ static Expr* rewrite_abs_in_expr(Expr* e, LimitCtx* ctx, bool* changed) {
 static bool contains_abs_over(Expr* e, Expr* x) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Abs &&
+        e->data.function.head->data.symbol.name == SYM_Abs &&
         e->data.function.arg_count == 1 &&
         expr_contains(e->data.function.args[0], x)) {
         return true;
@@ -2668,7 +2668,7 @@ static bool assumption_abs_compare(Expr* a, Expr** out_expr, int* out_op,
     if (!a || a->type != EXPR_FUNCTION || a->data.function.arg_count != 2) return false;
     const char* head_name = NULL;
     if (a->data.function.head->type == EXPR_SYMBOL) {
-        head_name = a->data.function.head->data.symbol;
+        head_name = a->data.function.head->data.symbol.name;
     }
     if (!head_name) return false;
 
@@ -3227,7 +3227,7 @@ static Expr* run_multivariate(Expr* f_in, Expr* vars, Expr* points) {
  * picked up an imaginary part. */
 static bool contains_imaginary_unit(Expr* e) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return e->data.symbol == SYM_I;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_I;
     if (e->type == EXPR_FUNCTION) {
         if (head_is(e, SYM_Complex) && e->data.function.arg_count == 2) {
             Expr* im = e->data.function.args[1];

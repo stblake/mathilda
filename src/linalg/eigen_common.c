@@ -59,7 +59,7 @@ bool eigen_extract_matrix_pair(Expr* arg, Expr** m_out, Expr** a_out,
                                        int64_t* n_out) {
     if (arg->type == EXPR_FUNCTION
         && arg->data.function.head->type == EXPR_SYMBOL
-        && arg->data.function.head->data.symbol == SYM_List
+        && arg->data.function.head->data.symbol.name == SYM_List
         && arg->data.function.arg_count == 2) {
         Expr* m = arg->data.function.args[0];
         Expr* a = arg->data.function.args[1];
@@ -308,7 +308,7 @@ Expr** eigen_extract_values(Expr* solutions, size_t* count_out) {
     *count_out = 0;
     if (!solutions || solutions->type != EXPR_FUNCTION
         || solutions->data.function.head->type != EXPR_SYMBOL
-        || solutions->data.function.head->data.symbol != SYM_List) {
+        || solutions->data.function.head->data.symbol.name != SYM_List) {
         return NULL;
     }
     size_t n = solutions->data.function.arg_count;
@@ -319,12 +319,12 @@ Expr** eigen_extract_values(Expr* solutions, size_t* count_out) {
         Expr* sol = solutions->data.function.args[i];
         if (sol->type != EXPR_FUNCTION
             || sol->data.function.head->type != EXPR_SYMBOL
-            || sol->data.function.head->data.symbol != SYM_List
+            || sol->data.function.head->data.symbol.name != SYM_List
             || sol->data.function.arg_count != 1) continue;
         Expr* rule = sol->data.function.args[0];
         if (rule->type != EXPR_FUNCTION
             || rule->data.function.head->type != EXPR_SYMBOL
-            || rule->data.function.head->data.symbol != SYM_Rule
+            || rule->data.function.head->data.symbol.name != SYM_Rule
             || rule->data.function.arg_count != 2) continue;
         out[out_count++] = expr_copy(rule->data.function.args[1]);
     }
@@ -344,7 +344,7 @@ static double eigen_part_to_double(Expr* e) {
     if (e->type == EXPR_MPFR) return mpfr_get_d(e->data.mpfr, MPFR_RNDN);
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.head->data.symbol.name == SYM_Rational
         && e->data.function.arg_count == 2) {
         double p = eigen_part_to_double(e->data.function.args[0]);
         double q = eigen_part_to_double(e->data.function.args[1]);
@@ -358,7 +358,7 @@ Expr* eigen_chop(Expr* val) {
     /* Complex[re, im] - drop im (or re) if small. */
     if (val->type == EXPR_FUNCTION
         && val->data.function.head->type == EXPR_SYMBOL
-        && val->data.function.head->data.symbol == SYM_Complex
+        && val->data.function.head->data.symbol.name == SYM_Complex
         && val->data.function.arg_count == 2) {
         Expr* re = val->data.function.args[0];
         Expr* im = val->data.function.args[1];
@@ -431,12 +431,12 @@ void eigen_sort_by_abs_desc(Expr** vals, size_t n) {
         keys[i].orig_idx = i;
         /* Infinity should sort first regardless. */
         if (vals[i]->type == EXPR_SYMBOL
-            && vals[i]->data.symbol == SYM_Infinity) {
+            && vals[i]->data.symbol.name == SYM_Infinity) {
             keys[i].abs_d = INFINITY;
             continue;
         }
         if (vals[i]->type == EXPR_SYMBOL
-            && vals[i]->data.symbol == SYM_Indeterminate) {
+            && vals[i]->data.symbol.name == SYM_Indeterminate) {
             keys[i].abs_d = -INFINITY; /* sort last */
             continue;
         }
@@ -462,7 +462,7 @@ Expr** eigen_null_space(Expr* M, int n, size_t* count_out) {
     Expr* R = eval_and_free(rr_call);
     if (!R || R->type != EXPR_FUNCTION
         || R->data.function.head->type != EXPR_SYMBOL
-        || R->data.function.head->data.symbol != SYM_List
+        || R->data.function.head->data.symbol.name != SYM_List
         || (int)R->data.function.arg_count != n) {
         if (R) expr_free(R);
         return NULL;
@@ -529,7 +529,7 @@ bool eigen_matrix_is_inexact(Expr* m) {
 
 /* True iff `e` is the symbol True. */
 static bool eigen_is_true(Expr* e) {
-    return e && e->type == EXPR_SYMBOL && e->data.symbol == SYM_True;
+    return e && e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_True;
 }
 
 /* Compare an EXPR_STRING value to a literal; returns true when they match. */
@@ -542,15 +542,15 @@ static bool eigen_string_eq(Expr* e, const char* lit) {
 MateigenMethod mateigen_parse_method_value(Expr* v) {
     if (!v) return MATEIGEN_AUTOMATIC;
     /* Bare Automatic symbol. */
-    if (v->type == EXPR_SYMBOL && v->data.symbol == SYM_Automatic)
+    if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Automatic)
         return MATEIGEN_AUTOMATIC;
     /* Bare method-name symbol (Mathematica usually wraps in a string, but
      * tolerate the symbol form too). */
     if (v->type == EXPR_SYMBOL) {
-        if (v->data.symbol == SYM_Direct)  return MATEIGEN_DIRECT;
-        if (v->data.symbol == SYM_Arnoldi) return MATEIGEN_ARNOLDI;
-        if (v->data.symbol == SYM_Banded)  return MATEIGEN_BANDED;
-        if (v->data.symbol == SYM_FEAST)   return MATEIGEN_FEAST;
+        if (v->data.symbol.name == SYM_Direct)  return MATEIGEN_DIRECT;
+        if (v->data.symbol.name == SYM_Arnoldi) return MATEIGEN_ARNOLDI;
+        if (v->data.symbol.name == SYM_Banded)  return MATEIGEN_BANDED;
+        if (v->data.symbol.name == SYM_FEAST)   return MATEIGEN_FEAST;
         return MATEIGEN_METHOD_UNKNOWN;
     }
     /* String form: "Direct", "Arnoldi", "Banded", "FEAST". */
@@ -567,7 +567,7 @@ MateigenMethod mateigen_parse_method_value(Expr* v) {
      * interpreted later (Phase 3+). */
     if (v->type == EXPR_FUNCTION
         && v->data.function.head->type == EXPR_SYMBOL
-        && v->data.function.head->data.symbol == SYM_List
+        && v->data.function.head->data.symbol.name == SYM_List
         && v->data.function.arg_count >= 1) {
         return mateigen_parse_method_value(v->data.function.args[0]);
     }
@@ -598,11 +598,11 @@ bool eigen_parse_args(Expr* res, EigenOpts* opts) {
         Expr* a = res->data.function.args[pos_end - 1];
         if (a->type == EXPR_FUNCTION
             && a->data.function.head->type == EXPR_SYMBOL
-            && (a->data.function.head->data.symbol == SYM_Rule
-                || a->data.function.head->data.symbol == SYM_RuleDelayed)
+            && (a->data.function.head->data.symbol.name == SYM_Rule
+                || a->data.function.head->data.symbol.name == SYM_RuleDelayed)
             && a->data.function.arg_count == 2
             && a->data.function.args[0]->type == EXPR_SYMBOL) {
-            const char* name = a->data.function.args[0]->data.symbol;
+            const char* name = a->data.function.args[0]->data.symbol.name;
             Expr* rhs = a->data.function.args[1];
             if (name == SYM_Cubics) {
                 opts->cubics_radical = eigen_is_true(rhs);
@@ -672,7 +672,7 @@ static bool eigen_leaf_to_double(Expr* e, double* out_re, double* out_im) {
     if (e->type == EXPR_MPFR)    { *out_re = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true; }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         if (h == SYM_Rational && e->data.function.arg_count == 2) {
             double p, q;
             if (eigen_leaf_to_double(e->data.function.args[0], &p, NULL)

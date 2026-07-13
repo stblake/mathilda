@@ -37,7 +37,7 @@ bool na_read_scalar(const Expr* e, double* re, double* im)
         case EXPR_FUNCTION: {
             const Expr* h = e->data.function.head;
             if (h && h->type == EXPR_SYMBOL && e->data.function.arg_count == 2) {
-                const char* name = h->data.symbol;
+                const char* name = h->data.symbol.name;
                 if (strcmp(name, "Rational") == 0) {
                     double p, q, d;
                     if (na_read_scalar(e->data.function.args[0], &p, &d)
@@ -75,7 +75,7 @@ static bool na_is_list(const Expr* e)
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, "List") == 0;
+        && strcmp(e->data.function.head->data.symbol.name, "List") == 0;
 }
 
 /* Store (re, im) at logical element index `lin` into a flat buffer, honouring

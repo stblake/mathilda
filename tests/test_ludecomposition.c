@@ -76,7 +76,7 @@ static int is_zero_entry(Expr* e) {
                                          && e->data.real <   1e-9);
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         if (strcmp(h, "Complex") == 0 && e->data.function.arg_count == 2) {
             return is_zero_entry(e->data.function.args[0])
                 && is_zero_entry(e->data.function.args[1]);
@@ -92,7 +92,7 @@ static int all_zero_tensor(Expr* t) {
     if (!t) return 0;
     if (t->type == EXPR_FUNCTION
         && t->data.function.head->type == EXPR_SYMBOL
-        && strcmp(t->data.function.head->data.symbol, "List") == 0) {
+        && strcmp(t->data.function.head->data.symbol.name, "List") == 0) {
         for (size_t i = 0; i < t->data.function.arg_count; i++) {
             if (!all_zero_tensor(t->data.function.args[i])) return 0;
         }
@@ -142,7 +142,7 @@ static void assert_perm_valid(const char* m_src, int n) {
              "Sort[LUDecomposition[%s][[2]]] == Range[%d]",
              m_src, n);
     Expr* res = run(buf);
-    ASSERT(res->type == EXPR_SYMBOL && strcmp(res->data.symbol, "True") == 0);
+    ASSERT(res->type == EXPR_SYMBOL && strcmp(res->data.symbol.name, "True") == 0);
     expr_free(res);
     printf("  PASS: p is a permutation of 1..%d  for %s\n", n, m_src);
 }
@@ -315,7 +315,7 @@ static void test_lu_truly_singular(void) {
     Expr* res = run("LUDecomposition[{{1, 2, 3}, {4, 5, 6}, {5, 7, 9}}]");
     ASSERT(res->type == EXPR_FUNCTION
         && res->data.function.head->type == EXPR_SYMBOL
-        && strcmp(res->data.function.head->data.symbol, "List") == 0
+        && strcmp(res->data.function.head->data.symbol.name, "List") == 0
         && res->data.function.arg_count == 3);
     expr_free(res);
     printf("  PASS: singular matrix returns a {lu, p, c} triple\n");
@@ -343,14 +343,14 @@ static void test_lu_bad_inputs(void) {
     /* Empty matrix - call should be left unevaluated. */
     Expr* res = run("LUDecomposition[{}]");
     ASSERT(res->type == EXPR_FUNCTION);
-    ASSERT(strcmp(res->data.function.head->data.symbol,
+    ASSERT(strcmp(res->data.function.head->data.symbol.name,
                   "LUDecomposition") == 0);
     expr_free(res);
 
     /* Vector (rank-1 tensor) - not a matrix. */
     res = run("LUDecomposition[{1, 2, 3}]");
     ASSERT(res->type == EXPR_FUNCTION);
-    ASSERT(strcmp(res->data.function.head->data.symbol,
+    ASSERT(strcmp(res->data.function.head->data.symbol.name,
                   "LUDecomposition") == 0);
     expr_free(res);
     printf("  PASS: empty / non-matrix inputs left unevaluated\n");
@@ -457,7 +457,7 @@ static void test_lu_attributes(void) {
     /* Protected attribute must be set. */
     Expr* res = run("MemberQ[Attributes[LUDecomposition], Protected]");
     ASSERT(res->type == EXPR_SYMBOL
-        && strcmp(res->data.symbol, "True") == 0);
+        && strcmp(res->data.symbol.name, "True") == 0);
     expr_free(res);
     printf("  PASS: LUDecomposition has Protected attribute\n");
 }

@@ -38,7 +38,7 @@
 static bool rt_head_is(const Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol == intern_symbol(name);
+           e->data.function.head->data.symbol.name == intern_symbol(name);
 }
 
 /* True iff `e` is a nonzero integer constant; writes its value to *out. */
@@ -57,7 +57,7 @@ static bool rt_is_rat_const(const Expr* e) {
     if (e->type == EXPR_BIGINT) return true;
     return e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol == intern_symbol("Rational");
+           e->data.function.head->data.symbol.name == intern_symbol("Rational");
 }
 
 /* Numerator / denominator (den > 0) of a rational-constant Expr (Integer or
@@ -167,7 +167,7 @@ static Expr* rt_class_primitive(Expr** ws, size_t nw, long* kof) {
 }
 
 static bool rt_is_true(const Expr* e) {
-    return e && e->type == EXPR_SYMBOL && e->data.symbol == intern_symbol("True");
+    return e && e->type == EXPR_SYMBOL && e->data.symbol.name == intern_symbol("True");
 }
 /* FreeQ[e, x] */
 static bool rt_free_of_x(Expr* e, Expr* x) {
@@ -198,7 +198,7 @@ static long rt_degree(Expr* e, Expr* x) {
     long d = -1;
     if (cl && cl->type == EXPR_FUNCTION
         && cl->data.function.head->type == EXPR_SYMBOL
-        && cl->data.function.head->data.symbol == intern_symbol("List"))
+        && cl->data.function.head->data.symbol.name == intern_symbol("List"))
         d = (long)cl->data.function.arg_count - 1;
     if (cl) expr_free(cl);
     return d;
@@ -466,7 +466,7 @@ static Expr* rt_try_li(Expr* f, Expr* x) {
 static Expr* rt_find_log_of_x(Expr* e, Expr* x) {
     if (!e || e->type != EXPR_FUNCTION) return NULL;
     if (e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == intern_symbol("Log")
+        && e->data.function.head->data.symbol.name == intern_symbol("Log")
         && e->data.function.arg_count == 1
         && !rt_free_of_x(e->data.function.args[0], x))
         return e->data.function.args[0];
@@ -484,14 +484,14 @@ static Expr* rt_find_log_of_x(Expr* e, Expr* x) {
 static Expr* rt_find_exp_of_x(Expr* e, Expr* x) {
     if (!e || e->type != EXPR_FUNCTION) return NULL;
     const char* h = (e->data.function.head->type == EXPR_SYMBOL)
-        ? e->data.function.head->data.symbol : NULL;
+        ? e->data.function.head->data.symbol.name : NULL;
     if (h == intern_symbol("Exp") && e->data.function.arg_count == 1
         && !rt_free_of_x(e->data.function.args[0], x))
         return e->data.function.args[0];
     if (h == intern_symbol("Power") && e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* ex = e->data.function.args[1];
-        if (base->type == EXPR_SYMBOL && base->data.symbol == intern_symbol("E")
+        if (base->type == EXPR_SYMBOL && base->data.symbol.name == intern_symbol("E")
             && !rt_free_of_x(ex, x))
             return ex;
     }
@@ -817,7 +817,7 @@ static long rt_var_mult_at_zero(Expr* p, Expr* v) {
     Expr* cl = rt_eval2("CoefficientList", expr_copy(p), expr_copy(v));
     if (cl && cl->type == EXPR_FUNCTION
         && cl->data.function.head->type == EXPR_SYMBOL
-        && cl->data.function.head->data.symbol == intern_symbol("List")) {
+        && cl->data.function.head->data.symbol.name == intern_symbol("List")) {
         for (size_t i = 0; i < cl->data.function.arg_count; i++)
             if (!rt_is_zero(cl->data.function.args[i])) { a = (long)i; break; }
     }
@@ -1092,7 +1092,7 @@ static Expr* rde_weak_normalizer(Expr* f, Expr* x) {
                 (Expr*[]){ res, expr_new_integer(0) }, 2), expr_new_symbol("rmWNz"));
             if (roots && roots->type == EXPR_FUNCTION
                 && roots->data.function.head->type == EXPR_SYMBOL
-                && roots->data.function.head->data.symbol == intern_symbol("List")) {
+                && roots->data.function.head->data.symbol.name == intern_symbol("List")) {
                 for (size_t ri = 0; ri < roots->data.function.arg_count; ri++) {
                     Expr* sol = roots->data.function.args[ri];   /* {rmWNz -> val} */
                     if (!sol || sol->type != EXPR_FUNCTION
@@ -1148,7 +1148,7 @@ static Expr* rde_base(Expr* f, Expr* g, Expr* x) {
      * to the Expr path below. */
     if (x->type == EXPR_SYMBOL) {
         Expr* y = NULL;
-        int nr = flint_rde_base_solve_fg(f, g, x->data.symbol, &y);
+        int nr = flint_rde_base_solve_fg(f, g, x->data.symbol.name, &y);
         if (nr >= 0) return y;              /* y is NULL on nr == 0 (decline) */
     }
 #endif
@@ -1277,14 +1277,14 @@ static void rt_collect_exp_exponents(Expr* e, Expr* x,
                                      Expr*** arr, size_t* n, size_t* cap) {
     if (!e || e->type != EXPR_FUNCTION) return;
     const char* h = (e->data.function.head->type == EXPR_SYMBOL)
-        ? e->data.function.head->data.symbol : NULL;
+        ? e->data.function.head->data.symbol.name : NULL;
     Expr* w = NULL;
     if (h == intern_symbol("Exp") && e->data.function.arg_count == 1
         && !rt_free_of_x(e->data.function.args[0], x))
         w = e->data.function.args[0];
     else if (h == intern_symbol("Power") && e->data.function.arg_count == 2
         && e->data.function.args[0]->type == EXPR_SYMBOL
-        && e->data.function.args[0]->data.symbol == intern_symbol("E")
+        && e->data.function.args[0]->data.symbol.name == intern_symbol("E")
         && !rt_free_of_x(e->data.function.args[1], x))
         w = e->data.function.args[1];
     if (w) {
@@ -1514,7 +1514,7 @@ static Expr* rt_frac_try(Expr* f, Expr* x, Expr* u, bool is_log) {
             Expr** fa; size_t nf; Expr* single[1];
             if (factored->type == EXPR_FUNCTION
                 && factored->data.function.head->type == EXPR_SYMBOL
-                && factored->data.function.head->data.symbol == intern_symbol("Times")) {
+                && factored->data.function.head->data.symbol.name == intern_symbol("Times")) {
                 fa = factored->data.function.args;
                 nf = factored->data.function.arg_count;
             } else { single[0] = factored; fa = single; nf = 1; }
@@ -1522,7 +1522,7 @@ static Expr* rt_frac_try(Expr* f, Expr* x, Expr* u, bool is_log) {
                 Expr* term = fa[i]; Expr* base = term; long e = 1;
                 if (term->type == EXPR_FUNCTION
                     && term->data.function.head->type == EXPR_SYMBOL
-                    && term->data.function.head->data.symbol == intern_symbol("Power")
+                    && term->data.function.head->data.symbol.name == intern_symbol("Power")
                     && term->data.function.arg_count == 2
                     && term->data.function.args[1]->type == EXPR_INTEGER) {
                     base = term->data.function.args[0];
@@ -1563,11 +1563,11 @@ static Expr* rt_frac_try(Expr* f, Expr* x, Expr* u, bool is_log) {
             Expr* sol = rt_eval2("SolveAlways", eqn, varlist);
             if (sol && sol->type == EXPR_FUNCTION
                 && sol->data.function.head->type == EXPR_SYMBOL
-                && sol->data.function.head->data.symbol == intern_symbol("List")
+                && sol->data.function.head->data.symbol.name == intern_symbol("List")
                 && sol->data.function.arg_count >= 1
                 && sol->data.function.args[0]->type == EXPR_FUNCTION
                 && sol->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
-                && sol->data.function.args[0]->data.function.head->data.symbol
+                && sol->data.function.args[0]->data.function.head->data.symbol.name
                      == intern_symbol("List")) {
                 /* Rothstein-Trager residues MUST be constants.  SolveAlways can
                  * return an x-dependent pseudo-solution for a residual with a
@@ -1731,7 +1731,7 @@ static Expr* rt_frac_lrt(Expr* f, Expr* x, Expr* u, bool is_log) {
                 bool declined = !logpart
                     || (logpart->type == EXPR_FUNCTION
                         && logpart->data.function.head->type == EXPR_SYMBOL
-                        && logpart->data.function.head->data.symbol
+                        && logpart->data.function.head->data.symbol.name
                              == intern_symbol("Integrate`TranscendentalLogPart"));
                 if (!declined) {
                     /* Substitute t -> kernel(x) and diff-back verify. */
@@ -1848,14 +1848,14 @@ static Expr* rt_hermite_try(Expr* f, Expr* x, bool is_log) {
             Expr** fa; size_t nf; Expr* single[1];
             if (factored->type == EXPR_FUNCTION
                 && factored->data.function.head->type == EXPR_SYMBOL
-                && factored->data.function.head->data.symbol == intern_symbol("Times")) {
+                && factored->data.function.head->data.symbol.name == intern_symbol("Times")) {
                 fa = factored->data.function.args; nf = factored->data.function.arg_count;
             } else { single[0] = factored; fa = single; nf = 1; }
             for (size_t i = 0; i < nf && !bad; i++) {
                 Expr* term = fa[i]; Expr* base = term;
                 if (term->type == EXPR_FUNCTION
                     && term->data.function.head->type == EXPR_SYMBOL
-                    && term->data.function.head->data.symbol == intern_symbol("Power")
+                    && term->data.function.head->data.symbol.name == intern_symbol("Power")
                     && term->data.function.arg_count == 2)
                     base = term->data.function.args[0];
                 if (rt_free_of_x(base, tsym)) continue;
@@ -1917,11 +1917,11 @@ static Expr* rt_hermite_try(Expr* f, Expr* x, bool is_log) {
             }
             if (sol && sol->type == EXPR_FUNCTION
                 && sol->data.function.head->type == EXPR_SYMBOL
-                && sol->data.function.head->data.symbol == intern_symbol("List")
+                && sol->data.function.head->data.symbol.name == intern_symbol("List")
                 && sol->data.function.arg_count >= 1
                 && sol->data.function.args[0]->type == EXPR_FUNCTION
                 && sol->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
-                && sol->data.function.args[0]->data.function.head->data.symbol
+                && sol->data.function.args[0]->data.function.head->data.symbol.name
                      == intern_symbol("List")) {
                 Expr* Qs = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
                     (Expr*[]){ expr_copy(Q), expr_copy(sol->data.function.args[0]) }, 2));
@@ -2033,7 +2033,7 @@ static Expr* rt_hyperexp_case(Expr* f, Expr* x) {
         Expr* cl = rt_eval2("CoefficientList", expr_copy(den), expr_copy(tsym));
         if (cl && cl->type == EXPR_FUNCTION
             && cl->data.function.head->type == EXPR_SYMBOL
-            && cl->data.function.head->data.symbol == intern_symbol("List")) {
+            && cl->data.function.head->data.symbol.name == intern_symbol("List")) {
             for (size_t i = 0; i < cl->data.function.arg_count; i++)
                 if (!rt_is_zero(cl->data.function.args[i])) { a = (long)i; break; }
         }
@@ -2070,14 +2070,14 @@ static Expr* rt_hyperexp_case(Expr* f, Expr* x) {
             Expr** fa; size_t nf; Expr* single[1];
             if (factored->type == EXPR_FUNCTION
                 && factored->data.function.head->type == EXPR_SYMBOL
-                && factored->data.function.head->data.symbol == intern_symbol("Times")) {
+                && factored->data.function.head->data.symbol.name == intern_symbol("Times")) {
                 fa = factored->data.function.args; nf = factored->data.function.arg_count;
             } else { single[0] = factored; fa = single; nf = 1; }
             for (size_t i = 0; i < nf && !bad; i++) {
                 Expr* term = fa[i]; Expr* base = term;
                 if (term->type == EXPR_FUNCTION
                     && term->data.function.head->type == EXPR_SYMBOL
-                    && term->data.function.head->data.symbol == intern_symbol("Power")
+                    && term->data.function.head->data.symbol.name == intern_symbol("Power")
                     && term->data.function.arg_count == 2)
                     base = term->data.function.args[0];   /* rad squarefree: e = 1 */
                 if (rt_free_of_x(base, tsym)) continue;    /* FreeQ[base, t] */
@@ -2168,11 +2168,11 @@ static Expr* rt_hyperexp_case(Expr* f, Expr* x) {
             }
             if (sol && sol->type == EXPR_FUNCTION
                 && sol->data.function.head->type == EXPR_SYMBOL
-                && sol->data.function.head->data.symbol == intern_symbol("List")
+                && sol->data.function.head->data.symbol.name == intern_symbol("List")
                 && sol->data.function.arg_count >= 1
                 && sol->data.function.args[0]->type == EXPR_FUNCTION
                 && sol->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
-                && sol->data.function.args[0]->data.function.head->data.symbol
+                && sol->data.function.args[0]->data.function.head->data.symbol.name
                      == intern_symbol("List")) {
                 Expr* Qs = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
                     (Expr*[]){ expr_copy(Q), expr_copy(sol->data.function.args[0]) }, 2));
@@ -2248,7 +2248,7 @@ static void rt_accum_factors(Expr* T, Expr* x, Expr** W,
                              Expr*** pf, size_t* npf, size_t* cap) {
     if (T->type == EXPR_FUNCTION
         && T->data.function.head->type == EXPR_SYMBOL
-        && T->data.function.head->data.symbol == intern_symbol("Times")) {
+        && T->data.function.head->data.symbol.name == intern_symbol("Times")) {
         for (size_t i = 0; i < T->data.function.arg_count; i++)
             rt_accum_factors(T->data.function.args[i], x, W, pf, npf, cap);
         return;
@@ -2256,13 +2256,13 @@ static void rt_accum_factors(Expr* T, Expr* x, Expr** W,
     Expr* w = NULL;   /* borrowed exponent if T is an x-dependent exp kernel */
     const char* h = (T->type == EXPR_FUNCTION
         && T->data.function.head->type == EXPR_SYMBOL)
-        ? T->data.function.head->data.symbol : NULL;
+        ? T->data.function.head->data.symbol.name : NULL;
     if (h == intern_symbol("Exp") && T->data.function.arg_count == 1
         && !rt_free_of_x(T->data.function.args[0], x))
         w = T->data.function.args[0];
     else if (h == intern_symbol("Power") && T->data.function.arg_count == 2
         && T->data.function.args[0]->type == EXPR_SYMBOL
-        && T->data.function.args[0]->data.symbol == intern_symbol("E")
+        && T->data.function.args[0]->data.symbol.name == intern_symbol("E")
         && !rt_free_of_x(T->data.function.args[1], x))
         w = T->data.function.args[1];
     if (w) {
@@ -2318,7 +2318,7 @@ static Expr* rt_expsum_case(Expr* f, Expr* x) {
     Expr** terms; size_t nt; Expr* single[1];
     if (fe->type == EXPR_FUNCTION
         && fe->data.function.head->type == EXPR_SYMBOL
-        && fe->data.function.head->data.symbol == intern_symbol("Plus")) {
+        && fe->data.function.head->data.symbol.name == intern_symbol("Plus")) {
         terms = fe->data.function.args; nt = fe->data.function.arg_count;
     } else { single[0] = fe; terms = single; nt = 1; }
 
@@ -2389,7 +2389,7 @@ static bool rt_verify_antideriv(Expr* result, Expr* f, Expr* x) {
 static void rt_collect_logs(Expr* e, Expr* x, Expr*** arr, size_t* n, size_t* cap) {
     if (!e || e->type != EXPR_FUNCTION) return;
     if (e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == intern_symbol("Log")
+        && e->data.function.head->data.symbol.name == intern_symbol("Log")
         && e->data.function.arg_count == 1
         && !rt_free_of_x(e->data.function.args[0], x)) {
         bool dup = false;
@@ -2465,7 +2465,7 @@ static Expr* rt_expand_logs(Expr* e);
 /* Expanded form of Log[a] (the argument `a` is borrowed). */
 static Expr* rt_log_of(Expr* a) {
     if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = a->data.function.head->data.symbol;
+        const char* h = a->data.function.head->data.symbol.name;
         if (h == intern_symbol("Times")) {
             size_t m = a->data.function.arg_count;
             Expr** ts = malloc((m ? m : 1) * sizeof(Expr*));
@@ -2489,7 +2489,7 @@ static Expr* rt_log_of(Expr* a) {
 static Expr* rt_expand_logs(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return expr_copy(e);
     if (e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == intern_symbol("Log")
+        && e->data.function.head->data.symbol.name == intern_symbol("Log")
         && e->data.function.arg_count == 1) {
         return rt_log_of(e->data.function.args[0]);
     }
@@ -2628,14 +2628,14 @@ static Expr* rt_log_tower_case(Expr* f, Expr* x) {
             Expr** fa; size_t nf; Expr* single[1];
             if (factored->type == EXPR_FUNCTION
                 && factored->data.function.head->type == EXPR_SYMBOL
-                && factored->data.function.head->data.symbol == intern_symbol("Times")) {
+                && factored->data.function.head->data.symbol.name == intern_symbol("Times")) {
                 fa = factored->data.function.args; nf = factored->data.function.arg_count;
             } else { single[0] = factored; fa = single; nf = 1; }
             for (size_t i = 0; i < nf && !bad; i++) {
                 Expr* term = fa[i]; Expr* base = term; long e = 1;
                 if (term->type == EXPR_FUNCTION
                     && term->data.function.head->type == EXPR_SYMBOL
-                    && term->data.function.head->data.symbol == intern_symbol("Power")
+                    && term->data.function.head->data.symbol.name == intern_symbol("Power")
                     && term->data.function.arg_count == 2
                     && term->data.function.args[1]->type == EXPR_INTEGER) {
                     base = term->data.function.args[0];
@@ -2706,11 +2706,11 @@ static Expr* rt_log_tower_case(Expr* f, Expr* x) {
             }
             if (sol && sol->type == EXPR_FUNCTION
                 && sol->data.function.head->type == EXPR_SYMBOL
-                && sol->data.function.head->data.symbol == intern_symbol("List")
+                && sol->data.function.head->data.symbol.name == intern_symbol("List")
                 && sol->data.function.arg_count >= 1
                 && sol->data.function.args[0]->type == EXPR_FUNCTION
                 && sol->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
-                && sol->data.function.args[0]->data.function.head->data.symbol
+                && sol->data.function.args[0]->data.function.head->data.symbol.name
                      == intern_symbol("List")) {
                 Expr* Qs = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
                     (Expr*[]){ expr_copy(Q), expr_copy(sol->data.function.args[0]) }, 2));
@@ -2808,11 +2808,11 @@ static Expr* rt_tower_solve(Expr* Q, Expr** syms, size_t nsym,
     }
     if (sol && sol->type == EXPR_FUNCTION
         && sol->data.function.head->type == EXPR_SYMBOL
-        && sol->data.function.head->data.symbol == intern_symbol("List")
+        && sol->data.function.head->data.symbol.name == intern_symbol("List")
         && sol->data.function.arg_count >= 1
         && sol->data.function.args[0]->type == EXPR_FUNCTION
         && sol->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
-        && sol->data.function.args[0]->data.function.head->data.symbol
+        && sol->data.function.args[0]->data.function.head->data.symbol.name
              == intern_symbol("List")) {
         Expr* Qs = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
             (Expr*[]){ expr_copy(Q), expr_copy(sol->data.function.args[0]) }, 2));
@@ -2935,14 +2935,14 @@ static Expr* rt_exp_tower_case(Expr* f, Expr* x) {
             Expr** fa; size_t nf; Expr* single[1];
             if (factored->type == EXPR_FUNCTION
                 && factored->data.function.head->type == EXPR_SYMBOL
-                && factored->data.function.head->data.symbol == intern_symbol("Times")) {
+                && factored->data.function.head->data.symbol.name == intern_symbol("Times")) {
                 fa = factored->data.function.args; nf = factored->data.function.arg_count;
             } else { single[0] = factored; fa = single; nf = 1; }
             for (size_t i = 0; i < nf && !bad; i++) {
                 Expr* term = fa[i]; Expr* base = term; long e = 1;
                 if (term->type == EXPR_FUNCTION
                     && term->data.function.head->type == EXPR_SYMBOL
-                    && term->data.function.head->data.symbol == intern_symbol("Power")
+                    && term->data.function.head->data.symbol.name == intern_symbol("Power")
                     && term->data.function.arg_count == 2
                     && term->data.function.args[1]->type == EXPR_INTEGER) {
                     base = term->data.function.args[0];
@@ -3417,7 +3417,7 @@ static Expr* rt_field_lrt_logpart(Expr* Rr, Expr* den, RtTower* T, long L,
     /* Declined iff the head is unchanged (a, rad, Dd, gate adopted by the call). */
     if (logpart && logpart->type == EXPR_FUNCTION
         && logpart->data.function.head->type == EXPR_SYMBOL
-        && logpart->data.function.head->data.symbol
+        && logpart->data.function.head->data.symbol.name
              == intern_symbol("Integrate`TranscendentalLogPart")) {
         expr_free(logpart);
         return NULL;
@@ -3456,14 +3456,14 @@ static Expr* rt_field_ratint(Expr* num, Expr* den, RtTower* T, long L, Expr* x) 
         Expr** fa; size_t nf; Expr* single[1];
         if (factored->type == EXPR_FUNCTION
             && factored->data.function.head->type == EXPR_SYMBOL
-            && factored->data.function.head->data.symbol == intern_symbol("Times")) {
+            && factored->data.function.head->data.symbol.name == intern_symbol("Times")) {
             fa = factored->data.function.args; nf = factored->data.function.arg_count;
         } else { single[0] = factored; fa = single; nf = 1; }
         for (size_t i = 0; i < nf && !bad; i++) {
             Expr* term = fa[i]; Expr* base = term;
             if (term->type == EXPR_FUNCTION
                 && term->data.function.head->type == EXPR_SYMBOL
-                && term->data.function.head->data.symbol == intern_symbol("Power")
+                && term->data.function.head->data.symbol.name == intern_symbol("Power")
                 && term->data.function.arg_count == 2)
                 base = term->data.function.args[0];       /* rad squarefree: e = 1 */
             if (rt_free_of_x(base, t)) continue;
@@ -3558,11 +3558,11 @@ static Expr* rt_field_ratint(Expr* num, Expr* den, RtTower* T, long L, Expr* x) 
         }
         if (sol && sol->type == EXPR_FUNCTION
             && sol->data.function.head->type == EXPR_SYMBOL
-            && sol->data.function.head->data.symbol == intern_symbol("List")
+            && sol->data.function.head->data.symbol.name == intern_symbol("List")
             && sol->data.function.arg_count >= 1
             && sol->data.function.args[0]->type == EXPR_FUNCTION
             && sol->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
-            && sol->data.function.args[0]->data.function.head->data.symbol
+            && sol->data.function.args[0]->data.function.head->data.symbol.name
                  == intern_symbol("List")) {
             Expr* Qs = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
                 (Expr*[]){ expr_copy(Q), expr_copy(sol->data.function.args[0]) }, 2));
@@ -3617,7 +3617,7 @@ static Expr* rt_field_hyperexp_coupled(Expr* num, Expr* den, RtTower* T, long L,
     Expr* cl = rt_eval2("CoefficientList", expr_copy(den), expr_copy(t));
     if (cl && cl->type == EXPR_FUNCTION
         && cl->data.function.head->type == EXPR_SYMBOL
-        && cl->data.function.head->data.symbol == intern_symbol("List")) {
+        && cl->data.function.head->data.symbol.name == intern_symbol("List")) {
         for (size_t i = 0; i < cl->data.function.arg_count; i++)
             if (!rt_is_zero(cl->data.function.args[i])) { a = (long)i; break; }
     }
@@ -3641,14 +3641,14 @@ static Expr* rt_field_hyperexp_coupled(Expr* num, Expr* den, RtTower* T, long L,
         Expr** fa; size_t nf; Expr* single[1];
         if (factored->type == EXPR_FUNCTION
             && factored->data.function.head->type == EXPR_SYMBOL
-            && factored->data.function.head->data.symbol == intern_symbol("Times")) {
+            && factored->data.function.head->data.symbol.name == intern_symbol("Times")) {
             fa = factored->data.function.args; nf = factored->data.function.arg_count;
         } else { single[0] = factored; fa = single; nf = 1; }
         for (size_t i = 0; i < nf && !bad; i++) {
             Expr* term = fa[i]; Expr* base = term;
             if (term->type == EXPR_FUNCTION
                 && term->data.function.head->type == EXPR_SYMBOL
-                && term->data.function.head->data.symbol == intern_symbol("Power")
+                && term->data.function.head->data.symbol.name == intern_symbol("Power")
                 && term->data.function.arg_count == 2)
                 base = term->data.function.args[0];
             if (rt_free_of_x(base, t)) continue;
@@ -3755,11 +3755,11 @@ static Expr* rt_field_hyperexp_coupled(Expr* num, Expr* den, RtTower* T, long L,
         }
         if (sol && sol->type == EXPR_FUNCTION
             && sol->data.function.head->type == EXPR_SYMBOL
-            && sol->data.function.head->data.symbol == intern_symbol("List")
+            && sol->data.function.head->data.symbol.name == intern_symbol("List")
             && sol->data.function.arg_count >= 1
             && sol->data.function.args[0]->type == EXPR_FUNCTION
             && sol->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
-            && sol->data.function.args[0]->data.function.head->data.symbol
+            && sol->data.function.args[0]->data.function.head->data.symbol.name
                  == intern_symbol("List")) {
             Expr* Qs = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
                 (Expr*[]){ expr_copy(Q), expr_copy(sol->data.function.args[0]) }, 2));
@@ -3969,7 +3969,7 @@ static Expr* rt_int_hyperexp_poly(Expr* num, Expr* den, RtTower* T, long L, Expr
     Expr* cl = rt_eval2("CoefficientList", expr_copy(den), expr_copy(t));
     if (cl && cl->type == EXPR_FUNCTION
         && cl->data.function.head->type == EXPR_SYMBOL
-        && cl->data.function.head->data.symbol == intern_symbol("List")) {
+        && cl->data.function.head->data.symbol.name == intern_symbol("List")) {
         for (size_t i = 0; i < cl->data.function.arg_count; i++)
             if (!rt_is_zero(cl->data.function.args[i])) { a = (long)i; break; }
     }
@@ -4159,11 +4159,11 @@ static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x) {
         }
         if (sol && sol->type == EXPR_FUNCTION
             && sol->data.function.head->type == EXPR_SYMBOL
-            && sol->data.function.head->data.symbol == intern_symbol("List")
+            && sol->data.function.head->data.symbol.name == intern_symbol("List")
             && sol->data.function.arg_count >= 1
             && sol->data.function.args[0]->type == EXPR_FUNCTION
             && sol->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
-            && sol->data.function.args[0]->data.function.head->data.symbol
+            && sol->data.function.args[0]->data.function.head->data.symbol.name
                  == intern_symbol("List")) {
             Expr* qs = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
                 (Expr*[]){ expr_copy(q), expr_copy(sol->data.function.args[0]) }, 2));
@@ -4213,11 +4213,11 @@ static Expr* rt_expand_exp_sums(Expr* e) {
     if (!e) return NULL;
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
     const char* h = (e->data.function.head->type == EXPR_SYMBOL)
-        ? e->data.function.head->data.symbol : NULL;
+        ? e->data.function.head->data.symbol.name : NULL;
     Expr* expo = NULL;
     if (h == intern_symbol("Power") && e->data.function.arg_count == 2
         && e->data.function.args[0]->type == EXPR_SYMBOL
-        && e->data.function.args[0]->data.symbol == intern_symbol("E"))
+        && e->data.function.args[0]->data.symbol.name == intern_symbol("E"))
         expo = e->data.function.args[1];
     else if (h == intern_symbol("Exp") && e->data.function.arg_count == 1)
         expo = e->data.function.args[0];
@@ -4258,7 +4258,7 @@ static Expr* rt_subst_kernels(Expr* e, RtTower* T) {
         if (T->kind[i] == RT_EXP
             && e->type == EXPR_FUNCTION
             && e->data.function.head->type == EXPR_SYMBOL
-            && e->data.function.head->data.symbol == intern_symbol("Exp")
+            && e->data.function.head->data.symbol.name == intern_symbol("Exp")
             && e->data.function.arg_count == 1
             && expr_eq(e->data.function.args[0], T->arg[i]))
             return expr_copy(T->t[i]);
@@ -4267,13 +4267,13 @@ static Expr* rt_subst_kernels(Expr* e, RtTower* T) {
     for (size_t m = 0; m < T->nm; m++) {
         if (e->type == EXPR_FUNCTION && e->data.function.arg_count >= 1
             && e->data.function.head->type == EXPR_SYMBOL) {
-            const char* h = e->data.function.head->data.symbol;
+            const char* h = e->data.function.head->data.symbol.name;
             Expr* w = NULL;
             if (h == intern_symbol("Exp") && e->data.function.arg_count == 1)
                 w = e->data.function.args[0];
             else if (h == intern_symbol("Power") && e->data.function.arg_count == 2
                      && e->data.function.args[0]->type == EXPR_SYMBOL
-                     && e->data.function.args[0]->data.symbol == intern_symbol("E"))
+                     && e->data.function.args[0]->data.symbol.name == intern_symbol("E"))
                 w = e->data.function.args[1];
             if (w && expr_eq(w, T->marg[m]))
                 return expr_new_function(expr_new_symbol("Power"),
@@ -4415,7 +4415,7 @@ static Expr* rt_trig_frontend(Expr* f, Expr* x) {
 static bool rt_expr_has_head(Expr* e, const char* h) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == intern_symbol(h)) return true;
+        && e->data.function.head->data.symbol.name == intern_symbol(h)) return true;
     if (rt_expr_has_head(e->data.function.head, h)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         if (rt_expr_has_head(e->data.function.args[i], h)) return true;

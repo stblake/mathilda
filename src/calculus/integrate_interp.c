@@ -49,7 +49,7 @@
 static bool head_is(const Expr* e, const char* sym) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == sym;
+        && e->data.function.head->data.symbol.name == sym;
 }
 
 static bool is_list(const Expr* e) { return head_is(e, SYM_List); }

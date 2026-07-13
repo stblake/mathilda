@@ -58,7 +58,7 @@ static int scalar_to_arb(const Expr* e, arb_t out, slong prec) {
         case EXPR_FUNCTION: {
             const Expr* h = e->data.function.head;
             if (h && h->type == EXPR_SYMBOL
-                && strcmp(h->data.symbol, "Rational") == 0
+                && strcmp(h->data.symbol.name, "Rational") == 0
                 && e->data.function.arg_count == 2) {
                 const Expr* a = e->data.function.args[0];
                 const Expr* b = e->data.function.args[1];
@@ -86,7 +86,7 @@ static int expr_to_acb(const Expr* e, acb_t out, slong prec) {
     if (e->type == EXPR_FUNCTION) {
         const Expr* h = e->data.function.head;
         if (h && h->type == EXPR_SYMBOL
-            && strcmp(h->data.symbol, "Complex") == 0
+            && strcmp(h->data.symbol.name, "Complex") == 0
             && e->data.function.arg_count == 2) {
             return scalar_to_arb(e->data.function.args[0], acb_realref(out), prec)
                 && scalar_to_arb(e->data.function.args[1], acb_imagref(out), prec);

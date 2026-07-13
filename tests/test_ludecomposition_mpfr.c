@@ -69,7 +69,7 @@ static bool leaf_to_double(Expr* e, double* out) {
 #endif
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         if (strcmp(h, "Rational") == 0 && e->data.function.arg_count == 2) {
             double p, q;
             if (leaf_to_double(e->data.function.args[0], &p)
@@ -92,7 +92,7 @@ static double max_abs_tensor(Expr* e) {
     if (!e) return 0.0;
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, "List") == 0) {
+        && strcmp(e->data.function.head->data.symbol.name, "List") == 0) {
         double m = 0.0;
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             double v = max_abs_tensor(e->data.function.args[i]);
@@ -108,7 +108,7 @@ static double max_abs_tensor(Expr* e) {
     /* Complex with non-trivial im: estimate by max(|re|, |im|). */
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, "Complex") == 0
+        && strcmp(e->data.function.head->data.symbol.name, "Complex") == 0
         && e->data.function.arg_count == 2) {
         double r = max_abs_tensor(e->data.function.args[0]);
         double i = max_abs_tensor(e->data.function.args[1]);
@@ -158,7 +158,7 @@ static void assert_perm_valid(const char* m_src, int n) {
              m_src, n);
     Expr* res = run(buf);
     ASSERT(res->type == EXPR_SYMBOL
-        && strcmp(res->data.symbol, "True") == 0);
+        && strcmp(res->data.symbol.name, "True") == 0);
     expr_free(res);
 }
 

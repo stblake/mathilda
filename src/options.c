@@ -34,19 +34,19 @@ const Expr* extract_extension_option_full(const Expr* res, size_t* new_argc,
         if (opt && opt->type == EXPR_FUNCTION
             && opt->data.function.head
             && opt->data.function.head->type == EXPR_SYMBOL
-            && (opt->data.function.head->data.symbol == SYM_Rule
-                || opt->data.function.head->data.symbol == SYM_RuleDelayed)
+            && (opt->data.function.head->data.symbol.name == SYM_Rule
+                || opt->data.function.head->data.symbol.name == SYM_RuleDelayed)
             && opt->data.function.arg_count == 2) {
             const Expr* lhs = opt->data.function.args[0];
             const Expr* rhs = opt->data.function.args[1];
             if (lhs && lhs->type == EXPR_SYMBOL
-                && lhs->data.symbol == SYM_Extension) {
+                && lhs->data.symbol.name == SYM_Extension) {
                 bool is_none      = (rhs && rhs->type == EXPR_SYMBOL
-                                     && rhs->data.symbol
-                                     && strcmp(rhs->data.symbol, "None") == 0);
+                                     && rhs->data.symbol.name
+                                     && strcmp(rhs->data.symbol.name, "None") == 0);
                 bool is_automatic = (rhs && rhs->type == EXPR_SYMBOL
-                                     && rhs->data.symbol
-                                     && strcmp(rhs->data.symbol, "Automatic") == 0);
+                                     && rhs->data.symbol.name
+                                     && strcmp(rhs->data.symbol.name, "Automatic") == 0);
                 if (!seen_rule) {
                     /* Rightmost setting wins. */
                     if (is_automatic) {

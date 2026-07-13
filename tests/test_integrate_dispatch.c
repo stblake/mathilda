@@ -58,7 +58,7 @@ static void test_cascade_risch(void) {
     ASSERT(!(result->type == EXPR_FUNCTION
              && result->data.function.head
              && result->data.function.head->type == EXPR_SYMBOL
-             && strcmp(result->data.function.head->data.symbol, "Integrate") == 0));
+             && strcmp(result->data.function.head->data.symbol.name, "Integrate") == 0));
     expr_free(result);
 }
 
@@ -75,7 +75,7 @@ static void test_method_strict_rational(void) {
         && result->type == EXPR_FUNCTION
         && result->data.function.head
         && result->data.function.head->type == EXPR_SYMBOL
-        && strcmp(result->data.function.head->data.symbol, "Integrate") == 0);
+        && strcmp(result->data.function.head->data.symbol.name, "Integrate") == 0);
     expr_free(result);
 }
 
@@ -89,7 +89,7 @@ static void test_method_invalid(void) {
     ASSERT(result->type == EXPR_FUNCTION
         && result->data.function.head
         && result->data.function.head->type == EXPR_SYMBOL
-        && strcmp(result->data.function.head->data.symbol, "Integrate") == 0);
+        && strcmp(result->data.function.head->data.symbol.name, "Integrate") == 0);
     expr_free(result);
 }
 

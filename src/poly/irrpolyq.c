@@ -61,14 +61,14 @@
 /* ===================================================================== */
 
 static bool is_sym_eq(const Expr* e, const char* name) {
-    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol, name) == 0;
+    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, name) == 0;
 }
 
 static bool is_rule_head(const Expr* e) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           (e->data.function.head->data.symbol == SYM_Rule ||
-            e->data.function.head->data.symbol == SYM_RuleDelayed) &&
+           (e->data.function.head->data.symbol.name == SYM_Rule ||
+            e->data.function.head->data.symbol.name == SYM_RuleDelayed) &&
            e->data.function.arg_count == 2;
 }
 
@@ -80,7 +80,7 @@ static bool contains_complex_head(const Expr* e) {
     if (!e) return false;
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Complex) {
+        e->data.function.head->data.symbol.name == SYM_Complex) {
         return true;
     }
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
@@ -105,7 +105,7 @@ static Expr* expand_complex_to_i(const Expr* e) {
     if (!e) return NULL;
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Complex &&
+        e->data.function.head->data.symbol.name == SYM_Complex &&
         e->data.function.arg_count == 2) {
         Expr* re = expand_complex_to_i(e->data.function.args[0]);
         Expr* im = expand_complex_to_i(e->data.function.args[1]);
@@ -177,7 +177,7 @@ static bool factor_is_constant(const Expr* e, Expr** vars, size_t v_count) {
         e->type == EXPR_REAL || e->type == EXPR_STRING) return true;
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         if (h == SYM_Rational || h == SYM_Complex) return true;
     }
     for (size_t i = 0; i < v_count; i++) {
@@ -192,7 +192,7 @@ static int count_nonconstant_factors(const Expr* f, Expr** vars, size_t v_count)
 
     if (f->type == EXPR_FUNCTION &&
         f->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = f->data.function.head->data.symbol;
+        const char* h = f->data.function.head->data.symbol.name;
         if (h == SYM_Times) {
             int total = 0;
             for (size_t i = 0; i < f->data.function.arg_count; i++) {
@@ -232,14 +232,14 @@ static int count_nonconstant_factors(const Expr* f, Expr** vars, size_t v_count)
 static bool is_atomic_algebraic_const(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     if (h == SYM_Power && e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp  = e->data.function.args[1];
         if (!(base->type == EXPR_INTEGER || base->type == EXPR_BIGINT)) return false;
         if (exp->type != EXPR_FUNCTION) return false;
         if (exp->data.function.head->type != EXPR_SYMBOL) return false;
-        if (exp->data.function.head->data.symbol != SYM_Rational) return false;
+        if (exp->data.function.head->data.symbol.name != SYM_Rational) return false;
         if (exp->data.function.arg_count != 2) return false;
         Expr* den = exp->data.function.args[1];
         return (den->type == EXPR_INTEGER && den->data.integer > 1);
@@ -661,7 +661,7 @@ Expr* builtin_irreduciblepolynomialq(Expr* res) {
             last_bad = opt;
             continue;
         }
-        const char* name = opt->data.function.args[0]->data.symbol;
+        const char* name = opt->data.function.args[0]->data.symbol.name;
         Expr* val = opt->data.function.args[1];
 
         if (name == SYM_GaussianIntegers || strcmp(name, "GaussianIntegers") == 0) {

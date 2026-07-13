@@ -82,7 +82,7 @@ static Expr* ev1(const char* h, Expr* a) { return eval_take(mk_fn1(h, a)); }
 static bool head_name_is(const Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, name) == 0;
+           strcmp(e->data.function.head->data.symbol.name, name) == 0;
 }
 
 /* True iff any subexpression of `e` is a call with head `name`. */
@@ -99,7 +99,7 @@ static bool contains_head(const Expr* e, const char* name) {
 /* True iff the symbol `x` occurs anywhere in `e`. */
 static bool contains_symbol(const Expr* e, const Expr* x) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return e->data.symbol == x->data.symbol;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == x->data.symbol.name;
     if (e->type != EXPR_FUNCTION) return false;
     if (contains_symbol(e->data.function.head, x)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
@@ -265,7 +265,7 @@ static int res_degree(Expr* p, Expr* x) {
 /* PolynomialQ[p, x]. */
 static bool res_polyq(Expr* p, Expr* x) {
     Expr* v = eval_take(mk_fn2("PolynomialQ", expr_copy(p), expr_copy(x)));
-    bool ok = v && v->type == EXPR_SYMBOL && v->data.symbol == SYM_True;
+    bool ok = v && v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True;
     if (v) expr_free(v);
     return ok;
 }
@@ -304,7 +304,7 @@ static void ev_free(ExprVec* s) {
 static Expr* solve_rhs(Expr* el, const Expr* x) {
     if (head_name_is(el, "Rule") && el->data.function.arg_count == 2) {
         Expr* lhs = el->data.function.args[0];
-        if (lhs->type == EXPR_SYMBOL && lhs->data.symbol == x->data.symbol)
+        if (lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == x->data.symbol.name)
             return el->data.function.args[1];
         return NULL;
     }
@@ -431,7 +431,7 @@ static bool res_kernel_vanishes_at(Expr* kernel, Expr* x, Expr* r) {
                                 mk_fn2("Rule", expr_copy(x), expr_copy(r))));
     if (!at) return false;
     Expr* pz = ev1("PossibleZeroQ", at);   /* at consumed */
-    bool ok = pz && pz->type == EXPR_SYMBOL && pz->data.symbol == SYM_True;
+    bool ok = pz && pz->type == EXPR_SYMBOL && pz->data.symbol.name == SYM_True;
     if (pz) expr_free(pz);
     return ok;
 }
@@ -520,7 +520,7 @@ static Expr* kernel_arg(Expr* e) {
     }
     if (head_name_is(e, "Power") && e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
-        if (base->type == EXPR_SYMBOL && base->data.symbol == SYM_E)
+        if (base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E)
             return e->data.function.args[1];
     }
     return NULL;
@@ -795,7 +795,7 @@ static bool is_even_in(Expr* f, Expr* x) {
     if (!fm) return false;
     Expr* diff = mk_fn2("Plus", expr_copy(f), mk_fn2("Times", mk_int(-1), fm));
     Expr* pz = ev1("PossibleZeroQ", diff);
-    bool ok = pz && pz->type == EXPR_SYMBOL && pz->data.symbol == SYM_True;
+    bool ok = pz && pz->type == EXPR_SYMBOL && pz->data.symbol.name == SYM_True;
     if (pz) expr_free(pz);
     return ok;
 }
@@ -847,13 +847,13 @@ static size_t collect_params(const Expr* e, const Expr* x, ParamBound* pb,
                              size_t cap, size_t n) {
     if (!e) return n;
     if (e->type == EXPR_SYMBOL) {
-        if (e->data.symbol == x->data.symbol) return n;
-        if (e->data.symbol == SYM_I) return n;
+        if (e->data.symbol.name == x->data.symbol.name) return n;
+        if (e->data.symbol.name == SYM_I) return n;
         for (size_t i = 0; i < n; i++)
-            if (pb[i].sym == e->data.symbol) return n;   /* already seen */
+            if (pb[i].sym == e->data.symbol.name) return n;   /* already seen */
         double tmp;
         if (numeric_double((Expr*)e, &tmp)) return n;    /* a numeric constant */
-        if (n < cap) { pb[n].sym = e->data.symbol; pb[n].lo = -HUGE_VAL; pb[n].hi = HUGE_VAL; n++; }
+        if (n < cap) { pb[n].sym = e->data.symbol.name; pb[n].lo = -HUGE_VAL; pb[n].hi = HUGE_VAL; n++; }
         return n;
     }
     if (e->type != EXPR_FUNCTION) return n;
@@ -883,9 +883,9 @@ static void relation_apply(ParamBound* pb, size_t np, const char* op,
     if (!lt && !gt) return;
     double c;
     if (L->type == EXPR_SYMBOL && numeric_double(R, &c))
-        bound_apply(pb, np, L->data.symbol, c, lt ? -1 : +1);   /* L<c: upper; L>c: lower */
+        bound_apply(pb, np, L->data.symbol.name, c, lt ? -1 : +1);   /* L<c: upper; L>c: lower */
     else if (R->type == EXPR_SYMBOL && numeric_double(L, &c))
-        bound_apply(pb, np, R->data.symbol, c, lt ? +1 : -1);   /* c<R: lower; c>R: upper */
+        bound_apply(pb, np, R->data.symbol.name, c, lt ? +1 : -1);   /* c<R: lower; c>R: upper */
 }
 
 /* Walk an assumption fact expression, tightening parameter bounds.  Handles
@@ -894,7 +894,7 @@ static void relation_apply(ParamBound* pb, size_t np, const char* op,
 static void absorb_fact(ParamBound* pb, size_t np, Expr* fact) {
     if (!fact || fact->type != EXPR_FUNCTION) return;
     if (fact->data.function.head->type != EXPR_SYMBOL) return;
-    const char* h = fact->data.function.head->data.symbol;
+    const char* h = fact->data.function.head->data.symbol.name;
     size_t ac = fact->data.function.arg_count;
     if (strcmp(h, "And") == 0 || strcmp(h, "List") == 0) {
         for (size_t i = 0; i < ac; i++) absorb_fact(pb, np, fact->data.function.args[i]);
@@ -905,7 +905,7 @@ static void absorb_fact(ParamBound* pb, size_t np, Expr* fact) {
         for (size_t i = 0; i + 2 < ac; i += 2) {
             Expr* opsym = fact->data.function.args[i + 1];
             if (opsym->type != EXPR_SYMBOL) continue;
-            relation_apply(pb, np, opsym->data.symbol,
+            relation_apply(pb, np, opsym->data.symbol.name,
                            fact->data.function.args[i], fact->data.function.args[i + 2]);
         }
         return;
@@ -983,7 +983,7 @@ static void param_interval(Expr* e, double* lo, double* hi) {
     *lo = -HUGE_VAL; *hi = HUGE_VAL;
     if (e->type == EXPR_SYMBOL) {
         for (size_t i = 0; i < g_nbounds; i++)
-            if (g_bounds[i].sym == e->data.symbol) {
+            if (g_bounds[i].sym == e->data.symbol.name) {
                 *lo = g_bounds[i].lo; *hi = g_bounds[i].hi; return;
             }
     }
@@ -1034,7 +1034,7 @@ static bool mellin_split(Expr* F, Expr* v, Expr** p_out, Expr** R_out) {
         if (head_name_is(fe, "Power") && fe->data.function.arg_count == 2) {
             Expr* base = fe->data.function.args[0];
             Expr* e    = fe->data.function.args[1];
-            if (base->type == EXPR_SYMBOL && base->data.symbol == v->data.symbol &&
+            if (base->type == EXPR_SYMBOL && base->data.symbol.name == v->data.symbol.name &&
                 !contains_symbol(e, v) && e->type != EXPR_INTEGER) {
                 if (p) { expr_free(p); ev_free(&rest); return false; }  /* two branch powers */
                 p = expr_copy(e);
@@ -1273,12 +1273,12 @@ static Expr* residue_family_rectangular(Expr* f, Expr* x, Expr* a, Expr* b) {
  * *C_out is owned, *m_out is the integer exponent.  Returns false otherwise. */
 static bool monomial_split(Expr* num, Expr* v, Expr** C_out, int* m_out) {
     if (!contains_symbol(num, v)) { *C_out = expr_copy(num); *m_out = 0; return true; }
-    if (num->type == EXPR_SYMBOL && num->data.symbol == v->data.symbol) {
+    if (num->type == EXPR_SYMBOL && num->data.symbol.name == v->data.symbol.name) {
         *C_out = mk_int(1); *m_out = 1; return true;
     }
     if (head_name_is(num, "Power") && num->data.function.arg_count == 2 &&
         num->data.function.args[0]->type == EXPR_SYMBOL &&
-        num->data.function.args[0]->data.symbol == v->data.symbol &&
+        num->data.function.args[0]->data.symbol.name == v->data.symbol.name &&
         num->data.function.args[1]->type == EXPR_INTEGER) {
         *C_out = mk_int(1);
         *m_out = (int)num->data.function.args[1]->data.integer;
@@ -1290,10 +1290,10 @@ static bool monomial_split(Expr* num, Expr* v, Expr** C_out, int* m_out) {
             Expr* fe = num->data.function.args[i];
             if (!contains_symbol(fe, v)) { C = eval_take(mk_fn2("Times", C, expr_copy(fe))); continue; }
             if (m >= 0) { expr_free(C); return false; }            /* two v-factors */
-            if (fe->type == EXPR_SYMBOL && fe->data.symbol == v->data.symbol) m = 1;
+            if (fe->type == EXPR_SYMBOL && fe->data.symbol.name == v->data.symbol.name) m = 1;
             else if (head_name_is(fe, "Power") &&
                      fe->data.function.args[0]->type == EXPR_SYMBOL &&
-                     fe->data.function.args[0]->data.symbol == v->data.symbol &&
+                     fe->data.function.args[0]->data.symbol.name == v->data.symbol.name &&
                      fe->data.function.args[1]->type == EXPR_INTEGER)
                 m = (int)fe->data.function.args[1]->data.integer;
             else { expr_free(C); return false; }
@@ -1321,7 +1321,7 @@ static Expr* residue_family_sector(Expr* f, Expr* x, Expr* a, Expr* b) {
         if (!contains_symbol(t, x)) c = t;
         else if (head_name_is(t, "Power") && t->data.function.arg_count == 2 &&
                  t->data.function.args[0]->type == EXPR_SYMBOL &&
-                 t->data.function.args[0]->data.symbol == x->data.symbol &&
+                 t->data.function.args[0]->data.symbol.name == x->data.symbol.name &&
                  !contains_symbol(t->data.function.args[1], x))
             n = t->data.function.args[1];
     }

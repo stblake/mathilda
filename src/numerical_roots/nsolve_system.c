@@ -118,7 +118,7 @@ static double value_magnitude(const Expr* e) {
 #endif
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Complex
+        && e->data.function.head->data.symbol.name == SYM_Complex
         && e->data.function.arg_count == 2) {
         double re = value_magnitude(e->data.function.args[0]);
         double im = value_magnitude(e->data.function.args[1]);
@@ -529,13 +529,13 @@ static Expr** elim_nroots(Expr* uni, Expr* var, bool want_machine,
     Expr** vals = NULL; int n = 0, cap = 0;
     Expr** eqs; size_t neq; Expr* single[1];
     if (r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL
-        && r->data.function.head->data.symbol == SYM_Or) {
+        && r->data.function.head->data.symbol.name == SYM_Or) {
         eqs = r->data.function.args; neq = r->data.function.arg_count;
     } else { single[0] = r; eqs = single; neq = 1; }
     for (size_t i = 0; i < neq; i++) {
         Expr* e = eqs[i];
         if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-            && e->data.function.head->data.symbol == SYM_Equal
+            && e->data.function.head->data.symbol.name == SYM_Equal
             && e->data.function.arg_count == 2) {
             if (n == cap) { cap = cap ? cap * 2 : 4; vals = realloc(vals, sizeof(Expr*) * (size_t)cap); }
             vals[n++] = expr_copy(e->data.function.args[1]);
@@ -559,7 +559,7 @@ typedef struct {
 static bool value_is_complex(const Expr* v) {
     return v->type == EXPR_FUNCTION
         && v->data.function.head->type == EXPR_SYMBOL
-        && v->data.function.head->data.symbol == SYM_Complex;
+        && v->data.function.head->data.symbol.name == SYM_Complex;
 }
 
 /* `assigned` is a List of rules (x->val) for the last `depth` variables. */

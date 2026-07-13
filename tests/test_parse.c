@@ -67,7 +67,7 @@ void test_parse_lists() {
         Expr* e = parse_expression(tests[i]);
         ASSERT(e != NULL);
         ASSERT(e->type == EXPR_FUNCTION);
-        ASSERT(strcmp(e->data.function.head->data.symbol, "List") == 0);
+        ASSERT(strcmp(e->data.function.head->data.symbol.name, "List") == 0);
         printf("PASS: %-15s → ", tests[i]);
         expr_print(e);
         printf("\n");

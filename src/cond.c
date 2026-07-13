@@ -15,9 +15,9 @@ Expr* builtin_if(Expr* res) {
     Expr* cond = res->data.function.args[0];
 
     if (cond->type == EXPR_SYMBOL) {
-        if (cond->data.symbol == SYM_True) {
+        if (cond->data.symbol.name == SYM_True) {
             return expr_copy(res->data.function.args[1]);
-        } else if (cond->data.symbol == SYM_False) {
+        } else if (cond->data.symbol.name == SYM_False) {
             if (argc >= 3) {
                 return expr_copy(res->data.function.args[2]);
             } else {
@@ -66,9 +66,9 @@ Expr* builtin_which(Expr* res) {
         if (!test_eval) return NULL;
 
         bool is_true  = (test_eval->type == EXPR_SYMBOL &&
-                         test_eval->data.symbol == SYM_True);
+                         test_eval->data.symbol.name == SYM_True);
         bool is_false = (test_eval->type == EXPR_SYMBOL &&
-                         test_eval->data.symbol == SYM_False);
+                         test_eval->data.symbol.name == SYM_False);
 
         if (is_true) {
             expr_free(test_eval);
@@ -162,7 +162,7 @@ Expr* builtin_trueq(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
 
     Expr* cond = res->data.function.args[0];
-    bool is_true = (cond->type == EXPR_SYMBOL && cond->data.symbol == SYM_True);
+    bool is_true = (cond->type == EXPR_SYMBOL && cond->data.symbol.name == SYM_True);
 
     return expr_new_symbol(is_true ? "True" : "False");
 }
@@ -190,7 +190,7 @@ static bool piecewise_is_pair(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_List
+        && e->data.function.head->data.symbol.name == SYM_List
         && e->data.function.arg_count == 2;
 }
 
@@ -215,7 +215,7 @@ Expr* builtin_piecewise(Expr* res) {
     /* First argument must be a list of {value, condition} pairs. */
     if (clauses_arg->type != EXPR_FUNCTION
         || clauses_arg->data.function.head->type != EXPR_SYMBOL
-        || clauses_arg->data.function.head->data.symbol != SYM_List) {
+        || clauses_arg->data.function.head->data.symbol.name != SYM_List) {
         return NULL;
     }
     size_t n_in = clauses_arg->data.function.arg_count;
@@ -243,8 +243,8 @@ Expr* builtin_piecewise(Expr* res) {
             return NULL;
         }
 
-        bool is_false = (c_eval->type == EXPR_SYMBOL && c_eval->data.symbol == SYM_False);
-        bool is_true  = (c_eval->type == EXPR_SYMBOL && c_eval->data.symbol == SYM_True);
+        bool is_false = (c_eval->type == EXPR_SYMBOL && c_eval->data.symbol.name == SYM_False);
+        bool is_true  = (c_eval->type == EXPR_SYMBOL && c_eval->data.symbol.name == SYM_True);
 
         if (is_false) {
             expr_free(c_eval);
@@ -309,7 +309,7 @@ Expr* builtin_piecewise(Expr* res) {
      * simplified to True. The returned value is held; the outer evaluator
      * will reduce it. */
     bool last_is_true = (out_conds[out_count - 1]->type == EXPR_SYMBOL
-                         && out_conds[out_count - 1]->data.symbol == SYM_True);
+                         && out_conds[out_count - 1]->data.symbol.name == SYM_True);
     if (out_count == 1 && last_is_true) {
         Expr* v = out_vals[0];
         expr_free(out_conds[0]);

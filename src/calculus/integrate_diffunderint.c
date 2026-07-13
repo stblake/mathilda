@@ -93,7 +93,7 @@ static Expr* ev2(const char* name, Expr* a, Expr* b)   { return eval_take(mk_fn2
 static bool head_name_is(const Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, name) == 0;
+           strcmp(e->data.function.head->data.symbol.name, name) == 0;
 }
 
 /* True iff any subexpression of `e` is a call with head `name`. */
@@ -110,7 +110,7 @@ static bool contains_head(const Expr* e, const char* name) {
 /* True iff the bare symbol `name` occurs anywhere in `e`. */
 static bool contains_symbol_name(const Expr* e, const char* name) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol, name) == 0;
+    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, name) == 0;
     if (e->type != EXPR_FUNCTION) return false;
     if (contains_symbol_name(e->data.function.head, name)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
@@ -120,7 +120,7 @@ static bool contains_symbol_name(const Expr* e, const char* name) {
 
 /* True iff the symbol `x` occurs anywhere in `e`. */
 static bool contains_symbol(const Expr* e, const Expr* x) {
-    return contains_symbol_name(e, x->data.symbol);
+    return contains_symbol_name(e, x->data.symbol.name);
 }
 
 /* True iff `e` contains Power[x, p] with p a constant other than 0 or 1 -- a
@@ -130,7 +130,7 @@ static bool has_nonlinear_x_power(const Expr* e, const Expr* x) {
     if (head_name_is(e, "Power") && e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* ex   = e->data.function.args[1];
-        if (base->type == EXPR_SYMBOL && base->data.symbol == x->data.symbol) {
+        if (base->type == EXPR_SYMBOL && base->data.symbol.name == x->data.symbol.name) {
             if (ex->type == EXPR_INTEGER &&
                 (ex->data.integer >= 2 || ex->data.integer <= -1)) return true;
             if (ex->type == EXPR_REAL) return true;
@@ -156,7 +156,7 @@ static bool contains_gaussian_exp(const Expr* e, const Expr* x) {
         arg = e->data.function.args[0];
     else if (head_name_is(e, "Power") && e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
-        if (base->type == EXPR_SYMBOL && strcmp(base->data.symbol, "E") == 0)
+        if (base->type == EXPR_SYMBOL && strcmp(base->data.symbol.name, "E") == 0)
             arg = e->data.function.args[1];
     }
     if (arg && contains_symbol(arg, x) && has_nonlinear_x_power(arg, x))
@@ -176,7 +176,7 @@ static bool has_trig_of_x(const Expr* e, const Expr* x) {
     static const char* T[] = { "Sin","Cos","Tan","Cot","Sec","Csc",
                                "Sinh","Cosh","Tanh","Coth","Sech","Csch" };
     if (e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         for (size_t i = 0; i < sizeof(T)/sizeof(T[0]); i++)
             if (strcmp(h, T[i]) == 0 && contains_symbol(e, x)) return true;
     }
@@ -371,13 +371,13 @@ static size_t collect_params(const Expr* e, const Expr* x, ParamBound* pb,
                              size_t cap, size_t n) {
     if (!e) return n;
     if (e->type == EXPR_SYMBOL) {
-        if (e->data.symbol == x->data.symbol) return n;
-        if (strcmp(e->data.symbol, "I") == 0) return n;
+        if (e->data.symbol.name == x->data.symbol.name) return n;
+        if (strcmp(e->data.symbol.name, "I") == 0) return n;
         for (size_t i = 0; i < n; i++)
-            if (pb[i].sym == e->data.symbol) return n;
+            if (pb[i].sym == e->data.symbol.name) return n;
         double tmp;
         if (numeric_double(e, &tmp)) return n;       /* Pi, E, EulerGamma, ... */
-        if (n < cap) { pb[n].sym = e->data.symbol; pb[n].lo = -HUGE_VAL;
+        if (n < cap) { pb[n].sym = e->data.symbol.name; pb[n].lo = -HUGE_VAL;
                        pb[n].hi = HUGE_VAL; n++; }
         return n;
     }
@@ -403,9 +403,9 @@ static void relation_apply(ParamBound* pb, size_t np, const char* op,
     if (!lt && !gt) return;
     double c;
     if (L->type == EXPR_SYMBOL && numeric_double(R, &c))
-        bound_apply(pb, np, L->data.symbol, c, lt ? -1 : +1);
+        bound_apply(pb, np, L->data.symbol.name, c, lt ? -1 : +1);
     else if (R->type == EXPR_SYMBOL && numeric_double(L, &c))
-        bound_apply(pb, np, R->data.symbol, c, lt ? +1 : -1);
+        bound_apply(pb, np, R->data.symbol.name, c, lt ? +1 : -1);
 }
 
 /* Tighten parameter bounds from an Assumptions fact (And/List conjunctions,
@@ -413,7 +413,7 @@ static void relation_apply(ParamBound* pb, size_t np, const char* op,
 static void absorb_fact(ParamBound* pb, size_t np, Expr* fact) {
     if (!fact || fact->type != EXPR_FUNCTION) return;
     if (fact->data.function.head->type != EXPR_SYMBOL) return;
-    const char* h = fact->data.function.head->data.symbol;
+    const char* h = fact->data.function.head->data.symbol.name;
     size_t ac = fact->data.function.arg_count;
     if (strcmp(h, "And") == 0 || strcmp(h, "List") == 0) {
         for (size_t i = 0; i < ac; i++) absorb_fact(pb, np, fact->data.function.args[i]);
@@ -423,7 +423,7 @@ static void absorb_fact(ParamBound* pb, size_t np, Expr* fact) {
         for (size_t i = 0; i + 2 < ac; i += 2) {
             Expr* opsym = fact->data.function.args[i + 1];
             if (opsym->type != EXPR_SYMBOL) continue;
-            relation_apply(pb, np, opsym->data.symbol,
+            relation_apply(pb, np, opsym->data.symbol.name,
                            fact->data.function.args[i], fact->data.function.args[i + 2]);
         }
         return;
@@ -464,7 +464,7 @@ static bool is_zero_expr(const Expr* a) {
 /* b == +Infinity (symbol Infinity or DirectedInfinity[1]) */
 static bool is_pos_inf(const Expr* b) {
     if (!b) return false;
-    if (b->type == EXPR_SYMBOL && strcmp(b->data.symbol, "Infinity") == 0) return true;
+    if (b->type == EXPR_SYMBOL && strcmp(b->data.symbol.name, "Infinity") == 0) return true;
     if (head_name_is(b, "DirectedInfinity") && b->data.function.arg_count == 1) {
         Expr* d = b->data.function.args[0];
         return d->type == EXPR_INTEGER && d->data.integer == 1;
@@ -492,11 +492,11 @@ static bool is_neg_inf(const Expr* a) {
  * not a clean monomial with a nonnegative integer power of x. */
 static long x_monomial_degree(const Expr* e, const Expr* x) {
     if (!contains_symbol(e, x)) return 0;
-    if (e->type == EXPR_SYMBOL && e->data.symbol == x->data.symbol) return 1;
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name == x->data.symbol.name) return 1;
     if (head_name_is(e, "Power") && e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* ex   = e->data.function.args[1];
-        if (base->type == EXPR_SYMBOL && base->data.symbol == x->data.symbol &&
+        if (base->type == EXPR_SYMBOL && base->data.symbol.name == x->data.symbol.name &&
             ex->type == EXPR_INTEGER && ex->data.integer >= 0)
             return (long)ex->data.integer;
         return -1;
@@ -599,7 +599,7 @@ static Expr* laplace_halfline(const Expr* g, const Expr* x,
                 ea = F->data.function.args[0];
             else if (head_name_is(F, "Power") && F->data.function.arg_count == 2 &&
                      F->data.function.args[0]->type == EXPR_SYMBOL &&
-                     strcmp(F->data.function.args[0]->data.symbol, "E") == 0)
+                     strcmp(F->data.function.args[0]->data.symbol.name, "E") == 0)
                 ea = F->data.function.args[1];
             if (ea) { saw_exp = true;
                       exparg = mk_fn2("Plus", exparg, expr_copy((Expr*)ea)); }
@@ -650,11 +650,11 @@ static Expr* laplace_halfline(const Expr* g, const Expr* x,
  * Sets *ok = false if `e` is not a clean integer-power monomial in x. */
 static long x_deg_signed(const Expr* e, const Expr* x, bool* ok) {
     if (!contains_symbol(e, x)) return 0;
-    if (e->type == EXPR_SYMBOL && e->data.symbol == x->data.symbol) return 1;
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name == x->data.symbol.name) return 1;
     if (head_name_is(e, "Power") && e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* ex   = e->data.function.args[1];
-        if (base->type == EXPR_SYMBOL && base->data.symbol == x->data.symbol &&
+        if (base->type == EXPR_SYMBOL && base->data.symbol.name == x->data.symbol.name &&
             ex->type == EXPR_INTEGER)
             return (long)ex->data.integer;
         *ok = false; return 0;
@@ -710,7 +710,7 @@ static Expr* laplace_sinc_halfline(const Expr* g, const Expr* x,
             if (head_name_is(F, "Exp") && F->data.function.arg_count == 1) ea = F->data.function.args[0];
             else if (head_name_is(F, "Power") && F->data.function.arg_count == 2 &&
                      F->data.function.args[0]->type == EXPR_SYMBOL &&
-                     strcmp(F->data.function.args[0]->data.symbol, "E") == 0) ea = F->data.function.args[1];
+                     strcmp(F->data.function.args[0]->data.symbol.name, "E") == 0) ea = F->data.function.args[1];
             if (ea) { saw_exp = true; exparg = mk_fn2("Plus", exparg, expr_copy((Expr*)ea)); }
             else    { rest = mk_fn2("Times", rest, expr_copy(F)); }
         }
@@ -1053,7 +1053,7 @@ static Expr* gaussian_halfline(const Expr* g, const Expr* x,
             if (head_name_is(F, "Exp") && F->data.function.arg_count == 1) ea = F->data.function.args[0];
             else if (head_name_is(F, "Power") && F->data.function.arg_count == 2 &&
                      F->data.function.args[0]->type == EXPR_SYMBOL &&
-                     strcmp(F->data.function.args[0]->data.symbol, "E") == 0) ea = F->data.function.args[1];
+                     strcmp(F->data.function.args[0]->data.symbol.name, "E") == 0) ea = F->data.function.args[1];
             if (ea) { if (exparg) multi_exp = true; else exparg = expr_copy((Expr*)ea); continue; }
             if ((head_name_is(F, "Cos") || head_name_is(F, "Sin")) &&
                 F->data.function.arg_count == 1 && contains_symbol(F->data.function.args[0], x)) {
@@ -1142,7 +1142,7 @@ static Expr* integrate_gaussian_param(const Expr* J, const Expr* p) {
             if (head_name_is(F, "Exp") && F->data.function.arg_count == 1) ea = F->data.function.args[0];
             else if (head_name_is(F, "Power") && F->data.function.arg_count == 2 &&
                      F->data.function.args[0]->type == EXPR_SYMBOL &&
-                     strcmp(F->data.function.args[0]->data.symbol, "E") == 0) ea = F->data.function.args[1];
+                     strcmp(F->data.function.args[0]->data.symbol.name, "E") == 0) ea = F->data.function.args[1];
             if (ea) { if (exparg) multi_exp = true; else exparg = expr_copy((Expr*)ea); continue; }
             rest = t_mul(rest, expr_copy(F));
         }
@@ -1219,7 +1219,7 @@ static bool find_base(const Expr* f, const Expr* x, const Expr* a, const Expr* b
                       Expr** out_p0, Expr** out_i0) {
     /* 1. other-parameter zero base: f|_{p->q} identically 0 in x. */
     for (size_t i = 0; i < np; i++) {
-        if (pb[i].sym == p->data.symbol) continue;
+        if (pb[i].sym == p->data.symbol.name) continue;
         Expr* q = mk_sym(pb[i].sym);
         Expr* fq = subst(f, p, q);
         bool zero = fq && is_zero_q(fq);
@@ -1462,11 +1462,11 @@ Expr* builtin_integrate_diffunderint(Expr* res) {
         Expr* opt = res->data.function.args[t];
         if (opt->type == EXPR_FUNCTION && opt->data.function.arg_count == 2 &&
             opt->data.function.head->type == EXPR_SYMBOL &&
-            (opt->data.function.head->data.symbol == SYM_Rule ||
-             opt->data.function.head->data.symbol == SYM_RuleDelayed)) {
+            (opt->data.function.head->data.symbol.name == SYM_Rule ||
+             opt->data.function.head->data.symbol.name == SYM_RuleDelayed)) {
             Expr* lhs = opt->data.function.args[0];
             if (lhs->type == EXPR_SYMBOL &&
-                strcmp(lhs->data.symbol, "Assumptions") == 0) {
+                strcmp(lhs->data.symbol.name, "Assumptions") == 0) {
                 assumptions = opt->data.function.args[1];
                 continue;
             }

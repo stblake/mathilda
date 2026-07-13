@@ -45,13 +45,13 @@
 static int head_is(const Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head && e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, name) == 0;
+           strcmp(e->data.function.head->data.symbol.name, name) == 0;
 }
 
 static const char* head_name(const Expr* e) {
     return (e && e->type == EXPR_FUNCTION && e->data.function.head &&
             e->data.function.head->type == EXPR_SYMBOL)
-           ? e->data.function.head->data.symbol : NULL;
+           ? e->data.function.head->data.symbol.name : NULL;
 }
 
 /* An option rule Method -> value (Rule or RuleDelayed with lhs symbol Method). */
@@ -73,10 +73,10 @@ static QQBarMethod parse_method(const Expr* res, int* bad) {
         const Expr* a = res->data.function.args[i];
         if (!is_option_rule(a)) continue;
         const Expr* lhs = a->data.function.args[0];
-        if (strcmp(lhs->data.symbol, "Method") != 0) continue;
+        if (strcmp(lhs->data.symbol.name, "Method") != 0) continue;
         const Expr* v = a->data.function.args[1];
         const char* s = (v->type == EXPR_STRING) ? v->data.string
-                      : (v->type == EXPR_SYMBOL) ? v->data.symbol : NULL;
+                      : (v->type == EXPR_SYMBOL) ? v->data.symbol.name : NULL;
         if (s && strcmp(s, "Automatic") == 0)        m = QQBAR_METHOD_AUTOMATIC;
         else if (s && strcmp(s, "Recursive") == 0)   m = QQBAR_METHOD_RECURSIVE;
         else if (s && strcmp(s, "NumberField") == 0) m = QQBAR_METHOD_NUMBERFIELD;

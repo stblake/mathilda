@@ -195,7 +195,7 @@ static Expr* gosper_antidiff(Expr* t, Expr* var) {
         bool solved = false;
         if (sol->type == EXPR_FUNCTION
             && sol->data.function.head->type == EXPR_SYMBOL
-            && sol->data.function.head->data.symbol == SYM_List
+            && sol->data.function.head->data.symbol.name == SYM_List
             && sol->data.function.arg_count >= 1) {
             Expr* rules = sol->data.function.args[0];
             if (rules->type == EXPR_FUNCTION
@@ -247,7 +247,7 @@ Expr* builtin_sum_gosper(Expr* res) {
     bool definite;
     if (!sum_stage_args(res, &f, &var, &imin, &imax, &definite)) return NULL;
 
-    if (definite && imax->type == EXPR_SYMBOL && imax->data.symbol == SYM_Infinity)
+    if (definite && imax->type == EXPR_SYMBOL && imax->data.symbol.name == SYM_Infinity)
         return NULL;
 
     Expr* F = gosper_antidiff(f, var);

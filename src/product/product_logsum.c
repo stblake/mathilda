@@ -32,13 +32,13 @@
 #include <stdlib.h>
 
 static bool is_inf_sym(const Expr* e) {
-    return e->type == EXPR_SYMBOL && e->data.symbol == SYM_Infinity;
+    return e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity;
 }
 
 static bool head_sym_is(const Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, name) == 0;
+        && strcmp(e->data.function.head->data.symbol.name, name) == 0;
 }
 
 Expr* builtin_product_logsum(Expr* res) {

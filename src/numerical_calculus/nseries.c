@@ -412,15 +412,15 @@ static bool ns_is_known_option(const char* s) {
 static bool ns_is_option_arg(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     if (h != SYM_Rule && h != SYM_RuleDelayed) return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* lhs = e->data.function.args[0];
-    return lhs->type == EXPR_SYMBOL && ns_is_known_option(lhs->data.symbol);
+    return lhs->type == EXPR_SYMBOL && ns_is_known_option(lhs->data.symbol.name);
 }
 
 static bool ns_parse_working_precision(Expr* val, bool* mpfr, long* bits) {
-    if (val->type == EXPR_SYMBOL && val->data.symbol == SYM_MachinePrecision) {
+    if (val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_MachinePrecision) {
         *mpfr = false; *bits = 0; return true;
     }
     double digits;
@@ -437,7 +437,7 @@ static bool ns_parse_working_precision(Expr* val, bool* mpfr, long* bits) {
 static bool ns_apply_option(Expr* rule, NsOpts* o) {
     Expr* lhs = rule->data.function.args[0];
     Expr* rhs = rule->data.function.args[1];
-    const char* name = lhs->data.symbol;
+    const char* name = lhs->data.symbol.name;
 
     if (name == SYM_Radius) {
         double r;
@@ -490,7 +490,7 @@ Expr* builtin_nseries(Expr* res) {
     Expr* spec = res->data.function.args[1];
     if (spec->type != EXPR_FUNCTION
         || spec->data.function.head->type != EXPR_SYMBOL
-        || spec->data.function.head->data.symbol != SYM_List
+        || spec->data.function.head->data.symbol.name != SYM_List
         || spec->data.function.arg_count != 3) {
         ns_warn("ivar", "second argument must be {x, x0, n}");
         return NULL;
@@ -525,7 +525,7 @@ Expr* builtin_nseries(Expr* res) {
     if (!z0) { ns_warn("nnum", "x0 is not numeric"); return NULL; }
 
     NsBind bind;
-    ns_bind_snapshot(&bind, var->data.symbol);
+    ns_bind_snapshot(&bind, var->data.symbol.name);
 
     NsCtx ctx;
     ctx.f = res->data.function.args[0];
@@ -543,7 +543,7 @@ Expr* builtin_nseries(Expr* res) {
         if (!get_approx_mpfr(z0, z0r, z0i, &inexact)) {
             ns_warn("nnum", "x0 is not numeric");
         } else {
-            result = ns_compute_mpfr(&ctx, var->data.symbol, x0_orig,
+            result = ns_compute_mpfr(&ctx, var->data.symbol.name, x0_orig,
                                      z0r, z0i, opts.radius, opts.bits, n);
             if (!result)
                 ns_warn("nnum", "f could not be evaluated to a number on the contour");
@@ -556,7 +556,7 @@ Expr* builtin_nseries(Expr* res) {
         if (!ns_to_complex(z0, &z0c)) {
             ns_warn("nnum", "x0 is not numeric");
         } else {
-            result = ns_compute_machine(&ctx, var->data.symbol, x0_orig,
+            result = ns_compute_machine(&ctx, var->data.symbol.name, x0_orig,
                                         z0c, opts.radius, n);
             if (!result)
                 ns_warn("nnum", "f could not be evaluated to a number on the contour");

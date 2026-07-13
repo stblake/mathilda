@@ -157,11 +157,11 @@ void test_table_n() {
     Expr* t = parse_expression("Table[x, 3]");
     Expr* res = evaluate(t);
     ASSERT(res->type == EXPR_FUNCTION);
-    ASSERT_STR_EQ(res->data.function.head->data.symbol, "List");
+    ASSERT_STR_EQ(res->data.function.head->data.symbol.name, "List");
     ASSERT(res->data.function.arg_count == 3);
     for (int i = 0; i < 3; i++) {
         ASSERT(res->data.function.args[i]->type == EXPR_SYMBOL);
-        ASSERT_STR_EQ(res->data.function.args[i]->data.symbol, "x");
+        ASSERT_STR_EQ(res->data.function.args[i]->data.symbol.name, "x");
     }
     expr_free(t); expr_free(res);
 }
@@ -170,7 +170,7 @@ void test_table_imax() {
     Expr* t = parse_expression("Table[i, {i, 3}]");
     Expr* res = evaluate(t);
     ASSERT(res->type == EXPR_FUNCTION);
-    ASSERT_STR_EQ(res->data.function.head->data.symbol, "List");
+    ASSERT_STR_EQ(res->data.function.head->data.symbol.name, "List");
     ASSERT(res->data.function.arg_count == 3);
     for (int i = 0; i < 3; i++) {
         ASSERT(res->data.function.args[i]->type == EXPR_INTEGER);
@@ -183,7 +183,7 @@ void test_table_imin_imax() {
     Expr* t = parse_expression("Table[i, {i, 2, 4}]");
     Expr* res = evaluate(t);
     ASSERT(res->type == EXPR_FUNCTION);
-    ASSERT_STR_EQ(res->data.function.head->data.symbol, "List");
+    ASSERT_STR_EQ(res->data.function.head->data.symbol.name, "List");
     ASSERT(res->data.function.arg_count == 3);
     for (int i = 0; i < 3; i++) {
         ASSERT(res->data.function.args[i]->type == EXPR_INTEGER);
@@ -196,7 +196,7 @@ void test_table_imin_imax_di() {
     Expr* t = parse_expression("Table[i, {i, 1, 5, 2}]");
     Expr* res = evaluate(t);
     ASSERT(res->type == EXPR_FUNCTION);
-    ASSERT_STR_EQ(res->data.function.head->data.symbol, "List");
+    ASSERT_STR_EQ(res->data.function.head->data.symbol.name, "List");
     ASSERT(res->data.function.arg_count == 3);
     ASSERT(res->data.function.args[0]->data.integer == 1);
     ASSERT(res->data.function.args[1]->data.integer == 3);
@@ -208,11 +208,11 @@ void test_table_list() {
     Expr* t = parse_expression("Table[i, {i, {a, b, c}}]");
     Expr* res = evaluate(t);
     ASSERT(res->type == EXPR_FUNCTION);
-    ASSERT_STR_EQ(res->data.function.head->data.symbol, "List");
+    ASSERT_STR_EQ(res->data.function.head->data.symbol.name, "List");
     ASSERT(res->data.function.arg_count == 3);
-    ASSERT_STR_EQ(res->data.function.args[0]->data.symbol, "a");
-    ASSERT_STR_EQ(res->data.function.args[1]->data.symbol, "b");
-    ASSERT_STR_EQ(res->data.function.args[2]->data.symbol, "c");
+    ASSERT_STR_EQ(res->data.function.args[0]->data.symbol.name, "a");
+    ASSERT_STR_EQ(res->data.function.args[1]->data.symbol.name, "b");
+    ASSERT_STR_EQ(res->data.function.args[2]->data.symbol.name, "c");
     expr_free(t); expr_free(res);
 }
 
@@ -220,7 +220,7 @@ void test_table_nested() {
     Expr* t = parse_expression("Table[i + j, {i, 2}, {j, 3}]");
     Expr* res = evaluate(t);
     ASSERT(res->type == EXPR_FUNCTION);
-    ASSERT_STR_EQ(res->data.function.head->data.symbol, "List");
+    ASSERT_STR_EQ(res->data.function.head->data.symbol.name, "List");
     ASSERT(res->data.function.arg_count == 2);
     
     // row1 = {2, 3, 4}
@@ -244,7 +244,7 @@ void test_range_imax() {
     Expr* t = parse_expression("Range[3]");
     Expr* res = evaluate(t);
     ASSERT(res->type == EXPR_FUNCTION);
-    ASSERT_STR_EQ(res->data.function.head->data.symbol, "List");
+    ASSERT_STR_EQ(res->data.function.head->data.symbol.name, "List");
     ASSERT(res->data.function.arg_count == 3);
     for (int i = 0; i < 3; i++) {
         ASSERT(res->data.function.args[i]->type == EXPR_INTEGER);
@@ -257,7 +257,7 @@ void test_range_imin_imax() {
     Expr* t = parse_expression("Range[2, 4]");
     Expr* res = evaluate(t);
     ASSERT(res->type == EXPR_FUNCTION);
-    ASSERT_STR_EQ(res->data.function.head->data.symbol, "List");
+    ASSERT_STR_EQ(res->data.function.head->data.symbol.name, "List");
     ASSERT(res->data.function.arg_count == 3);
     for (int i = 0; i < 3; i++) {
         ASSERT(res->data.function.args[i]->type == EXPR_INTEGER);
@@ -270,7 +270,7 @@ void test_range_imin_imax_di() {
     Expr* t = parse_expression("Range[1, 5, 2]");
     Expr* res = evaluate(t);
     ASSERT(res->type == EXPR_FUNCTION);
-    ASSERT_STR_EQ(res->data.function.head->data.symbol, "List");
+    ASSERT_STR_EQ(res->data.function.head->data.symbol.name, "List");
     ASSERT(res->data.function.arg_count == 3);
     ASSERT(res->data.function.args[0]->data.integer == 1);
     ASSERT(res->data.function.args[1]->data.integer == 3);
@@ -282,7 +282,7 @@ void test_range_real() {
     Expr* t = parse_expression("Range[1.5, 3.5]");
     Expr* res = evaluate(t);
     ASSERT(res->type == EXPR_FUNCTION);
-    ASSERT_STR_EQ(res->data.function.head->data.symbol, "List");
+    ASSERT_STR_EQ(res->data.function.head->data.symbol.name, "List");
     ASSERT(res->data.function.arg_count == 3);
     ASSERT(res->data.function.args[0]->type == EXPR_REAL);
     ASSERT(res->data.function.args[0]->data.real == 1.5);
@@ -295,11 +295,11 @@ void test_array_n() {
     Expr* t = parse_expression("Array[f, 3]");
     Expr* res = evaluate(t);
     ASSERT(res->type == EXPR_FUNCTION);
-    ASSERT_STR_EQ(res->data.function.head->data.symbol, "List");
+    ASSERT_STR_EQ(res->data.function.head->data.symbol.name, "List");
     ASSERT(res->data.function.arg_count == 3);
     for (int i = 0; i < 3; i++) {
         ASSERT(res->data.function.args[i]->type == EXPR_FUNCTION);
-        ASSERT_STR_EQ(res->data.function.args[i]->data.function.head->data.symbol, "f");
+        ASSERT_STR_EQ(res->data.function.args[i]->data.function.head->data.symbol.name, "f");
         ASSERT(res->data.function.args[i]->data.function.arg_count == 1);
         ASSERT(res->data.function.args[i]->data.function.args[0]->data.integer == i + 1);
     }
@@ -310,11 +310,11 @@ void test_array_n_r() {
     Expr* t = parse_expression("Array[f, 3, 0]");
     Expr* res = evaluate(t);
     ASSERT(res->type == EXPR_FUNCTION);
-    ASSERT_STR_EQ(res->data.function.head->data.symbol, "List");
+    ASSERT_STR_EQ(res->data.function.head->data.symbol.name, "List");
     ASSERT(res->data.function.arg_count == 3);
     for (int i = 0; i < 3; i++) {
         ASSERT(res->data.function.args[i]->type == EXPR_FUNCTION);
-        ASSERT_STR_EQ(res->data.function.args[i]->data.function.head->data.symbol, "f");
+        ASSERT_STR_EQ(res->data.function.args[i]->data.function.head->data.symbol.name, "f");
         ASSERT(res->data.function.args[i]->data.function.arg_count == 1);
         ASSERT(res->data.function.args[i]->data.function.args[0]->data.integer == i);
     }
@@ -325,7 +325,7 @@ void test_array_nested() {
     Expr* t = parse_expression("Array[f, {2, 3}]");
     Expr* res = evaluate(t);
     ASSERT(res->type == EXPR_FUNCTION);
-    ASSERT_STR_EQ(res->data.function.head->data.symbol, "List");
+    ASSERT_STR_EQ(res->data.function.head->data.symbol.name, "List");
     ASSERT(res->data.function.arg_count == 2);
     
     Expr* row1 = res->data.function.args[0];
@@ -346,24 +346,24 @@ void test_take() {
     Expr* res1 = evaluate(t1);
     ASSERT(res1->type == EXPR_FUNCTION);
     ASSERT(res1->data.function.arg_count == 2);
-    ASSERT_STR_EQ(res1->data.function.args[0]->data.symbol, "a");
-    ASSERT_STR_EQ(res1->data.function.args[1]->data.symbol, "b");
+    ASSERT_STR_EQ(res1->data.function.args[0]->data.symbol.name, "a");
+    ASSERT_STR_EQ(res1->data.function.args[1]->data.symbol.name, "b");
     expr_free(t1); expr_free(res1);
 
     Expr* t2 = parse_expression("Take[{a, b, c, d}, -2]");
     Expr* res2 = evaluate(t2);
     ASSERT(res2->type == EXPR_FUNCTION);
     ASSERT(res2->data.function.arg_count == 2);
-    ASSERT_STR_EQ(res2->data.function.args[0]->data.symbol, "c");
-    ASSERT_STR_EQ(res2->data.function.args[1]->data.symbol, "d");
+    ASSERT_STR_EQ(res2->data.function.args[0]->data.symbol.name, "c");
+    ASSERT_STR_EQ(res2->data.function.args[1]->data.symbol.name, "d");
     expr_free(t2); expr_free(res2);
 
     Expr* t3 = parse_expression("Take[{a, b, c, d}, {2, 3}]");
     Expr* res3 = evaluate(t3);
     ASSERT(res3->type == EXPR_FUNCTION);
     ASSERT(res3->data.function.arg_count == 2);
-    ASSERT_STR_EQ(res3->data.function.args[0]->data.symbol, "b");
-    ASSERT_STR_EQ(res3->data.function.args[1]->data.symbol, "c");
+    ASSERT_STR_EQ(res3->data.function.args[0]->data.symbol.name, "b");
+    ASSERT_STR_EQ(res3->data.function.args[1]->data.symbol.name, "c");
     expr_free(t3); expr_free(res3);
 }
 
@@ -372,8 +372,8 @@ void test_drop() {
     Expr* res1 = evaluate(t1);
     ASSERT(res1->type == EXPR_FUNCTION);
     ASSERT(res1->data.function.arg_count == 2);
-    ASSERT_STR_EQ(res1->data.function.args[0]->data.symbol, "c");
-    ASSERT_STR_EQ(res1->data.function.args[1]->data.symbol, "d");
+    ASSERT_STR_EQ(res1->data.function.args[0]->data.symbol.name, "c");
+    ASSERT_STR_EQ(res1->data.function.args[1]->data.symbol.name, "d");
     expr_free(t1); expr_free(res1);
 }
 
@@ -381,13 +381,13 @@ void test_flatten() {
     Expr* t1 = parse_expression("Flatten[{{a, b}, {c, {d, e}}}]");
     Expr* res1 = evaluate(t1);
     ASSERT(res1->data.function.arg_count == 5);
-    ASSERT_STR_EQ(res1->data.function.args[3]->data.symbol, "d");
+    ASSERT_STR_EQ(res1->data.function.args[3]->data.symbol.name, "d");
     expr_free(t1); expr_free(res1);
 
     Expr* t2 = parse_expression("Flatten[{{a, b}, {c, {d, e}}}, 1]");
     Expr* res2 = evaluate(t2);
     ASSERT(res2->data.function.arg_count == 4);
-    ASSERT_STR_EQ(res2->data.function.args[3]->data.function.head->data.symbol, "List");
+    ASSERT_STR_EQ(res2->data.function.args[3]->data.function.head->data.symbol.name, "List");
     expr_free(t2); expr_free(res2);
 }
 
@@ -406,19 +406,19 @@ void test_partition() {
 void test_rotate() {
     Expr* t1 = parse_expression("RotateLeft[{a, b, c}, 1]");
     Expr* res1 = evaluate(t1);
-    ASSERT_STR_EQ(res1->data.function.args[0]->data.symbol, "b");
+    ASSERT_STR_EQ(res1->data.function.args[0]->data.symbol.name, "b");
     expr_free(t1); expr_free(res1);
 
     Expr* t2 = parse_expression("RotateRight[{a, b, c}, 1]");
     Expr* res2 = evaluate(t2);
-    ASSERT_STR_EQ(res2->data.function.args[0]->data.symbol, "c");
+    ASSERT_STR_EQ(res2->data.function.args[0]->data.symbol.name, "c");
     expr_free(t2); expr_free(res2);
 }
 
 void test_reverse() {
     Expr* t1 = parse_expression("Reverse[{a, b, c}]");
     Expr* res1 = evaluate(t1);
-    ASSERT_STR_EQ(res1->data.function.args[0]->data.symbol, "c");
+    ASSERT_STR_EQ(res1->data.function.args[0]->data.symbol.name, "c");
     expr_free(t1); expr_free(res1);
 }
 
@@ -426,14 +426,14 @@ void test_transpose() {
     Expr* t1 = parse_expression("Transpose[{{a, b}, {c, d}}]");
     Expr* res1 = evaluate(t1);
     ASSERT(res1->data.function.arg_count == 2);
-    ASSERT_STR_EQ(res1->data.function.args[0]->data.function.args[1]->data.symbol, "c");
+    ASSERT_STR_EQ(res1->data.function.args[0]->data.function.args[1]->data.symbol.name, "c");
     expr_free(t1); expr_free(res1);
 
     Expr* t2 = parse_expression("Transpose[{{a, b}, {c, d}}, {1, 1}]");
     Expr* res2 = evaluate(t2);
     ASSERT(res2->data.function.arg_count == 2);
-    ASSERT_STR_EQ(res2->data.function.args[0]->data.symbol, "a");
-    ASSERT_STR_EQ(res2->data.function.args[1]->data.symbol, "d");
+    ASSERT_STR_EQ(res2->data.function.args[0]->data.symbol.name, "a");
+    ASSERT_STR_EQ(res2->data.function.args[1]->data.symbol.name, "d");
     expr_free(t2); expr_free(res2);
 }
 

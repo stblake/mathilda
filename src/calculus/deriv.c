@@ -123,7 +123,7 @@ static Expr* mk_neg(Expr* a) {
 /* ---------------------------------------------------------------------- */
 
 static bool is_sym(const Expr* e, const char* name) {
-    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol, name) == 0;
+    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, name) == 0;
 }
 
 static bool is_lit_zero(const Expr* e) {
@@ -158,7 +158,7 @@ static bool nonconsts_contains(const Expr* nonconsts, const Expr* sym) {
     size_t n = nonconsts->data.function.arg_count;
     for (size_t i = 0; i < n; i++) {
         const Expr* v = nonconsts->data.function.args[i];
-        if (v && v->type == EXPR_SYMBOL && v->data.symbol == sym->data.symbol) {
+        if (v && v->type == EXPR_SYMBOL && v->data.symbol.name == sym->data.symbol.name) {
             return true;
         }
     }
@@ -202,7 +202,7 @@ static Expr* build_unevaluated_d_nonconsts(const Expr* sym, const Expr* x,
  * Mathematica-compatible constants. */
 static bool is_dt_constant_symbol(const Expr* e) {
     if (!e || e->type != EXPR_SYMBOL) return false;
-    const char* s = e->data.symbol;
+    const char* s = e->data.symbol.name;
     return s == SYM_Pi || s == SYM_E || s == SYM_I ||
            s == SYM_Infinity || s == SYM_ComplexInfinity ||
            s == SYM_EulerGamma || s == SYM_Catalan ||
@@ -589,7 +589,7 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
          * derivatives of UnitStep (whose first derivative carries an
          * Indeterminate Piecewise value) stable rather than collapsing the
          * value to 0. */
-        if (f->type == EXPR_SYMBOL && f->data.symbol == SYM_Indeterminate)
+        if (f->type == EXPR_SYMBOL && f->data.symbol.name == SYM_Indeterminate)
             return expr_copy(f);
         /* A symbol declared as NonConstant produces the canonical
          * unevaluated implicit-derivative form. */
@@ -624,8 +624,8 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
          * D[a < b < c, x]. */
         bool f_is_equal_or_ineq = (f->type == EXPR_FUNCTION &&
                                    f->data.function.head->type == EXPR_SYMBOL &&
-                                   (f->data.function.head->data.symbol == SYM_Equal
-                                    || f->data.function.head->data.symbol == SYM_Inequality));
+                                   (f->data.function.head->data.symbol.name == SYM_Equal
+                                    || f->data.function.head->data.symbol.name == SYM_Inequality));
         if (!f_is_equal_or_ineq &&
             expr_free_of(f, x) && !expr_contains_nonconst(f, nonconsts)) {
             return mk_int(0);
@@ -658,7 +658,7 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
     /* Head is a plain symbol -- dispatch on the head name.               */
     /* ------------------------------------------------------------------ */
     if (head->type == EXPR_SYMBOL) {
-        const char* h = head->data.symbol;
+        const char* h = head->data.symbol.name;
 
         /* --- Plus: sum of derivatives. --- */
         if (h == SYM_Plus) {
@@ -761,7 +761,7 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             Expr* fn2 = args[1];
             if (fn2->type == EXPR_FUNCTION
                 && fn2->data.function.head->type == EXPR_SYMBOL
-                && fn2->data.function.head->data.symbol == SYM_Function) {
+                && fn2->data.function.head->data.symbol.name == SYM_Function) {
                 /* Two accepted body forms (the bound variable is
                  * always independent of x, so D threads through):
                  *   2-arg  Function[t, body]      — named bound var
@@ -1714,7 +1714,7 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
         if (h == SYM_Piecewise && n >= 1 &&
             args[0]->type == EXPR_FUNCTION &&
             args[0]->data.function.head->type == EXPR_SYMBOL &&
-            args[0]->data.function.head->data.symbol == SYM_List) {
+            args[0]->data.function.head->data.symbol.name == SYM_List) {
             Expr* pairs = args[0];
             size_t np = pairs->data.function.arg_count;
             Expr** new_pairs = malloc(sizeof(Expr*) * (np ? np : 1));
@@ -1724,7 +1724,7 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
                 Expr* pr = pairs->data.function.args[i];
                 if (!(pr->type == EXPR_FUNCTION &&
                       pr->data.function.head->type == EXPR_SYMBOL &&
-                      pr->data.function.head->data.symbol == SYM_List &&
+                      pr->data.function.head->data.symbol.name == SYM_List &&
                       pr->data.function.arg_count == 2)) { ok = false; break; }
                 /* Piecewise has HoldAll, so its branch values are not
                  * re-evaluated by the outer evaluator; reduce each derivative
@@ -1929,8 +1929,8 @@ static bool parse_var_spec(Expr* spec, Expr** var, int64_t* order,
         if (k->type == EXPR_REAL || k->type == EXPR_BIGINT ||
             (k->type == EXPR_FUNCTION &&
              k->data.function.head->type == EXPR_SYMBOL &&
-             (k->data.function.head->data.symbol == SYM_Rational ||
-              k->data.function.head->data.symbol == SYM_Complex))) {
+             (k->data.function.head->data.symbol.name == SYM_Rational ||
+              k->data.function.head->data.symbol.name == SYM_Complex))) {
             return false;
         }
         /* Symbolic order. */
@@ -2165,7 +2165,7 @@ static Expr* compute_deriv_symbolic_order(Expr* f, Expr* var, Expr* k) {
      * Non-linear arguments fall through (caller leaves D unevaluated). */
     if (f->type == EXPR_FUNCTION && f->data.function.arg_count == 1 &&
         f->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = f->data.function.head->data.symbol;
+        const char* h = f->data.function.head->data.symbol.name;
         bool is_trig  = (h == SYM_Sin) || (h == SYM_Cos);
         bool is_hyper = (h == SYM_Sinh) || (h == SYM_Cosh);
         if (is_trig || is_hyper) {
@@ -2257,12 +2257,12 @@ static bool parse_nonconsts_option(Expr* a, Expr** out) {
     if (a->data.function.arg_count != 2) return false;
     Expr* head = a->data.function.head;
     if (head->type != EXPR_SYMBOL) return false;
-    if (head->data.symbol != SYM_Rule && head->data.symbol != SYM_RuleDelayed) {
+    if (head->data.symbol.name != SYM_Rule && head->data.symbol.name != SYM_RuleDelayed) {
         return false;
     }
     Expr* lhs = a->data.function.args[0];
     Expr* rhs = a->data.function.args[1];
-    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol != SYM_NonConstants) {
+    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol.name != SYM_NonConstants) {
         return false;
     }
     if (rhs->type == EXPR_FUNCTION && is_sym(rhs->data.function.head, "List")) {
@@ -2392,7 +2392,7 @@ Expr* builtin_dt(Expr* res) {
         Expr* v = res->data.function.args[1];
         if (is_dt_constant_symbol(f)) return mk_int(0);   /* Dt[Pi, x] = 0 */
         if (v->type == EXPR_SYMBOL) {
-            if (f->data.symbol == v->data.symbol) return mk_int(1);  /* Dt[x, x] */
+            if (f->data.symbol.name == v->data.symbol.name) return mk_int(1);  /* Dt[x, x] */
             return NULL;                                  /* Dt[s, x] stays */
         }
     }
@@ -2493,7 +2493,7 @@ Expr* derivative_of_pure_function(Expr* deriv_head, Expr* pure_fn) {
         body = pure_fn->data.function.args[1];
 
         if (params->type == EXPR_SYMBOL &&
-            params->data.symbol == SYM_Null) {
+            params->data.symbol.name == SYM_Null) {
             /* Function[Null, body, attrs]: slot form with attributes. */
             for (size_t i = 0; i < m; i++) vars[i] = make_slot((int64_t)(i + 1));
         } else if (params->type == EXPR_SYMBOL) {
@@ -2592,7 +2592,7 @@ Expr* derivative_of_symbol(Expr* deriv_head, Expr* fsym) {
      * us back f[t1,...,tm] and we would correctly fall through; the
      * early exit here is purely a fast path that avoids the call/eval
      * roundtrip in the common no-definition case. */
-    if (!symtab_get_down_values(fsym->data.symbol)) return NULL;
+    if (!symtab_get_down_values(fsym->data.symbol.name)) return NULL;
 
     /* Mint fresh temporary variable symbols. We use a static counter so
      * names are globally unique per process invocation; this avoids the
@@ -2624,7 +2624,7 @@ Expr* derivative_of_symbol(Expr* deriv_head, Expr* fsym) {
      * f[t1,...,tm]. */
     bool unchanged = (body->type == EXPR_FUNCTION
                       && body->data.function.head->type == EXPR_SYMBOL
-                      && body->data.function.head->data.symbol == fsym->data.symbol
+                      && body->data.function.head->data.symbol.name == fsym->data.symbol.name
                       && body->data.function.arg_count == m);
     if (unchanged) {
         for (size_t i = 0; i < m; i++) {

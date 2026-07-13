@@ -64,22 +64,22 @@ static bool is_known_option_name(const char* s) {
 static bool is_option_arg(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     if (h != SYM_Rule && h != SYM_RuleDelayed) return false;
     if (e->data.function.arg_count != 2) return false;
     const Expr* lhs = e->data.function.args[0];
     if (lhs->type != EXPR_SYMBOL) return false;
-    return is_known_option_name(lhs->data.symbol);
+    return is_known_option_name(lhs->data.symbol.name);
 }
 
 /* Returns true iff `e` is the symbol True. */
 static bool is_true(const Expr* e) {
-    return e && e->type == EXPR_SYMBOL && e->data.symbol == SYM_True;
+    return e && e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_True;
 }
 
 /* True iff `e` is the symbol False. */
 static bool is_false(const Expr* e) {
-    return e && e->type == EXPR_SYMBOL && e->data.symbol == SYM_False;
+    return e && e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_False;
 }
 
 /* Apply a single option rule to `opts`.  Unknown values do not abort
@@ -88,7 +88,7 @@ static bool is_false(const Expr* e) {
 static void apply_option(const Expr* rule, SolveOpts* opts) {
     const Expr* lhs = rule->data.function.args[0];
     const Expr* rhs = rule->data.function.args[1];
-    const char* name = lhs->data.symbol;
+    const char* name = lhs->data.symbol.name;
     if (name == SYM_Cubics)   { opts->poly.cubics_radical = is_true(rhs); return; }
     if (name == SYM_Quartics) { opts->poly.quartics_radical = is_true(rhs); return; }
     if (name == SYM_InverseFunctions) {
@@ -101,7 +101,7 @@ static void apply_option(const Expr* rule, SolveOpts* opts) {
     if (name == SYM_GeneratedParameters) {
         /* Bare symbol form only -- the Function form is reserved. */
         if (rhs && rhs->type == EXPR_SYMBOL) {
-            opts->inv.param_head = rhs->data.symbol;
+            opts->inv.param_head = rhs->data.symbol.name;
         }
         return;
     }
@@ -136,7 +136,7 @@ static void warn_bad_option(const Expr* res, const Expr* opt) {
                        && opt->data.function.arg_count == 2)
         ? opt->data.function.args[0] : NULL;
     const char* name = (lhs && lhs->type == EXPR_SYMBOL)
-        ? lhs->data.symbol : "?";
+        ? lhs->data.symbol.name : "?";
     fprintf(stderr,
         "Solve::optx: Unknown option %s in Solve.\n",
         name);
@@ -153,7 +153,7 @@ static bool classify_single_var(Expr* vars, Expr** var_out) {
     if (vars->type == EXPR_SYMBOL) { *var_out = vars; return true; }
     if (vars->type == EXPR_FUNCTION
         && vars->data.function.head->type == EXPR_SYMBOL
-        && vars->data.function.head->data.symbol == SYM_List
+        && vars->data.function.head->data.symbol.name == SYM_List
         && vars->data.function.arg_count == 1
         && vars->data.function.args[0]->type == EXPR_SYMBOL) {
         *var_out = vars->data.function.args[0];
@@ -170,7 +170,7 @@ static bool classify_single_var(Expr* vars, Expr** var_out) {
 static bool is_conjunction_of_equations(const Expr* expr) {
     if (!expr || expr->type != EXPR_FUNCTION) return false;
     if (expr->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = expr->data.function.head->data.symbol;
+    const char* h = expr->data.function.head->data.symbol.name;
     return h == SYM_And || h == SYM_List;
 }
 
@@ -193,7 +193,7 @@ static bool is_numeric_literal(const Expr* e) {
             return true;
         case EXPR_FUNCTION:
             if (e->data.function.head->type == EXPR_SYMBOL) {
-                const char* h = e->data.function.head->data.symbol;
+                const char* h = e->data.function.head->data.symbol.name;
                 if (h == SYM_Complex || h == SYM_Rational) return true;
             }
             return false;
@@ -210,7 +210,7 @@ static bool is_valid_solve_vars(const Expr* vars) {
     if (!vars) return false;
     if (vars->type == EXPR_FUNCTION
         && vars->data.function.head->type == EXPR_SYMBOL
-        && vars->data.function.head->data.symbol == SYM_List) {
+        && vars->data.function.head->data.symbol.name == SYM_List) {
         if (vars->data.function.arg_count == 0) return false;
         for (size_t i = 0; i < vars->data.function.arg_count; i++) {
             const Expr* v = vars->data.function.args[i];
@@ -286,7 +286,7 @@ static Expr* unsubst_compound_vars(
     if (!e) return NULL;
     if (e->type == EXPR_SYMBOL) {
         for (size_t i = 0; i < n_subs; i++) {
-            if (e->data.symbol == subs[i].fresh) {
+            if (e->data.symbol.name == subs[i].fresh) {
                 return expr_copy(subs[i].original);
             }
         }
@@ -330,7 +330,7 @@ static size_t collect_and_subst_compound_vars(
 
     bool is_list = (vars_in->type == EXPR_FUNCTION
         && vars_in->data.function.head->type == EXPR_SYMBOL
-        && vars_in->data.function.head->data.symbol == SYM_List);
+        && vars_in->data.function.head->data.symbol.name == SYM_List);
 
     if (!is_list) {
         if (vars_in->type == EXPR_SYMBOL) {
@@ -379,7 +379,7 @@ static bool is_multi_var_list(const Expr* vars) {
     return vars
         && vars->type == EXPR_FUNCTION
         && vars->data.function.head->type == EXPR_SYMBOL
-        && vars->data.function.head->data.symbol == SYM_List
+        && vars->data.function.head->data.symbol.name == SYM_List
         && vars->data.function.arg_count >= 2;
 }
 
@@ -397,7 +397,7 @@ static Expr* wrap_in_list(Expr* expr) {
 static Expr* try_abs_zero_rewrite(const Expr* expr) {
     if (!expr || expr->type != EXPR_FUNCTION) return NULL;
     if (expr->data.function.head->type != EXPR_SYMBOL) return NULL;
-    if (expr->data.function.head->data.symbol != SYM_Equal) return NULL;
+    if (expr->data.function.head->data.symbol.name != SYM_Equal) return NULL;
     if (expr->data.function.arg_count != 2) return NULL;
     const Expr* lhs = expr->data.function.args[0];
     const Expr* rhs = expr->data.function.args[1];
@@ -405,12 +405,12 @@ static Expr* try_abs_zero_rewrite(const Expr* expr) {
     const Expr* zero_side = NULL;
     if (lhs->type == EXPR_FUNCTION
         && lhs->data.function.head->type == EXPR_SYMBOL
-        && lhs->data.function.head->data.symbol == SYM_Abs
+        && lhs->data.function.head->data.symbol.name == SYM_Abs
         && lhs->data.function.arg_count == 1) {
         abs_side = lhs; zero_side = rhs;
     } else if (rhs->type == EXPR_FUNCTION
         && rhs->data.function.head->type == EXPR_SYMBOL
-        && rhs->data.function.head->data.symbol == SYM_Abs
+        && rhs->data.function.head->data.symbol.name == SYM_Abs
         && rhs->data.function.arg_count == 1) {
         abs_side = rhs; zero_side = lhs;
     }
@@ -438,11 +438,11 @@ Expr* builtin_solve(Expr* res) {
         Expr* a = res->data.function.args[pos_end - 1];
         if (a->type == EXPR_FUNCTION
             && a->data.function.head->type == EXPR_SYMBOL
-            && (a->data.function.head->data.symbol == SYM_Rule
-                || a->data.function.head->data.symbol == SYM_RuleDelayed)
+            && (a->data.function.head->data.symbol.name == SYM_Rule
+                || a->data.function.head->data.symbol.name == SYM_RuleDelayed)
             && a->data.function.arg_count == 2
             && a->data.function.args[0]->type == EXPR_SYMBOL) {
-            const char* name = a->data.function.args[0]->data.symbol;
+            const char* name = a->data.function.args[0]->data.symbol.name;
             if (is_known_option_name(name)) {
                 pos_end--;
                 continue;
@@ -532,7 +532,7 @@ Expr* builtin_solve(Expr* res) {
      *   True  -> {{}}   (tautology: full-dimensional solution set)
      *   False -> {}     (contradiction: no solutions)             */
     Expr* out = NULL;
-    if (expr->type == EXPR_SYMBOL && expr->data.symbol == SYM_True) {
+    if (expr->type == EXPR_SYMBOL && expr->data.symbol.name == SYM_True) {
         Expr* empty = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
         out = expr_new_function(expr_new_symbol(SYM_List),
                                 (Expr*[]){ empty }, 1);
@@ -540,7 +540,7 @@ Expr* builtin_solve(Expr* res) {
         expr_free(vars_subst);
         return out;
     }
-    if (expr->type == EXPR_SYMBOL && expr->data.symbol == SYM_False) {
+    if (expr->type == EXPR_SYMBOL && expr->data.symbol.name == SYM_False) {
         out = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
         expr_free(expr);
         expr_free(vars_subst);
@@ -603,7 +603,7 @@ Expr* builtin_solve(Expr* res) {
 
         if (expr->type == EXPR_FUNCTION
             && expr->data.function.head->type == EXPR_SYMBOL
-            && expr->data.function.head->data.symbol == SYM_Equal
+            && expr->data.function.head->data.symbol.name == SYM_Equal
             && expr->data.function.arg_count == 2) {
             out = solvepoly_solve_polynomial_equality(expr, var, dom, &opts.poly);
             /* Polynomial specialist returns NULL when the equation is

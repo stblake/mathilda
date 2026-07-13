@@ -28,6 +28,12 @@
 // Get attributes for a given symbol
 uint32_t get_attributes(const char* symbol_name);
 
+// Phase 3a: def-threaded fast path -- effective attributes straight from an
+// already-resolved SymbolDef, with no symbol-table lookup. Returns ATTR_NONE
+// for a NULL def.
+struct SymbolDef;
+uint32_t get_attributes_def(struct SymbolDef* def);
+
 // Set attributes for a given symbol
 void set_attributes(const char* symbol_name, uint32_t attrs);
 

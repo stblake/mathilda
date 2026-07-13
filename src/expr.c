@@ -49,7 +49,7 @@ Expr* expr_new_real(double value) {
 //   - expr_copy() of a symbol a pointer copy,
 //   - expr_free() of a symbol a no-op for the name field.
 //
-// The cast to `char*` is intentional: `data.symbol` retains its existing
+// The cast to `char*` is intentional: `data.symbol.name` retains its existing
 // type for ABI stability, but the memory is owned by the interner and
 // must never be freed by Expr code.
 Expr* expr_new_symbol(const char* name) {
@@ -58,8 +58,9 @@ Expr* expr_new_symbol(const char* name) {
     e->type = EXPR_SYMBOL;
     e->refcount = 1;
     e->last_evaluated_at = 0;
-    e->data.symbol = (char*)intern_symbol(name);
-    if (!e->data.symbol) {
+    e->data.symbol.name = (char*)intern_symbol(name);
+    e->data.symbol.def = NULL;   /* Phase 3b: resolved + cached lazily on first eval use */
+    if (!e->data.symbol.name) {
         free(e);
         return NULL;
     }
@@ -300,7 +301,8 @@ Expr* expr_unshare(Expr* e) {
             fresh->data.real = e->data.real;
             break;
         case EXPR_SYMBOL:
-            fresh->data.symbol = e->data.symbol;  /* interned */
+            fresh->data.symbol.name = e->data.symbol.name;  /* interned */
+            fresh->data.symbol.def = e->data.symbol.def;    /* same symbol: cache carries over */
             break;
         case EXPR_STRING:
             fresh->data.string = e->data.string ? mathilda_strdup(e->data.string) : NULL;
@@ -371,7 +373,7 @@ void expr_free(Expr* e) {
 
     switch (e->type) {
         case EXPR_SYMBOL:
-            /* data.symbol is interned (owned by sym_intern); never free. */
+            /* data.symbol.name is interned (owned by sym_intern); never free. */
             break;
         case EXPR_STRING:
             if (e->data.string) free(e->data.string);
@@ -448,7 +450,7 @@ bool expr_eq(const Expr* a, const Expr* b) {
             return a->data.real == b->data.real;
         case EXPR_SYMBOL:
             /* Interned: same name guarantees same pointer. */
-            return a->data.symbol == b->data.symbol;
+            return a->data.symbol.name == b->data.symbol.name;
         case EXPR_STRING:
             return strcmp(a->data.string, b->data.string) == 0;
         case EXPR_FUNCTION: {
@@ -515,7 +517,7 @@ uint64_t expr_hash(const Expr* e) {
         }
         case EXPR_SYMBOL:
         case EXPR_STRING: {
-            const char* s = e->data.symbol;
+            const char* s = e->data.symbol.name;
             if (s) {
                 while (*s) {
                     h ^= (uint8_t)(*s++);

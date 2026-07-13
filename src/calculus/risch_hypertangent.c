@@ -52,7 +52,7 @@ bool risch_integrate_hypertangent_poly(const Expr* p, const Expr* t,
     expr_free(tsq1);
     /* a must be free of t (element of the base field). */
     Expr* fq = rh_fn("FreeQ", (Expr*[]){ rh_cp(a), rh_cp(t) }, 2);
-    bool a_in_k = fq && fq->type == EXPR_SYMBOL && fq->data.symbol == intern_symbol("True");
+    bool a_in_k = fq && fq->type == EXPR_SYMBOL && fq->data.symbol.name == intern_symbol("True");
     expr_free(fq);
     if (!a_in_k) { expr_free(a); return false; }
 

@@ -29,7 +29,7 @@ extern void core_init(void);
 static int is_list(const Expr* e) {
     return e && e->type == EXPR_FUNCTION && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, "List") == 0;
+        && strcmp(e->data.function.head->data.symbol.name, "List") == 0;
 }
 
 int main(int argc, char** argv) {

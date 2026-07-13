@@ -30,7 +30,7 @@
 static bool list2_nums(Expr* e, double* a, double* b) {
     return e && e->type == EXPR_FUNCTION && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_List
+        && e->data.function.head->data.symbol.name == SYM_List
         && e->data.function.arg_count == 2
         && numericize_bound(e->data.function.args[0], a)
         && numericize_bound(e->data.function.args[1], b);
@@ -48,7 +48,7 @@ static bool plotrange_yband(Expr* rhs, double* lo, double* hi) {
     bool ok = false;
     if (v->type == EXPR_FUNCTION && v->data.function.head
         && v->data.function.head->type == EXPR_SYMBOL
-        && v->data.function.head->data.symbol == SYM_List
+        && v->data.function.head->data.symbol.name == SYM_List
         && v->data.function.arg_count == 2) {
         Expr* a1 = v->data.function.args[1];
         if (list2_nums(a1, &a, &b)) ok = true;                 /* {xspec, {ymin,ymax}} */
@@ -70,7 +70,7 @@ typedef struct {
 static bool plot_eval_fn(double x, void* ctx_, double* y_out) {
     PlotEvalCtx* ctx = (PlotEvalCtx*)ctx_;
     Expr* xval = expr_new_real(x);
-    symtab_add_own_value(ctx->var->data.symbol, ctx->var, xval);
+    symtab_add_own_value(ctx->var->data.symbol.name, ctx->var, xval);
     Expr* result = evaluate(ctx->body);
 
     double y;
@@ -145,7 +145,7 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
         if (!is_rule_arg(arg)) FAIL_CLEANUP();
         Expr* lhs = arg->data.function.args[0];
         Expr* rhs = arg->data.function.args[1];
-        const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol : NULL;
+        const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol.name : NULL;
 
         if (name == SYM_PlotPoints) {
             long v;
@@ -157,7 +157,7 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
             sopts->max_recursion = (int)v;
         } else if (name == SYM_MaxPlotPoints) {
             Expr* v = evaluate(expr_copy(rhs));
-            bool is_inf = (v->type == EXPR_SYMBOL && v->data.symbol == SYM_Infinity);
+            bool is_inf = (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Infinity);
             long lv = -1;
             bool ok = is_inf;
             if (!ok && v->type == EXPR_INTEGER && v->data.integer > 0) { lv = (long)v->data.integer; ok = true; }
@@ -170,24 +170,24 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
              * it never reaches the Graphics[...] result. */
             Expr* v = evaluate(expr_copy(rhs));
             bool on = (v->type == EXPR_SYMBOL
-                       && (v->data.symbol == SYM_All || v->data.symbol == SYM_True));
+                       && (v->data.symbol.name == SYM_All || v->data.symbol.name == SYM_True));
             bool off = (v->type == EXPR_SYMBOL
-                        && (v->data.symbol == SYM_None || v->data.symbol == SYM_False));
+                        && (v->data.symbol.name == SYM_None || v->data.symbol.name == SYM_False));
             expr_free(v);
             if (!on && !off) FAIL_CLEANUP();
             sopts->mesh = on;
         } else if (name == SYM_RegionFunction) {
             sopts->region_function = rhs;
         } else if (name == SYM_Exclusions) {
-            if (!(rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_None)) sopts->exclusions = rhs;
+            if (!(rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_None)) sopts->exclusions = rhs;
         } else if (name == SYM_ColorFunction) {
             sopts->color_function = rhs;
         } else if (name == SYM_ColorFunctionScaling) {
             Expr* v = evaluate(expr_copy(rhs));
-            sopts->color_function_scaling = !(v->type == EXPR_SYMBOL && v->data.symbol == SYM_False);
+            sopts->color_function_scaling = !(v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False);
             expr_free(v);
         } else if (name == SYM_Filling) {
-            if (!(rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_None)) sopts->filling = rhs;
+            if (!(rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_None)) sopts->filling = rhs;
         } else if (name == SYM_FillingStyle) {
             sopts->filling_style = rhs;
         } else if (name == SYM_PlotStyle) {
@@ -205,7 +205,7 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
              * reduce to a positive real falls back to Automatic. */
             have_aspect = true;
             if (rhs->type == EXPR_SYMBOL
-                && (rhs->data.symbol == SYM_Automatic || rhs->data.symbol == SYM_Full)) {
+                && (rhs->data.symbol.name == SYM_Automatic || rhs->data.symbol.name == SYM_Full)) {
                 passthrough[n++] = expr_copy(arg);
             } else {
                 double v;
@@ -221,7 +221,7 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
                  * the interior Axes cross, so suppress Plot's Axes -> True
                  * default below. Frame -> False/None leaves the axes default. */
                 if (!(rhs->type == EXPR_SYMBOL
-                      && (rhs->data.symbol == SYM_False || rhs->data.symbol == SYM_None)))
+                      && (rhs->data.symbol.name == SYM_False || rhs->data.symbol.name == SYM_None)))
                     have_frame = true;
             }
             else if (name == SYM_PlotRange) {
@@ -282,7 +282,7 @@ static double* parse_exclusions(Expr* exclusions, Expr* var, size_t* out_count) 
     Expr** items;
     size_t n;
     bool is_list = (exclusions->type == EXPR_FUNCTION && exclusions->data.function.head->type == EXPR_SYMBOL
-                    && exclusions->data.function.head->data.symbol == SYM_List);
+                    && exclusions->data.function.head->data.symbol.name == SYM_List);
     if (is_list) { items = exclusions->data.function.args; n = exclusions->data.function.arg_count; }
     else { items = &exclusions; n = 1; }
     if (n == 0) return NULL;
@@ -294,10 +294,10 @@ static double* parse_exclusions(Expr* exclusions, Expr* var, size_t* out_count) 
         Expr* value_expr = it;
         /* x == a (Equal[x, a]): take the side that isn't the iterator var. */
         if (it->type == EXPR_FUNCTION && it->data.function.head->type == EXPR_SYMBOL
-            && it->data.function.head->data.symbol == SYM_Equal && it->data.function.arg_count == 2) {
+            && it->data.function.head->data.symbol.name == SYM_Equal && it->data.function.arg_count == 2) {
             Expr* lhs = it->data.function.args[0];
             Expr* rhsv = it->data.function.args[1];
-            value_expr = (lhs->type == EXPR_SYMBOL && lhs->data.symbol == var->data.symbol) ? rhsv : lhs;
+            value_expr = (lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == var->data.symbol.name) ? rhsv : lhs;
         }
         double v;
         if (numericize_bound(value_expr, &v)) out[cnt++] = v;
@@ -337,9 +337,9 @@ static Range1D* split_at_exclusions(double xmin, double xmax, const double* excl
 static double filling_baseline(Expr* filling, double run_ymin, double run_ymax) {
     if (!filling) return 0.0;
     if (filling->type == EXPR_SYMBOL) {
-        if (filling->data.symbol == SYM_Axis) return 0.0;
-        if (filling->data.symbol == SYM_Bottom) return run_ymin;
-        if (filling->data.symbol == SYM_Top) return run_ymax;
+        if (filling->data.symbol.name == SYM_Axis) return 0.0;
+        if (filling->data.symbol.name == SYM_Bottom) return run_ymin;
+        if (filling->data.symbol.name == SYM_Top) return run_ymax;
     }
     double v;
     if (numericize_bound(filling, &v)) return v;
@@ -668,7 +668,7 @@ static Expr* build_resample_meta(Expr** bodies, size_t nfun, Expr* var,
 }
 
 static Expr* opt_or_none(Expr* e) {
-    return (e && e->type == EXPR_SYMBOL && e->data.symbol == SYM_None) ? NULL : e;
+    return (e && e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_None) ? NULL : e;
 }
 
 Expr* plot_resample(const Expr* graphics_expr, double xmin, double xmax,
@@ -682,7 +682,7 @@ Expr* plot_resample(const Expr* graphics_expr, double xmin, double xmax,
         const Expr* a = graphics_expr->data.function.args[i];
         if (a && a->type == EXPR_FUNCTION && a->data.function.head
             && a->data.function.head->type == EXPR_SYMBOL
-            && a->data.function.head->data.symbol == SYM_PlotResample
+            && a->data.function.head->data.symbol.name == SYM_PlotResample
             && a->data.function.arg_count == 3) { meta = a; break; }
     }
     if (!meta) return NULL;
@@ -693,7 +693,7 @@ Expr* plot_resample(const Expr* graphics_expr, double xmin, double xmax,
     if (!var || var->type != EXPR_SYMBOL) return NULL;
     if (!blist || blist->type != EXPR_FUNCTION || !blist->data.function.head
         || blist->data.function.head->type != EXPR_SYMBOL
-        || blist->data.function.head->data.symbol != SYM_List) return NULL;
+        || blist->data.function.head->data.symbol.name != SYM_List) return NULL;
     if (!olist || olist->type != EXPR_FUNCTION || olist->data.function.arg_count != 10) return NULL;
 
     PlotSampleOpts sopts = {
@@ -749,7 +749,7 @@ Expr* builtin_plot(Expr* res) {
         Expr* arg = res->data.function.args[i];
         if (!is_rule_arg(arg)) continue;
         Expr* lhs = arg->data.function.args[0];
-        if (lhs->type == EXPR_SYMBOL && lhs->data.symbol == SYM_PlotLegends) {
+        if (lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == SYM_PlotLegends) {
             legends = evaluate(expr_copy(arg->data.function.args[1]));
         }
     }
@@ -771,7 +771,7 @@ Expr* builtin_plot(Expr* res) {
     size_t nfun;
     bool is_list = (f->type == EXPR_FUNCTION && f->data.function.head
                     && f->data.function.head->type == EXPR_SYMBOL
-                    && f->data.function.head->data.symbol == SYM_List);
+                    && f->data.function.head->data.symbol.name == SYM_List);
     if (is_list) {
         nfun = f->data.function.arg_count;
         bodies = f->data.function.args; /* borrowed */

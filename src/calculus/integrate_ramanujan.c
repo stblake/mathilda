@@ -138,13 +138,13 @@ static Expr* fullsimp2(Expr* e, Expr* as) {
 static bool head_name_is(const Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, name) == 0;
+           strcmp(e->data.function.head->data.symbol.name, name) == 0;
 }
 
 /* True iff the bare symbol `name` occurs anywhere in `e`. */
 static bool contains_symbol_name(const Expr* e, const char* name) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol, name) == 0;
+    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, name) == 0;
     if (e->type != EXPR_FUNCTION) return false;
     if (contains_symbol_name(e->data.function.head, name)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
@@ -152,7 +152,7 @@ static bool contains_symbol_name(const Expr* e, const char* name) {
     return false;
 }
 static bool contains_symbol(const Expr* e, const Expr* x) {
-    return x && x->type == EXPR_SYMBOL && contains_symbol_name(e, x->data.symbol);
+    return x && x->type == EXPR_SYMBOL && contains_symbol_name(e, x->data.symbol.name);
 }
 
 /* Non-consuming: Simplify[e] is x-free. */
@@ -173,7 +173,7 @@ static bool is_zero_now(const Expr* e) {
 /* Consuming: Simplify[pred] (optionally with assumptions) is the symbol True. */
 static bool prove_true(Expr* pred, Expr* as) {
     Expr* v = as ? ev2("Simplify", pred, cp(as)) : ev1("Simplify", pred);
-    bool t = v && v->type == EXPR_SYMBOL && strcmp(v->data.symbol, "True") == 0;
+    bool t = v && v->type == EXPR_SYMBOL && strcmp(v->data.symbol.name, "True") == 0;
     if (v) expr_free(v);
     return t;
 }
@@ -205,7 +205,7 @@ static bool is_zero_expr(const Expr* a) {
 /* b == +Infinity (symbol Infinity or DirectedInfinity[1]) */
 static bool is_pos_inf(const Expr* b) {
     if (!b) return false;
-    if (b->type == EXPR_SYMBOL && strcmp(b->data.symbol, "Infinity") == 0) return true;
+    if (b->type == EXPR_SYMBOL && strcmp(b->data.symbol.name, "Infinity") == 0) return true;
     if (head_name_is(b, "DirectedInfinity") && b->data.function.arg_count == 1) {
         Expr* d = b->data.function.args[0];
         return d->type == EXPR_INTEGER && d->data.integer == 1;
@@ -229,13 +229,13 @@ static size_t collect_factors(Expr* T, Expr** out, size_t cap, size_t n) {
  * otherwise NULL. */
 static Expr* x_power_exponent(const Expr* F, const Expr* x) {
     if (F->type == EXPR_SYMBOL && x->type == EXPR_SYMBOL &&
-        strcmp(F->data.symbol, x->data.symbol) == 0)
+        strcmp(F->data.symbol.name, x->data.symbol.name) == 0)
         return mk_int(1);
     if (head_name_is(F, "Power") && F->data.function.arg_count == 2) {
         Expr* base = F->data.function.args[0];
         Expr* ex   = F->data.function.args[1];
         if (base->type == EXPR_SYMBOL && x->type == EXPR_SYMBOL &&
-            strcmp(base->data.symbol, x->data.symbol) == 0 &&
+            strcmp(base->data.symbol.name, x->data.symbol.name) == 0 &&
             free_of_x_now(ex, x))
             return cp(ex);
     }
@@ -249,7 +249,7 @@ static Expr* exp_exponent(const Expr* K) {
         return K->data.function.args[0];
     if (head_name_is(K, "Power") && K->data.function.arg_count == 2) {
         Expr* base = K->data.function.args[0];
-        if (base->type == EXPR_SYMBOL && strcmp(base->data.symbol, "E") == 0)
+        if (base->type == EXPR_SYMBOL && strcmp(base->data.symbol.name, "E") == 0)
             return K->data.function.args[1];
     }
     return NULL;
@@ -618,7 +618,7 @@ static Iv sym_bound(const Expr* fact, const char* sym) {
     if (!fact || fact->type != EXPR_FUNCTION) return iv;
     const Expr* head = fact->data.function.head;
     if (head->type != EXPR_SYMBOL) return iv;
-    const char* h = head->data.symbol;
+    const char* h = head->data.symbol.name;
     size_t ac = fact->data.function.arg_count;
     if (strcmp(h, "And") == 0 || strcmp(h, "List") == 0) {
         for (size_t i = 0; i < ac; i++) {
@@ -637,10 +637,10 @@ static Iv sym_bound(const Expr* fact, const char* sym) {
             Expr* R = fact->data.function.args[i + 2];
             double c;
             if (opE->type != EXPR_SYMBOL) continue;
-            if (L->type == EXPR_SYMBOL && strcmp(L->data.symbol, sym) == 0 && num_dbl(R, &c))
-                iv_tighten(&iv, opE->data.symbol, c, true);
-            else if (R->type == EXPR_SYMBOL && strcmp(R->data.symbol, sym) == 0 && num_dbl(L, &c))
-                iv_tighten(&iv, opE->data.symbol, c, false);
+            if (L->type == EXPR_SYMBOL && strcmp(L->data.symbol.name, sym) == 0 && num_dbl(R, &c))
+                iv_tighten(&iv, opE->data.symbol.name, c, true);
+            else if (R->type == EXPR_SYMBOL && strcmp(R->data.symbol.name, sym) == 0 && num_dbl(L, &c))
+                iv_tighten(&iv, opE->data.symbol.name, c, false);
         }
         return iv;
     }
@@ -648,9 +648,9 @@ static Iv sym_bound(const Expr* fact, const char* sym) {
         Expr* L = fact->data.function.args[0];
         Expr* R = fact->data.function.args[1];
         double c;
-        if (L->type == EXPR_SYMBOL && strcmp(L->data.symbol, sym) == 0 && num_dbl(R, &c))
+        if (L->type == EXPR_SYMBOL && strcmp(L->data.symbol.name, sym) == 0 && num_dbl(R, &c))
             iv_tighten(&iv, h, c, true);
-        else if (R->type == EXPR_SYMBOL && strcmp(R->data.symbol, sym) == 0 && num_dbl(L, &c))
+        else if (R->type == EXPR_SYMBOL && strcmp(R->data.symbol.name, sym) == 0 && num_dbl(L, &c))
             iv_tighten(&iv, h, c, false);
     }
     return iv;
@@ -715,7 +715,7 @@ static bool iv_eval(const Expr* e, const Expr* as, Iv* out) {
     double v;
     if (num_dbl(e, &v)) { out->lo = out->hi = v; out->lo_open = out->hi_open = false; return true; }
     if (e->type == EXPR_SYMBOL) {
-        Iv b = sym_bound(as, e->data.symbol);
+        Iv b = sym_bound(as, e->data.symbol.name);
         if (!iv_finite(b.lo) && !iv_finite(b.hi)) return false;    /* unbounded */
         *out = b;
         return true;
@@ -892,7 +892,7 @@ static bool expo_walk(const Expr* e, const Expr* x, Expr** out, size_t* n, size_
         Expr* base = e->data.function.args[0];
         Expr* ex   = e->data.function.args[1];
         if (base->type == EXPR_SYMBOL && x->type == EXPR_SYMBOL &&
-            strcmp(base->data.symbol, x->data.symbol) == 0) {
+            strcmp(base->data.symbol.name, x->data.symbol.name) == 0) {
             if (!free_of_x_now(ex, x)) return false;
             expo_add(out, n, cap, ex);
             return true;                                      /* don't recurse into x^ex */
@@ -970,7 +970,7 @@ static long log_x_weight(const Expr* F, const Expr* x) {
     } else return 0;
     Expr* arg = logf->data.function.args[0];
     return (arg->type == EXPR_SYMBOL && x->type == EXPR_SYMBOL &&
-            strcmp(arg->data.symbol, x->data.symbol) == 0) ? k : 0;
+            strcmp(arg->data.symbol.name, x->data.symbol.name) == 0) ? k : 0;
 }
 
 /* Decompose `term` into C (x-free), rho (net power of x), a Log[x] weight kw
@@ -1100,7 +1100,7 @@ static bool dispatch_term(Expr** kernels, size_t nk, const Expr* x,
 
 /* True iff `e` is the bare symbol `name`. */
 static bool sym_is(const Expr* e, const char* name) {
-    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol, name) == 0;
+    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, name) == 0;
 }
 
 /* Value of Integrate[term, {x, 0, Infinity}], or NULL if the term is out of
@@ -1381,7 +1381,7 @@ Expr* integrate_sinpowmono_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumpt
                 e->type == EXPR_INTEGER && e->data.integer >= 1 && !rarg) {
                 rarg = base->data.function.args[0]; k = e->data.integer; continue;
             }
-            if (base->type == EXPR_SYMBOL && base->data.symbol == x->data.symbol &&
+            if (base->type == EXPR_SYMBOL && base->data.symbol.name == x->data.symbol.name &&
                 e->type == EXPR_INTEGER && e->data.integer < 0 && m == 0) {
                 m = -e->data.integer; continue;
             }
@@ -1501,7 +1501,7 @@ Expr* integrate_ratlogpow_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumpti
         Expr* g = fs[i];
         if (head_name_is(g, "Log") && g->data.function.arg_count == 1 &&
             g->data.function.args[0]->type == EXPR_SYMBOL &&
-            g->data.function.args[0]->data.symbol == x->data.symbol && n == 0) {
+            g->data.function.args[0]->data.symbol.name == x->data.symbol.name && n == 0) {
             n = 1; continue;
         }
         if (head_name_is(g, "Power") && g->data.function.arg_count == 2) {
@@ -1509,7 +1509,7 @@ Expr* integrate_ratlogpow_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumpti
             Expr* e    = g->data.function.args[1];
             if (head_name_is(base, "Log") && base->data.function.arg_count == 1 &&
                 base->data.function.args[0]->type == EXPR_SYMBOL &&
-                base->data.function.args[0]->data.symbol == x->data.symbol &&
+                base->data.function.args[0]->data.symbol.name == x->data.symbol.name &&
                 e->type == EXPR_INTEGER && e->data.integer >= 1 && n == 0) {
                 n = e->data.integer; continue;
             }
@@ -1647,11 +1647,11 @@ Expr* builtin_integrate_ramanujan(Expr* res) {
         Expr* opt = res->data.function.args[t];
         if (opt->type == EXPR_FUNCTION && opt->data.function.arg_count == 2 &&
             opt->data.function.head->type == EXPR_SYMBOL &&
-            (opt->data.function.head->data.symbol == SYM_Rule ||
-             opt->data.function.head->data.symbol == SYM_RuleDelayed)) {
+            (opt->data.function.head->data.symbol.name == SYM_Rule ||
+             opt->data.function.head->data.symbol.name == SYM_RuleDelayed)) {
             Expr* lhs = opt->data.function.args[0];
             if (lhs->type == EXPR_SYMBOL &&
-                strcmp(lhs->data.symbol, "Assumptions") == 0) {
+                strcmp(lhs->data.symbol.name, "Assumptions") == 0) {
                 assumptions = opt->data.function.args[1];
                 continue;
             }
@@ -1680,10 +1680,10 @@ static bool half_line_parse(Expr* res, Expr** f, Expr** x, Expr** a, Expr** b,
         Expr* opt = res->data.function.args[t];
         if (opt->type == EXPR_FUNCTION && opt->data.function.arg_count == 2 &&
             opt->data.function.head->type == EXPR_SYMBOL &&
-            (opt->data.function.head->data.symbol == SYM_Rule ||
-             opt->data.function.head->data.symbol == SYM_RuleDelayed)) {
+            (opt->data.function.head->data.symbol.name == SYM_Rule ||
+             opt->data.function.head->data.symbol.name == SYM_RuleDelayed)) {
             Expr* lhs = opt->data.function.args[0];
-            if (lhs->type == EXPR_SYMBOL && strcmp(lhs->data.symbol, "Assumptions") == 0) {
+            if (lhs->type == EXPR_SYMBOL && strcmp(lhs->data.symbol.name, "Assumptions") == 0) {
                 *assumptions = opt->data.function.args[1];
                 continue;
             }

@@ -44,22 +44,22 @@ static bool is_list(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_List;
+        && e->data.function.head->data.symbol.name == SYM_List;
 }
 
 static bool is_rule(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && (e->data.function.head->data.symbol == SYM_Rule
-         || e->data.function.head->data.symbol == SYM_RuleDelayed);
+        && (e->data.function.head->data.symbol.name == SYM_Rule
+         || e->data.function.head->data.symbol.name == SYM_RuleDelayed);
 }
 
 static bool is_equal(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Equal;
+        && e->data.function.head->data.symbol.name == SYM_Equal;
 }
 
 /* ------------------------------------------------------------------ */
@@ -133,14 +133,14 @@ static void extract_options(const Expr* res, size_t* n_pos,
         Expr* val = rule->data.function.args[1];
         if (key->type != EXPR_SYMBOL) continue;
 
-        if (key->data.symbol == SYM_MonomialOrder) {
+        if (key->data.symbol.name == SYM_MonomialOrder) {
             if (val->type == EXPR_SYMBOL) {
-                if (val->data.symbol == SYM_Lexicographic
-                 || val->data.symbol == SYM_Automatic) {
+                if (val->data.symbol.name == SYM_Lexicographic
+                 || val->data.symbol.name == SYM_Automatic) {
                     opt->order = GB_ORDER_LEX;
-                } else if (val->data.symbol == SYM_DegreeReverseLexicographic) {
+                } else if (val->data.symbol.name == SYM_DegreeReverseLexicographic) {
                     opt->order = GB_ORDER_GREVLEX;
-                } else if (val->data.symbol == SYM_EliminationOrder) {
+                } else if (val->data.symbol.name == SYM_EliminationOrder) {
                     opt->order = GB_ORDER_ELIM;
                 } else {
                     warn_once("nimpl", "unsupported MonomialOrder value; "
@@ -153,16 +153,16 @@ static void extract_options(const Expr* res, size_t* n_pos,
                  * number of main variables, which is not known here). */
                 opt->matrix_order = val;
             }
-        } else if (key->data.symbol == SYM_CoefficientDomain) {
+        } else if (key->data.symbol.name == SYM_CoefficientDomain) {
             if (val->type == EXPR_SYMBOL) {
-                if (val->data.symbol == SYM_Rationals
-                 || val->data.symbol == SYM_Automatic) {
+                if (val->data.symbol.name == SYM_Rationals
+                 || val->data.symbol.name == SYM_Automatic) {
                     opt->domain = GB_DOM_RATIONALS;
-                } else if (val->data.symbol == SYM_Integers) {
+                } else if (val->data.symbol.name == SYM_Integers) {
                     opt->domain = GB_DOM_INTEGERS;
-                } else if (val->data.symbol == SYM_RationalFunctions) {
+                } else if (val->data.symbol.name == SYM_RationalFunctions) {
                     opt->domain = GB_DOM_RATIONAL_FUNCTIONS;
-                } else if (val->data.symbol == SYM_InexactNumbers) {
+                } else if (val->data.symbol.name == SYM_InexactNumbers) {
                     /* Bare InexactNumbers -> machine precision (~16 digits). */
                     opt->domain = GB_DOM_INEXACT;
                     opt->inexact_prec = 16;
@@ -174,7 +174,7 @@ static void extract_options(const Expr* res, size_t* n_pos,
             } else if (val->type == EXPR_FUNCTION
                        && val->data.function.head
                        && val->data.function.head->type == EXPR_SYMBOL) {
-                const char* h = val->data.function.head->data.symbol;
+                const char* h = val->data.function.head->data.symbol.name;
                 if (h == SYM_InexactNumbers) {
                     opt->domain = GB_DOM_INEXACT;
                     int64_t p = 16;
@@ -199,12 +199,12 @@ static void extract_options(const Expr* res, size_t* n_pos,
                                    "falling back to Rationals");
                 opt->domain = GB_DOM_RATIONALS;
             }
-        } else if (key->data.symbol == SYM_Method) {
+        } else if (key->data.symbol.name == SYM_Method) {
             bool ok = false;
             if (val->type == EXPR_SYMBOL
-                && val->data.symbol == SYM_Automatic) ok = true;
+                && val->data.symbol.name == SYM_Automatic) ok = true;
             if (val->type == EXPR_SYMBOL
-                && val->data.symbol == SYM_GroebnerWalk) {
+                && val->data.symbol.name == SYM_GroebnerWalk) {
                 opt->method = GB_METHOD_WALK; ok = true;
             }
             if (val->type == EXPR_STRING && val->data.string
@@ -218,7 +218,7 @@ static void extract_options(const Expr* res, size_t* n_pos,
                                    "\"GroebnerWalk\" is implemented; "
                                    "falling back");
             }
-        } else if (key->data.symbol == SYM_Modulus) {
+        } else if (key->data.symbol.name == SYM_Modulus) {
             /* Honest "not implemented" instead of silently computing the
              * characteristic-0 basis as if Modulus weren't there.  The
              * surface accepts any value and ignores it; the basis comes
@@ -227,7 +227,7 @@ static void extract_options(const Expr* res, size_t* n_pos,
                                     "the basis is being computed over the "
                                     "rationals.  Use Mathematica for "
                                     "modular bases.");
-        } else if (key->data.symbol == SYM_Sort) {
+        } else if (key->data.symbol.name == SYM_Sort) {
             /* Mathematica's `Sort -> True` reverses the user-supplied
              * main-variable list before computing the basis, so the
              * "smallest" (rightmost-in-original-vars) variable becomes
@@ -235,14 +235,14 @@ static void extract_options(const Expr* res, size_t* n_pos,
              * and Sort -> True the basis is the same as with
              * vars = {z, y, x}.  We rebind the variable list at the
              * partition step below. */
-            if (val->type == EXPR_SYMBOL && val->data.symbol == SYM_True) {
+            if (val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_True) {
                 opt->sort_desc = true;
-            } else if (val->type == EXPR_SYMBOL && val->data.symbol == SYM_False) {
+            } else if (val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_False) {
                 opt->sort_desc = false;
             } else {
                 warn_once("nimpl", "Sort option accepts only True or False");
             }
-        } else if (key->data.symbol == SYM_ParameterVariables) {
+        } else if (key->data.symbol.name == SYM_ParameterVariables) {
             /* The variables named here are treated as parameters: they
              * survive in coefficients of the basis polynomials but are
              * not allowed to appear as leading variables of any
@@ -300,7 +300,7 @@ static Expr* normalise_polynomial(const Expr* p) {
  * to parameter variables since they have a numeric value. */
 static bool is_known_constant_symbol(const Expr* e) {
     if (!e || e->type != EXPR_SYMBOL) return false;
-    const char* s = e->data.symbol;
+    const char* s = e->data.symbol.name;
     return  s == SYM_Pi
          || s == SYM_E
          || s == SYM_EulerGamma

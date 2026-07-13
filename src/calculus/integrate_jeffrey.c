@@ -105,7 +105,7 @@ static bool expr_free_of(const Expr* f, const Expr* x) {
 /* True if any symbol with interned name `s` occurs anywhere in `e`. */
 static bool contains_sym(const Expr* e, const char* s) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return e->data.symbol == s;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == s;
     if (e->type != EXPR_FUNCTION) return false;
     if (contains_sym(e->data.function.head, s)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
@@ -178,16 +178,16 @@ static void wj_scan(const Expr* e, const char* xsym,
                     bool* has_trig, bool* has_hyp, bool* bad) {
     if (*bad || !e) return;
     if (e->type == EXPR_SYMBOL) {
-        if (e->data.symbol == xsym) *bad = true;  /* x outside a kernel */
+        if (e->data.symbol.name == xsym) *bad = true;  /* x outside a kernel */
         return;
     }
     if (e->type != EXPR_FUNCTION) return;
 
     const Expr* head = e->data.function.head;
     if (head && head->type == EXPR_SYMBOL && e->data.function.arg_count == 1) {
-        const char* h = head->data.symbol;
+        const char* h = head->data.symbol.name;
         const Expr* arg = e->data.function.args[0];
-        bool arg_is_x = (arg->type == EXPR_SYMBOL && arg->data.symbol == xsym);
+        bool arg_is_x = (arg->type == EXPR_SYMBOL && arg->data.symbol.name == xsym);
         if (arg_is_x && is_trig_head(h)) { *has_trig = true; return; }
         if (arg_is_x && is_hyp_head(h))  { *has_hyp  = true; return; }
     }
@@ -320,7 +320,7 @@ static LimKind classify_inf(Expr* e, Expr** fin) {
     if (!e) return LIM_BAIL;
 
     if (e->type == EXPR_SYMBOL) {
-        const char* s = e->data.symbol;
+        const char* s = e->data.symbol.name;
         if (s == SYM_Infinity) return LIM_POSINF;
         if (s == SYM_ComplexInfinity || s == SYM_Indeterminate) return LIM_BAIL;
         *fin = expr_copy(e);
@@ -331,7 +331,7 @@ static LimKind classify_inf(Expr* e, Expr** fin) {
         return LIM_FINITE;
     }
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         if (h == SYM_DirectedInfinity && e->data.function.arg_count == 1) {
             int s = const_sign(e->data.function.args[0]);
             return s > 0 ? LIM_POSINF : (s < 0 ? LIM_NEGINF : LIM_BAIL);
@@ -343,7 +343,7 @@ static LimKind classify_inf(Expr* e, Expr** fin) {
             Expr* dir = mk_int(1);
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 Expr* a = e->data.function.args[i];
-                if (a->type == EXPR_SYMBOL && a->data.symbol == SYM_Infinity) {
+                if (a->type == EXPR_SYMBOL && a->data.symbol.name == SYM_Infinity) {
                     infc++;
                 } else if (contains_sym(a, SYM_Infinity) ||
                            contains_sym(a, SYM_DirectedInfinity) ||
@@ -588,7 +588,7 @@ static Expr* wj_core(Expr* f, Expr* x, bool explicit_call) {
     if (wj_depth >= WJ_MAX_DEPTH) return NULL;
     if (expr_free_of(f, x)) return NULL;
 
-    const char* xsym = x->data.symbol;
+    const char* xsym = x->data.symbol.name;
 
     /* First try the integrand verbatim (the common, fast path).  If that does
      * not match -- typically because a kernel argument is a multiple or sum of x

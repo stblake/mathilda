@@ -33,8 +33,8 @@ static bool assoc_prints_special(const Expr* e) {
         const Expr* a = e->data.function.args[i];
         if (!(a->type == EXPR_FUNCTION &&
               a->data.function.head->type == EXPR_SYMBOL &&
-              (a->data.function.head->data.symbol == SYM_Rule ||
-               a->data.function.head->data.symbol == SYM_RuleDelayed) &&
+              (a->data.function.head->data.symbol.name == SYM_Rule ||
+               a->data.function.head->data.symbol.name == SYM_RuleDelayed) &&
               a->data.function.arg_count == 2))
             return false;
     }
@@ -64,7 +64,7 @@ static int get_expr_prec(Expr* e) {
     if (e->type != EXPR_FUNCTION) return 1000;
     if (e->data.function.head->type != EXPR_SYMBOL) return 1000;
     
-    const char* head = e->data.function.head->data.symbol;
+    const char* head = e->data.function.head->data.symbol.name;
 
     if (head == SYM_Set || head == SYM_SetDelayed) return 40;
     if (head == SYM_MessageName) return 780;
@@ -135,7 +135,7 @@ void expr_print_fullform(Expr* e) {
             else printf("%s", buf);
             break;
         }
-        case EXPR_SYMBOL: printf("%s", context_display_name(e->data.symbol)); break;
+        case EXPR_SYMBOL: printf("%s", context_display_name(e->data.symbol.name)); break;
         case EXPR_STRING: printf("\"%s\"", e->data.string); break;
         case EXPR_FUNCTION: print_function_fullform(e); break;
         case EXPR_NDARRAY: {
@@ -198,7 +198,7 @@ static void print_standard(Expr* e, int parent_prec) {
     if (need_parens) printf("(");
 
     if (e->data.function.head->type == EXPR_SYMBOL) {
-        const char* head = e->data.function.head->data.symbol;
+        const char* head = e->data.function.head->data.symbol.name;
         
         if (head == SYM_FullForm && e->data.function.arg_count == 1) {
             expr_print_fullform(e->data.function.args[0]);
@@ -372,7 +372,7 @@ static void print_standard(Expr* e, int parent_prec) {
                     }
                 } else if (a0->type == EXPR_FUNCTION &&
                            a0->data.function.head->type == EXPR_SYMBOL &&
-                           a0->data.function.head->data.symbol == SYM_Rational &&
+                           a0->data.function.head->data.symbol.name == SYM_Rational &&
                            a0->data.function.arg_count == 2 &&
                            a0->data.function.args[0]->type == EXPR_INTEGER &&
                            a0->data.function.args[0]->data.integer < 0) {
@@ -383,7 +383,7 @@ static void print_standard(Expr* e, int parent_prec) {
                     flipped_head = expr_new_function(expr_new_symbol(SYM_Rational), rargs, 2);
                 } else if (a0->type == EXPR_FUNCTION &&
                            a0->data.function.head->type == EXPR_SYMBOL &&
-                           a0->data.function.head->data.symbol == SYM_Complex &&
+                           a0->data.function.head->data.symbol.name == SYM_Complex &&
                            a0->data.function.arg_count == 2 &&
                            a0->data.function.args[0]->type == EXPR_INTEGER &&
                            a0->data.function.args[0]->data.integer == 0 &&
@@ -413,7 +413,7 @@ static void print_standard(Expr* e, int parent_prec) {
 
             for (size_t i = lead_start; i < count; i++) {
                 Expr* arg = (i == 0 && flipped_head) ? flipped_head : e->data.function.args[i];
-                if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && arg->data.function.head->data.symbol == SYM_Power && arg->data.function.arg_count == 2) {
+                if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && arg->data.function.head->data.symbol.name == SYM_Power && arg->data.function.arg_count == 2) {
                     Expr* exp = arg->data.function.args[1];
                     bool is_neg = false;
                     int64_t n, d;
@@ -498,7 +498,7 @@ static void print_standard(Expr* e, int parent_prec) {
                 } else {
                     const char* op = " ?? ";
                     if (a->type == EXPR_SYMBOL) {
-                        const char* s = a->data.symbol;
+                        const char* s = a->data.symbol.name;
                         if      (s == SYM_Equal)        op = " == ";
                         else if (s == SYM_Less)         op = " < ";
                         else if (s == SYM_Greater)      op = " > ";
@@ -559,7 +559,7 @@ static void print_standard(Expr* e, int parent_prec) {
                     t_copy = expr_new_real(-arg->data.real);
                     to_print = t_copy;
                 } else if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL) {
-                    const char* h = arg->data.function.head->data.symbol;
+                    const char* h = arg->data.function.head->data.symbol.name;
                     if (h == SYM_Times && arg->data.function.arg_count > 0) {
                         Expr* f_arg = arg->data.function.args[0];
                         if (f_arg->type == EXPR_INTEGER && f_arg->data.integer < 0) {
@@ -604,7 +604,7 @@ static void print_standard(Expr* e, int parent_prec) {
                             expr_free(t_copy->data.function.args[0]);
                             t_copy->data.function.args[0] = expr_new_real(-f_arg->data.real);
                             to_print = t_copy;
-                        } else if (f_arg->type == EXPR_FUNCTION && f_arg->data.function.head->type == EXPR_SYMBOL && f_arg->data.function.head->data.symbol == SYM_Rational) {
+                        } else if (f_arg->type == EXPR_FUNCTION && f_arg->data.function.head->type == EXPR_SYMBOL && f_arg->data.function.head->data.symbol.name == SYM_Rational) {
                             Expr* num = f_arg->data.function.args[0];
                             if (num->type == EXPR_INTEGER && num->data.integer < 0) {
                                 is_negative = true;
@@ -619,7 +619,7 @@ static void print_standard(Expr* e, int parent_prec) {
                             }
                         } else if (f_arg->type == EXPR_FUNCTION &&
                                    f_arg->data.function.head->type == EXPR_SYMBOL &&
-                                   f_arg->data.function.head->data.symbol == SYM_Complex &&
+                                   f_arg->data.function.head->data.symbol.name == SYM_Complex &&
                                    f_arg->data.function.arg_count == 2 &&
                                    f_arg->data.function.args[0]->type == EXPR_INTEGER &&
                                    f_arg->data.function.args[0]->data.integer == 0 &&
@@ -752,12 +752,12 @@ static void print_standard(Expr* e, int parent_prec) {
                  e->data.function.args[0]->type == EXPR_SYMBOL &&
                  e->data.function.args[1]->type == EXPR_FUNCTION &&
                  e->data.function.args[1]->data.function.head->type == EXPR_SYMBOL &&
-                 (e->data.function.args[1]->data.function.head->data.symbol == SYM_Blank ||
-                  e->data.function.args[1]->data.function.head->data.symbol == SYM_BlankSequence ||
-                  e->data.function.args[1]->data.function.head->data.symbol == SYM_BlankNullSequence) &&
+                 (e->data.function.args[1]->data.function.head->data.symbol.name == SYM_Blank ||
+                  e->data.function.args[1]->data.function.head->data.symbol.name == SYM_BlankSequence ||
+                  e->data.function.args[1]->data.function.head->data.symbol.name == SYM_BlankNullSequence) &&
                  e->data.function.args[1]->data.function.arg_count <= 1) {
             /* Pattern[name, Blank[...]] -> name_ / name_h / name__ / name___ */
-            printf("%s", e->data.function.args[0]->data.symbol);
+            printf("%s", e->data.function.args[0]->data.symbol.name);
             print_standard(e->data.function.args[1], 1000);
         }
         else {
@@ -886,7 +886,7 @@ static bool series_extract_negative(Expr* x0, Expr** abs_out) {
     }
     if (x0->type == EXPR_FUNCTION &&
         x0->data.function.head->type == EXPR_SYMBOL &&
-        x0->data.function.head->data.symbol == SYM_Times &&
+        x0->data.function.head->data.symbol.name == SYM_Times &&
         x0->data.function.arg_count > 0) {
         Expr* f = x0->data.function.args[0];
         Expr* negf = NULL;
@@ -979,7 +979,7 @@ static Expr* series_build_term(Expr* coef, Expr* power /* borrowed, may be NULL 
          * Times to force the Times printer to add parentheses. */
         if (power->type == EXPR_FUNCTION &&
             power->data.function.head->type == EXPR_SYMBOL &&
-            power->data.function.head->data.symbol == SYM_Plus) {
+            power->data.function.head->data.symbol.name == SYM_Plus) {
             Expr* targs[1] = { expr_copy(power) };
             return expr_new_function(expr_new_symbol(SYM_Times), targs, 1);
         }
@@ -1013,7 +1013,7 @@ static void print_series_data(Expr* e, int parent_prec) {
 
     bool coefs_ok = (coefs->type == EXPR_FUNCTION &&
                      coefs->data.function.head->type == EXPR_SYMBOL &&
-                     coefs->data.function.head->data.symbol == SYM_List);
+                     coefs->data.function.head->data.symbol.name == SYM_List);
     bool ints_ok  = (nmin_e->type == EXPR_INTEGER &&
                      nmax_e->type == EXPR_INTEGER &&
                      den_e->type  == EXPR_INTEGER &&
@@ -1215,7 +1215,7 @@ static void print_tex(Expr* e, int parent_prec) {
         print_tex_number(e);
         return;
     }
-    if (e->type == EXPR_SYMBOL) { print_tex_symbol(e->data.symbol); return; }
+    if (e->type == EXPR_SYMBOL) { print_tex_symbol(e->data.symbol.name); return; }
     if (e->type == EXPR_STRING) { printf("\\text{\"%s\"}", e->data.string); return; }
     if (e->type == EXPR_NDARRAY) {
         printf("\\text{NDArray}\\left[");
@@ -1233,7 +1233,7 @@ static void print_tex(Expr* e, int parent_prec) {
 
     Expr* head_expr = e->data.function.head;
     if (head_expr->type == EXPR_SYMBOL) {
-        const char* head = head_expr->data.symbol;
+        const char* head = head_expr->data.symbol.name;
         size_t argc = e->data.function.arg_count;
 
         if (head == SYM_Rational && argc == 2) {
@@ -1376,7 +1376,7 @@ static void print_tex(Expr* e, int parent_prec) {
                 Expr* arg = (i == 0 && flipped_head) ? flipped_head : e->data.function.args[i];
                 bool den_ok = false;
                 if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL
-                    && arg->data.function.head->data.symbol == SYM_Power
+                    && arg->data.function.head->data.symbol.name == SYM_Power
                     && arg->data.function.arg_count == 2) {
                     Expr* exp = arg->data.function.args[1];
                     int64_t n, d;
@@ -1444,7 +1444,7 @@ static void print_tex(Expr* e, int parent_prec) {
                 } else if (arg->type == EXPR_REAL && arg->data.real < 0.0) {
                     is_neg = true; owned = expr_new_real(-arg->data.real); to_print = owned;
                 } else if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL
-                           && arg->data.function.head->data.symbol == SYM_Times
+                           && arg->data.function.head->data.symbol.name == SYM_Times
                            && arg->data.function.arg_count > 0) {
                     Expr* f0 = arg->data.function.args[0];
                     if (f0->type == EXPR_INTEGER && f0->data.integer < 0) {
@@ -1528,7 +1528,7 @@ static void print_tex(Expr* e, int parent_prec) {
                 } else {
                     const char* op = "";
                     if (a->type == EXPR_SYMBOL) {
-                        const char* s = a->data.symbol;
+                        const char* s = a->data.symbol.name;
                         if      (s == SYM_Equal)        op = "=";
                         else if (s == SYM_Less)         op = "<";
                         else if (s == SYM_Greater)      op = ">";

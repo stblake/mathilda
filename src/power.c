@@ -30,13 +30,13 @@ static bool is_known_positive_pwr(Expr* e) {
     int64_t n, d;
     if (is_rational(e, &n, &d)) return n > 0;
     if (e->type == EXPR_SYMBOL) {
-        const char* s = e->data.symbol;
+        const char* s = e->data.symbol.name;
         if (s == SYM_E)  return true;
         if (s == SYM_Pi) return true;
     }
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2) {
         return is_known_positive_pwr(e->data.function.args[0]);
     }
@@ -342,7 +342,7 @@ static bool power_factor_composes_cleanly(Expr* f,
     if (f->type != EXPR_FUNCTION) return false;
     if (!f->data.function.head
         || f->data.function.head->type != EXPR_SYMBOL
-        || f->data.function.head->data.symbol != SYM_Power
+        || f->data.function.head->data.symbol.name != SYM_Power
         || f->data.function.arg_count != 2) return false;
     Expr* b = f->data.function.args[0];
     Expr* e = f->data.function.args[1];
@@ -453,11 +453,11 @@ static bool is_head_call(Expr* e, const char* sym, size_t argc) {
 static Expr* simplify_exp_log(Expr* base, Expr* exp) {
     bool exp_is_times = exp->type == EXPR_FUNCTION &&
                         exp->data.function.head->type == EXPR_SYMBOL &&
-                        exp->data.function.head->data.symbol == SYM_Times;
+                        exp->data.function.head->data.symbol.name == SYM_Times;
     size_t nf = exp_is_times ? exp->data.function.arg_count : 1;
     Expr** factors = exp_is_times ? exp->data.function.args : &exp;
 
-    bool base_is_E = (base->type == EXPR_SYMBOL && base->data.symbol == SYM_E);
+    bool base_is_E = (base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E);
 
     int log_idx = -1;
     Expr* a = NULL;
@@ -1030,7 +1030,7 @@ Expr* builtin_power(Expr* res) {
      * downstream is_zero_poly / Together-based simplification. */
     if (base->type == EXPR_FUNCTION &&
         base->data.function.head->type == EXPR_SYMBOL &&
-        base->data.function.head->data.symbol == SYM_Rational &&
+        base->data.function.head->data.symbol.name == SYM_Rational &&
         base->data.function.arg_count == 2 &&
         expr_is_integer_like(base->data.function.args[0]) &&
         expr_is_integer_like(base->data.function.args[1]) &&
@@ -1165,7 +1165,7 @@ Expr* builtin_power(Expr* res) {
         }
     }
 
-    if (exp->type == EXPR_INTEGER && base->type == EXPR_FUNCTION && base->data.function.head->data.symbol == SYM_Times) {
+    if (exp->type == EXPR_INTEGER && base->type == EXPR_FUNCTION && base->data.function.head->data.symbol.name == SYM_Times) {
         size_t bc = base->data.function.arg_count;
         Expr** new_args = malloc(sizeof(Expr*) * bc);
         for (size_t i = 0; i < bc; i++) {
@@ -1195,7 +1195,7 @@ Expr* builtin_power(Expr* res) {
      */
     if (base->type == EXPR_FUNCTION &&
         base->data.function.head->type == EXPR_SYMBOL &&
-        base->data.function.head->data.symbol == SYM_Times) {
+        base->data.function.head->data.symbol.name == SYM_Times) {
         int64_t pp_d, qq_d;
         if (is_rational(exp, &pp_d, &qq_d) && qq_d > 1) {
             size_t bc = base->data.function.arg_count;
@@ -1356,7 +1356,7 @@ rat_imag_fallthrough: ;
      * 1/9 * 2^(-2/3)).
      */
     if (base->type == EXPR_FUNCTION && base->data.function.head->type == EXPR_SYMBOL
-        && base->data.function.head->data.symbol == SYM_Times) {
+        && base->data.function.head->data.symbol.name == SYM_Times) {
         int64_t pp_pt, qq_pt;
         if (is_rational(exp, &pp_pt, &qq_pt) && qq_pt > 1) {
             size_t bc = base->data.function.arg_count;
@@ -1448,7 +1448,7 @@ rat_imag_fallthrough: ;
      * splits it into 1/9 * Power[2, -2/3].
      */
     if (base->type == EXPR_FUNCTION && base->data.function.head->type == EXPR_SYMBOL
-        && base->data.function.head->data.symbol == SYM_Power
+        && base->data.function.head->data.symbol.name == SYM_Power
         && base->data.function.arg_count == 2) {
         Expr* inner_base = base->data.function.args[0];
         Expr* inner_exp  = base->data.function.args[1];

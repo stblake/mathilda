@@ -88,7 +88,19 @@ typedef struct Expr {
     union {
         int64_t integer;
         double real;
-        char* symbol;
+        /* Phase 3b (EVAL_SYMTAB_IMPROVEMENTS): an EXPR_SYMBOL carries the
+         * interned `name` AND a lazily-resolved, cached pointer to its
+         * definition cell, so the evaluator reaches attributes / DownValues /
+         * builtin by pointer instead of a symbol-table lookup. `name` stays the
+         * FIRST member (union offset 0), so the historical EXPR_STRING type-pun
+         * (reading `data.symbol.name.name` for a string yields `data.string`) still
+         * holds. `def` is benign, lazily-filled metadata (NULL until first
+         * resolve), NOT considered by expr_eq/expr_hash, and MUST be reset to
+         * NULL wherever `name` is reassigned in place. */
+        struct {
+            char* name;
+            struct SymbolDef* def;
+        } symbol;
         char* string;
         struct {
             struct Expr* head;

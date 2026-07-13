@@ -108,14 +108,14 @@ static bool hn_numericizable(const Expr* e) {
             return true;
 #endif
         case EXPR_SYMBOL: {
-            SymbolDef* d = symtab_lookup(e->data.symbol);
+            SymbolDef* d = symtab_lookup(e->data.symbol.name);
             return d && (d->attributes & ATTR_CONSTANT);
         }
         case EXPR_FUNCTION: {
             const Expr* h = e->data.function.head;
             if (h->type == EXPR_SYMBOL &&
-                (strcmp(h->data.symbol, "Rational") == 0 ||
-                 strcmp(h->data.symbol, "Complex") == 0)) {
+                (strcmp(h->data.symbol.name, "Rational") == 0 ||
+                 strcmp(h->data.symbol.name, "Complex") == 0)) {
                 for (size_t i = 0; i < e->data.function.arg_count; i++)
                     if (!hn_numericizable(e->data.function.args[i])) return false;
                 return true;

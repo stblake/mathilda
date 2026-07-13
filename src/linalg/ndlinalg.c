@@ -387,7 +387,7 @@ Expr* ndla_norm(Expr* res)
     double p = 2.0; bool p_inf = false;
     if (argc == 2) {
         Expr* pe = res->data.function.args[1];
-        if (pe->type == EXPR_SYMBOL && pe->data.symbol == SYM_Infinity) p_inf = true;
+        if (pe->type == EXPR_SYMBOL && pe->data.symbol.name == SYM_Infinity) p_inf = true;
         else if (pe->type == EXPR_INTEGER && pe->data.integer > 0) p = (double)pe->data.integer;
         else if (pe->type == EXPR_REAL && pe->data.real > 0.0) p = pe->data.real;
         else return linalg_delist_and_reeval(res);

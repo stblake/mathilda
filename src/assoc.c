@@ -860,7 +860,7 @@ Expr* builtin_associate_to(Expr* res) {
     expr_free(current);
 
     /* Assign back to the symbol (HoldFirst guarantees `sym` is the symbol). */
-    symtab_add_own_value(sym->data.symbol, sym, updated);
+    symtab_add_own_value(sym->data.symbol.name, sym, updated);
     return updated;
 }
 
@@ -900,7 +900,7 @@ Expr* assoc_select_values(Expr* pred, const Expr* assoc, int64_t max) {
         if (max >= 0 && (int64_t)nout >= max) break;
         Expr* r = assoc->data.function.args[i];
         Expr* verdict = apply1(pred, rule_val(r));
-        if (verdict->type == EXPR_SYMBOL && verdict->data.symbol == SYM_True)
+        if (verdict->type == EXPR_SYMBOL && verdict->data.symbol.name == SYM_True)
             out[nout++] = expr_copy(r);
         expr_free(verdict);
     }
@@ -1016,7 +1016,7 @@ Expr* assoc_delete_cases(const Expr* assoc, Expr* pattern) {
         Expr* mq = expr_new_function(expr_new_symbol(SYM_MatchQ), mq_args, 2);
         Expr* verdict = evaluate(mq);
         expr_free(mq);
-        bool matches = (verdict->type == EXPR_SYMBOL && verdict->data.symbol == SYM_True);
+        bool matches = (verdict->type == EXPR_SYMBOL && verdict->data.symbol.name == SYM_True);
         expr_free(verdict);
         if (!matches) out[nout++] = expr_copy(r);
     }
@@ -1142,7 +1142,7 @@ Expr* builtin_keyselect(Expr* res) {
     for (size_t i = 0; i < n; i++) {
         Expr* r = assoc->data.function.args[i];
         Expr* verdict = apply1(pred, rule_key(r));
-        if (verdict->type == EXPR_SYMBOL && verdict->data.symbol == SYM_True)
+        if (verdict->type == EXPR_SYMBOL && verdict->data.symbol.name == SYM_True)
             out[nout++] = expr_copy(r);
         expr_free(verdict);
     }

@@ -467,7 +467,7 @@ static bool eval_to_complex(const char* input, double* re, double* im) {
     /* Check if it's Complex[re, im] */
     if (r->type == EXPR_FUNCTION &&
         r->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(r->data.function.head->data.symbol, "Complex") == 0 &&
+        strcmp(r->data.function.head->data.symbol.name, "Complex") == 0 &&
         r->data.function.arg_count == 2) {
         Expr* re_expr = r->data.function.args[0];
         Expr* im_expr = r->data.function.args[1];

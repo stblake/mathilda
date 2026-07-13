@@ -2,21 +2,21 @@
 
 bool is_overflow(Expr* e) {
     return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol == SYM_Overflow;
+           e->data.function.head->data.symbol.name == SYM_Overflow;
 }
 
 bool is_listq(Expr* e) {
     return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol == SYM_List;
+           e->data.function.head->data.symbol.name == SYM_List;
 }
 
 bool is_infinity(Expr* e) {
-    return e->type == EXPR_SYMBOL && e->data.symbol == SYM_Infinity;
+    return e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity;
 }
 
 bool is_minus_infinity(Expr* e) {
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Times &&
+        e->data.function.head->data.symbol.name == SYM_Times &&
         e->data.function.arg_count == 2) {
         Expr* a1 = e->data.function.args[0];
         Expr* a2 = e->data.function.args[1];

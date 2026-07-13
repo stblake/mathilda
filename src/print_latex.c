@@ -75,7 +75,7 @@ static int head_is(const Expr* e, const char* sym) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == sym;
+        && e->data.function.head->data.symbol.name == sym;
 }
 
 static int expr_prec(const Expr* e) {
@@ -274,7 +274,7 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
         return;
     }
     if (e->type == EXPR_SYMBOL) {
-        lb_cat(b, sym_latex(e->data.symbol));
+        lb_cat(b, sym_latex(e->data.symbol.name));
         return;
     }
     if (e->type == EXPR_STRING) {
@@ -294,7 +294,7 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
     const Expr** args = (const Expr**)e->data.function.args;
 
     if (!head || head->type != EXPR_SYMBOL) goto fallback;
-    const char* hname = head->data.symbol;
+    const char* hname = head->data.symbol.name;
 
     /* ---- Rational[p, q] ---- */
     if (hname == SYM_Rational && argc == 2) {
@@ -362,7 +362,7 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
         }
 
         /* Power[E, x] → e^{x} */
-        if (base->type == EXPR_SYMBOL && base->data.symbol == SYM_E) {
+        if (base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E) {
             lb_cat(b, "e^{");
             to_latex_prec(b, exp, PREC_ATOM);
             lb_cat(b, "}");
@@ -558,7 +558,7 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
          * render properly rather than dumping the plain re-parseable form (which
          * would show straight quotes, e.g. Key["a"]). */
         if (e->type == EXPR_FUNCTION && head && head->type == EXPR_SYMBOL) {
-            lb_cat(b, sym_latex(head->data.symbol));
+            lb_cat(b, sym_latex(head->data.symbol.name));
             lb_cat(b, "[");
             for (size_t i = 0; i < argc; i++) {
                 if (i) lb_cat(b, ", ");

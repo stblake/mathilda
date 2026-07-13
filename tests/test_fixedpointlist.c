@@ -26,7 +26,7 @@ static void run_real_list(const char* input, const double* expected, size_t n, d
     Expr* r = evaluate(e);
     ASSERT_MSG(r->type == EXPR_FUNCTION &&
                r->data.function.head->type == EXPR_SYMBOL &&
-               strcmp(r->data.function.head->data.symbol, "List") == 0,
+               strcmp(r->data.function.head->data.symbol.name, "List") == 0,
                "FixedPointList %s: result not a List", input);
     ASSERT_MSG(r->data.function.arg_count == n,
                "FixedPointList %s: expected length %zu, got %zu",
@@ -130,7 +130,7 @@ static void test_fpl_sametest_tolerance(void) {
     Expr* r = evaluate(e);
     ASSERT(r->type == EXPR_FUNCTION &&
            r->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(r->data.function.head->data.symbol, "List") == 0);
+           strcmp(r->data.function.head->data.symbol.name, "List") == 0);
     /* {1., 1.5, 1.41667, 1.41422} -- stop at step 3 since |1.41422 - 1.41667| < 0.01 */
     ASSERT_MSG(r->data.function.arg_count == 4,
                "expected 4 elements, got %zu", r->data.function.arg_count);

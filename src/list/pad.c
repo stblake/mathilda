@@ -26,7 +26,7 @@
 static Expr* pr_pad_at(Expr* P, const int64_t* coords, size_t n) {
     if (n == 0 || P->type != EXPR_FUNCTION ||
         P->data.function.head->type != EXPR_SYMBOL ||
-        P->data.function.head->data.symbol != SYM_List ||
+        P->data.function.head->data.symbol.name != SYM_List ||
         P->data.function.arg_count == 0) {
         return expr_copy(P);
     }
@@ -62,7 +62,7 @@ static int64_t pr_margin_at(Expr* margins, size_t level) {
     if (margins->type == EXPR_INTEGER) return level == 0 ? margins->data.integer : 0;
     if (margins->type == EXPR_FUNCTION &&
         margins->data.function.head->type == EXPR_SYMBOL &&
-        margins->data.function.head->data.symbol == SYM_List) {
+        margins->data.function.head->data.symbol.name == SYM_List) {
         if (level < margins->data.function.arg_count) {
             Expr* m = margins->data.function.args[level];
             if (m->type == EXPR_INTEGER) return m->data.integer;
@@ -170,7 +170,7 @@ static Expr* pad_dispatch(Expr* res, int pad_left, const char* name) {
 
     int64_t scalar_dim[1];
     if (!nspec ||
-        (nspec->type == EXPR_SYMBOL && nspec->data.symbol == SYM_Automatic)) {
+        (nspec->type == EXPR_SYMBOL && nspec->data.symbol.name == SYM_Automatic)) {
         /* Pad*[list] or Pad*[list, Automatic, ...]: pad to full. */
         size_t cap = 0, depth = 0;
         pr_scan_dims(list, 0, &dimv, &depth, &cap);
@@ -186,7 +186,7 @@ static Expr* pad_dispatch(Expr* res, int pad_left, const char* name) {
         k = 1;
     } else if (nspec->type == EXPR_FUNCTION &&
                nspec->data.function.head->type == EXPR_SYMBOL &&
-               nspec->data.function.head->data.symbol == SYM_List) {
+               nspec->data.function.head->data.symbol.name == SYM_List) {
         size_t kk = nspec->data.function.arg_count;
         if (kk == 0) return expr_copy(list);
         dimv = malloc(sizeof(int64_t) * kk);

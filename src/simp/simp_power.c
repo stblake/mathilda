@@ -93,7 +93,7 @@ static bool prime_rebase_check(int64_t n, int64_t* p_out, int64_t* k_out) {
 static bool has_rebaseable_power(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     Expr* head = e->data.function.head;
-    if (head && head->type == EXPR_SYMBOL && head->data.symbol == SYM_Power
+    if (head && head->type == EXPR_SYMBOL && head->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         if (base && base->type == EXPR_INTEGER && base->data.integer >= 4) {
@@ -127,7 +127,7 @@ static Expr* prime_rebase_copy(const Expr* e) {
 
     int64_t p_val, k_val;
     if (new_head && new_head->type == EXPR_SYMBOL
-        && new_head->data.symbol == SYM_Power
+        && new_head->data.symbol.name == SYM_Power
         && n == 2 && new_args && new_args[0]
         && new_args[0]->type == EXPR_INTEGER
         && prime_rebase_check(new_args[0]->data.integer, &p_val, &k_val)) {
@@ -226,7 +226,7 @@ static Expr* power_oneify_walk(const Expr* e) {
     /* Only Times triggers the implicit-one combine. */
     bool combined = false;
     if (new_head && new_head->type == EXPR_SYMBOL
-        && new_head->data.symbol == SYM_Times && n >= 2) {
+        && new_head->data.symbol.name == SYM_Times && n >= 2) {
         for (size_t i = 0; i < n; i++) {
             if (!new_args[i]) continue;
             Expr* a = new_args[i];
@@ -236,7 +236,7 @@ static Expr* power_oneify_walk(const Expr* e) {
                 if (p->type != EXPR_FUNCTION) continue;
                 Expr* ph = p->data.function.head;
                 if (!(ph && ph->type == EXPR_SYMBOL
-                      && ph->data.symbol == SYM_Power
+                      && ph->data.symbol.name == SYM_Power
                       && p->data.function.arg_count == 2)) continue;
                 if (!expr_eq(p->data.function.args[0], a)) continue;
                 /* args[i] = A, args[j] = Power[A, e].  Combine. */
@@ -328,7 +328,7 @@ Expr* transform_power_oneify(const Expr* e) {
 static bool is_constant_positive_factor(const Expr* x) {
     if (!x) return false;
     if (numeric_sign(x) == 1) return true;
-    if (x->type == EXPR_SYMBOL && is_positive_constant_symbol(x->data.symbol))
+    if (x->type == EXPR_SYMBOL && is_positive_constant_symbol(x->data.symbol.name))
         return true;
     return false;
 }
@@ -337,7 +337,7 @@ static bool is_constant_positive_factor(const Expr* x) {
 static bool has_distributable_power(const Expr* e, const AssumeCtx* ctx) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     Expr* head = e->data.function.head;
-    if (head && head->type == EXPR_SYMBOL && head->data.symbol == SYM_Power
+    if (head && head->type == EXPR_SYMBOL && head->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp_  = e->data.function.args[1];
@@ -347,7 +347,7 @@ static bool has_distributable_power(const Expr* e, const AssumeCtx* ctx) {
         /* (B)/(C) Power[Times[...], e] */
         if (base && base->type == EXPR_FUNCTION && base->data.function.head
             && base->data.function.head->type == EXPR_SYMBOL
-            && base->data.function.head->data.symbol == SYM_Times
+            && base->data.function.head->data.symbol.name == SYM_Times
             && base->data.function.arg_count > 0) {
             /* (B) any constant-positive factor? */
             for (size_t i = 0; i < base->data.function.arg_count; i++) {
@@ -360,7 +360,7 @@ static bool has_distributable_power(const Expr* e, const AssumeCtx* ctx) {
         /* (C) Power[Power[u, p], e] with e integer */
         if (base && base->type == EXPR_FUNCTION && base->data.function.head
             && base->data.function.head->type == EXPR_SYMBOL
-            && base->data.function.head->data.symbol == SYM_Power
+            && base->data.function.head->data.symbol.name == SYM_Power
             && base->data.function.arg_count == 2
             && prov_int(ctx, exp_)) {
             return true;
@@ -389,7 +389,7 @@ static Expr* power_distribute_walk(const Expr* e, const AssumeCtx* ctx) {
 
     /* Only Power[_, _] triggers any rewrite at this level. */
     if (!(new_head && new_head->type == EXPR_SYMBOL
-          && new_head->data.symbol == SYM_Power
+          && new_head->data.symbol.name == SYM_Power
           && n == 2 && new_args && new_args[0] && new_args[1])) {
         Expr* result = expr_new_function(new_head, new_args, n);
         if (new_args) free(new_args);
@@ -417,7 +417,7 @@ static Expr* power_distribute_walk(const Expr* e, const AssumeCtx* ctx) {
     /* (B) and (C) Power[Times[args...], e] */
     if (base->type == EXPR_FUNCTION && base->data.function.head
         && base->data.function.head->type == EXPR_SYMBOL
-        && base->data.function.head->data.symbol == SYM_Times
+        && base->data.function.head->data.symbol.name == SYM_Times
         && base->data.function.arg_count > 0) {
         size_t bn = base->data.function.arg_count;
         Expr** ba = base->data.function.args;
@@ -501,7 +501,7 @@ static Expr* power_distribute_walk(const Expr* e, const AssumeCtx* ctx) {
     /* (C) Power[Power[u, p], e] -> Power[u, p*e] when e provably integer. */
     if (base->type == EXPR_FUNCTION && base->data.function.head
         && base->data.function.head->type == EXPR_SYMBOL
-        && base->data.function.head->data.symbol == SYM_Power
+        && base->data.function.head->data.symbol.name == SYM_Power
         && base->data.function.arg_count == 2
         && prov_int(ctx, exp_)) {
         Expr* u  = base->data.function.args[0];
@@ -618,7 +618,7 @@ static bool radical_canon_get_rational(const Expr* e,
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (!e->data.function.head ||
         e->data.function.head->type != EXPR_SYMBOL ||
-        e->data.function.head->data.symbol != SYM_Rational) return false;
+        e->data.function.head->data.symbol.name != SYM_Rational) return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* na = e->data.function.args[0];
     Expr* da = e->data.function.args[1];
@@ -635,7 +635,7 @@ static Expr* radical_canon_rationalise_negexp(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return NULL;
     if (!e->data.function.head ||
         e->data.function.head->type != EXPR_SYMBOL ||
-        e->data.function.head->data.symbol != SYM_Power) return NULL;
+        e->data.function.head->data.symbol.name != SYM_Power) return NULL;
     if (e->data.function.arg_count != 2) return NULL;
     Expr* base = e->data.function.args[0];
     Expr* exp  = e->data.function.args[1];
@@ -688,7 +688,7 @@ static Expr* radical_canon_split_rational_base(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return NULL;
     if (!e->data.function.head ||
         e->data.function.head->type != EXPR_SYMBOL ||
-        e->data.function.head->data.symbol != SYM_Power) return NULL;
+        e->data.function.head->data.symbol.name != SYM_Power) return NULL;
     if (e->data.function.arg_count != 2) return NULL;
     Expr* base = e->data.function.args[0];
     Expr* exp  = e->data.function.args[1];

@@ -82,7 +82,7 @@ static Expr* eval_take(Expr* call) {
 static bool head_name_is(const Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, name) == 0;
+           strcmp(e->data.function.head->data.symbol.name, name) == 0;
 }
 
 /* True iff any subexpression of `e` is a call with head `name`. */
@@ -100,7 +100,7 @@ static bool contains_head(const Expr* e, const char* name) {
 static bool contains_symbol(const Expr* e, const Expr* x) {
     if (!e) return false;
     if (e->type == EXPR_SYMBOL)
-        return e->data.symbol == x->data.symbol;
+        return e->data.symbol.name == x->data.symbol.name;
     if (e->type != EXPR_FUNCTION) return false;
     if (contains_symbol(e->data.function.head, x)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
@@ -292,7 +292,7 @@ static Expr* nl_rule_rhs_for(Expr* el, const Expr* x) {
     /* el may be `List[Rule[x, val], ...]` (univariate Solve) or a bare Rule. */
     if (head_name_is(el, "Rule") && el->data.function.arg_count == 2) {
         Expr* lhs = el->data.function.args[0];
-        if (lhs->type == EXPR_SYMBOL && lhs->data.symbol == x->data.symbol)
+        if (lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == x->data.symbol.name)
             return el->data.function.args[1];
         return NULL;
     }

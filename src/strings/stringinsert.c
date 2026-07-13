@@ -78,7 +78,7 @@ Expr* builtin_stringinsert(Expr* res) {
     /* StringInsert[{s1, s2, ...}, "snew", spec] - map over list of strings */
     if (arg0->type == EXPR_FUNCTION &&
         arg0->data.function.head->type == EXPR_SYMBOL &&
-        arg0->data.function.head->data.symbol == SYM_List) {
+        arg0->data.function.head->data.symbol.name == SYM_List) {
         size_t n = arg0->data.function.arg_count;
         Expr** results = malloc(sizeof(Expr*) * n);
         if (!results) return NULL;
@@ -115,7 +115,7 @@ Expr* builtin_stringinsert(Expr* res) {
         pos_specs = &spec;
     } else if (spec->type == EXPR_FUNCTION &&
                spec->data.function.head->type == EXPR_SYMBOL &&
-               spec->data.function.head->data.symbol == SYM_List) {
+               spec->data.function.head->data.symbol.name == SYM_List) {
         npos = spec->data.function.arg_count;
         pos_specs = spec->data.function.args;
     } else {

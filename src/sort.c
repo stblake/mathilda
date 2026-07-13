@@ -93,7 +93,7 @@ static int string_compare_canonical(const char* s1, const char* s2) {
  * anywhere in its tree (heads and args included). */
 static bool expr_contains_symbol(const Expr* e, const char* sym) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return e->data.symbol == sym;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == sym;
     if (e->type != EXPR_FUNCTION) return false;
     if (expr_contains_symbol(e->data.function.head, sym)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
@@ -121,16 +121,16 @@ static bool expr_contains_symbol(const Expr* e, const char* sym) {
  *      coefficient's internal a-degree. */
 static double expr_poly_degree(const Expr* e, const char* v) {
     if (!e) return 0.0;
-    if (e->type == EXPR_SYMBOL) return (e->data.symbol == v) ? 1.0 : 0.0;
+    if (e->type == EXPR_SYMBOL) return (e->data.symbol.name == v) ? 1.0 : 0.0;
     if (e->type != EXPR_FUNCTION) return 0.0;
     if (e->data.function.head->type != EXPR_SYMBOL) {
         return expr_contains_symbol(e, v) ? INFINITY : 0.0;
     }
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     if (h == SYM_Power && e->data.function.arg_count == 2) {
         const Expr* base = e->data.function.args[0];
         const Expr* exp  = e->data.function.args[1];
-        if (base->type == EXPR_SYMBOL && base->data.symbol == v) {
+        if (base->type == EXPR_SYMBOL && base->data.symbol.name == v) {
             if (exp->type == EXPR_INTEGER) {
                 int64_t k = exp->data.integer;
                 if (k < 0) return INFINITY;
@@ -210,7 +210,7 @@ static void symset_add(SymSet* s, const char* sym) {
 static void collect_symbols_in(const Expr* e, SymSet* s) {
     if (!e || !s->ok) return;
     if (e->type == EXPR_SYMBOL) {
-        symset_add(s, e->data.symbol);
+        symset_add(s, e->data.symbol.name);
         return;
     }
     if (e->type != EXPR_FUNCTION) return;
@@ -290,8 +290,8 @@ int expr_compare(const Expr* a, const Expr* b) {
 
     /* 4. Structural tiebreak. */
     if (a->type == EXPR_SYMBOL && b->type == EXPR_SYMBOL) {
-        if (a->data.symbol == b->data.symbol) return 0;
-        return strcmp(a->data.symbol, b->data.symbol);
+        if (a->data.symbol.name == b->data.symbol.name) return 0;
+        return strcmp(a->data.symbol.name, b->data.symbol.name);
     }
     if (a->type == EXPR_SYMBOL) return -1;
     if (b->type == EXPR_SYMBOL) return 1;
@@ -368,8 +368,8 @@ static int custom_compare(const void* a, const void* b) {
         else if (result->data.integer == 0) cmp = 0;
         else if (result->data.integer == -1) cmp = 1;
     } else if (result->type == EXPR_SYMBOL) {
-        if (result->data.symbol == SYM_True) cmp = -1;
-        else if (result->data.symbol == SYM_False) cmp = 1;
+        if (result->data.symbol.name == SYM_True) cmp = -1;
+        else if (result->data.symbol.name == SYM_False) cmp = 1;
     }
     
     expr_free(result);
@@ -458,7 +458,7 @@ Expr* builtin_sort_by(Expr* res) {
      * The per-element key becomes the tuple {f1[e], ...}; expr_compare orders
      * equal-length lists lexicographically, giving exactly that behaviour. */
     bool multi = (f->type == EXPR_FUNCTION && f->data.function.head->type == EXPR_SYMBOL &&
-                  f->data.function.head->data.symbol == SYM_List);
+                  f->data.function.head->data.symbol.name == SYM_List);
 
     for (size_t i = 0; i < n; i++) {
         Expr* elem = coll->data.function.args[i];
@@ -702,8 +702,8 @@ Expr* builtin_orderedq(Expr* res) {
                 else if (result->data.integer == 0) cmp = 0;
                 else if (result->data.integer == -1) cmp = 1;
             } else if (result->type == EXPR_SYMBOL) {
-                if (result->data.symbol == SYM_True) cmp = -1;
-                else if (result->data.symbol == SYM_False) cmp = 1;
+                if (result->data.symbol.name == SYM_True) cmp = -1;
+                else if (result->data.symbol.name == SYM_False) cmp = 1;
             }
             expr_free(result);
         }

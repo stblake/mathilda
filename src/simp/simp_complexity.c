@@ -101,8 +101,8 @@ size_t simp_default_complexity(const Expr* e) {
              * SimplifyCount adds 1 for the wrapper, not the head's own
              * SimplifyCount. */
             if (head && head->type == EXPR_SYMBOL && argc == 2) {
-                if (head->data.symbol == SYM_Rational ||
-                    head->data.symbol == SYM_Complex) {
+                if (head->data.symbol.name == SYM_Rational ||
+                    head->data.symbol.name == SYM_Complex) {
                     return simp_default_complexity(e->data.function.args[0])
                          + simp_default_complexity(e->data.function.args[1])
                          + 1;

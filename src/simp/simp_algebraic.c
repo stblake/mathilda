@@ -95,7 +95,7 @@ static bool alg_collect_sqrt_bases(const Expr* e, const Expr** bases,
     if (!e || e->type != EXPR_FUNCTION) return true;
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2) {
         const Expr* base = e->data.function.args[0];
         Expr* exp        = e->data.function.args[1];
@@ -126,11 +126,11 @@ static bool alg_collect_sqrt_bases(const Expr* e, const Expr** bases,
  * whose Sqrt[]^2 = arg identity could mask a branch flip. */
 bool contains_explicit_complex(const Expr* e) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL && e->data.symbol == SYM_I) return true;
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_I) return true;
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Complex) return true;
+        e->data.function.head->data.symbol.name == SYM_Complex) return true;
     if (contains_explicit_complex(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         if (contains_explicit_complex(e->data.function.args[i])) return true;
@@ -147,7 +147,7 @@ static Expr* alg_subst_sqrt_to_gens(const Expr* e, const Expr** bases,
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2) {
         Expr* exp = e->data.function.args[1];
         int64_t p, q;
@@ -188,7 +188,7 @@ static Expr* alg_subst_gens_to_sqrt(const Expr* e, const char** gens,
     if (!e) return NULL;
     if (e->type == EXPR_SYMBOL) {
         for (size_t i = 0; i < n; i++) {
-            if (e->data.symbol == gens[i]) {
+            if (e->data.symbol.name == gens[i]) {
                 return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                           (Expr*[]){expr_copy((Expr*)bases[i]), make_rational(1, 2)}, 2));
             }
@@ -211,7 +211,7 @@ static Expr* alg_subst_gens_to_sqrt(const Expr* e, const char** gens,
  * to compute sigma_i(den) for rationalisation. */
 static Expr* alg_sigma_negate(const Expr* e, const char* gi_sym) {
     if (!e) return NULL;
-    if (e->type == EXPR_SYMBOL && e->data.symbol == gi_sym) {
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name == gi_sym) {
         return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                   (Expr*[]){expr_new_integer(-1), expr_copy((Expr*)e)}, 2));
     }
@@ -242,7 +242,7 @@ static Expr* alg_reduce_one_gen(const Expr* poly, const char* gi_sym,
     expr_free(cl_call);
     if (!coefs || coefs->type != EXPR_FUNCTION ||
         coefs->data.function.head->type != EXPR_SYMBOL ||
-        coefs->data.function.head->data.symbol != SYM_List) {
+        coefs->data.function.head->data.symbol.name != SYM_List) {
         if (coefs) expr_free(coefs);
         return NULL;
     }
@@ -333,7 +333,7 @@ static bool alg_u_is_polynomial(const Expr* u) {
     if (u->type != EXPR_FUNCTION) return true;   /* leaf is always polynomial */
     if (u->data.function.head &&
         u->data.function.head->type == EXPR_SYMBOL &&
-        u->data.function.head->data.symbol == SYM_Power &&
+        u->data.function.head->data.symbol.name == SYM_Power &&
         u->data.function.arg_count == 2) {
         Expr* exp = u->data.function.args[1];
         if (exp->type != EXPR_INTEGER && exp->type != EXPR_BIGINT) return false;
@@ -354,7 +354,7 @@ static Expr* alg_pick_var(const Expr* u) {
     Expr* vars = call_unary_copy("Variables", u);
     if (!vars || vars->type != EXPR_FUNCTION ||
         vars->data.function.head->type != EXPR_SYMBOL ||
-        vars->data.function.head->data.symbol != SYM_List ||
+        vars->data.function.head->data.symbol.name != SYM_List ||
         vars->data.function.arg_count == 0) {
         if (vars) expr_free(vars);
         return NULL;

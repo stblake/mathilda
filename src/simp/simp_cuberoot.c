@@ -157,7 +157,7 @@ static bool cuberoot_match_a_plus_b_sqrt_c(const Expr* e,
     if (e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Times
+        && e->data.function.head->data.symbol.name == SYM_Times
         && e->data.function.arg_count == 2) {
         Expr* k = e->data.function.args[0];
         Expr* sq = e->data.function.args[1];
@@ -175,7 +175,7 @@ static bool cuberoot_match_a_plus_b_sqrt_c(const Expr* e,
     if (e->type != EXPR_FUNCTION) return false;
     if (!e->data.function.head ||
         e->data.function.head->type != EXPR_SYMBOL ||
-        e->data.function.head->data.symbol != SYM_Plus) return false;
+        e->data.function.head->data.symbol.name != SYM_Plus) return false;
     if (e->data.function.arg_count != 2) return false;
 
     /* Identify the rational-only arg and the b*Sqrt[c] arg. */
@@ -214,7 +214,7 @@ static bool cuberoot_match_a_plus_b_sqrt_c(const Expr* e,
     if (sa->type == EXPR_FUNCTION
         && sa->data.function.head
         && sa->data.function.head->type == EXPR_SYMBOL
-        && sa->data.function.head->data.symbol == SYM_Times
+        && sa->data.function.head->data.symbol.name == SYM_Times
         && sa->data.function.arg_count == 2) {
         Expr* k = sa->data.function.args[0];
         Expr* sq = sa->data.function.args[1];
@@ -379,7 +379,7 @@ static Expr* simp_cuberoot_walk(const Expr* e, const AssumeCtx* ctx) {
     if (target->type == EXPR_FUNCTION
         && target->data.function.head
         && target->data.function.head->type == EXPR_SYMBOL
-        && target->data.function.head->data.symbol == SYM_Power
+        && target->data.function.head->data.symbol.name == SYM_Power
         && target->data.function.arg_count == 2) {
         Expr* exp = target->data.function.args[1];
         if (is_rational_literal(exp)) {
@@ -413,7 +413,7 @@ static Expr* simp_cuberoot_walk(const Expr* e, const AssumeCtx* ctx) {
     if (target->type == EXPR_FUNCTION
         && target->data.function.head
         && target->data.function.head->type == EXPR_SYMBOL
-        && target->data.function.head->data.symbol == SYM_Plus) {
+        && target->data.function.head->data.symbol.name == SYM_Plus) {
         size_t pn = target->data.function.arg_count;
         for (size_t i = 0; i < pn; i++) {
             Expr* arg_i = target->data.function.args[i];
@@ -421,7 +421,7 @@ static Expr* simp_cuberoot_walk(const Expr* e, const AssumeCtx* ctx) {
             if (arg_i->type != EXPR_FUNCTION
                 || !arg_i->data.function.head
                 || arg_i->data.function.head->type != EXPR_SYMBOL
-                || arg_i->data.function.head->data.symbol != SYM_Power
+                || arg_i->data.function.head->data.symbol.name != SYM_Power
                 || arg_i->data.function.arg_count != 2) continue;
             Expr* exp_i = arg_i->data.function.args[1];
             int64_t epn, eqn;
@@ -437,7 +437,7 @@ static Expr* simp_cuberoot_walk(const Expr* e, const AssumeCtx* ctx) {
                 if (arg_j->type != EXPR_FUNCTION
                     || !arg_j->data.function.head
                     || arg_j->data.function.head->type != EXPR_SYMBOL
-                    || arg_j->data.function.head->data.symbol != SYM_Power
+                    || arg_j->data.function.head->data.symbol.name != SYM_Power
                     || arg_j->data.function.arg_count != 2) continue;
                 Expr* exp_j = arg_j->data.function.args[1];
                 int64_t fpn, fqn;

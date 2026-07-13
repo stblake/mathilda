@@ -393,7 +393,7 @@ static void read_eigenvalue_entry(Expr* e, double* re, double* im) {
     if (e->type == EXPR_INTEGER) { *re = (double)e->data.integer; *im = 0.0; return; }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, "Complex") == 0
+        && strcmp(e->data.function.head->data.symbol.name, "Complex") == 0
         && e->data.function.arg_count == 2) {
         Expr* r = e->data.function.args[0];
         Expr* m = e->data.function.args[1];
@@ -418,7 +418,7 @@ static size_t eval_eigenvalues_mixed(const double* A, size_t n,
     ASSERT(r != NULL);
     ASSERT(r->type == EXPR_FUNCTION);
     ASSERT(r->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "List") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "List") == 0);
     size_t cnt = r->data.function.arg_count;
     *re_out = (double*)malloc(sizeof(double) * (cnt ? cnt : 1));
     *im_out = (double*)malloc(sizeof(double) * (cnt ? cnt : 1));
@@ -696,14 +696,14 @@ static size_t eval_eigenvectors_mixed(const double* A, size_t n,
     ASSERT(r != NULL);
     ASSERT(r->type == EXPR_FUNCTION);
     ASSERT(r->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "List") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "List") == 0);
     size_t k = r->data.function.arg_count;
     *V_re_out = (double*)malloc(sizeof(double) * (k ? k * n : 1));
     *V_im_out = (double*)malloc(sizeof(double) * (k ? k * n : 1));
     for (size_t i = 0; i < k; i++) {
         Expr* row = r->data.function.args[i];
         ASSERT(row->type == EXPR_FUNCTION);
-        ASSERT(strcmp(row->data.function.head->data.symbol, "List") == 0);
+        ASSERT(strcmp(row->data.function.head->data.symbol.name, "List") == 0);
         ASSERT(row->data.function.arg_count == n);
         for (size_t j = 0; j < n; j++) {
             read_vec_entry(row->data.function.args[j],
@@ -1380,7 +1380,7 @@ static void mpfr_assert_head(const char* label, const char* src,
     Expr* r = evaluate(e);
     bool ok = (r->type == EXPR_FUNCTION
                && r->data.function.head->type == EXPR_SYMBOL
-               && strcmp(r->data.function.head->data.symbol, head_name) == 0);
+               && strcmp(r->data.function.head->data.symbol.name, head_name) == 0);
     if (!ok) {
         char* s = expr_to_string(r);
         printf("FAIL: %s (head)\n  src: %s\n  got: %s\n", label, src, s);

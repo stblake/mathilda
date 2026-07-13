@@ -110,7 +110,7 @@ static bool is_inexact_leaf(const Expr* e) {
 /* True iff `e` is one of the hold heads N already passes through unchanged. */
 static bool is_hold_head_sym(const Expr* head) {
     if (!head || head->type != EXPR_SYMBOL) return false;
-    const char* s = head->data.symbol;
+    const char* s = head->data.symbol.name;
     return s == SYM_Hold
         || s == SYM_HoldForm
         || s == SYM_HoldComplete
@@ -129,7 +129,7 @@ static bool is_numeric_quantity(const Expr* e) {
     if (e->type == EXPR_MPFR) return true;
 #endif
     if (e->type == EXPR_SYMBOL) {
-        const char* name = e->data.symbol;
+        const char* name = e->data.symbol.name;
         return name == SYM_Pi || name == SYM_E || name == SYM_I
             || name == SYM_EulerGamma || name == SYM_GoldenRatio
             || name == SYM_Catalan || name == SYM_Degree
@@ -137,7 +137,7 @@ static bool is_numeric_quantity(const Expr* e) {
             || name == SYM_Khinchin;
     }
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* head_name = e->data.function.head->data.symbol;
+        const char* head_name = e->data.function.head->data.symbol.name;
         if (head_name == SYM_Complex || head_name == SYM_Rational) {
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 if (!is_numeric_quantity(e->data.function.args[i])) return false;

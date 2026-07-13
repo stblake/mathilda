@@ -611,7 +611,7 @@ static Expr* mat_invert(Expr* m) {
     /* If Inverse failed, the evaluator returns the call unchanged. */
     if (result && result->type == EXPR_FUNCTION
         && result->data.function.head->type == EXPR_SYMBOL
-        && result->data.function.head->data.symbol == SYM_Inverse) {
+        && result->data.function.head->data.symbol.name == SYM_Inverse) {
         expr_free(call);
         expr_free(result);
         return NULL;
@@ -725,15 +725,15 @@ static bool parse_tolerance_option(Expr* opt, bool* is_automatic_out,
     *tol_out = 0.0;
     if (opt->type != EXPR_FUNCTION) return false;
     if (opt->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* hd = opt->data.function.head->data.symbol;
+    const char* hd = opt->data.function.head->data.symbol.name;
     if ((hd != SYM_Rule && hd != SYM_RuleDelayed) ||
         opt->data.function.arg_count != 2) return false;
     Expr* lhs = opt->data.function.args[0];
     Expr* rhs = opt->data.function.args[1];
     if (lhs->type != EXPR_SYMBOL) return false;
-    if (lhs->data.symbol != SYM_Tolerance) return false;
+    if (lhs->data.symbol.name != SYM_Tolerance) return false;
 
-    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic) {
+    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) {
         *is_automatic_out = true;
         return true;
     }
@@ -751,7 +751,7 @@ static bool parse_tolerance_option(Expr* opt, bool* is_automatic_out,
     }
     if (rhs->type == EXPR_FUNCTION
         && rhs->data.function.head->type == EXPR_SYMBOL
-        && rhs->data.function.head->data.symbol == SYM_Rational
+        && rhs->data.function.head->data.symbol.name == SYM_Rational
         && rhs->data.function.arg_count == 2) {
         Expr* num = rhs->data.function.args[0];
         Expr* den = rhs->data.function.args[1];

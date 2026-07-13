@@ -72,7 +72,7 @@ static bool is_definite_zero(const Expr* e) {
 #endif
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.head->data.symbol.name == SYM_Rational
         && e->data.function.arg_count == 2) {
         return is_definite_zero(e->data.function.args[0]);
     }
@@ -99,7 +99,7 @@ static bool numeric_magnitude(const Expr* e, double* mag) {
 #endif
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.head->data.symbol.name == SYM_Rational
         && e->data.function.arg_count == 2) {
         double n, d;
         if (numeric_magnitude(e->data.function.args[0], &n)
@@ -112,7 +112,7 @@ static bool numeric_magnitude(const Expr* e, double* mag) {
     /* Complex[re, im] — magnitude = sqrt(re^2 + im^2). */
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Complex
+        && e->data.function.head->data.symbol.name == SYM_Complex
         && e->data.function.arg_count == 2) {
         double re, im;
         if (numeric_magnitude(e->data.function.args[0], &re)
@@ -131,7 +131,7 @@ static bool numeric_magnitude(const Expr* e, double* mag) {
 static bool head_eq(const Expr* e, const char* sym) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == sym;
+        && e->data.function.head->data.symbol.name == sym;
 }
 
 /* ------------------------------------------------------------------ *
@@ -145,7 +145,7 @@ static bool is_radical_atom(const Expr* e, Expr* var,
                             Expr** base_out, int64_t* p_out, int64_t* q_out) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
-    if (e->data.function.head->data.symbol != SYM_Power) return false;
+    if (e->data.function.head->data.symbol.name != SYM_Power) return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* exp = e->data.function.args[1];
     int64_t p, q;
@@ -188,7 +188,7 @@ static int64_t collect_lcm_for_base(Expr* e, Expr* base) {
     int64_t L = 1;
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.head->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2
         && expr_eq(e->data.function.args[0], base)) {
         int64_t p, q;
@@ -213,7 +213,7 @@ static Expr* subst_radical_to_u(Expr* e, Expr* base, int64_t L, const char* u_na
     if (!e) return NULL;
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.head->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2
         && expr_eq(e->data.function.args[0], base)) {
         int64_t p, q;
@@ -248,7 +248,7 @@ static Expr* subst_radical_to_u(Expr* e, Expr* base, int64_t L, const char* u_na
 /* True iff `e` contains the bare symbol with the given interned name. */
 static bool walk_contains_name(const Expr* e, const char* name) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return e->data.symbol == name;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == name;
     if (e->type != EXPR_FUNCTION) return false;
     if (walk_contains_name(e->data.function.head, name)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
@@ -412,7 +412,7 @@ Expr* solverad_solve_radicals_equality(Expr* equation, Expr* var, Expr* dom) {
     if (var->type != EXPR_SYMBOL) return NULL;
     if (equation->type != EXPR_FUNCTION
         || equation->data.function.head->type != EXPR_SYMBOL
-        || equation->data.function.head->data.symbol != SYM_Equal
+        || equation->data.function.head->data.symbol.name != SYM_Equal
         || equation->data.function.arg_count != 2) {
         return NULL;
     }
@@ -610,7 +610,7 @@ Expr* solverad_solve_radicals_equality(Expr* equation, Expr* var, Expr* dom) {
     }
     if (candidates->type != EXPR_FUNCTION
         || candidates->data.function.head->type != EXPR_SYMBOL
-        || candidates->data.function.head->data.symbol != SYM_List) {
+        || candidates->data.function.head->data.symbol.name != SYM_List) {
         /* Should never happen, but be defensive. */
         expr_free(e_orig);
         return candidates;

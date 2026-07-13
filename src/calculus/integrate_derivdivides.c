@@ -177,7 +177,7 @@ static bool differentiates_back(const Expr* r, const Expr* f, const Expr* x) {
                         mk_fn2("Times", mk_int(-1), expr_copy((Expr*)f)));
 
     Expr* pz = eval_take(mk_fn1("PossibleZeroQ", diff));
-    bool zero = pz && pz->type == EXPR_SYMBOL && pz->data.symbol == SYM_True;
+    bool zero = pz && pz->type == EXPR_SYMBOL && pz->data.symbol.name == SYM_True;
     if (pz) expr_free(pz);
     return zero;
 }

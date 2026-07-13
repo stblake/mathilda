@@ -313,8 +313,8 @@ static bool nl_const_complex_mpfr(Expr* e, long bits, mpfr_t re, mpfr_t im) {
 static bool nl_infinite_ray(Expr* z0, Expr** ray) {
     if (!z0) return false;
     if (z0->type == EXPR_SYMBOL) {
-        if (z0->data.symbol == SYM_Infinity
-            || z0->data.symbol == SYM_ComplexInfinity) {
+        if (z0->data.symbol.name == SYM_Infinity
+            || z0->data.symbol.name == SYM_ComplexInfinity) {
             *ray = expr_new_integer(1);
             return true;
         }
@@ -324,7 +324,7 @@ static bool nl_infinite_ray(Expr* z0, Expr** ray) {
     Expr* head = z0->data.function.head;
     if (head->type != EXPR_SYMBOL) return false;
 
-    if (head->data.symbol == SYM_DirectedInfinity) {
+    if (head->data.symbol.name == SYM_DirectedInfinity) {
         if (z0->data.function.arg_count == 1) {
             *ray = expr_copy(z0->data.function.args[0]);
         } else {
@@ -333,7 +333,7 @@ static bool nl_infinite_ray(Expr* z0, Expr** ray) {
         return true;
     }
 
-    if (head->data.symbol == SYM_Times) {
+    if (head->data.symbol.name == SYM_Times) {
         size_t n = z0->data.function.arg_count;
         bool found = false;
         Expr* prod = NULL;          /* accumulating Times of the remaining factors */
@@ -341,14 +341,14 @@ static bool nl_infinite_ray(Expr* z0, Expr** ray) {
             Expr* f = z0->data.function.args[i];
             Expr* contrib = NULL;
             if (f->type == EXPR_SYMBOL
-                && (f->data.symbol == SYM_Infinity
-                    || f->data.symbol == SYM_ComplexInfinity)) {
+                && (f->data.symbol.name == SYM_Infinity
+                    || f->data.symbol.name == SYM_ComplexInfinity)) {
                 found = true;
                 continue;           /* Infinity contributes unit magnitude */
             }
             if (f->type == EXPR_FUNCTION
                 && f->data.function.head->type == EXPR_SYMBOL
-                && f->data.function.head->data.symbol == SYM_DirectedInfinity) {
+                && f->data.function.head->data.symbol.name == SYM_DirectedInfinity) {
                 found = true;
                 contrib = (f->data.function.arg_count == 1)
                             ? expr_copy(f->data.function.args[0])
@@ -411,15 +411,15 @@ static bool nl_is_known_option(const char* s) {
 static bool nl_is_option_arg(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     if (h != SYM_Rule && h != SYM_RuleDelayed) return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* lhs = e->data.function.args[0];
-    return lhs->type == EXPR_SYMBOL && nl_is_known_option(lhs->data.symbol);
+    return lhs->type == EXPR_SYMBOL && nl_is_known_option(lhs->data.symbol.name);
 }
 
 static bool nl_parse_working_precision(Expr* val, bool* mpfr, long* bits) {
-    if (val->type == EXPR_SYMBOL && val->data.symbol == SYM_MachinePrecision) {
+    if (val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_MachinePrecision) {
         *mpfr = false; *bits = 0; return true;
     }
     double digits;
@@ -436,15 +436,15 @@ static bool nl_parse_working_precision(Expr* val, bool* mpfr, long* bits) {
 static bool nl_apply_option(Expr* rule, NlOpts* o) {
     Expr* lhs = rule->data.function.args[0];
     Expr* rhs = rule->data.function.args[1];
-    const char* name = lhs->data.symbol;
+    const char* name = lhs->data.symbol.name;
 
     if (name == SYM_Method) {
         if (rhs->type == EXPR_SYMBOL
-            && (rhs->data.symbol == SYM_EulerSum
-                || rhs->data.symbol == SYM_SequenceLimit)) {
-            o->method = rhs->data.symbol; return true;
+            && (rhs->data.symbol.name == SYM_EulerSum
+                || rhs->data.symbol.name == SYM_SequenceLimit)) {
+            o->method = rhs->data.symbol.name; return true;
         }
-        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic) {
+        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) {
             o->method = SYM_EulerSum; return true;
         }
         nl_warn("badmeth", "Method must be EulerSum or SequenceLimit; using EulerSum");
@@ -452,7 +452,7 @@ static bool nl_apply_option(Expr* rule, NlOpts* o) {
         return true;
     }
     if (name == SYM_Direction) {
-        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic)
+        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic)
             o->direction = NULL;       /* Automatic == -1 */
         else
             o->direction = rhs;
@@ -677,13 +677,13 @@ Expr* builtin_nlimit(Expr* res) {
     Expr* rule = res->data.function.args[1];
     if (rule->type != EXPR_FUNCTION
         || rule->data.function.head->type != EXPR_SYMBOL
-        || (rule->data.function.head->data.symbol != SYM_Rule
-            && rule->data.function.head->data.symbol != SYM_RuleDelayed)
+        || (rule->data.function.head->data.symbol.name != SYM_Rule
+            && rule->data.function.head->data.symbol.name != SYM_RuleDelayed)
         || rule->data.function.arg_count != 2
         || rule->data.function.args[0]->type != EXPR_SYMBOL) {
         return NULL;               /* not a var -> point spec: stay unevaluated */
     }
-    const char* var = rule->data.function.args[0]->data.symbol;
+    const char* var = rule->data.function.args[0]->data.symbol.name;
     Expr* z0_expr = rule->data.function.args[1];
     Expr* expr = res->data.function.args[0];
 

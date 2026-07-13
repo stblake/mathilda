@@ -44,7 +44,7 @@ bool expr_to_d(const Expr* e, double* out) {
 #endif
     if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational) {
+        && e->data.function.head->data.symbol.name == SYM_Rational) {
         double n, d;
         if (expr_to_d(e->data.function.args[0], &n) && expr_to_d(e->data.function.args[1], &d) && d != 0) {
             *out = n / d;
@@ -108,7 +108,7 @@ static bool circle_params(const Expr* e, double* cx, double* cy, double* r) {
 }
 
 static bool expr_is_sym(const Expr* e, const char* sym) {
-    return e && e->type == EXPR_SYMBOL && e->data.symbol == sym;
+    return e && e->type == EXPR_SYMBOL && e->data.symbol.name == sym;
 }
 
 /* ---------------- Color helpers ---------------- */
@@ -187,7 +187,7 @@ static RGBA8 rgba_from_cmyk(const Expr* e) {
     size_t n = e->data.function.arg_count;
     if (n == 1 && args[0] && args[0]->type == EXPR_FUNCTION
         && args[0]->data.function.head->type == EXPR_SYMBOL
-        && args[0]->data.function.head->data.symbol == SYM_List) {
+        && args[0]->data.function.head->data.symbol.name == SYM_List) {
         n = args[0]->data.function.arg_count;
         args = args[0]->data.function.args;
     }
@@ -210,7 +210,7 @@ Color to_raylib(RGBA8 c) { Color out = { c.r, c.g, c.b, c.a }; return out; }
  * anything else. */
 bool resolve_color(const Expr* e, RGBA8* out) {
     if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     if (h == SYM_RGBColor)  { *out = rgba_from_rgbcolor(e); return true; }
     if (h == SYM_GrayLevel) { *out = rgba_from_graylevel(e); return true; }
     if (h == SYM_Hue)       { *out = rgba_from_hue(e); return true; }
@@ -263,13 +263,13 @@ typedef struct {
 /* True when `e` is the symbol True or All (the "on" forms for Frame and
  * FrameTicks edge settings); False/None/anything else reads as "off". */
 static bool frame_edge_on(const Expr* e) {
-    return e && e->type == EXPR_SYMBOL && (e->data.symbol == SYM_True || e->data.symbol == SYM_All);
+    return e && e->type == EXPR_SYMBOL && (e->data.symbol.name == SYM_True || e->data.symbol.name == SYM_All);
 }
 
 /* True for the "show ticks" forms of a FrameTicks edge setting. Automatic and
  * True request ticks; None and False suppress them. */
 static bool frame_ticks_on(const Expr* e) {
-    return e && e->type == EXPR_SYMBOL && (e->data.symbol == SYM_Automatic || e->data.symbol == SYM_True);
+    return e && e->type == EXPR_SYMBOL && (e->data.symbol.name == SYM_Automatic || e->data.symbol.name == SYM_True);
 }
 
 /* Read a nested {{left, right}, {bottom, top}} option value into per-edge
@@ -277,7 +277,7 @@ static bool frame_ticks_on(const Expr* e) {
  * leaving `out` untouched so the caller can keep its default. */
 static bool parse_edge_pairs(const Expr* rhs, bool (*pred)(const Expr*), bool out[4]) {
     if (!rhs || rhs->type != EXPR_FUNCTION || rhs->data.function.head->type != EXPR_SYMBOL
-        || rhs->data.function.head->data.symbol != SYM_List || rhs->data.function.arg_count != 2)
+        || rhs->data.function.head->data.symbol.name != SYM_List || rhs->data.function.arg_count != 2)
         return false;
     const Expr* lr = rhs->data.function.args[0];
     const Expr* bt = rhs->data.function.args[1];
@@ -332,9 +332,9 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
         const Expr* opt = graphics->data.function.args[i];
         if (!opt || opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2) continue;
         const Expr* h0 = opt->data.function.head;
-        if (!h0 || h0->type != EXPR_SYMBOL || (h0->data.symbol != SYM_Rule && h0->data.symbol != SYM_RuleDelayed)) continue;
+        if (!h0 || h0->type != EXPR_SYMBOL || (h0->data.symbol.name != SYM_Rule && h0->data.symbol.name != SYM_RuleDelayed)) continue;
         const Expr* lhs0 = opt->data.function.args[0];
-        if (lhs0->type == EXPR_SYMBOL && lhs0->data.symbol == SYM_LabelStyle) {
+        if (lhs0->type == EXPR_SYMBOL && lhs0->data.symbol.name == SYM_LabelStyle) {
             RGBA8 c;
             if (resolve_color(opt->data.function.args[1], &c)) {
                 o->axes_color = c; o->ticks_color = c; o->frame_color = c;
@@ -347,11 +347,11 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
         if (!opt || opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2) continue;
         const Expr* h = opt->data.function.head;
         if (!h || h->type != EXPR_SYMBOL) continue;
-        if (h->data.symbol != SYM_Rule && h->data.symbol != SYM_RuleDelayed) continue;
+        if (h->data.symbol.name != SYM_Rule && h->data.symbol.name != SYM_RuleDelayed) continue;
         const Expr* lhs = opt->data.function.args[0];
         const Expr* rhs = opt->data.function.args[1];
         if (lhs->type != EXPR_SYMBOL) continue;
-        const char* name = lhs->data.symbol;
+        const char* name = lhs->data.symbol.name;
 
         if (name == SYM_Axes) {
             o->axes = expr_is_sym(rhs, SYM_True);
@@ -362,7 +362,7 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
             if (frame_edge_on(rhs)) {
                 for (int e = 0; e < 4; e++) o->frame_edge[e] = true;
             } else if (rhs->type == EXPR_SYMBOL
-                       && (rhs->data.symbol == SYM_False || rhs->data.symbol == SYM_None)) {
+                       && (rhs->data.symbol.name == SYM_False || rhs->data.symbol.name == SYM_None)) {
                 for (int e = 0; e < 4; e++) o->frame_edge[e] = false;
             } else {
                 parse_edge_pairs(rhs, frame_edge_on, o->frame_edge);
@@ -373,7 +373,7 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
              * FrameTicks -> None/False     : frame box but no ticks or labels.
              * FrameTicks -> {{l,r},{b,t}}  : per-edge, each Automatic/None. */
             if (rhs->type == EXPR_SYMBOL
-                && (rhs->data.symbol == SYM_None || rhs->data.symbol == SYM_False)) {
+                && (rhs->data.symbol.name == SYM_None || rhs->data.symbol.name == SYM_False)) {
                 for (int e = 0; e < 4; e++) o->frame_ticks[e] = false;
             } else if (frame_ticks_on(rhs)) {
                 for (int e = 0; e < 4; e++) o->frame_ticks[e] = true;
@@ -401,7 +401,7 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
             resolve_color(rhs, &o->background);
         } else if (name == SYM_ImageSize) {
             if (rhs->type == EXPR_FUNCTION && rhs->data.function.head->type == EXPR_SYMBOL
-                && rhs->data.function.head->data.symbol == SYM_List && rhs->data.function.arg_count == 2) {
+                && rhs->data.function.head->data.symbol.name == SYM_List && rhs->data.function.arg_count == 2) {
                 double w, hh;
                 if (expr_to_d(rhs->data.function.args[0], &w)) o->width = (long)w;
                 if (expr_to_d(rhs->data.function.args[1], &hh)) { o->height = (long)hh; o->height_pinned = true; }
@@ -414,14 +414,14 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
              *   Automatic -- data-driven y with spike clipping (the default)
              *   All       -- show every sampled point, no spike clipping */
             if (rhs->type == EXPR_SYMBOL
-                && (rhs->data.symbol == SYM_Automatic || rhs->data.symbol == SYM_All)) {
-                o->clip_outliers = (rhs->data.symbol != SYM_All);
+                && (rhs->data.symbol.name == SYM_Automatic || rhs->data.symbol.name == SYM_All)) {
+                o->clip_outliers = (rhs->data.symbol.name != SYM_All);
             }
             /* Two numeric forms:
              *   {{xmin, xmax}, {ymin, ymax}}  -- fix both axes
              *   {ymin, ymax}                  -- fix y only, x stays automatic */
             else if (rhs->type == EXPR_FUNCTION && rhs->data.function.head->type == EXPR_SYMBOL
-                && rhs->data.function.head->data.symbol == SYM_List
+                && rhs->data.function.head->data.symbol.name == SYM_List
                 && rhs->data.function.arg_count == 2) {
                 const Expr* a0 = rhs->data.function.args[0];
                 const Expr* a1 = rhs->data.function.args[1];
@@ -461,7 +461,7 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
             if (expr_is_sym(rhs, SYM_None)) {
                 o->pad_x_frac = 0.0; o->pad_y_frac = 0.0;
             } else if (rhs->type == EXPR_FUNCTION && rhs->data.function.head->type == EXPR_SYMBOL
-                       && rhs->data.function.head->data.symbol == SYM_List && rhs->data.function.arg_count == 2) {
+                       && rhs->data.function.head->data.symbol.name == SYM_List && rhs->data.function.arg_count == 2) {
                 double px, py;
                 if (expr_to_d(rhs->data.function.args[0], &px)) o->pad_x_frac = px;
                 if (expr_to_d(rhs->data.function.args[1], &py)) o->pad_y_frac = py;
@@ -480,17 +480,17 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
                 o->grid_x_on = true; o->grid_y_on = true;
                 o->grid_x_list = NULL; o->grid_y_list = NULL;
             } else if (rhs->type == EXPR_FUNCTION && rhs->data.function.head->type == EXPR_SYMBOL
-                       && rhs->data.function.head->data.symbol == SYM_List && rhs->data.function.arg_count == 2) {
+                       && rhs->data.function.head->data.symbol.name == SYM_List && rhs->data.function.arg_count == 2) {
                 const Expr* xs = rhs->data.function.args[0];
                 const Expr* ys = rhs->data.function.args[1];
                 if (expr_is_sym(xs, SYM_None)) o->grid_x_on = false;
                 else if (expr_is_sym(xs, SYM_Automatic)) { o->grid_x_on = true; o->grid_x_list = NULL; }
                 else if (xs->type == EXPR_FUNCTION && xs->data.function.head->type == EXPR_SYMBOL
-                         && xs->data.function.head->data.symbol == SYM_List) { o->grid_x_on = true; o->grid_x_list = xs; }
+                         && xs->data.function.head->data.symbol.name == SYM_List) { o->grid_x_on = true; o->grid_x_list = xs; }
                 if (expr_is_sym(ys, SYM_None)) o->grid_y_on = false;
                 else if (expr_is_sym(ys, SYM_Automatic)) { o->grid_y_on = true; o->grid_y_list = NULL; }
                 else if (ys->type == EXPR_FUNCTION && ys->data.function.head->type == EXPR_SYMBOL
-                         && ys->data.function.head->data.symbol == SYM_List) { o->grid_y_on = true; o->grid_y_list = ys; }
+                         && ys->data.function.head->data.symbol.name == SYM_List) { o->grid_y_on = true; o->grid_y_list = ys; }
             }
         } else if (name == SYM_GridLinesStyle) {
             resolve_color(rhs, &o->grid_color);
@@ -535,7 +535,7 @@ static void compute_bbox(const Expr* node, PlotRange2D* bb) {
     if (!node || node->type != EXPR_FUNCTION) return;
     const Expr* h = node->data.function.head;
     if (!h || h->type != EXPR_SYMBOL) return;
-    const char* name = h->data.symbol;
+    const char* name = h->data.symbol.name;
     size_t n = node->data.function.arg_count;
 
     if (name == SYM_List) {
@@ -593,7 +593,7 @@ static void collect_slopes(const Expr* node, double** buf, size_t* len, size_t* 
     if (!node || node->type != EXPR_FUNCTION) return;
     const Expr* h = node->data.function.head;
     if (!h || h->type != EXPR_SYMBOL) return;
-    const char* name = h->data.symbol;
+    const char* name = h->data.symbol.name;
     size_t n = node->data.function.arg_count;
 
     if (name == SYM_Line && n >= 1 && node->data.function.args[0]->type == EXPR_FUNCTION) {
@@ -639,7 +639,7 @@ static void gather_ys(const Expr* node, double** buf, size_t* len, size_t* cap) 
     if (!node || node->type != EXPR_FUNCTION) return;
     const Expr* h = node->data.function.head;
     if (!h || h->type != EXPR_SYMBOL) return;
-    const char* name = h->data.symbol;
+    const char* name = h->data.symbol.name;
     size_t n = node->data.function.arg_count;
 
     if (name == SYM_List) {
@@ -671,7 +671,7 @@ static size_t count_points(const Expr* node) {
     if (!node || node->type != EXPR_FUNCTION) return 0;
     const Expr* h = node->data.function.head;
     if (!h || h->type != EXPR_SYMBOL) return 0;
-    const char* name = h->data.symbol;
+    const char* name = h->data.symbol.name;
     size_t n = node->data.function.arg_count;
 
     if (name == SYM_Point && n >= 1) {
@@ -725,7 +725,7 @@ static void draw_primitive(const Expr* node, DrawState* state) {
     if (!node || node->type != EXPR_FUNCTION) return;
     const Expr* h = node->data.function.head;
     if (!h || h->type != EXPR_SYMBOL) return;
-    const char* name = h->data.symbol;
+    const char* name = h->data.symbol.name;
     size_t n = node->data.function.arg_count;
 
     if (name == SYM_List) {
@@ -1500,7 +1500,7 @@ static const Expr* find_legend_data(const Expr* graphics_expr) {
         const Expr* a = graphics_expr->data.function.args[i];
         if (a && a->type == EXPR_FUNCTION && a->data.function.head
             && a->data.function.head->type == EXPR_SYMBOL
-            && a->data.function.head->data.symbol == SYM_PlotLegendData) return a;
+            && a->data.function.head->data.symbol.name == SYM_PlotLegendData) return a;
     }
     return NULL;
 }
@@ -1513,7 +1513,7 @@ static const Expr* find_color_bar(const Expr* graphics_expr) {
         const Expr* a = graphics_expr->data.function.args[i];
         if (a && a->type == EXPR_FUNCTION && a->data.function.head
             && a->data.function.head->type == EXPR_SYMBOL
-            && a->data.function.head->data.symbol == SYM_StreamColorBar
+            && a->data.function.head->data.symbol.name == SYM_StreamColorBar
             && a->data.function.arg_count == 2)
             return a;
     }

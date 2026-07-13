@@ -54,14 +54,14 @@ static Expr* simp2(Expr* e, Expr* as) {
 static bool head_name_is(const Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, name) == 0;
+           strcmp(e->data.function.head->data.symbol.name, name) == 0;
 }
 static bool sym_is(const Expr* e, const char* name) {
-    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol, name) == 0;
+    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, name) == 0;
 }
 static bool is_symbol(const Expr* e, const Expr* x) {
     return e->type == EXPR_SYMBOL && x->type == EXPR_SYMBOL &&
-           e->data.symbol == x->data.symbol;
+           e->data.symbol.name == x->data.symbol.name;
 }
 
 static bool contains_symbol(const Expr* e, const Expr* x) {
@@ -393,10 +393,10 @@ static bool parse_definite(Expr* res, Expr** f, Expr** x, Expr** a, Expr** b,
         Expr* opt = res->data.function.args[t];
         if (opt->type == EXPR_FUNCTION && opt->data.function.arg_count == 2 &&
             opt->data.function.head->type == EXPR_SYMBOL &&
-            (opt->data.function.head->data.symbol == SYM_Rule ||
-             opt->data.function.head->data.symbol == SYM_RuleDelayed)) {
+            (opt->data.function.head->data.symbol.name == SYM_Rule ||
+             opt->data.function.head->data.symbol.name == SYM_RuleDelayed)) {
             Expr* lhs = opt->data.function.args[0];
-            if (lhs->type == EXPR_SYMBOL && strcmp(lhs->data.symbol, "Assumptions") == 0) {
+            if (lhs->type == EXPR_SYMBOL && strcmp(lhs->data.symbol.name, "Assumptions") == 0) {
                 *assumptions = opt->data.function.args[1];
                 continue;
             }

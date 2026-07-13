@@ -68,7 +68,7 @@ Expr* builtin_table(Expr* res) {
         }
     } else if (is_list_iter) {
         for (size_t i = 0; i < list_e->data.function.arg_count; i++) {
-            symtab_add_own_value(var_sym->data.symbol, var_sym, list_e->data.function.args[i]);
+            symtab_add_own_value(var_sym->data.symbol.name, var_sym, list_e->data.function.args[i]);
             Expr* eval_expr = evaluate(expr);
             if (results_count == results_cap) { results_cap *= 2; results = realloc(results, sizeof(Expr*) * results_cap); }
             results[results_count++] = eval_expr;
@@ -79,7 +79,7 @@ Expr* builtin_table(Expr* res) {
         Expr* curr_e = expr_copy(imin_e);
         while ((di_val > 0 && val <= max_val + 1e-14) || (di_val < 0 && val >= max_val - 1e-14)) {
             Expr* i_val = is_real ? expr_new_real(val) : expr_copy(curr_e);
-            symtab_add_own_value(var_sym->data.symbol, var_sym, i_val);
+            symtab_add_own_value(var_sym->data.symbol.name, var_sym, i_val);
             
             Expr* eval_expr = evaluate(expr);
             if (results_count == results_cap) { results_cap *= 2; results = realloc(results, sizeof(Expr*) * results_cap); }

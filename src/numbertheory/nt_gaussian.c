@@ -60,7 +60,7 @@ bool df_factor_mpz(const mpz_t m, mpz_t** out_primes,
     Expr* fact = internal_factorinteger(args, 1);
     if (!fact || fact->type != EXPR_FUNCTION ||
         fact->data.function.head->type != EXPR_SYMBOL ||
-        fact->data.function.head->data.symbol != SYM_List) {
+        fact->data.function.head->data.symbol.name != SYM_List) {
         if (fact) expr_free(fact);
         return false;
     }

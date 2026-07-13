@@ -326,12 +326,12 @@ static Expr* ni_mpfr_build(const mpfr_t re, const mpfr_t im, long target_bits) {
 static bool ni_infinity_dir(Expr* e, double _Complex* dir) {
     if (!e) return false;
     if (e->type == EXPR_SYMBOL) {
-        if (e->data.symbol == SYM_Infinity)        { *dir = 1.0; return true; }
-        if (e->data.symbol == SYM_ComplexInfinity) { *dir = 0.0; return true; }
+        if (e->data.symbol.name == SYM_Infinity)        { *dir = 1.0; return true; }
+        if (e->data.symbol.name == SYM_ComplexInfinity) { *dir = 0.0; return true; }
         return false;
     }
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         if (h == SYM_DirectedInfinity) {
             if (e->data.function.arg_count == 0) { *dir = 0.0; return true; }
             return ni_to_complex(e->data.function.args[0], dir);
@@ -445,11 +445,11 @@ static bool ni_is_known_option(const char* s) {
 static bool ni_is_option_arg(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     if (h != SYM_Rule && h != SYM_RuleDelayed) return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* lhs = e->data.function.args[0];
-    return lhs->type == EXPR_SYMBOL && ni_is_known_option(lhs->data.symbol);
+    return lhs->type == EXPR_SYMBOL && ni_is_known_option(lhs->data.symbol.name);
 }
 
 /* Resolve a Method name to its engine.  Strategies/rules that this build
@@ -478,7 +478,7 @@ static NiMethod ni_method_from_string(const char* s) {
 }
 
 static bool ni_parse_working_precision(Expr* val, bool* mpfr, long* bits) {
-    if (val->type == EXPR_SYMBOL && val->data.symbol == SYM_MachinePrecision) {
+    if (val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_MachinePrecision) {
         *mpfr = false; *bits = 0; return true;
     }
     double digits;
@@ -494,7 +494,7 @@ static bool ni_parse_working_precision(Expr* val, bool* mpfr, long* bits) {
 
 static bool ni_parse_goal(Expr* v, double* out) {
     if (v->type == EXPR_SYMBOL
-        && (v->data.symbol == SYM_Infinity || v->data.symbol == SYM_Automatic)) {
+        && (v->data.symbol.name == SYM_Infinity || v->data.symbol.name == SYM_Automatic)) {
         *out = -1.0; return true;
     }
     double d;
@@ -503,7 +503,7 @@ static bool ni_parse_goal(Expr* v, double* out) {
 }
 
 static bool ni_parse_int(Expr* v, int* out, bool allow_auto) {
-    if (allow_auto && v->type == EXPR_SYMBOL && v->data.symbol == SYM_Automatic) {
+    if (allow_auto && v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Automatic) {
         *out = -1; return true;
     }
     if (v->type == EXPR_INTEGER && v->data.integer >= 0) { *out = (int)v->data.integer; return true; }
@@ -519,7 +519,7 @@ static void ni_apply_method_subopt(Expr* sub, NiOpts* o) {
     if (!sub || sub->type != EXPR_FUNCTION) return;
     Expr* h = sub->data.function.head;
     if (h->type != EXPR_SYMBOL) return;
-    if ((h->data.symbol != SYM_Rule && h->data.symbol != SYM_RuleDelayed)
+    if ((h->data.symbol.name != SYM_Rule && h->data.symbol.name != SYM_RuleDelayed)
         || sub->data.function.arg_count != 2) return;
     Expr* k = sub->data.function.args[0];
     Expr* v = sub->data.function.args[1];
@@ -531,8 +531,8 @@ static void ni_apply_method_subopt(Expr* sub, NiOpts* o) {
         else if (!strcmp(v->data.string, "Right"))    o->rule_type = 1;
         else if (!strcmp(v->data.string, "Midpoint")) o->rule_type = 2;
     } else if (!strcmp(key, "RombergQuadrature") && v->type == EXPR_SYMBOL) {
-        if      (v->data.symbol == SYM_True)  o->romberg = true;
-        else if (v->data.symbol == SYM_False) o->romberg = false;
+        if      (v->data.symbol.name == SYM_True)  o->romberg = true;
+        else if (v->data.symbol.name == SYM_False) o->romberg = false;
     } else if (!strcmp(key, "Points") && v->type == EXPR_INTEGER) {
         long pts = v->data.integer;
         if (pts < 2) pts = 2;
@@ -544,13 +544,13 @@ static void ni_apply_method_subopt(Expr* sub, NiOpts* o) {
 static bool ni_apply_option(Expr* rule, NiOpts* o) {
     Expr* lhs = rule->data.function.args[0];
     Expr* rhs = rule->data.function.args[1];
-    const char* name = lhs->data.symbol;
+    const char* name = lhs->data.symbol.name;
 
     if (name == SYM_Method) {
         Expr* m = rhs;
         /* Method -> {"name", subopts...} or Method -> "name" or symbol. */
         if (m->type == EXPR_FUNCTION && m->data.function.head->type == EXPR_SYMBOL
-            && m->data.function.head->data.symbol == SYM_List
+            && m->data.function.head->data.symbol.name == SYM_List
             && m->data.function.arg_count >= 1) {
             for (size_t i = 1; i < m->data.function.arg_count; i++)
                 ni_apply_method_subopt(m->data.function.args[i], o);
@@ -562,9 +562,9 @@ static bool ni_apply_option(Expr* rule, NiOpts* o) {
             return true;
         }
         if (m->type == EXPR_SYMBOL) {
-            if (m->data.symbol == SYM_Automatic) { o->method = NI_AUTO; o->method_name = NULL; return true; }
-            o->method_name = m->data.symbol;
-            o->method = ni_method_from_string(m->data.symbol);
+            if (m->data.symbol.name == SYM_Automatic) { o->method = NI_AUTO; o->method_name = NULL; return true; }
+            o->method_name = m->data.symbol.name;
+            o->method = ni_method_from_string(m->data.symbol.name);
             return true;
         }
         o->method = NI_AUTO;
@@ -581,7 +581,7 @@ static bool ni_apply_option(Expr* rule, NiOpts* o) {
     if (name == SYM_MaxRecursion)  return ni_parse_int(rhs, &o->max_recursion, true);
     if (name == SYM_MinRecursion)  return ni_parse_int(rhs, &o->min_recursion, true);
     if (name == SYM_MaxPoints) {
-        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic) { o->max_points = -1; return true; }
+        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) { o->max_points = -1; return true; }
         double d;
         if (ni_to_double_real(rhs, &d) && d >= 1.0) { o->max_points = (long)d; return true; }
         ni_warn("badopt", "MaxPoints must be a positive integer or Automatic"); return false;
@@ -596,7 +596,7 @@ static bool ni_apply_option(Expr* rule, NiOpts* o) {
 static bool ni_is_spec(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL
-        || e->data.function.head->data.symbol != SYM_List) return false;
+        || e->data.function.head->data.symbol.name != SYM_List) return false;
     size_t n = e->data.function.arg_count;
     return n >= 3 && e->data.function.args[0]->type == EXPR_SYMBOL;
 }
@@ -725,7 +725,7 @@ static NiAtt ni_try_osc(NiCtx* ctx, double a, double b, double reltol) {
 /* True if the symbol named `name` occurs anywhere in e. */
 static bool levin_occurs(const Expr* e, const char* name) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol, name) == 0;
+    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, name) == 0;
     if (e->type == EXPR_FUNCTION) {
         if (levin_occurs(e->data.function.head, name)) return true;
         for (size_t i = 0; i < e->data.function.arg_count; i++)
@@ -735,7 +735,7 @@ static bool levin_occurs(const Expr* e, const char* name) {
 }
 
 static bool levin_is_sym(const Expr* e, const char* name) {
-    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol, name) == 0;
+    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, name) == 0;
 }
 static bool levin_is_head(const Expr* e, const char* head) {
     return e && e->type == EXPR_FUNCTION
@@ -1484,7 +1484,7 @@ static Expr* ni_run_1d_wholeline(Expr* body, const char* var, double sign,
 static bool ni_body_has_region(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         if (h == SYM_Boole || h == SYM_UnitStep) return true;
     }
     if (ni_body_has_region(e->data.function.head)) return true;
@@ -1544,7 +1544,7 @@ static Expr* ni_run_mc(Expr* body, Expr** specs, size_t d, const NiOpts* o, bool
     }
 
     for (size_t j = 0; j < d; j++)
-        ni_bind_snapshot(&binds[j], specs[j]->data.function.args[0]->data.symbol);
+        ni_bind_snapshot(&binds[j], specs[j]->data.function.args[0]->data.symbol.name);
 
     NiMcCtx ctx;
     ctx.body = body; ctx.binds = binds; ctx.d = d;
@@ -1598,7 +1598,7 @@ static Expr* ni_try_cubature(Expr* body, Expr** specs, size_t d, const NiOpts* o
     if (!ok) { free(a); free(b); free(binds); return NULL; }
 
     for (size_t j = 0; j < d; j++)
-        ni_bind_snapshot(&binds[j], specs[j]->data.function.args[0]->data.symbol);
+        ni_bind_snapshot(&binds[j], specs[j]->data.function.args[0]->data.symbol.name);
 
     NiMcCtx ctx;
     ctx.body = body; ctx.binds = binds; ctx.d = d;
@@ -1764,7 +1764,7 @@ static Expr* ni_try_levin_nd(Expr* body, Expr** specs, size_t nspecs,
     for (int s = 0; s < 2; s++) {
         Expr* sp = specs[s];
         if (sp->data.function.arg_count != 3) return NULL;
-        var[s] = sp->data.function.args[0]->data.symbol;
+        var[s] = sp->data.function.args[0]->data.symbol.name;
         Expr* amin = ni_num_endpoint(sp->data.function.args[1]);
         Expr* amax = ni_num_endpoint(sp->data.function.args[2]);
         bool okb = amin && amax && ni_to_double_real(amin, &lo[s])
@@ -1923,7 +1923,7 @@ static void ni_extract_points(Expr* excl, const char* var, double a, double b,
     double v;
     if (ni_to_double_real(excl, &v)) { ni_add_point(v, a, b, pts, n, maxn); return; }
     if (excl->type == EXPR_FUNCTION && excl->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = excl->data.function.head->data.symbol;
+        const char* h = excl->data.function.head->data.symbol.name;
         if (h == SYM_List) {
             for (size_t i = 0; i < excl->data.function.arg_count; i++)
                 ni_extract_points(excl->data.function.args[i], var, a, b, pts, n, maxn);
@@ -1938,14 +1938,14 @@ static void ni_extract_points(Expr* excl, const char* var, double a, double b,
             free(sv);
             if (sol && sol->type == EXPR_FUNCTION
                 && sol->data.function.head->type == EXPR_SYMBOL
-                && sol->data.function.head->data.symbol == SYM_List) {
+                && sol->data.function.head->data.symbol.name == SYM_List) {
                 for (size_t i = 0; i < sol->data.function.arg_count; i++) {
                     Expr* rule_set = sol->data.function.args[i];  /* {var -> val} */
                     if (rule_set->type != EXPR_FUNCTION) continue;
                     for (size_t j = 0; j < rule_set->data.function.arg_count; j++) {
                         Expr* r = rule_set->data.function.args[j];
                         if (r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL
-                            && r->data.function.head->data.symbol == SYM_Rule
+                            && r->data.function.head->data.symbol.name == SYM_Rule
                             && r->data.function.arg_count == 2) {
                             Expr* val = numericalize(r->data.function.args[1], numeric_machine_spec());
                             double rv;
@@ -2094,7 +2094,7 @@ Expr* builtin_nintegrate(Expr* res) {
      * keeping the full spec/option list (handles {f1, f2, ...} and matrices). */
     if (body->type == EXPR_FUNCTION
         && body->data.function.head->type == EXPR_SYMBOL
-        && body->data.function.head->data.symbol == SYM_List) {
+        && body->data.function.head->data.symbol.name == SYM_List) {
         size_t nc = body->data.function.arg_count;
         Expr** comps = malloc(nc * sizeof(Expr*));
         for (size_t c = 0; c < nc; c++) {
@@ -2163,7 +2163,7 @@ Expr* builtin_nintegrate(Expr* res) {
 
     Expr* spec0 = res->data.function.args[1];
     size_t nnodes = spec0->data.function.arg_count - 1;   /* {var, n0, n1, ...} */
-    const char* var = spec0->data.function.args[0]->data.symbol;
+    const char* var = spec0->data.function.args[0]->data.symbol.name;
 
     Expr* out = NULL;
     if (nnodes == 2) {

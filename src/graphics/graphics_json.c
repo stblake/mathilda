@@ -104,7 +104,7 @@ static int head_is(const Expr* e, const char* sym) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == sym;
+        && e->data.function.head->data.symbol.name == sym;
 }
 
 static int expr_to_double(const Expr* e, double* out) {
@@ -128,7 +128,7 @@ static void append_label(Buf* b, const Expr* e) {
     char tmp[64];
     const char* s = NULL;
     if (e && e->type == EXPR_STRING)      s = e->data.string;
-    else if (e && e->type == EXPR_SYMBOL) s = e->data.symbol;
+    else if (e && e->type == EXPR_SYMBOL) s = e->data.symbol.name;
     else if (e && e->type == EXPR_INTEGER) {
         snprintf(tmp, sizeof(tmp), "%lld", (long long)e->data.integer); s = tmp;
     } else {

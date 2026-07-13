@@ -46,7 +46,7 @@ static double as_double(Expr* e) {
     if (e->type == EXPR_INTEGER) return (double)e->data.integer;
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         if (strcmp(h, "Rational") == 0 && e->data.function.arg_count == 2) {
             return as_double(e->data.function.args[0])
                  / as_double(e->data.function.args[1]);
@@ -436,7 +436,7 @@ static void test_gen_dimerror(void) {
      * (i.e. EXPR_FUNCTION with head symbol unchanged). */
     ASSERT(r->type == EXPR_FUNCTION);
     ASSERT(r->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(r->data.function.head->data.symbol,
+    ASSERT(strcmp(r->data.function.head->data.symbol.name,
                   "SingularValueDecomposition") == 0);
     expr_free(r);
     printf("  PASS: generalized SVD with col mismatch left unevaluated\n");

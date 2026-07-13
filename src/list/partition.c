@@ -7,7 +7,7 @@ static Expr* partition_rec(Expr* list, Expr* n_spec, Expr* d_spec, size_t level_
     // Get n and d for this level
     int64_t n = -1;
     bool n_upto = false;
-    Expr* n_e = (n_spec->type == EXPR_FUNCTION && n_spec->data.function.head->data.symbol == SYM_List) ? 
+    Expr* n_e = (n_spec->type == EXPR_FUNCTION && n_spec->data.function.head->data.symbol.name == SYM_List) ? 
                 (level_idx < n_spec->data.function.arg_count ? n_spec->data.function.args[level_idx] : NULL) : 
                 (level_idx == 0 ? n_spec : NULL);
     
@@ -15,7 +15,7 @@ static Expr* partition_rec(Expr* list, Expr* n_spec, Expr* d_spec, size_t level_
 
     if (n_e->type == EXPR_INTEGER) {
         n = n_e->data.integer;
-    } else if (n_e->type == EXPR_FUNCTION && n_e->data.function.head->data.symbol == SYM_UpTo && n_e->data.function.arg_count == 1) {
+    } else if (n_e->type == EXPR_FUNCTION && n_e->data.function.head->data.symbol.name == SYM_UpTo && n_e->data.function.arg_count == 1) {
         if (n_e->data.function.args[0]->type == EXPR_INTEGER) {
             n = n_e->data.function.args[0]->data.integer;
             n_upto = true;
@@ -25,7 +25,7 @@ static Expr* partition_rec(Expr* list, Expr* n_spec, Expr* d_spec, size_t level_
 
     int64_t d = n;
     if (d_spec) {
-        Expr* d_e = (d_spec->type == EXPR_FUNCTION && d_spec->data.function.head->data.symbol == SYM_List) ? 
+        Expr* d_e = (d_spec->type == EXPR_FUNCTION && d_spec->data.function.head->data.symbol.name == SYM_List) ? 
                     (level_idx < d_spec->data.function.arg_count ? d_spec->data.function.args[level_idx] : NULL) : 
                     (level_idx == 0 ? d_spec : NULL);
         if (d_e && d_e->type == EXPR_INTEGER) {

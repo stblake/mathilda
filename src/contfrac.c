@@ -129,7 +129,7 @@ static bool expr_get_rational(const Expr* e, mpz_t p, mpz_t q) {
     }
     if (e->type == EXPR_FUNCTION && e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Rational &&
+        e->data.function.head->data.symbol.name == SYM_Rational &&
         e->data.function.arg_count == 2) {
         Expr* a = e->data.function.args[0];
         Expr* b = e->data.function.args[1];
@@ -148,7 +148,7 @@ static bool expr_get_rational(const Expr* e, mpz_t p, mpz_t q) {
 static bool expr_is_sqrt_int(const Expr* e, mpz_t D) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     Expr* h = e->data.function.head;
-    if (!h || h->type != EXPR_SYMBOL || h->data.symbol != SYM_Power ||
+    if (!h || h->type != EXPR_SYMBOL || h->data.symbol.name != SYM_Power ||
         e->data.function.arg_count != 2)
         return false;
     Expr* base = e->data.function.args[0];
@@ -157,7 +157,7 @@ static bool expr_is_sqrt_int(const Expr* e, mpz_t D) {
     /* exponent must be exactly Rational[1, 2] */
     if (!(ex->type == EXPR_FUNCTION && ex->data.function.head &&
           ex->data.function.head->type == EXPR_SYMBOL &&
-          ex->data.function.head->data.symbol == SYM_Rational &&
+          ex->data.function.head->data.symbol.name == SYM_Rational &&
           ex->data.function.arg_count == 2))
         return false;
     Expr* en = ex->data.function.args[0];
@@ -646,7 +646,7 @@ static Expr* fcf_bin(const char* head, Expr* a, Expr* b) {
 static bool fcf_is_list(const Expr* e) {
     return e && e->type == EXPR_FUNCTION && e->data.function.head &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol == SYM_List;
+           e->data.function.head->data.symbol.name == SYM_List;
 }
 
 /* --- Simple (possibly symbolic) convergent h_{n-1} / k_{n-1}. --- */

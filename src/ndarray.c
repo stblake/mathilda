@@ -652,13 +652,13 @@ static bool extract_datatype_option(const Expr* res, size_t* argc,
         const Expr* opt = res->data.function.args[n - 1];
         if (opt && opt->type == EXPR_FUNCTION && opt->data.function.head
             && opt->data.function.head->type == EXPR_SYMBOL
-            && (opt->data.function.head->data.symbol == SYM_Rule
-                || opt->data.function.head->data.symbol == SYM_RuleDelayed)
+            && (opt->data.function.head->data.symbol.name == SYM_Rule
+                || opt->data.function.head->data.symbol.name == SYM_RuleDelayed)
             && opt->data.function.arg_count == 2) {
             const Expr* lhs = opt->data.function.args[0];
             const Expr* rhs = opt->data.function.args[1];
             if (lhs && lhs->type == EXPR_SYMBOL
-                && lhs->data.symbol == SYM_DataType) {
+                && lhs->data.symbol.name == SYM_DataType) {
                 if (!seen) {
                     if (rhs && rhs->type == EXPR_STRING
                         && ndt_from_string(rhs->data.string, dtype)) {

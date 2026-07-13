@@ -39,19 +39,48 @@ typedef struct Rule {
 // Typedef for built-in C functions evaluating expressions
 typedef Expr* (*BuiltinFunc)(Expr* res);
 
-// A symbol definition containing rules associated with the symbol
-typedef struct {
-    char* symbol_name;
+// A symbol definition containing rules associated with the symbol.
+//
+// Phase 2 (EVAL_SYMTAB_IMPROVEMENTS): the string interner and the symbol table
+// are unified -- this node IS the intern entry. A single hash table keyed on the
+// name backs both interning (canonical `const char*`) and definition lookup, so
+// resolving a symbol to its definition no longer hashes twice across two tables.
+typedef struct SymbolDef {
+    char* symbol_name;  // owned: the canonical interned name (freed by intern_clear)
     Rule* own_values;   // x = 4
     Rule* down_values;  // f[x_] = x + 1
     BuiltinFunc builtin_func; // C function evaluating this symbol
     uint32_t attributes;
+    /* Phase 1 (EVAL_SYMTAB_IMPROVEMENTS): cached immutable "base" attributes --
+     * the floor from attr.c's builtin_attrs[] table. get_attributes() returns
+     * (base_attributes | attributes) as an O(1) field read + OR instead of the
+     * old ~140-entry strcmp scan on every call. The static table never changes,
+     * so once folded the base is permanently valid; base_seeded guards the
+     * one-time fold (lazily on first get_attributes, eagerly in attr_init for
+     * table symbols). `attributes` keeps its exact meaning (dynamic bits, also
+     * carrying the base bits that attr_init copies in for match.c's direct
+     * reads), so no mutation site needs to change. */
+    uint32_t base_attributes;
+    uint8_t  base_seeded;
+    /* Phase 2 unified-table bookkeeping.
+     *   is_system : migrated from the old InternEntry; set by
+     *               intern_mark_all_system() for every kernel-interned name.
+     *   has_def   : 1 once the name has been materialized as a real definition
+     *               (symtab_get_def called). Distinguishes a defined symbol
+     *               (enumerated by Names[], visible to symtab_lookup) from an
+     *               interned-only node whose name was merely canonicalized.
+     *               symtab_remove_symbol / symtab_clear reset this to 0 (the
+     *               node and its name survive so live Exprs' pointers stay
+     *               valid); intern_clear frees the node outright. */
+    uint8_t  is_system;
+    uint8_t  has_def;
     char* docstring;
     /* Default option settings for this symbol, the DefaultValues-equivalent
      * backing Options[f] / SetOptions[f]. A List[Rule[name,val], ...] owned
      * by the SymbolDef, or NULL when the symbol has no registered options.
      * Survives Clear[f] (only rules are cleared), freed on symbol removal. */
     Expr* default_options;
+    struct SymbolDef* next;   // hash-bucket chain (replaces the old SymEntry)
 } SymbolDef;
 
 // Initialize the symbol table
@@ -117,6 +146,11 @@ Rule* symtab_get_down_values(const char* symbol_name);
 // Apply DownValues to an expression f[...]
 // Returns new evaluated expression if a rule applied, else NULL
 Expr* apply_down_values(Expr* expr);
+
+// Phase 3a: def-threaded variant. `def` must be the definition of `expr`'s
+// (symbol) head; lets the evaluator avoid re-resolving the head. NULL def or
+// non-function expr returns NULL.
+Expr* apply_down_values_def(SymbolDef* def, Expr* expr);
 
 // Apply OwnValues to a symbol x
 // Returns new evaluated expression if a rule applied, else NULL

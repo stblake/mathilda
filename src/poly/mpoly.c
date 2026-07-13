@@ -645,7 +645,7 @@ static bool expr_term_to_mpoly(struct Expr* e, struct Expr** vars,
     /* Power[var, k]. */
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2) {
         struct Expr* base = e->data.function.args[0];
         struct Expr* exp  = e->data.function.args[1];
@@ -659,7 +659,7 @@ static bool expr_term_to_mpoly(struct Expr* e, struct Expr** vars,
     /* Times[...] -- multiply the contributions of each arg. */
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Times) {
+        e->data.function.head->data.symbol.name == SYM_Times) {
         mpz_t sub_coef; mpz_init(sub_coef);
         int sub_exps[n_vars > 0 ? n_vars : 1];
         for (size_t a = 0; a < e->data.function.arg_count; a++) {
@@ -694,7 +694,7 @@ MPoly* expr_to_mpoly(struct Expr* e, struct Expr** vars, int n_vars) {
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Plus) {
+        e->data.function.head->data.symbol.name == SYM_Plus) {
         mpz_t coef; mpz_init(coef);
         int exps[n_vars > 0 ? n_vars : 1];
         for (size_t a = 0; a < e->data.function.arg_count; a++) {

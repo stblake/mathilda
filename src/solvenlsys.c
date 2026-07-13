@@ -103,7 +103,7 @@ static bool is_concrete_integer(const Expr* v) {
 static bool contains_complex_head(const Expr* v) {
     if (!v || v->type != EXPR_FUNCTION) return false;
     if (v->data.function.head->type == EXPR_SYMBOL
-        && v->data.function.head->data.symbol == SYM_Complex) {
+        && v->data.function.head->data.symbol.name == SYM_Complex) {
         return true;
     }
     for (size_t i = 0; i < v->data.function.arg_count; i++) {
@@ -295,7 +295,7 @@ Expr* solvenlsys_solve_nonlinear_system(Expr* equations,
     /* `vars` must be a List of >= 1 distinct symbols. */
     if (vars->type != EXPR_FUNCTION
         || vars->data.function.head->type != EXPR_SYMBOL
-        || vars->data.function.head->data.symbol != SYM_List) {
+        || vars->data.function.head->data.symbol.name != SYM_List) {
         return NULL;
     }
     int n = (int)vars->data.function.arg_count;
@@ -305,7 +305,7 @@ Expr* solvenlsys_solve_nonlinear_system(Expr* equations,
         if (var_arr[j]->type != EXPR_SYMBOL) return NULL;
     for (int a = 0; a < n; a++)
         for (int b = a + 1; b < n; b++)
-            if (var_arr[a]->data.symbol == var_arr[b]->data.symbol) return NULL;
+            if (var_arr[a]->data.symbol.name == var_arr[b]->data.symbol.name) return NULL;
 
     /* `equations` is Equal[_, _], And[Equal, ...], or List[Equal, ...]. */
     Expr* single_holder[1];
@@ -313,13 +313,13 @@ Expr* solvenlsys_solve_nonlinear_system(Expr* equations,
     int m;
     if (equations->type == EXPR_FUNCTION
         && equations->data.function.head->type == EXPR_SYMBOL
-        && (equations->data.function.head->data.symbol == SYM_List
-            || equations->data.function.head->data.symbol == SYM_And)) {
+        && (equations->data.function.head->data.symbol.name == SYM_List
+            || equations->data.function.head->data.symbol.name == SYM_And)) {
         eq_arr = equations->data.function.args;
         m = (int)equations->data.function.arg_count;
     } else if (equations->type == EXPR_FUNCTION
         && equations->data.function.head->type == EXPR_SYMBOL
-        && equations->data.function.head->data.symbol == SYM_Equal) {
+        && equations->data.function.head->data.symbol.name == SYM_Equal) {
         single_holder[0] = equations;
         eq_arr = single_holder;
         m = 1;
@@ -339,7 +339,7 @@ Expr* solvenlsys_solve_nonlinear_system(Expr* equations,
     bool reals_only = false, integers_only = false;
     if (dom) {
         if (dom->type != EXPR_SYMBOL) return NULL;
-        const char* d = dom->data.symbol;
+        const char* d = dom->data.symbol.name;
         if (d == SYM_Reals) reals_only = true;
         else if (d == SYM_Integers) { reals_only = true; integers_only = true; }
         else if (d != SYM_Complexes) return NULL;
@@ -353,7 +353,7 @@ Expr* solvenlsys_solve_nonlinear_system(Expr* equations,
         Expr* eq = eq_arr[i];
         if (eq->type != EXPR_FUNCTION
             || eq->data.function.head->type != EXPR_SYMBOL
-            || eq->data.function.head->data.symbol != SYM_Equal
+            || eq->data.function.head->data.symbol.name != SYM_Equal
             || eq->data.function.arg_count != 2) {
             for (int k = 0; k < norig; k++) expr_free(orig[k]);
             free(orig);

@@ -28,7 +28,7 @@ static int classify_plus_term(Expr* e) {
     if (is_infinity_sym(e)) return 1;
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Times) {
+        e->data.function.head->data.symbol.name == SYM_Times) {
         size_t ac = e->data.function.arg_count;
         bool has_inf = false, has_cinf = false, has_indet = false;
         for (size_t i = 0; i < ac; i++) {
@@ -51,7 +51,7 @@ static int classify_plus_term(Expr* e) {
 
 static bool is_overflow(Expr* e) {
     return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol == SYM_Overflow;
+           e->data.function.head->data.symbol.name == SYM_Overflow;
 }
 
 /* Helper: extract numeric coefficient and base expression from a term. 
@@ -70,7 +70,7 @@ static void get_coeff_base(Expr* e, Expr** coeff, Expr** base, bool* allocated_b
         return;
     }
 
-    if (e->type == EXPR_FUNCTION && e->data.function.head->data.symbol == SYM_Times) {
+    if (e->type == EXPR_FUNCTION && e->data.function.head->data.symbol.name == SYM_Times) {
         if (e->data.function.arg_count >= 2) {
             Expr* first = e->data.function.args[0];
             if (expr_is_numeric_like(first) || is_complex(first, NULL, NULL)) {
@@ -231,7 +231,7 @@ static Expr* add_numbers(Expr* a, Expr* b) {
             a_ok = true;
         } else if (a->type == EXPR_FUNCTION &&
                    a->data.function.head->type == EXPR_SYMBOL &&
-                   a->data.function.head->data.symbol == SYM_Rational &&
+                   a->data.function.head->data.symbol.name == SYM_Rational &&
                    a->data.function.arg_count == 2 &&
                    expr_is_integer_like(a->data.function.args[0]) &&
                    expr_is_integer_like(a->data.function.args[1])) {
@@ -246,7 +246,7 @@ static Expr* add_numbers(Expr* a, Expr* b) {
                 b_ok = true;
             } else if (b->type == EXPR_FUNCTION &&
                        b->data.function.head->type == EXPR_SYMBOL &&
-                       b->data.function.head->data.symbol == SYM_Rational &&
+                       b->data.function.head->data.symbol.name == SYM_Rational &&
                        b->data.function.arg_count == 2 &&
                        expr_is_integer_like(b->data.function.args[0]) &&
                        expr_is_integer_like(b->data.function.args[1])) {
@@ -299,7 +299,7 @@ static bool is_neg_of_plus(Expr* e, Expr** inner_plus_out) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (!e->data.function.head ||
         e->data.function.head->type != EXPR_SYMBOL ||
-        e->data.function.head->data.symbol != SYM_Times)
+        e->data.function.head->data.symbol.name != SYM_Times)
         return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* c = e->data.function.args[0];
@@ -308,7 +308,7 @@ static bool is_neg_of_plus(Expr* e, Expr** inner_plus_out) {
     if (p->type != EXPR_FUNCTION ||
         !p->data.function.head ||
         p->data.function.head->type != EXPR_SYMBOL ||
-        p->data.function.head->data.symbol != SYM_Plus)
+        p->data.function.head->data.symbol.name != SYM_Plus)
         return false;
     *inner_plus_out = p;
     return true;

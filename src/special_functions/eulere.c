@@ -177,7 +177,7 @@ static eidx_kind euler_index(const Expr* e, unsigned long* idx, long* prec) {
 static bool euler_is_half(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     Expr* h = e->data.function.head;
-    if (!h || h->type != EXPR_SYMBOL || h->data.symbol != SYM_Rational)
+    if (!h || h->type != EXPR_SYMBOL || h->data.symbol.name != SYM_Rational)
         return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* a = e->data.function.args[0];

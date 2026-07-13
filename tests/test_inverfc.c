@@ -128,7 +128,7 @@ void test_inverfc_listable() {
     Expr* r = evaluate(e);
     expr_free(e);
     ASSERT(r->type == EXPR_FUNCTION &&
-           strcmp(r->data.function.head->data.symbol, "List") == 0 &&
+           strcmp(r->data.function.head->data.symbol.name, "List") == 0 &&
            r->data.function.arg_count == 4);
     double exp0[4] = { 0.47693627620446987, 0.68407034965662264,
                        0.81341984759761854, 0.90619380243682322 };

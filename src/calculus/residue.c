@@ -116,7 +116,7 @@ static bool residue_polyq(Expr* p, Expr* z) {
     Expr* call = internal_polynomialq(
         (Expr*[]){ expr_copy(p), expr_copy(z) }, 2);
     Expr* v = eval_and_free(call);
-    bool ok = v && v->type == EXPR_SYMBOL && v->data.symbol == SYM_True;
+    bool ok = v && v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True;
     if (v) expr_free(v);
     return ok;
 }
@@ -231,7 +231,7 @@ Expr* builtin_residue(Expr* res) {
     /* The location spec must be List[z, z0] with z a symbol. */
     if (spec->type != EXPR_FUNCTION ||
         spec->data.function.head->type != EXPR_SYMBOL ||
-        spec->data.function.head->data.symbol != SYM_List ||
+        spec->data.function.head->data.symbol.name != SYM_List ||
         spec->data.function.arg_count != 2)
         return NULL;
     Expr* z  = spec->data.function.args[0];

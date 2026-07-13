@@ -40,7 +40,7 @@ static int is_zero_entry(Expr* e) {
                                      && e->data.real <   1e-9;
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         if (strcmp(h, "Complex") == 0 && e->data.function.arg_count == 2) {
             return is_zero_entry(e->data.function.args[0])
                 && is_zero_entry(e->data.function.args[1]);
@@ -56,7 +56,7 @@ static int all_zero_tensor(Expr* t) {
     if (!t) return 0;
     if (t->type == EXPR_FUNCTION
         && t->data.function.head->type == EXPR_SYMBOL
-        && strcmp(t->data.function.head->data.symbol, "List") == 0) {
+        && strcmp(t->data.function.head->data.symbol.name, "List") == 0) {
         for (size_t i = 0; i < t->data.function.arg_count; i++) {
             if (!all_zero_tensor(t->data.function.args[i])) return 0;
         }
@@ -204,7 +204,7 @@ static void test_error_non_matrix(void) {
     Expr* res = run("SingularValueDecomposition[{1, 2, 3}]");
     ASSERT(res->type == EXPR_FUNCTION);
     ASSERT(res->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(res->data.function.head->data.symbol,
+    ASSERT(strcmp(res->data.function.head->data.symbol.name,
                   "SingularValueDecomposition") == 0);
     expr_free(res);
     printf("  PASS: rejects vector input\n");
@@ -215,7 +215,7 @@ static void test_error_out_of_range_k(void) {
     Expr* res = run("SingularValueDecomposition[{{1, 2}, {3, 4}}, 5]");
     ASSERT(res->type == EXPR_FUNCTION);
     ASSERT(res->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(res->data.function.head->data.symbol,
+    ASSERT(strcmp(res->data.function.head->data.symbol.name,
                   "SingularValueDecomposition") == 0);
     expr_free(res);
     printf("  PASS: rejects out-of-range k\n");
@@ -226,7 +226,7 @@ static void test_error_bad_option(void) {
     Expr* res = run("SingularValueDecomposition[{{1, 2}, {3, 4}}, BadOpt -> True]");
     ASSERT(res->type == EXPR_FUNCTION);
     ASSERT(res->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(res->data.function.head->data.symbol,
+    ASSERT(strcmp(res->data.function.head->data.symbol.name,
                   "SingularValueDecomposition") == 0);
     expr_free(res);
     printf("  PASS: rejects unknown option\n");
@@ -240,7 +240,7 @@ static void test_generalized_numeric_passthrough(void) {
         "SingularValueDecomposition[{{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}]");
     ASSERT(res->type == EXPR_FUNCTION);
     ASSERT(res->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(res->data.function.head->data.symbol, "List") == 0);
+    ASSERT(strcmp(res->data.function.head->data.symbol.name, "List") == 0);
     ASSERT(res->data.function.arg_count == 3);
     /* args[0] = {u, ua}, args[1] = {sigma, sigma_a}, args[2] = v */
     ASSERT(res->data.function.args[0]->type == EXPR_FUNCTION);
@@ -278,7 +278,7 @@ static void test_generalized_free_symbol_nogsymb(void) {
         "SingularValueDecomposition[{{{a, b}, {c, d}}, {{1, 2}, {3, 4}}}]");
     ASSERT(res->type == EXPR_FUNCTION);
     ASSERT(res->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(res->data.function.head->data.symbol,
+    ASSERT(strcmp(res->data.function.head->data.symbol.name,
                   "SingularValueDecomposition") == 0);
     expr_free(res);
     printf("  PASS: generalized with free symbols returns unevaluated (::nogsymb)\n");

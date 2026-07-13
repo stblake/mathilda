@@ -204,7 +204,7 @@ static Expr* ft_compute_list(Expr* poly, Expr** S, size_t S_count) {
 static void ft_extract_vars(Expr* var_arg, Expr*** S_out, size_t* S_count_out) {
     if (var_arg->type == EXPR_FUNCTION &&
         var_arg->data.function.head->type == EXPR_SYMBOL &&
-        var_arg->data.function.head->data.symbol == SYM_List) {
+        var_arg->data.function.head->data.symbol.name == SYM_List) {
         size_t n = var_arg->data.function.arg_count;
         *S_out = (n > 0) ? malloc(sizeof(Expr*) * n) : NULL;
         *S_count_out = n;
@@ -221,7 +221,7 @@ static void ft_extract_vars(Expr* var_arg, Expr*** S_out, size_t* S_count_out) {
 /* the two functions to recurse with.                                   */
 static Expr* ft_thread(Expr* compound, Expr* var_arg, const char* fname) {
     bool is_ineq = (compound->data.function.head->type == EXPR_SYMBOL
-                    && strcmp(compound->data.function.head->data.symbol, "Inequality") == 0);
+                    && strcmp(compound->data.function.head->data.symbol.name, "Inequality") == 0);
     size_t n = compound->data.function.arg_count;
     Expr** new_args = malloc(sizeof(Expr*) * n);
     for (size_t i = 0; i < n; i++) {
@@ -272,7 +272,7 @@ Expr* builtin_factorterms(Expr* res) {
 
     /* Auto-thread over List, Equal, Less, And, Or, ... */
     if (poly->type == EXPR_FUNCTION && poly->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = poly->data.function.head->data.symbol;
+        const char* h = poly->data.function.head->data.symbol.name;
         if (ft_is_threading_head(h)) {
             return ft_thread(poly, var_arg, "FactorTerms");
         }

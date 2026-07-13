@@ -18,7 +18,7 @@ typedef struct {
 static int64_t get_depth(Expr* e) {
     if (e->type != EXPR_FUNCTION) return 1;
     if (e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         if (h == SYM_Rational || h == SYM_Complex) return 1;
     }
     int64_t max_d = 0;
@@ -36,7 +36,7 @@ static LevelSpec parse_level_spec(Expr* ls, int64_t default_min, int64_t default
     if (ls->type == EXPR_INTEGER) {
         spec.min = 1;
         spec.max = ls->data.integer;
-    } else if (ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol == SYM_List) {
+    } else if (ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol.name == SYM_List) {
         if (ls->data.function.arg_count == 1 && ls->data.function.args[0]->type == EXPR_INTEGER) {
             spec.min = spec.max = ls->data.function.args[0]->data.integer;
         } else if (ls->data.function.arg_count == 2 && 
@@ -45,7 +45,7 @@ static LevelSpec parse_level_spec(Expr* ls, int64_t default_min, int64_t default
             spec.min = ls->data.function.args[0]->data.integer;
             spec.max = ls->data.function.args[1]->data.integer;
         }
-    } else if (ls->type == EXPR_SYMBOL && ls->data.symbol == SYM_Infinity) {
+    } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_Infinity) {
         spec.min = 1;
         spec.max = 1000000; 
     }
@@ -55,12 +55,12 @@ static LevelSpec parse_level_spec(Expr* ls, int64_t default_min, int64_t default
 static void parse_options(Expr* res, size_t start_idx, LevelSpec* spec) {
     for (size_t i = start_idx; i < res->data.function.arg_count; i++) {
         Expr* opt = res->data.function.args[i];
-        if (opt->type == EXPR_FUNCTION && opt->data.function.head->data.symbol == SYM_Rule) {
+        if (opt->type == EXPR_FUNCTION && opt->data.function.head->data.symbol.name == SYM_Rule) {
             if (opt->data.function.arg_count == 2 && 
                 opt->data.function.args[0]->type == EXPR_SYMBOL &&
-                opt->data.function.args[0]->data.symbol == SYM_Heads) {
+                opt->data.function.args[0]->data.symbol.name == SYM_Heads) {
                 if (opt->data.function.args[1]->type == EXPR_SYMBOL &&
-                    opt->data.function.args[1]->data.symbol == SYM_True) {
+                    opt->data.function.args[1]->data.symbol.name == SYM_True) {
                     spec->heads = true;
                 }
             }
@@ -117,7 +117,7 @@ Expr* builtin_apply(Expr* res) {
     Expr* expr = res->data.function.args[1];
 
     Expr* ls = (res->data.function.arg_count >= 3) ? res->data.function.args[2] : NULL;
-    if (ls && ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol == SYM_Rule) ls = NULL;
+    if (ls && ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol.name == SYM_Rule) ls = NULL;
 
     /* Apply[f, assoc] uses the association's values as f's arguments:
      * f @@ <|k1 -> v1, ...|> is f[v1, ...] (matching Wolfram, and consistent
@@ -194,7 +194,7 @@ Expr* builtin_map(Expr* res) {
         return assoc_map_values(f, expr);
 
     Expr* ls = (res->data.function.arg_count >= 3) ? res->data.function.args[2] : NULL;
-    if (ls && ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol == SYM_Rule) ls = NULL;
+    if (ls && ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol.name == SYM_Rule) ls = NULL;
 
     LevelSpec spec = parse_level_spec(ls, 1, 1);
     parse_options(res, ls ? 3 : 2, &spec);
@@ -308,7 +308,7 @@ static Expr* mapat_at_path(Expr* f, Expr* expr, Expr** path, size_t plen) {
          * {Key[k]} positions that Position returns. */
         Expr* key = NULL; bool positional = false; int64_t p = 0;
         if (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
-            idx->data.function.head->data.symbol == SYM_Key && idx->data.function.arg_count == 1) {
+            idx->data.function.head->data.symbol.name == SYM_Key && idx->data.function.arg_count == 1) {
             key = idx->data.function.args[0];
         } else if (idx->type == EXPR_INTEGER) {
             positional = true; p = idx->data.integer;
@@ -348,7 +348,7 @@ static Expr* mapat_at_path(Expr* f, Expr* expr, Expr** path, size_t plen) {
                 new_args[k - 1] = r;
             }
         }
-    } else if (idx->type == EXPR_SYMBOL && idx->data.symbol == SYM_All) {
+    } else if (idx->type == EXPR_SYMBOL && idx->data.symbol.name == SYM_All) {
         for (size_t i = 0; i < len; i++) {
             Expr* r = mapat_at_path(f, expr->data.function.args[i], path + 1, plen - 1);
             expr_free(new_args[i]);
@@ -356,7 +356,7 @@ static Expr* mapat_at_path(Expr* f, Expr* expr, Expr** path, size_t plen) {
         }
     } else if (idx->type == EXPR_FUNCTION &&
                idx->data.function.head->type == EXPR_SYMBOL &&
-               idx->data.function.head->data.symbol == SYM_Span) {
+               idx->data.function.head->data.symbol.name == SYM_Span) {
         int64_t start = 1, end = (int64_t)len, step = 1;
         size_t span_argc = idx->data.function.arg_count;
         if (span_argc >= 1) {
@@ -364,7 +364,7 @@ static Expr* mapat_at_path(Expr* f, Expr* expr, Expr** path, size_t plen) {
             if (a1->type == EXPR_INTEGER) {
                 start = a1->data.integer;
                 if (start < 0) start = (int64_t)len + start + 1;
-            } else if (a1->type == EXPR_SYMBOL && a1->data.symbol == SYM_All) {
+            } else if (a1->type == EXPR_SYMBOL && a1->data.symbol.name == SYM_All) {
                 start = 1;
             }
         }
@@ -373,7 +373,7 @@ static Expr* mapat_at_path(Expr* f, Expr* expr, Expr** path, size_t plen) {
             if (a2->type == EXPR_INTEGER) {
                 end = a2->data.integer;
                 if (end < 0) end = (int64_t)len + end + 1;
-            } else if (a2->type == EXPR_SYMBOL && a2->data.symbol == SYM_All) {
+            } else if (a2->type == EXPR_SYMBOL && a2->data.symbol.name == SYM_All) {
                 end = (int64_t)len;
             }
         }
@@ -406,7 +406,7 @@ static Expr* mapat_at_path(Expr* f, Expr* expr, Expr** path, size_t plen) {
 static bool mapat_is_list(Expr* e) {
     return e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol == SYM_List;
+           e->data.function.head->data.symbol.name == SYM_List;
 }
 
 Expr* builtin_map_at(Expr* res) {
@@ -515,7 +515,7 @@ Expr* builtin_select(Expr* res) {
         
         Expr* eval_res = evaluate(call);
         
-        if (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol == SYM_True) {
+        if (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol.name == SYM_True) {
             kept_args[kept_count++] = expr_copy(elem);
         }
         
@@ -548,7 +548,7 @@ static size_t leading_run_length(Expr* crit, Expr** elems, size_t n, bool over_v
         Expr* call = expr_new_function(expr_copy(crit), call_args, 1);
         Expr* v = evaluate(call);
         expr_free(call);
-        bool ok = (v->type == EXPR_SYMBOL && v->data.symbol == SYM_True);
+        bool ok = (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True);
         expr_free(v);
         if (!ok) break;
     }
@@ -611,7 +611,7 @@ Expr* builtin_select_first(Expr* res) {
         Expr* call = expr_new_function(expr_copy(pred), call_args, 1);
         Expr* v = evaluate(call);
         expr_free(call);
-        bool is_true = (v->type == EXPR_SYMBOL && v->data.symbol == SYM_True);
+        bool is_true = (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True);
         expr_free(v);
         if (is_true) return expr_copy(elem);
     }
@@ -670,8 +670,8 @@ static Expr* all_any_none_true(Expr* res, int mode) {
         Expr* call = expr_new_function(expr_copy(test), call_args, 1);
         Expr* v = evaluate(call);
         expr_free(call);
-        bool is_true  = (v->type == EXPR_SYMBOL && v->data.symbol == SYM_True);
-        bool is_false = (v->type == EXPR_SYMBOL && v->data.symbol == SYM_False);
+        bool is_true  = (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True);
+        bool is_false = (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False);
         expr_free(v);
 
         if (is_true) {
@@ -798,7 +798,7 @@ static bool freeq_at_level(Expr* expr, Expr* form, int64_t current_level, LevelS
     bool should_check = false;
     
     if (spec.min == -1 && spec.max == -1) {
-        if (expr->type != EXPR_FUNCTION || (expr->type == EXPR_FUNCTION && expr->data.function.head->type == EXPR_SYMBOL && (expr->data.function.head->data.symbol == SYM_Rational || expr->data.function.head->data.symbol == SYM_Complex))) {
+        if (expr->type != EXPR_FUNCTION || (expr->type == EXPR_FUNCTION && expr->data.function.head->type == EXPR_SYMBOL && (expr->data.function.head->data.symbol.name == SYM_Rational || expr->data.function.head->data.symbol.name == SYM_Complex))) {
             should_check = true;
         }
     } else {
@@ -815,7 +815,7 @@ static bool freeq_at_level(Expr* expr, Expr* form, int64_t current_level, LevelS
         env_free(env);
     }
 
-    if (expr->type == EXPR_FUNCTION && !(expr->data.function.head->type == EXPR_SYMBOL && (expr->data.function.head->data.symbol == SYM_Rational || expr->data.function.head->data.symbol == SYM_Complex))) {
+    if (expr->type == EXPR_FUNCTION && !(expr->data.function.head->type == EXPR_SYMBOL && (expr->data.function.head->data.symbol.name == SYM_Rational || expr->data.function.head->data.symbol.name == SYM_Complex))) {
         if (spec.heads) {
             if (!freeq_at_level(expr->data.function.head, form, current_level + 1, spec)) {
                 return false;
@@ -840,11 +840,11 @@ Expr* builtin_freeq(Expr* res) {
     if (res->data.function.arg_count >= 3) {
         Expr* ls = res->data.function.args[2];
         spec = parse_level_spec(ls, 1, 1);
-        if (ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol == SYM_List) {
+        if (ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol.name == SYM_List) {
             // Already parsed by parse_level_spec
-        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol == SYM_All) {
+        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_All) {
             spec.min = 0; spec.max = 1000000;
-        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol == SYM_Infinity) {
+        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_Infinity) {
             spec.min = 1; spec.max = 1000000;
         } else if (ls->type == EXPR_INTEGER) {
             spec.min = 1; spec.max = ls->data.integer;
@@ -856,12 +856,12 @@ Expr* builtin_freeq(Expr* res) {
     // Check options anywhere for FreeQ
     for (size_t i = 2; i < res->data.function.arg_count; i++) {
         Expr* opt = res->data.function.args[i];
-        if (opt->type == EXPR_FUNCTION && opt->data.function.head->data.symbol == SYM_Rule) {
+        if (opt->type == EXPR_FUNCTION && opt->data.function.head->data.symbol.name == SYM_Rule) {
             if (opt->data.function.arg_count == 2 && 
                 opt->data.function.args[0]->type == EXPR_SYMBOL &&
-                opt->data.function.args[0]->data.symbol == SYM_Heads) {
+                opt->data.function.args[0]->data.symbol.name == SYM_Heads) {
                 if (opt->data.function.args[1]->type == EXPR_SYMBOL &&
-                    opt->data.function.args[1]->data.symbol == SYM_False) {
+                    opt->data.function.args[1]->data.symbol.name == SYM_False) {
                     spec.heads = false;
                 }
             }
@@ -1228,7 +1228,7 @@ Expr* builtin_outer(Expr* res) {
     size_t num_depths = 0;
     for (int64_t i = res->data.function.arg_count - 1; i >= 1; i--) {
         Expr* a = res->data.function.args[i];
-        if (a->type == EXPR_INTEGER || (a->type == EXPR_SYMBOL && a->data.symbol == SYM_Infinity)) {
+        if (a->type == EXPR_INTEGER || (a->type == EXPR_SYMBOL && a->data.symbol.name == SYM_Infinity)) {
             num_depths++;
         } else {
             break;
@@ -1479,11 +1479,11 @@ Expr* builtin_permutations(Expr* res) {
             n_min = n;
             n_max = n;
             dn = 1;
-        } else if (spec->type == EXPR_SYMBOL && spec->data.symbol == SYM_All) {
+        } else if (spec->type == EXPR_SYMBOL && spec->data.symbol.name == SYM_All) {
             n_min = 0;
             n_max = len;
             dn = 1;
-        } else if (spec->type == EXPR_FUNCTION && spec->data.function.head->data.symbol == SYM_List) {
+        } else if (spec->type == EXPR_FUNCTION && spec->data.function.head->data.symbol.name == SYM_List) {
             size_t s_len = spec->data.function.arg_count;
             if (s_len == 1 && spec->data.function.args[0]->type == EXPR_INTEGER) {
                 n_min = n_max = spec->data.function.args[0]->data.integer;
@@ -1641,7 +1641,7 @@ static inline Expr* apply_binary(Expr* f, Expr* a, Expr* b) {
 }
 
 static inline bool sym_is_true(Expr* e) {
-    return e && e->type == EXPR_SYMBOL && e->data.symbol == SYM_True;
+    return e && e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_True;
 }
 
 /* --- Generic iteration runner. --- */
@@ -1914,12 +1914,12 @@ static Expr* nestwhile_impl(Expr* res, bool as_list) {
         if (m_arg->type == EXPR_INTEGER) {
             if (m_arg->data.integer < 1) return NULL;
             m_min = m_max = m_arg->data.integer;
-        } else if (m_arg->type == EXPR_SYMBOL && m_arg->data.symbol == SYM_All) {
+        } else if (m_arg->type == EXPR_SYMBOL && m_arg->data.symbol.name == SYM_All) {
             m_min = 1;
             m_max_inf = true;
         } else if (m_arg->type == EXPR_FUNCTION &&
                    m_arg->data.function.head->type == EXPR_SYMBOL &&
-                   m_arg->data.function.head->data.symbol == SYM_List &&
+                   m_arg->data.function.head->data.symbol.name == SYM_List &&
                    m_arg->data.function.arg_count == 2) {
             Expr* a0 = m_arg->data.function.args[0];
             Expr* a1 = m_arg->data.function.args[1];
@@ -1928,7 +1928,7 @@ static Expr* nestwhile_impl(Expr* res, bool as_list) {
             if (a1->type == EXPR_INTEGER) {
                 if (a1->data.integer < m_min) return NULL;
                 m_max = a1->data.integer;
-            } else if (a1->type == EXPR_SYMBOL && a1->data.symbol == SYM_Infinity) {
+            } else if (a1->type == EXPR_SYMBOL && a1->data.symbol.name == SYM_Infinity) {
                 m_max_inf = true;
             } else {
                 return NULL;
@@ -1947,7 +1947,7 @@ static Expr* nestwhile_impl(Expr* res, bool as_list) {
             if (max_arg->data.integer < 0) return NULL;
             max_apps = max_arg->data.integer;
             max_inf = false;
-        } else if (max_arg->type == EXPR_SYMBOL && max_arg->data.symbol == SYM_Infinity) {
+        } else if (max_arg->type == EXPR_SYMBOL && max_arg->data.symbol.name == SYM_Infinity) {
             max_inf = true;
         } else {
             return NULL;
@@ -2025,7 +2025,7 @@ static IterStep fixedpoint_step(ExprBuf* hist, void* vctx, Expr** out) {
 
     if (c->propagate_throw && next && next->type == EXPR_FUNCTION &&
         next->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = next->data.function.head->data.symbol;
+        const char* h = next->data.function.head->data.symbol.name;
         if (h == SYM_Throw || h == SYM_Abort ||
             h == SYM_Quit || h == SYM_Return) {
             *out = next;
@@ -2064,11 +2064,11 @@ static bool parse_fp_opts(Expr* res, size_t start,
         Expr* a = res->data.function.args[i];
         if (a->type == EXPR_FUNCTION &&
             a->data.function.head->type == EXPR_SYMBOL &&
-            (a->data.function.head->data.symbol == SYM_Rule ||
-             a->data.function.head->data.symbol == SYM_RuleDelayed) &&
+            (a->data.function.head->data.symbol.name == SYM_Rule ||
+             a->data.function.head->data.symbol.name == SYM_RuleDelayed) &&
             a->data.function.arg_count == 2 &&
             a->data.function.args[0]->type == EXPR_SYMBOL &&
-            a->data.function.args[0]->data.symbol == SYM_SameTest) {
+            a->data.function.args[0]->data.symbol.name == SYM_SameTest) {
             if (same_test != NULL) return false;
             same_test = a->data.function.args[1];
         } else if (!has_max && a->type == EXPR_INTEGER) {
@@ -2077,7 +2077,7 @@ static bool parse_fp_opts(Expr* res, size_t start,
             max_inf = false;
             has_max = true;
         } else if (!has_max && a->type == EXPR_SYMBOL &&
-                   a->data.symbol == SYM_Infinity) {
+                   a->data.symbol.name == SYM_Infinity) {
             has_max = true;
             max_inf = true;
         } else {
@@ -2149,11 +2149,11 @@ static bool thread_parse_spec(Expr* spec, size_t K, bool* mask) {
     }
 
     if (spec->type == EXPR_SYMBOL) {
-        if (spec->data.symbol == SYM_All) {
+        if (spec->data.symbol.name == SYM_All) {
             for (size_t i = 0; i < K; i++) mask[i] = true;
             return true;
         }
-        if (spec->data.symbol == SYM_None) {
+        if (spec->data.symbol.name == SYM_None) {
             for (size_t i = 0; i < K; i++) mask[i] = false;
             return true;
         }
@@ -2176,7 +2176,7 @@ static bool thread_parse_spec(Expr* spec, size_t K, bool* mask) {
 
     if (spec->type == EXPR_FUNCTION &&
         spec->data.function.head->type == EXPR_SYMBOL &&
-        spec->data.function.head->data.symbol == SYM_List) {
+        spec->data.function.head->data.symbol.name == SYM_List) {
         size_t na = spec->data.function.arg_count;
         int64_t m_idx, n_idx, s_step;
         if (na == 1) {

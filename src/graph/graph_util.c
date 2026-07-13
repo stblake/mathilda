@@ -22,7 +22,7 @@ static int head_is_sym(const Expr* e, const char* sym) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == sym;
+        && e->data.function.head->data.symbol.name == sym;
 }
 
 int graph_is_list(const Expr* e) {

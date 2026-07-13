@@ -52,10 +52,10 @@ static bool result_head_is(const char* src, const char* head_name) {
     bool ok = false;
     if (r->type == EXPR_FUNCTION && r->data.function.head
         && r->data.function.head->type == EXPR_SYMBOL
-        && strcmp(r->data.function.head->data.symbol, head_name) == 0) {
+        && strcmp(r->data.function.head->data.symbol.name, head_name) == 0) {
         ok = true;
     } else if (r->type == EXPR_SYMBOL
-        && strcmp(r->data.symbol, head_name) == 0) {
+        && strcmp(r->data.symbol.name, head_name) == 0) {
         ok = true;
     }
     expr_free(r);
@@ -274,7 +274,7 @@ static void test_crc_table_formula_fires(void) {
     bool still_integrate = (r->type == EXPR_FUNCTION
         && r->data.function.head
         && r->data.function.head->type == EXPR_SYMBOL
-        && strcmp(r->data.function.head->data.symbol, "Integrate") == 0);
+        && strcmp(r->data.function.head->data.symbol.name, "Integrate") == 0);
     if (still_integrate) {
         char* s = expr_to_string(r);
         fprintf(stderr, "CRC formula did not fire: result = %s\n", s);

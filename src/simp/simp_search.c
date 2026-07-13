@@ -86,7 +86,7 @@ bool has_non_integer_power(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2) {
         Expr* exp = e->data.function.args[1];
         if (exp->type != EXPR_INTEGER && exp->type != EXPR_BIGINT) return true;
@@ -109,7 +109,7 @@ static void collect_generators_capped(const Expr* e, const Expr** gens,
                                       size_t* n, size_t cap) {
     if (!e || *n >= cap) return;
     if (e->type == EXPR_SYMBOL) {
-        if (is_real_constant_symbol(e->data.symbol)) return;
+        if (is_real_constant_symbol(e->data.symbol.name)) return;
         for (size_t i = 0; i < *n; i++)
             if (expr_eq((Expr*)gens[i], (Expr*)e)) return;
         gens[(*n)++] = e;
@@ -118,7 +118,7 @@ static void collect_generators_capped(const Expr* e, const Expr** gens,
     if (e->type != EXPR_FUNCTION) return;  /* Integer/Real/String: not a generator */
     const Expr* head = e->data.function.head;
     if (head && head->type == EXPR_SYMBOL) {
-        const char* h = head->data.symbol;
+        const char* h = head->data.symbol.name;
         if (h == SYM_Plus || h == SYM_Times) {
             for (size_t i = 0; i < e->data.function.arg_count && *n < cap; i++)
                 collect_generators_capped(e->data.function.args[i], gens, n, cap);
@@ -290,7 +290,7 @@ static void try_collect_per_variable(const Expr* seed, size_t parent_score,
     if (vars->type != EXPR_FUNCTION ||
         !vars->data.function.head ||
         vars->data.function.head->type != EXPR_SYMBOL ||
-        vars->data.function.head->data.symbol != SYM_List) {
+        vars->data.function.head->data.symbol.name != SYM_List) {
         expr_free(vars);
         return;
     }
@@ -362,7 +362,7 @@ static bool simp_is_polynomial_in_own_vars(const Expr* e) {
     if (vars->type != EXPR_FUNCTION ||
         !vars->data.function.head ||
         vars->data.function.head->type != EXPR_SYMBOL ||
-        vars->data.function.head->data.symbol != SYM_List) {
+        vars->data.function.head->data.symbol.name != SYM_List) {
         expr_free(vars);
         return false;
     }
@@ -379,7 +379,7 @@ static bool simp_is_polynomial_in_own_vars(const Expr* e) {
     Expr* r = evaluate(pq);
     expr_free(pq);
     bool ok = (r && r->type == EXPR_SYMBOL &&
-               r->data.symbol == SYM_True);
+               r->data.symbol.name == SYM_True);
     if (r) expr_free(r);
     return ok;
 }
@@ -783,8 +783,8 @@ static bool split_symset_intersects(const SplitSymSet* a,
 static void split_collect_addend_symbols(const Expr* e, SplitSymSet* out) {
     if (!e) return;
     if (e->type == EXPR_SYMBOL) {
-        if (is_real_constant_symbol(e->data.symbol)) return;
-        split_symset_add(out, e->data.symbol);
+        if (is_real_constant_symbol(e->data.symbol.name)) return;
+        split_symset_add(out, e->data.symbol.name);
         return;
     }
     if (e->type != EXPR_FUNCTION) return;
@@ -820,7 +820,7 @@ static Expr* simp_split_additive(const Expr* input, const AssumeCtx* ctx,
     if (!input || input->type != EXPR_FUNCTION) return NULL;
     if (!input->data.function.head ||
         input->data.function.head->type != EXPR_SYMBOL ||
-        input->data.function.head->data.symbol != SYM_Plus)
+        input->data.function.head->data.symbol.name != SYM_Plus)
         return NULL;
     size_t n = input->data.function.arg_count;
     if (n < 4) return NULL;
@@ -968,7 +968,7 @@ static Expr* simp_split_multiplicative(const Expr* input,
     if (!input || input->type != EXPR_FUNCTION) return NULL;
     if (!input->data.function.head ||
         input->data.function.head->type != EXPR_SYMBOL ||
-        input->data.function.head->data.symbol != SYM_Times)
+        input->data.function.head->data.symbol.name != SYM_Times)
         return NULL;
     size_t n = input->data.function.arg_count;
     if (n < 3) return NULL;

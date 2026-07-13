@@ -60,7 +60,7 @@
 /* True iff `e` is the symbol `True`.  The PolynomialQ / rationalQ
  * predicates we call below return either True or False. */
 static bool is_true_symbol(const Expr* e) {
-    return e && e->type == EXPR_SYMBOL && e->data.symbol == SYM_True;
+    return e && e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_True;
 }
 
 /* True iff `f` contains `x` as a subexpression (structural FreeQ negation). */
@@ -316,7 +316,7 @@ static void crc_lazy_load(void) {
     int opened = 0;
     Expr* res = mathilda_run_file(path, &opened);
     bool failed = res && res->type == EXPR_SYMBOL
-                      && strcmp(res->data.symbol, "$Failed") == 0;
+                      && strcmp(res->data.symbol.name, "$Failed") == 0;
     if (res) expr_free(res);
     if (opened && !failed) crc_load_succeeded = true;
 }
@@ -428,22 +428,22 @@ static IntegrateMethod parse_method_option(Expr* opt, Expr** out_sub) {
     *out_sub = NULL;
     if (opt->type != EXPR_FUNCTION) return METHOD_INVALID;
     if (opt->data.function.head->type != EXPR_SYMBOL) return METHOD_INVALID;
-    const char* hd = opt->data.function.head->data.symbol;
+    const char* hd = opt->data.function.head->data.symbol.name;
     if ((hd != SYM_Rule && hd != SYM_RuleDelayed) ||
         opt->data.function.arg_count != 2) return METHOD_INVALID;
     Expr* lhs = opt->data.function.args[0];
     Expr* rhs = opt->data.function.args[1];
-    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol != SYM_Method)
+    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol.name != SYM_Method)
         return METHOD_INVALID;
 
     /* Accept either a string ("Automatic") or the symbol Automatic. */
-    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic)
+    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic)
         return METHOD_AUTOMATIC;
 
     /* List form: {"<method>", subopt -> val, ...}. */
     if (rhs->type == EXPR_FUNCTION &&
         rhs->data.function.head->type == EXPR_SYMBOL &&
-        rhs->data.function.head->data.symbol == SYM_List &&
+        rhs->data.function.head->data.symbol.name == SYM_List &&
         rhs->data.function.arg_count >= 1) {
         Expr* mname = rhs->data.function.args[0];
         if (mname->type != EXPR_STRING) return METHOD_INVALID;
@@ -453,7 +453,7 @@ static IntegrateMethod parse_method_option(Expr* opt, Expr** out_sub) {
             Expr* so = rhs->data.function.args[i];
             if (so->type != EXPR_FUNCTION ||
                 so->data.function.head->type != EXPR_SYMBOL) goto bad_subopt;
-            const char* sh = so->data.function.head->data.symbol;
+            const char* sh = so->data.function.head->data.symbol.name;
             if ((sh != SYM_Rule && sh != SYM_RuleDelayed) ||
                 so->data.function.arg_count != 2) goto bad_subopt;
             Expr* skey = so->data.function.args[0];
@@ -491,12 +491,12 @@ static bool definite_parse_method(Expr* opt, const char** name,
     if (opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2)
         return false;
     if (opt->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* hd = opt->data.function.head->data.symbol;
+    const char* hd = opt->data.function.head->data.symbol.name;
     if (hd != SYM_Rule && hd != SYM_RuleDelayed) return false;
     Expr* lhs = opt->data.function.args[0];
     Expr* rhs = opt->data.function.args[1];
-    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol != SYM_Method) return false;
-    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic) return true;
+    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol.name != SYM_Method) return false;
+    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) return true;
     if (rhs->type != EXPR_STRING) return false;
     IntegrateMethod m = method_from_string(rhs->data.string);
     if (m == METHOD_INVALID) return false;
@@ -518,10 +518,10 @@ static bool definite_parse_method(Expr* opt, const char** name,
 static bool option_lhs_is(Expr* opt, const char* sym) {
     if (opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2) return false;
     if (opt->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* hd = opt->data.function.head->data.symbol;
+    const char* hd = opt->data.function.head->data.symbol.name;
     if (hd != SYM_Rule && hd != SYM_RuleDelayed) return false;
     Expr* lhs = opt->data.function.args[0];
-    return lhs->type == EXPR_SYMBOL && lhs->data.symbol == sym;
+    return lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == sym;
 }
 
 /* Definite / iterated integration Integrate[f, {x,a,b}, {y,c,d}, ..., opts].
@@ -559,12 +559,12 @@ static Expr* integrate_definite(Expr* res) {
          * by name).  Selects the Cauchy principal value for interior poles. */
         if (opt->type == EXPR_FUNCTION && opt->data.function.arg_count == 2 &&
             opt->data.function.head->type == EXPR_SYMBOL &&
-            (opt->data.function.head->data.symbol == SYM_Rule ||
-             opt->data.function.head->data.symbol == SYM_RuleDelayed) &&
+            (opt->data.function.head->data.symbol.name == SYM_Rule ||
+             opt->data.function.head->data.symbol.name == SYM_RuleDelayed) &&
             opt->data.function.args[0]->type == EXPR_SYMBOL &&
-            strcmp(opt->data.function.args[0]->data.symbol, "PrincipalValue") == 0) {
+            strcmp(opt->data.function.args[0]->data.symbol.name, "PrincipalValue") == 0) {
             Expr* rhs = opt->data.function.args[1];
-            principal_value = (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_True);
+            principal_value = (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_True);
             continue;
         }
         if (option_lhs_is(opt, SYM_Method)) {
@@ -682,7 +682,7 @@ Expr* builtin_integrate(Expr* res) {
      * into each element (which stays symbolic if a piece cannot be done). */
     if (f->type == EXPR_FUNCTION &&
         f->data.function.head->type == EXPR_SYMBOL &&
-        f->data.function.head->data.symbol == SYM_List) {
+        f->data.function.head->data.symbol.name == SYM_List) {
         size_t n = f->data.function.arg_count;
         Expr** elems = malloc(n * sizeof(Expr*));
         for (size_t i = 0; i < n; i++) {
@@ -726,7 +726,7 @@ Expr* builtin_integrate(Expr* res) {
      * which understand the SeriesData head. */
     if (f->type == EXPR_FUNCTION &&
         f->data.function.head->type == EXPR_SYMBOL &&
-        f->data.function.head->data.symbol == SYM_SeriesData &&
+        f->data.function.head->data.symbol.name == SYM_SeriesData &&
         f->data.function.arg_count == 6) {
         Expr* r = series_integrate(f, x);
         if (r) return r;   /* residue/unsupported -> fall through, stays unevaluated */

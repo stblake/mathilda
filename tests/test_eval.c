@@ -17,7 +17,7 @@ void test_hold() {
     ASSERT(res != NULL);
     ASSERT(res->type == EXPR_FUNCTION);
     ASSERT(res->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(res->data.function.head->data.symbol, "Hold") == 0);
+    ASSERT(strcmp(res->data.function.head->data.symbol.name, "Hold") == 0);
     
     expr_free(e);
     expr_free(res);
@@ -33,13 +33,13 @@ void test_orderless() {
     ASSERT(res->data.function.arg_count == 3);
     
     ASSERT(res->data.function.args[0]->type == EXPR_SYMBOL);
-    ASSERT(strcmp(res->data.function.args[0]->data.symbol, "a") == 0);
+    ASSERT(strcmp(res->data.function.args[0]->data.symbol.name, "a") == 0);
     
     ASSERT(res->data.function.args[1]->type == EXPR_SYMBOL);
-    ASSERT(strcmp(res->data.function.args[1]->data.symbol, "b") == 0);
+    ASSERT(strcmp(res->data.function.args[1]->data.symbol.name, "b") == 0);
     
     ASSERT(res->data.function.args[2]->type == EXPR_SYMBOL);
-    ASSERT(strcmp(res->data.function.args[2]->data.symbol, "c") == 0);
+    ASSERT(strcmp(res->data.function.args[2]->data.symbol.name, "c") == 0);
     
     expr_free(e);
     expr_free(res);
@@ -55,13 +55,13 @@ void test_flat() {
     ASSERT(res->data.function.arg_count == 3);
     
     ASSERT(res->data.function.args[0]->type == EXPR_SYMBOL);
-    ASSERT(strcmp(res->data.function.args[0]->data.symbol, "a") == 0);
+    ASSERT(strcmp(res->data.function.args[0]->data.symbol.name, "a") == 0);
     
     ASSERT(res->data.function.args[1]->type == EXPR_SYMBOL);
-    ASSERT(strcmp(res->data.function.args[1]->data.symbol, "b") == 0);
+    ASSERT(strcmp(res->data.function.args[1]->data.symbol.name, "b") == 0);
     
     ASSERT(res->data.function.args[2]->type == EXPR_SYMBOL);
-    ASSERT(strcmp(res->data.function.args[2]->data.symbol, "c") == 0);
+    ASSERT(strcmp(res->data.function.args[2]->data.symbol.name, "c") == 0);
     
     expr_free(e);
     expr_free(res);
@@ -75,16 +75,16 @@ void test_flat() {
     Expr* e1 = parse_expression("f[f[x]]");
     Expr* res1 = evaluate(e1);
     ASSERT(res1->type == EXPR_FUNCTION && res1->data.function.arg_count == 1);
-    ASSERT(strcmp(res1->data.function.head->data.symbol, "f") == 0);
+    ASSERT(strcmp(res1->data.function.head->data.symbol.name, "f") == 0);
     ASSERT(res1->data.function.args[0]->type == EXPR_SYMBOL);
-    ASSERT(strcmp(res1->data.function.args[0]->data.symbol, "x") == 0);
+    ASSERT(strcmp(res1->data.function.args[0]->data.symbol.name, "x") == 0);
     expr_free(e1);
     expr_free(res1);
 
     Expr* e2 = parse_expression("f[f[x], f[y]]");
     Expr* res2 = evaluate(e2);
     ASSERT(res2->type == EXPR_FUNCTION && res2->data.function.arg_count == 2);
-    ASSERT(strcmp(res2->data.function.head->data.symbol, "f") == 0);
+    ASSERT(strcmp(res2->data.function.head->data.symbol.name, "f") == 0);
     expr_free(e2);
     expr_free(res2);
 }
@@ -99,13 +99,13 @@ void test_flat_and_orderless() {
     ASSERT(res->data.function.arg_count == 3);
     
     ASSERT(res->data.function.args[0]->type == EXPR_SYMBOL);
-    ASSERT(strcmp(res->data.function.args[0]->data.symbol, "a") == 0);
+    ASSERT(strcmp(res->data.function.args[0]->data.symbol.name, "a") == 0);
     
     ASSERT(res->data.function.args[1]->type == EXPR_SYMBOL);
-    ASSERT(strcmp(res->data.function.args[1]->data.symbol, "b") == 0);
+    ASSERT(strcmp(res->data.function.args[1]->data.symbol.name, "b") == 0);
     
     ASSERT(res->data.function.args[2]->type == EXPR_SYMBOL);
-    ASSERT(strcmp(res->data.function.args[2]->data.symbol, "c") == 0);
+    ASSERT(strcmp(res->data.function.args[2]->data.symbol.name, "c") == 0);
     
     expr_free(e);
     expr_free(res);
@@ -129,7 +129,7 @@ void test_setdelayed_and_downvalues() {
     // Test SetDelayed[f[Pattern[y, Blank[]]], Plus[y, 1]]
     Expr* e1 = parse_expression("SetDelayed[f[Pattern[y, Blank[]]], Plus[y, 1]]");
     Expr* res1 = evaluate(e1);
-    ASSERT(res1 != NULL && res1->type == EXPR_SYMBOL && strcmp(res1->data.symbol, "Null") == 0);
+    ASSERT(res1 != NULL && res1->type == EXPR_SYMBOL && strcmp(res1->data.symbol.name, "Null") == 0);
     
     // Evaluate f[10] -> 11
     Expr* e2 = parse_expression("f[10]");
@@ -157,7 +157,7 @@ void test_dimensions() {
     Expr* e1 = parse_expression("Dimensions[{{1, 2}, {3, 4}}]");
     Expr* res1 = evaluate(e1);
     ASSERT(res1 && res1->type == EXPR_FUNCTION);
-    ASSERT(strcmp(res1->data.function.head->data.symbol, "List") == 0);
+    ASSERT(strcmp(res1->data.function.head->data.symbol.name, "List") == 0);
     ASSERT(res1->data.function.arg_count == 2);
     ASSERT(res1->data.function.args[0]->type == EXPR_INTEGER && res1->data.function.args[0]->data.integer == 2);
     ASSERT(res1->data.function.args[1]->type == EXPR_INTEGER && res1->data.function.args[1]->data.integer == 2);
@@ -188,29 +188,29 @@ void test_dimensions() {
 void test_part() {
     Expr* e1 = parse_expression("{a, b, c}[[2]]");
     Expr* res1 = evaluate(e1);
-    ASSERT(res1 && res1->type == EXPR_SYMBOL && strcmp(res1->data.symbol, "b") == 0);
+    ASSERT(res1 && res1->type == EXPR_SYMBOL && strcmp(res1->data.symbol.name, "b") == 0);
     expr_free(e1); expr_free(res1);
 
     Expr* e2 = parse_expression("{a, b, c}[[-1]]");
     Expr* res2 = evaluate(e2);
-    ASSERT(res2 && res2->type == EXPR_SYMBOL && strcmp(res2->data.symbol, "c") == 0);
+    ASSERT(res2 && res2->type == EXPR_SYMBOL && strcmp(res2->data.symbol.name, "c") == 0);
     expr_free(e2); expr_free(res2);
 
     Expr* e3 = parse_expression("{a, b, c}[[0]]");
     Expr* res3 = evaluate(e3);
-    ASSERT(res3 && res3->type == EXPR_SYMBOL && strcmp(res3->data.symbol, "List") == 0);
+    ASSERT(res3 && res3->type == EXPR_SYMBOL && strcmp(res3->data.symbol.name, "List") == 0);
     expr_free(e3); expr_free(res3);
 }
 
 void test_builtin_head() {
     Expr* e1 = parse_expression("Head[g[x]]");
     Expr* res1 = evaluate(e1);
-    ASSERT(res1 && res1->type == EXPR_SYMBOL && strcmp(res1->data.symbol, "g") == 0);
+    ASSERT(res1 && res1->type == EXPR_SYMBOL && strcmp(res1->data.symbol.name, "g") == 0);
     expr_free(e1); expr_free(res1);
 
     Expr* e2 = parse_expression("Head[123]");
     Expr* res2 = evaluate(e2);
-    ASSERT(res2 && res2->type == EXPR_SYMBOL && strcmp(res2->data.symbol, "Integer") == 0);
+    ASSERT(res2 && res2->type == EXPR_SYMBOL && strcmp(res2->data.symbol.name, "Integer") == 0);
     expr_free(e2); expr_free(res2);
 
     /* Atomic heads. Use fresh symbols since earlier tests bind x, y, etc. */
@@ -230,26 +230,26 @@ void test_builtin_head() {
 void test_first_last_most_rest() {
     Expr* e1 = parse_expression("First[{a, b, c}]");
     Expr* res1 = evaluate(e1);
-    ASSERT(res1 && res1->type == EXPR_SYMBOL && strcmp(res1->data.symbol, "a") == 0);
+    ASSERT(res1 && res1->type == EXPR_SYMBOL && strcmp(res1->data.symbol.name, "a") == 0);
     expr_free(e1); expr_free(res1);
 
     Expr* e2 = parse_expression("Last[{a, b, c}]");
     Expr* res2 = evaluate(e2);
-    ASSERT(res2 && res2->type == EXPR_SYMBOL && strcmp(res2->data.symbol, "c") == 0);
+    ASSERT(res2 && res2->type == EXPR_SYMBOL && strcmp(res2->data.symbol.name, "c") == 0);
     expr_free(e2); expr_free(res2);
 
     Expr* e3 = parse_expression("Most[{a, b, c}]");
     Expr* res3 = evaluate(e3);
     ASSERT(res3 && res3->type == EXPR_FUNCTION && res3->data.function.arg_count == 2);
-    ASSERT(strcmp(res3->data.function.args[0]->data.symbol, "a") == 0);
-    ASSERT(strcmp(res3->data.function.args[1]->data.symbol, "b") == 0);
+    ASSERT(strcmp(res3->data.function.args[0]->data.symbol.name, "a") == 0);
+    ASSERT(strcmp(res3->data.function.args[1]->data.symbol.name, "b") == 0);
     expr_free(e3); expr_free(res3);
 
     Expr* e4 = parse_expression("Rest[{a, b, c}]");
     Expr* res4 = evaluate(e4);
     ASSERT(res4 && res4->type == EXPR_FUNCTION && res4->data.function.arg_count == 2);
-    ASSERT(strcmp(res4->data.function.args[0]->data.symbol, "b") == 0);
-    ASSERT(strcmp(res4->data.function.args[1]->data.symbol, "c") == 0);
+    ASSERT(strcmp(res4->data.function.args[0]->data.symbol.name, "b") == 0);
+    ASSERT(strcmp(res4->data.function.args[1]->data.symbol.name, "c") == 0);
     expr_free(e4); expr_free(res4);
 }
 
@@ -297,11 +297,11 @@ void test_append_prepend_to() {
 void test_attributes() {
     Expr* e1 = parse_expression("Attributes[Plus]");
     Expr* res1 = evaluate(e1);
-    ASSERT(res1 && res1->type == EXPR_FUNCTION && strcmp(res1->data.function.head->data.symbol, "List") == 0);
+    ASSERT(res1 && res1->type == EXPR_FUNCTION && strcmp(res1->data.function.head->data.symbol.name, "List") == 0);
     // Should contain Flat, Listable, NumericFunction, OneIdentity, Orderless
     bool found_flat = false;
     for (size_t i = 0; i < res1->data.function.arg_count; i++) {
-        if (strcmp(res1->data.function.args[i]->data.symbol, "Flat") == 0) found_flat = true;
+        if (strcmp(res1->data.function.args[i]->data.symbol.name, "Flat") == 0) found_flat = true;
     }
     ASSERT(found_flat);
     expr_free(e1); expr_free(res1);
@@ -311,7 +311,7 @@ void test_listable() {
     // Plus[{1, 2}, {3, 4}] -> {4, 6}
     Expr* e1 = parse_expression("Plus[{1, 2}, {3, 4}]");
     Expr* res1 = evaluate(e1);
-    ASSERT(res1 && res1->type == EXPR_FUNCTION && strcmp(res1->data.function.head->data.symbol, "List") == 0);
+    ASSERT(res1 && res1->type == EXPR_FUNCTION && strcmp(res1->data.function.head->data.symbol.name, "List") == 0);
     ASSERT(res1->data.function.arg_count == 2);
     ASSERT(res1->data.function.args[0]->type == EXPR_INTEGER && res1->data.function.args[0]->data.integer == 4);
     ASSERT(res1->data.function.args[1]->type == EXPR_INTEGER && res1->data.function.args[1]->data.integer == 6);
@@ -322,7 +322,7 @@ void test_listable() {
     Expr* res2 = evaluate(e2);
     ASSERT(res2 && res2->type == EXPR_FUNCTION && res2->data.function.arg_count == 3);
     // Elements are sorted because Plus is Orderless: Plus[1, a]
-    ASSERT(res2->data.function.args[0]->type == EXPR_FUNCTION && strcmp(res2->data.function.args[0]->data.function.head->data.symbol, "Plus") == 0);
+    ASSERT(res2->data.function.args[0]->type == EXPR_FUNCTION && strcmp(res2->data.function.args[0]->data.function.head->data.symbol.name, "Plus") == 0);
     expr_free(e2); expr_free(res2);
 
     // {a,b,c} + {1,2,3} -> {Plus[1, a], Plus[2, b], Plus[3, c]}
@@ -342,7 +342,7 @@ void test_listable() {
     Expr* e5 = parse_expression("{a, b, c} * 2");
     Expr* res5 = evaluate(e5);
     ASSERT(res5 && res5->type == EXPR_FUNCTION && res5->data.function.arg_count == 3);
-    ASSERT(res5->data.function.args[0]->type == EXPR_FUNCTION && strcmp(res5->data.function.args[0]->data.function.head->data.symbol, "Times") == 0);
+    ASSERT(res5->data.function.args[0]->type == EXPR_FUNCTION && strcmp(res5->data.function.args[0]->data.function.head->data.symbol.name, "Times") == 0);
     expr_free(e5); expr_free(res5);
 
     // Test Mod
@@ -377,7 +377,7 @@ void test_oneidentity() {
     // Plus[unbound] -> unbound
     Expr* e1 = parse_expression("Plus[unbound]");
     Expr* res1 = evaluate(e1);
-    ASSERT(res1 && res1->type == EXPR_SYMBOL && strcmp(res1->data.symbol, "unbound") == 0);
+    ASSERT(res1 && res1->type == EXPR_SYMBOL && strcmp(res1->data.symbol.name, "unbound") == 0);
     expr_free(e1); expr_free(res1);
 }
 
@@ -419,7 +419,7 @@ void test_plus() {
     Expr* e3 = parse_expression("x + x");
     Expr* res3 = evaluate(e3);
     ASSERT(res3 && res3->type == EXPR_FUNCTION);
-    ASSERT(strcmp(res3->data.function.head->data.symbol, "Times") == 0);
+    ASSERT(strcmp(res3->data.function.head->data.symbol.name, "Times") == 0);
     ASSERT(res3->data.function.args[0]->data.integer == 2);
     expr_free(e3); expr_free(res3);
 
@@ -428,7 +428,7 @@ void test_plus() {
     Expr* e4 = parse_expression("2*x^2 + 3*x^2");
     Expr* res4 = evaluate(e4);
     ASSERT(res4 && res4->type == EXPR_FUNCTION);
-    ASSERT(strcmp(res4->data.function.head->data.symbol, "Times") == 0);
+    ASSERT(strcmp(res4->data.function.head->data.symbol.name, "Times") == 0);
     ASSERT(res4->data.function.args[0]->data.integer == 5);
     expr_free(e4); expr_free(res4);
 
@@ -436,18 +436,18 @@ void test_plus() {
     Expr* e6 = parse_expression("1 + 2*x + x^2 + 4*x");
     Expr* res6 = evaluate(e6);
     ASSERT(res6 && res6->type == EXPR_FUNCTION);
-    ASSERT(strcmp(res6->data.function.head->data.symbol, "Plus") == 0);
+    ASSERT(strcmp(res6->data.function.head->data.symbol.name, "Plus") == 0);
     ASSERT(res6->data.function.arg_count == 3);
     // Check canonical order: 1, 6*x, x^2
     ASSERT(res6->data.function.args[0]->type == EXPR_INTEGER && res6->data.function.args[0]->data.integer == 1);
-    ASSERT(res6->data.function.args[1]->type == EXPR_FUNCTION && strcmp(res6->data.function.args[1]->data.function.head->data.symbol, "Times") == 0);
-    ASSERT(res6->data.function.args[2]->type == EXPR_FUNCTION && strcmp(res6->data.function.args[2]->data.function.head->data.symbol, "Power") == 0);
+    ASSERT(res6->data.function.args[1]->type == EXPR_FUNCTION && strcmp(res6->data.function.args[1]->data.function.head->data.symbol.name, "Times") == 0);
+    ASSERT(res6->data.function.args[2]->type == EXPR_FUNCTION && strcmp(res6->data.function.args[2]->data.function.head->data.symbol.name, "Power") == 0);
     expr_free(e6); expr_free(res6);
 
     // Plus[1, x, -1] -> x
     Expr* e5 = parse_expression("1 + x - 1");
     Expr* res5 = evaluate(e5);
-    ASSERT(res5 && res5->type == EXPR_SYMBOL && strcmp(res5->data.symbol, "x") == 0);
+    ASSERT(res5 && res5->type == EXPR_SYMBOL && strcmp(res5->data.symbol.name, "x") == 0);
     expr_free(e5); expr_free(res5);
 }
 
@@ -455,7 +455,7 @@ void test_divide() {
     // Divide[1, 2] -> Rational[1, 2]
     Expr* e1 = parse_expression("Divide[1, 2]");
     Expr* res1 = evaluate(e1);
-    ASSERT(res1 && res1->type == EXPR_FUNCTION && strcmp(res1->data.function.head->data.symbol, "Rational") == 0);
+    ASSERT(res1 && res1->type == EXPR_FUNCTION && strcmp(res1->data.function.head->data.symbol.name, "Rational") == 0);
     ASSERT(res1->data.function.arg_count == 2);
     ASSERT(res1->data.function.args[0]->data.integer == 1);
     ASSERT(res1->data.function.args[1]->data.integer == 2);
@@ -476,7 +476,7 @@ void test_divide() {
     // Divide[105, 55] -> Rational[21, 11]
     Expr* e4 = parse_expression("Divide[105, 55]");
     Expr* res4 = evaluate(e4);
-    ASSERT(res4 && res4->type == EXPR_FUNCTION && strcmp(res4->data.function.head->data.symbol, "Rational") == 0);
+    ASSERT(res4 && res4->type == EXPR_FUNCTION && strcmp(res4->data.function.head->data.symbol.name, "Rational") == 0);
     ASSERT(res4->data.function.args[0]->data.integer == 21);
     ASSERT(res4->data.function.args[1]->data.integer == 11);
     expr_free(e4); expr_free(res4);
@@ -484,9 +484,9 @@ void test_divide() {
     // Divide[x, y] -> Times[x, Power[y, -1]]
     Expr* e5 = parse_expression("Divide[x, y]");
     Expr* res5 = evaluate(e5);
-    ASSERT(res5 && res5->type == EXPR_FUNCTION && strcmp(res5->data.function.head->data.symbol, "Times") == 0);
+    ASSERT(res5 && res5->type == EXPR_FUNCTION && strcmp(res5->data.function.head->data.symbol.name, "Times") == 0);
     ASSERT(res5->data.function.arg_count == 2);
-    ASSERT(strcmp(res5->data.function.args[1]->data.function.head->data.symbol, "Power") == 0);
+    ASSERT(strcmp(res5->data.function.args[1]->data.function.head->data.symbol.name, "Power") == 0);
     expr_free(e5); expr_free(res5);
 }
 
@@ -494,7 +494,7 @@ void test_rational_arithmetic() {
     // 1 + 1/2 -> 3/2
     Expr* e1 = parse_expression("1 + 1/2");
     Expr* res1 = evaluate(e1);
-    ASSERT(res1 && res1->type == EXPR_FUNCTION && strcmp(res1->data.function.head->data.symbol, "Rational") == 0);
+    ASSERT(res1 && res1->type == EXPR_FUNCTION && strcmp(res1->data.function.head->data.symbol.name, "Rational") == 0);
     ASSERT(res1->data.function.args[0]->data.integer == 3);
     ASSERT(res1->data.function.args[1]->data.integer == 2);
     expr_free(e1); expr_free(res1);
@@ -502,7 +502,7 @@ void test_rational_arithmetic() {
     // 3/2 * 1/2 -> 3/4
     Expr* e2 = parse_expression("3/2 * 1/2");
     Expr* res2 = evaluate(e2);
-    ASSERT(res2 && res2->type == EXPR_FUNCTION && strcmp(res2->data.function.head->data.symbol, "Rational") == 0);
+    ASSERT(res2 && res2->type == EXPR_FUNCTION && strcmp(res2->data.function.head->data.symbol.name, "Rational") == 0);
     ASSERT(res2->data.function.args[0]->data.integer == 3);
     ASSERT(res2->data.function.args[1]->data.integer == 4);
     expr_free(e2); expr_free(res2);
@@ -548,21 +548,21 @@ void test_power() {
     // (a*b)^2 -> a^2 * b^2
     Expr* e4 = parse_expression("(a*b)^2");
     Expr* res4 = evaluate(e4);
-    ASSERT(res4 && res4->type == EXPR_FUNCTION && strcmp(res4->data.function.head->data.symbol, "Times") == 0);
+    ASSERT(res4 && res4->type == EXPR_FUNCTION && strcmp(res4->data.function.head->data.symbol.name, "Times") == 0);
     // Elements should be Power[a, 2] and Power[b, 2]
     expr_free(e4); expr_free(res4);
 
     // (a^2)^3 -> a^6
     Expr* e5 = parse_expression("(a^2)^3");
     Expr* res5 = evaluate(e5);
-    ASSERT(res5 && res5->type == EXPR_FUNCTION && strcmp(res5->data.function.head->data.symbol, "Power") == 0);
+    ASSERT(res5 && res5->type == EXPR_FUNCTION && strcmp(res5->data.function.head->data.symbol.name, "Power") == 0);
     ASSERT(res5->data.function.args[1]->type == EXPR_INTEGER && res5->data.function.args[1]->data.integer == 6);
     expr_free(e5); expr_free(res5);
 
     // (-1)^(1/2) -> Complex[0, 1]
     Expr* e6 = parse_expression("(-1)^(1/2)");
     Expr* res6 = evaluate(e6);
-    ASSERT(res6 && res6->type == EXPR_FUNCTION && strcmp(res6->data.function.head->data.symbol, "Complex") == 0);
+    ASSERT(res6 && res6->type == EXPR_FUNCTION && strcmp(res6->data.function.head->data.symbol.name, "Complex") == 0);
     ASSERT(res6->data.function.args[1]->data.integer == 1);
     expr_free(e6); expr_free(res6);
 }
@@ -577,13 +577,13 @@ void test_sqrt() {
     // Sqrt[2] -> Power[2, 1/2]
     Expr* e2 = parse_expression("Sqrt[2]");
     Expr* res2 = evaluate(e2);
-    ASSERT(res2 && res2->type == EXPR_FUNCTION && strcmp(res2->data.function.head->data.symbol, "Power") == 0);
+    ASSERT(res2 && res2->type == EXPR_FUNCTION && strcmp(res2->data.function.head->data.symbol.name, "Power") == 0);
     expr_free(e2); expr_free(res2);
 
     // Sqrt[{1, 4, 9}] -> {1, 2, 3}
     Expr* e3 = parse_expression("Sqrt[{1, 4, 9}]");
     Expr* res3 = evaluate(e3);
-    ASSERT(res3 && res3->type == EXPR_FUNCTION && strcmp(res3->data.function.head->data.symbol, "List") == 0);
+    ASSERT(res3 && res3->type == EXPR_FUNCTION && strcmp(res3->data.function.head->data.symbol.name, "List") == 0);
     ASSERT(res3->data.function.arg_count == 3);
     ASSERT(res3->data.function.args[0]->data.integer == 1);
     ASSERT(res3->data.function.args[1]->data.integer == 2);
@@ -593,14 +593,14 @@ void test_sqrt() {
     // Sqrt[x^2] -> Power[Power[x, 2], 1/2]
     Expr* e4 = parse_expression("Sqrt[x^2]");
     Expr* res4 = evaluate(e4);
-    ASSERT(res4 && res4->type == EXPR_FUNCTION && strcmp(res4->data.function.head->data.symbol, "Power") == 0);
+    ASSERT(res4 && res4->type == EXPR_FUNCTION && strcmp(res4->data.function.head->data.symbol.name, "Power") == 0);
     // Should NOT automatically simplify to x
     expr_free(e4); expr_free(res4);
 
     // Sqrt[45] -> 3*Sqrt[5]
     Expr* e5 = parse_expression("Sqrt[45]");
     Expr* res5 = evaluate(e5);
-    ASSERT(res5 && res5->type == EXPR_FUNCTION && strcmp(res5->data.function.head->data.symbol, "Times") == 0);
+    ASSERT(res5 && res5->type == EXPR_FUNCTION && strcmp(res5->data.function.head->data.symbol.name, "Times") == 0);
     ASSERT(res5->data.function.arg_count == 2);
     ASSERT(res5->data.function.args[0]->type == EXPR_INTEGER && res5->data.function.args[0]->data.integer == 3);
     expr_free(e5); expr_free(res5);
@@ -608,7 +608,7 @@ void test_sqrt() {
     // Sqrt[-9] -> 3*I
     Expr* e6 = parse_expression("Sqrt[-9]");
     Expr* res6 = evaluate(e6);
-    ASSERT(res6 && res6->type == EXPR_FUNCTION && strcmp(res6->data.function.head->data.symbol, "Complex") == 0);
+    ASSERT(res6 && res6->type == EXPR_FUNCTION && strcmp(res6->data.function.head->data.symbol.name, "Complex") == 0);
     ASSERT(res6->data.function.args[1]->type == EXPR_INTEGER && res6->data.function.args[1]->data.integer == 3);
     expr_free(e6); expr_free(res6);
 }
@@ -624,16 +624,16 @@ void test_apply() {
     // myApplyFunc @@ {a, b} -> myApplyFunc[a, b]
     Expr* e2 = parse_expression("myApplyFunc @@ {a, b}");
     Expr* res2 = evaluate(e2);
-    ASSERT(res2 && res2->type == EXPR_FUNCTION && strcmp(res2->data.function.head->data.symbol, "myApplyFunc") == 0);
+    ASSERT(res2 && res2->type == EXPR_FUNCTION && strcmp(res2->data.function.head->data.symbol.name, "myApplyFunc") == 0);
     ASSERT(res2->data.function.arg_count == 2);
     expr_free(e2); expr_free(res2);
 
     // myApplyFunc @@@ {{a, b}, {c, d}} -> {myApplyFunc[a, b], myApplyFunc[c, d]}
     Expr* e3 = parse_expression("myApplyFunc @@@ {{a, b}, {c, d}}");
     Expr* res3 = evaluate(e3);
-    ASSERT(res3 && res3->type == EXPR_FUNCTION && strcmp(res3->data.function.head->data.symbol, "List") == 0);
+    ASSERT(res3 && res3->type == EXPR_FUNCTION && strcmp(res3->data.function.head->data.symbol.name, "List") == 0);
     ASSERT(res3->data.function.arg_count == 2);
-    ASSERT(res3->data.function.args[0]->type == EXPR_FUNCTION && strcmp(res3->data.function.args[0]->data.function.head->data.symbol, "myApplyFunc") == 0);
+    ASSERT(res3->data.function.args[0]->type == EXPR_FUNCTION && strcmp(res3->data.function.args[0]->data.function.head->data.symbol.name, "myApplyFunc") == 0);
     expr_free(e3); expr_free(res3);
 }
 
@@ -642,9 +642,9 @@ void test_map() {
     // f /@ {a, b, c} -> {f[a], f[b], f[c]}
     Expr* e1 = parse_expression("f /@ {a, b, c}");
     Expr* res1 = evaluate(e1);
-    ASSERT(res1 && res1->type == EXPR_FUNCTION && strcmp(res1->data.function.head->data.symbol, "List") == 0);
+    ASSERT(res1 && res1->type == EXPR_FUNCTION && strcmp(res1->data.function.head->data.symbol.name, "List") == 0);
     ASSERT(res1->data.function.arg_count == 3);
-    ASSERT(res1->data.function.args[0]->type == EXPR_FUNCTION && strcmp(res1->data.function.args[0]->data.function.head->data.symbol, "f") == 0);
+    ASSERT(res1->data.function.args[0]->type == EXPR_FUNCTION && strcmp(res1->data.function.args[0]->data.function.head->data.symbol.name, "f") == 0);
     expr_free(e1); expr_free(res1);
 
     // Map[f, {{a, b}, {c, d}}, {2}] -> {{f[a], f[b]}, {f[c], f[d]}}
@@ -660,7 +660,7 @@ void test_map_all() {
     // f //@ {a, {b}} -> f[{f[a], f[{f[b]}]}]
     Expr* e1 = parse_expression("f //@ {a, {b}}");
     Expr* res1 = evaluate(e1);
-    ASSERT(res1 && res1->type == EXPR_FUNCTION && strcmp(res1->data.function.head->data.symbol, "f") == 0);
+    ASSERT(res1 && res1->type == EXPR_FUNCTION && strcmp(res1->data.function.head->data.symbol.name, "f") == 0);
     expr_free(e1); expr_free(res1);
 }
 
@@ -697,26 +697,26 @@ void test_matchq() {
     // MatchQ[1, _] -> True
     Expr* e1 = parse_expression("MatchQ[1, _]");
     Expr* res1 = evaluate(e1);
-    ASSERT(res1 && res1->type == EXPR_SYMBOL && strcmp(res1->data.symbol, "True") == 0);
+    ASSERT(res1 && res1->type == EXPR_SYMBOL && strcmp(res1->data.symbol.name, "True") == 0);
     expr_free(e1); expr_free(res1);
 
     // MatchQ[f[x], f[_]] -> True
     Expr* e2 = parse_expression("MatchQ[f[x], f[_]]");
     Expr* res2 = evaluate(e2);
-    ASSERT(res2 && res2->type == EXPR_SYMBOL && strcmp(res2->data.symbol, "True") == 0);
+    ASSERT(res2 && res2->type == EXPR_SYMBOL && strcmp(res2->data.symbol.name, "True") == 0);
     expr_free(e2); expr_free(res2);
 
     // MatchQ[f[x], g[_]] -> False
     Expr* e3 = parse_expression("MatchQ[f[x], g[_]]");
     Expr* res3 = evaluate(e3);
-    ASSERT(res3 && res3->type == EXPR_SYMBOL && strcmp(res3->data.symbol, "False") == 0);
+    ASSERT(res3 && res3->type == EXPR_SYMBOL && strcmp(res3->data.symbol.name, "False") == 0);
     expr_free(e3); expr_free(res3);
 }
 
 void test_compoundexpression() {
     Expr* e1 = parse_expression("a; b; c;");
     Expr* res1 = evaluate(e1);
-    ASSERT(res1 && res1->type == EXPR_SYMBOL && strcmp(res1->data.symbol, "Null") == 0);
+    ASSERT(res1 && res1->type == EXPR_SYMBOL && strcmp(res1->data.symbol.name, "Null") == 0);
     expr_free(res1); expr_free(e1);
 
     Expr* e2 = parse_expression("x = 11; y = 12");

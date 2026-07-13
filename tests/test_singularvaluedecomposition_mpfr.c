@@ -52,7 +52,7 @@ static double as_double(Expr* e) {
 #endif
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         if (strcmp(h, "Rational") == 0 && e->data.function.arg_count == 2) {
             return as_double(e->data.function.args[0])
                  / as_double(e->data.function.args[1]);

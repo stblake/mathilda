@@ -93,7 +93,7 @@ static bool get_approx(Expr* e, double complex* out, bool* is_inexact) {
 }
 
 static bool is_infinity(Expr* e) {
-    return e->type == EXPR_SYMBOL && e->data.symbol == SYM_Infinity;
+    return e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity;
 }
 
 /*
@@ -143,7 +143,7 @@ static Expr* peel_imaginary_unit(Expr* arg) {
         return expr_copy(im);
     }
     if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
-        arg->data.function.head->data.symbol == SYM_Times &&
+        arg->data.function.head->data.symbol.name == SYM_Times &&
         arg->data.function.arg_count > 0) {
         Expr* first = arg->data.function.args[0];
         Expr* fre; Expr* fim;
@@ -204,7 +204,7 @@ static Expr* try_simp_forward_of_inverse_hyp(const char* outer, Expr* arg) {
     if (arg->type != EXPR_FUNCTION || arg->data.function.arg_count != 1) return NULL;
     if (!arg->data.function.head ||
         arg->data.function.head->type != EXPR_SYMBOL) return NULL;
-    const char* inner = arg->data.function.head->data.symbol;
+    const char* inner = arg->data.function.head->data.symbol.name;
     Expr* x = arg->data.function.args[0];
 
     #define SQRT_OF(arg_e)                                                     \
@@ -292,7 +292,7 @@ static Expr* strip_inverse_call(Expr* arg, const char* inverse_name) {
 
 static bool is_minus_infinity(Expr* e) {
     if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 && 
-        e->data.function.head->type == EXPR_SYMBOL && e->data.function.head->data.symbol == SYM_Times) {
+        e->data.function.head->type == EXPR_SYMBOL && e->data.function.head->data.symbol.name == SYM_Times) {
         Expr* a1 = e->data.function.args[0];
         Expr* a2 = e->data.function.args[1];
         if (a1->type == EXPR_INTEGER && a1->data.integer == -1 && is_infinity(a2)) return true;

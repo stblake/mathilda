@@ -30,7 +30,7 @@ static const char* fn_head(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION || !e->data.function.head
         || e->data.function.head->type != EXPR_SYMBOL)
         return NULL;
-    return e->data.function.head->data.symbol;
+    return e->data.function.head->data.symbol.name;
 }
 
 /* Build a fresh normalized edge (with copied endpoints) from any accepted edge

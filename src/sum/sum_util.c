@@ -29,7 +29,7 @@ Expr* sum_factor(Expr* e) {
     /* If Factor came back unevaluated (head Factor), keep the input form. */
     if (r && r->type == EXPR_FUNCTION
           && r->data.function.head->type == EXPR_SYMBOL
-          && strcmp(r->data.function.head->data.symbol, "Factor") == 0) {
+          && strcmp(r->data.function.head->data.symbol.name, "Factor") == 0) {
         expr_free(r);
         return expr_copy(e);
     }
@@ -39,7 +39,7 @@ Expr* sum_factor(Expr* e) {
 bool sum_free_of(Expr* e, Expr* var) {
     Expr* args[2] = { expr_copy(e), expr_copy(var) };
     Expr* r = sum_eval("FreeQ", args, 2);
-    bool yes = (r && r->type == EXPR_SYMBOL && strcmp(r->data.symbol, "True") == 0);
+    bool yes = (r && r->type == EXPR_SYMBOL && strcmp(r->data.symbol.name, "True") == 0);
     if (r) expr_free(r);
     return yes;
 }

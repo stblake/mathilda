@@ -97,7 +97,7 @@ static bool leaf_to_complex(Expr* e, double* re, double* im) {
 #endif
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         if (strcmp(h, "Rational") == 0 && e->data.function.arg_count == 2) {
             double p, q, dummy;
             if (leaf_to_complex(e->data.function.args[0], &p, &dummy)
@@ -121,7 +121,7 @@ static bool extract_matrix(Expr* m, double** re_out, double** im_out,
                             int* rows_out, int* cols_out) {
     if (m->type != EXPR_FUNCTION
         || m->data.function.head->type != EXPR_SYMBOL
-        || strcmp(m->data.function.head->data.symbol, "List") != 0) {
+        || strcmp(m->data.function.head->data.symbol.name, "List") != 0) {
         return false;
     }
     int rows = (int)m->data.function.arg_count;
@@ -133,7 +133,7 @@ static bool extract_matrix(Expr* m, double** re_out, double** im_out,
     int cols;
     if (first->type == EXPR_FUNCTION
         && first->data.function.head->type == EXPR_SYMBOL
-        && strcmp(first->data.function.head->data.symbol, "List") == 0) {
+        && strcmp(first->data.function.head->data.symbol.name, "List") == 0) {
         cols = (int)first->data.function.arg_count;
     } else {
         return false;

@@ -27,7 +27,7 @@ static void assert_head_unevaluated(const char* input, const char* head) {
     ASSERT_MSG(result->type == EXPR_FUNCTION
         && result->data.function.head
         && result->data.function.head->type == EXPR_SYMBOL
-        && strcmp(result->data.function.head->data.symbol, head) == 0,
+        && strcmp(result->data.function.head->data.symbol.name, head) == 0,
         "expected unevaluated %s[...] for: %s", head, input);
     expr_free(result);
 }

@@ -32,12 +32,12 @@
 #include <stdlib.h>
 
 static bool bz_is_inf(const Expr* e) {
-    return e->type == EXPR_SYMBOL && e->data.symbol == SYM_Infinity;
+    return e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity;
 }
 static bool bz_is_head(const Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, name) == 0;
+        && strcmp(e->data.function.head->data.symbol.name, name) == 0;
 }
 
 /* Is e == Power[BesselJZero[nu, var], -2] with nu free of var?  Sets *nu_out

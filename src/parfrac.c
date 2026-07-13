@@ -31,13 +31,13 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha);
 static bool apart_has_symbolic_radical(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     const Expr* h = e->data.function.head;
-    if (h && h->type == EXPR_SYMBOL && h->data.symbol == SYM_Power
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2) {
         const Expr* base = e->data.function.args[0];
         const Expr* exp  = e->data.function.args[1];
         if (exp->type == EXPR_FUNCTION && exp->data.function.head
             && exp->data.function.head->type == EXPR_SYMBOL
-            && exp->data.function.head->data.symbol == SYM_Rational
+            && exp->data.function.head->data.symbol.name == SYM_Rational
             && base->type != EXPR_INTEGER && base->type != EXPR_BIGINT) {
             return true;
         }
@@ -109,7 +109,7 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
 
     // Check if it's an equation, inequality, list, or logical function to thread over
     if (expr->type == EXPR_FUNCTION) {
-        const char* head = expr->data.function.head->type == EXPR_SYMBOL ? expr->data.function.head->data.symbol : "";
+        const char* head = expr->data.function.head->type == EXPR_SYMBOL ? expr->data.function.head->data.symbol.name : "";
         if (strcmp(head, "List") == 0 || strcmp(head, "Equal") == 0 || strcmp(head, "Unequal") == 0 ||
             strcmp(head, "Less") == 0 || strcmp(head, "LessEqual") == 0 || strcmp(head, "Greater") == 0 ||
             strcmp(head, "GreaterEqual") == 0 || strcmp(head, "And") == 0 || strcmp(head, "Or") == 0 ||
@@ -234,8 +234,8 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
     Expr* npq = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialQ), npq_args, 2));
     Expr* dpq_args[2] = { expr_copy(D), expr_copy(var) };
     Expr* dpq = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialQ), dpq_args, 2));
-    bool n_poly = (npq->type == EXPR_SYMBOL && npq->data.symbol == SYM_True);
-    bool d_poly = (dpq->type == EXPR_SYMBOL && dpq->data.symbol == SYM_True);
+    bool n_poly = (npq->type == EXPR_SYMBOL && npq->data.symbol.name == SYM_True);
+    bool d_poly = (dpq->type == EXPR_SYMBOL && dpq->data.symbol.name == SYM_True);
     expr_free(npq); expr_free(dpq);
     if (!n_poly || !d_poly) {
         expr_free(N); expr_free(D); expr_free(var);
@@ -278,7 +278,7 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
 
     size_t num_args = 1;
     Expr** args = &f_den;
-    if (f_den->type == EXPR_FUNCTION && f_den->data.function.head->data.symbol == SYM_Times) {
+    if (f_den->type == EXPR_FUNCTION && f_den->data.function.head->data.symbol.name == SYM_Times) {
         num_args = f_den->data.function.arg_count;
         args = f_den->data.function.args;
     }
@@ -292,7 +292,7 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
         Expr* factor = args[i];
         Expr* base = factor;
         int64_t k = 1;
-        if (factor->type == EXPR_FUNCTION && factor->data.function.head->data.symbol == SYM_Power) {
+        if (factor->type == EXPR_FUNCTION && factor->data.function.head->data.symbol.name == SYM_Power) {
             base = factor->data.function.args[0];
             if (factor->data.function.args[1]->type == EXPR_INTEGER) {
                 k = factor->data.function.args[1]->data.integer;
@@ -404,7 +404,7 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
      * symbol) declines here and keeps the classical elimination path. */
     if (var->type == EXPR_SYMBOL) {
         Expr* frac = flint_apart_over_q(R, (const Expr* const*)bases, ks,
-                                        (int)m, C, var->data.symbol);
+                                        (int)m, C, var->data.symbol.name);
         if (frac) {
             Expr* res_pf = eval_and_free(expr_new_function(
                 expr_new_symbol(SYM_Plus), (Expr*[]){ Q, frac }, 2));
@@ -487,7 +487,7 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
     Expr* reduced = eval_and_free(expr_new_function(expr_new_symbol(SYM_RowReduce), (Expr*[]){matrix_expr}, 1));
     
     Expr* pfrac_sum = expr_new_integer(0);
-    if (reduced->type == EXPR_FUNCTION && reduced->data.function.head->data.symbol == SYM_List && reduced->data.function.arg_count == (size_t)S) {
+    if (reduced->type == EXPR_FUNCTION && reduced->data.function.head->data.symbol.name == SYM_List && reduced->data.function.arg_count == (size_t)S) {
         col = 0;
         for (size_t i = 0; i < m; i++) {
             Expr* exp_base = expr_expand(bases[i]);

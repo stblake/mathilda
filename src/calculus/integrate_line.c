@@ -76,7 +76,7 @@ static Expr* eval_take(Expr* call) {
 static bool head_name_is(const Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, name) == 0;
+           strcmp(e->data.function.head->data.symbol.name, name) == 0;
 }
 
 /* True iff any subexpression of `e` is a call with head `name`. */
@@ -93,7 +93,7 @@ static bool contains_head(const Expr* e, const char* name) {
 /* True iff the symbol `x` occurs anywhere in `e` (by interned pointer). */
 static bool contains_symbol(const Expr* e, const Expr* x) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return e->data.symbol == x->data.symbol;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == x->data.symbol.name;
     if (e->type != EXPR_FUNCTION) return false;
     if (contains_symbol(e->data.function.head, x)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
@@ -104,7 +104,7 @@ static bool contains_symbol(const Expr* e, const Expr* x) {
 /* True iff a symbol with textual name `name` occurs anywhere in `e`. */
 static bool has_symbol_name(const Expr* e, const char* name) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol, name) == 0;
+    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, name) == 0;
     if (e->type != EXPR_FUNCTION) return false;
     if (has_symbol_name(e->data.function.head, name)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
@@ -265,7 +265,7 @@ static Expr* line_eval_endpoint(Expr* F, Expr* x, Expr* gamma, const char* tname
 static Expr* line_rule_rhs_for(Expr* el, const Expr* t) {
     if (head_name_is(el, "Rule") && el->data.function.arg_count == 2) {
         Expr* lhs = el->data.function.args[0];
-        if (lhs->type == EXPR_SYMBOL && lhs->data.symbol == t->data.symbol)
+        if (lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == t->data.symbol.name)
             return el->data.function.args[1];
         return NULL;
     }
@@ -398,7 +398,7 @@ static bool is_branch_head(const char* h) {
 static bool has_branch_over_x(const Expr* e, const Expr* x) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         if (is_branch_head(h) && contains_symbol(e, x)) return true;
         if (strcmp(h, "Power") == 0 && e->data.function.arg_count == 2) {
             Expr* base = e->data.function.args[0];
@@ -479,7 +479,7 @@ static Expr* line_term_delta(Expr* term, Expr* x, Expr* a, Expr* b) {
         core->data.function.head->type != EXPR_SYMBOL) {
         expr_free(coeff); return NULL;
     }
-    const char* h = core->data.function.head->data.symbol;
+    const char* h = core->data.function.head->data.symbol.name;
     Expr* u = core->data.function.args[0];
     if (!is_affine_in(u, x)) { expr_free(coeff); return NULL; }
 
@@ -742,7 +742,7 @@ Expr* integrate_line_contour(Expr* f, Expr* x, Expr** pts, size_t npts,
 bool integrate_line_is_contour_spec(const Expr* e) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol == SYM_List &&
+           e->data.function.head->data.symbol.name == SYM_List &&
            e->data.function.arg_count >= 3 &&
            e->data.function.args[0]->type == EXPR_SYMBOL;
 }

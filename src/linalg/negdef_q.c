@@ -50,7 +50,7 @@
 static bool ndq_is_list(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
            && e->data.function.head->type == EXPR_SYMBOL
-           && e->data.function.head->data.symbol == SYM_List;
+           && e->data.function.head->data.symbol.name == SYM_List;
 }
 
 /* Coerce a leaf to a (re, im) double pair.  Recognises Integer, BigInt,
@@ -75,7 +75,7 @@ static bool ndq_leaf_to_double(Expr* e, double* out_re, double* out_im) {
 #endif
         case EXPR_FUNCTION:
             if (e->data.function.head->type == EXPR_SYMBOL) {
-                const char* h = e->data.function.head->data.symbol;
+                const char* h = e->data.function.head->data.symbol.name;
                 if (h == SYM_Rational && e->data.function.arg_count == 2) {
                     double p, q, dummy;
                     if (ndq_leaf_to_double(e->data.function.args[0], &p, &dummy)

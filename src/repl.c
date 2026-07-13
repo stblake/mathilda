@@ -148,8 +148,8 @@ void process_input(const char* input, int line_number) {
     if (to_print && to_print->type == EXPR_FUNCTION
         && to_print->data.function.head->type == EXPR_SYMBOL
         && to_print->data.function.arg_count >= 1) {
-        if (to_print->data.function.head->data.symbol == SYM_Graphics) graphics_show(to_print);
-        else if (to_print->data.function.head->data.symbol == SYM_Graphics3D) graphics3d_show(to_print);
+        if (to_print->data.function.head->data.symbol.name == SYM_Graphics) graphics_show(to_print);
+        else if (to_print->data.function.head->data.symbol.name == SYM_Graphics3D) graphics3d_show(to_print);
     }
 
     expr_free(to_print);
@@ -426,7 +426,7 @@ static void pipe_process_input(const char* input, int id) {
     if (evaluated->type == EXPR_FUNCTION
         && evaluated->data.function.head
         && evaluated->data.function.head->type == EXPR_SYMBOL
-        && evaluated->data.function.head->data.symbol == SYM_Graphics) {
+        && evaluated->data.function.head->data.symbol.name == SYM_Graphics) {
         char* plotly = graphics_to_plotly_json(evaluated);
         expr_free(evaluated);
         if (plotly) {

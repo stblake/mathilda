@@ -51,7 +51,7 @@ static bool rs_is_rational(const Expr* e) {
     if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
     return e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol == intern_symbol("Rational");
+           e->data.function.head->data.symbol.name == intern_symbol("Rational");
 }
 /* True iff e is the structural integer 0. */
 static bool rs_is_zero(const Expr* e) {
@@ -60,7 +60,7 @@ static bool rs_is_zero(const Expr* e) {
 static bool rs_is_list(const Expr* e) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol == intern_symbol("List");
+           e->data.function.head->data.symbol.name == intern_symbol("List");
 }
 
 /* ------------------------------------------------------------------ */
@@ -120,12 +120,12 @@ Expr* risch_rational_span(const Expr* theta, Expr* const* gens, size_t m,
                 Expr* rule = first->data.function.args[k];
                 if (rule->type == EXPR_FUNCTION &&
                     rule->data.function.head->type == EXPR_SYMBOL &&
-                    rule->data.function.head->data.symbol == intern_symbol("Rule") &&
+                    rule->data.function.head->data.symbol.name == intern_symbol("Rule") &&
                     rule->data.function.arg_count == 2) {
                     Expr* lhs = rule->data.function.args[0];
                     for (size_t i = 0; i < m; i++)
                         if (lhs->type == EXPR_SYMBOL && cs[i]->type == EXPR_SYMBOL &&
-                            lhs->data.symbol == cs[i]->data.symbol) {
+                            lhs->data.symbol.name == cs[i]->data.symbol.name) {
                             res[i] = rs_cp(rule->data.function.args[1]);
                         }
                 }

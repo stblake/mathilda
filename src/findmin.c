@@ -205,17 +205,17 @@ static bool fm_is_known_option_name(const char* s) {
 static bool fm_is_option_arg(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     if (h != SYM_Rule && h != SYM_RuleDelayed) return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* lhs = e->data.function.args[0];
     if (lhs->type != EXPR_SYMBOL) return false;
-    return fm_is_known_option_name(lhs->data.symbol);
+    return fm_is_known_option_name(lhs->data.symbol.name);
 }
 
 static bool fm_parse_working_precision(Expr* val,
                                        FmPrecMode* mode, long* bits) {
-    if (val->type == EXPR_SYMBOL && val->data.symbol == SYM_MachinePrecision) {
+    if (val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_MachinePrecision) {
         *mode = FM_PREC_MACHINE; *bits = 0; return true;
     }
     double digits = 0.0;
@@ -240,8 +240,8 @@ static bool fm_parse_working_precision(Expr* val,
 
 static bool fm_parse_goal(Expr* val, double* digits_out) {
     if (val->type == EXPR_SYMBOL) {
-        if (val->data.symbol == SYM_Automatic) { *digits_out = -1.0; return true; }
-        if (val->data.symbol == SYM_Infinity)  { *digits_out = INFINITY; return true; }
+        if (val->data.symbol.name == SYM_Automatic) { *digits_out = -1.0; return true; }
+        if (val->data.symbol.name == SYM_Infinity)  { *digits_out = INFINITY; return true; }
         return false;
     }
     return fm_expr_to_double_real(val, digits_out);
@@ -250,10 +250,10 @@ static bool fm_parse_goal(Expr* val, double* digits_out) {
 static bool fm_apply_option(Expr* rule, FmOpts* opts) {
     Expr* lhs = rule->data.function.args[0];
     Expr* rhs = rule->data.function.args[1];
-    const char* name = lhs->data.symbol;
+    const char* name = lhs->data.symbol.name;
 
     if (name == SYM_Method) {
-        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic) {
+        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) {
             opts->method = FM_METHOD_AUTOMATIC; return true;
         }
         if (rhs->type == EXPR_STRING) {
@@ -291,7 +291,7 @@ static bool fm_apply_option(Expr* rule, FmOpts* opts) {
     if (name == SYM_AccuracyGoal)  return fm_parse_goal(rhs, &opts->acc_goal_digits);
     if (name == SYM_PrecisionGoal) return fm_parse_goal(rhs, &opts->prec_goal_digits);
     if (name == SYM_Gradient) {
-        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic) {
+        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) {
             opts->gradient = NULL; return true;
         }
         opts->gradient = rhs; /* borrowed; verified by caller */
@@ -1070,7 +1070,7 @@ static FmSpecKind fm_parse_var_spec(Expr* spec, Expr** var_out,
     }
     if (spec->type != EXPR_FUNCTION) return FM_SPEC_BAD;
     if (spec->data.function.head->type != EXPR_SYMBOL) return FM_SPEC_BAD;
-    if (spec->data.function.head->data.symbol != SYM_List) return FM_SPEC_BAD;
+    if (spec->data.function.head->data.symbol.name != SYM_List) return FM_SPEC_BAD;
 
     size_t n = spec->data.function.arg_count;
     if (n < 1 || n > 4) return FM_SPEC_BAD;
@@ -1087,7 +1087,7 @@ static FmSpecKind fm_parse_var_spec(Expr* spec, Expr** var_out,
     Expr* x0_raw = spec->data.function.args[1];
     if (x0_raw->type == EXPR_FUNCTION
         && x0_raw->data.function.head->type == EXPR_SYMBOL
-        && x0_raw->data.function.head->data.symbol == SYM_List) {
+        && x0_raw->data.function.head->data.symbol.name == SYM_List) {
         fm_warn(g_fm_name, "vecvar", "vector-valued variables are not yet supported");
         return FM_SPEC_BAD;
     }
@@ -1114,7 +1114,7 @@ static bool fm_try_box_from_compare(Expr* cmp, Expr** vars, size_t nvars,
     if (cmp->type != EXPR_FUNCTION || cmp->data.function.arg_count != 2) return false;
     Expr* head = cmp->data.function.head;
     if (head->type != EXPR_SYMBOL) return false;
-    const char* op = head->data.symbol;
+    const char* op = head->data.symbol.name;
     if (op != SYM_Less && op != SYM_LessEqual
      && op != SYM_Greater && op != SYM_GreaterEqual) return false;
     Expr* a = cmp->data.function.args[0];
@@ -1126,14 +1126,14 @@ static bool fm_try_box_from_compare(Expr* cmp, Expr** vars, size_t nvars,
     bool var_left = false;
     if (a->type == EXPR_SYMBOL) {
         for (size_t i = 0; i < nvars; i++) {
-            if (vars[i]->data.symbol == a->data.symbol) {
+            if (vars[i]->data.symbol.name == a->data.symbol.name) {
                 var_idx = (int64_t)i; c_side = b; var_left = true; break;
             }
         }
     }
     if (var_idx < 0 && b->type == EXPR_SYMBOL) {
         for (size_t i = 0; i < nvars; i++) {
-            if (vars[i]->data.symbol == b->data.symbol) {
+            if (vars[i]->data.symbol.name == b->data.symbol.name) {
                 var_idx = (int64_t)i; c_side = a; var_left = false; break;
             }
         }
@@ -1180,7 +1180,7 @@ static bool fm_constraint_to_g(Expr* cmp, Expr** expr_out, bool* equality_out) {
     if (cmp->type != EXPR_FUNCTION || cmp->data.function.arg_count != 2) return false;
     Expr* head = cmp->data.function.head;
     if (head->type != EXPR_SYMBOL) return false;
-    const char* op = head->data.symbol;
+    const char* op = head->data.symbol.name;
     Expr* lhs = cmp->data.function.args[0];
     Expr* rhs = cmp->data.function.args[1];
 
@@ -1220,7 +1220,7 @@ static bool fm_collect_constraints(Expr* cons, Expr** vars, size_t nvars,
     if (!cons) return true;
     if (cons->type == EXPR_FUNCTION
         && cons->data.function.head->type == EXPR_SYMBOL
-        && cons->data.function.head->data.symbol == SYM_And) {
+        && cons->data.function.head->data.symbol.name == SYM_And) {
         for (size_t i = 0; i < cons->data.function.arg_count; i++) {
             if (!fm_collect_constraints(cons->data.function.args[i], vars, nvars,
                                         boxes, gens_inout, ngens_inout,
@@ -1234,7 +1234,7 @@ static bool fm_collect_constraints(Expr* cons, Expr** vars, size_t nvars,
      * box-or-general classifier on each. */
     if (cons->type == EXPR_FUNCTION
         && cons->data.function.head->type == EXPR_SYMBOL
-        && cons->data.function.head->data.symbol == SYM_Inequality
+        && cons->data.function.head->data.symbol.name == SYM_Inequality
         && cons->data.function.arg_count >= 3
         && (cons->data.function.arg_count & 1u) == 1) {
         size_t npairs = (cons->data.function.arg_count - 1) / 2;
@@ -1247,7 +1247,7 @@ static bool fm_collect_constraints(Expr* cons, Expr** vars, size_t nvars,
                 return false;
             }
             Expr* pair_args[2] = { expr_copy(a), expr_copy(b) };
-            Expr* pair = expr_new_function(expr_new_symbol(op->data.symbol),
+            Expr* pair = expr_new_function(expr_new_symbol(op->data.symbol.name),
                                            pair_args, 2);
             bool ok = fm_collect_constraints(pair, vars, nvars, boxes,
                                              gens_inout, ngens_inout,
@@ -1259,14 +1259,14 @@ static bool fm_collect_constraints(Expr* cons, Expr** vars, size_t nvars,
     }
     if (cons->type == EXPR_FUNCTION
         && cons->data.function.head->type == EXPR_SYMBOL
-        && cons->data.function.head->data.symbol == SYM_Or) {
+        && cons->data.function.head->data.symbol.name == SYM_Or) {
         fm_warn(g_fm_name, "nimpl", "disjunctive (Or) constraints are not yet supported");
         return false;
     }
     /* Reject Element[...] (e.g. x ∈ Integers) outright. */
     if (cons->type == EXPR_FUNCTION
         && cons->data.function.head->type == EXPR_SYMBOL
-        && cons->data.function.head->data.symbol == SYM_Element) {
+        && cons->data.function.head->data.symbol.name == SYM_Element) {
         fm_warn(g_fm_name, "nimpl", "Element / domain constraints are not yet supported");
         return false;
     }
@@ -2386,7 +2386,7 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
     Expr* cons = NULL;
     if (f_arg->type == EXPR_FUNCTION
         && f_arg->data.function.head->type == EXPR_SYMBOL
-        && f_arg->data.function.head->data.symbol == SYM_List
+        && f_arg->data.function.head->data.symbol.name == SYM_List
         && f_arg->data.function.arg_count == 2) {
         f_raw = f_arg->data.function.args[0];
         cons = f_arg->data.function.args[1];
@@ -2399,7 +2399,7 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
     bool is_system = false;
     if (var_arg->type == EXPR_FUNCTION
         && var_arg->data.function.head->type == EXPR_SYMBOL
-        && var_arg->data.function.head->data.symbol == SYM_List
+        && var_arg->data.function.head->data.symbol.name == SYM_List
         && var_arg->data.function.arg_count > 0) {
         size_t na = var_arg->data.function.arg_count;
         bool any_inner = false, all_inner_or_sym = true;
@@ -2407,7 +2407,7 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
             Expr* e = var_arg->data.function.args[i];
             bool is_inner = (e->type == EXPR_FUNCTION
                 && e->data.function.head->type == EXPR_SYMBOL
-                && e->data.function.head->data.symbol == SYM_List);
+                && e->data.function.head->data.symbol.name == SYM_List);
             bool is_sym = (e->type == EXPR_SYMBOL);
             if (is_inner) any_inner = true;
             if (!is_inner && !is_sym) all_inner_or_sym = false;
@@ -2506,7 +2506,7 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
 
     /* Now bind variables. */
     binds = (FmVarBind*)calloc(n, sizeof(FmVarBind));
-    for (size_t i = 0; i < n; i++) fm_bind_snapshot(&binds[i], vars[i]->data.symbol);
+    for (size_t i = 0; i < n; i++) fm_bind_snapshot(&binds[i], vars[i]->data.symbol.name);
 
     /* Constraints. */
     if (cons) {
@@ -2537,7 +2537,7 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
         if (opts.gradient
             && opts.gradient->type == EXPR_FUNCTION
             && opts.gradient->data.function.head->type == EXPR_SYMBOL
-            && opts.gradient->data.function.head->data.symbol == SYM_List
+            && opts.gradient->data.function.head->data.symbol.name == SYM_List
             && opts.gradient->data.function.arg_count == n) {
             g_exprs = (Expr**)malloc(sizeof(Expr*) * n);
             for (size_t i = 0; i < n; i++) g_exprs[i] = expr_copy(opts.gradient->data.function.args[i]);
@@ -2750,7 +2750,7 @@ Expr* builtin_findmaximum(Expr* res) {
     Expr* new_first;
     if (f_orig->type == EXPR_FUNCTION
         && f_orig->data.function.head->type == EXPR_SYMBOL
-        && f_orig->data.function.head->data.symbol == SYM_List
+        && f_orig->data.function.head->data.symbol.name == SYM_List
         && f_orig->data.function.arg_count == 2) {
         /* Wrap inner f only. */
         Expr* inner_f = f_orig->data.function.args[0];

@@ -60,7 +60,7 @@
 
 /* True if `e` is exactly the symbol `name`. */
 static bool ifc_is_symbol(const Expr* e, const char* name) {
-    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol, name) == 0;
+    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, name) == 0;
 }
 
 /* Build -Infinity, represented (as elsewhere in Mathilda) as Times[-1, Infinity]. */

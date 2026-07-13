@@ -76,18 +76,18 @@ static void trig_pi_reduce_frac(int64_t* n, int64_t* d) {
  * sets n, d.  Mirrors trig.c's extract_pi_multiplier; duplicated here
  * so simp.c does not have to expose that file-static helper. */
 static bool trig_pi_extract(const Expr* arg, int64_t* n_out, int64_t* d_out) {
-    if (arg->type == EXPR_SYMBOL && arg->data.symbol == SYM_Pi) {
+    if (arg->type == EXPR_SYMBOL && arg->data.symbol.name == SYM_Pi) {
         *n_out = 1; *d_out = 1; return true;
     }
     if (arg->type != EXPR_FUNCTION || !arg->data.function.head ||
         arg->data.function.head->type != EXPR_SYMBOL ||
-        arg->data.function.head->data.symbol != SYM_Times ||
+        arg->data.function.head->data.symbol.name != SYM_Times ||
         arg->data.function.arg_count != 2) {
         return false;
     }
     Expr* a0 = arg->data.function.args[0];
     Expr* a1 = arg->data.function.args[1];
-    if (!(a1->type == EXPR_SYMBOL && a1->data.symbol == SYM_Pi)) return false;
+    if (!(a1->type == EXPR_SYMBOL && a1->data.symbol.name == SYM_Pi)) return false;
     return is_rational(a0, n_out, d_out);
 }
 
@@ -211,7 +211,7 @@ static Expr* simp_trig_pi_canon_walk(const Expr* e) {
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
         e->data.function.arg_count == 1) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         bool is_trig = (h == SYM_Sin || h == SYM_Cos ||
                         h == SYM_Tan || h == SYM_Cot ||
                         h == SYM_Sec || h == SYM_Csc);

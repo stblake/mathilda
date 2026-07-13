@@ -66,7 +66,7 @@ static Expr* tr_expi(Expr* x) {
 static bool tr_is_trig(Expr* g, Expr* var, int* head, Expr** arg) {
     if (g->type != EXPR_FUNCTION || g->data.function.head->type != EXPR_SYMBOL
         || g->data.function.arg_count != 1) return false;
-    const char* h = g->data.function.head->data.symbol;
+    const char* h = g->data.function.head->data.symbol.name;
     int hh = (h == SYM_Sin) ? 1 : (h == SYM_Cos) ? 2 : 0;
     if (!hh) return false;
     if (sum_free_of(g->data.function.args[0], var)) return false;  /* Sin[const] is a constant */
@@ -95,7 +95,7 @@ static int tr_classify(Expr* term, Expr* var, Expr** c_out, int* th,
                        Expr** a_out, Expr** phi_out) {
     bool is_times = (term->type == EXPR_FUNCTION
                      && term->data.function.head->type == EXPR_SYMBOL
-                     && term->data.function.head->data.symbol == SYM_Times);
+                     && term->data.function.head->data.symbol.name == SYM_Times);
     size_t n = is_times ? term->data.function.arg_count : 1;
 
     Expr* c = sum_int(1);
@@ -184,7 +184,7 @@ Expr* builtin_sum_trigonometric(Expr* res) {
     /* Split fn = (product of k-powers) * trigpart. */
     bool is_times = (fn->type == EXPR_FUNCTION
                      && fn->data.function.head->type == EXPR_SYMBOL
-                     && fn->data.function.head->data.symbol == SYM_Times);
+                     && fn->data.function.head->data.symbol.name == SYM_Times);
     size_t n = is_times ? fn->data.function.arg_count : 1;
 
     int64_t powsum = 0;              /* sum of integer exponents of var */
@@ -194,7 +194,7 @@ Expr* builtin_sum_trigonometric(Expr* res) {
         if (g->type == EXPR_SYMBOL && g == var) {
             powsum += 1;
         } else if (g->type == EXPR_FUNCTION && g->data.function.head->type == EXPR_SYMBOL
-                   && g->data.function.head->data.symbol == SYM_Power
+                   && g->data.function.head->data.symbol.name == SYM_Power
                    && g->data.function.arg_count == 2
                    && expr_eq(g->data.function.args[0], var)
                    && g->data.function.args[1]->type == EXPR_INTEGER) {
@@ -215,7 +215,7 @@ Expr* builtin_sum_trigonometric(Expr* res) {
     Expr* trr = sum_eval("TrigReduce", (Expr*[]){ trigpart }, 1);
     Expr* tr = sum_eval("Expand", (Expr*[]){ trr }, 1);
     size_t nt = (tr->type == EXPR_FUNCTION && tr->data.function.head->type == EXPR_SYMBOL
-                 && tr->data.function.head->data.symbol == SYM_Plus)
+                 && tr->data.function.head->data.symbol.name == SYM_Plus)
                 ? tr->data.function.arg_count : 1;
 
     Expr** contribs = malloc(sizeof(Expr*) * nt);

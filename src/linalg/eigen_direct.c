@@ -293,7 +293,7 @@ Expr* direct_apply_k_spec_list(Expr* full_list, Expr* k_spec) {
         }
     } else if (k_spec->type == EXPR_FUNCTION
         && k_spec->data.function.head->type == EXPR_SYMBOL
-        && k_spec->data.function.head->data.symbol == SYM_UpTo
+        && k_spec->data.function.head->data.symbol.name == SYM_UpTo
         && k_spec->data.function.arg_count == 1
         && k_spec->data.function.args[0]->type == EXPR_INTEGER) {
         int64_t k = k_spec->data.function.args[0]->data.integer;

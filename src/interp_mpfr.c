@@ -34,7 +34,7 @@ enum { METHOD_DEFAULT = 0, METHOD_SPLINE = 1, METHOD_HERMITE = 2 };
 static bool m_is_list(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_List;
+        && e->data.function.head->data.symbol.name == SYM_List;
 }
 
 /* Coerce a real numeric Expr into the (pre-initialised) mpfr_t out.  Rejects

@@ -27,7 +27,7 @@
 #include <stdlib.h>
 
 static bool is_infinity_sym(const Expr* e) {
-    return e->type == EXPR_SYMBOL && e->data.symbol == SYM_Infinity;
+    return e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity;
 }
 
 Expr* builtin_sum_logzeta(Expr* res) {

@@ -329,10 +329,10 @@ Expr* builtin_subresultantpolynomials(Expr* res) {
 
     /* Both arguments must be polynomials in var. */
     Expr* pq1 = internal_polynomialq((Expr*[]){expr_copy(p1), expr_copy(var)}, 2);
-    bool is_poly1 = (pq1->type == EXPR_SYMBOL && pq1->data.symbol == SYM_True);
+    bool is_poly1 = (pq1->type == EXPR_SYMBOL && pq1->data.symbol.name == SYM_True);
     expr_free(pq1);
     Expr* pq2 = internal_polynomialq((Expr*[]){expr_copy(p2), expr_copy(var)}, 2);
-    bool is_poly2 = (pq2->type == EXPR_SYMBOL && pq2->data.symbol == SYM_True);
+    bool is_poly2 = (pq2->type == EXPR_SYMBOL && pq2->data.symbol.name == SYM_True);
     expr_free(pq2);
     if (!is_poly1 || !is_poly2) return subrespoly_emit_npolys(p1, p2, var);
 

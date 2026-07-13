@@ -96,7 +96,7 @@ static Expr* subst_slot1(const Expr* e, const Expr* replacement) {
 static Expr* find_x_minus_slot1(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return NULL;
     if (e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Plus
+        && e->data.function.head->data.symbol.name == SYM_Plus
         && e->data.function.arg_count == 2) {
         /* Look for one arg = -Slot[1] (i.e. Times[-1, Slot[1]]) and
          * the other free of Slot[1]. */
@@ -141,13 +141,13 @@ static Expr* substitute_bvar_with_slot(Expr* e, const char* bvar_name);   /* fwd
 static Expr* rootsum_fn_body_slot(Expr* fn) {
     if (fn->type != EXPR_FUNCTION
         || fn->data.function.head->type != EXPR_SYMBOL
-        || fn->data.function.head->data.symbol != SYM_Function) return NULL;
+        || fn->data.function.head->data.symbol.name != SYM_Function) return NULL;
     if (fn->data.function.arg_count == 1)
         return expr_copy(fn->data.function.args[0]);
     if (fn->data.function.arg_count == 2
         && fn->data.function.args[0]->type == EXPR_SYMBOL)
         return substitute_bvar_with_slot(fn->data.function.args[1],
-                                         fn->data.function.args[0]->data.symbol);
+                                         fn->data.function.args[0]->data.symbol.name);
     return NULL;
 }
 
@@ -201,7 +201,7 @@ static Expr* rootsum_try_lagrange(Expr* poly_fn, Expr* body_fn) {
     Expr* poly_rv = subst_slot1(poly, rv);
     Expr* pq = internal_polynomialq(
         (Expr*[]){ expr_copy(a_rv), expr_copy(rv) }, 2);
-    bool a_is_poly = pq && pq->type == EXPR_SYMBOL && pq->data.symbol == SYM_True;
+    bool a_is_poly = pq && pq->type == EXPR_SYMBOL && pq->data.symbol.name == SYM_True;
     int deg_a = a_is_poly ? get_degree_poly(a_rv, rv) : -1;
     int deg_d = get_degree_poly(poly_rv, rv);
     bool shape_ok = a_is_poly && deg_a >= 0 && deg_d >= 1 && deg_a < deg_d;
@@ -245,7 +245,7 @@ static Expr* builtin_rootsum(Expr* res) {
  * Walks the tree in place, returning a freshly allocated copy. */
 static Expr* substitute_bvar_with_slot(Expr* e, const char* bvar_name) {
     if (!e) return NULL;
-    if (e->type == EXPR_SYMBOL && strcmp(e->data.symbol, bvar_name) == 0) {
+    if (e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, bvar_name) == 0) {
         return expr_new_function(expr_new_symbol(SYM_Slot),
             (Expr*[]){ expr_new_integer(1) }, 1);
     }
@@ -271,7 +271,7 @@ Expr* root_make_rootsum(Expr* bvar, Expr* poly, Expr* body) {
      * form is also accepted by D[RootSum, x] in src/deriv.c for back-
      * compat, but the Slot form is what we emit going forward. */
     if (bvar && bvar->type == EXPR_SYMBOL) {
-        const char* name = bvar->data.symbol;
+        const char* name = bvar->data.symbol.name;
         Expr* poly_s = substitute_bvar_with_slot(poly, name);
         Expr* body_s = substitute_bvar_with_slot(body, name);
         expr_free(bvar); expr_free(poly); expr_free(body);

@@ -52,7 +52,7 @@ Expr* builtin_norm(Expr* res) {
 
         Expr* result = NULL;
 
-        if (p && p->type == EXPR_SYMBOL && p->data.symbol == SYM_Infinity) {
+        if (p && p->type == EXPR_SYMBOL && p->data.symbol.name == SYM_Infinity) {
             if (N == 0) {
                 result = expr_new_integer(0);
             } else {

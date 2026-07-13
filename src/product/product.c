@@ -54,7 +54,7 @@
 static bool head_is_name(const Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, name) == 0;
+        && strcmp(e->data.function.head->data.symbol.name, name) == 0;
 }
 
 /* A result "came back unevaluated" if its head is still the stage we called
@@ -88,7 +88,7 @@ typedef enum {
 static bool is_option(const Expr* arg) {
     if (arg->type != EXPR_FUNCTION) return false;
     if (arg->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = arg->data.function.head->data.symbol;
+    const char* h = arg->data.function.head->data.symbol.name;
     if (h != SYM_Rule && h != SYM_RuleDelayed) return false;
     if (arg->data.function.arg_count != 2) return false;
     return arg->data.function.args[0]->type == EXPR_SYMBOL;
@@ -99,8 +99,8 @@ static bool is_option(const Expr* arg) {
 static ProdMethod parse_method_option(const Expr* opt) {
     Expr* lhs = opt->data.function.args[0];
     Expr* rhs = opt->data.function.args[1];
-    if (lhs->data.symbol != SYM_Method) return PROD_METHOD_AUTOMATIC;
-    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic)
+    if (lhs->data.symbol.name != SYM_Method) return PROD_METHOD_AUTOMATIC;
+    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic)
         return PROD_METHOD_AUTOMATIC;
     if (rhs->type != EXPR_STRING) return PROD_METHOD_INVALID;
     const char* m = rhs->data.string;
@@ -229,7 +229,7 @@ static Expr* expand_list(Expr* f, Expr* var, Expr* list) {
 
     Rule* saved = iter_spec_shadow(var);
     for (size_t i = 0; i < n; i++) {
-        symtab_add_own_value(var->data.symbol, var, list->data.function.args[i]);
+        symtab_add_own_value(var->data.symbol.name, var, list->data.function.args[i]);
         terms[count++] = evaluate(f);
     }
     iter_spec_restore(var, saved);
@@ -262,7 +262,7 @@ static Expr* expand_range(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
         if ((int64_t)count >= PRODUCT_MAX_FINITE_TERMS) { overflow = true; break; }
 
         Expr* i_val = is_real ? expr_new_real(val) : expr_copy(curr_e);
-        symtab_add_own_value(var->data.symbol, var, i_val);
+        symtab_add_own_value(var->data.symbol.name, var, i_val);
         if (count == cap) { cap *= 2; terms = realloc(terms, sizeof(Expr*) * cap); }
         terms[count++] = evaluate(f);
         expr_free(i_val);
@@ -380,9 +380,9 @@ Expr* builtin_product(Expr* res) {
             if (m != PROD_METHOD_AUTOMATIC) method = m;
             /* VerifyConvergence -> False disables the infinite-product gate. */
             Expr* opt = a[i - 1];
-            if (opt->data.function.args[0]->data.symbol == SYM_VerifyConvergence
+            if (opt->data.function.args[0]->data.symbol.name == SYM_VerifyConvergence
                     && opt->data.function.args[1]->type == EXPR_SYMBOL
-                    && opt->data.function.args[1]->data.symbol == SYM_False)
+                    && opt->data.function.args[1]->data.symbol.name == SYM_False)
                 verify = 0;
             nspecs_end = i - 1;
         } else {

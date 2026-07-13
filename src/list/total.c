@@ -5,7 +5,7 @@
 static int64_t get_depth_for_total(Expr* e) {
     if (e->type != EXPR_FUNCTION) return 1;
     if (e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         if (h == SYM_Rational || h == SYM_Complex) return 1;
     }
     int64_t max_d = 0;

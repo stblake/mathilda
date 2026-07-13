@@ -14,7 +14,7 @@ bool head_is(const Expr* e, const char* sym) {
            e->type == EXPR_FUNCTION &&
            e->data.function.head &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol == sym;
+           e->data.function.head->data.symbol.name == sym;
 }
 
 /* Bit precision of a single inexact leaf.  Real → 53 (IEEE 754 double).

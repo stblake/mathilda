@@ -1521,7 +1521,7 @@ static bool expr_to_mpq(struct Expr* e, mpq_t out) {
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Rational &&
+        e->data.function.head->data.symbol.name == SYM_Rational &&
         e->data.function.arg_count == 2) {
         struct Expr* a = e->data.function.args[0];
         struct Expr* b = e->data.function.args[1];
@@ -1556,7 +1556,7 @@ static bool expr_term(struct Expr* e, struct Expr** vars, int n_vars,
     /* Rational literal at the term level. */
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Rational) {
+        e->data.function.head->data.symbol.name == SYM_Rational) {
         return expr_to_mpq(e, coef_out);
     }
 
@@ -1567,7 +1567,7 @@ static bool expr_term(struct Expr* e, struct Expr** vars, int n_vars,
      * symbolic-exponent atom), matched by the last-ditch check below. */
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2) {
         struct Expr* base = e->data.function.args[0];
         struct Expr* exp  = e->data.function.args[1];
@@ -1581,7 +1581,7 @@ static bool expr_term(struct Expr* e, struct Expr** vars, int n_vars,
     /* Times[...] -- multiply contributions. */
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Times) {
+        e->data.function.head->data.symbol.name == SYM_Times) {
         mpq_t sub_coef; mpq_init(sub_coef);
         int* sub_exps = (int*)malloc(sizeof(int) * (size_t)(n_vars > 0 ? n_vars : 1));
         bool ok = true;
@@ -1616,7 +1616,7 @@ GBPoly* gb_from_expr(struct Expr* e, struct Expr** vars, int n_vars,
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Plus) {
+        e->data.function.head->data.symbol.name == SYM_Plus) {
         mpq_t coef; mpq_init(coef);
         int* exps = (int*)malloc(sizeof(int) * (size_t)(n_vars > 0 ? n_vars : 1));
         for (size_t a = 0; a < e->data.function.arg_count; a++) {

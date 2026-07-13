@@ -82,7 +82,7 @@ static int is_zero_entry(Expr* e) {
                                          && e->data.real <   1e-9);
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         if (strcmp(h, "Complex") == 0 && e->data.function.arg_count == 2) {
             return is_zero_entry(e->data.function.args[0])
                 && is_zero_entry(e->data.function.args[1]);
@@ -100,7 +100,7 @@ static int all_zero_tensor(Expr* t) {
     if (!t) return 0;
     if (t->type == EXPR_FUNCTION
         && t->data.function.head->type == EXPR_SYMBOL
-        && strcmp(t->data.function.head->data.symbol, "List") == 0) {
+        && strcmp(t->data.function.head->data.symbol.name, "List") == 0) {
         for (size_t i = 0; i < t->data.function.arg_count; i++) {
             if (!all_zero_tensor(t->data.function.args[i])) return 0;
         }
@@ -162,13 +162,13 @@ static void tensor_dims(Expr* e, int* rows, int* cols) {
     *rows = -1; *cols = -1;
     if (e->type != EXPR_FUNCTION
         || e->data.function.head->type != EXPR_SYMBOL
-        || strcmp(e->data.function.head->data.symbol, "List") != 0) return;
+        || strcmp(e->data.function.head->data.symbol.name, "List") != 0) return;
     *rows = (int)e->data.function.arg_count;
     if (*rows == 0) { *cols = 0; return; }
     Expr* first = e->data.function.args[0];
     if (first->type == EXPR_FUNCTION
         && first->data.function.head->type == EXPR_SYMBOL
-        && strcmp(first->data.function.head->data.symbol, "List") == 0) {
+        && strcmp(first->data.function.head->data.symbol.name, "List") == 0) {
         *cols = (int)first->data.function.arg_count;
     }
 }
@@ -486,7 +486,7 @@ static void test_qr_unknown_option(void) {
                     "                Foo -> True]");
     ASSERT(res->type == EXPR_FUNCTION);
     ASSERT(res->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(res->data.function.head->data.symbol,
+    ASSERT(strcmp(res->data.function.head->data.symbol.name,
                   "QRDecomposition") == 0);
     expr_free(res);
     printf("  PASS: unknown option leaves call unevaluated\n");
@@ -497,7 +497,7 @@ static void test_qr_bad_matrix(void) {
     Expr* res = run("QRDecomposition[{1, 2, 3}]");
     ASSERT(res->type == EXPR_FUNCTION);
     ASSERT(res->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(res->data.function.head->data.symbol,
+    ASSERT(strcmp(res->data.function.head->data.symbol.name,
                   "QRDecomposition") == 0);
     expr_free(res);
     printf("  PASS: vector input leaves call unevaluated\n");

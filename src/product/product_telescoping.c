@@ -43,7 +43,7 @@ static bool is_num_rat(const Expr* e) {
     if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
     return e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational;
+        && e->data.function.head->data.symbol.name == SYM_Rational;
 }
 
 /* If evaluate(a - b) is a machine integer, store it and return true. */
@@ -173,7 +173,7 @@ Expr* builtin_product_telescoping(Expr* res) {
     Expr *f, *var, *imin, *imax;
     bool definite;
     if (!product_stage_args(res, &f, &var, &imin, &imax, &definite)) return NULL;
-    if (definite && imax->type == EXPR_SYMBOL && imax->data.symbol == SYM_Infinity)
+    if (definite && imax->type == EXPR_SYMBOL && imax->data.symbol.name == SYM_Infinity)
         return NULL;
     if (prod_has_symbolic_power(f, var)) return NULL;
 

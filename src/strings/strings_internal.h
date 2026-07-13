@@ -21,7 +21,7 @@
 static inline bool strings_is_upto(Expr* e, int64_t* out) {
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_UpTo &&
+        e->data.function.head->data.symbol.name == SYM_UpTo &&
         e->data.function.arg_count == 1 &&
         e->data.function.args[0]->type == EXPR_INTEGER) {
         *out = e->data.function.args[0]->data.integer;

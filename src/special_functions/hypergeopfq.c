@@ -56,7 +56,7 @@
 static bool is_list(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_List;
+        && e->data.function.head->data.symbol.name == SYM_List;
 }
 
 /* True if e is a non-positive integer (..., -2, -1, 0); fills *neg with

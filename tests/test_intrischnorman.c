@@ -572,7 +572,7 @@ static void assert_rischnorman_unevaluated(const char* integrand) {
     ASSERT(res->type == EXPR_FUNCTION);
     ASSERT(res->data.function.head
            && res->data.function.head->type == EXPR_SYMBOL
-           && strcmp(res->data.function.head->data.symbol,
+           && strcmp(res->data.function.head->data.symbol.name,
                      "Integrate`RischNorman") == 0);
     expr_free(e);
     expr_free(res);

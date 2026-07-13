@@ -142,7 +142,7 @@ void test_inverf_listable() {
     Expr* r = evaluate(e);
     expr_free(e);
     ASSERT(r->type == EXPR_FUNCTION &&
-           strcmp(r->data.function.head->data.symbol, "List") == 0 &&
+           strcmp(r->data.function.head->data.symbol.name, "List") == 0 &&
            r->data.function.arg_count == 3);
     double exp0[3] = { 0.1791434546212918, 0.4769362762044699, 1.8213863677184496 };
     for (int i = 0; i < 3; i++) {

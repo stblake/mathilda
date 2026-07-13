@@ -30,7 +30,7 @@ Expr* prod_factor(Expr* e) {
     /* If Factor came back unevaluated (head Factor), keep the input form. */
     if (r && r->type == EXPR_FUNCTION
           && r->data.function.head->type == EXPR_SYMBOL
-          && strcmp(r->data.function.head->data.symbol, "Factor") == 0) {
+          && strcmp(r->data.function.head->data.symbol.name, "Factor") == 0) {
         expr_free(r);
         return expr_copy(e);
     }
@@ -40,7 +40,7 @@ Expr* prod_factor(Expr* e) {
 bool prod_free_of(Expr* e, Expr* var) {
     Expr* args[2] = { expr_copy(e), expr_copy(var) };
     Expr* r = prod_eval("FreeQ", args, 2);
-    bool yes = (r && r->type == EXPR_SYMBOL && strcmp(r->data.symbol, "True") == 0);
+    bool yes = (r && r->type == EXPR_SYMBOL && strcmp(r->data.symbol.name, "True") == 0);
     if (r) expr_free(r);
     return yes;
 }
@@ -81,7 +81,7 @@ bool product_stage_args(Expr* res, Expr** f, Expr** var,
 /* Structural test: does the interned symbol `v` appear anywhere in e? */
 static bool contains_sym(const Expr* e, const char* v) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return e->data.symbol == v;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == v;
     if (e->type == EXPR_FUNCTION) {
         if (contains_sym(e->data.function.head, v)) return true;
         for (size_t i = 0; i < e->data.function.arg_count; i++)
@@ -92,9 +92,9 @@ static bool contains_sym(const Expr* e, const char* v) {
 
 bool prod_has_symbolic_power(Expr* e, Expr* var) {
     if (!e || e->type != EXPR_FUNCTION) return false;
-    const char* v = var->data.symbol;
+    const char* v = var->data.symbol.name;
     Expr* head = e->data.function.head;
-    if (head->type == EXPR_SYMBOL && head->data.symbol == SYM_Power
+    if (head->type == EXPR_SYMBOL && head->data.symbol.name == SYM_Power
             && e->data.function.arg_count == 2) {
         if (contains_sym(e->data.function.args[1], v)) return true;
     }
@@ -260,7 +260,7 @@ bool prod_rational_roots(Expr* e, Expr* var,
     Expr* F = prod_factor(e);
     bool is_times = (F->type == EXPR_FUNCTION
                      && F->data.function.head->type == EXPR_SYMBOL
-                     && F->data.function.head->data.symbol == SYM_Times);
+                     && F->data.function.head->data.symbol.name == SYM_Times);
     size_t fc = is_times ? F->data.function.arg_count : 1;
     for (size_t i = 0; i < fc; i++) {
         Expr* fac = is_times ? F->data.function.args[i] : F;
@@ -268,7 +268,7 @@ bool prod_rational_roots(Expr* e, Expr* var,
         int m = 1;
         if (fac->type == EXPR_FUNCTION
                 && fac->data.function.head->type == EXPR_SYMBOL
-                && fac->data.function.head->data.symbol == SYM_Power
+                && fac->data.function.head->data.symbol.name == SYM_Power
                 && fac->data.function.arg_count == 2
                 && fac->data.function.args[1]->type == EXPR_INTEGER) {
             base = fac->data.function.args[0];
@@ -279,7 +279,7 @@ bool prod_rational_roots(Expr* e, Expr* var,
                 || base->type == EXPR_REAL
                 || (base->type == EXPR_FUNCTION
                     && base->data.function.head->type == EXPR_SYMBOL
-                    && base->data.function.head->data.symbol == SYM_Rational)) {
+                    && base->data.function.head->data.symbol.name == SYM_Rational)) {
             Expr* p = expr_new_function(expr_new_symbol(SYM_Power),
                           (Expr*[]){ expr_copy(base), expr_new_integer(m) }, 2);
             Expr* pe = evaluate(p); expr_free(p);
@@ -316,7 +316,7 @@ bool prod_linear_factors(Expr* e, Expr* var,
     /* Iterate the top-level factors of F (Times[...] or a single factor). */
     bool is_times = (F->type == EXPR_FUNCTION
                      && F->data.function.head->type == EXPR_SYMBOL
-                     && F->data.function.head->data.symbol == SYM_Times);
+                     && F->data.function.head->data.symbol.name == SYM_Times);
     size_t fc = is_times ? F->data.function.arg_count : 1;
     for (size_t i = 0; i < fc; i++) {
         Expr* fac = is_times ? F->data.function.args[i] : F;
@@ -324,7 +324,7 @@ bool prod_linear_factors(Expr* e, Expr* var,
         int m = 1;
         if (fac->type == EXPR_FUNCTION
                 && fac->data.function.head->type == EXPR_SYMBOL
-                && fac->data.function.head->data.symbol == SYM_Power
+                && fac->data.function.head->data.symbol.name == SYM_Power
                 && fac->data.function.arg_count == 2
                 && fac->data.function.args[1]->type == EXPR_INTEGER) {
             base = fac->data.function.args[0];
@@ -336,7 +336,7 @@ bool prod_linear_factors(Expr* e, Expr* var,
                 || base->type == EXPR_REAL
                 || (base->type == EXPR_FUNCTION
                     && base->data.function.head->type == EXPR_SYMBOL
-                    && base->data.function.head->data.symbol == SYM_Rational)) {
+                    && base->data.function.head->data.symbol.name == SYM_Rational)) {
             Expr* p = expr_new_function(expr_new_symbol(SYM_Power),
                           (Expr*[]){ expr_copy(base), expr_new_integer(m) }, 2);
             Expr* pe = evaluate(p);

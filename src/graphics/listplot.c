@@ -31,14 +31,14 @@ static bool is_rule_arg(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     Expr* h = e->data.function.head;
     if (!h || h->type != EXPR_SYMBOL) return false;
-    return (h->data.symbol == SYM_Rule || h->data.symbol == SYM_RuleDelayed)
+    return (h->data.symbol.name == SYM_Rule || h->data.symbol.name == SYM_RuleDelayed)
         && e->data.function.arg_count == 2;
 }
 
 static bool is_list(const Expr* e) {
     return e && e->type == EXPR_FUNCTION && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_List;
+        && e->data.function.head->data.symbol.name == SYM_List;
 }
 
 /* Coerce an element to a double. Fast path for literal numbers; falls back
@@ -162,9 +162,9 @@ typedef struct {
 static double stem_baseline(Expr* filling, double ymin, double ymax) {
     if (!filling) return 0.0;
     if (filling->type == EXPR_SYMBOL) {
-        if (filling->data.symbol == SYM_Axis)   return 0.0;
-        if (filling->data.symbol == SYM_Bottom) return ymin;
-        if (filling->data.symbol == SYM_Top)    return ymax;
+        if (filling->data.symbol.name == SYM_Axis)   return 0.0;
+        if (filling->data.symbol.name == SYM_Bottom) return ymin;
+        if (filling->data.symbol.name == SYM_Top)    return ymax;
     }
     double v;
     if (numericize_bound(filling, &v)) return v;
@@ -210,22 +210,22 @@ static bool split_options(Expr* res, ListPlotOpts* o,
         if (!is_rule_arg(arg)) FAIL_CLEANUP();
         Expr* lhs = arg->data.function.args[0];
         Expr* rhs = arg->data.function.args[1];
-        const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol : NULL;
+        const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol.name : NULL;
 
         if (name == SYM_Joined) {
-            o->joined = (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_True);
+            o->joined = (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_True);
         } else if (name == SYM_Filling) {
-            if (!(rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_None)) o->filling = rhs;
+            if (!(rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_None)) o->filling = rhs;
         } else if (name == SYM_FillingStyle) {
-            if (!(rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic)) o->filling_style = rhs;
+            if (!(rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic)) o->filling_style = rhs;
         } else if (name == SYM_PlotMarkers) {
-            o->have_markers = !(rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_None);
+            o->have_markers = !(rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_None);
         } else if (name == SYM_DataRange) {
-            if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_All) {
+            if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_All) {
                 o->dr.force_multi = true;
             } else if (point2(rhs, &o->dr.xmin, &o->dr.xmax)) {
                 o->dr.has_range = (o->dr.xmin < o->dr.xmax);
-            } else if (!(rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic)) {
+            } else if (!(rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic)) {
                 FAIL_CLEANUP();
             }
         } else if (name == SYM_PlotLegends) {
@@ -242,7 +242,7 @@ static bool split_options(Expr* res, ListPlotOpts* o,
              * through verbatim; anything else numericalizes to a real. */
             have_aspect = true;
             if (rhs->type == EXPR_SYMBOL
-                && (rhs->data.symbol == SYM_Automatic || rhs->data.symbol == SYM_Full)) {
+                && (rhs->data.symbol.name == SYM_Automatic || rhs->data.symbol.name == SYM_Full)) {
                 passthrough[n++] = expr_copy(arg);
             } else {
                 double v;
@@ -255,7 +255,7 @@ static bool split_options(Expr* res, ListPlotOpts* o,
             if (name == SYM_Axes) have_axes = true;
             else if (name == SYM_Frame) {
                 if (!(rhs->type == EXPR_SYMBOL
-                      && (rhs->data.symbol == SYM_False || rhs->data.symbol == SYM_None)))
+                      && (rhs->data.symbol.name == SYM_False || rhs->data.symbol.name == SYM_None)))
                     have_frame = true;
             }
             passthrough[n++] = expr_copy(arg);
@@ -368,7 +368,7 @@ static void emit_dataset(Expr** prims, size_t* pc, const PointSet* ps, size_t id
  * dataset with its 1-based index. Returns NULL if legends is None/absent. */
 static Expr* build_legend_meta(Expr* legends, size_t nsets, Expr* single_color) {
     if (!legends) return NULL;
-    if (legends->type == EXPR_SYMBOL && legends->data.symbol == SYM_None) return NULL;
+    if (legends->type == EXPR_SYMBOL && legends->data.symbol.name == SYM_None) return NULL;
 
     bool explicit_list = is_list(legends);
     bool multi = (nsets > 1);

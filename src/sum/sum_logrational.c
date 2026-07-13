@@ -52,13 +52,13 @@ bool prod_linear_factors(Expr* e, Expr* var,
                          bool* all_linear_out);
 
 static bool is_infinity_sym(const Expr* e) {
-    return e->type == EXPR_SYMBOL && e->data.symbol == SYM_Infinity;
+    return e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity;
 }
 
 static bool head_is(const Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, name) == 0;
+        && strcmp(e->data.function.head->data.symbol.name, name) == 0;
 }
 
 /* True if e contains a Log[...] anywhere. */
@@ -95,7 +95,7 @@ static Expr* anchor_minus(Expr* imin, Expr* rho) {
 /* PossibleZeroQ[e] == True (consumes e). */
 static bool is_zero(Expr* e) {
     Expr* r = sum_eval("PossibleZeroQ", (Expr*[]){ e }, 1);
-    bool yes = (r && r->type == EXPR_SYMBOL && r->data.symbol == SYM_True);
+    bool yes = (r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True);
     if (r) expr_free(r);
     return yes;
 }

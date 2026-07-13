@@ -33,13 +33,13 @@
 int g_product_verify_convergence = 1;
 
 static bool is_inf_sym(const Expr* e) {
-    return e->type == EXPR_SYMBOL && e->data.symbol == SYM_Infinity;
+    return e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity;
 }
 
 static bool head_sym_is(const Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, name) == 0;
+        && strcmp(e->data.function.head->data.symbol.name, name) == 0;
 }
 
 static void warn_div(void) {
@@ -167,7 +167,7 @@ Expr* builtin_product_infinite(Expr* res) {
     if (head_sym_is(out, "Limit")) { expr_free(out); return NULL; }
     /* Divergent limit -> Product::div, stay unevaluated. */
     if ((out->type == EXPR_SYMBOL &&
-         (out->data.symbol == SYM_Infinity || out->data.symbol == SYM_ComplexInfinity))
+         (out->data.symbol.name == SYM_Infinity || out->data.symbol.name == SYM_ComplexInfinity))
         || head_sym_is(out, "DirectedInfinity")) {
         warn_div();
         expr_free(out);

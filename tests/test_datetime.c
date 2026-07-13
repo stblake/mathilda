@@ -36,7 +36,7 @@ void test_timing() {
     Expr* e = evaluate(p);
     expr_free(p);
     assert(e->type == EXPR_FUNCTION);
-    assert(strcmp(e->data.function.head->data.symbol, "List") == 0);
+    assert(strcmp(e->data.function.head->data.symbol.name, "List") == 0);
     assert(e->data.function.arg_count == 2);
     assert(e->data.function.args[0]->type == EXPR_REAL); // time
     assert(e->data.function.args[1]->type == EXPR_INTEGER);
@@ -49,7 +49,7 @@ void test_repeated_timing() {
     Expr* e = evaluate(p);
     expr_free(p);
     assert(e->type == EXPR_FUNCTION);
-    assert(strcmp(e->data.function.head->data.symbol, "List") == 0);
+    assert(strcmp(e->data.function.head->data.symbol.name, "List") == 0);
     assert(e->data.function.arg_count == 2);
     assert(e->data.function.args[0]->type == EXPR_REAL); // time
     assert(e->data.function.args[1]->type == EXPR_INTEGER);
@@ -132,7 +132,7 @@ void test_absolute_time_attributes() {
     Expr* e = evaluate(p);
     expr_free(p);
     assert(e->type == EXPR_SYMBOL);
-    assert(strcmp(e->data.symbol, "True") == 0);
+    assert(strcmp(e->data.symbol.name, "True") == 0);
     expr_free(e);
 }
 

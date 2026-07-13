@@ -83,7 +83,7 @@ typedef struct {
 static int is_regular_expression(Expr* e, const char** re_out) {
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_RegularExpression &&
+        e->data.function.head->data.symbol.name == SYM_RegularExpression &&
         e->data.function.arg_count == 1 &&
         e->data.function.args[0]->type == EXPR_STRING) {
         *re_out = e->data.function.args[0]->data.string;
@@ -266,7 +266,7 @@ Expr* builtin_names(Expr* res) {
         /* A List argument is a set of alternative patterns. */
         if (arg->type == EXPR_FUNCTION &&
             arg->data.function.head->type == EXPR_SYMBOL &&
-            arg->data.function.head->data.symbol == SYM_List) {
+            arg->data.function.head->data.symbol.name == SYM_List) {
             size_t n = arg->data.function.arg_count;
             if (n > 0) {
                 pats = calloc(n, sizeof(NamePat));

@@ -212,7 +212,7 @@ Expr* builtin_multiplicativeorder(Expr* res) {
     Expr* list = res->data.function.args[2];
     if (list->type != EXPR_FUNCTION ||
         list->data.function.head->type != EXPR_SYMBOL ||
-        list->data.function.head->data.symbol != SYM_List) {
+        list->data.function.head->data.symbol.name != SYM_List) {
         mpz_clears(k, n, order, NULL);
         return NULL;
     }

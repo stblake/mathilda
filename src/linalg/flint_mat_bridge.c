@@ -45,7 +45,7 @@ static int mb_expr_to_fmpq(const Expr* e, fmpq_t out) {
     if (e->type == EXPR_FUNCTION) {
         const Expr* h = e->data.function.head;
         if (h && h->type == EXPR_SYMBOL
-            && strcmp(h->data.symbol, "Rational") == 0
+            && strcmp(h->data.symbol.name, "Rational") == 0
             && e->data.function.arg_count == 2) {
             if (!mb_fmpz_from_int_expr(fmpq_numref(out), e->data.function.args[0]) ||
                 !mb_fmpz_from_int_expr(fmpq_denref(out), e->data.function.args[1]))

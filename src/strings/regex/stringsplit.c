@@ -87,7 +87,7 @@ Expr* builtin_stringsplit(Expr* res) {
 
     if (arg0->type == EXPR_FUNCTION &&
         arg0->data.function.head->type == EXPR_SYMBOL &&
-        arg0->data.function.head->data.symbol == SYM_List) {
+        arg0->data.function.head->data.symbol.name == SYM_List) {
         size_t n = arg0->data.function.arg_count;
         Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
         if (!out) { regex_rules_free(rules, nr); return NULL; }

@@ -250,15 +250,15 @@ static bool ns_term_mpfr(NsCtx* c, long k, mpfr_t out_re, mpfr_t out_im) {
 static bool ns_is_infinite(Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_SYMBOL)
-        return e->data.symbol == SYM_Infinity || e->data.symbol == SYM_ComplexInfinity;
+        return e->data.symbol.name == SYM_Infinity || e->data.symbol.name == SYM_ComplexInfinity;
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_DirectedInfinity)
+        && e->data.function.head->data.symbol.name == SYM_DirectedInfinity)
         return true;
     /* -Infinity etc.: Times[..., Infinity] */
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Times) {
+        && e->data.function.head->data.symbol.name == SYM_Times) {
         for (size_t i = 0; i < e->data.function.arg_count; i++)
             if (ns_is_infinite(e->data.function.args[i])) return true;
     }
@@ -284,7 +284,7 @@ static bool ns_head_is_numeric_blackbox(const char* s) {
 static bool ns_body_is_blackbox(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL
-        && ns_head_is_numeric_blackbox(e->data.function.head->data.symbol))
+        && ns_head_is_numeric_blackbox(e->data.function.head->data.symbol.name))
         return true;
     if (ns_body_is_blackbox(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
@@ -320,15 +320,15 @@ static bool ns_is_known_option(const char* s) {
 static bool ns_is_option_arg(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     if (h != SYM_Rule && h != SYM_RuleDelayed) return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* lhs = e->data.function.args[0];
-    return lhs->type == EXPR_SYMBOL && ns_is_known_option(lhs->data.symbol);
+    return lhs->type == EXPR_SYMBOL && ns_is_known_option(lhs->data.symbol.name);
 }
 
 static bool ns_parse_working_precision(Expr* val, bool* mpfr, long* bits) {
-    if (val->type == EXPR_SYMBOL && val->data.symbol == SYM_MachinePrecision) {
+    if (val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_MachinePrecision) {
         *mpfr = false; *bits = 0; return true;
     }
     double digits;
@@ -344,7 +344,7 @@ static bool ns_parse_working_precision(Expr* val, bool* mpfr, long* bits) {
 
 static bool ns_parse_goal(Expr* v, double* out) {
     if (v->type == EXPR_SYMBOL
-        && (v->data.symbol == SYM_Infinity || v->data.symbol == SYM_Automatic)) {
+        && (v->data.symbol.name == SYM_Infinity || v->data.symbol.name == SYM_Automatic)) {
         *out = -1.0; return true;
     }
     double d;
@@ -355,14 +355,14 @@ static bool ns_parse_goal(Expr* v, double* out) {
 static bool ns_apply_option(Expr* rule, NsOpts* o) {
     Expr* lhs = rule->data.function.args[0];
     Expr* rhs = rule->data.function.args[1];
-    const char* name = lhs->data.symbol;
+    const char* name = lhs->data.symbol.name;
 
     if (name == SYM_Method) {
         /* Accept a bare symbol, or Method -> {sym, subopts...} (subopts ignored
          * for now: the EulerMaclaurin NIntegrate sub-method tuning lands later). */
         Expr* m = rhs;
         if (m->type == EXPR_FUNCTION && m->data.function.head->type == EXPR_SYMBOL
-            && m->data.function.head->data.symbol == SYM_List
+            && m->data.function.head->data.symbol.name == SYM_List
             && m->data.function.arg_count >= 1)
             m = m->data.function.args[0];
         if (m->type == EXPR_STRING) {
@@ -375,7 +375,7 @@ static bool ns_apply_option(Expr* rule, NsOpts* o) {
             return true;
         }
         if (m->type == EXPR_SYMBOL) {
-            const char* sym = m->data.symbol;
+            const char* sym = m->data.symbol.name;
             if (sym == SYM_WynnEpsilon || sym == SYM_SequenceLimit) o->method = SYM_WynnEpsilon;
             else if (sym == SYM_EulerMaclaurin || sym == SYM_Integrate
                      || sym == SYM_EulerSum) o->method = SYM_EulerMaclaurin;
@@ -412,8 +412,8 @@ static bool ns_apply_option(Expr* rule, NsOpts* o) {
         ns_warn("badopt", "WynnDegree must be a positive integer"); return false;
     }
     if (name == SYM_VerifyConvergence) {
-        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_True)  { o->verify = true;  return true; }
-        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_False) { o->verify = false; return true; }
+        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_True)  { o->verify = true;  return true; }
+        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_False) { o->verify = false; return true; }
         ns_warn("badopt", "VerifyConvergence must be True or False"); return false;
     }
     if (name == SYM_AccuracyGoal)  return ns_parse_goal(rhs, &o->acc_goal);
@@ -1516,7 +1516,7 @@ static Expr* ns_run_single(Expr* body, const char* var, Expr* imin, Expr* imax,
 static bool ns_is_spec(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL
-        || e->data.function.head->data.symbol != SYM_List) return false;
+        || e->data.function.head->data.symbol.name != SYM_List) return false;
     size_t n = e->data.function.arg_count;
     return n >= 2 && n <= 4 && e->data.function.args[0]->type == EXPR_SYMBOL;
 }
@@ -1590,7 +1590,7 @@ Expr* builtin_nsum(Expr* res) {
     }
 
     /* Parse spec0 into (var, imin, imax, di). */
-    const char* var = spec0->data.function.args[0]->data.symbol;
+    const char* var = spec0->data.function.args[0]->data.symbol.name;
     size_t sn = spec0->data.function.arg_count;
     Expr *imin_raw, *imax_raw, *di_raw;
     if (sn == 2) { imin_raw = NULL; imax_raw = spec0->data.function.args[1]; di_raw = NULL; }

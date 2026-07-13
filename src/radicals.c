@@ -96,7 +96,7 @@ static Expr* slot1_to_var(const Expr* e, const Expr* xvar) {
     if (!e) return NULL;
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Slot
+        && e->data.function.head->data.symbol.name == SYM_Slot
         && e->data.function.arg_count == 1
         && e->data.function.args[0]->type == EXPR_INTEGER
         && e->data.function.args[0]->data.integer == 1) {
@@ -118,7 +118,7 @@ static Expr* slot1_to_var(const Expr* e, const Expr* xvar) {
  * equals `from_name` with a deep copy of `to`. */
 static Expr* subst_sym(const Expr* e, const char* from_name, const Expr* to) {
     if (!e) return NULL;
-    if (e->type == EXPR_SYMBOL && e->data.symbol == from_name) {
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name == from_name) {
         return expr_copy((Expr*)to);
     }
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
@@ -149,7 +149,7 @@ static Expr* extract_root_poly(const Expr* root_expr, const Expr* xvar) {
         raw = slot1_to_var(fn->data.function.args[0], xvar);
     } else if (fn->data.function.arg_count == 2
                && fn->data.function.args[0]->type == EXPR_SYMBOL) {
-        const char* bvar = fn->data.function.args[0]->data.symbol;
+        const char* bvar = fn->data.function.args[0]->data.symbol.name;
         raw = subst_sym(fn->data.function.args[1], bvar, xvar);
     } else {
         return NULL;

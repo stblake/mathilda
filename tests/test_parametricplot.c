@@ -51,7 +51,7 @@ void test_parametricplot_default_aspectratio_one(void) {
         if (opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2) continue;
         Expr* lhs = opt->data.function.args[0];
         Expr* rhs = opt->data.function.args[1];
-        if (lhs->type != EXPR_SYMBOL || strcmp(lhs->data.symbol, "AspectRatio") != 0)
+        if (lhs->type != EXPR_SYMBOL || strcmp(lhs->data.symbol.name, "AspectRatio") != 0)
             continue;
         double v = 0.0;
         if      (rhs->type == EXPR_REAL)    v = rhs->data.real;
@@ -75,8 +75,8 @@ void test_parametricplot_default_axes_true(void) {
         if (opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2) continue;
         Expr* lhs = opt->data.function.args[0];
         Expr* rhs = opt->data.function.args[1];
-        if (lhs->type == EXPR_SYMBOL && strcmp(lhs->data.symbol, "Axes") == 0
-            && rhs->type == EXPR_SYMBOL && strcmp(rhs->data.symbol, "True") == 0) {
+        if (lhs->type == EXPR_SYMBOL && strcmp(lhs->data.symbol.name, "Axes") == 0
+            && rhs->type == EXPR_SYMBOL && strcmp(rhs->data.symbol.name, "True") == 0) {
             found = true; break;
         }
     }
@@ -121,7 +121,7 @@ void test_parametricplot_adaptive_refines_circle(void) {
     for (size_t i = 0; i < prim_list->data.function.arg_count; i++) {
         Expr* e = prim_list->data.function.args[i];
         if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-            && strcmp(e->data.function.head->data.symbol, "Line") == 0)
+            && strcmp(e->data.function.head->data.symbol.name, "Line") == 0)
             npts += e->data.function.args[0]->data.function.arg_count;
     }
     ASSERT(npts > 10); /* adaptive refinement adds more points */
@@ -139,7 +139,7 @@ void test_parametricplot_points_are_2d(void) {
     for (size_t i = 0; i < prim_list->data.function.arg_count; i++) {
         Expr* e = prim_list->data.function.args[i];
         if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL
-            || strcmp(e->data.function.head->data.symbol, "Line") != 0) continue;
+            || strcmp(e->data.function.head->data.symbol.name, "Line") != 0) continue;
         Expr* pts = e->data.function.args[0];
         for (size_t j = 0; j < pts->data.function.arg_count; j++) {
             Expr* pt = pts->data.function.args[j];
@@ -184,13 +184,13 @@ void test_parametricplot_plotpoints_controls_density(void) {
     for (size_t i = 0; i < pl8->data.function.arg_count; i++) {
         Expr* e = pl8->data.function.args[i];
         if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-            && strcmp(e->data.function.head->data.symbol, "Line") == 0)
+            && strcmp(e->data.function.head->data.symbol.name, "Line") == 0)
             n8 += e->data.function.args[0]->data.function.arg_count;
     }
     for (size_t i = 0; i < pl50->data.function.arg_count; i++) {
         Expr* e = pl50->data.function.args[i];
         if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-            && strcmp(e->data.function.head->data.symbol, "Line") == 0)
+            && strcmp(e->data.function.head->data.symbol.name, "Line") == 0)
             n50 += e->data.function.args[0]->data.function.arg_count;
     }
     ASSERT(n8 < n50);
@@ -235,7 +235,7 @@ void test_parametricplot_colorfn_lines_are_2pt(void) {
     for (size_t i = 0; i < prim_list->data.function.arg_count; i++) {
         Expr* e = prim_list->data.function.args[i];
         if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL
-            || strcmp(e->data.function.head->data.symbol, "Line") != 0) continue;
+            || strcmp(e->data.function.head->data.symbol.name, "Line") != 0) continue;
         size_t npt = e->data.function.args[0]->data.function.arg_count;
         ASSERT(npt == 2);
         line_count++;
@@ -260,7 +260,7 @@ void test_parametricplot_regionfunction_right_half(void) {
     for (size_t i = 0; i < prim_list->data.function.arg_count; i++) {
         Expr* e = prim_list->data.function.args[i];
         if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL
-            || strcmp(e->data.function.head->data.symbol, "Line") != 0) continue;
+            || strcmp(e->data.function.head->data.symbol.name, "Line") != 0) continue;
         Expr* pts = e->data.function.args[0];
         for (size_t j = 0; j < pts->data.function.arg_count; j++) {
             Expr* pt = pts->data.function.args[j];
@@ -288,11 +288,11 @@ void test_parametricplot_plotstyle_passthrough(void) {
         if (opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2) continue;
         Expr* lhs = opt->data.function.args[0];
         Expr* rhs = opt->data.function.args[1];
-        if (lhs->type != EXPR_SYMBOL || strcmp(lhs->data.symbol, "PlotStyle") != 0)
+        if (lhs->type != EXPR_SYMBOL || strcmp(lhs->data.symbol.name, "PlotStyle") != 0)
             continue;
         found_rgb_style = (rhs->type == EXPR_FUNCTION
             && rhs->data.function.head->type == EXPR_SYMBOL
-            && strcmp(rhs->data.function.head->data.symbol, "RGBColor") == 0);
+            && strcmp(rhs->data.function.head->data.symbol.name, "RGBColor") == 0);
         break;
     }
     ASSERT(found_rgb_style);
@@ -312,7 +312,7 @@ void test_parametricplot_custom_aspectratio(void) {
         if (opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2) continue;
         Expr* lhs = opt->data.function.args[0];
         Expr* rhs = opt->data.function.args[1];
-        if (lhs->type != EXPR_SYMBOL || strcmp(lhs->data.symbol, "AspectRatio") != 0)
+        if (lhs->type != EXPR_SYMBOL || strcmp(lhs->data.symbol.name, "AspectRatio") != 0)
             continue;
         double v = 0.0;
         if      (rhs->type == EXPR_REAL)    v = rhs->data.real;
@@ -340,7 +340,7 @@ void test_parametricplot_lissajous_sufficient_points(void) {
     for (size_t i = 0; i < prim_list->data.function.arg_count; i++) {
         Expr* e = prim_list->data.function.args[i];
         if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-            && strcmp(e->data.function.head->data.symbol, "Line") == 0)
+            && strcmp(e->data.function.head->data.symbol.name, "Line") == 0)
             total_pts += e->data.function.args[0]->data.function.arg_count;
     }
     ASSERT(total_pts >= 25); /* at minimum the initial grid */
@@ -356,13 +356,13 @@ void test_parametricplot_computed_body_1iter(void) {
         "ParametricPlot[2 {Cos[t], Sin[t]}, {t, 0, 2 Pi}]"));
     ASSERT(g && g->type == EXPR_FUNCTION
            && g->data.function.head->type == EXPR_SYMBOL
-           && strcmp(g->data.function.head->data.symbol, "Graphics") == 0);
+           && strcmp(g->data.function.head->data.symbol.name, "Graphics") == 0);
     Expr* prim_list = g->data.function.args[0];
     bool has_line = false;
     for (size_t i = 0; i < prim_list->data.function.arg_count; i++) {
         Expr* e = prim_list->data.function.args[i];
         if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-            && strcmp(e->data.function.head->data.symbol, "Line") == 0) {
+            && strcmp(e->data.function.head->data.symbol.name, "Line") == 0) {
             has_line = true; break;
         }
     }
@@ -390,7 +390,7 @@ void test_parametricplot_two_iter_has_polygon(void) {
     for (size_t i = 0; i < prim_list->data.function.arg_count; i++) {
         Expr* e = prim_list->data.function.args[i];
         if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-            && strcmp(e->data.function.head->data.symbol, "Polygon") == 0) {
+            && strcmp(e->data.function.head->data.symbol.name, "Polygon") == 0) {
             has_polygon = true; break;
         }
     }
@@ -406,14 +406,14 @@ void test_parametricplot_two_iter_computed_body(void) {
         " {t, 0, 3 Pi/2}, {r, 1, 2}, PlotPoints -> 5]"));
     ASSERT(g && g->type == EXPR_FUNCTION
            && g->data.function.head->type == EXPR_SYMBOL
-           && strcmp(g->data.function.head->data.symbol, "Graphics") == 0);
+           && strcmp(g->data.function.head->data.symbol.name, "Graphics") == 0);
     /* Must produce at least one Polygon (some cells may be invalid for small t). */
     Expr* prim_list = g->data.function.args[0];
     bool has_polygon = false;
     for (size_t i = 0; i < prim_list->data.function.arg_count; i++) {
         Expr* e = prim_list->data.function.args[i];
         if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-            && strcmp(e->data.function.head->data.symbol, "Polygon") == 0) {
+            && strcmp(e->data.function.head->data.symbol.name, "Polygon") == 0) {
             has_polygon = true; break;
         }
     }
@@ -431,7 +431,7 @@ void test_parametricplot_two_iter_polygon_has_4_verts(void) {
     for (size_t i = 0; i < prim_list->data.function.arg_count; i++) {
         Expr* e = prim_list->data.function.args[i];
         if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL
-            || strcmp(e->data.function.head->data.symbol, "Polygon") != 0)
+            || strcmp(e->data.function.head->data.symbol.name, "Polygon") != 0)
             continue;
         /* Polygon[verts_list] — verts_list has 4 elements. */
         ASSERT(e->data.function.arg_count == 1);
@@ -451,7 +451,7 @@ void test_parametricplot_two_iter_mesh_adds_lines(void) {
     for (size_t i = 0; i < prim_list->data.function.arg_count; i++) {
         Expr* e = prim_list->data.function.args[i];
         if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-            && strcmp(e->data.function.head->data.symbol, "Line") == 0) {
+            && strcmp(e->data.function.head->data.symbol.name, "Line") == 0) {
             has_line = true; break;
         }
     }
@@ -468,13 +468,13 @@ void test_parametricplot_two_iter_multi_surface_has_polygon(void) {
         "ParametricPlot[{{2 r Cos[t], r Sin[t]}, {r Cos[t], 2 r Sin[t]}},"
         " {t, 0, 2 Pi}, {r, 0, 1}, PlotPoints -> 4]"));
     ASSERT(g && g->type == EXPR_FUNCTION
-           && strcmp(g->data.function.head->data.symbol, "Graphics") == 0);
+           && strcmp(g->data.function.head->data.symbol.name, "Graphics") == 0);
     Expr* prim_list = g->data.function.args[0];
     bool has_polygon = false;
     for (size_t i = 0; i < prim_list->data.function.arg_count; i++) {
         Expr* e = prim_list->data.function.args[i];
         if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-            && strcmp(e->data.function.head->data.symbol, "Polygon") == 0) {
+            && strcmp(e->data.function.head->data.symbol.name, "Polygon") == 0) {
             has_polygon = true; break;
         }
     }
@@ -493,7 +493,7 @@ void test_parametricplot_two_iter_multi_surface_two_colors(void) {
     for (size_t i = 0; i < prim_list->data.function.arg_count; i++) {
         Expr* e = prim_list->data.function.args[i];
         if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-            && strcmp(e->data.function.head->data.symbol, "RGBColor") == 0)
+            && strcmp(e->data.function.head->data.symbol.name, "RGBColor") == 0)
             ncolors++;
     }
     ASSERT(ncolors == 2);
@@ -521,7 +521,7 @@ void test_parametricplot_plotlegends_automatic(void) {
     for (size_t i = 1; i < g->data.function.arg_count; i++) {
         Expr* e = g->data.function.args[i];
         if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-            && strcmp(e->data.function.head->data.symbol, "$PlotLegendData") == 0) {
+            && strcmp(e->data.function.head->data.symbol.name, "$PlotLegendData") == 0) {
             has_legend = true; break;
         }
     }
@@ -540,7 +540,7 @@ void test_parametricplot_plotlegends_none(void) {
     for (size_t i = 1; i < g->data.function.arg_count; i++) {
         Expr* e = g->data.function.args[i];
         if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-            && strcmp(e->data.function.head->data.symbol, "$PlotLegendData") == 0) {
+            && strcmp(e->data.function.head->data.symbol.name, "$PlotLegendData") == 0) {
             has_legend = true; break;
         }
     }
@@ -559,7 +559,7 @@ void test_parametricplot_plotlegends_multicurve(void) {
     for (size_t i = 1; i < g->data.function.arg_count; i++) {
         Expr* e = g->data.function.args[i];
         if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-            && strcmp(e->data.function.head->data.symbol, "$PlotLegendData") == 0) {
+            && strcmp(e->data.function.head->data.symbol.name, "$PlotLegendData") == 0) {
             ASSERT(e->data.function.arg_count == 2); /* two curves */
             found = true; break;
         }
@@ -579,7 +579,7 @@ void test_parametricplot_plotlegends_explicit_labels(void) {
     for (size_t i = 1; i < g->data.function.arg_count; i++) {
         Expr* e = g->data.function.args[i];
         if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL
-            || strcmp(e->data.function.head->data.symbol, "$PlotLegendData") != 0) continue;
+            || strcmp(e->data.function.head->data.symbol.name, "$PlotLegendData") != 0) continue;
         /* $PlotLegendData[{color, label}]: check label is the string "my curve". */
         if (e->data.function.arg_count == 1) {
             Expr* entry = e->data.function.args[0];
@@ -610,8 +610,8 @@ void test_parametricplot_display_options_passthrough(void) {
         if (opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2) continue;
         Expr* lhs = opt->data.function.args[0];
         if (lhs->type != EXPR_SYMBOL) continue;
-        if (strcmp(lhs->data.symbol, "PlotLabel")  == 0) has_label = true;
-        if (strcmp(lhs->data.symbol, "GridLines")  == 0) has_grid  = true;
+        if (strcmp(lhs->data.symbol.name, "PlotLabel")  == 0) has_label = true;
+        if (strcmp(lhs->data.symbol.name, "GridLines")  == 0) has_grid  = true;
     }
     ASSERT(has_label);
     ASSERT(has_grid);

@@ -54,7 +54,7 @@ static bool is_complex_literal(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Complex
+        && e->data.function.head->data.symbol.name == SYM_Complex
         && e->data.function.arg_count == 2;
 }
 
@@ -62,7 +62,7 @@ bool is_rational_literal(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.head->data.symbol.name == SYM_Rational
         && e->data.function.arg_count == 2;
 }
 
@@ -136,8 +136,8 @@ static int element_decide(const Expr* x, const char* dom, const AssumeCtx* ctx) 
 
     if (strcmp(dom, "Booleans") == 0) {
         if (x->type == EXPR_SYMBOL) {
-            if (x->data.symbol == SYM_True)  return 1;
-            if (x->data.symbol == SYM_False) return 1;
+            if (x->data.symbol.name == SYM_True)  return 1;
+            if (x->data.symbol.name == SYM_False) return 1;
         }
         return -1;
     }
@@ -147,8 +147,8 @@ static int element_decide(const Expr* x, const char* dom, const AssumeCtx* ctx) 
             Expr* primeq = call_unary_copy("PrimeQ", x);
             int ans = -1;
             if (primeq && primeq->type == EXPR_SYMBOL) {
-                if (primeq->data.symbol == SYM_True) ans = 1;
-                if (primeq->data.symbol == SYM_False) ans = 0;
+                if (primeq->data.symbol.name == SYM_True) ans = 1;
+                if (primeq->data.symbol.name == SYM_False) ans = 0;
             }
             if (primeq) expr_free(primeq);
             return ans;
@@ -161,8 +161,8 @@ static int element_decide(const Expr* x, const char* dom, const AssumeCtx* ctx) 
             Expr* primeq = call_unary_copy("PrimeQ", x);
             int ans = -1;
             if (primeq && primeq->type == EXPR_SYMBOL) {
-                if (primeq->data.symbol == SYM_True) ans = 0;
-                if (primeq->data.symbol == SYM_False) ans = 1;
+                if (primeq->data.symbol.name == SYM_True) ans = 0;
+                if (primeq->data.symbol.name == SYM_False) ans = 1;
             }
             if (primeq) expr_free(primeq);
             return ans;
@@ -194,8 +194,8 @@ Expr* builtin_element(Expr* res) {
      * Simplify runs that each only see one of the facts. */
     if (x->type == EXPR_FUNCTION && x->data.function.head &&
         x->data.function.head->type == EXPR_SYMBOL &&
-        (x->data.function.head->data.symbol == SYM_List ||
-         x->data.function.head->data.symbol == SYM_Alternatives)) {
+        (x->data.function.head->data.symbol.name == SYM_List ||
+         x->data.function.head->data.symbol.name == SYM_Alternatives)) {
         size_t n = x->data.function.arg_count;
         bool all_true = (n > 0);
         bool any_false = false;
@@ -205,9 +205,9 @@ Expr* builtin_element(Expr* res) {
             Expr* sub = evaluate(call);
             expr_free(call);
             if (sub && sub->type == EXPR_SYMBOL) {
-                if (sub->data.symbol == SYM_True) {
+                if (sub->data.symbol.name == SYM_True) {
                     /* keep all_true */
-                } else if (sub->data.symbol == SYM_False) {
+                } else if (sub->data.symbol.name == SYM_False) {
                     any_false = true;
                     all_true = false;
                 } else {
@@ -225,7 +225,7 @@ Expr* builtin_element(Expr* res) {
     }
 
     if (dom->type != EXPR_SYMBOL) return NULL;
-    const char* d = dom->data.symbol;
+    const char* d = dom->data.symbol.name;
 
     /* Build context from current $Assumptions. */
     Expr* dollar = read_dollar_assumptions();
@@ -339,7 +339,7 @@ static Expr* simp_try_rebalance_relation(const Expr* relation) {
     if (relation->data.function.arg_count != 2) return NULL;
     const Expr* h = relation->data.function.head;
     if (!h || h->type != EXPR_SYMBOL) return NULL;
-    const char* hn = h->data.symbol;
+    const char* hn = h->data.symbol.name;
     bool ok = (hn == SYM_Equal ||
                hn == SYM_Unequal ||
                hn == SYM_Less ||
@@ -638,7 +638,7 @@ Expr* builtin_simplify(Expr* res) {
     size_t n_user_funcs = 0;
     if (opt_transform) {
         if (opt_transform->type == EXPR_SYMBOL &&
-            opt_transform->data.symbol == SYM_Automatic) {
+            opt_transform->data.symbol.name == SYM_Automatic) {
             /* Default: built-in only. */
         } else if (simp_eq_head_sym(opt_transform, "List")) {
             size_t m = opt_transform->data.function.arg_count;
@@ -646,7 +646,7 @@ Expr* builtin_simplify(Expr* res) {
             use_builtin = false; /* unless Automatic appears in the list */
             for (size_t i = 0; i < m; i++) {
                 Expr* el = opt_transform->data.function.args[i];
-                if (el->type == EXPR_SYMBOL && el->data.symbol == SYM_Automatic) {
+                if (el->type == EXPR_SYMBOL && el->data.symbol.name == SYM_Automatic) {
                     use_builtin = true;
                 } else {
                     user_funcs[n_user_funcs++] = el;
@@ -667,7 +667,7 @@ Expr* builtin_simplify(Expr* res) {
      * Automatic[candidate] (which would never reduce). */
     if (opt_complexity &&
         opt_complexity->type == EXPR_SYMBOL &&
-        opt_complexity->data.symbol == SYM_Automatic) {
+        opt_complexity->data.symbol.name == SYM_Automatic) {
         opt_complexity = NULL;
     }
 
@@ -717,7 +717,7 @@ Expr* builtin_simplify(Expr* res) {
     if (expr->type == EXPR_FUNCTION &&
         expr->data.function.head &&
         expr->data.function.head->type == EXPR_SYMBOL &&
-        head_threads_over(expr->data.function.head->data.symbol)) {
+        head_threads_over(expr->data.function.head->data.symbol.name)) {
         size_t n = expr->data.function.arg_count;
         Expr** new_args = (Expr**)calloc(n, sizeof(Expr*));
         for (size_t i = 0; i < n; i++) {
@@ -807,7 +807,7 @@ Expr* builtin_simplify(Expr* res) {
         if (expr->type == EXPR_FUNCTION
             && expr->data.function.head
             && expr->data.function.head->type == EXPR_SYMBOL
-            && expr->data.function.head->data.symbol == SYM_Plus
+            && expr->data.function.head->data.symbol.name == SYM_Plus
             && simp_has_rational_root(expr)
             && !contains_explicit_complex(expr)
             && !expr_has_nested_radical_radicand(expr)) {
@@ -1023,7 +1023,7 @@ Expr* builtin_assuming(Expr* res) {
     if (assum->type == EXPR_FUNCTION &&
         assum->data.function.head &&
         assum->data.function.head->type == EXPR_SYMBOL &&
-        assum->data.function.head->data.symbol == SYM_List) {
+        assum->data.function.head->data.symbol.name == SYM_List) {
         size_t n = assum->data.function.arg_count;
         Expr** copies = (Expr**)calloc(n, sizeof(Expr*));
         for (size_t i = 0; i < n; i++) copies[i] = expr_copy(assum->data.function.args[i]);

@@ -28,7 +28,7 @@ Expr* builtin_split(Expr* res) {
                 Expr* call_args[2] = { expr_copy(prev), expr_copy(curr) };
                 Expr* call = expr_new_function(expr_copy(test), call_args, 2);
                 Expr* eval_res = evaluate(call);
-                if (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol == SYM_True) {
+                if (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol.name == SYM_True) {
                     identical = true;
                 }
                 expr_free(eval_res);

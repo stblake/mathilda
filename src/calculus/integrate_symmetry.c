@@ -52,18 +52,18 @@ static Expr* simplify_take(Expr* e) { return eval_take(mk_fn1("Simplify", e)); }
 static bool head_name_is(const Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, name) == 0;
+           strcmp(e->data.function.head->data.symbol.name, name) == 0;
 }
 
 static bool sym_is(const Expr* e, const char* name) {
-    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol, name) == 0;
+    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, name) == 0;
 }
 
 /* Does `e` contain the variable `x` (a symbol) anywhere? */
 static bool contains_symbol(const Expr* e, const Expr* x) {
     if (!e) return false;
     if (e->type == EXPR_SYMBOL)
-        return x->type == EXPR_SYMBOL && e->data.symbol == x->data.symbol;
+        return x->type == EXPR_SYMBOL && e->data.symbol.name == x->data.symbol.name;
     if (e->type != EXPR_FUNCTION) return false;
     if (contains_symbol(e->data.function.head, x)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
@@ -228,11 +228,11 @@ Expr* builtin_integrate_symmetry(Expr* res) {
         Expr* opt = res->data.function.args[t];
         if (opt->type == EXPR_FUNCTION && opt->data.function.arg_count == 2 &&
             opt->data.function.head->type == EXPR_SYMBOL &&
-            (opt->data.function.head->data.symbol == SYM_Rule ||
-             opt->data.function.head->data.symbol == SYM_RuleDelayed)) {
+            (opt->data.function.head->data.symbol.name == SYM_Rule ||
+             opt->data.function.head->data.symbol.name == SYM_RuleDelayed)) {
             Expr* lhs = opt->data.function.args[0];
             if (lhs->type == EXPR_SYMBOL &&
-                strcmp(lhs->data.symbol, "Assumptions") == 0) {
+                strcmp(lhs->data.symbol.name, "Assumptions") == 0) {
                 assumptions = opt->data.function.args[1];
                 continue;
             }

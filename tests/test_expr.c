@@ -25,7 +25,7 @@ void test_symbol_expr() {
     Expr* e = expr_new_symbol("x");
     ASSERT(e != NULL);
     ASSERT(e->type == EXPR_SYMBOL);
-    ASSERT_STR_EQ(e->data.symbol, "x");
+    ASSERT_STR_EQ(e->data.symbol.name, "x");
     expr_free(e);
 }
 
@@ -46,7 +46,7 @@ void test_function_expr() {
     ASSERT(e->type == EXPR_FUNCTION);
     ASSERT(e->data.function.arg_count == 1);
     ASSERT(e->data.function.args[0] == x);
-    ASSERT_STR_EQ(e->data.function.head->data.symbol, "Sin");
+    ASSERT_STR_EQ(e->data.function.head->data.symbol.name, "Sin");
     
     expr_free(e); // Recursively frees x
 }

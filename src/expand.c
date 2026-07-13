@@ -25,8 +25,8 @@ static bool expr_contains_patt(Expr* e, Expr* patt) {
 }
 
 static Expr* multiply_two(Expr* a, Expr* b) {
-    bool a_is_plus = (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL && a->data.function.head->data.symbol == SYM_Plus);
-    bool b_is_plus = (b->type == EXPR_FUNCTION && b->data.function.head->type == EXPR_SYMBOL && b->data.function.head->data.symbol == SYM_Plus);
+    bool a_is_plus = (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL && a->data.function.head->data.symbol.name == SYM_Plus);
+    bool b_is_plus = (b->type == EXPR_FUNCTION && b->data.function.head->type == EXPR_SYMBOL && b->data.function.head->data.symbol.name == SYM_Plus);
 
     if (a_is_plus && b_is_plus) {
         size_t count = a->data.function.arg_count * b->data.function.arg_count;
@@ -110,7 +110,7 @@ Expr* expr_expand_patt(Expr* e, Expr* patt) {
 
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
-    const char* head = e->data.function.head->type == EXPR_SYMBOL ? e->data.function.head->data.symbol : "";
+    const char* head = e->data.function.head->type == EXPR_SYMBOL ? e->data.function.head->data.symbol.name : "";
 
     // Thread over lists, equations, inequalities, logic. Inequality has
     // operator-symbol slots at odd indices that must be passed through.
@@ -170,7 +170,7 @@ Expr* expr_expand_patt(Expr* e, Expr* patt) {
             long m = 1;
             if (exp_base->type == EXPR_FUNCTION
                 && exp_base->data.function.head->type == EXPR_SYMBOL
-                && strcmp(exp_base->data.function.head->data.symbol, "Plus") == 0)
+                && strcmp(exp_base->data.function.head->data.symbol.name, "Plus") == 0)
                 m = (long)exp_base->data.function.arg_count;
             bool do_expand = (m <= 1);
             if (!do_expand) {
@@ -211,7 +211,7 @@ Expr* builtin_expand(Expr* res) {
 static bool is_negative_int_power(Expr* e) {
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
-    if (e->data.function.head->data.symbol != SYM_Power) return false;
+    if (e->data.function.head->data.symbol.name != SYM_Power) return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* exp = e->data.function.args[1];
     return exp->type == EXPR_INTEGER && exp->data.integer < 0;
@@ -236,7 +236,7 @@ Expr* expr_expand_numerator(Expr* e) {
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
     const char* head = (e->data.function.head->type == EXPR_SYMBOL)
-        ? e->data.function.head->data.symbol : "";
+        ? e->data.function.head->data.symbol.name : "";
 
     if (is_thread_head(head)) {
         bool is_ineq = (strcmp(head, "Inequality") == 0);
@@ -312,7 +312,7 @@ Expr* expr_expand_denominator(Expr* e) {
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
     const char* head = (e->data.function.head->type == EXPR_SYMBOL)
-        ? e->data.function.head->data.symbol : "";
+        ? e->data.function.head->data.symbol.name : "";
 
     if (is_thread_head(head)) {
         bool is_ineq = (strcmp(head, "Inequality") == 0);

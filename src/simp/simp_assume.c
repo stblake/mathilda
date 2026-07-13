@@ -48,8 +48,8 @@ static void ctx_push(AssumeCtx* ctx, const Expr* fact) {
 static void ctx_walk(AssumeCtx* ctx, const Expr* a) {
     if (!a) return;
     if (a->type == EXPR_SYMBOL) {
-        if (a->data.symbol == SYM_True) return;
-        if (a->data.symbol == SYM_False) {
+        if (a->data.symbol.name == SYM_True) return;
+        if (a->data.symbol.name == SYM_False) {
             ctx->inconsistent = true;
             return;
         }
@@ -59,7 +59,7 @@ static void ctx_walk(AssumeCtx* ctx, const Expr* a) {
     if (a->type == EXPR_FUNCTION &&
         a->data.function.head &&
         a->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = a->data.function.head->data.symbol;
+        const char* h = a->data.function.head->data.symbol.name;
         if (h == SYM_And || h == SYM_List) {
             for (size_t i = 0; i < a->data.function.arg_count; i++) {
                 ctx_walk(ctx, a->data.function.args[i]);
@@ -75,8 +75,8 @@ static void ctx_walk(AssumeCtx* ctx, const Expr* a) {
             a->data.function.args[0]->type == EXPR_FUNCTION &&
             a->data.function.args[0]->data.function.head &&
             a->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
-            (a->data.function.args[0]->data.function.head->data.symbol == SYM_List ||
-             a->data.function.args[0]->data.function.head->data.symbol == SYM_Alternatives)) {
+            (a->data.function.args[0]->data.function.head->data.symbol.name == SYM_List ||
+             a->data.function.args[0]->data.function.head->data.symbol.name == SYM_Alternatives)) {
             const Expr* xs  = a->data.function.args[0];
             const Expr* dom = a->data.function.args[1];
             for (size_t i = 0; i < xs->data.function.arg_count; i++) {
@@ -139,7 +139,7 @@ static bool fact_implies_strict_positive(const Expr* f, const Expr* x) {
     if (f->type != EXPR_FUNCTION) return false;
     if (f->data.function.arg_count != 2) return false;
     if (f->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = f->data.function.head->data.symbol;
+    const char* h = f->data.function.head->data.symbol.name;
     Expr* a = f->data.function.args[0];
     Expr* b = f->data.function.args[1];
 
@@ -179,7 +179,7 @@ static bool fact_implies_nonneg(const Expr* f, const Expr* x) {
     if (f->type != EXPR_FUNCTION) return false;
     if (f->data.function.arg_count != 2) return false;
     if (f->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = f->data.function.head->data.symbol;
+    const char* h = f->data.function.head->data.symbol.name;
     Expr* a = f->data.function.args[0];
     Expr* b = f->data.function.args[1];
     /* x >= c with c >= 0 ; or c <= x with c >= 0. */
@@ -198,7 +198,7 @@ static bool fact_implies_strict_negative(const Expr* f, const Expr* x) {
     if (f->type != EXPR_FUNCTION) return false;
     if (f->data.function.arg_count != 2) return false;
     if (f->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = f->data.function.head->data.symbol;
+    const char* h = f->data.function.head->data.symbol.name;
     Expr* a = f->data.function.args[0];
     Expr* b = f->data.function.args[1];
     /* Less[x, c] with c <= 0. */
@@ -229,7 +229,7 @@ static bool fact_implies_nonpos(const Expr* f, const Expr* x) {
     if (f->type != EXPR_FUNCTION) return false;
     if (f->data.function.arg_count != 2) return false;
     if (f->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = f->data.function.head->data.symbol;
+    const char* h = f->data.function.head->data.symbol.name;
     Expr* a = f->data.function.args[0];
     Expr* b = f->data.function.args[1];
     if (h == SYM_LessEqual && expr_eq(a, x)) {
@@ -248,7 +248,7 @@ bool fact_in_domain(const Expr* f, const Expr* x, const char* dom) {
     if (!fact_is_function(f, "Element", 2)) return false;
     if (!expr_eq(f->data.function.args[0], x)) return false;
     Expr* d = f->data.function.args[1];
-    return d->type == EXPR_SYMBOL && strcmp(d->data.symbol, dom) == 0;
+    return d->type == EXPR_SYMBOL && strcmp(d->data.symbol.name, dom) == 0;
 }
 
 /* Recognise facts that prove `x` is an even integer. The most common form
@@ -267,12 +267,12 @@ static bool fact_implies_even(const Expr* f, const Expr* x) {
     if (a->type == EXPR_FUNCTION &&
         a->data.function.head &&
         a->data.function.head->type == EXPR_SYMBOL &&
-        a->data.function.head->data.symbol == SYM_Mod) {
+        a->data.function.head->data.symbol.name == SYM_Mod) {
         mod = a; zero = b;
     } else if (b->type == EXPR_FUNCTION &&
                b->data.function.head &&
                b->data.function.head->type == EXPR_SYMBOL &&
-               b->data.function.head->data.symbol == SYM_Mod) {
+               b->data.function.head->data.symbol.name == SYM_Mod) {
         mod = b; zero = a;
     }
     if (!mod || !zero) return false;
@@ -320,7 +320,7 @@ bool prov_re (const AssumeCtx* ctx, const Expr* x);
 static bool nsf_has_free_symbol(const Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_SYMBOL) {
-        return !is_real_constant_symbol(e->data.symbol);
+        return !is_real_constant_symbol(e->data.symbol.name);
     }
     if (e->type != EXPR_FUNCTION) return false;
     /* Skip the head — Cos/Sin/Log/etc. are not "free variables" even
@@ -463,7 +463,7 @@ bool prov_even(const AssumeCtx* ctx, const Expr* x) {
     if (x->type == EXPR_FUNCTION &&
         x->data.function.head &&
         x->data.function.head->type == EXPR_SYMBOL &&
-        x->data.function.head->data.symbol == SYM_Times) {
+        x->data.function.head->data.symbol.name == SYM_Times) {
         bool any_even = false;
         bool all_int = true;
         for (size_t i = 0; i < x->data.function.arg_count; i++) {
@@ -484,11 +484,11 @@ bool prov_pos(const AssumeCtx* ctx, const Expr* x) {
     if (!x) return false;
     if (numeric_sign(x) == 1) return true;
     if (fact_directly_positive(ctx, x)) return true;
-    if (x->type == EXPR_SYMBOL && is_positive_constant_symbol(x->data.symbol)) return true;
+    if (x->type == EXPR_SYMBOL && is_positive_constant_symbol(x->data.symbol.name)) return true;
     if (x->type == EXPR_FUNCTION &&
         x->data.function.head &&
         x->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = x->data.function.head->data.symbol;
+        const char* h = x->data.function.head->data.symbol.name;
         size_t n = x->data.function.arg_count;
         Expr** a = x->data.function.args;
         /* Times: positive iff every factor positive. We DON'T early-return
@@ -549,7 +549,7 @@ bool prov_nn(const AssumeCtx* ctx, const Expr* x) {
     if (x->type == EXPR_FUNCTION &&
         x->data.function.head &&
         x->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = x->data.function.head->data.symbol;
+        const char* h = x->data.function.head->data.symbol.name;
         size_t n = x->data.function.arg_count;
         Expr** a = x->data.function.args;
         if (h == SYM_Times && n > 0) {
@@ -612,7 +612,7 @@ bool prov_int(const AssumeCtx* ctx, const Expr* x) {
     if (x->type == EXPR_FUNCTION &&
         x->data.function.head &&
         x->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = x->data.function.head->data.symbol;
+        const char* h = x->data.function.head->data.symbol.name;
         size_t n = x->data.function.arg_count;
         Expr** a = x->data.function.args;
         if ((h == SYM_Times || h == SYM_Plus) && n > 0) {
@@ -634,7 +634,7 @@ bool prov_re(const AssumeCtx* ctx, const Expr* x) {
     if (x->type == EXPR_INTEGER || x->type == EXPR_BIGINT || x->type == EXPR_REAL) return true;
     if (prov_int(ctx, x)) return true;
     if (x->type == EXPR_SYMBOL) {
-        if (is_real_constant_symbol(x->data.symbol)) return true;
+        if (is_real_constant_symbol(x->data.symbol.name)) return true;
     }
     if (ctx) {
         for (size_t i = 0; i < ctx->count; i++) {
@@ -649,7 +649,7 @@ bool prov_re(const AssumeCtx* ctx, const Expr* x) {
     if (x->type == EXPR_FUNCTION &&
         x->data.function.head &&
         x->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = x->data.function.head->data.symbol;
+        const char* h = x->data.function.head->data.symbol.name;
         size_t n = x->data.function.arg_count;
         Expr** a = x->data.function.args;
         if ((h == SYM_Times || h == SYM_Plus) && n > 0 && all_real(ctx, x)) {

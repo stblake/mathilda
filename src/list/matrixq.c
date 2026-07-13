@@ -37,7 +37,7 @@
 static bool is_conjugate_node(Expr* n) {
     return n->type == EXPR_FUNCTION &&
            n->data.function.head->type == EXPR_SYMBOL &&
-           n->data.function.head->data.symbol == SYM_Conjugate &&
+           n->data.function.head->data.symbol.name == SYM_Conjugate &&
            n->data.function.arg_count == 1;
 }
 
@@ -71,7 +71,7 @@ static bool hermitian_pair_sametest(Expr* a, Expr* b, Expr* test) {
     free(args);
     Expr* result = eval_and_free(call);
     bool ok = (result->type == EXPR_SYMBOL &&
-               result->data.symbol == SYM_True);
+               result->data.symbol.name == SYM_True);
     expr_free(result);
     return ok;
 }
@@ -99,7 +99,7 @@ static bool hermitian_pair_tolerance(Expr* a, Expr* b, Expr* tol) {
     free(le_args);
     Expr* le_e = eval_and_free(le_call);
     bool ok = (le_e->type == EXPR_SYMBOL &&
-               le_e->data.symbol == SYM_True);
+               le_e->data.symbol.name == SYM_True);
     expr_free(le_e);
     return ok;
 }
@@ -120,20 +120,20 @@ Expr* builtin_hermitian_matrix_q(Expr* res) {
         Expr* opt = res->data.function.args[i];
         if (!(opt->type == EXPR_FUNCTION &&
               opt->data.function.head->type == EXPR_SYMBOL &&
-              opt->data.function.head->data.symbol == SYM_Rule &&
+              opt->data.function.head->data.symbol.name == SYM_Rule &&
               opt->data.function.arg_count == 2 &&
               opt->data.function.args[0]->type == EXPR_SYMBOL)) {
             return NULL;
         }
-        const char* name = opt->data.function.args[0]->data.symbol;
+        const char* name = opt->data.function.args[0]->data.symbol.name;
         Expr* val = opt->data.function.args[1];
         if (name == SYM_SameTest) {
             /* Automatic falls through to the structural test. */
-            if (!(val->type == EXPR_SYMBOL && val->data.symbol == SYM_Automatic)) {
+            if (!(val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_Automatic)) {
                 same_test = val;
             }
         } else if (name == SYM_Tolerance) {
-            if (!(val->type == EXPR_SYMBOL && val->data.symbol == SYM_Automatic)) {
+            if (!(val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_Automatic)) {
                 tolerance = val;
             }
         } else {
@@ -207,7 +207,7 @@ static bool symmetric_pair_sametest(Expr* a, Expr* b, Expr* test) {
     free(args);
     Expr* result = eval_and_free(call);
     bool ok = (result->type == EXPR_SYMBOL &&
-               result->data.symbol == SYM_True);
+               result->data.symbol.name == SYM_True);
     expr_free(result);
     return ok;
 }
@@ -234,7 +234,7 @@ static bool symmetric_pair_tolerance(Expr* a, Expr* b, Expr* tol) {
     free(le_args);
     Expr* le_e = eval_and_free(le_call);
     bool ok = (le_e->type == EXPR_SYMBOL &&
-               le_e->data.symbol == SYM_True);
+               le_e->data.symbol.name == SYM_True);
     expr_free(le_e);
     return ok;
 }
@@ -255,19 +255,19 @@ Expr* builtin_symmetric_matrix_q(Expr* res) {
         Expr* opt = res->data.function.args[i];
         if (!(opt->type == EXPR_FUNCTION &&
               opt->data.function.head->type == EXPR_SYMBOL &&
-              opt->data.function.head->data.symbol == SYM_Rule &&
+              opt->data.function.head->data.symbol.name == SYM_Rule &&
               opt->data.function.arg_count == 2 &&
               opt->data.function.args[0]->type == EXPR_SYMBOL)) {
             return NULL;
         }
-        const char* name = opt->data.function.args[0]->data.symbol;
+        const char* name = opt->data.function.args[0]->data.symbol.name;
         Expr* val = opt->data.function.args[1];
         if (name == SYM_SameTest) {
-            if (!(val->type == EXPR_SYMBOL && val->data.symbol == SYM_Automatic)) {
+            if (!(val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_Automatic)) {
                 same_test = val;
             }
         } else if (name == SYM_Tolerance) {
-            if (!(val->type == EXPR_SYMBOL && val->data.symbol == SYM_Automatic)) {
+            if (!(val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_Automatic)) {
                 tolerance = val;
             }
         } else {
@@ -410,7 +410,7 @@ static bool diag_entry_under_tolerance(Expr* e, Expr* tol) {
     Expr* le_call = expr_new_function(expr_new_symbol(SYM_LessEqual), le_args, 2);
     free(le_args);
     Expr* le_e = eval_and_free(le_call);
-    bool ok = (le_e->type == EXPR_SYMBOL && le_e->data.symbol == SYM_True);
+    bool ok = (le_e->type == EXPR_SYMBOL && le_e->data.symbol.name == SYM_True);
     expr_free(le_e);
     return ok;
 }
@@ -460,7 +460,7 @@ Expr* builtin_diagonal_matrix_q(Expr* res) {
         Expr* a1 = res->data.function.args[1];
         bool is_rule = (a1->type == EXPR_FUNCTION &&
                         a1->data.function.head->type == EXPR_SYMBOL &&
-                        a1->data.function.head->data.symbol == SYM_Rule);
+                        a1->data.function.head->data.symbol.name == SYM_Rule);
         if (is_rule) {
             /* k defaults to 0; options start at position 1. */
             opt_start = 1;
@@ -485,17 +485,17 @@ Expr* builtin_diagonal_matrix_q(Expr* res) {
         Expr* opt = res->data.function.args[i];
         bool is_rule = (opt->type == EXPR_FUNCTION &&
                         opt->data.function.head->type == EXPR_SYMBOL &&
-                        opt->data.function.head->data.symbol == SYM_Rule &&
+                        opt->data.function.head->data.symbol.name == SYM_Rule &&
                         opt->data.function.arg_count == 2 &&
                         opt->data.function.args[0]->type == EXPR_SYMBOL);
         if (!is_rule) {
             last_bad = opt;
             continue;
         }
-        const char* name = opt->data.function.args[0]->data.symbol;
+        const char* name = opt->data.function.args[0]->data.symbol.name;
         Expr* val = opt->data.function.args[1];
         if (name == SYM_Tolerance) {
-            if (!(val->type == EXPR_SYMBOL && val->data.symbol == SYM_Automatic)) {
+            if (!(val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_Automatic)) {
                 tolerance = val;
             }
         } else {
@@ -627,7 +627,7 @@ Expr* builtin_upper_triangular_matrix_q(Expr* res) {
         Expr* a1 = res->data.function.args[1];
         bool is_rule = (a1->type == EXPR_FUNCTION &&
                         a1->data.function.head->type == EXPR_SYMBOL &&
-                        a1->data.function.head->data.symbol == SYM_Rule);
+                        a1->data.function.head->data.symbol.name == SYM_Rule);
         if (is_rule) {
             opt_start = 1;
         } else {
@@ -646,17 +646,17 @@ Expr* builtin_upper_triangular_matrix_q(Expr* res) {
         Expr* opt = res->data.function.args[i];
         bool is_rule = (opt->type == EXPR_FUNCTION &&
                         opt->data.function.head->type == EXPR_SYMBOL &&
-                        opt->data.function.head->data.symbol == SYM_Rule &&
+                        opt->data.function.head->data.symbol.name == SYM_Rule &&
                         opt->data.function.arg_count == 2 &&
                         opt->data.function.args[0]->type == EXPR_SYMBOL);
         if (!is_rule) {
             last_bad = opt;
             continue;
         }
-        const char* name = opt->data.function.args[0]->data.symbol;
+        const char* name = opt->data.function.args[0]->data.symbol.name;
         Expr* val = opt->data.function.args[1];
         if (name == SYM_Tolerance) {
-            if (!(val->type == EXPR_SYMBOL && val->data.symbol == SYM_Automatic)) {
+            if (!(val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_Automatic)) {
                 tolerance = val;
             }
         } else {

@@ -165,7 +165,7 @@ static void test_series_deep_laurent(void) {
     expr_free(e);
     ASSERT(r->type == EXPR_FUNCTION);
     ASSERT(r->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "SeriesData") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "SeriesData") == 0);
     ASSERT(r->data.function.arg_count == 6);
     /* nmin = -10, nmax = 3, den = 1. */
     ASSERT(r->data.function.args[3]->type == EXPR_INTEGER);
@@ -196,19 +196,19 @@ static void test_series_bivariate(void) {
     Expr* r = evaluate(e);
     expr_free(e);
     ASSERT(r->type == EXPR_FUNCTION);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "SeriesData") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "SeriesData") == 0);
     ASSERT(r->data.function.arg_count == 6);
     /* Outer nmin=0, nmax=4, den=1. */
     ASSERT(r->data.function.args[3]->data.integer == 0);
     ASSERT(r->data.function.args[4]->data.integer == 4);
     Expr* coefs = r->data.function.args[2];
-    ASSERT(strcmp(coefs->data.function.head->data.symbol, "List") == 0);
+    ASSERT(strcmp(coefs->data.function.head->data.symbol.name, "List") == 0);
     ASSERT(coefs->data.function.arg_count == 4);
     /* Each inner coefficient is itself a SeriesData in y. */
     for (size_t i = 0; i < 4; i++) {
         Expr* c = coefs->data.function.args[i];
         ASSERT(c->type == EXPR_FUNCTION);
-        ASSERT(strcmp(c->data.function.head->data.symbol, "SeriesData") == 0);
+        ASSERT(strcmp(c->data.function.head->data.symbol.name, "SeriesData") == 0);
     }
     expr_free(r);
 }
@@ -220,11 +220,11 @@ static void test_series_list_threading(void) {
     Expr* r = evaluate(e);
     expr_free(e);
     ASSERT(r->type == EXPR_FUNCTION);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "List") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "List") == 0);
     ASSERT(r->data.function.arg_count == 3);
     for (size_t i = 0; i < 3; i++) {
         Expr* s = r->data.function.args[i];
-        ASSERT(strcmp(s->data.function.head->data.symbol, "SeriesData") == 0);
+        ASSERT(strcmp(s->data.function.head->data.symbol.name, "SeriesData") == 0);
     }
     expr_free(r);
 }
@@ -236,7 +236,7 @@ static void test_series_approximate_numbers(void) {
     Expr* e = parse_expression("Series[Sin[2.5 x], {x, 0, 5}]");
     Expr* r = evaluate(e);
     expr_free(e);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "SeriesData") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "SeriesData") == 0);
     Expr* coefs = r->data.function.args[2];
     Expr* c1 = coefs->data.function.args[1];
     ASSERT(c1->type == EXPR_REAL);
@@ -252,7 +252,7 @@ static void test_normal_converts(void) {
     expr_free(e);
     /* Exp series to order 3 is 1 + x + x^2/2 + x^3/6, no O term. */
     ASSERT(r->type == EXPR_FUNCTION);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "Plus") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "Plus") == 0);
     expr_free(r);
 }
 
@@ -410,7 +410,7 @@ static void test_series_protected(void) {
     Expr* r2 = evaluate(e2);
     expr_free(e2);
     ASSERT(r2->type == EXPR_FUNCTION);
-    ASSERT(strcmp(r2->data.function.head->data.symbol, "SeriesData") == 0);
+    ASSERT(strcmp(r2->data.function.head->data.symbol.name, "SeriesData") == 0);
     expr_free(r2);
 }
 
@@ -503,7 +503,7 @@ static void test_series_cot(void) {
     Expr* e = parse_expression("Series[Cot[x], {x, 0, 12}]");
     Expr* r = evaluate(e); expr_free(e);
     ASSERT(r->type == EXPR_FUNCTION);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "SeriesData") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "SeriesData") == 0);
     /* nmin = -1 (Laurent), nmax = 13, den = 1. */
     ASSERT(r->data.function.args[3]->data.integer == -1);
     ASSERT(r->data.function.args[4]->data.integer == 13);
@@ -542,7 +542,7 @@ static void test_series_csch(void) {
     /* 1/x - x/6 + 7 x^3/360 - 31 x^5/15120 + ... */
     Expr* e = parse_expression("Series[Csch[x], {x, 0, 11}]");
     Expr* r = evaluate(e); expr_free(e);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "SeriesData") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "SeriesData") == 0);
     ASSERT(r->data.function.args[3]->data.integer == -1);
     ASSERT(r->data.function.args[4]->data.integer == 12);
     expr_free(r);
@@ -745,7 +745,7 @@ static void test_series_branch_composition(void) {
     Expr* r = evaluate(e); expr_free(e);
     ASSERT(r->type == EXPR_FUNCTION);
     /* Composed branch points produce something — not bare Series or error. */
-    const char* head = r->data.function.head->data.symbol;
+    const char* head = r->data.function.head->data.symbol.name;
     ASSERT(strcmp(head, "Series") != 0);
     expr_free(r);
 }
@@ -759,7 +759,7 @@ static void test_series_arcsinh_non_branch_complex(void) {
     Expr* r = evaluate(e); expr_free(e);
     ASSERT(r->type == EXPR_FUNCTION);
     /* Should be a regular SeriesData (no branch wrap, no error). */
-    const char* head = r->data.function.head->data.symbol;
+    const char* head = r->data.function.head->data.symbol.name;
     ASSERT(strcmp(head, "Series") != 0);
     expr_free(r);
 }
@@ -773,7 +773,7 @@ static void test_normal_branch_passthrough(void) {
     Expr* r = evaluate(e); expr_free(e);
     ASSERT(r->type == EXPR_FUNCTION);
     /* The result should be a Plus containing a Log[Plus[-1, x]] subterm. */
-    const char* head = r->data.function.head->data.symbol;
+    const char* head = r->data.function.head->data.symbol.name;
     ASSERT(strcmp(head, "Plus") == 0);
     expr_free(r);
 }
@@ -787,7 +787,7 @@ static void test_series_sqrt_log_no_overflow(void) {
     setup_full();
     Expr* e = parse_expression("Series[Sqrt[Log[x+1]], {x, 0, 12}]");
     Expr* r = evaluate(e); expr_free(e);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "SeriesData") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "SeriesData") == 0);
     /* den = 2 (Puiseux), nmin = 1, nmax = 25 (target n = 12 -> 12*2+1). */
     ASSERT(r->data.function.args[3]->data.integer == 1);
     ASSERT(r->data.function.args[4]->data.integer == 25);
@@ -797,7 +797,7 @@ static void test_series_sqrt_log_no_overflow(void) {
     for (size_t i = 0; i < coefs->data.function.arg_count; i++) {
         Expr* ci = coefs->data.function.args[i];
         if (ci->type == EXPR_FUNCTION && ci->data.function.head->type == EXPR_SYMBOL) {
-            ASSERT(strcmp(ci->data.function.head->data.symbol, "Overflow") != 0);
+            ASSERT(strcmp(ci->data.function.head->data.symbol.name, "Overflow") != 0);
         }
     }
     expr_free(r);
@@ -810,14 +810,14 @@ static void test_series_deep_laurent_no_overflow(void) {
     setup_full();
     Expr* e = parse_expression("Series[1/Sin[x]^10, {x, 0, 2}]");
     Expr* r = evaluate(e); expr_free(e);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "SeriesData") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "SeriesData") == 0);
     Expr* coefs = r->data.function.args[2];
     ASSERT(coefs->data.function.arg_count >= 13);
     /* Last visible coefficient is at x^2, which is index 12 (nmin = -10). */
     Expr* last = coefs->data.function.args[12];
     /* Must be a Rational BigInt/Integer pair: 6803477/127702575. */
     ASSERT(last->type == EXPR_FUNCTION);
-    ASSERT(strcmp(last->data.function.head->data.symbol, "Rational") == 0);
+    ASSERT(strcmp(last->data.function.head->data.symbol.name, "Rational") == 0);
     /* Numerator 6803477, denominator 127702575 both fit int64, so stored as
      * plain Integer inside the Rational. */
     Expr* num = last->data.function.args[0];
@@ -873,7 +873,7 @@ static void test_series_one_over_one_minus_sqrt_at_one(void) {
      * with a simple pole, leading -2/(x - 1). */
     Expr* e = parse_expression("Series[1/(1-Sqrt[x]), {x, 1, 7}]");
     Expr* r = evaluate(e); expr_free(e);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "SeriesData") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "SeriesData") == 0);
     /* x0 = 1, nmin = -1, nmax = 8, den = 1. */
     ASSERT(r->data.function.args[1]->type == EXPR_INTEGER);
     ASSERT(r->data.function.args[1]->data.integer == 1);
@@ -1093,7 +1093,7 @@ static void test_binomial_monomial_all_symbolic(void) {
      * should simplify away once we series_expand it. Here we just check the
      * head is SeriesData with den=1, nmin=0, and the requested order. */
     ASSERT(r->type == EXPR_FUNCTION);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "SeriesData") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "SeriesData") == 0);
     ASSERT(r->data.function.args[3]->data.integer == 0);
     ASSERT(r->data.function.args[4]->data.integer == 3);
     ASSERT(r->data.function.args[5]->data.integer == 1);
@@ -1107,7 +1107,7 @@ static void test_binomial_monomial_puiseux_base(void) {
     Expr* r = evaluate(e); expr_free(e);
     /* Expected: 1 + x^(1/2)/2 - x/8 + x^(3/2)/16 - ... den=2, nmin=0. */
     ASSERT(r->type == EXPR_FUNCTION);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "SeriesData") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "SeriesData") == 0);
     ASSERT(r->data.function.args[5]->data.integer == 2);
     expr_free(r);
 }
@@ -1135,7 +1135,7 @@ static void test_binomial_monomial_high_order(void) {
     setup_full();
     Expr* e = parse_expression("Series[(1 - x^2)^(1/2), {x, 0, 20}]");
     Expr* r = evaluate(e); expr_free(e);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "SeriesData") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "SeriesData") == 0);
     Expr* coefs = r->data.function.args[2];
     /* Coefficients at odd indices should all be zero (only even powers
      * appear when the base is a pure function of x^2). */
@@ -1242,7 +1242,7 @@ static void test_apart_three_distinct_roots(void) {
     Expr* e = parse_expression("Series[1/((1-x)(1-2x)(1-3x)), {x, 0, 5}]");
     Expr* r = evaluate(e); expr_free(e);
     ASSERT(r->type == EXPR_FUNCTION);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "SeriesData") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "SeriesData") == 0);
     Expr* coefs = r->data.function.args[2];
     int64_t expected[] = {1, 6, 25, 90, 301, 966};
     for (size_t i = 0; i < 6; i++) {
@@ -1268,7 +1268,7 @@ static void test_apart_laurent_passthrough(void) {
     /* This should expand to 1/x^2 + O[x]^n. */
     Expr* e = parse_expression("Series[1/x^2, {x, 0, 3}]");
     Expr* r = evaluate(e); expr_free(e);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "SeriesData") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "SeriesData") == 0);
     ASSERT(r->data.function.args[3]->data.integer == -2);
     expr_free(r);
 }
@@ -1281,7 +1281,7 @@ static void test_apart_nonrational_denominator_guard(void) {
      * nmin should be -2. */
     Expr* e = parse_expression("Series[1/(Exp[x] - 1 - x), {x, 0, 3}]");
     Expr* r = evaluate(e); expr_free(e);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "SeriesData") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "SeriesData") == 0);
     ASSERT(r->data.function.args[3]->data.integer == -2);
     expr_free(r);
 }
@@ -1294,7 +1294,7 @@ static void test_apart_at_nonzero_point(void) {
     Expr* e = parse_expression("Series[1/(x*(x+1)), {x, 1, 3}]");
     Expr* r = evaluate(e); expr_free(e);
     ASSERT(r->type == EXPR_FUNCTION);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "SeriesData") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "SeriesData") == 0);
     ASSERT(r->data.function.args[1]->type == EXPR_INTEGER);
     ASSERT(r->data.function.args[1]->data.integer == 1);
     expr_free(r);

@@ -122,14 +122,14 @@ Expr* builtin_divisorsigma(Expr* res) {
         Expr* a = args[i];
         if (a->type == EXPR_FUNCTION &&
             a->data.function.head->type == EXPR_SYMBOL &&
-            a->data.function.head->data.symbol == SYM_Rule &&
+            a->data.function.head->data.symbol.name == SYM_Rule &&
             a->data.function.arg_count == 2) {
             Expr* key = a->data.function.args[0];
             Expr* val = a->data.function.args[1];
-            if (key->type == EXPR_SYMBOL && key->data.symbol == SYM_GaussianIntegers &&
+            if (key->type == EXPR_SYMBOL && key->data.symbol.name == SYM_GaussianIntegers &&
                 val->type == EXPR_SYMBOL &&
-                (val->data.symbol == SYM_True || val->data.symbol == SYM_False)) {
-                gaussian = (val->data.symbol == SYM_True);
+                (val->data.symbol.name == SYM_True || val->data.symbol.name == SYM_False)) {
+                gaussian = (val->data.symbol.name == SYM_True);
                 gaussian_set = true;
                 continue;
             }

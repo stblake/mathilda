@@ -103,7 +103,7 @@ static void collect_addition_trig_args(const Expr* e, TrigArgSet* set) {
     if (!e || e->type != EXPR_FUNCTION) return;
     Expr* head = e->data.function.head;
     if (head && head->type == EXPR_SYMBOL
-        && is_addition_trig_head(head->data.symbol)
+        && is_addition_trig_head(head->data.symbol.name)
         && e->data.function.arg_count == 1) {
         tas_add_borrowed(set, e->data.function.args[0]);
     }
@@ -121,7 +121,7 @@ static bool tree_contains_trig_at(const Expr* e, const char* head_sym,
     if (!e || e->type != EXPR_FUNCTION) return false;
     Expr* head = e->data.function.head;
     if (head && head->type == EXPR_SYMBOL
-        && head->data.symbol == head_sym
+        && head->data.symbol.name == head_sym
         && e->data.function.arg_count == 1
         && expr_eq(e->data.function.args[0], arg)) {
         return true;

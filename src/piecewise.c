@@ -56,9 +56,9 @@ static int classify_int_valued_head(Expr* e) {
     if (e->data.function.arg_count != 1) return -1;
     Expr* h = e->data.function.head;
     if (!h || h->type != EXPR_SYMBOL) return -1;
-    if (h->data.symbol == SYM_Floor)   return OP_FLOOR;
-    if (h->data.symbol == SYM_Ceiling) return OP_CEILING;
-    if (h->data.symbol == SYM_Round)   return OP_ROUND;
+    if (h->data.symbol.name == SYM_Floor)   return OP_FLOOR;
+    if (h->data.symbol.name == SYM_Ceiling) return OP_CEILING;
+    if (h->data.symbol.name == SYM_Round)   return OP_ROUND;
     return -1;
 }
 
@@ -77,12 +77,12 @@ static double round_half_even(double x) {
 }
 
 static bool is_infinity(Expr* e) {
-    return e->type == EXPR_SYMBOL && (e->data.symbol == SYM_Infinity || e->data.symbol == SYM_ComplexInfinity);
+    return e->type == EXPR_SYMBOL && (e->data.symbol.name == SYM_Infinity || e->data.symbol.name == SYM_ComplexInfinity);
 }
 
 static bool is_minus_infinity(Expr* e) {
     if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 && 
-        e->data.function.head->type == EXPR_SYMBOL && e->data.function.head->data.symbol == SYM_Times) {
+        e->data.function.head->type == EXPR_SYMBOL && e->data.function.head->data.symbol.name == SYM_Times) {
         Expr* a1 = e->data.function.args[0];
         Expr* a2 = e->data.function.args[1];
         if (a1->type == EXPR_INTEGER && a1->data.integer == -1 && is_infinity(a2)) return true;
@@ -184,7 +184,7 @@ static Expr* do_piecewise_1(Expr* x, int op) {
      * mpz arithmetic. */
     if (x->type == EXPR_FUNCTION
         && x->data.function.head->type == EXPR_SYMBOL
-        && x->data.function.head->data.symbol == SYM_Rational
+        && x->data.function.head->data.symbol.name == SYM_Rational
         && x->data.function.arg_count == 2
         && expr_is_integer_like(x->data.function.args[0])
         && expr_is_integer_like(x->data.function.args[1])) {
@@ -421,7 +421,7 @@ static int ustep_real_sign(Expr* a) {
     /* Exact GMP rational the int64 is_rational() refuses to extract. */
     if (a->type == EXPR_FUNCTION
         && a->data.function.head->type == EXPR_SYMBOL
-        && a->data.function.head->data.symbol == SYM_Rational
+        && a->data.function.head->data.symbol.name == SYM_Rational
         && a->data.function.arg_count == 2
         && expr_is_integer_like(a->data.function.args[0])
         && expr_is_integer_like(a->data.function.args[1])) {
@@ -438,7 +438,7 @@ static int ustep_real_sign(Expr* a) {
 /* True only for the (positive) real point at infinity. ComplexInfinity and
  * DirectedInfinity are NOT real and must not classify as non-negative. */
 static bool ustep_is_pos_infinity(Expr* e) {
-    return e->type == EXPR_SYMBOL && e->data.symbol == SYM_Infinity;
+    return e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity;
 }
 
 /* Certify the sign of an *exact* real numeric quantity (Pi, Sqrt[2], 3^(2/3),

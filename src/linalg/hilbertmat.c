@@ -43,7 +43,7 @@ typedef enum {
 static bool hm_is_call(const Expr* e, const char* sym) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol == sym;
+           e->data.function.head->data.symbol.name == sym;
 }
 
 /* Parse a single positive machine integer (Integer > 0). */
@@ -78,12 +78,12 @@ static bool hm_parse_dims(const Expr* spec, int64_t* m, int64_t* n) {
  * in place, matching "last valid setting wins"). */
 static bool hm_parse_working_precision(const Expr* val,
                                        hm_prec_mode* mode, long* bits) {
-    if (val->type == EXPR_SYMBOL && val->data.symbol == SYM_Infinity) {
+    if (val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_Infinity) {
         *mode = HM_PREC_EXACT;
         *bits = 0;
         return true;
     }
-    if (val->type == EXPR_SYMBOL && val->data.symbol == SYM_MachinePrecision) {
+    if (val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_MachinePrecision) {
         *mode = HM_PREC_MACHINE;
         *bits = 0;
         return true;
@@ -185,7 +185,7 @@ Expr* builtin_hilbertmatrix(Expr* res) {
             last_bad = opt;
             continue;
         }
-        const char* name = opt->data.function.args[0]->data.symbol;
+        const char* name = opt->data.function.args[0]->data.symbol.name;
         if (name == SYM_WorkingPrecision) {
             /* Last valid setting wins; an unparseable value is ignored. */
             hm_parse_working_precision(opt->data.function.args[1],

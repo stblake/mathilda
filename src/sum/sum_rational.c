@@ -67,7 +67,7 @@ static int sr_pdeg(Expr* e, Expr* var) {
 static bool sr_neg_power(Expr* e, Expr** base, int* k) {
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL
-        || e->data.function.head->data.symbol != SYM_Power
+        || e->data.function.head->data.symbol.name != SYM_Power
         || e->data.function.arg_count != 2) return false;
     Expr* ex = e->data.function.args[1];
     if (ex->type != EXPR_INTEGER || ex->data.integer >= 0) return false;
@@ -88,7 +88,7 @@ static int sr_find_pole(Expr* e, Expr* var, Expr** fb, int* fk) {
     if (sr_neg_power(e, &b, &kk) && !sum_free_of(b, var)) { *fb = b; *fk = kk; return 1; }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Times) {
+        && e->data.function.head->data.symbol.name == SYM_Times) {
         int c = 0;
         for (size_t i = 0; i < e->data.function.arg_count; i++)
             c += sr_find_pole(e->data.function.args[i], var, fb, fk);
@@ -308,7 +308,7 @@ static Expr* sr_decompose(Expr* f, Expr* var, Expr* imin, Expr* ext,
     size_t nterms;
     bool is_plus = apart->type == EXPR_FUNCTION
                 && apart->data.function.head->type == EXPR_SYMBOL
-                && apart->data.function.head->data.symbol == SYM_Plus;
+                && apart->data.function.head->data.symbol.name == SYM_Plus;
     if (is_plus) {
         nterms = apart->data.function.arg_count;
         terms = apart->data.function.args;
@@ -378,7 +378,7 @@ static void sr_walk_gens(Expr* e, bool* need_i, Expr*** surds, size_t* ns,
                          size_t* cap, bool* unsupported) {
     if (!e || *unsupported) return;
     if (e->type == EXPR_SYMBOL) {
-        if (e->data.symbol == SYM_I) *need_i = true;
+        if (e->data.symbol.name == SYM_I) *need_i = true;
         return;
     }
     if (e->type != EXPR_FUNCTION) return;
@@ -386,19 +386,19 @@ static void sr_walk_gens(Expr* e, bool* need_i, Expr*** surds, size_t* ns,
     Expr* head = e->data.function.head;
     size_t argc = e->data.function.arg_count;
     if (head->type == EXPR_SYMBOL) {
-        if (head->data.symbol == SYM_Complex && argc == 2) {
+        if (head->data.symbol.name == SYM_Complex && argc == 2) {
             Expr* im = e->data.function.args[1];
             bool zero = (im->type == EXPR_INTEGER && im->data.integer == 0)
                      || (im->type == EXPR_REAL && im->data.real == 0.0);
             if (!zero) *need_i = true;
             return;
         }
-        if (head->data.symbol == SYM_Root) { *unsupported = true; return; }
-        if (head->data.symbol == SYM_Power && argc == 2) {
+        if (head->data.symbol.name == SYM_Root) { *unsupported = true; return; }
+        if (head->data.symbol.name == SYM_Power && argc == 2) {
             Expr* ex = e->data.function.args[1];
             if (ex->type == EXPR_FUNCTION
                 && ex->data.function.head->type == EXPR_SYMBOL
-                && ex->data.function.head->data.symbol == SYM_Rational) {
+                && ex->data.function.head->data.symbol.name == SYM_Rational) {
                 for (size_t i = 0; i < *ns; i++)
                     if (expr_eq((*surds)[i], e)) return;   /* dedup */
                 if (*ns == *cap) {
@@ -430,7 +430,7 @@ static Expr* sr_generators(Expr* den, Expr* var) {
                       (Expr*[]){ expr_copy(var), sol }, 2);
     if (!roots || roots->type != EXPR_FUNCTION
         || roots->data.function.head->type != EXPR_SYMBOL
-        || roots->data.function.head->data.symbol != SYM_List) {
+        || roots->data.function.head->data.symbol.name != SYM_List) {
         if (roots) expr_free(roots);
         return NULL;
     }

@@ -6,11 +6,11 @@
  * `expr_new_symbol("Foo")` and `intern_symbol("Foo")` return for that
  * name. This lets hot evaluator paths replace
  *
- *     strcmp(head->data.symbol, "List") == 0
+ *     strcmp(head->data.symbol.name, "List") == 0
  *
  * with the much cheaper
  *
- *     head->data.symbol == SYM_List
+ *     head->data.symbol.name == SYM_List
  *
  * Every name compared via strcmp on a symbol field anywhere in src/
  * lives here; ad-hoc pointer comparisons elsewhere remain possible by

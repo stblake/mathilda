@@ -63,7 +63,7 @@ static Expr* d_s_minus(Expr* s, Expr* n) {
 static bool d_is_call1(Expr* e, const char* head_sym, Expr* var) {
     if (e->type != EXPR_FUNCTION) return false;
     Expr* h = e->data.function.head;
-    if (h->type != EXPR_SYMBOL || h->data.symbol != head_sym) return false;
+    if (h->type != EXPR_SYMBOL || h->data.symbol.name != head_sym) return false;
     if (e->data.function.arg_count != 1) return false;
     return expr_eq(e->data.function.args[0], var);
 }
@@ -71,7 +71,7 @@ static bool d_is_call1(Expr* e, const char* head_sym, Expr* var) {
 static bool d_is_eulerphi(Expr* e, Expr* var) {
     if (e->type != EXPR_FUNCTION) return false;
     Expr* h = e->data.function.head;
-    if (h->type != EXPR_SYMBOL || strcmp(h->data.symbol, "EulerPhi") != 0) return false;
+    if (h->type != EXPR_SYMBOL || strcmp(h->data.symbol.name, "EulerPhi") != 0) return false;
     if (e->data.function.arg_count != 1) return false;
     return expr_eq(e->data.function.args[0], var);
 }
@@ -79,7 +79,7 @@ static bool d_is_eulerphi(Expr* e, Expr* var) {
 static bool d_is_divisorsigma(Expr* e, Expr* var, Expr** a_out) {
     if (e->type != EXPR_FUNCTION) return false;
     Expr* h = e->data.function.head;
-    if (h->type != EXPR_SYMBOL || h->data.symbol != SYM_DivisorSigma) return false;
+    if (h->type != EXPR_SYMBOL || h->data.symbol.name != SYM_DivisorSigma) return false;
     if (e->data.function.arg_count != 2) return false;
     if (!expr_eq(e->data.function.args[1], var)) return false;
     *a_out = e->data.function.args[0];
@@ -153,7 +153,7 @@ Expr* builtin_sum_dirichlet(Expr* res) {
 
     bool is_times = (fn->type == EXPR_FUNCTION
                      && fn->data.function.head->type == EXPR_SYMBOL
-                     && fn->data.function.head->data.symbol == SYM_Times);
+                     && fn->data.function.head->data.symbol.name == SYM_Times);
     size_t n = is_times ? fn->data.function.arg_count : 1;
 
     Expr* s = NULL;          /* the exponent s in k^{-s} (owned) */
@@ -169,7 +169,7 @@ Expr* builtin_sum_dirichlet(Expr* res) {
         /* Power[base, exp] */
         if (x->type == EXPR_FUNCTION
             && x->data.function.head->type == EXPR_SYMBOL
-            && x->data.function.head->data.symbol == SYM_Power
+            && x->data.function.head->data.symbol.name == SYM_Power
             && x->data.function.arg_count == 2) {
             Expr* base = x->data.function.args[0];
             Expr* exp  = x->data.function.args[1];
@@ -193,7 +193,7 @@ Expr* builtin_sum_dirichlet(Expr* res) {
         /* Abs[MoebiusMu[var]] */
         if (x->type == EXPR_FUNCTION
             && x->data.function.head->type == EXPR_SYMBOL
-            && x->data.function.head->data.symbol == SYM_Abs
+            && x->data.function.head->data.symbol.name == SYM_Abs
             && x->data.function.arg_count == 1
             && d_is_call1(x->data.function.args[0], SYM_MoebiusMu, var)) {
             if (g_base) { ok = false; break; }

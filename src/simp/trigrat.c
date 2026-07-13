@@ -100,7 +100,7 @@ static Expr* tr_call_unary_copy(const char* head_name, const Expr* arg) {
 static bool tr_has_symbol_name(const Expr* e, const char* name) {
     if (!e) return false;
     if (e->type == EXPR_SYMBOL) {
-        return e->data.symbol && strcmp(e->data.symbol, name) == 0;
+        return e->data.symbol.name && strcmp(e->data.symbol.name, name) == 0;
     }
     if (e->type != EXPR_FUNCTION) return false;
     if (tr_has_symbol_name(e->data.function.head, name)) return true;
@@ -399,7 +399,7 @@ static Expr* tr_walk_subst(const Expr* e, TRBindings* b, int* counter,
 
     const Expr* h = e->data.function.head;
     size_t n = e->data.function.arg_count;
-    const char* hs = (h && h->type == EXPR_SYMBOL) ? h->data.symbol : NULL;
+    const char* hs = (h && h->type == EXPR_SYMBOL) ? h->data.symbol.name : NULL;
 
     /* Transparent additive/multiplicative heads -- recurse into children. */
     if (hs == SYM_Plus || hs == SYM_Times) {
@@ -447,7 +447,7 @@ static Expr* tr_walk_subst(const Expr* e, TRBindings* b, int* counter,
         e->data.function.args[1]->type == EXPR_FUNCTION) {
         const Expr* exp_e = e->data.function.args[1];
         const Expr* eh = exp_e->data.function.head;
-        if (eh && eh->type == EXPR_SYMBOL && eh->data.symbol == SYM_Rational &&
+        if (eh && eh->type == EXPR_SYMBOL && eh->data.symbol.name == SYM_Rational &&
             exp_e->data.function.arg_count == 2 &&
             exp_e->data.function.args[0] &&
             exp_e->data.function.args[0]->type == EXPR_INTEGER &&
@@ -588,26 +588,26 @@ static Expr* tr_walk_subst(const Expr* e, TRBindings* b, int* counter,
 
 static Expr* tr_subst_back(const Expr* e, const TRBindings* b) {
     if (!e) return NULL;
-    if (e->type == EXPR_SYMBOL && e->data.symbol) {
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name) {
         for (size_t i = 0; i < b->count; i++) {
-            if (strcmp(e->data.symbol, b->items[i].s_name) == 0) {
+            if (strcmp(e->data.symbol.name, b->items[i].s_name) == 0) {
                 const char* head = b->items[i].is_hyp ? SYM_Sinh : SYM_Sin;
                 return expr_new_function(expr_new_symbol(head),
                     (Expr*[]){ expr_copy(b->items[i].arg) }, 1);
             }
-            if (strcmp(e->data.symbol, b->items[i].c_name) == 0) {
+            if (strcmp(e->data.symbol.name, b->items[i].c_name) == 0) {
                 const char* head = b->items[i].is_hyp ? SYM_Cosh : SYM_Cos;
                 return expr_new_function(expr_new_symbol(head),
                     (Expr*[]){ expr_copy(b->items[i].arg) }, 1);
             }
         }
         for (size_t i = 0; i < b->opaque_count; i++) {
-            if (strcmp(e->data.symbol, b->opaques[i].name) == 0) {
+            if (strcmp(e->data.symbol.name, b->opaques[i].name) == 0) {
                 return expr_copy(b->opaques[i].subtree);
             }
         }
         for (size_t i = 0; i < b->radical_count; i++) {
-            if (strcmp(e->data.symbol, b->radicals[i].name) == 0) {
+            if (strcmp(e->data.symbol.name, b->radicals[i].name) == 0) {
                 return expr_copy(b->radicals[i].orig);
             }
         }
@@ -697,20 +697,20 @@ static Expr* tr_rewrite_pass(const Expr* e, const TRBindings* b, bool* changed) 
     if (e->type == EXPR_FUNCTION) {
         const Expr* h = e->data.function.head;
         /* Power[s_i, n] with n >= 2  -> rewrite */
-        if (h && h->type == EXPR_SYMBOL && h->data.symbol == SYM_Power &&
+        if (h && h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power &&
             e->data.function.arg_count == 2) {
             const Expr* base = e->data.function.args[0];
             const Expr* exp_e = e->data.function.args[1];
             if (base && base->type == EXPR_SYMBOL &&
                 exp_e && exp_e->type == EXPR_INTEGER &&
                 exp_e->data.integer >= 2) {
-                const TRBind* it = tr_find_by_s_name(b, base->data.symbol);
+                const TRBind* it = tr_find_by_s_name(b, base->data.symbol.name);
                 if (it) {
                     *changed = true;
                     return tr_build_reduce_rhs(it, exp_e->data.integer);
                 }
                 const TRRadical* rb =
-                    tr_find_radical_by_name(b, base->data.symbol);
+                    tr_find_radical_by_name(b, base->data.symbol.name);
                 if (rb) {
                     *changed = true;
                     return tr_build_radical_rhs(rb, exp_e->data.integer);
@@ -781,8 +781,8 @@ static void tr_split_frac(const Expr* tg, Expr** num_out, Expr** den_out) {
 
 static Expr* tr_subst_sym_zero(const Expr* e, const char* name) {
     if (!e) return NULL;
-    if (e->type == EXPR_SYMBOL && e->data.symbol &&
-        strcmp(e->data.symbol, name) == 0) {
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name &&
+        strcmp(e->data.symbol.name, name) == 0) {
         return tr_int(0);
     }
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
@@ -819,13 +819,13 @@ static Expr* tr_subst_sym_zero(const Expr* e, const char* name) {
 static bool tr_has_neg_sgen_power(const Expr* e, const TRBindings* b) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     const Expr* h = e->data.function.head;
-    if (h && h->type == EXPR_SYMBOL && h->data.symbol == SYM_Power &&
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2) {
         const Expr* base = e->data.function.args[0];
         const Expr* ex   = e->data.function.args[1];
         if (base && base->type == EXPR_SYMBOL &&
             ex && ex->type == EXPR_INTEGER && ex->data.integer < 0 &&
-            tr_find_by_s_name(b, base->data.symbol)) {
+            tr_find_by_s_name(b, base->data.symbol.name)) {
             return true;
         }
     }
@@ -1021,7 +1021,7 @@ static bool tr_is_opaque_name(const char* sym, const TRBindings* b) {
 
 static bool tr_contains_opaque(const Expr* e, const TRBindings* b) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return tr_is_opaque_name(e->data.symbol, b);
+    if (e->type == EXPR_SYMBOL) return tr_is_opaque_name(e->data.symbol.name, b);
     if (e->type != EXPR_FUNCTION) return false;
     if (tr_contains_opaque(e->data.function.head, b)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
@@ -1039,16 +1039,16 @@ static bool tr_contains_opaque(const Expr* e, const TRBindings* b) {
 static int tr_classify_factor(const Expr* f, const TRBindings* b) {
     if (!f) return 0;
     if (f->type == EXPR_SYMBOL) {
-        return tr_is_opaque_name(f->data.symbol, b) ? 1 : 0;
+        return tr_is_opaque_name(f->data.symbol.name, b) ? 1 : 0;
     }
     if (f->type != EXPR_FUNCTION) return 0;
     const Expr* h = f->data.function.head;
-    if (h && h->type == EXPR_SYMBOL && h->data.symbol == SYM_Power &&
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power &&
         f->data.function.arg_count == 2) {
         const Expr* base = f->data.function.args[0];
         const Expr* exp_e = f->data.function.args[1];
         bool base_opq_sym = (base && base->type == EXPR_SYMBOL &&
-                              tr_is_opaque_name(base->data.symbol, b));
+                              tr_is_opaque_name(base->data.symbol.name, b));
         if (base_opq_sym && exp_e && exp_e->type == EXPR_INTEGER) {
             return (exp_e->data.integer >= 1) ? 1 : -1;
         }
@@ -1070,7 +1070,7 @@ static int tr_classify_factor(const Expr* f, const TRBindings* b) {
 static void tr_collect_factors(const Expr* e, const Expr*** out, size_t* n, size_t* cap) {
     if (e->type == EXPR_FUNCTION && e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Times) {
+        e->data.function.head->data.symbol.name == SYM_Times) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             tr_collect_factors(e->data.function.args[i], out, n, cap);
         }
@@ -1231,7 +1231,7 @@ static Expr* tr_simp_l_grouped(const Expr* substed, const TRBindings* b) {
     bool top_is_plus = (source->type == EXPR_FUNCTION &&
                         source->data.function.head &&
                         source->data.function.head->type == EXPR_SYMBOL &&
-                        source->data.function.head->data.symbol == SYM_Plus);
+                        source->data.function.head->data.symbol.name == SYM_Plus);
 
     size_t n_addends = top_is_plus ? source->data.function.arg_count : 1;
 
@@ -1270,7 +1270,7 @@ retry:
         top_is_plus = (source->type == EXPR_FUNCTION &&
                        source->data.function.head &&
                        source->data.function.head->type == EXPR_SYMBOL &&
-                       source->data.function.head->data.symbol == SYM_Plus);
+                       source->data.function.head->data.symbol.name == SYM_Plus);
         n_addends = top_is_plus ? source->data.function.arg_count : 1;
         ok = true;
         retried = true;

@@ -37,7 +37,7 @@
 static int head_is(const Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head && e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, name) == 0;
+           strcmp(e->data.function.head->data.symbol.name, name) == 0;
 }
 
 static Expr* expr_from_fmpz(const fmpz_t z) {
@@ -89,7 +89,7 @@ static int fmpq_from_expr(const Expr* e, fmpq_t out) {
  * rational coefficient or a foreign symbol makes the build fail (return 0),
  * which just leaves the Root object unconverted. */
 static int is_poly_var(const Expr* e, const char* var) {
-    if (var && e->type == EXPR_SYMBOL) return strcmp(e->data.symbol, var) == 0;
+    if (var && e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, var) == 0;
     return head_is(e, "Slot") && e->data.function.arg_count == 1 &&
            e->data.function.args[0]->type == EXPR_INTEGER &&
            e->data.function.args[0]->data.integer == 1;
@@ -200,7 +200,7 @@ static int root_object_to_qqbar(const Expr* e, qqbar_t out) {
     const Expr* body;
     if (fn->data.function.arg_count == 2 &&
         fn->data.function.args[0]->type == EXPR_SYMBOL) {
-        var  = fn->data.function.args[0]->data.symbol;   /* Function[t, body] */
+        var  = fn->data.function.args[0]->data.symbol.name;   /* Function[t, body] */
         body = fn->data.function.args[1];
     } else if (fn->data.function.arg_count == 1) {
         body = fn->data.function.args[0];                /* Function[body(Slot[1])] */

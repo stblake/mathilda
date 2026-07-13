@@ -7,9 +7,9 @@ static bool get_seq_spec_indices(Expr* spec, int64_t len, int64_t** out_indices,
     bool is_none = false;
 
     if (spec->type == EXPR_SYMBOL) {
-        if (spec->data.symbol == SYM_All) {
+        if (spec->data.symbol.name == SYM_All) {
             is_all = true;
-        } else if (spec->data.symbol == SYM_None) {
+        } else if (spec->data.symbol.name == SYM_None) {
             is_none = true;
         } else {
             return false;
@@ -26,7 +26,7 @@ static bool get_seq_spec_indices(Expr* spec, int64_t len, int64_t** out_indices,
             if (m < 1) return false;
         }
     } else if (spec->type == EXPR_FUNCTION) {
-        const char* head = spec->data.function.head->type == EXPR_SYMBOL ? spec->data.function.head->data.symbol : "";
+        const char* head = spec->data.function.head->type == EXPR_SYMBOL ? spec->data.function.head->data.symbol.name : "";
         if (strcmp(head, "UpTo") == 0 && spec->data.function.arg_count == 1 && spec->data.function.args[0]->type == EXPR_INTEGER) {
             int64_t k = spec->data.function.args[0]->data.integer;
             if (k >= 0) {

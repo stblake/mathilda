@@ -50,7 +50,7 @@ static Expr* accuracy_of(const Expr* e);
 
 /* True if an Expr is the symbol `Infinity` (not -Infinity, not ComplexInfinity). */
 static bool expr_is_positive_infinity(const Expr* e) {
-    return e && e->type == EXPR_SYMBOL && e->data.symbol == SYM_Infinity;
+    return e && e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity;
 }
 
 /* Given two precision results (each Infinity, MachinePrecision, or a
@@ -61,11 +61,11 @@ static Expr* precision_min(Expr* a, Expr* b) {
     /* MachinePrecision < any explicit MPFR digits > machine: we approximate
      * MachinePrecision as the constant ≈15.95 for the purpose of this
      * comparison, but keep the symbolic form in the return. */
-    double da = (a->type == EXPR_SYMBOL && a->data.symbol == SYM_MachinePrecision)
+    double da = (a->type == EXPR_SYMBOL && a->data.symbol.name == SYM_MachinePrecision)
                 ? NUMERIC_MACHINE_PRECISION_DIGITS
                 : (a->type == EXPR_REAL ? a->data.real
                                         : (a->type == EXPR_INTEGER ? (double)a->data.integer : 0.0));
-    double db = (b->type == EXPR_SYMBOL && b->data.symbol == SYM_MachinePrecision)
+    double db = (b->type == EXPR_SYMBOL && b->data.symbol.name == SYM_MachinePrecision)
                 ? NUMERIC_MACHINE_PRECISION_DIGITS
                 : (b->type == EXPR_REAL ? b->data.real
                                         : (b->type == EXPR_INTEGER ? (double)b->data.integer : 0.0));
@@ -250,11 +250,11 @@ Expr* builtin_accuracy(Expr* res) {
 /* Parse the precision/accuracy argument n of SetPrecision/SetAccuracy into
  * a NumericSpec (or None for MachinePrecision). Returns true on success. */
 static bool parse_prec_arg(const Expr* n, NumericSpec* out_spec) {
-    if (n->type == EXPR_SYMBOL && n->data.symbol == SYM_MachinePrecision) {
+    if (n->type == EXPR_SYMBOL && n->data.symbol.name == SYM_MachinePrecision) {
         *out_spec = numeric_machine_spec();
         return true;
     }
-    if (n->type == EXPR_SYMBOL && n->data.symbol == SYM_Infinity) {
+    if (n->type == EXPR_SYMBOL && n->data.symbol.name == SYM_Infinity) {
         /* Infinity precision: keep values exact. Implemented as a signal
          * to the walker — for now, we simply return a machine spec and
          * rely on numericalize's default exact-preservation for atoms. */
@@ -310,7 +310,7 @@ Expr* builtin_set_accuracy(Expr* res) {
     if (n->type == EXPR_INTEGER) target_acc = (double)n->data.integer;
     else if (n->type == EXPR_REAL) target_acc = n->data.real;
     else if (is_rational((Expr*)n, &rn, &rd)) target_acc = (double)rn / (double)rd;
-    else if (n->type == EXPR_SYMBOL && n->data.symbol == SYM_MachinePrecision) {
+    else if (n->type == EXPR_SYMBOL && n->data.symbol.name == SYM_MachinePrecision) {
         NumericSpec s = numeric_machine_spec();
         return numericalize(value, s);
     }

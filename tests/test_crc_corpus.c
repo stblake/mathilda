@@ -44,7 +44,7 @@ static bool expr_contains_head_named(const Expr* e, const char* name) {
     if (e->type == EXPR_FUNCTION) {
         if (e->data.function.head
             && e->data.function.head->type == EXPR_SYMBOL
-            && strcmp(e->data.function.head->data.symbol, name) == 0) {
+            && strcmp(e->data.function.head->data.symbol.name, name) == 0) {
             return true;
         }
         if (expr_contains_head_named(e->data.function.head, name)) return true;
@@ -86,7 +86,7 @@ static bool n_value_is_real(Expr* nv, double tol) {
     if (nv->type == EXPR_FUNCTION
         && nv->data.function.head
         && nv->data.function.head->type == EXPR_SYMBOL
-        && strcmp(nv->data.function.head->data.symbol, "Complex") == 0
+        && strcmp(nv->data.function.head->data.symbol.name, "Complex") == 0
         && nv->data.function.arg_count == 2) {
         Expr* re = nv->data.function.args[0];
         Expr* im = nv->data.function.args[1];
@@ -123,7 +123,7 @@ static bool n_value_near_zero(Expr* nv, double tol) {
     if (nv->type == EXPR_FUNCTION
         && nv->data.function.head
         && nv->data.function.head->type == EXPR_SYMBOL
-        && strcmp(nv->data.function.head->data.symbol, "Complex") == 0
+        && strcmp(nv->data.function.head->data.symbol.name, "Complex") == 0
         && nv->data.function.arg_count == 2) {
         Expr* re = nv->data.function.args[0];
         Expr* im = nv->data.function.args[1];
@@ -259,7 +259,7 @@ int main(int argc, char** argv) {
     if (!tests || tests->type != EXPR_FUNCTION
         || !tests->data.function.head
         || tests->data.function.head->type != EXPR_SYMBOL
-        || strcmp(tests->data.function.head->data.symbol, "List") != 0) {
+        || strcmp(tests->data.function.head->data.symbol.name, "List") != 0) {
         fprintf(stderr,
             "FAIL: could not load %s as a List.\n", corpus_file);
         if (tests) expr_free(tests);
@@ -282,7 +282,7 @@ int main(int argc, char** argv) {
         if (pair->type != EXPR_FUNCTION
             || !pair->data.function.head
             || pair->data.function.head->type != EXPR_SYMBOL
-            || strcmp(pair->data.function.head->data.symbol, "List") != 0
+            || strcmp(pair->data.function.head->data.symbol.name, "List") != 0
             || pair->data.function.arg_count < 2) {
             malformed++;
             fprintf(stderr, "  [%3zu/%zu] MALFORMED\n", i + 1, n);

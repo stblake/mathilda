@@ -49,7 +49,7 @@ static void assert_complex_close(const char* input, double er, double ei, double
     expr_free(e);
     ASSERT_MSG(r->type == EXPR_FUNCTION &&
                r->data.function.head->type == EXPR_SYMBOL &&
-               strcmp(r->data.function.head->data.symbol, "Complex") == 0 &&
+               strcmp(r->data.function.head->data.symbol.name, "Complex") == 0 &&
                r->data.function.arg_count == 2,
                "%s: expected Complex[..], got something else", input);
     Expr* re = r->data.function.args[0];

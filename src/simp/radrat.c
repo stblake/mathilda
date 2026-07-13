@@ -81,10 +81,10 @@ static bool rr_real_base(const Expr* e) {
         case EXPR_INTEGER:
         case EXPR_REAL:
         case EXPR_BIGINT:  return true;
-        case EXPR_SYMBOL:  return strcmp(e->data.symbol, "I") != 0;
+        case EXPR_SYMBOL:  return strcmp(e->data.symbol.name, "I") != 0;
         case EXPR_FUNCTION: {
             const Expr* h = e->data.function.head;
-            if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol, "Complex") == 0)
+            if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "Complex") == 0)
                 return false;
             if (!rr_real_base(h)) return false;
             for (size_t i = 0; i < e->data.function.arg_count; i++)
@@ -102,7 +102,7 @@ static bool rr_real_base(const Expr* e) {
 static bool rr_parse_radical(const Expr* e, const Expr** base, int64_t* q) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     const Expr* h = e->data.function.head;
-    if (h->type != EXPR_SYMBOL || strcmp(h->data.symbol, "Power") != 0) return false;
+    if (h->type != EXPR_SYMBOL || strcmp(h->data.symbol.name, "Power") != 0) return false;
     if (e->data.function.arg_count != 2) return false;
     int64_t p, qq;
     if (!is_rational(e->data.function.args[1], &p, &qq)) return false;
@@ -167,12 +167,12 @@ static void rr_collect_symnames(const Expr* e, const char*** set, int* n, int* c
     if (!e) return;
     if (e->type == EXPR_SYMBOL) {
         for (int i = 0; i < *n; i++)
-            if (strcmp((*set)[i], e->data.symbol) == 0) return;
+            if (strcmp((*set)[i], e->data.symbol.name) == 0) return;
         if (*n >= *cap) {
             *cap = *cap ? *cap * 2 : 8;
             *set = realloc(*set, sizeof(char*) * (size_t)*cap);
         }
-        (*set)[(*n)++] = e->data.symbol;
+        (*set)[(*n)++] = e->data.symbol.name;
         return;
     }
     if (e->type == EXPR_FUNCTION) {
@@ -193,13 +193,13 @@ static void rr_collect_symnames(const Expr* e, const char*** set, int* n, int* c
 static bool rr_has_nonpoly_gen_power(const Expr* e, const RRGen* gens, int n) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     const Expr* h = e->data.function.head;
-    if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol, "Power") == 0
+    if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "Power") == 0
         && e->data.function.arg_count == 2) {
         const Expr* b = e->data.function.args[0];
         const Expr* ex = e->data.function.args[1];
         if (b->type == EXPR_SYMBOL) {
             for (int i = 0; i < n; i++)
-                if (gens[i].gen && strcmp(b->data.symbol, gens[i].gen) == 0) {
+                if (gens[i].gen && strcmp(b->data.symbol.name, gens[i].gen) == 0) {
                     if (ex->type != EXPR_INTEGER || ex->data.integer < 0)
                         return true;
                     break;
@@ -217,7 +217,7 @@ static bool rr_symbols_subset(const Expr* e, const char** set, int n) {
     if (!e) return true;
     if (e->type == EXPR_SYMBOL) {
         for (int i = 0; i < n; i++)
-            if (strcmp(set[i], e->data.symbol) == 0) return true;
+            if (strcmp(set[i], e->data.symbol.name) == 0) return true;
         return false;
     }
     if (e->type == EXPR_FUNCTION) {

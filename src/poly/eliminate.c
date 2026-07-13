@@ -44,7 +44,7 @@ static bool head_is(const Expr* e, const char* sym) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == sym;
+        && e->data.function.head->data.symbol.name == sym;
 }
 
 static bool is_list(const Expr* e)  { return head_is(e, SYM_List); }
@@ -82,7 +82,7 @@ static bool is_const_atom(const Expr* e) {
     }
     if (e->type == EXPR_MPFR) return true;
     if (e->type == EXPR_SYMBOL) {
-        const char* s = e->data.symbol;
+        const char* s = e->data.symbol.name;
         return s == SYM_True || s == SYM_False
             || s == SYM_Infinity || s == SYM_ComplexInfinity
             || s == SYM_Indeterminate;
@@ -97,7 +97,7 @@ static bool is_const_atom(const Expr* e) {
 static bool walk_has_symbol_name(const Expr* e, const char* name) {
     if (!e) return false;
     if (e->type == EXPR_SYMBOL) {
-        return strcmp(e->data.symbol, name) == 0;
+        return strcmp(e->data.symbol.name, name) == 0;
     }
     if (e->type != EXPR_FUNCTION) return false;
     if (walk_has_symbol_name(e->data.function.head, name)) return true;
@@ -203,7 +203,7 @@ static void collect_main_vars(const Expr* e, Expr** elim, size_t n_elim,
 
     const char* hsym = (e->data.function.head
                         && e->data.function.head->type == EXPR_SYMBOL)
-        ? e->data.function.head->data.symbol : NULL;
+        ? e->data.function.head->data.symbol.name : NULL;
 
     if (hsym && is_poly_recursive_head(hsym)) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
@@ -252,7 +252,7 @@ static const char* peel_invertible(Expr* side, Expr** inner_out) {
     if (!side->data.function.head
      || side->data.function.head->type != EXPR_SYMBOL) return NULL;
     if (side->data.function.arg_count != 1) return NULL;
-    const char* inv = invertible_head(side->data.function.head->data.symbol);
+    const char* inv = invertible_head(side->data.function.head->data.symbol.name);
     if (!inv) return NULL;
     *inner_out = side->data.function.args[0];
     return inv;
@@ -563,7 +563,7 @@ static TrigWhich trig_call(const Expr* e, bool* hyper, Expr** arg_out) {
     if (!e->data.function.head
      || e->data.function.head->type != EXPR_SYMBOL) return TK_NONE;
     if (e->data.function.arg_count != 1) return TK_NONE;
-    TrigWhich w = trig_which(e->data.function.head->data.symbol, hyper);
+    TrigWhich w = trig_which(e->data.function.head->data.symbol.name, hyper);
     if (w != TK_NONE) *arg_out = e->data.function.args[0];
     return w;
 }
@@ -1121,7 +1121,7 @@ static bool poly_atom_occurs(const Expr* e, const Expr* target) {
     if (e->type != EXPR_FUNCTION) return false;
     const char* hsym = (e->data.function.head
                         && e->data.function.head->type == EXPR_SYMBOL)
-        ? e->data.function.head->data.symbol : NULL;
+        ? e->data.function.head->data.symbol.name : NULL;
     if (hsym && is_poly_recursive_head(hsym)) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             if (poly_atom_occurs(e->data.function.args[i], target)) return true;
@@ -1631,7 +1631,7 @@ static Expr* inv_rewrite(const Expr* e, const char* xsym, const Expr* M,
     /* (1) ArcF[x] -> M */
     if (head_is(e, arc) && e->data.function.arg_count == 1) {
         Expr* a = e->data.function.args[0];
-        if (a && a->type == EXPR_SYMBOL && a->data.symbol == xsym) {
+        if (a && a->type == EXPR_SYMBOL && a->data.symbol.name == xsym) {
             return expr_copy((Expr*)M);
         }
     }
@@ -1696,7 +1696,7 @@ static int inv_detect(Expr** eqs, size_t n_eq, Expr** elim, size_t n_elim,
                 || side->data.function.arg_count != 1) continue;
             Expr* h = side->data.function.head;
             if (!h || h->type != EXPR_SYMBOL) continue;
-            if (!inv_lookup(h->data.symbol, fe)) continue;
+            if (!inv_lookup(h->data.symbol.name, fe)) continue;
             Expr* a = side->data.function.args[0];
             if (!a || a->type != EXPR_SYMBOL) continue;
             if (!var_in_list(a, elim, n_elim)) continue;
@@ -1705,15 +1705,15 @@ static int inv_detect(Expr** eqs, size_t n_eq, Expr** elim, size_t n_elim,
              * when `x` also appears as a genuine polynomial atom somewhere
              * (e.g. `1/x`), which is exactly when the forward Log pass would
              * fail.  Otherwise leave `M == Log[x]` for the forward pass. */
-            if (h->data.symbol == SYM_Log) {
+            if (h->data.symbol.name == SYM_Log) {
                 bool poly = false;
                 for (size_t j = 0; j < n_eq && !poly; j++) {
                     if (poly_atom_occurs(eqs[j], a)) poly = true;
                 }
                 if (!poly) continue;
             }
-            *arc    = h->data.symbol;
-            *xsym   = a->data.symbol;
+            *arc    = h->data.symbol.name;
+            *xsym   = a->data.symbol.name;
             *M_out  = expr_copy(other);
             return (int)i;
         }
@@ -1782,8 +1782,8 @@ Expr* builtin_eliminate(Expr* res) {
      * Eliminate is not HoldAll; same for `True`.  Fold these into the
      * obvious answer without emitting `eqf`. */
     if (eqns_arg && eqns_arg->type == EXPR_SYMBOL) {
-        if (eqns_arg->data.symbol == SYM_True)  return expr_new_symbol(SYM_True);
-        if (eqns_arg->data.symbol == SYM_False) return expr_new_symbol(SYM_False);
+        if (eqns_arg->data.symbol.name == SYM_True)  return expr_new_symbol(SYM_True);
+        if (eqns_arg->data.symbol.name == SYM_False) return expr_new_symbol(SYM_False);
     }
 
     /* ----- Unpack equation list (filtering True/False sentinels) ----- */
@@ -1806,8 +1806,8 @@ Expr* builtin_eliminate(Expr* res) {
     for (size_t i = 0; i < raw_n; i++) {
         Expr* x = raw_in[i];
         if (x && x->type == EXPR_SYMBOL) {
-            if (x->data.symbol == SYM_True) continue;  /* drop */
-            if (x->data.symbol == SYM_False) {
+            if (x->data.symbol.name == SYM_True) continue;  /* drop */
+            if (x->data.symbol.name == SYM_False) {
                 /* Any False element makes the whole conjunction False. */
                 free(eq_in);
                 return expr_new_symbol(SYM_False);

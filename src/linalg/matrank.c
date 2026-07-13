@@ -96,7 +96,7 @@ typedef struct {
 } MatrankOpts;
 
 static bool parse_tolerance_value(Expr* rhs, bool* is_auto_out, double* tol_out) {
-    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic) {
+    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) {
         *is_auto_out = true;
         *tol_out = 0.0;
         return true;
@@ -115,7 +115,7 @@ static bool parse_tolerance_value(Expr* rhs, bool* is_auto_out, double* tol_out)
     }
     if (rhs->type == EXPR_FUNCTION
         && rhs->data.function.head->type == EXPR_SYMBOL
-        && rhs->data.function.head->data.symbol == SYM_Rational
+        && rhs->data.function.head->data.symbol.name == SYM_Rational
         && rhs->data.function.arg_count == 2) {
         Expr* n = rhs->data.function.args[0];
         Expr* d = rhs->data.function.args[1];
@@ -157,17 +157,17 @@ static bool parse_options(Expr* res, MatrankOpts* opts) {
         if (opt->type != EXPR_FUNCTION
             || opt->data.function.head->type != EXPR_SYMBOL
             || opt->data.function.arg_count != 2) return false;
-        const char* hd = opt->data.function.head->data.symbol;
+        const char* hd = opt->data.function.head->data.symbol.name;
         if (hd != SYM_Rule && hd != SYM_RuleDelayed) return false;
         Expr* lhs = opt->data.function.args[0];
         Expr* rhs = opt->data.function.args[1];
         if (lhs->type != EXPR_SYMBOL) return false;
 
-        if (lhs->data.symbol == SYM_Method) {
+        if (lhs->data.symbol.name == SYM_Method) {
             MatsolMethod m = matsol_parse_method_option(opt);
             if (m == MATSOL_INVALID) return false;
             opts->method = m;
-        } else if (lhs->data.symbol == SYM_Tolerance) {
+        } else if (lhs->data.symbol.name == SYM_Tolerance) {
             bool is_auto;
             double tol;
             if (!parse_tolerance_value(rhs, &is_auto, &tol)) return false;
@@ -214,13 +214,13 @@ static bool entry_to_cplx(Expr* e, cplx_t* out) {
 #ifdef USE_MPFR
     if (e->type == EXPR_MPFR)    { *out = c_make(mpfr_get_d(e->data.mpfr, MPFR_RNDN), 0); return true; }
 #endif
-    if (e->type == EXPR_SYMBOL && strcmp(e->data.symbol, "I") == 0) {
+    if (e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, "I") == 0) {
         *out = c_make(0.0, 1.0);
         return true;
     }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* hd = e->data.function.head->data.symbol;
+        const char* hd = e->data.function.head->data.symbol.name;
         if (hd == SYM_Rational && e->data.function.arg_count == 2) {
             cplx_t p, q;
             if (!entry_to_cplx(e->data.function.args[0], &p)) return false;
@@ -256,7 +256,7 @@ static bool entry_to_cplx(Expr* e, cplx_t* out) {
 #endif
         || (n->type == EXPR_FUNCTION
             && n->data.function.head->type == EXPR_SYMBOL
-            && n->data.function.head->data.symbol == SYM_Complex)) {
+            && n->data.function.head->data.symbol.name == SYM_Complex)) {
         ok = entry_to_cplx(n, out);
     }
     expr_free(n);

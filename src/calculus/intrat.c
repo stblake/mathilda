@@ -57,7 +57,7 @@ static bool intrat_trace_enabled(void) {
     Rule* r = def->own_values;
     while (r) {
         if (r->replacement && r->replacement->type == EXPR_SYMBOL
-            && r->replacement->data.symbol == SYM_True) return true;
+            && r->replacement->data.symbol.name == SYM_True) return true;
         r = r->next;
     }
     return false;
@@ -144,7 +144,7 @@ static bool intrat_polyqr(Expr* a, Expr* b, Expr* x, Expr** out_q, Expr** out_r)
     expr_free(call);
     if (!result || result->type != EXPR_FUNCTION
         || result->data.function.head->type != EXPR_SYMBOL
-        || result->data.function.head->data.symbol != SYM_List
+        || result->data.function.head->data.symbol.name != SYM_List
         || result->data.function.arg_count != 2) {
         if (result) expr_free(result);
         *out_q = NULL; *out_r = NULL;
@@ -177,7 +177,7 @@ static bool intrat_polyq_test(Expr* expr, Expr* var) {
     Expr* call = internal_polynomialq(args, 2);
     Expr* val  = evaluate(call);
     expr_free(call);
-    bool ok = (val && val->type == EXPR_SYMBOL && val->data.symbol == SYM_True);
+    bool ok = (val && val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_True);
     if (val) expr_free(val);
     return ok;
 }
@@ -187,7 +187,7 @@ bool intrat_freeq_test(Expr* expr, Expr* var) {
     Expr* call = internal_freeq(args, 2);
     Expr* val  = evaluate(call);
     expr_free(call);
-    bool ok = (val && val->type == EXPR_SYMBOL && val->data.symbol == SYM_True);
+    bool ok = (val && val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_True);
     if (val) expr_free(val);
     return ok;
 }
@@ -252,7 +252,7 @@ static Expr* intrat_content(Expr* p, Expr* x) {
     expr_free(clist);
     if (!cl || cl->type != EXPR_FUNCTION
         || cl->data.function.head->type != EXPR_SYMBOL
-        || cl->data.function.head->data.symbol != SYM_List) {
+        || cl->data.function.head->data.symbol.name != SYM_List) {
         if (cl) expr_free(cl);
         return expr_new_integer(1);
     }
@@ -341,7 +341,7 @@ static bool intrat_extended_euclidean(Expr* a, Expr* b, Expr* c, Expr* x,
     Expr* coefs = eg_eval->data.function.args[1];
     if (coefs->type != EXPR_FUNCTION
         || coefs->data.function.head->type != EXPR_SYMBOL
-        || coefs->data.function.head->data.symbol != SYM_List
+        || coefs->data.function.head->data.symbol.name != SYM_List
         || coefs->data.function.arg_count != 2) {
         expr_free(eg_eval);
         return false;
@@ -546,7 +546,7 @@ static Expr* intrat_integrate_polynomial(Expr* poly, Expr* x) {
     expr_free(cl_call);
     if (!cl || cl->type != EXPR_FUNCTION
         || cl->data.function.head->type != EXPR_SYMBOL
-        || cl->data.function.head->data.symbol != SYM_List) {
+        || cl->data.function.head->data.symbol.name != SYM_List) {
         if (cl) expr_free(cl);
         /* Fall back to the trivial constant case: a polynomial that is
          * a pure constant has CoefficientList -> {const}. */
@@ -598,7 +598,7 @@ static bool extract_factored_denominator(Expr* fs, Expr* x,
     /* Times-headed: fs = c0 * factor1 * factor2 * ... */
     if (fs_expanded->type == EXPR_FUNCTION
         && fs_expanded->data.function.head->type == EXPR_SYMBOL
-        && fs_expanded->data.function.head->data.symbol == SYM_Times) {
+        && fs_expanded->data.function.head->data.symbol.name == SYM_Times) {
         Expr* c0 = expr_new_integer(1);
         Expr* pol = NULL;
         int k = 0;
@@ -614,7 +614,7 @@ static bool extract_factored_denominator(Expr* fs, Expr* x,
             if (pol) { expr_free(c0); return false; }
             if (arg->type == EXPR_FUNCTION
                 && arg->data.function.head->type == EXPR_SYMBOL
-                && arg->data.function.head->data.symbol == SYM_Power
+                && arg->data.function.head->data.symbol.name == SYM_Power
                 && arg->data.function.arg_count == 2
                 && arg->data.function.args[1]->type == EXPR_INTEGER
                 && arg->data.function.args[1]->data.integer >= 1) {
@@ -632,7 +632,7 @@ static bool extract_factored_denominator(Expr* fs, Expr* x,
     /* Single Power[pol, k]. */
     if (fs_expanded->type == EXPR_FUNCTION
         && fs_expanded->data.function.head->type == EXPR_SYMBOL
-        && fs_expanded->data.function.head->data.symbol == SYM_Power
+        && fs_expanded->data.function.head->data.symbol.name == SYM_Power
         && fs_expanded->data.function.arg_count == 2
         && fs_expanded->data.function.args[1]->type == EXPR_INTEGER
         && fs_expanded->data.function.args[1]->data.integer >= 1
@@ -762,12 +762,12 @@ static Expr* intrat_squarefree_list(Expr* p) {
 
     if (fs_eval->type == EXPR_FUNCTION
         && fs_eval->data.function.head->type == EXPR_SYMBOL
-        && fs_eval->data.function.head->data.symbol == SYM_Times) {
+        && fs_eval->data.function.head->data.symbol.name == SYM_Times) {
         for (size_t i = 0; i < fs_eval->data.function.arg_count; i++) {
             Expr* arg = fs_eval->data.function.args[i];
             if (arg->type == EXPR_FUNCTION
                 && arg->data.function.head->type == EXPR_SYMBOL
-                && arg->data.function.head->data.symbol == SYM_Power
+                && arg->data.function.head->data.symbol.name == SYM_Power
                 && arg->data.function.arg_count == 2
                 && arg->data.function.args[1]->type == EXPR_INTEGER) {
                 int k = (int)arg->data.function.args[1]->data.integer;
@@ -780,7 +780,7 @@ static Expr* intrat_squarefree_list(Expr* p) {
         }
     } else if (fs_eval->type == EXPR_FUNCTION
         && fs_eval->data.function.head->type == EXPR_SYMBOL
-        && fs_eval->data.function.head->data.symbol == SYM_Power
+        && fs_eval->data.function.head->data.symbol.name == SYM_Power
         && fs_eval->data.function.arg_count == 2
         && fs_eval->data.function.args[1]->type == EXPR_INTEGER) {
         int k = (int)fs_eval->data.function.args[1]->data.integer;
@@ -852,7 +852,7 @@ static Expr* intrat_squarefree_list(Expr* p) {
 static Expr* list_get(Expr* lst, size_t i) {
     if (!lst || lst->type != EXPR_FUNCTION
         || lst->data.function.head->type != EXPR_SYMBOL
-        || lst->data.function.head->data.symbol != SYM_List
+        || lst->data.function.head->data.symbol.name != SYM_List
         || i == 0 || i > lst->data.function.arg_count) return NULL;
     return expr_copy(lst->data.function.args[i - 1]);
 }
@@ -875,7 +875,7 @@ static void intrat_split_constant(Expr* p, Expr* x,
     }
     if (p->type != EXPR_FUNCTION
         || p->data.function.head->type != EXPR_SYMBOL
-        || p->data.function.head->data.symbol != SYM_Times) {
+        || p->data.function.head->data.symbol.name != SYM_Times) {
         *out_const = expr_new_integer(1);
         *out_residue = expr_copy(p);
         return;
@@ -955,7 +955,7 @@ static Expr* intrat_apart_list(Expr* f, Expr* x, const Expr* alpha) {
 
     if (ap->type == EXPR_FUNCTION
         && ap->data.function.head->type == EXPR_SYMBOL
-        && ap->data.function.head->data.symbol == SYM_Plus) {
+        && ap->data.function.head->data.symbol.name == SYM_Plus) {
         size_t n = ap->data.function.arg_count;
         Expr** terms = (Expr**)malloc(sizeof(Expr*) * n);
         for (size_t i = 0; i < n; i++) terms[i] = expr_copy(ap->data.function.args[i]);
@@ -995,7 +995,7 @@ static bool intrat_nthroot_q(Expr* p, Expr* x, int* n_out, Expr** a_out, Expr** 
     size_t nterms;
     if (c->type == EXPR_FUNCTION
         && c->data.function.head->type == EXPR_SYMBOL
-        && c->data.function.head->data.symbol == SYM_Plus) {
+        && c->data.function.head->data.symbol.name == SYM_Plus) {
         terms = c->data.function.args;
         nterms = c->data.function.arg_count;
     } else {
@@ -1015,7 +1015,7 @@ static bool intrat_nthroot_q(Expr* p, Expr* x, int* n_out, Expr** a_out, Expr** 
         int deg = 0;
         if (term->type == EXPR_FUNCTION
             && term->data.function.head->type == EXPR_SYMBOL
-            && term->data.function.head->data.symbol == SYM_Power
+            && term->data.function.head->data.symbol.name == SYM_Power
             && term->data.function.arg_count == 2
             && expr_eq(term->data.function.args[0], x)
             && term->data.function.args[1]->type == EXPR_INTEGER) {
@@ -1025,7 +1025,7 @@ static bool intrat_nthroot_q(Expr* p, Expr* x, int* n_out, Expr** a_out, Expr** 
             deg = 1; coeff = expr_new_integer(1);
         } else if (term->type == EXPR_FUNCTION
             && term->data.function.head->type == EXPR_SYMBOL
-            && term->data.function.head->data.symbol == SYM_Times) {
+            && term->data.function.head->data.symbol.name == SYM_Times) {
             /* coeff * x^n form. */
             Expr** factors = term->data.function.args;
             size_t nf = term->data.function.arg_count;
@@ -1037,7 +1037,7 @@ static bool intrat_nthroot_q(Expr* p, Expr* x, int* n_out, Expr** a_out, Expr** 
                     ccoll[ccn++] = expr_copy(f);
                 } else if (deg == 0 && f->type == EXPR_FUNCTION
                     && f->data.function.head->type == EXPR_SYMBOL
-                    && f->data.function.head->data.symbol == SYM_Power
+                    && f->data.function.head->data.symbol.name == SYM_Power
                     && f->data.function.arg_count == 2
                     && expr_eq(f->data.function.args[0], x)
                     && f->data.function.args[1]->type == EXPR_INTEGER) {
@@ -1091,7 +1091,7 @@ static bool intrat_nthroot_q(Expr* p, Expr* x, int* n_out, Expr** a_out, Expr** 
 static Expr* find_prs_at_degree(Expr* prs, Expr* x, int target_deg) {
     if (prs->type != EXPR_FUNCTION
         || prs->data.function.head->type != EXPR_SYMBOL
-        || prs->data.function.head->data.symbol != SYM_List) return NULL;
+        || prs->data.function.head->data.symbol.name != SYM_List) return NULL;
     for (size_t i = 0; i < prs->data.function.arg_count; i++) {
         Expr* el = prs->data.function.args[i];
         Expr* el_e = expr_expand(el);
@@ -1153,7 +1153,7 @@ static bool poly_only_uses(Expr* poly, Expr* bvar) {
     expr_free(vars_call);
     if (!vars || vars->type != EXPR_FUNCTION
         || vars->data.function.head->type != EXPR_SYMBOL
-        || vars->data.function.head->data.symbol != SYM_List) {
+        || vars->data.function.head->data.symbol.name != SYM_List) {
         if (vars) expr_free(vars);
         return false;
     }
@@ -1401,7 +1401,7 @@ static Expr* expand_simple_rootsum(Expr* poly, Expr* bvar, Expr* body) {
     expr_free(cl_call);
     if (!cl || cl->type != EXPR_FUNCTION
         || cl->data.function.head->type != EXPR_SYMBOL
-        || cl->data.function.head->data.symbol != SYM_List) {
+        || cl->data.function.head->data.symbol.name != SYM_List) {
         if (cl) expr_free(cl);
         return NULL;
     }
@@ -1639,7 +1639,7 @@ static Expr* intrat_strip_content_var(Expr* p, Expr* cvar) {
         (Expr*[]){expr_copy(p), expr_copy(cvar)}, 2));
     if (!cl || cl->type != EXPR_FUNCTION
         || cl->data.function.head->type != EXPR_SYMBOL
-        || cl->data.function.head->data.symbol != SYM_List
+        || cl->data.function.head->data.symbol.name != SYM_List
         || cl->data.function.arg_count == 0) {
         if (cl) expr_free(cl);
         return expr_copy(p);
@@ -1759,7 +1759,7 @@ static Expr* intrat_log_part_core(Expr* a, Expr* d, Expr* x, Expr* t,
         bool free_all;
         if (xgate->type == EXPR_FUNCTION
             && xgate->data.function.head->type == EXPR_SYMBOL
-            && xgate->data.function.head->data.symbol == SYM_List) {
+            && xgate->data.function.head->data.symbol.name == SYM_List) {
             free_all = true;
             for (size_t gi = 0;
                  gi < xgate->data.function.arg_count && free_all; gi++)
@@ -2145,7 +2145,7 @@ static Expr* build_log_term(Expr* alpha, Expr* S, Expr* t) {
 static void split_term_re_im(Expr* term, Expr** re_out, Expr** im_out) {
     if (term->type == EXPR_FUNCTION
         && term->data.function.head->type == EXPR_SYMBOL
-        && term->data.function.head->data.symbol == SYM_Complex
+        && term->data.function.head->data.symbol.name == SYM_Complex
         && term->data.function.arg_count == 2) {
         *re_out = expr_copy(term->data.function.args[0]);
         *im_out = expr_copy(term->data.function.args[1]);
@@ -2153,7 +2153,7 @@ static void split_term_re_im(Expr* term, Expr** re_out, Expr** im_out) {
     }
     if (term->type == EXPR_FUNCTION
         && term->data.function.head->type == EXPR_SYMBOL
-        && term->data.function.head->data.symbol == SYM_Times) {
+        && term->data.function.head->data.symbol.name == SYM_Times) {
         /* Look for a Complex factor among the Times args. */
         Expr* complex_factor = NULL;
         size_t complex_idx = 0;
@@ -2162,7 +2162,7 @@ static void split_term_re_im(Expr* term, Expr** re_out, Expr** im_out) {
             Expr* arg = term->data.function.args[i];
             if (arg->type == EXPR_FUNCTION
                 && arg->data.function.head->type == EXPR_SYMBOL
-                && arg->data.function.head->data.symbol == SYM_Complex) {
+                && arg->data.function.head->data.symbol.name == SYM_Complex) {
                 complex_factor = arg; complex_idx = i; break;
             }
         }
@@ -2205,7 +2205,7 @@ static void split_re_im(Expr* p, Expr** re_out, Expr** im_out) {
     Expr* expanded = expr_expand(p);
     if (!(expanded->type == EXPR_FUNCTION
         && expanded->data.function.head->type == EXPR_SYMBOL
-        && expanded->data.function.head->data.symbol == SYM_Plus)) {
+        && expanded->data.function.head->data.symbol.name == SYM_Plus)) {
         split_term_re_im(expanded, re_out, im_out);
         expr_free(expanded);
         return;
@@ -2537,7 +2537,7 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
     size_t nfactors;
     if (factored->type == EXPR_FUNCTION
         && factored->data.function.head->type == EXPR_SYMBOL
-        && factored->data.function.head->data.symbol == SYM_Times) {
+        && factored->data.function.head->data.symbol.name == SYM_Times) {
         factors = factored->data.function.args;
         nfactors = factored->data.function.arg_count;
     } else {
@@ -2553,7 +2553,7 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
         int multiplicity = 1;
         if (fac->type == EXPR_FUNCTION
             && fac->data.function.head->type == EXPR_SYMBOL
-            && fac->data.function.head->data.symbol == SYM_Power
+            && fac->data.function.head->data.symbol.name == SYM_Power
             && fac->data.function.arg_count == 2
             && fac->data.function.args[1]->type == EXPR_INTEGER
             && fac->data.function.args[1]->data.integer >= 1) {
@@ -3056,7 +3056,7 @@ static bool collect_linear_factors(Expr* factored, Expr* S, Expr* t,
     size_t nfactors;
     if (factored->type == EXPR_FUNCTION
         && factored->data.function.head->type == EXPR_SYMBOL
-        && factored->data.function.head->data.symbol == SYM_Times) {
+        && factored->data.function.head->data.symbol.name == SYM_Times) {
         factors = factored->data.function.args;
         nfactors = factored->data.function.arg_count;
     } else {
@@ -3073,7 +3073,7 @@ static bool collect_linear_factors(Expr* factored, Expr* S, Expr* t,
         int multiplicity = 1;
         if (fac->type == EXPR_FUNCTION
             && fac->data.function.head->type == EXPR_SYMBOL
-            && fac->data.function.head->data.symbol == SYM_Power
+            && fac->data.function.head->data.symbol.name == SYM_Power
             && fac->data.function.arg_count == 2
             && fac->data.function.args[1]->type == EXPR_INTEGER
             && fac->data.function.args[1]->data.integer >= 1) {
@@ -3107,7 +3107,7 @@ static Expr* intrat_linear_q_closer(Expr* pair_list, Expr* x, Expr* t) {
     (void)x;
     if (!pair_list || pair_list->type != EXPR_FUNCTION
         || pair_list->data.function.head->type != EXPR_SYMBOL
-        || pair_list->data.function.head->data.symbol != SYM_List) return NULL;
+        || pair_list->data.function.head->data.symbol.name != SYM_List) return NULL;
     size_t n = pair_list->data.function.arg_count;
     /* Empty pair list = LRT producer couldn't decompose.  See the
      * matching guard in intrat_log_to_real_pairs above for why returning
@@ -3186,7 +3186,7 @@ static Expr* intrat_linear_q_closer(Expr* pair_list, Expr* x, Expr* t) {
 static Expr* intrat_log_to_real_pairs(Expr* pair_list, Expr* x, Expr* t) {
     if (!pair_list || pair_list->type != EXPR_FUNCTION
         || pair_list->data.function.head->type != EXPR_SYMBOL
-        || pair_list->data.function.head->data.symbol != SYM_List) {
+        || pair_list->data.function.head->data.symbol.name != SYM_List) {
         return NULL;
     }
     size_t npairs = pair_list->data.function.arg_count;
@@ -3286,7 +3286,7 @@ static Expr* intrat_integrate_summands(Expr* h, Expr* x) {
     Expr* pieces = intrat_apart_list(h, x, NULL);
     if (!pieces || pieces->type != EXPR_FUNCTION
         || pieces->data.function.head->type != EXPR_SYMBOL
-        || pieces->data.function.head->data.symbol != SYM_List) {
+        || pieces->data.function.head->data.symbol.name != SYM_List) {
         if (pieces) expr_free(pieces);
         return NULL;
     }
@@ -3498,12 +3498,12 @@ static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
 static bool is_intrat_option(Expr* opt) {
     if (!opt || opt->type != EXPR_FUNCTION
         || opt->data.function.head->type != EXPR_SYMBOL
-        || (opt->data.function.head->data.symbol != SYM_Rule
-            && opt->data.function.head->data.symbol != SYM_RuleDelayed)
+        || (opt->data.function.head->data.symbol.name != SYM_Rule
+            && opt->data.function.head->data.symbol.name != SYM_RuleDelayed)
         || opt->data.function.arg_count != 2) return false;
     Expr* lhs = opt->data.function.args[0];
     if (lhs->type == EXPR_SYMBOL) {
-        return lhs->data.symbol == SYM_Extension;
+        return lhs->data.symbol.name == SYM_Extension;
     }
     if (lhs->type == EXPR_STRING) {
         const char* s = lhs->data.string;
@@ -3621,13 +3621,13 @@ Expr* builtin_intrat_intrationallogpart(Expr* res) {
         Expr* last = res->data.function.args[argc - 1];
         if (last->type == EXPR_FUNCTION
             && last->data.function.head->type == EXPR_SYMBOL
-            && (last->data.function.head->data.symbol == SYM_Rule
-                || last->data.function.head->data.symbol == SYM_RuleDelayed)
+            && (last->data.function.head->data.symbol.name == SYM_Rule
+                || last->data.function.head->data.symbol.name == SYM_RuleDelayed)
             && last->data.function.arg_count == 2
             && last->data.function.args[0]->type == EXPR_SYMBOL
-            && last->data.function.args[0]->data.symbol == SYM_RootSum) {
+            && last->data.function.args[0]->data.symbol.name == SYM_RootSum) {
             Expr* val = last->data.function.args[1];
-            root_sum = (val->type == EXPR_SYMBOL && val->data.symbol == SYM_True);
+            root_sum = (val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_True);
             argc--;
         }
     }
@@ -3699,7 +3699,7 @@ Expr* builtin_intrat_transcendental_log_part(Expr* res) {
     bool gate_ok = (xreal->type == EXPR_SYMBOL)
         || (xreal->type == EXPR_FUNCTION
             && xreal->data.function.head->type == EXPR_SYMBOL
-            && xreal->data.function.head->data.symbol == SYM_List);
+            && xreal->data.function.head->data.symbol.name == SYM_List);
     if (!gate_ok) return NULL;
     return intrat_transcendental_log_part(a, d, tau, z, Dd, xreal);
 }

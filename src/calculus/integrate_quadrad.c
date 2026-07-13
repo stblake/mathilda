@@ -530,7 +530,7 @@ static Expr* qr_Jp(Expr* p, Expr* a, Expr* b, Expr* c, Expr* rad, Expr* x) {
     int sA = qr_sign_probe(A);
     if (sA == 0) {
         Expr* z = eval_take(mk_fn1("PossibleZeroQ", expr_copy(A)));
-        bool zero = z && z->type == EXPR_SYMBOL && z->data.symbol == SYM_True;
+        bool zero = z && z->type == EXPR_SYMBOL && z->data.symbol.name == SYM_True;
         if (z) expr_free(z);
         if (zero) { expr_free(A); return NULL; }   /* pole on a branch point */
         sA = 1;                                     /* indeterminate -> ArcTanh */

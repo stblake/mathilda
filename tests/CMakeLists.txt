@@ -743,6 +743,14 @@ target_link_libraries(bench_assoc m)
 target_include_directories(bench_assoc PRIVATE ../src)
 add_test(NAME bench_assoc COMMAND bench_assoc)
 
+# Evaluator baseline benchmark: Phase 0 of EVAL_SYMTAB_IMPROVEMENTS.md. Measures
+# per-node dispatch cost so the symbol-object rework can be validated against a
+# committed baseline. Machine-normalized "much slower" gate like bench_assoc.
+add_executable(bench_eval bench_eval.c ${COMMON_SRC})
+target_link_libraries(bench_eval m)
+target_include_directories(bench_eval PRIVATE ../src)
+add_test(NAME bench_eval COMMAND bench_eval)
+
 add_executable(bench_ndarray_linalg bench_ndarray_linalg.c ${COMMON_SRC})
 target_link_libraries(bench_ndarray_linalg m)
 target_include_directories(bench_ndarray_linalg PRIVATE ../src)

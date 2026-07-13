@@ -17,7 +17,7 @@
 #include <stdlib.h>
 
 int get_tensor_dims(Expr* e, int64_t* dims) {
-    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL || e->data.function.head->data.symbol != SYM_List) {
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL || e->data.function.head->data.symbol.name != SYM_List) {
         return 0; // rank 0
     }
     int64_t len = e->data.function.arg_count;
@@ -37,7 +37,7 @@ int get_tensor_dims(Expr* e, int64_t* dims) {
 }
 
 void flatten_tensor(Expr* e, Expr** flat, size_t* idx) {
-    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL && e->data.function.head->data.symbol == SYM_List) {
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL && e->data.function.head->data.symbol.name == SYM_List) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             flatten_tensor(e->data.function.args[i], flat, idx);
         }

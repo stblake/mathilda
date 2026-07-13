@@ -31,7 +31,7 @@ static void collect_times_args(Expr* e, Expr*** args_out, size_t* count_out) {
     if (e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Times) {
+        && e->data.function.head->data.symbol.name == SYM_Times) {
         size_t n = e->data.function.arg_count;
         Expr** args = (Expr**)malloc(sizeof(Expr*) * n);
         for (size_t i = 0; i < n; i++) {
@@ -55,8 +55,8 @@ static bool factor_is_numeric_constant(const Expr* f) {
     if (f->type == EXPR_FUNCTION
         && f->data.function.head
         && f->data.function.head->type == EXPR_SYMBOL
-        && (f->data.function.head->data.symbol == SYM_Rational
-            || f->data.function.head->data.symbol == SYM_Complex)) {
+        && (f->data.function.head->data.symbol.name == SYM_Rational
+            || f->data.function.head->data.symbol.name == SYM_Complex)) {
         return true;
     }
     return false;
@@ -136,7 +136,7 @@ static Expr* factor_via_z_independent_split(Expr* P, Expr** vars, size_t v_count
             if (f->type == EXPR_FUNCTION
                 && f->data.function.head
                 && f->data.function.head->type == EXPR_SYMBOL
-                && f->data.function.head->data.symbol == SYM_Power
+                && f->data.function.head->data.symbol.name == SYM_Power
                 && f->data.function.arg_count == 2
                 && f->data.function.args[1]->type == EXPR_INTEGER
                 && f->data.function.args[1]->data.integer >= 1) {

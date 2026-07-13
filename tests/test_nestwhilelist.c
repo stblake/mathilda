@@ -26,7 +26,7 @@ static void run_real_list(const char* input, const double* expected, size_t n, d
     Expr* r = evaluate(e);
     ASSERT_MSG(r->type == EXPR_FUNCTION &&
                r->data.function.head->type == EXPR_SYMBOL &&
-               strcmp(r->data.function.head->data.symbol, "List") == 0,
+               strcmp(r->data.function.head->data.symbol.name, "List") == 0,
                "NestWhileList %s: result not a List", input);
     ASSERT_MSG(r->data.function.arg_count == n,
                "NestWhileList %s: expected length %zu, got %zu",

@@ -291,7 +291,7 @@ static Expr* mk_binary(const char* head, Expr* a1, Expr* a2) {
  * appear anywhere in `expr`. */
 static bool expr_free_of_symbol(const Expr* expr, const char* sym_name) {
     if (!expr) return true;
-    if (expr->type == EXPR_SYMBOL) return expr->data.symbol != sym_name;
+    if (expr->type == EXPR_SYMBOL) return expr->data.symbol.name != sym_name;
     if (expr->type != EXPR_FUNCTION) return true;
     if (!expr_free_of_symbol(expr->data.function.head, sym_name)) return false;
     for (size_t i = 0; i < expr->data.function.arg_count; i++) {
@@ -316,7 +316,7 @@ static bool contains_algebraic_function_of(const Expr* e, const char* xname) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     const Expr* h = e->data.function.head;
     size_t n = e->data.function.arg_count;
-    if (h && h->type == EXPR_SYMBOL && h->data.symbol == SYM_Power && n == 2) {
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power && n == 2) {
         const Expr* base = e->data.function.args[0];
         const Expr* exp  = e->data.function.args[1];
         if (base && exp
@@ -366,7 +366,7 @@ static bool contains_unsupported_function_of(const Expr* e, const char* xname) {
     const Expr* h = e->data.function.head;
     size_t n = e->data.function.arg_count;
     /* Non-symbol heads (e.g. Derivative[1][f]) are never pmint-supported. */
-    if (!h || h->type != EXPR_SYMBOL || !head_is_pmint_supported(h->data.symbol)) {
+    if (!h || h->type != EXPR_SYMBOL || !head_is_pmint_supported(h->data.symbol.name)) {
         return true;
     }
     for (size_t i = 0; i < n; i++) {
@@ -429,7 +429,7 @@ static Expr* convert_to_tan_rec(Expr* f, const char* xname, int depth) {
     Expr* result = NULL;
 
     if (n == 1 && head && head->type == EXPR_SYMBOL) {
-        const char* hs = head->data.symbol;
+        const char* hs = head->data.symbol.name;
         Expr* u = new_args[0];
 
         if (hs == SYM_Sin) {
@@ -555,7 +555,7 @@ static Expr* pythagorean_rewrite(Expr* f) {
     size_t n = f->data.function.arg_count;
 
     /* Detect Power[Sec[u], 2] etc. */
-    if (h && h->type == EXPR_SYMBOL && h->data.symbol == SYM_Power
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power
         && n == 2
         && f->data.function.args[0]
         && f->data.function.args[0]->type == EXPR_FUNCTION
@@ -567,7 +567,7 @@ static Expr* pythagorean_rewrite(Expr* f) {
         Expr* bh = base->data.function.head;
         Expr* u = base->data.function.args[0];
         if (bh && bh->type == EXPR_SYMBOL) {
-            const char* bhs = bh->data.symbol;
+            const char* bhs = bh->data.symbol.name;
             Expr* urew = pythagorean_rewrite(u);
             if (bhs == SYM_Sec) {
                 /* 1 + Tan[u]^2 */
@@ -624,7 +624,7 @@ static Expr* decot_rec(Expr* f) {
         Expr* h = f->data.function.head;
         if (h && h->type == EXPR_SYMBOL
             && f->data.function.arg_count == 1) {
-            const char* hs = h->data.symbol;
+            const char* hs = h->data.symbol.name;
             if (hs == SYM_Cot) {
                 Expr* inner = decot_rec(f->data.function.args[0]);
                 return mk_pow(mk_unary(SYM_Tan, inner), mk_int(-1));
@@ -698,7 +698,7 @@ static Expr* convert_sincos_to_tan_rec(Expr* f, const char* xname, int depth) {
     Expr* head = f->data.function.head;
     Expr* result = NULL;
     if (n == 1 && head && head->type == EXPR_SYMBOL) {
-        const char* hs = head->data.symbol;
+        const char* hs = head->data.symbol.name;
         Expr* u = new_args[0];
         if (hs == SYM_Sin) {
             Expr* T = mk_unary(SYM_Tan, mk_div(expr_copy(u), mk_int(2)));
@@ -756,7 +756,7 @@ static Expr* convert_sincos_to_tan_rec(Expr* f, const char* xname, int depth) {
 
 static Expr* convert_sincos_to_tan(Expr* f, Expr* x) {
     if (!f || !x || x->type != EXPR_SYMBOL) return NULL;
-    Expr* r = convert_sincos_to_tan_rec(f, x->data.symbol, 0);
+    Expr* r = convert_sincos_to_tan_rec(f, x->data.symbol.name, 0);
     if (!r) return NULL;
     Expr* normalised = eval_and_free(r);
     if (!normalised) return NULL;
@@ -797,7 +797,7 @@ static Expr* builtin_pm_pythagorean(Expr* res) {
  * Power form. */
 static Expr* convert_to_tan(Expr* f, Expr* x) {
     if (!f || !x || x->type != EXPR_SYMBOL) return NULL;
-    Expr* rewritten = convert_to_tan_rec(f, x->data.symbol, 0);
+    Expr* rewritten = convert_to_tan_rec(f, x->data.symbol.name, 0);
     if (!rewritten) return NULL;
     Expr* normalised = eval_and_free(rewritten);
     if (!normalised) return NULL;
@@ -870,7 +870,7 @@ static bool head_is_transcendental_atom(const Expr* f, const char* xname) {
     if (!f || f->type != EXPR_FUNCTION) return false;
     Expr* h = f->data.function.head;
     if (!h || h->type != EXPR_SYMBOL) return false;
-    const char* hs = h->data.symbol;
+    const char* hs = h->data.symbol.name;
     /* Trig / hyperbolic field generators.  Tan / Tanh are pmint's
      * canonical generators (per convert_to_tan); the others get
      * collected only if they appear post-eval as evaluator artifacts. */
@@ -888,7 +888,7 @@ static bool head_is_transcendental_atom(const Expr* f, const char* xname) {
         && f->data.function.arg_count == 2
         && f->data.function.args[0]
         && f->data.function.args[0]->type == EXPR_SYMBOL
-        && f->data.function.args[0]->data.symbol == SYM_E
+        && f->data.function.args[0]->data.symbol.name == SYM_E
         && !expr_free_of_symbol(f->data.function.args[1], xname)) {
         return true;
     }
@@ -918,7 +918,7 @@ static Expr* canonicalize_atom_head(Expr* expr) {
     Expr* h = expr->data.function.head;
     if (!h || h->type != EXPR_SYMBOL) return expr_copy(expr);
     if (expr->data.function.arg_count != 1) return expr_copy(expr);
-    const char* hs = h->data.symbol;
+    const char* hs = h->data.symbol.name;
     if (hs == SYM_Cot) {
         return mk_unary(SYM_Tan, expr_copy(expr->data.function.args[0]));
     }
@@ -969,7 +969,7 @@ static int collect_indets_closed(Expr* ff, Expr* x,
     *out_n = 0;
     if (!ff || !x || x->type != EXPR_SYMBOL) return 1;
 
-    const char* xname = x->data.symbol;
+    const char* xname = x->data.symbol.name;
     ExprList el;
     elist_init(&el);
 
@@ -1056,7 +1056,7 @@ static Expr* pm_sub_map_to_rule_list(const PMSubMap* m) {
             && lhs->data.function.arg_count == 1
             && lhs->data.function.head
             && lhs->data.function.head->type == EXPR_SYMBOL) {
-            const char* hs = lhs->data.function.head->data.symbol;
+            const char* hs = lhs->data.function.head->data.symbol.name;
             const char* recip_head = NULL;
             if (hs == SYM_Tan)  recip_head = SYM_Cot;
             else if (hs == SYM_Tanh) recip_head = SYM_Coth;
@@ -1212,13 +1212,13 @@ static Expr* eval_cancel(Expr* f) {
  * (often more compact) result is preserved.  Consumes `result`. */
 static Expr* strip_constant_of_integration(Expr* result, Expr* x) {
     if (!result || !x || x->type != EXPR_SYMBOL) return result;
-    const char* xname = x->data.symbol;
+    const char* xname = x->data.symbol.name;
 
     Expr* expanded = eval_expand(expr_copy(result));
     if (!expanded
         || expanded->type != EXPR_FUNCTION
         || expanded->data.function.head->type != EXPR_SYMBOL
-        || expanded->data.function.head->data.symbol != SYM_Plus) {
+        || expanded->data.function.head->data.symbol.name != SYM_Plus) {
         if (expanded) expr_free(expanded);
         return result;
     }
@@ -1273,7 +1273,7 @@ static int64_t eval_degree(Expr* p, Expr* x) {
     if (clist && clist->type == EXPR_FUNCTION
         && clist->data.function.head
         && clist->data.function.head->type == EXPR_SYMBOL
-        && clist->data.function.head->data.symbol == SYM_List
+        && clist->data.function.head->data.symbol.name == SYM_List
         && clist->data.function.arg_count > 0) {
         d = (int64_t)clist->data.function.arg_count - 1;
     }
@@ -1387,7 +1387,7 @@ static bool is_power_head(Expr* e);
  * returns mk_int(0).  Caller owns the result. */
 static Expr* diff_monomial_pow(Expr* m, Expr* var_k) {
     if (!var_k || var_k->type != EXPR_SYMBOL) return NULL;
-    const char* vk = var_k->data.symbol;
+    const char* vk = var_k->data.symbol.name;
 
     /* Iterate factors of m (treat non-Times as a 1-factor list). */
     size_t nf;
@@ -1405,7 +1405,7 @@ static Expr* diff_monomial_pow(Expr* m, Expr* var_k) {
     for (size_t i = 0; i < nf; i++) {
         Expr* f = facs[i];
         if (f->type == EXPR_SYMBOL) {
-            if (f->data.symbol == vk) {
+            if (f->data.symbol.name == vk) {
                 if (hit_idx >= 0) return NULL;     /* same var twice */
                 hit_idx = (int)i;
                 hit_exp = 1;
@@ -1414,7 +1414,7 @@ static Expr* diff_monomial_pow(Expr* m, Expr* var_k) {
         } else if (is_power_head(f) && f->data.function.arg_count == 2) {
             Expr* base = f->data.function.args[0];
             Expr* expn = f->data.function.args[1];
-            if (base->type == EXPR_SYMBOL && base->data.symbol == vk) {
+            if (base->type == EXPR_SYMBOL && base->data.symbol.name == vk) {
                 if (hit_idx >= 0) return NULL;
                 if (expn->type != EXPR_INTEGER) return NULL;
                 hit_idx = (int)i;
@@ -1561,7 +1561,7 @@ static void vars_in_poly(Expr* p, Expr** vars, size_t n,
     *out_n = 0;
     for (size_t i = 0; i < n; i++) {
         if (vars[i] && vars[i]->type == EXPR_SYMBOL
-            && !expr_free_of_symbol(p, vars[i]->data.symbol)) {
+            && !expr_free_of_symbol(p, vars[i]->data.symbol.name)) {
             out_idx[(*out_n)++] = i;
         }
     }
@@ -1933,7 +1933,7 @@ static void walk_coefficient_table(Expr* node, size_t depth, size_t nv,
     if (node->type != EXPR_FUNCTION
         || !node->data.function.head
         || node->data.function.head->type != EXPR_SYMBOL
-        || node->data.function.head->data.symbol != SYM_List) {
+        || node->data.function.head->data.symbol.name != SYM_List) {
         /* Scalar at non-leaf depth — pad zeros for the remaining
          * dimensions. */
         for (size_t i = depth; i < nv; i++) exp_vec[i] = 0;
@@ -2300,9 +2300,9 @@ static bool try_solve_qfast(LinearBuilder* lb,
  * Interned symbol-pointer equality. */
 static int sym_index_in(const Expr* e, Expr** list, size_t n) {
     if (e->type != EXPR_SYMBOL) return -1;
-    const char* s = e->data.symbol;
+    const char* s = e->data.symbol.name;
     for (size_t i = 0; i < n; i++) {
-        if (list[i]->type == EXPR_SYMBOL && list[i]->data.symbol == s) {
+        if (list[i]->type == EXPR_SYMBOL && list[i]->data.symbol.name == s) {
             return (int)i;
         }
     }
@@ -2313,21 +2313,21 @@ static bool is_times_head(Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Times;
+        && e->data.function.head->data.symbol.name == SYM_Times;
 }
 
 static bool is_plus_head(Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Plus;
+        && e->data.function.head->data.symbol.name == SYM_Plus;
 }
 
 static bool is_power_head(Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power;
+        && e->data.function.head->data.symbol.name == SYM_Power;
 }
 
 /* Sparse row keyed by monomial exponent vector. */
@@ -2571,7 +2571,7 @@ static bool pm_acc_apply_atom(const Expr* t, TermAcc* a,
     if (t->type == EXPR_FUNCTION
         && t->data.function.head
         && t->data.function.head->type == EXPR_SYMBOL
-        && t->data.function.head->data.symbol == SYM_Power
+        && t->data.function.head->data.symbol.name == SYM_Power
         && t->data.function.arg_count == 2) {
         const Expr* base = t->data.function.args[0];
         const Expr* expe = t->data.function.args[1];
@@ -2654,7 +2654,7 @@ static void pm_walk_one(const Expr* e, const PmWalkFrame* rest,
     if (e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         size_t n = e->data.function.arg_count;
 
         if (h == SYM_Plus) {
@@ -3097,7 +3097,7 @@ static int solve_linear_undet(Expr* equation_numer,
     PM_PHE(rr_t, PM_PH_TI_SOLVE_ROWRED);
     if (!rr || rr->type != EXPR_FUNCTION
         || rr->data.function.head->type != EXPR_SYMBOL
-        || rr->data.function.head->data.symbol != SYM_List) {
+        || rr->data.function.head->data.symbol.name != SYM_List) {
         if (rr) expr_free(rr);
         return 1;
     }
@@ -3227,7 +3227,7 @@ static int my_factors(Expr* p, int over_Qi,
         if (node->type == EXPR_FUNCTION
             && node->data.function.head
             && node->data.function.head->type == EXPR_SYMBOL) {
-            const char* hs = node->data.function.head->data.symbol;
+            const char* hs = node->data.function.head->data.symbol.name;
             if (hs == SYM_Times) {
                 for (size_t i = 0; i < node->data.function.arg_count && np < 60; i++) {
                     nodes_to_process[np++] = node->data.function.args[i];
@@ -3246,7 +3246,7 @@ static int my_factors(Expr* p, int over_Qi,
         bool mentions_var = false;
         for (size_t k = 0; k < nv; k++) {
             if (vars[k] && vars[k]->type == EXPR_SYMBOL
-                && !expr_free_of_symbol(node, vars[k]->data.symbol)) {
+                && !expr_free_of_symbol(node, vars[k]->data.symbol.name)) {
                 mentions_var = true;
                 break;
             }
@@ -3310,7 +3310,7 @@ static int get_special_all(Expr** si, Expr** vars, size_t n,
         if (!si[k] || si[k]->type != EXPR_FUNCTION) continue;
         Expr* head = si[k]->data.function.head;
         if (!head || head->type != EXPR_SYMBOL) continue;
-        const char* hs = head->data.symbol;
+        const char* hs = head->data.symbol.name;
 
         Expr* darboux1 = NULL;
         Expr* darboux2 = NULL;
@@ -4006,7 +4006,7 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
              * alone leaves `4 E^x (1+Cos[x])(Sin[x]-Cos[x]) / (8(1+Cos[x]))`
              * uncancelled. */
             const char* x_name = (x && x->type == EXPR_SYMBOL)
-                ? x->data.symbol : NULL;
+                ? x->data.symbol.name : NULL;
             if (x_name && combined) {
                 char buf[1024];
                 snprintf(buf, sizeof(buf),
@@ -4042,7 +4042,7 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
             if (combined && combined->type == EXPR_FUNCTION
                 && combined->data.function.head
                 && combined->data.function.head->type == EXPR_SYMBOL
-                && combined->data.function.head->data.symbol == SYM_Plus) {
+                && combined->data.function.head->data.symbol.name == SYM_Plus) {
                 size_t k = combined->data.function.arg_count;
                 Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (k ? k : 1));
                 for (size_t i = 0; i < k; i++) {
@@ -4299,7 +4299,7 @@ static Expr* builtin_pm_enumerate_monoms(Expr* res) {
     Expr* dexpr = res->data.function.args[1];
     if (vlist->type != EXPR_FUNCTION
         || vlist->data.function.head->type != EXPR_SYMBOL
-        || vlist->data.function.head->data.symbol != SYM_List)
+        || vlist->data.function.head->data.symbol.name != SYM_List)
         return NULL;
     if (dexpr->type != EXPR_INTEGER) return NULL;
     int total_degree = (int)dexpr->data.integer;
@@ -4372,7 +4372,7 @@ Expr* builtin_rischnorman(Expr* res) {
      * integrand contains an algebraic function of x (e.g., Sqrt[g(x)],
      * g(x)^(1/3)), bail out — the algorithm has no algebraic-case
      * support and downstream pipeline stages segfault on such inputs. */
-    if (contains_algebraic_function_of(f, x->data.symbol)) {
+    if (contains_algebraic_function_of(f, x->data.symbol.name)) {
         return NULL;
     }
 
@@ -4383,7 +4383,7 @@ Expr* builtin_rischnorman(Expr* res) {
      * ansatz "integrates" them as if they were constants — returning
      * x · g(x) for Integrate[g[x], x].  Falling through to NULL lets
      * the Integrate dispatcher leave the integral unevaluated. */
-    if (contains_unsupported_function_of(f, x->data.symbol)) {
+    if (contains_unsupported_function_of(f, x->data.symbol.name)) {
         return NULL;
     }
 
