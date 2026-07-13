@@ -64,8 +64,24 @@ if(USE_GRAPHICS)
     if(RAYLIB_FOUND)
         add_compile_definitions(USE_GRAPHICS)
         include_directories(${RAYLIB_INCLUDE_DIRS})
-        link_directories(${RAYLIB_LIBRARY_DIRS})
-        link_libraries(${RAYLIB_LIBRARIES})
+        # On Linux, libraylib is commonly a static archive (Ubuntu's
+        # libraylib-dev, or a from-source `make install`) whose transitive
+        # windowing deps — X11, GL, pthread, dl, rt, ... — live in the .pc
+        # file's `Libs.private:` line. pkg_check_modules exposes those only via
+        # its _STATIC_ variables; linking the plain _LIBRARIES set drops them,
+        # so every test executable fails with undefined `XInternAtom`, `XSync`,
+        # `XFree`, etc. (issue #18). The _STATIC_ set is a superset that equals
+        # the plain set on macOS (Libs.private is empty there — frameworks are
+        # recorded in the dylib), so prefer it unconditionally, keeping
+        # pkg-config's link order (raylib before its deps) that static archives
+        # require. Fall back to the plain set if _STATIC_ ever comes back empty.
+        if(RAYLIB_STATIC_LIBRARIES)
+            link_directories(${RAYLIB_STATIC_LIBRARY_DIRS})
+            link_libraries(${RAYLIB_STATIC_LIBRARIES})
+        else()
+            link_directories(${RAYLIB_LIBRARY_DIRS})
+            link_libraries(${RAYLIB_LIBRARIES})
+        endif()
     else()
         message(WARNING "Raylib not detected; building tests with USE_GRAPHICS=OFF")
         message(WARNING "  macOS (Homebrew): brew install raylib")
