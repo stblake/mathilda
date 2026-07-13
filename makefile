@@ -165,7 +165,13 @@ endif
 ifeq ($(USE_GRAPHICS), 1)
   ifneq ($(shell $(PKG_CONFIG) --exists raylib 2>/dev/null && echo y),)
     CFLAGS  += -DUSE_GRAPHICS $(shell $(PKG_CONFIG) --cflags raylib)
-    LDFLAGS += $(shell $(PKG_CONFIG) --libs raylib)
+    # `--static` appends the `Libs.private:` transitive deps (on Linux: -lX11
+    # -lGL -lpthread -ldl -lrt ...) that a static libraylib.a needs but `--libs`
+    # alone omits — otherwise the link fails with undefined XInternAtom/XSync
+    # (issue #18). Identical to `--libs` on macOS, where Libs.private is empty
+    # (frameworks are recorded in the dylib). EXTRA_LIBS below remains as a
+    # manual escape hatch for anything pkg-config still can't infer.
+    LDFLAGS += $(shell $(PKG_CONFIG) --static --libs raylib)
   else
     $(warning Raylib not detected; building with USE_GRAPHICS=0 (Show/Plot will print a text placeholder))
     $(warning   macOS (Homebrew): brew install raylib)
