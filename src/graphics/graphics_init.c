@@ -549,6 +549,74 @@ void graphics_init(void) {
         "\tA graphics primitive: a directed polyline with an arrowhead at its\n"
         "\tlast point. Used by StreamPlot to draw streamlines.");
 
+    symtab_add_builtin("Animate", builtin_animate);
+    symtab_get_def("Animate")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("Animate",
+        "Animate[expr, {t, tmin, tmax}, opts...]\n"
+        "\tOpens an interactive animation window, evaluating expr at each\n"
+        "\tframe with t bound to the current parameter value. Returns Null\n"
+        "\tonce the window is closed. expr is typically a Graphics[...] or\n"
+        "\tPlot[...] call that depends on t.\n"
+        "\n"
+        "\tOptions:\n"
+        "\t  AnimationDirection    Forward (default) | Backward |\n"
+        "\t                        ForwardBackward | BackwardForward\n"
+        "\t  AnimationRate         parameter units per second (real > 0)\n"
+        "\t  AnimationRepetitions  integer or Infinity (default Infinity)\n"
+        "\t  AnimationRunning      True (default) | False (start paused)\n"
+        "\t  AppearanceElements    All (default) | None |\n"
+        "\t                        {\"PlayPauseButton\", \"ProgressSlider\",\n"
+        "\t                         \"StepLeftButton\", \"StepRightButton\",\n"
+        "\t                         \"DirectionButton\",\n"
+        "\t                         \"FasterSlowerButtons\", \"ResetButton\"}\n"
+        "\t  DefaultDuration       seconds for one full pass (default 1.0)\n"
+        "\t  ControlPlacement      Bottom (default) | Top\n"
+        "\t  RefreshRate           target display FPS (default 60)\n"
+        "\n"
+        "\tKeyboard controls: Space (play/pause), Arrow keys (step),\n"
+        "\t  R (reset), Esc (close). Direction/speed buttons in the\n"
+        "\t  control bar are clickable.");
+
+    /* Inert option keywords for Animate. */
+    register_inert("AnimationDirection",
+        "AnimationDirection\n\tAnimate option: direction of parameter traversal.\n"
+        "\tForward (default), Backward, ForwardBackward, BackwardForward.");
+    register_inert("AnimationRate",
+        "AnimationRate\n\tAnimate option: parameter units advanced per second.\n"
+        "\tOverrides DefaultDuration when set.");
+    register_inert("AnimationRepetitions",
+        "AnimationRepetitions\n\tAnimate option: number of loop repetitions.\n"
+        "\tInfinity (default) loops forever; an integer stops after that many passes.");
+    register_inert("AnimationRunning",
+        "AnimationRunning\n\tAnimate option: True (default) starts playing immediately;\n"
+        "\tFalse opens the window paused.");
+    register_inert("AppearanceElements",
+        "AppearanceElements\n\tAnimate option: list of control elements to show.\n"
+        "\tAll (default) shows all controls; None hides the control bar.\n"
+        "\tNamed elements: \"PlayPauseButton\", \"ProgressSlider\",\n"
+        "\t\"StepLeftButton\", \"StepRightButton\", \"DirectionButton\",\n"
+        "\t\"FasterSlowerButtons\", \"ResetButton\", \"AnimationSlider\".");
+    register_inert("DefaultDuration",
+        "DefaultDuration\n\tAnimate option: seconds for one full parameter pass\n"
+        "\t(default 1.0). Determines AnimationRate when Rate is not given.");
+    register_inert("ControlPlacement",
+        "ControlPlacement\n\tAnimate option: where the playback control bar appears.\n"
+        "\tBottom (default) or Top.");
+    register_inert("RefreshRate",
+        "RefreshRate\n\tAnimate option: target display frames per second (default 60).");
+
+    /* AnimationDirection values are inert symbolic constants. */
+    register_inert("Forward",
+        "Forward\n\tAnimate AnimationDirection value: parameter increases from tmin to tmax.");
+    register_inert("Backward",
+        "Backward\n\tAnimate AnimationDirection value: parameter decreases from tmax to tmin.");
+    register_inert("ForwardBackward",
+        "ForwardBackward\n\tAnimate AnimationDirection value: parameter pingpongs "
+        "tmin→tmax→tmin→...");
+    register_inert("BackwardForward",
+        "BackwardForward\n\tAnimate AnimationDirection value: parameter pingpongs "
+        "tmax→tmin→tmax→...");
+
     symtab_add_builtin("Plot3D", builtin_plot3d);
     symtab_get_def("Plot3D")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_set_docstring("Plot3D",

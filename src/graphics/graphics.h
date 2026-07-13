@@ -20,6 +20,7 @@
 #include "barchart.h"
 #include "vectorplot.h"
 #include "show.h"
+#include "animate.h"
 
 void graphics_init(void);
 

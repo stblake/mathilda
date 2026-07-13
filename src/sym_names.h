@@ -736,6 +736,22 @@ extern const char* SYM_VectorPoints;  /* integer grid density, or Automatic */
 extern const char* SYM_VectorScale;   /* Automatic (uniform) | None (prop.) | fraction */
 extern const char* SYM_VectorStyle;   /* style directive(s) for arrows */
 
+/* Animate[expr, {t, tmin, tmax}, opts...] */
+extern const char* SYM_Animate;
+extern const char* SYM_AnimationDirection;   /* Forward | Backward | ForwardBackward | BackwardForward */
+extern const char* SYM_AnimationRate;        /* parameter units per second */
+extern const char* SYM_AnimationRepetitions; /* integer or Infinity */
+extern const char* SYM_AnimationRunning;     /* True | False (start state) */
+extern const char* SYM_AppearanceElements;   /* list of control elements, All, or None */
+extern const char* SYM_DefaultDuration;      /* seconds per full loop */
+extern const char* SYM_ControlPlacement;     /* Bottom | Top | Left | Right */
+extern const char* SYM_RefreshRate;          /* target display FPS */
+/* AnimationDirection values */
+extern const char* SYM_Forward;
+extern const char* SYM_Backward;
+extern const char* SYM_ForwardBackward;
+extern const char* SYM_BackwardForward;
+
 /* FLINT` context: direct REPL access to the FLINT-backed kernels that also
  * accelerate the corresponding System` builtins transparently. Each is a thin
  * wrapper over src/poly/flint_bridge.c (and, later, the matrix / numeric

@@ -715,6 +715,20 @@ const char* SYM_VectorPoints = NULL;
 const char* SYM_VectorScale = NULL;
 const char* SYM_VectorStyle = NULL;
 
+const char* SYM_Animate             = NULL;
+const char* SYM_AnimationDirection  = NULL;
+const char* SYM_AnimationRate       = NULL;
+const char* SYM_AnimationRepetitions = NULL;
+const char* SYM_AnimationRunning    = NULL;
+const char* SYM_AppearanceElements  = NULL;
+const char* SYM_DefaultDuration     = NULL;
+const char* SYM_ControlPlacement    = NULL;
+const char* SYM_RefreshRate         = NULL;
+const char* SYM_Forward             = NULL;
+const char* SYM_Backward            = NULL;
+const char* SYM_ForwardBackward     = NULL;
+const char* SYM_BackwardForward     = NULL;
+
 void sym_names_init(void) {
     /* intern_symbol is idempotent and stable, so this can run multiple
      * times without re-allocating. */
@@ -1409,6 +1423,20 @@ void sym_names_init(void) {
     SYM_VectorPoints               = intern_symbol("VectorPoints");
     SYM_VectorScale                = intern_symbol("VectorScale");
     SYM_VectorStyle                = intern_symbol("VectorStyle");
+
+    SYM_Animate                    = intern_symbol("Animate");
+    SYM_AnimationDirection         = intern_symbol("AnimationDirection");
+    SYM_AnimationRate              = intern_symbol("AnimationRate");
+    SYM_AnimationRepetitions       = intern_symbol("AnimationRepetitions");
+    SYM_AnimationRunning           = intern_symbol("AnimationRunning");
+    SYM_AppearanceElements         = intern_symbol("AppearanceElements");
+    SYM_DefaultDuration            = intern_symbol("DefaultDuration");
+    SYM_ControlPlacement           = intern_symbol("ControlPlacement");
+    SYM_RefreshRate                = intern_symbol("RefreshRate");
+    SYM_Forward                    = intern_symbol("Forward");
+    SYM_Backward                   = intern_symbol("Backward");
+    SYM_ForwardBackward            = intern_symbol("ForwardBackward");
+    SYM_BackwardForward            = intern_symbol("BackwardForward");
 
     /* System symbols that have no kernel implementation and no cached SYM_*
      * pointer, but must still be recognized as System` (not qualified into a

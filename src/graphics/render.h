@@ -8,6 +8,7 @@
 #define MATHILDA_GRAPHICS_RENDER_H
 
 #include <stdbool.h>
+#include "expr.h"
 
 /* Resolve the on-screen window height (px) from the AspectRatio setting.
  *
@@ -29,6 +30,14 @@ long gfx_window_height(long width, long height, double aspect_ratio,
  * conversion is unit-testable headless. */
 void cmyk_to_rgb(double c, double m, double y, double k,
                  double* r, double* g, double* b);
+
+/* Render a 2D Graphics[...] expression into a sub-region of an already-open
+ * Raylib window. The region is [rx, ry] origin with size [rw x rh] in screen
+ * pixels. Must be called between BeginDrawing() / EndDrawing(). The background
+ * color of the region is painted from the graphics object's Background option.
+ * No-op when USE_GRAPHICS is not compiled in (this file is excluded then). */
+void graphics_render_in_region(const Expr* graphics_expr,
+                                float rx, float ry, float rw, float rh);
 
 /* Number of minor (sub-)tick intervals per major frame-tick interval, chosen
  * from the leading digit of `step` so minor ticks land on round values: a

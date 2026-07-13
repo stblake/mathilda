@@ -27,6 +27,12 @@ color directives) with 3-coordinate `{x,y,z}` points instead of 2-coordinate
 
 ## Feature summary
 
+### Animation
+
+| Function | Purpose | Key options |
+|----------|---------|-------------|
+| [`Animate`](#animate) | Animate any expression over a parameter range in an interactive window | `AnimationDirection`, `AnimationRate`, `AnimationRepetitions`, `AnimationRunning`, `AppearanceElements`, `DefaultDuration`, `ControlPlacement`, `RefreshRate` |
+
 ### 2D plotters
 
 | Function | Purpose | Key options |
@@ -1092,4 +1098,69 @@ Out[3]= -Graphics-
 In[4]:= VectorPlot[{-y, x}, {x, -1.5, 1.5}, {y, -1.5, 1.5},
           RegionFunction -> Function[{x,y}, x^2 + y^2 < 1]]
 Out[4]= -Graphics-
+
+---
+
+## Animate
+
+```
+Animate[expr, {t, tmin, tmax}, opts...]
+```
+
+Opens an interactive animation window that evaluates `expr` at each frame with the
+iterator variable `t` bound to the current parameter value. `Animate` is `HoldAll`
+and `Protected`: the body `expr` is not evaluated until the frame is drawn.
+
+Returns `Null` once the window is closed (the animation window is the output).
+
+**Options:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `AnimationDirection` | `Forward` | `Forward`, `Backward`, `ForwardBackward`, `BackwardForward` |
+| `AnimationRate` | auto | parameter units per second; overrides `DefaultDuration` |
+| `AnimationRepetitions` | `Infinity` | number of loop passes; integer or `Infinity` |
+| `AnimationRunning` | `True` | `True` starts playing immediately; `False` opens paused |
+| `AppearanceElements` | `All` | `All`, `None`, or a list of element names |
+| `DefaultDuration` | `1.0` | seconds for one full parameter pass |
+| `ControlPlacement` | `Bottom` | `Bottom` or `Top` |
+| `RefreshRate` | `60` | target display FPS |
+
+**AppearanceElements names:** `"PlayPauseButton"`, `"ProgressSlider"`, `"AnimationSlider"`,
+`"StepLeftButton"`, `"StepRightButton"`, `"DirectionButton"`, `"FasterSlowerButtons"`,
+`"ResetButton"`.
+
+**Keyboard shortcuts:** `Space` (play/pause), `←`/`→` (step 2%), `R` (reset), `Esc` (close).
+
+**Examples:**
+
+```mathematica
+(* Rotating sine wave *)
+In[1]:= Animate[Plot[Sin[x + t], {x, 0, 2 Pi}], {t, 0, 2 Pi}]
+Out[1]= Null
+
+(* Bouncing circle *)
+In[2]:= Animate[Graphics[Disk[{t, 0}, 0.5], PlotRange -> {{0, 5}, {-1, 1}}],
+          {t, 0, 5}, AnimationDirection -> ForwardBackward]
+Out[2]= Null
+
+(* Slow-motion parametric curve unrolling, start paused *)
+In[3]:= Animate[
+          ParametricPlot[{Cos[u], Sin[u]}, {u, 0, t}],
+          {t, 0.01, 2 Pi},
+          DefaultDuration -> 4,
+          AnimationRunning -> False]
+Out[3]= Null
+
+(* Loop exactly 3 times *)
+In[4]:= Animate[Plot[Sin[n x], {x, 0, 2 Pi}], {n, 1, 5},
+          AnimationRepetitions -> 3, AnimationRate -> 2]
+Out[4]= Null
+
+(* Control bar at top, only slider + play button *)
+In[5]:= Animate[Plot[Exp[-t x^2], {x, -3, 3}], {t, 0.1, 5},
+          ControlPlacement -> Top,
+          AppearanceElements -> {"PlayPauseButton", "ProgressSlider"}]
+Out[5]= Null
+```
 ```

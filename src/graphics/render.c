@@ -2279,3 +2279,152 @@ close_window:
     if (dyn_prims) expr_free(dyn_prims);
     CloseWindow();
 }
+
+/* Render a 2D Graphics[...] expression into the screen region [rx,ry,rw,rh].
+ * Must be called inside BeginDrawing()/EndDrawing() of an open Raylib window.
+ * Does not clear the background outside the region; does paint the region with
+ * the graphics object's Background color. Used by Animate's per-frame draw. */
+void graphics_render_in_region(const Expr* graphics_expr,
+                                float rx, float ry, float rw, float rh) {
+    if (!graphics_expr || graphics_expr->type != EXPR_FUNCTION
+        || graphics_expr->data.function.arg_count < 1) return;
+    if (rw <= 0.0f || rh <= 0.0f) return;
+
+    GfxOptions opts;
+    gfx_options_parse(graphics_expr, &opts);
+    /* Override the stored window size to match the region. */
+    opts.width  = (long)rw;
+    opts.height = (long)rh;
+
+    const Expr* prims           = graphics_expr->data.function.args[0];
+    const Expr* legend_data     = find_legend_data(graphics_expr);
+    const Expr* color_bar_data  = find_color_bar(graphics_expr);
+    const Expr* bar_labels_data = find_bar_labels(graphics_expr);
+
+    /* Background fill for the content region. */
+    DrawRectangle((int)rx, (int)ry, (int)rw, (int)rh, to_raylib(opts.background));
+
+    PlotRange2D range = { DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX };
+    if (!opts.x_auto && !opts.y_auto) {
+        range = opts.range;
+    } else {
+        compute_bbox(prims, &range);
+        if (range.xmin > range.xmax) { range.xmin = -1; range.xmax = 1; }
+        if (range.ymin > range.ymax) { range.ymin = -1; range.ymax = 1; }
+        if (opts.y_auto && opts.clip_outliers && prims_have_runaway(prims)) {
+            double* ys = NULL; size_t yn = 0, ycap = 0;
+            gather_ys(prims, &ys, &yn, &ycap);
+            if (yn > 0) {
+                double lo, hi;
+                plot_robust_yrange(ys, yn, &lo, &hi);
+                if (lo <= hi) { range.ymin = lo; range.ymax = hi; }
+            }
+            free(ys);
+        }
+        double xpad = (range.xmax - range.xmin) * opts.pad_x_frac;
+        double ypad = (range.ymax - range.ymin) * opts.pad_y_frac;
+        if (xpad <= 0 && opts.pad_x_frac > 0) xpad = 1.0;
+        if (ypad <= 0 && opts.pad_y_frac > 0) ypad = 1.0;
+        range.xmin -= xpad; range.xmax += xpad;
+        range.ymin -= ypad; range.ymax += ypad;
+        if (!opts.x_auto) { range.xmin = opts.range.xmin; range.xmax = opts.range.xmax; }
+        if (!opts.y_auto) { range.ymin = opts.range.ymin; range.ymax = opts.range.ymax; }
+    }
+
+    double data_w = range.xmax - range.xmin;
+    double data_h = range.ymax - range.ymin;
+    if (data_w <= 0) data_w = 1;
+    if (data_h <= 0) data_h = 1;
+
+    /* Plot sub-region inside the content region (accounts for margins). */
+    float preg_x = rx, preg_y = ry, preg_w = rw, preg_h = rh;
+    if (opts.frame) {
+        float mL = rw * 0.05f; if (mL < 50.0f) mL = 50.0f;
+        float mR = rw * 0.05f; if (mR < 20.0f) mR = 20.0f;
+        float mT = rh * 0.05f; if (mT < 28.0f) mT = 28.0f;
+        float mB = rh * 0.05f; if (mB < 48.0f) mB = 48.0f;
+        if (mL + mR < rw - 40.0f && mT + mB < rh - 40.0f) {
+            preg_x = rx + mL; preg_y = ry + mT;
+            preg_w = rw - mL - mR; preg_h = rh - mT - mB;
+        }
+    } else if (opts.axes) {
+        float mL = rw * 0.06f; if (mL < 52.0f) mL = 52.0f;
+        float mR = rw * 0.03f; if (mR < 22.0f) mR = 22.0f;
+        float mT = rh * 0.05f; if (mT < 34.0f) mT = 34.0f;
+        float mB = rh * 0.07f; if (mB < 52.0f) mB = 52.0f;
+        if (mL + mR < rw - 40.0f && mT + mB < rh - 40.0f) {
+            preg_x = rx + mL; preg_y = ry + mT;
+            preg_w = rw - mL - mR; preg_h = rh - mT - mB;
+        }
+    }
+
+    double aspect = opts.aspect_ratio > 0 ? opts.aspect_ratio : (data_h / data_w);
+    double fit_by_width  = (double)preg_w / data_w;
+    double fit_by_height = (double)preg_h / (data_w * aspect);
+    float base_zoom = (float)(fit_by_width < fit_by_height ? fit_by_width : fit_by_height);
+    if (base_zoom <= 0 || !isfinite(base_zoom)) base_zoom = 1.0f;
+
+    double ysc = aspect * data_w / data_h;
+    if (!isfinite(ysc) || ysc <= 0) ysc = 1.0;
+
+    Camera2D camera = { 0 };
+    camera.offset   = (Vector2){ preg_x + preg_w / 2.0f, preg_y + preg_h / 2.0f };
+    camera.target   = (Vector2){ (float)((range.xmin + range.xmax) / 2.0),
+                                  (float)(-(range.ymin + range.ymax) / 2.0 * ysc) };
+    camera.rotation = 0.0f;
+    camera.zoom     = base_zoom;
+
+    DrawState init_state;
+    init_state.color      = to_raylib(opts.style_color);
+    init_state.thickness  = 1.5f / base_zoom;
+    double region_px      = (double)(preg_w < preg_h ? preg_w : preg_h);
+    double r_px           = 0.0067 * region_px;
+    size_t npts           = count_points(prims);
+    if (npts > 1) {
+        double area_px  = (double)preg_w * (double)preg_h;
+        double dens_px  = 0.12 * sqrt(area_px / (double)npts);
+        if (dens_px < r_px) r_px = dens_px;
+    }
+    if (r_px < 0.6) r_px = 0.6;
+    init_state.point_size = (base_zoom > 0) ? (float)(r_px / base_zoom) : (float)r_px;
+    init_state.text_scale = (float)(fmax(data_w, data_h) * 0.03 / HERSHEY_CAP_HEIGHT);
+    init_state.yscale     = (float)ysc;
+
+    PlotRange2D visible = { range.xmin, range.xmax, range.ymin * ysc, range.ymax * ysc };
+
+    if (opts.frame) BeginScissorMode((int)preg_x, (int)preg_y, (int)preg_w, (int)preg_h);
+    BeginMode2D(camera);
+    if (opts.prolog) { DrawState ps = init_state; draw_primitive(opts.prolog, &ps); }
+    draw_gridlines(&visible, ysc, camera.zoom, &opts);
+    if (opts.axes) draw_axes_lines(&visible, &range, ysc, camera.zoom, &opts);
+    DrawState state = init_state;
+    draw_primitive(prims, &state);
+    if (opts.epilog) { DrawState es = init_state; draw_primitive(opts.epilog, &es); }
+    EndMode2D();
+    if (opts.frame) EndScissorMode();
+
+    if (opts.axes) draw_axes_labels(&visible, &range, camera, ysc, &opts);
+    if (bar_labels_data) draw_bar_chart_labels(bar_labels_data, camera);
+    if (opts.frame) draw_frame(preg_x, preg_y, preg_w, preg_h, camera, ysc, &opts);
+    if (opts.frame) draw_frame_label(preg_x, preg_y, preg_w, preg_h, &opts);
+    /* Extra labels use region dimensions (not full window) for centering. */
+    draw_extra_labels(&opts, (int)(rx + rw), (int)(ry + rh));
+    if (legend_data) draw_legend(legend_data, (int)(rx + rw));
+
+    if (color_bar_data) {
+        double cb_spd_min = 0.0, cb_spd_max = 1.0;
+        const Expr* a0 = color_bar_data->data.function.args[0];
+        const Expr* a1 = color_bar_data->data.function.args[1];
+        if (a0->type == EXPR_REAL) cb_spd_min = a0->data.real;
+        if (a1->type == EXPR_REAL) cb_spd_max = a1->data.real;
+        const Expr* cb_cfn = (color_bar_data->data.function.arg_count >= 3)
+                             ? color_bar_data->data.function.args[2] : NULL;
+        const float cb_margin = 50.0f;
+        const float cb_w = 18.0f;
+        float cb_h = rh - 2.0f * cb_margin;
+        if (cb_h < 20.0f) cb_h = 20.0f;
+        float cb_x = rx + rw - 70.0f;
+        float cb_y = ry + cb_margin;
+        draw_color_bar(cb_x, cb_y, cb_w, cb_h, cb_spd_min, cb_spd_max, cb_cfn);
+    }
+}
