@@ -151,7 +151,7 @@ void risch_canonical_representation(const Expr* f, const Expr* t, const RischDer
 /* Returns NULL / count 0 for a constant p.                            */
 /* ------------------------------------------------------------------ */
 
-static Expr** risch_squarefree_t(const Expr* p, const Expr* t, size_t* count) {
+Expr** risch_squarefree_t(const Expr* p, const Expr* t, size_t* count) {
     *count = 0;
     long dp = risch_field_degree_t(p, t);
     if (dp <= 0) return NULL;               /* constant in t: no factors */

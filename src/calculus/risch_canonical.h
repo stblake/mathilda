@@ -43,6 +43,12 @@ void risch_split_factor(const Expr* p, const Expr* t, const RischDeriv* d,
 void risch_canonical_representation(const Expr* f, const Expr* t, const RischDeriv* d,
                                     Expr** f_p, Expr** f_s, Expr** f_n);
 
+/* Squarefree factorization over k[t] (Yun's algorithm, using d/dt).  Returns a
+ * malloc'd array of *count owned factors p_1..p_m with p = prod_i p_i^i, each
+ * p_i squarefree and pairwise coprime.  Returns NULL / *count 0 for a p that is
+ * constant in t.  Caller frees each factor and the array. */
+Expr** risch_squarefree_t(const Expr* p, const Expr* t, size_t* count);
+
 /* Register the Risch` splitting-factorization builtins.  Called from
  * integrate_init() during core_init().  Idempotent. */
 void integrate_risch_canonical_init(void);

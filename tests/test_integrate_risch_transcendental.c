@@ -295,11 +295,16 @@ static void test_hermite_exp_case(void) {
 
 /* ================= COUPLED HYPEREXPONENTIAL =================
  * Rational function of theta = E^u whose integral MIXES a Laurent-polynomial
- * part with a log part (D(g)/g improper in theta, so they do not separate):
- * one unified ansatz Q = sum_i w_i(x) theta^i + H(theta)/Hden + sum_j c_j
- * Log(g_j) solved by SolveAlways over {t, x}.  Covers 1/(c + E^x), improper
- * (E^(2x)/(1+E^x)), and repeated / theta=0 poles (Phase A: 1/(1+E^x)^2,
- * 1/(E^x (1+E^x)^2), 1/(1+E^x)^3). */
+ * part with a log part (D(g)/g improper in theta, so they do not separate).
+ * Integrated by the LITERAL Bronstein pipeline (rt_field_hyperexp_hermite):
+ * HermiteReduce (5.3) peels the repeated NORMAL poles into an exact rational
+ * part g with arbitrary rational lower-field coefficients; the residue criterion
+ * (5.6) gives the logs sum_j c_j Log(g_j) of the simple part; the coupling is
+ * reconciled by subtracting D_tower[logs]; and the remaining Laurent polynomial
+ * is integrated per-coefficient by a Risch DE (5.9).  The former undetermined-
+ * coefficient ansatz has been removed.  Covers 1/(c + E^x), improper
+ * (E^(2x)/(1+E^x)), repeated / theta=0 poles, and (the value the ansatz could
+ * not reach) rational lower-field coefficients at repeated exponential poles. */
 static void test_hyperexponential_case(void) {
     assert_rm_diff_zero("1/(1 + Exp[x])");
     assert_rm_diff_zero("1/(1 - Exp[x])");
@@ -321,6 +326,15 @@ static void test_hyperexponential_case(void) {
     assert_rm_diff_zero("1/(Exp[x/2] + Exp[x/3])");
     assert_rm_diff_zero("1/(Exp[x/2] + Exp[x/3])^2");
     assert_rm_diff_zero("Exp[x/6]/(1 + Exp[x/2] + Exp[x/3])");
+    /* Value-add of the literal Hermite pipeline over the removed bounded ansatz:
+     * a repeated exponential pole whose Hermite numerator coefficient is a genuine
+     * RATIONAL function of x (not a bounded polynomial).  These are constructed as
+     * exact derivatives so a correct integrator must round-trip them. */
+    assert_rm_diff_zero("D[1/((1 + x) (1 + Exp[x])^2), x]");
+    assert_rm_diff_zero("D[x/(1 + Exp[x])^2, x]");
+    assert_rm_diff_zero("D[x^2/(1 + Exp[x])^3, x]");
+    assert_rm_diff_zero("D[1/((1 + x^2) (2 + Exp[x])), x]");
+    assert_rm_diff_zero("x Exp[x]/(1 + Exp[x])^2");
 }
 
 /* ================= TRIG / HYPERBOLIC FRONT-END =================
@@ -353,6 +367,138 @@ static void test_trig_frontend(void) {
     assert_rm_num("Sin[x]^4");
     assert_rm_num("Cos[x]^4");
     assert_rm_num("Sinh[2 x]");
+}
+
+/* ================= REAL HYPERTANGENT CASE (Bronstein §5.10) =================
+ * Rational functions of a single real tangent kernel t = Tan[u] (u rational in
+ * x) integrate DIRECTLY and REAL through rt_hypertangent_case, retiring the
+ * I-laden TrigToExp route for them.  The reliable syntactic I-detector here is
+ * Position[.,Complex[__]] (FreeQ/Cases do not descend into Complex atoms). */
+
+/* The Method->"RischTranscendental" antiderivative is Complex-free (real) AND
+ * diff-backs to f. */
+static void assert_tan_real(const char* f) {
+    char buf[1600];
+    snprintf(buf, sizeof(buf),
+        "With[{g = Integrate[%s, x, Method -> \"RischTranscendental\"]}, "
+        "Position[g, Complex[__]] === {} && Simplify[D[g, x] - (%s)] === 0]", f, f);
+    assert_eval_eq(buf, "True", 0);
+}
+
+/* The antiderivative equals a specific real closed form (Simplify-robust). */
+static void assert_tan_form(const char* f, const char* expected) {
+    char buf[1200];
+    snprintf(buf, sizeof(buf),
+        "Simplify[Integrate[%s, x, Method -> \"RischTranscendental\"] - (%s)]", f, expected);
+    assert_eval_eq(buf, "0", 0);
+}
+
+static void test_real_hypertangent(void) {
+    /* Canonical clean real forms — what used to come back I-laden. */
+    assert_tan_form("Tan[x]", "-Log[Cos[x]]");
+    assert_tan_form("Tan[x]^2", "Tan[x] - x");
+    assert_tan_form("Tan[2 x]", "-Log[Cos[2 x]]/2");
+    /* Real + correct across powers, scalings, and a nonlinear tangent argument. */
+    assert_tan_real("Tan[x]");
+    assert_tan_real("Tan[x]^2");
+    assert_tan_real("Tan[x]^3");
+    assert_tan_real("Tan[x]^4");
+    assert_tan_real("Tan[x]^5");
+    assert_tan_real("Tan[x]^6");
+    assert_tan_real("Tan[2 x]");
+    assert_tan_real("Tan[3 x]^3");
+    assert_tan_real("Tan[x/2]");
+    assert_tan_real("2 x Tan[x^2]");                 /* Dt = 2x(t^2+1) */
+    assert_tan_real("Tan[x] + Tan[x]^4");
+    assert_tan_real("Tan[x]^2 + 3 Tan[x] + 1");
+}
+
+static void test_real_hypertangent_rational(void) {
+    /* Special-pole (t^2+1)^k parts via the coupled reduced case. */
+    assert_tan_real("1/(1 + Tan[x]^2)");             /* = Cos[x]^2 */
+    assert_tan_real("Tan[x]/(1 + Tan[x]^2)");
+    assert_tan_real("Tan[x]^2/(Tan[x]^2 + 1)^2");
+    /* Simple linear normal poles (rational Rothstein-Trager residues). */
+    assert_tan_real("(1 + Tan[x])/(1 - Tan[x])");
+    assert_tan_real("1/(1 + Tan[x])");
+    assert_tan_real("(Tan[x]^2 + 1)/(Tan[x] - 2)");
+}
+
+static void test_real_hypertangent_mixed(void) {
+    /* Polynomial-in-x coefficients that stay elementary (even tan powers). */
+    assert_tan_real("x Tan[x]^2");
+    assert_tan_real("x Tan[x]^4");
+    assert_tan_real("(x + 1) Tan[x]^2");
+    /* Genuinely non-elementary tangent integrands stay unevaluated (the driver
+     * PROVES it: Bronstein's ∫ x tan x obstruction lifted to higher terms). */
+    assert_head_unevaluated(
+        "Integrate[x Tan[x], x, Method -> \"RischTranscendental\"]", "Integrate");
+    assert_head_unevaluated(
+        "Integrate[x Tan[x]^3, x, Method -> \"RischTranscendental\"]", "Integrate");
+    assert_head_unevaluated(
+        "Integrate[x^2 Tan[x]^2, x, Method -> \"RischTranscendental\"]", "Integrate");
+}
+
+/* Cotangent (circular, special t^2+1, eta = -u') integrates real like Tan. */
+static void test_real_cotangent(void) {
+    assert_tan_form("Cot[x]", "Log[Sin[x]]");
+    assert_tan_form("Cot[x]^2", "-Cot[x] - x");
+    assert_tan_real("Cot[x]");
+    assert_tan_real("Cot[x]^2");
+    assert_tan_real("Cot[x]^3");
+    assert_tan_real("Cot[x]^4");
+    assert_tan_real("Cot[2 x]");
+    assert_tan_real("Cot[x]^2 + Cot[x]");
+    assert_tan_real("x Cot[x]^2");
+    assert_tan_real("1/(1 + Cot[x]^2)");           /* = Sin[x]^2 */
+}
+
+/* Hyperbolic tangent (special t^2-1, splits: two real Risch DEs) integrates
+ * real — retiring TrigToExp for real Tanh. */
+static void test_real_hypertanh(void) {
+    assert_tan_form("Tanh[x]", "Log[Cosh[x]]");
+    assert_tan_form("Tanh[x]^2", "x - Tanh[x]");
+    assert_tan_form("Tanh[2 x]", "Log[Cosh[2 x]]/2");
+    assert_tan_real("Tanh[x]");
+    assert_tan_real("Tanh[x]^2");
+    assert_tan_real("Tanh[x]^3");
+    assert_tan_real("Tanh[x]^4");
+    assert_tan_real("Tanh[x]^5");
+    assert_tan_real("Tanh[2 x]");
+    assert_tan_real("Tanh[x/2]");
+    assert_tan_real("Tanh[x] + Tanh[x]^4");
+    assert_tan_real("x Tanh[x]^2");                /* elementary (even power) */
+    assert_tan_real("1/(1 - Tanh[x]^2)");          /* = Cosh[x]^2, reduced pole */
+    assert_tan_real("Tanh[x]/(1 - Tanh[x]^2)");
+    /* Non-elementary hyperbolic tangent integrands stay unevaluated. */
+    assert_head_unevaluated(
+        "Integrate[x Tanh[x], x, Method -> \"RischTranscendental\"]", "Integrate");
+    assert_head_unevaluated(
+        "Integrate[x Tanh[x]^3, x, Method -> \"RischTranscendental\"]", "Integrate");
+    /* Coth: same hyperbolic monomial as Tanh (Dt = eta(1-t^2)), real cosmetic
+     * -2 Log[Sinh] (1-Coth^2 = -Csch^2, the sign folded into the rewrite). */
+    assert_tan_form("Coth[x]", "Log[Sinh[x]]");
+    assert_tan_form("Coth[x]^2", "x - Coth[x]");
+    assert_tan_real("Coth[x]");
+    assert_tan_real("Coth[x]^2");
+    assert_tan_real("Coth[x]^3");
+    assert_tan_real("Coth[2 x]");
+    assert_tan_real("x Coth[x]^2");
+    assert_head_unevaluated(
+        "Integrate[x Coth[x], x, Method -> \"RischTranscendental\"]", "Integrate");
+}
+
+static void test_real_hypertangent_robustness(void) {
+    /* Tanh has Dt = eta(1 - t^2), NOT a hypertangent monomial (special factor
+     * t^2-1, not t^2+1): the Tan-only gate must leave it on the TrigToExp path
+     * (correct, verified numerically) — a guard that the new case does not
+     * mis-claim hyperbolic tangents. */
+    assert_rm_num("Tanh[x]");
+    assert_rm_num("Tanh[x]^2");
+    /* A degree->=2 irreducible normal pole with rational residues still routes
+     * through the real path (linear-normal after the gate strips t^2+1)... this
+     * one (t^2+1 special only) stays real: Cot-free rational of Tan. */
+    assert_tan_real("(2 Tan[x] + 3)/(Tan[x]^2 + 1)");
 }
 
 /* ================= MULTI-KERNEL EXPONENTIAL SUMS =================
@@ -797,6 +943,13 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_hyperexponential_case);
     /* Trig / hyperbolic + multi-kernel. */
     TEST(test_trig_frontend);
+    /* Real hypertangent family (retires TrigToExp for real Tan/Cot/Tanh). */
+    TEST(test_real_hypertangent);
+    TEST(test_real_hypertangent_rational);
+    TEST(test_real_hypertangent_mixed);
+    TEST(test_real_cotangent);
+    TEST(test_real_hypertanh);
+    TEST(test_real_hypertangent_robustness);
     TEST(test_multikernel_case);
     /* Nested towers + genuine recursion. */
     TEST(test_log_tower_case);

@@ -455,6 +455,8 @@ set(COMMON_SRC
     ../src/calculus/risch_canonical.c
     ../src/calculus/risch_structure.c
     ../src/calculus/risch_hypertangent.c
+    ../src/calculus/risch_coupled.c
+    ../src/calculus/risch_hermite.c
     ../src/calculus/intsimp.c
     ../src/sum/sum.c
     ../src/sum/sum_util.c
@@ -945,6 +947,14 @@ add_test(NAME risch_structure_tests COMMAND risch_structure_tests)
 add_executable(risch_hypertangent_tests test_risch_hypertangent.c ${COMMON_SRC})
 target_include_directories(risch_hypertangent_tests PRIVATE ../src ../src/calculus)
 add_test(NAME risch_hypertangent_tests COMMAND risch_hypertangent_tests)
+
+add_executable(risch_coupled_tests test_risch_coupled.c ${COMMON_SRC})
+target_include_directories(risch_coupled_tests PRIVATE ../src ../src/calculus)
+add_test(NAME risch_coupled_tests COMMAND risch_coupled_tests)
+
+add_executable(risch_hermite_tests test_risch_hermite.c ${COMMON_SRC})
+target_include_directories(risch_hermite_tests PRIVATE ../src ../src/calculus)
+add_test(NAME risch_hermite_tests COMMAND risch_hermite_tests)
 
 add_executable(subresultants_tests test_subresultants.c ${COMMON_SRC})
 target_include_directories(subresultants_tests PRIVATE ../src)

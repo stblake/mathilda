@@ -148,6 +148,187 @@ static void test_hypertangent_robustness(void) {
              "=== Risch`IntegrateHypertangentPolynomial", "True");
 }
 
+/* t = tan(2x): Dt = 2(1+t^2);  t = tan(x/2): Dt = (1+t^2)/2. */
+#define HT2 "{x -> 1, t -> 2 (1 + t^2)}"
+#define HALF "{x -> 1, t -> (1 + t^2)/2}"
+#define RR "Risch`ResidueReduce"
+#define IHT "Risch`IntegrateHypertangent"
+
+/* ---- ResidueReduce (§5.6, the residue criterion) --------------------- */
+static void test_residue_reduce(void) {
+    /* Simple normal pole with a constant Rothstein-Trager residue:
+     * h = 1/(t-2), residue 1/(1+2^2) = 1/5, log arg t-2. */
+    run_zero(RR "[1/(t - 2), t, " HT "][[1]] - 1/5 Log[t - 2]");
+    run_test(RR "[1/(t - 2), t, " HT "][[2]]", "True");
+    /* No simple poles (h is a polynomial in t) -> {0, True}. */
+    run_test(RR "[t^2 + 1, t, " HT "]", "List[0, True]");
+    run_test(RR "[t^3 + x, t, " HT "]", "List[0, True]");
+    run_test(RR "[0, t, " HT "]", "List[0, True]");
+    /* Non-constant residue (depends on x) -> {0, False}: h = 1/(t-x) has residue
+     * 1/x^2, so it has no elementary integral over k(t) (Thm 5.6.1). */
+    run_test(RR "[1/(t - x), t, " HT "][[2]]", "False");
+    run_zero(RR "[1/(t - x), t, " HT "][[1]]");
+}
+
+/* h - D[g2] must lie in k[t] (its denominator is free of t) when beta = True. */
+static void run_rr_reduces(const char* h, const char* deriv) {
+    char buf[4096];
+    snprintf(buf, sizeof buf,
+        "With[{s = " RR "[%s, t, %s]}, s[[2]] === True && "
+        "FreeQ[Denominator[Together[(%s) - Risch`Derivation[s[[1]], %s]]], t]]",
+        h, deriv, h, deriv);
+    run_test(buf, "True");
+}
+
+static void test_residue_reduce_diffback(void) {
+    run_rr_reduces("1/(t - 2)", HT);
+    run_rr_reduces("3/(t - 2)", HT);
+    run_rr_reduces("1/((t - 2)(t - 4))", HT);
+    run_rr_reduces("1/(t - 2) + 1/(t + 3)", HT);
+    run_rr_reduces("(2 t + 1)/((t - 1)(t - 5))", HT);
+    run_rr_reduces("1/(t - 2)", HT2);          /* scaled monomial */
+}
+
+/* ---- IntegrateHypertangent (§5.10, the full driver): book examples --- */
+static void test_iht_book(void) {
+    /* Example 5.10.1: ∫(tan^2 + x tan + 1) = tan(x) + ∫ x tan(x) (non-elem),
+     * so g = t and beta = False. */
+    run_test(IHT "[t^2 + x t + 1, t, " HT "]", "List[t, False]");
+    /* Example 5.10.2: ∫ sin(x)/x, t = tan(x/2): g = 0, beta = False. */
+    run_test(IHT "[2 t/(x (t^2 + 1)), t, " HALF "]", "List[0, False]");
+    /* Pure log: ∫ D[Log(tan-2)] -> {Log[t-2], True}. */
+    run_zero(IHT "[(1 + t^2)/(t - 2), t, " HT "][[1]] - Log[t - 2]");
+    run_test(IHT "[(1 + t^2)/(t - 2), t, " HT "][[2]]", "True");
+    /* ∫ x tan(x) is not elementary: g = 0, beta = False. */
+    run_test(IHT "[x t, t, " HT "]", "List[0, False]");
+}
+
+/* When beta = True, f - D[g] must lie in k (free of t). */
+static void run_iht_reduces(const char* f, const char* deriv) {
+    char buf[4096];
+    snprintf(buf, sizeof buf,
+        "With[{s = " IHT "[%s, t, %s]}, s[[2]] === True && "
+        "FreeQ[Together[(%s) - Risch`Derivation[s[[1]], %s]], t]]",
+        f, deriv, f, deriv);
+    run_test(buf, "True");
+}
+
+/* Constructed: f = D[g0] + base with g0 in k(t) and base in k (free of t), so f
+ * is elementary and reduces to the base field — the driver must return beta =
+ * True with f - D[g] free of t. */
+static void run_iht_constructed(const char* g0, const char* base, const char* deriv) {
+    char buf[6000];
+    snprintf(buf, sizeof buf,
+        "With[{f = Risch`Derivation[%s, %s] + (%s)}, "
+        "With[{s = " IHT "[f, t, %s]}, s[[2]] === True && "
+        "FreeQ[Together[f - Risch`Derivation[s[[1]], %s]], t]]]",
+        g0, deriv, base, deriv, deriv);
+    run_test(buf, "True");
+}
+
+static void test_iht_constructed(void) {
+    /* Rational (no new logs): pure polynomial, reduced (special) poles, mixed. */
+    run_iht_constructed("t", "0", HT);
+    run_iht_constructed("t^2", "x", HT);
+    run_iht_constructed("t^3", "0", HT);                 /* ∫ tan^3, elementary */
+    run_iht_constructed("1/(t^2 + 1)", "1", HT);
+    run_iht_constructed("t/(t^2 + 1)", "x^2", HT);
+    run_iht_constructed("x t", "1/x", HT);
+    run_iht_constructed("x^2/(t^2 + 1)^2", "x", HT);     /* repeated special pole */
+    run_iht_constructed("t^2 + t/(t^2 + 1)", "x^3", HT);
+    /* Example 5.10.3 (elementary reduced element). */
+    run_iht_reduces("(t^5 + t^3 + x^2 t + 1)/(t^2 + 1)^3", HT);
+    /* Genuine constant-residue logarithms (exercise ResidueReduce). */
+    run_iht_reduces("(1 + t^2)/(t - 2)", HT);
+    run_iht_reduces("(1 + t^2)/(t - 2) + (1 + t^2)/(t + 3)", HT);
+}
+
+static void test_iht_scaling(void) {
+    /* Scaled monomial tan(2x). */
+    run_iht_constructed("t", "x", HT2);
+    run_iht_constructed("t^2/(t^2 + 1)", "1", HT2);
+    run_iht_constructed("t^3 + t", "x^2", HT2);
+    /* Half-angle monomial tan(x/2). */
+    run_iht_constructed("t/(t^2 + 1)", "x", HALF);
+    run_iht_constructed("t^2", "1", HALF);
+    run_iht_reduces("(1 + t^2)/(2 (t - 3))", HALF);
+}
+
+/* ---- Robustness: non-hypertangent + malformed input ------------------ */
+static void test_iht_robustness(void) {
+    /* IntegrateHypertangent declines non-hypertangent monomials (exp, log). */
+    run_test("Head[" IHT "[1/(t^2 + 1), t, {x -> 1, t -> t}]] === " IHT, "True");
+    run_test("Head[" IHT "[t, t, {x -> 1, t -> 1/x}]] === " IHT, "True");
+    /* Wrong arity / malformed derivation. */
+    run_test("Head[" IHT "[t, t]] === " IHT, "True");
+    run_test("Head[" IHT "[t, t, {x, t}]] === " IHT, "True");
+    /* ResidueReduce is a general (§5.6) algorithm — it declines only on genuinely
+     * malformed input (non-symbol monomial, wrong arity), not on non-hypertangent
+     * monomials. */
+    run_test("Head[" RR "[1/(t - 2), t]] === " RR, "True");
+    run_test("Head[" RR "[1/(t - 2), 5, " HT "]] === " RR, "True");
+}
+
+/* ---- IntegrateHypertanh (hyperbolic tangent case, special t^2-1) ------ */
+/* t = Tanh(x): Dt = 1 - t^2;  t = Tanh(2x): Dt = 2(1 - t^2). */
+#define TD "{x -> 1, t -> 1 - t^2}"
+#define TD2 "{x -> 1, t -> 2 (1 - t^2)}"
+#define IHTH "Risch`IntegrateHypertanh"
+
+static void test_hypertanh_values(void) {
+    /* ∫Tanh = Log[Cosh] : g = -1/2 Log[1-t^2], beta True. */
+    run_zero(IHTH "[t, t, " TD "][[1]] - (-1/2 Log[1 - t^2])");
+    run_test(IHTH "[t, t, " TD "][[2]]", "True");
+    /* ∫Tanh^2 : g = -t (leftover base +1). */
+    run_test(IHTH "[t^2, t, " TD "]", "List[Times[-1, t], True]");
+    /* ∫Sech^2 = Tanh : Sech^2 = 1 - t^2 -> g = t. */
+    run_test(IHTH "[1 - t^2, t, " TD "]", "List[t, True]");
+    /* Rejects a circular (t^2+1) derivation — that is the hypertangent case. */
+    run_test("Head[" IHTH "[t, t, {x -> 1, t -> 1 + t^2}]] === " IHTH, "True");
+    /* Malformed. */
+    run_test("Head[" IHTH "[t, t]] === " IHTH, "True");
+}
+
+/* beta True and f - D[g] free of t (reduced to k). */
+static void run_ihth_reduces(const char* f, const char* deriv) {
+    char buf[4096];
+    snprintf(buf, sizeof buf,
+        "With[{s = " IHTH "[%s, t, %s]}, s[[2]] === True && "
+        "FreeQ[Together[(%s) - Risch`Derivation[s[[1]], %s]], t]]",
+        f, deriv, f, deriv);
+    run_test(buf, "True");
+}
+/* Constructed f = D[g0] + base (g0 in k(t), base in k) must reduce (beta True). */
+static void run_ihth_constructed(const char* g0, const char* base, const char* deriv) {
+    char buf[6000];
+    snprintf(buf, sizeof buf,
+        "With[{f = Risch`Derivation[%s, %s] + (%s)}, "
+        "With[{s = " IHTH "[f, t, %s]}, s[[2]] === True && "
+        "FreeQ[Together[f - Risch`Derivation[s[[1]], %s]], t]]]",
+        g0, deriv, base, deriv, deriv);
+    run_test(buf, "True");
+}
+
+static void test_hypertanh_reduced_and_constructed(void) {
+    /* Reduced (t^2-1 pole) via the decoupled real coupled system. */
+    run_ihth_reduces("1/(1 - t^2)", TD);            /* = Cosh^2 */
+    run_ihth_reduces("1/(1 - t^2)^2", TD);
+    run_ihth_reduces("t/(1 - t^2)^2", TD);
+    run_ihth_reduces("(t + x)/(1 - t^2)^2", TD);
+    /* Constructed: polynomials, reduced poles, mixed, scaled monomial. */
+    run_ihth_constructed("t", "x", TD);
+    run_ihth_constructed("t^2", "1", TD);
+    run_ihth_constructed("t^3", "0", TD);
+    run_ihth_constructed("1/(1 - t^2)", "x^2", TD);
+    run_ihth_constructed("t/(1 - t^2)", "1", TD);
+    run_ihth_constructed("x t^2 + t", "x^3", TD);
+    run_ihth_constructed("t", "x", TD2);            /* Tanh(2x), eta = 2 */
+    run_ihth_constructed("t^2/(1 - t^2)", "1", TD2);
+    /* Non-elementary: ∫ x Tanh^3 has no elementary integral (the x tanh
+     * obstruction lifted) -> beta False. */
+    run_test(IHTH "[x t^3, t, " TD "][[2]]", "False");
+}
+
 int main(void) {
     core_init();
 
@@ -156,6 +337,14 @@ int main(void) {
     TEST(test_hypertangent_higher_degree);
     TEST(test_hypertangent_scaling);
     TEST(test_hypertangent_robustness);
+    TEST(test_residue_reduce);
+    TEST(test_residue_reduce_diffback);
+    TEST(test_iht_book);
+    TEST(test_iht_constructed);
+    TEST(test_iht_scaling);
+    TEST(test_iht_robustness);
+    TEST(test_hypertanh_values);
+    TEST(test_hypertanh_reduced_and_constructed);
 
     printf("All risch_hypertangent tests passed.\n");
     return 0;

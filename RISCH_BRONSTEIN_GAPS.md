@@ -197,7 +197,7 @@ Ratings: **✔ present** · **◑ partial / ad-hoc** · **�’ heuristic-subst
 |---|---|---|---|
 | `CanonicalRepresentation` (§3.5, p.100) | `f_p+f_s+f_n` split | — | ✗ |
 | `SplitFactor` / `SplitSquarefreeFactor` (§3.5) | normal/special | — | ✗ |
-| `HermiteReduce` (§5.3, p.139) | kill repeated normal poles | `rt_hermite_try:L1776`, `rt_field_ratint:L3441` (SolveAlways form) | ◑ |
+| `HermiteReduce` (§5.3, p.139) | kill repeated normal poles | **`risch_hermite_reduce` (literal quadratic algorithm), wired into `rt_field_ratint` (ansatz removed)** | ✔ |
 | `PolynomialReduce` (§5.4, p.141) | reduce `f_p` for nonlinear `t` | only implicit in exp/log poly cases | ◑ |
 | Liouville's Theorem (§5.5) | shape of the answer | assumed implicitly | ✔ (implicit) |
 | `ResidueReduce` / residue criterion (§5.6, p.151) | log part **+ decide non-integrability** | log part ✔ (`rt_frac_lrt`, `rt_field_lrt_logpart`); **decision half ✗** | ◑ |
@@ -348,7 +348,14 @@ P1, P3, P4.
 > **`CanonicalRepresentation`** (`f_p+f_s+f_n`, §3.5 p.103). Exposed as the `Risch\``
 > builtins; `tests/test_risch_canonical.c` covers Bronstein Examples 3.5.1/3.5.2, the unique
 > exp/hypertangent canonical decompositions, field division by an `x`-coefficient, and
-> per-monomial classification. Clean `-Wall -Wextra`, leak-clean. **Remaining:** thread the
+> per-monomial classification. Clean `-Wall -Wextra`, leak-clean.
+>
+> **Test coverage (2026-07-13):** the field primitives `FieldGCD`/`DivExact`/`NumDen`/
+> `ExtendedEuclidean`/`Diophantine` are now exposed as `Risch\`` builtins and covered
+> directly by a new `tests/test_risch_field.c` (property round-trips: Bézout `u a+v b=g`,
+> `a=q b+r`, `b dn+c ds=r`; degree bounds; field-unit behaviour; robustness). Total Bronstein
+> foundation coverage: **278 assertions across 34 functions** in `test_risch_{field,canonical,
+> structure,hypertangent}.c` (up from 88/14). **Remaining:** thread the
 > `f_p+f_s+f_n` split (and the special-polynomial set `S^irr` per monomial kind) through the
 > recursive integrator `rt_field_integrate`, replacing its ad-hoc per-case denominator gates.
 
@@ -378,9 +385,21 @@ through this **instead of** `TrigToExp`, yielding real `arctan`/`log(cos)` outpu
 > `Risch\`PolynomialReduce` / `Risch\`IntegrateHypertangentPolynomial` and
 > `tests/test_risch_hypertangent.c` (Example 5.10.1, real `∫tan x`, the `Dc≠0` non-elementarity
 > certificate, `a=2` scaling), leak-clean — the first real tangent integration with no complex
-> exponentials. **Remaining:** the reduced part `IntegrateHypertangentReduced` (b) which needs
-> the coupled 2×2 system `CoupledDESystem` (§8.4), the RDE tangent branches (c), the `RT_TAN`
-> detection + Hermite/residue front-end (a/d), and routing `tan` through this in the integrator.
+> exponentials.
+>
+> **Status (2026-07-13): reduced part + coupled system done.**
+> `src/calculus/risch_coupled.{c,h}` — `CoupledDESystem` (b) via the §8.1 reduction to a single
+> Risch DE over `C(i)(x)` (`Risch\`CoupledDESystem`, built on the newly-exposed base-field
+> `Risch\`RischDE` = `rde_base`), and `IntegrateHypertangentReduced` (§5.10, p.169) peeling `t²+1`
+> poles per multiplicity via Eq. (5.20) (`Risch\`IntegrateHypertangentReduced`). Reproduces
+> Bronstein Examples 5.10.3 `(c,d)`, 8.4.1 `(s1,s2)`, and 5.10.2 (`∫ sin x / x` → non-elementary).
+> Extensive stress-tested `tests/test_risch_coupled.c`, leak-clean. This is the base-field (single
+> `tan`-over-`C(x)`) coupled solver — correct and real-valued for the common case. **Remaining:**
+> the full Chapter-8 real recursion `CoupledDECancelTan` (for coupled systems that arise over a
+> field `k` itself carrying further tangent monomials — deep towers), the RDE tangent branches
+> `RdeSpecialDenomTan` / `PolyRischDECancelTan` (c), the `RT_TAN` detection + `IntegrateHypertangent`
+> driver (Hermite + Residue + reduced + polynomial) (a/d), and routing `tan` through this in the
+> live integrator instead of `TrigToExp`.
 
 **P3 — Residue-criterion decision half + tight degree bounds.**
 Return Booleans that *prove* non-elementarity (§5.6 Thm 5.6.1(ii), the `Dc≠0` tangent test,

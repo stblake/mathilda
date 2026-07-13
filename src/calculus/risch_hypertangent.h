@@ -33,6 +33,29 @@
 bool risch_integrate_hypertangent_poly(const Expr* p, const Expr* t,
                                        const RischDeriv* d, Expr** q, Expr** c);
 
+/* ResidueReduce (§5.6, the residue criterion).  For the simple part h in k(t),
+ * writes owned g2 (a sum of logs) and *beta: true with h - D[g2] in k[t] when
+ * every Rothstein-Trager residue is a constant of d, or false (g2 = 0) when a
+ * residue is non-constant (h has no elementary integral over k(t)). */
+bool risch_residue_reduce(const Expr* h, const Expr* t, const RischDeriv* d,
+                          Expr** g2, bool* beta);
+
+/* IntegrateHypertangent (§5.10, p.172 — the full driver).  For a hypertangent
+ * monomial t of the derivation given by the rules List `deriv` and f in k(t),
+ * writes owned g and *beta: true with f - D[g] in k, or false when f - D[g] has
+ * no elementary integral over k(t).  Composes HermiteReduce, ResidueReduce, and
+ * the reduced and polynomial hypertangent cases. */
+bool risch_integrate_hypertangent(const Expr* f, const Expr* t,
+                                  const Expr* deriv, Expr** g, bool* beta);
+
+/* IntegrateHypertanh (the hyperbolic tangent case, special t^2-1).  For a
+ * hyperbolic tangent monomial t (Dt = a(t^2-1)) of the derivation `deriv` and f
+ * in k(t), writes owned g and *beta: true with f - D[g] in k, or false when
+ * f - D[g] has no elementary integral over k(t).  The special t^2-1 splits over
+ * k, so the reduced case decouples into two real base Risch DEs (no C(i)). */
+bool risch_integrate_hypertanh(const Expr* f, const Expr* t,
+                               const Expr* deriv, Expr** g, bool* beta);
+
 /* Register the hypertangent builtins.  Called from integrate_init(). */
 void integrate_risch_hypertangent_init(void);
 

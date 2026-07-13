@@ -139,6 +139,16 @@ long risch_field_degree_t(const Expr* p, const Expr* t) {
     return deg;
 }
 
+/* Cancel[Together[a]] — canonical reduced form.  Crucial inside the k[t]
+ * long-division / reduction loops: over k = C(x) the coefficients are rational
+ * functions of x, and a plain Expand leaves a mathematically-zero leading
+ * coefficient in a syntactically-nonzero shape (mismatched denominators), so
+ * degree_t never sees the degree drop and the loop spins forever.  Reducing to
+ * canonical form each step collapses true zeros and guarantees termination. */
+static Expr* rf_normfrac(Expr* a) {   /* adopts a */
+    return rf_call1("Cancel", rf_call1("Together", a));
+}
+
 /* Numerator[Together[a]] — clear pure-x denominators so k[t] elements become
  * genuine polynomials in t with polynomial (not rational) coefficients. */
 static Expr* rf_clear_field_denoms(const Expr* a) {
@@ -238,7 +248,7 @@ bool risch_field_divmod_t(const Expr* a, const Expr* b, const Expr* t,
     if (db < 0) return false;                       /* division by zero */
     Expr* lcb = rf_coeff(b, t, db);
     Expr* q = expr_new_integer(0);
-    Expr* r = rf_call1("Expand", rf_cp(a));
+    Expr* r = rf_normfrac(rf_cp(a));
     for (;;) {
         long dr = risch_field_degree_t(r, t);
         if (dr < db) break;                         /* done (dr < 0 means r == 0) */
@@ -248,7 +258,9 @@ bool risch_field_divmod_t(const Expr* a, const Expr* b, const Expr* t,
                    : rf_eval_adopt(rf_times(ratio, rf_pow(rf_cp(t), dr - db)));
         q = rf_add(q, rf_cp(term));                 /* q += term */
         Expr* tb = rf_eval_adopt(rf_times(term, rf_cp(b)));  /* term*b, adopts term */
-        r = rf_call1("Expand", rf_add(r, rf_neg(tb)));       /* r -= term*b */
+        /* canonical reduce (not just Expand) so the leading coeff over C(x)
+         * collapses to zero and the degree strictly drops -> termination. */
+        r = rf_normfrac(rf_add(r, rf_neg(tb)));      /* r -= term*b */
     }
     expr_free(lcb);
     *qo = rf_call1("Cancel", q);
@@ -260,8 +272,11 @@ bool risch_field_divmod_t(const Expr* a, const Expr* b, const Expr* t,
 /* Extended gcd in k[t] (iterative; u a + v b = g).                    */
 /* ------------------------------------------------------------------ */
 
-void risch_field_xgcd_t(const Expr* a, const Expr* b, const Expr* t,
-                        Expr** go, Expr** uo, Expr** vo) {
+/* Classical iterative xgcd over k[t] (the no-FLINT fallback).  Over k = C(x)
+ * this suffers the textbook intermediate-coefficient swell, so it is only a
+ * backstop; the primary path delegates to PolynomialExtendedGCD below. */
+static void rf_xgcd_classical(const Expr* a, const Expr* b, const Expr* t,
+                              Expr** go, Expr** uo, Expr** vo) {
     Expr* r0 = rf_call1("Expand", rf_cp(a));
     Expr* r1 = rf_call1("Expand", rf_cp(b));
     Expr* u0 = expr_new_integer(1), *u1 = expr_new_integer(0);
@@ -281,6 +296,35 @@ void risch_field_xgcd_t(const Expr* a, const Expr* b, const Expr* t,
     }
     expr_free(r1); expr_free(u1); expr_free(v1);
     *go = r0; *uo = u0; *vo = v0;
+}
+
+/* Extended gcd in k[t]: u a + v b = g.  Delegates to the PolynomialExtendedGCD
+ * builtin, whose 3-arg form has a FLINT-backed, swell-free path (gr_poly over
+ * the rational-function ring fmpz_mpoly_q) for the k = C(x) coefficient field.
+ * The hand-rolled Euclidean loop (rf_xgcd_classical) blows up on irreducible
+ * normal poles over C(x); this restores it.  Result shape: {g, {u, v}}. */
+void risch_field_xgcd_t(const Expr* a, const Expr* b, const Expr* t,
+                        Expr** go, Expr** uo, Expr** vo) {
+    Expr* r = rf_call3("PolynomialExtendedGCD", rf_cp(a), rf_cp(b), rf_cp(t));
+    if (r && r->type == EXPR_FUNCTION &&
+        r->data.function.head->type == EXPR_SYMBOL &&
+        r->data.function.head->data.symbol.name == intern_symbol("List") &&
+        r->data.function.arg_count == 2) {
+        const Expr* g   = r->data.function.args[0];
+        const Expr* cof = r->data.function.args[1];
+        if (cof && cof->type == EXPR_FUNCTION &&
+            cof->data.function.head->type == EXPR_SYMBOL &&
+            cof->data.function.head->data.symbol.name == intern_symbol("List") &&
+            cof->data.function.arg_count == 2) {
+            *go = rf_cp(g);
+            *uo = rf_cp(cof->data.function.args[0]);
+            *vo = rf_cp(cof->data.function.args[1]);
+            expr_free(r);
+            return;
+        }
+    }
+    expr_free(r);
+    rf_xgcd_classical(a, b, t, go, uo, vo);   /* no-FLINT / unexpected shape */
 }
 
 /* ------------------------------------------------------------------ */
@@ -308,7 +352,7 @@ bool risch_field_polynomial_reduce(const Expr* p, const Expr* t, const RischDeri
     Expr* lambda = rf_coeff(Dt, t, delta);          /* lc_t(Dt) */
 
     Expr* q = expr_new_integer(0);
-    Expr* r = rf_call1("Expand", rf_cp(p));
+    Expr* r = rf_normfrac(rf_cp(p));
     for (;;) {
         long dr = risch_field_degree_t(r, t);
         if (dr < delta) break;
@@ -321,7 +365,8 @@ bool risch_field_polynomial_reduce(const Expr* p, const Expr* t, const RischDeri
         q = rf_add(q, rf_cp(q0));                                   /* q += q0 */
         Expr* Dq0 = risch_field_deriv(q0, d);
         expr_free(q0);
-        r = rf_call1("Expand", rf_add(r, rf_neg(Dq0)));            /* r -= D[q0] */
+        /* canonical reduce so the leading coeff over C(x) truly vanishes. */
+        r = rf_normfrac(rf_add(r, rf_neg(Dq0)));                   /* r -= D[q0] */
     }
     expr_free(lambda);
     *qo = rf_call1("Cancel", q);

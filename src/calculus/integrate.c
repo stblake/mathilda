@@ -38,6 +38,8 @@
 #include "risch_canonical.h"
 #include "risch_structure.h"
 #include "risch_hypertangent.h"
+#include "risch_coupled.h"
+#include "risch_hermite.h"
 #include "intsimp.h"
 #include "common.h"
 #include "expr.h"
@@ -1028,6 +1030,15 @@ void integrate_init(void) {
     /* Bronstein hypertangent case (Symbolic Integration I, §5.10): direct real
      * integration over a tangent monomial (polynomial part). */
     integrate_risch_hypertangent_init();
+
+    /* Bronstein coupled differential systems (Symbolic Integration I, Ch. 8) +
+     * the hypertangent reduced case (§5.10): CoupledDESystem via the reduction
+     * to a Risch DE over C(i)(x), and pole-peeling over a tangent monomial. */
+    integrate_risch_coupled_init();
+
+    /* Bronstein Hermite reduction (Symbolic Integration I, §5.3): the literal
+     * quadratic HermiteReduce over the tower derivation, f = D[g] + h + r. */
+    integrate_risch_hermite_init();
 
     /* Pre-register Integrate`CRCTable so ?Integrate`CRCTable shows a
      * docstring even before the lazy load fires.  The actual rule
