@@ -290,6 +290,59 @@ the branch cut runs along (−∞, +1).
   point follows from the generic `D`-based fallback.
 - Wrong arity emits `LogIntegral::argx` and stays unevaluated.
 
+## SinIntegral
+
+- `SinIntegral[z]` — the sine integral Si(z) = ∫₀ᶻ Sin[t]/t dt.
+
+`SinIntegral` is entire and odd, with no branch cuts. The convergent Maclaurin
+series `Si(z) = Σ (−1)ᵏ z^(2k+1)/((2k+1)(2k+1)!)` drives moderate arguments; for
+large `|z|` the asymptotic form `Si(z) = π/2 − cos(z) f(z) − sin(z) g(z)` is used
+instead. Complex arguments run through the shared `ncpx` MPFR-complex toolkit,
+with odd symmetry folding the left half-plane onto the right.
+
+- Exact special values: `SinIntegral[0] = 0`, `SinIntegral[Infinity] = Pi/2`,
+  `SinIntegral[-Infinity] = -Pi/2`, `SinIntegral[±I Infinity] = ±I Infinity`;
+  `ComplexInfinity` and `Indeterminate` map to `Indeterminate`.
+- Exact non-special arguments stay symbolic (`SinIntegral[2]`, `SinIntegral[x]`);
+  odd symmetry pulls a leading negative out (`SinIntegral[-x] = -SinIntegral[x]`).
+- Numeric evaluation at machine or arbitrary (MPFR) precision, tracking the
+  input precision: `SinIntegral[2.8] = 1.8321`,
+  `N[SinIntegral[2], 50] = 1.6054129768026948485767201481985889408485834223285`.
+- Complex arguments are fully accurate, e.g. `SinIntegral[2.5 + I] = 1.99549 +
+  0.222995 I`, and `SinIntegral[3. I] = 4.97344 I` (= I Shi(3)).
+- Derivative: `D[SinIntegral[z], z] = Sinc[z]` (chain rule applies, e.g.
+  `D[SinIntegral[x^2], x] = 2 x Sinc[x^2]`).
+- Series: Taylor at the origin (`Series[SinIntegral[x], {x, 0, 7}] =
+  x - x^3/18 + x^5/600 - x^7/35280 + O[x]^8`) and the trig-prefactored asymptotic
+  expansion at Infinity (`Normal[Series[SinIntegral[x], {x, Infinity, 3}]] =
+  Pi/2 - Sin[x]/x^2 + Cos[x] (-1/x + 2/x^3)`). The symbolic
+  `DirectedInfinity[z]`-direction form is not yet produced.
+- `Listable`, `NumericFunction`, `Protected`. Wrong arity emits
+  `SinIntegral::argx` and stays unevaluated.
+
+## Sinc
+
+- `Sinc[z]` — the cardinal sine Sin[z]/z, with the removable singularity filled
+  in as `Sinc[0] = 1`.
+
+`Sinc` is entire and even. Real arguments use `mpfr_sin(z)/z`; complex arguments
+use `sin(z)/z` via the shared `ncpx` toolkit. Provided as a first-class head so
+`SinIntegral` differentiates to it.
+
+- Exact special values: `Sinc[0] = 1`, `Sinc[±Infinity] = 0`;
+  `ComplexInfinity` maps to `Indeterminate`.
+- Numeric evaluation at machine or arbitrary (MPFR) precision, tracking input
+  precision: `Sinc[2.] = 0.454649`,
+  `N[Sinc[2], 45] = 0.454648713412840847698009932955872421351127485`. Complex:
+  `Sinc[1. + I] = 0.966711 - 0.331747 I`.
+- Symbolic arguments stay unevaluated (`Sinc[x]`, `Sinc[-x]`; WL does not
+  auto-fold the even symmetry).
+- Derivative: `D[Sinc[z], z] = Cos[z]/z - Sin[z]/z^2`.
+- Series at the origin: `Series[Sinc[x], {x, 0, 6}] =
+  1 - x^2/6 + x^4/120 - x^6/5040 + O[x]^7`.
+- `Listable`, `NumericFunction`, `Protected`. Wrong arity emits `Sinc::argx`
+  and stays unevaluated.
+
 ## InverseErf
 
 - `InverseErf[s]` — the inverse error function: the z solving s = erf(z).

@@ -22,6 +22,8 @@
 #include "erfi.h"
 #include "expintegralei.h"
 #include "logintegral.h"
+#include "sinintegral.h"
+#include "sinc.h"
 #include "inverf.h"
 #include "inverfc.h"
 #include "loggamma.h"
@@ -612,6 +614,8 @@ void core_init(void) {
     erfi_init();
     expintegralei_init();
     logintegral_init();
+    sinintegral_init();
+    sinc_init();
     inverf_init();
     inverfc_init();
     loggamma_init();

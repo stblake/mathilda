@@ -1090,6 +1090,19 @@ static Expr** kernel_coefs(const char* name, size_t N) {
             Expr* ratio = make_rational(num, den);
             c[k] = simp(mk_times(expr_copy(c[k - 2]), ratio));
         }
+    } else if (strcmp(name, "SinIntegral") == 0) {
+        /* Si[u] = sum_{m>=0} (-1)^m u^(2m+1) / ((2m+1)(2m+1)!).
+         * Odd powers only; c_{2m+1} = c_{2m-1} * -(2m-1)/((2m)(2m+1)^2), c_1 = 1. */
+        c[0] = expr_new_integer(0);
+        if (N > 1) c[1] = expr_new_integer(1);
+        for (size_t k = 2; k < N; k++) {
+            if ((k & 1) == 0) { c[k] = expr_new_integer(0); continue; }
+            int64_t m = (int64_t)(k - 1) / 2;
+            int64_t num = -(2*m - 1);
+            int64_t den = (2*m) * (2*m + 1) * (2*m + 1);
+            Expr* ratio = make_rational(num, den);
+            c[k] = simp(mk_times(expr_copy(c[k - 2]), ratio));
+        }
     } else {
         for (size_t i = 0; i < N; i++) c[i] = expr_new_integer(0);
     }
@@ -2095,6 +2108,7 @@ static bool is_known_elementary(Expr* e) {
         "Sinh", "Cosh", "Tanh",
         "ArcSin", "ArcCos", "ArcTan", "ArcCot",
         "ArcSinh", "ArcCosh", "ArcTanh", "ArcCoth",
+        "SinIntegral",
         NULL
     };
     for (int i = 0; names[i]; i++) if (has_symbol_head(e, names[i])) return true;
@@ -2125,6 +2139,8 @@ static Expr* rewrite_reciprocal_head(Expr* e) {
     if (h == SYM_Csc) return mk_power(mk_fn1("Sin",  arg), expr_new_integer(-1));
     if (h == SYM_Cot) return mk_times(mk_fn1("Cos",  expr_copy(arg)),
                                                 mk_power(mk_fn1("Sin",  arg), expr_new_integer(-1)));
+    if (h == SYM_Sinc) return mk_times(mk_fn1("Sin", expr_copy(arg)),
+                                                mk_power(arg, expr_new_integer(-1)));
     if (h == SYM_Sech) return mk_power(mk_fn1("Cosh", arg), expr_new_integer(-1));
     if (h == SYM_Csch) return mk_power(mk_fn1("Sinh", arg), expr_new_integer(-1));
     if (h == SYM_Coth) return mk_times(mk_fn1("Cosh", expr_copy(arg)),
@@ -2449,6 +2465,10 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                     int sc = so_branch_point_imag_sign(inner);
                     if (sc != 0) r = so_apply_arctan_branch_point(inner, sc, ctx->target_order, ctx);
                 }
+            }
+            else if (strcmp(head, "SinIntegral") == 0) {
+                /* Si is entire and odd (Si(0)=0), analytic at u=0 like ArcTan. */
+                r = so_apply_kernel_at_zero("SinIntegral", inner);
             }
             else if (strcmp(head, "ArcTanh") == 0) {
                 r = so_apply_kernel_at_zero("ArcTanh", inner);
@@ -3364,6 +3384,81 @@ static Expr* try_series_ei_at_infinity(Expr* f, Expr* x, int64_t n) {
     free(sd);
 
     return mk_times(mk_fn1("Exp", expr_copy(x)), series);
+}
+
+/* Asymptotic expansion of SinIntegral[x] at x = Infinity (DLMF 6.12.3):
+ *
+ *   Si(x) ~ Pi/2 - cos(x) f(x) - sin(x) g(x),
+ *     f(x) = Sum_{k>=0} (-1)^k (2k)!   / x^(2k+1),
+ *     g(x) = Sum_{k>=0} (-1)^k (2k+1)! / x^(2k+2).
+ *
+ * cos(x)/sin(x) are essential-singularity prefactors that stay symbolic while
+ * each bracket is a Laurent series in 1/x. Folding the leading minus signs in,
+ * the result (matching Mathematica's Series[SinIntegral[x],{x,Infinity,k}]) is
+ *
+ *   Pi/2
+ *   + Cos[x] SeriesData[1/x, 0, { (-1)^{k+1}(2k)!   at 1/x^(2k+1) }, 1, .., 1]
+ *   + Sin[x] SeriesData[1/x, 0, { (-1)^{k+1}(2k+1)! at 1/x^(2k+2) }, 2, .., 1].
+ *
+ * Returns NULL unless f is exactly SinIntegral[x] in the expansion variable. */
+static Expr* try_series_sinintegral_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "SinIntegral") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+
+    /* f-part: powers 2k+1 (k>=0), populated at 1/x exponents 1, 3, 5, ...
+     * coefficient (-1)^{k+1}(2k)!. nmin = 1. */
+    size_t ncf = (size_t)n;                       /* 1/x exponents 1 .. n */
+    Expr** cf = calloc(ncf, sizeof(Expr*));
+    for (size_t i = 0; i < ncf; i++) cf[i] = expr_new_integer(0);
+    for (int64_t k = 0; ; k++) {
+        int64_t p = 2 * k + 1;                    /* 1/x exponent */
+        if (p > n) break;
+        Expr* fact = eval_and_free(mk_fn1("Factorial", expr_new_integer(2 * k)));
+        int64_t sign = (k % 2 == 0) ? -1 : 1;     /* (-1)^{k+1} */
+        expr_free(cf[(size_t)(p - 1)]);
+        cf[(size_t)(p - 1)] = simp(mk_times(expr_new_integer(sign), fact));
+    }
+    Expr** sdf = calloc(6, sizeof(Expr*));
+    sdf[0] = mk_power(expr_copy(x), expr_new_integer(-1));
+    sdf[1] = expr_new_integer(0);
+    sdf[2] = expr_new_function(mk_symbol("List"), cf, ncf);
+    sdf[3] = expr_new_integer(1);                 /* nmin = 1 */
+    sdf[4] = expr_new_integer(n + 1);             /* O-term  */
+    sdf[5] = expr_new_integer(1);
+    Expr* seriesF = expr_new_function(mk_symbol("SeriesData"), sdf, 6);
+    free(sdf); free(cf);
+
+    Expr* halfpi = simp(mk_times(make_rational(1, 2), mk_symbol("Pi")));
+    Expr* result = mk_plus(halfpi, mk_times(mk_fn1("Cos", expr_copy(x)), seriesF));
+
+    /* g-part: powers 2k+2 (k>=0) at 1/x exponents 2, 4, 6, ...; nmin = 2.
+     * Only emitted if any g-term fits within order n. */
+    if (n >= 2) {
+        size_t ncg = (size_t)(n - 1);             /* 1/x exponents 2 .. n, index p-2 */
+        Expr** cg = calloc(ncg, sizeof(Expr*));
+        for (size_t i = 0; i < ncg; i++) cg[i] = expr_new_integer(0);
+        for (int64_t k = 0; ; k++) {
+            int64_t p = 2 * k + 2;                /* 1/x exponent */
+            if (p > n) break;
+            Expr* fact = eval_and_free(mk_fn1("Factorial", expr_new_integer(2 * k + 1)));
+            int64_t sign = (k % 2 == 0) ? -1 : 1; /* (-1)^{k+1} */
+            expr_free(cg[(size_t)(p - 2)]);
+            cg[(size_t)(p - 2)] = simp(mk_times(expr_new_integer(sign), fact));
+        }
+        Expr** sdg = calloc(6, sizeof(Expr*));
+        sdg[0] = mk_power(expr_copy(x), expr_new_integer(-1));
+        sdg[1] = expr_new_integer(0);
+        sdg[2] = expr_new_function(mk_symbol("List"), cg, ncg);
+        sdg[3] = expr_new_integer(2);             /* nmin = 2 */
+        sdg[4] = expr_new_integer(n + 1);
+        sdg[5] = expr_new_integer(1);
+        Expr* seriesG = expr_new_function(mk_symbol("SeriesData"), sdg, 6);
+        free(sdg); free(cg);
+        result = mk_plus(result, mk_times(mk_fn1("Sin", expr_copy(x)), seriesG));
+    }
+    return result;
 }
 
 /* Shared multiplier for the error-function asymptotic expansions at x = Infinity
@@ -4723,6 +4818,12 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
             expr_free(f_eval);
             expr_free(x0_eval);
             return ei;
+        }
+        Expr* si = try_series_sinintegral_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (si) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return si;
         }
         Expr* ai = try_series_airyai_at_infinity(f_eval, x, leading_only ? 1 : n);
         if (ai) {

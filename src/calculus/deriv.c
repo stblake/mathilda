@@ -336,6 +336,20 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
                       mk_fn2("Power", denom, mk_int(-1)));
     }
 
+    /* --- sine integral: d/dg SinIntegral[g] = Sinc[g] = Sin[g]/g. --- */
+    if (!strcmp(name, "SinIntegral")) {
+        return mk_fn1("Sinc", expr_copy(g));
+    }
+
+    /* --- cardinal sine: d/dg Sinc[g] = Cos[g]/g - Sin[g]/g^2. --- */
+    if (!strcmp(name, "Sinc")) {
+        Expr* t1 = mk_fn2("Times", mk_fn1("Cos", expr_copy(g)),
+                          mk_fn2("Power", expr_copy(g), mk_int(-1)));
+        Expr* t2 = mk_neg(mk_fn2("Times", mk_fn1("Sin", expr_copy(g)),
+                          mk_fn2("Power", expr_copy(g), mk_int(-2))));
+        return mk_fn2("Plus", t1, t2);
+    }
+
     /* --- error function: d/dg Erf[g] = (2/Sqrt[Pi]) E^(-g^2). --- */
     if (!strcmp(name, "Erf")) {
         Expr* coeff = mk_fn2("Times", mk_int(2),

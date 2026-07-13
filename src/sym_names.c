@@ -148,6 +148,8 @@ const char* SYM_Erfc = NULL;
 const char* SYM_Erfi = NULL;
 const char* SYM_ExpIntegralEi = NULL;
 const char* SYM_LogIntegral = NULL;
+const char* SYM_SinIntegral = NULL;
+const char* SYM_Sinc = NULL;
 const char* SYM_InverseErf = NULL;
 const char* SYM_InverseErfc = NULL;
 const char* SYM_Except = NULL;
@@ -869,6 +871,8 @@ void sym_names_init(void) {
     SYM_Erfi                       = intern_symbol("Erfi");
     SYM_ExpIntegralEi              = intern_symbol("ExpIntegralEi");
     SYM_LogIntegral                = intern_symbol("LogIntegral");
+    SYM_SinIntegral                = intern_symbol("SinIntegral");
+    SYM_Sinc                       = intern_symbol("Sinc");
     SYM_InverseErf                 = intern_symbol("InverseErf");
     SYM_InverseErfc                = intern_symbol("InverseErfc");
     SYM_Except                     = intern_symbol("Except");

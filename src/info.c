@@ -565,6 +565,19 @@ void info_init(void) {
         "ExpIntegralEi[-Infinity] = 0, ExpIntegralEi[+-I Infinity] = +-I Pi. Real and\n"
         "complex inputs evaluate numerically at machine or arbitrary (MPFR) precision;\n"
         "D[ExpIntegralEi[z], z] = E^z/z. Listable.");
+    symtab_set_docstring("SinIntegral",
+        "SinIntegral[z]\n"
+        "\tgives the sine integral Si(z) = Integral_0^z Sin[t]/t dt.\n"
+        "An entire, odd function with no branch cuts. SinIntegral[0] = 0,\n"
+        "SinIntegral[+-Infinity] = +-Pi/2, SinIntegral[+-I Infinity] = +-I Infinity.\n"
+        "Real and complex inputs evaluate numerically at machine or arbitrary (MPFR)\n"
+        "precision; D[SinIntegral[z], z] = Sinc[z]. Listable.");
+    symtab_set_docstring("Sinc",
+        "Sinc[z]\n"
+        "\tgives the cardinal sine Sin[z]/z, with Sinc[0] = 1.\n"
+        "An entire, even function. Sinc[+-Infinity] = 0. Real and complex inputs\n"
+        "evaluate numerically at machine or arbitrary (MPFR) precision;\n"
+        "D[Sinc[z], z] = Cos[z]/z - Sin[z]/z^2. Listable.");
     symtab_set_docstring("LogIntegral",
         "LogIntegral[z]\n"
         "\tgives the logarithmic integral li(z), the principal value of\n"
