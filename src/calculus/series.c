@@ -3461,6 +3461,78 @@ static Expr* try_series_sinintegral_at_infinity(Expr* f, Expr* x, int64_t n) {
     return result;
 }
 
+/* Asymptotic expansion of CosIntegral[x] at x = Infinity (DLMF 6.12.4):
+ *
+ *   Ci(x) ~ sin(x) f(x) - cos(x) g(x),
+ *     f(x) = Sum_{k>=0} (-1)^k (2k)!   / x^(2k+1),
+ *     g(x) = Sum_{k>=0} (-1)^k (2k+1)! / x^(2k+2).
+ *
+ * There is no constant term (unlike Si's Pi/2). Matching Mathematica's
+ * Series[CosIntegral[x],{x,Infinity,k}]:
+ *
+ *   Sin[x] SeriesData[1/x, 0, { (-1)^k (2k)!     at 1/x^(2k+1) }, 1, .., 1]
+ *   + Cos[x] SeriesData[1/x, 0, { (-1)^{k+1}(2k+1)! at 1/x^(2k+2) }, 2, .., 1].
+ *
+ * Returns NULL unless f is exactly CosIntegral[x] in the expansion variable. */
+static Expr* try_series_cosintegral_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "CosIntegral") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+
+    /* f-part (attached to Sin): powers 2k+1 at 1/x exponents 1, 3, 5, ...
+     * coefficient (-1)^k (2k)!. nmin = 1. */
+    size_t ncf = (size_t)n;                       /* 1/x exponents 1 .. n */
+    Expr** cf = calloc(ncf, sizeof(Expr*));
+    for (size_t i = 0; i < ncf; i++) cf[i] = expr_new_integer(0);
+    for (int64_t k = 0; ; k++) {
+        int64_t p = 2 * k + 1;                    /* 1/x exponent */
+        if (p > n) break;
+        Expr* fact = eval_and_free(mk_fn1("Factorial", expr_new_integer(2 * k)));
+        int64_t sign = (k % 2 == 0) ? 1 : -1;     /* (-1)^k */
+        expr_free(cf[(size_t)(p - 1)]);
+        cf[(size_t)(p - 1)] = simp(mk_times(expr_new_integer(sign), fact));
+    }
+    Expr** sdf = calloc(6, sizeof(Expr*));
+    sdf[0] = mk_power(expr_copy(x), expr_new_integer(-1));
+    sdf[1] = expr_new_integer(0);
+    sdf[2] = expr_new_function(mk_symbol("List"), cf, ncf);
+    sdf[3] = expr_new_integer(1);                 /* nmin = 1 */
+    sdf[4] = expr_new_integer(n + 1);             /* O-term  */
+    sdf[5] = expr_new_integer(1);
+    Expr* seriesF = expr_new_function(mk_symbol("SeriesData"), sdf, 6);
+    free(sdf); free(cf);
+
+    Expr* result = mk_times(mk_fn1("Sin", expr_copy(x)), seriesF);
+
+    /* g-part (attached to Cos): powers 2k+2 at 1/x exponents 2, 4, 6, ...;
+     * coefficient (-1)^{k+1}(2k+1)!. nmin = 2. Only if it fits within order n. */
+    if (n >= 2) {
+        size_t ncg = (size_t)(n - 1);             /* 1/x exponents 2 .. n, index p-2 */
+        Expr** cg = calloc(ncg, sizeof(Expr*));
+        for (size_t i = 0; i < ncg; i++) cg[i] = expr_new_integer(0);
+        for (int64_t k = 0; ; k++) {
+            int64_t p = 2 * k + 2;                /* 1/x exponent */
+            if (p > n) break;
+            Expr* fact = eval_and_free(mk_fn1("Factorial", expr_new_integer(2 * k + 1)));
+            int64_t sign = (k % 2 == 0) ? -1 : 1; /* (-1)^{k+1} */
+            expr_free(cg[(size_t)(p - 2)]);
+            cg[(size_t)(p - 2)] = simp(mk_times(expr_new_integer(sign), fact));
+        }
+        Expr** sdg = calloc(6, sizeof(Expr*));
+        sdg[0] = mk_power(expr_copy(x), expr_new_integer(-1));
+        sdg[1] = expr_new_integer(0);
+        sdg[2] = expr_new_function(mk_symbol("List"), cg, ncg);
+        sdg[3] = expr_new_integer(2);             /* nmin = 2 */
+        sdg[4] = expr_new_integer(n + 1);
+        sdg[5] = expr_new_integer(1);
+        Expr* seriesG = expr_new_function(mk_symbol("SeriesData"), sdg, 6);
+        free(sdg); free(cg);
+        result = mk_plus(result, mk_times(mk_fn1("Cos", expr_copy(x)), seriesG));
+    }
+    return result;
+}
+
 /* Shared multiplier for the error-function asymptotic expansions at x = Infinity
  * (DLMF 7.12.1). Each of Erf/Erfc/Erfi is  prefactor(Exp[±x^2]) times a series
  *
@@ -4182,6 +4254,49 @@ static Expr* try_series_ei_at_zero(Expr* f, Expr* x, int64_t n, int x_sign) {
     return series;
 }
 
+/* CosIntegral[x] at x = 0: Ci(0) = -Infinity blocks naive Taylor. Emit the
+ * DLMF 6.6.2 logarithmic series directly:
+ *
+ *   Ci(x) = EulerGamma + Log[x] + Sum_{m>=1} (-1)^m x^(2m) / (2m (2m)!),
+ *
+ * i.e. the x^0 coefficient carries EulerGamma + Log[x] (or Log[-x] when the
+ * Assumptions option forces x < 0) and only even powers appear thereafter. */
+static Expr* try_series_cosintegral_at_zero(Expr* f, Expr* x, int64_t n, int x_sign) {
+    if (!has_symbol_head(f, "CosIntegral") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+    if (n < 0) n = 0;
+
+    size_t ncoef = (size_t)n + 1;            /* exponents 0 .. n */
+    Expr** coefs = calloc(ncoef, sizeof(Expr*));
+    Expr* logarg = (x_sign < 0)
+                 ? mk_times(expr_new_integer(-1), expr_copy(x))
+                 : expr_copy(x);
+    coefs[0] = simp(mk_plus(mk_symbol("EulerGamma"), mk_fn1("Log", logarg)));
+    for (int64_t k = 1; k <= n; k++) {
+        if (k % 2 != 0) { coefs[k] = expr_new_integer(0); continue; }
+        int64_t m = k / 2;                   /* x^(2m) coefficient (-1)^m/(2m (2m)!) */
+        Expr* kfact = eval_and_free(mk_fn1("Factorial", expr_new_integer(k)));
+        Expr* denom = eval_and_free(mk_times(expr_new_integer(k), kfact));
+        Expr* recip = eval_and_free(mk_power(denom, expr_new_integer(-1)));
+        coefs[k] = (m % 2 == 0) ? recip
+                                : eval_and_free(mk_times(expr_new_integer(-1), recip));
+    }
+    Expr* coef_list = expr_new_function(mk_symbol("List"), coefs, ncoef);
+    free(coefs);
+
+    Expr** sd = calloc(6, sizeof(Expr*));
+    sd[0] = expr_copy(x);            /* expansion var */
+    sd[1] = expr_new_integer(0);     /* x0            */
+    sd[2] = coef_list;               /* coefficients  */
+    sd[3] = expr_new_integer(0);     /* nmin          */
+    sd[4] = expr_new_integer(n + 1); /* nmax (O-term) */
+    sd[5] = expr_new_integer(1);     /* denominator   */
+    Expr* series = expr_new_function(mk_symbol("SeriesData"), sd, 6);
+    free(sd);
+    return series;
+}
+
 /* Asymptotic series of BesselK[nu, x] at x = Infinity (DLMF 10.40.2):
  *
  *   K_nu(x) ~ sqrt(pi/(2x)) e^{-x} Sum_{k>=0} a_k / x^k,
@@ -4825,6 +4940,12 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
             expr_free(x0_eval);
             return si;
         }
+        Expr* ci = try_series_cosintegral_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (ci) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return ci;
+        }
         Expr* ai = try_series_airyai_at_infinity(f_eval, x, leading_only ? 1 : n);
         if (ai) {
             expr_free(f_eval);
@@ -4922,6 +5043,14 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
             expr_free(f_eval);
             expr_free(x0_eval);
             return ei0;
+        }
+        /* CosIntegral[x] at x = 0: Ci(0) = -Infinity blocks naive Taylor;
+         * emit the DLMF 6.6.2 logarithmic series directly. */
+        Expr* ci0 = try_series_cosintegral_at_zero(f_eval, x, leading_only ? 0 : n, x_sign);
+        if (ci0) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return ci0;
         }
         /* BesselK[p, x] at x = 0 (integer p): K_p has a pole and a logarithmic
          * branch term, so naive Taylor-via-D cannot produce it. Emit the

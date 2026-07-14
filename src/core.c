@@ -23,6 +23,7 @@
 #include "expintegralei.h"
 #include "logintegral.h"
 #include "sinintegral.h"
+#include "cosintegral.h"
 #include "sinc.h"
 #include "inverf.h"
 #include "inverfc.h"
@@ -615,6 +616,7 @@ void core_init(void) {
     expintegralei_init();
     logintegral_init();
     sinintegral_init();
+    cosintegral_init();
     sinc_init();
     inverf_init();
     inverfc_init();

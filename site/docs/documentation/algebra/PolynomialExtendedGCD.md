@@ -18,7 +18,7 @@ In[1]:= PolynomialExtendedGCD[2x^5-2x, (x^2-1)^2, x]
 Out[1]= {-1 + x^2, {1/4 x, 1/2 (-2 - x^2)}}
 
 In[2]:= PolynomialExtendedGCD[a (x+b)^2, (x+a)(x+b), x]
-Out[2]= {b + x, {1/(-a^2 + a b), -1/(-a + b)}}
+Out[2]= {b + x, {-1/(a^2 - a b), 1/(a - b)}}
 ```
 
 ## Implementation notes

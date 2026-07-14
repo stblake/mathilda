@@ -572,6 +572,14 @@ void info_init(void) {
         "SinIntegral[+-Infinity] = +-Pi/2, SinIntegral[+-I Infinity] = +-I Infinity.\n"
         "Real and complex inputs evaluate numerically at machine or arbitrary (MPFR)\n"
         "precision; D[SinIntegral[z], z] = Sinc[z]. Listable.");
+    symtab_set_docstring("CosIntegral",
+        "CosIntegral[z]\n"
+        "\tgives the cosine integral Ci(z) = -Integral_z^Infinity Cos[t]/t dt.\n"
+        "Has a logarithmic singularity at 0 and a branch cut on (-Infinity, 0].\n"
+        "CosIntegral[0] = -Infinity, CosIntegral[Infinity] = 0,\n"
+        "CosIntegral[-Infinity] = I Pi, CosIntegral[+-I Infinity] = Infinity.\n"
+        "Real and complex inputs evaluate numerically at machine or arbitrary (MPFR)\n"
+        "precision; D[CosIntegral[z], z] = Cos[z]/z. Listable.");
     symtab_set_docstring("Sinc",
         "Sinc[z]\n"
         "\tgives the cardinal sine Sin[z]/z, with Sinc[0] = 1.\n"

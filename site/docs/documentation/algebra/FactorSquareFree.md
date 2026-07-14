@@ -26,7 +26,7 @@ In[2]:= FactorSquareFree[x^4 - 9x^3 + 29x^2 - 39x + 18]
 Out[2]= (-3 + x)^2 (2 - 3 x + x^2)
 
 In[3]:= FactorSquareFree[x^5 - x^3 y^2 - x^2 y^3 + y^5]
-Out[3]= (-x + y)^2 (x^3 + 2 x^2 y + 2 x y^2 + y^3)
+Out[3]= (x - y)^2 (x^3 + 2 x^2 y + 2 x y^2 + y^3)
 
 In[4]:= FactorSquareFree[{(x^2 - 1)(x - 1), (x^4 - 1)(x^2 - 1)}]
 Out[4]= {(1 + x) (-1 + x)^2, (1 + x^2) (-1 + x^2)^2}

@@ -320,6 +320,42 @@ with odd symmetry folding the left half-plane onto the right.
 - `Listable`, `NumericFunction`, `Protected`. Wrong arity emits
   `SinIntegral::argx` and stays unevaluated.
 
+## CosIntegral
+
+- `CosIntegral[z]` — the cosine integral Ci(z) = −∫_z^∞ Cos[t]/t dt.
+
+`CosIntegral` has a logarithmic singularity at `0` and a branch cut along the
+negative real axis `(−∞, 0]`; it is neither entire nor odd. The convergent series
+`Ci(z) = EulerGamma + Log(z) + Σ_{k≥1} (−1)ᵏ z^(2k)/(2k (2k)!)` drives moderate
+arguments (the principal `Log` supplies the ±i π jump across the cut, so no folding
+is needed); for large `|z|` the asymptotic form `Ci(z) = sin(z) f(z) − cos(z) g(z)`
+is used, with a piecewise-constant Stokes / reflection term restoring the principal
+branch on and left of the imaginary axis. Complex arguments run through the shared
+`ncpx` MPFR-complex toolkit.
+
+- Exact special values: `CosIntegral[0] = -Infinity`, `CosIntegral[Infinity] = 0`,
+  `CosIntegral[-Infinity] = I Pi`, `CosIntegral[±I Infinity] = Infinity`;
+  `ComplexInfinity` and `Indeterminate` map to `Indeterminate`.
+- Exact non-special arguments stay symbolic (`CosIntegral[2]`, `CosIntegral[x]`,
+  `CosIntegral[-x]`); there is no odd/even fold.
+- Numeric evaluation at machine or arbitrary (MPFR) precision, tracking the input
+  precision: `CosIntegral[2.8] = 0.186488`,
+  `N[CosIntegral[2], 50] = 0.42298082877486499569856515319825589413573775630619`.
+- Negative real arguments lie on the branch cut and return the from-above value
+  `Ci(|x|) + I Pi`: `CosIntegral[-2.] = 0.422981 + 3.14159 I`.
+- Complex arguments are fully accurate, e.g. `CosIntegral[2.5 + I] = 0.331465 −
+  0.388237 I`, and on the imaginary axis `CosIntegral[3. I] = 4.96039 + 1.5708 I`
+  (= Chi(3) + I Pi/2).
+- Derivative: `D[CosIntegral[z], z] = Cos[z]/z` (chain rule applies, e.g.
+  `D[CosIntegral[x^2], x] = (2 Cos[x^2])/x`).
+- Series: the logarithmic Taylor series at the origin
+  (`Series[CosIntegral[x], {x, 0, 6}] = EulerGamma + Log[x] - x^2/4 + x^4/96 -
+  x^6/4320 + O[x]^7`) and the trig-prefactored asymptotic expansion at Infinity
+  (`Normal[Series[CosIntegral[x], {x, Infinity, 3}]] = -Cos[x]/x^2 + Sin[x] (1/x -
+  2/x^3)`). Generic-point Taylor expansions follow from the derivative rule.
+- `Listable`, `NumericFunction`, `Protected`. Wrong arity emits
+  `CosIntegral::argx` and stays unevaluated.
+
 ## Sinc
 
 - `Sinc[z]` — the cardinal sine Sin[z]/z, with the removable singularity filled

@@ -1,23 +1,44 @@
 # Other & Advanced
 
-35 built-in function(s) in this category.
+68 built-in function(s) in this category.
 
 - [`$PlotLegendData`]($PlotLegendData.md) — $PlotLegendData[{color1, label1}, ...]  _(Stable)_
 - [`$PlotResample`]($PlotResample.md) — $PlotResample[var, {f...}, {plotPoints, maxRecursion, maxPlotPoints, mesh, regionFunction, exclusions, colorFunction, colorFunctionScaling, filling, fillingStyle}]  _(Experimental)_
+- [`$StreamColorBar`]($StreamColorBar.md) — $StreamColorBar[speed_min, speed_max]  _(Experimental)_
+- [`AdjacencyGraph`](AdjacencyGraph.md) — AdjacencyGraph[m] builds a graph on vertices 1..n from a 0/1 adjacency matrix m (undirected if m is symmetric, else directed).  _(Stable)_
+- [`AdjacencyList`](AdjacencyList.md) — AdjacencyList[g] gives the adjacency list of g; AdjacencyList[g,v] gives the vertices adjacent to v (successors for directed edges).  _(Stable)_
+- [`AdjacencyMatrix`](AdjacencyMatrix.md) — AdjacencyMatrix[g] gives the 0/1 adjacency matrix of g (symmetric for undirected graphs).  _(Stable)_
 - [`AiryAiPrime`](AiryAiPrime.md) — AiryAiPrime[z]  _(Stable)_
 - [`AiryBiPrime`](AiryBiPrime.md) — AiryBiPrime[z]  _(Stable)_
-- [`AspectRatio`](AspectRatio.md) — AspectRatio  _(Experimental)_
+- [`AspectRatio`](AspectRatio.md) — AspectRatio  _(Stable)_
 - [`BesselJZero`](BesselJZero.md) — BesselJZero[n, k] gives the k-th positive zero of BesselJ[n, x]. Stays symbolic for symbolic arguments.  _(Stable)_
 - [`Black`](Black.md) — Black  _(Experimental)_
 - [`Blue`](Blue.md) — Blue  _(Experimental)_
 - [`Brown`](Brown.md) — Brown  _(Experimental)_
+- [`CompleteGraph`](CompleteGraph.md) — CompleteGraph[n] gives the complete graph K_n on n vertices.  _(Stable)_
+- [`ConnectedComponents`](ConnectedComponents.md) — ConnectedComponents[g] gives the connected components of g (weak, on the underlying undirected graph).  _(Stable)_
+- [`ConnectedGraphQ`](ConnectedGraphQ.md) — ConnectedGraphQ[g] gives True if g is connected.  _(Stable)_
+- [`ContourLabels`](ContourLabels.md) — ContourLabels  _(Experimental)_
+- [`ContourShading`](ContourShading.md) — ContourShading  _(Experimental)_
+- [`ContourStyle`](ContourStyle.md) — ContourStyle  _(Experimental)_
+- [`Contours`](Contours.md) — Contours  _(Experimental)_
 - [`Cyan`](Cyan.md) — Cyan  _(Experimental)_
+- [`CycleGraph`](CycleGraph.md) — CycleGraph[n] gives the cycle graph on n vertices.  _(Stable)_
+- [`DataType`](DataType.md) — DataType[a]  _(Stable)_
+- [`DirectedGraphQ`](DirectedGraphQ.md) — DirectedGraphQ[g] gives True if all edges of g are directed.  _(Stable)_
+- [`EdgeCount`](EdgeCount.md) — EdgeCount[g] gives the number of edges in the graph g.  _(Stable)_
+- [`EdgeList`](EdgeList.md) — EdgeList[g] gives the list of edges of the graph g.  _(Stable)_
+- [`FindShortestPath`](FindShortestPath.md) — FindShortestPath[g,s,t] gives a shortest path from s to t as a list of vertices ({} if none).  _(Stable)_
+- [`FindSpanningTree`](FindSpanningTree.md) — FindSpanningTree[g] gives a spanning tree (forest) of g as a graph.  _(Stable)_
 - [`Frame`](Frame.md) — Frame  _(Experimental)_
 - [`FrameStyle`](FrameStyle.md) — FrameStyle  _(Experimental)_
 - [`FrameTicks`](FrameTicks.md) — FrameTicks  _(Experimental)_
+- [`GraphDistance`](GraphDistance.md) — GraphDistance[g,s,t] gives the length of a shortest path from s to t (Infinity if unreachable).  _(Stable)_
+- [`GraphPlot`](GraphPlot.md) — GraphPlot[g] gives a Graphics object drawing the graph g with a circular vertex layout.  _(Stable)_
 - [`Gray`](Gray.md) — Gray  _(Experimental)_
 - [`Green`](Green.md) — Green  _(Experimental)_
 - [`ImageSize`](ImageSize.md) — ImageSize  _(Experimental)_
+- [`IncidenceMatrix`](IncidenceMatrix.md) — IncidenceMatrix[g] gives the vertex-edge incidence matrix of g (oriented: -1 tail, +1 head for directed edges).  _(Stable)_
 - [`LightBlue`](LightBlue.md) — LightBlue  _(Experimental)_
 - [`LightBrown`](LightBrown.md) — LightBrown  _(Experimental)_
 - [`LightCyan`](LightCyan.md) — LightCyan  _(Experimental)_
@@ -29,11 +50,23 @@
 - [`LightPurple`](LightPurple.md) — LightPurple  _(Experimental)_
 - [`LightRed`](LightRed.md) — LightRed  _(Experimental)_
 - [`LightYellow`](LightYellow.md) — LightYellow  _(Experimental)_
+- [`Lighting`](Lighting.md) — Lighting  _(Experimental)_
 - [`List`](List.md) — {e1, e2, ...} or List[e1, e2, ...]  _(Stable)_
 - [`Magenta`](Magenta.md) — Magenta  _(Experimental)_
+- [`NDArrayQ`](NDArrayQ.md) — NDArrayQ[expr]  _(Stable)_
 - [`Orange`](Orange.md) — Orange  _(Experimental)_
+- [`PathGraph`](PathGraph.md) — PathGraph[n] gives the path on n vertices; PathGraph[{v1,...}] the path over the given vertices.  _(Stable)_
 - [`Pink`](Pink.md) — Pink  _(Experimental)_
 - [`Purple`](Purple.md) — Purple  _(Experimental)_
+- [`RandomGraph`](RandomGraph.md) — RandomGraph[{n, m}] gives a random undirected graph with n vertices and m edges.  _(Stable)_
 - [`Red`](Red.md) — Red  _(Experimental)_
+- [`StronglyConnectedComponents`](StronglyConnectedComponents.md) — StronglyConnectedComponents[g] gives the strongly connected components of g (following edge directions).  _(Stable)_
+- [`VertexConnectivity`](VertexConnectivity.md) — VertexConnectivity[g] gives the minimum number of vertices whose removal disconnects g.  _(Stable)_
+- [`VertexCount`](VertexCount.md) — VertexCount[g] gives the number of vertices in the graph g.  _(Stable)_
+- [`VertexDegree`](VertexDegree.md) — VertexDegree[g] gives the list of vertex degrees; VertexDegree[g,v] gives the degree of vertex v.  _(Stable)_
+- [`VertexInDegree`](VertexInDegree.md) — VertexInDegree[g] / VertexInDegree[g,v] gives in-degrees (incoming directed edges; undirected edges count for both).  _(Stable)_
+- [`VertexList`](VertexList.md) — VertexList[g] gives the list of vertices of the graph g.  _(Stable)_
+- [`VertexOutDegree`](VertexOutDegree.md) — VertexOutDegree[g] / VertexOutDegree[g,v] gives out-degrees (outgoing directed edges; undirected edges count for both).  _(Stable)_
+- [`WeaklyConnectedComponents`](WeaklyConnectedComponents.md) — WeaklyConnectedComponents[g] gives the weakly connected components of g.  _(Stable)_
 - [`White`](White.md) — White  _(Experimental)_
 - [`Yellow`](Yellow.md) — Yellow  _(Experimental)_

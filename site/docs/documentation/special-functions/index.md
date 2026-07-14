@@ -1,6 +1,6 @@
 # Special Functions
 
-35 built-in function(s) in this category.
+38 built-in function(s) in this category.
 
 - [`AiryAi`](AiryAi.md) — AiryAi[z]  _(Stable)_
 - [`AiryBi`](AiryBi.md) — AiryBi[z]  _(Stable)_
@@ -11,6 +11,7 @@
 - [`BesselK`](BesselK.md) — BesselK[n, z]  _(Stable)_
 - [`BesselY`](BesselY.md) — BesselY[n, z]  _(Stable)_
 - [`Beta`](Beta.md) — Beta[a, b]  _(Stable)_
+- [`CosIntegral`](CosIntegral.md) — CosIntegral[z]  _(Stable)_
 - [`Erf`](Erf.md) — Erf[z]  _(Stable)_
 - [`Erfc`](Erfc.md) — Erfc[z]  _(Stable)_
 - [`Erfi`](Erfi.md) — Erfi[z]  _(Stable)_
@@ -35,5 +36,7 @@
 - [`PolyLog`](PolyLog.md) — PolyLog[n, z]  _(Stable)_
 - [`ProductLog`](ProductLog.md) — ProductLog[z]  _(Stable)_
 - [`QPochhammer`](QPochhammer.md) — QPochhammer[a, q, n]  _(Stable)_
+- [`SinIntegral`](SinIntegral.md) — SinIntegral[z]  _(Stable)_
+- [`Sinc`](Sinc.md) — Sinc[z]  _(Stable)_
 - [`StieltjesGamma`](StieltjesGamma.md) — StieltjesGamma[n]  _(Stable)_
 - [`Zeta`](Zeta.md) — Zeta[s]  _(Stable)_

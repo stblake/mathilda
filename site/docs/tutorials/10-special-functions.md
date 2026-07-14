@@ -230,6 +230,51 @@ In[2]:= N[LogIntegral[2]]
 Out[2]= 1.04516
 ```
 
+## Sine and cosine integrals
+
+`SinIntegral[z]` is the sine integral `Si(z) = Integral_0^z Sin[t]/t dt`, and
+`CosIntegral[z]` is the cosine integral `Ci(z) = -Integral_z^Infinity Cos[t]/t dt`.
+Both are non-elementary and evaluate numerically at machine or arbitrary precision:
+
+```mathematica
+In[1]:= N[SinIntegral[2]]
+Out[1]= 1.60541
+
+In[2]:= N[CosIntegral[2]]
+Out[2]= 0.422981
+```
+
+`Si` is entire and odd, with `SinIntegral[±Infinity] = ±Pi/2`. `Ci` is different:
+it has a logarithmic singularity at the origin and a branch cut along the negative
+real axis, so `CosIntegral[0] = -Infinity` and a negative real argument returns a
+complex value:
+
+```mathematica
+In[1]:= SinIntegral[Infinity]
+Out[1]= 1/2 Pi
+
+In[2]:= CosIntegral[0]
+Out[2]= -Infinity
+
+In[3]:= CosIntegral[-2.]
+Out[3]= 0.422981 + 3.14159 I
+```
+
+The two are linked through their derivatives. Differentiating the sine integral
+produces the cardinal sine `Sinc[z] = Sin[z]/z` (with the removable singularity
+filled in as `Sinc[0] = 1`), while the cosine integral differentiates to `Cos[z]/z`:
+
+```mathematica
+In[1]:= D[SinIntegral[x], x]
+Out[1]= Sinc[x]
+
+In[2]:= D[CosIntegral[x], x]
+Out[2]= Cos[x]/x
+
+In[3]:= Sinc[0]
+Out[3]= 1
+```
+
 ## The hypergeometric family
 
 Many of the functions above are special cases of one master function: the

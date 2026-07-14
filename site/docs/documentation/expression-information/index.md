@@ -1,6 +1,6 @@
 # Expression Information
 
-49 built-in function(s) in this category.
+52 built-in function(s) in this category.
 
 - [`$MachineEpsilon`]($MachineEpsilon.md) — $MachineEpsilon  _(Stable)_
 - [`$MachinePrecision`]($MachinePrecision.md) — $MachinePrecision  _(Stable)_
@@ -8,6 +8,8 @@
 - [`$MaxNumber`]($MaxNumber.md) — $MaxNumber  _(Stable)_
 - [`$MinMachineNumber`]($MinMachineNumber.md) — $MinMachineNumber  _(Stable)_
 - [`$MinNumber`]($MinNumber.md) — $MinNumber  _(Stable)_
+- [`$Version`]($Version.md) — $Version  _(Stable)_
+- [`$VersionNumber`]($VersionNumber.md) — $VersionNumber  _(Stable)_
 - [`AtomQ`](AtomQ.md) — AtomQ[expr]  _(Stable)_
 - [`Attributes`](Attributes.md) — Attributes[s] gives the list of attributes for s.  _(Stable)_
 - [`ByteCount`](ByteCount.md) — ByteCount[expr] gives the number of bytes used internally by Mathilda to store expr.  _(Stable)_
@@ -32,6 +34,7 @@
 - [`MachineNumberQ`](MachineNumberQ.md) — MachineNumberQ[expr] gives True if expr is a machine-precision real or complex number, and False otherwise.  _(Stable)_
 - [`MatrixQ`](MatrixQ.md) — MatrixQ[expr]  _(Stable)_
 - [`MemberQ`](MemberQ.md) — MemberQ[list, form] returns True if an element of list matches form, and False otherwise.  _(Stable)_
+- [`Names`](Names.md) — Names["string"] gives a sorted list of the names of symbols matching the string. Names[patt] matches a string pattern with metacharacters * (zero or more characters) and @ (one or more non-uppercase characters), or a RegularExpression["re"]. Names[{p1, p2, ...}] matches any of the patterns. Names[] lists all symbol names.  _(Stable)_
 - [`Negative`](Negative.md) — Negative[x]  _(Stable)_
 - [`NonNegative`](NonNegative.md) — NonNegative[x]  _(Stable)_
 - [`NonPositive`](NonPositive.md) — NonPositive[x]  _(Stable)_

@@ -144,6 +144,30 @@
     "url": "documentation/simplification/$SimplifyDebug/"
   },
   {
+    "name": "$StreamColorBar",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "$StreamColorBar[speed_min, speed_max]",
+    "url": "documentation/other-advanced/$StreamColorBar/"
+  },
+  {
+    "name": "$Version",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "$Version",
+    "url": "documentation/expression-information/$Version/"
+  },
+  {
+    "name": "$VersionNumber",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "$VersionNumber",
+    "url": "documentation/expression-information/$VersionNumber/"
+  },
+  {
     "name": "Abs",
     "category": "Arithmetic",
     "slug": "arithmetic",
@@ -182,6 +206,30 @@
     "status": "Stable",
     "summary": "AddTo[x, dx] or x += dx",
     "url": "documentation/assignment-and-rules/AddTo/"
+  },
+  {
+    "name": "AdjacencyGraph",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "AdjacencyGraph[m] builds a graph on vertices 1..n from a 0/1 adjacency matrix m (undirected if m is symmetric, else directed).",
+    "url": "documentation/other-advanced/AdjacencyGraph/"
+  },
+  {
+    "name": "AdjacencyList",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "AdjacencyList[g] gives the adjacency list of g; AdjacencyList[g,v] gives the vertices adjacent to v (successors for directed edges).",
+    "url": "documentation/other-advanced/AdjacencyList/"
+  },
+  {
+    "name": "AdjacencyMatrix",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "AdjacencyMatrix[g] gives the 0/1 adjacency matrix of g (symmetric for undirected graphs).",
+    "url": "documentation/other-advanced/AdjacencyMatrix/"
   },
   {
     "name": "AiryAi",
@@ -299,7 +347,7 @@
     "name": "AspectRatio",
     "category": "Other & Advanced",
     "slug": "other-advanced",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "AspectRatio",
     "url": "documentation/other-advanced/AspectRatio/"
   },
@@ -656,6 +704,14 @@
     "url": "documentation/statistics/Commonest/"
   },
   {
+    "name": "CompleteGraph",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "CompleteGraph[n] gives the complete graph K_n on n vertices.",
+    "url": "documentation/other-advanced/CompleteGraph/"
+  },
+  {
     "name": "Complex",
     "category": "Arithmetic",
     "slug": "arithmetic",
@@ -712,6 +768,22 @@
     "url": "documentation/linear-algebra/ConjugateTranspose/"
   },
   {
+    "name": "ConnectedComponents",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "ConnectedComponents[g] gives the connected components of g (weak, on the underlying undirected graph).",
+    "url": "documentation/other-advanced/ConnectedComponents/"
+  },
+  {
+    "name": "ConnectedGraphQ",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "ConnectedGraphQ[g] gives True if g is connected.",
+    "url": "documentation/other-advanced/ConnectedGraphQ/"
+  },
+  {
     "name": "Context",
     "category": "Scoping Constructs",
     "slug": "scoping-constructs",
@@ -728,6 +800,46 @@
     "url": "documentation/number-theory/ContinuedFraction/"
   },
   {
+    "name": "ContourLabels",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "ContourLabels",
+    "url": "documentation/other-advanced/ContourLabels/"
+  },
+  {
+    "name": "ContourPlot",
+    "category": "Graphics",
+    "slug": "graphics",
+    "status": "Experimental",
+    "summary": "ContourPlot[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]",
+    "url": "documentation/graphics/ContourPlot/"
+  },
+  {
+    "name": "ContourShading",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "ContourShading",
+    "url": "documentation/other-advanced/ContourShading/"
+  },
+  {
+    "name": "ContourStyle",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "ContourStyle",
+    "url": "documentation/other-advanced/ContourStyle/"
+  },
+  {
+    "name": "Contours",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Contours",
+    "url": "documentation/other-advanced/Contours/"
+  },
+  {
     "name": "CoprimeQ",
     "category": "Number Theory",
     "slug": "number-theory",
@@ -742,6 +854,14 @@
     "status": "Stable",
     "summary": "Cos[z]",
     "url": "documentation/elementary-functions/Cos/"
+  },
+  {
+    "name": "CosIntegral",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "CosIntegral[z]",
+    "url": "documentation/special-functions/CosIntegral/"
   },
   {
     "name": "Cosh",
@@ -816,12 +936,28 @@
     "url": "documentation/other-advanced/Cyan/"
   },
   {
+    "name": "CycleGraph",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "CycleGraph[n] gives the cycle graph on n vertices.",
+    "url": "documentation/other-advanced/CycleGraph/"
+  },
+  {
     "name": "D",
     "category": "Calculus",
     "slug": "calculus",
     "status": "Stable",
     "summary": "D[f, x] gives the partial derivative of f with respect to x.",
     "url": "documentation/calculus/D/"
+  },
+  {
+    "name": "DataType",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "DataType[a]",
+    "url": "documentation/other-advanced/DataType/"
   },
   {
     "name": "Decompose",
@@ -851,7 +987,7 @@
     "name": "Degree",
     "category": "Mathematical Constants",
     "slug": "mathematical-constants",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "Degree",
     "url": "documentation/mathematical-constants/Degree/"
   },
@@ -984,6 +1120,14 @@
     "url": "documentation/structural-manipulation/Dimensions/"
   },
   {
+    "name": "DirectedGraphQ",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "DirectedGraphQ[g] gives True if all edges of g are directed.",
+    "url": "documentation/other-advanced/DirectedGraphQ/"
+  },
+  {
     "name": "Discriminant",
     "category": "Algebra",
     "slug": "algebra",
@@ -1078,6 +1222,22 @@
     "status": "Stable",
     "summary": "E",
     "url": "documentation/mathematical-constants/E/"
+  },
+  {
+    "name": "EdgeCount",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "EdgeCount[g] gives the number of edges in the graph g.",
+    "url": "documentation/other-advanced/EdgeCount/"
+  },
+  {
+    "name": "EdgeList",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "EdgeList[g] gives the list of edges of the graph g.",
+    "url": "documentation/other-advanced/EdgeList/"
   },
   {
     "name": "Eigenvalues",
@@ -1512,6 +1672,22 @@
     "url": "documentation/calculus/FindRoot/"
   },
   {
+    "name": "FindShortestPath",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "FindShortestPath[g,s,t] gives a shortest path from s to t as a list of vertices ({} if none).",
+    "url": "documentation/other-advanced/FindShortestPath/"
+  },
+  {
+    "name": "FindSpanningTree",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "FindSpanningTree[g] gives a spanning tree (forest) of g as a graph.",
+    "url": "documentation/other-advanced/FindSpanningTree/"
+  },
+  {
     "name": "First",
     "category": "Data Structures",
     "slug": "data-structures",
@@ -1726,6 +1902,38 @@
     "status": "Experimental",
     "summary": "GoldenRatio",
     "url": "documentation/mathematical-constants/GoldenRatio/"
+  },
+  {
+    "name": "Graph",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "Graph[v, e] represents a graph with vertices v and edges e. Graph[e] derives the vertices from the edge list. Edges are DirectedEdge[u,v] or UndirectedEdge[u,v]; u->v and u<->v are accepted as shorthand. Simple graphs only: no self-loops or parallel edges.",
+    "url": "documentation/graphs/Graph/"
+  },
+  {
+    "name": "GraphDistance",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "GraphDistance[g,s,t] gives the length of a shortest path from s to t (Infinity if unreachable).",
+    "url": "documentation/other-advanced/GraphDistance/"
+  },
+  {
+    "name": "GraphPlot",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "GraphPlot[g] gives a Graphics object drawing the graph g with a circular vertex layout.",
+    "url": "documentation/other-advanced/GraphPlot/"
+  },
+  {
+    "name": "GraphQ",
+    "category": "Graphs",
+    "slug": "graphs",
+    "status": "Stable",
+    "summary": "GraphQ[g] gives True if g is a valid graph, and False otherwise.",
+    "url": "documentation/graphs/GraphQ/"
   },
   {
     "name": "Gray",
@@ -1958,6 +2166,14 @@
     "status": "Experimental",
     "summary": "ImageSize",
     "url": "documentation/other-advanced/ImageSize/"
+  },
+  {
+    "name": "IncidenceMatrix",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "IncidenceMatrix[g] gives the vertex-edge incidence matrix of g (oriented: -1 tail, +1 head for directed edges).",
+    "url": "documentation/other-advanced/IncidenceMatrix/"
   },
   {
     "name": "Increment",
@@ -2440,6 +2656,14 @@
     "url": "documentation/other-advanced/LightYellow/"
   },
   {
+    "name": "Lighting",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Lighting",
+    "url": "documentation/other-advanced/Lighting/"
+  },
+  {
     "name": "Limit",
     "category": "Calculus",
     "slug": "calculus",
@@ -2776,6 +3000,22 @@
     "url": "documentation/numerical-calculus/ND/"
   },
   {
+    "name": "NDArray",
+    "category": "Linear Algebra",
+    "slug": "linear-algebra",
+    "status": "Stable",
+    "summary": "NDArray[nested_list]",
+    "url": "documentation/linear-algebra/NDArray/"
+  },
+  {
+    "name": "NDArrayQ",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "NDArrayQ[expr]",
+    "url": "documentation/other-advanced/NDArrayQ/"
+  },
+  {
     "name": "NIntegrate",
     "category": "Numerical Calculus",
     "slug": "numerical-calculus",
@@ -2838,6 +3078,14 @@
     "status": "Stable",
     "summary": "NSum[f, {i, imin, imax}]",
     "url": "documentation/numerical-calculus/NSum/"
+  },
+  {
+    "name": "Names",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "Names[\"string\"] gives a sorted list of the names of symbols matching the string. Names[patt] matches a string pattern with metacharacters * (zero or more characters) and @ (one or more non-uppercase characters), or a RegularExpression[\"re\"]. Names[{p1, p2, ...}] matches any of the patterns. Names[] lists all symbol names.",
+    "url": "documentation/expression-information/Names/"
   },
   {
     "name": "Negative",
@@ -3072,6 +3320,22 @@
     "url": "documentation/structural-manipulation/PadRight/"
   },
   {
+    "name": "ParametricPlot",
+    "category": "Graphics",
+    "slug": "graphics",
+    "status": "Stable",
+    "summary": "ParametricPlot[{fx, fy}, {t, tmin, tmax}, opts...]",
+    "url": "documentation/graphics/ParametricPlot/"
+  },
+  {
+    "name": "ParametricPlot3D",
+    "category": "Graphics",
+    "slug": "graphics",
+    "status": "Stable",
+    "summary": "ParametricPlot3D[{fx, fy, fz}, {t, tmin, tmax}, opts...]",
+    "url": "documentation/graphics/ParametricPlot3D/"
+  },
+  {
     "name": "Part",
     "category": "Structural Manipulation",
     "slug": "structural-manipulation",
@@ -3102,6 +3366,14 @@
     "status": "Stable",
     "summary": "PartitionsQ[n]",
     "url": "documentation/number-theory/PartitionsQ/"
+  },
+  {
+    "name": "PathGraph",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "PathGraph[n] gives the path on n vertices; PathGraph[{v1,...}] the path over the given vertices.",
+    "url": "documentation/other-advanced/PathGraph/"
   },
   {
     "name": "Permutations",
@@ -3142,6 +3414,14 @@
     "status": "Stable",
     "summary": "Plot[f, {x, xmin, xmax}, opts...]",
     "url": "documentation/graphics/Plot/"
+  },
+  {
+    "name": "Plot3D",
+    "category": "Graphics",
+    "slug": "graphics",
+    "status": "Stable",
+    "summary": "Plot3D[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]",
+    "url": "documentation/graphics/Plot3D/"
   },
   {
     "name": "Plus",
@@ -3504,6 +3784,14 @@
     "url": "documentation/random-number-generation/RandomComplex/"
   },
   {
+    "name": "RandomGraph",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "RandomGraph[{n, m}] gives a random undirected graph with n vertices and m edges.",
+    "url": "documentation/other-advanced/RandomGraph/"
+  },
+  {
     "name": "RandomInteger",
     "category": "Random Number Generation",
     "slug": "random-number-generation",
@@ -3694,6 +3982,14 @@
     "status": "Stable",
     "summary": "Rescale[x, {min, max}]",
     "url": "documentation/lists-and-iteration/Rescale/"
+  },
+  {
+    "name": "Residue",
+    "category": "Calculus",
+    "slug": "calculus",
+    "status": "Stable",
+    "summary": "Residue[f, {z, z0}]",
+    "url": "documentation/calculus/Residue/"
   },
   {
     "name": "Rest",
@@ -3992,6 +4288,22 @@
     "url": "documentation/elementary-functions/Sin/"
   },
   {
+    "name": "SinIntegral",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "SinIntegral[z]",
+    "url": "documentation/special-functions/SinIntegral/"
+  },
+  {
+    "name": "Sinc",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "Sinc[z]",
+    "url": "documentation/special-functions/Sinc/"
+  },
+  {
     "name": "SingularValueDecomposition",
     "category": "Linear Algebra",
     "slug": "linear-algebra",
@@ -4112,6 +4424,14 @@
     "url": "documentation/special-functions/StieltjesGamma/"
   },
   {
+    "name": "StreamPlot",
+    "category": "Graphics",
+    "slug": "graphics",
+    "status": "Experimental",
+    "summary": "StreamPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}, opts...]",
+    "url": "documentation/graphics/StreamPlot/"
+  },
+  {
     "name": "StringCases",
     "category": "String Operations",
     "slug": "string-operations",
@@ -4206,6 +4526,14 @@
     "status": "Stable",
     "summary": "StringTake[\"string\", n]",
     "url": "documentation/string-operations/StringTake/"
+  },
+  {
+    "name": "StronglyConnectedComponents",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "StronglyConnectedComponents[g] gives the strongly connected components of g (following edge directions).",
+    "url": "documentation/other-advanced/StronglyConnectedComponents/"
   },
   {
     "name": "SubresultantPolynomialRemainders",
@@ -4646,6 +4974,62 @@
     "status": "Experimental",
     "summary": "VerifySolutions is an option for Solve that decides whether to",
     "url": "documentation/solutions-of-equations/VerifySolutions/"
+  },
+  {
+    "name": "VertexConnectivity",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "VertexConnectivity[g] gives the minimum number of vertices whose removal disconnects g.",
+    "url": "documentation/other-advanced/VertexConnectivity/"
+  },
+  {
+    "name": "VertexCount",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "VertexCount[g] gives the number of vertices in the graph g.",
+    "url": "documentation/other-advanced/VertexCount/"
+  },
+  {
+    "name": "VertexDegree",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "VertexDegree[g] gives the list of vertex degrees; VertexDegree[g,v] gives the degree of vertex v.",
+    "url": "documentation/other-advanced/VertexDegree/"
+  },
+  {
+    "name": "VertexInDegree",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "VertexInDegree[g] / VertexInDegree[g,v] gives in-degrees (incoming directed edges; undirected edges count for both).",
+    "url": "documentation/other-advanced/VertexInDegree/"
+  },
+  {
+    "name": "VertexList",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "VertexList[g] gives the list of vertices of the graph g.",
+    "url": "documentation/other-advanced/VertexList/"
+  },
+  {
+    "name": "VertexOutDegree",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "VertexOutDegree[g] / VertexOutDegree[g,v] gives out-degrees (outgoing directed edges; undirected edges count for both).",
+    "url": "documentation/other-advanced/VertexOutDegree/"
+  },
+  {
+    "name": "WeaklyConnectedComponents",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "WeaklyConnectedComponents[g] gives the weakly connected components of g.",
+    "url": "documentation/other-advanced/WeaklyConnectedComponents/"
   },
   {
     "name": "Which",
