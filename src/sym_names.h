@@ -723,6 +723,10 @@ extern const char* SYM_ContourShading;  /* True/False/Automatic: fill between co
 /* DensityPlot[f, {x,...}, {y,...}, opts...] */
 extern const char* SYM_DensityPlot;
 
+/* ComplexPlot[f, {z, zmin, zmax}, opts...] / ComplexPlot3D[...] */
+extern const char* SYM_ComplexPlot;
+extern const char* SYM_ComplexPlot3D;
+
 /* BarChart[data, opts...] / Histogram[data, opts...] */
 extern const char* SYM_BarChart;
 extern const char* SYM_Histogram;

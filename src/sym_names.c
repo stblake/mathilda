@@ -705,6 +705,8 @@ const char* SYM_ContourStyle = NULL;
 const char* SYM_ContourLabels = NULL;
 const char* SYM_ContourShading = NULL;
 const char* SYM_DensityPlot = NULL;
+const char* SYM_ComplexPlot = NULL;
+const char* SYM_ComplexPlot3D = NULL;
 const char* SYM_BarChart = NULL;
 const char* SYM_Histogram = NULL;
 const char* SYM_BarSpacing = NULL;
@@ -1414,6 +1416,8 @@ void sym_names_init(void) {
     SYM_ContourLabels              = intern_symbol("ContourLabels");
     SYM_ContourShading             = intern_symbol("ContourShading");
     SYM_DensityPlot                = intern_symbol("DensityPlot");
+    SYM_ComplexPlot                = intern_symbol("ComplexPlot");
+    SYM_ComplexPlot3D              = intern_symbol("ComplexPlot3D");
     SYM_BarChart                   = intern_symbol("BarChart");
     SYM_Histogram                  = intern_symbol("Histogram");
     SYM_BarSpacing                 = intern_symbol("BarSpacing");

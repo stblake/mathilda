@@ -469,6 +469,7 @@ void graphics3d_show(const Expr* graphics3d_expr) {
     Gfx3DOptions opts;
     gfx3d_options_parse(graphics3d_expr, &opts);
     const Expr* prims = graphics3d_expr->data.function.args[0];
+    const Expr* color_bar_data = find_color_bar(graphics3d_expr);
 
     Box3D bb = { DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX };
     compute_bbox3(prims, &bb);
@@ -602,6 +603,24 @@ void graphics3d_show(const Expr* graphics3d_expr) {
                 DrawText(s, (win_w - tw) / 2, 10, 18, BLACK);
                 free(s);
             }
+        }
+
+        /* Vertical phase color-scale bar (ComplexPlot3D PlotLegends). */
+        if (color_bar_data && color_bar_data->data.function.arg_count >= 2) {
+            double cb_min = 0.0, cb_max = 1.0;
+            const Expr* a0 = color_bar_data->data.function.args[0];
+            const Expr* a1 = color_bar_data->data.function.args[1];
+            if (a0->type == EXPR_REAL) cb_min = a0->data.real;
+            if (a1->type == EXPR_REAL) cb_max = a1->data.real;
+            const Expr* cb_cfn = (color_bar_data->data.function.arg_count >= 3)
+                                 ? color_bar_data->data.function.args[2] : NULL;
+            const float cb_margin = 50.0f;
+            const float cb_w = 18.0f;
+            float cb_h = (float)win_h - 2.0f * cb_margin;
+            if (cb_h < 20.0f) cb_h = 20.0f;
+            float cb_x = (float)win_w - 70.0f;
+            float cb_y = cb_margin;
+            draw_color_bar(cb_x, cb_y, cb_w, cb_h, cb_min, cb_max, cb_cfn);
         }
 
         draw_toolbar3(win_w, tb3_hover);

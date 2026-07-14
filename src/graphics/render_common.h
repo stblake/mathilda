@@ -26,4 +26,19 @@ Color to_raylib(RGBA8 c);
  * tick count. */
 double nice_step(double range, int target_ticks);
 
+/* Find the $StreamColorBar[lo, hi, cfn] metadata node embedded by the
+ * plotter in the Graphics/Graphics3D option list.  Returns NULL if absent. */
+const Expr* find_color_bar(const Expr* graphics_expr);
+
+/* Draw a vertical color scale bar in screen space.  Usable from both the
+ * 2D and 3D render paths (called after EndMode3D so drawing is 2D). */
+void draw_color_bar(float bar_x, float bar_y, float bar_w, float bar_h,
+                    double spd_min, double spd_max, const Expr* cfn);
+
+/* Hershey font helpers (declared here so render3d.c can call them without
+ * pulling in the full render.c header). */
+float hershey_text_width(const char* text, float scale);
+void  hershey_draw_text(const char* text, float x, float y, float scale,
+                        float angle, Color col);
+
 #endif /* MATHILDA_GRAPHICS_RENDER_COMMON_H */

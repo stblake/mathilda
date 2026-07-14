@@ -60,6 +60,13 @@ Expr* eval_color_function3(Expr* color_fn,
 
 /* Named color ramps — all take t ∈ [0,1], write r/g/b ∈ [0,1]. */
 
+/* PhaseRings: domain-colouring ramp for ComplexPlot. Takes the raw complex
+ * value (re, im) rather than a normalised t because both Arg and |w| are
+ * needed: hue = phase, brightness = 0.1 + 0.9·(1+cos(2π·log|w|))/2 (one
+ * bright/dark ring per e-fold of |w|, compressing near poles and zeros).
+ * The color-bar path (1-D, t only) falls back to a pure hue sweep. */
+void phase_rings_rgb(double re, double im, double* r, double* g, double* b);
+
 /* Thermal: dark blue-purple (t=0) → purple → red → orange → bright yellow (t=1).
  * Matches Mathematica's default StreamPlot speed colormap. */
 void thermal_rgb(double t, double* r, double* g, double* b);

@@ -411,6 +411,68 @@ void graphics_init(void) {
         "\t  AxesLabel, GridLines, ImageSize, Background, PlotLabel, …) pass\n"
         "\t  through to the Graphics[...] result.");
 
+    symtab_add_builtin("ComplexPlot", builtin_complexplot);
+    symtab_get_def("ComplexPlot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("ComplexPlot",
+        "ComplexPlot[f, {z, zmin, zmax}, opts...]\n"
+        "\tDomain-colouring plot of the complex function f over the rectangular\n"
+        "\tregion in the complex plane with corners zmin and zmax.  z is bound\n"
+        "\tto Complex[x, y] at each grid point; f must return a complex or real\n"
+        "\tnumber.  The color of each cell encodes Arg(f(z)) via the thermal\n"
+        "\tramp (same default as DensityPlot), and brightness encodes |f(z)|.\n"
+        "\tComplexPlot is HoldAll: f and the iterator spec are held unevaluated\n"
+        "\tuntil z is given a numeric complex value.\n"
+        "\n"
+        "\tOptions:\n"
+        "\t  PlotPoints          grid resolution per axis (default 200)\n"
+        "\t  ColorFunction       f[re, im] → color, or a named ramp string.\n"
+        "\t                      Named ramps: \"PhaseRings\" (hue=phase,\n"
+        "\t                      brightness=log|w| rings — highlights poles\n"
+        "\t                      and zeros), \"Rainbow\", \"CoolTones\",\n"
+        "\t                      \"WarmTones\", \"Greyscale\", \"Temperature\"\n"
+        "\t                      (others keyed to normalised Arg)\n"
+        "\t  ColorFunctionScaling True (default): scale re/im to [0,1] before\n"
+        "\t                       calling a custom ColorFunction\n"
+        "\t  RegionFunction      f[x,y] mask; excluded cells are not drawn\n"
+        "\t  PlotLegends         Automatic / True: attach a vertical phase color\n"
+        "\t                      scale bar (thermal ramp, -π at bottom, π at top)\n"
+        "\t  Standard Graphics options (Axes, AspectRatio→1, Frame, PlotRange,\n"
+        "\t  AxesLabel, GridLines, ImageSize, Background, PlotLabel, …) pass\n"
+        "\t  through to the Graphics[...] result.\n"
+        "\n"
+        "\tExamples:\n"
+        "\t  ComplexPlot[z^2, {z, -2-2I, 2+2I}]\n"
+        "\t  ComplexPlot[Sin[z], {z, -Pi-Pi*I, Pi+Pi*I}]\n"
+        "\t  ComplexPlot[1/(z^2+1), {z, -2-2I, 2+2I}, PlotPoints->80]\n"
+        "\t  ComplexPlot[(z^2+1)/(z^2-1), {z, -2-2I, 2+2I}, PlotLegends->Automatic]");
+
+    symtab_add_builtin("ComplexPlot3D", builtin_complexplot3d);
+    symtab_get_def("ComplexPlot3D")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("ComplexPlot3D",
+        "ComplexPlot3D[f, {z, zmin, zmax}, opts...]\n"
+        "\tThree-dimensional surface plot of a complex function: height = |f(z)|,\n"
+        "\tcolour = Arg(f(z)) via the thermal ramp (same default as Plot3D).\n"
+        "\tz is bound to Complex[x, y] at each grid point; the result is a\n"
+        "\tGraphics3D[...] object rendered in an orbit-camera window.\n"
+        "\tComplexPlot3D is HoldAll.\n"
+        "\n"
+        "\tOptions:\n"
+        "\t  PlotPoints          grid resolution per axis (default 200)\n"
+        "\t  ColorFunction       f[re, im] → color, or named ramp string;\n"
+        "\t                      \"PhaseRings\" recommended (see ComplexPlot)\n"
+        "\t  ColorFunctionScaling True (default): scale re/im to [0,1]\n"
+        "\t  RegionFunction      f[x,y] mask\n"
+        "\t  PlotLegends         Automatic / True: attach a vertical phase color\n"
+        "\t                      scale bar (-π at bottom, π at top)\n"
+        "\t  Lighting -> None    disables Lambertian shading (recommended for\n"
+        "\t                      accurate phase colours; default Automatic)\n"
+        "\t  Standard Graphics3D options pass through to the result.\n"
+        "\n"
+        "\tExamples:\n"
+        "\t  ComplexPlot3D[z^2, {z, -2-2I, 2+2I}]\n"
+        "\t  ComplexPlot3D[Sin[z], {z, -2-2I, 2+2I}, Lighting->None]\n"
+        "\t  ComplexPlot3D[1/z, {z, -2-2I, 2+2I}, PlotLegends->Automatic, Lighting->None]");
+
     symtab_add_builtin("BarChart", builtin_barchart);
     symtab_get_def("BarChart")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("BarChart",

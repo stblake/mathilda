@@ -1660,7 +1660,7 @@ static const Expr* find_bar_labels(const Expr* graphics_expr) {
 
 /* Finds $StreamColorBar[spd_min, spd_max] in the Graphics option list.
  * Returns the node (borrowed) or NULL if absent. */
-static const Expr* find_color_bar(const Expr* graphics_expr) {
+const Expr* find_color_bar(const Expr* graphics_expr) {
     size_t argc = graphics_expr->data.function.arg_count;
     for (size_t i = 1; i < argc; i++) {
         const Expr* a = graphics_expr->data.function.args[i];
@@ -1726,8 +1726,8 @@ static void draw_bar_chart_labels(const Expr* bar_labels, Camera2D camera) {
  * bar_x/y: top-left of the strip; bar_w/bar_h: dimensions in pixels.
  * cfn: the ColorFunction option Expr (string name, pure function, or NULL/
  * Automatic meaning default thermal ramp). Labels are drawn to the right. */
-static void draw_color_bar(float bar_x, float bar_y, float bar_w, float bar_h,
-                           double spd_min, double spd_max, const Expr* cfn) {
+void draw_color_bar(float bar_x, float bar_y, float bar_w, float bar_h,
+                    double spd_min, double spd_max, const Expr* cfn) {
     int bands = (int)bar_h;
     if (bands < 1) bands = 1;
 

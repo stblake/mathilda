@@ -325,7 +325,53 @@ Expr* named_color_ramp(const char* name, double t) {
         Expr* a[1] = { expr_new_real(1.0 - t) }; /* white at t=0, black at t=1 */
         return expr_new_function(expr_new_symbol(SYM_GrayLevel), a, 1);
     }
+    /* "PhaseRings" — 1-D bar variant: pure hue sweep at full brightness.
+     * The modulus-ring brightness oscillation cannot be shown in 1-D; the bar
+     * label range (−π to π) already conveys the phase mapping. */
+    if (strcmp(name, "PhaseRings") == 0) {
+        Expr* a[1] = { expr_new_real(t) };
+        return expr_new_function(expr_new_symbol(SYM_Hue), a, 1);
+    }
     return NULL;
+}
+
+/* phase_rings_rgb — domain-colouring ramp for complex functions.
+ *
+ * Hue = Arg(re + i·im) / (2π)  maps phase continuously around the color wheel.
+ * Value (brightness) = 0.1 + 0.9 · (1 + cos(2π · log|w|)) / 2  creates one
+ * bright/dark ring per e-fold of |w|, compressing near poles (|w|→∞) and zeros
+ * (|w|→0) to make them instantly visible as concentric ring clusters.
+ *
+ * Used by ComplexPlot when ColorFunction → "PhaseRings"; the color bar path
+ * (which only has a 1-D t parameter) uses hue_to_rgb instead, showing the phase
+ * sweep at full brightness so the bar tick labels (−π to π) are legible. */
+void phase_rings_rgb(double re, double im, double* r, double* g, double* b) {
+    double arg   = atan2(im, re);
+    double hue   = (arg + M_PI) / (2.0 * M_PI);   /* phase → [0, 1] */
+    double mod   = sqrt(re * re + im * im);
+    double bright;
+    if (mod < 1e-300) {
+        bright = 0.0;
+    } else {
+        double lmod = log(mod);
+        bright = (1.0 + cos(2.0 * M_PI * lmod)) * 0.5;
+        bright = 0.1 + 0.9 * bright;               /* floor at 0.1 */
+    }
+    /* HSV → RGB: S = 1, V = bright */
+    double h6 = hue * 6.0;
+    h6 -= floor(h6 / 6.0) * 6.0;                  /* wrap to [0, 6) */
+    int    sec = (int)h6;
+    double f   = h6 - (double)sec;
+    double q   = bright * (1.0 - f);
+    double tv  = bright * f;
+    switch (sec % 6) {
+        case 0: *r = bright; *g = tv;    *b = 0.0;   break;
+        case 1: *r = q;      *g = bright; *b = 0.0;  break;
+        case 2: *r = 0.0;    *g = bright; *b = tv;   break;
+        case 3: *r = 0.0;    *g = q;     *b = bright; break;
+        case 4: *r = tv;     *g = 0.0;   *b = bright; break;
+        default: *r = bright; *g = 0.0;  *b = q;     break;
+    }
 }
 
 /* hue_to_rgb — HSV → RGB with s=v=1 (pure saturated hue sweep). */
@@ -367,6 +413,9 @@ int resolve_ramp_to_rgb(const char* name, double t, double* r, double* g, double
         || strcmp(name, "GrayScale") == 0 || strcmp(name, "GreyScale") == 0
         || strcmp(name, "Grey") == 0 || strcmp(name, "Gray") == 0) {
         *r = *g = *b = 1.0 - t; return 1;
+    }
+    if (strcmp(name, "PhaseRings") == 0) {
+        hue_to_rgb(t, r, g, b); return 1;
     }
     return 0;
 }

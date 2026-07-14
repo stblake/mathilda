@@ -43,6 +43,7 @@ color directives) with 3-coordinate `{x,y,z}` points instead of 2-coordinate
 | [`PolarPlot`](#polarplot) | Polar curve `r(θ)` | `ColorFunction`, `PlotStyle`, `RegionFunction` |
 | [`ContourPlot`](#contourplot) | Iso-contour lines / filled contours of `f(x,y)` | `Contours`, `ContourStyle`, `ContourShading`, `ColorFunction`, `ContourLabels`, `ScalingFunctions` |
 | [`DensityPlot`](#densityplot) | Heatmap of `f(x,y)` | `ColorFunction`, `ColorFunctionScaling`, `RegionFunction`, `PlotLegends`, `ScalingFunctions` |
+| [`ComplexPlot`](#complexplot) | Domain-colouring of a complex function `f(z)` | `PlotPoints`, `ColorFunction`, `ColorFunctionScaling`, `RegionFunction`, `PlotLegends` |
 | [`VectorPlot`](#vectorplot) | Arrow grid for a 2D vector field | `VectorPoints`, `VectorScale`, `VectorStyle`, `ColorFunction`, `RegionFunction`, `ScalingFunctions` |
 | [`StreamPlot`](#streamplot) | RK4-integrated streamlines of a 2D vector field | `StreamPoints`, `StreamScale`, `StreamStyle`, `ColorFunction`, `RegionFunction`, `ScalingFunctions` |
 | [`BarChart`](#barchart) | Vertical bar chart for categorical / grouped data | `ChartStyle`, `ChartLabels`, `BarSpacing` |
@@ -54,6 +55,7 @@ color directives) with 3-coordinate `{x,y,z}` points instead of 2-coordinate
 |----------|---------|-------------|
 | [`Plot3D`](#plot3d) | Surface plot of `f(x,y)` with orbit camera | `PlotPoints`, `Mesh`, `ColorFunction`, `RegionFunction`, `Lighting` |
 | [`ParametricPlot3D`](#parametricplot3d) | Parametric space curves or surfaces in 3D | `ColorFunction`, `RegionFunction`, `Mesh` |
+| [`ComplexPlot3D`](#complexplot3d) | 3D surface `height=|f(z)|`, `color=Arg(f(z))` | `PlotPoints`, `ColorFunction`, `ColorFunctionScaling`, `RegionFunction`, `PlotLegends`, `Lighting` |
 
 ### Shared option cross-reference
 
@@ -996,6 +998,76 @@ Out[3]= -Graphics-
 In[4]:= DensityPlot[x^2 + y^2, {x, -3, 3}, {y, -3, 3},
           RegionFunction -> Function[{x,y}, x^2 + y^2 < 4]]
 Out[4]= -Graphics-
+```
+
+---
+
+## ComplexPlot
+
+```
+ComplexPlot[f, {z, zmin, zmax}, opts...]
+```
+
+Domain-colouring plot of the complex function `f` over the rectangular region
+in the complex plane with corners `zmin` and `zmax`.  `z` is bound to
+`Complex[x, y]` at each grid point; `f` must return a complex or real number.
+The color of each cell encodes `Arg(f(z))` via the thermal ramp (same default
+as `DensityPlot`), with brightness proportional to `|f(z)|/(1+|f(z)|)` so the
+origin fades to black.  `ComplexPlot` is `HoldAll`.
+
+**Options**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `PlotPoints` | `200` | Grid resolution per axis (high default for smooth gradients) |
+| `ColorFunction` | thermal by arg | `f[re, im] → color`, or a named ramp string. **`"PhaseRings"`** — hue = `Arg`, brightness = `(1+cos(2π·log|w|))/2` (one ring per e-fold of `|w|`); highlights poles and zeros as dense concentric ring clusters. Other ramps keyed to normalised `Arg`: `"Rainbow"`, `"CoolTones"`, `"WarmTones"`, `"Greyscale"`, `"Temperature"` |
+| `ColorFunctionScaling` | `True` | Scale `re`/`im` to `[0,1]` before calling a custom `ColorFunction` (no effect on `"PhaseRings"`, which uses raw values) |
+| `RegionFunction` | `None` | `f[x,y]` mask; excluded cells are not drawn |
+| `PlotLegends` | `None` | `Automatic` / `True`: draw a vertical phase color scale bar (thermal or hue ramp, −π at bottom, +π at top) |
+| Standard Graphics options | — | `Axes` (default `True`), `AspectRatio` (default `1`), `PlotRange`, `Frame`, `AxesLabel`, `GridLines`, `ImageSize`, `Background`, `PlotLabel`, … |
+
+**Examples**
+
+```mathematica
+ComplexPlot[z^2, {z, -2-2I, 2+2I}]
+ComplexPlot[Sin[z], {z, -Pi-Pi*I, Pi+Pi*I}]
+ComplexPlot[1/(z^2+1), {z, -2-2I, 2+2I}, PlotPoints->80]
+ComplexPlot[(z^2+1)/(z^2-1), {z, -2-2I, 2+2I}, PlotLegends->Automatic]
+ComplexPlot[(z^2+1)/(z^2-1), {z, -2-2I, 2+2I}, ColorFunction->"PhaseRings"]
+```
+
+---
+
+## ComplexPlot3D
+
+```
+ComplexPlot3D[f, {z, zmin, zmax}, opts...]
+```
+
+Three-dimensional surface plot of a complex function: **height = `|f(z)|`**,
+**colour = `Arg(f(z))`** via the thermal ramp (same default as `Plot3D`).
+`z` is bound to `Complex[x, y]` at each grid point; the result is a
+`Graphics3D[...]` object rendered in the orbit-camera window.
+`ComplexPlot3D` is `HoldAll`.
+
+**Options**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `PlotPoints` | `200` | Grid resolution per axis |
+| `ColorFunction` | thermal by arg | `f[re, im] → color`, or named ramp string (same set as `ComplexPlot`) |
+| `ColorFunctionScaling` | `True` | Scale `re`/`im` to `[0,1]` before calling custom `ColorFunction` |
+| `RegionFunction` | `None` | `f[x,y]` mask |
+| `PlotLegends` | `None` | `Automatic` / `True`: draw a vertical phase color scale bar |
+| `Lighting` | `Automatic` | `None` disables Lambertian shading for accurate phase colours |
+| Standard Graphics3D options | — | pass through to the `Graphics3D[...]` result |
+
+**Examples**
+
+```mathematica
+ComplexPlot3D[z^2, {z, -2-2I, 2+2I}]
+ComplexPlot3D[Sin[z], {z, -2-2I, 2+2I}, Lighting->None]
+ComplexPlot3D[1/z, {z, -2-2I, 2+2I}, PlotLegends->Automatic, Lighting->None]
 ```
 
 ---
