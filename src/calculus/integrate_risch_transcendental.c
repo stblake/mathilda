@@ -3842,6 +3842,43 @@ static Expr* rt_subst_kernels(Expr* e, RtTower* T) {
             && e->data.function.arg_count == 1
             && expr_eq(e->data.function.args[0], T->arg[i]))
             return expr_copy(T->t[i]);
+        /* RT_TAN: rationalise the OTHER circular/hyperbolic trig of the tangent
+         * argument to the tower variable (the fresh symbol keeps the evaluator from
+         * canonicalising the result back to Csc/Sec).  Tan/Tanh already matched the
+         * kernel above; here Sin=t/rad, Cos=1/rad, Sec=rad, Csc=rad/t, Cot=1/t with
+         * rad = Sqrt[1 + sigma t^2]. */
+        if (T->kind[i] == RT_TAN && e->type == EXPR_FUNCTION
+            && e->data.function.head->type == EXPR_SYMBOL
+            && e->data.function.arg_count == 1
+            && expr_eq(e->data.function.args[0], T->arg[i])) {
+            const char* h = e->data.function.head->data.symbol.name;
+            long sg = T->tsg[i]; Expr* ti = T->t[i];
+            Expr* rad = expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_new_function(expr_new_symbol("Plus"),
+                    (Expr*[]){ expr_new_integer(1), expr_new_function(expr_new_symbol("Times"),
+                        (Expr*[]){ expr_new_integer(sg), expr_new_function(expr_new_symbol("Power"),
+                            (Expr*[]){ expr_copy(ti), expr_new_integer(2) }, 2) }, 2) }, 2),
+                  expr_new_function(expr_new_symbol("Rational"),
+                    (Expr*[]){ expr_new_integer(1), expr_new_integer(2) }, 2) }, 2);
+            if (h == intern_symbol(sg > 0 ? "Sin" : "Sinh"))
+                return expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_copy(ti), expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ rad, expr_new_integer(-1) }, 2) }, 2);
+            if (h == intern_symbol(sg > 0 ? "Cos" : "Cosh"))
+                return expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ rad, expr_new_integer(-1) }, 2);
+            if (h == intern_symbol(sg > 0 ? "Sec" : "Sech")) return rad;
+            if (h == intern_symbol(sg > 0 ? "Csc" : "Csch"))
+                return expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ rad, expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ expr_copy(ti), expr_new_integer(-1) }, 2) }, 2);
+            if (h == intern_symbol(sg > 0 ? "Cot" : "Coth")) {
+                expr_free(rad);
+                return expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_copy(ti), expr_new_integer(-1) }, 2);
+            }
+            expr_free(rad);
+        }
     }
     /* Multiplicatively commensurate member kernel E^(marg) = t[mprim]^mmult. */
     for (size_t m = 0; m < T->nm; m++) {
@@ -3874,7 +3911,10 @@ static Expr* rt_subst_kernels(Expr* e, RtTower* T) {
 
 static Expr* rt_recursive_tower_case(Expr* f, Expr* x) {
     /* Split any evaluator-merged exponential monomial back into an independent
-     * tower basis before building the tower (see rt_expand_exp_sums). */
+     * tower basis before building the tower (see rt_expand_exp_sums).  Circular/
+     * hyperbolic trig of a tangent argument is rationalised to the tower variable
+     * during substitution (rt_subst_kernels), where the fresh symbol prevents the
+     * evaluator from canonicalising the Tan-rational form back to Csc/Sec. */
     Expr* fx = rt_expand_exp_sums(f);
     RtTower T;
     /* min_n = 2: single-kernel integrands are handled by the dedicated flat-tower
