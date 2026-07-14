@@ -40,6 +40,7 @@ typedef struct {
     Expr** arg;      /* u_i (log/tan argument) or w_i (exp exponent) (owned) */
     Expr** t;        /* fresh tower variable t_i                 (owned) */
     Expr** Dcoef;    /* log: u'/u ; exp: w' ; tan: u'           (owned) */
+    long*  tsg;      /* RT_TAN special sign sigma: +1 (Tan/Cot), -1 (Tanh/Coth); 0 else */
     Expr* subrules;  /* List of all kernel -> t_i rules          (owned) */
     /* Multiplicatively commensurate non-primitive exp members: a collected
      * kernel E^w whose exponent w = mmult * arg[mprim] is NOT an independent

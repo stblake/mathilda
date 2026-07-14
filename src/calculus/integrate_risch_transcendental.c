@@ -2735,10 +2735,43 @@ static void rt_tower_free(RtTower* T) {
     for (size_t i = 0; i < T->nm; i++)
         if (T->marg && T->marg[i]) expr_free(T->marg[i]);
     free(T->kind); free(T->kernel); free(T->arg); free(T->t); free(T->Dcoef);
-    free(T->marg); free(T->mprim); free(T->mmult);
+    free(T->tsg); free(T->marg); free(T->mprim); free(T->mmult);
     T->kind = NULL; T->kernel = NULL; T->arg = NULL; T->t = NULL; T->Dcoef = NULL;
-    T->marg = NULL; T->mprim = NULL; T->mmult = NULL;
+    T->tsg = NULL; T->marg = NULL; T->mprim = NULL; T->mmult = NULL;
     T->n = 0; T->nm = 0; T->subrules = NULL;
+}
+
+/* Collect distinct x-dependent tangent-family monomials: each is (argument u, sigma)
+ * with sigma = +1 for Tan/Cot (special polynomial t^2+1) and -1 for Tanh/Coth
+ * (t^2-1).  Cot[u]/Coth[u] are reciprocals of the Tan[u]/Tanh[u] tower variable, so
+ * they yield the same monomial (deduped by (u, sigma)).  The tower variable is
+ * always the Tan/Tanh spelling; rt_tower_build adds subst rules for all four. */
+static void rt_collect_tangents(Expr* e, Expr* x, Expr*** args, long** sigs,
+                                size_t* n, size_t* cap) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    const char* h = (e->data.function.head->type == EXPR_SYMBOL)
+        ? e->data.function.head->data.symbol.name : NULL;
+    if (h && e->data.function.arg_count == 1
+        && !rt_free_of_x(e->data.function.args[0], x)) {
+        long sg = 0;
+        if (h == intern_symbol("Tan") || h == intern_symbol("Cot")) sg = 1;
+        else if (h == intern_symbol("Tanh") || h == intern_symbol("Coth")) sg = -1;
+        if (sg) {
+            Expr* u = e->data.function.args[0];
+            bool dup = false;
+            for (size_t i = 0; i < *n; i++)
+                if ((*sigs)[i] == sg && expr_eq((*args)[i], u)) { dup = true; break; }
+            if (!dup) {
+                if (*n == *cap) { *cap = *cap ? *cap * 2 : 4;
+                    *args = realloc(*args, *cap * sizeof(Expr*));
+                    *sigs = realloc(*sigs, *cap * sizeof(long)); }
+                (*args)[*n] = expr_copy(u); (*sigs)[*n] = sg; (*n)++;
+            }
+        }
+    }
+    rt_collect_tangents(e->data.function.head, x, args, sigs, n, cap);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        rt_collect_tangents(e->data.function.args[i], x, args, sigs, n, cap);
 }
 
 /* Build the ordered differential tower of f over C(x).  Collect every
@@ -2754,12 +2787,14 @@ static void rt_tower_free(RtTower* T) {
  * rt_tower_free). */
 static bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
     T->kind = NULL; T->kernel = NULL; T->arg = NULL; T->t = NULL; T->Dcoef = NULL;
-    T->marg = NULL; T->mprim = NULL; T->mmult = NULL;
+    T->tsg = NULL; T->marg = NULL; T->mprim = NULL; T->mmult = NULL;
     T->subrules = NULL; T->n = 0; T->nm = 0;
 
     Expr** logs = NULL; size_t nl = 0, lc = 0; rt_collect_logs(f, x, &logs, &nl, &lc);
     Expr** exps = NULL; size_t ne = 0, ec = 0;
     rt_collect_exp_exponents(f, x, &exps, &ne, &ec);
+    Expr** tans = NULL; long* tsigs = NULL; size_t nt = 0, ntc = 0;
+    rt_collect_tangents(f, x, &tans, &tsigs, &nt, &ntc);   /* tangent-family monomials */
     Expr** mprim_pexp = malloc((ne ? ne : 1) * sizeof(Expr*)); /* per-member class primitive (borrowed) */
 
     /* --- Multiplicatively commensurate reduction of the exponential kernels. ---
@@ -2812,13 +2847,14 @@ static bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
     }
     size_t np = 0;
     for (size_t rep = 0; rep < ne; rep++) if (clsrep[rep] == (long)rep) np++;
-    size_t n = nl + np;
+    size_t n = nl + np + nt;
     if (!okc || n < min_n) {                         /* no upper depth cap */
         for (size_t rep = 0; rep < ne; rep++) if (clsprim[rep]) expr_free(clsprim[rep]);
         free(clsprim); free(clsrep); free(multof); free(mprim_pexp);
         for (size_t i = 0; i < nl; i++) expr_free(logs[i]);
         for (size_t i = 0; i < ne; i++) expr_free(exps[i]);
-        free(logs); free(exps);
+        for (size_t i = 0; i < nt; i++) expr_free(tans[i]);
+        free(logs); free(exps); free(tans); free(tsigs);
         return false;
     }
     /* Allocate the tower arrays now the depth n and member bound ne are known. */
@@ -2827,6 +2863,7 @@ static bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
     T->arg    = calloc(n ? n : 1, sizeof(Expr*));
     T->t      = calloc(n ? n : 1, sizeof(Expr*));
     T->Dcoef  = calloc(n ? n : 1, sizeof(Expr*));
+    T->tsg    = calloc(n ? n : 1, sizeof(long));
     T->marg   = calloc(ne ? ne : 1, sizeof(Expr*));
     T->mprim  = calloc(ne ? ne : 1, sizeof(long));
     T->mmult  = calloc(ne ? ne : 1, sizeof(long));
@@ -2848,6 +2885,18 @@ static bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
             (Expr*[]){ expr_new_symbol("E"), expr_copy(clsprim[rep]) }, 2);
         idx++;
     }
+    /* One RT_TAN tower kernel per collected tangent monomial (Tan/Tanh spelling). */
+    for (size_t i = 0; i < nt; i++) {
+        T->kind[idx] = RT_TAN;
+        T->tsg[idx] = tsigs[i];
+        T->arg[idx] = expr_copy(tans[i]);
+        T->kernel[idx] = expr_new_function(
+            expr_new_symbol(tsigs[i] > 0 ? "Tan" : "Tanh"),
+            (Expr*[]){ expr_copy(tans[i]) }, 1);
+        idx++;
+    }
+    for (size_t i = 0; i < nt; i++) expr_free(tans[i]);
+    free(tans); free(tsigs);
     /* Every exp member that is not itself the class primitive is an alias
      * E^w -> t[prim]^k; store its primitive exponent for the post-reorder remap. */
     for (size_t i = 0; i < ne; i++) {
@@ -2868,6 +2917,7 @@ static bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
                      && T->kind[i] == RT_LOG && T->kind[i + 1] == RT_EXP) swap = true;
             if (swap) {
                 RtKind kk = T->kind[i]; T->kind[i] = T->kind[i + 1]; T->kind[i + 1] = kk;
+                long sg = T->tsg[i]; T->tsg[i] = T->tsg[i + 1]; T->tsg[i + 1] = sg;
                 Expr* a = T->kernel[i]; T->kernel[i] = T->kernel[i + 1]; T->kernel[i + 1] = a;
                 a = T->arg[i]; T->arg[i] = T->arg[i + 1]; T->arg[i + 1] = a;
             }
@@ -2884,6 +2934,16 @@ static bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
         if (T->kind[i] == RT_LOG) {
             rules[nr++] = expr_new_function(expr_new_symbol("Rule"),
                 (Expr*[]){ expr_copy(T->kernel[i]), expr_copy(T->t[i]) }, 2);
+        } else if (T->kind[i] == RT_TAN) {
+            /* Tan[u]/Tanh[u] -> t ; Cot[u]/Coth[u] -> 1/t. */
+            rules[nr++] = expr_new_function(expr_new_symbol("Rule"),
+                (Expr*[]){ expr_copy(T->kernel[i]), expr_copy(T->t[i]) }, 2);
+            rules[nr++] = expr_new_function(expr_new_symbol("Rule"),
+                (Expr*[]){ expr_new_function(
+                    expr_new_symbol(T->tsg[i] > 0 ? "Cot" : "Coth"),
+                    (Expr*[]){ expr_copy(T->arg[i]) }, 1),
+                  expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_copy(T->t[i]), expr_new_integer(-1) }, 2) }, 2);
         } else {
             rules[nr++] = expr_new_function(expr_new_symbol("Rule"),
                 (Expr*[]){ expr_new_function(expr_new_symbol("Exp"),
@@ -2935,6 +2995,16 @@ static bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
             d = rt_eval2("D", expr_copy(T->arg[i]), expr_copy(x));
         }
         if (!d) { ok = false; break; }
+        /* Rewrite the tangent-derivative trig squares so the tower substitution
+         * catches them (D[Tan[a]] = Sec[a]^2 would otherwise strand a foreign
+         * kernel): Sec[a]^2 -> 1+Tan[a]^2, Csc -> 1+Cot^2, Sech -> 1-Tanh^2,
+         * Csch -> Coth^2-1. */
+        Expr* trig = parse_expression(
+            "{Sec[rmTA_]^2 -> 1 + Tan[rmTA_]^2, Csc[rmTA_]^2 -> 1 + Cot[rmTA_]^2, "
+            "Sech[rmTA_]^2 -> 1 - Tanh[rmTA_]^2, Csch[rmTA_]^2 -> Coth[rmTA_]^2 - 1}");
+        if (trig) d = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceRepeated"),
+            (Expr*[]){ d, trig }, 2));                             /* adopts d, trig */
+        if (!d) { ok = false; break; }
         Expr* dsub = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
             (Expr*[]){ d, expr_copy(T->subrules) }, 2));           /* adopts d */
         Expr* ds = dsub ? rt_eval1("Cancel", dsub) : NULL;
@@ -2964,17 +3034,29 @@ static Expr* rt_field_ratint(Expr* num, Expr* den, RtTower* T, long L, Expr* x, 
 static Expr* rt_field_hyperexp_coupled(Expr* num, Expr* den, RtTower* T, long L, Expr* x,
                                        Expr** rem_out);
 
-/* Tower derivation D_tower[e] = D[e,x] + sum_i Dt_i D[e,t_i], with Dt_i =
- * Dcoef_i (log) or Dcoef_i * t_i (exp).  Owned result. */
+/* Dt_i: the derivation of the tower variable t_i — Dcoef (log), Dcoef*t (exp),
+ * or Dcoef*(t^2 + sigma) (tan, sigma = +-1).  Owned. */
+static Expr* rt_dt_i(RtTower* T, size_t i) {
+    if (T->kind[i] == RT_LOG) return expr_copy(T->Dcoef[i]);
+    if (T->kind[i] == RT_TAN)
+        return expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_copy(T->Dcoef[i]),
+                expr_new_function(expr_new_symbol("Plus"),
+                    (Expr*[]){ expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ expr_copy(T->t[i]), expr_new_integer(2) }, 2),
+                      expr_new_integer(T->tsg[i]) }, 2) }, 2);
+    return expr_new_function(expr_new_symbol("Times"),   /* RT_EXP: Dcoef * t */
+        (Expr*[]){ expr_copy(T->Dcoef[i]), expr_copy(T->t[i]) }, 2);
+}
+
+/* Tower derivation D_tower[e] = D[e,x] + sum_i Dt_i D[e,t_i], with Dt_i from
+ * rt_dt_i (log / exp / tan).  Owned result. */
 Expr* rt_tower_deriv(Expr* e, RtTower* T, Expr* x) {
     Expr** terms = malloc((T->n + 1) * sizeof(Expr*));
     terms[0] = rt_eval2("D", expr_copy(e), expr_copy(x));
     for (size_t i = 0; i < T->n; i++) {
         Expr* dei = rt_eval2("D", expr_copy(e), expr_copy(T->t[i]));
-        Expr* dti = (T->kind[i] == RT_LOG)
-            ? expr_copy(T->Dcoef[i])
-            : expr_new_function(expr_new_symbol("Times"),
-                (Expr*[]){ expr_copy(T->Dcoef[i]), expr_copy(T->t[i]) }, 2);
+        Expr* dti = rt_dt_i(T, i);
         terms[i + 1] = expr_new_function(expr_new_symbol("Times"),
             (Expr*[]){ dti, dei }, 2);
     }
@@ -3108,10 +3190,7 @@ static Expr* rt_build_deriv_rules(RtTower* T, Expr* x) {
     rules[0] = expr_new_function(expr_new_symbol("Rule"),
         (Expr*[]){ expr_copy(x), expr_new_integer(1) }, 2);
     for (size_t i = 0; i < n; i++) {
-        Expr* dti = (T->kind[i] == RT_LOG)
-            ? expr_copy(T->Dcoef[i])
-            : expr_new_function(expr_new_symbol("Times"),
-                (Expr*[]){ expr_copy(T->Dcoef[i]), expr_copy(T->t[i]) }, 2);
+        Expr* dti = rt_dt_i(T, i);
         rules[i + 1] = expr_new_function(expr_new_symbol("Rule"),
             (Expr*[]){ expr_copy(T->t[i]), dti }, 2);
     }
