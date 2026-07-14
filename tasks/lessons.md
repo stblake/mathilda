@@ -1090,3 +1090,31 @@ touching a core subsystem, and revert immediately on the first regression rather
 than patching around it. (3) Decision routines (LogReducible / ExpReducible /
 LogarithmicDerivativeOfRadical) are valuable as reusable builtins even when the
 wholesale live-oracle swap is not worthwhile.
+
+## 2026-07-14 — Don't patch Risch deficiencies with Weierstrass
+Directive (user): rational trigonometric integrals must be integrated by the
+GENUINE Risch machinery — the complex-exponential tower (TrigToExp → integrate over
+the E^(ix) monomial → ExpToTrig with REAL reconstruction of the log part) and the
+real §5.10 hypertangent case — NOT by the Weierstrass t = Tan[x/2] half-angle
+substitution and NOT by routing through Jeffrey–Rich. The half-angle form is ugly
+(raw Tan[x/2]) and, more importantly, papers over the real deficiency instead of
+fixing it.
+
+What went wrong: I added an rt_weierstrass_case (t=Tan[x/2]) dispatch to close
+Sec/Csc/1-over-(2+Cos) and then promoted it ahead of Jeffrey–Rich at the top level.
+It regressed Sin[x]^2 (clean (2x-Sin[2x])/4 from the genuine exp route → ugly
+Tan[x/2] form) and was a patch, not a fix. Reverted the whole thing (branch reset).
+
+Rules for myself:
+1. When an integrand class is handled poorly, FIX the genuine algorithm (real
+   reconstruction of the complex log part; complete the rational-of-E^(ix) route;
+   relax an over-strict §5.10 gate) — do NOT bolt on a substitution that competes
+   with the genuine route.
+2. Before "improving" trig integration, capture what the GENUINE Risch route
+   (Integrate`RischTranscendental) already produces on clean main — much of it is
+   already clean (Sin^2, Sin^3, Tan). Only the true gaps (I-laden Csc, declined
+   Sec) are the work.
+3. Never promote a new stage ahead of an existing one without checking it does not
+   intercept cases the existing stage handles more cleanly (Sin^2 regression).
+4. REPL JSON output: parse with python (json), not sed — sed mangles Floor[...] and
+   `/` in payloads and falsely reads them as empty/declined.

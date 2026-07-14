@@ -499,6 +499,15 @@ static void test_real_hypertangent_robustness(void) {
      * through the real path (linear-normal after the gate strips t^2+1)... this
      * one (t^2+1 special only) stays real: Cot-free rational of Tan. */
     assert_tan_real("(2 Tan[x] + 3)/(Tan[x]^2 + 1)");
+    /* Irreducible-QUADRATIC normal pole (3 + t^2 does not split over Q): the §5.10
+     * residue criterion realises the quadratic-algebraic residues as a real ArcTan.
+     * Admitted by the max-irreducible-degree<=2 normal-pole gate (was declined by
+     * the old total-degree<=1 gate, which stranded these on the I-laden TrigToExp
+     * route).  Genuine §5.10 — no Weierstrass substitution. */
+    assert_tan_real("Tan[x]/(3 + Tan[x]^2)");
+    assert_tan_real("1/(3 + Tan[x]^2)");
+    assert_tan_real("(Tan[x] + 1)/(2 + Tan[x]^2)");
+    assert_tan_real("Cot[x]/(2 + Cot[x]^2)");
 }
 
 /* ================= MULTI-KERNEL EXPONENTIAL SUMS =================

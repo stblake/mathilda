@@ -4526,6 +4526,36 @@ static bool rt_free_of_trig(Expr* e) {
 /* The monomial variable t used throughout the family (a fixed internal symbol). */
 #define RT_HT_SYM "Integrate`htT"
 
+/* Maximum degree in t of an irreducible factor of p over Q (0 when p is constant
+ * in t, -1 on failure).  The normal-pole gate uses this: a normal denominator
+ * whose irreducible factors are each linear or quadratic has Rothstein-Trager
+ * residues that are rational or at-worst quadratic-algebraic, which the §5.10
+ * residue criterion realises as real Log / ArcTan.  A higher-degree irreducible
+ * factor carries residues whose tower-derivation spillover destabilises the
+ * p = h - D[g2] + r reconciliation, so those defer. */
+static long rt_max_irr_degree(Expr* p, Expr* t) {
+    Expr* fac = rt_eval1("Factor", expr_copy(p));
+    if (!fac) return -1;
+    long maxd = 0;
+    if (rt_head_is(fac, "Times")) {
+        for (size_t i = 0; i < fac->data.function.arg_count; i++) {
+            Expr* term = fac->data.function.args[i];
+            Expr* base = (rt_head_is(term, "Power")
+                          && term->data.function.arg_count == 2)
+                         ? term->data.function.args[0] : term;
+            long d = rt_degree(base, t);
+            if (d > maxd) maxd = d;
+        }
+    } else {
+        Expr* base = (rt_head_is(fac, "Power") && fac->data.function.arg_count == 2)
+                     ? fac->data.function.args[0] : fac;
+        long d = rt_degree(base, t);
+        if (d > maxd) maxd = d;
+    }
+    expr_free(fac);
+    return maxd;
+}
+
 
 /* Real "hypertangent family" integrator (Bronstein §5.10 and its hyperbolic
  * analogue): integrate a rational function of a SINGLE kernel `khead`[u]
@@ -4572,14 +4602,16 @@ static Expr* rt_hypertan_family(Expr* f, Expr* x, Expr* subrule, Expr* bval,
         ok = nn && dd && rt_is_poly(nn, t) && rt_is_poly(dd, t);
         if (ok) {
             /* Normal-pole gate.  Strip the special factor from the denominator,
-             * then require the remaining NORMAL part to SPLIT into linear factors
-             * over Q — its Rothstein-Trager residues are then rational (fast).
-             * An irreducible normal factor of degree >= 2 (e.g. t^2+5t+3) carries
-             * irrational-algebraic residues whose tower-derivation spillover blows
-             * up the p = h - D[g2] + r reconciliation, so those defer to the
-             * fallback.  (Pure-polynomial and special^k integrands strip to a unit;
-             * this admits split normal parts of any degree, e.g. the (1-t^2)^3 of
-             * a Weierstrass-substituted Sec[x]^3.) */
+             * then require every IRREDUCIBLE factor of the remaining NORMAL part
+             * (over Q) to have degree <= 2: its Rothstein-Trager residues are then
+             * rational (linear factors) or at-worst quadratic-algebraic (irreducible
+             * quadratics), both of which the §5.10 residue criterion realises as
+             * real Log / ArcTan.  A higher-degree irreducible factor carries
+             * residues whose tower-derivation spillover blows up the
+             * p = h - D[g2] + r reconciliation, so those defer.  (Pure-polynomial
+             * and special^k integrands strip to a unit; split normal parts of any
+             * degree pass, as does an irreducible quadratic such as the 3+t^2 of
+             * Tan[x]/(3+Tan[x]^2).) */
             Expr* dn = expr_copy(dd);
             for (int guard = 0; dn && guard < 4096; guard++) {
                 Expr* rem = rt_eval3("PolynomialRemainder",
@@ -4591,8 +4623,8 @@ static Expr* rt_hypertan_family(Expr* f, Expr* x, Expr* subrule, Expr* bval,
                     expr_copy(dn), expr_copy(special), expr_copy(t));
                 expr_free(dn); dn = q;
             }
-            long ndeg = dn ? rt_degree(dn, t) : -1;
-            ok = (ndeg >= 0 && ndeg <= 1);
+            long mdeg = dn ? rt_max_irr_degree(dn, t) : -1;
+            ok = (mdeg >= 0 && mdeg <= 2);
             if (dn) expr_free(dn);
         }
         if (Ft) expr_free(Ft);
