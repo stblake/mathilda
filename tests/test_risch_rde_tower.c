@@ -201,6 +201,27 @@ static void test_tower_deep_log(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Tower field — exponential (RT_EXP) top, NON-cancellation (Gap 1b).   */
+/* tau hyperexponential (delta=1, deriv-preserving); the special part of */
+/* the denominator (tau-power poles) is cleared by RdeSpecialDenomExp.   */
+/* ------------------------------------------------------------------ */
+static void test_tower_exp(void) {
+    /* tau = E^x, eta = Dtau/tau = 1.  Non-cancellation: deg_tau(f) >= 1. */
+    assert_rde_y("E^x", "1/(1 + E^x)");
+    assert_rde_y("E^x", "E^x/(2 + E^x)");
+    assert_rde_y("E^x", "1/(1 + E^x)^2");           /* repeated normal pole */
+    assert_rde_y("2 E^x", "1/(3 + E^x)");
+    assert_rde_y("E^x", "E^x");                     /* q_bar polynomial in tau */
+    assert_rde_y("E^x", "E^(2 x)/(1 + E^x)");
+    /* depth-2 exp-over-exp: tau = E^(E^x), eta = E^x — the derivation
+     * abstraction must generalise (k = C(x, E^x) itself carries an exponential). */
+    assert_rde_y("E^(E^x)", "1/(1 + E^(E^x))");
+    assert_rde_y("E^(E^x)", "E^(E^x)/(2 + E^(E^x))");
+    /* Cancellation (b in k, deg_tau(b)=0): PolyRischDECancelExp — Gap 1c, declines. */
+    assert_rde_nosol("2", "E^(-x)");
+}
+
+/* ------------------------------------------------------------------ */
 /* Declines — never wrong, only silent.  Genuine no-solution + the      */
 /* branches deferred to later increments / LimitedIntegrate (Gap 2).    */
 /* ------------------------------------------------------------------ */
@@ -222,6 +243,9 @@ static void test_integrator_endtoend(void) {
     assert_integrates("(2/x - 1/(x Log[x]^2)) E^(Log[x]^2)");
     /* Same family, polynomial-in-tau coefficient. */
     assert_integrates("(2 Log[x]/x) E^(Log[x]^2)");
+    /* Exp-over-exp: the E^(E^x) Laurent coefficient RDE q'+E^x q = p is solved by
+     * the literal 1b exponential tower stack. */
+    assert_integrates("D[E^(E^x)/(1 + E^x), x]");
     /* The non-elementary sibling still declines (guard against over-eager solve). */
     {
         char* s = eval_fullform("FreeQ[Integrate[E^(Log[x]^2), x], Integrate]");
@@ -241,6 +265,7 @@ int main(void) {
     TEST(test_polyrischde_nocancel);
     TEST(test_tower_depth1_log);
     TEST(test_tower_deep_log);
+    TEST(test_tower_exp);
     TEST(test_tower_declines);
     TEST(test_integrator_endtoend);
     printf("All Risch DE tower tests passed.\n");

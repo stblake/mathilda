@@ -550,29 +550,63 @@ static Expr* rc_den(Expr* e, RdeCtx* C) {
     expr_free(d); expr_free(lc);
     return mon;
 }
-static Expr* rc_num(Expr* e, RdeCtx* C) {
-    if (C->m < 0) return rde_num(e);
-    Expr* d = rde_den(e);
-    long dd = rt_degree(d, C->tau);
-    if (dd <= 0) { expr_free(d); return rt_eval1("Cancel", expr_copy(e)); }  /* den == 1 */
-    Expr* lc = rt_coeff(d, C->tau, dd);
-    Expr* nm = rde_num(e);
-    Expr* num = rde_divq(nm, lc);                   /* nm/lc matches den = d/lc */
-    expr_free(d); expr_free(lc); expr_free(nm);
-    return num;
-}
 
-/* RdeNormalDenominator over k(x)(tau) for a PRIMITIVE (RT_LOG) or base monomial:
- * reduce D y + f y = g to a Dq + b q = c with q = y h in k(x)[tau].  Primitive
- * monomials have no special denominator (Bronstein §6.2 p.188), so this mirrors
- * the base RdeNormalDenominator inlined in rde_base, lifted to the tau-field ops.
- * Returns 1 and fills *a,*b,*c,*h (all owned) on success; 0 for the authoritative
- * "no solution" (en does not divide dn h^2, Cor 6.1.1(ii)). */
+/* Lowest power of tau with a nonzero coefficient in the polynomial p (the tau-adic
+ * order at tau = 0); 0 when p == 0 or tau does not divide p. */
+static long rc_ord_tau(Expr* p, RdeCtx* C) {
+    if (rt_is_zero(p)) return 0;
+    Expr* cl = rt_eval2("CoefficientList", expr_copy(p), expr_copy(C->tau));
+    long o = 0;
+    if (cl && cl->type == EXPR_FUNCTION
+        && cl->data.function.head->type == EXPR_SYMBOL
+        && cl->data.function.head->data.symbol.name == intern_symbol("List")) {
+        for (size_t i = 0; i < cl->data.function.arg_count; i++)
+            if (!rt_is_zero(cl->data.function.args[i])) { o = (long)i; break; }
+    }
+    if (cl) expr_free(cl);
+    return o;
+}
+/* tau-adic valuation nu_tau(e) of a field element e in k(x)(tau): order of tau in
+ * the numerator minus the order in the denominator (negative == a tau-pole). */
+static long rc_val_tau(Expr* e, RdeCtx* C) {
+    Expr* num = rde_num(e);
+    Expr* den = rde_den(e);
+    long v = rc_ord_tau(num, C) - rc_ord_tau(den, C);
+    expr_free(num); expr_free(den);
+    return v;
+}
+/* tau^k (k >= 0) as a polynomial. */
+static Expr* rc_tau_pow(long k, RdeCtx* C) {
+    return expr_new_function(expr_new_symbol("Power"),
+        (Expr*[]){ expr_copy(C->tau), expr_new_integer(k) }, 2);
+}
+/* Normal part of a (monic-in-tau) denominator (SplitFactor, Bronstein §3.5): for
+ * an exponential monomial the only special irreducible is tau, so strip tau^v; for
+ * a primitive (RT_LOG) / base monomial every squarefree factor is normal. */
+static Expr* rc_normal_part(Expr* den, RdeCtx* C) {
+    if (C->m < 0 || C->T->kind[C->m] != RT_EXP) return expr_copy(den);
+    long v = rc_ord_tau(den, C);
+    if (v <= 0) return expr_copy(den);
+    Expr* tv = rc_tau_pow(v, C);
+    Expr* q = rc_quot(den, tv, C);
+    expr_free(tv);
+    return q;
+}
+/* RdeNormalDenominator over k(x)(tau) (Bronstein §6.1, Cor 6.1.1), lifted to the
+ * tau-field ops and to an arbitrary monomial via the SplitFactor normal/special
+ * split: reduce D y + f y = g to a Dq + b q = c with q = y h in k<tau>, a in
+ * k[tau] special-free.  For a primitive top b, c are already polynomials; for an
+ * exponential top they may still carry tau-poles (the special part), cleared next
+ * by RdeSpecialDenomExp.  Returns 1 and fills *a,*b,*c,*h (owned); 0 for the
+ * authoritative "no solution" (en does not divide dn h^2, Cor 6.1.1(ii)). */
 static int rde_normal_denominator_field(Expr* f, Expr* g, RdeCtx* C,
                                         Expr** a_out, Expr** b_out,
                                         Expr** c_out, Expr** h_out) {
-    Expr* dn = rc_den(f, C);
-    Expr* en = rc_den(g, C);
+    Expr* den_f = rc_den(f, C);
+    Expr* den_g = rc_den(g, C);
+    Expr* dn = rc_normal_part(den_f, C);            /* SplitFactor normal part */
+    Expr* en = rc_normal_part(den_g, C);
+    expr_free(den_f); expr_free(den_g);
     Expr* p  = rc_gcd(dn, en, C);
     Expr* den_e   = rc_D(en, C);
     Expr* den_num = rc_gcd(en, den_e, C);           /* gcd(en, D en) */
@@ -586,23 +620,70 @@ static int rde_normal_denominator_field(Expr* f, Expr* g, RdeCtx* C,
     Expr* dnh2 = rde_mul(dn, h2);
     Expr* rem = rc_rem(dnh2, en, C);
     bool ok = rt_is_zero(rem);
-    expr_free(rem); expr_free(h2);
-    if (!ok) { expr_free(dn); expr_free(en); expr_free(h); expr_free(dnh2); return 0; }
-    /* a = dn h ; b = dn h f - dn Dh ; c = dn h^2 g (= (dn h^2 / en)(en g)). */
-    Expr* num_f = rc_num(f, C);                     /* dn f */
-    Expr* num_g = rc_num(g, C);                     /* en g */
+    expr_free(rem); expr_free(h2); expr_free(dnh2);
+    if (!ok) { expr_free(dn); expr_free(en); expr_free(h); return 0; }
+    /* a = dn h ; b = dn h f - dn Dh ; c = dn h^2 g, by DIRECT field arithmetic so
+     * a stray tau-pole (the special part, for an exponential top) is retained in
+     * b, c for RdeSpecialDenomExp rather than being (wrongly) cleared. */
     Expr* aa = rde_mul(dn, h);
     Expr* dh = rc_D(h, C);
-    Expr* dndh = rde_mul(dn, dh);
-    Expr* hnf = rde_mul(h, num_f);                  /* dn h f = h (dn f) */
-    Expr* bb = rde_sub(hnf, dndh);
-    Expr* dnh2_en = rc_quot(dnh2, en, C);           /* dn h^2 / en (exact) */
-    Expr* cc = rde_mul(dnh2_en, num_g);             /* (dn h^2/en)(en g) = dn h^2 g */
-    expr_free(num_f); expr_free(num_g); expr_free(dh); expr_free(dndh);
-    expr_free(hnf); expr_free(dnh2_en); expr_free(dnh2);
+    Expr* dhf = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_copy(dn), expr_copy(h), expr_copy(f) }, 3));
+    Expr* dndh = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_copy(dn), dh }, 2));         /* adopts dh */
+    Expr* bb = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Plus"),
+        (Expr*[]){ dhf, expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_new_integer(-1), dndh }, 2) }, 2));  /* adopts dhf, dndh */
+    Expr* cc = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_copy(dn), expr_copy(h), expr_copy(h), expr_copy(g) }, 4));
     expr_free(dn); expr_free(en);
     *a_out = aa; *b_out = bb; *c_out = cc; *h_out = h;
     return 1;
+}
+
+/* RdeSpecialDenomExp (Bronstein §6.2, p.190): given a Dq + b q = c with a in k[tau]
+ * special-free and b, c in k<tau> (tau hyperexponential, eta = Dtau/tau in k),
+ * clear the special (tau-power) part of the denominator of any solution q.  Returns
+ * (a tau^N, (b + n a eta) tau^N, c tau^{N-n}, tau^{-n}); r = q tau^{-n} in k[tau]
+ * solves the returned polynomial equation.  1b-core omits the nb == 0 cancellation
+ * refinement (the parametric logarithmic-derivative test), so a tau=0 pole arising
+ * purely from cancellation is not lowered — sound (the exact identity gate in
+ * rde_tower makes any miss a decline). */
+static void rde_special_denom_exp(Expr* a, Expr* b, Expr* c, RdeCtx* C,
+                                  Expr** a_out, Expr** b_out, Expr** c_out,
+                                  Expr** hs_out) {
+    Expr* eta = C->T->Dcoef[C->m];                  /* Dtau/tau in k */
+    long nb = rc_val_tau(b, C);
+    long nc = rc_val_tau(c, C);
+    long minb = nb < 0 ? nb : 0;
+    long n = nc - minb; if (n > 0) n = 0;            /* n = min(0, nc - min(0,nb)) */
+    long N = 0;
+    if (-nb > N) N = -nb;
+    if (n - nc > N) N = n - nc;                      /* N = max(0, -nb, n - nc) */
+    Expr* tauN = rc_tau_pow(N, C);
+    *a_out = rde_mul(a, tauN);                       /* a tau^N */
+    /* b + n a eta, then * tau^N. */
+    Expr* naeta = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_new_integer(n), expr_copy(a), expr_copy(eta) }, 3));
+    Expr* bsum = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Plus"),
+        (Expr*[]){ expr_copy(b), naeta }, 2));       /* adopts naeta */
+    *b_out = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ bsum, expr_copy(tauN) }, 2));     /* adopts bsum */
+    Expr* tauNn = rc_tau_pow(N - n, C);
+    *c_out = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_copy(c), tauNn }, 2));       /* adopts tauNn */
+    *hs_out = rc_tau_pow(-n, C);                     /* tau^{-n}, -n >= 0 */
+    expr_free(tauN);
+}
+
+/* RdeBoundDegreeExp (Bronstein §6.3, p.200): upper bound on deg_tau(q) for
+ * a Dq + b q = c with tau hyperexponential (deriv-preserving, delta(tau)=1).
+ * 1b-core omits the da == db cancellation refinement (parametric log-derivative). */
+static long rde_bound_degree_exp(Expr* a, Expr* b, Expr* c, RdeCtx* C) {
+    long da = rc_deg(a, C), db = rc_deg(b, C), dc = rc_deg(c, C);
+    long mx = db > da ? db : da;
+    long n = dc - mx; if (n < 0) n = 0;
+    return n;
 }
 
 /* RdeBoundDegree for a primitive (RT_LOG) / base monomial: leading-degree bound on
@@ -747,36 +828,51 @@ Expr* rde_polyrischde_nocancel_field(Expr* b, Expr* c, RdeCtx* C, long n) {
 Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
     if (rt_is_zero(g)) return expr_new_integer(0);
     if (C->m < 0) return rde_base(f, g, C->x);
-    if (C->T->kind[C->m] != RT_LOG) return NULL;    /* EXP top -> 1b */
+    RtKind kind = C->T->kind[C->m];
+    if (kind != RT_LOG && kind != RT_EXP) return NULL;   /* tangent top -> Gap 3 */
 
     Expr *a, *b, *c, *h;
     if (!rde_normal_denominator_field(f, g, C, &a, &b, &c, &h)) return NULL;
+    /* Special part of the denominator: primitive (RT_LOG) tops have none
+     * (h_s = 1); an exponential top clears the tau-power poles (§6.2). */
+    Expr* h_s = expr_new_integer(1);
+    if (kind == RT_EXP) {
+        Expr *na, *nb, *nc, *nhs;
+        rde_special_denom_exp(a, b, c, C, &na, &nb, &nc, &nhs);
+        expr_free(a); expr_free(b); expr_free(c); expr_free(h_s);
+        a = na; b = nb; c = nc; h_s = nhs;
+    }
     Expr* result = NULL;
     if (rc_ispoly(a, C) && rc_ispoly(b, C) && rc_ispoly(c, C)) {
-        long n = rde_bound_degree_prim(a, b, c, C);
+        long n = (kind == RT_EXP) ? rde_bound_degree_exp(a, b, c, C)
+                                  : rde_bound_degree_prim(a, b, c, C);
         RdeSpde sp;
         if (rde_spde_field(a, b, c, C, n, &sp)) {
             Expr* H = NULL;
             if (rt_is_zero(sp.b)) {
                 /* D H = sp.c.  sp.c == 0 -> H = 0 (so q = beta); a nonzero sp.c is
-                 * primitive antidifferentiation, which needs LimitedIntegrate
-                 * (Gap 2) — decline. */
+                 * antidifferentiation, which needs LimitedIntegrate (Gap 2) —
+                 * decline. */
                 if (rt_is_zero(sp.c)) H = expr_new_integer(0);
             } else if (rc_deg(sp.b, C) >= 1) {
+                /* Non-cancellation (deg_tau(b) >= 1): the leading terms of D[q] and
+                 * b q never cancel, for a primitive OR exponential top (delta<=1). */
                 H = rde_polyrischde_nocancel_field(sp.b, sp.c, C, sp.m);
             }
-            /* deg_tau(sp.b) == 0 (b in k -> PolyRischDECancelPrim, 1c) declines. */
+            /* deg_tau(sp.b) == 0 (b in k -> PolyRischDECancel{Prim,Exp}, 1c) declines. */
             if (H) {
                 Expr* aH = rde_mul(sp.alpha, H);
-                Expr* q = rde_add(aH, sp.beta);
+                Expr* q = rde_add(aH, sp.beta);      /* q_bar = alpha H + beta */
                 expr_free(aH); expr_free(H);
-                result = rde_divq(q, h);            /* y = q / h */
-                expr_free(q);
+                /* y = q_bar / (h_s h) */
+                Expr* hsh = rde_mul(h_s, h);
+                result = rde_divq(q, hsh);
+                expr_free(hsh); expr_free(q);
             }
             rde_spde_free(&sp);
         }
     }
-    expr_free(a); expr_free(b); expr_free(c); expr_free(h);
+    expr_free(a); expr_free(b); expr_free(c); expr_free(h); expr_free(h_s);
 
     /* Correct-by-construction gate: D_tower[y] + f y - g must be exactly 0. */
     if (result) {

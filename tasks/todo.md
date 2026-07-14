@@ -19,9 +19,12 @@ solver `rde_tower(f, g, RdeCtx*)` solving `D_tower[y] + f y = g` over `K_L`.
       `tests/test_risch_rde_tower.c` (base + SPDE + NoCancel + depth-1/2/3 log towers +
       declines + integrator end-to-end), all green; leak-clean; full transcendental suite +
       P3 suites pass. **NEXT: extract RDE stack → `integrate_risch_rde.{c,h}` (user request).**
-- [ ] **1b** — RT_EXP non-cancellation: `RdeSpecialDenomExp` (§6.2 p.190) + exp `NoCancel`.
-      Unit-test `RdeSpecialDenomExp` vs Bronstein Ex 6.2.1/6.2.2 first. Tests: nested-exp
-      Laurent coefficient RDEs off the old ansatz box.
+- [x] **1b** — RT_EXP non-cancellation: SplitFactor normal/special split in
+      `rde_normal_denominator_field`, `RdeSpecialDenomExp` (§6.2 p.190, `ν_τ` valuation
+      clears τ-poles), `RdeBoundDegreeExp` (§6.3 p.200); reuses SPDE + NoCancel (deg_τ(b)≥1).
+      Closes exp-over-exp Laurent RDEs (`∫ D[E^(E^x)/(1+E^x)] → E^(E^x)/(1+E^x)`), depth-2
+      `RischDE[E^(E^x),…]`. All suites green; leak-clean. Deferred to 1c: cancellation
+      (`b∈k`, PolyRischDECancelExp) + the ν_τ cancellation refinement (parametric log deriv).
 - [ ] **1c** — Cancellation: `PolyRischDECancelPrim` (§6.6 p.212) + `…Exp` (p.213), recurse
       `rde_tower` over `k`. Tests: resonance/coupled-coefficient integrands.
 - [ ] **1d** — `rde_weak_normalizer_field` + full `rde_normal_denominator_field` over `k(τ)`
