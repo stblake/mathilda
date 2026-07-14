@@ -104,10 +104,23 @@ solver `rde_tower(f, g, RdeCtx*)` solving `D_tower[y] + f y = g` over `K_L`.
       (`Risch\`RischDE` with the single base var), but the caller's exact `D_tower[Q]==F` gate
       rejects any wrong `g`, so a tangent-top with genuine tower-coefficient poles declines rather
       than errs. The EXP-lower `e^x Tan[e^x]` is still served (correctly, messily) by an upstream
-      exp-case ahead of the recursion — cosmetic, out of scope. (c) the §6.2/§6.6 tangent RDE branches
-      (`IntegrateHypertangent` in `rt_field_integrate`, currently EXP-only in the else branch);
-      (c) the §6.2/§6.6 tangent RDE branches (`RdeSpecialDenomTan`, `PolyRischDECancelTan` via
-      `CoupledDECancelTan`). Each is a genuine algorithmic extension.
+      exp-case ahead of the recursion — cosmetic, out of scope. (c) **the §6.2/§6.6 `rde_tower`
+      tangent RDE branch (`RdeSpecialDenomTan`, `PolyRischDECancelTan` via `CoupledDECancelTan`) —
+      DEFERRED: pre-empted, no reachable test case** (the Gap 1d / 1f situation). Instrumented
+      `rde_tower`'s tangent-top decline (integrate_risch_rde.c L918) and the §5.10 driver's
+      reduced-case coupled RDE (`risch_integrate_hypertangent_reduced`, the C(x)-`rc_base_var`
+      chokepoint): across the full transcendental suite AND an aggressive hand-built tangent-tower
+      battery (special poles `(τ²+σ)^m` for m=1,2, normal poles, both σ, both C(x)-η and
+      genuine-tower η=`2Log[x]/x`∉C(x), plus exp/log ABOVE a tangent), `rde_tower` RT_TAN was
+      reached **0** times, while the driver's OWN coupled DE system (`risch_coupled_desystem`) IS
+      reached over towers (`nvars=3`, `solved=1`) and produces correct **diff-back-verified**
+      antiderivatives. So every reachable hypertangent RDE obligation is discharged by the §5.10
+      driver (tower-general HermiteReduce + ResidueReduce + IntegrateHypertangentPolynomial + the
+      reduced coupled DE); the `rde_tower` RT_TAN branch would be unreachable dead code. Left as an
+      authoritative decline; the exact `D_tower[Q]==F` gate keeps the integrator SOUND. (Separate
+      declining elementary case NOT in RT_TAN-RDE scope: `∫D[Log[1+Tan[x]]·Log[x]]` — a
+      *log-of-a-tangent-rational* top, `Dcoef=(1+τ²)/(1+τ)`; candidate for a future
+      log-over-tangent-rational tower increment, distinct from the three RT_TAN pieces.)
 
 ## RT_MAXK depth cap
 - [x] **Removed** (commit 4f6453c): `RtTower` arrays heap-allocated to the actual kernel count;

@@ -915,7 +915,12 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
     if (rt_is_zero(g)) return expr_new_integer(0);
     if (C->m < 0) return rde_base(f, g, C->x);
     RtKind kind = C->T->kind[C->m];
-    if (kind != RT_LOG && kind != RT_EXP) return NULL;   /* tangent top -> Gap 3 */
+    /* Tangent top: pre-empted — every reachable hypertangent RDE obligation is
+     * discharged by the §5.10 driver's OWN coupled DE system (risch_coupled_desystem,
+     * reachable over towers and verified), so this branch is never the deciding path
+     * for a constructible elementary integrand.  See RISCH_BRONSTEIN_GAPS.md / the
+     * RT_TAN piece-(c) determination.  Kept as an authoritative decline (Gap 3). */
+    if (kind != RT_LOG && kind != RT_EXP) return NULL;
 
     Expr *a, *b, *c, *h;
     if (!rde_normal_denominator_field(f, g, C, &a, &b, &c, &h)) return NULL;
