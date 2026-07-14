@@ -139,4 +139,4 @@ Out[14]= BLAS`dgemm[1, {{a, b}}, {{c}, {d}}, 0, {{0}}]
 
 The [LAPACK tutorial](14-lapack.md) covers the higher-level drivers — solving
 systems, factorizations, SVD, and eigenproblems. The full reference is in
-[`builtins/blas.md`](../../../docs/spec/builtins/blas.md).
+[`builtins/blas.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/blas.md).

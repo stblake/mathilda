@@ -135,5 +135,5 @@ Out[12]= LAPACK`dgetri[{{1, 2}, {2, 4}}]
 ## Where to go next
 
 The full reference is in
-[`builtins/lapack.md`](../../../docs/spec/builtins/lapack.md); for the
+[`builtins/lapack.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lapack.md); for the
 lower-level BLAS kernels see the [BLAS tutorial](13-blas.md).
