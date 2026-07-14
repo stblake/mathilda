@@ -1015,6 +1015,14 @@ target_include_directories(facpoly_tests PRIVATE ../src)
 add_executable(squarefreeq_tests test_squarefreeq.c ${COMMON_SRC})
 target_include_directories(squarefreeq_tests PRIVATE ../src)
 
+add_executable(polynomialsqrt_tests test_polynomialsqrt.c ${COMMON_SRC})
+target_include_directories(polynomialsqrt_tests PRIVATE ../src)
+add_test(NAME polynomialsqrt_tests COMMAND polynomialsqrt_tests)
+
+add_executable(rt_resultant_tests test_rt_resultant.c ${COMMON_SRC})
+target_include_directories(rt_resultant_tests PRIVATE ../src ../src/calculus)
+add_test(NAME rt_resultant_tests COMMAND rt_resultant_tests)
+
 add_executable(irreduciblepolynomialq_tests test_irreduciblepolynomialq.c ${COMMON_SRC})
 target_include_directories(irreduciblepolynomialq_tests PRIVATE ../src)
 

@@ -553,13 +553,34 @@ static Expr* rt_try_dilog(Expr* f, Expr* x) {
     return result;
 }
 
-/* Try each special-function recognizer in turn. */
+/* Special-function form registry (Cherry substrate — CHERRY_DESIGN.md §2.1/§3.2).
+ * Each entry is a special-function "plugin".  Today `recognize` is the narrow,
+ * enumerated template of Cherry's decision procedure (e.g. one Gaussian -> Erf,
+ * a linear exponent/denominator -> Ei) — each already correct-by-construction via
+ * its own diff-back/constant-cofactor gate.  This struct is the seam Cherry grows
+ * into: it will gain a finite argument generator (Sigma-decomposition for Li,
+ * Res_x(g1,p+alpha q) for Ei, completing-square for Erf), a derivative template,
+ * an answer constructor, and a structural bound (see the design doc), turning each
+ * template into the full decision procedure WITHOUT touching the dispatch below.
+ * Registering a new special function then means adding one entry here. */
+typedef struct {
+    const char* name;                    /* the emitted special function */
+    Expr* (*recognize)(Expr* f, Expr* x);/* narrow generator (grows into gen_arguments) */
+} RtSpecialForm;
+
+static const RtSpecialForm RT_SPECIAL_FORMS[] = {
+    { "Erf",           rt_try_erf   },   /* K E^(a x^2 + b x + c)                */
+    { "ExpIntegralEi", rt_try_ei    },   /* M E^(a x + b) / (c x + d)            */
+    { "LogIntegral",   rt_try_li    },   /* c w^(p-1) w' / Log[w]                */
+    { "PolyLog",       rt_try_dilog },   /* K Log[1 + p x] / x                   */
+};
+
+/* Try each registered special-function form in turn (order preserved). */
 static Expr* rt_special_case(Expr* f, Expr* x) {
-    Expr* r;
-    if ((r = rt_try_erf(f, x))) return r;
-    if ((r = rt_try_ei(f, x))) return r;
-    if ((r = rt_try_li(f, x))) return r;
-    if ((r = rt_try_dilog(f, x))) return r;
+    for (size_t i = 0; i < sizeof(RT_SPECIAL_FORMS) / sizeof(RT_SPECIAL_FORMS[0]); i++) {
+        Expr* r = RT_SPECIAL_FORMS[i].recognize(f, x);
+        if (r) return r;
+    }
     return NULL;
 }
 
@@ -2806,7 +2827,20 @@ static Expr* rt_log_tower_case(Expr* f, Expr* x) {
  * variables ts, the target F, and the back-substitution rule list `backrules`
  * (t_i -> kernel_i), form D_tower[Q] - F, solve the polynomial identity over
  * {t_n,...,t_1,x} with SolveAlways, pin free parameters to 0, and return the
- * back-substituted antiderivative (owned) or NULL.  Borrows all arguments. */
+ * back-substituted antiderivative (owned) or NULL.  Borrows all arguments.
+ *
+ * EXTENDED-LIOUVILLE EXTENSION POINT (Cherry substrate — CHERRY_DESIGN.md §2.2/§3.1).
+ * This IS the "reduce to a linear system over the constants" solver both Cherry
+ * algorithms need (Risch69 Main Thm part (b) in the 1986 paper; the undetermined-
+ * coefficient E1/E2/E3 solve in the 1989 paper).  It already accepts special-
+ * function basis terms with NO change: put  Q = poly_ansatz + Sum_i k_i SF(a_i)
+ * (SF in {LogIntegral, ExpIntegralEi, Erf, PolyLog, ...}, a_i a generated
+ * argument) with the k_i listed in `syms`.  The tower derivative it forms,
+ * D[Q,x] + Sum_j Dt_j D[Q,t_j], differentiates the SF terms correctly because
+ * Mathilda's D[] knows their derivatives (D[LogIntegral[u]] = u'/Log[u], etc.), so
+ * for a kernel argument u the SF term contributes exactly D_tower[u]/Log[u] to the
+ * linear system.  The Cherry driver (future) generates the a_i, appends the SF
+ * basis terms to Q and the k_i to `syms`, and calls this unchanged. */
 static Expr* rt_tower_solve(Expr* Q, Expr** syms, size_t nsym,
                             Expr** Dt, Expr** ts, size_t nl,
                             Expr* F, Expr* x, Expr* backrules) {

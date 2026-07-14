@@ -3889,6 +3889,31 @@ Expr* builtin_intrat_naive_log_part(Expr* res) {
     return intrat_naive_log_part(f, x);
 }
 
+/* Integrate`RothsteinTragerResultant[num, den, z, x]
+ *   = Resultant[num - z D[den, x], den, x],
+ * the Rothstein-Trager resultant whose roots in z are the residues of num/den.
+ * This is the named parametric-resultant primitive the LRT log part uses and that
+ * Cherry's special-function argument generators reuse (CHERRY_DESIGN.md §3.3): the
+ * log / exponential-integral (Ei) arguments are recovered from its roots. Built on
+ * the existing `Resultant` builtin — no new resultant machinery. */
+static Expr* builtin_intrat_rt_resultant(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 4) return NULL;
+    Expr* num = res->data.function.args[0];
+    Expr* den = res->data.function.args[1];
+    Expr* z   = res->data.function.args[2];
+    Expr* x   = res->data.function.args[3];
+    Expr* dd = eval_and_free(expr_new_function(expr_new_symbol(SYM_D),
+        (Expr*[]){ expr_copy(den), expr_copy(x) }, 2));            /* D[den, x] */
+    if (!dd) return NULL;
+    Expr* arg = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+        (Expr*[]){ expr_copy(num),
+            expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ expr_new_integer(-1), expr_copy(z), dd }, 3) }, 2)); /* num - z D[den] */
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Resultant),
+        (Expr*[]){ arg, expr_copy(den), expr_copy(x) }, 3));       /* Resultant[.,den,x] */
+    return r;
+}
+
 /* ------------------------------------------------------------------ */
 /* Init.                                                              */
 /* ------------------------------------------------------------------ */
@@ -4004,6 +4029,13 @@ void intrat_init(void) {
 
     /* Recursive-Risch transcendental LRT log part (consumed by
      * Integrate`RischTranscendental; not a user-facing surface form). */
+    install("Integrate`RothsteinTragerResultant",
+            builtin_intrat_rt_resultant,
+            "Integrate`RothsteinTragerResultant[num, den, z, x] = Resultant[num - z D[den,x],\n"
+            "den, x], the Rothstein-Trager resultant whose roots in z are the residues of\n"
+            "num/den. Argument generator for the log / exponential-integral (Ei) parts of\n"
+            "Cherry's special-function integration.");
+
     install("Integrate`TranscendentalLogPart",
             builtin_intrat_transcendental_log_part,
             "Integrate`TranscendentalLogPart[a, d, tau, z, Dd, g] computes the\n"

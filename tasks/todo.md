@@ -48,5 +48,20 @@ Outcome (2026-07-14): NET-NEGATIVE, reverted (integrator back to baseline).
 - Clean `-std=c99 -Wall -Wextra`; scoped `*_tests` green (grep FAIL:); REPL pins;
   valgrind vs Sin[1.0] baseline. Commit per phase.
 
+## Cherry substrate refactors (CHERRY_DESIGN.md §3) — behaviour-preserving  ✅ DONE
+- [x] R5: `PolynomialSqrt[p]`/`[p,x]` in facpoly.c + test_polynomialsqrt.c (green, leak-clean).
+- [x] R2: `RtSpecialForm` registry for `rt_special_case` — byte-identical (regression clean).
+- [x] R3: `Integrate`RothsteinTragerResultant[num,den,z,x]` in intrat.c (thin over `Resultant`)
+      + test_rt_resultant.c (green, leak-clean).
+- [x] R1: `rt_tower_solve` extension-point contract documented (already general — no change).
+- [x] R4: DEFERRED to the Cherry module (internal recursion entry `rt_field_integrate` already
+      exists; a wrapper now = dead code). Documented in CHERRY_DESIGN.md §3.
+
 ## Review
-(to be filled in)
+P1 landed on main (real structure theorem + LogarithmicDerivativeOfRadical); the wholesale
+live-oracle replacement (P1 Phase C) was attempted, proven net-negative (regresses Bronstein
+Log[x/Log[x]]), and reverted. Cherry incorporation was DESIGNED (CHERRY_DESIGN.md, grounded in
+both 1986/1989 papers) and its 5 substrate refactors landed: 2 new tested primitives
+(PolynomialSqrt, RothsteinTragerResultant), 1 registry (RtSpecialForm), 1 contract doc
+(rt_tower_solve), 1 principled defer (lower-field hook). No current integral changed;
+pre-existing failures (intrat 2 / factor 2 / poly 2 / intrischnorman 6) unchanged.
