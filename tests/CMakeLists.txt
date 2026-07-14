@@ -971,6 +971,14 @@ add_executable(risch_structure_tests test_risch_structure.c ${COMMON_SRC})
 target_include_directories(risch_structure_tests PRIVATE ../src ../src/calculus)
 add_test(NAME risch_structure_tests COMMAND risch_structure_tests)
 
+add_executable(risch_structure_real_tests test_risch_structure_real.c ${COMMON_SRC})
+target_include_directories(risch_structure_real_tests PRIVATE ../src ../src/calculus)
+add_test(NAME risch_structure_real_tests COMMAND risch_structure_real_tests)
+
+add_executable(risch_logderiv_radical_tests test_risch_logderiv_radical.c ${COMMON_SRC})
+target_include_directories(risch_logderiv_radical_tests PRIVATE ../src ../src/calculus)
+add_test(NAME risch_logderiv_radical_tests COMMAND risch_logderiv_radical_tests)
+
 add_executable(risch_hypertangent_tests test_risch_hypertangent.c ${COMMON_SRC})
 target_include_directories(risch_hypertangent_tests PRIVATE ../src ../src/calculus)
 add_test(NAME risch_hypertangent_tests COMMAND risch_hypertangent_tests)

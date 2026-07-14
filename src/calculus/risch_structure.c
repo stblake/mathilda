@@ -166,16 +166,41 @@ Expr* risch_rational_span(const Expr* theta, Expr* const* gens, size_t m,
 /* Structure-theorem front-ends.                                       */
 /* ------------------------------------------------------------------ */
 
-/* Decode {{t_i, "Exp"|"Log", Dt_i}, ...} into parallel arrays and build both the
- * derivation rules {x->1, t_i->Dt_i} and the generator list.  Returns the number
- * of monomials, or (size_t)-1 on malformed input.  On success the caller owns
- * *gens (array + elements), *vars (a List Expr), and *deriv_rules (a List Expr). */
+/* Monomial kinds and their structure-theorem index-set group.  The REAL Risch
+ * structure theorem (Bronstein Cor. 9.3.2) partitions the tower monomials into
+ * four DISJOINT index sets — E (exponentials), L (logarithms), T (tangents),
+ * A (arc-tangents) — and the four reducibility decisions each use only the
+ * relevant PAIR of generator sets:
+ *   log/exp reducibility (eq. 9.12/9.13):     generators from E u L (group 0);
+ *   tan/arctan reducibility (eq. 9.14/9.15):  generators from T u A (group 1).
+ * The generator of a monomial t_i is  Dt_i (Log, ArcTan),  Dt_i/t_i (Exp),
+ * Dt_i/(t_i^2+1) (Tan).  Lumping all generators (as the complex-only code did)
+ * is correct ONLY while no tangent monomials are present; the partitioning below
+ * makes the decision faithful to the disjoint-index real theorem. */
+enum { RS_LOG = 0, RS_EXP = 1, RS_TAN = 2, RS_ARCTAN = 3 };
+static int rs_kind_group(int k) { return (k == RS_TAN || k == RS_ARCTAN) ? 1 : 0; }
+
+/* Target-decision codes (which of the four Cor. 9.3.1/9.3.2 questions to answer). */
+enum { RS_LOG_R = 0, RS_EXP_R = 1, RS_TAN_R = 2, RS_ARCTAN_R = 3 };
+static int rs_target_group(int t) { return (t == RS_TAN_R || t == RS_ARCTAN_R) ? 1 : 0; }
+
+/* Decode {{t_i, "Exp"|"Log"|"Tan"|"ArcTan", Dt_i [, arg_i]}, ...} into parallel
+ * arrays and build the derivation rules {x->1, t_i->Dt_i} and the generator list.
+ * Returns the number of monomials, or (size_t)-1 on malformed input.  On success
+ * the caller owns *gens (array + elements), *kinds (int array), *vars (List Expr),
+ * *deriv_out (List Expr), and — when bases_out != NULL — *bases (array + elements,
+ * the witness base for each monomial: the log ARGUMENT arg_i when a 4-tuple gives
+ * it, else the monomial t_i itself).  The optional 4th element carries a_i for a
+ * logarithm t_i = log(a_i), used only for radical-witness reconstruction. */
 static size_t rs_decode_tower(const Expr* x, const Expr* mons,
-                              Expr*** gens_out, Expr** vars_out, Expr** deriv_out) {
+                              Expr*** gens_out, int** kinds_out, Expr*** bases_out,
+                              Expr** vars_out, Expr** deriv_out) {
     if (!rs_is_list(mons)) return (size_t)-1;
     size_t n = mons->data.function.arg_count;
 
     Expr** gens = (n ? malloc(n * sizeof(Expr*)) : NULL);
+    int*   kinds = (n ? malloc(n * sizeof(int)) : NULL);
+    Expr** bases = (bases_out && n ? malloc(n * sizeof(Expr*)) : NULL);
     /* derivation rules: {x->1} plus one per monomial. */
     Expr** drules = malloc((n + 1) * sizeof(Expr*));
     Expr** vars = malloc((n + 1) * sizeof(Expr*));
@@ -187,26 +212,35 @@ static size_t rs_decode_tower(const Expr* x, const Expr* mons,
     bool ok = true;
     for (size_t i = 0; i < n; i++) {
         Expr* mi = mons->data.function.args[i];
-        if (!rs_is_list(mi) || mi->data.function.arg_count != 3) { ok = false; break; }
+        if (!rs_is_list(mi) ||
+            (mi->data.function.arg_count != 3 && mi->data.function.arg_count != 4)) {
+            ok = false; break;
+        }
         Expr* ti = mi->data.function.args[0];
         Expr* kind = mi->data.function.args[1];
         Expr* Dti = mi->data.function.args[2];
+        Expr* argi = (mi->data.function.arg_count == 4) ? mi->data.function.args[3] : NULL;
         if (kind->type != EXPR_STRING) { ok = false; break; }
         const char* ks = kind->data.string;
 
-        /* generator: Log -> Dt_i ; Exp -> Dt_i / t_i ; Tan -> Dt_i / (t_i^2+1) */
-        Expr* g;
+        /* generator by kind; group per the disjoint index sets. */
+        Expr* g; int kc;
         if (strcmp(ks, "Log") == 0) {
-            g = rs_cp(Dti);
+            kc = RS_LOG; g = rs_cp(Dti);
         } else if (strcmp(ks, "Exp") == 0) {
-            g = rs_call1("Cancel", rs_times(rs_cp(Dti), rs_pow(rs_cp(ti), -1)));
+            kc = RS_EXP; g = rs_call1("Cancel", rs_times(rs_cp(Dti), rs_pow(rs_cp(ti), -1)));
         } else if (strcmp(ks, "Tan") == 0) {
+            kc = RS_TAN;
             Expr* tsq1 = rs_eval_adopt(expr_new_function(expr_new_symbol("Plus"),
                 (Expr*[]){ rs_pow(rs_cp(ti), 2), expr_new_integer(1) }, 2));
             g = rs_call1("Cancel", rs_times(rs_cp(Dti), rs_pow(tsq1, -1)));
+        } else if (strcmp(ks, "ArcTan") == 0) {
+            kc = RS_ARCTAN; g = rs_cp(Dti);
         } else { ok = false; break; }
 
         gens[i] = g;
+        kinds[i] = kc;
+        if (bases) bases[i] = (kc == RS_LOG && argi) ? rs_cp(argi) : rs_cp(ti);
         drules[i + 1] = expr_new_function(expr_new_symbol("Rule"),
             (Expr*[]){ rs_cp(ti), rs_cp(Dti) }, 2);
         vars[i + 1] = rs_cp(ti);
@@ -214,13 +248,15 @@ static size_t rs_decode_tower(const Expr* x, const Expr* mons,
     }
 
     if (!ok) {
-        for (size_t i = 0; i < done; i++) expr_free(gens[i]);
+        for (size_t i = 0; i < done; i++) { expr_free(gens[i]); if (bases) expr_free(bases[i]); }
         for (size_t i = 0; i <= done; i++) { expr_free(drules[i]); expr_free(vars[i]); }
-        free(gens); free(drules); free(vars);
+        free(gens); free(kinds); free(bases); free(drules); free(vars);
         return (size_t)-1;
     }
 
     *gens_out = gens;
+    *kinds_out = kinds;
+    if (bases_out) *bases_out = bases;
     *vars_out = expr_new_function(expr_new_symbol("List"), vars, n + 1);
     free(vars);
     *deriv_out = expr_new_function(expr_new_symbol("List"), drules, n + 1);
@@ -228,33 +264,149 @@ static size_t rs_decode_tower(const Expr* x, const Expr* mons,
     return n;
 }
 
-/* Shared body for LogReducible / ExpReducible.  is_log selects the target:
- * log test -> Da/a ; exp test -> Db. */
-static Expr* rs_reducible(const Expr* arg, const Expr* x, const Expr* mons, bool is_log) {
-    Expr** gens = NULL; Expr* vars = NULL; Expr* drules = NULL;
-    size_t m = rs_decode_tower(x, mons, &gens, &vars, &drules);
+/* Shared body for the four structure-theorem reducibility decisions.  `target`
+ * (RS_*_R) selects both the target theta and the generator group:
+ *   RS_LOG_R:    theta = Da/a       gens E u L   (Cor. i,   eq. 9.8/9.12)
+ *   RS_EXP_R:    theta = Db         gens E u L   (Cor. ii,  eq. 9.9/9.13)
+ *   RS_TAN_R:    theta = Db         gens T u A   (Cor. iv,  eq. 9.15)
+ *   RS_ARCTAN_R: theta = Db/(b^2+1) gens T u A   (Cor. iii, eq. 9.14)
+ * Returns an owned List of rational coefficients in FULL monomial-list order
+ * (0 at monomials outside the target's group), or NULL to signal "False". */
+static Expr* rs_structure_decide(const Expr* arg, const Expr* x, const Expr* mons,
+                                 int target) {
+    Expr** gens = NULL; int* kinds = NULL; Expr* vars = NULL; Expr* drules = NULL;
+    size_t m = rs_decode_tower(x, mons, &gens, &kinds, NULL, &vars, &drules);
     if (m == (size_t)-1) return NULL;
 
     RischDeriv d;
     if (!risch_deriv_from_rules(drules, &d)) {
         for (size_t i = 0; i < m; i++) expr_free(gens[i]);
-        free(gens); expr_free(vars); expr_free(drules);
+        free(gens); free(kinds); expr_free(vars); expr_free(drules);
         return NULL;
     }
 
     Expr* Darg = risch_field_deriv(arg, &d);   /* D_tower[arg] */
-    Expr* theta = is_log
-        ? rs_call1("Cancel", rs_times(Darg, rs_pow(rs_cp(arg), -1)))  /* Da/a */
-        : Darg;                                                       /* Db */
+    Expr* theta;
+    switch (target) {
+        case RS_LOG_R:
+            theta = rs_call1("Cancel", rs_times(Darg, rs_pow(rs_cp(arg), -1)));   /* Da/a */
+            break;
+        case RS_ARCTAN_R: {                                                       /* Db/(b^2+1) */
+            Expr* bsq1 = rs_eval_adopt(expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ rs_pow(rs_cp(arg), 2), expr_new_integer(1) }, 2));
+            theta = rs_call1("Cancel", rs_times(Darg, rs_pow(bsq1, -1)));
+            break;
+        }
+        default: /* RS_EXP_R, RS_TAN_R */
+            theta = Darg;                                                         /* Db */
+            break;
+    }
 
-    Expr* coeffs = risch_rational_span(theta, gens, m, vars);
+    /* Restrict to the generators of the target's index-set group. */
+    int grp = rs_target_group(target);
+    Expr** fg = (m ? malloc(m * sizeof(Expr*)) : NULL);
+    size_t* idx = (m ? malloc(m * sizeof(size_t)) : NULL);
+    size_t fm = 0;
+    for (size_t i = 0; i < m; i++)
+        if (rs_kind_group(kinds[i]) == grp) { fg[fm] = gens[i]; idx[fm] = i; fm++; }
+
+    Expr* coeffs = risch_rational_span(theta, fg, fm, vars);
+
+    Expr* result = NULL;
+    if (coeffs) {
+        Expr** full = (m ? malloc(m * sizeof(Expr*)) : NULL);
+        for (size_t i = 0; i < m; i++) full[i] = expr_new_integer(0);
+        for (size_t j = 0; j < fm; j++) {
+            expr_free(full[idx[j]]);
+            full[idx[j]] = rs_cp(coeffs->data.function.args[j]);
+        }
+        result = expr_new_function(expr_new_symbol("List"), full, m);
+        free(full);
+        expr_free(coeffs);
+    }
 
     risch_deriv_free(&d);
     expr_free(theta);
     for (size_t i = 0; i < m; i++) expr_free(gens[i]);
-    free(gens); expr_free(vars); expr_free(drules);
+    free(gens); free(kinds); free(fg); free(idx);
+    expr_free(vars); expr_free(drules);
 
-    return coeffs ? coeffs : expr_new_symbol("False");
+    return result;
+}
+
+/* ------------------------------------------------------------------ */
+/* Logarithmic derivative of a radical (Bronstein §5.12 / eq. 7.44).   */
+/* ------------------------------------------------------------------ */
+
+/* Decide whether f is the logarithmic derivative of a K-radical over the tower,
+ * via the structure-theorem test (Cor. 9.3.1/9.3.2 (ii), eq. 9.13/7.44): f is
+ * such a logarithmic derivative iff there are r_i in Q with
+ *     f = Sum_{i in L} r_i Dt_i + Sum_{i in E} r_i Dt_i/t_i
+ * (only the E u L generators participate).  On success, put the r_i over a common
+ * denominator n>0, set e_i = n*r_i in Z, and reconstruct the witness radical
+ *     u = Prod base_i^{e_i}     (base_i = arg_i for a logarithm t_i = log(a_i),
+ *                                = t_i for an exponential),
+ * so that D[u]/u = n*f exactly.  Returns an owned List[n, u], or NULL for "False".
+ *
+ * This is the exact, complete decision when f = Db is the derivative of a field
+ * element (the form arising from integration); the full §5.12 recursive method
+ * (which also admits radicals built from the log MONOMIALS themselves, e.g.
+ * Bronstein's u = x^5 log(x)) is a strictly broader completeness item. */
+static Expr* rs_logderiv_radical(const Expr* f, const Expr* x, const Expr* mons) {
+    Expr** gens = NULL; int* kinds = NULL; Expr** bases = NULL;
+    Expr* vars = NULL; Expr* drules = NULL;
+    size_t m = rs_decode_tower(x, mons, &gens, &kinds, &bases, &vars, &drules);
+    if (m == (size_t)-1) return NULL;
+
+    /* E u L generators only (group 0). */
+    Expr** fg = (m ? malloc(m * sizeof(Expr*)) : NULL);
+    size_t* idx = (m ? malloc(m * sizeof(size_t)) : NULL);
+    size_t fm = 0;
+    for (size_t i = 0; i < m; i++)
+        if (rs_kind_group(kinds[i]) == 0) { fg[fm] = gens[i]; idx[fm] = i; fm++; }
+
+    Expr* coeffs = risch_rational_span(f, fg, fm, vars);
+
+    Expr* result = NULL;
+    if (coeffs) {
+        /* n = LCM of the coefficient denominators (n = 1 when all integral / empty). */
+        Expr* n;
+        if (fm == 0) {
+            n = expr_new_integer(1);
+        } else {
+            Expr** ds = malloc(fm * sizeof(Expr*));
+            for (size_t j = 0; j < fm; j++)
+                ds[j] = rs_call1("Denominator", rs_cp(coeffs->data.function.args[j]));
+            Expr* dl = expr_new_function(expr_new_symbol("List"), ds, fm);
+            free(ds);
+            n = rs_fn("Apply", (Expr*[]){ expr_new_symbol("LCM"), dl }, 2);
+        }
+
+        /* u = Prod base_i^{n r_i}, skipping zero exponents. */
+        Expr** facs = (fm ? malloc(fm * sizeof(Expr*)) : NULL);
+        size_t nf = 0;
+        for (size_t j = 0; j < fm; j++) {
+            Expr* ej = rs_eval_adopt(rs_times(rs_cp(n), rs_cp(coeffs->data.function.args[j])));
+            if (rs_is_zero(ej)) { expr_free(ej); continue; }
+            facs[nf++] = expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ rs_cp(bases[idx[j]]), ej }, 2);
+        }
+        Expr* u;
+        if (nf == 0) u = expr_new_integer(1);
+        else if (nf == 1) u = rs_eval_adopt(facs[0]);
+        else u = rs_eval_adopt(expr_new_function(expr_new_symbol("Times"), facs, nf));
+        free(facs);
+
+        result = expr_new_function(expr_new_symbol("List"),
+            (Expr*[]){ n, u }, 2);
+    }
+
+    if (coeffs) expr_free(coeffs);
+    for (size_t i = 0; i < m; i++) { expr_free(gens[i]); if (bases) expr_free(bases[i]); }
+    free(gens); free(kinds); free(bases); free(fg); free(idx);
+    expr_free(vars); expr_free(drules);
+
+    return result;
 }
 
 /* ------------------------------------------------------------------ */
@@ -273,16 +425,26 @@ static Expr* builtin_risch_rationalspan(Expr* res) {
     return r ? r : expr_new_symbol("False");
 }
 
-/* Risch`LogReducible[a, x, mons] / Risch`ExpReducible[b, x, mons]. */
-static Expr* builtin_risch_logreducible(Expr* res) {
+/* The four structure-theorem reducibility builtins share one shape. */
+static Expr* rs_reducible_builtin(Expr* res, int target) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
-    return rs_reducible(res->data.function.args[0], res->data.function.args[1],
-                        res->data.function.args[2], true);
+    Expr* r = rs_structure_decide(res->data.function.args[0], res->data.function.args[1],
+                                  res->data.function.args[2], target);
+    return r ? r : expr_new_symbol("False");
 }
-static Expr* builtin_risch_expreducible(Expr* res) {
+/* Risch`LogReducible[a, x, mons] / Risch`ExpReducible[b, x, mons]
+ * / Risch`TanReducible[b, x, mons] / Risch`ArcTanReducible[b, x, mons]. */
+static Expr* builtin_risch_logreducible(Expr* res)    { return rs_reducible_builtin(res, RS_LOG_R); }
+static Expr* builtin_risch_expreducible(Expr* res)    { return rs_reducible_builtin(res, RS_EXP_R); }
+static Expr* builtin_risch_tanreducible(Expr* res)    { return rs_reducible_builtin(res, RS_TAN_R); }
+static Expr* builtin_risch_arctanreducible(Expr* res) { return rs_reducible_builtin(res, RS_ARCTAN_R); }
+
+/* Risch`LogarithmicDerivativeOfRadical[f, x, mons] -> {n, u} or False. */
+static Expr* builtin_risch_logderiv_radical(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
-    return rs_reducible(res->data.function.args[0], res->data.function.args[1],
-                        res->data.function.args[2], false);
+    Expr* r = rs_logderiv_radical(res->data.function.args[0], res->data.function.args[1],
+                                  res->data.function.args[2]);
+    return r ? r : expr_new_symbol("False");
 }
 
 /* ------------------------------------------------------------------ */
@@ -310,4 +472,21 @@ void integrate_risch_structure_init(void) {
         "structure theorem: returns the rational coefficients expressing Db in the\n"
         "monomial generators when Exp[b] is reducible over the tower, else False\n"
         "(Exp[b] is a new, algebraically independent monomial).");
+    rs_install("Risch`TanReducible", builtin_risch_tanreducible,
+        "Risch`TanReducible[b, x, {{t, \"Tan\"|\"ArcTan\"|\"Exp\"|\"Log\", Dt}, ...}]\n"
+        "applies the REAL Risch structure theorem (Cor. 9.3.2 iv, eq. 9.15): returns\n"
+        "the rational coefficients over the tangent/arc-tangent generators when Tan[b]\n"
+        "is reducible over the tower, else False. Only T u A monomials participate.");
+    rs_install("Risch`ArcTanReducible", builtin_risch_arctanreducible,
+        "Risch`ArcTanReducible[b, x, {{t, \"Tan\"|\"ArcTan\"|\"Exp\"|\"Log\", Dt}, ...}]\n"
+        "applies the REAL Risch structure theorem (Cor. 9.3.2 iii, eq. 9.14): returns\n"
+        "the rational coefficients expressing Db/(b^2+1) over the tangent/arc-tangent\n"
+        "generators when ArcTan[b] is reducible over the tower, else False.");
+    rs_install("Risch`LogarithmicDerivativeOfRadical", builtin_risch_logderiv_radical,
+        "Risch`LogarithmicDerivativeOfRadical[f, x, {{t, kind, Dt[, arg]}, ...}]\n"
+        "decides whether f is the logarithmic derivative of a K-radical over the tower\n"
+        "(Bronstein §5.12, structure-theorem test eq. 7.44/9.13): returns {n, u} with\n"
+        "n a positive integer and u the witness radical such that D[u]/u == n f, else\n"
+        "False. Only the Exp/Log (E u L) monomials participate; supply the log argument\n"
+        "as the optional 4th monomial element for the witness u.");
 }
