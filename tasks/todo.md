@@ -80,11 +80,17 @@ solver `rde_tower(f, g, RdeCtx*)` solving `D_tower[y] + f y = g` over `K_L`.
 - [x] **RT_TAN tower foundation** (commit c23f328): `RtKind += RT_TAN`, `tsg` sign, collection,
       derivation `Dt=Dcoef(t²+σ)`, `Sec²→1+Tan²` rewrite. Sound; builds the tower but declines
       pending the 3 integration pieces below.
-- [ ] **RT_TAN full integration** (3 pieces): (a) a `TrigToTan` integrand normaliser — none
-      exists; the evaluator rewrites `(1+Tan²)/Tan→Csc·Sec`, and `Csc` is irrational in `Tan`, so
-      only rational-in-Tan combinations substitute; (b) the hypertangent-TOP field dispatch
-      (`IntegrateHypertangent`); (c) the §6.2/§6.6 tangent RDE branches (`RdeSpecialDenomTan`,
-      `PolyRischDECancelTan` via `CoupledDECancelTan`) for exp/log-over-tangent RDEs. Large focused build.
+- [x] **TrigToTan normaliser** (commit 6793835): `rt_subst_kernels` rationalises circular/hyperbolic
+      trig of a tangent arg to the tower symbol (`Sin=t/√(1+σt²)`, …); the fresh symbol stops the
+      evaluator canonicalising back to `Csc·Sec`. A log-over-tangent integrand builds the correct
+      tower `F=(1+t₀²)/(t₀t₁)`. Verified; non-regressing.
+- [ ] **RT_TAN full integration** (3 remaining pieces): (a) **nonlinear-lower-monomial residue
+      support** — a tangent LOWER kernel has `Dt₀=t₀²+1` (δ=2), so the Rothstein–Trager residue
+      `Res_{t}(a−z·D[den],den)` in `rt_field_ratint` no longer reduces (this is the current blocker,
+      `∫(1+Tan²)/(Tan·Log[Tan])` builds but declines); (b) the hypertangent-TOP dispatch
+      (`IntegrateHypertangent` in `rt_field_integrate`, currently EXP-only in the else branch);
+      (c) the §6.2/§6.6 tangent RDE branches (`RdeSpecialDenomTan`, `PolyRischDECancelTan` via
+      `CoupledDECancelTan`). Each is a genuine algorithmic extension.
 
 ## RT_MAXK depth cap
 - [x] **Removed** (commit 4f6453c): `RtTower` arrays heap-allocated to the actual kernel count;
