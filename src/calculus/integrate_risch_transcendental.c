@@ -2726,14 +2726,18 @@ static void rt_dec_nonelem(void) {
 
 static void rt_tower_free(RtTower* T) {
     for (size_t i = 0; i < T->n; i++) {
-        if (T->kernel[i]) expr_free(T->kernel[i]);
-        if (T->arg[i]) expr_free(T->arg[i]);
-        if (T->t[i]) expr_free(T->t[i]);
-        if (T->Dcoef[i]) expr_free(T->Dcoef[i]);
+        if (T->kernel && T->kernel[i]) expr_free(T->kernel[i]);
+        if (T->arg && T->arg[i]) expr_free(T->arg[i]);
+        if (T->t && T->t[i]) expr_free(T->t[i]);
+        if (T->Dcoef && T->Dcoef[i]) expr_free(T->Dcoef[i]);
     }
     if (T->subrules) expr_free(T->subrules);
     for (size_t i = 0; i < T->nm; i++)
-        if (T->marg[i]) expr_free(T->marg[i]);
+        if (T->marg && T->marg[i]) expr_free(T->marg[i]);
+    free(T->kind); free(T->kernel); free(T->arg); free(T->t); free(T->Dcoef);
+    free(T->marg); free(T->mprim); free(T->mmult);
+    T->kind = NULL; T->kernel = NULL; T->arg = NULL; T->t = NULL; T->Dcoef = NULL;
+    T->marg = NULL; T->mprim = NULL; T->mmult = NULL;
     T->n = 0; T->nm = 0; T->subrules = NULL;
 }
 
@@ -2745,18 +2749,18 @@ static void rt_tower_free(RtTower* T) {
  * coefficient Dcoef_i (log: u_i'/u_i ; exp: w_i').  The structure-theorem
  * soundness check requires every Dcoef_i to lie in K_{i-1} = C(x, t_1..t_{i-1})
  * (triangular: free of t_i..t_n and of any residual foreign kernel).  Returns
- * true with T populated (2 <= n <= RT_MAXK); false otherwise (caller still calls
+ * true with T populated (n >= min_n; no upper depth cap — the arrays are
+ * heap-allocated to the actual kernel count); false otherwise (caller still calls
  * rt_tower_free). */
 static bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
-    for (size_t i = 0; i < RT_MAXK; i++)
-        { T->kernel[i] = T->arg[i] = T->t[i] = T->Dcoef[i] = NULL; }
-    T->subrules = NULL; T->n = 0;
+    T->kind = NULL; T->kernel = NULL; T->arg = NULL; T->t = NULL; T->Dcoef = NULL;
+    T->marg = NULL; T->mprim = NULL; T->mmult = NULL;
+    T->subrules = NULL; T->n = 0; T->nm = 0;
 
     Expr** logs = NULL; size_t nl = 0, lc = 0; rt_collect_logs(f, x, &logs, &nl, &lc);
     Expr** exps = NULL; size_t ne = 0, ec = 0;
     rt_collect_exp_exponents(f, x, &exps, &ne, &ec);
-    T->nm = 0;
-    Expr* mprim_pexp[2 * RT_MAXK];       /* per-member class-primitive exponent (borrowed) */
+    Expr** mprim_pexp = malloc((ne ? ne : 1) * sizeof(Expr*)); /* per-member class primitive (borrowed) */
 
     /* --- Multiplicatively commensurate reduction of the exponential kernels. ---
      * Collected exponents w_i, w_j define algebraically DEPENDENT kernels
@@ -2774,7 +2778,7 @@ static bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
     long* clsrep = malloc((ne ? ne : 1) * sizeof(long));
     long* multof = malloc((ne ? ne : 1) * sizeof(long));
     for (size_t i = 0; i < ne; i++) { clsrep[i] = -1; multof[i] = 1; }
-    bool okc = (ne <= 2 * RT_MAXK);                 /* member-array bound */
+    bool okc = true;
     for (size_t i = 0; i < ne && okc; i++) {        /* group by commensurability */
         if (clsrep[i] != -1) continue;
         clsrep[i] = (long)i;
@@ -2809,14 +2813,23 @@ static bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
     size_t np = 0;
     for (size_t rep = 0; rep < ne; rep++) if (clsrep[rep] == (long)rep) np++;
     size_t n = nl + np;
-    if (!okc || n < min_n || n > RT_MAXK) {
+    if (!okc || n < min_n) {                         /* no upper depth cap */
         for (size_t rep = 0; rep < ne; rep++) if (clsprim[rep]) expr_free(clsprim[rep]);
-        free(clsprim); free(clsrep); free(multof);
+        free(clsprim); free(clsrep); free(multof); free(mprim_pexp);
         for (size_t i = 0; i < nl; i++) expr_free(logs[i]);
         for (size_t i = 0; i < ne; i++) expr_free(exps[i]);
         free(logs); free(exps);
         return false;
     }
+    /* Allocate the tower arrays now the depth n and member bound ne are known. */
+    T->kind   = calloc(n ? n : 1, sizeof(RtKind));
+    T->kernel = calloc(n ? n : 1, sizeof(Expr*));
+    T->arg    = calloc(n ? n : 1, sizeof(Expr*));
+    T->t      = calloc(n ? n : 1, sizeof(Expr*));
+    T->Dcoef  = calloc(n ? n : 1, sizeof(Expr*));
+    T->marg   = calloc(ne ? ne : 1, sizeof(Expr*));
+    T->mprim  = calloc(ne ? ne : 1, sizeof(long));
+    T->mmult  = calloc(ne ? ne : 1, sizeof(long));
 
     size_t idx = 0;
     for (size_t i = 0; i < nl; i++) {
@@ -2866,7 +2879,7 @@ static bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
      * the primitive's post-ordering tower index by matching its exponent. */
     Expr** rules = malloc((2 * n + 2 * T->nm) * sizeof(Expr*)); size_t nr = 0;
     for (size_t i = 0; i < n; i++) {
-        char nm[16]; snprintf(nm, sizeof(nm), "rmR%zu", i);
+        char nm[32]; snprintf(nm, sizeof(nm), "rmR%zu", i);
         T->t[i] = expr_new_symbol(nm);
         if (T->kind[i] == RT_LOG) {
             rules[nr++] = expr_new_function(expr_new_symbol("Rule"),
@@ -2897,7 +2910,7 @@ static bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
     T->subrules = expr_new_function(expr_new_symbol("List"), rules, nr);
     free(rules);
     for (size_t rep = 0; rep < ne; rep++) if (clsprim[rep]) expr_free(clsprim[rep]);
-    free(clsprim); free(clsrep); free(multof);
+    free(clsprim); free(clsrep); free(multof); free(mprim_pexp);
     for (size_t i = 0; i < ne; i++) expr_free(exps[i]);
     free(exps);
 

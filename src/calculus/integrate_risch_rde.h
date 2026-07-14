@@ -28,27 +28,28 @@
 
 /* ---- Differential transcendental tower (shared with the integrator) ------- */
 
-#define RT_MAXK 5                       /* max tower depth in the live engine   */
+typedef enum { RT_LOG, RT_EXP, RT_TAN } RtKind; /* monomial kind: Log[u] / E^w / Tan[u] */
 
-typedef enum { RT_LOG, RT_EXP } RtKind; /* monomial kind: Log[u] / E^w          */
-
+/* The per-monomial and member arrays are heap-allocated by rt_tower_build_min,
+ * sized to the actual kernel count, so tower DEPTH IS UNBOUNDED (no RT_MAXK cap).
+ * rt_tower_free releases them; a not-yet-built tower has all pointers NULL. */
 typedef struct {
     size_t n;
-    RtKind kind[RT_MAXK];
-    Expr* kernel[RT_MAXK];   /* Log[u_i] or Power[E, w_i]                (owned) */
-    Expr* arg[RT_MAXK];      /* u_i (log argument) or w_i (exp exponent) (owned) */
-    Expr* t[RT_MAXK];        /* fresh tower variable t_i                 (owned) */
-    Expr* Dcoef[RT_MAXK];    /* log: u'/u ; exp: w' — in t-vars, in K_{i-1} (owned) */
-    Expr* subrules;          /* List of all kernel -> t_i rules          (owned) */
+    RtKind* kind;
+    Expr** kernel;   /* Log[u_i] / Power[E, w_i] / Tan[u_i]      (owned) */
+    Expr** arg;      /* u_i (log/tan argument) or w_i (exp exponent) (owned) */
+    Expr** t;        /* fresh tower variable t_i                 (owned) */
+    Expr** Dcoef;    /* log: u'/u ; exp: w' ; tan: u'           (owned) */
+    Expr* subrules;  /* List of all kernel -> t_i rules          (owned) */
     /* Multiplicatively commensurate non-primitive exp members: a collected
      * kernel E^w whose exponent w = mmult * arg[mprim] is NOT an independent
      * extension — it is (E^arg[mprim])^mmult = t[mprim]^mmult.  Recorded here so
      * rt_subst_kernels can alias it to a power of the primitive's tower var
      * instead of leaving it as a foreign kernel. */
     size_t nm;
-    Expr* marg[2 * RT_MAXK]; /* the member exponent w                    (owned) */
-    long  mprim[2 * RT_MAXK];/* tower index of the class primitive              */
-    long  mmult[2 * RT_MAXK];/* integer multiplier k (w = k * arg[mprim])       */
+    Expr** marg;     /* the member exponent w                    (owned) */
+    long*  mprim;    /* tower index of the class primitive              */
+    long*  mmult;    /* integer multiplier k (w = k * arg[mprim])       */
 } RtTower;
 
 /* Derivation context for the recursive Risch DE: the current top monomial
