@@ -315,6 +315,7 @@ static Expr* rt_rational_case(Expr* f, Expr* x) {
 /* Forward decls: the Ei/li recognizers extract the exponential/log kernel
  * directly (defined below alongside the transcendental-case machinery). */
 static Expr* rt_find_log_of_x(Expr* e, Expr* x);
+static Expr* rt_exp_ratreduce_case(Expr* f, Expr* x);
 static Expr* rt_find_exp_of_x(Expr* e, Expr* x);
 /* Diff-back verifier (defined with the tower machinery); used by the
  * pure-resultant LRT frac path, whose reuse crosses content boundaries. */
@@ -4381,12 +4382,218 @@ static Expr* rt_recursive_tower_case(Expr* f, Expr* x) {
     return result;
 }
 
+/* ---- real reconstruction of I-laden trigonometric antiderivatives --------- */
+/* The complex-exponential route integrates over the kernel E^(I x); its log part
+ * comes back as complex logs / ArcTan of E^(±I x), a correct but I-laden closed
+ * form (e.g. ∫Csc x -> Log[E^(I x)-1] - Log[E^(I x)+1], which equals the real
+ * Log[Tan[x/2]] up to a constant).  cx_reim decomposes such an expression of the
+ * REAL variable x into real + I·imaginary parts (treating x, Pi, E and any
+ * trig/Sqrt of a real argument as real); rt_realify keeps the real part — a valid
+ * antiderivative since the discarded imaginary part is a constant for a real
+ * integrand — and returns it only behind an exact diff-back check.  This is the
+ * LogToReal real reconstruction for the exponential tower, not a rewrite of the
+ * integrand. */
+
+static Expr* cx_int(long n) { return expr_new_integer(n); }
+static Expr* cx_add(Expr* a, Expr* b) {
+    return expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ a, b }, 2);
+}
+static Expr* cx_mul(Expr* a, Expr* b) {
+    return expr_new_function(expr_new_symbol("Times"), (Expr*[]){ a, b }, 2);
+}
+static Expr* cx_neg(Expr* a) { return cx_mul(cx_int(-1), a); }
+static Expr* cx_half(void) {
+    return expr_new_function(expr_new_symbol("Rational"),
+        (Expr*[]){ cx_int(1), cx_int(2) }, 2);
+}
+static Expr* cx_I(void) {
+    return expr_new_function(expr_new_symbol("Complex"), (Expr*[]){ cx_int(0), cx_int(1) }, 2);
+}
+static Expr* cx_log(Expr* a) { return expr_new_function(expr_new_symbol("Log"), (Expr*[]){ a }, 1); }
+
+/* True iff e contains no Complex[...] atom (manifestly real for real symbols). */
+static bool rt_free_of_complex(Expr* e) {
+    if (!e) return true;
+    if (e->type == EXPR_FUNCTION) {
+        if (rt_head_is(e, "Complex")) return false;
+        if (!rt_free_of_complex(e->data.function.head)) return false;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!rt_free_of_complex(e->data.function.args[i])) return false;
+    }
+    return true;
+}
+
+/* e == *re + I (*im), for a function of the real variable x.  Returns false on a
+ * construct it cannot split.  Owns the returned parts. */
+static bool cx_reim(Expr* e, Expr* x, Expr** re, Expr** im) {
+    *re = NULL; *im = NULL;
+    if (rt_head_is(e, "Complex") && e->data.function.arg_count == 2) {
+        *re = expr_copy(e->data.function.args[0]);
+        *im = expr_copy(e->data.function.args[1]);
+        return true;
+    }
+    if (rt_free_of_complex(e)) {          /* real atom / trig/Sqrt of real x, ... */
+        *re = expr_copy(e); *im = cx_int(0); return true;
+    }
+    if (e->type != EXPR_FUNCTION) return false;
+    size_t n = e->data.function.arg_count;
+
+    if (rt_head_is(e, "Plus")) {
+        Expr* R = cx_int(0); Expr* M = cx_int(0);
+        for (size_t i = 0; i < n; i++) {
+            Expr* r; Expr* m;
+            if (!cx_reim(e->data.function.args[i], x, &r, &m)) {
+                expr_free(R); expr_free(M); return false;
+            }
+            R = cx_add(R, r); M = cx_add(M, m);
+        }
+        *re = R; *im = M; return true;
+    }
+    if (rt_head_is(e, "Times")) {
+        Expr* R = cx_int(1); Expr* M = cx_int(0);
+        for (size_t i = 0; i < n; i++) {
+            Expr* c; Expr* d;
+            if (!cx_reim(e->data.function.args[i], x, &c, &d)) {
+                expr_free(R); expr_free(M); expr_free(c); return false;
+            }
+            /* (R + M i)(c + d i) = (Rc - Md) + (Rd + Mc) i */
+            Expr* nR = cx_add(cx_mul(expr_copy(R), expr_copy(c)),
+                              cx_neg(cx_mul(expr_copy(M), expr_copy(d))));
+            Expr* nM = cx_add(cx_mul(expr_copy(R), expr_copy(d)),
+                              cx_mul(expr_copy(M), expr_copy(c)));
+            expr_free(R); expr_free(M); expr_free(c); expr_free(d);
+            R = nR; M = nM;
+        }
+        *re = R; *im = M; return true;
+    }
+    if (rt_head_is(e, "Power") && n == 2) {
+        Expr* base = e->data.function.args[0];
+        Expr* ex   = e->data.function.args[1];
+        if (rt_free_of_complex(base)) {
+            /* base^(a + b i) = base^a (Cos[b Log base] + i Sin[b Log base]). */
+            Expr* a; Expr* b;
+            if (!cx_reim(ex, x, &a, &b)) return false;
+            Expr* mag = expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_copy(base), a }, 2);                 /* a adopted */
+            Expr* th = cx_mul(b, cx_log(expr_copy(base)));           /* b adopted */
+            *re = cx_mul(expr_copy(mag),
+                expr_new_function(expr_new_symbol("Cos"), (Expr*[]){ expr_copy(th) }, 1));
+            *im = cx_mul(mag,
+                expr_new_function(expr_new_symbol("Sin"), (Expr*[]){ th }, 1));
+            return true;
+        }
+        if (ex->type == EXPR_INTEGER) {                             /* complex^int */
+            Expr* br; Expr* bi;
+            if (!cx_reim(base, x, &br, &bi)) return false;
+            long p = ex->data.integer, ap = p < 0 ? -p : p;
+            Expr* R = cx_int(1); Expr* M = cx_int(0);
+            for (long k = 0; k < ap; k++) {
+                Expr* nR = cx_add(cx_mul(expr_copy(R), expr_copy(br)),
+                                  cx_neg(cx_mul(expr_copy(M), expr_copy(bi))));
+                Expr* nM = cx_add(cx_mul(expr_copy(R), expr_copy(bi)),
+                                  cx_mul(expr_copy(M), expr_copy(br)));
+                expr_free(R); expr_free(M); R = nR; M = nM;
+            }
+            expr_free(br); expr_free(bi);
+            if (p < 0) {                                            /* invert */
+                Expr* den = cx_add(cx_mul(expr_copy(R), expr_copy(R)),
+                                   cx_mul(expr_copy(M), expr_copy(M)));
+                Expr* invden = expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ den, cx_int(-1) }, 2);
+                Expr* nR = cx_mul(R, expr_copy(invden));
+                Expr* nM = cx_mul(cx_neg(M), invden);
+                R = nR; M = nM;
+            }
+            *re = R; *im = M; return true;
+        }
+        return false;                                              /* complex^noninteger */
+    }
+    if (rt_head_is(e, "Log") && n == 1) {
+        Expr* a; Expr* b;
+        if (!cx_reim(e->data.function.args[0], x, &a, &b)) return false;
+        /* Log[a + b i] = (1/2) Log[a^2 + b^2] + i ArcTan[a, b]  (Arg). */
+        Expr* mag2 = cx_add(cx_mul(expr_copy(a), expr_copy(a)),
+                            cx_mul(expr_copy(b), expr_copy(b)));
+        *re = cx_mul(cx_half(), cx_log(mag2));
+        *im = expr_new_function(expr_new_symbol("ArcTan"), (Expr*[]){ a, b }, 2);
+        return true;
+    }
+    /* ArcTan[z] = (i/2)(Log[1 - i z] - Log[1 + i z]); recurse on the rewrite. */
+    if (rt_head_is(e, "ArcTan") && n == 1) {
+        Expr* z = e->data.function.args[0];
+        Expr* iz1 = cx_mul(cx_I(), expr_copy(z));
+        Expr* iz2 = cx_mul(cx_I(), expr_copy(z));
+        Expr* rw = cx_mul(cx_mul(cx_I(), cx_half()),
+            cx_add(cx_log(cx_add(cx_int(1), cx_neg(iz1))),
+                   cx_neg(cx_log(cx_add(cx_int(1), iz2)))));
+        bool ok = cx_reim(rw, x, re, im);
+        expr_free(rw);
+        return ok;
+    }
+    /* ArcTanh[z] = (1/2)(Log[1 + z] - Log[1 - z]). */
+    if (rt_head_is(e, "ArcTanh") && n == 1) {
+        Expr* z = e->data.function.args[0];
+        Expr* rw = cx_mul(cx_half(),
+            cx_add(cx_log(cx_add(cx_int(1), expr_copy(z))),
+                   cx_neg(cx_log(cx_add(cx_int(1), cx_neg(expr_copy(z)))))));
+        bool ok = cx_reim(rw, x, re, im);
+        expr_free(rw);
+        return ok;
+    }
+    return false;
+}
+
+/* Numeric diff-back: true iff Sum_k |N[(D[g,x] - f) /. x -> p_k]| < 1e-9 over a
+ * few interior points.  Re[G] of an already-correct antiderivative G is provably
+ * an antiderivative of the real integrand f, so a numeric check is a sufficient
+ * guard against a cx_reim bug — and it is robust where the Simplify diff-back
+ * cannot reduce the nested-log real forms the reconstruction produces. */
+static bool rt_realify_numverify(Expr* g, Expr* f, Expr* x) {
+    static const char* pts[] = { "7/10", "13/10", "23/10", "37/10" };
+    Expr* Dg = rt_eval2("D", expr_copy(g), expr_copy(x));
+    if (!Dg) return false;
+    Expr* diff = expr_new_function(expr_new_symbol("Plus"),
+        (Expr*[]){ Dg, cx_neg(expr_copy(f)) }, 2);                  /* D[g] - f */
+    Expr* acc = cx_int(0);
+    for (size_t k = 0; k < sizeof pts / sizeof pts[0]; k++) {
+        Expr* rule = expr_new_function(expr_new_symbol("Rule"),
+            (Expr*[]){ expr_copy(x), parse_expression(pts[k]) }, 2);
+        Expr* at = expr_new_function(expr_new_symbol("ReplaceAll"),
+            (Expr*[]){ expr_copy(diff), rule }, 2);
+        Expr* nv = expr_new_function(expr_new_symbol("Abs"),
+            (Expr*[]){ expr_new_function(expr_new_symbol("N"), (Expr*[]){ at }, 1) }, 1);
+        acc = cx_add(acc, nv);
+    }
+    expr_free(diff);
+    Expr* test = expr_new_function(expr_new_symbol("Less"),
+        (Expr*[]){ acc, parse_expression("1/1000000000") }, 2);
+    Expr* val = rt_eval_own(test);
+    bool ok = val && val->type == EXPR_SYMBOL
+              && val->data.symbol.name == intern_symbol("True");
+    if (val) expr_free(val);
+    return ok;
+}
+
+/* Real closed form of the I-laden antiderivative G of the real integrand f:
+ * Re[G] (x real), returned only if it is manifestly real and diff-backs to f
+ * numerically. */
+static Expr* rt_realify(Expr* G, Expr* x, Expr* f) {
+    Expr* re = NULL; Expr* im = NULL;
+    if (!cx_reim(G, x, &re, &im)) { if (re) expr_free(re); if (im) expr_free(im); return NULL; }
+    if (im) expr_free(im);
+    Expr* reS = rt_eval1("Simplify", re);
+    if (reS && rt_free_of_complex(reS) && rt_realify_numverify(reS, f, x)) return reS;
+    if (reS) expr_free(reS);
+    return NULL;
+}
+
 /* Trigonometric / hyperbolic front-end (exponentialize path).
  * Rewrites the trig/hyperbolic kernels to complex exponentials with
  * TrigToExp, integrates the resulting (Laurent-)rational function of the
  * exponential kernel E^(I x) / E^x with the exponential machinery, and
  * converts the answer back to trigonometric form with ExpToTrig.  Both
- * rewrites are exact, so the result is correct by construction. */
+ * rewrites are exact, so the result is correct by construction; rt_realify then
+ * reconstructs a real closed form (diff-back gated) from the I-laden output. */
 static Expr* rt_trig_frontend(Expr* f, Expr* x) {
     Expr* fe = rt_eval1("TrigToExp", expr_copy(f));
     if (!fe) return NULL;
@@ -4405,6 +4612,12 @@ static Expr* rt_trig_frontend(Expr* f, Expr* x) {
      * collapse would render it in real closed form. */
     Expr* r = rt_exp_poly_case(fe, x);
     if (!r) r = rt_frac_case(fe, x);
+    /* Rational-function-of-a-single-exponential closer (kernelize E^(I x) -> pure
+     * rational integral).  Closes the Laurent forms with E^(-I x) in the
+     * denominator that the frac case leaves — Sec[x], Csc[x], 1/(2+Cos[x]),
+     * Sec[x]^3 — which are exactly the rational trigonometric integrands.  Runs
+     * after rt_frac_case so its cleaner squarefree ArcTan/Log parts win first. */
+    if (!r) r = rt_exp_ratreduce_case(fe, x);
     if (!r) r = rt_hyperexp_case(fe, x);
     /* Multi-kernel decoupling (Phase B): e.g. Sin/Cos times a real exponential
      * exponentialize to a sum of two non-commensurate exponentials E^((a +/- b I) x)
@@ -4412,7 +4625,14 @@ static Expr* rt_trig_frontend(Expr* f, Expr* x) {
     if (!r) r = rt_expsum_case(fe, x);
     expr_free(fe);
     if (!r) return NULL;
-    return rt_eval1("ExpToTrig", r);   /* adopts r; back to trig form */
+    Expr* out = rt_eval1("ExpToTrig", r);   /* adopts r; back to trig form */
+    if (!out) return NULL;
+    /* Real reconstruction: the exp route's log part is a correct but I-laden
+     * closed form; reconstruct a real one.  Diff-back gated, so on failure the
+     * correct I-laden form is kept (never a wrong or worse answer). */
+    Expr* real = rt_realify(out, x, f);
+    if (real) { expr_free(out); return real; }
+    return out;
 }
 
 /* True iff `e` contains, anywhere, a function node with head symbol `h`. */

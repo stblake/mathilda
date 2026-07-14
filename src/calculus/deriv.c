@@ -830,6 +830,22 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return r;
         }
 
+        /* --- ArcTan[u, v] (two-argument, = Arg[u + I v] = atan2(v, u)):
+         *   D = (u D[v] - v D[u]) / (u^2 + v^2). --- */
+        if (h == SYM_ArcTan && n == 2) {
+            Expr* u = args[0];
+            Expr* v = args[1];
+            Expr* du = deriv_of(u, x, nonconsts);
+            Expr* dv = deriv_of(v, x, nonconsts);
+            Expr* num = mk_fn2("Plus",
+                mk_fn2("Times", expr_copy(u), dv),
+                mk_neg(mk_fn2("Times", expr_copy(v), du)));
+            Expr* den = mk_fn2("Plus",
+                mk_fn2("Power", expr_copy(u), mk_int(2)),
+                mk_fn2("Power", expr_copy(v), mk_int(2)));
+            return mk_fn2("Times", num, mk_fn2("Power", den, mk_int(-1)));
+        }
+
         /* --- HypergeometricPFQ[{a..}, {b..}, z]: derivative w.r.t. z is
          *   (prod a_i / prod b_j) pFq[{a_i+1}, {b_j+1}, z], times D[z, x].
          * Only the z-derivative is handled here; if the parameter lists

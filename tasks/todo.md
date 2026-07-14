@@ -21,6 +21,13 @@ DEFICIENT (the real work):
   - I-laden: Csc[x] -> Log[..+I Sin..]; Tan[x]/(3+Tan[x]^2) -> (2I)x - Log[..I..].
   - Declined: Sec[x], Sec[x]^3, 1/(2+Cos[x]).
 
+## STATUS (2026-07-14): Fix 1 ✅, Fix 2 ✅, Fix 3 ✅ (all committed on feature/risch-p2-weierstrass)
+Fix 1 (3d74197): §5.10 quadratic residues -> real ArcTan.
+Fix 2+3: rt_exp_ratreduce_case wired into rt_trig_frontend (closes Sec/Csc/1-over-(2+Cos));
+  cx_reim + rt_realify real reconstruction of the exp-tower log part (numeric diff-back gate);
+  2-arg ArcTan[u,v] derivative in deriv.c. All rational trig now REAL (verified sweep).
+REMAINING completeness item: 1/(a+b Sin[x]) still declines (rt_exp_ratreduce_case sin-denominator).
+
 ## Fix 1 — §5.10 gate: admit irreducible-quadratic residues (genuine, low-risk)
 The direct hypertangent case (rt_hypertangent_case, Tan/Cot/…) routes through
 rt_hypertan_family, whose normal-pole pre-gate requires TOTAL denominator degree

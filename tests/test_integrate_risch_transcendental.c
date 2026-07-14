@@ -369,6 +369,53 @@ static void test_trig_frontend(void) {
     assert_rm_num("Sinh[2 x]");
 }
 
+/* ================= REAL RECONSTRUCTION (rational trigonometric) =================
+ * The complex-exponential route integrates over the kernel E^(I x); its log part
+ * is a correct but I-laden closed form.  rt_realify reconstructs a REAL closed form
+ * (Re[G], diff-back gated) so rational functions of the circular trig kernels come
+ * back real (Log / ArcTan), NOT I-laden and NOT via any Weierstrass substitution.
+ * Each case is asserted (a) Complex-free and (b) a correct antiderivative
+ * numerically (the real ArcTan/atan2 forms are not always Simplify-reducible). */
+static void assert_real_trig(const char* f) {
+    char buf[1600];
+    snprintf(buf, sizeof(buf),
+        "With[{g = Integrate`RischTranscendental[%s, x]}, "
+        "Head[g] =!= Integrate`RischTranscendental && FreeQ[g, Complex] && "
+        "Abs[N[(D[g, x] - (%s)) /. x -> 3/5]] + "
+        "Abs[N[(D[g, x] - (%s)) /. x -> 19/10]] < 1/100000]", f, f, f);
+    assert_eval_eq(buf, "True", 0);
+}
+
+static void test_real_trig_reconstruction(void) {
+    /* Sec / Csc and powers — real Log, were I-laden via TrigToExp. */
+    assert_real_trig("Sec[x]");
+    assert_real_trig("Csc[x]");
+    assert_real_trig("Sec[x]^2");
+    assert_real_trig("Csc[x]^2");
+    /* Irreducible-quadratic denominators over E^(I x) — real ArcTan (atan2). */
+    assert_real_trig("1/(2 + Cos[x])");
+    assert_real_trig("1/(5 + 4 Cos[x])");
+    assert_real_trig("1/(3 + 5 Cos[x])");
+    assert_real_trig("1/(1 + Sin[x])");
+    assert_real_trig("1/(1 - Cos[x])");
+    /* Mixed Sin + Cos, and a proper fraction. */
+    assert_real_trig("1/(Sin[x] + Cos[x])");
+    assert_real_trig("Cos[x]/(1 + Cos[x])");
+    /* Pure polynomials in Sin/Cos stay clean (exp-poly, multiple-angle). */
+    assert_real_trig("Sin[x]^2");
+    assert_real_trig("Sin[x]^3");
+    assert_real_trig("Cos[x]^4");
+    assert_real_trig("Sin[x] Cos[x]");
+}
+
+/* The two-argument ArcTan[u, v] = Arg[u + I v] differentiates as
+ * (u v' - v u')/(u^2 + v^2) — the rule rt_realify's atan2 output relies on. */
+static void test_arctan2_derivative(void) {
+    assert_eval_eq("D[ArcTan[Cos[x], Sin[x]], x]", "1", 0);          /* Arg = x */
+    assert_eval_eq("Simplify[D[ArcTan[x, x^2], x] - 1/(1 + x^2)]", "0", 0);
+    assert_eval_eq("Simplify[D[ArcTan[1, x], x] - 1/(1 + x^2)]", "0", 0);
+}
+
 /* ================= REAL HYPERTANGENT CASE (Bronstein §5.10) =================
  * Rational functions of a single real tangent kernel t = Tan[u] (u rational in
  * x) integrate DIRECTLY and REAL through rt_hypertangent_case, retiring the
@@ -959,6 +1006,8 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_real_cotangent);
     TEST(test_real_hypertanh);
     TEST(test_real_hypertangent_robustness);
+    TEST(test_real_trig_reconstruction);
+    TEST(test_arctan2_derivative);
     TEST(test_multikernel_case);
     /* Nested towers + genuine recursion. */
     TEST(test_log_tower_case);
