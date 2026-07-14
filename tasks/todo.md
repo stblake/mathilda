@@ -36,11 +36,14 @@ solver `rde_tower(f, g, RdeCtx*)` solving `D_tower[y] + f y = g` over `K_L`.
       (`RdeNormalDenominator` h + SPDE + cancel find them; exact-identity gate keeps it
       sound). Theoretically-complete-but-pre-empted, like the ansatz resonance code. Revisit
       only if a real integrand is found that needs it.
-- [ ] **1e** — Delete the `rt_field_rde` `SolveAlways` fallback; general branch becomes
-      `rde_tower(i·Dcoef_L, p, ctx@L-1)`. **BLOCKED on Gap 2** — the ansatz still covers the
-      antidifferentiation branches (`sp.b=0`/`b=Dz/z`) that rde_tower declines. Do after Gap 2.
-- [ ] **1f** — Decision wiring: every `rde_tower` NULL → `rt_dec_nonelem`; extend
-      `ElementaryIntegralQ` + `strict_unevaluated` guards for the newly-decided class. (After 1e.)
+- [x] **1e** — Retired the `rt_field_rde` `SolveAlways` `h/pd` ansatz (~158 lines) + orphaned
+      `rt_resonance_int`; the general branch routes every field RDE through `rde_tower` and its
+      NULL is an authoritative "no rational solution in K_L". Also extended the rde_tower gate to
+      RT_EXP tops. Verified non-regressing: 294-assertion transcendental suite + broad
+      `integrals_tests` corpus + all ansatz-era field-RDE examples still close. Leak-clean.
+- [x] **1f** — Decision wiring inherent in 1e: `rt_field_rde` NULL → `rt_dec_nonelem` (matches
+      the ansatz's prior authoritative-NULL behavior); `ElementaryIntegralQ` suite green. Residual
+      non-authoritative declines (tangent top, `b=Dz/z`) are out of tower scope / rare.
 - [ ] **(opt) File-split refactor** (Plan §4 Option B): extract RDE stack → `risch_rde.{c,h}`,
       thread `RtDecision*`, add to `tests/CMakeLists.txt`. Behavior-preserving commit.
 

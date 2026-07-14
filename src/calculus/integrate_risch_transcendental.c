@@ -813,28 +813,6 @@ long rt_rde_var_bound(long dpv, long dfv, bool deriv_lowers, long m_res) {
     return (bq < 0) ? 0 : bq;
 }
 
-/* Bronstein resonance integer for an EXPONENTIAL lower monomial v = t_k in the Risch DE
- * D[q] + f q = p with f = i Dcoef_L (Dcoef_L = D[t_L]/t_L = w_L' the top exp kernel's
- * derivation coefficient) and Dcoef_v = D[v]/v = w_k'.  The leading coefficient of
- * D[c v^n] + f (c v^n) is (n Dcoef_v + f) c v^n; it cancels — allowing deg_v(q) to reach
- * n beyond the naive bound — exactly when n = -f/Dcoef_v = -(i Dcoef_L)/Dcoef_v is a
- * nonnegative integer.  Returns that n, or -1 when the ratio is not a nonnegative integer
- * constant (no resonance).  Feeds rt_rde_var_bound's monotone widening, so a value here
- * can only ever raise the bound: never a wrong result (SolveAlways certifies, caller
- * diff-back verifies), at worst wasted ansatz terms. */
-static long rt_resonance_int(long i, Expr* DcoefL, Expr* Dcoefv) {
-    if (!DcoefL || !Dcoefv || rt_is_zero(Dcoefv)) return -1;
-    Expr* ratio = rt_eval1("Simplify", expr_new_function(expr_new_symbol("Times"),
-        (Expr*[]){ expr_new_integer(-i), expr_copy(DcoefL),
-            expr_new_function(expr_new_symbol("Power"),
-                (Expr*[]){ expr_copy(Dcoefv), expr_new_integer(-1) }, 2) }, 3));
-    long m = -1;
-    if (ratio && ratio->type == EXPR_INTEGER && ratio->data.integer >= 0)
-        m = (long)ratio->data.integer;
-    if (ratio) expr_free(ratio);
-    return m;
-}
-
 /* Multiplicity of the variable v at 0 in the polynomial p: the lowest power of v
  * that appears with a nonzero coefficient (0 if v does not divide p).  This is the
  * exact negative Laurent extent for an EXPONENTIAL kernel v — the order of the pole
@@ -3673,164 +3651,15 @@ static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x) {
         if (q) return q;
     }
 
-    /* By the RDE denominator theorem, denom(q) | denom(p) (a pole of q would give a
-     * higher-order pole in q' + i Dcoef q = p that nothing cancels), so
-     * q = h / pd with pd = Denominator[p] and h a bounded POLYNOMIAL numerator over
-     * {x, t_0..t_{L-1}}.  This is strictly more general than a monomial-Laurent
-     * ansatz — it captures a NON-monomial denominator such as 1/(1+Log[x]) — and
-     * subsumes it (pd carries every pole).  Solve h by SolveAlways. */
-    Expr* Dcoef = T->Dcoef[L];
-    Expr* pg = rt_eval1("Together", expr_copy(p));
-    Expr* pd = pg ? rt_eval1("Denominator", expr_copy(pg)) : NULL;
-    Expr* pn = pg ? rt_eval1("Numerator", expr_copy(pg)) : NULL;
-    if (pg) expr_free(pg);
-    if (!pd || !pn) { if (pd) expr_free(pd); if (pn) expr_free(pn); return NULL; }
-
-    size_t nlv = (size_t)L + 1;
-    Expr** lv = malloc(nlv * sizeof(Expr*));
-    long* bd = malloc(nlv * sizeof(long));
-    lv[0] = x;
-    for (long j = 0; j < L; j++) lv[j + 1] = T->t[j];
-
-    /* Exact degree bound (no cap) for the numerator h, where q = h/pd solves
-     * D_tower[q] + i Dcoef q = p.  Per lower variable v the bound is the leading-degree
-     * balance rt_rde_var_bound(deg_v(p), deg_v(i Dcoef), deriv_lowers) + deg_v(pd),
-     * where deriv_lowers distinguishes a LOGARITHMIC / base-x monomial (D lowers deg_v)
-     * from an EXPONENTIAL one (D preserves deg_v via the self-derivative D[t^k] =
-     * k w' t^k).  This replaces the former arbitrary cap-at-5 proxy — the bound is a
-     * function of the equation's degrees alone, so an exponential-Laurent coefficient
-     * of ANY degree is found rather than declined.  Correctness is SolveAlways-certified
-     * and the caller diff-back verifies, so the bound only affects completeness/perf. */
-    Expr* dcg = rt_eval1("Together", expr_copy(Dcoef));
-    Expr* dcn = dcg ? rt_eval1("Numerator", expr_copy(dcg)) : NULL;
-    Expr* dcd = dcg ? rt_eval1("Denominator", expr_copy(dcg)) : NULL;
-    if (dcg) expr_free(dcg);
-    for (size_t j = 0; j < nlv; j++) {
-        long dpn = rt_degree(pn, lv[j]); if (dpn < 0) dpn = 0;
-        long dpd = rt_degree(pd, lv[j]); if (dpd < 0) dpd = 0;
-        long dfv = 0;                              /* deg_v(i Dcoef) = deg_v(Dcoef) */
-        if (dcn && dcd) {
-            long dn = rt_degree(dcn, lv[j]); if (dn < 0) dn = 0;
-            long dd = rt_degree(dcd, lv[j]); if (dd < 0) dd = 0;
-            dfv = dn - dd;
-        }
-        /* v = x (j == 0) and logarithmic kernels lower deg_v under D; exponential
-         * kernels preserve it. */
-        bool deriv_lowers = (j == 0) || (T->kind[j - 1] == RT_LOG);
-        /* Live cancellation/resonance detection (Bronstein recursive degree reduction).
-         * For an EXPONENTIAL lower monomial at deg_v(f) == 0 the leading coefficients of
-         * D[q] and f q can cancel at an integer resonance n = -(i Dcoef_L)/Dcoef_v; feed
-         * that n to widen the bound exactly.  (deriv-lowering v has no reachable dfv==-1
-         * config in this architecture — see rt_rde_var_bound's reachability note.) */
-        long m_res = -1;
-        if (!deriv_lowers && dfv == 0)
-            m_res = rt_resonance_int(i, Dcoef, T->Dcoef[j - 1]);
-        bd[j] = rt_rde_var_bound(dpn - dpd, dfv, deriv_lowers, m_res) + dpd;
-    }
-    if (dcn) expr_free(dcn);
-    if (dcd) expr_free(dcd);
-    /* Per-variable LOW exponent.  An EXPONENTIAL lower monomial t_j is a unit
-     * (invertible), so the RDE solution may carry a SPECIAL pole there — a
-     * negative Laurent power NOT reflected in Denominator[p].  Bronstein's own
-     * three-level example integrates to q = t_1/t_0 (a t_0-pole absent from p's
-     * denominator x^2 (x+t_0)^2); a purely polynomial numerator over {x, t_j}
-     * cannot express it.  Give each exponential kernel the symmetric Laurent
-     * range [-bd, bd]; x and logarithmic kernels (whose derivation lowers
-     * degree, so no special pole) keep [0, bd].  The extra unknowns are
-     * certified to zero by SolveAlways, so this only widens completeness. */
-    long* lo = malloc(nlv * sizeof(long));
-    for (size_t j = 0; j < nlv; j++) {
-        bool is_exp = (j >= 1) && (T->kind[j - 1] == RT_EXP);
-        lo[j] = is_exp ? -bd[j] : 0;
-    }
-    long nmono = 1;
-    for (size_t j = 0; j < nlv; j++) nmono *= (bd[j] - lo[j] + 1);
-
-    Expr* result = NULL;
-    if (nmono > 0) {
-        Expr** hterms = malloc((size_t)nmono * sizeof(Expr*));
-        Expr** syms = malloc((size_t)nmono * sizeof(Expr*));
-        size_t ntq = 0, nsym = 0;
-        long* ev = malloc(nlv * sizeof(long));
-        for (long m = 0; m < nmono; m++) {
-            char nm[40]; snprintf(nm, sizeof(nm), "rmRd%ld", m);
-            long idx = m;                          /* mixed-radix decode with lo[] offset */
-            for (size_t j = 0; j < nlv; j++) {
-                long range = bd[j] - lo[j] + 1;
-                ev[j] = lo[j] + idx % range;
-                idx /= range;
-            }
-            Expr* mono = rt_build_monomial(lv, ev, nlv);
-            syms[nsym++] = expr_new_symbol(nm);
-            hterms[ntq++] = expr_new_function(expr_new_symbol("Times"),
-                (Expr*[]){ expr_new_symbol(nm), mono }, 2);
-        }
-        free(ev);
-        Expr* h = expr_new_function(expr_new_symbol("Plus"), hterms, ntq);
-        free(hterms);
-        /* q = h / pd. */
-        Expr* q = expr_new_function(expr_new_symbol("Times"),
-            (Expr*[]){ h, expr_new_function(expr_new_symbol("Power"),
-                (Expr*[]){ expr_copy(pd), expr_new_integer(-1) }, 2) }, 2);
-
-        Expr* dq = rt_tower_deriv(q, T, x);
-        Expr* iq = expr_new_function(expr_new_symbol("Times"),
-            (Expr*[]){ expr_new_integer(i), expr_copy(Dcoef), expr_copy(q) }, 3);
-        Expr* residual = expr_new_function(expr_new_symbol("Plus"),
-            (Expr*[]){ dq, iq, expr_new_function(expr_new_symbol("Times"),
-                (Expr*[]){ expr_new_integer(-1), expr_copy(p) }, 2) }, 3);
-        Expr* tog = rt_eval1("Together", residual);
-        Expr* rnum = tog ? rt_eval1("Numerator", tog) : NULL;
-
-        Expr* sol = NULL;
-        if (rnum) {
-            Expr** vl = malloc(nlv * sizeof(Expr*));
-            for (long j = 0; j < L; j++) vl[j] = expr_copy(T->t[L - 1 - j]);
-            vl[L] = expr_copy(x);
-            Expr* varlist = expr_new_function(expr_new_symbol("List"), vl, nlv);
-            free(vl);
-            Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
-                (Expr*[]){ rnum, expr_new_integer(0) }, 2);
-            sol = rt_eval2("SolveAlways", eqn, varlist);
-        }
-        if (sol && sol->type == EXPR_FUNCTION
-            && sol->data.function.head->type == EXPR_SYMBOL
-            && sol->data.function.head->data.symbol.name == intern_symbol("List")
-            && sol->data.function.arg_count >= 1
-            && sol->data.function.args[0]->type == EXPR_FUNCTION
-            && sol->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
-            && sol->data.function.args[0]->data.function.head->data.symbol.name
-                 == intern_symbol("List")) {
-            Expr* qs = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
-                (Expr*[]){ expr_copy(q), expr_copy(sol->data.function.args[0]) }, 2));
-            if (qs) {
-                Expr** zero = malloc((nsym ? nsym : 1) * sizeof(Expr*));
-                for (size_t j = 0; j < nsym; j++)
-                    zero[j] = expr_new_function(expr_new_symbol("Rule"),
-                        (Expr*[]){ expr_copy(syms[j]), expr_new_integer(0) }, 2);
-                Expr* zl = expr_new_function(expr_new_symbol("List"), zero, nsym);
-                free(zero);
-                result = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
-                    (Expr*[]){ qs, zl }, 2));
-            }
-        }
-        if (sol) expr_free(sol);
-        for (size_t j = 0; j < nsym; j++) expr_free(syms[j]);
-        free(syms);
-        expr_free(q);
-    }
-    /* Cancel the h/pd fraction (e.g. x(1+t)/(x(1+t)^2) -> 1/(1+t)) so the
-     * assembled antiderivative stays in lowest terms. */
-    if (result) result = rt_eval1("Cancel", result);
-    free(lv); free(bd); free(lo);
-    expr_free(pd); expr_free(pn);
-    /* A NULL here is the SolveAlways over the EXACT-degree-bound q = h/pd ansatz
-     * (rt_rde_var_bound: proven cap-free upper bound + denominator theorem +
-     * exponential special-pole Laurent range) finding the linear coefficient
-     * system inconsistent — i.e. no rational solution exists in K_L.  That is an
-     * authoritative "non-elementary" verdict, not a bounded-ansatz decline. */
-    if (!result) rt_dec_nonelem();
-    return result;
+    /* Gap 1e: the recursive Bronstein Chapter-6 solver (rde_tower, attempted above)
+     * is the decision procedure for the field Risch DE over a log/exp tower —
+     * normal/special denominator, exact degree bound, SPDE, non-cancellation,
+     * cancellation (recursive), and antidifferentiation.  Every case it declines is
+     * an authoritative "no rational solution in K_L", so the former bounded
+     * SolveAlways h/pd ansatz is retired.  (A tangent top — Gap 3 — or the b=Dz/z
+     * limited-integration branch reaches here as NULL and is out of current scope.) */
+    rt_dec_nonelem();
+    return NULL;
 }
 
 /* Recursive-tower case: build the differential tower of f, substitute all kernels
