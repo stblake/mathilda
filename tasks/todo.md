@@ -75,11 +75,27 @@ solver `rde_tower(f, g, RdeCtx*)` solving `D_tower[y] + f y = g` over `K_L`.
 
 ## Gap 3 — Tangent tower
 - [x] **Nested tangents over C(x)** (commit f8d89bf): `Tan[Log[x]]`, `Tanh[Log[x]]`, etc. via
-      relaxed `rt_kernel_eta` (eta-kernel-free = genuine over-C(x)) + numeric diff-back guard.
-      Plus a soundness fix: trig-frontend false-zero `Tan[x]·Tan[Log[x]]→0` (commit 18ae5a4).
-- [ ] **Full `RT_TAN` tower monomial** — tangent MIXED with an independent Log/Exp of x
-      (`Tan[x]·Log[x]`, `Log[Tan[x]]`) + the §6.2/§6.6 tangent RDE branches (`RdeSpecialDenomTan`,
-      `PolyRischDECancelTan`) wiring `CoupledDECancelTan`. Large structural build; deferred.
+      relaxed `rt_kernel_eta` + numeric diff-back guard. Soundness fix: trig-frontend false-zero
+      `Tan[x]·Tan[Log[x]]→0` (commit 18ae5a4).
+- [x] **RT_TAN tower foundation** (commit c23f328): `RtKind += RT_TAN`, `tsg` sign, collection,
+      derivation `Dt=Dcoef(t²+σ)`, `Sec²→1+Tan²` rewrite. Sound; builds the tower but declines
+      pending the 3 integration pieces below.
+- [ ] **RT_TAN full integration** (3 pieces): (a) a `TrigToTan` integrand normaliser — none
+      exists; the evaluator rewrites `(1+Tan²)/Tan→Csc·Sec`, and `Csc` is irrational in `Tan`, so
+      only rational-in-Tan combinations substitute; (b) the hypertangent-TOP field dispatch
+      (`IntegrateHypertangent`); (c) the §6.2/§6.6 tangent RDE branches (`RdeSpecialDenomTan`,
+      `PolyRischDECancelTan` via `CoupledDECancelTan`) for exp/log-over-tangent RDEs. Large focused build.
+
+## RT_MAXK depth cap
+- [x] **Removed** (commit 4f6453c): `RtTower` arrays heap-allocated to the actual kernel count;
+      tower depth unbounded. Corpus + suites green, leak-clean.
+
+## §7 LimitedIntegrate — status of the residuals
+- [x] **m=1** (the elementary-integrator need, `IntegratePrimitivePolynomial` fold-back): DONE (4ea4f7d).
+- [ ] **general m**: Cherry-adjacent — the elementary transcendental integrator never needs m>1
+      (only nonelementary-function / Cherry integration does). Not an elementary-integrator gap.
+- [ ] **`b=Dz/z` cancellation branch + `ParametricLogarithmicDerivative` (§7.3)**: rare higher-degree
+      refinements; the exact-identity gates keep the integrator SOUND (it declines) without them.
 
 ## Gap 4 — Retire flat-ansatz cases + remove RT_MAXK
 - [~] **BLOCKED (experiment done).** Disabling `rt_log_tower_case`/`rt_exp_tower_case` regresses
