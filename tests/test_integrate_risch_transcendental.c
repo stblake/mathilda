@@ -458,6 +458,14 @@ static void test_real_hypertangent(void) {
     assert_tan_real("2 x Tan[x^2]");                 /* Dt = 2x(t^2+1) */
     assert_tan_real("Tan[x] + Tan[x]^4");
     assert_tan_real("Tan[x]^2 + 3 Tan[x] + 1");
+    /* TRANSCENDENTAL tangent argument: tau = Tan[Log[x]] is hypertangent over C(x)
+     * (eta = 1/x), so it integrates directly to a clean real form rather than
+     * declining or routing through the complex-exponential front-end. */
+    assert_tan_form("Tan[Log[x]]/x", "-Log[Cos[Log[x]]]");
+    assert_tan_real("Tan[Log[x]]/x");
+    assert_tan_real("Tanh[Log[x]]/x");
+    assert_tan_real("Tan[Log[x]]^2/x");
+    assert_tan_real("(1 + Tan[Log[x]])/(x (1 - Tan[Log[x]]))");
 }
 
 static void test_real_hypertangent_rational(void) {

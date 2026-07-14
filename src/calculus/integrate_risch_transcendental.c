@@ -4480,6 +4480,11 @@ static Expr* rt_hypertan_family(Expr* f, Expr* x, Expr* subrule, Expr* bval,
         if (base) expr_free(base);
     }
     if (res) expr_free(res);
+    /* Numeric diff-back safety: the base-t-free construction is a proof over C(x),
+     * but a TRANSCENDENTAL tangent argument (u = Log[x], ...) now reaches here
+     * (rt_kernel_eta relaxed), so verify the assembled real form before returning
+     * it — declines instead of shipping a wrong closed form. */
+    if (result && !rt_realify_numverify(result, f, x)) { expr_free(result); result = NULL; }
     expr_free(F); expr_free(t); expr_free(deriv); expr_free(Dt); expr_free(special);
     expr_free(bval); expr_free(carg);
     return result;
@@ -4501,7 +4506,16 @@ static Expr* rt_hypertan_direct(Expr* f, Expr* x, Expr* u, const char* khead,
 /* eta = D[u, x] must be a rational function of x alone (free of trig/exp/log of x)
  * so that khead[u] is a monomial over k = C(x).  Returns owned eta or NULL. */
 static Expr* rt_kernel_eta(Expr* u, Expr* x) {
-    if (!rt_kernel_simple(u, x)) return NULL;
+    /* tau = Tan[u] (etc.) is a hypertangent monomial over C(x) exactly when
+     * eta = Dtau/(tau^2 +/- 1) = u' lies in C(x) — i.e. u' is free of every kernel.
+     * The argument u itself may be TRANSCENDENTAL (e.g. Log[x], with u' = 1/x): the
+     * monomial is still hypertangent over C(x), so a nested tangent such as
+     * Tan[Log[x]] integrates directly to a real Log[Cos]/ArcTan form rather than
+     * declining or routing through the complex-exponential front-end.  (The
+     * former rt_kernel_simple(u) gate was over-strict — it required u itself to be
+     * kernel-free; the eta check below is the genuine over-C(x) condition.  An
+     * integrand mixing the tangent with an independent Log/Exp of x is still
+     * rejected by rt_hypertan_family's free-of-log/exp gate on the substituted F.) */
     Expr* eta = rt_eval2("D", expr_copy(u), expr_copy(x));
     if (!eta || !rt_free_of_trig(eta)
         || rt_find_exp_of_x(eta, x) != NULL || rt_find_log_of_x(eta, x) != NULL) {
