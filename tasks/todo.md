@@ -92,7 +92,19 @@ solver `rde_tower(f, g, RdeCtx*)` solving `D_tower[y] + f y = g` over `K_L`.
       (`Sin=t/√(1+σt²)`, `Cos=1/√`, `Sec=√`, `Csc=√/t`, `Cot=1/t`) so the evaluator-canonical
       `Csc·Sec` form of `(1+Tan²)/Tan` substitutes cleanly. Closes `∫(1+Tan²)/(Tan·Log[Tan])→
       Log[Log[Tan[x]]]`, the repeated-pole `Log[Tan]^2` form, and the σ=−1 `Tanh` form.
-      `test_tangent_tower`; suite + corpus green; leak-clean. (b) the hypertangent-TOP dispatch
+      `test_tangent_tower`; suite + corpus green; leak-clean. (b) **hypertangent-TOP dispatch —
+      DONE.** `rt_field_integrate` gains an RT_TAN top branch (`rt_int_hypertangent_field`): it
+      builds the full tower derivation as a `Risch\`Derivation` rule-list `{x→1, t_0→Dt_0, …,
+      t_L→Dt_L}` (via `rt_dt_i`, tan-aware), dispatches to the §5.10 driver
+      (`Risch\`IntegrateHypertangent` σ=+1, `Risch\`IntegrateHypertanh` σ=−1 — both tower-general in
+      their HermiteReduce/ResidueReduce/poly sub-steps), then integrates the t_L-free base
+      remainder `F − D[g]` recursively in K_{L-1}. Closes the LOG-lower field hypertangent
+      `∫2Log[x]/x·Tan[Log[x]^2] → −Log[Cos[Log[x]^2]]` (and the σ=−1 Tanh form) that no upstream
+      exp-case reaches. Sound-by-construction: the reduced/pole-peel base RDE is still C(x)-only
+      (`Risch\`RischDE` with the single base var), but the caller's exact `D_tower[Q]==F` gate
+      rejects any wrong `g`, so a tangent-top with genuine tower-coefficient poles declines rather
+      than errs. The EXP-lower `e^x Tan[e^x]` is still served (correctly, messily) by an upstream
+      exp-case ahead of the recursion — cosmetic, out of scope. (c) the §6.2/§6.6 tangent RDE branches
       (`IntegrateHypertangent` in `rt_field_integrate`, currently EXP-only in the else branch);
       (c) the §6.2/§6.6 tangent RDE branches (`RdeSpecialDenomTan`, `PolyRischDECancelTan` via
       `CoupledDECancelTan`). Each is a genuine algorithmic extension.

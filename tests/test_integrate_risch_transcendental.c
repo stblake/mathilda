@@ -625,6 +625,10 @@ static void test_tangent_tower(void) {
     assert_rm_diff_zero("(1 + Tan[x]^2)/(Tan[x] Log[Tan[x]])");       /* Log[Log[Tan[x]]] */
     assert_rm_diff_zero("(1 + Tan[x]^2)/(Tan[x] Log[Tan[x]]^2)");     /* repeated pole -> -1/Log[Tan[x]] */
     assert_rm_diff_zero("(1 - Tanh[x]^2)/(Tanh[x] Log[Tanh[x]])");    /* hyperbolic, sigma=-1 */
+    /* Hypertangent TOP over a genuine tower base K_{L-1} (§5.10 driver dispatch):
+     * a tangent of a LOG-tower argument, coefficient = the argument's derivative. */
+    assert_rm_diff_zero("2 Log[x]/x Tan[Log[x]^2]");                  /* -Log[Cos[Log[x]^2]] */
+    assert_rm_diff_zero("2 Log[x]/x Tanh[Log[x]^2]");                 /* -Log[Cosh[Log[x]^2]], sigma=-1 */
 }
 
 /* ================= NESTED EXP TOWERS + MERGED MONOMIAL =================

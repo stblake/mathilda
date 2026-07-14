@@ -3494,6 +3494,64 @@ static Expr* rt_field_hyperexp_coupled(Expr* num, Expr* den, RtTower* T, long L,
     return rt_field_hyperexp_hermite(num, den, T, L, x, rem_out);
 }
 
+/* Hypertangent top monomial (Bronstein §5.10): Fg is rational in t = t_L over the
+ * lower tower field K_{L-1}, with t_L a hypertangent (Dt = Dcoef*(t^2+sigma),
+ * sigma = +1 Tan/Cot, -1 Tanh/Coth).  Build the full tower derivation as a
+ * Risch`Derivation rule-list {x->1, t_0->Dt_0, ..., t_L->Dt_L}, dispatch to the
+ * §5.10 driver (Risch`IntegrateHypertangent for sigma=+1, Risch`IntegrateHypertanh
+ * for sigma=-1), then integrate the t_L-free base-field remainder base = F - D[g]
+ * recursively in K_{L-1}.  Returns the antiderivative in tower-variable form (g in
+ * terms of the t_i, with the real special log Log[t_L^2+sigma]) or NULL.
+ *
+ * The driver's sub-steps (HermiteReduce, ResidueReduce, IntegrateHypertangent-
+ * Polynomial) are tower-general — they treat every deriv variable except t_L
+ * symbolically — so a polynomial-in-t_L integrand (no normal poles) is handled
+ * fully over the tower.  The reduced/pole-peeling sub-step solves its base Risch
+ * DE only over C(x) (Risch`RischDE with the single base var); when the true base
+ * field is a deeper tower a wrong g may result, but the caller's exact
+ * D_tower[Q] == F verification (rt_recursive_tower_case) rejects it — so this path
+ * is SOUND (declines) even where it is not yet complete. */
+static Expr* rt_int_hypertangent_field(Expr* Fg, RtTower* T, long L, Expr* x) {
+    /* deriv = {x -> 1, t_0 -> Dt_0, ..., t_L -> Dt_L}, all in tower-variable form. */
+    Expr** rules = malloc((size_t)(L + 2) * sizeof(Expr*));
+    rules[0] = expr_new_function(expr_new_symbol("Rule"),
+        (Expr*[]){ expr_copy(x), expr_new_integer(1) }, 2);
+    for (long i = 0; i <= L; i++)
+        rules[i + 1] = expr_new_function(expr_new_symbol("Rule"),
+            (Expr*[]){ expr_copy(T->t[i]), rt_dt_i(T, (size_t)i) }, 2);
+    Expr* deriv = expr_new_function(expr_new_symbol("List"), rules, (size_t)(L + 2));
+    free(rules);
+
+    const char* driver = (T->tsg[L] > 0) ? "Risch`IntegrateHypertangent"
+                                         : "Risch`IntegrateHypertanh";
+    Expr* res = rt_eval_call(driver,
+        (Expr*[]){ expr_copy(Fg), expr_copy(T->t[L]), expr_copy(deriv) }, 3);
+    Expr* result = NULL;
+    if (res && rt_head_is(res, "List") && res->data.function.arg_count == 2
+        && rt_is_true(res->data.function.args[1])) {
+        Expr* g = res->data.function.args[0];    /* borrowed, tower-var form */
+        /* base = F - D_tower[g]  (element of K_{L-1}: must be free of t_L).  Expand
+         * after Together: the derivation returns unexpanded products whose t-terms
+         * only cancel once expanded (cf. rt_hypertan_family). */
+        Expr* Dg = rt_eval2("Risch`Derivation", expr_copy(g), expr_copy(deriv));
+        Expr* base = Dg ? rt_eval1("Expand", rt_eval1("Together",
+            expr_new_function(expr_new_symbol("Plus"),
+            (Expr*[]){ expr_copy(Fg), expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_integer(-1), Dg }, 2) }, 2))) : NULL;
+        if (base && rt_free_of_x(base, T->t[L])) {
+            Expr* ib = rt_is_zero(base) ? expr_new_integer(0)
+                                        : rt_field_integrate(base, T, L - 1, x, NULL);
+            if (ib)
+                result = rt_eval_own(expr_new_function(expr_new_symbol("Plus"),
+                    (Expr*[]){ expr_copy(g), ib }, 2));
+        }
+        if (base) expr_free(base);
+    }
+    if (res) expr_free(res);
+    expr_free(deriv);
+    return result;
+}
+
 /* Integrate F (a rational function of x, t_1..t_L in tower-variable form) with
  * respect to the tower derivation, returning an antiderivative in tower-variable
  * form (owned) or NULL.  L < 0 is the rational base case C(x). */
@@ -3549,6 +3607,11 @@ Expr* rt_field_integrate(Expr* F, RtTower* T, long L, Expr* x, Expr** rem_out) {
                 }
                 expr_free(f_p); expr_free(f_s); expr_free(f_n);
             }
+        } else if (T->kind[L] == RT_TAN) {
+            /* Hypertangent top (§5.10): dispatch to the IntegrateHypertangent /
+             * -Hypertanh driver over the tower, then integrate the base remainder
+             * in K_{L-1}.  Correct-by-construction / decline (sound) — see helper. */
+            result = rt_int_hypertangent_field(Fg, T, L, x);
         } else {
             /* Exponential top: the pure-Laurent recursion first (genuine RDE,
              * rational lower-field coefficients); if it declines because a proper
