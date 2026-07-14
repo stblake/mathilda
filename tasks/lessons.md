@@ -1070,3 +1070,23 @@ Building `SplitFactor`/`SplitSquarefreeFactor` (risch_field.c / risch_canonical.
   building a function node is correct and must NOT be paired with freeing the elements.
 - New `src/calculus/*.c` is auto-globbed by the makefile but must be added to
   `tests/CMakeLists.txt` `COMMON_SRC` (and the test target added) or the test won't link.
+
+## P1 Phase C — structure-oracle tower replacement is net-negative (2026-07-14)
+
+**Pattern:** Before a "full replacement" of a working heuristic, PROBE whether the
+gap it targets is real in the live system. The gaps doc flagged G-A2 (dependent
+logs inflate the tower), but the live Risch tower engine already tolerates
+dependent generators (each becomes its own tower variable with a valid triangular
+derivation, gated by diff-back). A blanket structure-oracle log collapse
+REGRESSED the Bronstein `Log[x/Log[x]]` example — a composite log inside a
+`1/Log[...]^2` denominator became a coupled two-log denominator the integrator
+declines.
+
+**Rule for myself:** (1) A "replacement" that rewrites integrand kernels can turn a
+clean single kernel into a harder coupled form — collapsing is only safe for
+redundant EXTRA generators, never for kernels appearing in denominators.
+(2) Capture a regression baseline (anchor integrals + suite pass/fail) BEFORE
+touching a core subsystem, and revert immediately on the first regression rather
+than patching around it. (3) Decision routines (LogReducible / ExpReducible /
+LogarithmicDerivativeOfRadical) are valuable as reusable builtins even when the
+wholesale live-oracle swap is not worthwhile.

@@ -28,17 +28,21 @@ BASELINE (pre-Phase-C, must not regress): integrate_risch_transcendental_tests &
 integrals_tests CLEAN; intrat_tests 2 FAIL + intrischnorman_tests 6 FAIL are
 PRE-EXISTING (files untouched).
 
-## Phase C — Full oracle replacement in the live integrator  [integrate_risch_transcendental.c]
-- [ ] Replace `rt_class_primitive` (exp commensurability) + `rt_expand_logs` (log
-      syntactic split) as the PRIMARY independence engine in `rt_tower_build`:
-      incremental structure-theorem tower construction — for each candidate
-      log/exp kernel, decide independence vs the existing generators via the P1
-      oracle and record the Q-relation; new => new generator.
-- [ ] Catch additive Q-relations the syntactic path misses (Log[x^2+x]).
-- [ ] Lift/relax RT_MAXK where independence is proven.
-- [ ] Full transcendental + rational regression suite; diff vs baseline binary;
-      wrong answer impossible (diff-back / tower-identity gate => decline not wrong).
-- [ ] valgrind; docs; changelog.
+## Phase C — Full oracle replacement in the live integrator  [ATTEMPTED, REVERTED]
+Outcome (2026-07-14): NET-NEGATIVE, reverted (integrator back to baseline).
+- Blanket structure-oracle log collapse (rt_log_oracle_normalize pre-pass)
+  REGRESSED the Bronstein `Log[x/Log[x]]` example: a composite log inside a
+  `1/Log[...]^2` denominator becomes a COUPLED two-log denominator the field
+  integrator declines. Collapsing only helps for redundant EXTRA generators, not
+  kernels in denominators.
+- Probe confirmed the live engine already handles dependent generators robustly
+  (each becomes its own tower variable + triangular Dt, gated by diff-back); the
+  elementary additive-dependent cases already integrate. G-A2's live impact is
+  overstated. See memory project_risch_tower_dependent_log_robust.
+- Decision: P1 ships as A+B (the reusable Bronstein decision builtins). A safe
+  structure-oracle integration would need denominator-aware basis selection
+  INSIDE rt_tower_build — a larger, delicate effort with unclear marginal benefit
+  given diff-back already delivers soundness. Deferred as a future surgical item.
 
 ## Verification (each phase)
 - Clean `-std=c99 -Wall -Wextra`; scoped `*_tests` green (grep FAIL:); REPL pins;
