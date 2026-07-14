@@ -153,6 +153,40 @@ static void test_all_nonconstant_declines(void) {
     assert_head_unevaluated("Integrate`RischTranscendental", "1/(x (Log[x]^3 - x))");
 }
 
+/* Numeric diff-back at x=xval (for partials whose elementary Log argument Simplify
+ * cannot reduce — the identity still holds; the internal tower gate proved it). */
+static void assert_numeric_diff_zero_via(const char* head, const char* f, const char* xval) {
+    char buf[1600];
+    snprintf(buf, sizeof(buf),
+        "TrueQ[Abs[N[(D[%s[%s, x], x] - (%s)) /. x -> %s]] < 10^-9]", head, f, f, xval);
+    Expr* e = parse_expression(buf);
+    Expr* res = evaluate(e);
+    char* s = expr_to_string_fullform(res);
+    if (strcmp(s, "True") != 0)
+        printf("FAIL numeric diff-back (%s): %s at x=%s -> %s\n", head, f, xval, s);
+    ASSERT_MSG(strcmp(s, "True") == 0, "numeric diff-back (%s) %s at x=%s: %s", head, f, xval, s);
+    free(s);
+    expr_free(res);
+    expr_free(e);
+}
+
+/* ---- Coupled HYPEREXPONENTIAL partial log part (P3 tail) -------------------
+ * A mixed residue resultant over an EXPONENTIAL top monomial now returns the
+ * constant-residue elementary part (reconciled through the §5.9 Laurent step)
+ * PLUS an unintegrated Integrate[r_n] remainder, instead of declining wholesale.
+ * Requires a depth->=2 tower (the coupled path); the elementary Log argument is
+ * unsimplified (a Simplify gap), so correctness is checked numerically. */
+static void test_hyperexp_coupled_partial(void) {
+    const char* f = "E^x/(1 + E^(E^x)) + 1/(x + E^(E^x))";
+    /* constant-residue part elementary (E^x - Log[1+E^(E^x)]); non-constant
+     * residue 1/(x+E^(E^x)) surfaces as Integrate[.,x]. */
+    assert_integrate_presence("Integrate`RischTranscendental", f, false);
+    assert_numeric_diff_zero_via("Integrate`RischTranscendental", f, "0.7");
+    assert_numeric_diff_zero_via("Integrate`RischTranscendental", f, "1.3");
+    /* All-constant sibling stays fully elementary (no spurious remainder). */
+    assert_integrate_presence("Integrate`RischTranscendental", "E^x/(1 + E^(E^x))", true);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -163,6 +197,7 @@ int main(void) {
     test_exp_partial_out_of_scope();
     test_all_constant_unchanged();
     test_all_nonconstant_declines();
+    test_hyperexp_coupled_partial();
     printf("All residue-split tests passed.\n");
 
     symtab_clear();

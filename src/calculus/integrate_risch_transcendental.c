@@ -3435,7 +3435,8 @@ static Expr* rt_int_primitive_poly(Expr* num, Expr* den, RtTower* T, long L, Exp
 static Expr* rt_int_hyperexp_poly(Expr* num, Expr* den, RtTower* T, long L, Expr* x);
 static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x);
 static Expr* rt_field_ratint(Expr* num, Expr* den, RtTower* T, long L, Expr* x, Expr** rem_out);
-static Expr* rt_field_hyperexp_coupled(Expr* num, Expr* den, RtTower* T, long L, Expr* x);
+static Expr* rt_field_hyperexp_coupled(Expr* num, Expr* den, RtTower* T, long L, Expr* x,
+                                       Expr** rem_out);
 
 /* Tower derivation D_tower[e] = D[e,x] + sum_i Dt_i D[e,t_i], with Dt_i =
  * Dcoef_i (log) or Dcoef_i * t_i (exp).  Owned result. */
@@ -3726,7 +3727,9 @@ static Expr* rt_field_ratint(Expr* num, Expr* den, RtTower* T, long L, Expr* x,
  * Laurent and log coefficients, declining rational lower-field coefficients).  The
  * ansatz has been removed.  Returns g + L + Q (tower-variable form, owned), or NULL
  * when there is no elementary integral. */
-static Expr* rt_field_hyperexp_hermite(Expr* num, Expr* den, RtTower* T, long L, Expr* x) {
+static Expr* rt_field_hyperexp_hermite(Expr* num, Expr* den, RtTower* T, long L, Expr* x,
+                                       Expr** rem_out) {
+    if (rem_out) *rem_out = NULL;
     Expr* t = T->t[L];
     Expr* f = rt_eval1("Cancel", rt_eval1("Together",
         expr_new_function(expr_new_symbol("Times"),
@@ -3742,15 +3745,19 @@ static Expr* rt_field_hyperexp_hermite(Expr* num, Expr* den, RtTower* T, long L,
     expr_free(rules); expr_free(f);
     if (!ok) return NULL;
 
-    /* Step 2: residue-criterion log part of the simple h (constant residues). */
+    /* Step 2: residue-criterion log part of the simple h.  When the caller can carry
+     * a remainder (rem_out != NULL) we ACCEPT a partial log part (Bronstein Thm
+     * 5.6.1): a mixed residue resultant yields the constant-residue logs L_s plus the
+     * non-constant-residue remainder h_n (a proper simple fraction in t).  The
+     * elementary part is g + L_s + Q_s, with Q_s reconciled from h_s = h - h_n, and
+     * h_n reported unintegrated — mirroring the primitive/log path.  With rem_out ==
+     * NULL a mixed resultant declines (rt_field_lrt_logpart returns NULL). */
     Expr* Llog = NULL;
+    Expr* h_n = NULL;   /* non-constant-residue remainder (owned), NULL if none */
     if (!rt_is_zero(h)) {
         Expr* hn = rt_eval1("Numerator", rt_eval1("Together", expr_copy(h)));
         Expr* hd = rt_eval1("Denominator", rt_eval1("Together", expr_copy(h)));
-        /* Refuse a partial log part (NULL rem): the exponential §5.9 Laurent
-         * reconciliation cannot absorb a proper simple remainder, so a mixed
-         * residue resultant declines here exactly as before. */
-        Llog = (hn && hd) ? rt_field_lrt_logpart(hn, hd, T, L, x, NULL) : NULL;
+        Llog = (hn && hd) ? rt_field_lrt_logpart(hn, hd, T, L, x, rem_out ? &h_n : NULL) : NULL;
         if (hn) expr_free(hn);
         if (hd) expr_free(hd);
         if (!Llog) { expr_free(g); expr_free(h); expr_free(r); return NULL; }  /* non-elementary */
@@ -3758,16 +3765,32 @@ static Expr* rt_field_hyperexp_hermite(Expr* num, Expr* den, RtTower* T, long L,
         Llog = expr_new_integer(0);
     }
 
-    /* Step 3: Laurent leftover  P = h + r - D_tower[L]  (a Laurent polynomial in t).
-     * (h, r are consumed by the Plus below regardless of success.) */
+    /* h_s = h - h_n (the constant-residue part that reconciles into the Laurent
+     * polynomial); h_s == h when there is no partial remainder.  h is consumed. */
+    Expr* h_s;
+    if (h_n) {
+        h_s = rt_eval1("Together", expr_new_function(expr_new_symbol("Plus"),
+            (Expr*[]){ h, expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_integer(-1), expr_copy(h_n) }, 2) }, 2));   /* adopts h */
+        if (!h_s) { expr_free(g); expr_free(r); expr_free(Llog); expr_free(h_n); return NULL; }
+    } else {
+        h_s = h;
+    }
+
+    /* Step 3: Laurent leftover  P = h_s + r - D_tower[L]  (a Laurent polynomial in t).
+     * (h_s, r are consumed by the Plus below regardless of success.) */
     Expr* DL = rt_tower_deriv(Llog, T, x);
-    if (!DL) { expr_free(g); expr_free(h); expr_free(r); expr_free(Llog); return NULL; }
+    if (!DL) {
+        expr_free(g); expr_free(h_s); expr_free(r); expr_free(Llog);
+        if (h_n) expr_free(h_n);
+        return NULL;
+    }
     Expr* P = rt_eval1("Cancel", rt_eval1("Together",
         expr_new_function(expr_new_symbol("Plus"),
-            (Expr*[]){ h, r,
+            (Expr*[]){ h_s, r,
               expr_new_function(expr_new_symbol("Times"),
                 (Expr*[]){ expr_new_integer(-1), DL }, 2) }, 3)));
-    if (!P) { expr_free(g); expr_free(Llog); return NULL; }
+    if (!P) { expr_free(g); expr_free(Llog); if (h_n) expr_free(h_n); return NULL; }
 
     /* Step 4: integrate the Laurent polynomial P (per-coefficient Risch DE).  If P
      * has any t-coprime denominator factor (the logs did not reconcile), the
@@ -3778,32 +3801,43 @@ static Expr* rt_field_hyperexp_hermite(Expr* num, Expr* den, RtTower* T, long L,
     Expr* Q = (Pn && Pd) ? rt_int_hyperexp_poly(Pn, Pd, T, L, x) : NULL;
     if (Pn) expr_free(Pn);
     if (Pd) expr_free(Pd);
-    if (!Q) { expr_free(g); expr_free(Llog); return NULL; }
+    if (!Q) { expr_free(g); expr_free(Llog); if (h_n) expr_free(h_n); return NULL; }
 
     Expr* result = rt_eval_own(expr_new_function(expr_new_symbol("Plus"),
         (Expr*[]){ g, Llog, Q }, 3));
 
-    /* Self-verify: D_tower[result] == num/den (correct by construction; a cheap
-     * guard makes the wiring bulletproof — a mismatch declines rather than shipping
-     * a wrong form up to the top-level diff-back). */
+    /* Self-verify the (possibly partial) identity D_tower[result] + h_n == num/den.
+     * Exact and decidable in the tower field; with h_n == NULL this is the usual
+     * D_tower[result] == num/den.  A mismatch declines (a wrong h_n reconstruction —
+     * the κ_D gcd reconstruction is not exact over a transcendental monomial — can
+     * therefore only decline, never ship a wrong partial). */
     Expr* Dres = rt_tower_deriv(result, T, x);
     Expr* tgt = expr_new_function(expr_new_symbol("Times"),
         (Expr*[]){ expr_copy(num), expr_new_function(expr_new_symbol("Power"),
             (Expr*[]){ expr_copy(den), expr_new_integer(-1) }, 2) }, 2);
-    Expr* chk = rt_eval1("Together", expr_new_function(expr_new_symbol("Plus"),
+    Expr* diff = expr_new_function(expr_new_symbol("Plus"),
         (Expr*[]){ Dres, expr_new_function(expr_new_symbol("Times"),
-            (Expr*[]){ expr_new_integer(-1), tgt }, 2) }, 2));
+            (Expr*[]){ expr_new_integer(-1), tgt }, 2) }, 2);
+    if (h_n) {
+        diff = expr_new_function(expr_new_symbol("Plus"),
+            (Expr*[]){ diff, expr_copy(h_n) }, 2);
+    }
+    Expr* chk = rt_eval1("Together", diff);
     bool good = chk && rt_is_zero(chk);
     if (chk) expr_free(chk);
-    if (!good) { expr_free(result); return NULL; }
+    if (!good) { expr_free(result); if (h_n) expr_free(h_n); return NULL; }
+    if (rem_out) *rem_out = h_n;
+    else if (h_n) expr_free(h_n);
     return result;
 }
 
-static Expr* rt_field_hyperexp_coupled(Expr* num, Expr* den, RtTower* T, long L, Expr* x) {
+static Expr* rt_field_hyperexp_coupled(Expr* num, Expr* den, RtTower* T, long L, Expr* x,
+                                       Expr** rem_out) {
     /* The exponential-top proper part, integrated by the literal Bronstein pipeline
      * (Hermite reduction + residue criterion + hyperexponential-polynomial), with the
-     * former undetermined-coefficient ansatz removed.  See rt_field_hyperexp_hermite. */
-    return rt_field_hyperexp_hermite(num, den, T, L, x);
+     * former undetermined-coefficient ansatz removed.  See rt_field_hyperexp_hermite.
+     * A mixed residue resultant surfaces its non-constant-residue part via rem_out. */
+    return rt_field_hyperexp_hermite(num, den, T, L, x, rem_out);
 }
 
 /* Integrate F (a rational function of x, t_1..t_L in tower-variable form) with
@@ -3873,7 +3907,7 @@ static Expr* rt_field_integrate(Expr* F, RtTower* T, long L, Expr* x, Expr** rem
              * independent f_p/f_s/f_n split is deliberately not applied here. */
             result = rt_int_hyperexp_poly(num, den, T, L, x);
             if (!result)
-                result = rt_field_hyperexp_coupled(num, den, T, L, x);
+                result = rt_field_hyperexp_coupled(num, den, T, L, x, rem_out);
         }
     }
     if (num) expr_free(num);

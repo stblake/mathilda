@@ -1729,10 +1729,15 @@ algebraic residues.
   `logs + Integrate[remainder, x]` — e.g.
   `Integrate[1/(x Log[x]) + 1/(x (Log[x]^2 - x)), x]` returns
   `Log[Log[x]] + Integrate[1/(x (Log[x]^2 - x)), x]` instead of declining
-  the whole integral. Currently surfaced for the **primitive (logarithmic)**
-  monomial; the hyperexponential coupled path still declines a mixed
-  resultant (its §5.9 Laurent reconciliation cannot carry a proper simple
-  remainder).
+  the whole integral. Surfaced for **both** the primitive (logarithmic) and
+  the hyperexponential (exponential) top monomials: the coupled path splits
+  the simple part `h = h_s + h_n`, reconciles the constant-residue `h_s`
+  through the §5.9 Laurent step (`P = h_s + r - D[L_s]`), and reports the
+  non-constant `h_n` as the unintegrated remainder — e.g.
+  `∫ E^x/(1+E^(E^x)) + 1/(x+E^(E^x)) dx` returns
+  `E^x - Log[1+E^(E^x)] + Integrate[1/(x+E^(E^x)), x]`. Each partial is gated
+  by an exact tower-variable diff-back, so a form the κ_D reconstruction cannot
+  reconstruct exactly declines rather than shipping a wrong remainder.
 
 ```mathematica
 (* 1/(x (Log[x]^2+1)): tau = Log[x], D(d) = (1+t)^2 *)

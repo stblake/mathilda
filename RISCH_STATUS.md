@@ -699,6 +699,12 @@ non-elementary. Implementation: a file-local decision context
 it with elementary-result precedence. The RDE base case now routes every `C(x)` RDE
 (rational RHS included) to the complete `rde_base`, so no bounded-ansatz scope
 declines remain. Tests: `test_risch_elementaryq.c`.
+Also (P3 tail): the hyperexponential coupled path (`rt_field_hyperexp_hermite`)
+now returns the partial log part for a mixed resultant — splits `h = h_s + h_n`,
+reconciles the constant-residue `h_s` through §5.9, reports `h_n` as
+`Integrate[remainder, x]` (depth-≥2 towers, gated by the tower diff-back) —
+instead of declining. Test: `test_risch_residue_split.c`
+(`test_hyperexp_coupled_partial`).
 
 ### Phase A — Exponential Hermite with a `theta = 0` pole (Laurent-coupled) ✅ DONE (2026-07-10)
 Implemented by generalizing `rt_hyperexp_case`: the `theta`-coprime denominator
