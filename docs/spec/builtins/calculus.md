@@ -1740,6 +1740,46 @@ In[1]:= Integrate`TranscendentalLogPart[1, x + x t^2, t, z, 1 + 2 t + t^2, x]
 Out[1]= ArcTan[t]
 ```
 
+## Risch`ElementaryIntegralQ — the elementary-integrability decision
+
+`Risch`ElementaryIntegralQ[f, x]` is the Bronstein decision predicate: it
+decides whether `f` has an antiderivative expressible in **elementary** terms
+(rational, exp, log, radical, and hence trig / inverse-trig).
+
+- `True` — the recursive Risch integrator exhibits an elementary closed form
+  (an existence proof; correct by construction).
+- `False` — the decision procedure **proves** none exists, behind an exact
+  certificate: the §5.6 residue criterion (Thm 5.6.1(ii): a non-constant
+  residue in the simple part), a Chapter-6 Risch differential equation with no
+  rational solution (via the complete base-field solver `rde_base` or the
+  exact-degree-bound tower ansatz), or the §5.8 `Dc ≠ 0` primitive certificate.
+- **unevaluated** (with a `Risch`ElementaryIntegralQ::undec` message) — the
+  verdict is outside the single differential-tower field scope (algebraic
+  extensions, structures the tower builder rejects).
+
+It is sound by construction: a Boolean is returned only behind an exact
+certificate, never a bounded-ansatz "gave up." Note the classic non-elementary
+integrands, which the integrator *answers* with special functions, decide
+`False` — the special-function form is itself the statement that no elementary
+antiderivative exists.
+
+```mathematica
+In[1]:= Risch`ElementaryIntegralQ[E^x/x, x]        (* ExpIntegralEi *)
+Out[1]= False
+In[2]:= Risch`ElementaryIntegralQ[E^(x^2), x]      (* Erf *)
+Out[2]= False
+In[3]:= Risch`ElementaryIntegralQ[1/Log[x], x]     (* LogIntegral — non-constant residue *)
+Out[3]= False
+In[4]:= Risch`ElementaryIntegralQ[E^x/(1 + E^x), x] (* Log[1+E^x] *)
+Out[4]= True
+```
+
+**`Integrate::nonelem` message.** When `Integrate`RischTranscendental[f, x]`
+leaves the integral **unevaluated** and the field decision proves it has no
+elementary antiderivative, it emits the informational message
+`Integrate::nonelem` (Mathematica-style, to stderr). The return value is
+unchanged (the integral stays unevaluated); the message only explains *why*.
+
 ## PolynomialQuotientRemainder
 
 Single-pass companion to `PolynomialQuotient` / `PolynomialRemainder`.

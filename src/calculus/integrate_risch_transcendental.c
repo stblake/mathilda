@@ -18,6 +18,7 @@
 #include "expr.h"
 #include "eval.h"
 #include "parse.h"
+#include "print.h"
 #include "symtab.h"
 #include "attr.h"
 #include "sym_intern.h"
@@ -1282,9 +1283,11 @@ static Expr* rde_base(Expr* f, Expr* g, Expr* x) {
 /* Solve the Risch differential equation  q' + i u' q = p  for q in the base
  * field C(x), via the Bronstein one-step-reduction algorithm above.  The
  * coefficient is f = i u'; returns q (owned) or NULL when the term is
- * non-elementary in this field (e.g. E^(-x^2), E^(1/x)).  Replaces the former
- * SolveAlways ansatz (and its rational-denominator variant) with polynomial-
- * gcd-time SPDE. */
+ * non-elementary in this field (e.g. E^(-x^2), E^(1/x)).  Delegates to rde_base,
+ * the COMPLETE base-field solver (weak normalization + normal-denominator
+ * reduction + SPDE + polynomial non-cancellation solve) — so every NULL it
+ * returns is an authoritative "no rational solution", never a bounded-ansatz
+ * decline.  u and p may be rational in x (not just polynomial). */
 static Expr* rt_solve_rde(Expr* p, long i, Expr* u, Expr* x) {
     if (i == 0) return NULL;
     Expr* up = rt_eval2("D", expr_copy(u), expr_copy(x));   /* u' */
@@ -3162,6 +3165,34 @@ static Expr* rt_exp_tower_case(Expr* f, Expr* x) {
 
 typedef enum { RT_LOG, RT_EXP } RtKind;
 
+/* ================================================================== */
+/* Elementary-integrability decision (P3: Bronstein §5.6 residue        */
+/* criterion + Ch.6 Risch-DE no-solution certificates).                 */
+/* ================================================================== */
+/* Tri-state verdict of the decision procedure. */
+typedef enum { RT_DEC_UNKNOWN = 0, RT_DEC_ELEMENTARY, RT_DEC_NONELEMENTARY } RtDecision;
+
+/* File-local decision context.  The field integrator (rt_field_integrate and its
+ * callees) is a genuine decision procedure — every NULL it returns is either a
+ * theorem-backed "no elementary integral" or a dispatch-to-sibling decline.  When
+ * a caller wants the VERDICT (not just the antiderivative) it sets
+ * g_rt_decide_mode and runs the same path; the sub-algorithms raise
+ * g_rt_decision to RT_DEC_NONELEMENTARY at their AUTHORITATIVE decline points
+ * ONLY — a non-constant residue (Thm 5.6.1(ii)), a Risch DE with no rational
+ * solution (Ch.6, via the complete rde_base / exact-degree-bound ansatz), or the
+ * hypertangent Dc≠0 certificate — and NEVER on a routing decline.  The flag is
+ * write-once/sticky within a run; the driver (rt_decide) resets it, then reads
+ * ELEMENTARY iff a full antiderivative with no unintegrated remainder is produced
+ * (an elementary result always wins over a stray flag from an abandoned path). */
+static bool       g_rt_decide_mode = false;
+static RtDecision g_rt_decision     = RT_DEC_UNKNOWN;
+
+/* Raise the decision to NONELEMENTARY at an authoritative decline (no-op unless a
+ * decision is being requested). */
+static void rt_dec_nonelem(void) {
+    if (g_rt_decide_mode) g_rt_decision = RT_DEC_NONELEMENTARY;
+}
+
 typedef struct {
     size_t n;
     RtKind kind[RT_MAXK];
@@ -3204,7 +3235,7 @@ static void rt_tower_free(RtTower* T) {
  * (triangular: free of t_i..t_n and of any residual foreign kernel).  Returns
  * true with T populated (2 <= n <= RT_MAXK); false otherwise (caller still calls
  * rt_tower_free). */
-static bool rt_tower_build(Expr* f, Expr* x, RtTower* T) {
+static bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
     for (size_t i = 0; i < RT_MAXK; i++)
         { T->kernel[i] = T->arg[i] = T->t[i] = T->Dcoef[i] = NULL; }
     T->subrules = NULL; T->n = 0;
@@ -3266,7 +3297,7 @@ static bool rt_tower_build(Expr* f, Expr* x, RtTower* T) {
     size_t np = 0;
     for (size_t rep = 0; rep < ne; rep++) if (clsrep[rep] == (long)rep) np++;
     size_t n = nl + np;
-    if (!okc || n < 2 || n > RT_MAXK) {
+    if (!okc || n < min_n || n > RT_MAXK) {
         for (size_t rep = 0; rep < ne; rep++) if (clsprim[rep]) expr_free(clsprim[rep]);
         free(clsprim); free(clsrep); free(multof);
         for (size_t i = 0; i < nl; i++) expr_free(logs[i]);
@@ -3484,8 +3515,23 @@ static Expr* rt_field_lrt_logpart(Expr* Rr, Expr* den, RtTower* T, long L,
     Expr* gate = expr_new_function(expr_new_symbol("List"), gv, ng);
     free(gv);
 
-    Expr* logpart = rt_eval_call("Integrate`TranscendentalLogPart",
-        (Expr*[]){ a, rad, expr_copy(t), expr_new_symbol("rmZ"), Dd, gate }, 6);
+    /* In decision mode, append a 7th "decide" marker so a non-constant-residue
+     * resultant returns the inert marker Integrate`$NonConstantResidue (the simple
+     * part is non-elementary, Thm 5.6.1(ii)) instead of declining silently. */
+    Expr* logpart = g_rt_decide_mode
+        ? rt_eval_call("Integrate`TranscendentalLogPart",
+              (Expr*[]){ a, rad, expr_copy(t), expr_new_symbol("rmZ"), Dd, gate,
+                         expr_new_symbol("True") }, 7)
+        : rt_eval_call("Integrate`TranscendentalLogPart",
+              (Expr*[]){ a, rad, expr_copy(t), expr_new_symbol("rmZ"), Dd, gate }, 6);
+    /* Non-constant-residue verdict marker (decision mode): the simple part has no
+     * elementary integral — raise the decision and decline the (empty) log part. */
+    if (logpart && logpart->type == EXPR_SYMBOL
+        && logpart->data.symbol.name == intern_symbol("Integrate`$NonConstantResidue")) {
+        expr_free(logpart);
+        rt_dec_nonelem();
+        return NULL;
+    }
     /* Declined iff the head is unchanged (a, rad, Dd, gate adopted by the call). */
     if (logpart && logpart->type == EXPR_FUNCTION
         && logpart->data.function.head->type == EXPR_SYMBOL
@@ -3932,7 +3978,13 @@ static int rt_limited_field_integrate(Expr* r, RtTower* T, long L, Expr* x,
             else *c_out = c;
             *s_out = s;
             rc = 0;
-        } else { expr_free(c); expr_free(s); }
+        } else {
+            /* The would-be new-logarithm coefficient c is NON-constant (Dc != 0):
+             * by Bronstein's primitive-polynomial criterion (§5.8, p.158) the term
+             * has no elementary integral.  Authoritative non-elementary verdict. */
+            rt_dec_nonelem();
+            expr_free(c); expr_free(s);
+        }
     }
     expr_free(Rs);
     return rc;
@@ -4013,10 +4065,25 @@ static Expr* rt_int_hyperexp_poly(Expr* num, Expr* den, RtTower* T, long L, Expr
  * of a monomial-Laurent ansatz's reach and declines. */
 static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x) {
     Expr* w = T->arg[L];
-    bool base = rt_is_poly(w, x) && rt_is_poly(p, x);
+    /* Base field C(x): the RDE q' + i w' q = p has both coefficient (i w', with
+     * w = the exponent of the current monomial) and RHS p in C(x) — i.e. free of
+     * every lower tower variable.  Route it to the COMPLETE base-field solver
+     * rde_base (via rt_solve_rde), whose every "no solution" is authoritative
+     * (Bronstein Ch. 6, A1/F5 audit).  This deliberately does NOT require w or p to
+     * be POLYNOMIAL in x — rde_base handles rational coefficients (weak
+     * normalization + normal-denominator reduction), so a rational RHS such as the
+     * 1/x of E^x/x (∫ non-elementary, Ei) or E^(x^2) (Erf) is decided here rather
+     * than diverted to the bounded-ansatz general path below (the former
+     * rt_is_poly(p,x) guard was a spurious scope decline: it sent every rational-p
+     * base RDE to SolveAlways). */
+    bool base = true;
     for (size_t j = 0; j < T->n && base; j++)
         if (!rt_free_of_x(w, T->t[j]) || !rt_free_of_x(p, T->t[j])) base = false;
-    if (base) return rt_solve_rde(p, i, w, x);
+    if (base) {
+        Expr* q = rt_solve_rde(p, i, w, x);
+        if (!q) rt_dec_nonelem();   /* rde_base "no solution" is authoritative (Ch.6) */
+        return q;
+    }
 
     /* By the RDE denominator theorem, denom(q) | denom(p) (a pole of q would give a
      * higher-order pole in q' + i Dcoef q = p that nothing cancels), so
@@ -4169,6 +4236,12 @@ static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x) {
     if (result) result = rt_eval1("Cancel", result);
     free(lv); free(bd); free(lo);
     expr_free(pd); expr_free(pn);
+    /* A NULL here is the SolveAlways over the EXACT-degree-bound q = h/pd ansatz
+     * (rt_rde_var_bound: proven cap-free upper bound + denominator theorem +
+     * exponential special-pole Laurent range) finding the linear coefficient
+     * system inconsistent — i.e. no rational solution exists in K_L.  That is an
+     * authoritative "non-elementary" verdict, not a bounded-ansatz decline. */
+    if (!result) rt_dec_nonelem();
     return result;
 }
 
@@ -4278,7 +4351,9 @@ static Expr* rt_recursive_tower_case(Expr* f, Expr* x) {
      * tower basis before building the tower (see rt_expand_exp_sums). */
     Expr* fx = rt_expand_exp_sums(f);
     RtTower T;
-    if (!rt_tower_build(fx, x, &T)) { rt_tower_free(&T); expr_free(fx); return NULL; }
+    /* min_n = 2: single-kernel integrands are handled by the dedicated flat-tower
+     * cases above; the general recursion only takes depth->=2 towers. */
+    if (!rt_tower_build_min(fx, x, &T, 2)) { rt_tower_free(&T); expr_free(fx); return NULL; }
 
     /* Alias the kernels to tower variables structurally (NOT via an evaluated
      * ReplaceAll, which would re-merge a split exponential product before
@@ -5106,6 +5181,119 @@ static Expr* rt_integrate(Expr* f, Expr* x) {
 }
 
 /* ================================================================== */
+/* Elementary-integrability decision procedure (P3).                  */
+/* ================================================================== */
+
+/* True iff the head names a function that is NOT elementary — the special
+ * functions the integrator emits for a non-elementary antiderivative — or an
+ * unevaluated Integrate (a partial / declined result).  RootSum and Root are
+ * elementary (finite sums of logs / algebraic numbers) and are NOT listed. */
+static bool rt_head_nonelementary(const char* h) {
+    if (!h) return false;
+    static const char* NE[] = {
+        "ExpIntegralEi", "ExpIntegralE", "LogIntegral",
+        "SinIntegral", "CosIntegral", "SinhIntegral", "CoshIntegral",
+        "Erf", "Erfc", "Erfi", "FresnelS", "FresnelC",
+        "PolyLog", "Integrate", NULL };
+    for (int i = 0; NE[i]; i++)
+        if (h == intern_symbol(NE[i])) return true;
+    return false;
+}
+
+/* An antiderivative expressed WITHOUT any non-elementary special function (and
+ * without an unevaluated Integrate) is an elementary closed form: exhibiting it
+ * (correct by construction from the integrator) proves f is elementary-integrable. */
+static bool rt_expr_is_elementary(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return true;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && rt_head_nonelementary(e->data.function.head->data.symbol.name))
+        return false;
+    if (!rt_expr_is_elementary(e->data.function.head)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!rt_expr_is_elementary(e->data.function.args[i])) return false;
+    return true;
+}
+
+/* Field-path elementary-integrability decision.  Routes f through the AUTHORITATIVE
+ * recursive field integrator (rt_field_integrate) in decision mode — the same
+ * tower build / substitution / gate as rt_recursive_tower_case, but reading the
+ * VERDICT rather than assembling an answer.  Returns:
+ *   RT_DEC_ELEMENTARY     — a full antiderivative (no unintegrated remainder);
+ *   RT_DEC_NONELEMENTARY  — an authoritative certificate fired: a non-constant
+ *                           residue (Thm 5.6.1(ii)), a Risch DE with no rational
+ *                           solution (Ch.6, rde_base / exact-bound ansatz), or the
+ *                           §5.8 Dc!=0 primitive certificate;
+ *   RT_DEC_UNKNOWN        — out of the single-tower field scope (algebraic
+ *                           extensions, tower-builder rejects, or a genuine gap).
+ * Sound by construction: an ELEMENTARY / NONELEMENTARY verdict is emitted only
+ * behind an exact certificate — otherwise UNKNOWN. */
+static RtDecision rt_decide_field(Expr* f, Expr* x) {
+    Expr* fx = rt_expand_exp_sums(f);
+    RtTower T;
+    /* min_n = 1: the decision routes SINGLE-kernel integrands (E^x/x, E^(x^2),
+     * 1/Log[x]) through the same authoritative field integrator too — the flat-tower
+     * integrate cases that normally serve n=1 do not carry the decision certificates. */
+    if (!rt_tower_build_min(fx, x, &T, 1)) { rt_tower_free(&T); expr_free(fx); return RT_DEC_UNKNOWN; }
+    Expr* F = rt_eval1("Together", rt_subst_kernels(fx, &T));
+    RtDecision verdict = RT_DEC_UNKNOWN;
+    if (F && rt_find_exp_of_x(F, x) == NULL && rt_find_log_of_x(F, x) == NULL) {
+        Expr* num = rt_eval1("Numerator", expr_copy(F));
+        Expr* den = rt_eval1("Denominator", expr_copy(F));
+        Expr** vv = malloc((T.n + 1) * sizeof(Expr*));
+        vv[0] = expr_copy(x);
+        for (size_t i = 0; i < T.n; i++) vv[i + 1] = expr_copy(T.t[i]);
+        Expr* vlist = expr_new_function(expr_new_symbol("List"), vv, T.n + 1);
+        free(vv);
+        Expr* pqn = num ? rt_eval2("PolynomialQ", expr_copy(num), expr_copy(vlist)) : NULL;
+        Expr* pqd = den ? rt_eval2("PolynomialQ", expr_copy(den), expr_copy(vlist)) : NULL;
+        bool gate = num && den && rt_is_true(pqn) && rt_is_true(pqd);
+        if (pqn) expr_free(pqn);
+        if (pqd) expr_free(pqd);
+        expr_free(vlist);
+        if (num) expr_free(num);
+        if (den) expr_free(den);
+        if (gate) {
+            bool       save_mode = g_rt_decide_mode;
+            RtDecision save_dec  = g_rt_decision;
+            g_rt_decide_mode = true;
+            g_rt_decision    = RT_DEC_UNKNOWN;
+            Expr* rem = NULL;
+            Expr* Q = rt_field_integrate(F, &T, (long)T.n - 1, x, &rem);
+            if (Q && !rem)                               verdict = RT_DEC_ELEMENTARY;
+            else if (Q && rem)                           verdict = RT_DEC_NONELEMENTARY;
+            else if (g_rt_decision == RT_DEC_NONELEMENTARY) verdict = RT_DEC_NONELEMENTARY;
+            else                                         verdict = RT_DEC_UNKNOWN;
+            if (Q) expr_free(Q);
+            if (rem) expr_free(rem);
+            g_rt_decide_mode = save_mode;
+            g_rt_decision    = save_dec;
+        }
+    }
+    if (F) expr_free(F);
+    rt_tower_free(&T);
+    expr_free(fx);
+    return verdict;
+}
+
+/* Complete elementary-integrability verdict for f w.r.t. x.  True side: exhibit an
+ * elementary antiderivative via the full integrator (an existence proof — correct
+ * by construction).  False side: the field decision's authoritative non-elementary
+ * certificate.  Otherwise UNKNOWN.  Checking True first makes an exhibited
+ * antiderivative dominate any certificate, so the verdict is robust. */
+static RtDecision rt_decide(Expr* f, Expr* x) {
+    Expr* anti = rt_integrate(f, x);
+    if (anti) {
+        bool elem = rt_expr_is_elementary(anti);
+        expr_free(anti);
+        if (elem) return RT_DEC_ELEMENTARY;   /* elementary closed form exhibited */
+    }
+    RtDecision fld = rt_decide_field(f, x);
+    if (fld == RT_DEC_ELEMENTARY)    return RT_DEC_ELEMENTARY;
+    if (fld == RT_DEC_NONELEMENTARY) return RT_DEC_NONELEMENTARY;
+    return RT_DEC_UNKNOWN;
+}
+
+/* ================================================================== */
 /* Public builtin.                                                    */
 /* ================================================================== */
 
@@ -5132,8 +5320,54 @@ Expr* builtin_rischtranscendental(Expr* res) {
      * is in Mathematica's Integrate). */
     arith_warnings_mute_push();
     Expr* result = rt_integrate(f, x);
+    /* Decision half (P3): when the recursive algorithm produced no elementary
+     * antiderivative, consult the authoritative field decision.  If it PROVES the
+     * integrand has no elementary integral (a non-constant residue, a Risch DE with
+     * no rational solution, or the Dc!=0 primitive certificate — never a bounded-
+     * ansatz decline), report it Mathematica-style.  A stray certificate from an
+     * abandoned attempt cannot fire here: rt_decide_field re-derives the verdict
+     * with elementary-result precedence. */
+    if (!result && rt_decide_field(f, x) == RT_DEC_NONELEMENTARY) {
+        char* fs = expr_to_string(f);
+        char* xs = expr_to_string(x);
+        fprintf(stderr,
+            "Integrate::nonelem: The integrand %s has no antiderivative "
+            "elementary in %s.\n", fs ? fs : "?", xs ? xs : "?");
+        free(fs); free(xs);
+    }
     arith_warnings_mute_pop();
     return result;
+}
+
+/* Risch`ElementaryIntegralQ[f, x] — the Bronstein elementary-integrability decision
+ * predicate.  Returns True when f has an antiderivative expressible in elementary
+ * terms (exhibited by the integrator — an existence proof), False when the recursive
+ * Risch decision procedure PROVES none exists (§5.6 residue criterion Thm 5.6.1(ii),
+ * or a Ch.6 Risch DE with no rational solution, or the §5.8 Dc!=0 certificate), and
+ * stays UNEVALUATED (with an ElementaryIntegralQ::undec message) when the verdict is
+ * outside the single-tower field scope (algebraic extensions, deeper structures).
+ * Sound by construction: a Boolean is returned only behind an exact certificate. */
+static Expr* builtin_elementaryintegralq(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* f = res->data.function.args[0];
+    Expr* x = res->data.function.args[1];
+    if (x->type != EXPR_SYMBOL) return NULL;
+    arith_warnings_mute_push();
+    RtDecision d = rt_decide(f, x);
+    arith_warnings_mute_pop();
+    if (d == RT_DEC_ELEMENTARY)    return expr_new_symbol("True");
+    if (d == RT_DEC_NONELEMENTARY) return expr_new_symbol("False");
+    /* Undecided within scope: emit a diagnostic and leave the call unevaluated
+     * (the *Q-returns-Boolean convention allows NULL only with an emitted tag). */
+    {
+        char* fs = expr_to_string(f);
+        char* xs = expr_to_string(x);
+        fprintf(stderr,
+            "Risch`ElementaryIntegralQ::undec: Cannot decide elementary "
+            "integrability of %s with respect to %s.\n", fs ? fs : "?", xs ? xs : "?");
+        free(fs); free(xs);
+    }
+    return NULL;
 }
 
 /* Risch`RischDE[f, g, x] — solve the base-field Risch differential equation
@@ -5178,4 +5412,10 @@ void integrate_risch_transcendental_init(void) {
         "normalization, normal-denominator reduction, SPDE, and the polynomial\n"
         "non-cancellation solve.  Returns y (0 when g is 0), or stays unevaluated\n"
         "when no rational solution exists.  Coefficients may be Gaussian (C(i)(x)).");
+    rt_install("Risch`ElementaryIntegralQ", builtin_elementaryintegralq,
+        "Risch`ElementaryIntegralQ[f, x] decides whether f has an antiderivative\n"
+        "elementary in x: True if the recursive Risch integrator exhibits an\n"
+        "elementary closed form, False if it proves none exists (Bronstein residue\n"
+        "criterion / Risch-DE no-solution certificates), or unevaluated when the\n"
+        "verdict is outside the transcendental-tower field scope.");
 }

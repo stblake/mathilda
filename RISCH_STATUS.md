@@ -685,6 +685,21 @@ use).
 Ordered by value / tractability. All are correct-by-construction extensions;
 until done, the corresponding integrands decline cleanly.
 
+### Phase — Elementary-integrability DECISION (P3 Boolean verdict) ✅ DONE (2026-07-14)
+The dispatch's `NULL` (decline) is now backed, on the single-tower field class, by
+a positive verdict. `Risch`ElementaryIntegralQ[f, x]` (a `Risch`` builtin) returns
+`True` (integrator exhibits an elementary form), `False` (proven non-elementary via
+a non-constant residue — a decide-mode marker `Integrate`$NonConstantResidue` from
+`Integrate`TranscendentalLogPart` — or a Ch.6 RDE with no rational solution, or the
+§5.8 `Dc≠0` certificate), else unevaluated. `builtin_rischtranscendental` emits
+`Integrate::nonelem` when it leaves an integral unevaluated but proves it
+non-elementary. Implementation: a file-local decision context
+(`g_rt_decide_mode`/`g_rt_decision`) raised only at authoritative decline points in
+`rt_field_rde` / `rt_limited_field_integrate` / the residue path; `rt_decide` reads
+it with elementary-result precedence. The RDE base case now routes every `C(x)` RDE
+(rational RHS included) to the complete `rde_base`, so no bounded-ansatz scope
+declines remain. Tests: `test_risch_elementaryq.c`.
+
 ### Phase A — Exponential Hermite with a `theta = 0` pole (Laurent-coupled) ✅ DONE (2026-07-10)
 Implemented by generalizing `rt_hyperexp_case`: the `theta`-coprime denominator
 `Dtil = den/theta^a` is split into its repeated part

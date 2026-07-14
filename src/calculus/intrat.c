@@ -1741,7 +1741,7 @@ static Expr* intrat_bucket_const_part(Expr* Qi, Expr* t, Expr* xgate,
  * Direct port of IntegrateRational.m:751-801. */
 static Expr* intrat_log_part_core(Expr* a, Expr* d, Expr* x, Expr* t,
                                   bool root_sum, Expr* dprime_override,
-                                  Expr* xgate, Expr** remainder_out) {
+                                  Expr* xgate, Expr** remainder_out, bool decide) {
     if (remainder_out) *remainder_out = NULL;
     /* prs = SubresultantPolynomialRemainders[d, a - t*D(d), x] */
     Expr* dprime_e;
@@ -1825,6 +1825,16 @@ static Expr* intrat_log_part_core(Expr* a, Expr* d, Expr* x, Expr* t,
         expr_free(resultant);
         resultant = stripped;
         bool free_all = intrat_freeq_all(resultant, xgate);
+        if (!free_all && decide) {
+            /* Decision mode: ANY non-constant residue proves this simple part has no
+             * elementary integral (Bronstein residue criterion, Thm 5.6.1(ii)).  We
+             * only need the VERDICT, not the elementary constant-residue logs or a
+             * reconstructed remainder — return an inert marker the recursive-Risch
+             * caller (rt_field_lrt_logpart) decodes into a NONELEMENTARY verdict. */
+            expr_free(resultant); expr_free(a); expr_free(d); expr_free(prs);
+            if (atdp_keep) expr_free(atdp_keep);
+            return expr_new_symbol("Integrate`$NonConstantResidue");
+        }
         if (!free_all) {
             /* Mixed or fully non-constant.  A caller that cannot represent a
              * partial result (remainder_out == NULL — e.g. the exponential
@@ -1868,8 +1878,9 @@ static Expr* intrat_log_part_core(Expr* a, Expr* d, Expr* x, Expr* t,
             if (Qconst[i_idx] && get_degree_poly(Qconst[i_idx], t) > 0) any_const = true;
         }
         if (!any_const) {
-            /* No elementary logs to emit — decline like the all-non-constant
-             * case (also prevents an infinite Integrate[remainder] regress). */
+            /* No elementary logs to emit — decline (also prevents an infinite
+             * Integrate[remainder] regress).  Decision mode never reaches here: it
+             * short-circuits at the non-constant-residue detection above. */
             for (size_t i_idx = 0; i_idx < nQ; i_idx++) if (Qconst[i_idx]) expr_free(Qconst[i_idx]);
             free(Qconst); expr_free(Q_n_poly); expr_free(Q);
             expr_free(a); expr_free(d); expr_free(prs);
@@ -2068,7 +2079,7 @@ static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
     Expr* d_raw = intrat_denominator(fc);
     Expr* d = expr_expand(d_raw); expr_free(d_raw);
     expr_free(fc);
-    return intrat_log_part_core(a, d, x, t, root_sum, NULL, NULL, NULL);
+    return intrat_log_part_core(a, d, x, t, root_sum, NULL, NULL, NULL, false);
 }
 
 /* Defined below (Phase 4 consumer); forward-declared for the transcendental
@@ -2097,12 +2108,20 @@ static Expr* intrat_log_to_real_pairs(Expr* pair_list, Expr* x, Expr* t);
  * NULL when the whole log part is elementary. */
 static Expr* intrat_transcendental_log_part(Expr* a, Expr* d, Expr* tau,
                                             Expr* z, Expr* Dd, Expr* xreal,
-                                            Expr** remainder_out) {
+                                            Expr** remainder_out, bool decide) {
     if (remainder_out) *remainder_out = NULL;
     Expr* rem = NULL;
     Expr* pairs = intrat_log_part_core(expr_copy(a), expr_copy(d), tau, z,
-                                       /*root_sum=*/false, Dd, xreal, &rem);
+                                       /*root_sum=*/false, Dd, xreal, &rem, decide);
     if (!pairs) { if (rem) expr_free(rem); return NULL; }
+    /* Decision mode short-circuit: a non-constant residue yields the inert marker
+     * Integrate`$NonConstantResidue (no pair list) — propagate it up verbatim for
+     * the recursive-Risch caller to decode into a NONELEMENTARY verdict. */
+    if (pairs->type == EXPR_SYMBOL
+        && strcmp(pairs->data.symbol.name, "Integrate`$NonConstantResidue") == 0) {
+        if (rem) expr_free(rem);
+        return pairs;
+    }
     Expr* real = intrat_log_to_real_pairs(pairs, tau, z);
     expr_free(pairs);
     if (!real) { if (rem) expr_free(rem); return NULL; }  /* LogToReal declined */
@@ -3841,7 +3860,8 @@ Expr* builtin_intrat_logtoreal(Expr* res) {
 }
 
 Expr* builtin_intrat_transcendental_log_part(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 6)
+    if (res->type != EXPR_FUNCTION
+        || (res->data.function.arg_count != 6 && res->data.function.arg_count != 7))
         return NULL;
     Expr* a    = res->data.function.args[0];
     Expr* d    = res->data.function.args[1];
@@ -3849,6 +3869,12 @@ Expr* builtin_intrat_transcendental_log_part(Expr* res) {
     Expr* z    = res->data.function.args[3];
     Expr* Dd   = res->data.function.args[4];
     Expr* xreal = res->data.function.args[5];
+    /* Optional 7th argument is the "decide" marker (any expression): when present
+     * the residue criterion, on an all-non-constant-residue resultant, returns
+     * Integrate`PartialLogPart[0, a/d] instead of declining — so a caller seeking a
+     * non-elementarity VERDICT (never re-integrating the remainder) learns the whole
+     * simple part is non-elementary (Thm 5.6.1(ii)).  Absent for the integrator. */
+    bool decide = (res->data.function.arg_count == 7);
     if (tau->type != EXPR_SYMBOL || z->type != EXPR_SYMBOL)
         return NULL;
     /* `xreal` is the residue-constant gate: a single symbol (single-kernel
@@ -3860,7 +3886,7 @@ Expr* builtin_intrat_transcendental_log_part(Expr* res) {
             && xreal->data.function.head->data.symbol.name == SYM_List);
     if (!gate_ok) return NULL;
     Expr* rem = NULL;
-    Expr* logs = intrat_transcendental_log_part(a, d, tau, z, Dd, xreal, &rem);
+    Expr* logs = intrat_transcendental_log_part(a, d, tau, z, Dd, xreal, &rem, decide);
     if (!logs) { if (rem) expr_free(rem); return NULL; }
     if (rem) {
         /* Partial log part: wrap the elementary logs and the unintegrated

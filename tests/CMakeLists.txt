@@ -967,6 +967,10 @@ add_executable(risch_residue_split_tests test_risch_residue_split.c ${COMMON_SRC
 target_include_directories(risch_residue_split_tests PRIVATE ../src ../src/calculus)
 add_test(NAME risch_residue_split_tests COMMAND risch_residue_split_tests)
 
+add_executable(risch_elementaryq_tests test_risch_elementaryq.c ${COMMON_SRC})
+target_include_directories(risch_elementaryq_tests PRIVATE ../src ../src/calculus)
+add_test(NAME risch_elementaryq_tests COMMAND risch_elementaryq_tests)
+
 add_executable(risch_structure_tests test_risch_structure.c ${COMMON_SRC})
 target_include_directories(risch_structure_tests PRIVATE ../src ../src/calculus)
 add_test(NAME risch_structure_tests COMMAND risch_structure_tests)
