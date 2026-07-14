@@ -817,6 +817,66 @@ Expr* rde_polyrischde_nocancel_field(Expr* b, Expr* c, RdeCtx* C, long n) {
     return q;
 }
 
+/* PolyRischDECancel{Prim,Exp} (Bronstein §6.6, p.212/213): the CANCELLATION case
+ * b in k* (deg_tau(b) == 0) of the polynomial Risch DE Dq + b q = c, c in k[tau],
+ * deg(q) <= n.  Builds q top-down: at each degree m the coefficient s solves the
+ * lower-field Risch DE  D[s] + (b + m*eta) s = lc_tau(c)  (eta = Dtau/tau for an
+ * exponential tau, absent for a primitive tau) via a RECURSIVE rde_tower over
+ * K_{m-1} — the genuine one-level descent of the tower recursion.  Returns q
+ * (owned) or NULL.  The b = Dz/z [+ m eta] antidifferentiation branch (a
+ * higher-degree solution when b is a logarithmic derivative) needs LimitedIntegrate
+ * (Gap 2) and is omitted: sound, since the main loop is exact by construction (each
+ * pass cancels the top tau-term) and rde_tower's identity gate declines any miss. */
+static Expr* rde_polyrischde_cancel(Expr* b, Expr* c, RdeCtx* C, long n) {
+    RtKind kind = C->T->kind[C->m];
+    Expr* eta = (kind == RT_EXP) ? C->T->Dcoef[C->m] : NULL;
+    if (rt_is_zero(c)) return expr_new_integer(0);
+    if (n < rc_deg(c, C)) return NULL;
+    Expr* q = expr_new_integer(0);
+    Expr* cc = expr_copy(c);
+    bool fail = false;
+    while (!rt_is_zero(cc)) {
+        long m = rc_deg(cc, C);
+        if (n < m) { fail = true; break; }
+        Expr* lcc = rc_lc(cc, C);                    /* leading coeff, in k */
+        Expr* coef;                                  /* b + m*eta (exp) or b (prim) */
+        if (kind == RT_EXP)
+            coef = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ expr_copy(b), expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_integer(m), expr_copy(eta) }, 2) }, 2));
+        else
+            coef = expr_copy(b);
+        RdeCtx Clo = { C->T, C->m - 1, C->x, (C->m - 1 >= 0) ? C->T->t[C->m - 1] : C->x };
+        Expr* s = rde_tower(coef, lcc, &Clo);        /* recursion into the lower field */
+        expr_free(coef); expr_free(lcc);
+        if (!s) { fail = true; break; }
+        Expr* stm;                                   /* s tau^m */
+        if (m == 0) stm = expr_copy(s);
+        else {
+            Expr* tm = rc_tau_pow(m, C);
+            stm = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_copy(s), tm }, 2));  /* adopts tm */
+        }
+        expr_free(s);
+        q = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Plus"),
+            (Expr*[]){ q, expr_copy(stm) }, 2));      /* q += stm; adopts old q */
+        /* cc -= b*stm + D(stm). */
+        Expr* Dstm = rc_D(stm, C);
+        Expr* bstm = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_copy(b), expr_copy(stm) }, 2));
+        cc = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Plus"),
+            (Expr*[]){ cc, expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_integer(-1), bstm }, 2),
+              expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_integer(-1), Dstm }, 2) }, 3));  /* adopts cc, bstm, Dstm */
+        expr_free(stm);
+        n = m - 1;
+    }
+    expr_free(cc);
+    if (fail) { expr_free(q); return NULL; }
+    return q;
+}
+
 /* Recursive Risch DE driver: solve D_tower[y] + f y = g for y in K_m (Bronstein
  * §5.2 dispatch + Chapter 6).  m < 0 is the base field C(x) (delegates to the
  * complete, audited rde_base).  For m >= 0 with a PRIMITIVE (RT_LOG) top this
@@ -858,8 +918,11 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
                 /* Non-cancellation (deg_tau(b) >= 1): the leading terms of D[q] and
                  * b q never cancel, for a primitive OR exponential top (delta<=1). */
                 H = rde_polyrischde_nocancel_field(sp.b, sp.c, C, sp.m);
+            } else {
+                /* deg_tau(sp.b) == 0, b in k*: the CANCELLATION case
+                 * (PolyRischDECancel{Prim,Exp}, §6.6) — recurse into the lower field. */
+                H = rde_polyrischde_cancel(sp.b, sp.c, C, sp.m);
             }
-            /* deg_tau(sp.b) == 0 (b in k -> PolyRischDECancel{Prim,Exp}, 1c) declines. */
             if (H) {
                 Expr* aH = rde_mul(sp.alpha, H);
                 Expr* q = rde_add(aH, sp.beta);      /* q_bar = alpha H + beta */

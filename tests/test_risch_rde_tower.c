@@ -217,8 +217,25 @@ static void test_tower_exp(void) {
      * abstraction must generalise (k = C(x, E^x) itself carries an exponential). */
     assert_rde_y("E^(E^x)", "1/(1 + E^(E^x))");
     assert_rde_y("E^(E^x)", "E^(E^x)/(2 + E^(E^x))");
-    /* Cancellation (b in k, deg_tau(b)=0): PolyRischDECancelExp — Gap 1c, declines. */
-    assert_rde_nosol("2", "E^(-x)");
+}
+
+/* ------------------------------------------------------------------ */
+/* Tower field — the CANCELLATION case (Gap 1c): b in k* (deg_tau(b)=0),  */
+/* PolyRischDECancel{Prim,Exp} (§6.6), which recurses one tower level     */
+/* down (a lower-field Risch DE per coefficient).                        */
+/* ------------------------------------------------------------------ */
+static void test_tower_cancellation(void) {
+    /* Primitive top, b = const in k: PolyRischDECancelPrim -> RischDE over C(x). */
+    assert_rde_y("1", "Log[x]");
+    assert_rde_y("1", "Log[x]^2");
+    assert_rde_y("2", "3 Log[x] + 1");
+    /* Exponential top, b in k: PolyRischDECancelExp (coefficient b + m*eta). */
+    assert_rde_y("2", "E^(-x)");
+    assert_rde_y("3", "E^(-2 x)");
+    assert_rde_y("1", "E^(E^x)");                   /* q_bar poly; cancel -> nocancel */
+    /* Deep: the per-coefficient lower Risch DE is itself an exponential
+     * non-cancellation solve over C(x, E^x). */
+    assert_rde_y("1", "1/(1 + E^(E^x))");
 }
 
 /* ------------------------------------------------------------------ */
@@ -266,6 +283,7 @@ int main(void) {
     TEST(test_tower_depth1_log);
     TEST(test_tower_deep_log);
     TEST(test_tower_exp);
+    TEST(test_tower_cancellation);
     TEST(test_tower_declines);
     TEST(test_integrator_endtoend);
     printf("All Risch DE tower tests passed.\n");

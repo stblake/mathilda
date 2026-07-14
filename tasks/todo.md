@@ -25,8 +25,12 @@ solver `rde_tower(f, g, RdeCtx*)` solving `D_tower[y] + f y = g` over `K_L`.
       Closes exp-over-exp Laurent RDEs (`∫ D[E^(E^x)/(1+E^x)] → E^(E^x)/(1+E^x)`), depth-2
       `RischDE[E^(E^x),…]`. All suites green; leak-clean. Deferred to 1c: cancellation
       (`b∈k`, PolyRischDECancelExp) + the ν_τ cancellation refinement (parametric log deriv).
-- [ ] **1c** — Cancellation: `PolyRischDECancelPrim` (§6.6 p.212) + `…Exp` (p.213), recurse
-      `rde_tower` over `k`. Tests: resonance/coupled-coefficient integrands.
+- [x] **1c** — Cancellation (`b∈k*`, deg_τ(b)=0): `rde_polyrischde_cancel`
+      (`PolyRischDECancel{Prim,Exp}`, §6.6 p.212/213) builds q top-down, per-coefficient
+      lower-field Risch DE `D[s]+(b+m·η)s=lc_τ(c)` via **recursive `rde_tower` over `K_{m-1}`**.
+      Closes const-coeff RDEs (`[1,1/x+Log[x]]→Log[x]`, `[2,E^(-x)]→E^(-x)`), cancel→nocancel
+      chains (`1/(1+E^(E^x))`), integrator `∫D[E^x/(1+Log[x])]`. All suites green; leak-clean.
+      Deferred to Gap 2: the `b=Dz/z[+mη]` antidifferentiation branch (LimitedIntegrate).
 - [ ] **1d** — `rde_weak_normalizer_field` + full `rde_normal_denominator_field` over `k(τ)`
       (spurious-residue strip). Tests: positive-integer-residue tower integrands.
 - [ ] **1e** — Delete the `rt_field_rde` `SolveAlways` fallback; general branch becomes
