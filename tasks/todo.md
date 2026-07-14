@@ -44,11 +44,17 @@ solver `rde_tower(f, g, RdeCtx*)` solving `D_tower[y] + f y = g` over `K_L`.
 - [ ] **(opt) File-split refactor** (Plan §4 Option B): extract RDE stack → `risch_rde.{c,h}`,
       thread `RtDecision*`, add to `tests/CMakeLists.txt`. Behavior-preserving commit.
 
-## Gap 2 — LimitedIntegrate first-class (§7.2)
-- [ ] `LimitedIntegrateReduce` (p.248) + §7.1 parametric solve (`LinearConstraints`,
-      `ConstantSystem`) in `src/calculus/risch_param.{c,h}`; replace the `SolveAlways`
-      approximation in `rt_limited_field_integrate`. Sharpen `RdeBoundDegreePrim` cancellation
-      test + `ParametricLogarithmicDerivative` (§7.3). Tests: Bronstein Ex 7.2.x.
+## Gap 2 — antidifferentiation / LimitedIntegrate
+- [x] **Antidifferentiation branch** (`sp.b=0`, `D h = c`): `rde_tower` integrates `c` in
+      `K_m` via `rt_field_integrate` (RDE↔integrator mutual recursion), gated on a rational
+      tower result (`rc_is_tower_rational`; a new log ⇒ decline). Hardened the identity gate
+      (`Expand` the residual numerator — `Together` doesn't expand products). Closes
+      `RischDE[0, x E^x]→(x−1)E^x`, `RischDE[0, Log[x]]→x Log[x]−x`, `∫E^(E^x)(x E^x+1)→x E^(E^x)`.
+      Tests: `test_tower_antidiff`. Leak-clean; all suites green.
+- [ ] **Full §7 `LimitedIntegrate`** (`LimitedIntegrateReduce` p.248 + §7.1 parametric solve)
+      as a first-class facility in `src/calculus/risch_param.{c,h}`, replacing the `SolveAlways`
+      approximation in `rt_limited_field_integrate`; the `b = Dz/z [+ mη]` cancellation branch;
+      `ParametricLogarithmicDerivative` (§7.3). Deferred — the integrator already approximates.
 
 ## Gap 3 — Tangent tower monomial (`RT_TAN`)
 - [ ] `RtKind += RT_TAN`; `rt_tower_build` collects Tan/Cot (special τ²+1), Tanh/Coth (τ²−1).

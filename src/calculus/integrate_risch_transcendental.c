@@ -2962,7 +2962,7 @@ static bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
  * from the top-level recursive-tower assembly point — inner recursions pass
  * NULL, which makes the residue criterion decline a partial rather than surface
  * one mid-recursion. */
-static Expr* rt_field_integrate(Expr* F, RtTower* T, long L, Expr* x, Expr** rem_out);
+Expr* rt_field_integrate(Expr* F, RtTower* T, long L, Expr* x, Expr** rem_out);
 static int   rt_limited_field_integrate(Expr* r, RtTower* T, long L, Expr* x,
                                         Expr** s_out, Expr** c_out);
 static Expr* rt_int_primitive_poly(Expr* num, Expr* den, RtTower* T, long L, Expr* x);
@@ -3377,7 +3377,7 @@ static Expr* rt_field_hyperexp_coupled(Expr* num, Expr* den, RtTower* T, long L,
 /* Integrate F (a rational function of x, t_1..t_L in tower-variable form) with
  * respect to the tower derivation, returning an antiderivative in tower-variable
  * form (owned) or NULL.  L < 0 is the rational base case C(x). */
-static Expr* rt_field_integrate(Expr* F, RtTower* T, long L, Expr* x, Expr** rem_out) {
+Expr* rt_field_integrate(Expr* F, RtTower* T, long L, Expr* x, Expr** rem_out) {
     if (rem_out) *rem_out = NULL;
     if (!F) return NULL;
     if (L < 0) {

@@ -827,6 +827,32 @@ Expr* rde_polyrischde_nocancel_field(Expr* b, Expr* c, RdeCtx* C, long n) {
  * higher-degree solution when b is a logarithmic derivative) needs LimitedIntegrate
  * (Gap 2) and is omitted: sound, since the main loop is exact by construction (each
  * pass cancels the top tau-term) and rde_tower's identity gate declines any miss. */
+/* Is e a rational function of the whole tower {x, t_0..t_m} (no NEW Log/Exp of a
+ * tower variable)?  Used to accept an antiderivative only when it is a genuine
+ * element of K_m (a new logarithm would mean the Risch DE has no rational
+ * solution). */
+static bool rc_is_tower_rational(Expr* e, RdeCtx* C) {
+    size_t nv = (size_t)C->m + 2;                   /* x, t_0..t_m */
+    Expr** vv = malloc(nv * sizeof(Expr*));
+    vv[0] = expr_copy(C->x);
+    for (long j = 0; j <= C->m; j++) vv[j + 1] = expr_copy(C->T->t[j]);
+    Expr* vlist = expr_new_function(expr_new_symbol("List"), vv, nv);
+    free(vv);
+    Expr* tog = rt_eval1("Together", expr_copy(e));
+    Expr* num = tog ? rt_eval1("Numerator", expr_copy(tog)) : NULL;
+    Expr* den = tog ? rt_eval1("Denominator", expr_copy(tog)) : NULL;
+    if (tog) expr_free(tog);
+    Expr* pqn = num ? rt_eval2("PolynomialQ", num, expr_copy(vlist)) : NULL;
+    Expr* pqd = den ? rt_eval2("PolynomialQ", den, expr_copy(vlist)) : NULL;
+    bool ok = pqn && pqd
+        && pqn->type == EXPR_SYMBOL && pqn->data.symbol.name == intern_symbol("True")
+        && pqd->type == EXPR_SYMBOL && pqd->data.symbol.name == intern_symbol("True");
+    if (pqn) expr_free(pqn);
+    if (pqd) expr_free(pqd);
+    expr_free(vlist);
+    return ok;
+}
+
 static Expr* rde_polyrischde_cancel(Expr* b, Expr* c, RdeCtx* C, long n) {
     RtKind kind = C->T->kind[C->m];
     Expr* eta = (kind == RT_EXP) ? C->T->Dcoef[C->m] : NULL;
@@ -910,10 +936,22 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
         if (rde_spde_field(a, b, c, C, n, &sp)) {
             Expr* H = NULL;
             if (rt_is_zero(sp.b)) {
-                /* D H = sp.c.  sp.c == 0 -> H = 0 (so q = beta); a nonzero sp.c is
-                 * antidifferentiation, which needs LimitedIntegrate (Gap 2) —
-                 * decline. */
+                /* D H = sp.c (Gap 2 antidifferentiation).  sp.c == 0 -> H = 0
+                 * (q = beta).  Otherwise integrate sp.c within the field K_m via
+                 * the integrator (Bronstein IntegratePrimitivePolynomial §5.8 /
+                 * IntegrateHyperexponentialPolynomial §5.9 — the mutual recursion):
+                 * a rational-in-tower antiderivative IS the polynomial solution h; a
+                 * result carrying a NEW logarithm means the Risch DE has no rational
+                 * solution -> decline. */
                 if (rt_is_zero(sp.c)) H = expr_new_integer(0);
+                else {
+                    Expr* rem = NULL;
+                    Expr* Hc = rt_field_integrate(sp.c, C->T, C->m, C->x, &rem);
+                    bool ok = Hc && (!rem || rt_is_zero(rem)) && rc_is_tower_rational(Hc, C);
+                    if (rem) expr_free(rem);
+                    if (ok) H = Hc;
+                    else if (Hc) expr_free(Hc);
+                }
             } else if (rc_deg(sp.b, C) >= 1) {
                 /* Non-cancellation (deg_tau(b) >= 1): the leading terms of D[q] and
                  * b q never cancel, for a primitive OR exponential top (delta<=1). */
@@ -946,8 +984,13 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
         Expr* resid = expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ Dy, fy, mg }, 3);
         Expr* tog = rt_eval1("Together", resid);
         Expr* rnum = tog ? rt_eval1("Numerator", tog) : NULL;
-        bool good = rnum && rt_is_zero(rnum);
-        if (rnum) expr_free(rnum);
+        /* Expand the numerator: Together clears denominators but does NOT expand
+         * products, so a genuinely-zero residual with an unexpanded factor (e.g.
+         * D_tower of a polynomial-coefficient exp term, t*(x-1)) is only reduced to
+         * 0 after Expand. */
+        Expr* rexp = rnum ? rt_eval1("Expand", rnum) : NULL;
+        bool good = rexp && rt_is_zero(rexp);
+        if (rexp) expr_free(rexp);
         if (!good) { expr_free(result); result = NULL; }
     }
     return result;

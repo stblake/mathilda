@@ -101,4 +101,10 @@ Expr* rt_coeff(Expr* e, Expr* x, long k);
 bool  rt_is_zero(Expr* e);
 Expr* rt_tower_deriv(Expr* e, RtTower* T, Expr* x);
 
+/* Field integrator entry (Bronstein mutual recursion): integrate F in K_L over the
+ * tower T.  Returns the antiderivative in tower-variable form (owned), or NULL; a
+ * non-constant-residue remainder is returned via rem_out when non-NULL.  The RDE's
+ * antidifferentiation branch (D h = c) calls this to solve for h in the field. */
+Expr* rt_field_integrate(Expr* F, RtTower* T, long L, Expr* x, Expr** rem_out);
+
 #endif /* MATHILDA_INTEGRATE_RISCH_RDE_H */

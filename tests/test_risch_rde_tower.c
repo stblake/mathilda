@@ -59,6 +59,24 @@ static void assert_rde_y(const char* f, const char* y) {
     free(s);
 }
 
+/* Risch`RischDE[f, g, x] with g given DIRECTLY (not g = D[y]+f y) must SOLVE and
+ * the solution must satisfy D[sol]+f sol == g.  Used for antidifferentiation
+ * (D h = g) where forming g = D[y] would drop the kernel that defines the field. */
+static void assert_rde_solves(const char* f, const char* g) {
+    char buf[2048];
+    snprintf(buf, sizeof(buf),
+        "With[{sol = Risch`RischDE[%s, %s, x]}, "
+        "If[Head[sol] === Risch`RischDE, $Unsolved, "
+        "Together[Expand[D[sol, x] + (%s)*sol - (%s)]]]]",
+        f, g, f, g);
+    char* s = eval_fullform(buf);
+    if (strcmp(s, "0") != 0)
+        printf("FAIL: RischDE(f=%s, g=%s) -> %s (expected solved, residual 0)\n", f, g, s);
+    ASSERT_MSG(strcmp(s, "0") == 0,
+        "RischDE(f=%s, g=%s): expected solved with residual 0, got %s", f, g, s);
+    free(s);
+}
+
 /* Risch`RischDE[f, g, x] must stay UNEVALUATED (no rational solution in scope). */
 static void assert_rde_nosol(const char* f, const char* g) {
     char buf[2048];
@@ -246,9 +264,28 @@ static void test_tower_declines(void) {
     /* Non-elementary RHS: no rational solution in the tower field. */
     assert_rde_nosol("Log[x]/x", "1/x");
     assert_rde_nosol("Log[x]/x", "Log[x]");
-    /* Gap 2 boundary: sp.b == 0, sp.c != 0 -> primitive antidifferentiation
-     * (D y = Log[x] -> x Log[x] - x) needs LimitedIntegrate; declines for now. */
-    assert_rde_nosol("0", "Log[x]");
+}
+
+/* ------------------------------------------------------------------ */
+/* Tower field — the ANTIDIFFERENTIATION branch (Gap 2): sp.b == 0, so   */
+/* D h = c, solved by integrating c within the field K_m via the         */
+/* integrator (the Bronstein RDE<->integrator mutual recursion).         */
+/* ------------------------------------------------------------------ */
+static void test_tower_antidiff(void) {
+    /* Primitive top: D h = g integrates within k[tau] (poly antiderivative).
+     * g is passed directly (it carries the Log kernel that defines the field). */
+    assert_rde_solves("0", "Log[x]");               /* x Log[x] - x */
+    assert_rde_solves("0", "Log[x]^2");
+    assert_rde_solves("0", "x Log[x]");
+    /* Exponential top: the Laurent-coefficient antiderivative, incl. a
+     * non-constant coefficient (x E^x -> (x-1) E^x — the gate-Expand case). */
+    assert_rde_solves("0", "E^x");
+    assert_rde_solves("0", "x E^x");
+    assert_rde_solves("0", "x^2 E^x");
+    assert_rde_solves("0", "E^(2 x)");
+    /* No rational (elementary-in-field) antiderivative -> decline: the integral
+     * of 1/(1+Log[x]) is ~ExpIntegralEi (non-elementary). */
+    assert_rde_nosol("0", "1/(1 + Log[x])");
 }
 
 /* ------------------------------------------------------------------ */
@@ -263,6 +300,9 @@ static void test_integrator_endtoend(void) {
     /* Exp-over-exp: the E^(E^x) Laurent coefficient RDE q'+E^x q = p is solved by
      * the literal 1b exponential tower stack. */
     assert_integrates("D[E^(E^x)/(1 + E^x), x]");
+    /* Antidifferentiation (Gap 2): the E^(E^x) i=0 Laurent coefficient integrates
+     * within the field, x E^x + 1 -> x, giving x E^(E^x). */
+    assert_integrates("E^(E^x) (x E^x + 1)");
     /* The non-elementary sibling still declines (guard against over-eager solve). */
     {
         char* s = eval_fullform("FreeQ[Integrate[E^(Log[x]^2), x], Integrate]");
@@ -285,6 +325,7 @@ int main(void) {
     TEST(test_tower_exp);
     TEST(test_tower_cancellation);
     TEST(test_tower_declines);
+    TEST(test_tower_antidiff);
     TEST(test_integrator_endtoend);
     printf("All Risch DE tower tests passed.\n");
 
