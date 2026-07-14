@@ -470,6 +470,7 @@ set(COMMON_SRC
     ../src/calculus/intrat.c
     ../src/calculus/intrischnorman.c
     ../src/calculus/integrate_risch_transcendental.c
+    ../src/calculus/integrate_risch_rde.c
     ../src/calculus/risch_field.c
     ../src/calculus/risch_canonical.c
     ../src/calculus/risch_structure.c
