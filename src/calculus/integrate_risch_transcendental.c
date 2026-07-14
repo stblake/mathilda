@@ -4167,7 +4167,16 @@ static Expr* rt_trig_frontend(Expr* f, Expr* x) {
      * correct I-laden form is kept (never a wrong or worse answer). */
     Expr* real = rt_realify(out, x, f);
     if (real) { expr_free(out); return real; }
-    return out;
+    /* Soundness guard: the exp cases are correct by construction for a genuine
+     * rational function of E^(a x) (a constant), but TrigToExp of a trig-of-a-
+     * TRANSCENDENTAL argument (e.g. Tan[Log[x]] -> x^I = E^(I Log[x])) yields
+     * complex-power kernels the single-primitive exp cases can spuriously certify
+     * (once emitting Integrate[Tan[x] Tan[Log[x]]] = 0).  Since realify's exact
+     * gate did not fire, verify the I-laden form numerically before returning it;
+     * on failure decline (never ship a wrong closed form). */
+    if (rt_realify_numverify(out, f, x)) return out;
+    expr_free(out);
+    return NULL;
 }
 
 /* True iff `e` contains, anywhere, a function node with head symbol `h`. */
