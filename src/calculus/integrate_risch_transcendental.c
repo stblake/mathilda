@@ -2741,6 +2741,8 @@ static void rt_tower_free(RtTower* T) {
     T->n = 0; T->nm = 0; T->subrules = NULL;
 }
 
+static Expr* rt_subst_kernels(Expr* e, RtTower* T);   /* fwd: tower-var substitution */
+
 /* Collect distinct x-dependent tangent-family monomials: each is (argument u, sigma)
  * with sigma = +1 for Tan/Cot (special polynomial t^2+1) and -1 for Tanh/Coth
  * (t^2-1).  Cot[u]/Coth[u] are reciprocals of the Tan[u]/Tanh[u] tower variable, so
@@ -2927,7 +2929,7 @@ static bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
      * kernel E^(marg) contributes a rule E^(marg) -> t[prim]^mmult (both the
      * Exp[] and Power[E,] spellings); mprim is remapped from an exps[] index to
      * the primitive's post-ordering tower index by matching its exponent. */
-    Expr** rules = malloc((2 * n + 2 * T->nm) * sizeof(Expr*)); size_t nr = 0;
+    Expr** rules = malloc((6 * n + 2 * T->nm) * sizeof(Expr*)); size_t nr = 0;
     for (size_t i = 0; i < n; i++) {
         char nm[32]; snprintf(nm, sizeof(nm), "rmR%zu", i);
         T->t[i] = expr_new_symbol(nm);
@@ -2935,15 +2937,35 @@ static bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
             rules[nr++] = expr_new_function(expr_new_symbol("Rule"),
                 (Expr*[]){ expr_copy(T->kernel[i]), expr_copy(T->t[i]) }, 2);
         } else if (T->kind[i] == RT_TAN) {
-            /* Tan[u]/Tanh[u] -> t ; Cot[u]/Coth[u] -> 1/t. */
-            rules[nr++] = expr_new_function(expr_new_symbol("Rule"),
-                (Expr*[]){ expr_copy(T->kernel[i]), expr_copy(T->t[i]) }, 2);
-            rules[nr++] = expr_new_function(expr_new_symbol("Rule"),
-                (Expr*[]){ expr_new_function(
-                    expr_new_symbol(T->tsg[i] > 0 ? "Cot" : "Coth"),
-                    (Expr*[]){ expr_copy(T->arg[i]) }, 1),
-                  expr_new_function(expr_new_symbol("Power"),
-                    (Expr*[]){ expr_copy(T->t[i]), expr_new_integer(-1) }, 2) }, 2);
+            /* Rationalise the whole trig family of the tangent argument to the tower
+             * variable: Tan/Tanh -> t, Cot/Coth -> 1/t, and Sin=t/rad, Cos=1/rad,
+             * Sec=rad, Csc=rad/t with rad = Sqrt[1 + sigma t^2] (sigma = T->tsg).
+             * The evaluator-canonical form Csc*Sec of (1+Tan^2)/Tan then substitutes. */
+            long sg = T->tsg[i]; Expr* u = T->arg[i]; Expr* ti = T->t[i];
+            Expr* rad = expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_new_function(expr_new_symbol("Plus"),
+                    (Expr*[]){ expr_new_integer(1), expr_new_function(expr_new_symbol("Times"),
+                        (Expr*[]){ expr_new_integer(sg), expr_new_function(expr_new_symbol("Power"),
+                            (Expr*[]){ expr_copy(ti), expr_new_integer(2) }, 2) }, 2) }, 2),
+                  expr_new_function(expr_new_symbol("Rational"),
+                    (Expr*[]){ expr_new_integer(1), expr_new_integer(2) }, 2) }, 2);
+            Expr* invt = expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_copy(ti), expr_new_integer(-1) }, 2);
+            #define RT_TRULE(HD, RHS) rules[nr++] = expr_new_function(expr_new_symbol("Rule"), \
+                (Expr*[]){ expr_new_function(expr_new_symbol(HD), (Expr*[]){ expr_copy(u) }, 1), (RHS) }, 2)
+            rules[nr++] = expr_new_function(expr_new_symbol("Rule"),   /* Tan/Tanh kernel -> t */
+                (Expr*[]){ expr_copy(T->kernel[i]), expr_copy(ti) }, 2);
+            RT_TRULE(sg > 0 ? "Cot" : "Coth", expr_copy(invt));
+            RT_TRULE(sg > 0 ? "Sin" : "Sinh", expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_copy(ti), expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_copy(rad), expr_new_integer(-1) }, 2) }, 2));
+            RT_TRULE(sg > 0 ? "Cos" : "Cosh", expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_copy(rad), expr_new_integer(-1) }, 2));
+            RT_TRULE(sg > 0 ? "Sec" : "Sech", expr_copy(rad));
+            RT_TRULE(sg > 0 ? "Csc" : "Csch", expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_copy(rad), expr_copy(invt) }, 2));
+            #undef RT_TRULE
+            expr_free(rad); expr_free(invt);
         } else {
             rules[nr++] = expr_new_function(expr_new_symbol("Rule"),
                 (Expr*[]){ expr_new_function(expr_new_symbol("Exp"),
@@ -2991,8 +3013,14 @@ static bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
             d = expr_new_function(expr_new_symbol("Times"),
                 (Expr*[]){ du, expr_new_function(expr_new_symbol("Power"),
                     (Expr*[]){ expr_copy(T->arg[i]), expr_new_integer(-1) }, 2) }, 2);
+        } else if (T->kind[i] == RT_TAN) {
+            /* Dcoef = Dt/(t^2 + sigma) = sigma * u': D[Tan[u]]=(t^2+1)u' (sigma=+1),
+             * D[Tanh[u]]=(1-t^2)u' = -(t^2-1)u' (sigma=-1). */
+            Expr* du = rt_eval2("D", expr_copy(T->arg[i]), expr_copy(x));
+            d = expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_integer(T->tsg[i]), du }, 2);
         } else {
-            d = rt_eval2("D", expr_copy(T->arg[i]), expr_copy(x));
+            d = rt_eval2("D", expr_copy(T->arg[i]), expr_copy(x));   /* RT_EXP: w' */
         }
         if (!d) { ok = false; break; }
         /* Rewrite the tangent-derivative trig squares so the tower substitution
@@ -3005,6 +3033,9 @@ static bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
         if (trig) d = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceRepeated"),
             (Expr*[]){ d, trig }, 2));                             /* adopts d, trig */
         if (!d) { ok = false; break; }
+        /* T->subrules carries the tangent-trig rationalisation rules (Csc/Sec/Sin/Cos
+         * of a tangent argument -> tower-variable form with the Sqrt radical), so the
+         * evaluator-canonicalised (1+Tan^2)/Tan = Csc*Sec still substitutes cleanly. */
         Expr* dsub = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
             (Expr*[]){ d, expr_copy(T->subrules) }, 2));           /* adopts d */
         Expr* ds = dsub ? rt_eval1("Cancel", dsub) : NULL;
@@ -3115,6 +3146,24 @@ static Expr* rt_field_lrt_logpart(Expr* Rr, Expr* den, RtTower* T, long L,
     /* Monomial (tower) derivation of the squarefree radical. */
     Expr* Dd = rt_tower_deriv(rad, T, x);
     if (!Dd) { expr_free(rad); expr_free(a); return NULL; }
+
+    /* Clear lower-field (x, t_0..t_{L-1}) denominators of a and Dd so the resultant
+     * machinery sees polynomial coefficients: scaling BOTH by the same t_L-free
+     * factor leaves the residues z = a/Dd and the log arguments gcd(a - z Dd, rad)
+     * unchanged.  This is essential when a lower monomial is NONLINEAR — a tangent
+     * t_j has Dt_j = t_j^2 + 1, so its logarithmic-derivative coefficient
+     * Dcoef = (t_j^2+1)/t_j is rational, giving a, Dd a t_j denominator. */
+    Expr* ad = rt_eval1("Denominator", rt_eval1("Together", expr_copy(a)));
+    Expr* Ddd = rt_eval1("Denominator", rt_eval1("Together", expr_copy(Dd)));
+    Expr* lcd = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ ad, Ddd }, 2));                       /* adopts ad, Ddd */
+    if (lcd && !rt_is_zero(lcd) && rt_free_of_x(lcd, t)) {
+        Expr* a2 = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ a, expr_copy(lcd) }, 2));          /* adopts a */
+        Expr* D2 = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ Dd, lcd }, 2));                    /* adopts Dd, lcd */
+        a = a2; Dd = D2;
+    } else if (lcd) expr_free(lcd);
 
     /* Gate list {x, t_0, ..., t_{L-1}}: residues must be constants of D_tower. */
     size_t ng = (size_t)L + 1;

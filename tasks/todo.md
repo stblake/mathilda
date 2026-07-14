@@ -84,10 +84,15 @@ solver `rde_tower(f, g, RdeCtx*)` solving `D_tower[y] + f y = g` over `K_L`.
       trig of a tangent arg to the tower symbol (`Sin=t/√(1+σt²)`, …); the fresh symbol stops the
       evaluator canonicalising back to `Csc·Sec`. A log-over-tangent integrand builds the correct
       tower `F=(1+t₀²)/(t₀t₁)`. Verified; non-regressing.
-- [ ] **RT_TAN full integration** (3 remaining pieces): (a) **nonlinear-lower-monomial residue
-      support** — a tangent LOWER kernel has `Dt₀=t₀²+1` (δ=2), so the Rothstein–Trager residue
-      `Res_{t}(a−z·D[den],den)` in `rt_field_ratint` no longer reduces (this is the current blocker,
-      `∫(1+Tan²)/(Tan·Log[Tan])` builds but declines); (b) the hypertangent-TOP dispatch
+- [~] **RT_TAN full integration** (piece a DONE; b, c remaining): (a) **nonlinear-lower-monomial
+      residue support** — DONE. A tangent LOWER kernel has `Dcoef = σ·u'` (§5.10) and gives a
+      RATIONAL Dcoef in `t₀`, so the Rothstein–Trager LRT in `rt_field_lrt_logpart` now clears the
+      lower-field denominator (scaling `a`, `D` by a common `t_L`-free factor leaves residues/log-args
+      invariant), and `T->subrules` carries the full trig rationalisation of the tangent argument
+      (`Sin=t/√(1+σt²)`, `Cos=1/√`, `Sec=√`, `Csc=√/t`, `Cot=1/t`) so the evaluator-canonical
+      `Csc·Sec` form of `(1+Tan²)/Tan` substitutes cleanly. Closes `∫(1+Tan²)/(Tan·Log[Tan])→
+      Log[Log[Tan[x]]]`, the repeated-pole `Log[Tan]^2` form, and the σ=−1 `Tanh` form.
+      `test_tangent_tower`; suite + corpus green; leak-clean. (b) the hypertangent-TOP dispatch
       (`IntegrateHypertangent` in `rt_field_integrate`, currently EXP-only in the else branch);
       (c) the §6.2/§6.6 tangent RDE branches (`RdeSpecialDenomTan`, `PolyRischDECancelTan` via
       `CoupledDECancelTan`). Each is a genuine algorithmic extension.

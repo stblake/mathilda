@@ -615,6 +615,18 @@ static void test_log_tower_case(void) {
                         "- 1/Log[x/Log[x]] - Log[Log[x]/x]");
 }
 
+/* ================= TANGENT TOWER (RT_TAN monomial) =================
+ * A tangent monomial t = Tan[u]/Tanh[u] nested with an independent Log/Exp kernel.
+ * The tangent is NONLINEAR (Dt = u'(t^2 + sigma)); rt_subst_kernels rationalises
+ * the circular/hyperbolic trig to the tower variable, and the residue LRT clears
+ * the tangent's rational Dcoef denominator.  A tangent LOWER kernel with a log top:
+ * Int (1+Tan^2)/(Tan Log[Tan]) = Log[Log[Tan[x]]]. */
+static void test_tangent_tower(void) {
+    assert_rm_diff_zero("(1 + Tan[x]^2)/(Tan[x] Log[Tan[x]])");       /* Log[Log[Tan[x]]] */
+    assert_rm_diff_zero("(1 + Tan[x]^2)/(Tan[x] Log[Tan[x]]^2)");     /* repeated pole -> -1/Log[Tan[x]] */
+    assert_rm_diff_zero("(1 - Tanh[x]^2)/(Tanh[x] Log[Tanh[x]])");    /* hyperbolic, sigma=-1 */
+}
+
 /* ================= NESTED EXP TOWERS + MERGED MONOMIAL =================
  * Chain of nested exponentials t_i = E^(u_i) (e.g. E^x, E^(E^x)) via a Laurent
  * ansatz over the exp tower derivation, diff-back verified.  The third case is
@@ -1020,6 +1032,7 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_multikernel_case);
     /* Nested towers + genuine recursion. */
     TEST(test_log_tower_case);
+    TEST(test_tangent_tower);
     TEST(test_exp_tower_case);
     TEST(test_recursive_tower_case);
     /* Bronstein transcendental-RDE motivating examples (SPDE + tower fixes). */
