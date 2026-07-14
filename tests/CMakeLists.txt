@@ -971,6 +971,10 @@ add_executable(risch_elementaryq_tests test_risch_elementaryq.c ${COMMON_SRC})
 target_include_directories(risch_elementaryq_tests PRIVATE ../src ../src/calculus)
 add_test(NAME risch_elementaryq_tests COMMAND risch_elementaryq_tests)
 
+add_executable(risch_rde_tower_tests test_risch_rde_tower.c ${COMMON_SRC})
+target_include_directories(risch_rde_tower_tests PRIVATE ../src ../src/calculus)
+add_test(NAME risch_rde_tower_tests COMMAND risch_rde_tower_tests)
+
 add_executable(risch_structure_tests test_risch_structure.c ${COMMON_SRC})
 target_include_directories(risch_structure_tests PRIVATE ../src ../src/calculus)
 add_test(NAME risch_structure_tests COMMAND risch_structure_tests)

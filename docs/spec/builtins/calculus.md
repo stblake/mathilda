@@ -1785,6 +1785,32 @@ elementary antiderivative, it emits the informational message
 `Integrate::nonelem` (Mathematica-style, to stderr). The return value is
 unchanged (the integral stays unevaluated); the message only explains *why*.
 
+## Risch`RischDE — the Risch differential equation (Bronstein Chapter 6)
+
+`Risch`RischDE[f, g, x]` solves the Risch differential equation `D[y] + f y == g`
+for a rational `y`, either in the base field `C(x)` or in the transcendental **tower**
+`C(x)(t_1..t_n)` inferred from the `Log`/`Exp` kernels of `f` and `g` (the recursive
+Chapter-6 stack: normal-denominator reduction → SPDE → polynomial non-cancellation
+solve, with the derivation lifted to the tower). Returns `y` (`0` when `g == 0`), or
+stays **unevaluated** when no rational solution exists. Coefficients may be Gaussian
+(`C(i)(x)`).
+
+```
+In[1]:= Risch`RischDE[1, x, x]                                   (* y' + y == x *)
+Out[1]= -1 + x
+
+In[2]:= Risch`RischDE[2 x, 1, x]                                 (* Erf: no solution *)
+Out[2]= Risch`RischDE[2 x, 1, x]
+
+In[3]:= Risch`RischDE[2 Log[x]/x, 2/x - 1/(x Log[x]^2), x]       (* tower: τ = Log[x] *)
+Out[3]= 1/Log[x]
+```
+
+The intermediate Chapter-6 boxes are exposed for direct testing:
+`Risch`SPDE[a, b, c, x, n]` (Rothstein's degree-reducing reduction, §6.4, returns
+`{b', c', m, alpha, beta}` or `$Failed`) and `Risch`PolyRischDENoCancel[b, c, x, n]`
+(the non-cancellation polynomial solve, §6.5, returns `q` or `$Failed`).
+
 ## PolynomialQuotientRemainder
 
 Single-pass companion to `PolynomialQuotient` / `PolynomialRemainder`.
