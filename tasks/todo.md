@@ -67,9 +67,21 @@ solver `rde_tower(f, g, RdeCtx*)` solving `D_tower[y] + f y = g` over `K_L`.
 - [ ] `rt_field_integrate` RT_TAN dispatch → `IntegrateHypertangent{Reduced,Polynomial}` at
       every level. Tests: nested `Tan[Log[x]]/x`, `1/(a+b Sin[x])`.
 
+## Gap 3 — Tangent tower
+- [x] **Nested tangents over C(x)** (commit f8d89bf): `Tan[Log[x]]`, `Tanh[Log[x]]`, etc. via
+      relaxed `rt_kernel_eta` (eta-kernel-free = genuine over-C(x)) + numeric diff-back guard.
+      Plus a soundness fix: trig-frontend false-zero `Tan[x]·Tan[Log[x]]→0` (commit 18ae5a4).
+- [ ] **Full `RT_TAN` tower monomial** — tangent MIXED with an independent Log/Exp of x
+      (`Tan[x]·Log[x]`, `Log[Tan[x]]`) + the §6.2/§6.6 tangent RDE branches (`RdeSpecialDenomTan`,
+      `PolyRischDECancelTan`) wiring `CoupledDECancelTan`. Large structural build; deferred.
+
 ## Gap 4 — Retire flat-ansatz cases + remove RT_MAXK
-- [ ] After Gaps 1(+3) subsume them: delete/demote `rt_log_tower_case` / `rt_exp_tower_case`,
-      remove `nl≤4` caps + `RT_MAXK` (dynamic `RtTower` arrays). Full-suite diff.
+- [~] **BLOCKED (experiment done).** Disabling `rt_log_tower_case`/`rt_exp_tower_case` regresses
+      the primitive-polynomial class `Log[Log[x]]/(x Log[x]) → Log[Log[x]]²/2`,
+      `Log[Log[x]]^5/(x Log[x])`: the recursive path can't fold back the new logarithm (needs
+      §5.8 `IntegratePrimitivePolynomial` / `LimitedIntegrate`, the same §7 residual). The flat
+      cases' SolveAlways ansatz finds it. **Prerequisite: full `LimitedIntegrate`.**
+- [ ] `RT_MAXK`=5 depth-cap removal (dynamic `RtTower` arrays) — low value (depth-5 already deep).
 
 ## Gap 5 — §5.11 scope boundary (document-only)
 - [ ] Note `IntegrateNonLinearNoSpecial` / nonelementary-primitive as out-of-scope-by-

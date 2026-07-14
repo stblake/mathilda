@@ -4619,6 +4619,13 @@ static Expr* rt_transcendental_case(Expr* f, Expr* x) {
     if (r) return r;
     r = rt_expsum_case(f, x);   /* direct multi-kernel exponential sums */
     if (r) return r;
+    /* The flat-tower cases run before the recursive one because they close a
+     * PRIMITIVE-POLYNOMIAL class the recursive path still declines — e.g.
+     * Log[Log[x]]/(x Log[x]) -> Log[Log[x]]^2/2 needs the new-logarithm fold-back
+     * (§5.8 IntegratePrimitivePolynomial / LimitedIntegrate) that the deterministic
+     * recursion does not yet do; their SolveAlways ansatz finds it directly.  So
+     * they are NOT redundant with rt_recursive_tower_case and cannot be retired
+     * (Gap 4) until the recursive primitive-polynomial path gains LimitedIntegrate. */
     r = rt_log_tower_case(f, x);   /* nested logarithmic tower (depth > 1) */
     if (r) return r;
     r = rt_exp_tower_case(f, x);    /* nested exponential tower (depth > 1) */
