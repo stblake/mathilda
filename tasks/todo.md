@@ -54,10 +54,16 @@ solver `rde_tower(f, g, RdeCtx*)` solving `D_tower[y] + f y = g` over `K_L`.
       (`Expand` the residual numerator — `Together` doesn't expand products). Closes
       `RischDE[0, x E^x]→(x−1)E^x`, `RischDE[0, Log[x]]→x Log[x]−x`, `∫E^(E^x)(x E^x+1)→x E^(E^x)`.
       Tests: `test_tower_antidiff`. Leak-clean; all suites green.
-- [ ] **Full §7 `LimitedIntegrate`** (`LimitedIntegrateReduce` p.248 + §7.1 parametric solve)
-      as a first-class facility in `src/calculus/risch_param.{c,h}`, replacing the `SolveAlways`
-      approximation in `rt_limited_field_integrate`; the `b = Dz/z [+ mη]` cancellation branch;
-      `ParametricLogarithmicDerivative` (§7.3). Deferred — the integrator already approximates.
+- [x] **LimitedIntegrate m=1 (§7.2) — the IntegratePrimitivePolynomial fold-back.**
+      `rt_limited_field_integrate` now recognises the new logarithm `t_L=Log[u_L]` in the
+      tower-variable form `rt_field_integrate` returns it (was: kernel-form subrule mismatch →
+      silent decline). Closes `Log[Log[x]]/(x Log[x])→Log[Log[x]]²/2` etc. via the recursive path.
+- [x] **Gap 4** — `rt_recursive_tower_case` is now the PRIMARY tower path (subsumes the flat
+      cases, validated on suite + corpus); flat cases kept as fallback (carry `rt_tower_solve`
+      Cherry substrate). `RT_MAXK` removal deferred (low value).
+- [ ] **Full §7 `LimitedIntegrate`** (general m, `LimitedIntegrateReduce` p.248 + §7.1 parametric
+      solve) + `b=Dz/z[+mη]` cancellation branch + `ParametricLogarithmicDerivative` (§7.3).
+      Deferred — the m=1 case above covers the primitive recursion; the rest is Cherry-adjacent.
 
 ## Gap 3 — Tangent tower monomial (`RT_TAN`)
 - [ ] `RtKind += RT_TAN`; `rt_tower_build` collects Tan/Cot (special τ²+1), Tanh/Coth (τ²−1).

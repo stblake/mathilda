@@ -2945,6 +2945,7 @@ static int   rt_limited_field_integrate(Expr* r, RtTower* T, long L, Expr* x,
                                         Expr** s_out, Expr** c_out);
 static Expr* rt_int_primitive_poly(Expr* num, Expr* den, RtTower* T, long L, Expr* x);
 static Expr* rt_int_hyperexp_poly(Expr* num, Expr* den, RtTower* T, long L, Expr* x);
+static Expr* rt_subst_kernels(Expr* e, RtTower* T);
 static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x);
 static Expr* rt_field_ratint(Expr* num, Expr* den, RtTower* T, long L, Expr* x, Expr** rem_out);
 static Expr* rt_field_hyperexp_coupled(Expr* num, Expr* den, RtTower* T, long L, Expr* x,
@@ -3507,6 +3508,22 @@ static int rt_limited_field_integrate(Expr* r, RtTower* T, long L, Expr* x,
     *s_out = NULL; *c_out = NULL;
     Expr* R = rt_field_integrate(r, T, L - 1, x, NULL);  /* lower field: no partial */
     if (!R) return -1;
+    /* LimitedIntegrate (§7.2, m=1) recognition of the single new logarithm.
+     * rt_field_integrate returns ∫r in TOWER-VARIABLE form, so a new logarithm it
+     * introduces appears as Log[<u_L in t-vars>] — NOT the kernel-form Log[u_L] that
+     * T->subrules maps to t_L.  When t_L is logarithmic, fold that tower-variable
+     * new-log form to t_L first, so the primitive-polynomial fold-back captures it
+     * as the c·t_L term (closes e.g. ∫ Log[Log[x]]/(x Log[x]) = Log[Log[x]]^2/2). */
+    if (T->kind[L] == RT_LOG) {
+        Expr* uL_tv = rt_subst_kernels(T->arg[L], T);          /* u_L in t-vars */
+        Expr* newlog = expr_new_function(expr_new_symbol("Log"), (Expr*[]){ uL_tv }, 1);
+        Expr* nlrule = expr_new_function(expr_new_symbol("Rule"),
+            (Expr*[]){ newlog, expr_copy(T->t[L]) }, 2);
+        Expr* nlist = expr_new_function(expr_new_symbol("List"), (Expr*[]){ nlrule }, 1);
+        R = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+            (Expr*[]){ R, nlist }, 2));                        /* adopts R, nlist */
+        if (!R) return -1;
+    }
     Expr* Rs = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
         (Expr*[]){ R, expr_copy(T->subrules) }, 2));               /* adopts R */
     if (!Rs) return -1;
@@ -4626,11 +4643,18 @@ static Expr* rt_transcendental_case(Expr* f, Expr* x) {
      * recursion does not yet do; their SolveAlways ansatz finds it directly.  So
      * they are NOT redundant with rt_recursive_tower_case and cannot be retired
      * (Gap 4) until the recursive primitive-polynomial path gains LimitedIntegrate. */
-    r = rt_log_tower_case(f, x);   /* nested logarithmic tower (depth > 1) */
-    if (r) return r;
-    r = rt_exp_tower_case(f, x);    /* nested exponential tower (depth > 1) */
-    if (r) return r;
+    /* Gap 4: the genuine one-extension recursion is now the PRIMARY tower path — with
+     * the §5.8 LimitedIntegrate new-logarithm fold-back (rt_limited_field_integrate)
+     * it subsumes the primitive-polynomial class the flat SolveAlways ansätze were
+     * kept for (Log[Log[x]]/(x Log[x]) -> Log[Log[x]]^2/2, ...).  The flat cases
+     * (rt_log_tower_case / rt_exp_tower_case) remain only as a FALLBACK for anything
+     * the deterministic recursion declines (they also carry the rt_tower_solve Cherry
+     * P5 substrate). */
     r = rt_recursive_tower_case(f, x);   /* one-extension recursion (mixed / rational coeff) */
+    if (r) return r;
+    r = rt_log_tower_case(f, x);   /* flat ansatz fallback (nested log tower) */
+    if (r) return r;
+    r = rt_exp_tower_case(f, x);    /* flat ansatz fallback (nested exp tower) */
     if (r) return r;
     /* Real tangent monomial (Bronstein §5.10): integrate rational functions of a
      * single Tan[u] directly and real, retiring the TrigToExp route below for

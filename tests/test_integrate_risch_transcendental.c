@@ -594,7 +594,8 @@ static void test_multikernel_case(void) {
  * rationality gate makes non-rational inner kernels decline (see declines). */
 static void test_log_tower_case(void) {
     assert_rm_diff_zero("1/(x Log[x] Log[Log[x]])");
-    assert_rm_diff_zero("Log[Log[x]]/(x Log[x])");
+    assert_rm_diff_zero("Log[Log[x]]/(x Log[x])");   /* LimitedIntegrate fold-back -> Log[Log[x]]^2/2 */
+    assert_rm_diff_zero("Log[Log[x]]^5/(x Log[x])");  /* higher-degree primitive polynomial */
     assert_rm_diff_zero("Log[Log[x]]/x");
     assert_rm_diff_zero("1/(x Log[x] Log[Log[x]] Log[Log[Log[x]]])");
     assert_rm_diff_zero("Log[x] + Log[x + 1]");
