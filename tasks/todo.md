@@ -31,13 +31,16 @@ solver `rde_tower(f, g, RdeCtx*)` solving `D_tower[y] + f y = g` over `K_L`.
       Closes const-coeff RDEs (`[1,1/x+Log[x]]→Log[x]`, `[2,E^(-x)]→E^(-x)`), cancel→nocancel
       chains (`1/(1+E^(E^x))`), integrator `∫D[E^x/(1+Log[x])]`. All suites green; leak-clean.
       Deferred to Gap 2: the `b=Dz/z[+mη]` antidifferentiation branch (LimitedIntegrate).
-- [ ] **1d** — `rde_weak_normalizer_field` + full `rde_normal_denominator_field` over `k(τ)`
-      (spurious-residue strip). Tests: positive-integer-residue tower integrands.
+- [~] **1d** — `rde_weak_normalizer_field`: **DEFERRED — no reachable test case.** Every
+      constructible positive-integer-residue tower RDE already solves without it
+      (`RdeNormalDenominator` h + SPDE + cancel find them; exact-identity gate keeps it
+      sound). Theoretically-complete-but-pre-empted, like the ansatz resonance code. Revisit
+      only if a real integrand is found that needs it.
 - [ ] **1e** — Delete the `rt_field_rde` `SolveAlways` fallback; general branch becomes
-      `rde_tower(i·Dcoef_L, p, ctx@L-1)`. Verify full suite parity + no regressions (A/B any
-      pre-existing failures at HEAD).
+      `rde_tower(i·Dcoef_L, p, ctx@L-1)`. **BLOCKED on Gap 2** — the ansatz still covers the
+      antidifferentiation branches (`sp.b=0`/`b=Dz/z`) that rde_tower declines. Do after Gap 2.
 - [ ] **1f** — Decision wiring: every `rde_tower` NULL → `rt_dec_nonelem`; extend
-      `ElementaryIntegralQ` + `strict_unevaluated` guards for the newly-decided class.
+      `ElementaryIntegralQ` + `strict_unevaluated` guards for the newly-decided class. (After 1e.)
 - [ ] **(opt) File-split refactor** (Plan §4 Option B): extract RDE stack → `risch_rde.{c,h}`,
       thread `RtDecision*`, add to `tests/CMakeLists.txt`. Behavior-preserving commit.
 
