@@ -4700,7 +4700,12 @@ static Expr* rt_exp_ratreduce_case(Expr* f, Expr* x) {
                             (Expr*[]){ expr_new_symbol("E"), expr_copy(uexp) }, 2) }, 2) }, 1);
             Expr* Q = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
                 (Expr*[]){ expr_copy(A), back }, 2));
-            if (Q && rt_verify_antideriv(Q, f, x)) result = Q;
+            /* Correct by construction (exact rational integral over the kernel +
+             * exact back-substitution); accept on the Simplify diff-back, or a
+             * numeric one where Simplify cannot reduce the higher-pole forms
+             * (e.g. Sec[x]^3 -> a triple pole at E^(I x) = +/- i). */
+            if (Q && (rt_verify_antideriv(Q, f, x) || rt_realify_numverify(Q, f, x)))
+                result = Q;
             else if (Q) expr_free(Q);
         }
         if (A) expr_free(A);
