@@ -63,6 +63,14 @@ Partial derivative.
 - Distributes over `Equal`: `D[a == b, x]` becomes
   `Equal[D[a, x], D[b, x]]`. The evaluator folds `Equal[0, 0]` to
   `True`, matching Mathematica.
+- **Fundamental theorem of calculus**: `D[Integrate[f, x], x] -> f` for
+  the indefinite form whose integration variable matches the
+  differentiation variable. A definite/iterated integral
+  (`Integrate[f, {x, a, b}]`) or a different integration variable is not
+  the FTC and is left to the generic rules (differentiation under the
+  integral sign is not performed). This lets a differentiated
+  antiderivative reduce even when the integral was returned partially
+  unevaluated (see `Integrate`'s partial log part).
 - Differentiates `Piecewise` clause-wise:
   `D[Piecewise[{{v1, c1}, ...}, d], x]` becomes
   `Piecewise[{{D[v1, x], c1}, ...}, D[d, x]]` — the value expressions
@@ -1711,6 +1719,20 @@ algebraic residues.
   `tau -> kernel`), or unevaluated when the integral is not elementary in
   this form (a residue depending on a gate variable) / a factor exceeds
   `LogToReal`'s bounded scope.
+- **Partial log part (Bronstein Thm 5.6.1, the κ_D split).** When the
+  residue resultant mixes constant- and non-constant-residue factors
+  (`r = r_s · r_n`), the elementary constant-residue logs from `r_s` are
+  still returned; the non-constant part `r_n` is reported as an
+  unintegrated rational-function remainder. In that case the result is
+  `Integrate`PartialLogPart[logs, remainder]` (an inert head), and
+  `Integrate`RischTranscendental` surfaces it as
+  `logs + Integrate[remainder, x]` — e.g.
+  `Integrate[1/(x Log[x]) + 1/(x (Log[x]^2 - x)), x]` returns
+  `Log[Log[x]] + Integrate[1/(x (Log[x]^2 - x)), x]` instead of declining
+  the whole integral. Currently surfaced for the **primitive (logarithmic)**
+  monomial; the hyperexponential coupled path still declines a mixed
+  resultant (its §5.9 Laurent reconciliation cannot carry a proper simple
+  remainder).
 
 ```mathematica
 (* 1/(x (Log[x]^2+1)): tau = Log[x], D(d) = (1+t)^2 *)

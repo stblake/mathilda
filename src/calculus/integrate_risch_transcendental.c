@@ -26,6 +26,7 @@
 #include "flint_bridge.h"
 #include "risch_field.h"
 #include "risch_hermite.h"
+#include "risch_canonical.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -1735,7 +1736,35 @@ static Expr* rt_frac_lrt(Expr* f, Expr* x, Expr* u, bool is_log) {
                         && logpart->data.function.head->type == EXPR_SYMBOL
                         && logpart->data.function.head->data.symbol.name
                              == intern_symbol("Integrate`TranscendentalLogPart"));
-                if (!declined) {
+                /* Partial log part (Bronstein Thm 5.6.1): the residue resultant
+                 * mixed constant and non-constant residues.  Surface the
+                 * elementary constant-residue logs plus an unevaluated
+                 * Integrate[remainder, x] for the non-constant part.  The FTC
+                 * rule D[Integrate[f,x],x] = f makes rt_verify_antideriv close
+                 * the diff-back on the assembled partial form. */
+                bool partial = logpart && logpart->type == EXPR_FUNCTION
+                    && logpart->data.function.head->type == EXPR_SYMBOL
+                    && logpart->data.function.head->data.symbol.name
+                         == intern_symbol("Integrate`PartialLogPart")
+                    && logpart->data.function.arg_count == 2;
+                if (partial) {
+                    Expr* krule = expr_new_function(expr_new_symbol("List"),
+                        (Expr*[]){ expr_new_function(expr_new_symbol("Rule"),
+                            (Expr*[]){ expr_copy(tsym), expr_copy(kernel_back) }, 2) }, 1);
+                    Expr* logs_k = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                        (Expr*[]){ expr_copy(logpart->data.function.args[0]), expr_copy(krule) }, 2));
+                    Expr* rem_k = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                        (Expr*[]){ expr_copy(logpart->data.function.args[1]), krule }, 2));
+                    Expr* Q = (logs_k && rem_k) ? rt_eval_own(expr_new_function(
+                        expr_new_symbol("Plus"),
+                        (Expr*[]){ logs_k,
+                            expr_new_function(expr_new_symbol("Integrate"),
+                                (Expr*[]){ rem_k, expr_copy(x) }, 2) }, 2)) : NULL;
+                    if (!Q) { if (logs_k) expr_free(logs_k); if (rem_k) expr_free(rem_k); }
+                    if (Q && rt_verify_antideriv(Q, f, x)) result = Q;
+                    else if (Q) expr_free(Q);
+                    expr_free(logpart);
+                } else if (!declined) {
                     /* Substitute t -> kernel(x) and diff-back verify. */
                     Expr* Q = rt_eval_own(expr_new_function(
                         expr_new_symbol("ReplaceAll"),
@@ -3327,14 +3356,19 @@ static bool rt_tower_build(Expr* f, Expr* x, RtTower* T) {
     return ok;
 }
 
-/* Mutually recursive field-integration primitives (forward declarations). */
-static Expr* rt_field_integrate(Expr* F, RtTower* T, long L, Expr* x);
+/* Mutually recursive field-integration primitives (forward declarations).
+ * `rem_out` (when non-NULL) receives the unintegrated non-constant-residue
+ * remainder of a partial log part (Bronstein Thm 5.6.1); it is threaded only
+ * from the top-level recursive-tower assembly point — inner recursions pass
+ * NULL, which makes the residue criterion decline a partial rather than surface
+ * one mid-recursion. */
+static Expr* rt_field_integrate(Expr* F, RtTower* T, long L, Expr* x, Expr** rem_out);
 static int   rt_limited_field_integrate(Expr* r, RtTower* T, long L, Expr* x,
                                         Expr** s_out, Expr** c_out);
 static Expr* rt_int_primitive_poly(Expr* num, Expr* den, RtTower* T, long L, Expr* x);
 static Expr* rt_int_hyperexp_poly(Expr* num, Expr* den, RtTower* T, long L, Expr* x);
 static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x);
-static Expr* rt_field_ratint(Expr* num, Expr* den, RtTower* T, long L, Expr* x);
+static Expr* rt_field_ratint(Expr* num, Expr* den, RtTower* T, long L, Expr* x, Expr** rem_out);
 static Expr* rt_field_hyperexp_coupled(Expr* num, Expr* den, RtTower* T, long L, Expr* x);
 
 /* Tower derivation D_tower[e] = D[e,x] + sum_i Dt_i D[e,t_i], with Dt_i =
@@ -3378,7 +3412,8 @@ static Expr* rt_tower_deriv(Expr* e, RtTower* T, Expr* x) {
  * verifies, so an incomplete reduction (e.g. an exponential Laurent part not
  * captured here) declines rather than shipping a wrong form. */
 static Expr* rt_field_lrt_logpart(Expr* Rr, Expr* den, RtTower* T, long L,
-                                  Expr* x) {
+                                  Expr* x, Expr** rem_out) {
+    if (rem_out) *rem_out = NULL;
     Expr* t = T->t[L];
     long dn = rt_degree(Rr, t), dd = rt_degree(den, t);
     if (dn < 0 || dd <= 0 || dn >= dd) return NULL;   /* proper, den depends on t */
@@ -3424,6 +3459,22 @@ static Expr* rt_field_lrt_logpart(Expr* Rr, Expr* den, RtTower* T, long L,
         expr_free(logpart);
         return NULL;
     }
+    /* Partial log part (Bronstein Thm 5.6.1): the builtin returned
+     * Integrate`PartialLogPart[logs, remainder] — the residue resultant mixed
+     * constant and non-constant residues.  Only a caller that can carry the
+     * remainder (rem_out != NULL) may accept it; otherwise decline (the
+     * exponential coupled path cannot absorb a proper simple remainder). */
+    if (logpart && logpart->type == EXPR_FUNCTION
+        && logpart->data.function.head->type == EXPR_SYMBOL
+        && logpart->data.function.head->data.symbol.name
+             == intern_symbol("Integrate`PartialLogPart")
+        && logpart->data.function.arg_count == 2) {
+        if (!rem_out) { expr_free(logpart); return NULL; }
+        Expr* logs = expr_copy(logpart->data.function.args[0]);
+        *rem_out = expr_copy(logpart->data.function.args[1]);
+        expr_free(logpart);
+        return logs;   /* tower-variable elementary logs; remainder via rem_out */
+    }
     return logpart;   /* tower-variable form (in terms of the t_L symbol) */
 }
 
@@ -3461,6 +3512,25 @@ static Expr* rt_build_deriv_rules(RtTower* T, Expr* x) {
     return r;
 }
 
+/* Bronstein canonical representation (§3.5) at tower level L: split
+ * F = f_p + f_s + f_n into its polynomial part f_p in t = t_L, the special part
+ * f_s = b/d_s (special denominator — poles fixed by the derivation, e.g. t^k for
+ * an exponential, t^2+1 for a hypertangent), and the normal part f_n = c/d_n
+ * (proper, denominator coprime to the special part).  Reuses the tested
+ * differential-field C API (risch_canonical_representation) over the tower's
+ * monomial derivation.  Writes owned *f_p, *f_s, *f_n; returns false (leaving
+ * them untouched) only if the derivation rules are malformed. */
+static bool rt_canonical_split(Expr* F, RtTower* T, long L, Expr* x,
+                               Expr** f_p, Expr** f_s, Expr** f_n) {
+    Expr* rules = rt_build_deriv_rules(T, x);
+    RischDeriv d;
+    if (!risch_deriv_from_rules(rules, &d)) { expr_free(rules); return false; }
+    risch_canonical_representation(F, T->t[L], &d, f_p, f_s, f_n);
+    risch_deriv_free(&d);
+    expr_free(rules);
+    return true;
+}
+
 /* Literal Hermite reduction of the proper part Rr/den in t = t_L (Bronstein
  * §5.3) — the exact algorithm, with no undetermined-coefficient ansatz.  For a
  * primitive (log) monomial t_L is normal and Rr/den is proper, so the reduced
@@ -3469,7 +3539,9 @@ static Expr* rt_build_deriv_rules(RtTower* T, Expr* x) {
  * The literal reduction handles arbitrary rational K_{L-1} = C(x, t_0..t_{L-1})
  * numerator coefficients.  Returns g + logpart, self-verified by a tower
  * diff-back, or NULL when there is no elementary integral. */
-static Expr* rt_field_ratint_hermite(Expr* num, Expr* den, RtTower* T, long L, Expr* x) {
+static Expr* rt_field_ratint_hermite(Expr* num, Expr* den, RtTower* T, long L, Expr* x,
+                                     Expr** rem_out) {
+    if (rem_out) *rem_out = NULL;
     Expr* t = T->t[L];
     Expr* f = rt_eval1("Cancel", rt_eval1("Together",
         expr_new_function(expr_new_symbol("Times"),
@@ -3490,12 +3562,14 @@ static Expr* rt_field_ratint_hermite(Expr* num, Expr* den, RtTower* T, long L, E
     expr_free(r);
 
     Expr* logpart = NULL;
+    Expr* rem_tower = NULL;   /* partial log part: unintegrated r_n remainder */
     if (!rt_is_zero(h)) {
         /* h is simple (squarefree normal denominator): its integral is the
-         * residue-criterion / Rothstein-Trager log part. */
+         * residue-criterion / Rothstein-Trager log part.  With a partial log
+         * part (Thm 5.6.1) it returns the constant-residue logs plus rem_tower. */
         Expr* hn = rt_eval1("Numerator", rt_eval1("Together", expr_copy(h)));
         Expr* hd = rt_eval1("Denominator", rt_eval1("Together", expr_copy(h)));
-        logpart = (hn && hd) ? rt_field_lrt_logpart(hn, hd, T, L, x) : NULL;
+        logpart = (hn && hd) ? rt_field_lrt_logpart(hn, hd, T, L, x, rem_out ? &rem_tower : NULL) : NULL;
         if (hn) expr_free(hn);
         if (hd) expr_free(hd);
         if (!logpart) { expr_free(g); expr_free(h); return NULL; }  /* not elementary */
@@ -3507,31 +3581,41 @@ static Expr* rt_field_ratint_hermite(Expr* num, Expr* den, RtTower* T, long L, E
               (Expr*[]){ g, logpart }, 2))
         : g;
 
-    /* Self-verify: D_tower[result] == num/den (correct by construction, but a
-     * cheap guard makes the wiring bulletproof — a mismatch declines rather than
-     * shipping a wrong form up to the top-level diff-back). */
+    /* Self-verify the (possibly partial) identity D_tower[result] == num/den −
+     * rem_tower.  Exact and decidable in the tower field; identical to the full
+     * check when rem_tower is NULL.  A mismatch declines rather than shipping a
+     * wrong form. */
     Expr* Dres = rt_tower_deriv(result, T, x);
     Expr* tgt = expr_new_function(expr_new_symbol("Times"),
         (Expr*[]){ expr_copy(num), expr_new_function(expr_new_symbol("Power"),
             (Expr*[]){ expr_copy(den), expr_new_integer(-1) }, 2) }, 2);
-    Expr* chk = rt_eval1("Together", expr_new_function(expr_new_symbol("Plus"),
+    Expr* diff = expr_new_function(expr_new_symbol("Plus"),
         (Expr*[]){ Dres, expr_new_function(expr_new_symbol("Times"),
-            (Expr*[]){ expr_new_integer(-1), tgt }, 2) }, 2));
+            (Expr*[]){ expr_new_integer(-1), tgt }, 2) }, 2);
+    if (rem_tower)   /* D[result] − num/den + rem_tower == 0 */
+        diff = expr_new_function(expr_new_symbol("Plus"),
+            (Expr*[]){ diff, expr_copy(rem_tower) }, 2);
+    Expr* chk = rt_eval1("Together", diff);
     bool good = chk && rt_is_zero(chk);
     if (chk) expr_free(chk);
-    if (!good) { expr_free(result); return NULL; }
+    if (!good) { expr_free(result); if (rem_tower) expr_free(rem_tower); return NULL; }
+    if (rem_out) *rem_out = rem_tower;
+    else if (rem_tower) expr_free(rem_tower);
     return result;
 }
 
-static Expr* rt_field_ratint(Expr* num, Expr* den, RtTower* T, long L, Expr* x) {
+static Expr* rt_field_ratint(Expr* num, Expr* den, RtTower* T, long L, Expr* x,
+                             Expr** rem_out) {
     /* The proper rational part in t = t_L, integrated by the LITERAL Bronstein
      * pipeline: Hermite reduction (Sect. 5.3) peels the repeated normal poles
      * into an exact derivative D_tower[g], leaving a simple part h whose integral
      * is the residue-criterion / Lazard-Rioboo-Trager log part (Sect. 5.6).  This
      * is the exact decision procedure; the former bounded undetermined-
      * coefficient ansatz has been removed.  Returns g + logpart (self-verified by
-     * a tower diff-back), or NULL when there is no elementary integral. */
-    return rt_field_ratint_hermite(num, den, T, L, x);
+     * a tower diff-back), or NULL when there is no elementary integral.  A mixed
+     * residue resultant returns the constant-residue logs and the r_n remainder
+     * via rem_out (Thm 5.6.1) when rem_out != NULL. */
+    return rt_field_ratint_hermite(num, den, T, L, x, rem_out);
 }
 
 /* Coupled hyperexponential proper part (exponential top level t = t_L = E^(w_L)),
@@ -3582,7 +3666,10 @@ static Expr* rt_field_hyperexp_hermite(Expr* num, Expr* den, RtTower* T, long L,
     if (!rt_is_zero(h)) {
         Expr* hn = rt_eval1("Numerator", rt_eval1("Together", expr_copy(h)));
         Expr* hd = rt_eval1("Denominator", rt_eval1("Together", expr_copy(h)));
-        Llog = (hn && hd) ? rt_field_lrt_logpart(hn, hd, T, L, x) : NULL;
+        /* Refuse a partial log part (NULL rem): the exponential §5.9 Laurent
+         * reconciliation cannot absorb a proper simple remainder, so a mixed
+         * residue resultant declines here exactly as before. */
+        Llog = (hn && hd) ? rt_field_lrt_logpart(hn, hd, T, L, x, NULL) : NULL;
         if (hn) expr_free(hn);
         if (hd) expr_free(hd);
         if (!Llog) { expr_free(g); expr_free(h); expr_free(r); return NULL; }  /* non-elementary */
@@ -3641,7 +3728,8 @@ static Expr* rt_field_hyperexp_coupled(Expr* num, Expr* den, RtTower* T, long L,
 /* Integrate F (a rational function of x, t_1..t_L in tower-variable form) with
  * respect to the tower derivation, returning an antiderivative in tower-variable
  * form (owned) or NULL.  L < 0 is the rational base case C(x). */
-static Expr* rt_field_integrate(Expr* F, RtTower* T, long L, Expr* x) {
+static Expr* rt_field_integrate(Expr* F, RtTower* T, long L, Expr* x, Expr** rem_out) {
+    if (rem_out) *rem_out = NULL;
     if (!F) return NULL;
     if (L < 0) {
         Expr* r = rt_eval_call("Integrate`BronsteinRational",
@@ -3650,7 +3738,6 @@ static Expr* rt_field_integrate(Expr* F, RtTower* T, long L, Expr* x) {
         if (rt_head_is(r, "Integrate`BronsteinRational")) { expr_free(r); return NULL; }
         return r;
     }
-    Expr* t = T->t[L];
     Expr* Fg = rt_eval1("Together", expr_copy(F));
     if (!Fg) return NULL;
     Expr* num = rt_eval1("Numerator", expr_copy(Fg));
@@ -3658,22 +3745,31 @@ static Expr* rt_field_integrate(Expr* F, RtTower* T, long L, Expr* x) {
     Expr* result = NULL;
     if (num && den) {
         if (T->kind[L] == RT_LOG) {
-            if (rt_free_of_x(den, t)) {
-                /* Pure polynomial in t: primitive-polynomial recursion. */
-                result = rt_int_primitive_poly(num, den, T, L, x);
-            } else {
-                /* Split the polynomial part (recursion) from the proper rational
-                 * part in t (Hermite reduction + Rothstein-Trager log part). */
-                Expr* Pp = rt_eval_call("PolynomialQuotient",
-                    (Expr*[]){ expr_copy(num), expr_copy(den), expr_copy(t) }, 3);
-                Expr* Rr = rt_eval_call("PolynomialRemainder",
-                    (Expr*[]){ expr_copy(num), expr_copy(den), expr_copy(t) }, 3);
-                if (Pp && Rr) {
+            /* Bronstein canonical representation (§3.5): F = f_p + f_s + f_n over
+             * the primitive (log) monomial t_L.  A primitive monomial has no
+             * non-trivial special polynomial (Dt ∈ k ⇒ every special factor is a
+             * unit), so f_s ≡ 0; integrate the polynomial part f_p by the
+             * primitive-polynomial recursion (§5.8) and the normal proper part
+             * f_n by Hermite reduction + the Rothstein-Trager log part
+             * (§5.3 + §5.6).  This unifies the former ad-hoc PolynomialQuotient/
+             * Remainder denominator split (poly-quotient = f_p, remainder/den =
+             * f_n for a primitive) behind the canonical decomposition. */
+            Expr* f_p = NULL; Expr* f_s = NULL; Expr* f_n = NULL;
+            if (rt_canonical_split(Fg, T, L, x, &f_p, &f_s, &f_n)) {
+                if (rt_is_zero(f_s)) {   /* primitive: special part must vanish */
                     Expr* one = expr_new_integer(1);
-                    Expr* poly_int = rt_int_primitive_poly(Pp, one, T, L, x);
+                    Expr* poly_int = rt_int_primitive_poly(f_p, one, T, L, x);
                     expr_free(one);
-                    Expr* prop_int = rt_is_zero(Rr) ? expr_new_integer(0)
-                                                    : rt_field_ratint(Rr, den, T, L, x);
+                    Expr* prop_int;
+                    if (rt_is_zero(f_n)) {
+                        prop_int = expr_new_integer(0);
+                    } else {
+                        Expr* nn = rt_eval1("Numerator", expr_copy(f_n));
+                        Expr* dd = rt_eval1("Denominator", expr_copy(f_n));
+                        prop_int = (nn && dd) ? rt_field_ratint(nn, dd, T, L, x, rem_out) : NULL;
+                        if (nn) expr_free(nn);
+                        if (dd) expr_free(dd);
+                    }
                     if (poly_int && prop_int)
                         result = rt_eval_own(expr_new_function(expr_new_symbol("Plus"),
                             (Expr*[]){ poly_int, prop_int }, 2));
@@ -3682,13 +3778,18 @@ static Expr* rt_field_integrate(Expr* F, RtTower* T, long L, Expr* x) {
                         if (prop_int) expr_free(prop_int);
                     }
                 }
-                if (Pp) expr_free(Pp);
-                if (Rr) expr_free(Rr);
+                expr_free(f_p); expr_free(f_s); expr_free(f_n);
             }
         } else {
             /* Exponential top: the pure-Laurent recursion first (genuine RDE,
              * rational lower-field coefficients); if it declines because a proper
-             * part is present, the coupled hyperexponential ansatz. */
+             * part is present, the coupled hyperexponential pipeline.  The latter
+             * (rt_field_hyperexp_hermite) already performs the canonical split
+             * implicitly: its HermiteReduce -> (g, h, r) yields the f_n-derivative
+             * part g, the simple normal part h (= f_n), and the reduced Laurent
+             * polynomial r (= f_p + f_s, the special part living at t = 0), which
+             * it must keep COUPLED through the §5.9 residue reconciliation — so an
+             * independent f_p/f_s/f_n split is deliberately not applied here. */
             result = rt_int_hyperexp_poly(num, den, T, L, x);
             if (!result)
                 result = rt_field_hyperexp_coupled(num, den, T, L, x);
@@ -3697,6 +3798,9 @@ static Expr* rt_field_integrate(Expr* F, RtTower* T, long L, Expr* x) {
     if (num) expr_free(num);
     if (den) expr_free(den);
     expr_free(Fg);
+    /* A partial remainder is meaningful only alongside a successful elementary
+     * part; if the overall integration failed, drop it. */
+    if (!result && rem_out && *rem_out) { expr_free(*rem_out); *rem_out = NULL; }
     return result;
 }
 
@@ -3774,7 +3878,7 @@ static Expr* rt_int_primitive_poly(Expr* num, Expr* den, RtTower* T, long L, Exp
 static int rt_limited_field_integrate(Expr* r, RtTower* T, long L, Expr* x,
                                       Expr** s_out, Expr** c_out) {
     *s_out = NULL; *c_out = NULL;
-    Expr* R = rt_field_integrate(r, T, L - 1, x);
+    Expr* R = rt_field_integrate(r, T, L - 1, x, NULL);  /* lower field: no partial */
     if (!R) return -1;
     Expr* Rs = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
         (Expr*[]){ R, expr_copy(T->subrules) }, 2));               /* adopts R */
@@ -3835,7 +3939,7 @@ static Expr* rt_int_hyperexp_poly(Expr* num, Expr* den, RtTower* T, long L, Expr
         pw[j] = ip;
         Expr* pj = rt_coeff(nnum, t, j);
         if (rt_is_zero(pj)) { expr_free(pj); q[j] = NULL; continue; }
-        Expr* qj = (ip == 0) ? rt_field_integrate(pj, T, L - 1, x)
+        Expr* qj = (ip == 0) ? rt_field_integrate(pj, T, L - 1, x, NULL)
                              : rt_field_rde(pj, ip, T, L, x);
         expr_free(pj);
         if (!qj) { fail = true; break; }
@@ -4164,7 +4268,8 @@ static Expr* rt_recursive_tower_case(Expr* f, Expr* x) {
         if (num) expr_free(num);
         if (den) expr_free(den);
         if (gate) {
-            Expr* Q = rt_field_integrate(F, &T, (long)T.n - 1, x);
+            Expr* rem_tower = NULL;   /* partial log part: unintegrated r_n */
+            Expr* Q = rt_field_integrate(F, &T, (long)T.n - 1, x, &rem_tower);
             if (Q) {
                 /* Reduce Q to lowest terms in the TOWER VARIABLES (each kernel
                  * t_i an independent symbol) BEFORE back-substituting.  A common
@@ -4175,16 +4280,18 @@ static Expr* rt_recursive_tower_case(Expr* f, Expr* x) {
                  * unrecognisable form.  Together first: Q is a SUM of Laurent/log
                  * terms, which Cancel alone does not combine before reducing. */
                 Q = rt_eval1("Cancel", rt_eval1("Together", Q));
-                /* EXACT verification in the tower variables: D_tower[Q] must
-                 * equal F as a rational identity over C(x, t_0..t_{n-1}).  This
-                 * is decidable (Together the difference to 0) and replaces the
-                 * fragile Simplify diff-back, which cannot reduce the nested-
-                 * exponential closed forms (e.g. the big Laurent × E^(1/(1+E^x))
-                 * of In9) even when they are correct. */
+                /* EXACT verification in the tower variables: with a partial log
+                 * part (Bronstein Thm 5.6.1) the identity is D_tower[Q] + rem =
+                 * F, i.e. the elementary Q integrates all of F except the
+                 * unintegrated non-constant-residue remainder rem_tower.  When
+                 * rem_tower is NULL this is the usual exact D_tower[Q] == F. */
                 Expr* DQ = rt_tower_deriv(Q, &T, x);
                 Expr* diff = DQ ? expr_new_function(expr_new_symbol("Plus"),
                     (Expr*[]){ expr_copy(DQ), expr_new_function(expr_new_symbol("Times"),
                         (Expr*[]){ expr_new_integer(-1), expr_copy(F) }, 2) }, 2) : NULL;
+                if (diff && rem_tower)
+                    diff = expr_new_function(expr_new_symbol("Plus"),
+                        (Expr*[]){ diff, expr_copy(rem_tower) }, 2);
                 Expr* chk = diff ? rt_eval1("Together", diff) : NULL;
                 bool tower_ok = chk && rt_is_zero(chk);
                 if (DQ) expr_free(DQ);
@@ -4199,11 +4306,32 @@ static Expr* rt_recursive_tower_case(Expr* f, Expr* x) {
                     result = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
                         (Expr*[]){ Q, bl }, 2));                   /* adopts Q, bl */
                     if (result) result = rt_eval1("Cancel", result);
+                    /* Surface the unintegrated non-constant-residue part as a
+                     * genuine Integrate[rem, x] in the original kernels (a
+                     * separate back-rule list — ReplaceAll consumes its list).
+                     * rem's residues are all non-constant, so re-integrating it
+                     * declines (r_s empty ⇒ NULL): a fixed point, no loop. */
+                    if (result && rem_tower) {
+                        Expr** back2 = malloc(T.n * sizeof(Expr*));
+                        for (size_t i = 0; i < T.n; i++)
+                            back2[i] = expr_new_function(expr_new_symbol("Rule"),
+                                (Expr*[]){ expr_copy(T.t[i]), expr_copy(T.kernel[i]) }, 2);
+                        Expr* bl2 = expr_new_function(expr_new_symbol("List"), back2, T.n);
+                        free(back2);
+                        Expr* rem_k = rt_eval1("Cancel", rt_eval_own(
+                            expr_new_function(expr_new_symbol("ReplaceAll"),
+                                (Expr*[]){ expr_copy(rem_tower), bl2 }, 2)));
+                        Expr* rem_int = expr_new_function(expr_new_symbol("Integrate"),
+                            (Expr*[]){ rem_k, expr_copy(x) }, 2);
+                        result = rt_eval_own(expr_new_function(expr_new_symbol("Plus"),
+                            (Expr*[]){ result, rem_int }, 2));
+                    }
                     tower_verified = true;
                 } else {
                     expr_free(Q);
                 }
             }
+            if (rem_tower) expr_free(rem_tower);
         }
     }
     if (F) expr_free(F);

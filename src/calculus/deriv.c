@@ -811,6 +811,15 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return NULL;
         }
 
+        /* --- Fundamental theorem of calculus: D[Integrate[f, x], x] = f. ---
+         * Only the indefinite form with integration variable identical to the
+         * differentiation variable is the FTC.  A definite/iterated integral
+         * (Integrate[f, {x, a, b}], 2nd arg a List) or a different integration
+         * variable is left to fall through (differentiation under the integral
+         * sign is not done here). */
+        if (h == SYM_Integrate && n == 2 && expr_eq(args[1], x))
+            return expr_copy(args[0]);
+
         /* --- Log[b, f]: reduce to Log[f]/Log[b]. --- */
         if (h == SYM_Log && n == 2) {
             Expr* lb = mk_fn1("Log", expr_copy(args[0]));

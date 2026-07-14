@@ -959,6 +959,14 @@ add_executable(risch_canonical_tests test_risch_canonical.c ${COMMON_SRC})
 target_include_directories(risch_canonical_tests PRIVATE ../src ../src/calculus)
 add_test(NAME risch_canonical_tests COMMAND risch_canonical_tests)
 
+add_executable(risch_canonical_wiring_tests test_risch_canonical_wiring.c ${COMMON_SRC})
+target_include_directories(risch_canonical_wiring_tests PRIVATE ../src ../src/calculus)
+add_test(NAME risch_canonical_wiring_tests COMMAND risch_canonical_wiring_tests)
+
+add_executable(risch_residue_split_tests test_risch_residue_split.c ${COMMON_SRC})
+target_include_directories(risch_residue_split_tests PRIVATE ../src ../src/calculus)
+add_test(NAME risch_residue_split_tests COMMAND risch_residue_split_tests)
+
 add_executable(risch_structure_tests test_risch_structure.c ${COMMON_SRC})
 target_include_directories(risch_structure_tests PRIVATE ../src ../src/calculus)
 add_test(NAME risch_structure_tests COMMAND risch_structure_tests)
