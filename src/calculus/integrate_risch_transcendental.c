@@ -3655,14 +3655,16 @@ static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x) {
         return q;
     }
 
-    /* Gap 1a: recursive Risch DE over the tower.  The equation is
+    /* Gap 1/2: recursive Risch DE over the tower.  The equation is
      * D_tower[q] + (i Dcoef_L) q = p over K_L = C(x, t_0..t_{L-1}); when the top of
-     * K_L (t_{L-1}) is a PRIMITIVE (RT_LOG) monomial, solve it with the literal
-     * Bronstein Ch.6 stack (rde_tower) rather than the bounded ansatz.  The result
-     * is exact-identity certified inside rde_tower, so on success it is authoritative;
-     * on NULL we fall through to the ansatz (non-regressing) until the exponential /
-     * cancellation branches land. */
-    if (L >= 1 && T->kind[L - 1] == RT_LOG) {
+     * K_L (t_{L-1}) is a PRIMITIVE (RT_LOG) or EXPONENTIAL (RT_EXP) monomial, solve
+     * it with the literal Bronstein Ch.6 stack (rde_tower: normal/special denominator,
+     * degree bound, SPDE, non-cancellation / cancellation, antidifferentiation) rather
+     * than the bounded ansatz.  The result is exact-identity certified inside
+     * rde_tower, so on success it is authoritative; on NULL we fall through to the
+     * ansatz (non-regressing) for the residual cases rde_tower does not yet cover
+     * (the b=Dz/z limited-integration branch, tangent tops). */
+    if (L >= 1 && (T->kind[L - 1] == RT_LOG || T->kind[L - 1] == RT_EXP)) {
         Expr* fco = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
             (Expr*[]){ expr_new_integer(i), expr_copy(T->Dcoef[L]) }, 2));
         RdeCtx C = { T, L - 1, x, T->t[L - 1] };
