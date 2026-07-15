@@ -29,6 +29,7 @@
 #include "risch_field.h"
 #include "risch_hermite.h"
 #include "risch_canonical.h"
+#include "simp_trigexp_zero.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -1996,6 +1997,16 @@ static bool rt_verify_antideriv(Expr* result, Expr* f, Expr* x) {
     Expr* t2 = rt_eval1("Together", rt_eval1("TrigToExp", expr_copy(diff)));
     if (t2 && rt_is_zero(t2)) { expr_free(t2); expr_free(diff); return true; }
     if (t2) expr_free(t2);
+    /* Exact single-kernel rational-trig decision (Together over the raw Laurent
+     * TrigToExp form above leaves E^(-i x) poles uncombined for a Log/ArcTan-of-Tan
+     * diff-back — e.g. the §5.10 hypertangent answer for a rational function of
+     * Tan[x] — so it reads non-zero; and Simplify then mis-reduces the Sqrt-wrapped
+     * form to a spurious residual).  trigexp_rational_is_zero clears the kernel by
+     * an EXACT rational point-grid (a proof, never a numeric sample), so a genuine
+     * rational-in-Tan antiderivative certifies here in sub-ms.  Rigorous both ways;
+     * declines (UNKNOWN) to Simplify on multi-kernel / opaque-log forms. */
+    TrigExpZeroResult tez = trigexp_rational_is_zero(diff);
+    if (tez == TRIGEXP_ZERO_TRUE) { expr_free(diff); return true; }
     /* Residual (algebraic / log) forms the fast test leaves unreduced fall back to
      * Simplify (unchanged from the original gate). */
     Expr* s = rt_eval1("Simplify", diff);
@@ -4720,6 +4731,31 @@ static bool rt_free_of_trig(Expr* e) {
 /* The monomial variable t used throughout the family (a fixed internal symbol). */
 #define RT_HT_SYM "Integrate`htT"
 
+/* Reduce the EVEN powers of the reciprocal kernels to the tangent family, so an
+ * integrand that is genuinely rational in Tan[u] (etc.) but written with the
+ * secant/cosecant reciprocal — most commonly the Sec[u]^2 = d/du Tan[u] Jacobian
+ * factor of a tangent-substitution integrand — is recognised by the rational-in-t
+ * gate below instead of stranding on the leftover Sec and falling through to the
+ * (exponentializing, blow-up-prone) TrigToExp front-end:
+ *   Sec[a]^(2k)  -> (1 + Tan[a]^2)^k      Csc[a]^(2k)  -> (1 + Cot[a]^2)^k
+ *   Sech[a]^(2k) -> (1 - Tanh[a]^2)^k     Csch[a]^(2k) -> (Coth[a]^2 - 1)^k
+ * Each is an exact Pythagorean identity, so the rewrite is value-preserving.  ODD
+ * powers (a bare Sec[a] = Sqrt(1+Tan^2), genuinely NOT rational in Tan) are left
+ * untouched — such an integrand still correctly declines the rational-in-t gate.
+ * Returns an owned expression (a copy of f when nothing matched). */
+static Expr* rt_recip_sq_to_tan(Expr* f) {
+    static const char* rules_src =
+        "{ (Sec[a_]^n_ /; EvenQ[n])  :> (1 + Tan[a]^2)^(n/2),"
+        "  (Csc[a_]^n_ /; EvenQ[n])  :> (1 + Cot[a]^2)^(n/2),"
+        "  (Sech[a_]^n_ /; EvenQ[n]) :> (1 - Tanh[a]^2)^(n/2),"
+        "  (Csch[a_]^n_ /; EvenQ[n]) :> (Coth[a]^2 - 1)^(n/2) }";
+    Expr* rules = parse_expression(rules_src);
+    if (!rules) return expr_copy(f);
+    Expr* out = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+        (Expr*[]){ expr_copy(f), rules }, 2));   /* adopts rules */
+    return out ? out : expr_copy(f);
+}
+
 /* Maximum degree in t of an irreducible factor of p over Q (0 when p is constant
  * in t, -1 on failure).  The normal-pole gate uses this: a normal denominator
  * whose irreducible factors are each linear or quadratic has Rothstein-Trager
@@ -4782,8 +4818,14 @@ static Expr* rt_hypertan_family(Expr* f, Expr* x, Expr* subrule, Expr* bval,
                                 const char* driver, const char* inner,
                                 Expr* carg, bool cosmetic_plus) {
     Expr* t = expr_new_symbol(RT_HT_SYM);
+    /* Reduce even reciprocal-kernel powers (Sec[u]^2 -> 1+Tan[u]^2, ...) so a
+     * rational-in-Tan[u] integrand carrying the Sec Jacobian is recognised by the
+     * rational-in-t gate rather than stranding on the leftover Sec.  fr is an exact
+     * rewrite of f, so it is used for both the kernel substitution AND the diff-back
+     * verify below (which is thereby a rational-in-t certificate, not a Sec-laden one). */
+    Expr* fr = rt_recip_sq_to_tan(f);
     Expr* F = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
-        (Expr*[]){ expr_copy(f), subrule }, 2));                 /* adopts subrule */
+        (Expr*[]){ expr_copy(fr), subrule }, 2));                 /* adopts subrule */
 
     /* F must be a genuine rational function of t over C(x). */
     bool ok = F && rt_free_of_trig(F)
@@ -4825,7 +4867,7 @@ static Expr* rt_hypertan_family(Expr* f, Expr* x, Expr* subrule, Expr* bval,
         if (nn) expr_free(nn);
         if (dd) expr_free(dd);
     }
-    if (!ok) { if (F) expr_free(F); expr_free(t); expr_free(Dt); expr_free(special);
+    if (!ok) { expr_free(fr); if (F) expr_free(F); expr_free(t); expr_free(Dt); expr_free(special);
                expr_free(bval); expr_free(carg); return NULL; }
 
     /* deriv = {x -> 1, t -> Dt}. */
@@ -4905,12 +4947,23 @@ static Expr* rt_hypertan_family(Expr* f, Expr* x, Expr* subrule, Expr* bval,
         if (base) expr_free(base);
     }
     if (res) expr_free(res);
-    /* Diff-back safety: the base-t-free construction is a proof over C(x), but a
-     * TRANSCENDENTAL tangent argument (u = Log[x], ...) now reaches here
-     * (rt_kernel_eta relaxed), so verify the assembled real form with the EXACT
-     * symbolic gate before returning it — declines instead of shipping a wrong
-     * closed form, and never certifies by numeric sampling. */
-    if (result && !rt_verify_antideriv(result, f, x)) { expr_free(result); result = NULL; }
+    /* Diff-back safety, gated to the RELAXED case.  For a kernel argument u that is
+     * rational in x (the common Tan[x], Tan[2x], ... family) the whole §5.10 pipeline
+     * is a theorem (Bronstein Thm 5.10.1) — correct by construction, per the header
+     * above — and its clean real Log/ArcTan-of-Tan form is precisely what the diff-back
+     * zero tests cannot reduce (Together leaves the Laurent TrigToExp poles uncombined;
+     * Simplify mis-reduces the Sqrt-wrapped ArcTan to a spurious residual), so verifying
+     * it would spuriously REJECT a correct answer and strand the integral in the
+     * exponentializing front-end (an unbounded blow-up).  Only a TRANSCENDENTAL argument
+     * (u = Log[x], ...), admitted by rt_kernel_eta's relaxed eta-only gate, needs the
+     * diff-back guard — there the construction rests on the additional eta-in-C(x)
+     * assumption, so verify before shipping. */
+    bool u_transcendental = !rt_free_of_trig(carg)
+        || rt_find_exp_of_x(carg, x) != NULL || rt_find_log_of_x(carg, x) != NULL;
+    if (result && u_transcendental && !rt_verify_antideriv(result, fr, x)) {
+        expr_free(result); result = NULL;
+    }
+    expr_free(fr);
     expr_free(F); expr_free(t); expr_free(deriv); expr_free(Dt); expr_free(special);
     expr_free(bval); expr_free(carg);
     return result;

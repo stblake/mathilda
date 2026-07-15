@@ -1135,6 +1135,17 @@ static void test_circular_trig_integration(void) {
     assert_rm_diff_zero("Cos[x]/(1 + Cos[x])");
     assert_rm_diff_zero("1/(3 + Tan[x]^2)");
     assert_rm_diff_zero("Tan[x]/(3 + Tan[x]^2)");
+    /* Hypertangent (§5.10) rational-in-Tan integrands that formerly stranded on the
+     * Sec Jacobian / an improper (deg num >= deg den) quotient and fell through to the
+     * exponentializing front-end (an unbounded blow-up).  The Sec[x]^2 = 1+Tan[x]^2
+     * reduction now routes them through the direct hypertangent driver; their clean
+     * Sqrt[3]-wrapped Log/ArcTan forms are checked numerically because the Simplify
+     * diff-back mis-reduces that shape (exactly the spurious residual that used to make
+     * the diff-back gate reject the correct answer). */
+    assert_rm_num("((2 + Tan[x]^2) Sec[x]^2)/(1 + Tan[x]^3)");  /* reported hang */
+    assert_rm_num("Sec[x]^2/(1 + Tan[x]^3)");
+    assert_rm_num("(2 + 3 Tan[x]^2 + Tan[x]^4)/(1 + Tan[x]^3)"); /* pure-Tan improper */
+    assert_rm_num("Csc[x]^2/(1 + Cot[x]^3)");                    /* cosecant reciprocal */
     /* exponential x trig (non-commensurate exp-sum; I-laden yet exactly 0) */
     assert_rm_diff_zero("E^x Sin[x]");
     assert_rm_diff_zero("E^x Cos[x]");
