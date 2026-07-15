@@ -580,6 +580,20 @@ void info_init(void) {
         "CosIntegral[-Infinity] = I Pi, CosIntegral[+-I Infinity] = Infinity.\n"
         "Real and complex inputs evaluate numerically at machine or arbitrary (MPFR)\n"
         "precision; D[CosIntegral[z], z] = Cos[z]/z. Listable.");
+    symtab_set_docstring("FresnelC",
+        "FresnelC[z]\n"
+        "\tgives the Fresnel integral C(z) = Integral_0^z Cos[Pi t^2/2] dt.\n"
+        "An entire, odd function with no branch cuts. FresnelC[0] = 0,\n"
+        "FresnelC[+-Infinity] = +-1/2, FresnelC[+-I Infinity] = +-I/2.\n"
+        "Real and complex inputs evaluate numerically at machine or arbitrary (MPFR)\n"
+        "precision; D[FresnelC[z], z] = Cos[Pi z^2/2]. Listable.");
+    symtab_set_docstring("FresnelS",
+        "FresnelS[z]\n"
+        "\tgives the Fresnel integral S(z) = Integral_0^z Sin[Pi t^2/2] dt.\n"
+        "An entire, odd function with no branch cuts. FresnelS[0] = 0,\n"
+        "FresnelS[+-Infinity] = +-1/2, FresnelS[+-I Infinity] = -+I/2.\n"
+        "Real and complex inputs evaluate numerically at machine or arbitrary (MPFR)\n"
+        "precision; D[FresnelS[z], z] = Sin[Pi z^2/2]. Listable.");
     symtab_set_docstring("Sinc",
         "Sinc[z]\n"
         "\tgives the cardinal sine Sin[z]/z, with Sinc[0] = 1.\n"

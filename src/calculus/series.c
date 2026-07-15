@@ -1103,6 +1103,38 @@ static Expr** kernel_coefs(const char* name, size_t N) {
             Expr* ratio = make_rational(num, den);
             c[k] = simp(mk_times(expr_copy(c[k - 2]), ratio));
         }
+    } else if (strcmp(name, "FresnelC") == 0) {
+        /* C[u] = sum_{m>=0} (-1)^m (Pi/2)^(2m) u^(4m+1) / ((2m)!(4m+1)).
+         * Powers 4m+1 only; c_1 = 1,
+         * c_{4m+1} = c_{4m-3} * Pi^2 * -(4m-3)/(4(2m-1)(2m)(4m+1)). */
+        c[0] = expr_new_integer(0);
+        if (N > 1) c[1] = expr_new_integer(1);
+        for (size_t k = 2; k < N; k++) {
+            if (k % 4 != 1) { c[k] = expr_new_integer(0); continue; }
+            int64_t m = (int64_t)(k - 1) / 4;
+            int64_t num = -(4*m - 3);
+            int64_t den = 4 * (2*m - 1) * (2*m) * (4*m + 1);
+            Expr* ratio = simp(mk_times(mk_power(mk_symbol("Pi"), expr_new_integer(2)),
+                                        make_rational(num, den)));
+            c[k] = simp(mk_times(expr_copy(c[k - 4]), ratio));
+        }
+    } else if (strcmp(name, "FresnelS") == 0) {
+        /* S[u] = sum_{m>=0} (-1)^m (Pi/2)^(2m+1) u^(4m+3) / ((2m+1)!(4m+3)).
+         * Powers 4m+3 only; c_3 = Pi/6,
+         * c_{4m+3} = c_{4m-1} * Pi^2 * -(4m-1)/(4(2m)(2m+1)(4m+3)). */
+        c[0] = expr_new_integer(0);
+        if (N > 1) c[1] = expr_new_integer(0);
+        if (N > 2) c[2] = expr_new_integer(0);
+        if (N > 3) c[3] = simp(mk_times(make_rational(1, 6), mk_symbol("Pi")));
+        for (size_t k = 4; k < N; k++) {
+            if (k % 4 != 3) { c[k] = expr_new_integer(0); continue; }
+            int64_t m = (int64_t)(k - 3) / 4;
+            int64_t num = -(4*m - 1);
+            int64_t den = 4 * (2*m) * (2*m + 1) * (4*m + 3);
+            Expr* ratio = simp(mk_times(mk_power(mk_symbol("Pi"), expr_new_integer(2)),
+                                        make_rational(num, den)));
+            c[k] = simp(mk_times(expr_copy(c[k - 4]), ratio));
+        }
     } else {
         for (size_t i = 0; i < N; i++) c[i] = expr_new_integer(0);
     }
@@ -2108,7 +2140,7 @@ static bool is_known_elementary(Expr* e) {
         "Sinh", "Cosh", "Tanh",
         "ArcSin", "ArcCos", "ArcTan", "ArcCot",
         "ArcSinh", "ArcCosh", "ArcTanh", "ArcCoth",
-        "SinIntegral",
+        "SinIntegral", "FresnelC", "FresnelS",
         NULL
     };
     for (int i = 0; names[i]; i++) if (has_symbol_head(e, names[i])) return true;
@@ -2469,6 +2501,14 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
             else if (strcmp(head, "SinIntegral") == 0) {
                 /* Si is entire and odd (Si(0)=0), analytic at u=0 like ArcTan. */
                 r = so_apply_kernel_at_zero("SinIntegral", inner);
+            }
+            else if (strcmp(head, "FresnelC") == 0) {
+                /* FresnelC is entire and odd (C(0)=0), analytic at u=0. */
+                r = so_apply_kernel_at_zero("FresnelC", inner);
+            }
+            else if (strcmp(head, "FresnelS") == 0) {
+                /* FresnelS is entire and odd (S(0)=0), analytic at u=0. */
+                r = so_apply_kernel_at_zero("FresnelS", inner);
             }
             else if (strcmp(head, "ArcTanh") == 0) {
                 r = so_apply_kernel_at_zero("ArcTanh", inner);
@@ -3530,6 +3570,91 @@ static Expr* try_series_cosintegral_at_infinity(Expr* f, Expr* x, int64_t n) {
         free(sdg); free(cg);
         result = mk_plus(result, mk_times(mk_fn1("Cos", expr_copy(x)), seriesG));
     }
+    return result;
+}
+
+/* One Laurent 1/x part of a Fresnel asymptotic expansion. Builds
+ *   SeriesData[1/x, 0, {coefs}, nmin, n+1, 1]
+ * whose coefficient at 1/x^p (p = 4j + nmin, j = 0, 1, ...) is
+ *   base_sign * (-1)^j * D_j / Pi^(2j + (nmin+1)/2),
+ * where D_j is (4j-1)!! for the f-series (use_R = 0) or (4j+1)!! for the
+ * g-series (use_R = 1). Returns NULL if no term fits within order n. */
+static Expr* fresnel_inf_part(Expr* x, int64_t n, int64_t nmin, int use_R,
+                              int base_sign) {
+    if (n < nmin) return NULL;
+    size_t len = (size_t)(n - nmin + 1);
+    Expr** c = calloc(len, sizeof(Expr*));
+    for (size_t i = 0; i < len; i++) c[i] = expr_new_integer(0);
+    int64_t pi_base = (nmin + 1) / 2;          /* 1 for nmin=1, 2 for nmin=3 */
+    Expr* dfact = expr_new_integer(1);         /* D_0 = (-1)!! = 1!! = 1 */
+    for (int64_t j = 0; ; j++) {
+        int64_t p = 4 * j + nmin;
+        if (p > n) break;
+        int64_t sgn = base_sign * ((j % 2 == 0) ? 1 : -1);
+        Expr* pipow = mk_power(mk_symbol("Pi"), expr_new_integer(-(2 * j + pi_base)));
+        Expr* coef = simp(mk_times(mk_times(expr_new_integer(sgn), expr_copy(dfact)),
+                                   pipow));
+        expr_free(c[(size_t)(p - nmin)]);
+        c[(size_t)(p - nmin)] = coef;
+        /* Advance D_j -> D_{j+1}. */
+        int64_t jn = j + 1;
+        int64_t mult = use_R ? (4 * jn + 1) * (4 * jn - 1)
+                             : (4 * jn - 1) * (4 * jn - 3);
+        dfact = simp(mk_times(dfact, expr_new_integer(mult)));
+    }
+    expr_free(dfact);
+    Expr** sd = calloc(6, sizeof(Expr*));
+    sd[0] = mk_power(expr_copy(x), expr_new_integer(-1));
+    sd[1] = expr_new_integer(0);
+    sd[2] = expr_new_function(mk_symbol("List"), c, len);
+    sd[3] = expr_new_integer(nmin);
+    sd[4] = expr_new_integer(n + 1);
+    sd[5] = expr_new_integer(1);
+    Expr* series = expr_new_function(mk_symbol("SeriesData"), sd, 6);
+    free(sd); free(c);
+    return series;
+}
+
+/* phi = Pi x^2 / 2, the essential-singularity phase of the Fresnel integrals. */
+static Expr* fresnel_inf_phase(Expr* x) {
+    return simp(mk_times(make_rational(1, 2),
+               mk_times(mk_symbol("Pi"), mk_power(expr_copy(x), expr_new_integer(2)))));
+}
+
+/* Asymptotic expansion of FresnelC[x] at x = Infinity (DLMF 7.12):
+ *   C(x) ~ 1/2 + Sin[Pi x^2/2] f(x) - Cos[Pi x^2/2] g(x),
+ *     f(x) = (1/(Pi x))    Sum_j (-1)^j (4j-1)!! / (Pi x^2)^(2j),
+ *     g(x) = (1/(Pi^2 x^3)) Sum_j (-1)^j (4j+1)!! / (Pi x^2)^(2j).
+ * Sin/Cos of the quadratic phase stay symbolic prefactors on Laurent series in
+ * 1/x. Returns NULL unless f is exactly FresnelC[x] in the expansion variable. */
+static Expr* try_series_fresnelc_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "FresnelC") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+
+    Expr* result = make_rational(1, 2);
+    Expr* fpart = fresnel_inf_part(x, n, 1, 0, +1);   /* +Sin * f */
+    if (fpart) result = mk_plus(result, mk_times(mk_fn1("Sin", fresnel_inf_phase(x)), fpart));
+    Expr* gpart = fresnel_inf_part(x, n, 3, 1, -1);   /* -Cos * g */
+    if (gpart) result = mk_plus(result, mk_times(mk_fn1("Cos", fresnel_inf_phase(x)), gpart));
+    return result;
+}
+
+/* Asymptotic expansion of FresnelS[x] at x = Infinity (DLMF 7.12):
+ *   S(x) ~ 1/2 - Cos[Pi x^2/2] f(x) - Sin[Pi x^2/2] g(x),
+ * with the same auxiliary f, g. Returns NULL unless f is exactly FresnelS[x]. */
+static Expr* try_series_fresnels_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "FresnelS") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+
+    Expr* result = make_rational(1, 2);
+    Expr* fpart = fresnel_inf_part(x, n, 1, 0, -1);   /* -Cos * f */
+    if (fpart) result = mk_plus(result, mk_times(mk_fn1("Cos", fresnel_inf_phase(x)), fpart));
+    Expr* gpart = fresnel_inf_part(x, n, 3, 1, -1);   /* -Sin * g */
+    if (gpart) result = mk_plus(result, mk_times(mk_fn1("Sin", fresnel_inf_phase(x)), gpart));
     return result;
 }
 
@@ -4946,6 +5071,18 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
             expr_free(x0_eval);
             return ci;
         }
+        Expr* frc = try_series_fresnelc_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (frc) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return frc;
+        }
+        Expr* frs = try_series_fresnels_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (frs) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return frs;
+        }
         Expr* ai = try_series_airyai_at_infinity(f_eval, x, leading_only ? 1 : n);
         if (ai) {
             expr_free(f_eval);
@@ -5465,6 +5602,61 @@ Expr* builtin_seriescoefficient(Expr* res) {
                     mk_power(mk_fn1("Factorial", expr_copy(nv)),
                              expr_new_integer(-1)));
                 Expr* cond = mk_fn2("GreaterEqual", expr_copy(nv), expr_new_integer(1));
+                Expr* pair = expr_new_function(mk_symbol("List"),
+                                 (Expr*[]){ val, cond }, 2);
+                Expr* pairs = expr_new_function(mk_symbol("List"),
+                                  (Expr*[]){ pair }, 1);
+                Expr* pw = expr_new_function(mk_symbol("Piecewise"),
+                               (Expr*[]){ pairs, expr_new_integer(0) }, 2);
+                return eval_and_free(pw);
+            }
+        }
+    }
+
+    /* General term SeriesCoefficient[FresnelC/FresnelS[x], {x, 0, n}], symbolic n:
+     *   FresnelC: Piecewise[{{ (-1)^((n-1)/4) 2^(1-n) Pi^(n/2) /
+     *                          (n Gamma[(1+n)/4] Gamma[(3+n)/4]), Mod[n-1,4]==0 && n>=1 }}, 0]
+     *   FresnelS: same value with the (-1) exponent (n-3)/4 and Mod[n-3,4]==0 && n>=3. */
+    {
+        Expr* f0  = res->data.function.args[0];
+        Expr* sp0 = res->data.function.args[1];
+        int isC = has_symbol_head(f0, "FresnelC");
+        int isS = has_symbol_head(f0, "FresnelS");
+        if ((isC || isS) && f0->data.function.arg_count == 1 &&
+            sp0->type == EXPR_FUNCTION && has_symbol_head(sp0, "List") &&
+            sp0->data.function.arg_count == 3) {
+            Expr* xv  = sp0->data.function.args[0];
+            Expr* x0v = sp0->data.function.args[1];
+            Expr* nv  = sp0->data.function.args[2];
+            if (expr_eq(f0->data.function.args[0], xv) &&
+                is_lit_zero(x0v) && nv->type == EXPR_SYMBOL) {
+                int64_t off = isC ? 1 : 3;                 /* power class 4m+off */
+                Expr* nmoff = mk_plus(expr_copy(nv), expr_new_integer(-off));  /* n-off */
+                /* (-1)^((n-off)/4) */
+                Expr* sign = mk_power(expr_new_integer(-1),
+                                 mk_times(make_rational(1, 4), expr_copy(nmoff)));
+                /* 2^(1-n) */
+                Expr* pow2 = mk_power(expr_new_integer(2),
+                                 mk_plus(expr_new_integer(1),
+                                         mk_times(expr_new_integer(-1), expr_copy(nv))));
+                /* Pi^(n/2) */
+                Expr* pipow = mk_power(mk_symbol("Pi"),
+                                 mk_times(make_rational(1, 2), expr_copy(nv)));
+                /* n Gamma[(1+n)/4] Gamma[(3+n)/4] */
+                Expr* gam1 = mk_fn1("Gamma", mk_times(make_rational(1, 4),
+                                 mk_plus(expr_new_integer(1), expr_copy(nv))));
+                Expr* gam2 = mk_fn1("Gamma", mk_times(make_rational(1, 4),
+                                 mk_plus(expr_new_integer(3), expr_copy(nv))));
+                Expr* denom = mk_times(expr_copy(nv), mk_times(gam1, gam2));
+                Expr* val = mk_times(mk_times(sign, pow2),
+                                 mk_times(pipow, mk_power(denom, expr_new_integer(-1))));
+                /* Mod[n-off, 4] == 0 && n >= off */
+                Expr* cond = mk_fn2("And",
+                    mk_fn2("Equal",
+                        mk_fn2("Mod", expr_copy(nmoff), expr_new_integer(4)),
+                        expr_new_integer(0)),
+                    mk_fn2("GreaterEqual", expr_copy(nv), expr_new_integer(off)));
+                expr_free(nmoff);
                 Expr* pair = expr_new_function(mk_symbol("List"),
                                  (Expr*[]){ val, cond }, 2);
                 Expr* pairs = expr_new_function(mk_symbol("List"),

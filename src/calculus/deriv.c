@@ -347,6 +347,15 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
                       mk_fn2("Power", expr_copy(g), mk_int(-1)));
     }
 
+    /* --- Fresnel integrals: d/dg FresnelC[g] = Cos[Pi g^2/2],
+     *     d/dg FresnelS[g] = Sin[Pi g^2/2]. (Pi g^2/2 as Times[1/2, Pi, g^2].) */
+    if (!strcmp(name, "FresnelC") || !strcmp(name, "FresnelS")) {
+        Expr* half = mk_fn2("Power", mk_int(2), mk_int(-1));   /* 1/2 */
+        Expr* g2   = mk_fn2("Power", expr_copy(g), mk_int(2));
+        Expr* arg  = mk_fn2("Times", half, mk_fn2("Times", mk_sym("Pi"), g2));
+        return mk_fn1(!strcmp(name, "FresnelC") ? "Cos" : "Sin", arg);
+    }
+
     /* --- cardinal sine: d/dg Sinc[g] = Cos[g]/g - Sin[g]/g^2. --- */
     if (!strcmp(name, "Sinc")) {
         Expr* t1 = mk_fn2("Times", mk_fn1("Cos", expr_copy(g)),

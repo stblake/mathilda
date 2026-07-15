@@ -24,6 +24,7 @@
 #include "logintegral.h"
 #include "sinintegral.h"
 #include "cosintegral.h"
+#include "fresnel.h"
 #include "sinc.h"
 #include "inverf.h"
 #include "inverfc.h"
@@ -617,6 +618,7 @@ void core_init(void) {
     logintegral_init();
     sinintegral_init();
     cosintegral_init();
+    fresnel_init();
     sinc_init();
     inverf_init();
     inverfc_init();

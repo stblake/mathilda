@@ -356,6 +356,45 @@ branch on and left of the imaginary axis. Complex arguments run through the shar
 - `Listable`, `NumericFunction`, `Protected`. Wrong arity emits
   `CosIntegral::argx` and stays unevaluated.
 
+## FresnelC and FresnelS
+
+- `FresnelC[z]` — the Fresnel integral C(z) = ∫₀ᶻ Cos[π t²/2] dt.
+- `FresnelS[z]` — the Fresnel integral S(z) = ∫₀ᶻ Sin[π t²/2] dt.
+
+Both are entire and odd, with no branch cuts. One numeric kernel computes the
+pair (C, S) together: real inputs sum the two convergent Maclaurin series
+directly (switching to the DLMF 7.12 asymptotic form for large `|x|`), while
+complex inputs sum `A(z) = C + iS = Σ (iπ/2)ᵏ z^(2k+1)/(k!(2k+1))` and its
+`i → −i` partner `B` through the shared `ncpx` MPFR-complex toolkit, then recover
+`C = (A+B)/2`, `S = (A−B)/(2i)`. Guard bits (`≈ (π/2)|z|²/ln2`) absorb the
+partial-sum cancellation exactly; odd symmetry folds negative/left-half-plane
+inputs.
+
+- Exact special values: `FresnelC[0] = FresnelS[0] = 0`;
+  `FresnelC[±Infinity] = ±1/2`, `FresnelS[±Infinity] = ±1/2`;
+  `FresnelC[±I Infinity] = ±I/2`, `FresnelS[±I Infinity] = ∓I/2` (note the sign
+  flip on the imaginary directions); `ComplexInfinity`/`Indeterminate` map to
+  `Indeterminate`.
+- Exact non-special arguments stay symbolic; odd symmetry pulls a leading
+  negative out (`FresnelC[-x] = -FresnelC[x]`).
+- Numeric evaluation at machine or arbitrary (MPFR) precision, tracking the input
+  precision: `FresnelC[1.8] = 0.333633`, `FresnelS[1.8] = 0.450939`,
+  `N[FresnelC[2], 50] = 0.48825340607534075450022350335726103768836715450922`.
+- Complex arguments are fully accurate, e.g. `FresnelC[2.5 + I] = 116.648 −
+  105.229 I`, and on the imaginary axis `FresnelC[2. I] = 0.488253 I`.
+- Derivatives: `D[FresnelC[z], z] = Cos[π z²/2]`, `D[FresnelS[z], z] =
+  Sin[π z²/2]` (chain rule applies, e.g. `D[FresnelC[x^2], x] = 2 x Cos[π x⁴/2]`).
+- Series: Taylor at the origin (`Series[FresnelC[x], {x, 0, 9}] = x − π² x⁵/40 +
+  π⁴ x⁹/3456 + O[x]^10`; `Series[FresnelS[x], {x, 0, 7}] = π x³/6 − π³ x⁷/336 +
+  O[x]^8`) and the trig-prefactored asymptotic expansion at Infinity
+  (`Normal[Series[FresnelC[x], {x, Infinity, 3}]] = 1/2 − Cos[π x²/2]/(π² x³) +
+  Sin[π x²/2]/(π x)`). The symbolic-index general term is produced as a
+  `Piecewise` closed form, e.g. `SeriesCoefficient[FresnelC[x], {x, 0, n}] =
+  Piecewise[{{(-1)^((n-1)/4) 2^(1-n) π^(n/2)/(n Γ[(1+n)/4] Γ[(3+n)/4]),
+  Mod[n-1, 4] == 0 && n ≥ 1}}, 0]`.
+- `Listable`, `NumericFunction`, `Protected`. Wrong arity emits
+  `FresnelC::argx` / `FresnelS::argx` and stays unevaluated.
+
 ## Sinc
 
 - `Sinc[z]` — the cardinal sine Sin[z]/z, with the removable singularity filled
