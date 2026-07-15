@@ -272,10 +272,15 @@ static bool split_stream_options(Expr* res, StreamOpts* so,
         }
     }
 
-    /* StreamPlot defaults: square aspect (equal-scale axes). */
+    /* StreamPlot defaults: Frame->True, Axes->False, square aspect. */
     if (!have_axes && !have_frame) {
-        Expr* a[2] = { expr_new_symbol(SYM_Axes), expr_new_symbol(SYM_True) };
-        passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
+        Expr* fa[2] = { expr_new_symbol(SYM_Frame), expr_new_symbol(SYM_True) };
+        passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), fa, 2);
+        Expr* aa[2] = { expr_new_symbol(SYM_Axes), expr_new_symbol(SYM_False) };
+        passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), aa, 2);
+    } else if (!have_axes) {
+        Expr* aa[2] = { expr_new_symbol(SYM_Axes), expr_new_symbol(SYM_False) };
+        passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), aa, 2);
     }
     if (!have_aspect) {
         Expr* a[2] = { expr_new_symbol(SYM_AspectRatio), expr_new_integer(1) };

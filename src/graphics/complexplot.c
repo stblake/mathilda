@@ -115,10 +115,15 @@ static bool split_cplot_options(Expr* res, size_t first_opt_idx,
         }
     }
 
-    /* Inject defaults that match the existing field-plot conventions. */
+    /* Inject defaults: raster plots default to Frame->True, Axes->False. */
     if (!have_axes && !have_frame) {
-        Expr* a[2] = { expr_new_symbol(SYM_Axes), expr_new_symbol(SYM_True) };
-        pt[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
+        Expr* fa[2] = { expr_new_symbol(SYM_Frame), expr_new_symbol(SYM_True) };
+        pt[n++] = expr_new_function(expr_new_symbol(SYM_Rule), fa, 2);
+        Expr* aa[2] = { expr_new_symbol(SYM_Axes), expr_new_symbol(SYM_False) };
+        pt[n++] = expr_new_function(expr_new_symbol(SYM_Rule), aa, 2);
+    } else if (!have_axes) {
+        Expr* aa[2] = { expr_new_symbol(SYM_Axes), expr_new_symbol(SYM_False) };
+        pt[n++] = expr_new_function(expr_new_symbol(SYM_Rule), aa, 2);
     }
     if (!have_aspect) {
         Expr* a[2] = { expr_new_symbol(SYM_AspectRatio), expr_new_integer(1) };

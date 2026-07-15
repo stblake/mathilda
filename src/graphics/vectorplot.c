@@ -63,7 +63,7 @@ static bool split_vector_options(Expr* res, VecOpts* o,
     size_t cap  = (argc > 3 ? argc - 3 : 0) + 4;
     Expr** pt   = malloc(sizeof(Expr*) * cap);
     size_t n    = 0;
-    bool have_axes = false, have_aspect = false;
+    bool have_axes = false, have_aspect = false, have_frame = false;
 
 #define VP_FAIL() do { free(pt); return false; } while(0)
 
@@ -118,15 +118,25 @@ static bool split_vector_options(Expr* res, VecOpts* o,
         } else {
             if (name == SYM_Axes)        have_axes   = true;
             if (name == SYM_AspectRatio) have_aspect = true;
+            if (name == SYM_Frame
+                && !(rhs->type == EXPR_SYMBOL
+                     && (rhs->data.symbol == SYM_False
+                         || rhs->data.symbol == SYM_None)))
+                have_frame = true;
             Expr* val  = evaluate(expr_copy(rhs));
             Expr* a[2] = { expr_copy(lhs), val };
             pt[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
         }
     }
 
-    if (!have_axes) {
-        Expr* a[2] = { expr_new_symbol(SYM_Axes), expr_new_symbol(SYM_True) };
-        pt[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
+    if (!have_axes && !have_frame) {
+        Expr* fa[2] = { expr_new_symbol(SYM_Frame), expr_new_symbol(SYM_True) };
+        pt[n++] = expr_new_function(expr_new_symbol(SYM_Rule), fa, 2);
+        Expr* aa[2] = { expr_new_symbol(SYM_Axes), expr_new_symbol(SYM_False) };
+        pt[n++] = expr_new_function(expr_new_symbol(SYM_Rule), aa, 2);
+    } else if (!have_axes) {
+        Expr* aa[2] = { expr_new_symbol(SYM_Axes), expr_new_symbol(SYM_False) };
+        pt[n++] = expr_new_function(expr_new_symbol(SYM_Rule), aa, 2);
     }
     if (!have_aspect) {
         Expr* a[2] = { expr_new_symbol(SYM_AspectRatio), expr_new_integer(1) };

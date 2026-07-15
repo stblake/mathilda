@@ -1773,8 +1773,8 @@ void draw_color_bar(float bar_x, float bar_y, float bar_w, float bar_h,
     DrawRectangleLinesEx((Rectangle){ bar_x, bar_y, bar_w, bar_h }, 1.0f,
                          (Color){ 80, 80, 80, 255 });
 
-    /* 5 tick marks with numeric labels. */
-    const int nticks = 5;
+    /* 9 tick marks with numeric labels. */
+    const int nticks = 9;
     const float scale = 1.2f;
     float text_x = bar_x + bar_w + 5.0f;
     for (int k = 0; k < nticks; k++) {
