@@ -170,6 +170,19 @@ void test_together_algebraic_generator() {
     /* Non-symbol base: Log[r]^(p/q) is treated identically. */
     run_test("Together[1/Log[r]^(1/2) + 1/Log[r]^(1/3)]",
              "Times[Power[Log[r], Rational[-1, 2]], Plus[1, Power[Log[r], Rational[1, 6]]]]");
+
+    /* Constant-radical denominator with a NON-UNIT leading coefficient on the
+     * polynomial variable: 1/(2x - Sqrt5) - 1/(2x + Sqrt5) = 2 Sqrt5/(4x^2 - 5).
+     * Combining runs the together Plus-branch strict exact-division of the LCM
+     * denominator (4x^2 - 5) by each factor (2x +/- Sqrt5); the leading-
+     * coefficient recursion in exact_poly_div must divide the algebraic
+     * coefficient -2 Sqrt5 by the rational 2. Before the fix that division
+     * returned NULL (it required BOTH operands rational), so the whole sum was
+     * left uncombined for any coefficient != 1. */
+    run_test("Together[1/(2 x - Sqrt[5]) - 1/(2 x + Sqrt[5])]",
+             "Times[2, Power[5, Rational[1, 2]], Power[Plus[-5, Times[4, Power[x, 2]]], -1]]");
+    run_test("Together[1/(3 x - Sqrt[5]) - 1/(3 x + Sqrt[5])]",
+             "Times[2, Power[5, Rational[1, 2]], Power[Plus[-5, Times[9, Power[x, 2]]], -1]]");
 }
 
 /* Together / Cancel over transcendental-kernel generators (Log, Exp,

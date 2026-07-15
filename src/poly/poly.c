@@ -1274,18 +1274,24 @@ Expr* exact_poly_div(Expr* A, Expr* B, Expr** vars, size_t var_count) {
             // Fall through to rational quotient
         }
 
-        /* Rational/Gaussian fallback: only when BOTH operands lie in a
-         * field (Q or Q[i]). Then A/B is an exact field element and the
-         * symbolic Times[A, B^{-1}] auto-evaluates to a clean Rational
-         * or Complex[Rational, Rational]. For non-rational atoms
-         * (Sqrt[2], symbolic radicals, etc.) we are NOT in a field —
-         * Q[Sqrt[2], Sqrt[3], ...] is a polynomial ring, not a field —
-         * and a "fallback" symbolic Times[A, 1/B] is unsound: it claims
-         * an exact division that does not exist in the working ring,
-         * and propagating it through the GCD/LCM machinery triggers
-         * multivariate Euclidean coefficient explosion (case-13 Together
-         * hang). Return NULL to signal "no exact division". */
-        if (is_rational_or_gaussian(A) && is_rational_or_gaussian(B)) {
+        /* Division by a nonzero rational (or Gaussian-rational) scalar is
+         * exact in ANY Q(i)-algebra: such a B is a unit of the coefficient
+         * field, so A/B = A·B^{-1} lands back in the working ring for EVERY
+         * A — a plain rational, but also an algebraic atom like Sqrt[2] or a
+         * whole Q[Sqrt2, Sqrt3, ...] coefficient. (B != 0 is guaranteed by
+         * the is_zero_poly check above.) Keying on the DIVISOR is what lets a
+         * non-monic divisor whose lower coefficients are algebraic divide
+         * exactly, e.g. (4x^2-5)/(2x+Sqrt[5]): the leading-coefficient
+         * recursion lands here to divide -2 Sqrt[5] by the rational 2.
+         *
+         * The converse — a NON-field divisor B (Sqrt[2], a symbolic radical,
+         * ...) — is where a symbolic Times[A, 1/B] would be unsound: it
+         * claims an exact division that need not exist in the polynomial ring
+         * Q[Sqrt2, ...], and propagating it into the GCD/LCM machinery
+         * triggers the multivariate Euclidean coefficient explosion (case-13
+         * Together hang). Such a B is not rational_or_gaussian, so it still
+         * returns NULL below. */
+        if (is_rational_or_gaussian(B)) {
             return internal_times((Expr*[]){expr_copy(A), internal_power((Expr*[]){expr_copy(B), expr_new_integer(-1)}, 2)}, 2);
         }
         return NULL;
