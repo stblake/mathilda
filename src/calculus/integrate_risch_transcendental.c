@@ -604,14 +604,25 @@ static Expr* rt_special_case(Expr* f, Expr* x) {
  * theta-coefficient, or an unresolved integral makes it decline.  This is
  * the sub-oracle that lets the primitive polynomial reduction fold a
  * would-be new logarithm back into the tower.  On success sets *s_out and
- * *c_out (both owned) and returns 0; otherwise returns -1. */
-static int rt_limited_integrate(Expr* r, Expr* x, Expr* u,
+ * *c_out (both owned) and returns 0; otherwise returns -1.
+ *
+ * `is_bottom` selects the theta^0 (constant) coefficient of the antiderivative,
+ * which — unlike the higher theta^i coefficients, which must be rational so the
+ * result stays a polynomial in theta over K — may be ANY elementary function of
+ * x.  Bronstein's IntegratePrimitivePolynomial (§5.8) integrates the lowest term
+ * by a full LimitedIntegrate in K, so a genuine new logarithm or an ArcTan from
+ * an irreducible-quadratic log argument (e.g. the Sqrt[3] ArcTan of
+ * Integrate[(x^5-1) Log[x^2-x+1], x]) is a legitimate part of the answer, not a
+ * decline.  At the bottom level we therefore accept the complete lower-field
+ * antiderivative wholesale (s = R, c = 0).  The caller diff-back verifies. */
+static int rt_limited_integrate(Expr* r, Expr* x, Expr* u, int is_bottom,
                                 Expr** s_out, Expr** c_out) {
     *s_out = NULL; *c_out = NULL;
     Expr* R = rt_eval_call("Integrate`BronsteinRational",
         (Expr*[]){ expr_copy(r), expr_copy(x) }, 2);
     if (!R) return -1;
     if (rt_head_is(R, "Integrate`BronsteinRational")) { expr_free(R); return -1; }
+    if (is_bottom) { *s_out = R; *c_out = NULL; return 0; }
     /* Rsub = R with Log[u] replaced by the fresh variable rmT. */
     Expr* logu = expr_new_function(expr_new_symbol("Log"),
         (Expr*[]){ expr_copy(u) }, 1);
@@ -697,18 +708,21 @@ static Expr* rt_log_poly_case(Expr* f, Expr* x) {
                 (Expr*[]){ expr_copy(p[i]), neg }, 2);
         }
         Expr* s = NULL; Expr* c = NULL;
-        int rc = rt_limited_integrate(r_i, x, u, &s, &c);
+        int rc = rt_limited_integrate(r_i, x, u, i == 0, &s, &c);
         expr_free(r_i);
         if (rc != 0) { fail = true; break; }
-        /* Fold the theta-term back: q[i+1] += c/(i+1). */
-        Expr* bump = expr_new_function(expr_new_symbol("Times"),
-            (Expr*[]){ c, expr_new_function(expr_new_symbol("Power"),
-                (Expr*[]){ expr_new_integer(i + 1), expr_new_integer(-1) }, 2) }, 2);
-        if (q[i + 1] == NULL) {
-            q[i + 1] = rt_eval_own(bump);
-        } else {
-            q[i + 1] = rt_eval_own(expr_new_function(expr_new_symbol("Plus"),
-                (Expr*[]){ q[i + 1], bump }, 2));   /* adopts old q[i+1] */
+        /* Fold the theta-term back: q[i+1] += c/(i+1).  The bottom level returns
+         * c == NULL (the whole antiderivative is kept in s = q[0]); nothing to fold. */
+        if (c) {
+            Expr* bump = expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ c, expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_new_integer(i + 1), expr_new_integer(-1) }, 2) }, 2);
+            if (q[i + 1] == NULL) {
+                q[i + 1] = rt_eval_own(bump);
+            } else {
+                q[i + 1] = rt_eval_own(expr_new_function(expr_new_symbol("Plus"),
+                    (Expr*[]){ q[i + 1], bump }, 2));   /* adopts old q[i+1] */
+            }
         }
         q[i] = s;
     }
@@ -738,6 +752,13 @@ static Expr* rt_log_poly_case(Expr* f, Expr* x) {
     free(p); free(q);
     if (eta) expr_free(eta);
     expr_free(F); expr_free(tsym);
+    /* The recursion is correct by construction, but the bottom level now admits an
+     * arbitrary elementary lower-field antiderivative (new logs / ArcTan); diff-back
+     * verify so any surprise from the base integrator can only decline, never ship
+     * a wrong form. */
+    if (result && !rt_verify_antideriv(result, f, x)) {
+        expr_free(result); result = NULL;
+    }
     return result;
 }
 
@@ -1963,6 +1984,20 @@ static bool rt_verify_antideriv(Expr* result, Expr* f, Expr* x) {
     Expr* diff = expr_new_function(expr_new_symbol("Plus"),
         (Expr*[]){ d, expr_new_function(expr_new_symbol("Times"),
             (Expr*[]){ expr_new_integer(-1), expr_copy(f) }, 2) }, 2);
+    /* Fast EXACT zero-test before the (occasionally hang-prone) Simplify: TrigToExp
+     * collapses the circular/hyperbolic kernels to exponentials, and Together over
+     * that single rational function of E^(...) reduces a genuinely-zero difference
+     * to 0 at once — a sound certificate.  This makes the verification of a
+     * trig/hyperbolic antiderivative decidable in O(rational).  NB: TrigToExp must
+     * come FIRST — a plain Together on the raw hyperbolic form itself blows up doing
+     * GCD over the opaque Cosh/Sinh kernels (the Sech[x] / Sec[x]^3 hang):
+     * Simplify[D[2 ArcTan[Cosh x + Sinh x]] - Sech x] and Together of it both hang,
+     * yet Together[TrigToExp[...]] = 0 immediately. */
+    Expr* t2 = rt_eval1("Together", rt_eval1("TrigToExp", expr_copy(diff)));
+    if (t2 && rt_is_zero(t2)) { expr_free(t2); expr_free(diff); return true; }
+    if (t2) expr_free(t2);
+    /* Residual (algebraic / log) forms the fast test leaves unreduced fall back to
+     * Simplify (unchanged from the original gate). */
     Expr* s = rt_eval1("Simplify", diff);
     bool z = s && s->type == EXPR_INTEGER && s->data.integer == 0;
     if (s) expr_free(s);
@@ -2787,6 +2822,7 @@ static void rt_collect_tangents(Expr* e, Expr* x, Expr*** args, long** sigs,
  * true with T populated (n >= min_n; no upper depth cap — the arrays are
  * heap-allocated to the actual kernel count); false otherwise (caller still calls
  * rt_tower_free). */
+static Expr* rt_expand_exp_sums(Expr* e);   /* defined below; splits merged E^(a+b) */
 static bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
     T->kind = NULL; T->kernel = NULL; T->arg = NULL; T->t = NULL; T->Dcoef = NULL;
     T->tsg = NULL; T->marg = NULL; T->mprim = NULL; T->mmult = NULL;
@@ -2910,13 +2946,21 @@ static bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
     }
     T->n = n;
 
-    /* Order innermost-first (deepest at index 0); tie-break EXP before LOG. */
+    /* Order innermost-first (deepest at index 0); tie-break EXP/TAN before LOG.
+     * A LOG monomial's derivation coefficient may be a rational function of an
+     * EXP or TAN monomial (e.g. D[Log[Cos x]] = -Tan[x], D[Log[1+E^x]] =
+     * E^x/(1+E^x)), so those non-log monomials must sit BELOW the log for the
+     * triangular structure-theorem check to pass.  Conversely an exponential /
+     * tangent kernel's own coefficient lies in C(x) (free of logs), so it can
+     * always be pushed deeper.  When the LOG is genuinely nested inside the
+     * EXP/TAN argument the rt_contains test above keeps the correct order. */
     for (size_t pass = 0; pass < n; pass++)
         for (size_t i = 0; i + 1 < n; i++) {
             bool swap = false;
             if (rt_contains(T->kernel[i], T->kernel[i + 1])) swap = true;
             else if (!rt_contains(T->kernel[i + 1], T->kernel[i])
-                     && T->kind[i] == RT_LOG && T->kind[i + 1] == RT_EXP) swap = true;
+                     && T->kind[i] == RT_LOG
+                     && (T->kind[i + 1] == RT_EXP || T->kind[i + 1] == RT_TAN)) swap = true;
             if (swap) {
                 RtKind kk = T->kind[i]; T->kind[i] = T->kind[i + 1]; T->kind[i + 1] = kk;
                 long sg = T->tsg[i]; T->tsg[i] = T->tsg[i + 1]; T->tsg[i + 1] = sg;
@@ -3033,11 +3077,21 @@ static bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
         if (trig) d = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceRepeated"),
             (Expr*[]){ d, trig }, 2));                             /* adopts d, trig */
         if (!d) { ok = false; break; }
-        /* T->subrules carries the tangent-trig rationalisation rules (Csc/Sec/Sin/Cos
-         * of a tangent argument -> tower-variable form with the Sqrt radical), so the
-         * evaluator-canonicalised (1+Tan^2)/Tan = Csc*Sec still substitutes cleanly. */
-        Expr* dsub = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
-            (Expr*[]){ d, expr_copy(T->subrules) }, 2));           /* adopts d */
+        /* Split any exponential product the D-evaluation MERGED back into a summed
+         * exponent (D[E^(E^x)] * x = x E^(E^x) E^x, which the evaluator canonicalises
+         * to x E^(x + E^x)); without this the merged E^(x+E^x) is not the literal
+         * kernel E^x / E^(E^x) that T->subrules aliases, so it reads as a foreign
+         * exponential and the structure check spuriously rejects a valid tower — the
+         * depth-2 nested-exp-trig case Cos[x E^(E^x)] after TrigToExp. */
+        { Expr* de = rt_expand_exp_sums(d); expr_free(d); d = de; }
+        if (!d) { ok = false; break; }
+        /* Substitute the kernels to tower variables STRUCTURALLY (rt_subst_kernels),
+         * NOT via an evaluated ReplaceAll: the latter re-evaluates and re-merges the
+         * exp product just split above (E^(E^x) E^x -> E^(x+E^x)), stranding a foreign
+         * kernel.  rt_subst_kernels also carries the tangent-trig rationalisation, so
+         * the evaluator-canonicalised (1+Tan^2)/Tan = Csc*Sec still maps cleanly. */
+        Expr* dsub = rt_subst_kernels(d, T);
+        expr_free(d);
         Expr* ds = dsub ? rt_eval1("Cancel", dsub) : NULL;
         if (!ds) { ok = false; break; }
         T->Dcoef[i] = ds;
@@ -3055,7 +3109,7 @@ static bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
  * NULL, which makes the residue criterion decline a partial rather than surface
  * one mid-recursion. */
 Expr* rt_field_integrate(Expr* F, RtTower* T, long L, Expr* x, Expr** rem_out);
-static int   rt_limited_field_integrate(Expr* r, RtTower* T, long L, Expr* x,
+static int   rt_limited_field_integrate(Expr* r, RtTower* T, long L, Expr* x, int is_bottom,
                                         Expr** s_out, Expr** c_out);
 static Expr* rt_int_primitive_poly(Expr* num, Expr* den, RtTower* T, long L, Expr* x);
 static Expr* rt_int_hyperexp_poly(Expr* num, Expr* den, RtTower* T, long L, Expr* x);
@@ -3668,7 +3722,7 @@ static Expr* rt_int_primitive_poly(Expr* num, Expr* den, RtTower* T, long L, Exp
                         (Expr*[]){ expr_new_integer(-1), term }, 2) }, 2));
         }
         Expr* s = NULL; Expr* c = NULL;
-        int rc = r_i ? rt_limited_field_integrate(r_i, T, L, x, &s, &c) : -1;
+        int rc = r_i ? rt_limited_field_integrate(r_i, T, L, x, i == 0, &s, &c) : -1;
         if (r_i) expr_free(r_i);
         if (rc != 0) { fail = true; break; }
         if (c) {
@@ -3701,13 +3755,43 @@ static Expr* rt_int_primitive_poly(Expr* num, Expr* den, RtTower* T, long L, Exp
     return result;
 }
 
+/* True if `e` contains an inverse-tangent / -cotangent (circular or hyperbolic)
+ * kernel with an x-dependent argument.  Such a term is what a rational integral
+ * over an IRREDUCIBLE-QUADRATIC denominator produces (LogToReal of the complex
+ * conjugate log pair).  Appearing at a theta^i coefficient with i >= 1 it is the
+ * dilogarithm obstruction: e.g. Integrate[Log[1+x^2]/(1+x^2), x] is not
+ * elementary, so a primitive polynomial whose (i>=1)-level residual integrates to
+ * such an ArcTan has NO elementary integral (Bronstein Thm 5.6.1(ii)). */
+static bool rt_has_arctan_of_x(Expr* e, Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if ((h == intern_symbol("ArcTan") || h == intern_symbol("ArcCot")
+             || h == intern_symbol("ArcTanh") || h == intern_symbol("ArcCoth"))) {
+            for (size_t i = 0; i < e->data.function.arg_count; i++)
+                if (!rt_free_of_x(e->data.function.args[i], x)) return true;
+        }
+    }
+    if (rt_has_arctan_of_x(e->data.function.head, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rt_has_arctan_of_x(e->data.function.args[i], x)) return true;
+    return false;
+}
+
 /* Limited integration in the lower field: integrate r (free of t_L) in K_L and
  * split the result as s + c*t_L with s in K_L and c a constant (the single new
  * logarithm equal to t_L = Log[u_L] is folded into c; any other new logarithm or
  * non-constant t_L-coefficient means r is not integrable within this tower here,
  * so decline).  On success sets *s_out (owned, may be NULL for 0) and *c_out
- * (owned, NULL when 0) and returns 0; else -1. */
-static int rt_limited_field_integrate(Expr* r, RtTower* T, long L, Expr* x,
+ * (owned, NULL when 0) and returns 0; else -1.
+ *
+ * `is_bottom` selects the theta^0 coefficient, which may be ANY elementary
+ * function of x (a new logarithm or an ArcTan from an irreducible-quadratic log
+ * argument): the whole lower-field antiderivative is accepted wholesale.  At a
+ * theta^{>=1} coefficient an x-dependent ArcTan (or other non-theta transcendental
+ * the fold cannot absorb) is instead the dilogarithm obstruction and yields an
+ * authoritative NON-elementary verdict. */
+static int rt_limited_field_integrate(Expr* r, RtTower* T, long L, Expr* x, int is_bottom,
                                       Expr** s_out, Expr** c_out) {
     *s_out = NULL; *c_out = NULL;
     Expr* R = rt_field_integrate(r, T, L - 1, x, NULL);  /* lower field: no partial */
@@ -3733,8 +3817,16 @@ static int rt_limited_field_integrate(Expr* r, RtTower* T, long L, Expr* x,
     if (!Rs) return -1;
     Expr* tL = T->t[L];
     int rc = -1;
-    if (rt_find_exp_of_x(Rs, x) == NULL && rt_find_log_of_x(Rs, x) == NULL
-        && rt_is_poly(Rs, tL) && rt_degree(Rs, tL) <= 1) {
+    if (is_bottom) {
+        /* theta^0 coefficient: accept the complete elementary lower-field
+         * antiderivative (new logs / ArcTan permitted — see the header). */
+        *s_out = expr_copy(Rs); *c_out = NULL; rc = 0;
+        expr_free(Rs);
+        return rc;
+    }
+    bool foreign = rt_find_exp_of_x(Rs, x) != NULL || rt_find_log_of_x(Rs, x) != NULL
+                   || rt_has_arctan_of_x(Rs, x);
+    if (!foreign && rt_is_poly(Rs, tL) && rt_degree(Rs, tL) <= 1) {
         Expr* c = rt_coeff(Rs, tL, 1);
         Expr* s = rt_coeff(Rs, tL, 0);
         bool cconst = rt_free_of_x(c, x);
@@ -3752,6 +3844,14 @@ static int rt_limited_field_integrate(Expr* r, RtTower* T, long L, Expr* x,
             rt_dec_nonelem();
             expr_free(c); expr_free(s);
         }
+    } else if (rt_has_arctan_of_x(Rs, x)) {
+        /* A theta^{>=1} coefficient would have to carry an x-dependent ArcTan — the
+         * irreducible-quadratic dilogarithm obstruction (Thm 5.6.1(ii)).  The lower
+         * integral is complete (rational RHS), so this is an authoritative
+         * non-elementary verdict, e.g. Integrate[(3x+1) Log[x^2+1]^5, x].  (A merely
+         * unfolded x-dependent LOG is left as a plain decline — it can be a content /
+         * combination artifact of a reducible argument, not proven non-elementary.) */
+        rt_dec_nonelem();
     }
     expr_free(Rs);
     return rc;
@@ -3909,6 +4009,26 @@ static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x) {
  * rewrite is exact (E^(a+b) = E^a E^b) and the whole recursive case is
  * diff-back verified, so it can never ship a wrong form.  Returns a
  * freshly-owned tree (caller frees). */
+/* True if `e` contains an exponential (Exp[...] / E^...) or logarithm (Log[...])
+ * kernel anywhere.  Used to tell a "base-field" exponent term (rational in x, no
+ * nested transcendental — e.g. 1, 1/x) from a term carrying a nested kernel
+ * (x E^(1+1/x)) when deciding how to split a merged exponential. */
+static bool rt_has_explog_kernel(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if (h == intern_symbol("Exp") || h == intern_symbol("Log")) return true;
+        if (h == intern_symbol("Power") && e->data.function.arg_count == 2
+            && e->data.function.args[0]->type == EXPR_SYMBOL
+            && e->data.function.args[0]->data.symbol.name == intern_symbol("E"))
+            return true;
+    }
+    if (rt_has_explog_kernel(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rt_has_explog_kernel(e->data.function.args[i])) return true;
+    return false;
+}
+
 static Expr* rt_expand_exp_sums(Expr* e) {
     if (!e) return NULL;
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
@@ -3922,16 +4042,41 @@ static Expr* rt_expand_exp_sums(Expr* e) {
     else if (h == intern_symbol("Exp") && e->data.function.arg_count == 1)
         expo = e->data.function.args[0];
     if (expo && rt_head_is(expo, "Plus") && expo->data.function.arg_count >= 2) {
+        /* Split E^(a1 + a2 + ...) only to ISOLATE nested-kernel terms (a term
+         * carrying an Exp/Log, e.g. x E^(1+1/x)), which would otherwise strand a
+         * foreign kernel in the tower derivation.  All base-field terms (rational
+         * in x — 1, 1/x, ...) are grouped into ONE factor E^(sum of them).  This
+         * avoids peeling a bare constant E^c off a Plus like 1 + 1/x: E^1 · E^(1/x)
+         * re-merges under evaluation to E^(1+1/x), so the tower kernel E^(1/x) would
+         * never match its E^(1+1/x) occurrences (the In[14] nested-exp failure).
+         * Keeping 1+1/x together gives the valid single kernel E^(1+1/x). */
         size_t m = expo->data.function.arg_count;
-        Expr** facs = malloc(m * sizeof(Expr*));
+        Expr** base = malloc(m * sizeof(Expr*)); size_t nb = 0;
+        Expr** facs = malloc((m + 1) * sizeof(Expr*)); size_t nf = 0;
         for (size_t i = 0; i < m; i++) {
-            Expr* part = rt_expand_exp_sums(expo->data.function.args[i]);
-            facs[i] = expr_new_function(expr_new_symbol("Power"),
-                (Expr*[]){ expr_new_symbol("E"), part }, 2);
+            Expr* term = expo->data.function.args[i];
+            if (rt_has_explog_kernel(term))
+                facs[nf++] = expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_new_symbol("E"), rt_expand_exp_sums(term) }, 2);
+            else
+                base[nb++] = expr_copy(term);
         }
-        Expr* prod = expr_new_function(expr_new_symbol("Times"), facs, m);
-        free(facs);
-        return prod;
+        if (nf == 0) {                 /* no nested term: splitting would only peel a
+                                        * constant — keep the exponential whole. */
+            for (size_t i = 0; i < nb; i++) expr_free(base[i]);
+            free(base); free(facs);
+        } else {
+            if (nb > 0) {
+                Expr* basesum = (nb == 1) ? base[0]
+                    : expr_new_function(expr_new_symbol("Plus"), base, nb);
+                facs[nf++] = expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_new_symbol("E"), basesum }, 2);
+            }
+            free(base);
+            Expr* prod = expr_new_function(expr_new_symbol("Times"), facs, nf);
+            free(facs);
+            return prod;
+        }
     }
     Expr* nh = rt_expand_exp_sums(e->data.function.head);
     size_t k = e->data.function.arg_count;
@@ -4088,7 +4233,14 @@ static Expr* rt_recursive_tower_case(Expr* f, Expr* x) {
                 if (diff && rem_tower)
                     diff = expr_new_function(expr_new_symbol("Plus"),
                         (Expr*[]){ diff, expr_copy(rem_tower) }, 2);
-                Expr* chk = diff ? rt_eval1("Together", diff) : NULL;
+                /* Expand before Together: a summed derivation coefficient (e.g.
+                 * Dcoef = (k - t_tan x)/x for Log[x^k Cos x]) leaves an
+                 * undistributed product like x^5 (k/x - t_tan) in D_tower[Q], which
+                 * Together alone does not multiply out — so a genuinely-zero
+                 * residual would read as nonzero and a correct antiderivative would
+                 * be spuriously rejected.  Expand distributes the products; Together
+                 * then clears any lower-field fractions so rt_is_zero is exact. */
+                Expr* chk = diff ? rt_eval1("Together", rt_eval1("Expand", diff)) : NULL;
                 bool tower_ok = chk && rt_is_zero(chk);
                 if (DQ) expr_free(DQ);
                 if (chk) expr_free(chk);
@@ -4352,11 +4504,29 @@ static bool cx_reim(Expr* e, Expr* x, Expr** re, Expr** im) {
  * under the EXACT symbolic gate (rt_verify_antideriv, Simplify[D-f]===0).  A
  * Risch decision procedure never certifies by numeric sampling; if Simplify
  * cannot reduce the reconstructed real form to prove it, this declines. */
+static long rt_nodecount(Expr* e) {
+    if (!e) return 0;
+    long n = 1;
+    if (e->type == EXPR_FUNCTION) {
+        n += rt_nodecount(e->data.function.head);
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            n += rt_nodecount(e->data.function.args[i]);
+    }
+    return n;
+}
+
 static Expr* rt_realify(Expr* G, Expr* x, Expr* f) {
     Expr* re = NULL; Expr* im = NULL;
     if (!cx_reim(G, x, &re, &im)) { if (re) expr_free(re); if (im) expr_free(im); return NULL; }
     if (im) expr_free(im);
-    Expr* reS = rt_eval1("Simplify", re);
+    /* Complexity guard: on a form carrying an ArcTan/Log of a complex argument (the
+     * odd rational-trig powers, e.g. Sec[x]^3), cx_reim's exact real part explodes —
+     * ~280k nodes vs. ~13k for the heaviest case that still reduces cleanly (Sec[x]^4)
+     * — and Simplify then blows up.  Bail early (leak-free, no cost) so the front-end
+     * keeps the compact diff-back-verified exponential form; every genuine clean case
+     * sits far below the cap. */
+    if (rt_nodecount(re) > 60000) { expr_free(re); return NULL; }
+    Expr* reS = rt_eval1("Simplify", re);                           /* adopts re */
     if (reS && rt_free_of_complex(reS) && rt_verify_antideriv(reS, f, x)) return reS;
     if (reS) expr_free(reS);
     return NULL;
@@ -4398,26 +4568,39 @@ static Expr* rt_trig_frontend(Expr* f, Expr* x) {
      * exponentialize to a sum of two non-commensurate exponentials E^((a +/- b I) x)
      * that the single-primitive cases cannot kernelize. */
     if (!r) r = rt_expsum_case(fe, x);
+    /* Nested / mixed exponential towers exposed by TrigToExp: a trig kernel whose
+     * argument itself carries a nested exponential (e.g. Cos[x E^(E^x)] ->
+     * E^(±I x E^(E^x))) exponentializes to a genuine multi-kernel tower that the
+     * single-primitive closers above cannot kernelize.  Route it through the
+     * one-extension recursion (and the flat exp-tower fallback), which builds the
+     * {E^x, E^(E^x), E^(±I x E^(E^x))} tower and integrates it; the I-laden result
+     * is realified below (diff-back gated).  Closes e.g.
+     * Integrate[E^E^x (1 + x E^x) Cos[x E^E^x], x] = Sin[x E^E^x]. */
+    if (!r) r = rt_recursive_tower_case(fe, x);
+    if (!r) r = rt_exp_tower_case(fe, x);
     expr_free(fe);
     if (!r) return NULL;
-    Expr* out = rt_eval1("ExpToTrig", r);   /* adopts r; back to trig form */
-    if (!out) return NULL;
-    /* Real reconstruction: the exp route's log part is a correct but I-laden
-     * closed form; reconstruct a real one.  Diff-back gated, so on failure the
-     * correct I-laden form is kept (never a wrong or worse answer). */
-    Expr* real = rt_realify(out, x, f);
-    if (real) { expr_free(out); return real; }
-    /* Soundness guard: the exp cases are correct by construction for a genuine
-     * rational function of E^(a x) (a constant), but TrigToExp of a trig-of-a-
-     * TRANSCENDENTAL argument (e.g. Tan[Log[x]] -> x^I = E^(I Log[x])) yields
-     * complex-power kernels the single-primitive exp cases can spuriously certify
-     * (once emitting Integrate[Tan[x] Tan[Log[x]]] = 0).  Since realify's exact
-     * gate did not fire, verify the I-laden form with the EXACT symbolic diff-back
-     * before returning it; on failure decline (never ship a wrong closed form,
-     * never certify by numeric sampling). */
-    if (rt_verify_antideriv(out, f, x)) return out;
-    expr_free(out);
-    return NULL;
+    /* Soundness guard, verified on the EXPONENTIAL form `r` (not its ExpToTrig
+     * image).  The exp cases are correct by construction for a genuine rational
+     * function of E^(a x), but TrigToExp of a trig-of-a-TRANSCENDENTAL argument
+     * (e.g. Tan[Log[x]] -> x^I) yields complex-power kernels a single-primitive
+     * case can spuriously certify — so verify.  Crucially, verify `r` and NOT
+     * ExpToTrig[r]: r is a rational function of the exponential kernel, so the
+     * diff-back Together[TrigToExp[D[r]-f]] reduces to 0 exactly and fast, whereas
+     * the multiple-angle ExpToTrig image does NOT rational-reduce and would strand
+     * the check in Simplify (the Sec[x]^3 hang).  ExpToTrig is an exact rewrite, so
+     * ExpToTrig[r] is a correct antiderivative iff r is. */
+    if (!rt_verify_antideriv(r, f, x)) { expr_free(r); return NULL; }
+    /* Reconstruct a REAL closed form from the trig image ExpToTrig[r] (nice-to-have,
+     * exact-diff-back gated and time-bounded).  On success return the clean real
+     * form; on failure return the COMPACT exponential form `r` itself — already
+     * verified, so correct by construction, and far smaller than the multiple-angle
+     * ExpToTrig image (e.g. Sec[x]^3, whose real reduction Simplify cannot close). */
+    Expr* out = rt_eval1("ExpToTrig", expr_copy(r));   /* trig image; keep r */
+    Expr* real = out ? rt_realify(out, x, f) : NULL;
+    if (out) expr_free(out);
+    if (real) { expr_free(r); return real; }
+    return r;
 }
 
 /* True iff `e` contains, anywhere, a function node with head symbol `h`. */
@@ -4889,6 +5072,30 @@ static Expr* rt_transcendental_case(Expr* f, Expr* x) {
     if (r) return r;
     r = rt_trig_frontend(f, x);
     if (r) return r;
+    /* Dependent-logarithm fallback.  When every case above declined, the
+     * integrand may carry Q-linearly DEPENDENT logarithmic generators that no
+     * single case models — e.g. Log[x/(1+x)] + Log[1+x], two distinct Log
+     * kernels that collapse to the single generator Log[x].  Normalize with the
+     * log-of-product / log-of-power expansion (Log[a b] -> Log a + Log b,
+     * Log[b^p] -> p Log b); the evaluator then recombines the dependent pair
+     * (Log[x/(1+x)] + Log[1+x] -> Log[x]), and rt_log_poly_case integrates the
+     * collapsed Log[x]/x -> Log[x]^2/2.  Only runs after the original form failed
+     * (so it never changes an already-handled case's cleaner output), value-
+     * preserving (rt_expand_logs is an identity on the function's value), and
+     * guarded against re-entry so the retry itself cannot loop. */
+    static int rt_in_logcombine = 0;
+    if (!rt_in_logcombine) {
+        Expr* fn = rt_eval_own(rt_expand_logs(f));
+        if (fn && !expr_eq(fn, f)) {
+            rt_in_logcombine = 1;
+            r = rt_transcendental_case(fn, x);
+            rt_in_logcombine = 0;
+            expr_free(fn);
+            if (r) return r;
+        } else if (fn) {
+            expr_free(fn);
+        }
+    }
     return NULL;
 }
 

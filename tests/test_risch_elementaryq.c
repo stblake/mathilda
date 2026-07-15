@@ -74,6 +74,16 @@ static void test_false_residue(void) {
     assert_false("1/Log[x]");              /* LogIntegral — residue x is non-constant */
 }
 
+/* ---- False: the polynomial-in-Log dilogarithm obstruction (Thm 5.6.1(ii)) ----
+ * A (theta^{>=1})-level residual that integrates to an x-dependent ArcTan (from an
+ * irreducible-quadratic log argument) has no elementary integral — the
+ * dilogarithm obstruction, e.g. Integrate[Log[1+x^2]/(1+x^2)] = (dilog). */
+static void test_false_poly_log_dilog(void) {
+    assert_false("(3 x + 1) Log[x^2 + 1]^5"); /* reported In[7]: NOT elementary   */
+    assert_false("Log[1 + x^2]/(1 + x^2)");   /* the depth-1 dilog obstruction    */
+    assert_false("Log[1 + x^2]^2");           /* cross-term dilog (Catalan value) */
+}
+
 /* ---- True: an elementary antiderivative is exhibited ----------------------- */
 static void test_true_elementary(void) {
     assert_true("E^x");
@@ -84,6 +94,16 @@ static void test_true_elementary(void) {
     assert_true("1/(1 + x^2)");            /* ArcTan[x] (rational base case) */
     assert_true("Tan[x]");                 /* -Log[Cos[x]] (hypertangent)    */
     assert_true("1/(x (Log[x]^2 + 1))");   /* elementary complex-residue ArcTan */
+    /* Polynomial * Log: degree-1 in Log is ALWAYS elementary (one IBP -> rational
+     * integral), even with an irreducible-quadratic argument whose bottom-level
+     * ArcTan is a legitimate part of the answer. */
+    assert_true("(x^5 - 1) Log[x^2 - x + 1]"); /* reported In[12] */
+    assert_true("x Log[x^2 + 1]");
+    assert_true("Log[x]^3");               /* linear argument: no dilog obstruction */
+    /* Across the dispatch: fractional log/exp, nested tower, mixed tower. */
+    assert_true("E^x/(E^(2 x) + 1)");      /* ArcTan[E^x] (algebraic residues)   */
+    assert_true("1/(x Log[x] Log[Log[x]])"); /* Log[Log[Log[x]]] (nested log tower) */
+    assert_true("1/(3 + Tan[x]^2)");       /* real hypertangent (§5.10)          */
 }
 
 /* ---- Undecided: outside the transcendental-tower field scope --------------- */
@@ -98,6 +118,7 @@ int main(void) {
     printf("=== Risch`ElementaryIntegralQ decision predicate (P3) ===\n");
     TEST(test_false_risch_de);
     TEST(test_false_residue);
+    TEST(test_false_poly_log_dilog);
     TEST(test_true_elementary);
     TEST(test_undecided_out_of_scope);
     printf("All ElementaryIntegralQ tests passed.\n");

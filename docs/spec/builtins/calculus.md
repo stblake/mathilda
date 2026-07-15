@@ -623,7 +623,14 @@ monotonically down.
      exponential special-denominator Laurent ansatz and an exact
      tower-variable verification — nested exp/log towers such as
      `∫((e^x−x²+2x)/(x²(x+e^x)²)) e^((x²−1)/x + 1/(x+e^x)) dx = e^(−x+1/(e^x+x)+(x²−1)/x)`
-     and `∫(1/(x log(1+e^x)) − …) dx = log(x)/log(1+e^x)`.  Arithmetic warnings
+     and `∫(1/(x log(1+e^x)) − …) dx = log(x)/log(1+e^x)`.  Also closes
+     polynomial × `Log` with an irreducible-quadratic argument (a new `ArcTan`
+     in the answer, e.g. `∫(x⁵−1) log(x²−x+1) dx`), Q-linearly **dependent**
+     logarithms (`∫(log(x/(1+x))+log(1+x))/x = log(x)²/2`), mixed **tangent + log**
+     towers (`∫12x⁴+5x⁴ log(x¹²cos x)−x⁵ tan x = x⁵ log(x¹²cos x)`), and deeper
+     nested exponentials — including a constant-plus-rational inner exponent
+     (`∫… = x e^(x e^(1+1/x))`) and a nested exp inside a circular kernel
+     (`∫e^(e^x)(1+x e^x) cos(x e^(e^x)) = sin(x e^(e^x))`).  Arithmetic warnings
      from transient internal singular expressions are muted (as in Mathematica).
   12. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
      from `src/internal/CRCMathTablesIntegrals.m` on first call).
@@ -1757,7 +1764,11 @@ decides whether `f` has an antiderivative expressible in **elementary** terms
   certificate: the §5.6 residue criterion (Thm 5.6.1(ii): a non-constant
   residue in the simple part), a Chapter-6 Risch differential equation with no
   rational solution (via the complete base-field solver `rde_base` or the
-  exact-degree-bound tower ansatz), or the §5.8 `Dc ≠ 0` primitive certificate.
+  exact-degree-bound tower ansatz), the §5.8 `Dc ≠ 0` primitive certificate, or
+  the **dilogarithm obstruction** in a polynomial-in-`Log` integrand — a
+  θ^{≥1}-level residual that integrates to an x-dependent `ArcTan` (from an
+  irreducible-quadratic log argument) has no elementary integral, e.g.
+  `∫Log(1+x²)/(1+x²)` and hence `∫(3x+1) Log(x²+1)⁵`.
 - **unevaluated** (with a `Risch`ElementaryIntegralQ::undec` message) — the
   verdict is outside the single differential-tower field scope (algebraic
   extensions, structures the tower builder rejects).
@@ -1777,6 +1788,10 @@ In[3]:= Risch`ElementaryIntegralQ[1/Log[x], x]     (* LogIntegral — non-consta
 Out[3]= False
 In[4]:= Risch`ElementaryIntegralQ[E^x/(1 + E^x), x] (* Log[1+E^x] *)
 Out[4]= True
+In[5]:= Risch`ElementaryIntegralQ[(3 x + 1) Log[x^2 + 1]^5, x] (* dilog obstruction *)
+Out[5]= False
+In[6]:= Risch`ElementaryIntegralQ[(x^5 - 1) Log[x^2 - x + 1], x] (* degree-1: elementary *)
+Out[6]= True
 ```
 
 **`Integrate::nonelem` message.** When `Integrate`RischTranscendental[f, x]`

@@ -158,10 +158,23 @@ the recursive primitive-polynomial **coefficient matching**
 oracle** (`rt_limited_integrate`) that folds a would-be new logarithm back into
 the tower by bumping `q_{i+1} += c_i/(i+1)`.
 
+**2026-07-15 — bottom-level elementary term + dilog decision.** The `theta^0`
+(bottom) coefficient now accepts an ARBITRARY elementary lower-field
+antiderivative (a genuine new `Log`/`ArcTan` from an irreducible-quadratic log
+argument), so degree-1 `P(x) Log[u]` closes — e.g.
+`Integrate[(x^5-1) Log[x^2-x+1], x]` (a `Sqrt[3] ArcTan[(2x-1)/Sqrt[3]]` term).
+A non-`theta` transcendental at a `theta^{>=1}` coefficient is instead the
+DILOGARITHM obstruction: `rt_limited_field_integrate` fires the non-elementary
+certificate, so `Risch\`ElementaryIntegralQ[(3x+1) Log[x^2+1]^5, x] = False`
+(and `Log[1+x^2]/(1+x^2)`, `Log[1+x^2]^2`). Diff-back gated on the integrate side.
+
 - `Integrate[Log[x], x] = x Log[x] - x`
 - `Integrate[Log[x]^2, x]`, `Integrate[x Log[x], x]`, `Integrate[Log[x]^3, x]`
 - `Integrate[Log[x^2+1], x] = x Log[1+x^2] - 2x + 2 ArcTan[x]`
 - `Integrate[Log[2x+3], x]`, `Integrate[Log[x]/x, x] = Log[x]^2/2`
+- `Integrate[(x^5-1) Log[x^2-x+1], x]` (bottom-level ArcTan admitted)
+- Dependent logs collapse: `Integrate[(Log[x/(1+x)]+Log[1+x])/x, x] = Log[x]^2/2`
+  (log-combination fallback in `rt_transcendental_case`)
 
 ### 3.3 Exponential Laurent-polynomial  (`rt_exp_poly_case`)
 `sum_i p_i(x) E^(i u)`, single primitive kernel `E^u`, `i`
@@ -353,6 +366,21 @@ flat case is single-kind) and **rational lower-field coefficients** (a `t_n`
 coefficient that is `1/x`, a nonlinear unknown for the flat ansatz).  This engine
 is the genuine recursive Risch (Bronstein ch. 5): it peels
 **one extension at a time**.
+
+**2026-07-15 — mixed Tan+Log towers, nested-exp normalization, trig-frontend
+routing.** Four robustness fixes: (a) the tower **ordering** now places a `Tan`
+monomial beneath a `Log` whose derivative is rational in it
+(`D[Log[Cos x]] = -Tan x`), so `Integrate[12x^4+5x^4 Log[x^12 Cos x]-x^5 Tan x, x]
+= x^5 Log[x^12 Cos x]`; (b) the recursive-tower diff-back `Expand`s a **summed
+derivation coefficient** (e.g. `Dcoef = (k - t_tan x)/x`) so a genuinely-zero
+residual is recognized; (c) `rt_expand_exp_sums` keeps the x-free constant part of
+a `Plus` exponent grouped (no bare `E^1` factor that re-merges), so a
+constant-plus-rational inner exponent survives —
+`Integrate[E^(x E^(1+1/x)) - ..., x] = x E^(x E^(1+1/x))`; (d) the tower
+**derivation coefficient** is substituted STRUCTURALLY (`rt_subst_kernels`), not via
+an evaluating `ReplaceAll` that re-merges a split exp product — needed for the
+depth-2 nested-exp-in-`Cos` case routed from `rt_trig_frontend`:
+`Integrate[E^E^x (1+x E^x) Cos[x E^E^x], x] = Sin[x E^E^x]`.
 
 - `rt_tower_build` constructs the ordered differential tower (`RtTower`): collect
   every x-dependent `Log`/`E^` kernel, order innermost-first by structural

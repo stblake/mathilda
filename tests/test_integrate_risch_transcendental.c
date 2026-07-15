@@ -1006,6 +1006,177 @@ static void test_bronstein_rde_examples(void) {
         "Integrate[E^x/(x - 3)^2, x, Method -> \"RischTranscendental\"]", "Integrate");
 }
 
+/* ================= REPORTED-BUG REGRESSIONS =================
+ * The six transcendental-Risch integrands from the 2026-07-15 bug report, plus
+ * the "already works, lock it in" Group-2 exponential cases.  Each is diff-back
+ * verified (exact where Simplify closes, else numeric interior points). */
+static void test_reported_bug_fixes(void) {
+    /* In[1]: mixed Log+Tan tower — the LOG-after-TAN ordering + Expand'd tower
+     * diff-back.  ∫ = x^5 Log[x^12 Cos x]. */
+    assert_rm_diff_zero("12 x^4 + 5 x^4 Log[x^12 Cos[x]] - x^5 Tan[x]");
+    assert_rm_method_diff_zero("12 x^4 + 5 x^4 Log[x^12 Cos[x]] - x^5 Tan[x]");
+
+    /* In[2]/In[9]: Q-linearly DEPENDENT log generators collapse to Log[x]/x via
+     * the log-combination fallback.  ∫ = Log[x]^2/2. */
+    assert_rm_diff_zero("(Log[x/(1 + x)] + Log[1 + x])/x");
+    assert_rm_diff_zero("(Log[x + 1] + Log[x/(x + 1)])/x");
+
+    /* In[12]: polynomial * Log with an irreducible-quadratic argument — the
+     * bottom-level ArcTan is admitted (was rejected as a foreign new log). */
+    assert_rm_diff_zero("(x^5 - 1) Log[x^2 - x + 1]");
+    assert_rm_method_diff_zero("(x^5 - 1) Log[x^2 - x + 1]");
+
+    /* In[14]: nested exponential with a constant-plus-rational inner exponent
+     * E^(1+1/x) — the exp-sum split must keep 1+1/x together (no bare E^1 that
+     * re-merges).  ∫ = x E^(x E^(1+1/x)). */
+    assert_rm_num("E^(E^(1 + 1/x)*x) - E^(1 + 1/x + E^(1 + 1/x)*x)"
+                  " + E^(1 + 1/x + E^(1 + 1/x)*x)*x");
+
+    /* In[21]: depth-2 nested-exp inside a Cos — the trig front-end now routes the
+     * exponentialized integrand through the recursive tower, and the Dcoef exp
+     * product is kept structural.  ∫ = Sin[x E^E^x]. */
+    assert_rm_num("Exp[Exp[x]] (1 + x Exp[x]) Cos[x Exp[Exp[x]]]");
+
+    /* Group-2 (In[15]-In[20]): already-passing exponential integrands, locked in
+     * so the tower/exp-split refactors cannot silently regress them. */
+    assert_rm_diff_zero("E^(-1 + E^x + 1/x + 1/(1 - x^2))"
+                        " (E^x - 1/x^2 + (2 x)/(-1 + x^2)^2)");
+    assert_rm_diff_zero("(1 - 1/(x Log[x]^2)) Exp[1/Log[x] + x]");
+    assert_rm_diff_zero("(x + 1)/x^4 Exp[1/x]");
+    assert_rm_diff_zero("((-1 - x - x^2 + x^3)/(1 - 2 x^2 + x^4)) Exp[x]");
+    assert_rm_num("(E^(1/(E^x + x) + (-1 + x^2)/x) (E^x + 2 x - x^2))"
+                  "/(x^2 (E^x + x)^2)");
+    assert_rm_diff_zero("(Exp[1/Log[x]] (Log[x]^2 - 1))/Log[x]^2");
+}
+
+/* ================= DISPATCH CASE MATRIX =================
+ * One stressing integrand per case / sub-case of rt_transcendental_case's
+ * cascade (RISCH_STATUS.md §2), each diff-back verified.  Complements the
+ * per-family suites above with a single cross-cutting coverage matrix so a
+ * regression in any one dispatch arm is caught by a named check.  All reduce
+ * EXACTLY (Simplify[D - f] === 0), including the I-laden exp-sum and the
+ * special-function outputs. */
+static void test_dispatch_case_matrix(void) {
+    /* rt_rational_case — rational base, LRT over an irreducible quartic
+     * (two conjugate ArcTan + Log pairs). */
+    assert_rm_diff_zero("1/(x^4 + 1)");
+    /* rt_log_poly_case — polynomial in Log[x] (linear argument), high degree. */
+    assert_rm_diff_zero("x^2 Log[x]^3");
+    /* rt_exp_poly_case — Laurent polynomial in E^(x^2): the i=1 Risch DE
+     * q' + 2x q = x^3 has the polynomial solution (x^2-1)/2. */
+    assert_rm_diff_zero("x^3 E^(x^2)");
+    /* rt_exp_poly_case, Phase C — RATIONAL exponent E^(1/x). */
+    assert_rm_diff_zero("(x + 1)/x^4 E^(1/x)");
+    /* rt_frac_case — squarefree Rothstein-Trager with RATIONAL residues (log). */
+    assert_rm_diff_zero("1/(x Log[x] (1 + Log[x]))");
+    /* rt_frac_lrt — ALGEBRAIC residues -> ArcTan (exp kernel, E^(2x) -> t^2). */
+    assert_rm_diff_zero("E^x/(E^(2 x) + 1)");
+    /* rt_hermite_case — repeated pole (log kernel) + a residual log. */
+    assert_rm_diff_zero("(1 + Log[x])/(x Log[x]^2)");
+    /* rt_hyperexp_case — coupled Laurent + Hermite, higher repeated pole. */
+    assert_rm_diff_zero("1/(1 + E^x)^3");
+    /* rt_expsum_case — non-commensurate exponentials from E^x * trig (the
+     * I-laden Cosh/Sinh-of-complex form still diff-backs to exactly 0). */
+    assert_rm_diff_zero("x^2 E^x Cos[x]");
+    /* rt_log_tower_case — nested logarithmic tower, depth 3. */
+    assert_rm_diff_zero("1/(x Log[x] Log[Log[x]] Log[Log[Log[x]]])");
+    /* rt_exp_tower_case — nested exponential tower (Laurent ansatz). */
+    assert_rm_diff_zero("E^(2 E^x) E^x");
+    /* rt_recursive_tower_case — MIXED exp/log tower (independent extensions). */
+    assert_rm_diff_zero("E^x/x + E^x Log[x]");
+    /* rt_recursive_tower_case — RATIONAL lower-field coefficient (1/x). */
+    assert_rm_diff_zero("1/(x^2 Log[x]) - Log[Log[x]]/x^2");
+    /* rt_hypertangent_case — real §5.10 tangent, irreducible-quadratic residue. */
+    assert_rm_diff_zero("1/(3 + Tan[x]^2)");
+    /* rt_special_case — the special-function outputs (Ei / Erf / li).  These are
+     * NON-elementary; the integrator answers with the special function, whose
+     * derivative is exactly the integrand. */
+    assert_rm_diff_zero("E^x/x");     /* ExpIntegralEi[x] */
+    assert_rm_diff_zero("E^(-x^2)");  /* (Sqrt[Pi]/2) Erf[x] */
+    assert_rm_diff_zero("1/Log[x]");  /* LogIntegral[x] */
+}
+
+/* ================= CIRCULAR TRIGONOMETRIC =================
+ * Real Tan/Cot integrate through the direct §5.10 hypertangent case; every other
+ * circular integrand goes through the TrigToExp -> exponential -> ExpToTrig ->
+ * rt_realify front-end.  Each result verifies EXACTLY (Simplify[D - f] === 0),
+ * including the I-laden E^x*trig forms and the two-argument-ArcTan (atan2)
+ * rational-trig outputs.  The odd higher powers Sec[x]^3 return an exact but
+ * I-laden exponential form (their real reduction is a known Simplify gap), so
+ * they are diff-back-verified NUMERICALLY (assert_rm_num) rather than by the
+ * exact-Simplify assert_rm_diff_zero, which would itself blow up on the form. */
+static void test_circular_trig_integration(void) {
+    /* basic six */
+    assert_rm_diff_zero("Sin[x]");
+    assert_rm_diff_zero("Cos[x]");
+    assert_rm_diff_zero("Tan[x]");            /* -Log[Cos[x]] (direct hypertangent) */
+    assert_rm_diff_zero("Cot[x]");            /* Log[Sin[x]]                        */
+    assert_rm_diff_zero("Sec[x]");            /* realified real Log form            */
+    assert_rm_diff_zero("Csc[x]");
+    /* powers */
+    assert_rm_diff_zero("Sin[x]^2");
+    assert_rm_diff_zero("Cos[x]^2");
+    assert_rm_diff_zero("Tan[x]^2");          /* -x + Tan[x]                        */
+    assert_rm_diff_zero("Sec[x]^2");          /* Tan[x]                             */
+    assert_rm_diff_zero("Csc[x]^3");
+    assert_rm_diff_zero("Sin[x]^3");
+    assert_rm_diff_zero("Cos[x]^3");
+    assert_rm_diff_zero("Tan[x]^3");
+    assert_rm_num("Sec[x]^3");   /* exact I-laden exp form; numeric diff-back */
+    /* products / multiple angles */
+    assert_rm_diff_zero("Sin[x] Cos[x]");
+    assert_rm_diff_zero("Sin[x]^2 Cos[x]^2");
+    assert_rm_diff_zero("Sin[x]^3 Cos[x]^2");
+    assert_rm_diff_zero("Sin[2 x]");
+    assert_rm_diff_zero("Sin[x] Cos[2 x]");
+    /* rational in the circular kernels (real ArcTan/Log via realify) */
+    assert_rm_diff_zero("1/(2 + Cos[x])");
+    assert_rm_diff_zero("1/(5 + 4 Cos[x])");
+    assert_rm_diff_zero("Cos[x]/(1 + Cos[x])");
+    assert_rm_diff_zero("1/(3 + Tan[x]^2)");
+    assert_rm_diff_zero("Tan[x]/(3 + Tan[x]^2)");
+    /* exponential x trig (non-commensurate exp-sum; I-laden yet exactly 0) */
+    assert_rm_diff_zero("E^x Sin[x]");
+    assert_rm_diff_zero("E^x Cos[x]");
+    assert_rm_diff_zero("E^(2 x) Sin[3 x]");
+    assert_rm_diff_zero("x E^x Sin[x]");
+    assert_rm_diff_zero("x^2 E^x Cos[x]");
+    /* trig OF an exponential kernel */
+    assert_rm_diff_zero("Sin[E^x] E^x");      /* -Cos[E^x] */
+
+    /* Non-elementary circular integrands MUST decline cleanly (never a wrong form). */
+    assert_head_unevaluated(
+        "Integrate`RischTranscendental[Sin[x]/x, x]", "Integrate`RischTranscendental"); /* SinIntegral */
+    assert_head_unevaluated(
+        "Integrate`RischTranscendental[x Tan[x], x]", "Integrate`RischTranscendental");
+    assert_head_unevaluated(
+        "Integrate`RischTranscendental[Sin[x^2], x]", "Integrate`RischTranscendental"); /* Fresnel */
+    /* Non-rational inner kernel (Sin of a Log): the whole-tower rationality gate
+     * declines rather than certify a wrong closed form. */
+    assert_head_unevaluated(
+        "Integrate`RischTranscendental[Sin[Log[x]], x]", "Integrate`RischTranscendental");
+}
+
+/* ================= HYPERBOLIC =================
+ * Tanh/Coth integrate through the direct hyperbolic hypertangent case (special
+ * t^2 - 1); the rest through TrigToExp over the single exponential E^x.  All
+ * verify exactly. */
+static void test_hyperbolic_integration(void) {
+    assert_rm_diff_zero("Sinh[x]");
+    assert_rm_diff_zero("Cosh[x]");
+    assert_rm_diff_zero("Tanh[x]");           /* Log[Cosh[x]]  */
+    assert_rm_diff_zero("Coth[x]");           /* Log[Sinh[x]]  */
+    assert_rm_num("Sech[x]");                 /* 2 ArcTan[Cosh+Sinh]; Simplify diff-back hangs */
+    assert_rm_diff_zero("Csch[x]");
+    assert_rm_diff_zero("Sinh[x]^2");
+    assert_rm_diff_zero("Cosh[x]^2");
+    assert_rm_diff_zero("Tanh[x]^2");         /* x - Tanh[x]   */
+    assert_rm_diff_zero("Sech[x]^2");         /* -2/(1 + E^(2 x)) */
+    assert_rm_diff_zero("Tanh[x]^3");
+    assert_rm_diff_zero("Sinh[x] Cosh[x]");
+    assert_rm_diff_zero("1/(2 + Cosh[x])");
+}
+
 void test_integrate_risch_transcendental(void) {
     symtab_init();
     core_init();
@@ -1050,6 +1221,13 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_method_plumbing);
     TEST(test_strict_unevaluated);
     TEST(test_strict_misc);
+    /* 2026-07-15 reported-bug regressions. */
+    TEST(test_reported_bug_fixes);
+    /* Cross-cutting one-per-case dispatch coverage matrix. */
+    TEST(test_dispatch_case_matrix);
+    /* Trigonometric and hyperbolic integration suites. */
+    TEST(test_circular_trig_integration);
+    TEST(test_hyperbolic_integration);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }
