@@ -56,6 +56,15 @@ long rt_rde_var_bound(long dpv, long dfv, bool deriv_lowers, long m_res);
  * on failure (the call bubbles back as unevaluated). */
 Expr* builtin_rischtranscendental(Expr* res);
 
+/* Enable/disable the constant-base debasing pre-pass (a^u -> E^(u Log a)).
+ * Returns the PREVIOUS setting so callers can save/restore.  The Integrate
+ * inexact path disables it around the rationalised cascade: a float base
+ * (2.71828^x) is rationalised to a large exact fraction upstream, and debasing
+ * that fraction would manufacture a spuriously "exact" Log-based closed form
+ * that then numericalises to a degraded exponent — inexact inputs must instead
+ * observe the conservative inexact-in / inexact-out contract. */
+bool rt_transcendental_set_debase(bool enabled);
+
 /* Register the Integrate`RischTranscendental package symbol in the global
  * symbol table.  Called from integrate_init() during core_init().
  * Idempotent. */

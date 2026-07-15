@@ -5153,6 +5153,167 @@ static Expr* rt_transcendental_case(Expr* f, Expr* x) {
 }
 
 /* ================================================================== */
+/* Constant-base exponential support: a^u -> E^(u Log a).             */
+/* ================================================================== */
+/* The evaluator canonicalizes E^(c Log[a]) back to a^c (power.c make_power),
+ * so a base-a exponential (a != e) is stored as Power[a, u] and NONE of the
+ * exponential recognizers above (all keyed to Exp / Power[E, .]) fire — the
+ * integrand strands unintegrated even though a^u = E^(u Log a) is an ordinary
+ * hyperexponential monomial.  We bridge that by DEBASING: rewrite every
+ * x-dependent constant-base power a^u to E^(u * (sum_j e_j L_{p_j})), where
+ * a = prod_j p_j^{e_j} is the prime factorisation and each L_{p_j} is a fresh
+ * OPAQUE constant symbol standing for Log[p_j].  Because the exponent carries
+ * L_{p_j} (not the literal Log[p_j]), make_power does NOT collapse it, so the
+ * base-e machinery sees a genuine E^(...) tower with a constant log-derivative.
+ * Sharing L by prime makes commensurate bases commensurate (4^x = E^(2 x L_2),
+ * 2^x = E^(x L_2) -> one kernel), which the naive per-base symbol would miss.
+ * After integration the map L_{p_j} -> Log[p_j] is substituted back (and the
+ * evaluator re-collapses E^(x Log a) -> a^x), so the result is in the original
+ * base.  The rewrite is an exact identity, so correctness is preserved. */
+
+/* When false, the a^u debasing pre-pass is suppressed (see the header): the
+ * Integrate inexact path disables it so a rationalised float base is not given a
+ * spuriously exact Log-based closed form. */
+static bool rt_debase_enabled = true;
+bool rt_transcendental_set_debase(bool enabled) {
+    bool prev = rt_debase_enabled;
+    rt_debase_enabled = enabled;
+    return prev;
+}
+
+/* Opaque interned symbol name L_p standing for Log[p] (p a prime literal). */
+static const char* rt_baselog_name(Expr* p) {
+    char* ps = expr_to_string(p);
+    char buf[96];
+    snprintf(buf, sizeof buf, "Integrate`bLog$%s", ps ? ps : "0");
+    if (ps) free(ps);
+    return intern_symbol(buf);
+}
+
+/* a is a positive rational constant (Integer >= 2, positive Bigint, or a
+ * positive Rational) other than 1 — a usable exponential base. */
+static bool rt_is_pos_rational_base(Expr* a) {
+    if (!a) return false;
+    if (a->type == EXPR_INTEGER) return a->data.integer >= 2;
+    if (a->type == EXPR_BIGINT)  return mpz_cmp_ui(a->data.bigint, 1) > 0;
+    if (rt_head_is(a, "Rational") && a->data.function.arg_count == 2) {
+        Expr* num = a->data.function.args[0];
+        return (num->type == EXPR_INTEGER && num->data.integer > 0)
+            || (num->type == EXPR_BIGINT && mpz_sgn(num->data.bigint) > 0);
+    }
+    return false;
+}
+
+/* Collect (owned, deduplicated) every distinct constant base a of an
+ * x-dependent power a^u in `e`. */
+static void rt_collect_rational_bases(Expr* e, Expr* x,
+                                      Expr*** arr, size_t* n, size_t* cap) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    if (rt_head_is(e, "Power") && e->data.function.arg_count == 2) {
+        Expr* a = e->data.function.args[0];
+        Expr* u = e->data.function.args[1];
+        if (rt_is_pos_rational_base(a) && rt_free_of_x(a, x) && !rt_free_of_x(u, x)) {
+            bool dup = false;
+            for (size_t i = 0; i < *n; i++) if (expr_eq((*arr)[i], a)) { dup = true; break; }
+            if (!dup) {
+                if (*n == *cap) { *cap = *cap ? *cap * 2 : 4;
+                                  *arr = realloc(*arr, *cap * sizeof(Expr*)); }
+                (*arr)[(*n)++] = expr_copy(a);
+            }
+        }
+    }
+    rt_collect_rational_bases(e->data.function.head, x, arr, n, cap);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        rt_collect_rational_bases(e->data.function.args[i], x, arr, n, cap);
+}
+
+/* Log a = sum_j e_j L_{p_j} for a = prod_j p_j^{e_j}, via FactorInteger (which
+ * returns signed exponents for a rational a).  Records each prime p_j (owned,
+ * deduplicated) into *primes for the back-substitution map.  Owned coeff, or
+ * NULL if a factors to a unit. */
+static Expr* rt_base_logcoeff(Expr* a, Expr*** primes, size_t* np, size_t* pcap) {
+    Expr* fi = rt_eval1("FactorInteger", expr_copy(a));
+    if (!fi || !rt_head_is(fi, "List")) { if (fi) expr_free(fi); return NULL; }
+    Expr** terms = NULL; size_t nt = 0, tcap = 0;
+    for (size_t i = 0; i < fi->data.function.arg_count; i++) {
+        Expr* pe = fi->data.function.args[i];
+        if (!rt_head_is(pe, "List") || pe->data.function.arg_count != 2) continue;
+        Expr* p = pe->data.function.args[0];
+        Expr* ex = pe->data.function.args[1];
+        if (p->type == EXPR_INTEGER && p->data.integer <= 1) continue;
+        bool dup = false;
+        for (size_t k = 0; k < *np; k++) if (expr_eq((*primes)[k], p)) { dup = true; break; }
+        if (!dup) {
+            if (*np == *pcap) { *pcap = *pcap ? *pcap * 2 : 4;
+                                *primes = realloc(*primes, *pcap * sizeof(Expr*)); }
+            (*primes)[(*np)++] = expr_copy(p);
+        }
+        Expr* term = expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_copy(ex), expr_new_symbol(rt_baselog_name(p)) }, 2);
+        if (nt == tcap) { tcap = tcap ? tcap * 2 : 4; terms = realloc(terms, tcap * sizeof(Expr*)); }
+        terms[nt++] = term;
+    }
+    expr_free(fi);
+    if (nt == 0) { free(terms); return NULL; }
+    Expr* coeff = rt_eval_own(expr_new_function(expr_new_symbol("Plus"), terms, nt));
+    free(terms);
+    return coeff;
+}
+
+/* Debase every x-dependent constant-base power of `f` (see block comment).
+ * Returns the rewritten integrand and sets *backsub_out to the owned rule list
+ * {L_{p_j} -> Log[p_j]} — or NULL (leaving *backsub_out NULL) when `f` carries
+ * no such base, so the caller integrates it directly. */
+static Expr* rt_debase_exponentials(Expr* f, Expr* x, Expr** backsub_out) {
+    *backsub_out = NULL;
+    if (!rt_debase_enabled) return NULL;
+    Expr** bases = NULL; size_t nb = 0, bcap = 0;
+    rt_collect_rational_bases(f, x, &bases, &nb, &bcap);
+    if (nb == 0) { free(bases); return NULL; }
+
+    Expr** primes = NULL; size_t np = 0, pcap = 0;
+    Expr** rules = malloc(nb * sizeof(Expr*)); size_t nr = 0;
+    for (size_t i = 0; i < nb; i++) {
+        Expr* coeff = rt_base_logcoeff(bases[i], &primes, &np, &pcap);
+        if (!coeff) continue;
+        Expr* upat = expr_new_function(expr_new_symbol("Pattern"),
+            (Expr*[]){ expr_new_symbol("Integrate`bU"),
+                       expr_new_function(expr_new_symbol("Blank"), NULL, 0) }, 2);
+        Expr* lhs = expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(bases[i]), upat }, 2);
+        Expr* rhs = expr_new_function(expr_new_symbol("Exp"),
+            (Expr*[]){ expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_symbol("Integrate`bU"), coeff }, 2) }, 1);
+        rules[nr++] = expr_new_function(expr_new_symbol("RuleDelayed"),
+            (Expr*[]){ lhs, rhs }, 2);
+    }
+    for (size_t i = 0; i < nb; i++) expr_free(bases[i]);
+    free(bases);
+    if (nr == 0) {
+        free(rules);
+        for (size_t i = 0; i < np; i++) expr_free(primes[i]);
+        free(primes);
+        return NULL;
+    }
+    Expr* rl = expr_new_function(expr_new_symbol("List"), rules, nr);
+    free(rules);
+    Expr* fd = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceRepeated"),
+        (Expr*[]){ expr_copy(f), rl }, 2));
+
+    Expr** brules = malloc((np ? np : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < np; i++)
+        brules[i] = expr_new_function(expr_new_symbol("Rule"),
+            (Expr*[]){ expr_new_symbol(rt_baselog_name(primes[i])),
+                       expr_new_function(expr_new_symbol("Log"),
+                           (Expr*[]){ expr_copy(primes[i]) }, 1) }, 2);
+    *backsub_out = expr_new_function(expr_new_symbol("List"), brules, np);
+    free(brules);
+    for (size_t i = 0; i < np; i++) expr_free(primes[i]);
+    free(primes);
+    return fd;
+}
+
+/* ================================================================== */
 /* Top-level integration dispatch.                                    */
 /* ================================================================== */
 
@@ -5170,7 +5331,7 @@ static Expr* rt_transcendental_case(Expr* f, Expr* x) {
  * only decline, never emit a wrong closed form.  NB: this must NOT fall
  * back on the parallel-Risch (pmint) engine Integrate`RischNorman —
  * that is a different algorithm; RischTranscendental is the recursive Risch. */
-static Expr* rt_integrate(Expr* f, Expr* x) {
+static Expr* rt_integrate_core(Expr* f, Expr* x) {
     Expr* r = rt_rational_case(f, x);
     if (r) return r;
     r = rt_transcendental_case(f, x);
@@ -5178,6 +5339,39 @@ static Expr* rt_integrate(Expr* f, Expr* x) {
     r = rt_special_case(f, x);
     if (r) return r;
     return NULL;
+}
+
+/* Wrapper: debase any constant-base exponential a^u (a != e) to the base-e form
+ * the recursive Risch machinery handles, integrate, then map the opaque Log
+ * symbols back so the antiderivative is expressed in the original base. */
+static Expr* rt_integrate(Expr* f, Expr* x) {
+    Expr* backsub = NULL;
+    Expr* fd = rt_debase_exponentials(f, x, &backsub);
+    if (!fd) return rt_integrate_core(f, x);      /* no a^u base present */
+    Expr* r0 = rt_integrate_core(fd, x);
+    expr_free(fd);
+    if (!r0) { expr_free(backsub); return NULL; }
+    Expr* r = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+        (Expr*[]){ r0, backsub }, 2));             /* adopts r0, backsub; L_p -> Log[p] */
+    /* Fuse the split prime-logs a COMPOSITE base leaves behind.  A single-prime
+     * base collapses cleanly (make_power: E^(k Log p) -> p^k), but 6 = 2·3 debases
+     * to Log2 + Log3 sums (in both exponents and the 1/Log(a) constant), e.g.
+     * Log[1 + E^((Log2+Log3) x)]/(Log2+Log3).  n Log a + m Log b = Log[a^n b^m] is
+     * exact for positive integers a, b, so recombining pairs restores Log[6]
+     * (whereupon E^(x Log6) re-collapses to 6^x).  It fires only when two
+     * integer-logs actually pair, so it is a no-op on the clean single-base forms
+     * (a lone Log[3] denominator is untouched). */
+    Expr* logfuse = parse_expression(
+        "{ (nF_. Log[aF_Integer] + mF_. Log[bF_Integer] + rF_. /; aF > 0 && bF > 0)"
+        "    :> Log[aF^nF bF^mF] + rF }");
+    if (r && logfuse) {
+        Expr* r2 = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceRepeated"),
+            (Expr*[]){ r, logfuse }, 2));            /* adopts r, logfuse */
+        if (r2) r = r2;
+    } else if (logfuse) {
+        expr_free(logfuse);
+    }
+    return r;
 }
 
 /* ================================================================== */

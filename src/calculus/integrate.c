@@ -777,9 +777,16 @@ Expr* builtin_integrate(Expr* res) {
     CommonInexactInfo inexact = common_scan_inexact(f);
     Expr* coerced = NULL;
     Expr* effective_f = f;
+    /* For an inexact integrand the transcendental-Risch a^u debasing must stay OFF:
+     * the float base is rationalised to a large exact fraction below, and debasing
+     * it would fabricate an exact Log-based closed form that numericalises to a
+     * degraded exponent (2.71828^x -> 2.71828^(0.999999 x)).  Inexact-in stays
+     * inexact-out / unevaluated instead.  Restored before returning. */
+    bool debase_saved = true;
     if (inexact.has_inexact) {
+        debase_saved = rt_transcendental_set_debase(false);
         coerced = common_rationalize_input(f, inexact.min_bits);
-        if (!coerced) return NULL;
+        if (!coerced) { rt_transcendental_set_debase(debase_saved); return NULL; }
         effective_f = coerced;
     }
 
@@ -894,6 +901,7 @@ Expr* builtin_integrate(Expr* res) {
         result = numeric;
     }
 
+    rt_transcendental_set_debase(debase_saved);   /* no-op unless the inexact path disabled it */
     return result;
 }
 

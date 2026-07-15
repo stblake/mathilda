@@ -1049,6 +1049,31 @@ static void test_reported_bug_fixes(void) {
     assert_rm_diff_zero("(Exp[1/Log[x]] (Log[x]^2 - 1))/Log[x]^2");
 }
 
+/* ================= CONSTANT-BASE EXPONENTIALS (a^u, a != e) =================
+ * a^u = E^(u Log a) is an ordinary hyperexponential monomial, but the evaluator
+ * stores it as Power[a, u] (E^(c Log a) collapses back), so it must be DEBASED to
+ * the base-e form before the exponential machinery fires.  Prime-factored sharing
+ * makes 4^x = (2^x)^2 commensurate.  Diff-back verified NUMERICALLY (the answers
+ * carry Log[a] constants whose Simplify reduction is fragile). */
+static void test_constant_base_exponentials(void) {
+    /* Reported 2026-07-15: nested a^x tower and a single-kernel a^x rational. */
+    assert_rm_num("3^x/(Exp[3^x] + 1)");        /* -> (3^x - Log[1+E^3^x])/Log[3] */
+    assert_rm_num("2^x/(4^x - 2^x - 1)");       /* 4^x = (2^x)^2: one kernel */
+    /* Bare and simple rational-of-a^x. */
+    assert_rm_num("2^x");
+    assert_rm_num("1/(2^x + 1)");
+    assert_rm_num("x 2^x");                     /* polynomial * a^x */
+    /* Composite (multi-prime) base recombines to base form. */
+    assert_rm_num("6^x/(6^x + 1)");             /* -> Log[1+6^x]/Log[6] */
+    assert_rm_num("5^x/(25^x - 1)");            /* 25 = 5^2 */
+
+    /* INEXACT base must NOT be force-integrated to a (degraded) exact closed
+     * form: the float base is rationalised upstream, and debasing is suppressed
+     * so the general Integrate stays unevaluated (inexact-in / inexact-out). */
+    assert_eval_eq("Head[Integrate[x*2.71828^(-x), x]]", "Integrate", 0);
+    assert_eval_eq("Head[Integrate[x^2*2.71828^(-x), x]]", "Integrate", 0);
+}
+
 /* ================= DISPATCH CASE MATRIX =================
  * One stressing integrand per case / sub-case of rt_transcendental_case's
  * cascade (RISCH_STATUS.md §2), each diff-back verified.  Complements the
@@ -1234,6 +1259,8 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_strict_misc);
     /* 2026-07-15 reported-bug regressions. */
     TEST(test_reported_bug_fixes);
+    /* Constant-base exponentials a^u (a != e) via debasing. */
+    TEST(test_constant_base_exponentials);
     /* Cross-cutting one-per-case dispatch coverage matrix. */
     TEST(test_dispatch_case_matrix);
     /* Trigonometric and hyperbolic integration suites. */
