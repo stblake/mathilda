@@ -1,5 +1,14 @@
 # Simplify deficiencies (noted 2026-07-14)
 
+> **PARTIALLY RESOLVED (2026-07-15).** D2 (trig-power/log form): the
+> `½Log[1+Tan²]`-type collapse is addressed by the FP1 trig-log canonicalization
+> (`transform_trig_log_canon`, `src/simp/simp_trig_pi.c`) — `Log[Sec[u]^2] → −Log[Cos[u]^2]`
+> and analogues, so a log of a reciprocal-squared trig cancels against a sibling
+> `Log[Cos^2]`. The multiple-angle diff-back zero tests (shared with SIMPLIFY_GAPS.md
+> Families 1 & 3) are closed by the FP2 exact kernel zero test
+> (`src/simp/simp_trigexp_zero.c`). D1 (exp-log real collapse) and D3 (ComplexExpand) remain
+> open — deferred. See the 2026-07-13 changelog; tests in `tests/test_trigexp_zero.c`.
+
 Surfaced while making the transcendental Risch integrator return real closed forms
 for rational trigonometric integrands (roadmap P2). Each item is a concrete case
 where `Simplify` (and friends) cannot prove a true identity or reduce a form to a

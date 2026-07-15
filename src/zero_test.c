@@ -42,6 +42,7 @@
 #include "numeric.h"
 #include "poly/poly.h"
 #include "random.h"
+#include "simp_trigexp_zero.h"
 #include "sym_names.h"
 #include "symtab.h"
 
@@ -1076,6 +1077,20 @@ ZeroTestResult zero_test_decide(const Expr* e) {
      * (decide_rational returns FALSE exclusively when is_pure_rational_function
      * holds, where the Q-normalization is exact and complete). */
     if (r != ZERO_TEST_UNKNOWN) return r;
+
+    /* Exact trig/exp kernel zero-test.  A rational function of a single kernel
+     * t = E^(i x) (Sin[k x], Cos[k x], Sec[k x], …, with opaque Log/Sqrt terms
+     * and parameters as independent generators) is decided by EXACT rational
+     * point-evaluation on a Nullstellensatz grid — a symbolic decision, no
+     * numeric sampling.  decide_rational leaves these UNKNOWN because it treats
+     * every transcendental as an opaque indeterminate; this stage closes the
+     * Sec^n/Csc^n and symbolic-parameter diff-back identities exactly and fast.
+     * Declines (UNKNOWN → fall through) on non-single-kernel forms. */
+    {
+        TrigExpZeroResult tz = trigexp_rational_is_zero(e);
+        if (tz == TRIGEXP_ZERO_TRUE)  return ZERO_TEST_TRUE;
+        if (tz == TRIGEXP_ZERO_FALSE) return ZERO_TEST_FALSE;
+    }
 
     if (!has_free_symbols(e)) {
         r = decide_numeric(e);

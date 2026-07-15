@@ -160,6 +160,7 @@ Expr* simp_memo_wrap(const Expr* e, const char* pseudo_head,
 Expr* simp_trig_pi_canon(const Expr* e);
 Expr* transform_pythag_reduce(const Expr* e);
 Expr* transform_pythag_canon(const Expr* e);
+Expr* transform_trig_log_canon(const Expr* e);
 
 /* Used by simp_search.c (and the trig_roundtrip Pythag transforms in
  * simp_trig_roundtrip.c) to gate Pythag rewrites. Defined alongside

@@ -1416,6 +1416,22 @@ Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
             expr_free(alt);
         }
     }
+
+    /* Trig-log canonicalization seed: Log[Sec[u]^2] -> -Log[Cos[u]^2] (and the
+     * Csc/1+Tan^2/1+Cot^2/hyperbolic analogues). Normalizing a log of a
+     * reciprocal-squared trig form into the Cos/Sin base lets the log-fusion
+     * pass cancel it against a sibling Log[Cos^2]/Log[Sin^2] (SIMPLIFY_GAPS.md
+     * Family 2 / SIMPLIFY_DEFICIENCIES.md D2). Unconditional real identity;
+     * seeded (score-gated) so it propagates only when it does not enlarge. */
+    {
+        Expr* alt = transform_trig_log_canon(input);
+        if (alt && !expr_eq(alt, input)) {
+            update_best(&best, &best_score, alt, complexity_func);
+            cs_add_or_free(&seeds, alt);
+        } else if (alt) {
+            expr_free(alt);
+        }
+    }
     if (simp_best_is_zero(best)) goto search_done;
 
     /* TrigReduce seed.  The product-to-sum / power-reduction pass

@@ -1,5 +1,6 @@
 #include "simp.h"
 #include "simp_internal.h"
+#include "simp_trigexp_zero.h"
 #include "arithmetic.h"
 #include "attr.h"
 #include "common.h"
@@ -791,6 +792,17 @@ Expr* builtin_simplify(Expr* res) {
     if (use_builtin) {
     if (simp_classify(expr) == SIMP_SHAPE_RATIONAL) {
         best = simp_dispatch(expr, ctx, opt_complexity);
+    } else if ((best = transform_trigexp_vanish(expr)) != NULL) {
+        /* Exp-kernel vanishing fast path. A rational function of trig/exp
+         * kernels that is identically 0 — canonically a Risch antiderivative
+         * diff-back D[G]-f — is proven 0 here, BEFORE the per-subnode
+         * bottom-up descent that otherwise fires a full simp_search on every
+         * internal node and hangs: >40 s on the multiple-angle Sec^n/Csc^n
+         * forms, >90 s on symbolic-parameter I-laden forms (SIMPLIFY_GAPS.md
+         * Families 1 & 3). TrigToExp + E^(k I x) -> t^k kernelization + exact
+         * numerator zero-test — a genuine symbolic decision, no sampling.
+         * Declines cheaply (NULL) on non-vanishing / non-single-kernel inputs,
+         * so the general search below runs unchanged for everything else. */
     } else {
         /* Top-level algebraic-rational fast path. When the input is a
          * Plus over a multi-generator algebraic-number tower (e.g. the

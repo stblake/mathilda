@@ -263,8 +263,14 @@ bool risch_field_divmod_t(const Expr* a, const Expr* b, const Expr* t,
         r = rf_normfrac(rf_add(r, rf_neg(tb)));      /* r -= term*b */
     }
     expr_free(lcb);
-    *qo = rf_call1("Cancel", q);
-    *ro = rf_call1("Cancel", r);
+    /* q, r are polynomials in t; canonicalize fully (Expand[Cancel[Together]]) so
+     * the remainder does not ship an undistributed form.  `Cancel` alone leaves
+     * e.g. t^3+t+1 - t(t^2+1) as-is (it does not distribute the monomial into the
+     * product), even though risch_field_degree_t reduced it internally to break the
+     * loop — so the remainder printed as an unreduced (= 1) expression
+     * (RISCH_AUDIT_A4.md Finding 8). */
+    *qo = rf_call1("Expand", rf_call1("Cancel", rf_call1("Together", q)));
+    *ro = rf_call1("Expand", rf_call1("Cancel", rf_call1("Together", r)));
     return true;
 }
 

@@ -48,6 +48,16 @@ static Expr* rde_den(Expr* e) {
 /* Univariate polynomial primitives in x (args not consumed). */
 static Expr* rde_gcd(Expr* a, Expr* b, Expr* x) {
     (void)x;   /* PolynomialGCD infers the variable; a third arg is a 3rd poly */
+    /* Mathematically gcd(p, 0) = p (up to a unit), but Mathilda's PolynomialGCD
+     * returns 1 for a zero operand.  The SPDE (Thm 6.4.1) relies on the correct
+     * value in its b = 0 sub-problem: with the wrong gcd = 1 the divisibility
+     * test g | c passes spuriously and the subsequent exact PolynomialQuotient
+     * silently truncates the nonzero remainder, fabricating a bogus q = 0
+     * "solution" to an unsolvable RDE (RISCH_AUDIT_A4.md Finding 1 — e.g.
+     * Risch`RischDE[-2/x, x, x] wrongly returned 0).  Guard the zero-operand
+     * case explicitly so the base RDE stack stays authoritative. */
+    if (rt_is_zero(a)) return expr_copy(b);
+    if (rt_is_zero(b)) return expr_copy(a);
     return rt_eval2("PolynomialGCD", expr_copy(a), expr_copy(b));
 }
 static Expr* rde_quot(Expr* a, Expr* b, Expr* x) {
@@ -70,11 +80,31 @@ static Expr* rde_sub(Expr* a, Expr* b) {
         (Expr*[]){ expr_copy(a), expr_new_function(expr_new_symbol("Times"),
             (Expr*[]){ expr_new_integer(-1), expr_copy(b) }, 2) }, 2));
 }
-/* Field quotient a/b, cancelled (args not consumed). */
+/* Field quotient a/b, FULLY reduced (args not consumed).  Uses Together, not
+ * Cancel: `Cancel` does not reduce a ratio whose operands are themselves nested
+ * rationals — e.g. Cancel[(1+x)/(1+1/x)] stays put, while Together gives x.  The
+ * coefficient field k(x) of a tower monomial routinely produces such forms
+ * (lc(b) = (1+x)/x printed as 1+1/x), and an unreduced quotient makes leading
+ * terms fail to cancel in the SPDE / PolyRischDE loops, losing genuine solutions
+ * (RISCH_AUDIT_A4.md — the nested-exponential Laurent case). */
 static Expr* rde_divq(Expr* a, Expr* b) {
-    return rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+    return rt_eval1("Together", expr_new_function(expr_new_symbol("Times"),
         (Expr*[]){ expr_copy(a), expr_new_function(expr_new_symbol("Power"),
             (Expr*[]){ expr_copy(b), expr_new_integer(-1) }, 2) }, 2));
+}
+/* Canonical form of a tower field element (arg not consumed):
+ * Expand[Cancel[Together[e]]] — Together first combines nested rationals into a
+ * single reduced fraction (so lc(b) = (1+x)/x is not left as 1+1/x), Cancel strips
+ * common factors, and Expand distributes a monomial across a sum (so a genuine
+ * polynomial-in-tau is not hidden as t^2 (…-1/(t^2 …))).  This is the ONE
+ * normalizer the Bronstein field-arithmetic boxes (RdeNormalDenominator,
+ * RdeSpecialDenomExp, SPDE, PolyRischDE) must use so that PolynomialQ / degree /
+ * leading-coefficient tests see the true polynomial and leading terms cancel;
+ * plain Cancel or Expand alone each miss one of the two reductions
+ * (RISCH_AUDIT_A4.md — the rational-coefficient and nested-exponential Laurent
+ * regressions traced to exactly these two gaps). */
+static Expr* rde_canon(Expr* e) {
+    return rt_eval1("Expand", rt_eval1("Cancel", rt_eval1("Together", expr_copy(e))));
 }
 /* Leading coefficient of poly p in x (0 if p == 0). */
 static Expr* rde_lc(Expr* p, Expr* x) {
@@ -446,6 +476,27 @@ Expr* rde_base(Expr* f, Expr* g, Expr* x) {
     expr_free(dnh2);
     expr_free(dn); expr_free(en); expr_free(p); expr_free(h);
     expr_free(fbar); expr_free(gbar); expr_free(w);
+
+    /* Correct-by-construction gate (Expr fallback path).  Unlike rde_tower
+     * (which gates every result with the exact tower identity at rde_tower's
+     * tail), the base Expr reconstruction above trusted its PolynomialQuotients
+     * to be exact — the escape route for RISCH_AUDIT_A4.md Finding 1.  Verify
+     * D[y] + f y - g == 0 so any residual algebra slip declines cleanly instead
+     * of shipping a wrong closed form.  (The FLINT fast path returned earlier;
+     * it is separately audited authoritative — F5.) */
+    if (result) {
+        Expr* dy = rde_dx(result, x);
+        Expr* fy = rde_mul(f, result);
+        Expr* s1 = rde_add(dy, fy);
+        Expr* resid = rde_sub(s1, g);
+        Expr* tog = rt_eval1("Together", resid);
+        Expr* num = tog ? rt_eval1("Numerator", tog) : NULL;
+        Expr* exn = num ? rt_eval1("Expand", num) : NULL;
+        bool good = exn && rt_is_zero(exn);
+        expr_free(dy); expr_free(fy); expr_free(s1);
+        if (exn) expr_free(exn);
+        if (!good) { expr_free(result); result = NULL; }
+    }
     return result;
 }
 
@@ -622,20 +673,30 @@ static int rde_normal_denominator_field(Expr* f, Expr* g, RdeCtx* C,
     bool ok = rt_is_zero(rem);
     expr_free(rem); expr_free(h2); expr_free(dnh2);
     if (!ok) { expr_free(dn); expr_free(en); expr_free(h); return 0; }
-    /* a = dn h ; b = dn h f - dn Dh ; c = dn h^2 g, by DIRECT field arithmetic so
-     * a stray tau-pole (the special part, for an exponential top) is retained in
-     * b, c for RdeSpecialDenomExp rather than being (wrongly) cleared. */
+    /* a = dn h ; b = dn h f - dn Dh ; c = dn h^2 g.  Normalize b, c with Together
+     * (a single reduced fraction, tau-poles retained in the denominator): the
+     * product dn h^2 g is a genuine POLYNOMIAL in tau over k(x) whenever h clears
+     * g's normal tau-poles, but `Cancel` does NOT distribute a monomial into a sum
+     * with a cancelling denominator (e.g. it leaves t^2 (2/x - 1/(t^2 x)) as-is
+     * instead of (2 t^2 - 1)/x), so the downstream PolynomialQ gate then rejects a
+     * genuine polynomial and the whole SPDE solve is skipped (RISCH_AUDIT_A4.md —
+     * the rational-lower-field-coefficient tower RDE regression).  Together
+     * distributes and reduces, giving the canonical polynomial-over-k(x) form; it
+     * keeps (never clears) any special tau-pole an exponential top leaves for
+     * RdeSpecialDenomExp. */
     Expr* aa = rde_mul(dn, h);
     Expr* dh = rc_D(h, C);
     Expr* dhf = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
         (Expr*[]){ expr_copy(dn), expr_copy(h), expr_copy(f) }, 3));
     Expr* dndh = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
         (Expr*[]){ expr_copy(dn), dh }, 2));         /* adopts dh */
-    Expr* bb = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Plus"),
+    Expr* bbraw = expr_new_function(expr_new_symbol("Plus"),
         (Expr*[]){ dhf, expr_new_function(expr_new_symbol("Times"),
-            (Expr*[]){ expr_new_integer(-1), dndh }, 2) }, 2));  /* adopts dhf, dndh */
-    Expr* cc = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
-        (Expr*[]){ expr_copy(dn), expr_copy(h), expr_copy(h), expr_copy(g) }, 4));
+            (Expr*[]){ expr_new_integer(-1), dndh }, 2) }, 2);   /* adopts dhf, dndh */
+    Expr* bb = rde_canon(bbraw); expr_free(bbraw);
+    Expr* ccraw = expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_copy(dn), expr_copy(h), expr_copy(h), expr_copy(g) }, 4);
+    Expr* cc = rde_canon(ccraw); expr_free(ccraw);
     expr_free(dn); expr_free(en);
     *a_out = aa; *b_out = bb; *c_out = cc; *h_out = h;
     return 1;
@@ -657,6 +718,39 @@ static void rde_special_denom_exp(Expr* a, Expr* b, Expr* c, RdeCtx* C,
     long nc = rc_val_tau(c, C);
     long minb = nb < 0 ? nb : 0;
     long n = nc - minb; if (n > 0) n = 0;            /* n = min(0, nc - min(0,nb)) */
+    /* ParametricLogarithmicDerivative refinement (Bronstein §6.2, nb == 0 case,
+     * p.190-191): when b is a tau-UNIT (nb == 0) the solution can still carry a
+     * special tau = 0 pole produced by leading-coefficient CANCELLATION, which the
+     * valuation formula above cannot see.  Writing q = tau^m u (u a tau-unit), the
+     * t^m term of a Dq + b q is (m eta a + b) tau^m u, whose value at tau = 0 is
+     * (m eta a(0) + b(0)) u(0); a genuine tau^m factor needs the resonance residue
+     *   alpha = -b(0) / (a(0) eta)
+     * to be a NONPOSITIVE integer, whereupon alpha + m eta = 0 is the trivial
+     * logarithmic derivative Dz/z (z const) that Bronstein's ParametricLogarithmic-
+     * Derivative certifies.  Lower n to that resonance.  (A spurious lowering only
+     * widens the search; the exact-identity gate in rde_tower rejects any wrong q,
+     * so this can never ship a wrong result.)  This closes the nested-exponential
+     * Laurent solutions t_L/t_0 etc. (RISCH_AUDIT_A4.md — Bronstein Example 6.2.x). */
+    if (nb == 0) {
+        Expr* a0 = rt_eval2("ReplaceAll", expr_copy(a), expr_new_function(
+            expr_new_symbol("Rule"), (Expr*[]){ expr_copy(C->tau), expr_new_integer(0) }, 2));
+        if (a0 && !rt_is_zero(a0)) {
+            Expr* b0 = rt_eval2("ReplaceAll", expr_copy(b), expr_new_function(
+                expr_new_symbol("Rule"), (Expr*[]){ expr_copy(C->tau), expr_new_integer(0) }, 2));
+            Expr* cand = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_integer(-1), b0,
+                    expr_new_function(expr_new_symbol("Power"), (Expr*[]){
+                        expr_new_function(expr_new_symbol("Times"),
+                            (Expr*[]){ expr_copy(a0), expr_copy(eta) }, 2),
+                        expr_new_integer(-1) }, 2) }, 3));   /* -b(0)/(a(0) eta), adopts b0 */
+            if (cand && cand->type == EXPR_INTEGER) {
+                long cv = (long)cand->data.integer;
+                if (cv < n) n = cv;                  /* n = min(n, resonance) */
+            }
+            if (cand) expr_free(cand);
+        }
+        if (a0) expr_free(a0);
+    }
     long N = 0;
     if (-nb > N) N = -nb;
     if (n - nc > N) N = n - nc;                      /* N = max(0, -nb, n - nc) */
@@ -665,24 +759,52 @@ static void rde_special_denom_exp(Expr* a, Expr* b, Expr* c, RdeCtx* C,
     /* b + n a eta, then * tau^N. */
     Expr* naeta = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
         (Expr*[]){ expr_new_integer(n), expr_copy(a), expr_copy(eta) }, 3));
-    Expr* bsum = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Plus"),
-        (Expr*[]){ expr_copy(b), naeta }, 2));       /* adopts naeta */
-    *b_out = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
-        (Expr*[]){ bsum, expr_copy(tauN) }, 2));     /* adopts bsum */
+    Expr* bsum = expr_new_function(expr_new_symbol("Plus"),
+        (Expr*[]){ expr_copy(b), naeta }, 2);        /* adopts naeta */
+    Expr* bt = expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ bsum, expr_copy(tauN) }, 2);      /* adopts bsum */
+    *b_out = rde_canon(bt); expr_free(bt);
     Expr* tauNn = rc_tau_pow(N - n, C);
-    *c_out = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
-        (Expr*[]){ expr_copy(c), tauNn }, 2));       /* adopts tauNn */
+    Expr* ct = expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_copy(c), tauNn }, 2);        /* adopts tauNn */
+    *c_out = rde_canon(ct); expr_free(ct);
     *hs_out = rc_tau_pow(-n, C);                     /* tau^{-n}, -n >= 0 */
     expr_free(tauN);
 }
 
 /* RdeBoundDegreeExp (Bronstein §6.3, p.200): upper bound on deg_tau(q) for
- * a Dq + b q = c with tau hyperexponential (deriv-preserving, delta(tau)=1).
- * 1b-core omits the da == db cancellation refinement (parametric log-derivative). */
+ * a Dq + b q = c with tau hyperexponential (deriv-preserving, delta(tau)=1). */
 static long rde_bound_degree_exp(Expr* a, Expr* b, Expr* c, RdeCtx* C) {
     long da = rc_deg(a, C), db = rc_deg(b, C), dc = rc_deg(c, C);
     long mx = db > da ? db : da;
     long n = dc - mx; if (n < 0) n = 0;
+    /* da == db cancellation refinement (Bronstein §6.3, Lemma 6.3.4(ii)): when
+     * deg(a) == deg(b) the leading terms of a Dq and b q can CANCEL, letting deg(q)
+     * exceed the naive bound.  Cancellation occurs at the resonance m where
+     * -lc(b)/lc(a) = m eta + Dz/z (parametric logarithmic derivative); in the pure
+     * case (z const) m = -lc(b)/(lc(a) eta).  Raise the bound to max(n, m).  A
+     * too-large bound only widens the SPDE search — the exact-identity gate in
+     * rde_tower rejects any wrong q, so this can never ship a wrong result. */
+    if (da == db && da >= 0) {
+        Expr* eta = C->T->Dcoef[C->m];
+        Expr* lca = rc_lc(a, C);
+        Expr* lcb = rc_lc(b, C);
+        if (lca && !rt_is_zero(lca)) {
+            Expr* cand = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_integer(-1), expr_copy(lcb),
+                    expr_new_function(expr_new_symbol("Power"), (Expr*[]){
+                        expr_new_function(expr_new_symbol("Times"),
+                            (Expr*[]){ expr_copy(lca), expr_copy(eta) }, 2),
+                        expr_new_integer(-1) }, 2) }, 3));   /* -lc(b)/(lc(a) eta) */
+            if (cand && cand->type == EXPR_INTEGER) {
+                long cv = (long)cand->data.integer;
+                if (cv > n) n = cv;                  /* n = max(n, resonance) */
+            }
+            if (cand) expr_free(cand);
+        }
+        if (lca) expr_free(lca);
+        if (lcb) expr_free(lcb);
+    }
     return n;
 }
 

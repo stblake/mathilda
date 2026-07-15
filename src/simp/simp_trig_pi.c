@@ -521,3 +521,44 @@ Expr* transform_pythag_canon(const Expr* e) {
     return simp_memo_wrap(e, "$PythagCanon", transform_pythag_canon_impl);
 }
 
+/* Trig-log canonicalization: rewrite a logarithm of a reciprocal-squared /
+ * Pythagorean trig form into the Cos/Sin base.  Each rule is an UNCONDITIONAL
+ * real identity (both sides are the log of a positive quantity wherever
+ * defined), so it is safe with no positivity assumption:
+ *     Log[Sec[u]^2]     = -Log[Cos[u]^2]      Log[1 + Tan[u]^2] = -Log[Cos[u]^2]
+ *     Log[Csc[u]^2]     = -Log[Sin[u]^2]      Log[1 + Cot[u]^2] = -Log[Sin[u]^2]
+ * plus the hyperbolic analogues (Sech^2 = 1 - Tanh^2 = 1/Cosh^2, etc.).
+ *
+ * Normalizing Sec/Csc/1+Tan^2/... under a Log into the Cos/Sin base lets the
+ * log-fusion pass (simp_log Pass B) cancel it against a sibling Log[Cos^2] /
+ * Log[Sin^2] — e.g. `1/2 Log[1+Tan[u]^2] + Log[Cos[u]]` collapses once the
+ * first term is in the Cos base.  The stronger single-power collapse
+ * `-Log[Cos[u]^2] -> -2 Log[Cos[u]]` (giving `1/2 Log[1+Tan^2] -> -Log[Cos]`)
+ * is only valid on the principal branch (Cos[u] > 0) and is left to the
+ * assumption-aware Log rules; the squared forms here stay branch-safe. */
+static Expr* transform_trig_log_canon_impl(const Expr* e) {
+    static Expr* rules = NULL;
+    if (!rules) {
+        rules = parse_expression(
+            "{ Log[Sec[u_]^2]      :> -Log[Cos[u]^2], "
+            "  Log[Csc[u_]^2]      :> -Log[Sin[u]^2], "
+            "  Log[1 + Tan[u_]^2]  :> -Log[Cos[u]^2], "
+            "  Log[1 + Cot[u_]^2]  :> -Log[Sin[u]^2], "
+            "  Log[Sech[u_]^2]     :> -Log[Cosh[u]^2], "
+            "  Log[Csch[u_]^2]     :> -Log[Sinh[u]^2], "
+            "  Log[1 - Tanh[u_]^2] :> -Log[Cosh[u]^2], "
+            "  Log[-1 + Coth[u_]^2] :> -Log[Sinh[u]^2] }");
+    }
+    if (!rules) return NULL;
+    /* Fast-skip: no Log, or no reciprocal/tangent trig head to normalize. */
+    if (!contains_log(e)) return expr_copy((Expr*)e);
+
+    Expr* args[2] = { expr_copy((Expr*)e), expr_copy(rules) };
+    Expr* call = expr_new_function(expr_new_symbol(SYM_ReplaceRepeated), args, 2);
+    return eval_and_free(call);
+}
+
+Expr* transform_trig_log_canon(const Expr* e) {
+    return simp_memo_wrap(e, "$TrigLogCanon", transform_trig_log_canon_impl);
+}
+

@@ -73,13 +73,25 @@ void test_expand_coeff() {
 }
 
 void test_polynomialgcd() {
-    run_test("PolynomialGCD[(1+x)^2(2+x)(4+x), (1+x)(2+x)(3+x)]", "Times[Plus[1, x], Plus[2, x]]");
-    run_test("PolynomialGCD[(x+y)^2(y+z), (x+y)(y+z)^3]", "Times[Plus[x, y], Plus[y, z]]");
+    /* GCDs come back expanded (the FLINT fmpq_mpoly primitive, used unconditionally
+     * — no degree gate), which is WL-faithful; integer content is preserved. */
+    run_test("PolynomialGCD[(1+x)^2(2+x)(4+x), (1+x)(2+x)(3+x)]", "Plus[2, Times[3, x], Power[x, 2]]");
+    run_test("PolynomialGCD[(x+y)^2(y+z), (x+y)(y+z)^3]", "Plus[Times[x, y], Power[y, 2], Times[x, z], Times[y, z]]");
     run_test("PolynomialGCD[x^2+4x+4, x^2+2x+1]", "1");
     run_test("PolynomialGCD[x^4-4, x^4+4 x^2+4]", "Plus[2, Power[x, 2]]");
     run_test("PolynomialGCD[x^2+2 x y+y^2, x^3+y^3]", "Plus[x, y]");
     run_test("PolynomialGCD[x^2-1, x^3-1, x^4-1, x^5-1, x^6-1, x^7-1]", "Plus[-1, x]");
     run_test("PolynomialGCD[x^2+1, x^3+3I x^2-3x-I]", "Plus[Complex[0, 1], x]");
+    /* Rational-function coefficients (RISCH_AUDIT_A4.md): a polynomial in the GCD
+     * variable whose coefficients are rational functions of the other variables —
+     * produced by the recursive Risch tower field integrator.  A denominator is a
+     * unit in the fraction field, so it does not change the polynomial GCD; these
+     * formerly returned unevaluated. */
+    run_test("PolynomialGCD[(2 t^2 - 1)/x, t]", "1");
+    run_test("PolynomialGCD[t^2, 2 t/x]", "t");
+    run_test("PolynomialGCD[(t^2 - 1)/x, (t - 1)/x^2]", "Plus[-1, t]");
+    run_test("PolynomialGCD[(x + y)/z, (x^2 - y^2)/z^2]", "Plus[x, y]");
+    run_test("PolynomialGCD[6, 4]", "2");             /* numeric denominators unaffected */
 }
 
 void test_polynomiallcm() {
@@ -178,7 +190,7 @@ void test_discriminant() {
 
 void test_polynomialextendedgcd() {
     run_test("PolynomialExtendedGCD[2x^5-2x, (x^2-1)^2, x]", "List[Plus[-1, Power[x, 2]], List[Times[Rational[1, 4], x], Times[Rational[1, 2], Plus[-2, Times[-1, Power[x, 2]]]]]]");
-    run_test("PolynomialExtendedGCD[a (x+b)^2, (x+a)(x+b), x]", "List[Plus[b, x], List[Power[Plus[Times[-1, Power[a, 2]], Times[a, b]], -1], Times[-1, Power[Plus[Times[-1, a], b], -1]]]]");
+    run_test("PolynomialExtendedGCD[a (x+b)^2, (x+a)(x+b), x]", "List[Plus[b, x], List[Times[-1, Power[Plus[Power[a, 2], Times[-1, Times[a, b]]], -1]], Power[Plus[a, Times[-1, b]], -1]]]");
     run_test("PolynomialExtendedGCD[(x-1)(x-2)^2, (x-1)(x^2-3), x]", "List[Plus[-1, x], List[Plus[7, Times[4, x]], Plus[9, Times[-4, x]]]]");
     run_test("PolynomialExtendedGCD[x^2+x+1, x+1, x, Modulus -> 2]", "List[1, List[1, x]]");
 }
@@ -191,7 +203,7 @@ void test_power_simplification() {
 }
 
 void test_bigint_poly() {
-    run_test("PolynomialGCD[104857600000000000000000000 (x^2 - 1), 104857600000000000000000000 (x^3 - 1)]", "Times[104857600000000000000000000, Plus[-1, x]]");
+    run_test("PolynomialGCD[104857600000000000000000000 (x^2 - 1), 104857600000000000000000000 (x^3 - 1)]", "Plus[-104857600000000000000000000, Times[104857600000000000000000000, x]]");
     run_test("PolynomialQuotient[104857600000000000000000000 x^2 - 104857600000000000000000000, 104857600000000000000000000 x - 104857600000000000000000000, x]", "Plus[1, x]");
     run_test("PolynomialRemainder[104857600000000000000000000 x^2 - 104857600000000000000000000, x - 1, x]", "0");
 }

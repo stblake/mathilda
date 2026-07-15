@@ -145,6 +145,26 @@ static void assert_integrates(const char* g) {
     free(s);
 }
 
+/* Integrate[g, x, Method->"RischTranscendental"] must be elementary (non-Integrate)
+ * and diff back to g NUMERICALLY at two interior points — used where the exact
+ * Simplify[D-g] is beyond the simplifier (the nested-exponential real forms whose
+ * E^(-x) E^(x+…) products Simplify cannot recombine, though the integrator's own
+ * exact tower-coordinate identity gate has already certified them). */
+static void assert_integrates_num(const char* g) {
+    char buf[2560];
+    snprintf(buf, sizeof(buf),
+        "With[{ii = Integrate[%s, x, Method -> \"RischTranscendental\"]}, "
+        "If[!FreeQ[ii, Integrate], $Unintegrated, "
+        "If[Abs[N[(D[ii, x] - (%s)) /. x -> 13/10]] < 1/1000000 && "
+        "Abs[N[(D[ii, x] - (%s)) /. x -> 7/10]] < 1/1000000, 0, $Wrong]]]", g, g, g);
+    char* s = eval_fullform(buf);
+    if (strcmp(s, "0") != 0)
+        printf("FAIL: Integrate-num(%s) -> %s\n", g, s);
+    ASSERT_MSG(strcmp(s, "0") == 0,
+        "Integrate-num(%s): expected elementary + numeric diff-back 0, got %s", g, s);
+    free(s);
+}
+
 /* ------------------------------------------------------------------ */
 /* Base field C(x) — regression on the pre-existing rde_base path.     */
 /* ------------------------------------------------------------------ */
@@ -155,6 +175,13 @@ static void test_base_field(void) {
     assert_rde_y("1/x", "x^2");             /* rational coefficient       */
     assert_rde_nosol("2 x", "1");           /* Erf: q'+2x q=1 no rational  */
     assert_rde_nosol("1", "1/x");           /* Ei: q'+q=1/x no rational    */
+    /* RISCH_AUDIT_A4.md Finding 1: the base SPDE must NOT fabricate a q=0
+     * "solution" to an unsolvable pole-coefficient RDE (the PolynomialGCD[·,0]==1
+     * bug).  y'-(2/x)y=x is solvable only by the non-rational x^2 Log[x], so it
+     * MUST decline; the genuine solves above still succeed. */
+    assert_rde_nosol("-2/x", "x");
+    assert_rde_nosol("-1/x", "1");
+    assert_rde_nosol("-4/x", "x^3");
 }
 
 /* ------------------------------------------------------------------ */
@@ -171,6 +198,11 @@ static void test_spde_box(void) {
     assert_spde("Plus[x, 1]", "2", "3", 0, "List[0, 0, 0, 0, Rational[3, 2]]");
     /* n < 0 with c != 0: no solution. */
     assert_spde("1", "1", "1", -1, "$Failed");
+    /* RISCH_AUDIT_A4.md Finding 1: b == 0 sub-problem.  gcd(a,0) = a (not 1!), so
+     * a=x must NOT spuriously divide c=1 — SPDE[x,0,1,x,0] has no solution
+     * (x q' = 1 is unsolvable in k[x]).  Guards the PolynomialGCD[·,0] fix. */
+    assert_spde("x", "0", "1", 0, "$Failed");
+    assert_spde("x^2", "0", "x", 2, "$Failed");
 }
 
 /* ------------------------------------------------------------------ */
@@ -312,6 +344,38 @@ static void test_integrator_endtoend(void) {
     }
 }
 
+/* ------------------------------------------------------------------ */
+/* Rational lower-field coefficients (RISCH_AUDIT_A4.md — the Together */
+/* normalization fix in RdeNormalDenominator): the reduced c = dn h^2 g */
+/* is a genuine polynomial in tau, not left as t^2(…-1/(t^2 …)).        */
+/* ------------------------------------------------------------------ */
+static void test_tower_rational_coeff(void) {
+    /* q = 1/Log[x] (rational lower-field solution, tau-pole cleared by h). */
+    assert_integrates("(2/x - 1/(x Log[x]^2)) E^(Log[x]^2)");
+    /* q = 1/(1+Log[x]) (non-monomial denominator). */
+    assert_integrates("(2 Log[x]/(x (1 + Log[x])) - 1/(x (1 + Log[x])^2)) E^(Log[x]^2)");
+    /* q = 1/Log[x] over a mixed exp exponent 1/Log[x] + x. */
+    assert_integrates("(1 - 1/(x Log[x]^2)) Exp[1/Log[x] + x]");
+}
+
+/* ------------------------------------------------------------------ */
+/* Nested-exponential Laurent solutions (RISCH_AUDIT_A4.md — the two    */
+/* Chapter-6 refinements: RdeSpecialDenomExp nb==0 parametric-log-      */
+/* derivative resonance (§6.2) and RdeBoundDegreeExp da==db cancellation */
+/* (§6.3), plus the rde_divq / rde_canon full-reduction normalizer).    */
+/* Their exact Simplify[D-g] is beyond the simplifier, so numeric.      */
+/* ------------------------------------------------------------------ */
+static void test_tower_nested_exp(void) {
+    /* Bronstein Example 6.2.1: q = 1/E^x, special-pole resonance n=-1. */
+    assert_integrates_num("((E^x - x^2 + 2 x)/(x^2 (x + E^x)^2)) E^((x^2 - 1)/x + 1/(x + E^x))");
+    /* da==db degree-bound cancellation refinement (E^(1/(1+E^x)) family). */
+    assert_integrates_num("(Exp[1/(Exp[x] + 1)]/(39916800 Exp[10 x]))"
+                          "((1757211400 + 2581284541 Exp[x])/(Exp[x] + 1)^3)");
+    /* q = x E^(-1/x) - 1 (Laurent with special pole AND constant term); needs the
+     * full-reduction normalizer so lc(b)=(1+x)/x is not left as 1+1/x. */
+    assert_integrates_num("((x + 1) Exp[x/Exp[1/x]])/Exp[2/x]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -327,6 +391,8 @@ int main(void) {
     TEST(test_tower_declines);
     TEST(test_tower_antidiff);
     TEST(test_integrator_endtoend);
+    TEST(test_tower_rational_coeff);
+    TEST(test_tower_nested_exp);
     printf("All Risch DE tower tests passed.\n");
 
     symtab_clear();

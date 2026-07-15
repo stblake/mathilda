@@ -2181,6 +2181,38 @@ static int64_t poly_max_int_exponent(const Expr* e) {
     return best;
 }
 
+/* True iff `e` carries no bare symbol — a numeric constant (integer, bigint,
+ * rational, real).  Used to tell a genuine variable-carrying rational-function
+ * denominator (which we clear) from a numeric constant (a rational-number
+ * coefficient the standard path already handles). */
+static bool pg_is_constant(const Expr* e) {
+    if (!e) return true;
+    if (e->type == EXPR_SYMBOL) return false;
+    if (e->type == EXPR_FUNCTION) {
+        if (!pg_is_constant(e->data.function.head)) return false;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!pg_is_constant(e->data.function.args[i])) return false;
+    }
+    return true;
+}
+
+/* Cheap syntactic pre-scan: does `e` contain a negative integer power
+ * (i.e. a division)?  A plain expanded polynomial has none, so the hot
+ * PolynomialGCD path pays only this tree walk and skips the Together clearing. */
+static bool pg_has_negpow(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && strcmp(e->data.function.head->data.symbol.name, "Power") == 0
+        && e->data.function.arg_count == 2) {
+        const Expr* ex = e->data.function.args[1];
+        if (ex->type == EXPR_INTEGER && ex->data.integer < 0) return true;
+    }
+    if (pg_has_negpow(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (pg_has_negpow(e->data.function.args[i])) return true;
+    return false;
+}
+
 /* Option `Extension -> α`: factor over Q(α) using the QAUPoly         */
 /* machinery (see polynomialgcd_with_extension above).  `Extension ->   */
 /* None` is accepted and treated as the default (no extension).         */
@@ -2188,6 +2220,60 @@ static int64_t poly_max_int_exponent(const Expr* e) {
 /* routes through the single-generator α-path when one is found.        */
 Expr* builtin_polynomialgcd(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+
+    /* Rational-function arguments: a polynomial in the GCD variable whose
+     * COEFFICIENTS are rational functions of the other variables — e.g.
+     * (2 t^2 - 1)/x, produced by the recursive Risch tower field integrator
+     * (Cancel/Together/HermiteReduce over C(x)(t)) — is outside the classical
+     * decompose_to_bp domain and formerly returned NULL (unevaluated), silently
+     * breaking the tower Risch DE (RISCH_AUDIT_A4.md).  A denominator is a UNIT in
+     * the fraction field, so clearing it leaves the polynomial GCD unchanged:
+     * replace each rational-function argument by Numerator[Together[arg]] and
+     * recurse through the standard, FLINT-accelerated polynomial path.  Gated by a
+     * cheap negative-power pre-scan so plain-polynomial calls are unaffected, and
+     * idempotent (a genuine polynomial's Together-numerator is itself). */
+    {
+        size_t n = res->data.function.arg_count;
+        bool need = false;
+        for (size_t i = 0; i < n; i++)
+            if (pg_has_negpow(res->data.function.args[i])) { need = true; break; }
+        if (need) {
+            Expr** cleared = malloc(n * sizeof(Expr*));
+            bool any_rat = false;
+            for (size_t i = 0; i < n; i++) {
+                Expr* arg = res->data.function.args[i];
+                /* leave a trailing option (Extension -> a, a Rule) untouched */
+                if (arg->type == EXPR_FUNCTION
+                    && arg->data.function.head->type == EXPR_SYMBOL
+                    && strcmp(arg->data.function.head->data.symbol.name, "Rule") == 0) {
+                    cleared[i] = expr_copy(arg);
+                    continue;
+                }
+                Expr* tg = eval_and_free(expr_new_function(expr_new_symbol("Together"),
+                    (Expr*[]){ expr_copy(arg) }, 1));
+                Expr* den = tg ? eval_and_free(expr_new_function(expr_new_symbol("Denominator"),
+                    (Expr*[]){ expr_copy(tg) }, 1)) : NULL;
+                if (tg && den && !pg_is_constant(den)) {
+                    cleared[i] = eval_and_free(expr_new_function(expr_new_symbol("Numerator"),
+                        (Expr*[]){ tg }, 1));           /* consumes tg */
+                    any_rat = true;
+                } else {
+                    cleared[i] = expr_copy(arg);
+                    if (tg) expr_free(tg);
+                }
+                if (den) expr_free(den);
+            }
+            if (any_rat) {
+                Expr* call = expr_new_function(expr_copy(res->data.function.head), cleared, n);
+                free(cleared);                         /* element ownership moved into call */
+                Expr* r = builtin_polynomialgcd(call);
+                expr_free(call);
+                return r;
+            }
+            for (size_t i = 0; i < n; i++) expr_free(cleared[i]);
+            free(cleared);
+        }
+    }
 
     /* Strip a trailing Extension -> α option, if any.  Extension ->
      * Automatic triggers extension_autodetect_args and routes through
@@ -2221,17 +2307,16 @@ Expr* builtin_polynomialgcd(Expr* res) {
             if (auto_tower) qa_tower_free(auto_tower);
             return fg;
         }
-        /* Plain rational Q[x_1..x_n] GCD via FLINT fmpq_mpoly_gcd.  The classical
-         * pseudo-remainder / content path below carries int64 coefficients that
-         * overflow on dense, large-coefficient polynomials (e.g. the expanded
-         * (x+2)^40 and 40(x+2)^39 that Together/Cancel and the Risch integrator
-         * produce), silently returning only the content GCD (=1).  FLINT is
-         * exact and fast there; it declines (NULL) for parametric / algebraic
-         * rings, falling through to the classical structural path (which still
-         * handles factored inputs without expanding). */
-        if (!alpha && !auto_flag
-            && (poly_max_int_exponent(res->data.function.args[0]) >= 32
-                || poly_max_int_exponent(res->data.function.args[1]) >= 32)) {
+        /* Plain rational Q[x_1..x_n] GCD via FLINT fmpq_mpoly_gcd — the exact,
+         * fast primitive, used unconditionally for every rational input (no degree
+         * gate).  The classical pseudo-remainder / content path below carries int64
+         * coefficients that overflow on dense, large-coefficient polynomials (the
+         * expanded (x+2)^40 and 40(x+2)^39 that Together/Cancel and the Risch
+         * integrator produce), silently returning only the content GCD (=1); FLINT
+         * never does.  It declines (NULL) only for parametric / algebraic rings,
+         * falling through to the classical structural path (which still handles
+         * factored inputs without expanding). */
+        if (!alpha && !auto_flag) {
             Expr* fg2 = flint_multivariate_gcd_normalized(
                 res->data.function.args[0], res->data.function.args[1]);
             if (fg2) {

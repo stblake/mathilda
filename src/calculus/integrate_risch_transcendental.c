@@ -3870,16 +3870,24 @@ static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x) {
         Expr* q = rde_tower(fco, p, &C);
         expr_free(fco);
         if (q) return q;
+        /* Gap 1e: the recursive Bronstein Chapter-6 solver (rde_tower) IS the
+         * decision procedure for the field Risch DE over a log/exp tower —
+         * normal/special denominator, exact degree bound, SPDE, non-cancellation,
+         * cancellation (recursive), antidifferentiation.  With a log/exp lower top
+         * it was actually run to completion, so its NULL is an authoritative
+         * "no rational solution in K_L". */
+        rt_dec_nonelem();
+        return NULL;
     }
 
-    /* Gap 1e: the recursive Bronstein Chapter-6 solver (rde_tower, attempted above)
-     * is the decision procedure for the field Risch DE over a log/exp tower —
-     * normal/special denominator, exact degree bound, SPDE, non-cancellation,
-     * cancellation (recursive), and antidifferentiation.  Every case it declines is
-     * an authoritative "no rational solution in K_L", so the former bounded
-     * SolveAlways h/pd ansatz is retired.  (A tangent top — Gap 3 — or the b=Dz/z
-     * limited-integration branch reaches here as NULL and is out of current scope.) */
-    rt_dec_nonelem();
+    /* The lower field's top monomial is a hypertangent (RT_TAN) or otherwise
+     * outside the recursive RDE's current scope (Gap 3): the field Risch DE was
+     * NOT solved here at all.  This is a SCOPE decline, NOT a theorem — so return
+     * NULL WITHOUT raising the non-elementary certificate, leaving
+     * ElementaryIntegralQ `undec` rather than a false `False`.  Previously an
+     * unconditional rt_dec_nonelem() here declared elementary integrands such as
+     * Sec[x]^2 E^Tan[x] (antiderivative E^Tan[x]) "provably non-elementary".
+     * See RISCH_AUDIT_A4.md Finding 2. */
     return NULL;
 }
 
@@ -4339,46 +4347,17 @@ static bool cx_reim(Expr* e, Expr* x, Expr** re, Expr** im) {
     return false;
 }
 
-/* Numeric diff-back: true iff Sum_k |N[(D[g,x] - f) /. x -> p_k]| < 1e-9 over a
- * few interior points.  Re[G] of an already-correct antiderivative G is provably
- * an antiderivative of the real integrand f, so a numeric check is a sufficient
- * guard against a cx_reim bug — and it is robust where the Simplify diff-back
- * cannot reduce the nested-log real forms the reconstruction produces. */
-static bool rt_realify_numverify(Expr* g, Expr* f, Expr* x) {
-    static const char* pts[] = { "7/10", "13/10", "23/10", "37/10" };
-    Expr* Dg = rt_eval2("D", expr_copy(g), expr_copy(x));
-    if (!Dg) return false;
-    Expr* diff = expr_new_function(expr_new_symbol("Plus"),
-        (Expr*[]){ Dg, cx_neg(expr_copy(f)) }, 2);                  /* D[g] - f */
-    Expr* acc = cx_int(0);
-    for (size_t k = 0; k < sizeof pts / sizeof pts[0]; k++) {
-        Expr* rule = expr_new_function(expr_new_symbol("Rule"),
-            (Expr*[]){ expr_copy(x), parse_expression(pts[k]) }, 2);
-        Expr* at = expr_new_function(expr_new_symbol("ReplaceAll"),
-            (Expr*[]){ expr_copy(diff), rule }, 2);
-        Expr* nv = expr_new_function(expr_new_symbol("Abs"),
-            (Expr*[]){ expr_new_function(expr_new_symbol("N"), (Expr*[]){ at }, 1) }, 1);
-        acc = cx_add(acc, nv);
-    }
-    expr_free(diff);
-    Expr* test = expr_new_function(expr_new_symbol("Less"),
-        (Expr*[]){ acc, parse_expression("1/1000000000") }, 2);
-    Expr* val = rt_eval_own(test);
-    bool ok = val && val->type == EXPR_SYMBOL
-              && val->data.symbol.name == intern_symbol("True");
-    if (val) expr_free(val);
-    return ok;
-}
-
 /* Real closed form of the I-laden antiderivative G of the real integrand f:
  * Re[G] (x real), returned only if it is manifestly real and diff-backs to f
- * numerically. */
+ * under the EXACT symbolic gate (rt_verify_antideriv, Simplify[D-f]===0).  A
+ * Risch decision procedure never certifies by numeric sampling; if Simplify
+ * cannot reduce the reconstructed real form to prove it, this declines. */
 static Expr* rt_realify(Expr* G, Expr* x, Expr* f) {
     Expr* re = NULL; Expr* im = NULL;
     if (!cx_reim(G, x, &re, &im)) { if (re) expr_free(re); if (im) expr_free(im); return NULL; }
     if (im) expr_free(im);
     Expr* reS = rt_eval1("Simplify", re);
-    if (reS && rt_free_of_complex(reS) && rt_realify_numverify(reS, f, x)) return reS;
+    if (reS && rt_free_of_complex(reS) && rt_verify_antideriv(reS, f, x)) return reS;
     if (reS) expr_free(reS);
     return NULL;
 }
@@ -4433,9 +4412,10 @@ static Expr* rt_trig_frontend(Expr* f, Expr* x) {
      * TRANSCENDENTAL argument (e.g. Tan[Log[x]] -> x^I = E^(I Log[x])) yields
      * complex-power kernels the single-primitive exp cases can spuriously certify
      * (once emitting Integrate[Tan[x] Tan[Log[x]]] = 0).  Since realify's exact
-     * gate did not fire, verify the I-laden form numerically before returning it;
-     * on failure decline (never ship a wrong closed form). */
-    if (rt_realify_numverify(out, f, x)) return out;
+     * gate did not fire, verify the I-laden form with the EXACT symbolic diff-back
+     * before returning it; on failure decline (never ship a wrong closed form,
+     * never certify by numeric sampling). */
+    if (rt_verify_antideriv(out, f, x)) return out;
     expr_free(out);
     return NULL;
 }
@@ -4506,10 +4486,11 @@ static Expr* rt_exp_ratreduce_case(Expr* f, Expr* x) {
             Expr* Q = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
                 (Expr*[]){ expr_copy(A), back }, 2));
             /* Correct by construction (exact rational integral over the kernel +
-             * exact back-substitution); accept on the Simplify diff-back, or a
-             * numeric one where Simplify cannot reduce the higher-pole forms
-             * (e.g. Sec[x]^3 -> a triple pole at E^(I x) = +/- i). */
-            if (Q && (rt_verify_antideriv(Q, f, x) || rt_realify_numverify(Q, f, x)))
+             * exact back-substitution); shipped only behind the EXACT symbolic
+             * diff-back (Simplify[D-f]===0).  Where Simplify cannot reduce a
+             * higher-pole real form (e.g. Sec[x]^3 -> a triple pole at
+             * E^(I x) = +/- i) this declines rather than certify numerically. */
+            if (Q && rt_verify_antideriv(Q, f, x))
                 result = Q;
             else if (Q) expr_free(Q);
         }
@@ -4741,11 +4722,12 @@ static Expr* rt_hypertan_family(Expr* f, Expr* x, Expr* subrule, Expr* bval,
         if (base) expr_free(base);
     }
     if (res) expr_free(res);
-    /* Numeric diff-back safety: the base-t-free construction is a proof over C(x),
-     * but a TRANSCENDENTAL tangent argument (u = Log[x], ...) now reaches here
-     * (rt_kernel_eta relaxed), so verify the assembled real form before returning
-     * it — declines instead of shipping a wrong closed form. */
-    if (result && !rt_realify_numverify(result, f, x)) { expr_free(result); result = NULL; }
+    /* Diff-back safety: the base-t-free construction is a proof over C(x), but a
+     * TRANSCENDENTAL tangent argument (u = Log[x], ...) now reaches here
+     * (rt_kernel_eta relaxed), so verify the assembled real form with the EXACT
+     * symbolic gate before returning it — declines instead of shipping a wrong
+     * closed form, and never certifies by numeric sampling. */
+    if (result && !rt_verify_antideriv(result, f, x)) { expr_free(result); result = NULL; }
     expr_free(F); expr_free(t); expr_free(deriv); expr_free(Dt); expr_free(special);
     expr_free(bval); expr_free(carg);
     return result;
