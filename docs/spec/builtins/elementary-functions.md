@@ -185,6 +185,9 @@ Converts trigonometric and hyperbolic functions in `expr` to exponentials.
 **Features**:
 - `Listable`, `Protected`.
 - Operates on both circular and hyperbolic functions, and their inverses.
+- Rewrites recursively, including trig heads nested inside the *argument* of an
+  outer trig head — e.g. `TrigToExp[Sin[Cos[x]]]` exponentializes the inner
+  `Cos[x]` as well, matching Wolfram Language semantics.
 - Automatically threads over lists, equations, inequalities, and logic functions.
 
 ```mathematica

@@ -184,8 +184,16 @@ Expr* builtin_trigtoexp(Expr* res) {
      * rule. */
     trig_canon_suppress_inc();
 
+    /* ReplaceRepeated (not ReplaceAll): the trig->exp rewrite must recurse into
+     * the ARGUMENTS of trig heads, not just their top-level occurrences.  A plain
+     * top-down ReplaceAll rewrites Sin[Cos[x]-Sin[x]] -> E^(...(Cos[x]-Sin[x])...)
+     * but never re-descends into the substituted RHS, so the nested Cos[x]/Sin[x]
+     * stay as trig — an incompletely exponentialized form that diverges from WL and
+     * strands the Risch trig frontend (which needs a genuine exp tower over x).
+     * Every rule's RHS is built purely from Exp/Log/Sqrt (no trig heads), so the
+     * fixed-point iteration is guaranteed to terminate. */
     Expr* replace_args[2] = { expr_copy(arg), expr_copy(trig_to_exp_rules) };
-    Expr* replace_expr = expr_new_function(expr_new_symbol(SYM_ReplaceAll), replace_args, 2);
+    Expr* replace_expr = expr_new_function(expr_new_symbol(SYM_ReplaceRepeated), replace_args, 2);
     Expr* replaced = evaluate(replace_expr);
     expr_free(replace_expr);
 

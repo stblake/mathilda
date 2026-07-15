@@ -367,6 +367,13 @@ static void test_trig_frontend(void) {
     assert_rm_num("Sin[x]^4");
     assert_rm_num("Cos[x]^4");
     assert_rm_num("Sinh[2 x]");
+    /* Nested trig ARGUMENT: the outer Sin has a trig-valued argument, so the
+     * exp frontend must recursively exponentialize the inner Cos[x]-Sin[x]
+     * (TrigToExp must recurse into arguments) to expose a genuine exp tower.
+     * Antiderivative is Cos[Cos[x]-Sin[x]].  Regressed before TrigToExp used
+     * ReplaceRepeated (nested trig stayed unexponentialized -> frontend stranded). */
+    assert_rm_num("(Cos[x] + Sin[x]) Sin[Cos[x] - Sin[x]]");
+    assert_rm_num("(Cos[x] - Sin[x]) Cos[Cos[x] + Sin[x]]");
 }
 
 /* ================= REAL RECONSTRUCTION (rational trigonometric) =================
