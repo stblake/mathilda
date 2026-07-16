@@ -140,6 +140,8 @@ extern const char* SYM_ExpIntegralEi;
 extern const char* SYM_LogIntegral;
 extern const char* SYM_SinIntegral;
 extern const char* SYM_CosIntegral;
+extern const char* SYM_SinhIntegral;
+extern const char* SYM_CoshIntegral;
 extern const char* SYM_FresnelC;
 extern const char* SYM_FresnelS;
 extern const char* SYM_Sinc;

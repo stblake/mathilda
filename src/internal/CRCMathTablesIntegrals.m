@@ -1341,6 +1341,13 @@ IntegrateTable[x_^2 Cos[a_. x_]^2, x_] /; FreeQ[a, x] :=
 IntegrateTable[x_ Cos[a_. x_]^3, x_] /; FreeQ[a, x] := 
   x/(12 a) Sin[3 a x] + 1/(36 a^2) Cos[3 a x] + (3 x)/(4 a) Sin[a x] + 3/(4 a^2) Cos[a x];
 
+(* Formula 387 base case (m = 1): the sine / cosine integrals.  These also
+   terminate the Formula 387/388 negative-power recurrences below, which reduce
+   Sin[a x]/x^m and Cos[a x]/x^m down to Sin[a x]/x and Cos[a x]/x.
+   D[SinIntegral[a x], x] = Sin[a x]/x, D[CosIntegral[a x], x] = Cos[a x]/x. *)
+IntegrateTable[Sin[a_. x_]/x_, x_] /; FreeQ[a, x] := SinIntegral[a x];
+IntegrateTable[Cos[a_. x_]/x_, x_] /; FreeQ[a, x] := CosIntegral[a x];
+
 (* Formula 387: Reduction for Negative Powers *)
 IntegrateTable[Sin[a_. x_]/x_^m_, x_] /; FreeQ[{a, m}, x] && m =!= 1 && IntegerQ[m] && m > 1 :=
   -Sin[a x]/((m - 1) x^(m - 1)) + a/(m - 1) IntegrateTable[Cos[a x]/x^(m - 1), x];
@@ -2078,6 +2085,12 @@ IntegrateTable[Tanh[a_. x_], x_] /; FreeQ[a, x] := Log[Cosh[a x]]/a;
 IntegrateTable[Coth[a_. x_], x_] /; FreeQ[a, x] := Log[Sinh[a x]]/a;
 IntegrateTable[Sech[a_. x_], x_] /; FreeQ[a, x] := ArcTan[Sinh[a x]]/a;
 IntegrateTable[Csch[a_. x_], x_] /; FreeQ[a, x] := Log[Tanh[(a x)/2]]/a;
+
+(* Hyperbolic sine / cosine integrals (Sinh[a x]/x and Cosh[a x]/x), the
+   hyperbolic analogues of the SinIntegral / CosIntegral base cases above.
+   D[SinhIntegral[a x], x] = Sinh[a x]/x, D[CoshIntegral[a x], x] = Cosh[a x]/x. *)
+IntegrateTable[Sinh[a_. x_]/x_, x_] /; FreeQ[a, x] := SinhIntegral[a x];
+IntegrateTable[Cosh[a_. x_]/x_, x_] /; FreeQ[a, x] := CoshIntegral[a x];
 
 (* Formula 540 & 542 (generalised to argument a x) *)
 IntegrateTable[x_ Sinh[a_. x_], x_] /; FreeQ[a, x] := x Cosh[a x]/a - Sinh[a x]/a^2;

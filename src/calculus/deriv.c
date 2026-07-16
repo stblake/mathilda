@@ -347,6 +347,19 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
                       mk_fn2("Power", expr_copy(g), mk_int(-1)));
     }
 
+    /* --- hyperbolic sine integral: d/dg SinhIntegral[g] = Sinh[g]/g.
+     *     (No Sinhc builtin, so emit Sinh[g]/g directly.) --- */
+    if (!strcmp(name, "SinhIntegral")) {
+        return mk_fn2("Times", mk_fn1("Sinh", expr_copy(g)),
+                      mk_fn2("Power", expr_copy(g), mk_int(-1)));
+    }
+
+    /* --- hyperbolic cosine integral: d/dg CoshIntegral[g] = Cosh[g]/g. --- */
+    if (!strcmp(name, "CoshIntegral")) {
+        return mk_fn2("Times", mk_fn1("Cosh", expr_copy(g)),
+                      mk_fn2("Power", expr_copy(g), mk_int(-1)));
+    }
+
     /* --- Fresnel integrals: d/dg FresnelC[g] = Cos[Pi g^2/2],
      *     d/dg FresnelS[g] = Sin[Pi g^2/2]. (Pi g^2/2 as Times[1/2, Pi, g^2].) */
     if (!strcmp(name, "FresnelC") || !strcmp(name, "FresnelS")) {

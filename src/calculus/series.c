@@ -1103,6 +1103,19 @@ static Expr** kernel_coefs(const char* name, size_t N) {
             Expr* ratio = make_rational(num, den);
             c[k] = simp(mk_times(expr_copy(c[k - 2]), ratio));
         }
+    } else if (strcmp(name, "SinhIntegral") == 0) {
+        /* Shi[u] = sum_{m>=0} u^(2m+1) / ((2m+1)(2m+1)!).  Same as Si without the
+         * alternating sign; c_{2m+1} = c_{2m-1} * (2m-1)/((2m)(2m+1)^2), c_1 = 1. */
+        c[0] = expr_new_integer(0);
+        if (N > 1) c[1] = expr_new_integer(1);
+        for (size_t k = 2; k < N; k++) {
+            if ((k & 1) == 0) { c[k] = expr_new_integer(0); continue; }
+            int64_t m = (int64_t)(k - 1) / 2;
+            int64_t num = (2*m - 1);
+            int64_t den = (2*m) * (2*m + 1) * (2*m + 1);
+            Expr* ratio = make_rational(num, den);
+            c[k] = simp(mk_times(expr_copy(c[k - 2]), ratio));
+        }
     } else if (strcmp(name, "FresnelC") == 0) {
         /* C[u] = sum_{m>=0} (-1)^m (Pi/2)^(2m) u^(4m+1) / ((2m)!(4m+1)).
          * Powers 4m+1 only; c_1 = 1,
@@ -2140,7 +2153,7 @@ static bool is_known_elementary(Expr* e) {
         "Sinh", "Cosh", "Tanh",
         "ArcSin", "ArcCos", "ArcTan", "ArcCot",
         "ArcSinh", "ArcCosh", "ArcTanh", "ArcCoth",
-        "SinIntegral", "FresnelC", "FresnelS",
+        "SinIntegral", "SinhIntegral", "FresnelC", "FresnelS",
         NULL
     };
     for (int i = 0; names[i]; i++) if (has_symbol_head(e, names[i])) return true;
@@ -2501,6 +2514,10 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
             else if (strcmp(head, "SinIntegral") == 0) {
                 /* Si is entire and odd (Si(0)=0), analytic at u=0 like ArcTan. */
                 r = so_apply_kernel_at_zero("SinIntegral", inner);
+            }
+            else if (strcmp(head, "SinhIntegral") == 0) {
+                /* Shi is entire and odd (Shi(0)=0), analytic at u=0 like Si. */
+                r = so_apply_kernel_at_zero("SinhIntegral", inner);
             }
             else if (strcmp(head, "FresnelC") == 0) {
                 /* FresnelC is entire and odd (C(0)=0), analytic at u=0. */
@@ -3573,6 +3590,158 @@ static Expr* try_series_cosintegral_at_infinity(Expr* f, Expr* x, int64_t n) {
     return result;
 }
 
+/* Build the -I Pi/2 Stokes constant shared by the Shi/Chi asymptotic
+ * expansions: Times[Complex[0,-1], Rational[1,2], Pi]. */
+static Expr* si_hyper_stokes_const(void) {
+    return simp(mk_times(make_complex(expr_new_integer(0), expr_new_integer(-1)),
+                         mk_times(make_rational(1, 2), mk_symbol("Pi"))));
+}
+
+/* Asymptotic expansion of SinhIntegral[x] at x = Infinity:
+ *
+ *   Shi(x) ~ -I Pi/2 + cosh(x) F(x) + sinh(x) G(x),
+ *     F(x) = Sum_{k>=0} (2k)!   / x^(2k+1),
+ *     G(x) = Sum_{k>=0} (2k+1)! / x^(2k+2).
+ *
+ * F, G are Si's f, g without the (-1)^k (all coefficients positive), and the
+ * combination pairs cosh with F, sinh with G. Matching Mathematica's
+ * Series[SinhIntegral[x],{x,Infinity,k}]:
+ *
+ *   -I Pi/2
+ *   + Cosh[x] SeriesData[1/x, 0, { (2k)!   at 1/x^(2k+1) }, 1, .., 1]
+ *   + Sinh[x] SeriesData[1/x, 0, { (2k+1)! at 1/x^(2k+2) }, 2, .., 1].
+ *
+ * Returns NULL unless f is exactly SinhIntegral[x] in the expansion variable. */
+static Expr* try_series_sinhintegral_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "SinhIntegral") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+
+    /* F-part (attached to Cosh): powers 2k+1 at 1/x exponents 1, 3, 5, ...
+     * coefficient (2k)!. nmin = 1. */
+    size_t ncf = (size_t)n;                       /* 1/x exponents 1 .. n */
+    Expr** cf = calloc(ncf, sizeof(Expr*));
+    for (size_t i = 0; i < ncf; i++) cf[i] = expr_new_integer(0);
+    for (int64_t k = 0; ; k++) {
+        int64_t p = 2 * k + 1;                    /* 1/x exponent */
+        if (p > n) break;
+        Expr* fact = eval_and_free(mk_fn1("Factorial", expr_new_integer(2 * k)));
+        expr_free(cf[(size_t)(p - 1)]);
+        cf[(size_t)(p - 1)] = fact;
+    }
+    Expr** sdf = calloc(6, sizeof(Expr*));
+    sdf[0] = mk_power(expr_copy(x), expr_new_integer(-1));
+    sdf[1] = expr_new_integer(0);
+    sdf[2] = expr_new_function(mk_symbol("List"), cf, ncf);
+    sdf[3] = expr_new_integer(1);                 /* nmin = 1 */
+    sdf[4] = expr_new_integer(n + 1);             /* O-term  */
+    sdf[5] = expr_new_integer(1);
+    Expr* seriesF = expr_new_function(mk_symbol("SeriesData"), sdf, 6);
+    free(sdf); free(cf);
+
+    Expr* result = mk_plus(si_hyper_stokes_const(),
+                           mk_times(mk_fn1("Cosh", expr_copy(x)), seriesF));
+
+    /* G-part (attached to Sinh): powers 2k+2 at 1/x exponents 2, 4, 6, ...;
+     * coefficient (2k+1)!. nmin = 2. Only emitted if any g-term fits order n. */
+    if (n >= 2) {
+        size_t ncg = (size_t)(n - 1);             /* 1/x exponents 2 .. n, index p-2 */
+        Expr** cg = calloc(ncg, sizeof(Expr*));
+        for (size_t i = 0; i < ncg; i++) cg[i] = expr_new_integer(0);
+        for (int64_t k = 0; ; k++) {
+            int64_t p = 2 * k + 2;                /* 1/x exponent */
+            if (p > n) break;
+            Expr* fact = eval_and_free(mk_fn1("Factorial", expr_new_integer(2 * k + 1)));
+            expr_free(cg[(size_t)(p - 2)]);
+            cg[(size_t)(p - 2)] = fact;
+        }
+        Expr** sdg = calloc(6, sizeof(Expr*));
+        sdg[0] = mk_power(expr_copy(x), expr_new_integer(-1));
+        sdg[1] = expr_new_integer(0);
+        sdg[2] = expr_new_function(mk_symbol("List"), cg, ncg);
+        sdg[3] = expr_new_integer(2);             /* nmin = 2 */
+        sdg[4] = expr_new_integer(n + 1);
+        sdg[5] = expr_new_integer(1);
+        Expr* seriesG = expr_new_function(mk_symbol("SeriesData"), sdg, 6);
+        free(sdg); free(cg);
+        result = mk_plus(result, mk_times(mk_fn1("Sinh", expr_copy(x)), seriesG));
+    }
+    return result;
+}
+
+/* Asymptotic expansion of CoshIntegral[x] at x = Infinity:
+ *
+ *   Chi(x) ~ -I Pi/2 + sinh(x) F(x) + cosh(x) G(x),
+ *     F(x) = Sum_{k>=0} (2k)!   / x^(2k+1),
+ *     G(x) = Sum_{k>=0} (2k+1)! / x^(2k+2).
+ *
+ * Same F, G as SinhIntegral; only the combination differs (sinh with F, cosh
+ * with G). Matching Mathematica's Series[CoshIntegral[x],{x,Infinity,k}]:
+ *
+ *   -I Pi/2
+ *   + Sinh[x] SeriesData[1/x, 0, { (2k)!   at 1/x^(2k+1) }, 1, .., 1]
+ *   + Cosh[x] SeriesData[1/x, 0, { (2k+1)! at 1/x^(2k+2) }, 2, .., 1].
+ *
+ * Returns NULL unless f is exactly CoshIntegral[x] in the expansion variable. */
+static Expr* try_series_coshintegral_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "CoshIntegral") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+
+    /* F-part (attached to Sinh): powers 2k+1 at 1/x exponents 1, 3, 5, ...
+     * coefficient (2k)!. nmin = 1. */
+    size_t ncf = (size_t)n;                       /* 1/x exponents 1 .. n */
+    Expr** cf = calloc(ncf, sizeof(Expr*));
+    for (size_t i = 0; i < ncf; i++) cf[i] = expr_new_integer(0);
+    for (int64_t k = 0; ; k++) {
+        int64_t p = 2 * k + 1;                    /* 1/x exponent */
+        if (p > n) break;
+        Expr* fact = eval_and_free(mk_fn1("Factorial", expr_new_integer(2 * k)));
+        expr_free(cf[(size_t)(p - 1)]);
+        cf[(size_t)(p - 1)] = fact;
+    }
+    Expr** sdf = calloc(6, sizeof(Expr*));
+    sdf[0] = mk_power(expr_copy(x), expr_new_integer(-1));
+    sdf[1] = expr_new_integer(0);
+    sdf[2] = expr_new_function(mk_symbol("List"), cf, ncf);
+    sdf[3] = expr_new_integer(1);                 /* nmin = 1 */
+    sdf[4] = expr_new_integer(n + 1);             /* O-term  */
+    sdf[5] = expr_new_integer(1);
+    Expr* seriesF = expr_new_function(mk_symbol("SeriesData"), sdf, 6);
+    free(sdf); free(cf);
+
+    Expr* result = mk_plus(si_hyper_stokes_const(),
+                           mk_times(mk_fn1("Sinh", expr_copy(x)), seriesF));
+
+    /* G-part (attached to Cosh): powers 2k+2 at 1/x exponents 2, 4, 6, ...;
+     * coefficient (2k+1)!. nmin = 2. Only emitted if any g-term fits order n. */
+    if (n >= 2) {
+        size_t ncg = (size_t)(n - 1);             /* 1/x exponents 2 .. n, index p-2 */
+        Expr** cg = calloc(ncg, sizeof(Expr*));
+        for (size_t i = 0; i < ncg; i++) cg[i] = expr_new_integer(0);
+        for (int64_t k = 0; ; k++) {
+            int64_t p = 2 * k + 2;                /* 1/x exponent */
+            if (p > n) break;
+            Expr* fact = eval_and_free(mk_fn1("Factorial", expr_new_integer(2 * k + 1)));
+            expr_free(cg[(size_t)(p - 2)]);
+            cg[(size_t)(p - 2)] = fact;
+        }
+        Expr** sdg = calloc(6, sizeof(Expr*));
+        sdg[0] = mk_power(expr_copy(x), expr_new_integer(-1));
+        sdg[1] = expr_new_integer(0);
+        sdg[2] = expr_new_function(mk_symbol("List"), cg, ncg);
+        sdg[3] = expr_new_integer(2);             /* nmin = 2 */
+        sdg[4] = expr_new_integer(n + 1);
+        sdg[5] = expr_new_integer(1);
+        Expr* seriesG = expr_new_function(mk_symbol("SeriesData"), sdg, 6);
+        free(sdg); free(cg);
+        result = mk_plus(result, mk_times(mk_fn1("Cosh", expr_copy(x)), seriesG));
+    }
+    return result;
+}
+
 /* One Laurent 1/x part of a Fresnel asymptotic expansion. Builds
  *   SeriesData[1/x, 0, {coefs}, nmin, n+1, 1]
  * whose coefficient at 1/x^p (p = 4j + nmin, j = 0, 1, ...) is
@@ -4422,6 +4591,48 @@ static Expr* try_series_cosintegral_at_zero(Expr* f, Expr* x, int64_t n, int x_s
     return series;
 }
 
+/* CoshIntegral[x] at x = 0: Chi(0) = -Infinity blocks naive Taylor. Emit the
+ * logarithmic series directly (the trig series without the alternating sign):
+ *
+ *   Chi(x) = EulerGamma + Log[x] + Sum_{m>=1} x^(2m) / (2m (2m)!),
+ *
+ * i.e. the x^0 coefficient carries EulerGamma + Log[x] (or Log[-x] when the
+ * Assumptions option forces x < 0) and only even powers appear thereafter, all
+ * with positive coefficient. */
+static Expr* try_series_coshintegral_at_zero(Expr* f, Expr* x, int64_t n, int x_sign) {
+    if (!has_symbol_head(f, "CoshIntegral") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+    if (n < 0) n = 0;
+
+    size_t ncoef = (size_t)n + 1;            /* exponents 0 .. n */
+    Expr** coefs = calloc(ncoef, sizeof(Expr*));
+    Expr* logarg = (x_sign < 0)
+                 ? mk_times(expr_new_integer(-1), expr_copy(x))
+                 : expr_copy(x);
+    coefs[0] = simp(mk_plus(mk_symbol("EulerGamma"), mk_fn1("Log", logarg)));
+    for (int64_t k = 1; k <= n; k++) {
+        if (k % 2 != 0) { coefs[k] = expr_new_integer(0); continue; }
+        /* x^(2m) coefficient 1/(2m (2m)!) -- positive, no sign alternation. */
+        Expr* kfact = eval_and_free(mk_fn1("Factorial", expr_new_integer(k)));
+        Expr* denom = eval_and_free(mk_times(expr_new_integer(k), kfact));
+        coefs[k] = eval_and_free(mk_power(denom, expr_new_integer(-1)));
+    }
+    Expr* coef_list = expr_new_function(mk_symbol("List"), coefs, ncoef);
+    free(coefs);
+
+    Expr** sd = calloc(6, sizeof(Expr*));
+    sd[0] = expr_copy(x);            /* expansion var */
+    sd[1] = expr_new_integer(0);     /* x0            */
+    sd[2] = coef_list;               /* coefficients  */
+    sd[3] = expr_new_integer(0);     /* nmin          */
+    sd[4] = expr_new_integer(n + 1); /* nmax (O-term) */
+    sd[5] = expr_new_integer(1);     /* denominator   */
+    Expr* series = expr_new_function(mk_symbol("SeriesData"), sd, 6);
+    free(sd);
+    return series;
+}
+
 /* Asymptotic series of BesselK[nu, x] at x = Infinity (DLMF 10.40.2):
  *
  *   K_nu(x) ~ sqrt(pi/(2x)) e^{-x} Sum_{k>=0} a_k / x^k,
@@ -5071,6 +5282,18 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
             expr_free(x0_eval);
             return ci;
         }
+        Expr* shi = try_series_sinhintegral_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (shi) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return shi;
+        }
+        Expr* chi = try_series_coshintegral_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (chi) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return chi;
+        }
         Expr* frc = try_series_fresnelc_at_infinity(f_eval, x, leading_only ? 1 : n);
         if (frc) {
             expr_free(f_eval);
@@ -5188,6 +5411,14 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
             expr_free(f_eval);
             expr_free(x0_eval);
             return ci0;
+        }
+        /* CoshIntegral[x] at x = 0: Chi(0) = -Infinity blocks naive Taylor;
+         * emit the logarithmic series directly. */
+        Expr* chi0 = try_series_coshintegral_at_zero(f_eval, x, leading_only ? 0 : n, x_sign);
+        if (chi0) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return chi0;
         }
         /* BesselK[p, x] at x = 0 (integer p): K_p has a pole and a logarithmic
          * branch term, so naive Taylor-via-D cannot produce it. Emit the

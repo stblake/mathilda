@@ -580,6 +580,22 @@ void info_init(void) {
         "CosIntegral[-Infinity] = I Pi, CosIntegral[+-I Infinity] = Infinity.\n"
         "Real and complex inputs evaluate numerically at machine or arbitrary (MPFR)\n"
         "precision; D[CosIntegral[z], z] = Cos[z]/z. Listable.");
+    symtab_set_docstring("SinhIntegral",
+        "SinhIntegral[z]\n"
+        "\tgives the hyperbolic sine integral Shi(z) = Integral_0^z Sinh[t]/t dt.\n"
+        "An entire, odd function with no branch cuts. SinhIntegral[0] = 0,\n"
+        "SinhIntegral[+-Infinity] = +-Infinity, SinhIntegral[+-I Infinity] = +-I Pi/2.\n"
+        "Real and complex inputs evaluate numerically at machine or arbitrary (MPFR)\n"
+        "precision; D[SinhIntegral[z], z] = Sinh[z]/z. Listable.");
+    symtab_set_docstring("CoshIntegral",
+        "CoshIntegral[z]\n"
+        "\tgives the hyperbolic cosine integral\n"
+        "\tChi(z) = EulerGamma + Log[z] + Integral_0^z (Cosh[t] - 1)/t dt.\n"
+        "Has a logarithmic singularity at 0 and a branch cut on (-Infinity, 0].\n"
+        "CoshIntegral[0] = -Infinity, CoshIntegral[Infinity] = Infinity,\n"
+        "CoshIntegral[+-I Infinity] = +-I Pi/2.\n"
+        "Real and complex inputs evaluate numerically at machine or arbitrary (MPFR)\n"
+        "precision; D[CoshIntegral[z], z] = Cosh[z]/z. Listable.");
     symtab_set_docstring("FresnelC",
         "FresnelC[z]\n"
         "\tgives the Fresnel integral C(z) = Integral_0^z Cos[Pi t^2/2] dt.\n"

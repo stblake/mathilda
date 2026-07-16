@@ -356,6 +356,77 @@ branch on and left of the imaginary axis. Complex arguments run through the shar
 - `Listable`, `NumericFunction`, `Protected`. Wrong arity emits
   `CosIntegral::argx` and stays unevaluated.
 
+## SinhIntegral
+
+- `SinhIntegral[z]` — the hyperbolic sine integral Shi(z) = ∫₀ᶻ Sinh[t]/t dt.
+
+`SinhIntegral` is entire and odd, with no branch cuts — the imaginary-axis
+sibling of `SinIntegral` (Shi(z) = −i Si(i z)). The convergent Maclaurin series
+is `SinIntegral`'s without the alternating sign (all terms positive), so on the
+real axis there is no catastrophic cancellation; large |z| uses the
+optimally-truncated asymptotic `cosh(z) F(z) + sinh(z) G(z)` plus a Stokes
+constant off the real axis.
+
+- Exact special values: `SinhIntegral[0] = 0`, `SinhIntegral[±Infinity] =
+  ±Infinity`, `SinhIntegral[±I Infinity] = ±I Pi/2`; `ComplexInfinity` and
+  `Indeterminate` give `Indeterminate`.
+- Exact non-special arguments stay symbolic (`SinhIntegral[2]`,
+  `SinhIntegral[x]`); odd symmetry pulls a leading negative out
+  (`SinhIntegral[-x] = -SinhIntegral[x]`).
+- Machine and arbitrary-precision reals evaluate numerically, tracking input
+  precision: `SinhIntegral[2.8] = 4.34808`,
+  `N[SinhIntegral[2], 50] = 2.5015674333549756414733724827275423989162728736915`.
+  Results that overflow a machine double (`SinhIntegral[10.^6] ≈ 1.5166×10^434288`)
+  come back as an extended-exponent (MPFR) real rather than `Infinity`.
+- Complex arguments are fully accurate, e.g. `SinhIntegral[2.5 + I] = 2.84649 +
+  2.22177 I`, and `SinhIntegral[3. I] = 1.84865 I` (= I Si(3)).
+- Derivative: `D[SinhIntegral[z], z] = Sinh[z]/z` (chain rule applies, e.g.
+  `D[SinhIntegral[x^2], x] = (2 Sinh[x^2])/x`).
+- Series: Taylor at the origin (`Series[SinhIntegral[x], {x, 0, 7}] =
+  x + x^3/18 + x^5/600 + x^7/35280 + O[x]^8`) and the hyperbolic-prefactored
+  asymptotic expansion at Infinity
+  (`Normal[Series[SinhIntegral[x], {x, Infinity, 3}]] =
+  -I Pi/2 + Sinh[x]/x^2 + Cosh[x] (1/x + 2/x^3)`).
+- Integrate: `Integrate[Sinh[a x]/x, x] = SinhIntegral[a x]`.
+- `Listable`, `NumericFunction`, `Protected`. Wrong arity emits
+  `SinhIntegral::argx` and stays unevaluated.
+
+## CoshIntegral
+
+- `CoshIntegral[z]` — the hyperbolic cosine integral
+  Chi(z) = EulerGamma + Log[z] + ∫₀ᶻ (Cosh[t] − 1)/t dt.
+
+`CoshIntegral` has a logarithmic singularity at `0` and a branch cut along the
+negative real axis `(−∞, 0]` — the imaginary-axis sibling of `CosIntegral`
+(Chi(z) = Ci(i z) − i Pi/2). The convergent series is `CosIntegral`'s without
+the alternating sign; large |z| uses the asymptotic `sinh(z) F(z) + cosh(z) G(z)`
+plus a piecewise Stokes constant, with the principal `Log` supplying the branch.
+
+- Exact special values: `CoshIntegral[0] = -Infinity`, `CoshIntegral[Infinity] =
+  Infinity`, `CoshIntegral[-Infinity] = Infinity`, `CoshIntegral[±I Infinity] =
+  ±I Pi/2`; `ComplexInfinity` and `Indeterminate` give `Indeterminate`.
+- Exact non-special arguments stay symbolic (`CoshIntegral[2]`, `CoshIntegral[x]`,
+  `CoshIntegral[-x]`); there is no odd/even fold.
+- Machine and arbitrary-precision reals evaluate numerically, tracking input
+  precision: `CoshIntegral[2.8] = 4.33122`,
+  `N[CoshIntegral[2], 50] = 2.4526669226469145219061326474994928766017806887285`.
+  A negative real returns the from-above branch value `Chi(|x|) + I Pi`:
+  `CoshIntegral[-2.] = 2.45267 + 3.14159 I`. Overflowing results
+  (`CoshIntegral[10.^6]`) come back as an extended-exponent (MPFR) real.
+- Complex arguments are fully accurate, e.g. `CoshIntegral[3.5 + I] = 5.36668 +
+  4.28423 I`, and on the imaginary axis `CoshIntegral[3. I] = 0.11963 + 1.5708 I`
+  (= Ci(3) + I Pi/2).
+- Derivative: `D[CoshIntegral[z], z] = Cosh[z]/z` (chain rule applies, e.g.
+  `D[CoshIntegral[x^2], x] = (2 Cosh[x^2])/x`).
+- Series: the logarithmic Taylor series at the origin
+  (`Series[CoshIntegral[x], {x, 0, 6}] = EulerGamma + Log[x] + x^2/4 + x^4/96 +
+  x^6/4320 + O[x]^7`) and the hyperbolic-prefactored asymptotic expansion at
+  Infinity (`Normal[Series[CoshIntegral[x], {x, Infinity, 3}]] =
+  -I Pi/2 + Cosh[x]/x^2 + Sinh[x] (1/x + 2/x^3)`).
+- Integrate: `Integrate[Cosh[a x]/x, x] = CoshIntegral[a x]`.
+- `Listable`, `NumericFunction`, `Protected`. Wrong arity emits
+  `CoshIntegral::argx` and stays unevaluated.
+
 ## FresnelC and FresnelS
 
 - `FresnelC[z]` — the Fresnel integral C(z) = ∫₀ᶻ Cos[π t²/2] dt.

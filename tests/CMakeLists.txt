@@ -242,6 +242,8 @@ set(COMMON_SRC
     ../src/special_functions/logintegral.c
     ../src/special_functions/sinintegral.c
     ../src/special_functions/cosintegral.c
+    ../src/special_functions/sinhintegral.c
+    ../src/special_functions/coshintegral.c
     ../src/special_functions/fresnel.c
     ../src/special_functions/sinc.c
     ../src/special_functions/inverf.c
@@ -2160,6 +2162,12 @@ target_include_directories(sinintegral_tests PRIVATE ../src)
 
 add_executable(cosintegral_tests test_cosintegral.c ${COMMON_SRC})
 target_include_directories(cosintegral_tests PRIVATE ../src)
+
+add_executable(sinhintegral_tests test_sinhintegral.c ${COMMON_SRC})
+target_include_directories(sinhintegral_tests PRIVATE ../src)
+
+add_executable(coshintegral_tests test_coshintegral.c ${COMMON_SRC})
+target_include_directories(coshintegral_tests PRIVATE ../src)
 
 add_executable(fresnelc_tests test_fresnelc.c ${COMMON_SRC})
 target_include_directories(fresnelc_tests PRIVATE ../src)
