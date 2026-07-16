@@ -25,33 +25,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "expr.h"
-
-/* ---- Differential transcendental tower (shared with the integrator) ------- */
-
-typedef enum { RT_LOG, RT_EXP, RT_TAN } RtKind; /* monomial kind: Log[u] / E^w / Tan[u] */
-
-/* The per-monomial and member arrays are heap-allocated by rt_tower_build_min,
- * sized to the actual kernel count, so tower DEPTH IS UNBOUNDED (no RT_MAXK cap).
- * rt_tower_free releases them; a not-yet-built tower has all pointers NULL. */
-typedef struct {
-    size_t n;
-    RtKind* kind;
-    Expr** kernel;   /* Log[u_i] / Power[E, w_i] / Tan[u_i]      (owned) */
-    Expr** arg;      /* u_i (log/tan argument) or w_i (exp exponent) (owned) */
-    Expr** t;        /* fresh tower variable t_i                 (owned) */
-    Expr** Dcoef;    /* log: u'/u ; exp: w' ; tan: u'           (owned) */
-    long*  tsg;      /* RT_TAN special sign sigma: +1 (Tan/Cot), -1 (Tanh/Coth); 0 else */
-    Expr* subrules;  /* List of all kernel -> t_i rules          (owned) */
-    /* Multiplicatively commensurate non-primitive exp members: a collected
-     * kernel E^w whose exponent w = mmult * arg[mprim] is NOT an independent
-     * extension — it is (E^arg[mprim])^mmult = t[mprim]^mmult.  Recorded here so
-     * rt_subst_kernels can alias it to a power of the primitive's tower var
-     * instead of leaving it as a foreign kernel. */
-    size_t nm;
-    Expr** marg;     /* the member exponent w                    (owned) */
-    long*  mprim;    /* tower index of the class primitive              */
-    long*  mmult;    /* integer multiplier k (w = k * arg[mprim])       */
-} RtTower;
+#include "risch_util.h"    /* shared rt_ eval/predicate/poly helpers */
+#include "risch_tower.h"   /* RtKind / RtTower (the differential tower) */
 
 /* Derivation context for the recursive Risch DE: the current top monomial
  * tau = t_m (kind T->kind[m]) with the lower tower vars {x, t_0..t_{m-1}} = k as
@@ -90,18 +65,9 @@ int rde_spde_field(Expr* a, Expr* b, Expr* c, RdeCtx* C, long n, RdeSpde* out);
 /* PolyRischDENoCancel over k(x)[tau] (§6.5, deg_tau(b) >= 1): q (owned) or NULL. */
 Expr* rde_polyrischde_nocancel_field(Expr* b, Expr* c, RdeCtx* C, long n);
 
-/* ---- Shared helpers DEFINED in integrate_risch_transcendental.c ----------- */
-/* (small build-and-evaluate / polynomial primitives reused by both files) */
-
-bool  rt_head_is(const Expr* e, const char* name);
-Expr* rt_eval1(const char* head, Expr* a);
-Expr* rt_eval2(const char* head, Expr* a, Expr* b);
-Expr* rt_eval3(const char* head, Expr* a, Expr* b, Expr* c);
-bool  rt_is_poly(Expr* e, Expr* x);
-long  rt_degree(Expr* e, Expr* x);
-Expr* rt_coeff(Expr* e, Expr* x, long k);
-bool  rt_is_zero(Expr* e);
-Expr* rt_tower_deriv(Expr* e, RtTower* T, Expr* x);
+/* Small shared eval/predicate/poly helpers (rt_head_is, rt_eval1..3,
+ * rt_is_poly, rt_degree, rt_coeff, rt_is_zero, ...) are declared in
+ * risch_util.h; rt_tower_deriv in risch_tower.h — both included above. */
 
 /* Field integrator entry (Bronstein mutual recursion): integrate F in K_L over the
  * tower T.  Returns the antiderivative in tower-variable form (owned), or NULL; a
