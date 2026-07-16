@@ -476,7 +476,21 @@ Expr* builtin_plus(Expr* res) {
     
     TermGroup* groups = malloc(sizeof(TermGroup) * n);
     size_t group_count = 0;
-    
+
+    /* Open-addressing hash table mapping base-hash -> group index, so that
+     * collecting like terms is O(1) expected per term rather than a linear
+     * scan of every existing group. Without it, a Plus of many distinct
+     * monomials (e.g. Total of 10^5 terms over ~10^3 powers) is O(n*groups),
+     * i.e. quadratic. Capacity is a power of two >= 2n for a low load factor;
+     * slot_group holds the group index (-1 = empty), slot_hash the base hash
+     * so most probes reject without touching expr_eq. */
+    size_t ht_cap = 8;
+    while (ht_cap < n * 2) ht_cap <<= 1;
+    size_t ht_mask = ht_cap - 1;
+    int64_t* slot_group = malloc(sizeof(int64_t) * ht_cap);
+    uint64_t* slot_hash = malloc(sizeof(uint64_t) * ht_cap);
+    for (size_t s = 0; s < ht_cap; s++) slot_group[s] = -1;
+
     for (size_t i = 0; i < n; i++) {
         Expr* arg = res->data.function.args[i];
         Expr* c = NULL;
@@ -491,6 +505,8 @@ Expr* builtin_plus(Expr* res) {
                 if (groups[j].temp_base) expr_free(groups[j].base);
             }
             free(groups);
+            free(slot_group);
+            free(slot_hash);
             expr_free(c);
             if (is_temp_base && b != arg) expr_free(b);
             return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
@@ -520,15 +536,21 @@ Expr* builtin_plus(Expr* res) {
                     if (groups[j].temp_base) expr_free(groups[j].base);
                 }
                 free(groups);
+                free(slot_group);
+                free(slot_hash);
                 return num_sum;
             }
         } else {
+            uint64_t hb = expr_hash(b);
+            size_t slot = (size_t)hb & ht_mask;
             int found = -1;
-            for (size_t j = 0; j < group_count; j++) {
-                if (expr_eq(groups[j].base, b)) {
-                    found = (int)j;
+            while (slot_group[slot] != -1) {
+                if (slot_hash[slot] == hb &&
+                    expr_eq(groups[slot_group[slot]].base, b)) {
+                    found = (int)slot_group[slot];
                     break;
                 }
+                slot = (slot + 1) & ht_mask;
             }
 
             if (found >= 0) {
@@ -555,16 +577,23 @@ Expr* builtin_plus(Expr* res) {
                         if (groups[j].temp_base) expr_free(groups[j].base);
                     }
                     free(groups);
+                    free(slot_group);
+                    free(slot_hash);
                     return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
                 }
             } else {
-                groups[group_count].base = b; 
+                /* `slot` is the empty slot the probe stopped on. */
+                slot_group[slot] = (int64_t)group_count;
+                slot_hash[slot] = hb;
+                groups[group_count].base = b;
                 groups[group_count].coeff = c; // Already owned
                 groups[group_count].temp_base = is_temp_base;
                 group_count++;
             }
         }
     }
+    free(slot_group);
+    free(slot_hash);
     
     size_t final_count = group_count;
     bool has_num = !(num_sum->type == EXPR_INTEGER && num_sum->data.integer == 0);
@@ -598,7 +627,7 @@ Expr* builtin_plus(Expr* res) {
             final_args[idx++] = expr_new_function(expr_new_symbol(SYM_Times), t_args, 2);
         }
     }
-    
+
     Expr* final_res = NULL;
     if (idx == 0) {
         final_res = expr_new_integer(0);

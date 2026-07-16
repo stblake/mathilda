@@ -365,12 +365,26 @@ Expr* builtin_times(Expr* res) {
     BasePower* groups = malloc(sizeof(BasePower) * n);
     size_t group_count = 0;
 
+    /* Open-addressing hash table mapping base-hash -> group index, so that
+     * collecting like bases (Power exponents summed) is O(1) expected per
+     * factor rather than a linear scan of every existing group. Without it a
+     * product of many distinct factors (e.g. Product of n symbolic terms) is
+     * O(n*groups) = O(n^2). Mirrors builtin_plus. Encounter order is
+     * unchanged, so the order-dependent radical passes below are unaffected. */
+    size_t ht_cap = 8;
+    while (ht_cap < n * 2) ht_cap <<= 1;
+    size_t ht_mask = ht_cap - 1;
+    int64_t* slot_group = malloc(sizeof(int64_t) * ht_cap);
+    uint64_t* slot_hash = malloc(sizeof(uint64_t) * ht_cap);
+    for (size_t s = 0; s < ht_cap; s++) slot_group[s] = -1;
+
     for (size_t i = 0; i < n; i++) {
         Expr* arg = res->data.function.args[i];
         if (is_overflow(arg)) {
             expr_free(num_prod); if (complex_val) expr_free(complex_val);
             for(size_t j=0; j<group_count; j++) { expr_free(groups[j].base); expr_free(groups[j].exponent); }
-            free(groups); return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
+            free(groups); free(slot_group); free(slot_hash);
+            return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
         }
 
         if (expr_is_numeric_like(arg) && !is_complex(arg, NULL, NULL)) {
@@ -379,7 +393,13 @@ Expr* builtin_times(Expr* res) {
                 /* Could not fold this numeric factor into num_prod;
                  * stash it as its own group so we don't lose it (and so
                  * we don't propagate NULL to the type checks below). */
-                groups[group_count].base = expr_copy(arg);
+                Expr* nb = expr_copy(arg);
+                uint64_t hb = expr_hash(nb);
+                size_t slot = (size_t)hb & ht_mask;
+                while (slot_group[slot] != -1) slot = (slot + 1) & ht_mask;
+                slot_group[slot] = (int64_t)group_count;
+                slot_hash[slot] = hb;
+                groups[group_count].base = nb;
                 groups[group_count].exponent = expr_new_integer(1);
                 group_count++;
             } else {
@@ -416,18 +436,31 @@ Expr* builtin_times(Expr* res) {
                 base = arg->data.function.args[0]; exponent = expr_copy(arg->data.function.args[1]);
             } else { exponent = expr_new_integer(1); }
             
+            uint64_t hb = expr_hash(base);
+            size_t slot = (size_t)hb & ht_mask;
             int found = -1;
-            for (size_t j = 0; j < group_count; j++) { if (expr_eq(groups[j].base, base)) { found = (int)j; break; } }
+            while (slot_group[slot] != -1) {
+                if (slot_hash[slot] == hb && expr_eq(groups[slot_group[slot]].base, base)) {
+                    found = (int)slot_group[slot];
+                    break;
+                }
+                slot = (slot + 1) & ht_mask;
+            }
             if (found != -1) {
                 Expr* new_exp = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){groups[found].exponent, exponent}, 2));
                 groups[found].exponent = new_exp;
             } else {
+                /* `slot` is the empty slot the probe stopped on. */
+                slot_group[slot] = (int64_t)group_count;
+                slot_hash[slot] = hb;
                 groups[group_count].base = expr_copy(base);
                 groups[group_count].exponent = (arg == base) ? exponent : exponent;
                 group_count++;
             }
         }
     }
+    free(slot_group);
+    free(slot_hash);
 
     if (num_prod->type == EXPR_INTEGER && num_prod->data.integer == 0) {
         if (complex_val) expr_free(complex_val);
