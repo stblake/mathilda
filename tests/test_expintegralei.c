@@ -48,7 +48,7 @@ static void assert_complex_close(const char* input, double er, double ei, double
     expr_free(e);
     ASSERT_MSG(r->type == EXPR_FUNCTION &&
                r->data.function.head->type == EXPR_SYMBOL &&
-               strcmp(r->data.function.head->data.symbol, "Complex") == 0 &&
+               strcmp(r->data.function.head->data.symbol.name, "Complex") == 0 &&
                r->data.function.arg_count == 2,
                "%s: expected Complex[..], got something else", input);
     Expr* re = r->data.function.args[0];
@@ -178,7 +178,7 @@ void test_ei_large_magnitude() {
         expr_free(e);
         ASSERT_MSG(r != NULL && (r->type == EXPR_REAL ||
                    (r->type == EXPR_FUNCTION &&
-                    strcmp(r->data.function.head->data.symbol, "Complex") == 0)),
+                    strcmp(r->data.function.head->data.symbol.name, "Complex") == 0)),
                    "N[ExpIntegralEi[-10^60 I] + I Pi, 20] must be finite numeric");
         expr_free(r);
     }
@@ -205,7 +205,7 @@ void test_ei_listable() {
     Expr* r = evaluate(e);
     expr_free(e);
     ASSERT(r->type == EXPR_FUNCTION &&
-           strcmp(r->data.function.head->data.symbol, "List") == 0 &&
+           strcmp(r->data.function.head->data.symbol.name, "List") == 0 &&
            r->data.function.arg_count == 3);
     double exp0[3] = { 2.4420922851926516, 3.3012854491297978, 4.2498675574879335 };
     for (int i = 0; i < 3; i++) {

@@ -52,7 +52,7 @@ static bool divisible_is_numeric_quantity(const Expr* e) {
     if (e->type == EXPR_MPFR) return true;
 #endif
     if (e->type == EXPR_SYMBOL) {
-        const char* name = e->data.symbol;
+        const char* name = e->data.symbol.name;
         return name == SYM_Pi || name == SYM_E || name == SYM_I ||
                name == SYM_Infinity || name == SYM_ComplexInfinity ||
                name == SYM_EulerGamma || name == SYM_GoldenRatio ||
@@ -61,7 +61,7 @@ static bool divisible_is_numeric_quantity(const Expr* e) {
                name == SYM_Khinchin;
     }
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* head_name = e->data.function.head->data.symbol;
+        const char* head_name = e->data.function.head->data.symbol.name;
         if (head_name == SYM_Complex || head_name == SYM_Rational) return true;
         SymbolDef* def = symtab_get_def(head_name);
         if (def && (def->attributes & ATTR_NUMERICFUNCTION)) {

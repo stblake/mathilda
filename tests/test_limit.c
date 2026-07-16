@@ -218,6 +218,46 @@ static void test_bounded_envelope(void) {
     /* Interior bounded oscillation at 0 -- Sin[1/x] has no series at 0,
      * so the squeeze is the cleanest route.                              */
     check_equiv("Limit[x^2 Sin[1/x], x -> 0]",                "0");
+
+    /* Bounded base raised to a divergent positive power. The base stays in
+     * [-1/2, 1/2] while 1/x^2 -> +Infinity, so |f| <= (1/2)^(1/x^2) -> 0.  */
+    check_equiv("Limit[(Sin[1/x]/2)^(1/x^2), x -> 0]",        "0");
+    check_equiv("Limit[(Cos[1/x]/3)^(1/x^2), x -> 0]",        "0");
+    /* At Infinity the exponent -> 0, so f -> 1 (envelope must not fire).  */
+    check_equiv("Limit[(Sin[1/x]/2)^(1/x^2), x -> Infinity]", "1");
+    /* Base magnitude bound >= 1: (2 Sin[1/x])^(1/x^2) is unbounded, so no
+     * false 0 -- the shape is left unevaluated.                          */
+    check("Limit[(2 Sin[1/x])^(1/x^2), x -> 0]",
+          "Limit[(2 Sin[1/x])^(1/x^2), x -> 0]");
+    /* Negative divergent exponent: the bound inequality flips and a
+     * vanishing base blows up, so this too stays unevaluated.            */
+    check("Limit[(Sin[1/x]/2)^(-1/x^2), x -> 0]",
+          "Limit[(Sin[1/x]/2)^(-1/x^2), x -> 0]");
+
+    /* Shrinking (x-dependent) magnitude bound: |x Sin[1/x]/2| <= Abs[x]/2,
+     * whose limit is 0 < 1, so the squeeze fires even though the bound is
+     * not a constant.                                                    */
+    check_equiv("Limit[(x Sin[1/x]/2)^(1/x^2), x -> 0]",     "0");
+
+    /* Base bounded below by a constant > 1 (band [3/2, 5/2], positive):
+     * base^(1/x^2) -> +Infinity as the exponent -> +Infinity.           */
+    check("Limit[(2 + Sin[1/x]/2)^(1/x^2), x -> 0]",         "Infinity");
+
+    /* Bounded base with a *linearly divergent* exponent at Infinity. The
+     * general log-reduction/Series path used to recurse without progress
+     * (magnitude bound keeps the oscillator inside Abs[Log[..]]) and hang;
+     * the squeeze now settles both quickly.                              */
+    check_equiv("Limit[(Cos[x]/2)^x, x -> Infinity]",        "0");
+    check_equiv("Limit[(Sin[x]/2)^x, x -> Infinity]",        "0");
+
+    /* Genuine 1^Infinity with an unbounded-oscillation log (x Sin[x] has no
+     * limit): must terminate and stay unevaluated, not hang.            */
+    check("Limit[(1 + Sin[x]/x)^(x^2), x -> Infinity]",
+          "Limit[(1 + Sin[x]/x)^x^2, x -> Infinity]");
+
+    /* Convergent 1^Infinity through a bounded head (Cos[1/x] -> 1): once
+     * the squeeze stops the hang, Series recovers the true value E^(-1/2). */
+    check_equiv("Limit[Cos[1/x]^(x^2), x -> Infinity]",      "1/Sqrt[E]");
 }
 
 /* ----------------------------------------------------------------- */
@@ -225,6 +265,60 @@ static void test_bounded_envelope(void) {
 /* ----------------------------------------------------------------- */
 static void test_arctan_infinity(void) {
     check_equiv("Limit[ArcTan[x^2 - x^4], x -> Infinity]", "-Pi/2");
+}
+
+/* ----------------------------------------------------------------- */
+/* Asymptotic values of the builtin math functions at +/-Infinity.   */
+/*                                                                    */
+/* layer_compose_at_infinity applies f to the (infinite) inner limit  */
+/* and lets the builtin fold it. Every function that self-evaluates   */
+/* at Infinity is therefore covered by a single mechanism. Oscillatory */
+/* heads (Sin, Cos) stay Indeterminate.                               */
+/* ----------------------------------------------------------------- */
+static void test_asymptotic_at_infinity(void) {
+    /* Error functions -- the motivating gap. */
+    check("Limit[Erf[x], x -> Infinity]",   "1");
+    check("Limit[Erf[x], x -> -Infinity]",  "-1");
+    check("Limit[Erfc[x], x -> Infinity]",  "0");
+    check("Limit[Erfc[x], x -> -Infinity]", "2");
+    check("Limit[Erfi[x], x -> Infinity]",  "Infinity");
+    check("Limit[Erfi[x], x -> -Infinity]", "-Infinity");
+    /* Composed inner argument: inner limit is still +/-Infinity. */
+    check("Limit[Erf[3 x + 1], x -> Infinity]",  "1");
+    check("Limit[Erf[1 - x^3], x -> Infinity]",  "-1");
+
+    /* Exponential / logarithm. */
+    check("Limit[Exp[x], x -> Infinity]",   "Infinity");
+    check("Limit[Exp[x], x -> -Infinity]",  "0");
+    check("Limit[Log[x], x -> Infinity]",   "Infinity");
+
+    /* Hyperbolic + inverse hyperbolic. */
+    check("Limit[Sinh[x], x -> Infinity]",  "Infinity");
+    check("Limit[Cosh[x], x -> -Infinity]", "Infinity");
+    check("Limit[Tanh[x], x -> Infinity]",  "1");
+    check("Limit[Tanh[x], x -> -Infinity]", "-1");
+    check("Limit[Coth[x], x -> Infinity]",  "1");
+    check("Limit[Sech[x], x -> Infinity]",  "0");
+    check("Limit[Csch[x], x -> Infinity]",  "0");
+    check("Limit[ArcSinh[x], x -> Infinity]", "Infinity");
+    check("Limit[ArcCoth[x], x -> Infinity]", "0");
+
+    /* Inverse trig (values now self-evaluate in the builtins). */
+    check_equiv("Limit[ArcTan[x], x -> Infinity]",  "Pi/2");
+    check_equiv("Limit[ArcTan[x], x -> -Infinity]", "-Pi/2");
+    check("Limit[ArcCot[x], x -> Infinity]",  "0");
+    check("Limit[ArcCot[x], x -> -Infinity]", "0");   /* odd: 0 (not Pi) */
+    check_equiv("Limit[ArcSec[x], x -> Infinity]",  "Pi/2");
+    check("Limit[ArcCsc[x], x -> Infinity]",  "0");
+
+    /* Special functions. */
+    check("Limit[Gamma[x], x -> Infinity]",     "Infinity");
+    check("Limit[Zeta[x], x -> Infinity]",      "1");
+    check("Limit[ProductLog[x], x -> Infinity]", "Infinity");
+
+    /* Oscillatory heads have no limit at Infinity. */
+    check("Limit[Sin[x], x -> Infinity]", "Indeterminate");
+    check("Limit[Cos[x], x -> Infinity]", "Indeterminate");
 }
 
 /* ----------------------------------------------------------------- */
@@ -821,6 +915,7 @@ int main(void) {
     TEST(test_reciprocal_trig);
     TEST(test_bounded_envelope);
     TEST(test_arctan_infinity);
+    TEST(test_asymptotic_at_infinity);
     TEST(test_exp_indeterminate);
     TEST(test_power_zero_folding);
     TEST(test_misc);

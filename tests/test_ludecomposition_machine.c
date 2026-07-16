@@ -52,7 +52,7 @@ static int is_small_real(Expr* e) {
     }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         if (strcmp(h, "Complex") == 0 && e->data.function.arg_count == 2) {
             return is_small_real(e->data.function.args[0])
                 && is_small_real(e->data.function.args[1]);
@@ -65,7 +65,7 @@ static int all_small_tensor(Expr* t) {
     if (!t) return 0;
     if (t->type == EXPR_FUNCTION
         && t->data.function.head->type == EXPR_SYMBOL
-        && strcmp(t->data.function.head->data.symbol, "List") == 0) {
+        && strcmp(t->data.function.head->data.symbol.name, "List") == 0) {
         for (size_t i = 0; i < t->data.function.arg_count; i++) {
             if (!all_small_tensor(t->data.function.args[i])) return 0;
         }
@@ -140,7 +140,7 @@ static void assert_perm_valid_numeric(const char* m_src, int n) {
              m_src, n);
     Expr* res = run(buf);
     ASSERT(res->type == EXPR_SYMBOL
-        && strcmp(res->data.symbol, "True") == 0);
+        && strcmp(res->data.symbol.name, "True") == 0);
     expr_free(res);
     printf("  PASS: p is a permutation 1..%d  for %s\n", n, m_src);
 }
@@ -219,7 +219,7 @@ static void test_lu_machine_singular_returns_triple(void) {
                     " {4.0, 5.0, 6.0}, {7.0, 8.0, 9.0}}]");
     ASSERT(res->type == EXPR_FUNCTION);
     ASSERT(res->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(res->data.function.head->data.symbol, "List") == 0);
+    ASSERT(strcmp(res->data.function.head->data.symbol.name, "List") == 0);
     ASSERT(res->data.function.arg_count == 3);
     expr_free(res);
     printf("  PASS: singular machine-precision matrix returns a triple\n");

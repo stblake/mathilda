@@ -43,8 +43,8 @@ static bool eval_field(const FieldCtx* ctx, double x, double y,
                        double* vx_out, double* vy_out) {
     Expr* xval = expr_new_real(x);
     Expr* yval = expr_new_real(y);
-    symtab_add_own_value(ctx->xvar->data.symbol, ctx->xvar, xval);
-    symtab_add_own_value(ctx->yvar->data.symbol, ctx->yvar, yval);
+    symtab_add_own_value(ctx->xvar->data.symbol.name, ctx->xvar, xval);
+    symtab_add_own_value(ctx->yvar->data.symbol.name, ctx->yvar, yval);
 
     Expr* rx = evaluate(ctx->vx);
     Expr* ry = evaluate(ctx->vy);
@@ -96,9 +96,9 @@ static Expr* eval_stream_color(Expr* cfn,
         bool is_color = (result->type == EXPR_FUNCTION
                          && result->data.function.head
                          && result->data.function.head->type == EXPR_SYMBOL
-                         && (result->data.function.head->data.symbol == SYM_RGBColor
-                          || result->data.function.head->data.symbol == SYM_GrayLevel
-                          || result->data.function.head->data.symbol == SYM_Hue));
+                         && (result->data.function.head->data.symbol.name == SYM_RGBColor
+                          || result->data.function.head->data.symbol.name == SYM_GrayLevel
+                          || result->data.function.head->data.symbol.name == SYM_Hue));
         if (is_color) return result;
         expr_free(result);
     }
@@ -222,7 +222,7 @@ static bool split_stream_options(Expr* res, StreamOpts* so,
         if (!is_rule_arg(arg)) SP_FAIL();
         Expr* lhs = arg->data.function.args[0];
         Expr* rhs = arg->data.function.args[1];
-        const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol : NULL;
+        const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol.name : NULL;
 
         if (name == SYM_StreamPoints || name == SYM_PlotPoints) {
             Expr* v = evaluate(expr_copy(rhs));
@@ -236,9 +236,9 @@ static bool split_stream_options(Expr* res, StreamOpts* so,
             }
         } else if (name == SYM_StreamScale) {
             Expr* v = evaluate(expr_copy(rhs));
-            if (v->type == EXPR_SYMBOL && v->data.symbol == SYM_None) {
+            if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_None) {
                 so->stream_scale = -1.0; /* run until boundary */
-            } else if (v->type == EXPR_SYMBOL && v->data.symbol == SYM_Automatic) {
+            } else if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Automatic) {
                 so->stream_scale = 0.08;
             } else {
                 double sv;
@@ -263,7 +263,7 @@ static bool split_stream_options(Expr* res, StreamOpts* so,
             else if (name == SYM_AspectRatio) have_aspect = true;
             else if (name == SYM_Frame) {
                 if (!(rhs->type == EXPR_SYMBOL
-                      && (rhs->data.symbol == SYM_False || rhs->data.symbol == SYM_None)))
+                      && (rhs->data.symbol.name == SYM_False || rhs->data.symbol.name == SYM_None)))
                     have_frame = true;
             }
             Expr* val = evaluate(expr_copy(rhs));
@@ -375,7 +375,7 @@ Expr* builtin_streamplot(Expr* res) {
     if (!field_arg || field_arg->type != EXPR_FUNCTION
         || !field_arg->data.function.head
         || field_arg->data.function.head->type != EXPR_SYMBOL
-        || field_arg->data.function.head->data.symbol != SYM_List
+        || field_arg->data.function.head->data.symbol.name != SYM_List
         || field_arg->data.function.arg_count != 2)
         return NULL;
 
@@ -421,7 +421,7 @@ Expr* builtin_streamplot(Expr* res) {
             const Expr* e = passthrough[i];
             if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
                 && e->data.function.args[0]->type == EXPR_SYMBOL
-                && e->data.function.args[0]->data.symbol == SYM_PlotRange)
+                && e->data.function.args[0]->data.symbol.name == SYM_PlotRange)
                 { have_pr = true; break; }
         }
         if (!have_pr) {
@@ -624,8 +624,8 @@ Expr* builtin_streamplot(Expr* res) {
     if (so.legends && use_speed_color) {
         Expr* eval_legends = evaluate(expr_copy(so.legends));
         bool want_legend = !(eval_legends->type == EXPR_SYMBOL
-                             && (eval_legends->data.symbol == SYM_None
-                              || eval_legends->data.symbol == SYM_False));
+                             && (eval_legends->data.symbol.name == SYM_None
+                              || eval_legends->data.symbol.name == SYM_False));
         expr_free(eval_legends);
         if (want_legend) {
             Expr* cfn_copy = so.color_function

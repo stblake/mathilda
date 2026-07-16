@@ -4,7 +4,7 @@
 static bool should_reverse_at_level(Expr* level_spec, size_t current_level) {
     if (!level_spec) return current_level == 1;
     if (level_spec->type == EXPR_INTEGER) return (size_t)level_spec->data.integer == current_level;
-    if (level_spec->type == EXPR_FUNCTION && level_spec->data.function.head->data.symbol == SYM_List) {
+    if (level_spec->type == EXPR_FUNCTION && level_spec->data.function.head->data.symbol.name == SYM_List) {
         for (size_t i = 0; i < level_spec->data.function.arg_count; i++) {
             if (level_spec->data.function.args[i]->type == EXPR_INTEGER && 
                 (size_t)level_spec->data.function.args[i]->data.integer == current_level) return true;

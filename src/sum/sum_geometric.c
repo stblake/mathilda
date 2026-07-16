@@ -54,7 +54,7 @@ static Expr* var_power_base(Expr* e, Expr* var) {
 
     /* Fast path: Power[base, var] with base free of var and not 0/1. */
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.head->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2
         && expr_eq(e->data.function.args[1], var)
         && sum_free_of(e->data.function.args[0], var)) {
@@ -97,7 +97,7 @@ static Expr* var_power_base(Expr* e, Expr* var) {
 static bool find_geometric(Expr* f, Expr* var, Expr** r_out, Expr** p_out) {
     bool is_times = (f->type == EXPR_FUNCTION
                      && f->data.function.head->type == EXPR_SYMBOL
-                     && f->data.function.head->data.symbol == SYM_Times);
+                     && f->data.function.head->data.symbol.name == SYM_Times);
     size_t n = is_times ? f->data.function.arg_count : 1;
 
     Expr* r = NULL;                 /* product of ratios */
@@ -245,7 +245,7 @@ Expr* builtin_sum_geometric(Expr* res) {
     if (!sum_stage_args(res, &f, &var, &imin, &imax, &definite)) return NULL;
 
     bool infinite = (definite && imax->type == EXPR_SYMBOL
-                     && imax->data.symbol == SYM_Infinity);
+                     && imax->data.symbol.name == SYM_Infinity);
 
     /* Canonicalise the (held) summand so exponential factors are in base^exp
      * form: the parser leaves 1/2^k as (2^k)^(-1), whose base 2^k contains the
@@ -253,7 +253,9 @@ Expr* builtin_sum_geometric(Expr* res) {
      * part.  evaluate rewrites it to 2^(-k) (a var-free base), which cancels
      * cleanly.  This does not expand or run Together, so it is safe on the
      * symbolic r^var forms the memory warns about. */
-    Expr* fn = evaluate(expr_copy(f));
+    Expr* fc = expr_copy(f);
+    Expr* fn = evaluate(fc);
+    expr_free(fc);   /* evaluate() borrows; free the copy we made */
 
     Expr *r = NULL, *p = NULL;
     if (!find_geometric(fn, var, &r, &p)) { expr_free(fn); return NULL; }
@@ -274,7 +276,7 @@ Expr* builtin_sum_geometric(Expr* res) {
                                   sum_int(1) }, 2);
         Expr* conv = evaluate(lt);
         expr_free(lt);
-        bool converges = (conv->type == EXPR_SYMBOL && conv->data.symbol == SYM_True);
+        bool converges = (conv->type == EXPR_SYMBOL && conv->data.symbol.name == SYM_True);
         expr_free(conv);
         if (!converges) { expr_free(p); expr_free(r); return NULL; }
     }

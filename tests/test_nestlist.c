@@ -37,7 +37,7 @@ static void run_real_list_approx(const char* input, const double* expected, size
     Expr* r = evaluate(e);
     ASSERT_MSG(r->type == EXPR_FUNCTION, "NestList %s: expected List, got non-function", input);
     ASSERT_MSG(r->data.function.head->type == EXPR_SYMBOL &&
-               strcmp(r->data.function.head->data.symbol, "List") == 0,
+               strcmp(r->data.function.head->data.symbol.name, "List") == 0,
                "NestList %s: expected List head", input);
     ASSERT_MSG(r->data.function.arg_count == n,
                "NestList %s: expected length %zu, got %zu", input, n, r->data.function.arg_count);

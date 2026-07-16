@@ -576,7 +576,7 @@ static void test_hook_visible_via_ownvalues(void) {
      * the bare symbol $Pre. */
     ASSERT(r->pattern != NULL);
     ASSERT(r->pattern->type == EXPR_SYMBOL);
-    ASSERT_STR_EQ(r->pattern->data.symbol, "$Pre");
+    ASSERT_STR_EQ(r->pattern->data.symbol.name, "$Pre");
     clear_all_hooks();
 }
 

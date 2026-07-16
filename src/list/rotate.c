@@ -7,7 +7,7 @@ static Expr* rotate_rec(Expr* expr, Expr* n_spec, size_t level_idx) {
     int64_t n = 0;
     if (n_spec->type == EXPR_INTEGER) {
         if (level_idx == 0) n = n_spec->data.integer;
-    } else if (n_spec->type == EXPR_FUNCTION && n_spec->data.function.head->data.symbol == SYM_List) {
+    } else if (n_spec->type == EXPR_FUNCTION && n_spec->data.function.head->data.symbol.name == SYM_List) {
         if (level_idx < n_spec->data.function.arg_count) {
             Expr* sub_n = n_spec->data.function.args[level_idx];
             if (sub_n->type == EXPR_INTEGER) n = sub_n->data.integer;
@@ -58,7 +58,7 @@ Expr* builtin_rotateright(Expr* res) {
         neg_n_spec = expr_new_integer(-1);
     } else if (n_spec->type == EXPR_INTEGER) {
         neg_n_spec = expr_new_integer(-n_spec->data.integer);
-    } else if (n_spec->type == EXPR_FUNCTION && n_spec->data.function.head->data.symbol == SYM_List) {
+    } else if (n_spec->type == EXPR_FUNCTION && n_spec->data.function.head->data.symbol.name == SYM_List) {
         Expr** neg_args = malloc(sizeof(Expr*) * n_spec->data.function.arg_count);
         for (size_t i = 0; i < n_spec->data.function.arg_count; i++) {
             if (n_spec->data.function.args[i]->type == EXPR_INTEGER) {

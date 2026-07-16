@@ -38,8 +38,8 @@ static bool eval_region3d(Expr* rfn, double x, double y, double z) {
     Expr* call = expr_new_function(expr_copy(rfn), args, 3);
     Expr* r = evaluate(call);
     expr_free(call);
-    bool is_true  = (r->type == EXPR_SYMBOL && r->data.symbol == SYM_True);
-    bool is_false = (r->type == EXPR_SYMBOL && r->data.symbol == SYM_False);
+    bool is_true  = (r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True);
+    bool is_false = (r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_False);
     expr_free(r);
     if (is_true)  return true;
     if (is_false) return false;
@@ -62,7 +62,7 @@ static bool eval_body_xyz(Param3DEvalCtx* ctx, double* xo, double* yo, double* z
     bool ok = false;
     if (result && result->type == EXPR_FUNCTION
         && result->data.function.head->type == EXPR_SYMBOL
-        && result->data.function.head->data.symbol == SYM_List
+        && result->data.function.head->data.symbol.name == SYM_List
         && result->data.function.arg_count == 3) {
         double x, y, z;
         if (expr_to_real_double(result->data.function.args[0], &x) && isfinite(x)
@@ -80,7 +80,7 @@ static bool eval_body_xyz(Param3DEvalCtx* ctx, double* xo, double* yo, double* z
 /* Set var1 = t and evaluate the body (1-iterator form). */
 static bool param3d_eval(double t, Param3DEvalCtx* ctx,
                           double* xo, double* yo, double* zo) {
-    symtab_add_own_value(ctx->var1->data.symbol, ctx->var1, expr_new_real(t));
+    symtab_add_own_value(ctx->var1->data.symbol.name, ctx->var1, expr_new_real(t));
     return eval_body_xyz(ctx, xo, yo, zo);
 }
 
@@ -189,9 +189,12 @@ static ParamPt3D* param3d_sample(Param3DEvalCtx* ctx,
         gt[i] = t;
         gok[i] = param3d_eval(t, ctx, &gx[i], &gy[i], &gz[i]);
         if (gok[i]) {
-            if (gx[i] < xlo) xlo = gx[i]; if (gx[i] > xhi) xhi = gx[i];
-            if (gy[i] < ylo) ylo = gy[i]; if (gy[i] > yhi) yhi = gy[i];
-            if (gz[i] < zlo) zlo = gz[i]; if (gz[i] > zhi) zhi = gz[i];
+            if (gx[i] < xlo) xlo = gx[i];
+            if (gx[i] > xhi) xhi = gx[i];
+            if (gy[i] < ylo) ylo = gy[i];
+            if (gy[i] > yhi) yhi = gy[i];
+            if (gz[i] < zlo) zlo = gz[i];
+            if (gz[i] > zhi) zhi = gz[i];
         }
     }
     double xspan = (xhi > xlo) ? (xhi - xlo) : 1.0;
@@ -272,7 +275,7 @@ static bool split_options_param3d(Expr* res, size_t opts_start, long default_plo
         if (!is_rule_arg(arg)) P3D_FAIL();
         Expr* lhs = arg->data.function.args[0];
         Expr* rhs = arg->data.function.args[1];
-        const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol : NULL;
+        const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol.name : NULL;
 
         if (name == SYM_PlotPoints) {
             long v;
@@ -284,7 +287,7 @@ static bool split_options_param3d(Expr* res, size_t opts_start, long default_plo
             sopts->max_recursion = (int)v;
         } else if (name == SYM_MaxPlotPoints) {
             Expr* v = evaluate(expr_copy(rhs));
-            bool is_inf = (v->type == EXPR_SYMBOL && v->data.symbol == SYM_Infinity);
+            bool is_inf = (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Infinity);
             long lv = -1;
             bool ok = is_inf;
             if (!ok && v->type == EXPR_INTEGER && v->data.integer > 0) { lv = v->data.integer; ok = true; }
@@ -294,9 +297,9 @@ static bool split_options_param3d(Expr* res, size_t opts_start, long default_plo
         } else if (name == SYM_Mesh) {
             Expr* v = evaluate(expr_copy(rhs));
             bool on  = (v->type == EXPR_SYMBOL
-                        && (v->data.symbol == SYM_All || v->data.symbol == SYM_True));
+                        && (v->data.symbol.name == SYM_All || v->data.symbol.name == SYM_True));
             bool off = (v->type == EXPR_SYMBOL
-                        && (v->data.symbol == SYM_None || v->data.symbol == SYM_False));
+                        && (v->data.symbol.name == SYM_None || v->data.symbol.name == SYM_False));
             expr_free(v);
             if (!on && !off) P3D_FAIL();
             sopts->mesh = on;
@@ -307,7 +310,7 @@ static bool split_options_param3d(Expr* res, size_t opts_start, long default_plo
         } else if (name == SYM_ColorFunctionScaling) {
             Expr* v = evaluate(expr_copy(rhs));
             sopts->color_function_scaling =
-                !(v->type == EXPR_SYMBOL && v->data.symbol == SYM_False);
+                !(v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False);
             expr_free(v);
         } else if (name == SYM_PlotStyle) {
             have_style = true;
@@ -381,9 +384,12 @@ static Expr** build_param3d_curve(Expr* body, Expr* var1,
     double ylo = pts[0].y, yhi = pts[0].y;
     double zlo = pts[0].z, zhi = pts[0].z;
     for (size_t j = 1; j < npts; j++) {
-        if (pts[j].x < xlo) xlo = pts[j].x; if (pts[j].x > xhi) xhi = pts[j].x;
-        if (pts[j].y < ylo) ylo = pts[j].y; if (pts[j].y > yhi) yhi = pts[j].y;
-        if (pts[j].z < zlo) zlo = pts[j].z; if (pts[j].z > zhi) zhi = pts[j].z;
+        if (pts[j].x < xlo) xlo = pts[j].x;
+        if (pts[j].x > xhi) xhi = pts[j].x;
+        if (pts[j].y < ylo) ylo = pts[j].y;
+        if (pts[j].y > yhi) yhi = pts[j].y;
+        if (pts[j].z < zlo) zlo = pts[j].z;
+        if (pts[j].z > zhi) zhi = pts[j].z;
     }
 
     /* Generous capacity: one color + one Line per segment at most, plus mesh. */
@@ -477,17 +483,20 @@ static Expr** build_param3d_surface(Expr* body, Expr* var1, Expr* var2,
     for (long i = 0; i < n; i++) {
         double t = (n > 1) ? t1min + (t1max - t1min) * (double)i / (double)(n-1) : t1min;
         if (i == n-1) t = t1max;
-        symtab_add_own_value(ctx.var1->data.symbol, ctx.var1, expr_new_real(t));
+        symtab_add_own_value(ctx.var1->data.symbol.name, ctx.var1, expr_new_real(t));
         for (long j = 0; j < n; j++) {
             double u = (n > 1) ? t2min + (t2max - t2min) * (double)j / (double)(n-1) : t2min;
             if (j == n-1) u = t2max;
-            symtab_add_own_value(ctx.var2->data.symbol, ctx.var2, expr_new_real(u));
+            symtab_add_own_value(ctx.var2->data.symbol.name, ctx.var2, expr_new_real(u));
             GridPt3DParam* p = &grid[i * n + j];
             p->valid = eval_body_xyz(&ctx, &p->x, &p->y, &p->z);
             if (p->valid) {
-                if (p->x < xlo) xlo = p->x; if (p->x > xhi) xhi = p->x;
-                if (p->y < ylo) ylo = p->y; if (p->y > yhi) yhi = p->y;
-                if (p->z < zlo) zlo = p->z; if (p->z > zhi) zhi = p->z;
+                if (p->x < xlo) xlo = p->x;
+                if (p->x > xhi) xhi = p->x;
+                if (p->y < ylo) ylo = p->y;
+                if (p->y > yhi) yhi = p->y;
+                if (p->z < zlo) zlo = p->z;
+                if (p->z > zhi) zhi = p->z;
             }
         }
     }
@@ -569,7 +578,7 @@ static Expr** build_param3d_surface(Expr* body, Expr* var1, Expr* var2,
 static bool is_iterator_3d(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_List
+        && e->data.function.head->data.symbol.name == SYM_List
         && e->data.function.arg_count == 3
         && e->data.function.args[0]->type == EXPR_SYMBOL;
 }
@@ -581,7 +590,7 @@ static Expr* prescan_plotlegends3d(Expr* res, size_t opts_start) {
         Expr* arg = res->data.function.args[i];
         if (!is_rule_arg(arg)) continue;
         Expr* lhs = arg->data.function.args[0];
-        if (lhs->type == EXPR_SYMBOL && lhs->data.symbol == SYM_PlotLegends)
+        if (lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == SYM_PlotLegends)
             return evaluate(expr_copy(arg->data.function.args[1]));
     }
     return NULL;
@@ -638,12 +647,12 @@ Expr* builtin_parametricplot3d(Expr* res) {
          * {fx,fy,fz} triple. */
         bool body_is_list = (body->type == EXPR_FUNCTION
                               && body->data.function.head->type == EXPR_SYMBOL
-                              && body->data.function.head->data.symbol == SYM_List);
+                              && body->data.function.head->data.symbol.name == SYM_List);
         bool multi2 = (body_is_list
                        && body->data.function.arg_count >= 1
                        && body->data.function.args[0]->type == EXPR_FUNCTION
                        && body->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
-                       && body->data.function.args[0]->data.function.head->data.symbol
+                       && body->data.function.args[0]->data.function.head->data.symbol.name
                           == SYM_List);
 
         Expr** sub_bodies;
@@ -718,12 +727,12 @@ Expr* builtin_parametricplot3d(Expr* res) {
         /* Multi-curve: spec is a List whose first element is also a List. */
         bool is_list_head = (spec->type == EXPR_FUNCTION
                               && spec->data.function.head->type == EXPR_SYMBOL
-                              && spec->data.function.head->data.symbol == SYM_List);
+                              && spec->data.function.head->data.symbol.name == SYM_List);
         bool multi = (is_list_head
                       && spec->data.function.arg_count >= 1
                       && spec->data.function.args[0]->type == EXPR_FUNCTION
                       && spec->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
-                      && spec->data.function.args[0]->data.function.head->data.symbol
+                      && spec->data.function.args[0]->data.function.head->data.symbol.name
                          == SYM_List);
 
         Expr** bodies;

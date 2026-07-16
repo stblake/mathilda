@@ -6,6 +6,7 @@
  */
 
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "eval.h"
 #include "print.h"
 #include "sym_names.h"
@@ -21,6 +22,7 @@ static Expr* mat_dot(Expr* a, Expr* b) {
 }
 
 Expr* builtin_matrixpower(Expr* res) {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 2 || argc > 3) return NULL;
@@ -48,7 +50,7 @@ Expr* builtin_matrixpower(Expr* res) {
     bool is_real = (exp_arg->type == EXPR_REAL);
 
     if (exp_arg->type == EXPR_FUNCTION && exp_arg->data.function.head->type == EXPR_SYMBOL
-        && exp_arg->data.function.head->data.symbol == SYM_Rational) {
+        && exp_arg->data.function.head->data.symbol.name == SYM_Rational) {
         is_rational = true;
     }
 
@@ -104,7 +106,7 @@ Expr* builtin_matrixpower(Expr* res) {
 
         /* Check if Inverse returned unevaluated (singular matrix) */
         if (inv_result->type == EXPR_FUNCTION && inv_result->data.function.head->type == EXPR_SYMBOL
-            && inv_result->data.function.head->data.symbol == SYM_Inverse) {
+            && inv_result->data.function.head->data.symbol.name == SYM_Inverse) {
             expr_free(inv_result);
             return NULL; /* Singular: Inverse already printed warning */
         }

@@ -92,7 +92,7 @@ static bool contains_inexact(const Expr* e) {
 #endif
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "Complex") == 0) {
+        strcmp(e->data.function.head->data.symbol.name, "Complex") == 0) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             if (contains_inexact(e->data.function.args[i])) return true;
         }

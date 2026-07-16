@@ -108,7 +108,7 @@ static int64_t pi_small(int64_t x) {
  * Caller frees.  Returns NULL on allocation failure. */
 static uint32_t *gen_primes(int64_t bound, int64_t *count) {
     *count = 0;
-    if (bound < 2) { uint32_t *e = malloc(1); return e; }
+    if (bound < 2) { uint32_t *e = malloc(sizeof(uint32_t)); return e; }
     uint8_t *sieve = calloc((size_t)bound + 1, 1);
     if (!sieve) return NULL;
     for (int64_t i = 2; i <= bound; i++) sieve[i] = 1;
@@ -140,7 +140,7 @@ typedef struct {
 static int pitable_build(PiTable *t, int64_t B) {
     t->words = NULL; t->cnt = NULL; t->B = B;
     t->nwords = (B >> 6) + 1;
-    t->words = malloc((size_t)t->nwords * sizeof(uint64_t));
+    t->words = calloc((size_t)t->nwords, sizeof(uint64_t));
     t->cnt   = malloc((size_t)t->nwords * sizeof(uint32_t));
     if (!t->words || !t->cnt) { free(t->words); free(t->cnt); return 0; }
 

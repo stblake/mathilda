@@ -94,7 +94,7 @@ static Expr* pe_recip_2pi(void) { return fn2("Power", fn2("Times", pe_int(2), pe
 static const char* head_name(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return "";
     if (e->data.function.head->type != EXPR_SYMBOL) return "";
-    return e->data.function.head->data.symbol;
+    return e->data.function.head->data.symbol.name;
 }
 
 static bool is_head(const Expr* e, const char* h) {
@@ -516,7 +516,7 @@ static void pe_var_bounds(const Expr* v, const PECtx* ctx,
                 Expr* L  = f->data.function.args[k];
                 Expr* op = f->data.function.args[k+1];
                 Expr* R  = f->data.function.args[k+2];
-                const char* o = (op->type==EXPR_SYMBOL)? op->data.symbol : "";
+                const char* o = (op->type==EXPR_SYMBOL)? op->data.symbol.name : "";
                 double num;
                 bool lessop = (strcmp(o,"Less")==0 || strcmp(o,"LessEqual")==0);
                 if (expr_eq(L,(Expr*)v) && pe_to_double(R,&num)) {       /* v < num */
@@ -537,7 +537,7 @@ static int pe_real_sign(const Expr* e, const PECtx* ctx) {
     if (pe_to_double(e, &num)) return num > 0 ? 1 : (num < 0 ? -1 : 0);
 
     if (e->type == EXPR_SYMBOL) {
-        if (e->data.symbol == SYM_Pi || e->data.symbol == SYM_E) return 1;
+        if (e->data.symbol.name == SYM_Pi || e->data.symbol.name == SYM_E) return 1;
         double lo, hi; bool hl, hh;
         pe_var_bounds(e, ctx, &lo, &hl, &hi, &hh);
         if (hl && lo >= 0) return 1;
@@ -561,7 +561,7 @@ static bool pe_is_real(const Expr* e, const PECtx* ctx) {
     double num;
     if (pe_to_double(e, &num)) return true;
     if (e->type == EXPR_SYMBOL) {
-        if (e->data.symbol == SYM_Pi || e->data.symbol == SYM_E) return true;
+        if (e->data.symbol.name == SYM_Pi || e->data.symbol.name == SYM_E) return true;
         if (ctx->ctx && assume_known_real(ctx->ctx, (Expr*)e)) return true;
         double lo, hi; bool hl, hh;
         pe_var_bounds(e, ctx, &lo, &hl, &hi, &hh);
@@ -586,7 +586,7 @@ static Expr* pe_im_under(const Expr* e, const PECtx* ctx) {
     double num;
     if (pe_to_double(e, &num)) return pe_int(0);
     if (e->type == EXPR_SYMBOL) {
-        if (e->data.symbol == SYM_Pi || e->data.symbol == SYM_E) return pe_int(0);
+        if (e->data.symbol.name == SYM_Pi || e->data.symbol.name == SYM_E) return pe_int(0);
         if (pe_is_real(e, ctx)) return pe_int(0);
         return fn1("Im", expr_copy((Expr*)e));
     }
@@ -638,7 +638,7 @@ static bool pe_interval(const Expr* e, const PECtx* ctx, double* lo, double* hi)
     if (pe_to_double(e, &num)) { *lo = *hi = num; return true; }
 
     if (e->type == EXPR_SYMBOL) {
-        if (e->data.symbol == SYM_Pi) { *lo = *hi = M_PI; return true; }
+        if (e->data.symbol.name == SYM_Pi) { *lo = *hi = M_PI; return true; }
         double l, h; bool hl, hh;
         pe_var_bounds(e, ctx, &l, &hl, &h, &hh);
         if (hl && hh) { *lo = l; *hi = h; return true; }
@@ -713,7 +713,7 @@ static Expr* pe_reduce_ipi(Expr* e) {
 
     if (is_head(e2, "Power") && e2->data.function.arg_count == 2 &&
         e2->data.function.args[0]->type == EXPR_SYMBOL &&
-        strcmp(e2->data.function.args[0]->data.symbol, "E") == 0) {
+        strcmp(e2->data.function.args[0]->data.symbol.name, "E") == 0) {
         Expr* X = e2->data.function.args[1];
         Expr* ratio = eval_and_free(
             fn2("Times", expr_copy(X),
@@ -813,9 +813,9 @@ Expr* builtin_powerexpand(Expr* res) {
     /* Assumptions option. Automatic keeps the default behaviour; True emits
      * the universal formulas; anything else triggers refinement. */
     bool is_automatic = (!assum) ||
-        (assum->type == EXPR_SYMBOL && strcmp(assum->data.symbol, "Automatic") == 0);
+        (assum->type == EXPR_SYMBOL && strcmp(assum->data.symbol.name, "Automatic") == 0);
     bool is_true = (assum && assum->type == EXPR_SYMBOL &&
-                    strcmp(assum->data.symbol, "True") == 0);
+                    strcmp(assum->data.symbol.name, "True") == 0);
     if (!is_automatic) ctx.mode = is_true ? PE_TRUE : PE_ASSUME;
 
     if (ctx.mode == PE_ASSUME) ctx.ctx = assume_ctx_from_expr(assum);

@@ -90,7 +90,7 @@ static bool lu_mach_leaf_to_double(Expr* e, double* out_re, double* out_im)
 #endif
         case EXPR_FUNCTION:
             if (e->data.function.head->type == EXPR_SYMBOL) {
-                const char* h = e->data.function.head->data.symbol;
+                const char* h = e->data.function.head->data.symbol.name;
                 if (h == SYM_Rational && e->data.function.arg_count == 2) {
                     double p, q, dummy;
                     if (lu_mach_leaf_to_double(e->data.function.args[0], &p, &dummy)

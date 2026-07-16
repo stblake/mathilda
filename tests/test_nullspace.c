@@ -77,7 +77,7 @@ static bool list_is_zero(Expr* v) {
     if (v->type == EXPR_REAL)    return fabs(v->data.real) < 1e-3;
     if (v->type == EXPR_FUNCTION &&
         v->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(v->data.function.head->data.symbol, "List") == 0) {
+        strcmp(v->data.function.head->data.symbol.name, "List") == 0) {
         for (size_t i = 0; i < v->data.function.arg_count; i++) {
             if (!list_is_zero(v->data.function.args[i])) return false;
         }
@@ -107,7 +107,7 @@ static void assert_nullspace_valid(const char* m_str, int expected_n) {
     /* Top-level must be List[...]. */
     ASSERT(ns->type == EXPR_FUNCTION);
     ASSERT(ns->data.function.head->type == EXPR_SYMBOL);
-    ASSERT_STR_EQ(ns->data.function.head->data.symbol, "List");
+    ASSERT_STR_EQ(ns->data.function.head->data.symbol.name, "List");
 
     size_t n_basis = ns->data.function.arg_count;
     if ((int)n_basis != expected_n) {

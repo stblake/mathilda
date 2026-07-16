@@ -86,7 +86,7 @@ static int var_index(const VarSet* vs, const char* name) {
 static const char* fn_head_name(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return NULL;
     const Expr* h = e->data.function.head;
-    if (h && h->type == EXPR_SYMBOL) return h->data.symbol;
+    if (h && h->type == EXPR_SYMBOL) return h->data.symbol.name;
     return NULL;
 }
 
@@ -102,7 +102,7 @@ static int collect_vars(const Expr* e, VarSet* vs) {
         case EXPR_BIGINT:
             return 1;
         case EXPR_SYMBOL:
-            return varset_add(vs, e->data.symbol);
+            return varset_add(vs, e->data.symbol.name);
         case EXPR_FUNCTION: {
             const char* h = fn_head_name(e);
             if (!h) return 0;
@@ -152,7 +152,7 @@ static int to_mpoly(const Expr* e, fmpq_mpoly_t out,
             return 1;
         }
         case EXPR_SYMBOL: {
-            int idx = var_index(vs, e->data.symbol);
+            int idx = var_index(vs, e->data.symbol.name);
             if (idx < 0) return 0;
             fmpq_mpoly_gen(out, idx, ctx);
             return 1;
@@ -372,7 +372,7 @@ Expr* flint_multivariate_gcd_normalized(const Expr* a, const Expr* b) {
 /* Multivariate exact division a / b over Q[x_1..x_n]. Returns the quotient
  * when b divides a exactly, NULL otherwise (or out of scope). Mirrors
  * flint_multivariate_gcd's recognition/conversion; uses fmpq_mpoly_divides. */
-static Expr* flint_multivariate_divexact(const Expr* a, const Expr* b) {
+Expr* flint_multivariate_divexact(const Expr* a, const Expr* b) {
     if (!a || !b) return NULL;
 
     VarSet vs;
@@ -402,6 +402,481 @@ static Expr* flint_multivariate_divexact(const Expr* a, const Expr* b) {
     fmpq_mpoly_ctx_clear(ctx);
     varset_free(&vs);
     return out;
+}
+
+/* ================================================================== */
+/*  Native univariate-over-Q Risch differential-equation solver        */
+/* ================================================================== */
+/*
+ * Bronstein's base-field RDE core (SPDE ladder + PolyRischDENoCancel) executed
+ * entirely in FLINT `fmpq_poly` arithmetic. The Expr-tree implementation in
+ * integrate_risch_transcendental.c is faithful but routes every one of the
+ * ~O(n) recursion levels' polynomial operations back through the generic
+ * evaluator (Expand/Plus/Times/PolynomialGCD/CoefficientList/D as builtins) —
+ * on a degree-100 integrand that constant-factor overhead dominates (In17:
+ * ~17.5 s, ~95% in evaluate_step/builtin_plus/expr_eq/…, not the poly math).
+ * Working in packed fmpq_poly collapses the whole ladder to native FLINT
+ * kernels; the Expr path remains the fallback for multivariate / tower base
+ * fields (where the coefficients carry other symbols and conversion declines).
+ */
+
+/* Expr -> fmpq_poly (univariate in `xname`, rational coefficients). Returns 1
+ * and fills `out` on success; 0 if `e` is not such a polynomial (out is left
+ * zeroed). Mirrors to_mpoly's coefficient handling. */
+static int expr_accum_fmpq_poly(const Expr* e, const char* xname, fmpq_poly_t out) {
+    switch (e->type) {
+        case EXPR_INTEGER:
+            fmpq_poly_set_si(out, e->data.integer);
+            return 1;
+        case EXPR_BIGINT: {
+            fmpz_t z; fmpz_init(z);
+            fmpz_set_mpz(z, e->data.bigint);
+            fmpq_poly_set_fmpz(out, z);
+            fmpz_clear(z);
+            return 1;
+        }
+        case EXPR_SYMBOL:
+            if (strcmp(e->data.symbol.name, xname) != 0) return 0;   /* other symbol */
+            fmpq_poly_zero(out);
+            fmpq_poly_set_coeff_si(out, 1, 1);                  /* out = x */
+            return 1;
+        case EXPR_FUNCTION: {
+            const char* h = fn_head_name(e);
+            if (!h) return 0;
+            size_t n = e->data.function.arg_count;
+            if (strcmp(h, "Rational") == 0) {
+                if (n != 2) return 0;
+                fmpq_t c; fmpq_init(c);
+                if (!fmpz_from_int_expr(fmpq_numref(c), e->data.function.args[0]) ||
+                    !fmpz_from_int_expr(fmpq_denref(c), e->data.function.args[1])) {
+                    fmpq_clear(c); return 0;
+                }
+                fmpq_canonicalise(c);
+                fmpq_poly_set_fmpq(out, c);
+                fmpq_clear(c);
+                return 1;
+            }
+            if (strcmp(h, "Plus") == 0) {
+                fmpq_poly_zero(out);
+                fmpq_poly_t t; fmpq_poly_init(t);
+                int ok = 1;
+                for (size_t i = 0; i < n && ok; i++) {
+                    ok = expr_accum_fmpq_poly(e->data.function.args[i], xname, t);
+                    if (ok) fmpq_poly_add(out, out, t);
+                }
+                fmpq_poly_clear(t);
+                return ok;
+            }
+            if (strcmp(h, "Times") == 0) {
+                fmpq_poly_one(out);
+                fmpq_poly_t t; fmpq_poly_init(t);
+                int ok = 1;
+                for (size_t i = 0; i < n && ok; i++) {
+                    ok = expr_accum_fmpq_poly(e->data.function.args[i], xname, t);
+                    if (ok) fmpq_poly_mul(out, out, t);
+                }
+                fmpq_poly_clear(t);
+                return ok;
+            }
+            if (strcmp(h, "Power") == 0) {
+                if (n != 2) return 0;
+                const Expr* ex = e->data.function.args[1];
+                if (ex->type != EXPR_INTEGER || ex->data.integer < 0) return 0;
+                fmpq_poly_t b; fmpq_poly_init(b);
+                int ok = expr_accum_fmpq_poly(e->data.function.args[0], xname, b);
+                if (ok) fmpq_poly_pow(out, b, (ulong)ex->data.integer);
+                fmpq_poly_clear(b);
+                return ok;
+            }
+            return 0;
+        }
+        default:
+            return 0;   /* EXPR_REAL / EXPR_MPFR / … : not a rational polynomial */
+    }
+}
+
+/* num <- num/gcd(num,den), den <- den/gcd(num,den) (both monic-normalised by
+ * fmpq_poly). Leaves a coprime pair in lowest terms. */
+static void fq_ratfunc_reduce(fmpq_poly_t num, fmpq_poly_t den) {
+    if (fmpq_poly_is_zero(num)) { fmpq_poly_set_si(den, 1); return; }
+    fmpq_poly_t g; fmpq_poly_init(g);
+    fmpq_poly_gcd(g, num, den);
+    if (!fmpq_poly_is_one(g)) {
+        fmpq_poly_div(num, num, g);
+        fmpq_poly_div(den, den, g);
+    }
+    fmpq_poly_clear(g);
+}
+
+/* Expr rational function -> (num/den) as fmpq_poly, univariate in `xname` over
+ * Q. Combines Plus of fractions and Power[·,-k] denominators directly in
+ * fmpq_poly — no evaluator Together. Returns 1 on success, 0 if `e` contains a
+ * construct outside Q(xname) (another symbol, a fractional/ symbolic power, an
+ * inexact number). num, den must be pre-initialised; the result is NOT reduced
+ * (caller runs fq_ratfunc_reduce if it wants lowest terms). */
+static int expr_to_fmpq_ratfunc(const Expr* e, const char* xname,
+                                fmpq_poly_t num, fmpq_poly_t den) {
+    if (e->type == EXPR_FUNCTION) {
+        const char* h = fn_head_name(e);
+        if (h && strcmp(h, "Power") == 0 && e->data.function.arg_count == 2) {
+            const Expr* ex = e->data.function.args[1];
+            if (ex->type == EXPR_INTEGER && ex->data.integer < 0) {
+                fmpq_poly_t b; fmpq_poly_init(b);
+                int ok = expr_accum_fmpq_poly(e->data.function.args[0], xname, b);
+                if (ok) { fmpq_poly_pow(den, b, (ulong)(-ex->data.integer));
+                          fmpq_poly_set_si(num, 1); }
+                fmpq_poly_clear(b);
+                return ok;
+            }
+        }
+        if (h && strcmp(h, "Times") == 0) {
+            fmpq_poly_set_si(num, 1); fmpq_poly_set_si(den, 1);
+            fmpq_poly_t tn, td; fmpq_poly_init(tn); fmpq_poly_init(td);
+            int ok = 1;
+            for (size_t i = 0; i < e->data.function.arg_count && ok; i++) {
+                ok = expr_to_fmpq_ratfunc(e->data.function.args[i], xname, tn, td);
+                if (ok) { fmpq_poly_mul(num, num, tn); fmpq_poly_mul(den, den, td); }
+            }
+            fmpq_poly_clear(tn); fmpq_poly_clear(td);
+            return ok;
+        }
+        if (h && strcmp(h, "Plus") == 0) {
+            fmpq_poly_zero(num); fmpq_poly_set_si(den, 1);
+            fmpq_poly_t tn, td, p1, p2; fmpq_poly_init(tn); fmpq_poly_init(td);
+            fmpq_poly_init(p1); fmpq_poly_init(p2);
+            int ok = 1;
+            for (size_t i = 0; i < e->data.function.arg_count && ok; i++) {
+                ok = expr_to_fmpq_ratfunc(e->data.function.args[i], xname, tn, td);
+                if (ok) {   /* num/den + tn/td = (num*td + tn*den)/(den*td) */
+                    fmpq_poly_mul(p1, num, td);
+                    fmpq_poly_mul(p2, tn, den);
+                    fmpq_poly_add(num, p1, p2);
+                    fmpq_poly_mul(den, den, td);
+                }
+            }
+            fmpq_poly_clear(tn); fmpq_poly_clear(td); fmpq_poly_clear(p1); fmpq_poly_clear(p2);
+            return ok;
+        }
+    }
+    /* Polynomial / constant leaf (integer, bigint, rational, symbol, x^k, sums
+     * and products thereof): denominator 1. */
+    if (!expr_accum_fmpq_poly(e, xname, num)) return 0;
+    fmpq_poly_set_si(den, 1);
+    return 1;
+}
+
+/* fmpq_poly -> Expr, as an unsimplified Plus[Times[coeff, x^k], …] tree; the
+ * evaluator canonicalises it after the calling builtin returns. */
+static Expr* fmpq_poly_to_expr_x(const fmpq_poly_t p, const char* xname) {
+    if (fmpq_poly_is_zero(p)) return expr_new_integer(0);
+    slong d = fmpq_poly_degree(p);
+    Expr** terms = malloc(sizeof(Expr*) * (size_t)(d + 1));
+    size_t nt = 0;
+    fmpq_t c; fmpq_init(c);
+    for (slong k = 0; k <= d; k++) {
+        fmpq_poly_get_coeff_fmpq(c, p, k);
+        if (fmpq_is_zero(c)) continue;
+        Expr* coeff = expr_from_fmpq_local(c);
+        Expr* term;
+        if (k == 0) {
+            term = coeff;
+        } else {
+            Expr* xk = (k == 1)
+                ? expr_new_symbol(xname)
+                : expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_new_symbol(xname), expr_new_integer((int64_t)k) }, 2);
+            term = expr_new_function(expr_new_symbol("Times"), (Expr*[]){ coeff, xk }, 2);
+        }
+        terms[nt++] = term;
+    }
+    fmpq_clear(c);
+    Expr* r = (nt == 1)
+        ? terms[0]
+        : expr_new_function(expr_new_symbol("Plus"), terms, nt);
+    free(terms);
+    return r;
+}
+
+/* SPDE(a, b, c, D=d/dx, n): Bronstein Thm 6.4.1, over fmpq_poly. Fills
+ * (b_out, c_out, *m_out, alpha_out, beta_out) and returns 1 on success, or 0
+ * for "no solution". All outputs must be pre-initialised by the caller. */
+static int fq_spde(const fmpq_poly_t a, const fmpq_poly_t b, const fmpq_poly_t c,
+                   long n, fmpq_poly_t b_out, fmpq_poly_t c_out, long* m_out,
+                   fmpq_poly_t alpha_out, fmpq_poly_t beta_out) {
+    if (n < 0) {
+        if (fmpq_poly_is_zero(c)) {
+            fmpq_poly_zero(b_out); fmpq_poly_zero(c_out); *m_out = 0;
+            fmpq_poly_zero(alpha_out); fmpq_poly_zero(beta_out);
+            return 1;
+        }
+        return 0;                                       /* c != 0, n < 0 */
+    }
+    fmpq_poly_t g, rem, a1, b1, c1;
+    fmpq_poly_init(g); fmpq_poly_init(rem);
+    fmpq_poly_init(a1); fmpq_poly_init(b1); fmpq_poly_init(c1);
+    fmpq_poly_gcd(g, a, b);
+    fmpq_poly_rem(rem, c, g);
+    if (!fmpq_poly_is_zero(rem)) {                       /* g does not divide c */
+        fmpq_poly_clear(g); fmpq_poly_clear(rem);
+        fmpq_poly_clear(a1); fmpq_poly_clear(b1); fmpq_poly_clear(c1);
+        return 0;
+    }
+    fmpq_poly_div(a1, a, g);
+    fmpq_poly_div(b1, b, g);
+    fmpq_poly_div(c1, c, g);
+    fmpq_poly_clear(g); fmpq_poly_clear(rem);
+    long da = (long)fmpq_poly_degree(a1);
+    if (da == 0) {                                      /* a1 in k*: base case */
+        fmpq_poly_div(b_out, b1, a1);                   /* b1 / a1 (scalar) */
+        fmpq_poly_div(c_out, c1, a1);                   /* c1 / a1 (scalar) */
+        *m_out = n;                                     /* SPDE returns (…, n, 1, 0) */
+        fmpq_poly_set_si(alpha_out, 1);
+        fmpq_poly_zero(beta_out);
+        fmpq_poly_clear(a1); fmpq_poly_clear(b1); fmpq_poly_clear(c1);
+        return 1;
+    }
+    /* xgcd: S*b1 + T*a1 = 1 (gcd(a1,b1)=1); s = S. r = (s c1) mod a1. */
+    fmpq_poly_t G2, S, T, sc, r;
+    fmpq_poly_init(G2); fmpq_poly_init(S); fmpq_poly_init(T);
+    fmpq_poly_init(sc); fmpq_poly_init(r);
+    fmpq_poly_xgcd(G2, S, T, b1, a1);
+    fmpq_poly_mul(sc, S, c1);
+    fmpq_poly_rem(r, sc, a1);
+    fmpq_poly_clear(G2); fmpq_poly_clear(S); fmpq_poly_clear(T); fmpq_poly_clear(sc);
+    /* z = (c1 - b1 r) / a1 (exact). */
+    fmpq_poly_t b1r, z, da1, b2, dr, c2;
+    fmpq_poly_init(b1r); fmpq_poly_init(z);
+    fmpq_poly_mul(b1r, b1, r);
+    fmpq_poly_sub(z, c1, b1r);
+    fmpq_poly_div(z, z, a1);
+    fmpq_poly_clear(b1r);
+    /* recurse SPDE(a1, b1 + Da1, z - Dr, n - da). */
+    fmpq_poly_init(da1); fmpq_poly_init(b2); fmpq_poly_init(dr); fmpq_poly_init(c2);
+    fmpq_poly_derivative(da1, a1);
+    fmpq_poly_add(b2, b1, da1);
+    fmpq_poly_derivative(dr, r);
+    fmpq_poly_sub(c2, z, dr);
+    fmpq_poly_clear(b1); fmpq_poly_clear(c1); fmpq_poly_clear(da1);
+    fmpq_poly_clear(z); fmpq_poly_clear(dr);
+
+    fmpq_poly_t sub_b, sub_c, sub_alpha, sub_beta;
+    fmpq_poly_init(sub_b); fmpq_poly_init(sub_c);
+    fmpq_poly_init(sub_alpha); fmpq_poly_init(sub_beta);
+    long sub_m = 0;
+    int rc = fq_spde(a1, b2, c2, n - da, sub_b, sub_c, &sub_m, sub_alpha, sub_beta);
+    fmpq_poly_clear(b2); fmpq_poly_clear(c2);
+    if (!rc) {
+        fmpq_poly_clear(a1); fmpq_poly_clear(r);
+        fmpq_poly_clear(sub_b); fmpq_poly_clear(sub_c);
+        fmpq_poly_clear(sub_alpha); fmpq_poly_clear(sub_beta);
+        return 0;
+    }
+    /* adopt inner eqn; alpha = a1*sub.alpha, beta = a1*sub.beta + r. */
+    fmpq_poly_set(b_out, sub_b);
+    fmpq_poly_set(c_out, sub_c);
+    *m_out = sub_m;
+    fmpq_poly_mul(alpha_out, a1, sub_alpha);
+    fmpq_poly_mul(beta_out, a1, sub_beta);
+    fmpq_poly_add(beta_out, beta_out, r);
+    fmpq_poly_clear(a1); fmpq_poly_clear(r);
+    fmpq_poly_clear(sub_b); fmpq_poly_clear(sub_c);
+    fmpq_poly_clear(sub_alpha); fmpq_poly_clear(sub_beta);
+    return 1;
+}
+
+/* PolyRischDENoCancel1(b, c, D=d/dx, n), b != 0 (Bronstein p.208): leading
+ * terms of Dq and bq never cancel, so q is built top-down one monomial per
+ * pass. Fills q_out and returns 1, or returns 0 for "no solution". */
+static int fq_polyrischde_nocancel1(const fmpq_poly_t b, const fmpq_poly_t c,
+                                    long n, fmpq_poly_t q_out) {
+    long db = (long)fmpq_poly_degree(b);
+    fmpq_t lcb; fmpq_init(lcb);
+    fmpq_poly_get_coeff_fmpq(lcb, b, db);
+    fmpq_poly_zero(q_out);
+    fmpq_poly_t cc, p, dp, bp;
+    fmpq_poly_init(cc); fmpq_poly_init(p); fmpq_poly_init(dp); fmpq_poly_init(bp);
+    fmpq_poly_set(cc, c);
+    int ok = 1;
+    fmpq_t lcc, coeff; fmpq_init(lcc); fmpq_init(coeff);
+    while (!fmpq_poly_is_zero(cc)) {
+        long dc = (long)fmpq_poly_degree(cc);
+        long m = dc - db;
+        if (n < 0 || m < 0 || m > n) { ok = 0; break; }
+        fmpq_poly_get_coeff_fmpq(lcc, cc, dc);
+        fmpq_div(coeff, lcc, lcb);                      /* lc(c)/lc(b) */
+        fmpq_poly_zero(p);
+        fmpq_poly_set_coeff_fmpq(p, m, coeff);          /* p = coeff x^m */
+        fmpq_poly_add(q_out, q_out, p);
+        fmpq_poly_derivative(dp, p);
+        fmpq_poly_mul(bp, b, p);
+        fmpq_poly_sub(cc, cc, dp);                      /* c <- c - Dp - b p */
+        fmpq_poly_sub(cc, cc, bp);
+        n = m - 1;
+    }
+    fmpq_clear(lcc); fmpq_clear(coeff); fmpq_clear(lcb);
+    fmpq_poly_clear(cc); fmpq_poly_clear(p); fmpq_poly_clear(dp); fmpq_poly_clear(bp);
+    return ok;
+}
+
+/* PolyRischDENoCancel2(b=0, c, D=d/dx, n): the equation is Dq = c, i.e. a
+ * bounded-degree polynomial antiderivative of c. Fills q_out, returns 1, or 0
+ * when no such q exists (lambda = 1, delta = 0 for the base derivation). */
+static int fq_polyrischde_integrate(const fmpq_poly_t c, long n, fmpq_poly_t q_out) {
+    fmpq_poly_zero(q_out);
+    fmpq_poly_t cc, p, dp;
+    fmpq_poly_init(cc); fmpq_poly_init(p); fmpq_poly_init(dp);
+    fmpq_poly_set(cc, c);
+    int ok = 1;
+    fmpq_t lcc, coeff, mq; fmpq_init(lcc); fmpq_init(coeff); fmpq_init(mq);
+    while (!fmpq_poly_is_zero(cc)) {
+        long dc = (long)fmpq_poly_degree(cc);
+        long m = dc + 1;                                /* deg(c) - delta + 1 */
+        if (n < 0 || m < 0 || m > n) { ok = 0; break; }
+        fmpq_poly_get_coeff_fmpq(lcc, cc, dc);
+        fmpq_set_si(mq, m, 1);
+        fmpq_div(coeff, lcc, mq);                       /* lc(c)/m */
+        fmpq_poly_zero(p);
+        fmpq_poly_set_coeff_fmpq(p, m, coeff);
+        fmpq_poly_add(q_out, q_out, p);
+        fmpq_poly_derivative(dp, p);
+        fmpq_poly_sub(cc, cc, dp);
+        n = m - 1;
+    }
+    fmpq_clear(lcc); fmpq_clear(coeff); fmpq_clear(mq);
+    fmpq_poly_clear(cc); fmpq_poly_clear(p); fmpq_poly_clear(dp);
+    return ok;
+}
+
+/* Solve a Dq + b q = c for q in Q[x], deg(q) <= n, via SPDE + PolyRischDE.
+ * Fills q_out (fmpq_poly) and returns 1, or returns 0 for "no solution". */
+static int fq_rde_solve_ladder(const fmpq_poly_t a, const fmpq_poly_t b,
+                               const fmpq_poly_t c, long n, fmpq_poly_t q_out) {
+    fmpq_poly_t sb, sc, salpha, sbeta;
+    fmpq_poly_init(sb); fmpq_poly_init(sc);
+    fmpq_poly_init(salpha); fmpq_poly_init(sbeta);
+    long m = 0;
+    int result = 0;
+    if (fq_spde(a, b, c, n, sb, sc, &m, salpha, sbeta)) {
+        fmpq_poly_t H;
+        fmpq_poly_init(H);
+        int hok = fmpq_poly_is_zero(sb)
+            ? fq_polyrischde_integrate(sc, m, H)
+            : fq_polyrischde_nocancel1(sb, sc, m, H);
+        if (hok) {
+            fmpq_poly_mul(q_out, salpha, H);            /* q = alpha H + beta */
+            fmpq_poly_add(q_out, q_out, sbeta);
+            result = 1;
+        }
+        fmpq_poly_clear(H);
+    }
+    fmpq_poly_clear(sb); fmpq_poly_clear(sc);
+    fmpq_poly_clear(salpha); fmpq_poly_clear(sbeta);
+    return result;
+}
+
+/* Native base-field RDE for the exponential tower, univariate over Q.  Solves
+ *   Dq + f q = g   for y = q  (D = d/d(xvar), the base derivation), where f is
+ * a POLYNOMIAL (f = i·u' for an exp monomial e^u, u a polynomial in xvar, so
+ * den(f) = 1 and WeakNormalizer is a no-op, w = 1) and g is a rational function
+ * over Q(xvar).  Runs RdeNormalDenominator + RdeBoundDegreeBase + the SPDE
+ * ladder + PolyRischDE entirely in fmpq_poly, converting f and g straight from
+ * Expr to fmpq_poly (no evaluator Together/Cancel), which is where the seconds
+ * of Expr rational arithmetic on a degree-2n denominator are eliminated.
+ * Returns:
+ *    1  solved — *y_out = the (reduced) rational solution y as an Expr,
+ *    0  no solution of bounded degree exists (authoritative decline),
+ *   -1  out of scope — g is not univariate over Q, or f is not a polynomial
+ *       (a genuinely rational coefficient, i.e. the primitive/log tower where
+ *       weak normalization is non-trivial) — caller falls back to Expr. */
+int flint_rde_base_solve_fg(const Expr* f, const Expr* g,
+                            const char* xvar, Expr** y_out) {
+    if (y_out) *y_out = NULL;
+    fmpq_poly_t FN, FD, NG, EN;
+    fmpq_poly_init(FN); fmpq_poly_init(FD); fmpq_poly_init(NG); fmpq_poly_init(EN);
+    if (!expr_to_fmpq_ratfunc(f, xvar, FN, FD) ||
+        !expr_to_fmpq_ratfunc(g, xvar, NG, EN)) {
+        fmpq_poly_clear(FN); fmpq_poly_clear(FD); fmpq_poly_clear(NG); fmpq_poly_clear(EN);
+        return -1;                                      /* not univariate over Q */
+    }
+    fq_ratfunc_reduce(FN, FD);
+    if (!fmpq_poly_is_one(FD)) {                         /* f rational: weak-norm */
+        fmpq_poly_clear(FN); fmpq_poly_clear(FD); fmpq_poly_clear(NG); fmpq_poly_clear(EN);
+        return -1;                                      /* case not handled here */
+    }
+    fq_ratfunc_reduce(NG, EN);
+    /* NF = f (polynomial), dn = 1, num_g = NG, en = EN.  RdeNormalDenominator
+     * with dn = 1:  p = gcd(1, en) = 1,  h = gcd(en, en'). */
+    fmpq_poly_t H, enp;
+    fmpq_poly_init(H); fmpq_poly_init(enp);
+    fmpq_poly_derivative(enp, EN);
+    fmpq_poly_gcd(H, EN, enp);                           /* h = gcd(en, en') */
+    fmpq_poly_clear(enp);
+    /* Guard: en | h^2 (dn = 1). */
+    fmpq_poly_t H2, grem;
+    fmpq_poly_init(H2); fmpq_poly_init(grem);
+    fmpq_poly_mul(H2, H, H);
+    fmpq_poly_rem(grem, H2, EN);
+    int result;
+    if (!fmpq_poly_is_zero(grem)) {
+        result = 0;                                     /* en ∤ h^2 */
+    } else {
+        /* a = h,  b = h·f - Dh,  c = (h^2 / en) num_g. */
+        fmpq_poly_t aa, bb, cc, dh, hnf, h2_en;
+        fmpq_poly_init(aa); fmpq_poly_init(bb); fmpq_poly_init(cc);
+        fmpq_poly_init(dh); fmpq_poly_init(hnf); fmpq_poly_init(h2_en);
+        fmpq_poly_set(aa, H);
+        fmpq_poly_derivative(dh, H);
+        fmpq_poly_mul(hnf, H, FN);
+        fmpq_poly_sub(bb, hnf, dh);
+        fmpq_poly_div(h2_en, H2, EN);                   /* exact by the guard */
+        fmpq_poly_mul(cc, h2_en, NG);
+        fmpq_poly_clear(dh); fmpq_poly_clear(hnf); fmpq_poly_clear(h2_en);
+        /* RdeBoundDegreeBase (Bronstein p.199), including the b/a resonance. */
+        long da = (long)fmpq_poly_degree(aa);
+        long db = (long)fmpq_poly_degree(bb);
+        long dc = (long)fmpq_poly_degree(cc);
+        long mx = (db > da - 1) ? db : (da - 1);
+        long n = dc - mx; if (n < 0) n = 0;
+        if (db == da - 1 && da >= 1) {
+            fmpq_t lcb, lca, mm; fmpq_init(lcb); fmpq_init(lca); fmpq_init(mm);
+            fmpq_poly_get_coeff_fmpq(lcb, bb, db);
+            fmpq_poly_get_coeff_fmpq(lca, aa, da);
+            fmpq_div(mm, lcb, lca);
+            fmpq_neg(mm, mm);                           /* -lc(b)/lc(a) */
+            if (fmpz_is_one(fmpq_denref(mm)) && fmpz_fits_si(fmpq_numref(mm))) {
+                long mv = fmpz_get_si(fmpq_numref(mm));
+                long cand = dc - db; if (cand < 0) cand = 0;
+                if (mv > n) n = mv;
+                if (cand > n) n = cand;
+            }
+            fmpq_clear(lcb); fmpq_clear(lca); fmpq_clear(mm);
+        }
+        fmpq_poly_t q;
+        fmpq_poly_init(q);
+        if (fq_rde_solve_ladder(aa, bb, cc, n, q)) {
+            /* y = q / h (w = 1), reduced to lowest terms in fmpq_poly. */
+            fq_ratfunc_reduce(q, H);
+            if (y_out) {
+                Expr* yn = fmpq_poly_to_expr_x(q, xvar);
+                if (fmpq_poly_is_one(H)) {
+                    *y_out = yn;
+                } else {
+                    Expr* yd = fmpq_poly_to_expr_x(H, xvar);
+                    *y_out = expr_new_function(expr_new_symbol("Times"),
+                        (Expr*[]){ yn, expr_new_function(expr_new_symbol("Power"),
+                            (Expr*[]){ yd, expr_new_integer(-1) }, 2) }, 2);
+                }
+            }
+            result = 1;
+        } else {
+            result = 0;
+        }
+        fmpq_poly_clear(q);
+        fmpq_poly_clear(aa); fmpq_poly_clear(bb); fmpq_poly_clear(cc);
+    }
+    fmpq_poly_clear(H2); fmpq_poly_clear(grem); fmpq_poly_clear(H);
+    fmpq_poly_clear(FN); fmpq_poly_clear(FD); fmpq_poly_clear(NG); fmpq_poly_clear(EN);
+    return result;
 }
 
 /* ================================================================== */
@@ -454,8 +929,8 @@ static void nf_detect(const Expr* e, NFDetect* st) {
         case EXPR_BIGINT:
             return;
         case EXPR_SYMBOL:
-            if (!st->xname) st->xname = e->data.symbol;
-            else if (strcmp(st->xname, e->data.symbol) != 0) st->multi_x = 1;
+            if (!st->xname) st->xname = e->data.symbol.name;
+            else if (strcmp(st->xname, e->data.symbol.name) != 0) st->multi_x = 1;
             return;
         case EXPR_FUNCTION: {
             const char* h = fn_head_name(e);
@@ -544,7 +1019,7 @@ static int to_mpoly_gen(const Expr* e, fmpq_mpoly_t out,
             return 1;
         }
         case EXPR_SYMBOL:
-            if (strcmp(e->data.symbol, gs->xname) == 0) { fmpq_mpoly_gen(out, 0, ctx); return 1; }
+            if (strcmp(e->data.symbol.name, gs->xname) == 0) { fmpq_mpoly_gen(out, 0, ctx); return 1; }
             return 0;
         case EXPR_FUNCTION: {
             const char* h = fn_head_name(e);
@@ -901,8 +1376,8 @@ static void cyc_detect(const Expr* e, CycDetect* st) {
         case EXPR_BIGINT:
             return;
         case EXPR_SYMBOL:
-            if (!st->xname) st->xname = e->data.symbol;
-            else if (strcmp(st->xname, e->data.symbol) != 0) st->multi_x = 1;
+            if (!st->xname) st->xname = e->data.symbol.name;
+            else if (strcmp(st->xname, e->data.symbol.name) != 0) st->multi_x = 1;
             return;
         case EXPR_FUNCTION: {
             const char* h = fn_head_name(e);
@@ -992,8 +1467,8 @@ static void tower_detect(const Expr* e, TowerDetect* st) {
         case EXPR_BIGINT:
             return;
         case EXPR_SYMBOL:
-            if (!st->xname) st->xname = e->data.symbol;
-            else if (strcmp(st->xname, e->data.symbol) != 0) st->multi_x = 1;
+            if (!st->xname) st->xname = e->data.symbol.name;
+            else if (strcmp(st->xname, e->data.symbol.name) != 0) st->multi_x = 1;
             return;
         case EXPR_FUNCTION: {
             const char* h = fn_head_name(e);
@@ -1308,8 +1783,8 @@ static void ps_detect(const Expr* e, PSDetect* st) {
                 /* Fractional power: only sqrt of the single symbolic radicand. */
                 if (q != 2) { st->bad = 1; return; }
                 if (base->type != EXPR_SYMBOL) { st->bad = 1; return; }
-                if (!st->kname) st->kname = base->data.symbol;
-                else if (strcmp(st->kname, base->data.symbol) != 0) { st->bad = 1; return; }
+                if (!st->kname) st->kname = base->data.symbol.name;
+                else if (strcmp(st->kname, base->data.symbol.name) != 0) { st->bad = 1; return; }
                 st->has_sqrt = 1;
                 return;
             }
@@ -1335,7 +1810,7 @@ static Expr* ps_subst_in(const Expr* e, const char* kname) {
         case EXPR_BIGINT:
             return expr_copy((Expr*)e);
         case EXPR_SYMBOL:
-            if (strcmp(e->data.symbol, kname) == 0) {
+            if (strcmp(e->data.symbol.name, kname) == 0) {
                 Expr* pa[2] = { expr_new_symbol(PS_RADSYM), expr_new_integer(2) };
                 return expr_new_function(expr_new_symbol("Power"), pa, 2);
             }
@@ -1344,7 +1819,7 @@ static Expr* ps_subst_in(const Expr* e, const char* kname) {
             const char* h = fn_head_name(e);
             if (h && strcmp(h, "Power") == 0 && e->data.function.arg_count == 2 &&
                 e->data.function.args[0]->type == EXPR_SYMBOL &&
-                strcmp(e->data.function.args[0]->data.symbol, kname) == 0) {
+                strcmp(e->data.function.args[0]->data.symbol.name, kname) == 0) {
                 long p, q;
                 if (ps_as_ratio(e->data.function.args[1], &p, &q)) {
                     long s_exp = (q == 1) ? 2 * p : p;   /* k^m -> S^(2m); k^(p/2) -> S^p */
@@ -1375,7 +1850,7 @@ static Expr* ps_subst_out(const Expr* e, const char* kname) {
         case EXPR_BIGINT:
             return expr_copy((Expr*)e);
         case EXPR_SYMBOL:
-            if (strcmp(e->data.symbol, PS_RADSYM) == 0) {
+            if (strcmp(e->data.symbol.name, PS_RADSYM) == 0) {
                 Expr* ra[2] = { expr_new_integer(1), expr_new_integer(2) };
                 Expr* half = expr_new_function(expr_new_symbol("Rational"), ra, 2);
                 Expr* pa[2] = { expr_new_symbol(kname), half };
@@ -1479,12 +1954,12 @@ Expr* flint_parametric_sqrt_resultant(const Expr* a, const Expr* b,
     ps_detect(a, &st);
     ps_detect(b, &st);
     if (st.bad || !st.has_sqrt || !st.kname) return NULL;
-    if (strcmp(var->data.symbol, st.kname) == 0) return NULL;  /* var == radicand */
+    if (strcmp(var->data.symbol.name, st.kname) == 0) return NULL;  /* var == radicand */
 
     Expr* a2 = ps_subst_in(a, st.kname);
     Expr* b2 = ps_subst_in(b, st.kname);
     Expr* r = NULL;
-    if (a2 && b2) r = flint_multivariate_resultant(a2, b2, var->data.symbol);
+    if (a2 && b2) r = flint_multivariate_resultant(a2, b2, var->data.symbol.name);
     expr_free(a2);
     expr_free(b2);
     if (!r) return NULL;
@@ -1627,7 +2102,7 @@ Expr* flint_parametric_sqrt_factor_squarefree(const Expr* p) {
  * validate polynomial-ness — coefficients may be rational functions). */
 static void collect_all_symbols(const Expr* e, VarSet* vs) {
     if (!e) return;
-    if (e->type == EXPR_SYMBOL) { varset_add(vs, e->data.symbol); return; }
+    if (e->type == EXPR_SYMBOL) { varset_add(vs, e->data.symbol.name); return; }
     if (e->type == EXPR_FUNCTION)
         for (size_t i = 0; i < e->data.function.arg_count; i++)
             collect_all_symbols(e->data.function.args[i], vs);
@@ -1650,7 +2125,7 @@ static int expr_to_mpolyq(const Expr* e, fmpz_mpoly_q_t out,
             return 1;
         }
         case EXPR_SYMBOL: {
-            int idx = var_index(fvars, e->data.symbol);
+            int idx = var_index(fvars, e->data.symbol.name);
             if (idx < 0) return 0;
             fmpz_mpoly_q_gen(out, (slong)idx, mctx);
             return 1;
@@ -1844,7 +2319,7 @@ static Expr* parametric_field_op(const Expr* a, const Expr* b, const Expr* var,
     ps_detect(a, &st);
     ps_detect(b, &st);
     if (st.bad || !st.has_sqrt || !st.kname) return NULL;
-    const char* xname = var->data.symbol;
+    const char* xname = var->data.symbol.name;
     if (strcmp(xname, st.kname) == 0) return NULL;
 
     Expr* a2 = ps_subst_in(a, st.kname);
@@ -1971,6 +2446,492 @@ Expr* flint_parametric_field_normalize(const Expr* e) {
     varset_free(&fvars);
     expr_free(e2);
     return out;
+}
+
+/* True if `e` carries an actual denominator to combine — a Power[base, k] with
+ * k a negative integer (or negative-numerator Rational) and base a symbol or
+ * compound (not a numeric literal, whose negative power is just a rational
+ * constant). Only such inputs are combined by Together; a denominator-free
+ * product/polynomial is left factored, so flint_rational_together declines it. */
+static int expr_has_denominator(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return 0;
+    if (fn_head_name(e) && strcmp(fn_head_name(e), "Power") == 0 &&
+        e->data.function.arg_count == 2) {
+        const Expr* base = e->data.function.args[0];
+        const Expr* ex   = e->data.function.args[1];
+        int neg = (ex->type == EXPR_INTEGER && ex->data.integer < 0);
+        if (!neg && ex->type == EXPR_FUNCTION && fn_head_name(ex) &&
+            strcmp(fn_head_name(ex), "Rational") == 0 && ex->data.function.arg_count == 2 &&
+            ex->data.function.args[0]->type == EXPR_INTEGER &&
+            ex->data.function.args[0]->data.integer < 0)
+            neg = 1;
+        if (neg && (base->type == EXPR_SYMBOL || base->type == EXPR_FUNCTION))
+            return 1;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (expr_has_denominator(e->data.function.args[i])) return 1;
+    return 0;
+}
+
+/*
+ * Together for a plain rational function over Q: combine into a single fraction
+ * in lowest terms via fmpz_mpoly_q (which stores num/den reduced automatically)
+ * and read it back. This is the fast path for the common case the algebraic /
+ * parametric normalizers above decline — an ordinary rational in symbols, whose
+ * classical together_recursive expands and GCDs a degree-2n denominator at
+ * O(seconds). Returns the reduced num/den Expr, or NULL when:
+ *   - the input has no denominator to combine (Together leaves a product /
+ *     polynomial factored — we must NOT expand it), or
+ *   - the input is not a plain rational over Q (a symbolic/fractional power such
+ *     as a^x or Sqrt[2], or a transcendental kernel — expr_to_mpolyq declines),
+ * in which case the caller keeps its classical path. Output form matches the
+ * classical Together (expanded, reduced num/den).
+ */
+/* ------------------------------------------------------------------ *
+ *  Transcendental-kernel generators for Together / Cancel.            *
+ *                                                                      *
+ *  flint_rational_normalize_core reduces a plain rational over Q       *
+ *  (symbol generators) via fmpz_mpoly_q.  These helpers EXTEND it to   *
+ *  rationals whose atoms include transcendental kernels — Log[u],      *
+ *  E^u, ArcTan[u], … — by substituting each kernel to a fresh symbol   *
+ *  BEFORE the reduction and restoring it after, so the whole reduction *
+ *  runs in the fast fmpz_mpoly_q path instead of the classical         *
+ *  symbolic GCD (Together over a Log[x] atom is ~50× slower).  Two     *
+ *  kernel classes need distinct treatment:                            *
+ *                                                                      *
+ *   - Independent kernels (Log[u], inverse-trig, …): each DISTINCT     *
+ *     kernel subexpression is one independent generator — a fresh      *
+ *     symbol.  Log[x] and Log[1+Log[x]] are two independent            *
+ *     generators; their arguments are opaque.                          *
+ *                                                                      *
+ *   - Exponentials E^e: NOT independent — E^(2u) is (E^u)^2.  All Exp  *
+ *     kernels whose exponents are integer multiples of a common        *
+ *     fundamental u map to integer powers g^k of a single fresh symbol *
+ *     g = E^u, so a cross-power cancellation like                      *
+ *     (E^(2x)-1)/(E^x-1) → 1+E^x reduces correctly, matching the       *
+ *     classical Together/Cancel (which treats E^(ku) as (E^u)^k).      *
+ *                                                                      *
+ *  DECLINES (km_build → 0, caller keeps its classical path) when a     *
+ *  trig/hyperbolic kernel is present (the evaluator's 1/Sin→Csc        *
+ *  canonicalisation would make readback+eval diverge from the          *
+ *  classical form), on a non-E algebraic power (Sqrt[x], a^x — left    *
+ *  to the algebraic normaliser), on any other non-allowlisted head,    *
+ *  on inexact reals, or when the Exp exponents share no common integer *
+ *  fundamental.  The result is byte-identical to the classical         *
+ *  Together/Cancel on every case the fast path accepts.               */
+
+/* Growable list of borrowed Expr* pointers into the input tree. */
+typedef struct { const Expr** v; size_t n, cap; } EPtrList;
+
+static int epl_push_unique(EPtrList* L, const Expr* e) {
+    for (size_t i = 0; i < L->n; i++) if (expr_eq(L->v[i], e)) return 1; /* dup */
+    if (L->n == L->cap) {
+        size_t nc = L->cap ? L->cap * 2 : 8;
+        const Expr** nv = realloc(L->v, nc * sizeof(*nv));
+        if (!nv) return 0;
+        L->v = nv; L->cap = nc;
+    }
+    L->v[L->n++] = e;
+    return 1;
+}
+static void epl_free(EPtrList* L) { free(L->v); L->v = NULL; L->n = L->cap = 0; }
+
+/* Independent-kernel head allowlist. Forward trig / hyperbolic are absent
+ * deliberately (their 1/Sin→Csc form diverges); Exp is handled via Power[E,·]. */
+static int km_is_generic_kernel_head(const char* h) {
+    static const char* const ok[] = {
+        "Log", "ArcSin", "ArcCos", "ArcTan", "ArcCot", "ArcSec", "ArcCsc",
+        "ArcSinh", "ArcCosh", "ArcTanh", "ArcCoth", "ArcSech", "ArcCsch", NULL };
+    for (int i = 0; ok[i]; i++) if (strcmp(h, ok[i]) == 0) return 1;
+    return 0;
+}
+
+/* Pass-1 walk: gather independent kernels into gk, Exp kernels into xk (both
+ * deduped structurally). Recurses only through the ring ops (Plus/Times and
+ * integer Power). Returns 0 to DECLINE on any unsupported atom. */
+static int km_walk(const Expr* e, EPtrList* gk, EPtrList* xk) {
+    switch (e->type) {
+        case EXPR_INTEGER: case EXPR_BIGINT:
+            return 1;
+        case EXPR_SYMBOL:
+            /* reserve the fresh-symbol namespace so backward-subst is unambiguous */
+            return strncmp(e->data.symbol.name, "$flk", 4) == 0 ? 0 : 1;
+        case EXPR_FUNCTION: {
+            const char* h = fn_head_name(e);
+            if (!h) return 0;
+            size_t n = e->data.function.arg_count;
+            if (strcmp(h, "Rational") == 0) return 1;            /* rational constant */
+            if (strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) {
+                for (size_t i = 0; i < n; i++)
+                    if (!km_walk(e->data.function.args[i], gk, xk)) return 0;
+                return 1;
+            }
+            if (strcmp(h, "Power") == 0) {
+                if (n != 2) return 0;
+                const Expr* base = e->data.function.args[0];
+                const Expr* ex   = e->data.function.args[1];
+                if (ex->type == EXPR_INTEGER)                    /* ring power */
+                    return km_walk(base, gk, xk);
+                /* non-integer exponent: only E^e (an exponential) is supported */
+                if (base->type == EXPR_SYMBOL && strcmp(base->data.symbol.name, "E") == 0)
+                    return epl_push_unique(xk, e);
+                return 0;                                        /* Sqrt[x], a^x, … */
+            }
+            if (km_is_generic_kernel_head(h))
+                return epl_push_unique(gk, e);                   /* opaque kernel */
+            return 0;   /* trig/hyperbolic, Complex, and every other head */
+        }
+        default:
+            return 0;   /* REAL, STRING, NDARRAY, MPFR */
+    }
+}
+
+/* Kernel substitution: forward maps each kernel subexpression to its
+ * replacement (a fresh symbol, or Power[fresh,k] for an Exp kernel); backward
+ * maps a fresh symbol back to the kernel atom it stands for. */
+typedef struct {
+    Expr** from; Expr** to;   size_t n,  cap;    /* forward: kernel  → replacement */
+    Expr** bsym; Expr** batom; size_t bn, bcap;  /* backward: fresh symbol → atom */
+    int ctr;
+} KernMap;
+
+static void km_init(KernMap* km) { memset(km, 0, sizeof *km); }
+static void km_free(KernMap* km) {
+    for (size_t i = 0; i < km->n;  i++) { expr_free(km->from[i]); expr_free(km->to[i]); }
+    for (size_t i = 0; i < km->bn; i++) { expr_free(km->bsym[i]); expr_free(km->batom[i]); }
+    free(km->from); free(km->to); free(km->bsym); free(km->batom);
+    memset(km, 0, sizeof *km);
+}
+static int km_add_fwd(KernMap* km, Expr* from, Expr* to) {
+    if (km->n == km->cap) {
+        size_t nc = km->cap ? km->cap * 2 : 8;
+        Expr** a = realloc(km->from, nc * sizeof(*a));
+        Expr** b = realloc(km->to,   nc * sizeof(*b));
+        if (a) km->from = a;
+        if (b) km->to   = b;
+        if (!a || !b) return 0;
+        km->cap = nc;
+    }
+    km->from[km->n] = from; km->to[km->n] = to; km->n++;
+    return 1;
+}
+static int km_add_bwd(KernMap* km, Expr* sym, Expr* atom) {
+    if (km->bn == km->bcap) {
+        size_t nc = km->bcap ? km->bcap * 2 : 8;
+        Expr** a = realloc(km->bsym,  nc * sizeof(*a));
+        Expr** b = realloc(km->batom, nc * sizeof(*b));
+        if (a) km->bsym  = a;
+        if (b) km->batom = b;
+        if (!a || !b) return 0;
+        km->bcap = nc;
+    }
+    km->bsym[km->bn] = sym; km->batom[km->bn] = atom; km->bn++;
+    return 1;
+}
+
+/* evaluate(a/b); return it (owned) iff it is a nonzero machine integer, else
+ * NULL. Used to test whether an Exp exponent is an integer multiple of the
+ * candidate fundamental. */
+static Expr* km_int_ratio(const Expr* a, const Expr* b) {
+    Expr* binv = expr_new_function(expr_new_symbol("Power"),
+        (Expr*[]){ expr_copy((Expr*)b), expr_new_integer(-1) }, 2);
+    Expr* prod = expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_copy((Expr*)a), binv }, 2);
+    Expr* r = eval_and_free(prod);
+    if (r && r->type == EXPR_INTEGER && r->data.integer != 0) return r;
+    if (r) expr_free(r);
+    return NULL;
+}
+
+/* Build the kernel map for `e`. Returns 0 to decline (see block comment). */
+static int km_build(const Expr* e, KernMap* km) {
+    EPtrList gk = {0}, xk = {0};
+    if (!km_walk(e, &gk, &xk)) { epl_free(&gk); epl_free(&xk); return 0; }
+
+    char buf[32];
+    /* Independent kernels: one fresh symbol each. */
+    for (size_t i = 0; i < gk.n; i++) {
+        snprintf(buf, sizeof buf, "$flk%d", km->ctr++);
+        Expr* sym = expr_new_symbol(buf);
+        if (!km_add_bwd(km, expr_copy(sym), expr_copy((Expr*)gk.v[i])) ||
+            !km_add_fwd(km, expr_copy((Expr*)gk.v[i]), sym)) goto fail;
+    }
+
+    /* Exp kernels: map E^(k·u) → g^k for a common fundamental exponent u. */
+    if (xk.n > 0) {
+        const Expr* u = NULL;
+        for (size_t c = 0; c < xk.n && !u; c++) {
+            const Expr* cand = xk.v[c]->data.function.args[1];
+            int good = 1;
+            for (size_t j = 0; j < xk.n && good; j++) {
+                Expr* k = km_int_ratio(xk.v[j]->data.function.args[1], cand);
+                if (!k) good = 0; else expr_free(k);
+            }
+            if (good) u = cand;
+        }
+        if (!u) goto fail;                       /* no common integer fundamental */
+        snprintf(buf, sizeof buf, "$flk%d", km->ctr++);
+        Expr* g  = expr_new_symbol(buf);
+        Expr* eu = expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_new_symbol("E"), expr_copy((Expr*)u) }, 2);
+        if (!km_add_bwd(km, g, eu)) { goto fail; }
+        for (size_t j = 0; j < xk.n; j++) {
+            Expr* kr = km_int_ratio(xk.v[j]->data.function.args[1], u);
+            long k = (long)kr->data.integer;
+            expr_free(kr);
+            Expr* repl = (k == 1)
+                ? expr_new_symbol(buf)
+                : expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_new_symbol(buf), expr_new_integer(k) }, 2);
+            if (!km_add_fwd(km, expr_copy((Expr*)xk.v[j]), repl)) goto fail;
+        }
+    }
+
+    epl_free(&gk); epl_free(&xk);
+    return 1;
+fail:
+    epl_free(&gk); epl_free(&xk);
+    return 0;
+}
+
+static int km_find_fwd(const KernMap* km, const Expr* e) {
+    for (size_t i = 0; i < km->n; i++) if (expr_eq(km->from[i], e)) return (int)i;
+    return -1;
+}
+/* Replace each maximal kernel subexpression of `e` by its forward image. */
+static Expr* km_forward(const Expr* e, const KernMap* km) {
+    int idx = km_find_fwd(km, e);
+    if (idx >= 0) return expr_copy(km->to[idx]);
+    if (e->type == EXPR_FUNCTION) {
+        size_t n = e->data.function.arg_count;
+        Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t i = 0; i < n; i++)
+            args[i] = km_forward(e->data.function.args[i], km);
+        Expr* r = expr_new_function(expr_copy(e->data.function.head), args, n);
+        free(args);
+        return r;
+    }
+    return expr_copy((Expr*)e);
+}
+/* Restore fresh generator symbols in `e` back to their kernel atoms. */
+static Expr* km_backward(const Expr* e, const KernMap* km) {
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t i = 0; i < km->bn; i++)
+            if (expr_eq(e, km->bsym[i])) return expr_copy(km->batom[i]);
+        return expr_copy((Expr*)e);
+    }
+    if (e->type == EXPR_FUNCTION) {
+        size_t n = e->data.function.arg_count;
+        Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t i = 0; i < n; i++)
+            args[i] = km_backward(e->data.function.args[i], km);
+        Expr* r = expr_new_function(expr_copy(e->data.function.head), args, n);
+        free(args);
+        return r;
+    }
+    return expr_copy((Expr*)e);
+}
+
+/* Shared core: reduce the whole expression to a single fmpz_mpoly_q fraction
+ * (lowest terms) and read back num/den. Returns NULL if `e` is not a rational
+ * over Q in symbols and supported transcendental kernels. Callers apply their
+ * own structural gate first. */
+static Expr* flint_rational_normalize_core(const Expr* e) {
+    /* Substitute transcendental kernels to fresh symbols so the reduction runs
+     * in the plain-rational fmpz_mpoly_q path; restore them after. Declines
+     * (NULL) on any unsupported atom (see the km block comment above). */
+    KernMap km; km_init(&km);
+    if (!km_build(e, &km)) { km_free(&km); return NULL; }
+    Expr* work = km.n ? km_forward(e, &km) : NULL;
+    const Expr* target = work ? work : e;
+
+    VarSet fvars;
+    memset(&fvars, 0, sizeof fvars);
+    collect_all_symbols(target, &fvars);
+    if (fvars.count == 0) {
+        varset_free(&fvars); if (work) expr_free(work); km_free(&km); return NULL;
+    }
+    qsort(fvars.names, fvars.count, sizeof(char*), cmp_str);
+
+    fmpz_mpoly_ctx_t mctx;
+    fmpz_mpoly_ctx_init(mctx, (slong)fvars.count, ORD_LEX);
+    fmpz_mpoly_q_t q;
+    fmpz_mpoly_q_init(q, mctx);
+
+    Expr* out = NULL;
+    if (expr_to_mpolyq(target, q, mctx, &fvars)) {
+        fmpz_mpoly_q_canonicalise(q, mctx);
+        Expr* num = fmpz_mpoly_to_expr(fmpz_mpoly_q_numref(q), mctx, &fvars);
+        Expr* r;
+        if (fmpz_mpoly_is_one(fmpz_mpoly_q_denref(q), mctx)) {
+            r = num;
+        } else {
+            Expr* den = fmpz_mpoly_to_expr(fmpz_mpoly_q_denref(q), mctx, &fvars);
+            Expr* deninv = expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ den, expr_new_integer(-1) }, 2);
+            r = expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ num, deninv }, 2);
+        }
+        if (km.n) { Expr* rb = km_backward(r, &km); expr_free(r); r = rb; }
+        out = eval_and_free(r);
+    }
+
+    fmpz_mpoly_q_clear(q, mctx);
+    fmpz_mpoly_ctx_clear(mctx);
+    varset_free(&fvars);
+    if (work) expr_free(work);
+    km_free(&km);
+    return out;
+}
+
+Expr* flint_rational_together(const Expr* e) {
+    if (!e || !expr_has_denominator(e)) return NULL;
+    return flint_rational_normalize_core(e);
+}
+
+/* True if any Plus node in `e` has a denominator (Power[sym|compound, neg]) in
+ * its subtree. Cancel — unlike Together — does NOT put a sum of fractions over
+ * a common denominator (Cancel[1/(x+1)+1/(x+2)] stays uncombined), so when a
+ * denominator sits inside a Plus the single-fraction fast path does not apply. */
+static int denom_inside_plus(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return 0;
+    const char* h = fn_head_name(e);
+    if (h && strcmp(h, "Plus") == 0 && expr_has_denominator(e)) return 1;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (denom_inside_plus(e->data.function.args[i])) return 1;
+    return 0;
+}
+
+/*
+ * Cancel for a plain rational function over Q — reduce num/den to lowest terms
+ * via fmpz_mpoly_q. Same fast core as flint_rational_together, but with the
+ * stricter Cancel gate: it fires only on a *single* fraction (a denominator
+ * present AND no denominator inside a Plus), because Cancel leaves a sum of
+ * fractions uncombined. A denominator-free product stays factored (no
+ * denominator), and a symbolic/fractional power declines in expr_to_mpolyq.
+ * Output matches classical Cancel (expanded, reduced num/den). NULL otherwise.
+ */
+Expr* flint_rational_cancel(const Expr* e) {
+    if (!e || !expr_has_denominator(e) || denom_inside_plus(e)) return NULL;
+    return flint_rational_normalize_core(e);
+}
+
+/*
+ * FLINT-native partial fraction decomposition of a proper rational function
+ * R / (C * prod_i p_i^{k_i}) over Q, where the p_i are the distinct irreducible
+ * factors (as Exprs), k_i their multiplicities, and C the numeric leading
+ * content.  Returns the fractional part
+ *      sum_i sum_{j=1}^{k_i} A_{ij} / p_i^j ,   deg(A_{ij}) < deg(p_i),
+ * as an unsimplified Expr (the caller adds the polynomial part Q and lets the
+ * evaluator canonicalise), matching the classical RowReduce Apart output
+ * exactly.
+ *
+ * Method (all in fmpq_poly, O(M(n)) — no evaluator round-trip):
+ *   1. Distinct-factor split via CRT.  With q_i = p_i^{k_i}, D = prod q_i and
+ *      m_i = D/q_i, solve R/C = sum_i B_i * m_i by B_i = (R/C)*(m_i^{-1} mod q_i)
+ *      mod q_i, where m_i^{-1} mod q_i is the xgcd cofactor of m_i (q_i, m_i are
+ *      coprime, so the monic gcd is 1).  Then R/(C·D) = sum_i B_i/q_i.
+ *   2. p_i-adic expansion.  Writing B_i = c_0 + c_1 p_i + ... + c_{k-1} p_i^{k-1}
+ *      by iterated division, B_i/p_i^{k} = sum_j c_{k-j}/p_i^j, so A_{ij}=c_{k-j}.
+ *
+ * Gate: every operand must convert into Q(var) — a coefficient carrying another
+ * symbol, a radical, or a fractional power makes expr_accum_fmpq_poly fail, and
+ * the function returns NULL so the classical (multivariate-capable) RowReduce
+ * path runs.  Returns NULL without FLINT.
+ */
+Expr* flint_apart_over_q(const Expr* R, const Expr* const* bases,
+                         const int64_t* ks, int m,
+                         const Expr* C, const char* var) {
+    if (m < 1) return NULL;
+
+    /* R' = R / C as fmpq_poly over Q(var); C must be a nonzero constant. */
+    fmpq_poly_t Rp, Cp;
+    fmpq_poly_init(Rp); fmpq_poly_init(Cp);
+    if (!expr_accum_fmpq_poly(R, var, Rp) ||
+        !expr_accum_fmpq_poly(C, var, Cp) ||
+        fmpq_poly_degree(Cp) > 0) {
+        fmpq_poly_clear(Rp); fmpq_poly_clear(Cp); return NULL;
+    }
+    fmpq_t cval; fmpq_init(cval);
+    fmpq_poly_get_coeff_fmpq(cval, Cp, 0);
+    fmpq_poly_clear(Cp);
+    if (fmpq_is_zero(cval)) { fmpq_clear(cval); fmpq_poly_clear(Rp); return NULL; }
+    fmpq_poly_scalar_div_fmpq(Rp, Rp, cval);
+    fmpq_clear(cval);
+
+    /* Convert the irreducible bases p_i and form q_i = p_i^{k_i}. */
+    fmpq_poly_struct* P  = malloc((size_t)m * sizeof(fmpq_poly_struct));
+    fmpq_poly_struct* Qi = malloc((size_t)m * sizeof(fmpq_poly_struct));
+    int ok = 1, ninit = 0;
+    for (int i = 0; i < m; i++) {
+        fmpq_poly_init(&P[i]); fmpq_poly_init(&Qi[i]); ninit = i + 1;
+        if (ks[i] < 1 || !expr_accum_fmpq_poly(bases[i], var, &P[i]) ||
+            fmpq_poly_degree(&P[i]) < 1) { ok = 0; break; }
+        fmpq_poly_pow(&Qi[i], &P[i], (ulong)ks[i]);
+    }
+
+    Expr* result = NULL;
+    if (ok) {
+        fmpq_poly_t D; fmpq_poly_init(D); fmpq_poly_one(D);
+        for (int i = 0; i < m; i++) fmpq_poly_mul(D, D, &Qi[i]);
+
+        fmpq_poly_t mi, g, s, t, Bi, cur, quot, rem;
+        fmpq_poly_init(mi); fmpq_poly_init(g); fmpq_poly_init(s);
+        fmpq_poly_init(t);  fmpq_poly_init(Bi); fmpq_poly_init(cur);
+        fmpq_poly_init(quot); fmpq_poly_init(rem);
+
+        size_t cap = 8, nterms = 0;
+        Expr** terms = malloc(cap * sizeof(Expr*));
+
+        for (int i = 0; i < m; i++) {
+            /* B_i = (R' * (m_i^{-1} mod q_i)) mod q_i. */
+            fmpq_poly_div(mi, D, &Qi[i]);            /* m_i = D / q_i (exact) */
+            fmpq_poly_xgcd(g, s, t, &Qi[i], mi);     /* s q_i + t m_i = 1     */
+            fmpq_poly_mul(Bi, Rp, t);
+            fmpq_poly_rem(Bi, Bi, &Qi[i]);
+            /* p_i-adic digits c_0..c_{k-1}; A_{ij} = c_{k-j}. */
+            fmpq_poly_set(cur, Bi);
+            int64_t k = ks[i];
+            Expr** cexpr = malloc((size_t)k * sizeof(Expr*));
+            for (int64_t d = 0; d < k; d++) {
+                fmpq_poly_divrem(quot, rem, cur, &P[i]);
+                cexpr[d] = fmpq_poly_to_expr_x(rem, var);
+                fmpq_poly_set(cur, quot);
+            }
+            for (int64_t j = 1; j <= k; j++) {
+                Expr* Aij = cexpr[k - j];            /* ownership transferred */
+                if (Aij->type == EXPR_INTEGER && Aij->data.integer == 0) {
+                    expr_free(Aij); continue;
+                }
+                Expr* denom = (j == 1)
+                    ? expr_copy((Expr*)bases[i])
+                    : expr_new_function(expr_new_symbol("Power"),
+                          (Expr*[]){ expr_copy((Expr*)bases[i]),
+                                     expr_new_integer(j) }, 2);
+                Expr* inv = expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ denom, expr_new_integer(-1) }, 2);
+                Expr* term = expr_new_function(expr_new_symbol("Times"),
+                        (Expr*[]){ Aij, inv }, 2);
+                if (nterms == cap) { cap *= 2; terms = realloc(terms, cap * sizeof(Expr*)); }
+                terms[nterms++] = term;
+            }
+            free(cexpr);
+        }
+
+        if (nterms == 0)      result = expr_new_integer(0);
+        else if (nterms == 1) result = terms[0];
+        else result = expr_new_function(expr_new_symbol("Plus"), terms, nterms);
+        free(terms);
+
+        fmpq_poly_clear(D);  fmpq_poly_clear(mi);  fmpq_poly_clear(g);
+        fmpq_poly_clear(s);  fmpq_poly_clear(t);   fmpq_poly_clear(Bi);
+        fmpq_poly_clear(cur); fmpq_poly_clear(quot); fmpq_poly_clear(rem);
+    }
+
+    for (int i = 0; i < ninit; i++) { fmpq_poly_clear(&P[i]); fmpq_poly_clear(&Qi[i]); }
+    free(P); free(Qi);
+    fmpq_poly_clear(Rp);
+    return result;
 }
 
 /* ================================================================== */
@@ -2321,7 +3282,7 @@ static Expr* ga_radical_of(const GAGen* g) {
 static Expr* ga_subst_back(const Expr* e, const GADetect* st) {
     if (e->type == EXPR_SYMBOL) {
         for (int i = 0; i < st->ngen; i++)
-            if (strcmp(e->data.symbol, st->gens[i].name) == 0)
+            if (strcmp(e->data.symbol.name, st->gens[i].name) == 0)
                 return ga_radical_of(&st->gens[i]);
         return expr_copy((Expr*)e);
     }
@@ -2718,7 +3679,7 @@ Expr* flint_extension_divexact(const Expr* a, const Expr* b) {
 
 Expr* flint_polynomial_resultant(const Expr* a, const Expr* b, const Expr* var) {
     if (!var || var->type != EXPR_SYMBOL) return NULL;
-    return flint_multivariate_resultant(a, b, var->data.symbol);
+    return flint_multivariate_resultant(a, b, var->data.symbol.name);
 }
 
 Expr* flint_polynomial_factor(const Expr* p) {
@@ -2874,6 +3835,91 @@ static Expr* builtin_flint_factorsquarefree(Expr* res) {
     return flint_polynomial_factor_squarefree(res->data.function.args[0]);
 }
 
+/* ------------------------------------------------------------------ */
+/*  Linear-system coefficient extraction (pmint parallel-Risch solve)  */
+/* ------------------------------------------------------------------ */
+
+int flint_linear_system_terms(const Expr* equation,
+                              Expr* const* vars, int nvars,
+                              Expr* const* unknowns, int nunk,
+                              flint_lsys_term_fn cb, void* user) {
+    if (!equation || !cb || nvars < 0 || nunk < 0) return 0;
+    int nv = nvars, nu = nunk, V = nv + nu;
+    if (V == 0) return 0;
+
+    /* Variable set = base vars (indices 0..nv-1) then unknowns
+     * (nv..nv+nu-1), in that fixed order.  to_mpoly() below fails on any
+     * symbol not in this set, so a foreign parameter (e.g. `a` in
+     * Exp[a x]) makes the whole path decline — exactly matching the
+     * Q-only domain of the hand-rolled pm_walk builder. */
+    VarSet vs = {0};
+    for (int i = 0; i < nv; i++) {
+        if (vars[i]->type != EXPR_SYMBOL || !varset_add(&vs, vars[i]->data.symbol.name)) {
+            varset_free(&vs); return 0;
+        }
+    }
+    for (int j = 0; j < nu; j++) {
+        if (unknowns[j]->type != EXPR_SYMBOL || !varset_add(&vs, unknowns[j]->data.symbol.name)) {
+            varset_free(&vs); return 0;
+        }
+    }
+    /* Any duplicate name (var repeated, or a var colliding with an
+     * unknown) collapses the set and misaligns the index map — bail. */
+    if ((int)vs.count != V) { varset_free(&vs); return 0; }
+
+    fmpq_mpoly_ctx_t ctx;
+    fmpq_mpoly_ctx_init(ctx, (slong)V, ORD_LEX);
+    fmpq_mpoly_t eq;
+    fmpq_mpoly_init(eq, ctx);
+
+    int ok = to_mpoly(equation, eq, ctx, &vs);
+    if (ok) {
+        slong nterms = fmpq_mpoly_length(eq, ctx);
+        ulong* exps = (ulong*)malloc(sizeof(ulong) * (size_t)V);
+        if (!exps) ok = 0;
+
+        /* Pass 1: validate linearity in the unknowns before emitting a
+         * single term, so a caller that resets nothing on failure never
+         * sees partial output. */
+        for (slong i = 0; ok && i < nterms; i++) {
+            fmpq_mpoly_get_term_exp_ui(exps, eq, i, ctx);
+            int seen = 0;
+            for (int j = 0; j < nu; j++) {
+                if (exps[nv + j] > 1) { ok = 0; break; }   /* unknown^2: nonlinear */
+                if (exps[nv + j] == 1) seen++;
+            }
+            if (seen > 1) ok = 0;                          /* product of two unknowns */
+        }
+
+        /* Pass 2: emit one callback per term. */
+        if (ok) {
+            long* base_exp = (long*)malloc(sizeof(long) * (size_t)(nv ? nv : 1));
+            fmpq_t c; fmpq_init(c);
+            mpq_t mc; mpq_init(mc);
+            if (!base_exp) ok = 0;
+            for (slong i = 0; ok && i < nterms; i++) {
+                fmpq_mpoly_get_term_exp_ui(exps, eq, i, ctx);
+                for (int k = 0; k < nv; k++) base_exp[k] = (long)exps[k];
+                int col = nu;                              /* default: unknown-free */
+                for (int j = 0; j < nu; j++) {
+                    if (exps[nv + j] == 1) { col = j; break; }
+                }
+                fmpq_mpoly_get_term_coeff_fmpq(c, eq, i, ctx);
+                fmpq_get_mpq(mc, c);
+                cb(base_exp, nv, col, mc, user);
+            }
+            mpq_clear(mc); fmpq_clear(c);
+            free(base_exp);
+        }
+        free(exps);
+    }
+
+    fmpq_mpoly_clear(eq, ctx);
+    fmpq_mpoly_ctx_clear(ctx);
+    varset_free(&vs);
+    return ok;
+}
+
 void flint_bridge_init(void) {
     /* FLINT keeps thread-local memory pools (fmpz temporaries, prime caches)
      * that it reuses across calls and only releases at thread/program teardown.
@@ -2920,6 +3966,27 @@ Expr* flint_multivariate_gcd(const Expr* a, const Expr* b) { (void)a; (void)b; r
 Expr* flint_algebraic_field_normalize(const Expr* e) { (void)e; return NULL; }
 Expr* flint_algebraic_field_canonical(const Expr* e) { (void)e; return NULL; }
 Expr* flint_algebraic_field_together(const Expr* e) { (void)e; return NULL; }
+Expr* flint_rational_together(const Expr* e) { (void)e; return NULL; }
+Expr* flint_rational_cancel(const Expr* e) { (void)e; return NULL; }
+Expr* flint_apart_over_q(const Expr* R, const Expr* const* bases,
+                         const int64_t* ks, int m,
+                         const Expr* C, const char* var) {
+    (void)R; (void)bases; (void)ks; (void)m; (void)C; (void)var; return NULL;
+}
+int   flint_rde_base_solve_fg(const Expr* f, const Expr* g,
+                              const char* xvar, Expr** y_out) {
+    (void)f; (void)g; (void)xvar;
+    if (y_out) *y_out = NULL;
+    return -1;
+}
+int flint_linear_system_terms(const Expr* equation,
+                              Expr* const* vars, int nvars,
+                              Expr* const* unknowns, int nunk,
+                              flint_lsys_term_fn cb, void* user) {
+    (void)equation; (void)vars; (void)nvars; (void)unknowns; (void)nunk;
+    (void)cb; (void)user;
+    return 0;
+}
 void  flint_bridge_init(void) { /* no FLINT: nothing to register */ }
 
 #endif /* USE_FLINT */

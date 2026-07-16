@@ -111,7 +111,7 @@ Expr* builtin_sum_polynomial(Expr* res) {
     if (!sum_stage_args(res, &f, &var, &imin, &imax, &definite)) return NULL;
 
     /* A polynomial summed to Infinity diverges; fall through (stays held). */
-    if (definite && imax->type == EXPR_SYMBOL && imax->data.symbol == SYM_Infinity)
+    if (definite && imax->type == EXPR_SYMBOL && imax->data.symbol.name == SYM_Infinity)
         return NULL;
 
     Expr* F = antidifference(f, var);

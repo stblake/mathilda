@@ -108,13 +108,13 @@ bool expr_is_root_of_unity_pow(const Expr* e, int64_t* p_out, int64_t* q_out) {
     if (!e) return false;
 
     /* I  →  (-1)^(1/2);   Complex[0, ±1]. */
-    if (e->type == EXPR_SYMBOL && e->data.symbol == SYM_I) {
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_I) {
         *p_out = 1; *q_out = 2; return true;
     }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Complex
+        && e->data.function.head->data.symbol.name == SYM_Complex
         && e->data.function.arg_count == 2) {
         Expr* re = e->data.function.args[0];
         Expr* im = e->data.function.args[1];
@@ -130,7 +130,7 @@ bool expr_is_root_of_unity_pow(const Expr* e, int64_t* p_out, int64_t* q_out) {
     if (e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.head->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp  = e->data.function.args[1];

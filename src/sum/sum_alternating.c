@@ -50,7 +50,7 @@ static int alt_pdeg(Expr* e, Expr* var) {
 static bool alt_neg_power(Expr* e, Expr** base, int* m) {
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL
-        || e->data.function.head->data.symbol != SYM_Power
+        || e->data.function.head->data.symbol.name != SYM_Power
         || e->data.function.arg_count != 2) return false;
     Expr* ex = e->data.function.args[1];
     if (ex->type != EXPR_INTEGER || ex->data.integer >= 0) return false;
@@ -59,12 +59,12 @@ static bool alt_neg_power(Expr* e, Expr** base, int* m) {
     return true;
 }
 /* Find the (single) var-dependent pole factor of a partial-fraction term,
- * descending into nested Times.  Returns count; records base/mult in *fb/*fm. */
+ * descending into nested Times.  Returns count; records base/mult in fb, fm. */
 static int alt_find_pole(Expr* e, Expr* var, Expr** fb, int* fm) {
     Expr* b; int mm;
     if (alt_neg_power(e, &b, &mm) && !sum_free_of(b, var)) { *fb = b; *fm = mm; return 1; }
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Times) {
+        && e->data.function.head->data.symbol.name == SYM_Times) {
         int c = 0;
         for (size_t i = 0; i < e->data.function.arg_count; i++)
             c += alt_find_pole(e->data.function.args[i], var, fb, fm);
@@ -121,12 +121,14 @@ Expr* builtin_sum_alternating(Expr* res) {
     if (!is_infinity_sym(imax)) return NULL;
     if (imin->type != EXPR_INTEGER) return NULL;
 
-    Expr* fn = evaluate(expr_copy(f));
+    Expr* fc = expr_copy(f);
+    Expr* fn = evaluate(fc);
+    expr_free(fc);   /* evaluate() borrows; free the copy we made */
 
     /* Split fn into the sign exponent(s) (-1)^exp and the rest (R). */
     bool is_times = (fn->type == EXPR_FUNCTION
                      && fn->data.function.head->type == EXPR_SYMBOL
-                     && fn->data.function.head->data.symbol == SYM_Times);
+                     && fn->data.function.head->data.symbol.name == SYM_Times);
     size_t n = is_times ? fn->data.function.arg_count : 1;
 
     Expr* etot = sum_int(0);      /* sum of the (-1)^. exponents */
@@ -137,7 +139,7 @@ Expr* builtin_sum_alternating(Expr* res) {
         Expr* base; int mm;
         bool is_sign = (g->type == EXPR_FUNCTION
             && g->data.function.head->type == EXPR_SYMBOL
-            && g->data.function.head->data.symbol == SYM_Power
+            && g->data.function.head->data.symbol.name == SYM_Power
             && g->data.function.arg_count == 2
             && g->data.function.args[0]->type == EXPR_INTEGER
             && g->data.function.args[0]->data.integer == -1
@@ -185,7 +187,7 @@ Expr* builtin_sum_alternating(Expr* res) {
      * (sum_eval consumes rprod.) */
     Expr* ap = sum_eval("Apart", (Expr*[]){ rprod, expr_copy(var) }, 2);
     size_t nt = (ap->type == EXPR_FUNCTION && ap->data.function.head->type == EXPR_SYMBOL
-                 && ap->data.function.head->data.symbol == SYM_Plus)
+                 && ap->data.function.head->data.symbol.name == SYM_Plus)
                 ? ap->data.function.arg_count : 1;
 
     Expr** contribs = malloc(sizeof(Expr*) * nt);

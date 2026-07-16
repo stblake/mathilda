@@ -10,8 +10,8 @@ Expr* builtin_not(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
     if (arg->type == EXPR_SYMBOL) {
-        if (arg->data.symbol == SYM_True) return expr_new_symbol(SYM_False);
-        if (arg->data.symbol == SYM_False) return expr_new_symbol(SYM_True);
+        if (arg->data.symbol.name == SYM_True) return expr_new_symbol(SYM_False);
+        if (arg->data.symbol.name == SYM_False) return expr_new_symbol(SYM_True);
     }
     return NULL;
 }
@@ -30,12 +30,12 @@ Expr* builtin_and(Expr* res) {
     
     for (size_t i = 0; i < res->data.function.arg_count; i++) {
         Expr* evaluated_arg = evaluate(res->data.function.args[i]);
-        if (evaluated_arg->type == EXPR_SYMBOL && evaluated_arg->data.symbol == SYM_False) {
+        if (evaluated_arg->type == EXPR_SYMBOL && evaluated_arg->data.symbol.name == SYM_False) {
             expr_free(evaluated_arg);
             for (size_t j = 0; j < new_count; j++) expr_free(new_args[j]);
             free(new_args);
             return expr_new_symbol(SYM_False);
-        } else if (evaluated_arg->type == EXPR_SYMBOL && evaluated_arg->data.symbol == SYM_True) {
+        } else if (evaluated_arg->type == EXPR_SYMBOL && evaluated_arg->data.symbol.name == SYM_True) {
             expr_free(evaluated_arg);
             changed = true;
         } else {
@@ -76,12 +76,12 @@ Expr* builtin_or(Expr* res) {
     
     for (size_t i = 0; i < res->data.function.arg_count; i++) {
         Expr* evaluated_arg = evaluate(res->data.function.args[i]);
-        if (evaluated_arg->type == EXPR_SYMBOL && evaluated_arg->data.symbol == SYM_True) {
+        if (evaluated_arg->type == EXPR_SYMBOL && evaluated_arg->data.symbol.name == SYM_True) {
             expr_free(evaluated_arg);
             for (size_t j = 0; j < new_count; j++) expr_free(new_args[j]);
             free(new_args);
             return expr_new_symbol(SYM_True);
-        } else if (evaluated_arg->type == EXPR_SYMBOL && evaluated_arg->data.symbol == SYM_False) {
+        } else if (evaluated_arg->type == EXPR_SYMBOL && evaluated_arg->data.symbol.name == SYM_False) {
             expr_free(evaluated_arg);
             changed = true;
         } else {
@@ -120,8 +120,8 @@ Expr* builtin_boole(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
     if (arg->type == EXPR_SYMBOL) {
-        if (arg->data.symbol == SYM_True)  return expr_new_integer(1);
-        if (arg->data.symbol == SYM_False) return expr_new_integer(0);
+        if (arg->data.symbol.name == SYM_True)  return expr_new_integer(1);
+        if (arg->data.symbol.name == SYM_False) return expr_new_integer(0);
     }
     return NULL;
 }
@@ -138,13 +138,13 @@ Expr* builtin_conditional_expression(Expr* res) {
     Expr* cond = res->data.function.args[1];
 
     if (cond->type == EXPR_SYMBOL) {
-        if (cond->data.symbol == SYM_True) {
+        if (cond->data.symbol.name == SYM_True) {
             /* Steal the expr slot so the evaluator's free of res does not
              * double-free what we just returned. */
             res->data.function.args[0] = NULL;
             return expr;
         }
-        if (cond->data.symbol == SYM_False) {
+        if (cond->data.symbol.name == SYM_False) {
             return expr_new_symbol(SYM_Undefined);
         }
     }
@@ -153,7 +153,7 @@ Expr* builtin_conditional_expression(Expr* res) {
      * collapses to ConditionalExpression[e, And[c1, c2]]. */
     if (expr->type == EXPR_FUNCTION &&
         expr->data.function.head->type == EXPR_SYMBOL &&
-        expr->data.function.head->data.symbol == SYM_ConditionalExpression &&
+        expr->data.function.head->data.symbol.name == SYM_ConditionalExpression &&
         expr->data.function.arg_count == 2) {
         Expr* inner_expr = expr_copy(expr->data.function.args[0]);
         Expr** and_args = malloc(sizeof(Expr*) * 2);

@@ -64,7 +64,8 @@ static bool word_eq(const Word* a, const Word* b) {
     return true;
 }
 static int64_t nl_gcd(int64_t a, int64_t b) {
-    if (a < 0) a = -a; if (b < 0) b = -b;
+    if (a < 0) a = -a;
+    if (b < 0) b = -b;
     while (b) { int64_t t = a % b; a = b; b = t; }
     return a ? a : 1;
 }
@@ -266,7 +267,7 @@ static Expr* nl_zeta_poly(const WP* mzvs, Expr* prefactor) {
 static bool nl_is_harm(Expr* g, Expr* var, int* p_out) {
     if (g->type != EXPR_FUNCTION) return false;
     Expr* h = g->data.function.head;
-    if (h->type != EXPR_SYMBOL || h->data.symbol != SYM_HarmonicNumber) return false;
+    if (h->type != EXPR_SYMBOL || h->data.symbol.name != SYM_HarmonicNumber) return false;
     size_t ac = g->data.function.arg_count;
     if (ac < 1 || ac > 2) return false;
     if (!expr_eq(g->data.function.args[0], var)) return false;
@@ -279,7 +280,7 @@ static bool nl_is_harm(Expr* g, Expr* var, int* p_out) {
 static bool nl_is_polygamma(Expr* g, Expr* var, int* m_out) {
     if (g->type != EXPR_FUNCTION) return false;
     Expr* h = g->data.function.head;
-    if (h->type != EXPR_SYMBOL || h->data.symbol != SYM_PolyGamma) return false;
+    if (h->type != EXPR_SYMBOL || h->data.symbol.name != SYM_PolyGamma) return false;
     if (g->data.function.arg_count != 2) return false;
     Expr* ma = g->data.function.args[0];
     if (ma->type != EXPR_INTEGER || ma->data.integer < 1) return false;
@@ -298,11 +299,13 @@ Expr* builtin_sum_euler_nonlinear(Expr* res) {
     if (!is_infinity_sym(imax)) return NULL;
     if (imin->type != EXPR_INTEGER || imin->data.integer != 1) return NULL;
 
-    Expr* fn = evaluate(expr_copy(f));
+    Expr* fc = expr_copy(f);
+    Expr* fn = evaluate(fc);
+    expr_free(fc);   /* evaluate() borrows; free the copy we made */
 
     bool is_times = (fn->type == EXPR_FUNCTION
                      && fn->data.function.head->type == EXPR_SYMBOL
-                     && fn->data.function.head->data.symbol == SYM_Times);
+                     && fn->data.function.head->data.symbol.name == SYM_Times);
     size_t n = is_times ? fn->data.function.arg_count : 1;
 
     int Hord[NL_MAXFAC]; int nH = 0;
@@ -316,7 +319,7 @@ Expr* builtin_sum_euler_nonlinear(Expr* res) {
         int pp, mm, e = 1;
         Expr* base = g;
         if (g->type == EXPR_FUNCTION && g->data.function.head->type == EXPR_SYMBOL
-            && g->data.function.head->data.symbol == SYM_Power
+            && g->data.function.head->data.symbol.name == SYM_Power
             && g->data.function.arg_count == 2
             && g->data.function.args[1]->type == EXPR_INTEGER
             && g->data.function.args[1]->data.integer >= 1) {
@@ -355,7 +358,7 @@ Expr* builtin_sum_euler_nonlinear(Expr* res) {
     int q = 0; bool okmono = false;
     if (mono->type == EXPR_INTEGER && mono->data.integer == 1) { q = 0; okmono = true; }
     else if (mono->type == EXPR_FUNCTION && mono->data.function.head->type == EXPR_SYMBOL
-             && mono->data.function.head->data.symbol == SYM_Power
+             && mono->data.function.head->data.symbol.name == SYM_Power
              && mono->data.function.arg_count == 2
              && expr_eq(mono->data.function.args[0], var)
              && mono->data.function.args[1]->type == EXPR_INTEGER

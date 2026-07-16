@@ -58,7 +58,7 @@ static void test_cascade_risch(void) {
     ASSERT(!(result->type == EXPR_FUNCTION
              && result->data.function.head
              && result->data.function.head->type == EXPR_SYMBOL
-             && strcmp(result->data.function.head->data.symbol, "Integrate") == 0));
+             && strcmp(result->data.function.head->data.symbol.name, "Integrate") == 0));
     expr_free(result);
 }
 
@@ -75,7 +75,7 @@ static void test_method_strict_rational(void) {
         && result->type == EXPR_FUNCTION
         && result->data.function.head
         && result->data.function.head->type == EXPR_SYMBOL
-        && strcmp(result->data.function.head->data.symbol, "Integrate") == 0);
+        && strcmp(result->data.function.head->data.symbol.name, "Integrate") == 0);
     expr_free(result);
 }
 
@@ -89,7 +89,7 @@ static void test_method_invalid(void) {
     ASSERT(result->type == EXPR_FUNCTION
         && result->data.function.head
         && result->data.function.head->type == EXPR_SYMBOL
-        && strcmp(result->data.function.head->data.symbol, "Integrate") == 0);
+        && strcmp(result->data.function.head->data.symbol.name, "Integrate") == 0);
     expr_free(result);
 }
 
@@ -144,6 +144,56 @@ static void test_crctable_reciprocal_sqrt_branch(void) {
         " - 1/Sqrt[1 + Sin[x]]) /. x -> 8.0]] < 0.000001", "True", 0);
 }
 
+static void test_arctanh_real_branch(void) {
+    /* Radical antiderivatives that a substitution integrator would express
+     * with ArcTanh[g], |g| > 1 on the real axis, must be repaired to the
+     * derivative-identical, real-valued ArcCoth[g] (intsimp_finalize).  Before
+     * the repair, Integrate[Sqrt[x + Sqrt[x]], x] evaluated at x = 2 returned
+     * 2.68952 - I Pi/8 because ArcTanh[Sqrt[1 + Sqrt[x]]/x^(1/4)] sits on its
+     * branch cut for every x > 0.
+     *
+     * We assert (a) the antiderivative is real on x > 0, and (b) the
+     * derivative still matches the integrand.  The derivative check guards
+     * correctness independent of the surd form; the imaginary-part check
+     * guards the real-branch selection. */
+    assert_eval_eq(
+        "Abs[Im[N[Integrate[Sqrt[x + Sqrt[x]], x] /. x -> 2]]] < 0.000001",
+        "True", 0);
+    assert_eval_eq(
+        "Abs[N[(D[Integrate[Sqrt[x + Sqrt[x]], x], x] - Sqrt[x + Sqrt[x]])"
+        " /. x -> 2.3]] < 0.000001", "True", 0);
+    /* Sibling case: 1/(x Sqrt[x + 1]) -> -2 ArcCoth[Sqrt[1 + x]] (real). */
+    assert_eval_eq(
+        "Abs[Im[N[Integrate[1/(x Sqrt[x + 1]), x] /. x -> 3]]] < 0.000001",
+        "True", 0);
+    /* Non-radical ArcTanh must be left intact (gate is radical-only). */
+    assert_eval_eq("Integrate[1/(1 - x^2), x]", "ArcTanh[x]", 0);
+}
+
+static void test_root_kernel_keeps_radicals(void) {
+    /* Derivative-divides on a unit-root kernel (u = Sqrt[x]) must close the
+     * substitution with x -> u^2 and PowerExpand so the antiderivative stays in
+     * the integrand's OWN radical Sqrt[x + Sqrt[x]] rather than falling through
+     * to the Eliminate/Solve search's x^(1/4) / Sqrt[1 + Sqrt[x]] form.
+     *
+     * The decisive, form-independent check is that the derivative simplifies
+     * back to exactly the integrand (canonical printed form Sqrt[Sqrt[x] + x]);
+     * we also pin a numeric derivative-back for the x^2-weighted sibling, which
+     * exercises the (u^2)^(5/2) -> u^5 PowerExpand path. */
+    assert_eval_eq(
+        "D[Integrate[Sqrt[x + Sqrt[x]], x], x] // Simplify",
+        "Sqrt[Sqrt[x] + x]", 0);
+    assert_eval_eq(
+        "D[Integrate[x^2 Sqrt[x + Sqrt[x]], x], x] // Simplify",
+        "x^2 Sqrt[Sqrt[x] + x]", 0);
+    assert_eval_eq(
+        "Abs[N[(D[Integrate[x^2 Sqrt[x + Sqrt[x]], x], x]"
+        " - x^2 Sqrt[x + Sqrt[x]]) /. x -> 1.7]] < 0.000001", "True", 0);
+    /* The result must not carry the foreign x^(1/4) generator. */
+    assert_eval_eq(
+        "FreeQ[Integrate[Sqrt[x + Sqrt[x]], x], x^(1/4)]", "True", 0);
+}
+
 void test_integrate_dispatch(void) {
     symtab_init();
     core_init();
@@ -154,6 +204,8 @@ void test_integrate_dispatch(void) {
     TEST(test_method_invalid);
     TEST(test_crctable_termination);
     TEST(test_crctable_reciprocal_sqrt_branch);
+    TEST(test_arctanh_real_branch);
+    TEST(test_root_kernel_keeps_radicals);
 
     printf("All Integrate dispatch tests passed!\n");
 }

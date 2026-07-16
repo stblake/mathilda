@@ -44,7 +44,7 @@ static bool head_is(const Expr* e, const char* sym) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == sym;
+        && e->data.function.head->data.symbol.name == sym;
 }
 
 static bool is_list(const Expr* e)  { return head_is(e, SYM_List); }
@@ -82,7 +82,7 @@ static bool is_const_atom(const Expr* e) {
     }
     if (e->type == EXPR_MPFR) return true;
     if (e->type == EXPR_SYMBOL) {
-        const char* s = e->data.symbol;
+        const char* s = e->data.symbol.name;
         return s == SYM_True || s == SYM_False
             || s == SYM_Infinity || s == SYM_ComplexInfinity
             || s == SYM_Indeterminate;
@@ -97,7 +97,7 @@ static bool is_const_atom(const Expr* e) {
 static bool walk_has_symbol_name(const Expr* e, const char* name) {
     if (!e) return false;
     if (e->type == EXPR_SYMBOL) {
-        return strcmp(e->data.symbol, name) == 0;
+        return strcmp(e->data.symbol.name, name) == 0;
     }
     if (e->type != EXPR_FUNCTION) return false;
     if (walk_has_symbol_name(e->data.function.head, name)) return true;
@@ -203,7 +203,7 @@ static void collect_main_vars(const Expr* e, Expr** elim, size_t n_elim,
 
     const char* hsym = (e->data.function.head
                         && e->data.function.head->type == EXPR_SYMBOL)
-        ? e->data.function.head->data.symbol : NULL;
+        ? e->data.function.head->data.symbol.name : NULL;
 
     if (hsym && is_poly_recursive_head(hsym)) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
@@ -252,7 +252,7 @@ static const char* peel_invertible(Expr* side, Expr** inner_out) {
     if (!side->data.function.head
      || side->data.function.head->type != EXPR_SYMBOL) return NULL;
     if (side->data.function.arg_count != 1) return NULL;
-    const char* inv = invertible_head(side->data.function.head->data.symbol);
+    const char* inv = invertible_head(side->data.function.head->data.symbol.name);
     if (!inv) return NULL;
     *inner_out = side->data.function.args[0];
     return inv;
@@ -563,7 +563,7 @@ static TrigWhich trig_call(const Expr* e, bool* hyper, Expr** arg_out) {
     if (!e->data.function.head
      || e->data.function.head->type != EXPR_SYMBOL) return TK_NONE;
     if (e->data.function.arg_count != 1) return TK_NONE;
-    TrigWhich w = trig_which(e->data.function.head->data.symbol, hyper);
+    TrigWhich w = trig_which(e->data.function.head->data.symbol.name, hyper);
     if (w != TK_NONE) *arg_out = e->data.function.args[0];
     return w;
 }
@@ -828,6 +828,176 @@ static Expr* log_expand(const Expr* e, Expr** elim, size_t n_elim) {
     return r;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Commensurate-exponent folding                                      */
+/* ------------------------------------------------------------------ */
+
+/* `exp_expand` above splits sum exponents and factors *integer* multiples
+ * onto a common atomic kernel (`b^(k m) -> (b^m)^k`).  This pass is its
+ * fractional sibling: exponentials whose exponents differ only by a
+ * *rational* factor of a shared monomial are commensurate and must collapse
+ * onto one atomic kernel, e.g. `E^(x/3)` and `E^(x/2)` are both powers of
+ * `E^(x/6)` (`E^(x/3) = (E^(x/6))^2`, `E^(x/2) = (E^(x/6))^3`).  Without
+ * this the three kernels register as algebraically-independent auxes and
+ * Gate A rejects the system as `nlin`.
+ *
+ * The atomic exponent for a `(base, monomial)` group is `(1/L) * monomial`
+ * where `L` is the LCM of the denominators of every rational coefficient
+ * seen for that group; each `base^((p/q) m)` then rewrites to
+ * `(base^((1/L) m))^(p L / q)` with an integer outer power (since q | L).
+ * This subsumes the integer case (q = 1 => L unaffected), so it composes
+ * cleanly with whatever `exp_expand` already produced. */
+
+/* Decompose an exponent into a rational scalar coefficient `num/den`
+ * (den > 0) and the remaining monomial (fresh owned tree).  A leading
+ * Integer or Rational factor of a `Times` is peeled as the coefficient;
+ * anything else yields coefficient 1 and monomial = copy(exp).  Generalises
+ * `times_split_int` to fractional coefficients. */
+static void exp_split_rational(const Expr* exp, int64_t* num, int64_t* den,
+                               Expr** mono_out) {
+    *num = 1; *den = 1;
+    if (is_times(exp) && exp->data.function.arg_count >= 2) {
+        const Expr* lead = exp->data.function.args[0];
+        int64_t p, q;
+        if (is_rational(lead, &p, &q)) {
+            if (q < 0) { q = -q; p = -p; }
+            *num = p; *den = q;
+            size_t n = exp->data.function.arg_count;
+            if (n == 2) { *mono_out = expr_copy(exp->data.function.args[1]); return; }
+            Expr** rest = (Expr**)malloc(sizeof(Expr*) * (n - 1));
+            for (size_t i = 1; i < n; i++) {
+                rest[i - 1] = expr_copy(exp->data.function.args[i]);
+            }
+            *mono_out = expr_new_function(expr_new_symbol(SYM_Times), rest, n - 1);
+            free(rest);
+            return;
+        }
+    }
+    *mono_out = expr_copy((Expr*)exp);
+}
+
+/* Build the atomic exponent `(1/L) * monomial` as a flat `Times`, or just
+ * `monomial` when L == 1.  Deterministic so every rewrite of the same
+ * (base, monomial) group yields a structurally identical inner exponent
+ * (the invariant the downstream kernel dedup relies on). */
+static Expr* make_scaled_monomial(int64_t L, const Expr* mono) {
+    if (L == 1) return expr_copy((Expr*)mono);
+    Expr* coeff = expr_new_function(expr_new_symbol(SYM_Rational),
+        (Expr*[]){ expr_new_integer(1), expr_new_integer(L) }, 2);
+    if (is_times(mono)) {
+        size_t n = mono->data.function.arg_count;
+        Expr** args = (Expr**)malloc(sizeof(Expr*) * (n + 1));
+        args[0] = coeff;
+        for (size_t i = 0; i < n; i++) args[i + 1] = expr_copy(mono->data.function.args[i]);
+        Expr* r = expr_new_function(expr_new_symbol(SYM_Times), args, n + 1);
+        free(args);
+        return r;
+    }
+    return expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ coeff, expr_copy((Expr*)mono) }, 2);
+}
+
+/* Per-(base, monomial) LCM of exponent-coefficient denominators. */
+typedef struct {
+    Expr**   base;
+    Expr**   mono;
+    int64_t* lcms;
+    size_t   n;
+    size_t   cap;
+} ExpLcmState;
+
+static void explcm_init(ExpLcmState* s) {
+    s->base = NULL; s->mono = NULL; s->lcms = NULL; s->n = 0; s->cap = 0;
+}
+
+static void explcm_free(ExpLcmState* s) {
+    if (s->base) for (size_t i = 0; i < s->n; i++) expr_free(s->base[i]);
+    if (s->mono) for (size_t i = 0; i < s->n; i++) expr_free(s->mono[i]);
+    free(s->base); free(s->mono); free(s->lcms);
+    explcm_init(s);
+}
+
+static void explcm_add(ExpLcmState* s, const Expr* base, const Expr* mono,
+                       int64_t den) {
+    if (den < 0) den = -den;
+    if (den == 0) den = 1;
+    for (size_t i = 0; i < s->n; i++) {
+        if (expr_eq(s->base[i], base) && expr_eq(s->mono[i], mono)) {
+            s->lcms[i] = lcm(s->lcms[i], den);
+            return;
+        }
+    }
+    if (s->n == s->cap) {
+        s->cap = s->cap ? s->cap * 2 : 4;
+        s->base = (Expr**)realloc(s->base, sizeof(Expr*) * s->cap);
+        s->mono = (Expr**)realloc(s->mono, sizeof(Expr*) * s->cap);
+        s->lcms = (int64_t*)realloc(s->lcms, sizeof(int64_t) * s->cap);
+    }
+    s->base[s->n] = expr_copy((Expr*)base);
+    s->mono[s->n] = expr_copy((Expr*)mono);
+    s->lcms[s->n] = den;
+    s->n++;
+}
+
+/* Walk `e`, registering the coefficient denominator of every exponential
+ * kernel `base^(coeff*monomial)` under its (base, monomial) group. */
+static void explcm_collect(const Expr* e, ExpLcmState* s,
+                           Expr** elim, size_t n_elim) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    Expr* base = NULL;
+    Expr* exp  = NULL;
+    if (exp_kernel(e, elim, n_elim, &base, &exp)) {
+        int64_t num, den;
+        Expr* mono = NULL;
+        exp_split_rational(exp, &num, &den, &mono);
+        explcm_add(s, base, mono, den);
+        expr_free(mono);
+    }
+    if (e->data.function.head) explcm_collect(e->data.function.head, s, elim, n_elim);
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        explcm_collect(e->data.function.args[i], s, elim, n_elim);
+    }
+}
+
+/* Rewrite each exponential kernel `base^((p/q) m)` to `(base^((1/L) m))^k`
+ * with `k = p L / q` an integer.  Returns a fresh tree the caller owns. */
+static Expr* exp_commensurate(const Expr* e, const ExpLcmState* s,
+                              Expr** elim, size_t n_elim) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    Expr* base = NULL;
+    Expr* exp  = NULL;
+    if (exp_kernel(e, elim, n_elim, &base, &exp)) {
+        int64_t num, den;
+        Expr* mono = NULL;
+        exp_split_rational(exp, &num, &den, &mono);
+        int64_t L = den;  /* den itself divides the group LCM */
+        for (size_t i = 0; i < s->n; i++) {
+            if (expr_eq(s->base[i], base) && expr_eq(s->mono[i], mono)) {
+                L = s->lcms[i];
+                break;
+            }
+        }
+        Expr* inner_exp = make_scaled_monomial(L, mono);
+        expr_free(mono);
+        Expr* inner = make_power(expr_copy(base), inner_exp);
+        int64_t k = (num * L) / den;  /* den | L => exact */
+        if (k == 1) return inner;
+        return make_power(inner, expr_new_integer(k));
+    }
+
+    Expr* new_head = exp_commensurate(e->data.function.head, s, elim, n_elim);
+    size_t n = e->data.function.arg_count;
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        new_args[i] = exp_commensurate(e->data.function.args[i], s, elim, n_elim);
+    }
+    Expr* r = expr_new_function(new_head, new_args, n);
+    free(new_args);
+    return r;
+}
+
 /* Kernel families handled by the transcendental algebraisation pass.
  * CIRC / HYP carry an aux pair (Sin/Cos) plus a Pythagorean constraint;
  * EXP / LOG carry a single aux and no constraint. */
@@ -951,7 +1121,7 @@ static bool poly_atom_occurs(const Expr* e, const Expr* target) {
     if (e->type != EXPR_FUNCTION) return false;
     const char* hsym = (e->data.function.head
                         && e->data.function.head->type == EXPR_SYMBOL)
-        ? e->data.function.head->data.symbol : NULL;
+        ? e->data.function.head->data.symbol.name : NULL;
     if (hsym && is_poly_recursive_head(hsym)) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             if (poly_atom_occurs(e->data.function.args[i], target)) return true;
@@ -1358,6 +1528,241 @@ static void emit_alg(const Expr* res) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Inverse-function substitution pre-pass                             */
+/* ------------------------------------------------------------------ */
+
+/* The forward transcendental pass (Sin/Cos/Exp/Log of an *elim* variable)
+ * and the top-level inverse-rewrite (`f[u]==v` -> `u==f^-1[v]`) do not
+ * cover the u-substitution shape that arises when integrating by parts /
+ * by substitution, e.g.
+ *
+ *   Eliminate[{Dt[y] == x ArcSin[x]/Sqrt[1-x^2] Dt[x],
+ *              u == ArcSin[x],
+ *              Dt[u] == Dt[x]/Sqrt[1-x^2]}, {x, Dt[x]}]
+ *
+ * Here `ArcSin[x]` sits *inside a product* in the first equation, so it is
+ * an opaque function-atom still mentioning the elim variable `x` -> the
+ * pipeline bails `nlin`.  Yet the second equation *defines* the inverse
+ * function: `u == ArcSin[x]`.
+ *
+ * This pass exploits such a defining equation.  Given `M == ArcF[x]` with
+ * `M` elim-free and `x` a single elim symbol, it rewrites the whole system
+ * so the elim variable appears only polynomially:
+ *
+ *   (1) replace every `ArcF[x]` by the main expression `M` (from the
+ *       defining equation), everywhere;
+ *   (2) replace the companion radical `(1 -/+ x^2)^(p/2)` (or `(x^2-1)^(p/2)`)
+ *       by `coFn[M]^(co_sign*p)`, where `coFn` is the trigonometric
+ *       co-function of `ArcF` -- e.g. `Sqrt[1-x^2] -> Cos[M]` for ArcSin.
+ *       Because `coFn[M]` is a trig call of the *main* variable `M`, it is
+ *       an ordinary (non-eliminated) polynomial atom, so any factor of it
+ *       left over after elimination is divided out by
+ *       `gb_poly_strip_monomial`.  (Algebraising the radical as an
+ *       independent aux instead would leave a squared / branch-ambiguous
+ *       factor and a messy answer.)
+ *   (3) replace the defining equation with `x == F[M]` (F the forward
+ *       function), tying the elim variable to a main-variable trig atom.
+ *
+ * The result is exactly the hand-substituted system a human would write
+ * before running the Groebner elimination, and it reduces to Mathematica's
+ * `Eliminate::ifun`-flagged answer.  Principal branches are assumed (hence
+ * the `ifun` advisory), matching the forward pass's soundness contract. */
+
+/* One inverse-function family. `arc`/`fwd`/`co` are interned head symbols;
+ * `has_comp` gates the companion-radical rewrite; `const_term`/`x2_sign`
+ * build the companion base `const_term + x2_sign*x^2`. */
+typedef struct {
+    const char* fwd;      /* forward function head (Sin/Cos/.../Exp)       */
+    const char* co;       /* co-function head for the companion radical    */
+    bool        has_comp; /* false for Log (no companion radical)          */
+    int         const_term; /* +1 / -1  : the constant of the comp base    */
+    int         x2_sign;    /* +1 / -1  : sign of x^2 in the comp base     */
+    int         co_sign;    /* +1 / -1  : radical == co[M]^(co_sign*p)      */
+} InvEntry;
+
+/* Map an inverse-function head symbol to its family record. Uses the
+ * runtime-interned SYM_* pointers (valid once core_init() has run), so it
+ * cannot be a compile-time table. Returns false for non-inverse heads. */
+static bool inv_lookup(const char* h, InvEntry* out) {
+    if (h == SYM_ArcSin)  { *out = (InvEntry){ SYM_Sin,  SYM_Cos,  true,  1, -1, +1 }; return true; }
+    if (h == SYM_ArcCos)  { *out = (InvEntry){ SYM_Cos,  SYM_Sin,  true,  1, -1, +1 }; return true; }
+    if (h == SYM_ArcTan)  { *out = (InvEntry){ SYM_Tan,  SYM_Cos,  true,  1, +1, -1 }; return true; }
+    if (h == SYM_ArcSinh) { *out = (InvEntry){ SYM_Sinh, SYM_Cosh, true,  1, +1, +1 }; return true; }
+    if (h == SYM_ArcCosh) { *out = (InvEntry){ SYM_Cosh, SYM_Sinh, true, -1, +1, +1 }; return true; }
+    if (h == SYM_ArcTanh) { *out = (InvEntry){ SYM_Tanh, SYM_Cosh, true,  1, -1, -1 }; return true; }
+    /* Log: forward function is Exp, no companion radical.  Enabled only as a
+     * *fallback* — `inv_detect` restricts a `M == Log[x]` defining equation
+     * to the case where `x` also occurs polynomially (so the forward Log
+     * algebraisation alone would trip Gate B).  When `x` appears solely
+     * inside logs, the forward pass gives a tidier answer, so we defer to it.
+     * Pinning `x == E^M` (rather than substituting `x -> E^M`) keeps `E^M`
+     * as a single main-variable atom, sidestepping the exponential-blowup the
+     * naive substitution would cause. */
+    if (h == SYM_Log)     { *out = (InvEntry){ SYM_Exp,  NULL,     false, 0,  0,  0 }; return true; }
+    return false;
+}
+
+/* Build the (evaluated, canonical) companion base `const_term + x2_sign*x^2`
+ * for the elim symbol `xsym`, ready for `expr_eq` matching against radical
+ * bases in the tree. */
+static Expr* inv_build_comp_base(const char* xsym, const InvEntry* e) {
+    Expr* x2 = expr_new_function(expr_new_symbol(SYM_Power),
+        (Expr*[]){ expr_new_symbol(xsym), expr_new_integer(2) }, 2);
+    Expr* x2term = (e->x2_sign < 0)
+        ? expr_new_function(expr_new_symbol(SYM_Times),
+              (Expr*[]){ expr_new_integer(-1), x2 }, 2)
+        : x2;
+    Expr* base = expr_new_function(expr_new_symbol(SYM_Plus),
+        (Expr*[]){ expr_new_integer(e->const_term), x2term }, 2);
+    Expr* ev = evaluate(base);
+    expr_free(base);
+    return ev;
+}
+
+/* Recursively rewrite `e`: `ArcF[xsym] -> M`, and (when comp_base != NULL)
+ * `Power[comp_base, Rational[p,2]] -> co[M]^(co_sign*p)`.  Returns a fresh
+ * tree the caller owns.  `arc` is the inverse-function head being matched. */
+static Expr* inv_rewrite(const Expr* e, const char* xsym, const Expr* M,
+                         const char* arc, const Expr* comp_base,
+                         const char* co, int co_sign) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    /* (1) ArcF[x] -> M */
+    if (head_is(e, arc) && e->data.function.arg_count == 1) {
+        Expr* a = e->data.function.args[0];
+        if (a && a->type == EXPR_SYMBOL && a->data.symbol.name == xsym) {
+            return expr_copy((Expr*)M);
+        }
+    }
+    /* (2) companion power (comp_base)^(p/q) -> co[M]^(2 co_sign p / q).
+     *
+     * The companion base is exactly `co[M]^(2 co_sign)` (e.g. for ArcTan,
+     * x = Tan[M] gives 1 + x^2 = Sec[M]^2 = Cos[M]^-2, so co = Cos,
+     * co_sign = -1).  A half-integer exponent (q = 2) is the radical case
+     * `Sqrt[1-x^2] -> Cos[M]` that ArcSin/ArcSinh/... need; an integer
+     * exponent (q = 1) is the *rational-denominator* case `1/(1+x^2) ->
+     * Cos[M]^2` that ArcTan/ArcTanh need — without it the `1+x^2` /
+     * `1-x^2` factor survives elimination as a spurious `Sec/Sech`
+     * multiple.  Handling any q for which `2 co_sign p` divides evenly
+     * covers both (and is branch-safe: the identity is a squared one). */
+    if (comp_base && co && head_is(e, SYM_Power)
+        && e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        Expr* exp  = e->data.function.args[1];
+        int64_t p, q;
+        if (is_rational(exp, &p, &q) && expr_eq(base, comp_base)) {
+            int64_t numer = 2 * (int64_t)co_sign * p;
+            if (q != 0 && numer % q == 0) {
+                int64_t np = numer / q;
+                if (np == 0) return expr_new_integer(1);
+                Expr* com = expr_new_function(expr_new_symbol(co),
+                    (Expr*[]){ expr_copy((Expr*)M) }, 1);
+                if (np == 1) return com;
+                return expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ com, expr_new_integer(np) }, 2);
+            }
+        }
+    }
+
+    Expr* new_head = inv_rewrite(e->data.function.head, xsym, M, arc,
+                                 comp_base, co, co_sign);
+    size_t n = e->data.function.arg_count;
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        new_args[i] = inv_rewrite(e->data.function.args[i], xsym, M, arc,
+                                  comp_base, co, co_sign);
+    }
+    Expr* r = expr_new_function(new_head, new_args, n);
+    free(new_args);
+    return r;
+}
+
+/* Scan `eqs` for a defining equation `M == ArcF[x]` (either side): ArcF an
+ * invertible transcendental, `x` a single elim symbol, `M` elim-free.  On a
+ * hit, fill `*fe`, `*arc` (the interned arc head), `*xsym`, and an *owned*
+ * copy `*M_out` (the tree it points into is about to be rewritten), then
+ * return the equation index.  Returns -1 when none applies. */
+static int inv_detect(Expr** eqs, size_t n_eq, Expr** elim, size_t n_elim,
+                      InvEntry* fe, const char** arc, const char** xsym,
+                      Expr** M_out) {
+    for (size_t i = 0; i < n_eq; i++) {
+        Expr* eq = eqs[i];
+        if (!is_equal(eq) || eq->data.function.arg_count != 2) continue;
+        for (int s = 0; s < 2; s++) {
+            Expr* side  = eq->data.function.args[s];
+            Expr* other = eq->data.function.args[1 - s];
+            if (!side || side->type != EXPR_FUNCTION
+                || side->data.function.arg_count != 1) continue;
+            Expr* h = side->data.function.head;
+            if (!h || h->type != EXPR_SYMBOL) continue;
+            if (!inv_lookup(h->data.symbol.name, fe)) continue;
+            Expr* a = side->data.function.args[0];
+            if (!a || a->type != EXPR_SYMBOL) continue;
+            if (!var_in_list(a, elim, n_elim)) continue;
+            if (contains_any_var(other, elim, n_elim)) continue;
+            /* Log fallback gate: only take the inverse-substitution route
+             * when `x` also appears as a genuine polynomial atom somewhere
+             * (e.g. `1/x`), which is exactly when the forward Log pass would
+             * fail.  Otherwise leave `M == Log[x]` for the forward pass. */
+            if (h->data.symbol.name == SYM_Log) {
+                bool poly = false;
+                for (size_t j = 0; j < n_eq && !poly; j++) {
+                    if (poly_atom_occurs(eqs[j], a)) poly = true;
+                }
+                if (!poly) continue;
+            }
+            *arc    = h->data.symbol.name;
+            *xsym   = a->data.symbol.name;
+            *M_out  = expr_copy(other);
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+/* Drive the inverse-function substitution to a fixed point over `eqs`
+ * (owned array of `n_eq` owned `Equal[]` trees; rewritten in place).  Each
+ * round handles one defining equation.  Returns true if any rewrite fired
+ * (so the caller emits `ifun`).  `n_eq` is unchanged: each round overwrites
+ * exactly the defining-equation slot with `x == F[M]`. */
+static bool inv_substitute_all(Expr** eqs, size_t n_eq,
+                               Expr** elim, size_t n_elim) {
+    bool fired = false;
+    /* Bound the loop generously: each round removes one inverse-function
+     * kernel from play; the elim count caps how many distinct ones matter. */
+    for (size_t round = 0; round < n_elim + n_eq + 4; round++) {
+        InvEntry fe;
+        const char* arc = NULL;
+        const char* xsym = NULL;
+        Expr* M = NULL;
+        int di = inv_detect(eqs, n_eq, elim, n_elim, &fe, &arc, &xsym, &M);
+        if (di < 0) break;
+        fired = true;
+
+        Expr* comp = fe.has_comp ? inv_build_comp_base(xsym, &fe) : NULL;
+
+        for (size_t i = 0; i < n_eq; i++) {
+            Expr* r = inv_rewrite(eqs[i], xsym, M, arc, comp, fe.co, fe.co_sign);
+            expr_free(eqs[i]);
+            eqs[i] = r;
+        }
+
+        /* Overwrite the defining slot with `x == F[M]` (F the forward fn). */
+        Expr* fwd = expr_new_function(expr_new_symbol(fe.fwd),
+            (Expr*[]){ expr_copy(M) }, 1);
+        Expr* neweq = expr_new_function(expr_new_symbol(SYM_Equal),
+            (Expr*[]){ expr_new_symbol(xsym), fwd }, 2);
+        expr_free(eqs[di]);
+        eqs[di] = neweq;
+
+        if (comp) expr_free(comp);
+        expr_free(M);
+    }
+    return fired;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Builtin entry                                                      */
 /* ------------------------------------------------------------------ */
 
@@ -1377,8 +1782,8 @@ Expr* builtin_eliminate(Expr* res) {
      * Eliminate is not HoldAll; same for `True`.  Fold these into the
      * obvious answer without emitting `eqf`. */
     if (eqns_arg && eqns_arg->type == EXPR_SYMBOL) {
-        if (eqns_arg->data.symbol == SYM_True)  return expr_new_symbol(SYM_True);
-        if (eqns_arg->data.symbol == SYM_False) return expr_new_symbol(SYM_False);
+        if (eqns_arg->data.symbol.name == SYM_True)  return expr_new_symbol(SYM_True);
+        if (eqns_arg->data.symbol.name == SYM_False) return expr_new_symbol(SYM_False);
     }
 
     /* ----- Unpack equation list (filtering True/False sentinels) ----- */
@@ -1401,8 +1806,8 @@ Expr* builtin_eliminate(Expr* res) {
     for (size_t i = 0; i < raw_n; i++) {
         Expr* x = raw_in[i];
         if (x && x->type == EXPR_SYMBOL) {
-            if (x->data.symbol == SYM_True) continue;  /* drop */
-            if (x->data.symbol == SYM_False) {
+            if (x->data.symbol.name == SYM_True) continue;  /* drop */
+            if (x->data.symbol.name == SYM_False) {
                 /* Any False element makes the whole conjunction False. */
                 free(eq_in);
                 return expr_new_symbol(SYM_False);
@@ -1455,6 +1860,18 @@ Expr* builtin_eliminate(Expr* res) {
     KernelState ker; kernel_init(&ker);
     Expr** ker_elim_array = NULL;
 
+    /* ----- Inverse-function substitution pre-pass -----
+     * When a defining equation `M == ArcF[x]` is present (M elim-free, x a
+     * single elim symbol), propagate `ArcF[x] -> M` and the companion
+     * radical `Sqrt[1-x^2] -> Cos[M]` (etc.) through the whole system, then
+     * pin `x == F[M]`.  This turns u-substitution shapes (with the inverse
+     * buried inside a product) into a system that is polynomial in the elim
+     * variables, which the forward/radical passes and Buchberger then solve.
+     * See the section header above for the full rationale + identity table. */
+    if (inv_substitute_all(eq_work, n_eq, elim_items, n_elim)) {
+        fired_ifun = true;
+    }
+
     /* ----- Transcendental algebraisation pre-pass -----
      * When an elim variable sits inside a circular/hyperbolic trig, an
      * exponential (`b^x`), or a logarithm, expand multiple/sum/product
@@ -1492,6 +1909,23 @@ Expr* builtin_eliminate(Expr* res) {
         for (size_t i = 0; i < n_eq; i++) {
             Expr* r = log_expand(eq_work[i], elim_items, n_elim);
             expr_free(eq_work[i]); eq_work[i] = r;
+        }
+        /* (b') fold commensurate rational exponents (E^(x/3), E^(x/2))
+         *      onto one atomic kernel E^(x/L) so they share a single aux
+         *      instead of tripping Gate A as independent groups. */
+        {
+            ExpLcmState el; explcm_init(&el);
+            for (size_t i = 0; i < n_eq; i++) {
+                explcm_collect(eq_work[i], &el, elim_items, n_elim);
+            }
+            if (el.n > 0) {
+                for (size_t i = 0; i < n_eq; i++) {
+                    Expr* r = exp_commensurate(eq_work[i], &el,
+                                               elim_items, n_elim);
+                    expr_free(eq_work[i]); eq_work[i] = r;
+                }
+            }
+            explcm_free(&el);
         }
         /* (c) collect distinct kernel groups. */
         for (size_t i = 0; i < n_eq; i++) {

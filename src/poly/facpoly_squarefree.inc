@@ -14,7 +14,7 @@ static Expr* poly_deriv(Expr* p, Expr* x) {
     if (expr_eq(p, x)) return expr_new_integer(1);
 
     if (p->type == EXPR_FUNCTION) {
-        const char* head = p->data.function.head->type == EXPR_SYMBOL ? p->data.function.head->data.symbol : "";
+        const char* head = p->data.function.head->type == EXPR_SYMBOL ? p->data.function.head->data.symbol.name : "";
         if (strcmp(head, "Plus") == 0) {
             Expr** args = malloc(sizeof(Expr*) * p->data.function.arg_count);
             for (size_t i=0; i<p->data.function.arg_count; i++) args[i] = poly_deriv(p->data.function.args[i], x);
@@ -297,7 +297,7 @@ static Expr* factor_square_free_dispatcher(Expr* e) {
     if (!e) return NULL;
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
-    const char* head = e->data.function.head->type == EXPR_SYMBOL ? e->data.function.head->data.symbol : "";
+    const char* head = e->data.function.head->type == EXPR_SYMBOL ? e->data.function.head->data.symbol.name : "";
 
     if (strcmp(head, "List") == 0 || strcmp(head, "Equal") == 0 || strcmp(head, "Less") == 0 || 
         strcmp(head, "LessEqual") == 0 || strcmp(head, "Greater") == 0 || strcmp(head, "GreaterEqual") == 0 ||

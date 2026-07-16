@@ -120,7 +120,7 @@ static bool denom_collect_radical_base(const Expr* e,
 
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2) {
         const Expr* base = e->data.function.args[0];
         const Expr* exp  = e->data.function.args[1];
@@ -162,7 +162,7 @@ static Expr* denom_subst_radical_to_gen(const Expr* e, const Expr* base,
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2) {
         const Expr* this_base = e->data.function.args[0];
         const Expr* exp = e->data.function.args[1];
@@ -196,7 +196,7 @@ static Expr* denom_subst_radical_to_gen(const Expr* e, const Expr* base,
 static Expr* denom_subst_gen_to_radical(const Expr* e, const char* gen,
                                          const Expr* base, int64_t n) {
     if (!e) return NULL;
-    if (e->type == EXPR_SYMBOL && strcmp(e->data.symbol, gen) == 0) {
+    if (e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, gen) == 0) {
         Expr* pa[2] = { expr_copy((Expr*)base), make_rational(1, n) };
         Expr* pc = expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
         Expr* out = evaluate(pc);
@@ -206,10 +206,10 @@ static Expr* denom_subst_gen_to_radical(const Expr* e, const char* gen,
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2 &&
         e->data.function.args[0]->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.args[0]->data.symbol, gen) == 0) {
+        strcmp(e->data.function.args[0]->data.symbol.name, gen) == 0) {
         const Expr* exp = e->data.function.args[1];
         if (exp->type == EXPR_INTEGER) {
             int64_t k = exp->data.integer;
@@ -286,7 +286,7 @@ static Expr* denom_compute_inverse(const Expr* denom) {
     if (!xgcd_result ||
         xgcd_result->type != EXPR_FUNCTION ||
         xgcd_result->data.function.head->type != EXPR_SYMBOL ||
-        xgcd_result->data.function.head->data.symbol != SYM_List ||
+        xgcd_result->data.function.head->data.symbol.name != SYM_List ||
         xgcd_result->data.function.arg_count != 2) {
         if (xgcd_result) expr_free(xgcd_result);
         return NULL;
@@ -296,7 +296,7 @@ static Expr* denom_compute_inverse(const Expr* denom) {
     if (!coeffs ||
         coeffs->type != EXPR_FUNCTION ||
         coeffs->data.function.head->type != EXPR_SYMBOL ||
-        coeffs->data.function.head->data.symbol != SYM_List ||
+        coeffs->data.function.head->data.symbol.name != SYM_List ||
         coeffs->data.function.arg_count < 1) {
         expr_free(xgcd_result);
         return NULL;
@@ -379,7 +379,7 @@ static Expr* simp_rationalize_denom_walk(const Expr* e,
     if (target->type == EXPR_FUNCTION
         && target->data.function.head
         && target->data.function.head->type == EXPR_SYMBOL
-        && target->data.function.head->data.symbol == SYM_Power
+        && target->data.function.head->data.symbol.name == SYM_Power
         && target->data.function.arg_count == 2) {
         const Expr* denom = target->data.function.args[0];
         const Expr* exp = target->data.function.args[1];

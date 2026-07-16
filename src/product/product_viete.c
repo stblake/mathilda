@@ -31,20 +31,20 @@
 #include <stdlib.h>
 
 static bool is_inf_sym(const Expr* e) {
-    return e->type == EXPR_SYMBOL && e->data.symbol == SYM_Infinity;
+    return e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity;
 }
 
 static bool head_sym_is(const Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, name) == 0;
+        && strcmp(e->data.function.head->data.symbol.name, name) == 0;
 }
 
 /* True iff e is exactly the rational 1/2 (Rational[1,2]). */
 static bool is_one_half(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.head->data.symbol.name == SYM_Rational
         && e->data.function.arg_count == 2
         && e->data.function.args[0]->type == EXPR_INTEGER
         && e->data.function.args[0]->data.integer == 1

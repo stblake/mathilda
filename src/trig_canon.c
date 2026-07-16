@@ -59,7 +59,7 @@ static int classify(Expr* base, Expr** arg_out,
     Expr* head = base->data.function.head;
     if (!head || head->type != EXPR_SYMBOL) return 0;
     if (base->data.function.arg_count != 1) return 0;
-    const char* h = head->data.symbol;
+    const char* h = head->data.symbol.name;
 
     int sp = 0, cp = 0, k = 0;
     if      (h == SYM_Sin)  { sp =  1; cp =  0; k = 0; }

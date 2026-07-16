@@ -624,7 +624,7 @@ static bool test_factor_via_expr(const ZUPoly* image,
     if (factored->type == EXPR_FUNCTION
         && factored->data.function.head
         && factored->data.function.head->type == EXPR_SYMBOL
-        && strcmp(factored->data.function.head->data.symbol, "Times") == 0) {
+        && strcmp(factored->data.function.head->data.symbol.name, "Times") == 0) {
         size_t ac = factored->data.function.arg_count;
         result = (ZUPoly**)malloc(sizeof(ZUPoly*) * ac);
         for (size_t i = 0; i < ac; i++) {

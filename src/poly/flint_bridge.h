@@ -55,6 +55,32 @@ Expr* flint_multivariate_gcd(const Expr* a, const Expr* b);
  */
 Expr* flint_multivariate_gcd_normalized(const Expr* a, const Expr* b);
 
+/* Exact division a / b over Q[x_1..x_n]: the quotient when b divides a exactly,
+ * else NULL (inexact, or out of scope — parametric / algebraic coefficients).
+ * Fast and overflow-free (fmpq_mpoly_divides); bypasses the classical
+ * pseudo-division that is quadratic-plus on dense, large-coefficient inputs. */
+Expr* flint_multivariate_divexact(const Expr* a, const Expr* b);
+
+/*
+ * Native base-field Risch differential-equation solver for the exponential
+ * tower, over Q(xvar): solves  Dq + f q = g  (D = d/d(xvar)) for the solution
+ * y, where f is a polynomial (f = i·u' for e^u, u a polynomial in xvar, so
+ * WeakNormalizer is trivial) and g is a rational function over Q(xvar). Runs
+ * RdeNormalDenominator + RdeBoundDegreeBase + Bronstein's SPDE ladder +
+ * PolyRischDENoCancel entirely in fmpq_poly — f and g are converted straight to
+ * fmpq_poly, so NONE of the base-field arithmetic touches the generic evaluator
+ * (this is where the seconds of Together/Cancel on a degree-2n denominator go).
+ * Returns:
+ *    1  solved — *y_out = the reduced rational solution y as an Expr,
+ *    0  no solution of bounded degree exists (authoritative decline),
+ *   -1  out of scope — g not univariate over Q, or f not a polynomial (the
+ *       primitive/log tower, where weak normalization is non-trivial) — the
+ *       caller falls back to the Expr RDE path.
+ * Without FLINT this always returns -1.
+ */
+int flint_rde_base_solve_fg(const Expr* f, const Expr* g,
+                            const char* xvar, Expr** y_out);
+
 /*
  * Univariate GCD over a real quadratic number field Q(sqrt d) (M2, p=0, r=1).
  *
@@ -216,6 +242,44 @@ Expr* flint_parametric_field_divrem(const Expr* a, const Expr* b, const Expr* va
 Expr* flint_parametric_field_normalize(const Expr* e);
 
 /*
+ * Together for a plain rational function over Q: combine into a single reduced
+ * fraction via fmpz_mpoly_q, the fast path for the ordinary rational-in-symbols
+ * case the algebraic/parametric normalizers decline. Returns the (expanded,
+ * reduced) num/den Expr — matching the classical Together output — or NULL when
+ * the input has no denominator to combine (a product/polynomial Together leaves
+ * factored) or is not a plain rational over Q (symbolic/fractional power,
+ * transcendental kernel). NULL without FLINT.
+ */
+Expr* flint_rational_together(const Expr* e);
+
+/*
+ * Cancel for a plain rational function over Q: reduce a single fraction's
+ * num/den to lowest terms via fmpz_mpoly_q. Like flint_rational_together but
+ * with Cancel's stricter gate — fires only when a denominator is present and NO
+ * denominator sits inside a Plus (Cancel, unlike Together, leaves a sum of
+ * fractions uncombined). Returns the (expanded, reduced) num/den Expr matching
+ * classical Cancel, or NULL out of scope. NULL without FLINT.
+ */
+Expr* flint_rational_cancel(const Expr* e);
+
+/*
+ * FLINT-native partial fraction decomposition over Q. Given a proper rational
+ * R / (C * prod_i bases[i]^{ks[i]}) with the bases[] the distinct irreducible
+ * factors of the denominator (Exprs), ks[] their multiplicities, C the numeric
+ * content, and var the fraction variable name, returns the fractional part
+ * sum_i sum_{j=1}^{ks[i]} A_{ij}/bases[i]^j (deg A_{ij} < deg bases[i]) as an
+ * unsimplified Expr — the caller adds the polynomial part and lets the evaluator
+ * canonicalise. Output matches the classical RowReduce Apart exactly. Computed
+ * entirely in fmpq_poly (distinct-factor CRT split + p-adic expansion), so it
+ * replaces the O(S^2+) symbolic Gaussian elimination for the pure-Q case.
+ * Returns NULL when any operand carries another symbol / radical / fractional
+ * power (the multivariate case keeps the classical path). NULL without FLINT.
+ */
+Expr* flint_apart_over_q(const Expr* R, const Expr* const* bases,
+                         const int64_t* ks, int m,
+                         const Expr* C, const char* var);
+
+/*
  * Exact division a/b over the detected extension field. Returns the quotient, or
  * NULL when there is no algebraic generator or b ∤ a exactly (so Cancel's
  * divide-back can fall through to its classical path). NULL without FLINT.
@@ -266,6 +330,39 @@ Expr* flint_algebraic_field_canonical(const Expr* e);
  * path); roots of unity allowed. Returns NULL out of scope / without FLINT.
  */
 Expr* flint_algebraic_field_together(const Expr* e);
+
+/*
+ * Callback invoked once per monomial term by flint_linear_system_terms.
+ *   base_exp[0..nbase-1] — exponents in the base variables (the row key).
+ *   col                  — 0-based unknown column (0..nunk-1), or nunk for
+ *                          the unknown-free (constant / RHS) part of the term.
+ *   coeff                — the term's rational coefficient (borrowed; valid
+ *                          only for the duration of the call).
+ */
+typedef void (*flint_lsys_term_fn)(const long* base_exp, int nbase,
+                                   int col, const mpq_t coeff, void* user);
+
+/*
+ * Extract the coefficient structure of a linear system encoded as a single
+ * polynomial `equation` that is linear in `unknowns` and polynomial over Q in
+ * `vars`. Converts `equation` to one fmpq_mpoly over {vars ∪ unknowns} — FLINT
+ * performs the (potentially large) product expansion far faster than a
+ * hand-rolled mpq distributor — then invokes `cb` once per resulting monomial
+ * term (see flint_lsys_term_fn). This is the fast replacement for a manual
+ * distribute-and-accumulate pass over a nested Plus/Times equation tree.
+ *
+ * All of `vars` and `unknowns` must be distinct symbols. Returns 1 on success
+ * (every term delivered to `cb`). Returns 0 WITHOUT invoking `cb` at all when:
+ * FLINT is absent; a var/unknown is not a symbol or the two sets overlap;
+ * `equation` contains a symbol outside vars∪unknowns, an inexact/irrational
+ * coefficient, or a negative/symbolic power (i.e. it is not in Q[vars∪unknowns]);
+ * or it is nonlinear in some unknown. The caller then falls back to its own
+ * builder. Does not take ownership of any argument.
+ */
+int flint_linear_system_terms(const Expr* equation,
+                              Expr* const* vars, int nvars,
+                              Expr* const* unknowns, int nunk,
+                              flint_lsys_term_fn cb, void* user);
 
 /* Registers the M1 scaffolding builtin(s). Called from core_init(). */
 void flint_bridge_init(void);

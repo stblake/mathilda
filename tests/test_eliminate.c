@@ -514,6 +514,50 @@ static void test_log_squared(void) {
              "Equal[w, Power[u, 2]]");
 }
 
+static void test_exp_commensurate_fractions(void) {
+    /* Commensurate *fractional* exponents: E^(x/2) and E^(x/3) are both
+     * powers of the atomic kernel E^(x/6) (lcm(2,3)=6), so they collapse
+     * onto one aux: u=E^(x/2)=(E^(x/6))^3, v=E^(x/3)=(E^(x/6))^2 -> v^3==u^2.
+     * Before the commensurate-folding pass these registered as independent
+     * kernels and Gate A rejected the system as `nlin`. */
+    mute_stderr_once();
+    check_eq("Eliminate[{u == E^(x/2), v == E^(x/3)}, x]",
+             "Equal[Power[v, 3], Power[u, 2]]");
+}
+
+static void test_exp_commensurate_dt_substitution(void) {
+    /* Headline example: an integration-by-substitution shape whose three
+     * exponentials E^(x/3), E^(x/2), E^(x/6) are commensurate through the
+     * atomic kernel E^(x/6).  Eliminating {x, Dt[x]} yields the differential
+     * relation 6 Dt[u] == u^3 Dt[y] + u^4 Dt[y]. */
+    mute_stderr_once();
+    check_eq("Eliminate[{Dt[y] == 1/(E^(1/3 x) + E^(1/2 x)) Dt[x],"
+             " u == E^(x/6), Dt[u == E^(x/6)]}, {x, Dt[x]}]",
+             "Equal[Times[6, Dt[u]], Plus[Times[Power[u, 3], Dt[y]],"
+             " Times[Power[u, 4], Dt[y]]]]");
+}
+
+static void test_log_inverse_poly(void) {
+    /* A defining `u == Log[x]` with `x` ALSO occurring polynomially routes
+     * through the inverse-substitution pass (`x == E^u`), keeping E^u as a
+     * single main-variable atom:  w == x  ->  w == E^u.  The forward Log
+     * pass alone would trip Gate B here (x is both log-bound and a poly
+     * atom). */
+    mute_stderr_once();
+    check_eq("Eliminate[{u == Log[x], w == x}, x]",
+             "Equal[w, Power[E, u]]");
+}
+
+static void test_log_inverse_dt_substitution(void) {
+    /* Headline example: `Integrate[Log[x]/x, x]` substitution shape.  With
+     * u = Log[x] (so x = E^u) and Dt[u] == -Dt[x]/x^2, eliminating
+     * {x, Dt[x]} gives  u Dt[u] E^u + Dt[y] == 0  (i.e. -Dt[y] == E^u u Dt[u]). */
+    mute_stderr_once();
+    check_eq("Eliminate[{Dt[y] == Log[x]/x Dt[x], u == Log[x],"
+             " Dt[u == 1/x]}, {x, Dt[x]}]",
+             "Equal[Plus[Times[u, Dt[u], Power[E, u]], Dt[y]], 0]");
+}
+
 static void test_trig_memory_smoke(void) {
     /* Re-run the headline trig example to surface TrigState / aux-symbol
      * cleanup leaks across the multi-exit cleanup paths. */
@@ -522,6 +566,140 @@ static void test_trig_memory_smoke(void) {
         Expr* e = parse_expression(
             "Eliminate[{Dt[y] == Cos[x] Sqrt[1 - Sin[x]] Dt[x], u == Sin[x],"
             " Dt[u] == Cos[x] Dt[x]}, {x, Dt[x]}]");
+        Expr* r = evaluate(e);
+        ASSERT(r != NULL);
+        expr_free(e);
+        expr_free(r);
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/* Inverse-function substitution pre-pass                              */
+/*                                                                     */
+/* A defining equation `M == ArcF[x]` (M elim-free, x a single elim    */
+/* symbol) lets Eliminate propagate `ArcF[x] -> M` and the companion   */
+/* radical (`Sqrt[1-x^2] -> Cos[M]`, etc.) through the whole system,   */
+/* then pin `x == F[M]`.  This resolves u-substitution shapes where    */
+/* the inverse function sits buried inside a product.                  */
+/* ------------------------------------------------------------------ */
+
+static void test_inv_arcsin_dt_substitution(void) {
+    /* Headline example (the integration-by-substitution shape for
+     *   Integrate[x ArcSin[x]/Sqrt[1-x^2], x] ):
+     *   Dt[y] == x ArcSin[x]/Sqrt[1-x^2] Dt[x]
+     *   u == ArcSin[x]
+     *   Dt[u] == Dt[x]/Sqrt[1-x^2]
+     * Eliminating {x, Dt[x]} yields  u Sin[u] Dt[u] == Dt[y]. */
+    mute_stderr_once();
+    check_eq("Eliminate[{Dt[y] == (x ArcSin[x])/Sqrt[1-x^2] Dt[x],"
+             " u == ArcSin[x], Dt[u] == Dt[x]/Sqrt[1-x^2]}, {x, Dt[x]}]",
+             "Equal[Times[u, Dt[u], Sin[u]], Dt[y]]");
+}
+
+static void test_inv_arcsin_dt_held_equation(void) {
+    /* The exact prompt form, with the third equation given as
+     * `Dt[u == ArcSin[x]]` (which evaluates to Dt[u] == Dt[x]/Sqrt[1-x^2]
+     * before Eliminate sees it).  Must reduce to the same relation. */
+    mute_stderr_once();
+    check_eq("Eliminate[{Dt[y] == (x ArcSin[x])/Sqrt[1-x^2] Dt[x],"
+             " u == ArcSin[x], Dt[u == ArcSin[x]]}, {x, Dt[x]}]",
+             "Equal[Times[u, Dt[u], Sin[u]], Dt[y]]");
+}
+
+static void test_inv_arcsin_square(void) {
+    /* ArcSin substitution with x reappearing polynomially:
+     *   u == ArcSin[x], w == x^2  ->  w == Sin[u]^2. */
+    mute_stderr_once();
+    check_eq("Eliminate[{u == ArcSin[x], w == x^2}, x]",
+             "Equal[w, Power[Sin[u], 2]]");
+}
+
+static void test_inv_arccos_square(void) {
+    mute_stderr_once();
+    check_eq("Eliminate[{u == ArcCos[x], w == x^2}, x]",
+             "Equal[w, Power[Cos[u], 2]]");
+}
+
+static void test_inv_arctan_square(void) {
+    mute_stderr_once();
+    check_eq("Eliminate[{u == ArcTan[x], w == x^2}, x]",
+             "Equal[w, Power[Tan[u], 2]]");
+}
+
+static void test_inv_arcsinh_square(void) {
+    mute_stderr_once();
+    check_eq("Eliminate[{u == ArcSinh[x], w == x^2}, x]",
+             "Equal[w, Power[Sinh[u], 2]]");
+}
+
+static void test_inv_arccosh_square(void) {
+    mute_stderr_once();
+    check_eq("Eliminate[{u == ArcCosh[x], w == x^2}, x]",
+             "Equal[w, Power[Cosh[u], 2]]");
+}
+
+static void test_inv_arctanh_square(void) {
+    mute_stderr_once();
+    check_eq("Eliminate[{u == ArcTanh[x], w == x^2}, x]",
+             "Equal[w, Power[Tanh[u], 2]]");
+}
+
+static void test_inv_arcsinh_dt_substitution(void) {
+    /* Hyperbolic companion radical Sqrt[1+x^2] -> Cosh[u].
+     *   Integrate[ArcSinh[x]/Sqrt[1+x^2], x] = ArcSinh[x]^2/2, so
+     *   Dt[y] == u Dt[u]. */
+    mute_stderr_once();
+    check_eq("Eliminate[{Dt[y] == ArcSinh[x] Dt[x]/Sqrt[1+x^2],"
+             " u == ArcSinh[x], Dt[u] == Dt[x]/Sqrt[1+x^2]}, {x, Dt[x]}]",
+             "Equal[Times[u, Dt[u]], Dt[y]]");
+}
+
+static void test_inv_arctan_dt_substitution(void) {
+    /* Rational-denominator companion 1/(1+x^2) -> Cos[u]^2 (integer power of
+     * the companion base, not a radical).  Integrate[ArcTan[x]/(1+x^2), x] =
+     * ArcTan[x]^2/2, so the substitution shape reduces to Dt[y] == u Dt[u].
+     * Before the companion rule accepted integer exponents this returned the
+     * unreduced u Dt[u](1+Tan[u]^2) == Dt[y](1+Tan[u]^2). */
+    mute_stderr_once();
+    check_eq("Eliminate[{Dt[y] == ArcTan[x]/(1+x^2) Dt[x], u == ArcTan[x],"
+             " Dt[u] == Dt[x]/(1+x^2)}, {x, Dt[x]}]",
+             "Equal[Times[u, Dt[u]], Dt[y]]");
+}
+
+static void test_inv_arctanh_dt_substitution(void) {
+    /* Hyperbolic rational-denominator companion 1/(1-x^2) -> Cosh[u]^2.
+     * Integrate[ArcTanh[x]/(1-x^2), x] = ArcTanh[x]^2/2 -> Dt[y] == u Dt[u].
+     * Third equation given held as Dt[u == ArcTanh[x]]. */
+    mute_stderr_once();
+    check_eq("Eliminate[{Dt[y] == ArcTanh[x]/(1-x^2) Dt[x], u == ArcTanh[x],"
+             " Dt[u == ArcTanh[x]]}, {x, Dt[x]}]",
+             "Equal[Times[u, Dt[u]], Dt[y]]");
+}
+
+static void test_inv_arccos_dt_substitution(void) {
+    /* ArcCos companion radical Sqrt[1-x^2] -> Sin[u]; note the sign of
+     * Dt[u] flips.  Integrate[x ArcCos[x]/Sqrt[1-x^2], x] shape gives
+     *   u Cos[u] Dt[u] + Dt[y] == 0. */
+    mute_stderr_once();
+    check_eq("Eliminate[{Dt[y] == (x ArcCos[x])/Sqrt[1-x^2] Dt[x],"
+             " u == ArcCos[x], Dt[u] == -Dt[x]/Sqrt[1-x^2]}, {x, Dt[x]}]",
+             "Equal[Plus[Times[u, Cos[u], Dt[u]], Dt[y]], 0]");
+}
+
+static void test_inv_single_equation_shorthand(void) {
+    /* A lone defining equation eliminates its variable outright. */
+    mute_stderr_once();
+    check_eq("Eliminate[ArcTan[y] == z, y]", "True");
+}
+
+static void test_inv_memory_smoke(void) {
+    /* Exercise the inverse-substitution multi-exit cleanup paths for
+     * leaks (owned M copy, companion base, rewritten trees). */
+    mute_stderr_once();
+    for (int i = 0; i < 25; i++) {
+        Expr* e = parse_expression(
+            "Eliminate[{Dt[y] == (x ArcSin[x])/Sqrt[1-x^2] Dt[x],"
+            " u == ArcSin[x], Dt[u] == Dt[x]/Sqrt[1-x^2]}, {x, Dt[x]}]");
         Expr* r = evaluate(e);
         ASSERT(r != NULL);
         expr_free(e);
@@ -575,7 +753,25 @@ int main(void) {
     TEST(test_exp_integration_substitution);
     TEST(test_log_power);
     TEST(test_log_squared);
+    TEST(test_exp_commensurate_fractions);
+    TEST(test_exp_commensurate_dt_substitution);
+    TEST(test_log_inverse_poly);
+    TEST(test_log_inverse_dt_substitution);
     TEST(test_trig_memory_smoke);
+    TEST(test_inv_arcsin_dt_substitution);
+    TEST(test_inv_arcsin_dt_held_equation);
+    TEST(test_inv_arcsin_square);
+    TEST(test_inv_arccos_square);
+    TEST(test_inv_arctan_square);
+    TEST(test_inv_arcsinh_square);
+    TEST(test_inv_arccosh_square);
+    TEST(test_inv_arctanh_square);
+    TEST(test_inv_arcsinh_dt_substitution);
+    TEST(test_inv_arctan_dt_substitution);
+    TEST(test_inv_arctanh_dt_substitution);
+    TEST(test_inv_arccos_dt_substitution);
+    TEST(test_inv_single_equation_shorthand);
+    TEST(test_inv_memory_smoke);
 
     printf("All Eliminate tests passed!\n");
     return 0;

@@ -60,18 +60,18 @@ static Expr* heuristic_factor(Expr* P) {
 }
 
 static Expr* heuristic_factor_impl(Expr* P) {
-    if (P->data.function.head->data.symbol == SYM_Times || P->data.function.head->data.symbol == SYM_Power) {
+    if (P->data.function.head->data.symbol.name == SYM_Times || P->data.function.head->data.symbol.name == SYM_Power) {
         Expr** args = malloc(sizeof(Expr*) * P->data.function.arg_count);
         for(size_t i=0; i<P->data.function.arg_count; i++) args[i] = heuristic_factor(P->data.function.args[i]);
         Expr* res = eval_and_free(expr_new_function(expr_copy(P->data.function.head), args, P->data.function.arg_count));
         free(args);
         return res;
     }
-    if (P->data.function.head->data.symbol == SYM_List || P->data.function.head->data.symbol == SYM_Equal || P->data.function.head->data.symbol == SYM_Less ||
-        P->data.function.head->data.symbol == SYM_LessEqual || P->data.function.head->data.symbol == SYM_Greater || P->data.function.head->data.symbol == SYM_GreaterEqual ||
-        P->data.function.head->data.symbol == SYM_Inequality ||
-        P->data.function.head->data.symbol == SYM_And || P->data.function.head->data.symbol == SYM_Or || P->data.function.head->data.symbol == SYM_Not) {
-        bool is_ineq = (P->data.function.head->data.symbol == SYM_Inequality);
+    if (P->data.function.head->data.symbol.name == SYM_List || P->data.function.head->data.symbol.name == SYM_Equal || P->data.function.head->data.symbol.name == SYM_Less ||
+        P->data.function.head->data.symbol.name == SYM_LessEqual || P->data.function.head->data.symbol.name == SYM_Greater || P->data.function.head->data.symbol.name == SYM_GreaterEqual ||
+        P->data.function.head->data.symbol.name == SYM_Inequality ||
+        P->data.function.head->data.symbol.name == SYM_And || P->data.function.head->data.symbol.name == SYM_Or || P->data.function.head->data.symbol.name == SYM_Not) {
+        bool is_ineq = (P->data.function.head->data.symbol.name == SYM_Inequality);
         Expr** args = malloc(sizeof(Expr*) * P->data.function.arg_count);
         for (size_t i = 0; i < P->data.function.arg_count; i++) {
             if (is_ineq && (i & 1u) == 1)

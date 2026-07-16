@@ -29,6 +29,7 @@
 #include "intrischnorman.h"
 
 #include "expr.h"
+#include "core.h"
 #include "eval.h"
 #include "parse.h"
 #include "symtab.h"
@@ -38,12 +39,16 @@
 #include "arithmetic.h"
 #include "sym_names.h"
 #include "sym_intern.h"
+#include "flint_mat_bridge.h"
+#include "flint_bridge.h"
 
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <string.h>
+#include <limits.h>
 
 /* ------------------------------------------------------------------ */
 /* Performance caps.                                                    */
@@ -52,6 +57,30 @@
 #define PMINT_MAX_MONOMIALS   5000
 #define PMINT_MAX_REWRITE_DEPTH 32      /* convert_to_tan giveup depth */
 #define PMINT_MAX_INDETS      32        /* hard cap on indet set size  */
+#define PMINT_MAX_SPLIT_DEPTH 128       /* split_factor recursion guard */
+
+/* Guards on the symbolic-RowReduce slow path (Phase 4 linear solve), which can
+ * suffer expression swell — polynomial-in-parameter matrix entries whose size
+ * explodes during Gaussian elimination.  Two backstops, both leaving the
+ * integral unevaluated (always a safe result):
+ *
+ *   1. A size cap on the augmented matrix.  Legitimate parametric closures top
+ *      out around 132x37 / ~5500 leaf nodes (e.g. Integrate[Exp[a x] Cos[b x]]);
+ *      a runaway such as the Cosh/Sinh rewrite of Exp[a x]/(Exp[x]-1) reaches
+ *      237x42 / 11000+ leaves.  Abandoning the ansatz above the cap avoids the
+ *      minutes-long RowReduce without touching any closing case.
+ *   2. A cooperative per-call wall-clock deadline, checked before each RowReduce,
+ *      to catch an accumulation of individually-small-but-swelling systems.
+ *
+ * These bound the DiffUnderInt escalation on Integrate[x^k Exp[a x]/(Exp[x]-1)],
+ * which otherwise costs minutes and stalled the whole-line residue test suite. */
+#define PMINT_MAX_SOLVE_ROWS   180
+#define PMINT_MAX_SOLVE_LEAVES 8000
+#define PMINT_BUDGET_SEC 4.0
+static clock_t pm_budget_deadline = 0;
+static bool pm_over_budget(void) {
+    return pm_budget_deadline != 0 && clock() > pm_budget_deadline;
+}
 
 #ifndef PMINT_TRACE
 #define PMINT_TRACE 0
@@ -262,7 +291,7 @@ static Expr* mk_binary(const char* head, Expr* a1, Expr* a2) {
  * appear anywhere in `expr`. */
 static bool expr_free_of_symbol(const Expr* expr, const char* sym_name) {
     if (!expr) return true;
-    if (expr->type == EXPR_SYMBOL) return expr->data.symbol != sym_name;
+    if (expr->type == EXPR_SYMBOL) return expr->data.symbol.name != sym_name;
     if (expr->type != EXPR_FUNCTION) return true;
     if (!expr_free_of_symbol(expr->data.function.head, sym_name)) return false;
     for (size_t i = 0; i < expr->data.function.arg_count; i++) {
@@ -287,7 +316,7 @@ static bool contains_algebraic_function_of(const Expr* e, const char* xname) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     const Expr* h = e->data.function.head;
     size_t n = e->data.function.arg_count;
-    if (h && h->type == EXPR_SYMBOL && h->data.symbol == SYM_Power && n == 2) {
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power && n == 2) {
         const Expr* base = e->data.function.args[0];
         const Expr* exp  = e->data.function.args[1];
         if (base && exp
@@ -337,7 +366,7 @@ static bool contains_unsupported_function_of(const Expr* e, const char* xname) {
     const Expr* h = e->data.function.head;
     size_t n = e->data.function.arg_count;
     /* Non-symbol heads (e.g. Derivative[1][f]) are never pmint-supported. */
-    if (!h || h->type != EXPR_SYMBOL || !head_is_pmint_supported(h->data.symbol)) {
+    if (!h || h->type != EXPR_SYMBOL || !head_is_pmint_supported(h->data.symbol.name)) {
         return true;
     }
     for (size_t i = 0; i < n; i++) {
@@ -400,7 +429,7 @@ static Expr* convert_to_tan_rec(Expr* f, const char* xname, int depth) {
     Expr* result = NULL;
 
     if (n == 1 && head && head->type == EXPR_SYMBOL) {
-        const char* hs = head->data.symbol;
+        const char* hs = head->data.symbol.name;
         Expr* u = new_args[0];
 
         if (hs == SYM_Sin) {
@@ -526,7 +555,7 @@ static Expr* pythagorean_rewrite(Expr* f) {
     size_t n = f->data.function.arg_count;
 
     /* Detect Power[Sec[u], 2] etc. */
-    if (h && h->type == EXPR_SYMBOL && h->data.symbol == SYM_Power
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power
         && n == 2
         && f->data.function.args[0]
         && f->data.function.args[0]->type == EXPR_FUNCTION
@@ -538,7 +567,7 @@ static Expr* pythagorean_rewrite(Expr* f) {
         Expr* bh = base->data.function.head;
         Expr* u = base->data.function.args[0];
         if (bh && bh->type == EXPR_SYMBOL) {
-            const char* bhs = bh->data.symbol;
+            const char* bhs = bh->data.symbol.name;
             Expr* urew = pythagorean_rewrite(u);
             if (bhs == SYM_Sec) {
                 /* 1 + Tan[u]^2 */
@@ -595,7 +624,7 @@ static Expr* decot_rec(Expr* f) {
         Expr* h = f->data.function.head;
         if (h && h->type == EXPR_SYMBOL
             && f->data.function.arg_count == 1) {
-            const char* hs = h->data.symbol;
+            const char* hs = h->data.symbol.name;
             if (hs == SYM_Cot) {
                 Expr* inner = decot_rec(f->data.function.args[0]);
                 return mk_pow(mk_unary(SYM_Tan, inner), mk_int(-1));
@@ -669,7 +698,7 @@ static Expr* convert_sincos_to_tan_rec(Expr* f, const char* xname, int depth) {
     Expr* head = f->data.function.head;
     Expr* result = NULL;
     if (n == 1 && head && head->type == EXPR_SYMBOL) {
-        const char* hs = head->data.symbol;
+        const char* hs = head->data.symbol.name;
         Expr* u = new_args[0];
         if (hs == SYM_Sin) {
             Expr* T = mk_unary(SYM_Tan, mk_div(expr_copy(u), mk_int(2)));
@@ -727,7 +756,7 @@ static Expr* convert_sincos_to_tan_rec(Expr* f, const char* xname, int depth) {
 
 static Expr* convert_sincos_to_tan(Expr* f, Expr* x) {
     if (!f || !x || x->type != EXPR_SYMBOL) return NULL;
-    Expr* r = convert_sincos_to_tan_rec(f, x->data.symbol, 0);
+    Expr* r = convert_sincos_to_tan_rec(f, x->data.symbol.name, 0);
     if (!r) return NULL;
     Expr* normalised = eval_and_free(r);
     if (!normalised) return NULL;
@@ -768,7 +797,7 @@ static Expr* builtin_pm_pythagorean(Expr* res) {
  * Power form. */
 static Expr* convert_to_tan(Expr* f, Expr* x) {
     if (!f || !x || x->type != EXPR_SYMBOL) return NULL;
-    Expr* rewritten = convert_to_tan_rec(f, x->data.symbol, 0);
+    Expr* rewritten = convert_to_tan_rec(f, x->data.symbol.name, 0);
     if (!rewritten) return NULL;
     Expr* normalised = eval_and_free(rewritten);
     if (!normalised) return NULL;
@@ -841,7 +870,7 @@ static bool head_is_transcendental_atom(const Expr* f, const char* xname) {
     if (!f || f->type != EXPR_FUNCTION) return false;
     Expr* h = f->data.function.head;
     if (!h || h->type != EXPR_SYMBOL) return false;
-    const char* hs = h->data.symbol;
+    const char* hs = h->data.symbol.name;
     /* Trig / hyperbolic field generators.  Tan / Tanh are pmint's
      * canonical generators (per convert_to_tan); the others get
      * collected only if they appear post-eval as evaluator artifacts. */
@@ -859,7 +888,7 @@ static bool head_is_transcendental_atom(const Expr* f, const char* xname) {
         && f->data.function.arg_count == 2
         && f->data.function.args[0]
         && f->data.function.args[0]->type == EXPR_SYMBOL
-        && f->data.function.args[0]->data.symbol == SYM_E
+        && f->data.function.args[0]->data.symbol.name == SYM_E
         && !expr_free_of_symbol(f->data.function.args[1], xname)) {
         return true;
     }
@@ -889,7 +918,7 @@ static Expr* canonicalize_atom_head(Expr* expr) {
     Expr* h = expr->data.function.head;
     if (!h || h->type != EXPR_SYMBOL) return expr_copy(expr);
     if (expr->data.function.arg_count != 1) return expr_copy(expr);
-    const char* hs = h->data.symbol;
+    const char* hs = h->data.symbol.name;
     if (hs == SYM_Cot) {
         return mk_unary(SYM_Tan, expr_copy(expr->data.function.args[0]));
     }
@@ -940,7 +969,7 @@ static int collect_indets_closed(Expr* ff, Expr* x,
     *out_n = 0;
     if (!ff || !x || x->type != EXPR_SYMBOL) return 1;
 
-    const char* xname = x->data.symbol;
+    const char* xname = x->data.symbol.name;
     ExprList el;
     elist_init(&el);
 
@@ -1027,7 +1056,7 @@ static Expr* pm_sub_map_to_rule_list(const PMSubMap* m) {
             && lhs->data.function.arg_count == 1
             && lhs->data.function.head
             && lhs->data.function.head->type == EXPR_SYMBOL) {
-            const char* hs = lhs->data.function.head->data.symbol;
+            const char* hs = lhs->data.function.head->data.symbol.name;
             const char* recip_head = NULL;
             if (hs == SYM_Tan)  recip_head = SYM_Cot;
             else if (hs == SYM_Tanh) recip_head = SYM_Coth;
@@ -1183,13 +1212,13 @@ static Expr* eval_cancel(Expr* f) {
  * (often more compact) result is preserved.  Consumes `result`. */
 static Expr* strip_constant_of_integration(Expr* result, Expr* x) {
     if (!result || !x || x->type != EXPR_SYMBOL) return result;
-    const char* xname = x->data.symbol;
+    const char* xname = x->data.symbol.name;
 
     Expr* expanded = eval_expand(expr_copy(result));
     if (!expanded
         || expanded->type != EXPR_FUNCTION
         || expanded->data.function.head->type != EXPR_SYMBOL
-        || expanded->data.function.head->data.symbol != SYM_Plus) {
+        || expanded->data.function.head->data.symbol.name != SYM_Plus) {
         if (expanded) expr_free(expanded);
         return result;
     }
@@ -1244,7 +1273,7 @@ static int64_t eval_degree(Expr* p, Expr* x) {
     if (clist && clist->type == EXPR_FUNCTION
         && clist->data.function.head
         && clist->data.function.head->type == EXPR_SYMBOL
-        && clist->data.function.head->data.symbol == SYM_List
+        && clist->data.function.head->data.symbol.name == SYM_List
         && clist->data.function.arg_count > 0) {
         d = (int64_t)clist->data.function.arg_count - 1;
     }
@@ -1358,7 +1387,7 @@ static bool is_power_head(Expr* e);
  * returns mk_int(0).  Caller owns the result. */
 static Expr* diff_monomial_pow(Expr* m, Expr* var_k) {
     if (!var_k || var_k->type != EXPR_SYMBOL) return NULL;
-    const char* vk = var_k->data.symbol;
+    const char* vk = var_k->data.symbol.name;
 
     /* Iterate factors of m (treat non-Times as a 1-factor list). */
     size_t nf;
@@ -1376,7 +1405,7 @@ static Expr* diff_monomial_pow(Expr* m, Expr* var_k) {
     for (size_t i = 0; i < nf; i++) {
         Expr* f = facs[i];
         if (f->type == EXPR_SYMBOL) {
-            if (f->data.symbol == vk) {
+            if (f->data.symbol.name == vk) {
                 if (hit_idx >= 0) return NULL;     /* same var twice */
                 hit_idx = (int)i;
                 hit_exp = 1;
@@ -1385,7 +1414,7 @@ static Expr* diff_monomial_pow(Expr* m, Expr* var_k) {
         } else if (is_power_head(f) && f->data.function.arg_count == 2) {
             Expr* base = f->data.function.args[0];
             Expr* expn = f->data.function.args[1];
-            if (base->type == EXPR_SYMBOL && base->data.symbol == vk) {
+            if (base->type == EXPR_SYMBOL && base->data.symbol.name == vk) {
                 if (hit_idx >= 0) return NULL;
                 if (expn->type != EXPR_INTEGER) return NULL;
                 hit_idx = (int)i;
@@ -1532,7 +1561,7 @@ static void vars_in_poly(Expr* p, Expr** vars, size_t n,
     *out_n = 0;
     for (size_t i = 0; i < n; i++) {
         if (vars[i] && vars[i]->type == EXPR_SYMBOL
-            && !expr_free_of_symbol(p, vars[i]->data.symbol)) {
+            && !expr_free_of_symbol(p, vars[i]->data.symbol.name)) {
             out_idx[(*out_n)++] = i;
         }
     }
@@ -1549,11 +1578,20 @@ static void vars_in_poly(Expr* p, Expr** vars, size_t n,
  * spl_c[1]]; else recurse on q/s.
  *
  * On entry `vars` are the fresh vars currently considered; `l` are
- * their scaled derivatives. */
-static int split_factor(Expr* p,
-                         Expr** vars, Expr** l, size_t n,
-                         Expr** out_s, Expr** out_h) {
+ * their scaled derivatives.
+ *
+ * `depth` guards against unbounded recursion: content extraction is
+ * expected to strip one indeterminate per level, but a pathological
+ * integrand (e.g. an inexact-base exponential such as `2.71828^(-x)`,
+ * as produced by N[] over an Exp integrand) can fail to reduce and
+ * recurse without bound, overflowing the C stack.  Beyond
+ * PMINT_MAX_SPLIT_DEPTH we return failure so the pmint driver gives up
+ * and the integral is left unevaluated rather than crashing the process. */
+static int split_factor_rec(Expr* p,
+                            Expr** vars, Expr** l, size_t n,
+                            Expr** out_s, Expr** out_h, int depth) {
     *out_s = NULL; *out_h = NULL;
+    if (depth > PMINT_MAX_SPLIT_DEPTH) return 1;
 
     /* Find a var x in p. */
     size_t idx_buf[PMINT_MAX_INDETS];
@@ -1591,7 +1629,7 @@ static int split_factor(Expr* p,
     /* Recurse on content. */
     Expr* spl_c_s = NULL;
     Expr* spl_c_h = NULL;
-    if (split_factor(content, vars, l, n, &spl_c_s, &spl_c_h) != 0) {
+    if (split_factor_rec(content, vars, l, n, &spl_c_s, &spl_c_h, depth + 1) != 0) {
         expr_free(content); expr_free(q);
         return 1;
     }
@@ -1625,7 +1663,7 @@ static int split_factor(Expr* p,
     expr_free(q);
     Expr* splh_s = NULL;
     Expr* splh_h = NULL;
-    if (split_factor(q_over_s, vars, l, n, &splh_s, &splh_h) != 0) {
+    if (split_factor_rec(q_over_s, vars, l, n, &splh_s, &splh_h, depth + 1) != 0) {
         expr_free(q_over_s); expr_free(s);
         expr_free(spl_c_s); expr_free(spl_c_h);
         return 1;
@@ -1644,6 +1682,13 @@ static int split_factor(Expr* p,
     *out_s = s_final;
     *out_h = h_final;
     return 0;
+}
+
+/* Public entry: split_factor with the recursion depth counter started at 0. */
+static int split_factor(Expr* p,
+                        Expr** vars, Expr** l, size_t n,
+                        Expr** out_s, Expr** out_h) {
+    return split_factor_rec(p, vars, l, n, out_s, out_h, 0);
 }
 
 /* deflation(p) — pmint.maple lines 92-98.
@@ -1688,14 +1733,27 @@ static Expr* deflation(Expr* p,
     return result;
 }
 
-/* enumerate_monomials(vars, nv, total_degree) — recursive build of
- * the set of monomials in vars[] of total degree ≤ total_degree.
+/* enumerate_monomials(vars, nv, total_degree, maxdeg) — recursive build
+ * of the set of monomials in vars[] of total degree ≤ total_degree.
  *
  * pmint.maple lines 69-78.
+ *
+ * `maxdeg` (optional; NULL = no per-variable cap) is a length-nv array
+ * giving an additional *per-variable* exponent ceiling: the exponent of
+ * vars[k] never exceeds maxdeg[k].  This tightens the pure total-degree
+ * bound for generators whose degree in the antiderivative is provably
+ * small — chiefly the base integration variable x (derivative ≡ 1),
+ * whose candidate-numerator degree is bounded by
+ *   deg_x(cden) + max(deg_x(numer), deg_x(denom)) + 1,
+ * a value typically far below the transcendental total-degree bound.
+ * Capping it collapses the monomial count (and the resulting linear
+ * system) from O(dg^nv) toward O(dg) without excluding any monomial the
+ * true answer can contain.
  *
  * Cap at PMINT_MAX_MONOMIALS; on overflow set *out_n = 0 and return 1
  * (caller bubbles back with ::overlarge). */
 static int enumerate_monomials(Expr** vars, size_t nv, int total_degree,
+                                const int* maxdeg,
                                 Expr*** out_monoms, size_t* out_n) {
     *out_monoms = NULL;
     *out_n = 0;
@@ -1715,9 +1773,15 @@ static int enumerate_monomials(Expr** vars, size_t nv, int total_degree,
      *            {vars[-1]^i * w : 1 ≤ i ≤ d, w ∈ enumerate({vars[:-1]}, d-i)} */
     Expr* x = vars[nv - 1];
 
+    /* Per-variable exponent ceiling for this variable (default: no
+     * extra cap beyond the total degree). */
+    int this_max = total_degree;
+    if (maxdeg && maxdeg[nv - 1] < this_max) this_max = maxdeg[nv - 1];
+
     Expr** lower = NULL;
     size_t lower_n = 0;
-    if (enumerate_monomials(vars, nv - 1, total_degree, &lower, &lower_n) != 0) {
+    if (enumerate_monomials(vars, nv - 1, total_degree, maxdeg,
+                             &lower, &lower_n) != 0) {
         return 1;
     }
 
@@ -1754,11 +1818,11 @@ static int enumerate_monomials(Expr** vars, size_t nv, int total_degree,
     }
     free(lower);
 
-    /* i = 1..total_degree. */
-    for (int i = 1; i <= total_degree; i++) {
+    /* i = 1..min(total_degree, this_max). */
+    for (int i = 1; i <= this_max; i++) {
         Expr** lower_i = NULL;
         size_t lower_i_n = 0;
-        if (enumerate_monomials(vars, nv - 1, total_degree - i,
+        if (enumerate_monomials(vars, nv - 1, total_degree - i, maxdeg,
                                  &lower_i, &lower_i_n) != 0) {
             for (size_t j = 0; j < accn; j++) expr_free(acc[j]);
             free(acc);
@@ -1822,15 +1886,25 @@ static int build_candidate(Expr** monomials, size_t nm,
     Expr** unknowns = (Expr**)calloc(nm, sizeof(Expr*));
     if (!names || !unknowns) { free(names); free(unknowns); return 1; }
 
-    Expr* sum = mk_int(0);
+    /* Build the candidate numerator as a *flat* Plus of nm terms.  A
+     * left-nested binary Plus (mk_plus2 accumulated in a loop) would be
+     * nm levels deep, and a large nm (thousands, for a high-degree
+     * ansatz) overflows the evaluator's recursion guard the moment
+     * eval_expand recurses into it — wrapping inner nodes in Hold[] and
+     * silently corrupting the candidate.  A single flat Plus node is
+     * depth-1 regardless of nm. */
+    Expr** term_args = (Expr**)malloc(sizeof(Expr*) * nm);
     for (size_t i = 0; i < nm; i++) {
         char buf[32];
         snprintf(buf, sizeof(buf), "pmint$A%zu", i + 1);
         names[i] = intern_symbol(buf);
         unknowns[i] = expr_new_symbol(names[i]);
-        Expr* term = mk_times2(expr_copy(unknowns[i]), expr_copy(monomials[i]));
-        sum = mk_plus2(sum, term);
+        term_args[i] = mk_times2(expr_copy(unknowns[i]), expr_copy(monomials[i]));
     }
+    Expr* sum = (nm == 1)
+        ? term_args[0]
+        : expr_new_function(expr_new_symbol(SYM_Plus), term_args, nm);
+    free(term_args);
     Expr* sum_eval = eval_expand(sum);
 
     *out_num = sum_eval;
@@ -1859,7 +1933,7 @@ static void walk_coefficient_table(Expr* node, size_t depth, size_t nv,
     if (node->type != EXPR_FUNCTION
         || !node->data.function.head
         || node->data.function.head->type != EXPR_SYMBOL
-        || node->data.function.head->data.symbol != SYM_List) {
+        || node->data.function.head->data.symbol.name != SYM_List) {
         /* Scalar at non-leaf depth — pad zeros for the remaining
          * dimensions. */
         for (size_t i = depth; i < nv; i++) exp_vec[i] = 0;
@@ -2141,7 +2215,17 @@ static bool solve_and_emit_mpq(mpq_t* M,
     }
     for (size_t i = 0; i < nrows; i++) rowidx[i] = i;
 
-    gauss_jordan_mpq(M, rowidx, nrows, ncols, pivot_for_col);
+    /* FLINT fraction-free RREF (fmpq_mat_rref) is dramatically faster than
+     * the hand-rolled mpq_t Gauss-Jordan on the large, big-numerator systems
+     * pmint produces for high-degree ansätze — it dominates the profile
+     * (>99% of the solve for ∫E^x/(1+E^x)^n).  RREF is unique, so the FLINT
+     * result (written back in natural row order) decodes identically through
+     * emit_q_solution.  When FLINT is absent the helper returns 0 and we fall
+     * back to the portable Gauss-Jordan. */
+    if (nrows > (size_t)INT_MAX || ncols > (size_t)INT_MAX ||
+        !flint_rref_mpq_inplace(M, (int)nrows, (int)ncols, pivot_for_col)) {
+        gauss_jordan_mpq(M, rowidx, nrows, ncols, pivot_for_col);
+    }
     emit_q_solution(M, rowidx, pivot_for_col, ncols, unknowns, nunknowns,
                      out_solution_rules, out_status);
 
@@ -2216,9 +2300,9 @@ static bool try_solve_qfast(LinearBuilder* lb,
  * Interned symbol-pointer equality. */
 static int sym_index_in(const Expr* e, Expr** list, size_t n) {
     if (e->type != EXPR_SYMBOL) return -1;
-    const char* s = e->data.symbol;
+    const char* s = e->data.symbol.name;
     for (size_t i = 0; i < n; i++) {
-        if (list[i]->type == EXPR_SYMBOL && list[i]->data.symbol == s) {
+        if (list[i]->type == EXPR_SYMBOL && list[i]->data.symbol.name == s) {
             return (int)i;
         }
     }
@@ -2229,21 +2313,21 @@ static bool is_times_head(Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Times;
+        && e->data.function.head->data.symbol.name == SYM_Times;
 }
 
 static bool is_plus_head(Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Plus;
+        && e->data.function.head->data.symbol.name == SYM_Plus;
 }
 
 static bool is_power_head(Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power;
+        && e->data.function.head->data.symbol.name == SYM_Power;
 }
 
 /* Sparse row keyed by monomial exponent vector. */
@@ -2487,7 +2571,7 @@ static bool pm_acc_apply_atom(const Expr* t, TermAcc* a,
     if (t->type == EXPR_FUNCTION
         && t->data.function.head
         && t->data.function.head->type == EXPR_SYMBOL
-        && t->data.function.head->data.symbol == SYM_Power
+        && t->data.function.head->data.symbol.name == SYM_Power
         && t->data.function.arg_count == 2) {
         const Expr* base = t->data.function.args[0];
         const Expr* expe = t->data.function.args[1];
@@ -2570,7 +2654,7 @@ static void pm_walk_one(const Expr* e, const PmWalkFrame* rest,
     if (e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         size_t n = e->data.function.arg_count;
 
         if (h == SYM_Plus) {
@@ -2747,6 +2831,29 @@ static Expr* builtin_pm_qmb_stress(Expr* res) {
     return expr_new_symbol(ok ? "True" : "False");
 }
 
+/* Sink for flint_linear_system_terms: lands each (base-monomial, column,
+ * coeff) contribution into the QMatBuild, matching pm_acc_commit's
+ * convention exactly — unknown columns accumulate +coeff, the unknown-free
+ * (constant) column nunk accumulates −coeff (the RHS side of E ≡ 0). */
+typedef struct {
+    QMatBuild* M;
+    size_t     nunk;
+    bool       ok;
+} FlintQmbSink;
+
+static void flint_qmb_term_cb(const long* base_exp, int nbase,
+                              int col, const mpq_t coeff, void* user) {
+    FlintQmbSink* s = (FlintQmbSink*)user;
+    if (!s->ok) return;
+    int64_t ev[PMINT_MAX_INDETS];
+    for (int k = 0; k < nbase; k++) ev[k] = (int64_t)base_exp[k];
+    size_t row = qmb_find_or_add(s->M, ev);
+    if (row == SIZE_MAX) { s->ok = false; return; }
+    mpq_t* cell = &s->M->rows[row].col[col];
+    if (col < (int)s->nunk) mpq_add(*cell, *cell, coeff);
+    else                    mpq_sub(*cell, *cell, coeff);
+}
+
 /* Attempt direct-from-expanded build + solve.
  * Returns false (no state mutated) if any term doesn't decompose. */
 static bool try_solve_direct_q(Expr* equation_numer,
@@ -2759,14 +2866,34 @@ static bool try_solve_direct_q(Expr* equation_numer,
     M.nv = nv; M.ncols = nunk + 1;
     M.buckets = NULL; M.bucket_cap = 0; M.bucket_mask = 0;
 
-    /* Fused walker: Plus forks the accumulator, Times sequences
+    /* FLINT-native fast path: convert the whole equation to one
+     * fmpq_mpoly over {vars ∪ unknowns} and read its terms straight into
+     * M.  FLINT's packed-monomial multiplication expands the product tree
+     * far faster than the mpq pm_walk distributor, which dominates the
+     * profile on high-degree ansätze (large denominators → ~10^29
+     * coefficients).  Declines (leaving M empty, no callback fired) on any
+     * non-Q-rational or nonlinear input — then the portable pm_walk
+     * builder below runs.  nv is capped at PMINT_MAX_INDETS upstream, so
+     * flint_qmb_term_cb's fixed exp buffer is safe. */
+    bool built = false;
+    if (nv <= PMINT_MAX_INDETS) {
+        FlintQmbSink sink = { &M, nunk, true };
+        if (flint_linear_system_terms(equation_numer, vars, (int)nv,
+                                      unknowns, (int)nunk,
+                                      flint_qmb_term_cb, &sink)) {
+            if (!sink.ok) { qmb_free(&M); return false; }  /* alloc failure */
+            built = true;
+        }
+    }
+
+    /* Fused walker fallback: Plus forks the accumulator, Times sequences
      * factors in, Power[Plus,k] unrolls.  Each distributed monomial
      * contribution lands directly in M; no flat Plus is ever
      * materialised.  `equation_numer` may arrive already expanded
      * (slow path) or as a still-nested tree (fast path) — both are
      * handled by the same walker. */
-    if (!pm_walk_into_qmb(equation_numer, &M,
-                           vars, nv, unknowns, nunk)) {
+    if (!built && !pm_walk_into_qmb(equation_numer, &M,
+                                     vars, nv, unknowns, nunk)) {
         qmb_free(&M);
         return false;
     }
@@ -2953,13 +3080,24 @@ static int solve_linear_undet(Expr* equation_numer,
                                        mat_rows, lb.nrows);
     free(mat_rows);
 
+    /* Size / budget guard: abandon a swell-prone symbolic RowReduce rather than
+     * let it run away (the integral is simply left unevaluated).  See the
+     * PMINT_MAX_SOLVE_* / PMINT_BUDGET_SEC notes above. */
+    if (lb.nrows > PMINT_MAX_SOLVE_ROWS ||
+        leaf_count_internal(matrix, true) > PMINT_MAX_SOLVE_LEAVES ||
+        pm_over_budget()) {
+        expr_free(matrix);
+        *out_solution_rules = NULL;
+        *out_status = -1;
+        return 1;
+    }
     /* Call RowReduce.  Result is also a nested List. */
     PM_PHB(rr_t);
     Expr* rr = eval_and_free(mk_unary("RowReduce", matrix));
     PM_PHE(rr_t, PM_PH_TI_SOLVE_ROWRED);
     if (!rr || rr->type != EXPR_FUNCTION
         || rr->data.function.head->type != EXPR_SYMBOL
-        || rr->data.function.head->data.symbol != SYM_List) {
+        || rr->data.function.head->data.symbol.name != SYM_List) {
         if (rr) expr_free(rr);
         return 1;
     }
@@ -3089,7 +3227,7 @@ static int my_factors(Expr* p, int over_Qi,
         if (node->type == EXPR_FUNCTION
             && node->data.function.head
             && node->data.function.head->type == EXPR_SYMBOL) {
-            const char* hs = node->data.function.head->data.symbol;
+            const char* hs = node->data.function.head->data.symbol.name;
             if (hs == SYM_Times) {
                 for (size_t i = 0; i < node->data.function.arg_count && np < 60; i++) {
                     nodes_to_process[np++] = node->data.function.args[i];
@@ -3108,7 +3246,7 @@ static int my_factors(Expr* p, int over_Qi,
         bool mentions_var = false;
         for (size_t k = 0; k < nv; k++) {
             if (vars[k] && vars[k]->type == EXPR_SYMBOL
-                && !expr_free_of_symbol(node, vars[k]->data.symbol)) {
+                && !expr_free_of_symbol(node, vars[k]->data.symbol.name)) {
                 mentions_var = true;
                 break;
             }
@@ -3172,7 +3310,7 @@ static int get_special_all(Expr** si, Expr** vars, size_t n,
         if (!si[k] || si[k]->type != EXPR_FUNCTION) continue;
         Expr* head = si[k]->data.function.head;
         if (!head || head->type != EXPR_SYMBOL) continue;
-        const char* hs = head->data.symbol;
+        const char* hs = head->data.symbol.name;
 
         Expr* darboux1 = NULL;
         Expr* darboux2 = NULL;
@@ -3496,6 +3634,8 @@ static int64_t total_degree(Expr* p, Expr** vars, size_t n) {
 static Expr* rischnorman_integrate(Expr* f, Expr* x) {
     PMTRACE("entry\n");
     pm_phase_arm();
+    /* Arm the per-call wall-clock budget (see PMINT_BUDGET_SEC). */
+    pm_budget_deadline = clock() + (clock_t)(PMINT_BUDGET_SEC * CLOCKS_PER_SEC);
     /* Phase 4 pipeline (no log candidates yet): */
     /*   1. convert_to_tan(f, x)                                     */
     /*   2. collect_indets_closed                                    */
@@ -3629,6 +3769,34 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
     int64_t deg_den    = total_degree(ff_denom, vars, n);
     int64_t dg = 1 + deg_splq_s + (deg_num > deg_den ? deg_num : deg_den);
     if (dg < 0) dg = 0;
+
+    /* Per-variable exponent ceiling for the candidate ansatz.  The base
+     * integration variable x (the generator whose derivative is the
+     * constant 1) can appear in the candidate numerator only up to
+     *   deg_x(cden) + max(deg_x(numer), deg_x(denom)) + 1,
+     * because the derivation lowers the x-degree by exactly one on the
+     * x-monomial that has no surviving transcendental derivative (the
+     * pure "∫ dx = x" term), and preserves it otherwise.  Bounding x by
+     * this small value — rather than the transcendental total-degree
+     * bound dg — is what keeps ∫ R(E^x) dx from enumerating a
+     * combinatorial O(dg^2) monomial grid over {x, E^x}.  All other
+     * generators keep the full total-degree bound.  A too-tight bound
+     * here can only cause the linear solve to find no antiderivative
+     * (→ unevaluated); it can never yield a wrong closed form, since the
+     * result is pinned by E ≡ 0. */
+    int* maxdeg = (int*)malloc(sizeof(int) * (n ? n : 1));
+    for (size_t k = 0; k < n; k++) maxdeg[k] = (int)dg;
+    for (size_t k = 0; k < n; k++) {
+        if (!expr_eq(si[k], x)) continue;           /* not the base var x */
+        int64_t dxc = eval_degree(expr_copy(cden), expr_copy(vars[k]));
+        int64_t dxn = eval_degree(expr_copy(ff_numer), expr_copy(vars[k]));
+        int64_t dxd = eval_degree(expr_copy(ff_denom), expr_copy(vars[k]));
+        int64_t dgx = dxc + (dxn > dxd ? dxn : dxd) + 1;
+        if (dgx < 0) dgx = 0;
+        if (dgx < dg) maxdeg[k] = (int)dgx;
+        break;
+    }
+
     expr_free(ff_numer); expr_free(ff_denom);
     PM_PHE(cd, PM_PH_CDEN);
 
@@ -3643,7 +3811,8 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
     /* Enumerate monomials. */
     Expr** monoms = NULL; size_t nmon = 0;
     PM_PHB(em);
-    int em_err = enumerate_monomials(vars, n, (int)dg, &monoms, &nmon);
+    int em_err = enumerate_monomials(vars, n, (int)dg, maxdeg, &monoms, &nmon);
+    free(maxdeg);
     PM_PHE(em, PM_PH_ENUM_MONOMS);
     if (em_err != 0 || nmon == 0) {
         expr_free(ff_fresh); expr_free(cden); expr_free(q);
@@ -3837,7 +4006,7 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
              * alone leaves `4 E^x (1+Cos[x])(Sin[x]-Cos[x]) / (8(1+Cos[x]))`
              * uncancelled. */
             const char* x_name = (x && x->type == EXPR_SYMBOL)
-                ? x->data.symbol : NULL;
+                ? x->data.symbol.name : NULL;
             if (x_name && combined) {
                 char buf[1024];
                 snprintf(buf, sizeof(buf),
@@ -3873,7 +4042,7 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
             if (combined && combined->type == EXPR_FUNCTION
                 && combined->data.function.head
                 && combined->data.function.head->type == EXPR_SYMBOL
-                && combined->data.function.head->data.symbol == SYM_Plus) {
+                && combined->data.function.head->data.symbol.name == SYM_Plus) {
                 size_t k = combined->data.function.arg_count;
                 Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (k ? k : 1));
                 for (size_t i = 0; i < k; i++) {
@@ -4130,7 +4299,7 @@ static Expr* builtin_pm_enumerate_monoms(Expr* res) {
     Expr* dexpr = res->data.function.args[1];
     if (vlist->type != EXPR_FUNCTION
         || vlist->data.function.head->type != EXPR_SYMBOL
-        || vlist->data.function.head->data.symbol != SYM_List)
+        || vlist->data.function.head->data.symbol.name != SYM_List)
         return NULL;
     if (dexpr->type != EXPR_INTEGER) return NULL;
     int total_degree = (int)dexpr->data.integer;
@@ -4142,7 +4311,7 @@ static Expr* builtin_pm_enumerate_monoms(Expr* res) {
 
     Expr** monoms = NULL;
     size_t n = 0;
-    int err = enumerate_monomials(vars, nv, total_degree, &monoms, &n);
+    int err = enumerate_monomials(vars, nv, total_degree, NULL, &monoms, &n);
     free(vars);
     if (err) return NULL;
 
@@ -4203,7 +4372,7 @@ Expr* builtin_rischnorman(Expr* res) {
      * integrand contains an algebraic function of x (e.g., Sqrt[g(x)],
      * g(x)^(1/3)), bail out — the algorithm has no algebraic-case
      * support and downstream pipeline stages segfault on such inputs. */
-    if (contains_algebraic_function_of(f, x->data.symbol)) {
+    if (contains_algebraic_function_of(f, x->data.symbol.name)) {
         return NULL;
     }
 
@@ -4214,7 +4383,7 @@ Expr* builtin_rischnorman(Expr* res) {
      * ansatz "integrates" them as if they were constants — returning
      * x · g(x) for Integrate[g[x], x].  Falling through to NULL lets
      * the Integrate dispatcher leave the integral unevaluated. */
-    if (contains_unsupported_function_of(f, x->data.symbol)) {
+    if (contains_unsupported_function_of(f, x->data.symbol.name)) {
         return NULL;
     }
 

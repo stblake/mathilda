@@ -74,6 +74,17 @@ canonical forms that the generic pipeline alone does not:
   its prime factors, and linear combinations of logs are fused
   (`Sum c_i Log[a_i] -> Log[Prod a_i^c_i]`).
 - **Pythagorean completion and reduction** for trig and hyperbolic squares.
+- **Exact trig/exp zero-recognition** — a `Plus` that is a rational function of a
+  single exponential kernel `t = E^(I x)` and is identically zero (canonically a
+  Risch antiderivative diff-back `D[G] - f`) is proven `0` by exact rational
+  point-evaluation on a Nullstellensatz grid — no numeric sampling, no slow
+  `Together`. When that rigorous test declines — because of bare polynomial
+  dependence on the kernel variable (e.g. the `x` in the `x E^x Sin[x]`
+  diff-back) or mixed real+imaginary exponential kernels
+  (`E^((1+I) x) = E^x E^(I x)`) — an exact `TrigToExp`-collapse fallback catches
+  the identity: `Simplify[D[Integrate[x E^x Sin[x], x], x] - x E^x Sin[x]] -> 0`,
+  and angle-addition identities such as
+  `Sin[x] Cos[y] + Cos[x] Sin[y] - Sin[x + y] -> 0` collapse too.
 - **Trig / radical-trig rational normal form** — rational functions of trig and
   hyperbolic kernels are reduced to a canonical fraction modulo the Pythagorean
   ideal. A quadratic radical of a kernel (e.g. `Sqrt[Tan[x]]`, `Tan[x]^(3/2)`) is

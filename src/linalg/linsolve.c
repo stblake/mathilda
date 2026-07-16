@@ -33,6 +33,7 @@
 
 #include "linsolve.h"
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "eval.h"
 #include "symtab.h"
 #include "attr.h"
@@ -56,16 +57,16 @@
 MatsolMethod matsol_parse_method_option(Expr* opt) {
     if (opt->type != EXPR_FUNCTION) return MATSOL_INVALID;
     if (opt->data.function.head->type != EXPR_SYMBOL) return MATSOL_INVALID;
-    const char* hd = opt->data.function.head->data.symbol;
+    const char* hd = opt->data.function.head->data.symbol.name;
     if ((hd != SYM_Rule && hd != SYM_RuleDelayed) ||
         opt->data.function.arg_count != 2) return MATSOL_INVALID;
     Expr* lhs = opt->data.function.args[0];
     Expr* rhs = opt->data.function.args[1];
-    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol != SYM_Method)
+    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol.name != SYM_Method)
         return MATSOL_INVALID;
 
     /* Accept Method -> Automatic (the symbol). */
-    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic)
+    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic)
         return MATSOL_AUTOMATIC;
     if (rhs->type != EXPR_STRING) return MATSOL_INVALID;
     if (strcmp(rhs->data.string, "Automatic")                == 0) return MATSOL_AUTOMATIC;
@@ -996,6 +997,7 @@ static Expr* linearsolve_cofactor(Expr* m, Expr* b,
  * ------------------------------------------------------------------ */
 Expr* builtin_rowreduce(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return NULL;
 
@@ -1026,6 +1028,7 @@ Expr* builtin_rowreduce(Expr* res) {
 
 Expr* builtin_linearsolve(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    if (linalg_call_has_ndarray(res)) return ndla_linearsolve(res);
     size_t argc = res->data.function.arg_count;
     if (argc < 2 || argc > 3) return NULL;
 

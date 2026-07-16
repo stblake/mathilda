@@ -47,7 +47,7 @@ static void assert_complex_close(const char* input, double er, double ei, double
     expr_free(e);
     ASSERT_MSG(r->type == EXPR_FUNCTION &&
                r->data.function.head->type == EXPR_SYMBOL &&
-               strcmp(r->data.function.head->data.symbol, "Complex") == 0 &&
+               strcmp(r->data.function.head->data.symbol.name, "Complex") == 0 &&
                r->data.function.arg_count == 2,
                "%s: expected Complex[..], got something else", input);
     Expr* re = r->data.function.args[0];
@@ -153,7 +153,7 @@ void test_erfc_listable() {
     Expr* r = evaluate(e);
     expr_free(e);
     ASSERT(r->type == EXPR_FUNCTION &&
-           strcmp(r->data.function.head->data.symbol, "List") == 0 &&
+           strcmp(r->data.function.head->data.symbol.name, "List") == 0 &&
            r->data.function.arg_count == 3);
     double exp0[3] = { erfc(0.5), erfc(1.0), erfc(1.5) };
     for (int i = 0; i < 3; i++) {

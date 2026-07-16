@@ -23,7 +23,7 @@ bool expr_to_real_double(const Expr* e, double* out) {
 #endif
     if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational) {
+        && e->data.function.head->data.symbol.name == SYM_Rational) {
         Expr* n = e->data.function.args[0];
         Expr* d = e->data.function.args[1];
         if (n->type == EXPR_INTEGER && d->type == EXPR_INTEGER && d->data.integer != 0) {
@@ -48,7 +48,7 @@ bool is_rule_arg(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     Expr* h = e->data.function.head;
     if (!h || h->type != EXPR_SYMBOL) return false;
-    return (h->data.symbol == SYM_Rule || h->data.symbol == SYM_RuleDelayed)
+    return (h->data.symbol.name == SYM_Rule || h->data.symbol.name == SYM_RuleDelayed)
         && e->data.function.arg_count == 2;
 }
 
@@ -83,8 +83,8 @@ bool eval_region(Expr* region_fn, double x, double y) {
     Expr* call2 = expr_new_function(expr_copy(region_fn), args2, 2);
     Expr* r2 = evaluate(call2);
     expr_free(call2); /* evaluate() borrows its argument; the call node is ours to free */
-    bool true2 = (r2->type == EXPR_SYMBOL && r2->data.symbol == SYM_True);
-    bool false2 = (r2->type == EXPR_SYMBOL && r2->data.symbol == SYM_False);
+    bool true2 = (r2->type == EXPR_SYMBOL && r2->data.symbol.name == SYM_True);
+    bool false2 = (r2->type == EXPR_SYMBOL && r2->data.symbol.name == SYM_False);
     expr_free(r2);
     if (true2) return true;
     if (false2) return false;
@@ -95,15 +95,17 @@ bool eval_region(Expr* region_fn, double x, double y) {
     Expr* call1 = expr_new_function(expr_copy(region_fn), args1, 1);
     Expr* r1 = evaluate(call1);
     expr_free(call1);
-    bool ok = (r1->type == EXPR_SYMBOL && r1->data.symbol == SYM_True);
+    bool ok = (r1->type == EXPR_SYMBOL && r1->data.symbol.name == SYM_True);
     expr_free(r1);
     return ok;
 }
 
 static bool is_color_head(const Expr* e) {
-    if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = e->data.function.head->data.symbol;
-    return h == SYM_RGBColor || h == SYM_GrayLevel || h == SYM_Hue || h == SYM_CMYKColor;
+    return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && (e->data.function.head->data.symbol.name == SYM_RGBColor
+            || e->data.function.head->data.symbol.name == SYM_GrayLevel
+            || e->data.function.head->data.symbol.name == SYM_Hue
+            || e->data.function.head->data.symbol.name == SYM_CMYKColor);
 }
 
 Expr* eval_color_function(Expr* color_fn, double x, double y,
@@ -196,12 +198,12 @@ Expr* eval_color_function3(Expr* color_fn,
  * The renderer (render.c: draw_legend) reads it at display time. */
 Expr* build_legend_meta(Expr* legends, Expr** bodies, size_t nfun, Expr* single_color) {
     if (!legends) return NULL;
-    if (legends->type == EXPR_SYMBOL && legends->data.symbol == SYM_None) return NULL;
+    if (legends->type == EXPR_SYMBOL && legends->data.symbol.name == SYM_None) return NULL;
     if (nfun == 0) return NULL;
 
     bool explicit_list = (legends->type == EXPR_FUNCTION
                           && legends->data.function.head->type == EXPR_SYMBOL
-                          && legends->data.function.head->data.symbol == SYM_List);
+                          && legends->data.function.head->data.symbol.name == SYM_List);
     bool multi = (nfun > 1);
 
     Expr** entries = malloc(sizeof(Expr*) * nfun);
@@ -447,7 +449,7 @@ double scale_invert(ScaleFnType sf, double w) {
 ScaleFnType parse_scale_fn(Expr* e) {
     if (!e) return SF_NONE;
     if (e->type == EXPR_SYMBOL) {
-        if (e->data.symbol == SYM_None || e->data.symbol == SYM_Automatic) return SF_NONE;
+        if (e->data.symbol.name == SYM_None || e->data.symbol.name == SYM_Automatic) return SF_NONE;
     }
     if (e->type == EXPR_STRING) {
         const char* s = e->data.string;
@@ -465,7 +467,7 @@ void parse_scaling_functions(Expr* rhs, ScaleFnType* sf_x, ScaleFnType* sf_y) {
     /* {sfx, sfy} two-element List */
     if (rhs->type == EXPR_FUNCTION
         && rhs->data.function.head->type == EXPR_SYMBOL
-        && rhs->data.function.head->data.symbol == SYM_List
+        && rhs->data.function.head->data.symbol.name == SYM_List
         && rhs->data.function.arg_count == 2) {
         *sf_x = parse_scale_fn(rhs->data.function.args[0]);
         *sf_y = parse_scale_fn(rhs->data.function.args[1]);

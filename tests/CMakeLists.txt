@@ -64,8 +64,24 @@ if(USE_GRAPHICS)
     if(RAYLIB_FOUND)
         add_compile_definitions(USE_GRAPHICS)
         include_directories(${RAYLIB_INCLUDE_DIRS})
-        link_directories(${RAYLIB_LIBRARY_DIRS})
-        link_libraries(${RAYLIB_LIBRARIES})
+        # On Linux, libraylib is commonly a static archive (Ubuntu's
+        # libraylib-dev, or a from-source `make install`) whose transitive
+        # windowing deps — X11, GL, pthread, dl, rt, ... — live in the .pc
+        # file's `Libs.private:` line. pkg_check_modules exposes those only via
+        # its _STATIC_ variables; linking the plain _LIBRARIES set drops them,
+        # so every test executable fails with undefined `XInternAtom`, `XSync`,
+        # `XFree`, etc. (issue #18). The _STATIC_ set is a superset that equals
+        # the plain set on macOS (Libs.private is empty there — frameworks are
+        # recorded in the dylib), so prefer it unconditionally, keeping
+        # pkg-config's link order (raylib before its deps) that static archives
+        # require. Fall back to the plain set if _STATIC_ ever comes back empty.
+        if(RAYLIB_STATIC_LIBRARIES)
+            link_directories(${RAYLIB_STATIC_LIBRARY_DIRS})
+            link_libraries(${RAYLIB_STATIC_LIBRARIES})
+        else()
+            link_directories(${RAYLIB_LIBRARY_DIRS})
+            link_libraries(${RAYLIB_LIBRARIES})
+        endif()
     else()
         message(WARNING "Raylib not detected; building tests with USE_GRAPHICS=OFF")
         message(WARNING "  macOS (Homebrew): brew install raylib")
@@ -137,6 +153,7 @@ include_directories(../src/special_functions)
 include_directories(../src/numerical_calculus)
 include_directories(../src/numerical_roots)
 include_directories(../src/graphics)
+include_directories(../src/graph)
 include_directories(../src/strings)
 include_directories(../src/strings/regex)
 if(EXISTS "/opt/homebrew/include")
@@ -186,6 +203,7 @@ set(COMMON_SRC
     ../src/match.c
     ../src/part.c
     ../src/assoc.c
+    ../src/ndarray.c
     ../src/print.c
     ../src/plus.c
     ../src/times.c
@@ -222,6 +240,10 @@ set(COMMON_SRC
     ../src/special_functions/erfi.c
     ../src/special_functions/expintegralei.c
     ../src/special_functions/logintegral.c
+    ../src/special_functions/sinintegral.c
+    ../src/special_functions/cosintegral.c
+    ../src/special_functions/fresnel.c
+    ../src/special_functions/sinc.c
     ../src/special_functions/inverf.c
     ../src/special_functions/inverfc.c
     ../src/special_functions/loggamma.c
@@ -251,6 +273,7 @@ set(COMMON_SRC
     ../src/power.c
     ../src/funcprog.c
     ../src/boolean.c
+    ../src/names.c
     ../src/list/table.c
     ../src/list/range.c
     ../src/list/array.c
@@ -300,6 +323,7 @@ set(COMMON_SRC
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_factorial.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_bottomup.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_builtins.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_trigexp_zero.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_transform.c
     ../src/complex.c
     ../src/trig.c
@@ -359,6 +383,10 @@ set(COMMON_SRC
     ../src/linalg/svdecomp_machine.c
     ../src/linalg/svdecomp_mpfr.c
     ../src/linalg/lapack.c
+    ../src/linalg/numarray.c
+    ../src/linalg/ndlinalg.c
+    ../src/linalg/blas_bridge.c
+    ../src/linalg/lapack_bridge.c
     ../src/linalg/posdef_q.c
     ../src/linalg/negdef_q.c
     ../src/linalg/eigen.c
@@ -395,6 +423,7 @@ set(COMMON_SRC
     ../src/calculus/series.c
     ../src/calculus/deriv.c
     ../src/calculus/limit.c
+    ../src/calculus/residue.c
     ../src/context.c
     ../src/numeric.c
     ../src/precision.c
@@ -419,6 +448,7 @@ set(COMMON_SRC
     ../src/poly/eliminate.c
     ../src/sym_intern.c
     ../src/sym_names.c
+    ../src/version.c
     ../src/repl_hooks.c
     ../src/options.c
     ../src/options_builtin.c
@@ -432,8 +462,29 @@ set(COMMON_SRC
     ../src/calculus/integrate_chebychev.c
     ../src/calculus/integrate_goursat.c
     ../src/calculus/integrate_jeffrey.c
+    ../src/calculus/integrate_newton_leibniz.c
+    ../src/calculus/integrate_symmetry.c
+    ../src/calculus/integrate_beta.c
+    ../src/calculus/integrate_line.c
+    ../src/calculus/integrate_residue.c
+    ../src/calculus/integrate_diffunderint.c
+    ../src/calculus/integrate_ramanujan.c
     ../src/calculus/intrat.c
     ../src/calculus/intrischnorman.c
+    ../src/calculus/integrate_risch_transcendental.c
+    ../src/calculus/risch_util.c
+    ../src/calculus/integrate_risch_rde.c
+    ../src/calculus/risch_tower.c
+    ../src/calculus/risch_field_integrate.c
+    ../src/calculus/risch_singleext.c
+    ../src/calculus/risch_trig_frontend.c
+    ../src/calculus/risch_special.c
+    ../src/calculus/risch_field.c
+    ../src/calculus/risch_canonical.c
+    ../src/calculus/risch_structure.c
+    ../src/calculus/risch_hypertangent.c
+    ../src/calculus/risch_coupled.c
+    ../src/calculus/risch_hermite.c
     ../src/calculus/intsimp.c
     ../src/sum/sum.c
     ../src/sum/sum_util.c
@@ -510,8 +561,30 @@ set(COMMON_SRC
     ../src/graphics/plot.c
     ../src/graphics/plot3d.c
     ../src/graphics/parametricplot.c
+    ../src/graphics/parametricplot3d.c
+    ../src/graphics/contourplot.c
+    ../src/graphics/streamplot.c
     ../src/graphics/listplot.c
     ../src/graphics/show.c
+    ../src/graph/graph.c
+    ../src/graph/graph_util.c
+    ../src/graph/construct.c
+    ../src/graph/graphq.c
+    ../src/graph/vertexlist.c
+    ../src/graph/edgelist.c
+    ../src/graph/counts.c
+    ../src/graph/adjlist.c
+    ../src/graph/degree.c
+    ../src/graph/directedq.c
+    ../src/graph/adjmat.c
+    ../src/graph/incmat.c
+    ../src/graph/adjgraph.c
+    ../src/graph/generators.c
+    ../src/graph/shortestpath.c
+    ../src/graph/components.c
+    ../src/graph/spanningtree.c
+    ../src/graph/connectivity.c
+    ../src/graph/graphplot.c
 )
 
 # render.c / render3d.c / hershey_font.c need a live Raylib + display; only
@@ -548,10 +621,20 @@ target_include_directories(regression_tests PRIVATE ../src)
 add_executable(comparisons_tests test_comparisons.c ${COMMON_SRC})
 target_include_directories(comparisons_tests PRIVATE ../src)
 
+add_executable(graph_tests test_graph.c ${COMMON_SRC})
+target_link_libraries(graph_tests m)
+target_include_directories(graph_tests PRIVATE ../src ../src/graph)
+add_test(NAME graph_tests COMMAND graph_tests)
+
 add_executable(zero_test_tests test_zero_test.c ${COMMON_SRC})
 target_link_libraries(zero_test_tests m)
 target_include_directories(zero_test_tests PRIVATE ../src)
 add_test(NAME zero_test_tests COMMAND zero_test_tests)
+
+add_executable(trigexp_zero_tests test_trigexp_zero.c ${COMMON_SRC})
+target_link_libraries(trigexp_zero_tests m)
+target_include_directories(trigexp_zero_tests PRIVATE ../src)
+add_test(NAME trigexp_zero_tests COMMAND trigexp_zero_tests)
 
 add_executable(rootreduce_tests test_rootreduce.c ${COMMON_SRC})
 target_include_directories(rootreduce_tests PRIVATE ../src)
@@ -679,6 +762,10 @@ add_executable(boolean_tests test_boolean.c ${COMMON_SRC})
 target_link_libraries(boolean_tests m)
 target_include_directories(boolean_tests PRIVATE ../src)
 
+add_executable(names_tests test_names.c ${COMMON_SRC})
+target_link_libraries(names_tests m)
+target_include_directories(names_tests PRIVATE ../src)
+
 add_executable(association_tests test_association.c ${COMMON_SRC})
 target_link_libraries(association_tests m)
 target_include_directories(association_tests PRIVATE ../src)
@@ -690,6 +777,29 @@ add_executable(bench_assoc bench_assoc.c ${COMMON_SRC})
 target_link_libraries(bench_assoc m)
 target_include_directories(bench_assoc PRIVATE ../src)
 add_test(NAME bench_assoc COMMAND bench_assoc)
+
+# Evaluator baseline benchmark: Phase 0 of EVAL_SYMTAB_IMPROVEMENTS.md. Measures
+# per-node dispatch cost so the symbol-object rework can be validated against a
+# committed baseline. Machine-normalized "much slower" gate like bench_assoc.
+add_executable(bench_eval bench_eval.c ${COMMON_SRC})
+target_link_libraries(bench_eval m)
+target_include_directories(bench_eval PRIVATE ../src)
+add_test(NAME bench_eval COMMAND bench_eval)
+
+add_executable(bench_ndarray_linalg bench_ndarray_linalg.c ${COMMON_SRC})
+target_link_libraries(bench_ndarray_linalg m)
+target_include_directories(bench_ndarray_linalg PRIVATE ../src)
+add_test(NAME bench_ndarray_linalg COMMAND bench_ndarray_linalg)
+
+add_executable(ndarray_tests test_ndarray.c ${COMMON_SRC})
+target_link_libraries(ndarray_tests m)
+target_include_directories(ndarray_tests PRIVATE ../src)
+add_test(NAME ndarray_tests COMMAND ndarray_tests)
+
+add_executable(ndarray_linalg_tests test_ndarray_linalg.c ${COMMON_SRC})
+target_link_libraries(ndarray_linalg_tests m)
+target_include_directories(ndarray_linalg_tests PRIVATE ../src)
+add_test(NAME ndarray_linalg_tests COMMAND ndarray_linalg_tests)
 
 add_executable(patterns_tests test_patterns.c ${COMMON_SRC})
 target_link_libraries(patterns_tests m)
@@ -855,6 +965,54 @@ target_include_directories(backtrack_tests PRIVATE ../src)
 add_executable(poly_tests test_poly.c ${COMMON_SRC})
 target_include_directories(poly_tests PRIVATE ../src)
 
+add_executable(risch_field_tests test_risch_field.c ${COMMON_SRC})
+target_include_directories(risch_field_tests PRIVATE ../src ../src/calculus)
+add_test(NAME risch_field_tests COMMAND risch_field_tests)
+
+add_executable(risch_canonical_tests test_risch_canonical.c ${COMMON_SRC})
+target_include_directories(risch_canonical_tests PRIVATE ../src ../src/calculus)
+add_test(NAME risch_canonical_tests COMMAND risch_canonical_tests)
+
+add_executable(risch_canonical_wiring_tests test_risch_canonical_wiring.c ${COMMON_SRC})
+target_include_directories(risch_canonical_wiring_tests PRIVATE ../src ../src/calculus)
+add_test(NAME risch_canonical_wiring_tests COMMAND risch_canonical_wiring_tests)
+
+add_executable(risch_residue_split_tests test_risch_residue_split.c ${COMMON_SRC})
+target_include_directories(risch_residue_split_tests PRIVATE ../src ../src/calculus)
+add_test(NAME risch_residue_split_tests COMMAND risch_residue_split_tests)
+
+add_executable(risch_elementaryq_tests test_risch_elementaryq.c ${COMMON_SRC})
+target_include_directories(risch_elementaryq_tests PRIVATE ../src ../src/calculus)
+add_test(NAME risch_elementaryq_tests COMMAND risch_elementaryq_tests)
+
+add_executable(risch_rde_tower_tests test_risch_rde_tower.c ${COMMON_SRC})
+target_include_directories(risch_rde_tower_tests PRIVATE ../src ../src/calculus)
+add_test(NAME risch_rde_tower_tests COMMAND risch_rde_tower_tests)
+
+add_executable(risch_structure_tests test_risch_structure.c ${COMMON_SRC})
+target_include_directories(risch_structure_tests PRIVATE ../src ../src/calculus)
+add_test(NAME risch_structure_tests COMMAND risch_structure_tests)
+
+add_executable(risch_structure_real_tests test_risch_structure_real.c ${COMMON_SRC})
+target_include_directories(risch_structure_real_tests PRIVATE ../src ../src/calculus)
+add_test(NAME risch_structure_real_tests COMMAND risch_structure_real_tests)
+
+add_executable(risch_logderiv_radical_tests test_risch_logderiv_radical.c ${COMMON_SRC})
+target_include_directories(risch_logderiv_radical_tests PRIVATE ../src ../src/calculus)
+add_test(NAME risch_logderiv_radical_tests COMMAND risch_logderiv_radical_tests)
+
+add_executable(risch_hypertangent_tests test_risch_hypertangent.c ${COMMON_SRC})
+target_include_directories(risch_hypertangent_tests PRIVATE ../src ../src/calculus)
+add_test(NAME risch_hypertangent_tests COMMAND risch_hypertangent_tests)
+
+add_executable(risch_coupled_tests test_risch_coupled.c ${COMMON_SRC})
+target_include_directories(risch_coupled_tests PRIVATE ../src ../src/calculus)
+add_test(NAME risch_coupled_tests COMMAND risch_coupled_tests)
+
+add_executable(risch_hermite_tests test_risch_hermite.c ${COMMON_SRC})
+target_include_directories(risch_hermite_tests PRIVATE ../src ../src/calculus)
+add_test(NAME risch_hermite_tests COMMAND risch_hermite_tests)
+
 add_executable(subresultants_tests test_subresultants.c ${COMMON_SRC})
 target_include_directories(subresultants_tests PRIVATE ../src)
 
@@ -878,6 +1036,14 @@ target_include_directories(facpoly_tests PRIVATE ../src)
 
 add_executable(squarefreeq_tests test_squarefreeq.c ${COMMON_SRC})
 target_include_directories(squarefreeq_tests PRIVATE ../src)
+
+add_executable(polynomialsqrt_tests test_polynomialsqrt.c ${COMMON_SRC})
+target_include_directories(polynomialsqrt_tests PRIVATE ../src)
+add_test(NAME polynomialsqrt_tests COMMAND polynomialsqrt_tests)
+
+add_executable(rt_resultant_tests test_rt_resultant.c ${COMMON_SRC})
+target_include_directories(rt_resultant_tests PRIVATE ../src ../src/calculus)
+add_test(NAME rt_resultant_tests COMMAND rt_resultant_tests)
 
 add_executable(irreduciblepolynomialq_tests test_irreduciblepolynomialq.c ${COMMON_SRC})
 target_include_directories(irreduciblepolynomialq_tests PRIVATE ../src)
@@ -1253,6 +1419,27 @@ else()
     target_link_libraries(lapack_tests gmp m)
 endif()
 add_test(NAME lapack_tests COMMAND lapack_tests)
+
+# BLAS` / LAPACK` context builtins (blas_bridge.c / lapack_bridge.c).
+add_executable(blas_tests test_blas.c ${COMMON_SRC})
+target_include_directories(blas_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(blas_tests gmp m ${ECM_LIB})
+    add_dependencies(blas_tests build_ecm)
+else()
+    target_link_libraries(blas_tests gmp m)
+endif()
+add_test(NAME blas_tests COMMAND blas_tests)
+
+add_executable(lapack_builtin_tests test_lapack_builtin.c ${COMMON_SRC})
+target_include_directories(lapack_builtin_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(lapack_builtin_tests gmp m ${ECM_LIB})
+    add_dependencies(lapack_builtin_tests build_ecm)
+else()
+    target_link_libraries(lapack_builtin_tests gmp m)
+endif()
+add_test(NAME lapack_builtin_tests COMMAND lapack_builtin_tests)
 
 add_executable(conjugate_transpose_tests test_conjugate_transpose.c ${COMMON_SRC})
 target_include_directories(conjugate_transpose_tests PRIVATE ../src)
@@ -1693,6 +1880,15 @@ else()
 endif()
 add_test(NAME integrate_derivdivides_tests COMMAND integrate_derivdivides_tests)
 
+add_executable(integrate_risch_transcendental_tests test_integrate_risch_transcendental.c ${COMMON_SRC})
+target_include_directories(integrate_risch_transcendental_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_risch_transcendental_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(integrate_risch_transcendental_tests gmp m)
+endif()
+add_test(NAME integrate_risch_transcendental_tests COMMAND integrate_risch_transcendental_tests)
+
 add_executable(integrate_linrad_tests test_integrate_linrad.c ${COMMON_SRC})
 target_include_directories(integrate_linrad_tests PRIVATE ../src)
 if(USE_ECM)
@@ -1737,6 +1933,96 @@ else()
     target_link_libraries(integrate_goursat_tests gmp m)
 endif()
 add_test(NAME integrate_goursat_tests COMMAND integrate_goursat_tests)
+
+add_executable(integrate_newton_leibniz_tests test_integrate_newton_leibniz.c ${COMMON_SRC})
+target_include_directories(integrate_newton_leibniz_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_newton_leibniz_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(integrate_newton_leibniz_tests gmp m)
+endif()
+add_test(NAME integrate_newton_leibniz_tests COMMAND integrate_newton_leibniz_tests)
+
+add_executable(integrate_line_tests test_integrate_line.c ${COMMON_SRC})
+target_include_directories(integrate_line_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_line_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(integrate_line_tests gmp m)
+endif()
+add_test(NAME integrate_line_tests COMMAND integrate_line_tests)
+
+add_executable(integrate_residue_tests test_integrate_residue.c ${COMMON_SRC})
+target_include_directories(integrate_residue_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_residue_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(integrate_residue_tests gmp m)
+endif()
+add_test(NAME integrate_residue_tests COMMAND integrate_residue_tests)
+
+add_executable(integrate_symmetry_tests test_integrate_symmetry.c ${COMMON_SRC})
+target_include_directories(integrate_symmetry_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_symmetry_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(integrate_symmetry_tests gmp m)
+endif()
+add_test(NAME integrate_symmetry_tests COMMAND integrate_symmetry_tests)
+
+add_executable(integrate_principalvalue_tests test_integrate_principalvalue.c ${COMMON_SRC})
+target_include_directories(integrate_principalvalue_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_principalvalue_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(integrate_principalvalue_tests gmp m)
+endif()
+add_test(NAME integrate_principalvalue_tests COMMAND integrate_principalvalue_tests)
+
+add_executable(integrate_osclog_tests test_integrate_osclog.c ${COMMON_SRC})
+target_include_directories(integrate_osclog_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_osclog_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(integrate_osclog_tests gmp m)
+endif()
+add_test(NAME integrate_osclog_tests COMMAND integrate_osclog_tests)
+
+add_executable(integrate_beta_tests test_integrate_beta.c ${COMMON_SRC})
+target_include_directories(integrate_beta_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_beta_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(integrate_beta_tests gmp m)
+endif()
+add_test(NAME integrate_beta_tests COMMAND integrate_beta_tests)
+
+add_executable(integrate_diffunderint_tests test_integrate_diffunderint.c ${COMMON_SRC})
+target_include_directories(integrate_diffunderint_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_diffunderint_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(integrate_diffunderint_tests gmp m)
+endif()
+add_test(NAME integrate_diffunderint_tests COMMAND integrate_diffunderint_tests)
+
+add_executable(integrate_ramanujan_tests test_integrate_ramanujan.c ${COMMON_SRC})
+target_include_directories(integrate_ramanujan_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_ramanujan_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(integrate_ramanujan_tests gmp m)
+endif()
+add_test(NAME integrate_ramanujan_tests COMMAND integrate_ramanujan_tests)
+
+add_executable(residue_tests test_residue.c ${COMMON_SRC})
+target_include_directories(residue_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(residue_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(residue_tests gmp m)
+endif()
+add_test(NAME residue_tests COMMAND residue_tests)
 
 add_executable(integrate_jeffrey_tests test_integrate_jeffrey.c ${COMMON_SRC})
 target_include_directories(integrate_jeffrey_tests PRIVATE ../src)
@@ -1869,6 +2155,21 @@ target_include_directories(expintegralei_tests PRIVATE ../src)
 add_executable(logintegral_tests test_logintegral.c ${COMMON_SRC})
 target_include_directories(logintegral_tests PRIVATE ../src)
 
+add_executable(sinintegral_tests test_sinintegral.c ${COMMON_SRC})
+target_include_directories(sinintegral_tests PRIVATE ../src)
+
+add_executable(cosintegral_tests test_cosintegral.c ${COMMON_SRC})
+target_include_directories(cosintegral_tests PRIVATE ../src)
+
+add_executable(fresnelc_tests test_fresnelc.c ${COMMON_SRC})
+target_include_directories(fresnelc_tests PRIVATE ../src)
+
+add_executable(fresnels_tests test_fresnels.c ${COMMON_SRC})
+target_include_directories(fresnels_tests PRIVATE ../src)
+
+add_executable(sinc_tests test_sinc.c ${COMMON_SRC})
+target_include_directories(sinc_tests PRIVATE ../src)
+
 add_executable(positive_tests test_positive.c ${COMMON_SRC})
 target_include_directories(positive_tests PRIVATE ../src)
 
@@ -1999,8 +2300,12 @@ if(USE_ECM)
     add_dependencies(iter_tests build_ecm)
     add_dependencies(cond_tests build_ecm)
     add_dependencies(boolean_tests build_ecm)
+    add_dependencies(names_tests build_ecm)
     add_dependencies(association_tests build_ecm)
     add_dependencies(bench_assoc build_ecm)
+    add_dependencies(bench_ndarray_linalg build_ecm)
+    add_dependencies(ndarray_tests build_ecm)
+    add_dependencies(ndarray_linalg_tests build_ecm)
     add_dependencies(patterns_tests build_ecm)
     add_dependencies(replace_tests build_ecm)
     add_dependencies(core_tests build_ecm)

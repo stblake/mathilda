@@ -72,6 +72,7 @@
 #include "qrdecomp.h"
 #include "qrdecomp_internal.h"
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "linsolve.h"
 #include "eval.h"
 #include "symtab.h"
@@ -210,14 +211,14 @@ static bool is_definitely_zero(Expr* e) {
  * ------------------------------------------------------------------ */
 static bool parse_bool_value(Expr* rhs, bool* out) {
     if (rhs->type != EXPR_SYMBOL) return false;
-    const char* s = rhs->data.symbol;
+    const char* s = rhs->data.symbol.name;
     if (strcmp(s, "True")  == 0) { *out = true;  return true; }
     if (strcmp(s, "False") == 0) { *out = false; return true; }
     return false;
 }
 
 static bool parse_targetstructure_value(Expr* rhs, QrTargetStructure* out) {
-    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic) {
+    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) {
         *out = QR_TS_DENSE;
         return true;
     }
@@ -237,17 +238,17 @@ bool qr_parse_options(Expr* res, QrOpts* opts) {
         if (opt->type != EXPR_FUNCTION
             || opt->data.function.head->type != EXPR_SYMBOL
             || opt->data.function.arg_count != 2) return false;
-        const char* hd = opt->data.function.head->data.symbol;
+        const char* hd = opt->data.function.head->data.symbol.name;
         if (hd != SYM_Rule && hd != SYM_RuleDelayed) return false;
         Expr* lhs = opt->data.function.args[0];
         Expr* rhs = opt->data.function.args[1];
         if (lhs->type != EXPR_SYMBOL) return false;
 
-        if (lhs->data.symbol == SYM_Pivoting) {
+        if (lhs->data.symbol.name == SYM_Pivoting) {
             bool v;
             if (!parse_bool_value(rhs, &v)) return false;
             opts->pivoting = v;
-        } else if (lhs->data.symbol == SYM_TargetStructure) {
+        } else if (lhs->data.symbol.name == SYM_TargetStructure) {
             QrTargetStructure ts;
             if (!parse_targetstructure_value(rhs, &ts)) return false;
             opts->target_structure = ts;
@@ -508,10 +509,10 @@ static Expr* build_q_from_Q(Expr** Q_flat, int n, int rank,
  * Conjugate when assembling q from the orthonormal column buffer Q. */
 static bool has_complex_content(Expr* e) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol, "I") == 0;
+    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, "I") == 0;
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Complex) return true;
+        && e->data.function.head->data.symbol.name == SYM_Complex) return true;
     if (has_complex_content(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         if (has_complex_content(e->data.function.args[i])) return true;
@@ -706,6 +707,7 @@ Expr* qr_dispatch(Expr* m, int n, int p, const QrOpts* opts) {
  *  Public entry.                                                      *
  * ------------------------------------------------------------------ */
 Expr* builtin_qrdecomposition(Expr* res) {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 1) return NULL;

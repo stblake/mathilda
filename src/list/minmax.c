@@ -11,7 +11,7 @@ Expr* builtin_minmax(Expr* res) {
     Expr* arg = res->data.function.args[0];
     bool is_list = arg->type == EXPR_FUNCTION &&
                    arg->data.function.head->type == EXPR_SYMBOL &&
-                   arg->data.function.head->data.symbol == SYM_List;
+                   arg->data.function.head->data.symbol.name == SYM_List;
     if (!is_list && !is_association(arg)) return NULL;
 
     Expr* min_arg[1] = { expr_copy(arg) };
@@ -40,7 +40,7 @@ Expr* builtin_min(Expr* res) {
     for (size_t i = 0; i < n; i++) {
         Expr* arg = res->data.function.args[i];
         if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
-            arg->data.function.head->data.symbol == SYM_List) {
+            arg->data.function.head->data.symbol.name == SYM_List) {
             has_list = true;
             break;
         }
@@ -51,7 +51,7 @@ Expr* builtin_min(Expr* res) {
         for (size_t i = 0; i < n; i++) {
             Expr* arg = res->data.function.args[i];
             if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
-                arg->data.function.head->data.symbol == SYM_List) {
+                arg->data.function.head->data.symbol.name == SYM_List) {
                 new_count += arg->data.function.arg_count;
             } else {
                 new_count++;
@@ -63,7 +63,7 @@ Expr* builtin_min(Expr* res) {
         for (size_t i = 0; i < n; i++) {
             Expr* arg = res->data.function.args[i];
             if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
-                arg->data.function.head->data.symbol == SYM_List) {
+                arg->data.function.head->data.symbol.name == SYM_List) {
                 for (size_t j = 0; j < arg->data.function.arg_count; j++) {
                     new_args[k++] = expr_copy(arg->data.function.args[j]);
                 }
@@ -165,7 +165,7 @@ Expr* builtin_max(Expr* res) {
     for (size_t i = 0; i < n; i++) {
         Expr* arg = res->data.function.args[i];
         if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && 
-            arg->data.function.head->data.symbol == SYM_List) {
+            arg->data.function.head->data.symbol.name == SYM_List) {
             has_list = true;
             break;
         }
@@ -176,7 +176,7 @@ Expr* builtin_max(Expr* res) {
         for (size_t i = 0; i < n; i++) {
             Expr* arg = res->data.function.args[i];
             if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && 
-                arg->data.function.head->data.symbol == SYM_List) {
+                arg->data.function.head->data.symbol.name == SYM_List) {
                 new_count += arg->data.function.arg_count;
             } else {
                 new_count++;
@@ -188,7 +188,7 @@ Expr* builtin_max(Expr* res) {
         for (size_t i = 0; i < n; i++) {
             Expr* arg = res->data.function.args[i];
             if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && 
-                arg->data.function.head->data.symbol == SYM_List) {
+                arg->data.function.head->data.symbol.name == SYM_List) {
                 for (size_t j = 0; j < arg->data.function.arg_count; j++) {
                     new_args[k++] = expr_copy(arg->data.function.args[j]);
                 }

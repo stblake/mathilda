@@ -72,11 +72,11 @@ static bool split_vector_options(Expr* res, VecOpts* o,
         if (!is_rule_arg(arg)) VP_FAIL();
         Expr* lhs = arg->data.function.args[0];
         Expr* rhs = arg->data.function.args[1];
-        const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol : NULL;
+        const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol.name : NULL;
 
         if (name == SYM_VectorPoints) {
             Expr* v = evaluate(expr_copy(rhs));
-            if (v->type == EXPR_SYMBOL && v->data.symbol == SYM_Automatic) {
+            if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Automatic) {
                 o->vector_points = 15; expr_free(v);
             } else {
                 long lv;
@@ -86,9 +86,9 @@ static bool split_vector_options(Expr* res, VecOpts* o,
             }
         } else if (name == SYM_VectorScale) {
             Expr* v = evaluate(expr_copy(rhs));
-            if (v->type == EXPR_SYMBOL && v->data.symbol == SYM_Automatic) {
+            if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Automatic) {
                 o->scale_mode = VS_AUTOMATIC;
-            } else if (v->type == EXPR_SYMBOL && v->data.symbol == SYM_None) {
+            } else if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_None) {
                 o->scale_mode = VS_NONE;
             } else {
                 double f;
@@ -107,7 +107,7 @@ static bool split_vector_options(Expr* res, VecOpts* o,
         } else if (name == SYM_ColorFunctionScaling) {
             Expr* v = evaluate(expr_copy(rhs));
             o->color_function_scaling = !(v->type == EXPR_SYMBOL
-                                          && v->data.symbol == SYM_False);
+                                          && v->data.symbol.name == SYM_False);
             expr_free(v);
         } else if (name == SYM_RegionFunction) {
             o->region_function = rhs; /* borrowed */
@@ -120,8 +120,8 @@ static bool split_vector_options(Expr* res, VecOpts* o,
             if (name == SYM_AspectRatio) have_aspect = true;
             if (name == SYM_Frame
                 && !(rhs->type == EXPR_SYMBOL
-                     && (rhs->data.symbol == SYM_False
-                         || rhs->data.symbol == SYM_None)))
+                     && (rhs->data.symbol.name == SYM_False
+                         || rhs->data.symbol.name == SYM_None)))
                 have_frame = true;
             Expr* val  = evaluate(expr_copy(rhs));
             Expr* a[2] = { expr_copy(lhs), val };
@@ -158,8 +158,8 @@ static Vec2 vp_eval(Expr* xvar, Expr* yvar,
                      double x, double y) {
     Expr* xv = expr_new_real(x);
     Expr* yv = expr_new_real(y);
-    symtab_add_own_value(xvar->data.symbol, xvar, xv);
-    symtab_add_own_value(yvar->data.symbol, yvar, yv);
+    symtab_add_own_value(xvar->data.symbol.name, xvar, xv);
+    symtab_add_own_value(yvar->data.symbol.name, yvar, yv);
 
     Expr* rvx = evaluate(vx_body);
     Expr* rvy = evaluate(vy_body);
@@ -175,7 +175,7 @@ static Vec2 vp_eval(Expr* xvar, Expr* yvar,
 
 static bool is_color_head_vp(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     return h == SYM_RGBColor || h == SYM_GrayLevel || h == SYM_Hue || h == SYM_CMYKColor;
 }
 
@@ -228,7 +228,7 @@ Expr* builtin_vectorplot(Expr* res) {
     Expr* field = res->data.function.args[0];
     if (!field || field->type != EXPR_FUNCTION
         || field->data.function.head->type != EXPR_SYMBOL
-        || field->data.function.head->data.symbol != SYM_List
+        || field->data.function.head->data.symbol.name != SYM_List
         || field->data.function.arg_count != 2)
         return NULL;
 
@@ -409,7 +409,7 @@ Expr* builtin_vectorplot(Expr* res) {
             const Expr* e = pt[i];
             if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
                 && e->data.function.args[0]->type == EXPR_SYMBOL
-                && e->data.function.args[0]->data.symbol == SYM_PlotRange)
+                && e->data.function.args[0]->data.symbol.name == SYM_PlotRange)
                 { have_pr = true; break; }
         }
         if (!have_pr) {

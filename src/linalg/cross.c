@@ -7,6 +7,7 @@
  */
 
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "eval.h"
 #include "sym_names.h"
 #include <stdio.h>
@@ -14,6 +15,7 @@
 
 Expr* builtin_cross(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    if (linalg_call_has_ndarray(res)) return ndla_cross(res);
     size_t m = res->data.function.arg_count;
     if (m == 0) return NULL;
 
@@ -21,7 +23,7 @@ Expr* builtin_cross(Expr* res) {
     bool valid = true;
     for (size_t i = 0; i < m; i++) {
         Expr* arg = res->data.function.args[i];
-        if (arg->type != EXPR_FUNCTION || arg->data.function.head->type != EXPR_SYMBOL || arg->data.function.head->data.symbol != SYM_List) {
+        if (arg->type != EXPR_FUNCTION || arg->data.function.head->type != EXPR_SYMBOL || arg->data.function.head->data.symbol.name != SYM_List) {
             valid = false;
             break;
         }

@@ -7,6 +7,11 @@
 
 ```text
 Integrate[f, x] gives the indefinite integral of f with respect to x.
+Integrate[f, {x, xmin, xmax}] gives the definite integral by the
+fundamental theorem of calculus (Method -> "NewtonLeibniz").
+Integrate[f, {x, xmin, xmax}, {y, ymin, ymax}, ...] gives the iterated
+multiple integral (innermost/last spec integrated first; inner bounds
+may depend on outer variables).  See also Integrate`SingularPoints.
 Integrate[f, x, Method -> "<name>"] dispatches directly to a single
 subroutine, bypassing the default cascade.  Accepted method names:
   "Automatic"          — try BronsteinRational, then RischNorman, then CRCTable (default)
@@ -19,8 +24,27 @@ subroutine, bypassing the default cascade.  Accepted method names:
   "GoursatAlgebraic"   — Integrate`GoursatAlgebraic (pseudo-elliptic F/R^p, p in {1/2,1/3,2/3,1/4,3/4}, via Mobius eigendescent)
   "Weierstrass"        — Integrate`Weierstrass (continuous tan(x/2) / tanh(x/2) substitution)
   "RischNorman"        — Integrate`RischNorman (Bronstein pmint heuristic)
+  "RischTranscendental"       — Integrate`RischTranscendental (recursive transcendental Risch; correct by construction)
   "CRCTable"           — Integrate`CRCTable (lazy-loaded CRC integral table)
   "Undefined"          — Integrate`Undefined (unknown functions u[x], u'[x]; Roach §1.7)
+  "NewtonLeibniz"       — real definite integrals via F(b)-F(a) (implicit for the {x,a,b} form)
+  "LineIntegral"        — complex contour integrals (implicit for the {x,z0,...,zn} form)
+  "Residue"             — improper/periodic real definite integrals by the residue theorem
+                          (rational/Fourier on (-Inf,Inf), rational-in-Sin/Cos over a period,
+                          principal values, even half-lines); tried before NewtonLeibniz under Automatic
+  "DiffUnderInt"         — parameter-dependent definite integrals by differentiation under the
+  ("DifferentiationUnderIntegral") integral sign (Feynman's trick): Integrate`DiffUnderInt;
+                          Laplace/Fourier, sinc, and even-rational half-line families;
+                          tried after Residue and NewtonLeibniz in the definite cascade
+  "RamanujanMasterTheorem" — half-line Int_0^Inf x^(s-1) f(x) dx by the Mellin transform /
+  ("Mellin")              Ramanujan Master Theorem: Integrate`RamanujanMasterTheorem;
+                          exp/Gaussian/algebraic/Cos/Sin/ArcTan/Log/BesselJ/pFq/PolyLog
+                          kernels (monomial x^k substitution; Erf, incomplete Gamma, BesselJ^2
+                          reduced to pFq); also the exp-geometric kernel 1/(E^(c x)+g)
+                          (Bose-Einstein / Fermi-Dirac -> Gamma*PolyLog), a Frullani pre-pass
+                          (f(a x)-f(b x))/x -> (f(0)-f(Inf)) Log[b/a], and a Log[x]^k weight;
+                          strip-gated, yielding a ConditionalExpression when
+                          Assumptions do not prove convergence; after NewtonLeibniz under Automatic
 Method -> {"DerivativeDivides", "Substitution" -> u} pins the kernel u(x),
 trialing only that substitution.
 Named methods are strict: failure returns unevaluated, with no fallback.
@@ -41,7 +65,7 @@ In[2]:= Integrate[2 x/(x^2 + 1), x]
 Out[2]= Log[1 + x^2]
 
 In[3]:= Integrate[1/(x - a)^2, x]
-Out[3]= -1/(-a + x)
+Out[3]= 1/(a - x)
 
 In[4]:= Integrate[(2x+3)/(x^2+3x+5)^2, x]
 Out[4]= -1/(5 + 3 x + x^2)

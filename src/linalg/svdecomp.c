@@ -34,6 +34,7 @@
 #include "qrdecomp.h"
 #include "qrdecomp_internal.h"
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "eval.h"
 #include "symtab.h"
 #include "attr.h"
@@ -80,7 +81,7 @@ static bool probe_matrix(Expr* e, int* rows, int* cols) {
  *  responsible for evaluating Abs[sigma_i] < tol in their own arith.  *
  * ------------------------------------------------------------------ */
 static bool parse_targetstructure_value(Expr* rhs, SvdTargetStructure* out) {
-    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic) {
+    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) {
         *out = SVD_TS_DENSE;
         return true;
     }
@@ -96,7 +97,7 @@ static bool is_named_option(Expr* e) {
     if (e->type != EXPR_FUNCTION
         || e->data.function.head->type != EXPR_SYMBOL
         || e->data.function.arg_count != 2) return false;
-    const char* hd = e->data.function.head->data.symbol;
+    const char* hd = e->data.function.head->data.symbol.name;
     if (hd != SYM_Rule && hd != SYM_RuleDelayed) return false;
     return e->data.function.args[0]->type == EXPR_SYMBOL;
 }
@@ -116,7 +117,7 @@ static bool parse_k_value(Expr* e, SvdKForm* form, int* k_out) {
     }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_UpTo
+        && e->data.function.head->data.symbol.name == SYM_UpTo
         && e->data.function.arg_count == 1) {
         Expr* arg = e->data.function.args[0];
         if (arg->type != EXPR_INTEGER) return false;
@@ -170,7 +171,7 @@ bool svd_parse_args(Expr* res, SvdArgs* args) {
     bool pair_handled = false;
     if (a0->type == EXPR_FUNCTION
         && a0->data.function.head->type == EXPR_SYMBOL
-        && a0->data.function.head->data.symbol == SYM_List
+        && a0->data.function.head->data.symbol.name == SYM_List
         && a0->data.function.arg_count == 2) {
 
         int64_t outer_dims[64];
@@ -214,11 +215,11 @@ bool svd_parse_args(Expr* res, SvdArgs* args) {
         Expr* lhs = opt->data.function.args[0];
         Expr* rhs = opt->data.function.args[1];
 
-        if (lhs->data.symbol == SYM_TargetStructure) {
+        if (lhs->data.symbol.name == SYM_TargetStructure) {
             SvdTargetStructure ts;
             if (!parse_targetstructure_value(rhs, &ts)) return false;
             args->target_structure = ts;
-        } else if (lhs->data.symbol == SYM_Tolerance) {
+        } else if (lhs->data.symbol.name == SYM_Tolerance) {
             args->tolerance = rhs;
         } else {
             return false;
@@ -317,10 +318,10 @@ static bool sv_is_zero(Expr* e) {
  * Drives the choice between Hermitian and Euclidean inner products. */
 static bool sv_has_complex_content(Expr* e) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol, "I") == 0;
+    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, "I") == 0;
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Complex) return true;
+        && e->data.function.head->data.symbol.name == SYM_Complex) return true;
     if (sv_has_complex_content(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         if (sv_has_complex_content(e->data.function.args[i])) return true;
@@ -346,7 +347,7 @@ static bool sv_leaf_is_numeric(Expr* e) {
         case EXPR_FUNCTION:
             if (e->data.function.head->type == EXPR_SYMBOL
                 && e->data.function.arg_count == 2) {
-                const char* h = e->data.function.head->data.symbol;
+                const char* h = e->data.function.head->data.symbol.name;
                 if (h == SYM_Rational || strcmp(h, "Rational") == 0
                     || h == SYM_Complex  || strcmp(h, "Complex")  == 0) {
                     return sv_leaf_is_numeric(e->data.function.args[0])
@@ -386,7 +387,7 @@ static bool sv_is_nonneg_numeric(const Expr* e) {
     if (e->type == EXPR_BIGINT)  return mpz_sgn(e->data.bigint) >= 0;
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.head->data.symbol.name == SYM_Rational
         && e->data.function.arg_count == 2) {
         const Expr* num = e->data.function.args[0];
         const Expr* den = e->data.function.args[1];
@@ -406,7 +407,7 @@ static bool sv_contains_root(const Expr* e) {
     if (!e) return false;
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Root) return true;
+        && e->data.function.head->data.symbol.name == SYM_Root) return true;
     if (sv_contains_root(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         if (sv_contains_root(e->data.function.args[i])) return true;
@@ -420,18 +421,18 @@ static bool sv_eig_usable(Expr* eigvals, Expr* eigvecs, int expected) {
     if (!eigvals || !eigvecs) return false;
     if (eigvals->type != EXPR_FUNCTION
         || eigvals->data.function.head->type != EXPR_SYMBOL
-        || eigvals->data.function.head->data.symbol != SYM_List
+        || eigvals->data.function.head->data.symbol.name != SYM_List
         || (int)eigvals->data.function.arg_count != expected) return false;
     if (eigvecs->type != EXPR_FUNCTION
         || eigvecs->data.function.head->type != EXPR_SYMBOL
-        || eigvecs->data.function.head->data.symbol != SYM_List
+        || eigvecs->data.function.head->data.symbol.name != SYM_List
         || (int)eigvecs->data.function.arg_count != expected) return false;
     for (int i = 0; i < expected; i++) {
         if (sv_contains_root(eigvals->data.function.args[i])) return false;
         Expr* row = eigvecs->data.function.args[i];
         if (row->type != EXPR_FUNCTION
             || row->data.function.head->type != EXPR_SYMBOL
-            || row->data.function.head->data.symbol != SYM_List
+            || row->data.function.head->data.symbol.name != SYM_List
             || (int)row->data.function.arg_count != expected) return false;
         for (int k = 0; k < expected; k++) {
             if (sv_contains_root(row->data.function.args[k])) return false;
@@ -1089,7 +1090,7 @@ static bool sv_is_numeric(const Expr* e) {
 #endif
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.head->data.symbol.name == SYM_Rational
         && e->data.function.arg_count == 2) {
         return sv_is_numeric(e->data.function.args[0])
             && sv_is_numeric(e->data.function.args[1]);
@@ -1112,7 +1113,7 @@ static bool sv_below_tol(Expr* e, Expr* tol) {
     Expr* cmp = eval_and_free(expr_new_function(
         expr_new_symbol(SYM_Less), (Expr*[]){lhs, rhs}, 2));
     bool below = (cmp->type == EXPR_SYMBOL
-                  && strcmp(cmp->data.symbol, "True") == 0);
+                  && strcmp(cmp->data.symbol.name, "True") == 0);
     expr_free(cmp);
     return below;
 }
@@ -1364,6 +1365,7 @@ Expr* svd_dispatch(const SvdArgs* args, int n, int p, int n_a) {
  *  Public entry.                                                      *
  * ------------------------------------------------------------------ */
 Expr* builtin_singularvaluedecomposition(Expr* res) {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 1) return NULL;

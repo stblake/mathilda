@@ -84,6 +84,16 @@ size_t simp_default_complexity(const Expr* e) {
         case EXPR_REAL:    return 2;
         case EXPR_SYMBOL:  return 1;
         case EXPR_STRING:  return 1;
+        case EXPR_NDARRAY: {
+            /* Each entry is a machine-precision Real (score 2); +1 for the
+             * NDArray wrapper. Keeps Simplify from preferring a large packed
+             * array over a compact symbolic form. */
+            size_t n = 1;
+            for (int i = 0; i < e->data.ndarray.rank; i++) {
+                n *= (size_t)e->data.ndarray.dims[i];
+            }
+            return 1 + 2 * n;
+        }
         case EXPR_FUNCTION: {
             const Expr* head = e->data.function.head;
             size_t argc = e->data.function.arg_count;
@@ -91,8 +101,8 @@ size_t simp_default_complexity(const Expr* e) {
              * SimplifyCount adds 1 for the wrapper, not the head's own
              * SimplifyCount. */
             if (head && head->type == EXPR_SYMBOL && argc == 2) {
-                if (head->data.symbol == SYM_Rational ||
-                    head->data.symbol == SYM_Complex) {
+                if (head->data.symbol.name == SYM_Rational ||
+                    head->data.symbol.name == SYM_Complex) {
                     return simp_default_complexity(e->data.function.args[0])
                          + simp_default_complexity(e->data.function.args[1])
                          + 1;

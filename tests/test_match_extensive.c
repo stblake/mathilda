@@ -148,7 +148,7 @@ void test_match_extensive_named_sequences() {
     Expr* val_y = env_get(env, "y");
     ASSERT(val_y != NULL);
     printf("  y found in env, type=%d\n", val_y->type);
-    ASSERT(val_y->type == EXPR_FUNCTION && strcmp(val_y->data.function.head->data.symbol, "Sequence") == 0);
+    ASSERT(val_y->type == EXPR_FUNCTION && strcmp(val_y->data.function.head->data.symbol.name, "Sequence") == 0);
     ASSERT(val_y->data.function.arg_count == 2);
     
     Expr* expected_y = parse_or_die("Sequence[2, 3]");

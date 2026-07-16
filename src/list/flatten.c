@@ -30,7 +30,7 @@ Expr* builtin_flatten(Expr* res) {
     const char* h = SYM_List;
     if (res->data.function.arg_count == 3) {
         if (res->data.function.args[2]->type != EXPR_SYMBOL) return NULL;
-        h = res->data.function.args[2]->data.symbol;
+        h = res->data.function.args[2]->data.symbol.name;
     }
 
     size_t cap = 16;

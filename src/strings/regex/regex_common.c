@@ -73,7 +73,7 @@ static char* wrap_anchored(const char* src) {
 static char* pattern_source(Expr* e) {
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_RegularExpression &&
+        e->data.function.head->data.symbol.name == SYM_RegularExpression &&
         e->data.function.arg_count == 1 &&
         e->data.function.args[0]->type == EXPR_STRING) {
         return rc_strdup(e->data.function.args[0]->data.string);
@@ -88,8 +88,8 @@ static char* pattern_source(Expr* e) {
 static int is_rule2(Expr* e, Expr** lhs, Expr** rhs) {
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        (e->data.function.head->data.symbol == SYM_Rule ||
-         e->data.function.head->data.symbol == SYM_RuleDelayed) &&
+        (e->data.function.head->data.symbol.name == SYM_Rule ||
+         e->data.function.head->data.symbol.name == SYM_RuleDelayed) &&
         e->data.function.arg_count == 2) {
         *lhs = e->data.function.args[0];
         *rhs = e->data.function.args[1];
@@ -145,7 +145,7 @@ int regex_rules_build(Expr* patt, int anchored, RegexRule** out, const char* hea
     int n;
     if (patt->type == EXPR_FUNCTION &&
         patt->data.function.head->type == EXPR_SYMBOL &&
-        patt->data.function.head->data.symbol == SYM_List) {
+        patt->data.function.head->data.symbol.name == SYM_List) {
         n = (int)patt->data.function.arg_count;
         elems = patt->data.function.args;
         if (n == 0) return -1;

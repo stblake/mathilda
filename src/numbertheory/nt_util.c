@@ -60,7 +60,7 @@ bool rational_like_needs_bigint(const Expr* e) {
     if (e->type == EXPR_BIGINT) return true;
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Rational &&
+        e->data.function.head->data.symbol.name == SYM_Rational &&
         e->data.function.arg_count == 2) {
         return e->data.function.args[0]->type == EXPR_BIGINT ||
                e->data.function.args[1]->type == EXPR_BIGINT;

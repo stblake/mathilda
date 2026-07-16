@@ -45,7 +45,7 @@ static int mb_expr_to_fmpq(const Expr* e, fmpq_t out) {
     if (e->type == EXPR_FUNCTION) {
         const Expr* h = e->data.function.head;
         if (h && h->type == EXPR_SYMBOL
-            && strcmp(h->data.symbol, "Rational") == 0
+            && strcmp(h->data.symbol.name, "Rational") == 0
             && e->data.function.arg_count == 2) {
             if (!mb_fmpz_from_int_expr(fmpq_numref(out), e->data.function.args[0]) ||
                 !mb_fmpz_from_int_expr(fmpq_denref(out), e->data.function.args[1]))
@@ -312,6 +312,46 @@ static Expr* builtin_flint_linearsolve(Expr* res) {
     return out;
 }
 
+/* In-place RREF of a flat row-major mpq_t matrix via fmpq_mat_rref.
+ * See flint_mat_bridge.h. */
+int flint_rref_mpq_inplace(mpq_t* M, int r, int c, int64_t* pivot_for_col) {
+    if (!M || r <= 0 || c <= 0 || !pivot_for_col) return 0;
+
+    fmpq_mat_t A;
+    fmpq_mat_init(A, r, c);
+    for (int i = 0; i < r; i++) {
+        for (int j = 0; j < c; j++) {
+            fmpq_set_mpq(fmpq_mat_entry(A, i, j), M[(size_t)i * c + j]);
+        }
+    }
+
+    fmpq_mat_rref(A, A);
+
+    /* Write the (unique) RREF back into M in natural row order. */
+    for (int i = 0; i < r; i++) {
+        for (int j = 0; j < c; j++) {
+            fmpq_get_mpq(M[(size_t)i * c + j], fmpq_mat_entry(A, i, j));
+        }
+    }
+
+    /* Pivot of column j = the physical row whose leading nonzero entry is in
+     * column j.  In RREF each pivot column has a single 1, and pivot rows are
+     * ordered with strictly increasing pivot columns, so one left-to-right
+     * scan per row identifies its pivot column uniquely. */
+    for (int j = 0; j < c; j++) pivot_for_col[j] = -1;
+    for (int i = 0; i < r; i++) {
+        for (int j = 0; j < c; j++) {
+            if (!fmpq_is_zero(fmpq_mat_entry(A, i, j))) {
+                pivot_for_col[j] = i;
+                break;
+            }
+        }
+    }
+
+    fmpq_mat_clear(A);
+    return 1;
+}
+
 void flint_mat_bridge_init(void) {
     symtab_add_builtin(SYM_FLINT_Det, builtin_flint_det);
     symtab_get_def(SYM_FLINT_Det)->attributes |= ATTR_PROTECTED;
@@ -362,6 +402,9 @@ Expr** flint_mat_solve(Expr** fm, int r, int c, Expr** fb, int k) {
     (void)fm; (void)r; (void)c; (void)fb; (void)k; return NULL;
 }
 int flint_mat_rank(Expr** flat, int r, int c) { (void)flat; (void)r; (void)c; return -1; }
+int flint_rref_mpq_inplace(mpq_t* M, int r, int c, int64_t* pivot_for_col) {
+    (void)M; (void)r; (void)c; (void)pivot_for_col; return 0;
+}
 void  flint_mat_bridge_init(void) { /* no FLINT: nothing to register */ }
 
 #endif /* USE_FLINT */

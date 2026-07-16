@@ -26,6 +26,7 @@
  */
 
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "sym_names.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,7 +35,7 @@
 static bool vm_is_call(const Expr* e, const char* sym) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol == sym;
+           e->data.function.head->data.symbol.name == sym;
 }
 
 /* Parse a single positive machine integer (Integer > 0). */
@@ -92,6 +93,7 @@ static Expr* vm_build(int64_t n, int64_t k, Expr* const* nodes) {
 }
 
 Expr* builtin_vandermondematrix(Expr* res) {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
 

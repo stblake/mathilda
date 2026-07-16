@@ -822,10 +822,10 @@ static Expr* lp_emit_nonopt(Expr* bad, Expr* res) {
 static bool lp_as_option(Expr* opt, const char** name, Expr** val) {
     if (opt->type == EXPR_FUNCTION &&
         opt->data.function.head->type == EXPR_SYMBOL &&
-        opt->data.function.head->data.symbol == SYM_Rule &&
+        opt->data.function.head->data.symbol.name == SYM_Rule &&
         opt->data.function.arg_count == 2 &&
         opt->data.function.args[0]->type == EXPR_SYMBOL) {
-        *name = opt->data.function.args[0]->data.symbol;
+        *name = opt->data.function.args[0]->data.symbol.name;
         *val  = opt->data.function.args[1];
         return true;
     }
@@ -844,7 +844,7 @@ Expr* builtin_lerchphi(Expr* res) {
     for (size_t i = 3; i < argc; i++) {
         const char* name; Expr* val;
         if (!lp_as_option(args[i], &name, &val)) { last_bad = args[i]; continue; }
-        bool is_true = (val->type == EXPR_SYMBOL && val->data.symbol == SYM_True);
+        bool is_true = (val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_True);
         if (name == SYM_DoublyInfinite)            doubly_infinite = is_true;
         else if (name == SYM_IncludeSingularTerm)  include_singular = is_true;
         else                                       last_bad = args[i];

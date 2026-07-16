@@ -47,7 +47,7 @@ static void assert_complex_close(const char* input, double er, double ei, double
     expr_free(e);
     ASSERT_MSG(r->type == EXPR_FUNCTION &&
                r->data.function.head->type == EXPR_SYMBOL &&
-               strcmp(r->data.function.head->data.symbol, "Complex") == 0 &&
+               strcmp(r->data.function.head->data.symbol.name, "Complex") == 0 &&
                r->data.function.arg_count == 2,
                "%s: expected Complex[..], got something else", input);
     Expr* re = r->data.function.args[0];
@@ -160,7 +160,7 @@ void test_erfi_listable() {
     Expr* r = evaluate(e);
     expr_free(e);
     ASSERT(r->type == EXPR_FUNCTION &&
-           strcmp(r->data.function.head->data.symbol, "List") == 0 &&
+           strcmp(r->data.function.head->data.symbol.name, "List") == 0 &&
            r->data.function.arg_count == 3);
     double exp0[3] = { 0.6149520946965110, 4.584733257284427, 130.39575501324693 };
     double tol[3]  = { 1e-12, 1e-11, 1e-9 };

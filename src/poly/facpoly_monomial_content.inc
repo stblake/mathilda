@@ -65,7 +65,7 @@ static bool monomial_collect(Expr* e, mpz_t coeff_out,
     if (e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Times) {
+        && e->data.function.head->data.symbol.name == SYM_Times) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             if (!monomial_collect(e->data.function.args[i], coeff_out,
                                   atoms, exps, count, cap)) return false;
@@ -79,7 +79,7 @@ static bool monomial_collect(Expr* e, mpz_t coeff_out,
     if (e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.head->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2
         && e->data.function.args[1]->type == EXPR_INTEGER) {
         atom = e->data.function.args[0];
@@ -121,7 +121,7 @@ static Expr* expr_from_mpz_normalized(const mpz_t v) {
 static Expr* factor_monomial_content(Expr* P) {
     if (P->type != EXPR_FUNCTION) return NULL;
     if (P->data.function.head->type != EXPR_SYMBOL) return NULL;
-    if (P->data.function.head->data.symbol != SYM_Plus) return NULL;
+    if (P->data.function.head->data.symbol.name != SYM_Plus) return NULL;
     size_t n = P->data.function.arg_count;
     if (n < 2) return NULL;
 

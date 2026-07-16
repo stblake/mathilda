@@ -42,7 +42,7 @@ static bool head_is(const Expr* e, const char* sym) {
         && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == sym;
+        && e->data.function.head->data.symbol.name == sym;
 }
 
 static bool is_list(const Expr* e)  { return head_is(e, SYM_List); }
@@ -131,8 +131,8 @@ static EqnsKind normalise_eqns(Expr* eqns_arg, Expr** scratch_slot,
                                Expr*** items, size_t* n) {
     /* Pre-evaluated sentinels (SolveAlways is not HoldAll). */
     if (eqns_arg && eqns_arg->type == EXPR_SYMBOL) {
-        if (eqns_arg->data.symbol == SYM_True)  return EQNS_TAUT;
-        if (eqns_arg->data.symbol == SYM_False) return EQNS_UNSAT;
+        if (eqns_arg->data.symbol.name == SYM_True)  return EQNS_TAUT;
+        if (eqns_arg->data.symbol.name == SYM_False) return EQNS_UNSAT;
     }
     if (is_equal(eqns_arg)) {
         *scratch_slot = eqns_arg;
@@ -148,8 +148,8 @@ static EqnsKind normalise_eqns(Expr* eqns_arg, Expr** scratch_slot,
         for (size_t i = 0; i < *n; i++) {
             Expr* x = (*items)[i];
             if (x && x->type == EXPR_SYMBOL) {
-                if (x->data.symbol == SYM_True)  continue;
-                if (x->data.symbol == SYM_False) return EQNS_UNSAT;
+                if (x->data.symbol.name == SYM_True)  continue;
+                if (x->data.symbol.name == SYM_False) return EQNS_UNSAT;
             }
             if (!is_equal(x)) return EQNS_BADSHAPE;
         }
@@ -342,7 +342,7 @@ Expr* builtin_solvealways(Expr* res) {
     for (size_t i = 0; i < n_eq; i++) {
         Expr* eq = eq_items[i];
         /* Skip sentinel True survivors from list/And filtering. */
-        if (eq && eq->type == EXPR_SYMBOL && eq->data.symbol == SYM_True)
+        if (eq && eq->type == EXPR_SYMBOL && eq->data.symbol.name == SYM_True)
             continue;
         Expr* poly  = normalise_to_polynomial(eq);
         Expr* clist = call_coefficient_list(poly, vars_list_view);

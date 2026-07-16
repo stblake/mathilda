@@ -1052,6 +1052,35 @@ void test_bytecount() {
     assert(res->type == EXPR_INTEGER);
     assert(res->data.integer > sizeof(Expr) * 3); // head + 2 args
     expr_free(res); expr_free(e);
+
+    /* --- BigInt: counts GMP significand limbs, not just the Expr node. --- */
+    /* A large bigint outweighs a small machine integer. */
+    assert_eval_eq("ByteCount[2^100] > ByteCount[7]", "True", 0);
+    /* Cost grows with magnitude: 2^5000 has ~50x the limbs of 2^100. */
+    assert_eval_eq("ByteCount[2^5000] > ByteCount[2^100]", "True", 0);
+
+    /* --- NDArray: must count the dims[] array and the flat data buffer. --- */
+    /* Buffer dominates: a bigger array costs strictly more. */
+    assert_eval_eq("ByteCount[NDArray[Range[1000]]] > ByteCount[NDArray[Range[10]]]", "True", 0);
+    /* Exact per-element scaling. Both operands are rank-1 float64, so the Expr
+     * node and the dims[] allocation are identical and cancel in the diff,
+     * leaving exactly (100 - 10) elements * 8 bytes each. */
+    assert_eval_eq("ByteCount[NDArray[Range[100]]] - ByteCount[NDArray[Range[10]]] === 90 * 8", "True", 0);
+    /* dtype width is honored: float64 (8B/elem) vs float32 (4B/elem), same
+     * shape -> exactly 100 * (8 - 4) bytes apart. */
+    assert_eval_eq("ByteCount[NDArray[Range[100], DataType -> \"float64\"]] - "
+                   "ByteCount[NDArray[Range[100], DataType -> \"float32\"]] === 100 * 4", "True", 0);
+    /* complex64 (16B/elem) vs complex32 (8B/elem), same shape -> 2 * (16 - 8). */
+    assert_eval_eq("ByteCount[NDArray[{Complex[1,2], Complex[3,4]}, DataType -> \"complex64\"]] - "
+                   "ByteCount[NDArray[{Complex[1,2], Complex[3,4]}, DataType -> \"complex32\"]] === 2 * 8", "True", 0);
+    /* complex64 costs more per element than the float64 of the same shape. */
+    assert_eval_eq("ByteCount[NDArray[Range[100], DataType -> \"complex64\"]] > "
+                   "ByteCount[NDArray[Range[100], DataType -> \"float64\"]]", "True", 0);
+
+#ifdef USE_MPFR
+    /* --- MPFR: significand storage scales with the requested precision. --- */
+    assert_eval_eq("ByteCount[N[Pi, 1000]] > ByteCount[N[Pi, 30]]", "True", 0);
+#endif
 }
 
 void test_information(void) {

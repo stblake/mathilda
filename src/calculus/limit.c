@@ -163,7 +163,7 @@ static Expr* simp(Expr* e) {
 /* ---------------------------------------------------------------------- */
 
 static bool is_sym(Expr* e, const char* name) {
-    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol, name) == 0;
+    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, name) == 0;
 }
 
 static int literal_sign(Expr* e);  /* forward */
@@ -275,7 +275,7 @@ static bool is_known_head_symbol(const char* name) {
 static bool contains_opaque_head_over(Expr* e, Expr* x) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL) {
-        const char* name = e->data.function.head->data.symbol;
+        const char* name = e->data.function.head->data.symbol.name;
         if (!is_known_head_symbol(name)) {
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 if (expr_contains(e->data.function.args[i], x)) return true;
@@ -322,14 +322,14 @@ static Expr* layer3_rational(Expr* f, LimitCtx* ctx);
 static Expr* layer5_lhospital(Expr* f, LimitCtx* ctx);
 static Expr* layer5_log_reduction(Expr* f, LimitCtx* ctx);
 static Expr* layer6_bounded(Expr* f, LimitCtx* ctx);
-static Expr* layer_arctan_infinity(Expr* f, LimitCtx* ctx);
+static Expr* layer_compose_at_infinity(Expr* f, LimitCtx* ctx);
 static Expr* layer_bounded_envelope(Expr* f, LimitCtx* ctx);
 static Expr* layer_log_merge(Expr* f, LimitCtx* ctx);
 static Expr* layer_log_of_finite(Expr* f, LimitCtx* ctx);
 static Expr* layer_plus_termwise(Expr* f, LimitCtx* ctx);
 static Expr* layer_abs_rewrite(Expr* f, LimitCtx* ctx);
 static Expr* rewrite_reciprocal_trig(Expr* e);
-static Expr* magnitude_upper_bound(Expr* e, Expr* x);
+static Expr* magnitude_upper_bound(Expr* e, Expr* x, bool var_abs);
 static bool  contains_bounded_head(Expr* e);
 #define LIMIT_UNKNOWN_GROWTH INT64_MAX
 static int64_t growth_exponent_upper(Expr* e, Expr* x);
@@ -358,13 +358,23 @@ static int64_t growth_exponent_upper(Expr* e, Expr* x);
 /* 1 + E^x/2 - E^-x/2 and division by E^x cancels to E^-x + 1/2 - ...,    */
 /* which the termwise-Plus layer then folds to 1/2.                       */
 /* ---------------------------------------------------------------------- */
+/* True iff e is a single-argument application of a hyperbolic head that has a
+ * well-defined value at Infinity (so the compose-at-infinity layer can fold it
+ * directly instead of going through the exp rewrite). */
+static bool is_bare_hyperbolic_call(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 1)
+        return false;
+    return head_is(e, SYM_Sinh) || head_is(e, SYM_Cosh) || head_is(e, SYM_Tanh) ||
+           head_is(e, SYM_Coth) || head_is(e, SYM_Sech) || head_is(e, SYM_Csch);
+}
+
 static Expr* rewrite_hyperbolic_to_exp(Expr* e) {
     if (!e) return NULL;
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
     size_t n = e->data.function.arg_count;
     if (e->data.function.head->type == EXPR_SYMBOL && n == 1) {
-        const char* hn = e->data.function.head->data.symbol;
+        const char* hn = e->data.function.head->data.symbol.name;
         Expr* z = rewrite_hyperbolic_to_exp(e->data.function.args[0]);
         if (hn == SYM_Sinh) {
             /* (E^z - E^-z)/2 */
@@ -411,7 +421,7 @@ static Expr* rewrite_reciprocal_trig(Expr* e) {
     size_t n = e->data.function.arg_count;
 
     if (e->data.function.head->type == EXPR_SYMBOL && n == 1) {
-        const char* hn = e->data.function.head->data.symbol;
+        const char* hn = e->data.function.head->data.symbol.name;
         /* Recurse into the argument first so nested reciprocal-trig
          * expressions are all rewritten. */
         Expr* z = rewrite_reciprocal_trig(e->data.function.args[0]);
@@ -494,16 +504,19 @@ static bool contains_bounded_head(Expr* e) {
     return false;
 }
 
-static Expr* magnitude_upper_bound(Expr* e, Expr* x) {
+static Expr* magnitude_upper_bound(Expr* e, Expr* x, bool var_abs) {
     if (!e) return mk_int(0);
     if (free_of(e, x)) return mk_fn1("Abs", expr_copy(e));
     if (e->type != EXPR_FUNCTION) {
-        /* Bare variable: return `x` (not Abs[x]). The caller only invokes
-         * this for limits at +Infinity, where `x` is eventually positive
-         * and its magnitude equals itself. Keeping Abs around causes
-         * Limit[1/Abs[x], x->Infinity] to bottom out through L'Hospital
-         * on a non-polynomial denominator with no useful progress. */
-        return expr_copy(e);
+        /* Bare variable. With var_abs the true magnitude |x| = Abs[x] is
+         * returned, so the bound is sound at a finite point too (used by
+         * envelope_bounded_power for shapes like x Sin[1/x] at x -> 0).
+         * Without it we return `x` (not Abs[x]): the +Infinity-only general
+         * squeeze relies on `x` being eventually positive, and keeping Abs
+         * around causes Limit[1/Abs[x], x->Infinity] to bottom out through
+         * L'Hospital on a non-polynomial denominator with no useful
+         * progress. */
+        return var_abs ? mk_fn1("Abs", expr_copy(e)) : expr_copy(e);
     }
 
     if (head_is(e, SYM_Sin) || head_is(e, SYM_Cos) || head_is(e, SYM_Tanh)) {
@@ -518,7 +531,7 @@ static Expr* magnitude_upper_bound(Expr* e, Expr* x) {
         Expr* sum = mk_int(0);
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             sum = mk_fn2("Plus", sum, magnitude_upper_bound(
-                                            e->data.function.args[i], x));
+                                            e->data.function.args[i], x, var_abs));
         }
         return simp(sum);
     }
@@ -527,7 +540,7 @@ static Expr* magnitude_upper_bound(Expr* e, Expr* x) {
         Expr* prod = mk_int(1);
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             prod = mk_times(prod, magnitude_upper_bound(
-                                        e->data.function.args[i], x));
+                                        e->data.function.args[i], x, var_abs));
         }
         return simp(prod);
     }
@@ -538,11 +551,11 @@ static Expr* magnitude_upper_bound(Expr* e, Expr* x) {
         if (exp->type == EXPR_INTEGER) {
             int64_t n = exp->data.integer;
             if (n >= 0) {
-                Expr* bb = magnitude_upper_bound(base, x);
+                Expr* bb = magnitude_upper_bound(base, x, var_abs);
                 return simp(mk_fn2("Power", bb, mk_int(n)));
             }
             /* negative integer: |1/base^|n|| = 1/|base|^|n| -- keep Abs wrap. */
-            Expr* bb = magnitude_upper_bound(base, x);
+            Expr* bb = magnitude_upper_bound(base, x, var_abs);
             return simp(mk_fn2("Power", bb, mk_int(n)));
         }
         /* Exp[bounded]: bound by E. */
@@ -1473,44 +1486,65 @@ static Expr* layer6_bounded(Expr* f, LimitCtx* ctx) {
     return mk_sym("Indeterminate");
 }
 
+/* Recursively true iff any node of `e` is a function application whose head is
+ * the interned symbol `head_sym`. Used to decide whether `head[Infinity]`
+ * actually reduced (head gone) or stayed unevaluated. */
+static bool contains_head_symbol(Expr* e, const char* head_sym) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == head_sym) return true;
+    if (contains_head_symbol(e->data.function.head, head_sym)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (contains_head_symbol(e->data.function.args[i], head_sym)) return true;
+    return false;
+}
+
 /* ---------------------------------------------------------------------- */
-/* Layer -- ArcTan / ArcCot at +/-Infinity                                 */
+/* Layer -- f[g(x)] at +/-Infinity via the head's own value at Infinity     */
 /*                                                                         */
-/*     ArcTan[h(x)] as x -> a, where h(x) -> +Infinity  ->  Pi/2           */
-/*                                             -Infinity -> -Pi/2          */
-/*     ArcCot[h(x)] as x -> a, where h(x) -> +Infinity  ->  0              */
-/*                                             -Infinity -> Pi             */
-/* Series cannot see through ArcTan at an infinite inner argument, so we   */
-/* intercept this shape early.                                             */
+/* Generalises the old ArcTan/ArcCot special case. For a single-argument   */
+/* f[inner] whose inner argument diverges to +/-Infinity, apply f to that   */
+/* infinite limit and let the builtin fold it:                             */
+/*     Erf[Infinity] = 1,   Tanh[Infinity] = 1,   ArcTan[Infinity] = Pi/2,  */
+/*     Exp[Infinity] = Infinity,   Gamma[Infinity] = Infinity,   ...        */
+/* This is exact for every f that self-evaluates at Infinity -- precisely   */
+/* the functions that have a well-defined value there. Series cannot see    */
+/* through such heads at an infinite inner argument, so we intercept early. */
+/* Oscillatory heads (Sin, Cos) leave f[Infinity] unevaluated, so the       */
+/* residual-head guard rejects them and we fall through to the bounded/     */
+/* Interval layers (which return Indeterminate). Restricting to +/-Infinity  */
+/* (not ComplexInfinity) avoids direction-ambiguous folds.                  */
 /* ---------------------------------------------------------------------- */
-static Expr* layer_arctan_infinity(Expr* f, LimitCtx* ctx) {
-    if ((!head_is(f, SYM_ArcTan) && !head_is(f, SYM_ArcCot)) ||
-        f->data.function.arg_count != 1) {
-        return NULL;
-    }
+static Expr* layer_compose_at_infinity(Expr* f, LimitCtx* ctx) {
+    if (f->type != EXPR_FUNCTION || f->data.function.arg_count != 1) return NULL;
+    Expr* head = f->data.function.head;
+    if (!head || head->type != EXPR_SYMBOL) return NULL;
     Expr* inner = f->data.function.args[0];
     if (free_of(inner, ctx->x)) return NULL;
 
     LimitCtx sub = *ctx; sub.depth += 1;
     Expr* lim_inner = compute_limit(inner, &sub);
     if (!lim_inner) return NULL;
-
-    /* Preserve pending x by refusing if the inner limit kept x. */
     if (expr_contains(lim_inner, ctx->x)) { expr_free(lim_inner); return NULL; }
 
-    bool pos = is_infinity_sym(lim_inner);
-    bool neg = is_neg_infinity(lim_inner);
-    if (!pos && !neg) { expr_free(lim_inner); return NULL; }
-    expr_free(lim_inner);
-
-    if (head_is(f, SYM_ArcTan)) {
-        Expr* halfpi = mk_fn2("Times", mk_fn2("Power", mk_int(2), mk_int(-1)),
-                                       mk_sym("Pi"));
-        return pos ? halfpi : simp(mk_neg(halfpi));
+    if (!is_infinity_sym(lim_inner) && !is_neg_infinity(lim_inner)) {
+        expr_free(lim_inner);
+        return NULL;
     }
-    /* ArcCot */
-    if (pos) return mk_int(0);
-    return mk_sym("Pi");
+
+    /* Apply the head to the infinite inner limit and let the builtin evaluate
+     * it. mk_fn1 adopts lim_inner (via expr_new_function). */
+    Expr* val = simp(mk_fn1(head->data.symbol.name, lim_inner));
+
+    /* Accept only when the head actually resolved (no residual head[...] and no
+     * pending x). Rejects Sin[Infinity], Cos[Infinity], ... that stay symbolic. */
+    if (val && !contains_head_symbol(val, head->data.symbol.name) &&
+        !expr_contains(val, ctx->x)) {
+        return val;
+    }
+    expr_free(val);
+    return NULL;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1523,19 +1557,143 @@ static Expr* layer_arctan_infinity(Expr* f, LimitCtx* ctx) {
 /* Sin[h(x)]/p(x), (1 +/- Cos[x])/x, x Sin[x]/(5 + x^2) family at infinity */
 /* as well as x^2 Sin[1/x] at 0.                                           */
 /* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
+/* Bounded base raised to a divergent positive power                       */
+/*                                                                         */
+/* Handles f = base^exp where `base` carries a bounded oscillatory head    */
+/* (Sin/Cos/Tanh/ArcTan/ArcCot) and exp -> +Infinity at the limit point.   */
+/* For real exp, |base^exp| = |base|^exp, and because exp is eventually     */
+/* positive the magnitude is bounded above by B^exp, with B the *constant*  */
+/* magnitude bound of the base. When B^exp -> 0 the squeeze forces f -> 0   */
+/* (the value is complex where base < 0, but its magnitude still vanishes,  */
+/* so the two-sided complex limit is 0). Unlike the general envelope this   */
+/* uses no bare-variable magnitude reasoning, so it is valid at a finite    */
+/* point as well as at Infinity.                                            */
+/* Example: (Sin[1/x]/2)^(1/x^2) at x -> 0  =>  <= (1/2)^(1/x^2) -> 0.      */
+/* ---------------------------------------------------------------------- */
+/* True iff `e` is a concrete real number in [0, 1). Symbolic values fail
+ * the comparison (stay unevaluated, not True), so only comparable literals
+ * -- Integer, Real, Rational -- can satisfy it. */
+static bool lit_in_unit_interval(Expr* e) {
+    if (!e) return false;
+    Expr* lo = simp(mk_fn2("GreaterEqual", expr_copy(e), mk_int(0)));
+    Expr* hi = simp(mk_fn2("Less",         expr_copy(e), mk_int(1)));
+    bool ok = is_sym(lo, "True") && is_sym(hi, "True");
+    expr_free(lo); expr_free(hi);
+    return ok;
+}
+
+/* True iff `e` is a concrete real number strictly greater than 1. */
+static bool lit_gt_one(Expr* e) {
+    if (!e) return false;
+    Expr* hi = simp(mk_fn2("Greater", expr_copy(e), mk_int(1)));
+    bool ok = is_sym(hi, "True");
+    expr_free(hi);
+    return ok;
+}
+
+static Expr* envelope_bounded_power(Expr* f, LimitCtx* ctx) {
+    if (!head_is(f, SYM_Power) || f->data.function.arg_count != 2) return NULL;
+    Expr* base = f->data.function.args[0];
+    Expr* exp  = f->data.function.args[1];
+
+    /* The base must be the oscillatory factor; the exponent must vary. */
+    if (!contains_bounded_head(base)) return NULL;
+    if (free_of(exp, ctx->x)) return NULL;
+
+    /* Require exp -> +Infinity. This makes exp eventually positive (so the
+     * squeeze direction is fixed): B^exp -> 0 forces base^exp -> 0, and a
+     * base bounded below by a constant > 1 forces base^exp -> Infinity. A
+     * -Infinity or finite exponent limit is rejected: the inequalities flip
+     * and neither conclusion holds. */
+    LimitCtx sub = *ctx; sub.depth += 1;
+    Expr* lim_exp = compute_limit(exp, &sub);
+    if (!lim_exp) return NULL;
+    bool pos_inf = is_infinity_sym(lim_exp);
+    expr_free(lim_exp);
+    if (!pos_inf) return NULL;
+
+    /* --- Upper-bound squeeze to 0 ---------------------------------------
+     * B(x) >= |base(x)| pointwise (var_abs makes the bare-variable bound
+     * sound at a finite point, e.g. |x Sin[1/x]/2| <= Abs[x]/2). When
+     * Limit[B] = L with 0 <= L < 1 then eventually B < r < 1, so
+     * |base^exp| = |base|^exp <= B^exp <= r^exp -> 0 (exp -> +Infinity).
+     * The two-sided complex limit is then 0 (magnitude vanishes even where
+     * base < 0). Firing on Limit[B] rather than Limit[B^exp] lets a
+     * *shrinking* x-dependent bound (Limit[B] = 0) succeed, not just a
+     * constant one. */
+    Expr* B = magnitude_upper_bound(base, ctx->x, /*var_abs=*/true);
+    if (B) {
+        Expr* lim_B = compute_limit(B, &sub);
+        expr_free(B);
+        if (lim_B) {
+            bool decays = lit_in_unit_interval(lim_B);
+            expr_free(lim_B);
+            if (decays) return mk_int(0);
+        }
+    }
+
+    /* --- Lower-bound blow-up to Infinity --------------------------------
+     * For base = c + g(x) with c an x-free real constant and g the bounded
+     * oscillatory remainder, |base| >= |c| - U where U >= |g|. If
+     * |c| - U -> L > 1 and c > 0, then base is eventually positive and
+     * base >= L > 1, so base^exp -> +Infinity (exp -> +Infinity). */
+    if (head_is(base, SYM_Plus)) {
+        Expr* c    = mk_int(0);   /* sum of x-free terms   */
+        Expr* rest = mk_int(0);   /* sum of x-bearing terms */
+        for (size_t i = 0; i < base->data.function.arg_count; i++) {
+            Expr* t = base->data.function.args[i];
+            if (free_of(t, ctx->x))
+                c    = mk_fn2("Plus", c,    expr_copy(t));
+            else
+                rest = mk_fn2("Plus", rest, expr_copy(t));
+        }
+        c = simp(c); rest = simp(rest);
+
+        if (literal_sign(c) > 0) {
+            Expr* U     = magnitude_upper_bound(rest, ctx->x, /*var_abs=*/true);
+            Expr* lower = simp(mk_fn2("Plus", mk_fn1("Abs", expr_copy(c)),
+                                              mk_neg(U)));
+            Expr* lim_L = compute_limit(lower, &sub);
+            expr_free(lower);
+            bool blows_up = lim_L && lit_gt_one(lim_L);
+            if (lim_L) expr_free(lim_L);
+            if (blows_up) { expr_free(c); expr_free(rest); return mk_sym("Infinity"); }
+        }
+        expr_free(c); expr_free(rest);
+    }
+
+    return NULL;
+}
+
+/* ---------------------------------------------------------------------- */
 static Expr* layer_bounded_envelope(Expr* f, LimitCtx* ctx) {
     if (!contains_bounded_head(f)) return NULL;
-    /* Only +Infinity for now: magnitude_upper_bound returns `x` (not
-     * Abs[x]) for the bare variable, which is only an actual upper bound
-     * on |x| when x is positive. Negative-infinity limits must first be
-     * transformed via x -> -y. */
+
+    /* Bounded base raised to a divergent positive power. Valid at finite
+     * points too, so it runs before the +Infinity-only general squeeze. */
+    Expr* bp = envelope_bounded_power(f, ctx);
+    if (bp) return bp;
+
+    /* General squeeze is +Infinity-only: magnitude_upper_bound returns `x`
+     * (not Abs[x]) for the bare variable, which is only an actual upper
+     * bound on |x| when x is positive. Negative-infinity limits must first
+     * be transformed via x -> -y. */
     if (!is_infinity_sym(ctx->point)) return NULL;
 
-    Expr* bound = magnitude_upper_bound(f, ctx->x);
+    Expr* bound = magnitude_upper_bound(f, ctx->x, /*var_abs=*/false);
     if (!bound) return NULL;
 
-    /* Guard: if the bound itself still mentions a bounded head we can't
-     * reason about (e.g. Abs[E^(Sin[..])]) we don't learn anything.      */
+    /* Guard: if the bound itself still mentions a bounded head, the
+     * magnitude reduction failed to replace the oscillator by its constant
+     * envelope -- it survived buried inside an Abs[Log[..]] / Abs[E^(..)]
+     * default wrap. Recursing compute_limit on such a bound re-enters this
+     * layer and re-wraps another Abs each level down to the depth cap (an
+     * expensive simp per level), so bail: the squeeze cannot make progress.
+     * This is what makes Limit[x Log[Sin[x]/2], x->Infinity] terminate,
+     * and thereby unblocks the (Sin[x]/2)^x / (1+Sin[x]/x)^(x^2) families. */
+    if (contains_bounded_head(bound)) { expr_free(bound); return NULL; }
+
     LimitCtx sub = *ctx; sub.depth += 1;
     Expr* lim_bound = compute_limit(bound, &sub);
     expr_free(bound);
@@ -2167,7 +2325,7 @@ static Expr* rewrite_abs_in_expr(Expr* e, LimitCtx* ctx, bool* changed) {
     free(args);
 
     if (current->data.function.head->type == EXPR_SYMBOL && n == 1 &&
-        current->data.function.head->data.symbol == SYM_Abs &&
+        current->data.function.head->data.symbol.name == SYM_Abs &&
         expr_contains(current->data.function.args[0], ctx->x)) {
         Expr* g = current->data.function.args[0];
         int s = sign_near_point(g, ctx);
@@ -2190,7 +2348,7 @@ static Expr* rewrite_abs_in_expr(Expr* e, LimitCtx* ctx, bool* changed) {
 static bool contains_abs_over(Expr* e, Expr* x) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Abs &&
+        e->data.function.head->data.symbol.name == SYM_Abs &&
         e->data.function.arg_count == 1 &&
         expr_contains(e->data.function.args[0], x)) {
         return true;
@@ -2334,19 +2492,30 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
         return NULL;
     }
 
-    /* Normalize reciprocal trig up-front. This is cheap (one tree walk +
-     * one evaluate) and rescues the continuous-substitution path on
-     * shapes like x Csc[x], x Cot[a x], Sec[2x] (1 - Tan[x]), etc. */
-    Expr* rewritten = rewrite_reciprocal_trig(f_in);
+    /* At an infinite point, a *bare* single hyperbolic call (Tanh[g], Coth[g],
+     * Sech[g], Csch[g], Sinh[g], Cosh[g]) is left completely intact -- both the
+     * reciprocal-trig normalization and the exp rewrite are skipped -- so
+     * layer_compose_at_infinity can fold it via the head's own value at
+     * Infinity (Tanh[Infinity]=1, Sech[Infinity]=0, Sinh[Infinity]=Infinity...).
+     * rewrite_reciprocal_trig would otherwise turn Tanh/Coth/Sech/Csch into
+     * Sinh/Cosh ratios, which the exp rewrite then expands into an
+     * asymptotically opaque quotient that the Series/termwise layers miss. */
+    bool at_inf = is_infinity_sym(ctx->point) || is_neg_infinity(ctx->point);
+    bool bare_hyp_at_inf = at_inf && is_bare_hyperbolic_call(f_in);
 
-    /* At Infinity the Sinh/Cosh/Tanh series kernels are misleading
-     * because their leading behaviour is dominated by a single Exp term.
-     * Rewrite them in exponential form so Series can see the dominant
-     * growth and the term-wise Plus layer can cancel decaying tails.
-     * We also Expand so shapes like `E^(-x) (1 + (E^x - E^-x)/2)` fold
-     * into `1/2 - E^(-2x)/2 + E^(-x)`, which the term-wise Plus layer
-     * can directly sum (each summand has a finite limit). */
-    if (is_infinity_sym(ctx->point) || is_neg_infinity(ctx->point)) {
+    /* Normalize reciprocal trig up-front. This is cheap (one tree walk + one
+     * evaluate) and rescues the continuous-substitution path on shapes like
+     * x Csc[x], x Cot[a x], Sec[2x] (1 - Tan[x]), etc. */
+    Expr* rewritten = bare_hyp_at_inf ? expr_copy(f_in)
+                                      : rewrite_reciprocal_trig(f_in);
+
+    /* At Infinity the Sinh/Cosh/Tanh series kernels are misleading because
+     * their leading behaviour is dominated by a single Exp term. Rewrite them
+     * in exponential form so Series can see the dominant growth and the
+     * term-wise Plus layer can cancel decaying tails. We also Expand so shapes
+     * like `E^(-x) (1 + (E^x - E^-x)/2)` fold into `1/2 - E^(-2x)/2 + E^(-x)`,
+     * which the term-wise Plus layer can directly sum. */
+    if (at_inf && !bare_hyp_at_inf) {
         Expr* r2 = rewrite_hyperbolic_to_exp(rewritten);
         expr_free(rewritten);
         rewritten = simp(mk_fn1("Expand", r2));
@@ -2393,8 +2562,9 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
      * Derivative[1][Abs][...] as a "clean" answer. */
     TRY(LIMIT_M_SUBSTITUTION, layer_abs_rewrite(f, ctx));
 
-    /* ArcTan / ArcCot of a divergent inner argument. */
-    TRY(LIMIT_M_ASYMPTOTIC, layer_arctan_infinity(f, ctx));
+    /* f[g(x)] at +/-Infinity via the head's own value there (Erf, Tanh,
+     * ArcTan, Exp, Gamma, ...). Generalises the old ArcTan/ArcCot rule. */
+    TRY(LIMIT_M_ASYMPTOTIC, layer_compose_at_infinity(f, ctx));
 
     /* Layer 3: rational function short-cut (P(x)/Q(x) classical forms). */
     TRY(LIMIT_M_RATIONAL, layer3_rational(f, ctx));
@@ -2498,7 +2668,7 @@ static bool assumption_abs_compare(Expr* a, Expr** out_expr, int* out_op,
     if (!a || a->type != EXPR_FUNCTION || a->data.function.arg_count != 2) return false;
     const char* head_name = NULL;
     if (a->data.function.head->type == EXPR_SYMBOL) {
-        head_name = a->data.function.head->data.symbol;
+        head_name = a->data.function.head->data.symbol.name;
     }
     if (!head_name) return false;
 
@@ -3057,7 +3227,7 @@ static Expr* run_multivariate(Expr* f_in, Expr* vars, Expr* points) {
  * picked up an imaginary part. */
 static bool contains_imaginary_unit(Expr* e) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return e->data.symbol == SYM_I;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_I;
     if (e->type == EXPR_FUNCTION) {
         if (head_is(e, SYM_Complex) && e->data.function.arg_count == 2) {
             Expr* im = e->data.function.args[1];

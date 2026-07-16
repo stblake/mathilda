@@ -329,7 +329,7 @@ static Expr* builtin_context(Expr* res) {
     Expr* a = res->data.function.args[0];
     const char* name = NULL;
     if (a->type == EXPR_SYMBOL) {
-        name = a->data.symbol;
+        name = a->data.symbol.name;
     } else if (a->type == EXPR_STRING) {
         name = a->data.string;
     } else {
@@ -394,7 +394,7 @@ static Expr* builtin_begin_package(Expr* res) {
     if (needs_list) {
         if (needs_list->type != EXPR_FUNCTION
             || needs_list->data.function.head->type != EXPR_SYMBOL
-            || needs_list->data.function.head->data.symbol != SYM_List) {
+            || needs_list->data.function.head->data.symbol.name != SYM_List) {
             return NULL;
         }
         needs_count = needs_list->data.function.arg_count;

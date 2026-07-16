@@ -366,7 +366,7 @@ Expr* builtin_inequality(Expr* res) {
     for (size_t i = 1; i < n; i += 2) {
         Expr* op = res->data.function.args[i];
         if (op->type != EXPR_SYMBOL) return NULL;
-        const char* s = op->data.symbol;
+        const char* s = op->data.symbol.name;
         if (s != SYM_Less && s != SYM_LessEqual
          && s != SYM_Greater && s != SYM_GreaterEqual
          && s != SYM_Equal) return NULL;
@@ -383,7 +383,7 @@ Expr* builtin_inequality(Expr* res) {
         Expr* a  = res->data.function.args[2*k];
         Expr* op = res->data.function.args[2*k + 1];
         Expr* b  = res->data.function.args[2*k + 2];
-        int d = decide_pair(op->data.symbol, a, b);
+        int d = decide_pair(op->data.symbol.name, a, b);
         if (d == 0) {                    /* definitely False */
             free(undecided);
             return expr_new_symbol(SYM_False);
@@ -427,7 +427,7 @@ Expr* builtin_inequality(Expr* res) {
         /* Exactly one undecided pair survived — return it as the binary
          * comparison so downstream consumers see the familiar shape. */
         Expr* binary_args[2] = { out_args[0], out_args[2] };
-        const char* head_sym = out_args[1]->data.symbol;
+        const char* head_sym = out_args[1]->data.symbol.name;
         expr_free(out_args[1]);
         Expr* result = expr_new_function(expr_new_symbol(head_sym), binary_args, 2);
         free(out_args);

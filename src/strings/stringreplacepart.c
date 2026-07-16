@@ -18,7 +18,7 @@
 static bool srp_is_list(Expr* e) {
     return e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol == SYM_List;
+           e->data.function.head->data.symbol.name == SYM_List;
 }
 
 /*

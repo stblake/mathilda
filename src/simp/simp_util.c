@@ -63,7 +63,7 @@ bool simp_debug_enabled(void) {
     Rule* r = symtab_get_own_values("$SimplifyDebug");
     if (!r || !r->replacement) return false;
     Expr* v = r->replacement;
-    return v->type == EXPR_SYMBOL && v->data.symbol == SYM_True;
+    return v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True;
 }
 
 double simp_debug_elapsed_ms(clock_t t0) {
@@ -106,10 +106,10 @@ bool is_rule_with_lhs(const Expr* e, const char* lhs_symbol) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.arg_count != 2) return false;
     if (!e->data.function.head || e->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     if (h != SYM_Rule && h != SYM_RuleDelayed) return false;
     Expr* k = e->data.function.args[0];
-    return k && k->type == EXPR_SYMBOL && strcmp(k->data.symbol, lhs_symbol) == 0;
+    return k && k->type == EXPR_SYMBOL && strcmp(k->data.symbol.name, lhs_symbol) == 0;
 }
 
 bool head_threads_over(const char* h) {
@@ -188,12 +188,12 @@ bool simp_has_rational_root(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     const Expr* head = e->data.function.head;
     size_t argc = e->data.function.arg_count;
-    if (head && head->type == EXPR_SYMBOL && head->data.symbol == SYM_Power
+    if (head && head->type == EXPR_SYMBOL && head->data.symbol.name == SYM_Power
         && argc == 2) {
         const Expr* exp = e->data.function.args[1];
         if (exp->type == EXPR_FUNCTION && exp->data.function.head
             && exp->data.function.head->type == EXPR_SYMBOL
-            && exp->data.function.head->data.symbol == SYM_Rational
+            && exp->data.function.head->data.symbol.name == SYM_Rational
             && exp->data.function.arg_count == 2) {
             const Expr* qq = exp->data.function.args[1];
             if (qq->type == EXPR_INTEGER && qq->data.integer >= 2) return true;
@@ -222,17 +222,17 @@ static size_t nested_radical_penalty(const Expr* e) {
     size_t total = 0;
     const Expr* head = e->data.function.head;
     size_t argc = e->data.function.arg_count;
-    if (head && head->type == EXPR_SYMBOL && head->data.symbol == SYM_Power
+    if (head && head->type == EXPR_SYMBOL && head->data.symbol.name == SYM_Power
         && argc == 2) {
         const Expr* base = e->data.function.args[0];
         const Expr* exp  = e->data.function.args[1];
         if (base->type == EXPR_FUNCTION && base->data.function.head
             && base->data.function.head->type == EXPR_SYMBOL) {
-            const char* bsym = base->data.function.head->data.symbol;
+            const char* bsym = base->data.function.head->data.symbol.name;
             if (bsym != SYM_Rational && bsym != SYM_Complex) {
                 if (exp->type == EXPR_FUNCTION && exp->data.function.head
                     && exp->data.function.head->type == EXPR_SYMBOL
-                    && exp->data.function.head->data.symbol == SYM_Rational
+                    && exp->data.function.head->data.symbol.name == SYM_Rational
                     && exp->data.function.arg_count == 2) {
                     const Expr* qq = exp->data.function.args[1];
                     if (qq->type == EXPR_INTEGER && qq->data.integer >= 2

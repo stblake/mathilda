@@ -60,7 +60,7 @@ static bool expr_contains_head_named(const Expr* e, const char* name) {
     if (e->type == EXPR_FUNCTION) {
         if (e->data.function.head
             && e->data.function.head->type == EXPR_SYMBOL
-            && strcmp(e->data.function.head->data.symbol, name) == 0) {
+            && strcmp(e->data.function.head->data.symbol.name, name) == 0) {
             return true;
         }
         if (expr_contains_head_named(e->data.function.head, name)) return true;
@@ -174,7 +174,7 @@ int main(int argc, char** argv) {
     if (!tests || tests->type != EXPR_FUNCTION
         || !tests->data.function.head
         || tests->data.function.head->type != EXPR_SYMBOL
-        || strcmp(tests->data.function.head->data.symbol, "List") != 0) {
+        || strcmp(tests->data.function.head->data.symbol.name, "List") != 0) {
         fprintf(stderr,
             "FAIL: could not load IntegrateRationalTests.m as a List.\n");
         if (tests) expr_free(tests);
@@ -200,7 +200,7 @@ int main(int argc, char** argv) {
         if (triple->type != EXPR_FUNCTION
             || !triple->data.function.head
             || triple->data.function.head->type != EXPR_SYMBOL
-            || strcmp(triple->data.function.head->data.symbol, "List") != 0
+            || strcmp(triple->data.function.head->data.symbol.name, "List") != 0
             || triple->data.function.arg_count < 2) {
             malformed++;
             continue;
@@ -250,7 +250,7 @@ int main(int argc, char** argv) {
                 && result->type == EXPR_FUNCTION
                 && result->data.function.head
                 && result->data.function.head->type == EXPR_SYMBOL
-                && strcmp(result->data.function.head->data.symbol,
+                && strcmp(result->data.function.head->data.symbol.name,
                           "Integrate") == 0);
 
             if (is_unevaluated) {

@@ -46,7 +46,7 @@ static bool eval_body_xy(ParamEvalCtx* ctx, double* x_out, double* y_out) {
     bool ok = false;
     if (result && result->type == EXPR_FUNCTION
         && result->data.function.head->type == EXPR_SYMBOL
-        && result->data.function.head->data.symbol == SYM_List
+        && result->data.function.head->data.symbol.name == SYM_List
         && result->data.function.arg_count == 2) {
         double x, y;
         if (expr_to_real_double(result->data.function.args[0], &x) && isfinite(x)
@@ -62,7 +62,7 @@ static bool eval_body_xy(ParamEvalCtx* ctx, double* x_out, double* y_out) {
 
 /* Set var1 = t and evaluate the body (1-iterator form). */
 static bool param_eval(double t, ParamEvalCtx* ctx, double* x_out, double* y_out) {
-    symtab_add_own_value(ctx->var1->data.symbol, ctx->var1, expr_new_real(t));
+    symtab_add_own_value(ctx->var1->data.symbol.name, ctx->var1, expr_new_real(t));
     return eval_body_xy(ctx, x_out, y_out);
 }
 
@@ -236,7 +236,7 @@ static bool split_options_param(Expr* res, size_t opts_start, long default_plot_
         if (!is_rule_arg(arg)) PFAIL();
         Expr* lhs = arg->data.function.args[0];
         Expr* rhs = arg->data.function.args[1];
-        const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol : NULL;
+        const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol.name : NULL;
 
         if (name == SYM_PlotPoints) {
             long v;
@@ -248,7 +248,7 @@ static bool split_options_param(Expr* res, size_t opts_start, long default_plot_
             sopts->max_recursion = (int)v;
         } else if (name == SYM_MaxPlotPoints) {
             Expr* v = evaluate(expr_copy(rhs));
-            bool is_inf = (v->type == EXPR_SYMBOL && v->data.symbol == SYM_Infinity);
+            bool is_inf = (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Infinity);
             long lv = -1;
             bool ok = is_inf;
             if (!ok && v->type == EXPR_INTEGER && v->data.integer > 0) { lv = v->data.integer; ok = true; }
@@ -257,8 +257,8 @@ static bool split_options_param(Expr* res, size_t opts_start, long default_plot_
             sopts->max_plot_points = lv;
         } else if (name == SYM_Mesh) {
             Expr* v = evaluate(expr_copy(rhs));
-            bool on  = (v->type == EXPR_SYMBOL && (v->data.symbol == SYM_All  || v->data.symbol == SYM_True));
-            bool off = (v->type == EXPR_SYMBOL && (v->data.symbol == SYM_None || v->data.symbol == SYM_False));
+            bool on  = (v->type == EXPR_SYMBOL && (v->data.symbol.name == SYM_All  || v->data.symbol.name == SYM_True));
+            bool off = (v->type == EXPR_SYMBOL && (v->data.symbol.name == SYM_None || v->data.symbol.name == SYM_False));
             expr_free(v);
             if (!on && !off) PFAIL();
             sopts->mesh = on;
@@ -268,7 +268,7 @@ static bool split_options_param(Expr* res, size_t opts_start, long default_plot_
             sopts->color_function = rhs;
         } else if (name == SYM_ColorFunctionScaling) {
             Expr* v = evaluate(expr_copy(rhs));
-            sopts->color_function_scaling = !(v->type == EXPR_SYMBOL && v->data.symbol == SYM_False);
+            sopts->color_function_scaling = !(v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False);
             expr_free(v);
         } else if (name == SYM_PlotStyle) {
             have_style = true;
@@ -279,7 +279,7 @@ static bool split_options_param(Expr* res, size_t opts_start, long default_plot_
         } else if (name == SYM_AspectRatio) {
             have_aspect = true;
             if (rhs->type == EXPR_SYMBOL
-                && (rhs->data.symbol == SYM_Automatic || rhs->data.symbol == SYM_Full)) {
+                && (rhs->data.symbol.name == SYM_Automatic || rhs->data.symbol.name == SYM_Full)) {
                 pass[n++] = expr_copy(arg);
             } else {
                 double v;
@@ -292,7 +292,7 @@ static bool split_options_param(Expr* res, size_t opts_start, long default_plot_
             if (name == SYM_Axes)  have_axes  = true;
             if (name == SYM_Frame) {
                 if (!(rhs->type == EXPR_SYMBOL
-                      && (rhs->data.symbol == SYM_False || rhs->data.symbol == SYM_None)))
+                      && (rhs->data.symbol.name == SYM_False || rhs->data.symbol.name == SYM_None)))
                     have_frame = true;
             }
             Expr* val = evaluate(expr_copy(rhs));
@@ -457,11 +457,11 @@ static Expr** build_param_region(Expr* body, Expr* var1, Expr* var2,
         double t = (n > 1) ? t1min + (t1max - t1min) * (double)i / (double)(n-1) : t1min;
         if (i == n-1) t = t1max;
         /* Set var1 once per row. */
-        symtab_add_own_value(ctx.var1->data.symbol, ctx.var1, expr_new_real(t));
+        symtab_add_own_value(ctx.var1->data.symbol.name, ctx.var1, expr_new_real(t));
         for (long j = 0; j < n; j++) {
             double r = (n > 1) ? t2min + (t2max - t2min) * (double)j / (double)(n-1) : t2min;
             if (j == n-1) r = t2max;
-            symtab_add_own_value(ctx.var2->data.symbol, ctx.var2, expr_new_real(r));
+            symtab_add_own_value(ctx.var2->data.symbol.name, ctx.var2, expr_new_real(r));
             GridPt2D* p = &grid[i * n + j];
             p->valid = eval_body_xy(&ctx, &p->x, &p->y);
         }
@@ -538,7 +538,7 @@ static Expr** build_param_region(Expr* body, Expr* var1, Expr* var2,
 static bool is_iterator(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_List
+        && e->data.function.head->data.symbol.name == SYM_List
         && e->data.function.arg_count == 3
         && e->data.function.args[0]->type == EXPR_SYMBOL;
 }
@@ -553,7 +553,7 @@ static Expr* prescan_plotlegends(Expr* res, size_t opts_start) {
         Expr* arg = res->data.function.args[i];
         if (!is_rule_arg(arg)) continue;
         Expr* lhs = arg->data.function.args[0];
-        if (lhs->type == EXPR_SYMBOL && lhs->data.symbol == SYM_PlotLegends)
+        if (lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == SYM_PlotLegends)
             return evaluate(expr_copy(arg->data.function.args[1]));
     }
     return NULL;
@@ -613,12 +613,12 @@ Expr* builtin_parametricplot(Expr* res) {
          * Single-surface: everything else ({fx,fy} or a computed expression). */
         bool body_is_list = (body->type == EXPR_FUNCTION
                              && body->data.function.head->type == EXPR_SYMBOL
-                             && body->data.function.head->data.symbol == SYM_List);
+                             && body->data.function.head->data.symbol.name == SYM_List);
         bool multi2 = (body_is_list
                        && body->data.function.arg_count >= 1
                        && body->data.function.args[0]->type == EXPR_FUNCTION
                        && body->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
-                       && body->data.function.args[0]->data.function.head->data.symbol == SYM_List);
+                       && body->data.function.args[0]->data.function.head->data.symbol.name == SYM_List);
 
         Expr** sub_bodies;
         size_t nsub;
@@ -698,13 +698,13 @@ Expr* builtin_parametricplot(Expr* res) {
          * Single: everything else (a literal {fx,fy}, or a computed body). */
         bool is_list_head = (spec->type == EXPR_FUNCTION
                              && spec->data.function.head->type == EXPR_SYMBOL
-                             && spec->data.function.head->data.symbol == SYM_List);
+                             && spec->data.function.head->data.symbol.name == SYM_List);
 
         bool multi = (is_list_head
                       && spec->data.function.arg_count >= 1
                       && spec->data.function.args[0]->type == EXPR_FUNCTION
                       && spec->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
-                      && spec->data.function.args[0]->data.function.head->data.symbol == SYM_List);
+                      && spec->data.function.args[0]->data.function.head->data.symbol.name == SYM_List);
 
         Expr** bodies;
         size_t nbodies;

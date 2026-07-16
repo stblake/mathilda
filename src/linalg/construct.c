@@ -5,6 +5,7 @@
  */
 
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "sym_names.h"
 #include <stdlib.h>
 
@@ -17,7 +18,7 @@ Expr* builtin_identitymatrix(Expr* res) {
     if (arg->type == EXPR_INTEGER) {
         m = arg->data.integer;
         n = m;
-    } else if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && arg->data.function.head->data.symbol == SYM_List) {
+    } else if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && arg->data.function.head->data.symbol.name == SYM_List) {
         if (arg->data.function.arg_count == 2) {
             Expr* arg_m = arg->data.function.args[0];
             Expr* arg_n = arg->data.function.args[1];
@@ -50,10 +51,11 @@ Expr* builtin_identitymatrix(Expr* res) {
 }
 
 Expr* builtin_diagonalmatrix(Expr* res) {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 3) return NULL;
 
     Expr* list = res->data.function.args[0];
-    if (list->type != EXPR_FUNCTION || list->data.function.head->type != EXPR_SYMBOL || list->data.function.head->data.symbol != SYM_List) {
+    if (list->type != EXPR_FUNCTION || list->data.function.head->type != EXPR_SYMBOL || list->data.function.head->data.symbol.name != SYM_List) {
         return expr_copy(res);
     }
 
@@ -76,7 +78,7 @@ Expr* builtin_diagonalmatrix(Expr* res) {
         if (dim_expr->type == EXPR_INTEGER) {
             m = dim_expr->data.integer;
             n = m;
-        } else if (dim_expr->type == EXPR_FUNCTION && dim_expr->data.function.head->type == EXPR_SYMBOL && dim_expr->data.function.head->data.symbol == SYM_List) {
+        } else if (dim_expr->type == EXPR_FUNCTION && dim_expr->data.function.head->type == EXPR_SYMBOL && dim_expr->data.function.head->data.symbol.name == SYM_List) {
             if (dim_expr->data.function.arg_count == 2) {
                 Expr* arg_m = dim_expr->data.function.args[0];
                 Expr* arg_n = dim_expr->data.function.args[1];

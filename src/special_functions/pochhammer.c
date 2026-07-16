@@ -47,7 +47,7 @@
 
 /* True if `e` is exactly the symbol `name`. */
 static bool poch_is_symbol(const Expr* e, const char* name) {
-    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol, name) == 0;
+    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, name) == 0;
 }
 
 /* True if `e` (or a subexpression) is headed by Gamma -- used to detect a

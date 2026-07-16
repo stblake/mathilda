@@ -20,16 +20,24 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
         ],
     )?;
 
+    // Use the PREDEFINED clipboard/undo items so the standard shortcuts
+    // (Cmd+C/X/V/A, Cmd+Z) route through the macOS responder chain to the
+    // focused text editor. Binding custom items to those accelerators would
+    // hijack the keys app-wide and break copy/paste inside cells.
     let edit = Submenu::with_items(
         app,
         "Edit",
         true,
         &[
-            &MenuItem::with_id(app, "add-cell",     "Add Cell Below",   true, Some("CmdOrCtrl+B"))?,
+            &MenuItem::with_id(app, "add-cell", "Add Cell Below", true, Some("CmdOrCtrl+B"))?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "copy-cells",   "Copy Cell(s)",     true, Some("CmdOrCtrl+C"))?,
-            &MenuItem::with_id(app, "paste-cells",  "Paste Cell(s)",    true, Some("CmdOrCtrl+V"))?,
-            &MenuItem::with_id(app, "delete-cells", "Delete Cell(s)",   true, Some("Backspace"))?,
+            &PredefinedMenuItem::undo(app, None)?,
+            &PredefinedMenuItem::redo(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::cut(app, None)?,
+            &PredefinedMenuItem::copy(app, None)?,
+            &PredefinedMenuItem::paste(app, None)?,
+            &PredefinedMenuItem::select_all(app, None)?,
         ],
     )?;
 

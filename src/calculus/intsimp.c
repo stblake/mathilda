@@ -31,6 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <math.h>
 
 /* ====================================================================
  * Radical detection + Simplify guard.
@@ -47,12 +48,12 @@
 bool intsimp_has_radical(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.head->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2) {
         Expr* exp = e->data.function.args[1];
         if (exp->type == EXPR_FUNCTION
             && exp->data.function.head->type == EXPR_SYMBOL
-            && exp->data.function.head->data.symbol == SYM_Rational) {
+            && exp->data.function.head->data.symbol.name == SYM_Rational) {
             return true;
         }
     }
@@ -104,7 +105,7 @@ int intsimp_sign_pos_assumption(Expr* e) {
     }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.head->data.symbol.name == SYM_Rational
         && e->data.function.arg_count == 2
         && e->data.function.args[0]->type == EXPR_INTEGER
         && e->data.function.args[1]->type == EXPR_INTEGER) {
@@ -122,7 +123,7 @@ int intsimp_sign_pos_assumption(Expr* e) {
     }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.head->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp = e->data.function.args[1];
@@ -137,7 +138,7 @@ int intsimp_sign_pos_assumption(Expr* e) {
     }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Times) {
+        && e->data.function.head->data.symbol.name == SYM_Times) {
         int sign = 1;
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             int s = intsimp_sign_pos_assumption(e->data.function.args[i]);
@@ -148,7 +149,7 @@ int intsimp_sign_pos_assumption(Expr* e) {
     }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Plus) {
+        && e->data.function.head->data.symbol.name == SYM_Plus) {
         int sign = 0;
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             int s = intsimp_sign_pos_assumption(e->data.function.args[i]);
@@ -160,7 +161,7 @@ int intsimp_sign_pos_assumption(Expr* e) {
     }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Sqrt
+        && e->data.function.head->data.symbol.name == SYM_Sqrt
         && e->data.function.arg_count == 1) {
         int s = intsimp_sign_pos_assumption(e->data.function.args[0]);
         if (s > 0) return 1;
@@ -250,7 +251,7 @@ Expr* intsimp_pos_sqrt_factor(Expr* e) {
     }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.head->data.symbol.name == SYM_Rational
         && e->data.function.arg_count == 2) {
         Expr* num = e->data.function.args[0];
         Expr* den = e->data.function.args[1];
@@ -260,7 +261,7 @@ Expr* intsimp_pos_sqrt_factor(Expr* e) {
     }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.head->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp_e = e->data.function.args[1];
@@ -301,7 +302,7 @@ Expr* intsimp_pos_sqrt_factor(Expr* e) {
 Expr* intsimp_pos_sqrt(Expr* e) {
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Times) {
+        && e->data.function.head->data.symbol.name == SYM_Times) {
         size_t n = e->data.function.arg_count;
         Expr** out = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
         for (size_t i = 0; i < n; i++) {
@@ -343,7 +344,7 @@ static bool collect_times_factors(Expr* term,
                                   Expr** log_arg_out) {
     if (term->type == EXPR_FUNCTION
         && term->data.function.head->type == EXPR_SYMBOL
-        && term->data.function.head->data.symbol == SYM_Times) {
+        && term->data.function.head->data.symbol.name == SYM_Times) {
         size_t n = term->data.function.arg_count;
         for (size_t i = 0; i < n; i++) {
             if (!collect_times_factors(term->data.function.args[i],
@@ -355,7 +356,7 @@ static bool collect_times_factors(Expr* term,
     }
     if (term->type == EXPR_FUNCTION
         && term->data.function.head->type == EXPR_SYMBOL
-        && term->data.function.head->data.symbol == SYM_Log
+        && term->data.function.head->data.symbol.name == SYM_Log
         && term->data.function.arg_count == 1) {
         if (*log_arg_out) return false; /* multiple Log factors */
         *log_arg_out = term->data.function.args[0];
@@ -375,7 +376,7 @@ static bool decompose_log_term(Expr* term, Expr** coeff_out, Expr** log_arg_out)
     /* Plain Log[x]. */
     if (term->type == EXPR_FUNCTION
         && term->data.function.head->type == EXPR_SYMBOL
-        && term->data.function.head->data.symbol == SYM_Log
+        && term->data.function.head->data.symbol.name == SYM_Log
         && term->data.function.arg_count == 1) {
         *coeff_out = expr_new_integer(1);
         *log_arg_out = expr_copy(term->data.function.args[0]);
@@ -385,7 +386,7 @@ static bool decompose_log_term(Expr* term, Expr** coeff_out, Expr** log_arg_out)
      * rest become the coefficient. */
     if (term->type != EXPR_FUNCTION
         || term->data.function.head->type != EXPR_SYMBOL
-        || term->data.function.head->data.symbol != SYM_Times) return false;
+        || term->data.function.head->data.symbol.name != SYM_Times) return false;
 
     Expr** factors = NULL;
     size_t fc = 0, fcap = 0;
@@ -418,7 +419,7 @@ Expr* intsimp_log_to_arctanh(Expr* e, Expr* x) {
     if (!e) return NULL;
     if (!(e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Plus)) {
+        && e->data.function.head->data.symbol.name == SYM_Plus)) {
         return expr_copy(e);
     }
 
@@ -583,7 +584,7 @@ Expr* intsimp_strip_log_constants(Expr* e, Expr* x) {
     /* Only Log heads need post-rewrite. */
     if (rebuilt->type != EXPR_FUNCTION
         || rebuilt->data.function.head->type != EXPR_SYMBOL
-        || rebuilt->data.function.head->data.symbol != SYM_Log
+        || rebuilt->data.function.head->data.symbol.name != SYM_Log
         || rebuilt->data.function.arg_count != 1) {
         return rebuilt;
     }
@@ -591,7 +592,7 @@ Expr* intsimp_strip_log_constants(Expr* e, Expr* x) {
     Expr* arg = rebuilt->data.function.args[0];
     if (arg->type != EXPR_FUNCTION
         || arg->data.function.head->type != EXPR_SYMBOL
-        || arg->data.function.head->data.symbol != SYM_Times) {
+        || arg->data.function.head->data.symbol.name != SYM_Times) {
         return rebuilt;
     }
 
@@ -661,8 +662,8 @@ Expr* intsimp_normalize_inverse_trig_signs(Expr* e) {
      * an argument that starts with a unary minus or a Times whose
      * first factor is a literal -1. */
     if (e->data.function.head->type == EXPR_SYMBOL
-        && (e->data.function.head->data.symbol == SYM_ArcTan
-            || e->data.function.head->data.symbol == SYM_ArcTanh)
+        && (e->data.function.head->data.symbol.name == SYM_ArcTan
+            || e->data.function.head->data.symbol.name == SYM_ArcTanh)
         && e->data.function.arg_count == 1) {
         Expr* arg = e->data.function.args[0];
         bool negative = false;
@@ -672,7 +673,7 @@ Expr* intsimp_normalize_inverse_trig_signs(Expr* e) {
             stripped = expr_new_integer(-arg->data.integer);
         } else if (arg->type == EXPR_FUNCTION
             && arg->data.function.head->type == EXPR_SYMBOL
-            && arg->data.function.head->data.symbol == SYM_Times
+            && arg->data.function.head->data.symbol.name == SYM_Times
             && arg->data.function.arg_count >= 1
             && arg->data.function.args[0]->type == EXPR_INTEGER
             && arg->data.function.args[0]->data.integer == -1) {
@@ -768,7 +769,7 @@ static bool it_pos_base(const Expr* c) {
     }
     if (c->type == EXPR_FUNCTION
         && c->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = c->data.function.head->data.symbol;
+        const char* h = c->data.function.head->data.symbol.name;
         if (h == SYM_Times) {
             for (size_t i = 0; i < c->data.function.arg_count; i++)
                 if (!it_pos_base(c->data.function.args[i])) return false;
@@ -791,7 +792,7 @@ static Expr* it_normalize_xfree_powers(Expr* e, Expr* x) {
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
     if (e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.head->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2) {
         int64_t pn, pd;
         if (is_rational(e->data.function.args[1], &pn, &pd) && pd != 1
@@ -818,7 +819,7 @@ static Expr* it_normalize_xfree_powers(Expr* e, Expr* x) {
 static bool it_has_x_radical(const Expr* e, Expr* x) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.head->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2) {
         int64_t pn, pd;
         if (is_rational(e->data.function.args[1], &pn, &pd) && pd != 1
@@ -841,7 +842,7 @@ static bool it_is_invtrig_head(const char* s) {
 static bool it_term_is_transcendental(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL) {
-        const char* s = e->data.function.head->data.symbol;
+        const char* s = e->data.function.head->data.symbol.name;
         if (s == SYM_Log || it_is_invtrig_head(s)) return true;
     }
     if (it_term_is_transcendental(e->data.function.head)) return true;
@@ -857,7 +858,7 @@ static bool it_summand_negative(const Expr* t) {
     if (t->type == EXPR_REAL)    return t->data.real < 0.0;
     if (t->type == EXPR_FUNCTION
         && t->data.function.head->type == EXPR_SYMBOL) {
-        const char* s = t->data.function.head->data.symbol;
+        const char* s = t->data.function.head->data.symbol.name;
         if (s == SYM_Rational && t->data.function.arg_count == 2
             && t->data.function.args[0]->type == EXPR_INTEGER)
             return t->data.function.args[0]->data.integer < 0;
@@ -873,7 +874,7 @@ static bool it_all_negative(const Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Plus) {
+        && e->data.function.head->data.symbol.name == SYM_Plus) {
         if (e->data.function.arg_count == 0) return false;
         for (size_t i = 0; i < e->data.function.arg_count; i++)
             if (!it_summand_negative(e->data.function.args[i])) return false;
@@ -896,7 +897,7 @@ static Expr* it_tidy_invtrig_args(Expr* e) {
     free(na);
 
     if (rebuilt->data.function.head->type == EXPR_SYMBOL
-        && it_is_invtrig_head(rebuilt->data.function.head->data.symbol)
+        && it_is_invtrig_head(rebuilt->data.function.head->data.symbol.name)
         && rebuilt->data.function.arg_count == 1) {
         Expr* ax = expr_expand(rebuilt->data.function.args[0]);
         Expr* ae = eval_and_free(ax);
@@ -956,6 +957,108 @@ static Expr* it_recombine_algebraic(Expr* alg) {
     return out;
 }
 
+/* ====================================================================
+ * Output cleanup — real-branch repair of ArcTanh.
+ * ====================================================================
+ *
+ * A substitution integrator can back-substitute into an antiderivative
+ * carrying ArcTanh[g(x)] whose argument g is real with |g| > 1 on the
+ * integrand's real domain.  ArcTanh's real interval is (-1, 1); for
+ * |g| > 1 the value sits on the branch cut (1, Inf) U (-Inf, -1) and
+ * gains a constant +-I Pi/2, so the antiderivative of a *real* integrand
+ * comes out complex-valued (off by a constant imaginary part).  The
+ * companion function ArcCoth has the SAME derivative — d/dz ArcTanh[z] =
+ * d/dz ArcCoth[z] = 1/(1 - z^2) — and is real precisely where |z| > 1.
+ * Rewriting ArcTanh[g] -> ArcCoth[g] there therefore selects the real
+ * branch without changing the derivative (differentiate-back is
+ * unaffected), matching the real closed form Mathematica returns.  E.g.
+ * Integrate[Sqrt[x + Sqrt[x]], x] would otherwise carry
+ * ArcTanh[Sqrt[1 + Sqrt[x]]/x^(1/4)] with the argument > 1 for all x > 0.
+ */
+
+/* Evaluate N[e]; on a real machine number store it in *out and return true.
+ * Returns false for complex, infinite (a probe that hit a pole ->
+ * ComplexInfinity), or still-symbolic results.  Borrows `e`. */
+static bool it_num_real(const Expr* e, double* out) {
+    Expr* call = expr_new_function(expr_new_symbol(SYM_N),
+                                   (Expr*[]){ expr_copy((Expr*)e) }, 1);
+    Expr* r = eval_and_free(call);
+    bool ok = false;
+    if (r) {
+        if (r->type == EXPR_REAL)         { *out = r->data.real;            ok = true; }
+        else if (r->type == EXPR_INTEGER) { *out = (double)r->data.integer; ok = true; }
+        else {
+            int64_t nn, dd;
+            if (is_rational(r, &nn, &dd) && dd != 0) {
+                *out = (double)nn / (double)dd; ok = true;
+            }
+        }
+        expr_free(r);
+    }
+    return ok;
+}
+
+/* True iff g(x) is real with |g| > 1 across a spread of positive-real sample
+ * points — the branch condition under which ArcCoth[g] is the real form and
+ * ArcTanh[g] sits on its cut.  Probes that hit a singularity / complex value
+ * are skipped; a definite real |g| <= 1 or a nonzero imaginary part at any
+ * probe vetoes the rewrite (conservative: the swap is derivative-preserving,
+ * so a false negative merely leaves the pre-existing form). */
+static bool it_arg_real_outside_unit(const Expr* g, Expr* x) {
+    static const double probes[] = { 0.3, 0.7, 1.3, 2.0, 3.5, 8.0, 15.0 };
+    const size_t np = sizeof(probes) / sizeof(probes[0]);
+    int valid = 0;
+    for (size_t i = 0; i < np; i++) {
+        Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
+            (Expr*[]){ expr_copy(x), expr_new_real(probes[i]) }, 2);
+        Expr* sub = eval_and_free(internal_replace_all(
+            (Expr*[]){ expr_copy((Expr*)g), rule }, 2));
+        if (!sub) continue;
+        Expr* im_call = expr_new_function(expr_new_symbol(SYM_Im),
+            (Expr*[]){ expr_copy(sub) }, 1);
+        Expr* ab_call = expr_new_function(expr_new_symbol(SYM_Abs),
+            (Expr*[]){ sub }, 1);                 /* consumes sub */
+        double im, ab;
+        bool im_ok = it_num_real(im_call, &im);
+        bool ab_ok = it_num_real(ab_call, &ab);
+        expr_free(im_call);
+        expr_free(ab_call);
+        if (!im_ok || !ab_ok) continue;           /* singular / complex-infinite probe */
+        if (fabs(im) > 1e-7)   return false;       /* g not real here */
+        if (ab <= 1.0 + 1e-7)  return false;       /* |g| <= 1: ArcTanh is the real branch */
+        valid++;
+    }
+    return valid >= 3;
+}
+
+/* Walk `e`, rewriting every x-dependent ArcTanh[g] whose argument is real
+ * with |g| > 1 on the real domain into the derivative-identical, real-valued
+ * ArcCoth[g].  Returns a fresh owned tree; `e` is untouched. */
+static Expr* it_realify_arctanh(const Expr* e, Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    size_t n = e->data.function.arg_count;
+    Expr** na = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++)
+        na[i] = it_realify_arctanh(e->data.function.args[i], x);
+    Expr* head = it_realify_arctanh(e->data.function.head, x);
+    Expr* rebuilt = expr_new_function(head, na, n);
+    free(na);
+
+    if (rebuilt->data.function.head->type == EXPR_SYMBOL
+        && rebuilt->data.function.head->data.symbol.name == SYM_ArcTanh
+        && rebuilt->data.function.arg_count == 1) {
+        Expr* g = rebuilt->data.function.args[0];
+        if (!intrat_freeq_test(g, x) && it_arg_real_outside_unit(g, x)) {
+            Expr* out = expr_new_function(expr_new_symbol(SYM_ArcCoth),
+                (Expr*[]){ expr_copy(g) }, 1);
+            expr_free(rebuilt);
+            return out;
+        }
+    }
+    return rebuilt;
+}
+
 /* Largest algebraic part we will attempt to Cancel[Together] — a guard
  * against the multivariate-GCD blow-up on high-generator results. */
 #define IT_RECOMBINE_GATE 800
@@ -966,7 +1069,7 @@ static Expr* it_recombine_algebraic(Expr* alg) {
 static bool it_contains_integrate(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Integrate) return true;
+        && e->data.function.head->data.symbol.name == SYM_Integrate) return true;
     if (it_contains_integrate(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         if (it_contains_integrate(e->data.function.args[i])) return true;
@@ -998,7 +1101,7 @@ Expr* intsimp_finalize(Expr* r, Expr* x) {
     /* (2) split into algebraic vs transcendental summands. */
     bool is_plus = (p->type == EXPR_FUNCTION
         && p->data.function.head->type == EXPR_SYMBOL
-        && p->data.function.head->data.symbol == SYM_Plus);
+        && p->data.function.head->data.symbol.name == SYM_Plus);
     size_t n = is_plus ? p->data.function.arg_count : 1;
 
     Expr** alg = (Expr**)malloc(sizeof(Expr*) * n);
@@ -1032,8 +1135,13 @@ Expr* intsimp_finalize(Expr* r, Expr* x) {
         }
     }
 
-    /* (4) distribute + sign-normalise inverse-trig arguments. */
+    /* (4) select the real branch of ArcTanh (ArcTanh[g] -> ArcCoth[g] where
+     *     g is real with |g| > 1 on the real domain), then distribute +
+     *     sign-normalise inverse-trig arguments. */
     if (trn_sum) {
+        Expr* rb = it_realify_arctanh(trn_sum, x);
+        expr_free(trn_sum);
+        trn_sum = rb;
         Expr* t2 = it_tidy_invtrig_args(trn_sum);
         expr_free(trn_sum);
         trn_sum = t2;

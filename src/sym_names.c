@@ -96,6 +96,7 @@ const char* SYM_Csc = NULL;
 const char* SYM_Csch = NULL;
 const char* SYM_Cubics = NULL;
 const char* SYM_DampingFactor = NULL;
+const char* SYM_DataType = NULL;
 const char* SYM_Degree = NULL;
 const char* SYM_DesignMatrix = NULL;
 const char* SYM_DegreeLexicographic = NULL;
@@ -147,6 +148,11 @@ const char* SYM_Erfc = NULL;
 const char* SYM_Erfi = NULL;
 const char* SYM_ExpIntegralEi = NULL;
 const char* SYM_LogIntegral = NULL;
+const char* SYM_SinIntegral = NULL;
+const char* SYM_CosIntegral = NULL;
+const char* SYM_FresnelC = NULL;
+const char* SYM_FresnelS = NULL;
+const char* SYM_Sinc = NULL;
 const char* SYM_InverseErf = NULL;
 const char* SYM_InverseErfc = NULL;
 const char* SYM_Except = NULL;
@@ -266,6 +272,7 @@ const char* SYM_LiouvilleLambda = NULL;
 const char* SYM_PrimeOmega = NULL;
 const char* SYM_PrimeNu = NULL;
 const char* SYM_List = NULL;
+const char* SYM_NDArray = NULL;
 const char* SYM_Association = NULL;
 const char* SYM_AssociationQ = NULL;
 const char* SYM_Keys = NULL;
@@ -330,6 +337,7 @@ const char* SYM_NHoldRest = NULL;
 const char* SYM_NIntegrate = NULL;
 const char* SYM_NLimit = NULL;
 const char* SYM_NResidue = NULL;
+const char* SYM_Residue = NULL;
 const char* SYM_NRoots = NULL;
 const char* SYM_NSolve = NULL;
 const char* SYM_NSeries = NULL;
@@ -557,6 +565,7 @@ const char* SYM_Mean = NULL;
 const char* SYM_Median = NULL;
 const char* SYM_MemberQ = NULL;
 const char* SYM_N = NULL;
+const char* SYM_Names = NULL;
 const char* SYM_Norm = NULL;
 const char* SYM_Numerator = NULL;
 const char* SYM_NumericQ = NULL;
@@ -602,6 +611,8 @@ const char* SYM_DollarModuleNumber = NULL;
 const char* SYM_DollarRecursionLimit = NULL;
 const char* SYM_DollarSimplifyDebug = NULL;
 const char* SYM_DollarruSimplify = NULL;
+const char* SYM_DollarVersion = NULL;
+const char* SYM_DollarVersionNumber = NULL;
 
 const char* SYM_Graphics = NULL;
 const char* SYM_Graphics3D = NULL;
@@ -731,6 +742,38 @@ const char* SYM_Backward            = NULL;
 const char* SYM_ForwardBackward     = NULL;
 const char* SYM_BackwardForward     = NULL;
 
+/* Graph subsystem (src/graph/). */
+const char* SYM_Graph = NULL;
+const char* SYM_DirectedEdge = NULL;
+const char* SYM_UndirectedEdge = NULL;
+const char* SYM_TwoWayRule = NULL;
+const char* SYM_GraphQ = NULL;
+const char* SYM_DirectedGraphQ = NULL;
+const char* SYM_ConnectedGraphQ = NULL;
+const char* SYM_VertexList = NULL;
+const char* SYM_EdgeList = NULL;
+const char* SYM_VertexCount = NULL;
+const char* SYM_EdgeCount = NULL;
+const char* SYM_AdjacencyList = NULL;
+const char* SYM_VertexDegree = NULL;
+const char* SYM_VertexInDegree = NULL;
+const char* SYM_VertexOutDegree = NULL;
+const char* SYM_AdjacencyMatrix = NULL;
+const char* SYM_IncidenceMatrix = NULL;
+const char* SYM_AdjacencyGraph = NULL;
+const char* SYM_CompleteGraph = NULL;
+const char* SYM_CycleGraph = NULL;
+const char* SYM_PathGraph = NULL;
+const char* SYM_RandomGraph = NULL;
+const char* SYM_FindShortestPath = NULL;
+const char* SYM_GraphDistance = NULL;
+const char* SYM_ConnectedComponents = NULL;
+const char* SYM_WeaklyConnectedComponents = NULL;
+const char* SYM_StronglyConnectedComponents = NULL;
+const char* SYM_FindSpanningTree = NULL;
+const char* SYM_VertexConnectivity = NULL;
+const char* SYM_GraphPlot = NULL;
+
 void sym_names_init(void) {
     /* intern_symbol is idempotent and stable, so this can run multiple
      * times without re-allocating. */
@@ -808,6 +851,7 @@ void sym_names_init(void) {
     SYM_Csch                       = intern_symbol("Csch");
     SYM_Cubics                     = intern_symbol("Cubics");
     SYM_DampingFactor              = intern_symbol("DampingFactor");
+    SYM_DataType                   = intern_symbol("DataType");
     SYM_Degree                     = intern_symbol("Degree");
     SYM_DesignMatrix               = intern_symbol("DesignMatrix");
     SYM_DegreeLexicographic        = intern_symbol("DegreeLexicographic");
@@ -859,6 +903,11 @@ void sym_names_init(void) {
     SYM_Erfi                       = intern_symbol("Erfi");
     SYM_ExpIntegralEi              = intern_symbol("ExpIntegralEi");
     SYM_LogIntegral                = intern_symbol("LogIntegral");
+    SYM_SinIntegral                = intern_symbol("SinIntegral");
+    SYM_CosIntegral                = intern_symbol("CosIntegral");
+    SYM_FresnelC                   = intern_symbol("FresnelC");
+    SYM_FresnelS                   = intern_symbol("FresnelS");
+    SYM_Sinc                       = intern_symbol("Sinc");
     SYM_InverseErf                 = intern_symbol("InverseErf");
     SYM_InverseErfc                = intern_symbol("InverseErfc");
     SYM_Except                     = intern_symbol("Except");
@@ -981,6 +1030,7 @@ void sym_names_init(void) {
     SYM_PrimeOmega                 = intern_symbol("PrimeOmega");
     SYM_PrimeNu                    = intern_symbol("PrimeNu");
     SYM_List                       = intern_symbol("List");
+    SYM_NDArray                     = intern_symbol("NDArray");
     SYM_Association                = intern_symbol("Association");
     SYM_AssociationQ               = intern_symbol("AssociationQ");
     SYM_Keys                       = intern_symbol("Keys");
@@ -1045,6 +1095,7 @@ void sym_names_init(void) {
     SYM_NIntegrate                 = intern_symbol("NIntegrate");
     SYM_NLimit                     = intern_symbol("NLimit");
     SYM_NResidue                   = intern_symbol("NResidue");
+    SYM_Residue                    = intern_symbol("Residue");
     SYM_NRoots                     = intern_symbol("NRoots");
     SYM_NSolve                     = intern_symbol("NSolve");
     SYM_NSeries                    = intern_symbol("NSeries");
@@ -1271,6 +1322,7 @@ void sym_names_init(void) {
     SYM_Median                     = intern_symbol("Median");
     SYM_MemberQ                    = intern_symbol("MemberQ");
     SYM_N                          = intern_symbol("N");
+    SYM_Names                      = intern_symbol("Names");
     SYM_Norm                       = intern_symbol("Norm");
     SYM_Numerator                  = intern_symbol("Numerator");
     SYM_NumericQ                   = intern_symbol("NumericQ");
@@ -1316,6 +1368,8 @@ void sym_names_init(void) {
     SYM_DollarRecursionLimit       = intern_symbol("$RecursionLimit");
     SYM_DollarSimplifyDebug        = intern_symbol("$SimplifyDebug");
     SYM_DollarruSimplify           = intern_symbol("$ruSimplify");
+    SYM_DollarVersion              = intern_symbol("$Version");
+    SYM_DollarVersionNumber        = intern_symbol("$VersionNumber");
 
     SYM_Graphics                   = intern_symbol("Graphics");
     SYM_Graphics3D                 = intern_symbol("Graphics3D");
@@ -1441,6 +1495,38 @@ void sym_names_init(void) {
     SYM_Backward                   = intern_symbol("Backward");
     SYM_ForwardBackward            = intern_symbol("ForwardBackward");
     SYM_BackwardForward            = intern_symbol("BackwardForward");
+
+    /* Graph subsystem (src/graph/). */
+    SYM_Graph                      = intern_symbol("Graph");
+    SYM_DirectedEdge               = intern_symbol("DirectedEdge");
+    SYM_UndirectedEdge             = intern_symbol("UndirectedEdge");
+    SYM_TwoWayRule                 = intern_symbol("TwoWayRule");
+    SYM_GraphQ                     = intern_symbol("GraphQ");
+    SYM_DirectedGraphQ             = intern_symbol("DirectedGraphQ");
+    SYM_ConnectedGraphQ            = intern_symbol("ConnectedGraphQ");
+    SYM_VertexList                 = intern_symbol("VertexList");
+    SYM_EdgeList                   = intern_symbol("EdgeList");
+    SYM_VertexCount                = intern_symbol("VertexCount");
+    SYM_EdgeCount                  = intern_symbol("EdgeCount");
+    SYM_AdjacencyList              = intern_symbol("AdjacencyList");
+    SYM_VertexDegree               = intern_symbol("VertexDegree");
+    SYM_VertexInDegree             = intern_symbol("VertexInDegree");
+    SYM_VertexOutDegree            = intern_symbol("VertexOutDegree");
+    SYM_AdjacencyMatrix            = intern_symbol("AdjacencyMatrix");
+    SYM_IncidenceMatrix            = intern_symbol("IncidenceMatrix");
+    SYM_AdjacencyGraph             = intern_symbol("AdjacencyGraph");
+    SYM_CompleteGraph              = intern_symbol("CompleteGraph");
+    SYM_CycleGraph                 = intern_symbol("CycleGraph");
+    SYM_PathGraph                  = intern_symbol("PathGraph");
+    SYM_RandomGraph                = intern_symbol("RandomGraph");
+    SYM_FindShortestPath           = intern_symbol("FindShortestPath");
+    SYM_GraphDistance              = intern_symbol("GraphDistance");
+    SYM_ConnectedComponents        = intern_symbol("ConnectedComponents");
+    SYM_WeaklyConnectedComponents  = intern_symbol("WeaklyConnectedComponents");
+    SYM_StronglyConnectedComponents = intern_symbol("StronglyConnectedComponents");
+    SYM_FindSpanningTree           = intern_symbol("FindSpanningTree");
+    SYM_VertexConnectivity         = intern_symbol("VertexConnectivity");
+    SYM_GraphPlot                  = intern_symbol("GraphPlot");
 
     /* System symbols that have no kernel implementation and no cached SYM_*
      * pointer, but must still be recognized as System` (not qualified into a

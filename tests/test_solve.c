@@ -561,13 +561,13 @@ static void test_cubic_radical(void) {
         Expr* rule = inner->data.function.args[0];
         ASSERT(rule->type == EXPR_FUNCTION);
         ASSERT(rule->data.function.head->type == EXPR_SYMBOL);
-        ASSERT(strcmp(rule->data.function.head->data.symbol, "Rule") == 0);
+        ASSERT(strcmp(rule->data.function.head->data.symbol.name, "Rule") == 0);
         /* RHS should NOT be a held Root[] -- Cubics -> True must emit
          * a radical expression. */
         Expr* rhs = rule->data.function.args[1];
         if (rhs->type == EXPR_FUNCTION
             && rhs->data.function.head->type == EXPR_SYMBOL
-            && strcmp(rhs->data.function.head->data.symbol, "Root") == 0) {
+            && strcmp(rhs->data.function.head->data.symbol.name, "Root") == 0) {
             printf("FAIL: Cubics -> True still emitted Root[] for "
                    "x^3 + x + 1 == 0\n");
             ASSERT(0);
@@ -587,7 +587,7 @@ static void test_nquadratic_n3(void) {
     ASSERT(res);
     ASSERT(res->type == EXPR_FUNCTION);
     ASSERT(res->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(res->data.function.head->data.symbol, "List") == 0);
+    ASSERT(strcmp(res->data.function.head->data.symbol.name, "List") == 0);
     if (res->data.function.arg_count != 6) {
         printf("FAIL: Solve[x^6 - 9 x^3 + 8 == 0, x] -- expected 6 rules, got %zu\n",
                res->data.function.arg_count);

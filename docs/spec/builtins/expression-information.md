@@ -206,6 +206,28 @@ In[4]:= MachineNumberQ[$MaxNumber]   (* MPFR, not machine *)
 Out[4]= False
 ```
 
+## $Version, $VersionNumber
+Release identity of the running Mathilda. Both are read-only `Protected`
+symbols holding an `OwnValue`; redefining them emits `Set::wrsym`.
+
+- `$VersionNumber`: the Mathilda version as a `Real` (the single source of
+  truth for the release; currently `0.01`).
+- `$Version`: a string describing the running build. It is assembled
+  **at compile time** and lists the Mathilda version followed by the
+  versions of the libraries it was linked against — the C compiler, GMP,
+  MPFR, FLINT, and any optional components that were compiled in (GMP-ECM,
+  Raylib, the dense-LA backend, GNU Readline). Optional segments are guarded
+  by the same build flags the makefile emits, so the string names only what
+  is actually present.
+
+```mathematica
+In[1]:= $VersionNumber
+Out[1]= 0.01
+
+In[2]:= $Version
+Out[2]= "Mathilda 0.01 (Apple LLVM 17.0.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)"
+```
+
 ## ListQ, VectorQ, MatrixQ
 Predicates for testing lists and their structures.
 - `ListQ[expr]`: `True` if the head of `expr` is `List`.
@@ -657,6 +679,55 @@ Range[n, m, d]
 	uses step d."
 ```
 
+## Names
+Gives a canonically sorted list of the names (as strings) of symbols in the
+symbol table that match a pattern.
+- `Names["string"]` &rarr; names matching the string pattern. Same list as
+  `?string`.
+- `Names[patt]` &rarr; names matching an arbitrary string pattern `patt`.
+- `Names[{p1, p2, ...}]` &rarr; names matching any of the `p_i`.
+- `Names[]` &rarr; every name in the symbol table.
+
+A string pattern is matched against the **whole** name (anchored) and supports
+two metacharacters:
+
+| Metacharacter | Matches |
+|---------------|---------|
+| `*` | zero or more characters |
+| `@` | one or more characters that are **not** uppercase letters |
+
+Every other character (including the `` ` `` used in context prefixes) is
+literal. A pattern element may instead be `RegularExpression["re"]`, matched
+against the whole name via the PCRE2 engine; when Mathilda is built without
+PCRE2 a `RegularExpression` pattern emits `Names::regavail` and stays
+unevaluated. The result is always ordered so that `Names[patt]` is identical to
+`Sort[Names[patt]]`.
+
+**Context handling.** Symbols are stored under bare names for the `System`` and
+`Global`` contexts (builtins and unqualified user symbols). A pattern that
+contains a `` ` `` is matched against — and returns — each symbol's fully
+context-qualified name (`System`Sin`, `Global`x`, …); a plain pattern (no
+backtick) is matched against, and returns, the stored short name. This is what
+makes `Names["System`*"]` enumerate all builtins.
+
+**Features**: `Protected`. All symbols are candidates. A symbol's home context
+is `System`` when it is a builtin (or a kernel-interned System symbol) and
+`Global`` otherwise, mirroring `Context[]`.
+
+```mathematica
+In[1]:= Names["List*"]
+Out[1]= {"List", "ListPlot", "ListQ"}
+
+In[2]:= Names["Ar@"]
+Out[2]= {"Arg", "Array", "Arrow"}          (* @ stops at the uppercase in ArcSin *)
+
+In[3]:= Names[RegularExpression["Si."]]
+Out[3]= {"Sin"}
+
+In[4]:= MemberQ[Names["System`*"], "System`Sin"]
+Out[4]= True
+```
+
 ## MessageName
 Associates a named text string (a "message") with a symbol, written with the
 `::` operator.
@@ -755,4 +826,5 @@ Gives the number of bytes used internally by Mathilda to store the expression.
 **Features**:
 - `Protected`.
 - Uses `sizeof()` in C and measures the internal AST memory allocation boundaries, dynamically capturing sizes of individual strings, symbols, allocated blocks, arrays, and expression structs.
+- Counts the payload of leaf atoms that own out-of-node storage: `EXPR_BIGINT` (GMP limbs), `EXPR_NDARRAY` (the `dims[]` array plus the flat data buffer, sized by element count and dtype width), and `EXPR_MPFR` (significand storage, scaling with precision). For an `NDArray`, the buffer dominates, so `ByteCount` scales with the number of elements and the dtype's bytes-per-element.
 

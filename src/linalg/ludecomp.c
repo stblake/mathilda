@@ -42,6 +42,7 @@
 #include "ludecomp.h"
 #include "ludecomp_internal.h"
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "linsolve.h"
 #include "eval.h"
 #include "symtab.h"
@@ -119,7 +120,7 @@ static bool numeric_abs_sq_as_mpq(Expr* e, mpq_t out_sq) {
 
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
 
         if (h == SYM_Rational && e->data.function.arg_count == 2) {
             Expr* num = e->data.function.args[0];
@@ -483,6 +484,7 @@ Expr* lu_dispatch(Expr* m, int rows, int cols)
  * ------------------------------------------------------------------ */
 Expr* builtin_ludecomposition(Expr* res)
 {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc != 1) return NULL;

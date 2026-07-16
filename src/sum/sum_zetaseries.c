@@ -41,7 +41,7 @@
 static bool zs_zeta_linear(Expr* e, Expr* var, Expr** a_out, Expr** b_out) {
     if (e->type != EXPR_FUNCTION) return false;
     Expr* h = e->data.function.head;
-    if (h->type != EXPR_SYMBOL || h->data.symbol != SYM_Zeta) return false;
+    if (h->type != EXPR_SYMBOL || h->data.symbol.name != SYM_Zeta) return false;
     if (e->data.function.arg_count != 1) return false;
     Expr* arg = e->data.function.args[0];
     if (sum_free_of(arg, var)) return false;
@@ -81,7 +81,7 @@ static int zs_find_zeta_in_plus(Expr* p, Expr* var, Expr** a_out, Expr** b_out) 
 
 static bool zs_is_plus(Expr* e) {
     return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Plus;
+        && e->data.function.head->data.symbol.name == SYM_Plus;
 }
 
 Expr* builtin_sum_zetaseries(Expr* res);
@@ -95,7 +95,9 @@ Expr* builtin_sum_zetaseries(Expr* res) {
     if (imin->type != EXPR_INTEGER) return NULL;
     int64_t k0 = imin->data.integer;
 
-    Expr* fn = evaluate(expr_copy(f));
+    Expr* fc = expr_copy(f);
+    Expr* fn = evaluate(fc);
+    expr_free(fc);   /* evaluate() borrows; free the copy we made */
 
     /* Split fn = C * G, where G is the additive group holding Zeta[linear]. */
     Expr* G = NULL;        /* alias into fn */
@@ -113,7 +115,7 @@ Expr* builtin_sum_zetaseries(Expr* res) {
         }
     } else if (fn->type == EXPR_FUNCTION
                && fn->data.function.head->type == EXPR_SYMBOL
-               && fn->data.function.head->data.symbol == SYM_Times) {
+               && fn->data.function.head->data.symbol.name == SYM_Times) {
         /* find the factor that is a Plus[..Zeta[linear]..]; rest = other factors. */
         int gfi = -1;
         for (size_t i = 0; i < fn->data.function.arg_count; i++) {
@@ -217,7 +219,7 @@ Expr* builtin_sum_zetaseries(Expr* res) {
     Expr* out = sum_eval("Sum", (Expr*[]){ R, spec }, 2);   /* adopts R, spec */
 
     if (out->type == EXPR_FUNCTION && out->data.function.head->type == EXPR_SYMBOL
-        && out->data.function.head->data.symbol == SYM_Sum) {
+        && out->data.function.head->data.symbol.name == SYM_Sum) {
         expr_free(out); return NULL;   /* outer sum did not close */
     }
     return out;

@@ -201,6 +201,70 @@ void zggsvd3_(const char* jobu, const char* jobv, const char* jobq,
               double* work, const int* lwork,
               double* rwork, int* iwork, int* info);
 
+/* dgesv / zgesv -- solve the square system A X = B by LU factorisation.
+ *   A (n*n, col-major)  overwritten with its LU factors
+ *   ipiv (n)            row pivots
+ *   B (n*nrhs, col-major) overwritten with the solution X */
+void dgesv_(const int* n, const int* nrhs, double* a, const int* lda,
+            int* ipiv, double* b, const int* ldb, int* info);
+void zgesv_(const int* n, const int* nrhs, double* a, const int* lda,
+            int* ipiv, double* b, const int* ldb, int* info);
+
+/* dgetri / zgetri -- inverse from an existing dgetrf/zgetrf LU factorisation. */
+void dgetri_(const int* n, double* a, const int* lda, const int* ipiv,
+             double* work, const int* lwork, int* info);
+void zgetri_(const int* n, double* a, const int* lda, const int* ipiv,
+             double* work, const int* lwork, int* info);
+
+/* dgeev / zgeev -- eigenvalues and (right) eigenvectors of a general matrix.
+ * Real: eigenvalues arrive split as (wr, wi); complex conjugate pairs share a
+ * packed VR column (LAPACK convention). Complex: eigenvalues in w, VR complex.*/
+void dgeev_(const char* jobvl, const char* jobvr, const int* n,
+            double* a, const int* lda, double* wr, double* wi,
+            double* vl, const int* ldvl, double* vr, const int* ldvr,
+            double* work, const int* lwork, int* info);
+void zgeev_(const char* jobvl, const char* jobvr, const int* n,
+            double* a, const int* lda, double* w,
+            double* vl, const int* ldvl, double* vr, const int* ldvr,
+            double* work, const int* lwork, double* rwork, int* info);
+
+/* dsyev / zheev -- eigenvalues (ascending) and eigenvectors of a
+ * symmetric / Hermitian matrix; A is overwritten with the eigenvectors. */
+void dsyev_(const char* jobz, const char* uplo, const int* n,
+            double* a, const int* lda, double* w,
+            double* work, const int* lwork, int* info);
+void zheev_(const char* jobz, const char* uplo, const int* n,
+            double* a, const int* lda, double* w,
+            double* work, const int* lwork, double* rwork, int* info);
+
+/* dgels / zgels -- least-squares / minimum-norm solve of A X = B (full rank).
+ * B is max(m,n)*nrhs, col-major; the solution occupies its first n rows. */
+void dgels_(const char* trans, const int* m, const int* n, const int* nrhs,
+            double* a, const int* lda, double* b, const int* ldb,
+            double* work, const int* lwork, int* info);
+void zgels_(const char* trans, const int* m, const int* n, const int* nrhs,
+            double* a, const int* lda, double* b, const int* ldb,
+            double* work, const int* lwork, int* info);
+
+/* dgesvd / zgesvd -- classic (QR-iteration) SVD.  jobu = jobvt = 'A' returns
+ * full square U and V^H.  Complex variant needs rwork of length 5*min(m,n). */
+void dgesvd_(const char* jobu, const char* jobvt, const int* m, const int* n,
+             double* a, const int* lda, double* s,
+             double* u, const int* ldu, double* vt, const int* ldvt,
+             double* work, const int* lwork, int* info);
+void zgesvd_(const char* jobu, const char* jobvt, const int* m, const int* n,
+             double* a, const int* lda, double* s,
+             double* u, const int* ldu, double* vt, const int* ldvt,
+             double* work, const int* lwork, double* rwork, int* info);
+
+/* dtrtrs / ztrtrs -- solve a triangular system A X = B (no workspace). */
+void dtrtrs_(const char* uplo, const char* trans, const char* diag,
+             const int* n, const int* nrhs, const double* a, const int* lda,
+             double* b, const int* ldb, int* info);
+void ztrtrs_(const char* uplo, const char* trans, const char* diag,
+             const int* n, const int* nrhs, const double* a, const int* lda,
+             double* b, const int* ldb, int* info);
+
 #endif /* !MATHILDA_USE_ACCELERATE */
 
 #endif /* USE_LAPACK */
@@ -334,6 +398,57 @@ int mat_lapack_zggsvd3(char jobu, char jobv, char jobq,
                        double* U, int ldu,
                        double* V, int ldv,
                        double* Q, int ldq);
+
+/* ---------------------------------------------------------------------
+ * Higher-level solve / eigen / SVD wrappers used by lapack_bridge.c.
+ * All matrices are column-major; complex variants carry interleaved
+ * (re, im) doubles. Each returns the LAPACK info code (0 success, <0 bad
+ * arg, >0 numerical issue); stubs return -1 without LAPACK.
+ * ------------------------------------------------------------------ */
+
+/* Solve A X = B (A n*n, B n*nrhs). On success A holds the LU factors, ipiv the
+ * pivots, and B is overwritten with the solution X. */
+int mat_lapack_dgesv(int n, int nrhs, double* A, int lda, int* ipiv,
+                     double* B, int ldb);
+int mat_lapack_zgesv(int n, int nrhs, double* A, int lda, int* ipiv,
+                     double* B, int ldb);
+
+/* Invert an already-factored matrix (dgetrf/zgetrf output in A + ipiv). */
+int mat_lapack_dgetri(int n, double* A, int lda, const int* ipiv);
+int mat_lapack_zgetri(int n, double* A, int lda, const int* ipiv);
+
+/* General eigenproblem: eigenvalues and right eigenvectors (jobvl='N',
+ * jobvr='V'). Real: (wr, wi) split, VR packed per LAPACK's real convention.
+ * Complex: eigenvalues in w (2n interleaved), VR complex n*n. A is destroyed. */
+int mat_lapack_dgeev(int n, double* A, int lda,
+                     double* wr, double* wi, double* VR, int ldvr);
+int mat_lapack_zgeev(int n, double* A, int lda,
+                     double* w, double* VR, int ldvr);
+
+/* Symmetric / Hermitian eigenproblem (jobz='V', uplo='U'): eigenvalues
+ * ascending in w (length n, real), eigenvectors overwrite A (columns). */
+int mat_lapack_dsyev(int n, double* A, int lda, double* w);
+int mat_lapack_zheev(int n, double* A, int lda, double* w);
+
+/* Least squares min ||A X - B|| (trans='N', full rank). A is m*n; B is
+ * ldb*nrhs with ldb = max(m,n); the solution occupies its first n rows. */
+int mat_lapack_dgels(int m, int n, int nrhs, double* A, int lda,
+                     double* B, int ldb);
+int mat_lapack_zgels(int m, int n, int nrhs, double* A, int lda,
+                     double* B, int ldb);
+
+/* Classic SVD (jobu=jobvt='A'): full square U (m*m) and VT (n*n), S length
+ * min(m,n). A is destroyed. */
+int mat_lapack_dgesvd(int m, int n, double* A, int lda,
+                      double* S, double* U, int ldu, double* VT, int ldvt);
+int mat_lapack_zgesvd(int m, int n, double* A, int lda,
+                      double* S, double* U, int ldu, double* VT, int ldvt);
+
+/* Triangular solve A X = B (uplo='U', trans='N', diag='N'); B overwritten. */
+int mat_lapack_dtrtrs(int n, int nrhs, const double* A, int lda,
+                      double* B, int ldb);
+int mat_lapack_ztrtrs(int n, int nrhs, const double* A, int lda,
+                      double* B, int ldb);
 
 #ifdef __cplusplus
 }

@@ -113,7 +113,7 @@ static bool classify_atom(const Expr* e, const Expr* x,
     /* Case (a): f[g]. */
     if (head->type == EXPR_SYMBOL) {
         if (e->data.function.arg_count != 1) return false;
-        if (!symbol_is_free(head->data.symbol)) return false;
+        if (!symbol_is_free(head->data.symbol.name)) return false;
         const Expr* g = e->data.function.args[0];
         if (expr_free_of(g, x)) return false;
         *order = 0; *func = head; *arg = g;
@@ -130,7 +130,7 @@ static bool classify_atom(const Expr* e, const Expr* x,
         const Expr* nexp = dop->data.function.args[0];
         if (nexp->type != EXPR_INTEGER || nexp->data.integer < 1) return false;
         const Expr* f = head->data.function.args[0];
-        if (f->type != EXPR_SYMBOL || !symbol_is_free(f->data.symbol)) return false;
+        if (f->type != EXPR_SYMBOL || !symbol_is_free(f->data.symbol.name)) return false;
         if (e->data.function.arg_count != 1) return false;
         const Expr* g = e->data.function.args[0];
         if (expr_free_of(g, x)) return false;

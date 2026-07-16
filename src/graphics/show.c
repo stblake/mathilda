@@ -12,7 +12,7 @@ static bool is_rule_arg(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     const Expr* h = e->data.function.head;
     if (!h || h->type != EXPR_SYMBOL) return false;
-    return (h->data.symbol == SYM_Rule || h->data.symbol == SYM_RuleDelayed)
+    return (h->data.symbol.name == SYM_Rule || h->data.symbol.name == SYM_RuleDelayed)
         && e->data.function.arg_count == 2;
 }
 
@@ -21,8 +21,8 @@ static bool is_rule_arg(const Expr* e) {
 static bool is_graphics(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && (e->data.function.head->data.symbol == SYM_Graphics
-            || e->data.function.head->data.symbol == SYM_Graphics3D)
+        && (e->data.function.head->data.symbol.name == SYM_Graphics
+            || e->data.function.head->data.symbol.name == SYM_Graphics3D)
         && e->data.function.arg_count >= 1;
 }
 
@@ -60,7 +60,7 @@ Expr* builtin_show(Expr* res) {
         for (size_t j = 0; j < n; j++) {
             Expr* lhs = opts[j]->data.function.args[0];
             if (lhs->type == EXPR_SYMBOL && newlhs->type == EXPR_SYMBOL
-                && lhs->data.symbol == newlhs->data.symbol) {
+                && lhs->data.symbol.name == newlhs->data.symbol.name) {
                 expr_free(opts[j]);
                 opts[j] = expr_copy(newopt);
                 replaced = true;

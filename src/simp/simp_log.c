@@ -47,7 +47,7 @@ static bool is_log1(const Expr* e) {
            e->type == EXPR_FUNCTION &&
            e->data.function.head &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol == SYM_Log &&
+           e->data.function.head->data.symbol.name == SYM_Log &&
            e->data.function.arg_count == 1;
 }
 
@@ -73,7 +73,7 @@ static bool extract_pos_rational(const Expr* e, mpz_t num, mpz_t den) {
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Rational &&
+        e->data.function.head->data.symbol.name == SYM_Rational &&
         e->data.function.arg_count == 2) {
         Expr* p = e->data.function.args[0];
         Expr* q = e->data.function.args[1];
@@ -112,7 +112,7 @@ static Expr* decompose_log_integer(const mpz_t n) {
         factors->type != EXPR_FUNCTION ||
         !factors->data.function.head ||
         factors->data.function.head->type != EXPR_SYMBOL ||
-        factors->data.function.head->data.symbol != SYM_List) {
+        factors->data.function.head->data.symbol.name != SYM_List) {
         if (factors) expr_free(factors);
         return NULL;
     }
@@ -124,7 +124,7 @@ static Expr* decompose_log_integer(const mpz_t n) {
         if (pair && pair->type == EXPR_FUNCTION &&
             pair->data.function.head &&
             pair->data.function.head->type == EXPR_SYMBOL &&
-            pair->data.function.head->data.symbol == SYM_List &&
+            pair->data.function.head->data.symbol.name == SYM_List &&
             pair->data.function.arg_count == 2) {
             Expr* e = pair->data.function.args[1];
             if (e && e->type == EXPR_INTEGER && e->data.integer == 1) {
@@ -236,7 +236,7 @@ static Expr* try_decompose_one_log(const Expr* log_expr) {
     if (arg->type == EXPR_FUNCTION &&
         arg->data.function.head &&
         arg->data.function.head->type == EXPR_SYMBOL &&
-        arg->data.function.head->data.symbol == SYM_Power &&
+        arg->data.function.head->data.symbol.name == SYM_Power &&
         arg->data.function.arg_count == 2) {
         Expr* base = arg->data.function.args[0];
         Expr* expt = arg->data.function.args[1];
@@ -329,7 +329,7 @@ static bool extract_log_term(const Expr* term, Expr** coeff_out, Expr** arg_out)
     if (!term || term->type != EXPR_FUNCTION ||
         !term->data.function.head ||
         term->data.function.head->type != EXPR_SYMBOL ||
-        term->data.function.head->data.symbol != SYM_Times) {
+        term->data.function.head->data.symbol.name != SYM_Times) {
         return false;
     }
     size_t n = term->data.function.arg_count;
@@ -382,7 +382,7 @@ static Expr* try_fuse_plus(const Expr* plus_expr, const AssumeCtx* ctx) {
     if (!plus_expr || plus_expr->type != EXPR_FUNCTION ||
         !plus_expr->data.function.head ||
         plus_expr->data.function.head->type != EXPR_SYMBOL ||
-        plus_expr->data.function.head->data.symbol != SYM_Plus) {
+        plus_expr->data.function.head->data.symbol.name != SYM_Plus) {
         return NULL;
     }
     size_t n = plus_expr->data.function.arg_count;
@@ -570,7 +570,7 @@ static bool has_log(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Log) return true;
+        e->data.function.head->data.symbol.name == SYM_Log) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         if (has_log(e->data.function.args[i])) return true;
     }

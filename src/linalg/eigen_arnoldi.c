@@ -85,7 +85,7 @@ static double arnoldi_coerce_double(Expr* e) {
     if (e->type == EXPR_MPFR)    return mpfr_get_d(e->data.mpfr, MPFR_RNDN);
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.head->data.symbol.name == SYM_Rational
         && e->data.function.arg_count == 2) {
         Expr* p = e->data.function.args[0];
         Expr* q = e->data.function.args[1];
@@ -104,7 +104,7 @@ static bool arnoldi_subopt_key_eq(Expr* key, const char* name,
     if (key->type == EXPR_STRING && strcmp(key->data.string, name) == 0)
         return true;
     if (key->type == EXPR_SYMBOL && sym_intern
-        && key->data.symbol == sym_intern)
+        && key->data.symbol.name == sym_intern)
         return true;
     return false;
 }
@@ -117,15 +117,15 @@ static void arnoldi_parse_subopts(Expr* method_value, ArnoldiOpts* opts) {
     if (!method_value) return;
     if (method_value->type != EXPR_FUNCTION) return;
     Expr* head = method_value->data.function.head;
-    if (head->type != EXPR_SYMBOL || head->data.symbol != SYM_List) return;
+    if (head->type != EXPR_SYMBOL || head->data.symbol.name != SYM_List) return;
     for (size_t i = 1; i < method_value->data.function.arg_count; i++) {
         Expr* rule = method_value->data.function.args[i];
         if (rule->type != EXPR_FUNCTION) continue;
         if (rule->data.function.arg_count != 2) continue;
         Expr* rh = rule->data.function.head;
         if (rh->type != EXPR_SYMBOL) continue;
-        if (rh->data.symbol != SYM_Rule
-            && rh->data.symbol != SYM_RuleDelayed) continue;
+        if (rh->data.symbol.name != SYM_Rule
+            && rh->data.symbol.name != SYM_RuleDelayed) continue;
         Expr* key = rule->data.function.args[0];
         Expr* val = rule->data.function.args[1];
         if (arnoldi_subopt_key_eq(key, "BasisSize", SYM_BasisSize)
@@ -153,7 +153,7 @@ static size_t arnoldi_target_k(Expr* k_spec, size_t n) {
     }
     if (k_spec->type == EXPR_FUNCTION
         && k_spec->data.function.head->type == EXPR_SYMBOL
-        && k_spec->data.function.head->data.symbol == SYM_UpTo
+        && k_spec->data.function.head->data.symbol.name == SYM_UpTo
         && k_spec->data.function.arg_count == 1
         && k_spec->data.function.args[0]->type == EXPR_INTEGER) {
         int64_t k = k_spec->data.function.args[0]->data.integer;

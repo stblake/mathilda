@@ -69,7 +69,7 @@ void iter_spec_free(IterSpec* s) {
 static bool is_list_expr(const Expr* e) {
     return e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_List;
+        && e->data.function.head->data.symbol.name == SYM_List;
 }
 
 bool iter_spec_parse(Expr* spec, IterSpec* out) {
@@ -142,7 +142,7 @@ bool iter_spec_resolve_numeric(const IterSpec* s, bool allow_inf,
 
     if (s->kind == ITER_KIND_COUNT) {
         if (allow_inf && s->imax->type == EXPR_SYMBOL
-                      && s->imax->data.symbol == SYM_Infinity) {
+                      && s->imax->data.symbol.name == SYM_Infinity) {
             *is_inf = true;
             return true;
         }
@@ -153,7 +153,7 @@ bool iter_spec_resolve_numeric(const IterSpec* s, bool allow_inf,
     if (s->kind != ITER_KIND_RANGE) return false;
 
     if (allow_inf && s->imax->type == EXPR_SYMBOL
-                  && s->imax->data.symbol == SYM_Infinity) {
+                  && s->imax->data.symbol.name == SYM_Infinity) {
         *is_inf = true;
     }
     if (s->imin->type == EXPR_REAL || s->imax->type == EXPR_REAL
@@ -184,7 +184,7 @@ bool iter_spec_resolve_numeric(const IterSpec* s, bool allow_inf,
 
 Rule* iter_spec_shadow(Expr* var) {
     if (!var || var->type != EXPR_SYMBOL) return NULL;
-    SymbolDef* def = symtab_get_def(var->data.symbol);
+    SymbolDef* def = symtab_get_def(var->data.symbol.name);
     Rule* old = def->own_values;
     def->own_values = NULL;
     return old;
@@ -192,7 +192,7 @@ Rule* iter_spec_shadow(Expr* var) {
 
 void iter_spec_restore(Expr* var, Rule* saved_own) {
     if (!var || var->type != EXPR_SYMBOL) return;
-    SymbolDef* def = symtab_get_def(var->data.symbol);
+    SymbolDef* def = symtab_get_def(var->data.symbol.name);
     Rule* r = def->own_values;
     while (r) {
         Rule* next = r->next;
@@ -216,7 +216,7 @@ void iter_spec_restore(Expr* var, Rule* saved_own) {
 static const char* is_flow_control_head(Expr* e) {
     if (e->type != EXPR_FUNCTION) return NULL;
     if (e->data.function.head->type != EXPR_SYMBOL) return NULL;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     if (h == SYM_Return ||
         h == SYM_Break ||
         h == SYM_Continue ||
@@ -395,7 +395,7 @@ Expr* builtin_do(Expr* res) {
     } else if (is_list_iter) {
         /* {i, {a, b, c, ...}} -- iterate over explicit list elements. */
         for (size_t i = 0; i < list_e->data.function.arg_count; i++) {
-            symtab_add_own_value(var_sym->data.symbol, var_sym, list_e->data.function.args[i]);
+            symtab_add_own_value(var_sym->data.symbol.name, var_sym, list_e->data.function.args[i]);
             Expr* eval_expr = evaluate(expr);
             Expr* rv = NULL;
             IterFlowAction f = iter_flow_classify(eval_expr, SYM_Do, &rv);
@@ -420,7 +420,7 @@ Expr* builtin_do(Expr* res) {
         Expr* curr_e = expr_copy(imin_e);
         while (is_inf || (di_val > 0 && val <= max_val + 1e-14) || (di_val < 0 && val >= max_val - 1e-14)) {
             Expr* i_val = is_real ? expr_new_real(val) : expr_copy(curr_e);
-            symtab_add_own_value(var_sym->data.symbol, var_sym, i_val);
+            symtab_add_own_value(var_sym->data.symbol.name, var_sym, i_val);
 
             Expr* eval_expr = evaluate(expr);
             expr_free(i_val);
@@ -515,7 +515,7 @@ Expr* builtin_for(Expr* res) {
     while (true) {
         /* --- Test --- */
         Expr* eval_test = evaluate(test);
-        bool condition_met = (eval_test->type == EXPR_SYMBOL && eval_test->data.symbol == SYM_True);
+        bool condition_met = (eval_test->type == EXPR_SYMBOL && eval_test->data.symbol.name == SYM_True);
         expr_free(eval_test);
         if (!condition_met) break;
 
@@ -598,7 +598,7 @@ Expr* builtin_while(Expr* res) {
         }
 
         /* Exit the loop unless the test evaluated to the symbol True. */
-        bool condition_met = (eval_test->type == EXPR_SYMBOL && eval_test->data.symbol == SYM_True);
+        bool condition_met = (eval_test->type == EXPR_SYMBOL && eval_test->data.symbol.name == SYM_True);
         expr_free(eval_test);
         if (!condition_met) break;
 

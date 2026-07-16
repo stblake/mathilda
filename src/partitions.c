@@ -59,7 +59,7 @@ static bool ip_to_mpq(const Expr* e, mpq_t out) {
     }
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Rational &&
+        e->data.function.head->data.symbol.name == SYM_Rational &&
         e->data.function.arg_count == 2) {
         Expr* pe = e->data.function.args[0];
         Expr* qe = e->data.function.args[1];
@@ -121,7 +121,7 @@ static long ip_floor_div(const mpq_t a, const mpq_t b) {
 }
 
 static bool ip_is_sym(const Expr* e, const char* s) {
-    return e && e->type == EXPR_SYMBOL && e->data.symbol == s;
+    return e && e->type == EXPR_SYMBOL && e->data.symbol.name == s;
 }
 
 /* ----- enumeration context --------------------------------------------- */

@@ -44,6 +44,7 @@
   export let nb: CanvasNotebook;
   export let currentZoom: number = 1.0;
   export let focused: boolean = false;  // true when rendered full-screen
+  export let isSelected: boolean = false;
 
   // Per-notebook accent colour from the deep-space palette
   const PALETTE = ['#89b4fa','#a6e3a1','#f38ba8','#fab387','#cba6f7','#94e2d5'];
@@ -174,15 +175,21 @@
     const dyScreen = e.clientY - dragStartY;
     if (Math.abs(dxScreen) > 4 || Math.abs(dyScreen) > 4) dragMoved = true;
     const effectiveZoom = currentZoom || 1;
-    const newX = dragNbX0 + dxScreen / effectiveZoom;
-    const newY = dragNbY0 + dyScreen / effectiveZoom;
-    canvasState.update(s => ({
-      ...s,
-      notebooks: s.notebooks.map(n => n.id === nb.id ? { ...n, x: newX, y: newY } : n),
-    }));
+    const dxWorld = dxScreen / effectiveZoom;
+    const dyWorld = dyScreen / effectiveZoom;
+    if (isSelected) {
+      // Move all selected notebooks by the same world-space delta
+      dispatch('groupMove', { dx: dxWorld, dy: dyWorld, originX: dragNbX0, originY: dragNbY0, id: nb.id });
+    } else {
+      canvasState.update(s => ({
+        ...s,
+        notebooks: s.notebooks.map(n => n.id === nb.id ? { ...n, x: dragNbX0 + dxWorld, y: dragNbY0 + dyWorld } : n),
+      }));
+    }
   }
 
   function onTitlePointerUp(_e: PointerEvent) {
+    if (dragging && isSelected) dispatch('groupMoveEnd', {});
     dragging = false;
   }
 
@@ -499,6 +506,7 @@
   class:mounted
   class:collapsed={nb.collapsed}
   class:focused-card={focused}
+  class:selected={isSelected}
   style="--accent: {accentColor}; --accent-glow: {accentColor}1a;"
   bind:this={cardEl}
   tabindex="-1"
@@ -713,6 +721,13 @@
   .nb-card.mounted {
     opacity: 1;
     transform: scale(1);
+  }
+
+  /* Multi-selected via rubber-band */
+  .nb-card.selected {
+    outline: 2px solid var(--accent, #89b4fa);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(137,180,250,0.18), 0 8px 32px rgba(0,0,0,0.45);
   }
 
   /* Full-screen focused mode — edge to edge, no card chrome */

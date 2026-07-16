@@ -28,13 +28,13 @@
 #include <stdlib.h>
 
 static bool is_inf_sym(const Expr* e) {
-    return e->type == EXPR_SYMBOL && e->data.symbol == SYM_Infinity;
+    return e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity;
 }
 
 static bool is_power(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.head->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2;
 }
 
@@ -50,7 +50,7 @@ static bool abs_lt_one(Expr* base) {
                    (Expr*[]){ ab, expr_new_integer(1) }, 2);   /* adopts ab */
     Expr* r = evaluate(lt);
     expr_free(lt);
-    bool yes = (r && r->type == EXPR_SYMBOL && r->data.symbol == SYM_True);
+    bool yes = (r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True);
     if (r) expr_free(r);
     return yes;
 }
@@ -64,7 +64,7 @@ Expr* builtin_product_cantor(Expr* res) {
     /* Body must be Plus with exactly two args, one of which is the literal 1. */
     if (!(f->type == EXPR_FUNCTION
           && f->data.function.head->type == EXPR_SYMBOL
-          && f->data.function.head->data.symbol == SYM_Plus
+          && f->data.function.head->data.symbol.name == SYM_Plus
           && f->data.function.arg_count == 2)) return NULL;
 
     Expr* a0 = f->data.function.args[0];

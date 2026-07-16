@@ -55,13 +55,13 @@
 static bool head_is(const Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION && e->data.function.head &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, name) == 0;
+           strcmp(e->data.function.head->data.symbol.name, name) == 0;
 }
 
 /* True iff a symbol named `name` appears anywhere in e (head or args). */
 static bool mp_has_symbol(const Expr* e, const char* name) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol, name) == 0;
+    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, name) == 0;
     if (e->type == EXPR_FUNCTION) {
         if (mp_has_symbol(e->data.function.head, name)) return true;
         for (size_t i = 0; i < e->data.function.arg_count; i++)
@@ -92,7 +92,7 @@ static Expr* mp_subst_slot(const Expr* e, const char* var) {
 /* Replace every symbol named `from` in e with symbol `to`; fresh copy. */
 static Expr* mp_subst_symbol(const Expr* e, const char* from, const char* to) {
     if (!e) return NULL;
-    if (e->type == EXPR_SYMBOL && strcmp(e->data.symbol, from) == 0)
+    if (e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, from) == 0)
         return expr_new_symbol(to);
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     size_t n = e->data.function.arg_count;
@@ -108,7 +108,7 @@ static Expr* mp_subst_symbol(const Expr* e, const char* from, const char* to) {
 /* Replace every symbol named `from` in e with Slot[1]; fresh copy. */
 static Expr* mp_subst_symbol_with_slot(const Expr* e, const char* from) {
     if (!e) return NULL;
-    if (e->type == EXPR_SYMBOL && strcmp(e->data.symbol, from) == 0)
+    if (e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, from) == 0)
         return expr_new_function(expr_new_symbol(SYM_Slot),
                                  (Expr*[]){ expr_new_integer(1) }, 1);
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
@@ -246,7 +246,7 @@ static bool mp_root_of_unity_order(const Expr* exp, long* q_out) {
     bool ok = true;
     for (size_t i = 0; i < nf && ok; i++) {
         const Expr* f = fac[i];
-        if (f->type == EXPR_SYMBOL && strcmp(f->data.symbol, "Pi") == 0) {
+        if (f->type == EXPR_SYMBOL && strcmp(f->data.symbol.name, "Pi") == 0) {
             pi++;
         } else if (f->type == EXPR_INTEGER) {
             mpq_set_si(t, f->data.integer, 1); mpq_mul(rat, rat, t);
@@ -300,7 +300,7 @@ static Expr* mp_walk(const Expr* e, AtomCtx* c) {
 
     const Expr* head = e->data.function.head;
     if (head->type != EXPR_SYMBOL) { c->failed = true; return NULL; }
-    const char* h = head->data.symbol;
+    const char* h = head->data.symbol.name;
     size_t na = e->data.function.arg_count;
     Expr* const* A = e->data.function.args;
 
@@ -344,7 +344,7 @@ static Expr* mp_walk(const Expr* e, AtomCtx* c) {
         const Expr* base = A[0];
         const Expr* exp  = A[1];
 
-        if (base->type == EXPR_SYMBOL && strcmp(base->data.symbol, "E") == 0) {
+        if (base->type == EXPR_SYMBOL && strcmp(base->data.symbol.name, "E") == 0) {
             long q;
             if (mp_root_of_unity_order(exp, &q)) {
                 char* nm = mp_fresh_name(c);
@@ -411,7 +411,7 @@ static Expr* mp_walk(const Expr* e, AtomCtx* c) {
         } else if (fnn == 2 &&
                    fn->data.function.args[0]->type == EXPR_SYMBOL) {
             rel = mp_subst_symbol(fn->data.function.args[1],
-                                  fn->data.function.args[0]->data.symbol, nm);
+                                  fn->data.function.args[0]->data.symbol.name, nm);
         }
         if (!rel) { free(nm); c->failed = true; return NULL; }
         mp_store(c, nm, rel);
@@ -466,7 +466,7 @@ static void mp_collect(const Expr* e, const Expr* var,
         mp_collect(e->data.function.args[0], var, out, n, cap);
         return;
     }
-    if (!mp_has_symbol(e, var->data.symbol)) return;   /* numeric content */
+    if (!mp_has_symbol(e, var->data.symbol.name)) return;   /* numeric content */
     for (size_t i = 0; i < *n; i++)
         if (expr_eq((*out)[i], e)) return;             /* already have it */
     if (*n == *cap) {
@@ -663,7 +663,7 @@ Expr* builtin_minimalpolynomial(Expr* res) {
         if ((head_is(a, "Rule") || head_is(a, "RuleDelayed")) &&
             a->data.function.arg_count == 2 &&
             a->data.function.args[0]->type == EXPR_SYMBOL &&
-            strcmp(a->data.function.args[0]->data.symbol, "Extension") == 0) {
+            strcmp(a->data.function.args[0]->data.symbol.name, "Extension") == 0) {
             ext = a->data.function.args[1];
         } else if (npos < 3) {
             pos[npos++] = args[i];

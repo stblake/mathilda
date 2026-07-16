@@ -15,8 +15,13 @@ else
   BUILD_PLATFORM := Windows
 endif
 
+# Compiler. Defaults to the plain `gcc` on PATH; override on the command line
+# (e.g. `make CC=gcc-16`) if a specific version is needed. Do NOT hardcode a
+# versioned name here — not every host has it (Linux distros generally ship
+# `gcc` only, macOS Homebrew ships `gcc-NN`). A plain `=` (not `?=`) is required:
+# Make pre-defines CC=cc as a built-in, which would defeat `?=`.
 CC = gcc
-CFLAGS = -O3 -std=c99 -Wall -Wextra -g -I./src -I./src/list -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/strings -I./src/strings/regex -I/usr/local/include
+CFLAGS = -O3 -std=c99 -Wall -Wextra -g -I./src -I./src/list -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/graph -I./src/strings -I./src/strings/regex -I/usr/include -I/usr/local/include
 
 # Readline is available on macOS and Linux but not on Windows (MinGW).
 # Build with USE_READLINE=0 to disable it explicitly (e.g. for cross-builds
@@ -35,6 +40,22 @@ endif
 
 LDFLAGS = $(READLINE_LIBS) -L/usr/local/lib -lgmp -lm
 
+# Site-specific link libraries, appended verbatim to the link line. Some
+# distributions need extra libraries the autodetection can't infer — e.g. on
+# certain Ubuntu setups a statically-linked raylib pulls in `-lX11`, or a
+# minimal LAPACKE package needs `-llapack` spelled out. Pass them on the
+# command line rather than editing this file:
+#   make EXTRA_LIBS="-llapack -lX11"
+EXTRA_LIBS ?=
+
+# Optional compile-time install prefix. When set, the kernel also looks for its
+# bundled src/internal tree under $(PREFIX)/share/mathilda/internal, so a binary
+# installed to $(PREFIX)/bin finds its modules with no MATHILDA_HOME needed:
+#   make PREFIX=/usr/local && cp Mathilda /usr/local/bin
+ifdef PREFIX
+CFLAGS += -DMATHILDA_PREFIX=\"$(PREFIX)\"
+endif
+
 # GMP-ECM for advanced integer factorisation (facint.c: ecm_init/ecm_factor via
 # the public ecm.h). System library only — no longer vendored as a submodule.
 # GMP-ECM ships no pkg-config .pc file, so detection is a compile+link probe
@@ -43,9 +64,16 @@ LDFLAGS = $(READLINE_LIBS) -L/usr/local/lib -lgmp -lm
 # factoriser, matching the USE_FLINT=0 / USE_MPFR=0 graceful-degrade policy.
 #   macOS (Homebrew): brew install gmp-ecm
 #   Ubuntu/Debian:    sudo apt install libecm-dev
+# NOTE: the probe MUST include <stdio.h> before <ecm.h>. GMP-ECM's ecm.h uses
+# the FILE type (ecm_params has `FILE *os, *es;`) but on Debian/Ubuntu's 7.0.5
+# it does not include <stdio.h> itself — it relies on the includer. macOS system
+# headers pull in <stdio.h> transitively (masking the bug), Linux glibc does not,
+# so without this the probe fails to COMPILE on Linux and ECM is wrongly reported
+# "not detected" even when libecm-dev is installed. The multiarch lib dir is on
+# the default linker path, so -lecm resolves without an explicit -L there.
 ifeq ($(USE_ECM), 1)
-  ECM_PROBE := $(shell printf '\#include <ecm.h>\nint main(void){ecm_params p;ecm_init(p);return 0;}\n' > /tmp/mathilda_ecmprobe.c 2>/dev/null && \
-    $(CC) /tmp/mathilda_ecmprobe.c -o /tmp/mathilda_ecmprobe -I/usr/local/include -I/opt/homebrew/include \
+  ECM_PROBE := $(shell printf '\#include <stdio.h>\n\#include <ecm.h>\nint main(void){ecm_params p;ecm_init(p);return 0;}\n' > /tmp/mathilda_ecmprobe.c 2>/dev/null && \
+    $(CC) /tmp/mathilda_ecmprobe.c -o /tmp/mathilda_ecmprobe -I/usr/include -I/usr/local/include -I/opt/homebrew/include \
       -L/usr/local/lib -L/opt/homebrew/lib -lecm -lgmp 2>/dev/null && echo y; \
     rm -f /tmp/mathilda_ecmprobe.c /tmp/mathilda_ecmprobe)
   ifeq ($(ECM_PROBE), y)
@@ -106,7 +134,13 @@ endif
 # `git clone && make` always succeeds, no matter the host environment.
 ifeq ($(USE_LAPACK), 1)
   ifeq ($(BUILD_PLATFORM),Darwin)
-    CFLAGS  += -DUSE_LAPACK -DMATHILDA_USE_ACCELERATE
+    # Apple's vecLib/vBasicOps.h headers (pulled in by Accelerate.h) pass typed
+    # SSE vectors (vUInt16, vUInt32, ...) into the compiler's _mm_* intrinsics,
+    # which under GCC are declared with strict __m128i parameters. Clang permits
+    # the implicit vector conversion; GCC needs -flax-vector-conversions or the
+    # Accelerate include fails to compile. Harmless to our own code (it uses no
+    # vector types) and scoped to the Darwin/Accelerate path only.
+    CFLAGS  += -DUSE_LAPACK -DMATHILDA_USE_ACCELERATE -flax-vector-conversions
     LDFLAGS += -framework Accelerate
   else ifneq ($(shell pkg-config --exists lapacke 2>/dev/null && echo y),)
     CFLAGS  += -DUSE_LAPACK $(shell pkg-config --cflags lapacke)
@@ -131,7 +165,13 @@ endif
 ifeq ($(USE_GRAPHICS), 1)
   ifneq ($(shell $(PKG_CONFIG) --exists raylib 2>/dev/null && echo y),)
     CFLAGS  += -DUSE_GRAPHICS $(shell $(PKG_CONFIG) --cflags raylib)
-    LDFLAGS += $(shell $(PKG_CONFIG) --libs raylib)
+    # `--static` appends the `Libs.private:` transitive deps (on Linux: -lX11
+    # -lGL -lpthread -ldl -lrt ...) that a static libraylib.a needs but `--libs`
+    # alone omits — otherwise the link fails with undefined XInternAtom/XSync
+    # (issue #18). Identical to `--libs` on macOS, where Libs.private is empty
+    # (frameworks are recorded in the dylib). EXTRA_LIBS below remains as a
+    # manual escape hatch for anything pkg-config still can't infer.
+    LDFLAGS += $(shell $(PKG_CONFIG) --static --libs raylib)
   else
     $(warning Raylib not detected; building with USE_GRAPHICS=0 (Show/Plot will print a text placeholder))
     $(warning   macOS (Homebrew): brew install raylib)
@@ -184,7 +224,7 @@ ifeq ($(USE_REGEX), 1)
 endif
 
 SRC_DIR = src
-SRC = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/list/*.c) $(wildcard $(SRC_DIR)/linalg/*.c) $(wildcard $(SRC_DIR)/numbertheory/*.c) $(wildcard $(SRC_DIR)/poly/*.c) $(wildcard $(SRC_DIR)/simp/*.c) $(wildcard $(SRC_DIR)/calculus/*.c) $(wildcard $(SRC_DIR)/sum/*.c) $(wildcard $(SRC_DIR)/product/*.c) $(wildcard $(SRC_DIR)/special_functions/*.c) $(wildcard $(SRC_DIR)/numerical_calculus/*.c) $(wildcard $(SRC_DIR)/numerical_roots/*.c) $(wildcard $(SRC_DIR)/graphics/*.c) $(wildcard $(SRC_DIR)/strings/*.c) $(wildcard $(SRC_DIR)/strings/regex/*.c)
+SRC = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/list/*.c) $(wildcard $(SRC_DIR)/linalg/*.c) $(wildcard $(SRC_DIR)/numbertheory/*.c) $(wildcard $(SRC_DIR)/poly/*.c) $(wildcard $(SRC_DIR)/simp/*.c) $(wildcard $(SRC_DIR)/calculus/*.c) $(wildcard $(SRC_DIR)/sum/*.c) $(wildcard $(SRC_DIR)/product/*.c) $(wildcard $(SRC_DIR)/special_functions/*.c) $(wildcard $(SRC_DIR)/numerical_calculus/*.c) $(wildcard $(SRC_DIR)/numerical_roots/*.c) $(wildcard $(SRC_DIR)/graphics/*.c) $(wildcard $(SRC_DIR)/graph/*.c) $(wildcard $(SRC_DIR)/strings/*.c) $(wildcard $(SRC_DIR)/strings/regex/*.c)
 ifneq ($(USE_GRAPHICS), 1)
 SRC := $(filter-out $(SRC_DIR)/graphics/render.c $(SRC_DIR)/graphics/render3d.c $(SRC_DIR)/graphics/hershey_font.c, $(SRC))
 endif
@@ -198,7 +238,7 @@ CMAKE_TEST_BINARIES = comparisons_tests eval_tests expr_tests match_tests match_
 all: $(TARGET)
 
 $(TARGET): $(OBJ)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(EXTRA_LIBS)
 
 $(SRC_DIR)/%.o: $(SRC_DIR)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@

@@ -513,15 +513,15 @@ static bool nd_is_known_option(const char* s) {
 static bool nd_is_option_arg(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     if (h != SYM_Rule && h != SYM_RuleDelayed) return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* lhs = e->data.function.args[0];
-    return lhs->type == EXPR_SYMBOL && nd_is_known_option(lhs->data.symbol);
+    return lhs->type == EXPR_SYMBOL && nd_is_known_option(lhs->data.symbol.name);
 }
 
 static bool nd_parse_working_precision(Expr* val, bool* mpfr, long* bits) {
-    if (val->type == EXPR_SYMBOL && val->data.symbol == SYM_MachinePrecision) {
+    if (val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_MachinePrecision) {
         *mpfr = false; *bits = 0; return true;
     }
     double digits;
@@ -538,15 +538,15 @@ static bool nd_parse_working_precision(Expr* val, bool* mpfr, long* bits) {
 static bool nd_apply_option(Expr* rule, NdOpts* o) {
     Expr* lhs = rule->data.function.args[0];
     Expr* rhs = rule->data.function.args[1];
-    const char* name = lhs->data.symbol;
+    const char* name = lhs->data.symbol.name;
 
     if (name == SYM_Method) {
         if (rhs->type == EXPR_SYMBOL
-            && (rhs->data.symbol == SYM_EulerSum
-                || rhs->data.symbol == SYM_NIntegrate)) {
-            o->method = rhs->data.symbol; return true;
+            && (rhs->data.symbol.name == SYM_EulerSum
+                || rhs->data.symbol.name == SYM_NIntegrate)) {
+            o->method = rhs->data.symbol.name; return true;
         }
-        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic) {
+        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) {
             o->method = SYM_EulerSum; return true;
         }
         nd_warn("badmeth", "Method must be EulerSum or NIntegrate; using EulerSum");
@@ -669,7 +669,7 @@ Expr* builtin_nd(Expr* res) {
     Expr* arg0 = res->data.function.args[0];
     if (arg0->type == EXPR_FUNCTION
         && arg0->data.function.head->type == EXPR_SYMBOL
-        && arg0->data.function.head->data.symbol == SYM_List) {
+        && arg0->data.function.head->data.symbol.name == SYM_List) {
         return nd_thread_over_list(res);
     }
 
@@ -701,15 +701,15 @@ Expr* builtin_nd(Expr* res) {
     Expr* n_expr = NULL;
     Expr* n_owned = NULL;
     if (spec->type == EXPR_SYMBOL) {
-        var = spec->data.symbol;
+        var = spec->data.symbol.name;
         n_owned = expr_new_integer(1);
         n_expr = n_owned;
     } else if (spec->type == EXPR_FUNCTION
                && spec->data.function.head->type == EXPR_SYMBOL
-               && spec->data.function.head->data.symbol == SYM_List
+               && spec->data.function.head->data.symbol.name == SYM_List
                && spec->data.function.arg_count == 2
                && spec->data.function.args[0]->type == EXPR_SYMBOL) {
-        var = spec->data.function.args[0]->data.symbol;
+        var = spec->data.function.args[0]->data.symbol.name;
         n_expr = spec->data.function.args[1];
     } else {
         nd_warn("ivar", "the second argument must be x or {x, n} with x a symbol");

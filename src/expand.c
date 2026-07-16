@@ -25,8 +25,8 @@ static bool expr_contains_patt(Expr* e, Expr* patt) {
 }
 
 static Expr* multiply_two(Expr* a, Expr* b) {
-    bool a_is_plus = (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL && a->data.function.head->data.symbol == SYM_Plus);
-    bool b_is_plus = (b->type == EXPR_FUNCTION && b->data.function.head->type == EXPR_SYMBOL && b->data.function.head->data.symbol == SYM_Plus);
+    bool a_is_plus = (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL && a->data.function.head->data.symbol.name == SYM_Plus);
+    bool b_is_plus = (b->type == EXPR_FUNCTION && b->data.function.head->type == EXPR_SYMBOL && b->data.function.head->data.symbol.name == SYM_Plus);
 
     if (a_is_plus && b_is_plus) {
         size_t count = a->data.function.arg_count * b->data.function.arg_count;
@@ -110,7 +110,7 @@ Expr* expr_expand_patt(Expr* e, Expr* patt) {
 
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
-    const char* head = e->data.function.head->type == EXPR_SYMBOL ? e->data.function.head->data.symbol : "";
+    const char* head = e->data.function.head->type == EXPR_SYMBOL ? e->data.function.head->data.symbol.name : "";
 
     // Thread over lists, equations, inequalities, logic. Inequality has
     // operator-symbol slots at odd indices that must be passed through.
@@ -158,11 +158,34 @@ Expr* expr_expand_patt(Expr* e, Expr* patt) {
     if (strcmp(head, "Power") == 0 && e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp = e->data.function.args[1];
-        if (exp->type == EXPR_INTEGER && exp->data.integer > 0 && exp->data.integer < 100) {
+        if (exp->type == EXPR_INTEGER && exp->data.integer > 0) {
+            int64_t n = exp->data.integer;
             Expr* exp_base = expr_expand_patt(base, patt);
-            Expr* res = power_expand(exp_base, exp->data.integer);
+            /* Gate on the ESTIMATED result size, not a flat exponent cap: an
+             * m-term base raised to n expands to C(n+m-1, m-1) terms.  For a
+             * binomial (m = 2) that is just n + 1, so (x + 2)^102 (needed by the
+             * high-degree Risch denominators) expands cheaply, while a 5-term
+             * base at n = 100 (~4.5M terms) stays factored.  Replaces the former
+             * arbitrary `n < 100` ceiling. */
+            long m = 1;
+            if (exp_base->type == EXPR_FUNCTION
+                && exp_base->data.function.head->type == EXPR_SYMBOL
+                && strcmp(exp_base->data.function.head->data.symbol.name, "Plus") == 0)
+                m = (long)exp_base->data.function.arg_count;
+            bool do_expand = (m <= 1);
+            if (!do_expand) {
+                double est = 1.0;                 /* C(n+m-1, m-1), overflow-safe */
+                for (long i = 1; i <= m - 1 && est <= 2.0e5; i++)
+                    est *= (double)(n + i) / (double)i;
+                do_expand = (est <= 2.0e5);
+            }
+            if (do_expand) {
+                Expr* res = power_expand(exp_base, n);
+                expr_free(exp_base);
+                return res;
+            }
             expr_free(exp_base);
-            return res;
+            return expr_copy(e);
         }
         // For negative integer or non-integer power, we still don't go into subexpressions
         return expr_copy(e);
@@ -188,7 +211,7 @@ Expr* builtin_expand(Expr* res) {
 static bool is_negative_int_power(Expr* e) {
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
-    if (e->data.function.head->data.symbol != SYM_Power) return false;
+    if (e->data.function.head->data.symbol.name != SYM_Power) return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* exp = e->data.function.args[1];
     return exp->type == EXPR_INTEGER && exp->data.integer < 0;
@@ -213,7 +236,7 @@ Expr* expr_expand_numerator(Expr* e) {
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
     const char* head = (e->data.function.head->type == EXPR_SYMBOL)
-        ? e->data.function.head->data.symbol : "";
+        ? e->data.function.head->data.symbol.name : "";
 
     if (is_thread_head(head)) {
         bool is_ineq = (strcmp(head, "Inequality") == 0);
@@ -289,7 +312,7 @@ Expr* expr_expand_denominator(Expr* e) {
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
     const char* head = (e->data.function.head->type == EXPR_SYMBOL)
-        ? e->data.function.head->data.symbol : "";
+        ? e->data.function.head->data.symbol.name : "";
 
     if (is_thread_head(head)) {
         bool is_ineq = (strcmp(head, "Inequality") == 0);

@@ -101,17 +101,17 @@ static bool primeq_parse_options(const Expr* res, size_t first_opt,
         Expr* a = res->data.function.args[i];
         if (a->type != EXPR_FUNCTION ||
             a->data.function.head->type != EXPR_SYMBOL ||
-            a->data.function.head->data.symbol != SYM_Rule ||
+            a->data.function.head->data.symbol.name != SYM_Rule ||
             a->data.function.arg_count != 2) {
             return false;
         }
         Expr* key = a->data.function.args[0];
         Expr* val = a->data.function.args[1];
         if (key->type != EXPR_SYMBOL) return false;
-        if (key->data.symbol == SYM_GaussianIntegers) {
+        if (key->data.symbol.name == SYM_GaussianIntegers) {
             if (val->type != EXPR_SYMBOL) return false;
-            if (strcmp(val->data.symbol, "True") == 0) *out_gaussian = true;
-            else if (strcmp(val->data.symbol, "False") == 0) *out_gaussian = false;
+            if (strcmp(val->data.symbol.name, "True") == 0) *out_gaussian = true;
+            else if (strcmp(val->data.symbol.name, "False") == 0) *out_gaussian = false;
             else return false;
         } else {
             return false;  /* unknown option */
@@ -161,7 +161,7 @@ Expr* builtin_primeq(Expr* res) {
     }
 
     if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL) {
-        const char* head = arg->data.function.head->data.symbol;
+        const char* head = arg->data.function.head->data.symbol.name;
         /* Gaussian prime test for Complex[a, b] with integer parts. Works
          * in both option-on and option-off modes since membership in Z[i]
          * is the relevant universe in either case. */
@@ -727,7 +727,7 @@ static void rbd_factor_mpz(mpz_t factor, mpz_t n, Expr* method_opt) {
     if (method_opt) {
         if (method_opt->type == EXPR_FUNCTION
             && method_opt->data.function.head->type == EXPR_SYMBOL
-            && method_opt->data.function.head->data.symbol == SYM_Rational
+            && method_opt->data.function.head->data.symbol.name == SYM_Rational
             && method_opt->data.function.arg_count == 2) {
             expr_to_mpz(method_opt->data.function.args[0], a);
             expr_to_mpz(method_opt->data.function.args[1], b);
@@ -1226,12 +1226,12 @@ Expr* builtin_factorinteger(Expr* res) {
         Expr* arg = res->data.function.args[i];
         if (arg->type == EXPR_INTEGER) {
             k_limit = (int)arg->data.integer;
-        } else if (arg->type == EXPR_SYMBOL && arg->data.symbol == SYM_Automatic) {
+        } else if (arg->type == EXPR_SYMBOL && arg->data.symbol.name == SYM_Automatic) {
             // keep default
-        } else if ((arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && (arg->data.function.head->data.symbol == SYM_Rule || arg->data.function.head->data.symbol == SYM_RuleDelayed)) && arg->data.function.arg_count == 2) {
+        } else if ((arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && (arg->data.function.head->data.symbol.name == SYM_Rule || arg->data.function.head->data.symbol.name == SYM_RuleDelayed)) && arg->data.function.arg_count == 2) {
             Expr* lhs = arg->data.function.args[0];
             Expr* rhs = arg->data.function.args[1];
-            if (lhs->type == EXPR_SYMBOL && lhs->data.symbol == SYM_Method) {
+            if (lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == SYM_Method) {
                 if (rhs->type == EXPR_STRING) {
                     if (strcmp(rhs->data.string, "TrialDivision") == 0) method = METHOD_TRIAL;
                     else if (strcmp(rhs->data.string, "PollardRho") == 0) method = METHOD_POLLARD_RHO;
@@ -1244,15 +1244,15 @@ Expr* builtin_factorinteger(Expr* res) {
                     else if (strcmp(rhs->data.string, "ShanksSquareForms") == 0) method = METHOD_SQUFOF;
                     else if (strcmp(rhs->data.string, "BlakeRationalBaseDescent") == 0) method = METHOD_RBD;
                     else if (strcmp(rhs->data.string, "Automatic") == 0) method = METHOD_AUTOMATIC;
-                } else if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic) {
+                } else if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) {
                     method = METHOD_AUTOMATIC;
-                } else if (rhs->type == EXPR_FUNCTION && rhs->data.function.head->data.symbol == SYM_List) {
+                } else if (rhs->type == EXPR_FUNCTION && rhs->data.function.head->data.symbol.name == SYM_List) {
                     if (rhs->data.function.arg_count == 2) {
                         Expr* m_name = rhs->data.function.args[0];
                         Expr* m_opt = rhs->data.function.args[1];
                         if (m_name->type == EXPR_STRING && strcmp(m_name->data.string, "BlakeRationalBaseDescent") == 0) {
                             method = METHOD_RBD;
-                            if (m_opt->type == EXPR_FUNCTION && m_opt->data.function.head->type == EXPR_SYMBOL && (m_opt->data.function.head->data.symbol == SYM_Rule || m_opt->data.function.head->data.symbol == SYM_RuleDelayed) && m_opt->data.function.arg_count == 2) {
+                            if (m_opt->type == EXPR_FUNCTION && m_opt->data.function.head->type == EXPR_SYMBOL && (m_opt->data.function.head->data.symbol.name == SYM_Rule || m_opt->data.function.head->data.symbol.name == SYM_RuleDelayed) && m_opt->data.function.arg_count == 2) {
                                 Expr* opt_lhs = m_opt->data.function.args[0];
                                 Expr* opt_rhs = m_opt->data.function.args[1];
                                 if (opt_lhs->type == EXPR_STRING && strcmp(opt_lhs->data.string, "Base") == 0) {

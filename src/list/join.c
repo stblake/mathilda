@@ -132,7 +132,7 @@ Expr* builtin_catenate(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* lst = res->data.function.args[0];
     if (!(lst->type == EXPR_FUNCTION && lst->data.function.head->type == EXPR_SYMBOL &&
-          lst->data.function.head->data.symbol == SYM_List))
+          lst->data.function.head->data.symbol.name == SYM_List))
         return NULL;
 
     size_t m = lst->data.function.arg_count;

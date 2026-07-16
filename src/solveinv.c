@@ -105,8 +105,8 @@ static Expr* mk_rat(int64_t p, int64_t q) {
 
 static bool contains_var(const Expr* e, const Expr* var) {
     if (!e || !var || var->type != EXPR_SYMBOL) return false;
-    const char* vname = var->data.symbol;
-    if (e->type == EXPR_SYMBOL) return e->data.symbol == vname;
+    const char* vname = var->data.symbol.name;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == vname;
     if (e->type != EXPR_FUNCTION) return false;
     if (contains_var(e->data.function.head, var)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
@@ -118,7 +118,7 @@ static bool contains_var(const Expr* e, const Expr* var) {
 static bool head_is(const Expr* e, const char* sym) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == sym;
+        && e->data.function.head->data.symbol.name == sym;
 }
 
 /* ------------------------------------------------------------------ *
@@ -757,12 +757,12 @@ static Expr* solve_inner_equation(Expr* inner_eq, Expr* var,
 
     /* Equation might have collapsed to True/False during eval. */
     if (inner_eq->type == EXPR_SYMBOL) {
-        if (inner_eq->data.symbol == SYM_True) {
+        if (inner_eq->data.symbol.name == SYM_True) {
             Expr* empty = expr_new_function(mk_sym("List"), NULL, 0);
             return expr_new_function(mk_sym("List"),
                                      (Expr*[]){ empty }, 1);
         }
-        if (inner_eq->data.symbol == SYM_False) {
+        if (inner_eq->data.symbol.name == SYM_False) {
             return expr_new_function(mk_sym("List"), NULL, 0);
         }
         return NULL;
@@ -1013,7 +1013,7 @@ static bool isolate_residual(Expr* residual, Expr* var, Isolation* out) {
         expr_free(payload); expr_free(new_rhs);
         return false;
     }
-    const char* h = payload->data.function.head->data.symbol;
+    const char* h = payload->data.function.head->data.symbol.name;
 
     if (h == SYM_Power && payload->data.function.arg_count == 2) {
         Expr* base = payload->data.function.args[0];
@@ -1044,7 +1044,7 @@ static bool isolate_residual(Expr* residual, Expr* var, Isolation* out) {
          * generalised to the multi-branch complex log family. */
         if (!contains_var(base, var) && contains_var(exp_, var)) {
             Expr* new_g;
-            if (base->type == EXPR_SYMBOL && base->data.symbol == SYM_E) {
+            if (base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E) {
                 new_g = expr_copy(exp_);
             } else {
                 new_g = eval_and_free(mk_fn2("Times",
@@ -1097,7 +1097,7 @@ bool solveinv_looks_invertible(const Expr* expr, const Expr* var) {
     if (!expr || !var) return false;
     if (expr->type == EXPR_FUNCTION) {
         if (expr->data.function.head->type == EXPR_SYMBOL) {
-            const char* h = expr->data.function.head->data.symbol;
+            const char* h = expr->data.function.head->data.symbol.name;
             if (head_is_in_table(h)
                 && expr->data.function.arg_count == 1
                 && contains_var(expr->data.function.args[0], var)) {
@@ -1213,7 +1213,7 @@ static Expr* solveinv_drive(Expr* equation, Expr* var,
          * inner equation reduced trivially. */
         bool g_is_var = iso.g && iso.g->type == EXPR_SYMBOL
                         && var->type == EXPR_SYMBOL
-                        && iso.g->data.symbol == var->data.symbol;
+                        && iso.g->data.symbol.name == var->data.symbol.name;
         if (g_is_var && iso.head && iso.head != SYM_Power) {
             Expr* sols = make_inverse_function_solution(
                 iso.head, iso.new_rhs, var, ctx);

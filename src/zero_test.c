@@ -42,6 +42,7 @@
 #include "numeric.h"
 #include "poly/poly.h"
 #include "random.h"
+#include "simp_trigexp_zero.h"
 #include "sym_names.h"
 #include "symtab.h"
 
@@ -207,7 +208,7 @@ static bool symbol_has_own_value(const char* sym_name) {
 static void collect_free(const Expr* e, SymPtrSet* out) {
     if (!e) return;
     if (e->type == EXPR_SYMBOL) {
-        const char* name = e->data.symbol;
+        const char* name = e->data.symbol.name;
         if (is_known_constant(name)) return;
         if (symbol_has_own_value(name)) return;
         sps_add(out, name);
@@ -244,9 +245,9 @@ static bool expr_has_algebraic_constant(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     const Expr* head = e->data.function.head;
     if (head && head->type == EXPR_SYMBOL) {
-        if (head->data.symbol == SYM_Sqrt && e->data.function.arg_count == 1)
+        if (head->data.symbol.name == SYM_Sqrt && e->data.function.arg_count == 1)
             return true;
-        if (head->data.symbol == SYM_Power && e->data.function.arg_count == 2) {
+        if (head->data.symbol.name == SYM_Power && e->data.function.arg_count == 2) {
             int64_t p, q;
             if (is_rational(e->data.function.args[1], &p, &q) && q != 1)
                 return true;
@@ -283,7 +284,7 @@ static bool is_pure_rational_function(const Expr* e) {
     if (e->type == EXPR_MPFR) return false;
 #endif
     if (e->type == EXPR_STRING) return false;
-    if (e->type == EXPR_SYMBOL) return !is_known_constant(e->data.symbol);
+    if (e->type == EXPR_SYMBOL) return !is_known_constant(e->data.symbol.name);
     if (e->type == EXPR_FUNCTION) {
         int64_t rn = 0, rd = 1;
         if (is_rational((Expr*)e, &rn, &rd)) return true;   /* Rational[int,int] */
@@ -291,7 +292,7 @@ static bool is_pure_rational_function(const Expr* e) {
         if (is_complex((Expr*)e, &re, &im)) return false;    /* Gaussian: I is algebraic */
         const Expr* h = e->data.function.head;
         if (!h || h->type != EXPR_SYMBOL) return false;
-        const char* nm = h->data.symbol;
+        const char* nm = h->data.symbol.name;
         size_t argc = e->data.function.arg_count;
         if (nm == SYM_Plus || nm == SYM_Times) {
             for (size_t i = 0; i < argc; ++i)
@@ -345,7 +346,7 @@ static ZeroTestResult decide_structural(const Expr* e) {
     if (e->type == EXPR_STRING) return ZERO_TEST_FALSE;
 
     if (e->type == EXPR_SYMBOL) {
-        const char* name = e->data.symbol;
+        const char* name = e->data.symbol.name;
         if (name == SYM_True || name == SYM_False) return ZERO_TEST_FALSE;
         if (name == SYM_Infinity || name == SYM_ComplexInfinity)
             return ZERO_TEST_FALSE;
@@ -462,7 +463,7 @@ static bool expr_abs_double(const Expr* e, double* out) {
      * precision). Recurse on components. */
     if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 &&
         e->data.function.head && e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Rational) {
+        e->data.function.head->data.symbol.name == SYM_Rational) {
         double mn = 0.0, md = 0.0;
         if (!expr_abs_double(e->data.function.args[0], &mn)) return false;
         if (!expr_abs_double(e->data.function.args[1], &md)) return false;
@@ -514,7 +515,7 @@ static bool is_algebraic_expr(const Expr* e) {
         if (is_rational((Expr*)e, &rn, &rd)) return true;
         const Expr* h = e->data.function.head;
         if (!h || h->type != EXPR_SYMBOL) return false;
-        const char* nm = h->data.symbol;
+        const char* nm = h->data.symbol.name;
         size_t argc = e->data.function.arg_count;
         if (nm == SYM_Power && argc == 2) {
             int64_t pn = 0, pd = 1;
@@ -564,7 +565,7 @@ static double magnitude_scale(const Expr* e) {
     }
 
     if (e->type == EXPR_SYMBOL) {
-        if (is_known_constant(e->data.symbol)) {
+        if (is_known_constant(e->data.symbol.name)) {
             Expr* n = numericalize(e, numeric_machine_spec());
             double m = 0.0;
             if (n && expr_abs_double(n, &m)) { expr_free(n); return m > 0.0 ? m : 1.0; }
@@ -587,7 +588,7 @@ static double magnitude_scale(const Expr* e) {
 
         const Expr* head = e->data.function.head;
         const char* head_name = (head && head->type == EXPR_SYMBOL)
-                                ? head->data.symbol : NULL;
+                                ? head->data.symbol.name : NULL;
         size_t argc = e->data.function.arg_count;
 
         if (head_name == SYM_Plus) {
@@ -700,7 +701,7 @@ static bool is_pure_numeric(const Expr* e) {
      * shape numericalize emits for bigint-denominator rationals. */
     if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 &&
         e->data.function.head && e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Rational) {
+        e->data.function.head->data.symbol.name == SYM_Rational) {
         return is_pure_numeric(e->data.function.args[0]) &&
                is_pure_numeric(e->data.function.args[1]);
     }
@@ -732,7 +733,7 @@ static double magnitude_scale_at(const Expr* e, NumericSpec spec) {
     if (!e) return 1.0;
     if (e->type == EXPR_FUNCTION && e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Plus) {
+        e->data.function.head->data.symbol.name == SYM_Plus) {
         double sum = 0.0;
         for (size_t i = 0; i < e->data.function.arg_count; ++i) {
             Expr* n = numericalize(e->data.function.args[i], spec);
@@ -942,7 +943,7 @@ static Expr* substitute_symbols(const Expr* e, const char** syms, Expr** vals, s
 
     if (e->type == EXPR_SYMBOL) {
         for (size_t i = 0; i < n; ++i) {
-            if (e->data.symbol == syms[i]) return expr_copy(vals[i]);
+            if (e->data.symbol.name == syms[i]) return expr_copy(vals[i]);
         }
         return expr_copy((Expr*)e);
     }
@@ -1076,6 +1077,20 @@ ZeroTestResult zero_test_decide(const Expr* e) {
      * (decide_rational returns FALSE exclusively when is_pure_rational_function
      * holds, where the Q-normalization is exact and complete). */
     if (r != ZERO_TEST_UNKNOWN) return r;
+
+    /* Exact trig/exp kernel zero-test.  A rational function of a single kernel
+     * t = E^(i x) (Sin[k x], Cos[k x], Sec[k x], …, with opaque Log/Sqrt terms
+     * and parameters as independent generators) is decided by EXACT rational
+     * point-evaluation on a Nullstellensatz grid — a symbolic decision, no
+     * numeric sampling.  decide_rational leaves these UNKNOWN because it treats
+     * every transcendental as an opaque indeterminate; this stage closes the
+     * Sec^n/Csc^n and symbolic-parameter diff-back identities exactly and fast.
+     * Declines (UNKNOWN → fall through) on non-single-kernel forms. */
+    {
+        TrigExpZeroResult tz = trigexp_rational_is_zero(e);
+        if (tz == TRIGEXP_ZERO_TRUE)  return ZERO_TEST_TRUE;
+        if (tz == TRIGEXP_ZERO_FALSE) return ZERO_TEST_FALSE;
+    }
 
     if (!has_free_symbols(e)) {
         r = decide_numeric(e);

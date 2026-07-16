@@ -52,7 +52,7 @@ Expr* builtin_transpose(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     Expr* list = res->data.function.args[0];
     if (list->type != EXPR_FUNCTION || list->data.function.head->type != EXPR_SYMBOL) return NULL;
-    const char* head = list->data.function.head->data.symbol;
+    const char* head = list->data.function.head->data.symbol.name;
 
     int64_t in_dims[64];
     int in_depth = get_array_dimensions(list, in_dims, head);
@@ -64,7 +64,7 @@ Expr* builtin_transpose(Expr* res) {
         for (int i = 2; i < in_depth; i++) perm[i] = i + 1;
     } else {
         Expr* spec = res->data.function.args[1];
-        if (spec->type != EXPR_FUNCTION || spec->data.function.head->data.symbol != SYM_List || 
+        if (spec->type != EXPR_FUNCTION || spec->data.function.head->data.symbol.name != SYM_List || 
             spec->data.function.arg_count != (size_t)in_depth) {
             free(perm); return NULL;
         }
@@ -112,7 +112,7 @@ Expr* builtin_conjugate_transpose(Expr* res) {
     int64_t dims[64];
     int depth = 0;
     if (m->type == EXPR_FUNCTION && m->data.function.head->type == EXPR_SYMBOL &&
-        m->data.function.head->data.symbol == SYM_List) {
+        m->data.function.head->data.symbol.name == SYM_List) {
         depth = get_array_dimensions(m, dims, "List");
     }
 

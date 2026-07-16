@@ -76,7 +76,7 @@ static bool radical_factor_split(const Expr* e,
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (!e->data.function.head ||
         e->data.function.head->type != EXPR_SYMBOL) return false;
-    if (e->data.function.head->data.symbol != SYM_Power) return false;
+    if (e->data.function.head->data.symbol.name != SYM_Power) return false;
     if (e->data.function.arg_count != 2) return false;
     const Expr* base = e->data.function.args[0];
     const Expr* exp  = e->data.function.args[1];
@@ -196,7 +196,7 @@ static Expr* simp_radicals_walk(const Expr* e) {
     if (target->type == EXPR_FUNCTION
         && target->data.function.head
         && target->data.function.head->type == EXPR_SYMBOL
-        && target->data.function.head->data.symbol == SYM_Times) {
+        && target->data.function.head->data.symbol.name == SYM_Times) {
         Expr* combined = simp_radicals_combine_times(target);
         if (combined) {
             if (current) expr_free(current);
@@ -357,7 +357,7 @@ bool is_sqrt(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (!e->data.function.head ||
         e->data.function.head->type != EXPR_SYMBOL ||
-        e->data.function.head->data.symbol != SYM_Power) return false;
+        e->data.function.head->data.symbol.name != SYM_Power) return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* exp = e->data.function.args[1];
     if (!is_rational_literal(exp)) return false;
@@ -408,7 +408,7 @@ static bool extract_sqrt_term(const Expr* e, const AssumeCtx* ctx,
     if (e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.head->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2
         && is_rational_literal(e->data.function.args[1])) {
         Expr* exp = e->data.function.args[1];
@@ -441,7 +441,7 @@ static bool extract_sqrt_term(const Expr* e, const AssumeCtx* ctx,
     if (e->type != EXPR_FUNCTION) return false;
     if (!e->data.function.head ||
         e->data.function.head->type != EXPR_SYMBOL ||
-        e->data.function.head->data.symbol != SYM_Times) return false;
+        e->data.function.head->data.symbol.name != SYM_Times) return false;
 
     /* Flatten nested Times via a depth-first walk: Simplify's
      * intermediate forms can land us with shapes like
@@ -462,7 +462,7 @@ static bool extract_sqrt_term(const Expr* e, const AssumeCtx* ctx,
         if (top->node->type != EXPR_FUNCTION ||
             !top->node->data.function.head ||
             top->node->data.function.head->type != EXPR_SYMBOL ||
-            top->node->data.function.head->data.symbol != SYM_Times) {
+            top->node->data.function.head->data.symbol.name != SYM_Times) {
             /* leaf factor: append */
             if (flat_n == flat_cap) {
                 flat_cap = flat_cap ? flat_cap * 2 : 8;
@@ -662,7 +662,7 @@ static bool plus_has_sqrt_bearing_term(const Expr* plus_node,
     if (!plus_node || plus_node->type != EXPR_FUNCTION) return false;
     if (!plus_node->data.function.head ||
         plus_node->data.function.head->type != EXPR_SYMBOL ||
-        plus_node->data.function.head->data.symbol != SYM_Plus) return false;
+        plus_node->data.function.head->data.symbol.name != SYM_Plus) return false;
     for (size_t i = 0; i < plus_node->data.function.arg_count; i++) {
         Expr* b = NULL; Expr* C = NULL;
         if (extract_sqrt_term(plus_node->data.function.args[i], ctx, &b, &C)) {
@@ -684,7 +684,7 @@ static bool contains_sqrt_of_plus(const Expr* e) {
         if (inner && inner->type == EXPR_FUNCTION &&
             inner->data.function.head &&
             inner->data.function.head->type == EXPR_SYMBOL &&
-            inner->data.function.head->data.symbol == SYM_Plus) {
+            inner->data.function.head->data.symbol.name == SYM_Plus) {
             return true;
         }
     }
@@ -789,7 +789,7 @@ static Expr* sqrt_if_clean_square(const Expr* D, const AssumeCtx* ctx) {
     if (D->type == EXPR_FUNCTION
         && D->data.function.head
         && D->data.function.head->type == EXPR_SYMBOL
-        && D->data.function.head->data.symbol == SYM_Power
+        && D->data.function.head->data.symbol.name == SYM_Power
         && D->data.function.arg_count == 2) {
         Expr* exp = D->data.function.args[1];
         if (exp->type == EXPR_INTEGER &&
@@ -814,7 +814,7 @@ static Expr* sqrt_if_clean_square(const Expr* D, const AssumeCtx* ctx) {
     if (D->type == EXPR_FUNCTION
         && D->data.function.head
         && D->data.function.head->type == EXPR_SYMBOL
-        && D->data.function.head->data.symbol == SYM_Plus
+        && D->data.function.head->data.symbol.name == SYM_Plus
         && !has_non_integer_power(D)) {
         Expr* expanded = call_unary_copy("Expand", D);
         if (expanded) {
@@ -827,7 +827,7 @@ static Expr* sqrt_if_clean_square(const Expr* D, const AssumeCtx* ctx) {
                     if (fsf->type == EXPR_FUNCTION
                         && fsf->data.function.head
                         && fsf->data.function.head->type == EXPR_SYMBOL
-                        && fsf->data.function.head->data.symbol == SYM_Power
+                        && fsf->data.function.head->data.symbol.name == SYM_Power
                         && fsf->data.function.arg_count == 2) {
                         Expr* fsf_exp = fsf->data.function.args[1];
                         if (fsf_exp->type == EXPR_INTEGER &&
@@ -858,7 +858,7 @@ static Expr* sqrt_if_clean_square(const Expr* D, const AssumeCtx* ctx) {
     if (D->type == EXPR_FUNCTION &&
         D->data.function.head &&
         D->data.function.head->type == EXPR_SYMBOL &&
-        D->data.function.head->data.symbol == SYM_Plus &&
+        D->data.function.head->data.symbol.name == SYM_Plus &&
         plus_has_sqrt_bearing_term(D, ctx)) {
         Expr* cached_val = NULL;
         bool cached_neg = false;
@@ -895,7 +895,7 @@ static size_t count_outer_sqrt_candidates(const Expr* plus_node,
     if (!plus_node || plus_node->type != EXPR_FUNCTION) return 0;
     if (!plus_node->data.function.head ||
         plus_node->data.function.head->type != EXPR_SYMBOL ||
-        plus_node->data.function.head->data.symbol != SYM_Plus) return 0;
+        plus_node->data.function.head->data.symbol.name != SYM_Plus) return 0;
     size_t k = 0;
     for (size_t i = 0; i < plus_node->data.function.arg_count; i++) {
         Expr* b = NULL; Expr* C = NULL;
@@ -933,7 +933,7 @@ static bool split_plus_into_a_plus_b_sqrt_c(const Expr* plus_node,
     if (!plus_node || plus_node->type != EXPR_FUNCTION) return false;
     if (!plus_node->data.function.head ||
         plus_node->data.function.head->type != EXPR_SYMBOL ||
-        plus_node->data.function.head->data.symbol != SYM_Plus) return false;
+        plus_node->data.function.head->data.symbol.name != SYM_Plus) return false;
 
     size_t n = plus_node->data.function.arg_count;
     if (n < 2) return false;
@@ -1029,7 +1029,7 @@ static bool denest_prov_pos(const AssumeCtx* ctx, const Expr* x, int depth) {
         if (!f->data.function.head ||
             f->data.function.head->type != EXPR_SYMBOL) continue;
         if (f->data.function.arg_count != 2) continue;
-        const char* h = f->data.function.head->data.symbol;
+        const char* h = f->data.function.head->data.symbol.name;
         const Expr* a = f->data.function.args[0];
         const Expr* b = f->data.function.args[1];
         /* Greater[x, z] or Less[z, x] with z provably nonneg => x > 0. */
@@ -1071,7 +1071,7 @@ static bool denest_prov_nonneg(const AssumeCtx* ctx, const Expr* x, int depth) {
         if (!f->data.function.head ||
             f->data.function.head->type != EXPR_SYMBOL) continue;
         if (f->data.function.arg_count != 2) continue;
-        const char* h = f->data.function.head->data.symbol;
+        const char* h = f->data.function.head->data.symbol.name;
         const Expr* a = f->data.function.args[0];
         const Expr* b = f->data.function.args[1];
         if (h == SYM_GreaterEqual && expr_eq((Expr*)a, (Expr*)x)) {
@@ -1094,7 +1094,7 @@ static bool denest_prov_nonneg(const AssumeCtx* ctx, const Expr* x, int depth) {
      */
     if (x && x->type == EXPR_FUNCTION && x->data.function.head &&
         x->data.function.head->type == EXPR_SYMBOL &&
-        x->data.function.head->data.symbol == SYM_Plus) {
+        x->data.function.head->data.symbol.name == SYM_Plus) {
         size_t pn = x->data.function.arg_count;
         if (pn == 2) {
             /* Subtraction pattern: u + (-1)*v. */
@@ -1106,7 +1106,7 @@ static bool denest_prov_nonneg(const AssumeCtx* ctx, const Expr* x, int depth) {
                 if (arg->type == EXPR_FUNCTION &&
                     arg->data.function.head &&
                     arg->data.function.head->type == EXPR_SYMBOL &&
-                    arg->data.function.head->data.symbol == SYM_Times &&
+                    arg->data.function.head->data.symbol.name == SYM_Times &&
                     arg->data.function.arg_count == 2) {
                     Expr* c = arg->data.function.args[0];
                     Expr* w = arg->data.function.args[1];
@@ -1125,7 +1125,7 @@ static bool denest_prov_nonneg(const AssumeCtx* ctx, const Expr* x, int depth) {
                     if (!f->data.function.head ||
                         f->data.function.head->type != EXPR_SYMBOL) continue;
                     if (f->data.function.arg_count != 2) continue;
-                    const char* h = f->data.function.head->data.symbol;
+                    const char* h = f->data.function.head->data.symbol.name;
                     const Expr* a = f->data.function.args[0];
                     const Expr* b = f->data.function.args[1];
                     if ((h == SYM_Greater || h == SYM_GreaterEqual) &&
@@ -1162,7 +1162,7 @@ static bool denest_prov_nonneg(const AssumeCtx* ctx, const Expr* x, int depth) {
      * before Expand distributes them. */
     if (x && x->type == EXPR_FUNCTION && x->data.function.head &&
         x->data.function.head->type == EXPR_SYMBOL &&
-        x->data.function.head->data.symbol == SYM_Times) {
+        x->data.function.head->data.symbol.name == SYM_Times) {
         bool all_nn = true;
         for (size_t i = 0; i < x->data.function.arg_count; i++) {
             if (!denest_prov_nonneg(ctx, x->data.function.args[i],
@@ -1248,7 +1248,7 @@ static bool classify_q_sqrt_term(const Expr* term,
     }
     if (term->type == EXPR_FUNCTION && term->data.function.head &&
         term->data.function.head->type == EXPR_SYMBOL &&
-        term->data.function.head->data.symbol == SYM_Times) {
+        term->data.function.head->data.symbol.name == SYM_Times) {
         size_t n = term->data.function.arg_count;
         if (n == 0) return false;
         Expr** coef_args = (Expr**)malloc(sizeof(Expr*) * n);
@@ -1357,7 +1357,7 @@ static bool q_sqrt_extension_is_nonneg(const Expr* e) {
     if (is_sqrt(e) ||
         (e->type == EXPR_FUNCTION && e->data.function.head &&
          e->data.function.head->type == EXPR_SYMBOL &&
-         e->data.function.head->data.symbol == SYM_Times)) {
+         e->data.function.head->data.symbol.name == SYM_Times)) {
         Expr* a = NULL; Expr* b = NULL; Expr* g = NULL;
         if (!classify_q_sqrt_term(e, &a, &b, &g)) return false;
         bool ok;
@@ -1374,7 +1374,7 @@ static bool q_sqrt_extension_is_nonneg(const Expr* e) {
     if (e->type != EXPR_FUNCTION ||
         !e->data.function.head ||
         e->data.function.head->type != EXPR_SYMBOL ||
-        e->data.function.head->data.symbol != SYM_Plus) {
+        e->data.function.head->data.symbol.name != SYM_Plus) {
         return false;
     }
 
@@ -1692,7 +1692,7 @@ static bool match_half_int_power(const Expr* e, int64_t* m_out,
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (!e->data.function.head ||
         e->data.function.head->type != EXPR_SYMBOL ||
-        e->data.function.head->data.symbol != SYM_Power) return false;
+        e->data.function.head->data.symbol.name != SYM_Power) return false;
     if (e->data.function.arg_count != 2) return false;
     if (!e->data.function.args[0] || !e->data.function.args[1]) return false;
     Expr* exp = e->data.function.args[1];
@@ -1863,7 +1863,7 @@ static Expr* simp_denest_sqrt_walk(const Expr* e, const AssumeCtx* ctx) {
         if (base->type == EXPR_FUNCTION
             && base->data.function.head
             && base->data.function.head->type == EXPR_SYMBOL
-            && base->data.function.head->data.symbol == SYM_Plus) {
+            && base->data.function.head->data.symbol.name == SYM_Plus) {
             Expr* d = try_denest_pow_half_int(base, m_num, ctx);
             if (d) {
                 if (current) expr_free(current);

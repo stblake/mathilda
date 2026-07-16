@@ -137,7 +137,7 @@ static void lift_decompose_term(Expr* term, mpq_t coef, LiftTokList* tokens) {
     if (term->type == EXPR_FUNCTION
         && term->data.function.head
         && term->data.function.head->type == EXPR_SYMBOL
-        && term->data.function.head->data.symbol == SYM_Times) {
+        && term->data.function.head->data.symbol.name == SYM_Times) {
         for (size_t i = 0; i < term->data.function.arg_count; i++) {
             lift_decompose_term(term->data.function.args[i], coef, tokens);
         }
@@ -153,7 +153,7 @@ static void lift_decompose_term(Expr* term, mpq_t coef, LiftTokList* tokens) {
     if (term->type == EXPR_FUNCTION
         && term->data.function.head
         && term->data.function.head->type == EXPR_SYMBOL
-        && term->data.function.head->data.symbol == SYM_Power
+        && term->data.function.head->data.symbol.name == SYM_Power
         && term->data.function.arg_count == 2) {
         Expr* exp = term->data.function.args[1];
         if (exp->type == EXPR_INTEGER && exp->data.integer >= 1
@@ -238,7 +238,7 @@ static Expr* lift_common_from_plus_impl(const Expr* plus_e) {
     if (!plus_e || plus_e->type != EXPR_FUNCTION
         || !plus_e->data.function.head
         || plus_e->data.function.head->type != EXPR_SYMBOL
-        || plus_e->data.function.head->data.symbol != SYM_Plus) {
+        || plus_e->data.function.head->data.symbol.name != SYM_Plus) {
         return NULL;
     }
     size_t n = plus_e->data.function.arg_count;
@@ -328,7 +328,7 @@ Expr* simp_lift_common_factor(const Expr* e) {
         || e->data.function.head->type != EXPR_SYMBOL) {
         return NULL;
     }
-    const char* sym = e->data.function.head->data.symbol;
+    const char* sym = e->data.function.head->data.symbol.name;
     if (sym == SYM_Plus) {
         return lift_common_from_plus_impl(e);
     }
@@ -338,7 +338,7 @@ Expr* simp_lift_common_factor(const Expr* e) {
             if (child && child->type == EXPR_FUNCTION
                 && child->data.function.head
                 && child->data.function.head->type == EXPR_SYMBOL
-                && child->data.function.head->data.symbol == SYM_Plus) {
+                && child->data.function.head->data.symbol.name == SYM_Plus) {
                 Expr* lifted = lift_common_from_plus_impl(child);
                 if (lifted) {
                     Expr** new_args = (Expr**)malloc(sizeof(Expr*) * e->data.function.arg_count);
@@ -391,7 +391,7 @@ static bool plus_arg_is_negative_leading(const Expr* arg) {
     if (arg->type == EXPR_FUNCTION
         && arg->data.function.head
         && arg->data.function.head->type == EXPR_SYMBOL
-        && arg->data.function.head->data.symbol == SYM_Times
+        && arg->data.function.head->data.symbol.name == SYM_Times
         && arg->data.function.arg_count >= 1) {
         Expr* coef = arg->data.function.args[0];
         if (coef->type == EXPR_INTEGER) return coef->data.integer < 0;
@@ -408,7 +408,7 @@ static bool plus_is_negative_leading(const Expr* p) {
     if (!p || p->type != EXPR_FUNCTION
         || !p->data.function.head
         || p->data.function.head->type != EXPR_SYMBOL
-        || p->data.function.head->data.symbol != SYM_Plus
+        || p->data.function.head->data.symbol.name != SYM_Plus
         || p->data.function.arg_count < 1) {
         return false;
     }
@@ -437,7 +437,7 @@ Expr* canon_negate_pairs(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION
         || !e->data.function.head
         || e->data.function.head->type != EXPR_SYMBOL
-        || e->data.function.head->data.symbol != SYM_Times) {
+        || e->data.function.head->data.symbol.name != SYM_Times) {
         return NULL;
     }
     size_t n = e->data.function.arg_count;
@@ -543,7 +543,7 @@ bool has_pythag_head(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return false;
     Expr* head = e->data.function.head;
     if (head && head->type == EXPR_SYMBOL) {
-        const char* h = head->data.symbol;
+        const char* h = head->data.symbol.name;
         if (h == SYM_Cos || h == SYM_Sin ||
             h == SYM_Cosh || h == SYM_Sinh ||
             h == SYM_Tan || h == SYM_Cot ||

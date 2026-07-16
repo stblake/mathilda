@@ -21,6 +21,13 @@
  *     $PlotResample[...]
  *   ]
  *
+ * GraphPlot[] instead emits node-link diagrams built from Line (edges),
+ * Disk (vertices), and Text (labels). When Disk or Text primitives are
+ * present the converter switches to "diagram mode": vertices become marker
+ * points, labels become annotations, and the layout uses an equal-aspect
+ * (scaleanchor) square with hidden axes -- so a graph draws as a graph, not
+ * as an XY function plot.
+ *
  * Output JSON (Plotly format):
  *
  *   {
@@ -29,13 +36,7 @@
  *        "line":{"color":"rgba(51,102,204,1.0)","width":1.5}},
  *       ...
  *     ],
- *     "layout": {
- *       "xaxis":{"showgrid":true,"zeroline":true},
- *       "yaxis":{"showgrid":true,"zeroline":true},
- *       "margin":{"l":50,"r":20,"t":20,"b":50},
- *       "height":350,
- *       "plot_bgcolor":"#fff","paper_bgcolor":"#fff"
- *     }
+ *     "layout": { ... }
  *   }
  */
 
@@ -87,9 +88,12 @@ static int buf_cat(Buf* b, const char* s) {
     return 1;
 }
 
-/* Append a double value — use %g to keep it compact. */
+/* Append a double value — use %g to keep it compact. Snap sub-noise
+ * magnitudes to 0 so floating-point dust (e.g. sin(pi) ~ 1e-16) does not
+ * blow up an auto-ranged axis. */
 static int buf_catd(Buf* b, double v) {
     char tmp[64];
+    if (fabs(v) < 1e-12) v = 0.0;
     snprintf(tmp, sizeof(tmp), "%.7g", v);
     return buf_cat(b, tmp);
 }
@@ -104,7 +108,7 @@ static int head_is(const Expr* e, const char* sym) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == sym;
+        && e->data.function.head->data.symbol.name == sym;
 }
 
 static int expr_to_double(const Expr* e, double* out) {
@@ -114,6 +118,7 @@ static int expr_to_double(const Expr* e, double* out) {
     if (e->type == EXPR_BIGINT)  { *out = mpz_get_d(e->data.bigint);  return 1; }
     return 0;
 }
+
 
 /* -----------------------------------------------------------------------
  * Coordinate-list serialiser
@@ -145,9 +150,12 @@ static void rgba_str(char* out, size_t outsz, double r, double g, double b, doub
     int ri = (int)(r * 255.0 + 0.5);
     int gi = (int)(g * 255.0 + 0.5);
     int bi = (int)(b * 255.0 + 0.5);
-    if (ri < 0) ri = 0; if (ri > 255) ri = 255;
-    if (gi < 0) gi = 0; if (gi > 255) gi = 255;
-    if (bi < 0) bi = 0; if (bi > 255) bi = 255;
+    if (ri < 0) ri = 0;
+    if (ri > 255) ri = 255;
+    if (gi < 0) gi = 0;
+    if (gi > 255) gi = 255;
+    if (bi < 0) bi = 0;
+    if (bi > 255) bi = 255;
     snprintf(out, outsz, "rgba(%d,%d,%d,%.3f)", ri, gi, bi, a);
 }
 
@@ -167,7 +175,7 @@ static int resolve_color_rgb(const Expr* e,
         || e->data.function.head->type != EXPR_SYMBOL)
         return 0;
 
-    const char*   h    = e->data.function.head->data.symbol;
+    const char*   h    = e->data.function.head->data.symbol.name;
     const Expr**  args = (const Expr**)e->data.function.args;
     size_t        n    = e->data.function.arg_count;
     double r = 0, g = 0, b = 0, a = 1;
@@ -219,7 +227,7 @@ static int resolve_color_rgb(const Expr* e,
         size_t cn = n;
         if (cn == 1 && args[0] && args[0]->type == EXPR_FUNCTION
             && args[0]->data.function.head->type == EXPR_SYMBOL
-            && args[0]->data.function.head->data.symbol == SYM_List) {
+            && args[0]->data.function.head->data.symbol.name == SYM_List) {
             cn = args[0]->data.function.arg_count;
             ca = (const Expr**)args[0]->data.function.args;
         }
@@ -498,8 +506,21 @@ char* graphics_to_plotly_json(const Expr* g) {
     const Expr* prim_list = g->data.function.args[0];
     if (!head_is(prim_list, SYM_List)) return NULL;
 
-    Buf data_buf;
+    size_t n = prim_list->data.function.arg_count;
+
+    /* Diagram mode: a node-link picture (GraphPlot) rather than a function
+     * plot. Signalled by the presence of Disk (vertices) or Text (labels),
+     * which Plot[] never emits. */
+    int diagram_mode = 0;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* p = prim_list->data.function.args[i];
+        if (head_is(p, SYM_Disk) || head_is(p, SYM_Text)) { diagram_mode = 1; break; }
+    }
+
+    Buf data_buf, anno_buf;
     if (!buf_init(&data_buf, 65536)) return NULL;
+    if (!buf_init(&anno_buf, 4096)) { buf_free(&data_buf); return NULL; }
+    buf_cat(&anno_buf, "[");
 
     State2D state = {
         .buf         = &data_buf,
@@ -511,32 +532,50 @@ char* graphics_to_plotly_json(const Expr* g) {
     buf_cat(&data_buf, "[");
     draw_prim_list_2d(&state, prim_list);
     buf_cat(&data_buf, "]");
+    buf_cat(&anno_buf, "]");
 
     /* Build the layout object. */
-    char layout[512];
-    snprintf(layout, sizeof(layout),
-             "{\"xaxis\":{\"showgrid\":true,\"zeroline\":true,"
-             "\"zerolinecolor\":\"#aaa\",\"zerolinewidth\":1},"
-             "\"yaxis\":{\"showgrid\":true,\"zeroline\":true,"
-             "\"zerolinecolor\":\"#aaa\",\"zerolinewidth\":1},"
-             "\"margin\":{\"l\":50,\"r\":20,\"t\":20,\"b\":50},"
-             "\"height\":350,"
-             "\"plot_bgcolor\":\"#fff\","
-             "\"paper_bgcolor\":\"#fff\"}");
+    Buf layout;
+    if (!buf_init(&layout, 1024)) { buf_free(&data_buf); buf_free(&anno_buf); return NULL; }
+    if (diagram_mode) {
+        /* Square, axis-free canvas with equal x/y scaling so a circular
+         * vertex layout stays circular. */
+        buf_cat(&layout,
+            "{\"xaxis\":{\"visible\":false,\"showgrid\":false,\"zeroline\":false},"
+            "\"yaxis\":{\"visible\":false,\"showgrid\":false,\"zeroline\":false,"
+            "\"scaleanchor\":\"x\",\"scaleratio\":1},"
+            "\"margin\":{\"l\":20,\"r\":20,\"t\":20,\"b\":20},"
+            "\"height\":400,\"showlegend\":false,"
+            "\"plot_bgcolor\":\"#fff\",\"paper_bgcolor\":\"#fff\",");
+        buf_cat(&layout, "\"annotations\":");
+        buf_cat(&layout, anno_buf.buf);
+        buf_cat(&layout, "}");
+    } else {
+        buf_cat(&layout,
+            "{\"xaxis\":{\"showgrid\":true,\"zeroline\":true,"
+            "\"zerolinecolor\":\"#aaa\",\"zerolinewidth\":1},"
+            "\"yaxis\":{\"showgrid\":true,\"zeroline\":true,"
+            "\"zerolinecolor\":\"#aaa\",\"zerolinewidth\":1},"
+            "\"margin\":{\"l\":50,\"r\":20,\"t\":20,\"b\":50},"
+            "\"height\":350,"
+            "\"plot_bgcolor\":\"#fff\",\"paper_bgcolor\":\"#fff\"}");
+    }
 
     /* Assemble the final JSON object. */
     Buf out;
-    if (!buf_init(&out, data_buf.len + 1024)) {
-        buf_free(&data_buf);
+    if (!buf_init(&out, data_buf.len + layout.len + 64)) {
+        buf_free(&data_buf); buf_free(&anno_buf); buf_free(&layout);
         return NULL;
     }
     buf_cat(&out, "{\"data\":");
     buf_cat(&out, data_buf.buf);
     buf_cat(&out, ",\"layout\":");
-    buf_cat(&out, layout);
+    buf_cat(&out, layout.buf);
     buf_cat(&out, "}");
 
     buf_free(&data_buf);
+    buf_free(&anno_buf);
+    buf_free(&layout);
     return out.buf; /* caller frees */
 }
 

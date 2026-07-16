@@ -709,7 +709,7 @@ static Expr* parse_function(ParserState* s, Expr* head) {
     }
     s->pos++;  // Skip ']'
 
-    if (head && head->type == EXPR_SYMBOL && head->data.symbol == SYM_Sqrt && count == 1) {
+    if (head && head->type == EXPR_SYMBOL && head->data.symbol.name == SYM_Sqrt && count == 1) {
         expr_free(head);
         Expr* rat_args[2] = { expr_new_integer(1), expr_new_integer(2) };
         Expr* half = expr_new_function(expr_new_symbol(SYM_Rational), rat_args, 2);
@@ -751,6 +751,7 @@ typedef enum {
     OP_APPLY1,
     OP_RULE,
     OP_RULEDELAYED,
+    OP_TWOWAYRULE,
     OP_CONDITION,
     OP_ALTERNATIVES,
     OP_MAP,
@@ -816,6 +817,11 @@ static OperatorDef get_operator(const char* pos) {
         def.type = OP_REPLACEREPEATED; def.prec = 110; def.right_assoc = 0; def.head_name = "ReplaceRepeated"; def.len = 3;
     } else if (strncmp(pos, "//@", 3) == 0) {
         def.type = OP_MAPALL; def.prec = 620; def.right_assoc = 1; def.head_name = "MapAll"; def.len = 3;
+    } else if (strncmp(pos, "<->", 3) == 0) {
+        /* TwoWayRule (u <-> v). Same precedence/associativity as Rule; the
+         * graph subsystem normalizes it to UndirectedEdge on construction.
+         * Checked before "<>", "<=", "<" so the 3-char form wins. */
+        def.type = OP_TWOWAYRULE; def.prec = 120; def.right_assoc = 1; def.head_name = "TwoWayRule"; def.len = 3;
     } else if (strncmp(pos, "//", 2) == 0) {
         def.type = OP_POSTFIX; def.prec = 70; def.head_name = "Postfix"; def.len = 2;
     } else if (strncmp(pos, "/.", 2) == 0 && !isdigit(pos[2])) {
@@ -1449,8 +1455,8 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
                        && left->type == EXPR_FUNCTION
                        && left->data.function.head->type == EXPR_SYMBOL
                        && left->data.function.arg_count == 2
-                       && is_chain_compare_head(left->data.function.head->data.symbol)) {
-                const char* inner_head = left->data.function.head->data.symbol;
+                       && is_chain_compare_head(left->data.function.head->data.symbol.name)) {
+                const char* inner_head = left->data.function.head->data.symbol.name;
                 Expr* a = left->data.function.args[0];
                 Expr* b = left->data.function.args[1];
                 /* Steal a and b out of `left`, then free the now-empty shell. */

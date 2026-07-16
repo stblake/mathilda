@@ -184,8 +184,16 @@ Expr* builtin_trigtoexp(Expr* res) {
      * rule. */
     trig_canon_suppress_inc();
 
+    /* ReplaceRepeated (not ReplaceAll): the trig->exp rewrite must recurse into
+     * the ARGUMENTS of trig heads, not just their top-level occurrences.  A plain
+     * top-down ReplaceAll rewrites Sin[Cos[x]-Sin[x]] -> E^(...(Cos[x]-Sin[x])...)
+     * but never re-descends into the substituted RHS, so the nested Cos[x]/Sin[x]
+     * stay as trig — an incompletely exponentialized form that diverges from WL and
+     * strands the Risch trig frontend (which needs a genuine exp tower over x).
+     * Every rule's RHS is built purely from Exp/Log/Sqrt (no trig heads), so the
+     * fixed-point iteration is guaranteed to terminate. */
     Expr* replace_args[2] = { expr_copy(arg), expr_copy(trig_to_exp_rules) };
-    Expr* replace_expr = expr_new_function(expr_new_symbol(SYM_ReplaceAll), replace_args, 2);
+    Expr* replace_expr = expr_new_function(expr_new_symbol(SYM_ReplaceRepeated), replace_args, 2);
     Expr* replaced = evaluate(replace_expr);
     expr_free(replace_expr);
 
@@ -255,7 +263,7 @@ static void collect_trig_squares(const Expr* e, TrigSquareList* L) {
     if (e->type != EXPR_FUNCTION) return;
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2) {
         const Expr* base = e->data.function.args[0];
         const Expr* exp  = e->data.function.args[1];
@@ -264,7 +272,7 @@ static void collect_trig_squares(const Expr* e, TrigSquareList* L) {
             base->data.function.head->type == EXPR_SYMBOL &&
             base->data.function.arg_count == 1 &&
             exp->type == EXPR_INTEGER && exp->data.integer >= 2) {
-            int k = trig_pair_kind(base->data.function.head->data.symbol);
+            int k = trig_pair_kind(base->data.function.head->data.symbol.name);
             if (k >= 0) {
                 if (L->count < TRIG_PAIR_CAP) {
                     L->kinds[L->count] = k;
@@ -349,7 +357,7 @@ static void collect_trig_atoms(const Expr* e, TrigSquareList* L) {
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
         e->data.function.arg_count == 1) {
-        int k = trig_pair_kind(e->data.function.head->data.symbol);
+        int k = trig_pair_kind(e->data.function.head->data.symbol.name);
         if (k >= 0) {
             if (L->count < TRIG_PAIR_CAP) {
                 L->kinds[L->count] = k;
@@ -426,7 +434,7 @@ static int64_t max_trig_atom_power(const Expr* e) {
     int64_t best = 0;
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2) {
         const Expr* base = e->data.function.args[0];
         const Expr* exp  = e->data.function.args[1];
@@ -435,7 +443,7 @@ static int64_t max_trig_atom_power(const Expr* e) {
             base->data.function.head->type == EXPR_SYMBOL &&
             base->data.function.arg_count == 1 &&
             exp->type == EXPR_INTEGER && exp->data.integer >= 2 &&
-            trig_pair_kind(base->data.function.head->data.symbol) >= 0) {
+            trig_pair_kind(base->data.function.head->data.symbol.name) >= 0) {
             best = exp->data.integer;
         }
     }
@@ -462,7 +470,7 @@ static int has_reciprocal_power(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return 0;
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2) {
         const Expr* exp = e->data.function.args[1];
         if (exp->type == EXPR_INTEGER && exp->data.integer < 0) return 1;
@@ -482,7 +490,7 @@ static Expr* builtin_trigexpand_impl(Expr* res) {
     if (arg->type == EXPR_FUNCTION &&
         arg->data.function.head &&
         arg->data.function.head->type == EXPR_SYMBOL &&
-        trigexpand_threads_over(arg->data.function.head->data.symbol)) {
+        trigexpand_threads_over(arg->data.function.head->data.symbol.name)) {
         size_t n = arg->data.function.arg_count;
         Expr** new_args = (Expr**)calloc(n, sizeof(Expr*));
         if (!new_args) return NULL;
@@ -706,7 +714,7 @@ static bool is_trig_head(const char* h) {
 static bool is_trig_atom(const Expr* e) {
     return e && e->type == EXPR_FUNCTION && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && is_trig_head(e->data.function.head->data.symbol)
+        && is_trig_head(e->data.function.head->data.symbol.name)
         && e->data.function.arg_count == 1;
 }
 
@@ -726,7 +734,7 @@ static bool has_compound_trig_structure(const Expr* e) {
     if (!e->data.function.head ||
         e->data.function.head->type != EXPR_SYMBOL) return false;
 
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
 
     /* Power[trig_atom, k] with k != 1: cancellable. */
     if (h == SYM_Power && e->data.function.arg_count == 2) {
@@ -751,7 +759,7 @@ static bool has_compound_trig_structure(const Expr* e) {
             else if (a->type == EXPR_FUNCTION
                      && a->data.function.head
                      && a->data.function.head->type == EXPR_SYMBOL
-                     && a->data.function.head->data.symbol == SYM_Power
+                     && a->data.function.head->data.symbol.name == SYM_Power
                      && a->data.function.arg_count == 2
                      && is_trig_atom(a->data.function.args[0])) {
                 /* Power of a trig atom -- compound on its own. */
@@ -792,7 +800,7 @@ static Expr* builtin_trigfactor_impl(Expr* res) {
     if (arg->type == EXPR_FUNCTION &&
         arg->data.function.head &&
         arg->data.function.head->type == EXPR_SYMBOL &&
-        trigexpand_threads_over(arg->data.function.head->data.symbol)) {
+        trigexpand_threads_over(arg->data.function.head->data.symbol.name)) {
         size_t n = arg->data.function.arg_count;
         Expr** new_args = (Expr**)calloc(n, sizeof(Expr*));
         if (!new_args) return NULL;
@@ -914,7 +922,7 @@ static Expr* builtin_trigreduce_impl(Expr* res) {
     if (arg->type == EXPR_FUNCTION &&
         arg->data.function.head &&
         arg->data.function.head->type == EXPR_SYMBOL &&
-        trigexpand_threads_over(arg->data.function.head->data.symbol)) {
+        trigexpand_threads_over(arg->data.function.head->data.symbol.name)) {
         size_t n = arg->data.function.arg_count;
         Expr** new_args = (Expr**)calloc(n, sizeof(Expr*));
         if (!new_args) return NULL;

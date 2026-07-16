@@ -6,11 +6,11 @@
  * `expr_new_symbol("Foo")` and `intern_symbol("Foo")` return for that
  * name. This lets hot evaluator paths replace
  *
- *     strcmp(head->data.symbol, "List") == 0
+ *     strcmp(head->data.symbol.name, "List") == 0
  *
  * with the much cheaper
  *
- *     head->data.symbol == SYM_List
+ *     head->data.symbol.name == SYM_List
  *
  * Every name compared via strcmp on a symbol field anywhere in src/
  * lives here; ad-hoc pointer comparisons elsewhere remain possible by
@@ -98,6 +98,7 @@ extern const char* SYM_Csc;
 extern const char* SYM_Csch;
 extern const char* SYM_Cubics;
 extern const char* SYM_DampingFactor;
+extern const char* SYM_DataType;
 extern const char* SYM_Degree;
 extern const char* SYM_DesignMatrix;
 extern const char* SYM_DegreeLexicographic;
@@ -137,6 +138,11 @@ extern const char* SYM_Erfc;
 extern const char* SYM_Erfi;
 extern const char* SYM_ExpIntegralEi;
 extern const char* SYM_LogIntegral;
+extern const char* SYM_SinIntegral;
+extern const char* SYM_CosIntegral;
+extern const char* SYM_FresnelC;
+extern const char* SYM_FresnelS;
+extern const char* SYM_Sinc;
 extern const char* SYM_InverseErf;
 extern const char* SYM_InverseErfc;
 extern const char* SYM_Eigenvectors;
@@ -268,6 +274,8 @@ extern const char* SYM_PrimeNu;
 extern const char* SYM_List;
 extern const char* SYM_Listable;
 extern const char* SYM_ListQ;
+/* NDArray (dense machine-precision ndarray) data-structure family. */
+extern const char* SYM_NDArray;
 /* Association (Wolfram-Language <| ... |>) data-structure family. */
 extern const char* SYM_Association;
 extern const char* SYM_AssociationQ;
@@ -331,6 +339,7 @@ extern const char* SYM_NHoldRest;
 extern const char* SYM_NIntegrate;
 extern const char* SYM_NLimit;
 extern const char* SYM_NResidue;
+extern const char* SYM_Residue;
 extern const char* SYM_NRoots;
 extern const char* SYM_NSolve;
 extern const char* SYM_NSeries;
@@ -559,6 +568,7 @@ extern const char* SYM_Mean;
 extern const char* SYM_Median;
 extern const char* SYM_MemberQ;
 extern const char* SYM_N;
+extern const char* SYM_Names;
 extern const char* SYM_Norm;
 extern const char* SYM_Numerator;
 extern const char* SYM_NumericQ;
@@ -604,6 +614,8 @@ extern const char* SYM_DollarModuleNumber;
 extern const char* SYM_DollarRecursionLimit;
 extern const char* SYM_DollarSimplifyDebug;
 extern const char* SYM_DollarruSimplify;
+extern const char* SYM_DollarVersion;
+extern const char* SYM_DollarVersionNumber;
 
 /* Graphics engine (src/graphics/): primitives, style directives, and
  * Graphics[]/Show[]/Plot[] plus Plot's option names. MaxRecursion is
@@ -775,6 +787,41 @@ extern const char* SYM_FLINT_Zeta;            /* FLINT`Zeta[s]            */
 extern const char* SYM_FLINT_HurwitzZeta;     /* FLINT`HurwitzZeta[s,a]   */
 extern const char* SYM_FLINT_PolyGamma;       /* FLINT`PolyGamma[n,z]     */
 extern const char* SYM_FLINT_StieltjesGamma;  /* FLINT`StieltjesGamma[n]  */
+
+/* Graph subsystem (src/graph/): the Graph head, its edge constructors, and
+ * every builtin head. Graphs are ordinary Expr trees
+ * Graph[List[verts...], List[edges...]]; no new EXPR_* tag. SYM_Rule and
+ * SYM_Graphics primitives (Line/Point/Disk/Text) are reused, not re-declared. */
+extern const char* SYM_Graph;
+extern const char* SYM_DirectedEdge;
+extern const char* SYM_UndirectedEdge;
+extern const char* SYM_TwoWayRule;
+extern const char* SYM_GraphQ;
+extern const char* SYM_DirectedGraphQ;
+extern const char* SYM_ConnectedGraphQ;
+extern const char* SYM_VertexList;
+extern const char* SYM_EdgeList;
+extern const char* SYM_VertexCount;
+extern const char* SYM_EdgeCount;
+extern const char* SYM_AdjacencyList;
+extern const char* SYM_VertexDegree;
+extern const char* SYM_VertexInDegree;
+extern const char* SYM_VertexOutDegree;
+extern const char* SYM_AdjacencyMatrix;
+extern const char* SYM_IncidenceMatrix;
+extern const char* SYM_AdjacencyGraph;
+extern const char* SYM_CompleteGraph;
+extern const char* SYM_CycleGraph;
+extern const char* SYM_PathGraph;
+extern const char* SYM_RandomGraph;
+extern const char* SYM_FindShortestPath;
+extern const char* SYM_GraphDistance;
+extern const char* SYM_ConnectedComponents;
+extern const char* SYM_WeaklyConnectedComponents;
+extern const char* SYM_StronglyConnectedComponents;
+extern const char* SYM_FindSpanningTree;
+extern const char* SYM_VertexConnectivity;
+extern const char* SYM_GraphPlot;
 
 /* Populate every SYM_* by interning its name string. Idempotent: safe
  * to call repeatedly. Must run before any consumer reads a SYM_*

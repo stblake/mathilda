@@ -22,6 +22,13 @@ void info_init(void) {
         "are reduced exactly (repeated squaring on GMP); Rational and Real\n"
         "exponents evaluate numerically when the base is numeric; Power[0, 0]\n"
         "stays Indeterminate; Power[x, 1/2] is canonicalised to Sqrt[x].");
+    symtab_set_docstring("DataType",
+        "DataType[a]\n"
+        "\tgives the element data type of the NDArray a as a string: one of\n"
+        "\t\"float64\", \"float32\", \"complex64\", or \"complex32\". Set the type\n"
+        "\twhen constructing with NDArray[list, DataType -> \"float32\"]; the\n"
+        "\tfour types map onto BLAS's s/d/c/z precisions. Returns unevaluated\n"
+        "\tfor a non-NDArray argument.");
     symtab_set_docstring("Subtract",
         "x - y or Subtract[x, y] represents x - y; rewritten by the evaluator\n"
         "to Plus[x, Times[-1, y]] so it inherits Plus's flattening and ordering.");
@@ -252,6 +259,15 @@ void info_init(void) {
         "Options: Radius (contour radius, default 1/100, or Automatic), WorkingPrecision, "
         "PrecisionGoal, MaxRecursion (max contour refinements, default 10), "
         "Method ('Trapezoidal').");
+    symtab_set_docstring("Residue",
+        "Residue[f, {z, z0}]\n"
+        "\tgives the residue of f at the isolated singularity z = z0 -- the "
+        "coefficient of (z - z0)^-1 in the Laurent expansion of f.\n\n"
+        "Computed by power-series expansion, so a residue is found only where f "
+        "admits a Laurent series at z0. Returns unevaluated at branch points "
+        "(fractional-power expansions) and when no series can be produced. See "
+        "NResidue for a numerical alternative that also handles essential "
+        "singularities.");
     symtab_set_docstring("ND",
         "ND[expr, x, x0]\n"
         "\tgives a numerical approximation to the derivative of expr with respect "
@@ -549,6 +565,41 @@ void info_init(void) {
         "ExpIntegralEi[-Infinity] = 0, ExpIntegralEi[+-I Infinity] = +-I Pi. Real and\n"
         "complex inputs evaluate numerically at machine or arbitrary (MPFR) precision;\n"
         "D[ExpIntegralEi[z], z] = E^z/z. Listable.");
+    symtab_set_docstring("SinIntegral",
+        "SinIntegral[z]\n"
+        "\tgives the sine integral Si(z) = Integral_0^z Sin[t]/t dt.\n"
+        "An entire, odd function with no branch cuts. SinIntegral[0] = 0,\n"
+        "SinIntegral[+-Infinity] = +-Pi/2, SinIntegral[+-I Infinity] = +-I Infinity.\n"
+        "Real and complex inputs evaluate numerically at machine or arbitrary (MPFR)\n"
+        "precision; D[SinIntegral[z], z] = Sinc[z]. Listable.");
+    symtab_set_docstring("CosIntegral",
+        "CosIntegral[z]\n"
+        "\tgives the cosine integral Ci(z) = -Integral_z^Infinity Cos[t]/t dt.\n"
+        "Has a logarithmic singularity at 0 and a branch cut on (-Infinity, 0].\n"
+        "CosIntegral[0] = -Infinity, CosIntegral[Infinity] = 0,\n"
+        "CosIntegral[-Infinity] = I Pi, CosIntegral[+-I Infinity] = Infinity.\n"
+        "Real and complex inputs evaluate numerically at machine or arbitrary (MPFR)\n"
+        "precision; D[CosIntegral[z], z] = Cos[z]/z. Listable.");
+    symtab_set_docstring("FresnelC",
+        "FresnelC[z]\n"
+        "\tgives the Fresnel integral C(z) = Integral_0^z Cos[Pi t^2/2] dt.\n"
+        "An entire, odd function with no branch cuts. FresnelC[0] = 0,\n"
+        "FresnelC[+-Infinity] = +-1/2, FresnelC[+-I Infinity] = +-I/2.\n"
+        "Real and complex inputs evaluate numerically at machine or arbitrary (MPFR)\n"
+        "precision; D[FresnelC[z], z] = Cos[Pi z^2/2]. Listable.");
+    symtab_set_docstring("FresnelS",
+        "FresnelS[z]\n"
+        "\tgives the Fresnel integral S(z) = Integral_0^z Sin[Pi t^2/2] dt.\n"
+        "An entire, odd function with no branch cuts. FresnelS[0] = 0,\n"
+        "FresnelS[+-Infinity] = +-1/2, FresnelS[+-I Infinity] = -+I/2.\n"
+        "Real and complex inputs evaluate numerically at machine or arbitrary (MPFR)\n"
+        "precision; D[FresnelS[z], z] = Sin[Pi z^2/2]. Listable.");
+    symtab_set_docstring("Sinc",
+        "Sinc[z]\n"
+        "\tgives the cardinal sine Sin[z]/z, with Sinc[0] = 1.\n"
+        "An entire, even function. Sinc[+-Infinity] = 0. Real and complex inputs\n"
+        "evaluate numerically at machine or arbitrary (MPFR) precision;\n"
+        "D[Sinc[z], z] = Cos[z]/z - Sin[z]/z^2. Listable.");
     symtab_set_docstring("LogIntegral",
         "LogIntegral[z]\n"
         "\tgives the logarithmic integral li(z), the principal value of\n"
@@ -2562,6 +2613,12 @@ void info_init(void) {
     symtab_set_docstring("Orderless", "Orderless is an attribute that can be assigned to a symbol f to indicate that the elements e_i in expressions of the form f[e_1, e_2, ...] should automatically be sorted into canonical order. This property is accounted for in pattern matching.");
     symtab_set_docstring("OneIdentity", "OneIdentity is an attribute that can be assigned to a symbol f to indicate that f[x], f[f[x]], etc. are all equivalent to x for the purpose of pattern matching.");
     symtab_set_docstring("Information", "Information[symbol] or ?symbol returns information on symbol.");
+    symtab_set_docstring("Names",
+        "Names[\"string\"] gives a sorted list of the names of symbols matching "
+        "the string. Names[patt] matches a string pattern with metacharacters "
+        "* (zero or more characters) and @ (one or more non-uppercase "
+        "characters), or a RegularExpression[\"re\"]. Names[{p1, p2, ...}] "
+        "matches any of the patterns. Names[] lists all symbol names.");
     symtab_set_docstring("OwnValues", "OwnValues[s] gives a list of own-value rules for s.");
     symtab_set_docstring("DownValues", "DownValues[s] gives a list of down-value rules for s.");
     symtab_set_docstring("Attributes", "Attributes[s] gives the list of attributes for s.");

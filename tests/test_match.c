@@ -174,13 +174,13 @@ void test_match_patterntest() {
     // MatchQ[Range[10], {___, _?PrimeQ, ___}]
     Expr* e5 = parse_or_die("MatchQ[Range[10], {___, _?PrimeQ, ___}]");
     Expr* res5 = evaluate(e5);
-    ASSERT(res5->type == EXPR_SYMBOL && strcmp(res5->data.symbol, "True") == 0);
+    ASSERT(res5->type == EXPR_SYMBOL && strcmp(res5->data.symbol.name, "True") == 0);
     expr_free(e5); expr_free(res5);
 
     // MatchQ[Range[10], {___, _?(Mod[#, 2] == 0 &), ___}]
     Expr* e6 = parse_or_die("MatchQ[Range[10], {___, _?(Mod[#, 2] == 0 &), ___}]");
     Expr* res6 = evaluate(e6);
-    ASSERT(res6->type == EXPR_SYMBOL && strcmp(res6->data.symbol, "True") == 0);
+    ASSERT(res6->type == EXPR_SYMBOL && strcmp(res6->data.symbol.name, "True") == 0);
     expr_free(e6); expr_free(res6);
 
     env_free(env);

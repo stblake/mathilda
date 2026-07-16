@@ -25,7 +25,7 @@
 static bool is_power(const Expr* e) {
     return e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.head->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2;
 }
 
@@ -47,7 +47,7 @@ static Expr* sum_exponent(Expr* expo, Expr* var, Expr* imin, Expr* imax,
     /* If Sum could not close the exponent series, fall through. */
     if (r && r->type == EXPR_FUNCTION
           && r->data.function.head->type == EXPR_SYMBOL
-          && strcmp(r->data.function.head->data.symbol, "Sum") == 0) {
+          && strcmp(r->data.function.head->data.symbol.name, "Sum") == 0) {
         expr_free(r);
         return NULL;
     }
@@ -64,7 +64,7 @@ Expr* builtin_product_geometric(Expr* res) {
      * Product`Rational (finite-only), so we bail below and let Product`Infinite
      * try instead. */
     bool infinite = definite && imax->type == EXPR_SYMBOL
-                    && imax->data.symbol == SYM_Infinity;
+                    && imax->data.symbol.name == SYM_Infinity;
 
     /* Geometric only engages when there is a genuine base^(involves k) factor;
      * pure rational inputs were already tried by Product`Rational. */
@@ -73,7 +73,7 @@ Expr* builtin_product_geometric(Expr* res) {
     /* Factor list of f (Times args, or a single factor). */
     bool is_times = (f->type == EXPR_FUNCTION
                      && f->data.function.head->type == EXPR_SYMBOL
-                     && f->data.function.head->data.symbol == SYM_Times);
+                     && f->data.function.head->data.symbol.name == SYM_Times);
     size_t fc = is_times ? f->data.function.arg_count : 1;
 
     size_t cap = fc + 1, ngeo = 0;
@@ -142,7 +142,7 @@ Expr* builtin_product_geometric(Expr* res) {
         }
         if (cof_result && cof_result->type == EXPR_FUNCTION
               && cof_result->data.function.head->type == EXPR_SYMBOL
-              && strcmp(cof_result->data.function.head->data.symbol,
+              && strcmp(cof_result->data.function.head->data.symbol.name,
                         "Product`Rational") == 0) {
             /* cofactor was not a rational the stage could close -> bail. */
             expr_free(cof_result);

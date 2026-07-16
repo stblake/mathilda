@@ -21,10 +21,17 @@ the current working directory.
 **Features**:
 - `Protected`. Returns `True` if the module was located and loaded (or had already
   been loaded), `False` otherwise.
-- Resolution tries `$MATHILDA_HOME/<relpath>` first, then a relative ladder
-  (`src/internal/`, `../src/internal/`, `../../src/internal/`,
-  `../../../src/internal/`), so it works from the REPL (run at the repo root) and
-  from the test binaries (run from `tests/build/`).
+- Resolution is independent of the current working directory and tries, in
+  order: `$MATHILDA_HOME/<relpath>`; `<exe_dir>/src/internal/<relpath>` and
+  `<exe_dir>/../share/mathilda/internal/<relpath>` (relative to the running
+  binary, so a relocated or installed executable still finds its modules);
+  `$(PREFIX)/share/mathilda/internal/<relpath>` when built with a compile-time
+  `MATHILDA_PREFIX`; and finally a CWD ladder (`src/internal/`,
+  `../src/internal/`, `../../src/internal/`, `../../../src/internal/`). This
+  works from the REPL (run at the repo root or from anywhere with the binary in
+  place), from the test binaries (run from `tests/build/`), and from a binary
+  copied to a `bin` directory with `MATHILDA_HOME` pointing at `src/internal`.
+  The winning base directory is cached after the first successful lookup.
 - Each module is loaded **at most once**, so repeated calls — and the lazy
   per-family loading used by [`FullSimplify`](simplification.md#fullsimplify) —
   never re-register rules.

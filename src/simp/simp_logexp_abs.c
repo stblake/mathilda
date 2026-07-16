@@ -115,7 +115,7 @@ static Expr* logexp_top_rewrite(const Expr* e, const AssumeCtx* ctx) {
     if (!e || e->type != EXPR_FUNCTION) return NULL;
     if (!e->data.function.head ||
         e->data.function.head->type != EXPR_SYMBOL) return NULL;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     Expr** a = e->data.function.args;
     size_t n = e->data.function.arg_count;
 
@@ -126,7 +126,7 @@ static Expr* logexp_top_rewrite(const Expr* e, const AssumeCtx* ctx) {
         if (inner->type == EXPR_FUNCTION &&
             inner->data.function.head &&
             inner->data.function.head->type == EXPR_SYMBOL) {
-            const char* ih = inner->data.function.head->data.symbol;
+            const char* ih = inner->data.function.head->data.symbol.name;
             size_t in = inner->data.function.arg_count;
             Expr** ia = inner->data.function.args;
 
@@ -187,7 +187,7 @@ static Expr* logexp_top_rewrite(const Expr* e, const AssumeCtx* ctx) {
         Expr* base = a[0];
         Expr* exp_  = a[1];
 
-        if (base->type == EXPR_SYMBOL && base->data.symbol == SYM_E) {
+        if (base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E) {
             /* Try to expand the exponent so Plus distributes through any
              * outer Times. Cheap, idempotent, and only used to detect
              * Plus structure. */
@@ -196,7 +196,7 @@ static Expr* logexp_top_rewrite(const Expr* e, const AssumeCtx* ctx) {
                 expanded_exp->type == EXPR_FUNCTION &&
                 expanded_exp->data.function.head &&
                 expanded_exp->data.function.head->type == EXPR_SYMBOL &&
-                expanded_exp->data.function.head->data.symbol == SYM_Plus &&
+                expanded_exp->data.function.head->data.symbol.name == SYM_Plus &&
                 expanded_exp->data.function.arg_count > 1) {
                 size_t en = expanded_exp->data.function.arg_count;
                 Expr** factors = (Expr**)calloc(en, sizeof(Expr*));
@@ -217,7 +217,7 @@ static Expr* logexp_top_rewrite(const Expr* e, const AssumeCtx* ctx) {
         if (base->type == EXPR_FUNCTION &&
             base->data.function.head &&
             base->data.function.head->type == EXPR_SYMBOL) {
-            const char* bh = base->data.function.head->data.symbol;
+            const char* bh = base->data.function.head->data.symbol.name;
             size_t bn = base->data.function.arg_count;
             Expr** ba = base->data.function.args;
 
@@ -296,7 +296,7 @@ bool contains_abs(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Abs) return true;
+        e->data.function.head->data.symbol.name == SYM_Abs) return true;
     if (contains_abs(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         if (contains_abs(e->data.function.args[i])) return true;
@@ -326,7 +326,7 @@ bool contains_trig_or_hyperbolic(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        head_is_trig_or_hyperbolic(e->data.function.head->data.symbol)) return true;
+        head_is_trig_or_hyperbolic(e->data.function.head->data.symbol.name)) return true;
     if (contains_trig_or_hyperbolic(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         if (contains_trig_or_hyperbolic(e->data.function.args[i])) return true;
@@ -345,10 +345,10 @@ bool contains_exp_form(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
-        if (base && base->type == EXPR_SYMBOL && base->data.symbol == SYM_E) {
+        if (base && base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E) {
             return true;
         }
     }
@@ -364,7 +364,7 @@ bool contains_log(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Log) return true;
+        e->data.function.head->data.symbol.name == SYM_Log) return true;
     if (contains_log(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         if (contains_log(e->data.function.args[i])) return true;
@@ -377,7 +377,7 @@ bool contains_power(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power) return true;
+        e->data.function.head->data.symbol.name == SYM_Power) return true;
     if (contains_power(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         if (contains_power(e->data.function.args[i])) return true;
@@ -394,7 +394,7 @@ bool contains_plus_or_times(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         if (h == SYM_Plus ||
             h == SYM_Times ||
             h == SYM_Power) return true;
@@ -413,7 +413,7 @@ bool contains_plus_or_times(const Expr* e) {
 bool contains_variable(const Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_SYMBOL) {
-        return !is_real_constant_symbol(e->data.symbol);
+        return !is_real_constant_symbol(e->data.symbol.name);
     }
     if (e->type != EXPR_FUNCTION) return false;
     if (contains_variable(e->data.function.head)) return true;
@@ -432,11 +432,11 @@ static size_t expr_variables_count_capped_walk(const Expr* e,
                                                size_t cap) {
     if (!e || *nseen >= cap) return *nseen;
     if (e->type == EXPR_SYMBOL) {
-        if (is_real_constant_symbol(e->data.symbol)) return *nseen;
+        if (is_real_constant_symbol(e->data.symbol.name)) return *nseen;
         for (size_t i = 0; i < *nseen; i++) {
-            if (strcmp(seen[i], e->data.symbol) == 0) return *nseen;
+            if (strcmp(seen[i], e->data.symbol.name) == 0) return *nseen;
         }
-        seen[*nseen] = e->data.symbol;
+        seen[*nseen] = e->data.symbol.name;
         (*nseen)++;
         return *nseen;
     }
@@ -472,7 +472,7 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
     /* Universal: idempotency Abs[Abs[x]] -> Abs[x]. */
     if (arg->type == EXPR_FUNCTION &&
         arg->data.function.head && arg->data.function.head->type == EXPR_SYMBOL &&
-        arg->data.function.head->data.symbol == SYM_Abs &&
+        arg->data.function.head->data.symbol.name == SYM_Abs &&
         arg->data.function.arg_count == 1) {
         return expr_copy((Expr*)arg);
     }
@@ -480,7 +480,7 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
     /* Universal: conjugate symmetry Abs[Conjugate[x]] -> Abs[x]. */
     if (arg->type == EXPR_FUNCTION &&
         arg->data.function.head && arg->data.function.head->type == EXPR_SYMBOL &&
-        arg->data.function.head->data.symbol == SYM_Conjugate &&
+        arg->data.function.head->data.symbol.name == SYM_Conjugate &&
         arg->data.function.arg_count == 1) {
         Expr* a[1] = { expr_copy(arg->data.function.args[0]) };
         return expr_new_function(expr_new_symbol(SYM_Abs), a, 1);
@@ -490,10 +490,10 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
      * exponential is e^(real part of the exponent). */
     if (arg->type == EXPR_FUNCTION &&
         arg->data.function.head && arg->data.function.head->type == EXPR_SYMBOL &&
-        arg->data.function.head->data.symbol == SYM_Power &&
+        arg->data.function.head->data.symbol.name == SYM_Power &&
         arg->data.function.arg_count == 2 &&
         arg->data.function.args[0]->type == EXPR_SYMBOL &&
-        arg->data.function.args[0]->data.symbol == SYM_E) {
+        arg->data.function.args[0]->data.symbol.name == SYM_E) {
         Expr* re_in[1] = { expr_copy(arg->data.function.args[1]) };
         Expr* re_call = expr_new_function(expr_new_symbol(SYM_Re), re_in, 1);
         Expr* pa[2] = { expr_new_symbol(SYM_E), re_call };
@@ -505,7 +505,7 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
      * Abs[x/y] case since x/y is Times[x, Power[y, -1]]. */
     if (arg->type == EXPR_FUNCTION &&
         arg->data.function.head && arg->data.function.head->type == EXPR_SYMBOL &&
-        arg->data.function.head->data.symbol == SYM_Times &&
+        arg->data.function.head->data.symbol.name == SYM_Times &&
         arg->data.function.arg_count >= 2) {
         size_t n = arg->data.function.arg_count;
         Expr** new_args = (Expr**)calloc(n, sizeof(Expr*));
@@ -524,7 +524,7 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
      * rule applies only to integer exponents. */
     if (arg->type == EXPR_FUNCTION &&
         arg->data.function.head && arg->data.function.head->type == EXPR_SYMBOL &&
-        arg->data.function.head->data.symbol == SYM_Power &&
+        arg->data.function.head->data.symbol.name == SYM_Power &&
         arg->data.function.arg_count == 2 &&
         (arg->data.function.args[1]->type == EXPR_INTEGER ||
          arg->data.function.args[1]->type == EXPR_BIGINT)) {
@@ -555,7 +555,7 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
      * an Element[y, Reals] assumption. */
     if (arg->type == EXPR_FUNCTION &&
         arg->data.function.head && arg->data.function.head->type == EXPR_SYMBOL &&
-        arg->data.function.head->data.symbol == SYM_Power &&
+        arg->data.function.head->data.symbol.name == SYM_Power &&
         arg->data.function.arg_count == 2 &&
         assume_known_real(ctx, arg->data.function.args[1])) {
         Expr* base = arg->data.function.args[0];
@@ -571,7 +571,7 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
      * Log[x]] and the second factor has unit modulus. */
     if (arg->type == EXPR_FUNCTION &&
         arg->data.function.head && arg->data.function.head->type == EXPR_SYMBOL &&
-        arg->data.function.head->data.symbol == SYM_Power &&
+        arg->data.function.head->data.symbol.name == SYM_Power &&
         arg->data.function.arg_count == 2 &&
         assume_known_positive(ctx, arg->data.function.args[0])) {
         Expr* base = arg->data.function.args[0];
@@ -622,7 +622,7 @@ static Expr* abs_walk(const Expr* e, const AssumeCtx* ctx) {
     /* Rule fires only on Abs[_]. */
     bool is_abs = e->data.function.head &&
                   e->data.function.head->type == EXPR_SYMBOL &&
-                  e->data.function.head->data.symbol == SYM_Abs &&
+                  e->data.function.head->data.symbol.name == SYM_Abs &&
                   e->data.function.arg_count == 1;
     if (is_abs) {
         const Expr* inner = this_form ? this_form->data.function.args[0]
@@ -660,7 +660,7 @@ static bool is_rational_half(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.head->data.symbol.name == SYM_Rational
         && e->data.function.arg_count == 2
         && e->data.function.args[0]->type == EXPR_INTEGER
         && e->data.function.args[0]->data.integer == 1
@@ -673,7 +673,7 @@ static bool is_sqrt_of_square(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (!e->data.function.head ||
         e->data.function.head->type != EXPR_SYMBOL ||
-        e->data.function.head->data.symbol != SYM_Power ||
+        e->data.function.head->data.symbol.name != SYM_Power ||
         e->data.function.arg_count != 2) return false;
     Expr* outer_base = e->data.function.args[0];
     Expr* outer_exp = e->data.function.args[1];
@@ -681,7 +681,7 @@ static bool is_sqrt_of_square(const Expr* e) {
     if (outer_base->type != EXPR_FUNCTION ||
         !outer_base->data.function.head ||
         outer_base->data.function.head->type != EXPR_SYMBOL ||
-        outer_base->data.function.head->data.symbol != SYM_Power ||
+        outer_base->data.function.head->data.symbol.name != SYM_Power ||
         outer_base->data.function.arg_count != 2) return false;
     Expr* inner_exp = outer_base->data.function.args[1];
     return inner_exp->type == EXPR_INTEGER && inner_exp->data.integer == 2;

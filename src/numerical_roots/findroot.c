@@ -139,12 +139,12 @@ static bool fr_is_known_option_name(const char* s) {
 static bool fr_is_option_arg(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     if (h != SYM_Rule && h != SYM_RuleDelayed) return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* lhs = e->data.function.args[0];
     if (lhs->type != EXPR_SYMBOL) return false;
-    return fr_is_known_option_name(lhs->data.symbol);
+    return fr_is_known_option_name(lhs->data.symbol.name);
 }
 
 /* Extract a double from an Integer / Real / Rational / BigInt /
@@ -218,7 +218,7 @@ static Expr* fr_expr_from_complex_mpfr(const mpfr_t re, const mpfr_t im) {
  * Returns false on malformed values. */
 static bool fr_parse_working_precision(Expr* val,
                                        FrPrecMode* mode, long* bits) {
-    if (val->type == EXPR_SYMBOL && val->data.symbol == SYM_MachinePrecision) {
+    if (val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_MachinePrecision) {
         *mode = FR_PREC_MACHINE;
         *bits = 0;
         return true;
@@ -251,8 +251,8 @@ static bool fr_parse_working_precision(Expr* val,
  * +∞ (caller can treat as relaxed criterion). */
 static bool fr_parse_goal(Expr* val, double* digits_out) {
     if (val->type == EXPR_SYMBOL) {
-        if (val->data.symbol == SYM_Automatic) { *digits_out = -1.0; return true; }
-        if (val->data.symbol == SYM_Infinity)  { *digits_out = INFINITY; return true; }
+        if (val->data.symbol.name == SYM_Automatic) { *digits_out = -1.0; return true; }
+        if (val->data.symbol.name == SYM_Infinity)  { *digits_out = INFINITY; return true; }
         return false;
     }
     return fr_expr_to_double_real(val, digits_out);
@@ -263,10 +263,10 @@ static bool fr_parse_goal(Expr* val, double* digits_out) {
 static bool fr_apply_option(Expr* rule, FrOpts* opts) {
     Expr* lhs = rule->data.function.args[0];
     Expr* rhs = rule->data.function.args[1];
-    const char* name = lhs->data.symbol;
+    const char* name = lhs->data.symbol.name;
 
     if (name == SYM_Method) {
-        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic) {
+        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) {
             opts->method = FR_METHOD_AUTOMATIC; return true;
         }
         if (rhs->type == EXPR_STRING) {
@@ -328,7 +328,7 @@ static FrSpecKind fr_parse_var_spec(Expr* spec, Expr** var_out,
     *x0_out = *x1_out = *xmin_out = *xmax_out = NULL;
     if (!spec || spec->type != EXPR_FUNCTION) return FR_SPEC_BAD;
     if (spec->data.function.head->type != EXPR_SYMBOL) return FR_SPEC_BAD;
-    if (spec->data.function.head->data.symbol != SYM_List) return FR_SPEC_BAD;
+    if (spec->data.function.head->data.symbol.name != SYM_List) return FR_SPEC_BAD;
 
     size_t n = spec->data.function.arg_count;
     if (n < 2 || n > 4) return FR_SPEC_BAD;
@@ -341,7 +341,7 @@ static FrSpecKind fr_parse_var_spec(Expr* spec, Expr** var_out,
     Expr* x0_raw = spec->data.function.args[1];
     if (x0_raw->type == EXPR_FUNCTION
         && x0_raw->data.function.head->type == EXPR_SYMBOL
-        && x0_raw->data.function.head->data.symbol == SYM_List) {
+        && x0_raw->data.function.head->data.symbol.name == SYM_List) {
         fr_warn("vecvar", "vector-valued variables are not yet supported");
         return FR_SPEC_BAD;
     }
@@ -421,7 +421,7 @@ static void fr_bind_restore(FrVarBind* b) {
 static Expr* fr_normalize_eqn(Expr* e) {
     if (e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Equal
+        && e->data.function.head->data.symbol.name == SYM_Equal
         && e->data.function.arg_count == 2) {
         Expr* args[2] = {
             expr_copy(e->data.function.args[0]),
@@ -499,7 +499,7 @@ static bool fr_has_inert_derivative(const Expr* e) {
     if (head && head->type == EXPR_FUNCTION &&
         head->data.function.head &&
         head->data.function.head->type == EXPR_SYMBOL &&
-        head->data.function.head->data.symbol == SYM_Derivative)
+        head->data.function.head->data.symbol.name == SYM_Derivative)
         return true;
     if (fr_has_inert_derivative(head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
@@ -1186,7 +1186,7 @@ cleanup:
 static Expr* fr_normalize_eqn_list(Expr* eqlist) {
     if (!eqlist || eqlist->type != EXPR_FUNCTION) return NULL;
     if (eqlist->data.function.head->type != EXPR_SYMBOL) return NULL;
-    if (eqlist->data.function.head->data.symbol != SYM_List) return NULL;
+    if (eqlist->data.function.head->data.symbol.name != SYM_List) return NULL;
     size_t n = eqlist->data.function.arg_count;
     Expr** items = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
     for (size_t i = 0; i < n; i++) {
@@ -1433,12 +1433,12 @@ Expr* builtin_findroot(Expr* res) {
     bool is_system = false;
     if (var_spec->type == EXPR_FUNCTION
         && var_spec->data.function.head->type == EXPR_SYMBOL
-        && var_spec->data.function.head->data.symbol == SYM_List
+        && var_spec->data.function.head->data.symbol.name == SYM_List
         && var_spec->data.function.arg_count > 0) {
         Expr* first = var_spec->data.function.args[0];
         if (first->type == EXPR_FUNCTION
             && first->data.function.head->type == EXPR_SYMBOL
-            && first->data.function.head->data.symbol == SYM_List) {
+            && first->data.function.head->data.symbol.name == SYM_List) {
             is_system = true;
         }
     }
@@ -1471,7 +1471,7 @@ Expr* builtin_findroot(Expr* res) {
          * starting bindings, so cross-variable references in start
          * expressions were already resolved during fr_parse_var_spec. */
         for (size_t i = 0; i < nvars; i++) {
-            fr_bind_snapshot(&binds[i], vars[i]->data.symbol);
+            fr_bind_snapshot(&binds[i], vars[i]->data.symbol.name);
         }
 
         fnorm = fr_normalize_eqn_list(f_raw);
@@ -1524,7 +1524,7 @@ Expr* builtin_findroot(Expr* res) {
     }
 
     FrVarBind bind = {0};
-    fr_bind_snapshot(&bind, var->data.symbol);
+    fr_bind_snapshot(&bind, var->data.symbol.name);
 
     Expr* fnorm = fr_normalize_eqn(f_raw);
     Expr* result = NULL;

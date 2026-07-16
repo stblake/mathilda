@@ -234,15 +234,15 @@ static bool nr_is_known_option(const char* s) {
 static bool nr_is_option_arg(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     if (h != SYM_Rule && h != SYM_RuleDelayed) return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* lhs = e->data.function.args[0];
-    return lhs->type == EXPR_SYMBOL && nr_is_known_option(lhs->data.symbol);
+    return lhs->type == EXPR_SYMBOL && nr_is_known_option(lhs->data.symbol.name);
 }
 
 static bool nr_parse_working_precision(Expr* val, bool* mpfr, long* bits) {
-    if (val->type == EXPR_SYMBOL && val->data.symbol == SYM_MachinePrecision) {
+    if (val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_MachinePrecision) {
         *mpfr = false; *bits = 0; return true;
     }
     double digits;
@@ -258,8 +258,8 @@ static bool nr_parse_working_precision(Expr* val, bool* mpfr, long* bits) {
 
 static bool nr_parse_goal(Expr* val, double* digits_out) {
     if (val->type == EXPR_SYMBOL) {
-        if (val->data.symbol == SYM_Automatic) { *digits_out = -1.0;      return true; }
-        if (val->data.symbol == SYM_Infinity)  { *digits_out = INFINITY;  return true; }
+        if (val->data.symbol.name == SYM_Automatic) { *digits_out = -1.0;      return true; }
+        if (val->data.symbol.name == SYM_Infinity)  { *digits_out = INFINITY;  return true; }
         return false;
     }
     return nr_to_double_real(val, digits_out);
@@ -268,10 +268,10 @@ static bool nr_parse_goal(Expr* val, double* digits_out) {
 static bool nr_apply_option(Expr* rule, NrOpts* o) {
     Expr* lhs = rule->data.function.args[0];
     Expr* rhs = rule->data.function.args[1];
-    const char* name = lhs->data.symbol;
+    const char* name = lhs->data.symbol.name;
 
     if (name == SYM_Radius) {
-        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic) {
+        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) {
             o->radius_auto = true; return true;
         }
         double r;
@@ -299,9 +299,9 @@ static bool nr_apply_option(Expr* rule, NrOpts* o) {
     if (name == SYM_Method) {
         /* Only the trapezoidal rule is implemented; accept Automatic and the
          * "Trapezoidal" name, warn (but proceed) on anything else. */
-        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic) return true;
+        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) return true;
         if (rhs->type == EXPR_STRING && strcmp(rhs->data.string, "Trapezoidal") == 0) return true;
-        if (rhs->type == EXPR_SYMBOL && strcmp(rhs->data.symbol, "Trapezoidal") == 0) return true;
+        if (rhs->type == EXPR_SYMBOL && strcmp(rhs->data.symbol.name, "Trapezoidal") == 0) return true;
         nr_warn("badmeth", "only Method -> \"Trapezoidal\" is supported; using it");
         return true;
     }
@@ -369,7 +369,7 @@ Expr* builtin_nresidue(Expr* res) {
     Expr* arg0 = res->data.function.args[0];
     if (arg0->type == EXPR_FUNCTION
         && arg0->data.function.head->type == EXPR_SYMBOL
-        && arg0->data.function.head->data.symbol == SYM_List) {
+        && arg0->data.function.head->data.symbol.name == SYM_List) {
         return nr_thread_over_list(res);
     }
 
@@ -399,7 +399,7 @@ Expr* builtin_nresidue(Expr* res) {
     Expr* spec = res->data.function.args[1];
     if (spec->type != EXPR_FUNCTION
         || spec->data.function.head->type != EXPR_SYMBOL
-        || spec->data.function.head->data.symbol != SYM_List
+        || spec->data.function.head->data.symbol.name != SYM_List
         || spec->data.function.arg_count != 2) {
         nr_warn("ivar", "second argument must be {z, z0}");
         return NULL;
@@ -434,7 +434,7 @@ Expr* builtin_nresidue(Expr* res) {
     if (!z0) { nr_warn("nnum", "z0 is not numeric"); return NULL; }
 
     NrBind bind;
-    nr_bind_snapshot(&bind, var->data.symbol);
+    nr_bind_snapshot(&bind, var->data.symbol.name);
 
     NrCtx ctx;
     ctx.f = res->data.function.args[0];

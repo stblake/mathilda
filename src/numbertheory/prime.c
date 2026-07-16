@@ -40,7 +40,7 @@
 /* Map a Method option value (a string, or the symbol Automatic) to a method.
  * Returns 1 on success, 0 if the value is not a recognised method. */
 static int prime_parse_method(const Expr* val, PrimeCountMethod *out) {
-    if (val->type == EXPR_SYMBOL && val->data.symbol == SYM_Automatic) {
+    if (val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_Automatic) {
         *out = PC_AUTOMATIC; return 1;
     }
     if (val->type != EXPR_STRING) return 0;
@@ -71,7 +71,7 @@ Expr* builtin_primepi(Expr* res) {
             && opt->type == EXPR_FUNCTION && opt->data.function.arg_count == 2) {
             Expr* lhs = opt->data.function.args[0];
             Expr* rhs = opt->data.function.args[1];
-            if (lhs->type == EXPR_SYMBOL && lhs->data.symbol == SYM_Method) {
+            if (lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == SYM_Method) {
                 if (!prime_parse_method(rhs, &method)) {
                     if (!arith_warnings_muted()) {
                         char* s = expr_to_string(rhs);

@@ -94,7 +94,7 @@ static void fit_warn(const char* head, const char* tag, const char* fmt, ...) {
 static bool fit_is_list(const Expr* e) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol == SYM_List;
+           e->data.function.head->data.symbol.name == SYM_List;
 }
 
 static size_t fit_len(const Expr* e) {
@@ -108,17 +108,17 @@ static Expr* fit_elem(const Expr* e, size_t i) {
 static bool fit_head_is(const Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, name) == 0;
+           strcmp(e->data.function.head->data.symbol.name, name) == 0;
 }
 
 /* Infinity as a WorkingPrecision value: the bare symbol Infinity (before
  * evaluation) or DirectedInfinity[1] (after). */
 static bool fit_is_infinity(const Expr* e) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL && e->data.symbol == SYM_Infinity) return true;
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity) return true;
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_DirectedInfinity &&
+        e->data.function.head->data.symbol.name == SYM_DirectedInfinity &&
         e->data.function.arg_count == 1) {
         Expr* a = e->data.function.args[0];
         return a->type == EXPR_INTEGER && a->data.integer == 1;
@@ -173,10 +173,10 @@ typedef struct {
 } FitOpts;
 
 static bool fit_parse_working_precision(Expr* v, FitWPMode* mode, long* bits) {
-    if (v->type == EXPR_SYMBOL && v->data.symbol == SYM_Automatic) {
+    if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Automatic) {
         *mode = FIT_WP_AUTO; *bits = 0; return true;
     }
-    if (v->type == EXPR_SYMBOL && v->data.symbol == SYM_MachinePrecision) {
+    if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_MachinePrecision) {
         *mode = FIT_WP_MACHINE; *bits = 0; return true;
     }
     if (fit_is_infinity(v)) { *mode = FIT_WP_INFINITY; *bits = 0; return true; }
@@ -228,10 +228,10 @@ static bool fit_is_option_arg(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     Expr* h = e->data.function.head;
     if (h->type != EXPR_SYMBOL) return false;
-    if (h->data.symbol != SYM_Rule && h->data.symbol != SYM_RuleDelayed) return false;
+    if (h->data.symbol.name != SYM_Rule && h->data.symbol.name != SYM_RuleDelayed) return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* lhs = e->data.function.args[0];
-    return lhs->type == EXPR_SYMBOL && fit_is_option_name(lhs->data.symbol);
+    return lhs->type == EXPR_SYMBOL && fit_is_option_name(lhs->data.symbol.name);
 }
 
 /* Parse trailing options.  *npos receives the number of leading positional
@@ -249,7 +249,7 @@ static bool fit_parse_options(Expr** args, size_t argc, size_t* npos, FitOpts* o
 
     for (size_t i = n; i < argc; i++) {
         Expr* rule = args[i];
-        const char* name = rule->data.function.args[0]->data.symbol;
+        const char* name = rule->data.function.args[0]->data.symbol.name;
         Expr* val = rule->data.function.args[1];
         if (name == SYM_WorkingPrecision) {
             if (!fit_parse_working_precision(val, &opts->wp_mode, &opts->wp_bits)) {
@@ -398,7 +398,7 @@ static Expr* fit_build_design_matrix(Expr** funs, size_t nfun,
     for (size_t r = 0; r < npts; r++) {
         MatchEnv* env = env_new();
         for (size_t k = 0; k < ncoord; k++)
-            env_set(env, vars[k]->data.symbol, coords[r * ncoord + k]);
+            env_set(env, vars[k]->data.symbol.name, coords[r * ncoord + k]);
         Expr** cells = calloc(nfun, sizeof(Expr*));
         for (size_t j = 0; j < nfun; j++) {
             Expr* sub = replace_bindings(funs[j], env);
@@ -841,7 +841,7 @@ static Expr* fit_solve_findmin(Expr* M, Expr* V, const FitOpts* opts) {
                 if (rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2) {
                     Expr* lhs = rule->data.function.args[0];
                     if (lhs->type == EXPR_SYMBOL &&
-                        lhs->data.symbol == csyms[j]->data.symbol) {
+                        lhs->data.symbol.name == csyms[j]->data.symbol.name) {
                         val = rule->data.function.args[1];
                         break;
                     }
@@ -868,7 +868,7 @@ typedef enum { FIT_NORM_L2, FIT_NORM_L1, FIT_NORM_OTHER } FitNormKind;
 static FitNormKind fit_classify_norm(const Expr* fn) {
     if (!fn || fn->type != EXPR_FUNCTION ||
         fn->data.function.head->type != EXPR_SYMBOL ||
-        fn->data.function.head->data.symbol != SYM_Function ||
+        fn->data.function.head->data.symbol.name != SYM_Function ||
         fn->data.function.arg_count < 1) {
         return FIT_NORM_OTHER;
     }

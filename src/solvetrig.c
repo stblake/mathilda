@@ -46,7 +46,7 @@ static Expr* mk_neg(Expr* e) {
 static bool head_is_sym(const Expr* e, const char* interned_head) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == interned_head;
+        && e->data.function.head->data.symbol.name == interned_head;
 }
 
 /* ------------------------------------------------------------------ *
@@ -63,7 +63,7 @@ static bool is_trig_head_name(const char* h) {
 static bool var_in(const Expr* e, const Expr* var) {
     if (!e || !var) return false;
     if (e->type == EXPR_SYMBOL && var->type == EXPR_SYMBOL
-        && e->data.symbol == var->data.symbol) return true;
+        && e->data.symbol.name == var->data.symbol.name) return true;
     if (e->type != EXPR_FUNCTION) return false;
     if (var_in(e->data.function.head, var)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
@@ -76,7 +76,7 @@ bool solvetrig_has_trig(const Expr* expr, const Expr* var) {
     if (!expr || !var) return false;
     if (expr->type == EXPR_FUNCTION) {
         if (expr->data.function.head->type == EXPR_SYMBOL) {
-            const char* h = expr->data.function.head->data.symbol;
+            const char* h = expr->data.function.head->data.symbol.name;
             if (is_trig_head_name(h)
                 && expr->data.function.arg_count == 1
                 && var_in(expr->data.function.args[0], var)) {
@@ -126,7 +126,7 @@ static bool extract_exp_n(const Expr* e_expr, const Expr* var,
     for (size_t i = 0; i < e_expr->data.function.arg_count; i++) {
         const Expr* a = e_expr->data.function.args[i];
         if (a->type == EXPR_SYMBOL && var->type == EXPR_SYMBOL
-            && a->data.symbol == var->data.symbol) {
+            && a->data.symbol.name == var->data.symbol.name) {
             if (seen_var) return false;
             seen_var = true;
             continue;
@@ -134,7 +134,7 @@ static bool extract_exp_n(const Expr* e_expr, const Expr* var,
         /* Complex[0, n] with n an integer. */
         if (a->type == EXPR_FUNCTION
             && a->data.function.head->type == EXPR_SYMBOL
-            && a->data.function.head->data.symbol == SYM_Complex
+            && a->data.function.head->data.symbol.name == SYM_Complex
             && a->data.function.arg_count == 2
             && a->data.function.args[0]->type == EXPR_INTEGER
             && a->data.function.args[0]->data.integer == 0
@@ -146,7 +146,7 @@ static bool extract_exp_n(const Expr* e_expr, const Expr* var,
         }
         /* I as a bare symbol -- shouldn't appear post-canonicalisation
          * but handle defensively. */
-        if (a->type == EXPR_SYMBOL && a->data.symbol == SYM_I) {
+        if (a->type == EXPR_SYMBOL && a->data.symbol.name == SYM_I) {
             if (have_n) return false;
             n_acc = 1;
             have_n = true;
@@ -181,7 +181,7 @@ static Expr* substitute_walk(const Expr* e, const Expr* var,
     /* Atomic var -- bad: every var occurrence must be inside an
      * admissible Power[E, m*I*var]. */
     if (e->type == EXPR_SYMBOL && var->type == EXPR_SYMBOL
-        && e->data.symbol == var->data.symbol) {
+        && e->data.symbol.name == var->data.symbol.name) {
         st->bad = true;
         return NULL;
     }
@@ -192,7 +192,7 @@ static Expr* substitute_walk(const Expr* e, const Expr* var,
     if (head_is_sym(e, SYM_Power) && e->data.function.arg_count == 2) {
         const Expr* base = e->data.function.args[0];
         const Expr* exp_ = e->data.function.args[1];
-        if (base->type == EXPR_SYMBOL && base->data.symbol == SYM_E
+        if (base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E
             && var_in(exp_, var)) {
             int64_t m;
             if (!extract_exp_n(exp_, var, &m)) {

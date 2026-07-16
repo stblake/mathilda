@@ -24,7 +24,7 @@ static bool collect_strings(Expr* e, const char*** strs, size_t* count, size_t* 
         return true;
     }
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_List) {
+        && e->data.function.head->data.symbol.name == SYM_List) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             if (!collect_strings(e->data.function.args[i], strs, count, cap))
                 return false;

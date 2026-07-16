@@ -417,7 +417,7 @@ bool get_approx_mpfr(const Expr* e, mpfr_t re, mpfr_t im, bool* is_inexact) {
  * ---------------------------------------------------------------------- */
 static bool is_hold_head(const Expr* head) {
     if (!head || head->type != EXPR_SYMBOL) return false;
-    const char* s = head->data.symbol;
+    const char* s = head->data.symbol.name;
     return s == SYM_HoldForm
         || s == SYM_Hold
         || s == SYM_HoldComplete
@@ -494,7 +494,7 @@ static Expr* leaf_from_bigint(const mpz_t v, NumericSpec spec) {
  *  Anything else (Infinity, True, user symbols) → a fresh copy.
  * ---------------------------------------------------------------------- */
 static Expr* numericalize_symbol(const Expr* e, NumericSpec spec) {
-    const NumericConstant* c = find_constant(e->data.symbol);
+    const NumericConstant* c = find_constant(e->data.symbol.name);
     if (c) {
 #ifdef USE_MPFR
         if (spec.mode == NUMERIC_MODE_MPFR && c->mpfr_fill) {
@@ -533,7 +533,7 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
      * call unchanged (the Root builtin itself returns NULL). */
     if (e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Root) {
+        && e->data.function.head->data.symbol.name == SYM_Root) {
         Expr* out = root_numericalize(e, spec);
         if (out) return out;
         /* Failed (e.g. non-integer coefficients, out-of-range k).  Don't
@@ -564,7 +564,7 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
      * Compute the true quotient here instead, exactly like the int64 path. */
     if (e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.head->data.symbol.name == SYM_Rational
         && e->data.function.arg_count == 2
         && expr_is_integer_like(e->data.function.args[0])
         && expr_is_integer_like(e->data.function.args[1])) {
@@ -636,7 +636,7 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
     const bool is_power =
         (n == 2)
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power;
+        && e->data.function.head->data.symbol.name == SYM_Power;
     const bool exp_is_int =
         is_power
         && (e->data.function.args[1]->type == EXPR_INTEGER
@@ -692,6 +692,7 @@ Expr* numericalize(const Expr* e, NumericSpec spec) {
 #endif
             return expr_new_real(e->data.real);
         case EXPR_STRING:  return expr_copy((Expr*)e);
+        case EXPR_NDARRAY:  return expr_copy((Expr*)e); /* already machine-precision */
         case EXPR_SYMBOL:  return numericalize_symbol(e, spec);
         case EXPR_FUNCTION: return numericalize_function(e, spec);
 #ifdef USE_MPFR
@@ -832,7 +833,7 @@ Expr** numeric_contagion_args(Expr* const* args, size_t n) {
 static bool parse_precision_arg(const Expr* prec, NumericSpec* out_spec) {
     /* MachinePrecision symbol → machine mode. */
     if (prec->type == EXPR_SYMBOL
-        && prec->data.symbol == SYM_MachinePrecision) {
+        && prec->data.symbol.name == SYM_MachinePrecision) {
         *out_spec = numeric_machine_spec();
         return true;
     }

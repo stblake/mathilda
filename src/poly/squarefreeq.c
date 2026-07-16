@@ -58,14 +58,14 @@ static Expr* squarefreeq_deriv(Expr* p, Expr* var);
 /* ===================================================================== */
 
 static bool is_sym_eq(const Expr* e, const char* name) {
-    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol, name) == 0;
+    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, name) == 0;
 }
 
 static bool is_rule_head(const Expr* e) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           (e->data.function.head->data.symbol == SYM_Rule ||
-            e->data.function.head->data.symbol == SYM_RuleDelayed) &&
+           (e->data.function.head->data.symbol.name == SYM_Rule ||
+            e->data.function.head->data.symbol.name == SYM_RuleDelayed) &&
            e->data.function.arg_count == 2;
 }
 
@@ -77,7 +77,7 @@ static bool is_var_spec(const Expr* e) {
     if (e->type == EXPR_SYMBOL) return true;
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_List) {
+        e->data.function.head->data.symbol.name == SYM_List) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             if (e->data.function.args[i]->type != EXPR_SYMBOL) return false;
         }
@@ -92,7 +92,7 @@ static bool is_var_spec(const Expr* e) {
 static bool is_complex_integer(const Expr* e, mpz_t a_out, mpz_t b_out) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
-    if (e->data.function.head->data.symbol != SYM_Complex) return false;
+    if (e->data.function.head->data.symbol.name != SYM_Complex) return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* re = e->data.function.args[0];
     Expr* im = e->data.function.args[1];
@@ -168,7 +168,7 @@ static bool sqfree_integer_mpz(const mpz_t n) {
     bool ok = true;
     if (fi->type == EXPR_FUNCTION &&
         fi->data.function.head->type == EXPR_SYMBOL &&
-        fi->data.function.head->data.symbol == SYM_List) {
+        fi->data.function.head->data.symbol.name == SYM_List) {
         for (size_t i = 0; i < fi->data.function.arg_count; i++) {
             Expr* pair = fi->data.function.args[i];
             if (pair->type != EXPR_FUNCTION ||
@@ -307,7 +307,7 @@ static bool sqfree_gaussian(const mpz_t a_in, const mpz_t b_in) {
     free(ar);
     if (!fi || fi->type != EXPR_FUNCTION ||
         fi->data.function.head->type != EXPR_SYMBOL ||
-        fi->data.function.head->data.symbol != SYM_List) {
+        fi->data.function.head->data.symbol.name != SYM_List) {
         if (fi) expr_free(fi);
         return false;
     }
@@ -516,7 +516,7 @@ static bool sqfree_dispatch(Expr* e, Expr** vars, size_t v_count,
         mpz_clears(a, b, NULL);
         if (e->type == EXPR_FUNCTION &&
             e->data.function.head->type == EXPR_SYMBOL &&
-            e->data.function.head->data.symbol == SYM_Complex) {
+            e->data.function.head->data.symbol.name == SYM_Complex) {
             /* Gaussian-mode-off Complex literal: not square-free in Z. */
             return false;
         }
@@ -651,7 +651,7 @@ Expr* builtin_squarefreeq(Expr* res) {
             last_bad = opt;
             continue;
         }
-        const char* name = opt->data.function.args[0]->data.symbol;
+        const char* name = opt->data.function.args[0]->data.symbol.name;
         Expr* val = opt->data.function.args[1];
         if (name == SYM_GaussianIntegers || strcmp(name, "GaussianIntegers") == 0) {
             if (is_sym_eq(val, "True")) gaussian_setting = 1;

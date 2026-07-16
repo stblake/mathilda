@@ -45,7 +45,7 @@ Expr* builtin_stringpart(Expr* res) {
     /* StringPart[{s1, s2, ...}, spec] - map over list of strings */
     if (arg0->type == EXPR_FUNCTION &&
         arg0->data.function.head->type == EXPR_SYMBOL &&
-        arg0->data.function.head->data.symbol == SYM_List) {
+        arg0->data.function.head->data.symbol.name == SYM_List) {
         size_t n = arg0->data.function.arg_count;
         Expr** results = malloc(sizeof(Expr*) * n);
         if (!results) return NULL;
@@ -79,7 +79,7 @@ Expr* builtin_stringpart(Expr* res) {
     /* StringPart["string", {n1, n2, ...}] - list of indices */
     if (spec->type == EXPR_FUNCTION &&
         spec->data.function.head->type == EXPR_SYMBOL &&
-        spec->data.function.head->data.symbol == SYM_List) {
+        spec->data.function.head->data.symbol.name == SYM_List) {
         size_t n = spec->data.function.arg_count;
         Expr** results = malloc(sizeof(Expr*) * n);
         if (!results) return NULL;
@@ -100,7 +100,7 @@ Expr* builtin_stringpart(Expr* res) {
     /* StringPart["string", m;;n] or StringPart["string", m;;n;;s] - Span */
     if (spec->type == EXPR_FUNCTION &&
         spec->data.function.head->type == EXPR_SYMBOL &&
-        spec->data.function.head->data.symbol == SYM_Span) {
+        spec->data.function.head->data.symbol.name == SYM_Span) {
         int64_t start = 1, end = len, step = 1;
         size_t span_argc = spec->data.function.arg_count;
 
@@ -110,7 +110,7 @@ Expr* builtin_stringpart(Expr* res) {
                 start = a1->data.integer;
                 if (start < 0) start = len + start + 1;
             } else if (a1->type == EXPR_SYMBOL &&
-                       a1->data.symbol == SYM_All) {
+                       a1->data.symbol.name == SYM_All) {
                 start = 1;
             } else return NULL;
         }
@@ -120,7 +120,7 @@ Expr* builtin_stringpart(Expr* res) {
                 end = a2->data.integer;
                 if (end < 0) end = len + end + 1;
             } else if (a2->type == EXPR_SYMBOL &&
-                       a2->data.symbol == SYM_All) {
+                       a2->data.symbol.name == SYM_All) {
                 end = len;
             } else return NULL;
         }

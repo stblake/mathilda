@@ -67,7 +67,7 @@ enum { METHOD_DEFAULT = 0, METHOD_SPLINE = 1, METHOD_HERMITE = 2 };
 static bool interp_is_list(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_List;
+        && e->data.function.head->data.symbol.name == SYM_List;
 }
 
 /*
@@ -95,7 +95,7 @@ static bool node_to_double(const Expr* e, double* out) {
     }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.head->data.symbol.name == SYM_Rational
         && e->data.function.arg_count == 2
         && expr_is_integer_like(e->data.function.args[0])
         && expr_is_integer_like(e->data.function.args[1])) {
@@ -126,7 +126,7 @@ static bool is_real_or_array(const Expr* e) {
     if (is_scalar_real(e)) return true;
     if (e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_List
+        && e->data.function.head->data.symbol.name == SYM_List
         && e->data.function.arg_count > 0) {
         for (size_t i = 0; i < e->data.function.arg_count; i++)
             if (!is_real_or_array(e->data.function.args[i])) return false;
@@ -1071,7 +1071,7 @@ Expr* interp_apply(Expr* ifun, Expr** call_args, size_t argc) {
         periodic = calloc(m, sizeof(bool));
         for (size_t k = 0; k < m; k++) {
             Expr* b = pe->data.function.args[k];
-            periodic[k] = (b->type == EXPR_SYMBOL && b->data.symbol == SYM_True);
+            periodic[k] = (b->type == EXPR_SYMBOL && b->data.symbol.name == SYM_True);
         }
     }
 
@@ -1208,21 +1208,21 @@ static Expr* builtin_interpolation(Expr* res) {
         Expr* a = res->data.function.args[i];
         if (a->type == EXPR_FUNCTION && a->data.function.arg_count == 2
             && a->data.function.head->type == EXPR_SYMBOL
-            && (a->data.function.head->data.symbol == SYM_Rule
-                || a->data.function.head->data.symbol == SYM_RuleDelayed)) {
+            && (a->data.function.head->data.symbol.name == SYM_Rule
+                || a->data.function.head->data.symbol.name == SYM_RuleDelayed)) {
             Expr* lhs = a->data.function.args[0];
             Expr* rhs = a->data.function.args[1];
             if (lhs->type != EXPR_SYMBOL) return NULL;
-            if (lhs->data.symbol == SYM_InterpolationOrder) {
+            if (lhs->data.symbol.name == SYM_InterpolationOrder) {
                 if (!node_to_order(rhs, &explicit_order)) return NULL;
-            } else if (lhs->data.symbol == SYM_Method) {
-                if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic) { /* default */ }
+            } else if (lhs->data.symbol.name == SYM_Method) {
+                if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) { /* default */ }
                 else if (rhs->type == EXPR_STRING && rhs->data.string
                          && strcmp(rhs->data.string, "Spline") == 0) method = METHOD_SPLINE;
                 else if (rhs->type == EXPR_STRING && rhs->data.string
                          && strcmp(rhs->data.string, "Hermite") == 0) method = METHOD_HERMITE;
                 else return NULL;
-            } else if (lhs->data.symbol == SYM_PeriodicInterpolation) {
+            } else if (lhs->data.symbol.name == SYM_PeriodicInterpolation) {
                 periodic_spec = rhs;   /* validated against m below */
             } else return NULL;
             continue;
@@ -1254,15 +1254,15 @@ static Expr* builtin_interpolation(Expr* res) {
     bool* periodic = NULL;
     bool any_periodic = false;
     if (periodic_spec) {
-        bool all_true = (periodic_spec->type == EXPR_SYMBOL && periodic_spec->data.symbol == SYM_True);
-        bool all_false = (periodic_spec->type == EXPR_SYMBOL && periodic_spec->data.symbol == SYM_False);
+        bool all_true = (periodic_spec->type == EXPR_SYMBOL && periodic_spec->data.symbol.name == SYM_True);
+        bool all_false = (periodic_spec->type == EXPR_SYMBOL && periodic_spec->data.symbol.name == SYM_False);
         if (!all_false) {
             periodic = calloc(m, sizeof(bool));
             if (all_true) { for (size_t k = 0; k < m; k++) periodic[k] = true; any_periodic = true; }
             else if (interp_is_list(periodic_spec) && periodic_spec->data.function.arg_count == m) {
                 for (size_t k = 0; k < m; k++) {
                     Expr* b = periodic_spec->data.function.args[k];
-                    periodic[k] = (b->type == EXPR_SYMBOL && b->data.symbol == SYM_True);
+                    periodic[k] = (b->type == EXPR_SYMBOL && b->data.symbol.name == SYM_True);
                     if (periodic[k]) any_periodic = true;
                 }
             } else { free(periodic); return NULL; }   /* malformed periodic spec */

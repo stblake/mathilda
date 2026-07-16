@@ -32,12 +32,12 @@ Expr* builtin_factor(Expr* res) {
             if (opt->type == EXPR_FUNCTION
                 && opt->data.function.head
                 && opt->data.function.head->type == EXPR_SYMBOL
-                && (opt->data.function.head->data.symbol == SYM_Rule
-                    || opt->data.function.head->data.symbol == SYM_RuleDelayed)
+                && (opt->data.function.head->data.symbol.name == SYM_Rule
+                    || opt->data.function.head->data.symbol.name == SYM_RuleDelayed)
                 && opt->data.function.arg_count == 2) {
                 Expr* lhs = opt->data.function.args[0];
                 Expr* rhs = opt->data.function.args[1];
-                if (lhs->type == EXPR_SYMBOL && lhs->data.symbol == SYM_Extension) {
+                if (lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == SYM_Extension) {
                     alpha_expr = rhs;
                 }
             }
@@ -46,8 +46,8 @@ Expr* builtin_factor(Expr* res) {
         Expr* alpha_auto = NULL;
         QATower* auto_tower = NULL;
         if (alpha_expr && alpha_expr->type == EXPR_SYMBOL
-            && alpha_expr->data.symbol
-            && strcmp(alpha_expr->data.symbol, "Automatic") == 0) {
+            && alpha_expr->data.symbol.name
+            && strcmp(alpha_expr->data.symbol.name, "Automatic") == 0) {
             auto_tower = extension_autodetect(res->data.function.args[0]);
             if (auto_tower && auto_tower->n == 1) {
                 alpha_auto = expr_copy(auto_tower->alpha_renders[0]);
@@ -61,8 +61,8 @@ Expr* builtin_factor(Expr* res) {
         /* Skip the qa-factor path when alpha_expr resolves to a no-op
          * sentinel (None or Automatic-with-no-detect). */
         if (alpha_expr && alpha_expr->type == EXPR_SYMBOL
-            && alpha_expr->data.symbol
-            && strcmp(alpha_expr->data.symbol, "None") == 0) {
+            && alpha_expr->data.symbol.name
+            && strcmp(alpha_expr->data.symbol.name, "None") == 0) {
             alpha_expr = NULL;
         }
         if (alpha_expr) {
@@ -77,7 +77,7 @@ Expr* builtin_factor(Expr* res) {
             if (alpha_expr->type == EXPR_FUNCTION
                 && alpha_expr->data.function.head
                 && alpha_expr->data.function.head->type == EXPR_SYMBOL
-                && alpha_expr->data.function.head->data.symbol == SYM_List) {
+                && alpha_expr->data.function.head->data.symbol.name == SYM_List) {
                 is_tower = true;
                 n_alphas = (int)alpha_expr->data.function.arg_count;
                 alpha_list = alpha_expr->data.function.args;  /* borrowed */
@@ -177,7 +177,7 @@ Expr* builtin_factor(Expr* res) {
         if (arg0->type == EXPR_FUNCTION
             && arg0->data.function.head
             && arg0->data.function.head->type == EXPR_SYMBOL) {
-            const char* h = arg0->data.function.head->data.symbol;
+            const char* h = arg0->data.function.head->data.symbol.name;
             if (h == SYM_Less ||
                 h == SYM_Greater ||
                 h == SYM_Equal ||

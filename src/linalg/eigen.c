@@ -1,6 +1,7 @@
 #include "eigen.h"
 #include "eigen_internal.h"
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "eval.h"
 #include "symtab.h"
 #include "attr.h"
@@ -63,7 +64,7 @@ static Expr** eigen_apply_k_spec(Expr** vals, size_t count, Expr* k_spec,
             }
         } else if (k_spec->type == EXPR_FUNCTION
             && k_spec->data.function.head->type == EXPR_SYMBOL
-            && k_spec->data.function.head->data.symbol == SYM_UpTo
+            && k_spec->data.function.head->data.symbol.name == SYM_UpTo
             && k_spec->data.function.arg_count == 1
             && k_spec->data.function.args[0]->type == EXPR_INTEGER) {
             int64_t k = k_spec->data.function.args[0]->data.integer;
@@ -139,6 +140,7 @@ static Expr** eigen_compute_eigenvalues_full(Expr* m, Expr* a,
 }
 
 Expr* builtin_eigenvalues(Expr* res) {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     EigenOpts opts;
     if (!eigen_parse_args(res, &opts)) return NULL;
 
@@ -299,6 +301,7 @@ static Expr* eigen_normalize_vector(Expr* v) {
 }
 
 Expr* builtin_eigenvectors(Expr* res) {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     EigenOpts opts;
     if (!eigen_parse_args(res, &opts)) return NULL;
 
@@ -414,7 +417,7 @@ Expr* builtin_eigenvectors(Expr* res) {
         /* Special handling: Infinity eigenvalues correspond to the null
          * space of `a` (the generalised pencil's "infinite" branch). */
         bool is_inf = (val->type == EXPR_SYMBOL
-                       && val->data.symbol == SYM_Infinity);
+                       && val->data.symbol.name == SYM_Infinity);
 
         Expr* residual = NULL;
         if (is_inf && a) {

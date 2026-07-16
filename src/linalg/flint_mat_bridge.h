@@ -17,6 +17,8 @@
 #define FLINT_MAT_BRIDGE_H
 
 #include "expr.h"
+#include <gmp.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -72,6 +74,19 @@ Expr** flint_mat_solve(Expr** flat_m, int r, int c, Expr** flat_b, int k);
  * Does not take ownership of `flat` or its elements.
  */
 int flint_mat_rank(Expr** flat, int r, int c);
+
+/*
+ * In-place reduced row echelon form of an r×c rational matrix supplied as a
+ * flat row-major mpq_t array `M` (M[i*c + j]; every entry already mpq_init'd).
+ * Computed exactly via FLINT's fraction-free fmpq_mat_rref — far faster than a
+ * hand-rolled mpq_t Gauss-Jordan on systems with large rational entries, whose
+ * numerators blow up under repeated pivoting. On return M holds the (unique)
+ * RREF in natural row order, and pivot_for_col[j] (length c, caller-allocated)
+ * is the physical row that pivots column j, or -1 if column j has no pivot.
+ * Returns 1 on success, 0 when FLINT is absent (caller keeps its mpq path).
+ * Does not allocate or free M.
+ */
+int flint_rref_mpq_inplace(mpq_t* M, int r, int c, int64_t* pivot_for_col);
 
 /* Registers the FLINT` context matrix builtins (FLINT`Det, FLINT`Inverse,
  * FLINT`LinearSolve, FLINT`RowReduce, FLINT`MatrixRank). Called from

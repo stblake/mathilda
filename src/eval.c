@@ -86,9 +86,9 @@ void     eval_clock_bump(void) { g_eval_clock++; }
 /*
  * eval_classify_return:
  * See the contract in eval.h. Pointer-equality on interned symbols is
- * the dispatch primitive: every Expr_Symbol's `data.symbol` field is the
+ * the dispatch primitive: every Expr_Symbol's `data.symbol.name` field is the
  * canonical interned pointer (sym_intern.c), so checks like
- * `head->data.symbol == SYM_Return` and `target->data.symbol ==
+ * `head->data.symbol.name == SYM_Return` and `target->data.symbol.name ==
  * boundary_head` are O(1) and never strcmp.
  *
  * Care is taken to keep this side-effect free: no eval_clock_bump,
@@ -105,7 +105,7 @@ EvalReturnAction eval_classify_return(Expr* e,
     if (!e) return EVAL_RETURN_NONE;
     if (e->type != EXPR_FUNCTION) return EVAL_RETURN_NONE;
     if (e->data.function.head->type != EXPR_SYMBOL) return EVAL_RETURN_NONE;
-    if (e->data.function.head->data.symbol != SYM_Return) return EVAL_RETURN_NONE;
+    if (e->data.function.head->data.symbol.name != SYM_Return) return EVAL_RETURN_NONE;
 
     size_t argc = e->data.function.arg_count;
 
@@ -133,7 +133,7 @@ EvalReturnAction eval_classify_return(Expr* e,
     Expr* target = e->data.function.args[1];
     if (boundary_head &&
         target->type == EXPR_SYMBOL &&
-        target->data.symbol == boundary_head) {
+        target->data.symbol.name == boundary_head) {
         if (out_value) *out_value = expr_copy(e->data.function.args[0]);
         return EVAL_RETURN_CONSUME;
     }
@@ -239,7 +239,7 @@ bool eval_flatten_args(Expr* e, const char* head_name) {
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         Expr* arg = e->data.function.args[i];
         if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
-            arg->data.function.head->data.symbol == head_name) {
+            arg->data.function.head->data.symbol.name == head_name) {
             new_count += arg->data.function.arg_count;
             needs_flattening = true;
         } else {
@@ -256,7 +256,7 @@ bool eval_flatten_args(Expr* e, const char* head_name) {
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         Expr* arg = e->data.function.args[i];
         if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
-            arg->data.function.head->data.symbol == head_name) {
+            arg->data.function.head->data.symbol.name == head_name) {
             /* Splat nested arguments into the new array */
             for (size_t j = 0; j < arg->data.function.arg_count; j++) {
                 new_args[idx++] = expr_copy(arg->data.function.args[j]);
@@ -285,7 +285,7 @@ static bool has_list_arg(Expr* e) {
         Expr* arg = e->data.function.args[i];
         if (arg->type == EXPR_FUNCTION &&
             arg->data.function.head->type == EXPR_SYMBOL &&
-            arg->data.function.head->data.symbol == SYM_List) {
+            arg->data.function.head->data.symbol.name == SYM_List) {
             return true;
         }
     }
@@ -310,7 +310,7 @@ static Expr* apply_listable(Expr* e) {
         Expr* arg = e->data.function.args[i];
         if (arg->type == EXPR_FUNCTION &&
             arg->data.function.head->type == EXPR_SYMBOL &&
-            arg->data.function.head->data.symbol == SYM_List) {
+            arg->data.function.head->data.symbol.name == SYM_List) {
             size_t len = arg->data.function.arg_count;
             if (!have_list) { have_list = true; list_len = len; }
             else if (len != list_len) {
@@ -337,7 +337,7 @@ static Expr* apply_listable(Expr* e) {
             Expr* arg = e->data.function.args[i];
             if (arg->type == EXPR_FUNCTION &&
             arg->data.function.head->type == EXPR_SYMBOL &&
-            arg->data.function.head->data.symbol == SYM_List) {
+            arg->data.function.head->data.symbol.name == SYM_List) {
                 /* All list arguments must have identical lengths */
                 if (arg->data.function.arg_count != list_len) {
                     char* s = expr_to_string(e);
@@ -392,7 +392,7 @@ static bool lhs_arg_contains_pattern(Expr* e) {
     if (!e) return false;
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         if (h == SYM_Blank || h == SYM_BlankSequence || h == SYM_BlankNullSequence
             || h == SYM_Pattern || h == SYM_Optional || h == SYM_Repeated
             || h == SYM_RepeatedNull || h == SYM_PatternTest
@@ -417,11 +417,11 @@ static bool lhs_arg_contains_pattern(Expr* e) {
  */
 static const char* assignment_target_symbol(Expr* lhs) {
     if (!lhs) return NULL;
-    if (lhs->type == EXPR_SYMBOL) return lhs->data.symbol;
+    if (lhs->type == EXPR_SYMBOL) return lhs->data.symbol.name;
     if (lhs->type == EXPR_FUNCTION &&
         lhs->data.function.head->type == EXPR_SYMBOL &&
         lhs->data.function.arg_count >= 1) {
-        const char* h = lhs->data.function.head->data.symbol;
+        const char* h = lhs->data.function.head->data.symbol.name;
         if (h == SYM_Condition || h == SYM_HoldPattern || h == SYM_Part ||
             h == SYM_MessageName) {
             /* f::tag = ... targets f, not MessageName: a usage message may be
@@ -447,12 +447,12 @@ static bool is_assignable_lhs(Expr* lhs, Expr* rhs) {
     if (lhs->type == EXPR_SYMBOL) return true;
     if (lhs->type != EXPR_FUNCTION) return false;
     if (lhs->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = lhs->data.function.head->data.symbol;
+    const char* h = lhs->data.function.head->data.symbol.name;
     if (h != SYM_List) return true; /* downvalue / part / etc. handled in apply_assignment */
 
     if (rhs->type != EXPR_FUNCTION ||
         rhs->data.function.head->type != EXPR_SYMBOL ||
-        rhs->data.function.head->data.symbol != SYM_List) {
+        rhs->data.function.head->data.symbol.name != SYM_List) {
         return false;
     }
     if (lhs->data.function.arg_count != rhs->data.function.arg_count) return false;
@@ -485,19 +485,19 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
      * unevaluated. */
     if (lhs->type == EXPR_FUNCTION
         && lhs->data.function.head->type == EXPR_SYMBOL
-        && lhs->data.function.head->data.symbol == SYM_Options
+        && lhs->data.function.head->data.symbol.name == SYM_Options
         && lhs->data.function.arg_count == 1
         && lhs->data.function.args[0]->type == EXPR_SYMBOL) {
         if (rhs->type == EXPR_FUNCTION
             && rhs->data.function.head->type == EXPR_SYMBOL
-            && rhs->data.function.head->data.symbol == SYM_List) {
+            && rhs->data.function.head->data.symbol.name == SYM_List) {
             bool all_rules = true;
             for (size_t i = 0; i < rhs->data.function.arg_count; i++) {
                 Expr* r = rhs->data.function.args[i];
                 if (!(r->type == EXPR_FUNCTION
                       && r->data.function.head->type == EXPR_SYMBOL
-                      && (r->data.function.head->data.symbol == SYM_Rule
-                          || r->data.function.head->data.symbol == SYM_RuleDelayed)
+                      && (r->data.function.head->data.symbol.name == SYM_Rule
+                          || r->data.function.head->data.symbol.name == SYM_RuleDelayed)
                       && r->data.function.arg_count == 2
                       && (r->data.function.args[0]->type == EXPR_SYMBOL
                           || r->data.function.args[0]->type == EXPR_STRING))) {
@@ -506,7 +506,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
                 }
             }
             if (all_rules) {
-                symtab_set_options(lhs->data.function.args[0]->data.symbol,
+                symtab_set_options(lhs->data.function.args[0]->data.symbol.name,
                                    expr_copy(rhs));
                 eval_clock_bump();
                 return true;
@@ -521,7 +521,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
      * outer check when lhs itself is a List. */
     bool lhs_is_list = (lhs->type == EXPR_FUNCTION &&
                         lhs->data.function.head->type == EXPR_SYMBOL &&
-                        lhs->data.function.head->data.symbol == SYM_List);
+                        lhs->data.function.head->data.symbol.name == SYM_List);
     if (!lhs_is_list) {
         const char* target = assignment_target_symbol(lhs);
         if (target && (get_attributes(target) & ATTR_PROTECTED)) {
@@ -533,7 +533,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
 
     if (lhs->type == EXPR_SYMBOL) {
         /* Standard symbol assignment */
-        symtab_add_own_value(lhs->data.symbol, lhs, rhs);
+        symtab_add_own_value(lhs->data.symbol.name, lhs, rhs);
 
         /* Special system variables: keep their C-side mirror state in sync.
          * Set has HoldFirst, so for `$RecursionLimit = expr` the rhs is
@@ -541,7 +541,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
          * limit reflects the value the user expects to see when they read
          * the symbol back. If validation fails, the OwnValue is rolled back
          * to the current C-side limit. */
-        if (strcmp(lhs->data.symbol, "$RecursionLimit") == 0) {
+        if (strcmp(lhs->data.symbol.name, "$RecursionLimit") == 0) {
             Expr* probe = is_delayed ? evaluate(expr_copy(rhs)) : expr_copy(rhs);
             sync_recursion_limit_from_value(probe);
             expr_free(probe);
@@ -549,10 +549,10 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
         return true;
     } else if (lhs->type == EXPR_FUNCTION) {
         if (lhs->data.function.head->type == EXPR_SYMBOL &&
-            lhs->data.function.head->data.symbol == SYM_List &&
+            lhs->data.function.head->data.symbol.name == SYM_List &&
             rhs->type == EXPR_FUNCTION &&
             rhs->data.function.head->type == EXPR_SYMBOL &&
-            rhs->data.function.head->data.symbol == SYM_List) {
+            rhs->data.function.head->data.symbol.name == SYM_List) {
             
             /* List destructuring: match lengths and recurse. Pre-flight every
              * element so a malformed child (e.g. a literal integer on the LHS)
@@ -574,7 +574,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
                 }
             }
             return all_ok;
-        } else if (lhs->data.function.head->type == EXPR_SYMBOL && lhs->data.function.head->data.symbol == SYM_Part) {
+        } else if (lhs->data.function.head->type == EXPR_SYMBOL && lhs->data.function.head->data.symbol.name == SYM_Part) {
             Expr* expr_part_assign(Expr* lhs, Expr* rhs); // Forward declare or include part.h
             Expr* assigned = expr_part_assign(lhs, rhs);
             if (assigned) {
@@ -585,7 +585,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
         } else if (lhs->data.function.head->type == EXPR_SYMBOL) {
             /* Pattern-based assignment (DownValues) */
             /* We use the entire lhs as the pattern, and its head as the key */
-            const char* symbol_name = lhs->data.function.head->data.symbol;
+            const char* symbol_name = lhs->data.function.head->data.symbol.name;
 
             /* f::usage = "..." additionally registers the string as f's
              * docstring so ?f and Information[f] surface it. The message is
@@ -597,7 +597,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
                 lhs->data.function.args[1]->type == EXPR_STRING &&
                 strcmp(lhs->data.function.args[1]->data.string, "usage") == 0 &&
                 rhs->type == EXPR_STRING) {
-                symtab_set_docstring(lhs->data.function.args[0]->data.symbol,
+                symtab_set_docstring(lhs->data.function.args[0]->data.symbol.name,
                                      rhs->data.string);
             }
 
@@ -609,7 +609,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
              * This is standard Mathematica semantics. */
             if (is_delayed && rhs->type == EXPR_FUNCTION &&
                 rhs->data.function.head->type == EXPR_SYMBOL &&
-                rhs->data.function.head->data.symbol == SYM_Condition &&
+                rhs->data.function.head->data.symbol.name == SYM_Condition &&
                 rhs->data.function.arg_count == 2) {
                 /* Build Condition[lhs, test] as the new pattern */
                 Expr** cond_args = malloc(sizeof(Expr*) * 2);
@@ -624,9 +624,9 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
             if (symbol_name == SYM_Condition && actual_pattern->data.function.arg_count == 2) {
                 Expr* inner_lhs = actual_pattern->data.function.args[0];
                 if (inner_lhs->type == EXPR_FUNCTION && inner_lhs->data.function.head->type == EXPR_SYMBOL) {
-                    symbol_name = inner_lhs->data.function.head->data.symbol;
+                    symbol_name = inner_lhs->data.function.head->data.symbol.name;
                 } else if (inner_lhs->type == EXPR_SYMBOL) {
-                    symbol_name = inner_lhs->data.symbol;
+                    symbol_name = inner_lhs->data.symbol.name;
                 }
             }
             symtab_add_down_value(symbol_name, actual_pattern, actual_rhs);
@@ -649,7 +649,7 @@ static bool flatten_sequences(Expr* e) {
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         Expr* arg = e->data.function.args[i];
         if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
-            arg->data.function.head->data.symbol == SYM_Sequence) {
+            arg->data.function.head->data.symbol.name == SYM_Sequence) {
             new_count += arg->data.function.arg_count;
         } else {
             new_count++;
@@ -663,7 +663,7 @@ static bool flatten_sequences(Expr* e) {
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         Expr* arg = e->data.function.args[i];
         if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
-            arg->data.function.head->data.symbol == SYM_Sequence) {
+            arg->data.function.head->data.symbol.name == SYM_Sequence) {
             for (size_t j = 0; j < arg->data.function.arg_count; j++) {
                 new_args[k++] = expr_copy(arg->data.function.args[j]);
             }
@@ -702,6 +702,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
         case EXPR_REAL:
         case EXPR_STRING:
         case EXPR_BIGINT:
+        case EXPR_NDARRAY:        /* dense ndarray: an atomic value */
 #ifdef USE_MPFR
         case EXPR_MPFR:
 #endif
@@ -725,8 +726,26 @@ Expr* evaluate_step(Expr* e, bool* changed) {
             if (head != orig_head) *changed = true;
 
             uint32_t attrs = ATTR_NONE;
+            /* Phase 3a: resolve the head's definition ONCE, then thread it
+             * through attribute lookup, DownValue dispatch, and builtin dispatch
+             * below -- instead of re-resolving (re-hashing) the same head up to
+             * three times per node per evaluation pass. The def node is stable
+             * (Phase 2: never freed/reallocated), so the pointer stays valid
+             * even if the symbol is redefined mid-step; each use reads its
+             * fields fresh. */
+            SymbolDef* hdef = NULL;
             if (head->type == EXPR_SYMBOL) {
-                attrs = get_attributes(head->data.symbol);
+                /* Phase 3b: the symbol node caches its resolved def. First touch
+                 * looks it up (one hash on the unified table); every later pass
+                 * over this same node is a pointer load. Writing the cache on a
+                 * possibly-shared node is safe -- it is benign metadata, and all
+                 * sharers are the same symbol with the same def. */
+                hdef = head->data.symbol.def;
+                if (!hdef) {
+                    hdef = symtab_get_def(head->data.symbol.name);
+                    head->data.symbol.def = hdef;
+                }
+                attrs = get_attributes_def(hdef);
             } else if (head->type == EXPR_FUNCTION) {
                 attrs = pure_function_attributes(head);
             }
@@ -764,7 +783,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                     if (!hold_all_complete &&
                         orig_arg->type == EXPR_FUNCTION &&
                         orig_arg->data.function.head->type == EXPR_SYMBOL &&
-                        orig_arg->data.function.head->data.symbol == SYM_Evaluate &&
+                        orig_arg->data.function.head->data.symbol.name == SYM_Evaluate &&
                         orig_arg->data.function.arg_count == 1) {
                         new_args[i] = evaluate(orig_arg->data.function.args[0]);
                         *changed = true; /* Evaluate[] wrapper stripped */
@@ -786,8 +805,8 @@ Expr* evaluate_step(Expr* e, bool* changed) {
     if (hold_all_complete) {
         /* HoldAllComplete leaves Sequence intact */
     } else if (head->type == EXPR_SYMBOL &&
-        (head->data.symbol == SYM_Set || head->data.symbol == SYM_SetDelayed ||
-         head->data.symbol == SYM_Rule || head->data.symbol == SYM_RuleDelayed)) {
+        (head->data.symbol.name == SYM_Set || head->data.symbol.name == SYM_SetDelayed ||
+         head->data.symbol.name == SYM_Rule || head->data.symbol.name == SYM_RuleDelayed)) {
         // Do not flatten sequences in assignments or rules
     } else {
         if (flatten_sequences(res)) *changed = true;
@@ -811,7 +830,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 Expr* arg = res->data.function.args[i];
                 if (arg->type == EXPR_FUNCTION &&
                     arg->data.function.head->type == EXPR_SYMBOL &&
-                    arg->data.function.head->data.symbol == SYM_Unevaluated &&
+                    arg->data.function.head->data.symbol.name == SYM_Unevaluated &&
                     arg->data.function.arg_count == 1) {
                     Expr* stripped = expr_copy(arg->data.function.args[0]);
                     expr_free(arg);
@@ -828,7 +847,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
 
             /* Flat: associative flattening (requires symbolic head, suppressed by HoldAllComplete) */
             if (head->type == EXPR_SYMBOL && (attrs & ATTR_FLAT) && !hold_all_complete) {
-                if (eval_flatten_args(res, head->data.symbol)) *changed = true;
+                if (eval_flatten_args(res, head->data.symbol.name)) *changed = true;
             }
 
             /* Listable: automatic threading */
@@ -842,7 +861,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
             }
 
             if (head->type == EXPR_SYMBOL) {
-                const char* head_name = head->data.symbol;
+                const char* head_name = head->data.symbol.name;
 
                 /* Orderless: commutative sorting. Pre-check whether the
                  * args are already in canonical order so the §3.4 detector
@@ -871,7 +890,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                  * symbols (which is most builtin-bearing heads) are
                  * unaffected because apply_assignment refuses to install
                  * DownValues on a Protected target. */
-                Expr* down = apply_down_values(res);
+                Expr* down = apply_down_values_def(hdef, res);
                 if (down) {
                     expr_free(res);
                     *changed = true; /* DownValue rule fired */
@@ -879,9 +898,8 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 }
 
                 /* 5. Call C-level Built-in Functions (internal "down code") */
-                SymbolDef* def = symtab_get_def(head_name);
-                if (def && def->builtin_func) {
-                    Expr* ret = def->builtin_func(res);
+                if (hdef && hdef->builtin_func) {
+                    Expr* ret = hdef->builtin_func(res);
                     if (ret) {
                         expr_free(res);
                         *changed = true; /* Built-in produced a rewrite */
@@ -903,18 +921,18 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                     if (lhs->type == EXPR_FUNCTION) {
                         /* Only evaluate arguments, not the head, to avoid matching existing rules */
                         Expr** eval_args = malloc(sizeof(Expr*) * lhs->data.function.arg_count);
-                        bool is_part = (lhs->data.function.head->type == EXPR_SYMBOL && lhs->data.function.head->data.symbol == SYM_Part);
+                        bool is_part = (lhs->data.function.head->type == EXPR_SYMBOL && lhs->data.function.head->data.symbol.name == SYM_Part);
                         /* List destructuring: {a, b, ...} = {...}. Each element that is
                          * a Symbol is a binding target and must NOT be evaluated (otherwise
                          * prior OwnValues clobber the targets -- e.g. {a,b}={1,2} then
                          * {a,b}={3,4} would try to assign to the values 1,2 instead of a,b).
                          * Non-symbol elements (e.g. a[x] in {a[x], b[y]} = ...) still need
                          * their inner arguments evaluated so the target pattern is correct. */
-                        bool is_list = (lhs->data.function.head->type == EXPR_SYMBOL && lhs->data.function.head->data.symbol == SYM_List);
+                        bool is_list = (lhs->data.function.head->type == EXPR_SYMBOL && lhs->data.function.head->data.symbol.name == SYM_List);
 
                         uint32_t lhs_attrs = ATTR_NONE;
                         if (lhs->data.function.head->type == EXPR_SYMBOL) {
-                            lhs_attrs = get_attributes(lhs->data.function.head->data.symbol);
+                            lhs_attrs = get_attributes(lhs->data.function.head->data.symbol.name);
                         }
 
                         for (size_t i = 0; i < lhs->data.function.arg_count; i++) {
@@ -944,7 +962,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                                     hold = true;
                                 } else if (child->type == EXPR_FUNCTION &&
                                            child->data.function.head->type == EXPR_SYMBOL &&
-                                           child->data.function.head->data.symbol == SYM_List) {
+                                           child->data.function.head->data.symbol.name == SYM_List) {
                                     hold = true;
                                 }
                             }
@@ -982,7 +1000,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                  * The pattern-matching half lives in src/match.c (search
                  * for ATTR_ONEIDENTITY). */
             } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
-                       head->data.function.head->data.symbol == SYM_Function) {
+                       head->data.function.head->data.symbol.name == SYM_Function) {
 
                 /* 7. Apply Pure Function */
                 Expr* applied = apply_pure_function(head, res->data.function.args, res->data.function.arg_count);
@@ -992,7 +1010,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                     return applied;
                 }
             } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
-                       head->data.function.head->data.symbol == SYM_Association &&
+                       head->data.function.head->data.symbol.name == SYM_Association &&
                        res->data.function.arg_count >= 1) {
                 /* 7a. Association as accessor: <|...|>[key] (or [Key[key]]) looks
                  * the key up, giving the value or Missing["KeyAbsent", key] --
@@ -1002,7 +1020,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 Expr* keyarg = res->data.function.args[0];
                 Expr* lookup_key = keyarg;
                 if (keyarg->type == EXPR_FUNCTION && keyarg->data.function.head->type == EXPR_SYMBOL &&
-                    keyarg->data.function.head->data.symbol == SYM_Key &&
+                    keyarg->data.function.head->data.symbol.name == SYM_Key &&
                     keyarg->data.function.arg_count == 1) {
                     lookup_key = keyarg->data.function.args[0];
                 }
@@ -1038,12 +1056,12 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 *changed = true;
                 return out;
             } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
-                       head->data.function.head->data.symbol == SYM_Key &&
+                       head->data.function.head->data.symbol.name == SYM_Key &&
                        head->data.function.arg_count == 1 &&
                        res->data.function.arg_count == 1 &&
                        res->data.function.args[0]->type == EXPR_FUNCTION &&
                        res->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
-                       res->data.function.args[0]->data.function.head->data.symbol == SYM_Association) {
+                       res->data.function.args[0]->data.function.head->data.symbol.name == SYM_Association) {
                 /* 7a'. Key[k][assoc] operator form: extract the value at key k,
                  * giving the value or Missing["KeyAbsent", k]. This is the
                  * curried complement of assoc[Key[k]], and it is what makes
@@ -1071,11 +1089,11 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 *changed = true;
                 return out;
             } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
-                       head->data.function.head->data.symbol == SYM_Derivative &&
+                       head->data.function.head->data.symbol.name == SYM_Derivative &&
                        res->data.function.arg_count == 1 &&
                        res->data.function.args[0]->type == EXPR_FUNCTION &&
                        res->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
-                       res->data.function.args[0]->data.function.head->data.symbol == SYM_Function) {
+                       res->data.function.args[0]->data.function.head->data.symbol.name == SYM_Function) {
                 /* 7b. Derivative[n1,...,nm][Function[...]] reduces to a new
                  * Function whose body has been differentiated. Without this
                  * step, f'[x] for a pure-function f would remain stuck as
@@ -1087,11 +1105,11 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                     return reduced;
                 }
             } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
-                       head->data.function.head->data.symbol == SYM_Derivative &&
+                       head->data.function.head->data.symbol.name == SYM_Derivative &&
                        res->data.function.arg_count == 1 &&
                        res->data.function.args[0]->type == EXPR_FUNCTION &&
                        res->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
-                       res->data.function.args[0]->data.function.head->data.symbol == SYM_InterpolatingFunction) {
+                       res->data.function.args[0]->data.function.head->data.symbol.name == SYM_InterpolatingFunction) {
                 /* 7b''. Derivative[d1,...,dm][InterpolatingFunction[...]] reduces
                  * to a fresh InterpolatingFunction carrying the accumulated
                  * derivative orders, which evaluates the mixed partial when
@@ -1103,7 +1121,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                     return reduced;
                 }
             } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
-                       head->data.function.head->data.symbol == SYM_Derivative &&
+                       head->data.function.head->data.symbol.name == SYM_Derivative &&
                        res->data.function.arg_count == 1 &&
                        res->data.function.args[0]->type == EXPR_SYMBOL) {
                 /* 7b'. Derivative[n1,...,nm][f] where f is a symbol with
@@ -1119,7 +1137,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                     return reduced;
                 }
             } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
-                       head->data.function.head->data.symbol == SYM_Composition &&
+                       head->data.function.head->data.symbol.name == SYM_Composition &&
                        head->data.function.arg_count >= 1) {
                 /* 7c. Composition[f1, ..., fn][args...] -> f1[f2[...[fn[args...]]]].
                  * The innermost call carries all the user-supplied arguments;
@@ -1144,7 +1162,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 *changed = true; /* Composition unrolled */
                 return inner;
             } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
-                       head->data.function.head->data.symbol == SYM_InterpolatingFunction) {
+                       head->data.function.head->data.symbol.name == SYM_InterpolatingFunction) {
                 /* 7d. InterpolatingFunction[domain, table][x] -> interpolated
                  * value. The object itself is a normal form; only its
                  * application is reduced here. interp_apply returns NULL for a

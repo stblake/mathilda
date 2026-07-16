@@ -5,8 +5,10 @@
  *
  *   1. Collect the distinct radical bases B_1..B_n (each B_k appears as
  *      B_k^(p/q_k) with q_k > 1).  Require n >= 2 (single-generator inputs
- *      are already handled by Together/Cancel) and every B_k provably
- *      positive (so B_k^(p/q) -> g_k^p is branch-safe).
+ *      are already handled by Together/Cancel) and every B_k real-valued
+ *      (symbols assumed real; only explicit complex constants are rejected)
+ *      -- the reduction is an exact principal-branch rewrite for any real
+ *      radicand regardless of sign.
  *   2. Substitute, outer-base-first, B_k and all its powers to a fresh
  *      polynomial generator g_k (poly_subst_radical_to_gen).
  *   3. Build the relation g_k^{q_k} - V_k for each compound base, where V_k
@@ -59,33 +61,35 @@ static int64_t rr_lcm(int64_t a, int64_t b) {
 
 /* ---- positive-base convention (branch safety) --------------------- */
 
-/* True when `e` is provably positive under the symbol-positive
- * convention: symbols are treated as positive, positive numbers are
- * positive, and sums / products / powers of positive things are
- * positive.  Negative or complex numeric bases return false so we never
- * cross a branch cut (the bug class that caused false corpus DIFFs in the
- * intsimp work). */
-static bool rr_pos_base(const Expr* e) {
+/* True when `e` is a real-valued radicand under the symbol-is-real
+ * convention: symbols and real numbers are real, and functions of real
+ * things are real.  We reject only bases carrying an explicit complex
+ * constant (a `Complex[..]` node or the imaginary unit `I`), which is the
+ * one situation where the principal branch could genuinely differ.
+ *
+ * Positivity is deliberately NOT required: radrat's whole algorithm is an
+ * exact rewrite on the principal branch — each radical B^(p/q) is mapped
+ * to a fresh generator via the identity (B^(1/q))^q = B, generators are
+ * never merged across distinct bases, and the radicals are reconstructed
+ * verbatim before the final Cancel/Factor.  So the reduction is valid for
+ * any real base regardless of sign (e.g. `1 - x`, negative for x > 1),
+ * and the earlier positive-only gate merely blocked legitimate
+ * sign-indefinite radicands such as the nested `1 + Sqrt[1 - x]`. */
+static bool rr_real_base(const Expr* e) {
     if (!e) return false;
     switch (e->type) {
-        case EXPR_INTEGER: return e->data.integer > 0;
-        case EXPR_REAL:    return e->data.real > 0.0;
-        case EXPR_BIGINT:  return mpz_sgn(e->data.bigint) > 0;
-        case EXPR_SYMBOL:  return true;
+        case EXPR_INTEGER:
+        case EXPR_REAL:
+        case EXPR_BIGINT:  return true;
+        case EXPR_SYMBOL:  return strcmp(e->data.symbol.name, "I") != 0;
         case EXPR_FUNCTION: {
             const Expr* h = e->data.function.head;
-            if (h->type != EXPR_SYMBOL) return false;
-            const char* hn = h->data.symbol;
-            int64_t n, d;
-            if (is_rational(e, &n, &d)) return (n > 0) == (d > 0) && n != 0;
-            if (strcmp(hn, "Plus") == 0 || strcmp(hn, "Times") == 0) {
-                for (size_t i = 0; i < e->data.function.arg_count; i++)
-                    if (!rr_pos_base(e->data.function.args[i])) return false;
-                return e->data.function.arg_count > 0;
-            }
-            if (strcmp(hn, "Power") == 0 && e->data.function.arg_count == 2)
-                return rr_pos_base(e->data.function.args[0]);
-            return false;
+            if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "Complex") == 0)
+                return false;
+            if (!rr_real_base(h)) return false;
+            for (size_t i = 0; i < e->data.function.arg_count; i++)
+                if (!rr_real_base(e->data.function.args[i])) return false;
+            return true;
         }
         default: return false;
     }
@@ -98,7 +102,7 @@ static bool rr_pos_base(const Expr* e) {
 static bool rr_parse_radical(const Expr* e, const Expr** base, int64_t* q) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     const Expr* h = e->data.function.head;
-    if (h->type != EXPR_SYMBOL || strcmp(h->data.symbol, "Power") != 0) return false;
+    if (h->type != EXPR_SYMBOL || strcmp(h->data.symbol.name, "Power") != 0) return false;
     if (e->data.function.arg_count != 2) return false;
     int64_t p, qq;
     if (!is_rational(e->data.function.args[1], &p, &qq)) return false;
@@ -138,7 +142,7 @@ static void rr_collect(const Expr* e, RRGen* gens, int* n, bool* overflow) {
     const Expr* base = NULL;
     int64_t q = 0;
     if (rr_parse_radical(e, &base, &q) && rr_has_symbol(base)) {
-        if (!rr_pos_base(base)) { *overflow = true; return; }
+        if (!rr_real_base(base)) { *overflow = true; return; }
         int found = -1;
         for (int i = 0; i < *n; i++)
             if (expr_eq(gens[i].base, (Expr*)base)) { found = i; break; }
@@ -163,12 +167,12 @@ static void rr_collect_symnames(const Expr* e, const char*** set, int* n, int* c
     if (!e) return;
     if (e->type == EXPR_SYMBOL) {
         for (int i = 0; i < *n; i++)
-            if (strcmp((*set)[i], e->data.symbol) == 0) return;
+            if (strcmp((*set)[i], e->data.symbol.name) == 0) return;
         if (*n >= *cap) {
             *cap = *cap ? *cap * 2 : 8;
             *set = realloc(*set, sizeof(char*) * (size_t)*cap);
         }
-        (*set)[(*n)++] = e->data.symbol;
+        (*set)[(*n)++] = e->data.symbol.name;
         return;
     }
     if (e->type == EXPR_FUNCTION) {
@@ -178,12 +182,42 @@ static void rr_collect_symnames(const Expr* e, const char*** set, int* n, int* c
     }
 }
 
+/* True if `e` contains a Power[g, m] whose base g is one of the generator
+ * symbols and whose exponent m is NOT a non-negative integer (a Laurent or
+ * fractional generator power).  Such a term makes a relation g_k^{q_k} - V_k
+ * non-polynomial in the generators; radrat's per-generator univariate
+ * reduction cannot handle it, and feeding it to PolynomialRemainder /
+ * PolynomialExtendedGCD blows up.  Arises with doubly-nested radicals whose
+ * outer base holds an inverse inner radical, e.g. the base 1 + 1/Sqrt[1-x]
+ * substitutes to 1 + g^(-2).  Relations that trip this are skipped. */
+static bool rr_has_nonpoly_gen_power(const Expr* e, const RRGen* gens, int n) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "Power") == 0
+        && e->data.function.arg_count == 2) {
+        const Expr* b = e->data.function.args[0];
+        const Expr* ex = e->data.function.args[1];
+        if (b->type == EXPR_SYMBOL) {
+            for (int i = 0; i < n; i++)
+                if (gens[i].gen && strcmp(b->data.symbol.name, gens[i].gen) == 0) {
+                    if (ex->type != EXPR_INTEGER || ex->data.integer < 0)
+                        return true;
+                    break;
+                }
+        }
+    }
+    if (rr_has_nonpoly_gen_power(h, gens, n)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rr_has_nonpoly_gen_power(e->data.function.args[i], gens, n)) return true;
+    return false;
+}
+
 /* True if every symbol of `e` is a member of the name set. */
 static bool rr_symbols_subset(const Expr* e, const char** set, int n) {
     if (!e) return true;
     if (e->type == EXPR_SYMBOL) {
         for (int i = 0; i < n; i++)
-            if (strcmp(set[i], e->data.symbol) == 0) return true;
+            if (strcmp(set[i], e->data.symbol.name) == 0) return true;
         return false;
     }
     if (e->type == EXPR_FUNCTION) {
@@ -224,6 +258,30 @@ static Expr* rr_call3(const char* head, Expr* a0, Expr* a1, Expr* a2) {
 static Expr* rr_polyrem(Expr* poly, const Expr* rel, const char* gen) {
     return rr_call3("PolynomialRemainder", poly,
                     expr_copy((Expr*)rel), expr_new_symbol(gen));
+}
+
+/* Finalise a reduced (num, den) generator-polynomial pair into a candidate
+ * result: substitute every radical back for its generator, then form
+ * Cancel[num / Factor[den]].  Consumes `num` and `den`; the generators and
+ * `ONE` stay owned by the caller.  Returns NULL on failure. */
+static Expr* rr_finalize(Expr* num, Expr* den, const RRGen* gens, int n,
+                         Expr* ONE) {
+    for (int i = 0; i < n && num && den; i++) {
+        Expr* nb = poly_subst_radical_from_gen(num, gens[i].base, ONE,
+                                               gens[i].q, gens[i].gen);
+        expr_free(num); num = nb;
+        Expr* db = poly_subst_radical_from_gen(den, gens[i].base, ONE,
+                                               gens[i].q, gens[i].gen);
+        expr_free(den); den = db;
+    }
+    if (!num || !den) { if (num) expr_free(num); if (den) expr_free(den);
+                        return NULL; }
+    Expr* dfac = rr_call1("Factor", den);              /* consumes den */
+    if (!dfac) { expr_free(num); return NULL; }
+    Expr* frac = rr_eval_free(expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){num, expr_new_function(expr_new_symbol(SYM_Power),
+                  (Expr*[]){dfac, expr_new_integer(-1)}, 2)}, 2));
+    return rr_call1("Cancel", frac);                   /* consumes frac */
 }
 
 /* ---- the pass ----------------------------------------------------- */
@@ -272,16 +330,25 @@ Expr* simp_radical_rational(const Expr* input,
         sub = nx;
     }
 
-    /* Symbol set of the substituted ring (for the relation guard). */
+    /* Symbol set of the reduction ring (for the relation-usability guard).
+     * This is the generator names (present in `sub`) together with the
+     * problem's parameters.  The parameters must be gathered from the
+     * ORIGINAL `input`, not just `sub`: a variable that appears only inside a
+     * radical base (e.g. `x` in `Sqrt[1-x]` when the numerator carries no bare
+     * `x`) vanishes from `sub` after substitution, yet its relation
+     * g_k^{q_k} - V_k (here g1^2 - (1-x)) is genuine and needed to reduce odd
+     * generator powers.  Collecting from `input` keeps such relations. */
     const char** ringset = NULL;
     int rn = 0, rcap = 0;
     rr_collect_symnames(sub, &ringset, &rn, &rcap);
+    rr_collect_symnames((Expr*)input, &ringset, &rn, &rcap);
 
     /* Step 3: build usable relations  g_k^{q_k} - V_k. */
     Expr* rels[RR_MAX_GENS];
     char* rel_gen[RR_MAX_GENS];
     int nrel = 0;
-    for (int k = 0; k < n; k++) {
+    bool laurent = false;
+    for (int k = 0; k < n && !laurent; k++) {
         if (gens[k].base->type != EXPR_FUNCTION) continue; /* symbol base: free */
         Expr* V = expr_copy(gens[k].base);
         for (int j = 0; j < n; j++) {
@@ -292,6 +359,13 @@ Expr* simp_radical_rational(const Expr* input,
             V = nv;
         }
         if (!rr_symbols_subset(V, ringset, rn)) { expr_free(V); continue; }
+        /* A generator base holding an inverse inner radical substitutes to a
+         * negative generator power (e.g. 1 + 1/Sqrt[1-x] -> 1 + g^(-2)),
+         * making g_k^{q_k} - V_k a Laurent, not polynomial, relation.  radrat's
+         * per-generator univariate reduction cannot handle it and the downstream
+         * PolynomialExtendedGCD blows up, so abandon the whole pass (the input
+         * is outside this method's polynomial-ring model). */
+        if (rr_has_nonpoly_gen_power(V, gens, n)) { expr_free(V); laurent = true; break; }
         /* rel = g_k^{q_k} - V */
         Expr* gpow = expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){expr_new_symbol(gens[k].gen),
@@ -308,8 +382,8 @@ Expr* simp_radical_rational(const Expr* input,
     }
     free(ringset);
 
-    if (nrel == 0) {
-        /* Nothing to reduce against -> defer. */
+    if (laurent || nrel == 0) {
+        /* Laurent relation (out of model) or nothing to reduce against -> defer. */
         expr_free(sub); expr_free(ONE);
         for (int i = 0; i < nrel; i++) expr_free(rels[i]);
         for (int i = 0; i < n; i++) { expr_free(gens[i].base); free(gens[i].gen); }
@@ -386,41 +460,76 @@ Expr* simp_radical_rational(const Expr* input,
         }
     }
 
-    for (int i = 0; i < nrel; i++) expr_free(rels[i]);
-
     if (!num || !den) {
         if (num) expr_free(num);
         if (den) expr_free(den);
+        for (int i = 0; i < nrel; i++) expr_free(rels[i]);
         expr_free(ONE);
         for (int i = 0; i < n; i++) { expr_free(gens[i].base); free(gens[i].gen); }
         return NULL;
     }
 
-    /* Step 5: substitute the radicals back, then Cancel[N / Factor[D]]. */
+    /* Step 5: enumerate candidate representatives; keep the lowest-scoring.
+     *
+     * The reduced (num, den) is the polynomial-in-generators normal form, but
+     * its equivalence class also holds representatives with a generator in the
+     * DENOMINATOR.  Multiplying num and den by g_i^k and reducing the
+     * numerator modulo g_i^{q_i} - B_i trades a numerator radical for the
+     * (often simpler) base polynomial B_i -- the exact dual of the Step-4b
+     * denominator rationalisation.  This folds e.g.
+     *   (1 - Sqrt[1-x]) Sqrt[1+Sqrt[1-x]]  ->  x / Sqrt[1+Sqrt[1-x]]
+     * back to its integrand.  Both sides are multiplied by the same
+     * (generically nonzero) g_i^k, so the move is exact on the principal
+     * branch; the strict score gate below keeps a variant only when it is
+     * genuinely simpler than the input. */
+    Expr* best = rr_finalize(expr_copy(num), expr_copy(den), gens, n, ONE);
+    size_t best_score = best ? score_with_func(best, complexity_func) : SIZE_MAX;
+
     for (int i = 0; i < n; i++) {
-        Expr* nb = poly_subst_radical_from_gen(num, gens[i].base, ONE,
-                                               gens[i].q, gens[i].gen);
-        expr_free(num); num = nb;
-        Expr* db = poly_subst_radical_from_gen(den, gens[i].base, ONE,
-                                               gens[i].q, gens[i].gen);
-        expr_free(den); den = db;
+        Expr* gsym = expr_new_symbol(gens[i].gen);
+        int ndeg = get_degree_poly(num, gsym);
+        expr_free(gsym);
+        if (ndeg <= 0) continue;   /* no g_i to trade out of the numerator */
+
+        for (int64_t k = 1; k < gens[i].q; k++) {
+            /* vnum = reduce(num * g_i^k) ; vden = den * g_i^k */
+            Expr* vnum = rr_eval_free(expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){expr_copy(num),
+                          expr_new_function(expr_new_symbol(SYM_Power),
+                              (Expr*[]){expr_new_symbol(gens[i].gen),
+                                        expr_new_integer(k)}, 2)}, 2));
+            for (int j = 0; j < nrel && vnum; j++)
+                vnum = rr_polyrem(vnum, rels[j], rel_gen[j]);
+            if (!vnum) continue;
+            Expr* vden = rr_eval_free(expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){expr_copy(den),
+                          expr_new_function(expr_new_symbol(SYM_Power),
+                              (Expr*[]){expr_new_symbol(gens[i].gen),
+                                        expr_new_integer(k)}, 2)}, 2));
+            Expr* cand = rr_finalize(vnum, vden, gens, n, ONE);
+            if (!cand) continue;
+            size_t cs = score_with_func(cand, complexity_func);
+            if (!best || cs < best_score) {
+                if (best) expr_free(best);
+                best = cand; best_score = cs;
+            } else {
+                expr_free(cand);
+            }
+        }
     }
+
+    for (int i = 0; i < nrel; i++) expr_free(rels[i]);
+    expr_free(num); expr_free(den);
     expr_free(ONE);
     for (int i = 0; i < n; i++) { expr_free(gens[i].base); free(gens[i].gen); }
 
-    Expr* dfac = rr_call1("Factor", den);              /* consumes den */
-    Expr* frac = rr_eval_free(expr_new_function(expr_new_symbol(SYM_Times),
-        (Expr*[]){num, expr_new_function(expr_new_symbol(SYM_Power),
-                  (Expr*[]){dfac, expr_new_integer(-1)}, 2)}, 2));
-    Expr* result = rr_call1("Cancel", frac);           /* consumes frac */
-    if (!result) return NULL;
+    if (!best) return NULL;
 
     /* Step 6: strict score gate. */
-    if (expr_eq(result, (Expr*)input)
-        || score_with_func(result, complexity_func)
-               >= score_with_func(input, complexity_func)) {
-        expr_free(result);
+    if (expr_eq(best, (Expr*)input)
+        || best_score >= score_with_func(input, complexity_func)) {
+        expr_free(best);
         return NULL;
     }
-    return result;
+    return best;
 }

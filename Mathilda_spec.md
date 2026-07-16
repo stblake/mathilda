@@ -52,7 +52,10 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | Pattern matching (`MatchQ`, `Cases`, `DeleteCases`, `Position`, `Count`, ...) | [`builtins/pattern-matching.md`](docs/spec/builtins/pattern-matching.md) |
 | File I/O (`Get`, `Put`, `PutAppend`, `>>`, `>>>`) | [`builtins/file-io.md`](docs/spec/builtins/file-io.md) |
 | Graphics (`Graphics`, `Graphics3D`, `Show`, `Plot`, `Plot3D`, `StreamPlot`, `Arrow`, `Point`, `Line`, `Rectangle`, `Circle`, `Disk`, `Polygon`, `Text`, ...) | [`builtins/graphics.md`](docs/spec/builtins/graphics.md) |
+| Graphs (`Graph`, `DirectedEdge`, `UndirectedEdge`, `GraphQ`, `VertexList`, `EdgeList`, `AdjacencyMatrix`, `FindShortestPath`, `GraphPlot`, ...) | [`builtins/graphs.md`](docs/spec/builtins/graphs.md) |
 | FLINT context (`` FLINT`PolynomialGCD ``, `` FLINT`Factor ``, `` FLINT`Det ``, `` FLINT`Zeta ``, ...) — direct access to the FLINT-backed kernels | [`builtins/flint.md`](docs/spec/builtins/flint.md) |
+| BLAS context (`` BLAS`ddot ``, `` BLAS`dgemv ``, `` BLAS`dgemm ``, `` BLAS`zgemm ``, ...) — direct access to the machine-precision BLAS kernels | [`builtins/blas.md`](docs/spec/builtins/blas.md) |
+| LAPACK context (`` LAPACK`dgesv ``, `` LAPACK`dgeqrf ``, `` LAPACK`dgesdd ``, `` LAPACK`dgeev ``, ...) — direct access to the LAPACK drivers | [`builtins/lapack.md`](docs/spec/builtins/lapack.md) |
 
 ## Changelog
 

@@ -178,13 +178,13 @@ static NrPoly* nr_build_poly(Expr* equation, Expr* var, mpfr_prec_t wp,
     /* The equation is evaluated before NRoots sees it, so a numeric (in)equality
      * may already have collapsed:  1 == 0 -> False,  1 == 1 -> True. */
     if (equation && equation->type == EXPR_SYMBOL) {
-        if (equation->data.symbol == SYM_False) { *was_constant = true; *constant_zero = false; return NULL; }
-        if (equation->data.symbol == SYM_True)  { *was_constant = true; *constant_zero = true;  return NULL; }
+        if (equation->data.symbol.name == SYM_False) { *was_constant = true; *constant_zero = false; return NULL; }
+        if (equation->data.symbol.name == SYM_True)  { *was_constant = true; *constant_zero = true;  return NULL; }
     }
 
     if (!equation || equation->type != EXPR_FUNCTION
         || equation->data.function.head->type != EXPR_SYMBOL
-        || equation->data.function.head->data.symbol != SYM_Equal
+        || equation->data.function.head->data.symbol.name != SYM_Equal
         || equation->data.function.arg_count != 2) {
         nr_warn("neqn", "first argument is not an equation lhs == rhs.");
         return NULL;
@@ -655,11 +655,11 @@ static bool nr_is_known_option(const char* s) {
 static bool nr_is_option_arg(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     if (h != SYM_Rule && h != SYM_RuleDelayed) return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* lhs = e->data.function.args[0];
-    return lhs->type == EXPR_SYMBOL && nr_is_known_option(lhs->data.symbol);
+    return lhs->type == EXPR_SYMBOL && nr_is_known_option(lhs->data.symbol.name);
 }
 
 static NrMethod nr_method_from_name(const char* s) {
@@ -687,15 +687,15 @@ static bool nr_to_double_real(Expr* e, double* out) {
 static bool nr_apply_option(Expr* rule, NrOpts* o) {
     Expr* lhs = rule->data.function.args[0];
     Expr* rhs = rule->data.function.args[1];
-    const char* name = lhs->data.symbol;
+    const char* name = lhs->data.symbol.name;
 
     if (name == SYM_Method) {
         Expr* m = rhs;
         if (m->type == EXPR_FUNCTION && m->data.function.head->type == EXPR_SYMBOL
-            && m->data.function.head->data.symbol == SYM_List
+            && m->data.function.head->data.symbol.name == SYM_List
             && m->data.function.arg_count >= 1)
             m = m->data.function.args[0];
-        if (m->type == EXPR_SYMBOL && m->data.symbol == SYM_Automatic) {
+        if (m->type == EXPR_SYMBOL && m->data.symbol.name == SYM_Automatic) {
             o->method = NR_AUTO; o->method_name = NULL; return true;
         }
         if (m->type == EXPR_STRING) {
@@ -705,16 +705,16 @@ static bool nr_apply_option(Expr* rule, NrOpts* o) {
             return true;
         }
         if (m->type == EXPR_SYMBOL) {
-            o->method_name = m->data.symbol;
-            o->method = nr_method_from_name(m->data.symbol);
-            if (o->method == NR_AUTO) { nr_warn("bdmtd", "unknown Method %s.", m->data.symbol); return false; }
+            o->method_name = m->data.symbol.name;
+            o->method = nr_method_from_name(m->data.symbol.name);
+            if (o->method == NR_AUTO) { nr_warn("bdmtd", "unknown Method %s.", m->data.symbol.name); return false; }
             return true;
         }
         nr_warn("bdmtd", "invalid Method value."); return false;
     }
     if (name == SYM_PrecisionGoal) {
         if (rhs->type == EXPR_SYMBOL
-            && (rhs->data.symbol == SYM_Automatic || rhs->data.symbol == SYM_Infinity)) {
+            && (rhs->data.symbol.name == SYM_Automatic || rhs->data.symbol.name == SYM_Infinity)) {
             o->prec_goal = -1.0; return true;
         }
         double v;
@@ -722,7 +722,7 @@ static bool nr_apply_option(Expr* rule, NrOpts* o) {
         nr_warn("badopt", "invalid PrecisionGoal value."); return false;
     }
     if (name == SYM_MaxIterations) {
-        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic) { o->max_iter = -1; return true; }
+        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) { o->max_iter = -1; return true; }
         if (rhs->type == EXPR_INTEGER && rhs->data.integer > 0) { o->max_iter = (int)rhs->data.integer; return true; }
         nr_warn("badopt", "MaxIterations must be a positive integer or Automatic."); return false;
     }

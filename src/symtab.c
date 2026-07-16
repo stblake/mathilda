@@ -12,12 +12,11 @@
 
 #define SYMTAB_SIZE 65535
 
-typedef struct SymEntry {
-    SymbolDef* def;
-    struct SymEntry* next;
-} SymEntry;
-
-static SymEntry* symtab[SYMTAB_SIZE] = {0};
+/* Phase 2: one table backs both interning and definition lookup. Each bucket
+ * chains SymbolDef nodes directly (the old SymEntry indirection is gone). A node
+ * exists as soon as its name is interned; `has_def` marks whether it carries a
+ * real definition. */
+static SymbolDef* symtab[SYMTAB_SIZE] = {0};
 
 static unsigned int hash(const char* s) {
     unsigned int h = 5381;
@@ -25,60 +24,133 @@ static unsigned int hash(const char* s) {
     return h % SYMTAB_SIZE;
 }
 
+static void free_rule_list(Rule* r) {
+    while (r) {
+        Rule* next = r->next;
+        expr_free(r->pattern);
+        expr_free(r->replacement);
+        free(r);
+        r = next;
+    }
+}
+
+/* Reset a node to "interned only": free its definition payload but KEEP the node
+ * and its canonical name string in the table (so SYM_* and any live Expr keep
+ * valid pointers) and KEEP is_system. This is what symtab_clear / symtab_init /
+ * symtab_remove_symbol leave behind -- observationally an undefined symbol. */
+static void reset_node_payload(SymbolDef* d) {
+    free_rule_list(d->own_values);   d->own_values = NULL;
+    free_rule_list(d->down_values);  d->down_values = NULL;
+    if (d->docstring) { free(d->docstring); d->docstring = NULL; }
+    if (d->default_options) { expr_free(d->default_options); d->default_options = NULL; }
+    d->builtin_func = NULL;
+    d->attributes = 0;
+    d->base_attributes = 0;
+    d->base_seeded = 0;
+    d->has_def = 0;
+}
+
+/* The single find-or-create used by both interning and definition lookup.
+ * `materialize` marks the node as a real definition (has_def=1). An already
+ * interned input is recognised by pointer identity first (the common hot case),
+ * falling back to strcmp only for fresh string literals. */
+static SymbolDef* node_intern(const char* name, int materialize) {
+    if (!name) return NULL;
+    unsigned int idx = hash(name);
+    for (SymbolDef* d = symtab[idx]; d; d = d->next) {
+        if (d->symbol_name == name || strcmp(d->symbol_name, name) == 0) {
+            if (materialize) d->has_def = 1;
+            return d;
+        }
+    }
+    /* Not present: create a node owning a stable copy of the name. calloc zeroes
+     * every field (own_values=NULL, attributes=0, is_system=0, base_seeded=0). */
+    SymbolDef* d = calloc(1, sizeof(SymbolDef));
+    size_t len = strlen(name);
+    char* copy = malloc(len + 1);
+    memcpy(copy, name, len + 1);
+    d->symbol_name = copy;
+    d->has_def = (uint8_t)(materialize ? 1 : 0);
+    d->next = symtab[idx];
+    symtab[idx] = d;
+    return d;
+}
+
+/* Non-creating find (any node, defined or interned-only). */
+static SymbolDef* node_find(const char* name) {
+    if (!name) return NULL;
+    unsigned int idx = hash(name);
+    for (SymbolDef* d = symtab[idx]; d; d = d->next)
+        if (d->symbol_name == name || strcmp(d->symbol_name, name) == 0)
+            return d;
+    return NULL;
+}
+
 void symtab_init(void) {
-    memset(symtab, 0, sizeof(symtab));
-    /* Populate the SYM_* canonical-pointer cache so that any code path
-     * that compares e->data.symbol against SYM_* (match.c, eval.c, the
-     * arithmetic heads, etc.) works as soon as the symtab is live -- not
-     * only after core_init() has finished registering builtins. Tests
-     * that initialise just the symtab depend on this. */
+    /* Reset every existing node to interned-only rather than memset-ing the
+     * bucket array: the array now owns the interned name strings, and SYM_*
+     * (populated by sym_names_init below) plus any live Expr point straight at
+     * them, so a memset would strand those pointers. First call: table empty,
+     * so this loop is a no-op. */
+    for (int i = 0; i < SYMTAB_SIZE; i++)
+        for (SymbolDef* d = symtab[i]; d; d = d->next)
+            reset_node_payload(d);
+    /* Populate the SYM_* canonical-pointer cache so that any code path that
+     * compares e->data.symbol.name against SYM_* (match.c, eval.c, the arithmetic
+     * heads, etc.) works as soon as the symtab is live -- not only after
+     * core_init() has finished registering builtins. Tests that initialise just
+     * the symtab depend on this. */
     sym_names_init();
 }
 
-/* Both lookup helpers below first intern the input name, then key on
- * the canonical pointer. This collapses the per-bucket strcmp into a
- * pointer compare and is correct because the bucket entries' symbol_name
- * fields are themselves interned at creation time. */
 SymbolDef* symtab_get_def(const char* symbol_name) {
-    const char* canon = intern_symbol(symbol_name);
-    unsigned int idx = hash(canon);
-    SymEntry* entry = symtab[idx];
-    while (entry) {
-        if (entry->def->symbol_name == canon) {
-            return entry->def;
-        }
-        entry = entry->next;
-    }
-
-    // Create new symbol definition
-    SymbolDef* def = malloc(sizeof(SymbolDef));
-    def->symbol_name = (char*)canon;  /* interned; symtab does not own the storage */
-    def->own_values = NULL;
-    def->down_values = NULL;
-    def->builtin_func = NULL;
-    def->attributes = 0;
-    def->docstring = NULL;
-    def->default_options = NULL;
-
-    SymEntry* new_entry = malloc(sizeof(SymEntry));
-    new_entry->def = def;
-    new_entry->next = symtab[idx];
-    symtab[idx] = new_entry;
-
-    return def;
+    return node_intern(symbol_name, 1);
 }
 
 SymbolDef* symtab_lookup(const char* symbol_name) {
-    const char* canon = intern_symbol(symbol_name);
-    unsigned int idx = hash(canon);
-    SymEntry* entry = symtab[idx];
-    while (entry) {
-        if (entry->def->symbol_name == canon) {
-            return entry->def;
+    /* Only materialized definitions "exist" for the context resolver and
+     * Options[]; an interned-only node reads as absent, matching the pre-merge
+     * behavior where such names had no SymbolDef at all. */
+    SymbolDef* d = node_find(symbol_name);
+    return (d && d->has_def) ? d : NULL;
+}
+
+/* ============================================================
+ * String interning (Phase 2: merged into the symbol table).
+ * intern_symbol canonicalizes a name to a stable pointer without materializing
+ * a definition, so merely mentioning a symbol does not make it appear in
+ * Names[]. These implement the sym_intern.h API over the unified table.
+ * ============================================================ */
+const char* intern_symbol(const char* name) {
+    SymbolDef* d = node_intern(name, 0);
+    return d ? d->symbol_name : NULL;
+}
+
+int intern_is_system(const char* name) {
+    SymbolDef* d = node_find(name);
+    return d ? d->is_system : 0;
+}
+
+void intern_mark_all_system(void) {
+    for (int i = 0; i < SYMTAB_SIZE; i++)
+        for (SymbolDef* d = symtab[i]; d; d = d->next)
+            d->is_system = 1;
+}
+
+void intern_clear(void) {
+    /* Full teardown: free every node, its payload, and its name string. Any
+     * previously-returned interned pointer (including SYM_*) becomes invalid. */
+    for (int i = 0; i < SYMTAB_SIZE; i++) {
+        SymbolDef* d = symtab[i];
+        while (d) {
+            SymbolDef* next = d->next;
+            reset_node_payload(d);
+            free(d->symbol_name);
+            free(d);
+            d = next;
         }
-        entry = entry->next;
+        symtab[i] = NULL;
     }
-    return NULL;
 }
 
 void symtab_add_builtin(const char* symbol_name, BuiltinFunc func) {
@@ -140,7 +212,7 @@ static const Expr* strip_pattern_wrappers(const Expr* p) {
     while (p && p->type == EXPR_FUNCTION && p->data.function.head &&
            p->data.function.head->type == EXPR_SYMBOL &&
            p->data.function.arg_count >= 1) {
-        const char* h = p->data.function.head->data.symbol;
+        const char* h = p->data.function.head->data.symbol.name;
         if (h == SYM_HoldPattern || h == SYM_Verbatim) {
             p = p->data.function.args[0];
             continue;
@@ -165,7 +237,7 @@ static bool slot_is_variable_length(const Expr* p) {
         p->data.function.head->type != EXPR_SYMBOL) {
         return false;
     }
-    const char* h = p->data.function.head->data.symbol;
+    const char* h = p->data.function.head->data.symbol.name;
     if (h == SYM_BlankSequence) return true;
     if (h == SYM_BlankNullSequence) return true;
     if (h == SYM_Optional) return true;
@@ -190,7 +262,7 @@ static bool pattern_arg_is_optional(const Expr* p) {
         p->data.function.head->type != EXPR_SYMBOL) {
         return false;
     }
-    const char* h = p->data.function.head->data.symbol;
+    const char* h = p->data.function.head->data.symbol.name;
     if (h == SYM_Optional) return true;
     if (h == SYM_Pattern && p->data.function.arg_count == 2) {
         return pattern_arg_is_optional(p->data.function.args[1]);
@@ -223,14 +295,14 @@ static const char* pattern_arg_head_canon(const Expr* p) {
 
     Expr* head = p->data.function.head;
     if (!head || head->type != EXPR_SYMBOL) return NULL;
-    const char* h = head->data.symbol;
+    const char* h = head->data.symbol.name;
 
     /* Blank[] -> wildcard; Blank[h] -> h. */
     if (h == SYM_Blank) {
         if (p->data.function.arg_count == 0) return NULL;
         Expr* head_arg = p->data.function.args[0];
         if (head_arg && head_arg->type == EXPR_SYMBOL) {
-            return intern_symbol(head_arg->data.symbol);
+            return intern_symbol(head_arg->data.symbol.name);
         }
         return NULL;
     }
@@ -340,7 +412,7 @@ static int32_t pattern_specificity(const Expr* p) {
 
     Expr* head = p->data.function.head;
     if (head && head->type == EXPR_SYMBOL) {
-        const char* h = head->data.symbol;
+        const char* h = head->data.symbol.name;
         size_t ac = p->data.function.arg_count;
 
         if (h == SYM_HoldPattern || h == SYM_Verbatim) {
@@ -481,7 +553,7 @@ static Expr* pattern_canonicalize(Expr* p) {
 
     Expr* head = p->data.function.head;
     if (head && head->type == EXPR_SYMBOL) {
-        const char* h = head->data.symbol;
+        const char* h = head->data.symbol.name;
 
         /* HoldPattern / Verbatim explicitly opt out of canonicalization;
          * their whole purpose is to match a literal subtree without
@@ -566,13 +638,13 @@ static Expr* pattern_canonicalize(Expr* p) {
     head = p->data.function.head;
     uint32_t attrs = 0;
     if (head && head->type == EXPR_SYMBOL) {
-        SymbolDef* def = symtab_lookup(head->data.symbol);
+        SymbolDef* def = symtab_lookup(head->data.symbol.name);
         if (def) attrs = def->attributes;
     }
 
     /* Flat: flatten nested same-head args (Plus[Plus[a,b],c] -> Plus[a,b,c]). */
     if (head && head->type == EXPR_SYMBOL && (attrs & ATTR_FLAT)) {
-        eval_flatten_args(p, head->data.symbol);
+        eval_flatten_args(p, head->data.symbol.name);
     }
 
     /* Orderless: sort args using the same comparator the evaluator uses
@@ -585,7 +657,7 @@ static Expr* pattern_canonicalize(Expr* p) {
     /* Power[Times[t1,...,tn], k_Integer] -> Times[Power[t1,k],...,Power[tn,k]].
      * Mirrors src/power.c's integer-exponent fast path that fires
      * unconditionally during normal evaluation. */
-    if (head && head->type == EXPR_SYMBOL && head->data.symbol == SYM_Power
+    if (head && head->type == EXPR_SYMBOL && head->data.symbol.name == SYM_Power
         && p->data.function.arg_count == 2) {
         Expr* base = p->data.function.args[0];
         Expr* exp  = p->data.function.args[1];
@@ -593,7 +665,7 @@ static Expr* pattern_canonicalize(Expr* p) {
             && base && base->type == EXPR_FUNCTION
             && base->data.function.head
             && base->data.function.head->type == EXPR_SYMBOL
-            && base->data.function.head->data.symbol == SYM_Times) {
+            && base->data.function.head->data.symbol.name == SYM_Times) {
             size_t bc = base->data.function.arg_count;
             Expr** new_args = malloc(sizeof(Expr*) * bc);
             for (size_t i = 0; i < bc; i++) {
@@ -618,14 +690,14 @@ static Expr* pattern_canonicalize(Expr* p) {
     /* Power[Power[base, e1], e2] -> Power[base, e1*e2] when both
      * exponents are numeric literals. Matches the evaluator's nested-
      * Power collapse for sound bases. */
-    if (head && head->type == EXPR_SYMBOL && head->data.symbol == SYM_Power
+    if (head && head->type == EXPR_SYMBOL && head->data.symbol.name == SYM_Power
         && p->data.function.arg_count == 2) {
         Expr* base = p->data.function.args[0];
         Expr* outer_exp = p->data.function.args[1];
         if (base && base->type == EXPR_FUNCTION
             && base->data.function.head
             && base->data.function.head->type == EXPR_SYMBOL
-            && base->data.function.head->data.symbol == SYM_Power
+            && base->data.function.head->data.symbol.name == SYM_Power
             && base->data.function.arg_count == 2) {
             Expr* inner_base = base->data.function.args[0];
             Expr* inner_exp  = base->data.function.args[1];
@@ -736,45 +808,16 @@ void symtab_clear_symbol(const char* symbol_name) {
 }
 
 void symtab_remove_symbol(const char* symbol_name) {
-    const char* canon = intern_symbol(symbol_name);
-    unsigned int idx = hash(canon);
-    SymEntry* entry = symtab[idx];
-    SymEntry* prev = NULL;
-    while (entry) {
-        if (entry->def->symbol_name == canon) {
-            /* Removing the definition invalidates any cached evaluation
-             * that referenced this symbol's rules. */
-            eval_clock_bump();
-
-            Rule* curr = entry->def->own_values;
-            while (curr) {
-                Rule* next = curr->next;
-                expr_free(curr->pattern);
-                expr_free(curr->replacement);
-                free(curr);
-                curr = next;
-            }
-            curr = entry->def->down_values;
-            while (curr) {
-                Rule* next = curr->next;
-                expr_free(curr->pattern);
-                expr_free(curr->replacement);
-                free(curr);
-                curr = next;
-            }
-            if (entry->def->docstring) free(entry->def->docstring);
-            if (entry->def->default_options) expr_free(entry->def->default_options);
-            /* symbol_name is interned and owned by sym_intern; do not free. */
-            free(entry->def);
-
-            if (prev) prev->next = entry->next;
-            else symtab[idx] = entry->next;
-            free(entry);
-            return;
-        }
-        prev = entry;
-        entry = entry->next;
-    }
+    SymbolDef* d = node_find(symbol_name);
+    if (!d || !d->has_def) return;   /* nothing materialized to remove */
+    /* Removing the definition invalidates any cached evaluation that referenced
+     * this symbol's rules. */
+    eval_clock_bump();
+    /* Reset to interned-only. The node and its name string remain in the table
+     * so a later reference recreates a fresh, empty definition and, crucially,
+     * any live Expr (and SYM_*) that already hold the interned name pointer stay
+     * valid. is_system is preserved. */
+    reset_node_payload(d);
 }
 
 /* ============================================================
@@ -800,11 +843,11 @@ void symtab_remove_symbol(const char* symbol_name) {
 static void alpha_collect_names(const Expr* p, const char** names, int* n) {
     if (!p || p->type != EXPR_FUNCTION) return;
     Expr* head = p->data.function.head;
-    if (head && head->type == EXPR_SYMBOL && head->data.symbol == SYM_Pattern
+    if (head && head->type == EXPR_SYMBOL && head->data.symbol.name == SYM_Pattern
         && p->data.function.arg_count >= 1
         && p->data.function.args[0]
         && p->data.function.args[0]->type == EXPR_SYMBOL) {
-        const char* nm = p->data.function.args[0]->data.symbol;
+        const char* nm = p->data.function.args[0]->data.symbol.name;
         int seen = 0;
         for (int i = 0; i < *n; i++) if (names[i] == nm) { seen = 1; break; }
         if (!seen && *n < ALPHA_MAX_VARS) names[(*n)++] = nm;
@@ -822,10 +865,11 @@ static void alpha_rename(Expr* p, const char** names, int n) {
     if (!p) return;
     if (p->type == EXPR_SYMBOL) {
         for (int i = 0; i < n; i++) {
-            if (p->data.symbol == names[i]) {
+            if (p->data.symbol.name == names[i]) {
                 char buf[24];
                 snprintf(buf, sizeof(buf), "$Pat$%d", i);
-                p->data.symbol = (char*)intern_symbol(buf);
+                p->data.symbol.name = (char*)intern_symbol(buf);
+                p->data.symbol.def = NULL;   /* name changed: invalidate cached def */
                 break;
             }
         }
@@ -885,69 +929,34 @@ bool symtab_remove_matching_rule(const char* symbol_name, const Expr* lhs,
     return removed;
 }
 
+void symtab_for_each(void (*visit)(const char* name, SymbolDef* def,
+                                   void* user), void* user) {
+    if (!visit) return;
+    for (int i = 0; i < SYMTAB_SIZE; i++)
+        for (SymbolDef* d = symtab[i]; d; d = d->next)
+            if (d->has_def)   /* skip interned-only nodes: they are not "symbols" */
+                visit(d->symbol_name, d, user);
+}
+
 void symtab_clear(void) {
-    for (int i = 0; i < SYMTAB_SIZE; i++) {
-        SymEntry* entry = symtab[i];
-        while (entry) {
-            SymEntry* next = entry->next;
-            
-            // Inline symtab_clear_symbol logic without lookup
-            Rule* curr = entry->def->own_values;
-            while (curr) {
-                Rule* r_next = curr->next;
-                expr_free(curr->pattern);
-                expr_free(curr->replacement);
-                free(curr);
-                curr = r_next;
-            }
-            entry->def->own_values = NULL;
-
-            curr = entry->def->down_values;
-            while (curr) {
-                Rule* r_next = curr->next;
-                expr_free(curr->pattern);
-                expr_free(curr->replacement);
-                free(curr);
-                curr = r_next;
-            }
-            entry->def->down_values = NULL;
-
-            if (entry->def->docstring) free(entry->def->docstring);
-            if (entry->def->default_options) expr_free(entry->def->default_options);
-            /* symbol_name is interned and owned by sym_intern; do not free. */
-            free(entry->def);
-            free(entry);
-            entry = next;
-        }
-        symtab[i] = NULL;
-    }
+    /* Reset every definition to interned-only. Nodes and their name strings are
+     * retained so SYM_* and any Expr created before the clear keep valid
+     * pointers -- callers routinely clear between subtests and keep evaluating.
+     * Use intern_clear() for a full teardown that also frees the name strings. */
+    for (int i = 0; i < SYMTAB_SIZE; i++)
+        for (SymbolDef* d = symtab[i]; d; d = d->next)
+            reset_node_payload(d);
 }
 
 
 Rule* symtab_get_own_values(const char* symbol_name) {
-    const char* canon = intern_symbol(symbol_name);
-    unsigned int idx = hash(canon);
-    SymEntry* entry = symtab[idx];
-    while (entry) {
-        if (entry->def->symbol_name == canon) {
-            return entry->def->own_values;
-        }
-        entry = entry->next;
-    }
-    return NULL;
+    SymbolDef* d = node_find(symbol_name);
+    return d ? d->own_values : NULL;
 }
 
 Rule* symtab_get_down_values(const char* symbol_name) {
-    const char* canon = intern_symbol(symbol_name);
-    unsigned int idx = hash(canon);
-    SymEntry* entry = symtab[idx];
-    while (entry) {
-        if (entry->def->symbol_name == canon) {
-            return entry->def->down_values;
-        }
-        entry = entry->next;
-    }
-    return NULL;
+    SymbolDef* d = node_find(symbol_name);
+    return d ? d->down_values : NULL;
 }
 
 /* §3.5 input-side dispatch key. Returns the canonical head of an
@@ -965,18 +974,16 @@ static const char* input_arg_head_canon(const Expr* arg) {
     if (arg->type == EXPR_SYMBOL) return intern_symbol("Symbol");
     if (arg->type == EXPR_FUNCTION && arg->data.function.head &&
         arg->data.function.head->type == EXPR_SYMBOL) {
-        return intern_symbol(arg->data.function.head->data.symbol);
+        return intern_symbol(arg->data.function.head->data.symbol.name);
     }
     return NULL;
 }
 
-Expr* apply_down_values(Expr* expr) {
-    if (!expr || expr->type != EXPR_FUNCTION) return NULL;
-
-    Expr* head = expr->data.function.head;
-    if (head->type != EXPR_SYMBOL) return NULL;
-
-    SymbolDef* def = symtab_get_def(head->data.symbol);
+/* Phase 3a: def-threaded entry point. The evaluator resolves the head's def
+ * once per evaluate_step and passes it here, so DownValue dispatch does not
+ * re-hash the head. `def` must be the definition of `expr`'s (symbol) head. */
+Expr* apply_down_values_def(SymbolDef* def, Expr* expr) {
+    if (!def || !expr || expr->type != EXPR_FUNCTION) return NULL;
     if (!def->down_values) return NULL;
 
     /* §3.5 dispatch filter: pre-compute the input's shape once, then
@@ -1015,7 +1022,7 @@ Expr* apply_down_values(Expr* expr) {
             Expr* opts = env_get(env, "$OptionsPattern$");
             if (opts) {
                 Expr* resolved =
-                    optionvalue_inject_context(result, head->data.symbol, opts);
+                    optionvalue_inject_context(result, def->symbol_name, opts);
                 expr_free(result);
                 result = resolved;
             }
@@ -1027,10 +1034,19 @@ Expr* apply_down_values(Expr* expr) {
     return NULL;
 }
 
+/* Compatibility wrapper: resolve the head's def, then delegate. Used by callers
+ * outside the evaluator hot path that only have the expression in hand. */
+Expr* apply_down_values(Expr* expr) {
+    if (!expr || expr->type != EXPR_FUNCTION) return NULL;
+    Expr* head = expr->data.function.head;
+    if (!head || head->type != EXPR_SYMBOL) return NULL;
+    return apply_down_values_def(symtab_get_def(head->data.symbol.name), expr);
+}
+
 Expr* apply_own_values(Expr* expr) {
     if (!expr || expr->type != EXPR_SYMBOL) return NULL;
     
-    SymbolDef* def = symtab_get_def(expr->data.symbol);
+    SymbolDef* def = symtab_get_def(expr->data.symbol.name);
     Rule* rule = def->own_values;
     while (rule) {
         MatchEnv* env = env_new();

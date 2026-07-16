@@ -34,7 +34,7 @@
 static bool list2_nums3(Expr* e, double* a, double* b) {
     return e && e->type == EXPR_FUNCTION && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_List
+        && e->data.function.head->data.symbol.name == SYM_List
         && e->data.function.arg_count == 2
         && numericize_bound(e->data.function.args[0], a)
         && numericize_bound(e->data.function.args[1], b);
@@ -51,7 +51,7 @@ static bool plotrange_zband(Expr* rhs, double* lo, double* hi) {
     bool ok = false;
     if (v->type == EXPR_FUNCTION && v->data.function.head
         && v->data.function.head->type == EXPR_SYMBOL
-        && v->data.function.head->data.symbol == SYM_List) {
+        && v->data.function.head->data.symbol.name == SYM_List) {
         size_t n = v->data.function.arg_count;
         if (n >= 2 && list2_nums3(v->data.function.args[n - 1], &a, &b)) ok = true;
         else if (n == 2 && numericize_bound(v->data.function.args[0], &a)
@@ -112,7 +112,7 @@ static bool split_options3(Expr* res, Plot3DSampleOpts* sopts,
         if (!is_rule_arg(arg)) FAIL_CLEANUP3();
         Expr* lhs = arg->data.function.args[0];
         Expr* rhs = arg->data.function.args[1];
-        const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol : NULL;
+        const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol.name : NULL;
 
         if (name == SYM_PlotPoints) {
             long v;
@@ -127,10 +127,10 @@ static bool split_options3(Expr* res, Plot3DSampleOpts* sopts,
              * Plot3D shows grid lines on the surface out of the box. */
             Expr* v = evaluate(expr_copy(rhs));
             bool on = (v->type == EXPR_SYMBOL
-                       && (v->data.symbol == SYM_All || v->data.symbol == SYM_True
-                           || v->data.symbol == SYM_Automatic));
+                       && (v->data.symbol.name == SYM_All || v->data.symbol.name == SYM_True
+                           || v->data.symbol.name == SYM_Automatic));
             bool off = (v->type == EXPR_SYMBOL
-                        && (v->data.symbol == SYM_None || v->data.symbol == SYM_False));
+                        && (v->data.symbol.name == SYM_None || v->data.symbol.name == SYM_False));
             expr_free(v);
             if (!on && !off) FAIL_CLEANUP3();
             sopts->mesh = on;
@@ -140,7 +140,7 @@ static bool split_options3(Expr* res, Plot3DSampleOpts* sopts,
             sopts->color_function = rhs;
         } else if (name == SYM_ColorFunctionScaling) {
             Expr* v = evaluate(expr_copy(rhs));
-            sopts->color_function_scaling = !(v->type == EXPR_SYMBOL && v->data.symbol == SYM_False);
+            sopts->color_function_scaling = !(v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False);
             expr_free(v);
         } else if (name == SYM_ExclusionStyle) {
             /* Store the raw rhs for use in the sampler; also pass through to
@@ -216,8 +216,8 @@ static bool eval_region3(Expr* region_fn, double x, double y, double z) {
     Expr* call3 = expr_new_function(expr_copy(region_fn), args3, 3);
     Expr* r3 = evaluate(call3);
     expr_free(call3);
-    bool true3 = (r3->type == EXPR_SYMBOL && r3->data.symbol == SYM_True);
-    bool false3 = (r3->type == EXPR_SYMBOL && r3->data.symbol == SYM_False);
+    bool true3 = (r3->type == EXPR_SYMBOL && r3->data.symbol.name == SYM_True);
+    bool false3 = (r3->type == EXPR_SYMBOL && r3->data.symbol.name == SYM_False);
     expr_free(r3);
     if (true3) return true;
     if (false3) return false;
@@ -229,8 +229,8 @@ static bool eval_region3(Expr* region_fn, double x, double y, double z) {
 static bool plot3d_eval_z(double x, double y, Plot3DEvalCtx* ctx, double* z_out) {
     Expr* xval = expr_new_real(x);
     Expr* yval = expr_new_real(y);
-    symtab_add_own_value(ctx->varx->data.symbol, ctx->varx, xval);
-    symtab_add_own_value(ctx->vary->data.symbol, ctx->vary, yval);
+    symtab_add_own_value(ctx->varx->data.symbol.name, ctx->varx, xval);
+    symtab_add_own_value(ctx->vary->data.symbol.name, ctx->vary, yval);
     Expr* result = evaluate(ctx->body);
     double z;
     bool ok = expr_to_real_double(result, &z) && isfinite(z);
@@ -244,8 +244,8 @@ static bool plot3d_eval_z(double x, double y, Plot3DEvalCtx* ctx, double* z_out)
 static bool plot3d_eval_fn(double x, double y, Plot3DEvalCtx* ctx, double* z_out) {
     Expr* xval = expr_new_real(x);
     Expr* yval = expr_new_real(y);
-    symtab_add_own_value(ctx->varx->data.symbol, ctx->varx, xval);
-    symtab_add_own_value(ctx->vary->data.symbol, ctx->vary, yval);
+    symtab_add_own_value(ctx->varx->data.symbol.name, ctx->varx, xval);
+    symtab_add_own_value(ctx->vary->data.symbol.name, ctx->vary, yval);
     Expr* result = evaluate(ctx->body);
 
     double z;
@@ -455,7 +455,7 @@ static Expr* surface_color(Expr* single_color, size_t fi, size_t nfun) {
 
     bool is_list = (single_color->type == EXPR_FUNCTION
                     && single_color->data.function.head->type == EXPR_SYMBOL
-                    && single_color->data.function.head->data.symbol == SYM_List);
+                    && single_color->data.function.head->data.symbol.name == SYM_List);
     if (is_list) {
         size_t len = single_color->data.function.arg_count;
         if (len == 0) return palette_color(fi);
@@ -764,7 +764,7 @@ Expr* builtin_plot3d(Expr* res) {
     size_t nfun;
     bool is_list = (f->type == EXPR_FUNCTION && f->data.function.head
                     && f->data.function.head->type == EXPR_SYMBOL
-                    && f->data.function.head->data.symbol == SYM_List);
+                    && f->data.function.head->data.symbol.name == SYM_List);
     if (is_list) {
         nfun = f->data.function.arg_count;
         bodies = f->data.function.args; /* borrowed */

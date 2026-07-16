@@ -57,7 +57,7 @@ static bool intrat_trace_enabled(void) {
     Rule* r = def->own_values;
     while (r) {
         if (r->replacement && r->replacement->type == EXPR_SYMBOL
-            && r->replacement->data.symbol == SYM_True) return true;
+            && r->replacement->data.symbol.name == SYM_True) return true;
         r = r->next;
     }
     return false;
@@ -144,7 +144,7 @@ static bool intrat_polyqr(Expr* a, Expr* b, Expr* x, Expr** out_q, Expr** out_r)
     expr_free(call);
     if (!result || result->type != EXPR_FUNCTION
         || result->data.function.head->type != EXPR_SYMBOL
-        || result->data.function.head->data.symbol != SYM_List
+        || result->data.function.head->data.symbol.name != SYM_List
         || result->data.function.arg_count != 2) {
         if (result) expr_free(result);
         *out_q = NULL; *out_r = NULL;
@@ -177,7 +177,7 @@ static bool intrat_polyq_test(Expr* expr, Expr* var) {
     Expr* call = internal_polynomialq(args, 2);
     Expr* val  = evaluate(call);
     expr_free(call);
-    bool ok = (val && val->type == EXPR_SYMBOL && val->data.symbol == SYM_True);
+    bool ok = (val && val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_True);
     if (val) expr_free(val);
     return ok;
 }
@@ -187,7 +187,7 @@ bool intrat_freeq_test(Expr* expr, Expr* var) {
     Expr* call = internal_freeq(args, 2);
     Expr* val  = evaluate(call);
     expr_free(call);
-    bool ok = (val && val->type == EXPR_SYMBOL && val->data.symbol == SYM_True);
+    bool ok = (val && val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_True);
     if (val) expr_free(val);
     return ok;
 }
@@ -252,7 +252,7 @@ static Expr* intrat_content(Expr* p, Expr* x) {
     expr_free(clist);
     if (!cl || cl->type != EXPR_FUNCTION
         || cl->data.function.head->type != EXPR_SYMBOL
-        || cl->data.function.head->data.symbol != SYM_List) {
+        || cl->data.function.head->data.symbol.name != SYM_List) {
         if (cl) expr_free(cl);
         return expr_new_integer(1);
     }
@@ -341,7 +341,7 @@ static bool intrat_extended_euclidean(Expr* a, Expr* b, Expr* c, Expr* x,
     Expr* coefs = eg_eval->data.function.args[1];
     if (coefs->type != EXPR_FUNCTION
         || coefs->data.function.head->type != EXPR_SYMBOL
-        || coefs->data.function.head->data.symbol != SYM_List
+        || coefs->data.function.head->data.symbol.name != SYM_List
         || coefs->data.function.arg_count != 2) {
         expr_free(eg_eval);
         return false;
@@ -546,7 +546,7 @@ static Expr* intrat_integrate_polynomial(Expr* poly, Expr* x) {
     expr_free(cl_call);
     if (!cl || cl->type != EXPR_FUNCTION
         || cl->data.function.head->type != EXPR_SYMBOL
-        || cl->data.function.head->data.symbol != SYM_List) {
+        || cl->data.function.head->data.symbol.name != SYM_List) {
         if (cl) expr_free(cl);
         /* Fall back to the trivial constant case: a polynomial that is
          * a pure constant has CoefficientList -> {const}. */
@@ -598,7 +598,7 @@ static bool extract_factored_denominator(Expr* fs, Expr* x,
     /* Times-headed: fs = c0 * factor1 * factor2 * ... */
     if (fs_expanded->type == EXPR_FUNCTION
         && fs_expanded->data.function.head->type == EXPR_SYMBOL
-        && fs_expanded->data.function.head->data.symbol == SYM_Times) {
+        && fs_expanded->data.function.head->data.symbol.name == SYM_Times) {
         Expr* c0 = expr_new_integer(1);
         Expr* pol = NULL;
         int k = 0;
@@ -614,7 +614,7 @@ static bool extract_factored_denominator(Expr* fs, Expr* x,
             if (pol) { expr_free(c0); return false; }
             if (arg->type == EXPR_FUNCTION
                 && arg->data.function.head->type == EXPR_SYMBOL
-                && arg->data.function.head->data.symbol == SYM_Power
+                && arg->data.function.head->data.symbol.name == SYM_Power
                 && arg->data.function.arg_count == 2
                 && arg->data.function.args[1]->type == EXPR_INTEGER
                 && arg->data.function.args[1]->data.integer >= 1) {
@@ -632,7 +632,7 @@ static bool extract_factored_denominator(Expr* fs, Expr* x,
     /* Single Power[pol, k]. */
     if (fs_expanded->type == EXPR_FUNCTION
         && fs_expanded->data.function.head->type == EXPR_SYMBOL
-        && fs_expanded->data.function.head->data.symbol == SYM_Power
+        && fs_expanded->data.function.head->data.symbol.name == SYM_Power
         && fs_expanded->data.function.arg_count == 2
         && fs_expanded->data.function.args[1]->type == EXPR_INTEGER
         && fs_expanded->data.function.args[1]->data.integer >= 1
@@ -762,12 +762,12 @@ static Expr* intrat_squarefree_list(Expr* p) {
 
     if (fs_eval->type == EXPR_FUNCTION
         && fs_eval->data.function.head->type == EXPR_SYMBOL
-        && fs_eval->data.function.head->data.symbol == SYM_Times) {
+        && fs_eval->data.function.head->data.symbol.name == SYM_Times) {
         for (size_t i = 0; i < fs_eval->data.function.arg_count; i++) {
             Expr* arg = fs_eval->data.function.args[i];
             if (arg->type == EXPR_FUNCTION
                 && arg->data.function.head->type == EXPR_SYMBOL
-                && arg->data.function.head->data.symbol == SYM_Power
+                && arg->data.function.head->data.symbol.name == SYM_Power
                 && arg->data.function.arg_count == 2
                 && arg->data.function.args[1]->type == EXPR_INTEGER) {
                 int k = (int)arg->data.function.args[1]->data.integer;
@@ -780,7 +780,7 @@ static Expr* intrat_squarefree_list(Expr* p) {
         }
     } else if (fs_eval->type == EXPR_FUNCTION
         && fs_eval->data.function.head->type == EXPR_SYMBOL
-        && fs_eval->data.function.head->data.symbol == SYM_Power
+        && fs_eval->data.function.head->data.symbol.name == SYM_Power
         && fs_eval->data.function.arg_count == 2
         && fs_eval->data.function.args[1]->type == EXPR_INTEGER) {
         int k = (int)fs_eval->data.function.args[1]->data.integer;
@@ -852,7 +852,7 @@ static Expr* intrat_squarefree_list(Expr* p) {
 static Expr* list_get(Expr* lst, size_t i) {
     if (!lst || lst->type != EXPR_FUNCTION
         || lst->data.function.head->type != EXPR_SYMBOL
-        || lst->data.function.head->data.symbol != SYM_List
+        || lst->data.function.head->data.symbol.name != SYM_List
         || i == 0 || i > lst->data.function.arg_count) return NULL;
     return expr_copy(lst->data.function.args[i - 1]);
 }
@@ -875,7 +875,7 @@ static void intrat_split_constant(Expr* p, Expr* x,
     }
     if (p->type != EXPR_FUNCTION
         || p->data.function.head->type != EXPR_SYMBOL
-        || p->data.function.head->data.symbol != SYM_Times) {
+        || p->data.function.head->data.symbol.name != SYM_Times) {
         *out_const = expr_new_integer(1);
         *out_residue = expr_copy(p);
         return;
@@ -955,7 +955,7 @@ static Expr* intrat_apart_list(Expr* f, Expr* x, const Expr* alpha) {
 
     if (ap->type == EXPR_FUNCTION
         && ap->data.function.head->type == EXPR_SYMBOL
-        && ap->data.function.head->data.symbol == SYM_Plus) {
+        && ap->data.function.head->data.symbol.name == SYM_Plus) {
         size_t n = ap->data.function.arg_count;
         Expr** terms = (Expr**)malloc(sizeof(Expr*) * n);
         for (size_t i = 0; i < n; i++) terms[i] = expr_copy(ap->data.function.args[i]);
@@ -995,7 +995,7 @@ static bool intrat_nthroot_q(Expr* p, Expr* x, int* n_out, Expr** a_out, Expr** 
     size_t nterms;
     if (c->type == EXPR_FUNCTION
         && c->data.function.head->type == EXPR_SYMBOL
-        && c->data.function.head->data.symbol == SYM_Plus) {
+        && c->data.function.head->data.symbol.name == SYM_Plus) {
         terms = c->data.function.args;
         nterms = c->data.function.arg_count;
     } else {
@@ -1015,7 +1015,7 @@ static bool intrat_nthroot_q(Expr* p, Expr* x, int* n_out, Expr** a_out, Expr** 
         int deg = 0;
         if (term->type == EXPR_FUNCTION
             && term->data.function.head->type == EXPR_SYMBOL
-            && term->data.function.head->data.symbol == SYM_Power
+            && term->data.function.head->data.symbol.name == SYM_Power
             && term->data.function.arg_count == 2
             && expr_eq(term->data.function.args[0], x)
             && term->data.function.args[1]->type == EXPR_INTEGER) {
@@ -1025,7 +1025,7 @@ static bool intrat_nthroot_q(Expr* p, Expr* x, int* n_out, Expr** a_out, Expr** 
             deg = 1; coeff = expr_new_integer(1);
         } else if (term->type == EXPR_FUNCTION
             && term->data.function.head->type == EXPR_SYMBOL
-            && term->data.function.head->data.symbol == SYM_Times) {
+            && term->data.function.head->data.symbol.name == SYM_Times) {
             /* coeff * x^n form. */
             Expr** factors = term->data.function.args;
             size_t nf = term->data.function.arg_count;
@@ -1037,7 +1037,7 @@ static bool intrat_nthroot_q(Expr* p, Expr* x, int* n_out, Expr** a_out, Expr** 
                     ccoll[ccn++] = expr_copy(f);
                 } else if (deg == 0 && f->type == EXPR_FUNCTION
                     && f->data.function.head->type == EXPR_SYMBOL
-                    && f->data.function.head->data.symbol == SYM_Power
+                    && f->data.function.head->data.symbol.name == SYM_Power
                     && f->data.function.arg_count == 2
                     && expr_eq(f->data.function.args[0], x)
                     && f->data.function.args[1]->type == EXPR_INTEGER) {
@@ -1091,7 +1091,7 @@ static bool intrat_nthroot_q(Expr* p, Expr* x, int* n_out, Expr** a_out, Expr** 
 static Expr* find_prs_at_degree(Expr* prs, Expr* x, int target_deg) {
     if (prs->type != EXPR_FUNCTION
         || prs->data.function.head->type != EXPR_SYMBOL
-        || prs->data.function.head->data.symbol != SYM_List) return NULL;
+        || prs->data.function.head->data.symbol.name != SYM_List) return NULL;
     for (size_t i = 0; i < prs->data.function.arg_count; i++) {
         Expr* el = prs->data.function.args[i];
         Expr* el_e = expr_expand(el);
@@ -1153,7 +1153,7 @@ static bool poly_only_uses(Expr* poly, Expr* bvar) {
     expr_free(vars_call);
     if (!vars || vars->type != EXPR_FUNCTION
         || vars->data.function.head->type != EXPR_SYMBOL
-        || vars->data.function.head->data.symbol != SYM_List) {
+        || vars->data.function.head->data.symbol.name != SYM_List) {
         if (vars) expr_free(vars);
         return false;
     }
@@ -1401,7 +1401,7 @@ static Expr* expand_simple_rootsum(Expr* poly, Expr* bvar, Expr* body) {
     expr_free(cl_call);
     if (!cl || cl->type != EXPR_FUNCTION
         || cl->data.function.head->type != EXPR_SYMBOL
-        || cl->data.function.head->data.symbol != SYM_List) {
+        || cl->data.function.head->data.symbol.name != SYM_List) {
         if (cl) expr_free(cl);
         return NULL;
     }
@@ -1624,40 +1624,149 @@ static Expr* intrat_naive_log_part(Expr* f, Expr* x) {
     return result;
 }
 
+/* Divide p by the polynomial GCD of its NONZERO coefficients viewed as a
+ * polynomial in cvar (the content of p in cvar).  internal PolynomialGCD
+ * bails to a held call when handed a zero argument (PolynomialGCD[x^2, 0,
+ * 4 x^2] returns 1, not x^2), so zero coefficients are filtered first.
+ * Returns Cancel[p / content] when the content is a non-trivial polynomial,
+ * else a copy of p.  Borrows p; caller owns the result.  Used by the
+ * transcendental log-part path to strip the x-only content that the
+ * denominator-clearing scaling introduces into the Rothstein-Trager
+ * resultant, exposing the (constant-residue) polynomial in the residue
+ * variable. */
+static Expr* intrat_strip_content_var(Expr* p, Expr* cvar) {
+    Expr* cl = eval_and_free(internal_coefficientlist(
+        (Expr*[]){expr_copy(p), expr_copy(cvar)}, 2));
+    if (!cl || cl->type != EXPR_FUNCTION
+        || cl->data.function.head->type != EXPR_SYMBOL
+        || cl->data.function.head->data.symbol.name != SYM_List
+        || cl->data.function.arg_count == 0) {
+        if (cl) expr_free(cl);
+        return expr_copy(p);
+    }
+    size_t n = cl->data.function.arg_count;
+    Expr** nz = (Expr**)malloc(sizeof(Expr*) * n);
+    size_t nnz = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* c = cl->data.function.args[i];
+        if (!is_zero_poly(c)) nz[nnz++] = expr_copy(c);
+    }
+    expr_free(cl);
+    if (nnz == 0) { free(nz); return expr_copy(p); }
+    Expr* content = (nnz == 1) ? nz[0] : internal_polynomialgcd(nz, nnz);
+    free(nz);
+    if (head_is(content, SYM_PolynomialGCD)
+        || (content->type == EXPR_INTEGER
+            && (content->data.integer == 1 || content->data.integer == -1))) {
+        expr_free(content);
+        return expr_copy(p);
+    }
+    Expr* div = internal_divide((Expr*[]){expr_copy(p), content}, 2);
+    return eval_and_free(internal_cancel((Expr*[]){div}, 1));
+}
+
+/* True iff polynomial p is free of every variable named in `xgate` (a single
+ * symbol, or a List of symbols) — i.e. the roots of p are constants of the
+ * derivation.  Used by the residue criterion's κ_D split. */
+static bool intrat_freeq_all(Expr* p, Expr* xgate) {
+    if (xgate->type == EXPR_FUNCTION
+        && xgate->data.function.head->type == EXPR_SYMBOL
+        && xgate->data.function.head->data.symbol.name == SYM_List) {
+        for (size_t gi = 0; gi < xgate->data.function.arg_count; gi++)
+            if (!intrat_freeq_test(p, xgate->data.function.args[gi]))
+                return false;
+        return true;
+    }
+    return intrat_freeq_test(p, xgate);
+}
+
+/* Recursively walk a Factor[] result, routing each irreducible factor (base of
+ * a Power, or a bare polynomial in `t`) into the constant-residue product *Qs
+ * (free of the gate vars) or the non-constant product *Qn.  Numeric / t-free
+ * factors are dropped.  *Qs, *Qn are running products (owned), each starting at
+ * integer 1; internal_times adopts them, so they are consumed and replaced. */
+static void intrat_route_factor(Expr* f, Expr* t, Expr* xgate,
+                                Expr** Qs, Expr** Qn) {
+    if (f->type == EXPR_FUNCTION
+        && f->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = f->data.function.head->data.symbol.name;
+        if (h == SYM_Times) {
+            for (size_t k = 0; k < f->data.function.arg_count; k++)
+                intrat_route_factor(f->data.function.args[k], t, xgate, Qs, Qn);
+            return;
+        }
+        if (h == SYM_Power) {   /* squarefree bucket => exponent 1: route base */
+            intrat_route_factor(f->data.function.args[0], t, xgate, Qs, Qn);
+            return;
+        }
+    }
+    if (get_degree_poly(f, t) <= 0) return;   /* numeric / t-free: drop */
+    Expr** dst = intrat_freeq_all(f, xgate) ? Qs : Qn;
+    *dst = expand_and_free(internal_times((Expr*[]){*dst, expr_copy(f)}, 2));
+}
+
+/* Split a squarefree bucket polynomial Qi (in `t`) into its constant-residue
+ * sub-product (returned) and, multiplied into *Qn_acc, its non-constant-residue
+ * sub-product.  Returns the constant product (owned; integer 1 if none). */
+static Expr* intrat_bucket_const_part(Expr* Qi, Expr* t, Expr* xgate,
+                                      Expr** Qn_acc) {
+    Expr* factored = eval_and_free(internal_factor((Expr*[]){expr_copy(Qi)}, 1));
+    Expr* Qs = expr_new_integer(1);
+    if (factored) { intrat_route_factor(factored, t, xgate, &Qs, Qn_acc); expr_free(factored); }
+    return Qs;
+}
+
 /* IntRationalLogPart core. Returns either the {Q, S} pair list
  * (root_sum=false) or the symbolic RootSum sum (root_sum=true).
  * On algorithmic failure returns NULL.
  *
+ * `a`, `d` are the (owned) numerator / denominator in the main variable `x`
+ * with squarefree `d`; `t` is the residue variable.  Two optional hooks
+ * generalise the pure-rational computation to a transcendental monomial
+ * extension (the recursive-Risch Lazard-Rioboo-Trager log part):
+ *   - `dprime_override != NULL` injects the monomial derivation `D(d)` in
+ *     place of the ordinary `d/dx` (here `x` is the monomial variable);
+ *   - `xgate != NULL` requires the residues (roots of the resultant) to be
+ *     constants of the derivation (free of `xgate`).  Bronstein's residue
+ *     criterion (Thm 5.6.1) splits the resultant r = r_s · r_n by whether each
+ *     factor's residues are constant: the constant part r_s yields elementary
+ *     logs, the non-constant part r_n does not.  When `remainder_out != NULL`
+ *     and the split is genuinely mixed, the elementary r_s logs are returned AND
+ *     *remainder_out is set to the (owned) r_n rational-function remainder to be
+ *     reported unintegrated (partial log part).  When `remainder_out == NULL`
+ *     (caller refuses partials) a mixed resultant declines (NULL), as does the
+ *     all-non-constant case; the all-constant case is unchanged.
+ * With both NULL this is the original pure-rational log part.
+ *
  * Direct port of IntegrateRational.m:751-801. */
-static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
-                                          bool root_sum) {
-    intrat_trace("IntRationalLogPart", "IN", f);
-
-    /* Together-canonicalise f so the numerator and denominator are
-     * clean polynomials with no internal fractions in parametric
-     * coefficients.  Apart pieces like
-     *   (-b/(2 a^2) - x/(2 a)) / (a^2 + b^2 x^2)
-     * arrive with rational coefficients in (a, b); without this
-     * normalisation the resultant chain emits held PolynomialGCD
-     * calls that pollute the downstream (Q, S) pair. */
-    Expr* tg_call = internal_together((Expr*[]){expr_copy(f)}, 1);
-    Expr* fc = eval_and_free(tg_call);
-
-    /* a = Numerator[fc], d = Denominator[fc]. */
-    Expr* a_raw = intrat_numerator(fc);
-    Expr* a = eval_and_free(a_raw);
-    Expr* d_raw = intrat_denominator(fc);
-    Expr* d = expr_expand(d_raw); expr_free(d_raw);
-    expr_free(fc);
-
-    /* prs = SubresultantPolynomialRemainders[d, a - t*D[d,x], x] */
-    Expr* dprime = intrat_d(d, x);
-    Expr* dprime_e = expr_expand(dprime); expr_free(dprime);
+static Expr* intrat_log_part_core(Expr* a, Expr* d, Expr* x, Expr* t,
+                                  bool root_sum, Expr* dprime_override,
+                                  Expr* xgate, Expr** remainder_out, bool decide) {
+    if (remainder_out) *remainder_out = NULL;
+    /* prs = SubresultantPolynomialRemainders[d, a - t*D(d), x] */
+    Expr* dprime_e;
+    if (dprime_override) {
+        dprime_e = expr_expand(dprime_override);
+    } else {
+        Expr* dprime = intrat_d(d, x);
+        dprime_e = expr_expand(dprime); expr_free(dprime);
+    }
     Expr* tdprime = internal_times(
         (Expr*[]){expr_copy(t), dprime_e}, 2);
     Expr* atdp_raw = internal_subtract(
         (Expr*[]){expr_copy(a), tdprime}, 2);
-    Expr* atdp = expr_expand(atdp_raw); expr_free(atdp_raw);
+    Expr* atdp;
+    if (dprime_override) {
+        /* the monomial derivation D(d) can carry x-denominators (e.g. the
+         * u'/u of a logarithmic kernel); clear them so the resultant / PRS
+         * operate on genuine polynomials.  The x-only denominator scales the
+         * resultant by a unit that the x-content strip below removes. */
+        Expr* tg = eval_and_free(internal_together((Expr*[]){atdp_raw}, 1));
+        Expr* nn = intrat_numerator(tg);
+        atdp = expr_expand(nn); expr_free(nn); expr_free(tg);
+    } else {
+        atdp = expr_expand(atdp_raw); expr_free(atdp_raw);
+    }
 
     Expr* prs_args[3] = { expr_copy(d), expr_copy(atdp), expr_copy(x) };
     Expr* prs_call = expr_new_function(
@@ -1681,26 +1790,135 @@ static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
      * t.  Concrete witness: x/(1 + x^8) has resultant (1 + 4096 t^4)^2
      * but PRS-bottom primitive in t is t (1 + 4096 t^4), structurally
      * different. */
+    /* The residue map is a/D(d) = P(x)/W(x) where atdp = P - t*W is linear in t.
+     * Snapshot it before the Resultant call adopts `atdp` — the κ_D split's
+     * remainder reconstruction resultant needs it (partial log part). */
+    Expr* atdp_keep = xgate ? expr_copy(atdp) : NULL;
     Expr* res_args[3] = { expr_copy(d), atdp, expr_copy(x) };
     Expr* res_call = expr_new_function(
         expr_new_symbol(SYM_Resultant), res_args, 3);
     Expr* resultant_raw = evaluate(res_call);
     expr_free(res_call);
     if (!resultant_raw) {
-        expr_free(a); expr_free(d); expr_free(prs); return NULL;
+        expr_free(a); expr_free(d); expr_free(prs);
+        if (atdp_keep) expr_free(atdp_keep);
+        return NULL;
     }
     Expr* resultant = intrat_primitive(resultant_raw, t);
     expr_free(resultant_raw);
+
+    /* κ_D split state (partial log part).  In `partial_mode` the resultant has a
+     * genuine mix of constant- and non-constant-residue factors: emit only the
+     * constant-residue (r_s) logs and report the r_n part via *remainder_out. */
+    bool partial_mode = false;
+    Expr* remainder_local = NULL;
+
+    if (xgate) {
+        /* Strip the lower-field content the denominator-clearing scaling leaves,
+         * then classify the residues (roots of the resultant) by whether they
+         * are constants of the derivation (free of every gate variable).  A
+         * single symbol gates a single-kernel extension; a `List` gates a tower
+         * proper part.  Bronstein's residue criterion (Thm 5.6.1) keeps the
+         * elementary constant-residue logs even when non-constant residues are
+         * present; the fully-constant case is unchanged. */
+        Expr* stripped = intrat_strip_content_var(resultant, t);
+        expr_free(resultant);
+        resultant = stripped;
+        bool free_all = intrat_freeq_all(resultant, xgate);
+        if (!free_all && decide) {
+            /* Decision mode: ANY non-constant residue proves this simple part has no
+             * elementary integral (Bronstein residue criterion, Thm 5.6.1(ii)).  We
+             * only need the VERDICT, not the elementary constant-residue logs or a
+             * reconstructed remainder — return an inert marker the recursive-Risch
+             * caller (rt_field_lrt_logpart) decodes into a NONELEMENTARY verdict. */
+            expr_free(resultant); expr_free(a); expr_free(d); expr_free(prs);
+            if (atdp_keep) expr_free(atdp_keep);
+            return expr_new_symbol("Integrate`$NonConstantResidue");
+        }
+        if (!free_all) {
+            /* Mixed or fully non-constant.  A caller that cannot represent a
+             * partial result (remainder_out == NULL — e.g. the exponential
+             * coupled path) declines exactly as before.  Otherwise defer to the
+             * per-factor partition after the squarefree split below. */
+            if (!remainder_out) {
+                expr_free(resultant); expr_free(a); expr_free(d); expr_free(prs);
+                if (atdp_keep) expr_free(atdp_keep);
+                return NULL;
+            }
+            partial_mode = true;
+        }
+    }
 
     /* Q = SquareFree[resultant]: list of {poly_i, mult_i}. */
     Expr* Q = intrat_squarefree_list(resultant);
     expr_free(resultant);
     if (!Q) {
-        expr_free(a); expr_free(d); expr_free(prs); return NULL;
+        expr_free(a); expr_free(d); expr_free(prs);
+        if (atdp_keep) expr_free(atdp_keep);
+        return NULL;
     }
 
     int deg_d = get_degree_poly(d, x);
     size_t nQ = Q->data.function.arg_count;
+
+    /* Partial κ_D partition: per bucket, the constant-residue sub-product
+     * Qconst[i] (used in the output instead of the full bucket) and the global
+     * non-constant product Q_n_poly (whose residues drive the remainder).  Only
+     * built in partial_mode; NULL entries mean "no constant residues in bucket". */
+    Expr** Qconst = NULL;
+    if (partial_mode) {
+        Qconst = (Expr**)malloc(sizeof(Expr*) * nQ);
+        Expr* Q_n_poly = expr_new_integer(1);
+        bool any_const = false;
+        for (size_t i_idx = 0; i_idx < nQ; i_idx++) {
+            Expr* Qi = list_get(Q->data.function.args[i_idx], 1);
+            if (!Qi || get_degree_poly(Qi, t) <= 0) { if (Qi) expr_free(Qi); Qconst[i_idx] = NULL; continue; }
+            Qconst[i_idx] = intrat_bucket_const_part(Qi, t, xgate, &Q_n_poly);
+            expr_free(Qi);
+            if (Qconst[i_idx] && get_degree_poly(Qconst[i_idx], t) > 0) any_const = true;
+        }
+        if (!any_const) {
+            /* No elementary logs to emit — decline (also prevents an infinite
+             * Integrate[remainder] regress).  Decision mode never reaches here: it
+             * short-circuits at the non-constant-residue detection above. */
+            for (size_t i_idx = 0; i_idx < nQ; i_idx++) if (Qconst[i_idx]) expr_free(Qconst[i_idx]);
+            free(Qconst); expr_free(Q_n_poly); expr_free(Q);
+            expr_free(a); expr_free(d); expr_free(prs);
+            if (atdp_keep) expr_free(atdp_keep);
+            return NULL;
+        }
+        /* Remainder = the d_n-part of a/d, where d_n = gcd(d, Res_t(Q_n, atdp))
+         * collects the poles whose residue is a root of Q_n (non-constant).
+         * atdp = P - t*W is linear in t, so Res_t(Q_n, atdp) = W^deg * Q_n(P/W)
+         * (a poly in x); its gcd with d picks exactly those poles. */
+        Expr* resn_call = expr_new_function(expr_new_symbol(SYM_Resultant),
+            (Expr*[]){ Q_n_poly, atdp_keep, expr_copy(t) }, 3);   /* adopts both */
+        atdp_keep = NULL;
+        Expr* Res_n = eval_and_free(resn_call);
+        Expr* d_n = Res_n ? intrat_polygcd_monic(d, Res_n, x) : NULL;
+        if (Res_n) expr_free(Res_n);
+        Expr* d_s = d_n ? intrat_exquo(d, d_n, x) : NULL;
+        Expr* rr = NULL; Expr* ss = NULL;
+        bool ok = d_n && d_s
+            && intrat_extended_euclidean(d_n, d_s, a, x, &rr, &ss);  /* rr d_n + ss d_s = a */
+        if (rr) expr_free(rr);
+        if (ok) {
+            /* a/(d_n d_s) = rr/d_s + ss/d_n; the non-constant (d_n) part is ss/d_n. */
+            remainder_local = eval_and_free(internal_together((Expr*[]){
+                internal_divide((Expr*[]){ ss, expr_copy(d_n) }, 2) }, 1));
+        } else if (ss) { expr_free(ss); }
+        if (d_n) expr_free(d_n);
+        if (d_s) expr_free(d_s);
+        if (!remainder_local) {
+            /* Could not reconstruct the remainder — decline rather than emit a
+             * partial result whose residual identity we cannot certify. */
+            for (size_t i_idx = 0; i_idx < nQ; i_idx++) if (Qconst[i_idx]) expr_free(Qconst[i_idx]);
+            free(Qconst); expr_free(Q);
+            expr_free(a); expr_free(d); expr_free(prs);
+            return NULL;
+        }
+    }
+    if (atdp_keep) { expr_free(atdp_keep); atdp_keep = NULL; }
 
     /* Compute S[i] for each i.  Where Q[[i,1]] has non-trivial t-
      * degree, we derive a polynomial in (t, x). */
@@ -1777,10 +1995,17 @@ static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
         size_t nterms = 0;
         for (size_t i_idx = 0; i_idx < nQ; i_idx++) {
             if (!S[i_idx]) continue;
-            Expr* Qi_pair = Q->data.function.args[i_idx];
-            Expr* Qi = list_get(Qi_pair, 1);
-            if (!Qi) continue;
-            if (get_degree_poly(Qi, t) <= 0) { expr_free(Qi); continue; }
+            /* In partial_mode restrict the RootSum to the constant-residue
+             * sub-product of the bucket (S[i] mod Qi agrees on its sub-roots). */
+            Expr* Qi;
+            if (partial_mode) {
+                if (!Qconst[i_idx] || get_degree_poly(Qconst[i_idx], t) <= 0) continue;
+                Qi = expr_copy(Qconst[i_idx]);
+            } else {
+                Qi = list_get(Q->data.function.args[i_idx], 1);
+                if (!Qi) continue;
+                if (get_degree_poly(Qi, t) <= 0) { expr_free(Qi); continue; }
+            }
 
             /* RootSum[Function[t, Qi], Function[t, t Log[S[i]]]]. */
             Expr* func1 = expr_new_function(expr_new_symbol(SYM_Function),
@@ -1797,6 +2022,11 @@ static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
         for (size_t i_idx = 0; i_idx < nQ; i_idx++) if (S[i_idx]) expr_free(S[i_idx]);
         free(S);
         expr_free(Q);
+        if (partial_mode) {
+            for (size_t i_idx = 0; i_idx < nQ; i_idx++) if (Qconst[i_idx]) expr_free(Qconst[i_idx]);
+            free(Qconst);
+            *remainder_out = remainder_local;
+        }
         Expr* result;
         if (nterms == 0) { free(terms); result = expr_new_integer(0); }
         else if (nterms == 1) { result = terms[0]; free(terms); }
@@ -1810,21 +2040,94 @@ static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
     size_t npairs = 0;
     for (size_t i_idx = 0; i_idx < nQ; i_idx++) {
         if (!S[i_idx]) continue;
-        Expr* Qi_pair = Q->data.function.args[i_idx];
-        Expr* Qi = list_get(Qi_pair, 1);
-        if (!Qi) continue;
-        if (get_degree_poly(Qi, t) <= 0) { expr_free(Qi); continue; }
+        Expr* Qi;
+        if (partial_mode) {
+            if (!Qconst[i_idx] || get_degree_poly(Qconst[i_idx], t) <= 0) continue;
+            Qi = expr_copy(Qconst[i_idx]);
+        } else {
+            Qi = list_get(Q->data.function.args[i_idx], 1);
+            if (!Qi) continue;
+            if (get_degree_poly(Qi, t) <= 0) { expr_free(Qi); continue; }
+        }
         pairs[npairs++] = expr_new_function(expr_new_symbol(SYM_List),
             (Expr*[]){Qi, expr_copy(S[i_idx])}, 2);
     }
     for (size_t i_idx = 0; i_idx < nQ; i_idx++) if (S[i_idx]) expr_free(S[i_idx]);
     free(S);
     expr_free(Q);
+    if (partial_mode) {
+        for (size_t i_idx = 0; i_idx < nQ; i_idx++) if (Qconst[i_idx]) expr_free(Qconst[i_idx]);
+        free(Qconst);
+        *remainder_out = remainder_local;
+    }
 
     Expr* result = expr_new_function(expr_new_symbol(SYM_List), pairs, npairs);
     free(pairs);
     intrat_trace("IntRationalLogPart", "OUT", result);
     return result;
+}
+
+/* Pure-rational log part: Together-canonicalise f, split into a/d, and run
+ * the core with the ordinary derivation (no transcendental hooks). */
+static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
+                                          bool root_sum) {
+    intrat_trace("IntRationalLogPart", "IN", f);
+    /* Together-canonicalise f so the numerator and denominator are clean
+     * polynomials with no internal fractions in parametric coefficients. */
+    Expr* fc = eval_and_free(internal_together((Expr*[]){expr_copy(f)}, 1));
+    Expr* a = eval_and_free(intrat_numerator(fc));
+    Expr* d_raw = intrat_denominator(fc);
+    Expr* d = expr_expand(d_raw); expr_free(d_raw);
+    expr_free(fc);
+    return intrat_log_part_core(a, d, x, t, root_sum, NULL, NULL, NULL, false);
+}
+
+/* Defined below (Phase 4 consumer); forward-declared for the transcendental
+ * log part which hands its {Q_i, S_i} pairs straight to Rioboo's LogToReal. */
+static Expr* intrat_log_to_real_pairs(Expr* pair_list, Expr* x, Expr* t);
+
+/* Transcendental (recursive-Risch) Lazard-Rioboo-Trager log part.
+ *
+ * Integrates the PROPER, SQUAREFREE-denominator fraction  a(tau)/d(tau)  of a
+ * single transcendental monomial extension tau (= Log[u] or E^u over Q(x)),
+ * whose log part carries ALGEBRAIC (non-rational) residues — the class the
+ * single-constant-per-factor SolveAlways ansatz cannot express.  `Dd` is the
+ * monomial derivation D(d) = d/dx(d) + (D tau) d/dtau(d), computed by the
+ * caller.  The residues are the roots of the Rothstein-Trager resultant
+ * Res_tau(a - z Dd, d) (z = the residue variable); each squarefree factor
+ * Q_i(z) with its log argument S_i(z, tau) is converted to real Log + ArcTan
+ * form by Rioboo's LogToReal.  Returns the antiderivative as a function of
+ * `tau` (the caller substitutes tau -> kernel), or NULL when the integral is
+ * not elementary in this form / a factor exceeds LogToReal's bounded scope.
+ * `a`, `d`, `Dd`, `tau`, `z`, `xreal` are all borrowed.
+ *
+ * When `remainder_out != NULL`, the residue criterion may return a PARTIAL log
+ * part (Bronstein Thm 5.6.1): the elementary constant-residue logs, with the
+ * non-constant-residue rational remainder written to *remainder_out (owned, a
+ * function of `tau`) for the caller to report unintegrated.  *remainder_out is
+ * NULL when the whole log part is elementary. */
+static Expr* intrat_transcendental_log_part(Expr* a, Expr* d, Expr* tau,
+                                            Expr* z, Expr* Dd, Expr* xreal,
+                                            Expr** remainder_out, bool decide) {
+    if (remainder_out) *remainder_out = NULL;
+    Expr* rem = NULL;
+    Expr* pairs = intrat_log_part_core(expr_copy(a), expr_copy(d), tau, z,
+                                       /*root_sum=*/false, Dd, xreal, &rem, decide);
+    if (!pairs) { if (rem) expr_free(rem); return NULL; }
+    /* Decision mode short-circuit: a non-constant residue yields the inert marker
+     * Integrate`$NonConstantResidue (no pair list) — propagate it up verbatim for
+     * the recursive-Risch caller to decode into a NONELEMENTARY verdict. */
+    if (pairs->type == EXPR_SYMBOL
+        && strcmp(pairs->data.symbol.name, "Integrate`$NonConstantResidue") == 0) {
+        if (rem) expr_free(rem);
+        return pairs;
+    }
+    Expr* real = intrat_log_to_real_pairs(pairs, tau, z);
+    expr_free(pairs);
+    if (!real) { if (rem) expr_free(rem); return NULL; }  /* LogToReal declined */
+    if (remainder_out) *remainder_out = rem;
+    else if (rem) expr_free(rem);   /* caller refuses partial: shouldn't happen */
+    return real;
 }
 
 /* ====================================================================
@@ -2019,7 +2322,7 @@ static Expr* build_log_term(Expr* alpha, Expr* S, Expr* t) {
 static void split_term_re_im(Expr* term, Expr** re_out, Expr** im_out) {
     if (term->type == EXPR_FUNCTION
         && term->data.function.head->type == EXPR_SYMBOL
-        && term->data.function.head->data.symbol == SYM_Complex
+        && term->data.function.head->data.symbol.name == SYM_Complex
         && term->data.function.arg_count == 2) {
         *re_out = expr_copy(term->data.function.args[0]);
         *im_out = expr_copy(term->data.function.args[1]);
@@ -2027,7 +2330,7 @@ static void split_term_re_im(Expr* term, Expr** re_out, Expr** im_out) {
     }
     if (term->type == EXPR_FUNCTION
         && term->data.function.head->type == EXPR_SYMBOL
-        && term->data.function.head->data.symbol == SYM_Times) {
+        && term->data.function.head->data.symbol.name == SYM_Times) {
         /* Look for a Complex factor among the Times args. */
         Expr* complex_factor = NULL;
         size_t complex_idx = 0;
@@ -2036,7 +2339,7 @@ static void split_term_re_im(Expr* term, Expr** re_out, Expr** im_out) {
             Expr* arg = term->data.function.args[i];
             if (arg->type == EXPR_FUNCTION
                 && arg->data.function.head->type == EXPR_SYMBOL
-                && arg->data.function.head->data.symbol == SYM_Complex) {
+                && arg->data.function.head->data.symbol.name == SYM_Complex) {
                 complex_factor = arg; complex_idx = i; break;
             }
         }
@@ -2079,7 +2382,7 @@ static void split_re_im(Expr* p, Expr** re_out, Expr** im_out) {
     Expr* expanded = expr_expand(p);
     if (!(expanded->type == EXPR_FUNCTION
         && expanded->data.function.head->type == EXPR_SYMBOL
-        && expanded->data.function.head->data.symbol == SYM_Plus)) {
+        && expanded->data.function.head->data.symbol.name == SYM_Plus)) {
         split_term_re_im(expanded, re_out, im_out);
         expr_free(expanded);
         return;
@@ -2411,7 +2714,7 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
     size_t nfactors;
     if (factored->type == EXPR_FUNCTION
         && factored->data.function.head->type == EXPR_SYMBOL
-        && factored->data.function.head->data.symbol == SYM_Times) {
+        && factored->data.function.head->data.symbol.name == SYM_Times) {
         factors = factored->data.function.args;
         nfactors = factored->data.function.arg_count;
     } else {
@@ -2427,7 +2730,7 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
         int multiplicity = 1;
         if (fac->type == EXPR_FUNCTION
             && fac->data.function.head->type == EXPR_SYMBOL
-            && fac->data.function.head->data.symbol == SYM_Power
+            && fac->data.function.head->data.symbol.name == SYM_Power
             && fac->data.function.arg_count == 2
             && fac->data.function.args[1]->type == EXPR_INTEGER
             && fac->data.function.args[1]->data.integer >= 1) {
@@ -2930,7 +3233,7 @@ static bool collect_linear_factors(Expr* factored, Expr* S, Expr* t,
     size_t nfactors;
     if (factored->type == EXPR_FUNCTION
         && factored->data.function.head->type == EXPR_SYMBOL
-        && factored->data.function.head->data.symbol == SYM_Times) {
+        && factored->data.function.head->data.symbol.name == SYM_Times) {
         factors = factored->data.function.args;
         nfactors = factored->data.function.arg_count;
     } else {
@@ -2947,7 +3250,7 @@ static bool collect_linear_factors(Expr* factored, Expr* S, Expr* t,
         int multiplicity = 1;
         if (fac->type == EXPR_FUNCTION
             && fac->data.function.head->type == EXPR_SYMBOL
-            && fac->data.function.head->data.symbol == SYM_Power
+            && fac->data.function.head->data.symbol.name == SYM_Power
             && fac->data.function.arg_count == 2
             && fac->data.function.args[1]->type == EXPR_INTEGER
             && fac->data.function.args[1]->data.integer >= 1) {
@@ -2981,7 +3284,7 @@ static Expr* intrat_linear_q_closer(Expr* pair_list, Expr* x, Expr* t) {
     (void)x;
     if (!pair_list || pair_list->type != EXPR_FUNCTION
         || pair_list->data.function.head->type != EXPR_SYMBOL
-        || pair_list->data.function.head->data.symbol != SYM_List) return NULL;
+        || pair_list->data.function.head->data.symbol.name != SYM_List) return NULL;
     size_t n = pair_list->data.function.arg_count;
     /* Empty pair list = LRT producer couldn't decompose.  See the
      * matching guard in intrat_log_to_real_pairs above for why returning
@@ -3060,7 +3363,7 @@ static Expr* intrat_linear_q_closer(Expr* pair_list, Expr* x, Expr* t) {
 static Expr* intrat_log_to_real_pairs(Expr* pair_list, Expr* x, Expr* t) {
     if (!pair_list || pair_list->type != EXPR_FUNCTION
         || pair_list->data.function.head->type != EXPR_SYMBOL
-        || pair_list->data.function.head->data.symbol != SYM_List) {
+        || pair_list->data.function.head->data.symbol.name != SYM_List) {
         return NULL;
     }
     size_t npairs = pair_list->data.function.arg_count;
@@ -3160,7 +3463,7 @@ static Expr* intrat_integrate_summands(Expr* h, Expr* x) {
     Expr* pieces = intrat_apart_list(h, x, NULL);
     if (!pieces || pieces->type != EXPR_FUNCTION
         || pieces->data.function.head->type != EXPR_SYMBOL
-        || pieces->data.function.head->data.symbol != SYM_List) {
+        || pieces->data.function.head->data.symbol.name != SYM_List) {
         if (pieces) expr_free(pieces);
         return NULL;
     }
@@ -3372,12 +3675,12 @@ static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
 static bool is_intrat_option(Expr* opt) {
     if (!opt || opt->type != EXPR_FUNCTION
         || opt->data.function.head->type != EXPR_SYMBOL
-        || (opt->data.function.head->data.symbol != SYM_Rule
-            && opt->data.function.head->data.symbol != SYM_RuleDelayed)
+        || (opt->data.function.head->data.symbol.name != SYM_Rule
+            && opt->data.function.head->data.symbol.name != SYM_RuleDelayed)
         || opt->data.function.arg_count != 2) return false;
     Expr* lhs = opt->data.function.args[0];
     if (lhs->type == EXPR_SYMBOL) {
-        return lhs->data.symbol == SYM_Extension;
+        return lhs->data.symbol.name == SYM_Extension;
     }
     if (lhs->type == EXPR_STRING) {
         const char* s = lhs->data.string;
@@ -3495,13 +3798,13 @@ Expr* builtin_intrat_intrationallogpart(Expr* res) {
         Expr* last = res->data.function.args[argc - 1];
         if (last->type == EXPR_FUNCTION
             && last->data.function.head->type == EXPR_SYMBOL
-            && (last->data.function.head->data.symbol == SYM_Rule
-                || last->data.function.head->data.symbol == SYM_RuleDelayed)
+            && (last->data.function.head->data.symbol.name == SYM_Rule
+                || last->data.function.head->data.symbol.name == SYM_RuleDelayed)
             && last->data.function.arg_count == 2
             && last->data.function.args[0]->type == EXPR_SYMBOL
-            && last->data.function.args[0]->data.symbol == SYM_RootSum) {
+            && last->data.function.args[0]->data.symbol.name == SYM_RootSum) {
             Expr* val = last->data.function.args[1];
-            root_sum = (val->type == EXPR_SYMBOL && val->data.symbol == SYM_True);
+            root_sum = (val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_True);
             argc--;
         }
     }
@@ -3556,6 +3859,46 @@ Expr* builtin_intrat_logtoreal(Expr* res) {
     return intrat_log_to_real(r, s, x, t);
 }
 
+Expr* builtin_intrat_transcendental_log_part(Expr* res) {
+    if (res->type != EXPR_FUNCTION
+        || (res->data.function.arg_count != 6 && res->data.function.arg_count != 7))
+        return NULL;
+    Expr* a    = res->data.function.args[0];
+    Expr* d    = res->data.function.args[1];
+    Expr* tau  = res->data.function.args[2];
+    Expr* z    = res->data.function.args[3];
+    Expr* Dd   = res->data.function.args[4];
+    Expr* xreal = res->data.function.args[5];
+    /* Optional 7th argument is the "decide" marker (any expression): when present
+     * the residue criterion, on an all-non-constant-residue resultant, returns
+     * Integrate`PartialLogPart[0, a/d] instead of declining — so a caller seeking a
+     * non-elementarity VERDICT (never re-integrating the remainder) learns the whole
+     * simple part is non-elementary (Thm 5.6.1(ii)).  Absent for the integrator. */
+    bool decide = (res->data.function.arg_count == 7);
+    if (tau->type != EXPR_SYMBOL || z->type != EXPR_SYMBOL)
+        return NULL;
+    /* `xreal` is the residue-constant gate: a single symbol (single-kernel
+     * extension) or a List of symbols (tower proper part — free of x and every
+     * lower tower variable). */
+    bool gate_ok = (xreal->type == EXPR_SYMBOL)
+        || (xreal->type == EXPR_FUNCTION
+            && xreal->data.function.head->type == EXPR_SYMBOL
+            && xreal->data.function.head->data.symbol.name == SYM_List);
+    if (!gate_ok) return NULL;
+    Expr* rem = NULL;
+    Expr* logs = intrat_transcendental_log_part(a, d, tau, z, Dd, xreal, &rem, decide);
+    if (!logs) { if (rem) expr_free(rem); return NULL; }
+    if (rem) {
+        /* Partial log part: wrap the elementary logs and the unintegrated
+         * non-constant-residue remainder in an inert head the recursive-Risch
+         * caller (rt_field_lrt_logpart) decodes.  The head has no definition, so
+         * it survives evaluation unchanged. */
+        return expr_new_function(expr_new_symbol("Integrate`PartialLogPart"),
+                                 (Expr*[]){ logs, rem }, 2);
+    }
+    return logs;
+}
+
 Expr* builtin_intrat_logtoarctanh(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* e = res->data.function.args[0];
@@ -3570,6 +3913,31 @@ Expr* builtin_intrat_naive_log_part(Expr* res) {
     Expr* x = res->data.function.args[1];
     if (x->type != EXPR_SYMBOL) return NULL;
     return intrat_naive_log_part(f, x);
+}
+
+/* Integrate`RothsteinTragerResultant[num, den, z, x]
+ *   = Resultant[num - z D[den, x], den, x],
+ * the Rothstein-Trager resultant whose roots in z are the residues of num/den.
+ * This is the named parametric-resultant primitive the LRT log part uses and that
+ * Cherry's special-function argument generators reuse (CHERRY_DESIGN.md §3.3): the
+ * log / exponential-integral (Ei) arguments are recovered from its roots. Built on
+ * the existing `Resultant` builtin — no new resultant machinery. */
+static Expr* builtin_intrat_rt_resultant(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 4) return NULL;
+    Expr* num = res->data.function.args[0];
+    Expr* den = res->data.function.args[1];
+    Expr* z   = res->data.function.args[2];
+    Expr* x   = res->data.function.args[3];
+    Expr* dd = eval_and_free(expr_new_function(expr_new_symbol(SYM_D),
+        (Expr*[]){ expr_copy(den), expr_copy(x) }, 2));            /* D[den, x] */
+    if (!dd) return NULL;
+    Expr* arg = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+        (Expr*[]){ expr_copy(num),
+            expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ expr_new_integer(-1), expr_copy(z), dd }, 3) }, 2)); /* num - z D[den] */
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Resultant),
+        (Expr*[]){ arg, expr_copy(den), expr_copy(x) }, 3));       /* Resultant[.,den,x] */
+    return r;
 }
 
 /* ------------------------------------------------------------------ */
@@ -3684,6 +4052,27 @@ void intrat_init(void) {
             "discriminant -> Log + LogToAtan-derived ArcTan). Returns the\n"
             "call unevaluated when r has factors of degree > 2 in t (the\n"
             "bounded-Solve scope of Phase 4).");
+
+    /* Recursive-Risch transcendental LRT log part (consumed by
+     * Integrate`RischTranscendental; not a user-facing surface form). */
+    install("Integrate`RothsteinTragerResultant",
+            builtin_intrat_rt_resultant,
+            "Integrate`RothsteinTragerResultant[num, den, z, x] = Resultant[num - z D[den,x],\n"
+            "den, x], the Rothstein-Trager resultant whose roots in z are the residues of\n"
+            "num/den. Argument generator for the log / exponential-integral (Ei) parts of\n"
+            "Cherry's special-function integration.");
+
+    install("Integrate`TranscendentalLogPart",
+            builtin_intrat_transcendental_log_part,
+            "Integrate`TranscendentalLogPart[a, d, tau, z, Dd, g] computes the\n"
+            "logarithmic part of Integrate[a/d] for a transcendental monomial\n"
+            "tau (a/d proper with squarefree d in tau), where Dd is the monomial\n"
+            "derivation D(d), z is the residue variable, and g is the residue-\n"
+            "constant gate: a symbol (single kernel) or a List of symbols (tower\n"
+            "proper part, gating x and every lower tower variable). Returns the\n"
+            "real Log + ArcTan form as a function of tau (Rothstein-Trager\n"
+            "resultant + Rioboo LogToReal), or unevaluated when the integral is\n"
+            "not elementary in this form.");
 
     /* Phase 8b — NaiveLogPart RootSum fallback. */
     install("Integrate`NaiveLogPart",

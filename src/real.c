@@ -140,7 +140,7 @@ static bool rd_is_rational_bigint(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (!e->data.function.head
         || e->data.function.head->type != EXPR_SYMBOL
-        || e->data.function.head->data.symbol != SYM_Rational
+        || e->data.function.head->data.symbol.name != SYM_Rational
         || e->data.function.arg_count != 2) {
         return false;
     }
@@ -716,7 +716,7 @@ Expr* builtin_realdigits(Expr* res) {
         if (x_expr->type == EXPR_FUNCTION
             && x_expr->data.function.head
             && x_expr->data.function.head->type == EXPR_SYMBOL
-            && x_expr->data.function.head->data.symbol == SYM_Complex
+            && x_expr->data.function.head->data.symbol.name == SYM_Complex
             && is_complex(x_expr, &re_p, &im_p)) {
             /* True complex with imaginary != 0 -> not a real number. */
             return rd_emit_realx(res);
@@ -763,7 +763,7 @@ Expr* builtin_realdigits(Expr* res) {
     size_t target_len = 0;
     if (argc >= 3) {
         Expr* l_expr = res->data.function.args[2];
-        if (l_expr->type == EXPR_SYMBOL && l_expr->data.symbol == SYM_Automatic) {
+        if (l_expr->type == EXPR_SYMBOL && l_expr->data.symbol.name == SYM_Automatic) {
             len_automatic = true;
             has_len = true;
         } else if (!expr_is_integer_like(l_expr)) {
@@ -1312,7 +1312,7 @@ Expr* builtin_mantissa_exponent(Expr* res) {
         if (x_expr->type == EXPR_FUNCTION
             && x_expr->data.function.head
             && x_expr->data.function.head->type == EXPR_SYMBOL
-            && x_expr->data.function.head->data.symbol == SYM_Complex
+            && x_expr->data.function.head->data.symbol.name == SYM_Complex
             && is_complex(x_expr, &re_p, &im_p)) {
             return me_emit_realx(x_expr);
         }
@@ -1696,14 +1696,14 @@ Expr* builtin_real_exponent(Expr* res) {
         if (x_in->type == EXPR_FUNCTION
             && x_in->data.function.head
             && x_in->data.function.head->type == EXPR_SYMBOL
-            && x_in->data.function.head->data.symbol == SYM_Complex
+            && x_in->data.function.head->data.symbol.name == SYM_Complex
             && is_complex(x_in, &re_p, &im_p)) {
             return re_emit_realx(x_in);
         }
         if (b_in && b_in->type == EXPR_FUNCTION
             && b_in->data.function.head
             && b_in->data.function.head->type == EXPR_SYMBOL
-            && b_in->data.function.head->data.symbol == SYM_Complex
+            && b_in->data.function.head->data.symbol.name == SYM_Complex
             && is_complex(b_in, &re_p, &im_p)) {
             return re_emit_ibase(b_in);
         }

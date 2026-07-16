@@ -53,6 +53,13 @@ Work through them in order if you're new — each one builds on the last.
     Differentiate and integrate, expand power series, take limits, evaluate
     symbolic sums, and find roots and extrema numerically.
 
+-   :material-transfer: __[Integration methods](integration-methods/index.md)__
+
+    Advanced, per-method deep dives into `Integrate`'s cascade — the **Mellin
+    transform** engine for half-line integrals \(\int_0^\infty x^{s-1} f\,dx\)
+    and the **residue theorem** engine for improper, periodic, and contour
+    integrals. Algorithm, references, and worked examples.
+
 -   :material-calculator-variant: __[9. Numerical calculus](09-numerical-calculus.md)__
 
     When there is no closed form: numerical integration, differentiation,
@@ -76,6 +83,18 @@ Work through them in order if you're new — each one builds on the last.
     Evaluate infinite products with `Product`: rational telescoping, the
     Wallis/Viète trigonometric factorizations, Euler prime products for `ζ`,
     and the exponential products for `e`, `γ`, and Glaisher's constant.
+
+-   :material-grid: __[13. BLAS kernels](13-blas.md)__
+
+    Call the machine-precision BLAS kernels directly through the `` BLAS` ``
+    context: dot products and norms, `dgemv`, `dgemm`, the symmetric and
+    triangular Level-3 routines, and their complex `z*` counterparts.
+
+-   :material-table-large: __[14. LAPACK drivers](14-lapack.md)__
+
+    Solve systems and least squares, factor matrices (LU, QR, Cholesky),
+    compute the SVD, and solve symmetric and general eigenproblems with the
+    `` LAPACK` `` context.
 
 </div>
 

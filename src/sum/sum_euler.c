@@ -160,7 +160,7 @@ static Expr* euler_quadratic(int q) {
 /* g == Power[HarmonicNumber[var], 2]?  (H_k squared, order-1 harmonic only.) */
 static bool is_harmonic_sq(Expr* g, Expr* var) {
     if (g->type != EXPR_FUNCTION || g->data.function.head->type != EXPR_SYMBOL
-        || g->data.function.head->data.symbol != SYM_Power
+        || g->data.function.head->data.symbol.name != SYM_Power
         || g->data.function.arg_count != 2) return false;
     Expr* e2 = g->data.function.args[1];
     if (e2->type != EXPR_INTEGER || e2->data.integer != 2) return false;
@@ -173,7 +173,7 @@ static bool is_harmonic_sq(Expr* g, Expr* var) {
 static bool is_harmonic_factor(Expr* g, Expr* var, int* p_out) {
     if (g->type != EXPR_FUNCTION) return false;
     Expr* h = g->data.function.head;
-    if (h->type != EXPR_SYMBOL || h->data.symbol != SYM_HarmonicNumber) return false;
+    if (h->type != EXPR_SYMBOL || h->data.symbol.name != SYM_HarmonicNumber) return false;
     size_t ac = g->data.function.arg_count;
     if (ac < 1 || ac > 2) return false;
     if (!expr_eq(g->data.function.args[0], var)) return false;
@@ -196,11 +196,13 @@ Expr* builtin_sum_euler(Expr* res) {
     if (imin->type != EXPR_INTEGER || imin->data.integer != 1) return NULL;
 
     /* Canonicalise the held summand (1/k^q parses as (k^q)^(-1)). */
-    Expr* fn = evaluate(expr_copy(f));
+    Expr* fc = expr_copy(f);
+    Expr* fn = evaluate(fc);
+    expr_free(fc);   /* evaluate() borrows; free the copy we made */
 
     bool is_times = (fn->type == EXPR_FUNCTION
                      && fn->data.function.head->type == EXPR_SYMBOL
-                     && fn->data.function.head->data.symbol == SYM_Times);
+                     && fn->data.function.head->data.symbol.name == SYM_Times);
     size_t n = is_times ? fn->data.function.arg_count : 1;
 
     int p = 0, hcount = 0, hsqcount = 0;
@@ -240,7 +242,7 @@ Expr* builtin_sum_euler(Expr* res) {
 
     int q = 0; bool okmono = false;
     if (mono->type == EXPR_FUNCTION && mono->data.function.head->type == EXPR_SYMBOL
-        && mono->data.function.head->data.symbol == SYM_Power
+        && mono->data.function.head->data.symbol.name == SYM_Power
         && mono->data.function.arg_count == 2
         && expr_eq(mono->data.function.args[0], var)
         && mono->data.function.args[1]->type == EXPR_INTEGER) {

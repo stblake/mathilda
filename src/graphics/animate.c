@@ -104,12 +104,12 @@ static bool is_rule_arg(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.arg_count == 2
         && e->data.function.head->type == EXPR_SYMBOL
-        && (e->data.function.head->data.symbol == SYM_Rule
-            || e->data.function.head->data.symbol == SYM_RuleDelayed);
+        && (e->data.function.head->data.symbol.name == SYM_Rule
+            || e->data.function.head->data.symbol.name == SYM_RuleDelayed);
 }
 
 static bool is_sym(const Expr* e, const char* sym) {
-    return e && e->type == EXPR_SYMBOL && e->data.symbol == sym;
+    return e && e->type == EXPR_SYMBOL && e->data.symbol.name == sym;
 }
 
 static void parse_animate_opts(Expr** args, size_t start, size_t argc,
@@ -120,7 +120,7 @@ static void parse_animate_opts(Expr** args, size_t start, size_t argc,
         const Expr* lhs = arg->data.function.args[0];
         const Expr* rhs = arg->data.function.args[1];
         if (!lhs || lhs->type != EXPR_SYMBOL) continue;
-        const char* key = lhs->data.symbol;
+        const char* key = lhs->data.symbol.name;
 
         if (key == SYM_AnimationDirection) {
             if      (is_sym(rhs, SYM_Forward))         o->direction = ANIM_DIR_FORWARD;
@@ -165,7 +165,7 @@ static void parse_animate_opts(Expr** args, size_t start, size_t argc,
                 o->show_reset_button     = false;
             } else if (rhs->type == EXPR_FUNCTION
                        && rhs->data.function.head->type == EXPR_SYMBOL
-                       && rhs->data.function.head->data.symbol == SYM_List) {
+                       && rhs->data.function.head->data.symbol.name == SYM_List) {
                 o->show_play_pause       = false;
                 o->show_step_buttons     = false;
                 o->show_direction_button = false;
@@ -212,11 +212,11 @@ static bool parse_iter_spec(const Expr* e, const char** var_sym,
                              double* tmin, double* tmax) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
-    if (e->data.function.head->data.symbol != SYM_List) return false;
+    if (e->data.function.head->data.symbol.name != SYM_List) return false;
     if (e->data.function.arg_count != 3) return false;
     const Expr* ve = e->data.function.args[0];
     if (!ve || ve->type != EXPR_SYMBOL) return false;
-    *var_sym = ve->data.symbol;
+    *var_sym = ve->data.symbol.name;
     return numericize(e->data.function.args[1], tmin)
         && numericize(e->data.function.args[2], tmax);
 }
@@ -393,8 +393,8 @@ static double slider_frac_from_mouse(float mx, int win_w) {
 static bool is_graphics_expr(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && (e->data.function.head->data.symbol == SYM_Graphics
-            || e->data.function.head->data.symbol == SYM_Graphics3D)
+        && (e->data.function.head->data.symbol.name == SYM_Graphics
+            || e->data.function.head->data.symbol.name == SYM_Graphics3D)
         && e->data.function.arg_count >= 1;
 }
 

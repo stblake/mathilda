@@ -23,7 +23,7 @@ static int leaf_to_double(Expr* e, double* out) {
     /* Negative-int wrapped under Times[-1, n]. */
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, "Times") == 0
+        && strcmp(e->data.function.head->data.symbol.name, "Times") == 0
         && e->data.function.arg_count == 2) {
         double a, b;
         if (leaf_to_double(e->data.function.args[0], &a)
@@ -92,7 +92,7 @@ size_t corpus_eval_eigenvalues_real(const double* A, size_t n,
     ASSERT(r != NULL);
     ASSERT(r->type == EXPR_FUNCTION);
     ASSERT(r->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "List") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "List") == 0);
 
     size_t out_count = r->data.function.arg_count;
     *lambdas = (double*)malloc(sizeof(double) * (out_count ? out_count : 1));
@@ -115,7 +115,7 @@ size_t corpus_eval_eigenvectors_real(const double* A, size_t n,
     ASSERT(r != NULL);
     ASSERT(r->type == EXPR_FUNCTION);
     ASSERT(r->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "List") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "List") == 0);
 
     size_t out_count = r->data.function.arg_count;
     *V = (double*)malloc(sizeof(double) * (out_count ? out_count * n : 1));
@@ -123,7 +123,7 @@ size_t corpus_eval_eigenvectors_real(const double* A, size_t n,
         Expr* row = r->data.function.args[i];
         ASSERT(row->type == EXPR_FUNCTION);
         ASSERT(row->data.function.head->type == EXPR_SYMBOL);
-        ASSERT(strcmp(row->data.function.head->data.symbol, "List") == 0);
+        ASSERT(strcmp(row->data.function.head->data.symbol.name, "List") == 0);
         ASSERT(row->data.function.arg_count == n);
         for (size_t j = 0; j < n; j++) {
             ASSERT(leaf_to_double(row->data.function.args[j],
@@ -144,7 +144,7 @@ void corpus_check_real_eigenvalues(const char* label,
     ASSERT(r != NULL);
     ASSERT(r->type == EXPR_FUNCTION);
     ASSERT(r->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "List") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "List") == 0);
     ASSERT(r->data.function.arg_count == n);
     int ok = 1;
     for (size_t i = 0; i < n; i++) {
@@ -277,7 +277,7 @@ static int leaf_to_complex(Expr* e, double* out_re, double* out_im) {
     if (leaf_to_double(e, &v)) { *out_re = v; return 1; }
     if (e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, "Complex") == 0
+        && strcmp(e->data.function.head->data.symbol.name, "Complex") == 0
         && e->data.function.arg_count == 2) {
         double r, m;
         if (leaf_to_double(e->data.function.args[0], &r)
@@ -302,7 +302,7 @@ size_t corpus_eval_hermitian_eigenvalues(const double* A_re,
     ASSERT(r != NULL);
     ASSERT(r->type == EXPR_FUNCTION);
     ASSERT(r->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "List") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "List") == 0);
 
     size_t out_count = r->data.function.arg_count;
     *lambdas = (double*)malloc(sizeof(double) * (out_count ? out_count : 1));
@@ -334,7 +334,7 @@ size_t corpus_eval_eigenvectors_complex(const double* A_re,
     ASSERT(r != NULL);
     ASSERT(r->type == EXPR_FUNCTION);
     ASSERT(r->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "List") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "List") == 0);
 
     size_t out_count = r->data.function.arg_count;
     size_t cap = out_count ? out_count * n : 1;
@@ -344,7 +344,7 @@ size_t corpus_eval_eigenvectors_complex(const double* A_re,
         Expr* row = r->data.function.args[i];
         ASSERT(row->type == EXPR_FUNCTION);
         ASSERT(row->data.function.head->type == EXPR_SYMBOL);
-        ASSERT(strcmp(row->data.function.head->data.symbol, "List") == 0);
+        ASSERT(strcmp(row->data.function.head->data.symbol.name, "List") == 0);
         ASSERT(row->data.function.arg_count == n);
         for (size_t j = 0; j < n; j++) {
             double rr, ii;
@@ -437,7 +437,7 @@ size_t corpus_eval_eigenvalues_complex(const double* A_re,
     ASSERT(r != NULL);
     ASSERT(r->type == EXPR_FUNCTION);
     ASSERT(r->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "List") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "List") == 0);
 
     size_t out_count = r->data.function.arg_count;
     *eval_re = (double*)malloc(sizeof(double) * (out_count ? out_count : 1));

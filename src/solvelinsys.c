@@ -63,6 +63,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "arithmetic.h"
 #include "attr.h"
 #include "eval.h"
 #include "expr.h"
@@ -134,7 +135,7 @@ static bool is_concrete_nonzero(const Expr* e) {
     if (e->type == EXPR_REAL)    return e->data.real != 0.0;
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational) {
+        && e->data.function.head->data.symbol.name == SYM_Rational) {
         /* Mathilda canonicalises Rational[0, _] -> 0, so any
          * Rational[_, _] surviving here is non-zero. */
         return true;
@@ -157,7 +158,7 @@ static bool contains_complex_head(const Expr* v) {
     if (!v) return false;
     if (v->type != EXPR_FUNCTION) return false;
     if (v->data.function.head->type == EXPR_SYMBOL
-        && v->data.function.head->data.symbol == SYM_Complex) {
+        && v->data.function.head->data.symbol.name == SYM_Complex) {
         return true;
     }
     for (size_t i = 0; i < v->data.function.arg_count; i++) {
@@ -356,6 +357,10 @@ static int gaussian_reduce(AugMat* A, size_t* pivot_row_for_col) {
 /* Emit `Solve::svars` to stderr.  Throttled to once per distinct
  * input hash, mirroring the `Solve::optx` idiom in solve.c. */
 static void warn_svars(uint64_t input_hash) {
+    /* Internal decision procedures (e.g. the Risch structure-theorem Q-span
+     * solve) legitimately hand SolveAlways underdetermined systems; honour the
+     * shared warnings-mute counter so those probes stay quiet. */
+    if (arith_warnings_muted()) return;
     static uint64_t last_warned_hash = 0;
     if (input_hash == last_warned_hash) return;
     last_warned_hash = input_hash;
@@ -376,7 +381,7 @@ Expr* solvelinsys_solve_linear_system(Expr* equations,
     /* `vars` must be a List of symbols (>= 1). */
     if (vars->type != EXPR_FUNCTION
         || vars->data.function.head->type != EXPR_SYMBOL
-        || vars->data.function.head->data.symbol != SYM_List) {
+        || vars->data.function.head->data.symbol.name != SYM_List) {
         return NULL;
     }
     size_t n = vars->data.function.arg_count;
@@ -389,7 +394,7 @@ Expr* solvelinsys_solve_linear_system(Expr* equations,
      * Mathematica also refuses. */
     for (size_t a = 0; a < n; a++) {
         for (size_t b = a + 1; b < n; b++) {
-            if (var_arr[a]->data.symbol == var_arr[b]->data.symbol) {
+            if (var_arr[a]->data.symbol.name == var_arr[b]->data.symbol.name) {
                 return NULL;
             }
         }
@@ -401,13 +406,13 @@ Expr* solvelinsys_solve_linear_system(Expr* equations,
     size_t m;
     if (equations->type == EXPR_FUNCTION
         && equations->data.function.head->type == EXPR_SYMBOL
-        && (equations->data.function.head->data.symbol == SYM_List
-            || equations->data.function.head->data.symbol == SYM_And)) {
+        && (equations->data.function.head->data.symbol.name == SYM_List
+            || equations->data.function.head->data.symbol.name == SYM_And)) {
         eq_arr = equations->data.function.args;
         m = equations->data.function.arg_count;
     } else if (equations->type == EXPR_FUNCTION
         && equations->data.function.head->type == EXPR_SYMBOL
-        && equations->data.function.head->data.symbol == SYM_Equal) {
+        && equations->data.function.head->data.symbol.name == SYM_Equal) {
         single_holder[0] = equations;
         eq_arr = single_holder;
         m = 1;
@@ -427,7 +432,7 @@ Expr* solvelinsys_solve_linear_system(Expr* equations,
     bool integers_only = false;
     if (dom) {
         if (dom->type != EXPR_SYMBOL) return NULL;
-        const char* d = dom->data.symbol;
+        const char* d = dom->data.symbol.name;
         if (d == SYM_Reals) reals_only = true;
         else if (d == SYM_Integers) {
             reals_only = true;
@@ -445,7 +450,7 @@ Expr* solvelinsys_solve_linear_system(Expr* equations,
         Expr* eq = eq_arr[i];
         if (eq->type != EXPR_FUNCTION
             || eq->data.function.head->type != EXPR_SYMBOL
-            || eq->data.function.head->data.symbol != SYM_Equal
+            || eq->data.function.head->data.symbol.name != SYM_Equal
             || eq->data.function.arg_count != 2) {
             am_free(&A);
             return NULL;

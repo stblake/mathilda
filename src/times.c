@@ -6,6 +6,7 @@
 #include "sym_names.h"
 #include "trig_canon.h"
 #include "series.h"
+#include "ndarray.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -15,7 +16,7 @@
 
 static bool is_overflow(Expr* e) {
     return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol == SYM_Overflow;
+           e->data.function.head->data.symbol.name == SYM_Overflow;
 }
 
 /* True for positive numeric expressions: positive int/bigint, positive real,
@@ -179,7 +180,7 @@ static Expr* multiply_numbers(Expr* a, Expr* b) {
             a_ok = true;
         } else if (a->type == EXPR_FUNCTION &&
                    a->data.function.head->type == EXPR_SYMBOL &&
-                   a->data.function.head->data.symbol == SYM_Rational &&
+                   a->data.function.head->data.symbol.name == SYM_Rational &&
                    a->data.function.arg_count == 2 &&
                    expr_is_integer_like(a->data.function.args[0]) &&
                    expr_is_integer_like(a->data.function.args[1])) {
@@ -194,7 +195,7 @@ static Expr* multiply_numbers(Expr* a, Expr* b) {
                 b_ok = true;
             } else if (b->type == EXPR_FUNCTION &&
                        b->data.function.head->type == EXPR_SYMBOL &&
-                       b->data.function.head->data.symbol == SYM_Rational &&
+                       b->data.function.head->data.symbol.name == SYM_Rational &&
                        b->data.function.arg_count == 2 &&
                        expr_is_integer_like(b->data.function.args[0]) &&
                        expr_is_integer_like(b->data.function.args[1])) {
@@ -244,6 +245,24 @@ Expr* builtin_times(Expr* res) {
     size_t n = res->data.function.arg_count;
     if (n == 0) return expr_new_integer(1);
     if (n == 1) return expr_copy(res->data.function.args[0]);
+
+    /* NDArray fast path: same-shape NDArray operands multiply elementwise over
+     * raw buffers, with numpy-style broadcasting of numeric scalars (3 * NDArray;
+     * this is also how -NDArray and NDArray - NDArray reduce). If the array
+     * operands disagree in shape, warn (NDArray::shape) and leave the product
+     * unevaluated, like Dot::dotsh. A NULL (a symbolic operand, or no NDArray at
+     * all) falls through to the generic path, which treats any NDArrays as
+     * opaque non-numeric factors. */
+    {
+        Expr* fast = ndarray_elementwise(res->data.function.args, n, false);
+        if (fast) return fast;
+        if (ndarray_warn_shape_mismatch(res->data.function.args, n, "multiplied"))
+            return NULL;
+        /* NDArray combined with a symbolic factor (c * NDArray): purely numeric,
+         * so it can't be multiplied elementwise. Warn, then fall through to
+         * leave the product unevaluated. */
+        ndarray_warn_symbolic(res->data.function.args, n, "multiplied");
+    }
 
     /* SeriesData arithmetic: if any factor is a power series, fold the whole
      * Times through the series algebra. Runs before inexact contagion, which
@@ -367,7 +386,7 @@ Expr* builtin_times(Expr* res) {
                 expr_free(num_prod);
                 num_prod = next;
             }
-        } else if (is_complex(arg, NULL, NULL) || (arg->type == EXPR_SYMBOL && arg->data.symbol == SYM_I)) {
+        } else if (is_complex(arg, NULL, NULL) || (arg->type == EXPR_SYMBOL && arg->data.symbol.name == SYM_I)) {
             Expr* c_arg;
             if (arg->type == EXPR_SYMBOL) {
                 Expr* z0 = expr_new_integer(0);
@@ -393,7 +412,7 @@ Expr* builtin_times(Expr* res) {
             }
         } else {
             Expr* base = arg; Expr* exponent;
-            if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && arg->data.function.head->data.symbol == SYM_Power && arg->data.function.arg_count == 2) {
+            if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && arg->data.function.head->data.symbol.name == SYM_Power && arg->data.function.arg_count == 2) {
                 base = arg->data.function.args[0]; exponent = expr_copy(arg->data.function.args[1]);
             } else { exponent = expr_new_integer(1); }
             
@@ -459,7 +478,7 @@ Expr* builtin_times(Expr* res) {
                 num_extracted = true;
             } else if (num_prod->type == EXPR_FUNCTION &&
                        num_prod->data.function.head->type == EXPR_SYMBOL &&
-                       num_prod->data.function.head->data.symbol == SYM_Rational &&
+                       num_prod->data.function.head->data.symbol.name == SYM_Rational &&
                        num_prod->data.function.arg_count == 2 &&
                        expr_is_integer_like(num_prod->data.function.args[0]) &&
                        expr_is_integer_like(num_prod->data.function.args[1])) {
@@ -785,7 +804,7 @@ Expr* builtin_times(Expr* res) {
             (en_sa == 1) &&
             (groups[0].base->type == EXPR_FUNCTION) &&
             (groups[0].base->data.function.head->type == EXPR_SYMBOL) &&
-            (groups[0].base->data.function.head->data.symbol == SYM_Rational) &&
+            (groups[0].base->data.function.head->data.symbol.name == SYM_Rational) &&
             num_prod_rational && (cd_chk >= 2) &&
             (cn_abs <= CANON_CAP) && (cd_chk <= CANON_CAP);
         /* Also bound the radicand magnitudes. */
@@ -828,7 +847,7 @@ Expr* builtin_times(Expr* res) {
                 base_ok = true;
             } else if (gb->type == EXPR_FUNCTION &&
                        gb->data.function.head->type == EXPR_SYMBOL &&
-                       gb->data.function.head->data.symbol == SYM_Rational &&
+                       gb->data.function.head->data.symbol.name == SYM_Rational &&
                        gb->data.function.arg_count == 2 &&
                        expr_is_integer_like(gb->data.function.args[0]) &&
                        expr_is_integer_like(gb->data.function.args[1])) {

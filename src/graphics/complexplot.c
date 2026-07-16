@@ -79,7 +79,7 @@ static bool split_cplot_options(Expr* res, size_t first_opt_idx,
         if (!is_rule_arg(arg)) CP_FAIL();
         Expr* lhs = arg->data.function.args[0];
         Expr* rhs = arg->data.function.args[1];
-        const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol : NULL;
+        const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol.name : NULL;
 
         if (name == SYM_PlotPoints) {
             long v;
@@ -90,23 +90,23 @@ static bool split_cplot_options(Expr* res, size_t first_opt_idx,
         } else if (name == SYM_ColorFunctionScaling) {
             Expr* v = evaluate(expr_copy(rhs));
             o->color_function_scaling = !(v->type == EXPR_SYMBOL
-                                           && v->data.symbol == SYM_False);
+                                           && v->data.symbol.name == SYM_False);
             expr_free(v);
         } else if (name == SYM_RegionFunction) {
             o->region_function = rhs; /* borrowed */
         } else if (name == SYM_PlotLegends) {
             Expr* v = evaluate(expr_copy(rhs));
             o->show_legend = !(v->type == EXPR_SYMBOL
-                               && (v->data.symbol == SYM_None
-                                   || v->data.symbol == SYM_False));
+                               && (v->data.symbol.name == SYM_None
+                                   || v->data.symbol.name == SYM_False));
             expr_free(v);
         } else {
             if      (name == SYM_Axes)        have_axes   = true;
             else if (name == SYM_AspectRatio) have_aspect = true;
             else if (name == SYM_Frame) {
                 if (!(rhs->type == EXPR_SYMBOL
-                      && (rhs->data.symbol == SYM_False
-                          || rhs->data.symbol == SYM_None)))
+                      && (rhs->data.symbol.name == SYM_False
+                          || rhs->data.symbol.name == SYM_None)))
                     have_frame = true;
             }
             Expr* val  = evaluate(expr_copy(rhs));
@@ -173,7 +173,7 @@ static bool parse_complex_iterator(Expr* iter, Expr** zvar_out,
     if (!iter || iter->type != EXPR_FUNCTION
         || !iter->data.function.head
         || iter->data.function.head->type != EXPR_SYMBOL
-        || iter->data.function.head->data.symbol != SYM_List
+        || iter->data.function.head->data.symbol.name != SYM_List
         || iter->data.function.arg_count != 3)
         return false;
 
@@ -211,7 +211,7 @@ static bool cp_eval(Expr* zvar, Expr* body, double x, double y,
                     double* re_out, double* im_out) {
     Expr* ra[2] = { expr_new_real(x), expr_new_real(y) };
     Expr* zval  = expr_new_function(expr_new_symbol(SYM_Complex), ra, 2);
-    symtab_add_own_value(zvar->data.symbol, zvar, zval);
+    symtab_add_own_value(zvar->data.symbol.name, zvar, zval);
 
     Expr* result = evaluate(expr_copy(body));
     bool ok = false;
@@ -262,7 +262,7 @@ static Expr* cp_default_color(double re, double im) {
 static bool is_color_head(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION || !e->data.function.head
         || e->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     return h == SYM_RGBColor || h == SYM_GrayLevel || h == SYM_Hue || h == SYM_CMYKColor;
 }
 
@@ -408,7 +408,7 @@ static void embed_plot_range(double xmin, double xmax, double ymin, double ymax,
         const Expr* e = (*pt)[i];
         if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
             && e->data.function.args[0]->type == EXPR_SYMBOL
-            && e->data.function.args[0]->data.symbol == SYM_PlotRange)
+            && e->data.function.args[0]->data.symbol.name == SYM_PlotRange)
             return;
     }
     *pt = realloc(*pt, sizeof(Expr*) * (*pt_n + 1));
@@ -431,7 +431,7 @@ static void embed_plot_range3(double xmin, double xmax,
         const Expr* e = (*pt)[i];
         if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
             && e->data.function.args[0]->type == EXPR_SYMBOL
-            && e->data.function.args[0]->data.symbol == SYM_PlotRange)
+            && e->data.function.args[0]->data.symbol.name == SYM_PlotRange)
             return;
     }
     *pt = realloc(*pt, sizeof(Expr*) * (*pt_n + 1));

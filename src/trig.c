@@ -69,17 +69,17 @@ static Expr* make_sqrt_expr(Expr* e) {
  */
 static bool extract_pi_multiplier(Expr* e, int64_t* n, int64_t* d) {
     // Case 1: Pi
-    if (e->type == EXPR_SYMBOL && e->data.symbol == SYM_Pi) {
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Pi) {
         *n = 1; *d = 1;
         return true;
     }
     
     // Case 2: n/d * Pi (Times[Rational[n, d], Pi])
-    if (e->type == EXPR_FUNCTION && e->data.function.head->data.symbol == SYM_Times && e->data.function.arg_count == 2) {
+    if (e->type == EXPR_FUNCTION && e->data.function.head->data.symbol.name == SYM_Times && e->data.function.arg_count == 2) {
         Expr* first = e->data.function.args[0];
         Expr* second = e->data.function.args[1];
         
-        if (second->type == EXPR_SYMBOL && second->data.symbol == SYM_Pi) {
+        if (second->type == EXPR_SYMBOL && second->data.symbol.name == SYM_Pi) {
             if (is_rational(first, n, d)) return true;
         }
     }
@@ -139,7 +139,7 @@ static Expr* peel_imaginary_unit(Expr* arg) {
         return expr_copy(im);
     }
     if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
-        arg->data.function.head->data.symbol == SYM_Times &&
+        arg->data.function.head->data.symbol.name == SYM_Times &&
         arg->data.function.arg_count > 0) {
         Expr* first = arg->data.function.args[0];
         Expr* fre; Expr* fim;
@@ -237,7 +237,7 @@ static Expr* try_simp_forward_of_inverse(const char* outer, Expr* arg) {
     if (arg->type != EXPR_FUNCTION || arg->data.function.arg_count != 1) return NULL;
     if (!arg->data.function.head ||
         arg->data.function.head->type != EXPR_SYMBOL) return NULL;
-    const char* inner = arg->data.function.head->data.symbol;
+    const char* inner = arg->data.function.head->data.symbol.name;
     Expr* x = arg->data.function.args[0];
 
     /* Helpers to build common subexpressions: Sqrt[1 - x^2], Sqrt[1 + x^2],
@@ -1153,6 +1153,10 @@ Expr* builtin_arctan(Expr* res) {
         // ArcTan[I y] -> I ArcTanh[y]
         { Expr* f = trig_i_fold(arg, "ArcTanh", +1); if (f) return f; }
 
+        // ArcTan[Infinity] = Pi/2  (ArcTan[-Infinity] -> -Pi/2 via the odd fold above)
+        if (is_infinity_sym(arg))
+            return make_times(make_rational(1, 2), expr_new_symbol(SYM_Pi));
+
         // Attempt exact inverse evaluation
         Expr* exact = exact_arctan(arg);
         if (exact) return exact;
@@ -1250,6 +1254,9 @@ Expr* builtin_arccot(Expr* res) {
     // ArcCot[I y] -> -I ArcCoth[y]
     { Expr* f = trig_i_fold(arg, "ArcCoth", -1); if (f) return f; }
 
+    // ArcCot[Infinity] = 0  (ArcCot[-Infinity] -> 0 via the odd fold above)
+    if (is_infinity_sym(arg)) return expr_new_integer(0);
+
     // Attempt exact inverse evaluation
     Expr* exact = exact_arccot(arg);
     if (exact) return exact;
@@ -1286,6 +1293,10 @@ Expr* builtin_arcsec(Expr* res) {
 
     // ArcSec[-x] -> Pi - ArcSec[x]
     { Expr* f = arc_pi_minus_fold(arg, "ArcSec"); if (f) return f; }
+
+    // ArcSec[+-Infinity] = Pi/2  (ArcSec[-Infinity] -> Pi - Pi/2 via the fold above)
+    if (is_infinity_sym(arg))
+        return make_times(make_rational(1, 2), expr_new_symbol(SYM_Pi));
 
     // Attempt exact inverse evaluation
     Expr* exact = exact_arcsec(arg);
@@ -1326,6 +1337,9 @@ Expr* builtin_arccsc(Expr* res) {
 
     // ArcCsc[I y] -> -I ArcCsch[y]
     { Expr* f = trig_i_fold(arg, "ArcCsch", -1); if (f) return f; }
+
+    // ArcCsc[Infinity] = 0  (ArcCsc[-Infinity] -> 0 via the odd fold above)
+    if (is_infinity_sym(arg)) return expr_new_integer(0);
 
     // Attempt exact inverse evaluation
     Expr* exact = exact_arccsc(arg);

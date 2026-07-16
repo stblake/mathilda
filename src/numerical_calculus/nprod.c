@@ -65,7 +65,7 @@ static void np_warn(const char* tag, const char* fmt, ...) {
 static bool np_is_spec(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL
-        || e->data.function.head->data.symbol != SYM_List) return false;
+        || e->data.function.head->data.symbol.name != SYM_List) return false;
     size_t n = e->data.function.arg_count;
     return n >= 2 && n <= 4 && e->data.function.args[0]->type == EXPR_SYMBOL;
 }
@@ -81,11 +81,11 @@ static bool np_is_known_option(const char* s) {
 static bool np_is_option_arg(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     if (h != SYM_Rule && h != SYM_RuleDelayed) return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* lhs = e->data.function.args[0];
-    return lhs->type == EXPR_SYMBOL && np_is_known_option(lhs->data.symbol);
+    return lhs->type == EXPR_SYMBOL && np_is_known_option(lhs->data.symbol.name);
 }
 
 /* WorkingPrecision values are small integer/real literals in practice. */
@@ -109,7 +109,7 @@ static bool np_is_numberlike(Expr* e) {
         case EXPR_FUNCTION: {
             Expr* h = e->data.function.head;
             return h->type == EXPR_SYMBOL
-                && (h->data.symbol == SYM_Complex || h->data.symbol == SYM_Rational);
+                && (h->data.symbol.name == SYM_Complex || h->data.symbol.name == SYM_Rational);
         }
         default:
             return false;
@@ -119,12 +119,12 @@ static bool np_is_numberlike(Expr* e) {
 static bool np_is_infinity(Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_SYMBOL)
-        return e->data.symbol == SYM_ComplexInfinity
-            || e->data.symbol == SYM_Indeterminate
-            || e->data.symbol == SYM_Infinity;
+        return e->data.symbol.name == SYM_ComplexInfinity
+            || e->data.symbol.name == SYM_Indeterminate
+            || e->data.symbol.name == SYM_Infinity;
     if (e->type == EXPR_FUNCTION) {
         Expr* h = e->data.function.head;
-        return h->type == EXPR_SYMBOL && h->data.symbol == SYM_DirectedInfinity;
+        return h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_DirectedInfinity;
     }
     return false;
 }
@@ -164,7 +164,7 @@ typedef struct {
 static bool np_apply_option(Expr* rule, NpOpts* o) {
     Expr* lhs = rule->data.function.args[0];
     Expr* rhs = rule->data.function.args[1];
-    const char* name = lhs->data.symbol;
+    const char* name = lhs->data.symbol.name;
 
     if (name == SYM_NProductFactors)      { o->factors = rhs;       return true; }
     if (name == SYM_NProductExtraFactors) { o->extra_factors = rhs; return true; }
@@ -176,7 +176,7 @@ static bool np_apply_option(Expr* rule, NpOpts* o) {
     if (name == SYM_WorkingPrecision) {
         o->wprec = rhs;
         o->mpfr = false; o->wdigits = 0.0;
-        if (!(rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_MachinePrecision)) {
+        if (!(rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_MachinePrecision)) {
             double d;
             if (np_to_double(rhs, &d) && d > NUMERIC_MACHINE_PRECISION_DIGITS) {
                 o->mpfr = true; o->wdigits = d;
@@ -262,7 +262,7 @@ Expr* builtin_nprod(Expr* res) {
     Expr* s = eval_and_free(nsum);      /* the numeric Log-sum, or special  */
 
     /* Divergent product: NSum reports the divergent log-sum as ComplexInfinity. */
-    if (s && s->type == EXPR_SYMBOL && s->data.symbol == SYM_ComplexInfinity) {
+    if (s && s->type == EXPR_SYMBOL && s->data.symbol.name == SYM_ComplexInfinity) {
         expr_free(s);
         return expr_new_symbol(SYM_ComplexInfinity);
     }

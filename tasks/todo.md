@@ -1,80 +1,157 @@
-# Goursat cube-root third-kind (p=2/3) + general-affine, FLINT-accelerated
+# Risch Transcendental → Complete Bronstein Decision Procedure
 
-Goal: make these close under `Method -> "GoursatAlgebraic"`:
-- (a) `Integrate[((x-1)^2(x+1))^(1/3)/x^2, x]`  — genus-0 double-root radicand, double pole
-- (b) `Integrate[(1-k x)/((1+(k-2)x)(x(1-x)(1-k x))^(2/3)), x]` — third-kind, symbolic k
+Plan: `RISCH_COMPLETENESS_PLAN.md`. Reference: Bronstein, *Symbolic Integration I*, 2nd ed.
+Each item lands green (its tests + the full `integrate_risch_transcendental_tests` suite) and
+is committed before the next. Correct-by-construction: emit only behind an exact tower-var
+`Together`-zero identity; every NULL is authoritative or a sibling-decline.
 
-## Diagnosis (done)
-Both are THIRD-KIND (F pole off the branch locus). Eigendescent correctly obstructs
-(H0 genuinely != 0). `goursat_cubic_thirdkind` was p=1/3 only. Native canonic over the
-descent tower Q(k)(k^(1/3), R(t0)^(1/3), omega) does not terminate -> route through the
-FLINT algebraic-field engine (`flint_algebraic_field_normalize` = rigorous zero test,
-`flint_algebraic_field_canonical` = RootReduce). FLINT engine confirmed to handle
-symbol-radicand cube roots + roots of unity together. Constant radicands (numeric k =
-3^(1/3)) are DEFERRED by the engine -> target symbolic k (what the user wants).
-diff_back_ok is already numeric (pins params + x) so it is NOT a tower bottleneck.
+## Gap 1 — Recursive Risch DE over the tower (KEYSTONE)
 
-## Plan
-- [ ] P1. Extend `goursat_cubic_thirdkind` to p=2/3: coefficient direction omega^(a*j),
-      a=3-pnum; matched Y-slot Y^(3-pnum); vanishing slots = the other two;
-      C = F*N/(R*p_match). [math verified in experiment]
-- [ ] P2. General-affine offset: t0 = F's single non-branch pole; if N(t0)=0 keep m=0
-      (fast, preserves existing p=1/3 cases); else m = R(t0)^(1/3) - kappa t0, a = kappa t+m,
-      N = R - a^3. [math verified: m_off = 3^(1/3)+2(-1)^(1/3) for case b]
-- [ ] P3. FLINT routing: new static helper `tk_is_zero_tower(e)` = try
-      `flint_algebraic_field_normalize` first (->0 => zero), fall back to canonic+is_zero.
-      Use for the two vanishing-slot tests. Route the C computation (F*N/(R*p_match))
-      through `flint_algebraic_field_canonical` when a genuine radical generator is
-      present; keep native canonic otherwise / when FLINT absent.
-- [ ] P4. Test (b) symbolic k end-to-end; confirm diff_back_ok closes; valgrind clean.
-- [ ] P5. Case (a): eigendescent double-root path in `goursat_cubic` (accept dR=3,nr=2 ->
-      2 finite roots + Infinity). Verify it closes (genus 0, kappa=1). If third-kind
-      route also needed for the double pole, assess.
-- [ ] P6. Regression: existing p=1/3 third-kind + full goursat/rat/simp suites; add
-      GOURSAT_EXERCISES cases; docs (algebra.md) + changelog; memory update.
+Replace the `rt_field_rde` general-branch ansatz (L4122–4280) with a literal recursive Ch.6
+solver `rde_tower(f, g, RdeCtx*)` solving `D_tower[y] + f y = g` over `K_L`.
 
-## Review (2026-07-04)
-- P1/P2/P3 IMPLEMENTED and verified sound: p=2/3 coefficient direction + matched slot,
-  general-affine m = R(t0)^(1/3)-kappa t0, and FLINT-routed zero test / canonic
-  (tk_is_zero_tower via flint_algebraic_field_normalize; canonic_tower via
-  flint_algebraic_field_canonical). FLINT routing SOLVES the tower non-termination:
-  native canonic did not finish at 300s/pass; FLINT-routed slots return in <1s and are
-  numerically correct (pzeroA~8e-17, pzeroB~3e-19, pmatch~0.13).
-- BLOCKER (mathematical, not code): for case (b) the scale C = F*N/(R*p_match) is NOT
-  t-free (Craw@t=1/7=0.686 vs @t=2/9=0.701) -> |D[G]-f|=7.24. A single linear-argument
-  log family cannot capture the integrand: F = -k/(k-2) + pole-part, whose constant part
-  integrates to an ALGEBRAIC term and pole-part to a Log (two eigencomponents).
-- The reference's constructive algorithm (preprint 30042026B Cor 4.8(i) / CubicTest23) is
-  the eigendescent substitution x=z^3 -> rational J1,J2, valid only when H~0 == 0. Case (b)
-  has H~0 != 0 (measured 0.19-0.81i). Preprint L838-840 EXPLICITLY DEFERS the H~0 != 0
-  rational-F (third-kind) case to Risch-Trager-Bronstein; the two-component split is an
-  UNPROVEN assertion in cube_roots.tex with no criterion/formula. Case (a) additionally
-  has a repeated root (violates every theorem's simple-root hypothesis).
-- CONCLUSION: neither example is closeable by the reference's constructive method; both
-  need a research-level cube-root third-kind Risch-Trager-Bronstein (or the unconstructed
-  split). All experimental edits REVERTED; working tree clean. Awaiting user direction.
-- Reusable: tk_is_zero_tower / canonic_tower (route Goursat tower canonic/zero-test through
-  the committed FLINT field engine) is a proven pattern worth landing independently.
+- [x] **1a** — `RdeCtx` derivation abstraction + `rde_tower` + base passthrough; RT_LOG
+      (primitive) non-cancellation: `rde_normal_denominator_field` + `rde_spde_field` +
+      `rde_polyrischde_nocancel_field`. Field-correct `k(x)[τ]` algebra (monic-Euclidean
+      `rc_gcd`; variable-explicit Quotient/Remainder/ExtendedGCD). Wired into `rt_field_rde`
+      log-top ahead of the ansatz; exact tower-identity certified. `Risch`RischDE` extended
+      to towers; `Risch`SPDE` + `Risch`PolyRischDENoCancel` boxes exposed. Tests:
+      `tests/test_risch_rde_tower.c` (base + SPDE + NoCancel + depth-1/2/3 log towers +
+      declines + integrator end-to-end), all green; leak-clean; full transcendental suite +
+      P3 suites pass. **NEXT: extract RDE stack → `integrate_risch_rde.{c,h}` (user request).**
+- [x] **1b** — RT_EXP non-cancellation: SplitFactor normal/special split in
+      `rde_normal_denominator_field`, `RdeSpecialDenomExp` (§6.2 p.190, `ν_τ` valuation
+      clears τ-poles), `RdeBoundDegreeExp` (§6.3 p.200); reuses SPDE + NoCancel (deg_τ(b)≥1).
+      Closes exp-over-exp Laurent RDEs (`∫ D[E^(E^x)/(1+E^x)] → E^(E^x)/(1+E^x)`), depth-2
+      `RischDE[E^(E^x),…]`. All suites green; leak-clean. Deferred to 1c: cancellation
+      (`b∈k`, PolyRischDECancelExp) + the ν_τ cancellation refinement (parametric log deriv).
+- [x] **1c** — Cancellation (`b∈k*`, deg_τ(b)=0): `rde_polyrischde_cancel`
+      (`PolyRischDECancel{Prim,Exp}`, §6.6 p.212/213) builds q top-down, per-coefficient
+      lower-field Risch DE `D[s]+(b+m·η)s=lc_τ(c)` via **recursive `rde_tower` over `K_{m-1}`**.
+      Closes const-coeff RDEs (`[1,1/x+Log[x]]→Log[x]`, `[2,E^(-x)]→E^(-x)`), cancel→nocancel
+      chains (`1/(1+E^(E^x))`), integrator `∫D[E^x/(1+Log[x])]`. All suites green; leak-clean.
+      Deferred to Gap 2: the `b=Dz/z[+mη]` antidifferentiation branch (LimitedIntegrate).
+- [~] **1d** — `rde_weak_normalizer_field`: **DEFERRED — no reachable test case.** Every
+      constructible positive-integer-residue tower RDE already solves without it
+      (`RdeNormalDenominator` h + SPDE + cancel find them; exact-identity gate keeps it
+      sound). Theoretically-complete-but-pre-empted, like the ansatz resonance code. Revisit
+      only if a real integrand is found that needs it.
+- [x] **1e** — Retired the `rt_field_rde` `SolveAlways` `h/pd` ansatz (~158 lines) + orphaned
+      `rt_resonance_int`; the general branch routes every field RDE through `rde_tower` and its
+      NULL is an authoritative "no rational solution in K_L". Also extended the rde_tower gate to
+      RT_EXP tops. Verified non-regressing: 294-assertion transcendental suite + broad
+      `integrals_tests` corpus + all ansatz-era field-RDE examples still close. Leak-clean.
+- [x] **1f** — Decision wiring inherent in 1e: `rt_field_rde` NULL → `rt_dec_nonelem` (matches
+      the ansatz's prior authoritative-NULL behavior); `ElementaryIntegralQ` suite green. Residual
+      non-authoritative declines (tangent top, `b=Dz/z`) are out of tower scope / rare.
+- [ ] **(opt) File-split refactor** (Plan §4 Option B): extract RDE stack → `risch_rde.{c,h}`,
+      thread `RtDecision*`, add to `tests/CMakeLists.txt`. Behavior-preserving commit.
 
-## RootReduce WL-faithfulness (G1–G5) — 2026-07-04 — DONE
+## Gap 2 — antidifferentiation / LimitedIntegrate
+- [x] **Antidifferentiation branch** (`sp.b=0`, `D h = c`): `rde_tower` integrates `c` in
+      `K_m` via `rt_field_integrate` (RDE↔integrator mutual recursion), gated on a rational
+      tower result (`rc_is_tower_rational`; a new log ⇒ decline). Hardened the identity gate
+      (`Expand` the residual numerator — `Together` doesn't expand products). Closes
+      `RischDE[0, x E^x]→(x−1)E^x`, `RischDE[0, Log[x]]→x Log[x]−x`, `∫E^(E^x)(x E^x+1)→x E^(E^x)`.
+      Tests: `test_tower_antidiff`. Leak-clean; all suites green.
+- [x] **LimitedIntegrate m=1 (§7.2) — the IntegratePrimitivePolynomial fold-back.**
+      `rt_limited_field_integrate` now recognises the new logarithm `t_L=Log[u_L]` in the
+      tower-variable form `rt_field_integrate` returns it (was: kernel-form subrule mismatch →
+      silent decline). Closes `Log[Log[x]]/(x Log[x])→Log[Log[x]]²/2` etc. via the recursive path.
+- [x] **Gap 4** — `rt_recursive_tower_case` is now the PRIMARY tower path (subsumes the flat
+      cases, validated on suite + corpus); flat cases kept as fallback (carry `rt_tower_solve`
+      Cherry substrate). `RT_MAXK` removal deferred (low value).
+- [ ] **Full §7 `LimitedIntegrate`** (general m, `LimitedIntegrateReduce` p.248 + §7.1 parametric
+      solve) + `b=Dz/z[+mη]` cancellation branch + `ParametricLogarithmicDerivative` (§7.3).
+      Deferred — the m=1 case above covers the primitive recursion; the rest is Cherry-adjacent.
 
-Plan: /Users/user/.claude/plans/glowing-petting-pnueli.md
+## Gap 3 — Tangent tower monomial (`RT_TAN`)
+- [ ] `RtKind += RT_TAN`; `rt_tower_build` collects Tan/Cot (special τ²+1), Tanh/Coth (τ²−1).
+- [ ] `rde_special_denominator` RT_TAN (`RdeSpecialDenomTan` §6.2 p.192) +
+      `rde_polyrischde_cancel` RT_TAN (`PolyRischDECancelTan` §6.6 p.215) → wire
+      `Risch\`CoupledDECancelTan`.
+- [ ] `rt_field_integrate` RT_TAN dispatch → `IntegrateHypertangent{Reduced,Polynomial}` at
+      every level. Tests: nested `Tan[Log[x]]/x`, `1/(a+b Sin[x])`.
 
-- [x] G1 constant algebraic numbers → Root/quadratic/rational (FLINT qqbar, new src/poly/flint_qqbar.c)
-- [x] G2 nested constant radicals reduce ((Sqrt[18]+Sqrt[27])/Sqrt[5+2Sqrt[6]] → 3)
-- [x] G3 RootReduce::argx / RootReduce::mtd diagnostics
-- [x] G4 thread over Equal/inequalities/logic; exact qqbar decision for binary (in)equalities
-- [x] G5 Method → Automatic/Recursive/NumberField distinct paths (identical canonical result)
-- [x] src/rootreduce.c dispatcher; parametric towers still route to flint_algebraic_field_canonical
-- [x] tests/test_rootreduce.c extended (G1–G5); all pass
-- [x] docs/spec/builtins/algebra.md + changelog 2026-06-29.md updated
+## Gap 3 — Tangent tower
+- [x] **Nested tangents over C(x)** (commit f8d89bf): `Tan[Log[x]]`, `Tanh[Log[x]]`, etc. via
+      relaxed `rt_kernel_eta` + numeric diff-back guard. Soundness fix: trig-frontend false-zero
+      `Tan[x]·Tan[Log[x]]→0` (commit 18ae5a4).
+- [x] **RT_TAN tower foundation** (commit c23f328): `RtKind += RT_TAN`, `tsg` sign, collection,
+      derivation `Dt=Dcoef(t²+σ)`, `Sec²→1+Tan²` rewrite. Sound; builds the tower but declines
+      pending the 3 integration pieces below.
+- [x] **TrigToTan normaliser** (commit 6793835): `rt_subst_kernels` rationalises circular/hyperbolic
+      trig of a tangent arg to the tower symbol (`Sin=t/√(1+σt²)`, …); the fresh symbol stops the
+      evaluator canonicalising back to `Csc·Sec`. A log-over-tangent integrand builds the correct
+      tower `F=(1+t₀²)/(t₀t₁)`. Verified; non-regressing.
+- [~] **RT_TAN full integration** (piece a DONE; b, c remaining): (a) **nonlinear-lower-monomial
+      residue support** — DONE. A tangent LOWER kernel has `Dcoef = σ·u'` (§5.10) and gives a
+      RATIONAL Dcoef in `t₀`, so the Rothstein–Trager LRT in `rt_field_lrt_logpart` now clears the
+      lower-field denominator (scaling `a`, `D` by a common `t_L`-free factor leaves residues/log-args
+      invariant), and `T->subrules` carries the full trig rationalisation of the tangent argument
+      (`Sin=t/√(1+σt²)`, `Cos=1/√`, `Sec=√`, `Csc=√/t`, `Cot=1/t`) so the evaluator-canonical
+      `Csc·Sec` form of `(1+Tan²)/Tan` substitutes cleanly. Closes `∫(1+Tan²)/(Tan·Log[Tan])→
+      Log[Log[Tan[x]]]`, the repeated-pole `Log[Tan]^2` form, and the σ=−1 `Tanh` form.
+      `test_tangent_tower`; suite + corpus green; leak-clean. (b) **hypertangent-TOP dispatch —
+      DONE.** `rt_field_integrate` gains an RT_TAN top branch (`rt_int_hypertangent_field`): it
+      builds the full tower derivation as a `Risch\`Derivation` rule-list `{x→1, t_0→Dt_0, …,
+      t_L→Dt_L}` (via `rt_dt_i`, tan-aware), dispatches to the §5.10 driver
+      (`Risch\`IntegrateHypertangent` σ=+1, `Risch\`IntegrateHypertanh` σ=−1 — both tower-general in
+      their HermiteReduce/ResidueReduce/poly sub-steps), then integrates the t_L-free base
+      remainder `F − D[g]` recursively in K_{L-1}. Closes the LOG-lower field hypertangent
+      `∫2Log[x]/x·Tan[Log[x]^2] → −Log[Cos[Log[x]^2]]` (and the σ=−1 Tanh form) that no upstream
+      exp-case reaches. Sound-by-construction: the reduced/pole-peel base RDE is still C(x)-only
+      (`Risch\`RischDE` with the single base var), but the caller's exact `D_tower[Q]==F` gate
+      rejects any wrong `g`, so a tangent-top with genuine tower-coefficient poles declines rather
+      than errs. The EXP-lower `e^x Tan[e^x]` is still served (correctly, messily) by an upstream
+      exp-case ahead of the recursion — cosmetic, out of scope. (c) **the §6.2/§6.6 `rde_tower`
+      tangent RDE branch (`RdeSpecialDenomTan`, `PolyRischDECancelTan` via `CoupledDECancelTan`) —
+      DEFERRED: pre-empted, no reachable test case** (the Gap 1d / 1f situation). Instrumented
+      `rde_tower`'s tangent-top decline (integrate_risch_rde.c L918) and the §5.10 driver's
+      reduced-case coupled RDE (`risch_integrate_hypertangent_reduced`, the C(x)-`rc_base_var`
+      chokepoint): across the full transcendental suite AND an aggressive hand-built tangent-tower
+      battery (special poles `(τ²+σ)^m` for m=1,2, normal poles, both σ, both C(x)-η and
+      genuine-tower η=`2Log[x]/x`∉C(x), plus exp/log ABOVE a tangent), `rde_tower` RT_TAN was
+      reached **0** times, while the driver's OWN coupled DE system (`risch_coupled_desystem`) IS
+      reached over towers (`nvars=3`, `solved=1`) and produces correct **diff-back-verified**
+      antiderivatives. So every reachable hypertangent RDE obligation is discharged by the §5.10
+      driver (tower-general HermiteReduce + ResidueReduce + IntegrateHypertangentPolynomial + the
+      reduced coupled DE); the `rde_tower` RT_TAN branch would be unreachable dead code. Left as an
+      authoritative decline; the exact `D_tower[Q]==F` gate keeps the integrator SOUND. (Separate
+      declining elementary case NOT in RT_TAN-RDE scope: `∫D[Log[1+Tan[x]]·Log[x]]` — a
+      *log-of-a-tangent-rational* top, `Dcoef=(1+τ²)/(1+τ)`; candidate for a future
+      log-over-tangent-rational tower increment, distinct from the three RT_TAN pieces.)
 
-Review:
-- WL-faithful Root index (reals asc, then non-reals) — matched WL exactly on every
-  reference example, including the degree-6 (2^(1/3)+Sqrt[5]) and degree-15 Root-product.
-- Fixed a real bug found while wiring Root-object input: build_fmpz_poly reused a temp
-  polynomial across Plus/Times terms without zeroing in the variable branch → wrong minpoly
-  (t^3+t+c → 2t^3+…) and a qqbar_add blow-up that manifested as a hang on the c→1 example.
-- Behaviour change (more WL-faithful): degree≥3 constant results are Root objects, not cubic
-  radicals; updated the one existing test that expected 1/(1+2^(1/3)+2^(2/3)) → -1+2^(1/3).
-- Memory: paired init/clear audit clean; no my-code frame in valgrind definitely-lost.
+## RT_MAXK depth cap
+- [x] **Removed** (commit 4f6453c): `RtTower` arrays heap-allocated to the actual kernel count;
+      tower depth unbounded. Corpus + suites green, leak-clean.
+
+## §7 LimitedIntegrate — status of the residuals
+- [x] **m=1** (the elementary-integrator need, `IntegratePrimitivePolynomial` fold-back): DONE (4ea4f7d).
+- [ ] **general m**: Cherry-adjacent — the elementary transcendental integrator never needs m>1
+      (only nonelementary-function / Cherry integration does). Not an elementary-integrator gap.
+- [ ] **`b=Dz/z` cancellation branch + `ParametricLogarithmicDerivative` (§7.3)**: rare higher-degree
+      refinements; the exact-identity gates keep the integrator SOUND (it declines) without them.
+
+## Gap 4 — Retire flat-ansatz cases + remove RT_MAXK
+- [~] **BLOCKED (experiment done).** Disabling `rt_log_tower_case`/`rt_exp_tower_case` regresses
+      the primitive-polynomial class `Log[Log[x]]/(x Log[x]) → Log[Log[x]]²/2`,
+      `Log[Log[x]]^5/(x Log[x])`: the recursive path can't fold back the new logarithm (needs
+      §5.8 `IntegratePrimitivePolynomial` / `LimitedIntegrate`, the same §7 residual). The flat
+      cases' SolveAlways ansatz finds it. **Prerequisite: full `LimitedIntegrate`.**
+- [ ] `RT_MAXK`=5 depth-cap removal (dynamic `RtTower` arrays) — low value (depth-5 already deep).
+
+## Gap 5 — §5.11 scope boundary (document-only)
+- [ ] Note `IntegrateNonLinearNoSpecial` / nonelementary-primitive as out-of-scope-by-
+      construction (Bronstein §5.2 p.136) in `RISCH_STATUS.md`; no code.
+
+## Per-increment checklist (CLAUDE.md)
+- [ ] `make -j` clean under `-std=c99 -Wall -Wextra`
+- [ ] increment tests + full `integrate_risch_transcendental_tests` green
+- [ ] valgrind: no new leak blocks over `Sin[1.0]` baseline
+- [ ] docs: `docs/spec/builtins/calculus.md` + weekly `docs/spec/changelog/<Mon>.md`;
+      `RISCH_STATUS.md` case map; memory `project_risch_p3_decision` linkage
+- [ ] commit with Bronstein box→function references
+
+## Review
+(fill in as increments land)

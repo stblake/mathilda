@@ -134,6 +134,23 @@ void test_cancel_nonsymbol_base() {
              "Plus[1, Power[Log[r], Rational[1, 3]]]");
 }
 
+/* A symbolic power x^n whose base x is ALSO a bare polynomial generator makes
+ * the generic multivariate PolynomialGCD's variable set algebraically
+ * dependent; before the rat_has_dependent_power_generators soundness gate this
+ * looped forever (e.g. reached from Integrate[1/(1+x^n), x]).  The gate leaves
+ * such fractions uncancelled (correctness-preserving); genuinely-cancellable
+ * commensurate generators still cancel via the FLINT path. */
+void test_cancel_dependent_power_generators() {
+    /* Terminates; nothing to cancel (x^(n-1) and x^n are incommensurate). */
+    run_test("Cancel[x^(n-1)/(1+x^n)]",
+             "Times[Power[x, Plus[-1, n]], Power[Plus[1, Power[x, n]], -1]]");
+    /* Commensurate generator: still cancels (FLINT). */
+    run_test("Cancel[(x^(2 n) - 1)/(x^n - 1)]", "Plus[1, Power[x, n]]");
+    /* Shared symbolic power with a bare-x cofactor: still cancels (FLINT). */
+    run_test("Cancel[x^n (x+1)/(x^n (x+2))]",
+             "Times[Plus[1, x], Power[Plus[2, x], -1]]");
+}
+
 /* Together must apply the same algebraic-generator pass.
  * The headline regression: y^(5/8) (y^(19/8) - y^(73/24)/(y^(2/3) - 1/y^(1/3)))
  * with denominators {8, 8, 24, 3, 3} yields lcm m = 24, and after substitution
@@ -153,6 +170,47 @@ void test_together_algebraic_generator() {
     /* Non-symbol base: Log[r]^(p/q) is treated identically. */
     run_test("Together[1/Log[r]^(1/2) + 1/Log[r]^(1/3)]",
              "Times[Power[Log[r], Rational[-1, 2]], Plus[1, Power[Log[r], Rational[1, 6]]]]");
+
+    /* Constant-radical denominator with a NON-UNIT leading coefficient on the
+     * polynomial variable: 1/(2x - Sqrt5) - 1/(2x + Sqrt5) = 2 Sqrt5/(4x^2 - 5).
+     * Combining runs the together Plus-branch strict exact-division of the LCM
+     * denominator (4x^2 - 5) by each factor (2x +/- Sqrt5); the leading-
+     * coefficient recursion in exact_poly_div must divide the algebraic
+     * coefficient -2 Sqrt5 by the rational 2. Before the fix that division
+     * returned NULL (it required BOTH operands rational), so the whole sum was
+     * left uncombined for any coefficient != 1. */
+    run_test("Together[1/(2 x - Sqrt[5]) - 1/(2 x + Sqrt[5])]",
+             "Times[2, Power[5, Rational[1, 2]], Power[Plus[-5, Times[4, Power[x, 2]]], -1]]");
+    run_test("Together[1/(3 x - Sqrt[5]) - 1/(3 x + Sqrt[5])]",
+             "Times[2, Power[5, Rational[1, 2]], Power[Plus[-5, Times[9, Power[x, 2]]], -1]]");
+}
+
+/* Together / Cancel over transcendental-kernel generators (Log, Exp,
+ * inverse-trig): the FLINT plain-rational fast path treats each kernel as an
+ * atomic generator instead of falling back to the ~50x slower symbolic GCD.
+ * Output must match the classical Together/Cancel exactly. */
+void test_together_cancel_kernels() {
+    /* Log[x] kernel: combines into one reduced fraction. */
+    run_test("Together[1/(1 + Log[x]) + 1/(2 + Log[x])]",
+             "Times[Plus[3, Times[2, Log[x]]], Power[Plus[2, Power[Log[x], 2], Times[3, Log[x]]], -1]]");
+    /* Inverse-trig kernel: same handling as Log. */
+    run_test("Together[1/(1 + ArcTan[x]) + 1/(2 + ArcTan[x])]",
+             "Times[Plus[3, Times[2, ArcTan[x]]], Power[Plus[2, Power[ArcTan[x], 2], Times[3, ArcTan[x]]], -1]]");
+    /* Exp kernel: E^(k x) is treated as (E^x)^k, so the sum combines correctly
+     * (the classical path left this uncombined — a latent bug now fixed). */
+    run_test("Together[1/(1 + E^x) + 1/(2 + E^x)]",
+             "Times[Plus[3, Times[2, Power[E, x]]], Power[Plus[2, Times[3, Power[E, x]], Power[E, Times[2, x]]], -1]]");
+    /* Exp cross-power cancellation depends on E^(2x) = (E^x)^2. */
+    run_test("Cancel[(E^(2 x) - 1)/(E^x - 1)]", "Plus[1, Power[E, x]]");
+    run_test("Cancel[(Log[x]^2 - 1)/(Log[x] - 1)]", "Plus[1, Log[x]]");
+    /* Nested independent Log kernels: Log[x] and Log[1+Log[x]] are distinct
+     * generators. */
+    run_test("Together[1/(1 + Log[1 + Log[x]]) + 1/Log[x]]",
+             "Times[Plus[1, Log[x], Log[Plus[1, Log[x]]]], "
+             "Power[Plus[Log[x], Times[Log[x], Log[Plus[1, Log[x]]]]], -1]]");
+    /* Trig kernels are declined to the classical path (1/Sin -> Csc form). */
+    run_test("Together[1/(1 + Cos[x]) + 1/Sin[x]]",
+             "Times[Power[Plus[1, Cos[x]], -1], Plus[1, Cot[x], Csc[x]]]");
 }
 
 void test_together() {
@@ -175,8 +233,10 @@ int main() {
     TEST(test_cancel);
     TEST(test_cancel_algebraic_generator);
     TEST(test_cancel_nonsymbol_base);
+    TEST(test_cancel_dependent_power_generators);
     TEST(test_together);
     TEST(test_together_algebraic_generator);
+    TEST(test_together_cancel_kernels);
     printf("All rat tests passed!\n");
 
     return 0;

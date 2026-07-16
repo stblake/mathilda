@@ -32,13 +32,13 @@
 #include <stdlib.h>
 
 static bool is_inf_sym(const Expr* e) {
-    return e->type == EXPR_SYMBOL && e->data.symbol == SYM_Infinity;
+    return e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity;
 }
 
 static bool is_power(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.head->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2;
 }
 
@@ -49,7 +49,7 @@ static bool same_val(Expr* a, Expr* b) {
     Expr* diff = expr_new_function(expr_new_symbol(SYM_Plus),
                      (Expr*[]){ expr_copy(a), neg }, 2);          /* adopts neg */
     Expr* r = prod_eval("PossibleZeroQ", (Expr*[]){ diff }, 1);   /* adopts diff */
-    bool yes = (r && r->type == EXPR_SYMBOL && r->data.symbol == SYM_True);
+    bool yes = (r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True);
     if (r) expr_free(r);
     return yes;
 }
@@ -105,7 +105,7 @@ Expr* builtin_product_eulerprime(Expr* res) {
             Expr* gte = evaluate(gt);
             expr_free(gt);
             bool diverges = (gte && gte->type == EXPR_SYMBOL
-                             && gte->data.symbol == SYM_False);
+                             && gte->data.symbol.name == SYM_False);
             if (gte) expr_free(gte);
             if (!diverges)
                 out = prod_eval("Zeta", (Expr*[]){ expr_copy(se) }, 1);

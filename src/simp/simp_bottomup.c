@@ -284,7 +284,7 @@ Expr* simp_bottomup(const Expr* input, const AssumeCtx* ctx,
     /* Held heads: don't descend, but still run top-level search. */
     const Expr* head = input->data.function.head;
     if (head && head->type == EXPR_SYMBOL) {
-        const char* hn = head->data.symbol;
+        const char* hn = head->data.symbol.name;
         if (simp_skip_recursion_head(hn) || simp_head_holds_args(hn)) {
             Expr* result = simp_dispatch(input, ctx, complexity_func);
             simp_memo_put(memo, input, result);

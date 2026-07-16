@@ -45,7 +45,7 @@
 static bool hg_contains_pfq(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_HypergeometricPFQ) return true;
+        && e->data.function.head->data.symbol.name == SYM_HypergeometricPFQ) return true;
     if (hg_contains_pfq(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         if (hg_contains_pfq(e->data.function.args[i])) return true;
@@ -57,10 +57,10 @@ static bool hg_contains_pfq(Expr* e) {
  * not Binomial/Gamma/Pochhammer ratios, so this exposes the rational term ratio
  * of a binomial hypergeometric term (e.g. 2^k/Binomial[2k,k]) to the detector. */
 static Expr* hg_expand_binomial(const Expr* e) {
-    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     const Expr* h = e->data.function.head;
     size_t n = e->data.function.arg_count;
-    if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol, "Binomial") == 0 && n == 2) {
+    if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "Binomial") == 0 && n == 2) {
         Expr* a = hg_expand_binomial(e->data.function.args[0]);
         Expr* b = hg_expand_binomial(e->data.function.args[1]);
         Expr* amb = expr_new_function(expr_new_symbol(SYM_Plus),
@@ -79,7 +79,7 @@ static Expr* hg_expand_binomial(const Expr* e) {
     }
     Expr** nargs = malloc(sizeof(Expr*) * (n ? n : 1));
     for (size_t i = 0; i < n; i++) nargs[i] = hg_expand_binomial(e->data.function.args[i]);
-    Expr* out = expr_new_function(expr_copy(h), nargs, n);
+    Expr* out = expr_new_function(expr_copy((Expr*)h), nargs, n);
     free(nargs);
     return out;
 }
@@ -105,17 +105,17 @@ static int hg_pdeg(Expr* e, Expr* var) {
 static Expr* hg_first_root(Expr* sol) {
     if (!sol || sol->type != EXPR_FUNCTION) return NULL;
     if (sol->data.function.head->type != EXPR_SYMBOL
-        || sol->data.function.head->data.symbol != SYM_List
+        || sol->data.function.head->data.symbol.name != SYM_List
         || sol->data.function.arg_count < 1) return NULL;
     Expr* s0 = sol->data.function.args[0];
     if (s0->type != EXPR_FUNCTION
         || s0->data.function.head->type != EXPR_SYMBOL
-        || s0->data.function.head->data.symbol != SYM_List
+        || s0->data.function.head->data.symbol.name != SYM_List
         || s0->data.function.arg_count < 1) return NULL;
     Expr* rule = s0->data.function.args[0];
     if (rule->type != EXPR_FUNCTION
         || rule->data.function.head->type != EXPR_SYMBOL
-        || rule->data.function.head->data.symbol != SYM_Rule
+        || rule->data.function.head->data.symbol.name != SYM_Rule
         || rule->data.function.arg_count != 2) return NULL;
     return expr_copy(rule->data.function.args[1]);
 }

@@ -63,7 +63,7 @@ static bool split_density_options(Expr* res, DensityOpts* o,
         if (!is_rule_arg(arg)) DP_FAIL();
         Expr* lhs = arg->data.function.args[0];
         Expr* rhs = arg->data.function.args[1];
-        const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol : NULL;
+        const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol.name : NULL;
 
         if (name == SYM_PlotPoints) {
             long v;
@@ -74,15 +74,15 @@ static bool split_density_options(Expr* res, DensityOpts* o,
         } else if (name == SYM_ColorFunctionScaling) {
             Expr* v = evaluate(expr_copy(rhs));
             o->color_function_scaling = !(v->type == EXPR_SYMBOL
-                                          && v->data.symbol == SYM_False);
+                                          && v->data.symbol.name == SYM_False);
             expr_free(v);
         } else if (name == SYM_RegionFunction) {
             o->region_function = rhs;          /* borrowed */
         } else if (name == SYM_PlotLegends) {
             Expr* v = evaluate(expr_copy(rhs));
             o->show_legend = !(v->type == EXPR_SYMBOL
-                               && (v->data.symbol == SYM_None
-                                   || v->data.symbol == SYM_False));
+                               && (v->data.symbol.name == SYM_None
+                                   || v->data.symbol.name == SYM_False));
             expr_free(v);
         } else if (name == SYM_ScalingFunctions) {
             Expr* v = evaluate(expr_copy(rhs));
@@ -93,8 +93,8 @@ static bool split_density_options(Expr* res, DensityOpts* o,
             else if (name == SYM_AspectRatio) have_aspect = true;
             else if (name == SYM_Frame) {
                 if (!(rhs->type == EXPR_SYMBOL
-                      && (rhs->data.symbol == SYM_False
-                          || rhs->data.symbol == SYM_None)))
+                      && (rhs->data.symbol.name == SYM_False
+                          || rhs->data.symbol.name == SYM_None)))
                     have_frame = true;
             }
             Expr* val    = evaluate(expr_copy(rhs));
@@ -128,8 +128,8 @@ static bool split_density_options(Expr* res, DensityOpts* o,
 static double dp_eval(Expr* xvar, Expr* yvar, Expr* body, double x, double y) {
     Expr* xv = expr_new_real(x);
     Expr* yv = expr_new_real(y);
-    symtab_add_own_value(xvar->data.symbol, xvar, xv);
-    symtab_add_own_value(yvar->data.symbol, yvar, yv);
+    symtab_add_own_value(xvar->data.symbol.name, xvar, xv);
+    symtab_add_own_value(yvar->data.symbol.name, yvar, yv);
     Expr* r = evaluate(body);
     double v;
     bool ok = expr_to_real_double(r, &v) && isfinite(v);
@@ -144,7 +144,7 @@ static double dp_eval(Expr* xvar, Expr* yvar, Expr* body, double x, double y) {
 
 static bool is_color_head_dp(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     return h == SYM_RGBColor || h == SYM_GrayLevel || h == SYM_Hue || h == SYM_CMYKColor;
 }
 
@@ -287,7 +287,7 @@ Expr* builtin_densityplot(Expr* res) {
             const Expr* e = pt[i];
             if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
                 && e->data.function.args[0]->type == EXPR_SYMBOL
-                && e->data.function.args[0]->data.symbol == SYM_PlotRange)
+                && e->data.function.args[0]->data.symbol.name == SYM_PlotRange)
                 { have_pr = true; break; }
         }
         if (!have_pr) {

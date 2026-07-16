@@ -67,7 +67,7 @@ static Expr* poch1_to_fact(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     const Expr* head = e->data.function.head;
     size_t argc = e->data.function.arg_count;
-    if (head->type == EXPR_SYMBOL && head->data.symbol == SYM_Pochhammer
+    if (head->type == EXPR_SYMBOL && head->data.symbol.name == SYM_Pochhammer
             && argc == 2
             && e->data.function.args[0]->type == EXPR_INTEGER
             && e->data.function.args[0]->data.integer == 1) {
@@ -88,7 +88,7 @@ Expr* builtin_product_rational(Expr* res) {
     if (!product_stage_args(res, &f, &var, &imin, &imax, &definite)) return NULL;
 
     /* Infinite products are handled by Product`Infinite, not here. */
-    if (definite && imax->type == EXPR_SYMBOL && imax->data.symbol == SYM_Infinity)
+    if (definite && imax->type == EXPR_SYMBOL && imax->data.symbol.name == SYM_Infinity)
         return NULL;
 
     /* A symbolic exponent (a^k) is Geometric territory and would hang Factor. */

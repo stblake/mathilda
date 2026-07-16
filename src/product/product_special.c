@@ -26,22 +26,22 @@ static bool is_one(const Expr* e) {
 static bool is_k_pow_k(const Expr* f, const Expr* var) {
     return f->type == EXPR_FUNCTION
         && f->data.function.head->type == EXPR_SYMBOL
-        && f->data.function.head->data.symbol == SYM_Power
+        && f->data.function.head->data.symbol.name == SYM_Power
         && f->data.function.arg_count == 2
         && f->data.function.args[0]->type == EXPR_SYMBOL
-        && f->data.function.args[0]->data.symbol == var->data.symbol
+        && f->data.function.args[0]->data.symbol.name == var->data.symbol.name
         && f->data.function.args[1]->type == EXPR_SYMBOL
-        && f->data.function.args[1]->data.symbol == var->data.symbol;
+        && f->data.function.args[1]->data.symbol.name == var->data.symbol.name;
 }
 
 /* Gamma[var]. */
 static bool is_gamma_k(const Expr* f, const Expr* var) {
     return f->type == EXPR_FUNCTION
         && f->data.function.head->type == EXPR_SYMBOL
-        && strcmp(f->data.function.head->data.symbol, "Gamma") == 0
+        && strcmp(f->data.function.head->data.symbol.name, "Gamma") == 0
         && f->data.function.arg_count == 1
         && f->data.function.args[0]->type == EXPR_SYMBOL
-        && f->data.function.args[0]->data.symbol == var->data.symbol;
+        && f->data.function.args[0]->data.symbol.name == var->data.symbol.name;
 }
 
 Expr* builtin_product_special(Expr* res) {
@@ -49,7 +49,7 @@ Expr* builtin_product_special(Expr* res) {
     bool definite;
     if (!product_stage_args(res, &f, &var, &imin, &imax, &definite)) return NULL;
     if (!definite || !is_one(imin)) return NULL;
-    if (imax->type == EXPR_SYMBOL && imax->data.symbol == SYM_Infinity) return NULL;
+    if (imax->type == EXPR_SYMBOL && imax->data.symbol.name == SYM_Infinity) return NULL;
 
     /* prod_{k=1}^{n} k^k = Hyperfactorial[n]. */
     if (is_k_pow_k(f, var)) {

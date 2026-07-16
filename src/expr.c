@@ -2,6 +2,7 @@
 #include "arithmetic.h"
 #include "sym_intern.h"
 #include "sym_names.h"
+#include "ndarray.h"   /* ndt_elem_size for dtype-aware copy/eq/hash */
 #include <stdbool.h>
 #include <math.h>
 #include <ctype.h>
@@ -48,7 +49,7 @@ Expr* expr_new_real(double value) {
 //   - expr_copy() of a symbol a pointer copy,
 //   - expr_free() of a symbol a no-op for the name field.
 //
-// The cast to `char*` is intentional: `data.symbol` retains its existing
+// The cast to `char*` is intentional: `data.symbol.name` retains its existing
 // type for ABI stability, but the memory is owned by the interner and
 // must never be freed by Expr code.
 Expr* expr_new_symbol(const char* name) {
@@ -57,8 +58,9 @@ Expr* expr_new_symbol(const char* name) {
     e->type = EXPR_SYMBOL;
     e->refcount = 1;
     e->last_evaluated_at = 0;
-    e->data.symbol = (char*)intern_symbol(name);
-    if (!e->data.symbol) {
+    e->data.symbol.name = (char*)intern_symbol(name);
+    e->data.symbol.def = NULL;   /* Phase 3b: resolved + cached lazily on first eval use */
+    if (!e->data.symbol.name) {
         free(e);
         return NULL;
     }
@@ -136,6 +138,21 @@ Expr* expr_new_bigint_from_str(const char* str) {
         free(e);
         return NULL;
     }
+    return e;
+}
+
+Expr* expr_new_ndarray(int rank, const int64_t* dims, void* data, NDType dtype) {
+    Expr* e = malloc(sizeof(Expr));
+    if (!e) return NULL;
+    e->type = EXPR_NDARRAY;
+    e->refcount = 1;
+    e->last_evaluated_at = 0;
+    e->data.ndarray.rank = rank;
+    e->data.ndarray.dims = malloc(sizeof(int64_t) * (size_t)rank);
+    if (!e->data.ndarray.dims) { free(e); return NULL; }
+    memcpy(e->data.ndarray.dims, dims, sizeof(int64_t) * (size_t)rank);
+    e->data.ndarray.data = data;
+    e->data.ndarray.dtype = dtype;
     return e;
 }
 
@@ -284,7 +301,8 @@ Expr* expr_unshare(Expr* e) {
             fresh->data.real = e->data.real;
             break;
         case EXPR_SYMBOL:
-            fresh->data.symbol = e->data.symbol;  /* interned */
+            fresh->data.symbol.name = e->data.symbol.name;  /* interned */
+            fresh->data.symbol.def = e->data.symbol.def;    /* same symbol: cache carries over */
             break;
         case EXPR_STRING:
             fresh->data.string = e->data.string ? mathilda_strdup(e->data.string) : NULL;
@@ -293,6 +311,20 @@ Expr* expr_unshare(Expr* e) {
             mpz_init(fresh->data.bigint);
             mpz_set(fresh->data.bigint, e->data.bigint);
             break;
+        case EXPR_NDARRAY: {
+            int rank = e->data.ndarray.rank;
+            NDType dt = e->data.ndarray.dtype;
+            size_t n = 1;
+            for (int i = 0; i < rank; i++) n *= (size_t)e->data.ndarray.dims[i];
+            size_t bytes = ndt_elem_size(dt) * n;
+            fresh->data.ndarray.rank = rank;
+            fresh->data.ndarray.dtype = dt;
+            fresh->data.ndarray.dims = malloc(sizeof(int64_t) * (size_t)rank);
+            memcpy(fresh->data.ndarray.dims, e->data.ndarray.dims, sizeof(int64_t) * (size_t)rank);
+            fresh->data.ndarray.data = malloc(bytes);
+            memcpy(fresh->data.ndarray.data, e->data.ndarray.data, bytes);
+            break;
+        }
 #ifdef USE_MPFR
         case EXPR_MPFR:
             mpfr_init2(fresh->data.mpfr, mpfr_get_prec(e->data.mpfr));
@@ -341,7 +373,7 @@ void expr_free(Expr* e) {
 
     switch (e->type) {
         case EXPR_SYMBOL:
-            /* data.symbol is interned (owned by sym_intern); never free. */
+            /* data.symbol.name is interned (owned by sym_intern); never free. */
             break;
         case EXPR_STRING:
             if (e->data.string) free(e->data.string);
@@ -357,6 +389,10 @@ void expr_free(Expr* e) {
             break;
         case EXPR_BIGINT:
             mpz_clear(e->data.bigint);
+            break;
+        case EXPR_NDARRAY:
+            free(e->data.ndarray.dims);
+            free(e->data.ndarray.data);
             break;
 #ifdef USE_MPFR
         case EXPR_MPFR:
@@ -414,7 +450,7 @@ bool expr_eq(const Expr* a, const Expr* b) {
             return a->data.real == b->data.real;
         case EXPR_SYMBOL:
             /* Interned: same name guarantees same pointer. */
-            return a->data.symbol == b->data.symbol;
+            return a->data.symbol.name == b->data.symbol.name;
         case EXPR_STRING:
             return strcmp(a->data.string, b->data.string) == 0;
         case EXPR_FUNCTION: {
@@ -427,6 +463,20 @@ bool expr_eq(const Expr* a, const Expr* b) {
         }
         case EXPR_BIGINT:
             return mpz_cmp(a->data.bigint, b->data.bigint) == 0;
+        case EXPR_NDARRAY: {
+            /* dtype is part of identity (a float32 array is not SameQ to a
+             * float64 one with equal values, matching the MPFR-precision rule
+             * below). */
+            if (a->data.ndarray.dtype != b->data.ndarray.dtype) return false;
+            if (a->data.ndarray.rank != b->data.ndarray.rank) return false;
+            size_t n = 1;
+            for (int i = 0; i < a->data.ndarray.rank; i++) {
+                if (a->data.ndarray.dims[i] != b->data.ndarray.dims[i]) return false;
+                n *= (size_t)a->data.ndarray.dims[i];
+            }
+            size_t bytes = ndt_elem_size(a->data.ndarray.dtype) * n;
+            return memcmp(a->data.ndarray.data, b->data.ndarray.data, bytes) == 0;
+        }
 #ifdef USE_MPFR
         case EXPR_MPFR:
             /* Equal iff same precision AND same value (matches SameQ
@@ -467,7 +517,7 @@ uint64_t expr_hash(const Expr* e) {
         }
         case EXPR_SYMBOL:
         case EXPR_STRING: {
-            const char* s = e->data.symbol;
+            const char* s = e->data.symbol.name;
             if (s) {
                 while (*s) {
                     h ^= (uint8_t)(*s++);
@@ -492,6 +542,26 @@ uint64_t expr_hash(const Expr* e) {
             for (size_t i = 0; i < nlimbs; i++) {
                 h ^= mpz_getlimbn(e->data.bigint, i);
                 h *= prime;
+            }
+            break;
+        }
+        case EXPR_NDARRAY: {
+            h ^= (uint64_t)e->data.ndarray.rank;
+            h *= prime;
+            h ^= (uint64_t)e->data.ndarray.dtype;
+            h *= prime;
+            size_t n = 1;
+            for (int i = 0; i < e->data.ndarray.rank; i++) {
+                h ^= (uint64_t)e->data.ndarray.dims[i];
+                h *= prime;
+                n *= (size_t)e->data.ndarray.dims[i];
+            }
+            /* Hash the raw buffer as bytes so all dtypes (incl. 4-byte float /
+             * float32-complex) hash correctly. */
+            const unsigned char* bytes = (const unsigned char*)e->data.ndarray.data;
+            size_t nbytes = ndt_elem_size(e->data.ndarray.dtype) * n;
+            for (size_t i = 0; i < nbytes; i++) {
+                h ^= (uint64_t)bytes[i]; h *= prime;
             }
             break;
         }

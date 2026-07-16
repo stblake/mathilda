@@ -46,6 +46,7 @@
  */
 
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "symtab.h"
 #include "attr.h"
 #include "print.h"
@@ -180,7 +181,7 @@ static bool expr_to_mpq(Expr* e, mpq_t out) {
     }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.head->data.symbol.name == SYM_Rational
         && e->data.function.arg_count == 2) {
         Expr* n = e->data.function.args[0];
         Expr* dn = e->data.function.args[1];
@@ -206,14 +207,14 @@ static bool entry_to_grat(Expr* e, GRat* z) {
         mpq_set_ui(z->im, 0, 1);
         return true;
     }
-    if (e->type == EXPR_SYMBOL && strcmp(e->data.symbol, "I") == 0) {
+    if (e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, "I") == 0) {
         mpq_set_ui(z->re, 0, 1);
         mpq_set_si(z->im, 1, 1);
         return true;
     }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Complex
+        && e->data.function.head->data.symbol.name == SYM_Complex
         && e->data.function.arg_count == 2) {
         if (!expr_to_mpq(e->data.function.args[0], z->re)) return false;
         if (!expr_to_mpq(e->data.function.args[1], z->im)) return false;
@@ -427,6 +428,7 @@ static int lll_reduce(GRat* B, int n, int d, mpq_t* min_gso2) {
  *  Public builtin.                                                    *
  * ------------------------------------------------------------------ */
 Expr* builtin_latticereduce(Expr* res) {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc != 1) {
@@ -579,7 +581,7 @@ static bool finv_extract_double_pair(const Expr* e, double* re, double* im) {
     if (finv_num_to_double(e, re)) { *im = 0.0; return true; }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Complex
+        && e->data.function.head->data.symbol.name == SYM_Complex
         && e->data.function.arg_count == 2) {
         if (finv_num_to_double(e->data.function.args[0], re)
          && finv_num_to_double(e->data.function.args[1], im))
@@ -661,8 +663,8 @@ static int finv_user_zerotest(Expr* fn, Expr* residual) {
     Expr* r = eval_and_free(call);
     int verdict = -1;
     if (r && r->type == EXPR_SYMBOL) {
-        if (strcmp(r->data.symbol, "True") == 0) verdict = 1;
-        else if (strcmp(r->data.symbol, "False") == 0) verdict = 0;
+        if (strcmp(r->data.symbol.name, "True") == 0) verdict = 1;
+        else if (strcmp(r->data.symbol.name, "False") == 0) verdict = 0;
     }
     expr_free(r);
     return verdict;
@@ -676,6 +678,7 @@ static void finv_msg(const char* tag, const char* body, Expr* list) {
 }
 
 Expr* builtin_findintegernullvector(Expr* res) {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     Expr** av = res->data.function.args;
@@ -689,15 +692,15 @@ Expr* builtin_findintegernullvector(Expr* res) {
         Expr* o = av[pos_end - 1];
         if (o->type != EXPR_FUNCTION
             || o->data.function.head->type != EXPR_SYMBOL
-            || (o->data.function.head->data.symbol != SYM_Rule
-             && o->data.function.head->data.symbol != SYM_RuleDelayed)
+            || (o->data.function.head->data.symbol.name != SYM_Rule
+             && o->data.function.head->data.symbol.name != SYM_RuleDelayed)
             || o->data.function.arg_count != 2
             || o->data.function.args[0]->type != EXPR_SYMBOL)
             break;
-        const char* opt = o->data.function.args[0]->data.symbol;
+        const char* opt = o->data.function.args[0]->data.symbol.name;
         Expr* val = o->data.function.args[1];
         if (opt == SYM_WorkingPrecision) {
-            if (!(val->type == EXPR_SYMBOL && val->data.symbol == SYM_Automatic)) {
+            if (!(val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_Automatic)) {
                 double digits;
                 if (!finv_num_to_double(val, &digits) || digits <= 0.0) return NULL;
                 wp_explicit = true;
@@ -705,7 +708,7 @@ Expr* builtin_findintegernullvector(Expr* res) {
                 if (wp_bits < 8) wp_bits = 8;
             }
         } else if (strcmp(opt, "ZeroTest") == 0) {
-            if (!(val->type == EXPR_SYMBOL && val->data.symbol == SYM_Automatic))
+            if (!(val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_Automatic))
                 zerotest_fn = val;
         } else {
             break;                  /* unknown trailing rule: not an option */
@@ -718,7 +721,7 @@ Expr* builtin_findintegernullvector(Expr* res) {
     Expr* list = av[0];
     if (list->type != EXPR_FUNCTION
         || list->data.function.head->type != EXPR_SYMBOL
-        || list->data.function.head->data.symbol != SYM_List)
+        || list->data.function.head->data.symbol.name != SYM_List)
         return NULL;
     size_t n = list->data.function.arg_count;
     if (n < 2) return NULL;

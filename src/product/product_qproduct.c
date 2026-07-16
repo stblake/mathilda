@@ -26,7 +26,7 @@
 
 static bool is_head(const Expr* e, const char* sym) {
     return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == sym;
+        && e->data.function.head->data.symbol.name == sym;
 }
 
 /* Analyse one factor `base` as alpha + beta * qbase^k (q-linear).
@@ -44,7 +44,7 @@ static bool split_qpow(Expr* e, Expr* var, Expr** qb, Expr** bprod) {
     }
     if (is_head(e, SYM_Power) && e->data.function.arg_count == 2
             && e->data.function.args[1]->type == EXPR_SYMBOL
-            && e->data.function.args[1]->data.symbol == var->data.symbol
+            && e->data.function.args[1]->data.symbol.name == var->data.symbol.name
             && prod_free_of(e->data.function.args[0], var)) {
         if (*qb) return false;                        /* two q^k factors */
         *qb = e->data.function.args[0];
@@ -295,7 +295,7 @@ Expr* builtin_product_qproduct(Expr* res) {
     bool definite;
     if (!product_stage_args(res, &f, &var, &imin, &imax, &definite)) return NULL;
     if (!definite) return NULL;                       /* indefinite q-products deferred */
-    if (imax->type == EXPR_SYMBOL && imax->data.symbol == SYM_Infinity)
+    if (imax->type == EXPR_SYMBOL && imax->data.symbol.name == SYM_Infinity)
         return try_qproduct_infinite(f, var, imin);   /* NULL -> fall through */
     if (!prod_has_symbolic_power(f, var)) return NULL; /* no q^k -> not our job */
 

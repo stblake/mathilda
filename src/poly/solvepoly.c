@@ -95,7 +95,7 @@ static bool is_definite_zero(const Expr* e) {
     if (e->type == EXPR_REAL)    return e->data.real == 0.0;
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.head->data.symbol.name == SYM_Rational
         && e->data.function.arg_count == 2) {
         return is_definite_zero(e->data.function.args[0]);
     }
@@ -126,7 +126,7 @@ static int try_sign(Expr* e) {
     }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.head->data.symbol.name == SYM_Rational
         && e->data.function.arg_count == 2) {
         /* Mathilda's canonical Rational has positive denominator,
          * so the sign matches the numerator. */
@@ -630,7 +630,7 @@ static Expr** solve_quartic_radical(Expr* a, Expr* b, Expr* c, Expr* d,
  * src/root.c. */
 static Expr* sub_var_with_slot(Expr* e, const char* vname) {
     if (!e) return NULL;
-    if (e->type == EXPR_SYMBOL && e->data.symbol == vname) {
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name == vname) {
         return mk_fn1("Slot", mk_int(1));
     }
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
@@ -647,7 +647,7 @@ static Expr* sub_var_with_slot(Expr* e, const char* vname) {
 
 /* Root[Function[poly_in_slot1], k]. */
 static Expr* root_object(Expr* poly_in_var, Expr* var, int k) {
-    Expr* poly_in_slot = sub_var_with_slot(poly_in_var, var->data.symbol);
+    Expr* poly_in_slot = sub_var_with_slot(poly_in_var, var->data.symbol.name);
     Expr* fn = mk_fn1("Function", poly_in_slot);
     return mk_fn2("Root", fn, mk_int(k));
 }
@@ -771,7 +771,7 @@ static bool solve_gcd_substituted(Expr* poly, Expr* var, int d, int64_t g,
 
     if (u_solutions->type != EXPR_FUNCTION
         || u_solutions->data.function.head->type != EXPR_SYMBOL
-        || u_solutions->data.function.head->data.symbol != SYM_List) {
+        || u_solutions->data.function.head->data.symbol.name != SYM_List) {
         expr_free(u_solutions);
         return false;
     }
@@ -779,12 +779,12 @@ static bool solve_gcd_substituted(Expr* poly, Expr* var, int d, int64_t g,
         Expr* sol = u_solutions->data.function.args[i];
         if (sol->type != EXPR_FUNCTION
             || sol->data.function.head->type != EXPR_SYMBOL
-            || sol->data.function.head->data.symbol != SYM_List
+            || sol->data.function.head->data.symbol.name != SYM_List
             || sol->data.function.arg_count != 1) continue;
         Expr* rule = sol->data.function.args[0];
         if (rule->type != EXPR_FUNCTION
             || rule->data.function.head->type != EXPR_SYMBOL
-            || rule->data.function.head->data.symbol != SYM_Rule
+            || rule->data.function.head->data.symbol.name != SYM_Rule
             || rule->data.function.arg_count != 2) continue;
         Expr* u_val = rule->data.function.args[1];
         push_binomial_x_roots(u_val, g, reals_only, mult, sl);
@@ -798,7 +798,7 @@ static bool solve_gcd_substituted(Expr* poly, Expr* var, int d, int64_t g,
 static bool expr_contains_var(const Expr* e, const Expr* var) {
     if (!e || !var) return false;
     if (e->type == EXPR_SYMBOL && var->type == EXPR_SYMBOL
-        && e->data.symbol == var->data.symbol) return true;
+        && e->data.symbol.name == var->data.symbol.name) return true;
     if (e->type != EXPR_FUNCTION) return false;
     if (expr_contains_var(e->data.function.head, var)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
@@ -927,7 +927,7 @@ static bool solve_polydecomp_m2(Expr* poly, Expr* var, int d,
     if (!y_solutions
         || y_solutions->type != EXPR_FUNCTION
         || y_solutions->data.function.head->type != EXPR_SYMBOL
-        || y_solutions->data.function.head->data.symbol != SYM_List) {
+        || y_solutions->data.function.head->data.symbol.name != SYM_List) {
         if (y_solutions) expr_free(y_solutions);
         expr_free(h);
         return false;
@@ -938,12 +938,12 @@ static bool solve_polydecomp_m2(Expr* poly, Expr* var, int d,
         Expr* sol = y_solutions->data.function.args[i];
         if (sol->type != EXPR_FUNCTION
             || sol->data.function.head->type != EXPR_SYMBOL
-            || sol->data.function.head->data.symbol != SYM_List
+            || sol->data.function.head->data.symbol.name != SYM_List
             || sol->data.function.arg_count != 1) continue;
         Expr* rule = sol->data.function.args[0];
         if (rule->type != EXPR_FUNCTION
             || rule->data.function.head->type != EXPR_SYMBOL
-            || rule->data.function.head->data.symbol != SYM_Rule
+            || rule->data.function.head->data.symbol.name != SYM_Rule
             || rule->data.function.arg_count != 2) continue;
         Expr* y_val = rule->data.function.args[1];
         Expr* h_eq = eval_and_free(mk_fn2("Equal",
@@ -956,17 +956,17 @@ static bool solve_polydecomp_m2(Expr* poly, Expr* var, int d,
         if (!x_solutions) continue;
         if (x_solutions->type == EXPR_FUNCTION
             && x_solutions->data.function.head->type == EXPR_SYMBOL
-            && x_solutions->data.function.head->data.symbol == SYM_List) {
+            && x_solutions->data.function.head->data.symbol.name == SYM_List) {
             for (size_t j = 0; j < x_solutions->data.function.arg_count; j++) {
                 Expr* xsol = x_solutions->data.function.args[j];
                 if (xsol->type != EXPR_FUNCTION
                     || xsol->data.function.head->type != EXPR_SYMBOL
-                    || xsol->data.function.head->data.symbol != SYM_List
+                    || xsol->data.function.head->data.symbol.name != SYM_List
                     || xsol->data.function.arg_count != 1) continue;
                 Expr* xrule = xsol->data.function.args[0];
                 if (xrule->type != EXPR_FUNCTION
                     || xrule->data.function.head->type != EXPR_SYMBOL
-                    || xrule->data.function.head->data.symbol != SYM_Rule
+                    || xrule->data.function.head->data.symbol.name != SYM_Rule
                     || xrule->data.function.arg_count != 2) continue;
                 Expr* x_val = xrule->data.function.args[1];
                 sl_push_with_mult(sl, expr_copy(x_val), mult);
@@ -1169,7 +1169,7 @@ static bool walk_one_factor(Expr* f, Expr* var, bool reals_only,
                             int64_t outer_mult, SolList* sl) {
     if (f->type == EXPR_FUNCTION
         && f->data.function.head->type == EXPR_SYMBOL
-        && f->data.function.head->data.symbol == SYM_Power
+        && f->data.function.head->data.symbol.name == SYM_Power
         && f->data.function.arg_count == 2
         && f->data.function.args[1]->type == EXPR_INTEGER
         && f->data.function.args[1]->data.integer > 0) {
@@ -1179,7 +1179,7 @@ static bool walk_one_factor(Expr* f, Expr* var, bool reals_only,
     }
     if (f->type == EXPR_FUNCTION
         && f->data.function.head->type == EXPR_SYMBOL
-        && f->data.function.head->data.symbol == SYM_Times) {
+        && f->data.function.head->data.symbol.name == SYM_Times) {
         return walk_product(f, var, reals_only, opts, dom, outer_mult, sl);
     }
     return handle_factor(f, var, reals_only, opts, dom, outer_mult, sl);
@@ -1190,7 +1190,7 @@ static bool walk_product(Expr* prod, Expr* var, bool reals_only,
                          int64_t outer_mult, SolList* sl) {
     if (prod->type != EXPR_FUNCTION
         || prod->data.function.head->type != EXPR_SYMBOL
-        || prod->data.function.head->data.symbol != SYM_Times) {
+        || prod->data.function.head->data.symbol.name != SYM_Times) {
         return walk_one_factor(prod, var, reals_only, opts, dom,
                                outer_mult, sl);
     }
@@ -1236,7 +1236,7 @@ static bool is_concrete_real(const Expr* e) {
     }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.head->data.symbol.name == SYM_Rational
         && e->data.function.arg_count == 2) {
         return true;
     }
@@ -1256,7 +1256,7 @@ static void decompose_root(const Expr* v, Expr** mag_out, Expr** exp_out) {
     Expr* single_array[1] = { (Expr*)v };
     if (v->type == EXPR_FUNCTION
         && v->data.function.head->type == EXPR_SYMBOL
-        && v->data.function.head->data.symbol == SYM_Times) {
+        && v->data.function.head->data.symbol.name == SYM_Times) {
         factors = v->data.function.args;
         fc = v->data.function.arg_count;
     } else {
@@ -1276,7 +1276,7 @@ static void decompose_root(const Expr* v, Expr** mag_out, Expr** exp_out) {
         }
         if (f->type == EXPR_FUNCTION
             && f->data.function.head->type == EXPR_SYMBOL
-            && f->data.function.head->data.symbol == SYM_Power
+            && f->data.function.head->data.symbol.name == SYM_Power
             && f->data.function.arg_count == 2
             && f->data.function.args[0]->type == EXPR_INTEGER
             && f->data.function.args[0]->data.integer == -1) {
@@ -1396,7 +1396,7 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
     if (var->type != EXPR_SYMBOL) return NULL;
     if (equation->type != EXPR_FUNCTION
         || equation->data.function.head->type != EXPR_SYMBOL
-        || equation->data.function.head->data.symbol != SYM_Equal
+        || equation->data.function.head->data.symbol.name != SYM_Equal
         || equation->data.function.arg_count != 2) {
         return NULL;
     }
@@ -1418,7 +1418,7 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
     bool reals_only = false;
     bool integers_only = false;
     if (dom && dom->type == EXPR_SYMBOL) {
-        const char* dsym = dom->data.symbol;
+        const char* dsym = dom->data.symbol.name;
         if (dsym == SYM_Reals) {
             reals_only = true;
         } else if (dsym == SYM_Integers) {
@@ -1644,7 +1644,7 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
         size_t cap = 1;
         if (sqfree->type == EXPR_FUNCTION
             && sqfree->data.function.head->type == EXPR_SYMBOL
-            && sqfree->data.function.head->data.symbol == SYM_Times) {
+            && sqfree->data.function.head->data.symbol.name == SYM_Times) {
             cap = sqfree->data.function.arg_count;
         }
         Expr** sf_factors = (Expr**)malloc(sizeof(Expr*) * cap);
@@ -1653,12 +1653,12 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
 
         if (sqfree->type == EXPR_FUNCTION
             && sqfree->data.function.head->type == EXPR_SYMBOL
-            && sqfree->data.function.head->data.symbol == SYM_Times) {
+            && sqfree->data.function.head->data.symbol.name == SYM_Times) {
             for (size_t i = 0; i < sqfree->data.function.arg_count; i++) {
                 Expr* fi = sqfree->data.function.args[i];
                 if (fi->type == EXPR_FUNCTION
                     && fi->data.function.head->type == EXPR_SYMBOL
-                    && fi->data.function.head->data.symbol == SYM_Power
+                    && fi->data.function.head->data.symbol.name == SYM_Power
                     && fi->data.function.arg_count == 2
                     && fi->data.function.args[1]->type == EXPR_INTEGER
                     && fi->data.function.args[1]->data.integer > 0) {
@@ -1673,7 +1673,7 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
         } else {
             if (sqfree->type == EXPR_FUNCTION
                 && sqfree->data.function.head->type == EXPR_SYMBOL
-                && sqfree->data.function.head->data.symbol == SYM_Power
+                && sqfree->data.function.head->data.symbol.name == SYM_Power
                 && sqfree->data.function.arg_count == 2
                 && sqfree->data.function.args[1]->type == EXPR_INTEGER
                 && sqfree->data.function.args[1]->data.integer > 0) {

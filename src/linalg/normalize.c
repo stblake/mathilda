@@ -21,6 +21,7 @@
  */
 
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "sym_names.h"
 #include "eval.h"
 #include "expr.h"
@@ -55,6 +56,7 @@ static bool norm_is_numeric_zero(const Expr* e) {
 
 Expr* builtin_normalize(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    if (linalg_call_has_ndarray(res)) return ndla_normalize(res);
     size_t argc = res->data.function.arg_count;
     if (argc != 1 && argc != 2) {
         fprintf(stderr,

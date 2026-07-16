@@ -116,6 +116,30 @@ static bool contains_unintegrated(const Expr* e) {
     return false;
 }
 
+/* True if `f` contains a Power[b, e] whose base `b` involves x and whose
+ * exponent `e` is not a concrete number -- a symbolic-exponent monomial such
+ * as x^k, x^(k-1) or x^(a+b).
+ *
+ * DerivativeDivides forms the quotient f / u'(x) and normalises it with
+ * Together/Cancel.  When x carries a symbolic exponent, that normalisation
+ * feeds PolynomialGCD a pseudo-remainder sequence over the symbolic powers as
+ * independent generators, which blows up (unbounded time) -- and such a
+ * monomial is never a productive u-substitution kernel here anyway.  Bailing
+ * early keeps the cascade responsive; the integral falls through to the
+ * methods that own these forms (rational / Euler-Beta reductions, tables). */
+static bool has_symbolic_power_of(const Expr* f, const Expr* x) {
+    if (!f || f->type != EXPR_FUNCTION) return false;
+    if (head_is((Expr*)f, SYM_Power) && f->data.function.arg_count == 2) {
+        const Expr* b = f->data.function.args[0];
+        const Expr* e = f->data.function.args[1];
+        if (!expr_free_of(b, x) && !expr_is_numeric_like(e)) return true;
+    }
+    if (!expr_free_of(f->data.function.head, x)) return true;
+    for (size_t i = 0; i < f->data.function.arg_count; i++)
+        if (has_symbolic_power_of(f->data.function.args[i], x)) return true;
+    return false;
+}
+
 /* D[expr, x]; borrows, returns owned (evaluated). */
 static Expr* deriv_dx(const Expr* expr, const Expr* x) {
     return eval_take(mk_fn2("D", expr_copy((Expr*)expr), expr_copy((Expr*)x)));
@@ -153,7 +177,7 @@ static bool differentiates_back(const Expr* r, const Expr* f, const Expr* x) {
                         mk_fn2("Times", mk_int(-1), expr_copy((Expr*)f)));
 
     Expr* pz = eval_take(mk_fn1("PossibleZeroQ", diff));
-    bool zero = pz && pz->type == EXPR_SYMBOL && pz->data.symbol == SYM_True;
+    bool zero = pz && pz->type == EXPR_SYMBOL && pz->data.symbol.name == SYM_True;
     if (pz) expr_free(pz);
     return zero;
 }
@@ -309,6 +333,29 @@ static void fresh_uy(Expr** u, Expr** y) {
 /* Strategy 1: direct quotient                                            */
 /* ---------------------------------------------------------------------- */
 
+/* If `w` is a pure unit root of the integration variable, w = x^(1/n)
+ * (n >= 2), return n; else 0.  For such a kernel the substitution u = x^(1/n)
+ * inverts cleanly as x = u^n, which lets the direct-quotient strategy replace
+ * the residual x that a bare w -> u leaves behind (e.g. Sqrt[x + Sqrt[x]] with
+ * kernel Sqrt[x] gives 2 u Sqrt[u + x]; closing x -> u^2 yields the clean
+ * 2 u Sqrt[u + u^2], keeping the antiderivative in the integrand's own radical
+ * Sqrt[x + Sqrt[x]] rather than introducing x^(1/4) generators). */
+static int64_t kernel_root_degree(const Expr* w, const Expr* x) {
+    if (!w || w->type != EXPR_FUNCTION) return 0;
+    if (!head_is((Expr*)w, SYM_Power) || w->data.function.arg_count != 2) return 0;
+    if (!expr_eq(w->data.function.args[0], (Expr*)x)) return 0;
+    const Expr* e = w->data.function.args[1];
+    if (e->type == EXPR_FUNCTION && head_is((Expr*)e, SYM_Rational)
+        && e->data.function.arg_count == 2) {
+        const Expr* a = e->data.function.args[0];
+        const Expr* b = e->data.function.args[1];
+        if (a->type == EXPR_INTEGER && b->type == EXPR_INTEGER
+            && a->data.integer == 1 && b->data.integer >= 2)
+            return b->data.integer;
+    }
+    return 0;
+}
+
 /* Try kernel `w` via  q = Cancel[Together[f / D[w, x]]]; q /. w -> u.
  * Returns a verified antiderivative or NULL.  Borrows everything. */
 static Expr* try_direct_kernel(const Expr* f, const Expr* x, const Expr* w) {
@@ -323,6 +370,29 @@ static Expr* try_direct_kernel(const Expr* f, const Expr* x, const Expr* w) {
 
     Expr* u; Expr* y; fresh_uy(&u, &y);
     Expr* qu = replace_one(q, w, u);                        /* consumes q */
+
+    /* A bare w -> u can leave the variable behind when w is a root of x (the
+     * radicand still mentions x, e.g. Sqrt[x + Sqrt[x]] -> 2 u Sqrt[u + x]).
+     * For a unit root w = x^(1/n) the inverse x = u^n closes the substitution
+     * without introducing foreign radical generators; differentiate-back still
+     * gates correctness. */
+    if (qu && !expr_free_of(qu, x)) {
+        int64_t n = kernel_root_degree(w, x);
+        if (n >= 2) {
+            Expr* upow = mk_fn2("Power", expr_copy(u), mk_int(n));
+            qu = replace_one(qu, x, upow);                  /* consumes qu */
+            expr_free(upow);
+            /* PowerExpand collapses the (u^n)^(p/n) powers the x -> u^n
+             * substitution creates (e.g. from x^(5/2) -> (u^2)^(5/2)) down to
+             * u^p, under u = x^(1/n) >= 0 (the integration-positivity
+             * convention).  It leaves genuine radicals of polynomials in u --
+             * Sqrt[u^2 + u] etc. -- untouched, so the reduced integrand stays a
+             * clean function of the integrand's own radical.  differentiate-back
+             * against the original f re-verifies, so a branch-crossing expansion
+             * is rejected rather than trusted. */
+            if (qu) qu = eval_take(mk_fn1("PowerExpand", qu));
+        }
+    }
 
     Expr* result = NULL;
     if (qu && expr_free_of(qu, x)) {
@@ -429,6 +499,10 @@ static Expr* dd_core(Expr* f, Expr* x, bool use_eliminate,
     if (x->type != EXPR_SYMBOL) return NULL;
     if (expr_free_of(f, x))      return NULL;   /* nothing to integrate in x */
     if (dd_depth >= DD_MAX_DEPTH) return NULL;
+    /* Symbolic-exponent monomials (x^k, x^(k-1), ...) send the Together/Cancel
+     * quotient normalisation into a PolynomialGCD pseudo-remainder blow-up and
+     * are never a productive substitution kernel -- decline them up front. */
+    if (has_symbolic_power_of(f, x)) return NULL;
 
     bool outermost = (dd_depth == 0);
 

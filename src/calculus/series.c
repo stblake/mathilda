@@ -32,6 +32,7 @@
 #include "poly.h"
 #include "rationalize.h"
 #include "sym_names.h"
+#include "ndarray.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -80,7 +81,7 @@ static bool is_lit_zero(Expr* e) {
 static bool has_symbol_head(Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, name) == 0;
+           strcmp(e->data.function.head->data.symbol.name, name) == 0;
 }
 
 /* Cheap structural test for SeriesData[x, x0, {coefs}, nmin, nmax, den]. Uses
@@ -89,7 +90,7 @@ static bool has_symbol_head(Expr* e, const char* name) {
 bool is_series_data(const Expr* e) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol == SYM_SeriesData &&
+           e->data.function.head->data.symbol.name == SYM_SeriesData &&
            e->data.function.arg_count == 6;
 }
 
@@ -154,7 +155,7 @@ bool series_split_two_term(Expr* e, Expr* x,
     if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) {
         return false;
     }
-    const char* head = e->data.function.head->data.symbol;
+    const char* head = e->data.function.head->data.symbol.name;
     size_t n = e->data.function.arg_count;
 
     if (head == SYM_Plus) {
@@ -573,11 +574,11 @@ static bool so_is_purely_numeric(Expr* e) {
         case EXPR_MPFR:
 #endif
             return true;
-        case EXPR_SYMBOL: case EXPR_STRING: return false;
+        case EXPR_SYMBOL: case EXPR_STRING: case EXPR_NDARRAY: return false;
         case EXPR_FUNCTION: {
             Expr* h = e->data.function.head;
             if (h->type != EXPR_SYMBOL) return false;
-            const char* s = h->data.symbol;
+            const char* s = h->data.symbol.name;
             if (s != SYM_Rational && s != SYM_Complex &&
                 s != SYM_Times && s != SYM_Plus &&
                 s != SYM_Power) return false;
@@ -1089,6 +1090,51 @@ static Expr** kernel_coefs(const char* name, size_t N) {
             Expr* ratio = make_rational(num, den);
             c[k] = simp(mk_times(expr_copy(c[k - 2]), ratio));
         }
+    } else if (strcmp(name, "SinIntegral") == 0) {
+        /* Si[u] = sum_{m>=0} (-1)^m u^(2m+1) / ((2m+1)(2m+1)!).
+         * Odd powers only; c_{2m+1} = c_{2m-1} * -(2m-1)/((2m)(2m+1)^2), c_1 = 1. */
+        c[0] = expr_new_integer(0);
+        if (N > 1) c[1] = expr_new_integer(1);
+        for (size_t k = 2; k < N; k++) {
+            if ((k & 1) == 0) { c[k] = expr_new_integer(0); continue; }
+            int64_t m = (int64_t)(k - 1) / 2;
+            int64_t num = -(2*m - 1);
+            int64_t den = (2*m) * (2*m + 1) * (2*m + 1);
+            Expr* ratio = make_rational(num, den);
+            c[k] = simp(mk_times(expr_copy(c[k - 2]), ratio));
+        }
+    } else if (strcmp(name, "FresnelC") == 0) {
+        /* C[u] = sum_{m>=0} (-1)^m (Pi/2)^(2m) u^(4m+1) / ((2m)!(4m+1)).
+         * Powers 4m+1 only; c_1 = 1,
+         * c_{4m+1} = c_{4m-3} * Pi^2 * -(4m-3)/(4(2m-1)(2m)(4m+1)). */
+        c[0] = expr_new_integer(0);
+        if (N > 1) c[1] = expr_new_integer(1);
+        for (size_t k = 2; k < N; k++) {
+            if (k % 4 != 1) { c[k] = expr_new_integer(0); continue; }
+            int64_t m = (int64_t)(k - 1) / 4;
+            int64_t num = -(4*m - 3);
+            int64_t den = 4 * (2*m - 1) * (2*m) * (4*m + 1);
+            Expr* ratio = simp(mk_times(mk_power(mk_symbol("Pi"), expr_new_integer(2)),
+                                        make_rational(num, den)));
+            c[k] = simp(mk_times(expr_copy(c[k - 4]), ratio));
+        }
+    } else if (strcmp(name, "FresnelS") == 0) {
+        /* S[u] = sum_{m>=0} (-1)^m (Pi/2)^(2m+1) u^(4m+3) / ((2m+1)!(4m+3)).
+         * Powers 4m+3 only; c_3 = Pi/6,
+         * c_{4m+3} = c_{4m-1} * Pi^2 * -(4m-1)/(4(2m)(2m+1)(4m+3)). */
+        c[0] = expr_new_integer(0);
+        if (N > 1) c[1] = expr_new_integer(0);
+        if (N > 2) c[2] = expr_new_integer(0);
+        if (N > 3) c[3] = simp(mk_times(make_rational(1, 6), mk_symbol("Pi")));
+        for (size_t k = 4; k < N; k++) {
+            if (k % 4 != 3) { c[k] = expr_new_integer(0); continue; }
+            int64_t m = (int64_t)(k - 3) / 4;
+            int64_t num = -(4*m - 1);
+            int64_t den = 4 * (2*m) * (2*m + 1) * (4*m + 3);
+            Expr* ratio = simp(mk_times(mk_power(mk_symbol("Pi"), expr_new_integer(2)),
+                                        make_rational(num, den)));
+            c[k] = simp(mk_times(expr_copy(c[k - 4]), ratio));
+        }
     } else {
         for (size_t i = 0; i < N; i++) c[i] = expr_new_integer(0);
     }
@@ -1372,7 +1418,7 @@ static Expr* make_imag_unit_signed(int sign) {
 static bool is_imag_unit(Expr* e, int sign) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
-    if (e->data.function.head->data.symbol != SYM_Complex) return false;
+    if (e->data.function.head->data.symbol.name != SYM_Complex) return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* re = e->data.function.args[0];
     Expr* im = e->data.function.args[1];
@@ -2001,14 +2047,14 @@ static SeriesObj* so_apply_sinh_or_cosh(SeriesObj* s, bool is_sinh) {
 static bool has_infinity(Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_SYMBOL) {
-        const char* s = e->data.symbol;
+        const char* s = e->data.symbol.name;
         return (s == SYM_Infinity ||
                 s == SYM_ComplexInfinity ||
                 s == SYM_Indeterminate);
     }
     if (e->type == EXPR_FUNCTION) {
         if (e->data.function.head->type == EXPR_SYMBOL) {
-            const char* h = e->data.function.head->data.symbol;
+            const char* h = e->data.function.head->data.symbol.name;
             if (h == SYM_DirectedInfinity ||
                 h == SYM_Indeterminate) return true;
         }
@@ -2094,6 +2140,7 @@ static bool is_known_elementary(Expr* e) {
         "Sinh", "Cosh", "Tanh",
         "ArcSin", "ArcCos", "ArcTan", "ArcCot",
         "ArcSinh", "ArcCosh", "ArcTanh", "ArcCoth",
+        "SinIntegral", "FresnelC", "FresnelS",
         NULL
     };
     for (int i = 0; names[i]; i++) if (has_symbol_head(e, names[i])) return true;
@@ -2118,12 +2165,14 @@ static bool is_known_elementary(Expr* e) {
 static Expr* rewrite_reciprocal_head(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 1) return NULL;
     if (e->data.function.head->type != EXPR_SYMBOL) return NULL;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     Expr* arg = expr_copy(e->data.function.args[0]);
     if (h == SYM_Sec) return mk_power(mk_fn1("Cos",  arg), expr_new_integer(-1));
     if (h == SYM_Csc) return mk_power(mk_fn1("Sin",  arg), expr_new_integer(-1));
     if (h == SYM_Cot) return mk_times(mk_fn1("Cos",  expr_copy(arg)),
                                                 mk_power(mk_fn1("Sin",  arg), expr_new_integer(-1)));
+    if (h == SYM_Sinc) return mk_times(mk_fn1("Sin", expr_copy(arg)),
+                                                mk_power(arg, expr_new_integer(-1)));
     if (h == SYM_Sech) return mk_power(mk_fn1("Cosh", arg), expr_new_integer(-1));
     if (h == SYM_Csch) return mk_power(mk_fn1("Sinh", arg), expr_new_integer(-1));
     if (h == SYM_Coth) return mk_times(mk_fn1("Cosh", expr_copy(arg)),
@@ -2274,7 +2323,7 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
 
     if (e->type == EXPR_FUNCTION) {
         const char* head = (e->data.function.head->type == EXPR_SYMBOL)
-                               ? e->data.function.head->data.symbol : NULL;
+                               ? e->data.function.head->data.symbol.name : NULL;
         /* ---- Plus ---- */
         if (head && strcmp(head, "Plus") == 0) {
             SeriesObj* acc = NULL;
@@ -2448,6 +2497,18 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                     int sc = so_branch_point_imag_sign(inner);
                     if (sc != 0) r = so_apply_arctan_branch_point(inner, sc, ctx->target_order, ctx);
                 }
+            }
+            else if (strcmp(head, "SinIntegral") == 0) {
+                /* Si is entire and odd (Si(0)=0), analytic at u=0 like ArcTan. */
+                r = so_apply_kernel_at_zero("SinIntegral", inner);
+            }
+            else if (strcmp(head, "FresnelC") == 0) {
+                /* FresnelC is entire and odd (C(0)=0), analytic at u=0. */
+                r = so_apply_kernel_at_zero("FresnelC", inner);
+            }
+            else if (strcmp(head, "FresnelS") == 0) {
+                /* FresnelS is entire and odd (S(0)=0), analytic at u=0. */
+                r = so_apply_kernel_at_zero("FresnelS", inner);
             }
             else if (strcmp(head, "ArcTanh") == 0) {
                 r = so_apply_kernel_at_zero("ArcTanh", inner);
@@ -2740,13 +2801,13 @@ static bool expr_nonanalytic_in(const Expr* e, Expr* x) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (expr_free_of((Expr*)e, x)) return false;   /* no dependence -> safe */
     Expr* h = e->data.function.head;
-    if (h && h->type == EXPR_SYMBOL && h->data.symbol) {
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol.name) {
         static const char* const bad[] = {
             "Floor", "Ceiling", "Round", "IntegerPart", "FractionalPart",
             "Mod", "Quotient", "Sign", "Abs", "Arg", "UnitStep",
             "KroneckerDelta", "Boole", "Max", "Min", NULL };
         for (size_t i = 0; bad[i]; i++)
-            if (strcmp(h->data.symbol, bad[i]) == 0) return true;
+            if (strcmp(h->data.symbol.name, bad[i]) == 0) return true;
     }
     if (expr_nonanalytic_in(h, x)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
@@ -2766,7 +2827,7 @@ static Expr* series_base_var(Expr* x) {
     if (x->type == EXPR_SYMBOL) return x;
     if (x->type == EXPR_FUNCTION &&
         x->data.function.head->type == EXPR_SYMBOL &&
-        x->data.function.head->data.symbol == SYM_Power &&
+        x->data.function.head->data.symbol.name == SYM_Power &&
         x->data.function.arg_count == 2 &&
         x->data.function.args[0]->type == EXPR_SYMBOL)
         return x->data.function.args[0];
@@ -2813,9 +2874,11 @@ static SeriesObj* operand_to_series(Expr* op, Expr* x, Expr* x0,
         /* Anything else: expand it as a series about (x, x0). Pad the internal
          * order the same way builtin_series does so Laurent/Puiseux operands
          * survive. */
-        bool x0_is_numeric = (x0->type == EXPR_INTEGER ||
-                              x0->type == EXPR_REAL ||
-                              x0->type == EXPR_BIGINT);
+        /* A concrete number -- including Complex[num, num] (every UHP pole) and
+         * Rational -- keeps so_inv's convolution coefficients numeric and
+         * bounded, so it earns the full Laurent pad. Only a free/symbolic x0
+         * risks the O(N^2) symbolic-coefficient blow-up the tight pad guards. */
+        bool x0_is_numeric = expr_is_numeric_like(x0);
         int64_t target = order_num > 0 ? order_num : 1;
         int64_t pad = x0_is_numeric ? 12 : 2;
         SeriesCtx ctx = {
@@ -3029,9 +3092,14 @@ Expr* builtin_normal(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
 
+    /* Normal[ndarray] converts an NDArray back to its equivalent nested List. */
+    if (arg->type == EXPR_NDARRAY) {
+        return ndarray_to_nested_list(arg);
+    }
+
     /* Normal[assoc] converts an association to its list of rules. */
     if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
-        arg->data.function.head->data.symbol == SYM_Association) {
+        arg->data.function.head->data.symbol.name == SYM_Association) {
         size_t n = arg->data.function.arg_count;
         Expr** rules = malloc(sizeof(Expr*) * (n ? n : 1));
         for (size_t i = 0; i < n; i++) rules[i] = expr_copy(arg->data.function.args[i]);
@@ -3209,7 +3277,7 @@ static bool has_negative_power_in(Expr* e, Expr* x) {
     if (!e) return false;
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp  = e->data.function.args[1];
@@ -3234,7 +3302,7 @@ static bool all_negative_powers_polynomial(Expr* e, Expr* x) {
     if (!e) return true;
     if (e->type != EXPR_FUNCTION) return true;
     if (e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp  = e->data.function.args[1];
@@ -3269,7 +3337,7 @@ static bool all_negative_powers_polynomial(Expr* e, Expr* x) {
 static bool has_non_rational_power_in(Expr* e, Expr* x) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp  = e->data.function.args[1];
@@ -3356,6 +3424,325 @@ static Expr* try_series_ei_at_infinity(Expr* f, Expr* x, int64_t n) {
     free(sd);
 
     return mk_times(mk_fn1("Exp", expr_copy(x)), series);
+}
+
+/* Asymptotic expansion of SinIntegral[x] at x = Infinity (DLMF 6.12.3):
+ *
+ *   Si(x) ~ Pi/2 - cos(x) f(x) - sin(x) g(x),
+ *     f(x) = Sum_{k>=0} (-1)^k (2k)!   / x^(2k+1),
+ *     g(x) = Sum_{k>=0} (-1)^k (2k+1)! / x^(2k+2).
+ *
+ * cos(x)/sin(x) are essential-singularity prefactors that stay symbolic while
+ * each bracket is a Laurent series in 1/x. Folding the leading minus signs in,
+ * the result (matching Mathematica's Series[SinIntegral[x],{x,Infinity,k}]) is
+ *
+ *   Pi/2
+ *   + Cos[x] SeriesData[1/x, 0, { (-1)^{k+1}(2k)!   at 1/x^(2k+1) }, 1, .., 1]
+ *   + Sin[x] SeriesData[1/x, 0, { (-1)^{k+1}(2k+1)! at 1/x^(2k+2) }, 2, .., 1].
+ *
+ * Returns NULL unless f is exactly SinIntegral[x] in the expansion variable. */
+static Expr* try_series_sinintegral_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "SinIntegral") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+
+    /* f-part: powers 2k+1 (k>=0), populated at 1/x exponents 1, 3, 5, ...
+     * coefficient (-1)^{k+1}(2k)!. nmin = 1. */
+    size_t ncf = (size_t)n;                       /* 1/x exponents 1 .. n */
+    Expr** cf = calloc(ncf, sizeof(Expr*));
+    for (size_t i = 0; i < ncf; i++) cf[i] = expr_new_integer(0);
+    for (int64_t k = 0; ; k++) {
+        int64_t p = 2 * k + 1;                    /* 1/x exponent */
+        if (p > n) break;
+        Expr* fact = eval_and_free(mk_fn1("Factorial", expr_new_integer(2 * k)));
+        int64_t sign = (k % 2 == 0) ? -1 : 1;     /* (-1)^{k+1} */
+        expr_free(cf[(size_t)(p - 1)]);
+        cf[(size_t)(p - 1)] = simp(mk_times(expr_new_integer(sign), fact));
+    }
+    Expr** sdf = calloc(6, sizeof(Expr*));
+    sdf[0] = mk_power(expr_copy(x), expr_new_integer(-1));
+    sdf[1] = expr_new_integer(0);
+    sdf[2] = expr_new_function(mk_symbol("List"), cf, ncf);
+    sdf[3] = expr_new_integer(1);                 /* nmin = 1 */
+    sdf[4] = expr_new_integer(n + 1);             /* O-term  */
+    sdf[5] = expr_new_integer(1);
+    Expr* seriesF = expr_new_function(mk_symbol("SeriesData"), sdf, 6);
+    free(sdf); free(cf);
+
+    Expr* halfpi = simp(mk_times(make_rational(1, 2), mk_symbol("Pi")));
+    Expr* result = mk_plus(halfpi, mk_times(mk_fn1("Cos", expr_copy(x)), seriesF));
+
+    /* g-part: powers 2k+2 (k>=0) at 1/x exponents 2, 4, 6, ...; nmin = 2.
+     * Only emitted if any g-term fits within order n. */
+    if (n >= 2) {
+        size_t ncg = (size_t)(n - 1);             /* 1/x exponents 2 .. n, index p-2 */
+        Expr** cg = calloc(ncg, sizeof(Expr*));
+        for (size_t i = 0; i < ncg; i++) cg[i] = expr_new_integer(0);
+        for (int64_t k = 0; ; k++) {
+            int64_t p = 2 * k + 2;                /* 1/x exponent */
+            if (p > n) break;
+            Expr* fact = eval_and_free(mk_fn1("Factorial", expr_new_integer(2 * k + 1)));
+            int64_t sign = (k % 2 == 0) ? -1 : 1; /* (-1)^{k+1} */
+            expr_free(cg[(size_t)(p - 2)]);
+            cg[(size_t)(p - 2)] = simp(mk_times(expr_new_integer(sign), fact));
+        }
+        Expr** sdg = calloc(6, sizeof(Expr*));
+        sdg[0] = mk_power(expr_copy(x), expr_new_integer(-1));
+        sdg[1] = expr_new_integer(0);
+        sdg[2] = expr_new_function(mk_symbol("List"), cg, ncg);
+        sdg[3] = expr_new_integer(2);             /* nmin = 2 */
+        sdg[4] = expr_new_integer(n + 1);
+        sdg[5] = expr_new_integer(1);
+        Expr* seriesG = expr_new_function(mk_symbol("SeriesData"), sdg, 6);
+        free(sdg); free(cg);
+        result = mk_plus(result, mk_times(mk_fn1("Sin", expr_copy(x)), seriesG));
+    }
+    return result;
+}
+
+/* Asymptotic expansion of CosIntegral[x] at x = Infinity (DLMF 6.12.4):
+ *
+ *   Ci(x) ~ sin(x) f(x) - cos(x) g(x),
+ *     f(x) = Sum_{k>=0} (-1)^k (2k)!   / x^(2k+1),
+ *     g(x) = Sum_{k>=0} (-1)^k (2k+1)! / x^(2k+2).
+ *
+ * There is no constant term (unlike Si's Pi/2). Matching Mathematica's
+ * Series[CosIntegral[x],{x,Infinity,k}]:
+ *
+ *   Sin[x] SeriesData[1/x, 0, { (-1)^k (2k)!     at 1/x^(2k+1) }, 1, .., 1]
+ *   + Cos[x] SeriesData[1/x, 0, { (-1)^{k+1}(2k+1)! at 1/x^(2k+2) }, 2, .., 1].
+ *
+ * Returns NULL unless f is exactly CosIntegral[x] in the expansion variable. */
+static Expr* try_series_cosintegral_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "CosIntegral") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+
+    /* f-part (attached to Sin): powers 2k+1 at 1/x exponents 1, 3, 5, ...
+     * coefficient (-1)^k (2k)!. nmin = 1. */
+    size_t ncf = (size_t)n;                       /* 1/x exponents 1 .. n */
+    Expr** cf = calloc(ncf, sizeof(Expr*));
+    for (size_t i = 0; i < ncf; i++) cf[i] = expr_new_integer(0);
+    for (int64_t k = 0; ; k++) {
+        int64_t p = 2 * k + 1;                    /* 1/x exponent */
+        if (p > n) break;
+        Expr* fact = eval_and_free(mk_fn1("Factorial", expr_new_integer(2 * k)));
+        int64_t sign = (k % 2 == 0) ? 1 : -1;     /* (-1)^k */
+        expr_free(cf[(size_t)(p - 1)]);
+        cf[(size_t)(p - 1)] = simp(mk_times(expr_new_integer(sign), fact));
+    }
+    Expr** sdf = calloc(6, sizeof(Expr*));
+    sdf[0] = mk_power(expr_copy(x), expr_new_integer(-1));
+    sdf[1] = expr_new_integer(0);
+    sdf[2] = expr_new_function(mk_symbol("List"), cf, ncf);
+    sdf[3] = expr_new_integer(1);                 /* nmin = 1 */
+    sdf[4] = expr_new_integer(n + 1);             /* O-term  */
+    sdf[5] = expr_new_integer(1);
+    Expr* seriesF = expr_new_function(mk_symbol("SeriesData"), sdf, 6);
+    free(sdf); free(cf);
+
+    Expr* result = mk_times(mk_fn1("Sin", expr_copy(x)), seriesF);
+
+    /* g-part (attached to Cos): powers 2k+2 at 1/x exponents 2, 4, 6, ...;
+     * coefficient (-1)^{k+1}(2k+1)!. nmin = 2. Only if it fits within order n. */
+    if (n >= 2) {
+        size_t ncg = (size_t)(n - 1);             /* 1/x exponents 2 .. n, index p-2 */
+        Expr** cg = calloc(ncg, sizeof(Expr*));
+        for (size_t i = 0; i < ncg; i++) cg[i] = expr_new_integer(0);
+        for (int64_t k = 0; ; k++) {
+            int64_t p = 2 * k + 2;                /* 1/x exponent */
+            if (p > n) break;
+            Expr* fact = eval_and_free(mk_fn1("Factorial", expr_new_integer(2 * k + 1)));
+            int64_t sign = (k % 2 == 0) ? -1 : 1; /* (-1)^{k+1} */
+            expr_free(cg[(size_t)(p - 2)]);
+            cg[(size_t)(p - 2)] = simp(mk_times(expr_new_integer(sign), fact));
+        }
+        Expr** sdg = calloc(6, sizeof(Expr*));
+        sdg[0] = mk_power(expr_copy(x), expr_new_integer(-1));
+        sdg[1] = expr_new_integer(0);
+        sdg[2] = expr_new_function(mk_symbol("List"), cg, ncg);
+        sdg[3] = expr_new_integer(2);             /* nmin = 2 */
+        sdg[4] = expr_new_integer(n + 1);
+        sdg[5] = expr_new_integer(1);
+        Expr* seriesG = expr_new_function(mk_symbol("SeriesData"), sdg, 6);
+        free(sdg); free(cg);
+        result = mk_plus(result, mk_times(mk_fn1("Cos", expr_copy(x)), seriesG));
+    }
+    return result;
+}
+
+/* One Laurent 1/x part of a Fresnel asymptotic expansion. Builds
+ *   SeriesData[1/x, 0, {coefs}, nmin, n+1, 1]
+ * whose coefficient at 1/x^p (p = 4j + nmin, j = 0, 1, ...) is
+ *   base_sign * (-1)^j * D_j / Pi^(2j + (nmin+1)/2),
+ * where D_j is (4j-1)!! for the f-series (use_R = 0) or (4j+1)!! for the
+ * g-series (use_R = 1). Returns NULL if no term fits within order n. */
+static Expr* fresnel_inf_part(Expr* x, int64_t n, int64_t nmin, int use_R,
+                              int base_sign) {
+    if (n < nmin) return NULL;
+    size_t len = (size_t)(n - nmin + 1);
+    Expr** c = calloc(len, sizeof(Expr*));
+    for (size_t i = 0; i < len; i++) c[i] = expr_new_integer(0);
+    int64_t pi_base = (nmin + 1) / 2;          /* 1 for nmin=1, 2 for nmin=3 */
+    Expr* dfact = expr_new_integer(1);         /* D_0 = (-1)!! = 1!! = 1 */
+    for (int64_t j = 0; ; j++) {
+        int64_t p = 4 * j + nmin;
+        if (p > n) break;
+        int64_t sgn = base_sign * ((j % 2 == 0) ? 1 : -1);
+        Expr* pipow = mk_power(mk_symbol("Pi"), expr_new_integer(-(2 * j + pi_base)));
+        Expr* coef = simp(mk_times(mk_times(expr_new_integer(sgn), expr_copy(dfact)),
+                                   pipow));
+        expr_free(c[(size_t)(p - nmin)]);
+        c[(size_t)(p - nmin)] = coef;
+        /* Advance D_j -> D_{j+1}. */
+        int64_t jn = j + 1;
+        int64_t mult = use_R ? (4 * jn + 1) * (4 * jn - 1)
+                             : (4 * jn - 1) * (4 * jn - 3);
+        dfact = simp(mk_times(dfact, expr_new_integer(mult)));
+    }
+    expr_free(dfact);
+    Expr** sd = calloc(6, sizeof(Expr*));
+    sd[0] = mk_power(expr_copy(x), expr_new_integer(-1));
+    sd[1] = expr_new_integer(0);
+    sd[2] = expr_new_function(mk_symbol("List"), c, len);
+    sd[3] = expr_new_integer(nmin);
+    sd[4] = expr_new_integer(n + 1);
+    sd[5] = expr_new_integer(1);
+    Expr* series = expr_new_function(mk_symbol("SeriesData"), sd, 6);
+    free(sd); free(c);
+    return series;
+}
+
+/* phi = Pi x^2 / 2, the essential-singularity phase of the Fresnel integrals. */
+static Expr* fresnel_inf_phase(Expr* x) {
+    return simp(mk_times(make_rational(1, 2),
+               mk_times(mk_symbol("Pi"), mk_power(expr_copy(x), expr_new_integer(2)))));
+}
+
+/* Asymptotic expansion of FresnelC[x] at x = Infinity (DLMF 7.12):
+ *   C(x) ~ 1/2 + Sin[Pi x^2/2] f(x) - Cos[Pi x^2/2] g(x),
+ *     f(x) = (1/(Pi x))    Sum_j (-1)^j (4j-1)!! / (Pi x^2)^(2j),
+ *     g(x) = (1/(Pi^2 x^3)) Sum_j (-1)^j (4j+1)!! / (Pi x^2)^(2j).
+ * Sin/Cos of the quadratic phase stay symbolic prefactors on Laurent series in
+ * 1/x. Returns NULL unless f is exactly FresnelC[x] in the expansion variable. */
+static Expr* try_series_fresnelc_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "FresnelC") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+
+    Expr* result = make_rational(1, 2);
+    Expr* fpart = fresnel_inf_part(x, n, 1, 0, +1);   /* +Sin * f */
+    if (fpart) result = mk_plus(result, mk_times(mk_fn1("Sin", fresnel_inf_phase(x)), fpart));
+    Expr* gpart = fresnel_inf_part(x, n, 3, 1, -1);   /* -Cos * g */
+    if (gpart) result = mk_plus(result, mk_times(mk_fn1("Cos", fresnel_inf_phase(x)), gpart));
+    return result;
+}
+
+/* Asymptotic expansion of FresnelS[x] at x = Infinity (DLMF 7.12):
+ *   S(x) ~ 1/2 - Cos[Pi x^2/2] f(x) - Sin[Pi x^2/2] g(x),
+ * with the same auxiliary f, g. Returns NULL unless f is exactly FresnelS[x]. */
+static Expr* try_series_fresnels_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "FresnelS") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+
+    Expr* result = make_rational(1, 2);
+    Expr* fpart = fresnel_inf_part(x, n, 1, 0, -1);   /* -Cos * f */
+    if (fpart) result = mk_plus(result, mk_times(mk_fn1("Cos", fresnel_inf_phase(x)), fpart));
+    Expr* gpart = fresnel_inf_part(x, n, 3, 1, -1);   /* -Sin * g */
+    if (gpart) result = mk_plus(result, mk_times(mk_fn1("Sin", fresnel_inf_phase(x)), gpart));
+    return result;
+}
+
+/* Shared multiplier for the error-function asymptotic expansions at x = Infinity
+ * (DLMF 7.12.1). Each of Erf/Erfc/Erfi is  prefactor(Exp[±x^2]) times a series
+ *
+ *   Sum_{k>=0} a_k / x^(2k+1),   a_0 = lead_sign / Sqrt[Pi],
+ *   a_k = a_{k-1} * ratio_sign * (2k-1)/2.
+ *
+ * Only the odd 1/x powers (2k+1) are populated; the even slots are 0. The result
+ * is a Laurent series in 1/x, matching Mathilda's Infinity convention (expansion
+ * variable Power[x,-1], x0 = 0). Order n fills 1/x exponents 1..n with an O-term
+ * at n+1, mirroring the ExpIntegralEi hook above. */
+static Expr* erf_family_series(Expr* x, int64_t n, int lead_sign, int ratio_sign) {
+    if (n < 1) n = 1;
+    size_t ncoef = (size_t)n;                 /* 1/x exponents 1 .. n */
+    Expr** coefs = calloc(ncoef, sizeof(Expr*));
+    for (size_t i = 0; i < ncoef; i++) coefs[i] = expr_new_integer(0);
+
+    /* a_0 = lead_sign * Pi^(-1/2), living at 1/x exponent 1 (index 0). */
+    Expr* ak = eval_and_free(mk_times(expr_new_integer(lead_sign),
+                                      mk_power(mk_symbol("Pi"), make_rational(-1, 2))));
+    for (int64_t k = 0; ; k++) {
+        size_t idx = (size_t)(2 * k + 1 - 1); /* exponent 2k+1, nmin = 1 */
+        if (idx >= ncoef) { expr_free(ak); break; }
+        expr_free(coefs[idx]);
+        coefs[idx] = expr_copy(ak);
+        /* a_{k+1} = a_k * ratio_sign * (2(k+1)-1)/2 = a_k * ratio_sign*(2k+1)/2. */
+        ak = eval_and_free(mk_times(ak, make_rational(ratio_sign * (2 * k + 1), 2)));
+    }
+
+    Expr* coef_list = expr_new_function(mk_symbol("List"), coefs, ncoef);
+    free(coefs);
+
+    Expr** sd = calloc(6, sizeof(Expr*));
+    sd[0] = mk_power(expr_copy(x), expr_new_integer(-1)); /* expansion var 1/x */
+    sd[1] = expr_new_integer(0);                          /* x0 (in 1/x)       */
+    sd[2] = coef_list;                                    /* coefficients      */
+    sd[3] = expr_new_integer(1);                          /* nmin              */
+    sd[4] = expr_new_integer(n + 1);                      /* nmax (O-term)     */
+    sd[5] = expr_new_integer(1);                          /* denominator       */
+    Expr* series = expr_new_function(mk_symbol("SeriesData"), sd, 6);
+    free(sd);
+    return series;
+}
+
+/* Build the Exp[±x^2] essential-singularity prefactor. */
+static Expr* erf_exp_prefactor(Expr* x, int sign) {
+    Expr* xsq = mk_power(expr_copy(x), expr_new_integer(2));
+    if (sign < 0) xsq = mk_times(expr_new_integer(-1), xsq);
+    return mk_fn1("Exp", xsq);
+}
+
+/* Asymptotic expansion of Erf[x] at x = Infinity (DLMF 7.12.1):
+ *
+ *   Erf(x) ~ 1 - E^(-x^2)/Sqrt[Pi] (1/x - 1/(2x^3) + 3/(4x^5) - ...).
+ *
+ * The constant 1 is the limit; the E^(-x^2) essential singularity stays a
+ * symbolic prefactor multiplying a Laurent series in 1/x, so the result is
+ *   Plus[1, Times[Exp[-x^2], SeriesData[1/x, 0, {-1/Sqrt[Pi], 0, ...}, 1, n+1, 1]]].
+ * Returns NULL unless f is exactly Erf[x] in the expansion variable. */
+static Expr* try_series_erf_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "Erf") || f->data.function.arg_count != 1) return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+    Expr* mult = erf_family_series(x, n, -1, -1);   /* -1/Sqrt[Pi], alternating */
+    return mk_plus(expr_new_integer(1),
+                   mk_times(erf_exp_prefactor(x, -1), mult));
+}
+
+/* Erfc(x) = 1 - Erf(x) ~ E^(-x^2)/Sqrt[Pi] (1/x - 1/(2x^3) + ...). No constant
+ * term (Erfc -> 0); the multiplier is the negation of Erf's. */
+static Expr* try_series_erfc_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "Erfc") || f->data.function.arg_count != 1) return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+    Expr* mult = erf_family_series(x, n, +1, -1);   /* +1/Sqrt[Pi], alternating */
+    return mk_times(erf_exp_prefactor(x, -1), mult);
+}
+
+/* Erfi(x) = -I Erf(I x) ~ E^(x^2)/Sqrt[Pi] (1/x + 1/(2x^3) + 3/(4x^5) + ...).
+ * All-positive coefficients, growing prefactor Exp[+x^2] (Erfi -> Infinity). */
+static Expr* try_series_erfi_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "Erfi") || f->data.function.arg_count != 1) return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+    Expr* mult = erf_family_series(x, n, +1, +1);   /* +1/Sqrt[Pi], all positive */
+    return mk_times(erf_exp_prefactor(x, +1), mult);
 }
 
 /* Asymptotic expansion of AiryAi[x] at x = Infinity (DLMF 9.7.5):
@@ -3976,6 +4363,49 @@ static Expr* try_series_ei_at_zero(Expr* f, Expr* x, int64_t n, int x_sign) {
         Expr* kfact = eval_and_free(mk_fn1("Factorial", expr_new_integer(k)));
         Expr* denom = eval_and_free(mk_times(expr_new_integer(k), kfact));
         coefs[k] = eval_and_free(mk_power(denom, expr_new_integer(-1)));
+    }
+    Expr* coef_list = expr_new_function(mk_symbol("List"), coefs, ncoef);
+    free(coefs);
+
+    Expr** sd = calloc(6, sizeof(Expr*));
+    sd[0] = expr_copy(x);            /* expansion var */
+    sd[1] = expr_new_integer(0);     /* x0            */
+    sd[2] = coef_list;               /* coefficients  */
+    sd[3] = expr_new_integer(0);     /* nmin          */
+    sd[4] = expr_new_integer(n + 1); /* nmax (O-term) */
+    sd[5] = expr_new_integer(1);     /* denominator   */
+    Expr* series = expr_new_function(mk_symbol("SeriesData"), sd, 6);
+    free(sd);
+    return series;
+}
+
+/* CosIntegral[x] at x = 0: Ci(0) = -Infinity blocks naive Taylor. Emit the
+ * DLMF 6.6.2 logarithmic series directly:
+ *
+ *   Ci(x) = EulerGamma + Log[x] + Sum_{m>=1} (-1)^m x^(2m) / (2m (2m)!),
+ *
+ * i.e. the x^0 coefficient carries EulerGamma + Log[x] (or Log[-x] when the
+ * Assumptions option forces x < 0) and only even powers appear thereafter. */
+static Expr* try_series_cosintegral_at_zero(Expr* f, Expr* x, int64_t n, int x_sign) {
+    if (!has_symbol_head(f, "CosIntegral") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+    if (n < 0) n = 0;
+
+    size_t ncoef = (size_t)n + 1;            /* exponents 0 .. n */
+    Expr** coefs = calloc(ncoef, sizeof(Expr*));
+    Expr* logarg = (x_sign < 0)
+                 ? mk_times(expr_new_integer(-1), expr_copy(x))
+                 : expr_copy(x);
+    coefs[0] = simp(mk_plus(mk_symbol("EulerGamma"), mk_fn1("Log", logarg)));
+    for (int64_t k = 1; k <= n; k++) {
+        if (k % 2 != 0) { coefs[k] = expr_new_integer(0); continue; }
+        int64_t m = k / 2;                   /* x^(2m) coefficient (-1)^m/(2m (2m)!) */
+        Expr* kfact = eval_and_free(mk_fn1("Factorial", expr_new_integer(k)));
+        Expr* denom = eval_and_free(mk_times(expr_new_integer(k), kfact));
+        Expr* recip = eval_and_free(mk_power(denom, expr_new_integer(-1)));
+        coefs[k] = (m % 2 == 0) ? recip
+                                : eval_and_free(mk_times(expr_new_integer(-1), recip));
     }
     Expr* coef_list = expr_new_function(mk_symbol("List"), coefs, ncoef);
     free(coefs);
@@ -4622,12 +5052,36 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
      * ExpIntegralEi) have no Laurent series there -- the generic x -> 1/u
      * substitution would hand a pole to naive Taylor. Emit their known
      * asymptotic expansions (with the E^x prefactor kept symbolic) directly. */
-    if (x0_eval->type == EXPR_SYMBOL && x0_eval->data.symbol == SYM_Infinity) {
+    if (x0_eval->type == EXPR_SYMBOL && x0_eval->data.symbol.name == SYM_Infinity) {
         Expr* ei = try_series_ei_at_infinity(f_eval, x, leading_only ? 1 : n);
         if (ei) {
             expr_free(f_eval);
             expr_free(x0_eval);
             return ei;
+        }
+        Expr* si = try_series_sinintegral_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (si) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return si;
+        }
+        Expr* ci = try_series_cosintegral_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (ci) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return ci;
+        }
+        Expr* frc = try_series_fresnelc_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (frc) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return frc;
+        }
+        Expr* frs = try_series_fresnels_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (frs) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return frs;
         }
         Expr* ai = try_series_airyai_at_infinity(f_eval, x, leading_only ? 1 : n);
         if (ai) {
@@ -4677,6 +5131,26 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
             expr_free(x0_eval);
             return by;
         }
+        /* Error functions at Infinity: DLMF 7.12.1 asymptotic expansions,
+         * each an Exp[±x^2] essential singularity times a Laurent series. */
+        Expr* erf = try_series_erf_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (erf) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return erf;
+        }
+        Expr* erfc = try_series_erfc_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (erfc) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return erfc;
+        }
+        Expr* erfi = try_series_erfi_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (erfi) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return erfi;
+        }
         /* ProductLog[x] at Infinity: nested-logarithm asymptotic expansion
          * (the x^0 coefficient), not a power series in 1/x. */
         Expr* plw = try_series_productlog_at_infinity(f_eval, x, leading_only ? 0 : n);
@@ -4706,6 +5180,14 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
             expr_free(f_eval);
             expr_free(x0_eval);
             return ei0;
+        }
+        /* CosIntegral[x] at x = 0: Ci(0) = -Infinity blocks naive Taylor;
+         * emit the DLMF 6.6.2 logarithmic series directly. */
+        Expr* ci0 = try_series_cosintegral_at_zero(f_eval, x, leading_only ? 0 : n, x_sign);
+        if (ci0) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return ci0;
         }
         /* BesselK[p, x] at x = 0 (integer p): K_p has a pole and a logarithmic
          * branch term, so naive Taylor-via-D cannot produce it. Emit the
@@ -4799,7 +5281,7 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
     bool at_zero_or_infinity =
         is_lit_zero(x0_eval) ||
         (x0_eval->type == EXPR_SYMBOL &&
-         x0_eval->data.symbol == SYM_Infinity);
+         x0_eval->data.symbol.name == SYM_Infinity);
     if (at_zero_or_infinity) {
         Expr* body = NULL;
         Expr* pf = try_factor_power_prefactor(f_eval, x, &body);
@@ -4812,7 +5294,7 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
 
     /* Handle expansion at Infinity by substituting x -> 1/u. */
     bool at_infinity = (x0_eval->type == EXPR_SYMBOL &&
-                        (x0_eval->data.symbol == SYM_Infinity));
+                        (x0_eval->data.symbol.name == SYM_Infinity));
     Expr* f_use  = f_used_for_expand;
     Expr* x_use  = x;
     Expr* x0_use = x0_eval;
@@ -4852,9 +5334,13 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
      * {x, a, 1}] with pad=12 would grow unbounded. Cap pad tight in that
      * case -- real poles/roots at a symbolic point are uncommon, and
      * compound expressions still get a couple of correction slots. */
-    bool x0_is_numeric = (x0_use->type == EXPR_INTEGER ||
-                          x0_use->type == EXPR_REAL ||
-                          x0_use->type == EXPR_BIGINT);
+    /* Complex[num, num] (every upper-half-plane pole) and Rational are concrete
+     * numbers: so_inv keeps their coefficients numeric and bounded, so they earn
+     * the full Laurent pad. Restricting to INTEGER/REAL/BIGINT wrongly demoted a
+     * complex pole like I = Complex[0,1] to pad=2, one term short -- the residue
+     * at a double/triple complex pole (Fourier/Jordan family) then dropped its
+     * product-rule cross term. Only a free/symbolic x0 keeps the tight pad. */
+    bool x0_is_numeric = expr_is_numeric_like(x0_use);
     int64_t pad = x0_is_numeric ? 12 : 2;
     int64_t internal_order = order + pad;
 
@@ -5022,7 +5508,7 @@ Expr* builtin_series(Expr* res) {
         Expr* s = raw[i];
         if (has_symbol_head(s, "Rule") && s->data.function.arg_count == 2 &&
             s->data.function.args[0]->type == EXPR_SYMBOL &&
-            strcmp(s->data.function.args[0]->data.symbol, "Assumptions") == 0) {
+            strcmp(s->data.function.args[0]->data.symbol.name, "Assumptions") == 0) {
             assm = s->data.function.args[1];
             continue;
         }
@@ -5116,6 +5602,61 @@ Expr* builtin_seriescoefficient(Expr* res) {
                     mk_power(mk_fn1("Factorial", expr_copy(nv)),
                              expr_new_integer(-1)));
                 Expr* cond = mk_fn2("GreaterEqual", expr_copy(nv), expr_new_integer(1));
+                Expr* pair = expr_new_function(mk_symbol("List"),
+                                 (Expr*[]){ val, cond }, 2);
+                Expr* pairs = expr_new_function(mk_symbol("List"),
+                                  (Expr*[]){ pair }, 1);
+                Expr* pw = expr_new_function(mk_symbol("Piecewise"),
+                               (Expr*[]){ pairs, expr_new_integer(0) }, 2);
+                return eval_and_free(pw);
+            }
+        }
+    }
+
+    /* General term SeriesCoefficient[FresnelC/FresnelS[x], {x, 0, n}], symbolic n:
+     *   FresnelC: Piecewise[{{ (-1)^((n-1)/4) 2^(1-n) Pi^(n/2) /
+     *                          (n Gamma[(1+n)/4] Gamma[(3+n)/4]), Mod[n-1,4]==0 && n>=1 }}, 0]
+     *   FresnelS: same value with the (-1) exponent (n-3)/4 and Mod[n-3,4]==0 && n>=3. */
+    {
+        Expr* f0  = res->data.function.args[0];
+        Expr* sp0 = res->data.function.args[1];
+        int isC = has_symbol_head(f0, "FresnelC");
+        int isS = has_symbol_head(f0, "FresnelS");
+        if ((isC || isS) && f0->data.function.arg_count == 1 &&
+            sp0->type == EXPR_FUNCTION && has_symbol_head(sp0, "List") &&
+            sp0->data.function.arg_count == 3) {
+            Expr* xv  = sp0->data.function.args[0];
+            Expr* x0v = sp0->data.function.args[1];
+            Expr* nv  = sp0->data.function.args[2];
+            if (expr_eq(f0->data.function.args[0], xv) &&
+                is_lit_zero(x0v) && nv->type == EXPR_SYMBOL) {
+                int64_t off = isC ? 1 : 3;                 /* power class 4m+off */
+                Expr* nmoff = mk_plus(expr_copy(nv), expr_new_integer(-off));  /* n-off */
+                /* (-1)^((n-off)/4) */
+                Expr* sign = mk_power(expr_new_integer(-1),
+                                 mk_times(make_rational(1, 4), expr_copy(nmoff)));
+                /* 2^(1-n) */
+                Expr* pow2 = mk_power(expr_new_integer(2),
+                                 mk_plus(expr_new_integer(1),
+                                         mk_times(expr_new_integer(-1), expr_copy(nv))));
+                /* Pi^(n/2) */
+                Expr* pipow = mk_power(mk_symbol("Pi"),
+                                 mk_times(make_rational(1, 2), expr_copy(nv)));
+                /* n Gamma[(1+n)/4] Gamma[(3+n)/4] */
+                Expr* gam1 = mk_fn1("Gamma", mk_times(make_rational(1, 4),
+                                 mk_plus(expr_new_integer(1), expr_copy(nv))));
+                Expr* gam2 = mk_fn1("Gamma", mk_times(make_rational(1, 4),
+                                 mk_plus(expr_new_integer(3), expr_copy(nv))));
+                Expr* denom = mk_times(expr_copy(nv), mk_times(gam1, gam2));
+                Expr* val = mk_times(mk_times(sign, pow2),
+                                 mk_times(pipow, mk_power(denom, expr_new_integer(-1))));
+                /* Mod[n-off, 4] == 0 && n >= off */
+                Expr* cond = mk_fn2("And",
+                    mk_fn2("Equal",
+                        mk_fn2("Mod", expr_copy(nmoff), expr_new_integer(4)),
+                        expr_new_integer(0)),
+                    mk_fn2("GreaterEqual", expr_copy(nv), expr_new_integer(off)));
+                expr_free(nmoff);
                 Expr* pair = expr_new_function(mk_symbol("List"),
                                  (Expr*[]){ val, cond }, 2);
                 Expr* pairs = expr_new_function(mk_symbol("List"),

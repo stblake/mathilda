@@ -25,8 +25,8 @@ void test_regression_flat_orderless_eval() {
     bool found_b = false;
     for (size_t i = 0; i < 2; i++) {
         Expr* arg = res1->data.function.args[i];
-        if (arg->type == EXPR_SYMBOL && strcmp(arg->data.symbol, "b") == 0) found_b = true;
-        if (arg->type == EXPR_FUNCTION && strcmp(arg->data.function.head->data.symbol, "Times") == 0) found_times = true;
+        if (arg->type == EXPR_SYMBOL && strcmp(arg->data.symbol.name, "b") == 0) found_b = true;
+        if (arg->type == EXPR_FUNCTION && strcmp(arg->data.function.head->data.symbol.name, "Times") == 0) found_times = true;
     }
     ASSERT(found_b && found_times);
     expr_free(e1); expr_free(res1);
@@ -51,7 +51,7 @@ void test_regression_set_evaluation() {
     // 3. Set down value
     Expr* e3 = parse_expression("SetDelayed[f[Pattern[y, Blank[]]], Plus[y, 5]]");
     Expr* res3 = evaluate(e3);
-    ASSERT(res3->type == EXPR_SYMBOL && strcmp(res3->data.symbol, "Null") == 0);
+    ASSERT(res3->type == EXPR_SYMBOL && strcmp(res3->data.symbol.name, "Null") == 0);
     expr_free(e3); expr_free(res3);
     
     // 4. Evaluate down value with evaluated argument
@@ -92,7 +92,7 @@ void test_regression_nested_replace() {
     Expr* e2 = parse_expression("g[10, 20]");
     Expr* res2 = evaluate(e2);
     ASSERT(res2->type == EXPR_FUNCTION);
-    ASSERT(strcmp(res2->data.function.head->data.symbol, "List") == 0);
+    ASSERT(strcmp(res2->data.function.head->data.symbol.name, "List") == 0);
     ASSERT(res2->data.function.arg_count == 3);
     ASSERT(res2->data.function.args[0]->data.integer == 20);
     ASSERT(res2->data.function.args[1]->data.integer == 10);
@@ -117,12 +117,12 @@ void test_regression_clear() {
     // Clear[x]
     Expr* e3 = parse_expression("Clear[x]");
     Expr* res3 = evaluate(e3);
-    ASSERT(res3->type == EXPR_SYMBOL && strcmp(res3->data.symbol, "Null") == 0);
+    ASSERT(res3->type == EXPR_SYMBOL && strcmp(res3->data.symbol.name, "Null") == 0);
     
     // Evaluate x again (should be unbound, so evaluates to symbol 'x')
     Expr* e4 = parse_expression("x");
     Expr* res4 = evaluate(e4);
-    ASSERT(res4->type == EXPR_SYMBOL && strcmp(res4->data.symbol, "x") == 0);
+    ASSERT(res4->type == EXPR_SYMBOL && strcmp(res4->data.symbol.name, "x") == 0);
     
     // SetDelayed f[x_] := x + 1
     Expr* e5 = parse_expression("SetDelayed[f[Pattern[y, Blank[]]], Plus[y, 1]]");
@@ -141,7 +141,7 @@ void test_regression_clear() {
     // Evaluate f[10] again (should be unbound, so evaluates to f[10])
     Expr* e8 = parse_expression("f[10]");
     Expr* res8 = evaluate(e8);
-    ASSERT(res8->type == EXPR_FUNCTION && strcmp(res8->data.function.head->data.symbol, "f") == 0);
+    ASSERT(res8->type == EXPR_FUNCTION && strcmp(res8->data.function.head->data.symbol.name, "f") == 0);
     
     expr_free(e1); expr_free(res1);
     expr_free(e2); expr_free(res2);

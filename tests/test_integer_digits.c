@@ -210,7 +210,7 @@ static void test_bignum_base2(void) {
     /* Verify the structure: List with 101 args, first = 1, rest = 0. */
     ASSERT(e->type == EXPR_FUNCTION);
     ASSERT(e->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(e->data.function.head->data.symbol == SYM_List);
+    ASSERT(e->data.function.head->data.symbol.name == SYM_List);
     ASSERT(e->data.function.arg_count == 101);
     ASSERT(e->data.function.args[0]->type == EXPR_INTEGER);
     ASSERT(e->data.function.args[0]->data.integer == 1);

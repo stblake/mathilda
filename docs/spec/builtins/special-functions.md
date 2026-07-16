@@ -290,6 +290,134 @@ the branch cut runs along (−∞, +1).
   point follows from the generic `D`-based fallback.
 - Wrong arity emits `LogIntegral::argx` and stays unevaluated.
 
+## SinIntegral
+
+- `SinIntegral[z]` — the sine integral Si(z) = ∫₀ᶻ Sin[t]/t dt.
+
+`SinIntegral` is entire and odd, with no branch cuts. The convergent Maclaurin
+series `Si(z) = Σ (−1)ᵏ z^(2k+1)/((2k+1)(2k+1)!)` drives moderate arguments; for
+large `|z|` the asymptotic form `Si(z) = π/2 − cos(z) f(z) − sin(z) g(z)` is used
+instead. Complex arguments run through the shared `ncpx` MPFR-complex toolkit,
+with odd symmetry folding the left half-plane onto the right.
+
+- Exact special values: `SinIntegral[0] = 0`, `SinIntegral[Infinity] = Pi/2`,
+  `SinIntegral[-Infinity] = -Pi/2`, `SinIntegral[±I Infinity] = ±I Infinity`;
+  `ComplexInfinity` and `Indeterminate` map to `Indeterminate`.
+- Exact non-special arguments stay symbolic (`SinIntegral[2]`, `SinIntegral[x]`);
+  odd symmetry pulls a leading negative out (`SinIntegral[-x] = -SinIntegral[x]`).
+- Numeric evaluation at machine or arbitrary (MPFR) precision, tracking the
+  input precision: `SinIntegral[2.8] = 1.8321`,
+  `N[SinIntegral[2], 50] = 1.6054129768026948485767201481985889408485834223285`.
+- Complex arguments are fully accurate, e.g. `SinIntegral[2.5 + I] = 1.99549 +
+  0.222995 I`, and `SinIntegral[3. I] = 4.97344 I` (= I Shi(3)).
+- Derivative: `D[SinIntegral[z], z] = Sinc[z]` (chain rule applies, e.g.
+  `D[SinIntegral[x^2], x] = 2 x Sinc[x^2]`).
+- Series: Taylor at the origin (`Series[SinIntegral[x], {x, 0, 7}] =
+  x - x^3/18 + x^5/600 - x^7/35280 + O[x]^8`) and the trig-prefactored asymptotic
+  expansion at Infinity (`Normal[Series[SinIntegral[x], {x, Infinity, 3}]] =
+  Pi/2 - Sin[x]/x^2 + Cos[x] (-1/x + 2/x^3)`). The symbolic
+  `DirectedInfinity[z]`-direction form is not yet produced.
+- `Listable`, `NumericFunction`, `Protected`. Wrong arity emits
+  `SinIntegral::argx` and stays unevaluated.
+
+## CosIntegral
+
+- `CosIntegral[z]` — the cosine integral Ci(z) = −∫_z^∞ Cos[t]/t dt.
+
+`CosIntegral` has a logarithmic singularity at `0` and a branch cut along the
+negative real axis `(−∞, 0]`; it is neither entire nor odd. The convergent series
+`Ci(z) = EulerGamma + Log(z) + Σ_{k≥1} (−1)ᵏ z^(2k)/(2k (2k)!)` drives moderate
+arguments (the principal `Log` supplies the ±i π jump across the cut, so no folding
+is needed); for large `|z|` the asymptotic form `Ci(z) = sin(z) f(z) − cos(z) g(z)`
+is used, with a piecewise-constant Stokes / reflection term restoring the principal
+branch on and left of the imaginary axis. Complex arguments run through the shared
+`ncpx` MPFR-complex toolkit.
+
+- Exact special values: `CosIntegral[0] = -Infinity`, `CosIntegral[Infinity] = 0`,
+  `CosIntegral[-Infinity] = I Pi`, `CosIntegral[±I Infinity] = Infinity`;
+  `ComplexInfinity` and `Indeterminate` map to `Indeterminate`.
+- Exact non-special arguments stay symbolic (`CosIntegral[2]`, `CosIntegral[x]`,
+  `CosIntegral[-x]`); there is no odd/even fold.
+- Numeric evaluation at machine or arbitrary (MPFR) precision, tracking the input
+  precision: `CosIntegral[2.8] = 0.186488`,
+  `N[CosIntegral[2], 50] = 0.42298082877486499569856515319825589413573775630619`.
+- Negative real arguments lie on the branch cut and return the from-above value
+  `Ci(|x|) + I Pi`: `CosIntegral[-2.] = 0.422981 + 3.14159 I`.
+- Complex arguments are fully accurate, e.g. `CosIntegral[2.5 + I] = 0.331465 −
+  0.388237 I`, and on the imaginary axis `CosIntegral[3. I] = 4.96039 + 1.5708 I`
+  (= Chi(3) + I Pi/2).
+- Derivative: `D[CosIntegral[z], z] = Cos[z]/z` (chain rule applies, e.g.
+  `D[CosIntegral[x^2], x] = (2 Cos[x^2])/x`).
+- Series: the logarithmic Taylor series at the origin
+  (`Series[CosIntegral[x], {x, 0, 6}] = EulerGamma + Log[x] - x^2/4 + x^4/96 -
+  x^6/4320 + O[x]^7`) and the trig-prefactored asymptotic expansion at Infinity
+  (`Normal[Series[CosIntegral[x], {x, Infinity, 3}]] = -Cos[x]/x^2 + Sin[x] (1/x -
+  2/x^3)`). Generic-point Taylor expansions follow from the derivative rule.
+- `Listable`, `NumericFunction`, `Protected`. Wrong arity emits
+  `CosIntegral::argx` and stays unevaluated.
+
+## FresnelC and FresnelS
+
+- `FresnelC[z]` — the Fresnel integral C(z) = ∫₀ᶻ Cos[π t²/2] dt.
+- `FresnelS[z]` — the Fresnel integral S(z) = ∫₀ᶻ Sin[π t²/2] dt.
+
+Both are entire and odd, with no branch cuts. One numeric kernel computes the
+pair (C, S) together: real inputs sum the two convergent Maclaurin series
+directly (switching to the DLMF 7.12 asymptotic form for large `|x|`), while
+complex inputs sum `A(z) = C + iS = Σ (iπ/2)ᵏ z^(2k+1)/(k!(2k+1))` and its
+`i → −i` partner `B` through the shared `ncpx` MPFR-complex toolkit, then recover
+`C = (A+B)/2`, `S = (A−B)/(2i)`. Guard bits (`≈ (π/2)|z|²/ln2`) absorb the
+partial-sum cancellation exactly; odd symmetry folds negative/left-half-plane
+inputs.
+
+- Exact special values: `FresnelC[0] = FresnelS[0] = 0`;
+  `FresnelC[±Infinity] = ±1/2`, `FresnelS[±Infinity] = ±1/2`;
+  `FresnelC[±I Infinity] = ±I/2`, `FresnelS[±I Infinity] = ∓I/2` (note the sign
+  flip on the imaginary directions); `ComplexInfinity`/`Indeterminate` map to
+  `Indeterminate`.
+- Exact non-special arguments stay symbolic; odd symmetry pulls a leading
+  negative out (`FresnelC[-x] = -FresnelC[x]`).
+- Numeric evaluation at machine or arbitrary (MPFR) precision, tracking the input
+  precision: `FresnelC[1.8] = 0.333633`, `FresnelS[1.8] = 0.450939`,
+  `N[FresnelC[2], 50] = 0.48825340607534075450022350335726103768836715450922`.
+- Complex arguments are fully accurate, e.g. `FresnelC[2.5 + I] = 116.648 −
+  105.229 I`, and on the imaginary axis `FresnelC[2. I] = 0.488253 I`.
+- Derivatives: `D[FresnelC[z], z] = Cos[π z²/2]`, `D[FresnelS[z], z] =
+  Sin[π z²/2]` (chain rule applies, e.g. `D[FresnelC[x^2], x] = 2 x Cos[π x⁴/2]`).
+- Series: Taylor at the origin (`Series[FresnelC[x], {x, 0, 9}] = x − π² x⁵/40 +
+  π⁴ x⁹/3456 + O[x]^10`; `Series[FresnelS[x], {x, 0, 7}] = π x³/6 − π³ x⁷/336 +
+  O[x]^8`) and the trig-prefactored asymptotic expansion at Infinity
+  (`Normal[Series[FresnelC[x], {x, Infinity, 3}]] = 1/2 − Cos[π x²/2]/(π² x³) +
+  Sin[π x²/2]/(π x)`). The symbolic-index general term is produced as a
+  `Piecewise` closed form, e.g. `SeriesCoefficient[FresnelC[x], {x, 0, n}] =
+  Piecewise[{{(-1)^((n-1)/4) 2^(1-n) π^(n/2)/(n Γ[(1+n)/4] Γ[(3+n)/4]),
+  Mod[n-1, 4] == 0 && n ≥ 1}}, 0]`.
+- `Listable`, `NumericFunction`, `Protected`. Wrong arity emits
+  `FresnelC::argx` / `FresnelS::argx` and stays unevaluated.
+
+## Sinc
+
+- `Sinc[z]` — the cardinal sine Sin[z]/z, with the removable singularity filled
+  in as `Sinc[0] = 1`.
+
+`Sinc` is entire and even. Real arguments use `mpfr_sin(z)/z`; complex arguments
+use `sin(z)/z` via the shared `ncpx` toolkit. Provided as a first-class head so
+`SinIntegral` differentiates to it.
+
+- Exact special values: `Sinc[0] = 1`, `Sinc[±Infinity] = 0`;
+  `ComplexInfinity` maps to `Indeterminate`.
+- Numeric evaluation at machine or arbitrary (MPFR) precision, tracking input
+  precision: `Sinc[2.] = 0.454649`,
+  `N[Sinc[2], 45] = 0.454648713412840847698009932955872421351127485`. Complex:
+  `Sinc[1. + I] = 0.966711 - 0.331747 I`.
+- Symbolic arguments stay unevaluated (`Sinc[x]`, `Sinc[-x]`; WL does not
+  auto-fold the even symmetry).
+- Derivative: `D[Sinc[z], z] = Cos[z]/z - Sin[z]/z^2`.
+- Series at the origin: `Series[Sinc[x], {x, 0, 6}] =
+  1 - x^2/6 + x^4/120 - x^6/5040 + O[x]^7`.
+- `Listable`, `NumericFunction`, `Protected`. Wrong arity emits `Sinc::argx`
+  and stays unevaluated.
+
 ## InverseErf
 
 - `InverseErf[s]` — the inverse error function: the z solving s = erf(z).

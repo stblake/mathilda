@@ -17,7 +17,7 @@ void test_print_basic() {
     Expr* res = evaluate(e);
     ASSERT(res != NULL);
     ASSERT(res->type == EXPR_SYMBOL);
-    ASSERT(strcmp(res->data.symbol, "Null") == 0);
+    ASSERT(strcmp(res->data.symbol.name, "Null") == 0);
     expr_free(e);
     expr_free(res);
 }
@@ -26,7 +26,7 @@ void test_fullform_wrapper() {
     Expr* e = parse_expression("Print[FullForm[x + y]]");
     Expr* res = evaluate(e);
     ASSERT(res != NULL);
-    ASSERT(strcmp(res->data.symbol, "Null") == 0);
+    ASSERT(strcmp(res->data.symbol.name, "Null") == 0);
     expr_free(e);
     expr_free(res);
 }
@@ -35,7 +35,7 @@ void test_inputform_wrapper() {
     Expr* e = parse_expression("Print[InputForm[x + y]]");
     Expr* res = evaluate(e);
     ASSERT(res != NULL);
-    ASSERT(strcmp(res->data.symbol, "Null") == 0);
+    ASSERT(strcmp(res->data.symbol.name, "Null") == 0);
     expr_free(e);
     expr_free(res);
 }

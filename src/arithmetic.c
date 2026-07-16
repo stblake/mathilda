@@ -73,7 +73,7 @@ Expr* builtin_rational(Expr* res) {
         }
         
         Expr* r = make_rational(n, d);
-        if (r && r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL && r->data.function.head->data.symbol == SYM_Rational) {
+        if (r && r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL && r->data.function.head->data.symbol.name == SYM_Rational) {
             Expr* rn = r->data.function.args[0];
             Expr* rd = r->data.function.args[1];
             if (rn->type == EXPR_INTEGER && rd->type == EXPR_INTEGER && rn->data.integer == n && rd->data.integer == d) {
@@ -102,7 +102,7 @@ bool is_rational(const Expr* e, int64_t* n, int64_t* d) {
      * mapped memory). */
     if (e->type == EXPR_FUNCTION && e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Rational) {
+        e->data.function.head->data.symbol.name == SYM_Rational) {
         if (e->data.function.arg_count == 2 &&
             e->data.function.args[0] &&
             e->data.function.args[1] &&
@@ -127,7 +127,7 @@ bool is_rational_like(const Expr* e) {
     if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Rational &&
+        e->data.function.head->data.symbol.name == SYM_Rational &&
         e->data.function.arg_count == 2 &&
         expr_is_integer_like(e->data.function.args[0]) &&
         expr_is_integer_like(e->data.function.args[1])) {
@@ -138,7 +138,7 @@ bool is_rational_like(const Expr* e) {
 
 bool is_complex(Expr* e, Expr** re, Expr** im) {
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Complex &&
+        e->data.function.head->data.symbol.name == SYM_Complex &&
         e->data.function.arg_count == 2) {
         if (re) *re = e->data.function.args[0];
         if (im) *im = e->data.function.args[1];
@@ -231,15 +231,15 @@ Expr* builtin_divide(Expr* res) {
 }
 
 bool is_infinity_sym(Expr* e) {
-    return e && e->type == EXPR_SYMBOL && e->data.symbol == SYM_Infinity;
+    return e && e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity;
 }
 
 bool is_complex_infinity_sym(Expr* e) {
-    return e && e->type == EXPR_SYMBOL && e->data.symbol == SYM_ComplexInfinity;
+    return e && e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_ComplexInfinity;
 }
 
 bool is_indeterminate_sym(Expr* e) {
-    return e && e->type == EXPR_SYMBOL && e->data.symbol == SYM_Indeterminate;
+    return e && e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Indeterminate;
 }
 
 int expr_numeric_sign(Expr* e) {
@@ -284,7 +284,7 @@ bool expr_is_superficially_negative(Expr* e) {
     }
     if (e->type == EXPR_FUNCTION && e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Times &&
+        e->data.function.head->data.symbol.name == SYM_Times &&
         e->data.function.arg_count > 0) {
         /* Leading factor carries the syntactic sign, per Times canonical
          * ordering (numerics sort first). */
@@ -296,7 +296,7 @@ bool expr_is_superficially_negative(Expr* e) {
 bool is_neg_infinity_form(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
-    if (e->data.function.head->data.symbol != SYM_Times) return false;
+    if (e->data.function.head->data.symbol.name != SYM_Times) return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* a = e->data.function.args[0];
     Expr* b = e->data.function.args[1];

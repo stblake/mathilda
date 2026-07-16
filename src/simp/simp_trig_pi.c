@@ -76,18 +76,18 @@ static void trig_pi_reduce_frac(int64_t* n, int64_t* d) {
  * sets n, d.  Mirrors trig.c's extract_pi_multiplier; duplicated here
  * so simp.c does not have to expose that file-static helper. */
 static bool trig_pi_extract(const Expr* arg, int64_t* n_out, int64_t* d_out) {
-    if (arg->type == EXPR_SYMBOL && arg->data.symbol == SYM_Pi) {
+    if (arg->type == EXPR_SYMBOL && arg->data.symbol.name == SYM_Pi) {
         *n_out = 1; *d_out = 1; return true;
     }
     if (arg->type != EXPR_FUNCTION || !arg->data.function.head ||
         arg->data.function.head->type != EXPR_SYMBOL ||
-        arg->data.function.head->data.symbol != SYM_Times ||
+        arg->data.function.head->data.symbol.name != SYM_Times ||
         arg->data.function.arg_count != 2) {
         return false;
     }
     Expr* a0 = arg->data.function.args[0];
     Expr* a1 = arg->data.function.args[1];
-    if (!(a1->type == EXPR_SYMBOL && a1->data.symbol == SYM_Pi)) return false;
+    if (!(a1->type == EXPR_SYMBOL && a1->data.symbol.name == SYM_Pi)) return false;
     return is_rational(a0, n_out, d_out);
 }
 
@@ -211,7 +211,7 @@ static Expr* simp_trig_pi_canon_walk(const Expr* e) {
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
         e->data.function.arg_count == 1) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         bool is_trig = (h == SYM_Sin || h == SYM_Cos ||
                         h == SYM_Tan || h == SYM_Cot ||
                         h == SYM_Sec || h == SYM_Csc);
@@ -519,5 +519,46 @@ static Expr* transform_pythag_canon_impl(const Expr* e) {
 
 Expr* transform_pythag_canon(const Expr* e) {
     return simp_memo_wrap(e, "$PythagCanon", transform_pythag_canon_impl);
+}
+
+/* Trig-log canonicalization: rewrite a logarithm of a reciprocal-squared /
+ * Pythagorean trig form into the Cos/Sin base.  Each rule is an UNCONDITIONAL
+ * real identity (both sides are the log of a positive quantity wherever
+ * defined), so it is safe with no positivity assumption:
+ *     Log[Sec[u]^2]     = -Log[Cos[u]^2]      Log[1 + Tan[u]^2] = -Log[Cos[u]^2]
+ *     Log[Csc[u]^2]     = -Log[Sin[u]^2]      Log[1 + Cot[u]^2] = -Log[Sin[u]^2]
+ * plus the hyperbolic analogues (Sech^2 = 1 - Tanh^2 = 1/Cosh^2, etc.).
+ *
+ * Normalizing Sec/Csc/1+Tan^2/... under a Log into the Cos/Sin base lets the
+ * log-fusion pass (simp_log Pass B) cancel it against a sibling Log[Cos^2] /
+ * Log[Sin^2] — e.g. `1/2 Log[1+Tan[u]^2] + Log[Cos[u]]` collapses once the
+ * first term is in the Cos base.  The stronger single-power collapse
+ * `-Log[Cos[u]^2] -> -2 Log[Cos[u]]` (giving `1/2 Log[1+Tan^2] -> -Log[Cos]`)
+ * is only valid on the principal branch (Cos[u] > 0) and is left to the
+ * assumption-aware Log rules; the squared forms here stay branch-safe. */
+static Expr* transform_trig_log_canon_impl(const Expr* e) {
+    static Expr* rules = NULL;
+    if (!rules) {
+        rules = parse_expression(
+            "{ Log[Sec[u_]^2]      :> -Log[Cos[u]^2], "
+            "  Log[Csc[u_]^2]      :> -Log[Sin[u]^2], "
+            "  Log[1 + Tan[u_]^2]  :> -Log[Cos[u]^2], "
+            "  Log[1 + Cot[u_]^2]  :> -Log[Sin[u]^2], "
+            "  Log[Sech[u_]^2]     :> -Log[Cosh[u]^2], "
+            "  Log[Csch[u_]^2]     :> -Log[Sinh[u]^2], "
+            "  Log[1 - Tanh[u_]^2] :> -Log[Cosh[u]^2], "
+            "  Log[-1 + Coth[u_]^2] :> -Log[Sinh[u]^2] }");
+    }
+    if (!rules) return NULL;
+    /* Fast-skip: no Log, or no reciprocal/tangent trig head to normalize. */
+    if (!contains_log(e)) return expr_copy((Expr*)e);
+
+    Expr* args[2] = { expr_copy((Expr*)e), expr_copy(rules) };
+    Expr* call = expr_new_function(expr_new_symbol(SYM_ReplaceRepeated), args, 2);
+    return eval_and_free(call);
+}
+
+Expr* transform_trig_log_canon(const Expr* e) {
+    return simp_memo_wrap(e, "$TrigLogCanon", transform_trig_log_canon_impl);
 }
 

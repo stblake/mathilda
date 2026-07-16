@@ -54,7 +54,7 @@ static void compute_bbox3(const Expr* node, Box3D* bb) {
     if (!node || node->type != EXPR_FUNCTION) return;
     const Expr* h = node->data.function.head;
     if (!h || h->type != EXPR_SYMBOL) return;
-    const char* name = h->data.symbol;
+    const char* name = h->data.symbol.name;
     size_t n = node->data.function.arg_count;
 
     if (name == SYM_List) {
@@ -96,26 +96,26 @@ static void gfx3d_options_parse(const Expr* graphics3d, Gfx3DOptions* o) {
         if (!opt || opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2) continue;
         const Expr* h = opt->data.function.head;
         if (!h || h->type != EXPR_SYMBOL) continue;
-        if (h->data.symbol != SYM_Rule && h->data.symbol != SYM_RuleDelayed) continue;
+        if (h->data.symbol.name != SYM_Rule && h->data.symbol.name != SYM_RuleDelayed) continue;
         const Expr* lhs = opt->data.function.args[0];
         const Expr* rhs = opt->data.function.args[1];
         if (lhs->type != EXPR_SYMBOL) continue;
-        const char* name = lhs->data.symbol;
+        const char* name = lhs->data.symbol.name;
 
         if (name == SYM_Lighting) {
             /* Lighting -> None/False disables shading; anything else keeps it on. */
             o->lighting = !(rhs->type == EXPR_SYMBOL
-                            && (rhs->data.symbol == SYM_None
-                                || rhs->data.symbol == SYM_False));
+                            && (rhs->data.symbol.name == SYM_None
+                                || rhs->data.symbol.name == SYM_False));
         } else if (name == SYM_Axes) {
-            o->axes = (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_True);
+            o->axes = (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_True);
         } else if (name == SYM_PlotStyle) {
             resolve_color(rhs, &o->style_color);
         } else if (name == SYM_Background) {
             resolve_color(rhs, &o->background);
         } else if (name == SYM_ImageSize) {
             if (rhs->type == EXPR_FUNCTION && rhs->data.function.head->type == EXPR_SYMBOL
-                && rhs->data.function.head->data.symbol == SYM_List && rhs->data.function.arg_count == 2) {
+                && rhs->data.function.head->data.symbol.name == SYM_List && rhs->data.function.arg_count == 2) {
                 double w, hh;
                 if (expr_to_d(rhs->data.function.args[0], &w)) o->width = (long)w;
                 if (expr_to_d(rhs->data.function.args[1], &hh)) o->height = (long)hh;
@@ -229,7 +229,7 @@ static void bake_node(const Expr* node, Color* cur_color, BakedMesh* bm) {
     if (!node || node->type != EXPR_FUNCTION) return;
     const Expr* h = node->data.function.head;
     if (!h || h->type != EXPR_SYMBOL) return;
-    const char* name = h->data.symbol;
+    const char* name = h->data.symbol.name;
     size_t n = node->data.function.arg_count;
 
     if (name == SYM_List) {

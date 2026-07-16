@@ -47,7 +47,7 @@ static bool factor_via_bz_callback(const ZUPoly* image,
     if (factored->type == EXPR_FUNCTION
         && factored->data.function.head
         && factored->data.function.head->type == EXPR_SYMBOL
-        && factored->data.function.head->data.symbol == SYM_Times) {
+        && factored->data.function.head->data.symbol.name == SYM_Times) {
         size_t ac = factored->data.function.arg_count;
         cap = (int)ac;
         result = (ZUPoly**)malloc(sizeof(ZUPoly*) * (size_t)cap);
@@ -332,7 +332,7 @@ static bool zupoly_factor_to_array(const ZUPoly* p,
     if (fac->type == EXPR_FUNCTION
         && fac->data.function.head
         && fac->data.function.head->type == EXPR_SYMBOL
-        && fac->data.function.head->data.symbol == SYM_Times) {
+        && fac->data.function.head->data.symbol.name == SYM_Times) {
         arg_count = fac->data.function.arg_count;
         args = fac->data.function.args;
     } else {
@@ -356,7 +356,7 @@ static bool zupoly_factor_to_array(const ZUPoly* p,
         if (a->type == EXPR_FUNCTION
             && a->data.function.head
             && a->data.function.head->type == EXPR_SYMBOL
-            && a->data.function.head->data.symbol == SYM_Power
+            && a->data.function.head->data.symbol.name == SYM_Power
             && a->data.function.arg_count == 2) {
             Expr* exp_e = a->data.function.args[1];
             if (exp_e->type != EXPR_INTEGER || exp_e->data.integer < 1) {

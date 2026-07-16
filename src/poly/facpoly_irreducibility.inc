@@ -92,7 +92,7 @@ static int count_nontrivial_factors(Expr* factored, Expr* var) {
     if (factored->type == EXPR_FUNCTION
         && factored->data.function.head
         && factored->data.function.head->type == EXPR_SYMBOL
-        && factored->data.function.head->data.symbol == SYM_Times) {
+        && factored->data.function.head->data.symbol.name == SYM_Times) {
         int total = 0;
         for (size_t i = 0; i < factored->data.function.arg_count; i++) {
             Expr* a = factored->data.function.args[i];

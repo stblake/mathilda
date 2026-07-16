@@ -38,7 +38,7 @@ Expr* builtin_polarplot(Expr* res) {
     if (!iter || iter->type != EXPR_FUNCTION
         || !iter->data.function.head
         || iter->data.function.head->type != EXPR_SYMBOL
-        || iter->data.function.head->data.symbol != SYM_List
+        || iter->data.function.head->data.symbol.name != SYM_List
         || iter->data.function.arg_count != 3
         || iter->data.function.args[0]->type != EXPR_SYMBOL)
         return NULL;
@@ -53,7 +53,7 @@ Expr* builtin_polarplot(Expr* res) {
     bool is_list = (r_body->type == EXPR_FUNCTION
                     && r_body->data.function.head
                     && r_body->data.function.head->type == EXPR_SYMBOL
-                    && r_body->data.function.head->data.symbol == SYM_List
+                    && r_body->data.function.head->data.symbol.name == SYM_List
                     && r_body->data.function.arg_count > 0);
 
     Expr* param_body;
@@ -78,10 +78,10 @@ Expr* builtin_polarplot(Expr* res) {
         if (a && a->type == EXPR_FUNCTION && a->data.function.arg_count == 2
             && a->data.function.head
             && a->data.function.head->type == EXPR_SYMBOL
-            && (a->data.function.head->data.symbol == SYM_Rule
-                || a->data.function.head->data.symbol == SYM_RuleDelayed)
+            && (a->data.function.head->data.symbol.name == SYM_Rule
+                || a->data.function.head->data.symbol.name == SYM_RuleDelayed)
             && a->data.function.args[0]->type == EXPR_SYMBOL
-            && a->data.function.args[0]->data.symbol == SYM_PlotPoints) {
+            && a->data.function.args[0]->data.symbol.name == SYM_PlotPoints) {
             have_plot_points = true;
             break;
         }

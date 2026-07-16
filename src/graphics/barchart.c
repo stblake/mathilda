@@ -66,7 +66,7 @@ static bool split_chart_options(Expr* res, size_t start_idx,
         if (!is_rule_arg(arg)) BC_FAIL();
         Expr* lhs = arg->data.function.args[0];
         Expr* rhs = arg->data.function.args[1];
-        const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol : NULL;
+        const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol.name : NULL;
 
         if (name == SYM_BarSpacing) {
             double v;
@@ -110,7 +110,7 @@ static Expr* bar_color(Expr* chart_style, size_t i) {
         Expr* color = NULL;
         if (cs->type == EXPR_FUNCTION
             && cs->data.function.head->type == EXPR_SYMBOL
-            && cs->data.function.head->data.symbol == SYM_List
+            && cs->data.function.head->data.symbol.name == SYM_List
             && cs->data.function.arg_count > 0) {
             size_t idx = i % cs->data.function.arg_count;
             color = evaluate(expr_copy(cs->data.function.args[idx]));
@@ -175,7 +175,7 @@ static size_t emit_bar(Expr** prims, size_t np,
 static bool extract_reals(Expr* list, double** vals_out, size_t* n_out) {
     if (!list || list->type != EXPR_FUNCTION
         || list->data.function.head->type != EXPR_SYMBOL
-        || list->data.function.head->data.symbol != SYM_List)
+        || list->data.function.head->data.symbol.name != SYM_List)
         return false;
 
     size_t n = list->data.function.arg_count;
@@ -202,7 +202,7 @@ Expr* builtin_barchart(Expr* res) {
     Expr* data_arg = evaluate(expr_copy(res->data.function.args[0]));
     if (!data_arg || data_arg->type != EXPR_FUNCTION
         || data_arg->data.function.head->type != EXPR_SYMBOL
-        || data_arg->data.function.head->data.symbol != SYM_List) {
+        || data_arg->data.function.head->data.symbol.name != SYM_List) {
         expr_free(data_arg);
         return NULL;
     }
@@ -215,7 +215,7 @@ Expr* builtin_barchart(Expr* res) {
         Expr* first = data_arg->data.function.args[0];
         if (first->type == EXPR_FUNCTION
             && first->data.function.head->type == EXPR_SYMBOL
-            && first->data.function.head->data.symbol == SYM_List)
+            && first->data.function.head->data.symbol.name == SYM_List)
             multi = true;
     }
 
@@ -297,7 +297,7 @@ Expr* builtin_barchart(Expr* res) {
         Expr* labels_ev = evaluate(expr_copy(co.chart_labels));
         if (labels_ev->type == EXPR_FUNCTION
             && labels_ev->data.function.head->type == EXPR_SYMBOL
-            && labels_ev->data.function.head->data.symbol == SYM_List) {
+            && labels_ev->data.function.head->data.symbol.name == SYM_List) {
             size_t nl = labels_ev->data.function.arg_count;
             size_t count = (nl < n_bars) ? nl : n_bars;
             Expr** pairs = malloc(sizeof(Expr*) * count);
@@ -324,7 +324,7 @@ Expr* builtin_barchart(Expr* res) {
             const Expr* e = pt[i];
             if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
                 && e->data.function.args[0]->type == EXPR_SYMBOL
-                && e->data.function.args[0]->data.symbol == SYM_PlotRange)
+                && e->data.function.args[0]->data.symbol.name == SYM_PlotRange)
                 { have_pr = true; break; }
         }
         if (!have_pr) {
@@ -394,7 +394,7 @@ static size_t histogram_parse_bins(Expr* res,
     }
     if (ev->type == EXPR_FUNCTION
         && ev->data.function.head->type == EXPR_SYMBOL
-        && ev->data.function.head->data.symbol == SYM_List) {
+        && ev->data.function.head->data.symbol.name == SYM_List) {
         size_t lc = ev->data.function.arg_count;
         if (lc == 1) {
             /* {step} */
@@ -505,7 +505,7 @@ Expr* builtin_histogram(Expr* res) {
             const Expr* e = pt[i];
             if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
                 && e->data.function.args[0]->type == EXPR_SYMBOL
-                && e->data.function.args[0]->data.symbol == SYM_PlotRange)
+                && e->data.function.args[0]->data.symbol.name == SYM_PlotRange)
                 { have_pr = true; break; }
         }
         if (!have_pr) {

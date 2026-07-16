@@ -22,6 +22,7 @@
  */
 
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "sym_names.h"
 #include "print.h"
 #include <stdio.h>
@@ -31,7 +32,7 @@
 static bool hk_is_call(const Expr* e, const char* sym) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol == sym;
+           e->data.function.head->data.symbol.name == sym;
 }
 
 /* Parse a single positive machine integer (Integer > 0). */
@@ -79,6 +80,7 @@ static Expr* hk_build(int64_t m, int64_t n,
 }
 
 Expr* builtin_hankelmatrix(Expr* res) {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
 

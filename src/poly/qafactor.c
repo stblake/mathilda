@@ -403,7 +403,7 @@ static void collect_factors(Expr* factored, const char* x_name, ExprList* out) {
     if (factored->type == EXPR_FUNCTION
         && factored->data.function.head
         && factored->data.function.head->type == EXPR_SYMBOL
-        && factored->data.function.head->data.symbol == SYM_Times) {
+        && factored->data.function.head->data.symbol.name == SYM_Times) {
         for (size_t i = 0; i < factored->data.function.arg_count; i++) {
             collect_factors(factored->data.function.args[i], x_name, out);
         }
@@ -414,7 +414,7 @@ static void collect_factors(Expr* factored, const char* x_name, ExprList* out) {
     if (factored->type == EXPR_FUNCTION
         && factored->data.function.head
         && factored->data.function.head->type == EXPR_SYMBOL
-        && factored->data.function.head->data.symbol == SYM_Power
+        && factored->data.function.head->data.symbol.name == SYM_Power
         && factored->data.function.arg_count == 2) {
         Expr* base = factored->data.function.args[0];
         Expr* exp  = factored->data.function.args[1];
@@ -579,11 +579,11 @@ static Expr* expr_subst(const Expr* e,
  * the bare symbol I or the canonical Complex[0, 1]. */
 static bool expr_is_imaginary_unit(const Expr* e) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL && e->data.symbol == SYM_I) return true;
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_I) return true;
     if (e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Complex
+        && e->data.function.head->data.symbol.name == SYM_Complex
         && e->data.function.arg_count == 2) {
         Expr* re = e->data.function.args[0];
         Expr* im = e->data.function.args[1];
@@ -601,7 +601,7 @@ static bool expr_is_sqrt_int(const Expr* e, long* out_c) {
     if (!e->data.function.head
         || e->data.function.head->type != EXPR_SYMBOL
         || e->data.function.arg_count < 1) return false;
-    const char* head = e->data.function.head->data.symbol;
+    const char* head = e->data.function.head->data.symbol.name;
     if (head == SYM_Sqrt && e->data.function.arg_count == 1) {
         Expr* c = e->data.function.args[0];
         if (c->type != EXPR_INTEGER) return false;
@@ -678,7 +678,7 @@ QAExt* qa_resolve_extension(const Expr* alpha_expr, Expr** render_out) {
     if (alpha_expr->type == EXPR_FUNCTION
         && alpha_expr->data.function.head
         && alpha_expr->data.function.head->type == EXPR_SYMBOL
-        && alpha_expr->data.function.head->data.symbol == SYM_Times
+        && alpha_expr->data.function.head->data.symbol.name == SYM_Times
         && alpha_expr->data.function.arg_count == 2) {
         Expr* a = alpha_expr->data.function.args[0];
         Expr* b = alpha_expr->data.function.args[1];
@@ -714,7 +714,7 @@ QAExt* qa_resolve_extension(const Expr* alpha_expr, Expr** render_out) {
     if (alpha_expr->type == EXPR_FUNCTION
         && alpha_expr->data.function.head
         && alpha_expr->data.function.head->type == EXPR_SYMBOL
-        && alpha_expr->data.function.head->data.symbol == SYM_Power
+        && alpha_expr->data.function.head->data.symbol.name == SYM_Power
         && alpha_expr->data.function.arg_count == 2) {
         Expr* c   = alpha_expr->data.function.args[0];
         Expr* exp = alpha_expr->data.function.args[1];
@@ -821,7 +821,7 @@ static Expr* expand_radicals_to_atomic_poly(const Expr* e,
      * denominator divides q_natural, rewrite. */
     if (e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.head->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2) {
         const Expr* base  = e->data.function.args[0];
         const Expr* exp_e = e->data.function.args[1];
@@ -863,7 +863,7 @@ static Expr* expand_radicals_to_atomic_poly(const Expr* e,
      * some surface forms. */
     if (e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Sqrt
+        && e->data.function.head->data.symbol.name == SYM_Sqrt
         && e->data.function.arg_count == 1) {
         const Expr* base = e->data.function.args[0];
         if (base->type == EXPR_INTEGER && base->data.integer == c_base
@@ -1165,7 +1165,7 @@ static Expr* qa_factor_inner(const Expr* poly,
     if (!poly || !ext || !alpha_render_output || !var) return NULL;
     if (var->type != EXPR_SYMBOL) return NULL;
 
-    const char* x_name = var->data.symbol;
+    const char* x_name = var->data.symbol.name;
     const char* y_name = QA_ALPHA_INTERNAL;
 
     /* 1) Lift input poly → QAUPoly. */
@@ -1764,14 +1764,14 @@ static Expr* canonicalise_nested_radicands(const Expr* e,
     bool is_sqrt_head = false;
     if (e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Sqrt
+        && e->data.function.head->data.symbol.name == SYM_Sqrt
         && e->data.function.arg_count == 1) {
         radicand = e->data.function.args[0];
         is_radical = true;
         is_sqrt_head = true;
     } else if (e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.head->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2) {
         const Expr* base = e->data.function.args[0];
         const Expr* exp  = e->data.function.args[1];
@@ -1854,7 +1854,7 @@ static Expr* decompose_redundant_sqrts_walk(const Expr* e,
      * integer whose prime factors are all in prime_set. */
     if (e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         const Expr* base_e = NULL;
         bool is_sqrt = false;
         if (h == SYM_Sqrt && e->data.function.arg_count == 1) {
@@ -1946,7 +1946,7 @@ static Expr* decompose_redundant_sqrts(const Expr* e, const QATower* t) {
         if (!a || a->type != EXPR_FUNCTION) continue;
         if (!a->data.function.head
             || a->data.function.head->type != EXPR_SYMBOL) continue;
-        const char* h = a->data.function.head->data.symbol;
+        const char* h = a->data.function.head->data.symbol.name;
         const Expr* base = NULL;
         bool is_sqrt = false;
         if (h == SYM_Sqrt && a->data.function.arg_count == 1) {
@@ -1983,7 +1983,7 @@ static void count_radical_power_occurrences(const Expr* e, int* count) {
     if (!e || e->type != EXPR_FUNCTION) return;
     if (e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         if (h == SYM_Sqrt && e->data.function.arg_count == 1) {
             (*count)++;
         } else if (h == SYM_Power && e->data.function.arg_count == 2) {
@@ -2045,7 +2045,7 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
         if (a_r && a_r->type == EXPR_FUNCTION
             && a_r->data.function.head
             && a_r->data.function.head->type == EXPR_SYMBOL
-            && a_r->data.function.head->data.symbol == SYM_Power
+            && a_r->data.function.head->data.symbol.name == SYM_Power
             && a_r->data.function.arg_count == 2
             && a_r->data.function.args[0]->type == EXPR_INTEGER) {
             int64_t pe, qe;
@@ -2058,7 +2058,7 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
         if (c_i == 0 && a_r && a_r->type == EXPR_FUNCTION
             && a_r->data.function.head
             && a_r->data.function.head->type == EXPR_SYMBOL
-            && a_r->data.function.head->data.symbol == SYM_Sqrt
+            && a_r->data.function.head->data.symbol.name == SYM_Sqrt
             && a_r->data.function.arg_count == 1
             && a_r->data.function.args[0]->type == EXPR_INTEGER) {
             c_i = a_r->data.function.args[0]->data.integer;
@@ -2123,7 +2123,7 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
         if (a_r && a_r->type == EXPR_FUNCTION
             && a_r->data.function.head
             && a_r->data.function.head->type == EXPR_SYMBOL
-            && a_r->data.function.head->data.symbol == SYM_Power
+            && a_r->data.function.head->data.symbol.name == SYM_Power
             && a_r->data.function.arg_count == 2
             && a_r->data.function.args[0]->type == EXPR_INTEGER) {
             int64_t pe, qe;
@@ -2136,7 +2136,7 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
         if (c_i == 0 && a_r && a_r->type == EXPR_FUNCTION
             && a_r->data.function.head
             && a_r->data.function.head->type == EXPR_SYMBOL
-            && a_r->data.function.head->data.symbol == SYM_Sqrt
+            && a_r->data.function.head->data.symbol.name == SYM_Sqrt
             && a_r->data.function.arg_count == 1
             && a_r->data.function.args[0]->type == EXPR_INTEGER) {
             c_i = a_r->data.function.args[0]->data.integer;
@@ -2232,8 +2232,8 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
         collect_variables(num_expr, &vars, &vc, &vcap);
         collect_variables(den_expr, &vars, &vc, &vcap);
         for (size_t i = 0; i < vc; i++) {
-            if (vars[i]->type == EXPR_SYMBOL && vars[i]->data.symbol
-                && strcmp(vars[i]->data.symbol, QA_ALPHA_INTERNAL) == 0) continue;
+            if (vars[i]->type == EXPR_SYMBOL && vars[i]->data.symbol.name
+                && strcmp(vars[i]->data.symbol.name, QA_ALPHA_INTERNAL) == 0) continue;
             if (!var) var = expr_copy(vars[i]);
         }
         for (size_t i = 0; i < vc; i++) expr_free(vars[i]);
@@ -2381,9 +2381,9 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
 
     Expr* result = NULL;
     if (ok && q_num && q_den) {
-        Expr* num_out = qaupoly_to_expr_alpha(q_num, var->data.symbol,
+        Expr* num_out = qaupoly_to_expr_alpha(q_num, var->data.symbol.name,
                                               t->gamma_render);
-        Expr* den_out = qaupoly_to_expr_alpha(q_den, var->data.symbol,
+        Expr* den_out = qaupoly_to_expr_alpha(q_den, var->data.symbol.name,
                                               t->gamma_render);
         Expr* den_inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){den_out, expr_new_integer(-1)}, 2));
@@ -2433,7 +2433,7 @@ static Expr* tower_substitute_alphas(const Expr* e, const QATower* t) {
         if (a_r && a_r->type == EXPR_FUNCTION
             && a_r->data.function.head
             && a_r->data.function.head->type == EXPR_SYMBOL
-            && a_r->data.function.head->data.symbol == SYM_Power
+            && a_r->data.function.head->data.symbol.name == SYM_Power
             && a_r->data.function.arg_count == 2
             && a_r->data.function.args[0]->type == EXPR_INTEGER) {
             int64_t pe, qe;
@@ -2446,7 +2446,7 @@ static Expr* tower_substitute_alphas(const Expr* e, const QATower* t) {
         if (c_i == 0 && a_r && a_r->type == EXPR_FUNCTION
             && a_r->data.function.head
             && a_r->data.function.head->type == EXPR_SYMBOL
-            && a_r->data.function.head->data.symbol == SYM_Sqrt
+            && a_r->data.function.head->data.symbol.name == SYM_Sqrt
             && a_r->data.function.arg_count == 1
             && a_r->data.function.args[0]->type == EXPR_INTEGER) {
             c_i = a_r->data.function.args[0]->data.integer;
@@ -2607,7 +2607,7 @@ Expr* qa_polynomialgcd_with_tower(Expr* const* argv, size_t argc,
         g = next;
     }
     if (g && !qaupoly_is_zero(g)) {
-        result = qaupoly_to_expr_alpha(g, poly_var->data.symbol,
+        result = qaupoly_to_expr_alpha(g, poly_var->data.symbol.name,
                                        t->gamma_render);
     }
     if (g) qaupoly_free(g);
@@ -2653,7 +2653,7 @@ Expr* qa_polynomiallcm_with_tower(Expr* const* argv, size_t argc,
     if (L && !qaupoly_is_zero(L)) {
         QAUPoly* monic = qaupoly_make_monic(L);
         if (monic) {
-            result = qaupoly_to_expr_alpha(monic, poly_var->data.symbol,
+            result = qaupoly_to_expr_alpha(monic, poly_var->data.symbol.name,
                                            t->gamma_render);
             qaupoly_free(monic);
         }
@@ -2728,8 +2728,8 @@ static Expr* tower_multivar_combine(Expr* const* argv, size_t argc,
     if (in_gamma->type == EXPR_FUNCTION
         && in_gamma->data.function.head
         && in_gamma->data.function.head->type == EXPR_SYMBOL
-        && in_gamma->data.function.head->data.symbol
-        && strcmp(in_gamma->data.function.head->data.symbol, op_head) == 0) {
+        && in_gamma->data.function.head->data.symbol.name
+        && strcmp(in_gamma->data.function.head->data.symbol.name, op_head) == 0) {
         expr_free(in_gamma);
         return NULL;
     }
@@ -2768,7 +2768,7 @@ bool qa_tower_has_nested_radical(const QATower* t) {
         if (!a || a->type != EXPR_FUNCTION) continue;
         if (!a->data.function.head ||
             a->data.function.head->type != EXPR_SYMBOL) continue;
-        const char* h = a->data.function.head->data.symbol;
+        const char* h = a->data.function.head->data.symbol.name;
         const Expr* base = NULL;
         if (h == SYM_Sqrt && a->data.function.arg_count == 1) {
             base = a->data.function.args[0];
@@ -2793,7 +2793,7 @@ static bool expr_has_free_var(const Expr* e) {
     if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT ||
         e->type == EXPR_REAL || e->type == EXPR_STRING) return false;
     if (e->type == EXPR_SYMBOL) {
-        const char* s = e->data.symbol;
+        const char* s = e->data.symbol.name;
         if (!s) return false;
         /* Mathematical constants are not free variables. */
         if (s == SYM_Pi || s == SYM_E || s == SYM_I ||
@@ -2805,7 +2805,7 @@ static bool expr_has_free_var(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         /* Sqrt[c] / Power[c, p/q] with integer-only base is a "radical
          * constant", not a variable. Walk into the base to confirm. */
         if (h == SYM_Sqrt && e->data.function.arg_count == 1) {
@@ -2841,7 +2841,7 @@ static bool expr_contains_any_radical(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         if (h == SYM_Sqrt && e->data.function.arg_count == 1) return true;
         if (h == SYM_Power && e->data.function.arg_count == 2) {
             int64_t p, q;
@@ -2859,7 +2859,7 @@ static bool expr_has_nested_radical_radicand_walk(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         const Expr* base = NULL;
         bool is_radical_node = false;
         if (h == SYM_Sqrt && e->data.function.arg_count == 1) {
@@ -2931,7 +2931,7 @@ static bool expr_is_atomic_algebraic(const Expr* e) {
     if (e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Times
+        && e->data.function.head->data.symbol.name == SYM_Times
         && e->data.function.arg_count == 2) {
         Expr* a = e->data.function.args[0];
         Expr* b = e->data.function.args[1];
@@ -2951,7 +2951,7 @@ static bool expr_is_atomic_algebraic(const Expr* e) {
     if (e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.head->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp  = e->data.function.args[1];
@@ -3019,7 +3019,7 @@ static bool expr_collect_atomic_algebraics(const Expr* e,
         || !e->data.function.head
         || e->data.function.head->type != EXPR_SYMBOL) return false;
 
-    const char* head = e->data.function.head->data.symbol;
+    const char* head = e->data.function.head->data.symbol.name;
 
     /* Plus / Times: recurse on every argument. */
     if (head == SYM_Plus || head == SYM_Times) {
@@ -3129,13 +3129,13 @@ static bool expr_qx_is_irreducible(const Expr* R, const char* z_name) {
     if (fe->type == EXPR_FUNCTION
         && fe->data.function.head
         && fe->data.function.head->type == EXPR_SYMBOL
-        && fe->data.function.head->data.symbol == SYM_Times) {
+        && fe->data.function.head->data.symbol.name == SYM_Times) {
         for (size_t i = 0; i < fe->data.function.arg_count; i++) {
             Expr* a = fe->data.function.args[i];
             if (a->type == EXPR_FUNCTION
                 && a->data.function.head
                 && a->data.function.head->type == EXPR_SYMBOL
-                && a->data.function.head->data.symbol == SYM_Power
+                && a->data.function.head->data.symbol.name == SYM_Power
                 && a->data.function.arg_count == 2) {
                 Expr* k = a->data.function.args[1];
                 if (k->type == EXPR_INTEGER && k->data.integer > 1) {
@@ -3153,7 +3153,7 @@ static bool expr_qx_is_irreducible(const Expr* R, const char* z_name) {
     } else if (fe->type == EXPR_FUNCTION
                && fe->data.function.head
                && fe->data.function.head->type == EXPR_SYMBOL
-               && fe->data.function.head->data.symbol == SYM_Power
+               && fe->data.function.head->data.symbol.name == SYM_Power
                && fe->data.function.arg_count == 2) {
         Expr* k = fe->data.function.args[1];
         if (k->type == EXPR_INTEGER && k->data.integer > 1) {
@@ -3181,7 +3181,7 @@ static QAExt* qa_resolve_nested_radical(const Expr* alpha_expr,
     if (!alpha_expr || alpha_expr->type != EXPR_FUNCTION) return NULL;
     if (!alpha_expr->data.function.head
         || alpha_expr->data.function.head->type != EXPR_SYMBOL
-        || alpha_expr->data.function.head->data.symbol != SYM_Power
+        || alpha_expr->data.function.head->data.symbol.name != SYM_Power
         || alpha_expr->data.function.arg_count != 2) return NULL;
 
     Expr* base = alpha_expr->data.function.args[0];
@@ -3242,7 +3242,7 @@ static QAExt* qa_resolve_nested_radical(const Expr* alpha_expr,
         if (a_r && a_r->type == EXPR_FUNCTION
             && a_r->data.function.head
             && a_r->data.function.head->type == EXPR_SYMBOL
-            && a_r->data.function.head->data.symbol == SYM_Power
+            && a_r->data.function.head->data.symbol.name == SYM_Power
             && a_r->data.function.arg_count == 2
             && a_r->data.function.args[0]->type == EXPR_INTEGER) {
             int64_t pe, qe;
@@ -3256,7 +3256,7 @@ static QAExt* qa_resolve_nested_radical(const Expr* alpha_expr,
         if (c_i == 0 && a_r && a_r->type == EXPR_FUNCTION
             && a_r->data.function.head
             && a_r->data.function.head->type == EXPR_SYMBOL
-            && a_r->data.function.head->data.symbol == SYM_Sqrt
+            && a_r->data.function.head->data.symbol.name == SYM_Sqrt
             && a_r->data.function.arg_count == 1
             && a_r->data.function.args[0]->type == EXPR_INTEGER) {
             c_i = a_r->data.function.args[0]->data.integer;
@@ -3444,7 +3444,7 @@ static void autodetect_walk_intbase_only(const Expr* e, AutodetectGen* gens,
         }
         return;
     }
-    const char* head = e->data.function.head->data.symbol;
+    const char* head = e->data.function.head->data.symbol.name;
     if (head == SYM_Sqrt && e->data.function.arg_count == 1) {
         /* Sqrt[c] with integer c is atomic for G8 — skip. */
         return;
@@ -3506,7 +3506,7 @@ static void autodetect_walk(const Expr* e, AutodetectGen* gens,
         return;
     }
 
-    const char* head = e->data.function.head->data.symbol;
+    const char* head = e->data.function.head->data.symbol.name;
     const Expr* base = NULL;
     int64_t p = 0, q = 1;
     bool is_radical = false;
@@ -3590,7 +3590,7 @@ static Expr* autodetect_rewrite_to_atomic(const Expr* e) {
 
     if (e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.head->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2) {
         const Expr* base = e->data.function.args[0];
         const Expr* exp_e = e->data.function.args[1];
@@ -3681,7 +3681,7 @@ static bool autodetect_is_atomic_radical_surface(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (!e->data.function.head
         || e->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     if (h == SYM_Sqrt && e->data.function.arg_count == 1) return true;
     if (h == SYM_Power && e->data.function.arg_count == 2) {
         int64_t p, q;
@@ -3735,13 +3735,13 @@ static void autodetect_canonicalise_post(AutodetectGen* gens, size_t* n,
         int64_t q_natural = 0;
         if (surface->data.function.head
             && surface->data.function.head->type == EXPR_SYMBOL
-            && surface->data.function.head->data.symbol == SYM_Sqrt
+            && surface->data.function.head->data.symbol.name == SYM_Sqrt
             && surface->data.function.arg_count == 1) {
             radicand = surface->data.function.args[0];
             q_natural = 2;
         } else if (surface->data.function.head
             && surface->data.function.head->type == EXPR_SYMBOL
-            && surface->data.function.head->data.symbol == SYM_Power
+            && surface->data.function.head->data.symbol.name == SYM_Power
             && surface->data.function.arg_count == 2) {
             const Expr* e_x = surface->data.function.args[1];
             int64_t pe, qe;
@@ -4109,7 +4109,7 @@ static bool polyrad_parse_radical(const Expr* e,
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (!e->data.function.head
         || e->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = e->data.function.head->data.symbol;
+    const char* h = e->data.function.head->data.symbol.name;
     if (h == SYM_Sqrt && e->data.function.arg_count == 1) {
         *out_base = e->data.function.args[0];
         *out_q = 2;
@@ -4320,14 +4320,14 @@ static Expr* qa_cancel_with_poly_radical_impl(const Expr* arg) {
                 && xgcd_result->type == EXPR_FUNCTION
                 && xgcd_result->data.function.head
                 && xgcd_result->data.function.head->type == EXPR_SYMBOL
-                && xgcd_result->data.function.head->data.symbol == SYM_List
+                && xgcd_result->data.function.head->data.symbol.name == SYM_List
                 && xgcd_result->data.function.arg_count == 2) {
                 Expr* gcd_e = xgcd_result->data.function.args[0];
                 Expr* coeffs = xgcd_result->data.function.args[1];
                 if (coeffs && coeffs->type == EXPR_FUNCTION
                     && coeffs->data.function.head
                     && coeffs->data.function.head->type == EXPR_SYMBOL
-                    && coeffs->data.function.head->data.symbol == SYM_List
+                    && coeffs->data.function.head->data.symbol.name == SYM_List
                     && coeffs->data.function.arg_count >= 1) {
                     Expr* u_in_s = coeffs->data.function.args[0];
 

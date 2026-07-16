@@ -1,6 +1,6 @@
 # Linear Algebra
 
-39 built-in function(s) in this category.
+40 built-in function(s) in this category.
 
 - [`ConjugateTranspose`](ConjugateTranspose.md) — ConjugateTranspose[m]  _(Stable)_
 - [`Cross`](Cross.md) — Cross[a, b]  _(Stable)_
@@ -25,6 +25,7 @@
 - [`LinearSolve`](LinearSolve.md) — LinearSolve[m, b]  _(Stable)_
 - [`MatrixPower`](MatrixPower.md) — MatrixPower[m, n]  _(Stable)_
 - [`MatrixRank`](MatrixRank.md) — MatrixRank[m]  _(Stable)_
+- [`NDArray`](NDArray.md) — NDArray[nested_list]  _(Stable)_
 - [`NegativeDefiniteMatrixQ`](NegativeDefiniteMatrixQ.md) — NegativeDefiniteMatrixQ[m]  _(Stable)_
 - [`Norm`](Norm.md) — Norm[expr]  _(Stable)_
 - [`Normalize`](Normalize.md) — Normalize[v]  _(Stable)_

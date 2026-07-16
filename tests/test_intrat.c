@@ -208,9 +208,10 @@ static void test_integrate_unevaluated(void) {
     /* Genuinely non-elementary integrand: stays as Integrate[...].
      * (Sin[x] used to bubble back unevaluated; with the
      * Integrate`RischNorman dispatcher hook it now closes to a
-     * Tan[x/2]-form antiderivative.  Replace with a known
-     * non-elementary case.) */
-    run_eq("Integrate[1/Log[x], x]", "Integrate[1/Log[x], x]");
+     * Tan[x/2]-form antiderivative.  1/Log[x] likewise now closes to
+     * LogIntegral[x] via the widened li recognizer, so use a nested-log
+     * integrand with no elementary/special-function antiderivative.) */
+    run_eq("Integrate[1/Log[Log[x]], x]", "Integrate[1/Log[Log[x]], x]");
 }
 
 /* ------------------------------------------------------------------ */
@@ -309,7 +310,7 @@ static void test_integrate_lrt_naivelogpart_fallback(void) {
     ASSERT(r->type == EXPR_FUNCTION);
     ASSERT(r->data.function.head->type == EXPR_SYMBOL);
     /* Must NOT be the unevaluated Integrate head. */
-    ASSERT(strcmp(r->data.function.head->data.symbol, "Integrate") != 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "Integrate") != 0);
     expr_free(e);
     expr_free(r);
 }
@@ -325,7 +326,7 @@ static void test_integrate_parametric_biquadratic_closes(void) {
     ASSERT(r->data.function.head->type == EXPR_SYMBOL);
     /* Must NOT be RootSum — that would mean the Sophie-Germain path
      * silently regressed back to NaiveLogPart's fallback. */
-    ASSERT(strcmp(r->data.function.head->data.symbol, "RootSum") != 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "RootSum") != 0);
     /* Verify mathematical correctness at a concrete instantiation. */
     Expr* check = parse_expression(
         "N[(D[Integrate[1/(b + a x^4), x], x] - 1/(b + a x^4)) "
@@ -402,14 +403,14 @@ static void test_naivelogpart_basic(void) {
     Expr* r = evaluate(e);
     ASSERT(r->type == EXPR_FUNCTION);
     ASSERT(r->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "RootSum") == 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "RootSum") == 0);
     ASSERT(r->data.function.arg_count == 2);
     /* Both children are Function nodes. */
     for (size_t k = 0; k < 2; k++) {
         Expr* fn = r->data.function.args[k];
         ASSERT(fn->type == EXPR_FUNCTION);
         ASSERT(fn->data.function.head->type == EXPR_SYMBOL);
-        ASSERT(strcmp(fn->data.function.head->data.symbol, "Function") == 0);
+        ASSERT(strcmp(fn->data.function.head->data.symbol.name, "Function") == 0);
     }
     expr_free(e);
     expr_free(r);
@@ -425,7 +426,7 @@ static void test_naivelogpart_quartic_hard(void) {
     ASSERT(r->data.function.head->type == EXPR_SYMBOL);
     /* Should NOT be the held RootSum form for this non-parametric
      * biquadratic — the radical-formula expansion fires. */
-    ASSERT(strcmp(r->data.function.head->data.symbol, "RootSum") != 0);
+    ASSERT(strcmp(r->data.function.head->data.symbol.name, "RootSum") != 0);
     expr_free(e);
     expr_free(r);
 }
@@ -496,7 +497,7 @@ static bool contains_head(const Expr* e, const char* head) {
     if (!e) return false;
     if (e->type == EXPR_FUNCTION) {
         if (e->data.function.head->type == EXPR_SYMBOL
-            && strcmp(e->data.function.head->data.symbol, head) == 0) {
+            && strcmp(e->data.function.head->data.symbol.name, head) == 0) {
             return true;
         }
         for (size_t i = 0; i < e->data.function.arg_count; i++) {

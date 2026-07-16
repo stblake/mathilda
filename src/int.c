@@ -1026,7 +1026,7 @@ Expr* builtin_fromdigits(Expr* res) {
     if (first->type == EXPR_FUNCTION
         && first->data.function.head
         && first->data.function.head->type == EXPR_SYMBOL
-        && first->data.function.head->data.symbol == SYM_List) {
+        && first->data.function.head->data.symbol.name == SYM_List) {
 
         /* Decide between integer fast path and symbolic Horner. */
         bool all_int_digits = fd_all_integer_digits(first);

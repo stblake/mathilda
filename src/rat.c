@@ -32,7 +32,7 @@ static bool is_superficially_negative(Expr* e) {
     if (e->type == EXPR_REAL) return e->data.real < 0.0;
     int64_t n, d;
     if (is_rational(e, &n, &d)) return n < 0;
-    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL && e->data.function.head->data.symbol == SYM_Times) {
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL && e->data.function.head->data.symbol.name == SYM_Times) {
         if (e->data.function.arg_count > 0) {
             Expr* first = e->data.function.args[0];
             if (first->type == EXPR_INTEGER) return first->data.integer < 0;
@@ -59,7 +59,7 @@ static bool den_has_negative_lead(Expr* e) {
     if (!e) return false;
     if (is_superficially_negative(e)) return true;
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Plus &&
+        e->data.function.head->data.symbol.name == SYM_Plus &&
         e->data.function.arg_count > 0) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             if (!is_superficially_negative(e->data.function.args[i])) return false;
@@ -93,12 +93,12 @@ static void extract_num_den(Expr* expr, Expr** num_out, Expr** den_out) {
         return;
     }
 
-    if (expr->type == EXPR_FUNCTION && expr->data.function.head->type == EXPR_SYMBOL && (expr->data.function.head->data.symbol == SYM_Power || expr->data.function.head->data.symbol == SYM_Exp)) {
-        bool is_exp = expr->data.function.head->data.symbol == SYM_Exp;
+    if (expr->type == EXPR_FUNCTION && expr->data.function.head->type == EXPR_SYMBOL && (expr->data.function.head->data.symbol.name == SYM_Power || expr->data.function.head->data.symbol.name == SYM_Exp)) {
+        bool is_exp = expr->data.function.head->data.symbol.name == SYM_Exp;
         Expr* base = is_exp ? expr_new_symbol(SYM_E) : expr->data.function.args[0];
         Expr* exp = is_exp ? expr->data.function.args[0] : expr->data.function.args[1];
 
-        if (exp->type == EXPR_FUNCTION && exp->data.function.head->type == EXPR_SYMBOL && exp->data.function.head->data.symbol == SYM_Plus) {
+        if (exp->type == EXPR_FUNCTION && exp->data.function.head->type == EXPR_SYMBOL && exp->data.function.head->data.symbol.name == SYM_Plus) {
             size_t count = exp->data.function.arg_count;
             Expr** num_args = malloc(sizeof(Expr*) * count);
             Expr** den_args = malloc(sizeof(Expr*) * count);
@@ -144,7 +144,7 @@ static void extract_num_den(Expr* expr, Expr** num_out, Expr** den_out) {
         }
     }
 
-    if (expr->type == EXPR_FUNCTION && expr->data.function.head->type == EXPR_SYMBOL && expr->data.function.head->data.symbol == SYM_Times) {
+    if (expr->type == EXPR_FUNCTION && expr->data.function.head->type == EXPR_SYMBOL && expr->data.function.head->data.symbol.name == SYM_Times) {
         size_t count = expr->data.function.arg_count;
         Expr** n_args = malloc(sizeof(Expr*) * count);
         Expr** d_args = malloc(sizeof(Expr*) * count);
@@ -189,6 +189,33 @@ Expr* builtin_denominator(Expr* res) {
     return d;
 }
 
+#ifdef USE_FLINT
+/* Largest integer Power exponent anywhere in `e` (0 if none). Used to gate the
+ * FLINT exact-division fast paths below: on dense high-degree polynomials
+ * (the Bronstein RDE / high-order Laurent integrands, degree 100+), FLINT's
+ * packed fmpq_mpoly_divides is dramatically faster and overflow-free compared
+ * to the classical exact_poly_div's dense Expr arithmetic. Low-degree inputs
+ * stay on the classical path so their (often factored) output shape and the
+ * tests that pin it are undisturbed. */
+static int64_t rat_max_int_exponent(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return 0;
+    int64_t best = 0;
+    if (e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
+        e->data.function.arg_count == 2) {
+        const Expr* ex = e->data.function.args[1];
+        if (ex->type == EXPR_INTEGER && ex->data.integer > best)
+            best = ex->data.integer;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        int64_t sub = rat_max_int_exponent(e->data.function.args[i]);
+        if (sub > best) best = sub;
+    }
+    return best;
+}
+#endif
+
 /* Strict variant of cancel_exact_div: returns NULL when exact_poly_div
  * cannot perform the division in Q[vars] (i.e. the divisor doesn't
  * actually divide the dividend in the working multivariate polynomial
@@ -210,6 +237,21 @@ static Expr* cancel_exact_div_strict(Expr* num, Expr* den) {
 
     Expr* exp_num = expr_expand(num);
     Expr* exp_den = expr_expand(den);
+
+#ifdef USE_FLINT
+    /* Dense high-degree fast path: FLINT's fmpq_mpoly_divides settles exact
+     * divisibility over Q[vars] in packed form. It returns NULL (out of scope
+     * or not exactly divisible) for the same cases the classical path leaves
+     * uncancelled, so the strict NULL contract is preserved. */
+    if (rat_max_int_exponent(exp_num) >= 32 || rat_max_int_exponent(exp_den) >= 32) {
+        Expr* fq = flint_multivariate_divexact(exp_num, exp_den);
+        if (fq) {
+            expr_free(exp_num);
+            expr_free(exp_den);
+            return fq;
+        }
+    }
+#endif
 
     size_t v_count = 0, v_cap = 16;
     Expr** vars = malloc(sizeof(Expr*) * v_cap);
@@ -233,6 +275,24 @@ static Expr* cancel_exact_div_wrapper(Expr* num, Expr* den) {
 
     Expr* exp_num = expr_expand(num);
     Expr* exp_den = expr_expand(den);
+
+#ifdef USE_FLINT
+    /* Dense high-degree fast path: FLINT's fmpq_mpoly_divides performs the
+     * exact division in packed form, overflow-free and far faster than the
+     * classical exact_poly_div on degree-100+ numerators (the Bronstein RDE /
+     * high-order Laurent integrands). Here the divisor is the numerator/
+     * denominator GCD, so the division is always exact and FLINT returns the
+     * quotient; a NULL (out of scope) simply falls through to the classical
+     * path unchanged. */
+    if (rat_max_int_exponent(exp_num) >= 32 || rat_max_int_exponent(exp_den) >= 32) {
+        Expr* fq = flint_multivariate_divexact(exp_num, exp_den);
+        if (fq) {
+            expr_free(exp_num);
+            expr_free(exp_den);
+            return fq;
+        }
+    }
+#endif
 
     size_t v_count = 0, v_cap = 16;
     Expr** vars = malloc(sizeof(Expr*) * v_cap);
@@ -284,7 +344,7 @@ static bool has_embedded_rational_subterm(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp  = e->data.function.args[1];
@@ -316,7 +376,7 @@ static bool has_embedded_rational_subterm(Expr* e) {
 static void rat_factor_list_copy(const Expr* e, Expr*** out, size_t* n_out) {
     if (e->type == EXPR_FUNCTION && e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Times) {
+        e->data.function.head->data.symbol.name == SYM_Times) {
         size_t n = e->data.function.arg_count;
         Expr** arr = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
         for (size_t i = 0; i < n; i++) arr[i] = expr_copy(e->data.function.args[i]);
@@ -357,7 +417,7 @@ static void rat_strip_numeric_factors(Expr** arr, size_t* n_io) {
         Expr* f = arr[i];
         if (f->type == EXPR_FUNCTION && f->data.function.head &&
             f->data.function.head->type == EXPR_SYMBOL &&
-            f->data.function.head->data.symbol == SYM_Power &&
+            f->data.function.head->data.symbol.name == SYM_Power &&
             f->data.function.arg_count == 2) {
             Expr* base = f->data.function.args[0];
             Expr* exp  = f->data.function.args[1];
@@ -432,7 +492,7 @@ static Expr* rat_symbolic_content(const Expr* e) {
     bool is_plus = (e->type == EXPR_FUNCTION &&
                     e->data.function.head &&
                     e->data.function.head->type == EXPR_SYMBOL &&
-                    e->data.function.head->data.symbol == SYM_Plus);
+                    e->data.function.head->data.symbol.name == SYM_Plus);
 
     Expr** running = NULL;
     size_t n_running = 0;
@@ -485,7 +545,7 @@ static Expr* rat_div_distribute(Expr* e, const Expr* divisor) {
     }
     if (e->type == EXPR_FUNCTION && e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Plus) {
+        e->data.function.head->data.symbol.name == SYM_Plus) {
         size_t n = e->data.function.arg_count;
         Expr** new_args = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
         for (size_t i = 0; i < n; i++) {
@@ -577,11 +637,82 @@ static void rat_strip_symbolic_common(Expr** num_io, Expr** den_io) {
  * user-facing evaluation. */
 int cancel_recursive_inside_gcd = 0;
 
+/* True when `exp` is a symbolic (variable-bearing) exponent — anything other
+ * than a numeric literal (integer / real / rational).  A Power with such an
+ * exponent is a transcendental generator, not a polynomial power. */
+static bool rat_exp_is_symbolic(Expr* exp) {
+    if (!exp) return false;
+    if (exp->type == EXPR_INTEGER || exp->type == EXPR_BIGINT ||
+        exp->type == EXPR_REAL) return false;
+    int64_t p, q;
+    if (is_rational(exp, &p, &q)) return false;   /* Rational[a, b] literal */
+    return true;
+}
+
+/* Structural subexpression test: does `hay` contain `needle`? */
+static bool rat_contains_expr(Expr* hay, Expr* needle) {
+    if (!hay) return false;
+    if (expr_eq(hay, needle)) return true;
+    if (hay->type != EXPR_FUNCTION) return false;
+    if (rat_contains_expr(hay->data.function.head, needle)) return true;
+    for (size_t i = 0; i < hay->data.function.arg_count; i++)
+        if (rat_contains_expr(hay->data.function.args[i], needle)) return true;
+    return false;
+}
+
+/* True when the generic multivariate GCD's variable set for num/den would
+ * contain ALGEBRAICALLY-DEPENDENT generators, on which the generic subresultant
+ * Euclid cannot make degree progress and loops forever.  Two shapes arise for a
+ * transcendental power Power[b, e] with a symbolic exponent e:
+ *   (1) its base b is itself another generator (e.g. the atom x^n alongside the
+ *       bare variable x, from x^n/(x(1+x^n)) — reached via Integrate[1/(1+x^n)]);
+ *   (2) another symbolic power shares its base b with a different exponent
+ *       (e.g. x^(n-1) and x^n).
+ * FLINT packs genuine Q-polynomials (including the commensurate x^n / x^(2n)
+ * generator case) and is tried first, so this gate — checked only when FLINT
+ * declined — never rejects a fraction that would actually cancel.  Bailing
+ * (leaving it uncancelled) is always correctness-preserving. */
+static bool rat_has_dependent_power_generators(Expr* num, Expr* den) {
+    size_t vc = 0, vp = 16;
+    Expr** vv = malloc(sizeof(Expr*) * vp);
+    collect_variables(num, &vv, &vc, &vp);
+    collect_variables(den, &vv, &vc, &vp);
+    bool dep = false;
+    for (size_t i = 0; i < vc && !dep; i++) {
+        Expr* v = vv[i];
+        if (v->type != EXPR_FUNCTION ||
+            v->data.function.head->type != EXPR_SYMBOL ||
+            v->data.function.head->data.symbol.name != SYM_Power ||
+            v->data.function.arg_count != 2 ||
+            !rat_exp_is_symbolic(v->data.function.args[1]))
+            continue;
+        Expr* base = v->data.function.args[0];
+        Expr* exp  = v->data.function.args[1];
+        for (size_t j = 0; j < vc && !dep; j++) {
+            if (j == i) continue;
+            Expr* w = vv[j];
+            /* (1) base b is (or contains) another generator. */
+            if (rat_contains_expr(base, w)) { dep = true; break; }
+            /* (2) another symbolic power of the same base, different exponent. */
+            if (w->type == EXPR_FUNCTION &&
+                w->data.function.head->type == EXPR_SYMBOL &&
+                w->data.function.head->data.symbol.name == SYM_Power &&
+                w->data.function.arg_count == 2 &&
+                rat_exp_is_symbolic(w->data.function.args[1]) &&
+                expr_eq(base, w->data.function.args[0]) &&
+                !expr_eq(exp, w->data.function.args[1])) { dep = true; break; }
+        }
+    }
+    for (size_t i = 0; i < vc; i++) expr_free(vv[i]);
+    free(vv);
+    return dep;
+}
+
 static Expr* cancel_recursive(Expr* e) {
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
     if (e->data.function.head->type == EXPR_SYMBOL) {
-        const char* head = e->data.function.head->data.symbol;
+        const char* head = e->data.function.head->data.symbol.name;
         if (head == SYM_List || head == SYM_Plus ||
             head == SYM_Equal || head == SYM_Less ||
             head == SYM_LessEqual || head == SYM_Greater ||
@@ -642,10 +773,26 @@ static Expr* cancel_recursive(Expr* e) {
     g = flint_multivariate_gcd_normalized(num, den);
     if (g) g = eval_and_free(g);
 #endif
+    /* Soundness gate for the generic PolynomialGCD fallback.  When FLINT
+     * declined (g == NULL) the input is not a genuine polynomial over Q that
+     * FLINT could pack.  The generic Expr subresultant Euclid then treats each
+     * transcendental power Power[b, e] (symbolic exponent) as an independent
+     * generator; two incommensurate powers of the SAME base (e.g. x^(n-1) and
+     * x^n) are algebraically dependent yet look independent, so get_degree_poly
+     * cannot order them, no coefficient reduction makes progress, and the GCD /
+     * exact_poly_div loop runs forever (e.g. Cancel[x^(n-1)/(1+x^n)], reached
+     * from Integrate[1/(1+x^n), x]).  Leaving the fraction uncancelled is always
+     * correctness-preserving, and such fractions do not cancel anyway. */
+    if (!g && rat_has_dependent_power_generators(num, den)) {
+        cancel_recursive_inside_gcd--;
+        expr_free(num);
+        expr_free(den);
+        return expr_copy(e);
+    }
     if (!g)
         g = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialGCD), (Expr*[]){expr_copy(num), expr_copy(den)}, 2));
     cancel_recursive_inside_gcd--;
-    
+
     Expr* new_num = cancel_exact_div_wrapper(num, g);
     Expr* new_den = cancel_exact_div_wrapper(den, g);
     
@@ -693,7 +840,7 @@ static Expr* together_recursive_ext(Expr* e, const Expr* alpha) {
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
     if (e->data.function.head->type == EXPR_SYMBOL) {
-        const char* head = e->data.function.head->data.symbol;
+        const char* head = e->data.function.head->data.symbol.name;
 
         if (head == SYM_Plus) {
             size_t count = e->data.function.arg_count;
@@ -1072,7 +1219,7 @@ static Expr* cancel_auto_gcd_quotient(const Expr* arg) {
          * first plain non-I symbol is the polynomial variable. */
         for (size_t i = 0; i < vc; i++) {
             if (vars[i]->type == EXPR_SYMBOL
-                && vars[i]->data.symbol == SYM_I) continue;
+                && vars[i]->data.symbol.name == SYM_I) continue;
             if (!var) var = expr_copy(vars[i]);
         }
         for (size_t i = 0; i < vc; i++) expr_free(vars[i]);
@@ -1167,13 +1314,13 @@ static int pick_best_tower_generator(const Expr* arg, const QATower* t) {
  * over-an-extension fraction from a plain rational one. */
 static bool rat_has_algebraic_atom(const Expr* e) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return e->data.symbol == SYM_I;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_I;
     if (e->type != EXPR_FUNCTION) return false;
     const Expr* h = e->data.function.head;
     if (h && h->type == EXPR_SYMBOL) {
-        if (h->data.symbol == SYM_Sqrt || h->data.symbol == SYM_Complex)
+        if (h->data.symbol.name == SYM_Sqrt || h->data.symbol.name == SYM_Complex)
             return true;
-        if (h->data.symbol == SYM_Power && e->data.function.arg_count == 2) {
+        if (h->data.symbol.name == SYM_Power && e->data.function.arg_count == 2) {
             int64_t p, q;
             if (is_rational(e->data.function.args[1], &p, &q) && q != 1)
                 return true;
@@ -1219,7 +1366,7 @@ static Expr* flint_cancel_fraction(Expr* arg) {
      * relation-dependent cancellations like (x^3-k)/(x-k^(1/3))). */
     if (arg->type == EXPR_FUNCTION && arg->data.function.head &&
         arg->data.function.head->type == EXPR_SYMBOL &&
-        arg->data.function.head->data.symbol == SYM_Plus) {
+        arg->data.function.head->data.symbol.name == SYM_Plus) {
         Expr* ft = flint_algebraic_field_together(arg);
         if (ft) return ft;
     }
@@ -1301,6 +1448,14 @@ static Expr* builtin_cancel_compute(Expr* res) {
     if (res->data.function.arg_count == 1) {
         Expr* fc = flint_cancel_fraction(res->data.function.args[0]);
         if (fc) return fc;
+        /* Plain rational function over Q (no algebraic generator): reduce the
+         * single fraction directly in fmpz_mpoly_q — the same fast path Together
+         * uses, but with Cancel's gate (a lone fraction, no denominator under a
+         * Plus, since Cancel leaves a sum of fractions uncombined). Far faster
+         * than the classical extract/GCD/exact-divide on a high-degree
+         * denominator; output form (expanded, reduced num/den) is unchanged. */
+        Expr* rc = flint_rational_cancel(res->data.function.args[0]);
+        if (rc) return rc;
     }
 #endif
 
@@ -1334,7 +1489,7 @@ static Expr* builtin_cancel_compute(Expr* res) {
     if (auto_flag && rat_has_algebraic_atom(arg)) {
         bool is_sum = (arg->type == EXPR_FUNCTION && arg->data.function.head
                        && arg->data.function.head->type == EXPR_SYMBOL
-                       && arg->data.function.head->data.symbol == SYM_Plus);
+                       && arg->data.function.head->data.symbol.name == SYM_Plus);
         if (!is_sum) {
             Expr* red = cancel_auto_gcd_quotient(arg);
             if (red) {
@@ -1416,7 +1571,7 @@ static Expr* builtin_cancel_compute(Expr* res) {
                     bool is_sum = (arg->type == EXPR_FUNCTION
                                    && arg->data.function.head
                                    && arg->data.function.head->type == EXPR_SYMBOL
-                                   && arg->data.function.head->data.symbol == SYM_Plus);
+                                   && arg->data.function.head->data.symbol.name == SYM_Plus);
                     int idx = pick_best_tower_generator(arg, auto_tower);
                     Expr* best = NULL;
                     if (idx >= 0) {
@@ -1458,7 +1613,7 @@ static Expr* builtin_cancel_compute(Expr* res) {
         bool is_sum = (arg->type == EXPR_FUNCTION
                        && arg->data.function.head
                        && arg->data.function.head->type == EXPR_SYMBOL
-                       && arg->data.function.head->data.symbol == SYM_Plus);
+                       && arg->data.function.head->data.symbol.name == SYM_Plus);
         if (is_sum) {
             Expr* result = together_recursive_ext(arg, alpha);
             if (result) {
@@ -1495,7 +1650,7 @@ static Expr* builtin_cancel_compute(Expr* res) {
     if (auto_flag) {
         bool is_sum = (arg->type == EXPR_FUNCTION && arg->data.function.head
                        && arg->data.function.head->type == EXPR_SYMBOL
-                       && arg->data.function.head->data.symbol == SYM_Plus);
+                       && arg->data.function.head->data.symbol.name == SYM_Plus);
         if (!is_sum) {
             Expr* red = cancel_auto_gcd_quotient(arg);
             if (red) {
@@ -1563,7 +1718,7 @@ static Expr* together_recursive(Expr* e) {
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
     
     if (e->data.function.head->type == EXPR_SYMBOL) {
-        const char* head = e->data.function.head->data.symbol;
+        const char* head = e->data.function.head->data.symbol.name;
         
         if (head == SYM_Plus) {
             size_t count = e->data.function.arg_count;
@@ -1714,6 +1869,17 @@ static Expr* builtin_together_compute(Expr* res) {
     {
         Expr* fc = flint_cancel_fraction(arg);
         if (fc) return fc;
+    }
+    /* Plain rational function over Q (no algebraic generator, so the extension
+     * paths above declined): combine into a single reduced fraction directly in
+     * fmpz_mpoly_q. This is the fast path for the ordinary case where the
+     * classical together_recursive expands and GCDs a high-degree denominator at
+     * O(seconds); the FLINT output is the same expanded/reduced num/den. Gated
+     * (inside) to fire only when there is a denominator to combine, so a
+     * denominator-free product/polynomial is still left factored. */
+    if (!alpha && !auto_flag) {
+        Expr* ft = flint_rational_together(arg);
+        if (ft) return ft;
     }
 #endif
 

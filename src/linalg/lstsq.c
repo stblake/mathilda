@@ -90,6 +90,7 @@
 
 #include "lstsq.h"
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "eval.h"
 #include "symtab.h"
 #include "attr.h"
@@ -147,16 +148,16 @@ typedef enum {
 static LstsqMethod parse_method_option(Expr* opt) {
     if (opt->type != EXPR_FUNCTION) return LSTSQ_INVALID;
     if (opt->data.function.head->type != EXPR_SYMBOL) return LSTSQ_INVALID;
-    const char* hd = opt->data.function.head->data.symbol;
+    const char* hd = opt->data.function.head->data.symbol.name;
     if ((hd != SYM_Rule && hd != SYM_RuleDelayed)
         || opt->data.function.arg_count != 2) return LSTSQ_INVALID;
     Expr* lhs = opt->data.function.args[0];
     Expr* rhs = opt->data.function.args[1];
-    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol != SYM_Method)
+    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol.name != SYM_Method)
         return LSTSQ_INVALID;
 
     /* Method -> Automatic (the symbol). */
-    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic)
+    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic)
         return LSTSQ_AUTOMATIC;
     if (rhs->type != EXPR_STRING) return LSTSQ_INVALID;
     if (strcmp(rhs->data.string, "Automatic")           == 0) return LSTSQ_AUTOMATIC;
@@ -180,15 +181,15 @@ static bool parse_tolerance_option(Expr* opt, bool* is_automatic_out,
     *tol_out = 0.0;
     if (opt->type != EXPR_FUNCTION) return false;
     if (opt->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* hd = opt->data.function.head->data.symbol;
+    const char* hd = opt->data.function.head->data.symbol.name;
     if ((hd != SYM_Rule && hd != SYM_RuleDelayed)
         || opt->data.function.arg_count != 2) return false;
     Expr* lhs = opt->data.function.args[0];
     Expr* rhs = opt->data.function.args[1];
     if (lhs->type != EXPR_SYMBOL) return false;
-    if (lhs->data.symbol != SYM_Tolerance) return false;
+    if (lhs->data.symbol.name != SYM_Tolerance) return false;
 
-    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic) {
+    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) {
         *is_automatic_out = true;
         return true;
     }
@@ -206,7 +207,7 @@ static bool parse_tolerance_option(Expr* opt, bool* is_automatic_out,
     }
     if (rhs->type == EXPR_FUNCTION
         && rhs->data.function.head->type == EXPR_SYMBOL
-        && rhs->data.function.head->data.symbol == SYM_Rational
+        && rhs->data.function.head->data.symbol.name == SYM_Rational
         && rhs->data.function.arg_count == 2) {
         Expr* num = rhs->data.function.args[0];
         Expr* den = rhs->data.function.args[1];
@@ -273,7 +274,7 @@ static bool is_numeric_atom(Expr* e) {
     if (e->type == EXPR_REAL)    return true;
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
+        const char* h = e->data.function.head->data.symbol.name;
         if (h == SYM_Rational || h == SYM_Complex) {
             for (size_t i = 0; i < e->data.function.arg_count; i++)
                 if (!is_numeric_atom(e->data.function.args[i])) return false;
@@ -288,7 +289,7 @@ static bool is_numeric_tensor(Expr* e) {
     if (is_numeric_atom(e)) return true;
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_List) {
+        && e->data.function.head->data.symbol.name == SYM_List) {
         for (size_t i = 0; i < e->data.function.arg_count; i++)
             if (!is_numeric_tensor(e->data.function.args[i])) return false;
         return true;
@@ -315,7 +316,7 @@ static bool has_complex_leaf(Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_FUNCTION) {
         const char* h = (e->data.function.head->type == EXPR_SYMBOL)
-                       ? e->data.function.head->data.symbol : NULL;
+                       ? e->data.function.head->data.symbol.name : NULL;
         if (h == SYM_Complex) return true;
         for (size_t i = 0; i < e->data.function.arg_count; i++)
             if (has_complex_leaf(e->data.function.args[i])) return true;
@@ -332,7 +333,7 @@ static bool expr_as_double(Expr* e, double* out) {
     if (e->type == EXPR_BIGINT)  { *out = mpz_get_d(e->data.bigint); return true; }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.head->data.symbol.name == SYM_Rational
         && e->data.function.arg_count == 2) {
         double n, d;
         if (!expr_as_double(e->data.function.args[0], &n)) return false;
@@ -441,7 +442,7 @@ static Expr* direct_solve(Expr* m, Expr* b, Expr* tol_opt_or_null) {
     /* PseudoInverse failed (returned the unevaluated call). */
     if (pinv->type == EXPR_FUNCTION
         && pinv->data.function.head->type == EXPR_SYMBOL
-        && pinv->data.function.head->data.symbol == SYM_PseudoInverse) {
+        && pinv->data.function.head->data.symbol.name == SYM_PseudoInverse) {
         expr_free(pinv);
         return NULL;
     }
@@ -721,7 +722,7 @@ static Expr* cgls_solve(Expr* m, Expr* b,
         (Expr*[]){expr_copy(b)}, 1));
     if (!bT || bT->type != EXPR_FUNCTION
         || bT->data.function.head->type != EXPR_SYMBOL
-        || bT->data.function.head->data.symbol != SYM_List) {
+        || bT->data.function.head->data.symbol.name != SYM_List) {
         if (bT) expr_free(bT);
         expr_free(mt);
         return NULL;
@@ -1029,6 +1030,7 @@ static Expr* lsqr_solve(Expr* m, Expr* b, Expr* tol_opt_or_null,
  * and Krylov currently dispatch to Direct (see the file header).
  * ------------------------------------------------------------------ */
 Expr* builtin_leastsquares(Expr* res) {
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 2) return NULL;

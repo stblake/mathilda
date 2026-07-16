@@ -279,7 +279,7 @@ static int modular_root(mpz_t x, const mpz_t c, const mpz_t r, const mpz_t m) {
     Expr* fact = internal_factorinteger(args, 1);
     if (!fact || fact->type != EXPR_FUNCTION ||
         fact->data.function.head->type != EXPR_SYMBOL ||
-        fact->data.function.head->data.symbol != SYM_List) {
+        fact->data.function.head->data.symbol.name != SYM_List) {
         if (fact) expr_free(fact);
         return 0;
     }
@@ -377,7 +377,7 @@ Expr* builtin_powermod(Expr* res) {
     /* --- Rational exponent p/q: modular q-th root of a^p. ------------- */
     if (b_expr->type == EXPR_FUNCTION && b_expr->data.function.head &&
         b_expr->data.function.head->type == EXPR_SYMBOL &&
-        b_expr->data.function.head->data.symbol == SYM_Rational &&
+        b_expr->data.function.head->data.symbol.name == SYM_Rational &&
         b_expr->data.function.arg_count == 2 &&
         expr_is_integer_like(b_expr->data.function.args[0]) &&
         expr_is_integer_like(b_expr->data.function.args[1])) {

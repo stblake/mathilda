@@ -8,6 +8,7 @@
 #include "trig_canon.h"
 #include "internal.h"
 #include "series.h"
+#include "ndarray.h"
 #include <math.h>
 #include <complex.h>
 #include <stdio.h>
@@ -29,13 +30,13 @@ static bool is_known_positive_pwr(Expr* e) {
     int64_t n, d;
     if (is_rational(e, &n, &d)) return n > 0;
     if (e->type == EXPR_SYMBOL) {
-        const char* s = e->data.symbol;
+        const char* s = e->data.symbol.name;
         if (s == SYM_E)  return true;
         if (s == SYM_Pi) return true;
     }
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2) {
         return is_known_positive_pwr(e->data.function.args[0]);
     }
@@ -341,7 +342,7 @@ static bool power_factor_composes_cleanly(Expr* f,
     if (f->type != EXPR_FUNCTION) return false;
     if (!f->data.function.head
         || f->data.function.head->type != EXPR_SYMBOL
-        || f->data.function.head->data.symbol != SYM_Power
+        || f->data.function.head->data.symbol.name != SYM_Power
         || f->data.function.arg_count != 2) return false;
     Expr* b = f->data.function.args[0];
     Expr* e = f->data.function.args[1];
@@ -452,11 +453,11 @@ static bool is_head_call(Expr* e, const char* sym, size_t argc) {
 static Expr* simplify_exp_log(Expr* base, Expr* exp) {
     bool exp_is_times = exp->type == EXPR_FUNCTION &&
                         exp->data.function.head->type == EXPR_SYMBOL &&
-                        exp->data.function.head->data.symbol == SYM_Times;
+                        exp->data.function.head->data.symbol.name == SYM_Times;
     size_t nf = exp_is_times ? exp->data.function.arg_count : 1;
     Expr** factors = exp_is_times ? exp->data.function.args : &exp;
 
-    bool base_is_E = (base->type == EXPR_SYMBOL && base->data.symbol == SYM_E);
+    bool base_is_E = (base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E);
 
     int log_idx = -1;
     Expr* a = NULL;
@@ -512,6 +513,28 @@ static Expr* simplify_exp_log(Expr* base, Expr* exp) {
         (Expr*[]){ expr_copy(a), coeff }, 2));
 }
 
+/* Decode a scalar exponent Expr into a (re, im) pair for the NDArray power fast
+ * path: Integer/Real → real, Complex[re, im] with Integer/Real parts → complex.
+ * Returns false for anything else (symbolic, Rational, BigInt, MPFR), so those
+ * fall through to the generic symbolic Power. */
+static bool power_scalar_components(const Expr* e, double* re, double* im) {
+    *im = 0.0;
+    if (e->type == EXPR_INTEGER) { *re = (double)e->data.integer; return true; }
+    if (e->type == EXPR_REAL)    { *re = e->data.real; return true; }
+    if (head_is(e, SYM_Complex) && e->data.function.arg_count == 2) {
+        const Expr* a = e->data.function.args[0];
+        const Expr* b = e->data.function.args[1];
+        double ar, br;
+        if ((a->type == EXPR_INTEGER ? (ar = (double)a->data.integer, true)
+             : a->type == EXPR_REAL  ? (ar = a->data.real, true) : false) &&
+            (b->type == EXPR_INTEGER ? (br = (double)b->data.integer, true)
+             : b->type == EXPR_REAL  ? (br = b->data.real, true) : false)) {
+            *re = ar; *im = br; return true;
+        }
+    }
+    return false;
+}
+
 Expr* builtin_power(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
 
@@ -535,6 +558,39 @@ Expr* builtin_power(Expr* res) {
 
     Expr* base = res->data.function.args[0];
     Expr* exp = res->data.function.args[1];
+
+    /* NDArray fast path: elementwise A^B (same shape) or A^scalar. Uses raw
+     * C-level complex power over the flat buffer; promotes the result dtype to
+     * complex when a real base with a non-integer exponent leaves the real axis
+     * (e.g. (-1.0)^0.5). A mixed NDArray/symbolic case falls through. */
+    if (is_ndarray(base)) {
+        if (is_ndarray(exp)) {
+            Expr* fast = ndarray_elementwise_power(base, exp);
+            if (fast) return fast;
+            Expr* pair[2] = { base, exp };
+            if (ndarray_warn_shape_mismatch(pair, 2, "raised to a power"))
+                return NULL;
+        } else {
+            double er, ei;
+            if (power_scalar_components(exp, &er, &ei)) {
+                Expr* fast = ndarray_scalar_power(base, er, ei);
+                if (fast) return fast;
+            }
+        }
+    } else if (is_ndarray(exp)) {
+        double br, bi;
+        if (power_scalar_components(base, &br, &bi)) {
+            Expr* fast = ndarray_base_scalar_power(br, bi, exp);
+            if (fast) return fast;
+        }
+    }
+    /* NDArray combined with a symbolic base or exponent (NDArray^n): purely
+     * numeric, so it can't be raised elementwise. Warn, then fall through to
+     * leave the power unevaluated. Same-shape / scalar cases returned above. */
+    if (is_ndarray(base) || is_ndarray(exp)) {
+        Expr* nd_pair[2] = { base, exp };
+        ndarray_warn_symbolic(nd_pair, 2, "raised to a power");
+    }
 
     /* Infinity / Indeterminate preprocessing.
      *
@@ -974,7 +1030,7 @@ Expr* builtin_power(Expr* res) {
      * downstream is_zero_poly / Together-based simplification. */
     if (base->type == EXPR_FUNCTION &&
         base->data.function.head->type == EXPR_SYMBOL &&
-        base->data.function.head->data.symbol == SYM_Rational &&
+        base->data.function.head->data.symbol.name == SYM_Rational &&
         base->data.function.arg_count == 2 &&
         expr_is_integer_like(base->data.function.args[0]) &&
         expr_is_integer_like(base->data.function.args[1]) &&
@@ -1109,7 +1165,7 @@ Expr* builtin_power(Expr* res) {
         }
     }
 
-    if (exp->type == EXPR_INTEGER && base->type == EXPR_FUNCTION && base->data.function.head->data.symbol == SYM_Times) {
+    if (exp->type == EXPR_INTEGER && base->type == EXPR_FUNCTION && base->data.function.head->data.symbol.name == SYM_Times) {
         size_t bc = base->data.function.arg_count;
         Expr** new_args = malloc(sizeof(Expr*) * bc);
         for (size_t i = 0; i < bc; i++) {
@@ -1139,7 +1195,7 @@ Expr* builtin_power(Expr* res) {
      */
     if (base->type == EXPR_FUNCTION &&
         base->data.function.head->type == EXPR_SYMBOL &&
-        base->data.function.head->data.symbol == SYM_Times) {
+        base->data.function.head->data.symbol.name == SYM_Times) {
         int64_t pp_d, qq_d;
         if (is_rational(exp, &pp_d, &qq_d) && qq_d > 1) {
             size_t bc = base->data.function.arg_count;
@@ -1300,7 +1356,7 @@ rat_imag_fallthrough: ;
      * 1/9 * 2^(-2/3)).
      */
     if (base->type == EXPR_FUNCTION && base->data.function.head->type == EXPR_SYMBOL
-        && base->data.function.head->data.symbol == SYM_Times) {
+        && base->data.function.head->data.symbol.name == SYM_Times) {
         int64_t pp_pt, qq_pt;
         if (is_rational(exp, &pp_pt, &qq_pt) && qq_pt > 1) {
             size_t bc = base->data.function.arg_count;
@@ -1392,7 +1448,7 @@ rat_imag_fallthrough: ;
      * splits it into 1/9 * Power[2, -2/3].
      */
     if (base->type == EXPR_FUNCTION && base->data.function.head->type == EXPR_SYMBOL
-        && base->data.function.head->data.symbol == SYM_Power
+        && base->data.function.head->data.symbol.name == SYM_Power
         && base->data.function.arg_count == 2) {
         Expr* inner_base = base->data.function.args[0];
         Expr* inner_exp  = base->data.function.args[1];

@@ -1,5 +1,25 @@
 # Lessons learned
 
+## No NIntegrate crosscheck inside Integrate — verify correct-by-construction (2026-07-08)
+
+The definite-integral methods in `Integrate` must NEVER validate a symbolic
+result against `NIntegrate` (or any numeric quadrature). The project philosophy
+(see the residue method `integrate_residue.c` and the cascade-ordering lesson) is
+**correct-by-construction**: deterministic methods gated by symbolic
+convergence/assumption conditions, with symbolic self-verification only
+(`PossibleZeroQ`, `Simplify`, exact base values).
+
+For the DiffUnderInt (Feynman) method specifically, this is both a rule and a
+gift: the Conrad §12 conditional-convergence trap (differentiating `∫sin(tx)/x`
+into the divergent `∫cos(tx)`) is caught automatically because the inner
+`Integrate[∂_p f, {x,a,b}]` fails to close / returns divergent under the engine's
+own gates — so we skip that parameter. Verification = symbolic derivative check
+`PossibleZeroQ[D[I,p] − J]` + an EXACT base value `I(p0)` (zero-integrand or the
+engine's exact `Integrate` of `f|_{p→p0}`), never a numeric compare.
+
+Test-side numeric comparison (`N[result - expected]` in `test_*.c`) is fine — the
+prohibition is on numerics *inside* the `Integrate` code path.
+
 ## Carving a C file into regions: grep ALL return types, not just the obvious one (2026-06-07)
 
 When splitting `arithmetic.c` into `numbertheory.c`, I mapped function
@@ -892,3 +912,236 @@ Lessons:
   elementary via Chebyshev's binomial mechanism, NOT the Goursat reduction — the
   WL reference `CubicRootElementaryQ` rejects it too. Hand-derived
   `H1 = -2(-4)^(-1/3) z/(1+z^3) ≠ 0` confirms it's inherent, not a code bug.
+
+## Integrate hang on symbolic-exponent integrands (2026-07-09)
+- **Symptom**: `Integrate[x^(k-1)(1-x)^(l-1),{x,0,1}]` (and indefinite
+  `Integrate[x^k+x^(k-1),x]`, `Integrate[x^(k-1)(1-x),x]`) hung forever.
+- **Root cause**: an integrand with a symbolic-exponent power of x (`x^k`,
+  `x^(k-1)`) reaches `Together`/`Cancel` → `PolynomialGCD`, which treats the
+  symbolic powers as independent polynomial generators and blows the
+  pseudo-remainder sequence up (unbounded). Two entry points hit it: the
+  rational-integration classifier `is_rational_in` (its `Together` *probe*, before
+  BronsteinRational even runs) and the derivative-divides quotient
+  `cancel_together`. `sample <pid>` pinpointed `pseudo_rem`/`poly_gcd_internal`.
+- **Fix**: decline these Together-backed paths structurally, up front — a
+  `Power[b,e]` with `b` depending on x and non-numeric `e` (`expr_is_numeric_like`
+  rejects it) is provably not rational in x and never a productive u-substitution
+  kernel. Guards: `has_symbolic_power_in` (integrate.c `try_rational`),
+  `has_symbolic_power_of` (integrate_derivdivides.c `dd_core`).
+- **Lesson**: when Integrate/Simplify/Together *hangs* (not wrong-answer), it is
+  almost always PolynomialGCD/pseudo-remainder on symbolic exponents (see also
+  `together_layer4_design.md`, the a^i Together hang). Use macOS `sample <pid> 2`
+  on the live process to get the loop; the fix belongs at the *classifier gate*
+  (reject before the expensive probe), not inside PolynomialGCD.
+- **Process**: `./Mathilda` in pipe mode (non-tty) speaks NDJSON, not bare exprs —
+  drive it with `{"id":1,"expr":"..."}` + `{"type":"quit"}`, and beware `| head -1`
+  masking the real exit code (use `${PIPESTATUS}` / capture then grep).
+
+## Completeness over aesthetics: don't gate out correct results (2026-07-10)
+
+- **Correction**: For `Integrate\`RischTranscendental`, I added a `FreeQ[_, I]` gate that
+  DECLINED `Tan[x]`/`Tanh[x]` because their coupled-hyperexponential answer, via
+  the complex substitution `u = I x`, came out I-laden (`I x - Log[1 + E^(2 I x)]`
+  `= -Log[Cos[x]]`) and no simplifier reduced it to real form. The user's rule:
+  **favour completeness — return the correct antiderivative even when unsimplified,
+  and FLAG the case as a `Simplify` improvement opportunity** rather than silently
+  declining it.
+- **Rule for myself**: a Risch/integration branch that is correct by construction
+  must NOT be suppressed just because the output isn't in the prettiest form. If
+  the answer is correct (diff-back 0 / SolveAlways-certified), ship it. Record the
+  un-simplified shapes as explicit known-gaps (code comment + changelog +
+  docs "Simplify improvement opportunity"), so the aesthetic fix can be done in
+  `Simplify`, not by dropping capability from the integrator.
+
+## Generalizing an RDE/ansatz solver: gate on genuine rational functions (2026-07-11)
+
+- **Bug I introduced & fixed**: extending the base Risch-DE solver `rt_solve_rde`
+  to rational exponents (Phase C, `E^(1/x)`) via a `q = h/Denominator[p]` ansatz, I
+  routed every non-polynomial `p` to it. But `rt_exp_poly_case` passes the
+  exponential's *coefficient* as `p` — for raw `E^x Sin[x]`, `p = Sin[x]`
+  (transcendental). `SolveAlways` then certified a spurious `q = 0`, so
+  `Integrate[E^x Sin[x]]` wrongly returned `0` (broke every multi-kernel test).
+- **Rule for myself**: when a `SolveAlways`/denominator-theorem ansatz is fed a
+  coefficient that may be transcendental, GATE it: require `p` (and `u'`) to be a
+  genuine rational function of `x` — `PolynomialQ` on both `Numerator` and
+  `Denominator` of `Together[·]`. A transcendental kernel (Sin, Log, another exp)
+  must be rejected so the integrand falls through to the case that actually models
+  it (expsum / trig front-end), never certified against a truncated ansatz.
+- **Build gotcha**: after editing a `src/*.c` that the cmake test binary compiles
+  via `COMMON_SRC`, a bare `make` (top-level) and `cmake --build` can run a STALE
+  object if a `git stash`/`pop` reordered mtimes — I chased a phantom regression
+  from a stale binary. `touch src/<file>.c` (or clean) before trusting test output.
+
+## Eliminate inverse-substitution: don't intercept what the forward pass owns (2026-07-11)
+When adding a new pre-pass that keys off a function head, check whether an
+existing pass already handles that head *better*. The inverse-function
+substitution pass initially included `Log`, which regressed `test_log_power`:
+`u==Log[x]` got rewritten to `x->E^M` (a main-variable exponential the Groebner
+atomiser can't decompose -> spurious nlin), whereas the pre-existing forward
+exp/log algebraisation resolved `Log[x^n] -> n Log[x]` cleanly. Rule: a new
+head-triggered transform must be disjoint from existing ones, or measurably
+better on their cases. Always run the *existing* target test binary before
+declaring done.
+
+## No arbitrary caps / hacks in decision procedures (2026-07-11)
+User reaction to shipping a Risch field-RDE degree bound behind an arbitrary
+`if(d>5)d=5` cap (and a leftover `nmono<=128` ceiling): "Mathilda should be hack
+free! The RDE solver should work for all degrees." A magic-constant degree cap in a
+*decision procedure* is not an acceptable "increment" — it silently rejects valid
+integrals. Rule: never introduce or leave a magic-number degree cap / resource
+ceiling in the Risch (or any decision-procedure) code. Derive the bound from the
+problem (here Bronstein RdeBoundDegree: leading-degree balance, monomial-type-aware —
+log/x lower degree under D, exp preserves it), shared in a documented helper, with NO
+ceiling. Correctness is already guaranteed by SolveAlways-certification + diff-back, so
+the bound only affects completeness — which is exactly why it must be principled, not
+capped. When a whole family of ansatz sites shares the same hack pattern, say so and
+clean them all (or scope explicitly), don't leave siblings capped.
+
+## Pattern rules can't re-use a var nonlinearly (a_^2) — bind linearly, Sqrt on RHS (2026-07-11)
+Adding inverse-hyperbolic analogs to the CRC integral table, I first mirrored the
+existing trig rules verbatim, e.g. `IntegrateTable[ArcSinh[a_. x_]/Sqrt[1 + a_^2 x_^2]]`.
+These NEVER fired — and neither did the trig originals (453–458) they copied. I called it
+a "matcher bug"; the user corrected me twice: "That's not a matcher bug, you need to match
+to a_ and use Sqrt[a_] on the RHS of the rule," then "All rules in the table should be
+updated in this way to fix this issue." Root cause: a pattern that binds `a_` from the
+numerator (`ArcSinh[a_. x_]`, a_=2) and then writes `a_^2` in the denominator asks the
+matcher to confirm `2^2 == 4` — it does NOT evaluate/invert pattern-var powers, so the
+rule silently fails to match (except the trivial a=1 case via the optional default). The
+rules "passed" in normal `Integrate` only because the general cascade (DerivativeDivides /
+Risch) solved them by another route; through `Method -> "CRCTable"` they were dead.
+Fix (apply to EVERY rule with this shape): bind the *quadratic* coefficient linearly as
+`a_` using `c_ + a_. x_^2` (the `c_ +` form is required — `1 - a_ x_^2` won't bind the
+coefficient because of sign fusion; `c_ + a_. x_^2` binds c=1, a=-4 cleanly), pin the
+constant with a `Condition` (`c === 1`), link the numerator coefficient `b_` with
+`a === ±b^2`, and recover the linear coefficient as `Sqrt[±a]` on the RHS. For x^n
+recurrences use the optional exponent `x_^n_.` so bare `x` (n=1) matches and odd powers
+bottom out (the n=1 recurrence term vanishes since its coefficient is n-1=0, and
+`0*IntegrateTable[…] -> 0`). Rule: when a table rule "doesn't fire," first check whether the
+pattern re-uses a bound variable under a nonlinear op (`a_^2`, `Sqrt[a_]` against a literal)
+— the matcher can't invert those. Bind linearly + Condition + reconstruct on the RHS. And
+verify rules fire through their ACTUAL dispatch path (`Method -> "CRCTable"` /
+`IntegrateTable[...]` directly), not just via top-level `Integrate`, which can mask a dead
+rule by solving it another way.
+
+## Squared/cubed pattern constants never match numeric args — sweep the whole table (2026-07-11)
+After fixing the inverse-trig/hyperbolic `a_^2 x^2` rules, the user pointed at Formula 488
+(`Log[x_^2 + a_^2]`) and said "there are still many cases that will fail for the same reason
+... We need to fix every rule in the table that has this issue!" Root cause (general): ANY
+IntegrateTable pattern that reuses a constant under a power — `a_^2`, `b_^2`, `c_^3`, `c_^4`
+— cannot bind against a numeric argument (the matcher does not invert the power), so the rule
+silently never fires for concrete input; it only ever matched symbolic squares. ~169 rule
+heads were affected across every family. Fix recipe: bind the constant linearly (`a_^2 -> a_`),
+recover the linear part via `Sqrt[a]` on the RHS (even powers halve: a^2->a, a^4->a^2, a^6->a^3;
+Abs[a]->Sqrt[a]). Signs: `x_^2 - a_` will NOT bind a_ to a negative literal (verified in Sqrt,
+1/(...), (...)^(3/2), Log, and trig contexts), so match BOTH signs with `x_^2 + a_` — even-RHS
+pairs merge into one unguarded rule (negative a reproduces the minus form); odd-RHS pairs split
+on `Not[TrueQ[a<0]]`/`TrueQ[a<0]` with Sqrt[-a]. `Not[TrueQ[a<0]]` fires for positive-numeric
+AND symbolic a but excludes negative, preventing the greedy plus rule from shadowing the minus
+sibling. Many squared-constant rules turned out REDUNDANT with linear `a_. + b_. x_^n_` forms
+that already fire (c^2 block 43-51, 62, 66, single-power c^3/c^4, 356) — delete those rather than
+convert. Two pre-existing CRC transcription bugs (Formulas 181, 216) surfaced only once the rules
+began firing — re-derive, don't faithfully copy the bug. Separate pre-existing issues NOT in
+scope: `1/(...)^n_` reductions (pattern exponent: `Power[Power[E,n],-1]` != `Power[E,-k]`; explicit
+`^2` works) and `1/(x^m Sqrt[...])` form-matching. Verify every rule fires through its real
+dispatch (`Method -> "CRCTable"`), not top-level `Integrate` which can mask a dead rule by solving
+it another way. General lesson: when a table rule "doesn't fire," first check for a bound variable
+reused under a nonlinear op.
+
+## Bronstein Risch canonical rep (P0) — 2026-07-12
+
+Building `SplitFactor`/`SplitSquarefreeFactor` (risch_field.c / risch_canonical.c):
+
+- **`Together` does not expand its numerator.** A difference that is algebraically 0
+  can come back as an unexpanded, canceling sum. For zero-tests use
+  `Expand[Together[a - b]]`, not `Together[a - b]`. (First SplitFactor test "failed"
+  on a result that was actually correct.)
+- **Field gcd in `k[t]` must special-case a zero operand.** `PolynomialGCD[p, 0]` does
+  NOT reliably return `p` here; `gcd(c, 0)` came back as `1`, which made Yun's loop
+  never reduce `deg(c)` → infinite loop → `out[]` buffer overflow → heap corruption
+  (SIGABRT "free list damaged", detected asynchronously so the backtrace was useless).
+  Handle `gcd(a,0)=a`, `gcd(0,b)=b` explicitly (degree `-1` marks the zero poly).
+- **Splitting-factorization output is only unique up to units of the field `k=C(x)`.**
+  A monic-in-`t` gcd makes the factors monic (`t-1`, not Bronstein's `4x^2(t-1)`), and
+  the product of monic factors reconstructs `monic(p)`, not `p` (differ by `lc_t(p)`).
+  Test via reconstruction × content and normal/special classification, or pin the
+  canonical (monic) special part; don't string-match Bronstein's content-carrying forms.
+- **`expr_copy` is a refcount bump, not a deep copy** (`e->refcount++`); `expr_new_function`
+  copies the args *array* and *adopts* the element references. So `free(arr)` after
+  building a function node is correct and must NOT be paired with freeing the elements.
+- New `src/calculus/*.c` is auto-globbed by the makefile but must be added to
+  `tests/CMakeLists.txt` `COMMON_SRC` (and the test target added) or the test won't link.
+
+## P1 Phase C — structure-oracle tower replacement is net-negative (2026-07-14)
+
+**Pattern:** Before a "full replacement" of a working heuristic, PROBE whether the
+gap it targets is real in the live system. The gaps doc flagged G-A2 (dependent
+logs inflate the tower), but the live Risch tower engine already tolerates
+dependent generators (each becomes its own tower variable with a valid triangular
+derivation, gated by diff-back). A blanket structure-oracle log collapse
+REGRESSED the Bronstein `Log[x/Log[x]]` example — a composite log inside a
+`1/Log[...]^2` denominator became a coupled two-log denominator the integrator
+declines.
+
+**Rule for myself:** (1) A "replacement" that rewrites integrand kernels can turn a
+clean single kernel into a harder coupled form — collapsing is only safe for
+redundant EXTRA generators, never for kernels appearing in denominators.
+(2) Capture a regression baseline (anchor integrals + suite pass/fail) BEFORE
+touching a core subsystem, and revert immediately on the first regression rather
+than patching around it. (3) Decision routines (LogReducible / ExpReducible /
+LogarithmicDerivativeOfRadical) are valuable as reusable builtins even when the
+wholesale live-oracle swap is not worthwhile.
+
+## 2026-07-14 — Don't patch Risch deficiencies with Weierstrass
+Directive (user): rational trigonometric integrals must be integrated by the
+GENUINE Risch machinery — the complex-exponential tower (TrigToExp → integrate over
+the E^(ix) monomial → ExpToTrig with REAL reconstruction of the log part) and the
+real §5.10 hypertangent case — NOT by the Weierstrass t = Tan[x/2] half-angle
+substitution and NOT by routing through Jeffrey–Rich. The half-angle form is ugly
+(raw Tan[x/2]) and, more importantly, papers over the real deficiency instead of
+fixing it.
+
+What went wrong: I added an rt_weierstrass_case (t=Tan[x/2]) dispatch to close
+Sec/Csc/1-over-(2+Cos) and then promoted it ahead of Jeffrey–Rich at the top level.
+It regressed Sin[x]^2 (clean (2x-Sin[2x])/4 from the genuine exp route → ugly
+Tan[x/2] form) and was a patch, not a fix. Reverted the whole thing (branch reset).
+
+Rules for myself:
+1. When an integrand class is handled poorly, FIX the genuine algorithm (real
+   reconstruction of the complex log part; complete the rational-of-E^(ix) route;
+   relax an over-strict §5.10 gate) — do NOT bolt on a substitution that competes
+   with the genuine route.
+2. Before "improving" trig integration, capture what the GENUINE Risch route
+   (Integrate`RischTranscendental) already produces on clean main — much of it is
+   already clean (Sin^2, Sin^3, Tan). Only the true gaps (I-laden Csc, declined
+   Sec) are the work.
+3. Never promote a new stage ahead of an existing one without checking it does not
+   intercept cases the existing stage handles more cleanly (Sin^2 regression).
+4. REPL JSON output: parse with python (json), not sed — sed mangles Floor[...] and
+   `/` in payloads and falsely reads them as empty/declined.
+
+## Simplify I-laden collapse fallback + masked-failure lesson (2026-07-16)
+
+Task: make Simplify prove `x E^x Sin[x]` Risch diff-backs zero. Root cause: the
+exact grid zero-test (`trigexp_rational_is_zero`) declines BY DESIGN on bare
+polynomial dependence on the kernel var and on mixed real+imaginary exp kernels
+(`E^((1+I)x)=E^x·E^(Ix)` read as independent opaques). Fix: `transform_trigexp_vanish`
+now, ONLY when that test returns UNKNOWN (never FALSE) and complexity ≤ 512, tries
+`TrigToExp[e]`; a literal `0` (via the evaluator's automatic E^a·E^b→E^(a+b) merge,
+NO Together/grid) is a proof. Sound, cheap, leak-free.
+
+Rules for myself:
+1. When extending a decision-procedure fast path, gate the new fallback on the
+   rigorous test DECLINING — never run it when the rigorous test already proved a
+   verdict (wastes work) and never unconditionally (here: unconditional TrigToExp
+   reintroduces the exp-form blowup the grid test exists to avoid — the UNKNOWN+cap
+   gate is load-bearing).
+2. MASKED FAILURES: an assert-active test suite ABORTS at the first failure, hiding
+   every later test. Fixing an early failure UNMASKS later ones — that later red is
+   NOT necessarily your regression. Prove it: reproduce the newly-visible failure on
+   a clean worktree of the true committed HEAD (`git worktree add /tmp/x <sha>`).
+   Here Csc[x]^3 returned unevaluated on HEAD 0ee179d too → pre-existing + flaky,
+   not caused by my change nor the earlier modularization (which the abort had also
+   shielded from ever checking test_circular_trig_integration).
+3. Pipe vs C-test divergence: a case can decline deterministically in a cold pipe
+   but pass in the warm C-test process (memo/symbol state). Don't conclude "broken"
+   from the pipe alone.

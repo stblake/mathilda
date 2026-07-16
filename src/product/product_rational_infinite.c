@@ -41,7 +41,7 @@
 #include <stdio.h>
 
 static bool is_inf_sym(const Expr* e) {
-    return e->type == EXPR_SYMBOL && e->data.symbol == SYM_Infinity;
+    return e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity;
 }
 
 static void warn_div(void) {
@@ -62,7 +62,7 @@ static bool zeroq(Expr* e) {
     Expr* r = expr_new_function(expr_new_symbol("PossibleZeroQ"), (Expr*[]){ e }, 1);
     Expr* v = evaluate(r);
     expr_free(r);
-    bool yes = (v && v->type == EXPR_SYMBOL && v->data.symbol == SYM_True);
+    bool yes = (v && v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True);
     if (v) expr_free(v);
     return yes;
 }
@@ -74,7 +74,7 @@ static bool cmp_true(const char* head, Expr* a, Expr* b) {
                   (Expr*[]){ expr_copy(a), b }, 2);   /* adopts b */
     Expr* v = evaluate(e);
     expr_free(e);
-    bool yes = (v && v->type == EXPR_SYMBOL && v->data.symbol == SYM_True);
+    bool yes = (v && v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True);
     if (v) expr_free(v);
     return yes;
 }
@@ -119,7 +119,8 @@ Expr* builtin_product_rational_infinite(Expr* res) {
     if (!gotN || !gotD || !okN || !okD) {
         if (gotN) free_roots(rootsN, multsN, nN);
         if (gotD) free_roots(rootsD, multsD, nD);
-        if (leadN) expr_free(leadN); if (leadD) expr_free(leadD);
+        if (leadN) expr_free(leadN);
+        if (leadD) expr_free(leadD);
         return NULL;
     }
 

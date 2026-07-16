@@ -6,6 +6,7 @@
  */
 
 #include "linalg.h"
+#include "ndlinalg.h"
 #include "eval.h"
 #include "sym_names.h"
 #include <stdlib.h>
@@ -13,7 +14,7 @@
 static int64_t get_default_trace_depth(Expr* list) {
     int64_t depth = 0;
     Expr* curr = list;
-    while (curr->type == EXPR_FUNCTION && curr->data.function.head->type == EXPR_SYMBOL && curr->data.function.head->data.symbol == SYM_List) {
+    while (curr->type == EXPR_FUNCTION && curr->data.function.head->type == EXPR_SYMBOL && curr->data.function.head->data.symbol.name == SYM_List) {
         depth++;
         if (curr->data.function.arg_count == 0) break;
         curr = curr->data.function.args[0];
@@ -24,7 +25,7 @@ static int64_t get_default_trace_depth(Expr* list) {
 static Expr* extract_diagonal_element(Expr* list, int64_t n, size_t index) {
     Expr* curr = list;
     for (int64_t level = 0; level < n; level++) {
-        if (curr->type != EXPR_FUNCTION || curr->data.function.head->type != EXPR_SYMBOL || curr->data.function.head->data.symbol != SYM_List) {
+        if (curr->type != EXPR_FUNCTION || curr->data.function.head->type != EXPR_SYMBOL || curr->data.function.head->data.symbol.name != SYM_List) {
             return NULL; // Not a list at this level
         }
         if (index >= curr->data.function.arg_count) {
@@ -37,12 +38,13 @@ static Expr* extract_diagonal_element(Expr* list, int64_t n, size_t index) {
 
 Expr* builtin_tr(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    if (linalg_call_has_ndarray(res)) return ndla_tr(res);
     size_t count = res->data.function.arg_count;
     if (count < 1 || count > 3) return NULL;
 
     Expr* list = res->data.function.args[0];
 
-    if (list->type != EXPR_FUNCTION || list->data.function.head->type != EXPR_SYMBOL || list->data.function.head->data.symbol != SYM_List) {
+    if (list->type != EXPR_FUNCTION || list->data.function.head->type != EXPR_SYMBOL || list->data.function.head->data.symbol.name != SYM_List) {
         return expr_copy(list);
     }
 

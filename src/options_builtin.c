@@ -33,7 +33,7 @@
 /* Textual name of an option key (symbol or string), or NULL. */
 static const char* opt_name_text(const Expr* e) {
     if (!e) return NULL;
-    if (e->type == EXPR_SYMBOL) return e->data.symbol;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name;
     if (e->type == EXPR_STRING) return e->data.string;
     return NULL;
 }
@@ -56,7 +56,7 @@ static bool is_option_rule(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     const Expr* h = e->data.function.head;
     if (!h || h->type != EXPR_SYMBOL) return false;
-    if (h->data.symbol != SYM_Rule && h->data.symbol != SYM_RuleDelayed) return false;
+    if (h->data.symbol.name != SYM_Rule && h->data.symbol.name != SYM_RuleDelayed) return false;
     if (e->data.function.arg_count != 2) return false;
     const Expr* lhs = e->data.function.args[0];
     return lhs && (lhs->type == EXPR_SYMBOL || lhs->type == EXPR_STRING);
@@ -65,7 +65,7 @@ static bool is_option_rule(const Expr* e) {
 static bool is_list(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_List;
+        && e->data.function.head->data.symbol.name == SYM_List;
 }
 
 static Expr* empty_list(void) {
@@ -107,7 +107,7 @@ static Expr* lookup_rule(const Expr* list, const Expr* name) {
 static Expr* options_of_object(const Expr* obj) {
     if (!obj) return empty_list();
     if (obj->type == EXPR_SYMBOL) {
-        Expr* stored = symtab_get_options(obj->data.symbol);
+        Expr* stored = symtab_get_options(obj->data.symbol.name);
         return is_list(stored) ? expr_copy(stored) : empty_list();
     }
     if (obj->type == EXPR_FUNCTION) {
@@ -167,7 +167,7 @@ Expr* builtin_setoptions(Expr* res) {
 
     Expr* sobj = res->data.function.args[0];
     if (sobj->type != EXPR_SYMBOL) return NULL;
-    const char* sym = sobj->data.symbol;
+    const char* sym = sobj->data.symbol.name;
 
     if (get_attributes(sym) & ATTR_LOCKED) {
         fprintf(stderr, "SetOptions::locked: Symbol %s is locked and cannot be modified.\n", sym);
@@ -220,8 +220,8 @@ Expr* builtin_setoptions(Expr* res) {
 static Expr* defaults_lookup(const Expr* f, const Expr* name) {
     if (!f) return NULL;
     if (f->type == EXPR_SYMBOL) {
-        if (f->data.symbol == SYM_Automatic) return NULL;
-        return lookup_value(symtab_get_options(f->data.symbol), name);
+        if (f->data.symbol.name == SYM_Automatic) return NULL;
+        return lookup_value(symtab_get_options(f->data.symbol.name), name);
     }
     if (is_option_rule(f)) {
         if (opt_name_eq(f->data.function.args[0], name))
@@ -271,7 +271,7 @@ Expr* builtin_optionvalue(Expr* res) {
         f = a[0]; opts = a[1]; name = a[2];
     } else if (n == 4) {
         f = a[0]; opts = a[1]; name = a[2];
-        if (!(a[3]->type == EXPR_SYMBOL && a[3]->data.symbol == SYM_Hold)) return NULL;
+        if (!(a[3]->type == EXPR_SYMBOL && a[3]->data.symbol.name == SYM_Hold)) return NULL;
         hold = true;
     } else {
         return NULL;
@@ -303,7 +303,7 @@ Expr* optionvalue_inject_context(const Expr* e, const char* head_sym,
     const Expr* h = e->data.function.head;
     size_t n = e->data.function.arg_count;
 
-    if (h && h->type == EXPR_SYMBOL && h->data.symbol == SYM_OptionValue
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_OptionValue
         && (n == 1 || n == 2)) {
         Expr** na = malloc(sizeof(Expr*) * 3);
         if (n == 1) {                              /* [name] -> [head, opts, name] */

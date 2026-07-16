@@ -262,7 +262,7 @@ static int fileprint_split_lines(const char* buf, size_t size,
  * the caller can treat the result as a plain 1-based index. */
 static int fileprint_resolve_span_slot(const Expr* slot_expr, int which,
                                        int64_t total, int64_t* out) {
-    if (slot_expr->type == EXPR_SYMBOL && slot_expr->data.symbol == SYM_All) {
+    if (slot_expr->type == EXPR_SYMBOL && slot_expr->data.symbol.name == SYM_All) {
         if (which == 0) *out = 1;
         else if (which == 1) *out = total;
         else *out = 1;
@@ -304,7 +304,7 @@ static int fileprint_decode_selector(const Expr* selector, int64_t total,
     }
     if (selector->type == EXPR_FUNCTION
         && selector->data.function.head->type == EXPR_SYMBOL
-        && selector->data.function.head->data.symbol == SYM_Span)
+        && selector->data.function.head->data.symbol.name == SYM_Span)
     {
         size_t argc = selector->data.function.arg_count;
         if (argc < 2 || argc > 3) return 0;
@@ -381,7 +381,7 @@ Expr* builtin_fileprint(Expr* res) {
         if (selector->type != EXPR_INTEGER
             && !(selector->type == EXPR_FUNCTION
                  && selector->data.function.head->type == EXPR_SYMBOL
-                 && selector->data.function.head->data.symbol == SYM_Span))
+                 && selector->data.function.head->data.symbol.name == SYM_Span))
         {
             return NULL;
         }

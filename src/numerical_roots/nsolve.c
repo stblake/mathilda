@@ -78,7 +78,7 @@
 static bool is_head(const Expr* e, const char* sym) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == sym;
+        && e->data.function.head->data.symbol.name == sym;
 }
 
 /* A value counts as real unless it is wrapped in a Complex[_, _] head. */
@@ -89,9 +89,9 @@ static bool value_is_real(const Expr* v) {
 /* True iff `e` is a domain specifier symbol (Reals / Complexes / Integers). */
 static bool is_domain_symbol(const Expr* e) {
     return e && e->type == EXPR_SYMBOL
-        && (e->data.symbol == SYM_Reals
-            || e->data.symbol == SYM_Complexes
-            || e->data.symbol == SYM_Integers);
+        && (e->data.symbol.name == SYM_Reals
+            || e->data.symbol.name == SYM_Complexes
+            || e->data.symbol.name == SYM_Integers);
 }
 
 /* Read an exact numeric Expr (Integer / Real / BigInt / Rational / MPFR) as a
@@ -151,11 +151,11 @@ static bool is_constant_symbol(const char* s) {
 static void collect_symbols(const Expr* e, Expr*** out, size_t* n, size_t* cap) {
     if (!e) return;
     if (e->type == EXPR_SYMBOL) {
-        if (is_constant_symbol(e->data.symbol)) return;
+        if (is_constant_symbol(e->data.symbol.name)) return;
         for (size_t i = 0; i < *n; i++)
-            if ((*out)[i]->data.symbol == e->data.symbol) return;
+            if ((*out)[i]->data.symbol.name == e->data.symbol.name) return;
         if (*n == *cap) { *cap *= 2; *out = realloc(*out, sizeof(Expr*) * (*cap)); }
-        (*out)[(*n)++] = expr_new_symbol(e->data.symbol);
+        (*out)[(*n)++] = expr_new_symbol(e->data.symbol.name);
         return;
     }
     if (e->type == EXPR_FUNCTION) {
@@ -204,18 +204,18 @@ static bool nsolve_is_option_arg(const Expr* e) {
     if (!is_head(e, SYM_Rule) && !is_head(e, SYM_RuleDelayed)) return false;
     if (e->data.function.arg_count != 2) return false;
     const Expr* lhs = e->data.function.args[0];
-    return lhs->type == EXPR_SYMBOL && nsolve_is_known_option(lhs->data.symbol);
+    return lhs->type == EXPR_SYMBOL && nsolve_is_known_option(lhs->data.symbol.name);
 }
 
 /* Apply one option rule.  Unknown values are tolerated (left at default). */
 static void nsolve_apply_option(const Expr* rule, NSolveOpts* o) {
     const Expr* lhs = rule->data.function.args[0];
     const Expr* rhs = rule->data.function.args[1];
-    const char* name = lhs->data.symbol;
+    const char* name = lhs->data.symbol.name;
 
     if (name == SYM_MaxRoots) {
         if (rhs->type == EXPR_SYMBOL
-            && (rhs->data.symbol == SYM_Automatic || rhs->data.symbol == SYM_Infinity)) {
+            && (rhs->data.symbol.name == SYM_Automatic || rhs->data.symbol.name == SYM_Infinity)) {
             o->max_roots = -1;
         } else if (rhs->type == EXPR_INTEGER && rhs->data.integer >= 0) {
             o->max_roots = (long)rhs->data.integer;
@@ -225,8 +225,8 @@ static void nsolve_apply_option(const Expr* rule, NSolveOpts* o) {
     if (name == SYM_WorkingPrecision || name == SYM_PrecisionGoal) {
         double v;
         if (rhs->type == EXPR_SYMBOL
-            && (rhs->data.symbol == SYM_Automatic
-                || rhs->data.symbol == SYM_MachinePrecision)) {
+            && (rhs->data.symbol.name == SYM_Automatic
+                || rhs->data.symbol.name == SYM_MachinePrecision)) {
             o->prec_digits = -1.0;
         } else if (expr_to_double(rhs, &v) && v > 0.0) {
             o->prec_digits = v;
@@ -244,8 +244,8 @@ static void nsolve_apply_option(const Expr* rule, NSolveOpts* o) {
     }
     if (name == SYM_VerifySolutions) {
         if (rhs->type == EXPR_SYMBOL) {
-            if (rhs->data.symbol == SYM_True)       o->verify = 1;
-            else if (rhs->data.symbol == SYM_False) o->verify = 0;
+            if (rhs->data.symbol.name == SYM_True)       o->verify = 1;
+            else if (rhs->data.symbol.name == SYM_False) o->verify = 0;
             else                                     o->verify = -1; /* Automatic */
         }
         return;
@@ -336,7 +336,7 @@ static Expr* as_equation(Expr* expr) {
 static bool expr_mentions(const Expr* e, const Expr* var) {
     if (!e) return false;
     if (e->type == EXPR_SYMBOL)
-        return var->type == EXPR_SYMBOL && e->data.symbol == var->data.symbol;
+        return var->type == EXPR_SYMBOL && e->data.symbol.name == var->data.symbol.name;
     if (e->type == EXPR_FUNCTION) {
         if (expr_mentions(e->data.function.head, var)) return true;
         for (size_t i = 0; i < e->data.function.arg_count; i++)
@@ -397,12 +397,12 @@ static Expr* nsolve_polynomial(Expr* expr, Expr* var,
     if (!nr) return NULL;
 
     /* Constant equations collapse to True/False inside NRoots. */
-    if (nr->type == EXPR_SYMBOL && nr->data.symbol == SYM_True) {
+    if (nr->type == EXPR_SYMBOL && nr->data.symbol.name == SYM_True) {
         expr_free(nr);
         Expr* empty = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
         return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ empty }, 1);
     }
-    if (nr->type == EXPR_SYMBOL && nr->data.symbol == SYM_False) {
+    if (nr->type == EXPR_SYMBOL && nr->data.symbol.name == SYM_False) {
         expr_free(nr);
         return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     }
@@ -542,7 +542,7 @@ static Expr* nsolve_via_solve(Expr* expr, Expr* varlist,
      * satisfy the original equation, and (under Reals) manifestly complex roots.
      * Solve can leave such extraneous roots when it cannot discharge the
      * substitution branch symbolically. */
-    bool reals_only = dom && dom->type == EXPR_SYMBOL && dom->data.symbol == SYM_Reals;
+    bool reals_only = dom && dom->type == EXPR_SYMBOL && dom->data.symbol.name == SYM_Reals;
     numeric = filter_solutions(numeric, expr, reals_only);
 
     return cap_solutions(numeric, max_roots);
@@ -788,11 +788,11 @@ Expr* builtin_nsolve(Expr* res) {
 
     /* Tautology / contradiction short-circuits (the equation system is
      * evaluated before NSolve sees it). */
-    if (expr->type == EXPR_SYMBOL && expr->data.symbol == SYM_True) {
+    if (expr->type == EXPR_SYMBOL && expr->data.symbol.name == SYM_True) {
         Expr* empty = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
         return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ empty }, 1);
     }
-    if (expr->type == EXPR_SYMBOL && expr->data.symbol == SYM_False)
+    if (expr->type == EXPR_SYMBOL && expr->data.symbol.name == SYM_False)
         return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
 
     /* Parse the optional positional vars / domain / precision arguments. */
@@ -817,7 +817,7 @@ Expr* builtin_nsolve(Expr* res) {
     }
     if (idx != pos_end) return NULL;  /* leftover positional args */
 
-    bool reals_only = dom && dom->data.symbol == SYM_Reals;
+    bool reals_only = dom && dom->data.symbol.name == SYM_Reals;
 
     /* Working precision -> machine flag + bit width. */
     bool want_machine = (opts.prec_digits < 0.0);
@@ -841,7 +841,7 @@ Expr* builtin_nsolve(Expr* res) {
 
     /* Univariate polynomial -> NRoots (the explicit requirement).  The Integers
      * domain is left to Solve, which can restrict to concrete integers. */
-    bool integers_dom = dom && dom->data.symbol == SYM_Integers;
+    bool integers_dom = dom && dom->data.symbol.name == SYM_Integers;
     Expr* out = NULL;
     if (nvars == 1 && !integers_dom) {
         Expr* var = varlist->data.function.args[0];
