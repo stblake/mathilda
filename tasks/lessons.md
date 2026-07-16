@@ -1118,3 +1118,30 @@ Rules for myself:
    intercept cases the existing stage handles more cleanly (Sin^2 regression).
 4. REPL JSON output: parse with python (json), not sed — sed mangles Floor[...] and
    `/` in payloads and falsely reads them as empty/declined.
+
+## Simplify I-laden collapse fallback + masked-failure lesson (2026-07-16)
+
+Task: make Simplify prove `x E^x Sin[x]` Risch diff-backs zero. Root cause: the
+exact grid zero-test (`trigexp_rational_is_zero`) declines BY DESIGN on bare
+polynomial dependence on the kernel var and on mixed real+imaginary exp kernels
+(`E^((1+I)x)=E^x·E^(Ix)` read as independent opaques). Fix: `transform_trigexp_vanish`
+now, ONLY when that test returns UNKNOWN (never FALSE) and complexity ≤ 512, tries
+`TrigToExp[e]`; a literal `0` (via the evaluator's automatic E^a·E^b→E^(a+b) merge,
+NO Together/grid) is a proof. Sound, cheap, leak-free.
+
+Rules for myself:
+1. When extending a decision-procedure fast path, gate the new fallback on the
+   rigorous test DECLINING — never run it when the rigorous test already proved a
+   verdict (wastes work) and never unconditionally (here: unconditional TrigToExp
+   reintroduces the exp-form blowup the grid test exists to avoid — the UNKNOWN+cap
+   gate is load-bearing).
+2. MASKED FAILURES: an assert-active test suite ABORTS at the first failure, hiding
+   every later test. Fixing an early failure UNMASKS later ones — that later red is
+   NOT necessarily your regression. Prove it: reproduce the newly-visible failure on
+   a clean worktree of the true committed HEAD (`git worktree add /tmp/x <sha>`).
+   Here Csc[x]^3 returned unevaluated on HEAD 0ee179d too → pre-existing + flaky,
+   not caused by my change nor the earlier modularization (which the abort had also
+   shielded from ever checking test_circular_trig_integration).
+3. Pipe vs C-test divergence: a case can decline deterministically in a cold pipe
+   but pass in the warm C-test process (memo/symbol state). Don't conclude "broken"
+   from the pipe alone.

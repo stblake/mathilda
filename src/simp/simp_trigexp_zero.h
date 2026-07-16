@@ -45,10 +45,15 @@ typedef enum {
  * `var` outside an exponential (bare `var`, `Log[var]`, `Sqrt[var]`, a tower). */
 TrigExpZeroResult trigexp_rational_is_zero(const Expr* e);
 
-/* Simplify seed. Returns a fresh Integer 0 iff `trigexp_rational_is_zero(e)`
- * proves `e` identically zero; otherwise NULL (decline — contributes nothing
- * to the candidate set, never a worse form). `e` is read-only. Cheaply gated
- * so non-vanishing / non-trig inputs bail before any Together. */
+/* Simplify seed. Returns a fresh Integer 0 when `e` is proven identically
+ * zero, else NULL (decline — contributes nothing to the candidate set, never
+ * a worse form). `e` is read-only. Two provers: the rigorous grid test
+ * `trigexp_rational_is_zero`, and — only when that DECLINES (never when it
+ * proves non-zero) and `e` is small — an exact `TrigToExp`-collapse fallback
+ * that catches the shapes the grid test bails on (bare polynomial dependence
+ * on the kernel variable, mixed real+imaginary exponential kernels), e.g. the
+ * `x E^x Sin[x]` diff-back. Cheaply gated so non-vanishing / non-trig inputs
+ * bail before any Together. */
 Expr* transform_trigexp_vanish(const Expr* e);
 
 #endif /* MATHILDA_SIMP_TRIGEXP_ZERO_H */
