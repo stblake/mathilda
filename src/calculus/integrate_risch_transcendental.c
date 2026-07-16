@@ -853,6 +853,93 @@ static long rt_var_mult_at_zero(Expr* p, Expr* v) {
 }
 
 
+/* Structural (non-evaluating) rewrite exposing a transcendental general power as
+ * an explicit base-e exponential:  b^e  ->  Power[E, e Log[b]],  for every
+ * x-dependent power whose exponent `e` is NOT a rational-number constant (so the
+ * genuine algebraic / polynomial powers x^2, x^(1/2), x^(-1) are left intact).
+ *
+ * The evaluator canonicalizes E^(c Log[b]) straight back to b^c (power.c
+ * simplify_exp_log), so an exponential whose exponent carries a Log — precisely
+ * the image of a circular/inverse trig of a logarithm under TrigToExp, e.g.
+ * Cos[x Log x] -> (x^(I x) + x^(-I x))/2, whose kernels are E^(±I x Log x) —
+ * is STORED as the general power b^e and hides from every exponential recognizer
+ * (all keyed to Exp / Power[E, .]).  This rebuilds the raw Power[E, .] spelling
+ * WITHOUT passing through the evaluator, so the tower machinery
+ * (rt_collect_exp_exponents / rt_subst_kernels, which match Power[E, .]
+ * structurally) sees the hyperexponential monomial.  Here Log[b] is a GENUINE
+ * logarithmic sub-kernel (D[Log x] = 1/x), collected and differentiated as such —
+ * unlike the constant-base debasing (rt_debase_exponentials), whose opaque L_p
+ * stands for a CONSTANT Log[p].  The result is a raw tree that MUST be
+ * kernel-substituted (rt_subst_kernels) before any evaluation; back-substituting
+ * the tower kernels then lets the evaluator re-collapse E^(e Log b) -> b^e, so the
+ * antiderivative is rendered in the original power form.  Applying it to an
+ * already base-e form is a no-op (Power[E, .] is skipped). */
+static Expr* rt_powers_to_exp(Expr* e, Expr* x) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    if (rt_head_is(e, "Power") && e->data.function.arg_count == 2) {
+        Expr* b  = e->data.function.args[0];
+        Expr* ex = e->data.function.args[1];
+        bool b_is_E = (b->type == EXPR_SYMBOL && b->data.symbol.name == intern_symbol("E"));
+        /* Transcendental exponential kernel: non-e base, non-rational exponent,
+         * and the whole power depends on x (so a constant power like 2^Sqrt[2] is
+         * left alone — nothing to integrate there). */
+        if (!b_is_E && !rt_is_rat_const(ex) && !rt_free_of_x(e, x)) {
+            Expr* nb  = rt_powers_to_exp(b, x);
+            /* Split the exponent's additive terms: rational-constant terms stay as
+             * an ALGEBRAIC power b^(alg) (a base-field factor), the rest form the
+             * transcendental kernel E^(trans Log b).  This is essential because the
+             * evaluator MERGES a polynomial coefficient into the exponent — x^2 x^x
+             * -> x^(2+x), x^2 x^(I x) -> x^(2+I x) — which would otherwise read as a
+             * kernel independent of x^(3+x)/x^(3+I x) (exponent ratio non-constant),
+             * defeating the commensurability reduction.  Peeling the constant part
+             * back off restores the shared primitive kernel x^x / x^(I x). */
+            Expr** terms; size_t nt; Expr* single[1];
+            if (rt_head_is(ex, "Plus")) {
+                terms = ex->data.function.args; nt = ex->data.function.arg_count;
+            } else { single[0] = ex; terms = single; nt = 1; }
+            Expr** algt = malloc(nt * sizeof(Expr*)); size_t na = 0;
+            Expr** trt  = malloc(nt * sizeof(Expr*)); size_t ntr = 0;
+            for (size_t i = 0; i < nt; i++) {
+                if (rt_is_rat_const(terms[i])) algt[na++] = expr_copy(terms[i]);
+                else trt[ntr++] = rt_powers_to_exp(terms[i], x);
+            }
+            /* trt is never empty: ex is non-rational overall, so it has a term that
+             * is not a rational constant. */
+            Expr* trans = (ntr == 1) ? trt[0]
+                : expr_new_function(expr_new_symbol("Plus"), trt, ntr);
+            free(trt);
+            Expr* ker = expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_new_symbol("E"),
+                    expr_new_function(expr_new_symbol("Times"),
+                        (Expr*[]){ trans, expr_new_function(expr_new_symbol("Log"),
+                            (Expr*[]){ expr_copy(nb) }, 1) }, 2) }, 2);
+            Expr* result;
+            if (na == 0) {
+                expr_free(nb);
+                result = ker;
+            } else {
+                Expr* algsum = (na == 1) ? algt[0]
+                    : expr_new_function(expr_new_symbol("Plus"), algt, na);
+                Expr* algpow = expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ nb, algsum }, 2);
+                result = expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ algpow, ker }, 2);
+            }
+            free(algt);
+            return result;
+        }
+    }
+    Expr* nh = rt_powers_to_exp(e->data.function.head, x);
+    size_t k = e->data.function.arg_count;
+    Expr** na = malloc((k ? k : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < k; i++)
+        na[i] = rt_powers_to_exp(e->data.function.args[i], x);
+    Expr* r = expr_new_function(nh, na, k);
+    free(na);
+    return r;
+}
+
 /* Collect (as owned copies, deduplicated) the exponents of every E^w / Exp[w]
  * kernel of `e` whose exponent depends on x. */
 static void rt_collect_exp_exponents(Expr* e, Expr* x,
@@ -4190,8 +4277,14 @@ static Expr* rt_recursive_tower_case(Expr* f, Expr* x) {
      * tower basis before building the tower (see rt_expand_exp_sums).  Circular/
      * hyperbolic trig of a tangent argument is rationalised to the tower variable
      * during substitution (rt_subst_kernels), where the fresh symbol prevents the
-     * evaluator from canonicalising the Tan-rational form back to Csc/Sec. */
-    Expr* fx = rt_expand_exp_sums(f);
+     * evaluator from canonicalising the Tan-rational form back to Csc/Sec.
+     *
+     * rt_powers_to_exp first re-exposes any transcendental general power b^e (e.g.
+     * x^(I x) = E^(I x Log x), hidden by the E^(c Log b) -> b^c collapse) as a raw
+     * base-e kernel, so a mixed log/exp tower over such a power is recognised. */
+    Expr* fp = rt_powers_to_exp(f, x);
+    Expr* fx = rt_expand_exp_sums(fp);
+    expr_free(fp);
     RtTower T;
     /* min_n = 2: single-kernel integrands are handled by the dedicated flat-tower
      * cases above; the general recursion only takes depth->=2 towers. */
@@ -4554,6 +4647,12 @@ static Expr* rt_trig_frontend(Expr* f, Expr* x) {
     Expr* fe = rt_eval1("TrigToExp", expr_copy(f));
     if (!fe) return NULL;
     if (expr_eq(fe, f)) { expr_free(fe); return NULL; }   /* no trig/hyperbolic */
+    /* TrigToExp of a trig/inverse-trig of a LOGARITHM leaves a general power
+     * (Cos[x Log x] -> (x^(I x) + x^(-I x))/2), the E^(±I x Log x) kernels having
+     * collapsed to b^e.  Re-expose them as raw base-e exponentials so the tower
+     * cases below recognise the hyperexponential monomial (no-op otherwise). */
+    { Expr* fe2 = rt_powers_to_exp(fe, x);
+      if (fe2) { expr_free(fe); fe = fe2; } }
     /* All exponential cases are used, including the coupled hyperexponential
      * one, for completeness — a correct antiderivative is returned even when
      * it cannot be reduced to the cleanest real form.
@@ -5408,6 +5507,39 @@ static bool rt_expr_is_elementary(Expr* e) {
     return true;
 }
 
+/* True iff e carries an ALGEBRAIC function of x anywhere: a radical (a
+ * Rational-headed, i.e. non-integer, exponent over an x-dependent base — Sqrt[x]
+ * = x^(1/2), x^(1/3), Sqrt[Sin[x]]) or a Surd/Root/AlgebraicNumber of x.  The
+ * transcendental Risch decision procedure (Bronstein Ch.5/6) is a decision
+ * procedure ONLY over a purely transcendental tower over C(x); an algebraic
+ * extension is out of scope.  The field decision must therefore return UNKNOWN
+ * for such integrands rather than a spurious certificate: e.g. Cos[Sqrt[x]],
+ * E^Sqrt[x], Sin[x^(1/3)] are all elementary (via an algebraic substitution the
+ * transcendental algorithm does not perform), so a `False` verdict would be
+ * unsound.  (x^x = E^(x Log x) and x^Sqrt[2] = E^(Sqrt[2] Log x) are NOT flagged:
+ * their exponents are transcendental, not Rational-headed — those are genuine
+ * hyperexponential monomials rt_powers_to_exp handles.) */
+static bool rt_has_algebraic_of_x(Expr* e, Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const char* h = (e->data.function.head->type == EXPR_SYMBOL)
+        ? e->data.function.head->data.symbol.name : NULL;
+    if (h == intern_symbol("Power") && e->data.function.arg_count == 2) {
+        Expr* b = e->data.function.args[0];
+        Expr* p = e->data.function.args[1];
+        /* radical: x-dependent base raised to a non-integer rational power */
+        if (p && p->type == EXPR_FUNCTION && rt_head_is(p, "Rational")
+            && !rt_free_of_x(b, x))
+            return true;
+    }
+    if ((h == intern_symbol("Surd") || h == intern_symbol("Root")
+         || h == intern_symbol("AlgebraicNumber")) && !rt_free_of_x(e, x))
+        return true;
+    if (rt_has_algebraic_of_x(e->data.function.head, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rt_has_algebraic_of_x(e->data.function.args[i], x)) return true;
+    return false;
+}
+
 /* Field-path elementary-integrability decision.  Routes f through the AUTHORITATIVE
  * recursive field integrator (rt_field_integrate) in decision mode — the same
  * tower build / substitution / gate as rt_recursive_tower_case, but reading the
@@ -5422,7 +5554,34 @@ static bool rt_expr_is_elementary(Expr* e) {
  * Sound by construction: an ELEMENTARY / NONELEMENTARY verdict is emitted only
  * behind an exact certificate — otherwise UNKNOWN. */
 static RtDecision rt_decide_field(Expr* f, Expr* x) {
-    Expr* fx = rt_expand_exp_sums(f);
+    /* Scope guard: an algebraic function of x (radical / Surd / Root) puts the
+     * integrand outside the purely-transcendental tower the field decision is a
+     * decision procedure over — decline to UNKNOWN rather than emit an unsound
+     * certificate.  Checked on the ORIGINAL f (Sqrt[x] survives inside Cos[Sqrt[x]]
+     * and E^Sqrt[x] alike), before exponentialization. */
+    if (rt_has_algebraic_of_x(f, x)) return RT_DEC_UNKNOWN;
+    /* Mirror the integrator's trig/hyperbolic front-end (rt_trig_frontend) so the
+     * DECISION routes trig integrands through the SAME Gaussian exponential tower
+     * the True side uses.  Without this the tower builder cannot form a Risch tower
+     * from a bare Sin/Cos/Tan kernel and the field decision falls to UNKNOWN — so
+     * genuinely non-elementary trig integrands (Sin[x]/x -> SinIntegral, Sin[x^2] ->
+     * FresnelS, Cos[x Log x], Cos[E^x]) returned `undec` instead of the authoritative
+     * `False`.  TrigToExp exponentializes the trig kernels; rt_powers_to_exp then
+     * re-exposes the E^(c Log b) kernels that TrigToExp leaves collapsed as general
+     * powers b^e (Cos[x Log x] -> x^(±I x)).  Both rewrites are exact, so the tower —
+     * and hence the residue / Risch-DE certificate read off it — is authoritative. */
+    Expr* fe = rt_eval1("TrigToExp", expr_copy(f));
+    Expr* src;
+    if (fe && !expr_eq(fe, f)) {
+        src = fe;                       /* trig/hyperbolic present: use exp form */
+    } else {
+        if (fe) expr_free(fe);
+        src = expr_copy(f);             /* no trig: decide f directly */
+    }
+    Expr* pw = rt_powers_to_exp(src, x);   /* re-expose b^e exponential kernels */
+    expr_free(src);
+    Expr* fx = rt_expand_exp_sums(pw);
+    expr_free(pw);
     RtTower T;
     /* min_n = 1: the decision routes SINGLE-kernel integrands (E^x/x, E^(x^2),
      * 1/Log[x]) through the same authoritative field integrator too — the flat-tower

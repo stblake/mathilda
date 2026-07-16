@@ -84,6 +84,20 @@ static void test_false_poly_log_dilog(void) {
     assert_false("Log[1 + x^2]^2");           /* cross-term dilog (Catalan value) */
 }
 
+/* ---- False: trig / inverse-trig integrands, decided through the SAME Gaussian
+ * exponential tower the integrator uses.  rt_decide_field exponentializes with
+ * TrigToExp (+ rt_powers_to_exp) so a bare trig kernel becomes E^(I ...), then
+ * reads the residue / Risch-DE certificate off the tower.  Each of these is a
+ * classic special-function integral (non-elementary), so must decide False. */
+static void test_false_trig_frontend(void) {
+    assert_false("Sin[x]/x");        /* SinIntegral — E^(I x)/x RDE no soln     */
+    assert_false("Sin[x]/x^2");      /* SinIntegral sibling                     */
+    assert_false("Sin[x^2]");        /* FresnelS — E^(I x^2) Erf-type no soln   */
+    assert_false("Cos[x^2]");        /* FresnelC sibling                        */
+    assert_false("Cos[E^x]");        /* CosIntegral of E^x (depth-2 tower)      */
+    assert_false("Cos[x Log[x]]");   /* trig of a logarithm: non-elementary     */
+}
+
 /* ---- True: an elementary antiderivative is exhibited ----------------------- */
 static void test_true_elementary(void) {
     assert_true("E^x");
@@ -104,11 +118,25 @@ static void test_true_elementary(void) {
     assert_true("E^x/(E^(2 x) + 1)");      /* ArcTan[E^x] (algebraic residues)   */
     assert_true("1/(x Log[x] Log[Log[x]])"); /* Log[Log[Log[x]]] (nested log tower) */
     assert_true("1/(3 + Tan[x]^2)");       /* real hypertangent (§5.10)          */
+    /* Trig integrands with an elementary antiderivative, exhibited before the
+     * field decision is ever consulted (True dominates). */
+    assert_true("Sin[x]");                 /* -Cos[x]                            */
+    assert_true("Sec[x]^2");               /* Tan[x]                             */
+    assert_true("Sin[Log[x]]");            /* trig of a log, now integrable      */
+    assert_true("E^x Sin[x]");             /* damped oscillation                 */
 }
 
 /* ---- Undecided: outside the transcendental-tower field scope --------------- */
 static void test_undecided_out_of_scope(void) {
     assert_undecided("1/Sqrt[1 + x^3]");   /* algebraic (elliptic) — no log/exp tower */
+    /* Algebraic function of x: an exp/trig of a radical is elementary via an
+     * ALGEBRAIC substitution the transcendental algorithm does not perform, so
+     * the field decision must decline to UNKNOWN, never a spurious False.  (These
+     * would blow the pure-transcendental scope if exponentialized naively.) */
+    assert_undecided("E^Sqrt[x]");         /* = 2 E^Sqrt[x] (Sqrt[x] - 1): elementary */
+    assert_undecided("Cos[Sqrt[x]]");      /* elementary via u = Sqrt[x]              */
+    assert_undecided("Sin[x^(1/3)]");      /* elementary via u = x^(1/3)              */
+    assert_undecided("Sqrt[Sin[x]]");      /* algebraic over the trig kernel          */
 }
 
 int main(void) {
@@ -119,6 +147,7 @@ int main(void) {
     TEST(test_false_risch_de);
     TEST(test_false_residue);
     TEST(test_false_poly_log_dilog);
+    TEST(test_false_trig_frontend);
     TEST(test_true_elementary);
     TEST(test_undecided_out_of_scope);
     printf("All ElementaryIntegralQ tests passed.\n");

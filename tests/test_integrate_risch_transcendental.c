@@ -1194,10 +1194,21 @@ static void test_circular_trig_integration(void) {
         "Integrate`RischTranscendental[x Tan[x], x]", "Integrate`RischTranscendental");
     assert_head_unevaluated(
         "Integrate`RischTranscendental[Sin[x^2], x]", "Integrate`RischTranscendental"); /* Fresnel */
-    /* Non-rational inner kernel (Sin of a Log): the whole-tower rationality gate
-     * declines rather than certify a wrong closed form. */
+    /* Trig OF a logarithm: TrigToExp exposes the transcendental power kernel
+     * Sin[Log x] -> (x^I - x^(-I))/(2 I) = E^(±I Log x), which rt_powers_to_exp
+     * re-spells as a genuine base-e hyperexponential over C(x) — so the mixed
+     * log/exp tower now integrates it exactly (x(Sin[Log x] - Cos[Log x])/2).  The
+     * genuinely non-elementary Log-in-argument integrands (Sin[Log x] Log[Log x],
+     * Cos[x Log x]) still decline via the field decision — see below. */
+    assert_rm_diff_zero("Sin[Log[x]]");
+    assert_rm_diff_zero("Cos[Log[x]]");
+    assert_rm_diff_zero("x^I");                    /* x^I = E^(I Log x), power rule */
+    /* d/dx[x^3 Cos[x Log x]] — an elementary mixed log/exp-power tower. */
+    assert_rm_diff_zero(
+        "3 x^2 Cos[x Log[x]] - x^3 Sin[x Log[x]] - x^3 Log[x] Sin[x Log[x]]");
+    /* Still non-elementary: Sin of x Log x has no elementary antiderivative. */
     assert_head_unevaluated(
-        "Integrate`RischTranscendental[Sin[Log[x]], x]", "Integrate`RischTranscendental");
+        "Integrate`RischTranscendental[Cos[x Log[x]], x]", "Integrate`RischTranscendental");
 }
 
 /* ================= HYPERBOLIC =================

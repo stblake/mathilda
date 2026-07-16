@@ -751,7 +751,26 @@ monotonically down.
         `Sin[x] Cos[x]`, `Tan`, `Tanh`, ...; through the complex substitution
         `Tan`/`Tanh` come out in a correct but I-laden form (e.g.
         `I x - Log[1 + E^(2 I x)] = -Log[Cos[x]]`) that no current simplifier
-        reduces to real closed form (a `Simplify` improvement opportunity);
+        reduces to real closed form (a `Simplify` improvement opportunity).
+        A structural pre-pass `rt_powers_to_exp` re-exposes a **transcendental
+        general power** `b^e` (base `b != e`, non-rational exponent) as a raw
+        base-e kernel `E^(e Log b)` — the evaluator collapses `E^(c Log b) -> b^c`,
+        so a trig/inverse-trig *of a logarithm* hides its exponential kernels as
+        general powers (`Cos[x Log x] -> (x^(I x) + x^(-I x))/2`, kernels
+        `E^(±I x Log x)`) and evades every `Exp`/`Power[E, .]`-keyed recognizer.
+        Rewriting without going through the evaluator keeps the raw `Power[E, .]`
+        spelling the tower collectors/substitution already match, with `Log b` a
+        genuine logarithmic sub-kernel; the exponent is split so an
+        evaluator-merged polynomial coefficient (`x^2 x^(I x) -> x^(2+I x)`) peels
+        back to an algebraic power times the shared primitive kernel `x^(I x)`.
+        This closes the elementary mixed log/exp-power towers
+        `Integrate[Cos[Log x], x] = (x/2)(Cos[Log x] + Sin[Log x])`,
+        `Integrate[Sin[Log x], x] = (x/2)(Sin[Log x] - Cos[Log x])`,
+        `Integrate[x^I, x] = (1/2 - I/2) x^(1+I)`,
+        `Integrate[x^x (1 + Log x), x] = x^x`, and
+        `Integrate[3 x^2 Cos[x Log x] - x^3 (1 + Log x) Sin[x Log x], x] =
+        x^3 Cos[x Log x]`; the non-elementary siblings (`Cos[x Log x]`, `x^x`)
+        still decline;
       - `K E^(a x^2 + b x + c)` (`a != 0`) → `Erf`/`Erfi`;
       - `(M E^(a x + b))/(c x + d)` → `ExpIntegralEi` — the `E^v` kernel is
         extracted directly, so a negative leading coefficient (`E^(-x)/x →
@@ -1772,6 +1791,22 @@ decides whether `f` has an antiderivative expressible in **elementary** terms
 - **unevaluated** (with a `Risch`ElementaryIntegralQ::undec` message) — the
   verdict is outside the single differential-tower field scope (algebraic
   extensions, structures the tower builder rejects).
+
+**Trigonometric integrands.** The `False` side decides trig / inverse-trig
+integrands through the **same** Gaussian exponential tower the integrator uses:
+the decision exponentializes with `TrigToExp` (and re-exposes any collapsed
+`E^(c Log b)` general-power kernels, so `Cos[x Log x]` becomes `x^(±I x)` →
+`E^(±I x Log x)`), then reads the residue / Risch-DE certificate off the tower.
+So the classic trig special-function integrals now decide `False`: `∫Sin(x)/x`
+(SinIntegral), `∫Sin(x²)` (FresnelS), `∫Cos(eˣ)` (CosIntegral), `∫Cos(x·Log x)`.
+
+**Scope guard — algebraic functions of x.** An integrand carrying a radical of
+`x` (a non-integer rational power of an x-dependent base — `Cos[√x]`, `E^√x`,
+`Sin[x^(1/3)]`, `√(Sin x)`), or a `Surd`/`Root` of `x`, is **out of scope** for
+the purely-transcendental decision: it is elementary via an *algebraic*
+substitution the transcendental algorithm does not perform, so the predicate
+stays **unevaluated** (`undec`) rather than emit an unsound `False`. This also
+closes a latent unsoundness on `∫E^√x`.
 
 It is sound by construction: a Boolean is returned only behind an exact
 certificate, never a bounded-ansatz "gave up." Note the classic non-elementary
