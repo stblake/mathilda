@@ -428,6 +428,63 @@ void test_parse_dots() {
     // Let me check what `x .1` parses as in my code!
 }
 
+/* Helper: assert that parse_next_expression yields exactly `expected_count`
+ * statements from `buffer`, and that the last one's FullForm is `last`.
+ * Mirrors how mathilda_run_file (Get) iterates a multi-statement file. */
+static void assert_statements(const char* buffer, int expected_count,
+                              const char* last) {
+    const char* ptr = buffer;
+    int count = 0;
+    char* last_form = NULL;
+    for (;;) {
+        Expr* e = parse_next_expression(&ptr);
+        if (!e) break;
+        count++;
+        free(last_form);
+        last_form = expr_to_string_fullform(e);
+        expr_free(e);
+    }
+    if (count != expected_count) {
+        printf("FAIL: %s -> %d statements (expected %d)\n",
+               buffer, count, expected_count);
+        assert(count == expected_count);
+    }
+    if (last && (!last_form || strcmp(last_form, last) != 0)) {
+        printf("FAIL: %s -> last %s (expected %s)\n",
+               buffer, last_form ? last_form : "(none)", last);
+        assert(last_form && strcmp(last_form, last) == 0);
+    }
+    free(last_form);
+}
+
+/* GitHub issue #20: two top-level expressions on separate lines with no
+ * trailing `;` were merged into one via implicit multiplication, so
+ * Get["file.m"] returned the wrong value. A bracket-depth-0 line break must
+ * terminate the statement (Mathematica semantics), while line breaks inside
+ * brackets stay insignificant. */
+void test_parse_newline_separator() {
+    /* Bare juxtaposition across a newline: two statements, not a product. */
+    assert_statements("a\nb\n", 2, "b");
+    /* Each statement is itself an implicit product on one line. */
+    assert_statements("a b\nc d\n", 2, "Times[c, d]");
+    /* Real repro: Series then Integrate — must stay two statements. */
+    assert_statements("Series[Sin[x],{x,0,5}]\nIntegrate[Sin[x],x]\n", 2,
+                      "Integrate[Sin[x], x]");
+    /* Explicit `;` and bare newlines mix freely. */
+    assert_statements("x = 3;\nx^2\n", 2, "Power[x, 2]");
+
+    /* Line breaks inside brackets do NOT separate: one statement each. */
+    assert_statements("f[a,\n b,\n c]\n", 1, "f[a, b, c]");
+    assert_statements("{1,\n 2,\n 3}\n", 1, "List[1, 2, 3]");
+    assert_statements("(a\n b)\n", 1, "Times[a, b]");
+    /* Juxtaposition inside braces across a newline stays implicit Times. */
+    assert_statements("{a\n b}\n", 1, "List[Times[a, b]]");
+
+    /* A line ending in an operator continues onto the next line. */
+    assert_statements("1 +\n2\n", 1, "Plus[1, 2]");
+    assert_statements("x =\n 5\n", 1, "Set[x, 5]");
+}
+
 int main() {
     /* The parser builds expressions with the cached SYM_* symbol pointers
      * (e.g. expr_new_symbol(SYM_List)), which are only populated by
@@ -449,6 +506,7 @@ int main() {
     TEST(test_parse_precedence);
     TEST(test_parse_comments);
     TEST(test_parse_trailing_semicolon);
+    TEST(test_parse_newline_separator);
     TEST(test_parse_dots);
     TEST(test_parse_scaled_scientific);
 

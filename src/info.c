@@ -2687,6 +2687,8 @@ void info_init(void) {
     symtab_set_docstring("Get",
         "Get[\"filename\"]\n"
         "\treads expressions from a file, evaluates them in order, and returns the last result.\n"
+        "Expressions are separated by a newline or a semicolon; a trailing ; is not required.\n"
+        "A line break inside (), [], {} or <||> is insignificant, so one expression may span lines.\n"
         "Returns $Failed if the file cannot be opened.\n"
         "It is conventional to use names ending in .m for files containing Mathilda input.");
     symtab_set_docstring("Put",

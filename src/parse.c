@@ -16,6 +16,13 @@
 typedef struct {
     const char* input;  // Original input string
     const char* pos;    // Current position
+    int bracket_depth;  // Nesting depth of (), [], {}, <|...|>, [[...]].
+                        // Newlines are insignificant inside brackets, so a
+                        // multi-line list/call stays one expression.
+    int saw_newline;    // Set by skip_whitespace: did the most recent skip
+                        // cross a genuine (non-comment) newline? Used to make a
+                        // top-level line break terminate a statement instead of
+                        // acting as implicit multiplication.
 } ParserState;
 
 // Forward declarations
@@ -73,8 +80,14 @@ static bool extend_inequality(Expr* ineq, const char* new_op_name, Expr* new_val
 
 // Skips whitespace and comments
 static void skip_whitespace(ParserState* s) {
+    /* saw_newline is sticky: set here when a genuine line break is skipped, and
+     * cleared only when a primary token is actually consumed (see
+     * parse_primary). This survives the nested skip_whitespace calls made while
+     * parsing a sub-expression's right operand, so the infix loop can still see
+     * that a newline separated two juxtaposed statements. */
     while (1) {
         if (isspace(*s->pos)) {
+            if (*s->pos == '\n') s->saw_newline = 1;
             s->pos++;
         } else if (s->pos[0] == '(' && s->pos[1] == '*') {
             int depth = 1;
@@ -593,6 +606,7 @@ static Expr* parse_string(ParserState* s) {
 // Parses lists: {1,2,3}
 static Expr* parse_list(ParserState* s) {
     s->pos++;  // Skip '{'
+    s->bracket_depth++;
     /* Dynamic buffer: lists may have arbitrarily many elements (e.g. the
      * trigsimp rule lists exceed 60 entries). Grow as needed rather than
      * relying on a fixed stack-allocated array. */
@@ -624,6 +638,7 @@ static Expr* parse_list(ParserState* s) {
         return NULL;
     }
     s->pos++;  // Skip '}'
+    s->bracket_depth--;
 
     // Create List[...] expression
     Expr* list = expr_new_function(expr_new_symbol(SYM_List), elements, count);
@@ -639,6 +654,7 @@ static Expr* parse_list(ParserState* s) {
  * rules, duplicate-key collapse) is left to builtin_association. */
 static Expr* parse_association(ParserState* s) {
     s->pos += 2;  // Skip '<|'
+    s->bracket_depth++;
     size_t cap = 16;
     Expr** entries = malloc(cap * sizeof(Expr*));
     size_t count = 0;
@@ -670,6 +686,7 @@ static Expr* parse_association(ParserState* s) {
         return NULL;
     }
     s->pos += 2;  // Skip '|>'
+    s->bracket_depth--;
 
     Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association), entries, count);
     free(entries);
@@ -679,6 +696,7 @@ static Expr* parse_association(ParserState* s) {
 // Parses functions: f[x,y]
 static Expr* parse_function(ParserState* s, Expr* head) {
     s->pos++;  // Skip '['
+    s->bracket_depth++;
     /* Dynamic buffer: function calls may have arbitrarily many args. */
     size_t cap = 16;
     Expr** args = malloc(cap * sizeof(Expr*));
@@ -708,6 +726,7 @@ static Expr* parse_function(ParserState* s, Expr* head) {
         return NULL;
     }
     s->pos++;  // Skip ']'
+    s->bracket_depth--;
 
     if (head && head->type == EXPR_SYMBOL && head->data.symbol.name == SYM_Sqrt && count == 1) {
         expr_free(head);
@@ -939,13 +958,17 @@ static OperatorDef get_operator(const char* pos) {
 static Expr* parse_primary(ParserState* s) {
     skip_whitespace(s);
     if (!*s->pos) return NULL;
-    
+    /* A primary token starts here: reset the sticky newline flag so that only
+     * line breaks appearing *after* this token can terminate the statement. */
+    s->saw_newline = 0;
+
     switch (*s->pos) {
         case '"': return parse_string(s);
         case '{': return parse_list(s);
         case '[': return parse_function(s, NULL);  // Anonymous function
         case '(': {
             s->pos++;
+            s->bracket_depth++;
             Expr* inner = parse_expression_prec(s, 0);
             skip_whitespace(s);
             if (*s->pos == ')') {
@@ -953,6 +976,7 @@ static Expr* parse_primary(ParserState* s) {
             } else {
                 fprintf(stderr, "Expected ')'\n");
             }
+            s->bracket_depth--;
             return inner;
         }
 
@@ -1168,6 +1192,13 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         // (an association literal `<|...|>` begins with `<|`, which is not a
         // can_start_primary char, so admit it explicitly).
         if (op_def.type == OP_NONE && (can_start_primary(*s->pos) || strncmp(s->pos, "<|", 2) == 0)) {
+            // A top-level newline terminates the statement rather than acting as
+            // implicit multiplication: in a file `a\nb` is two statements (as in
+            // Mathematica), not `a b`. Inside brackets newlines stay
+            // insignificant, so `{a\nb}` and multi-line calls remain one
+            // expression. An explicit operator (e.g. a trailing `+`) is handled
+            // above this branch, so operator-continued lines still join.
+            if (s->bracket_depth == 0 && s->saw_newline) break;
             // Implicit Times has same precedence as explicit Times (400)
             if (400 < min_prec) break;
             op_def.type = OP_TIMES;
@@ -1214,7 +1245,8 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
             Expr* args[64];
             size_t count = 0;
             args[count++] = left;
-            
+            s->bracket_depth++;
+
             while (*s->pos && strncmp(s->pos, "]]", 2) != 0) {
                 skip_whitespace(s);
                 if (count > 1 && *s->pos == ',') s->pos++;
@@ -1233,6 +1265,7 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
                 return NULL;
             }
             s->pos += 2; // skip ']]'
+            s->bracket_depth--;
             left = expr_new_function(expr_new_symbol(SYM_Part), args, count);
             continue;
         } else if (op_def.type == OP_CALL) {
@@ -1495,7 +1528,7 @@ static Expr* parse_expression_state(ParserState* s) {
 
 // Public interface
 Expr* parse_expression(const char* input) {
-    ParserState state = {input, input};
+    ParserState state = {input, input, 0, 0};
     Expr* result = parse_expression_state(&state);
     
     // Check for trailing garbage
@@ -1511,7 +1544,7 @@ Expr* parse_expression(const char* input) {
 
 Expr* parse_next_expression(const char** input_ptr) {
     if (!input_ptr || !*input_ptr) return NULL;
-    ParserState state = {*input_ptr, *input_ptr};
+    ParserState state = {*input_ptr, *input_ptr, 0, 0};
 
     /* Skip leading whitespace, comments, and empty ';' separators so that a
      * stray or doubled separator never yields a spurious empty statement. */
