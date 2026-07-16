@@ -13,6 +13,11 @@ and `Erf`/`Erfi`. Both PDFs in the repo root.
 Cherry's foundation. This document is the architecture + the refactors to do *now* so the
 Cherry engines drop in cleanly later. It is a design, not an implementation.
 
+> **Superseded for execution by [`CHERRY_PLAN.md`](CHERRY_PLAN.md) (2026-07-16)**, which carries the
+> code-level algorithm specs, the paper-exact test pins, and the corrected file map. This document
+> predates the `risch_*` module split, so some file locations below are stale — the Status section
+> (§3) and `CHERRY_PLAN.md` §1.2 give the current locations.
+
 ---
 
 ## 0. The one idea
@@ -183,10 +188,11 @@ keystone.**
 
 ### 2.4 New polynomial primitives (small, generally useful)
 
-- `PolynomialPerfectSquareQ[p, x]` / internal `poly_perfect_square_q` — is `p` a square in
-  `K̄[x]`? (squarefree structure: every irreducible factor has even multiplicity).
-- `PolynomialSqrt[p, x]` / internal `poly_sqrt` — the polynomial square root when it exists.
-  Both are self-contained additions to `poly/`; useful beyond Cherry.
+- `PolynomialSqrt[p]` / `[p, x]` — the polynomial square root when it exists, with the
+  perfect-square test folded in (returns `$Failed` otherwise). **Landed** as
+  `builtin_polynomialsqrt` in `src/poly/facpoly.c` (static helper `ps_is_numeric`; see R5). A
+  separate `PolynomialPerfectSquareQ` / `poly_perfect_square_q` predicate proved unnecessary — the
+  square-root builtin subsumes it. Self-contained addition to `poly/`; useful beyond Cherry.
 
 ---
 
@@ -201,6 +207,8 @@ outputs), the same discipline as the P0 spine.
    `rt_tower_solve` into a reusable `rt_ansatz_solve(basis_terms, unknowns, F, T, x)` that
    accepts **extra basis terms** (the future `Σ k_c T_c(a_c)`). Today's callers pass an empty
    extra-basis list → identical output. *This is the keystone; everything else composes onto it.*
+   **(Superseded by R1 below: no extraction was done — `rt_tower_solve` already IS this solver and
+   accepts SF basis terms directly, so `rt_ansatz_solve` was never created.)**
 
 2. **Promote `rt_special_case` to a registry.** Wrap `rt_try_erf/ei/li/dilog` as four
    `SpecialFunctionForm` entries behind the four-method interface (each still a narrow
@@ -232,10 +240,11 @@ consumer (the project's "hack-free / simplicity" bar):
   (`tests/test_polynomialsqrt.c`). Returns `s` with `s²==p` for a perfect square (even
   multiplicities; numeric content via `Sqrt`), else `$Failed`; accepted only after the exact
   `Expand[s²−p]==0` certificate. This is the erf-argument square-root primitive (`rᵢ=√(p+βᵢq)`).
-- **R2 — DONE (registry).** `RtSpecialForm` table in `integrate_risch_transcendental.c`; the
-  four recognizers are now entries and `rt_special_case` loops the registry. Byte-identical
-  behaviour (verified). The struct is the seam that grows `gen_arguments`/`deriv_template`/
-  `answer_term`/`max_terms`.
+- **R2 — DONE (registry).** `RtSpecialForm` table in `src/calculus/risch_special.c` — the module
+  was split after this doc was written, so the registry and the four recognizers moved out of
+  `integrate_risch_transcendental.c` (now a ~710-line driver). The four recognizers are entries and
+  `rt_special_case` loops the registry (`risch_special.c:262`). Byte-identical behaviour (verified).
+  The struct is the seam that grows `gen_arguments`/`deriv_template`/`answer_term`/`max_terms`.
 - **R3 — DONE (thin primitive over existing `Resultant`).** `Integrate\`RothsteinTragerResultant[
   num, den, z, x] = Resultant[num − z D[den,x], den, x]` in `src/calculus/intrat.c`
   (`tests/test_rt_resultant.c`) — roots in `z` are the residues; the Ei/log argument generator.

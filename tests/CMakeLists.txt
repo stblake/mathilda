@@ -463,6 +463,7 @@ set(COMMON_SRC
     ../src/calculus/integrate_linratiorad.c
     ../src/calculus/integrate_chebychev.c
     ../src/calculus/integrate_goursat.c
+    ../src/calculus/integrate_fresnel.c
     ../src/calculus/integrate_jeffrey.c
     ../src/calculus/integrate_newton_leibniz.c
     ../src/calculus/integrate_symmetry.c
@@ -481,6 +482,9 @@ set(COMMON_SRC
     ../src/calculus/risch_singleext.c
     ../src/calculus/risch_trig_frontend.c
     ../src/calculus/risch_special.c
+    ../src/calculus/cherry_ei.c
+    ../src/calculus/cherry_li.c
+    ../src/calculus/cherry_dilog.c
     ../src/calculus/risch_field.c
     ../src/calculus/risch_canonical.c
     ../src/calculus/risch_structure.c
@@ -1046,6 +1050,22 @@ add_test(NAME polynomialsqrt_tests COMMAND polynomialsqrt_tests)
 add_executable(rt_resultant_tests test_rt_resultant.c ${COMMON_SRC})
 target_include_directories(rt_resultant_tests PRIVATE ../src ../src/calculus)
 add_test(NAME rt_resultant_tests COMMAND rt_resultant_tests)
+
+add_executable(cherry_ei_tests test_cherry_ei.c ${COMMON_SRC})
+target_include_directories(cherry_ei_tests PRIVATE ../src ../src/calculus)
+add_test(NAME cherry_ei_tests COMMAND cherry_ei_tests)
+
+add_executable(cherry_li_tests test_cherry_li.c ${COMMON_SRC})
+target_include_directories(cherry_li_tests PRIVATE ../src ../src/calculus)
+add_test(NAME cherry_li_tests COMMAND cherry_li_tests)
+
+add_executable(cherry_dilog_tests test_cherry_dilog.c ${COMMON_SRC})
+target_include_directories(cherry_dilog_tests PRIVATE ../src ../src/calculus)
+add_test(NAME cherry_dilog_tests COMMAND cherry_dilog_tests)
+
+add_executable(integrate_fresnel_tests test_integrate_fresnel.c ${COMMON_SRC})
+target_include_directories(integrate_fresnel_tests PRIVATE ../src ../src/calculus)
+add_test(NAME integrate_fresnel_tests COMMAND integrate_fresnel_tests)
 
 add_executable(irreduciblepolynomialq_tests test_irreduciblepolynomialq.c ${COMMON_SRC})
 target_include_directories(irreduciblepolynomialq_tests PRIVATE ../src)

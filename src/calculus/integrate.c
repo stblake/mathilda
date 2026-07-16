@@ -24,6 +24,7 @@
 #include "integrate_linratiorad.h"
 #include "integrate_chebychev.h"
 #include "integrate_goursat.h"
+#include "integrate_fresnel.h"
 #include "integrate_jeffrey.h"
 #include "integrate_newton_leibniz.h"
 #include "integrate_symmetry.h"
@@ -262,6 +263,11 @@ static Expr* try_weierstrass(Expr* f, Expr* x) {
  * Risch-Norman.  Non-elementary (obstructed) integrands return NULL. */
 static Expr* try_goursat(Expr* f, Expr* x) {
     return integrate_goursat_try(f, x);
+}
+
+/* K Sin[a x^2+b x+c] / K Cos[...] -> FresnelS/FresnelC (complete the square). */
+static Expr* try_fresnel(Expr* f, Expr* x) {
+    return integrate_fresnel_try(f, x);
 }
 
 /* Stage 2: Risch-Norman heuristic (Bronstein pmint). */
@@ -807,6 +813,10 @@ Expr* builtin_integrate(Expr* res) {
              * curves, so they run ahead of the Eliminate/Solve search and
              * Risch-Norman. */
             if (!result) result = try_goursat(effective_f, x);
+            /* Fresnel: K Sin/Cos of a quadratic -> FresnelS/FresnelC by completing
+             * the square (the trig sibling of the Gaussian -> Erf recognizer),
+             * deterministic and diff-back verified. */
+            if (!result) result = try_fresnel(effective_f, x);
             /* Weierstrass before derivative-divides: it is a domain-specific,
              * deterministic algorithm for rational trig/hyperbolic integrands
              * that is guaranteed to close (and verified by construction), so it

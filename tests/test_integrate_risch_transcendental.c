@@ -766,12 +766,15 @@ static void test_strict_unevaluated(void) {
     assert_head_unevaluated("Integrate`RischTranscendental[Sin[x^2], x]", "Integrate`RischTranscendental");
     assert_head_unevaluated("Integrate`RischTranscendental[Sin[x]/x, x]", "Integrate`RischTranscendental");
     assert_head_unevaluated("Integrate`RischTranscendental[Cos[x]/x, x]", "Integrate`RischTranscendental");
-    /* Exponential of a rational whose Risch DE has no rational solution, and an
-     * Ei-type integrand with a NON-linear denominator (unimplemented). */
-    assert_head_unevaluated("Integrate`RischTranscendental[Exp[1/x], x]", "Integrate`RischTranscendental");
-    assert_head_unevaluated("Integrate`RischTranscendental[Exp[x]/x^2, x]", "Integrate`RischTranscendental");
-    /* Ei-type integrand with a NON-linear (quadratic) denominator remains out of
-     * scope: the widened Ei recognizer requires an exactly linear c x + d. */
+    /* Ei-type integrands with RATIONAL ei-argument constants now close via the
+     * Cherry ExpIntegralEi engine (cherry_ei.c): Exp[1/x] -> x E^(1/x) - Ei(1/x)
+     * (Cherry 1989 Ex 5.1); Exp[x]/x^2 -> Ei(x) - E^x/x.  Both remain
+     * non-elementary; the integrator emits the exact ei closed form. */
+    assert_rm_method_diff_zero("Exp[1/x]");
+    assert_rm_method_diff_zero("Exp[x]/x^2");
+    /* A quadratic denominator with COMPLEX/ALGEBRAIC roots (x^2 + 1 -> +-I) needs
+     * the algebraically-closed-constant layer (Cherry §7, a later phase); the ei
+     * engine declines cleanly rather than emit a partial or wrong form. */
     assert_head_unevaluated("Integrate`RischTranscendental[Exp[x]/(x^2 + 1), x]", "Integrate`RischTranscendental");
     /* Non-elementary nested-log integrands (need Ei/li of a log); and a residual
      * NON-rational inner kernel (Sin[Log[x]]) must DECLINE, never certify a wrong
@@ -1005,12 +1008,14 @@ static void test_bronstein_rde_examples(void) {
     assert_rm_num1("(Exp[1/(Exp[x] + 1)]/(39916800 Exp[10 x]))"
                   "((1757211400 + 2581284541 Exp[x])/(Exp[x] + 1)^3)"); /* In9 */
 
-    /* Genuinely non-elementary siblings that MUST decline (the RDE correctly
-     * proves no solution — a numerator perturbation that leaves an Ei residue). */
-    assert_head_unevaluated(
-        "Integrate[E^x/(x + 2)^2, x, Method -> \"RischTranscendental\"]", "Integrate");
-    assert_head_unevaluated(
-        "Integrate[E^x/(x - 3)^2, x, Method -> \"RischTranscendental\"]", "Integrate");
+    /* Non-elementary siblings the elementary RDE correctly declines (no ELEMENTARY
+     * solution — an Ei residue remains), now CLOSED by the Cherry ExpIntegralEi
+     * engine (cherry_ei.c): E^x/(x+2)^2 -> E^(-2) Ei(x+2) - E^x/(x+2), etc.  They
+     * stay non-elementary (ElementaryIntegralQ is False, checked below), but the
+     * integrator emits the exact ei closed form. */
+    assert_rm_method_diff_zero("E^x/(x + 2)^2");
+    assert_rm_method_diff_zero("E^x/(x - 3)^2");
+    assert_eval_eq("Risch`ElementaryIntegralQ[E^x/(x + 2)^2, x]", "False", 0);
 }
 
 /* ================= REPORTED-BUG REGRESSIONS =================

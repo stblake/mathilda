@@ -8,6 +8,9 @@
 
 #include "risch_special.h"
 #include "risch_util.h"
+#include "cherry_ei.h"
+#include "cherry_li.h"
+#include "cherry_dilog.h"
 
 #include "expr.h"
 #include "eval.h"
@@ -252,10 +255,13 @@ typedef struct {
 } RtSpecialForm;
 
 static const RtSpecialForm RT_SPECIAL_FORMS[] = {
-    { "Erf",           rt_try_erf   },   /* K E^(a x^2 + b x + c)                */
-    { "ExpIntegralEi", rt_try_ei    },   /* M E^(a x + b) / (c x + d)            */
-    { "LogIntegral",   rt_try_li    },   /* c w^(p-1) w' / Log[w]                */
-    { "PolyLog",       rt_try_dilog },   /* K Log[1 + p x] / x                   */
+    { "Erf",           rt_try_erf     }, /* K E^(a x^2 + b x + c)                */
+    { "ExpIntegralEi", rt_try_ei      }, /* M E^(a x + b) / (c x + d)   [fast path] */
+    { "ExpIntegralEi", rt_cherry_ei   }, /* g E^f, g,f in C(x): ei + erf (Cherry 1989) */
+    { "LogIntegral",   rt_try_li      }, /* c w^(p-1) w' / Log[w]      [fast path] */
+    { "LogIntegral",   rt_cherry_li   }, /* multi-li over C(x,Log[w])  (Cherry 1986) */
+    { "PolyLog",       rt_try_dilog   }, /* K Log[1 + p x] / x        [fast path] */
+    { "PolyLog",       rt_cherry_dilog }, /* R Log[w] -> LogLog + PolyLog[2] (Cherry) */
 };
 
 /* Try each registered special-function form in turn (order preserved). */
