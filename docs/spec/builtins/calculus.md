@@ -633,7 +633,15 @@ monotonically down.
      (`∫e^(e^x)(1+x e^x) cos(x e^(e^x)) = sin(x e^(e^x))`).  Arithmetic warnings
      from transient internal singular expressions are muted (as in Mathematica).
   12. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
-     from `src/internal/CRCMathTablesIntegrals.m` on first call).
+     from `src/internal/CRCMathTablesIntegrals.m` on first call).  Integer-power
+     reduction rules cover all six circular and six hyperbolic functions
+     (`Sin/Cos/Tan/Cot/Sec/Csc` and `Sinh/…/Csch`, argument `a x`), their
+     products (`Sinh^m Cosh^n`), canonical-head reciprocal products
+     (`Csc^m Sec^n`, `Csch^m Sech^n`), mixed tangent/secant powers
+     (`Tan^m Sec^n`, `Cot^m Csc^n` and hyperbolic analogues — the canonical form
+     of `Sin^m/Cos^n` quotients), `E^(a x)` times circular or hyperbolic
+     powers (the hyperbolic case guards the `a = n b` resonance), and
+     polynomial × hyperbolic (`x^n Sinh/Cosh`, `x Sinh^m`, `x/Sinh^n = x Csch^n`).
   If every stage gives up the call bubbles back unevaluated.
 - `Method -> "<name>"` option (3rd argument) bypasses the cascade and
   dispatches strictly to a single subroutine, with no fallback:

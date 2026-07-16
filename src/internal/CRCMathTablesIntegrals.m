@@ -968,6 +968,21 @@ IntegrateTable[1/Cos[a_. x_]^2, x_] /; FreeQ[a, x] := Tan[a x]/a;
 IntegrateTable[1/Cos[a_. x_]^m_, x_] /; FreeQ[{a, m}, x] && m =!= 1 && IntegerQ[m] && m > 2 :=
   Sin[a x]/(a (m - 1) Cos[a x]^(m - 1)) + (m - 2)/(m - 1) IntegrateTable[1/Cos[a x]^(m - 2), x];
 
+(* Sec Reduction (missing from CRC tables; the reciprocal-power rules
+   above only fire on 1/Cos[a x]^m, not on the Sec head).  Mirrors the
+   Sech reduction; terminates at Sec[a x] (odd n) or a constant (even n). *)
+IntegrateTable[Sec[a_. x_]^n_Integer, x_] /; FreeQ[{a, n}, x] && n > 1 :=
+  (Sec[a x]^(n - 2) Tan[a x])/(a (n - 1)) + (n - 2)/(n - 1) IntegrateTable[Sec[a x]^(n - 2), x];
+
+(* Csc Reduction (missing from CRC tables; the reciprocal-power rules
+   above only fire on 1/Sin[a x]^m, not on the Csc head).  The second
+   term is + (n-2)/(n-1), unlike the Csch analogue: the circular
+   identity is Csc^2 = 1 + Cot^2 whereas Csch^2 = Coth^2 - 1, which
+   flips the recursion sign.  Terminates at Csc[a x] (odd n) or a
+   constant (even n). *)
+IntegrateTable[Csc[a_. x_]^n_Integer, x_] /; FreeQ[{a, n}, x] && n > 1 :=
+  -(Csc[a x]^(n - 2) Cot[a x])/(a (n - 1)) + (n - 2)/(n - 1) IntegrateTable[Csc[a x]^(n - 2), x];
+
 (* Formula 299 *)
 IntegrateTable[Sin[m_. x_] Sin[n_. x_], x_] /; FreeQ[{m, n}, x] && m^2 =!= n^2 := 
   Sin[(m - n) x]/(2 (m - n)) - Sin[(m + n) x]/(2 (m + n));
@@ -1006,6 +1021,22 @@ IntegrateTable[Cos[a_. x_]^m_/Sin[a_. x_]^n_, x_] /; FreeQ[{a, m, n}, x] && n =!
 IntegrateTable[Sin[a_. x_]^m_/Cos[a_. x_]^n_, x_] /; FreeQ[{a, m, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 :=
   Sin[a x]^(m - 1)/(a (n - 1) Cos[a x]^(n - 1)) - (m - n + 2)/(n - 1) IntegrateTable[Sin[a x]^m/Cos[a x]^(n - 2), x];
 
+(* Mixed tangent/secant and cotangent/cosecant powers.  Mathilda canonicalises
+   the Formula 307/308 quotients into these heads: Sin^m/Cos^n -> Tan^m Sec^(n-m)
+   and Cos^m/Sin^n -> Cot^m Csc^(n-m), so the quotient rules above never match an
+   evaluated integrand.  Reduce the Tan/Cot power by two (bottoming out on the
+   single-Sec^n / Csc^n rules), then close the odd tail on the Tan Sec^n /
+   Cot Csc^n bases (which include Sec Tan and Csc Cot at n = 1 — a form the CRC
+   circular tables omit but the hyperbolic Sech Tanh / Csch Coth carry). *)
+IntegrateTable[Tan[a_. x_] Sec[a_. x_]^n_., x_] /; FreeQ[{a, n}, x] && IntegerQ[n] :=
+  Sec[a x]^n/(a n);
+IntegrateTable[Cot[a_. x_] Csc[a_. x_]^n_., x_] /; FreeQ[{a, n}, x] && IntegerQ[n] :=
+  -Csc[a x]^n/(a n);
+IntegrateTable[Tan[a_. x_]^m_Integer Sec[a_. x_]^n_., x_] /; FreeQ[{a, m, n}, x] && IntegerQ[n] && m > 1 :=
+  Tan[a x]^(m - 1) Sec[a x]^n/(a (m + n - 1)) - (m - 1)/(m + n - 1) IntegrateTable[Tan[a x]^(m - 2) Sec[a x]^n, x];
+IntegrateTable[Cot[a_. x_]^m_Integer Csc[a_. x_]^n_., x_] /; FreeQ[{a, m, n}, x] && IntegerQ[n] && m > 1 :=
+  -Cot[a x]^(m - 1) Csc[a x]^n/(a (m + n - 1)) - (m - 1)/(m + n - 1) IntegrateTable[Cot[a x]^(m - 2) Csc[a x]^n, x];
+
 (* Formula 309 *)
 IntegrateTable[Sin[a_. x_]/Cos[a_. x_]^2, x_] /; FreeQ[a, x] := Sec[a x]/a;
 
@@ -1037,6 +1068,18 @@ IntegrateTable[1/(Sin[a_. x_]^2 Cos[a_. x_]^2), x_] /; FreeQ[a, x] := -2/a Cot[2
 (* Formula 317 *)
 IntegrateTable[1/(Sin[a_. x_]^m_ Cos[a_. x_]^n_), x_] /; FreeQ[{a, m, n}, x] && m =!= 1 && IntegerQ[m] && m > 1 :=
   -(1/(a (m - 1) Sin[a x]^(m - 1) Cos[a x]^(n - 1))) + (m + n - 2)/(m - 1) IntegrateTable[1/(Sin[a x]^(m - 2) Cos[a x]^n), x];
+
+(* Formulas 312-317 keyed on the Csc / Sec HEADS.  Mathilda canonicalises
+   1/Sin -> Csc and 1/Cos -> Sec, so the reciprocal `1/(Sin^m Cos^n)` forms
+   above never match an evaluated integrand (e.g. Csc[x]^4 Sec[x]^3); these
+   head-basis reductions supply the coverage.  The recursive term is
+   + (m+n-2)/(m-1) (from 1 = Sin^2 + Cos^2), the opposite sign to the
+   hyperbolic Csch/Sech analogue.  Terminate at Csc Sec or single Sec^n/Csc^n. *)
+IntegrateTable[Csc[a_. x_] Sec[a_. x_], x_] /; FreeQ[a, x] := Log[Tan[a x]]/a;
+IntegrateTable[Csc[a_. x_] Sec[a_. x_]^n_Integer, x_] /; FreeQ[{a, n}, x] && n > 1 :=
+  Sec[a x]^(n - 1)/(a (n - 1)) + IntegrateTable[Csc[a x] Sec[a x]^(n - 2), x];
+IntegrateTable[Csc[a_. x_]^m_Integer Sec[a_. x_]^n_Integer, x_] /; FreeQ[{a, m, n}, x] && m > 1 :=
+  -(Csc[a x]^(m - 1) Sec[a x]^(n - 1))/(a (m - 1)) + (m + n - 2)/(m - 1) IntegrateTable[Csc[a x]^(m - 2) Sec[a x]^n, x];
 
 (* Formula 318 *)
 IntegrateTable[Sin[a_ + b_. x_], x_] /; FreeQ[{a, b}, x] := -Cos[a + b x]/b;
@@ -1418,6 +1461,19 @@ IntegrateTable[x_/Cos[a_. x_]^2, x_] /; FreeQ[a, x] :=
 (* Formula 413 *)
 IntegrateTable[x_/Cos[a_. x_]^n_, x_] /; FreeQ[{a, n}, x] && n =!= 1 && n =!= 2 && IntegerQ[n] && n > 2 :=
   (x Sin[a x])/(a (n - 1) Cos[a x]^(n - 1)) - 1/(a^2 (n - 1) (n - 2) Cos[a x]^(n - 2)) + (n - 2)/(n - 1) IntegrateTable[x/Cos[a x]^(n - 2), x];
+
+(* Formulas 410-413 keyed on the Csc / Sec HEADS: Mathilda folds x/Sin^n into
+   x Csc^n, so the reciprocal forms above never match.  Even n closes on the
+   x Csc^2 / x Sec^2 bases; odd n bottoms out on the non-elementary x Csc / x Sec
+   (a dilogarithm) and is left unresolved, as with x/Sin, x/Cos. *)
+IntegrateTable[x_ Csc[a_. x_]^2, x_] /; FreeQ[a, x] :=
+  -x Cot[a x]/a + Log[Sin[a x]]/a^2;
+IntegrateTable[x_ Csc[a_. x_]^n_Integer, x_] /; FreeQ[{a, n}, x] && n > 2 :=
+  -x Cot[a x] Csc[a x]^(n - 2)/(a (n - 1)) - Csc[a x]^(n - 2)/(a^2 (n - 1) (n - 2)) + (n - 2)/(n - 1) IntegrateTable[x Csc[a x]^(n - 2), x];
+IntegrateTable[x_ Sec[a_. x_]^2, x_] /; FreeQ[a, x] :=
+  x Tan[a x]/a + Log[Cos[a x]]/a^2;
+IntegrateTable[x_ Sec[a_. x_]^n_Integer, x_] /; FreeQ[{a, n}, x] && n > 2 :=
+  x Tan[a x] Sec[a x]^(n - 2)/(a (n - 1)) - Sec[a x]^(n - 2)/(a^2 (n - 1) (n - 2)) + (n - 2)/(n - 1) IntegrateTable[x Sec[a x]^(n - 2), x];
 
 (* Formulas 414-421.  The squared coefficient b_^2 (which never matched a numeric
    argument) is bound linearly as b_ and recovered via Sqrt[b]; a_ is the
@@ -1982,46 +2038,133 @@ IntegrateTable[x_^m_ E^x_ Cos[x_], x_] /; FreeQ[m, x] && m > 0 :=
 IntegrateTable[x_^m_ E^(a_. x_) Cos[b_. x_], x_] /; FreeQ[{a, b, m}, x] && m > 0 := 
   (x^m E^(a x) (a Cos[b x] + b Sin[b x]))/(a^2 + b^2) - m/(a^2 + b^2) IntegrateTable[x^(m - 1) E^(a x) (a Cos[b x] + b Sin[b x]), x];
 
-(* Formula 528: Form 1 *)
-IntegrateTable[E^(a_. x_) Cos[x_]^m_ Sin[x_]^n_, x_] /; FreeQ[{a, m, n}, x] && m + n;
+(* Formula 528 (E^(a x) Cos^m Sin^n) was left as a truncated, RHS-less
+   statement in the CRC port and never fired; removed rather than kept as dead
+   syntax.  Such products are reached instead through the general cascade. *)
+
+(* E^(a x) times hyperbolic powers.  The circular E^(a x) Sin^n / Cos^n
+   reductions above have denominator a^2 + n^2 b^2, which never vanishes for
+   real a, b.  The hyperbolic analogue's denominator is a^2 - n^2 b^2, which is
+   zero at the resonance a = n b (e.g. E^x Cosh[x], a = b = 1: there e^x =
+   cosh x + sinh x forces a secular x/2 term).  The reductions below carry the
+   a^2 =!= n^2 b^2 guard and bottom out on the n = 1 bases; the a^2 === b^2
+   bases supply the resonant closed form e^(2 a x)/(4 a) +- x/2.  (An exotic
+   intermediate resonance a = n b with n > 1, e.g. E^(2x) Cosh[x]^2, is left to
+   the general cascade.) *)
+IntegrateTable[E^(a_. x_) Sinh[b_. x_], x_] /; FreeQ[{a, b}, x] && a^2 =!= b^2 :=
+  E^(a x) (a Sinh[b x] - b Cosh[b x])/(a^2 - b^2);
+IntegrateTable[E^(a_. x_) Cosh[b_. x_], x_] /; FreeQ[{a, b}, x] && a^2 =!= b^2 :=
+  E^(a x) (a Cosh[b x] - b Sinh[b x])/(a^2 - b^2);
+IntegrateTable[E^(a_. x_) Cosh[b_. x_], x_] /; FreeQ[{a, b}, x] && a^2 === b^2 :=
+  E^(2 a x)/(4 a) + x/2;
+IntegrateTable[E^(a_. x_) Sinh[b_. x_], x_] /; FreeQ[{a, b}, x] && b === a :=
+  E^(2 a x)/(4 a) - x/2;
+IntegrateTable[E^(a_. x_) Sinh[b_. x_], x_] /; FreeQ[{a, b}, x] && b === -a :=
+  -E^(2 a x)/(4 a) + x/2;
+IntegrateTable[E^(a_. x_) Sinh[b_. x_]^n_, x_] /; FreeQ[{a, b, n}, x] && IntegerQ[n] && n > 1 && a^2 =!= n^2 b^2 :=
+  (E^(a x) Sinh[b x]^(n - 1) (a Sinh[b x] - n b Cosh[b x]))/(a^2 - n^2 b^2) +
+  (n (n - 1) b^2)/(a^2 - n^2 b^2) IntegrateTable[E^(a x) Sinh[b x]^(n - 2), x];
+IntegrateTable[E^(a_. x_) Cosh[b_. x_]^n_, x_] /; FreeQ[{a, b, n}, x] && IntegerQ[n] && n > 1 && a^2 =!= n^2 b^2 :=
+  (E^(a x) Cosh[b x]^(n - 1) (a Cosh[b x] - n b Sinh[b x]))/(a^2 - n^2 b^2) -
+  (n (n - 1) b^2)/(a^2 - n^2 b^2) IntegrateTable[E^(a x) Cosh[b x]^(n - 2), x];
 
 (* Formula 534 - 539 *)
-IntegrateTable[Sinh[x_], x_] := Cosh[x];
-IntegrateTable[Cosh[x_], x_] := Sinh[x];
-IntegrateTable[Tanh[x_], x_] := Log[Cosh[x]];
-IntegrateTable[Coth[x_], x_] := Log[Sinh[x]];
-IntegrateTable[Sech[x_], x_] := ArcTan[Sinh[x]];
-IntegrateTable[Csch[x_], x_] := Log[Tanh[x/2]];
+(* Single-function bases generalised to argument a x (the CRC originals bound a
+   bare x, so every a != 1 hyperbolic reduction that bottomed out here failed to
+   close — cf. Sech[2 x]^3). *)
+IntegrateTable[Sinh[a_. x_], x_] /; FreeQ[a, x] := Cosh[a x]/a;
+IntegrateTable[Cosh[a_. x_], x_] /; FreeQ[a, x] := Sinh[a x]/a;
+IntegrateTable[Tanh[a_. x_], x_] /; FreeQ[a, x] := Log[Cosh[a x]]/a;
+IntegrateTable[Coth[a_. x_], x_] /; FreeQ[a, x] := Log[Sinh[a x]]/a;
+IntegrateTable[Sech[a_. x_], x_] /; FreeQ[a, x] := ArcTan[Sinh[a x]]/a;
+IntegrateTable[Csch[a_. x_], x_] /; FreeQ[a, x] := Log[Tanh[(a x)/2]]/a;
 
-(* Formula 540 & 542 *)
-IntegrateTable[x_ Sinh[x_], x_] := x Cosh[x] - Sinh[x];
-IntegrateTable[x_ Cosh[x_], x_] := x Sinh[x] - Cosh[x];
+(* Formula 540 & 542 (generalised to argument a x) *)
+IntegrateTable[x_ Sinh[a_. x_], x_] /; FreeQ[a, x] := x Cosh[a x]/a - Sinh[a x]/a^2;
+IntegrateTable[x_ Cosh[a_. x_], x_] /; FreeQ[a, x] := x Sinh[a x]/a - Cosh[a x]/a^2;
 
-(* Formula 541 & 543 *)
-IntegrateTable[x_^n_ Sinh[x_], x_] /; FreeQ[n, x] && n > 0 := 
-  x^n Cosh[x] - n IntegrateTable[x^(n - 1) Cosh[x], x];
-IntegrateTable[x_^n_ Cosh[x_], x_] /; FreeQ[n, x] && n > 0 := 
-  x^n Sinh[x] - n IntegrateTable[x^(n - 1) Sinh[x], x];
+(* Formula 541 & 543 (generalised to argument a x) *)
+IntegrateTable[x_^n_ Sinh[a_. x_], x_] /; FreeQ[{a, n}, x] && n > 0 :=
+  x^n Cosh[a x]/a - n/a IntegrateTable[x^(n - 1) Cosh[a x], x];
+IntegrateTable[x_^n_ Cosh[a_. x_], x_] /; FreeQ[{a, n}, x] && n > 0 :=
+  x^n Sinh[a x]/a - n/a IntegrateTable[x^(n - 1) Sinh[a x], x];
 
-(* Formula 544 & 545 *)
-IntegrateTable[Sech[x_] Tanh[x_], x_] := -Sech[x];
-IntegrateTable[Csch[x_] Coth[x_], x_] := -Csch[x];
+(* Polynomial x Sinh^m / Cosh^m (hyperbolic analogues of circular Formulas
+   381-386).  Derived by the power-reduction Sinh^2 = (Cosh 2ax - 1)/2,
+   Cosh^2 = (Cosh 2ax + 1)/2, Sinh^3 = (Sinh 3ax - 3 Sinh ax)/4,
+   Cosh^3 = (Cosh 3ax + 3 Cosh ax)/4; the leading x^(k+1) term flips sign
+   relative to the circular case for the Sinh members (the "-1/2" constant). *)
+IntegrateTable[x_ Sinh[a_. x_]^2, x_] /; FreeQ[a, x] :=
+  -x^2/4 + x Sinh[2 a x]/(4 a) - Cosh[2 a x]/(8 a^2);
+IntegrateTable[x_^2 Sinh[a_. x_]^2, x_] /; FreeQ[a, x] :=
+  -x^3/6 + x^2 Sinh[2 a x]/(4 a) - x Cosh[2 a x]/(4 a^2) + Sinh[2 a x]/(8 a^3);
+IntegrateTable[x_ Sinh[a_. x_]^3, x_] /; FreeQ[a, x] :=
+  x Cosh[3 a x]/(12 a) - Sinh[3 a x]/(36 a^2) - 3 x Cosh[a x]/(4 a) + 3 Sinh[a x]/(4 a^2);
+IntegrateTable[x_ Cosh[a_. x_]^2, x_] /; FreeQ[a, x] :=
+  x^2/4 + x Sinh[2 a x]/(4 a) - Cosh[2 a x]/(8 a^2);
+IntegrateTable[x_^2 Cosh[a_. x_]^2, x_] /; FreeQ[a, x] :=
+  x^3/6 + x^2 Sinh[2 a x]/(4 a) - x Cosh[2 a x]/(4 a^2) + Sinh[2 a x]/(8 a^3);
+IntegrateTable[x_ Cosh[a_. x_]^3, x_] /; FreeQ[a, x] :=
+  x Sinh[3 a x]/(12 a) - Cosh[3 a x]/(36 a^2) + 3 x Sinh[a x]/(4 a) - 3 Cosh[a x]/(4 a^2);
 
-(* Formula 546 & 552 & 549 & 551 & 553 & 555 *)
-IntegrateTable[Sinh[x_]^2, x_] := Sinh[2 x]/4 - x/2;
-IntegrateTable[Cosh[x_]^2, x_] := Sinh[2 x]/4 + x/2;
-IntegrateTable[Tanh[x_]^2, x_] := x - Tanh[x];
-IntegrateTable[Sech[x_]^2, x_] := Tanh[x];
-IntegrateTable[Coth[x_]^2, x_] := x - Coth[x];
-IntegrateTable[Csch[x_]^2, x_] := -Coth[x];
+(* Polynomial over hyperbolic powers: x Csch^n = x/Sinh^n, x Sech^n = x/Cosh^n
+   (hyperbolic analogues of circular Formulas 410-413, keyed on the canonical
+   Csch/Sech heads since Mathilda folds 1/Sinh^n -> Csch^n).  The recursion
+   drops n by two and closes on the x Csch^2 / x Sech^2 bases (even n); odd n
+   bottoms out on the non-elementary x Csch / x Sech (a dilogarithm), left
+   unresolved exactly as the circular x/Sin, x/Cos are.  Sign of the recursive
+   term: - for Csch (Csch^2 = Coth^2 - 1), + for Sech (Sech^2 = 1 - Tanh^2). *)
+IntegrateTable[x_ Csch[a_. x_]^2, x_] /; FreeQ[a, x] :=
+  -x Coth[a x]/a + Log[Sinh[a x]]/a^2;
+IntegrateTable[x_ Csch[a_. x_]^n_Integer, x_] /; FreeQ[{a, n}, x] && n > 2 :=
+  -x Coth[a x] Csch[a x]^(n - 2)/(a (n - 1)) - Csch[a x]^(n - 2)/(a^2 (n - 1) (n - 2)) - (n - 2)/(n - 1) IntegrateTable[x Csch[a x]^(n - 2), x];
+IntegrateTable[x_ Sech[a_. x_]^2, x_] /; FreeQ[a, x] :=
+  x Tanh[a x]/a - Log[Cosh[a x]]/a^2;
+IntegrateTable[x_ Sech[a_. x_]^n_Integer, x_] /; FreeQ[{a, n}, x] && n > 2 :=
+  x Tanh[a x] Sech[a x]^(n - 2)/(a (n - 1)) + Sech[a x]^(n - 2)/(a^2 (n - 1) (n - 2)) + (n - 2)/(n - 1) IntegrateTable[x Sech[a x]^(n - 2), x];
 
-(* Formula 547 *)
-IntegrateTable[Sinh[x_]^m_Integer Cosh[x_]^n_Integer, x_] /; FreeQ[{m, n}, x] && m + n =!= 0 && n > 1 :=
-  (Sinh[x]^(m + 1) Cosh[x]^(n - 1))/(m + n) + (n - 1)/(m + n) IntegrateTable[Sinh[x]^m Cosh[x]^(n - 2), x];
+(* Formula 544 & 545 (generalised to argument a x) *)
+IntegrateTable[Sech[a_. x_] Tanh[a_. x_], x_] /; FreeQ[a, x] := -Sech[a x]/a;
+IntegrateTable[Csch[a_. x_] Coth[a_. x_], x_] /; FreeQ[a, x] := -Csch[a x]/a;
 
-(* Formula 548 *)
-IntegrateTable[1/(Sinh[x_]^m_Integer Cosh[x_]^n_Integer), x_] /; FreeQ[{m, n}, x] && m =!= 1 && m > 1 :=
-  -1/((m - 1) Sinh[x]^(m - 1) Cosh[x]^(n - 1)) - (m + n - 2)/(m - 1) IntegrateTable[1/(Sinh[x]^(m - 2) Cosh[x]^n), x];
+(* Formula 546 & 552 & 549 & 551 & 553 & 555 (generalised to argument a x) *)
+IntegrateTable[Sinh[a_. x_]^2, x_] /; FreeQ[a, x] := Sinh[2 a x]/(4 a) - x/2;
+IntegrateTable[Cosh[a_. x_]^2, x_] /; FreeQ[a, x] := Sinh[2 a x]/(4 a) + x/2;
+IntegrateTable[Tanh[a_. x_]^2, x_] /; FreeQ[a, x] := x - Tanh[a x]/a;
+IntegrateTable[Sech[a_. x_]^2, x_] /; FreeQ[a, x] := Tanh[a x]/a;
+IntegrateTable[Coth[a_. x_]^2, x_] /; FreeQ[a, x] := x - Coth[a x]/a;
+IntegrateTable[Csch[a_. x_]^2, x_] /; FreeQ[a, x] := -Coth[a x]/a;
+
+(* Hyperbolic product base cases (mirror circular Formulas 301/304/305).
+   The Formula 547 reduction below strips the Cosh power two at a time and
+   bottoms out on Cosh^1 (odd n) or Cosh^0 = Sinh^m (even n); the single-Cosh
+   and single-Sinh bases close the odd-n tail.  No sign flip relative to the
+   circular forms: d/dx Cosh = +Sinh and d/dx Sinh = +Cosh both integrate the
+   power up, whereas the circular Sin/Cos pair carries the d/dx Cos = -Sin sign
+   only in the single-Sin form (Formula 304), which is why that one is negated
+   there and not here. *)
+IntegrateTable[Sinh[a_. x_] Cosh[a_. x_], x_] /; FreeQ[a, x] := Sinh[a x]^2/(2 a);
+IntegrateTable[Sinh[a_. x_] Cosh[a_. x_]^m_, x_] /; FreeQ[{a, m}, x] && m =!= -1 :=
+  Cosh[a x]^(m + 1)/((m + 1) a);
+IntegrateTable[Sinh[a_. x_]^m_ Cosh[a_. x_], x_] /; FreeQ[{a, m}, x] && m =!= -1 :=
+  Sinh[a x]^(m + 1)/((m + 1) a);
+
+(* Formula 547 (generalised to argument a x) *)
+IntegrateTable[Sinh[a_. x_]^m_Integer Cosh[a_. x_]^n_Integer, x_] /; FreeQ[{a, m, n}, x] && m + n =!= 0 && n > 1 :=
+  (Sinh[a x]^(m + 1) Cosh[a x]^(n - 1))/((m + n) a) + (n - 1)/(m + n) IntegrateTable[Sinh[a x]^m Cosh[a x]^(n - 2), x];
+
+(* Hyperbolic reciprocal-product reductions, keyed on the Csch / Sech HEADS.
+   Mathilda canonicalises 1/Sinh -> Csch and 1/Cosh -> Sech, so the CRC
+   `1/(Sinh^m Cosh^n)` form (old Formula 548) never actually matches an
+   evaluated integrand — the reductions below replace it in the real head
+   basis.  Signs follow 1 = Cosh^2 - Sinh^2 (the hyperbolic reduction carries a
+   minus on its recursive term, unlike the circular Csc/Sec analogue's plus).
+   Terminate at Csch Sech (odd m and n) or the single-head Sech^n / Csch^n. *)
+IntegrateTable[Csch[a_. x_] Sech[a_. x_], x_] /; FreeQ[a, x] := Log[Tanh[a x]]/a;
+IntegrateTable[Csch[a_. x_] Sech[a_. x_]^n_Integer, x_] /; FreeQ[{a, n}, x] && n > 1 :=
+  Sech[a x]^(n - 1)/(a (n - 1)) + IntegrateTable[Csch[a x] Sech[a x]^(n - 2), x];
+IntegrateTable[Csch[a_. x_]^m_Integer Sech[a_. x_]^n_Integer, x_] /; FreeQ[{a, m, n}, x] && m > 1 :=
+  -(Csch[a x]^(m - 1) Sech[a x]^(n - 1))/(a (m - 1)) - (m + n - 2)/(m - 1) IntegrateTable[Csch[a x]^(m - 2) Sech[a x]^n, x];
 
 (* Formula 550 *)
 IntegrateTable[Tanh[a_. x_]^n_Integer, x_] /; FreeQ[{a, n}, x] && n > 1 := 
@@ -2047,8 +2190,23 @@ IntegrateTable[Sech[a_. x_]^n_Integer, x_] /; FreeQ[{a, n}, x] && n > 1 :=
 IntegrateTable[Csch[a_. x_]^n_Integer, x_] /; FreeQ[{a, n}, x] && n > 1 := 
   -(Csch[a x]^(n - 2) Coth[a x])/(a (n - 1)) - (n - 2)/(n - 1) IntegrateTable[Csch[a x]^(n - 2), x];
 
+(* Mixed Tanh/Sech and Coth/Csch powers — hyperbolic analogues of the Tan/Sec
+   and Cot/Csc reductions above; the canonical form of Sinh^m/Cosh^n and
+   Cosh^m/Sinh^n.  Signs follow Sech^2 = 1 - Tanh^2 and Csch^2 = Coth^2 - 1, so
+   the recursive term is + here where the circular Tan/Sec analogue is -.
+   The n = 1 base (Tanh Sech, Coth Csch) also matches the Sech Tanh / Csch Coth
+   rules (Formulas 544/545) with the same value. *)
+IntegrateTable[Tanh[a_. x_] Sech[a_. x_]^n_., x_] /; FreeQ[{a, n}, x] && IntegerQ[n] :=
+  -Sech[a x]^n/(a n);
+IntegrateTable[Coth[a_. x_] Csch[a_. x_]^n_., x_] /; FreeQ[{a, n}, x] && IntegerQ[n] :=
+  -Csch[a x]^n/(a n);
+IntegrateTable[Tanh[a_. x_]^m_Integer Sech[a_. x_]^n_., x_] /; FreeQ[{a, m, n}, x] && IntegerQ[n] && m > 1 :=
+  -Tanh[a x]^(m - 1) Sech[a x]^n/(a (m + n - 1)) + (m - 1)/(m + n - 1) IntegrateTable[Tanh[a x]^(m - 2) Sech[a x]^n, x];
+IntegrateTable[Coth[a_. x_]^m_Integer Csch[a_. x_]^n_., x_] /; FreeQ[{a, m, n}, x] && IntegerQ[n] && m > 1 :=
+  -Coth[a x]^(m - 1) Csch[a x]^n/(a (m + n - 1)) + (m - 1)/(m + n - 1) IntegrateTable[Coth[a x]^(m - 2) Csch[a x]^n, x];
+
 (* Formula 556 - 558 *)
-IntegrateTable[Sinh[m_. x_] Sinh[n_. x_], x_] /; FreeQ[{m, n}, x] && m^2 =!= n^2 := 
+IntegrateTable[Sinh[m_. x_] Sinh[n_. x_], x_] /; FreeQ[{m, n}, x] && m^2 =!= n^2 :=
   Sinh[(m + n) x]/(2 (m + n)) - Sinh[(m - n) x]/(2 (m - n));
 IntegrateTable[Cosh[m_. x_] Cosh[n_. x_], x_] /; FreeQ[{m, n}, x] && m^2 =!= n^2 := 
   Sinh[(m + n) x]/(2 (m + n)) + Sinh[(m - n) x]/(2 (m - n));
