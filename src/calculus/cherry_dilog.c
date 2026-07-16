@@ -17,12 +17,16 @@
  *   INT Log[x]/(1-x) dx = PolyLog[2, 1-x].
  *
  * Scope of THIS increment: a single log kernel Log[w] (w a monic linear factor)
- * over a rational R whose denominator splits into monic linear factors, where the
- * degree-1 Sigma-decomposition closes WITHOUT introducing a transcendental
- * constant Log[r_j - r_i] (root spacing +-1) or a complex Log[-1] = i pi.  The
- * transcendental-constant cases (Log[2+x]/x, root spacing != 1) and the multi-log
- * / higher-degree Sigma-decomposition are later increments; they decline cleanly
- * (the unmatched Log leaves the tower system unsolvable).
+ * over a rational R whose denominator splits into monic linear factors.  The
+ * transcendental-constant root-spacing case (Log[2+x]/x, root spacing != 1) IS
+ * handled: a dilog whose derivative leaves a Log of a CONSTANT (e.g.
+ * D[PolyLog[2,-x/2]] = -Log[1+x/2]/x contributing a Log[2]) is admitted, the
+ * constant flowing into a Log-Log answer term Log[2] Log[x]
+ * (INT Log[2+x]/x = Log[2] Log[x] - PolyLog[2,-x/2]).  Only a residual Log of an
+ * x-DEPENDENT argument (a reversed root pair -> Log[-x] = i pi shift) drops the
+ * candidate.  The multi-log / higher-degree Sigma-decomposition (degree > 1 in
+ * the log tower, Log[x] Log[1+x]/x) remains a later increment; it declines
+ * cleanly (the higher-weight polylog is not in the candidate basis).
  */
 
 #include "cherry_dilog.h"
@@ -54,6 +58,52 @@ static Expr* mk_times2(Expr* a, Expr* b) {
     return expr_new_function(mk_sym("Times"), (Expr*[]){ a, b }, 2);
 }
 static Expr* mk_log(Expr* a) { return expr_new_function(mk_sym("Log"), (Expr*[]){ a }, 1); }
+
+/* True if c is a manifestly POSITIVE real rational constant (integer > 0, or a
+ * Rational with positive numerator — Mathilda normalizes denominators positive). */
+static bool is_pos_rational(Expr* c) {
+    if (c->type == EXPR_INTEGER) return c->data.integer > 0;
+    if (c->type == EXPR_BIGINT)  return mpz_sgn(c->data.bigint) > 0;
+    if (c->type == EXPR_REAL)    return c->data.real > 0;
+    if (c->type == EXPR_FUNCTION && c->data.function.head->type == EXPR_SYMBOL
+        && c->data.function.head->data.symbol.name == intern_symbol("Rational")
+        && c->data.function.arg_count == 2)
+        return is_pos_rational(c->data.function.args[0]);
+    return false;
+}
+
+/* True if the normalized candidate derivative e carries a Log that DISQUALIFIES
+ * the candidate.  Two disqualifiers, both meaning "does not rationalise as a real
+ * tower element":
+ *   (a) Log of an x-DEPENDENT argument — the derivative did not reduce to the
+ *       kernel factors (a genuinely unmatched log), or
+ *   (b) Log of a non-positive constant — the tell-tale of a REVERSED root pair,
+ *       whose D leaves Log[-c] = i pi + Log[c] (e.g. D[PolyLog[2,(x+2)/2]] leaves
+ *       Log[-1/2]); its dilog is the reflection of the forward pair and pollutes
+ *       the real answer with an i pi shift.
+ * A Log of a POSITIVE constant (Log[2], Log[1/2] from a FORWARD pair with root
+ * spacing != 1) is kept — it becomes the real Log-Log answer term Log[2] Log[x],
+ * closing the transcendental-root-spacing case.  Final diff-back certifies. */
+static bool has_bad_log(Expr* e, Expr* x) {
+    if (!e) return false;
+    /* Pi (symbol) is the tell-tale of a reversed pair whose Log[-1] PowerExpands to
+     * I Pi, DELETING the Log node before the check below can see it — reject it. */
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == intern_symbol("Pi");
+    if (e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if (h == intern_symbol("Complex")) return true;   /* I from Log[-1] */
+        if (h == intern_symbol("Log") && e->data.function.arg_count == 1) {
+            Expr* arg = e->data.function.args[0];
+            if (!rt_free_of_x(arg, x)) return true;       /* (a) x-dependent */
+            if (!is_pos_rational(arg))  return true;       /* (b) non-positive const */
+        }
+    }
+    if (has_bad_log(e->data.function.head, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_bad_log(e->data.function.args[i], x)) return true;
+    return false;
+}
 
 /* Collect the distinct x-dependent Log[w] arguments in e into ws[] (owned copies,
  * deduped), up to cap.  Returns the count. */
@@ -98,6 +148,25 @@ static void collect_rational_roots(Expr* p, Expr* x, Expr** rs, size_t* n, size_
         }
     }
     if (sols) expr_free(sols);
+}
+
+/* Normalize the logs of a candidate derivative so a SCALED kernel factor splits
+ * into a kernel factor plus a constant log: Log[g] -> PowerExpand[Log[Factor[g]]]
+ * rewrites Log[1+x/2] = Log[(1/2)(2+x)] into Log[1/2] + Log[2+x], exposing the
+ * monic factor Log[2+x] (substituted to a kernel var u_k downstream) and the
+ * transcendental constant Log[1/2].  Without this, D[PolyLog[2,-x/2]] leaves
+ * Log[1+x/2] — neither a bare kernel factor nor a constant — and the candidate is
+ * wrongly dropped.  Adopts e; returns an owned expr. */
+static Expr* normalize_logs(Expr* e) {
+    Expr* a = mk_sym("chdl$la");
+    Expr* pat = mk_log(expr_new_function(mk_sym("Pattern"),
+        (Expr*[]){ expr_copy(a),
+                   expr_new_function(mk_sym("Blank"), NULL, 0) }, 2));
+    Expr* rhs = mk_log(expr_new_function(mk_sym("Factor"), (Expr*[]){ a }, 1));
+    Expr* rule = expr_new_function(mk_sym("RuleDelayed"), (Expr*[]){ pat, rhs }, 2);
+    Expr* rep = rt_eval_own(expr_new_function(mk_sym("ReplaceAll"),
+        (Expr*[]){ e, rule }, 2));                   /* adopts e */
+    return rt_eval1("PowerExpand", rep);
 }
 
 Expr* rt_cherry_dilog(Expr* f, Expr* x) {
@@ -160,20 +229,22 @@ Expr* rt_cherry_dilog(Expr* f, Expr* x) {
         krules[k] = expr_new_function(mk_sym("Rule"),
             (Expr*[]){ mk_log(expr_copy(facs[k])), expr_copy(us[k]) }, 2);
     Expr* klist = expr_new_function(mk_sym("List"), krules, nr);
+    free(krules);                       /* List copied the element pointers */
 
-    /* A candidate is admissible only if its derivative RATIONALISES in the tower —
-     * i.e. after Log[x-r_k] -> u_k no Log remains.  This drops the polluting dilog
-     * of a reversed root pair (D[PolyLog[2,1+x]] = -Log[-x]/(1+x) leaves Log[-x],
-     * an i pi shift) that would otherwise break the linear system. */
+    /* A candidate is admissible only if its NORMALIZED derivative rationalises in
+     * the tower — after Log[x-r_k] -> u_k the only surviving logs are of POSITIVE
+     * constants (real transcendental coefficients, kept).  has_bad_log drops a
+     * reversed root pair (D[PolyLog[2,1+x]] = -Log[-x]/(1+x) -> Log[-1]/i pi shift)
+     * and any genuinely unmatched x-dependent log. */
     #define ADD_TERM(answer_term)                                                   \
         do {                                                                        \
             char sn[24]; snprintf(sn, sizeof(sn), "chdl$c%zu", ci);                 \
             Expr* s = mk_sym(sn);                                                   \
             Expr* term = mk_times2(expr_copy(s), (answer_term));                    \
-            Expr* d = rt_eval2("D", expr_copy(term), expr_copy(x));                 \
+            Expr* d = normalize_logs(rt_eval2("D", expr_copy(term), expr_copy(x))); \
             Expr* dr = rt_eval_own(expr_new_function(mk_sym("ReplaceAll"),          \
                 (Expr*[]){ d, expr_copy(klist) }, 2));                              \
-            if (dr && rt_free_of_head(dr, "Log")) {                                 \
+            if (dr && !has_bad_log(dr, x)) {                                        \
                 syms[ci] = s; basis[ci] = term; dbasis[ci] = dr; ci++;              \
             } else {                                                                \
                 expr_free(s); expr_free(term); if (dr) expr_free(dr);               \
@@ -216,15 +287,30 @@ Expr* rt_cherry_dilog(Expr* f, Expr* x) {
     Expr* resid = Fk ? mk_plus2(Fk, mk_neg(rhs_sum)) : NULL;
     Expr* rnum = resid ? rt_eval1("Numerator", rt_eval1("Together", resid)) : NULL;
 
+    /* Every coefficient of a {u_k, x}-monomial in rnum must vanish.  Solve for OUR
+     * coefficient unknowns EXPLICITLY (the chdl$c syms) rather than via SolveAlways:
+     * a root-spacing-!=1 dilog leaves a transcendental constant Log[c] (e.g. Log[2])
+     * in the coefficients, and SolveAlways would (nonlinearly) try to solve for it
+     * too, corrupting the system.  CoefficientList over {u_0,...,x} + Thread[==0] +
+     * Solve for {chdl$c} keeps Log[c] a constant. */
     Expr* sol = NULL;
     if (rnum) {
         Expr** vl = malloc((nr + 1) * sizeof(Expr*));
         for (size_t k = 0; k < nr; k++) vl[k] = expr_copy(us[k]);
         vl[nr] = expr_copy(x);
         Expr* varlist = expr_new_function(mk_sym("List"), vl, nr + 1);
-        free(vl);
-        sol = rt_eval2("SolveAlways",
-            expr_new_function(mk_sym("Equal"), (Expr*[]){ rnum, mk_int(0) }, 2), varlist);
+        free(vl);                       /* List copied the element pointers */
+        Expr* clist = rt_eval2("CoefficientList", rnum, varlist);      /* adopts both */
+        Expr* threaded = rt_eval1("Thread", expr_new_function(mk_sym("Equal"),
+            (Expr*[]){ rt_eval1("Flatten", clist), mk_int(0) }, 2));
+        /* drop the trivially-true equations (a vanishing coefficient Threads to
+         * `True`); Solve returns unevaluated if any `True` is left in the list. */
+        Expr* eqs = rt_eval2("DeleteCases", threaded, expr_new_symbol("True"));
+        Expr** ul = malloc((nc ? nc : 1) * sizeof(Expr*));
+        for (size_t i = 0; i < nc; i++) ul[i] = expr_copy(syms[i]);
+        Expr* unklist = expr_new_function(mk_sym("List"), ul, nc);
+        free(ul);
+        sol = rt_eval2("Solve", eqs, unklist);
     }
 
     /* 6. assemble and PowerExpand diff-back verify. */
@@ -252,7 +338,11 @@ Expr* rt_cherry_dilog(Expr* f, Expr* x) {
         }
         if (Q && rt_free_of_head(Q, "Integrate")) {
             Expr* diff = mk_plus2(rt_eval2("D", expr_copy(Q), expr_copy(x)), mk_neg(expr_copy(f)));
-            Expr* chk = rt_eval1("Simplify", rt_eval1("PowerExpand", diff));
+            /* normalize_logs (Log[a] -> PowerExpand[Log[Factor[a]]]) splits a scaled
+             * linear log Log[1+x/2] into Log[1/2] + Log[2+x], so the transcendental
+             * constant Log[1/2] carried by the answer cancels — a plain
+             * Simplify[PowerExpand[.]] cannot bridge Log[1+x/2] = Log[1/2]+Log[2+x]. */
+            Expr* chk = rt_eval1("Simplify", normalize_logs(diff));
             if (chk && chk->type == EXPR_INTEGER && chk->data.integer == 0) result = Q;
             else expr_free(Q);
             if (chk) expr_free(chk);

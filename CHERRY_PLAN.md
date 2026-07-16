@@ -454,14 +454,21 @@ This layer is what lifts d12 from a miss to a hit and makes Ex 5.3/5.4/p.894 exa
 > symbolic integrand parameter (the `a` in Ex 5.4) stays a parameter. Cherry's `erf = (√π/2)Erfi`,
 > so answers carry `√π`. Complex β and non-square `q` decline cleanly.
 >
-> **Status (2026-07-16): dilogarithm — LANDED (degree-2 Σ-decomposition, partial).**
+> **Status (2026-07-16): dilogarithm — LANDED (degree-2 Σ-decomposition + transcendental root spacing).**
 > `cherry_dilog.c` (`rt_cherry_dilog`) generalises `rt_try_dilog` to the `Log·Log + PolyLog[2]`
 > answer form via TOWER matching: dilog args are the interpolants `(x-r_i)/(r_j-r_i)` between the
-> rational roots of the linear factors; candidates whose derivative leaves a `Log` (reversed pair
-> → `Log[-x]` = iπ shift) are filtered. Closes `Log[x]/(1+x) = Log[x]Log[1+x]+PolyLog[2,-x]`,
-> `Log[x]/(1-x)`, `Log[x]/(x^2-1)`, `Log[2x+1]/(x+1)`. Deferred (decline cleanly): transcendental
-> root spacings (`Log[2+x]/x`), degree>1 in the log tower (`Log[x]Log[1+x]/x`). Registered as a
-> `PolyLog` form behind the `rt_try_dilog` fast path.
+> rational roots of the linear factors. Closes `Log[x]/(1+x) = Log[x]Log[1+x]+PolyLog[2,-x]`,
+> `Log[x]/(1-x)`, `Log[x]/(x^2-1)`, `Log[2x+1]/(x+1)`.
+> **Transcendental-constant root spacing (spacing != 1) now LANDED** (`Log[2+x]/x =
+> Log[2]Log[x] - PolyLog[2,-x/2]`, `Log[2x+3]/(x-1)`): a candidate whose derivative leaves a `Log`
+> of a POSITIVE constant is admitted (the constant becomes a real `Log·Log` term); derivatives are
+> normalized `Log[g]->PowerExpand[Log[Factor[g]]]` to split a scaled linear factor `Log[1+x/2]`
+> into `Log[1/2]+Log[2+x]`; a residual `Log` of an x-dependent OR non-positive/complex constant
+> (reversed pair -> `Log[-x]`/iπ shift) still drops the candidate; and the coefficient solve moved
+> from `SolveAlways` to explicit `Solve[Thread[Flatten[CoefficientList[·,{u,x}]]==0],{unknowns}]`
+> so a transcendental constant `Log[c]` stays a constant. Deferred (decline cleanly): NON-monic
+> linear kernels needing rational-content extraction (`Log[3+2x]/x`), degree>1 in the log tower
+> (`Log[x]Log[1+x]/x`). Registered as a `PolyLog` form behind the `rt_try_dilog` fast path.
 >
 > **Status (2026-07-16): C4 Fresnel — LANDED.** `Integrate` closes Gaussian-phase trig
 > `K Sin[a x^2+b x+c]` / `K Cos[...]` → `FresnelS`/`FresnelC` by completing the square (the trig

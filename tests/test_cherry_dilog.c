@@ -33,8 +33,12 @@ static void assert_dilog(const char* f) {
     snprintf(buf, sizeof(buf),
         "With[{r = Integrate[%s, x]}, Head[r] =!= Integrate && !FreeQ[r, PolyLog]]", f);
     ASSERT_MSG(eval_is(buf, "True"), "%s: expected a PolyLog form", f);
+    /* Normalize logs of scaled linear args (Log[1+x/2] = Log[1/2]+Log[2+x]) before
+     * PowerExpand so a transcendental-root-spacing answer diff-backs to 0 exactly —
+     * the same certificate the engine's emission gate uses. */
     snprintf(buf, sizeof(buf),
-        "Simplify[PowerExpand[D[Integrate[%s, x], x] - (%s)]]", f, f);
+        "Simplify[PowerExpand[(D[Integrate[%s, x], x] - (%s)) /. Log[a_] :> Log[Factor[a]]]]",
+        f, f);
     ASSERT_MSG(eval_is(buf, "0"), "%s: PowerExpand diff-back nonzero", f);
     snprintf(buf, sizeof(buf),
         "Abs[N[(D[Integrate[%s, x], x] - (%s)) /. x -> 13/10]] < 1/10^6", f, f);
@@ -54,14 +58,20 @@ static void test_dilog(void) {
     /* rt_try_dilog fast-path forms still fire */
     assert_dilog("Log[1+x]/x");       /* -PolyLog[2,-x] */
     assert_dilog("Log[1-x]/x");
+    /* transcendental-constant root spacing (spacing != 1): a FORWARD dilog whose
+     * derivative leaves a Log of a POSITIVE constant contributes a real Log-Log
+     * term (Log[2] Log[x]).  Cherry's transcendental-root-spacing case. */
+    assert_dilog("Log[2+x]/x");       /* = Log[2] Log[x] - PolyLog[2, -x/2] */
+    assert_dilog("Log[2 x + 3]/(x-1)");
+    /* exact closed form (numeric: Log[1/2] vs -Log[2] confounds symbolic Simplify). */
+    ASSERT_MSG(eval_is(
+        "Abs[N[(Integrate[Log[2+x]/x, x] - (Log[2] Log[x] - PolyLog[2, -x/2])) /. x -> 13/10]]"
+        " < 1/10^6", "True"), "Log[2+x]/x exact form");
 }
 
-/* Decline-safety: transcendental-constant root spacings and products of logs
- * (degree > 1 in the log tower) are later increments; they decline cleanly. */
+/* Decline-safety: a product of x-dependent logs (degree > 1 in the log tower,
+ * a genuine higher-weight polylog) is a later increment; it declines cleanly. */
 static void test_dilog_declines(void) {
-    ASSERT_MSG(eval_is("Head[Integrate`RischTranscendental[Log[2+x]/x, x]]"
-                       " === Integrate`RischTranscendental", "True"),
-        "Log[2+x]/x should decline");
     ASSERT_MSG(eval_is("Head[Integrate`RischTranscendental[Log[x] Log[1+x]/x, x]]"
                        " === Integrate`RischTranscendental", "True"),
         "Log[x]Log[1+x]/x should decline");

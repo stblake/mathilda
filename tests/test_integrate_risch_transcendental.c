@@ -772,10 +772,10 @@ static void test_strict_unevaluated(void) {
      * non-elementary; the integrator emits the exact ei closed form. */
     assert_rm_method_diff_zero("Exp[1/x]");
     assert_rm_method_diff_zero("Exp[x]/x^2");
-    /* A quadratic denominator with COMPLEX/ALGEBRAIC roots (x^2 + 1 -> +-I) needs
-     * the algebraically-closed-constant layer (Cherry §7, a later phase); the ei
-     * engine declines cleanly rather than emit a partial or wrong form. */
-    assert_head_unevaluated("Integrate`RischTranscendental[Exp[x]/(x^2 + 1), x]", "Integrate`RischTranscendental");
+    /* A quadratic denominator with COMPLEX roots (x^2 + 1 -> +-I) now closes via the
+     * algebraically-closed-constant layer (Cherry §7): a lone complex-conjugate pair
+     * of ExpIntegralEi, diff-back exact over Q(i). */
+    assert_rm_method_diff_zero("Exp[x]/(x^2 + 1)");
     /* Non-elementary nested-log integrands (need Ei/li of a log); and a residual
      * NON-rational inner kernel (Sin[Log[x]]) must DECLINE, never certify a wrong
      * form (the whole-tower rationality gate). */
@@ -861,12 +861,11 @@ static void test_strict_misc(void) {
     /* Fresnel / Si / Ci non-elementary integrands bubble back unevaluated. */
     assert_head_unevaluated(
         "Integrate`RischTranscendental[Cos[x^2], x]", "Integrate`RischTranscendental");
-    /* The LRT frac path fires only with a genuine derivation factor: the
-     * ArcTan-family integrands above carry 1/x (log) or E^x (exp).  Without
-     * it the integral is non-elementary (li / Ei family), so the LRT must
-     * DECLINE, not certify a wrong closed form. */
-    assert_head_unevaluated(
-        "Integrate`RischTranscendental[1/(Log[x]^2 + 1), x]", "Integrate`RischTranscendental");
+    /* 1/(Log[x]^2 + 1): the theta-denominator Log[x]^2 + 1 has the constant
+     * COMPLEX-conjugate roots rho = +-I, so Cherry's transcendental-constant
+     * rescaling emits a lone complex-conjugate LogIntegral pair (the li analogue
+     * of the complex-quadratic Ei above), diff-back correct over Q(i). */
+    assert_rm_num("1/(Log[x]^2 + 1)");
     /* x-dependent residues (the resultant does not become free of x after the
      * content strip): the x-content gate must reject rather than certify. */
     assert_head_unevaluated(

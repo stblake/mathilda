@@ -844,8 +844,12 @@ monotonically down.
         interpolants `(x-r_i)/(r_j-r_i)` between the rational roots of the linear
         factors): `Integrate[Log[x]/(1+x),x] = Log[x] Log[1+x] + PolyLog[2,-x]`,
         `Integrate[Log[x]/(1-x),x] = PolyLog[2,1-x]`, `Log[x]/(x^2-1)`,
-        `Log[2x+1]/(x+1)`. Transcendental-constant root spacings (`Log[2+x]/x`)
-        and products of logs decline;
+        `Log[2x+1]/(x+1)`. **Transcendental-constant root spacing** (spacing `!= 1`)
+        now closes too — a dilog whose derivative leaves a `Log` of a positive
+        constant contributes a real `Log-Log` term:
+        `Integrate[Log[2+x]/x,x] = Log[2] Log[x] - PolyLog[2,-x/2]`,
+        `Log[2x+3]/(x-1)`. Non-monic linear kernels (`Log[3+2x]/x`) and products
+        of logs still decline;
       - fractional (Rothstein–Trager) log-part: a proper rational function of
         `theta` with squarefree denominator `prod g_i` gives `sum_i c_i Log(g_i)`,
         the constant residues `c_i` solved from `num = sum_i c_i D(g_i)(d/g_i)`
