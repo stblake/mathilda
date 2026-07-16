@@ -194,6 +194,40 @@ static long rt_nodecount(Expr* e) {
     return n;
 }
 
+/* True iff `e` is a polynomial in x and trigonometric/hyperbolic kernels: free
+ * of Log and inverse (Arc*) heads, and of any Power with a negative or
+ * non-integer exponent (i.e. no denominators / radicals).  This is exactly the
+ * antiderivative shape produced for a trig-POLYNOMIAL integrand such as
+ * x^n Cos[x] Sin[x]^m — a sum of x^k {Sin,Cos,…}[j x] — for which ExpToTrig's
+ * real part is already the clean multiple-angle form.  Simplify's transform
+ * search Factors the TrigExpand image of such a form, and the multivariate
+ * factorizer is pathologically slow over the OVERLAPPING generators
+ * {x, Cos[x], Sin[x]} (Cos[x]/Sin[x] themselves contain x): seconds per term,
+ * the root cause of the Integrate[x^7 Cos[x] Sin[x]^5, …] hang.  Rational-trig
+ * answers (Sec[x], 1/(2+Cos[x])) carry Log/ArcTan and are excluded here — they
+ * do not hit that blow-up and genuinely benefit from full Simplify. */
+static bool rt_is_trig_polynomial(Expr* e) {
+    if (!e) return false;
+    if (e->type != EXPR_FUNCTION) return true;   /* atom: symbol / number */
+    Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL) {
+        const char* nm = h->data.symbol.name;
+        if (nm == intern_symbol("Log")) return false;
+        if (strncmp(nm, "Arc", 3) == 0) return false;   /* ArcTan, ArcTanh, … */
+        if (nm == intern_symbol("Power") && e->data.function.arg_count == 2) {
+            /* Only non-negative integer exponents keep it a polynomial; a
+             * negative or fractional exponent is a denominator / radical. */
+            Expr* ex = e->data.function.args[1];
+            if (!(ex->type == EXPR_INTEGER && ex->data.integer >= 0)) return false;
+            return rt_is_trig_polynomial(e->data.function.args[0]);
+        }
+    }
+    if (!rt_is_trig_polynomial(h)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!rt_is_trig_polynomial(e->data.function.args[i])) return false;
+    return true;
+}
+
 static Expr* rt_realify(Expr* G, Expr* x, Expr* f) {
     Expr* re = NULL; Expr* im = NULL;
     if (!cx_reim(G, x, &re, &im)) { if (re) expr_free(re); if (im) expr_free(im); return NULL; }
@@ -205,6 +239,21 @@ static Expr* rt_realify(Expr* G, Expr* x, Expr* f) {
      * keeps the compact diff-back-verified exponential form; every genuine clean case
      * sits far below the cap. */
     if (rt_nodecount(re) > 60000) { expr_free(re); return NULL; }
+    /* Fast path for a trig-polynomial antiderivative (∫ x^n · trig-poly): the real
+     * part is already the clean multiple-angle form.  Normalize it with the cheap,
+     * linear TrigReduce (product-to-sum) instead of full Simplify — whose Factor
+     * search over the overlapping {x, Cos[x], Sin[x]} generators is what hangs — and
+     * return it once the exact diff-back gate certifies it.  For a trig POLYNOMIAL
+     * the gate's Together[TrigToExp[D-f]] reduces to 0 immediately (no denominators),
+     * so this is O(rational), not a Simplify. */
+    if (rt_free_of_complex(re) && rt_is_trig_polynomial(re)) {
+        Expr* reN = rt_eval1("TrigReduce", expr_copy(re));          /* adopts the copy */
+        if (reN && rt_free_of_complex(reN) && rt_is_trig_polynomial(reN)
+                && rt_verify_antideriv(reN, f, x)) {
+            expr_free(re); return reN;
+        }
+        if (reN) expr_free(reN);
+    }
     Expr* reS = rt_eval1("Simplify", re);                           /* adopts re */
     if (reS && rt_free_of_complex(reS) && rt_verify_antideriv(reS, f, x)) return reS;
     if (reS) expr_free(reS);

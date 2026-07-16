@@ -1044,6 +1044,15 @@ static void test_reported_bug_fixes(void) {
      * product is kept structural.  ∫ = Sin[x E^E^x]. */
     assert_rm_num("Exp[Exp[x]] (1 + x Exp[x]) Cos[x Exp[Exp[x]]]");
 
+    /* Reported 2026-07-16: ∫ x^n Cos[x] Sin[x]^m — a trig-POLYNOMIAL integrand.
+     * The front-end's real form is the clean multiple-angle antiderivative, but
+     * rt_realify used to hand it to full Simplify, whose Factor search over the
+     * OVERLAPPING generators {x, Cos[x], Sin[x]} is pathologically slow (seconds
+     * per term) — x^7 Cos[x] Sin[x]^5 never returned.  rt_realify now takes a
+     * cheap TrigReduce + exact-diff-back fast path for trig-polynomial real forms. */
+    assert_rm_num("x Cos[x] Sin[x]^5");
+    assert_rm_num("x^2 Cos[x] Sin[x]^3");
+
     /* Group-2 (In[15]-In[20]): already-passing exponential integrands, locked in
      * so the tower/exp-split refactors cannot silently regress them. */
     assert_rm_diff_zero("E^(-1 + E^x + 1/x + 1/(1 - x^2))"
