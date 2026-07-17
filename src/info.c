@@ -2886,6 +2886,14 @@ void info_init(void) {
         "\tgives the coefficient of form^n.  n may be a non-negative integer\n"
         "\tor (for Laurent / Puiseux expressions) a rational.");
     symtab_set_docstring("CoefficientList", "CoefficientList[poly, var] gives a list of coefficients of powers of var in poly, starting with power 0.\nCoefficientList[poly, {var1, var2, ...}] gives an array of coefficients of the variables.");
+    symtab_set_docstring("Exponent",
+        "Exponent[expr, form] gives the maximum power with which form appears in the\n"
+        "expanded form of expr.\n"
+        "Exponent[expr, form, h] applies h to the set of exponents (default Max).\n"
+        "form may be a symbol, a kernel, or a product of terms; expr need not be\n"
+        "expanded.  Exponent is purely syntactic (no zero-coefficient recognition).\n"
+        "Exponent[0, x] is -Infinity.  Exponent[expr, {f1, f2, ...}] gives the list of\n"
+        "exponents for each fi.");
     symtab_set_docstring("PolynomialGCD",
         "PolynomialGCD[poly1, poly2, ...] gives the greatest common divisor of the polynomials.\n"
         "Option Extension -> alpha computes the GCD over Q(alpha), where alpha is an\n"

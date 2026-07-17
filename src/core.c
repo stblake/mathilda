@@ -698,6 +698,8 @@ void core_init(void) {
     lapack_bridge_init();
     void squarefreeq_init(void);
     squarefreeq_init();
+    void exponent_init(void);
+    exponent_init();
     void irrpolyq_init(void);
     irrpolyq_init();
     void minpoly_init(void);

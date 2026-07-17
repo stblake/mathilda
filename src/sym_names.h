@@ -556,6 +556,7 @@ extern const char* SYM_Det;
 extern const char* SYM_DiagonalMatrix;
 extern const char* SYM_Dot;
 extern const char* SYM_Expand;
+extern const char* SYM_Exponent;
 extern const char* SYM_Extract;
 extern const char* SYM_Factorial;
 extern const char* SYM_Factorial2;
