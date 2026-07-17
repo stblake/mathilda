@@ -52,7 +52,7 @@ Gives pseudorandom real numbers.
 - RandomReal[{xmin, xmax}] chooses reals with a uniform probability distribution in the range xmin to xmax.
 - RandomReal gives a different sequence of pseudorandom reals whenever you run Mathilda. You can start with a particular seed using SeedRandom.
 - Uses 53 bits of randomness for full double-precision mantissa coverage.
-- Accepts integer, real, rational, and bigint range arguments.
+- Accepts integer, real, rational, and bigint range arguments, as well as symbolic-but-numeric bounds that `N[]` can reduce to a machine (or MPFR) number, e.g. `RandomReal[{-Pi, Pi}]` or `RandomReal[{0, Sqrt[2]}]`.
 - `WorkingPrecision -> n` accepts `MachinePrecision` (the default) or a positive number of decimal digits. Digit counts above MachinePrecision route generation through MPFR, so range bounds keep their full working precision and the result is an MPFR atom.
 
 ```mathematica
@@ -113,7 +113,7 @@ Gives pseudorandom complex numbers.
 - `RandomComplex[{zmin, zmax}]` chooses complex numbers uniformly in the rectangle with corners at `zmin` and `zmax`.
 - RandomComplex gives a different sequence of pseudorandom complex numbers whenever you run Mathilda. You can start with a particular seed using SeedRandom.
 - Uses 53 bits of randomness per component for full double-precision mantissa coverage.
-- Accepts integer, real, rational, and complex range arguments. When the range has no imaginary component, the result simplifies to a real.
+- Accepts integer, real, rational, and complex range arguments, as well as symbolic-but-numeric corners that `N[]` can reduce to a number, e.g. `RandomComplex[{-Pi - I, Pi + I}]` (a `Plus` that only collapses to a `Complex` once `Pi` is numeric). When the range has no imaginary component, the result simplifies to a real.
 - `WorkingPrecision -> n` accepts `MachinePrecision` (the default) or a positive number of decimal digits. Digit counts above MachinePrecision route generation through MPFR, so the real and imaginary parts are MPFR atoms at the requested precision.
 
 ```mathematica

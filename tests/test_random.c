@@ -1,5 +1,6 @@
 #include "expr.h"
 #include "eval.h"
+#include "arithmetic.h"
 #include "core.h"
 #include "symtab.h"
 #include "test_utils.h"
@@ -424,6 +425,22 @@ void test_randomreal_negative_range(void) {
     }
 }
 
+/* ---- Symbolic-but-numeric bounds (Pi, -Pi, Sqrt[2], ...) numericalize ---- */
+void test_randomreal_constant_bounds(void) {
+    for (int i = 0; i < 100; i++) {
+        double v = eval_to_real("RandomReal[{-Pi, Pi}]");
+        ASSERT_MSG(v >= -3.14159265358979 && v < 3.14159265358979,
+                   "RandomReal[{-Pi,Pi}] returned %g", v);
+    }
+    for (int i = 0; i < 100; i++) {
+        double v = eval_to_real("RandomReal[{0, Sqrt[2]}]");
+        ASSERT_MSG(v >= 0.0 && v < 1.4142135623731,
+                   "RandomReal[{0,Sqrt[2]}] returned %g", v);
+    }
+    /* Multi-dimensional array with constant bounds must produce a 10x10 grid. */
+    assert_eval_eq("Dimensions[RandomReal[{-Pi, Pi}, {10, 10}]]", "{10, 10}", 0);
+}
+
 /* ---- Coverage: values spread across range ---- */
 void test_randomreal_coverage(void) {
     /* With enough trials, RandomReal[{0,1}] should produce values
@@ -584,6 +601,23 @@ void test_randomcomplex_symbolic(void) {
     assert_eval_eq("RandomComplex[x]", "RandomComplex[x]", 0);
     assert_eval_eq("RandomComplex[{a, b}]", "RandomComplex[{a, b}]", 0);
     assert_eval_eq("RandomComplex[{0, 1 + I}, x]", "RandomComplex[{0, 1 + I}, x]", 0);
+}
+
+/* ---- Symbolic-but-numeric complex bounds numericalize ---- */
+void test_randomcomplex_constant_bounds(void) {
+    /* `-Pi - I` is a Plus that only collapses to a Complex once Pi is
+     * numeric; the range parser must still evaluate it. */
+    for (int i = 0; i < 50; i++) {
+        Expr* e = parse_expression("RandomComplex[{-Pi - I, Pi + I}]");
+        Expr* r = evaluate(e);
+        Expr *re, *im;
+        ASSERT_MSG(is_complex(r, &re, &im),
+                   "RandomComplex[{-Pi-I, Pi+I}] did not evaluate to a number");
+        expr_free(e);
+        expr_free(r);
+    }
+    assert_eval_eq("Dimensions[RandomComplex[{-Pi - I, Pi + I}, {4, 4}]]",
+                   "{4, 4}", 0);
 }
 
 void test_randomcomplex_attributes(void) {
@@ -1130,6 +1164,7 @@ int main(void) {
     TEST(test_randomreal_attributes);
     TEST(test_randomreal_info);
     TEST(test_randomreal_negative_range);
+    TEST(test_randomreal_constant_bounds);
     TEST(test_randomreal_coverage);
     TEST(test_randomreal_single_dim_list);
     TEST(test_randomreal_type);
@@ -1143,6 +1178,7 @@ int main(void) {
     TEST(test_randomcomplex_multidim);
     TEST(test_randomcomplex_seedrandom);
     TEST(test_randomcomplex_symbolic);
+    TEST(test_randomcomplex_constant_bounds);
     TEST(test_randomcomplex_attributes);
     TEST(test_randomcomplex_info);
     TEST(test_randomcomplex_head);

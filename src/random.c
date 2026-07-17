@@ -310,11 +310,11 @@ Expr* builtin_randominteger(Expr* res) {
 }
 
 /*
- * Convert a numeric expression to a double value.
- * Supports EXPR_INTEGER, EXPR_REAL, EXPR_BIGINT, and Rational[n,d].
- * Returns true on success, false if the expression is not numeric.
+ * Read a plain numeric literal into a double. Handles the exact leaf forms
+ * (Integer, Real, BigInt, Rational[n,d]) directly, without any numeric
+ * evaluation. Returns true on success, false otherwise.
  */
-static bool expr_to_real(Expr* e, double* out) {
+static bool literal_to_real(Expr* e, double* out) {
     if (e->type == EXPR_INTEGER) {
         *out = (double)e->data.integer;
         return true;
@@ -327,12 +327,37 @@ static bool expr_to_real(Expr* e, double* out) {
         *out = mpz_get_d(e->data.bigint);
         return true;
     }
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) {
+        *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN);
+        return true;
+    }
+#endif
     int64_t n, d;
     if (is_rational(e, &n, &d)) {
         *out = (double)n / (double)d;
         return true;
     }
     return false;
+}
+
+/*
+ * Convert a numeric expression to a double value.
+ *
+ * Fast path: exact literals via literal_to_real. Slow path: any other
+ * expression that N[] can reduce to a machine number — symbolic constants
+ * and constant arithmetic such as Pi, -Pi, Sqrt[2], or E/2 — so that range
+ * bounds like RandomReal[{-Pi, Pi}] evaluate. Returns false only when the
+ * expression is genuinely non-numeric (e.g. a free symbol x).
+ */
+static bool expr_to_real(Expr* e, double* out) {
+    if (literal_to_real(e, out)) return true;
+
+    Expr* num = numericalize(e, numeric_machine_spec());
+    if (!num) return false;
+    bool ok = literal_to_real(num, out);
+    expr_free(num);
+    return ok;
 }
 
 /*
@@ -494,6 +519,27 @@ static bool parse_working_precision_opt(Expr* arg, long* bits, bool* is_machine)
 
 #ifdef USE_MPFR
 /*
+ * Extract an MPFR approximation of `e` into `(re, im)`, numericalizing
+ * symbolic-but-numeric bounds (Pi, -Pi, Sqrt[2], ...) when the direct
+ * get_approx_mpfr extraction fails. `re` and `im` must already be
+ * initialized to the target precision. Returns false only when `e` is
+ * genuinely non-numeric.
+ */
+static bool random_get_approx_mpfr(Expr* e, mpfr_t re, mpfr_t im) {
+    if (get_approx_mpfr(e, re, im, NULL)) return true;
+
+    NumericSpec spec;
+    spec.mode = NUMERIC_MODE_MPFR;
+    spec.bits = (long)mpfr_get_prec(re);
+    spec.preserve_inexact = false;
+    Expr* num = numericalize(e, spec);
+    if (!num) return false;
+    bool ok = get_approx_mpfr(num, re, im, NULL);
+    expr_free(num);
+    return ok;
+}
+
+/*
  * Generate a single MPFR random real in [xmin, xmax) at the given precision.
  * xmin and xmax must already be initialized MPFR values.
  */
@@ -528,16 +574,16 @@ static bool parse_real_range_mpfr(Expr* arg, mpfr_t xmin, mpfr_t xmax) {
         arg->data.function.head->type == EXPR_SYMBOL &&
         arg->data.function.head->data.symbol.name == SYM_List &&
         arg->data.function.arg_count == 2) {
-        ok = get_approx_mpfr(arg->data.function.args[0], xmin, scratch_im, NULL)
+        ok = random_get_approx_mpfr(arg->data.function.args[0], xmin, scratch_im)
              && mpfr_zero_p(scratch_im);
         if (ok) {
-            ok = get_approx_mpfr(arg->data.function.args[1], xmax, scratch_im, NULL)
+            ok = random_get_approx_mpfr(arg->data.function.args[1], xmax, scratch_im)
                  && mpfr_zero_p(scratch_im);
         }
     } else {
         /* Single value: range is [0, val]. */
         mpfr_set_zero(xmin, +1);
-        ok = get_approx_mpfr(arg, xmax, scratch_im, NULL)
+        ok = random_get_approx_mpfr(arg, xmax, scratch_im)
              && mpfr_zero_p(scratch_im);
     }
 
@@ -786,6 +832,36 @@ static Expr* random_complex_range(double re_min, double re_max,
 }
 
 /*
+ * Convert a numeric expression to its real and imaginary double parts.
+ *
+ * Handles a Complex[] atom, a plain real literal (imag part 0), and — via
+ * numericalize — symbolic-but-numeric corners such as `-Pi - I` (a Plus that
+ * only collapses to a Complex once Pi is numeric) or Exp[I Pi/4]. Returns
+ * false only when the expression is genuinely non-numeric.
+ */
+static bool expr_to_complex_parts(Expr* e, double* re, double* im) {
+    Expr *rp, *ip;
+    if (is_complex(e, &rp, &ip))
+        return expr_to_real(rp, re) && expr_to_real(ip, im);
+    if (expr_to_real(e, re)) {
+        *im = 0.0;
+        return true;
+    }
+    /* Slow path: reduce symbolic expressions like `-Pi - I` to a number. */
+    Expr* num = numericalize(e, numeric_machine_spec());
+    if (!num) return false;
+    bool ok = false;
+    if (is_complex(num, &rp, &ip))
+        ok = expr_to_real(rp, re) && expr_to_real(ip, im);
+    else if (literal_to_real(num, re)) {
+        *im = 0.0;
+        ok = true;
+    }
+    expr_free(num);
+    return ok;
+}
+
+/*
  * Parse a complex-valued range argument into corner coordinates.
  * A complex range is a rectangle in the complex plane defined by two corners.
  * Supports:
@@ -797,62 +873,18 @@ static Expr* random_complex_range(double re_min, double re_max,
 static bool parse_complex_range(Expr* arg,
                                 double* re_min, double* re_max,
                                 double* im_min, double* im_max) {
-    /* Try as a single value (upper corner, lower corner is origin) */
-    Expr *re_part, *im_part;
-    double val;
-
-    if (is_complex(arg, &re_part, &im_part)) {
-        double re_val, im_val;
-        if (!expr_to_real(re_part, &re_val) || !expr_to_real(im_part, &im_val))
-            return false;
-        *re_min = 0.0; *re_max = re_val;
-        *im_min = 0.0; *im_max = im_val;
-        return true;
-    }
-    if (expr_to_real(arg, &val)) {
-        *re_min = 0.0; *re_max = val;
-        *im_min = 0.0; *im_max = 0.0;
-        return true;
+    /* Single value: upper corner, lower corner is origin. */
+    if (arg->type != EXPR_FUNCTION ||
+        arg->data.function.head->type != EXPR_SYMBOL ||
+        arg->data.function.head->data.symbol.name != SYM_List ||
+        arg->data.function.arg_count != 2) {
+        *re_min = 0.0; *im_min = 0.0;
+        return expr_to_complex_parts(arg, re_max, im_max);
     }
 
-    /* Check for List[zmin, zmax] */
-    if (arg->type == EXPR_FUNCTION &&
-        arg->data.function.head->type == EXPR_SYMBOL &&
-        arg->data.function.head->data.symbol.name == SYM_List &&
-        arg->data.function.arg_count == 2) {
-
-        Expr* lo = arg->data.function.args[0];
-        Expr* hi = arg->data.function.args[1];
-
-        double lo_re = 0.0, lo_im = 0.0, hi_re = 0.0, hi_im = 0.0;
-
-        /* Parse lo */
-        Expr *lo_re_part, *lo_im_part;
-        if (is_complex(lo, &lo_re_part, &lo_im_part)) {
-            if (!expr_to_real(lo_re_part, &lo_re) || !expr_to_real(lo_im_part, &lo_im))
-                return false;
-        } else if (expr_to_real(lo, &lo_re)) {
-            lo_im = 0.0;
-        } else {
-            return false;
-        }
-
-        /* Parse hi */
-        Expr *hi_re_part, *hi_im_part;
-        if (is_complex(hi, &hi_re_part, &hi_im_part)) {
-            if (!expr_to_real(hi_re_part, &hi_re) || !expr_to_real(hi_im_part, &hi_im))
-                return false;
-        } else if (expr_to_real(hi, &hi_re)) {
-            hi_im = 0.0;
-        } else {
-            return false;
-        }
-
-        *re_min = lo_re; *re_max = hi_re;
-        *im_min = lo_im; *im_max = hi_im;
-        return true;
-    }
-    return false;
+    /* List[zmin, zmax] rectangle. */
+    return expr_to_complex_parts(arg->data.function.args[0], re_min, im_min)
+        && expr_to_complex_parts(arg->data.function.args[1], re_max, im_max);
 }
 
 /*
@@ -940,9 +972,9 @@ static bool parse_complex_range_mpfr(Expr* arg,
         arg->data.function.head->type == EXPR_SYMBOL &&
         arg->data.function.head->data.symbol.name == SYM_List &&
         arg->data.function.arg_count == 2) {
-        if (!get_approx_mpfr(arg->data.function.args[0], re_min, im_min, NULL))
+        if (!random_get_approx_mpfr(arg->data.function.args[0], re_min, im_min))
             return false;
-        if (!get_approx_mpfr(arg->data.function.args[1], re_max, im_max, NULL))
+        if (!random_get_approx_mpfr(arg->data.function.args[1], re_max, im_max))
             return false;
         return true;
     }
@@ -950,7 +982,7 @@ static bool parse_complex_range_mpfr(Expr* arg,
     /* Single value: rectangle is from origin to arg. */
     mpfr_set_zero(re_min, +1);
     mpfr_set_zero(im_min, +1);
-    return get_approx_mpfr(arg, re_max, im_max, NULL);
+    return random_get_approx_mpfr(arg, re_max, im_max);
 }
 
 /*
