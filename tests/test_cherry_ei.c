@@ -129,6 +129,24 @@ static void test_complex_ei(void) {
     /* d12 (Cherry 1989): (x^2+1)e^x/(x^2+x+1) — a polynomial part (e^x) plus the
      * complex-conjugate ei pair.  Was the canonical §7/A1 gated pin. */
     assert_ei("(x^2 + 1) E^x/(x^2 + x + 1)");
+    /* Shifted centers over Q(i sqrt d): the direct Solve over the number field fails
+     * (Together won't cancel the conjugate-linear factors back to the real quadratic),
+     * so these close via the {1,chs}-basis NF fallback (rt_cherry_ei_conjpair_nf). */
+    assert_ei("E^x/(x^2 + 2 x + 3)");    /* Q(i sqrt2) */
+    assert_ei("E^x/(x^2 + 2 x + 7)");    /* Q(i sqrt6) */
+    assert_ei("E^x/(x^2 - 2 x + 3)");
+    assert_ei("(3 x + 1) E^x/(x^2 + 2 x + 3)");
+}
+
+/* Constant exponent offset: E^(c + h(x)) = E^c E^(h(x)) — the constant folds into the
+ * cofactor rather than inflating deg(p) and defeating P2. */
+static void test_const_offset(void) {
+    assert_ei("E^(1/x + 2)");            /* E^2 (x E^(1/x) - ei(1/x)) */
+    ASSERT_MSG(eval_is(
+        "Simplify[Integrate[E^(1/x + 2), x, Method -> \"RischTranscendental\"]"
+        " - E^2 (x E^(1/x) - ExpIntegralEi[1/x])]", "0"), "E^(1/x+2) exact form");
+    assert_ei("E^((x - 1)/x)");          /* = E^(1 - 1/x) */
+    assert_ei("E^(1/x - 1)");
 }
 
 /* Nonlinear exponents f = p/q close too — the engine is NOT limited to linear f. */
@@ -353,6 +371,7 @@ int main(void) {
     TEST(test_cherry_erf);
     TEST(test_cherry_erf_symbolic);
     TEST(test_complex_ei);
+    TEST(test_const_offset);
     TEST(test_elementaryq_false);
     TEST(test_cherry_multiterm);
     /* extensive stress battery */

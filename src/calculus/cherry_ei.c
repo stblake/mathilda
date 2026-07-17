@@ -294,11 +294,178 @@ static size_t gen_alpha_candidates(Expr* g1, Expr* p, Expr* q, Expr* x,
     return n;
 }
 
+/* A1 number-field fallback for a LONE complex-conjugate ei pair (Cherry C = C-bar).
+ * a0, a1 are conjugate complex constants (roots of the P1 resultant of an irreducible
+ * quadratic pole).  Mathilda's Solve/Together do not reliably solve the coefficient
+ * system over Q(i sqrt d): Together fails to cancel the two complex-linear factors
+ * (x + a_i) back against the real quadratic (x + a0)(x + a1), so the residual is
+ * over-determined and Solve then declines.  This solves the system over Q instead, by
+ * the number-field basis method: write a = center +- chs with chs the algebraic
+ * generator (chs^2 = disc, disc = ((a0-a1)/2)^2 a negative rational), carry the
+ * conjugate coefficients as c0 = cza + czb*chs, c1 = cza - czb*chs and y with rational
+ * unknowns, reduce the residual modulo chs^2 - disc, split it into the {1, chs} Q-basis
+ * (both parts must vanish), and Solve over Q — where Solve is reliable.  The generator
+ * is then back-substituted (chs -> (a0-a1)/2) and the answer diff-back verified.
+ * Borrows all arguments; returns a fresh, verified antiderivative or NULL. */
+static Expr* rt_cherry_ei_conjpair_nf(Expr* f, Expr* v, Expr* g, Expr* a0, Expr* a1,
+                                      Expr* sden, long Ny, Expr* x) {
+    Expr* rhalf = expr_new_function(mk_sym("Rational"), (Expr*[]){ mk_int(1), mk_int(2) }, 2);
+    /* center = (a0+a1)/2 is the RATIONAL real part; Simplify (not Together) is needed to
+     * cancel the conjugate imaginary parts (Together leaves e.g. 1/2(1/2(2-2I√2)+...)). */
+    Expr* center = rt_eval1("Simplify",
+        mk_times2(mk_plus2(expr_copy(a0), expr_copy(a1)), expr_copy(rhalf)));   /* (a0+a1)/2 */
+    Expr* hd = rt_eval1("Together",
+        mk_times2(mk_plus2(expr_copy(a0), mk_neg(expr_copy(a1))), rhalf));      /* (a0-a1)/2 = chs value */
+    Expr* disc = rt_eval1("Simplify", mk_pow(expr_copy(hd), mk_int(2)));        /* hd^2 (neg rational) */
+    if (!center || !hd || !disc || !rt_free_of_x(center, x) || !rt_free_of_x(disc, x)) {
+        if (center) expr_free(center); if (hd) expr_free(hd); if (disc) expr_free(disc);
+        return NULL;
+    }
+    Expr* chs = mk_sym("chei$s");
+    long ny = Ny < 0 ? 0 : Ny;
+
+    /* unknowns: y_0..y_ny (rational), cza, czb */
+    size_t nun = (size_t)(ny + 1) + 2;
+    Expr** unk = malloc(nun * sizeof(Expr*));
+    size_t ui = 0;
+    Expr** yterms = malloc((size_t)(ny + 1) * sizeof(Expr*));
+    for (long j = 0; j <= ny; j++) {
+        char nm[32]; snprintf(nm, sizeof(nm), "chei$y%ld", j);
+        Expr* yj = mk_sym(nm);
+        unk[ui++] = expr_copy(yj);
+        yterms[j] = mk_times2(yj, mk_pow(expr_copy(x), mk_int(j)));
+    }
+    Expr* yans = mk_times2(expr_new_function(mk_sym("Plus"), yterms, (size_t)(ny + 1)),
+                           mk_pow(expr_copy(sden), mk_int(-1)));
+    free(yterms);
+    Expr* cza = mk_sym("chei$cza"); Expr* czb = mk_sym("chei$czb");
+    unk[ui++] = expr_copy(cza); unk[ui++] = expr_copy(czb);
+    Expr* c0e = mk_plus2(expr_copy(cza), mk_times2(expr_copy(czb), expr_copy(chs)));       /* cza + czb chs */
+    Expr* c1e = mk_plus2(expr_copy(cza), mk_neg(mk_times2(expr_copy(czb), expr_copy(chs))));/* cza - czb chs */
+
+    /* rhs = y' + v' y + c0 v'/(v + (center+chs)) + c1 v'/(v + (center-chs)) */
+    Expr* vderiv = rt_eval2("D", expr_copy(v), expr_copy(x));
+    Expr* yder = rt_eval2("D", expr_copy(yans), expr_copy(x));
+    Expr* a0s = mk_plus2(expr_copy(center), expr_copy(chs));
+    Expr* a1s = mk_plus2(expr_copy(center), mk_neg(expr_copy(chs)));
+    Expr* t1 = mk_times2(expr_copy(vderiv), expr_copy(yans));
+    Expr* t2 = mk_times2(c0e, mk_times2(expr_copy(vderiv),
+                    mk_pow(mk_plus2(expr_copy(v), a0s), mk_int(-1))));   /* adopts c0e, a0s */
+    Expr* t3 = mk_times2(c1e, mk_times2(expr_copy(vderiv),
+                    mk_pow(mk_plus2(expr_copy(v), a1s), mk_int(-1))));   /* adopts c1e, a1s */
+    expr_free(vderiv);
+    Expr* rhs = expr_new_function(mk_sym("Plus"), (Expr*[]){ yder, t1, t2, t3 }, 4);
+    Expr* rnum = rt_eval1("Numerator", rt_eval1("Together",
+        mk_plus2(expr_copy(g), mk_neg(rhs))));
+
+    Expr* result = NULL;
+    if (rnum) {
+        Expr* minp = mk_plus2(mk_pow(expr_copy(chs), mk_int(2)), mk_neg(expr_copy(disc))); /* chs^2 - disc */
+        Expr* rd = rt_eval_call("PolynomialRemainder",
+            (Expr*[]){ rt_eval1("Expand", rnum), minp, expr_copy(chs) }, 3);   /* adopts rnum, minp */
+        if (rd) {
+            Expr* A = rt_eval_call("Coefficient",
+                (Expr*[]){ expr_copy(rd), expr_copy(chs), mk_int(0) }, 3);     /* chs^0 part */
+            Expr* B = rt_eval_call("Coefficient",
+                (Expr*[]){ rd, expr_copy(chs), mk_int(1) }, 3);                /* adopts rd; chs^1 part */
+            Expr* clA = A ? rt_eval2("CoefficientList", A, expr_copy(x)) : NULL;
+            Expr* clB = B ? rt_eval2("CoefficientList", B, expr_copy(x)) : NULL;
+            Expr* allc = (clA && clB) ? rt_eval2("Join", clA, clB) : NULL;     /* adopts clA, clB */
+            if (!allc) { if (clA) expr_free(clA); if (clB) expr_free(clB); }
+            Expr* eqs = allc ? rt_eval1("Thread", expr_new_function(mk_sym("Equal"),
+                (Expr*[]){ allc, mk_int(0) }, 2)) : NULL;                      /* adopts allc */
+            Expr** ul = malloc(nun * sizeof(Expr*));
+            for (size_t jj = 0; jj < nun; jj++) ul[jj] = expr_copy(unk[jj]);
+            Expr* unklist = expr_new_function(mk_sym("List"), ul, nun);
+            free(ul);
+            Expr* sol = eqs ? rt_eval2("Solve", eqs, unklist) : (expr_free(unklist), (Expr*)NULL);
+            bool solved = sol && sol->type == EXPR_FUNCTION && rt_head_is(sol, "List")
+                && sol->data.function.arg_count >= 1
+                && sol->data.function.args[0]->type == EXPR_FUNCTION
+                && rt_head_is(sol->data.function.args[0], "List");
+            if (solved) {
+                Expr* rules = sol->data.function.args[0];
+                /* apply the solution, then back-substitute chs -> hd (the real value) */
+                Expr* chs2hd = expr_new_function(mk_sym("List"),
+                    (Expr*[]){ expr_new_function(mk_sym("Rule"),
+                        (Expr*[]){ expr_copy(chs), expr_copy(hd) }, 2) }, 1);
+                Expr* c0v = rt_eval_own(expr_new_function(mk_sym("ReplaceAll"),
+                    (Expr*[]){ rt_eval_own(expr_new_function(mk_sym("ReplaceAll"),
+                        (Expr*[]){ mk_plus2(expr_copy(cza), mk_times2(expr_copy(czb), expr_copy(chs))),
+                                   expr_copy(rules) }, 2)), expr_copy(chs2hd) }, 2));
+                Expr* c1v = rt_eval_own(expr_new_function(mk_sym("ReplaceAll"),
+                    (Expr*[]){ rt_eval_own(expr_new_function(mk_sym("ReplaceAll"),
+                        (Expr*[]){ mk_plus2(expr_copy(cza), mk_neg(mk_times2(expr_copy(czb), expr_copy(chs)))),
+                                   expr_copy(rules) }, 2)), expr_copy(chs2hd) }, 2));
+                Expr* yv = rt_eval_own(expr_new_function(mk_sym("ReplaceAll"),
+                    (Expr*[]){ expr_copy(yans), expr_copy(rules) }, 2));
+                expr_free(chs2hd);
+                /* answer = y E^v + c0 E^(-a0) ei(v+a0) + c1 E^(-a1) ei(v+a1) */
+                Expr* ei0 = expr_new_function(mk_sym("ExpIntegralEi"),
+                    (Expr*[]){ mk_plus2(expr_copy(v), expr_copy(a0)) }, 1);
+                Expr* ei1 = expr_new_function(mk_sym("ExpIntegralEi"),
+                    (Expr*[]){ mk_plus2(expr_copy(v), expr_copy(a1)) }, 1);
+                Expr* term0 = mk_times2(yv, mk_pow(mk_sym("E"), expr_copy(v)));
+                Expr* term1 = mk_times2(c0v, mk_times2(mk_pow(mk_sym("E"), mk_neg(expr_copy(a0))), ei0));
+                Expr* term2 = mk_times2(c1v, mk_times2(mk_pow(mk_sym("E"), mk_neg(expr_copy(a1))), ei1));
+                Expr* Q = rt_eval_own(expr_new_function(mk_sym("Plus"),
+                    (Expr*[]){ term0, term1, term2 }, 3));
+                if (Q && rt_free_of_head(Q, "Integrate") && rt_verify_antideriv(Q, f, x))
+                    result = Q;
+                else if (Q) expr_free(Q);
+            }
+            if (sol) expr_free(sol);
+        }
+    }
+
+    for (size_t jj = 0; jj < nun; jj++) expr_free(unk[jj]);
+    free(unk);
+    expr_free(yans); expr_free(cza); expr_free(czb); expr_free(chs);
+    expr_free(center); expr_free(hd); expr_free(disc);
+    return result;
+}
+
 Expr* rt_cherry_ei(Expr* f, Expr* x) {
     /* 1. The exponential kernel E^v (v = the Cherry exponent f).  Base field:
      *    v must be a rational function of x alone (no nested exp/log). */
     Expr* v = rt_find_exp_of_x(f, x);          /* borrowed */
     if (!v || !rt_kernel_simple(v, x)) return NULL;
+
+    /* 1a. Constant-offset reduction.  If the exponent v has a nonzero x-free
+     *     polynomial part c (v = c + proper-fraction), factor E^v = E^c E^(v-c): the
+     *     constant E^c folds into the cofactor.  Without this, the constant term
+     *     inflates deg(p) and defeats the P2 (deg p == 0) recognition — e.g.
+     *     E^(1/x+2) = E^2 E^(1/x) would decline.  Recurse on f E^(-c) (whose exponent
+     *     v-c has no constant term) and scale by E^c.  Fires ONLY when the polynomial
+     *     part of v is a nonzero CONSTANT (degree 0), so a genuine polynomial exponent
+     *     part (E^(x+1), E^((x^4+a)/x^2)) is untouched. */
+    {
+        Expr* vt = rt_eval1("Together", expr_copy(v));
+        Expr* pv = vt ? rt_eval1("Numerator", expr_copy(vt)) : NULL;
+        Expr* qv = vt ? rt_eval1("Denominator", expr_copy(vt)) : NULL;
+        if (vt) expr_free(vt);
+        Expr* vc = NULL;
+        if (pv && qv && rt_is_poly(pv, x) && rt_is_poly(qv, x)) {
+            Expr* quo = rt_eval_call("PolynomialQuotient",
+                (Expr*[]){ expr_copy(pv), expr_copy(qv), expr_copy(x) }, 3);
+            if (quo && rt_is_poly(quo, x) && rt_degree(quo, x) == 0 && !rt_is_zero(quo))
+                vc = expr_copy(quo);
+            if (quo) expr_free(quo);
+        }
+        if (pv) expr_free(pv);
+        if (qv) expr_free(qv);
+        if (vc) {
+            Expr* emc = mk_pow(mk_sym("E"), mk_neg(expr_copy(vc)));
+            Expr* fstr = rt_eval1("Together", mk_times2(expr_copy(f), emc));  /* f E^(-c) */
+            Expr* sub = fstr ? rt_cherry_ei(fstr, x) : NULL;
+            if (fstr) expr_free(fstr);
+            if (sub) {
+                Expr* ec = mk_pow(mk_sym("E"), vc);           /* adopts vc */
+                return rt_eval_own(mk_times2(ec, sub));       /* E^c * INT f E^(-c) */
+            }
+            expr_free(vc);   /* recursion declined — fall through to the normal path */
+        }
+    }
 
     /* g = Together[f E^(-v)] — the rational cofactor after peeling E^v. */
     Expr* emv = mk_pow(mk_sym("E"), mk_neg(expr_copy(v)));
@@ -530,6 +697,15 @@ Expr* rt_cherry_ei(Expr* f, Expr* x) {
         else if (Q) expr_free(Q);
     }
     if (sol) expr_free(sol);
+
+    /* A1 number-field fallback: a lone complex-conjugate ei pair (m == 2, no erf)
+     * that the primary Solve over Q(i sqrt d) could not crack — solve it over Q by
+     * the {1, chs} basis method instead (rt_cherry_ei_conjpair_nf).  Fires ONLY when
+     * the direct path already failed, so every case the direct Solve closes stays
+     * byte-identical; the fallback newly closes e.g. E^x/(x^2+2x+3) (Q(i sqrt2)). */
+    if (!result && m == 2 && me == 0
+        && numeric_complex(alphas[0]) && numeric_complex(alphas[1]))
+        result = rt_cherry_ei_conjpair_nf(f, v, g, alphas[0], alphas[1], sden, Ny, x);
 
     for (size_t i = 0; i < m; i++) { expr_free(alphas[i]); expr_free(csyms[i]); }
     free(csyms);

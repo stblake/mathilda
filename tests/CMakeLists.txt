@@ -1067,6 +1067,10 @@ add_executable(cherry_ei_tests test_cherry_ei.c ${COMMON_SRC})
 target_include_directories(cherry_ei_tests PRIVATE ../src ../src/calculus)
 add_test(NAME cherry_ei_tests COMMAND cherry_ei_tests)
 
+add_executable(cherry_stress_tests test_cherry_stress.c ${COMMON_SRC})
+target_include_directories(cherry_stress_tests PRIVATE ../src ../src/calculus)
+add_test(NAME cherry_stress_tests COMMAND cherry_stress_tests)
+
 add_executable(cherry_li_tests test_cherry_li.c ${COMMON_SRC})
 target_include_directories(cherry_li_tests PRIVATE ../src ../src/calculus)
 add_test(NAME cherry_li_tests COMMAND cherry_li_tests)

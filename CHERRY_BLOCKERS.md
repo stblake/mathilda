@@ -42,10 +42,25 @@ towers, and the general complex/degree-≥3 constant case (see B2 / A1 below).
 ## A. True blockers (stuck pending hard math or missing infrastructure)
 
 ### A1 — Complex algebraically-closed constants (`C = C̄` over `Q(i)` and beyond) — ✅ LANDED for the lone pair (2026-07-17)
-- **Delivered (lone conjugate pair over `Q(i)` AND `Q(i√d)`):** d12
+- **Delivered (lone conjugate pair over `Q(i)` and many `Q(i√d)`):** d12
   `∫ (x²+1)e^x/(x²+x+1) dx` closes with a complex-conjugate `ExpIntegralEi` pair
   (`Q(i√3)`), as do `E^x/(x²+x+1)`, `E^x/(x²+3)`, `E^x/(x²+2x+5)`,
   `(2x+1)e^x/(x²+x+3)` (`Q(i√11)`), … — all diff-back exact.
+- **Stress-test finding + FIX (2026-07-17):** the lone conjugate pair now closes over
+  **ANY `Q(i√d)`**, uniformly. A stress sweep found that the direct-`Solve` path only
+  cracked the fields Mathilda's `Solve` happened to handle (`E^x/(x²+2x+3)` over
+  `Q(i√2)` declined). Root cause: `Together` fails to cancel the two complex-linear
+  factors back against the real quadratic, over-determining the system. New fallback
+  **`rt_cherry_ei_conjpair_nf`** (`cherry_ei.c`) solves it **over Q** by the `{1, chs}`
+  number-field basis method (write `a = center ± chs`, `chs² = disc`; carry `c0,c1` and
+  `y` with rational unknowns; reduce mod `chs² − disc`; split into the `{1, chs}` basis;
+  `Solve` over Q). Fires only when the direct solve failed, so prior closures stay
+  byte-identical. Closes `E^x/(x²+2x+3)`, `E^x/(x²+2x+7)`, `E^x/(x²−2x+3)`,
+  `(3x+1)E^x/(x²+2x+3)`, … (`center` needs `Simplify`, not `Together`).
+- **Constant exponent offset — FIXED (2026-07-17):** `E^(c + h(x))` with `c` x-free
+  (e.g. `E^(1/x+2) = E²·E^(1/x)`) now closes — the constant is factored out before the
+  P2 recognition (which the inflated `deg(p)` had defeated). Fires only when the
+  polynomial part of the exponent is a nonzero constant.
 - **Root-cause correction (important):** the coefficient `Solve` over `Q(i√d)` is NOT
   intrinsically the blocker — the *isolated* small system solves fine natively. The
   failure was **system size**: the generous real-case `Y`-degree bound (`Ny≈6`)
@@ -179,7 +194,7 @@ towers, and the general complex/degree-≥3 constant case (see B2 / A1 below).
 
 | ID | Pin | Gap | Root cause | Path |
 |---|---|---|---|---|
-| C-i | `∫ Log[3+2x]/x dx` | non-monic linear dilog kernel | `cherry_dilog.c` builds interpolants from **monic** `x−r`; a non-monic `w=3+2x` isn't normalized | extract rational content: `Log[a x+b] = Log[a] + Log[x+b/a]`, feed monic factor + fold `Log[a]` constant into the `Log·Log` term |
+| C-i | `∫ Log[3+2x]/x dx` | non-monic linear dilog kernel — **cherry_dilog-internal only; the full Integrate cascade closes it, so not user-facing** (verified 2026-07-17) | `cherry_dilog.c` builds interpolants from **monic** `x−r`; a non-monic `w=3+2x` isn't normalized, AND rational-root kernels (`Log[x+1/2]/(x+1)`) decline even after monic-normalizing — two stacked issues | extract rational content `Log[a x+b] = Log[a] + Log[x+b/a]` AND add rational-root interpolant support; deprioritized since the cascade already returns a correct answer |
 | C-ii | `∫ Log[x]Log[1+x]/x dx` | degree > 1 in the log tower | dilog gate requires `deg ≤ 1` in every `t_i` (`cherry_dilog.c:194`) | genuinely non-elementary in the *dilog* class as written — verify it is `Integrate::nonelem` (the test suite already asserts this decline) or needs a higher-`d` Σ-decomposition (Cherry's `d≥2` hook, ties to B1) |
 | C-iii | li output form | `x/Log[x]²` emits `ExpIntegralEi[2 Log[x]]` where the pin reads `2 li(x²)` | `li(u)=ExpIntegralEi[Log u]` — **mathematically equal**, cosmetic only | optional: normalize ei-of-log → `LogIntegral` in the emission for output parity with the paper |
 

@@ -1,3 +1,28 @@
+# Cherry stress-test gap fixes — robust complex constants + constant offset — 2026-07-17
+
+Stress campaign (176-case sweep + `cherry_stress_tests`) found **0 soundness bugs**; fixed 2 of 3
+completeness gaps (`cherry_ei.c`), de-scoped the 3rd (cascade covers it).
+
+- [x] **#1 A1 complex constants — robust across Q(i√d).** Root cause was NOT the field but that
+      `Together` won't cancel the conjugate-linear factors back to the real quadratic (over-determined
+      system → `Solve` declines). New fallback `rt_cherry_ei_conjpair_nf`: solve over Q by the `{1,chs}`
+      basis method (a=center±chs, chs²=disc; reduce mod chs²−disc; split; Solve/Q). Fires only when the
+      direct solve failed → byte-identical for prior closures. Closes `E^x/(x²+2x+3)` (Q(i√2)) etc.
+      (`center` needs `Simplify`, not `Together`.)
+- [x] **#2 Constant exponent offset.** `E^(c+h(x))` = `E^c·E^(h(x))` — factor the constant out before
+      P2 (which the inflated deg(p) defeated). Closes `E^(1/x+2)`, `E^((x-1)/x)`. Gated to a nonzero
+      CONSTANT poly part, so `E^(x+1)`/`E^((x⁴+a)/x²)` untouched.
+- [~] **#3 Non-monic dilog kernel — DE-SCOPED.** `Log[2x+1]/(x+1)` already closes for users via the full
+      Integrate cascade; the cherry_dilog-internal decline needs rational-root interpolant support
+      (`Log[x+1/2]/(x+1)` declines everywhere) — two stacked issues, no user-facing benefit. Documented.
+- [x] Tests: `test_const_offset` + shifted-NF cases in `test_cherry_ei.c`; `cherry_stress_tests` updated
+      (5 former declines now closes()). All cherry + risch_transcendental suites green.
+- [x] Valgrind: NF path leak-clean (the small overage is the pre-existing `rt_verify_antideriv`/Together
+      uninitialised-value on complex-constant expressions, not the new allocations).
+- [x] Docs: changelog, `docs/spec/builtins/calculus.md`, `CHERRY_BLOCKERS.md` (A1 robust; C-i de-scoped).
+
+---
+
 # Cherry completion — B3 (C0 seam) → B2 (Thm 5.4 case b) → A1 (complex constants) — 2026-07-17
 
 Plan: `~/.claude/plans/gentle-jumping-babbage.md`. Spec: `CHERRY_PLAN.md`, `CHERRY_BLOCKERS.md`.

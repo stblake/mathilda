@@ -823,9 +823,14 @@ monotonically down.
         ExpIntegralEi[x-I])`, `E^x/(x^2+x+1)` (over `Q(i sqrt3)`), `E^x/(x^2+3)`,
         `E^x/(x^2+2x+5)`, a numerator `(2x+1)E^x/(x^2+x+3)` (over `Q(i sqrt11)`),
         and the polynomial-part case **d12** `Integrate[(x^2+1)E^x/(x^2+x+1),x] =
-        E^x + (complex-conjugate ei pair)`. Complex poles mixed with a `P2`/
-        reciprocal term (`E^(1/x)/(x^2+1)`) and degree-`≥3` constants
-        (`E^x/(x^3-2)`) are deferred and decline cleanly. A **multi-term**
+        E^x + (complex-conjugate ei pair)`. The lone conjugate pair closes over ANY
+        `Q(i sqrt d)` — a shifted center (`E^x/(x^2+2x+3)`, `E^x/(x^2+2x+7)`,
+        `(3x+1)E^x/(x^2+2x+3)`) that the direct number-field `Solve` cannot crack is
+        solved over Q by the `{1, chs}`-basis fallback. Complex poles mixed with a
+        `P2`/reciprocal term (`E^(1/x)/(x^2+1)`) and degree-`≥3` constants
+        (`E^x/(x^3-2)`) are deferred and decline cleanly. A constant exponent offset
+        `E^(c + h(x))` (e.g. `E^(1/x+2) = E^2 E^(1/x)`) is factored out before matching.
+        A **multi-term**
         exponential `Sum_i p_i E^(i w)` (rational in a single kernel `E^w`, several
         commensurate Laurent terms) that the single-shape matcher cannot peel is
         integrated term-by-term (Cherry Thm 5.4 case b) —
