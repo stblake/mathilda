@@ -664,6 +664,7 @@ void core_init(void) {
     list_init();
     assoc_init();
     ndarray_init();
+    ndkernels_init();   /* elementary-function NDArray element-wise kernels */
     replace_init();
     patterns_init();
     cond_init();

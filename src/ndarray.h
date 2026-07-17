@@ -134,6 +134,61 @@ Expr* ndarray_scalar_power(const Expr* a, double er, double ei);
  * NDArray. */
 Expr* ndarray_base_scalar_power(double br, double bi, const Expr* exp_arr);
 
+/* ---------------------------------------------------------------------------
+ * Element-wise scalar-function acceleration.
+ *
+ * Every elementary/special function is Listable, but Listable threading only
+ * sees List-headed args, not NDArrays. These descriptors let a function head
+ * register a machine-precision scalar kernel that the evaluator maps directly
+ * over an NDArray's flat buffer (no per-element Expr / evaluator round-trip),
+ * exactly as Plus/Times/Power do. A kernel writes its result through the
+ * (double re, double im) choke point, so one kernel serves all four dtypes.
+ * A kernel returns false for an element it cannot compute at machine precision
+ * (non-finite / pole); the caller then degrades to the faithful List path.
+ * -------------------------------------------------------------------------- */
+
+/* Unary kernel: f[array]. `cplx` is always valid. `real` is an optional faster
+ * path used only when the input dtype is real AND `real_closed` is true (a real
+ * input is guaranteed a real output); NULL means "use cplx and take the real
+ * part". When `real_closed` is false (Sqrt/Log/ArcSin/... which can leave the
+ * real axis on real input) the engine computes via `cplx` and promotes the
+ * result dtype to complex iff any element came out non-real. */
+typedef struct {
+    bool (*cplx)(double ire, double iim, double* ore, double* oim);
+    bool (*real)(double in, double* out);
+    bool real_closed;
+    /* Projection functions (Abs/Re/Im/Arg): the result is always real even for
+     * complex input. The engine writes a real-dtype array, taking `ore` from
+     * `cplx` as the value (`oim` ignored). Overrides real_closed. */
+    bool to_real;
+} NDUnaryKernel;
+
+/* Binary scalar-index kernel: f[scalar, array] or f[array, scalar] — one
+ * operand is an NDArray, the other a broadcast numeric scalar (BesselJ[n, arr],
+ * Log[b, arr], ArcTan[arr, y], ...). `real_closed` as above. */
+typedef struct {
+    bool (*cplx)(double are, double aim, double bre, double bim,
+                 double* ore, double* oim);
+    bool real_closed;
+} NDBinaryKernel;
+
+/* Map unary kernel `k` over NDArray `a`, returning a new EXPR_NDARRAY of the
+ * same shape (dtype narrowed/promoted per the kernel's real-closedness). Returns
+ * NULL if `a` isn't an NDArray or any element's kernel reports failure (caller
+ * degrades to ndarray_delist_and_reeval). */
+Expr* ndarray_map_unary(const Expr* a, const NDUnaryKernel* k);
+
+/* Map binary kernel `k` over exactly one NDArray operand (`a0` or `a1`) and one
+ * broadcast numeric scalar. Returns NULL if the operands aren't that shape or
+ * any element's kernel reports failure. */
+Expr* ndarray_map_binary(const Expr* a0, const Expr* a1, const NDBinaryKernel* k);
+
+/* Faithful degrade path: rebuild `call` with every NDArray arg replaced by its
+ * equivalent nested List and re-evaluate, so the result matches f[{...}] exactly
+ * (Listable threads element-wise, poles yield ComplexInfinity, etc.). Borrows
+ * `call` (never frees it); caller owns the returned Expr. */
+Expr* ndarray_delist_and_reeval(const Expr* call);
+
 /* When every operand in args[0..n) is an NDArray but they are not all the same
  * shape, print a one-line `NDArray::shape` warning naming the two offending
  * shapes (verb is the operation, e.g. "added"/"multiplied") and return true.
@@ -156,5 +211,10 @@ bool ndarray_warn_symbolic(Expr** args, size_t n, const char* verb);
 
 /* Register NDArray's builtins, attributes, and docstring. */
 void ndarray_init(void);
+
+/* Register the elementary-function NDArray element-wise kernels (ndkernels.c)
+ * on their function heads (Sin, Cos, Exp, Log, ArcTan, Abs, ...). Special
+ * functions register their own kernels from their own modules. */
+void ndkernels_init(void);
 
 #endif /* MATHILDA_NDARRAY_H */

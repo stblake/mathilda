@@ -204,6 +204,7 @@ set(COMMON_SRC
     ../src/part.c
     ../src/assoc.c
     ../src/ndarray.c
+    ../src/ndkernels.c
     ../src/print.c
     ../src/plus.c
     ../src/times.c
@@ -813,6 +814,11 @@ add_executable(ndarray_tests test_ndarray.c ${COMMON_SRC})
 target_link_libraries(ndarray_tests m)
 target_include_directories(ndarray_tests PRIVATE ../src)
 add_test(NAME ndarray_tests COMMAND ndarray_tests)
+
+add_executable(ndarray_functions_tests test_ndarray_functions.c ${COMMON_SRC})
+target_link_libraries(ndarray_functions_tests m)
+target_include_directories(ndarray_functions_tests PRIVATE ../src)
+add_test(NAME ndarray_functions_tests COMMAND ndarray_functions_tests)
 
 add_executable(ndarray_linalg_tests test_ndarray_linalg.c ${COMMON_SRC})
 target_link_libraries(ndarray_linalg_tests m)

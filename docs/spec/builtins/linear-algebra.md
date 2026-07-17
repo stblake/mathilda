@@ -48,6 +48,20 @@ modelled on numpy's `ndarray`.
   and `-A` / `A - B`. Scalars are "weak": an `Integer`/`Real` scalar keeps the
   array's float width (`float32 + 1 -> float32`), while a `Complex` scalar moves
   it onto the complex axis at the same width (`float32 + I -> complex32`).
+- **Elementary and special functions map over `NDArray` at C speed.** `Sin`,
+  `Cos`, `Exp`, `Log`, `Sqrt`, the inverse trig/hyperbolic functions, `Abs`/`Re`/
+  `Im`/`Arg`/`Conjugate`/`Sign`, and special functions (`Gamma`, `Erf`, `Erfc`,
+  `LogGamma`, `BesselJ`/`BesselY`, `Beta`, …) loop the flat buffer directly (no
+  per-element `Expr`). A real input that leaves the real axis promotes to a
+  complex array (`Log[NDArray[{-1.,4.}]]`, `ArcSin` outside `[-1,1]`); projections
+  (`Abs`/`Re`/`Im`/`Arg`) yield a real array even from complex input. Two-arg
+  forms `Log[b, NDArray[...]]`, `ArcTan[NDArray[...], y]`, `BesselJ[n,
+  NDArray[...]]`, etc. broadcast the scalar. Any element the C kernel cannot
+  produce at machine precision (a pole, e.g. `Gamma[NDArray[{0.,1.}]]`, or a
+  function with no machine kernel yet, e.g. `FresnelC`, `AiryAi`, `ProductLog`,
+  `Zeta`) degrades faithfully to the `List` path, so the result always matches
+  `f[{...}]`. Registration is one line per head via
+  `symtab_set_ndarray_unary_kernel` / `_binary_kernel` (`src/ndkernels.c`).
 - Machine precision only. Any input or fast-path result that would need a
   non-machine-precision entry (a symbol, an exact/rational number, a BigInt,
   an MPFR value) is left unpacked/unevaluated instead of forcing a lossy

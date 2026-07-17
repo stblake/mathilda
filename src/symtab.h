@@ -80,6 +80,13 @@ typedef struct SymbolDef {
      * by the SymbolDef, or NULL when the symbol has no registered options.
      * Survives Clear[f] (only rules are cleared), freed on symbol removal. */
     Expr* default_options;
+    /* Optional machine-precision element-wise kernels for NDArray arguments.
+     * Opaque (const NDUnaryKernel* / const NDBinaryKernel* from ndarray.h) to
+     * keep symtab.h free of an ndarray.h include cycle; the evaluator casts.
+     * NULL (the calloc default) means "no NDArray fast path for this head".
+     * Point at static-const descriptors, so the SymbolDef never owns them. */
+    const void* ndarray_unary_kernel;
+    const void* ndarray_binary_kernel;
     struct SymbolDef* next;   // hash-bucket chain (replaces the old SymEntry)
 } SymbolDef;
 
@@ -124,6 +131,13 @@ void symtab_add_builtin(const char* symbol_name, BuiltinFunc func);
 // Set/get docstring for a symbol
 void symtab_set_docstring(const char* symbol_name, const char* doc);
 const char* symtab_get_docstring(const char* symbol_name);
+
+// Register an NDArray element-wise machine kernel for a function head. `kernel`
+// points at a static-const NDUnaryKernel / NDBinaryKernel (see ndarray.h); the
+// SymbolDef stores it opaquely and never owns it. The evaluator maps it over an
+// NDArray argument at C speed instead of falling back to List threading.
+void symtab_set_ndarray_unary_kernel(const char* symbol_name, const void* kernel);
+void symtab_set_ndarray_binary_kernel(const char* symbol_name, const void* kernel);
 
 // Set/get the default option settings (a List[Rule[name,val], ...]) for a
 // symbol -- the store behind Options[f] and SetOptions[f]. symtab_set_options

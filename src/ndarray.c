@@ -535,6 +535,177 @@ Expr* ndarray_scalar_power(const Expr* a, double er, double ei) {
     return expr_new_ndarray(a->data.ndarray.rank, a->data.ndarray.dims, out, dtc);
 }
 
+/* -------------------- element-wise scalar-function map ------------------- */
+
+Expr* ndarray_map_unary(const Expr* a, const NDUnaryKernel* k) {
+    if (!is_ndarray(a) || !k) return NULL;
+    NDType dta = a->data.ndarray.dtype;
+    const void* in = a->data.ndarray.data;
+    size_t sz = ndarray_size(a);
+    int rank = a->data.ndarray.rank;
+    const int64_t* dims = a->data.ndarray.dims;
+
+    /* Projection (Abs/Re/Im/Arg): always a real output, even for complex input.
+     * The real dtype keeps the input's component width. */
+    if (k->to_real) {
+        if (!k->cplx) return NULL;   /* degrade */
+        NDType dtr = (ndt_comp_size(dta) == sizeof(double)) ? NDT_FLOAT64
+                                                            : NDT_FLOAT32;
+        void* out = malloc(ndt_elem_size(dtr) * sz);
+        for (size_t j = 0; j < sz; j++) {
+            double re, im, orr, oii;
+            ndt_get(in, j, dta, &re, &im);
+            if (!k->cplx(re, im, &orr, &oii)) { free(out); return NULL; }
+            ndt_set(out, j, dtr, orr, 0.0);
+        }
+        return expr_new_ndarray(rank, dims, out, dtr);
+    }
+
+    /* Complex input: complex output, straight map. A real-only kernel (no cplx)
+     * declines here, degrading a complex NDArray to the List path. */
+    if (ndt_is_complex(dta)) {
+        if (!k->cplx) return NULL;
+        void* out = malloc(ndt_elem_size(dta) * sz);
+        for (size_t j = 0; j < sz; j++) {
+            double re, im, orr, oii;
+            ndt_get(in, j, dta, &re, &im);
+            if (!k->cplx(re, im, &orr, &oii)) { free(out); return NULL; }
+            ndt_set(out, j, dta, orr, oii);
+        }
+        return expr_new_ndarray(rank, dims, out, dta);
+    }
+
+    /* Real input, function stays on the real axis: real output. */
+    if (k->real_closed) {
+        void* out = malloc(ndt_elem_size(dta) * sz);
+        if (dta == NDT_FLOAT64 && k->real) {
+            /* Hot path: raw double buffers, no widening. */
+            const double* id = (const double*)in;
+            double* od = (double*)out;
+            for (size_t j = 0; j < sz; j++)
+                if (!k->real(id[j], &od[j])) { free(out); return NULL; }
+        } else {
+            for (size_t j = 0; j < sz; j++) {
+                double re, im, orr, oii = 0.0;
+                ndt_get(in, j, dta, &re, &im);
+                if (k->real) { if (!k->real(re, &orr)) { free(out); return NULL; } }
+                else if (!k->cplx || !k->cplx(re, 0.0, &orr, &oii)) { free(out); return NULL; }
+                ndt_set(out, j, dta, orr, oii);
+            }
+        }
+        return expr_new_ndarray(rank, dims, out, dta);
+    }
+
+    /* Real input, function may leave the real axis (Sqrt/Log/ArcSin/...):
+     * compute complex, then narrow to real dtype iff every element is real,
+     * else promote (mirrors real_power_escapes in ndarray_scalar_power). */
+    if (!k->cplx) return NULL;   /* degrade (sentinel / real-only kernel) */
+    NDType dtcplx = ndt_as_complex(dta);
+    void* tmp = malloc(ndt_elem_size(dtcplx) * sz);
+    bool any_imag = false;
+    for (size_t j = 0; j < sz; j++) {
+        double re, im, orr, oii;
+        ndt_get(in, j, dta, &re, &im);
+        if (!k->cplx(re, 0.0, &orr, &oii)) { free(tmp); return NULL; }
+        if (oii != 0.0) any_imag = true;
+        ndt_set(tmp, j, dtcplx, orr, oii);
+    }
+    if (any_imag) return expr_new_ndarray(rank, dims, tmp, dtcplx);
+    /* Narrow back to the original real dtype. */
+    void* out = malloc(ndt_elem_size(dta) * sz);
+    for (size_t j = 0; j < sz; j++) {
+        double re, im;
+        ndt_get(tmp, j, dtcplx, &re, &im);
+        ndt_set(out, j, dta, re, im);
+    }
+    free(tmp);
+    return expr_new_ndarray(rank, dims, out, dta);
+}
+
+Expr* ndarray_map_binary(const Expr* a0, const Expr* a1, const NDBinaryKernel* k) {
+    if (!k || !k->cplx) return NULL;   /* !cplx => sentinel: degrade to List */
+    /* Exactly one operand is an NDArray; the other is a broadcast scalar. */
+    const Expr* arr; const Expr* scal; bool arr_first;
+    if (is_ndarray(a0) && !is_ndarray(a1))      { arr = a0; scal = a1; arr_first = true; }
+    else if (is_ndarray(a1) && !is_ndarray(a0)) { arr = a1; scal = a0; arr_first = false; }
+    else return NULL;
+
+    double sre, sim; bool s_cplx;
+    if (!scalar_value(scal, &sre, &sim, &s_cplx)) return NULL;
+
+    NDType dta = arr->data.ndarray.dtype;
+    const void* in = arr->data.ndarray.data;
+    size_t sz = ndarray_size(arr);
+    int rank = arr->data.ndarray.rank;
+    const int64_t* dims = arr->data.ndarray.dims;
+
+    /* Genuinely-complex output: complex input or complex scalar. Map directly. */
+    if (ndt_is_complex(dta) || s_cplx) {
+        NDType dtc = ndt_as_complex(dta);
+        void* out = malloc(ndt_elem_size(dtc) * sz);
+        for (size_t j = 0; j < sz; j++) {
+            double re, im, orr, oii;
+            ndt_get(in, j, dta, &re, &im);
+            bool ok = arr_first ? k->cplx(re, im, sre, sim, &orr, &oii)
+                                : k->cplx(sre, sim, re, im, &orr, &oii);
+            if (!ok) { free(out); return NULL; }
+            ndt_set(out, j, dtc, orr, oii);
+        }
+        return expr_new_ndarray(rank, dims, out, dtc);
+    }
+
+    /* Real inputs, real-closed function: real output. */
+    if (k->real_closed) {
+        void* out = malloc(ndt_elem_size(dta) * sz);
+        for (size_t j = 0; j < sz; j++) {
+            double re, im, orr, oii;
+            ndt_get(in, j, dta, &re, &im);
+            bool ok = arr_first ? k->cplx(re, 0.0, sre, 0.0, &orr, &oii)
+                                : k->cplx(sre, 0.0, re, 0.0, &orr, &oii);
+            if (!ok) { free(out); return NULL; }
+            ndt_set(out, j, dta, orr, oii);
+        }
+        return expr_new_ndarray(rank, dims, out, dta);
+    }
+
+    /* Real inputs, may escape (Log[b, x] on negatives): compute complex, narrow
+     * to real dtype iff every element is real, else promote. */
+    NDType dtcplx = ndt_as_complex(dta);
+    void* tmp = malloc(ndt_elem_size(dtcplx) * sz);
+    bool any_imag = false;
+    for (size_t j = 0; j < sz; j++) {
+        double re, im, orr, oii;
+        ndt_get(in, j, dta, &re, &im);
+        bool ok = arr_first ? k->cplx(re, 0.0, sre, 0.0, &orr, &oii)
+                            : k->cplx(sre, 0.0, re, 0.0, &orr, &oii);
+        if (!ok) { free(tmp); return NULL; }
+        if (oii != 0.0) any_imag = true;
+        ndt_set(tmp, j, dtcplx, orr, oii);
+    }
+    if (any_imag) return expr_new_ndarray(rank, dims, tmp, dtcplx);
+    void* out = malloc(ndt_elem_size(dta) * sz);
+    for (size_t j = 0; j < sz; j++) {
+        double re, im;
+        ndt_get(tmp, j, dtcplx, &re, &im);
+        ndt_set(out, j, dta, re, im);
+    }
+    free(tmp);
+    return expr_new_ndarray(rank, dims, out, dta);
+}
+
+Expr* ndarray_delist_and_reeval(const Expr* call) {
+    if (!call || call->type != EXPR_FUNCTION) return NULL;
+    size_t n = call->data.function.arg_count;
+    Expr** args = malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = call->data.function.args[i];
+        args[i] = is_ndarray(a) ? ndarray_to_nested_list(a) : expr_copy(a);
+    }
+    Expr* rebuilt = expr_new_function(expr_copy(call->data.function.head), args, n);
+    free(args);
+    return eval_and_free(rebuilt);
+}
+
 /* Format an NDArray's shape as "{d0, d1, ...}" into buf. */
 static void format_shape(const Expr* a, char* buf, size_t buflen) {
     size_t off = 0;

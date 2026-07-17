@@ -169,6 +169,14 @@ const char* symtab_get_docstring(const char* symbol_name) {
     return def->docstring;
 }
 
+void symtab_set_ndarray_unary_kernel(const char* symbol_name, const void* kernel) {
+    symtab_get_def(symbol_name)->ndarray_unary_kernel = kernel;
+}
+
+void symtab_set_ndarray_binary_kernel(const char* symbol_name, const void* kernel) {
+    symtab_get_def(symbol_name)->ndarray_binary_kernel = kernel;
+}
+
 void symtab_set_options(const char* symbol_name, Expr* list) {
     SymbolDef* def = symtab_get_def(symbol_name);
     if (def->default_options) expr_free(def->default_options);

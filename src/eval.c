@@ -10,6 +10,7 @@
 
 #include "eval.h"
 #include "symtab.h"
+#include "ndarray.h"
 #include "core.h"
 #include "purefunc.h"
 #include "print.h"
@@ -895,6 +896,34 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                     expr_free(res);
                     *changed = true; /* DownValue rule fired */
                     return down;
+                }
+
+                /* 4b. NDArray element-wise fast path. Listable functions with a
+                 * registered machine kernel (elementary/special functions) map
+                 * directly over an NDArray argument's flat buffer at C speed
+                 * instead of falling through to the slow List-threading path
+                 * (which NDArrays don't even trigger). A kernel failure on any
+                 * element (pole/overflow) degrades faithfully to the List path,
+                 * so results always match f[{...}]. Runs after user DownValues
+                 * (so overrides still win) and before the builtin (whose scalar
+                 * numeric paths ignore NDArrays anyway). */
+                if (hdef) {
+                    size_t na = res->data.function.arg_count;
+                    Expr** aa = res->data.function.args;
+                    Expr* nd = NULL;
+                    if (na == 1 && hdef->ndarray_unary_kernel && is_ndarray(aa[0])) {
+                        nd = ndarray_map_unary(aa[0], hdef->ndarray_unary_kernel);
+                        if (!nd) nd = ndarray_delist_and_reeval(res);
+                    } else if (na == 2 && hdef->ndarray_binary_kernel &&
+                               (is_ndarray(aa[0]) ^ is_ndarray(aa[1]))) {
+                        nd = ndarray_map_binary(aa[0], aa[1], hdef->ndarray_binary_kernel);
+                        if (!nd) nd = ndarray_delist_and_reeval(res);
+                    }
+                    if (nd) {
+                        expr_free(res);
+                        *changed = true; /* NDArray fast path rewrote the call */
+                        return nd;
+                    }
                 }
 
                 /* 5. Call C-level Built-in Functions (internal "down code") */
