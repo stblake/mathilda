@@ -974,6 +974,11 @@ void integrate_init(void) {
      * helpers, and the explicit `Integrate`BronsteinRational` entry. */
     intrat_init();
 
+    /* Cherry 1986 Thm 4.4 Sigma-decomposition: Integrate`SigmaDecomposition
+     * (also the engine behind the logarithmic-integral non-existence decision). */
+    void cherry_sigma_init(void);
+    cherry_sigma_init();
+
     /* Undefined-function integrator (Roach §1.7): Integrate`Undefined. */
     integrate_unknown_init();
 

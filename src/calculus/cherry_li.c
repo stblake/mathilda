@@ -33,6 +33,7 @@
 
 #include "cherry_li.h"
 #include "risch_util.h"
+#include "cherry_sigma_decomp.h"
 
 #include "expr.h"
 #include "eval.h"
@@ -281,4 +282,69 @@ Expr* rt_cherry_li(Expr* f, Expr* x) {
     free(syms);
     expr_free(F); expr_free(t); expr_free(wp); expr_free(eta);
     return result;
+}
+
+/* --- The li NON-existence decision (Cherry 1986 Thm 5.4 case a / Thm 4.4) ---
+ *
+ * INT A/Log[w] is li-elementary iff the reduced function Phi = A/w' has an
+ * all-equal Sigma-decomposition over the irreducible factors of w (equivalently
+ * Phi in K[w]): the candidate li arguments for a single logarithm are the powers
+ * w^k, so A/w' = Sum_k d_k w^(k-1) is exactly the membership Phi in K[w].  A
+ * Thm 4.4 PROOF of non-existence (cherry_sigma_decompose -> SIGMA_NONEXISTENT)
+ * means the integral is not li-elementary.  Gated to the pure essential form
+ * F = A/theta (A free of theta) with w squarefree; anything else declines
+ * (returns false = "not proven non-elementary"), never a wrong certificate. */
+bool rt_cherry_li_nonelem(Expr* f, Expr* x) {
+    Expr* w = rt_find_log_of_x(f, x);                    /* borrowed */
+    if (!w || !rt_kernel_simple(w, x) || !rt_is_poly(w, x) || rt_degree(w, x) < 1)
+        return false;
+
+    Expr* t = mk_sym("chli$dt");
+    Expr* rule = expr_new_function(mk_sym("Rule"),
+        (Expr*[]){ expr_new_function(mk_sym("Log"), (Expr*[]){ expr_copy(w) }, 1),
+                   expr_copy(t) }, 2);
+    Expr* F = rt_eval_own(expr_new_function(mk_sym("ReplaceAll"),
+        (Expr*[]){ expr_copy(f), rule }, 2));
+
+    bool verdict = false;
+    if (F && rt_free_of_head(F, "Log") && !rt_free_of_x(F, t)
+        && !rt_find_exp_of_x(F, x)) {
+        /* Essential form: A = Cancel[F theta] must be free of theta (F = A/theta). */
+        Expr* A = rt_eval1("Cancel", mk_times2(expr_copy(F), expr_copy(t)));
+        Expr* sfq = (A && rt_free_of_x(A, t))
+            ? rt_eval2("SquareFreeQ", expr_copy(w), expr_copy(x)) : NULL;
+        if (sfq && rt_is_true(sfq)) {
+            Expr* wp  = rt_eval2("D", expr_copy(w), expr_copy(x));
+            Expr* Phi = rt_eval1("Cancel",
+                mk_times2(expr_copy(A), mk_pow(expr_copy(wp), mk_int(-1))));   /* A / w' */
+            Expr* fl  = rt_eval_call("FactorList", (Expr*[]){ expr_copy(w) }, 1);
+            if (Phi && fl && rt_head_is(fl, "List")
+                && fl->data.function.arg_count >= 2) {
+                size_t nf = 0;
+                Expr** facs = malloc((fl->data.function.arg_count - 1) * sizeof(Expr*));
+                for (size_t i = 1; i < fl->data.function.arg_count; i++) {
+                    Expr* pr = fl->data.function.args[i];
+                    if (pr->type == EXPR_FUNCTION && rt_head_is(pr, "List")
+                        && pr->data.function.arg_count == 2)
+                        facs[nf++] = expr_copy(pr->data.function.args[0]);
+                }
+                if (nf > 0) {
+                    SigmaDecomp dd = cherry_sigma_decompose(Phi, facs, nf, x);
+                    verdict = (dd.status == SIGMA_NONEXISTENT);
+                    cherry_sigma_free(&dd);
+                }
+                for (size_t i = 0; i < nf; i++) expr_free(facs[i]);
+                free(facs);
+            }
+            if (Phi) expr_free(Phi);
+            if (fl) expr_free(fl);
+            if (wp) expr_free(wp);
+        }
+        if (sfq) expr_free(sfq);
+        if (A) expr_free(A);
+    }
+
+    if (F) expr_free(F);
+    expr_free(t);
+    return verdict;
 }

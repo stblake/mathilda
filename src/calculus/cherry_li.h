@@ -23,4 +23,11 @@
 /* gamma over C(x, Log[w])  ->  v + Sum_k d_k LogIntegral[w^k], or NULL. */
 Expr* rt_cherry_li(Expr* f, Expr* x);
 
+/* The li NON-existence decision (Cherry 1986 Thm 5.4 case a / Thm 4.4).  True iff
+ * f is the pure essential form A/Log[w] (w squarefree) whose reduced function
+ * Phi = A/w' PROVABLY has no all-equal Sigma-decomposition over the irreducible
+ * factors of w — i.e. INT f is not li-elementary (elementary + LogIntegral).
+ * The decision property behind Integrate`LiElementaryQ; f, x are borrowed. */
+bool rt_cherry_li_nonelem(Expr* f, Expr* x);
+
 #endif /* MATHILDA_CHERRY_LI_H */

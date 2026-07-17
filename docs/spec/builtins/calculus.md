@@ -1905,6 +1905,55 @@ elementary antiderivative, it emits the informational message
 `Integrate::nonelem` (Mathematica-style, to stderr). The return value is
 unchanged (the integral stays unevaluated); the message only explains *why*.
 
+## Integrate`SigmaDecomposition — Cherry 1986 Theorem 4.4
+
+`Integrate`SigmaDecomposition[Phi, {f1, ..., fm}, x]` gives the degree-1
+**all-equal restricted Σ-decomposition** of `Phi ∈ K(x)` over the distinct
+irreducibles `fi` (Cherry, *The Logarithmic Integral*, SIAM J. Comput. 1986,
+Thm 4.4). With the all-equal restriction `g(r) = (r, ..., r)` every term is
+`b_i · P^{r_i}` where `P = ∏_j f_j`, so this decides membership `Phi ∈ K[P]`.
+
+- Returns a list of `{b_i, {a_i1, ..., a_im}}` pairs with
+  `Phi = Σ_i b_i ∏_j f_j^{a_ij}` and `b_i` constant, or **`$Failed`** when the
+  Thm 4.4 termination (multiplicity extraction + the cross-factor consistency
+  check + increasing-case degree overshoot) **proves** no such decomposition
+  exists. This non-existence certificate is the decision property behind
+  `Integrate`LiElementaryQ`.
+
+```mathematica
+In[1]:= Integrate`SigmaDecomposition[x^2/2, {x - 1, x + 1}, x]   (* x^2/2 = 1/2 + 1/2 (x^2-1) *)
+Out[1]= {{1/2, {0, 0}}, {1/2, {1, 1}}}
+
+In[2]:= Integrate`SigmaDecomposition[x/2, {x - 1, x + 1}, x]     (* odd: no even-power form *)
+Out[2]= $Failed
+```
+
+## Integrate`LiElementaryQ — the logarithmic-integral decision
+
+`Integrate`LiElementaryQ[f, x]` decides whether `f` has an antiderivative that
+is **li-elementary** (elementary functions together with the logarithmic
+integral `LogIntegral`):
+
+- **True** — the Cherry 1986 li engine exhibits one (an existence proof);
+- **False** — for the pure essential form `A/Log[w]` (`w` squarefree) whose
+  reduced function `Φ = A/w'` provably has no Σ-decomposition over the
+  irreducible factors of `w` (Thm 5.4 case a → Thm 4.4);
+- **unevaluated** — outside the certified single-logarithm scope.
+
+Unlike `Risch`ElementaryIntegralQ`, this counts `LogIntegral` answers as
+integrable, so the two predicates deliberately disagree on li integrands.
+
+```mathematica
+In[1]:= Integrate`LiElementaryQ[x^3/Log[x^2 - 1], x]   (* = 1/2 li(x^2-1) + 1/2 li((x^2-1)^2) *)
+Out[1]= True
+
+In[2]:= Risch`ElementaryIntegralQ[x^3/Log[x^2 - 1], x] (* li is not elementary *)
+Out[2]= False
+
+In[3]:= Integrate`LiElementaryQ[x^2/Log[x^2 - 1], x]   (* Cherry Ex 5.2: not li-elementary *)
+Out[3]= False
+```
+
 ## Risch`RischDE — the Risch differential equation (Bronstein Chapter 6)
 
 `Risch`RischDE[f, g, x]` solves the Risch differential equation `D[y] + f y == g`

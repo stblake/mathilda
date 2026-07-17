@@ -487,6 +487,7 @@ set(COMMON_SRC
     ../src/calculus/cherry_ei.c
     ../src/calculus/cherry_li.c
     ../src/calculus/cherry_dilog.c
+    ../src/calculus/cherry_sigma_decomp.c
     ../src/calculus/risch_field.c
     ../src/calculus/risch_canonical.c
     ../src/calculus/risch_structure.c
@@ -1068,6 +1069,10 @@ add_test(NAME cherry_ei_tests COMMAND cherry_ei_tests)
 add_executable(cherry_li_tests test_cherry_li.c ${COMMON_SRC})
 target_include_directories(cherry_li_tests PRIVATE ../src ../src/calculus)
 add_test(NAME cherry_li_tests COMMAND cherry_li_tests)
+
+add_executable(cherry_sigma_tests test_cherry_sigma.c ${COMMON_SRC})
+target_include_directories(cherry_sigma_tests PRIVATE ../src)
+add_test(NAME cherry_sigma_tests COMMAND cherry_sigma_tests)
 
 add_executable(cherry_dilog_tests test_cherry_dilog.c ${COMMON_SRC})
 target_include_directories(cherry_dilog_tests PRIVATE ../src ../src/calculus)
