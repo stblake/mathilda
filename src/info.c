@@ -2877,6 +2877,13 @@ void info_init(void) {
         "ExpandDenominator leaves the numerator unexpanded.\n"
         "ExpandDenominator automatically threads over lists, as well as equations,\n"
         "\tinequalities, and logic functions.");
+    symtab_set_docstring("ExpandAll",
+        "ExpandAll[expr]\n\texpands out all products and integer powers in any part of expr.\n"
+        "ExpandAll[expr, patt]\n\tavoids expanding parts of expr that do not contain terms matching patt.\n"
+        "ExpandAll effectively maps Expand and ExpandDenominator onto every part of expr,\n"
+        "\tincluding function heads, arguments, exponents, and denominators.\n"
+        "ExpandAll automatically threads over lists, as well as equations,\n"
+        "\tinequalities, and logic functions.");
     symtab_set_docstring("Coefficient",
         "Coefficient[expr, form]\n"
         "\tgives the coefficient of form^1 in expr.  form is matched\n"

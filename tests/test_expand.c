@@ -84,12 +84,73 @@ void test_expand_flint_overflow() {
              "Plus[Times[p, r, Sin[x]], Times[q, r, Sin[x]], Times[p, s, Sin[x]], Times[q, s, Sin[x]]]");
 }
 
+/* ExpandAll: expand products and integer powers in EVERY part of expr. */
+void test_expand_all() {
+    /* Expands inside a transcendental argument AND expands the denominator,
+     * where a top-level Expand reaches neither. */
+    run_test("ExpandAll[1/(1+x)^3 + Sin[(1+x)^3]]",
+             "Plus[Power[Plus[1, Times[3, x], Times[3, Power[x, 2]], Power[x, 3]], -1], "
+             "Sin[Plus[1, Times[3, x], Times[3, Power[x, 2]], Power[x, 3]]]]");
+    /* Contrast: plain Expand leaves both untouched. */
+    run_test("Expand[1/(1+x)^3 + Sin[(1+x)^3]]",
+             "Plus[Power[Plus[1, x], -3], Sin[Power[Plus[1, x], 3]]]");
+
+    /* Numerator and denominator of a rational both expand, and the numerator
+     * distributes over the expanded denominator. */
+    run_test("ExpandAll[(x+z)^2/(x+y)^2]",
+             "Plus[Times[Power[x, 2], Power[Plus[Power[x, 2], Times[2, Times[x, y]], Power[y, 2]], -1]], "
+             "Times[2, Times[x, Power[Plus[Power[x, 2], Times[2, Times[x, y]], Power[y, 2]], -1], z]], "
+             "Times[Power[Plus[Power[x, 2], Times[2, Times[x, y]], Power[y, 2]], -1], Power[z, 2]]]");
+
+    /* Expand inside an exponent. */
+    run_test("ExpandAll[E^(I a (t-b))]",
+             "Power[E, Plus[Times[Complex[0, -1], Times[a, b]], Times[Complex[0, 1], Times[a, t]]]]");
+
+    /* Go into compound (non-symbol) heads. */
+    run_test("ExpandAll[((1+a) (1+b))[x]]",
+             "Plus[1, a, b, Times[a, b]][x]");
+
+    /* Two-arg ExpandAll: expand only subexpressions containing x. (y+z)^2 has
+     * no x and stays factored. */
+    run_test("ExpandAll[(f[(x+y)^2] + g[(y+z)^2])^2, x]",
+             "Plus[Power[f[Plus[Power[x, 2], Times[2, Times[x, y]], Power[y, 2]]], 2], "
+             "Power[g[Power[Plus[y, z], 2]], 2], "
+             "Times[2, Times[f[Plus[Power[x, 2], Times[2, Times[x, y]], Power[y, 2]]], g[Power[Plus[y, z], 2]]]]]");
+
+    /* Threads over lists, expanding a numerator power and a denominator power. */
+    run_test("ExpandAll[{(1+x)^2, 1/(1+y)^2}]",
+             "List[Plus[1, Times[2, x], Power[x, 2]], "
+             "Power[Plus[1, Times[2, y], Power[y, 2]], -1]]");
+
+    /* Threads over an equation, expanding both sides. */
+    run_test("ExpandAll[(1+x)^2 == 1/(1+y)^2]",
+             "Equal[Plus[1, Times[2, x], Power[x, 2]], "
+             "Power[Plus[1, Times[2, y], Power[y, 2]], -1]]");
+
+    /* Nested denominator inside a transcendental head. */
+    run_test("ExpandAll[Log[1/(a+b)^2]]",
+             "Log[Power[Plus[Power[a, 2], Times[2, Times[a, b]], Power[b, 2]], -1]]");
+
+    /* Atoms and already-expanded input are returned unchanged. */
+    run_test("ExpandAll[x]", "x");
+    run_test("ExpandAll[a + b + c]", "Plus[a, b, c]");
+    run_test("ExpandAll[7]", "7");
+
+    /* Pattern that matches nothing: whole expression left untouched. */
+    run_test("ExpandAll[(1+x)^2, y]", "Power[Plus[1, x], 2]");
+
+    /* Deeply nested: product inside a sum inside a function argument. */
+    run_test("ExpandAll[f[(a+b)(c+d)]]",
+             "f[Plus[Times[a, c], Times[b, c], Times[a, d], Times[b, d]]]");
+}
+
 int main() {
     symtab_init();
     core_init();
 
     TEST(test_expand);
     TEST(test_expand_flint_overflow);
+    TEST(test_expand_all);
 
     printf("All expand tests passed!\n");
     return 0;

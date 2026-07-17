@@ -7,6 +7,7 @@
 #include "flint_bridge.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 static bool expr_contains_patt(Expr* e, Expr* patt) {
     if (!patt) return true; // NULL pattern matches everything
@@ -695,6 +696,95 @@ Expr* expr_expand_denominator(Expr* e) {
     return expr_copy(e);
 }
 
+/* ------------------------------------------------------------------------- *
+ *  ExpandAll — expand products and integer powers in EVERY part of expr.
+ *
+ *  Where Expand only distributes at the top level, ExpandAll recurses into
+ *  every subexpression (function heads and arguments, exponents, and the bases
+ *  of denominators), applying Expand (and ExpandDenominator) at each node.  It
+ *  is a thin driver over expr_expand_impl: the recursion reaches the parts that
+ *  a top-level Expand leaves untouched, and expr_expand_impl does the actual
+ *  distribution once the children are already expanded.
+ * ------------------------------------------------------------------------- */
+static Expr* expr_expand_all_impl(Expr* e, Expr* patt, bool overflow_mode) {
+    if (!e) return NULL;
+    /* Two-arg ExpandAll[expr, patt]: leave parts free of patt untouched. */
+    if (patt && !expr_contains_patt(e, patt)) return expr_copy(e);
+    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+
+    size_t n = e->data.function.arg_count;
+    const char* head = (e->data.function.head->type == EXPR_SYMBOL)
+        ? e->data.function.head->data.symbol.name : "";
+
+    /* Denominator factor: Power[base, negative-integer].  Recurse into the base,
+     * expand it to the positive power, and keep the reciprocal, mirroring
+     * ExpandDenominator.  A surrounding Times later distributes the numerator
+     * across the expanded denominator.  patt is honoured by the recursive guard
+     * on the base (base free of patt returns unchanged). */
+    if (strcmp(head, "Power") == 0 && n == 2 &&
+        e->data.function.args[1]->type == EXPR_INTEGER &&
+        e->data.function.args[1]->data.integer < 0) {
+        Expr* base = e->data.function.args[0];
+        int64_t k = -e->data.function.args[1]->data.integer;   /* k > 0 */
+        Expr* ib = expr_expand_all_impl(base, patt, overflow_mode);
+        Expr* pos = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ ib, expr_new_integer(k) }, 2));
+        Expr* pos_ex = expr_expand_impl(pos, patt, overflow_mode);
+        expr_free(pos);
+        Expr* ret = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ pos_ex, expr_new_integer(-1) }, 2));
+        return ret;
+    }
+
+    /* Bottom-up: ExpandAll the head and every argument, rebuild, then Expand
+     * this level.  Inequality carries operator-symbol slots at odd indices that
+     * must be passed through untouched. */
+    bool is_ineq = (strcmp(head, "Inequality") == 0);
+    Expr* new_head = expr_expand_all_impl(e->data.function.head, patt, overflow_mode);
+    Expr** args = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        if (is_ineq && (i & 1u) == 1)
+            args[i] = expr_copy(e->data.function.args[i]);
+        else
+            args[i] = expr_expand_all_impl(e->data.function.args[i], patt, overflow_mode);
+    }
+    Expr* rebuilt = eval_and_free(expr_new_function(new_head, args, n));
+    free(args);
+
+    Expr* result = expr_expand_impl(rebuilt, patt, overflow_mode);
+    expr_free(rebuilt);
+    return result;
+}
+
+/* Internal ExpandAll (public API): leaves oversized powers factored. */
+Expr* expr_expand_all_patt(Expr* e, Expr* patt) {
+    return expr_expand_all_impl(e, patt, /*overflow_mode=*/false);
+}
+
+Expr* expr_expand_all(Expr* e) {
+    return expr_expand_all_impl(e, NULL, /*overflow_mode=*/false);
+}
+
+/* Print `ExpandAll::argt: ExpandAll called with N arguments; 1 or 2 arguments
+ * are expected.` to stderr, matching Mathematica's variable-arity diagnostic. */
+static Expr* expand_all_emit_argt(size_t argc) {
+    fprintf(stderr,
+            "ExpandAll::argt: ExpandAll called with %zu argument%s; "
+            "1 or 2 arguments are expected.\n",
+            argc, argc == 1 ? "" : "s");
+    return NULL;
+}
+
+/* User-facing ExpandAll[]: like Expand, an expansion too large to fit in memory
+ * yields Overflow[] rather than silently declining. */
+Expr* builtin_expand_all(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return expand_all_emit_argt(argc);
+    Expr* patt = (argc == 2) ? res->data.function.args[1] : NULL;
+    return expr_expand_all_impl(res->data.function.args[0], patt, /*overflow_mode=*/true);
+}
+
 Expr* builtin_expand_numerator(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     return expr_expand_numerator(res->data.function.args[0]);
@@ -712,4 +802,6 @@ void expand_init(void) {
     symtab_get_def("ExpandNumerator")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("ExpandDenominator", builtin_expand_denominator);
     symtab_get_def("ExpandDenominator")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("ExpandAll", builtin_expand_all);
+    symtab_get_def("ExpandAll")->attributes |= ATTR_PROTECTED;
 }
