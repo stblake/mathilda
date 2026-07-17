@@ -672,7 +672,7 @@ Expands out products and positive integer powers in an expression.
 - Works only on positive integer powers and distributes products over sums.
 - Threads over equations, inequalities, and lists.
 - Implements an efficient binary-splitting algorithm for distributing products and repeated squaring for powers.
-- `Expand[expr, patt]` leaves unexpanded any parts of `expr` that are free of the pattern `patt`.
+- `Expand[expr, patt]` leaves unexpanded any parts of `expr` that are free of the pattern `patt`. Inside a product, pattern-free factors are carried along as an unexpanded coefficient rather than being distributed.
 
 ```mathematica
 In[1]:= Expand[(x+3)(x+2)]
@@ -683,6 +683,9 @@ Out[2]= x^4 - 2 x^2 y^2 + y^4
 
 In[3]:= Expand[(x+1)^2 + (y+1)^2, x]
 Out[3]= 1 + 2x + x^2 + (1+y)^2
+
+In[4]:= Expand[(a+b)(x[1]+x[2])^2, x[_]]
+Out[4]= (a+b) x[1]^2 + 2 (a+b) x[1] x[2] + (a+b) x[2]^2
 ```
 
 ## ExpandNumerator

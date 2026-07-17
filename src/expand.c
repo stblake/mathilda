@@ -145,14 +145,67 @@ Expr* expr_expand_patt(Expr* e, Expr* patt) {
     if (strcmp(head, "Times") == 0) {
         size_t count = e->data.function.arg_count;
         if (count == 0) return expr_new_integer(1);
-        Expr** args = malloc(sizeof(Expr*) * count);
+
+        /* Two-arg Expand[expr, patt] leaves parts free of patt unexpanded.
+         * Partition the factors: pattern-free factors are carried as an
+         * atomic coefficient (never distributed into, never expanded), and
+         * only pattern-containing factors are expanded and multiplied out.
+         * With patt == NULL every factor is active (expr_contains_patt returns
+         * true), recovering plain single-arg Expand. */
+        Expr** active = malloc(sizeof(Expr*) * count);
+        Expr** freef  = malloc(sizeof(Expr*) * count);
+        size_t na = 0, nf = 0;
         for (size_t i = 0; i < count; i++) {
-            args[i] = expr_expand_patt(e->data.function.args[i], patt);
+            Expr* arg = e->data.function.args[i];
+            if (patt && !expr_contains_patt(arg, patt)) {
+                freef[nf++] = expr_copy(arg);
+            } else {
+                active[na++] = expr_expand_patt(arg, patt);
+            }
         }
-        Expr* res = multiply_all(args, 0, count - 1);
-        for (size_t i = 0; i < count; i++) expr_free(args[i]);
-        free(args);
-        return res;
+
+        Expr* active_result = (na == 0) ? expr_new_integer(1)
+                                        : multiply_all(active, 0, na - 1);
+        for (size_t i = 0; i < na; i++) expr_free(active[i]);
+        free(active);
+
+        if (nf == 0) {
+            free(freef);
+            return active_result;
+        }
+
+        /* Build the unexpanded free coefficient (a single Times of the
+         * pattern-free factors). */
+        Expr* free_coeff;
+        if (nf == 1) {
+            free_coeff = freef[0]; /* take ownership */
+        } else {
+            free_coeff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), freef, nf));
+        }
+        free(freef);
+
+        /* Distribute the free coefficient over each summand of the expanded
+         * active part, keeping the coefficient itself unexpanded. */
+        Expr* ret;
+        if (active_result->type == EXPR_FUNCTION
+            && active_result->data.function.head->type == EXPR_SYMBOL
+            && active_result->data.function.head->data.symbol.name == SYM_Plus) {
+            size_t k = active_result->data.function.arg_count;
+            Expr** terms = malloc(sizeof(Expr*) * k);
+            for (size_t i = 0; i < k; i++) {
+                Expr* t_args[2] = { expr_copy(free_coeff),
+                                    expr_copy(active_result->data.function.args[i]) };
+                terms[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), t_args, 2));
+            }
+            ret = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), terms, k));
+            free(terms);
+        } else {
+            Expr* t_args[2] = { expr_copy(free_coeff), expr_copy(active_result) };
+            ret = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), t_args, 2));
+        }
+        expr_free(free_coeff);
+        expr_free(active_result);
+        return ret;
     }
 
     if (strcmp(head, "Power") == 0 && e->data.function.arg_count == 2) {

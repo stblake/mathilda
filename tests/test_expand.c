@@ -41,6 +41,13 @@ void test_expand() {
     run_test("Expand[(x+1)^2 + (y+1)^2, y]", "Plus[1, Power[Plus[1, x], 2], Times[2, y], Power[y, 2]]");
     run_test("Expand[(x+1)^2 + (y+1)^2, _Symbol]", "Plus[2, Times[2, x], Power[x, 2], Times[2, y], Power[y, 2]]");
     run_test("Expand[(x^2+1)^2 + (y+1)^2, x^2]", "Plus[1, Times[2, Power[x, 2]], Power[x, 4], Power[Plus[1, y], 2]]");
+
+    // Two-arg Expand across a product: pattern-free factors stay unexpanded and
+    // ride along as an atomic coefficient (regression for the (a+b) distribution bug).
+    run_test("Expand[(a+b)(x+y)^2, x]", "Plus[Times[Plus[a, b], Power[x, 2]], Times[2, Times[Plus[a, b], x, y]], Times[Plus[a, b], Power[y, 2]]]");
+    run_test("Expand[(x+1)^2 (y+1)^2, x]", "Plus[Power[Plus[1, y], 2], Times[2, Times[x, Power[Plus[1, y], 2]]], Times[Power[x, 2], Power[Plus[1, y], 2]]]");
+    // A pattern-free numeric coefficient still distributes.
+    run_test("Expand[3 (x+y), x]", "Plus[Times[3, x], Times[3, y]]");
 }
 
 int main() {
