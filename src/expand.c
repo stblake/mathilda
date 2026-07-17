@@ -4,6 +4,7 @@
 #include "arithmetic.h"
 #include "match.h"
 #include "sym_names.h"
+#include "flint_bridge.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -79,6 +80,57 @@ static Expr* multiply_all(Expr** args, size_t start, size_t end) {
     return res;
 }
 
+/* Multiply the already-expanded active factors of a Times.  When `can_flint`
+ * and at least two factors are polynomials over Q, their sub-product is handed
+ * to FLINT (packed fmpq_mpoly multiply) in one shot and only the remaining
+ * non-polynomial factors are multiplied with the generic tree multiplier —
+ * so a product like Log[x] (1+y)^45 (1+z)^45 (1+w)^45 no longer distributes the
+ * three dense polynomials term-by-term.  The factors are borrowed (freed by the
+ * caller); the returned Expr is fresh. */
+static Expr* multiply_active(Expr** active, size_t na, bool can_flint) {
+    if (na == 0) return expr_new_integer(1);
+    if (na == 1) return expr_copy(active[0]);
+
+    if (can_flint) {
+        Expr** poly = malloc(sizeof(Expr*) * na);
+        Expr** rest = malloc(sizeof(Expr*) * na);
+        size_t np = 0, nr = 0;
+        for (size_t i = 0; i < na; i++) {
+            if (flint_is_polynomial_over_q(active[i])) poly[np++] = active[i];
+            else                                       rest[nr++] = active[i];
+        }
+        if (np >= 2) {
+            /* Raw (unevaluated) Times of the polynomial factors: to_mpoly reads
+             * the product structure directly, so evaluating it here — which
+             * would invoke the generic multiply we are trying to avoid — is
+             * neither needed nor wanted. */
+            Expr** cp = malloc(sizeof(Expr*) * np);
+            for (size_t i = 0; i < np; i++) cp[i] = expr_copy(poly[i]);
+            Expr* tmp = expr_new_function(expr_new_symbol(SYM_Times), cp, np);
+            free(cp);
+            Expr* P = flint_expand_polynomial(tmp);
+            expr_free(tmp);
+            if (P) {
+                Expr* res;
+                if (nr == 0) {
+                    res = P;
+                } else {
+                    Expr** all = malloc(sizeof(Expr*) * (nr + 1));
+                    all[0] = P;
+                    for (size_t i = 0; i < nr; i++) all[i + 1] = rest[i];
+                    res = multiply_all(all, 0, nr);
+                    free(all);
+                    expr_free(P);
+                }
+                free(poly); free(rest);
+                return res;
+            }
+        }
+        free(poly); free(rest);
+    }
+    return multiply_all(active, 0, na - 1);
+}
+
 static Expr* power_expand(Expr* base, int64_t exp) {
     if (exp == 0) return expr_new_integer(1);
     if (exp == 1) return expr_copy(base);
@@ -104,13 +156,201 @@ static Expr* power_expand(Expr* base, int64_t exp) {
     return res;
 }
 
-Expr* expr_expand_patt(Expr* e, Expr* patt) {
+/* Two ceilings on the estimated monomial count of an expanded integer power.
+ * Neither is a mathematical cap on degree or exponent: univariate and
+ * low-dimensional expansions of ANY degree pass both, because the estimate
+ * below is exact for them.  They differ only in what happens to a genuinely
+ * high-dimensional multinomial that would exhaust memory:
+ *
+ *   EXPAND_FACTOR_CAP   — internal callers (Together, Apart, Cancel, the
+ *     integrators, linear algebra, ...) reach `expr_expand` as a helper and
+ *     need a *usable* expression back.  Above this modest ceiling the power is
+ *     simply left factored, which is a valid, correct input for those
+ *     algorithms and avoids needless combinatorial work.
+ *
+ *   EXPAND_OVERFLOW_CAP — the user-facing `Expand` never declines: it expands
+ *     everything that plausibly fits in memory (each result term costs a few
+ *     hundred bytes, so tens of millions of terms approach a multi-GB tree).
+ *     Only beyond this genuine memory ceiling does it yield `Overflow[]`
+ *     instead of an answer.  Heuristic and machine-independent; tune if needed. */
+#define EXPAND_FACTOR_CAP   2.0e5
+#define EXPAND_OVERFLOW_CAP 5.0e7
+
+/* An upper bound on the size of an expanded (sub)expression, as a Newton-box
+ * estimate: `terms` bounds the monomial count, and `deg` records, per distinct
+ * kernel (indeterminate), the maximum total degree that kernel reaches.  Any
+ * atom that is not a rational coefficient — a symbol, or an opaque head such as
+ * Sin[x] or x^(1/2) — is treated as a kernel of degree 1, so the estimate is a
+ * true upper bound for ANY expression, not just polynomials over Q. */
+typedef struct {
+    double     terms;
+    struct KDeg { Expr* kernel; long deg; } *deg;
+    size_t     n, cap;
+} SizeEst;
+
+static void se_free(SizeEst* s) { free(s->deg); s->deg = NULL; s->n = s->cap = 0; }
+
+/* Record degree `d` for `kernel`, combining with any existing entry via `f`
+ * (fmax for Plus alternatives, addition for Times/Power products). */
+static void se_put(SizeEst* s, Expr* kernel, long d, long (*combine)(long, long)) {
+    for (size_t i = 0; i < s->n; i++) {
+        if (expr_eq(s->deg[i].kernel, kernel)) { s->deg[i].deg = combine(s->deg[i].deg, d); return; }
+    }
+    if (s->n == s->cap) { s->cap = s->cap ? s->cap * 2 : 8; s->deg = realloc(s->deg, s->cap * sizeof(*s->deg)); }
+    s->deg[s->n].kernel = kernel;
+    s->deg[s->n].deg = d;
+    s->n++;
+}
+static long comb_max(long a, long b) { return a > b ? a : b; }
+static long comb_add(long a, long b) { return a + b; }
+
+/* Bounding-box monomial count prod_kernel (deg + 1), clamped at `cap`. */
+static double se_box(const SizeEst* s, double cap) {
+    double b = 1.0;
+    for (size_t i = 0; i < s->n && b <= cap; i++) b *= (double)s->deg[i].deg + 1.0;
+    return b;
+}
+
+static SizeEst estimate_terms(const Expr* e, double cap);
+
+/* Term bound for base^n given the base's estimate `c`: the tighter of the
+ * multinomial count C(n + m - 1, m - 1) (m = base term count, exact when the
+ * base terms are independent) and the bounding box (exact for a true
+ * polynomial).  Fills `r`'s degree map with the base degrees scaled by n. */
+static double se_power(const SizeEst* c, int64_t n, SizeEst* r, double cap) {
+    double multinom = 1.0;                        /* C(n + m - 1, m - 1) */
+    for (double i = 1.0; i <= c->terms - 1.0 && multinom <= cap; i += 1.0)
+        multinom *= (double)((double)n + i) / i;
+    for (size_t j = 0; j < c->n; j++)
+        se_put(r, c->deg[j].kernel, (long)n * c->deg[j].deg, comb_max);
+    double box = se_box(r, cap);
+    return multinom < box ? multinom : box;
+}
+
+/* Recursively bound the number of monomials in the fully expanded `e`.  Always
+ * returns a valid upper bound: collection during real expansion only reduces
+ * the count.  The `cap` clamps intermediate products so the estimate is
+ * overflow-safe even for astronomically large results. */
+static SizeEst estimate_terms(const Expr* e, double cap) {
+    SizeEst r = { 1.0, NULL, 0, 0 };
+    if (!e) return r;
+
+    switch (e->type) {
+        case EXPR_INTEGER: case EXPR_REAL: case EXPR_BIGINT:
+            return r;                                  /* numeric coefficient */
+        case EXPR_SYMBOL:
+            se_put(&r, (Expr*)e, 1, comb_max);
+            return r;
+        case EXPR_FUNCTION:
+            break;
+        default:
+            se_put(&r, (Expr*)e, 1, comb_max);         /* opaque atom */
+            return r;
+    }
+
+    const char* h = (e->data.function.head->type == EXPR_SYMBOL)
+        ? e->data.function.head->data.symbol.name : "";
+    size_t n = e->data.function.arg_count;
+
+    if (strcmp(h, "Rational") == 0 || strcmp(h, "Complex") == 0)
+        return r;                                      /* numeric coefficient */
+
+    if (strcmp(h, "Plus") == 0) {
+        double sum = 0.0;
+        for (size_t i = 0; i < n; i++) {
+            SizeEst c = estimate_terms(e->data.function.args[i], cap);
+            sum += c.terms; if (sum > cap) sum = cap + 1.0;
+            for (size_t j = 0; j < c.n; j++) se_put(&r, c.deg[j].kernel, c.deg[j].deg, comb_max);
+            se_free(&c);
+        }
+        double box = se_box(&r, cap);
+        r.terms = sum < box ? sum : box;
+        return r;
+    }
+
+    if (strcmp(h, "Times") == 0) {
+        double prod = 1.0;
+        for (size_t i = 0; i < n; i++) {
+            SizeEst c = estimate_terms(e->data.function.args[i], cap);
+            prod *= c.terms; if (prod > cap) prod = cap + 1.0;
+            for (size_t j = 0; j < c.n; j++) se_put(&r, c.deg[j].kernel, c.deg[j].deg, comb_add);
+            se_free(&c);
+        }
+        double box = se_box(&r, cap);
+        r.terms = prod < box ? prod : box;
+        return r;
+    }
+
+    if (strcmp(h, "Power") == 0 && n == 2) {
+        const Expr* ex = e->data.function.args[1];
+        if (ex->type == EXPR_INTEGER && ex->data.integer > 0) {
+            SizeEst c = estimate_terms(e->data.function.args[0], cap);
+            r.terms = se_power(&c, ex->data.integer, &r, cap);
+            se_free(&c);
+            return r;
+        }
+        if (ex->type == EXPR_INTEGER && ex->data.integer == 0)
+            return r;                                  /* x^0 -> 1 */
+        /* negative / fractional / symbolic exponent: opaque kernel */
+        se_put(&r, (Expr*)e, 1, comb_max);
+        return r;
+    }
+
+    /* any other head (Sin, Log, ...): opaque kernel */
+    se_put(&r, (Expr*)e, 1, comb_max);
+    return r;
+}
+
+/* Upper bound on the expanded monomial count of `e`, clamped at `cap`. */
+static double estimate_expand_terms(const Expr* e, double cap) {
+    SizeEst s = estimate_terms(e, cap);
+    double t = s.terms;
+    se_free(&s);
+    return t;
+}
+
+/* Core expander.  `overflow_mode` selects the behavior for a power whose
+ * expansion is estimated too large: user-facing Expand (true) uses the memory
+ * ceiling and yields Overflow[]; internal helpers (false) use the modest factor
+ * ceiling and leave the power factored.  The flag is threaded through every
+ * recursive call so an oversized subexpression is handled consistently; because
+ * Plus/Times absorb Overflow[], an oversized part collapses the whole tree to
+ * Overflow[] in user-facing mode. */
+static Expr* expr_expand_impl(Expr* e, Expr* patt, bool overflow_mode) {
     if (!e) return NULL;
     if (patt && !expr_contains_patt(e, patt)) return expr_copy(e);
 
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
     const char* head = e->data.function.head->type == EXPR_SYMBOL ? e->data.function.head->data.symbol.name : "";
+
+    /* Fast path: for a plain (single-argument) Expand of an arithmetic head,
+     * size-check the result and hand the whole expansion to FLINT, which
+     * distributes and collects in packed fmpq_mpoly arithmetic — vastly faster
+     * than the generic Expr multiply on dense, high-degree inputs.  The estimate
+     * is an upper bound on the monomial count:
+     *   - above the ceiling, user-facing Expand yields Overflow[] (it never
+     *     silently declines); an internal helper instead falls through to the
+     *     classical path, which leaves an oversized power factored — a valid
+     *     input for its caller.
+     *   - within the ceiling, try FLINT; if it declines (not a polynomial over
+     *     Q — a transcendental head, symbolic exponent, inexact coefficient),
+     *     fall through to the classical distributor, which still expands the
+     *     polynomial parts of a mixed expression via this same fast path on
+     *     recursion. */
+    double cap = overflow_mode ? EXPAND_OVERFLOW_CAP : EXPAND_FACTOR_CAP;
+    if (patt == NULL &&
+        (strcmp(head, "Plus") == 0 || strcmp(head, "Times") == 0 || strcmp(head, "Power") == 0)) {
+        double est = estimate_expand_terms(e, cap);
+        if (est > cap) {
+            if (overflow_mode)
+                return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
+            /* internal mode: fall through to leave oversized powers factored */
+        } else if (flint_bridge_available()) {
+            Expr* fast = flint_expand_polynomial(e);
+            if (fast) return fast;
+        }
+    }
 
     // Thread over lists, equations, inequalities, logic. Inequality has
     // operator-symbol slots at odd indices that must be passed through.
@@ -124,7 +364,7 @@ Expr* expr_expand_patt(Expr* e, Expr* patt) {
             if (is_ineq && (i & 1u) == 1) {
                 args[i] = expr_copy(e->data.function.args[i]);
             } else {
-                args[i] = expr_expand_patt(e->data.function.args[i], patt);
+                args[i] = expr_expand_impl(e->data.function.args[i], patt, overflow_mode);
             }
         }
         Expr* res = eval_and_free(expr_new_function(expr_copy(e->data.function.head), args, e->data.function.arg_count));
@@ -135,7 +375,7 @@ Expr* expr_expand_patt(Expr* e, Expr* patt) {
     if (strcmp(head, "Plus") == 0) {
         Expr** args = malloc(sizeof(Expr*) * e->data.function.arg_count);
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
-            args[i] = expr_expand_patt(e->data.function.args[i], patt);
+            args[i] = expr_expand_impl(e->data.function.args[i], patt, overflow_mode);
         }
         Expr* res = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), args, e->data.function.arg_count));
         free(args);
@@ -160,12 +400,16 @@ Expr* expr_expand_patt(Expr* e, Expr* patt) {
             if (patt && !expr_contains_patt(arg, patt)) {
                 freef[nf++] = expr_copy(arg);
             } else {
-                active[na++] = expr_expand_patt(arg, patt);
+                active[na++] = expr_expand_impl(arg, patt, overflow_mode);
             }
         }
 
-        Expr* active_result = (na == 0) ? expr_new_integer(1)
-                                        : multiply_all(active, 0, na - 1);
+        /* FLINT the polynomial sub-product only in the plain single-argument
+         * case (patt == NULL), where the whole-expression size was already
+         * bounded by the top-level fast path; the two-argument selective Expand
+         * keeps the generic multiplier. */
+        Expr* active_result = multiply_active(active, na,
+                                              patt == NULL && flint_bridge_available());
         for (size_t i = 0; i < na; i++) expr_free(active[i]);
         free(active);
 
@@ -213,32 +457,25 @@ Expr* expr_expand_patt(Expr* e, Expr* patt) {
         Expr* exp = e->data.function.args[1];
         if (exp->type == EXPR_INTEGER && exp->data.integer > 0) {
             int64_t n = exp->data.integer;
-            Expr* exp_base = expr_expand_patt(base, patt);
-            /* Gate on the ESTIMATED result size, not a flat exponent cap: an
-             * m-term base raised to n expands to C(n+m-1, m-1) terms.  For a
-             * binomial (m = 2) that is just n + 1, so (x + 2)^102 (needed by the
-             * high-degree Risch denominators) expands cheaply, while a 5-term
-             * base at n = 100 (~4.5M terms) stays factored.  Replaces the former
-             * arbitrary `n < 100` ceiling. */
-            long m = 1;
-            if (exp_base->type == EXPR_FUNCTION
-                && exp_base->data.function.head->type == EXPR_SYMBOL
-                && strcmp(exp_base->data.function.head->data.symbol.name, "Plus") == 0)
-                m = (long)exp_base->data.function.arg_count;
-            bool do_expand = (m <= 1);
-            if (!do_expand) {
-                double est = 1.0;                 /* C(n+m-1, m-1), overflow-safe */
-                for (long i = 1; i <= m - 1 && est <= 2.0e5; i++)
-                    est *= (double)(n + i) / (double)i;
-                do_expand = (est <= 2.0e5);
-            }
-            if (do_expand) {
+            Expr* exp_base = expr_expand_impl(base, patt, overflow_mode);
+            /* Reached only when the top-level FLINT fast path did not handle
+             * this power (FLINT absent, a non-polynomial base, or a
+             * pattern-restricted Expand).  Gate on the estimated result size and
+             * fall back to the generic distributor. */
+            double pcap = overflow_mode ? EXPAND_OVERFLOW_CAP : EXPAND_FACTOR_CAP;
+            SizeEst be = estimate_terms(exp_base, pcap);
+            SizeEst pe = { 0.0, NULL, 0, 0 };
+            double est = se_power(&be, n, &pe, pcap);
+            se_free(&be); se_free(&pe);
+            if (est <= pcap) {
                 Expr* res = power_expand(exp_base, n);
                 expr_free(exp_base);
                 return res;
             }
             expr_free(exp_base);
-            return expr_copy(e);
+            if (overflow_mode)
+                return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
+            return expr_copy(e); /* internal: leave factored */
         }
         // For negative integer or non-integer power, we still don't go into subexpressions
         return expr_copy(e);
@@ -248,15 +485,24 @@ Expr* expr_expand_patt(Expr* e, Expr* patt) {
     return expr_copy(e);
 }
 
-Expr* expr_expand(Expr* e) {
-    return expr_expand_patt(e, NULL);
+/* Internal expander (public API).  Leaves an oversized power factored rather
+ * than yielding Overflow[], so callers such as Together/Cancel/Apart and the
+ * integrators always receive a usable expression. */
+Expr* expr_expand_patt(Expr* e, Expr* patt) {
+    return expr_expand_impl(e, patt, /*overflow_mode=*/false);
 }
 
+Expr* expr_expand(Expr* e) {
+    return expr_expand_impl(e, NULL, /*overflow_mode=*/false);
+}
+
+/* User-facing Expand[]: never silently declines — an expansion too large to fit
+ * in memory yields Overflow[]. */
 Expr* builtin_expand(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     Expr* patt = NULL;
     if (res->data.function.arg_count == 2) patt = res->data.function.args[1];
-    Expr* ret = expr_expand_patt(res->data.function.args[0], patt);
+    Expr* ret = expr_expand_impl(res->data.function.args[0], patt, /*overflow_mode=*/true);
     return ret;
 }
 

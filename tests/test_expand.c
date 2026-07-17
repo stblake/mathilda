@@ -50,12 +50,47 @@ void test_expand() {
     run_test("Expand[3 (x+y), x]", "Plus[Times[3, x], Times[3, y]]");
 }
 
+/* FLINT-accelerated large polynomial expansion and Overflow[] gating. */
+void test_expand_flint_overflow() {
+    /* Dense univariate power: the multinomial term count C(344,3) ~ 6.7M would
+     * once have refused this, but the Newton-box estimate sees a degree-5797
+     * univariate (<= 5798 terms) and FLINT expands it. Assert structural facts
+     * rather than the 5758-term fullform. */
+    run_test("Length[Expand[(1 + x + 5 x^3 + 8 x^17)^341]]", "5758");
+    run_test("Exponent[Expand[(1 + x + 5 x^3 + 8 x^17)^341], x]", "5797");
+    run_test("Coefficient[Expand[(1 + x + 5 x^3 + 8 x^17)^341], x, 0]", "1");
+
+    /* FLINT result matches the classical binomial expansion exactly. */
+    run_test("Expand[(x + 2)^60] === Sum[Binomial[60, k] x^k 2^(60 - k), {k, 0, 60}]", "True");
+
+    /* Genuine high-dimensional blow-up: never silently declined, yields
+     * Overflow[], which propagates through Plus. */
+    run_test("Expand[(a + b + c + d + e + f + g)^60]", "Overflow[]");
+    run_test("Expand[(a + b + c + d + e + f + g)^60 + x^2]", "Overflow[]");
+
+    /* Mixed poly/non-poly: the polynomial part expands, the transcendental
+     * kernel is preserved. */
+    run_test("Expand[(1 + x)^2 + Sin[y]^2]",
+             "Plus[1, Times[2, x], Power[x, 2], Power[Sin[y], 2]]");
+
+    /* Partitioned Times: a non-polynomial factor forces the whole-product FLINT
+     * decline, but the polynomial sub-product is still expanded via FLINT and
+     * only the transcendental factor is distributed generically. Verify the
+     * result equals the reference (order-independent), including a large
+     * intermediate that would be slow to distribute term-by-term. */
+    run_test("Expand[Log[x] (1 + y)^20 (1 - y)^20 - Log[x] (1 - y^2)^20] === 0", "True");
+    run_test("Expand[Sin[x] (p + q) (r + s)] === Expand[Sin[x] Expand[(p + q) (r + s)]]", "True");
+    run_test("Expand[Sin[x] (p + q) (r + s)]",
+             "Plus[Times[p, r, Sin[x]], Times[q, r, Sin[x]], Times[p, s, Sin[x]], Times[q, s, Sin[x]]]");
+}
+
 int main() {
     symtab_init();
     core_init();
-    
+
     TEST(test_expand);
-    
+    TEST(test_expand_flint_overflow);
+
     printf("All expand tests passed!\n");
     return 0;
 }

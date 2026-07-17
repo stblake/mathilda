@@ -671,7 +671,28 @@ Expands out products and positive integer powers in an expression.
 - `Protected`.
 - Works only on positive integer powers and distributes products over sums.
 - Threads over equations, inequalities, and lists.
-- Implements an efficient binary-splitting algorithm for distributing products and repeated squaring for powers.
+- **Polynomials over the rationals are expanded through FLINT** (packed
+  `fmpq_mpoly` arithmetic), which distributes and collects like terms orders of
+  magnitude faster than the generic tree multiplier on dense, high-degree
+  inputs — e.g. `(1 + x + 5 x^3 + 8 x^17)^341` (degree 5797, 5758 terms) expands
+  in a few hundredths of a second. Non-polynomial parts (transcendental heads,
+  symbolic/fractional exponents, inexact coefficients) fall back to the generic
+  binary-splitting distributor and repeated-squaring power expander.
+- In a **mixed product** — one where a non-polynomial factor (e.g. `Log[x]`)
+  would otherwise force the whole product onto the generic path — the
+  polynomial-over-`Q` factors are still multiplied together through FLINT, and
+  only the non-polynomial factors are distributed generically. So
+  `Expand[Log[x] (1+y)^300 (1-y)^300]` collapses the two degree-300 factors in
+  packed arithmetic rather than distributing 90 601 terms by hand.
+- `ExpandNumerator` and `ExpandDenominator` inherit the same acceleration (they
+  expand their numerator/denominator polynomial through the same path).
+- **Never silently declines.** `Expand` expands anything that fits in memory; an
+  expansion whose (estimated) size exceeds the memory ceiling returns
+  `Overflow[]` rather than leaving the expression unevaluated. The size estimate
+  is a Newton-box upper bound — the tighter of the multinomial term count and
+  the per-variable degree box — so univariate and low-dimensional expansions of
+  *any* degree are recognised as cheap and always run; only a genuinely
+  high-dimensional combinatorial blow-up (e.g. `(a+b+c+d+e+f+g)^60`) overflows.
 - `Expand[expr, patt]` leaves unexpanded any parts of `expr` that are free of the pattern `patt`. Inside a product, pattern-free factors are carried along as an unexpanded coefficient rather than being distributed.
 
 ```mathematica
@@ -686,6 +707,12 @@ Out[3]= 1 + 2x + x^2 + (1+y)^2
 
 In[4]:= Expand[(a+b)(x[1]+x[2])^2, x[_]]
 Out[4]= (a+b) x[1]^2 + 2 (a+b) x[1] x[2] + (a+b) x[2]^2
+
+In[5]:= Length[Expand[(1 + x + 5 x^3 + 8 x^17)^341]]
+Out[5]= 5758
+
+In[6]:= Expand[(a+b+c+d+e+f+g)^60]
+Out[6]= Overflow[]
 ```
 
 ## ExpandNumerator

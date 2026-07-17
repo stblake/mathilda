@@ -301,6 +301,40 @@ static Expr* mpoly_to_expr(const fmpq_mpoly_t P, const fmpq_mpoly_ctx_t ctx,
 
 int flint_bridge_available(void) { return 1; }
 
+int flint_is_polynomial_over_q(const Expr* e) {
+    if (!e) return 0;
+    VarSet vs;
+    memset(&vs, 0, sizeof vs);
+    int ok = collect_vars(e, &vs);   /* accepts numeric constants (count 0) too */
+    varset_free(&vs);
+    return ok;
+}
+
+Expr* flint_expand_polynomial(const Expr* e) {
+    if (!e) return NULL;
+
+    VarSet vs;
+    memset(&vs, 0, sizeof vs);
+    if (!collect_vars(e, &vs)) { varset_free(&vs); return NULL; }
+    if (vs.count == 0) { varset_free(&vs); return NULL; } /* numeric: nothing to expand */
+    qsort(vs.names, vs.count, sizeof(char*), cmp_str);
+
+    fmpq_mpoly_ctx_t ctx;
+    fmpq_mpoly_ctx_init(ctx, (slong)vs.count, ORD_LEX);
+
+    fmpq_mpoly_t P;
+    fmpq_mpoly_init(P, ctx);
+
+    Expr* out = NULL;
+    if (to_mpoly(e, P, ctx, &vs))
+        out = mpoly_to_expr(P, ctx, &vs);
+
+    fmpq_mpoly_clear(P, ctx);
+    fmpq_mpoly_ctx_clear(ctx);
+    varset_free(&vs);
+    return out;
+}
+
 /* Shared core: compute the multivariate GCD of a, b over Q[vars]. When
  * `normalize` is false the raw FLINT (monic) GCD is returned; when true the
  * result is rescaled to the primitive-integer, positive-leading associate
@@ -3963,6 +3997,8 @@ void flint_bridge_init(void) {
 
 int   flint_bridge_available(void) { return 0; }
 Expr* flint_multivariate_gcd(const Expr* a, const Expr* b) { (void)a; (void)b; return NULL; }
+Expr* flint_expand_polynomial(const Expr* e) { (void)e; return NULL; }
+int   flint_is_polynomial_over_q(const Expr* e) { (void)e; return 0; }
 Expr* flint_algebraic_field_normalize(const Expr* e) { (void)e; return NULL; }
 Expr* flint_algebraic_field_canonical(const Expr* e) { (void)e; return NULL; }
 Expr* flint_algebraic_field_together(const Expr* e) { (void)e; return NULL; }

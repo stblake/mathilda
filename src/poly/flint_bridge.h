@@ -62,6 +62,30 @@ Expr* flint_multivariate_gcd_normalized(const Expr* a, const Expr* b);
 Expr* flint_multivariate_divexact(const Expr* a, const Expr* b);
 
 /*
+ * Fully expand a polynomial over Q[x_1..x_n] to its distributed normal form
+ * (Plus of Times[coeff, x_i^e_i, ...] monomials), via fmpq_mpoly.  This is the
+ * accelerator behind `Expand`: converting the tree to fmpq_mpoly does the
+ * multiplication and collection in packed FLINT arithmetic — orders of
+ * magnitude faster than the generic Expr schoolbook multiply on dense,
+ * high-degree inputs (e.g. (1 + x + 5 x^3 + 8 x^17)^341).
+ *
+ * Returns a fresh Expr the caller owns, or NULL — leaving the caller on the
+ * classical path — when FLINT is absent, when `e` is purely numeric (nothing to
+ * expand), or when `e` is not a polynomial over Q in recognisable variables (an
+ * inexact real, a negative/fractional/symbolic power, or a transcendental head
+ * such as Sin/Log).  Never mutates its argument.  The caller is responsible for
+ * bounding the result size beforehand; this routine will build whatever the
+ * input demands. */
+Expr* flint_expand_polynomial(const Expr* e);
+
+/* True (1) when `e` is a polynomial over Q in recognisable variables — i.e. the
+ * kind of expression flint_expand_polynomial accepts (built from integers,
+ * rationals, symbols, Plus/Times, and non-negative integer Power). Numeric
+ * constants qualify. Lets a caller partition a product into the factors FLINT
+ * can multiply and the rest. Always 0 without FLINT. */
+int flint_is_polynomial_over_q(const Expr* e);
+
+/*
  * Native base-field Risch differential-equation solver for the exponential
  * tower, over Q(xvar): solves  Dq + f q = g  (D = d/d(xvar)) for the solution
  * y, where f is a polynomial (f = i·u' for e^u, u a polynomial in xvar, so
