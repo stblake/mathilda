@@ -38,7 +38,22 @@ else
   READLINE_LIBS = -lreadline
 endif
 
-LDFLAGS = $(READLINE_LIBS) -L/usr/local/lib -lgmp -lm
+# POSIX threads accelerate the element-wise NDArray kernels (Erf, Sin, Exp, ...)
+# by splitting large-array maps across cores. Available on macOS and Linux; the
+# -pthread driver flag sets the right defines and links libpthread on both. Build
+# with USE_THREADS=0 to force the serial path (e.g. thread-less platforms).
+USE_THREADS ?= 1
+ifeq ($(BUILD_PLATFORM),Windows)
+  override USE_THREADS := 0
+endif
+ifeq ($(USE_THREADS),1)
+  CFLAGS  += -DMATHILDA_THREADS -pthread
+  THREAD_LIBS = -pthread
+else
+  THREAD_LIBS =
+endif
+
+LDFLAGS = $(READLINE_LIBS) $(THREAD_LIBS) -L/usr/local/lib -lgmp -lm
 
 # Site-specific link libraries, appended verbatim to the link line. Some
 # distributions need extra libraries the autodetection can't infer — e.g. on

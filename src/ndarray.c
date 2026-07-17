@@ -535,6 +535,147 @@ Expr* ndarray_scalar_power(const Expr* a, double er, double ei) {
     return expr_new_ndarray(a->data.ndarray.rank, a->data.ndarray.dims, out, dtc);
 }
 
+/* -------------------- parallel element-wise map ------------------------- */
+/* The element-wise kernel loops below are embarrassingly parallel: each output
+ * element depends only on the same-index input element, and every kernel is a
+ * pure function (libm / arithmetic, thread-safe). For large arrays we split the
+ * flat index range across worker threads, which is where the wall-clock cost of
+ * e.g. Erf[NDArray[...]] over millions of elements actually lives. Guarded by
+ * MATHILDA_THREADS (set by the makefile with -pthread); without it every map
+ * runs serially, so the CMake test build and any thread-less platform are
+ * unaffected. */
+
+/* A chunk callback processes the half-open flat range [lo, hi). It returns false
+ * to signal that the kernel declined an element (out-of-fast-domain); the caller
+ * then frees its buffer and degrades to the exact per-element List path, exactly
+ * as the serial loops did on a false kernel return. */
+typedef bool (*nd_chunk_fn)(void* ctx, size_t lo, size_t hi);
+
+#ifdef MATHILDA_THREADS
+#include <pthread.h>
+#include <unistd.h>
+
+/* Arrays smaller than this run serially: below it the thread spawn/join cost
+ * dominates the actual kernel work. */
+#define NDARRAY_THREAD_THRESHOLD ((size_t)100000)
+#define NDARRAY_MAX_THREADS 16
+
+typedef struct { nd_chunk_fn fn; void* ctx; size_t lo, hi; bool ok; } nd_thread_job;
+
+static void* nd_thread_run(void* p) {
+    nd_thread_job* j = (nd_thread_job*)p;
+    j->ok = j->fn(j->ctx, j->lo, j->hi);
+    return NULL;
+}
+
+/* Threads to use for `n` elements: 1 for small arrays, else one per online CPU
+ * (capped), and never so many that a chunk falls below the threshold. */
+static int nd_thread_count(size_t n) {
+    if (n < NDARRAY_THREAD_THRESHOLD) return 1;
+    long ncpu = sysconf(_SC_NPROCESSORS_ONLN);
+    if (ncpu < 1) ncpu = 1;
+    if (ncpu > NDARRAY_MAX_THREADS) ncpu = NDARRAY_MAX_THREADS;
+    size_t by_work = n / NDARRAY_THREAD_THRESHOLD;
+    if (by_work < 1) by_work = 1;
+    if ((size_t)ncpu > by_work) ncpu = (long)by_work;
+    return (int)ncpu;
+}
+#endif /* MATHILDA_THREADS */
+
+/* Run `fn` over [0, n), in parallel for large arrays when threads are available,
+ * serially otherwise. Returns true iff every chunk returned true. */
+static bool nd_parallel_for(size_t n, nd_chunk_fn fn, void* ctx) {
+#ifdef MATHILDA_THREADS
+    int nt = nd_thread_count(n);
+    if (nt > 1) {
+        pthread_t th[NDARRAY_MAX_THREADS];
+        nd_thread_job jb[NDARRAY_MAX_THREADS];
+        bool threaded[NDARRAY_MAX_THREADS];
+        size_t chunk = (n + (size_t)nt - 1) / (size_t)nt;
+        int nc = 0;
+        for (int t = 0; t < nt; t++) {
+            size_t lo = (size_t)t * chunk;
+            if (lo >= n) break;
+            size_t hi = lo + chunk;
+            if (hi > n) hi = n;
+            jb[nc].fn = fn; jb[nc].ctx = ctx; jb[nc].lo = lo; jb[nc].hi = hi;
+            jb[nc].ok = true;
+            threaded[nc] = (pthread_create(&th[nc], NULL, nd_thread_run, &jb[nc]) == 0);
+            if (!threaded[nc]) jb[nc].ok = fn(ctx, lo, hi); /* spawn failed: inline */
+            nc++;
+        }
+        bool all = true;
+        for (int t = 0; t < nc; t++) {
+            if (threaded[t]) pthread_join(th[t], NULL);
+            all = all && jb[t].ok;
+        }
+        return all;
+    }
+#endif
+    return fn(ctx, 0, n);
+}
+
+/* Chunk contexts + callbacks for the straight (index-preserving) maps. */
+typedef struct { const double* id; double* od; const NDUnaryKernel* k; } ndu_hot_ctx;
+static bool ndu_hot_chunk(void* c, size_t lo, size_t hi) {
+    const ndu_hot_ctx* x = (const ndu_hot_ctx*)c;
+    for (size_t j = lo; j < hi; j++)
+        if (!x->k->real(x->id[j], &x->od[j])) return false;
+    return true;
+}
+
+typedef struct { const void* in; void* out; NDType dt; const NDUnaryKernel* k; } ndu_map_ctx;
+static bool ndu_cplx_chunk(void* c, size_t lo, size_t hi) {
+    const ndu_map_ctx* x = (const ndu_map_ctx*)c;
+    for (size_t j = lo; j < hi; j++) {
+        double re, im, orr, oii;
+        ndt_get(x->in, j, x->dt, &re, &im);
+        if (!x->k->cplx(re, im, &orr, &oii)) return false;
+        ndt_set(x->out, j, x->dt, orr, oii);
+    }
+    return true;
+}
+static bool ndu_realgen_chunk(void* c, size_t lo, size_t hi) {
+    const ndu_map_ctx* x = (const ndu_map_ctx*)c;
+    for (size_t j = lo; j < hi; j++) {
+        double re, im, orr, oii = 0.0;
+        ndt_get(x->in, j, x->dt, &re, &im);
+        if (x->k->real) { if (!x->k->real(re, &orr)) return false; }
+        else if (!x->k->cplx || !x->k->cplx(re, 0.0, &orr, &oii)) return false;
+        ndt_set(x->out, j, x->dt, orr, oii);
+    }
+    return true;
+}
+
+typedef struct { const void* in; void* out; NDType dti, dto; const NDUnaryKernel* k; } ndu_proj_ctx;
+static bool ndu_proj_chunk(void* c, size_t lo, size_t hi) {
+    const ndu_proj_ctx* x = (const ndu_proj_ctx*)c;
+    for (size_t j = lo; j < hi; j++) {
+        double re, im, orr, oii;
+        ndt_get(x->in, j, x->dti, &re, &im);
+        if (!x->k->cplx(re, im, &orr, &oii)) return false;
+        ndt_set(x->out, j, x->dto, orr, 0.0);
+    }
+    return true;
+}
+
+typedef struct {
+    const void* in; void* out; NDType dti, dto; const NDBinaryKernel* k;
+    double sre, sim; bool arr_first;
+} ndb_ctx;
+static bool ndb_map_chunk(void* c, size_t lo, size_t hi) {
+    const ndb_ctx* x = (const ndb_ctx*)c;
+    for (size_t j = lo; j < hi; j++) {
+        double re, im, orr, oii;
+        ndt_get(x->in, j, x->dti, &re, &im);
+        bool ok = x->arr_first ? x->k->cplx(re, im, x->sre, x->sim, &orr, &oii)
+                               : x->k->cplx(x->sre, x->sim, re, im, &orr, &oii);
+        if (!ok) return false;
+        ndt_set(x->out, j, x->dto, orr, oii);
+    }
+    return true;
+}
+
 /* -------------------- element-wise scalar-function map ------------------- */
 
 Expr* ndarray_map_unary(const Expr* a, const NDUnaryKernel* k) {
@@ -552,12 +693,8 @@ Expr* ndarray_map_unary(const Expr* a, const NDUnaryKernel* k) {
         NDType dtr = (ndt_comp_size(dta) == sizeof(double)) ? NDT_FLOAT64
                                                             : NDT_FLOAT32;
         void* out = malloc(ndt_elem_size(dtr) * sz);
-        for (size_t j = 0; j < sz; j++) {
-            double re, im, orr, oii;
-            ndt_get(in, j, dta, &re, &im);
-            if (!k->cplx(re, im, &orr, &oii)) { free(out); return NULL; }
-            ndt_set(out, j, dtr, orr, 0.0);
-        }
+        ndu_proj_ctx ctx = { in, out, dta, dtr, k };
+        if (!nd_parallel_for(sz, ndu_proj_chunk, &ctx)) { free(out); return NULL; }
         return expr_new_ndarray(rank, dims, out, dtr);
     }
 
@@ -566,12 +703,8 @@ Expr* ndarray_map_unary(const Expr* a, const NDUnaryKernel* k) {
     if (ndt_is_complex(dta)) {
         if (!k->cplx) return NULL;
         void* out = malloc(ndt_elem_size(dta) * sz);
-        for (size_t j = 0; j < sz; j++) {
-            double re, im, orr, oii;
-            ndt_get(in, j, dta, &re, &im);
-            if (!k->cplx(re, im, &orr, &oii)) { free(out); return NULL; }
-            ndt_set(out, j, dta, orr, oii);
-        }
+        ndu_map_ctx ctx = { in, out, dta, k };
+        if (!nd_parallel_for(sz, ndu_cplx_chunk, &ctx)) { free(out); return NULL; }
         return expr_new_ndarray(rank, dims, out, dta);
     }
 
@@ -580,18 +713,11 @@ Expr* ndarray_map_unary(const Expr* a, const NDUnaryKernel* k) {
         void* out = malloc(ndt_elem_size(dta) * sz);
         if (dta == NDT_FLOAT64 && k->real) {
             /* Hot path: raw double buffers, no widening. */
-            const double* id = (const double*)in;
-            double* od = (double*)out;
-            for (size_t j = 0; j < sz; j++)
-                if (!k->real(id[j], &od[j])) { free(out); return NULL; }
+            ndu_hot_ctx ctx = { (const double*)in, (double*)out, k };
+            if (!nd_parallel_for(sz, ndu_hot_chunk, &ctx)) { free(out); return NULL; }
         } else {
-            for (size_t j = 0; j < sz; j++) {
-                double re, im, orr, oii = 0.0;
-                ndt_get(in, j, dta, &re, &im);
-                if (k->real) { if (!k->real(re, &orr)) { free(out); return NULL; } }
-                else if (!k->cplx || !k->cplx(re, 0.0, &orr, &oii)) { free(out); return NULL; }
-                ndt_set(out, j, dta, orr, oii);
-            }
+            ndu_map_ctx ctx = { in, out, dta, k };
+            if (!nd_parallel_for(sz, ndu_realgen_chunk, &ctx)) { free(out); return NULL; }
         }
         return expr_new_ndarray(rank, dims, out, dta);
     }
@@ -643,28 +769,16 @@ Expr* ndarray_map_binary(const Expr* a0, const Expr* a1, const NDBinaryKernel* k
     if (ndt_is_complex(dta) || s_cplx) {
         NDType dtc = ndt_as_complex(dta);
         void* out = malloc(ndt_elem_size(dtc) * sz);
-        for (size_t j = 0; j < sz; j++) {
-            double re, im, orr, oii;
-            ndt_get(in, j, dta, &re, &im);
-            bool ok = arr_first ? k->cplx(re, im, sre, sim, &orr, &oii)
-                                : k->cplx(sre, sim, re, im, &orr, &oii);
-            if (!ok) { free(out); return NULL; }
-            ndt_set(out, j, dtc, orr, oii);
-        }
+        ndb_ctx ctx = { in, out, dta, dtc, k, sre, sim, arr_first };
+        if (!nd_parallel_for(sz, ndb_map_chunk, &ctx)) { free(out); return NULL; }
         return expr_new_ndarray(rank, dims, out, dtc);
     }
 
     /* Real inputs, real-closed function: real output. */
     if (k->real_closed) {
         void* out = malloc(ndt_elem_size(dta) * sz);
-        for (size_t j = 0; j < sz; j++) {
-            double re, im, orr, oii;
-            ndt_get(in, j, dta, &re, &im);
-            bool ok = arr_first ? k->cplx(re, 0.0, sre, 0.0, &orr, &oii)
-                                : k->cplx(sre, 0.0, re, 0.0, &orr, &oii);
-            if (!ok) { free(out); return NULL; }
-            ndt_set(out, j, dta, orr, oii);
-        }
+        ndb_ctx ctx = { in, out, dta, dta, k, sre, 0.0, arr_first };
+        if (!nd_parallel_for(sz, ndb_map_chunk, &ctx)) { free(out); return NULL; }
         return expr_new_ndarray(rank, dims, out, dta);
     }
 
