@@ -39,6 +39,7 @@
 
 #include "cherry_ei.h"
 #include "risch_util.h"
+#include "risch_singleext.h"
 
 #include "expr.h"
 #include "eval.h"
@@ -382,6 +383,27 @@ Expr* rt_cherry_ei(Expr* f, Expr* x) {
     expr_free(dq);
     if (Ny < 0) Ny = 0;
 
+    /* A1 (complex C = C-bar): when an ei-argument constant is COMPLEX (a lone
+     * conjugate pair over Q(i)/Q(i sqrt3) — e.g. d12 (x^2+1)e^x/(x^2+x+1) over
+     * Q(i sqrt3)), the coefficient system is solved over that number field.  The
+     * generous real-case bound above inflates Y to ~6 unknowns, and Solve over the
+     * algebraic field does NOT reduce that larger mixed system (whereas the tight
+     * system solves cleanly — verified).  For an admitted complex candidate the
+     * only pole is the irreducible quadratic g1 (the numeric-complex gate requires
+     * q = 1, deg g1 = 2, so sden has no rational factor), hence y is a pure
+     * polynomial whose degree is the polynomial part of g plus a small margin.
+     * Tighten Ny to keep the number-field Solve tractable; the exact diff-back gate
+     * still guarantees soundness, so a too-small bound can only decline. */
+    bool has_complex = false;
+    for (size_t i = 0; i < m; i++)
+        if (numeric_complex(alphas[i])) { has_complex = true; break; }
+    if (has_complex) {
+        long poly_part = rt_degree(gnum, x) - rt_degree(gden, x);
+        if (poly_part < 0) poly_part = 0;
+        long Ny_tight = poly_part + rt_degree(sden, x) + 1;
+        if (Ny_tight >= 0 && Ny_tight < Ny) Ny = Ny_tight;
+    }
+
     size_t nsym = (size_t)(Ny + 1) + m + me;
     Expr** syms = malloc((nsym ? nsym : 1) * sizeof(Expr*));
     size_t si = 0;
@@ -519,5 +541,110 @@ Expr* rt_cherry_ei(Expr* f, Expr* x) {
     expr_free(yansatz); expr_free(sden);
     expr_free(gnum); expr_free(gden); expr_free(g);
     expr_free(p); expr_free(q);
+    return result;
+}
+
+/* ================================================================== */
+/* Multi-term exponential (Cherry Thm 5.4 case b, flat level).         */
+/* ================================================================== */
+
+/* f rational in a SINGLE exponential kernel E^w (w rational in x) whose Laurent
+ * expansion has several essential terms  Sum_i p_i(x) E^(i w).  The single-shape
+ * rt_cherry_ei cannot peel these together — its cofactor g = f E^(-v) must be free
+ * of exp, which fails as soon as two commensurate exponentials (E^w, E^(2w), …)
+ * coexist (e.g. (E^x + E^(2x))/(x-1)).  Cherry's Thm 5.4 case b integrates the term
+ * by term: Laurent-split in t = E^w, then integrate each essential term
+ * p_i E^(i w) with rt_cherry_ei (recovering its ei/erf part) and the t^0 term with
+ * the rational integrator, and sum.  Reached only after rt_cherry_ei declined, so a
+ * single-term integrand never lands here.  Diff-back verified as a whole; a mis-split
+ * can only decline. */
+Expr* rt_cherry_exp_multiterm(Expr* f, Expr* x) {
+    Expr* v = rt_find_exp_of_x(f, x);
+    if (!v || !rt_kernel_simple(v, x)) return NULL;
+
+    /* Kernelize to t = rmT = E^uexp (commensurate exponents E^(k w) -> t^k). */
+    Expr* uexp = NULL;
+    Expr* F = rt_exp_kernelize(f, x, &uexp);
+    if (!F || !uexp) { if (F) expr_free(F); if (uexp) expr_free(uexp); return NULL; }
+    Expr* t = mk_sym("rmT");
+
+    Expr* G   = rt_eval1("Together", expr_copy(F));
+    Expr* num = G ? rt_eval1("Numerator", expr_copy(G)) : NULL;
+    Expr* den = G ? rt_eval1("Denominator", expr_copy(G)) : NULL;
+    Expr* result = NULL;
+
+    /* Require a PURE Laurent form: den a monomial c*t^a in t (a t-dependent
+     * denominator pole is the Hermite/log hyperexponential case handled elsewhere),
+     * num a polynomial in t, and no residual exp/log after kernelization. */
+    bool shape = num && den && rt_is_poly(num, t) && rt_is_poly(den, t)
+        && rt_find_exp_of_x(F, x) == NULL && rt_find_log_of_x(F, x) == NULL;
+    long a = -1; Expr* lc = NULL;
+    if (shape) {
+        Expr* cl = rt_eval2("CoefficientList", expr_copy(den), expr_copy(t));
+        if (cl && cl->type == EXPR_FUNCTION && rt_head_is(cl, "List")) {
+            size_t nz = 0;
+            for (size_t i = 0; i < cl->data.function.arg_count; i++)
+                if (!rt_is_zero(cl->data.function.args[i])) {
+                    if (a < 0) a = (long)i;
+                    nz++;
+                }
+            if (nz == 1 && a >= 0) lc = expr_copy(cl->data.function.args[a]);  /* monomial */
+        }
+        if (cl) expr_free(cl);
+    }
+
+    if (lc) {
+        long dnum = rt_degree(num, t);
+        Expr** pieces = malloc((size_t)(dnum + 1) * sizeof(Expr*));
+        size_t np = 0;
+        bool okall = true;
+        bool any_ei = false;   /* require >=2 essential terms (else rt_cherry_ei would have fired) */
+        int nterms = 0;
+        for (long j = 0; j <= dnum && okall; j++) {
+            Expr* c = rt_coeff(num, t, j);
+            if (rt_is_zero(c)) { expr_free(c); continue; }
+            long ip = j - a;
+            Expr* pi = rt_eval1("Cancel", mk_times2(c, mk_pow(expr_copy(lc), mk_int(-1)))); /* p_i(x) */
+            nterms++;
+            Expr* piece = NULL;
+            if (ip == 0) {
+                /* the t^0 term integrates in C(x) */
+                Expr* r = rt_eval_call("Integrate`BronsteinRational",
+                    (Expr*[]){ expr_copy(pi), expr_copy(x) }, 2);
+                if (r && !rt_head_is(r, "Integrate`BronsteinRational")) piece = r;
+                else if (r) expr_free(r);
+            } else {
+                /* the essential term p_i E^(ip uexp) -> ei/erf via rt_cherry_ei */
+                Expr* sub = mk_times2(expr_copy(pi),
+                    mk_pow(mk_sym("E"), mk_times2(mk_int(ip), expr_copy(uexp))));
+                Expr* sub_e = rt_eval1("Together", sub);   /* normalize E^(ip w) */
+                piece = sub_e ? rt_cherry_ei(sub_e, x) : NULL;
+                if (sub_e) expr_free(sub_e);
+                if (piece) any_ei = true;
+            }
+            expr_free(pi);
+            if (!piece) { okall = false; }
+            else pieces[np++] = piece;
+        }
+        /* Only emit a genuine MULTI-term answer with at least one ei/erf piece — a
+         * single essential term is rt_cherry_ei's job (already tried and declined for
+         * a reason we must not paper over). */
+        if (okall && any_ei && nterms >= 2 && np > 0) {
+            Expr* sum = expr_new_function(mk_sym("Plus"), pieces, np);
+            Expr* cand = rt_eval_own(sum);
+            if (cand && rt_free_of_head(cand, "Integrate") && rt_verify_antideriv(cand, f, x))
+                result = cand;
+            else if (cand) expr_free(cand);
+        } else {
+            for (size_t i = 0; i < np; i++) expr_free(pieces[i]);
+        }
+        free(pieces);
+        expr_free(lc);
+    }
+
+    if (G) expr_free(G);
+    if (num) expr_free(num);
+    if (den) expr_free(den);
+    expr_free(F); expr_free(uexp); expr_free(t);
     return result;
 }

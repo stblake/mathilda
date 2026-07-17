@@ -21,6 +21,7 @@
 #include "risch_singleext.h"
 #include "risch_trig_frontend.h"
 #include "risch_special.h"
+#include "cherry_driver.h"
 
 #include "expr.h"
 #include "eval.h"
@@ -313,7 +314,7 @@ static Expr* rt_integrate_core(Expr* f, Expr* x) {
     if (r) return r;
     r = rt_transcendental_case(f, x);
     if (r) return r;
-    r = rt_special_case(f, x);
+    r = extended_liouville_solve(f, x, RT_SF_TOP_ANY);   /* Cherry dispatch (C0 seam) */
     if (r) return r;
     return NULL;
 }

@@ -817,11 +817,20 @@ monotonically down.
         (E^Sqrt[2] ExpIntegralEi[x-Sqrt[2]] - E^(-Sqrt[2]) ExpIntegralEi[x+Sqrt[2]])
         /(2 Sqrt[2])` (Cherry p.894), also `E^x/(x^2-x-1)` (golden ratio) etc.
         A single irreducible-quadratic denominator with **complex** conjugate
-        roots (`f` a polynomial) closes with a conjugate pair of `ExpIntegralEi`:
+        roots closes with a conjugate pair of `ExpIntegralEi` over the number field
+        the roots generate — `Q(i)` **and** `Q(i sqrt d)`:
         `Integrate[E^x/(x^2+1),x] = (I/2)(ExpIntegralEi[x+I]/E^I - E^I
-        ExpIntegralEi[x-I])`, also `E^x/(x^2+9)`, `E^x/(x^2+2x+2)`. Complex poles
-        mixed with other poles (`E^(1/x)/(x^2+1)`) or over `Q(i sqrt3)`
-        (`x^2+x+1`), and degree-`≥3` constants, are deferred and decline cleanly;
+        ExpIntegralEi[x-I])`, `E^x/(x^2+x+1)` (over `Q(i sqrt3)`), `E^x/(x^2+3)`,
+        `E^x/(x^2+2x+5)`, a numerator `(2x+1)E^x/(x^2+x+3)` (over `Q(i sqrt11)`),
+        and the polynomial-part case **d12** `Integrate[(x^2+1)E^x/(x^2+x+1),x] =
+        E^x + (complex-conjugate ei pair)`. Complex poles mixed with a `P2`/
+        reciprocal term (`E^(1/x)/(x^2+1)`) and degree-`≥3` constants
+        (`E^x/(x^3-2)`) are deferred and decline cleanly. A **multi-term**
+        exponential `Sum_i p_i E^(i w)` (rational in a single kernel `E^w`, several
+        commensurate Laurent terms) that the single-shape matcher cannot peel is
+        integrated term-by-term (Cherry Thm 5.4 case b) —
+        `Integrate[(E^x+E^(2x))/(x-1),x] = E ExpIntegralEi[x-1] +
+        E^2 ExpIntegralEi[2x-2]`, `E^x(E^x+1)/((x-1)(x-2))`;
       - `c w^(p-1) w'/Log[w]` → `c LogIntegral[w^p]` (single-li fast path) —
         subsumes `K/Log[x] → K LogIntegral[x]`, a scaled/affine argument
         (`1/Log[2x] → LogIntegral[2x]/2`) and a monomial numerator (`x/Log[x] →

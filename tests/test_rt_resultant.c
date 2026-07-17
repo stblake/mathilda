@@ -53,12 +53,30 @@ static void test_residue_roots(void) {
 static void test_arity(void) {
     run_test("Head[Integrate`RothsteinTragerResultant[1, x, z]] "
              "=== Integrate`RothsteinTragerResultant", "True");
+    run_test("Head[Integrate`ExpIntegralEiResultant[x, x, 1, a]] "
+             "=== Integrate`ExpIntegralEiResultant", "True");
+}
+
+/* Integrate`ExpIntegralEiResultant[g1, p, q, alpha, x] = Resultant[g1, p+alpha q, x];
+ * its alpha-roots are Cherry's ei-argument constants (P1 generator, u_i = f+alpha_i). */
+static void test_ei_resultant(void) {
+    /* p.894  E^x/(x^2-2):  g1 = x^2-2, p = x, q = 1  ->  h(a) = a^2 - 2, roots ±Sqrt[2]. */
+    run_test("Integrate`ExpIntegralEiResultant[x^2 - 2, x, 1, a, x]",
+             "Plus[-2, Power[a, 2]]");
+    /* d8  E^x/(x+1)^2:  g1 = (x+1)^2, p = x, q = 1  ->  (a-1)^2, double root a = 1,
+     * i.e. the ei argument u = x + 1 (matches Integrate answer ei(x+1)). */
+    run_test("Factor[Integrate`ExpIntegralEiResultant[(x + 1)^2, x, 1, a, x]]",
+             "Power[Plus[-1, a], 2]");
+    /* Ex 5.1  E^(1/x):  f = 1/x, p = 1, q = x, g1 = x  ->  1 + a x resultant = 1... use
+     * a genuine pole:  g1 = x, p = 1, q = x -> Resultant[x, 1 + a x, x] = 1 (no ei pole). */
+    run_test("Integrate`ExpIntegralEiResultant[x, 1, x, a, x]", "1");
 }
 
 int main(void) {
     core_init();
     TEST(test_residue_roots);
     TEST(test_arity);
+    TEST(test_ei_resultant);
     printf("All RothsteinTragerResultant tests passed.\n");
     return 0;
 }

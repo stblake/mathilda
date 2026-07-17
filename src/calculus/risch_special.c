@@ -252,25 +252,35 @@ static Expr* rt_try_dilog(Expr* f, Expr* x) {
 typedef struct {
     const char* name;                    /* the emitted special function */
     Expr* (*recognize)(Expr* f, Expr* x);/* narrow generator (grows into gen_arguments) */
+    unsigned top;                        /* RT_SF_TOP_* mask: closable top monomials */
 } RtSpecialForm;
 
 static const RtSpecialForm RT_SPECIAL_FORMS[] = {
-    { "Erf",           rt_try_erf     }, /* K E^(a x^2 + b x + c)                */
-    { "ExpIntegralEi", rt_try_ei      }, /* M E^(a x + b) / (c x + d)   [fast path] */
-    { "ExpIntegralEi", rt_cherry_ei   }, /* g E^f, g,f in C(x): ei + erf (Cherry 1989) */
-    { "LogIntegral",   rt_try_li      }, /* c w^(p-1) w' / Log[w]      [fast path] */
-    { "LogIntegral",   rt_cherry_li   }, /* multi-li over C(x,Log[w])  (Cherry 1986) */
-    { "PolyLog",       rt_try_dilog   }, /* K Log[1 + p x] / x        [fast path] */
-    { "PolyLog",       rt_cherry_dilog }, /* R Log[w] -> LogLog + PolyLog[2] (Cherry) */
+    { "Erf",           rt_try_erf,      RT_SF_TOP_EXP }, /* K E^(a x^2 + b x + c)                */
+    { "ExpIntegralEi", rt_try_ei,       RT_SF_TOP_EXP }, /* M E^(a x + b) / (c x + d)   [fast path] */
+    { "ExpIntegralEi", rt_cherry_ei,    RT_SF_TOP_EXP }, /* g E^f, g,f in C(x): ei + erf (Cherry 1989) */
+    { "ExpIntegralEi", rt_cherry_exp_multiterm, RT_SF_TOP_EXP }, /* Sum_i p_i E^(i w): Thm 5.4 case b */
+    { "LogIntegral",   rt_try_li,       RT_SF_TOP_LOG }, /* c w^(p-1) w' / Log[w]      [fast path] */
+    { "LogIntegral",   rt_cherry_li,    RT_SF_TOP_LOG }, /* multi-li over C(x,Log[w])  (Cherry 1986) */
+    { "PolyLog",       rt_try_dilog,    RT_SF_TOP_LOG }, /* K Log[1 + p x] / x        [fast path] */
+    { "PolyLog",       rt_cherry_dilog, RT_SF_TOP_LOG }, /* R Log[w] -> LogLog + PolyLog[2] (Cherry) */
 };
 
-/* Try each registered special-function form in turn (order preserved). */
-Expr* rt_special_case(Expr* f, Expr* x) {
+/* Try each registered form whose top-monomial mask intersects `top_mask`, in
+ * registry order.  RT_SF_TOP_ANY tries every form (the outermost, tower-free
+ * dispatch); a routed call from the tower hook narrows to the peeled top kind. */
+Expr* rt_special_case_routed(Expr* f, Expr* x, unsigned top_mask) {
     for (size_t i = 0; i < sizeof(RT_SPECIAL_FORMS) / sizeof(RT_SPECIAL_FORMS[0]); i++) {
+        if (!(RT_SPECIAL_FORMS[i].top & top_mask)) continue;
         Expr* r = RT_SPECIAL_FORMS[i].recognize(f, x);
         if (r) return r;
     }
     return NULL;
+}
+
+/* Try each registered special-function form in turn (order preserved). */
+Expr* rt_special_case(Expr* f, Expr* x) {
+    return rt_special_case_routed(f, x, RT_SF_TOP_ANY);
 }
 
 /* ================================================================== */

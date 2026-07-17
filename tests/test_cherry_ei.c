@@ -113,10 +113,22 @@ static void test_cherry_1986_macsyma(void) {
  * conjugate roots (f a polynomial, q = 1) closes with a complex-conjugate pair of
  * ExpIntegralEi terms — the diff-back over Q(i) is exact and fast. */
 static void test_complex_ei(void) {
-    assert_ei("E^x/(x^2 + 1)");        /* alpha = +-I           */
-    assert_ei("E^x/(x^2 + 9)");        /* alpha = +-3 I         */
-    assert_ei("E^(2 x)/(x^2 + 1)");    /* scaled exponent       */
-    assert_ei("E^x/(x^2 + 2 x + 2)");  /* alpha = -1 +- I       */
+    assert_ei("E^x/(x^2 + 1)");        /* alpha = +-I         (Q(i))    */
+    assert_ei("E^x/(x^2 + 9)");        /* alpha = +-3 I       (Q(i))    */
+    assert_ei("E^(2 x)/(x^2 + 1)");    /* scaled exponent               */
+    assert_ei("E^x/(x^2 + 2 x + 2)");  /* alpha = -1 +- I     (Q(i))    */
+    /* A1 (complex algebraically-closed constants, C = C-bar over Q(i sqrt3)):
+     * the lone conjugate pair from x^2+x+1 now closes.  The generous real-case
+     * Y-degree bound made the number-field Solve blow up; tightening it for a
+     * complex candidate keeps the (small) system solvable over Q(i sqrt3). */
+    assert_ei("E^x/(x^2 + x + 1)");    /* alpha = (1 -+ I sqrt3)/2 (Q(i sqrt3)) */
+    assert_ei("E^x/(x^2 + 3)");        /* alpha = -+ I sqrt3      (Q(i sqrt3)) */
+    assert_ei("E^x/(x^2 + 2 x + 5)");  /* alpha = -1 -+ 2 I       (Q(i))       */
+    assert_ei("(2 x + 1) E^x/(x^2 + x + 3)"); /* numerator; Q(i sqrt11)         */
+    assert_ei("x E^x/(x^2 + x + 1)");  /* numerator over Q(i sqrt3)             */
+    /* d12 (Cherry 1989): (x^2+1)e^x/(x^2+x+1) — a polynomial part (e^x) plus the
+     * complex-conjugate ei pair.  Was the canonical §7/A1 gated pin. */
+    assert_ei("(x^2 + 1) E^x/(x^2 + x + 1)");
 }
 
 /* Nonlinear exponents f = p/q close too — the engine is NOT limited to linear f. */
@@ -299,16 +311,37 @@ static void test_stress_declines(void) {
     /* real-quadratic exponent with a NEGATIVE completing-square constant -> the
      * erf constant beta = +-2 I is complex; deferred, declines cleanly. */
     assert_declines("E^((x^4 - 1)/x^2)");
-    /* Complex ei poles that are NOT a lone conjugate pair over Q(i) still defer:
-     *  - x^2+x+1 lives over Q(i sqrt3) where Together does not reduce (the C2 G1
-     *    gap), so d12-style denominators decline;
-     *  - a P2/reciprocal term (E^(1/x)/(x^2+1)) mixes a real pole with the complex
-     *    pair, blowing up Together over Q(i) — deferred. */
-    assert_declines("E^x/(x^2 + x + 1)");
+    /* A lone conjugate pair over Q(i)/Q(i sqrt3) now closes (see test_complex_ei);
+     * what still defers is a complex pair MIXED with another pole — a P2/reciprocal
+     * term.  E^(1/x)/(x^2+1) has a linear-exponent denominator q = x (degq != 0),
+     * so the numeric-complex gate keeps the +-I pair out (mixing it with the P2
+     * q-side term would blow up Together over Q(i)); clean decline. */
     assert_declines("E^(1/x)/(x^2 + 1)");
     /* Irreducible cubic: only the real root is admitted, so the (complex) rest
      * of the pole set is unmatched -> clean decline (not a wrong partial form). */
     assert_declines("E^x/(x^3 - 2)");
+}
+
+/* Cherry Thm 5.4 case b (flat multi-term exponential): f rational in a single
+ * kernel E^w with SEVERAL commensurate Laurent terms Sum_i p_i E^(i w).  The
+ * single-shape rt_cherry_ei declines (its cofactor would carry a residual
+ * exponential); rt_cherry_exp_multiterm integrates term-by-term and sums. */
+static void test_cherry_multiterm(void) {
+    /* two essential terms, shared denominator */
+    assert_ei("(E^x + E^(2 x))/(x - 1)");
+    ASSERT_MSG(eval_is(
+        "Simplify[Integrate[(E^x + E^(2 x))/(x - 1), x, Method -> \"RischTranscendental\"]"
+        " - (E ExpIntegralEi[x - 1] + E^2 ExpIntegralEi[2 x - 2])]", "0"),
+        "multi-term (E^x+E^(2x))/(x-1) exact form");
+    /* product form E^x (E^x + 1) = E^(2x) + E^x over a quadratic denominator */
+    assert_ei("E^x (E^x + 1)/((x - 1)(x - 2))");
+    assert_ei("(E^x + E^(2 x))/((x - 1)(x - 2))");
+    /* three commensurate terms */
+    assert_ei("(E^x + E^(2 x) + E^(3 x))/(x - 1)");
+    /* a term whose per-term integral needs a P1 resultant (quadratic pole) */
+    assert_ei("(E^x + E^(2 x))/(x^2 - 2)");
+    /* single-term integrands still go through rt_cherry_ei, unaffected */
+    assert_ei("E^(2 x)/(x - 1)");
 }
 
 int main(void) {
@@ -321,6 +354,7 @@ int main(void) {
     TEST(test_cherry_erf_symbolic);
     TEST(test_complex_ei);
     TEST(test_elementaryq_false);
+    TEST(test_cherry_multiterm);
     /* extensive stress battery */
     TEST(test_stress_linear_exp);
     TEST(test_stress_reciprocal_exp);

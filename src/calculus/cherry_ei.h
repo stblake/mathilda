@@ -27,4 +27,11 @@
  * if no constants solve the matching identity. */
 Expr* rt_cherry_ei(Expr* f, Expr* x);
 
+/* Cherry Thm 5.4 case b (flat exponential level): f rational in a single kernel E^w
+ * whose Laurent expansion has several essential terms Sum_i p_i E^(i w) that the
+ * single-shape rt_cherry_ei cannot peel together (e.g. (E^x + E^(2x))/(x-1)).
+ * Integrate term-by-term (each p_i E^(i w) via rt_cherry_ei, the t^0 term rationally)
+ * and sum; diff-back verified.  Tried after rt_cherry_ei declines; NULL otherwise. */
+Expr* rt_cherry_exp_multiterm(Expr* f, Expr* x);
+
 #endif /* MATHILDA_CHERRY_EI_H */

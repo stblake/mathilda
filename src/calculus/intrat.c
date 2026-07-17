@@ -3940,6 +3940,30 @@ static Expr* builtin_intrat_rt_resultant(Expr* res) {
     return r;
 }
 
+/* Integrate`ExpIntegralEiResultant[g1, p, q, alpha, x]
+ *   = Resultant[g1, p + alpha q, x],
+ * the parametric resultant whose roots in the parameter alpha are Cherry's
+ * ei-argument constants (the u_i = f + alpha_i of the P1 generator, resolving
+ * g~1/g1 = Sum c_i u_i'/u_i; Cherry 1989 §4.2 / CHERRY_PLAN.md §3.2).  Distinct
+ * from RothsteinTragerResultant (which resultants against num - z D[den]); here
+ * the parameter enters linearly through p + alpha q with q the exponent
+ * denominator.  A thin, testable sibling built on the existing Resultant. */
+static Expr* builtin_intrat_ei_resultant(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 5) return NULL;
+    Expr* g1    = res->data.function.args[0];
+    Expr* p     = res->data.function.args[1];
+    Expr* q     = res->data.function.args[2];
+    Expr* alpha = res->data.function.args[3];
+    Expr* x     = res->data.function.args[4];
+    Expr* arg = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+        (Expr*[]){ expr_copy(p),
+            expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ expr_copy(alpha), expr_copy(q) }, 2) }, 2));  /* p + alpha q */
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Resultant),
+        (Expr*[]){ expr_copy(g1), arg, expr_copy(x) }, 3));             /* Resultant[g1,.,x] */
+    return r;
+}
+
 /* ------------------------------------------------------------------ */
 /* Init.                                                              */
 /* ------------------------------------------------------------------ */
@@ -4061,6 +4085,13 @@ void intrat_init(void) {
             "den, x], the Rothstein-Trager resultant whose roots in z are the residues of\n"
             "num/den. Argument generator for the log / exponential-integral (Ei) parts of\n"
             "Cherry's special-function integration.");
+
+    install("Integrate`ExpIntegralEiResultant",
+            builtin_intrat_ei_resultant,
+            "Integrate`ExpIntegralEiResultant[g1, p, q, a, x] = Resultant[g1, p + a q, x],\n"
+            "the parametric resultant whose roots in the parameter a are the ExpIntegralEi\n"
+            "argument constants alpha_i of Cherry's P1 generator (u_i = f + alpha_i, f = p/q).\n"
+            "Built on Resultant; the ei sibling of RothsteinTragerResultant.");
 
     install("Integrate`TranscendentalLogPart",
             builtin_intrat_transcendental_log_part,

@@ -1,3 +1,35 @@
+# Cherry completion — B3 (C0 seam) → B2 (Thm 5.4 case b) → A1 (complex constants) — 2026-07-17
+
+Plan: `~/.claude/plans/gentle-jumping-babbage.md`. Spec: `CHERRY_PLAN.md`, `CHERRY_BLOCKERS.md`.
+
+## Checklist
+- [x] **B3.1** `RtSpecialForm` top-monomial mask (`RT_SF_TOP_EXP/LOG/ANY`) + `rt_special_case_routed`
+      (`risch_special.{c,h}`). Consumed seam only — no unused 4-method struct (no-dead-abstraction).
+- [x] **B3.2** `cherry_driver.{c,h}` — `extended_liouville_solve(f, x, top_mask)`; outermost dispatch calls it.
+- [x] **B3.3** `Integrate`ExpIntegralEiResultant[g1,p,q,a,x] = Resultant[g1, p+a q, x]` (`intrat.c`) + test.
+- [x] **B3.4** Byte-identical: full ei/li/dilog/Fresnel pin battery diffs clean.
+- [x] **B2** `rt_cherry_exp_multiterm` (`cherry_ei.c`) — flat multi-term `Σ p_i E^(i w)`; closes
+      `(E^x+E^(2x))/(x-1) = E ei(x-1)+E² ei(2x-2)`, `E^x(E^x+1)/((x-1)(x-2))`, etc. Diff-back verified.
+- [x] **A1** complex lone conjugate pair over `Q(i)`/`Q(i√d)` — tighten `Ny` for a complex candidate
+      so native `Solve` handles the field. Closes d12 `(x²+1)e^x/(x²+x+1)` + broad family. Verified.
+- [x] Tests + regression (cherry_ei/li/dilog/sigma/rt_resultant/risch_transcendental all green);
+      valgrind clean (new paths absent from leak stacks; d12 at macOS baseline); docs updated.
+
+## Review
+- **B3** behaviour-preserving (byte-identical). Deliberate deviation: added only the consumed seam
+  (mask + `extended_liouville_solve` + resultant), not the full 4-method struct — the Cherry engines
+  re-derive structure from kernel-form `f`, so extra method pointers would have no consumer.
+- **B2** realized as a flat outermost engine, NOT a tower hook. A `rt_field_integrate`-decline hook was
+  prototyped, proven zero-regression, but pulled: reachable nested cases are already closed by the
+  existing primitive-poly recursion, and an ei answer in tower-var form fails `rt_tower_deriv` verify
+  (shifted-exponent `E^(iw+α)` doesn't collapse). `risch_field_integrate.c` left byte-identical. The
+  deep depth-≥2 peel is deferred (no reachable pin the existing recursion misses).
+- **A1** did NOT need the FLINT number-field solve for the lone pair: the isolated small system solves
+  natively over `Q(i√3)`; the blocker was the generous `Ny` inflating the ansatz. Tightening it closes
+  d12 + `Q(i√d)` family; the exact diff-back gate keeps it sound. General mixed/deg-≥3 case deferred.
+
+---
+
 # Risch Transcendental → Complete Bronstein Decision Procedure
 
 Plan: `RISCH_COMPLETENESS_PLAN.md`. Reference: Bronstein, *Symbolic Integration I*, 2nd ed.

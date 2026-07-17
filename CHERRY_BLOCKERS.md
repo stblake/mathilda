@@ -30,18 +30,37 @@ working in the REPL**:
 every decline is a bare `return NULL` → `RT_DEC_UNKNOWN` → unevaluated `Integrate`. **No Cherry
 engine can currently prove non-existence.**
 
-The registry is still the 2-field `RtSpecialForm {name, recognize}` (`risch_special.c:252`); the
-4-method interface, `cherry_driver.c`/`extended_liouville_solve`, `Integrate\`ExpIntegralEiResultant`,
-`cherry_sigma_decomp.c`, the `rt_verify_antideriv` Integrate-guard, and the Thm 5.4 tower hook **do
-not exist**.
+**Update (2026-07-17):** the C0 seam now exists — `RtSpecialForm` carries a top-monomial
+applicability mask + `rt_special_case_routed`, `cherry_driver.c`/`extended_liouville_solve` is the
+single dispatch point, and `Integrate\`ExpIntegralEiResultant` is registered (B3). The flat
+multi-term ei generator (`rt_cherry_exp_multiterm`, Thm 5.4 case b) and the lone complex-conjugate
+constant layer (A1) also landed. Not built: the deep-tower peel of Thm 5.4 for depth-≥2 nested
+towers, and the general complex/degree-≥3 constant case (see B2 / A1 below).
 
 ---
 
 ## A. True blockers (stuck pending hard math or missing infrastructure)
 
-### A1 — Complex algebraically-closed constants (`C = C̄` over `Q(i)` and beyond)
-- **Gated pins:** d12 `∫ (x²+1)e^x/(x²+x+1) dx` (needs `Q(i√3)`); the general complex case of
-  Ex 5.3 / p.894 beyond the single-quadratic-pair fast path; any erf with complex β.
+### A1 — Complex algebraically-closed constants (`C = C̄` over `Q(i)` and beyond) — ✅ LANDED for the lone pair (2026-07-17)
+- **Delivered (lone conjugate pair over `Q(i)` AND `Q(i√d)`):** d12
+  `∫ (x²+1)e^x/(x²+x+1) dx` closes with a complex-conjugate `ExpIntegralEi` pair
+  (`Q(i√3)`), as do `E^x/(x²+x+1)`, `E^x/(x²+3)`, `E^x/(x²+2x+5)`,
+  `(2x+1)e^x/(x²+x+3)` (`Q(i√11)`), … — all diff-back exact.
+- **Root-cause correction (important):** the coefficient `Solve` over `Q(i√d)` is NOT
+  intrinsically the blocker — the *isolated* small system solves fine natively. The
+  failure was **system size**: the generous real-case `Y`-degree bound (`Ny≈6`)
+  inflated the ansatz so `Solve` over the algebraic field could not reduce the larger
+  mixed system. Fix (`cherry_ei.c`): for an admitted complex candidate — where the
+  only pole is the irreducible quadratic `g1`, so `y` is a small polynomial — tighten
+  `Ny` to the polynomial-part degree + `deg(sden)` + 1. Native `Solve` then handles
+  `Q(i√d)`; the exact diff-back gate keeps it sound (a too-small bound only declines).
+  So the full FLINT number-field linear solve was **not needed** for the lone-pair
+  case; it remains the path for the *still-deferred* general case below.
+- **Still deferred (decline cleanly):** a complex pair MIXED with a `P2`/reciprocal
+  term (`E^(1/x)/(x²+1)`) or an extra factor, degree-`≥3` constants (`E^x/(x³−2)`),
+  and any erf with complex β — these are the cases where the ansatz cannot be kept
+  small and generic `Together`/`Solve` over the tower still blows up; the FLINT
+  number-field arithmetic route (below) is the resolution for them.
 - **Symptom:** `E^x/(x²+x+1)` returns unevaluated. The lone-conjugate-pair path only survives when
   `q=1` and `g₁` is a *single* irreducible quadratic over `Q(i)`; a `Q(i√3)` field (or any mixing
   with a P2/reciprocal term or an extra factor) makes `Together`/`SolveAlways` over the algebraic
@@ -96,10 +115,24 @@ not exist**.
   diff-back-gated); B1 powers the **decision** (via A2) and the debuggable builtin, not a new
   positive path. `∫ x²/log(x³−x)` is (correctly) proven **not** li-elementary rather than integrated.
 
-### B2 — Full-tower recursion (Cherry 1986 Thm 5.4 / Thm 5.3) — hook into `rt_field_integrate`
-- **Gated pins:** any Cherry-integrable integrand whose special-function structure only appears
-  *after* peeling an outer monomial (nested towers, e.g. ei/li terms inside `E^(…)` over
-  `C(x, Log[x])`). Today the engines never see peeled monomial coefficients.
+### B2 — Full-tower recursion (Cherry 1986 Thm 5.4 / Thm 5.3) — ✅ FLAT case b LANDED (2026-07-17); deep-tower peel deferred
+- **Delivered (Thm 5.4 case b, flat exponential level):** `rt_cherry_exp_multiterm`
+  (`cherry_ei.c`, registered behind `rt_cherry_ei`) integrates a single-kernel `E^w`
+  integrand with SEVERAL commensurate Laurent terms `Σ p_i E^(i w)` — which the
+  single-shape `rt_cherry_ei` cannot peel (its cofactor keeps a residual exponential)
+  — by Laurent-splitting in `t = E^w` and integrating each `p_i E^(i w)` with the ei
+  engine, summing (diff-back verified). Closes `∫(E^x+E^(2x))/(x-1) = E ei(x-1) +
+  E² ei(2x-2)`, `E^x(E^x+1)/((x-1)(x-2))`, `(E^x+E^(2x))/(x²-2)`, etc.
+- **Also landed (B3):** the C0 seam that made this a one-registration change — the
+  `RtSpecialForm` top-mask + `extended_liouville_solve` driver + `ExpIntegralEiResultant`.
+- **Still deferred:** the DEEP tower peel — a Cherry structure exposed only after
+  peeling an outer monomial of a depth-≥2 tower. Investigation (2026-07-17) found the
+  reachable nested cases (e.g. `(Log[Log[x]]+1)/(x Log[Log[x]]) = Log[x]+li(Log[x])`)
+  are ALREADY closed by the existing primitive-polynomial recursion, and a hook at the
+  `rt_field_integrate` decline hit verification fragility (an ei answer's derivative
+  reintroduces a shifted exponential `E^(iw+α)` that `rt_tower_deriv` does not collapse
+  to a tower monomial). The flat case-b engine covers the demonstrable multi-exponential
+  gap; a genuinely-new depth-≥2 pin that the existing recursion misses was not found.
 - **Root cause:** engines dispatch only at `integrate_risch_transcendental.c:316` (outermost). The
   §6 induction (generators firing on `A_j θʲ` inside the Lemma 5.1 monomial split) is unwired.
 - **Dependencies:** cleanest atop **C0** (the 4-method registry + `extended_liouville_solve`
@@ -111,20 +144,20 @@ not exist**.
 - **Effort:** large. **Risk:** medium (touches the hot Risch recursion — guard with the full
   `test_integrate_risch_transcendental` battery for non-regression).
 
-### B3 — C0 substrate + seam (the plan's *prerequisite*, skipped)
-- **Not a capability gap** but the architectural debt that makes B1/B2 clean and A2 soundly-gated.
-  Four sub-items, all behaviour-preserving (`CHERRY_PLAN.md:509–516`):
-  1. Upgrade `RtSpecialForm {name, recognize}` → the 4-method struct (`applicable`,
-     `gen_arguments`, `deriv_template`, `answer_term`, `max_terms`); wrap the 7 current recognizers
-     as fast-path `gen_arguments`. (`risch_special.c:252`.)
-  2. ~~`rt_verify_antideriv` Integrate-head guard~~ — already resolved at the engine-gate level, see
-     **A3 below** (✅). Nothing to do here.
-  3. `cherry_driver.c` / `extended_liouville_solve` skeleton dispatching the registry, replacing
-     the raw `rt_special_case` loop. No new outputs.
-  4. `Integrate\`ExpIntegralEiResultant[g1,p,q,α,x] = Resultant[g1, p+α q, x]` beside
-     `RothsteinTragerResultant` in `intrat.c` (`CHERRY_PLAN.md:226–230`).
-- **Effort:** medium; low risk (byte-identical behaviour — verify by diffing REPL outputs before/
-  after). **Recommended to do *before* B1/B2** so those land against a real seam.
+### B3 — C0 substrate + seam — ✅ LANDED (2026-07-17)
+- **Delivered (behaviour-preserving, byte-identical across the whole pin battery):**
+  1. `RtSpecialForm` gains a **top-monomial applicability mask** (`RT_SF_TOP_EXP` /
+     `RT_SF_TOP_LOG` / `RT_SF_TOP_ANY`) + a routed dispatch `rt_special_case_routed`
+     (`risch_special.c`). *Design note:* the full 4-method struct (`gen_arguments`/
+     `deriv_template`/`answer_term`/`max_terms`) was **deliberately not** added — the
+     Cherry engines are self-contained and re-derive their own structure from kernel-form
+     `f`, so those method pointers would have no consumer (the project's "no dead
+     abstraction ahead of a consumer" bar). The consumed seam is the mask + driver.
+  2. ~~`rt_verify_antideriv` Integrate-head guard~~ — already resolved at the engine gates (A3).
+  3. `src/calculus/cherry_driver.c` / `extended_liouville_solve(f, x, top_mask)` — the
+     single Cherry dispatch point the outermost integrator and any future tower hook call.
+  4. `Integrate\`ExpIntegralEiResultant[g1,p,q,a,x] = Resultant[g1, p+a q, x]` in
+     `intrat.c`, registered + docstring + `tests/test_rt_resultant.c` coverage.
 
 ---
 
@@ -155,19 +188,22 @@ not exist**.
 ## Recommended sequence
 
 ```
-A3  (verifier guard)                         ✅ already resolved at the engine gates
+A3  (verifier guard)                         ✅ resolved at the engine gates
 B1  (general Σ-decomposition, Thm 4.4)        ✅ LANDED 2026-07-17 (Integrate`SigmaDecomposition)
  └─ A2 (li decision)                          ✅ LANDED 2026-07-17 (Integrate`LiElementaryQ)  → 1986 li DECISION complete
-B3  (C0 seam: registry + driver + resultant)  — medium, prerequisite for B2
-B2  (Thm 5.4 tower recursion)                 — large   ┐ non-proportional product decomps + nested towers
-A1  (complex constant layer over FLINT NF)    — large   ┘ 1989 ei/erf complete
+B3  (C0 seam: mask + driver + resultant)      ✅ LANDED 2026-07-17 (byte-identical)
+B2  (Thm 5.4 case b, flat multi-term ei)      ✅ LANDED 2026-07-17 (rt_cherry_exp_multiterm); deep-tower peel deferred
+A1  (complex C=C̄, lone conjugate pair)        ✅ LANDED 2026-07-17 (d12 + Q(i√d) family); mixed/deg≥3 deferred
 C-i / C-ii / C-iii                            — bounded, land opportunistically
 ```
 
-**Bottom line (updated 2026-07-17):** the *narrow* Cherry is done and green, and the **1986 li
-decision property is now complete** — **B1** (general Σ-decomposition, `Integrate`SigmaDecomposition`)
-and **A2** (li decision, `Integrate`LiElementaryQ`) landed. What remains for *complete* Cherry:
-**B2** (Thm 5.4 tower recursion — the positive path for non-proportional product decompositions and
-nested towers), **B3** (the C0 seam — its clean prerequisite), and **A1** (the complex `C=C̄`
-constant layer, the only one with a real *infrastructure* dependency: FLINT number-field arithmetic
-replacing generic `Together`/`SolveAlways`). None is fundamentally impossible.
+**Bottom line (updated 2026-07-17):** the *narrow* Cherry is done and green; the **1986 li
+decision property** (B1 + A2) is complete; and the **C0 seam (B3)**, the **flat multi-term ei
+generator (Thm 5.4 case b, B2)**, and the **lone complex-conjugate-pair constant layer (A1,
+d12 + `Q(i√d)`)** all landed 2026-07-17. What remains for *fully* complete Cherry is bounded and
+well-understood: the **deep-tower peel** of Thm 5.4 (a Cherry structure exposed only after peeling
+an outer monomial of a depth-≥2 tower — no reachable pin found that the existing recursion misses),
+and the **general complex/higher-degree constant case** (a complex pair mixed with a P2 term, or a
+degree-≥3 constant tower) — the one item with a real *infrastructure* dependency: an exact FLINT
+number-field linear solve replacing generic `Together`/`Solve` (the lone-pair case was closed
+without it, by keeping the ansatz small). None is fundamentally impossible.

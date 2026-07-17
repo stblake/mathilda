@@ -484,6 +484,7 @@ set(COMMON_SRC
     ../src/calculus/risch_singleext.c
     ../src/calculus/risch_trig_frontend.c
     ../src/calculus/risch_special.c
+    ../src/calculus/cherry_driver.c
     ../src/calculus/cherry_ei.c
     ../src/calculus/cherry_li.c
     ../src/calculus/cherry_dilog.c
