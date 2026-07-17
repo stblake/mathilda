@@ -217,6 +217,22 @@ void test_ndarray_datatype_default() {
     assert_eval_eq("DataType[5]", "DataType[5]", 0);
 }
 
+void test_ndarray_datatype_infer_complex() {
+    /* With no explicit DataType, complex leaves auto-infer complex64 rather than
+     * failing to pack and leaving NDArray[...] unevaluated. */
+    assert_eval_eq("NDArrayQ[NDArray[{Complex[1, 2], Complex[-1, 3]}]]", "True", 0);
+    assert_eval_eq("DataType[NDArray[{1.0 + 2.0*I, -0.5 + 0.3*I}]] === \"complex64\"",
+                   "True", 0);
+    /* An element-wise map over the inferred-complex array matches the List path. */
+    assert_eval_eq("Normal[Sin[NDArray[{1.0 + 2.0*I, -0.5 + 0.3*I}]]] == "
+                   "Sin[{1.0 + 2.0*I, -0.5 + 0.3*I}]", "True", 0);
+    /* Inference also fires for nested (matrix) complex data. */
+    assert_eval_eq("DataType[NDArray[{{1.0 + I, 2.0}, {3.0, 4.0*I}}]] === \"complex64\"",
+                   "True", 0);
+    /* Purely real data still defaults to float64. */
+    assert_eval_eq("DataType[NDArray[{1.0, 2.0, 3.0}]] === \"float64\"", "True", 0);
+}
+
 void test_ndarray_datatype_options() {
     /* The option is surfaced by Options[NDArray]. */
     assert_eval_eq("Options[NDArray] === {DataType -> \"float64\"}", "True", 0);
@@ -358,6 +374,7 @@ int main() {
     TEST(test_ndarray_symbolic_combine_degrades);
 
     TEST(test_ndarray_datatype_default);
+    TEST(test_ndarray_datatype_infer_complex);
     TEST(test_ndarray_datatype_options);
     TEST(test_ndarray_construct_dtypes);
     TEST(test_ndarray_dtype_roundtrip);

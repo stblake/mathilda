@@ -922,13 +922,28 @@ static bool ndarray_is_ragged(const Expr* list) {
     return shape_probe(list, dims, NDARRAY_MAX_RANK) < 0;
 }
 
+/* Recursively test whether a nested List contains any Complex[...] leaf, so the
+ * default (unspecified) dtype can be inferred as complex rather than defaulting
+ * to float64 and failing to pack. Recurses through Lists; any non-List node with
+ * head Complex counts. */
+static bool nested_list_has_complex(const Expr* e) {
+    if (head_is(e, SYM_List)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (nested_list_has_complex(e->data.function.args[i])) return true;
+        return false;
+    }
+    return head_is(e, SYM_Complex);
+}
+
 /* Strip a trailing `DataType -> "..."` option from res's args (rightmost wins),
  * modelled on options.c's extract_extension_option_full. Sets *dtype (default
  * float64), decrements *argc to the count of non-option args, and returns true
  * unless an explicit DataType option carried an unknown string (in which case
- * *bad is set true and the caller leaves the expression unevaluated). */
+ * *bad is set true and the caller leaves the expression unevaluated). When no
+ * DataType option is present, *explicit is set false so the caller can infer the
+ * dtype from the data (e.g. complex leaves -> complex64). */
 static bool extract_datatype_option(const Expr* res, size_t* argc,
-                                    NDType* dtype, bool* bad) {
+                                    NDType* dtype, bool* bad, bool* explicit_dt) {
     *dtype = NDT_FLOAT64;
     *bad = false;
     size_t n = res->data.function.arg_count;
@@ -960,14 +975,15 @@ static bool extract_datatype_option(const Expr* res, size_t* argc,
         break;
     }
     *argc = n;
+    *explicit_dt = seen;
     return true;
 }
 
 Expr* builtin_ndarray(Expr* res) {
     size_t argc;
     NDType dtype;
-    bool bad;
-    extract_datatype_option(res, &argc, &dtype, &bad);
+    bool bad, explicit_dt;
+    extract_datatype_option(res, &argc, &dtype, &bad, &explicit_dt);
     if (bad) {
         ndarray_warn_once("NDArray::dtype: Unknown DataType; expected one of "
                           "\"float64\", \"float32\", \"complex64\", "
@@ -976,6 +992,10 @@ Expr* builtin_ndarray(Expr* res) {
     }
     if (argc != 1) return NULL;
     Expr* arg = res->data.function.args[0];
+    /* No explicit DataType: infer complex64 when the data carries complex
+     * leaves, else keep the float64 default. float32/complex32 require an
+     * explicit option. */
+    if (!explicit_dt && nested_list_has_complex(arg)) dtype = NDT_COMPLEX64;
     Expr* packed = ndarray_from_nested_list(arg, dtype);
     if (packed) return packed;
     /* A ragged (non-rectangular) list can never form an array, so reject it
@@ -1006,7 +1026,7 @@ void ndarray_init(void) {
     symtab_get_def("NDArrayQ")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("NDArrayQ",
         "NDArrayQ[expr]\n"
-        "\tGives True if expr is an NDArray value, else False.");
+        "\tGives True if expr is an NDArray object, else False.");
 
     symtab_add_builtin("NDArray", builtin_ndarray);
     symtab_get_def("NDArray")->attributes |= ATTR_PROTECTED;

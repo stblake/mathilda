@@ -14,7 +14,9 @@ modelled on numpy's `ndarray`.
   `"float64"` (`double`, the default), `"float32"` (`float`), `"complex64"`
   (2×`double`), `"complex32"` (2×`float`). Real dtypes accept `Integer`/`Real`
   leaves; complex dtypes additionally accept `Complex[...]` (and bare reals).
-  `Options[NDArray]` is `{DataType -> "float64"}`; `DataType[a]` gives an
+  With no `DataType` option the dtype is inferred from the data: complex leaves
+  give `"complex64"`, otherwise `"float64"` (`"float32"`/`"complex32"` require an
+  explicit option). `Options[NDArray]` is `{DataType -> "float64"}`; `DataType[a]` gives an
   array's dtype as a string. dtype is part of an array's identity, so
   `NDArray[{1,2},DataType->"float32"]` is not `SameQ` to the `"float64"` one.
 - Unlike Mathematica's packed arrays -- an invisible internal optimization a
