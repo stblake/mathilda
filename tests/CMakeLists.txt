@@ -444,6 +444,7 @@ set(COMMON_SRC
     ../src/poly/rootofunity.c
     ../src/poly/squarefreeq.c
     ../src/poly/exponent.c
+    ../src/poly/facpoly_list.c
     ../src/poly/irrpolyq.c
     ../src/poly/groebner.c
     ../src/poly/groebnerbasis.c
@@ -677,6 +678,10 @@ add_test(NAME coprimeq_tests COMMAND coprimeq_tests)
 add_executable(exponent_tests test_exponent.c ${COMMON_SRC})
 target_include_directories(exponent_tests PRIVATE ../src)
 add_test(NAME exponent_tests COMMAND exponent_tests)
+
+add_executable(factorlist_tests test_factorlist.c ${COMMON_SRC})
+target_include_directories(factorlist_tests PRIVATE ../src)
+add_test(NAME factorlist_tests COMMAND factorlist_tests)
 
 add_executable(divisors_tests test_divisors.c ${COMMON_SRC})
 target_include_directories(divisors_tests PRIVATE ../src)

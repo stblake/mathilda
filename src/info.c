@@ -2947,6 +2947,13 @@ void info_init(void) {
         "compositum Q(alpha_1, ..., alpha_n).  The tower is reduced to a single\n"
         "primitive element gamma = alpha_1 + s_2 alpha_2 + ... via Trager's\n"
         "primitive-element algorithm (Phase G6).");
+    symtab_set_docstring("FactorList",
+        "FactorList[poly] gives a list of the irreducible factors of poly together\n"
+        "with their exponents, as {factor, exponent} pairs.  A thin wrapper over\n"
+        "Factor: options (GaussianIntegers -> True, Extension -> {a1, ...}) are\n"
+        "forwarded verbatim.  The first element is always the overall numerical\n"
+        "factor {c, 1} (it is {1, 1} when there is none); denominator factors of a\n"
+        "rational function appear with negative exponents.");
     symtab_set_docstring("FactorTerms",
         "FactorTerms[poly]\n\tpulls out any overall numerical factor in poly.\n"
         "FactorTerms[poly, x]\n\tpulls out any overall factor in poly that does not depend on x.\n"

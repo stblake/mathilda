@@ -942,6 +942,34 @@ In[5]:= Factor[(x^3 + 2x^2)/(x^2 - 4y^2) - (x + 2)/(x^2 - 4y^2)]
 Out[5]= ((-1 + x) (1 + x) (2 + x)) / ((x - 2 y) (x + 2 y))
 ```
 
+## FactorList
+Gives a list of the irreducible factors of a polynomial together with their exponents.
+- `FactorList[poly]`
+- `FactorList[poly, GaussianIntegers -> True]`
+- `FactorList[poly, Extension -> {a1, a2, ...}]`
+
+**Features**:
+- `Listable`, `Protected`.
+- A thin wrapper over `Factor`: it factors via `Factor[poly, opts...]` (options are forwarded verbatim) and splits the product into `{factor, exponent}` pairs.
+- The first element is always the overall numerical factor `{c, 1}` — it is `{1, 1}` when there is no numerical factor.
+- Denominator factors of a rational function appear with negative exponents.
+- `Times @@ Power @@@ FactorList[poly]` reconstructs `poly` (up to `Factor`'s normal form).
+- Because it delegates to `Factor`, the factorisation depth and normal form (factor ordering, `Extension`/`GaussianIntegers` handling) are exactly `Factor`'s.
+
+```mathematica
+In[1]:= FactorList[x^2 - 1]
+Out[1]= {{1, 1}, {-1 + x, 1}, {1 + x, 1}}
+
+In[2]:= FactorList[2 x^3 + 2 x^2 - 2 x - 2]
+Out[2]= {{2, 1}, {-1 + x, 1}, {1 + x, 2}}
+
+In[3]:= FactorList[(x^3 + 2 x^2)/(x^2 - 4 y^2) - (x + 2)/(x^2 - 4 y^2)]
+Out[3]= {{1, 1}, {-1 + x, 1}, {1 + x, 1}, {2 + x, 1}, {x - 2 y, -1}, {x + 2 y, -1}}
+
+In[4]:= FactorList[x^2 + 1, Extension -> I]
+Out[4]= {{1, 1}, {-I + x, 1}, {I + x, 1}}
+```
+
 ## FactorTerms
 Pulls out an overall numerical factor in a polynomial, or factors that do
 not depend on a given set of variables.

@@ -687,6 +687,8 @@ void core_init(void) {
     partitions_init();
     poly_init();
     facpoly_init();
+    void factorlist_init(void);
+    factorlist_init();
     flint_bridge_init();
     void flint_mat_bridge_init(void);
     flint_mat_bridge_init();

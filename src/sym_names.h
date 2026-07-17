@@ -165,6 +165,7 @@ extern const char* SYM_ExtendedGCD;
 extern const char* SYM_Extension;
 extern const char* SYM_FEAST;
 extern const char* SYM_Factor;
+extern const char* SYM_FactorList;
 extern const char* SYM_Fit;
 extern const char* SYM_FitRegularization;
 extern const char* SYM_FactorSquareFree;

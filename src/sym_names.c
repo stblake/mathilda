@@ -165,6 +165,7 @@ const char* SYM_ExtendedGCD = NULL;
 const char* SYM_Extension = NULL;
 const char* SYM_FEAST = NULL;
 const char* SYM_Factor = NULL;
+const char* SYM_FactorList = NULL;
 const char* SYM_Fit = NULL;
 const char* SYM_FitRegularization = NULL;
 const char* SYM_FactorSquareFree = NULL;
@@ -894,6 +895,7 @@ void sym_names_init(void) {
     SYM_Extension                  = intern_symbol("Extension");
     SYM_FEAST                      = intern_symbol("FEAST");
     SYM_Factor                     = intern_symbol("Factor");
+    SYM_FactorList                 = intern_symbol("FactorList");
     SYM_Fit                        = intern_symbol("Fit");
     SYM_FitRegularization          = intern_symbol("FitRegularization");
     SYM_FactorSquareFree           = intern_symbol("FactorSquareFree");
