@@ -4,6 +4,7 @@
 #include "symtab.h"
 #include "sym_names.h"
 #include "assoc.h"
+#include "ndarray.h"
 
 static bool is_atomic(Expr* e);
 static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, Expr* rhs, size_t* rhs_idx, bool is_rhs_list);
@@ -531,6 +532,20 @@ Expr* builtin_part(Expr* res) {
     Expr* expr = res->data.function.args[0];
     Expr** indices = res->data.function.args + 1;
     size_t nindices = res->data.function.arg_count - 1;
+
+    /* NDArray: index the flat buffer directly. [[0]] (head extraction) falls
+     * through to expr_part/expr_head, which reports NDArray as the head. Plain
+     * integer subscripts index natively; Span/All/List positions degrade to the
+     * general List Part via delist-and-reeval. */
+    if (is_ndarray(expr) &&
+        !(nindices > 0 && indices[0]->type == EXPR_INTEGER &&
+          indices[0]->data.integer == 0)) {
+        bool degrade = false;
+        Expr* r = ndarray_part(expr, indices, nindices, &degrade);
+        if (r) return r;
+        if (degrade) return ndarray_delist_and_reeval(res);
+        return NULL;  /* out-of-range / too many subscripts: leave unevaluated */
+    }
 
     // Mathematica allows [[0]] even for atoms
     if (nindices > 0 && indices[0]->type == EXPR_INTEGER && indices[0]->data.integer == 0) {

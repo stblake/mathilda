@@ -334,6 +334,43 @@ void test_ndarray_float32_dot() {
                    "NDArray[{1., 1.}, DataType -> \"float32\"]]", "{3.0, 7.0}", 0);
 }
 
+/* ---------- Part (indexing) ---------- */
+
+void test_ndarray_part_scalar() {
+    /* Full integer indexing yields a scalar leaf. */
+    assert_eval_eq("NDArray[{10., 20., 30., 40.}][[2]]", "20.0", 0);
+    assert_eval_eq("NDArray[{10., 20., 30., 40.}][[-1]]", "40.0", 0);
+    assert_eval_eq("NDArray[{{1., 2., 3.}, {4., 5., 6.}}][[2, 3]]", "6.0", 0);
+    /* Complex leaf rebuilds Complex[]. */
+    assert_eval_eq("NDArray[{Complex[1, 2], Complex[3, -4]}][[2]]", "3.0 - 4.0*I", 0);
+    /* [[0]] gives the head, and it is NDArray (not List). */
+    assert_eval_eq("NDArray[{1., 2., 3.}][[0]]", "NDArray", 0);
+}
+
+void test_ndarray_part_subarray() {
+    /* A partial integer index yields a sub-NDArray of the trailing shape. */
+    assert_eval_eq("NDArrayQ[NDArray[{{1., 2., 3.}, {4., 5., 6.}}][[1]]]", "True", 0);
+    assert_eval_eq("Normal[NDArray[{{1., 2., 3.}, {4., 5., 6.}}][[1]]]", "{1.0, 2.0, 3.0}", 0);
+    assert_eval_eq("Dimensions[NDArray[Table[1.0*i + j, {i, 2}, {j, 3}]][[2]]]", "{3}", 0);
+}
+
+void test_ndarray_part_matches_list_path() {
+    /* Native integer indexing agrees with the delisted reference, including a
+     * rank-3 array and negative subscripts. */
+    assert_eval_eq("Module[{t = NDArray[Table[100.0 i + 10.0 j + k, {i, 2}, {j, 3}, {k, 4}]], "
+                   "l = Table[100.0 i + 10.0 j + k, {i, 2}, {j, 3}, {k, 4}]}, "
+                   "{Normal[t[[2]]] == l[[2]], Normal[t[[1, 3]]] == l[[1, 3]], "
+                   "t[[2, 3, 4]] == l[[2, 3, 4]], t[[-1, -1, -1]] == l[[-1, -1, -1]]}]",
+                   "{True, True, True, True}", 0);
+}
+
+void test_ndarray_part_degrades() {
+    /* Span / All / a List of positions degrade to the general List Part path. */
+    assert_eval_eq("NDArray[{10., 20., 30., 40.}][[2 ;; 3]]", "{20.0, 30.0}", 0);
+    assert_eval_eq("NDArray[{10., 20., 30., 40.}][[{1, 3}]]", "{10.0, 30.0}", 0);
+    assert_eval_eq("NDArray[{{1., 2.}, {3., 4.}}][[All, 2]]", "{2.0, 4.0}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -392,6 +429,11 @@ int main() {
 
     TEST(test_ndarray_complex_dot);
     TEST(test_ndarray_float32_dot);
+
+    TEST(test_ndarray_part_scalar);
+    TEST(test_ndarray_part_subarray);
+    TEST(test_ndarray_part_matches_list_path);
+    TEST(test_ndarray_part_degrades);
 
     printf("All NDArray tests passed.\n");
     return 0;

@@ -239,6 +239,61 @@ Expr* ndarray_to_nested_list(const Expr* a) {
                           a->data.ndarray.data, a->data.ndarray.dtype, &idx);
 }
 
+Expr* ndarray_part(const Expr* a, Expr** indices, size_t nindices, bool* degrade) {
+    *degrade = false;
+    int rank = a->data.ndarray.rank;
+    const int64_t* dims = a->data.ndarray.dims;
+    NDType dt = a->data.ndarray.dtype;
+
+    if (nindices == 0) return NULL;               /* caller supplies >= 1 index */
+    if (nindices > (size_t)rank) return NULL;     /* too many subscripts: partw */
+
+    /* The native path handles only plain-integer subscripts; anything else
+     * (Span, All, a List of positions, UpTo, ...) degrades to delist-and-reeval,
+     * which reuses the fully general List Part semantics. */
+    for (size_t i = 0; i < nindices; i++) {
+        if (indices[i]->type != EXPR_INTEGER) { *degrade = true; return NULL; }
+    }
+
+    /* Flat (element) offset accumulated over the leading axes. The buffer is
+     * row-major, so fixing the leading `nindices` axes selects a contiguous
+     * block whose length is the product of the trailing dims. */
+    size_t offset = 0;
+    for (size_t i = 0; i < nindices; i++) {
+        int64_t k = indices[i]->data.integer;
+        int64_t len = dims[i];
+        if (k < 0) k = len + k + 1;               /* negatives count from end */
+        if (k < 1 || k > len) return NULL;        /* out of range: leave as-is */
+        int64_t stride = 1;
+        for (int j = (int)i + 1; j < rank; j++) stride *= dims[j];
+        offset += (size_t)(k - 1) * (size_t)stride;
+    }
+
+    if ((size_t)rank == nindices) {               /* fully indexed -> scalar leaf */
+        double re, im;
+        ndt_get(a->data.ndarray.data, offset, dt, &re, &im);
+        if (ndt_is_complex(dt)) {
+            Expr* cargs[2] = { expr_new_real(re), expr_new_real(im) };
+            return expr_new_function(expr_new_symbol(SYM_Complex), cargs, 2);
+        }
+        return expr_new_real(re);
+    }
+
+    /* Contiguous rank-(rank-nindices) sub-array starting at `offset`. */
+    int subrank = rank - (int)nindices;
+    int64_t subdims[NDARRAY_MAX_RANK];
+    size_t subsize = 1;
+    for (int j = 0; j < subrank; j++) {
+        subdims[j] = dims[nindices + (size_t)j];
+        subsize *= (size_t)subdims[j];
+    }
+    size_t esz = ndt_elem_size(dt);
+    void* out = malloc(esz * subsize);
+    if (!out) return NULL;
+    memcpy(out, (const char*)a->data.ndarray.data + offset * esz, esz * subsize);
+    return expr_new_ndarray(subrank, subdims, out, dt); /* takes ownership */
+}
+
 Expr* ndarray_dot2(const Expr* a, const Expr* b, bool* shape_error) {
     int rankA = a->data.ndarray.rank;
     int rankB = b->data.ndarray.rank;

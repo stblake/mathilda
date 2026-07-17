@@ -84,6 +84,13 @@ modelled on numpy's `ndarray`.
 - `DataType[NDArray[...]]` is the element dtype string (numpy `.dtype`);
   unevaluated on a non-array.
 - `MatrixQ`/`VectorQ` answer per rank (2 / 1).
+- `Part[NDArray[...], i1, ...]` (`arr[[...]]`) indexes the flat buffer directly.
+  Plain integer subscripts (1-based, negatives from the end) are handled
+  natively: indexing every axis gives a scalar leaf (`Real`, or `Complex` for a
+  complex dtype), while indexing a leading run of axes gives a contiguous
+  sub-`NDArray` of the trailing shape (so `mat[[i]]` is a packed row, `NDArrayQ`
+  True). `arr[[0]]` is the head `NDArray`. Non-integer specs (`Span`, `All`, a
+  list of positions) fall back to the general `List` `Part` and return a `List`.
 
 **Features**:
 - `Protected`.

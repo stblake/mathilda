@@ -88,6 +88,16 @@ Expr* ndarray_from_nested_list(const Expr* list, NDType dtype);
  * List[...] tree from an NDArray's flat buffer. Caller owns the result. */
 Expr* ndarray_to_nested_list(const Expr* a);
 
+/* Native Part[a, i1, ..., iN] over a leading run of plain-integer subscripts,
+ * operating directly on the flat buffer (no full materialization). N == rank
+ * yields a scalar leaf (Real or Complex[re,im]); N < rank yields a contiguous
+ * rank-(rank-N) sub-NDArray. Subscripts are 1-based, negatives count from the
+ * end. A non-integer subscript (Span/All/List/...) sets *degrade true and
+ * returns NULL, so the caller can fall back to ndarray_delist_and_reeval; an
+ * out-of-range subscript or too many subscripts returns NULL with *degrade
+ * false (leave the Part unevaluated). Caller owns any returned Expr. */
+Expr* ndarray_part(const Expr* a, Expr** indices, size_t nindices, bool* degrade);
+
 /* NDArray[nested_list] constructor builtin: packs `res`'s sole argument, or
  * returns NULL (leave unevaluated) if it can't be packed. */
 Expr* builtin_ndarray(Expr* res);
