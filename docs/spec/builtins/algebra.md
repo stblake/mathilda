@@ -152,6 +152,17 @@ the generators' minimal-polynomial ideal via `fmpz_mpoly_divrem_ideal`), and
 inverting it with a solve over `Q(params)` (`gr_mat` over `fmpz_mpoly_q`)
 rationalises the denominator to `Norm_{K/Q(params)}(D)`. No numeric zero oracle.
 
+**Polynomials / rational functions with algebraic-number coefficients** — when
+the input is not itself a constant algebraic number nor a variable-radicand
+tower, `RootReduce` threads over its structure and canonicalises each **maximal
+constant-algebraic subexpression** (i.e. each coefficient) via `qqbar`, leaving
+the free-variable structure intact. A coefficient that is a genuine algebraic
+zero (e.g. `Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]`) reduces to `0` and its
+monomial drops out; a non-vanishing algebraic coefficient (e.g. `Sqrt[8]`) is
+canonicalised in place. Purely symbolic coefficients and the variable structure
+are preserved — `RootReduce` does no plain polynomial cancellation (that is
+`Cancel`'s job).
+
 **Features**:
 - `Protected`, `Listable`. Threads over lists, and over equations, inequalities
   and logic functions (`Equal`, `Unequal`, `Less`, `And`, ...); for
@@ -184,6 +195,12 @@ Out[5]= True
 
 In[6]:= RootReduce[1/(1 + k^(1/3))]        (* parametric tower *)
 Out[6]= (1 - k^(1/3) + k^(2/3)) / (1 + k)
+
+In[7]:= RootReduce[(Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]) x^2 + x + 1]
+Out[7]= 1 + x                              (* vanishing coefficient dropped *)
+
+In[8]:= RootReduce[a x^2 + Sqrt[8] x]      (* thread over coefficients *)
+Out[8]= 2 Sqrt[2] x + a x^2
 ```
 
 ## Apart

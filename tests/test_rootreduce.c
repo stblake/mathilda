@@ -114,6 +114,18 @@ static void test_rootreduce_exact(void) {
      * polynomial cancellation — that is Cancel's job). */
     check("RootReduce[x + 1]", "1 + x");
     check("RootReduce[(x^2 - 1)/(x - 1)]", "(-1 + x^2)/(-1 + x)");
+
+    /* Thread over the coefficients of a polynomial in a free variable: the x^2
+     * coefficient Sqrt[2]+Sqrt[3]-Sqrt[5+2Sqrt[6]] is a genuine algebraic zero,
+     * so RootReduce reduces it to 0 and the monomial drops out. */
+    check("RootReduce[(Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]) x^2 + x + 1]",
+          "1 + x");
+    /* A non-vanishing algebraic coefficient is canonicalised in place, while a
+     * purely symbolic coefficient (a) and the variable structure are preserved. */
+    check("RootReduce[a x^2 + Sqrt[8] x]", "2 Sqrt[2] x + a x^2");
+    /* Rational function: the coefficient in the numerator is reduced, the
+     * free-variable denominator is left intact (no spurious rationalisation). */
+    check("RootReduce[Sqrt[8]/x]", "(2 Sqrt[2])/x");
 }
 
 /* ------------------------------------------------------------------ */

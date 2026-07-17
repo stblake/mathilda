@@ -16,6 +16,13 @@
  *       flint_bridge.c): the denominator is inverted in the field by an exact
  *       linear solve, no numeric oracle.
  *
+ *   (3) POLYNOMIALS / RATIONAL FUNCTIONS in a free variable whose coefficients
+ *       are constant algebraic numbers — threaded over via rr_thread_coeffs:
+ *       each maximal constant-algebraic subexpression (a coefficient) is
+ *       canonicalised via qqbar and the free-variable structure is left intact,
+ *       so a vanishing radical coefficient reduces to 0 and its monomial drops
+ *       out. Plain polynomial cancellation is NOT performed (that is Cancel).
+ *
  * RootReduce also threads over equations, inequalities and logic functions
  * (Equal, Less, And, ...), and for equations/inequalities of constant algebraic
  * numbers it decides the (in)equality exactly via `qqbar`. It is Listable, so
@@ -98,6 +105,25 @@ static int is_relational(const Expr* e) {
 
 static Expr* bool_expr(int v) { return expr_new_symbol(v ? "True" : "False"); }
 
+/* Recursively thread RootReduce over the structure of `e`: canonicalise every
+ * maximal constant-algebraic subexpression (a polynomial/rational-function
+ * coefficient) via qqbar, leaving the free-variable structure intact. Cheap —
+ * flint_qqbar_canonical returns NULL immediately for anything carrying a free
+ * symbol. Returns a newly-built, *unevaluated* tree; the caller evaluates once
+ * so that e.g. Times[0, x^2] collapses and vanishing coefficients drop out. */
+static Expr* rr_thread_coeffs(const Expr* e, QQBarMethod method) {
+    Expr* q = flint_qqbar_canonical(e, method);
+    if (q) return q;                                   /* maximal const-algebraic */
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++)
+        args[i] = rr_thread_coeffs(e->data.function.args[i], method);
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), args, n);
+    free(args);
+    return out;
+}
+
 /* Thread RootReduce over a relational/logical head. For a binary
  * (in)equality of constant algebraic numbers, decide it exactly via qqbar;
  * otherwise map RootReduce over the parts and re-evaluate. */
@@ -169,6 +195,13 @@ Expr* builtin_rootreduce(Expr* res) {
 #ifdef USE_FLINT
     Expr* r = flint_algebraic_field_canonical(arg);
     if (r) return r;
+
+    /* Polynomial / rational function with constant-algebraic coefficients:
+     * thread RootReduce over the coefficients (e.g. a vanishing radical
+     * coefficient reduces to 0 and its monomial drops out). */
+    Expr* threaded = rr_thread_coeffs(arg, method);
+    if (threaded && !expr_eq(threaded, arg)) return eval_and_free(threaded);
+    expr_free(threaded);
 #endif
 
     /* Identity: steal the positional arg out of res (evaluator frees res). */
@@ -190,6 +223,8 @@ void rootreduce_init(void) {
         "RootReduce[expr] canonicalises an algebraic expression: a constant "
         "algebraic number becomes a rational, a quadratic radical, or a Root "
         "object; a rational function over a radical tower has its denominator "
-        "rationalised. Threads over lists, equations, inequalities and logic. "
+        "rationalised; a polynomial/rational function in a free variable has its "
+        "constant-algebraic coefficients canonicalised. Threads over lists, "
+        "equations, inequalities and logic. "
         "Option: Method -> \"Automatic\" | \"Recursive\" | \"NumberField\".");
 }
