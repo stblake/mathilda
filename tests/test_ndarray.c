@@ -364,11 +364,43 @@ void test_ndarray_part_matches_list_path() {
                    "{True, True, True, True}", 0);
 }
 
-void test_ndarray_part_degrades() {
-    /* Span / All / a List of positions degrade to the general List Part path. */
-    assert_eval_eq("NDArray[{10., 20., 30., 40.}][[2 ;; 3]]", "{20.0, 30.0}", 0);
-    assert_eval_eq("NDArray[{10., 20., 30., 40.}][[{1, 3}]]", "{10.0, 30.0}", 0);
-    assert_eval_eq("NDArray[{{1., 2.}, {3., 4.}}][[All, 2]]", "{2.0, 4.0}", 0);
+void test_ndarray_part_slices_stay_packed() {
+    /* Span / All / a List of positions produce a packed sub-NDArray natively. */
+    assert_eval_eq("NDArrayQ[NDArray[{10., 20., 30., 40.}][[2 ;; 3]]]", "True", 0);
+    assert_eval_eq("Normal[NDArray[{10., 20., 30., 40.}][[2 ;; 3]]]", "{20.0, 30.0}", 0);
+    /* Stepped and reversed spans. */
+    assert_eval_eq("Normal[NDArray[{10., 20., 30., 40.}][[1 ;; 4 ;; 2]]]", "{10.0, 30.0}", 0);
+    assert_eval_eq("Normal[NDArray[{10., 20., 30., 40.}][[-1 ;; 1 ;; -1]]]",
+                   "{40.0, 30.0, 20.0, 10.0}", 0);
+    /* Fancy (list of positions) gather stays packed. */
+    assert_eval_eq("NDArrayQ[NDArray[{10., 20., 30., 40.}][[{1, 3}]]]", "True", 0);
+    assert_eval_eq("Normal[NDArray[{10., 20., 30., 40.}][[{1, 3}]]]", "{10.0, 30.0}", 0);
+    /* A column of a matrix (All on axis 1, integer on axis 2) is a packed vector. */
+    assert_eval_eq("NDArrayQ[NDArray[{{1., 2.}, {3., 4.}}][[All, 2]]]", "True", 0);
+    assert_eval_eq("Normal[NDArray[{{1., 2.}, {3., 4.}}][[All, 2]]]", "{2.0, 4.0}", 0);
+    /* A sub-matrix (Span on both axes) keeps rank 2. */
+    assert_eval_eq("Dimensions[NDArray[{{1., 2., 3.}, {4., 5., 6.}}][[All, 2 ;; 3]]]",
+                   "{2, 2}", 0);
+    assert_eval_eq("Normal[NDArray[{{1., 2., 3.}, {4., 5., 6.}}][[All, 2 ;; 3]]]",
+                   "{{2.0, 3.0}, {5.0, 6.0}}", 0);
+    /* dtype is preserved through a slice. */
+    assert_eval_eq("DataType[NDArray[{1., 2., 3., 4.}, DataType -> \"float32\"][[2 ;; 3]]] "
+                   "=== \"float32\"", "True", 0);
+    assert_eval_eq("DataType[NDArray[{Complex[1, 1], 2, 3}][[2 ;; 3]]] === \"complex64\"",
+                   "True", 0);
+}
+
+void test_ndarray_part_slices_match_list_path() {
+    /* Mixed integer / All / Span / fancy subscripts over a rank-3 array agree
+     * with the delisted reference (Normal[t][[...]]). */
+    assert_eval_eq("Module[{t = NDArray[Table[100.0 i + 10.0 j + k, {i, 3}, {j, 4}, {k, 5}]], "
+                   "l = Table[100.0 i + 10.0 j + k, {i, 3}, {j, 4}, {k, 5}]}, "
+                   "{Normal[t[[2 ;; 3]]] == l[[2 ;; 3]], "
+                   "Normal[t[[All, 2 ;; 4 ;; 2]]] == l[[All, 2 ;; 4 ;; 2]], "
+                   "Normal[t[[2, All, 3]]] == l[[2, All, 3]], "
+                   "Normal[t[[{1, 3}, 2, {1, 4, 5}]]] == l[[{1, 3}, 2, {1, 4, 5}]], "
+                   "Normal[t[[-1 ;; 1 ;; -1, 2, All]]] == l[[-1 ;; 1 ;; -1, 2, All]]}]",
+                   "{True, True, True, True, True}", 0);
 }
 
 int main() {
@@ -433,7 +465,8 @@ int main() {
     TEST(test_ndarray_part_scalar);
     TEST(test_ndarray_part_subarray);
     TEST(test_ndarray_part_matches_list_path);
-    TEST(test_ndarray_part_degrades);
+    TEST(test_ndarray_part_slices_stay_packed);
+    TEST(test_ndarray_part_slices_match_list_path);
 
     printf("All NDArray tests passed.\n");
     return 0;

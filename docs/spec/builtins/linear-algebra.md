@@ -84,13 +84,17 @@ modelled on numpy's `ndarray`.
 - `DataType[NDArray[...]]` is the element dtype string (numpy `.dtype`);
   unevaluated on a non-array.
 - `MatrixQ`/`VectorQ` answer per rank (2 / 1).
-- `Part[NDArray[...], i1, ...]` (`arr[[...]]`) indexes the flat buffer directly.
-  Plain integer subscripts (1-based, negatives from the end) are handled
-  natively: indexing every axis gives a scalar leaf (`Real`, or `Complex` for a
-  complex dtype), while indexing a leading run of axes gives a contiguous
-  sub-`NDArray` of the trailing shape (so `mat[[i]]` is a packed row, `NDArrayQ`
-  True). `arr[[0]]` is the head `NDArray`. Non-integer specs (`Span`, `All`, a
-  list of positions) fall back to the general `List` `Part` and return a `List`.
+- `Part[NDArray[...], i1, ...]` (`arr[[...]]`) indexes the flat buffer directly
+  and stays packed. Subscripts are 1-based with negatives counting from the end;
+  omitted trailing axes are implicitly `All`. An integer subscript drops that
+  axis, `All` / `Span[a,b,c]` (step and reversal supported) / a list of
+  positions keep it. Indexing every axis with integers gives a scalar leaf
+  (`Real`, or `Complex` for a complex dtype); otherwise the result is a
+  sub-`NDArray` whose shape is the kept axes — so `mat[[i]]` is a packed row,
+  `mat[[All, j]]` a packed column, `mat[[All, a;;b]]` a packed sub-matrix, all
+  preserving dtype. `arr[[0]]` is the head `NDArray`. Out-of-range or too-many
+  subscripts leave the `Part[...]` unevaluated, as in Wolfram. (Exotic specs
+  such as an empty span or `Key[...]` fall back to the general `List` `Part`.)
 
 **Features**:
 - `Protected`.

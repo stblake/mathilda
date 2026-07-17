@@ -239,6 +239,123 @@ Expr* ndarray_to_nested_list(const Expr* a) {
                           a->data.ndarray.data, a->data.ndarray.dtype, &idx);
 }
 
+/* Per-axis index selection for ndarray_part's general (sliced) path. `keep` is
+ * false for an integer subscript (the axis is dropped from the result) and true
+ * for All / Span / a List of positions (the axis survives with `n` selected
+ * source positions listed 0-based in `pos`). `pos` is always heap-allocated
+ * (length 1 for a dropped axis) so cleanup is uniform. */
+typedef struct { int64_t* pos; int64_t n; bool keep; } NDAxisSel;
+
+/* Status codes for build_axis_selector: OK, or leave the whole Part alone. */
+#define NDPART_OK       0
+#define NDPART_DEGRADE  1   /* spec is valid but not natively handled -> delist */
+#define NDPART_INVALID  2   /* out-of-range subscript -> leave Part unevaluated */
+
+/* Resolve a 1-based (possibly negative) subscript against axis length `len` to
+ * a 0-based position, or return false if out of range. */
+static bool nd_resolve_index(int64_t k, int64_t len, int64_t* pos0) {
+    if (k < 0) k = len + k + 1;
+    if (k < 1 || k > len) return false;
+    *pos0 = k - 1;
+    return true;
+}
+
+/* Fill `sel` for one axis of length `len` from `spec` (NULL means an implicit
+ * trailing All). Mirrors the List-path Span/All/List semantics in part.c. */
+static int build_axis_selector(const Expr* spec, int64_t len, NDAxisSel* sel) {
+    sel->pos = NULL; sel->n = 0; sel->keep = false;
+
+    /* Implicit trailing All, or an explicit All symbol: keep every position. */
+    if (spec == NULL ||
+        (spec->type == EXPR_SYMBOL && spec->data.symbol.name == SYM_All)) {
+        sel->pos = malloc(sizeof(int64_t) * (size_t)(len > 0 ? len : 1));
+        if (!sel->pos) return NDPART_DEGRADE;
+        for (int64_t i = 0; i < len; i++) sel->pos[i] = i;
+        sel->n = len; sel->keep = true;
+        return NDPART_OK;
+    }
+
+    /* Integer subscript: drop the axis, fix a single position. */
+    if (spec->type == EXPR_INTEGER) {
+        int64_t p;
+        if (!nd_resolve_index(spec->data.integer, len, &p)) return NDPART_INVALID;
+        sel->pos = malloc(sizeof(int64_t));
+        if (!sel->pos) return NDPART_DEGRADE;
+        sel->pos[0] = p; sel->n = 1; sel->keep = false;
+        return NDPART_OK;
+    }
+
+    if (spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = spec->data.function.head->data.symbol.name;
+
+        /* Span[start, end, step] with the same start/end/step resolution the
+         * List path uses (Integer / All / UpTo per component). */
+        if (h == SYM_Span) {
+            int64_t start = 1, end = len, step = 1;
+            size_t argc = spec->data.function.arg_count;
+            const Expr* const* sa = (const Expr* const*)spec->data.function.args;
+            for (size_t c = 0; c < argc && c < 3; c++) {
+                const Expr* e = sa[c];
+                bool is_all = (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_All);
+                bool is_upto = (e->type == EXPR_FUNCTION &&
+                                e->data.function.head->type == EXPR_SYMBOL &&
+                                e->data.function.head->data.symbol.name == SYM_UpTo &&
+                                e->data.function.arg_count == 1 &&
+                                e->data.function.args[0]->type == EXPR_INTEGER);
+                int64_t v = 0;
+                if (e->type == EXPR_INTEGER) v = e->data.integer;
+                else if (is_upto) v = e->data.function.args[0]->data.integer;
+                else if (!is_all) return NDPART_DEGRADE;
+
+                if (c == 0) {          /* start */
+                    if (is_all) start = 1;
+                    else { if (is_upto && v > len) v = len; start = v < 0 ? len + v + 1 : v; }
+                } else if (c == 1) {   /* end */
+                    if (is_all) end = len;
+                    else { if (is_upto && v > len) v = len; end = v < 0 ? len + v + 1 : v; }
+                } else {               /* step */
+                    if (is_all) step = 1;
+                    else if (is_upto) return NDPART_DEGRADE;
+                    else step = v;
+                    if (step == 0) return NDPART_INVALID;
+                }
+            }
+            int64_t count = 0;
+            if (step > 0) { if (start <= end && start >= 1 && end <= len) count = (end - start) / step + 1; }
+            else          { if (start >= end && start <= len && end >= 1) count = (start - end) / (-step) + 1; }
+            if (count <= 0) return NDPART_DEGRADE;   /* empty span -> exact List {} */
+            sel->pos = malloc(sizeof(int64_t) * (size_t)count);
+            if (!sel->pos) return NDPART_DEGRADE;
+            int64_t cur = start;
+            for (int64_t i = 0; i < count; i++) { sel->pos[i] = cur - 1; cur += step; }
+            sel->n = count; sel->keep = true;
+            return NDPART_OK;
+        }
+
+        /* A List of plain integer positions (fancy gather). Any non-integer
+         * entry, or an empty list, degrades to the exact List-path result. */
+        if (h == SYM_List) {
+            size_t m = spec->data.function.arg_count;
+            if (m == 0) return NDPART_DEGRADE;
+            sel->pos = malloc(sizeof(int64_t) * m);
+            if (!sel->pos) return NDPART_DEGRADE;
+            for (size_t i = 0; i < m; i++) {
+                const Expr* e = spec->data.function.args[i];
+                int64_t p;
+                if (e->type != EXPR_INTEGER || !nd_resolve_index(e->data.integer, len, &p)) {
+                    free(sel->pos); sel->pos = NULL;
+                    return (e->type == EXPR_INTEGER) ? NDPART_INVALID : NDPART_DEGRADE;
+                }
+                sel->pos[i] = p;
+            }
+            sel->n = (int64_t)m; sel->keep = true;
+            return NDPART_OK;
+        }
+    }
+
+    return NDPART_DEGRADE;   /* unrecognised spec (Key, pattern, ...) */
+}
+
 Expr* ndarray_part(const Expr* a, Expr** indices, size_t nindices, bool* degrade) {
     *degrade = false;
     int rank = a->data.ndarray.rank;
@@ -248,49 +365,105 @@ Expr* ndarray_part(const Expr* a, Expr** indices, size_t nindices, bool* degrade
     if (nindices == 0) return NULL;               /* caller supplies >= 1 index */
     if (nindices > (size_t)rank) return NULL;     /* too many subscripts: partw */
 
-    /* The native path handles only plain-integer subscripts; anything else
-     * (Span, All, a List of positions, UpTo, ...) degrades to delist-and-reeval,
-     * which reuses the fully general List Part semantics. */
-    for (size_t i = 0; i < nindices; i++) {
-        if (indices[i]->type != EXPR_INTEGER) { *degrade = true; return NULL; }
+    /* Fast path: every subscript is a plain integer. Fixing the leading axes of
+     * a row-major buffer selects a contiguous block, so this is O(1) for a
+     * scalar leaf and a single memcpy for a sub-array. */
+    bool all_int = true;
+    for (size_t i = 0; i < nindices; i++)
+        if (indices[i]->type != EXPR_INTEGER) { all_int = false; break; }
+
+    if (all_int) {
+        size_t offset = 0;
+        for (size_t i = 0; i < nindices; i++) {
+            int64_t p;
+            if (!nd_resolve_index(indices[i]->data.integer, dims[i], &p)) return NULL;
+            int64_t stride = 1;
+            for (int j = (int)i + 1; j < rank; j++) stride *= dims[j];
+            offset += (size_t)p * (size_t)stride;
+        }
+        if ((size_t)rank == nindices) {           /* fully indexed -> scalar leaf */
+            double re, im;
+            ndt_get(a->data.ndarray.data, offset, dt, &re, &im);
+            if (ndt_is_complex(dt)) {
+                Expr* cargs[2] = { expr_new_real(re), expr_new_real(im) };
+                return expr_new_function(expr_new_symbol(SYM_Complex), cargs, 2);
+            }
+            return expr_new_real(re);
+        }
+        int subrank = rank - (int)nindices;
+        int64_t subdims[NDARRAY_MAX_RANK];
+        size_t subsize = 1;
+        for (int j = 0; j < subrank; j++) {
+            subdims[j] = dims[nindices + (size_t)j];
+            subsize *= (size_t)subdims[j];
+        }
+        size_t esz = ndt_elem_size(dt);
+        void* out = malloc(esz * subsize);
+        if (!out) return NULL;
+        memcpy(out, (const char*)a->data.ndarray.data + offset * esz, esz * subsize);
+        return expr_new_ndarray(subrank, subdims, out, dt); /* takes ownership */
     }
 
-    /* Flat (element) offset accumulated over the leading axes. The buffer is
-     * row-major, so fixing the leading `nindices` axes selects a contiguous
-     * block whose length is the product of the trailing dims. */
-    size_t offset = 0;
-    for (size_t i = 0; i < nindices; i++) {
-        int64_t k = indices[i]->data.integer;
-        int64_t len = dims[i];
-        if (k < 0) k = len + k + 1;               /* negatives count from end */
-        if (k < 1 || k > len) return NULL;        /* out of range: leave as-is */
-        int64_t stride = 1;
-        for (int j = (int)i + 1; j < rank; j++) stride *= dims[j];
-        offset += (size_t)(k - 1) * (size_t)stride;
+    /* General path: a mix of Integer / All / Span / List subscripts (plus
+     * implicit trailing All axes). Build a per-axis list of source positions,
+     * then gather into a packed result via a mixed-radix walk over all axes
+     * (dropped integer axes have radix 1, so they contribute a fixed digit and
+     * do not appear in the output shape). */
+    NDAxisSel sel[NDARRAY_MAX_RANK];
+    for (int i = 0; i < rank; i++) { sel[i].pos = NULL; sel[i].n = 0; sel[i].keep = false; }
+
+    int status = NDPART_OK;
+    for (int i = 0; i < rank; i++) {
+        const Expr* spec = ((size_t)i < nindices) ? indices[i] : NULL;
+        status = build_axis_selector(spec, dims[i], &sel[i]);
+        if (status != NDPART_OK) break;
+    }
+    if (status != NDPART_OK) {
+        for (int i = 0; i < rank; i++) free(sel[i].pos);
+        if (status == NDPART_DEGRADE) *degrade = true;
+        return NULL;   /* INVALID -> leave unevaluated; DEGRADE -> caller delists */
     }
 
-    if ((size_t)rank == nindices) {               /* fully indexed -> scalar leaf */
+    int subrank = 0;
+    int64_t subdims[NDARRAY_MAX_RANK];
+    size_t total = 1;
+    for (int i = 0; i < rank; i++) {
+        if (sel[i].keep) subdims[subrank++] = sel[i].n;
+        total *= (size_t)sel[i].n;
+    }
+
+    int64_t stride[NDARRAY_MAX_RANK];
+    { int64_t s = 1; for (int i = rank - 1; i >= 0; i--) { stride[i] = s; s *= dims[i]; } }
+
+    size_t esz = ndt_elem_size(dt);
+    void* out = malloc(esz * (total ? total : 1));
+    if (!out) { for (int i = 0; i < rank; i++) free(sel[i].pos); return NULL; }
+
+    for (size_t oi = 0; oi < total; oi++) {
+        size_t rem = oi, src = 0;
+        for (int i = rank - 1; i >= 0; i--) {
+            int64_t d = sel[i].n;                 /* radix (>=1) */
+            int64_t digit = (int64_t)(rem % (size_t)d);
+            rem /= (size_t)d;
+            src += (size_t)sel[i].pos[digit] * (size_t)stride[i];
+        }
         double re, im;
-        ndt_get(a->data.ndarray.data, offset, dt, &re, &im);
+        ndt_get(a->data.ndarray.data, src, dt, &re, &im);
+        ndt_set(out, oi, dt, re, im);
+    }
+
+    for (int i = 0; i < rank; i++) free(sel[i].pos);
+
+    if (subrank == 0) {                           /* all axes dropped -> scalar */
+        double re, im;
+        ndt_get(out, 0, dt, &re, &im);
+        free(out);
         if (ndt_is_complex(dt)) {
             Expr* cargs[2] = { expr_new_real(re), expr_new_real(im) };
             return expr_new_function(expr_new_symbol(SYM_Complex), cargs, 2);
         }
         return expr_new_real(re);
     }
-
-    /* Contiguous rank-(rank-nindices) sub-array starting at `offset`. */
-    int subrank = rank - (int)nindices;
-    int64_t subdims[NDARRAY_MAX_RANK];
-    size_t subsize = 1;
-    for (int j = 0; j < subrank; j++) {
-        subdims[j] = dims[nindices + (size_t)j];
-        subsize *= (size_t)subdims[j];
-    }
-    size_t esz = ndt_elem_size(dt);
-    void* out = malloc(esz * subsize);
-    if (!out) return NULL;
-    memcpy(out, (const char*)a->data.ndarray.data + offset * esz, esz * subsize);
     return expr_new_ndarray(subrank, subdims, out, dt); /* takes ownership */
 }
 
