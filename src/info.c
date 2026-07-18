@@ -1702,6 +1702,11 @@ void info_init(void) {
         "Array[f, {n1, n2, ...}]\n"
         "\tgenerates an n1 x n2 x ... nested-list array with elements\n"
         "\tf[i1, i2, ...].");
+    symtab_set_docstring("ConstantArray",
+        "ConstantArray[c, n]\n"
+        "\tgenerates a list of n copies of the element c.\n"
+        "ConstantArray[c, {n1, n2, ...}]\n"
+        "\tgenerates an n1 x n2 x ... nested array of copies of c.");
     symtab_set_docstring("Union",
         "Union[list]\n"
         "\tgives the sorted list of distinct elements in list.\n"

@@ -90,6 +90,25 @@ Generates an array by applying a function to indices.
 - `Array[f, n]`
 - `Array[f, {n1, n2, ...}]`
 
+## ConstantArray
+Generates a list (or nested array) filled with copies of a fixed element.
+Attributes: `Protected`.
+- `ConstantArray[c, n]`: a flat list of `n` copies of the element `c`.
+- `ConstantArray[c, {n1, n2, ...}]`: an `n1 x n2 x ...` nested array of copies
+  of `c`.
+
+The element `c` is copied verbatim, so it may be any expression (a symbol, an
+exact or machine number, or a compound structure such as a matrix). A dimension
+of `0` yields an empty list at that level. Dimensions must be non-negative
+machine integers; other dimension specifications leave the call unevaluated.
+
+```
+In[1]:= ConstantArray[c, 5]
+Out[1]= {c, c, c, c, c}
+In[2]:= ConstantArray[0, {2, 3}]
+Out[2]= {{0, 0, 0}, {0, 0, 0}}
+```
+
 ## Rescale
 Linearly rescales values onto a target interval. Attributes: `NumericFunction`,
 `Protected`.

@@ -85,6 +85,7 @@ const char* SYM_Condition = NULL;
 const char* SYM_ConditionalExpression = NULL;
 const char* SYM_Conjugate = NULL;
 const char* SYM_ConjugateTranspose = NULL;
+const char* SYM_ConstantArray = NULL;
 const char* SYM_Continue = NULL;
 const char* SYM_ContinuedFraction = NULL;
 const char* SYM_ContourPoints = NULL;
@@ -821,6 +822,7 @@ void sym_names_init(void) {
     SYM_ConditionalExpression      = intern_symbol("ConditionalExpression");
     SYM_Conjugate                  = intern_symbol("Conjugate");
     SYM_ConjugateTranspose         = intern_symbol("ConjugateTranspose");
+    SYM_ConstantArray              = intern_symbol("ConstantArray");
     SYM_Continue                   = intern_symbol("Continue");
     SYM_ContinuedFraction          = intern_symbol("ContinuedFraction");
     SYM_ContourPoints              = intern_symbol("ContourPoints");

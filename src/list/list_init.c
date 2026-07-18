@@ -5,6 +5,7 @@ void list_init(void) {
     symtab_add_builtin("Table", builtin_table);
     symtab_add_builtin("Range", builtin_range);
     symtab_add_builtin("Array", builtin_array);
+    symtab_add_builtin("ConstantArray", builtin_constant_array);
     symtab_add_builtin("Take", builtin_take);
     symtab_add_builtin("Drop", builtin_drop);
     symtab_add_builtin("Flatten", builtin_flatten);
@@ -65,6 +66,7 @@ void list_init(void) {
     symtab_get_def("Table")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_get_def("Range")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Array")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("ConstantArray")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Take")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Drop")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Flatten")->attributes |= ATTR_PROTECTED;

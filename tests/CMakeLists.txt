@@ -280,6 +280,7 @@ set(COMMON_SRC
     ../src/list/table.c
     ../src/list/range.c
     ../src/list/array.c
+    ../src/list/constant_array.c
     ../src/list/take_drop.c
     ../src/list/flatten.c
     ../src/list/partition.c
@@ -658,6 +659,10 @@ add_test(NAME flint_bridge_tests COMMAND flint_bridge_tests)
 
 add_executable(list_tests test_list.c ${COMMON_SRC})
 target_include_directories(list_tests PRIVATE ../src)
+
+add_executable(constant_array_tests test_constant_array.c ${COMMON_SRC})
+target_include_directories(constant_array_tests PRIVATE ../src)
+add_test(NAME constant_array_tests COMMAND constant_array_tests)
 
 add_executable(rescale_tests test_rescale.c ${COMMON_SRC})
 target_include_directories(rescale_tests PRIVATE ../src)
