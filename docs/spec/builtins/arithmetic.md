@@ -1046,3 +1046,39 @@ Complex number functions.
 - `Arg[z]`: Phase angle. Pure-real MPFR returns symbolic `0` or `Pi`;
   `Complex[MPFR, MPFR]` evaluates via `mpfr_atan2` at the working
   precision.
+
+## ComplexExpand
+
+`ComplexExpand[expr]` rewrites `expr` into explicit real and imaginary parts,
+assuming every free symbol is **real**.  `ComplexExpand[expr, {x1, x2, ...}]`
+instead treats variables matching any of the `xi` (which may be patterns) as
+**complex**, breaking each into `Re[xi]` and `Im[xi]`.
+
+- Decomposes recursively through `Plus`, `Times`, `Power` (Cartesian for
+  integer exponents, a polar `Abs`/`Arg` master formula otherwise), `Exp`,
+  `Log`, the circular and hyperbolic functions and their inverses (rewritten
+  through their logarithmic forms), and the `Re`/`Im`/`Abs`/`Arg`/
+  `Conjugate`/`Sign`/`ReIm` heads.
+- Option `TargetFunctions` selects the output basis:
+  `-> {Re, Im}` (default, Cartesian), `-> {Abs, Arg}` (polar), or
+  `-> Conjugate`.
+- Threads over `List`, and over equations, inequalities, and logic heads
+  (`Equal`, `Less`, `And`, `Or`, ...); verified complex identities such as
+  `ComplexExpand[Re[z] == (z + Conjugate[z])/2, z]` collapse to `True`.
+- `Protected`.  Calls with zero or more than two positional arguments emit
+  `General::argct` and stay unevaluated.
+
+Examples:
+```
+In[1]:= ComplexExpand[Sin[x + I y]]
+Out[1]= Sin[x] Cosh[y] + I Cos[x] Sinh[y]
+
+In[2]:= ComplexExpand[Re[z^2], {z}]
+Out[2]= -Im[z]^2 + Re[z]^2
+
+In[3]:= ComplexExpand[Re[z^2], {z}, TargetFunctions -> Conjugate]
+Out[3]= 1/2 (z^2 + Conjugate[z]^2)
+
+In[4]:= ComplexExpand[Tan[x + I y]]
+Out[4]= Sin[2 x]/(Cos[2 x] + Cosh[2 y]) + I Sinh[2 y]/(Cos[2 x] + Cosh[2 y])
+```

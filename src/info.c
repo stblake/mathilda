@@ -2183,6 +2183,18 @@ void info_init(void) {
         "TrigToExp[expr]\n\trewrites circular and hyperbolic trigonometric functions (and their\n\tinverses) in expr in terms of exponentials and logarithms.");
     symtab_set_docstring("ExpToTrig",
         "ExpToTrig[expr]\n\trewrites exponentials and logarithms in expr in terms of circular and\n\thyperbolic trigonometric functions when possible.");
+    symtab_set_docstring("ComplexExpand",
+        "ComplexExpand[expr]\n\texpands expr assuming that all variables are real.\n"
+        "ComplexExpand[expr, {x1, x2, ...}]\n\texpands expr assuming that variables "
+        "matching any of the xi are complex; the xi may be patterns.\n"
+        "\tComplexExpand rewrites expr into explicit real and imaginary parts, "
+        "propagating through Plus, Times, Power, Exp, Log, the circular and "
+        "hyperbolic functions and their inverses, and the "
+        "Re/Im/Abs/Arg/Conjugate/Sign/ReIm heads.\n"
+        "\tThe option TargetFunctions -> {Re, Im} (default), {Abs, Arg}, or "
+        "Conjugate chooses the output basis.\n"
+        "\tComplexExpand automatically threads over lists, equations, "
+        "inequalities, and logic functions.");
     symtab_set_docstring("TrigExpand",
         "TrigExpand[expr]\n\texpands out trigonometric functions in expr.\n\tTrigExpand operates on both circular and hyperbolic functions.\n\tTrigExpand splits up sums and integer multiples that appear in arguments of\n\ttrigonometric functions, and then expands out products of trigonometric\n\tfunctions into sums of powers, using trigonometric identities when possible.\n\tTrigExpand automatically threads over lists, as well as equations,\n\tinequalities, and logic functions.");
     symtab_set_docstring("TrigFactor",

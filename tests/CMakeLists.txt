@@ -329,6 +329,7 @@ set(COMMON_SRC
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_trigexp_zero.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_transform.c
     ../src/complex.c
+    ../src/complex_expand.c
     ../src/trig.c
     ../src/trig_canon.c
     ../src/hyperbolic.c
@@ -2501,6 +2502,16 @@ else()
     target_link_libraries(trigexpand_tests gmp m)
 endif()
 add_test(NAME trigexpand_tests COMMAND trigexpand_tests)
+
+add_executable(complexexpand_tests test_complexexpand.c ${COMMON_SRC})
+target_include_directories(complexexpand_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(complexexpand_tests gmp m ${ECM_LIB})
+    add_dependencies(complexexpand_tests build_ecm)
+else()
+    target_link_libraries(complexexpand_tests gmp m)
+endif()
+add_test(NAME complexexpand_tests COMMAND complexexpand_tests)
 
 add_executable(trigfactor_tests test_trigfactor.c ${COMMON_SRC})
 target_include_directories(trigfactor_tests PRIVATE ../src)

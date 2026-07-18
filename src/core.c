@@ -58,6 +58,7 @@
 #include "cond.h"
 #include "iter.h"
 #include "complex.h"
+#include "complex_expand.h"
 #include "trig.h"
 #include "hyperbolic.h"
 #include "logexp.h"
@@ -693,6 +694,7 @@ void core_init(void) {
     cond_init();
     iter_init();
     complex_init();
+    complex_expand_init();
     trig_init();
     hyperbolic_init();
     void trigsimp_init(void);
