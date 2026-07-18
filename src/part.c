@@ -622,7 +622,9 @@ Expr* builtin_extract(Expr* res) {
                 return NULL;
             }
         }
-        return expr_new_function(expr_new_symbol(SYM_List), args, npos);
+        Expr* r = expr_new_function(expr_new_symbol(SYM_List), args, npos);
+        free(args);   /* expr_new_function copies the array; free our copy */
+        return r;
     } else {
         return extract_single(expr, pos, h);
     }

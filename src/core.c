@@ -822,6 +822,9 @@ void core_init(void) {
     void graph_init(void);
     graph_init();
 
+    void fourier_init(void);
+    fourier_init();
+
     /* Options/SetOptions/OptionValue + the default-options registry. Runs last
      * so every option-name symbol used by the registry is already interned. */
     void options_builtin_init(void);

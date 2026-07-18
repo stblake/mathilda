@@ -1606,6 +1606,32 @@ void info_init(void) {
         "shares the same head and length; the walk halts at the first ragged\n"
         "level. Dimensions always returns a List, including the empty List {}\n"
         "for atomic expressions.");
+    symtab_set_docstring("Fourier",
+        "Fourier[list]\n"
+        "\tgives the discrete Fourier transform of a list of complex numbers.\n"
+        "Fourier[list, {p1, p2, ...}]\n"
+        "\treturns the specified positions of the discrete Fourier transform.\n"
+        "\n"
+        "The transform of a length-n list u is v[s] = 1/n^((1-a)/2) Sum_r u[r]\n"
+        "Exp[2 Pi I b (r-1)(s-1)/n], with {a,b} set by the FourierParameters\n"
+        "option (default {0,1}; {-1,1} data analysis, {1,-1} signal processing).\n"
+        "Exact input is first numericalised with N; the list may be a nested\n"
+        "rectangular array for a multidimensional transform. Symbolic input\n"
+        "yields the exact transform in terms of roots of unity.");
+    symtab_set_docstring("InverseFourier",
+        "InverseFourier[list]\n"
+        "\tgives the inverse discrete Fourier transform of a list of complex numbers.\n"
+        "InverseFourier[list, {p1, p2, ...}]\n"
+        "\treturns the specified positions of the inverse discrete Fourier transform.\n"
+        "\n"
+        "The inverse transform of a length-n list v is u[r] = 1/n^((1+a)/2)\n"
+        "Sum_s v[s] Exp[-2 Pi I b (r-1)(s-1)/n], with {a,b} set by the\n"
+        "FourierParameters option (default {0,1}). InverseFourier inverts Fourier.");
+    symtab_set_docstring("FourierParameters",
+        "FourierParameters is an option for Fourier and InverseFourier that\n"
+        "specifies the {a, b} convention for the transform. The default {0, 1}\n"
+        "uses the symmetric 1/Sqrt[n] normalisation; {-1, 1} and {1, -1} give the\n"
+        "data-analysis and signal-processing conventions.");
     symtab_set_docstring("First", "First[expr] gives the first element of expr.");
     symtab_set_docstring("Last", "Last[expr] gives the last element of expr.");
     symtab_set_docstring("Most", "Most[expr] gives all but the last element of expr.");

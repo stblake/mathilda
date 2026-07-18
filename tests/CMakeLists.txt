@@ -141,6 +141,31 @@ if(USE_REGEX)
     endif()
 endif()
 
+# FFTW autodetection — mirror the makefile's fftw3 pkg-config probe. When
+# absent, the Fourier machine path compiles to a naive O(n^2) DFT fallback.
+option(USE_FFTW "Use FFTW for the machine-precision Fourier transform" ON)
+if(USE_FFTW)
+    if(APPLE)
+        set(ENV{PKG_CONFIG_PATH}
+            "/opt/homebrew/lib/pkgconfig:/usr/local/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+    endif()
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(FFTW QUIET fftw3)
+    endif()
+    if(FFTW_FOUND)
+        add_compile_definitions(USE_FFTW)
+        include_directories(${FFTW_INCLUDE_DIRS})
+        link_directories(${FFTW_LIBRARY_DIRS})
+        link_libraries(${FFTW_LIBRARIES})
+    else()
+        message(WARNING "FFTW not detected; building tests with USE_FFTW=OFF")
+        message(WARNING "  macOS (Homebrew): brew install fftw")
+        message(WARNING "  Ubuntu/Debian:    sudo apt install libfftw3-dev")
+        set(USE_FFTW OFF)
+    endif()
+endif()
+
 include_directories(/usr/local/include)
 include_directories(../src/list)
 include_directories(../src/linalg)
@@ -333,6 +358,7 @@ set(COMMON_SRC
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_transform.c
     ../src/complex.c
     ../src/complex_expand.c
+    ../src/fourier.c
     ../src/trig.c
     ../src/trig_canon.c
     ../src/hyperbolic.c
@@ -665,6 +691,10 @@ target_include_directories(list_tests PRIVATE ../src)
 add_executable(intersection_tests test_intersection.c ${COMMON_SRC})
 target_include_directories(intersection_tests PRIVATE ../src)
 add_test(NAME intersection_tests COMMAND intersection_tests)
+
+add_executable(fourier_tests test_fourier.c ${COMMON_SRC})
+target_include_directories(fourier_tests PRIVATE ../src)
+add_test(NAME fourier_tests COMMAND fourier_tests)
 
 add_executable(complement_tests test_complement.c ${COMMON_SRC})
 target_include_directories(complement_tests PRIVATE ../src)

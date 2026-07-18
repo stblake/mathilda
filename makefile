@@ -4,6 +4,7 @@ USE_LAPACK ?= 1
 USE_GRAPHICS ?= 1
 USE_FLINT ?= 1
 USE_REGEX ?= 1
+USE_FFTW ?= 1
 
 # Platform detection — used for readline and other OS-specific choices.
 # On Windows under MSYS2/MinGW, uname returns "MINGW64_NT-*" or similar;
@@ -235,6 +236,25 @@ ifeq ($(USE_REGEX), 1)
     $(warning   macOS (Homebrew): brew install pcre2)
     $(warning   Ubuntu/Debian:    sudo apt install libpcre2-dev)
     override USE_REGEX := 0
+  endif
+endif
+
+# FFTW (Fastest Fourier Transform in the West) backs the machine-precision path
+# of Fourier[]/InverseFourier[] with an O(n log n) discrete Fourier transform.
+# System library only (GPL) — never vendored. Only the double-precision `fftw3`
+# module is used; the arbitrary-precision path is Mathilda's own MPFR-complex
+# FFT. Autodetected via pkg-config; when absent the build still succeeds and the
+# machine path falls back to a naive O(n^2) DFT, matching the USE_MPFR=0 /
+# USE_LAPACK=0 graceful-degrade policy.
+ifeq ($(USE_FFTW), 1)
+  ifneq ($(shell $(PKG_CONFIG) --exists fftw3 2>/dev/null && echo y),)
+    CFLAGS  += -DUSE_FFTW $(shell $(PKG_CONFIG) --cflags fftw3)
+    LDFLAGS += $(shell $(PKG_CONFIG) --libs fftw3)
+  else
+    $(warning FFTW not detected; building with USE_FFTW=0 (Fourier uses a naive O(n^2) fallback))
+    $(warning   macOS (Homebrew): brew install fftw)
+    $(warning   Ubuntu/Debian:    sudo apt install libfftw3-dev)
+    override USE_FFTW := 0
   endif
 endif
 

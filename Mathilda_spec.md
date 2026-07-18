@@ -43,6 +43,7 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | Mathematical constants (`Pi`, `E`, `Degree`, `EulerGamma`, `Catalan`, `GoldenRatio`, `Glaisher`, `Khinchin`, ...) | [`builtins/mathematical-constants.md`](docs/spec/builtins/mathematical-constants.md) |
 | Special functions (`Gamma`, `Pochhammer`, `HypergeometricPFQ`, `Hypergeometric0F1`/`1F1`/`2F1`, ...) | [`builtins/special-functions.md`](docs/spec/builtins/special-functions.md) |
 | Numerical calculus (`ND`, `NIntegrate`, `NSum`, `NProduct`, `NLimit`, `NSeries`, `NResidue`) | [`builtins/numerical-calculus.md`](docs/spec/builtins/numerical-calculus.md) |
+| Fourier transforms (`Fourier`, `InverseFourier`) | [`builtins/fourier-transforms.md`](docs/spec/builtins/fourier-transforms.md) |
 | Lists and iteration (`Table`, `Range`, `Map`, `Do`, ...) | [`builtins/lists-and-iteration.md`](docs/spec/builtins/lists-and-iteration.md) |
 | Data structures (`Association`/`<\|...\|>`, `Keys`, `Values`, `Lookup`, `Counts`, `GroupBy`, `Merge`, ...) | [`builtins/data-structures.md`](docs/spec/builtins/data-structures.md) |
 | Functional programming (`Function`, `Apply`, `Select`, ...) | [`builtins/functional-programming.md`](docs/spec/builtins/functional-programming.md) |

@@ -380,6 +380,29 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("Exclusions", "None"));
     ob_commit(&b, "NIntegrate");
 
+    /* ---- Fourier transforms ---- FourierParameters -> {a, b}, default {0, 1}.
+     * No r_* helper builds an int-list value, so construct {0,1} by hand. */
+    {
+        Expr** fp = malloc(2 * sizeof(Expr*));
+        fp[0] = expr_new_integer(0);
+        fp[1] = expr_new_integer(1);
+        Expr* fplist = expr_new_function(expr_new_symbol(SYM_List), fp, 2);
+        free(fp);
+        ob_init(&b);
+        ob_add(&b, rule2(expr_new_symbol("FourierParameters"), fplist));
+        ob_commit(&b, "Fourier");
+    }
+    {
+        Expr** fp = malloc(2 * sizeof(Expr*));
+        fp[0] = expr_new_integer(0);
+        fp[1] = expr_new_integer(1);
+        Expr* fplist = expr_new_function(expr_new_symbol(SYM_List), fp, 2);
+        free(fp);
+        ob_init(&b);
+        ob_add(&b, rule2(expr_new_symbol("FourierParameters"), fplist));
+        ob_commit(&b, "InverseFourier");
+    }
+
     /* ---- Number theory ---- */
     ob_init(&b);
     ob_add(&b, r_sym("Method", "Automatic"));
