@@ -489,6 +489,7 @@ const char* SYM_Temporary = NULL;
 const char* SYM_Terms = NULL;
 const char* SYM_Thread = NULL;
 const char* SYM_Throw = NULL;
+const char* SYM_Catch = NULL;
 const char* SYM_TimeConstrained = NULL;
 const char* SYM_Times = NULL;
 const char* SYM_ToeplitzMatrix = NULL;
@@ -1223,6 +1224,7 @@ void sym_names_init(void) {
     SYM_Terms                      = intern_symbol("Terms");
     SYM_Thread                     = intern_symbol("Thread");
     SYM_Throw                      = intern_symbol("Throw");
+    SYM_Catch                      = intern_symbol("Catch");
     SYM_TimeConstrained            = intern_symbol("TimeConstrained");
     SYM_Times                      = intern_symbol("Times");
     SYM_ToeplitzMatrix             = intern_symbol("ToeplitzMatrix");

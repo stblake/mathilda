@@ -463,6 +463,19 @@ void core_init(void) {
     symtab_set_docstring("Scan",
         "Scan[f, expr]\n\tApplies f to each element of expr for its side effects\n"
         "\tand returns Null. Over an association, applies f to each value.");
+    symtab_add_builtin("Throw", builtin_throw);
+    symtab_get_def("Throw")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Throw",
+        "Throw[value]\n\tStops evaluation and returns value to the nearest enclosing\n"
+        "\tCatch. Throw[value, tag] is caught only by Catch[expr, form] whose form\n"
+        "\tmatches tag. Throw[value, tag, f] returns f[value, tag] if uncaught.");
+    symtab_add_builtin("Catch", builtin_catch);
+    symtab_get_def("Catch")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
+    symtab_set_docstring("Catch",
+        "Catch[expr]\n\tReturns the argument of the first Throw generated while\n"
+        "\tevaluating expr, or expr if none. Catch[expr, form] catches only a\n"
+        "\tThrow[value, tag] whose tag matches form (tag is re-evaluated per\n"
+        "\tcomparison); Catch[expr, form, f] returns f[value, tag].");
     symtab_add_builtin("SelectFirst", builtin_select_first);
     symtab_get_def("SelectFirst")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("SelectFirst",

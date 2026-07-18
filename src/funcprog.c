@@ -611,6 +611,8 @@ Expr* builtin_select_first(Expr* res) {
         Expr* call = expr_new_function(expr_copy(pred), call_args, 1);
         Expr* v = evaluate(call);
         expr_free(call);
+        /* A Throw from the predicate propagates. */
+        if (eval_is_inflight_throw(v)) return v;
         bool is_true = (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True);
         expr_free(v);
         if (is_true) return expr_copy(elem);
@@ -618,6 +620,80 @@ Expr* builtin_select_first(Expr* res) {
     if (deflt) return expr_copy(deflt);
     Expr* margs[1] = { expr_new_string("NotFound") };
     return expr_new_function(expr_new_symbol(SYM_Missing), margs, 1);
+}
+
+/* ------------------- Catch / Throw -------------------
+ *
+ * Throw[value] / Throw[value, tag] / Throw[value, tag, f] stop evaluation and
+ * hand the Throw[...] node up to the nearest enclosing Catch. Throw is
+ * non-held: value/tag/f are evaluated by the arg loop before the throw
+ * propagates. The plain Throw[...] node *is* the in-flight sentinel
+ * (eval_is_inflight_throw); evaluate_step's argument loop short-circuits on it,
+ * so this builtin only validates arity and declines. */
+Expr* builtin_throw(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t n = res->data.function.arg_count;
+    if (n < 1 || n > 3) return NULL;   /* wrong arity: leave unevaluated */
+    return NULL;                        /* Throw[...] stands as the sentinel */
+}
+
+/* Catch[expr] returns the argument of the first Throw generated while
+ * evaluating expr, or expr itself if none. Catch[expr, form] catches only a
+ * Throw[v, tag] whose tag matches form (tag is re-evaluated before each
+ * comparison); other throws propagate to an outer Catch. Catch[expr, form, f]
+ * returns f[value, tag]. Attribute HoldFirst: the body is held so we drive its
+ * evaluation ourselves and consume any sentinel; form and f (args 1,2) are
+ * evaluated normally by the arg loop. */
+Expr* builtin_catch(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 3) return NULL;
+
+    Expr* result = evaluate(res->data.function.args[0]);   /* HoldFirst body */
+
+    if (!eval_is_inflight_throw(result))
+        return result;   /* no throw -> Catch yields the evaluated body */
+
+    size_t targc = result->data.function.arg_count;
+    Expr* value = result->data.function.args[0];
+    Expr* tag   = (targc >= 2) ? result->data.function.args[1] : NULL;
+
+    /* 1-arg Catch catches ANY throw; tag/handler are irrelevant. */
+    if (argc == 1) {
+        Expr* out = expr_copy(value);
+        expr_free(result);
+        return out;
+    }
+
+    /* 2/3-arg Catch: only a *tagged* throw is eligible, and only if its tag
+     * matches form. A tagless Throw[value] is never caught here. */
+    bool matched = false;
+    if (targc >= 2) {
+        Expr* tag_eval = evaluate(expr_copy(tag));   /* WL: tag re-evaluated */
+        MatchEnv* env = env_new();
+        matched = match(tag_eval, res->data.function.args[1], env);
+        env_free(env);
+        expr_free(tag_eval);
+    }
+
+    if (!matched)
+        return result;   /* propagate the same sentinel to an outer Catch */
+
+    if (argc == 2) {
+        Expr* out = expr_copy(value);
+        expr_free(result);
+        return out;
+    }
+
+    /* argc == 3: return f[value, tag] (evaluated). tag is non-NULL because a
+     * match required targc >= 2. */
+    Expr* handler = res->data.function.args[2];   /* evaluated by arg loop */
+    Expr* fa[2] = { expr_copy(value), expr_copy(tag) };
+    Expr* call = expr_new_function(expr_copy(handler), fa, 2);
+    expr_free(result);
+    Expr* out = evaluate(call);
+    expr_free(call);
+    return out;
 }
 
 /* ------------------- Scan -------------------
@@ -641,6 +717,8 @@ Expr* builtin_scan(Expr* res) {
         Expr* call = expr_new_function(expr_copy(f), call_args, 1);
         Expr* r = evaluate(call);
         expr_free(call);
+        /* A Throw from f propagates (Scan otherwise discards f's result). */
+        if (eval_is_inflight_throw(r)) return r;
         if (r) expr_free(r);   /* result discarded; f is run for effect */
     }
     return expr_new_symbol(SYM_Null);
@@ -670,6 +748,8 @@ static Expr* all_any_none_true(Expr* res, int mode) {
         Expr* call = expr_new_function(expr_copy(test), call_args, 1);
         Expr* v = evaluate(call);
         expr_free(call);
+        /* A Throw from the test propagates. */
+        if (eval_is_inflight_throw(v)) return v;
         bool is_true  = (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True);
         bool is_false = (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False);
         expr_free(v);
@@ -1689,6 +1769,15 @@ static IterRunResult iter_run(ExprBuf* buf, IterStepFn step_fn, void* ctx,
         }
         Expr* next = NULL;
         IterStep s = step_fn(buf, ctx, &next);
+        /* Catch/Throw: an in-flight Throw produced by the step (via f applied
+         * to the running value) short-circuits the whole iteration and
+         * propagates as the result. Covers Nest/NestList/Fold/FoldList/
+         * NestWhile(List)/FixedPoint(List) in one place. */
+        if (next && eval_is_inflight_throw(next)) {
+            ebuf_free_all(buf);
+            *out_early = next;
+            return ITER_RUN_EARLY;
+        }
         if (s == ITER_STEP_CONT) {
             ebuf_push(buf, next);
             apps++;
@@ -1888,6 +1977,8 @@ static IterStep nestwhile_step(ExprBuf* hist, void* vctx, Expr** out) {
         Expr* test_call = expr_new_function(expr_copy(c->test), ta, (size_t)k);
         free(ta);
         Expr* tr = eval_and_free(test_call);
+        /* A Throw from the while-test propagates as the result. */
+        if (eval_is_inflight_throw(tr)) { *out = tr; return ITER_STEP_RETURN; }
         bool keep = sym_is_true(tr);
         expr_free(tr);
         if (!keep) return ITER_STEP_HALT;
@@ -2038,6 +2129,8 @@ static IterStep fixedpoint_step(ExprBuf* hist, void* vctx, Expr** out) {
         same = expr_eq(last, next);
     } else {
         Expr* tr = apply_binary(c->same_test, last, next);
+        /* A Throw from SameTest propagates as the result. */
+        if (eval_is_inflight_throw(tr)) { expr_free(next); *out = tr; return ITER_STEP_RETURN; }
         same = sym_is_true(tr);
         expr_free(tr);
     }

@@ -25,6 +25,15 @@ Expr* evaluate_step(Expr* e, bool* changed);
 // Full infinite evaluation loop (stops at fixed point)
 Expr* evaluate(Expr* e);
 
+/* True iff `e` is an in-flight Throw sentinel: Throw[v], Throw[v,tag] or
+ * Throw[v,tag,f] (head SYM_Throw, arity 1-3). Catch/Throw propagate by
+ * returning this expression up through the normal evaluation return paths;
+ * evaluate_step's argument loop short-circuits on it so a Throw fired deep
+ * inside f[...]/Plus[...]/etc. reaches the nearest enclosing Catch. A held
+ * Throw (e.g. Hold[Throw[1]]) is never evaluated and so never becomes a
+ * sentinel, which is why reusing the plain Throw[...] node is unambiguous. */
+bool eval_is_inflight_throw(const Expr* e);
+
 // Recursion-depth limit for nested evaluate() calls. Guards C-stack overflow
 // when expressions trigger deeply recursive sub-evaluation (Listable, Flat,
 // user DownValues that re-evaluate, etc.). Default 1024 (matches Mathematica).

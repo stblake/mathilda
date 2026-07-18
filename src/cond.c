@@ -64,6 +64,8 @@ Expr* builtin_which(Expr* res) {
     for (size_t i = 0; i < argc; i += 2) {
         Expr* test_eval = evaluate(args[i]);
         if (!test_eval) return NULL;
+        /* A Throw from a test propagates to the nearest enclosing Catch. */
+        if (eval_is_inflight_throw(test_eval)) return test_eval;
 
         bool is_true  = (test_eval->type == EXPR_SYMBOL &&
                          test_eval->data.symbol.name == SYM_True);
@@ -143,6 +145,8 @@ Expr* builtin_switch(Expr* res) {
     for (size_t i = 1; i + 1 < argc; i += 2) {
         Expr* form_eval = evaluate(args[i]);
         if (!form_eval) return NULL;
+        /* A Throw from a form propagates to the nearest enclosing Catch. */
+        if (eval_is_inflight_throw(form_eval)) return form_eval;
 
         MatchEnv* env = env_new();
         bool matched = match(expr, form_eval, env);

@@ -99,6 +99,13 @@ void     eval_clock_bump(void) { g_eval_clock++; }
  * That copy is necessary because the caller will free `e` after
  * yielding the value.
  */
+bool eval_is_inflight_throw(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_Throw &&
+           e->data.function.arg_count >= 1 && e->data.function.arg_count <= 3;
+}
+
 EvalReturnAction eval_classify_return(Expr* e,
                                       const char* boundary_head,
                                       Expr** out_value) {
@@ -777,6 +784,12 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 if (i == 0 && (attrs & ATTR_HOLDFIRST)) hold = true;
                 if (i > 0 && (attrs & ATTR_HOLDREST)) hold = true;
 
+                /* Track whether this slot was produced by *evaluation* (vs a
+                 * held plain copy). Only an evaluated argument can be an
+                 * in-flight Throw that must short-circuit the call; a held
+                 * copy of a literal Throw[...] (e.g. Hold[Throw[1]]) is inert
+                 * and must NOT short-circuit. */
+                bool arg_evaluated = false;
                 Expr* orig_arg = e->data.function.args[i];
                 if (hold) {
                     /* Check for Evaluate[expr] - overrides HoldFirst/HoldRest/HoldAll
@@ -787,13 +800,32 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                         orig_arg->data.function.head->data.symbol.name == SYM_Evaluate &&
                         orig_arg->data.function.arg_count == 1) {
                         new_args[i] = evaluate(orig_arg->data.function.args[0]);
+                        arg_evaluated = true;
                         *changed = true; /* Evaluate[] wrapper stripped */
                     } else {
                         new_args[i] = expr_copy(orig_arg);
                     }
                 } else {
                     new_args[i] = evaluate(orig_arg);
+                    arg_evaluated = true;
                     if (new_args[i] != orig_arg) *changed = true;
+                }
+
+                /* Catch/Throw: an evaluated argument that is an in-flight Throw
+                 * short-circuits the entire call. Free the siblings produced so
+                 * far and the evaluated head, then hand the sentinel up through
+                 * the normal return path -- this frame and every enclosing frame
+                 * still run their own cleanup (this is why longjmp is not used).
+                 * `res` has not been built yet, so nothing else is owned here.
+                 * Runs before `res` is built and before Orderless sorting, so
+                 * first-throw-wins holds for Plus/Times arguments too. */
+                if (arg_evaluated && eval_is_inflight_throw(new_args[i])) {
+                    Expr* sentinel = new_args[i];
+                    for (size_t j = 0; j < i; j++) expr_free(new_args[j]);
+                    free(new_args);
+                    expr_free(head);
+                    *changed = true;
+                    return sentinel;
                 }
             }
             
@@ -1216,6 +1248,30 @@ Expr* evaluate_step(Expr* e, bool* changed) {
  * expression reaches a fixed point (no further changes) or the iteration 
  * limit is reached.
  */
+/* Convert an uncaught in-flight Throw that reached the top level into its WL
+ * result: Throw[v,t,f] -> f[v,t] (evaluated); Throw[v] / Throw[v,t] ->
+ * Hold[Throw[...]] (inert, so feeding it back does not re-throw). Emits
+ * Throw::nocatch on stderr -- the channel eval already uses for
+ * $RecursionLimit/$IterationLimit (there is no Message[] builtin). Takes
+ * ownership of `thr`. */
+static Expr* eval_report_uncaught_throw(Expr* thr) {
+    char* s = expr_to_string(thr);
+    fprintf(stderr, "Throw::nocatch: Uncaught %s returned to top level.\n",
+            s ? s : "Throw[...]");
+    free(s);
+    if (thr->data.function.arg_count == 3) {
+        Expr* fa[2] = { expr_copy(thr->data.function.args[0]),
+                        expr_copy(thr->data.function.args[1]) };
+        Expr* call = expr_new_function(expr_copy(thr->data.function.args[2]), fa, 2);
+        expr_free(thr);
+        Expr* out = evaluate(call);
+        expr_free(call);
+        return out;
+    }
+    Expr* one[1] = { thr };
+    return expr_new_function(expr_new_symbol(SYM_Hold), one, 1);
+}
+
 Expr* evaluate(Expr* e) {
     if (!e) return NULL;
 
@@ -1309,6 +1365,10 @@ Expr* evaluate(Expr* e) {
                 current->last_evaluated_at = g_eval_clock;
             }
             eval_recursion_depth--;
+            /* An in-flight Throw that survives to the top level is uncaught
+             * (any enclosing Catch would have consumed it at depth >= 1). */
+            if (is_top_level && eval_is_inflight_throw(current))
+                current = eval_report_uncaught_throw(current);
             return current;
         }
 
@@ -1327,5 +1387,7 @@ Expr* evaluate(Expr* e) {
         fprintf(stderr, "$IterationLimit exceeded\n");
     }
     eval_recursion_depth--;
+    if (is_top_level && eval_is_inflight_throw(current))
+        current = eval_report_uncaught_throw(current);
     return current;
 }

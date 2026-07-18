@@ -491,6 +491,7 @@ extern const char* SYM_Temporary;
 extern const char* SYM_Terms;
 extern const char* SYM_Thread;
 extern const char* SYM_Throw;
+extern const char* SYM_Catch;
 extern const char* SYM_TimeConstrained;
 extern const char* SYM_Times;
 extern const char* SYM_ToeplitzMatrix;
