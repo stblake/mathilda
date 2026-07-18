@@ -435,7 +435,7 @@ static bool is_hold_head(const Expr* head) {
 
 static Expr* leaf_from_double(double v, NumericSpec spec) {
 #ifdef USE_MPFR
-    if (spec.mode == NUMERIC_MODE_MPFR) {
+    if (numeric_spec_is_mpfr(spec)) {
         return expr_new_mpfr_from_d(v, spec.bits);
     }
 #else
@@ -446,7 +446,7 @@ static Expr* leaf_from_double(double v, NumericSpec spec) {
 
 static Expr* leaf_from_integer(int64_t v, NumericSpec spec) {
 #ifdef USE_MPFR
-    if (spec.mode == NUMERIC_MODE_MPFR) {
+    if (numeric_spec_is_mpfr(spec)) {
         /* long may be 32 bits on some platforms; use a path that carries
          * the full int64 range through the mpz_t bridge. */
         if (v >= (int64_t)LONG_MIN && v <= (int64_t)LONG_MAX) {
@@ -466,7 +466,7 @@ static Expr* leaf_from_integer(int64_t v, NumericSpec spec) {
 
 static Expr* leaf_from_bigint(const mpz_t v, NumericSpec spec) {
 #ifdef USE_MPFR
-    if (spec.mode == NUMERIC_MODE_MPFR) {
+    if (numeric_spec_is_mpfr(spec)) {
         return expr_new_mpfr_from_mpz(v, spec.bits);
     }
     /* Machine mode: a plain (double) conversion overflows to +/-inf once the
@@ -497,7 +497,7 @@ static Expr* numericalize_symbol(const Expr* e, NumericSpec spec) {
     const NumericConstant* c = find_constant(e->data.symbol.name);
     if (c) {
 #ifdef USE_MPFR
-        if (spec.mode == NUMERIC_MODE_MPFR && c->mpfr_fill) {
+        if (numeric_spec_is_mpfr(spec) && c->mpfr_fill) {
             mpfr_t tmp;
             mpfr_init2(tmp, spec.bits);
             c->mpfr_fill(tmp, spec.bits);
@@ -547,7 +547,7 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
     int64_t rn, rd;
     if (is_rational((Expr*)e, &rn, &rd)) {
 #ifdef USE_MPFR
-        if (spec.mode == NUMERIC_MODE_MPFR) {
+        if (numeric_spec_is_mpfr(spec)) {
             Expr* r = expr_new_mpfr_from_si((long)rn, spec.bits);
             if (r) mpfr_div_si(r->data.mpfr, r->data.mpfr, (long)rd, MPFR_RNDN);
             return r;
@@ -574,7 +574,7 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
         expr_to_mpz(e->data.function.args[1], mpq_denref(q));
         mpq_canonicalize(q);
 #ifdef USE_MPFR
-        if (spec.mode == NUMERIC_MODE_MPFR) {
+        if (numeric_spec_is_mpfr(spec)) {
             mpfr_t r;
             mpfr_init2(r, spec.bits);
             mpfr_set_q(r, q, MPFR_RNDN);
@@ -686,7 +686,11 @@ Expr* numericalize(const Expr* e, NumericSpec spec) {
             if (spec.mode == NUMERIC_MODE_MPFR) {
                 /* Promote double to MPFR at the requested precision.
                  * The value is exact to 53 bits; bits beyond are zero.
-                 * This matches Mathematica's "pad zero" promotion. */
+                 * This matches Mathematica's "pad zero" promotion, which is
+                 * what SetPrecision wants. N[x, p] uses NUMERIC_MODE_MPFR_CAP
+                 * and deliberately falls through: a machine Real carries only
+                 * ~15.95 digits and N must never manufacture precision it
+                 * doesn't have, so it stays a machine Real (MachinePrecision). */
                 return expr_new_mpfr_from_d(e->data.real, spec.bits);
             }
 #endif
@@ -721,12 +725,23 @@ Expr* numericalize(const Expr* e, NumericSpec spec) {
                 }
                 return expr_new_real(d);
             }
-            /* MPFR → MPFR: if precision differs, re-round; otherwise copy. */
-            if ((long)mpfr_get_prec(e->data.mpfr) == spec.bits) {
-                return expr_new_mpfr_copy(e->data.mpfr);
-            }
+            /* MPFR → MPFR. NUMERIC_MODE_MPFR sets the precision to exactly
+             * spec.bits (SetPrecision pads up when the request exceeds the
+             * value's current precision). NUMERIC_MODE_MPFR_CAP (the two-arg
+             * N[x, p]) must never *increase* precision: cap the target at
+             * min(existing, requested) so a 30-digit value stays 30 digits
+             * under N[.., 50] but a 50-digit value still reduces under
+             * N[.., 30]. */
             {
-                Expr* r = expr_new_mpfr_bits(spec.bits);
+                long cur    = (long)mpfr_get_prec(e->data.mpfr);
+                long target = spec.bits;
+                if (spec.mode == NUMERIC_MODE_MPFR_CAP && cur < target) {
+                    target = cur;
+                }
+                if (cur == target) {
+                    return expr_new_mpfr_copy(e->data.mpfr);
+                }
+                Expr* r = expr_new_mpfr_bits(target);
                 if (r) mpfr_set(r->data.mpfr, e->data.mpfr, MPFR_RNDN);
                 return r;
             }
@@ -854,8 +869,12 @@ static bool parse_precision_arg(const Expr* prec, NumericSpec* out_spec) {
     if (digits <= 0.0) return false;
 
 #ifdef USE_MPFR
-    out_spec->mode = NUMERIC_MODE_MPFR;
+    /* N[expr, p] caps inexact leaves at their existing precision — it never
+     * manufactures digits. NUMERIC_MODE_MPFR_CAP encodes that; SetPrecision /
+     * SetAccuracy (their own parsers) use plain NUMERIC_MODE_MPFR and pad up. */
+    out_spec->mode = NUMERIC_MODE_MPFR_CAP;
     out_spec->bits = numeric_digits_to_bits(digits);
+    out_spec->preserve_inexact = false;
     return true;
 #else
     /* Phase 1 fallback: emit a one-shot warning, then use machine. */

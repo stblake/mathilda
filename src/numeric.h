@@ -44,6 +44,16 @@ typedef enum {
     NUMERIC_MODE_MACHINE = 0
 #ifdef USE_MPFR
     , NUMERIC_MODE_MPFR
+    /* Like NUMERIC_MODE_MPFR, but for the two-argument N[expr, p]: it never
+     * *increases* the precision of an already-inexact leaf. A machine Real
+     * stays a machine Real (it cannot gain digits it doesn't have); an MPFR
+     * value is capped at min(existing, requested) bits. Exact leaves
+     * (Integer/Rational/constants) are still produced at the full requested
+     * precision. SetPrecision/SetAccuracy and every internal
+     * working-precision numericalization keep plain NUMERIC_MODE_MPFR (which
+     * pads up), so this capping variant is produced solely by the N builtin.
+     * See numeric_spec_is_mpfr() / numeric_spec_caps_inexact() below. */
+    , NUMERIC_MODE_MPFR_CAP
 #endif
 } NumericMode;
 
@@ -83,6 +93,32 @@ static inline NumericSpec numeric_machine_spec(void) {
     s.bits = 0;
     s.preserve_inexact = false;
     return s;
+}
+
+/* True iff `spec` requests an arbitrary-precision (MPFR) result, whether or
+ * not it caps inexact leaves. Use in place of a bare
+ * `spec.mode == NUMERIC_MODE_MPFR` test so the capping N variant
+ * (NUMERIC_MODE_MPFR_CAP) still takes the MPFR production paths for exact
+ * leaves. `mode` is always initialized, so this is UB-free at every call
+ * site (unlike reading the preserve_inexact flag). */
+static inline bool numeric_spec_is_mpfr(NumericSpec spec) {
+#ifdef USE_MPFR
+    return spec.mode == NUMERIC_MODE_MPFR || spec.mode == NUMERIC_MODE_MPFR_CAP;
+#else
+    (void)spec;
+    return false;
+#endif
+}
+
+/* True iff `spec` must not increase the precision of an already-inexact leaf
+ * (the two-argument N[expr, p] semantics). */
+static inline bool numeric_spec_caps_inexact(NumericSpec spec) {
+#ifdef USE_MPFR
+    return spec.mode == NUMERIC_MODE_MPFR_CAP;
+#else
+    (void)spec;
+    return false;
+#endif
 }
 
 /* Numericalize an expression under `spec`, returning a *newly allocated*

@@ -67,9 +67,16 @@ Numerical evaluation.
   `N[N[Pi, 100]]` (i.e. `N[Pi, 100] // N`) stays at 100 digits rather than
   collapsing to `MachinePrecision`, matching Mathematica. Likewise `N[2.5`100]`
   keeps its 100-digit precision.
-- `N[expr, p]` is an explicit precision request: it can both raise precision
-  (re-evaluating exact parts at `p` digits) and lower an already-approximate
-  value (`N[N[Pi, 100], 20]` → 20 digits).
+- `N[expr, p]` is an explicit precision request, but like `N[expr]` it **never
+  increases** the precision of a number that is already approximate — `N`
+  cannot manufacture digits that aren't there. Exact parts (integers,
+  rationals, constants) are produced at `p` digits, while each inexact leaf is
+  capped at `min(existing, p)`: a machine real stays `MachinePrecision`
+  (`N[1., 50]` → machine), a `1.0`30` stays 30 digits under `N[.., 50]`, and an
+  already-higher-precision value is still **lowered** (`N[N[Pi, 100], 20]` → 20
+  digits). Contrast `SetPrecision[x, p]`, which *does* pad an approximate value
+  up to `p` digits. Example: `N[{1., 1, 1.0`30}, 50]` has precisions
+  `{MachinePrecision, 50.272, 30.103}`.
 - Inexact contagion is unaffected: mixing a machine real with a
   higher-precision value collapses to machine precision
   (`1. + N[Pi, 100]` → `4.14159`), since `MachinePrecision` is the floor.
