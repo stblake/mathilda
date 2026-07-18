@@ -250,6 +250,9 @@ Expr* expr_head(Expr* e) {
         case EXPR_INTEGER: return expr_new_symbol(SYM_Integer);
         case EXPR_BIGINT: return expr_new_symbol(SYM_Integer);
         case EXPR_REAL: return expr_new_symbol(SYM_Real);
+#ifdef USE_MPFR
+        case EXPR_MPFR: return expr_new_symbol(SYM_Real);
+#endif
         case EXPR_NDARRAY: return expr_new_symbol(SYM_NDArray);
         case EXPR_SYMBOL: return expr_new_symbol(SYM_Symbol);
         case EXPR_STRING: return expr_new_symbol(SYM_String);

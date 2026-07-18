@@ -215,6 +215,14 @@ void test_builtin_head() {
 
     /* Atomic heads. Use fresh symbols since earlier tests bind x, y, etc. */
     assert_eval_eq("Head[3.14]", "Real", 0);
+#ifdef USE_MPFR
+    /* Regression: an arbitrary-precision real (EXPR_MPFR) reports head Real,
+     * same as a machine real. N[Pi, 24] previously left Head unevaluated
+     * because expr_head had no EXPR_MPFR case. */
+    assert_eval_eq("Head[N[Pi, 24]]", "Real", 0);
+    assert_eval_eq("Head[N[3, 50]]", "Real", 0);
+    assert_eval_eq("Head[N[Pi, 24], headWrap]", "headWrap[Real]", 0);
+#endif
     assert_eval_eq("Head[headTestSym1]", "Symbol", 0);
     assert_eval_eq("Head[\"foo\"]", "String", 0);
     assert_eval_eq("Head[headTestSym1 + headTestSym2]", "Plus", 0);
