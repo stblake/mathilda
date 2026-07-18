@@ -40,24 +40,28 @@ void test_unevaluated_sequence_not_flattened() {
     assert_eval_eq("Length[Unevaluated[Sequence[a, b, c, d]]]", "4", 0);
 }
 
-/* Unevaluated stops Evaluate inside a held function */
+/* Unevaluated stops Evaluate inside a held function: Evaluate forces the arg,
+ * Unevaluated keeps 1+2 from evaluating (result is 1+2, not 3), and the wrapper
+ * is stripped per WMA semantics. */
 void test_unevaluated_stops_evaluate() {
-    assert_eval_eq("Hold[Evaluate[Unevaluated[1+2]]]", "Hold[Unevaluated[1 + 2]]", 0);
+    assert_eval_eq("Hold[Evaluate[Unevaluated[1+2]]]", "Hold[1 + 2]", 0);
 }
 
-/* Unevaluated inside a held function remains as a wrapper */
+/* Unevaluated inside a HoldAll function is stripped even in held positions
+ * (WMA semantics); the exposed content stays unevaluated because HoldAll holds it. */
 void test_unevaluated_in_holdall() {
     assert_eval_eq("ClearAll[f]; SetAttributes[f, HoldAll]; f[Unevaluated[1+2]]",
-                   "f[Unevaluated[1 + 2]]", 0);
+                   "f[1 + 2]", 0);
 }
 
-/* Held positions preserve Unevaluated; unheld positions strip it */
+/* Unevaluated is stripped in held AND unheld positions (only HoldAllComplete
+ * preserves it). The exposed content stays unevaluated in held positions. */
 void test_unevaluated_mixed_hold() {
-    assert_eval_eq("Hold[Unevaluated[1+2]]", "Hold[Unevaluated[1 + 2]]", 0);
-    /* HoldFirst on Set: LHS is held, so Unevaluated wrapper is preserved on LHS.
-     * Use a helper symbol g that we protect so we can observe the held form. */
+    assert_eval_eq("Hold[Unevaluated[1+2]]", "Hold[1 + 2]", 0);
+    /* HoldFirst on mySym: arg 1 is held (1+2 stays unevaluated) but the
+     * Unevaluated wrapper is still stripped; arg 2 evaluates normally. */
     assert_eval_eq("ClearAll[mySym]; Attributes[mySym]; SetAttributes[mySym, HoldFirst]; mySym[Unevaluated[1+2], 3+4]",
-                   "mySym[Unevaluated[1 + 2], 7]", 0);
+                   "mySym[1 + 2, 7]", 0);
 }
 
 /* Nested Unevaluated: each call strips one layer */

@@ -2545,6 +2545,19 @@ void info_init(void) {
         "\tis an attribute which specifies that all arguments to a function are not to be modified or looked at in any way in the process of evaluation.\n"
         "HoldAllComplete prevents argument evaluation, Sequence flattening inside arguments, Unevaluated wrapper stripping, and application of Evaluate.\n"
         "Evaluate cannot override HoldAllComplete.");
+    symtab_set_docstring("HoldAll",
+        "HoldAll\n"
+        "\tis an attribute that specifies that all arguments to a function are to be maintained in an unevaluated form.\n"
+        "You can use Evaluate to evaluate the arguments of a HoldAll function in a controlled way.\n"
+        "Even when a function has attribute HoldAll, Sequence objects that appear in its arguments are still by default flattened, and Unevaluated wrappers are stripped.");
+    symtab_set_docstring("HoldFirst",
+        "HoldFirst\n"
+        "\tis an attribute that specifies that the first argument to a function is to be maintained in an unevaluated form.\n"
+        "Use Evaluate to evaluate a held first argument in a controlled way.");
+    symtab_set_docstring("HoldRest",
+        "HoldRest\n"
+        "\tis an attribute that specifies that all but the first argument to a function are to be maintained in an unevaluated form.\n"
+        "Use Evaluate to evaluate a held argument in a controlled way.");
     symtab_set_docstring("Set",
         "lhs = rhs or Set[lhs, rhs]\n"
         "\tevaluates rhs once and assigns the result to lhs.  When lhs is a\n"

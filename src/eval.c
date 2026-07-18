@@ -858,30 +858,31 @@ Expr* evaluate_step(Expr* e, bool* changed) {
         if (flatten_sequences(res)) *changed = true;
     }
 
-            /* 2.6 Strip Unevaluated wrappers in non-held positions.
+            /* 2.6 Strip Unevaluated wrappers.
              * f[Unevaluated[expr]] passes expr (unevaluated) to f, with the
              * wrapper removed. This runs AFTER flatten_sequences so that any
              * Sequence[...] directly inside Unevaluated is preserved (e.g.
              * Length[Unevaluated[Sequence[a,b]]] gives 2 because Sequence is
              * not flattened into Length's argument list).
-             * The wrapper is kept in held positions (so Hold[Unevaluated[1+2]]
-             * stays as Hold[Unevaluated[1+2]]) and for HoldAllComplete heads
-             * (already handled by the early return above). */
-            for (size_t i = 0; i < res->data.function.arg_count; i++) {
-                bool held = hold_all_complete;
-                if (i == 0 && (attrs & ATTR_HOLDFIRST)) held = true;
-                if (i > 0 && (attrs & ATTR_HOLDREST)) held = true;
-                if (held) continue;
-
-                Expr* arg = res->data.function.args[i];
-                if (arg->type == EXPR_FUNCTION &&
-                    arg->data.function.head->type == EXPR_SYMBOL &&
-                    arg->data.function.head->data.symbol.name == SYM_Unevaluated &&
-                    arg->data.function.arg_count == 1) {
-                    Expr* stripped = expr_copy(arg->data.function.args[0]);
-                    expr_free(arg);
-                    res->data.function.args[i] = stripped;
-                    *changed = true; /* Unevaluated wrapper removed */
+             * Per WMA semantics, the wrapper is stripped even in HELD positions
+             * (so Hold[Unevaluated[1+2]] becomes Hold[1+2], with 1+2 left
+             * unevaluated because Hold's HoldAll still holds it). Only
+             * HoldAllComplete heads keep the wrapper intact -- and that case is
+             * skipped here. Stripping merely removes the wrapper; the exposed
+             * content is not itself evaluated, so the head's hold attributes are
+             * respected on the next pass. */
+            if (!hold_all_complete) {
+                for (size_t i = 0; i < res->data.function.arg_count; i++) {
+                    Expr* arg = res->data.function.args[i];
+                    if (arg->type == EXPR_FUNCTION &&
+                        arg->data.function.head->type == EXPR_SYMBOL &&
+                        arg->data.function.head->data.symbol.name == SYM_Unevaluated &&
+                        arg->data.function.arg_count == 1) {
+                        Expr* stripped = expr_copy(arg->data.function.args[0]);
+                        expr_free(arg);
+                        res->data.function.args[i] = stripped;
+                        *changed = true; /* Unevaluated wrapper removed */
+                    }
                 }
             }
 

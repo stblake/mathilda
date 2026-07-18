@@ -526,8 +526,8 @@ Represents the unevaluated form of `expr` when it appears as the argument to a f
 **Features**:
 - Attributes: `{HoldAllComplete, Protected}`.
 - `f[Unevaluated[expr]]` passes `expr` to `f` as if `f` temporarily held that single argument; the `Unevaluated` wrapper is then stripped before `f`'s body runs, effectively yielding `f[expr]` with `expr` unevaluated.
-- The wrapper is **not** stripped when the enclosing function holds the argument (e.g. `f` has `HoldAll`, or `HoldFirst`/`HoldRest` applies to that position).
-- The wrapper is **not** stripped when the enclosing function has `HoldAllComplete`.
+- The wrapper is stripped **even in held positions** (e.g. when `f` has `HoldAll`, or `HoldFirst`/`HoldRest` applies to that position). Stripping only removes the wrapper — it does **not** force evaluation of the exposed content — so under a holding head the content stays unevaluated: `Hold[Unevaluated[1+2]]` gives `Hold[1+2]`, not `Hold[3]`.
+- The wrapper is **not** stripped when the enclosing function has `HoldAllComplete` (e.g. `HoldComplete`, or `Unevaluated` itself).
 - Stripping happens **after** `Sequence` flattening, so a `Sequence` directly inside `Unevaluated` survives into the argument slot (`Length[Unevaluated[Sequence[a, b]]]` gives `2`).
 - Nested `Unevaluated` wrappers are stripped one layer per evaluation step.
 - As a top-level expression, `Unevaluated[expr]` evaluates to itself (because of `HoldAllComplete`).
@@ -539,11 +539,11 @@ Out[1]= 4
 In[2]:= Length[Unevaluated[Sequence[a, b]]]
 Out[2]= 2
 
-In[3]:= Hold[Evaluate[Unevaluated[1+2]]]
-Out[3]= Hold[Unevaluated[1 + 2]]
+In[3]:= Hold[Unevaluated[1+2]]
+Out[3]= Hold[1 + 2]
 
 In[4]:= SetAttributes[f, HoldAll]; f[Unevaluated[1+2]]
-Out[4]= f[Unevaluated[1 + 2]]
+Out[4]= f[1 + 2]
 
 In[5]:= HoldComplete[Unevaluated[1+2]]
 Out[5]= HoldComplete[Unevaluated[1 + 2]]
@@ -578,6 +578,31 @@ Out[4]= HoldComplete[g[1 + 2]]
 
 In[5]:= ReleaseHold[HoldComplete[Sequence[1, 2]]]
 Out[5]= Sequence[1, 2]
+```
+
+## HoldAll (attribute)
+An attribute that specifies that **all** arguments to a function are to be maintained in an unevaluated form.
+
+A function with `HoldAll`:
+- does not evaluate any argument,
+- **still** flattens `Sequence[...]` appearing in its arguments (unless it also has `SequenceHold`),
+- **still** strips `Unevaluated[...]` wrappers from its arguments — even though the position is held, the wrapper is removed and the exposed content is left unevaluated,
+- can be overridden per-argument by an `Evaluate[...]` wrapper, which forces that argument to evaluate.
+
+`HoldFirst` and `HoldRest` are the finer-grained variants (hold the first argument, or all but the first). `HoldAll` is the combination of both. `Hold`, `HoldForm`, `HoldPattern`, and pure `Function` are standard built-in heads that carry `HoldAll`.
+
+```mathematica
+In[1]:= Hold[1+1, 2+2]
+Out[1]= Hold[1 + 1, 2 + 2]
+
+In[2]:= Hold[Sequence[a, b], c]
+Out[2]= Hold[a, b, c]
+
+In[3]:= Hold[Unevaluated[1+2]]
+Out[3]= Hold[1 + 2]
+
+In[4]:= Hold[Evaluate[1+2], 3+4]
+Out[4]= Hold[3, 3 + 4]
 ```
 
 ## HoldAllComplete (attribute)
