@@ -41,27 +41,48 @@ void test_unevaluated_sequence_not_flattened() {
 }
 
 /* Unevaluated stops Evaluate inside a held function: Evaluate forces the arg,
- * Unevaluated keeps 1+2 from evaluating (result is 1+2, not 3), and the wrapper
- * is stripped per WMA semantics. */
+ * which is Unevaluated[1+2] and evaluates to itself (HoldAllComplete). Because
+ * that result lands in a HELD slot of Hold, the wrapper is NOT stripped per WMA
+ * (Hold[Evaluate[Unevaluated[1+2]]] -> Hold[Unevaluated[1+2]], not Hold[3]). */
 void test_unevaluated_stops_evaluate() {
-    assert_eval_eq("Hold[Evaluate[Unevaluated[1+2]]]", "Hold[1 + 2]", 0);
+    assert_eval_eq("Hold[Evaluate[Unevaluated[1+2]]]", "Hold[Unevaluated[1 + 2]]", 0);
 }
 
-/* Unevaluated inside a HoldAll function is stripped even in held positions
- * (WMA semantics); the exposed content stays unevaluated because HoldAll holds it. */
+/* Unevaluated inside a HoldAll function is NOT stripped: the argument was never
+ * going to be evaluated, so the wrapper has nothing to do and remains (WMA). */
 void test_unevaluated_in_holdall() {
     assert_eval_eq("ClearAll[f]; SetAttributes[f, HoldAll]; f[Unevaluated[1+2]]",
-                   "f[1 + 2]", 0);
+                   "f[Unevaluated[1 + 2]]", 0);
 }
 
-/* Unevaluated is stripped in held AND unheld positions (only HoldAllComplete
- * preserves it). The exposed content stays unevaluated in held positions. */
+/* Unevaluated is stripped only in positions that would otherwise be evaluated.
+ * In a held slot the wrapper remains; HoldAllComplete additionally preserves it
+ * even in non-held slots (see test_holdcomplete_preserves_unevaluated). */
 void test_unevaluated_mixed_hold() {
-    assert_eval_eq("Hold[Unevaluated[1+2]]", "Hold[1 + 2]", 0);
-    /* HoldFirst on mySym: arg 1 is held (1+2 stays unevaluated) but the
-     * Unevaluated wrapper is still stripped; arg 2 evaluates normally. */
+    /* Hold is HoldAll, so its slot is held: wrapper remains. */
+    assert_eval_eq("Hold[Unevaluated[1+2]]", "Hold[Unevaluated[1 + 2]]", 0);
+    /* HoldFirst on mySym: arg 1 is held so its Unevaluated wrapper remains;
+     * arg 2 is not held and evaluates normally. */
     assert_eval_eq("ClearAll[mySym]; Attributes[mySym]; SetAttributes[mySym, HoldFirst]; mySym[Unevaluated[1+2], 3+4]",
-                   "mySym[1 + 2, 7]", 0);
+                   "mySym[Unevaluated[1 + 2], 7]", 0);
+}
+
+/* Unevaluated in a NON-held slot is stripped, and it holds the exposed content
+ * for exactly one evaluation of the surrounding function (WMA). */
+void test_unevaluated_nonheld_strip() {
+    /* Length is not Hold*: the wrapper forces the argument to be held for this
+     * one evaluation, so Length sees Plus[1,2,3] (3 summands), not 6. */
+    assert_eval_eq("Length[Unevaluated[1+2+3]]", "3", 0);
+    /* Without the wrapper the sum evaluates first, so Length[6] is 0. */
+    assert_eval_eq("Length[1+2+3]", "0", 0);
+    /* Not propagated: after one held pass the wrapper is gone and normal
+     * evaluation resumes, so g[Unevaluated[1+1]] -> g[1+1] -> gg[2]. */
+    assert_eval_eq("ClearAll[g]; g[x_]:=gg[x]; g[Unevaluated[1+1]]", "gg[2]", 0);
+}
+
+/* Unevaluated[] (no argument) evaluates to itself. */
+void test_unevaluated_empty() {
+    assert_eval_eq("Unevaluated[]", "Unevaluated[]", 0);
 }
 
 /* Nested Unevaluated: each call strips one layer */
@@ -175,6 +196,8 @@ int main() {
     TEST(test_unevaluated_stops_evaluate);
     TEST(test_unevaluated_in_holdall);
     TEST(test_unevaluated_mixed_hold);
+    TEST(test_unevaluated_nonheld_strip);
+    TEST(test_unevaluated_empty);
     TEST(test_unevaluated_nested);
     TEST(test_unevaluated_symbolic_head);
     TEST(test_holdcomplete_preserves_unevaluated);

@@ -2513,7 +2513,7 @@ void info_init(void) {
         "ConditionalExpression[expr, False] evaluates to Undefined.\n"
         "Nested forms collapse: ConditionalExpression[ConditionalExpression[e, c1], c2] evaluates to ConditionalExpression[e, c1 && c2].\n"
         "ConditionalExpression has attribute Protected.");
-    symtab_set_docstring("Evaluate", "Evaluate[expr]\n\tcauses expr to be evaluated even if it appears as the argument of a function whose attributes specify that it should be held unevaluated.\nEvaluate only overrides HoldFirst, HoldRest, and HoldAll attributes when it appears directly as the head of the function argument that would otherwise be held.\nEvaluate does not override HoldAllComplete.");
+    symtab_set_docstring("Evaluate", "Evaluate[expr]\n\tcauses expr to be evaluated even if it appears as the argument of a function whose attributes specify that it should be held unevaluated.\nEvaluate only overrides HoldFirst, HoldRest, and HoldAll attributes when it appears directly as the head of the function argument that would otherwise be held.\nEvaluate does not override HoldAllComplete.\nEvaluate with other than one argument reduces to Sequence: Evaluate[] gives Sequence[] and Evaluate[a, b] gives Sequence[a, b].");
     symtab_set_docstring("ReleaseHold", "ReleaseHold[expr]\n\tremoves Hold, HoldForm, HoldPattern, and HoldComplete in expr.\nReleaseHold removes only one layer of Hold etc.; it does not remove inner occurrences in nested Hold etc. functions.");
     symtab_set_docstring("HoldPattern",
         "HoldPattern[expr]\n"
@@ -2549,7 +2549,7 @@ void info_init(void) {
         "HoldAll\n"
         "\tis an attribute that specifies that all arguments to a function are to be maintained in an unevaluated form.\n"
         "You can use Evaluate to evaluate the arguments of a HoldAll function in a controlled way.\n"
-        "Even when a function has attribute HoldAll, Sequence objects that appear in its arguments are still by default flattened, and Unevaluated wrappers are stripped.");
+        "Even when a function has attribute HoldAll, Sequence objects that appear in its arguments are still by default flattened; Unevaluated wrappers on a held argument are, however, left intact (use HoldComplete/HoldAllComplete to also suppress Sequence flattening).");
     symtab_set_docstring("HoldFirst",
         "HoldFirst\n"
         "\tis an attribute that specifies that the first argument to a function is to be maintained in an unevaluated form.\n"

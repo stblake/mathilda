@@ -1650,8 +1650,17 @@ Expr* builtin_releasehold(Expr* res) {
  * identity since args are already evaluated by the standard pipeline.
  */
 Expr* builtin_evaluate(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
-    return expr_copy(res->data.function.args[0]);
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t n = res->data.function.arg_count;
+    /* Arity 1: identity (arguments are already evaluated by the standard
+     * pipeline in an unheld position). Any other arity splices via Sequence,
+     * so Evaluate[] -> Sequence[] and Evaluate[a, b] -> Sequence[a, b]. */
+    if (n == 1) return expr_copy(res->data.function.args[0]);
+    Expr** seq = malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) seq[i] = expr_copy(res->data.function.args[i]);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_Sequence), seq, n);
+    free(seq);
+    return out;
 }
 
 Expr* builtin_append(Expr* res) {

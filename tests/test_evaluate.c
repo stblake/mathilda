@@ -58,10 +58,34 @@ void test_evaluate_symbolic() {
     assert_eval_eq("Hold[Evaluate[2^10]]", "Hold[1024]", 0);
 }
 
-/* Evaluate with wrong argument count remains unevaluated */
+/* Evaluate with other than one argument reduces to Sequence (which then splices
+ * wherever it lands). Standalone Sequence stays as-is. */
 void test_evaluate_wrong_args() {
-    assert_eval_eq("Evaluate[]", "Evaluate[]", 0);
-    assert_eval_eq("Evaluate[1, 2]", "Evaluate[1, 2]", 0);
+    assert_eval_eq("Evaluate[]", "Sequence[]", 0);
+    assert_eval_eq("Evaluate[1, 2]", "Sequence[1, 2]", 0);
+}
+
+/* Evaluate[...] with arity != 1 in a held slot splices via Sequence:
+ * Evaluate[] vanishes and Evaluate[a,b] forces then splices both. */
+void test_evaluate_seq_in_hold() {
+    assert_eval_eq("Hold[Evaluate[]]", "Hold[]", 0);
+    assert_eval_eq("Hold[Evaluate[], 1+1]", "Hold[2]", 0);
+    assert_eval_eq("Hold[Evaluate[1+1, 2+2]]", "Hold[2, 4]", 0);
+    assert_eval_eq("Hold[a, Evaluate[1+1, 2+2], b]", "Hold[a, 2, 4, b]", 0);
+}
+
+/* Evaluate overrides the HoldAll of Attributes: Attributes[x] sees the symbol x,
+ * while Attributes[Evaluate[x]] sees the value of x (here Plus). */
+void test_evaluate_attributes_override() {
+    assert_eval_eq("x=Plus; {Attributes[x], Attributes[Evaluate[x]]}",
+                   "{{}, {Flat, Listable, NumericFunction, OneIdentity, Orderless, Protected}}", 0);
+    assert_eval_eq("ClearAll[x]", "Null", 0);
+}
+
+/* Unevaluated temporarily makes a non-Hold head behave as HoldAll for that arg. */
+void test_evaluate_length_unevaluated() {
+    assert_eval_eq("Length[Unevaluated[1+2+3]]", "3", 0);
+    assert_eval_eq("Length[1+2+3]", "0", 0);
 }
 
 /* Evaluate is Protected */
@@ -126,6 +150,22 @@ void test_evaluate_memory() {
     Expr* r5 = evaluate(e5);
     expr_free(e5);
     expr_free(r5);
+
+    /* Sequence-producing forms (arity != 1), held and unheld. */
+    Expr* e6 = parse_expression("Evaluate[1, 2]");
+    Expr* r6 = evaluate(e6);
+    expr_free(e6);
+    expr_free(r6);
+
+    Expr* e7 = parse_expression("Hold[Evaluate[1+1, 2+2]]");
+    Expr* r7 = evaluate(e7);
+    expr_free(e7);
+    expr_free(r7);
+
+    Expr* e8 = parse_expression("Hold[Evaluate[]]");
+    Expr* r8 = evaluate(e8);
+    expr_free(e8);
+    expr_free(r8);
 }
 
 int main() {
@@ -141,6 +181,9 @@ int main() {
     TEST(test_evaluate_multiple);
     TEST(test_evaluate_symbolic);
     TEST(test_evaluate_wrong_args);
+    TEST(test_evaluate_seq_in_hold);
+    TEST(test_evaluate_attributes_override);
+    TEST(test_evaluate_length_unevaluated);
     TEST(test_evaluate_protected);
     TEST(test_evaluate_nested_expr);
     TEST(test_evaluate_with_list);

@@ -790,6 +790,14 @@ Expr* evaluate_step(Expr* e, bool* changed) {
              * itself a rewrite even if the wrapped expression evaluates
              * to itself — flag it explicitly. */
             Expr** new_args = malloc(sizeof(Expr*) * e->data.function.arg_count);
+            /* Pointers of Unevaluated[...] wrappers that landed in a HELD slot.
+             * Per WMA, such wrappers are NOT stripped below (the argument was
+             * never going to be evaluated, so Unevaluated has nothing to do).
+             * We track by pointer identity, not index, because flatten_sequences
+             * can shift argument positions before the strip pass runs; held
+             * Unevaluated nodes are never Sequence, so their pointers survive it. */
+            Expr** held_uneval = malloc(sizeof(Expr*) * e->data.function.arg_count);
+            size_t held_uneval_count = 0;
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 bool hold = hold_all_complete;
                 if (i == 0 && (attrs & ATTR_HOLDFIRST)) hold = true;
@@ -803,18 +811,41 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 bool arg_evaluated = false;
                 Expr* orig_arg = e->data.function.args[i];
                 if (hold) {
-                    /* Check for Evaluate[expr] - overrides HoldFirst/HoldRest/HoldAll
-                     * but NOT HoldAllComplete. */
+                    /* Check for Evaluate[...] - overrides HoldFirst/HoldRest/HoldAll
+                     * but NOT HoldAllComplete. Arity 1 forces the single argument;
+                     * any other arity forces each argument and splices them via a
+                     * Sequence, which flatten_sequences resolves below (so
+                     * Evaluate[] vanishes and Evaluate[a, b] -> a, b). */
                     if (!hold_all_complete &&
                         orig_arg->type == EXPR_FUNCTION &&
                         orig_arg->data.function.head->type == EXPR_SYMBOL &&
-                        orig_arg->data.function.head->data.symbol.name == SYM_Evaluate &&
-                        orig_arg->data.function.arg_count == 1) {
-                        new_args[i] = evaluate(orig_arg->data.function.args[0]);
+                        orig_arg->data.function.head->data.symbol.name == SYM_Evaluate) {
+                        size_t ne = orig_arg->data.function.arg_count;
+                        if (ne == 1) {
+                            new_args[i] = evaluate(orig_arg->data.function.args[0]);
+                        } else {
+                            Expr** seq = malloc(sizeof(Expr*) * ne);
+                            for (size_t k = 0; k < ne; k++)
+                                seq[k] = evaluate(orig_arg->data.function.args[k]);
+                            new_args[i] = expr_new_function(
+                                expr_new_symbol(SYM_Sequence), seq, ne);
+                            free(seq);
+                        }
                         arg_evaluated = true;
-                        *changed = true; /* Evaluate[] wrapper stripped */
+                        *changed = true; /* Evaluate wrapper stripped */
                     } else {
                         new_args[i] = expr_copy(orig_arg);
+                    }
+                    /* Record a held Unevaluated[...] wrapper so the strip pass
+                     * below leaves it intact (WMA: held wrappers are not removed).
+                     * Covers both the plain held copy and the
+                     * Hold[Evaluate[Unevaluated[x]]] case where the override
+                     * evaluates to Unevaluated[x] in a held slot. */
+                    if (new_args[i]->type == EXPR_FUNCTION &&
+                        new_args[i]->data.function.head->type == EXPR_SYMBOL &&
+                        new_args[i]->data.function.head->data.symbol.name == SYM_Unevaluated &&
+                        new_args[i]->data.function.arg_count == 1) {
+                        held_uneval[held_uneval_count++] = new_args[i];
                     }
                 } else {
                     new_args[i] = evaluate(orig_arg);
@@ -838,6 +869,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                     Expr* sentinel = new_args[i];
                     for (size_t j = 0; j < i; j++) expr_free(new_args[j]);
                     free(new_args);
+                    free(held_uneval);
                     expr_free(head);
                     *changed = true;
                     return sentinel;
@@ -864,13 +896,18 @@ Expr* evaluate_step(Expr* e, bool* changed) {
              * Sequence[...] directly inside Unevaluated is preserved (e.g.
              * Length[Unevaluated[Sequence[a,b]]] gives 2 because Sequence is
              * not flattened into Length's argument list).
-             * Per WMA semantics, the wrapper is stripped even in HELD positions
-             * (so Hold[Unevaluated[1+2]] becomes Hold[1+2], with 1+2 left
-             * unevaluated because Hold's HoldAll still holds it). Only
-             * HoldAllComplete heads keep the wrapper intact -- and that case is
-             * skipped here. Stripping merely removes the wrapper; the exposed
-             * content is not itself evaluated, so the head's hold attributes are
-             * respected on the next pass. */
+             * Per WMA semantics, the wrapper is stripped ONLY in positions that
+             * would otherwise be evaluated (non-held slots): the wrapper's job is
+             * to temporarily hold an argument that a non-Hold head would evaluate.
+             * In genuinely held slots -- HoldFirst/HoldRest/HoldAll on that
+             * position, or content forced there by Evaluate -- the wrapper is
+             * left intact (so f[Unevaluated[1+2]] with f HoldAll stays
+             * f[Unevaluated[1+2]], and Hold[Evaluate[Unevaluated[1+2]]] stays
+             * Hold[Unevaluated[1+2]]). Those held wrappers were recorded by
+             * pointer in held_uneval above. HoldAllComplete heads keep every
+             * wrapper and skip this pass entirely. Stripping merely removes the
+             * wrapper; the exposed content is not itself evaluated, so the head's
+             * hold attributes are respected on the next pass. */
             if (!hold_all_complete) {
                 for (size_t i = 0; i < res->data.function.arg_count; i++) {
                     Expr* arg = res->data.function.args[i];
@@ -878,6 +915,11 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                         arg->data.function.head->type == EXPR_SYMBOL &&
                         arg->data.function.head->data.symbol.name == SYM_Unevaluated &&
                         arg->data.function.arg_count == 1) {
+                        bool held_here = false;
+                        for (size_t k = 0; k < held_uneval_count; k++) {
+                            if (held_uneval[k] == arg) { held_here = true; break; }
+                        }
+                        if (held_here) continue; /* held slot: keep wrapper */
                         Expr* stripped = expr_copy(arg->data.function.args[0]);
                         expr_free(arg);
                         res->data.function.args[i] = stripped;
@@ -885,6 +927,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                     }
                 }
             }
+            free(held_uneval);
 
             /* 3. Apply structural and semantic attributes.
              * Order follows Withoff §3.1: Flat → Sequence (already done above) →
