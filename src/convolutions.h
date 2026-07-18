@@ -25,6 +25,7 @@ typedef enum { CONV_MODE_CONVOLVE, CONV_MODE_CORRELATE } ConvMode;
 Expr* conv_engine(Expr* res, ConvMode mode);
 
 Expr* builtin_list_convolve(Expr* res);
+Expr* builtin_list_correlate(Expr* res);
 void  convolutions_init(void);
 
 #endif /* MATHILDA_CONVOLUTIONS_H */

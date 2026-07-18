@@ -825,10 +825,8 @@ void core_init(void) {
     void fourier_init(void);
     fourier_init();
 
-    void convolutions_init(void);
+    void convolutions_init(void);   /* registers ListConvolve + ListCorrelate */
     convolutions_init();
-    void correlations_init(void);
-    correlations_init();
 
     /* Options/SetOptions/OptionValue + the default-options registry. Runs last
      * so every option-name symbol used by the registry is already interned. */

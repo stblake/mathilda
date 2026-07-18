@@ -151,8 +151,8 @@ Out[2]= {0.447214, 0.447214, -0.447214, -0.447214, 0.447214}
 
 ## ListConvolve / ListCorrelate
 
-Discrete convolution and correlation, implemented in `src/convolutions.{c,h}`
-(shared engine) and `src/correlations.{c,h}` (thin `ListCorrelate` front end).
+Discrete convolution and correlation, both implemented in
+`src/convolutions.{c,h}` over one shared engine (parameterised by mode).
 Attribute on both: `Protected`.
 
 `ListConvolve[ker, list]` forms `Sum_r ker[r] list[s-r]`; `ListCorrelate[ker,

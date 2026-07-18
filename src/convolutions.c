@@ -885,9 +885,12 @@ Expr* conv_engine(Expr* res, ConvMode mode) {
     return result;
 }
 
-Expr* builtin_list_convolve(Expr* res) { return conv_engine(res, CONV_MODE_CONVOLVE); }
+Expr* builtin_list_convolve(Expr* res)  { return conv_engine(res, CONV_MODE_CONVOLVE); }
+Expr* builtin_list_correlate(Expr* res) { return conv_engine(res, CONV_MODE_CORRELATE); }
 
 void convolutions_init(void) {
-    symtab_add_builtin("ListConvolve", builtin_list_convolve);
-    symtab_get_def("ListConvolve")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("ListConvolve",  builtin_list_convolve);
+    symtab_add_builtin("ListCorrelate", builtin_list_correlate);
+    symtab_get_def("ListConvolve")->attributes  |= ATTR_PROTECTED;
+    symtab_get_def("ListCorrelate")->attributes |= ATTR_PROTECTED;
 }

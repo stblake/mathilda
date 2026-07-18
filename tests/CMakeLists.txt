@@ -360,7 +360,6 @@ set(COMMON_SRC
     ../src/complex_expand.c
     ../src/fourier.c
     ../src/convolutions.c
-    ../src/correlations.c
     ../src/trig.c
     ../src/trig_canon.c
     ../src/hyperbolic.c
