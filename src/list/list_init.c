@@ -35,6 +35,7 @@ void list_init(void) {
     symtab_add_builtin("ConjugateTranspose", builtin_conjugate_transpose);
     symtab_add_builtin("Tally", builtin_tally);
     symtab_add_builtin("Union", builtin_union);
+    symtab_add_builtin("Intersection", builtin_intersection);
     symtab_add_builtin("DeleteDuplicates", builtin_deleteduplicates);
     symtab_add_builtin("DeleteDuplicatesBy", builtin_deleteduplicatesby);
     symtab_get_def("DeleteDuplicatesBy")->attributes |= ATTR_PROTECTED;
@@ -83,6 +84,7 @@ void list_init(void) {
     symtab_get_def("ConjugateTranspose")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Tally")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Union")->attributes |= ATTR_FLAT | ATTR_ONEIDENTITY | ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_get_def("Intersection")->attributes |= ATTR_FLAT | ATTR_ONEIDENTITY | ATTR_PROTECTED;
     symtab_get_def("DeleteDuplicates")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Split")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Total")->attributes |= ATTR_PROTECTED;

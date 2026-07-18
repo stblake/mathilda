@@ -436,6 +436,34 @@ In[2]:= Union[{a, b, a, c}, {d, a, e, b}, {c, a}]
 Out[2]= {a, b, c, d, e}
 ```
 
+## Intersection
+Gives a sorted list of the elements common to all of the inputs.
+- `Intersection[list]`
+- `Intersection[list1, list2, ...]`
+- `Intersection[..., SameTest -> test]`
+
+**Features**:
+- `Flat`, `OneIdentity`, `Protected`.
+- All expressions must have the same head, which need not be `List`.
+- Result has the same head as the inputs; the empty intersection is `{}`.
+- With `SameTest -> f`, elements `a`, `b` are treated as equal when `f[a, b]`
+  is `True`; the canonically-greatest member of each class is kept.
+
+```mathematica
+In[1]:= Intersection[{1, 1, 2, 3}, {3, 1, 4}, {4, 1, 3, 3}]
+Out[1]= {1, 3}
+
+In[2]:= Intersection[f[a, b], f[c, a], f[b, b, a]]
+Out[2]= f[a]
+
+In[3]:= Intersection[Divisors[45], Divisors[78]]
+Out[3]= {1, 3}
+
+In[4]:= Intersection[{1.1, 3.4, .5, 7.6, 7.1, 1.9}, {1.2, 3.3, 7.7, 1.3},
+          SameTest -> (Floor[#1] == Floor[#2] &)]
+Out[4]= {1.9, 3.4, 7.6}
+```
+
 ## DeleteDuplicates
 Removes duplicate elements while preserving order.
 - `DeleteDuplicates[list]`

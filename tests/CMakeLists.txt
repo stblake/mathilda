@@ -662,6 +662,10 @@ add_test(NAME flint_bridge_tests COMMAND flint_bridge_tests)
 add_executable(list_tests test_list.c ${COMMON_SRC})
 target_include_directories(list_tests PRIVATE ../src)
 
+add_executable(intersection_tests test_intersection.c ${COMMON_SRC})
+target_include_directories(intersection_tests PRIVATE ../src)
+add_test(NAME intersection_tests COMMAND intersection_tests)
+
 add_executable(constant_array_tests test_constant_array.c ${COMMON_SRC})
 target_include_directories(constant_array_tests PRIVATE ../src)
 add_test(NAME constant_array_tests COMMAND constant_array_tests)

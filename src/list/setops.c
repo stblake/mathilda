@@ -147,7 +147,142 @@ Expr* builtin_union(Expr* res) {
     
     Expr* result = expr_new_function(expr_copy(common_head), unique_args, unique_count);
     if (unique_args) free(unique_args);
-    
+
+    return result;
+}
+
+/* Evaluate test[a, b] and report whether it yields the symbol True. Used by
+ * Intersection's SameTest path (a and b are borrowed; the call is built from
+ * fresh copies and freed here). */
+static bool same_test_equal(Expr* test, Expr* a, Expr* b) {
+    Expr* call_args[2] = { expr_copy(a), expr_copy(b) };
+    Expr* call = expr_new_function(expr_copy(test), call_args, 2);
+    Expr* r = evaluate(call);
+    bool eq = (r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True);
+    expr_free(r);
+    expr_free(call);
+    return eq;
+}
+
+/* Intersection[l1, l2, ...] gives the sorted list of elements common to every
+ * li, deduplicated, using the head of the first argument (need not be List).
+ *
+ * Default comparison is canonical structural equality, computed in O(total)
+ * with the file-local hash set: deduplicate the first operand, then keep only
+ * the candidates that survive a membership test against each later operand.
+ *
+ * SameTest -> f switches to an O(n^2) path using f[a,b]===True as the
+ * equivalence relation. Wolfram keeps the canonically-greatest member of each
+ * equivalence class as its representative, so we sort the first operand
+ * ascending and, on a class collision, replace the stored representative with
+ * the later (hence greater) element. */
+Expr* builtin_intersection(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1)
+        return builtin_arg_error("Intersection",
+            (res->type == EXPR_FUNCTION) ? res->data.function.arg_count : 0,
+            1, SIZE_MAX);
+
+    /* Locate a trailing SameTest option, mirroring builtin_union. */
+    Expr* same_test = NULL;
+    size_t last_arg = res->data.function.arg_count;
+    for (size_t i = 0; i < res->data.function.arg_count; i++) {
+        Expr* arg = res->data.function.args[i];
+        if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
+            arg->data.function.head->data.symbol.name == SYM_Rule &&
+            arg->data.function.arg_count == 2 &&
+            arg->data.function.args[0]->type == EXPR_SYMBOL &&
+            arg->data.function.args[0]->data.symbol.name == SYM_SameTest) {
+            same_test = arg->data.function.args[1];
+            if (i < last_arg) last_arg = i;
+        }
+    }
+
+    if (last_arg == 0) return NULL;   /* only an option, no list operands */
+
+    Expr* first = res->data.function.args[0];
+    if (first->type != EXPR_FUNCTION) return expr_copy(first);
+    Expr* common_head = first->data.function.head;
+
+    /* Every operand must share the head of the first. */
+    for (size_t i = 0; i < last_arg; i++) {
+        Expr* arg = res->data.function.args[i];
+        if (arg->type != EXPR_FUNCTION || !expr_eq(arg->data.function.head, common_head))
+            return NULL;
+    }
+
+    size_t first_count = first->data.function.arg_count;
+    Expr** cand = malloc(sizeof(Expr*) * (first_count ? first_count : 1));
+    size_t ncand = 0;
+
+    if (same_test == NULL) {
+        /* --- Default path: hash-based, O(total). --- */
+        HashTable* seen = ht_create(first_count * 2 + 1);
+        for (size_t j = 0; j < first_count; j++) {
+            Expr* e = first->data.function.args[j];
+            if (!ht_find(seen, e)) {
+                Expr* c = expr_copy(e);
+                cand[ncand++] = c;
+                ht_insert(seen, c, 0);
+            }
+        }
+        ht_free(seen, false);
+
+        for (size_t i = 1; i < last_arg && ncand > 0; i++) {
+            Expr* arg = res->data.function.args[i];
+            size_t m = arg->data.function.arg_count;
+            HashTable* h = ht_create(m * 2 + 1);
+            for (size_t j = 0; j < m; j++)
+                if (!ht_find(h, arg->data.function.args[j]))
+                    ht_insert(h, arg->data.function.args[j], 0);
+            size_t w = 0;
+            for (size_t k = 0; k < ncand; k++) {
+                if (ht_find(h, cand[k])) cand[w++] = cand[k];
+                else expr_free(cand[k]);
+            }
+            ncand = w;
+            ht_free(h, false);
+        }
+    } else {
+        /* --- SameTest path: O(n^2), greatest representative per class. --- */
+        Expr** sorted0 = malloc(sizeof(Expr*) * (first_count ? first_count : 1));
+        for (size_t j = 0; j < first_count; j++)
+            sorted0[j] = first->data.function.args[j];   /* borrowed */
+        qsort(sorted0, first_count, sizeof(Expr*), compare_expr_ptrs);
+        for (size_t j = 0; j < first_count; j++) {
+            Expr* e = sorted0[j];
+            size_t match = SIZE_MAX;
+            for (size_t k = 0; k < ncand; k++)
+                if (same_test_equal(same_test, e, cand[k])) { match = k; break; }
+            if (match == SIZE_MAX) {
+                cand[ncand++] = expr_copy(e);
+            } else {
+                /* e is canonically >= cand[match]; keep the greater one. */
+                expr_free(cand[match]);
+                cand[match] = expr_copy(e);
+            }
+        }
+        free(sorted0);
+
+        for (size_t i = 1; i < last_arg && ncand > 0; i++) {
+            Expr* arg = res->data.function.args[i];
+            size_t m = arg->data.function.arg_count;
+            size_t w = 0;
+            for (size_t k = 0; k < ncand; k++) {
+                bool present = false;
+                for (size_t j = 0; j < m; j++)
+                    if (same_test_equal(same_test, cand[k], arg->data.function.args[j])) {
+                        present = true; break;
+                    }
+                if (present) cand[w++] = cand[k];
+                else expr_free(cand[k]);
+            }
+            ncand = w;
+        }
+    }
+
+    qsort(cand, ncand, sizeof(Expr*), compare_expr_ptrs);
+    Expr* result = expr_new_function(expr_copy(common_head), cand, ncand);
+    free(cand);
     return result;
 }
 

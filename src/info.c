@@ -1730,6 +1730,14 @@ void info_init(void) {
         "\tgives the sorted list of distinct elements appearing in any of the\n"
         "\tinput lists (set union).\n"
         "Comparison is by canonical structural equality.");
+    symtab_set_docstring("Intersection",
+        "Intersection[list]\n"
+        "\tgives the sorted list of distinct elements in list.\n"
+        "Intersection[l1, l2, ...]\n"
+        "\tgives the sorted list of elements common to all the li (set\n"
+        "\tintersection). The li must share a head, which need not be List.\n"
+        "Intersection[l1, ..., SameTest -> f]\n"
+        "\tuses f[a, b] to decide whether elements a and b are the same.");
     symtab_set_docstring("Tally", "Tally[list] counts the number of occurrences of each distinct element in list.");
     symtab_set_docstring("Commonest", "Commonest[list] gives a list of the elements that are the most common in list.\nCommonest[list, n] gives a list of the n most common elements in list.");
     symtab_set_docstring("DeleteDuplicates",

@@ -252,6 +252,7 @@ const char* SYM_IntegerString = NULL;
 const char* SYM_IntegerPart = NULL;
 const char* SYM_IntegerPartitions = NULL;
 const char* SYM_Integers = NULL;
+const char* SYM_Intersection = NULL;
 const char* SYM_Interval = NULL;
 const char* SYM_InterpolatingFunction = NULL;
 const char* SYM_Interpolation = NULL;
@@ -995,6 +996,7 @@ void sym_names_init(void) {
     SYM_IntegerPartitions          = intern_symbol("IntegerPartitions");
     SYM_Integers                   = intern_symbol("Integers");
     SYM_Integrate                  = intern_symbol("Integrate");
+    SYM_Intersection               = intern_symbol("Intersection");
     SYM_Interval                   = intern_symbol("Interval");
     SYM_InterpolatingFunction      = intern_symbol("InterpolatingFunction");
     SYM_Interpolation              = intern_symbol("Interpolation");
