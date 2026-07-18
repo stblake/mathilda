@@ -787,6 +787,21 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
             size_t saved = env->count;
             env_set(env, "$OptionsPattern$", optlist);  /* env_set copies value */
             expr_free(optlist);
+            /* If the OptionsPattern was named (opts : OptionsPattern[]), also
+             * bind that symbol to a Sequence of the matched options so the RHS
+             * can splice them -- Sequence @@ ..., {opts}, or passing opts down
+             * to another call. WL binds the name to the option sequence; an
+             * empty match binds Sequence[] which vanishes on splice. Without
+             * this only OptionValue (via $OptionsPattern$) works, not the
+             * common opts-forwarding idiom. */
+            if (bind_sym && bind_sym->type == EXPR_SYMBOL) {
+                Expr** sitems = malloc(sizeof(Expr*) * (cnt ? cnt : 1));
+                for (size_t i = 0; i < cnt; i++) sitems[i] = expr_copy(collected[i]);
+                Expr* seq = expr_new_function(expr_new_symbol(SYM_Sequence), sitems, cnt);
+                free(sitems);
+                env_set(env, bind_sym->data.symbol.name, seq);
+                expr_free(seq);
+            }
             /* Consume every remaining expr; the rest of the pattern list must
              * match against zero arguments. */
             if (match_args_internal(exprs + n_exprs, 0, pats + 1, n_pats - 1, env,
