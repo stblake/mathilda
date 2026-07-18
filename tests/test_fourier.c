@@ -62,6 +62,15 @@ static void chk(const char* elem, double exp_re, double exp_im, double tol) {
                "%s: Im expected %.10g, got %.10g", elem, exp_im, im);
 }
 
+/* Max_k |recon_k - data_k| over the whole (flattened) array — the full-array
+ * analogue of the single-element round-trip checks. Both expressions are
+ * evaluated; `data` must be side-effect free (it is substituted verbatim). */
+static double recon_err(const char* recon, const char* data) {
+    char buf[1024];
+    snprintf(buf, sizeof(buf), "Max[Abs[Flatten[(%s) - (%s)]]]", recon, data);
+    return num_of(buf);
+}
+
 /* ---- machine-precision 1-D (WMA golden vectors) --------------------- */
 
 void test_machine_1d() {
@@ -117,6 +126,49 @@ void test_multidim() {
     ASSERT_MSG(fabs(num_of(
         "Module[{x=ConstantArray[0,{2,3,4}]}, x[[1,1,1]]=1; x[[2,2,2]]=1; "
         "Re[Fourier[x][[1,1,1]]]]") - 0.40824829) < 1e-6, "3D corner");
+}
+
+/* ---- whole-array inverse round trip (recovers the ENTIRE array) ------ *
+ * The single-element checks above confirm particular coefficients; these
+ * assert that InverseFourier[Fourier[data]] reproduces the whole array to
+ * numerical precision, for ranks 1..3, real and complex, machine and MPFR. */
+
+void test_fourier_roundtrip_full() {
+    /* 1-D: power-of-two and non-power-of-two (mixed-radix) lengths. */
+    ASSERT_MSG(recon_err("InverseFourier[Fourier[{3,1,4,1,5,9,2,6}]]",
+                         "{3,1,4,1,5,9,2,6}") < 1e-12, "FT roundtrip 1-D pow2");
+    ASSERT_MSG(recon_err("InverseFourier[Fourier[{2,7,1,8,2,8,1,8,2,8,4}]]",
+                         "{2,7,1,8,2,8,1,8,2,8,4}") < 1e-12, "FT roundtrip 1-D mixed radix");
+    /* 2-D. */
+    ASSERT_MSG(recon_err("InverseFourier[Fourier[{{1,2,3},{4,5,6}}]]",
+                         "{{1,2,3},{4,5,6}}") < 1e-12, "FT roundtrip 2-D");
+    /* 3-D, real input. */
+    ASSERT_MSG(recon_err("InverseFourier[Fourier[Table[i+2 j+3 k,{i,2},{j,3},{k,4}]]]",
+                         "Table[i+2 j+3 k,{i,2},{j,3},{k,4}]") < 1e-12, "FT roundtrip 3-D");
+    /* 3-D, complex input. */
+    ASSERT_MSG(recon_err("InverseFourier[Fourier[Table[i+I k,{i,2},{j,3},{k,4}]]]",
+                         "Table[i+I k,{i,2},{j,3},{k,4}]") < 1e-12, "FT roundtrip 3-D complex");
+    /* The forward-then-inverse order also recovers the array. */
+    ASSERT_MSG(recon_err("Fourier[InverseFourier[{{1,2,3},{4,5,6}}]]",
+                         "{{1,2,3},{4,5,6}}") < 1e-12, "FT roundtrip 2-D (inverse first)");
+}
+
+#ifdef USE_MPFR
+void test_fourier_roundtrip_mpfr() {
+    /* Arbitrary-precision whole-array round trip, 1-D and 2-D. */
+    ASSERT_MSG(recon_err("InverseFourier[Fourier[N[{1,2,3,4,5,6,7},30]]]",
+                         "N[{1,2,3,4,5,6,7},30]") < 1e-25, "FT roundtrip MPFR 1-D");
+    ASSERT_MSG(recon_err("InverseFourier[Fourier[N[{{1,2,3},{4,5,6}},30]]]",
+                         "N[{{1,2,3},{4,5,6}},30]") < 1e-25, "FT roundtrip MPFR 2-D");
+}
+#endif
+
+void test_fourier_roundtrip_ndarray() {
+    /* The NDArray fast path recovers the whole 3-D array (compare via Normal). */
+    ASSERT_MSG(num_of(
+        "Module[{na=NDArray[{{{1.,2.},{3.,4.}},{{5.,6.},{7.,8.}}}]}, "
+        "Max[Abs[Flatten[Normal[InverseFourier[Fourier[na]]] - Normal[na]]]]]")
+        < 1e-12, "FT roundtrip NDArray 3-D");
 }
 
 /* ---- FourierParameters conventions ---------------------------------- */
@@ -316,6 +368,39 @@ void test_dct_multidim() {
         "FourierDCT[{{1,2,3},{4,5,6}}] == FourierDCT[{{1,2,3},{4,5,6}},2]", "True", 0);
 }
 
+/* ---- whole-array N-D round trip (recovers the ENTIRE array) --------- *
+ * test_dct_dst_inverse covers 1-D; these assert the inverse relationships
+ * reproduce the whole multidimensional array (per-axis separability). */
+
+void test_dct_dst_roundtrip_nd() {
+    const char* d2 = "{{0.1,0.2,0.3},{0.4,0.5,0.6}}";
+    const char* d3 = "Table[N[i+2 j+3 k],{i,3},{j,3},{k,3}]";
+    char r[512];
+    /* 2-D: DCT-II <-> DCT-III and DST-II <-> DST-III over the whole array. */
+    snprintf(r, sizeof(r), "FourierDCT[FourierDCT[%s,2],3]", d2);
+    ASSERT_MSG(recon_err(r, d2) < 1e-12, "DCT II<->III 2-D full");
+    snprintf(r, sizeof(r), "FourierDST[FourierDST[%s,2],3]", d2);
+    ASSERT_MSG(recon_err(r, d2) < 1e-12, "DST II<->III 2-D full");
+    /* 3-D self-inverse: DCT-I, DCT-IV, DST-I, DST-IV. */
+    snprintf(r, sizeof(r), "FourierDCT[FourierDCT[%s,1],1]", d3);
+    ASSERT_MSG(recon_err(r, d3) < 1e-10, "DCT-I self-inverse 3-D");
+    snprintf(r, sizeof(r), "FourierDCT[FourierDCT[%s,4],4]", d3);
+    ASSERT_MSG(recon_err(r, d3) < 1e-10, "DCT-IV self-inverse 3-D");
+    snprintf(r, sizeof(r), "FourierDST[FourierDST[%s,1],1]", d3);
+    ASSERT_MSG(recon_err(r, d3) < 1e-10, "DST-I self-inverse 3-D");
+    snprintf(r, sizeof(r), "FourierDST[FourierDST[%s,4],4]", d3);
+    ASSERT_MSG(recon_err(r, d3) < 1e-10, "DST-IV self-inverse 3-D");
+    /* 3-D II<->III inverse pairs. */
+    snprintf(r, sizeof(r), "FourierDCT[FourierDCT[%s,2],3]", d3);
+    ASSERT_MSG(recon_err(r, d3) < 1e-10, "DCT II<->III 3-D");
+    snprintf(r, sizeof(r), "FourierDST[FourierDST[%s,2],3]", d3);
+    ASSERT_MSG(recon_err(r, d3) < 1e-10, "DST II<->III 3-D");
+    /* 3-D complex input, DCT-II <-> DCT-III. */
+    const char* d3c = "Table[N[i+I k],{i,3},{j,3},{k,3}]";
+    snprintf(r, sizeof(r), "FourierDCT[FourierDCT[%s,2],3]", d3c);
+    ASSERT_MSG(recon_err(r, d3c) < 1e-10, "DCT II<->III 3-D complex");
+}
+
 /* ---- arbitrary precision (MPFR) ------------------------------------- */
 
 #ifdef USE_MPFR
@@ -362,7 +447,7 @@ void test_dct_dst_diagnostics() {
     assert_eval_eq("FourierDCT[{a,b,c}]", "FourierDCT[{a, b, c}]", 0);
     assert_eval_eq("FourierDST[{a,b,c}]", "FourierDST[{a, b, c}]", 0);
     /* DCT-I needs length >= 2. */
-    assert_eval_eq("FourierDCT[{5.}, 1]", "FourierDCT[{5.}, 1]", 0);
+    assert_eval_eq("FourierDCT[{5.}, 1]", "FourierDCT[{5.0}, 1]", 0);
 }
 
 void test_dct_dst_attributes() {
@@ -382,6 +467,11 @@ int main() {
     TEST(test_real_collapse);
     TEST(test_inverse_roundtrip);
     TEST(test_multidim);
+    TEST(test_fourier_roundtrip_full);
+#ifdef USE_MPFR
+    TEST(test_fourier_roundtrip_mpfr);
+#endif
+    TEST(test_fourier_roundtrip_ndarray);
     TEST(test_fourier_parameters);
 #ifdef USE_MPFR
     TEST(test_arbitrary_precision);
@@ -397,6 +487,7 @@ int main() {
     TEST(test_dct_dst_complex);
     TEST(test_dct_dst_inverse);
     TEST(test_dct_multidim);
+    TEST(test_dct_dst_roundtrip_nd);
 #ifdef USE_MPFR
     TEST(test_dct_dst_mpfr);
 #endif
