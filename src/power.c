@@ -1783,7 +1783,9 @@ rat_imag_fallthrough: ;
 }
 
 Expr* builtin_sqrt(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("Sqrt", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
     Expr* half = make_rational(1, 2);
     Expr* p_args[2] = { expr_copy(arg), half };

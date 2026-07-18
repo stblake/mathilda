@@ -302,7 +302,9 @@ static bool is_minus_infinity(Expr* e) {
 }
 
 Expr* builtin_sinh(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("Sinh", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
     { Expr* inv = strip_inverse_call(arg, "ArcSinh"); if (inv) return inv; }
@@ -342,7 +344,9 @@ Expr* builtin_sinh(Expr* res) {
 }
 
 Expr* builtin_cosh(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("Cosh", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
     { Expr* inv = strip_inverse_call(arg, "ArcCosh"); if (inv) return inv; }
@@ -378,7 +382,9 @@ Expr* builtin_cosh(Expr* res) {
 }
 
 Expr* builtin_tanh(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("Tanh", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
     { Expr* inv = strip_inverse_call(arg, "ArcTanh"); if (inv) return inv; }
@@ -416,7 +422,9 @@ Expr* builtin_tanh(Expr* res) {
 }
 
 Expr* builtin_coth(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("Coth", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
     { Expr* inv = strip_inverse_call(arg, "ArcCoth"); if (inv) return inv; }
@@ -453,7 +461,9 @@ Expr* builtin_coth(Expr* res) {
 }
 
 Expr* builtin_sech(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("Sech", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
     { Expr* inv = strip_inverse_call(arg, "ArcSech"); if (inv) return inv; }
@@ -486,7 +496,9 @@ Expr* builtin_sech(Expr* res) {
 }
 
 Expr* builtin_csch(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("Csch", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
     { Expr* inv = strip_inverse_call(arg, "ArcCsch"); if (inv) return inv; }
@@ -519,7 +531,9 @@ Expr* builtin_csch(Expr* res) {
 }
 
 Expr* builtin_arcsinh(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("ArcSinh", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
     // ArcSinh is odd: ArcSinh[-x] -> -ArcSinh[x]
@@ -550,7 +564,9 @@ Expr* builtin_arcsinh(Expr* res) {
 }
 
 Expr* builtin_arccosh(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("ArcCosh", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
     
     if (arg->type == EXPR_INTEGER && arg->data.integer == 1) return expr_new_integer(0);
@@ -575,7 +591,9 @@ Expr* builtin_arccosh(Expr* res) {
 }
 
 Expr* builtin_arctanh(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("ArcTanh", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
     // ArcTanh is odd: ArcTanh[-x] -> -ArcTanh[x]
@@ -613,7 +631,9 @@ Expr* builtin_arctanh(Expr* res) {
 }
 
 Expr* builtin_arccoth(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("ArcCoth", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
     // ArcCoth is odd: ArcCoth[-x] -> -ArcCoth[x]
@@ -647,7 +667,9 @@ Expr* builtin_arccoth(Expr* res) {
 }
 
 Expr* builtin_arcsech(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("ArcSech", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
     
     if (arg->type == EXPR_INTEGER && arg->data.integer == 1) return expr_new_integer(0);
@@ -671,7 +693,9 @@ Expr* builtin_arcsech(Expr* res) {
 }
 
 Expr* builtin_arccsch(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("ArcCsch", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
     // ArcCsch is odd: ArcCsch[-x] -> -ArcCsch[x]

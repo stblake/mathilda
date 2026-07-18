@@ -33,6 +33,7 @@
 
 #include "expr.h"
 #include <stdbool.h>
+#include <stddef.h>
 
 /* True iff `e` is a function call whose head symbol equals `sym`.
  *
@@ -49,6 +50,25 @@
  * This is the single canonical head-check used throughout the system --
  * do not reintroduce strcmp-based head comparisons. */
 bool head_is(const Expr* e, const char* sym);
+
+/* Emit a Wolfram-style argument-count diagnostic on stderr for a builtin
+ * `head` that was called with `got` arguments but expects an argument count
+ * in the inclusive range [min, max].
+ *
+ *   - min == max            -> fixed arity   ("Sin::argx" / "Head::argrx")
+ *   - max == SIZE_MAX       -> min-or-more   ("Head::argm")
+ *   - max == min + 1        -> two choices   ("Head::argt": "1 or 2 ...")
+ *   - otherwise             -> a range       ("Head::argb": "between m and n")
+ *
+ * The message text mirrors Mathematica exactly, e.g.
+ *   Sin::argx: Sin called with 3 arguments; 1 argument is expected.
+ *
+ * Always returns NULL so an arity guard reads as a single statement:
+ *   if (argc != 1)
+ *       return builtin_arg_error("Sin", argc, 1, 1);
+ * Leaving the call unevaluated (NULL) matches Mathematica, which prints the
+ * message and returns the expression unchanged. */
+Expr* builtin_arg_error(const char* head, size_t got, size_t min, size_t max);
 
 /* Result of common_scan_inexact.
  *

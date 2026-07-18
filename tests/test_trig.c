@@ -248,6 +248,90 @@ void test_arc_trig_mpfr_complex(void) {
     free(sR); expr_free(eR); expr_free(rR);
 }
 
+/* Capture stderr while `input` is parsed + evaluated. Returns the collected
+ * stderr text (caller frees) and writes the printed result into
+ * *out_result_str (also heap-allocated). Mirrors test_logexp.c. */
+static char* eval_capturing_stderr(const char* input, char** out_result_str) {
+    const char* path = "/tmp/mathilda_trig_stderr.log";
+    fflush(stderr);
+    if (!freopen(path, "w+", stderr)) {
+        if (out_result_str) *out_result_str = NULL;
+        return NULL;
+    }
+    Expr* p = parse_expression(input);
+    Expr* e = evaluate(p);
+    if (out_result_str) *out_result_str = expr_to_string(e);
+    expr_free(p);
+    expr_free(e);
+    fflush(stderr);
+    freopen("/dev/tty", "w", stderr);
+
+    FILE* f = fopen(path, "r");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    if (n < 0) { fclose(f); return NULL; }
+    fseek(f, 0, SEEK_SET);
+    char* buf = malloc((size_t)n + 1);
+    if (!buf) { fclose(f); return NULL; }
+    size_t got = fread(buf, 1, (size_t)n, f);
+    buf[got] = '\0';
+    fclose(f);
+    remove(path);
+    return buf;
+}
+
+/* Elementary functions called with the wrong number of arguments must emit
+ * a Mathematica-style argument-count diagnostic (`argx` for the fixed-arity
+ * unary functions, `argt` for the 1-or-2-argument ArcTan) and leave the call
+ * unevaluated. */
+void test_elementary_argx(void) {
+    struct { const char* input; const char* tag; const char* expect_phrase; size_t argc; } cases[] = {
+        {"Sin[]",          "Sin::argx",    "1 argument is expected",      0},
+        {"Sin[1, 2, 3]",   "Sin::argx",    "1 argument is expected",      3},
+        {"Cos[1, 2]",      "Cos::argx",    "1 argument is expected",      2},
+        {"Sec[]",          "Sec::argx",    "1 argument is expected",      0},
+        {"ArcCsc[1, 2]",   "ArcCsc::argx", "1 argument is expected",      2},
+        {"ArcTan[]",       "ArcTan::argt", "1 or 2 arguments are expected", 0},
+        {"ArcTan[1, 2, 3]","ArcTan::argt", "1 or 2 arguments are expected", 3},
+        {NULL, NULL, NULL, 0}
+    };
+    for (int i = 0; cases[i].input != NULL; i++) {
+        char* result = NULL;
+        char* err = eval_capturing_stderr(cases[i].input, &result);
+        ASSERT(result != NULL);
+        ASSERT_MSG(strcmp(result, cases[i].input) == 0,
+                   "%s: expected call unchanged, got %s", cases[i].input, result);
+        ASSERT_MSG(err && strstr(err, cases[i].tag) != NULL,
+                   "%s: expected %s diagnostic, got: %s",
+                   cases[i].input, cases[i].tag, err ? err : "(null)");
+        char needle[64];
+        snprintf(needle, sizeof needle, "called with %zu argument%s",
+                 cases[i].argc, cases[i].argc == 1 ? "" : "s");
+        ASSERT_MSG(strstr(err, needle) != NULL,
+                   "%s: missing arg-count phrase '%s' in: %s",
+                   cases[i].input, needle, err);
+        ASSERT_MSG(strstr(err, cases[i].expect_phrase) != NULL,
+                   "%s: missing expectation phrase '%s' in: %s",
+                   cases[i].input, cases[i].expect_phrase, err);
+        free(result);
+        free(err);
+    }
+
+    /* Valid arities must NOT emit a diagnostic. */
+    struct { const char* input; } ok[] = {
+        {"Sin[1]"}, {"ArcTan[3, 2]"}, {NULL}
+    };
+    for (int i = 0; ok[i].input != NULL; i++) {
+        char* result = NULL;
+        char* err = eval_capturing_stderr(ok[i].input, &result);
+        ASSERT_MSG(!(err && strstr(err, "::arg")),
+                   "%s: unexpected arg diagnostic: %s", ok[i].input, err ? err : "");
+        free(result);
+        free(err);
+    }
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -257,6 +341,7 @@ int main() {
     TEST(test_trig_forward_of_inverse);
     TEST(test_trig_mpfr_complex);
     TEST(test_arc_trig_mpfr_complex);
+    TEST(test_elementary_argx);
 
     return 0;
 }

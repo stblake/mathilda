@@ -649,7 +649,9 @@ static Expr* strip_inverse_call(Expr* arg, const char* inverse_name) {
  * Falls back to approximate numeric evaluation via C standard math (csin) if possible.
  */
 Expr* builtin_sin(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("Sin", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
     { Expr* inv = strip_inverse_call(arg, "ArcSin"); if (inv) return inv; }
@@ -699,7 +701,9 @@ Expr* builtin_sin(Expr* res) {
  * Falls back to approximate numeric evaluation via C standard math (ccos) if possible.
  */
 Expr* builtin_cos(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("Cos", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
     { Expr* inv = strip_inverse_call(arg, "ArcCos"); if (inv) return inv; }
@@ -749,7 +753,9 @@ Expr* builtin_cos(Expr* res) {
  * Falls back to approximate numeric evaluation via C standard math (ctan) if possible.
  */
 Expr* builtin_tan(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("Tan", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
     { Expr* inv = strip_inverse_call(arg, "ArcTan"); if (inv) return inv; }
@@ -800,7 +806,9 @@ Expr* builtin_tan(Expr* res) {
  * Falls back to approximate numeric evaluation via C standard math (1/ctan) if possible.
  */
 Expr* builtin_cot(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("Cot", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
     { Expr* inv = strip_inverse_call(arg, "ArcCot"); if (inv) return inv; }
@@ -850,7 +858,9 @@ Expr* builtin_cot(Expr* res) {
  * Falls back to approximate numeric evaluation via C standard math (1/ccos) if possible.
  */
 Expr* builtin_sec(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("Sec", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
     { Expr* inv = strip_inverse_call(arg, "ArcSec"); if (inv) return inv; }
@@ -897,7 +907,9 @@ Expr* builtin_sec(Expr* res) {
  * Falls back to approximate numeric evaluation via C standard math (1/csin) if possible.
  */
 Expr* builtin_csc(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("Csc", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
     { Expr* inv = strip_inverse_call(arg, "ArcCsc"); if (inv) return inv; }
@@ -1053,7 +1065,9 @@ static Expr* exact_arccsc(Expr* arg) {
  * Falls back to C standard math (casin) for approximate numerical inputs.
  */
 Expr* builtin_arcsin(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("ArcSin", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
     // ArcSin is odd: ArcSin[-x] -> -ArcSin[x]
@@ -1097,7 +1111,9 @@ Expr* builtin_arcsin(Expr* res) {
  * Falls back to C standard math (cacos) for approximate numerical inputs.
  */
 Expr* builtin_arccos(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("ArcCos", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
     // ArcCos[-x] -> Pi - ArcCos[x]
@@ -1142,7 +1158,11 @@ Expr* builtin_arccos(Expr* res) {
  */
 Expr* builtin_arctan(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
-    
+
+    // ArcTan accepts 1 (arctangent) or 2 (two-argument / quadrant) arguments.
+    if (res->data.function.arg_count != 1 && res->data.function.arg_count != 2)
+        return builtin_arg_error("ArcTan", res->data.function.arg_count, 1, 2);
+
     // Single argument ArcTan[z]
     if (res->data.function.arg_count == 1) {
         Expr* arg = res->data.function.args[0];
@@ -1245,7 +1265,9 @@ Expr* builtin_arctan(Expr* res) {
  * Falls back to C standard math (catan) for approximate numerical inputs.
  */
 Expr* builtin_arccot(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("ArcCot", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
     // ArcCot is odd (Mathematica convention): ArcCot[-x] -> -ArcCot[x]
@@ -1288,7 +1310,9 @@ Expr* builtin_arccot(Expr* res) {
  * Falls back to C standard math (cacos) for approximate numerical inputs.
  */
 Expr* builtin_arcsec(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("ArcSec", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
     // ArcSec[-x] -> Pi - ArcSec[x]
@@ -1329,7 +1353,9 @@ Expr* builtin_arcsec(Expr* res) {
  * Falls back to C standard math (casin) for approximate numerical inputs.
  */
 Expr* builtin_arccsc(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("ArcCsc", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
     // ArcCsc is odd: ArcCsc[-x] -> -ArcCsc[x]

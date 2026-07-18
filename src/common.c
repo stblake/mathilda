@@ -5,6 +5,9 @@
 #include "numeric.h"
 #include "rationalize.h"
 
+#include <stdio.h>
+#include <stdint.h>
+
 #ifdef USE_MPFR
 #include <mpfr.h>
 #endif
@@ -15,6 +18,36 @@ bool head_is(const Expr* e, const char* sym) {
            e->data.function.head &&
            e->data.function.head->type == EXPR_SYMBOL &&
            e->data.function.head->data.symbol.name == sym;
+}
+
+Expr* builtin_arg_error(const char* head, size_t got, size_t min, size_t max) {
+    const char* got_s = (got == 1) ? "" : "s"; /* "argument" vs "arguments" */
+
+    if (min == max) {
+        /* Fixed arity. Mathematica tags the one-argument case `argx`. */
+        const char* tag = (min == 1) ? "argx" : "argrx";
+        fprintf(stderr,
+                "%s::%s: %s called with %zu argument%s; "
+                "%zu argument%s %s expected.\n",
+                head, tag, head, got, got_s,
+                min, (min == 1) ? "" : "s", (min == 1) ? "is" : "are");
+    } else if (max == SIZE_MAX) {
+        fprintf(stderr,
+                "%s::argm: %s called with %zu argument%s; "
+                "%zu or more arguments are expected.\n",
+                head, head, got, got_s, min);
+    } else if (max == min + 1) {
+        fprintf(stderr,
+                "%s::argt: %s called with %zu argument%s; "
+                "%zu or %zu arguments are expected.\n",
+                head, head, got, got_s, min, max);
+    } else {
+        fprintf(stderr,
+                "%s::argb: %s called with %zu argument%s; "
+                "between %zu and %zu arguments are expected.\n",
+                head, head, got, got_s, min, max);
+    }
+    return NULL;
 }
 
 /* Bit precision of a single inexact leaf.  Real → 53 (IEEE 754 double).

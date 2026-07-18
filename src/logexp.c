@@ -11,6 +11,7 @@
 #include "numeric.h"
 #include "numeric_complex.h"
 #include "sym_names.h"
+#include "common.h"
 
 /*
  * logexp_init:
@@ -146,13 +147,8 @@ Expr* builtin_log(Expr* res) {
     // Wrong arity: emit Mathematica's `Log::argt` diagnostic and leave
     // the call unevaluated. Log accepts 1 (natural log) or 2 (base-b log).
     size_t argc = res->data.function.arg_count;
-    if (argc != 1 && argc != 2) {
-        fprintf(stderr,
-                "Log::argt: Log called with %zu argument%s; "
-                "1 or 2 arguments are expected.\n",
-                argc, argc == 1 ? "" : "s");
-        return NULL;
-    }
+    if (argc != 1 && argc != 2)
+        return builtin_arg_error("Log", argc, 1, 2);
 
     // Log[z] - Natural logarithm
     if (argc == 1) {
@@ -399,7 +395,9 @@ Expr* builtin_log(Expr* res) {
  * Implements the evaluation logic for the 'Exp' function.
  */
 Expr* builtin_exp(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1)
+        return builtin_arg_error("Exp", res->data.function.arg_count, 1, 1);
     Expr* z = res->data.function.args[0];
 
     // Exact evaluations for special constants

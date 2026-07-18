@@ -13,6 +13,19 @@
   to `double` through libc's `csin / ccos / ...` (see
   `src/numeric_complex.c`).
 
+**Wrong arity.** Every elementary function validates its argument count and,
+on a mismatch, emits the standard Mathematica diagnostic on stderr and leaves
+the call unevaluated (returns the expression unchanged). The unary functions
+(`Sin`, `Cos`, …, `ArcSin`, …, `Exp`, `Sqrt`, and the hyperbolic set below)
+use `argx`; the variadic `ArcTan` and `Log` (1 or 2 arguments) use `argt`. The
+message is produced by the shared `builtin_arg_error` helper in `src/common.c`.
+
+```
+Sin[]          -> Sin::argx: Sin called with 0 arguments; 1 argument is expected.
+Sin[1, 2, 3]   -> Sin::argx: Sin called with 3 arguments; 1 argument is expected.
+ArcTan[1,2,3]  -> ArcTan::argt: ArcTan called with 3 arguments; 1 or 2 arguments are expected.
+```
+
 ```mathematica
 In[1]:= Sin[Pi/6]
 Out[1]= 1/2
