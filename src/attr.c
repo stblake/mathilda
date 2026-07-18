@@ -78,6 +78,7 @@ static SymbolAttr builtin_attrs[] = {
     {"Return", ATTR_PROTECTED},
     {"Array", ATTR_PROTECTED},
     {"ConstantArray", ATTR_PROTECTED},
+    {"ArrayFlatten", ATTR_PROTECTED},
     {"Take", ATTR_NHOLDREST | ATTR_PROTECTED},
     {"Drop", ATTR_NHOLDREST | ATTR_PROTECTED},
     {"Extract", ATTR_NHOLDREST | ATTR_PROTECTED},

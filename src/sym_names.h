@@ -50,6 +50,7 @@ extern const char* SYM_ArcTanh;
 extern const char* SYM_Arg;
 extern const char* SYM_Arnoldi;
 extern const char* SYM_Array;
+extern const char* SYM_ArrayFlatten;
 extern const char* SYM_AssumptionRules;
 extern const char* SYM_Assumptions;
 extern const char* SYM_Automatic;

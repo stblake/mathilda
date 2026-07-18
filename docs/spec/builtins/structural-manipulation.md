@@ -250,6 +250,21 @@ Flattens out nested lists.
 - `Flatten[list, n]`: Flattens up to level `n`.
 - `Flatten[list, n, h]`: Flattens subexpressions with head `h`.
 
+## ArrayFlatten
+Creates a single flattened matrix from a matrix of matrices (block matrix).
+- `ArrayFlatten[a]`: For a matrix of matrices, yields a matrix whose elements are in the same order as in `MatrixForm[a]`. Equivalent to `Flatten[a, {{1,3},{2,4}}]`.
+- `ArrayFlatten[a, r]`: Flattens out `r` pairs of levels of a rank-`2r` array, giving a rank-`r` array. Equivalent to `Flatten[a, {{1,r+1},...,{r,2r}}]`.
+
+**Features**:
+- `Protected`. Default `r = 2`.
+- Blocks must fit: matrices in the same grid row must share their first dimension, and matrices in the same column their second; the output size along an axis is the sum of the block sizes. Disagreeing blocks leave the call unevaluated.
+- Elements whose array depth is less than `r` are treated as scalars and replicated to fill a rank-`r` block (e.g. `0` becomes a zero block).
+
+```
+In[1]:= m = {{1, 2}, {3, 4}}; ArrayFlatten[{{0, 0, m}, {m, m, 0}}]
+Out[1]= {{0, 0, 0, 0, 1, 2}, {0, 0, 0, 0, 3, 4}, {1, 2, 1, 2, 0, 0}, {3, 4, 3, 4, 0, 0}}
+```
+
 ## Join
 Concatenates lists or other expressions that share the same head.
 - `Join[list1, list2, ...]`: Concatenates the elements of all lists into a single expression.

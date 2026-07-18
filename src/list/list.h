@@ -13,6 +13,7 @@
 #include "range.h"
 #include "array.h"
 #include "constant_array.h"
+#include "array_flatten.h"
 #include "take_drop.h"
 #include "flatten.h"
 #include "partition.h"

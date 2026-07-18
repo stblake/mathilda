@@ -1683,6 +1683,14 @@ void info_init(void) {
         "Flatten[list, n, h]\n"
         "\tflattens only sublists whose head matches h, leaving other heads\n"
         "\tin place.");
+    symtab_set_docstring("ArrayFlatten",
+        "ArrayFlatten[a]\n"
+        "\tcreates a single flattened matrix from a matrix of matrices, forming a\n"
+        "\tblock matrix. Blocks sharing a row must agree on their first dimension\n"
+        "\tand blocks sharing a column on their second; elements shallower than a\n"
+        "\tblock (e.g. 0) are treated as scalars and replicated to fill.\n"
+        "ArrayFlatten[a, r]\n"
+        "\tflattens out r pairs of levels of a rank-2r array, giving a rank-r array.");
     symtab_set_docstring("Partition",
         "Partition[list, n]\n"
         "\tpartitions list into non-overlapping sublists of length n; trailing\n"
