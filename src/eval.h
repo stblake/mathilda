@@ -34,6 +34,14 @@ Expr* evaluate(Expr* e);
  * sentinel, which is why reusing the plain Throw[...] node is unambiguous. */
 bool eval_is_inflight_throw(const Expr* e);
 
+/* True iff `e` is an in-flight Goto sentinel: Goto[tag] (head SYM_Goto, arity
+ * 1). Like Throw, a Goto propagates by being returned up the evaluation stack;
+ * evaluate_step's argument loop short-circuits on it so a Goto fired inside a
+ * nested call (e.g. an If branch) bubbles up to the enclosing
+ * CompoundExpression, which scans its statements for the matching Label[tag].
+ * Unlike Throw it is consumed at a CompoundExpression, not a Catch. */
+bool eval_is_inflight_goto(const Expr* e);
+
 // Recursion-depth limit for nested evaluate() calls. Guards C-stack overflow
 // when expressions trigger deeply recursive sub-evaluation (Listable, Flat,
 // user DownValues that re-evaluate, etc.). Default 1024 (matches Mathematica).

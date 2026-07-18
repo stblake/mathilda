@@ -106,6 +106,13 @@ bool eval_is_inflight_throw(const Expr* e) {
            e->data.function.arg_count >= 1 && e->data.function.arg_count <= 3;
 }
 
+bool eval_is_inflight_goto(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_Goto &&
+           e->data.function.arg_count == 1;
+}
+
 EvalReturnAction eval_classify_return(Expr* e,
                                       const char* boundary_head,
                                       Expr** out_value) {
@@ -811,15 +818,19 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                     if (new_args[i] != orig_arg) *changed = true;
                 }
 
-                /* Catch/Throw: an evaluated argument that is an in-flight Throw
-                 * short-circuits the entire call. Free the siblings produced so
-                 * far and the evaluated head, then hand the sentinel up through
-                 * the normal return path -- this frame and every enclosing frame
-                 * still run their own cleanup (this is why longjmp is not used).
-                 * `res` has not been built yet, so nothing else is owned here.
-                 * Runs before `res` is built and before Orderless sorting, so
-                 * first-throw-wins holds for Plus/Times arguments too. */
-                if (arg_evaluated && eval_is_inflight_throw(new_args[i])) {
+                /* Catch/Throw and Goto/Label: an evaluated argument that is an
+                 * in-flight Throw or Goto short-circuits the entire call. Free
+                 * the siblings produced so far and the evaluated head, then hand
+                 * the sentinel up through the normal return path -- this frame
+                 * and every enclosing frame still run their own cleanup (this is
+                 * why longjmp is not used). `res` has not been built yet, so
+                 * nothing else is owned here. Runs before `res` is built and
+                 * before Orderless sorting, so first-throw-wins holds for
+                 * Plus/Times arguments too. A Goto bubbles the same way until an
+                 * enclosing CompoundExpression consumes it (see
+                 * builtin_compoundexpression). */
+                if (arg_evaluated && (eval_is_inflight_throw(new_args[i]) ||
+                                      eval_is_inflight_goto(new_args[i]))) {
                     Expr* sentinel = new_args[i];
                     for (size_t j = 0; j < i; j++) expr_free(new_args[j]);
                     free(new_args);
@@ -1272,6 +1283,19 @@ static Expr* eval_report_uncaught_throw(Expr* thr) {
     return expr_new_function(expr_new_symbol(SYM_Hold), one, 1);
 }
 
+/* An in-flight Goto that survives to the top level found no matching Label in
+ * any enclosing CompoundExpression. Emit Goto::nolabel on stderr (same channel
+ * as Throw::nocatch) and return the Goto[tag] node unchanged -- unlike Throw,
+ * the inert node itself is the WL result, so no rewrite is needed. Takes
+ * ownership of and returns `g`. */
+static Expr* eval_report_uncaught_goto(Expr* g) {
+    char* s = expr_to_string(g);
+    fprintf(stderr, "Goto::nolabel: %s found no matching Label.\n",
+            s ? s : "Goto[...]");
+    free(s);
+    return g;
+}
+
 Expr* evaluate(Expr* e) {
     if (!e) return NULL;
 
@@ -1369,6 +1393,8 @@ Expr* evaluate(Expr* e) {
              * (any enclosing Catch would have consumed it at depth >= 1). */
             if (is_top_level && eval_is_inflight_throw(current))
                 current = eval_report_uncaught_throw(current);
+            else if (is_top_level && eval_is_inflight_goto(current))
+                current = eval_report_uncaught_goto(current);
             return current;
         }
 
@@ -1389,5 +1415,7 @@ Expr* evaluate(Expr* e) {
     eval_recursion_depth--;
     if (is_top_level && eval_is_inflight_throw(current))
         current = eval_report_uncaught_throw(current);
+    else if (is_top_level && eval_is_inflight_goto(current))
+        current = eval_report_uncaught_goto(current);
     return current;
 }

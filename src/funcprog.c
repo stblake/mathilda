@@ -637,6 +637,31 @@ Expr* builtin_throw(Expr* res) {
     return NULL;                        /* Throw[...] stands as the sentinel */
 }
 
+/* ------------------- Goto / Label -------------------
+ *
+ * Goto[tag] transfers control to Label[tag] in the CompoundExpression it
+ * appears in directly, then in enclosing ones. Goto is non-held: tag is
+ * evaluated by the arg loop, and the plain Goto[tag] node *is* the in-flight
+ * sentinel (eval_is_inflight_goto). evaluate_step's argument loop
+ * short-circuits on it so a Goto fired inside a nested call bubbles up to the
+ * enclosing CompoundExpression, which scans for the matching Label and jumps
+ * (builtin_compoundexpression). Like builtin_throw, this only validates arity
+ * and declines. */
+Expr* builtin_goto(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1) return NULL;  /* wrong arity: leave alone */
+    return NULL;                                          /* Goto[tag] stands as the sentinel */
+}
+
+/* Label[tag] marks a jump target inside a CompoundExpression. As a statement it
+ * is a no-op that evaluates to Null; the raw held Label[tag] node is what
+ * builtin_compoundexpression scans for when consuming a Goto[tag] sentinel. */
+Expr* builtin_label(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1) return NULL;  /* wrong arity: leave alone */
+    return expr_new_symbol(SYM_Null);
+}
+
 /* Catch[expr] returns the argument of the first Throw generated while
  * evaluating expr, or expr itself if none. Catch[expr, form] catches only a
  * Throw[v, tag] whose tag matches form (tag is re-evaluated before each

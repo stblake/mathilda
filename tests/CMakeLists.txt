@@ -781,6 +781,11 @@ add_executable(catch_throw_tests test_catch_throw.c ${COMMON_SRC})
 target_link_libraries(catch_throw_tests m)
 target_include_directories(catch_throw_tests PRIVATE ../src)
 
+add_executable(goto_label_tests test_goto_label.c ${COMMON_SRC})
+target_link_libraries(goto_label_tests m)
+target_include_directories(goto_label_tests PRIVATE ../src)
+add_test(NAME goto_label_tests COMMAND goto_label_tests)
+
 add_executable(boolean_tests test_boolean.c ${COMMON_SRC})
 target_link_libraries(boolean_tests m)
 target_include_directories(boolean_tests PRIVATE ../src)

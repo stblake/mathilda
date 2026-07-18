@@ -24,6 +24,8 @@ Expr* builtin_lengthwhile(Expr* res);
 Expr* builtin_scan(Expr* res);
 Expr* builtin_catch(Expr* res);
 Expr* builtin_throw(Expr* res);
+Expr* builtin_goto(Expr* res);
+Expr* builtin_label(Expr* res);
 Expr* builtin_all_true(Expr* res);
 Expr* builtin_any_true(Expr* res);
 Expr* builtin_none_true(Expr* res);

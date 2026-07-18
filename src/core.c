@@ -476,6 +476,16 @@ void core_init(void) {
         "\tevaluating expr, or expr if none. Catch[expr, form] catches only a\n"
         "\tThrow[value, tag] whose tag matches form (tag is re-evaluated per\n"
         "\tcomparison); Catch[expr, form, f] returns f[value, tag].");
+    symtab_add_builtin("Goto", builtin_goto);
+    symtab_get_def("Goto")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Goto",
+        "Goto[tag]\n\tScans the CompoundExpression it appears in directly for\n"
+        "\tLabel[tag], then enclosing ones, and transfers control to that point.");
+    symtab_add_builtin("Label", builtin_label);
+    symtab_get_def("Label")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Label",
+        "Label[tag]\n\tMarks a point in a CompoundExpression to which control can\n"
+        "\tbe transferred with Goto[tag]. As a statement it evaluates to Null.");
     symtab_add_builtin("SelectFirst", builtin_select_first);
     symtab_get_def("SelectFirst")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("SelectFirst",
@@ -847,19 +857,53 @@ Expr* builtin_compoundexpression(Expr* res) {
     if (res->data.function.arg_count == 0) return expr_new_symbol(SYM_Null);
 
     Expr* last_val = NULL;
-    for (size_t i = 0; i < res->data.function.arg_count; i++) {
+    size_t n = res->data.function.arg_count;
+    for (size_t i = 0; i < n; i++) {
         if (last_val) expr_free(last_val);
         last_val = evaluate(res->data.function.args[i]);
         if (last_val->type == EXPR_FUNCTION && last_val->data.function.head->type == EXPR_SYMBOL) {
             const char* hname = last_val->data.function.head->data.symbol.name;
-            if (hname == SYM_Return || hname == SYM_Break || 
-                hname == SYM_Continue || hname == SYM_Throw || 
+            /* Goto[tag]: scan this CompoundExpression's statements for the
+             * matching Label[tag] and resume there (a backward or forward
+             * jump). Label tags are held (CompoundExpression is HoldAll), so we
+             * match the raw Label argument against the Goto's evaluated tag.
+             * If no Label matches here, return the sentinel so an enclosing
+             * CompoundExpression can consume it -- WL scans the compound
+             * expression the Goto appears in directly, then enclosing ones. */
+            if (hname == SYM_Goto && last_val->data.function.arg_count == 1) {
+                Expr* tag = last_val->data.function.args[0];
+                size_t target = 0;
+                int found = 0;
+                for (size_t j = 0; j < n; j++) {
+                    Expr* stmt = res->data.function.args[j];
+                    if (stmt->type == EXPR_FUNCTION &&
+                        stmt->data.function.head->type == EXPR_SYMBOL &&
+                        stmt->data.function.head->data.symbol.name == SYM_Label &&
+                        stmt->data.function.arg_count == 1 &&
+                        expr_eq(stmt->data.function.args[0], tag)) {
+                        target = j;
+                        found = 1;
+                        break;
+                    }
+                }
+                if (found) {
+                    expr_free(last_val);
+                    last_val = NULL;
+                    i = target;   /* loop i++ resumes at the statement after Label */
+                    continue;
+                }
+                break;            /* propagate Goto to an enclosing CompoundExpression */
+            }
+            if (hname == SYM_Return || hname == SYM_Break ||
+                hname == SYM_Continue || hname == SYM_Throw ||
                 hname == SYM_Abort || hname == SYM_Quit) {
                 break;
             }
         }
     }
-    return last_val;
+    /* last_val can be NULL only if the jump target Label was the final
+     * statement; yield Null so we never return NULL ("cannot evaluate"). */
+    return last_val ? last_val : expr_new_symbol(SYM_Null);
 }
 Expr* builtin_clear(Expr* res) {
     if (res->type == EXPR_FUNCTION) {

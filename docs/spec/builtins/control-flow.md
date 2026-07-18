@@ -279,3 +279,44 @@ In[5]:= Catch[Throw[v, tg], tg, {#1, #2} &]
 Out[5]= {v, tg}
 ```
 
+## Goto / Label
+Imperative jumps within a `CompoundExpression`. `Goto[tag]` transfers control to
+the `Label[tag]` in the compound expression the `Goto` appears in directly, then
+in enclosing ones. `Label[tag]` marks a jump target; as a statement it evaluates
+to `Null`.
+
+- `Goto[tag]`: scans the enclosing `CompoundExpression`'s statements for
+  `Label[tag]` and resumes evaluation there — a forward jump (skipping the
+  statements in between) or a backward jump (forming a loop). If no matching
+  `Label` is found in the current compound expression, the `Goto` propagates to
+  the enclosing one; if none matches anywhere it is left unevaluated.
+- `Label[tag]`: marks a point that `Goto[tag]` can jump to. It must appear as an
+  explicit element of a `CompoundExpression`.
+
+**Features**:
+- Both are `Protected`. `tag` is evaluated (conventionally a literal symbol or
+  integer) and compared structurally to each `Label`'s tag.
+- Like `Catch`/`Throw`, `Goto` is implemented by sentinel propagation through the
+  evaluator's normal return paths (no `setjmp`/`longjmp`), so a `Goto` fired
+  inside a nested call (e.g. an `If` branch) still reaches the enclosing
+  `CompoundExpression`. Leak-free.
+- A `Goto` loop is a genuine loop with no artificial iteration cap; termination
+  is the program's responsibility (as with `While`).
+- A `Goto[tag]` that reaches the top level with no matching `Label` anywhere
+  emits a `Goto::nolabel` message (stderr) and returns the inert `Goto[tag]`
+  node. The message fires only when truly unmatched — a `Goto` that legitimately
+  propagates from an inner to an outer `CompoundExpression` mid-evaluation is
+  silent.
+
+```mathematica
+In[1]:= Module[{i = 0, s = 0}, Label[top]; i = i + 1; s = s + i;
+          If[i < 5, Goto[top]]; s]
+Out[1]= 15
+
+In[2]:= f[a_] := Module[{x = 1., xp}, Label[begin];
+          If[Abs[xp - x] < 10^-8, Goto[end]]; xp = x; x = (x + a/x)/2;
+          Goto[begin]; Label[end]; x];
+        f[2]
+Out[2]= 1.41421
+```
+

@@ -48,6 +48,27 @@ static bool extend_flat_head(Expr* left, const char* head_name, Expr* right) {
     return true;
 }
 
+/* If `right` is an n-ary call whose head is `head_name`, prepend `left` as its
+ * new first argument in-place (taking ownership of `left`) and return true.
+ * Mirrors extend_flat_head but for a right-associative operator: `;` is parsed
+ * right-associatively, so `a; b; c` accumulates the CompoundExpression on the
+ * right (right = CompoundExpression[b, c]). Prepending yields the flat
+ * CompoundExpression[a, b, c] WL produces, which matters for control flow:
+ * Goto/Label scanning treats each ';'-chain as one flat statement list. */
+static bool prepend_flat_head(Expr* left, const char* head_name, Expr* right) {
+    if (!head_is(right, intern_symbol(head_name))) return false;
+
+    size_t old_count = right->data.function.arg_count;
+    Expr** new_args = malloc(sizeof(Expr*) * (old_count + 1));
+    if (!new_args) return false;
+    new_args[0] = left;
+    for (size_t k = 0; k < old_count; k++) new_args[k + 1] = right->data.function.args[k];
+    free(right->data.function.args);
+    right->data.function.args = new_args;
+    right->data.function.arg_count = old_count + 1;
+    return true;
+}
+
 /* Heads that participate in Mathematica-style chained comparisons. WL
  * collapses `a < b <= c == d > e` into one Inequality[...] node; Unequal
  * (`!=`) is intentionally excluded — its WL semantics ("all distinct")
@@ -1463,6 +1484,17 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
             } else {
                 Expr* args[2] = { left, right };
                 left = expr_new_function(expr_new_symbol(SYM_Optional), args, 2);
+            }
+        } else if (op_def.type == OP_COMPOUND) {
+            /* Flatten `;` chains at parse time so a;b;c parses as the n-ary
+             * CompoundExpression[a, b, c] rather than a right-nested binary
+             * tree. `;` is right-associative, so `right` holds the already-built
+             * tail: prepend `left` into it when it is a CompoundExpression. */
+            if (prepend_flat_head(left, op_def.head_name, right)) {
+                left = right;
+            } else {
+                Expr* args[2] = { left, right };
+                left = expr_new_function(expr_new_symbol(op_def.head_name), args, 2);
             }
         } else {
             /* Chained comparisons. `a < b <= c == d > e` is left-associated
