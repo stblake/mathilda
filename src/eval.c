@@ -661,17 +661,21 @@ static bool flatten_sequences(Expr* e) {
     if (e->type != EXPR_FUNCTION) return false;
 
     size_t new_count = 0;
+    bool found_sequence = false;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         Expr* arg = e->data.function.args[i];
         if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
             arg->data.function.head->data.symbol.name == SYM_Sequence) {
             new_count += arg->data.function.arg_count;
+            found_sequence = true;
         } else {
             new_count++;
         }
     }
 
-    if (new_count == e->data.function.arg_count) return false;
+    /* A lone Sequence[x] changes structure without changing arg_count, so we
+     * cannot gate on (new_count == arg_count) -- test for any Sequence head. */
+    if (!found_sequence) return false;
     
     Expr** new_args = malloc(sizeof(Expr*) * new_count);
     size_t k = 0;
@@ -844,14 +848,12 @@ Expr* evaluate_step(Expr* e, bool* changed) {
             free(new_args);
             
     /* 2.5 Flatten Sequences - must happen before attributes.
-     * Suppressed under HoldAllComplete and inside Set/SetDelayed/Rule/RuleDelayed
-     * (whose pattern syntax preserves Sequence as a literal head). */
-    if (hold_all_complete) {
-        /* HoldAllComplete leaves Sequence intact */
-    } else if (head->type == EXPR_SYMBOL &&
-        (head->data.symbol.name == SYM_Set || head->data.symbol.name == SYM_SetDelayed ||
-         head->data.symbol.name == SYM_Rule || head->data.symbol.name == SYM_RuleDelayed)) {
-        // Do not flatten sequences in assignments or rules
+     * Suppressed for heads carrying SequenceHold (e.g. Set/SetDelayed/Rule/
+     * RuleDelayed, so assignments and rules can return Sequence objects) and for
+     * HoldAllComplete heads (HoldAllComplete implies SequenceHold). Any
+     * user-defined head with SequenceHold is honored automatically. */
+    if (hold_all_complete || (attrs & ATTR_SEQUENCEHOLD)) {
+        /* SequenceHold / HoldAllComplete leaves Sequence intact */
     } else {
         if (flatten_sequences(res)) *changed = true;
     }

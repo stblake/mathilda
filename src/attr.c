@@ -19,8 +19,8 @@ static SymbolAttr builtin_attrs[] = {
     {"HoldComplete", ATTR_HOLDALLCOMPLETE | ATTR_PROTECTED},
     {"HoldPattern", ATTR_HOLDALL | ATTR_PROTECTED},
     {"Unevaluated", ATTR_HOLDALLCOMPLETE | ATTR_PROTECTED},
-    {"Set", ATTR_HOLDFIRST | ATTR_PROTECTED},
-    {"SetDelayed", ATTR_HOLDALL | ATTR_PROTECTED},
+    {"Set", ATTR_HOLDFIRST | ATTR_PROTECTED | ATTR_SEQUENCEHOLD},
+    {"SetDelayed", ATTR_HOLDALL | ATTR_PROTECTED | ATTR_SEQUENCEHOLD},
     {"MessageName", ATTR_HOLDFIRST | ATTR_PROTECTED},
     {"Clear", ATTR_HOLDALL | ATTR_PROTECTED},
     {"AppendTo", ATTR_HOLDFIRST | ATTR_PROTECTED},
@@ -54,7 +54,7 @@ static SymbolAttr builtin_attrs[] = {
     {"Pattern", ATTR_HOLDFIRST | ATTR_PROTECTED},
     {"PatternTest", ATTR_HOLDREST | ATTR_PROTECTED},
     {"Condition", ATTR_HOLDREST | ATTR_PROTECTED},
-    {"Rule", ATTR_PROTECTED},
+    {"Rule", ATTR_PROTECTED | ATTR_SEQUENCEHOLD},
     {"RuleDelayed", ATTR_HOLDREST | ATTR_PROTECTED | ATTR_SEQUENCEHOLD},
     {"Equal", ATTR_PROTECTED},
     {"Unequal", ATTR_PROTECTED},
@@ -139,6 +139,8 @@ static SymbolAttr builtin_attrs[] = {
     {"Det", ATTR_PROTECTED},
     {"Cross", ATTR_PROTECTED},
     {"Norm", ATTR_PROTECTED},
+    {"Sequence", ATTR_PROTECTED},
+    {"SequenceHold", ATTR_PROTECTED},
     {NULL, 0}
 };
 

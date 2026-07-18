@@ -865,6 +865,10 @@ target_include_directories(patterns_tests PRIVATE ../src)
 add_executable(replace_tests test_replace.c ${COMMON_SRC})
 target_include_directories(replace_tests PRIVATE ../src)
 
+add_executable(sequence_tests test_sequence.c ${COMMON_SRC})
+target_include_directories(sequence_tests PRIVATE ../src)
+add_test(NAME sequence_tests COMMAND sequence_tests)
+
 add_executable(options_tests test_options.c ${COMMON_SRC})
 target_include_directories(options_tests PRIVATE ../src)
 
@@ -2396,6 +2400,7 @@ if(USE_ECM)
     add_dependencies(ndarray_linalg_tests build_ecm)
     add_dependencies(patterns_tests build_ecm)
     add_dependencies(replace_tests build_ecm)
+    add_dependencies(sequence_tests build_ecm)
     add_dependencies(core_tests build_ecm)
     add_dependencies(trig_tests build_ecm)
     add_dependencies(trig_canon_tests build_ecm)

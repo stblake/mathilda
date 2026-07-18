@@ -1868,6 +1868,17 @@ void info_init(void) {
         "\tRational, Complex, Symbol, or String), and False if expr is a\n"
         "\tcompound expression of the form head[...].");
     symtab_set_docstring("Identity", "Identity[expr] gives expr unchanged (the identity function).");
+    symtab_set_docstring("Sequence",
+        "Sequence[e1, e2, ...]\n"
+        "\trepresents a sequence of arguments that is automatically spliced into\n"
+        "\tthe argument list of any enclosing function. Sequence[] evaporates and\n"
+        "\tSequence[e] acts like the identity. Splicing is suppressed for heads\n"
+        "\twith the attribute SequenceHold or HoldAllComplete.");
+    symtab_set_docstring("SequenceHold",
+        "SequenceHold\n"
+        "\tis an attribute which specifies that Sequence objects appearing in the\n"
+        "\targuments of a function should not automatically be flattened out.\n"
+        "\tThe attribute HoldAllComplete implies SequenceHold.");
     symtab_set_docstring("Composition",
         "Composition[f1, f2, f3, ...]\n"
         "\trepresents a composition of the functions f1, f2, f3, ....\n"

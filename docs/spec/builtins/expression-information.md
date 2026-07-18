@@ -592,6 +592,50 @@ A function with `HoldAllComplete`:
 
 `HoldComplete` and `Unevaluated` are the two standard built-in heads that carry `HoldAllComplete`.
 
+## Sequence
+Represents a run of arguments that is automatically spliced into the argument
+list of any enclosing function.
+- `Sequence[e1, e2, ...]`
+
+**Features**:
+- Attributes: `{Protected}`.
+- Splicing happens structurally during evaluation, before `Flat`/`Listable`/
+  `Orderless`: `f[a, Sequence[b, c], d]` becomes `f[a, b, c, d]`.
+- `Sequence[]` evaporates and `Sequence[e]` acts like the identity, so
+  `{a, Sequence[b], c}` gives `{a, b, c}` and `{Sequence[], a}` gives `{a}`.
+- A bare `Sequence[...]` with no enclosing function (including one stored in an
+  `OwnValue`) is left as a `Sequence` object; it only splices at a call site.
+- `Sequence` is the wrapper produced by `BlankSequence`/`BlankNullSequence`
+  (`f[a, b, c] /. f[x__] -> x` gives `Sequence[a, b, c]`) and by `SlotSequence`
+  (`##& [a, b, c]` gives `Sequence[a, b, c]`).
+- Splicing is suppressed for heads carrying `SequenceHold` or `HoldAllComplete`.
+
+```mathematica
+In[1]:= f[a, Sequence[b, c], d]
+Out[1]= f[a, b, c, d]
+
+In[2]:= {a, Sequence[b], c, Identity[d]}
+Out[2]= {a, b, c, d}
+
+In[3]:= {a, b, g[x, y], h[w], g[z, y]} /. g -> Sequence
+Out[3]= {a, b, x, y, h[w], z, y}
+```
+
+## SequenceHold (attribute)
+An attribute specifying that `Sequence` objects appearing in the arguments of a
+function are **not** automatically flattened out.
+
+- `HoldAll` alone does *not* prevent splicing: `Hold[Sequence[a, b]]` gives
+  `Hold[a, b]`.
+- `SequenceHold` is what suppresses it: with
+  `SetAttributes[h, {HoldAll, SequenceHold}]`, `h[a, Sequence[b, c]]` stays
+  `h[a, Sequence[b, c]]`.
+- `HoldAllComplete` implies `SequenceHold`.
+- The assignment and replacement heads `Set`, `SetDelayed`, `Rule`, and
+  `RuleDelayed` carry `SequenceHold`, so a definition can return a `Sequence`
+  that splices only at the eventual call site — e.g.
+  `splice[x_] := Sequence[x, x, x]; {a, splice[b], c}` gives `{a, b, b, b, c}`.
+
 ## InputForm
 - `InputForm[expr]` causes `expr` to be printed in a form suitable for input (standard form in Mathilda).
 
