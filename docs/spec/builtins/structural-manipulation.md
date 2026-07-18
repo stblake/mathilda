@@ -464,6 +464,37 @@ In[4]:= Intersection[{1.1, 3.4, .5, 7.6, 7.1, 1.9}, {1.2, 3.3, 7.7, 1.3},
 Out[4]= {1.9, 3.4, 7.6}
 ```
 
+## Complement
+Gives the sorted list of the distinct elements of the first argument that are
+not in any of the others (set difference).
+- `Complement[eall, e1, e2, ...]`
+- `Complement[eall, ..., SameTest -> test]`
+
+**Features**:
+- `Protected`. Unlike `Union`/`Intersection`, `Complement` is order-sensitive in
+  its first argument, so it is *not* `Flat`/`OneIdentity`.
+- All expressions must have the same head, which need not be `List`.
+- Result has the same head as the inputs; deduplicated and sorted into standard
+  order. If nothing survives the removals the result is `{}`.
+- Default option `SameTest -> Automatic` (`Options[Complement]`). With
+  `SameTest -> f`, elements `a`, `b` are treated as equal when `f[a, b]` is
+  `True`; the canonically-smallest member of each class is kept.
+
+```mathematica
+In[1]:= Complement[{a, b, c, d, e}, {a, c}, {d}]
+Out[1]= {b, e}
+
+In[2]:= Complement[f[a, b, c, d], f[c, a], f[b, b, a]]
+Out[2]= f[d]
+
+In[3]:= Complement[{b, e, d, a, b, c, d}, {b, c}]
+Out[3]= {a, d, e}
+
+In[4]:= Complement[{1.1, 3.4, .5, 7.6, 7.1, 1.9}, {1.2, 3.3, 1.3},
+          SameTest -> (Floor[#1] == Floor[#2] &)]
+Out[4]= {0.5, 7.1}
+```
+
 ## DeleteDuplicates
 Removes duplicate elements while preserving order.
 - `DeleteDuplicates[list]`

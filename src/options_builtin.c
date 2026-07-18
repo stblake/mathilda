@@ -740,6 +740,11 @@ void options_register_defaults(void) {
         ob_add(&b, r_sym("SameTest", "Automatic"));
         ob_commit(&b, fp_fns[i]);
     }
+
+    /* ---- Set operations ---- */
+    ob_init(&b);
+    ob_add(&b, r_sym("SameTest", "Automatic"));
+    ob_commit(&b, "Complement");
 }
 
 void options_builtin_init(void) {

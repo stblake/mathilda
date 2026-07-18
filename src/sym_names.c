@@ -74,6 +74,7 @@ const char* SYM_CoefficientDomain = NULL;
 const char* SYM_CollectPerVariable = NULL;
 const char* SYM_Commonest = NULL;
 const char* SYM_CompensatedSummation = NULL;
+const char* SYM_Complement = NULL;
 const char* SYM_Complex = NULL;
 const char* SYM_ComplexExpand = NULL;
 const char* SYM_ComplexInfinity = NULL;
@@ -814,6 +815,7 @@ void sym_names_init(void) {
     SYM_CollectPerVariable         = intern_symbol("CollectPerVariable");
     SYM_Commonest                  = intern_symbol("Commonest");
     SYM_CompensatedSummation       = intern_symbol("CompensatedSummation");
+    SYM_Complement                 = intern_symbol("Complement");
     SYM_Complex                    = intern_symbol("Complex");
     SYM_ComplexExpand              = intern_symbol("ComplexExpand");
     SYM_ComplexInfinity            = intern_symbol("ComplexInfinity");

@@ -666,6 +666,10 @@ add_executable(intersection_tests test_intersection.c ${COMMON_SRC})
 target_include_directories(intersection_tests PRIVATE ../src)
 add_test(NAME intersection_tests COMMAND intersection_tests)
 
+add_executable(complement_tests test_complement.c ${COMMON_SRC})
+target_include_directories(complement_tests PRIVATE ../src)
+add_test(NAME complement_tests COMMAND complement_tests)
+
 add_executable(constant_array_tests test_constant_array.c ${COMMON_SRC})
 target_include_directories(constant_array_tests PRIVATE ../src)
 add_test(NAME constant_array_tests COMMAND constant_array_tests)

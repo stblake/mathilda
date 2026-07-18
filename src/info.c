@@ -1738,6 +1738,13 @@ void info_init(void) {
         "\tintersection). The li must share a head, which need not be List.\n"
         "Intersection[l1, ..., SameTest -> f]\n"
         "\tuses f[a, b] to decide whether elements a and b are the same.");
+    symtab_set_docstring("Complement",
+        "Complement[eall, e1, e2, ...]\n"
+        "\tgives the sorted list of distinct elements in eall that are not in\n"
+        "\tany of the ei (set difference). The arguments must share a head,\n"
+        "\twhich need not be List.\n"
+        "Complement[eall, e1, ..., SameTest -> f]\n"
+        "\tuses f[a, b] to decide whether elements a and b are the same.");
     symtab_set_docstring("Tally", "Tally[list] counts the number of occurrences of each distinct element in list.");
     symtab_set_docstring("Commonest", "Commonest[list] gives a list of the elements that are the most common in list.\nCommonest[list, n] gives a list of the n most common elements in list.");
     symtab_set_docstring("DeleteDuplicates",

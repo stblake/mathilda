@@ -76,6 +76,7 @@ extern const char* SYM_CoefficientDomain;
 extern const char* SYM_CollectPerVariable;
 extern const char* SYM_Commonest;
 extern const char* SYM_CompensatedSummation;
+extern const char* SYM_Complement;
 extern const char* SYM_Complex;
 extern const char* SYM_ComplexExpand;
 extern const char* SYM_ComplexInfinity;
