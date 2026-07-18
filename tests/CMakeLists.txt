@@ -359,6 +359,8 @@ set(COMMON_SRC
     ../src/complex.c
     ../src/complex_expand.c
     ../src/fourier.c
+    ../src/convolutions.c
+    ../src/correlations.c
     ../src/trig.c
     ../src/trig_canon.c
     ../src/hyperbolic.c
@@ -695,6 +697,14 @@ add_test(NAME intersection_tests COMMAND intersection_tests)
 add_executable(fourier_tests test_fourier.c ${COMMON_SRC})
 target_include_directories(fourier_tests PRIVATE ../src)
 add_test(NAME fourier_tests COMMAND fourier_tests)
+
+add_executable(convolutions_tests test_convolutions.c ${COMMON_SRC})
+target_include_directories(convolutions_tests PRIVATE ../src)
+add_test(NAME convolutions_tests COMMAND convolutions_tests)
+
+add_executable(correlations_tests test_correlations.c ${COMMON_SRC})
+target_include_directories(correlations_tests PRIVATE ../src)
+add_test(NAME correlations_tests COMMAND correlations_tests)
 
 add_executable(complement_tests test_complement.c ${COMMON_SRC})
 target_include_directories(complement_tests PRIVATE ../src)

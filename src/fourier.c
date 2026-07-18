@@ -270,6 +270,31 @@ static Expr* machine_build_ndarray(double* out, int64_t N, const int64_t* dims, 
     return expr_new_ndarray(rank, dims, out, NDT_COMPLEX64);
 }
 
+/* Pure standard unnormalised nD DFT (FFTW or naive fallback), in place on an
+ * interleaved (re, im) double buffer of length 2N. `sign` is the exponent sign
+ * of the transform (+1 for +2πi, −1 for −2πi). Exposed for reuse by the
+ * ListConvolve/ListCorrelate FFT fast path; see fourier.h. */
+void fourier_fft_machine(double* buf, const int64_t* dims, int rank, int sign) {
+    int64_t N = 1;
+    for (int i = 0; i < rank; i++) N *= dims[i];
+    if (N <= 0) return;
+#ifdef USE_FFTW
+    fftw_complex* fb = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * (size_t)N);
+    memcpy(fb, buf, (size_t)N * 2 * sizeof(double));
+    int idims[FOURIER_MAX_RANK];
+    for (int i = 0; i < rank; i++) idims[i] = (int)dims[i];
+    /* FFTW_BACKWARD (+1) matches our +2πi convention; FFTW_FORWARD (-1) the -. */
+    int fsign = (sign > 0) ? FFTW_BACKWARD : FFTW_FORWARD;
+    fftw_plan p = fftw_plan_dft(rank, idims, fb, fb, fsign, FFTW_ESTIMATE);
+    fftw_execute(p);
+    fftw_destroy_plan(p);
+    memcpy(buf, fb, (size_t)N * 2 * sizeof(double));
+    fftw_free(fb);
+#else
+    naive_std_transform(buf, dims, rank, sign);
+#endif
+}
+
 /* FFT (FFTW or naive) + b-gather + normalisation. Consumes `buf` (an
  * interleaved (re, im) double buffer of length 2N) and returns a fresh
  * malloc'd interleaved output buffer. */
@@ -278,24 +303,8 @@ static double* machine_transform_buf(double* buf, const int64_t* dims, int rank,
     int64_t N = 1;
     for (int i = 0; i < rank; i++) N *= dims[i];
     double norm = pow((double)N, base_sign > 0 ? -(1.0 - a) / 2.0 : -(1.0 + a) / 2.0);
-    double* std_buf;
 
-#ifdef USE_FFTW
-    fftw_complex* fb = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * (size_t)N);
-    memcpy(fb, buf, (size_t)N * 2 * sizeof(double));
-    free(buf);
-    int idims[FOURIER_MAX_RANK];
-    for (int i = 0; i < rank; i++) idims[i] = (int)dims[i];
-    /* FFTW_BACKWARD (+1) matches our +2πi convention; FFTW_FORWARD (-1) the -. */
-    int sign = (base_sign > 0) ? FFTW_BACKWARD : FFTW_FORWARD;
-    fftw_plan p = fftw_plan_dft(rank, idims, fb, fb, sign, FFTW_ESTIMATE);
-    fftw_execute(p);
-    fftw_destroy_plan(p);
-    std_buf = (double*)fb;
-#else
-    naive_std_transform(buf, dims, rank, base_sign);
-    std_buf = buf;
-#endif
+    fourier_fft_machine(buf, dims, rank, base_sign);
 
     int64_t strides[FOURIER_MAX_RANK];
     row_major_strides(dims, rank, strides);
@@ -306,15 +315,10 @@ static double* machine_transform_buf(double* buf, const int64_t* dims, int rank,
             int64_t k = (o / strides[i]) % dims[i];
             src += gather_index(b, k, dims[i]) * strides[i];
         }
-        out[2 * o]     = norm * std_buf[2 * src];
-        out[2 * o + 1] = norm * std_buf[2 * src + 1];
+        out[2 * o]     = norm * buf[2 * src];
+        out[2 * o + 1] = norm * buf[2 * src + 1];
     }
-
-#ifdef USE_FFTW
-    fftw_free(fb);
-#else
     free(buf);
-#endif
     return out;
 }
 
@@ -496,7 +500,10 @@ static void fft_bluestein(ncpx* a, size_t n, int sign, mpfr_prec_t wp) {
     free(A); free(B); free(w);
 }
 
-static void fft_mpfr(ncpx* a, size_t n, int sign, mpfr_prec_t wp) {
+/* MPFR-complex FFT dispatcher (radix-2 for powers of two, Bluestein otherwise).
+ * Exposed for reuse by the ListConvolve/ListCorrelate arbitrary-precision FFT
+ * fast path; see fourier.h. */
+void fourier_fft_mpfr(ncpx* a, size_t n, int sign, mpfr_prec_t wp) {
     if (n <= 1) return;
     if (is_pow2(n)) fft_pow2(a, n, sign, wp);
     else            fft_bluestein(a, n, sign, wp);
@@ -540,7 +547,7 @@ static Expr* arb_path(Expr** leaves, const int64_t* dims, int rank,
         for (int64_t o = 0; o < N; o++) {
             if ((o / s) % n != 0) continue;
             for (int64_t r = 0; r < n; r++) ncpx_set(&line[r], &buf[o + r * s]);
-            fft_mpfr(line, (size_t)n, base_sign, wp);
+            fourier_fft_mpfr(line, (size_t)n, base_sign, wp);
             for (int64_t r = 0; r < n; r++) ncpx_set(&buf[o + r * s], &line[r]);
         }
         for (int64_t k = 0; k < n; k++) ncpx_clear(&line[k]);

@@ -1627,6 +1627,36 @@ void info_init(void) {
         "The inverse transform of a length-n list v is u[r] = 1/n^((1+a)/2)\n"
         "Sum_s v[s] Exp[-2 Pi I b (r-1)(s-1)/n], with {a,b} set by the\n"
         "FourierParameters option (default {0,1}). InverseFourier inverts Fourier.");
+    symtab_set_docstring("ListConvolve",
+        "ListConvolve[ker, list]\n"
+        "\tforms the convolution Sum_r ker[r] list[s-r] of ker with list.\n"
+        "ListConvolve[ker, list, k]\n"
+        "\taligns element k of ker with each element of list (cyclic).\n"
+        "ListConvolve[ker, list, {kL, kR}]\n"
+        "\tsets the overhang: {-1,1} none (default), {1,1}/{-1,-1} maximal at one\n"
+        "\tend, {1,-1} maximal at both.\n"
+        "ListConvolve[ker, list, klist, padding]\n"
+        "\tpads list at each end with p, cyclic repetitions of {p1,p2,...}, the\n"
+        "\tlist itself (default), or {} for no padding.\n"
+        "ListConvolve[ker, list, klist, padding, g, h]\n"
+        "\tuses g in place of Times and h in place of Plus.\n"
+        "ListConvolve[ker, list, klist, padding, g, h, lev]\n"
+        "\tworks at level lev. ker and list may be multidimensional. Large numeric\n"
+        "\tinput uses an FFT; exact and symbolic input is computed directly.");
+    symtab_set_docstring("ListCorrelate",
+        "ListCorrelate[ker, list]\n"
+        "\tforms the correlation Sum_r ker[r] list[s+r] of ker with list.\n"
+        "ListCorrelate[ker, list, k]\n"
+        "\taligns element k of ker with each element of list (cyclic).\n"
+        "ListCorrelate[ker, list, {kL, kR}]\n"
+        "\tsets the overhang: {1,-1} none (default), {1,1}/{-1,-1} maximal at one\n"
+        "\tend, {-1,1} maximal at both (negated relative to ListConvolve).\n"
+        "ListCorrelate[ker, list, klist, padding]\n"
+        "\tpads list as in ListConvolve.\n"
+        "ListCorrelate[ker, list, klist, padding, g, h]\n"
+        "\tuses g in place of Times and h in place of Plus.\n"
+        "ListCorrelate[ker, list, klist, padding, g, h, lev]\n"
+        "\tworks at level lev. Equivalent to ListConvolve[Reverse[ker], list].");
     symtab_set_docstring("FourierParameters",
         "FourierParameters is an option for Fourier and InverseFourier that\n"
         "specifies the {a, b} convention for the transform. The default {0, 1}\n"

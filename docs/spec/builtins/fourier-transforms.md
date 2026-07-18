@@ -148,3 +148,62 @@ Out[1]= {0.58541, -0.262866, -0.0854102, -0.425325, 0.894427}
 In[2]:= FourierDST[{0, 0, 1, 0, 0}, "IV"]
 Out[2]= {0.447214, 0.447214, -0.447214, -0.447214, 0.447214}
 ```
+
+## ListConvolve / ListCorrelate
+
+Discrete convolution and correlation, implemented in `src/convolutions.{c,h}`
+(shared engine) and `src/correlations.{c,h}` (thin `ListCorrelate` front end).
+Attribute on both: `Protected`.
+
+`ListConvolve[ker, list]` forms `Sum_r ker[r] list[s-r]`; `ListCorrelate[ker,
+list]` forms `Sum_r ker[r] list[s+r]`, over the alignment window fixed by the
+overhang parameters. For one-dimensional data `ListCorrelate[ker, list]` equals
+`ListConvolve[Reverse[ker], list]`.
+
+Argument forms (identical for both):
+
+| Form | Meaning |
+|------|---------|
+| `ListConvolve[ker, list]` | no overhang; output length `Length[list]-Length[ker]+1` |
+| `…, k` | cyclic; align element `k` of `ker` with each element (≡ `{k,k}`) |
+| `…, {kL, kR}` | overhang at each end: first output has `list[[1]] ker[[kL]]`, last has `list[[-1]] ker[[kR]]` |
+| `…, klist, p` | pad ends with `p` |
+| `…, klist, {p1,p2,…}` | pad with cyclic repetitions of the `pi` |
+| `…, klist, list` | treat `list` as cyclic (default) |
+| `…, klist, {}` | no padding (the missing list factor is dropped from each term) |
+| `…, klist, padding, g, h` | use `g` in place of `Times`, `h` in place of `Plus` |
+| `…, klist, padding, g, h, lev` | operate at level `lev` |
+
+Common `{kL, kR}`: `{-1,1}` no overhang (ListConvolve default), `{1,-1}` no
+overhang (ListCorrelate default), `{1,1}`/`{-1,-1}` maximal at one end, and the
+"both ends" setting (`{1,-1}` convolve, `{-1,1}` correlate). Settings are negated
+between the two functions. Kernels and data may be multidimensional; `{kL,kR}`
+broadcasts over axes and `{{kL1,…},{kR1,…}}` sets each axis independently.
+
+Data may be symbolic, exact, machine-precision, or arbitrary-precision. A general
+direct engine handles every case (all padding/overhang forms, generalized
+`g`/`h`, `n` dimensions). For large numeric input with the default `Times`/`Plus`
+a separable FFT fast path is used instead — FFTW for machine precision and the
+MPFR FFT (radix-2 + Bluestein) for arbitrary precision, in both 1-D and n-D —
+which materialises the padded window and computes a linear convolution via a
+zero-padded FFT product. Exact (integer/rational) input stays exact through the
+direct path.
+
+```
+In[1]:= ListConvolve[{x, y}, {a, b, c, d, e, f}]
+Out[1]= {b x + a y, c x + b y, d x + c y, e x + d y, f x + e y}
+
+In[2]:= ListConvolve[{x, y, z}, {1, 2, 3, 4, 5, 6}, {1, -1}]
+Out[2]= {x + 6 y + 5 z, 2 x + y + 6 z, 3 x + 2 y + z, 4 x + 3 y + 2 z,
+         5 x + 4 y + 3 z, 6 x + 5 y + 4 z, x + 6 y + 5 z, 2 x + y + 6 z}
+
+In[3]:= ListConvolve[{{1, 1}, {1, 1}}, {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, 1]
+Out[3]= {{20, 18, 22}, {14, 12, 16}, {26, 24, 28}}
+
+In[4]:= ListConvolve[{x, y, z}, {1, 2, 3}, 1, {}, f, g]
+Out[4]= {g[f[z], f[y], f[x, 1]], g[f[z], f[y, 1], f[x, 2]],
+         g[f[z, 1], f[y, 2], f[x, 3]]}
+
+In[5]:= ListCorrelate[{x, y}, {a, b, c, d, e, f}]
+Out[5]= {a x + b y, b x + c y, c x + d y, d x + e y, e x + f y}
+```
