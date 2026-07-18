@@ -202,6 +202,7 @@ set(COMMON_SRC
     ../src/symtab.c
     ../src/match.c
     ../src/part.c
+    ../src/vectors.c
     ../src/assoc.c
     ../src/ndarray.c
     ../src/ndkernels.c
@@ -664,6 +665,10 @@ target_include_directories(list_tests PRIVATE ../src)
 add_executable(constant_array_tests test_constant_array.c ${COMMON_SRC})
 target_include_directories(constant_array_tests PRIVATE ../src)
 add_test(NAME constant_array_tests COMMAND constant_array_tests)
+
+add_executable(unit_vector_tests test_unit_vector.c ${COMMON_SRC})
+target_include_directories(unit_vector_tests PRIVATE ../src)
+add_test(NAME unit_vector_tests COMMAND unit_vector_tests)
 
 add_executable(array_flatten_tests test_array_flatten.c ${COMMON_SRC})
 target_include_directories(array_flatten_tests PRIVATE ../src)

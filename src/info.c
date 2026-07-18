@@ -1715,6 +1715,14 @@ void info_init(void) {
         "\tgenerates a list of n copies of the element c.\n"
         "ConstantArray[c, {n1, n2, ...}]\n"
         "\tgenerates an n1 x n2 x ... nested array of copies of c.");
+    symtab_set_docstring("UnitVector",
+        "UnitVector[k]\n"
+        "\tgives the 2-D unit vector in the k-th direction.\n"
+        "UnitVector[n, k]\n"
+        "\tgives the n-D unit vector: a length-n list with a 1 in position k\n"
+        "\tand 0s elsewhere.\n"
+        "Components are exact integers unless WorkingPrecision requests\n"
+        "MachinePrecision or a digit count.");
     symtab_set_docstring("Union",
         "Union[list]\n"
         "\tgives the sorted list of distinct elements in list.\n"

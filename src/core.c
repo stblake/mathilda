@@ -127,6 +127,7 @@
 #include "sym_intern.h"
 #include "sym_names.h"
 #include "repl_hooks.h"
+#include "vectors.h"
 #include "version.h"
 
 /*
@@ -686,6 +687,7 @@ void core_init(void) {
     boolean_init();
     names_init();
     list_init();
+    vectors_init();
     assoc_init();
     ndarray_init();
     ndkernels_init();   /* elementary-function NDArray element-wise kernels */

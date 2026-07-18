@@ -109,6 +109,29 @@ In[2]:= ConstantArray[0, {2, 3}]
 Out[2]= {{0, 0, 0}, {0, 0, 0}}
 ```
 
+## UnitVector
+Generates a coordinate unit vector. Attributes: `Protected`.
+- `UnitVector[k]`: the two-dimensional unit vector in the `k`-th direction
+  (equivalent to `UnitVector[2, k]`).
+- `UnitVector[n, k]`: the `n`-dimensional unit vector — a length-`n` list with a
+  `1` in position `k` and `0`s elsewhere.
+
+Components are exact integers by default. The `WorkingPrecision` option selects
+the component representation: `Infinity` (exact, the default), `MachinePrecision`
+(machine-precision reals), or a digit count `d` (`d`-digit reals). `n` and `k`
+must be positive machine integers with `1 <= k <= n`; other arguments leave the
+call unevaluated. `UnitVector[]` reports `UnitVector::argt`; a non-option
+argument beyond the required ones reports `UnitVector::nonopt`.
+
+```
+In[1]:= UnitVector[1]
+Out[1]= {1, 0}
+In[2]:= UnitVector[3, 2]
+Out[2]= {0, 1, 0}
+In[3]:= UnitVector[2, WorkingPrecision -> MachinePrecision]
+Out[3]= {0., 1.}
+```
+
 ## Rescale
 Linearly rescales values onto a target interval. Attributes: `NumericFunction`,
 `Protected`.
