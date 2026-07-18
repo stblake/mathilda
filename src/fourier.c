@@ -830,14 +830,450 @@ Expr* builtin_fourier(Expr* res)         { return fourier_core(res, 0); }
 Expr* builtin_inverse_fourier(Expr* res) { return fourier_core(res, 1); }
 
 /* ==================================================================== *
+ *  FourierDCT / FourierDST — real discrete cosine / sine transforms
+ * ====================================================================
+ *
+ * Four WMA types each (I..IV), selectable by integer 1..4 or the strings
+ * "I".."IV"; the default is type II. Each is the real orthonormal (unitary)
+ * transform v = M u with the real matrix (0-indexed i = s-1, j = r-1; length n):
+ *
+ *   DCT-I  (n>=2): sqrt(2/(n-1)) c_j cos(pi i j/(n-1)),  c_0=c_{n-1}=1/2 else 1
+ *   DCT-II       : (1/sqrt(n)) cos(pi (j+1/2) i / n)
+ *   DCT-III      : (1/sqrt(n)) d_j cos(pi j (i+1/2)/n),  d_0=1 else 2
+ *   DCT-IV       : sqrt(2/n) cos(pi (j+1/2)(i+1/2)/n)
+ *   DST-I        : sqrt(2/(n+1)) sin(pi (j+1)(i+1)/(n+1))
+ *   DST-II       : (1/sqrt(n)) sin(pi (j+1/2)(i+1)/n)
+ *   DST-III      : (1/sqrt(n)) ( 2 sin(pi (j+1)(i+1/2)/n) for j<n-1; (-1)^i for j=n-1 )
+ *   DST-IV       : sqrt(2/n) sin(pi (j+1/2)(i+1/2)/n)
+ *
+ * The matrix is real and separable, so the transform is applied independently
+ * per axis and real input yields real output. Complex input is handled by
+ * applying M to the real and imaginary parts independently.
+ *
+ * Regimes mirror Fourier: exact input is numericalised with N and takes the
+ * machine path (FFTW real-to-real REDFT/RODFT plan — O(n log n) — or a direct
+ * O(n^2) matrix fallback); MPFR input takes a direct O(n^2) MPFR matrix path;
+ * genuinely symbolic input stays unevaluated (WMA behaviour).
+ */
+
+/* Parse the type argument: Integer 1..4 or the strings "I".."IV". */
+static bool parse_dct_type(const Expr* e, int* out) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER) {
+        int64_t v = e->data.integer;
+        if (v >= 1 && v <= 4) { *out = (int)v; return true; }
+        return false;
+    }
+    if (e->type == EXPR_STRING) {
+        const char* s = e->data.string;
+        if (!s) return false;
+        if (!strcmp(s, "I"))   { *out = 1; return true; }
+        if (!strcmp(s, "II"))  { *out = 2; return true; }
+        if (!strcmp(s, "III")) { *out = 3; return true; }
+        if (!strcmp(s, "IV"))  { *out = 4; return true; }
+    }
+    return false;
+}
+
+/* Axis-length validity: DCT-I needs n >= 2 (it divides by n-1); all else n >= 1. */
+static bool dct_axis_ok(int type, bool sine, int64_t n) {
+    if (n < 1) return false;
+    if (!sine && type == 1 && n < 2) return false;
+    return true;
+}
+
+#ifdef USE_FFTW
+/* Map (type, sine) to the FFTW real-to-real transform kind. */
+static fftw_r2r_kind dct_fftw_kind(int type, bool sine) {
+    if (!sine) {
+        switch (type) { case 1: return FFTW_REDFT00; case 2: return FFTW_REDFT10;
+                        case 3: return FFTW_REDFT01; default: return FFTW_REDFT11; }
+    }
+    switch (type) { case 1: return FFTW_RODFT00; case 2: return FFTW_RODFT10;
+                    case 3: return FFTW_RODFT01; default: return FFTW_RODFT11; }
+}
+
+/* Per-axis scale mapping FFTW's unnormalised REDFT/RODFT output onto the WMA
+ * orthonormal convention (the total scale is the product over axes). */
+static double dct_axis_scale(int type, bool sine, int64_t n) {
+    double dn = (double)n;
+    switch (type) {
+        case 1: return sine ? 1.0 / sqrt(2.0 * (dn + 1.0)) : 1.0 / sqrt(2.0 * (dn - 1.0));
+        case 2: return 1.0 / (2.0 * sqrt(dn));
+        case 3: return 1.0 / sqrt(dn);
+        default: return 1.0 / sqrt(2.0 * dn);
+    }
+}
+#else
+/* Single matrix entry M[i][j] (machine double) per the formulas above. */
+static double dct_entry(int i, int j, int n, int type, bool sine) {
+    double dn = (double)n, di = (double)i, dj = (double)j;
+    if (!sine) {
+        switch (type) {
+            case 1: { double c = (j == 0 || j == n - 1) ? 0.5 : 1.0;
+                      return sqrt(2.0 / (dn - 1.0)) * c * cos(M_PI * di * dj / (dn - 1.0)); }
+            case 2: return (1.0 / sqrt(dn)) * cos(M_PI * (dj + 0.5) * di / dn);
+            case 3: { double d = (j == 0) ? 1.0 : 2.0;
+                      return (1.0 / sqrt(dn)) * d * cos(M_PI * dj * (di + 0.5) / dn); }
+            case 4: return sqrt(2.0 / dn) * cos(M_PI * (dj + 0.5) * (di + 0.5) / dn);
+        }
+    } else {
+        switch (type) {
+            case 1: return sqrt(2.0 / (dn + 1.0)) * sin(M_PI * (dj + 1.0) * (di + 1.0) / (dn + 1.0));
+            case 2: return (1.0 / sqrt(dn)) * sin(M_PI * (dj + 0.5) * (di + 1.0) / dn);
+            case 3: if (j == n - 1) return (1.0 / sqrt(dn)) * ((i % 2 == 0) ? 1.0 : -1.0);
+                    return (1.0 / sqrt(dn)) * 2.0 * sin(M_PI * (dj + 1.0) * (di + 0.5) / dn);
+            case 4: return sqrt(2.0 / dn) * sin(M_PI * (dj + 0.5) * (di + 0.5) / dn);
+        }
+    }
+    return 0.0;
+}
+
+/* Direct O(n^2) matrix-vector transform along one axis (strided lines). The
+ * matrix already carries the full WMA normalisation. */
+static void dct_apply_axis_machine(double* data, const int64_t* dims, int rank,
+                                   int ax, int type, bool sine) {
+    int64_t strides[FOURIER_MAX_RANK];
+    row_major_strides(dims, rank, strides);
+    int64_t N = 1;
+    for (int i = 0; i < rank; i++) N *= dims[i];
+    int64_t n = dims[ax], s = strides[ax];
+    double* M = malloc((size_t)n * (size_t)n * sizeof(double));
+    for (int64_t i = 0; i < n; i++)
+        for (int64_t j = 0; j < n; j++)
+            M[i * n + j] = dct_entry((int)i, (int)j, (int)n, type, sine);
+    double* tmp  = malloc((size_t)n * sizeof(double));
+    double* outl = malloc((size_t)n * sizeof(double));
+    for (int64_t o = 0; o < N; o++) {
+        if ((o / s) % n != 0) continue;
+        for (int64_t r = 0; r < n; r++) tmp[r] = data[o + r * s];
+        for (int64_t i = 0; i < n; i++) {
+            double acc = 0.0;
+            for (int64_t j = 0; j < n; j++) acc += M[i * n + j] * tmp[j];
+            outl[i] = acc;
+        }
+        for (int64_t i = 0; i < n; i++) data[o + i * s] = outl[i];
+    }
+    free(M); free(tmp); free(outl);
+}
+#endif
+
+/* Consume the interleaved (re, im) buffer `buf` (length 2N) and return a fresh
+ * interleaved output buffer, or NULL if any axis length is invalid for `type`. */
+static double* dct_transform_buf(double* buf, const int64_t* dims, int rank,
+                                 int type, bool sine) {
+    int64_t N = 1;
+    for (int i = 0; i < rank; i++) {
+        if (!dct_axis_ok(type, sine, dims[i])) { free(buf); return NULL; }
+        N *= dims[i];
+    }
+    double* re = malloc((size_t)N * sizeof(double));
+    double* im = malloc((size_t)N * sizeof(double));
+    bool has_im = false;
+    for (int64_t o = 0; o < N; o++) {
+        re[o] = buf[2 * o];
+        im[o] = buf[2 * o + 1];
+        if (im[o] != 0.0) has_im = true;
+    }
+    free(buf);
+
+    double scale = 1.0;
+#ifdef USE_FFTW
+    int idims[FOURIER_MAX_RANK];
+    fftw_r2r_kind kind[FOURIER_MAX_RANK];
+    fftw_r2r_kind k = dct_fftw_kind(type, sine);
+    for (int i = 0; i < rank; i++) { idims[i] = (int)dims[i]; kind[i] = k; }
+    for (int i = 0; i < rank; i++) scale *= dct_axis_scale(type, sine, dims[i]);
+    fftw_plan p = fftw_plan_r2r(rank, idims, re, re, kind, FFTW_ESTIMATE);
+    fftw_execute(p);
+    fftw_destroy_plan(p);
+    if (has_im) {
+        fftw_plan p2 = fftw_plan_r2r(rank, idims, im, im, kind, FFTW_ESTIMATE);
+        fftw_execute(p2);
+        fftw_destroy_plan(p2);
+    }
+#else
+    for (int ax = 0; ax < rank; ax++) {
+        dct_apply_axis_machine(re, dims, rank, ax, type, sine);
+        if (has_im) dct_apply_axis_machine(im, dims, rank, ax, type, sine);
+    }
+#endif
+
+    double* out = malloc((size_t)N * 2 * sizeof(double));
+    for (int64_t o = 0; o < N; o++) {
+        out[2 * o]     = scale * re[o];
+        out[2 * o + 1] = has_im ? scale * im[o] : 0.0;
+    }
+    free(re); free(im);
+    return out;
+}
+
+/* List path: numericalise, pack, transform, delist to a plain nested List. */
+static Expr* dct_machine_path(const Expr* nested, const int64_t* dims, int rank,
+                              int type, bool sine) {
+    int64_t N = 1;
+    for (int i = 0; i < rank; i++) N *= dims[i];
+    if (N <= 0) return NULL;
+
+    Expr* nnum = numericalize(nested, numeric_machine_spec());
+    if (!nnum) return NULL;
+    int64_t d2[FOURIER_MAX_RANK];
+    int r2 = 0;
+    if (!nested_dims(nnum, d2, &r2) || r2 != rank) { expr_free(nnum); return NULL; }
+    for (int i = 0; i < rank; i++) if (d2[i] != dims[i]) { expr_free(nnum); return NULL; }
+
+    Expr** leaves = malloc((size_t)N * sizeof(Expr*));
+    size_t idx = 0;
+    nd_flatten(nnum, 0, rank, leaves, &idx);
+    double* buf = malloc((size_t)N * 2 * sizeof(double));
+    for (int64_t o = 0; o < N; o++) {
+        double re, im;
+        if (!leaf_to_cdouble(leaves[o], &re, &im)) {
+            free(leaves); free(buf); expr_free(nnum); return NULL;
+        }
+        buf[2 * o] = re;
+        buf[2 * o + 1] = im;
+    }
+    free(leaves);
+    expr_free(nnum);
+
+    double* out = dct_transform_buf(buf, dims, rank, type, sine);
+    if (!out) return NULL;
+    Expr* nd = machine_build_ndarray(out, N, dims, rank);
+    Expr* lst = ndarray_to_nested_list(nd);
+    expr_free(nd);
+    return lst;
+}
+
+/* NDArray fast path: read the packed buffer directly and return an NDArray. */
+static Expr* dct_machine_path_ndarray(const Expr* nd, int type, bool sine) {
+    int rank = nd->data.ndarray.rank;
+    const int64_t* dims = nd->data.ndarray.dims;
+    NDType dt = nd->data.ndarray.dtype;
+    int64_t N = 1;
+    for (int i = 0; i < rank; i++) N *= dims[i];
+    if (N <= 0) return NULL;
+
+    double* buf = malloc((size_t)N * 2 * sizeof(double));
+    for (int64_t o = 0; o < N; o++)
+        ndt_get(nd->data.ndarray.data, (size_t)o, dt, &buf[2 * o], &buf[2 * o + 1]);
+
+    double* out = dct_transform_buf(buf, dims, rank, type, sine);
+    if (!out) return NULL;
+    return machine_build_ndarray(out, N, dims, rank);
+}
+
+#ifdef USE_MPFR
+/* Build the n*n MPFR transform matrix at working precision `wp`. Each entry is
+ * mpfr_init2'd; the caller clears and frees the array. */
+static mpfr_t* dct_matrix_build_mpfr(int n, int type, bool sine, mpfr_prec_t wp) {
+    mpfr_t* M = malloc((size_t)n * (size_t)n * sizeof(mpfr_t));
+    mpfr_t base, pi, ang, val;
+    mpfr_init2(base, wp); mpfr_init2(pi, wp); mpfr_init2(ang, wp); mpfr_init2(val, wp);
+    mpfr_const_pi(pi, MPFR_RNDN);
+
+    /* Base coefficient (common to every entry of this type). */
+    if (!sine) {
+        switch (type) {
+            case 1: mpfr_set_ui(base, 2, MPFR_RNDN); mpfr_div_ui(base, base, (unsigned long)(n - 1), MPFR_RNDN); mpfr_sqrt(base, base, MPFR_RNDN); break;
+            case 4: mpfr_set_ui(base, 2, MPFR_RNDN); mpfr_div_ui(base, base, (unsigned long)n, MPFR_RNDN); mpfr_sqrt(base, base, MPFR_RNDN); break;
+            default: mpfr_set_ui(base, 1, MPFR_RNDN); { mpfr_t t; mpfr_init2(t, wp); mpfr_sqrt_ui(t, (unsigned long)n, MPFR_RNDN); mpfr_div(base, base, t, MPFR_RNDN); mpfr_clear(t); } break; /* 1/sqrt(n) */
+        }
+    } else {
+        switch (type) {
+            case 1: mpfr_set_ui(base, 2, MPFR_RNDN); mpfr_div_ui(base, base, (unsigned long)(n + 1), MPFR_RNDN); mpfr_sqrt(base, base, MPFR_RNDN); break;
+            case 4: mpfr_set_ui(base, 2, MPFR_RNDN); mpfr_div_ui(base, base, (unsigned long)n, MPFR_RNDN); mpfr_sqrt(base, base, MPFR_RNDN); break;
+            default: mpfr_set_ui(base, 1, MPFR_RNDN); { mpfr_t t; mpfr_init2(t, wp); mpfr_sqrt_ui(t, (unsigned long)n, MPFR_RNDN); mpfr_div(base, base, t, MPFR_RNDN); mpfr_clear(t); } break;
+        }
+    }
+
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            mpfr_init2(M[i * n + j], wp);
+            unsigned long num = 0, den = 1;
+            int use_cos = 1;
+            double factor = 1.0;
+            int special = 0;   /* DST-III last column: value = base * (-1)^i */
+            if (!sine) {
+                switch (type) {
+                    case 1: num = (unsigned long)i * (unsigned long)j; den = (unsigned long)(n - 1);
+                            factor = (j == 0 || j == n - 1) ? 0.5 : 1.0; break;
+                    case 2: num = (unsigned long)(2 * j + 1) * (unsigned long)i; den = (unsigned long)(2 * n); break;
+                    case 3: num = (unsigned long)j * (unsigned long)(2 * i + 1); den = (unsigned long)(2 * n);
+                            factor = (j == 0) ? 1.0 : 2.0; break;
+                    case 4: num = (unsigned long)(2 * j + 1) * (unsigned long)(2 * i + 1); den = (unsigned long)(4 * n); break;
+                }
+            } else {
+                use_cos = 0;
+                switch (type) {
+                    case 1: num = (unsigned long)(j + 1) * (unsigned long)(i + 1); den = (unsigned long)(n + 1); break;
+                    case 2: num = (unsigned long)(2 * j + 1) * (unsigned long)(i + 1); den = (unsigned long)(2 * n); break;
+                    case 3: if (j == n - 1) { special = 1; }
+                            else { num = (unsigned long)(j + 1) * (unsigned long)(2 * i + 1); den = (unsigned long)(2 * n); factor = 2.0; }
+                            break;
+                    case 4: num = (unsigned long)(2 * j + 1) * (unsigned long)(2 * i + 1); den = (unsigned long)(4 * n); break;
+                }
+            }
+            if (special) {
+                mpfr_set(M[i * n + j], base, MPFR_RNDN);
+                if (i % 2 != 0) mpfr_neg(M[i * n + j], M[i * n + j], MPFR_RNDN);
+                continue;
+            }
+            mpfr_mul_ui(ang, pi, num, MPFR_RNDN);
+            mpfr_div_ui(ang, ang, den, MPFR_RNDN);
+            if (use_cos) mpfr_cos(val, ang, MPFR_RNDN);
+            else         mpfr_sin(val, ang, MPFR_RNDN);
+            mpfr_mul(M[i * n + j], base, val, MPFR_RNDN);
+            if (factor != 1.0) mpfr_mul_d(M[i * n + j], M[i * n + j], factor, MPFR_RNDN);
+        }
+    }
+    mpfr_clear(base); mpfr_clear(pi); mpfr_clear(ang); mpfr_clear(val);
+    return M;
+}
+
+static Expr* dct_arb_path(Expr** leaves, const int64_t* dims, int rank,
+                          int type, bool sine, long target_bits) {
+    int64_t N = 1;
+    for (int i = 0; i < rank; i++) {
+        if (!dct_axis_ok(type, sine, dims[i])) return NULL;
+        N *= dims[i];
+    }
+    if (N <= 0) return NULL;
+
+    long guard = 32;
+    { int64_t t = N; while (t > 1) { guard += 2; t >>= 1; } }
+    mpfr_prec_t wp = (mpfr_prec_t)(target_bits + guard);
+
+    mpfr_t* re = malloc((size_t)N * sizeof(mpfr_t));
+    mpfr_t* im = malloc((size_t)N * sizeof(mpfr_t));
+    for (int64_t o = 0; o < N; o++) {
+        mpfr_init2(re[o], wp); mpfr_init2(im[o], wp);
+        mpfr_t rr, ii; mpfr_init2(rr, wp); mpfr_init2(ii, wp);
+        bool inexact = false;
+        if (!get_approx_mpfr(leaves[o], rr, ii, &inexact)) {
+            mpfr_clear(rr); mpfr_clear(ii);
+            for (int64_t j = 0; j <= o; j++) { mpfr_clear(re[j]); mpfr_clear(im[j]); }
+            free(re); free(im);
+            return NULL;
+        }
+        mpfr_set(re[o], rr, MPFR_RNDN); mpfr_set(im[o], ii, MPFR_RNDN);
+        mpfr_clear(rr); mpfr_clear(ii);
+    }
+
+    int64_t strides[FOURIER_MAX_RANK];
+    row_major_strides(dims, rank, strides);
+    for (int ax = 0; ax < rank; ax++) {
+        int64_t n = dims[ax], s = strides[ax];
+        mpfr_t* M = dct_matrix_build_mpfr((int)n, type, sine, wp);
+        mpfr_t *lre = malloc((size_t)n * sizeof(mpfr_t)), *lim = malloc((size_t)n * sizeof(mpfr_t));
+        mpfr_t *ore = malloc((size_t)n * sizeof(mpfr_t)), *oim = malloc((size_t)n * sizeof(mpfr_t));
+        mpfr_t prod; mpfr_init2(prod, wp);
+        for (int64_t r = 0; r < n; r++) { mpfr_init2(lre[r], wp); mpfr_init2(lim[r], wp); mpfr_init2(ore[r], wp); mpfr_init2(oim[r], wp); }
+        for (int64_t o = 0; o < N; o++) {
+            if ((o / s) % n != 0) continue;
+            for (int64_t r = 0; r < n; r++) { mpfr_set(lre[r], re[o + r * s], MPFR_RNDN); mpfr_set(lim[r], im[o + r * s], MPFR_RNDN); }
+            for (int64_t i = 0; i < n; i++) {
+                mpfr_set_zero(ore[i], 1); mpfr_set_zero(oim[i], 1);
+                for (int64_t j = 0; j < n; j++) {
+                    mpfr_mul(prod, M[i * n + j], lre[j], MPFR_RNDN); mpfr_add(ore[i], ore[i], prod, MPFR_RNDN);
+                    mpfr_mul(prod, M[i * n + j], lim[j], MPFR_RNDN); mpfr_add(oim[i], oim[i], prod, MPFR_RNDN);
+                }
+            }
+            for (int64_t i = 0; i < n; i++) { mpfr_set(re[o + i * s], ore[i], MPFR_RNDN); mpfr_set(im[o + i * s], oim[i], MPFR_RNDN); }
+        }
+        for (int64_t r = 0; r < n; r++) { mpfr_clear(lre[r]); mpfr_clear(lim[r]); mpfr_clear(ore[r]); mpfr_clear(oim[r]); }
+        free(lre); free(lim); free(ore); free(oim);
+        mpfr_clear(prod);
+        for (int64_t t = 0; t < n * n; t++) mpfr_clear(M[t]);
+        free(M);
+    }
+
+    Expr** out = malloc((size_t)N * sizeof(Expr*));
+    for (int64_t o = 0; o < N; o++) {
+        mpfr_t rre, rim; mpfr_init2(rre, target_bits); mpfr_init2(rim, target_bits);
+        mpfr_set(rre, re[o], MPFR_RNDN); mpfr_set(rim, im[o], MPFR_RNDN);
+        out[o] = numeric_mpfr_make_complex(rre, rim);
+        mpfr_clear(rre); mpfr_clear(rim);
+    }
+    for (int64_t o = 0; o < N; o++) { mpfr_clear(re[o]); mpfr_clear(im[o]); }
+    free(re); free(im);
+
+    size_t idx = 0;
+    Expr* tree = build_nested(out, dims, rank, 0, &idx);
+    free(out);
+    return tree;
+}
+#endif /* USE_MPFR */
+
+/* Dispatch a validated data argument to the appropriate regime. */
+static Expr* dct_compute(Expr* data, int type, bool sine) {
+    if (data->type == EXPR_NDARRAY) {
+        if (data->data.ndarray.rank > FOURIER_MAX_RANK) return NULL;
+        return dct_machine_path_ndarray(data, type, sine);
+    }
+
+    int64_t dims[FOURIER_MAX_RANK];
+    int rank = 0;
+    if (!nested_dims(data, dims, &rank)) return NULL;
+    int64_t N = 1;
+    for (int i = 0; i < rank; i++) {
+        if (dims[i] <= 0) return NULL;
+        N *= dims[i];
+    }
+
+    Expr** leaves = malloc((size_t)N * sizeof(Expr*));
+    size_t idx = 0;
+    nd_flatten(data, 0, rank, leaves, &idx);
+
+    long arb_bits = 0;
+    Regime reg = classify(leaves, (size_t)N, &arb_bits);
+
+    Expr* result = NULL;
+    if (reg == REG_SYMBOLIC) {
+        result = NULL;                       /* symbolic input stays unevaluated */
+    } else if (reg == REG_MACHINE) {
+        result = dct_machine_path(data, dims, rank, type, sine);
+    } else { /* REG_ARB */
+#ifdef USE_MPFR
+        result = dct_arb_path(leaves, dims, rank, type, sine, arb_bits);
+#else
+        result = NULL;
+#endif
+    }
+    free(leaves);
+    return result;
+}
+
+static Expr* dct_core(Expr* res, bool sine) {
+    const char* name = sine ? "FourierDST" : "FourierDCT";
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return builtin_arg_error(name, argc, 1, 2);
+
+    Expr* data = res->data.function.args[0];
+    int type = 2;                            /* FourierDCT[list] == type II */
+    if (argc == 2) {
+        if (!parse_dct_type(res->data.function.args[1], &type)) return NULL;
+    }
+    return dct_compute(data, type, sine);
+}
+
+Expr* builtin_fourier_dct(Expr* res) { return dct_core(res, false); }
+Expr* builtin_fourier_dst(Expr* res) { return dct_core(res, true);  }
+
+/* ==================================================================== *
  *  Registration
  * ==================================================================== */
 
 void fourier_init(void) {
     symtab_add_builtin("Fourier", builtin_fourier);
     symtab_add_builtin("InverseFourier", builtin_inverse_fourier);
+    symtab_add_builtin("FourierDCT", builtin_fourier_dct);
+    symtab_add_builtin("FourierDST", builtin_fourier_dst);
     symtab_get_def("Fourier")->attributes |= ATTR_PROTECTED;
     symtab_get_def("InverseFourier")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("FourierDCT")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("FourierDST")->attributes |= ATTR_PROTECTED;
     /* FourierParameters is an option symbol. */
     symtab_get_def("FourierParameters")->attributes |= ATTR_PROTECTED;
 }

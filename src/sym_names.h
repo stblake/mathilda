@@ -178,6 +178,8 @@ extern const char* SYM_False;
 extern const char* SYM_Fourier;
 extern const char* SYM_InverseFourier;
 extern const char* SYM_FourierParameters;
+extern const char* SYM_FourierDCT;
+extern const char* SYM_FourierDST;
 extern const char* SYM_FileBaseName;
 extern const char* SYM_FileExistsQ;
 extern const char* SYM_FileExtension;

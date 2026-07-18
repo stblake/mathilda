@@ -23,6 +23,8 @@
 
 Expr* builtin_fourier(Expr* res);
 Expr* builtin_inverse_fourier(Expr* res);
+Expr* builtin_fourier_dct(Expr* res);
+Expr* builtin_fourier_dst(Expr* res);
 
 void fourier_init(void);
 

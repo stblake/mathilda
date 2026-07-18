@@ -82,3 +82,69 @@ u[r] = 1/n^((1+a)/2) Sum[v[s] Exp[-2 Pi I b (r-1)(s-1)/n], {s, 1, n}]
 In[1]:= InverseFourier[Fourier[{1, 0, 1, 0, 1, 0}]]
 Out[1]= {1., 0., 1., 0., 1., 0.}
 ```
+
+## FourierDCT
+
+Fourier discrete cosine transform of a real (or complex) list, or a rectangular
+nested array for a multidimensional transform. `FourierDCT[list]` gives the
+type-II transform; `FourierDCT[list, m]` gives type `m`, where `m` is one of the
+integers `1..4` or the strings `"I"`, `"II"`, `"III"`, `"IV"`. Implemented in
+`src/fourier.{c,h}`. Attribute: `Protected`.
+
+The four real orthonormal (unitary) types, for a length-`n` list `u` giving `v`:
+
+```
+DCT-I    Sqrt[2/(n-1)] (u[1]/2 + Sum[u[r] Cos[Pi/(n-1) (r-1)(s-1)], {r,2,n-1}] + (-1)^(s-1) u[n]/2)
+DCT-II   1/Sqrt[n] Sum[u[r] Cos[Pi/n (r-1/2)(s-1)], {r,1,n}]
+DCT-III  1/Sqrt[n] (u[1] + 2 Sum[u[r] Cos[Pi/n (r-1)(s-1/2)], {r,2,n}])
+DCT-IV   Sqrt[2/n] Sum[u[r] Cos[Pi/n (r-1/2)(s-1/2)], {r,1,n}]
+```
+
+The inverse transforms for types 1, 2, 3, 4 are types 1, 3, 2, 4 respectively:
+DCT-I and DCT-IV are their own inverses, while DCT-II and DCT-III invert each
+other. `FourierDCT[list]` is equivalent to `FourierDCT[list, 2]`. Exact input is
+first numericalised with `N`; genuinely symbolic input stays unevaluated.
+
+Two numeric regimes are dispatched automatically: an `O(n log n)`
+machine-precision transform via **FFTW**'s real-to-real `REDFT` plans (a direct
+`O(n^2)` matrix fallback when built without `USE_FFTW`), and a direct `O(n^2)`
+MPFR matrix path when any element carries MPFR precision (e.g. `N[list, 24]`).
+An [`NDArray`](linear-algebra.md) argument is transformed in place on its packed
+buffer and returns an `NDArray`.
+
+```
+In[1]:= FourierDCT[{0, 0, 1, 0, 1}]
+Out[1]= {0.894427, -0.425325, -0.0854102, -0.262866, 0.58541}
+
+In[2]:= FourierDCT[{1, 0, 0, 1, 2}, 1]
+Out[2]= {1.76777, -0.853553, 1.06066, 0.146447, 0.353553}
+
+In[3]:= FourierDCT[{1, 2 I, 3, 4 I}]
+Out[3]= {2. + 3. I, -0.112085 - 1.46508 I, -0.707107 + 0.707107 I, 1.57716 - 1.68925 I}
+```
+
+## FourierDST
+
+Fourier discrete sine transform, dual to `FourierDCT`. `FourierDST[list]` gives
+the type-II transform; `FourierDST[list, m]` gives type `m` (integer `1..4` or
+string `"I".."IV"`). Implemented in `src/fourier.{c,h}`. Attribute: `Protected`.
+
+```
+DST-I    Sqrt[2/(n+1)] Sum[u[r] Sin[Pi/(n+1) r s], {r,1,n}]
+DST-II   1/Sqrt[n] Sum[u[r] Sin[Pi/n (r-1/2) s], {r,1,n}]
+DST-III  1/Sqrt[n] (2 Sum[u[r] Sin[Pi/n r (s-1/2)], {r,1,n-1}] + (-1)^(s-1) u[n])
+DST-IV   Sqrt[2/n] Sum[u[r] Sin[Pi/n (r-1/2)(s-1/2)], {r,1,n}]
+```
+
+Inverse types match `FourierDCT` (I and IV self-inverse; II and III inverse of
+each other). The regimes are identical: FFTW's `RODFT` real-to-real plans for
+machine precision, a direct MPFR matrix path for arbitrary precision, and an
+`NDArray` fast path.
+
+```
+In[1]:= FourierDST[{0, 0, 1, 0, 1}]
+Out[1]= {0.58541, -0.262866, -0.0854102, -0.425325, 0.894427}
+
+In[2]:= FourierDST[{0, 0, 1, 0, 0}, "IV"]
+Out[2]= {0.447214, 0.447214, -0.447214, -0.447214, 0.447214}
+```

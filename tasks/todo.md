@@ -1,3 +1,36 @@
+# Catch/Throw evaluator feature + Trager package bring-up — 2026-07-18
+
+Plan: `~/.claude/plans/what-do-i-need-eager-fog.md`.
+
+## Part 1 — Catch/Throw (C evaluator, sentinel propagation) — DONE ✓
+- [x] SYM_Catch in sym_names.{h,c} (SYM_Throw already present)
+- [x] `eval_is_inflight_throw` (eval.h decl + eval.c def)
+- [x] Arg-loop short-circuit in evaluate_step
+- [x] builtin_throw (arity check, declines) + builtin_catch (HoldFirst) — funcprog.{c,h}
+- [x] Uncaught top-level handler in evaluate() (eval_report_uncaught_throw)
+- [x] Propagation sites: scan, which, switch, nestwhile_step, fixedpoint SameTest, all_any_none_true, selectfirst
+- [x] Centralize sentinel check in iter_run
+- [x] Register builtins + attrs in core.c (Catch=HOLDFIRST|PROTECTED, Throw=PROTECTED); docstrings co-located
+- [x] tests/test_catch_throw.c + CMakeLists.txt; all pass; regressions (cond/iter/nest/nestwhile/fold) pass
+- [x] valgrind: 0 per-call bytes lost (20k-iter loop == control loop)
+- [x] docs: control-flow.md + changelog 2026-07-13.md
+
+## Part 2 — Trager package (.m)
+- [x] Vendor packages/trager/ (clone); mathilda-compat.m; load.m
+- [x] Load cleanly; IntegrateTrager defined & dispatches through pipeline
+- [x] Fixed real Mathilda matcher bug: named OptionsPattern binding (src/match.c) — was the first stall
+- [x] Compat shims: DirectoryName/FileNameJoin/ConstantArray/Intersection/MapThread/MissingQ/UnitVector/Quiet/Message/Check/ValueQ/FilterRules/ComplexExpand
+- [ ] BLOCKER 1: afFormRegularAtInfinity/rationalizeToAF returns non-boolean -> If picks neither branch -> Module locals unbound -> reassemble stalls (IntegrateTrager.m:385-386). Diagnose the unevaluated AF primitive.
+- [ ] BLOCKER 2: Reap/Sow (Reduce.m) — non-local, needs evaluator support like Catch/Throw
+- [ ] BLOCKER 3: ToNumberField/AlgebraicNumber -> Root/RootSum representation (Residues.m/Basis.m)
+- [ ] BLOCKER 4: Surface.m 2-arg radical detection doesn't recognize Power[_,1/2]
+- See packages/trager/MATHILDA_STATUS.md for the full resumable status.
+
+## Review
+(to fill in)
+
+---
+
 # Cherry stress-test gap fixes — robust complex constants + constant offset — 2026-07-17
 
 Stress campaign (176-case sweep + `cherry_stress_tests`) found **0 soundness bugs**; fixed 2 of 3

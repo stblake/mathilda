@@ -178,6 +178,8 @@ const char* SYM_False = NULL;
 const char* SYM_Fourier = NULL;
 const char* SYM_InverseFourier = NULL;
 const char* SYM_FourierParameters = NULL;
+const char* SYM_FourierDCT = NULL;
+const char* SYM_FourierDST = NULL;
 const char* SYM_FileBaseName = NULL;
 const char* SYM_FileExistsQ = NULL;
 const char* SYM_FileExtension = NULL;
@@ -917,6 +919,8 @@ void sym_names_init(void) {
     SYM_Fourier                    = intern_symbol("Fourier");
     SYM_InverseFourier             = intern_symbol("InverseFourier");
     SYM_FourierParameters          = intern_symbol("FourierParameters");
+    SYM_FourierDCT                 = intern_symbol("FourierDCT");
+    SYM_FourierDST                 = intern_symbol("FourierDST");
     SYM_Fit                        = intern_symbol("Fit");
     SYM_FitRegularization          = intern_symbol("FitRegularization");
     SYM_FactorSquareFree           = intern_symbol("FactorSquareFree");

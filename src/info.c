@@ -1632,6 +1632,26 @@ void info_init(void) {
         "specifies the {a, b} convention for the transform. The default {0, 1}\n"
         "uses the symmetric 1/Sqrt[n] normalisation; {-1, 1} and {1, -1} give the\n"
         "data-analysis and signal-processing conventions.");
+    symtab_set_docstring("FourierDCT",
+        "FourierDCT[list]\n"
+        "\tgives the Fourier discrete cosine transform (type II) of list.\n"
+        "FourierDCT[list, m]\n"
+        "\tgives the type-m transform, m one of 1..4 or \"I\"..\"IV\".\n"
+        "\n"
+        "The four real orthonormal types are self/pair-inverse: I and IV invert\n"
+        "themselves; II and III invert each other. Exact input is numericalised\n"
+        "with N first; list may be a rectangular nested array (transformed per\n"
+        "axis). Machine and arbitrary-precision (MPFR) input are both supported.");
+    symtab_set_docstring("FourierDST",
+        "FourierDST[list]\n"
+        "\tgives the Fourier discrete sine transform (type II) of list.\n"
+        "FourierDST[list, m]\n"
+        "\tgives the type-m transform, m one of 1..4 or \"I\"..\"IV\".\n"
+        "\n"
+        "The four real orthonormal types are self/pair-inverse: I and IV invert\n"
+        "themselves; II and III invert each other. Exact input is numericalised\n"
+        "with N first; list may be a rectangular nested array (transformed per\n"
+        "axis). Machine and arbitrary-precision (MPFR) input are both supported.");
     symtab_set_docstring("First", "First[expr] gives the first element of expr.");
     symtab_set_docstring("Last", "Last[expr] gives the last element of expr.");
     symtab_set_docstring("Most", "Most[expr] gives all but the last element of expr.");
