@@ -523,6 +523,91 @@ void test_fileprint_protected(void) {
     assert_eval_eq("MemberQ[Attributes[FilePrint], Protected]", "True", 0);
 }
 
+/* ===== FileNameJoin ===== */
+
+void test_filenamejoin_basic(void) {
+    assert_eval_eq("FileNameJoin[{\"dir1\", \"dir2\", \"file\"}]",
+                   "\"dir1/dir2/file\"", 0);
+}
+
+void test_filenamejoin_prejoined_component(void) {
+    /* A component may itself contain separators; it is split and rejoined. */
+    assert_eval_eq("FileNameJoin[{\"dir1/dir2\", \"file\"}]",
+                   "\"dir1/dir2/file\"", 0);
+}
+
+void test_filenamejoin_absolute_from_empty_leading(void) {
+    /* An empty leading component produces a leading separator. */
+    assert_eval_eq("FileNameJoin[{\"\", \"usr\", \"bin\"}]", "\"/usr/bin\"", 0);
+}
+
+void test_filenamejoin_absolute_from_leading_separator(void) {
+    assert_eval_eq("FileNameJoin[{\"/usr\", \"bin\"}]", "\"/usr/bin\"", 0);
+}
+
+void test_filenamejoin_single_name_canonicalizes(void) {
+    /* FileNameJoin["name"] canonicalizes a lone name. */
+    assert_eval_eq("FileNameJoin[\"a/b/c\"]", "\"a/b/c\"", 0);
+}
+
+void test_filenamejoin_collapses_duplicate_separators(void) {
+    assert_eval_eq("FileNameJoin[{\"dir1/\", \"file\"}]", "\"dir1/file\"", 0);
+    assert_eval_eq("FileNameJoin[{\"a//b\", \"c\"}]",     "\"a/b/c\"",     0);
+}
+
+void test_filenamejoin_empty_list(void) {
+    assert_eval_eq("FileNameJoin[{}]", "\"\"", 0);
+}
+
+void test_filenamejoin_windows_separator(void) {
+    /* Backslash separators when OperatingSystem->"Windows". */
+    assert_eval_eq(
+        "FileNameJoin[{\"dir1\", \"dir2\", \"file\"}, OperatingSystem->\"Windows\"]",
+        "\"dir1\\dir2\\file\"", 0);
+}
+
+void test_filenamejoin_windows_unc_share(void) {
+    /* A leading \\server\share is preserved verbatim as a UNC prefix. */
+    assert_eval_eq(
+        "FileNameJoin[{\"\\\\\\\\server\\\\share\", \"path\", \"file\"}, OperatingSystem->\"Windows\"]",
+        "\"\\\\server\\share\\path\\file\"", 0);
+}
+
+void test_filenamejoin_unix_option(void) {
+    /* OperatingSystem->"Unix" forces '/' regardless of host. */
+    assert_eval_eq(
+        "FileNameJoin[{\"dir1\", \"dir2\"}, OperatingSystem->\"Unix\"]",
+        "\"dir1/dir2\"", 0);
+}
+
+void test_filenamejoin_macosx_option(void) {
+    /* "MacOSX" behaves like "Unix". */
+    assert_eval_eq(
+        "FileNameJoin[{\"dir1\", \"dir2\"}, OperatingSystem->\"MacOSX\"]",
+        "\"dir1/dir2\"", 0);
+}
+
+void test_filenamejoin_unevaluated_on_bad_args(void) {
+    assert_eval_eq("FileNameJoin[42]",       "FileNameJoin[42]",       0);
+    assert_eval_eq("FileNameJoin[{1, 2}]",   "FileNameJoin[{1, 2}]",   0);
+    assert_eval_eq("FileNameJoin[x]",        "FileNameJoin[x]",        0);
+}
+
+void test_filenamejoin_unknown_os_is_unevaluated(void) {
+    assert_eval_eq(
+        "FileNameJoin[{\"a\"}, OperatingSystem->\"VMS\"]",
+        "FileNameJoin[{\"a\"}, OperatingSystem -> \"VMS\"]", 0);
+}
+
+void test_filenamejoin_zero_args_is_unevaluated(void) {
+    /* Prints FileNameJoin::argx to stderr and leaves the call unevaluated. */
+    assert_eval_eq("FileNameJoin[]", "FileNameJoin[]", 0);
+}
+
+void test_filenamejoin_protected(void) {
+    assert_eval_eq("MemberQ[Attributes[FileNameJoin], Protected]", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -578,6 +663,23 @@ int main(void) {
     TEST(test_fileprint_unevaluated_on_bad_args);
     TEST(test_fileprint_zero_step_is_unevaluated);
     TEST(test_fileprint_protected);
+
+    /* FileNameJoin */
+    TEST(test_filenamejoin_basic);
+    TEST(test_filenamejoin_prejoined_component);
+    TEST(test_filenamejoin_absolute_from_empty_leading);
+    TEST(test_filenamejoin_absolute_from_leading_separator);
+    TEST(test_filenamejoin_single_name_canonicalizes);
+    TEST(test_filenamejoin_collapses_duplicate_separators);
+    TEST(test_filenamejoin_empty_list);
+    TEST(test_filenamejoin_windows_separator);
+    TEST(test_filenamejoin_windows_unc_share);
+    TEST(test_filenamejoin_unix_option);
+    TEST(test_filenamejoin_macosx_option);
+    TEST(test_filenamejoin_unevaluated_on_bad_args);
+    TEST(test_filenamejoin_unknown_os_is_unevaluated);
+    TEST(test_filenamejoin_zero_args_is_unevaluated);
+    TEST(test_filenamejoin_protected);
 
     printf("All tests passed!\n");
     return 0;

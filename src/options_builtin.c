@@ -768,6 +768,11 @@ void options_register_defaults(void) {
     ob_init(&b);
     ob_add(&b, r_sym("SameTest", "Automatic"));
     ob_commit(&b, "Complement");
+
+    /* ---- File name construction ---- */
+    ob_init(&b);
+    ob_add(&b, r_str("OperatingSystem", "Unix"));
+    ob_commit(&b, "FileNameJoin");
 }
 
 void options_builtin_init(void) {

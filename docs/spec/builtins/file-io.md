@@ -1,6 +1,6 @@
 # File I/O
 
-Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`) and `src/files.c` (`FileExistsQ`, `FileExtension`, `FileBaseName`, `FilePrint`).
+Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`) and `src/files.c` (`FileExistsQ`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FilePrint`).
 
 ## Get
 Reads a sequence of Mathilda expressions from a file, evaluates each in order, and returns the value of the last one.
@@ -113,6 +113,29 @@ FileExtension["report.tar.gz"]   (* "gz" *)
 FileBaseName["report.tar.gz"]    (* "report.tar" *)
 FileExtension["/etc/.bashrc"]    (* "" *)
 FileBaseName["/etc/.bashrc"]     (* ".bashrc" *)
+```
+
+## FileNameJoin
+Assembles a file name from a list of path components (or canonicalizes a lone name).
+- `FileNameJoin[{"n1", "n2", ...}]` — join the components with the OS pathname separator.
+- `FileNameJoin["name"]` — canonicalize a single name, normalizing separators to the OS form.
+- `FileNameJoin[..., OperatingSystem->"os"]` — select the separator convention; `"os"` is `"Windows"`, `"MacOSX"`, or `"Unix"`.
+
+**Features**:
+- `Protected`.
+- Pure string operation — does not touch the filesystem.
+- Components may themselves contain separators; each is split into segments and rejoined, so duplicate and trailing separators collapse (`{"a//b", "c"}` → `"a/b/c"`).
+- An empty (or separator-led) leading component yields an absolute path: `{"", "usr", "bin"}` → `"/usr/bin"`.
+- `"Windows"` uses `\` and preserves a leading `\\server\share` UNC prefix as a single unit; `"MacOSX"`/`"Unix"` use `/`. The default is the host operating system's separator.
+- `Options[FileNameJoin]` reports the `OperatingSystem` default.
+- `FileNameJoin[]` prints `FileNameJoin::argx` and stays unevaluated; a non-string/non-list argument, a list containing a non-string, or an unknown OS leaves the call unevaluated.
+
+**Example**:
+```
+FileNameJoin[{"dir1", "dir2", "file"}]                       (* "dir1/dir2/file" *)
+FileNameJoin[{"dir1/dir2", "file"}]                          (* "dir1/dir2/file" *)
+FileNameJoin[{"", "usr", "bin"}]                             (* "/usr/bin" *)
+FileNameJoin[{"dir1", "dir2"}, OperatingSystem->"Windows"]   (* "dir1\dir2" *)
 ```
 
 ## FilePrint

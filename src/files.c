@@ -29,6 +29,7 @@
 #include "symtab.h"
 #include "sym_names.h"
 #include "attr.h"
+#include "common.h"
 
 #include <sys/stat.h>
 #include <stddef.h>
@@ -36,6 +37,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* Pathname separator for the host operating system.  FileNameJoin uses
+ * this as its default when no OperatingSystem->"..." option is given. */
+#ifdef _WIN32
+#define HOST_SEP '\\'
+#else
+#define HOST_SEP '/'
+#endif
 
 /* FileExistsQ["name"]
  *
@@ -417,6 +426,166 @@ Expr* builtin_fileprint(Expr* res) {
     return expr_new_symbol(SYM_Null);
 }
 
+/* === FileNameJoin ======================================================
+ *
+ * Assembles a file name from a list of path components (or canonicalizes a
+ * single name).  Pure string manipulation — never touches the filesystem.
+ *
+ *   FileNameJoin[{"a","b","c"}]         -> "a/b/c"
+ *   FileNameJoin[{"a/b","c"}]           -> "a/b/c"   (components may
+ *                                          themselves contain separators;
+ *                                          they are split and rejoined)
+ *   FileNameJoin[{"","a","b"}]          -> "/a/b"    (empty leading
+ *                                          component yields an absolute path)
+ *   FileNameJoin["a/b/c"]               -> "a/b/c"   (canonicalize one name)
+ *   FileNameJoin[{}]                    -> ""
+ *   FileNameJoin[..., OperatingSystem->"Windows"|"MacOSX"|"Unix"]
+ *
+ * "Windows" uses '\\' as the separator and treats a leading "\\server\share"
+ * (UNC) prefix as a single unit; "MacOSX"/"Unix" use '/'.  The default is the
+ * host operating system's separator.
+ */
+
+/* Is `c` a pathname separator?  '/' is always one; '\\' is a separator only
+ * when the target operating system is Windows. */
+static int fnj_is_sep(char c, int windows) {
+    return c == '/' || (windows && c == '\\');
+}
+
+/* Join `ncomp` path components into a freshly-malloced NUL-terminated string
+ * using separator `sep`.  Each component is split into maximal non-separator
+ * runs; empty runs (from leading/trailing/duplicate separators) are dropped,
+ * so "a//b" and "a/" collapse cleanly.  A leading empty (or separator-led)
+ * first component makes the path absolute.  On Windows, a first component
+ * beginning with two separators is preserved verbatim as a UNC prefix.
+ * Returns NULL only on allocation failure. */
+static char* fnj_build(const char* const* comps, size_t ncomp,
+                       char sep, int windows) {
+    size_t cap = 4;
+    for (size_t i = 0; i < ncomp; i++) {
+        cap += strlen(comps[i]) + 1;
+    }
+    char* out = (char*)malloc(cap);
+    if (!out) return NULL;
+
+    size_t pos = 0;
+    int wrote = 0;  /* have we emitted at least one segment yet? */
+
+    if (ncomp > 0) {
+        const char* c0 = comps[0];
+        if (windows && fnj_is_sep(c0[0], windows) && fnj_is_sep(c0[1], windows)) {
+            /* UNC: emit the "\\" prefix; the segment walk below picks up the
+             * share/host names that follow it. */
+            out[pos++] = sep;
+            out[pos++] = sep;
+        } else if (c0[0] == '\0' || fnj_is_sep(c0[0], windows)) {
+            /* Absolute path: a single leading separator.  Later segments are
+             * joined without an extra separator because `wrote` stays 0. */
+            out[pos++] = sep;
+        }
+    }
+
+    for (size_t i = 0; i < ncomp; i++) {
+        const char* p = comps[i];
+        while (*p) {
+            while (*p && fnj_is_sep(*p, windows)) p++;   /* skip separators */
+            const char* seg = p;
+            while (*p && !fnj_is_sep(*p, windows)) p++;  /* one segment */
+            size_t seg_len = (size_t)(p - seg);
+            if (seg_len == 0) continue;
+            if (wrote) out[pos++] = sep;
+            memcpy(out + pos, seg, seg_len);
+            pos += seg_len;
+            wrote = 1;
+        }
+    }
+
+    out[pos] = '\0';
+    return out;
+}
+
+/* FileNameJoin[spec]
+ * FileNameJoin[spec, OperatingSystem->"os"]
+ *
+ * `spec` is either a single string (canonicalized) or a List of strings
+ * (joined).  Options are trailing Rule[OperatingSystem, "..."] arguments.
+ * Leaves the call unevaluated (NULL) on any malformed argument; prints the
+ * standard argx message when called with zero arguments. */
+Expr* builtin_filenamejoin(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc == 0) return builtin_arg_error("FileNameJoin", 0, 1, 1);
+
+    /* Determine the target separator from any OperatingSystem option. */
+    char sep = HOST_SEP;
+    int windows = (HOST_SEP == '\\');
+    for (size_t i = 1; i < argc; i++) {
+        Expr* a = res->data.function.args[i];
+        if (a->type != EXPR_FUNCTION ||
+            a->data.function.arg_count != 2 ||
+            a->data.function.head->type != EXPR_SYMBOL ||
+            (a->data.function.head->data.symbol.name != SYM_Rule &&
+             a->data.function.head->data.symbol.name != SYM_RuleDelayed)) {
+            return NULL;  /* an unexpected non-option argument */
+        }
+        Expr* key = a->data.function.args[0];
+        Expr* val = a->data.function.args[1];
+        if (key->type != EXPR_SYMBOL ||
+            strcmp(key->data.symbol.name, "OperatingSystem") != 0) return NULL;
+        if (val->type != EXPR_STRING) return NULL;
+        if (strcmp(val->data.string, "Windows") == 0) {
+            sep = '\\'; windows = 1;
+        } else if (strcmp(val->data.string, "Unix") == 0 ||
+                   strcmp(val->data.string, "MacOSX") == 0) {
+            sep = '/'; windows = 0;
+        } else {
+            return NULL;  /* unknown operating system */
+        }
+    }
+
+    /* Gather the path components: a lone string, or a List of strings. */
+    Expr* spec = res->data.function.args[0];
+    const char* stackbuf[1];
+    const char** comps;
+    const char** heapbuf = NULL;
+    size_t ncomp;
+
+    if (spec->type == EXPR_STRING) {
+        stackbuf[0] = spec->data.string;
+        comps = stackbuf;
+        ncomp = 1;
+    } else if (spec->type == EXPR_FUNCTION &&
+               spec->data.function.head->type == EXPR_SYMBOL &&
+               spec->data.function.head->data.symbol.name == SYM_List) {
+        size_t n = spec->data.function.arg_count;
+        for (size_t i = 0; i < n; i++) {
+            if (spec->data.function.args[i]->type != EXPR_STRING) return NULL;
+        }
+        if (n == 0) {
+            comps = NULL;
+            ncomp = 0;
+        } else {
+            heapbuf = (const char**)malloc(sizeof(const char*) * n);
+            if (!heapbuf) return NULL;
+            for (size_t i = 0; i < n; i++) {
+                heapbuf[i] = spec->data.function.args[i]->data.string;
+            }
+            comps = heapbuf;
+            ncomp = n;
+        }
+    } else {
+        return NULL;
+    }
+
+    char* out = fnj_build(comps, ncomp, sep, windows);
+    free(heapbuf);
+    if (!out) return NULL;  /* allocation failure — leave call unevaluated */
+
+    Expr* result = expr_new_string(out);
+    free(out);
+    return result;
+}
+
 void files_init(void) {
     /* Docstrings live in info.c alongside the other File-I/O entries.
      * All builtins are Protected with no special evaluation behaviour —
@@ -430,6 +599,9 @@ void files_init(void) {
 
     symtab_add_builtin("FileBaseName", builtin_filebasename);
     symtab_get_def("FileBaseName")->attributes |= ATTR_PROTECTED;
+
+    symtab_add_builtin("FileNameJoin", builtin_filenamejoin);
+    symtab_get_def("FileNameJoin")->attributes |= ATTR_PROTECTED;
 
     symtab_add_builtin("FilePrint", builtin_fileprint);
     symtab_get_def("FilePrint")->attributes |= ATTR_PROTECTED;

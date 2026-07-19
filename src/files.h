@@ -35,6 +35,14 @@
  *   FilePrint["name",      range (1-based, inclusive) with optional
  *       m;;n;;s]           signed step `s`.  Returns Null on success
  *                          and $Failed if the file cannot be opened.
+ *
+ *   FileNameJoin[{...}]    Joins path components into a single file name
+ *   FileNameJoin["name"]   suitable for the current operating system, or
+ *                          canonicalizes a lone name.  An empty leading
+ *                          component yields an absolute path.  Accepts an
+ *                          OperatingSystem->"Windows"|"MacOSX"|"Unix"
+ *                          option to select the separator convention.
+ *                          Pure string manipulation; no filesystem access.
  */
 
 void files_init(void);
@@ -43,5 +51,6 @@ Expr* builtin_fileexistsq(Expr* res);
 Expr* builtin_fileextension(Expr* res);
 Expr* builtin_filebasename(Expr* res);
 Expr* builtin_fileprint(Expr* res);
+Expr* builtin_filenamejoin(Expr* res);
 
 #endif /* FILES_H */

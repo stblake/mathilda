@@ -2912,6 +2912,14 @@ void info_init(void) {
         "FileBaseName drops all directory specifications.\n"
         "FileBaseName[\"file.tar.gz\"] gives \"file.tar\" — only the final extension is split off.\n"
         "FileBaseName by default assumes pathname separators and other conventions suitable for your operating system.");
+    symtab_set_docstring("FileNameJoin",
+        "FileNameJoin[{\"name1\", \"name2\", ...}]\n"
+        "\tjoins the namei into a file name suitable for your current operating system.\n"
+        "The namei can be individual names or file paths containing pathname separators.\n"
+        "FileNameJoin[{\"\", \"name1\", ...}] gives an absolute file path beginning with a pathname separator.\n"
+        "FileNameJoin[\"name\"] canonicalizes name, making pathname separators appropriate for your operating system.\n"
+        "FileNameJoin[..., OperatingSystem->\"os\"] yields a file name in the format for the specified operating system; possible choices are \"Windows\", \"MacOSX\", and \"Unix\".\n"
+        "FileNameJoin just assembles a file name; it does not search for the file specified.");
     symtab_set_docstring("FilePrint",
         "FilePrint[\"file\"]\n"
         "\tprints out the raw textual contents of file.\n"
