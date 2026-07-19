@@ -64,6 +64,23 @@ static void chk_small(const char* input, double tol) {
     expr_free(r);
 }
 
+/* Assert `input` is returned unevaluated with its head intact — i.e. it prints
+ * as `head[...]`. Unlike chk_eq(X, X) (a tautology, since both sides evaluate
+ * the same way), this genuinely distinguishes "left unevaluated" from "reduced
+ * to a result". */
+static void chk_stays(const char* input, const char* head) {
+    Expr* e = parse_expression(input);
+    ASSERT_MSG(e != NULL, "parse failed: %s", input);
+    Expr* r = evaluate(e);
+    expr_free(e);
+    char* s = expr_to_string(r);
+    size_t hl = strlen(head);
+    ASSERT_MSG(strncmp(s, head, hl) == 0 && s[hl] == '[',
+               "%s: expected unevaluated %s[...], got %s", input, head, s);
+    free(s);
+    expr_free(r);
+}
+
 /* ---- 1-D symbolic, overhangs ---------------------------------------- */
 
 static void test_basic(void) {
@@ -198,14 +215,89 @@ static void test_fft_mpfr(void) {
 }
 #endif
 
+/* ---- kernel/list size relationships -------------------------------- */
+
+static void test_kernel_sizes(void) {
+    /* Single-element kernel scales the list (m = 1). */
+    chk_eq("ListConvolve[{k},{a,b,c}]", "{a k,b k,c k}");
+    chk_eq("ListConvolve[{3},{a,b,c,d}]", "{3 a,3 b,3 c,3 d}");
+    /* Kernel the same length as the list: default overhang gives one output,
+     * with the h-terms ordered by ascending list index. */
+    chk_eq("ListConvolve[{x,y,z},{a,b,c}]", "{c x+b y+a z}");
+    chk_eq("ListConvolve[{x,y},{a,b}]", "{b x+a y}");
+}
+
+/* ListConvolve[k,l] == ListCorrelate[Reverse[k],l] (default overhang); with an
+ * explicit overhang the {kL,kR} convention negates in place under reversal. */
+static void test_reverse_identity(void) {
+    chk_eq("ListConvolve[{x,y,z},{a,b,c,d,e}]",
+           "ListCorrelate[Reverse[{x,y,z}],{a,b,c,d,e}]");
+    chk_eq("ListConvolve[{p,q,r,s},{1,2,3,4,5,6,7},{1,-1}]",
+           "ListCorrelate[Reverse[{p,q,r,s}],{1,2,3,4,5,6,7},{-1,1}]");
+}
+
+/* ---- optional level argument (7th) --------------------------------- */
+
+static void test_lev_argument(void) {
+    /* lev == rank(ker) is the only supported value and is a no-op. */
+    chk_eq("ListConvolve[{x,y},{a,b,c,d},1,p,Times,Plus,1]",
+           "ListConvolve[{x,y},{a,b,c,d},1,p]");
+    chk_eq("ListConvolve[{{a,b},{c,d}},{{1,2,3},{4,5,6},{7,8,9}},1,0,Times,Plus,2]",
+           "ListConvolve[{{a,b},{c,d}},{{1,2,3},{4,5,6},{7,8,9}},1,0]");
+    /* lev != rank(ker) is unsupported: the call stays unevaluated. */
+    chk_stays("ListConvolve[{x,y},{a,b,c,d},1,p,Times,Plus,2]", "ListConvolve");
+}
+
+/* ---- numeric direct path (below the FFT threshold) ----------------- */
+
+static void test_machine_direct(void) {
+    /* Small Real input takes the tight O(L*m) numeric loop, not the FFT;
+     * checked against the definitional reference Sum_r Reverse[ker]_r lst. */
+    chk_small(
+        "ker={0.5,-1.5,2.0}; lst={1.0,2.0,3.0,4.0,5.0,6.0};"
+        "m=3; L=4; ref=Table[Total[Reverse[ker]*lst[[t;;t+m-1]]],{t,1,L}];"
+        "Max[Abs[ListConvolve[ker,lst]-ref]]",
+        1e-12);
+    /* Complex machine data through the same loop. */
+    chk_small(
+        "ker={1.0+1.0 I, 2.0-1.0 I}; lst={0.5, 1.0+2.0 I, -1.0, 3.0 I, 2.0};"
+        "m=2; L=4; ref=Table[Total[Reverse[ker]*lst[[t;;t+m-1]]],{t,1,L}];"
+        "Max[Abs[ListConvolve[ker,lst]-ref]]",
+        1e-12);
+}
+
+/* ---- rank-3 (exact engine, all-ones kernel) ------------------------ */
+
+static void test_rank3(void) {
+    /* 2x2x2 all-ones kernel over a 3x3x3 array: each output is the sum over a
+     * 2x2x2 window (reversal is irrelevant for an all-ones kernel). Exact. */
+    chk_small(
+        "dat=Table[100 i+10 j+k,{i,1,3},{j,1,3},{k,1,3}];"
+        "ker=ConstantArray[1,{2,2,2}];"
+        "ref=Table[Sum[dat[[t1+i,t2+j,t3+k]],{i,0,1},{j,0,1},{k,0,1}],"
+        "{t1,1,2},{t2,1,2},{t3,1,2}];"
+        "Max[Abs[Flatten[ListConvolve[ker,dat]-ref]]]",
+        0.0);
+}
+
 /* ---- diagnostics + attributes -------------------------------------- */
 
 static void test_errors_attrs(void) {
     /* Wrong arity: stays unevaluated. */
-    chk_eq("ListConvolve[]", "ListConvolve[]");
-    chk_eq("ListConvolve[{1,2}]", "ListConvolve[{1,2}]");
+    chk_stays("ListConvolve[{1,2}]", "ListConvolve");
+    chk_stays("ListConvolve[a,b,c,d,e,f,g,h]", "ListConvolve");  /* 8 args */
     /* Non-list arguments: unevaluated. */
-    chk_eq("ListConvolve[x,y]", "ListConvolve[x,y]");
+    chk_stays("ListConvolve[x,y]", "ListConvolve");
+    /* Kernel and list of different ranks. */
+    chk_stays("ListConvolve[{x,y},{{a,b},{c,d}}]", "ListConvolve");
+    /* Zero overhang index is invalid. */
+    chk_stays("ListConvolve[{x,y},{a,b,c},0]", "ListConvolve");
+    /* An overhang that empties the output window (L = n - KL + KR = 0). */
+    chk_stays("ListConvolve[{v,w,x,y,z},{a,b},{3,1}]", "ListConvolve");
+    /* Empty kernel. */
+    chk_stays("ListConvolve[{},{a,b,c}]", "ListConvolve");
+    /* Pad list of the wrong rank. */
+    chk_stays("ListConvolve[{{a,b},{c,d}},{{1,2},{3,4}},1,{9,9}]", "ListConvolve");
     ASSERT(symtab_get_def("ListConvolve")->attributes & ATTR_PROTECTED);
 }
 
@@ -219,6 +311,11 @@ int main(void) {
     TEST(test_generalized);
     TEST(test_multidim);
     TEST(test_exact);
+    TEST(test_kernel_sizes);
+    TEST(test_reverse_identity);
+    TEST(test_lev_argument);
+    TEST(test_machine_direct);
+    TEST(test_rank3);
     TEST(test_fft_machine);
 #ifdef USE_MPFR
     TEST(test_fft_mpfr);

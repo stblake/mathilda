@@ -59,6 +59,22 @@ static void chk_small(const char* input, double tol) {
     expr_free(r);
 }
 
+/* Assert `input` is returned unevaluated with its head intact (prints as
+ * `head[...]`). Unlike chk_eq(X, X) — a tautology — this genuinely checks the
+ * call was left unevaluated rather than reduced. */
+static void chk_stays(const char* input, const char* head) {
+    Expr* e = parse_expression(input);
+    ASSERT_MSG(e != NULL, "parse failed: %s", input);
+    Expr* r = evaluate(e);
+    expr_free(e);
+    char* s = expr_to_string(r);
+    size_t hl = strlen(head);
+    ASSERT_MSG(strncmp(s, head, hl) == 0 && s[hl] == '[',
+               "%s: expected unevaluated %s[...], got %s", input, head, s);
+    free(s);
+    expr_free(r);
+}
+
 /* ---- 1-D symbolic, overhangs ---------------------------------------- */
 
 static void test_basic(void) {
@@ -146,11 +162,75 @@ static void test_complex(void) {
         1e-9);
 }
 
+/* ---- kernel/list size relationships -------------------------------- */
+
+static void test_kernel_sizes(void) {
+    /* Single-element kernel scales the list (m = 1). */
+    chk_eq("ListCorrelate[{k},{a,b,c}]", "{a k,b k,c k}");
+    chk_eq("ListCorrelate[{3},{a,b,c,d}]", "{3 a,3 b,3 c,3 d}");
+    /* Kernel the same length as the list: default overhang gives one output,
+     * with the h-terms ordered by ascending list index. */
+    chk_eq("ListCorrelate[{x,y,z},{a,b,c}]", "{a x+b y+c z}");
+    chk_eq("ListCorrelate[{x,y},{a,b}]", "{a x+b y}");
+    /* Correlate/convolve reverse identity with an explicit overhang. */
+    chk_eq("ListCorrelate[{x,y,z},{a,b,c,d,e},1]",
+           "ListConvolve[Reverse[{x,y,z}],{a,b,c,d,e},-1]");
+}
+
+/* ---- optional level argument (7th) --------------------------------- */
+
+static void test_lev_argument(void) {
+    /* lev == rank(ker) is the only supported value and is a no-op. */
+    chk_eq("ListCorrelate[{x,y},{a,b,c,d},1,p,Times,Plus,1]",
+           "ListCorrelate[{x,y},{a,b,c,d},1,p]");
+    chk_eq("ListCorrelate[{{a,b},{c,d}},{{1,2,3},{4,5,6},{7,8,9}},1,0,Times,Plus,2]",
+           "ListCorrelate[{{a,b},{c,d}},{{1,2,3},{4,5,6},{7,8,9}},1,0]");
+    /* lev != rank(ker) is unsupported: the call stays unevaluated. */
+    chk_stays("ListCorrelate[{x,y},{a,b,c,d},1,p,Times,Plus,2]", "ListCorrelate");
+}
+
+/* ---- numeric direct path (below the FFT threshold) ----------------- */
+
+static void test_machine_direct(void) {
+    /* Small Real input takes the tight O(L*m) numeric loop, not the FFT;
+     * checked against the definitional reference Sum_r ker_r lst. */
+    chk_small(
+        "ker={0.5,-1.5,2.0}; lst={1.0,2.0,3.0,4.0,5.0,6.0};"
+        "m=3; L=4; ref=Table[Total[ker*lst[[t;;t+m-1]]],{t,1,L}];"
+        "Max[Abs[ListCorrelate[ker,lst]-ref]]",
+        1e-12);
+}
+
+/* ---- rank-3 (exact engine, all-ones kernel) ------------------------ */
+
+static void test_rank3(void) {
+    /* 2x2x2 all-ones kernel over a 3x3x3 array: each output is the sum over a
+     * 2x2x2 window. Exact integer arithmetic (direct engine). */
+    chk_small(
+        "dat=Table[100 i+10 j+k,{i,1,3},{j,1,3},{k,1,3}];"
+        "ker=ConstantArray[1,{2,2,2}];"
+        "ref=Table[Sum[dat[[t1+i,t2+j,t3+k]],{i,0,1},{j,0,1},{k,0,1}],"
+        "{t1,1,2},{t2,1,2},{t3,1,2}];"
+        "Max[Abs[Flatten[ListCorrelate[ker,dat]-ref]]]",
+        0.0);
+}
+
 /* ---- diagnostics + attributes -------------------------------------- */
 
 static void test_errors_attrs(void) {
-    chk_eq("ListCorrelate[]", "ListCorrelate[]");
-    chk_eq("ListCorrelate[{1,2}]", "ListCorrelate[{1,2}]");
+    /* Wrong arity: stays unevaluated. */
+    chk_stays("ListCorrelate[{1,2}]", "ListCorrelate");
+    chk_stays("ListCorrelate[a,b,c,d,e,f,g,h]", "ListCorrelate");  /* 8 args */
+    /* Non-list arguments: unevaluated. */
+    chk_stays("ListCorrelate[x,y]", "ListCorrelate");
+    /* Kernel and list of different ranks. */
+    chk_stays("ListCorrelate[{x,y},{{a,b},{c,d}}]", "ListCorrelate");
+    /* Zero overhang index is invalid. */
+    chk_stays("ListCorrelate[{x,y},{a,b,c},0]", "ListCorrelate");
+    /* An overhang that empties the output window (L = n + KL - KR = 0). */
+    chk_stays("ListCorrelate[{v,w,x,y,z},{a,b},{1,3}]", "ListCorrelate");
+    /* Empty kernel. */
+    chk_stays("ListCorrelate[{},{a,b,c}]", "ListCorrelate");
     ASSERT(symtab_get_def("ListCorrelate")->attributes & ATTR_PROTECTED);
 }
 
@@ -163,6 +243,10 @@ int main(void) {
     TEST(test_padding_generalized);
     TEST(test_multidim);
     TEST(test_exact);
+    TEST(test_kernel_sizes);
+    TEST(test_lev_argument);
+    TEST(test_machine_direct);
+    TEST(test_rank3);
     TEST(test_fft);
     TEST(test_complex);
     TEST(test_errors_attrs);
