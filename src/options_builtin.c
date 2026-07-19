@@ -773,6 +773,10 @@ void options_register_defaults(void) {
     ob_init(&b);
     ob_add(&b, r_str("OperatingSystem", "Unix"));
     ob_commit(&b, "FileNameJoin");
+
+    ob_init(&b);
+    ob_add(&b, r_str("OperatingSystem", "Unix"));
+    ob_commit(&b, "FileNameSplit");
 }
 
 void options_builtin_init(void) {

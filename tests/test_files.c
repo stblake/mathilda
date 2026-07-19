@@ -608,6 +608,93 @@ void test_filenamejoin_protected(void) {
     assert_eval_eq("MemberQ[Attributes[FileNameJoin], Protected]", "True", 0);
 }
 
+/* ===== FileNameSplit ===== */
+
+void test_filenamesplit_basic(void) {
+    assert_eval_eq("FileNameSplit[\"a/b/c\"]", "{\"a\", \"b\", \"c\"}", 0);
+}
+
+/* The docstring's own example: leading separator yields a leading "",
+ * and the trailing separator produces no empty final element. */
+void test_filenamesplit_absolute_and_trailing(void) {
+    assert_eval_eq("FileNameSplit[\"/home/sb/mathilda/examples/\"]",
+                   "{\"\", \"home\", \"sb\", \"mathilda\", \"examples\"}", 0);
+}
+
+/* Duplicate and trailing separators collapse away. */
+void test_filenamesplit_collapses_separators(void) {
+    assert_eval_eq("FileNameSplit[\"a//b/\"]", "{\"a\", \"b\"}", 0);
+}
+
+/* A lone name splits to a single part. */
+void test_filenamesplit_single_name(void) {
+    assert_eval_eq("FileNameSplit[\"file\"]", "{\"file\"}", 0);
+}
+
+/* Empty input yields the empty list; "/" yields just the leading "". */
+void test_filenamesplit_edge_empty_and_root(void) {
+    assert_eval_eq("FileNameSplit[\"\"]", "{}", 0);
+    assert_eval_eq("FileNameSplit[\"/\"]", "{\"\"}", 0);
+}
+
+/* FileNameJoin is the inverse: joining a split reconstructs the name. */
+void test_filenamesplit_join_round_trip(void) {
+    assert_eval_eq("FileNameJoin[FileNameSplit[\"/a/b/c\"]]", "\"/a/b/c\"", 0);
+    assert_eval_eq("FileNameJoin[FileNameSplit[\"a/b/c\"]]",  "\"a/b/c\"",  0);
+}
+
+/* Under Windows a drive letter falls out as an ordinary first part. */
+void test_filenamesplit_windows_drive(void) {
+    assert_eval_eq(
+        "FileNameSplit[\"C:\\\\path\\\\file\", OperatingSystem->\"Windows\"]",
+        "{\"C:\", \"path\", \"file\"}", 0);
+}
+
+/* Under Windows a leading \\server\share UNC prefix is kept as one part. */
+void test_filenamesplit_windows_unc_share(void) {
+    assert_eval_eq(
+        "FileNameSplit[\"\\\\\\\\server\\\\share\\\\path\\\\file\", OperatingSystem->\"Windows\"]",
+        "{\"\\\\server\\share\", \"path\", \"file\"}", 0);
+}
+
+/* OperatingSystem->"Unix"/"MacOSX" force '/' regardless of host; a bare
+ * backslash is then an ordinary character, not a separator. */
+void test_filenamesplit_unix_and_macosx_option(void) {
+    assert_eval_eq(
+        "FileNameSplit[\"dir1/dir2\", OperatingSystem->\"Unix\"]",
+        "{\"dir1\", \"dir2\"}", 0);
+    assert_eval_eq(
+        "FileNameSplit[\"dir1/dir2\", OperatingSystem->\"MacOSX\"]",
+        "{\"dir1\", \"dir2\"}", 0);
+}
+
+void test_filenamesplit_unknown_os_is_unevaluated(void) {
+    assert_eval_eq(
+        "FileNameSplit[\"a\", OperatingSystem->\"VMS\"]",
+        "FileNameSplit[\"a\", OperatingSystem -> \"VMS\"]", 0);
+}
+
+void test_filenamesplit_unevaluated_on_bad_args(void) {
+    assert_eval_eq("FileNameSplit[42]",     "FileNameSplit[42]",     0);
+    assert_eval_eq("FileNameSplit[{1, 2}]", "FileNameSplit[{1, 2}]", 0);
+    /* Symbolic argument flows through unevaluated (the caller may bind it). */
+    assert_eval_eq("FileNameSplit[x]",      "FileNameSplit[x]",      0);
+}
+
+void test_filenamesplit_zero_args_is_unevaluated(void) {
+    /* Prints FileNameSplit::argx to stderr and leaves the call unevaluated. */
+    assert_eval_eq("FileNameSplit[]", "FileNameSplit[]", 0);
+}
+
+void test_filenamesplit_protected(void) {
+    assert_eval_eq("MemberQ[Attributes[FileNameSplit], Protected]", "True", 0);
+}
+
+void test_filenamesplit_options(void) {
+    assert_eval_eq("Options[FileNameSplit]",
+                   "{OperatingSystem -> \"Unix\"}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -680,6 +767,22 @@ int main(void) {
     TEST(test_filenamejoin_unknown_os_is_unevaluated);
     TEST(test_filenamejoin_zero_args_is_unevaluated);
     TEST(test_filenamejoin_protected);
+
+    /* FileNameSplit */
+    TEST(test_filenamesplit_basic);
+    TEST(test_filenamesplit_absolute_and_trailing);
+    TEST(test_filenamesplit_collapses_separators);
+    TEST(test_filenamesplit_single_name);
+    TEST(test_filenamesplit_edge_empty_and_root);
+    TEST(test_filenamesplit_join_round_trip);
+    TEST(test_filenamesplit_windows_drive);
+    TEST(test_filenamesplit_windows_unc_share);
+    TEST(test_filenamesplit_unix_and_macosx_option);
+    TEST(test_filenamesplit_unknown_os_is_unevaluated);
+    TEST(test_filenamesplit_unevaluated_on_bad_args);
+    TEST(test_filenamesplit_zero_args_is_unevaluated);
+    TEST(test_filenamesplit_protected);
+    TEST(test_filenamesplit_options);
 
     printf("All tests passed!\n");
     return 0;

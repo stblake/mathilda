@@ -2920,6 +2920,14 @@ void info_init(void) {
         "FileNameJoin[\"name\"] canonicalizes name, making pathname separators appropriate for your operating system.\n"
         "FileNameJoin[..., OperatingSystem->\"os\"] yields a file name in the format for the specified operating system; possible choices are \"Windows\", \"MacOSX\", and \"Unix\".\n"
         "FileNameJoin just assembles a file name; it does not search for the file specified.");
+    symtab_set_docstring("FileNameSplit",
+        "FileNameSplit[\"name\"]\n"
+        "\tsplits a file name into a list of parts.\n"
+        "FileNameSplit by default uses pathname separators and other conventions suitable for your operating system.\n"
+        "FileNameSplit[..., OperatingSystem->\"os\"] uses the conventions of the specified operating system; possible choices are \"Windows\", \"MacOSX\", and \"Unix\".\n"
+        "Absolute file names that begin with a pathname separator yield a list of parts that starts with \"\".\n"
+        "Under Windows, the drive or share name is treated as the first part of the file name.\n"
+        "FileNameSplit just operates on names of files; it does not actually search for the file specified.");
     symtab_set_docstring("FilePrint",
         "FilePrint[\"file\"]\n"
         "\tprints out the raw textual contents of file.\n"

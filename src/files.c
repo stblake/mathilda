@@ -2,9 +2,12 @@
  * files.c — Filesystem-predicate and path-string builtins.
  *
  * Builtins:
- *   FileExistsQ["name"]   — touches the filesystem (lstat).
- *   FileExtension["name"] — pure string manipulation.
- *   FileBaseName["name"]  — pure string manipulation.
+ *   FileExistsQ["name"]    — touches the filesystem (lstat).
+ *   FileExtension["name"]  — pure string manipulation.
+ *   FileBaseName["name"]   — pure string manipulation.
+ *   FilePrint["name", ...] — streams file contents to stdout.
+ *   FileNameJoin[{...}]    — assembles a file name from parts.
+ *   FileNameSplit["name"]  — splits a file name into its parts.
  *
  * Both string builtins follow the POSIX convention: the path
  * separator is `/`, the directory portion is everything up to and
@@ -586,6 +589,168 @@ Expr* builtin_filenamejoin(Expr* res) {
     return result;
 }
 
+/* === FileNameSplit =====================================================
+ *
+ * Splits a file name into its List of path components — the structural
+ * inverse of FileNameJoin.  Pure string manipulation; never touches the
+ * filesystem.
+ *
+ *   FileNameSplit["a/b/c"]              -> {"a", "b", "c"}
+ *   FileNameSplit["/home/sb/x/"]        -> {"", "home", "sb", "x"}
+ *                                          (leading separator => absolute
+ *                                          => leading ""; trailing and
+ *                                          duplicate separators dropped)
+ *   FileNameSplit[""]                   -> {}
+ *   FileNameSplit["/"]                  -> {""}
+ *   FileNameSplit[..., OperatingSystem->"Windows"|"MacOSX"|"Unix"]
+ *
+ * On Windows the separator set is {'/','\\'}; a leading "\\host\share"
+ * (UNC) prefix is kept as a single part, and a drive like "C:" falls out
+ * naturally as an ordinary first part (it contains no separator).  On
+ * "Unix"/"MacOSX" the separator is '/'.  The default is the host OS.
+ *
+ * FileNameJoin[FileNameSplit[x]] reconstructs a canonicalized x for the
+ * common cases: both share fnj_is_sep and the same absolute/UNC rules.
+ */
+
+/* Duplicate the substring [start, start+len) as a fresh NUL-terminated
+ * string.  Returns NULL on allocation failure. */
+static char* fns_dup(const char* start, size_t len) {
+    char* s = (char*)malloc(len + 1);
+    if (!s) return NULL;
+    memcpy(s, start, len);
+    s[len] = '\0';
+    return s;
+}
+
+/* Split `path` into its path components under the given separator
+ * convention.  Returns a freshly-malloced array of `*out_n` NUL-terminated
+ * strings (each malloced); the caller frees every element and the array.
+ * An empty path yields zero parts (returns a valid 0-length allocation).
+ * Returns NULL only on allocation failure. */
+static char** fns_split_build(const char* path, int windows, size_t* out_n) {
+    /* Upper bound on the number of parts: each part past the first needs at
+     * least one separator, and the optional leading "" adds one.  strlen+2
+     * is comfortably safe. */
+    size_t cap = strlen(path) + 2;
+    char** parts = (char**)malloc(sizeof(char*) * cap);
+    if (!parts) return NULL;
+    size_t np = 0;
+
+    const char* p = path;
+
+    if (windows && fnj_is_sep(p[0], windows) && fnj_is_sep(p[1], windows)) {
+        /* UNC: the "\\host\share" prefix is a single part.  Consume the two
+         * leading separators, the host segment, and (if present) a
+         * separator plus the share segment. */
+        const char* q = p + 2;
+        while (*q && !fnj_is_sep(*q, windows)) q++;      /* host segment */
+        if (*q) {
+            q++;                                         /* skip separator */
+            while (*q && !fnj_is_sep(*q, windows)) q++;  /* share segment */
+        }
+        parts[np] = fns_dup(p, (size_t)(q - p));
+        if (!parts[np]) goto oom;
+        np++;
+        p = q;
+    } else if (*p != '\0' && fnj_is_sep(*p, windows)) {
+        /* Absolute path (non-UNC): a leading "" part. */
+        parts[np] = fns_dup("", 0);
+        if (!parts[np]) goto oom;
+        np++;
+    }
+
+    /* Remaining components: maximal non-separator runs; empty runs from
+     * leading/trailing/duplicate separators are dropped. */
+    while (*p) {
+        while (*p && fnj_is_sep(*p, windows)) p++;   /* skip separators */
+        const char* seg = p;
+        while (*p && !fnj_is_sep(*p, windows)) p++;  /* one segment */
+        size_t seg_len = (size_t)(p - seg);
+        if (seg_len == 0) continue;
+        parts[np] = fns_dup(seg, seg_len);
+        if (!parts[np]) goto oom;
+        np++;
+    }
+
+    *out_n = np;
+    return parts;
+
+oom:
+    for (size_t i = 0; i < np; i++) free(parts[i]);
+    free(parts);
+    return NULL;
+}
+
+/* FileNameSplit[spec]
+ * FileNameSplit[spec, OperatingSystem->"os"]
+ *
+ * `spec` must be a single string.  Options are trailing
+ * Rule[OperatingSystem, "..."] arguments, decoded exactly as FileNameJoin
+ * does.  Leaves the call unevaluated (NULL) on any malformed argument;
+ * prints the standard argx message when called with zero arguments. */
+Expr* builtin_filenamesplit(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc == 0) return builtin_arg_error("FileNameSplit", 0, 1, 1);
+
+    /* Determine the target separator from any OperatingSystem option — same
+     * decoding as builtin_filenamejoin. */
+    int windows = (HOST_SEP == '\\');
+    for (size_t i = 1; i < argc; i++) {
+        Expr* a = res->data.function.args[i];
+        if (a->type != EXPR_FUNCTION ||
+            a->data.function.arg_count != 2 ||
+            a->data.function.head->type != EXPR_SYMBOL ||
+            (a->data.function.head->data.symbol.name != SYM_Rule &&
+             a->data.function.head->data.symbol.name != SYM_RuleDelayed)) {
+            return NULL;  /* an unexpected non-option argument */
+        }
+        Expr* key = a->data.function.args[0];
+        Expr* val = a->data.function.args[1];
+        if (key->type != EXPR_SYMBOL ||
+            strcmp(key->data.symbol.name, "OperatingSystem") != 0) return NULL;
+        if (val->type != EXPR_STRING) return NULL;
+        if (strcmp(val->data.string, "Windows") == 0) {
+            windows = 1;
+        } else if (strcmp(val->data.string, "Unix") == 0 ||
+                   strcmp(val->data.string, "MacOSX") == 0) {
+            windows = 0;
+        } else {
+            return NULL;  /* unknown operating system */
+        }
+    }
+
+    Expr* spec = res->data.function.args[0];
+    if (spec->type != EXPR_STRING) return NULL;
+
+    size_t np = 0;
+    char** parts = fns_split_build(spec->data.string, windows, &np);
+    if (!parts) return NULL;  /* allocation failure — leave call unevaluated */
+
+    /* Assemble the List.  expr_new_function memcpy-copies the args array and
+     * adopts the element Expr* pointers, so we free our args array (and the
+     * transient char* parts) but not the elements. */
+    Expr** args = NULL;
+    if (np > 0) {
+        args = (Expr**)malloc(sizeof(Expr*) * np);
+        if (!args) {
+            for (size_t i = 0; i < np; i++) free(parts[i]);
+            free(parts);
+            return NULL;
+        }
+        for (size_t i = 0; i < np; i++) {
+            args[i] = expr_new_string(parts[i]);
+        }
+    }
+    for (size_t i = 0; i < np; i++) free(parts[i]);
+    free(parts);
+
+    Expr* list = expr_new_function(expr_new_symbol("List"), args, np);
+    free(args);
+    return list;
+}
+
 void files_init(void) {
     /* Docstrings live in info.c alongside the other File-I/O entries.
      * All builtins are Protected with no special evaluation behaviour —
@@ -602,6 +767,9 @@ void files_init(void) {
 
     symtab_add_builtin("FileNameJoin", builtin_filenamejoin);
     symtab_get_def("FileNameJoin")->attributes |= ATTR_PROTECTED;
+
+    symtab_add_builtin("FileNameSplit", builtin_filenamesplit);
+    symtab_get_def("FileNameSplit")->attributes |= ATTR_PROTECTED;
 
     symtab_add_builtin("FilePrint", builtin_fileprint);
     symtab_get_def("FilePrint")->attributes |= ATTR_PROTECTED;

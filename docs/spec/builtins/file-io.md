@@ -1,6 +1,6 @@
 # File I/O
 
-Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`) and `src/files.c` (`FileExistsQ`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FilePrint`).
+Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`) and `src/files.c` (`FileExistsQ`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`).
 
 ## Get
 Reads a sequence of Mathilda expressions from a file, evaluates each in order, and returns the value of the last one.
@@ -136,6 +136,28 @@ FileNameJoin[{"dir1", "dir2", "file"}]                       (* "dir1/dir2/file"
 FileNameJoin[{"dir1/dir2", "file"}]                          (* "dir1/dir2/file" *)
 FileNameJoin[{"", "usr", "bin"}]                             (* "/usr/bin" *)
 FileNameJoin[{"dir1", "dir2"}, OperatingSystem->"Windows"]   (* "dir1\dir2" *)
+```
+
+## FileNameSplit
+Splits a file name into the `List` of its path components — the structural inverse of `FileNameJoin`.
+- `FileNameSplit["name"]` — split using the OS pathname separator.
+- `FileNameSplit[..., OperatingSystem->"os"]` — select the separator convention; `"os"` is `"Windows"`, `"MacOSX"`, or `"Unix"`.
+
+**Features**:
+- `Protected`.
+- Pure string operation — does not touch the filesystem.
+- A leading pathname separator marks an absolute path and yields a leading `""` part; trailing and duplicate separators are dropped (`"a//b/"` → `{"a", "b"}`).
+- `"Windows"` treats a leading `\\server\share` UNC prefix as a single part and a drive like `C:` as an ordinary first part; `"MacOSX"`/`"Unix"` split on `/`. The default is the host operating system's separator.
+- `Options[FileNameSplit]` reports the `OperatingSystem` default.
+- `FileNameJoin[FileNameSplit[name]]` reconstructs a canonicalized `name`.
+- `FileNameSplit[]` prints `FileNameSplit::argx` and stays unevaluated; a non-string argument or an unknown OS leaves the call unevaluated.
+
+**Example**:
+```
+FileNameSplit["a/b/c"]                                        (* {"a", "b", "c"} *)
+FileNameSplit["/home/sb/mathilda/examples/"]                  (* {"", "home", "sb", "mathilda", "examples"} *)
+FileNameSplit["C:\path\file", OperatingSystem->"Windows"]     (* {"C:", "path", "file"} *)
+FileNameSplit["\\server\share\path\file", OperatingSystem->"Windows"]  (* {"\\server\share", "path", "file"} *)
 ```
 
 ## FilePrint
