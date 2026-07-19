@@ -6,6 +6,7 @@
 #include "match.h"
 #include "sym_names.h"
 #include "assoc.h"
+#include "common.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -2433,4 +2434,140 @@ Expr* builtin_thread(Expr* res) {
     Expr* eval_res = evaluate(wrapped);
     expr_free(wrapped);
     return eval_res;
+}
+
+/* ---------------------------------------------------------------------------
+ * MapThread — the "function and arguments separately" sibling of Thread.
+ *
+ *   MapThread[f, {l1, ..., lk}]      -> {f[l1[[1]],...], ..., f[l1[[L]],...]}
+ *   MapThread[f, {e1, ..., ek}, n]   -> thread f over the parts at level n
+ *
+ * mapthread_rec threads f in parallel through the k BORROWED sub-expressions in
+ * `exprs`, descending `level` dimensions. At level 0 it builds the leaf
+ * f[exprs[0], ..., exprs[k-1]] (deep-copying each part). At level > 0 all k
+ * sub-expressions must have the same shape: either all Lists of equal length
+ * (thread over corresponding elements -> List[...]) or all Associations with
+ * identical key sequences (thread over values, preserving keys -> Association).
+ * Any structural mismatch returns NULL so the caller leaves MapThread[...]
+ * unevaluated (matching builtin_thread's silent unequal-length path).
+ * -------------------------------------------------------------------------- */
+static Expr* mapthread_rec(Expr* f, Expr** exprs, size_t k, int64_t level) {
+    /* Leaf: apply f to the k corresponding parts. */
+    if (level <= 0) {
+        Expr** fargs = (Expr**)malloc(sizeof(Expr*) * (k ? k : 1));
+        if (!fargs) return NULL;
+        for (size_t j = 0; j < k; j++) fargs[j] = expr_copy(exprs[j]);
+        Expr* leaf = expr_new_function(expr_copy(f), fargs, k);
+        free(fargs);
+        return leaf;
+    }
+
+    if (k == 0) return NULL;   /* cannot determine shape with no sub-exprs */
+
+    /* Classify the k sub-expressions: all associations, or all lists? */
+    bool all_assoc = true, all_list = true;
+    for (size_t j = 0; j < k; j++) {
+        if (!is_association(exprs[j])) all_assoc = false;
+        if (!(exprs[j]->type == EXPR_FUNCTION &&
+              exprs[j]->data.function.head->type == EXPR_SYMBOL &&
+              exprs[j]->data.function.head->data.symbol.name == SYM_List))
+            all_list = false;
+    }
+
+    /* Association threading: identical key sequences, thread over values. */
+    if (all_assoc) {
+        size_t L = exprs[0]->data.function.arg_count;
+        for (size_t j = 1; j < k; j++)
+            if (exprs[j]->data.function.arg_count != L) return NULL;
+        for (size_t p = 0; p < L; p++) {
+            Expr* key0 = exprs[0]->data.function.args[p]->data.function.args[0];
+            for (size_t j = 1; j < k; j++) {
+                Expr* keyj = exprs[j]->data.function.args[p]->data.function.args[0];
+                if (!expr_eq(key0, keyj)) return NULL;
+            }
+        }
+        Expr** rules = (Expr**)malloc(sizeof(Expr*) * (L ? L : 1));
+        if (!rules) return NULL;
+        Expr** col = (Expr**)malloc(sizeof(Expr*) * k);
+        if (!col) { free(rules); return NULL; }
+        for (size_t p = 0; p < L; p++) {
+            for (size_t j = 0; j < k; j++)
+                col[j] = exprs[j]->data.function.args[p]->data.function.args[1];
+            Expr* child = mapthread_rec(f, col, k, level - 1);
+            if (!child) {
+                for (size_t q = 0; q < p; q++) expr_free(rules[q]);
+                free(rules); free(col);
+                return NULL;
+            }
+            Expr* key = expr_copy(exprs[0]->data.function.args[p]->data.function.args[0]);
+            Expr* rargs[2] = { key, child };
+            rules[p] = expr_new_function(expr_new_symbol(SYM_Rule), rargs, 2);
+        }
+        Expr* result = expr_new_function(expr_new_symbol(SYM_Association), rules, L);
+        free(rules); free(col);
+        return result;
+    }
+
+    /* List threading: all lists of equal length, thread over elements. */
+    if (all_list) {
+        size_t L = exprs[0]->data.function.arg_count;
+        for (size_t j = 1; j < k; j++)
+            if (exprs[j]->data.function.arg_count != L) return NULL;
+        Expr** out = (Expr**)malloc(sizeof(Expr*) * (L ? L : 1));
+        if (!out) return NULL;
+        Expr** col = (Expr**)malloc(sizeof(Expr*) * k);
+        if (!col) { free(out); return NULL; }
+        for (size_t i = 0; i < L; i++) {
+            for (size_t j = 0; j < k; j++)
+                col[j] = exprs[j]->data.function.args[i];
+            Expr* child = mapthread_rec(f, col, k, level - 1);
+            if (!child) {
+                for (size_t q = 0; q < i; q++) expr_free(out[q]);
+                free(out); free(col);
+                return NULL;
+            }
+            out[i] = child;
+        }
+        Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, L);
+        free(out); free(col);
+        return result;
+    }
+
+    return NULL;  /* mixed / non-threadable shapes -> leave unevaluated */
+}
+
+Expr* builtin_mapthread(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 2 || argc > 3)
+        return builtin_arg_error("MapThread", argc, 2, 3);
+
+    Expr* f     = res->data.function.args[0];
+    Expr* lists = res->data.function.args[1];
+
+    int64_t level = 1;                       /* default threading level */
+    if (argc == 3) {
+        Expr* nspec = res->data.function.args[2];
+        if (nspec->type != EXPR_INTEGER || nspec->data.integer < 0) return NULL;
+        level = nspec->data.integer;
+    }
+
+    /* Outer container must be a List of the k expressions to thread. */
+    if (lists->type != EXPR_FUNCTION ||
+        lists->data.function.head->type != EXPR_SYMBOL ||
+        lists->data.function.head->data.symbol.name != SYM_List)
+        return NULL;
+
+    size_t k = lists->data.function.arg_count;
+    if (k == 0)                              /* MapThread[f, {}] -> {} */
+        return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+
+    Expr* built = mapthread_rec(f, lists->data.function.args, k, level);
+    if (!built) return NULL;                 /* structural mismatch -> unchanged */
+
+    /* Evaluate so f's attributes fire and the f[...] leaves reduce
+     * (mirrors builtin_thread's final evaluate). */
+    Expr* out = evaluate(built);
+    expr_free(built);
+    return out;
 }

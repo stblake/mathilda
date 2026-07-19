@@ -1872,6 +1872,17 @@ void info_init(void) {
         "Apply[f, expr, levelspec]\n"
         "\tperforms the head replacement at the parts of expr specified by\n"
         "\tlevelspec; the default levelspec is {0} (top level only).");
+    symtab_set_docstring("MapThread",
+        "MapThread[f, {{a1, a2, ...}, {b1, b2, ...}, ...}]\n"
+        "\tgives {f[a1, b1, ...], f[a2, b2, ...], ...}, applying f to\n"
+        "\tcorresponding elements of the lists.\n"
+        "MapThread[f, {e1, e2, ...}, n]\n"
+        "\tapplies f to the parts of the ei at level n.\n"
+        "\n"
+        "The ei must all have the same shape down through level n. MapThread is\n"
+        "a generalization of Map to functions of several variables; it takes\n"
+        "the function and its argument lists separately, unlike Thread. Lists\n"
+        "of associations with identical keys thread over their values.");
     symtab_set_docstring("MapAll",
         "f //@ expr or MapAll[f, expr]\n"
         "\tapplies f to every subexpression in expr (equivalent to\n"

@@ -303,6 +303,8 @@ void core_init(void) {
     symtab_set_docstring("MapIndexed",
         "MapIndexed[f, list]\n\tGives {f[e1, {1}], f[e2, {2}], ...}. Over an\n"
         "\tassociation, f[value, {Key[k]}] keeping keys.");
+    symtab_add_builtin("MapThread", builtin_mapthread);
+    symtab_get_def("MapThread")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("MapAll", builtin_map_all);
     symtab_add_builtin("MapAt", builtin_map_at);
     symtab_get_def("MapAt")->attributes |= ATTR_PROTECTED;

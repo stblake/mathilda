@@ -244,6 +244,33 @@ In[2]:= MapIndexed[f, <|"a" -> 10, "b" -> 20|>]
 Out[2]= <|"a" -> f[10, {Key["a"]}], "b" -> f[20, {Key["b"]}]|>
 ```
 
+## MapThread
+Applies `f` to corresponding parts of several expressions — a generalization of
+`Map` to functions of several variables. Unlike `Thread`, the function and its
+argument lists are given separately.
+- `MapThread[f, {{a1, a2, ...}, {b1, b2, ...}, ...}]`: gives
+  `{f[a1, b1, ...], f[a2, b2, ...], ...}`, threading over level 1. All argument
+  lists must have the same length.
+- `MapThread[f, {e1, e2, ...}, n]`: applies `f` to the parts of the `ei` at level
+  `n` (a non-negative integer). The `ei` must all have the same shape down
+  through level `n`; `n = 0` gives `f[e1, e2, ...]`.
+- Lists of associations with identical key sequences thread over their values:
+  `MapThread[f, {<|a -> 1|>, <|a -> 2|>}]` gives `<|a -> f[1, 2]|>`.
+
+A dimension mismatch (unequal lengths, a non-list argument, or mismatched
+association keys) leaves the expression unevaluated.
+
+```mathematica
+In[1]:= MapThread[f, {{a, b, c}, {x, y, z}}]
+Out[1]= {f[a, x], f[b, y], f[c, z]}
+
+In[2]:= MapThread[f, {{{a, b}, {c, d}}, {{u, v}, {s, t}}}, 2]
+Out[2]= {{f[a, u], f[b, v]}, {f[c, s], f[d, t]}}
+
+In[3]:= MapThread[Plus, {{a, b, c}, {u, v, w}, {x, y, z}}]
+Out[3]= {a + u + x, b + v + y, c + w + z}
+```
+
 ## Apply (@@, @@@)
 - `f @@ expr`: Level 0.
 - `f @@@ expr`: Level 1.
