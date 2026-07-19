@@ -159,6 +159,97 @@ static void test_split_no_match(void) {
     assert_eval_eq("StringSplit[\"\", RegularExpression[\"x\"]]", "{}", 0);
 }
 
+static void test_split_whitespace_default(void) {
+    /* One-argument form splits at runs of whitespace. */
+    assert_eval_eq("StringSplit[\"a bbb  cccc aa   d\"]",
+                   "{\"a\", \"bbb\", \"cccc\", \"aa\", \"d\"}", 0);
+    assert_eval_eq("StringSplit[\"This is a sentence--which goes on.\"]",
+                   "{\"This\", \"is\", \"a\", \"sentence--which\", \"goes\", \"on.\"}", 0);
+}
+
+static void test_split_literal_alternatives(void) {
+    /* Literal delimiter (dot is not a metacharacter). */
+    assert_eval_eq("StringSplit[\"192.168.0.1\", \".\"]",
+                   "{\"192\", \"168\", \"0\", \"1\"}", 0);
+    /* A list of delimiters and the equivalent Alternatives (|) form. */
+    assert_eval_eq("StringSplit[\"a-b:c-d:e-f-g\", {\":\", \"-\"}]",
+                   "{\"a\", \"b\", \"c\", \"d\", \"e\", \"f\", \"g\"}", 0);
+    assert_eval_eq("StringSplit[\"a-b:c-d:e-f-g\", \":\" | \"-\"]",
+                   "{\"a\", \"b\", \"c\", \"d\", \"e\", \"f\", \"g\"}", 0);
+}
+
+static void test_split_charclass(void) {
+    assert_eval_eq("StringSplit[\"123  2.3  4  6\", WhitespaceCharacter ..]",
+                   "{\"123\", \"2.3\", \"4\", \"6\"}", 0);
+    assert_eval_eq("StringSplit[\"11a22b3\", _?LetterQ]",
+                   "{\"11\", \"22\", \"3\"}", 0);
+    assert_eval_eq("StringSplit[\"This is a sentence, which goes on.\", Except[WordCharacter] ..]",
+                   "{\"This\", \"is\", \"a\", \"sentence\", \"which\", \"goes\", \"on\"}", 0);
+}
+
+static void test_split_stringexpression(void) {
+    /* ~~ concatenates string patterns: whitespace, a digit, whitespace. */
+    assert_eval_eq("StringSplit[\"primes: 2 two 3 three 5 five ...\", "
+                   "Whitespace ~~ RegularExpression[\"\\\\d\"] ~~ Whitespace]",
+                   "{\"primes:\", \"two\", \"three\", \"five ...\"}", 0);
+}
+
+static void test_split_rules(void) {
+    /* Insert a value at each delimiter (patt -> val). */
+    assert_eval_eq("StringSplit[\"a b::c d::e f g\", \"::\" -> \"--\"]",
+                   "{\"a b\", \"--\", \"c d\", \"--\", \"e f g\"}", 0);
+    /* :> with a named pattern keeps the delimiter itself. */
+    assert_eval_eq("StringSplit[\"a--b c--d e\", x : \"--\" :> x]",
+                   "{\"a\", \"--\", \"b c\", \"--\", \"d e\"}", 0);
+    /* Equivalent to StringReplace when the pieces are rejoined. */
+    assert_eval_eq("StringJoin[StringSplit[\"ab::c::d::ef\", \"::\" -> \"X\"]]",
+                   "\"abXcXdXef\"", 0);
+}
+
+static void test_split_n_and_all(void) {
+    /* At most n substrings; the remainder is the last piece. */
+    assert_eval_eq("StringSplit[\"a b c d\", \" \", 2]", "{\"a\", \"b c d\"}", 0);
+    /* All keeps the leading/trailing empty substrings. */
+    assert_eval_eq("InputForm[StringSplit[\":a:b:c:\", \":\", All]]",
+                   "{\"\", \"a\", \"b\", \"c\", \"\"}", 0);
+    /* Interior empties are kept by default; boundary empties dropped. */
+    assert_eval_eq("InputForm[StringSplit[\"a,,b\", \",\"]]",
+                   "{\"a\", \"\", \"b\"}", 0);
+    assert_eval_eq("InputForm[StringSplit[\":a:b:c:\", \":\"]]",
+                   "{\"a\", \"b\", \"c\"}", 0);
+}
+
+static void test_split_null_and_ignorecase(void) {
+    /* A null delimiter splits at every character. */
+    assert_eval_eq("StringSplit[\"abcdefg\", \"\"]",
+                   "{\"a\", \"b\", \"c\", \"d\", \"e\", \"f\", \"g\"}", 0);
+    /* IgnoreCase treats c and C as equivalent. */
+    assert_eval_eq("StringSplit[\"cat Cat hat CAT\", \"c\", IgnoreCase -> True]",
+                   "{\"at \", \"at hat \", \"AT\"}", 0);
+}
+
+static void test_split_thread_and_regex(void) {
+    assert_eval_eq("StringSplit[{\"a:b:c:d\", \"listable:element\"}, \":\"]",
+                   "{{\"a\", \"b\", \"c\", \"d\"}, {\"listable\", \"element\"}}", 0);
+    assert_eval_eq("StringSplit[\"A tree, an apple, four pears. And more: two sacks\", "
+                   "RegularExpression[\"\\\\W+\"]]",
+                   "{\"A\", \"tree\", \"an\", \"apple\", \"four\", \"pears\", "
+                   "\"And\", \"more\", \"two\", \"sacks\"}", 0);
+}
+
+static void test_split_unevaluated(void) {
+    /* A non-string subject leaves the call unevaluated. */
+    assert_eval_eq("StringSplit[xyz, \":\"]", "StringSplit[xyz, \":\"]", 0);
+}
+
+/* The WL string-pattern vocabulary is shared: StringCases gains it too. */
+static void test_cases_wl_pattern(void) {
+    assert_eval_eq("StringCases[\"a bbb  cccc aa   d\", Except[WhitespaceCharacter] ..]",
+                   "{\"a\", \"bbb\", \"cccc\", \"aa\", \"d\"}", 0);
+    assert_eval_eq("StringReplace[\"a1b2c3\", DigitCharacter -> \"#\"]",
+                   "\"a#b#c#\"", 0);
+}
+
 #endif /* USE_REGEX */
 
 int main(void) {
@@ -188,6 +279,16 @@ int main(void) {
     TEST(test_split_delimiter);
     TEST(test_split_zero_width);
     TEST(test_split_no_match);
+    TEST(test_split_whitespace_default);
+    TEST(test_split_literal_alternatives);
+    TEST(test_split_charclass);
+    TEST(test_split_stringexpression);
+    TEST(test_split_rules);
+    TEST(test_split_n_and_all);
+    TEST(test_split_null_and_ignorecase);
+    TEST(test_split_thread_and_regex);
+    TEST(test_split_unevaluated);
+    TEST(test_cases_wl_pattern);
 #else
     printf("USE_REGEX not defined; skipping regex string-function tests\n");
 #endif

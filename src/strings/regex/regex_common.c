@@ -41,21 +41,6 @@ static char* rc_strdup(const char* s) {
     return d;
 }
 
-/* Escape PCRE metacharacters in `s` so it matches literally. */
-static char* escape_literal(const char* s) {
-    size_t n = strlen(s);
-    char* out = malloc(2 * n + 1);
-    if (!out) return NULL;
-    size_t j = 0;
-    for (size_t i = 0; i < n; i++) {
-        char c = s[i];
-        if (c && strchr("\\.^$|?*+()[]{}", c)) out[j++] = '\\';
-        out[j++] = c;
-    }
-    out[j] = '\0';
-    return out;
-}
-
 /* Wrap regex source as \A(?:src)\z for a whole-string (anchored) match. */
 static char* wrap_anchored(const char* src) {
     size_t n = strlen(src);
@@ -68,20 +53,12 @@ static char* wrap_anchored(const char* src) {
     return out;
 }
 
-/* Regex source (malloc'd) for a single pattern element that is either
- * RegularExpression["re"] or a literal string. Returns NULL if unsupported. */
+/* Regex source (malloc'd) for a single pattern element. Delegates to the shared
+ * Wolfram-string-pattern translator (literal strings, RegularExpression, character
+ * classes, StringExpression, Alternatives, Repeated, Except, ...). NULL if the
+ * pattern is unsupported. */
 static char* pattern_source(Expr* e) {
-    if (e->type == EXPR_FUNCTION &&
-        e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol.name == SYM_RegularExpression &&
-        e->data.function.arg_count == 1 &&
-        e->data.function.args[0]->type == EXPR_STRING) {
-        return rc_strdup(e->data.function.args[0]->data.string);
-    }
-    if (e->type == EXPR_STRING) {
-        return escape_literal(e->data.string);
-    }
-    return NULL;
+    return wl_pattern_to_regex(e, NULL);
 }
 
 /* Is e a Rule[...] or RuleDelayed[...] with two arguments? */
@@ -99,7 +76,8 @@ static int is_rule2(Expr* e, Expr** lhs, Expr** rhs) {
 }
 
 /* Compile one element into `out`. Returns 0 on success, -1 on failure. */
-static int build_one(Expr* e, int anchored, RegexRule* out, const char* head) {
+static int build_one(Expr* e, int anchored, int caseless, RegexRule* out,
+                     const char* head) {
     Expr* patt = e;
     Expr* rhs = NULL;
     Expr* l; Expr* r;
@@ -108,24 +86,32 @@ static int build_one(Expr* e, int anchored, RegexRule* out, const char* head) {
     char* src = pattern_source(patt);
     if (!src) return -1;                    /* unsupported pattern -> unevaluated */
 
-    char* final;
     if (anchored) {
-        final = wrap_anchored(src);
+        char* a = wrap_anchored(src);
         free(src);
-        if (!final) return -1;
-    } else {
-        final = src;
+        if (!a) return -1;
+        src = a;
+    }
+    if (caseless) {                          /* case-insensitive: prepend (?i) */
+        size_t n = strlen(src);
+        char* c = malloc(n + 5);            /* "(?i)" (4) + src + NUL */
+        if (!c) { free(src); return -1; }
+        memcpy(c, "(?i)", 4);
+        memcpy(c + 4, src, n + 1);
+        free(src);
+        src = c;
     }
 
     char err[256];
-    RegexProgram* prog = regex_compile(final, err, sizeof err);
-    free(final);
+    RegexProgram* prog = regex_compile(src, err, sizeof err);
+    free(src);
     if (!prog) {
         fprintf(stderr, "%s::regex: %s\n", head, err);
         return -1;
     }
     out->prog = prog;
     out->rhs = rhs;
+    out->lhs = patt;
     return 0;
 }
 
@@ -134,6 +120,11 @@ static int build_one(Expr* e, int anchored, RegexRule* out, const char* head) {
 /* ------------------------------------------------------------------ */
 
 int regex_rules_build(Expr* patt, int anchored, RegexRule** out, const char* head) {
+    return regex_rules_build_ex(patt, anchored, /*caseless=*/0, out, head);
+}
+
+int regex_rules_build_ex(Expr* patt, int anchored, int caseless,
+                         RegexRule** out, const char* head) {
     if (!regex_available()) {
         fprintf(stderr,
                 "%s::regavail: regular-expression support is not available; "
@@ -158,7 +149,7 @@ int regex_rules_build(Expr* patt, int anchored, RegexRule** out, const char* hea
     if (!rules) return -1;
 
     for (int i = 0; i < n; i++) {
-        if (build_one(elems[i], anchored, &rules[i], head) != 0) {
+        if (build_one(elems[i], anchored, caseless, &rules[i], head) != 0) {
             regex_rules_free(rules, i);     /* free the i already built */
             return -1;
         }

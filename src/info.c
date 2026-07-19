@@ -3859,13 +3859,6 @@ void info_init(void) {
         "\tmatch wins, ties broken by rule order.\n"
         "StringReplace[{s1, s2, ...}, rules]\n"
         "\tGives the list of results for each of the si.");
-
-    symtab_set_docstring("StringSplit",
-        "StringSplit[\"string\", patt]\n"
-        "\tSplits \"string\" into the substrings between non-overlapping matches\n"
-        "\tof the delimiter patt.  Empty pieces are dropped.\n"
-        "StringSplit[{s1, s2, ...}, patt]\n"
-        "\tGives the list of results for each of the si.\n\n"
-        "\tpatt may be RegularExpression[\"re\"], a literal string, or a list of\n"
-        "\talternative delimiters.");
+    /* StringSplit's docstring lives in regex_init() (regex_init.c), next to the
+     * string-pattern class heads it shares. */
 }

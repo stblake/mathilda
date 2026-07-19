@@ -794,6 +794,7 @@ typedef enum {
     OP_TWOWAYRULE,
     OP_CONDITION,
     OP_ALTERNATIVES,
+    OP_STRINGEXPRESSION,
     OP_MAP,
     OP_MAPALL,
     OP_REPLACEALL,
@@ -888,6 +889,12 @@ static OperatorDef get_operator(const char* pos) {
         def.type = OP_SPAN; def.prec = 290; def.right_assoc = 0; def.head_name = "Span"; def.len = 2;
     } else if (*pos == ';') {
         def.type = OP_COMPOUND; def.prec = 10; def.right_assoc = 1; def.head_name = "CompoundExpression"; def.len = 1;
+    } else if (strncmp(pos, "~~", 2) == 0) {
+        /* StringExpression (a ~~ b ~~ c): concatenation of string patterns.
+         * Precedence just below Alternatives (160) so `a ~~ b | c` groups as
+         * StringExpression[a, Alternatives[b, c]], matching Mathematica. The
+         * StringExpression head is Flat, so nested nodes flatten at eval. */
+        def.type = OP_STRINGEXPRESSION; def.prec = 155; def.head_name = "StringExpression"; def.len = 2;
     } else if (strncmp(pos, "||", 2) == 0) {
         def.type = OP_OR; def.prec = 215; def.head_name = "Or"; def.len = 2;
     } else if (*pos == '|') {
@@ -1468,6 +1475,9 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         } else if (op_def.type == OP_ALTERNATIVES) {
             Expr* args[2] = { left, right };
             left = expr_new_function(expr_new_symbol(SYM_Alternatives), args, 2);
+        } else if (op_def.type == OP_STRINGEXPRESSION) {
+            Expr* args[2] = { left, right };
+            left = expr_new_function(expr_new_symbol(SYM_StringExpression), args, 2);
         } else if (op_def.type == OP_CONDITION) {
             Expr* args[2] = { left, right };
             left = expr_new_function(expr_new_symbol(SYM_Condition), args, 2);

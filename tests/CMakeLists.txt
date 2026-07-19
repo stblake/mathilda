@@ -445,14 +445,15 @@ set(COMMON_SRC
     ../src/strings/stringreverse.c
     ../src/strings/stringinsert.c
     ../src/strings/stringreplacepart.c
+    ../src/strings/stringsplit.c
     ../src/strings/strings_init.c
     ../src/strings/regex/regex_engine.c
     ../src/strings/regex/regex_common.c
+    ../src/strings/regex/string_pattern.c
     ../src/strings/regex/regularexpression.c
     ../src/strings/regex/stringmatchq.c
     ../src/strings/regex/stringcases.c
     ../src/strings/regex/stringreplace.c
-    ../src/strings/regex/stringsplit.c
     ../src/strings/regex/regex_init.c
     ../src/calculus/series.c
     ../src/calculus/deriv.c

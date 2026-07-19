@@ -28,6 +28,8 @@
 typedef struct {
     RegexProgram* prog;   /* owned; free via regex_rules_free */
     Expr*         rhs;    /* borrowed; NULL when the element was a bare pattern */
+    Expr*         lhs;    /* borrowed; the delimiter pattern (rule LHS or bare pattern).
+                             Lets StringSplit bind a named Pattern[x,...] for `:>` RHS. */
 } RegexRule;
 
 /*
@@ -43,7 +45,27 @@ typedef struct {
  * A successful result must be released with regex_rules_free().
  */
 int  regex_rules_build(Expr* patt, int anchored, RegexRule** out, const char* head);
+/*
+ * Extended form: when `caseless` is nonzero each pattern matches case-insensitively
+ * (a `(?i)` inline modifier is prepended to the compiled source). `regex_rules_build`
+ * is the thin `caseless == 0` wrapper. Used by StringSplit's IgnoreCase option.
+ */
+int  regex_rules_build_ex(Expr* patt, int anchored, int caseless,
+                          RegexRule** out, const char* head);
 void regex_rules_free(RegexRule* rules, int n);
+
+/*
+ * Translate a Wolfram string pattern into malloc'd PCRE source (caller frees), or
+ * return NULL if the pattern is unsupported. Handles literal strings,
+ * RegularExpression["re"], the character-class heads (Whitespace, WhitespaceCharacter,
+ * LetterCharacter, DigitCharacter, WordCharacter, NumberString), StringExpression,
+ * Alternatives, Repeated/RepeatedNull, Except, Blank, Pattern (capture group), and
+ * PatternTest with a known predicate (LetterQ/DigitQ/UpperCaseQ/LowerCaseQ).
+ *
+ * When `is_null` is non-NULL it is set to 1 iff `patt` is the empty string "" (the
+ * "split at every character" null delimiter); callers that care handle it specially.
+ */
+char* wl_pattern_to_regex(Expr* patt, int* is_null);
 
 /*
  * Expand a replacement template (`$0`..`$N`, and `$$` -> literal `$`) using the

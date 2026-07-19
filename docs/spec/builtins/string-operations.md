@@ -435,19 +435,60 @@ Out[2]= "X123X X45X X6X X789X"
 
 Splits a string at matches of a delimiter pattern.
 
+- `StringSplit["string"]`: splits at runs of whitespace (equivalent to
+  `StringSplit["string", Whitespace]`), dropping leading/trailing empties.
 - `StringSplit["string", patt]`: the list of substrings between non-overlapping
-  matches of the delimiter `patt`; empty pieces are dropped.
+  matches of the delimiter `patt`.
+- `StringSplit["string", {p1, p2, ...}]`: splits at any of the `pi`.
+- `StringSplit["string", patt -> val]`: inserts `val` at the position of each
+  delimiter (`patt :> val` evaluates `val` per match; a named `x:patt :> f[x]`
+  binds the matched text). Rejoining the pieces reproduces `StringReplace`.
+- `StringSplit["string", patt, n]`: splits into at most `n` substrings.
+- `StringSplit["string", patt, All]`: keeps the leading/trailing empty
+  substrings that are otherwise dropped.
 - `StringSplit[{s1, s2, ...}, patt]`: gives the list of results for each `si`.
-- `patt` may be `RegularExpression["re"]`, a literal string, or a list of
-  alternative delimiters. Zero-width delimiters (e.g. `(?m)^`) split at
-  positions.
+- The empty-string delimiter `""` splits at every character. Zero-length
+  substrings between two adjacent interior delimiters are kept.
+- Option `IgnoreCase -> True` matches delimiters case-insensitively.
+- `patt` accepts the full shared string-pattern vocabulary (see below), plus
+  `RegularExpression["re"]` and literal strings. Zero-width delimiters (e.g.
+  `(?m)^`) split at positions.
 - **Attributes**: `Protected`.
 
 ```mathematica
-In[1]:= StringSplit["1.23, 4.56  7.89", RegularExpression["(\\s|,)+"]]
-Out[1]= {"1.23", "4.56", "7.89"}
+In[1]:= StringSplit["a bbb  cccc aa   d"]
+Out[1]= {"a", "bbb", "cccc", "aa", "d"}
 
-In[2]:= StringSplit["a,b,c", ","]
-Out[2]= {"a", "b", "c"}
+In[2]:= StringSplit["a-b:c-d:e-f-g", {":", "-"}]
+Out[2]= {"a", "b", "c", "d", "e", "f", "g"}
+
+In[3]:= StringSplit["a b::c d::e f g", "::" -> "--"]
+Out[3]= {"a b", "--", "c d", "--", "e f g"}
+
+In[4]:= StringSplit["This is a sentence, which goes on.", Except[WordCharacter] ..]
+Out[4]= {"This", "is", "a", "sentence", "which", "goes", "on"}
 ```
+
+## String patterns
+
+Beyond `RegularExpression["re"]` and literal strings, `StringMatchQ`,
+`StringCases`, `StringReplace`, and `StringSplit` share a translator
+(`string_pattern.c`) that turns symbolic Wolfram string patterns into PCRE:
+
+| Pattern | Matches |
+|---------|---------|
+| `Whitespace` | a run of whitespace (`\s+`) |
+| `WhitespaceCharacter` | one whitespace character |
+| `LetterCharacter` / `DigitCharacter` / `WordCharacter` | one letter / digit / letter-or-digit |
+| `NumberString` | a signed integer or decimal number |
+| `p1 ~~ p2 ~~ ...` (`StringExpression`) | `p1`, then `p2`, ... in sequence |
+| `p1 \| p2` (`Alternatives`) | any of the alternatives |
+| `p ..` / `p ...` (`Repeated` / `RepeatedNull`) | one-or-more / zero-or-more of `p` |
+| `Except[p]` | one character that does not begin a `p`-match |
+| `_` (`Blank[]`) | any single character |
+| `x : p` (`Pattern`) | `p`, capturing the matched text as `x` |
+| `_?LetterQ` (and `DigitQ`/`UpperCaseQ`/`LowerCaseQ`) | one character satisfying the predicate |
+
+An unsupported pattern leaves the call unevaluated. `~~` (`StringExpression`)
+is a `Flat` operator with precedence just below `Alternatives`.
 
