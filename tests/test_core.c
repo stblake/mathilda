@@ -1180,14 +1180,59 @@ void test_clear_attributes(void) {
     assert_eval_eq("Clear[testClearS2]", "Null", 0);
 }
 
+void test_valueq(void) {
+    /* Undefined symbol -> False. Uses a fresh name so prior tests can't taint it. */
+    assert_eval_eq("ValueQ[vqUndefined]", "False", 0);
+
+    /* Immediate OwnValue -> True. */
+    assert_eval_eq("vqX = 5", "5", 0);
+    assert_eval_eq("ValueQ[vqX]", "True", 0);
+
+    /* Delayed OwnValue -> True, and the RHS must NOT be forced (HoldAll). If the
+     * RandomReal[] were evaluated here the test would still pass on value, but
+     * the point is that ValueQ never triggers it — covered structurally. */
+    assert_eval_eq("vqY := RandomReal[]", "Null", 0);
+    assert_eval_eq("ValueQ[vqY]", "True", 0);
+
+    /* DownValues on the head -> True for any f[...], matching or not. */
+    assert_eval_eq("vqF[x_] := x^2", "Null", 0);
+    assert_eval_eq("ValueQ[vqF[1]]", "True", 0);
+    assert_eval_eq("ValueQ[vqF[2]]", "True", 0);
+    assert_eval_eq("ValueQ[vqF[a, b]]", "True", 0);
+
+    /* Bare symbol that only carries DownValues (no OwnValue) -> False. */
+    assert_eval_eq("ValueQ[vqF]", "False", 0);
+
+    /* HoldAll: x bound to unassigned y. ValueQ[x] sees x's OwnValue (True);
+     * ValueQ[y] sees no value (False). */
+    assert_eval_eq("vqA = vqB", "vqB", 0);
+    assert_eval_eq("{ValueQ[vqA], ValueQ[vqB]}", "{True, False}", 0);
+
+    /* Non-symbol / non-function atoms -> False. */
+    assert_eval_eq("ValueQ[5]", "False", 0);
+    assert_eval_eq("ValueQ[1.5]", "False", 0);
+    assert_eval_eq("ValueQ[\"str\"]", "False", 0);
+
+    /* Attributes: HoldAll + Protected. */
+    assert_eval_eq("MemberQ[Attributes[ValueQ], HoldAll]", "True", 0);
+    assert_eval_eq("MemberQ[Attributes[ValueQ], Protected]", "True", 0);
+
+    /* Wrong arity: reports ValueQ::argx and leaves the expression unevaluated. */
+    assert_eval_eq("ValueQ[]", "ValueQ[]", 0);
+
+    /* Clean up so later tests aren't contaminated. */
+    assert_eval_eq("ClearAll[vqX, vqY, vqF, vqA, vqB]", "Null", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
-    
+
     TEST(test_numberq);
     TEST(test_numericq);
     TEST(test_atomq);
     TEST(test_integerq);
+    TEST(test_valueq);
     TEST(test_evenq_oddq);
     TEST(test_mod);
     TEST(test_quotient);

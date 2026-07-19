@@ -2073,6 +2073,11 @@ void info_init(void) {
         "\tgives True if expr is an Integer or BigInt, False otherwise.\n"
         "Returns False on rationals with denominator > 1, reals, and symbolic\n"
         "expressions (even those that are integer-valued, e.g. 2 Pi / Pi).");
+    symtab_set_docstring("ValueQ",
+        "ValueQ[expr]\n"
+        "\tgives True if a value has been defined for expr, False otherwise.\n"
+        "HoldAll: inspects the symbol itself, not its evaluated value. A bare\n"
+        "symbol tests OwnValues; f[...] tests whether head f has any DownValues.");
     symtab_set_docstring("EvenQ", "EvenQ[n] gives True if n is an even integer (Integer or BigInt), False otherwise.");
     symtab_set_docstring("OddQ", "OddQ[n] gives True if n is an odd integer (Integer or BigInt), False otherwise.");
     symtab_set_docstring("PrimeQ",

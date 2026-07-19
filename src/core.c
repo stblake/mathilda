@@ -585,6 +585,7 @@ void core_init(void) {
     symtab_add_builtin("NonNegative", builtin_nonnegative);
     symtab_add_builtin("NonPositive", builtin_nonpositive);
     symtab_add_builtin("IntegerQ", builtin_integerq);
+    symtab_add_builtin("ValueQ", builtin_valueq);
     symtab_add_builtin("EvenQ", builtin_evenq);
     symtab_add_builtin("OddQ", builtin_oddq);
     symtab_add_builtin("Mod", builtin_mod);
@@ -617,6 +618,7 @@ void core_init(void) {
     symtab_get_def("NonNegative")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
     symtab_get_def("NonPositive")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
     symtab_get_def("IntegerQ")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("ValueQ")->attributes |= (ATTR_HOLDALL | ATTR_PROTECTED);
     symtab_get_def("EvenQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("OddQ")->attributes |= ATTR_PROTECTED;
     /* HoldAll (matching real Mathematica): ?x/Information[x] must inspect
@@ -2226,6 +2228,32 @@ Expr* builtin_integerq(Expr* res) {
 
     if (expr_is_integer_like(arg)) {
         return expr_new_symbol(SYM_True);
+    }
+
+    return expr_new_symbol(SYM_False);
+}
+
+/* ValueQ[expr] — True if a value has been defined for expr, False otherwise.
+ * HoldAll: the argument is inspected unevaluated so we probe the symbol itself
+ * rather than the value it would evaluate to. A bare symbol carries a value
+ * iff it has OwnValues; an expression f[...] is considered valued iff its head
+ * f has any DownValues (regardless of whether the argument actually matches a
+ * rule — this mirrors Wolfram's ValueQ). symtab_lookup (not symtab_get_def) is
+ * used so that querying an undefined symbol never materializes it. */
+Expr* builtin_valueq(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
+        return builtin_arg_error("ValueQ",
+            res->type == EXPR_FUNCTION ? res->data.function.arg_count : 0, 1, 1);
+    }
+
+    Expr* arg = res->data.function.args[0];
+    if (arg->type == EXPR_SYMBOL) {
+        SymbolDef* d = symtab_lookup(arg->data.symbol.name);
+        if (d && d->own_values) return expr_new_symbol(SYM_True);
+    } else if (arg->type == EXPR_FUNCTION &&
+               arg->data.function.head->type == EXPR_SYMBOL) {
+        SymbolDef* d = symtab_lookup(arg->data.function.head->data.symbol.name);
+        if (d && d->down_values) return expr_new_symbol(SYM_True);
     }
 
     return expr_new_symbol(SYM_False);

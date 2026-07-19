@@ -80,6 +80,33 @@ In[6]:= MachineNumberQ[1 + 2 I]         (* exact Gaussian integer *)
 Out[6]= False
 ```
 
+## ValueQ
+`ValueQ[expr]` gives `True` if a value has been defined for `expr`, and
+`False` otherwise. It has attribute `HoldAll`, so it inspects the symbol
+itself rather than the value the symbol would evaluate to. A bare symbol is
+valued iff it carries an OwnValue (immediate `x = 5` or delayed
+`y := RandomReal[]`); an expression `f[...]` is valued iff its head `f` has
+any DownValue — regardless of whether the argument actually matches a rule.
+Everything else (numbers, strings, undefined symbols) gives `False`.
+Attributes: `HoldAll`, `Protected`.
+
+```mathematica
+In[1]:= ValueQ[x]
+Out[1]= False
+
+In[2]:= x = 5; ValueQ[x]
+Out[2]= True
+
+In[3]:= f[x_] := x^2; {ValueQ[f[2]], ValueQ[f[a, b]]}   (* head has DownValues *)
+Out[3]= {True, True}
+
+In[4]:= ValueQ[f]                       (* bare symbol, only DownValues *)
+Out[4]= False
+
+In[5]:= ValueQ /@ Unevaluated[{x, y}]   (* HoldAll preserved via Unevaluated *)
+Out[5]= {True, False}
+```
+
 ## PossibleZeroQ
 Hybrid symbolic-numeric test for whether `expr` is identically zero.
 The general problem is undecidable (Richardson 1968); `PossibleZeroQ`
