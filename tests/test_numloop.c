@@ -241,6 +241,27 @@ static void test_diff_do_part_2d_reads(void) {
                "Do[m[[i, j]] = m[[i, j]] + m[[j, i]], {i, 1, 4}, {j, 1, 4}]; m]");
 }
 
+/* ---------------- Map[f, list] (fast-path + fallback) ---------------- */
+static void test_map_fast(void) {
+    expect_full("Map[2. #&, {1., 2., 3.}]", "List[2.0, 4.0, 6.0]");
+}
+static void test_map_body_real(void) {
+    /* exact integer elements, but a Real literal forces an inexact result */
+    expect_full("Map[# + 0.5&, {1, 2, 3}]", "List[1.5, 2.5, 3.5]");
+}
+static void test_map_bare_head(void) {
+    expect_full("Map[Sqrt, {4., 9., 16.}]", "List[2.0, 3.0, 4.0]");
+}
+static void test_map_fallback_exact(void) {
+    expect_full("Map[#^2&, {1, 2, 3}]", "List[1, 4, 9]");
+}
+static void test_map_fallback_symbolic(void) {
+    expect_full("Map[f, {1, 2, 3}]", "List[f[1], f[2], f[3]]");
+}
+static void test_map_fallback_free_symbol(void) {
+    expect_full("Map[# + a&, {1., 2.}]", "List[Plus[1.0, a], Plus[2.0, a]]");
+}
+
 /* ---------------- Fallback: must NOT fast-path ---------------- */
 static void test_fallback_nest_exact_int(void) {
     /* exact integer arithmetic stays exact */
@@ -328,6 +349,12 @@ int main(void) {
     TEST(test_diff_for_part);
     TEST(test_diff_do_part_2d);
     TEST(test_diff_do_part_2d_reads);
+    TEST(test_map_fast);
+    TEST(test_map_body_real);
+    TEST(test_map_bare_head);
+    TEST(test_map_fallback_exact);
+    TEST(test_map_fallback_symbolic);
+    TEST(test_map_fallback_free_symbol);
 
     /* Fallback (exact / symbolic must be untouched) */
     TEST(test_fallback_nest_exact_int);

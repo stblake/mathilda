@@ -606,6 +606,57 @@ Expr* numloop_nest(const Expr* f, const Expr* x0, int64_t n) {
     return expr_new_real(x);
 }
 
+/* ------------------------------------------------------------------------
+ *  Map[f, expr] at level {1}
+ * ---------------------------------------------------------------------- */
+Expr* numloop_map(const Expr* f, const Expr* expr) {
+    if (numloop_off()) return NULL;
+    if (expr->type != EXPR_FUNCTION) return NULL;
+    size_t n = expr->data.function.arg_count;
+    if (n == 0) return NULL;   /* trivial; let the interpreter handle it */
+
+    NumProg p;
+    bool body_inexact;
+    if (!compile_function(&p, f, 1, &body_inexact)) return NULL;
+
+    /* Every element must be a machine number; note whether any is inexact. */
+    double* vals = malloc(n * sizeof(double));
+    if (!vals) { prog_free(&p); return NULL; }
+    bool any_inexact = false, ok = true;
+    for (size_t i = 0; i < n; i++) {
+        if (!to_machine_double(expr->data.function.args[i], &vals[i])) { ok = false; break; }
+        if (value_is_inexact(expr->data.function.args[i])) any_inexact = true;
+    }
+    /* Result must be inexact (an element is Real, or the body has a Real
+     * literal); otherwise the interpreter would keep an exact/symbolic result. */
+    if (!ok || (!any_inexact && !body_inexact)) { free(vals); prog_free(&p); return NULL; }
+
+    double* stack = malloc(p.max_stack * sizeof(double));
+    if (!stack) { free(vals); prog_free(&p); return NULL; }
+    Expr** out = malloc(n * sizeof(Expr*));
+    if (!out) { free(stack); free(vals); prog_free(&p); return NULL; }
+
+    bool bail = false;
+    size_t done = 0;
+    for (size_t i = 0; i < n; i++) {
+        double r = numprog_run(&p, &vals[i], stack);
+        if (!isfinite(r)) { bail = true; break; }
+        out[i] = expr_new_real(r);
+        done++;
+    }
+    free(stack);
+    free(vals);
+    prog_free(&p);
+    if (bail) {
+        for (size_t i = 0; i < done; i++) expr_free(out[i]);
+        free(out);
+        return NULL;
+    }
+    Expr* result = expr_new_function(expr_copy(expr->data.function.head), out, n);
+    free(out);
+    return result;
+}
+
 /* ========================================================================
  *  Imperative loop bodies as numeric assignment blocks
  *

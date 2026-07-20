@@ -37,6 +37,12 @@ void numloop_set_enabled(bool on);
  * iterate boxed as a Real, or NULL. */
 Expr* numloop_nest(const Expr* f, const Expr* x0, int64_t n);
 
+/* Map[f, expr] at the default level {1}: f a numeric pure function (or numeric
+ * head) applied to each machine-number element of `expr`. Returns a same-head
+ * expression of Reals, or NULL to fall back (non-numeric element, exact result,
+ * uncompilable f). */
+Expr* numloop_map(const Expr* f, const Expr* expr);
+
 /* Do[body, {n}] count form. The body is a numeric assignment block: a single
  * Set[var, rhs], or a CompoundExpression of such assignments (multiple state
  * variables, sequential within an iteration). Writes each assigned variable's

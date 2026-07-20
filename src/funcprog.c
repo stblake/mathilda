@@ -195,6 +195,14 @@ Expr* builtin_map(Expr* res) {
     if (res->data.function.arg_count == 2 && is_association(expr))
         return assoc_map_values(f, expr);
 
+    /* Automatic numeric fast-path: Map[f, {machine numbers}] with f a numeric
+     * pure function runs the compiled body per element (no per-element evaluate).
+     * NULL means "not numeric-closed" -> the general level-mapper below. */
+    if (res->data.function.arg_count == 2) {
+        Expr* fast = numloop_map(f, expr);
+        if (fast) return fast;
+    }
+
     Expr* ls = (res->data.function.arg_count >= 3) ? res->data.function.args[2] : NULL;
     if (ls && ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol.name == SYM_Rule) ls = NULL;
 
