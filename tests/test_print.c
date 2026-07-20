@@ -4,6 +4,7 @@
 #include "symtab.h"
 #include "core.h"
 #include "print.h"
+#include "print_latex.h"
 #include "test_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -77,7 +78,14 @@ void test_holdform() {
     char* full = expr_to_string_fullform(res);
     ASSERT(strcmp(full, "HoldForm[Plus[1, 1]]") == 0);
     free(full);
-    
+
+    /* HoldForm must be transparent in LaTeX too (notebook rendering), not leak
+     * "HoldForm[...]". This is what makes Trace[]'s HoldForm-wrapped steps
+     * render cleanly in the notebook. */
+    char* tex = expr_to_latex(res);
+    ASSERT(strcmp(tex, "1+1") == 0);
+    free(tex);
+
     expr_free(e);
     expr_free(res);
 }
