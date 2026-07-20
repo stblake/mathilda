@@ -594,6 +594,41 @@ In[3]:= StringRepeat["ab", 10, 19]
 Out[3]= "abababababababababa"
 ```
 
+## StringPadLeft / StringPadRight
+
+Make a string a given length by padding it (with spaces or a repeated pad
+string) or truncating it. Byte-length based, like the other string builtins.
+`StringPadLeft` pads on the left and truncates keeping the last `n` characters;
+`StringPadRight` pads on the right and truncates keeping the first `n`.
+
+- `StringPad*["string", n]`: length `n`, padded with spaces or truncated.
+- `StringPad*["string", n, "padding"]`: pads with repeated copies of `"padding"`
+  (laid down as cyclic bytes `padding[i mod Length]`, truncated at width `n`).
+- `StringPad*["string"]`: single string, one argument — returned unchanged.
+- `StringPad*[{s1, s2, ...}]`: pads each string to the length of the longest,
+  so all become the same length.
+- `StringPad*[{s1, s2, ...}, n, ...]`: pads or truncates each string to length `n`.
+- A non-string subject (that is not a list of strings), a non-integer or negative
+  `n`, a non-string `padding` (a list-valued `padding` is not supported), or an
+  empty `padding` when padding is required leaves the call unevaluated. Other
+  arities emit `StringPadLeft::argb` / `StringPadRight::argb` (1 to 3 arguments
+  expected).
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringPadLeft["abcde", 10]
+Out[1]= "     abcde"
+
+In[2]:= StringPadRight["abcde", 10, "."]
+Out[2]= "abcde....."
+
+In[3]:= StringPadLeft[{"a", "ab", "abc", "abcd", "abcde"}]
+Out[3]= {"    a", "   ab", "  abc", " abcd", "abcde"}
+
+In[4]:= StringPadLeft[{"a", "ab", "abc", "abcd", "abcde"}, 3]
+Out[4]= {"  a", " ab", "abc", "bcd", "cde"}
+```
+
 ## String patterns
 
 Beyond `RegularExpression["re"]` and literal strings, `StringMatchQ`,

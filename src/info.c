@@ -3905,6 +3905,30 @@ void info_init(void) {
         "StringRepeat[\"string\", n, max]\n"
         "\tGives up to n copies of \"string\", truncated to a total length of\n"
         "\tat most max characters.");
+
+    symtab_set_docstring("StringPadLeft",
+        "StringPadLeft[\"string\", n]\n"
+        "\tMakes \"string\" length n, padding on the left with spaces or\n"
+        "\ttruncating (keeping the last n characters) as needed.\n"
+        "StringPadLeft[\"string\", n, \"padding\"]\n"
+        "\tPads with repeated copies of \"padding\".\n"
+        "StringPadLeft[{s1, s2, ...}]\n"
+        "\tPads each string on the left with spaces to the length of the\n"
+        "\tlongest, making them all the same length.\n"
+        "StringPadLeft[{s1, s2, ...}, n, ...]\n"
+        "\tPads or truncates each string to length n.");
+
+    symtab_set_docstring("StringPadRight",
+        "StringPadRight[\"string\", n]\n"
+        "\tMakes \"string\" length n, padding on the right with spaces or\n"
+        "\ttruncating (keeping the first n characters) as needed.\n"
+        "StringPadRight[\"string\", n, \"padding\"]\n"
+        "\tPads with repeated copies of \"padding\".\n"
+        "StringPadRight[{s1, s2, ...}]\n"
+        "\tPads each string on the right with spaces to the length of the\n"
+        "\tlongest, making them all the same length.\n"
+        "StringPadRight[{s1, s2, ...}, n, ...]\n"
+        "\tPads or truncates each string to length n.");
     /* StringSplit's docstring lives in regex_init() (regex_init.c), next to the
      * string-pattern class heads it shares. */
 }

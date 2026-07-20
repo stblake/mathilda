@@ -19,6 +19,8 @@ Expr* builtin_stringinsert(Expr* res);
 Expr* builtin_stringreplacepart(Expr* res);
 Expr* builtin_stringpartition(Expr* res);
 Expr* builtin_stringrepeat(Expr* res);
+Expr* builtin_stringpadleft(Expr* res);
+Expr* builtin_stringpadright(Expr* res);
 
 /*
  * Regular-expression string builtins (src/strings/regex/, backed by PCRE2).

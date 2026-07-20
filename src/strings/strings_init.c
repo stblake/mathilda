@@ -90,4 +90,15 @@ void strings_init(void) {
     symtab_add_builtin("StringRepeat", builtin_stringrepeat);
     symtab_get_def("StringRepeat")->attributes |= ATTR_PROTECTED;
     /* Docstring lives in info.c (info_init). */
+
+    /* StringPadLeft/StringPadRight thread over a list of strings internally
+     * (the 1-arg form pads to the longest element), so they must NOT be
+     * ATTR_LISTABLE - that would thread before the handler sees the list. */
+    symtab_add_builtin("StringPadLeft", builtin_stringpadleft);
+    symtab_get_def("StringPadLeft")->attributes |= ATTR_PROTECTED;
+    /* Docstring lives in info.c (info_init). */
+
+    symtab_add_builtin("StringPadRight", builtin_stringpadright);
+    symtab_get_def("StringPadRight")->attributes |= ATTR_PROTECTED;
+    /* Docstring lives in info.c (info_init). */
 }
