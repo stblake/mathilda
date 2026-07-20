@@ -86,4 +86,8 @@ void strings_init(void) {
     symtab_add_builtin("StringPartition", builtin_stringpartition);
     symtab_get_def("StringPartition")->attributes |= ATTR_PROTECTED;
     /* Docstring lives in info.c (info_init). */
+
+    symtab_add_builtin("StringRepeat", builtin_stringrepeat);
+    symtab_get_def("StringRepeat")->attributes |= ATTR_PROTECTED;
+    /* Docstring lives in info.c (info_init). */
 }

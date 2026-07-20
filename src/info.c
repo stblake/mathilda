@@ -3898,6 +3898,13 @@ void info_init(void) {
         "\tfinal substring so every character appears.\n"
         "StringPartition[{s1, s2, ...}, spec]\n"
         "\tThreads over a list of strings.");
+
+    symtab_set_docstring("StringRepeat",
+        "StringRepeat[\"string\", n]\n"
+        "\tGives a string with \"string\" repeated n times.\n"
+        "StringRepeat[\"string\", n, max]\n"
+        "\tGives up to n copies of \"string\", truncated to a total length of\n"
+        "\tat most max characters.");
     /* StringSplit's docstring lives in regex_init() (regex_init.c), next to the
      * string-pattern class heads it shares. */
 }

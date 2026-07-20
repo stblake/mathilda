@@ -570,6 +570,30 @@ In[4]:= StringPartition["ababababab", 3]
 Out[4]= {"aba", "bab", "aba"}
 ```
 
+## StringRepeat
+
+Builds a string by repeating a base string. Byte-length based, like the other
+string builtins.
+
+- `StringRepeat["string", n]`: `"string"` concatenated `n` times.
+- `StringRepeat["string", n, max]`: up to `n` copies of `"string"`, truncated so
+  the total length is at most `max` characters (a partial final copy is allowed).
+- `n == 0`, an empty base string, or `max == 0` gives `""`. A non-string subject,
+  a non-integer or negative `n`/`max` leaves the call unevaluated; other arities
+  emit `StringRepeat::argt` (2 or 3 arguments expected).
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringRepeat["a", 50]
+Out[1]= "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+In[2]:= StringRepeat["abc", 10]
+Out[2]= "abcabcabcabcabcabcabcabcabcabc"
+
+In[3]:= StringRepeat["ab", 10, 19]
+Out[3]= "abababababababababa"
+```
+
 ## String patterns
 
 Beyond `RegularExpression["re"]` and literal strings, `StringMatchQ`,
