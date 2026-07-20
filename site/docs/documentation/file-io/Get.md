@@ -8,6 +8,8 @@
 ```text
 Get["filename"]
     reads expressions from a file, evaluates them in order, and returns the last result.
+Expressions are separated by a newline or a semicolon; a trailing ; is not required.
+A line break inside (), [], {} or <||> is insignificant, so one expression may span lines.
 Returns $Failed if the file cannot be opened.
 It is conventional to use names ending in .m for files containing Mathilda input.
 ```

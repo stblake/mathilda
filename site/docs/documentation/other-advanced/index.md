@@ -1,6 +1,6 @@
 # Other & Advanced
 
-68 built-in function(s) in this category.
+82 built-in function(s) in this category.
 
 - [`$PlotLegendData`]($PlotLegendData.md) — $PlotLegendData[{color1, label1}, ...]  _(Stable)_
 - [`$PlotResample`]($PlotResample.md) — $PlotResample[var, {f...}, {plotPoints, maxRecursion, maxPlotPoints, mesh, regionFunction, exclusions, colorFunction, colorFunctionScaling, filling, fillingStyle}]  _(Experimental)_
@@ -11,10 +11,13 @@
 - [`AiryAiPrime`](AiryAiPrime.md) — AiryAiPrime[z]  _(Stable)_
 - [`AiryBiPrime`](AiryBiPrime.md) — AiryBiPrime[z]  _(Stable)_
 - [`AspectRatio`](AspectRatio.md) — AspectRatio  _(Stable)_
+- [`BarSpacing`](BarSpacing.md) — BarSpacing  _(Experimental)_
 - [`BesselJZero`](BesselJZero.md) — BesselJZero[n, k] gives the k-th positive zero of BesselJ[n, x]. Stays symbolic for symbolic arguments.  _(Stable)_
 - [`Black`](Black.md) — Black  _(Experimental)_
 - [`Blue`](Blue.md) — Blue  _(Experimental)_
 - [`Brown`](Brown.md) — Brown  _(Experimental)_
+- [`ChartLabels`](ChartLabels.md) — ChartLabels  _(Experimental)_
+- [`ChartStyle`](ChartStyle.md) — ChartStyle  _(Experimental)_
 - [`CompleteGraph`](CompleteGraph.md) — CompleteGraph[n] gives the complete graph K_n on n vertices.  _(Stable)_
 - [`ConnectedComponents`](ConnectedComponents.md) — ConnectedComponents[g] gives the connected components of g (weak, on the underlying undirected graph).  _(Stable)_
 - [`ConnectedGraphQ`](ConnectedGraphQ.md) — ConnectedGraphQ[g] gives True if g is connected.  _(Stable)_
@@ -30,13 +33,18 @@
 - [`EdgeList`](EdgeList.md) — EdgeList[g] gives the list of edges of the graph g.  _(Stable)_
 - [`FindShortestPath`](FindShortestPath.md) — FindShortestPath[g,s,t] gives a shortest path from s to t as a list of vertices ({} if none).  _(Stable)_
 - [`FindSpanningTree`](FindSpanningTree.md) — FindSpanningTree[g] gives a spanning tree (forest) of g as a graph.  _(Stable)_
+- [`FourierParameters`](FourierParameters.md) — FourierParameters is an option for Fourier and InverseFourier that  _(Experimental)_
 - [`Frame`](Frame.md) — Frame  _(Experimental)_
 - [`FrameStyle`](FrameStyle.md) — FrameStyle  _(Experimental)_
 - [`FrameTicks`](FrameTicks.md) — FrameTicks  _(Experimental)_
+- [`FresnelC`](FresnelC.md) — FresnelC[z]  _(Stable)_
+- [`FresnelS`](FresnelS.md) — FresnelS[z]  _(Stable)_
 - [`GraphDistance`](GraphDistance.md) — GraphDistance[g,s,t] gives the length of a shortest path from s to t (Infinity if unreachable).  _(Stable)_
 - [`GraphPlot`](GraphPlot.md) — GraphPlot[g] gives a Graphics object drawing the graph g with a circular vertex layout.  _(Stable)_
 - [`Gray`](Gray.md) — Gray  _(Experimental)_
 - [`Green`](Green.md) — Green  _(Experimental)_
+- [`HoldFirst`](HoldFirst.md) — HoldFirst  _(Experimental)_
+- [`HoldRest`](HoldRest.md) — HoldRest  _(Experimental)_
 - [`ImageSize`](ImageSize.md) — ImageSize  _(Experimental)_
 - [`IncidenceMatrix`](IncidenceMatrix.md) — IncidenceMatrix[g] gives the vertex-edge incidence matrix of g (oriented: -1 tail, +1 head for directed edges).  _(Stable)_
 - [`LightBlue`](LightBlue.md) — LightBlue  _(Experimental)_
@@ -57,10 +65,16 @@
 - [`Orange`](Orange.md) — Orange  _(Experimental)_
 - [`PathGraph`](PathGraph.md) — PathGraph[n] gives the path on n vertices; PathGraph[{v1,...}] the path over the given vertices.  _(Stable)_
 - [`Pink`](Pink.md) — Pink  _(Experimental)_
+- [`PolynomialSqrt`](PolynomialSqrt.md) — PolynomialSqrt[p] gives a polynomial s with s^2 == p when p is a perfect square (every non-constant irreducible factor has even multiplicity; the numeric content is carried through Sqrt), and $Failed otherwise. PolynomialSqrt[p, x] treats p as a polynomial in x.  _(Stable)_
 - [`Purple`](Purple.md) — Purple  _(Experimental)_
 - [`RandomGraph`](RandomGraph.md) — RandomGraph[{n, m}] gives a random undirected graph with n vertices and m edges.  _(Stable)_
 - [`Red`](Red.md) — Red  _(Experimental)_
+- [`ScalingFunctions`](ScalingFunctions.md) — ScalingFunctions  _(Experimental)_
+- [`StringExpression`](StringExpression.md) — StringExpression[p1, p2, ...] or p1 ~~ p2 ~~ ...  _(Stable)_
 - [`StronglyConnectedComponents`](StronglyConnectedComponents.md) — StronglyConnectedComponents[g] gives the strongly connected components of g (following edge directions).  _(Stable)_
+- [`VectorPoints`](VectorPoints.md) — VectorPoints  _(Experimental)_
+- [`VectorScale`](VectorScale.md) — VectorScale  _(Experimental)_
+- [`VectorStyle`](VectorStyle.md) — VectorStyle  _(Experimental)_
 - [`VertexConnectivity`](VertexConnectivity.md) — VertexConnectivity[g] gives the minimum number of vertices whose removal disconnects g.  _(Stable)_
 - [`VertexCount`](VertexCount.md) — VertexCount[g] gives the number of vertices in the graph g.  _(Stable)_
 - [`VertexDegree`](VertexDegree.md) — VertexDegree[g] gives the list of vertex degrees; VertexDegree[g,v] gives the degree of vertex v.  _(Stable)_

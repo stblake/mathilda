@@ -7,7 +7,7 @@
 
 ```text
 Plot[f, {x, xmin, xmax}, opts...]
-    Adaptively samples f over [xmin, xmax], displays the resulting curve in an interactive window, and returns it as a Graphics[...] object. A list of functions Plot[{f1, f2, ...}, {x, xmin, xmax}] draws each on the same axes in a distinct palette colour. Options: PlotPoints (initial sample count, default 50), MaxRecursion (adaptive refinement depth, default 6), MaxPlotPoints (overall point cap, default Infinity), Mesh (All overlays the evaluation points as dots; default None), PlotRange, PlotRangePadding, AspectRatio, PlotStyle, Axes, AxesLabel, AxesOrigin, AxesStyle, TicksStyle, LabelStyle, Frame, FrameLabel, FrameStyle, FrameTicks, RotateLabel, GridLines, GridLinesStyle, Prolog, Epilog, PlotLabel, Background, ImageSize, ColorFunction (a function, or "Rainbow"), ColorFunctionScaling (default True), Filling (Axis/Bottom/Top/a number), FillingStyle, PlotLegends (Automatic/"Expressions"/an explicit list), RegionFunction, Exclusions.
+    Adaptively samples f over [xmin, xmax], displays the resulting curve in an interactive window, and returns it as a Graphics[...] object. A list of functions Plot[{f1, f2, ...}, {x, xmin, xmax}] draws each on the same axes in a distinct palette colour. Options: PlotPoints (initial sample count, default 50), MaxRecursion (adaptive refinement depth, default 6), MaxPlotPoints (overall point cap, default Infinity), Mesh (All overlays the evaluation points as dots; default None), PlotRange, PlotRangePadding, AspectRatio, PlotStyle, Axes, AxesLabel, AxesOrigin, AxesStyle, TicksStyle, LabelStyle, Frame, FrameLabel, FrameStyle, FrameTicks, RotateLabel, GridLines, GridLinesStyle, Prolog, Epilog, PlotLabel, Background, ImageSize, ColorFunction (a function, or named ramp: "Rainbow"/"CoolTones"/"WarmTones"/"Greyscale"/"Temperature"), ColorFunctionScaling (default True), Filling (Axis/Bottom/Top/a number), FillingStyle, PlotLegends (Automatic/"Expressions"/an explicit list), RegionFunction, Exclusions.
 ```
 
 ## Examples
@@ -20,9 +20,6 @@ Out[1]= Plot[Sin[x], {x, a, b}]
 ```
 
 ## Implementation notes
-
-- `HoldAll`, `Protected`.
-- Declines to evaluate if the iterator spec isn't `{x, xmin, xmax}` with
 
 **Attributes:** `HoldAll`, `Protected`.
 

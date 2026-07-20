@@ -1,6 +1,6 @@
 # Functional Programming
 
-31 built-in function(s) in this category.
+32 built-in function(s) in this category.
 
 - [`AllTrue`](AllTrue.md) — AllTrue[list, test]  _(Stable)_
 - [`AnyTrue`](AnyTrue.md) — AnyTrue[list, test]  _(Stable)_
@@ -14,6 +14,7 @@
 - [`Interpolation`](Interpolation.md) — Interpolation[data]  _(Stable)_
 - [`MapAll`](MapAll.md) — f //@ expr or MapAll[f, expr]  _(Experimental)_
 - [`MapIndexed`](MapIndexed.md) — MapIndexed[f, list]  _(Stable)_
+- [`MapThread`](MapThread.md) — MapThread[f, {{a1, a2, ...}, {b1, b2, ...}, ...}]  _(Stable)_
 - [`MaximalBy`](MaximalBy.md) — MaximalBy[list, f]  _(Stable)_
 - [`MinimalBy`](MinimalBy.md) — MinimalBy[list, f]  _(Stable)_
 - [`Nest`](Nest.md) — Nest[f, expr, n]  _(Stable)_

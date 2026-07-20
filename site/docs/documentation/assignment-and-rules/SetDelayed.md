@@ -22,7 +22,7 @@ _No verified examples yet for this function._
 
 **Data structures.** Symbol LHS → OwnValue (`symtab_add_own_value`); function-head LHS → DownValue (`symtab_add_down_value`) keyed on the head, with the full LHS as the match pattern and the held RHS as the replacement; `List` LHS recurses for destructuring. One delayed-specific transform: if the RHS is `Condition[body, test]`, `apply_assignment` rewrites the rule as `Condition[lhs, test] := body`, so `f[x_] := body /; test` is stored equivalently to `f[x_] /; test := body`; the condition's head symbol is then unwrapped to find the true DownValue key. Protected targets are refused with a `SetDelayed::wrsym` message. For `$RecursionLimit` a copy of the RHS is evaluated to sync the C-side limit.
 
-**Attributes:** `HoldAll`, `Protected`.
+**Attributes:** `HoldAll`, `Protected`, `SequenceHold`.
 
 ## Implementation status
 

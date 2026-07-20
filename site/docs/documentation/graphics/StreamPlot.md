@@ -19,7 +19,9 @@ StreamPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
       StreamStyle   – Style directive(s) applied to all streams.
       StreamColorFunction / ColorFunction
                      – f[x,y,vx,vy,speed] (or fewer args) returning a color,
-                       or "Rainbow" (hue = scaled speed).
+                       or a named ramp: "Rainbow", "CoolTones",
+                       "WarmTones", "Greyscale", "Temperature"
+                       (all keyed to scaled speed).
       RegionFunction – f[x,y] mask; seeds outside the region are skipped.
       PlotLegends   – Automatic / "Expressions" / explicit label list.
       Standard Graphics options (PlotRange, Axes, AspectRatio, Frame, …)
@@ -31,10 +33,6 @@ StreamPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
 _No verified examples yet for this function._
 
 ## Implementation notes
-
-- `HoldAll`, `Protected`.
-- RK4 integration; step size adapts to seed density and domain size.
-- Declines to evaluate if the field arg is not a 2-element List, or if
 
 **Attributes:** `HoldAll`, `Protected`.
 

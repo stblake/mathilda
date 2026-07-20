@@ -25,7 +25,7 @@ Out[1]= 4
 In[2]:= Length[Unevaluated[Sequence[a, b]]]
 Out[2]= 2
 
-In[3]:= Hold[Evaluate[Unevaluated[1+2]]]
+In[3]:= Hold[Unevaluated[1+2]]
 Out[3]= Hold[Unevaluated[1 + 2]]
 
 In[4]:= SetAttributes[f, HoldAll]; f[Unevaluated[1+2]]
@@ -44,8 +44,9 @@ Out[6]= {HoldAllComplete, Protected}
 
 - Attributes: `{HoldAllComplete, Protected}`.
 - `f[Unevaluated[expr]]` passes `expr` to `f` as if `f` temporarily held that single argument; the `Unevaluated` wrapper is then stripped before `f`'s body runs, effectively yielding `f[expr]` with `expr` unevaluated.
-- The wrapper is **not** stripped when the enclosing function holds the argument (e.g. `f` has `HoldAll`, or `HoldFirst`/`HoldRest` applies to that position).
-- The wrapper is **not** stripped when the enclosing function has `HoldAllComplete`.
+- The wrapper is stripped **only in positions that would otherwise be evaluated** (non-held slots). Its purpose is to make an ordinary head hold an argument it would normally evaluate; stripping removes the wrapper but does **not** force evaluation of the exposed content for that one step, so `Length[Unevaluated[1+2+3]]` gives `3` (Length sees the held `Plus[1,2,3]`, not `6`).
+- The wrapper is **not** stripped in a genuinely held slot — when `f` has `HoldAll`, or `HoldFirst`/`HoldRest` applies to that position — because the argument was never going to be evaluated: `Hold[Unevaluated[1+2]]` gives `Hold[Unevaluated[1+2]]`, and with `HoldAll` `f`, `f[Unevaluated[1+2]]` gives `f[Unevaluated[1+2]]`.
+- The wrapper is likewise **not** stripped when the enclosing function has `HoldAllComplete` (e.g. `HoldComplete`, or `Unevaluated` itself).
 - Stripping happens **after** `Sequence` flattening, so a `Sequence` directly inside `Unevaluated` survives into the argument slot (`Length[Unevaluated[Sequence[a, b]]]` gives `2`).
 - Nested `Unevaluated` wrappers are stripped one layer per evaluation step.
 - As a top-level expression, `Unevaluated[expr]` evaluates to itself (because of `HoldAllComplete`).

@@ -1,6 +1,6 @@
 # Expression Information
 
-52 built-in function(s) in this category.
+57 built-in function(s) in this category.
 
 - [`$MachineEpsilon`]($MachineEpsilon.md) — $MachineEpsilon  _(Stable)_
 - [`$MachinePrecision`]($MachinePrecision.md) — $MachinePrecision  _(Stable)_
@@ -22,6 +22,7 @@
 - [`FreeQ`](FreeQ.md) — FreeQ[expr, form]  _(Stable)_
 - [`FullForm`](FullForm.md) — FullForm[expr]  _(Stable)_
 - [`Hold`](Hold.md) — Hold[expr]  _(Stable)_
+- [`HoldAll`](HoldAll.md) — HoldAll  _(Stable)_
 - [`HoldAllComplete`](HoldAllComplete.md) — HoldAllComplete  _(Experimental)_
 - [`HoldComplete`](HoldComplete.md) — HoldComplete[expr]  _(Stable)_
 - [`HoldForm`](HoldForm.md) — HoldForm[expr] prints as the expression expr, with expr maintained in an unevaluated form.  _(Stable)_
@@ -47,10 +48,14 @@
 - [`PossibleZeroQ`](PossibleZeroQ.md) — PossibleZeroQ[expr] gives True if symbolic and numerical methods suggest that expr has value zero, and False otherwise.  _(Stable)_
 - [`Print`](Print.md) — Print[expr1, expr2, ...]  _(Stable)_
 - [`ReleaseHold`](ReleaseHold.md) — ReleaseHold[expr]  _(Stable)_
+- [`Sequence`](Sequence.md) — Sequence[e1, e2, ...]  _(Stable)_
+- [`SequenceHold`](SequenceHold.md) — SequenceHold  _(Experimental)_
 - [`SetAttributes`](SetAttributes.md) — SetAttributes[s, attr] sets the attributes for s.  _(Stable)_
 - [`Symbol`](Symbol.md) — Symbol["name"]  _(Stable)_
 - [`TeXForm`](TeXForm.md) — TeXForm[expr]  _(Experimental)_
 - [`ToExpression`](ToExpression.md) — ToExpression[input]  _(Stable)_
 - [`ToString`](ToString.md) — ToString[expr]  _(Stable)_
+- [`Trace`](Trace.md) — Trace[expr]  _(Stable)_
 - [`Unevaluated`](Unevaluated.md) — Unevaluated[expr]  _(Stable)_
+- [`ValueQ`](ValueQ.md) — ValueQ[expr]  _(Stable)_
 - [`VectorQ`](VectorQ.md) — VectorQ[expr]  _(Stable)_

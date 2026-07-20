@@ -62,7 +62,7 @@ When a precision argument requests extended precision, the MPFR path (`randomrea
 - RandomReal[{xmin, xmax}] chooses reals with a uniform probability distribution in the range xmin to xmax.
 - RandomReal gives a different sequence of pseudorandom reals whenever you run Mathilda. You can start with a particular seed using SeedRandom.
 - Uses 53 bits of randomness for full double-precision mantissa coverage.
-- Accepts integer, real, rational, and bigint range arguments.
+- Accepts integer, real, rational, and bigint range arguments, as well as symbolic-but-numeric bounds that `N[]` can reduce to a machine (or MPFR) number, e.g. `RandomReal[{-Pi, Pi}]` or `RandomReal[{0, Sqrt[2]}]`.
 - `WorkingPrecision -> n` accepts `MachinePrecision` (the default) or a positive number of decimal digits. Digit counts above MachinePrecision route generation through MPFR, so range bounds keep their full working precision and the result is an MPFR atom.
 
 **Attributes:** `Protected`.

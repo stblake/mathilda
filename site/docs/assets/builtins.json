@@ -272,6 +272,14 @@
     "url": "documentation/functional-programming/AllTrue/"
   },
   {
+    "name": "Animate",
+    "category": "Graphics",
+    "slug": "graphics",
+    "status": "Experimental",
+    "summary": "Animate[expr, {t, tmin, tmax}, opts...]",
+    "url": "documentation/graphics/Animate/"
+  },
+  {
     "name": "AnyTrue",
     "category": "Functional Programming",
     "slug": "functional-programming",
@@ -344,6 +352,14 @@
     "url": "documentation/lists-and-iteration/Array/"
   },
   {
+    "name": "ArrayFlatten",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "ArrayFlatten[a]",
+    "url": "documentation/structural-manipulation/ArrayFlatten/"
+  },
+  {
     "name": "AspectRatio",
     "category": "Other & Advanced",
     "slug": "other-advanced",
@@ -414,6 +430,22 @@
     "status": "Stable",
     "summary": "Attributes[s] gives the list of attributes for s.",
     "url": "documentation/expression-information/Attributes/"
+  },
+  {
+    "name": "BarChart",
+    "category": "Graphics",
+    "slug": "graphics",
+    "status": "Experimental",
+    "summary": "BarChart[{v1, v2, ..., vn}, opts...]",
+    "url": "documentation/graphics/BarChart/"
+  },
+  {
+    "name": "BarSpacing",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "BarSpacing",
+    "url": "documentation/other-advanced/BarSpacing/"
   },
   {
     "name": "BarnesG",
@@ -608,6 +640,14 @@
     "url": "documentation/mathematical-constants/Catalan/"
   },
   {
+    "name": "Catch",
+    "category": "Control Flow",
+    "slug": "control-flow",
+    "status": "Stable",
+    "summary": "Catch[expr]",
+    "url": "documentation/control-flow/Catch/"
+  },
+  {
     "name": "Catenate",
     "category": "Structural Manipulation",
     "slug": "structural-manipulation",
@@ -630,6 +670,22 @@
     "status": "Stable",
     "summary": "Characters[\"string\"]",
     "url": "documentation/string-operations/Characters/"
+  },
+  {
+    "name": "ChartLabels",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "ChartLabels",
+    "url": "documentation/other-advanced/ChartLabels/"
+  },
+  {
+    "name": "ChartStyle",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "ChartStyle",
+    "url": "documentation/other-advanced/ChartStyle/"
   },
   {
     "name": "Chop",
@@ -704,6 +760,14 @@
     "url": "documentation/statistics/Commonest/"
   },
   {
+    "name": "Complement",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "Complement[eall, e1, e2, ...]",
+    "url": "documentation/structural-manipulation/Complement/"
+  },
+  {
     "name": "CompleteGraph",
     "category": "Other & Advanced",
     "slug": "other-advanced",
@@ -718,6 +782,30 @@
     "status": "Stable",
     "summary": "Complex[re, im]",
     "url": "documentation/arithmetic/Complex/"
+  },
+  {
+    "name": "ComplexExpand",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
+    "status": "Stable",
+    "summary": "ComplexExpand[expr]",
+    "url": "documentation/arithmetic/ComplexExpand/"
+  },
+  {
+    "name": "ComplexPlot",
+    "category": "Graphics",
+    "slug": "graphics",
+    "status": "Experimental",
+    "summary": "ComplexPlot[f, {z, zmin, zmax}, opts...]",
+    "url": "documentation/graphics/ComplexPlot/"
+  },
+  {
+    "name": "ComplexPlot3D",
+    "category": "Graphics",
+    "slug": "graphics",
+    "status": "Experimental",
+    "summary": "ComplexPlot3D[f, {z, zmin, zmax}, opts...]",
+    "url": "documentation/graphics/ComplexPlot3D/"
   },
   {
     "name": "ComposeList",
@@ -782,6 +870,14 @@
     "status": "Stable",
     "summary": "ConnectedGraphQ[g] gives True if g is connected.",
     "url": "documentation/other-advanced/ConnectedGraphQ/"
+  },
+  {
+    "name": "ConstantArray",
+    "category": "Lists and Iteration",
+    "slug": "lists-and-iteration",
+    "status": "Stable",
+    "summary": "ConstantArray[c, n]",
+    "url": "documentation/lists-and-iteration/ConstantArray/"
   },
   {
     "name": "Context",
@@ -870,6 +966,14 @@
     "status": "Stable",
     "summary": "Cosh[z]",
     "url": "documentation/elementary-functions/Cosh/"
+  },
+  {
+    "name": "CoshIntegral",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "CoshIntegral[z]",
+    "url": "documentation/special-functions/CoshIntegral/"
   },
   {
     "name": "Cot",
@@ -1038,6 +1142,14 @@
     "status": "Stable",
     "summary": "Denominator[expr]",
     "url": "documentation/algebra/Denominator/"
+  },
+  {
+    "name": "DensityPlot",
+    "category": "Graphics",
+    "slug": "graphics",
+    "status": "Experimental",
+    "summary": "DensityPlot[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]",
+    "url": "documentation/graphics/DensityPlot/"
   },
   {
     "name": "Derivative",
@@ -1392,6 +1504,14 @@
     "url": "documentation/algebra/Expand/"
   },
   {
+    "name": "ExpandAll",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "ExpandAll[expr]",
+    "url": "documentation/structural-manipulation/ExpandAll/"
+  },
+  {
     "name": "ExpandDenominator",
     "category": "Algebra",
     "slug": "algebra",
@@ -1406,6 +1526,14 @@
     "status": "Stable",
     "summary": "ExpandNumerator[expr]",
     "url": "documentation/algebra/ExpandNumerator/"
+  },
+  {
+    "name": "Exponent",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "Exponent[expr, form] gives the maximum power with which form appears in the",
+    "url": "documentation/structural-manipulation/Exponent/"
   },
   {
     "name": "ExponentialMovingAverage",
@@ -1552,6 +1680,14 @@
     "url": "documentation/number-theory/FactorInteger/"
   },
   {
+    "name": "FactorList",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "FactorList[poly] gives a list of the irreducible factors of poly together",
+    "url": "documentation/structural-manipulation/FactorList/"
+  },
+  {
     "name": "FactorSquareFree",
     "category": "Algebra",
     "slug": "algebra",
@@ -1630,6 +1766,22 @@
     "status": "Stable",
     "summary": "FileExtension[\"file\"]",
     "url": "documentation/file-io/FileExtension/"
+  },
+  {
+    "name": "FileNameJoin",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "FileNameJoin[{\"name1\", \"name2\", ...}]",
+    "url": "documentation/file-io/FileNameJoin/"
+  },
+  {
+    "name": "FileNameSplit",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "FileNameSplit[\"name\"]",
+    "url": "documentation/file-io/FileNameSplit/"
   },
   {
     "name": "FilePrint",
@@ -1776,6 +1928,38 @@
     "url": "documentation/control-flow/For/"
   },
   {
+    "name": "Fourier",
+    "category": "Fourier Transforms",
+    "slug": "fourier-transforms",
+    "status": "Stable",
+    "summary": "Fourier[list]",
+    "url": "documentation/fourier-transforms/Fourier/"
+  },
+  {
+    "name": "FourierDCT",
+    "category": "Fourier Transforms",
+    "slug": "fourier-transforms",
+    "status": "Stable",
+    "summary": "FourierDCT[list]",
+    "url": "documentation/fourier-transforms/FourierDCT/"
+  },
+  {
+    "name": "FourierDST",
+    "category": "Fourier Transforms",
+    "slug": "fourier-transforms",
+    "status": "Stable",
+    "summary": "FourierDST[list]",
+    "url": "documentation/fourier-transforms/FourierDST/"
+  },
+  {
+    "name": "FourierParameters",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "FourierParameters is an option for Fourier and InverseFourier that",
+    "url": "documentation/other-advanced/FourierParameters/"
+  },
+  {
     "name": "Frame",
     "category": "Other & Advanced",
     "slug": "other-advanced",
@@ -1806,6 +1990,22 @@
     "status": "Stable",
     "summary": "FreeQ[expr, form]",
     "url": "documentation/expression-information/FreeQ/"
+  },
+  {
+    "name": "FresnelC",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "FresnelC[z]",
+    "url": "documentation/other-advanced/FresnelC/"
+  },
+  {
+    "name": "FresnelS",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "FresnelS[z]",
+    "url": "documentation/other-advanced/FresnelS/"
   },
   {
     "name": "FromContinuedFraction",
@@ -1902,6 +2102,14 @@
     "status": "Experimental",
     "summary": "GoldenRatio",
     "url": "documentation/mathematical-constants/GoldenRatio/"
+  },
+  {
+    "name": "Goto",
+    "category": "Control Flow",
+    "slug": "control-flow",
+    "status": "Stable",
+    "summary": "Goto[tag]",
+    "url": "documentation/control-flow/Goto/"
   },
   {
     "name": "Graph",
@@ -2024,12 +2232,28 @@
     "url": "documentation/linear-algebra/HilbertMatrix/"
   },
   {
+    "name": "Histogram",
+    "category": "Graphics",
+    "slug": "graphics",
+    "status": "Stable",
+    "summary": "Histogram[data, opts...]",
+    "url": "documentation/graphics/Histogram/"
+  },
+  {
     "name": "Hold",
     "category": "Expression Information",
     "slug": "expression-information",
     "status": "Stable",
     "summary": "Hold[expr]",
     "url": "documentation/expression-information/Hold/"
+  },
+  {
+    "name": "HoldAll",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "HoldAll",
+    "url": "documentation/expression-information/HoldAll/"
   },
   {
     "name": "HoldAllComplete",
@@ -2048,6 +2272,14 @@
     "url": "documentation/expression-information/HoldComplete/"
   },
   {
+    "name": "HoldFirst",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "HoldFirst",
+    "url": "documentation/other-advanced/HoldFirst/"
+  },
+  {
     "name": "HoldForm",
     "category": "Expression Information",
     "slug": "expression-information",
@@ -2062,6 +2294,14 @@
     "status": "Stable",
     "summary": "HoldPattern[expr]",
     "url": "documentation/pattern-matching/HoldPattern/"
+  },
+  {
+    "name": "HoldRest",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "HoldRest",
+    "url": "documentation/other-advanced/HoldRest/"
   },
   {
     "name": "HornerForm",
@@ -2296,6 +2536,14 @@
     "url": "documentation/functional-programming/Interpolation/"
   },
   {
+    "name": "Intersection",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "Intersection[list]",
+    "url": "documentation/structural-manipulation/Intersection/"
+  },
+  {
     "name": "Inverse",
     "category": "Linear Algebra",
     "slug": "linear-algebra",
@@ -2318,6 +2566,14 @@
     "status": "Stable",
     "summary": "InverseErfc[s]",
     "url": "documentation/special-functions/InverseErfc/"
+  },
+  {
+    "name": "InverseFourier",
+    "category": "Fourier Transforms",
+    "slug": "fourier-transforms",
+    "status": "Stable",
+    "summary": "InverseFourier[list]",
+    "url": "documentation/fourier-transforms/InverseFourier/"
   },
   {
     "name": "InverseFunctions",
@@ -2478,6 +2734,14 @@
     "status": "Stable",
     "summary": "LUDecomposition[m]",
     "url": "documentation/linear-algebra/LUDecomposition/"
+  },
+  {
+    "name": "Label",
+    "category": "Control Flow",
+    "slug": "control-flow",
+    "status": "Stable",
+    "summary": "Label[tag]",
+    "url": "documentation/control-flow/Label/"
   },
   {
     "name": "Last",
@@ -2696,6 +2960,22 @@
     "url": "documentation/other-advanced/List/"
   },
   {
+    "name": "ListConvolve",
+    "category": "Fourier Transforms",
+    "slug": "fourier-transforms",
+    "status": "Stable",
+    "summary": "ListConvolve[ker, list]",
+    "url": "documentation/fourier-transforms/ListConvolve/"
+  },
+  {
+    "name": "ListCorrelate",
+    "category": "Fourier Transforms",
+    "slug": "fourier-transforms",
+    "status": "Stable",
+    "summary": "ListCorrelate[ker, list]",
+    "url": "documentation/fourier-transforms/ListCorrelate/"
+  },
+  {
     "name": "ListPlot",
     "category": "Graphics",
     "slug": "graphics",
@@ -2822,6 +3102,14 @@
     "status": "Stable",
     "summary": "MapIndexed[f, list]",
     "url": "documentation/functional-programming/MapIndexed/"
+  },
+  {
+    "name": "MapThread",
+    "category": "Functional Programming",
+    "slug": "functional-programming",
+    "status": "Stable",
+    "summary": "MapThread[f, {{a1, a2, ...}, {b1, b2, ...}, ...}]",
+    "url": "documentation/functional-programming/MapThread/"
   },
   {
     "name": "MatchQ",
@@ -3331,7 +3619,7 @@
     "name": "ParametricPlot3D",
     "category": "Graphics",
     "slug": "graphics",
-    "status": "Stable",
+    "status": "Experimental",
     "summary": "ParametricPlot3D[{fx, fy, fz}, {t, tmin, tmax}, opts...]",
     "url": "documentation/graphics/ParametricPlot3D/"
   },
@@ -3440,6 +3728,22 @@
     "url": "documentation/special-functions/Pochhammer/"
   },
   {
+    "name": "PolarAxes",
+    "category": "Graphics",
+    "slug": "graphics",
+    "status": "Experimental",
+    "summary": "PolarAxes",
+    "url": "documentation/graphics/PolarAxes/"
+  },
+  {
+    "name": "PolarPlot",
+    "category": "Graphics",
+    "slug": "graphics",
+    "status": "Experimental",
+    "summary": "PolarPlot[r, {theta, tmin, tmax}, opts...]",
+    "url": "documentation/graphics/PolarPlot/"
+  },
+  {
     "name": "PolyGamma",
     "category": "Special Functions",
     "slug": "special-functions",
@@ -3518,6 +3822,14 @@
     "status": "Stable",
     "summary": "PolynomialRemainder[p, q, x] gives the remainder from dividing p by q, treated as polynomials in x.",
     "url": "documentation/algebra/PolynomialRemainder/"
+  },
+  {
+    "name": "PolynomialSqrt",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "PolynomialSqrt[p] gives a polynomial s with s^2 == p when p is a perfect square (every non-constant irreducible factor has even multiplicity; the numeric content is carried through Sqrt), and $Failed otherwise. PolynomialSqrt[p, x] treats p as a polynomial in x.",
+    "url": "documentation/other-advanced/PolynomialSqrt/"
   },
   {
     "name": "Position",
@@ -4060,7 +4372,7 @@
     "category": "Algebra",
     "slug": "algebra",
     "status": "Stable",
-    "summary": "RootReduce[expr] canonicalises an algebraic expression: a constant algebraic number becomes a rational, a quadratic radical, or a Root object; a rational function over a radical tower has its denominator rationalised. Threads over lists, equations, inequalities and logic. Option: Method -> \"Automatic\" | \"Recursive\" | \"NumberField\".",
+    "summary": "RootReduce[expr] canonicalises an algebraic expression: a constant algebraic number becomes a rational, a quadratic radical, or a Root object; a rational function over a radical tower has its denominator rationalised; a polynomial/rational function in a free variable has its constant-algebraic coefficients canonicalised. Threads over lists, equations, inequalities and logic. Option: Method -> \"Automatic\" | \"Recursive\" | \"NumberField\".",
     "url": "documentation/algebra/RootReduce/"
   },
   {
@@ -4128,6 +4440,14 @@
     "url": "documentation/comparisons/SameQ/"
   },
   {
+    "name": "ScalingFunctions",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "ScalingFunctions",
+    "url": "documentation/other-advanced/ScalingFunctions/"
+  },
+  {
     "name": "Scan",
     "category": "Functional Programming",
     "slug": "functional-programming",
@@ -4166,6 +4486,22 @@
     "status": "Stable",
     "summary": "SelectFirst[list, pred]",
     "url": "documentation/functional-programming/SelectFirst/"
+  },
+  {
+    "name": "Sequence",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "Sequence[e1, e2, ...]",
+    "url": "documentation/expression-information/Sequence/"
+  },
+  {
+    "name": "SequenceHold",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Experimental",
+    "summary": "SequenceHold",
+    "url": "documentation/expression-information/SequenceHold/"
   },
   {
     "name": "Series",
@@ -4320,6 +4656,14 @@
     "url": "documentation/elementary-functions/Sinh/"
   },
   {
+    "name": "SinhIntegral",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "SinhIntegral[z]",
+    "url": "documentation/special-functions/SinhIntegral/"
+  },
+  {
     "name": "Slot",
     "category": "Functional Programming",
     "slug": "functional-programming",
@@ -4448,6 +4792,22 @@
     "url": "documentation/string-operations/StringDrop/"
   },
   {
+    "name": "StringExpression",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "StringExpression[p1, p2, ...] or p1 ~~ p2 ~~ ...",
+    "url": "documentation/other-advanced/StringExpression/"
+  },
+  {
+    "name": "StringExtract",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringExtract[\"string\", n]",
+    "url": "documentation/string-operations/StringExtract/"
+  },
+  {
     "name": "StringInsert",
     "category": "String Operations",
     "slug": "string-operations",
@@ -4480,12 +4840,52 @@
     "url": "documentation/string-operations/StringMatchQ/"
   },
   {
+    "name": "StringPadLeft",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringPadLeft[\"string\", n]",
+    "url": "documentation/string-operations/StringPadLeft/"
+  },
+  {
+    "name": "StringPadRight",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringPadRight[\"string\", n]",
+    "url": "documentation/string-operations/StringPadRight/"
+  },
+  {
     "name": "StringPart",
     "category": "String Operations",
     "slug": "string-operations",
     "status": "Stable",
     "summary": "StringPart[\"string\", n]",
     "url": "documentation/string-operations/StringPart/"
+  },
+  {
+    "name": "StringPartition",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringPartition[\"string\", n]",
+    "url": "documentation/string-operations/StringPartition/"
+  },
+  {
+    "name": "StringPosition",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringPosition[\"string\", patt]",
+    "url": "documentation/string-operations/StringPosition/"
+  },
+  {
+    "name": "StringRepeat",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringRepeat[\"string\", n]",
+    "url": "documentation/string-operations/StringRepeat/"
   },
   {
     "name": "StringReplace",
@@ -4512,11 +4912,19 @@
     "url": "documentation/string-operations/StringReverse/"
   },
   {
+    "name": "StringRiffle",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringRiffle[{s1, s2, ...}]",
+    "url": "documentation/string-operations/StringRiffle/"
+  },
+  {
     "name": "StringSplit",
     "category": "String Operations",
     "slug": "string-operations",
     "status": "Stable",
-    "summary": "StringSplit[\"string\", patt]",
+    "summary": "StringSplit[\"string\"]",
     "url": "documentation/string-operations/StringSplit/"
   },
   {
@@ -4526,6 +4934,14 @@
     "status": "Stable",
     "summary": "StringTake[\"string\", n]",
     "url": "documentation/string-operations/StringTake/"
+  },
+  {
+    "name": "StringTrim",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringTrim[\"string\"]",
+    "url": "documentation/string-operations/StringTrim/"
   },
   {
     "name": "StronglyConnectedComponents",
@@ -4712,6 +5128,14 @@
     "url": "documentation/functional-programming/Through/"
   },
   {
+    "name": "Throw",
+    "category": "Control Flow",
+    "slug": "control-flow",
+    "status": "Stable",
+    "summary": "Throw[value]",
+    "url": "documentation/control-flow/Throw/"
+  },
+  {
     "name": "TimeConstrained",
     "category": "Time and Date",
     "slug": "time-and-date",
@@ -4790,6 +5214,14 @@
     "status": "Stable",
     "summary": "Tr[m]",
     "url": "documentation/linear-algebra/Tr/"
+  },
+  {
+    "name": "Trace",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "Trace[expr]",
+    "url": "documentation/expression-information/Trace/"
   },
   {
     "name": "TransformationFunctions",
@@ -4888,6 +5320,14 @@
     "url": "documentation/elementary-functions/UnitStep/"
   },
   {
+    "name": "UnitVector",
+    "category": "Lists and Iteration",
+    "slug": "lists-and-iteration",
+    "status": "Stable",
+    "summary": "UnitVector[k]",
+    "url": "documentation/lists-and-iteration/UnitVector/"
+  },
+  {
     "name": "Unprotect",
     "category": "Assignment and Rules",
     "slug": "assignment-and-rules",
@@ -4928,6 +5368,14 @@
     "url": "documentation/linear-algebra/UpperTriangularMatrixQ/"
   },
   {
+    "name": "ValueQ",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "ValueQ[expr]",
+    "url": "documentation/expression-information/ValueQ/"
+  },
+  {
     "name": "Values",
     "category": "Data Structures",
     "slug": "data-structures",
@@ -4960,12 +5408,44 @@
     "url": "documentation/data-structures/Variance/"
   },
   {
+    "name": "VectorPlot",
+    "category": "Graphics",
+    "slug": "graphics",
+    "status": "Experimental",
+    "summary": "VectorPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}, opts...]",
+    "url": "documentation/graphics/VectorPlot/"
+  },
+  {
+    "name": "VectorPoints",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "VectorPoints",
+    "url": "documentation/other-advanced/VectorPoints/"
+  },
+  {
     "name": "VectorQ",
     "category": "Expression Information",
     "slug": "expression-information",
     "status": "Stable",
     "summary": "VectorQ[expr]",
     "url": "documentation/expression-information/VectorQ/"
+  },
+  {
+    "name": "VectorScale",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "VectorScale",
+    "url": "documentation/other-advanced/VectorScale/"
+  },
+  {
+    "name": "VectorStyle",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "VectorStyle",
+    "url": "documentation/other-advanced/VectorStyle/"
   },
   {
     "name": "VerifySolutions",

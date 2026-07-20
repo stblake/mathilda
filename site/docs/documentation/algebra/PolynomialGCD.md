@@ -19,7 +19,7 @@ All examples below are verified against the current Mathilda build.
 
 ```mathematica
 In[1]:= PolynomialGCD[(1+x)^2(2+x)(4+x), (1+x)(2+x)(3+x)]
-Out[1]= (1 + x) (2 + x)
+Out[1]= 2 + 3 x + x^2
 
 In[2]:= PolynomialGCD[x^2+4x+4, x^2+2x+1]
 Out[2]= 1

@@ -1,13 +1,19 @@
 # Structural Manipulation
 
-21 built-in function(s) in this category.
+27 built-in function(s) in this category.
 
+- [`ArrayFlatten`](ArrayFlatten.md) — ArrayFlatten[a]  _(Stable)_
 - [`Catenate`](Catenate.md) — Catenate[{e1, e2, ...}]  _(Stable)_
+- [`Complement`](Complement.md) — Complement[eall, e1, e2, ...]  _(Stable)_
 - [`Dimensions`](Dimensions.md) — Dimensions[expr]  _(Stable)_
+- [`ExpandAll`](ExpandAll.md) — ExpandAll[expr]  _(Stable)_
+- [`Exponent`](Exponent.md) — Exponent[expr, form] gives the maximum power with which form appears in the  _(Stable)_
 - [`Extract`](Extract.md) — Extract[expr, pos]  _(Stable)_
+- [`FactorList`](FactorList.md) — FactorList[poly] gives a list of the irreducible factors of poly together  _(Stable)_
 - [`Flatten`](Flatten.md) — Flatten[list]  _(Stable)_
 - [`Head`](Head.md) — Head[expr]  _(Stable)_
 - [`Insert`](Insert.md) — Insert[expr, elem, n] inserts elem at position n in expr.  _(Stable)_
+- [`Intersection`](Intersection.md) — Intersection[list]  _(Stable)_
 - [`Length`](Length.md) — Length[expr]  _(Stable)_
 - [`Level`](Level.md) — Level[expr, levelspec]  _(Stable)_
 - [`OrderedQ`](OrderedQ.md) — OrderedQ[h[e1, e2, ...]] gives True if the elements are in canonical order, and False otherwise.  _(Stable)_

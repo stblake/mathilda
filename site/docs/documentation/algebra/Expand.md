@@ -23,6 +23,15 @@ Out[2]= x^4 - 2 x^2 y^2 + y^4
 
 In[3]:= Expand[(x+1)^2 + (y+1)^2, x]
 Out[3]= 1 + 2 x + x^2 + (1 + y)^2
+
+In[4]:= Expand[(a+b)(x[1]+x[2])^2, x[_]]
+Out[4]= (a + b) x[1]^2 + (a + b) x[2]^2 + 2 (a + b) x[1] x[2]
+
+In[5]:= Length[Expand[(1 + x + 5 x^3 + 8 x^17)^341]]
+Out[5]= 5758
+
+In[6]:= Expand[(a+b+c+d+e+f+g)^60]
+Out[6]= Overflow[]
 ```
 
 ## Implementation notes
@@ -43,8 +52,7 @@ A two-argument `Expand[expr, patt]` only expands subexpressions that *contain* `
 - `Protected`.
 - Works only on positive integer powers and distributes products over sums.
 - Threads over equations, inequalities, and lists.
-- Implements an efficient binary-splitting algorithm for distributing products and repeated squaring for powers.
-- `Expand[expr, patt]` leaves unexpanded any parts of `expr` that are free of the pattern `patt`.
+- **Polynomials over the rationals are expanded through FLINT** (packed
 
 **Attributes:** `Protected`.
 

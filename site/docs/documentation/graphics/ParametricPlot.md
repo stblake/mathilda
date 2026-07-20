@@ -16,10 +16,6 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
-- `HoldAll`, `Protected`.
-- Declines to evaluate if bounds aren't numeric or `PlotPoints < 2`.
-- Auto-displays exactly like `Graphics`/`Plot`.
-
 **Attributes:** `HoldAll`, `Protected`.
 
 ## Implementation status

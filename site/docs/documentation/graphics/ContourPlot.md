@@ -25,8 +25,9 @@ ContourPlot[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
                          False/None: lines only. Automatic (default): shade when
                          ColorFunction is set, otherwise lines only.
       ColorFunction    - A function f[t] → color (t in [0,1] after scaling), or
-                         a string: "Rainbow" (Hue ramp) or "Temperature" (blue-
-                         cyan-yellow-red). Applied to shading and auto line colors.
+                         a named ramp string: "Rainbow", "Temperature",
+                         "CoolTones", "WarmTones", "Greyscale".
+                         Applied to shading and auto line colors.
       ColorFunctionScaling - True (default): normalise z to [0,1] before calling
                              ColorFunction. False: pass raw z.
       PlotPoints       - Grid resolution per axis (default 25; increase for
@@ -43,9 +44,6 @@ ContourPlot[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
 _No verified examples yet for this function._
 
 ## Implementation notes
-
-- `HoldAll`, `Protected`.
-- Declines to evaluate if bounds aren't numeric or the function argument
 
 **Attributes:** `HoldAll`, `Protected`.
 

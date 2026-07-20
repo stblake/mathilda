@@ -1,7 +1,7 @@
 # ParametricPlot3D
 
-!!! success "Status: Stable"
-    documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+!!! note "Status: Experimental"
+    present and registered, but lightly documented and not yet covered by dedicated tests.
 
 ## Description
 
@@ -14,33 +14,15 @@ ParametricPlot3D[{fx, fy, fz}, {t, tmin, tmax}, {u, umin, umax}, opts...]
 
 ## Examples
 
-All examples below are verified against the current Mathilda build.
-
-```mathematica
-In[1]:= ParametricPlot3D[{Cos[t], Sin[t], t/5}, {t, 0, 4 Pi}]
-Out[1]= -Graphics3D-
-
-In[2]:= ParametricPlot3D[{Sin[2 t] Cos[t], Sin[2 t] Sin[t], Cos[t]}, {t, 0, 2 Pi}]
-Out[2]= -Graphics3D-
-
-In[3]:= ParametricPlot3D[{{Cos[t], Sin[t], 0}, {Cos[t], 0, Sin[t]}}, {t, 0, 2 Pi}]
-Out[3]= -Graphics3D-
-
-In[4]:= ParametricPlot3D[{Cos[t], Sin[t], t/5}, {t, 0, 4 Pi}, Mesh -> All]
-Out[4]= -Graphics3D-
-```
+_No verified examples yet for this function._
 
 ## Implementation notes
-
-- `HoldAll`, `Protected`.
-- Declines to evaluate if bounds aren't numeric or `PlotPoints < 2`.
-- Auto-displays exactly like `Graphics3D`/`Plot3D`.
 
 **Attributes:** `HoldAll`, `Protected`.
 
 ## Implementation status
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+**Experimental** — present and registered, but lightly documented and not yet covered by dedicated tests.
 
 ## References
 

@@ -23,7 +23,7 @@ _No verified examples yet for this function._
 
 **Data structures.** `apply_assignment` dispatches on the LHS shape: a bare `EXPR_SYMBOL` installs an **OwnValue** via `symtab_add_own_value`; a function head installs a **DownValue** via `symtab_add_down_value` keyed on the head symbol (the whole LHS becomes the stored pattern); a `List` LHS recurses element-wise for destructuring (`{x,y} = {1,2}`); a `Part` LHS routes to `expr_part_assign`. Writes to `ATTR_PROTECTED` targets (resolved through `Condition`/`HoldPattern`/`Part` wrappers by `assignment_target_symbol`) are refused with a `Set::wrsym` message but still return the RHS. `$RecursionLimit` assignments additionally mirror the value into the C-side limit.
 
-**Attributes:** `HoldFirst`, `Protected`.
+**Attributes:** `HoldFirst`, `Protected`, `SequenceHold`.
 
 ## Implementation status
 

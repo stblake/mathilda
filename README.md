@@ -2,7 +2,7 @@
 
 Mathilda is a small, open source computer algebra system (CAS) heavily inspired by the core architecture and evaluation semantics of Mathematica (the Wolfram Language). Written entirely in C99 and its own language, it implements a recursive expression model, structural pattern matching with backtracking, rewriting rules, and an extensive library of built-in mathematical functions. 
 
-Today Mathilda spans roughly **232,000 lines of C99** across **340 source modules**, exposing **~575 built-in functions** organized into **29 functional categories** — from arbitrary-precision arithmetic and symbolic calculus to polynomial factorization, dense linear algebra, integer factorization, and interactive 2D/3D graphics.
+Today Mathilda spans roughly **294,000 lines of C99** across **433 source modules**, exposing **~695 built-in functions** organized into **32 functional categories** — from arbitrary-precision arithmetic and symbolic calculus to polynomial factorization, dense linear algebra, integer factorization, and interactive 2D/3D graphics.
 
 ## 🌟 Key Features
 
@@ -44,7 +44,7 @@ Today Mathilda spans roughly **232,000 lines of C99** across **340 source module
 
 ## 📚 Function Categories
 
-The complete reference (~575 functions) lives in [`Mathilda_spec.md`](Mathilda_spec.md), which indexes the per-category pages under [`docs/spec/builtins/`](docs/spec/builtins/):
+The complete reference (~695 functions) lives in [`Mathilda_spec.md`](Mathilda_spec.md), which indexes the per-category pages under [`docs/spec/builtins/`](docs/spec/builtins/):
 
 * Arithmetic and Algebra
 * Calculus

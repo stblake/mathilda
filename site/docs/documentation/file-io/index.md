@@ -1,10 +1,12 @@
 # File I/O
 
-8 built-in function(s) in this category.
+10 built-in function(s) in this category.
 
 - [`FileBaseName`](FileBaseName.md) — FileBaseName["file"]  _(Stable)_
 - [`FileExistsQ`](FileExistsQ.md) — FileExistsQ["name"]  _(Stable)_
 - [`FileExtension`](FileExtension.md) — FileExtension["file"]  _(Stable)_
+- [`FileNameJoin`](FileNameJoin.md) — FileNameJoin[{"name1", "name2", ...}]  _(Stable)_
+- [`FileNameSplit`](FileNameSplit.md) — FileNameSplit["name"]  _(Stable)_
 - [`FilePrint`](FilePrint.md) — FilePrint["file"]  _(Stable)_
 - [`Get`](Get.md) — Get["filename"]  _(Stable)_
 - [`LoadModule`](LoadModule.md) — LoadModule["relpath"]  _(Experimental)_

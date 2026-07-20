@@ -47,7 +47,7 @@ Expand`, which costs 30–130 ms on Tan-rich inputs.
 
 - `Listable`, `Protected`.
 - Operates on both circular and hyperbolic functions, and their inverses.
-- Automatically threads over lists, equations, inequalities, and logic functions.
+- Rewrites recursively, including trig heads nested inside the *argument* of an
 
 **Attributes:** `Listable`, `Protected`.
 

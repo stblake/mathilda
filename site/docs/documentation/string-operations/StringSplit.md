@@ -6,14 +6,22 @@
 ## Description
 
 ```text
+StringSplit["string"]
+    Splits "string" at runs of whitespace.
 StringSplit["string", patt]
-    Splits "string" into the substrings between non-overlapping matches
-    of the delimiter patt.  Empty pieces are dropped.
+    Splits at delimiters matching the string pattern patt.
+StringSplit["string", {p1, p2, ...}]
+    Splits at any of the pi.
+StringSplit["string", patt -> val]
+    Inserts val at the position of each delimiter.
+StringSplit["string", patt, n]
+    Splits into at most n substrings.
 StringSplit[{s1, s2, ...}, patt]
     Gives the list of results for each of the si.
 
-    patt may be RegularExpression["re"], a literal string, or a list of
-    alternative delimiters.
+    Empty substrings between adjacent interior delimiters are kept; those
+    at the start or end are dropped unless All is given as the third
+    argument. "" splits at every character. Option: IgnoreCase -> True.
 ```
 
 ## Examples
@@ -21,11 +29,17 @@ StringSplit[{s1, s2, ...}, patt]
 All examples below are verified against the current Mathilda build.
 
 ```mathematica
-In[1]:= StringSplit["1.23, 4.56  7.89", RegularExpression["(\\s|,)+"]]
-Out[1]= {"1.23", "4.56", "7.89"}
+In[1]:= StringSplit["a bbb  cccc aa   d"]
+Out[1]= {"a", "bbb", "cccc", "aa", "d"}
 
-In[2]:= StringSplit["a,b,c", ","]
-Out[2]= {"a", "b", "c"}
+In[2]:= StringSplit["a-b:c-d:e-f-g", {":", "-"}]
+Out[2]= {"a", "b", "c", "d", "e", "f", "g"}
+
+In[3]:= StringSplit["a b::c d::e f g", "::" -> "--"]
+Out[3]= {"a b", "--", "c d", "--", "e f g"}
+
+In[4]:= StringSplit["This is a sentence, which goes on.", Except[WordCharacter] ..]
+Out[4]= {"This", "is", "a", "sentence", "which", "goes", "on"}
 ```
 
 ## Implementation notes
@@ -38,5 +52,5 @@ Out[2]= {"a", "b", "c"}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/strings/regex/regex_init.c`](https://github.com/stblake/mathilda/blob/main/src/strings/regex/regex_init.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)

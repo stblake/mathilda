@@ -12,32 +12,9 @@ Plot3D[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
 
 ## Examples
 
-All examples below are verified against the current Mathilda build.
-
-```mathematica
-In[1]:= Plot3D[Sin[x] Cos[y], {x, -3, 3}, {y, -3, 3}]
-Out[1]= -Graphics3D-
-
-In[2]:= Plot3D[x^2 - y^2, {x, -2, 2}, {y, -2, 2}, ColorFunction -> "Rainbow", Mesh -> None]
-Out[2]= -Graphics3D-
-
-In[3]:= Plot3D[x + y, {x, -2, 2}, {y, -2, 2}, RegionFunction -> Function[{x, y, z}, x^2 + y^2 < 4]]
-Out[3]= -Graphics3D-
-
-In[4]:= Plot3D[x + y, {x,-2,2}, {y,-2,2},RegionFunction -> Function[{x,y,z}, x^2+y^2 <4],ExclusionStyle -> RGBColor[1, 0.3, 0]]
-Out[4]= -Graphics3D-
-
-In[5]:= Plot3D[{Sin[x + y], Cos[x - y]}, {x, -2, 2}, {y, -2, 2}]
-Out[5]= -Graphics3D-
-
-In[6]:= Plot3D[{x^2, x^2 + 1}, {x,-2,2}, {y,-2,2},PlotStyle -> {Blue, Red}]
-Out[6]= -Graphics3D-
-```
+_No verified examples yet for this function._
 
 ## Implementation notes
-
-- `HoldAll`, `Protected`.
-- Declines to evaluate if either iterator spec isn't `{var, min, max}` with
 
 **Attributes:** `HoldAll`, `Protected`.
 

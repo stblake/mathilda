@@ -6,7 +6,7 @@
 ## Description
 
 ```text
-RootReduce[expr] canonicalises an algebraic expression: a constant algebraic number becomes a rational, a quadratic radical, or a Root object; a rational function over a radical tower has its denominator rationalised. Threads over lists, equations, inequalities and logic. Option: Method -> "Automatic" | "Recursive" | "NumberField".
+RootReduce[expr] canonicalises an algebraic expression: a constant algebraic number becomes a rational, a quadratic radical, or a Root object; a rational function over a radical tower has its denominator rationalised; a polynomial/rational function in a free variable has its constant-algebraic coefficients canonicalised. Threads over lists, equations, inequalities and logic. Option: Method -> "Automatic" | "Recursive" | "NumberField".
 ```
 
 ## Examples
@@ -28,6 +28,12 @@ Out[4]= Root[-1 + 3 #1 + 3 #1^2 + #1^3 &, 1]
 
 In[5]:= RootReduce[1/(1 + k^(1/3))]        (* parametric tower *)
 Out[5]= (1 - k^(1/3) + k^(2/3))/(1 + k)
+
+In[6]:= RootReduce[(Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]) x^2 + x + 1]
+Out[6]= 1 + x
+
+In[7]:= RootReduce[a x^2 + Sqrt[8] x]      (* thread over coefficients *)
+Out[7]= 2 Sqrt[2] x + a x^2
 ```
 
 ## Implementation notes

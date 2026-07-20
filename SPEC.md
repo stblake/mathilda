@@ -10,7 +10,7 @@ built-in mathematical functions. The name pays homage to David Stoutemyer's
 PICOMATH-80.
 
 **Key characteristics:**
-- ~22 kLoC of C99 across ~44 source modules.
+- ~294 kLoC of C99 across ~433 source modules.
 - Arbitrary-precision integers via GMP.
 - Interactive REPL with GNU Readline support.
 - Mathematica-compatible surface syntax and evaluation semantics.

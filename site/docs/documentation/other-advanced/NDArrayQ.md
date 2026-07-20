@@ -7,7 +7,7 @@
 
 ```text
 NDArrayQ[expr]
-    Gives True if expr is an NDArray value, else False.
+    Gives True if expr is an NDArray object, else False.
 ```
 
 ## Examples

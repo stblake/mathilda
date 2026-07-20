@@ -20,9 +20,9 @@ Mathilda is a small computer algebra system that recreates the **core
 architecture and evaluation semantics of the Mathematica programming language** — a recursive
 expression model, attribute-driven evaluation, structural pattern matching with
 backtracking, and a rewrite-rule engine — together with an extensive library of
-**~575 built-in functions**.
+**~695 built-in functions**.
 
-It spans roughly **232,000 lines of C99**, uses **GMP** for arbitrary-precision
+It spans roughly **294,000 lines of C99**, uses **GMP** for arbitrary-precision
 integers and **MPFR** for arbitrary-precision reals, and is licensed under
 **GPLv3**.
 
@@ -32,35 +32,41 @@ integers and **MPFR** for arbitrary-precision reals, and is licensed under
 
 Every example on this site — including the ones below — is run through the
 actual Mathilda build and its real output captured. Nothing is transcribed by
-hand.
+hand. Here are some famous results, computed from scratch:
 
 ```mathematica
-In[1]:= Factor[x^4 - 1]
-Out[1]= (-1 + x) (1 + x) (1 + x^2)
+In[1]:= Sum[1/k^2, {k, 1, Infinity}]                    (* the Basel problem *)
+Out[1]= 1/6 Pi^2
 
-In[2]:= Solve[x^2 - 5x + 6 == 0, x]
-Out[2]= {{x -> 2}, {x -> 3}}
+In[2]:= Integrate[Exp[-x^2], {x, -Infinity, Infinity}]  (* the Gaussian integral *)
+Out[2]= Sqrt[Pi]
 
-In[3]:= D[Sin[x^2], x]
-Out[3]= 2 x Cos[x^2]
+In[3]:= Zeta[-1]                                         (* 1 + 2 + 3 + ... "=" -1/12 *)
+Out[3]= -1/12
 
-In[4]:= Integrate[1/(x^2 + 1), x]
-Out[4]= ArcTan[x]
+In[4]:= Sum[HarmonicNumber[k]/k^2, {k, 1, Infinity}]    (* an Euler sum *)
+Out[4]= 2 Zeta[3]
 
-In[5]:= Sum[k^2, {k, 1, n}]
-Out[5]= 1/6 n (1 + n) (1 + 2 n)
+In[5]:= Integrate[Sin[x]/x, {x, 0, Infinity}]           (* the Dirichlet integral *)
+Out[5]= 1/2 Pi
 
-In[6]:= Series[Exp[x], {x, 0, 4}]
-Out[6]= 1 + x + 1/2 x^2 + 1/6 x^3 + 1/24 x^4 + O[x]^5
+In[6]:= Factor[x^4 + 4]                                  (* the Sophie Germain identity *)
+Out[6]= (2 - 2 x + x^2) (2 + 2 x + x^2)
 
-In[7]:= Limit[Sin[x]/x, x -> 0]
-Out[7]= 1
+In[7]:= Limit[(1 + 1/n)^n, n -> Infinity]               (* a definition of e *)
+Out[7]= E
 
-In[8]:= Eigenvalues[{{2, 0}, {0, 3}}]
-Out[8]= {3, 2}
+In[8]:= ContinuedFraction[GoldenRatio, 8]               (* the "most irrational" number *)
+Out[8]= {1, 1, 1, 1, 1, 1, 1, 1}
 
-In[9]:= FactorInteger[2^67 - 1]
-Out[9]= {{193707721, 1}, {761838257287, 1}}
+In[9]:= Series[Exp[x], {x, 0, 5}]
+Out[9]= 1 + x + 1/2 x^2 + 1/6 x^3 + 1/24 x^4 + 1/120 x^5 + O[x]^6
+
+In[10]:= FactorInteger[2^67 - 1]                         (* Cole's 1903 factorization *)
+Out[10]= {{193707721, 1}, {761838257287, 1}}
+
+In[11]:= PrimePi[10^9]                                   (* primes below a billion *)
+Out[11]= 50847534
 ```
 
 ---

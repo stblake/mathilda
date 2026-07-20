@@ -15,7 +15,7 @@ All examples below are verified against the current Mathilda build.
 
 ```mathematica
 In[1]:= Names["List*"]
-Out[1]= {"List", "ListPlot", "ListQ"}
+Out[1]= {"List", "ListConvolve", "ListCorrelate", "ListPlot", "ListQ"}
 
 In[2]:= Names["Ar@"]
 Out[2]= {"Arg", "Array", "Arrow"}
