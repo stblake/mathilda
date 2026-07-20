@@ -460,6 +460,7 @@ set(COMMON_SRC
     ../src/strings/regex/stringmatchq.c
     ../src/strings/regex/stringcases.c
     ../src/strings/regex/stringreplace.c
+    ../src/strings/regex/stringposition.c
     ../src/strings/regex/regex_init.c
     ../src/calculus/series.c
     ../src/calculus/deriv.c
@@ -2236,6 +2237,15 @@ else()
 endif()
 add_test(NAME stringpartition_tests COMMAND stringpartition_tests)
 
+add_executable(stringposition_tests test_stringposition.c ${COMMON_SRC})
+target_include_directories(stringposition_tests PRIVATE ../src ../src/strings ../src/strings/regex)
+if(USE_ECM)
+    target_link_libraries(stringposition_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(stringposition_tests gmp m)
+endif()
+add_test(NAME stringposition_tests COMMAND stringposition_tests)
+
 add_executable(stringrepeat_tests test_stringrepeat.c ${COMMON_SRC})
 target_include_directories(stringrepeat_tests PRIVATE ../src ../src/strings ../src/strings/regex)
 if(USE_ECM)
@@ -2542,6 +2552,7 @@ if(USE_ECM)
     add_dependencies(regex_tests build_ecm)
     add_dependencies(stringfns_tests build_ecm)
     add_dependencies(stringpartition_tests build_ecm)
+    add_dependencies(stringposition_tests build_ecm)
     add_dependencies(stringrepeat_tests build_ecm)
     add_dependencies(stringpad_tests build_ecm)
     add_dependencies(stringriffle_tests build_ecm)

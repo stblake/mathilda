@@ -640,6 +640,7 @@ extern const char* SYM_LetterCharacter;
 extern const char* SYM_DigitCharacter;
 extern const char* SYM_NumberString;
 extern const char* SYM_IgnoreCase;
+extern const char* SYM_Overlaps;
 extern const char* SYM_SubresultantPolynomialRemainders;
 extern const char* SYM_Subtract;
 extern const char* SYM_Sum;

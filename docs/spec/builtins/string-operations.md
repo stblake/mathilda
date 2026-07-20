@@ -537,6 +537,44 @@ In[4]:= StringExtract["a 1\nb 2\nc 3 x", All, 3]
 Out[4]= {Missing["PartAbsent", 3], Missing["PartAbsent", 3], "x"}
 ```
 
+## StringPosition
+
+Gives the `{start, end}` character positions at which substrings matching a
+string pattern occur, in the 1-based inclusive form used by `StringTake`,
+`StringDrop`, and `StringReplacePart`. Byte-indexed, like the rest of the string
+subsystem, and backed by the same PCRE2 pattern engine as `StringCases`.
+
+- `StringPosition["string", patt]`: positions of every substring matching the
+  string pattern `patt` (a literal, `RegularExpression[...]`, a general string
+  expression such as `x_ ~~ x_`, or a character class).
+- `StringPosition["string", patt, n]`: only the first `n` occurrences.
+- `StringPosition["string", {p1, p2, ...}]`: matches of each `pi`, merged and
+  ordered by start position (a list of patterns is not the same as
+  `Alternatives`).
+- `StringPosition[{s1, s2, ...}, patt]`: threads, giving one result list per
+  subject; non-string elements pass through unchanged.
+- **Options**: `Overlaps -> True` (default) includes overlapping substrings but
+  only the first match starting at each position; `Overlaps -> False` excludes
+  overlaps (greedy, global); `Overlaps -> All` includes every matching substring
+  at every start. `IgnoreCase -> True` folds case.
+- A non-string, non-list subject leaves the call unevaluated; zero arguments
+  emits `StringPosition::argb`.
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringPosition["abXYZaaabXYZaaaaXYZXYZ", "XYZ"]
+Out[1]= {{3, 5}, {10, 12}, {17, 19}, {20, 22}}
+
+In[2]:= StringPosition["AABBBAABABBCCCBAAA", x_ ~~ x_]
+Out[2]= {{1, 2}, {3, 4}, {4, 5}, {6, 7}, {10, 11}, {12, 13}, {13, 14}, {16, 17}, {17, 18}}
+
+In[3]:= StringPosition["AAAAA", "AA", Overlaps -> False]
+Out[3]= {{1, 2}, {3, 4}}
+
+In[4]:= StringPosition["abAB", "a", IgnoreCase -> True]
+Out[4]= {{1, 1}, {3, 3}}
+```
+
 ## StringPartition
 
 Partitions a string into fixed-length substrings. Byte-indexed, like

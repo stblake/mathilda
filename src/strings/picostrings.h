@@ -34,6 +34,7 @@ Expr* builtin_stringreplace(Expr* res);
 Expr* builtin_stringsplit(Expr* res);
 Expr* builtin_stringtrim(Expr* res);
 Expr* builtin_stringextract(Expr* res);
+Expr* builtin_stringposition(Expr* res);
 
 void strings_init(void);
 void regex_init(void);

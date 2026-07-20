@@ -635,6 +635,7 @@ const char* SYM_LetterCharacter = NULL;
 const char* SYM_DigitCharacter = NULL;
 const char* SYM_NumberString = NULL;
 const char* SYM_IgnoreCase = NULL;
+const char* SYM_Overlaps = NULL;
 const char* SYM_SubresultantPolynomialRemainders = NULL;
 const char* SYM_Subtract = NULL;
 const char* SYM_Sum = NULL;
@@ -1432,6 +1433,7 @@ void sym_names_init(void) {
     SYM_DigitCharacter             = intern_symbol("DigitCharacter");
     SYM_NumberString               = intern_symbol("NumberString");
     SYM_IgnoreCase                 = intern_symbol("IgnoreCase");
+    SYM_Overlaps                   = intern_symbol("Overlaps");
     SYM_SubresultantPolynomialRemainders = intern_symbol("SubresultantPolynomialRemainders");
     SYM_Subtract                   = intern_symbol("Subtract");
     SYM_Sum                        = intern_symbol("Sum");

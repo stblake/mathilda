@@ -3887,6 +3887,21 @@ void info_init(void) {
         "\tAbsent blocks yield Missing[\"PartAbsent\", pos]. A list of strings\n"
         "\tthreads.");
 
+    symtab_set_docstring("StringPosition",
+        "StringPosition[\"string\", patt]\n"
+        "\tGives a list of the {start, end} character positions at which\n"
+        "\tsubstrings matching the string pattern patt occur in \"string\".\n"
+        "StringPosition[\"string\", patt, n]\n"
+        "\tIncludes only the first n occurrences.\n"
+        "StringPosition[\"string\", {p1, p2, ...}]\n"
+        "\tGives positions of all the pi.\n"
+        "StringPosition[{s1, s2, ...}, patt]\n"
+        "\tThreads over a list of strings.\n\n"
+        "\tPositions use the form consumed by StringTake / StringReplacePart.\n"
+        "\tOptions: Overlaps -> True (default; overlaps allowed, one substring\n"
+        "\tper start), False (no overlaps), or All (every matching substring);\n"
+        "\tIgnoreCase -> True treats upper/lowercase as equivalent.");
+
     symtab_set_docstring("StringPartition",
         "StringPartition[\"string\", n]\n"
         "\tPartitions string into non-overlapping substrings of length n.\n"

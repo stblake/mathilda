@@ -58,6 +58,9 @@ void regex_init(void) {
     symtab_add_builtin("StringExtract", builtin_stringextract);
     symtab_get_def("StringExtract")->attributes |= ATTR_PROTECTED;
 
+    symtab_add_builtin("StringPosition", builtin_stringposition);
+    symtab_get_def("StringPosition")->attributes |= ATTR_PROTECTED;
+
     /* Inert protected heads understood by the string-pattern translator
      * (string_pattern.c). StringExpression (the ~~ operator's head) is Flat so
      * a ~~ b ~~ c collapses to StringExpression[a, b, c]. */
@@ -74,6 +77,7 @@ void regex_init(void) {
     register_inert("NumberString",
         "NumberString\n\tA string pattern matching a signed integer or decimal number.");
     register_inert("IgnoreCase", NULL);
+    register_inert("Overlaps", NULL);
 
     symtab_get_def("StringExpression")->attributes |=
         ATTR_FLAT | ATTR_ONEIDENTITY | ATTR_PROTECTED;
