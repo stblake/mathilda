@@ -90,16 +90,37 @@ void test_holdform() {
     expr_free(res);
 }
 
+void test_series_latex() {
+    /* SeriesData must render as the series it represents in LaTeX (notebook),
+     * not as the raw SeriesData[...] container — matching the plain printer.
+     * Regression for gh #22. Also checks negative rational coefficients show
+     * as subtraction (x - 1/6 x^3), not "+ -1/6". */
+    Expr* e = parse_expression("Series[Sin[x], {x, 0, 5}]");
+    Expr* res = evaluate(e);
+
+    char* str = expr_to_string(res);
+    ASSERT(strcmp(str, "x - 1/6 x^3 + 1/120 x^5 + O[x]^6") == 0);
+    free(str);
+
+    char* tex = expr_to_latex(res);
+    ASSERT(strcmp(tex, "x-\\frac{1}{6}\\,x^{3}+\\frac{1}{120}\\,x^{5}+O[x]^{6}") == 0);
+    free(tex);
+
+    expr_free(e);
+    expr_free(res);
+}
+
 int main() {
     symtab_init();
     core_init();
-    
+
     TEST(test_print_basic);
     TEST(test_fullform_wrapper);
     TEST(test_inputform_wrapper);
     TEST(test_negative_bigint_in_plus);
     TEST(test_holdform);
-    
+    TEST(test_series_latex);
+
     printf("All print tests passed!\n");
     return 0;
 }
