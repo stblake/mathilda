@@ -7,6 +7,7 @@
 #include "sym_names.h"
 #include "assoc.h"
 #include "common.h"
+#include "numloop.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -1703,6 +1704,19 @@ static void ebuf_truncate(ExprBuf* b, size_t drop) {
     b->count -= drop;
 }
 
+/* Drop the first `drop` items (freeing them) and shift the rest down. Used by
+ * the bounded-history window (see iter_run's max_history): scalar Nest/Fold/
+ * FixedPoint only ever read the most recent iterate, so superseded ones are
+ * freed mid-loop instead of piling up to O(n) live nodes (which would defeat
+ * the Expr node pool). Safe if drop >= count. */
+static void ebuf_drop_front(ExprBuf* b, size_t drop) {
+    if (drop >= b->count) drop = b->count;
+    for (size_t i = 0; i < drop; i++) expr_free(b->items[i]);
+    if (drop < b->count)
+        memmove(b->items, b->items + drop, (b->count - drop) * sizeof(Expr*));
+    b->count -= drop;
+}
+
 /*
  * Convert an iteration history into a result expression.
  *   as_list=true  -> returns out_head[items...], taking ownership of out_head
@@ -1779,10 +1793,20 @@ typedef enum {
  * limit_is_safety=true   -> `limit` is a safety cap for an otherwise unbounded
  *                           run; reaching it is treated as failure (buf is
  *                           freed and ITER_RUN_SAFETY is returned).
+ *
+ * max_history bounds how many trailing iterates the history buffer retains.
+ * The *List variants keep every iterate (pass SIZE_MAX). The scalar variants
+ * that only ever read the most recent value(s) pass a small window (1 for
+ * Nest/Fold/FixedPoint): once the buffer exceeds the window the oldest entries
+ * are freed mid-loop, so a 10^6-step Nest holds O(window) live nodes instead of
+ * O(n) — which keeps the bounded Expr node pool effective (an O(n) live set
+ * empties the free-list and forces every allocation to fresh malloc). Steps
+ * whose logic depends on buf->count (NestWhile's m_min/m_max gating) MUST pass
+ * SIZE_MAX so the count keeps reflecting the true application total.
  */
 static IterRunResult iter_run(ExprBuf* buf, IterStepFn step_fn, void* ctx,
                               int64_t limit, bool limit_is_safety,
-                              Expr** out_early) {
+                              size_t max_history, Expr** out_early) {
     *out_early = NULL;
     int64_t apps = 0;
     while (1) {
@@ -1807,6 +1831,11 @@ static IterRunResult iter_run(ExprBuf* buf, IterStepFn step_fn, void* ctx,
         if (s == ITER_STEP_CONT) {
             ebuf_push(buf, next);
             apps++;
+            /* Bounded-history window: drop superseded iterates so scalar runs
+             * stay O(window) in memory. Trimming every push means the buffer
+             * only ever overshoots by one, so this is O(window) per step. */
+            if (buf->count > max_history)
+                ebuf_drop_front(buf, buf->count - max_history);
         } else if (s == ITER_STEP_HALT_ADD) {
             ebuf_push(buf, next);
             return ITER_RUN_OK;
@@ -1847,13 +1876,24 @@ static Expr* nest_impl(Expr* res, bool as_list) {
     int64_t n = n_expr->data.integer;
     if (n < 0) return NULL;
 
+    /* Automatic numeric fast-path: a machine-real-arithmetic pure function
+     * iterated over a machine real runs in compiled doubles (no per-step Expr
+     * allocation). Scalar form only; NULL means "not numeric-closed", fall
+     * through to the interpreted loop. */
+    if (!as_list) {
+        Expr* fast = numloop_nest(f, expr, n);
+        if (fast) return fast;
+    }
+
     ExprBuf buf;
     ebuf_init(&buf);
     ebuf_push(&buf, expr_copy(expr));
 
     NestCtx ctx = { .f = f };
     Expr* early = NULL;
-    IterRunResult r = iter_run(&buf, nest_step, &ctx, n, false, &early);
+    /* Scalar Nest reads only the latest iterate -> window 1; NestList keeps all. */
+    IterRunResult r = iter_run(&buf, nest_step, &ctx, n, false,
+                               as_list ? SIZE_MAX : 1, &early);
     if (r == ITER_RUN_SAFETY) return NULL;
     if (r == ITER_RUN_EARLY) return early;
     return ebuf_finalize(&buf, as_list, expr_new_symbol(SYM_List));
@@ -1914,6 +1954,15 @@ static Expr* fold_impl(Expr* res, bool as_list) {
         return r;
     }
 
+    /* Automatic numeric fast-path for the seeded scalar Fold[f, x0, list] over
+     * machine numbers: run the binary reduction in compiled doubles. */
+    if (!as_list && argc == 3) {
+        Expr* fast = numloop_fold(res->data.function.args[0],
+                                  res->data.function.args[1],
+                                  res->data.function.args[2]);
+        if (fast) return fast;
+    }
+
     Expr* f = res->data.function.args[0];
     Expr* seed_src;
     Expr* list;
@@ -1953,7 +2002,9 @@ static Expr* fold_impl(Expr* res, bool as_list) {
 
     FoldCtx ctx = { .f = f, .elems = elems + start, .total = m, .idx = 0 };
     Expr* early = NULL;
-    IterRunResult r = iter_run(&buf, fold_step, &ctx, (int64_t)m, false, &early);
+    /* Scalar Fold reads only the latest accumulator -> window 1; FoldList keeps all. */
+    IterRunResult r = iter_run(&buf, fold_step, &ctx, (int64_t)m, false,
+                               as_list ? SIZE_MAX : 1, &early);
     if (r == ITER_RUN_SAFETY) return NULL;
     if (r == ITER_RUN_EARLY) return early;
     return ebuf_finalize(&buf, as_list, expr_copy(list_head));
@@ -2023,6 +2074,13 @@ static Expr* nestwhile_impl(Expr* res, bool as_list) {
     Expr* expr = res->data.function.args[1];
     Expr* test = res->data.function.args[2];
 
+    /* Automatic numeric fast-path for the default scalar NestWhile[f, x0, test]
+     * (m = 1, no max, no extra n): iterate in compiled doubles. */
+    if (!as_list && argc == 3) {
+        Expr* fast = numloop_nestwhile(f, expr, test);
+        if (fast) return fast;
+    }
+
     /* Parse optional m. */
     int64_t m_min = 1, m_max = 1;
     bool m_max_inf = false;
@@ -2087,7 +2145,10 @@ static Expr* nestwhile_impl(Expr* res, bool as_list) {
                          .m_min = m_min, .m_max = m_max, .m_max_inf = m_max_inf };
     Expr* early = NULL;
     int64_t limit = max_inf ? ITER_SAFETY_CAP : max_apps;
-    IterRunResult r = iter_run(&buf, nestwhile_step, &ctx, limit, max_inf, &early);
+    /* NestWhile's step gates on buf->count (m_min/m_max) and n_extra<0 trims the
+     * tail, so the full history must be retained -> SIZE_MAX (no windowing). */
+    IterRunResult r = iter_run(&buf, nestwhile_step, &ctx, limit, max_inf,
+                               SIZE_MAX, &early);
     if (r == ITER_RUN_SAFETY) return NULL;
     if (r == ITER_RUN_EARLY) return early;
 
@@ -2095,7 +2156,7 @@ static Expr* nestwhile_impl(Expr* res, bool as_list) {
      * negative n_extra trims iterates from the end. */
     if (n_extra > 0) {
         NestCtx nctx = { .f = f };
-        r = iter_run(&buf, nest_step, &nctx, n_extra, false, &early);
+        r = iter_run(&buf, nest_step, &nctx, n_extra, false, SIZE_MAX, &early);
         if (r == ITER_RUN_SAFETY) return NULL;
         if (r == ITER_RUN_EARLY) return early;
     } else if (n_extra < 0) {
@@ -2223,6 +2284,13 @@ static Expr* fixedpoint_impl(Expr* res, bool as_list) {
     bool max_inf = true;
     if (!parse_fp_opts(res, 2, &same_test, &max_apps, &max_inf)) return NULL;
 
+    /* Automatic numeric fast-path for the plain scalar FixedPoint[f, x0] (no
+     * SameTest, no application cap): iterate in compiled doubles. */
+    if (!as_list && same_test == NULL && max_inf) {
+        Expr* fast = numloop_fixedpoint(f, expr);
+        if (fast) return fast;
+    }
+
     ExprBuf buf;
     ebuf_init(&buf);
     ebuf_push(&buf, expr_copy(expr));
@@ -2231,7 +2299,10 @@ static Expr* fixedpoint_impl(Expr* res, bool as_list) {
                           .propagate_throw = !as_list };
     Expr* early = NULL;
     int64_t limit = max_inf ? ITER_SAFETY_CAP : max_apps;
-    IterRunResult r = iter_run(&buf, fixedpoint_step, &ctx, limit, max_inf, &early);
+    /* Scalar FixedPoint compares only the latest pair -> window 1; the *List
+     * form keeps every iterate. */
+    IterRunResult r = iter_run(&buf, fixedpoint_step, &ctx, limit, max_inf,
+                               as_list ? SIZE_MAX : 1, &early);
     if (r == ITER_RUN_SAFETY) return NULL;
     if (r == ITER_RUN_EARLY) return early;
 

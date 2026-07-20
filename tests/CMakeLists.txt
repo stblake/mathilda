@@ -302,6 +302,7 @@ set(COMMON_SRC
     ../src/special_functions/besseljzero.c
     ../src/power.c
     ../src/funcprog.c
+    ../src/numloop.c
     ../src/boolean.c
     ../src/names.c
     ../src/list/table.c
@@ -1035,6 +1036,9 @@ add_test(NAME fit_tests COMMAND fit_tests)
 
 add_executable(funcprog_through_tests test_funcprog_through.c ${COMMON_SRC})
 target_include_directories(funcprog_through_tests PRIVATE ../src)
+
+add_executable(numloop_tests test_numloop.c ${COMMON_SRC})
+target_include_directories(numloop_tests PRIVATE ../src)
 
 add_executable(mapat_tests test_mapat.c ${COMMON_SRC})
 target_include_directories(mapat_tests PRIVATE ../src)

@@ -292,14 +292,17 @@ Expr* builtin_times(Expr* res) {
      * This is what turns `1. Pi` into `3.14159` instead of leaving it as a
      * frozen `1. Pi` Times. */
     {
-        Expr** numed = numeric_contagion_args(res->data.function.args, n);
-        if (numed) {
+        enum { CONTAGION_SMALL = 8 };
+        Expr* numed_stack[CONTAGION_SMALL];
+        Expr** numed = (n <= CONTAGION_SMALL) ? numed_stack
+                                              : malloc(sizeof(Expr*) * n);
+        if (numeric_contagion_args(res->data.function.args, n, numed)) {
             for (size_t i = 0; i < n; i++) {
                 expr_free(res->data.function.args[i]);
                 res->data.function.args[i] = numed[i];
             }
-            free(numed);
         }
+        if (n > CONTAGION_SMALL) free(numed);
     }
 
     /* Infinity / Indeterminate preprocessing.
@@ -1119,7 +1122,13 @@ Expr* builtin_times(Expr* res) {
         return expr_new_integer(1);
     }
 
-    Expr** final_args = malloc(sizeof(Expr*) * final_count); size_t idx = 0;
+    /* final_count <= 2 + group_count <= 2 + n; when !heap_bufs, n <= TIMES_SMALL_N,
+     * so the result vector fits a stack buffer (expr_new_function memcpys it).
+     * Saves a malloc/free per small Times in tight numeric loops. */
+    Expr* final_args_stack[TIMES_SMALL_N + 2];
+    Expr** final_args = heap_bufs ? malloc(sizeof(Expr*) * final_count)
+                                  : final_args_stack;
+    size_t idx = 0;
     if (!(num_prod->type == EXPR_INTEGER && num_prod->data.integer == 1)) final_args[idx++] = num_prod;
     else expr_free(num_prod);
     if (complex_val) final_args[idx++] = complex_val;
@@ -1134,7 +1143,12 @@ Expr* builtin_times(Expr* res) {
         }
     }
     if (heap_bufs) free(groups);
-    if (idx == 1) { Expr* res_final = final_args[0]; free(final_args); return res_final; }
+    if (idx == 1) {
+        Expr* res_final = final_args[0];
+        if (heap_bufs) free(final_args);
+        return res_final;
+    }
     Expr* result = expr_new_function(expr_new_symbol(SYM_Times), final_args, idx);
-    free(final_args); return result;
+    if (heap_bufs) free(final_args);
+    return result;
 }

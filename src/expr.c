@@ -52,6 +52,8 @@ static Expr*  g_expr_pool = NULL;         /* free-list head */
 static size_t g_expr_pool_size = 0;       /* current free-list length */
 static bool   g_expr_pool_atexit_registered = false;
 
+static void expr_args_pool_free_all(void);  /* args-array buckets; defined below */
+
 /* Drain the free-list back to the system allocator. Idempotent; registered
  * with atexit(). Only touches already-freed (pooled) nodes. */
 void expr_pool_free_all(void) {
@@ -63,6 +65,7 @@ void expr_pool_free_all(void) {
     }
     g_expr_pool = NULL;
     g_expr_pool_size = 0;
+    expr_args_pool_free_all();
 }
 
 static Expr* expr_alloc_node(void) {
@@ -89,6 +92,71 @@ static void expr_release_node(Expr* e) {
     e->data.function.head = g_expr_pool;       /* push */
     g_expr_pool = e;
     g_expr_pool_size++;
+}
+
+/* ------------------------------------------------------------------------
+ *  Function args-array pool (bucketed free-list)
+ *
+ *  Beyond the fixed-size node struct, every EXPR_FUNCTION owns a heap array of
+ *  `arg_count` Expr* slots. In tight numeric loops the evaluator rebuilds a
+ *  handful of small function nodes per pass (e.g. Times[3.5,x,Plus[1,Times[-1,
+ *  x]]] rebuilds 3), so these small malloc/free pairs are the dominant residual
+ *  allocator traffic once the node struct itself is pooled. We recycle the
+ *  arrays through per-length free-lists (bucket[k] holds arrays of exactly k
+ *  slots), mirroring the bounded node pool.
+ *
+ *  Safety: an array is returned to bucket[k] only when it was allocated for
+ *  exactly k slots (every allocation site sizes to arg_count, and reuse only
+ *  ever touches arg_count slots), so a popped array always has room for the
+ *  requested count. Arrays freed directly with free() elsewhere (parse.c,
+ *  eval.c flatten, ...) simply bypass the pool — harmless, just unpooled.
+ *  Only lengths 1..EXPR_ARGS_POOL_MAXLEN are pooled; larger arrays go straight
+ *  to malloc/free. Each bucket is capped so a big transient batch drains to
+ *  fresh malloc (same locality rationale as the node pool's cap). */
+#define EXPR_ARGS_POOL_MAXLEN   8      /* pool arrays of 1..8 slots */
+#define EXPR_ARGS_POOL_CAP_EACH 1024   /* max recycled arrays per length */
+static Expr** g_args_pool[EXPR_ARGS_POOL_MAXLEN + 1];   /* [len] -> free-list head */
+static size_t g_args_pool_size[EXPR_ARGS_POOL_MAXLEN + 1];
+
+/* Drain every args-array bucket back to the OS. Called from expr_pool_free_all
+ * (which is atexit-registered) so binaries leave a clean heap for valgrind. */
+static void expr_args_pool_free_all(void) {
+    for (size_t k = 1; k <= EXPR_ARGS_POOL_MAXLEN; k++) {
+        Expr** a = g_args_pool[k];
+        while (a) {
+            Expr** next = (Expr**)a[0];   /* link stored in slot 0 */
+            free(a);
+            a = next;
+        }
+        g_args_pool[k] = NULL;
+        g_args_pool_size[k] = 0;
+    }
+}
+
+/* Allocate an args array of `len` slots (contents uninitialised — the caller
+ * fills them). Pops from bucket[len] when available. */
+static Expr** expr_args_alloc(size_t len) {
+    if (len >= 1 && len <= EXPR_ARGS_POOL_MAXLEN && g_args_pool[len]) {
+        Expr** a = g_args_pool[len];
+        g_args_pool[len] = (Expr**)a[0];   /* pop */
+        g_args_pool_size[len]--;
+        return a;
+    }
+    return (Expr**)malloc(sizeof(Expr*) * len);
+}
+
+/* Return an args array of `len` slots to its bucket, or to the OS if the length
+ * is out of range or the bucket is at capacity. */
+static void expr_args_free(Expr** a, size_t len) {
+    if (!a) return;
+    if (len < 1 || len > EXPR_ARGS_POOL_MAXLEN ||
+        g_args_pool_size[len] >= EXPR_ARGS_POOL_CAP_EACH) {
+        free(a);
+        return;
+    }
+    a[0] = (Expr*)g_args_pool[len];        /* push (link in slot 0) */
+    g_args_pool[len] = a;
+    g_args_pool_size[len]++;
 }
 
 // Create/allocate a new integer expression.
@@ -165,12 +233,17 @@ Expr* expr_new_function(Expr* head, Expr** args, size_t arg_count) {
     e->last_evaluated_at = 0;
     e->data.function.head = head;
     if (arg_count > 0) {
-        e->data.function.args = calloc(arg_count, sizeof(Expr*));
+        e->data.function.args = expr_args_alloc(arg_count);
         if (!e->data.function.args) {
-            free(e);
+            expr_release_node(e);
             return NULL;
         }
+        /* expr_args_alloc returns uninitialised storage; fill every slot so a
+         * later expr_free never dereferences garbage. memcpy covers all slots
+         * when args is supplied; otherwise zero them (callers that pass NULL
+         * expect NULL slots to fill in themselves). */
         if (args) memcpy(e->data.function.args, args, sizeof(Expr*) * arg_count);
+        else      memset(e->data.function.args, 0, sizeof(Expr*) * arg_count);
     } else {
         e->data.function.args = NULL;
     }
@@ -407,10 +480,10 @@ Expr* expr_unshare(Expr* e) {
             fresh->data.function.head = expr_copy(e->data.function.head);
             fresh->data.function.arg_count = e->data.function.arg_count;
             if (e->data.function.arg_count > 0) {
-                fresh->data.function.args = malloc(sizeof(Expr*) * e->data.function.arg_count);
+                fresh->data.function.args = expr_args_alloc(e->data.function.arg_count);
                 if (!fresh->data.function.args) {
                     if (fresh->data.function.head) expr_free(fresh->data.function.head);
-                    free(fresh);
+                    expr_release_node(fresh);
                     return e;
                 }
                 for (size_t i = 0; i < e->data.function.arg_count; i++) {
@@ -457,7 +530,8 @@ void expr_free(Expr* e) {
                     expr_free(e->data.function.args[i]);
                 }
             }
-            if (e->data.function.args) free(e->data.function.args);
+            if (e->data.function.args)
+                expr_args_free(e->data.function.args, e->data.function.arg_count);
             break;
         case EXPR_BIGINT:
             mpz_clear(e->data.bigint);

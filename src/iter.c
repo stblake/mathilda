@@ -45,6 +45,7 @@
 #include "arithmetic.h"
 #include "sym_names.h"
 #include "assoc.h"
+#include "numloop.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -369,6 +370,23 @@ Expr* builtin_do(Expr* res) {
     Expr* di_e    = s.di;
     Expr* list_e  = s.list;
 
+    /* Automatic numeric fast-path: compile the body's arithmetic (a single
+     * assignment or a CompoundExpression of assignments) to doubles and iterate
+     * without allocating. NULL means "not numeric-closed" -> interpreter. */
+    if (is_n_times && !is_inf) {
+        Expr* fast = numloop_do_count(expr, imax_e->data.integer);
+        if (fast) { iter_spec_free(&s); return fast; }
+    } else if (!is_n_times && !is_list_iter && !is_inf && !is_real && var_sym &&
+               imin_e && imin_e->type == EXPR_INTEGER &&
+               imax_e && imax_e->type == EXPR_INTEGER &&
+               (!di_e || di_e->type == EXPR_INTEGER)) {
+        /* Integer range form Do[body, {i, imin, imax, di}]. */
+        Expr* fast = numloop_do_range(expr, var_sym, imin_e->data.integer,
+                                      imax_e->data.integer,
+                                      di_e ? di_e->data.integer : 1);
+        if (fast) { iter_spec_free(&s); return fast; }
+    }
+
     /*
      * Shadow any existing OwnValue for the iterator: we temporarily clear
      * it so that evaluation of the body sees successive iterator values,
@@ -506,6 +524,14 @@ Expr* builtin_for(Expr* res) {
     Expr* incr  = res->data.function.args[2];
     Expr* body  = (argc == 4) ? res->data.function.args[3] : NULL;
 
+    /* Automatic numeric fast-path for the canonical counter loop
+     * For[i = i0, i < n, i++, x = <numeric>]: run in compiled doubles.
+     * NULL means "not the numeric shape" -> fall through to the interpreter. */
+    if (body) {
+        Expr* fast = numloop_for(start, test, incr, body);
+        if (fast) return fast;
+    }
+
     /* Initialisation: evaluate `start` for its side-effects; discard result. */
     Expr* eval_start = evaluate(start);
     expr_free(eval_start);
@@ -580,6 +606,12 @@ Expr* builtin_while(Expr* res) {
 
     Expr* test = res->data.function.args[0];
     Expr* body = (argc == 2) ? res->data.function.args[1] : NULL;
+
+    /* Automatic numeric fast-path for While[<numeric cmp>, x = <numeric>]. */
+    if (body) {
+        Expr* fast = numloop_while(test, body);
+        if (fast) return fast;
+    }
 
     Expr* returned_val = NULL;
 

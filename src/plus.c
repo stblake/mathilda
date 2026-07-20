@@ -422,14 +422,17 @@ Expr* builtin_plus(Expr* res) {
      * numericalize exact numeric parts in-place so `1. + Pi` collapses to
      * `4.14159` instead of staying as a frozen `1. + Pi` Plus. */
     {
-        Expr** numed = numeric_contagion_args(res->data.function.args, n);
-        if (numed) {
+        enum { CONTAGION_SMALL = 8 };
+        Expr* numed_stack[CONTAGION_SMALL];
+        Expr** numed = (n <= CONTAGION_SMALL) ? numed_stack
+                                              : malloc(sizeof(Expr*) * n);
+        if (numeric_contagion_args(res->data.function.args, n, numed)) {
             for (size_t i = 0; i < n; i++) {
                 expr_free(res->data.function.args[i]);
                 res->data.function.args[i] = numed[i];
             }
-            free(numed);
         }
+        if (n > CONTAGION_SMALL) free(numed);
     }
 
     /* Infinity / Indeterminate preprocessing.
@@ -623,7 +626,12 @@ Expr* builtin_plus(Expr* res) {
         return expr_new_integer(0);
     }
     
-    Expr** final_args = malloc(sizeof(Expr*) * final_count);
+    /* final_count <= 1 + group_count <= 1 + n; when !heap_bufs, n <= PLUS_SMALL_N,
+     * so the result vector fits a stack buffer (expr_new_function memcpys it, so
+     * the buffer need not outlive this call). Saves a malloc/free per small Plus. */
+    Expr* final_args_stack[PLUS_SMALL_N + 1];
+    Expr** final_args = heap_bufs ? malloc(sizeof(Expr*) * final_count)
+                                  : final_args_stack;
     size_t idx = 0;
     if (has_num) {
         Expr* re = NULL, *im = NULL;
@@ -633,7 +641,7 @@ Expr* builtin_plus(Expr* res) {
             final_args[idx++] = expr_copy(num_sum);
         }
     }
-    
+
     for (size_t j = 0; j < group_count; j++) {
         if (groups[j].coeff->type == EXPR_INTEGER && groups[j].coeff->data.integer == 0) {
             continue;
@@ -649,14 +657,12 @@ Expr* builtin_plus(Expr* res) {
     Expr* final_res = NULL;
     if (idx == 0) {
         final_res = expr_new_integer(0);
-        free(final_args);
     } else if (idx == 1) {
         final_res = final_args[0];
-        free(final_args);
     } else {
         final_res = expr_new_function(expr_new_symbol(SYM_Plus), final_args, idx);
-        free(final_args);
     }
+    if (heap_bufs) free(final_args);
     
     expr_free(num_sum);
     for(size_t j=0; j<group_count; j++) {

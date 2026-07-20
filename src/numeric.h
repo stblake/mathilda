@@ -233,16 +233,18 @@ bool get_approx_mpfr(const Expr* e,
 
 /* Mathematica inexact-contagion pre-pass for Plus / Times / other numeric
  * heads. Scans `args[0..n]` for any inexact numeric leaf (Real, MPFR, or
- * Complex[...] containing one). If found, returns a freshly allocated
- * array of `n` Expr* where each entry is numericalize(args[i]) at the
- * maximum MPFR precision observed among the inexact args (or machine
- * precision if only EXPR_REAL inexactness is present). This is how
- * `1. Pi` collapses to `3.14159` — the Pi is numericalized in-line.
+ * Complex[...] containing one). If found, writes into the caller-provided
+ * `out[0..n]` (which must have room for `n` entries) each numericalize(args[i])
+ * at the maximum MPFR precision observed among the inexact args (or machine
+ * precision if only EXPR_REAL inexactness is present) and returns true. This
+ * is how `1. Pi` collapses to `3.14159` — the Pi is numericalized in-line.
  *
- * Returns NULL if no arg is inexact; the caller should then proceed with
- * the original arg list. The returned array and all its elements are
- * caller-owned (free each with expr_free and the array with free()). */
-Expr** numeric_contagion_args(Expr* const* args, size_t n);
+ * Returns false (leaving `out` untouched) if no arg is inexact, or if every
+ * arg is already a bare machine Real (nothing to do); the caller should then
+ * proceed with the original arg list. When true, each written element is
+ * caller-owned (free with expr_free); the `out` buffer itself is the caller's
+ * (may be stack-allocated). */
+bool numeric_contagion_args(Expr* const* args, size_t n, Expr** out);
 
 /* Builtin entry points */
 Expr* builtin_n(Expr* res);
