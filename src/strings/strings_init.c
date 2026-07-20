@@ -101,4 +101,10 @@ void strings_init(void) {
     symtab_add_builtin("StringPadRight", builtin_stringpadright);
     symtab_get_def("StringPadRight")->attributes |= ATTR_PROTECTED;
     /* Docstring lives in info.c (info_init). */
+
+    /* StringRiffle takes a (possibly nested) list as its first argument and must
+     * inspect the whole structure, so it must NOT be ATTR_LISTABLE. */
+    symtab_add_builtin("StringRiffle", builtin_stringriffle);
+    symtab_get_def("StringRiffle")->attributes |= ATTR_PROTECTED;
+    /* Docstring lives in info.c (info_init). */
 }

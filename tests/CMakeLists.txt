@@ -451,6 +451,7 @@ set(COMMON_SRC
     ../src/strings/stringpartition.c
     ../src/strings/stringrepeat.c
     ../src/strings/stringpad.c
+    ../src/strings/stringriffle.c
     ../src/strings/strings_init.c
     ../src/strings/regex/regex_engine.c
     ../src/strings/regex/regex_common.c
@@ -2253,6 +2254,15 @@ else()
 endif()
 add_test(NAME stringpad_tests COMMAND stringpad_tests)
 
+add_executable(stringriffle_tests test_stringriffle.c ${COMMON_SRC})
+target_include_directories(stringriffle_tests PRIVATE ../src ../src/strings ../src/strings/regex)
+if(USE_ECM)
+    target_link_libraries(stringriffle_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(stringriffle_tests gmp m)
+endif()
+add_test(NAME stringriffle_tests COMMAND stringriffle_tests)
+
 add_executable(series_tests test_series.c ${COMMON_SRC})
 target_include_directories(series_tests PRIVATE ../src)
 
@@ -2534,6 +2544,7 @@ if(USE_ECM)
     add_dependencies(stringpartition_tests build_ecm)
     add_dependencies(stringrepeat_tests build_ecm)
     add_dependencies(stringpad_tests build_ecm)
+    add_dependencies(stringriffle_tests build_ecm)
     add_dependencies(series_tests build_ecm)
     add_dependencies(series_twoterm_tests build_ecm)
     add_dependencies(deriv_tests build_ecm)

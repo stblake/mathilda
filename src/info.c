@@ -3929,6 +3929,19 @@ void info_init(void) {
         "\tlongest, making them all the same length.\n"
         "StringPadRight[{s1, s2, ...}, n, ...]\n"
         "\tPads or truncates each string to length n.");
+
+    symtab_set_docstring("StringRiffle",
+        "StringRiffle[{s1, s2, ...}]\n"
+        "\tJoins the si into a string with spaces between them; nested lists\n"
+        "\tuse spaces at the lowest level and increasing numbers of newlines\n"
+        "\tat higher levels. Non-string elements are converted with ToString.\n"
+        "StringRiffle[list, sep]\n"
+        "\tInserts the string sep between the top-level elements.\n"
+        "StringRiffle[list, {\"left\", \"sep\", \"right\"}]\n"
+        "\tJoins with sep and wraps the result in the left/right delimiters.\n"
+        "StringRiffle[list, sep1, sep2, ...]\n"
+        "\tInserts separator sep_i (a string or {left, sep, right}) between\n"
+        "\telements at level i.");
     /* StringSplit's docstring lives in regex_init() (regex_init.c), next to the
      * string-pattern class heads it shares. */
 }

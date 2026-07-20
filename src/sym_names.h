@@ -629,6 +629,7 @@ extern const char* SYM_StringPartition;
 extern const char* SYM_StringRepeat;
 extern const char* SYM_StringPadLeft;
 extern const char* SYM_StringPadRight;
+extern const char* SYM_StringRiffle;
 /* String-pattern (StringExpression) heads and the IgnoreCase option, used by the
  * regex string family (StringSplit / StringCases / StringReplace / StringMatchQ). */
 extern const char* SYM_StringExpression;

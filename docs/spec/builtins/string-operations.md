@@ -629,6 +629,43 @@ In[4]:= StringPadLeft[{"a", "ab", "abc", "abcd", "abcde"}, 3]
 Out[4]= {"  a", " ab", "abc", "bcd", "cde"}
 ```
 
+## StringRiffle
+
+Assembles a string from a (possibly nested) list by inserting separators between
+elements — the inverse of `StringSplit`. Non-string leaves are converted with
+`ToString` (so `27` becomes `"27"`); string leaves are used verbatim.
+
+- `StringRiffle[list]`: joins with the default scheme — a single space at the
+  innermost level, one extra newline per level above it. A 2-D array joins rows
+  with `"\n"` and cells with `" "`; a 3-D array joins blocks with `"\n\n"`, rows
+  with `"\n"`, cells with `" "`.
+- `StringRiffle[list, sep]`: inserts the string `sep` between the top-level
+  elements; deeper levels fall back to the default scheme.
+- `StringRiffle[list, {"left", "sep", "right"}]`: a 3-string list is a delimiter
+  triple — joins with `sep` and wraps the result in `left`…`right`.
+- `StringRiffle[list, sep1, sep2, ...]`: inserts separator `sep_i` (a string or a
+  delimiter triple) between elements at level `i` (level 1 is outermost); levels
+  deeper than the supplied separators use the default scheme.
+- An empty list gives `""` (or just the delimiters for a triple). A first
+  argument that is neither a list nor a string, or a separator that is neither a
+  string nor a 3-string list, leaves the call unevaluated. No arguments emits
+  `StringRiffle::argm` (1 or more arguments expected).
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringRiffle[{"a", "b", "c", "d", "e"}]
+Out[1]= "a b c d e"
+
+In[2]:= StringRiffle[{"a", "b", "c", "d", "e"}, ", "]
+Out[2]= "a, b, c, d, e"
+
+In[3]:= StringRiffle[{"a", "b", "c", "d", "e"}, {"(", " ", ")"}]
+Out[3]= "(a b c d e)"
+
+In[4]:= StringRiffle[{{"a", 27}, {"b", 28}, {"c", 29}}, {"{", ", ", "}"}, ": "]
+Out[4]= "{a: 27, b: 28, c: 29}"
+```
+
 ## String patterns
 
 Beyond `RegularExpression["re"]` and literal strings, `StringMatchQ`,
