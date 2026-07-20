@@ -15,6 +15,7 @@
 #include "sym_names.h"
 #include "print.h"
 #include "eval.h"
+#include "plot_common.h"
 #include <raylib.h>
 #include <gmp.h>
 #ifdef USE_MPFR
@@ -258,6 +259,7 @@ typedef struct {
     RGBA8 grid_color;         /* GridLinesStyle */
     const Expr* prolog;       /* borrowed; drawn first, in data space */
     const Expr* epilog;       /* borrowed; drawn last, in data space */
+    ScaleFnType sf_x, sf_y;  /* ScalingFunctions; SF_NONE = linear (default) */
 } GfxOptions;
 
 /* True when `e` is the symbol True or All (the "on" forms for Frame and
@@ -321,6 +323,8 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
     o->grid_color = (RGBA8){ 210, 210, 210, 255 };
     o->prolog = NULL;
     o->epilog = NULL;
+    o->sf_x = SF_NONE;
+    o->sf_y = SF_NONE;
 
     size_t argc = graphics->data.function.arg_count;
 
@@ -499,6 +503,21 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
         } else if (name == SYM_Epilog) {
             o->epilog = rhs;
         }
+    }
+
+    /* Second pass: scan for the $ScalingMeta[sf_x_int, sf_y_int] metadata
+     * node emitted by plotters that support ScalingFunctions.  It is not a
+     * Rule, so the main option loop above skips it. */
+    for (size_t i = 1; i < argc; i++) {
+        const Expr* a = graphics->data.function.args[i];
+        if (!a || a->type != EXPR_FUNCTION || a->data.function.arg_count != 2) continue;
+        const Expr* ah = a->data.function.head;
+        if (!ah || ah->type != EXPR_SYMBOL || ah->data.symbol.name != SYM_ScalingMeta) continue;
+        const Expr* sx = a->data.function.args[0];
+        const Expr* sy = a->data.function.args[1];
+        if (sx->type == EXPR_INTEGER) o->sf_x = (ScaleFnType)sx->data.integer;
+        if (sy->type == EXPR_INTEGER) o->sf_y = (ScaleFnType)sy->data.integer;
+        break;
     }
 
     if (o->width < 100) o->width = 100;
@@ -894,7 +913,13 @@ static void draw_primitive(const Expr* node, DrawState* state) {
             label = owned ? owned : "";
         }
         float w = hershey_text_width(label, state->text_scale);
-        hershey_draw_text(label, (float)x - w / 2.0f, (float)(-y * state->yscale), state->text_scale, 0.0f, state->color);
+        /* Stroke thickness in world units: scale proportionally to the glyph
+         * size so caps never balloon to data-range scale.  The 0.5 factor
+         * matches hershey_draw_text_ex's cap_r = thickness*0.5 formula and
+         * keeps caps at ~1/14 of cap height, which is visually tight. */
+        float ws_thick = state->text_scale * 0.5f;
+        hershey_draw_text_ex(label, (float)x - w / 2.0f, (float)(-y * state->yscale),
+                             state->text_scale, 0.0f, state->color, ws_thick);
         if (owned) free(owned);
         return;
     }
@@ -979,28 +1004,87 @@ static void axes_origin_in_region(const PlotRange2D* vis, const PlotRange2D* dra
  * y ticks are placed at nice *data* values (data*ysc), so labels read true.
  * `zoom` is the camera zoom: the strokes are drawn 1.5 px wide on screen (to
  * match the frame's weight) by expressing the world-space width as 1.5/zoom. */
+/* Generate "nice" log-scale tick positions for a scaled axis.
+ * world_min/world_max are in world (scaled) space; sf is the active scale.
+ * Writes up to max_n ticks: world positions into ticks_w[], original
+ * (data-space) values into ticks_v[].  Returns the count.
+ *
+ * Ticks are placed at 1×, 2×, 5× per decade in the original domain when
+ * the visible span covers ≤4 decades; only at decade powers otherwise.
+ * This mirrors Mathematica's logarithmic tick placement. */
+static int gen_log_ticks(double world_min, double world_max, ScaleFnType sf,
+                          double* ticks_w, double* ticks_v, int max_n) {
+    double orig_min = scale_invert(sf, world_min);
+    double orig_max = scale_invert(sf, world_max);
+    if (orig_min <= 0.0 || orig_max <= 0.0 || orig_min >= orig_max) return 0;
+
+    double l10_min = floor(log10(orig_min));
+    double l10_max = ceil(log10(orig_max));
+    int n_decades = (int)(l10_max - l10_min);
+    if (n_decades < 1) n_decades = 1;
+
+    /* Sub-decade candidates per decade: 1, 2, 5 for narrow spans; 1 only wide */
+    static const double sub_narrow[] = { 1.0, 2.0, 5.0 };
+    static const double sub_wide[]   = { 1.0 };
+    const double* sub  = (n_decades <= 4) ? sub_narrow : sub_wide;
+    int           nsub = (n_decades <= 4) ? 3          : 1;
+
+    int n = 0;
+    for (int d = (int)l10_min - 1; d <= (int)l10_max; d++) {
+        double decade = pow(10.0, (double)d);
+        for (int s = 0; s < nsub; s++) {
+            double v = sub[s] * decade;
+            if (v < orig_min * (1.0 - 1e-9)) continue;
+            if (v > orig_max * (1.0 + 1e-9)) break;
+            double w = scale_apply(sf, v);
+            if (n < max_n) { ticks_w[n] = w; ticks_v[n] = v; n++; }
+        }
+    }
+    return n;
+}
+
 static void draw_axes_lines(const PlotRange2D* range, const PlotRange2D* drange,
                             double ysc, float zoom, const GfxOptions* o) {
     double ox, oy;
     axes_origin_in_region(range, drange, ysc, o, &ox, &oy);
-    float w = (zoom > 0.0f) ? 1.5f / zoom : 1.5f; /* world units -> 1.5 px on screen */
+    float w = (zoom > 0.0f) ? 1.5f / zoom : 1.5f;
     Color col = to_raylib(o->axes_color);
 
     DrawLineEx((Vector2){ (float)range->xmin, (float)-oy }, (Vector2){ (float)range->xmax, (float)-oy }, w, col);
     DrawLineEx((Vector2){ (float)ox, (float)-range->ymin }, (Vector2){ (float)ox, (float)-range->ymax }, w, col);
 
-    double xstep = nice_step(range->xmax - range->xmin, 8);
     double xtick = (range->ymax - range->ymin) * 0.015;
     double ytick = (range->xmax - range->xmin) * 0.015;
 
-    for (double tx = ceil(range->xmin / xstep) * xstep; tx <= range->xmax + 1e-9; tx += xstep) {
-        DrawLineEx((Vector2){ (float)tx, (float)-(oy - xtick) }, (Vector2){ (float)tx, (float)-(oy + xtick) }, w, col);
+    if (o->sf_x != SF_NONE) {
+        double tw[128]; double tv[128];
+        int nt = gen_log_ticks(range->xmin, range->xmax, o->sf_x, tw, tv, 128);
+        for (int i = 0; i < nt; i++)
+            DrawLineEx((Vector2){ (float)tw[i], (float)-(oy - xtick) },
+                       (Vector2){ (float)tw[i], (float)-(oy + xtick) }, w, col);
+    } else {
+        double xstep = nice_step(range->xmax - range->xmin, 8);
+        for (double tx = ceil(range->xmin / xstep) * xstep; tx <= range->xmax + 1e-9; tx += xstep)
+            DrawLineEx((Vector2){ (float)tx, (float)-(oy - xtick) },
+                       (Vector2){ (float)tx, (float)-(oy + xtick) }, w, col);
     }
+
     double dymin = range->ymin / ysc, dymax = range->ymax / ysc;
-    double ystep = nice_step(dymax - dymin, 6);
-    for (double ty = ceil(dymin / ystep) * ystep; ty <= dymax + 1e-9; ty += ystep) {
-        double ry = ty * ysc;
-        DrawLineEx((Vector2){ (float)(ox - ytick), (float)-ry }, (Vector2){ (float)(ox + ytick), (float)-ry }, w, col);
+    if (o->sf_y != SF_NONE) {
+        double tw[128]; double tv[128];
+        int nt = gen_log_ticks(dymin, dymax, o->sf_y, tw, tv, 128);
+        for (int i = 0; i < nt; i++) {
+            double ry = tw[i] * ysc;
+            DrawLineEx((Vector2){ (float)(ox - ytick), (float)-ry },
+                       (Vector2){ (float)(ox + ytick), (float)-ry }, w, col);
+        }
+    } else {
+        double ystep = nice_step(dymax - dymin, 6);
+        for (double ty = ceil(dymin / ystep) * ystep; ty <= dymax + 1e-9; ty += ystep) {
+            double ry = ty * ysc;
+            DrawLineEx((Vector2){ (float)(ox - ytick), (float)-ry },
+                       (Vector2){ (float)(ox + ytick), (float)-ry }, w, col);
+        }
     }
 }
 
@@ -1061,33 +1145,54 @@ static void draw_axes_labels(const PlotRange2D* range, const PlotRange2D* drange
     double ox, oy;
     axes_origin_in_region(range, drange, ysc, o, &ox, &oy);
     Color col = to_raylib(o->ticks_color);
-    double xstep = nice_step(range->xmax - range->xmin, 8);
-    /* y ticks are stepped in data space; render position is ty*ysc below. */
     double dymin = range->ymin / ysc, dymax = range->ymax / ysc;
-    double ystep = nice_step(dymax - dymin, 6);
-    /* World-space tick half-lengths, matching draw_axes_lines exactly. */
     double xtick = (range->ymax - range->ymin) * 0.015;
     double ytick = (range->xmax - range->xmin) * 0.015;
     const float scale = 1.5f;
-    const float cap = HERSHEY_CAP_HEIGHT * scale; /* glyph height in px */
-    const float gap = 5.0f;                       /* clearance past the tick end */
+    const float cap = HERSHEY_CAP_HEIGHT * scale;
+    const float gap = 5.0f;
     char buf[64];
 
-    for (double tx = ceil(range->xmin / xstep) * xstep; tx <= range->xmax + 1e-9; tx += xstep) {
-        if (fabs(tx) < 1e-9) tx = 0.0;
-        snprintf(buf, sizeof(buf), "%g", tx);
-        /* Screen position of the tick's lower (below-axis) end. */
-        Vector2 tip = GetWorldToScreen2D((Vector2){ (float)tx, (float)-(oy - xtick) }, camera);
-        float w = hershey_text_width(buf, scale);
-        hershey_draw_text_ex(buf, tip.x - w / 2.0f, tip.y + gap + cap, scale, 0.0f, col, 1.5f);
+    /* X tick labels */
+    if (o->sf_x != SF_NONE) {
+        double tw[128]; double tv[128];
+        int nt = gen_log_ticks(range->xmin, range->xmax, o->sf_x, tw, tv, 128);
+        for (int i = 0; i < nt; i++) {
+            snprintf(buf, sizeof(buf), "%g", tv[i]);
+            Vector2 tip = GetWorldToScreen2D((Vector2){ (float)tw[i], (float)-(oy - xtick) }, camera);
+            float lw = hershey_text_width(buf, scale);
+            hershey_draw_text_ex(buf, tip.x - lw / 2.0f, tip.y + gap + cap, scale, 0.0f, col, 1.5f);
+        }
+    } else {
+        double xstep = nice_step(range->xmax - range->xmin, 8);
+        for (double tx = ceil(range->xmin / xstep) * xstep; tx <= range->xmax + 1e-9; tx += xstep) {
+            if (fabs(tx) < 1e-9) tx = 0.0;
+            snprintf(buf, sizeof(buf), "%g", tx);
+            Vector2 tip = GetWorldToScreen2D((Vector2){ (float)tx, (float)-(oy - xtick) }, camera);
+            float lw = hershey_text_width(buf, scale);
+            hershey_draw_text_ex(buf, tip.x - lw / 2.0f, tip.y + gap + cap, scale, 0.0f, col, 1.5f);
+        }
     }
-    for (double ty = ceil(dymin / ystep) * ystep; ty <= dymax + 1e-9; ty += ystep) {
-        if (fabs(ty) < 1e-9) ty = 0.0;
-        snprintf(buf, sizeof(buf), "%g", ty);
-        /* Screen position of the tick's left (outside-axis) end. */
-        Vector2 tip = GetWorldToScreen2D((Vector2){ (float)(ox - ytick), (float)(-ty * ysc) }, camera);
-        float w = hershey_text_width(buf, scale);
-        hershey_draw_text_ex(buf, tip.x - w - gap, tip.y + cap / 2.0f, scale, 0.0f, col, 1.5f);
+
+    /* Y tick labels */
+    if (o->sf_y != SF_NONE) {
+        double tw[128]; double tv[128];
+        int nt = gen_log_ticks(dymin, dymax, o->sf_y, tw, tv, 128);
+        for (int i = 0; i < nt; i++) {
+            snprintf(buf, sizeof(buf), "%g", tv[i]);
+            Vector2 tip = GetWorldToScreen2D((Vector2){ (float)(ox - ytick), (float)(-tw[i] * ysc) }, camera);
+            float lw = hershey_text_width(buf, scale);
+            hershey_draw_text_ex(buf, tip.x - lw - gap, tip.y + cap / 2.0f, scale, 0.0f, col, 1.5f);
+        }
+    } else {
+        double ystep = nice_step(dymax - dymin, 6);
+        for (double ty = ceil(dymin / ystep) * ystep; ty <= dymax + 1e-9; ty += ystep) {
+            if (fabs(ty) < 1e-9) ty = 0.0;
+            snprintf(buf, sizeof(buf), "%g", ty);
+            Vector2 tip = GetWorldToScreen2D((Vector2){ (float)(ox - ytick), (float)(-ty * ysc) }, camera);
+            float lw = hershey_text_width(buf, scale);
+            hershey_draw_text_ex(buf, tip.x - lw - gap, tip.y + cap / 2.0f, scale, 0.0f, col, 1.5f);
+        }
     }
 }
 
@@ -1158,53 +1263,89 @@ static void draw_frame(float rx, float ry, float rw, float rh,
              : (o->frame_edge[FR_RIGHT] && o->frame_ticks[FR_RIGHT]) ? FR_RIGHT : -1;
 
     /* X ticks along the bottom and/or top edges. */
-    double xstep = nice_step(xR - xL, 8);
-    int xsub = frame_minor_divs(xstep);
-    double xm = xstep / xsub;
-    if (xm > 0) {
-        long i0 = (long)ceil(xL / xm - 1e-9), i1 = (long)floor(xR / xm + 1e-9);
-        for (long i = i0; i <= i1; i++) {
-            double tx = i * xm;
-            bool major = (i % xsub == 0);
-            float len = major ? maj : minr;
-            float sx = GetWorldToScreen2D((Vector2){ (float)tx, 0.0f }, camera).x;
+    if (o->sf_x != SF_NONE) {
+        double tw[128]; double tv[128];
+        int nt = gen_log_ticks(xL, xR, o->sf_x, tw, tv, 128);
+        for (int i = 0; i < nt; i++) {
+            float sx = GetWorldToScreen2D((Vector2){ (float)tw[i], 0.0f }, camera).x;
             if (sx < L - 0.5f || sx > R + 0.5f) continue;
             if (o->frame_edge[FR_BOTTOM] && o->frame_ticks[FR_BOTTOM])
-                DrawLineEx((Vector2){ sx, B }, (Vector2){ sx, B - len }, lw, col);
+                DrawLineEx((Vector2){ sx, B }, (Vector2){ sx, B - maj }, lw, col);
             if (o->frame_edge[FR_TOP] && o->frame_ticks[FR_TOP])
-                DrawLineEx((Vector2){ sx, T }, (Vector2){ sx, T + len }, lw, col);
-            if (major && xlab >= 0) {
-                snprintf(buf, sizeof(buf), "%g", fabs(tx) < 1e-9 ? 0.0 : tx);
-                float w = hershey_text_width(buf, scale);
-                /* Outside the frame: below the bottom edge, or above the top. */
+                DrawLineEx((Vector2){ sx, T }, (Vector2){ sx, T + maj }, lw, col);
+            if (xlab >= 0) {
+                snprintf(buf, sizeof(buf), "%g", tv[i]);
+                float fw = hershey_text_width(buf, scale);
                 float baseline = (xlab == FR_BOTTOM) ? (B + gap + cap) : (T - gap);
-                hershey_draw_text_ex(buf, sx - w / 2.0f, baseline, scale, 0.0f, col, lw);
+                hershey_draw_text_ex(buf, sx - fw / 2.0f, baseline, scale, 0.0f, col, lw);
+            }
+        }
+    } else {
+        double xstep = nice_step(xR - xL, 8);
+        int xsub = frame_minor_divs(xstep);
+        double xm = xstep / xsub;
+        if (xm > 0) {
+            long i0 = (long)ceil(xL / xm - 1e-9), i1 = (long)floor(xR / xm + 1e-9);
+            for (long i = i0; i <= i1; i++) {
+                double tx = i * xm;
+                bool major = (i % xsub == 0);
+                float len = major ? maj : minr;
+                float sx = GetWorldToScreen2D((Vector2){ (float)tx, 0.0f }, camera).x;
+                if (sx < L - 0.5f || sx > R + 0.5f) continue;
+                if (o->frame_edge[FR_BOTTOM] && o->frame_ticks[FR_BOTTOM])
+                    DrawLineEx((Vector2){ sx, B }, (Vector2){ sx, B - len }, lw, col);
+                if (o->frame_edge[FR_TOP] && o->frame_ticks[FR_TOP])
+                    DrawLineEx((Vector2){ sx, T }, (Vector2){ sx, T + len }, lw, col);
+                if (major && xlab >= 0) {
+                    snprintf(buf, sizeof(buf), "%g", fabs(tx) < 1e-9 ? 0.0 : tx);
+                    float fw = hershey_text_width(buf, scale);
+                    float baseline = (xlab == FR_BOTTOM) ? (B + gap + cap) : (T - gap);
+                    hershey_draw_text_ex(buf, sx - fw / 2.0f, baseline, scale, 0.0f, col, lw);
+                }
             }
         }
     }
 
     /* Y ticks along the left and/or right edges. */
-    double ystep = nice_step(dymax - dymin, 6);
-    int ysub = frame_minor_divs(ystep);
-    double ym = ystep / ysub;
-    if (ym > 0) {
-        long i0 = (long)ceil(dymin / ym - 1e-9), i1 = (long)floor(dymax / ym + 1e-9);
-        for (long i = i0; i <= i1; i++) {
-            double ty = i * ym;
-            bool major = (i % ysub == 0);
-            float len = major ? maj : minr;
-            float sy = GetWorldToScreen2D((Vector2){ 0.0f, (float)(-ty * ysc) }, camera).y;
+    if (o->sf_y != SF_NONE) {
+        double tw[128]; double tv[128];
+        int nt = gen_log_ticks(dymin, dymax, o->sf_y, tw, tv, 128);
+        for (int i = 0; i < nt; i++) {
+            float sy = GetWorldToScreen2D((Vector2){ 0.0f, (float)(-tw[i] * ysc) }, camera).y;
             if (sy < T - 0.5f || sy > B + 0.5f) continue;
             if (o->frame_edge[FR_LEFT] && o->frame_ticks[FR_LEFT])
-                DrawLineEx((Vector2){ L, sy }, (Vector2){ L + len, sy }, lw, col);
+                DrawLineEx((Vector2){ L, sy }, (Vector2){ L + maj, sy }, lw, col);
             if (o->frame_edge[FR_RIGHT] && o->frame_ticks[FR_RIGHT])
-                DrawLineEx((Vector2){ R, sy }, (Vector2){ R - len, sy }, lw, col);
-            if (major && ylab >= 0) {
-                snprintf(buf, sizeof(buf), "%g", fabs(ty) < 1e-9 ? 0.0 : ty);
-                float w = hershey_text_width(buf, scale);
-                /* Outside the frame: left of the left edge, or right of the right. */
-                float tx = (ylab == FR_LEFT) ? (L - gap - w) : (R + gap);
-                hershey_draw_text_ex(buf, tx, sy + cap / 2.0f, scale, 0.0f, col, lw);
+                DrawLineEx((Vector2){ R, sy }, (Vector2){ R - maj, sy }, lw, col);
+            if (ylab >= 0) {
+                snprintf(buf, sizeof(buf), "%g", tv[i]);
+                float fw = hershey_text_width(buf, scale);
+                float ftx = (ylab == FR_LEFT) ? (L - gap - fw) : (R + gap);
+                hershey_draw_text_ex(buf, ftx, sy + cap / 2.0f, scale, 0.0f, col, lw);
+            }
+        }
+    } else {
+        double ystep = nice_step(dymax - dymin, 6);
+        int ysub = frame_minor_divs(ystep);
+        double ym = ystep / ysub;
+        if (ym > 0) {
+            long i0 = (long)ceil(dymin / ym - 1e-9), i1 = (long)floor(dymax / ym + 1e-9);
+            for (long i = i0; i <= i1; i++) {
+                double ty = i * ym;
+                bool major = (i % ysub == 0);
+                float len = major ? maj : minr;
+                float sy = GetWorldToScreen2D((Vector2){ 0.0f, (float)(-ty * ysc) }, camera).y;
+                if (sy < T - 0.5f || sy > B + 0.5f) continue;
+                if (o->frame_edge[FR_LEFT] && o->frame_ticks[FR_LEFT])
+                    DrawLineEx((Vector2){ L, sy }, (Vector2){ L + len, sy }, lw, col);
+                if (o->frame_edge[FR_RIGHT] && o->frame_ticks[FR_RIGHT])
+                    DrawLineEx((Vector2){ R, sy }, (Vector2){ R - len, sy }, lw, col);
+                if (major && ylab >= 0) {
+                    snprintf(buf, sizeof(buf), "%g", fabs(ty) < 1e-9 ? 0.0 : ty);
+                    float fw = hershey_text_width(buf, scale);
+                    float ftx = (ylab == FR_LEFT) ? (L - gap - fw) : (R + gap);
+                    hershey_draw_text_ex(buf, ftx, sy + cap / 2.0f, scale, 0.0f, col, lw);
+                }
             }
         }
     }
@@ -1505,34 +1646,127 @@ static const Expr* find_legend_data(const Expr* graphics_expr) {
     return NULL;
 }
 
+/* Finds $BarChartLabels[{x1,label1},...] in the Graphics option list.
+ * Returns the node (borrowed) or NULL if absent. */
+static const Expr* find_bar_labels(const Expr* graphics_expr) {
+    size_t argc = graphics_expr->data.function.arg_count;
+    for (size_t i = 1; i < argc; i++) {
+        const Expr* a = graphics_expr->data.function.args[i];
+        if (a && a->type == EXPR_FUNCTION && a->data.function.head
+            && a->data.function.head->type == EXPR_SYMBOL
+            && a->data.function.head->data.symbol.name == SYM_BarChartLabels)
+            return a;
+    }
+    return NULL;
+}
+
 /* Finds $StreamColorBar[spd_min, spd_max] in the Graphics option list.
  * Returns the node (borrowed) or NULL if absent. */
-static const Expr* find_color_bar(const Expr* graphics_expr) {
+const Expr* find_color_bar(const Expr* graphics_expr) {
     size_t argc = graphics_expr->data.function.arg_count;
     for (size_t i = 1; i < argc; i++) {
         const Expr* a = graphics_expr->data.function.args[i];
         if (a && a->type == EXPR_FUNCTION && a->data.function.head
             && a->data.function.head->type == EXPR_SYMBOL
             && a->data.function.head->data.symbol.name == SYM_StreamColorBar
-            && a->data.function.arg_count == 2)
+            && a->data.function.arg_count >= 2)
             return a;
     }
     return NULL;
 }
 
-/* Screen-space vertical color scale bar for StreamPlot's speed gradient.
+/* Screen-space category labels for BarChart/Histogram — drawn after EndMode2D
+ * so they are crisp (pixel-fixed size) and sit clearly below the axis ticks.
+ * Each element of bar_labels is {world_x, label_string_or_expr}.
+ *
+ * Placement: project world y=0 (bar baseline) to screen.  The axis tick
+ * numbers sit ~(gap + tick_cap) pixels below that; the category labels sit
+ * a further (label_gap + label_cap) pixels below the tick numbers. */
+static void draw_bar_chart_labels(const Expr* bar_labels, Camera2D camera) {
+    if (!bar_labels) return;
+    size_t n = bar_labels->data.function.arg_count;
+
+    /* tick row: scale=1.5, cap=10.5 px, gap=5 px → tick row bottom ≈ +15 px */
+    const float tick_scale = 1.5f;
+    const float tick_cap   = HERSHEY_CAP_HEIGHT * tick_scale; /* ~10.5 px */
+    const float tick_gap   = 5.0f;
+
+    /* category label row: scale=2.0, cap=14 px */
+    const float scale  = 2.0f;
+    const float cap    = HERSHEY_CAP_HEIGHT * scale; /* 14 px */
+    const float label_gap = 6.0f;
+
+    /* Screen y of the x-axis (world y=0, render y=0). */
+    Vector2 axis_screen = GetWorldToScreen2D((Vector2){ 0.0f, 0.0f }, camera);
+    /* Baseline of the tick-number row, then the category-label baseline. */
+    float tick_baseline = axis_screen.y + tick_gap + tick_cap;
+    float label_y = tick_baseline + label_gap + cap;
+
+    Color col = (Color){ 30, 30, 30, 255 };
+    for (size_t i = 0; i < n; i++) {
+        const Expr* pair = bar_labels->data.function.args[i];
+        if (!pair || pair->type != EXPR_FUNCTION || pair->data.function.arg_count < 2) continue;
+        double wx;
+        if (!expr_to_d(pair->data.function.args[0], &wx)) continue;
+        const Expr* lbl = pair->data.function.args[1];
+        char* owned = NULL;
+        const char* text;
+        if (lbl->type == EXPR_STRING) {
+            text = lbl->data.string;
+        } else {
+            owned = expr_to_string((Expr*)lbl);
+            text = owned ? owned : "?";
+        }
+        Vector2 sp = GetWorldToScreen2D((Vector2){ (float)wx, 0.0f }, camera);
+        float w = hershey_text_width(text, scale);
+        hershey_draw_text_ex(text, sp.x - w / 2.0f, label_y, scale, 0.0f, col, 1.5f);
+        if (owned) free(owned);
+    }
+}
+
+/* Screen-space vertical color scale bar.
  * bar_x/y: top-left of the strip; bar_w/bar_h: dimensions in pixels.
- * Labels are drawn to the right of the strip. */
-static void draw_color_bar(float bar_x, float bar_y, float bar_w, float bar_h,
-                           double spd_min, double spd_max) {
+ * cfn: the ColorFunction option Expr (string name, pure function, or NULL/
+ * Automatic meaning default thermal ramp). Labels are drawn to the right. */
+void draw_color_bar(float bar_x, float bar_y, float bar_w, float bar_h,
+                    double spd_min, double spd_max, const Expr* cfn) {
     int bands = (int)bar_h;
     if (bands < 1) bands = 1;
+
+    /* Determine whether cfn is a usable string name or a callable Expr. */
+    const char* cfn_name = NULL;
+    bool cfn_is_callable = false;
+    if (cfn && cfn->type == EXPR_STRING) {
+        cfn_name = cfn->data.string;
+    } else if (cfn && cfn->type == EXPR_FUNCTION) {
+        /* Pure function or other callable — evaluated per band below. */
+        cfn_is_callable = true;
+    }
 
     /* Gradient strip — top = spd_max (t=1), bottom = spd_min (t=0). */
     for (int i = 0; i < bands; i++) {
         double t = 1.0 - (double)i / (double)(bands > 1 ? bands - 1 : 1);
         double rv, gv, bv;
-        thermal_rgb(t, &rv, &gv, &bv);
+        bool colored = false;
+
+        if (cfn_name && resolve_ramp_to_rgb(cfn_name, t, &rv, &gv, &bv)) {
+            colored = true;
+        } else if (cfn_is_callable) {
+            /* Evaluate cfn[t] and resolve the resulting color expression. */
+            Expr* targ[1] = { expr_new_real(t) };
+            Expr* call = expr_new_function(expr_copy((Expr*)cfn), targ, 1);
+            Expr* result = evaluate(call);
+            RGBA8 col;
+            if (result && resolve_color(result, &col)) {
+                rv = col.r / 255.0;
+                gv = col.g / 255.0;
+                bv = col.b / 255.0;
+                colored = true;
+            }
+            expr_free(result);
+        }
+        if (!colored) thermal_rgb(t, &rv, &gv, &bv);
+
         Color c = { (unsigned char)(rv * 255.0 + 0.5),
                     (unsigned char)(gv * 255.0 + 0.5),
                     (unsigned char)(bv * 255.0 + 0.5), 255 };
@@ -1541,8 +1775,8 @@ static void draw_color_bar(float bar_x, float bar_y, float bar_w, float bar_h,
     DrawRectangleLinesEx((Rectangle){ bar_x, bar_y, bar_w, bar_h }, 1.0f,
                          (Color){ 80, 80, 80, 255 });
 
-    /* 5 tick marks with numeric labels. */
-    const int nticks = 5;
+    /* 9 tick marks with numeric labels. */
+    const int nticks = 9;
     const float scale = 1.2f;
     float text_x = bar_x + bar_w + 5.0f;
     for (int k = 0; k < nticks; k++) {
@@ -1641,6 +1875,7 @@ void graphics_show(const Expr* graphics_expr) {
     Expr* dyn_prims = NULL;
     bool resample_ok = true;          /* cleared if this isn't a Plot object */
     const Expr* color_bar_data = find_color_bar(graphics_expr);
+    const Expr* bar_labels_data = find_bar_labels(graphics_expr);
     /* The x-span currently sampled (with margin) and the visible width at the
      * last re-sample -- the loop re-samples once the view leaves either. */
     double cov_lo = 0.0, cov_hi = 0.0, ref_vw = -1.0;
@@ -1984,6 +2219,7 @@ void graphics_show(const Expr* graphics_expr) {
         if (opts.frame) EndScissorMode();
 
         if (opts.axes) draw_axes_labels(&visible, &range, camera, ysc, &opts);
+        if (bar_labels_data) draw_bar_chart_labels(bar_labels_data, camera);
         if (opts.frame) draw_frame(reg_x, reg_y, reg_w, reg_h, camera, ysc, &opts);
         if (opts.frame) draw_frame_label(reg_x, reg_y, reg_w, reg_h, &opts);
         draw_extra_labels(&opts, (int)opts.width, (int)opts.height);
@@ -1996,13 +2232,16 @@ void graphics_show(const Expr* graphics_expr) {
             const Expr* a1 = color_bar_data->data.function.args[1];
             if (a0->type == EXPR_REAL) cb_spd_min = a0->data.real;
             if (a1->type == EXPR_REAL) cb_spd_max = a1->data.real;
+            /* 3rd arg (optional): the ColorFunction expression. */
+            const Expr* cb_cfn = (color_bar_data->data.function.arg_count >= 3)
+                                 ? color_bar_data->data.function.args[2] : NULL;
             const float cb_margin = 50.0f;
             const float cb_w = 18.0f;
             float cb_h = opts.height - 2.0f * cb_margin;
             if (cb_h < 20.0f) cb_h = 20.0f;
             float cb_x = opts.width - 70.0f;
             float cb_y = cb_margin;
-            draw_color_bar(cb_x, cb_y, cb_w, cb_h, cb_spd_min, cb_spd_max);
+            draw_color_bar(cb_x, cb_y, cb_w, cb_h, cb_spd_min, cb_spd_max, cb_cfn);
         }
 
         /* On a capture frame suppress every bit of UI chrome so the saved
@@ -2041,4 +2280,153 @@ void graphics_show(const Expr* graphics_expr) {
 close_window:
     if (dyn_prims) expr_free(dyn_prims);
     CloseWindow();
+}
+
+/* Render a 2D Graphics[...] expression into the screen region [rx,ry,rw,rh].
+ * Must be called inside BeginDrawing()/EndDrawing() of an open Raylib window.
+ * Does not clear the background outside the region; does paint the region with
+ * the graphics object's Background color. Used by Animate's per-frame draw. */
+void graphics_render_in_region(const Expr* graphics_expr,
+                                float rx, float ry, float rw, float rh) {
+    if (!graphics_expr || graphics_expr->type != EXPR_FUNCTION
+        || graphics_expr->data.function.arg_count < 1) return;
+    if (rw <= 0.0f || rh <= 0.0f) return;
+
+    GfxOptions opts;
+    gfx_options_parse(graphics_expr, &opts);
+    /* Override the stored window size to match the region. */
+    opts.width  = (long)rw;
+    opts.height = (long)rh;
+
+    const Expr* prims           = graphics_expr->data.function.args[0];
+    const Expr* legend_data     = find_legend_data(graphics_expr);
+    const Expr* color_bar_data  = find_color_bar(graphics_expr);
+    const Expr* bar_labels_data = find_bar_labels(graphics_expr);
+
+    /* Background fill for the content region. */
+    DrawRectangle((int)rx, (int)ry, (int)rw, (int)rh, to_raylib(opts.background));
+
+    PlotRange2D range = { DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX };
+    if (!opts.x_auto && !opts.y_auto) {
+        range = opts.range;
+    } else {
+        compute_bbox(prims, &range);
+        if (range.xmin > range.xmax) { range.xmin = -1; range.xmax = 1; }
+        if (range.ymin > range.ymax) { range.ymin = -1; range.ymax = 1; }
+        if (opts.y_auto && opts.clip_outliers && prims_have_runaway(prims)) {
+            double* ys = NULL; size_t yn = 0, ycap = 0;
+            gather_ys(prims, &ys, &yn, &ycap);
+            if (yn > 0) {
+                double lo, hi;
+                plot_robust_yrange(ys, yn, &lo, &hi);
+                if (lo <= hi) { range.ymin = lo; range.ymax = hi; }
+            }
+            free(ys);
+        }
+        double xpad = (range.xmax - range.xmin) * opts.pad_x_frac;
+        double ypad = (range.ymax - range.ymin) * opts.pad_y_frac;
+        if (xpad <= 0 && opts.pad_x_frac > 0) xpad = 1.0;
+        if (ypad <= 0 && opts.pad_y_frac > 0) ypad = 1.0;
+        range.xmin -= xpad; range.xmax += xpad;
+        range.ymin -= ypad; range.ymax += ypad;
+        if (!opts.x_auto) { range.xmin = opts.range.xmin; range.xmax = opts.range.xmax; }
+        if (!opts.y_auto) { range.ymin = opts.range.ymin; range.ymax = opts.range.ymax; }
+    }
+
+    double data_w = range.xmax - range.xmin;
+    double data_h = range.ymax - range.ymin;
+    if (data_w <= 0) data_w = 1;
+    if (data_h <= 0) data_h = 1;
+
+    /* Plot sub-region inside the content region (accounts for margins). */
+    float preg_x = rx, preg_y = ry, preg_w = rw, preg_h = rh;
+    if (opts.frame) {
+        float mL = rw * 0.05f; if (mL < 50.0f) mL = 50.0f;
+        float mR = rw * 0.05f; if (mR < 20.0f) mR = 20.0f;
+        float mT = rh * 0.05f; if (mT < 28.0f) mT = 28.0f;
+        float mB = rh * 0.05f; if (mB < 48.0f) mB = 48.0f;
+        if (mL + mR < rw - 40.0f && mT + mB < rh - 40.0f) {
+            preg_x = rx + mL; preg_y = ry + mT;
+            preg_w = rw - mL - mR; preg_h = rh - mT - mB;
+        }
+    } else if (opts.axes) {
+        float mL = rw * 0.06f; if (mL < 52.0f) mL = 52.0f;
+        float mR = rw * 0.03f; if (mR < 22.0f) mR = 22.0f;
+        float mT = rh * 0.05f; if (mT < 34.0f) mT = 34.0f;
+        float mB = rh * 0.07f; if (mB < 52.0f) mB = 52.0f;
+        if (mL + mR < rw - 40.0f && mT + mB < rh - 40.0f) {
+            preg_x = rx + mL; preg_y = ry + mT;
+            preg_w = rw - mL - mR; preg_h = rh - mT - mB;
+        }
+    }
+
+    double aspect = opts.aspect_ratio > 0 ? opts.aspect_ratio : (data_h / data_w);
+    double fit_by_width  = (double)preg_w / data_w;
+    double fit_by_height = (double)preg_h / (data_w * aspect);
+    float base_zoom = (float)(fit_by_width < fit_by_height ? fit_by_width : fit_by_height);
+    if (base_zoom <= 0 || !isfinite(base_zoom)) base_zoom = 1.0f;
+
+    double ysc = aspect * data_w / data_h;
+    if (!isfinite(ysc) || ysc <= 0) ysc = 1.0;
+
+    Camera2D camera = { 0 };
+    camera.offset   = (Vector2){ preg_x + preg_w / 2.0f, preg_y + preg_h / 2.0f };
+    camera.target   = (Vector2){ (float)((range.xmin + range.xmax) / 2.0),
+                                  (float)(-(range.ymin + range.ymax) / 2.0 * ysc) };
+    camera.rotation = 0.0f;
+    camera.zoom     = base_zoom;
+
+    DrawState init_state;
+    init_state.color      = to_raylib(opts.style_color);
+    init_state.thickness  = 1.5f / base_zoom;
+    double region_px      = (double)(preg_w < preg_h ? preg_w : preg_h);
+    double r_px           = 0.0067 * region_px;
+    size_t npts           = count_points(prims);
+    if (npts > 1) {
+        double area_px  = (double)preg_w * (double)preg_h;
+        double dens_px  = 0.12 * sqrt(area_px / (double)npts);
+        if (dens_px < r_px) r_px = dens_px;
+    }
+    if (r_px < 0.6) r_px = 0.6;
+    init_state.point_size = (base_zoom > 0) ? (float)(r_px / base_zoom) : (float)r_px;
+    init_state.text_scale = (float)(fmax(data_w, data_h) * 0.03 / HERSHEY_CAP_HEIGHT);
+    init_state.yscale     = (float)ysc;
+
+    PlotRange2D visible = { range.xmin, range.xmax, range.ymin * ysc, range.ymax * ysc };
+
+    if (opts.frame) BeginScissorMode((int)preg_x, (int)preg_y, (int)preg_w, (int)preg_h);
+    BeginMode2D(camera);
+    if (opts.prolog) { DrawState ps = init_state; draw_primitive(opts.prolog, &ps); }
+    draw_gridlines(&visible, ysc, camera.zoom, &opts);
+    if (opts.axes) draw_axes_lines(&visible, &range, ysc, camera.zoom, &opts);
+    DrawState state = init_state;
+    draw_primitive(prims, &state);
+    if (opts.epilog) { DrawState es = init_state; draw_primitive(opts.epilog, &es); }
+    EndMode2D();
+    if (opts.frame) EndScissorMode();
+
+    if (opts.axes) draw_axes_labels(&visible, &range, camera, ysc, &opts);
+    if (bar_labels_data) draw_bar_chart_labels(bar_labels_data, camera);
+    if (opts.frame) draw_frame(preg_x, preg_y, preg_w, preg_h, camera, ysc, &opts);
+    if (opts.frame) draw_frame_label(preg_x, preg_y, preg_w, preg_h, &opts);
+    /* Extra labels use region dimensions (not full window) for centering. */
+    draw_extra_labels(&opts, (int)(rx + rw), (int)(ry + rh));
+    if (legend_data) draw_legend(legend_data, (int)(rx + rw));
+
+    if (color_bar_data) {
+        double cb_spd_min = 0.0, cb_spd_max = 1.0;
+        const Expr* a0 = color_bar_data->data.function.args[0];
+        const Expr* a1 = color_bar_data->data.function.args[1];
+        if (a0->type == EXPR_REAL) cb_spd_min = a0->data.real;
+        if (a1->type == EXPR_REAL) cb_spd_max = a1->data.real;
+        const Expr* cb_cfn = (color_bar_data->data.function.arg_count >= 3)
+                             ? color_bar_data->data.function.args[2] : NULL;
+        const float cb_margin = 50.0f;
+        const float cb_w = 18.0f;
+        float cb_h = rh - 2.0f * cb_margin;
+        if (cb_h < 20.0f) cb_h = 20.0f;
+        float cb_x = rx + rw - 70.0f;
+        float cb_y = ry + cb_margin;
+        draw_color_bar(cb_x, cb_y, cb_w, cb_h, cb_spd_min, cb_spd_max, cb_cfn);
+    }
 }

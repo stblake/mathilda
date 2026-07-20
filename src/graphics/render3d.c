@@ -11,7 +11,12 @@
  * Coordinate convention: the data is z-up (z is the plotted function
  * value, as in Mathematica), but Raylib's Camera3D is y-up. Every world
  * point's y and z are swapped exactly once, in to_v3() -- there is no other
- * axis remap anywhere else in this file. */
+ * axis remap anywhere else in this file.
+ *
+ * Performance note: the expression tree is converted to a flat C mesh
+ * (BakedMesh) ONCE before the render loop.  This eliminates per-frame
+ * malloc/free for every polygon and the per-frame recursive tree walk,
+ * both of which scaled badly for dense multi-surface plots. */
 
 #include "render3d.h"
 #include "render_common.h"
@@ -152,8 +157,6 @@ static Color shade_color(Color base, Vector3 face_normal, Vector3 light_dir) {
     };
 }
 
-typedef struct { Color color; bool lighting; Vector3 light_dir; } DrawState3D;
-
 /* Reads a 3-coordinate {x,y,z} List into a Vector3 (already axis-remapped). */
 static bool expr_point3(const Expr* e, Vector3* out) {
     double x, y, z;
@@ -167,12 +170,62 @@ static bool expr_point3(const Expr* e, Vector3* out) {
     return false;
 }
 
-/* Mirrors render.c's draw_primitive, restricted to the primitives Plot3D
- * actually emits (List, color directives, Opacity, Polygon, Line). A
- * hand-built Graphics3D[] using a 2D-only primitive (Point, Rectangle,
- * Circle, Text, ...) simply isn't drawn -- the same "unrecognized node is
- * silently skipped" contract render.c's draw_primitive already has. */
-static void draw_primitive3(const Expr* node, DrawState3D* state) {
+/* ---------------- baked mesh ---------------- *
+ *
+ * The expression tree is walked ONCE before the render loop to produce a pair
+ * of flat C arrays: triangles (BakedTri) and line segments (BakedSeg).  Each
+ * frame only iterates those arrays -- no malloc, no recursive tree walk.
+ *
+ * Normals are pre-computed at bake time; per-frame shading only needs a dot
+ * product and a multiply per triangle, not a cross-product + normalize. */
+
+typedef struct {
+    Vector3 v0, v1, v2;
+    Vector3 normal;     /* pre-computed face normal */
+    Color   base_color; /* unshaded colour */
+} BakedTri;
+
+typedef struct {
+    Vector3 a, b;
+    Color   color;
+} BakedSeg;
+
+typedef struct {
+    BakedTri* tris;  size_t n_tris, tri_cap;
+    BakedSeg* segs;  size_t n_segs, seg_cap;
+} BakedMesh;
+
+static void bm_push_tri(BakedMesh* bm, Vector3 v0, Vector3 v1, Vector3 v2, Color c) {
+    if (bm->n_tris == bm->tri_cap) {
+        bm->tri_cap = bm->tri_cap ? bm->tri_cap * 2 : 512;
+        bm->tris = (BakedTri*)realloc(bm->tris, sizeof(BakedTri) * bm->tri_cap);
+    }
+    Vector3 e1 = Vector3Subtract(v1, v0);
+    Vector3 e2 = Vector3Subtract(v2, v0);
+    bm->tris[bm->n_tris++] = (BakedTri){
+        v0, v1, v2,
+        Vector3Normalize(Vector3CrossProduct(e1, e2)),
+        c
+    };
+}
+
+static void bm_push_seg(BakedMesh* bm, Vector3 a, Vector3 b, Color c) {
+    if (bm->n_segs == bm->seg_cap) {
+        bm->seg_cap = bm->seg_cap ? bm->seg_cap * 2 : 512;
+        bm->segs = (BakedSeg*)realloc(bm->segs, sizeof(BakedSeg) * bm->seg_cap);
+    }
+    bm->segs[bm->n_segs++] = (BakedSeg){ a, b, c };
+}
+
+static void bm_free(BakedMesh* bm) {
+    free(bm->tris); bm->tris = NULL; bm->n_tris = bm->tri_cap = 0;
+    free(bm->segs); bm->segs = NULL; bm->n_segs = bm->seg_cap = 0;
+}
+
+/* Walk the expression tree and append primitives to `bm`.  Mirrors
+ * draw_primitive3's logic but outputs to flat arrays instead of Raylib calls.
+ * `cur_color` carries the mutable colour state across recursive calls. */
+static void bake_node(const Expr* node, Color* cur_color, BakedMesh* bm) {
     if (!node || node->type != EXPR_FUNCTION) return;
     const Expr* h = node->data.function.head;
     if (!h || h->type != EXPR_SYMBOL) return;
@@ -180,45 +233,31 @@ static void draw_primitive3(const Expr* node, DrawState3D* state) {
     size_t n = node->data.function.arg_count;
 
     if (name == SYM_List) {
-        for (size_t i = 0; i < n; i++) draw_primitive3(node->data.function.args[i], state);
+        for (size_t i = 0; i < n; i++) bake_node(node->data.function.args[i], cur_color, bm);
         return;
     }
     {
         RGBA8 c;
-        if (resolve_color(node, &c)) { state->color = to_raylib(c); return; }
+        if (resolve_color(node, &c)) { *cur_color = to_raylib(c); return; }
     }
-    if (name == SYM_Opacity) {
+    if (name == SYM_Opacity && n >= 1) {
         double a;
-        if (n >= 1 && expr_to_d(node->data.function.args[0], &a)) state->color.a = (unsigned char)(a * 255);
+        if (expr_to_d(node->data.function.args[0], &a)) cur_color->a = (unsigned char)(a * 255);
         return;
     }
     if (name == SYM_Polygon && n >= 1 && node->data.function.args[0]->type == EXPR_FUNCTION) {
         const Expr* arg = node->data.function.args[0];
         size_t m = arg->data.function.arg_count;
         if (m >= 3) {
-            Vector3* v = malloc(sizeof(Vector3) * m);
+            Vector3* v = (Vector3*)malloc(sizeof(Vector3) * m);
             size_t cnt = 0;
             for (size_t i = 0; i < m; i++) {
                 if (expr_point3(arg->data.function.args[i], &v[cnt])) cnt++;
             }
-            /* Fan from vertex 0, exactly Polygon's 2D contract (render.c) --
-             * valid here because every Polygon Plot3D/ParametricPlot3D builds
-             * is a convex quad. Backface culling is disabled for the whole 3D
-             * draw pass (see graphics3d_show), so winding doesn't matter for
-             * visibility. */
-            if (cnt >= 3) {
-                Color draw_color = state->color;
-                if (state->lighting) {
-                    /* Face normal from the first two edges of the fan.
-                     * Vector3CrossProduct and Vector3Normalize are from raymath.h. */
-                    Vector3 e1 = Vector3Subtract(v[1], v[0]);
-                    Vector3 e2 = Vector3Subtract(v[2], v[0]);
-                    Vector3 n  = Vector3Normalize(Vector3CrossProduct(e1, e2));
-                    draw_color = shade_color(state->color, n, state->light_dir);
-                }
-                for (size_t i = 1; i + 1 < cnt; i++)
-                    DrawTriangle3D(v[0], v[i], v[i + 1], draw_color);
-            }
+            /* Fan triangulation from v[0] — valid because every Polygon
+             * Plot3D/ParametricPlot3D emits is a convex quad. */
+            for (size_t i = 1; i + 1 < cnt; i++)
+                bm_push_tri(bm, v[0], v[i], v[i + 1], *cur_color);
             free(v);
         }
         return;
@@ -231,12 +270,34 @@ static void draw_primitive3(const Expr* node, DrawState3D* state) {
         for (size_t i = 0; i < m; i++) {
             Vector3 cur;
             if (expr_point3(arg->data.function.args[i], &cur)) {
-                if (have_prev) DrawLine3D(prev, cur, state->color);
+                if (have_prev) bm_push_seg(bm, prev, cur, *cur_color);
                 prev = cur;
                 have_prev = true;
             }
         }
         return;
+    }
+}
+
+/* Convert the primitive expression to a flat BakedMesh. Call once, before
+ * the render loop; render with render_baked() every frame. */
+static BakedMesh bake_mesh(const Expr* prims, RGBA8 default_color) {
+    BakedMesh bm = { NULL, 0, 0, NULL, 0, 0 };
+    Color c = to_raylib(default_color);
+    bake_node(prims, &c, &bm);
+    return bm;
+}
+
+/* Per-frame render: iterate the flat arrays, applying Lambertian shading when
+ * lighting is on. No allocations, no tree traversal. */
+static void render_baked(const BakedMesh* bm, bool lighting, Vector3 light_dir) {
+    for (size_t i = 0; i < bm->n_tris; i++) {
+        const BakedTri* t = &bm->tris[i];
+        Color c = lighting ? shade_color(t->base_color, t->normal, light_dir) : t->base_color;
+        DrawTriangle3D(t->v0, t->v1, t->v2, c);
+    }
+    for (size_t i = 0; i < bm->n_segs; i++) {
+        DrawLine3D(bm->segs[i].a, bm->segs[i].b, bm->segs[i].color);
     }
 }
 
@@ -408,6 +469,7 @@ void graphics3d_show(const Expr* graphics3d_expr) {
     Gfx3DOptions opts;
     gfx3d_options_parse(graphics3d_expr, &opts);
     const Expr* prims = graphics3d_expr->data.function.args[0];
+    const Expr* color_bar_data = find_color_bar(graphics3d_expr);
 
     Box3D bb = { DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX };
     compute_bbox3(prims, &bb);
@@ -422,6 +484,12 @@ void graphics3d_show(const Expr* graphics3d_expr) {
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow((int)opts.width, (int)opts.height, "Mathilda");
     SetTargetFPS(60);
+
+    /* Pre-bake the expression tree into flat C arrays before the render loop.
+     * This converts every Polygon into (n-2) BakedTri entries and every Line
+     * into BakedSeg entries — one-time O(n) work that eliminates per-frame
+     * malloc/free and recursive tree traversal. */
+    BakedMesh mesh = bake_mesh(prims, opts.style_color);
 
     Camera3D camera = { 0 };
     camera.up = (Vector3){ 0, 1, 0 };
@@ -443,9 +511,15 @@ void graphics3d_show(const Expr* graphics3d_expr) {
     int tb3_hover = -1;
 
     while (!WindowShouldClose()) {
+        /* Use the actual current window size every frame so toolbar hit
+         * detection and 2D overlays stay correct if the OS resizes the window
+         * (e.g. window manager placement, Mission Control animations). */
+        int win_w = GetScreenWidth();
+        int win_h = GetScreenHeight();
+
         Vector2 mouse = GetMousePosition();
         Vector2 mdelta = GetMouseDelta();
-        tb3_hover = tb3_hit(mouse, (int)opts.width);
+        tb3_hover = tb3_hit(mouse, win_w);
 
         /* Toolbar clicks: only act on a release inside the button so that
          * a drag starting on the toolbar doesn't orbit the camera. */
@@ -492,12 +566,6 @@ void graphics3d_show(const Expr* graphics3d_expr) {
         if (IsKeyPressed(KEY_S)) TakeScreenshot("mathilda_plot.png");
         if (IsKeyPressed(KEY_ESCAPE)) break;
 
-        /* Flush OS events before drawing so a close request that arrived
-         * while the previous frame was rendering is caught immediately. */
-        PollInputEvents();
-        if (WindowShouldClose()) break;
-        if (IsKeyPressed(KEY_ESCAPE)) break;
-
         camera.position = (Vector3){
             (float)(camera.target.x + distance * cos(elevation) * cos(azimuth)),
             (float)(camera.target.y + distance * sin(elevation)),
@@ -521,33 +589,49 @@ void graphics3d_show(const Expr* graphics3d_expr) {
 
         BeginMode3D(camera);
         rlDisableBackfaceCulling(); /* surfaces are visible from both sides */
-        DrawState3D state = { .color    = to_raylib(opts.style_color),
-                              .lighting = opts.lighting,
-                              .light_dir = light_dir };
-        draw_primitive3(prims, &state);
+        render_baked(&mesh, opts.lighting, light_dir);
         if (opts.axes) draw_box3(&bb, axes_color);
         EndMode3D(); /* EndMode3D flushes the render batch; rlDisableBackfaceCulling
                       * must stay in effect until here so the flush renders both faces */
         rlEnableBackfaceCulling();
 
-        if (opts.axes) draw_box_ticks(&bb, camera, (int)opts.width, (int)opts.height, axes_color);
+        if (opts.axes) draw_box_ticks(&bb, camera, win_w, win_h, axes_color);
         if (opts.plot_label) {
             char* s = expr_to_string((Expr*)opts.plot_label);
             if (s) {
                 int tw = MeasureText(s, 18);
-                DrawText(s, ((int)opts.width - tw) / 2, 10, 18, BLACK);
+                DrawText(s, (win_w - tw) / 2, 10, 18, BLACK);
                 free(s);
             }
         }
 
-        draw_toolbar3((int)opts.width, tb3_hover);
+        /* Vertical phase color-scale bar (ComplexPlot3D PlotLegends). */
+        if (color_bar_data && color_bar_data->data.function.arg_count >= 2) {
+            double cb_min = 0.0, cb_max = 1.0;
+            const Expr* a0 = color_bar_data->data.function.args[0];
+            const Expr* a1 = color_bar_data->data.function.args[1];
+            if (a0->type == EXPR_REAL) cb_min = a0->data.real;
+            if (a1->type == EXPR_REAL) cb_max = a1->data.real;
+            const Expr* cb_cfn = (color_bar_data->data.function.arg_count >= 3)
+                                 ? color_bar_data->data.function.args[2] : NULL;
+            const float cb_margin = 50.0f;
+            const float cb_w = 18.0f;
+            float cb_h = (float)win_h - 2.0f * cb_margin;
+            if (cb_h < 20.0f) cb_h = 20.0f;
+            float cb_x = (float)win_w - 70.0f;
+            float cb_y = cb_margin;
+            draw_color_bar(cb_x, cb_y, cb_w, cb_h, cb_min, cb_max, cb_cfn);
+        }
+
+        draw_toolbar3(win_w, tb3_hover);
 
         DrawText("drag: rotate   scroll: zoom   right-drag: pan",
-                 10, (int)opts.height - 22, 14, GRAY);
+                 10, win_h - 22, 14, GRAY);
 
         EndDrawing();
     }
     done3d:;
 
+    bm_free(&mesh);
     CloseWindow();
 }

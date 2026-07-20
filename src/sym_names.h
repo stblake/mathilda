@@ -755,6 +755,9 @@ extern const char* SYM_StreamScale;    /* stream length control */
 extern const char* SYM_StreamStyle;    /* style directives for streams */
 extern const char* SYM_StreamColorFunction; /* color by position/speed */
 extern const char* SYM_StreamColorBar;      /* internal: color-scale bar metadata */
+extern const char* SYM_BarChartLabels;     /* internal: screen-space bar category labels */
+extern const char* SYM_ScalingFunctions;  /* axis-transform option                        */
+extern const char* SYM_ScalingMeta;       /* internal: $ScalingMeta[sf_x_int, sf_y_int]  */
 
 /* ContourPlot[f, {x,...}, {y,...}, opts...] */
 extern const char* SYM_ContourPlot;
@@ -762,6 +765,42 @@ extern const char* SYM_Contours;        /* integer or list of explicit levels */
 extern const char* SYM_ContourStyle;    /* style directive(s) for the contour lines */
 extern const char* SYM_ContourLabels;   /* True/False: draw z-value labels on contours */
 extern const char* SYM_ContourShading;  /* True/False/Automatic: fill between contours */
+
+/* DensityPlot[f, {x,...}, {y,...}, opts...] */
+extern const char* SYM_DensityPlot;
+
+/* ComplexPlot[f, {z, zmin, zmax}, opts...] / ComplexPlot3D[...] */
+extern const char* SYM_ComplexPlot;
+extern const char* SYM_ComplexPlot3D;
+
+/* BarChart[data, opts...] / Histogram[data, opts...] */
+extern const char* SYM_BarChart;
+extern const char* SYM_Histogram;
+extern const char* SYM_BarSpacing;    /* gap between bars (fraction of bar width) */
+extern const char* SYM_ChartStyle;    /* color/style list for bars */
+extern const char* SYM_ChartLabels;   /* x-axis label list */
+
+/* VectorPlot[{vx,vy}, {x,...}, {y,...}, opts...] */
+extern const char* SYM_VectorPlot;
+extern const char* SYM_VectorPoints;  /* integer grid density, or Automatic */
+extern const char* SYM_VectorScale;   /* Automatic (uniform) | None (prop.) | fraction */
+extern const char* SYM_VectorStyle;   /* style directive(s) for arrows */
+
+/* Animate[expr, {t, tmin, tmax}, opts...] */
+extern const char* SYM_Animate;
+extern const char* SYM_AnimationDirection;   /* Forward | Backward | ForwardBackward | BackwardForward */
+extern const char* SYM_AnimationRate;        /* parameter units per second */
+extern const char* SYM_AnimationRepetitions; /* integer or Infinity */
+extern const char* SYM_AnimationRunning;     /* True | False (start state) */
+extern const char* SYM_AppearanceElements;   /* list of control elements, All, or None */
+extern const char* SYM_DefaultDuration;      /* seconds per full loop */
+extern const char* SYM_ControlPlacement;     /* Bottom | Top | Left | Right */
+extern const char* SYM_RefreshRate;          /* target display FPS */
+/* AnimationDirection values */
+extern const char* SYM_Forward;
+extern const char* SYM_Backward;
+extern const char* SYM_ForwardBackward;
+extern const char* SYM_BackwardForward;
 
 /* FLINT` context: direct REPL access to the FLINT-backed kernels that also
  * accelerate the corresponding System` builtins transparently. Each is a thin

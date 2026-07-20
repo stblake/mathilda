@@ -599,6 +599,7 @@ set(COMMON_SRC
     ../src/numerical_roots/nsolve.c
     ../src/numerical_roots/nsolve_system.c
     ../src/graphics/graphics_init.c
+    ../src/graphics/graphics_json.c
     ../src/graphics/sampling.c
     ../src/graphics/plot_common.c
     ../src/graphics/plot.c
@@ -606,7 +607,13 @@ set(COMMON_SRC
     ../src/graphics/parametricplot.c
     ../src/graphics/parametricplot3d.c
     ../src/graphics/contourplot.c
+    ../src/graphics/densityplot.c
+    ../src/graphics/complexplot.c
     ../src/graphics/streamplot.c
+    ../src/graphics/vectorplot.c
+    ../src/graphics/polarplot.c
+    ../src/graphics/barchart.c
+    ../src/graphics/animate.c
     ../src/graphics/listplot.c
     ../src/graphics/show.c
     ../src/graph/graph.c

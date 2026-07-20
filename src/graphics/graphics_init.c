@@ -232,7 +232,8 @@ void graphics_init(void) {
         "AspectRatio, PlotStyle, Axes, AxesLabel, AxesOrigin, AxesStyle, "
         "TicksStyle, LabelStyle, Frame, FrameLabel, FrameStyle, FrameTicks, "
         "RotateLabel, GridLines, GridLinesStyle, Prolog, Epilog, PlotLabel, "
-        "Background, ImageSize, ColorFunction (a function, or \"Rainbow\"), "
+        "Background, ImageSize, ColorFunction (a function, or named ramp: "
+        "\"Rainbow\"/\"CoolTones\"/\"WarmTones\"/\"Greyscale\"/\"Temperature\"), "
         "ColorFunctionScaling (default True), Filling (Axis/Bottom/Top/a "
         "number), FillingStyle, PlotLegends (Automatic/\"Expressions\"/an "
         "explicit list), RegionFunction, Exclusions.");
@@ -317,8 +318,9 @@ void graphics_init(void) {
         "\t                     False/None: lines only. Automatic (default): shade when\n"
         "\t                     ColorFunction is set, otherwise lines only.\n"
         "\t  ColorFunction    - A function f[t] → color (t in [0,1] after scaling), or\n"
-        "\t                     a string: \"Rainbow\" (Hue ramp) or \"Temperature\" (blue-\n"
-        "\t                     cyan-yellow-red). Applied to shading and auto line colors.\n"
+        "\t                     a named ramp string: \"Rainbow\", \"Temperature\",\n"
+        "\t                     \"CoolTones\", \"WarmTones\", \"Greyscale\".\n"
+        "\t                     Applied to shading and auto line colors.\n"
         "\t  ColorFunctionScaling - True (default): normalise z to [0,1] before calling\n"
         "\t                         ColorFunction. False: pass raw z.\n"
         "\t  PlotPoints       - Grid resolution per axis (default 25; increase for\n"
@@ -349,6 +351,237 @@ void graphics_init(void) {
         "by z value using ColorFunction or the built-in blue-cyan-yellow-red thermal "
         "ramp. Automatic enables shading only when ColorFunction is set.");
 
+    symtab_add_builtin("PolarPlot", builtin_polarplot);
+    symtab_get_def("PolarPlot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("PolarPlot",
+        "PolarPlot[r, {theta, tmin, tmax}, opts...]\n"
+        "\tPlots the polar curve r(theta) by converting to Cartesian\n"
+        "\tcoordinates {r*Cos[theta], r*Sin[theta]} and sampling adaptively\n"
+        "\tover [tmin, tmax]. Returns a Graphics[...] object (auto-displayed).\n"
+        "PolarPlot[{r1, r2, ...}, {theta, tmin, tmax}, opts...]\n"
+        "\tMultiple polar curves in distinct palette colours.\n"
+        "\n"
+        "\tNegative r values are plotted in the opposite direction (standard\n"
+        "\tpolar convention). Default AspectRatio -> 1 (equal axes).\n"
+        "\n"
+        "\tOptions (same as ParametricPlot):\n"
+        "\t  PlotPoints          - initial sample count per curve (default 75)\n"
+        "\t  MaxRecursion        - adaptive refinement depth (default 6)\n"
+        "\t  MaxPlotPoints       - total point cap (default Infinity)\n"
+        "\t  Mesh                - All/True: overlay evaluation dots; None (default)\n"
+        "\t  ColorFunction       - f[t] or \"Rainbow\" (sweeps scaled theta)\n"
+        "\t  ColorFunctionScaling - True (default): normalise theta to [0,1]\n"
+        "\t  RegionFunction      - f[x,y] mask\n"
+        "\t  PlotStyle           - color/style directive(s)\n"
+        "\t  PlotLegends         - Automatic / \"Expressions\" / label list\n"
+        "\t  PolarAxes           - option keyword (accepted; polar grid overlay\n"
+        "\t                        not yet rendered)\n"
+        "\t  Standard Graphics options (AspectRatio, Axes, PlotRange,\n"
+        "\t  AxesLabel, Frame, GridLines, PlotLabel, Background, ImageSize,\n"
+        "\t  Prolog, Epilog) pass through to the Graphics[...] result.");
+
+    /* PolarAxes is an inert option keyword -- recognised and documented but
+     * actual polar grid overlay is not yet rendered. */
+    symtab_get_def("PolarAxes")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("PolarAxes",
+        "PolarAxes\n\tPolarPlot option: True requests a polar grid overlay\n"
+        "\t(radial circles + angle labels). Currently accepted but not yet\n"
+        "\trendered; Cartesian axes are drawn instead.");
+
+    symtab_add_builtin("DensityPlot", builtin_densityplot);
+    symtab_get_def("DensityPlot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("DensityPlot",
+        "DensityPlot[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]\n"
+        "\tRenders f(x,y) as a heatmap: each grid cell is coloured by its\n"
+        "\tfunction value via ColorFunction (default: thermal blue→yellow ramp).\n"
+        "\tDensityPlot is HoldAll: f is held unevaluated until x and y are\n"
+        "\tbound to numeric values. Returns a Graphics[...] object.\n"
+        "\n"
+        "\tOptions:\n"
+        "\t  PlotPoints          grid resolution per axis (default 50)\n"
+        "\t  ColorFunction       named ramp string or f[t]→color (t in [0,1]).\n"
+        "\t                      Ramps: \"Rainbow\", \"CoolTones\", \"WarmTones\",\n"
+        "\t                      \"Greyscale\", \"Temperature\" (all keyed to\n"
+        "\t                      normalised z value, t∈[0,1])\n"
+        "\t  ColorFunctionScaling True (default): normalise z to [0,1] before\n"
+        "\t                       calling ColorFunction; False: pass raw z\n"
+        "\t  RegionFunction      f[x,y] mask; excluded cells are not drawn\n"
+        "\t  PlotLegends         Automatic: attach a vertical color scale bar\n"
+        "\t  Standard Graphics options (Axes, AspectRatio→1, Frame, PlotRange,\n"
+        "\t  AxesLabel, GridLines, ImageSize, Background, PlotLabel, …) pass\n"
+        "\t  through to the Graphics[...] result.");
+
+    symtab_add_builtin("ComplexPlot", builtin_complexplot);
+    symtab_get_def("ComplexPlot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("ComplexPlot",
+        "ComplexPlot[f, {z, zmin, zmax}, opts...]\n"
+        "\tDomain-colouring plot of the complex function f over the rectangular\n"
+        "\tregion in the complex plane with corners zmin and zmax.  z is bound\n"
+        "\tto Complex[x, y] at each grid point; f must return a complex or real\n"
+        "\tnumber.  The color of each cell encodes Arg(f(z)) via the thermal\n"
+        "\tramp (same default as DensityPlot), and brightness encodes |f(z)|.\n"
+        "\tComplexPlot is HoldAll: f and the iterator spec are held unevaluated\n"
+        "\tuntil z is given a numeric complex value.\n"
+        "\n"
+        "\tOptions:\n"
+        "\t  PlotPoints          grid resolution per axis (default 200)\n"
+        "\t  ColorFunction       f[re, im] → color, or a named ramp string.\n"
+        "\t                      Named ramps: \"PhaseRings\" (hue=phase,\n"
+        "\t                      brightness=log|w| rings — highlights poles\n"
+        "\t                      and zeros), \"Rainbow\", \"CoolTones\",\n"
+        "\t                      \"WarmTones\", \"Greyscale\", \"Temperature\"\n"
+        "\t                      (others keyed to normalised Arg)\n"
+        "\t  ColorFunctionScaling True (default): scale re/im to [0,1] before\n"
+        "\t                       calling a custom ColorFunction\n"
+        "\t  RegionFunction      f[x,y] mask; excluded cells are not drawn\n"
+        "\t  PlotLegends         Automatic / True: attach a vertical phase color\n"
+        "\t                      scale bar (thermal ramp, -π at bottom, π at top)\n"
+        "\t  Standard Graphics options (Axes, AspectRatio→1, Frame, PlotRange,\n"
+        "\t  AxesLabel, GridLines, ImageSize, Background, PlotLabel, …) pass\n"
+        "\t  through to the Graphics[...] result.\n"
+        "\n"
+        "\tExamples:\n"
+        "\t  ComplexPlot[z^2, {z, -2-2I, 2+2I}]\n"
+        "\t  ComplexPlot[Sin[z], {z, -Pi-Pi*I, Pi+Pi*I}]\n"
+        "\t  ComplexPlot[1/(z^2+1), {z, -2-2I, 2+2I}, PlotPoints->80]\n"
+        "\t  ComplexPlot[(z^2+1)/(z^2-1), {z, -2-2I, 2+2I}, PlotLegends->Automatic]");
+
+    symtab_add_builtin("ComplexPlot3D", builtin_complexplot3d);
+    symtab_get_def("ComplexPlot3D")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("ComplexPlot3D",
+        "ComplexPlot3D[f, {z, zmin, zmax}, opts...]\n"
+        "\tThree-dimensional surface plot of a complex function: height = |f(z)|,\n"
+        "\tcolour = Arg(f(z)) via the thermal ramp (same default as Plot3D).\n"
+        "\tz is bound to Complex[x, y] at each grid point; the result is a\n"
+        "\tGraphics3D[...] object rendered in an orbit-camera window.\n"
+        "\tComplexPlot3D is HoldAll.\n"
+        "\n"
+        "\tOptions:\n"
+        "\t  PlotPoints          grid resolution per axis (default 200)\n"
+        "\t  ColorFunction       f[re, im] → color, or named ramp string;\n"
+        "\t                      \"PhaseRings\" recommended (see ComplexPlot)\n"
+        "\t  ColorFunctionScaling True (default): scale re/im to [0,1]\n"
+        "\t  RegionFunction      f[x,y] mask\n"
+        "\t  PlotLegends         Automatic / True: attach a vertical phase color\n"
+        "\t                      scale bar (-π at bottom, π at top)\n"
+        "\t  Lighting -> None    disables Lambertian shading (recommended for\n"
+        "\t                      accurate phase colours; default Automatic)\n"
+        "\t  Standard Graphics3D options pass through to the result.\n"
+        "\n"
+        "\tExamples:\n"
+        "\t  ComplexPlot3D[z^2, {z, -2-2I, 2+2I}]\n"
+        "\t  ComplexPlot3D[Sin[z], {z, -2-2I, 2+2I}, Lighting->None]\n"
+        "\t  ComplexPlot3D[1/z, {z, -2-2I, 2+2I}, PlotLegends->Automatic, Lighting->None]");
+
+    symtab_add_builtin("BarChart", builtin_barchart);
+    symtab_get_def("BarChart")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("BarChart",
+        "BarChart[{v1, v2, ..., vn}, opts...]\n"
+        "\tDraws a vertical bar chart: n bars at x = 1..n with heights v1..vn.\n"
+        "BarChart[{{v1,...}, {w1,...}, ...}, opts...]\n"
+        "\tMultiple grouped datasets, each in a distinct palette colour.\n"
+        "\n"
+        "\tOptions:\n"
+        "\t  ChartStyle    color/style list cycling through bars (default: palette)\n"
+        "\t  ChartLabels   list of x-axis tick labels\n"
+        "\t  BarSpacing    gap fraction of bar width (default 0.2)\n"
+        "\t  Standard Graphics options (Axes, AspectRatio, Frame, PlotRange,\n"
+        "\t  PlotLabel, Background, ImageSize, …) pass through.");
+
+    symtab_add_builtin("Histogram", builtin_histogram);
+    symtab_get_def("Histogram")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Histogram",
+        "Histogram[data, opts...]\n"
+        "\tBins the numeric values in data and draws a frequency histogram.\n"
+        "\tBin count defaults to Sturges' rule: ceil(Log2[n]) + 1.\n"
+        "Histogram[data, k, opts...]\n"
+        "\tk equal-width bins.\n"
+        "Histogram[data, {step}, opts...]\n"
+        "\tBins of width step.\n"
+        "Histogram[data, {min, max, step}, opts...]\n"
+        "\tExplicit range and width.\n"
+        "\n"
+        "\tOptions:\n"
+        "\t  ChartStyle   color/style list cycling through bins\n"
+        "\t  BarSpacing   gap fraction of bin width (default 0.2)\n"
+        "\t  Standard Graphics options pass through.");
+
+    /* Option keyword inerts for BarChart/Histogram. */
+    symtab_get_def("BarSpacing")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("BarSpacing",
+        "BarSpacing\n\tBarChart/Histogram option: gap between bars as a fraction\n"
+        "\tof bar width (default 0.2). 0 = touching bars; 1 = all gap.");
+    symtab_get_def("ChartStyle")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ChartStyle",
+        "ChartStyle\n\tBarChart/Histogram option: color or list of colors cycling\n"
+        "\tthrough bars. Defaults to the standard palette.");
+    symtab_get_def("ChartLabels")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ChartLabels",
+        "ChartLabels\n\tBarChart option: list of label expressions drawn below\n"
+        "\teach bar on the x-axis.");
+
+    symtab_add_builtin("VectorPlot", builtin_vectorplot);
+    symtab_get_def("VectorPlot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("VectorPlot",
+        "VectorPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}, opts...]\n"
+        "\tDraws a grid of arrows showing the direction (and optionally\n"
+        "\tmagnitude) of the vector field {vx, vy} at each grid point.\n"
+        "\tVectorPlot is HoldAll: vx, vy are held unevaluated until x and y\n"
+        "\tare bound to numeric values. Returns a Graphics[...] object.\n"
+        "\n"
+        "\tOptions:\n"
+        "\t  VectorPoints   integer n → n×n grid (default 15); Automatic = 15\n"
+        "\t  VectorScale    Automatic: equal-length arrows (direction only)\n"
+        "\t                 None: proportional to magnitude\n"
+        "\t                 real f: arrow length = f × grid spacing\n"
+        "\t  VectorStyle    style directive(s) applied to all arrows\n"
+        "\t  ColorFunction  named ramp string (keyed to speed) or\n"
+        "\t                 f[vx,vy,speed]/f[speed]→color.\n"
+        "\t                 Ramps: \"Rainbow\", \"CoolTones\", \"WarmTones\",\n"
+        "\t                 \"Greyscale\", \"Temperature\"\n"
+        "\t  ColorFunctionScaling  True (default): normalise speed to [0,1]\n"
+        "\t  RegionFunction f[x,y] mask: skip grid points outside the region\n"
+        "\t  Standard Graphics options (Axes, AspectRatio→1, Frame, PlotRange,\n"
+        "\t  AxesLabel, GridLines, ImageSize, Background, PlotLabel, …) pass\n"
+        "\t  through to the Graphics[...] result.");
+
+    /* Option keyword inerts for VectorPlot. */
+    symtab_get_def("VectorPoints")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("VectorPoints",
+        "VectorPoints\n\tVectorPlot option: integer n specifies an n×n seed grid\n"
+        "\t(default 15). Automatic also uses 15.");
+    symtab_get_def("VectorScale")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("VectorScale",
+        "VectorScale\n\tVectorPlot option: controls arrow length.\n"
+        "\t  Automatic (default): all arrows drawn at equal length (direction only)\n"
+        "\t  None: length proportional to field magnitude\n"
+        "\t  real f: arrow length = f × grid spacing");
+    symtab_get_def("VectorStyle")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("VectorStyle",
+        "VectorStyle\n\tVectorPlot option: style directive(s) (RGBColor, Thickness, …)\n"
+        "\tapplied globally to all arrows. Overrides per-arrow ColorFunction.");
+
+    symtab_get_def("ScalingFunctions")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ScalingFunctions",
+        "ScalingFunctions\n"
+        "\tOption for Plot, ListPlot, DensityPlot, ContourPlot, VectorPlot,\n"
+        "\tStreamPlot: applies a coordinate transform to one or both axes.\n"
+        "\n"
+        "\tForms:\n"
+        "\t  ScalingFunctions -> \"Log\"         both axes: natural log\n"
+        "\t  ScalingFunctions -> \"Log10\"        both axes: log base 10\n"
+        "\t  ScalingFunctions -> \"Log2\"         both axes: log base 2\n"
+        "\t  ScalingFunctions -> \"Reverse\"      both axes: mirror (negate)\n"
+        "\t  ScalingFunctions -> {\"Log\", None}  x-axis log, y-axis linear\n"
+        "\t  ScalingFunctions -> {None, \"Log\"}  x-axis linear, y-axis log\n"
+        "\t  ScalingFunctions -> None           identity (default)\n"
+        "\t  ScalingFunctions -> Automatic      identity (default)\n"
+        "\n"
+        "\tWhen a log scale is active, tick labels show original data-space\n"
+        "\tvalues (e.g. 1, 2, 5, 10, 20, …) at decade-based positions.\n"
+        "\tNon-positive values on a log-scaled axis are suppressed (mapped to\n"
+        "\t-1e30 in world space).");
+
     symtab_add_builtin("StreamPlot", builtin_streamplot);
     symtab_get_def("StreamPlot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_set_docstring("StreamPlot",
@@ -365,7 +598,9 @@ void graphics_init(void) {
         "\t  StreamStyle   – Style directive(s) applied to all streams.\n"
         "\t  StreamColorFunction / ColorFunction\n"
         "\t                 – f[x,y,vx,vy,speed] (or fewer args) returning a color,\n"
-        "\t                   or \"Rainbow\" (hue = scaled speed).\n"
+        "\t                   or a named ramp: \"Rainbow\", \"CoolTones\",\n"
+        "\t                   \"WarmTones\", \"Greyscale\", \"Temperature\"\n"
+        "\t                   (all keyed to scaled speed).\n"
         "\t  RegionFunction – f[x,y] mask; seeds outside the region are skipped.\n"
         "\t  PlotLegends   – Automatic / \"Expressions\" / explicit label list.\n"
         "\t  Standard Graphics options (PlotRange, Axes, AspectRatio, Frame, …)\n"
@@ -375,6 +610,74 @@ void graphics_init(void) {
         "Arrow[{{x1,y1}, {x2,y2}, ...}]\n"
         "\tA graphics primitive: a directed polyline with an arrowhead at its\n"
         "\tlast point. Used by StreamPlot to draw streamlines.");
+
+    symtab_add_builtin("Animate", builtin_animate);
+    symtab_get_def("Animate")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("Animate",
+        "Animate[expr, {t, tmin, tmax}, opts...]\n"
+        "\tOpens an interactive animation window, evaluating expr at each\n"
+        "\tframe with t bound to the current parameter value. Returns Null\n"
+        "\tonce the window is closed. expr is typically a Graphics[...] or\n"
+        "\tPlot[...] call that depends on t.\n"
+        "\n"
+        "\tOptions:\n"
+        "\t  AnimationDirection    Forward (default) | Backward |\n"
+        "\t                        ForwardBackward | BackwardForward\n"
+        "\t  AnimationRate         parameter units per second (real > 0)\n"
+        "\t  AnimationRepetitions  integer or Infinity (default Infinity)\n"
+        "\t  AnimationRunning      True (default) | False (start paused)\n"
+        "\t  AppearanceElements    All (default) | None |\n"
+        "\t                        {\"PlayPauseButton\", \"ProgressSlider\",\n"
+        "\t                         \"StepLeftButton\", \"StepRightButton\",\n"
+        "\t                         \"DirectionButton\",\n"
+        "\t                         \"FasterSlowerButtons\", \"ResetButton\"}\n"
+        "\t  DefaultDuration       seconds for one full pass (default 1.0)\n"
+        "\t  ControlPlacement      Bottom (default) | Top\n"
+        "\t  RefreshRate           target display FPS (default 60)\n"
+        "\n"
+        "\tKeyboard controls: Space (play/pause), Arrow keys (step),\n"
+        "\t  R (reset), Esc (close). Direction/speed buttons in the\n"
+        "\t  control bar are clickable.");
+
+    /* Inert option keywords for Animate. */
+    register_inert("AnimationDirection",
+        "AnimationDirection\n\tAnimate option: direction of parameter traversal.\n"
+        "\tForward (default), Backward, ForwardBackward, BackwardForward.");
+    register_inert("AnimationRate",
+        "AnimationRate\n\tAnimate option: parameter units advanced per second.\n"
+        "\tOverrides DefaultDuration when set.");
+    register_inert("AnimationRepetitions",
+        "AnimationRepetitions\n\tAnimate option: number of loop repetitions.\n"
+        "\tInfinity (default) loops forever; an integer stops after that many passes.");
+    register_inert("AnimationRunning",
+        "AnimationRunning\n\tAnimate option: True (default) starts playing immediately;\n"
+        "\tFalse opens the window paused.");
+    register_inert("AppearanceElements",
+        "AppearanceElements\n\tAnimate option: list of control elements to show.\n"
+        "\tAll (default) shows all controls; None hides the control bar.\n"
+        "\tNamed elements: \"PlayPauseButton\", \"ProgressSlider\",\n"
+        "\t\"StepLeftButton\", \"StepRightButton\", \"DirectionButton\",\n"
+        "\t\"FasterSlowerButtons\", \"ResetButton\", \"AnimationSlider\".");
+    register_inert("DefaultDuration",
+        "DefaultDuration\n\tAnimate option: seconds for one full parameter pass\n"
+        "\t(default 1.0). Determines AnimationRate when Rate is not given.");
+    register_inert("ControlPlacement",
+        "ControlPlacement\n\tAnimate option: where the playback control bar appears.\n"
+        "\tBottom (default) or Top.");
+    register_inert("RefreshRate",
+        "RefreshRate\n\tAnimate option: target display frames per second (default 60).");
+
+    /* AnimationDirection values are inert symbolic constants. */
+    register_inert("Forward",
+        "Forward\n\tAnimate AnimationDirection value: parameter increases from tmin to tmax.");
+    register_inert("Backward",
+        "Backward\n\tAnimate AnimationDirection value: parameter decreases from tmax to tmin.");
+    register_inert("ForwardBackward",
+        "ForwardBackward\n\tAnimate AnimationDirection value: parameter pingpongs "
+        "tmin→tmax→tmin→...");
+    register_inert("BackwardForward",
+        "BackwardForward\n\tAnimate AnimationDirection value: parameter pingpongs "
+        "tmax→tmin→tmax→...");
 
     symtab_add_builtin("Plot3D", builtin_plot3d);
     symtab_get_def("Plot3D")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;

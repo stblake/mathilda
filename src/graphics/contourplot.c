@@ -38,16 +38,8 @@
 static Expr* contour_color(Expr* cfn, double t, double x, double y) {
     if (cfn) {
         if (cfn->type == EXPR_STRING) {
-            const char* nm = cfn->data.string;
-            if (strcmp(nm, "Rainbow") == 0) {
-                Expr* h_arg[1] = { expr_new_real(t * 0.8) };
-                return expr_new_function(expr_new_symbol(SYM_Hue), h_arg, 1);
-            }
-            if (strcmp(nm, "Temperature") == 0 || strcmp(nm, "Thermal") == 0) {
-                double rv, gv, bv; thermal_rgb(t, &rv, &gv, &bv);
-                Expr* a[3] = { expr_new_real(rv), expr_new_real(gv), expr_new_real(bv) };
-                return expr_new_function(expr_new_symbol(SYM_RGBColor), a, 3);
-            }
+            Expr* c = named_color_ramp(cfn->data.string, t);
+            if (c) return c;
         }
         /* Try f[t] then f[x,y,t] */
         static const int arities[] = { 1, 3 };
@@ -91,9 +83,10 @@ typedef struct {
     bool    contour_style_none;    /* ContourStyle -> None: no lines */
     bool    contour_labels;        /* draw Text[level] at midpoint */
     int     shading;               /* 0 = off, 1 = on, -1 = Automatic */
-    Expr*   color_function;        /* borrowed; NULL = none */
-    bool    color_function_scaling;
-    Expr*   region_function;       /* borrowed; NULL = none */
+    Expr*       color_function;        /* borrowed; NULL = none */
+    bool        color_function_scaling;
+    Expr*       region_function;       /* borrowed; NULL = none */
+    ScaleFnType sf_x, sf_y;
 } ContourOpts;
 
 static bool split_contour_options(Expr* res, ContourOpts* co,
@@ -111,6 +104,8 @@ static bool split_contour_options(Expr* res, ContourOpts* co,
     co->color_function = NULL;
     co->color_function_scaling = true;
     co->region_function = NULL;
+    co->sf_x = SF_NONE;
+    co->sf_y = SF_NONE;
 
     size_t argc = res->data.function.arg_count;
     /* opts start at index 3 (after f, {x,...}, {y,...}) */
@@ -194,6 +189,10 @@ static bool split_contour_options(Expr* res, ContourOpts* co,
             expr_free(v);
         } else if (name == SYM_RegionFunction) {
             co->region_function = rhs; /* borrowed */
+        } else if (name == SYM_ScalingFunctions) {
+            Expr* v = evaluate(expr_copy(rhs));
+            parse_scaling_functions(v, &co->sf_x, &co->sf_y);
+            expr_free(v);
         } else if (name == SYM_PlotLegends) {
             /* Automatic or True → show colour bar / swatches; None/False → off. */
             Expr* v = evaluate(expr_copy(rhs));
@@ -217,8 +216,13 @@ static bool split_contour_options(Expr* res, ContourOpts* co,
     }
 
     if (!have_axes && !have_frame) {
-        Expr* a[2] = { expr_new_symbol(SYM_Axes), expr_new_symbol(SYM_True) };
-        passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
+        Expr* fa[2] = { expr_new_symbol(SYM_Frame), expr_new_symbol(SYM_True) };
+        passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), fa, 2);
+        Expr* aa[2] = { expr_new_symbol(SYM_Axes), expr_new_symbol(SYM_False) };
+        passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), aa, 2);
+    } else if (!have_axes) {
+        Expr* aa[2] = { expr_new_symbol(SYM_Axes), expr_new_symbol(SYM_False) };
+        passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), aa, 2);
     }
     if (!have_aspect) {
         Expr* a[2] = { expr_new_symbol(SYM_AspectRatio), expr_new_integer(1) };
@@ -459,8 +463,17 @@ Expr* builtin_contourplot(Expr* res) {
     bool do_shade = (co.shading == 1) || (co.shading == -1 && co.color_function != NULL);
 
     int N = co.plot_points;        /* grid is (N+1)×(N+1) points, N×N cells */
+
+    /* World-space (scaled) bounds and step sizes.  When no scaling is active
+     * these equal the data-space values, so the code below is uniform. */
+    double u_xmin = scale_apply(co.sf_x, xmin), u_xmax = scale_apply(co.sf_x, xmax);
+    double u_ymin = scale_apply(co.sf_y, ymin), u_ymax = scale_apply(co.sf_y, ymax);
+    double du_x = (u_xmax - u_xmin) / N;
+    double du_y = (u_ymax - u_ymin) / N;
+    /* Keep legacy names for code that still uses them for data-space work. */
     double dx = (xmax - xmin) / N;
     double dy = (ymax - ymin) / N;
+    (void)dx; (void)dy; /* suppress unused-variable warning when only world coords used */
 
     /* Allocate and evaluate the grid. */
     double* grid = malloc(sizeof(double) * (size_t)(N + 1) * (size_t)(N + 1));
@@ -523,14 +536,16 @@ Expr* builtin_contourplot(Expr* res) {
                 sub_body = expr_copy(elem);
             }
 
-            /* Evaluate grid for this element. */
+            /* Evaluate grid for this element (sample uniformly in world space). */
             GridCtx lctx = { .xvar = xspec.var, .yvar = yspec.var, .body = sub_body };
             Rule* lox = iter_spec_shadow(xspec.var);
             Rule* loy = iter_spec_shadow(yspec.var);
             for (int iy = 0; iy <= N; iy++) {
-                double yj = ymin + iy * dy;
-                for (int ix = 0; ix <= N; ix++)
-                    grid[iy * (N + 1) + ix] = eval_at(&lctx, xmin + ix * dx, yj);
+                double yj = scale_invert(co.sf_y, u_ymin + iy * du_y);
+                for (int ix = 0; ix <= N; ix++) {
+                    double xi = scale_invert(co.sf_x, u_xmin + ix * du_x);
+                    grid[iy * (N + 1) + ix] = eval_at(&lctx, xi, yj);
+                }
             }
             iter_spec_restore(xspec.var, lox);
             iter_spec_restore(yspec.var, loy);
@@ -549,19 +564,19 @@ Expr* builtin_contourplot(Expr* res) {
             double* sub_lvs  = (co.levels && co.n_levels > 0) ? co.levels : &zero_lv;
             size_t  sub_nl   = (co.levels && co.n_levels > 0) ? co.n_levels : 1;
 
-            /* Marching squares. */
+            /* Marching squares (cell corners in world space). */
             for (size_t li = 0; li < sub_nl; li++) {
                 double level = sub_lvs[li];
                 for (int iy = 0; iy < N; iy++) {
-                    double yj = ymin + iy * dy;
+                    double wy0 = u_ymin + iy * du_y;
                     for (int ix = 0; ix < N; ix++) {
-                        double xi  = xmin + ix * dx;
+                        double wx0 = u_xmin + ix * du_x;
                         double v00 = grid[ iy      * (N + 1) + ix    ];
                         double v10 = grid[ iy      * (N + 1) + ix + 1];
                         double v11 = grid[(iy + 1) * (N + 1) + ix + 1];
                         double v01 = grid[(iy + 1) * (N + 1) + ix    ];
                         LENSURE(4);
-                        cell_march(lprims, &lnprim, xi, yj, dx, dy,
+                        cell_march(lprims, &lnprim, wx0, wy0, du_x, du_y,
                                    v00, v10, v11, v01, level);
                     }
                 }
@@ -573,7 +588,7 @@ Expr* builtin_contourplot(Expr* res) {
         free(grid);
         free(co.levels);
 
-        /* Embed PlotRange if not already in passthrough. */
+        /* Embed PlotRange if not already in passthrough (world coords). */
         {
             bool have_pr = false;
             for (size_t i = 0; i < pt_count; i++) {
@@ -585,8 +600,8 @@ Expr* builtin_contourplot(Expr* res) {
             }
             if (!have_pr) {
                 passthrough = realloc(passthrough, sizeof(Expr*) * (pt_count + 1));
-                Expr* xr[2] = { expr_new_real(xmin), expr_new_real(xmax) };
-                Expr* yr[2] = { expr_new_real(ymin), expr_new_real(ymax) };
+                Expr* xr[2] = { expr_new_real(u_xmin), expr_new_real(u_xmax) };
+                Expr* yr[2] = { expr_new_real(u_ymin), expr_new_real(u_ymax) };
                 Expr* xrng = expr_new_function(expr_new_symbol(SYM_List), xr, 2);
                 Expr* yrng = expr_new_function(expr_new_symbol(SYM_List), yr, 2);
                 Expr* rl[2] = { xrng, yrng };
@@ -596,6 +611,8 @@ Expr* builtin_contourplot(Expr* res) {
                     expr_new_function(expr_new_symbol(SYM_Rule), ra, 2);
             }
         }
+
+        emit_scaling_meta(co.sf_x, co.sf_y, &passthrough, &pt_count);
 
         /* PlotLegends -> Automatic: one swatch per equation. */
         if (co.show_legend && neq > 0) {
@@ -649,9 +666,9 @@ Expr* builtin_contourplot(Expr* res) {
 
     double zmin = 1e300, zmax = -1e300;
     for (int iy = 0; iy <= N; iy++) {
-        double yj = ymin + iy * dy;
+        double yj = scale_invert(co.sf_y, u_ymin + iy * du_y);
         for (int ix = 0; ix <= N; ix++) {
-            double xi = xmin + ix * dx;
+            double xi = scale_invert(co.sf_x, u_xmin + ix * du_x);
             double v = eval_at(&ctx, xi, yj);
             grid[iy * (N + 1) + ix] = v;
             if (isfinite(v)) {
@@ -702,9 +719,9 @@ Expr* builtin_contourplot(Expr* res) {
     if (do_shade) {
         double zspan = (zmax > zmin) ? (zmax - zmin) : 1.0;
         for (int iy = 0; iy < N; iy++) {
-            double yj = ymin + iy * dy;
+            double wy0 = u_ymin + iy * du_y;
             for (int ix = 0; ix < N; ix++) {
-                double xi = xmin + ix * dx;
+                double wx0 = u_xmin + ix * du_x;
                 double v00 = grid[iy       * (N + 1) + ix    ];
                 double v10 = grid[iy       * (N + 1) + ix + 1];
                 double v11 = grid[(iy + 1) * (N + 1) + ix + 1];
@@ -714,8 +731,9 @@ Expr* builtin_contourplot(Expr* res) {
                 if (!isfinite(v00) || !isfinite(v10) || !isfinite(v11) || !isfinite(v01))
                     continue;
 
-                /* RegionFunction: skip if centre is outside. */
-                double cx = xi + dx * 0.5, cy = yj + dy * 0.5;
+                /* RegionFunction checked at original (data-space) cell centre. */
+                double cx = scale_invert(co.sf_x, wx0 + du_x * 0.5);
+                double cy = scale_invert(co.sf_y, wy0 + du_y * 0.5);
                 if (co.region_function && !eval_region(co.region_function, cx, cy))
                     continue;
 
@@ -727,9 +745,9 @@ Expr* builtin_contourplot(Expr* res) {
                 ENSURE_CAP(2);
                 prims[nprim++] = contour_color(co.color_function, t, cx, cy);
 
-                /* Rectangle[{xi, yj}, {xi+dx, yj+dy}] */
-                Expr* p1[2] = { expr_new_real(xi),      expr_new_real(yj) };
-                Expr* p2[2] = { expr_new_real(xi + dx), expr_new_real(yj + dy) };
+                /* Rectangle corners in world space. */
+                Expr* p1[2] = { expr_new_real(wx0),          expr_new_real(wy0) };
+                Expr* p2[2] = { expr_new_real(wx0 + du_x),   expr_new_real(wy0 + du_y) };
                 Expr* ra[2] = {
                     expr_new_function(expr_new_symbol(SYM_List), p1, 2),
                     expr_new_function(expr_new_symbol(SYM_List), p2, 2),
@@ -796,12 +814,12 @@ Expr* builtin_contourplot(Expr* res) {
                 }
             }
 
-            /* Marching squares over every cell. */
+            /* Marching squares over every cell (world-space coords). */
             bool label_done = false;
             for (int iy = 0; iy < N; iy++) {
-                double yj = ymin + iy * dy;
+                double wy0 = u_ymin + iy * du_y;
                 for (int ix = 0; ix < N; ix++) {
-                    double xi = xmin + ix * dx;
+                    double wx0 = u_xmin + ix * du_x;
                     double v00 = grid[iy       * (N + 1) + ix    ];
                     double v10 = grid[iy       * (N + 1) + ix + 1];
                     double v11 = grid[(iy + 1) * (N + 1) + ix + 1];
@@ -809,7 +827,7 @@ Expr* builtin_contourplot(Expr* res) {
 
                     ENSURE_CAP(4);
                     size_t before = nprim;
-                    cell_march(prims, &nprim, xi, yj, dx, dy, v00, v10, v11, v01, level);
+                    cell_march(prims, &nprim, wx0, wy0, du_x, du_y, v00, v10, v11, v01, level);
 
                     /* Capture first segment for the label. */
                     if (co.contour_labels && !label_done && nprim > before) {
@@ -846,7 +864,8 @@ Expr* builtin_contourplot(Expr* res) {
     free(co.levels);
 
     /* Always embed an explicit PlotRange so the renderer uses the user's
-     * domain, matching the behaviour of StreamPlot and Plot3D. */
+     * domain, matching the behaviour of StreamPlot and Plot3D.
+     * Use world (scaled) coords so the renderer maps correctly. */
     {
         bool have_pr = false;
         for (size_t i = 0; i < pt_count; i++) {
@@ -858,8 +877,8 @@ Expr* builtin_contourplot(Expr* res) {
         }
         if (!have_pr) {
             passthrough = realloc(passthrough, sizeof(Expr*) * (pt_count + 1));
-            Expr* xr[2] = { expr_new_real(xmin), expr_new_real(xmax) };
-            Expr* yr[2] = { expr_new_real(ymin), expr_new_real(ymax) };
+            Expr* xr[2] = { expr_new_real(u_xmin), expr_new_real(u_xmax) };
+            Expr* yr[2] = { expr_new_real(u_ymin), expr_new_real(u_ymax) };
             Expr* xrange = expr_new_function(expr_new_symbol(SYM_List), xr, 2);
             Expr* yrange = expr_new_function(expr_new_symbol(SYM_List), yr, 2);
             Expr* rlist[2] = { xrange, yrange };
@@ -869,6 +888,8 @@ Expr* builtin_contourplot(Expr* res) {
         }
     }
 
+    emit_scaling_meta(co.sf_x, co.sf_y, &passthrough, &pt_count);
+
     /* PlotLegends -> Automatic: embed a $StreamColorBar[zmin, zmax] metadata
      * node so the renderer draws a vertical colour-scale bar. */
     if (co.show_legend) {
@@ -876,9 +897,12 @@ Expr* builtin_contourplot(Expr* res) {
         double bar_hi = isfinite(zmax) ? zmax : 1.0;
         if (bar_lo == bar_hi) bar_hi = bar_lo + 1.0;
         passthrough = realloc(passthrough, sizeof(Expr*) * (pt_count + 1));
-        Expr* cb_args[2] = { expr_new_real(bar_lo), expr_new_real(bar_hi) };
+        Expr* cfn_copy = co.color_function
+                         ? expr_copy(co.color_function)
+                         : expr_new_symbol(SYM_Automatic);
+        Expr* cb_args[3] = { expr_new_real(bar_lo), expr_new_real(bar_hi), cfn_copy };
         passthrough[pt_count++] =
-            expr_new_function(expr_new_symbol(SYM_StreamColorBar), cb_args, 2);
+            expr_new_function(expr_new_symbol(SYM_StreamColorBar), cb_args, 3);
     }
 
     Expr* prim_list = expr_new_function(expr_new_symbol(SYM_List), prims, nprim);

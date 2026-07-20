@@ -13,9 +13,15 @@
 #include "parametricplot.h"
 #include "parametricplot3d.h"
 #include "listplot.h"
+#include "polarplot.h"
 #include "streamplot.h"
 #include "contourplot.h"
+#include "densityplot.h"
+#include "barchart.h"
+#include "vectorplot.h"
 #include "show.h"
+#include "animate.h"
+#include "complexplot.h"
 
 void graphics_init(void);
 

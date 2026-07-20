@@ -58,11 +58,75 @@ Expr* eval_color_function3(Expr* color_fn,
                             double zmin, double zmax,
                             bool scaling);
 
-/* Thermal color ramp matching Mathematica's default StreamPlot palette:
- * dark blue-purple (t=0) → purple → red → orange → bright yellow (t=1).
- * r, g, b are written as [0,1] doubles. */
+/* Named color ramps — all take t ∈ [0,1], write r/g/b ∈ [0,1]. */
+
+/* PhaseRings: domain-colouring ramp for ComplexPlot. Takes the raw complex
+ * value (re, im) rather than a normalised t because both Arg and |w| are
+ * needed: hue = phase, brightness = 0.1 + 0.9·(1+cos(2π·log|w|))/2 (one
+ * bright/dark ring per e-fold of |w|, compressing near poles and zeros).
+ * The color-bar path (1-D, t only) falls back to a pure hue sweep. */
+void phase_rings_rgb(double re, double im, double* r, double* g, double* b);
+
+/* Thermal: dark blue-purple (t=0) → purple → red → orange → bright yellow (t=1).
+ * Matches Mathematica's default StreamPlot speed colormap. */
 void thermal_rgb(double t, double* r, double* g, double* b);
 
+/* CoolTones: near-white ice blue (t=0) → sky blue → cornflower → deep navy (t=1). */
+void cool_tones_rgb(double t, double* r, double* g, double* b);
+
+/* WarmTones: pale cream (t=0) → amber → orange → deep crimson (t=1). */
+void warm_tones_rgb(double t, double* r, double* g, double* b);
+
+/* Resolve a ColorFunction name string + t ∈ [0,1] to a color Expr (caller
+ * owns).  Recognised names: "Rainbow", "Temperature"/"Thermal",
+ * "CoolTones"/"Cool", "WarmTones"/"Warm",
+ * "Greyscale"/"Grayscale"/"Grey"/"Gray".
+ * Returns NULL when the name is not recognised. */
+Expr* named_color_ramp(const char* name, double t);
+
+/* resolve_ramp_to_rgb — same lookup as named_color_ramp but writes raw RGB
+ * doubles [0,1] instead of constructing an Expr.  Returns 1 on success,
+ * 0 if the name is not recognised. */
+int resolve_ramp_to_rgb(const char* name, double t, double* r, double* g, double* b);
+
+/* ---------------------------------------------------------------------- */
+/* Axis scaling (ScalingFunctions option)                                  */
+/* ---------------------------------------------------------------------- */
+
+/* Identifies one axis's scaling transform.  SF_NONE is the identity.
+ * Values are stored as EXPR_INTEGER inside $ScalingMeta[] metadata so
+ * the renderer can read them without any string parsing overhead. */
+typedef enum {
+    SF_NONE    = 0,
+    SF_LOG     = 1,   /* natural log: world = ln(data)  */
+    SF_LOG2    = 2,   /* log base 2:  world = log2(data) */
+    SF_LOG10   = 3,   /* log base 10: world = log10(data) */
+    SF_REVERSE = 4    /* mirror axis: world = -data */
+} ScaleFnType;
+
+/* Map a data-space coordinate to world space. */
+double scale_apply(ScaleFnType sf, double x);
+
+/* Inverse: world → data space. */
+double scale_invert(ScaleFnType sf, double w);
+
+/* Parse a ScalingFunctions spec expression (string or None/Automatic) to
+ * a ScaleFnType.  NULL or unrecognised → SF_NONE. */
+ScaleFnType parse_scale_fn(Expr* e);
+
+/* Parse ScalingFunctions RHS into (sf_x, sf_y).
+ * "Log" → both axes Log; {"Log","Log10"} → per-axis; None/Automatic → SF_NONE. */
+void parse_scaling_functions(Expr* rhs, ScaleFnType* sf_x, ScaleFnType* sf_y);
+
+/* Append the $ScalingMeta[sfx, sfy] metadata node to a Graphics options
+ * array (pt/pt_n) when at least one axis has a non-identity scale.
+ * Reallocates *pt by +1 when needed; caller must pass the current capacity
+ * (the array has capacity to hold at least pt_n+1 entries already) or set
+ * cap > pt_n to indicate there is room.  Pass cap=0 to always reallocate. */
+void emit_scaling_meta(ScaleFnType sf_x, ScaleFnType sf_y,
+                       Expr*** pt, size_t* pt_n);
+
+/* ---------------------------------------------------------------------- */
 /* Build the $PlotLegendData[{color1,label1}, ...] metadata node that the
  * renderer reads to draw a legend box.  `legends` is the already-evaluated
  * PlotLegends option value; `bodies` / `nfun` supply per-curve body exprs

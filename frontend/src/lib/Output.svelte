@@ -63,16 +63,20 @@
     import('plotly.js-dist-min').then((Plotly: any) => {
       const spec = data as any;
       const dark = !document.documentElement.classList.contains('light');
+      const sceneAxisDark  = { gridcolor: '#313244', zerolinecolor: '#585b70', tickfont: { color: '#cdd6f4' }, backgroundcolor: '#181825', showbackground: true };
+      const sceneAxisLight = { gridcolor: '#d8d9e8', zerolinecolor: '#9999bb', tickfont: { color: '#1c1c2e' }, backgroundcolor: '#f0f0f8', showbackground: true };
       const layoutOverride = dark ? {
         plot_bgcolor:  '#181825', paper_bgcolor: '#181825',
         font: { color: '#cdd6f4' },
         xaxis: { ...(spec.layout?.xaxis ?? {}), gridcolor: '#313244', zerolinecolor: '#585b70', tickfont: { color: '#cdd6f4' } },
         yaxis: { ...(spec.layout?.yaxis ?? {}), gridcolor: '#313244', zerolinecolor: '#585b70', tickfont: { color: '#cdd6f4' } },
+        scene: { ...(spec.layout?.scene ?? {}), bgcolor: '#181825', xaxis: sceneAxisDark, yaxis: sceneAxisDark, zaxis: sceneAxisDark },
       } : {
         plot_bgcolor:  '#ffffff', paper_bgcolor: '#f5f5fa',
         font: { color: '#1c1c2e' },
         xaxis: { ...(spec.layout?.xaxis ?? {}), gridcolor: '#d8d9e8', zerolinecolor: '#9999bb', tickfont: { color: '#1c1c2e' } },
         yaxis: { ...(spec.layout?.yaxis ?? {}), gridcolor: '#d8d9e8', zerolinecolor: '#9999bb', tickfont: { color: '#1c1c2e' } },
+        scene: { ...(spec.layout?.scene ?? {}), bgcolor: '#f5f5fa', xaxis: sceneAxisLight, yaxis: sceneAxisLight, zaxis: sceneAxisLight },
       };
       Plotly.react(node, spec.data ?? [spec], { ...(spec.layout ?? {}), ...layoutOverride }, {
         responsive: true, displayModeBar: true,

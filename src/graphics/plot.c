@@ -62,13 +62,17 @@ static bool plotrange_yband(Expr* rhs, double* lo, double* hi) {
 }
 
 typedef struct {
-    Expr* var;             /* iterator symbol, borrowed */
-    Expr* body;             /* f, borrowed */
-    Expr* region_function;  /* borrowed; NULL = none */
+    Expr*       var;             /* iterator symbol, borrowed */
+    Expr*       body;            /* f, borrowed */
+    Expr*       region_function; /* borrowed; NULL = none */
+    ScaleFnType sf_x;            /* x-axis scaling (sampler receives world x) */
+    ScaleFnType sf_y;            /* y-axis scaling applied to output */
 } PlotEvalCtx;
 
-static bool plot_eval_fn(double x, void* ctx_, double* y_out) {
+static bool plot_eval_fn(double u, void* ctx_, double* y_out) {
     PlotEvalCtx* ctx = (PlotEvalCtx*)ctx_;
+    /* u is in world space; invert to get the original x for evaluation */
+    double x = scale_invert(ctx->sf_x, u);
     Expr* xval = expr_new_real(x);
     symtab_add_own_value(ctx->var->data.symbol.name, ctx->var, xval);
     Expr* result = evaluate(ctx->body);
@@ -80,7 +84,12 @@ static bool plot_eval_fn(double x, void* ctx_, double* y_out) {
     if (ok && ctx->region_function && !eval_region(ctx->region_function, x, y)) ok = false;
 
     expr_free(xval);
-    if (ok) *y_out = y;
+    if (ok) {
+        /* Apply y-axis scaling; reject points with undefined scale (e.g. log(<=0)) */
+        double wy = scale_apply(ctx->sf_y, y);
+        if (!isfinite(wy)) ok = false;
+        else *y_out = wy;
+    }
     return ok;
 }
 
@@ -102,6 +111,7 @@ typedef struct {
      * asymptote) doesn't starve refinement of its on-screen body. A degenerate
      * band (lo >= hi) means "no explicit PlotRange y" -> sample full extent. */
     double yclip_lo, yclip_hi;
+    ScaleFnType sf_x, sf_y;  /* ScalingFunctions: world = scale_apply(sf, data) */
 } PlotSampleOpts;
 
 /* Splits res's trailing Rule args (starting at index 2) into the sampler
@@ -127,6 +137,8 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
     sopts->filling_style = NULL;
     sopts->yclip_lo = 0.0;
     sopts->yclip_hi = -1.0; /* degenerate => no clip until an explicit PlotRange y is seen */
+    sopts->sf_x = SF_NONE;
+    sopts->sf_y = SF_NONE;
     *single_color_out = NULL;
 
     size_t argc = res->data.function.arg_count;
@@ -190,6 +202,10 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
             if (!(rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_None)) sopts->filling = rhs;
         } else if (name == SYM_FillingStyle) {
             sopts->filling_style = rhs;
+        } else if (name == SYM_ScalingFunctions) {
+            Expr* v = evaluate(expr_copy(rhs));
+            parse_scaling_functions(v, &sopts->sf_x, &sopts->sf_y);
+            expr_free(v);
         } else if (name == SYM_PlotStyle) {
             have_style = true;
             if (*single_color_out) expr_free(*single_color_out);
@@ -472,9 +488,14 @@ static Expr** sample_lines(Expr* body, Expr* var, double xmin, double xmax,
     size_t npts = 0, cap = 0;
     for (size_t r = 0; r < nranges; r++) {
         if (!(ranges[r].lo < ranges[r].hi)) continue;
-        PlotEvalCtx ctx = { .var = var, .body = body, .region_function = sopts->region_function };
+        PlotEvalCtx ctx = { .var = var, .body = body, .region_function = sopts->region_function,
+                            .sf_x = sopts->sf_x, .sf_y = sopts->sf_y };
+        /* Sample in world (scaled) space so the grid is uniform on-screen */
+        double slo = scale_apply(sopts->sf_x, ranges[r].lo);
+        double shi = scale_apply(sopts->sf_x, ranges[r].hi);
+        if (!isfinite(slo) || !isfinite(shi) || slo >= shi) continue;
         size_t rn;
-        PlotPoint* rpts = plot_sample_adaptive(plot_eval_fn, &ctx, ranges[r].lo, ranges[r].hi,
+        PlotPoint* rpts = plot_sample_adaptive(plot_eval_fn, &ctx, slo, shi,
                                                 sopts->plot_points, sopts->max_recursion,
                                                 sopts->max_plot_points,
                                                 sopts->yclip_lo, sopts->yclip_hi, &rn);
@@ -810,6 +831,10 @@ Expr* builtin_plot(Expr* res) {
      * smooth rather than revealing the original coarse grid. */
     Expr* meta = build_resample_meta(bodies, nfun, ispec.var, &sopts);
     iter_spec_free(&ispec);
+
+    /* Emit $ScalingMeta when at least one axis uses a non-identity scale so
+     * the renderer can draw logarithmic tick labels. */
+    emit_scaling_meta(sopts.sf_x, sopts.sf_y, &passthrough, &passthrough_count);
 
     size_t gargc = 1 + passthrough_count + 1 + (legend_meta ? 1 : 0);
     Expr** gargs = malloc(sizeof(Expr*) * gargc);

@@ -104,15 +104,16 @@ static bool is_color_head(const Expr* e) {
     return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
         && (e->data.function.head->data.symbol.name == SYM_RGBColor
             || e->data.function.head->data.symbol.name == SYM_GrayLevel
-            || e->data.function.head->data.symbol.name == SYM_Hue);
+            || e->data.function.head->data.symbol.name == SYM_Hue
+            || e->data.function.head->data.symbol.name == SYM_CMYKColor);
 }
 
 Expr* eval_color_function(Expr* color_fn, double x, double y,
                            double xmin, double xmax, bool scaling) {
-    if (color_fn->type == EXPR_STRING && strcmp(color_fn->data.string, "Rainbow") == 0) {
+    if (color_fn->type == EXPR_STRING) {
         double t = (xmax > xmin) ? (x - xmin) / (xmax - xmin) : 0.0;
-        Expr* a[1] = { expr_new_real(t * 0.8) }; /* stop short of wrapping back to red */
-        return expr_new_function(expr_new_symbol(SYM_Hue), a, 1);
+        Expr* c = named_color_ramp(color_fn->data.string, t);
+        if (c) return c;
     }
 
     double cx = (scaling && xmax > xmin) ? (x - xmin) / (xmax - xmin) : x;
@@ -141,12 +142,15 @@ Expr* eval_color_function3(Expr* color_fn,
                             double ymin, double ymax,
                             double zmin, double zmax,
                             bool scaling) {
-    if (color_fn->type == EXPR_STRING && strcmp(color_fn->data.string, "Rainbow") == 0) {
-        /* Height-based: cold blue → hot red, capped at 0.8 hue to avoid
-         * wrapping back to red from the violet end. */
+    if (color_fn->type == EXPR_STRING) {
         double t = (zmax > zmin) ? (z - zmin) / (zmax - zmin) : 0.0;
-        Expr* a[1] = { expr_new_real((1.0 - t) * 0.8) };
-        return expr_new_function(expr_new_symbol(SYM_Hue), a, 1);
+        if (strcmp(color_fn->data.string, "Rainbow") == 0) {
+            /* 3D Rainbow: inverted height-based sweep (cold blue at top → red at bottom). */
+            Expr* a[1] = { expr_new_real((1.0 - t) * 0.8) };
+            return expr_new_function(expr_new_symbol(SYM_Hue), a, 1);
+        }
+        Expr* c = named_color_ramp(color_fn->data.string, t);
+        if (c) return c;
     }
 
     double xs = (scaling && xmax > xmin) ? (x - xmin) / (xmax - xmin) : x;
@@ -241,4 +245,243 @@ void thermal_rgb(double t, double* r, double* g, double* b) {
     *r = stops[i][0] + f * (stops[i + 1][0] - stops[i][0]);
     *g = stops[i][1] + f * (stops[i + 1][1] - stops[i][1]);
     *b = stops[i][2] + f * (stops[i + 1][2] - stops[i][2]);
+}
+
+/* cool_tones_rgb — near-white ice blue (t=0) → deep navy/indigo (t=1). */
+void cool_tones_rgb(double t, double* r, double* g, double* b) {
+    static const double stops[5][3] = {
+        { 0.91, 0.96, 1.00 }, /* near-white, ice-blue tint */
+        { 0.53, 0.78, 0.96 }, /* light sky blue            */
+        { 0.18, 0.50, 0.83 }, /* cornflower blue           */
+        { 0.07, 0.23, 0.60 }, /* royal/cobalt blue         */
+        { 0.02, 0.08, 0.35 }, /* deep navy/indigo          */
+    };
+    if (t < 0.0) t = 0.0;
+    if (t > 1.0) t = 1.0;
+    double idx = t * 4.0;
+    int    i   = (int)idx;
+    if (i > 3) i = 3;
+    double f = idx - (double)i;
+    *r = stops[i][0] + f * (stops[i + 1][0] - stops[i][0]);
+    *g = stops[i][1] + f * (stops[i + 1][1] - stops[i][1]);
+    *b = stops[i][2] + f * (stops[i + 1][2] - stops[i][2]);
+}
+
+/* warm_tones_rgb — pale cream (t=0) → amber → orange → deep crimson (t=1). */
+void warm_tones_rgb(double t, double* r, double* g, double* b) {
+    static const double stops[5][3] = {
+        { 1.00, 0.97, 0.80 }, /* pale cream/yellow */
+        { 1.00, 0.80, 0.38 }, /* warm amber        */
+        { 0.95, 0.48, 0.08 }, /* orange            */
+        { 0.78, 0.14, 0.06 }, /* red-orange        */
+        { 0.45, 0.03, 0.03 }, /* deep crimson      */
+    };
+    if (t < 0.0) t = 0.0;
+    if (t > 1.0) t = 1.0;
+    double idx = t * 4.0;
+    int    i   = (int)idx;
+    if (i > 3) i = 3;
+    double f = idx - (double)i;
+    *r = stops[i][0] + f * (stops[i + 1][0] - stops[i][0]);
+    *g = stops[i][1] + f * (stops[i + 1][1] - stops[i][1]);
+    *b = stops[i][2] + f * (stops[i + 1][2] - stops[i][2]);
+}
+
+/* named_color_ramp — resolve a ColorFunction name string and a normalised
+ * parameter t ∈ [0,1] to a concrete color expression (caller owns).
+ * Returns NULL when the name is not recognised.
+ *
+ * Recognised names:
+ *   "Rainbow"               — Hue sweep (red→violet, stops short of wrap)
+ *   "Temperature"/"Thermal" — thermal blue-purple→yellow ramp
+ *   "CoolTones"/"Cool"      — ice-white → sky-blue → deep navy
+ *   "WarmTones"/"Warm"      — cream → amber → orange → crimson
+ *   "Greyscale"/"Grayscale" — white (t=0) → black (t=1)
+ */
+Expr* named_color_ramp(const char* name, double t) {
+    if (t < 0.0) t = 0.0;
+    if (t > 1.0) t = 1.0;
+
+    if (strcmp(name, "Rainbow") == 0) {
+        Expr* a[1] = { expr_new_real(t * 0.8) };
+        return expr_new_function(expr_new_symbol(SYM_Hue), a, 1);
+    }
+    if (strcmp(name, "Temperature") == 0 || strcmp(name, "Thermal") == 0) {
+        double rv, gv, bv; thermal_rgb(t, &rv, &gv, &bv);
+        Expr* a[3] = { expr_new_real(rv), expr_new_real(gv), expr_new_real(bv) };
+        return expr_new_function(expr_new_symbol(SYM_RGBColor), a, 3);
+    }
+    if (strcmp(name, "CoolTones") == 0 || strcmp(name, "Cool") == 0) {
+        double rv, gv, bv; cool_tones_rgb(t, &rv, &gv, &bv);
+        Expr* a[3] = { expr_new_real(rv), expr_new_real(gv), expr_new_real(bv) };
+        return expr_new_function(expr_new_symbol(SYM_RGBColor), a, 3);
+    }
+    if (strcmp(name, "WarmTones") == 0 || strcmp(name, "Warm") == 0) {
+        double rv, gv, bv; warm_tones_rgb(t, &rv, &gv, &bv);
+        Expr* a[3] = { expr_new_real(rv), expr_new_real(gv), expr_new_real(bv) };
+        return expr_new_function(expr_new_symbol(SYM_RGBColor), a, 3);
+    }
+    if (strcmp(name, "Greyscale") == 0 || strcmp(name, "Grayscale") == 0
+        || strcmp(name, "GrayScale") == 0 || strcmp(name, "GreyScale") == 0
+        || strcmp(name, "Grey") == 0 || strcmp(name, "Gray") == 0) {
+        Expr* a[1] = { expr_new_real(1.0 - t) }; /* white at t=0, black at t=1 */
+        return expr_new_function(expr_new_symbol(SYM_GrayLevel), a, 1);
+    }
+    /* "PhaseRings" — 1-D bar variant: pure hue sweep at full brightness.
+     * The modulus-ring brightness oscillation cannot be shown in 1-D; the bar
+     * label range (−π to π) already conveys the phase mapping. */
+    if (strcmp(name, "PhaseRings") == 0) {
+        Expr* a[1] = { expr_new_real(t) };
+        return expr_new_function(expr_new_symbol(SYM_Hue), a, 1);
+    }
+    return NULL;
+}
+
+/* phase_rings_rgb — domain-colouring ramp for complex functions.
+ *
+ * Hue = Arg(re + i·im) / (2π)  maps phase continuously around the color wheel.
+ * Value (brightness) = 0.1 + 0.9 · (1 + cos(2π · log|w|)) / 2  creates one
+ * bright/dark ring per e-fold of |w|, compressing near poles (|w|→∞) and zeros
+ * (|w|→0) to make them instantly visible as concentric ring clusters.
+ *
+ * Used by ComplexPlot when ColorFunction → "PhaseRings"; the color bar path
+ * (which only has a 1-D t parameter) uses hue_to_rgb instead, showing the phase
+ * sweep at full brightness so the bar tick labels (−π to π) are legible. */
+void phase_rings_rgb(double re, double im, double* r, double* g, double* b) {
+    double arg   = atan2(im, re);
+    double hue   = (arg + M_PI) / (2.0 * M_PI);   /* phase → [0, 1] */
+    double mod   = sqrt(re * re + im * im);
+    double bright;
+    if (mod < 1e-300) {
+        bright = 0.0;
+    } else {
+        double lmod = log(mod);
+        bright = (1.0 + cos(2.0 * M_PI * lmod)) * 0.5;
+        bright = 0.1 + 0.9 * bright;               /* floor at 0.1 */
+    }
+    /* HSV → RGB: S = 1, V = bright */
+    double h6 = hue * 6.0;
+    h6 -= floor(h6 / 6.0) * 6.0;                  /* wrap to [0, 6) */
+    int    sec = (int)h6;
+    double f   = h6 - (double)sec;
+    double q   = bright * (1.0 - f);
+    double tv  = bright * f;
+    switch (sec % 6) {
+        case 0: *r = bright; *g = tv;    *b = 0.0;   break;
+        case 1: *r = q;      *g = bright; *b = 0.0;  break;
+        case 2: *r = 0.0;    *g = bright; *b = tv;   break;
+        case 3: *r = 0.0;    *g = q;     *b = bright; break;
+        case 4: *r = tv;     *g = 0.0;   *b = bright; break;
+        default: *r = bright; *g = 0.0;  *b = q;     break;
+    }
+}
+
+/* hue_to_rgb — HSV → RGB with s=v=1 (pure saturated hue sweep). */
+static void hue_to_rgb(double h, double* r, double* g, double* b) {
+    h = h - floor(h);
+    double hh = h * 6.0;
+    int    i  = (int)floor(hh);
+    double f  = hh - (double)i;
+    double q  = 1.0 - f;
+    switch (((i % 6) + 6) % 6) {
+        case 0: *r = 1.0; *g = f;   *b = 0.0; break;
+        case 1: *r = q;   *g = 1.0; *b = 0.0; break;
+        case 2: *r = 0.0; *g = 1.0; *b = f;   break;
+        case 3: *r = 0.0; *g = q;   *b = 1.0; break;
+        case 4: *r = f;   *g = 0.0; *b = 1.0; break;
+        default: *r = 1.0; *g = 0.0; *b = q;  break;
+    }
+}
+
+/* resolve_ramp_to_rgb — same lookup table as named_color_ramp but writes raw
+ * RGB doubles instead of constructing an Expr.  Returns 1 on success, 0 if
+ * the name is not recognised. */
+int resolve_ramp_to_rgb(const char* name, double t, double* r, double* g, double* b) {
+    if (t < 0.0) t = 0.0;
+    if (t > 1.0) t = 1.0;
+    if (strcmp(name, "Rainbow") == 0) {
+        hue_to_rgb(t * 0.8, r, g, b); return 1;
+    }
+    if (strcmp(name, "Temperature") == 0 || strcmp(name, "Thermal") == 0) {
+        thermal_rgb(t, r, g, b); return 1;
+    }
+    if (strcmp(name, "CoolTones") == 0 || strcmp(name, "Cool") == 0) {
+        cool_tones_rgb(t, r, g, b); return 1;
+    }
+    if (strcmp(name, "WarmTones") == 0 || strcmp(name, "Warm") == 0) {
+        warm_tones_rgb(t, r, g, b); return 1;
+    }
+    if (strcmp(name, "Greyscale") == 0 || strcmp(name, "Grayscale") == 0
+        || strcmp(name, "GrayScale") == 0 || strcmp(name, "GreyScale") == 0
+        || strcmp(name, "Grey") == 0 || strcmp(name, "Gray") == 0) {
+        *r = *g = *b = 1.0 - t; return 1;
+    }
+    if (strcmp(name, "PhaseRings") == 0) {
+        hue_to_rgb(t, r, g, b); return 1;
+    }
+    return 0;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Axis scaling helpers (ScalingFunctions)                                 */
+/* ---------------------------------------------------------------------- */
+
+double scale_apply(ScaleFnType sf, double x) {
+    switch (sf) {
+        case SF_LOG:     return (x > 0.0) ? log(x)   : -1e30;
+        case SF_LOG2:    return (x > 0.0) ? log2(x)  : -1e30;
+        case SF_LOG10:   return (x > 0.0) ? log10(x) : -1e30;
+        case SF_REVERSE: return -x;
+        default:         return x;
+    }
+}
+
+double scale_invert(ScaleFnType sf, double w) {
+    switch (sf) {
+        case SF_LOG:     return exp(w);
+        case SF_LOG2:    return pow(2.0, w);
+        case SF_LOG10:   return pow(10.0, w);
+        case SF_REVERSE: return -w;
+        default:         return w;
+    }
+}
+
+ScaleFnType parse_scale_fn(Expr* e) {
+    if (!e) return SF_NONE;
+    if (e->type == EXPR_SYMBOL) {
+        if (e->data.symbol.name == SYM_None || e->data.symbol.name == SYM_Automatic) return SF_NONE;
+    }
+    if (e->type == EXPR_STRING) {
+        const char* s = e->data.string;
+        if (strcmp(s, "Log")     == 0) return SF_LOG;
+        if (strcmp(s, "Log2")    == 0) return SF_LOG2;
+        if (strcmp(s, "Log10")   == 0) return SF_LOG10;
+        if (strcmp(s, "Reverse") == 0 || strcmp(s, "Reversed") == 0) return SF_REVERSE;
+    }
+    return SF_NONE;
+}
+
+void parse_scaling_functions(Expr* rhs, ScaleFnType* sf_x, ScaleFnType* sf_y) {
+    *sf_x = SF_NONE; *sf_y = SF_NONE;
+    if (!rhs) return;
+    /* {sfx, sfy} two-element List */
+    if (rhs->type == EXPR_FUNCTION
+        && rhs->data.function.head->type == EXPR_SYMBOL
+        && rhs->data.function.head->data.symbol.name == SYM_List
+        && rhs->data.function.arg_count == 2) {
+        *sf_x = parse_scale_fn(rhs->data.function.args[0]);
+        *sf_y = parse_scale_fn(rhs->data.function.args[1]);
+    } else {
+        /* Single spec applies to both axes */
+        *sf_x = *sf_y = parse_scale_fn(rhs);
+    }
+}
+
+void emit_scaling_meta(ScaleFnType sf_x, ScaleFnType sf_y,
+                       Expr*** pt, size_t* pt_n) {
+    if (sf_x == SF_NONE && sf_y == SF_NONE) return;
+    *pt = realloc(*pt, sizeof(Expr*) * (*pt_n + 1));
+    Expr* sm_args[2] = { expr_new_integer((int64_t)sf_x),
+                         expr_new_integer((int64_t)sf_y) };
+    (*pt)[(*pt_n)++] = expr_new_function(expr_new_symbol(SYM_ScalingMeta), sm_args, 2);
 }

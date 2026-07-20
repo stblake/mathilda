@@ -23,6 +23,111 @@ builds a `Graphics[...]`, reusing the same primitive heads (`Polygon`, `Line`,
 color directives) with 3-coordinate `{x,y,z}` points instead of 2-coordinate
 `{x,y}` ones -- see `Graphics3D` and `Plot3D` below.
 
+---
+
+## Feature summary
+
+### Animation
+
+| Function | Purpose | Key options |
+|----------|---------|-------------|
+| [`Animate`](#animate) | Animate any expression over a parameter range in an interactive window | `AnimationDirection`, `AnimationRate`, `AnimationRepetitions`, `AnimationRunning`, `AppearanceElements`, `DefaultDuration`, `ControlPlacement`, `RefreshRate` |
+
+### 2D plotters
+
+| Function | Purpose | Key options |
+|----------|---------|-------------|
+| [`Plot`](#plot) | Adaptive function curve(s) of one variable | `PlotPoints`, `MaxRecursion`, `Filling`, `ColorFunction`, `RegionFunction`, `Exclusions`, `ScalingFunctions` |
+| [`ListPlot`](#listplot) | Scatter / line plot of discrete data | `Joined`, `Filling`, `DataRange`, `PlotStyle`, `ScalingFunctions` |
+| [`ParametricPlot`](#parametricplot) | Parametric curves `{fx(t), fy(t)}` (1-iter) or surfaces `{fx(t,u), fy(t,u)}` (2-iter) | `ColorFunction`, `RegionFunction`, `Mesh` |
+| [`PolarPlot`](#polarplot) | Polar curve `r(θ)` | `ColorFunction`, `PlotStyle`, `RegionFunction` |
+| [`ContourPlot`](#contourplot) | Iso-contour lines / filled contours of `f(x,y)` | `Contours`, `ContourStyle`, `ContourShading`, `ColorFunction`, `ContourLabels`, `ScalingFunctions` |
+| [`DensityPlot`](#densityplot) | Heatmap of `f(x,y)` | `ColorFunction`, `ColorFunctionScaling`, `RegionFunction`, `PlotLegends`, `ScalingFunctions` |
+| [`ComplexPlot`](#complexplot) | Domain-colouring of a complex function `f(z)` | `PlotPoints`, `ColorFunction`, `ColorFunctionScaling`, `RegionFunction`, `PlotLegends` |
+| [`VectorPlot`](#vectorplot) | Arrow grid for a 2D vector field | `VectorPoints`, `VectorScale`, `VectorStyle`, `ColorFunction`, `RegionFunction`, `ScalingFunctions` |
+| [`StreamPlot`](#streamplot) | RK4-integrated streamlines of a 2D vector field | `StreamPoints`, `StreamScale`, `StreamStyle`, `ColorFunction`, `RegionFunction`, `ScalingFunctions` |
+| [`BarChart`](#barchart) | Vertical bar chart for categorical / grouped data | `ChartStyle`, `ChartLabels`, `BarSpacing` |
+| [`Histogram`](#histogram) | Frequency histogram with flexible bin specs | `ChartStyle`, `BarSpacing`; bin: `k`, `{step}`, `{min,max,step}` |
+
+### 3D plotters
+
+| Function | Purpose | Key options |
+|----------|---------|-------------|
+| [`Plot3D`](#plot3d) | Surface plot of `f(x,y)` with orbit camera | `PlotPoints`, `Mesh`, `ColorFunction`, `RegionFunction`, `Lighting` |
+| [`ParametricPlot3D`](#parametricplot3d) | Parametric space curves or surfaces in 3D | `ColorFunction`, `RegionFunction`, `Mesh` |
+| [`ComplexPlot3D`](#complexplot3d) | 3D surface `height=|f(z)|`, `color=Arg(f(z))` | `PlotPoints`, `ColorFunction`, `ColorFunctionScaling`, `RegionFunction`, `PlotLegends`, `Lighting` |
+
+### Shared option cross-reference
+
+| Option | Supported by |
+|--------|-------------|
+| `PlotRange` | all plotters (auto-embedded; user can override) |
+| `PlotPoints` | all function plotters |
+| `PlotStyle` | `Plot`, `ListPlot`, `ParametricPlot`, `PolarPlot`, `Plot3D`, `ParametricPlot3D` |
+| `PlotLegends` | `Plot`, `ListPlot`, `DensityPlot`, `ContourPlot`, `StreamPlot` |
+| `PlotLabel` | all (pass-through to `Graphics`/`Graphics3D`) |
+| `ColorFunction` | `Plot`, `ParametricPlot`, `PolarPlot`, `Plot3D`, `ParametricPlot3D`, `DensityPlot`, `ContourPlot`, `VectorPlot`, `StreamPlot` |
+| `ColorFunctionScaling` | same set as `ColorFunction` |
+| `RegionFunction` | `Plot`, `ParametricPlot`, `Plot3D`, `ParametricPlot3D`, `DensityPlot`, `ContourPlot`, `VectorPlot`, `StreamPlot` |
+| `Filling` / `FillingStyle` | `Plot`, `ListPlot` |
+| `ScalingFunctions` | `Plot`, `ListPlot`, `DensityPlot`, `ContourPlot`, `VectorPlot`, `StreamPlot` |
+| `AspectRatio` | all 2D plotters (default `1/GoldenRatio` for Plot/ListPlot, `1` for field plots) |
+| `Axes` / `AxesLabel` / `AxesStyle` | all plotters (pass-through) |
+| `Frame` / `FrameLabel` / `FrameStyle` | all plotters (pass-through) |
+| `GridLines` / `GridLinesStyle` | all plotters (pass-through) |
+| `Background` / `ImageSize` | all plotters (pass-through) |
+
+### Primitives
+
+| Primitive | Description |
+|-----------|-------------|
+| `Point[{x,y}]` / `Point[{{x1,y1},…}]` | Point(s) |
+| `Line[{{x1,y1},…}]` | Polyline |
+| `Arrow[{{x1,y1},{x2,y2}}]` | Directed line segment with arrowhead |
+| `Circle[{x,y}, r]` | Circle outline |
+| `Disk[{x,y}, r]` | Filled disk |
+| `Rectangle[{x1,y1},{x2,y2}]` | Axis-aligned filled rectangle |
+| `Polygon[{{x1,y1},…}]` | Filled polygon (any winding order) |
+| `Text[expr, {x,y}]` | String / expression label (Hershey vector font) |
+
+### Style directives
+
+| Directive | Effect |
+|-----------|--------|
+| `RGBColor[r,g,b]` / `RGBColor[r,g,b,a]` | Set fill/stroke color |
+| `GrayLevel[g]` / `GrayLevel[g,a]` | Grayscale color |
+| `Hue[h]` / `Hue[h,s,b]` / `Hue[h,s,b,a]` | HSB color |
+| `CMYKColor[c,m,y,k]` | CMYK color |
+| `Opacity[a]` | Fill opacity `[0,1]` |
+| `Thickness[t]` | Line thickness (plot coords) |
+| `PointSize[s]` | Point radius (plot coords) |
+| 24 named constants | `Red`, `Blue`, `Green`, `Black`, `White`, `Gray`, `Orange`, `Purple`, … |
+
+### ColorFunction ramps (built-in named strings)
+
+| Name | Aliases | Description |
+|------|---------|-------------|
+| `"Rainbow"` | — | Full HSV sweep (hue 0→1) |
+| `"Temperature"` | `"Thermal"` | Dark blue-purple → orange → bright yellow |
+| `"CoolTones"` | `"Cool"` | Ice blue → cornflower → deep navy |
+| `"WarmTones"` | `"Warm"` | Pale cream → amber → deep crimson |
+| `"Greyscale"` | `"Grayscale"`, `"Grey"`, `"Gray"` | White → black |
+
+### ScalingFunctions (axis transforms)
+
+Available for `Plot`, `ListPlot`, `DensityPlot`, `ContourPlot`, `VectorPlot`, `StreamPlot`:
+
+| Value | Transform | Tick labels |
+|-------|-----------|-------------|
+| `"Log"` | natural log (world = ln data) | decade + 2×, 5× sub-ticks |
+| `"Log10"` | log base 10 | decade + 2×, 5× sub-ticks |
+| `"Log2"` | log base 2 | decade + 2×, 5× sub-ticks |
+| `"Reverse"` | negate (world = –data) | linear, reversed |
+| `None` / `Automatic` | identity | standard linear |
+| `{"sfx", "sfy"}` | per-axis | mixed |
+
+---
+
 ## Graphics
 A symbolic 2D graphics object.
 - `Graphics[primitives]`: wraps a (possibly nested) list of primitives and
@@ -101,42 +206,198 @@ transcribed from the historical Hershey dataset (`tools/hershey.dat`) by
 ## RGBColor / GrayLevel / Opacity / Thickness / PointSize
 Style directives. Placed alongside primitives in a `Graphics[]` primitive
 list, each affects every primitive that follows it (left to right), exactly
-like Mathematica's directive semantics.
+like Mathematica's directive semantics. See also `Hue` and `CMYKColor` below,
+and the **Named color constants** section above for the 24 pre-defined color
+symbols.
+
 - `RGBColor[r, g, b]` / `RGBColor[r, g, b, a]`: color, components in `[0,1]`.
-- `GrayLevel[g]` / `GrayLevel[g, a]`: a shade of gray.
-- `Opacity[a]`: opacity in `[0,1]`.
+- `GrayLevel[g]` / `GrayLevel[g, a]`: a shade of gray (0 = black, 1 = white).
+- `Opacity[a]`: fill opacity in `[0,1]` (does not affect line alpha; use the
+  4-argument `RGBColor`/`GrayLevel`/`Hue` forms for full RGBA control).
 - `Thickness[t]`: line thickness (plot coordinates) for `Line`/`Circle`.
 - `PointSize[s]`: point radius (plot coordinates) for `Point`.
 
 ```mathematica
 In[1]:= Graphics[{RGBColor[1, 0, 0], Point[{0, 0}], Line[{{0,0},{1,1}}]}]
 Out[1]= -Graphics-
+
+In[2]:= Graphics[{GrayLevel[0.3], Disk[{0, 0}], GrayLevel[0.8], Disk[{2, 0}]}]
+Out[2]= -Graphics-
+
+In[3]:= Graphics[{Blue, Opacity[0.5], Polygon[{{0,0},{1,0},{0.5,1}}],
+                  Red,  Opacity[0.5], Polygon[{{0.5,0},{1.5,0},{1,1}}]}]
+Out[3]= -Graphics-  (* two overlapping semi-transparent triangles *)
 ```
 
 ## Named color constants
-`Red`, `Green`, `Blue`, `Black`, `White`, `Gray`, `Cyan`, `Magenta`,
-`Yellow`, `Brown`, `Orange`, `Pink`, `Purple` and their light variants
-`LightRed`, `LightGreen`, `LightBlue`, `LightGray`, `LightCyan`,
-`LightMagenta`, `LightYellow`, `LightBrown`, `LightOrange`, `LightPink`,
-`LightPurple` are ordinary protected `OwnValue`s evaluating to an
-`RGBColor[...]`/`GrayLevel[...]` literal (e.g. `Red` is exactly
-`RGBColor[1, 0, 0]`, `Black` is `GrayLevel[0]`) -- usable anywhere a
-color literal is, including `PlotStyle`, `Background`, `FrameStyle`,
-`AxesStyle`, `TicksStyle`, `GridLinesStyle`, and as a style directive
-directly inside a primitive list (`Graphics[{Blue, Point[{0,0}]}]`).
 
-Because `Plot`/`Show` are `HoldAll`/inert respectively, a non-`Held`
-`Graphics[...]`'s arguments evaluate normally (so `Blue` resolves the
-instant it's parsed), while `Plot` evaluates each of its own option values
-once before storing them, specifically so a named color used inside e.g.
-`Epilog -> {Red, ...}` resolves the same way.
+All 24 named color constants are protected `OwnValue`s that evaluate to an
+`RGBColor[r,g,b]` or `GrayLevel[g]` literal. They are usable anywhere a
+color literal is accepted: as a style directive inside a primitive list,
+as the value of `PlotStyle`, `Background`, `FrameStyle`, `AxesStyle`,
+`TicksStyle`, `GridLinesStyle`, `ColorFunction` return values, and so on.
+
+Because `Graphics[...]` is not held, its arguments evaluate at construction
+time — a bare `Red` inside a primitive list is immediately replaced by
+`RGBColor[1, 0, 0]`. `Plot`/`ParametricPlot`/etc. are `HoldAll` but
+evaluate each option value once before storing it on the result, so a
+named color in any option (e.g. `PlotStyle -> Orange` or
+`Epilog -> {Blue, Disk[{0,0}]}`) resolves identically.
+
+All four color forms — `RGBColor`, `GrayLevel`, `Hue`, `CMYKColor` — are
+recognised as style directives in both the Raylib CLI renderer and the
+Plotly notebook frontend.
+
+**Color table** (24 constants):
+
+| Name | Evaluates to | Approx. swatch |
+|---|---|---|
+| `Black` | `GrayLevel[0]` | black |
+| `White` | `GrayLevel[1]` | white |
+| `Gray` | `GrayLevel[0.5]` | mid-gray |
+| `LightGray` | `GrayLevel[0.85]` | pale gray |
+| `Red` | `RGBColor[1, 0, 0]` | pure red |
+| `Green` | `RGBColor[0, 1, 0]` | lime green |
+| `Blue` | `RGBColor[0, 0, 1]` | pure blue |
+| `Cyan` | `RGBColor[0, 1, 1]` | cyan |
+| `Magenta` | `RGBColor[1, 0, 1]` | magenta |
+| `Yellow` | `RGBColor[1, 1, 0]` | yellow |
+| `Brown` | `RGBColor[0.6, 0.4, 0.2]` | brown |
+| `Orange` | `RGBColor[1, 0.5, 0]` | orange |
+| `Pink` | `RGBColor[1, 0.5, 0.5]` | pink |
+| `Purple` | `RGBColor[0.5, 0, 0.5]` | purple |
+| `LightRed` | `RGBColor[1, 0.85, 0.85]` | pale red |
+| `LightGreen` | `RGBColor[0.88, 1, 0.88]` | pale green |
+| `LightBlue` | `RGBColor[0.87, 0.94, 1]` | pale blue |
+| `LightCyan` | `RGBColor[0.9, 1, 1]` | pale cyan |
+| `LightMagenta` | `RGBColor[1, 0.9, 1]` | pale magenta |
+| `LightYellow` | `RGBColor[1, 1, 0.85]` | pale yellow |
+| `LightBrown` | `RGBColor[0.94, 0.91, 0.88]` | pale brown |
+| `LightOrange` | `RGBColor[1, 0.9, 0.8]` | pale orange |
+| `LightPink` | `RGBColor[1, 0.925, 0.925]` | pale pink |
+| `LightPurple` | `RGBColor[0.94, 0.88, 0.94]` | pale purple |
 
 ```mathematica
+(* Named colors evaluate to their literal form *)
 In[1]:= Red
 Out[1]= RGBColor[1, 0, 0]
 
-In[2]:= Plot[Sin[x], {x, 0, 2 Pi}, PlotStyle -> Green, Background -> LightGray]
+In[2]:= Black
+Out[2]= GrayLevel[0]
+
+In[3]:= {Red, Green, Blue, Black, White, Gray}
+Out[3]= {RGBColor[1, 0, 0], RGBColor[0, 1, 0], RGBColor[0, 0, 1],
+         GrayLevel[0], GrayLevel[1], GrayLevel[0.5]}
+
+(* Style directive inside a primitive list *)
+In[4]:= Graphics[{Red, Disk[{0, 0}], Blue, Disk[{2, 0}], Green, Disk[{4, 0}]}]
+Out[4]= -Graphics-
+
+(* As PlotStyle / Background options *)
+In[5]:= Plot[Sin[x], {x, 0, 2 Pi}, PlotStyle -> Orange, Background -> LightGray]
+Out[5]= -Graphics-
+
+(* Per-color Disk grid — all 24 named colors *)
+In[6]:= With[{cols = {Red, Green, Blue, Black, White, Gray,
+                       Cyan, Magenta, Yellow, Brown, Orange, Pink,
+                       Purple, LightRed, LightGreen, LightBlue, LightGray,
+                       LightCyan, LightMagenta, LightYellow, LightBrown,
+                       LightOrange, LightPink, LightPurple}},
+         Table[{cols[[n]], Disk[{Mod[n - 1, 6] * 2, -Floor[(n - 1) / 6] * 2}]},
+               {n, Length[cols]}]] // Graphics
+Out[6]= -Graphics-
+
+(* Named colors in multi-curve PlotStyle *)
+In[7]:= Plot[{Sin[x], Cos[x], Sin[2 x]}, {x, 0, 2 Pi},PlotStyle -> {Red, Blue, Green}]
+Out[7]= -Graphics-
+
+(* Named colors in Epilog *)
+In[8]:= Plot[Sin[x], {x, 0, 2 Pi},
+          Epilog -> {Orange, PointSize[0.02], Point[{Pi/2, 1}],
+                     Purple, PointSize[0.02], Point[{3 Pi/2, -1}]}]
+Out[8]= -Graphics-
+
+(* AxesStyle / GridLinesStyle *)
+In[9]:= Plot[x^2, {x, -2, 2}, GridLines -> Automatic,
+          GridLinesStyle -> LightBlue, AxesStyle -> Gray]
+Out[9]= -Graphics-
+
+(* Combining named colors with Opacity *)
+In[10]:= Graphics[{Red, Opacity[0.4], Disk[{0, 0}],
+                   Blue, Opacity[0.4], Disk[{1, 0}],
+                   Green, Opacity[0.4], Disk[{0.5, 0.866}]}]
+Out[10]= -Graphics-  (* three overlapping translucent disks *)
+
+(* ParametricPlot with named color *)
+In[11]:= ParametricPlot[{Cos[t], Sin[t]}, {t, 0, 2 Pi}, PlotStyle -> Purple]
+Out[11]= -Graphics-
+
+(* Plot3D with named color surface *)
+In[12]:= Plot3D[Sin[x] Cos[y], {x, -3, 3}, {y, -3, 3}, PlotStyle -> Cyan, Mesh -> None]
+Out[12]= -Graphics3D-
+```
+
+## Named ColorFunction ramps
+
+All gradient-based plotters — `DensityPlot`, `ContourPlot`, `VectorPlot`,
+`StreamPlot`, `Plot`, `Plot3D`, `ParametricPlot`, `ParametricPlot3D` — accept
+`ColorFunction -> "name"` where `name` is one of the following built-in
+string ramps.  Each ramp is a continuous 5-stop RGB gradient parameterised
+by `t ∈ [0,1]` (normalised to the data range when
+`ColorFunctionScaling -> True`, the default).
+
+| Name | Aliases | Appearance |
+|------|---------|------------|
+| `"Rainbow"` | — | `Hue` sweep red → violet (stops at 0.8 to avoid wrapping back to red) |
+| `"Temperature"` | `"Thermal"` | dark blue-purple → purple → red → orange → bright yellow (Mathilda's default stream/contour ramp) |
+| `"CoolTones"` | `"Cool"` | near-white ice blue → sky blue → cornflower → deep navy/indigo |
+| `"WarmTones"` | `"Warm"` | pale cream → amber → orange → deep crimson |
+| `"Greyscale"` | `"Grayscale"`, `"Grey"`, `"Gray"` | white (t=0) → black (t=1) |
+
+**Calling convention by plotter:**
+
+| Plotter | `t` is derived from… |
+|---------|----------------------|
+| `Plot`, `ParametricPlot`, `PolarPlot` | position along curve: `(x − xmin)/(xmax − xmin)` |
+| `Plot3D`, `ParametricPlot3D` | z-height: `(z − zmin)/(zmax − zmin)` |
+| `DensityPlot`, `ContourPlot` | cell's normalised function value |
+| `VectorPlot`, `StreamPlot` | field magnitude (speed) |
+
+For custom function forms see the individual plotter's `ColorFunction` option
+table.
+
+```mathematica
+(* DensityPlot with each named ramp *)
+In[1]:= DensityPlot[Sin[x] Sin[y], {x, -4, 4}, {y, -3, 3},
+          ColorFunction -> "CoolTones"]
+Out[1]= -Graphics-
+
+In[2]:= DensityPlot[Sin[x] Sin[y], {x, -4, 4}, {y, -3, 3},
+          ColorFunction -> "WarmTones"]
 Out[2]= -Graphics-
+
+In[3]:= DensityPlot[Sin[x] Sin[y], {x, -4, 4}, {y, -3, 3},
+          ColorFunction -> "Greyscale"]
+Out[3]= -Graphics-
+
+In[4]:= DensityPlot[Sin[x] Sin[y], {x, -4, 4}, {y, -3, 3},
+          ColorFunction -> "Temperature"]
+Out[4]= -Graphics-
+
+(* ContourPlot with a warm ramp *)
+In[5]:= ContourPlot[x^2 + y^2, {x, -2, 2}, {y, -2, 2},
+          ContourShading -> True, ColorFunction -> "WarmTones"]
+Out[5]= -Graphics-
+
+(* VectorPlot with cool tones *)
+In[6]:= VectorPlot[{-y, x}, {x, -2, 2}, {y, -2, 2},
+          ColorFunction -> "CoolTones"]
+Out[6]= -Graphics-
+
+(* StreamPlot with greyscale speed coloring *)
+In[7]:= StreamPlot[{-y, x}, {x, -2, 2}, {y, -2, 2},
+          StreamColorFunction -> "Greyscale", PlotLegends -> Automatic]
+Out[7]= -Graphics-
 ```
 
 ## Hue
@@ -308,75 +569,7 @@ Adaptively samples and displays a function of one real variable.
 - `HoldAll`: `f` (or the function list) and the iterator spec are not
   pre-evaluated (`x` has no value until sampling binds it).
 
-Sampling options (consumed by `Plot` itself; not stored on the resulting
-`Graphics[...]`), implemented by one shared adaptive sampler so the same
-algorithm and option semantics will back future plotting functions
-(`ListPlot`, `ParametricPlot`, ...):
-
-| Option | Default | Meaning |
-|---|---|---|
-| `PlotPoints` | `50` | initial uniform sample count across `[xmin,xmax]` |
-| `MaxRecursion` | `6` | max bisection depth per initial interval when curvature/a singularity demands it |
-| `MaxPlotPoints` | `Infinity` | overall cap on stored sample points |
-| `Mesh` | `None` | `All` overlays a dot at every evaluation point (in the curve's colour); `None` draws the line only. `True`/`False` are accepted as synonyms |
-| `RegionFunction` | none | `f[x,y]` (or `f[x]`) -- a sample where this isn't `True` is dropped exactly like a singularity (the curve gaps there) |
-| `Exclusions` | `None` | `{x1, x2, ...}` or `{x == a, ...}`: forces a discontinuity at each given x, independent of curvature/singularity detection |
-| `ColorFunction` | none | a function `f[xscaled,yscaled]`/`f[xscaled]` returning a color literal (`RGBColor`/`GrayLevel`/`Hue`), applied per sampled segment -- or the string `"Rainbow"` for a built-in `Hue` sweep over x. Overrides `PlotStyle` for the curve itself |
-| `ColorFunctionScaling` | `True` | whether `ColorFunction` receives `x`/`y` scaled to `[0,1]` over the plot's range, or raw data values |
-| `Filling` | `None` | `Axis` (to `y=0`), `Bottom`/`Top` (to the run's own min/max y), or a number (to that y) -- a strip of small quad `Polygon[]`s (one per consecutive sampled-point pair) hugging the curve down to the baseline, under the curve's outline |
-| `FillingStyle` | none | color for the fill; default is the curve's own color at `Opacity[0.3]` |
-| `PlotLegends` | none | `Automatic`/`"Expressions"` (label each curve with its own expression, via `ToString`) or an explicit list of label strings -- drawn as a small swatch+label box, top-right below the toolbar |
-
-The adaptive sampler judges each candidate segment by the maximum **vertical**
-gap between the curve and the straight chord at three interior probe points
-(1/4, 1/2, 3/4), normalized by the displayed y-extent. Probing more than the
-midpoint alone makes it robust to oscillatory functions (e.g. a sum of sines
-of different frequencies), where a single-midpoint test would resonate with the
-grid and miss the wiggle entirely no matter how high `MaxRecursion` is set.
-
-Every probe is first **clamped to the displayed y-band** — an explicit numeric
-`PlotRange` y, or (during zoom re-sampling) the current visible extent. This
-keeps refinement on the part of the curve the window actually shows: a function
-that dives far out of frame (a truncated Taylor series past its radius of
-convergence, a steep asymptote) would otherwise pour its whole detail budget
-into the off-screen plunge and leave the visible body and its on-screen crossing
-coarsely faceted. Clamped, the off-band stretch collapses onto the clip line and
-reads as flat, so the recursion concentrates where it is seen. With no explicit
-`PlotRange` y the curve is sampled over its full extent, exactly as before.
-
-This vertical-gap test is the **primary** refinement driver, and because a
-chord's sagitta grows with curvature, sample density tracks curvature: points
-cluster where the curve bends (the peaks of `Sin`, the ends of `x^3`, the body
-of a spike) and thin out where it is straight — including steep but locally
-linear stretches such as `Sin`'s zero-crossings. A secondary, deliberately
-loose chord-**length** cap (≈1/12 of the frame) acts only as a backstop, so a
-near-vertical asymptotic approach (e.g. `Log[x]` near `0`) cannot leave a
-conspicuous on-screen gap; it is kept generous on purpose, since a tight cap
-keys on slope rather than curvature and would invert the density, over-sampling
-straight-steep regions at the expense of the curvy ones.
-
-**Features**:
-- `HoldAll`, `Protected`.
-- Declines to evaluate if the iterator spec isn't `{x, xmin, xmax}` with
-  numeric (possibly symbolic-but-numeric, e.g. `2 Pi`) bounds, or any
-  option has a malformed value (e.g. `PlotPoints -> 1`).
-- Auto-displays (like Mathematica's notebook front end auto-rendering a
-  `Graphics[]` result) -- no separate `Show[]` call is needed to see the
-  plot, though `Show[Plot[...], opt -> val]` works for re-styling.
-
-**Not yet implemented**: `ColorFunction`'s companion `MeshFunctions`/
-`MeshShading` (finer control over an already-working `Mesh`), curve-to-curve
-`Filling -> {1 -> {2}}` for multi-curve plots, `Method` (one sampler, not
-multiple selectable algorithms), `ClippingStyle`, `PlotTheme`, and
-`BaseStyle` (broader than `LabelStyle`, overlapping confusingly with
-`PlotStyle`) are silently accepted on the option list (`Plot` copies any
-option it doesn't specifically recognize through onto the returned
-`Graphics[...]` rather than erroring) but have no rendering effect yet.
-Likewise, notebook-embedding-only options (`BaselinePosition`,
-`AlignmentPoint`, `CoordinatesToolOptions`, `ImageSizeRaw`, `PlotRegion`,
-`ImageMargins`, `ImagePadding`) and `WorkingPrecision` (the sampler is
-architecturally machine-precision `double` throughout) are accepted but
-inherently inert in a standalone window.
+Options: see **Feature summary** above. `HoldAll`, `Protected`. Unknown options pass through to `Graphics[...]`.
 
 ```mathematica
 In[1]:= Plot[Sin[x], {x, 0, 2 Pi}]
@@ -446,40 +639,7 @@ Samples and displays a function of two real variables as a surface.
 - `Plot3D[f, {x,...}, {y,...}, opts...]`: as above, with options below.
 - `HoldAll`: `f` and both iterator specs are not pre-evaluated.
 
-`Plot3D` reuses `Plot`'s option *semantics* wherever a 3D analogue makes
-sense, sharing the actual evaluation code (`src/graphics/plot_common.c`) for
-`RegionFunction`, `ColorFunction`, and the multi-curve/multi-surface palette:
-
-| Option | Default | Meaning |
-|---|---|---|
-| `PlotPoints` | `25` | initial per-axis grid resolution (an `n x n` grid) |
-| `MaxRecursion` | `2` | doubles the *whole* grid's resolution (up to this many times, capped at 200 points/axis) while a cell-center-vs-bilinear-interpolant flatness check fails -- a global, crack-free analogue of `Plot`'s per-interval adaptive bisection (a per-cell quadtree would leave T-junction cracks where differently-refined cells meet) |
-| `Mesh` | `True` | overlays the grid wireframe on the surface (unlike `Plot`'s default `None` -- Mathematica's `Plot3D` shows mesh lines out of the box too); `None`/`False` draws the filled surface only. **Only interior grid lines are drawn** -- the perimeter edges of the domain are omitted, giving a smooth boundary silhouette |
-| `PlotStyle` | `RGBColor[0.2,0.4,0.8]` | the surface's fill color. For a single surface, a direct color literal; for multi-surface plots (`{f1,f2,...}`), a `List` of colors is indexed per surface (cycling if shorter than the surface count), or a single literal applies to all. Ignored per-cell where `ColorFunction` overrides |
-| `ColorFunction` | none | a function returning a color literal, evaluated at the center of each grid cell. **Calling convention** (tried in order): `f[xs, ys, zs]` (Mathematica's 3D convention), then `f[xs, zs]` (height ramp), then `f[zs]` (univariate height). The string `"Rainbow"` is built-in: it maps z-height to a blue-to-red hue sweep (`Hue[(1-t)*0.8]` where `t = (z-zmin)/(zmax-zmin)`) |
-| `ColorFunctionScaling` | `True` | when `True`, the arguments passed to `ColorFunction` are scaled to `[0,1]` within the data range; `False` passes raw coordinate values |
-| `RegionFunction` | none | `f[x,y,z]` (Mathematica's `Plot3D` convention) tried first; falls back to `Plot`'s `f[x,y]`/`f[x]` forms if that doesn't resolve to `True`/`False`, so a `RegionFunction` written for `Plot` keeps working |
-| `ExclusionStyle` | `GrayLevel[0.35]` | style directive (a color literal or `Thickness[...]` etc.) used to draw the boundary edges between included and excluded grid cells when `RegionFunction` is active |
-| `PlotRange` | `Automatic` | an explicit `{zmin,zmax}` (or the last `{zmin,zmax}` of a longer nested list) feeds the same flatness check `MaxRecursion` uses, and bounds the rendered box |
-| `Axes` | `True` | draws a wireframe bounding box with tick labels |
-| `Lighting` | `Automatic` | surface shading model. `Automatic` (default): per-face Lambertian flat shading — each polygon's face normal is dotted with a directional light that is **fixed relative to the camera** (upper-right-front in view space: `0.3 right + 1.0 up + 0.5 forward`, normalised), so the lit/dark pattern updates as you orbit. Intensity `I = 0.3 + 0.7 × |n·L|` (ambient 0.3 + diffuse 0.7, two-sided so back faces are lit too). `None` or `False`: disables shading and draws surfaces in their raw `PlotStyle`/`ColorFunction` color |
-
-Other options (`PlotLabel`, `Background`, `ImageSize`, `AxesLabel`, ...) are
-evaluated once (since `Plot3D` is `HoldAll`) and copied through onto the
-`Graphics3D[...]` result, exactly like `Plot`'s fallback branch. 2D-only
-chrome with no 3D analogue in this engine (`Filling`, `FillingStyle`,
-`Exclusions`, `Frame*`, `GridLines*`, `PlotLegends`) is likewise not
-specially recognized -- it passes through inertly rather than erroring, so
-copying a `Plot[]` option list onto `Plot3D[]` by habit doesn't break
-anything, it just has no effect for those names.
-
-**Features**:
-- `HoldAll`, `Protected`.
-- Declines to evaluate if either iterator spec isn't `{var, min, max}` with
-  numeric (possibly symbolic-but-numeric) bounds, if `PlotPoints -> 1` (or
-  any other malformed sampling option), or if no grid cell is valid (e.g. a
-  `RegionFunction` that excludes every sampled point).
-- Auto-displays, exactly like `Graphics`/`Plot`.
+Options: see **Feature summary** above. `HoldAll`, `Protected`. `ExclusionStyle` (default `GrayLevel[0.35]`) styles boundary edges when `RegionFunction` is active.
 
 ```mathematica
 In[1]:= Plot3D[Sin[x] Cos[y], {x, -3, 3}, {y, -3, 3}]
@@ -521,39 +681,7 @@ Samples and displays a parametric planar curve or filled region.
   All` overlays the grid lines.  The fill is **solid** by default; use
   `PlotStyle -> {color, Opacity[a]}` to get a transparent region.
 
-`HoldAll`: the body and all iterator specs are not pre-evaluated.
-
-Adaptive sampling (1-iterator form) uses a 2D chord-deviation test in `(x, y)`
-space: the midpoint of each candidate segment is checked for Euclidean
-displacement from the linear interpolant of the two endpoints, normalised by the
-bounding-box diagonal.  Three interior probes per interval (quarter-point and
-midpoint) avoid aliasing against periodic curves.
-
-| Option | Default | Meaning |
-|---|---|---|
-| `PlotPoints` | `25` | initial uniform sample count (1-iter) or grid size (2-iter) |
-| `MaxRecursion` | `6` | maximum adaptive-subdivision depth (1-iter only) |
-| `MaxPlotPoints` | `Infinity` | overall point cap (1-iter only) |
-| `Mesh` | `None` | `All` overlays sample dots (1-iter) or grid lines (2-iter) |
-| `PlotLegends` | none | `Automatic` or `"Expressions"` labels each curve with its body expression; an explicit `{l1, l2, ...}` uses those labels. Embeds `$PlotLegendData` in the Graphics result for the renderer to draw a legend box. |
-| `ColorFunction` | none | colors by parameter; `"Rainbow"` sweeps hue; a function `f[t_scaled]` (1-iter) or `f[t_scaled, r_scaled]` (2-iter). With `ColorFunctionScaling -> True` (default) inputs are scaled to `[0,1]` |
-| `ColorFunctionScaling` | `True` | whether to scale parameters before `ColorFunction` |
-| `RegionFunction` | none | `f[x,y]` mask; points where it returns `False` are excluded |
-| `PlotStyle` | `RGBColor[0.2,0.4,0.8]` | curve/polygon color; a `List` of directives is accepted, so `PlotStyle -> {Blue, Opacity[0.4]}` gives a semi-transparent fill for the two-iterator form |
-| `AspectRatio` | `1` | square by default (both axes equally important) |
-| `Axes` | `True` | draws coordinate axes |
-
-All other display options (`PlotRange`, `PlotRangePadding`, `AxesLabel`,
-`AxesOrigin`, `AxesStyle`, `Frame`, `FrameLabel`, `FrameStyle`, `FrameTicks`,
-`GridLines`, `GridLinesStyle`, `Prolog`, `Epilog`, `PlotLabel`, `Background`,
-`ImageSize`, `TicksStyle`, `LabelStyle`, `RotateLabel`) are evaluated and
-passed through to the `Graphics[...]` result, where the renderer interprets
-them identically to how it does for bare `Graphics[]` objects.
-
-**Features**:
-- `HoldAll`, `Protected`.
-- Declines to evaluate if bounds aren't numeric or `PlotPoints < 2`.
-- Auto-displays exactly like `Graphics`/`Plot`.
+`HoldAll`, `Protected`. Options: see **Feature summary** above.
 
 ```mathematica
 (* --- One-iterator: curves --- *)
@@ -590,6 +718,39 @@ In[9]:= ParametricPlot[{r Cos[t], r Sin[t]}, {t, 0, 2 Pi}, {r, 1, 2},
 Out[9]= -Graphics-  (* with grid lines overlaid *)
 ```
 
+## PolarPlot
+Plots one or more curves given in polar coordinates `r(theta)`, converting
+to Cartesian `{r*Cos[theta], r*Sin[theta]}` and sampling adaptively.  Returns a
+`Graphics[...]` object (auto-displayed).
+
+- `PolarPlot[r, {theta, tmin, tmax}]` — single polar curve.
+- `PolarPlot[{r1, r2, ...}, {theta, tmin, tmax}]` — multiple curves in
+  distinct palette colours.
+
+`HoldAll`, `Protected`. Negative `r` values plot in the opposite direction. Default `AspectRatio -> 1`. Options: same as `ParametricPlot`; see **Feature summary** above. `PolarAxes -> True` is accepted but polar grid overlay is not yet rendered.
+
+```mathematica
+In[1]:= PolarPlot[1, {t, 0, 2Pi}]
+Out[1]= -Graphics-  (* unit circle *)
+
+In[2]:= PolarPlot[Sin[2t], {t, 0, 2Pi}]
+Out[2]= -Graphics-  (* four-petal rose *)
+
+In[3]:= PolarPlot[{1, 2}, {t, 0, 2Pi}, PlotStyle -> {Blue, Red}]
+Out[3]= -Graphics-  (* two concentric circles *)
+
+In[4]:= PolarPlot[t, {t, 0, 4Pi}, ColorFunction -> "Rainbow"]
+Out[4]= -Graphics-  (* Archimedean spiral, rainbow-coloured *)
+
+In[5]:= PolarPlot[Sin[2t], {t, 0, 2Pi}, Mesh -> All, PlotLabel -> "Rose"]
+Out[5]= -Graphics-  (* rose with sample-point overlay and title *)
+```
+
+## PolarAxes
+`PolarPlot` option: `True` requests a polar grid overlay (radial circles at
+regular intervals plus angular degree/radian labels). Currently accepted and
+documented but not yet rendered; Cartesian axes are drawn instead.
+
 ## ParametricPlot3D
 Samples and displays a parametric 3D space curve or surface patch, returning
 a `Graphics3D[...]` object rendered in an orbit-camera window.
@@ -609,44 +770,7 @@ a `Graphics3D[...]` object rendered in an orbit-camera window.
   via `body`, and emits filled `Polygon[{p00,p10,p11,p01}]` quads for each
   valid grid cell. Produces `Graphics3D[{Polygon[...], ...}, opts]`.
 
-`HoldAll`: the body and all iterator specs are not pre-evaluated.
-
-Adaptive sampling (1-iterator form) uses a 3D Euclidean chord-deviation test
-in `(x, y, z)` space, normalized by the curve's bounding-box diagonal. Three
-interior probes per interval prevent aliasing against periodic curves, exactly
-mirroring `ParametricPlot`'s 2D algorithm extended to 3D.
-
-`ColorFunction` receives **scaled spatial coordinates** `{xs, ys, zs}` (in
-`[0,1]` over the sampled range when `ColorFunctionScaling -> True`), not
-parameter values — this matches `Plot3D`'s convention and means a function
-like `Function[{x,y,z}, Hue[z]]` colors by height. `"Rainbow"` maps hue to
-the z-extent for surfaces and to z-range for curves. `RegionFunction` is
-tried as `f[x,y,z]` first, then falls back to `f[x,y]` forms.
-
-| Option | Default | Meaning |
-|---|---|---|
-| `PlotPoints` | `25` | initial uniform sample count (1-iter) or grid size (2-iter) |
-| `MaxRecursion` | `6` | maximum adaptive-subdivision depth (1-iter only) |
-| `MaxPlotPoints` | `Infinity` | overall point cap (1-iter only) |
-| `Mesh` | `None` | `All`/`True` overlays sample dots (1-iter) or grid lines (2-iter) |
-| `PlotLegends` | none | `Automatic` or `"Expressions"` labels each curve; an explicit `{l1,...}` uses those labels |
-| `ColorFunction` | none | `"Rainbow"` or `f[x,y,z]`/`f[x,z]`/`f[z]` (scaled spatial); colors per segment (1-iter) or per cell (2-iter) |
-| `ColorFunctionScaling` | `True` | whether spatial coords are scaled to `[0,1]` before `ColorFunction` |
-| `RegionFunction` | none | `f[x,y,z]` mask; points where it returns `False` are excluded |
-| `PlotStyle` | `RGBColor[0.2,0.4,0.8]` | curve/surface color; a `List` of directives is accepted, so `PlotStyle -> {Blue, Opacity[0.4]}` gives a semi-transparent surface for the two-iterator form |
-| `Axes` | `True` | draws the 3D bounding-box wireframe with tick labels |
-| `Lighting` | `Automatic` | `Automatic`: per-face Lambertian shading (same model as `Plot3D`); `None`/`False`: raw flat color |
-
-All other options (`PlotRange`, `AxesLabel`, `PlotLabel`, `Background`,
-`ImageSize`, ...) are evaluated and passed through to the `Graphics3D[...]`
-result. `AspectRatio` is silently ignored (the orbit camera has no fixed
-aspect ratio). Interactive controls are the same as `Plot3D` (drag to rotate,
-scroll to zoom, `R` to reset, `S` for screenshot, `Esc` to close).
-
-**Features**:
-- `HoldAll`, `Protected`.
-- Declines to evaluate if bounds aren't numeric or `PlotPoints < 2`.
-- Auto-displays exactly like `Graphics3D`/`Plot3D`.
+`HoldAll`, `Protected`. Options: see **Feature summary** above. `ColorFunction` receives scaled spatial `{xs,ys,zs}` coordinates (not parameter values). `RegionFunction` is tried as `f[x,y,z]` first, then `f[x,y]`. Interactive controls same as `Plot3D`.
 
 ```mathematica
 (* --- One-iterator: space curves --- *)
@@ -712,30 +836,7 @@ Data is classified into one or more datasets:
 A non-list argument, an empty list, or all-missing data leaves `ListPlot`
 unevaluated.
 
-`ListPlot`-specific options (the rest pass through to the `Graphics[...]`
-result and are interpreted by the renderer — see the `Show` table above):
-
-| Option | Default | Meaning |
-|---|---|---|
-| `Joined` | `False` | `True` connects the points with a `Line` polyline instead of drawing point markers |
-| `DataRange` | `Automatic` | the x-range `{xmin, xmax}` to assume for a heights list (`Automatic`/`All` = `1` to `n`); `DataRange -> All` forces a flat list of pairs to be read as several height datasets |
-| `Filling` | `None` | `Axis` / `Bottom` / `Top` / a number — fills down to that baseline. With `Joined -> True` the whole region under the connecting curve is filled continuously (quad/triangle `Polygon[]` strip, shared with `Plot`); otherwise a vertical stem is drawn from each point |
-| `FillingStyle` | `Automatic` | colour/opacity directive for the fill (default `Opacity[0.3]`) |
-| `PlotStyle` | `Automatic` | colour for the points/line (default blue `RGBColor[0.2, 0.4, 0.8]`) |
-| `PlotLegends` | `None` | `{lbl1, ...}` labels each dataset; `Automatic` labels by index; emits the internal `$PlotLegendData` the renderer's legend box reads |
-| `PlotMarkers` | `None` | accepted; markers currently render with the default glyph |
-
-Plot-style defaults distinct from a bare `Graphics[]`: `Axes -> True`,
-`AspectRatio -> 1/GoldenRatio`. A supplied `Frame -> True` suppresses the
-default `Axes -> True`, as for `Plot`.
-
-Marker size is **adaptive**: when no explicit `PointSize` is given, the
-renderer shrinks the dots as the scatter grows denser, so a large point cloud
-stays legible instead of merging into an ink blob. The home-zoom radius is held
-to a small fraction of the mean inter-point spacing (≈ `sqrt(area / N)` for `N`
-points over the plot region), capped at the sparse default and floored at a
-sub-pixel minimum. It therefore depends on the point count, the window size, and
-the pixel resolution. An explicit `PointSize` overrides this entirely.
+Options: see **Feature summary** above. Defaults: `Axes -> True`, `AspectRatio -> 1/GoldenRatio`. Marker size adapts to scatter density; an explicit `PointSize` overrides it.
 
 ```mathematica
 In[1]:= ListPlot[{1, 4, 9, 16, 25}]
@@ -762,40 +863,12 @@ from a uniform grid of seed points, renders each stream as an
 `Arrow[...]` primitive (a directed polyline with an arrowhead at its
 end), and returns a `Graphics[...]` object (auto-displayed).
 
-`StreamPlot` is `HoldAll`: the field components `vx`, `vy` and the
-iterator specs are held unevaluated — `x` and `y` have no values until
-the sampler substitutes numeric coordinates, exactly like `Plot`'s
-function body.
+`HoldAll`, `Protected`. Options: see **Feature summary** above. Defaults: `Axes -> True`, `AspectRatio -> 1`. `ColorFunction` is an alias for `StreamColorFunction`.
 
 ```mathematica
 StreamPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}]
 StreamPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
 ```
-
-**Options**
-
-| Option | Default | Meaning |
-|---|---|---|
-| `StreamPoints` | `Automatic` (15×15 grid) | Integer `n` for an n×n seed grid; `Automatic` uses the default 15×15 |
-| `StreamScale` | `Automatic` | `Automatic` limits each stream to ≈ 8% of the domain diagonal; `None` lets streams run until they leave the domain; a positive real sets the fraction of the diagonal |
-| `StreamStyle` | *(thin steel-blue)* | A style directive or list applied to every stream (e.g. `Thickness[0.003]`, `RGBColor[...]`) |
-| `StreamColorFunction` | `None` | `f[x,y,vx,vy,speed]` (or fewer args) → color directive per stream at its midpoint; `"Rainbow"` maps scaled speed to hue |
-| `ColorFunction` | `None` | Alias for `StreamColorFunction` |
-| `RegionFunction` | `None` | `f[x,y]` mask; seeds and integration steps outside the region are skipped |
-| `PlotLegends` | `None` | `Automatic` / `"Expressions"` / explicit list |
-| `PlotPoints` | — | Alias for `StreamPoints` (integer only) |
-
-All other options (`PlotRange`, `Axes`, `AspectRatio`, `Frame`, `AxesLabel`,
-`GridLines`, `PlotLabel`, `Background`, `ImageSize`, …) pass through to the
-`Graphics[...]` result.
-
-Default style: `Axes -> True`, `AspectRatio -> 1` (square domain).
-
-**Arrow primitive** — `Arrow[{{x1,y1}, ..., {xn,yn}}]` draws a directed
-polyline with a filled arrowhead triangle at the final point. The
-arrowhead size scales with line thickness and viewport size so it remains
-visible at any zoom level. `Arrow` is an inert protected head (like `Line`
-or `Polygon`) and can be used directly inside `Graphics[...]`.
 
 ```mathematica
 (* --- Basic stream plots --- *)
@@ -833,17 +906,6 @@ In[9]:= Graphics[{Blue, Arrow[{{0,0}, {1,0}, {1,1}}]}]
 Out[9]= -Graphics-
 ```
 
-**Features**:
-- `HoldAll`, `Protected`.
-- RK4 integration; step size adapts to seed density and domain size.
-- Declines to evaluate if the field arg is not a 2-element List, or if
-  bounds aren't numeric.
-- `StreamColorFunction` is evaluated at each stream's midpoint; tries
-  `f[x,y,vx,vy,speed]` → `f[x,y,vx,vy]` → `f[x,y]` → `f[speed]` in
-  order, using the first form that returns a recognized color.
-- Arrow arrowhead size is viewport-relative: it stays visible regardless
-  of `PlotRange` scale or interactive zoom.
-
 ## ContourPlot
 Generates iso-contour lines of a 2-D function `f(x, y)` using the marching
 squares algorithm and returns a `Graphics[...]` object (auto-displayed).
@@ -853,46 +915,7 @@ ContourPlot[f, {x, xmin, xmax}, {y, ymin, ymax}]
 ContourPlot[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
 ```
 
-`ContourPlot` is `HoldAll`: `f` is held unevaluated until `x` and `y` are
-given numeric values, exactly like `Plot`'s function body.
-
-**Algorithm**: evaluates `f` on a `(PlotPoints+1) × (PlotPoints+1)` grid,
-then for each contour level runs marching squares over the `PlotPoints ×
-PlotPoints` grid of cells, linearly interpolating the exact crossing points on
-cell edges. Saddle cells (where both pairs of opposite corners straddle the
-level) use the bilinear cell-centre value to choose the correct diagonal. If
-`ContourShading` is active, each grid cell is filled with a coloured
-`Rectangle[]` primitive whose colour corresponds to the cell's average `z`
-value via `ColorFunction` or the built-in blue-cyan-yellow-red thermal ramp.
-
-**Options**
-
-| Option | Default | Meaning |
-|---|---|---|
-| `Contours` | `10` | Integer `n`: `n` evenly spaced auto levels in `[zmin, zmax]`; or `{c1, c2, ...}` to set levels explicitly |
-| `ContourStyle` | `Automatic` | Style directive(s) for the contour lines. `Automatic`: each level is coloured by its height using the thermal ramp. A single directive is applied to all levels; a `List` of directives cycles through the levels. `None`/`False` suppresses lines entirely |
-| `ContourLabels` | `False` | `True`: draws the level's `z` value as a `Text[]` at the midpoint of each level's first visible grid-segment |
-| `ContourShading` | `Automatic` | `True`: fill each grid cell with a colour derived from its average `z`. `False`/`None`: lines only. `Automatic`: enable shading when `ColorFunction` is set, otherwise lines only |
-| `ColorFunction` | `None` | `"Rainbow"` (Hue ramp), `"Temperature"` (blue-cyan-yellow-red), or a function `f[t]` with `t ∈ [0,1]` after scaling. Applied to both the cell shading and the auto contour-line colours |
-| `ColorFunctionScaling` | `True` | `True`: normalise `z` to `[0,1]` before calling `ColorFunction`; `False`: pass raw `z` |
-| `PlotPoints` | `25` | Grid resolution per axis; increase for smoother contours |
-| `RegionFunction` | `None` | `f[x,y]` mask; cells whose centre lies outside return `False` are neither shaded nor contoured |
-| `Axes` | `True` | Coordinate axes (same Plot/StreamPlot default) |
-| `AspectRatio` | `1` | Default square aspect (both axes equally important) |
-
-All other `Graphics` options (`Frame`, `PlotRange`, `AxesLabel`, `GridLines`,
-`PlotLabel`, `Background`, `ImageSize`, `Prolog`, `Epilog`, …) pass through
-to the `Graphics[...]` result.
-
-**Features**:
-- `HoldAll`, `Protected`.
-- Declines to evaluate if bounds aren't numeric or the function argument
-  does not have exactly two iterator specs.
-- Marching squares handles all 16 cell states, including the two saddle
-  cases (5 and 10), with bilinear centre disambiguation.
-- An explicit `PlotRange` passed in options suppresses the auto-range
-  injection (which otherwise pins the range to `{xmin,xmax}` × `{ymin,ymax}`
-  so the axes match the sampling domain).
+`HoldAll`, `Protected`. Uses marching squares with bilinear saddle-cell disambiguation. Options: see **Feature summary** above. Defaults: `Axes -> True`, `AspectRatio -> 1`.
 
 ```mathematica
 (* --- Basic contour plots --- *)
@@ -942,4 +965,274 @@ In[10]:= ContourPlot[Sin[x] + Cos[y], {x, -3, 3}, {y, -3, 3},
            ContourStyle -> None, ContourShading -> True,
            ColorFunction -> "Temperature"]
 Out[10]= -Graphics-
+```
+
+---
+
+## DensityPlot
+
+```
+DensityPlot[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
+```
+
+Renders `f(x,y)` as a heatmap by shading each grid cell with the colour corresponding to its average `f` value. `HoldAll`, `Protected`. Default `ColorFunction`: thermal blue→yellow ramp. Options: see **Feature summary** above.
+
+**Examples:**
+
+```mathematica
+(* Basic heatmap *)
+In[1]:= DensityPlot[Sin[x] Sin[y], {x, -4, 4}, {y, -3, 3}]
+Out[1]= -Graphics-
+
+(* Rainbow colour scheme *)
+In[2]:= DensityPlot[x^2 - y^2, {x, -2, 2}, {y, -2, 2},
+          ColorFunction -> "Rainbow", PlotPoints -> 60]
+Out[2]= -Graphics-
+
+(* Custom ColorFunction + legend *)
+In[3]:= DensityPlot[Sin[x + y], {x, 0, 6}, {y, 0, 6},
+          ColorFunction -> (GrayLevel[#]&), PlotLegends -> Automatic]
+Out[3]= -Graphics-
+
+(* RegionFunction: circular mask *)
+In[4]:= DensityPlot[x^2 + y^2, {x, -3, 3}, {y, -3, 3},
+          RegionFunction -> Function[{x,y}, x^2 + y^2 < 4]]
+Out[4]= -Graphics-
+```
+
+---
+
+## ComplexPlot
+
+```
+ComplexPlot[f, {z, zmin, zmax}, opts...]
+```
+
+Domain-colouring plot of the complex function `f` over the rectangular region
+in the complex plane with corners `zmin` and `zmax`.  `z` is bound to
+`Complex[x, y]` at each grid point; `f` must return a complex or real number.
+The color of each cell encodes `Arg(f(z))` via the thermal ramp (same default
+as `DensityPlot`), with brightness proportional to `|f(z)|/(1+|f(z)|)` so the
+origin fades to black.  `ComplexPlot` is `HoldAll`.
+
+**Options**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `PlotPoints` | `200` | Grid resolution per axis (high default for smooth gradients) |
+| `ColorFunction` | thermal by arg | `f[re, im] → color`, or a named ramp string. **`"PhaseRings"`** — hue = `Arg`, brightness = `(1+cos(2π·log|w|))/2` (one ring per e-fold of `|w|`); highlights poles and zeros as dense concentric ring clusters. Other ramps keyed to normalised `Arg`: `"Rainbow"`, `"CoolTones"`, `"WarmTones"`, `"Greyscale"`, `"Temperature"` |
+| `ColorFunctionScaling` | `True` | Scale `re`/`im` to `[0,1]` before calling a custom `ColorFunction` (no effect on `"PhaseRings"`, which uses raw values) |
+| `RegionFunction` | `None` | `f[x,y]` mask; excluded cells are not drawn |
+| `PlotLegends` | `None` | `Automatic` / `True`: draw a vertical phase color scale bar (thermal or hue ramp, −π at bottom, +π at top) |
+| Standard Graphics options | — | `Axes` (default `True`), `AspectRatio` (default `1`), `PlotRange`, `Frame`, `AxesLabel`, `GridLines`, `ImageSize`, `Background`, `PlotLabel`, … |
+
+**Examples**
+
+```mathematica
+ComplexPlot[z^2, {z, -2-2I, 2+2I}]
+ComplexPlot[Sin[z], {z, -Pi-Pi*I, Pi+Pi*I}]
+ComplexPlot[1/(z^2+1), {z, -2-2I, 2+2I}, PlotPoints->80]
+ComplexPlot[(z^2+1)/(z^2-1), {z, -2-2I, 2+2I}, PlotLegends->Automatic]
+ComplexPlot[(z^2+1)/(z^2-1), {z, -2-2I, 2+2I}, ColorFunction->"PhaseRings"]
+```
+
+---
+
+## ComplexPlot3D
+
+```
+ComplexPlot3D[f, {z, zmin, zmax}, opts...]
+```
+
+Three-dimensional surface plot of a complex function: **height = `|f(z)|`**,
+**colour = `Arg(f(z))`** via the thermal ramp (same default as `Plot3D`).
+`z` is bound to `Complex[x, y]` at each grid point; the result is a
+`Graphics3D[...]` object rendered in the orbit-camera window.
+`ComplexPlot3D` is `HoldAll`.
+
+**Options**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `PlotPoints` | `200` | Grid resolution per axis |
+| `ColorFunction` | thermal by arg | `f[re, im] → color`, or named ramp string (same set as `ComplexPlot`) |
+| `ColorFunctionScaling` | `True` | Scale `re`/`im` to `[0,1]` before calling custom `ColorFunction` |
+| `RegionFunction` | `None` | `f[x,y]` mask |
+| `PlotLegends` | `None` | `Automatic` / `True`: draw a vertical phase color scale bar |
+| `Lighting` | `Automatic` | `None` disables Lambertian shading for accurate phase colours |
+| Standard Graphics3D options | — | pass through to the `Graphics3D[...]` result |
+
+**Examples**
+
+```mathematica
+ComplexPlot3D[z^2, {z, -2-2I, 2+2I}]
+ComplexPlot3D[Sin[z], {z, -2-2I, 2+2I}, Lighting->None]
+ComplexPlot3D[1/z, {z, -2-2I, 2+2I}, PlotLegends->Automatic, Lighting->None]
+```
+
+---
+
+## BarChart
+
+```
+BarChart[{v1, v2, ..., vn}, opts...]
+BarChart[{{v1,...}, {w1,...}, ...}, opts...]
+```
+
+Draws a vertical bar chart. Single-dataset: `n` bars at `x = 1..n`. Multi-dataset: grouped bars in distinct palette colours. Options: `ChartStyle`, `ChartLabels`, `BarSpacing` (gap fraction, default `0.2`), standard `Graphics` options. Defaults: `Axes→True`, `AspectRatio→0.618`.
+
+**Examples:**
+
+```mathematica
+(* Simple bar chart *)
+In[1]:= BarChart[{3, 1, 4, 1, 5, 9, 2, 6}]
+Out[1]= -Graphics-
+
+(* Custom colours and labels *)
+In[2]:= BarChart[{2.5, 4.1, 3.3, 5.7},
+          ChartStyle -> {Red, Blue, Green, Orange},
+          ChartLabels -> {"Q1", "Q2", "Q3", "Q4"}]
+Out[2]= -Graphics-
+
+(* Grouped datasets *)
+In[3]:= BarChart[{{1, 3, 2}, {4, 2, 5}}, BarSpacing -> 0.3]
+Out[3]= -Graphics-
+
+(* Negative values *)
+In[4]:= BarChart[{3, -1, 4, -1, 5}]
+Out[4]= -Graphics-
+```
+
+---
+
+## Histogram
+
+```
+Histogram[data, opts...]
+Histogram[data, k, opts...]
+Histogram[data, {step}, opts...]
+Histogram[data, {min, max, step}, opts...]
+```
+
+Bins numeric `data` and draws a frequency histogram. Default bin count: Sturges' rule (`⌈log₂(n)⌉ + 1`). Options: `ChartStyle`, `BarSpacing` (default `0.2`), standard `Graphics` options. Defaults: `Axes→True`, `AspectRatio→0.618`.
+
+**Examples:**
+
+```mathematica
+(* Auto-binned histogram *)
+In[1]:= Histogram[Table[RandomReal[], {200}]]
+Out[1]= -Graphics-
+
+(* Bind data first, then vary bin specs *)
+In[2]:= data = Table[RandomReal[], {200}]
+
+(* Explicit bin count *)
+In[3]:= Histogram[data, 20]
+Out[3]= -Graphics-
+
+(* Fixed bin width *)
+In[4]:= Histogram[data, {0.1}]
+Out[4]= -Graphics-
+
+(* Explicit range and width *)
+In[5]:= Histogram[data, {0, 1, 0.05}]
+Out[5]= -Graphics-
+```
+
+---
+
+## VectorPlot
+
+```
+VectorPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
+```
+
+Draws a grid of arrows for the vector field `{vx, vy}`. `HoldAll`, `Protected`. Default `ColorFunction`: thermal ramp keyed to speed. Arrow sizing is screen-normalized so arrows stay visible across mixed-scale axes. Options: see **Feature summary** above. `VectorScale -> None` makes lengths proportional to magnitude; a real value scales relative to grid spacing.
+
+**Examples:**
+
+```mathematica
+(* Simple rotation field *)
+In[1]:= VectorPlot[{-y, x}, {x, -2, 2}, {y, -2, 2}]
+Out[1]= -Graphics-
+
+(* Gradient field with Rainbow colouring *)
+In[2]:= VectorPlot[{x, y}, {x, -3, 3}, {y, -3, 3},
+          ColorFunction -> "Rainbow", VectorPoints -> 20]
+Out[2]= -Graphics-
+
+(* Magnitude-proportional arrows *)
+In[3]:= VectorPlot[{Sin[y], Cos[x]}, {x, 0, 2Pi}, {y, 0, 2Pi},
+          VectorScale -> None]
+Out[3]= -Graphics-
+
+(* RegionFunction: unit disk only *)
+In[4]:= VectorPlot[{-y, x}, {x, -1.5, 1.5}, {y, -1.5, 1.5},
+          RegionFunction -> Function[{x,y}, x^2 + y^2 < 1]]
+Out[4]= -Graphics-
+
+---
+
+## Animate
+
+```
+Animate[expr, {t, tmin, tmax}, opts...]
+```
+
+Opens an interactive animation window that evaluates `expr` at each frame with the
+iterator variable `t` bound to the current parameter value. `Animate` is `HoldAll`
+and `Protected`: the body `expr` is not evaluated until the frame is drawn.
+
+Returns `Null` once the window is closed (the animation window is the output).
+
+**Options:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `AnimationDirection` | `Forward` | `Forward`, `Backward`, `ForwardBackward`, `BackwardForward` |
+| `AnimationRate` | auto | parameter units per second; overrides `DefaultDuration` |
+| `AnimationRepetitions` | `Infinity` | number of loop passes; integer or `Infinity` |
+| `AnimationRunning` | `True` | `True` starts playing immediately; `False` opens paused |
+| `AppearanceElements` | `All` | `All`, `None`, or a list of element names |
+| `DefaultDuration` | `1.0` | seconds for one full parameter pass |
+| `ControlPlacement` | `Bottom` | `Bottom` or `Top` |
+| `RefreshRate` | `60` | target display FPS |
+
+**AppearanceElements names:** `"PlayPauseButton"`, `"ProgressSlider"`, `"AnimationSlider"`,
+`"StepLeftButton"`, `"StepRightButton"`, `"DirectionButton"`, `"FasterSlowerButtons"`,
+`"ResetButton"`.
+
+**Keyboard shortcuts:** `Space` (play/pause), `←`/`→` (step 2%), `R` (reset), `Esc` (close).
+
+**Examples:**
+
+```mathematica
+(* Rotating sine wave *)
+In[1]:= Animate[Plot[Sin[x + t], {x, 0, 2 Pi}], {t, 0, 2 Pi}]
+Out[1]= Null
+
+(* Bouncing circle *)
+In[2]:= Animate[Graphics[Disk[{t, 0}, 0.5], PlotRange -> {{0, 5}, {-1, 1}}],
+          {t, 0, 5}, AnimationDirection -> ForwardBackward]
+Out[2]= Null
+
+(* Slow-motion parametric curve unrolling, start paused *)
+In[3]:= Animate[
+          ParametricPlot[{Cos[u], Sin[u]}, {u, 0, t}],
+          {t, 0.01, 2 Pi},
+          DefaultDuration -> 4,
+          AnimationRunning -> False]
+Out[3]= Null
+
+(* Loop exactly 3 times *)
+In[4]:= Animate[Plot[Sin[n x], {x, 0, 2 Pi}], {n, 1, 5},
+          AnimationRepetitions -> 3, AnimationRate -> 2]
+Out[4]= Null
+
+(* Control bar at top, only slider + play button *)
+In[5]:= Animate[Plot[Exp[-t x^2], {x, -3, 3}], {t, 0.1, 5},
+          ControlPlacement -> Top,
+          AppearanceElements -> {"PlayPauseButton", "ProgressSlider"}]
+Out[5]= Null
+```
 ```
