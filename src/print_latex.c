@@ -306,6 +306,21 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
         return;
     }
 
+    /* ---- SeriesData[...] → a0 + a1 (x-x0) + ... + O[x-x0]^n ----
+     * SeriesData is an inert head that must display as the sum it represents,
+     * not as the literal 6-argument container. The plain printer (print.c)
+     * builds an equivalent Plus/Times/Power/O tree and delegates; we call the
+     * same shared builder so the notebook LaTeX matches the CLI exactly (gh
+     * #22). A NULL result (unrenderable shape) falls through to generic. */
+    if (hname == SYM_SeriesData && argc == 6) {
+        Expr* disp = series_data_to_display_expr((Expr*)e);
+        if (disp) {
+            to_latex_prec(b, disp, ctx_prec);
+            expr_free(disp);
+            return;
+        }
+    }
+
     /* ---- Rational[p, q] ---- */
     if (hname == SYM_Rational && argc == 2) {
         lb_cat(b, "\\frac{");
@@ -587,15 +602,36 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
  * Plus renderer — handles subtraction (negative terms)
  * ======================================================================== */
 
-/* True if e is a negative term: Times[-1, ...] or negative integer/real */
+/* True if e is Rational[p, q] with a negative integer numerator p. Such a
+ * coefficient (e.g. -1/6) should display as subtraction, matching the plain
+ * printer, rather than "+ -1/6" (surfaced by series output, gh #22). */
+static int is_neg_rational(const Expr* e) {
+    return head_is(e, SYM_Rational) && e->data.function.arg_count == 2
+        && e->data.function.args[0]->type == EXPR_INTEGER
+        && e->data.function.args[0]->data.integer < 0;
+}
+
+/* Render |Rational[-p, q]| = \frac{p}{q} (numerator already known negative). */
+static void render_rational_abs(LBuf* b, const Expr* e) {
+    lb_cat(b, "\\frac{");
+    lb_catf(b, "%lld", (long long)(-e->data.function.args[0]->data.integer));
+    lb_cat(b, "}{");
+    to_latex_prec(b, e->data.function.args[1], PREC_ATOM);
+    lb_cat(b, "}");
+}
+
+/* True if e is a negative term: Times[-1, ...] or negative integer/real,
+ * a negative rational, or a Times led by one of those. */
 static int is_negative_term(const Expr* e) {
     if (!e) return 0;
     if (e->type == EXPR_INTEGER) return e->data.integer < 0;
     if (e->type == EXPR_REAL)    return e->data.real < 0;
+    if (is_neg_rational(e))      return 1;
     if (head_is(e, SYM_Times) && e->data.function.arg_count >= 1) {
         const Expr* first = e->data.function.args[0];
         if (first->type == EXPR_INTEGER && first->data.integer < 0) return 1;
         if (first->type == EXPR_REAL    && first->data.real    < 0) return 1;
+        if (is_neg_rational(first)) return 1;
     }
     return 0;
 }
@@ -604,8 +640,18 @@ static int is_negative_term(const Expr* e) {
 static void render_negate(LBuf* b, const Expr* e) {
     if (e->type == EXPR_INTEGER) { lb_catf(b, "%lld", (long long)-e->data.integer); return; }
     if (e->type == EXPR_REAL)    { lb_catf(b, "%g",             -e->data.real);     return; }
+    if (is_neg_rational(e))      { render_rational_abs(b, e); return; }
     if (head_is(e, SYM_Times) && e->data.function.arg_count >= 1) {
         const Expr* first = e->data.function.args[0];
+        if (is_neg_rational(first)) {
+            /* Times[-p/q, rest...] → (p/q) rest */
+            render_rational_abs(b, first);
+            for (size_t i = 1; i < e->data.function.arg_count; i++) {
+                lb_cat(b, "\\,");
+                to_latex_maybe_paren(b, e->data.function.args[i], PREC_MUL + 1);
+            }
+            return;
+        }
         int ok; double v = atom_value(first, &ok);
         if (ok && v == -1 && e->data.function.arg_count == 2) {
             /* Times[-1, x] → just render x */

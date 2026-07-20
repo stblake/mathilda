@@ -1003,7 +1003,18 @@ static void print_series_generic(Expr* e, int parent_prec) {
     printf("]");
 }
 
-static void print_series_data(Expr* e, int parent_prec) {
+/* Builds the human-readable equivalent of
+ * SeriesData[x, x0, {a0, ..., a_{k-1}}, nmin, nmax, den] as a fresh
+ * Plus-expression of Times/Power/O nodes:
+ *     a0 + a1 (x-x0) + ... + O[x-x0]^(nmax/den).
+ * Returns a freshly-owned expression (caller frees), or NULL when the
+ * arguments are not in a renderable shape (non-literal nmin/nmax/den or a
+ * non-List coefficient container) so the caller can fall back to the generic
+ * head[args...] form. Shared by the plain printer (print_series_data) and the
+ * LaTeX printer (src/print_latex.c) so the two renderings cannot drift. */
+Expr* series_data_to_display_expr(Expr* e) {
+    if (e->type != EXPR_FUNCTION || e->data.function.arg_count != 6) return NULL;
+
     Expr* x        = e->data.function.args[0];
     Expr* x0       = e->data.function.args[1];
     Expr* coefs    = e->data.function.args[2];
@@ -1018,10 +1029,7 @@ static void print_series_data(Expr* e, int parent_prec) {
                      nmax_e->type == EXPR_INTEGER &&
                      den_e->type  == EXPR_INTEGER &&
                      den_e->data.integer != 0);
-    if (!coefs_ok || !ints_ok) {
-        print_series_generic(e, parent_prec);
-        return;
-    }
+    if (!coefs_ok || !ints_ok) return NULL;
 
     int64_t nmin = nmin_e->data.integer;
     int64_t nmax = nmax_e->data.integer;
@@ -1065,9 +1073,18 @@ static void print_series_data(Expr* e, int parent_prec) {
     }
     free(terms);
 
+    expr_free(base);
+    return sum;
+}
+
+static void print_series_data(Expr* e, int parent_prec) {
+    Expr* sum = series_data_to_display_expr(e);
+    if (!sum) {
+        print_series_generic(e, parent_prec);
+        return;
+    }
     print_standard(sum, parent_prec);
     expr_free(sum);
-    expr_free(base);
 }
 
 /* ===================== TeXForm renderer =====================
