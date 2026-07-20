@@ -23,17 +23,79 @@ static void assoc_assign_value(Expr* rule, Expr** rest, size_t nrest, Expr* rhs,
     }
 }
 
+/* Extract the (re, im) machine-double value of a numeric Expr for storing into a
+ * typed NDArray buffer. Handles Integer, Real, BigInt, Rational, and Complex. */
+static bool nd_num_reim(Expr* e, double* re, double* im) {
+    if (!e) return false;
+    switch (e->type) {
+        case EXPR_INTEGER: *re = (double)e->data.integer; *im = 0.0; return true;
+        case EXPR_REAL:    *re = e->data.real;            *im = 0.0; return true;
+        case EXPR_BIGINT:  *re = mpz_get_d(e->data.bigint); *im = 0.0; return true;
+        default: break;
+    }
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.arg_count == 2) {
+        const char* h = e->data.function.head->data.symbol.name;
+        double a, b, t;
+        if (h == SYM_Rational &&
+            nd_num_reim(e->data.function.args[0], &a, &t) &&
+            nd_num_reim(e->data.function.args[1], &b, &t) && b != 0.0) {
+            *re = a / b; *im = 0.0; return true;
+        }
+        if (h == SYM_Complex &&
+            nd_num_reim(e->data.function.args[0], &a, &t) &&
+            nd_num_reim(e->data.function.args[1], &b, &t)) {
+            *re = a; *im = b; return true;
+        }
+    }
+    return false;
+}
+
+/* Assign a single element of a dense NDArray addressed by a full index list (one
+ * integer per axis). Returns a fresh NDArray with the element replaced, or the
+ * array unchanged when the pattern isn't a supported single-element numeric set
+ * (partial/list/span index, out-of-range, non-numeric or complex-into-real rhs). */
+static Expr* nd_part_assign(Expr* arr, Expr** indices, size_t nindices, Expr* rhs) {
+    int rank = arr->data.ndarray.rank;
+    if ((size_t)rank != nindices) return expr_copy(arr);
+    int64_t offset = 0, N = 1;
+    for (size_t j = 0; j < nindices; j++) {
+        if (indices[j]->type != EXPR_INTEGER) return expr_copy(arr);
+        int64_t dim = arr->data.ndarray.dims[j];
+        int64_t p = indices[j]->data.integer;
+        if (p < 0) p = dim + p + 1;
+        if (p < 1 || p > dim) return expr_copy(arr);
+        offset = offset * dim + (p - 1);
+    }
+    for (int j = 0; j < rank; j++) N *= arr->data.ndarray.dims[j];
+
+    double re, im;
+    if (!nd_num_reim(rhs, &re, &im)) return expr_copy(arr);
+    if (im != 0.0 && !ndt_is_complex(arr->data.ndarray.dtype)) return expr_copy(arr);
+
+    size_t esz = ndt_elem_size(arr->data.ndarray.dtype);
+    void* nb = malloc((size_t)N * esz);
+    if (!nb) return expr_copy(arr);
+    memcpy(nb, arr->data.ndarray.data, (size_t)N * esz);
+    ndt_set(nb, (size_t)offset, arr->data.ndarray.dtype, re, im);
+    return expr_new_ndarray(rank, arr->data.ndarray.dims, nb, arr->data.ndarray.dtype);
+}
+
 static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, Expr* rhs, size_t* rhs_idx, bool is_rhs_list) {
     if (nindices == 0) {
         if (is_rhs_list) {
             if (*rhs_idx < rhs->data.function.arg_count) {
                 return expr_copy(rhs->data.function.args[(*rhs_idx)++]);
             } else {
-                return expr_copy(rhs); 
+                return expr_copy(rhs);
             }
         }
         return expr_copy(rhs);
     }
+
+    /* Dense NDArray element assignment (a[[i]] = v, a[[i,j]] = v). */
+    if (expr->type == EXPR_NDARRAY)
+        return nd_part_assign(expr, indices, nindices, rhs);
 
     if (is_atomic(expr)) return expr_copy(expr);
 
