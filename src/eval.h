@@ -25,6 +25,14 @@ Expr* evaluate_step(Expr* e, bool* changed);
 // Full infinite evaluation loop (stops at fixed point)
 Expr* evaluate(Expr* e);
 
+/* Trace[expr] support (beads-planning-b3k). Evaluate `held_expr` to a fixed
+ * point, recording each top-level rewrite, and return a freshly-owned flat
+ * List of the intermediate expressions (Trace v1 semantics: {e0, ..., eN}, or
+ * {} when no top-level rewrite fires). `held_expr` is BORROWED (not consumed).
+ * Reentrant: safe to call from inside a running evaluation, including nested
+ * within another trace. */
+Expr* eval_collect_trace(Expr* held_expr);
+
 /* True iff `e` is an in-flight Throw sentinel: Throw[v], Throw[v,tag] or
  * Throw[v,tag,f] (head SYM_Throw, arity 1-3). Catch/Throw propagate by
  * returning this expression up through the normal evaluation return paths;

@@ -485,6 +485,7 @@ void core_init(void) {
     symtab_set_docstring("Goto",
         "Goto[tag]\n\tScans the CompoundExpression it appears in directly for\n"
         "\tLabel[tag], then enclosing ones, and transfers control to that point.");
+    void trace_init(void); trace_init();  /* Trace[expr] — src/trace.c */
     symtab_add_builtin("Label", builtin_label);
     symtab_get_def("Label")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Label",

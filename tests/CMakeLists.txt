@@ -218,6 +218,7 @@ set(COMMON_SRC
     ../src/expr.c
     ../src/parse.c
     ../src/eval.c
+    ../src/trace.c
     ../src/internal.c
     ../src/attr.c
     ../src/core.c
@@ -662,6 +663,9 @@ target_include_directories(parse_tests PRIVATE ../src)
 
 add_executable(eval_tests test_eval.c ${COMMON_SRC})
 target_include_directories(eval_tests PRIVATE ../src)
+
+add_executable(trace_tests test_trace.c ${COMMON_SRC})
+target_include_directories(trace_tests PRIVATE ../src)
 
 add_executable(match_tests test_match.c ${COMMON_SRC})
 target_include_directories(match_tests PRIVATE ../src)
