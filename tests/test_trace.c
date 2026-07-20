@@ -128,6 +128,30 @@ static void test_reentrancy_and_repeat(void) {
     expr_free(c);
 }
 
+/* The user-facing Trace[] builtin (Phase 3, src/trace.c). Unlike the direct
+ * eval_collect_trace tests above, these go through the evaluator, so they also
+ * exercise the HoldForm wrapping that keeps the returned list inert on the
+ * evaluator's re-evaluation pass (without it, {1 + 1, 2} would collapse to
+ * {2, 2}). */
+static void test_builtin_basic(void) {
+    assert_eval_eq("Trace[1 + 1]", "{1 + 1, 2}", 0);
+    assert_eval_eq("Trace[5]", "{}", 0);              /* inert atom */
+    assert_eval_eq("Trace[zzz]", "{}", 0);            /* normal-form symbol */
+    /* HoldAll: the argument reaches the builtin unevaluated. */
+    assert_eval_eq("Attributes[Trace]", "{HoldAll, Protected}", 0);
+}
+
+static void test_builtin_holdform_idempotent(void) {
+    /* Re-tracing the same input in one session must still yield the full
+     * trace (guards the clock mitigation); and the held first element must not
+     * collapse under re-evaluation (guards the HoldForm wrapping). */
+    assert_eval_eq("Trace[1 + 1]", "{1 + 1, 2}", 0);
+    assert_eval_eq("Trace[1 + 1]", "{1 + 1, 2}", 0);
+    /* The 2-argument form (h4u) is not yet implemented: builtin_trace returns
+     * NULL, and HoldAll keeps the args unevaluated, so it stays fully held. */
+    assert_eval_eq("Trace[1 + 1, x]", "Trace[1 + 1, x]", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -137,6 +161,8 @@ int main(void) {
     TEST(test_inert_symbol);
     TEST(test_multistep);
     TEST(test_reentrancy_and_repeat);
+    TEST(test_builtin_basic);
+    TEST(test_builtin_holdform_idempotent);
 
     printf("All trace tests passed!\n");
     symtab_clear();

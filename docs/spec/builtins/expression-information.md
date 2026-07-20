@@ -492,6 +492,44 @@ In[11]:= Hold[Evaluate[1+1, 2+2]]
 Out[11]= Hold[2, 4]
 ```
 
+## Trace
+Records the successive top-level expressions produced while evaluating `expr`.
+- `Trace[expr]`: Returns a flat `List` of the intermediate expressions the
+  evaluator passes through while reducing `expr` to a fixed point, in order:
+  `{e0, e1, ..., eN}` where `e0` is the (held) input and `eN` is the final
+  result. Returns `{}` when `expr` needs no top-level rewriting.
+
+**Features**:
+- `HoldAll`, `Protected`. The argument is held so its rewrite sequence can be
+  observed from the start.
+- **Flat, top-level only (v1).** Only rewrites in `expr`'s own outermost
+  evaluation loop are recorded; sub-evaluations of arguments (nested
+  `evaluate` calls) are not. Step granularity follows the evaluator's actual
+  iterations, so Mathilda may record fewer intermediates than a reference
+  system that shows every substitution separately.
+- Each intermediate is returned wrapped in `HoldForm` (printed transparently),
+  so the result list is inert and does not re-evaluate.
+- Not memoized: `Trace` bumps the evaluation clock once per call so an
+  already-evaluated argument is still traced in full.
+- Reentrant: `Trace` may appear inside a traced expression; the inner list is
+  produced independently.
+- The two-argument form `Trace[expr, form]` (pattern filtering) and
+  `TraceDepth` are not yet implemented; `Trace[expr, form]` stays unevaluated.
+
+```mathematica
+In[1]:= Trace[1 + 1]
+Out[1]= {1 + 1, 2}
+
+In[2]:= Trace[5]
+Out[2]= {}
+
+In[3]:= x = 3; Trace[x + 1]
+Out[3]= {x + 1, 4}
+
+In[4]:= Trace[{Trace[1 + 1], 2 + 2}]
+Out[4]= {{Trace[1 + 1], 2 + 2}, {{1 + 1, 2}, 4}}
+```
+
 ## ReleaseHold
 Removes `Hold`, `HoldForm`, `HoldPattern`, and `HoldComplete` in `expr`.
 - `ReleaseHold[expr]`

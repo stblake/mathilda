@@ -218,6 +218,7 @@ set(COMMON_SRC
     ../src/expr.c
     ../src/parse.c
     ../src/eval.c
+    ../src/trace.c
     ../src/internal.c
     ../src/attr.c
     ../src/core.c
