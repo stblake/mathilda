@@ -178,6 +178,28 @@ static bool const_fold(const Expr* e, double* out) {
     return ok;
 }
 
+/* Above this element count the interpreter's vectorized NDArray kernels
+ * (tight C / BLAS loops) beat per-element bytecode interpretation, so the fused
+ * fast-path only earns its keep for small arrays in tight loops -- where the
+ * per-iteration evaluator + allocation overhead the fast-path removes dominates.
+ * Larger arrays decline it and use the interpreter's vectorized path. */
+#define NUMLOOP_ARRAY_MAX_ELEMS 256
+
+/* True for a dense real (float64) NDArray -- the dtype whose flat buffer is a
+ * plain double[] the scalar VM can iterate element-by-element. Complex/float32
+ * arrays are left to the interpreter. */
+static bool is_f64_ndarray(const Expr* e) {
+    return e && e->type == EXPR_NDARRAY && e->data.ndarray.dtype == NDT_FLOAT64;
+}
+
+/* Element count of an NDArray (product of its dims). */
+static size_t nd_elem_count(const Expr* e) {
+    size_t n = 1;
+    for (int i = 0; i < e->data.ndarray.rank; i++)
+        n *= (size_t)e->data.ndarray.dims[i];
+    return n;
+}
+
 /* True if `e` carries a machine-inexact leaf (Real / MPFR, incl. inside
  * Complex[...]). Presence of one anywhere in the body guarantees the
  * interpreter's result is inexact, which is what makes the double result
@@ -443,9 +465,45 @@ static bool value_is_inexact(const Expr* v) {
     return false;
 }
 
+/* Nest[f, arr, n] over a dense float64 NDArray: the compiled scalar body is run
+ * per element (element-local, so the update is safe in place), fusing the whole
+ * map with no intermediate array temporaries and no per-iteration Expr/NDArray
+ * allocation. The body may reference Slot[1] and scalar constants only. */
+static Expr* numloop_nest_array(const Expr* f, const Expr* x0, int64_t n) {
+    NumProg p;
+    bool body_inexact;
+    if (!compile_function(&p, f, 1, &body_inexact)) return NULL;
+    if (p.nvars != 1) { prog_free(&p); return NULL; }   /* single register per element */
+
+    size_t N = nd_elem_count(x0);
+    if (N == 0 || N > NUMLOOP_ARRAY_MAX_ELEMS) { prog_free(&p); return NULL; }
+    double* buf = malloc(N * sizeof(double));
+    if (!buf) { prog_free(&p); return NULL; }
+    memcpy(buf, x0->data.ndarray.data, N * sizeof(double));
+
+    double* stack = malloc(p.max_stack * sizeof(double));
+    if (!stack) { free(buf); prog_free(&p); return NULL; }
+
+    bool bail = false;
+    for (int64_t i = 0; i < n && !bail; i++) {
+        for (size_t k = 0; k < N; k++) {
+            double v = numprog_run(&p, &buf[k], stack);
+            if (!isfinite(v)) { bail = true; break; }
+            buf[k] = v;
+        }
+    }
+    free(stack);
+    prog_free(&p);
+    if (bail) { free(buf); return NULL; }   /* interpreter re-runs the whole Nest */
+    return expr_new_ndarray(x0->data.ndarray.rank, x0->data.ndarray.dims,
+                            buf, NDT_FLOAT64);   /* takes ownership of buf */
+}
+
 Expr* numloop_nest(const Expr* f, const Expr* x0, int64_t n) {
     if (numloop_off()) return NULL;
     if (n < 0) return NULL;
+
+    if (is_f64_ndarray(x0)) return numloop_nest_array(f, x0, n);
 
     double x;
     if (!to_machine_double(x0, &x)) return NULL;
@@ -503,11 +561,22 @@ typedef struct {
     size_t  nstmts;
     size_t  max_stack;
     bool    forces_real;
+
+    /* Array mode (all block variables are same-shape float64 NDArrays): the
+     * compiled scalar bytecode is run per element over these flat buffers,
+     * fusing the whole element-wise map with no intermediate array temporaries. */
+    bool     is_array;
+    double*  abuf[NUMBLOCK_MAXVARS];       /* owned float64 buffer per var */
+    size_t   nelem;                        /* element count (all vars) */
+    int      arr_rank;
+    int64_t  arr_dims[8];                  /* shape for writeback */
 } NumBlock;
 
 static void numblock_free(NumBlock* b) {
     for (size_t i = 0; i < b->nstmts; i++) prog_free(&b->progs[i]);
     b->nstmts = 0;
+    if (b->is_array)
+        for (size_t i = 0; i < b->nvars; i++) { free(b->abuf[i]); b->abuf[i] = NULL; }
 }
 
 static int nb_var(NumBlock* b, const char* name, const Expr* sym) {
@@ -630,6 +699,138 @@ static void numblock_writeback(NumBlock* b) {
             writeback_symbol(b->syms[i], expr_new_real(b->regs[i]));
 }
 
+/* ---- Array-mode block: all variables are same-shape float64 NDArrays ---- */
+
+/* Build an array block from an imperative body (no loop counter). Every LHS
+ * variable must currently hold a float64 NDArray of one common shape (or be an
+ * assigned-before-read temporary, which gets a zero buffer of that shape).
+ * Read-only operands must be scalar constants. Returns false (so the caller can
+ * try the scalar path or the interpreter) when the body is not such a loop. */
+static bool numblock_build_array(NumBlock* b, const Expr* body) {
+    memset(b, 0, sizeof(*b));
+    b->counter_idx = -1;
+
+    const Expr* stmts[NUMBLOCK_MAXSTMTS];
+    size_t ns = 0;
+    if (body->type == EXPR_FUNCTION &&
+        body->data.function.head->type == EXPR_SYMBOL &&
+        body->data.function.head->data.symbol.name == SYM_CompoundExpression) {
+        for (size_t i = 0; i < body->data.function.arg_count; i++) {
+            const Expr* a = body->data.function.args[i];
+            if (a->type == EXPR_SYMBOL && a->data.symbol.name == SYM_Null) continue;
+            if (ns >= NUMBLOCK_MAXSTMTS) return false;
+            stmts[ns++] = a;
+        }
+    } else {
+        stmts[ns++] = body;
+    }
+    if (ns == 0) return false;
+
+    const Expr* rhs_of[NUMBLOCK_MAXSTMTS];
+    int         lhs_of[NUMBLOCK_MAXSTMTS];
+    for (size_t i = 0; i < ns; i++) {
+        const Expr *sym, *rhs;
+        if (!stmt_is_set(stmts[i], &sym, &rhs)) return false;
+        int vi = nb_var(b, sym->data.symbol.name, sym);
+        if (vi < 0) return false;
+        b->assigned[vi] = true;
+        lhs_of[i] = vi; rhs_of[i] = rhs;
+    }
+
+    /* Seed variables from their current values, establishing the common shape.
+     * At least one variable must be a small float64 NDArray for this to be an
+     * array loop; the rest must match its shape (or be undefined temporaries). */
+    bool have_shape = false;
+    for (size_t i = 0; i < b->nvars; i++) {
+        Expr* cur = evaluate((Expr*)b->syms[i]);
+        if (is_f64_ndarray(cur)) {
+            size_t Ni = nd_elem_count(cur);
+            if (!have_shape) {
+                if (Ni == 0 || Ni > NUMLOOP_ARRAY_MAX_ELEMS ||
+                    cur->data.ndarray.rank > 8) { expr_free(cur); goto fail; }
+                b->nelem = Ni;
+                b->arr_rank = cur->data.ndarray.rank;
+                memcpy(b->arr_dims, cur->data.ndarray.dims,
+                       sizeof(int64_t) * (size_t)b->arr_rank);
+                have_shape = true;
+            } else if (Ni != b->nelem) { expr_free(cur); goto fail; }
+            b->abuf[i] = malloc(b->nelem * sizeof(double));
+            if (!b->abuf[i]) { expr_free(cur); goto fail; }
+            memcpy(b->abuf[i], cur->data.ndarray.data, b->nelem * sizeof(double));
+            b->defined[i] = b->seeded[i] = true;
+        } else if (cur && cur != b->syms[i] && cur->type != EXPR_SYMBOL) {
+            /* a bound non-array value (e.g. a scalar) cannot mix into an array
+             * block -- decline so the scalar path / interpreter handles it. */
+            expr_free(cur);
+            goto fail;
+        }
+        /* else: unbound -> an assigned-before-read temporary (buffer below). */
+        expr_free(cur);
+    }
+    if (!have_shape) goto fail;   /* no array variable -> not an array loop */
+
+    /* Allocate zero buffers for undefined temporaries now that the shape is known. */
+    for (size_t i = 0; i < b->nvars; i++) {
+        if (!b->abuf[i]) {
+            b->abuf[i] = calloc(b->nelem, sizeof(double));
+            if (!b->abuf[i]) goto fail;
+        }
+    }
+
+    b->is_array = true;
+    b->forces_real = true;   /* NDArrays are always inexact */
+
+    /* Compile each statement over the array variables (a read-only array operand
+     * doesn't resolve as a var and won't const-fold, so it bails here). */
+    VarCtx vc = { .var_names = b->names, .nvars = b->nvars,
+                  .slot_var = false, .defined = b->defined };
+    for (size_t i = 0; i < ns; i++) {
+        if (!numprog_compile(&b->progs[i], rhs_of[i], &vc)) {
+            b->nstmts = i;
+            numblock_free(b);
+            return false;
+        }
+        if (b->progs[i].max_stack > b->max_stack) b->max_stack = b->progs[i].max_stack;
+        b->lhs[i] = lhs_of[i];
+        b->defined[lhs_of[i]] = true;
+    }
+    b->nstmts = ns;
+    if (b->max_stack == 0) b->max_stack = 1;
+    return true;
+
+fail:
+    b->is_array = true;   /* so numblock_free releases any abuf already taken */
+    numblock_free(b);
+    return false;
+}
+
+/* Run one pass of the array block: fuse all statements over one traversal of the
+ * element index, updating buffers in place (element-local, so safe). Returns
+ * false on a non-finite result. `elem` is a scratch register file of nvars. */
+static bool numblock_step_array(NumBlock* b, double* elem, double* stack) {
+    for (size_t k = 0; k < b->nelem; k++) {
+        for (size_t i = 0; i < b->nvars; i++) elem[i] = b->abuf[i][k];
+        for (size_t s = 0; s < b->nstmts; s++) {
+            double v = numprog_run(&b->progs[s], elem, stack);
+            if (!isfinite(v)) return false;
+            elem[b->lhs[s]] = v;
+            b->abuf[b->lhs[s]][k] = v;
+        }
+    }
+    return true;
+}
+
+/* Write each assigned variable's final buffer back as a float64 NDArray. The
+ * buffer's ownership transfers to the new NDArray, so it is not freed here. */
+static void numblock_writeback_array(NumBlock* b) {
+    for (size_t i = 0; i < b->nvars; i++) {
+        if (!b->assigned[i]) continue;
+        Expr* nd = expr_new_ndarray(b->arr_rank, b->arr_dims, b->abuf[i], NDT_FLOAT64);
+        b->abuf[i] = NULL;   /* ownership moved into nd */
+        writeback_symbol(b->syms[i], nd);
+    }
+}
+
 /* ------------------------------------------------------------------------
  *  Do[body, {n}] count form  /  Do[body, {i, imin, imax, di}] range form
  * ---------------------------------------------------------------------- */
@@ -638,6 +839,23 @@ Expr* numloop_do_count(const Expr* body, int64_t n) {
     if (n < 1) return NULL;
 
     NumBlock b;
+
+    /* Small-float64-NDArray body: fuse the element-wise map over the flat
+     * buffers (no per-iteration Expr/NDArray allocation). */
+    if (numblock_build_array(&b, body)) {
+        double* stack = malloc(b.max_stack * sizeof(double));
+        double* elem  = malloc(b.nvars * sizeof(double));
+        if (!stack || !elem) { free(stack); free(elem); numblock_free(&b); return NULL; }
+        bool abail = false;
+        for (int64_t k = 0; k < n; k++)
+            if (!numblock_step_array(&b, elem, stack)) { abail = true; break; }
+        free(stack); free(elem);
+        if (abail) { numblock_free(&b); return NULL; }
+        numblock_writeback_array(&b);
+        numblock_free(&b);
+        return expr_new_symbol(SYM_Null);
+    }
+
     if (!numblock_build(&b, body, NULL, 0.0)) return NULL;
     if (!b.forces_real) { numblock_free(&b); return NULL; }
 

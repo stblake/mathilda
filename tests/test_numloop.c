@@ -56,6 +56,32 @@ static void diff(const char* input) {
                input, fast, interp, rel);
 }
 
+/* Assert the fast path and interpreter agree element-wise for a float64 NDArray
+ * result (small-array fused fast-path vs the interpreter's vectorized kernels). */
+static void diff_array(const char* input) {
+    numloop_set_enabled(true);
+    Expr* e1 = parse_expression(input); Expr* r1 = evaluate(e1);
+    numloop_set_enabled(false);
+    Expr* e2 = parse_expression(input); Expr* r2 = evaluate(e2);
+    numloop_set_enabled(true);
+    ASSERT_MSG(r1 && r1->type == EXPR_NDARRAY && r2 && r2->type == EXPR_NDARRAY &&
+               r1->data.ndarray.dtype == NDT_FLOAT64 &&
+               r2->data.ndarray.dtype == NDT_FLOAT64,
+               "%s: expected float64 NDArray results", input);
+    size_t n1 = 1, n2 = 1;
+    for (int i = 0; i < r1->data.ndarray.rank; i++) n1 *= (size_t)r1->data.ndarray.dims[i];
+    for (int i = 0; i < r2->data.ndarray.rank; i++) n2 *= (size_t)r2->data.ndarray.dims[i];
+    ASSERT_MSG(n1 == n2, "%s: shape mismatch %zu vs %zu", input, n1, n2);
+    const double* d1 = (const double*)r1->data.ndarray.data;
+    const double* d2 = (const double*)r2->data.ndarray.data;
+    for (size_t k = 0; k < n1; k++) {
+        double scale = fabs(d2[k]) > 1.0 ? fabs(d2[k]) : 1.0;
+        ASSERT_MSG(fabs(d1[k] - d2[k]) / scale < 1e-9,
+                   "%s: element %zu fast=%.17g interp=%.17g", input, k, d1[k], d2[k]);
+    }
+    expr_free(e1); expr_free(r1); expr_free(e2); expr_free(r2);
+}
+
 /* Assert an expression evaluates to `expected` (FullForm) with the fast path
  * enabled -- used for fallback (exact/symbolic) cases. */
 static void expect_full(const char* input, const char* expected) {
@@ -174,6 +200,24 @@ static void test_diff_nest_cos_head(void) {
     diff("Nest[Cos, 1.0, 500]");
 }
 
+/* ---------------- Differential: NDArray (fused element-wise) ---------------- */
+static void test_diff_nest_array_logistic(void) {
+    diff_array("Nest[3.5 # (1 - #)&, NDArray[{0.1, 0.3, 0.5, 0.7, 0.9}], 300]");
+}
+static void test_diff_nest_array_cos(void) {
+    diff_array("Nest[Cos, NDArray[{0., 1., 2., 3.}], 50]");
+}
+static void test_diff_nest_array_2d(void) {
+    diff_array("Nest[# + 0.5&, NDArray[{{0.1, 0.2}, {0.3, 0.4}}], 10]");
+}
+static void test_diff_do_array_logistic(void) {
+    diff_array("Module[{a = NDArray[{0.1, 0.3, 0.5, 0.7}]}, Do[a = 3.5 a (1 - a), {300}]; a]");
+}
+static void test_diff_do_array_compound(void) {
+    diff_array("Module[{a = NDArray[{0.1, 0.3, 0.5, 0.7}]}, "
+               "Do[a = 3.5 a (1 - a); b = a + 1.; a = b - 1., {200}]; a]");
+}
+
 /* ---------------- Fallback: must NOT fast-path ---------------- */
 static void test_fallback_nest_exact_int(void) {
     /* exact integer arithmetic stays exact */
@@ -251,6 +295,11 @@ int main(void) {
     TEST(test_diff_nestwhile_halve);
     TEST(test_diff_nestwhile_double);
     TEST(test_diff_nest_cos_head);
+    TEST(test_diff_nest_array_logistic);
+    TEST(test_diff_nest_array_cos);
+    TEST(test_diff_nest_array_2d);
+    TEST(test_diff_do_array_logistic);
+    TEST(test_diff_do_array_compound);
 
     /* Fallback (exact / symbolic must be untouched) */
     TEST(test_fallback_nest_exact_int);
