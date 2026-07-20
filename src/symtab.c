@@ -1053,10 +1053,30 @@ Expr* apply_down_values(Expr* expr) {
 
 Expr* apply_own_values(Expr* expr) {
     if (!expr || expr->type != EXPR_SYMBOL) return NULL;
-    
-    SymbolDef* def = symtab_get_def(expr->data.symbol.name);
+
+    /* Reuse the node's cached def pointer when present (same fast path the
+     * evaluator uses for function heads), resolving and caching on first
+     * touch. The def node is stable (never freed/reallocated), so the cache
+     * stays valid even across redefinition; it is benign metadata and safe to
+     * write on a shared node. Saves a symbol-table hash on every symbol read. */
+    SymbolDef* def = expr->data.symbol.def;
+    if (!def) {
+        def = symtab_get_def(expr->data.symbol.name);
+        expr->data.symbol.def = def;
+    }
     Rule* rule = def->own_values;
     while (rule) {
+        /* Fast path for the ubiquitous `x = value` OwnValue: the pattern is a
+         * bare symbol keyed to this very symbol (own_values live on the
+         * symbol's own def), so it matches unconditionally with no bindings.
+         * Skip the matcher and its three-malloc MatchEnv entirely and clone
+         * the replacement directly — this is the hottest read in tight loops
+         * like Do[x = f[x], {n}]. The name compare is a cheap interned-pointer
+         * check that also guards against any exotic caller. */
+        if (rule->pattern->type == EXPR_SYMBOL &&
+            rule->pattern->data.symbol.name == expr->data.symbol.name) {
+            return expr_copy(rule->replacement);
+        }
         MatchEnv* env = env_new();
         if (match(expr, rule->pattern, env)) {
             Expr* result = replace_bindings(rule->replacement, env);

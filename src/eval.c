@@ -29,6 +29,13 @@
  */
 #define MAX_ITERATIONS 4096
 
+/* Small-arity fast path for evaluate_step's per-call scratch array. The vast
+ * majority of function calls (arithmetic heads, Set, control flow, ...) have a
+ * handful of arguments; sizing a stack buffer to cover them avoids a malloc/
+ * free pair per function node per evaluation pass — a dominant cost in tight
+ * numeric loops. Calls with more args fall back to a heap allocation. */
+#define EVAL_SMALL_ARGS 8
+
 /*
  * $RecursionLimit guard. The REPL is single-threaded so a static counter
  * suffices. Each call to evaluate() bumps eval_recursion_depth on entry and
@@ -292,14 +299,10 @@ int eval_compare_expr_ptrs(const void* a, const void* b) {
  * (i.e. produced a structurally different argument list). When false,
  * `e` is byte-for-byte unchanged and the §3.4 fixed-point detector can
  * count this step as a no-op. */
-bool eval_flatten_args(Expr* e, const char* head_name) {
-    /* Callers may hand us a C-string literal (e.g. internal_call_impl
-     * passes "Plus") rather than the interned canonical pointer. Funnel
-     * through the interner so the per-arg head check below is a pointer
-     * compare against the same pointer that lives on every interned
-     * EXPR_SYMBOL. */
-    head_name = intern_symbol(head_name);
-
+/* Core flatten, assuming `head_name` is ALREADY the interned canonical
+ * pointer. The hot evaluator path (which holds an EXPR_SYMBOL's name, always
+ * interned) calls this directly to skip a per-call hash on every Flat head. */
+static bool eval_flatten_args_interned(Expr* e, const char* head_name) {
     size_t new_count = 0;
     bool needs_flattening = false;
 
@@ -340,6 +343,13 @@ bool eval_flatten_args(Expr* e, const char* head_name) {
     e->data.function.args = new_args;
     e->data.function.arg_count = new_count;
     return true;
+}
+
+/* Public entry: callers may hand us a C-string literal (e.g. internal_call_impl
+ * passes "Plus") rather than the interned canonical pointer, so funnel through
+ * the interner before the pointer-compare core. */
+bool eval_flatten_args(Expr* e, const char* head_name) {
+    return eval_flatten_args_interned(e, intern_symbol(head_name));
 }
 
 /*
@@ -841,14 +851,21 @@ Expr* evaluate_step(Expr* e, bool* changed) {
              * already-stable inputs. Stripping an Evaluate[] wrapper is
              * itself a rewrite even if the wrapped expression evaluates
              * to itself — flag it explicitly. */
-            Expr** new_args = malloc(sizeof(Expr*) * e->data.function.arg_count);
+            size_t argc = e->data.function.arg_count;
+            Expr* new_args_stack[EVAL_SMALL_ARGS];
+            Expr** new_args = (argc <= EVAL_SMALL_ARGS)
+                                  ? new_args_stack
+                                  : malloc(sizeof(Expr*) * argc);
             /* Pointers of Unevaluated[...] wrappers that landed in a HELD slot.
              * Per WMA, such wrappers are NOT stripped below (the argument was
              * never going to be evaluated, so Unevaluated has nothing to do).
              * We track by pointer identity, not index, because flatten_sequences
              * can shift argument positions before the strip pass runs; held
-             * Unevaluated nodes are never Sequence, so their pointers survive it. */
-            Expr** held_uneval = malloc(sizeof(Expr*) * e->data.function.arg_count);
+             * Unevaluated nodes are never Sequence, so their pointers survive it.
+             * Held Unevaluated wrappers are vanishingly rare (essentially never
+             * in numeric code), so this tracking array is allocated lazily on
+             * first sighting rather than on every function node. */
+            Expr** held_uneval = NULL;
             size_t held_uneval_count = 0;
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 bool hold = hold_all_complete;
@@ -897,7 +914,11 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                         new_args[i]->data.function.head->type == EXPR_SYMBOL &&
                         new_args[i]->data.function.head->data.symbol.name == SYM_Unevaluated &&
                         new_args[i]->data.function.arg_count == 1) {
-                        held_uneval[held_uneval_count++] = new_args[i];
+                        /* Lazily allocate: capacity argc is always enough since
+                         * there is at most one held wrapper per argument slot. */
+                        if (!held_uneval)
+                            held_uneval = malloc(sizeof(Expr*) * (argc ? argc : 1));
+                        if (held_uneval) held_uneval[held_uneval_count++] = new_args[i];
                     }
                 } else {
                     new_args[i] = evaluate(orig_arg);
@@ -920,16 +941,16 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                                       eval_is_inflight_goto(new_args[i]))) {
                     Expr* sentinel = new_args[i];
                     for (size_t j = 0; j < i; j++) expr_free(new_args[j]);
-                    free(new_args);
-                    free(held_uneval);
+                    if (new_args != new_args_stack) free(new_args);
+                    free(held_uneval);   /* free(NULL) is a no-op */
                     expr_free(head);
                     *changed = true;
                     return sentinel;
                 }
             }
             
-            Expr* res = expr_new_function(head, new_args, e->data.function.arg_count);
-            free(new_args);
+            Expr* res = expr_new_function(head, new_args, argc);
+            if (new_args != new_args_stack) free(new_args);
             
     /* 2.5 Flatten Sequences - must happen before attributes.
      * Suppressed for heads carrying SequenceHold (e.g. Set/SetDelayed/Rule/
@@ -989,7 +1010,9 @@ Expr* evaluate_step(Expr* e, bool* changed) {
 
             /* Flat: associative flattening (requires symbolic head, suppressed by HoldAllComplete) */
             if (head->type == EXPR_SYMBOL && (attrs & ATTR_FLAT) && !hold_all_complete) {
-                if (eval_flatten_args(res, head->data.symbol.name)) *changed = true;
+                /* head is an EXPR_SYMBOL, so its name is already interned —
+                 * call the core directly and skip the redundant hash. */
+                if (eval_flatten_args_interned(res, head->data.symbol.name)) *changed = true;
             }
 
             /* Listable: automatic threading */

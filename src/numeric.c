@@ -795,10 +795,12 @@ Expr** numeric_contagion_args(Expr* const* args, size_t n) {
 
     bool any_inexact = false;
     bool any_machine = false;
+    bool all_plain_real = true;   /* every arg already a bare machine double? */
 #ifdef USE_MPFR
     long min_mpfr_prec = 0;  /* 0 = not yet observed */
 #endif
     for (size_t i = 0; i < n; i++) {
+        if (args[i]->type != EXPR_REAL) all_plain_real = false;
         if (arg_is_inexact(args[i])) {
             any_inexact = true;
             if (arg_has_machine_real(args[i])) any_machine = true;
@@ -811,6 +813,11 @@ Expr** numeric_contagion_args(Expr* const* args, size_t n) {
         }
     }
     if (!any_inexact) return NULL;
+    /* Fast path for the dominant case in tight float loops: every operand is
+     * already a bare machine double, so contagion has nothing exact to
+     * numericalize and would only clone each real into an identical one. Skip
+     * the output array and the per-arg allocations entirely. */
+    if (all_plain_real) return NULL;
 
     /* Precision contagion follows Mathematica: the *lowest* precision
      * among inexact operands wins. MachinePrecision is the floor — any

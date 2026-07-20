@@ -122,6 +122,13 @@ Expr* expr_new_string(const char* str);
 Expr* expr_new_function(Expr* head, Expr** args, size_t arg_count);
 void expr_free(Expr* e);
 Expr* expr_copy(Expr* e);
+
+/* Drain the internal Expr free-list, returning every recycled node to the
+ * system allocator. Registered with atexit() automatically on first
+ * allocation, so callers rarely need it; exposed for tests and for an
+ * explicit end-of-run cleanup. Safe to call repeatedly. Nodes still in use
+ * are unaffected — only already-freed (pooled) nodes are released. */
+void expr_pool_free_all(void);
 /* Inc-ref `e` (no copy) and return the same pointer. Pairs with
  * expr_free, which dec-refs. NULL is passed through. Use this in places
  * that previously called expr_copy on an immutable atom. */

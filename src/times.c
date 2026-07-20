@@ -254,14 +254,22 @@ Expr* builtin_times(Expr* res) {
      * all) falls through to the generic path, which treats any NDArrays as
      * opaque non-numeric factors. */
     {
-        Expr* fast = ndarray_elementwise(res->data.function.args, n, false);
-        if (fast) return fast;
-        if (ndarray_warn_shape_mismatch(res->data.function.args, n, "multiplied"))
-            return NULL;
-        /* NDArray combined with a symbolic factor (c * NDArray): purely numeric,
-         * so it can't be multiplied elementwise. Warn, then fall through to
-         * leave the product unevaluated. */
-        ndarray_warn_symbolic(res->data.function.args, n, "multiplied");
+        /* Cheap guard: only walk the NDArray machinery (three arg scans) when
+         * an NDArray operand is actually present. Pure-scalar Times — the
+         * dominant case — skips it with a single pass. */
+        bool any_nd = false;
+        for (size_t i = 0; i < n; i++)
+            if (is_ndarray(res->data.function.args[i])) { any_nd = true; break; }
+        if (any_nd) {
+            Expr* fast = ndarray_elementwise(res->data.function.args, n, false);
+            if (fast) return fast;
+            if (ndarray_warn_shape_mismatch(res->data.function.args, n, "multiplied"))
+                return NULL;
+            /* NDArray combined with a symbolic factor (c * NDArray): purely
+             * numeric, so it can't be multiplied elementwise. Warn, then fall
+             * through to leave the product unevaluated. */
+            ndarray_warn_symbolic(res->data.function.args, n, "multiplied");
+        }
     }
 
     /* SeriesData arithmetic: if any factor is a power series, fold the whole
@@ -362,7 +370,13 @@ Expr* builtin_times(Expr* res) {
     Expr* num_prod = expr_new_integer(1);
     Expr* complex_val = NULL;
 
-    BasePower* groups = malloc(sizeof(BasePower) * n);
+    /* Collector buffers on the stack for the common small product (mirrors
+     * builtin_plus): avoids three malloc/free pairs per Times in tight numeric
+     * loops. n <= TIMES_SMALL_N bounds ht_cap <= TIMES_SMALL_HT below. */
+    enum { TIMES_SMALL_N = 8, TIMES_SMALL_HT = 16 };
+    bool heap_bufs = (n > TIMES_SMALL_N);
+    BasePower groups_stack[TIMES_SMALL_N];
+    BasePower* groups = heap_bufs ? malloc(sizeof(BasePower) * n) : groups_stack;
     size_t group_count = 0;
 
     /* Open-addressing hash table mapping base-hash -> group index, so that
@@ -374,8 +388,10 @@ Expr* builtin_times(Expr* res) {
     size_t ht_cap = 8;
     while (ht_cap < n * 2) ht_cap <<= 1;
     size_t ht_mask = ht_cap - 1;
-    int64_t* slot_group = malloc(sizeof(int64_t) * ht_cap);
-    uint64_t* slot_hash = malloc(sizeof(uint64_t) * ht_cap);
+    int64_t  slot_group_stack[TIMES_SMALL_HT];
+    uint64_t slot_hash_stack[TIMES_SMALL_HT];
+    int64_t* slot_group = heap_bufs ? malloc(sizeof(int64_t) * ht_cap) : slot_group_stack;
+    uint64_t* slot_hash = heap_bufs ? malloc(sizeof(uint64_t) * ht_cap) : slot_hash_stack;
     for (size_t s = 0; s < ht_cap; s++) slot_group[s] = -1;
 
     for (size_t i = 0; i < n; i++) {
@@ -383,7 +399,7 @@ Expr* builtin_times(Expr* res) {
         if (is_overflow(arg)) {
             expr_free(num_prod); if (complex_val) expr_free(complex_val);
             for(size_t j=0; j<group_count; j++) { expr_free(groups[j].base); expr_free(groups[j].exponent); }
-            free(groups); free(slot_group); free(slot_hash);
+            if (heap_bufs) { free(groups); free(slot_group); free(slot_hash); }
             return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
         }
 
@@ -459,13 +475,14 @@ Expr* builtin_times(Expr* res) {
             }
         }
     }
-    free(slot_group);
-    free(slot_hash);
+    if (heap_bufs) free(slot_group);
+    if (heap_bufs) free(slot_hash);
 
     if (num_prod->type == EXPR_INTEGER && num_prod->data.integer == 0) {
         if (complex_val) expr_free(complex_val);
         for(size_t j=0; j<group_count; j++) { expr_free(groups[j].base); expr_free(groups[j].exponent); }
-        free(groups); return num_prod;
+        if (heap_bufs) free(groups);
+        return num_prod;
     }
 
     /* Radical canonicalization: for each Power[b, q] group with b a positive
@@ -1098,7 +1115,8 @@ Expr* builtin_times(Expr* res) {
     if (final_count == 0) {
         expr_free(num_prod); if (complex_val) expr_free(complex_val);
         for(size_t j=0; j<group_count; j++) { expr_free(groups[j].base); expr_free(groups[j].exponent); }
-        free(groups); return expr_new_integer(1);
+        if (heap_bufs) free(groups);
+        return expr_new_integer(1);
     }
 
     Expr** final_args = malloc(sizeof(Expr*) * final_count); size_t idx = 0;
@@ -1115,7 +1133,7 @@ Expr* builtin_times(Expr* res) {
             final_args[idx++] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){groups[i].base, groups[i].exponent}, 2));
         }
     }
-    free(groups);
+    if (heap_bufs) free(groups);
     if (idx == 1) { Expr* res_final = final_args[0]; free(final_args); return res_final; }
     Expr* result = expr_new_function(expr_new_symbol(SYM_Times), final_args, idx);
     free(final_args); return result;

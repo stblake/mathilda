@@ -19,9 +19,81 @@ char* mathilda_strdup(const char* s) {
     return r;
 }
 
+/* ------------------------------------------------------------------------
+ *  Expr node pool (bounded free-list)
+ *
+ *  Profiling the logistic-map benchmark (Do[x = 3.5 x (1-x), {10^6}]) showed
+ *  ~65% of wall time in the system allocator: the evaluator churns fixed-size
+ *  Expr structs, allocating and freeing tens of nodes per iteration. Because
+ *  every Expr is exactly sizeof(Expr) bytes, freed nodes are recycled through a
+ *  singly-linked free-list instead of round-tripping through malloc/free. The
+ *  link is stored in the dead node's payload (data.function.head, a genuine
+ *  Expr* at union offset 0 — no aliasing games). The REPL is single-threaded,
+ *  so no locking is needed.
+ *
+ *  The free-list is BOUNDED (EXPR_POOL_CAP nodes). This is the crucial detail:
+ *  an unbounded pool accumulates every freed node and, after mixed churn,
+ *  threads across memory in scrambled order — so a large batch allocation (e.g.
+ *  KeySort building a 40k-key association, then sorting it) pulls scattered
+ *  nodes and the sort thrashes the cache (its O(n log n) doubling ratio
+ *  regressed from ~2.2 to ~3.8). Capping keeps the recycled set small and
+ *  cache-hot: the evaluator's working set (tens of nodes) always hits it, while
+ *  a large batch drains the cap and then falls to fresh malloc, whose natural
+ *  burst locality restores the sort's scaling. Frees past the cap go straight
+ *  back to the system allocator.
+ *
+ *  expr_pool_free_all() drains the (bounded) free-list back to the OS; it is
+ *  registered with atexit() on first use so every binary leaves a clean heap
+ *  for valgrind. Nodes still in use at exit are freed by their owners exactly
+ *  as before — the pool only holds nodes that have already been expr_free'd.
+ * ---------------------------------------------------------------------- */
+#define EXPR_POOL_CAP 8192                /* max recycled nodes held (~0.5 MB) */
+static Expr*  g_expr_pool = NULL;         /* free-list head */
+static size_t g_expr_pool_size = 0;       /* current free-list length */
+static bool   g_expr_pool_atexit_registered = false;
+
+/* Drain the free-list back to the system allocator. Idempotent; registered
+ * with atexit(). Only touches already-freed (pooled) nodes. */
+void expr_pool_free_all(void) {
+    Expr* e = g_expr_pool;
+    while (e) {
+        Expr* next = e->data.function.head;
+        free(e);
+        e = next;
+    }
+    g_expr_pool = NULL;
+    g_expr_pool_size = 0;
+}
+
+static Expr* expr_alloc_node(void) {
+    Expr* e = g_expr_pool;
+    if (e) {
+        g_expr_pool = e->data.function.head;   /* pop */
+        g_expr_pool_size--;
+        return e;
+    }
+    if (!g_expr_pool_atexit_registered) {
+        g_expr_pool_atexit_registered = true;
+        atexit(expr_pool_free_all);
+    }
+    return (Expr*)malloc(sizeof(Expr));
+}
+
+/* Return a physically-dead node to the pool, or to the OS once the pool is at
+ * capacity. Caller must have already released any owned payload. */
+static void expr_release_node(Expr* e) {
+    if (g_expr_pool_size >= EXPR_POOL_CAP) {
+        free(e);
+        return;
+    }
+    e->data.function.head = g_expr_pool;       /* push */
+    g_expr_pool = e;
+    g_expr_pool_size++;
+}
+
 // Create/allocate a new integer expression.
 Expr* expr_new_integer(int64_t value) {
-    Expr* e = malloc(sizeof(Expr));
+    Expr* e = expr_alloc_node();
     if (!e) return NULL;
     e->type = EXPR_INTEGER;
     e->refcount = 1;
@@ -32,7 +104,7 @@ Expr* expr_new_integer(int64_t value) {
 
 // Create/allocate a new real (double) expression.
 Expr* expr_new_real(double value) {
-    Expr* e = malloc(sizeof(Expr));
+    Expr* e = expr_alloc_node();
     if (!e) return NULL;
     e->type = EXPR_REAL;
     e->refcount = 1;
@@ -53,7 +125,7 @@ Expr* expr_new_real(double value) {
 // type for ABI stability, but the memory is owned by the interner and
 // must never be freed by Expr code.
 Expr* expr_new_symbol(const char* name) {
-    Expr* e = malloc(sizeof(Expr));
+    Expr* e = expr_alloc_node();
     if (!e) return NULL;
     e->type = EXPR_SYMBOL;
     e->refcount = 1;
@@ -69,7 +141,7 @@ Expr* expr_new_symbol(const char* name) {
 
 // Create/allocate a new string expression.
 Expr* expr_new_string(const char* str) {
-    Expr* e = malloc(sizeof(Expr));
+    Expr* e = expr_alloc_node();
     if (!e) return NULL;
 
     e->type = EXPR_STRING;
@@ -85,7 +157,7 @@ Expr* expr_new_string(const char* str) {
 
 // Create/allocate an expression: h[arg1, arg2, ...]
 Expr* expr_new_function(Expr* head, Expr** args, size_t arg_count) {
-    Expr* e = malloc(sizeof(Expr));
+    Expr* e = expr_alloc_node();
     if (!e) return NULL;
 
     e->type = EXPR_FUNCTION;
@@ -108,7 +180,7 @@ Expr* expr_new_function(Expr* head, Expr** args, size_t arg_count) {
 
 // BigInt constructors
 Expr* expr_new_bigint_from_mpz(const mpz_t val) {
-    Expr* e = malloc(sizeof(Expr));
+    Expr* e = expr_alloc_node();
     if (!e) return NULL;
     e->type = EXPR_BIGINT;
     e->refcount = 1;
@@ -118,7 +190,7 @@ Expr* expr_new_bigint_from_mpz(const mpz_t val) {
 }
 
 Expr* expr_new_bigint_from_int64(int64_t val) {
-    Expr* e = malloc(sizeof(Expr));
+    Expr* e = expr_alloc_node();
     if (!e) return NULL;
     e->type = EXPR_BIGINT;
     e->refcount = 1;
@@ -128,7 +200,7 @@ Expr* expr_new_bigint_from_int64(int64_t val) {
 }
 
 Expr* expr_new_bigint_from_str(const char* str) {
-    Expr* e = malloc(sizeof(Expr));
+    Expr* e = expr_alloc_node();
     if (!e) return NULL;
     e->type = EXPR_BIGINT;
     e->refcount = 1;
@@ -142,7 +214,7 @@ Expr* expr_new_bigint_from_str(const char* str) {
 }
 
 Expr* expr_new_ndarray(int rank, const int64_t* dims, void* data, NDType dtype) {
-    Expr* e = malloc(sizeof(Expr));
+    Expr* e = expr_alloc_node();
     if (!e) return NULL;
     e->type = EXPR_NDARRAY;
     e->refcount = 1;
@@ -161,7 +233,7 @@ Expr* expr_new_ndarray(int rank, const int64_t* dims, void* data, NDType dtype) 
  * `mpfr_t` at the requested precision; the caller owns the result and
  * should free it with `expr_free`, which calls `mpfr_clear`. */
 Expr* expr_new_mpfr_bits(mpfr_prec_t bits) {
-    Expr* e = malloc(sizeof(Expr));
+    Expr* e = expr_alloc_node();
     if (!e) return NULL;
     e->type = EXPR_MPFR;
     e->refcount = 1;
@@ -196,7 +268,7 @@ Expr* expr_new_mpfr_from_str(const char* str, mpfr_prec_t bits) {
     return e;
 }
 Expr* expr_new_mpfr_move(mpfr_t src) {
-    Expr* e = malloc(sizeof(Expr));
+    Expr* e = expr_alloc_node();
     if (!e) { mpfr_clear(src); return NULL; }
     e->type = EXPR_MPFR;
     e->refcount = 1;
@@ -282,7 +354,7 @@ Expr* expr_unshare(Expr* e) {
     if (e->refcount == 1) return e;
 
     /* Build a one-level private copy. Children stay shared (inc-ref). */
-    Expr* fresh = malloc(sizeof(Expr));
+    Expr* fresh = expr_alloc_node();
     if (!fresh) return e;  /* OOM: fall back to (still-shared) original */
     fresh->type = e->type;
     fresh->refcount = 1;
@@ -402,7 +474,9 @@ void expr_free(Expr* e) {
         default:
             break;
     }
-    free(e);
+    /* Recycle the fixed-size node through the pool instead of free() —
+     * see the free-list note above expr_new_integer. */
+    expr_release_node(e);
 }
 
 
