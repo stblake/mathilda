@@ -537,6 +537,39 @@ In[4]:= StringExtract["a 1\nb 2\nc 3 x", All, 3]
 Out[4]= {Missing["PartAbsent", 3], Missing["PartAbsent", 3], "x"}
 ```
 
+## StringPartition
+
+Partitions a string into fixed-length substrings. Byte-indexed, like
+`StringTake`/`StringDrop`.
+
+- `StringPartition["string", n]`: non-overlapping substrings of length `n`
+  (offset `d = n`). Trailing characters that cannot fill a full block are
+  dropped.
+- `StringPartition["string", n, d]`: length-`n` substrings starting every `d`
+  characters. All substrings are length `n`; if `d > n` characters in the middle
+  are skipped, and if `d < n` the substrings overlap.
+- `StringPartition["string", UpTo[n]]`: substrings of length up to `n` (offset
+  `d = n`), allowing the final substring to be shorter so every character
+  appears. Combinable with an explicit offset as `UpTo[n], d`.
+- A list of strings threads. A non-string subject, a non-integer length/offset,
+  or a non-positive `n` or `d` leaves the call unevaluated; other arities emit
+  `StringPartition::argt` (2 or 3 arguments expected).
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringPartition["123456789123456789", 9]
+Out[1]= {"123456789", "123456789"}
+
+In[2]:= StringPartition["123456789", 2, 1]
+Out[2]= {"12", "23", "34", "45", "56", "67", "78", "89"}
+
+In[3]:= StringPartition["123456789", UpTo[2]]
+Out[3]= {"12", "34", "56", "78", "9"}
+
+In[4]:= StringPartition["ababababab", 3]
+Out[4]= {"aba", "bab", "aba"}
+```
+
 ## String patterns
 
 Beyond `RegularExpression["re"]` and literal strings, `StringMatchQ`,

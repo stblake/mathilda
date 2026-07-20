@@ -3886,6 +3886,18 @@ void info_init(void) {
         "\tUses sepi as the separator for successive levels.\n\n"
         "\tAbsent blocks yield Missing[\"PartAbsent\", pos]. A list of strings\n"
         "\tthreads.");
+
+    symtab_set_docstring("StringPartition",
+        "StringPartition[\"string\", n]\n"
+        "\tPartitions string into non-overlapping substrings of length n.\n"
+        "StringPartition[\"string\", n, d]\n"
+        "\tGenerates length-n substrings with offset d (all of length n; some\n"
+        "\ttrailing or middle characters may be omitted).\n"
+        "StringPartition[\"string\", UpTo[n]]\n"
+        "\tPartitions into substrings of length up to n, allowing a shorter\n"
+        "\tfinal substring so every character appears.\n"
+        "StringPartition[{s1, s2, ...}, spec]\n"
+        "\tThreads over a list of strings.");
     /* StringSplit's docstring lives in regex_init() (regex_init.c), next to the
      * string-pattern class heads it shares. */
 }

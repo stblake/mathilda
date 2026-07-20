@@ -448,6 +448,7 @@ set(COMMON_SRC
     ../src/strings/stringsplit.c
     ../src/strings/stringtrim.c
     ../src/strings/stringextract.c
+    ../src/strings/stringpartition.c
     ../src/strings/strings_init.c
     ../src/strings/regex/regex_engine.c
     ../src/strings/regex/regex_common.c
@@ -2223,6 +2224,15 @@ target_include_directories(regex_tests PRIVATE ../src ../src/strings ../src/stri
 add_executable(stringfns_tests test_stringfns.c ${COMMON_SRC})
 target_include_directories(stringfns_tests PRIVATE ../src ../src/strings ../src/strings/regex)
 
+add_executable(stringpartition_tests test_stringpartition.c ${COMMON_SRC})
+target_include_directories(stringpartition_tests PRIVATE ../src ../src/strings ../src/strings/regex)
+if(USE_ECM)
+    target_link_libraries(stringpartition_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(stringpartition_tests gmp m)
+endif()
+add_test(NAME stringpartition_tests COMMAND stringpartition_tests)
+
 add_executable(series_tests test_series.c ${COMMON_SRC})
 target_include_directories(series_tests PRIVATE ../src)
 
@@ -2501,6 +2511,7 @@ if(USE_ECM)
     add_dependencies(strings_tests build_ecm)
     add_dependencies(regex_tests build_ecm)
     add_dependencies(stringfns_tests build_ecm)
+    add_dependencies(stringpartition_tests build_ecm)
     add_dependencies(series_tests build_ecm)
     add_dependencies(series_twoterm_tests build_ecm)
     add_dependencies(deriv_tests build_ecm)

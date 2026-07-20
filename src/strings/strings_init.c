@@ -82,4 +82,8 @@ void strings_init(void) {
     symtab_add_builtin("StringReplacePart", builtin_stringreplacepart);
     symtab_get_def("StringReplacePart")->attributes |= ATTR_PROTECTED;
     /* Docstring lives in info.c (info_init). */
+
+    symtab_add_builtin("StringPartition", builtin_stringpartition);
+    symtab_get_def("StringPartition")->attributes |= ATTR_PROTECTED;
+    /* Docstring lives in info.c (info_init). */
 }
