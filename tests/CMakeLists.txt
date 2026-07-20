@@ -233,6 +233,7 @@ set(COMMON_SRC
     ../src/ndarray.c
     ../src/ndkernels.c
     ../src/print.c
+    ../src/print_latex.c
     ../src/plus.c
     ../src/times.c
     ../src/arithmetic.c
