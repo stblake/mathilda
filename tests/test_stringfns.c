@@ -295,6 +295,85 @@ static void test_trim_unevaluated(void) {
     assert_eval_eq("StringTrim[]", "StringTrim[]", 0);
 }
 
+/* ============================ StringExtract =========================== */
+
+/* Single-level whitespace position specs: n, -n, {..}, span, All. */
+static void test_extract_positions(void) {
+    assert_eval_eq("StringExtract[\"a bbb  cccc aa   d\", 2]", "\"bbb\"", 0);
+    assert_eval_eq("StringExtract[\"a bbb  cccc aa   d\", -1]", "\"d\"", 0);
+    assert_eval_eq("StringExtract[\"a bbb  cccc aa   d\", 2 ;; 4]",
+                   "{\"bbb\", \"cccc\", \"aa\"}", 0);
+    assert_eval_eq("StringExtract[\"a bbb  cccc aa   d\", {1, 3}]",
+                   "{\"a\", \"cccc\"}", 0);
+    assert_eval_eq("StringExtract[\"a bbb  cccc aa   d\", {1, 4, 5}]",
+                   "{\"a\", \"aa\", \"d\"}", 0);
+}
+
+/* {pos..} is equivalent to Part[StringSplit[..], {pos..}]. */
+static void test_extract_part_equivalence(void) {
+    assert_eval_eq("StringExtract[\"a bbb  cccc aa   d\", {1, 4, 5}]",
+                   "Part[StringSplit[\"a bbb  cccc aa   d\"], {1, 4, 5}]", 0);
+}
+
+/* All extracts every whitespace-delimited token (== StringSplit). */
+static void test_extract_all(void) {
+    assert_eval_eq("StringExtract[\"A tree, an apple, four pears. And more: two sacks\", All]",
+                   "{\"A\", \"tree,\", \"an\", \"apple,\", \"four\", \"pears.\", "
+                   "\"And\", \"more:\", \"two\", \"sacks\"}", 0);
+    assert_eval_eq("StringExtract[\"A tree, an apple, four pears. And more: two sacks\", All]",
+                   "StringSplit[\"A tree, an apple, four pears. And more: two sacks\"]", 0);
+}
+
+/* sep -> pos with a literal separator and a pattern separator. */
+static void test_extract_separator(void) {
+    assert_eval_eq("StringExtract[\"a--bbb--ccc--dddd\", \"--\" -> 3]", "\"ccc\"", 0);
+    /* sep -> All is exactly StringSplit[string, sep]. */
+    assert_eval_eq("StringExtract[\"a--bbb---ccc--dddd\", \"--\" -> All]",
+                   "StringSplit[\"a--bbb---ccc--dddd\", \"--\"]", 0);
+    /* A string pattern as separator: runs of non-word characters. */
+    assert_eval_eq("StringExtract[\"A tree, an apple, four pears. And more: two sacks\", "
+                   "Except[WordCharacter] .. -> All]",
+                   "{\"A\", \"tree\", \"an\", \"apple\", \"four\", \"pears\", "
+                   "\"And\", \"more\", \"two\", \"sacks\"}", 0);
+}
+
+/* Multi-level extraction with whitespace/newline depth defaults. */
+static void test_extract_multilevel(void) {
+    /* table = "a 1\nb 2\nc 3 x" with real newline bytes. */
+    assert_eval_eq("StringExtract[\"a 1\nb 2\nc 3 x\", All, 1]",
+                   "{\"a\", \"b\", \"c\"}", 0);
+    assert_eval_eq("StringExtract[\"a 1\nb 2\nc 3 x\", 3, 1]", "\"c\"", 0);
+    assert_eval_eq("StringExtract[\"a 1\nb 2\nc 3 x\", 3, All]",
+                   "{\"c\", \"3\", \"x\"}", 0);
+    /* Three-level: "\n\n" -> 2, "\n" -> 2, Whitespace -> 3. */
+    assert_eval_eq("StringExtract[\"a b c\nd e f\ng h i\n\nj k l\nm n o\np q r s"
+                   "\n\nt u v\nw x y z\", 2, 2, 3]", "\"o\"", 0);
+}
+
+/* Out-of-range blocks yield Missing["PartAbsent", pos]. */
+static void test_extract_missing(void) {
+    assert_eval_eq("StringExtract[\"a b c\", 5]", "Missing[\"PartAbsent\", 5]", 0);
+    assert_eval_eq("StringExtract[\"a b c\", -9]", "Missing[\"PartAbsent\", -9]", 0);
+    /* Mapped across lines: absent third word becomes Missing per line. */
+    assert_eval_eq("StringExtract[\"a 1\nb 2\nc 3 x\", All, 3]",
+                   "{Missing[\"PartAbsent\", 3], Missing[\"PartAbsent\", 3], \"x\"}", 0);
+}
+
+/* A list of strings threads. */
+static void test_extract_thread(void) {
+    assert_eval_eq("StringExtract[{\"a b c\", \"x y z\"}, 2]", "{\"b\", \"y\"}", 0);
+    assert_eval_eq("StringExtract[{\"a b c\", \"x y z\"}, {1, 3}]",
+                   "{{\"a\", \"c\"}, {\"x\", \"z\"}}", 0);
+}
+
+static void test_extract_unevaluated(void) {
+    /* A non-string, non-list subject leaves the call unevaluated. */
+    assert_eval_eq("StringExtract[xyz, 2]", "StringExtract[xyz, 2]", 0);
+    /* Zero / one argument: unevaluated (a StringExtract::argm message is written). */
+    assert_eval_eq("StringExtract[]", "StringExtract[]", 0);
+    assert_eval_eq("StringExtract[\"abc\"]", "StringExtract[\"abc\"]", 0);
+}
+
 #endif /* USE_REGEX */
 
 int main(void) {
@@ -340,6 +419,15 @@ int main(void) {
     TEST(test_trim_regex_front_only);
     TEST(test_trim_thread);
     TEST(test_trim_unevaluated);
+
+    TEST(test_extract_positions);
+    TEST(test_extract_part_equivalence);
+    TEST(test_extract_all);
+    TEST(test_extract_separator);
+    TEST(test_extract_multilevel);
+    TEST(test_extract_missing);
+    TEST(test_extract_thread);
+    TEST(test_extract_unevaluated);
 #else
     printf("USE_REGEX not defined; skipping regex string-function tests\n");
 #endif

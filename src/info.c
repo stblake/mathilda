@@ -3870,6 +3870,22 @@ void info_init(void) {
         "\tGives the list of results for each of the si.\n\n"
         "\tWhitespace covers runs of spaces, tabs, and newlines. Each end is\n"
         "\ttrimmed to a fixed point.");
+    symtab_set_docstring("StringExtract",
+        "StringExtract[\"string\", n]\n"
+        "\tExtracts the nth whitespace-delimited block of \"string\" (-n counts\n"
+        "\tfrom the end).\n"
+        "StringExtract[\"string\", spec]\n"
+        "\tSelects blocks with spec: n, -n, {n1, n2, ...}, n1;;n2, or All.\n"
+        "StringExtract[\"string\", sep -> pos]\n"
+        "\tDelimits blocks with the string pattern sep. sep -> All equals\n"
+        "\tStringSplit[\"string\", sep].\n"
+        "StringExtract[\"string\", pos1, pos2, ...]\n"
+        "\tExtracts across levels: whitespace at the lowest level, then \"\\n\",\n"
+        "\tthen \"\\n\\n\", and so on for higher levels.\n"
+        "StringExtract[\"string\", sep1 -> pos1, sep2 -> pos2, ...]\n"
+        "\tUses sepi as the separator for successive levels.\n\n"
+        "\tAbsent blocks yield Missing[\"PartAbsent\", pos]. A list of strings\n"
+        "\tthreads.");
     /* StringSplit's docstring lives in regex_init() (regex_init.c), next to the
      * string-pattern class heads it shares. */
 }

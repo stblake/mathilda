@@ -501,6 +501,42 @@ In[4]:= StringTrim["007bond007", DigitCharacter ..]
 Out[4]= "bond"
 ```
 
+## StringExtract
+
+Splits a string into blocks and selects blocks by position. Built on top of
+`StringSplit`, so the split behaviour (whitespace-run collapsing, empty-end
+trimming, the full string-pattern vocabulary) is identical.
+
+- `StringExtract["string", spec]`: splits at runs of whitespace and selects with
+  `spec`, one of `n` (nth block), `-n` (nth from the end), `{n1, n2, ...}` (a
+  collection), `n1;;n2` (a span), or `All` (every block).
+- `StringExtract["string", sep -> pos]`: delimits blocks with the string pattern
+  `sep`. `sep -> All` is exactly `StringSplit["string", sep]`.
+- `StringExtract["string", pos1, pos2, ...]`: extracts across levels, delimiting
+  with whitespace at the lowest level, a single `"\n"` at the next, `"\n\n"` at
+  the next, and so on for higher levels.
+- `StringExtract["string", sep1 -> pos1, sep2 -> pos2, ...]`: uses `sepi` as the
+  separator for successive levels, giving a nested list of blocks.
+- Out-of-range blocks yield `Missing["PartAbsent", pos]`. `{pos...}` is
+  equivalent to `Part[StringSplit["string"], {pos...}]` for in-range positions.
+- A list of strings threads. A non-string, non-list subject leaves the call
+  unevaluated; fewer than 2 arguments emits `StringExtract::argm`.
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringExtract["a bbb  cccc aa   d", 2]
+Out[1]= "bbb"
+
+In[2]:= StringExtract["a bbb  cccc aa   d", 2 ;; 4]
+Out[2]= {"bbb", "cccc", "aa"}
+
+In[3]:= StringExtract["a--bbb--ccc--dddd", "--" -> 3]
+Out[3]= "ccc"
+
+In[4]:= StringExtract["a 1\nb 2\nc 3 x", All, 3]
+Out[4]= {Missing["PartAbsent", 3], Missing["PartAbsent", 3], "x"}
+```
+
 ## String patterns
 
 Beyond `RegularExpression["re"]` and literal strings, `StringMatchQ`,

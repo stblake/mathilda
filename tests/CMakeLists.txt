@@ -447,6 +447,7 @@ set(COMMON_SRC
     ../src/strings/stringreplacepart.c
     ../src/strings/stringsplit.c
     ../src/strings/stringtrim.c
+    ../src/strings/stringextract.c
     ../src/strings/strings_init.c
     ../src/strings/regex/regex_engine.c
     ../src/strings/regex/regex_common.c
