@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "macOS": {
+      "entitlements": "Entitlements.plist",
+      "frameworks": [
+        "binaries/libs/libgmp.10.dylib",
+        "binaries/libs/libmpfr.6.dylib",
+        "binaries/libs/libpcre2-8.0.dylib",
+        "binaries/libs/libraylib.550.dylib"
+      ],
+      "files": {
+        "embedded.provisionprofile": "embedded.provisionprofile"
+      }
+    }
+  }
+}
