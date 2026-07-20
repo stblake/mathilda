@@ -55,10 +55,12 @@ Work through them in order if you're new — each one builds on the last.
 
 -   :material-transfer: __[Integration methods](integration-methods/index.md)__
 
-    Advanced, per-method deep dives into `Integrate`'s cascade — the **Mellin
-    transform** engine for half-line integrals \(\int_0^\infty x^{s-1} f\,dx\)
-    and the **residue theorem** engine for improper, periodic, and contour
-    integrals. Algorithm, references, and worked examples.
+    Advanced, per-method deep dives into `Integrate`'s cascade — the
+    **transcendental Risch** decision procedure and **Cherry's special-function**
+    extensions (`erf`, `Ei`, `li`, dilogarithm), the **Mellin transform** engine
+    for half-line integrals \(\int_0^\infty x^{s-1} f\,dx\), and the **residue
+    theorem** engine for improper, periodic, and contour integrals. Algorithm,
+    references, and worked examples.
 
 -   :material-calculator-variant: __[9. Numerical calculus](09-numerical-calculus.md)__
 

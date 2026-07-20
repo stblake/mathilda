@@ -1,6 +1,8 @@
 title: Integration methods
 nav:
   - index.md
+  - risch-transcendental.md
+  - cherry-special-functions.md
   - mellin.md
   - residue.md
   - lineintegral.md

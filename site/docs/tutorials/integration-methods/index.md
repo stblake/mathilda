@@ -22,6 +22,21 @@ dispatch would reach for a slower or less appropriate one.
 
 <div class="grid cards" markdown>
 
+-   :material-sigma: __[The transcendental Risch algorithm](risch-transcendental.md)__
+
+    The complete *decision procedure* for transcendental elementary integration
+    (Bronstein Ch. 5–6): differential towers, Liouville's theorem, and the Risch
+    differential equation. Returns an elementary antiderivative or **proves none
+    exists** with `Risch`ElementaryIntegralQ` — the mechanised impossibility
+    theorem behind \(e^{x^2}\), \(e^x/x\), and \(\sin x/x\).
+
+-   :material-function: __[Cherry's special-function extensions](cherry-special-functions.md)__
+
+    When Risch proves an integral is *not* elementary, Cherry's theory supplies
+    the closed form anyway — in the error function, exponential and logarithmic
+    integrals, the sine/cosine and Fresnel integrals, and the dilogarithm.
+    `li`, `Ei`, `erf`, `Si`, `Ci`, `PolyLog[2, ·]`.
+
 -   :material-transfer: __[Mellin transforms](mellin.md)__
 
     Half-line integrals \(\int_0^\infty x^{s-1} f(x)\,dx\) in closed form via a
@@ -51,9 +66,10 @@ dispatch would reach for a slower or less appropriate one.
 !!! note "More methods coming"
     This section is being filled in one method at a time. The complete list of
     method names accepted by `Integrate[..., Method -> "..."]` is
-    `"DerivativeDivides"`, `"RischNorman"`, `"BronsteinRational"`,
-    `"Weierstrass"`, `"NewtonLeibniz"`, `"DiffUnderInt"`, `"LineIntegral"`,
-    `"Residue"`, and `"Mellin"` (a synonym for `"RamanujanMasterTheorem"`).
+    `"DerivativeDivides"`, `"RischNorman"`, `"RischTranscendental"`,
+    `"BronsteinRational"`, `"Weierstrass"`, `"NewtonLeibniz"`, `"DiffUnderInt"`,
+    `"LineIntegral"`, `"Residue"`, and `"Mellin"` (a synonym for
+    `"RamanujanMasterTheorem"`).
 
 ## Following along
 
