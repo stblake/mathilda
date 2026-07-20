@@ -84,6 +84,58 @@ static uint64_t g_eval_clock = 1;
 uint64_t eval_clock_get(void) { return g_eval_clock; }
 void     eval_clock_bump(void) { g_eval_clock++; }
 
+/* ---- Trace collector (beads-planning-b3k, Phase 2) -----------------------
+ * Trace[expr] records the sequence of top-level intermediate expressions the
+ * fixed-point loop below produces while reducing expr. A single collector is
+ * installed at a time via g_trace_active; nested Trace saves/installs/restores
+ * it through the natural C call stack (see eval_collect_trace). While a
+ * collector is installed, evaluate()'s loop appends each real top-level
+ * rewrite, gated to the exact recursion depth of the traced expression's own
+ * loop so that argument sub-evaluations (which run at greater depth) are
+ * excluded -- the flat, top-level-only v1 semantics.
+ *
+ * Ownership: every expression handed to the collector is inc-ref'd
+ * (expr_copy) before storage, so the steps survive the evaluator freeing the
+ * transient `current`/`next` trees; eval_collect_trace hands the array to
+ * expr_new_function (which takes ownership of the elements) and frees the
+ * array shell. Cost when not tracing: one predicted-false global-pointer read
+ * per loop iteration, matching the existing eval_overflow check. */
+typedef struct TraceCollector {
+    Expr**  steps;         /* each element inc-ref'd (owned by the collector) */
+    size_t  count, cap;
+    int     record_depth;  /* record only when eval_recursion_depth == this */
+    bool    seeded;        /* whether the initial e0 has been recorded yet */
+} TraceCollector;
+
+static TraceCollector* g_trace_active = NULL;  /* NULL when not tracing */
+
+/* Push an inc-ref'd copy of `e` onto the active collector, growing on demand. */
+static void trace_push(TraceCollector* tc, Expr* e) {
+    if (tc->count == tc->cap) {
+        size_t newcap = tc->cap ? tc->cap * 2 : 8;
+        Expr** grown = realloc(tc->steps, newcap * sizeof(Expr*));
+        if (!grown) return;   /* OOM: drop this step rather than crash */
+        tc->steps = grown;
+        tc->cap = newcap;
+    }
+    tc->steps[tc->count++] = expr_copy(e);
+}
+
+/* Record one real top-level rewrite. `before` is the pre-step expression and
+ * `after` is the result of the step; both are borrowed. Called only from the
+ * evaluate() change branch. Depth-gated: a no-op unless the currently running
+ * loop is the traced expression's own. On the first recorded step the pre-step
+ * e0 is seeded first, so an evaluation that never takes a step yields {}. */
+static void trace_record_step(Expr* before, Expr* after) {
+    TraceCollector* tc = g_trace_active;
+    if (!tc || eval_recursion_depth != tc->record_depth) return;
+    if (!tc->seeded) {
+        trace_push(tc, before);
+        tc->seeded = true;
+    }
+    trace_push(tc, after);
+}
+
 /*
  * eval_classify_return:
  * See the contract in eval.h. Pointer-equality on interned symbols is
@@ -1444,6 +1496,12 @@ Expr* evaluate(Expr* e) {
             return current;
         }
 
+        /* Trace: this is a real top-level rewrite (current -> next). Record it
+         * before we drop `current`. Depth-gated inside trace_record_step so
+         * only the traced expression's own loop contributes; the g_trace_active
+         * guard keeps the untraced hot path to a single predicted-false read. */
+        if (g_trace_active) trace_record_step(current, next);
+
         /* Prepare for the next iteration */
         expr_free(current);
         current = next;
@@ -1464,4 +1522,42 @@ Expr* evaluate(Expr* e) {
     else if (is_top_level && eval_is_inflight_goto(current))
         current = eval_report_uncaught_goto(current);
     return current;
+}
+
+/* See eval.h. Evaluate `held_expr` to a fixed point while recording each
+ * top-level rewrite, returning a fresh flat List of the intermediates (Trace
+ * v1 semantics). `held_expr` is BORROWED -- evaluate() copies it and the
+ * caller retains ownership. Reentrant: the previously-active collector is
+ * saved on the C stack and restored on return, so a nested Trace produces its
+ * own list without perturbing the outer one (the inner trace appears to the
+ * outer as a single already-reduced value). */
+Expr* eval_collect_trace(Expr* held_expr) {
+    if (!held_expr) return NULL;
+
+    TraceCollector* prev = g_trace_active;
+    TraceCollector tc;
+    tc.steps        = NULL;
+    tc.count        = 0;
+    tc.cap          = 0;
+    /* The traced expression's own loop runs one level below the current depth
+     * (evaluate() increments eval_recursion_depth on entry). Recording only at
+     * that depth excludes argument sub-evaluations -> flat, top-level steps. */
+    tc.record_depth = eval_recursion_depth + 1;
+    tc.seeded       = false;
+    g_trace_active  = &tc;
+
+    /* Phase-1 mitigation A: bump the eval clock so the timestamp early-exit
+     * (see top of evaluate()) cannot short-circuit an already-stamped root --
+     * a full re-evaluation is required to observe its steps. Trace is thereby
+     * documented as non-memoized (it invalidates the eval cache once per call).*/
+    eval_clock_bump();
+
+    Expr* final = evaluate(held_expr);   /* borrowed in; fresh copy out */
+    expr_free(final);                    /* == the last recorded step; discard */
+
+    g_trace_active = prev;               /* restore the outer collector, if any */
+
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), tc.steps, tc.count);
+    free(tc.steps);                      /* elements now owned by `list` */
+    return list;
 }
