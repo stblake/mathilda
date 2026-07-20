@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Mac App Store (MAS) entitlements for Mathilda Notebook.
+
+  These entitlements are applied at SIGNING time by the MAS build
+  (tauri.appstore.conf.json -> bundle.macOS.entitlements). They have no effect
+  on plain .dmg builds.
+
+  Placeholders ($IDENTIFIER, $TEAM_ID) MUST be replaced before signing — either
+  by editing this file or, preferably, by passing a rendered copy. See
+  docs/appstore.md.
+
+  Entitlement rationale:
+
+  * com.apple.security.app-sandbox (MANDATORY for MAS)
+      Every App Store app must run inside the App Sandbox. This is the entire
+      reason the sidecar had to be made self-contained: sandboxed apps cannot
+      load dylibs from /opt/homebrew.
+
+  * com.apple.application-identifier = $IDENTIFIER
+      Must EXACTLY equal tauri.conf.json > identifier (currently
+      "com.mathilda.notebook"). Apple matches this against the App ID and the
+      provisioning profile. Format is usually "<TEAMID>.<bundle-id>" in some
+      contexts, but for the application-identifier entitlement Apple expects the
+      bundle identifier here; keep it identical to the app's bundle id.
+
+  * com.apple.developer.team-identifier = $TEAM_ID
+      Your 10-character Apple Developer Team ID. Must match the certificate and
+      provisioning profile.
+
+  * com.apple.security.files.user-selected.read-write
+      REQUIRED. The notebook opens and saves .lb notebook/library files via the
+      Tauri dialog plugin (open/save panels in frontend/src/App.svelte). Under
+      the sandbox, an app may only touch files the user explicitly picks in an
+      NSOpenPanel/NSSavePanel; this entitlement grants read-write access to
+      those user-selected files. Without it, open/save would silently fail.
+
+  NOTE (deliberately omitted):
+    * com.apple.security.network.client / .server — NOT included. The engine
+      runs as a local sidecar communicating over stdio pipes; there is no
+      network use anywhere in the app or engine. Add network.client only if a
+      real network feature is introduced.
+-->
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+
+    <key>com.apple.application-identifier</key>
+    <string>$IDENTIFIER</string>
+
+    <key>com.apple.developer.team-identifier</key>
+    <string>$TEAM_ID</string>
+
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+</dict>
+</plist>
