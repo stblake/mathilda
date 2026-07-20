@@ -469,6 +469,38 @@ In[4]:= StringSplit["This is a sentence, which goes on.", Except[WordCharacter] 
 Out[4]= {"This", "is", "a", "sentence", "which", "goes", "on"}
 ```
 
+## StringTrim
+
+Trims substrings matching a pattern from the beginning and end of a string.
+
+- `StringTrim["string"]`: trims runs of whitespace (spaces, tabs, newlines)
+  from both ends.
+- `StringTrim["string", patt]`: trims substrings matching the string pattern
+  `patt` from the start and the end. Each end is trimmed to a fixed point, so a
+  single-character `patt` still removes an entire run.
+- `StringTrim[{s1, s2, ...}, ...]`: gives the list of results for each `si`;
+  non-string list elements pass through unchanged.
+- `patt` accepts the full shared string-pattern vocabulary (see below),
+  `RegularExpression["re"]`, and literal strings. A pattern that anchors itself
+  to the start (e.g. `RegularExpression["^ *"]`) therefore only trims the front.
+- A non-string subject leaves the call unevaluated; an argument count other than
+  1 or 2 emits `StringTrim::argt`.
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringTrim["   aaa bbb ccc   "]
+Out[1]= "aaa bbb ccc"
+
+In[2]:= StringTrim["++++aaa bbb ccc----", ("+" | "-") ...]
+Out[2]= "aaa bbb ccc"
+
+In[3]:= StringTrim["   aaa bbb ccc   ", RegularExpression["^ *"]]
+Out[3]= "aaa bbb ccc   "
+
+In[4]:= StringTrim["007bond007", DigitCharacter ..]
+Out[4]= "bond"
+```
+
 ## String patterns
 
 Beyond `RegularExpression["re"]` and literal strings, `StringMatchQ`,

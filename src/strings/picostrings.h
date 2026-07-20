@@ -27,6 +27,7 @@ Expr* builtin_stringmatchq(Expr* res);
 Expr* builtin_stringcases(Expr* res);
 Expr* builtin_stringreplace(Expr* res);
 Expr* builtin_stringsplit(Expr* res);
+Expr* builtin_stringtrim(Expr* res);
 
 void strings_init(void);
 void regex_init(void);

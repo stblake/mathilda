@@ -52,6 +52,9 @@ void regex_init(void) {
         "\tat the start or end are dropped unless All is given as the third\n"
         "\targument. \"\" splits at every character. Option: IgnoreCase -> True.");
 
+    symtab_add_builtin("StringTrim", builtin_stringtrim);
+    symtab_get_def("StringTrim")->attributes |= ATTR_PROTECTED;
+
     /* Inert protected heads understood by the string-pattern translator
      * (string_pattern.c). StringExpression (the ~~ operator's head) is Flat so
      * a ~~ b ~~ c collapses to StringExpression[a, b, c]. */

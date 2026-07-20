@@ -250,6 +250,51 @@ static void test_cases_wl_pattern(void) {
                    "\"a#b#c#\"", 0);
 }
 
+/* StringTrim - trims matching substrings from both ends of a string. */
+static void test_trim_whitespace_default(void) {
+    /* Default pattern trims leading/trailing whitespace runs. */
+    assert_eval_eq("StringTrim[\"   aaa bbb ccc   \"]",
+                   "\"aaa bbb ccc\"", 0);
+    /* No trimmable ends: string is returned unchanged. */
+    assert_eval_eq("StringTrim[\"hello\"]", "\"hello\"", 0);
+    /* Tabs and real newlines count as whitespace (embedded as literal bytes). */
+    assert_eval_eq("StringTrim[\"\t\n  hi there  \n\t\"]", "\"hi there\"", 0);
+    /* An all-whitespace string trims to empty; empty input stays empty. */
+    assert_eval_eq("StringTrim[\"   \"]", "\"\"", 0);
+    assert_eval_eq("StringTrim[\"\"]", "\"\"", 0);
+}
+
+static void test_trim_pattern(void) {
+    /* Multi-character alternative repeated at both ends: ("+" | "-") ... */
+    assert_eval_eq("StringTrim[\"++++aaa bbb ccc----\", (\"+\" | \"-\") ...]",
+                   "\"aaa bbb ccc\"", 0);
+    /* A literal single-character pattern is stripped to a fixed point. */
+    assert_eval_eq("StringTrim[\"xxabcxx\", \"x\"]", "\"abc\"", 0);
+    /* Character-class Repeated strips digit runs from both ends. */
+    assert_eval_eq("StringTrim[\"007bond007\", DigitCharacter ..]", "\"bond\"", 0);
+    /* Interior matches are left untouched; only the ends are trimmed. */
+    assert_eval_eq("StringTrim[\"xxaxbxx\", \"x\"]", "\"axb\"", 0);
+}
+
+static void test_trim_regex_front_only(void) {
+    /* RegularExpression["^ *"] anchors to the start, so only the front trims. */
+    assert_eval_eq("StringTrim[\"   aaa bbb ccc   \", RegularExpression[\"^ *\"]]",
+                   "\"aaa bbb ccc   \"", 0);
+}
+
+static void test_trim_thread(void) {
+    /* Threads over a list of strings; non-string elements pass through. */
+    assert_eval_eq("StringTrim[{\"  a  \", \"  b  \"}]", "{\"a\", \"b\"}", 0);
+    assert_eval_eq("StringTrim[{\"  a  \", 5, x}]", "{\"a\", 5, x}", 0);
+}
+
+static void test_trim_unevaluated(void) {
+    /* A non-string subject leaves the call unevaluated. */
+    assert_eval_eq("StringTrim[x]", "StringTrim[x]", 0);
+    /* Zero arguments: unevaluated (a StringTrim::argt message is written). */
+    assert_eval_eq("StringTrim[]", "StringTrim[]", 0);
+}
+
 #endif /* USE_REGEX */
 
 int main(void) {
@@ -289,6 +334,12 @@ int main(void) {
     TEST(test_split_thread_and_regex);
     TEST(test_split_unevaluated);
     TEST(test_cases_wl_pattern);
+
+    TEST(test_trim_whitespace_default);
+    TEST(test_trim_pattern);
+    TEST(test_trim_regex_front_only);
+    TEST(test_trim_thread);
+    TEST(test_trim_unevaluated);
 #else
     printf("USE_REGEX not defined; skipping regex string-function tests\n");
 #endif

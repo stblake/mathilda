@@ -3859,6 +3859,17 @@ void info_init(void) {
         "\tmatch wins, ties broken by rule order.\n"
         "StringReplace[{s1, s2, ...}, rules]\n"
         "\tGives the list of results for each of the si.");
+
+    symtab_set_docstring("StringTrim",
+        "StringTrim[\"string\"]\n"
+        "\tTrims whitespace from the beginning and end of \"string\".\n"
+        "StringTrim[\"string\", patt]\n"
+        "\tTrims substrings matching the string pattern patt from the beginning\n"
+        "\tand end.\n"
+        "StringTrim[{s1, s2, ...}, ...]\n"
+        "\tGives the list of results for each of the si.\n\n"
+        "\tWhitespace covers runs of spaces, tabs, and newlines. Each end is\n"
+        "\ttrimmed to a fixed point.");
     /* StringSplit's docstring lives in regex_init() (regex_init.c), next to the
      * string-pattern class heads it shares. */
 }

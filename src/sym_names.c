@@ -619,6 +619,7 @@ const char* SYM_StringPart = NULL;
 const char* SYM_StringReplacePart = NULL;
 const char* SYM_StringReverse = NULL;
 const char* SYM_StringTake = NULL;
+const char* SYM_StringTrim = NULL;
 const char* SYM_StringExpression = NULL;
 const char* SYM_Whitespace = NULL;
 const char* SYM_WhitespaceCharacter = NULL;
@@ -1408,6 +1409,7 @@ void sym_names_init(void) {
     SYM_StringReplacePart          = intern_symbol("StringReplacePart");
     SYM_StringReverse              = intern_symbol("StringReverse");
     SYM_StringTake                 = intern_symbol("StringTake");
+    SYM_StringTrim                 = intern_symbol("StringTrim");
     SYM_StringExpression           = intern_symbol("StringExpression");
     SYM_Whitespace                 = intern_symbol("Whitespace");
     SYM_WhitespaceCharacter        = intern_symbol("WhitespaceCharacter");
