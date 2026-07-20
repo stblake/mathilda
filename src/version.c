@@ -30,8 +30,20 @@
 #define MVER_STR(x)  MVER_STR2(x)
 
 /* --- C compiler (leads the list, no separator) ------------------------- */
-#ifdef __VERSION__
-#  define VER_COMPILER __VERSION__      /* already a string literal */
+/* __VERSION__ alone is inconsistent across compilers: clang and Apple clang
+ * expand it to a string that already begins with the vendor name ("clang ...",
+ * "Apple LLVM ..."), but real GCC expands it to a bare version number like
+ * "16.1.0" with no "GCC" prefix. Identify the compiler explicitly so the
+ * $Version string always names it. Order matters: clang also defines __GNUC__,
+ * so test __clang__ first. */
+#if defined(__clang__)
+#  define VER_COMPILER __VERSION__      /* already begins with "clang"/"Apple LLVM" */
+#elif defined(__GNUC__)
+#  define VER_COMPILER "GCC " MVER_STR(__GNUC__) "." \
+                              MVER_STR(__GNUC_MINOR__) "." \
+                              MVER_STR(__GNUC_PATCHLEVEL__)
+#elif defined(__VERSION__)
+#  define VER_COMPILER __VERSION__
 #else
 #  define VER_COMPILER "unknown compiler"
 #endif

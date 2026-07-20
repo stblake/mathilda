@@ -160,7 +160,7 @@ void process_input(const char* input, int line_number) {
 
 #ifndef NO_READLINE
 void repl_loop() {
-    printf("\nMathilda " MATHILDA_VERSION_STRING " - A small, open source, Mathematica-like computer algebra system.\n\n");
+    printf("\nMathilda " MATHILDA_VERSION_STRING " - A small, open source computer algebra system.\n\n");
     printf("This program is free, open source software and comes with ABSOLUTELY NO WARRANTY.\n\n");
     printf("End a line with '\\' to enter a multiline expression. Press Return to evaluate.\n");
     printf("Exit by evaluating Quit[] or CONTROL-C.\n\n");
@@ -252,7 +252,7 @@ void repl_loop() {
 /* Fallback interactive loop when readline is not available (e.g. Windows).
  * Uses fgets; no history or line-editing. Pipe mode bypasses this entirely. */
 void repl_loop(void) {
-    printf("\nMathilda " MATHILDA_VERSION_STRING " - A small, open source, Mathematica-like computer algebra system.\n\n");
+    printf("\nMathilda " MATHILDA_VERSION_STRING " - A small, open source computer algebra system.\n\n");
     printf("Exit by evaluating Quit[] or pressing Ctrl+Z (Windows) / Ctrl+D (Unix).\n\n");
 
     char line[MAX_INPUT_LEN];
