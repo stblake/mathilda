@@ -12,6 +12,7 @@
 #include "picostrings.h"
 #include "symtab.h"
 #include "attr.h"
+#include "sym_names.h"
 
 /* Register a symbol as an inert protected head (no builtin, no rules). Used for
  * the string-pattern class heads that the WL-pattern translator recognises. */
@@ -60,6 +61,18 @@ void regex_init(void) {
 
     symtab_add_builtin("StringPosition", builtin_stringposition);
     symtab_get_def("StringPosition")->attributes |= ATTR_PROTECTED;
+    /* Options[StringPosition] = {IgnoreCase -> False, Overlaps -> True}. The
+     * builtin seeds its option state from these defaults (so SetOptions works)
+     * and lets explicit trailing options override. */
+    {
+        Expr* ic = expr_new_function(expr_new_symbol(SYM_Rule),
+            (Expr*[]){ expr_new_symbol(SYM_IgnoreCase), expr_new_symbol(SYM_False) }, 2);
+        Expr* ov = expr_new_function(expr_new_symbol(SYM_Rule),
+            (Expr*[]){ expr_new_symbol(SYM_Overlaps), expr_new_symbol(SYM_True) }, 2);
+        Expr* opts = expr_new_function(expr_new_symbol(SYM_List),
+            (Expr*[]){ ic, ov }, 2);
+        symtab_set_options("StringPosition", opts);
+    }
 
     /* Inert protected heads understood by the string-pattern translator
      * (string_pattern.c). StringExpression (the ~~ operator's head) is Flat so

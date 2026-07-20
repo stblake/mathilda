@@ -138,6 +138,24 @@ static void test_edges(void) {
                    "{{1, 1}, {2, 2}, {3, 3}}", 0);   /* n <= 0 imposes no cap */
 }
 
+/* Options[StringPosition] exposes defaults; SetOptions changes the behaviour. */
+static void test_options(void) {
+    assert_eval_eq("Options[StringPosition]",
+                   "{IgnoreCase -> False, Overlaps -> True}", 0);
+    /* SetOptions redefines the default used when no explicit option is given. */
+    assert_eval_eq("SetOptions[StringPosition, Overlaps -> False]",
+                   "{IgnoreCase -> False, Overlaps -> False}", 0);
+    assert_eval_eq("StringPosition[\"AAAAA\", \"AA\"]", "{{1, 2}, {3, 4}}", 0);
+    /* An explicit option still overrides the changed default. */
+    assert_eval_eq("StringPosition[\"AAAAA\", \"AA\", Overlaps -> True]",
+                   "{{1, 2}, {2, 3}, {3, 4}, {4, 5}}", 0);
+    /* Restore the default so test order does not matter. */
+    assert_eval_eq("SetOptions[StringPosition, Overlaps -> True]",
+                   "{IgnoreCase -> False, Overlaps -> True}", 0);
+    assert_eval_eq("StringPosition[\"AAAAA\", \"AA\"]",
+                   "{{1, 2}, {2, 3}, {3, 4}, {4, 5}}", 0);
+}
+
 /* Invalid arguments leave the call unevaluated (message emitted). */
 static void test_unevaluated(void) {
     assert_eval_eq("StringPosition[xyz, \"a\"]", "StringPosition[xyz, \"a\"]", 0);
@@ -168,6 +186,7 @@ int main(void) {
     TEST(test_subject_threading);
     TEST(test_stringtake_roundtrip);
     TEST(test_edges);
+    TEST(test_options);
     TEST(test_unevaluated);
 #else
     printf("USE_REGEX not defined; skipping StringPosition tests\n");

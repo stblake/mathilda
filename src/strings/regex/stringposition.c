@@ -25,6 +25,7 @@
 #include "picostrings.h"
 #include "regex_common.h"
 #include "sym_names.h"
+#include "symtab.h"
 #include "common.h"
 
 #include <string.h>
@@ -182,9 +183,23 @@ Expr* builtin_stringposition(Expr* res) {
 
     if (argc == 0) return builtin_arg_error("StringPosition", 0, 1, 3);
 
-    /* Strip trailing IgnoreCase / Overlaps options, leaving positional args. */
+    /* Seed option state from the registered defaults (so SetOptions[
+     * StringPosition, ...] takes effect), then let explicit trailing options
+     * override below. Defaults are {IgnoreCase -> False, Overlaps -> True}. */
     int caseless = 0;
     OverlapMode mode = OV_TRUE;
+    Expr* defs = symtab_get_options("StringPosition");   /* borrowed */
+    if (defs && defs->type == EXPR_FUNCTION) {
+        for (size_t i = 0; i < defs->data.function.arg_count; i++) {
+            int v;
+            if (sp_match_opt(defs->data.function.args[i], SYM_IgnoreCase, &v, 0))
+                caseless = v;
+            else if (sp_match_opt(defs->data.function.args[i], SYM_Overlaps, &v, 1))
+                mode = (OverlapMode)v;
+        }
+    }
+
+    /* Strip trailing IgnoreCase / Overlaps options, leaving positional args. */
     size_t pargc = argc;
     while (pargc >= 2) {
         int v;

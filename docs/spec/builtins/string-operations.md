@@ -553,10 +553,12 @@ subsystem, and backed by the same PCRE2 pattern engine as `StringCases`.
   `Alternatives`).
 - `StringPosition[{s1, s2, ...}, patt]`: threads, giving one result list per
   subject; non-string elements pass through unchanged.
-- **Options**: `Overlaps -> True` (default) includes overlapping substrings but
-  only the first match starting at each position; `Overlaps -> False` excludes
-  overlaps (greedy, global); `Overlaps -> All` includes every matching substring
-  at every start. `IgnoreCase -> True` folds case.
+- **Options** (`Options[StringPosition]` → `{IgnoreCase -> False, Overlaps ->
+  True}`; `SetOptions` changes the defaults): `Overlaps -> True` (default)
+  includes overlapping substrings but only the first match starting at each
+  position; `Overlaps -> False` excludes overlaps (greedy, global); `Overlaps ->
+  All` includes every matching substring at every start. `IgnoreCase -> True`
+  folds case. An explicit option in the call overrides the registered default.
 - A non-string, non-list subject leaves the call unevaluated; zero arguments
   emits `StringPosition::argb`.
 - **Attributes**: `Protected`.
