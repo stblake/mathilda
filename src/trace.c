@@ -1,4 +1,5 @@
-/* Trace[expr] — user-facing builtin (beads-planning-b3k, Phase 3).
+/* Trace[expr] / Trace[expr, form] — user-facing builtin
+ * (beads-planning-b3k Phase 3; the two-arg form is beads-planning-h4u).
  *
  * A thin wrapper over the evaluator-side collector eval_collect_trace()
  * (src/eval.c). Trace[expr] returns a flat List of the successive top-level
@@ -6,17 +7,26 @@
  *   - >=1 top-level rewrite -> {e0, e1, ..., eN}
  *   - no top-level rewrite (inert atom / normal form) -> {}
  *
+ * Trace[expr, form] additionally filters that flat list to the steps whose
+ * expression matches the pattern `form`, using the same structural matcher as
+ * MatchQ (src/match.c). Because Trace is HoldAll, `form` reaches the builtin
+ * unevaluated, so pattern literals like `_Integer` or `f[_]` work directly.
+ * This is the flat, top-level analogue of Mathematica's Trace[expr, form]:
+ * only the top-level rewrite sequence (never argument sub-evaluations) is
+ * produced, then filtered -- consistent with the v1 flat semantics of the
+ * one-arg form. A form that matches nothing yields {}.
+ *
  * All the depth/clock/ownership subtlety lives in eval_collect_trace; this file
- * only handles arity dispatch, registration, attributes, and the docstring.
- * The 2-argument form Trace[expr, form] (form filtering) is deferred to
- * beads-planning-h4u: builtin_trace returns NULL for arities != 1 so those
- * calls stay unevaluated rather than silently misbehaving.
+ * only handles arity dispatch, form filtering, HoldForm wrapping, registration,
+ * attributes, and the docstring. Arities other than 1 or 2 return NULL so the
+ * call stays unevaluated rather than silently misbehaving.
  */
 #include "expr.h"
 #include "eval.h"
 #include "symtab.h"
 #include "attr.h"
 #include "sym_names.h"
+#include "match.h"
 
 /* Trace requires HoldAll: the argument must reach the builtin unevaluated so
  * the collector can observe its rewrite sequence from the start. Without Hold,
@@ -36,19 +46,57 @@
  * yielding the Mathematica-style {1 + 1, 2}. The raw collector output is left
  * unwrapped so eval_collect_trace stays a clean data primitive for later
  * phases (TraceDepth, Trace[expr, form]). */
-Expr* builtin_trace(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1)
-        return NULL;   /* 2-arg form (h4u) and malformed calls stay unevaluated */
-
-    Expr* raw = eval_collect_trace(res->data.function.args[0]);
-    if (!raw) return NULL;
-
+/* Filter `raw` (a flat List owned by the caller) in place, keeping only the
+ * steps that structurally match `form` (borrowed). Dropped steps are freed;
+ * kept steps are compacted to the front and arg_count is shrunk. The slot array
+ * itself is untouched (still owned by `raw`), so no reallocation is needed and
+ * expr_free(raw) later reclaims it. */
+static void trace_filter_by_form(Expr* raw, Expr* form) {
+    size_t keep = 0;
     for (size_t i = 0; i < raw->data.function.arg_count; i++) {
-        Expr* step = raw->data.function.args[i];       /* ownership moves into HoldForm */
+        Expr* step = raw->data.function.args[i];
+        MatchEnv* env = env_new();
+        bool matched = match(step, form, env);
+        env_free(env);
+        if (matched) {
+            raw->data.function.args[keep++] = step;   /* compact toward front */
+        } else {
+            expr_free(step);                          /* drop */
+        }
+    }
+    raw->data.function.arg_count = keep;
+}
+
+/* Wrap every element of `raw` (a flat List, owned) in HoldForm, in place, so
+ * the returned list stays inert under the evaluator's fixed-point re-pass while
+ * still printing transparently. Ownership of each step moves into its HoldForm
+ * wrapper; the wrapper takes the slot. */
+static void trace_wrap_holdform(Expr* raw) {
+    for (size_t i = 0; i < raw->data.function.arg_count; i++) {
+        Expr* step = raw->data.function.args[i];
         Expr* wrap[1] = { step };
         raw->data.function.args[i] =
             expr_new_function(expr_new_symbol(SYM_HoldForm), wrap, 1);
     }
+}
+
+Expr* builtin_trace(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1 && argc != 2) return NULL;  /* other arities stay unevaluated */
+
+    Expr* raw = eval_collect_trace(res->data.function.args[0]);
+    if (!raw) return NULL;
+
+    /* Trace[expr, form]: drop steps that don't match the (held) pattern form.
+     * Filtering runs on the raw, pre-HoldForm steps so `form` matches the plain
+     * expression a user wrote (e.g. _Integer against 5, not against
+     * HoldForm[5]). The collector has already restored the outer trace state,
+     * so match()'s internal evaluation (for /; and ?test) is safe here. */
+    if (argc == 2)
+        trace_filter_by_form(raw, res->data.function.args[1]);
+
+    trace_wrap_holdform(raw);
     return raw;
 }
 
@@ -58,5 +106,7 @@ void trace_init(void) {
     symtab_set_docstring("Trace",
         "Trace[expr]\n\tGenerates a list of the successive top-level expressions\n"
         "\tproduced while evaluating expr. Returns {} when expr needs no\n"
-        "\trewriting. Sub-evaluations of arguments are not recorded (flat form).");
+        "\trewriting. Sub-evaluations of arguments are not recorded (flat form).\n"
+        "Trace[expr, form]\n\tIncludes only the steps whose expression matches the\n"
+        "\tpattern form (e.g. Trace[expr, _Integer]).");
 }
