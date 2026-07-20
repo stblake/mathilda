@@ -498,6 +498,10 @@ Records the successive top-level expressions produced while evaluating `expr`.
   evaluator passes through while reducing `expr` to a fixed point, in order:
   `{e0, e1, ..., eN}` where `e0` is the (held) input and `eN` is the final
   result. Returns `{}` when `expr` needs no top-level rewriting.
+- `Trace[expr, form]`: The same flat trace, filtered to the steps whose
+  expression matches the pattern `form` (structural match, as in `MatchQ`).
+  `form` is held, so pattern literals such as `_Integer` or `f[_]` may be given
+  directly. Returns `{}` when no step matches.
 
 **Features**:
 - `HoldAll`, `Protected`. The argument is held so its rewrite sequence can be
@@ -513,8 +517,13 @@ Records the successive top-level expressions produced while evaluating `expr`.
   already-evaluated argument is still traced in full.
 - Reentrant: `Trace` may appear inside a traced expression; the inner list is
   produced independently.
-- The two-argument form `Trace[expr, form]` (pattern filtering) and
-  `TraceDepth` are not yet implemented; `Trace[expr, form]` stays unevaluated.
+- **`Trace[expr, form]`** matches `form` against each recorded top-level step
+  (never against argument sub-evaluations, per the flat v1 semantics), so it is
+  the flat analogue of Mathematica's form-restricted trace rather than a full
+  nested one. A bare symbol `form` matches only that literal symbol among the
+  steps, not "every use of the symbol".
+- `TraceDepth` and arities other than 1 or 2 are not implemented; e.g.
+  `Trace[expr, form, extra]` stays unevaluated.
 
 ```mathematica
 In[1]:= Trace[1 + 1]
@@ -528,6 +537,12 @@ Out[3]= {x + 1, 4}
 
 In[4]:= Trace[{Trace[1 + 1], 2 + 2}]
 Out[4]= {{Trace[1 + 1], 2 + 2}, {{1 + 1, 2}, 4}}
+
+In[5]:= Trace[1 + 2 + 3, _Integer]
+Out[5]= {6}
+
+In[6]:= Trace[Nest[f, x, 3], _f]
+Out[6]= {f[f[f[x]]]}
 ```
 
 ## ReleaseHold
