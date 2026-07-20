@@ -296,6 +296,16 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
     if (!head || head->type != EXPR_SYMBOL) goto fallback;
     const char* hname = head->data.symbol.name;
 
+    /* ---- HoldForm[x] → x (transparent) ----
+     * HoldForm suppresses evaluation but is invisible when printed; it must
+     * render its argument at the enclosing precedence, exactly as the plain
+     * printer does (print.c). Trace[expr] wraps each step in HoldForm, so
+     * without this the notebook LaTeX would leak "HoldForm[...]". */
+    if (hname == SYM_HoldForm && argc == 1) {
+        to_latex_prec(b, args[0], ctx_prec);
+        return;
+    }
+
     /* ---- Rational[p, q] ---- */
     if (hname == SYM_Rational && argc == 2) {
         lb_cat(b, "\\frac{");
