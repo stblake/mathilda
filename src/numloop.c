@@ -38,10 +38,22 @@ typedef enum {
     OP_POW,     /* pop e,b -> push pow(b,e)  */
     OP_SIN, OP_COS, OP_TAN,
     OP_SINH, OP_COSH, OP_TANH,
-    OP_EXP, OP_LOG, OP_SQRT, OP_ABS, OP_ARCTAN
+    OP_EXP, OP_LOG, OP_SQRT, OP_ABS, OP_ARCTAN,
+    OP_LOAD     /* pop 1-based index -> push arr[a][index] (NaN if out of range) */
 } NumOp;
 
 typedef struct { uint8_t op; int32_t a; } NInsn;
+
+/* Array context for OP_LOAD (indexed reads of NDArray buffers inside a Part
+ * loop). NULL for scalar programs, which never emit OP_LOAD. OP_LOAD pops
+ * `rank` 1-based indices (i1..iR, deepest on top), validates each against
+ * `dims`, and pushes the row-major element (NaN if any index is out of range). */
+typedef struct {
+    double*        buf[4];    /* flat float64 buffers */
+    int            rank[4];   /* rank of each array */
+    const int64_t* dims[4];   /* dims of each array */
+    size_t         count;
+} ArrCtx;
 
 typedef struct {
     NInsn*  code;   size_t ncode, ccode;
@@ -110,7 +122,20 @@ typedef struct {
     const bool*  defined;     /* optional length-nvars mask: only vars marked
                                  defined resolve; an undefined read then falls to
                                  const-fold and bails. NULL = all defined. */
+    const char** arr_names;   /* array-variable names: Part[name, i1..iR] on one
+                                 of these compiles to R index pushes + an OP_LOAD
+                                 instead of const-folding. NULL = none. */
+    const int*   arr_rank;    /* rank of each array var (indices expected) */
+    size_t       narr;
 } VarCtx;
+
+/* Resolve a bare symbol to an array-variable index, or -1. */
+static int resolve_arr(const VarCtx* vc, const Expr* e) {
+    if (!vc->arr_names || e->type != EXPR_SYMBOL) return -1;
+    for (size_t i = 0; i < vc->narr; i++)
+        if (e->data.symbol.name == vc->arr_names[i]) return (int)i;
+    return -1;
+}
 
 /* Return k for a Slot[k] node (k >= 1), or -1 if `e` is not a numbered Slot. */
 static int slot_index(const Expr* e) {
@@ -141,10 +166,17 @@ static int resolve_var(const VarCtx* vc, const Expr* e) {
     return -1;
 }
 
-/* Does `e` reference any loop variable anywhere in its tree? */
+/* Does `e` reference any loop variable (scalar or indexed array read) anywhere
+ * in its tree? An array element load is loop-varying, so it counts even when its
+ * index is constant -- otherwise a constant-index read would be frozen. */
 static bool contains_var(const VarCtx* vc, const Expr* e) {
     if (resolve_var(vc, e) >= 0) return true;
     if (e->type == EXPR_FUNCTION) {
+        if (e->data.function.head->type == EXPR_SYMBOL &&
+            e->data.function.head->data.symbol.name == SYM_Part &&
+            e->data.function.arg_count >= 2 &&
+            resolve_arr(vc, e->data.function.args[0]) >= 0)
+            return true;
         if (contains_var(vc, e->data.function.head)) return true;
         for (size_t i = 0; i < e->data.function.arg_count; i++)
             if (contains_var(vc, e->data.function.args[i])) return true;
@@ -254,6 +286,24 @@ static NumOp unary_op_for(const char* head) {
 static void compile_walk(NumProg* p, const VarCtx* vc, const Expr* e) {
     if (!p->ok) return;
 
+    /* Indexed array read Part[arr, i1..iR]. Handled before the const-fold check
+     * because the array's elements change across iterations, so it must NOT be
+     * frozen to a constant. The number of indices must match the array's rank. */
+    if (e->type == EXPR_FUNCTION &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Part &&
+        e->data.function.arg_count >= 2) {
+        int ai = resolve_arr(vc, e->data.function.args[0]);
+        if (ai >= 0) {
+            size_t nidx = e->data.function.arg_count - 1;
+            if ((int)nidx != vc->arr_rank[ai]) { p->ok = false; return; }
+            for (size_t j = 0; j < nidx; j++)
+                compile_walk(p, vc, e->data.function.args[j + 1]);  /* push i_{j+1} */
+            emit(p, OP_LOAD, ai, -(int)(nidx - 1));   /* pop R, push 1 */
+            return;
+        }
+    }
+
     /* Variable reference (bare symbol or Slot[1]). */
     int vi = resolve_var(vc, e);
     if (vi >= 0) { emit(p, OP_VAR, vi, +1); return; }
@@ -286,6 +336,8 @@ static void compile_walk(NumProg* p, const VarCtx* vc, const Expr* e) {
     }
 
     if (argc == 1) {
+        /* N[x] is the identity on a value already carried as a machine double. */
+        if (head == SYM_N) { compile_walk(p, vc, e->data.function.args[0]); return; }
         NumOp uop = unary_op_for(head);
         if (uop != (NumOp)255) {
             compile_walk(p, vc, e->data.function.args[0]);
@@ -376,7 +428,8 @@ static bool compile_function(NumProg* p, const Expr* f, size_t arity,
 /* ------------------------------------------------------------------------
  *  Runtime VM
  * ---------------------------------------------------------------------- */
-static double numprog_run(const NumProg* p, const double* regs, double* stack) {
+static double numprog_run_ac(const NumProg* p, const double* regs,
+                             double* stack, const ArrCtx* ac) {
     size_t sp = 0;
     const NInsn* c = p->code;
     size_t n = p->ncode;
@@ -401,9 +454,32 @@ static double numprog_run(const NumProg* p, const double* regs, double* stack) {
             case OP_SQRT:  stack[sp-1] = sqrt(stack[sp-1]); break;
             case OP_ABS:   stack[sp-1] = fabs(stack[sp-1]); break;
             case OP_ARCTAN:stack[sp-1] = atan(stack[sp-1]); break;
+            case OP_LOAD: {
+                /* pop `rank` 1-based indices (i1..iR, iR on top), validate each
+                 * against dims, push the row-major element; any out-of-range or
+                 * non-integer index -> NaN, which the caller's isfinite check
+                 * turns into a fall-back to the interpreter. */
+                size_t av = (size_t)c[i].a;
+                int R = ac->rank[av];
+                int64_t off = 0;
+                bool oob = false;
+                for (int d = 0; d < R; d++) {
+                    double xd = stack[sp - R + d];
+                    int64_t id = (int64_t)xd;
+                    if ((double)id != xd || id < 1 || id > ac->dims[av][d]) { oob = true; break; }
+                    off = off * ac->dims[av][d] + (id - 1);
+                }
+                sp -= (size_t)R;
+                stack[sp++] = oob ? (double)NAN : ac->buf[av][off];
+                break;
+            }
         }
     }
     return stack[0];
+}
+
+static double numprog_run(const NumProg* p, const double* regs, double* stack) {
+    return numprog_run_ac(p, regs, stack, NULL);
 }
 
 /* ------------------------------------------------------------------------
@@ -831,6 +907,125 @@ static void numblock_writeback_array(NumBlock* b) {
     }
 }
 
+/* ========================================================================
+ *  Part-assignment loops:  Do[a[[idx]] = rhs, {i, ...}] / For[...]
+ *
+ *  A counter-driven loop whose body writes one element of a 1-D float64 NDArray
+ *  per iteration. The buffer is mutated *in place* (O(iterations)), avoiding the
+ *  interpreter's whole-array copy per Part-set (which is O(iterations * N)). The
+ *  rhs may read the counter, other elements a[[jexpr]] (OP_LOAD), and scalar
+ *  constants. Single Set[Part[a, idx], rhs] statement.
+ * ==================================================================== */
+typedef struct {
+    const Expr* arr_sym;        /* the array's bare symbol, for writeback */
+    double*     buf;            /* owned float64 buffer, mutated in place */
+    int64_t     nelem;
+    int         rank;
+    int64_t     dims[8];
+    NumProg     idx_prog[8];    /* one LHS index expression per axis */
+    NumProg     rhs_prog;       /* rhs, over {counter} + array reads */
+    size_t      max_stack;
+    bool        built;
+} PartLoop;
+
+static void partloop_free(PartLoop* pl) {
+    if (!pl->built) return;
+    for (int k = 0; k < pl->rank; k++) prog_free(&pl->idx_prog[k]);
+    prog_free(&pl->rhs_prog);
+    free(pl->buf);
+    pl->built = false;
+}
+
+/* Build from a single-statement body Set[Part[a, i1..iR], rhs] where a is a bare
+ * symbol bound to a rank-R float64 NDArray; counter_name is the loop variable
+ * (scalar register 0). The rhs may read a[[j1..jR]] and the counter. */
+static bool partloop_build(PartLoop* pl, const Expr* body, const char* counter_name) {
+    memset(pl, 0, sizeof(*pl));
+    if (body->type != EXPR_FUNCTION ||
+        body->data.function.head->type != EXPR_SYMBOL ||
+        body->data.function.head->data.symbol.name != SYM_Set ||
+        body->data.function.arg_count != 2)
+        return false;
+    const Expr* lhs = body->data.function.args[0];
+    const Expr* rhs = body->data.function.args[1];
+    if (lhs->type != EXPR_FUNCTION ||
+        lhs->data.function.head->type != EXPR_SYMBOL ||
+        lhs->data.function.head->data.symbol.name != SYM_Part ||
+        lhs->data.function.arg_count < 2 ||
+        lhs->data.function.args[0]->type != EXPR_SYMBOL)
+        return false;
+    const Expr* asym = lhs->data.function.args[0];
+    size_t nidx = lhs->data.function.arg_count - 1;
+
+    Expr* cur = evaluate((Expr*)asym);
+    if (!is_f64_ndarray(cur) || cur->data.ndarray.rank < 1 ||
+        cur->data.ndarray.rank > 8 || (size_t)cur->data.ndarray.rank != nidx) {
+        expr_free(cur); return false;
+    }
+    pl->arr_sym = asym;
+    pl->rank = cur->data.ndarray.rank;
+    pl->nelem = 1;
+    for (int k = 0; k < pl->rank; k++) {
+        pl->dims[k] = cur->data.ndarray.dims[k];
+        pl->nelem *= pl->dims[k];
+    }
+    pl->buf = malloc((size_t)pl->nelem * sizeof(double));
+    if (!pl->buf) { expr_free(cur); return false; }
+    memcpy(pl->buf, cur->data.ndarray.data, (size_t)pl->nelem * sizeof(double));
+    expr_free(cur);
+
+    const char* cvn = counter_name;
+    const char* avn = asym->data.symbol.name;
+    int arank = pl->rank;
+    VarCtx vc = { .var_names = &cvn, .nvars = 1, .slot_var = false, .defined = NULL,
+                  .arr_names = &avn, .arr_rank = &arank, .narr = 1 };
+
+    pl->max_stack = 0;
+    for (size_t k = 0; k < nidx; k++) {
+        if (!numprog_compile(&pl->idx_prog[k], lhs->data.function.args[k + 1], &vc)) {
+            for (size_t j = 0; j < k; j++) prog_free(&pl->idx_prog[j]);
+            free(pl->buf); return false;
+        }
+        if (pl->idx_prog[k].max_stack > pl->max_stack) pl->max_stack = pl->idx_prog[k].max_stack;
+    }
+    if (!numprog_compile(&pl->rhs_prog, rhs, &vc)) {
+        for (size_t j = 0; j < nidx; j++) prog_free(&pl->idx_prog[j]);
+        free(pl->buf); return false;
+    }
+    if (pl->rhs_prog.max_stack > pl->max_stack) pl->max_stack = pl->rhs_prog.max_stack;
+    pl->built = true;
+    return true;
+}
+
+/* Run one iteration at counter value `i`. Evaluates each LHS axis index,
+ * validates it against the array's shape, and stores the rhs at the row-major
+ * offset. Returns false (bail) on an out-of-range index or a non-finite rhs. */
+static bool partloop_step(PartLoop* pl, int64_t i, double* regs, double* stack,
+                          const ArrCtx* ac) {
+    regs[0] = (double)i;
+    int64_t off = 0;
+    for (int k = 0; k < pl->rank; k++) {
+        double xk = numprog_run_ac(&pl->idx_prog[k], regs, stack, ac);
+        int64_t ik = (int64_t)xk;
+        if ((double)ik != xk || ik < 1 || ik > pl->dims[k]) return false;
+        off = off * pl->dims[k] + (ik - 1);
+    }
+    double v = numprog_run_ac(&pl->rhs_prog, regs, stack, ac);
+    if (!isfinite(v)) return false;
+    pl->buf[off] = v;
+    return true;
+}
+
+/* Write the mutated buffer back as a float64 NDArray (ownership transfers). */
+static void partloop_writeback(PartLoop* pl) {
+    Expr* nd = expr_new_ndarray(pl->rank, pl->dims, pl->buf, NDT_FLOAT64);
+    pl->buf = NULL;   /* ownership moved into nd */
+    for (int k = 0; k < pl->rank; k++) prog_free(&pl->idx_prog[k]);
+    prog_free(&pl->rhs_prog);
+    pl->built = false;
+    writeback_symbol(pl->arr_sym, nd);
+}
+
 /* ------------------------------------------------------------------------
  *  Do[body, {n}] count form  /  Do[body, {i, imin, imax, di}] range form
  * ---------------------------------------------------------------------- */
@@ -877,6 +1072,25 @@ Expr* numloop_do_range(const Expr* body, const Expr* var,
                        int64_t imin, int64_t imax, int64_t di) {
     if (numloop_off()) return NULL;
     if (di == 0) return NULL;
+
+    /* In-place Part-assignment loop: Do[a[[idx]] = rhs, {i, imin, imax, di}]. */
+    {
+        PartLoop pl;
+        if (partloop_build(&pl, body, var->data.symbol.name)) {
+            double* stack = malloc(pl.max_stack * sizeof(double));
+            if (!stack) { partloop_free(&pl); return NULL; }
+            ArrCtx ac = { .count = 1 };
+            ac.buf[0] = pl.buf; ac.rank[0] = pl.rank; ac.dims[0] = pl.dims;
+            double regs[1];
+            bool bail = false;
+            for (int64_t i = imin; (di > 0) ? (i <= imax) : (i >= imax); i += di)
+                if (!partloop_step(&pl, i, regs, stack, &ac)) { bail = true; break; }
+            free(stack);
+            if (bail) { partloop_free(&pl); return NULL; }
+            partloop_writeback(&pl);   /* iterator stays localised; only `a` persists */
+            return expr_new_symbol(SYM_Null);
+        }
+    }
 
     NumBlock b;
     if (!numblock_build(&b, body, var, (double)imin)) return NULL;
@@ -953,6 +1167,29 @@ Expr* numloop_for(const Expr* start, const Expr* test,
         return NULL;
     double bound;
     if (!eval_to_double(test->data.function.args[1], &bound)) return NULL;
+
+    /* In-place Part-assignment loop: For[i=i0, i<n, i++, a[[idx]] = rhs]. */
+    {
+        PartLoop pl;
+        if (partloop_build(&pl, body, ivar->data.symbol.name)) {
+            double* stack = malloc(pl.max_stack * sizeof(double));
+            if (!stack) { partloop_free(&pl); return NULL; }
+            ArrCtx ac = { .count = 1 };
+            ac.buf[0] = pl.buf; ac.rank[0] = pl.rank; ac.dims[0] = pl.dims;
+            double regs[1];
+            bool pbail = false;
+            int64_t pi = i0;
+            while (cmp_eval((double)pi, bound, op)) {
+                if (!partloop_step(&pl, pi, regs, stack, &ac)) { pbail = true; break; }
+                pi++;
+            }
+            free(stack);
+            if (pbail) { partloop_free(&pl); return NULL; }
+            partloop_writeback(&pl);
+            writeback_symbol(ivar, expr_new_integer(pi));   /* For keeps its counter */
+            return expr_new_symbol(SYM_Null);
+        }
+    }
 
     NumBlock b;
     if (!numblock_build(&b, body, ivar, (double)i0)) return NULL;

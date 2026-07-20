@@ -218,6 +218,29 @@ static void test_diff_do_array_compound(void) {
                "Do[a = 3.5 a (1 - a); b = a + 1.; a = b - 1., {200}]; a]");
 }
 
+/* ---------------- Differential: in-place Part-assignment loops ---------------- */
+static void test_diff_do_part_fill(void) {
+    diff_array("Module[{v = NDArray[Table[0., {40}]]}, Do[v[[i]] = N[i]^2, {i, 1, 40}]; v]");
+}
+static void test_diff_do_part_reads(void) {
+    /* rhs reads other elements (Fibonacci) */
+    diff_array("Module[{v = NDArray[Table[0., {20}]]}, v[[1]] = 1.; v[[2]] = 1.; "
+               "Do[v[[i]] = v[[i-1]] + v[[i-2]], {i, 3, 20}]; v]");
+}
+static void test_diff_for_part(void) {
+    diff_array("Module[{v = NDArray[Table[0., {30}]]}, "
+               "For[i = 1, i <= 30, i++, v[[i]] = Sin[N[i]]]; v]");
+}
+static void test_diff_do_part_2d(void) {
+    diff_array("Module[{m = NDArray[Table[0., {5}, {5}]]}, "
+               "Do[m[[i, j]] = N[i]*10 + N[j], {i, 1, 5}, {j, 1, 5}]; m]");
+}
+static void test_diff_do_part_2d_reads(void) {
+    /* multi-index reads of other elements, mutated in place */
+    diff_array("Module[{m = NDArray[Table[1., {4}, {4}]]}, "
+               "Do[m[[i, j]] = m[[i, j]] + m[[j, i]], {i, 1, 4}, {j, 1, 4}]; m]");
+}
+
 /* ---------------- Fallback: must NOT fast-path ---------------- */
 static void test_fallback_nest_exact_int(void) {
     /* exact integer arithmetic stays exact */
@@ -300,6 +323,11 @@ int main(void) {
     TEST(test_diff_nest_array_2d);
     TEST(test_diff_do_array_logistic);
     TEST(test_diff_do_array_compound);
+    TEST(test_diff_do_part_fill);
+    TEST(test_diff_do_part_reads);
+    TEST(test_diff_for_part);
+    TEST(test_diff_do_part_2d);
+    TEST(test_diff_do_part_2d_reads);
 
     /* Fallback (exact / symbolic must be untouched) */
     TEST(test_fallback_nest_exact_int);
