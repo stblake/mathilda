@@ -342,8 +342,21 @@ bool rt_verify_antideriv(Expr* result, Expr* f, Expr* x) {
      * declines (UNKNOWN) to Simplify on multi-kernel / opaque-log forms. */
     TrigExpZeroResult tez = trigexp_rational_is_zero(diff);
     if (tez == TRIGEXP_ZERO_TRUE) { expr_free(diff); return true; }
-    /* Residual (algebraic / log) forms the fast test leaves unreduced fall back to
-     * Simplify (unchanged from the original gate). */
+    /* ComplexExpand+Together exact test, tried BEFORE the hang-prone Simplify.
+     * The Cherry Q(i sqrt d) ei conjugate pairs differentiate to E^x/(x+a) with a in
+     * Q(i sqrt d); the difference is zero but a plain Simplify over Q(i sqrt d) + the
+     * E^x kernel blows up the generic multivariate GCD (hangs).  ComplexExpand splits
+     * the I*Sqrt[d] algebra into real/imaginary parts over R, where Together decides
+     * exactly — certifying the pair without ever reaching Simplify.  Sound:
+     * ComplexExpand is an exact identity, so Together of it is 0 only for a genuine
+     * zero.  On a real-radical diff (sqrt2) it returns nonzero and we fall through to
+     * Simplify (which handles the reals), so this only ADDS certifications. */
+    Expr* ce = rt_eval1("Together",
+        rt_eval1("ComplexExpand", rt_eval1("TrigToExp", expr_copy(diff))));
+    bool zce = ce && rt_is_zero(ce);
+    if (ce) expr_free(ce);
+    if (zce) { expr_free(diff); return true; }
+    /* Residual (real algebraic / log) forms fall back to Simplify (original gate). */
     Expr* s = rt_eval1("Simplify", diff);
     bool z = s && s->type == EXPR_INTEGER && s->data.integer == 0;
     if (s) expr_free(s);

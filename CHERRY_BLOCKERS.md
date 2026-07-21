@@ -2,6 +2,11 @@
 
 **Date:** 2026-07-17
 **Companion:** `CHERRY_PLAN.md` (the executable spec), `CHERRY_DESIGN.md` (architecture).
+**Successor layer:** [`KNOWLES_DESIGN.md`](KNOWLES_DESIGN.md) (2026-07-21) — Knowles' extension of
+Cherry from transcendental-*elementary* to transcendental-*Liouvillian* integrands (integrand may
+itself contain `li`/`erf`/`Ei`), in terms of `erf` (1992/93) and `li` (1986 §2). It reuses this
+subsystem wholesale; its B2 deep-tower peel and the `RT_PRIM` Liouvillian-primitive tower generator
+are the shared substrate.
 **Purpose:** an honest, verified ledger of everything remaining before Cherry's algorithm
 (1986 li + 1989 ei/erf) is *complete* — i.e. has the **decision property**, fires **inside the
 tower recursion**, and handles **algebraically-closed constants** in full. Each entry names the

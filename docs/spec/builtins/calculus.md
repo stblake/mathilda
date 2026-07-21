@@ -836,6 +836,25 @@ monotonically down.
         integrated term-by-term (Cherry Thm 5.4 case b) —
         `Integrate[(E^x+E^(2x))/(x-1),x] = E ExpIntegralEi[x-1] +
         E^2 ExpIntegralEi[2x-2]`, `E^x(E^x+1)/((x-1)(x-2))`;
+      - **error-function integration of transcendental Liouvillian integrands**
+        (Knowles 1992/93, the layer above Cherry): an integrand that may itself
+        contain `Erf`/`Erfi` is closed in terms of elementary functions plus
+        `Erf`/`Erfi` over the `RT_PRIM` Liouvillian-primitive tower. For each
+        exponential monomial `e^w` the perfect-square gate (`-w = u^2 -> erf(u)`,
+        `+w = u^2 -> erfi(u)`) generates the error-function arguments, and
+        `v + Sum_i k_i erf(u_i)` is solved as one linear system over the constants
+        (diff-back verified): `Integrate[E^(-x^2-Erf[x]^2),x] = (Pi/4) Erf[Erf[x]]`,
+        `Integrate[Erf[x] E^(-x^2-Erf[x]^2),x] = -(Sqrt[Pi]/4) E^(-Erf[x]^2)`,
+        `Integrate[2 E^(-x^2) Erf[x] - 3 E^(-1/x^2)/x^2,x] = (Sqrt[Pi]/2) Erf[x]^2 +
+        (3 Sqrt[Pi]/2) Erf[1/x]`; `Integrate[x E^(-x^2-Erf[x]^2),x]` correctly
+        declines (no erf-elementary antiderivative). The **radical (quasiquadratic)**
+        case is also handled (Knowles Part I §6, Ex 8.1): when a top exponential
+        hides an algebraic factor `E^(l/2 Log[g]) = g^(l/2)`, it is pulled out first,
+        surfacing a half-integer power of a log tower variable; the erf argument is
+        then a radical `1/Sqrt[Log g]`, solved in `s = Sqrt[Log g]` — e.g.
+        `Integrate[E^(1/2 Log[Log[x]] - 1/Log[x])/(x Log[x]^2),x] =
+        -Sqrt[Pi] Erf[1/Sqrt[Log[x]]]` (and its `Erfi` dual). `x`-rational
+        elementary-part coefficients remain a later increment;
       - `c w^(p-1) w'/Log[w]` → `c LogIntegral[w^p]` (single-li fast path) —
         subsumes `K/Log[x] → K LogIntegral[x]`, a scaled/affine argument
         (`1/Log[2x] → LogIntegral[2x]/2`) and a monomial numerator (`x/Log[x] →

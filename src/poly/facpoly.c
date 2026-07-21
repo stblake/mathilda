@@ -101,6 +101,15 @@ Expr* builtin_polynomialsqrt(Expr* res) {
         || res->data.function.arg_count > 2)
         return NULL;
     Expr* p = res->data.function.args[0];
+    /* In the 2-arg form PolynomialSqrt[p, x], any factor free of the named
+     * variable x is CONSTANT content — carry it through Sqrt just like the
+     * numeric content, so a symbolic/algebraic leading coefficient
+     * (Sqrt[-c] for -c x^2, Cherry's Erf argument over an algebraically
+     * closed constant field) is handled rather than rejected as a "bare
+     * irreducible".  The 1-arg form has no variable, so its numeric-only
+     * content behaviour is unchanged. */
+    Expr* psx = (res->data.function.arg_count == 2)
+        ? res->data.function.args[1] : NULL;
 
     /* 0 -> 0. */
     Expr* pe = expr_expand(p);
@@ -123,7 +132,9 @@ Expr* builtin_polynomialsqrt(Expr* res) {
     bool ok = true;
     for (size_t i = 0; i < nit && ok; i++) {
         Expr* t = items[i];
-        if (ps_is_numeric(t)) {
+        bool t_content = ps_is_numeric(t)
+            || (psx && !contains_any_symbol_from(t, psx));  /* x-free => content */
+        if (t_content) {
             konst = eval_and_free(expr_new_function(expr_new_symbol("Times"),
                 (Expr*[]){ konst, expr_copy(t) }, 2));
         } else if (t->type == EXPR_FUNCTION
@@ -133,7 +144,8 @@ Expr* builtin_polynomialsqrt(Expr* res) {
                    && t->data.function.args[1]->type == EXPR_INTEGER) {
             int64_t e = t->data.function.args[1]->data.integer;
             Expr* base = t->data.function.args[0];
-            if (ps_is_numeric(base)) {
+            if (ps_is_numeric(base)
+                || (psx && !contains_any_symbol_from(base, psx))) {
                 konst = eval_and_free(expr_new_function(expr_new_symbol("Times"),
                     (Expr*[]){ konst, expr_copy(t) }, 2));
             } else if (e % 2 == 0) {

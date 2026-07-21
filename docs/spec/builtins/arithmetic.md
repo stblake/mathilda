@@ -102,6 +102,10 @@ Symbolic sum.
 **Features**:
 - `Flat`, `Orderless`, `Listable`.
 - Combines numeric constants and collects like terms (e.g., `x + 2x` becomes `3x`).
+- Like-term collection is hash-based (O(N) expected) and canonically sorts only
+  the collapsed result, so a large flat sum (e.g. `Total` of 10^5 monomials) does
+  not pay the generic `Orderless` sort over all N raw terms. `Times` collects
+  factors the same way.
 - Returns `0` if no arguments are provided.
 - Returns `Overflow[]` if integer addition overflows or if any argument is `Overflow[]`.
 
@@ -120,7 +124,10 @@ Gives the total of elements in a list.
 
 **Features**:
 - `Protected`.
-- `Total[list]` is equivalent to `Apply[Plus, list]`.
+- `Total[list]` is equivalent to `Apply[Plus, list]`. The list elements are
+  already evaluated, so the level-1 sum collects like terms directly (skipping a
+  redundant re-evaluation and sort of every term); summing a large symbolic list
+  is fast even when the result collapses to a few distinct terms.
 - `Total[list, n]` totals all elements down to level `n`.
 - `Total[list, {n}]` totals elements at level `n` only.
 - Supports negative levels to count from the bottom (`-1` is the last dimension).

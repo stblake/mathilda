@@ -19,6 +19,14 @@ static bool is_overflow(Expr* e) {
            e->data.function.head->data.symbol.name == SYM_Overflow;
 }
 
+/* qsort comparator over Expr* (array of Expr pointers), delegating to the
+ * canonical expr_compare. Used to canonically order builtin_times's collapsed
+ * output, so the evaluator can skip the generic ORDERLESS sort of the raw
+ * (possibly huge) input — see the ORDERLESS block in eval.c. */
+static int times_cmp_ptrs(const void* pa, const void* pb) {
+    return expr_compare(*(Expr* const*)pa, *(Expr* const*)pb);
+}
+
 /* True for positive numeric expressions: positive int/bigint, positive real,
  * or Rational[n, d] with positive numerator (denominators are conventionally
  * positive in Mathilda). Used to guard the radical-fusion rewrite
@@ -1148,6 +1156,11 @@ Expr* builtin_times(Expr* res) {
         if (heap_bufs) free(final_args);
         return res_final;
     }
+    /* Canonically order the collapsed factors here (group count is small) so
+     * the evaluator can skip the generic ORDERLESS sort of the raw input; see
+     * the ORDERLESS block in eval.c. The leading numeric coefficient still
+     * sorts first (numbers precede symbols/powers in expr_compare). */
+    if (idx >= 2) qsort(final_args, idx, sizeof(Expr*), times_cmp_ptrs);
     Expr* result = expr_new_function(expr_new_symbol(SYM_Times), final_args, idx);
     if (heap_bufs) free(final_args);
     return result;

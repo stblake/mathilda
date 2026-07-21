@@ -285,6 +285,14 @@ static Expr* add_numbers(Expr* a, Expr* b) {
     return NULL;
 }
 
+/* qsort comparator over Expr* (array of Expr pointers), delegating to the
+ * canonical expr_compare. Used to canonically order builtin_plus's collapsed
+ * output, so the evaluator can skip the generic ORDERLESS sort of the raw
+ * (possibly huge) input — see the ORDERLESS block in eval.c. */
+static int plus_cmp_ptrs(const void* pa, const void* pb) {
+    return expr_compare(*(Expr* const*)pa, *(Expr* const*)pb);
+}
+
 Expr* make_plus(Expr* a, Expr* b) {
     Expr* args[2] = { a, b };
     return expr_new_function(expr_new_symbol(SYM_Plus), args, 2);
@@ -660,6 +668,10 @@ Expr* builtin_plus(Expr* res) {
     } else if (idx == 1) {
         final_res = final_args[0];
     } else {
+        /* Canonically order the collapsed terms here (group count is small)
+         * so the evaluator need not sort the raw input. The leading numeric
+         * term still sorts first (numbers precede symbols/powers). */
+        qsort(final_args, idx, sizeof(Expr*), plus_cmp_ptrs);
         final_res = expr_new_function(expr_new_symbol(SYM_Plus), final_args, idx);
     }
     if (heap_bufs) free(final_args);

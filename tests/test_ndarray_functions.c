@@ -127,6 +127,10 @@ static void test_special_cloop(void) {
     chk_matches("LogGamma", d);
     chk_matches("Erf", d);
     chk_matches("Erfc", d);
+    chk_matches("Factorial", d);
+    /* Factorial degrades at a negative-integer pole (non-finite). */
+    chk_eq("Head[Factorial[NDArray[{1., 2.}]]]", "NDArray");
+    chk_eq("Head[Factorial[NDArray[{-1., 2.}]]]", "List");
     chk_matches2("BesselJ", "2", "{1., 2., 3.}");
     chk_matches2("BesselY", "1", "{1., 2., 3.}");
     chk_matches2("Beta", "2.", "{1., 2., 3.}");
@@ -153,6 +157,55 @@ static void test_special_degrade(void) {
     chk_matches2("LegendreP", "2", d);
 }
 
+static void test_rounding(void) {
+    /* Floor/Ceiling/Round/IntegerPart/FractionalPart over a real array match the
+     * List path, incl. banker's rounding at the .5 boundary and floored sign. */
+    const char* d = "{1.2, 2.5, 3.5, -1.7, -2.5}";
+    const char* fns[] = {
+        "Floor", "Ceiling", "Round", "IntegerPart", "FractionalPart",
+    };
+    for (unsigned i = 0; i < sizeof(fns)/sizeof(fns[0]); i++)
+        chk_matches(fns[i], d);
+    /* Round is half-to-even: 2.5->2, 3.5->4, -2.5->-2. */
+    chk_eq("Round[NDArray[{2.5, 3.5, -2.5}]]", "NDArray[{2.0, 4.0, -2.0}]");
+    /* Stays packed on real input; complex input degrades to the List path. */
+    chk_eq("Head[Floor[NDArray[{1.5, 2.5}]]]", "NDArray");
+    chk_eq("Head[Floor[NDArray[{1.5 + 0.5 I}, DataType -> \"complex64\"]]]", "List");
+}
+
+static void test_sqrt_and_rational_power(void) {
+    /* Sqrt[NDArray] = NDArray^(1/2) now routes through the C power loop instead
+     * of renaming back to Sqrt[NDArray]. */
+    chk_eq("Head[Sqrt[NDArray[Range[4]]]]", "NDArray");
+    chk_eq("Max[Abs[Flatten[Normal[Sqrt[NDArray[{1., 2., 4., 9.}]]] "
+           "- Sqrt[{1., 2., 4., 9.}]]]] < 1/1000000000", "True");
+    /* Rational exponent p/q, and real->complex escape (negative base). */
+    chk_eq("Max[Abs[Flatten[Normal[NDArray[{1., 8., 27.}]^(1/3)] "
+           "- {1., 8., 27.}^(1/3)]]] < 1/1000000000", "True");
+    chk_eq("DataType[Sqrt[NDArray[{-1., 4.}]]]", "\"complex64\"");
+}
+
+static void test_rational_scalar_arithmetic(void) {
+    /* A Rational scalar broadcasts over Plus/Times (1/2 NDArray = Times[1/2, ...])
+     * instead of leaving the product symbolic. */
+    chk_eq("Head[NDArray[Range[6]] / 2]", "NDArray");
+    chk_eq("NDArray[{1., 2., 3.}] / 2", "NDArray[{0.5, 1.0, 1.5}]");
+    chk_eq("3/4 * NDArray[{4., 8.}]", "NDArray[{3.0, 6.0}]");
+    chk_eq("NDArray[{1., 2.}] + 1/2", "NDArray[{1.5, 2.5}]");
+    /* A genuinely symbolic scalar still declines (stays unevaluated). */
+    chk_eq("Head[x * NDArray[{1., 2.}]]", "Times");
+}
+
+static void test_mod_quotient(void) {
+    /* Mod[array, n] / Quotient[array, n] match the List path (floored). */
+    chk_eq("Mod[NDArray[{1., 2., 3., 4., 5.}], 3]", "NDArray[{1.0, 2.0, 0.0, 1.0, 2.0}]");
+    chk_eq("Quotient[NDArray[{1., 2., 3., 4., 5.}], 3]", "NDArray[{0.0, 0.0, 1.0, 1.0, 1.0}]");
+    /* Floored: negatives carry the divisor's sign. */
+    chk_eq("Mod[NDArray[{-1., -2., -3.}], 3]", "NDArray[{2.0, 1.0, 0.0}]");
+    /* Complex operand / zero divisor decline -> faithful List degrade. */
+    chk_eq("Head[Mod[NDArray[{1. + 1. I}, DataType -> \"complex64\"], 3]]", "List");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -162,6 +215,10 @@ int main(void) {
     TEST(test_structure_and_dtype);
     TEST(test_complex_and_float32_inputs);
     TEST(test_binary);
+    TEST(test_rounding);
+    TEST(test_sqrt_and_rational_power);
+    TEST(test_rational_scalar_arithmetic);
+    TEST(test_mod_quotient);
     TEST(test_special_cloop);
     TEST(test_special_degrade);
 

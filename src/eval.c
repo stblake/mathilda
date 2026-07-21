@@ -1031,8 +1031,22 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 /* Orderless: commutative sorting. Pre-check whether the
                  * args are already in canonical order so the §3.4 detector
                  * can skip a no-op qsort on stable expressions
-                 * (Plus[a,b,c] re-evaluating, etc.). */
-                if (attrs & ATTR_ORDERLESS) {
+                 * (Plus[a,b,c] re-evaluating, etc.).
+                 *
+                 * Plus and Times canonicalize their OWN argument order inside
+                 * builtin_plus/builtin_times (which sort the collapsed group
+                 * set before returning), so the generic ORDERLESS sort here is
+                 * redundant for them. Worse, on a large sum/product it is the
+                 * dominant cost: sorting N raw terms with the heavy polynomial
+                 * expr_compare is O(N log N) with a per-compare constant orders
+                 * of magnitude above an atom compare, even though the collapsed
+                 * result has only a handful of distinct terms (e.g. Total of
+                 * 10^5 monomials over ~11 powers). Skip the whole block — the
+                 * builtin always runs for arg_count >= 2 (arity 0/1 is handled
+                 * earlier) and sorts its small output, and a held/unevaluated
+                 * Plus was never sorted anyway. */
+                if ((attrs & ATTR_ORDERLESS) &&
+                    head_name != SYM_Plus && head_name != SYM_Times) {
                     bool already_sorted = true;
                     for (size_t i = 1; i < res->data.function.arg_count; i++) {
                         if (eval_compare_expr_ptrs(&res->data.function.args[i - 1],

@@ -246,6 +246,15 @@ static Expr* denom_subst_gen_to_radical(const Expr* e, const char* gen,
 static Expr* denom_compute_inverse(const Expr* denom) {
     const Expr* base = NULL;
     int64_t n = 0;
+    /* Bail on a denominator that carries an explicit complex literal (I).  This
+     * pass rationalises a REAL radical denominator via the conjugate over
+     * Q[α]/(α^n - c); a complex denominator like x - (1 + I Sqrt[3])/2 substitutes
+     * the radical for a generator but leaves I in the coefficients, so the
+     * PolynomialExtendedGCD runs over Q(i) in {gen, x} and the generic
+     * multivariate GCD blows up in exact_poly_div (Simplify/FullSimplify hang over
+     * Q(i sqrt d)).  Clearing an i-times-radical denominator is not this pass's
+     * job; decline so Together/Cancel (which handle it fine) do the work. */
+    if (contains_explicit_complex(denom)) return NULL;
     if (!denom_collect_radical_base(denom, &base, &n)) return NULL;
     if (!base) return NULL;
     if (n < 2) return NULL;

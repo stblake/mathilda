@@ -533,6 +533,7 @@ set(COMMON_SRC
     ../src/calculus/cherry_ei.c
     ../src/calculus/cherry_li.c
     ../src/calculus/cherry_dilog.c
+    ../src/calculus/knowles_erf.c
     ../src/calculus/cherry_sigma_decomp.c
     ../src/calculus/risch_field.c
     ../src/calculus/risch_canonical.c
@@ -1207,6 +1208,15 @@ add_test(NAME cherry_dilog_tests COMMAND cherry_dilog_tests)
 add_executable(integrate_fresnel_tests test_integrate_fresnel.c ${COMMON_SRC})
 target_include_directories(integrate_fresnel_tests PRIVATE ../src ../src/calculus)
 add_test(NAME integrate_fresnel_tests COMMAND integrate_fresnel_tests)
+
+# Knowles Liouvillian integration (KNOWLES_DESIGN.md)
+add_executable(knowles_tower_tests test_knowles_tower.c ${COMMON_SRC})
+target_include_directories(knowles_tower_tests PRIVATE ../src ../src/calculus)
+add_test(NAME knowles_tower_tests COMMAND knowles_tower_tests)
+
+add_executable(knowles_erf_tests test_knowles_erf.c ${COMMON_SRC})
+target_include_directories(knowles_erf_tests PRIVATE ../src ../src/calculus)
+add_test(NAME knowles_erf_tests COMMAND knowles_erf_tests)
 
 add_executable(irreduciblepolynomialq_tests test_irreduciblepolynomialq.c ${COMMON_SRC})
 target_include_directories(irreduciblepolynomialq_tests PRIVATE ../src)

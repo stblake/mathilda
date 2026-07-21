@@ -708,6 +708,43 @@ static bool rat_has_dependent_power_generators(Expr* num, Expr* den) {
     return dep;
 }
 
+/* True iff `e` is a pure numeric constant — a number, a recognised numeric
+ * constant symbol (Pi, E, I, EulerGamma, ...), or a NumericFunction / Complex /
+ * Rational built from such (mirrors core.c's is_numeric_quantity).  A fraction
+ * whose numerator AND denominator are both numeric constants carries NO genuine
+ * polynomial variable, so the generic multivariate PolynomialGCD below has
+ * nothing to cancel — yet on an algebraic-irrational atom FLINT can't pack
+ * (e.g. (1 - I Sqrt[3])/2) it treats I and Sqrt[3] as independent generators and
+ * spins forever in exact_poly_div.  Detecting the constant case and skipping the
+ * GCD is always correctness-preserving (a constant fraction needs no polynomial
+ * cancellation) and kills a whole class of Simplify/Together hangs. */
+static bool rat_is_numeric_const(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_REAL || e->type == EXPR_BIGINT)
+        return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    if (e->type == EXPR_SYMBOL) {
+        const char* n = e->data.symbol.name;
+        return n == SYM_Pi || n == SYM_E || n == SYM_I || n == SYM_Infinity ||
+               n == SYM_ComplexInfinity || n == SYM_EulerGamma ||
+               n == SYM_GoldenRatio || n == SYM_Catalan || n == SYM_Degree ||
+               n == SYM_GoldenAngle || n == SYM_Glaisher || n == SYM_Khinchin;
+    }
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if (h == SYM_Complex || h == SYM_Rational) return true;
+        SymbolDef* def = symtab_get_def(h);
+        if (def && (def->attributes & ATTR_NUMERICFUNCTION)) {
+            for (size_t i = 0; i < e->data.function.arg_count; i++)
+                if (!rat_is_numeric_const(e->data.function.args[i])) return false;
+            return true;
+        }
+    }
+    return false;
+}
+
 static Expr* cancel_recursive(Expr* e) {
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
@@ -784,6 +821,15 @@ static Expr* cancel_recursive(Expr* e) {
      * from Integrate[1/(1+x^n), x]).  Leaving the fraction uncancelled is always
      * correctness-preserving, and such fractions do not cancel anyway. */
     if (!g && rat_has_dependent_power_generators(num, den)) {
+        cancel_recursive_inside_gcd--;
+        expr_free(num);
+        expr_free(den);
+        return expr_copy(e);
+    }
+    /* Numeric-constant fraction over an algebraic-irrational atom FLINT declined
+     * (e.g. (1 - I Sqrt[3])/2): no polynomial variable to cancel, and the generic
+     * GCD would spin in exact_poly_div.  Leave uncancelled (already reduced). */
+    if (!g && rat_is_numeric_const(num) && rat_is_numeric_const(den)) {
         cancel_recursive_inside_gcd--;
         expr_free(num);
         expr_free(den);
@@ -1698,16 +1744,25 @@ static Expr* builtin_cancel_compute(Expr* res) {
         Expr* atom = NULL;
         int64_t m = 1;
         if (poly_find_radical_gen(arg, &base, &atom, &m)) {
-            char* gen = poly_make_fresh_gen(arg);
-            Expr* substituted = poly_subst_radical_to_gen(arg, base, atom, m, gen);
-            Expr* combined = together_recursive(substituted);
-            expr_free(substituted);
-            Expr* final = poly_subst_radical_from_gen(combined, base, atom, m, gen);
-            expr_free(combined);
-            expr_free(base);
-            expr_free(atom);
-            free(gen);
-            return final;
+            /* A pure numeric constant (e.g. (1 - I Sqrt[3])/2) has no polynomial
+             * variable to cancel; substituting the radical for a fresh generator
+             * would make it look like a polynomial in that generator and blow up
+             * the downstream GCD (exact_poly_div swell).  Skip the pass — fall to
+             * cancel_recursive, whose numeric-const guard leaves it reduced. */
+            if (rat_is_numeric_const(arg)) {
+                expr_free(base); expr_free(atom);
+            } else {
+                char* gen = poly_make_fresh_gen(arg);
+                Expr* substituted = poly_subst_radical_to_gen(arg, base, atom, m, gen);
+                Expr* combined = together_recursive(substituted);
+                expr_free(substituted);
+                Expr* final = poly_subst_radical_from_gen(combined, base, atom, m, gen);
+                expr_free(combined);
+                expr_free(base);
+                expr_free(atom);
+                free(gen);
+                return final;
+            }
         }
     }
 
@@ -1846,6 +1901,55 @@ static Expr* together_recursive(Expr* e) {
     return cancel_recursive(e);
 }
 
+#ifdef USE_FLINT
+/* True if e structurally contains the imaginary unit (a Complex[..] atom, which is
+ * how the evaluator stores I, or a bare symbol I). */
+static bool rat_contains_i(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_I;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Complex) return true;
+    if (rat_contains_i(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rat_contains_i(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Together over Q(i): the plain-Q fmpz_mpoly_q fast path (flint_rational_together)
+ * declines on I, so a multivariate Gaussian rational — e.g. an undetermined-
+ * coefficient residual with complex coefficients — falls to the classical
+ * multivariate-GCD combine (together_recursive), which blows up super-exponentially
+ * in the number of unknowns.  Substitute I -> a fresh indeterminate t, run the fast
+ * plain-Q Together over Q[vars, t], then substitute t -> I (the evaluator reduces
+ * I^k).  Correct for any well-defined input: N(t)/D(t) = sum_j n_j/d_j is an
+ * identity in the FREE variable t, so evaluating at t = I preserves it (no
+ * denominator vanishes at t = I for a well-defined fraction).  Declines (NULL) when
+ * I is absent, when the I->t image still carries an algebraic atom (a genuine
+ * Q(i, sqrt d) tower, left to the extension path), or when the plain-Q path
+ * declines. */
+static Expr* flint_gaussian_together(const Expr* arg) {
+    if (!rat_contains_i(arg)) return NULL;
+    Expr* t = expr_new_symbol("Rat$gaussI");
+    Expr* fwd = expr_new_function(expr_new_symbol(SYM_Rule),
+        (Expr*[]){ expr_new_symbol(SYM_I), expr_copy(t) }, 2);
+    Expr* e2 = eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+        (Expr*[]){ expr_copy((Expr*)arg), fwd }, 2));
+    if (!e2 || rat_contains_i(e2) || rat_has_algebraic_atom(e2)) {
+        if (e2) expr_free(e2);
+        expr_free(t);
+        return NULL;
+    }
+    Expr* tog = flint_rational_together(e2);
+    expr_free(e2);
+    if (!tog) { expr_free(t); return NULL; }
+    Expr* bwd = expr_new_function(expr_new_symbol(SYM_Rule),
+        (Expr*[]){ t, expr_new_symbol(SYM_I) }, 2);          /* adopts t */
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+        (Expr*[]){ tog, bwd }, 2));                          /* adopts tog */
+}
+#endif
+
 static Expr* builtin_together_compute(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
@@ -1880,6 +1984,11 @@ static Expr* builtin_together_compute(Expr* res) {
     if (!alpha && !auto_flag) {
         Expr* ft = flint_rational_together(arg);
         if (ft) return ft;
+        /* Q(i) Gaussian rational: the plain-Q path above declines on I; combine
+         * over Q[vars, t] with I -> t and map back, avoiding the classical
+         * multivariate-GCD blow-up on a complex-coefficient residual. */
+        Expr* gi = flint_gaussian_together(arg);
+        if (gi) return gi;
     }
 #endif
 
@@ -1994,16 +2103,22 @@ static Expr* builtin_together_compute(Expr* res) {
         Expr* atom = NULL;
         int64_t m = 1;
         if (poly_find_radical_gen(arg, &base, &atom, &m)) {
-            char* gen = poly_make_fresh_gen(arg);
-            Expr* substituted = poly_subst_radical_to_gen(arg, base, atom, m, gen);
-            Expr* combined = together_recursive(substituted);
-            expr_free(substituted);
-            Expr* final = poly_subst_radical_from_gen(combined, base, atom, m, gen);
-            expr_free(combined);
-            expr_free(base);
-            expr_free(atom);
-            free(gen);
-            return final;
+            /* Numeric constant: skip the radical->generator pass (would blow up
+             * the GCD); cancel_recursive's numeric-const guard handles it. */
+            if (rat_is_numeric_const(arg)) {
+                expr_free(base); expr_free(atom);
+            } else {
+                char* gen = poly_make_fresh_gen(arg);
+                Expr* substituted = poly_subst_radical_to_gen(arg, base, atom, m, gen);
+                Expr* combined = together_recursive(substituted);
+                expr_free(substituted);
+                Expr* final = poly_subst_radical_from_gen(combined, base, atom, m, gen);
+                expr_free(combined);
+                expr_free(base);
+                expr_free(atom);
+                free(gen);
+                return final;
+            }
         }
     }
 
