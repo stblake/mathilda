@@ -144,10 +144,22 @@ Expr* ndla_det(Expr* res)
         if (!na_load_matrix(arg, false, true, &n, &cc, &A))
             return linalg_delist_and_reeval(res);
         int* piv = (int*)malloc(sizeof(int) * (size_t)n);
-        int sign;
-        nd_lu_real(A, n, piv, &sign);
-        double det = (double)sign;
-        for (int k = 0; k < n; k++) det *= A[k + (size_t)k * n];
+        double det;
+        if (mathilda_lapack_probe()) {
+            /* LAPACK dgetrf (blocked, vectorized) — det = sign * prod(diag U). */
+            int info = mat_lapack_dgetrf(n, n, A, n, piv);
+            if (info < 0) { free(piv); free(A); return linalg_delist_and_reeval(res); }
+            det = 1.0;
+            for (int k = 0; k < n; k++) {
+                det *= A[k + (size_t)k * n];
+                if (piv[k] != k + 1) det = -det;      /* ipiv is 1-indexed */
+            }
+        } else {
+            int sign;
+            nd_lu_real(A, n, piv, &sign);
+            det = (double)sign;
+            for (int k = 0; k < n; k++) det *= A[k + (size_t)k * n];
+        }
         if (det == 0.0) det = 0.0;               /* normalise -0.0 to +0.0 */
         free(piv); free(A);
         return expr_new_real(det);
@@ -193,6 +205,19 @@ Expr* ndla_inverse(Expr* res)
         if (!na_load_matrix(arg, false, true, &n, &cc, &A))
             return linalg_delist_and_reeval(res);
         int* piv = (int*)malloc(sizeof(int) * (size_t)n);
+        if (mathilda_lapack_probe()) {
+            /* LAPACK dgetrf + dgetri (blocked, vectorized). */
+            int info = mat_lapack_dgetrf(n, n, A, n, piv);
+            if (info != 0) {                          /* <0 bad arg, >0 singular */
+                free(piv); free(A); return linalg_delist_and_reeval(res);
+            }
+            info = mat_lapack_dgetri(n, A, n, piv);
+            free(piv);
+            if (info != 0) { free(A); return linalg_delist_and_reeval(res); }
+            Expr* out = na_build_matrix(A, n, n, false, true);
+            free(A);
+            return out;
+        }
         int sign, rank = nd_lu_real(A, n, piv, &sign);
         if (rank < n) {                              /* singular: defer for Inverse::sing */
             free(piv); free(A);
@@ -270,6 +295,16 @@ Expr* ndla_linearsolve(Expr* res)
             free(A); return linalg_delist_and_reeval(res);
         }
         int* piv = (int*)malloc(sizeof(int) * (size_t)n);
+        if (mathilda_lapack_probe()) {
+            /* LAPACK dgesv (blocked LU + solve). */
+            int info = mat_lapack_dgesv(n, nrhs, A, n, piv, B, n);
+            free(piv); free(A);
+            if (info != 0) { free(B); return linalg_delist_and_reeval(res); }
+            Expr* out = is_vec ? na_build_vector(B, n, false)
+                               : na_build_matrix(B, n, nrhs, false, true);
+            free(B);
+            return out;
+        }
         int sign, rank = nd_lu_real(A, n, piv, &sign);
         if (rank < n) {                              /* singular: defer */
             free(piv); free(A); free(B);
