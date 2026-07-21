@@ -94,7 +94,30 @@ This is exactly the wall the Cherry engine hits: the coefficient solve and the d
 
 ## 3. Where Mathilda must be strengthened (two independent tracks)
 
+> **Update (2026-07-21): Track A partially LANDED.** The general `Simplify`/`FullSimplify`
+> hang over Q(i√d) is **fixed** — the denominator-rationalisation pass
+> (`simp_rationalize.c` `denom_compute_inverse`) now bails when the denominator carries an
+> explicit complex literal (it is meant for *real* radical denominators; a complex one left
+> `I` in the coefficients and blew up the extended-GCD over Q(i) in `{gen, x}`). Verified:
+> `Simplify[E^x/(x + (1−I√3)/2)]`, `Simplify[1/(x−a) − 1/(x−ā)]`,
+> `FullSimplify[1/(x−a) − 1/(x−ā)] = (I√3)/(1−x+x²)` all return fast; real-radical
+> rationalisation (`1/(1+√2)→−1+√2`) is unchanged.
+>
+> **The Cherry complex-ei cases still decline**, though — un-gating them re-hangs, now in the
+> **diff-back verifier** `rt_verify_antideriv` (`risch_util.c`). Traced precisely: the
+> number-field fallback *solves* (its residual `Together` over the symbolic generator `chs`
+> and the coefficient `Solve` both complete); the answer is correct
+> (`E^{−a}E^{x+a}` collapses to `E^x`); but the verifier's `Together[TrigToExp[diff]]` does
+> **not** reduce the `E^x·R(x)` difference to 0 (leaves it uncombined, `zero=0`) and then the
+> fallback `Simplify[diff]` hits a *different* Simplify sub-pass over Q(i√d) and hangs. So the
+> remaining blocker is a **number-field-aware zero-test** for the diff-back — squarely Track B.
+
 ### Track A — the targeted fix (small, high-leverage): don't substitute radicals into a blow-up
+
+**Status: the `denom_compute_inverse` complex-denominator guard is landed (above).** It fixed
+the standalone `Simplify` hang but *not* the Cherry solve, because the diff-back verifier reaches
+the blow-up through a different route. The remaining Track-A-shaped options for a full Cherry
+solve without Track B:
 
 The `Simplify` pass that substitutes a Q(i√d) radical for a polynomial generator should **decline
 the substitution when it would create a multivariate GCD over a transcendental kernel** — i.e.

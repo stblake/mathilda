@@ -286,14 +286,15 @@ static size_t gen_alpha_candidates(Expr* g1, Expr* p, Expr* q, Expr* x,
                      * Q(i) — defer those. */
                     if (numeric_complex(val) && (degq != 0 || rt_degree(g1, x) != 2))
                         continue;
-                    /* A COMPLEX root that also carries a radical lives in Q(i sqrt d)
-                     * (d not a perfect square), not Q(i).  The coefficient solve and
-                     * diff-back for that pair route through Simplify/Together over
-                     * Q(i sqrt d), where the generic multivariate GCD blows up
-                     * (exact_poly_div expression-swell) — the engine would HANG.
-                     * Decline cleanly (leave the integral unevaluated) rather than
-                     * hang; pure Q(i) pairs (roots like +-I, -1+-2I: no radical) and
-                     * real-radical roots (sqrt2 in e^x/(x^2-2)) are unaffected. */
+                    /* A COMPLEX root carrying a radical lives in Q(i sqrt d) (d not
+                     * a perfect square).  The coefficient solve routes to the
+                     * number-field fallback, but its diff-back verifier
+                     * (rt_verify_antideriv) still falls to Simplify over Q(i sqrt d)
+                     * with the E^x kernel, which does not certify and hangs — so the
+                     * closed form cannot be admitted yet.  Decline cleanly rather
+                     * than hang.  Q(i) pairs (roots p + q I, no radical) and
+                     * real-radical roots (sqrt2) are unaffected and still close.
+                     * Un-gate once the number-field zero-test lands (Track B). */
                     if (numeric_complex(val) && expr_has_radical(val)) continue;
                     /* dedup */
                     bool dup = false;
