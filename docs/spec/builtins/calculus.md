@@ -871,6 +871,18 @@ monotonically down.
         LogIntegral[E^3 x]/E^3`, `Integrate[(Log[x]^2+3)/(Log[x]^2+3Log[x]+2),x] =
         x + 4 LogIntegral[E x]/E - 7 LogIntegral[E^2 x]/E^2`. Multi-log towers
         (reducible `w` needing a product decomposition) decline;
+      - `c g'(x)/Log[g]` → `c LogIntegral[g]` for a **mixed exp/log kernel** `g`
+        that is not a polynomial in `x` (so `Log[g]` appears as a SUM, not a
+        `Log[...]` node, and the polynomial-`w` engines above cannot see it). The
+        kernel is discovered from the denominator: for `f = N/D` (`Together`), the
+        only elementary `g` with `f ∝ g'/Log[g]` has `Log[g] = D`, i.e. `g =
+        Exp[D]`; the certificate `Together[f D / g']` must be a nonzero constant,
+        and a `PowerExpand` diff-back reconfirms the branch identity. Closes
+        `Integrate[(E^x (1+x))/(x + Log[x]), x] = LogIntegral[x E^x]` (here
+        `Log[x E^x] = x + Log[x]`). Gated to a `D` containing a logarithm — a
+        `Log`-free `D` is either `Ei`-reducible (`LogIntegral[Exp[u]] =
+        ExpIntegralEi[u]`, owned by the `Ei` recognizer) or spurious, so it
+        declines fast without normalizing over an `Exp[...]` generator;
       - `K Log[1 + p x]/x` → `PolyLog[2, -p x]` (dilogarithm fast path); and the
         general `R(x) Log[w]` → `Log-Log + PolyLog[2]` form (Cherry degree-2
         Sigma-decomposition, matched in the log tower with dilog arguments the

@@ -112,12 +112,22 @@ static void test_cherry_li_declines(void) {
     assert_declines("x^3/Log[x^3-x]");      /* reducible w -> product args     */
 }
 
+/* Generalized mixed exp/log kernel g = Exp[D]: f = c g'/Log[g] with g not a
+ * polynomial in x (Log[g] present as a SUM, not a Log node).  The kernel is
+ * discovered from the denominator, so these close where the polynomial-w
+ * engines cannot. */
+static void test_cherry_li_kernel(void) {
+    assert_li("(E^x (1 + x))/(x + Log[x])");      /* li(x E^x)   */
+    assert_li("(x E^x (2 + x))/(x + 2 Log[x])");  /* li(x^2 E^x) */
+}
+
 int main(void) {
     core_init();
     TEST(test_cherry_1986_li);
     TEST(test_cherry_li_stress);
     TEST(test_cherry_li_rescale);
     TEST(test_cherry_li_declines);
+    TEST(test_cherry_li_kernel);
     printf("All Cherry LogIntegral tests passed.\n");
     return 0;
 }

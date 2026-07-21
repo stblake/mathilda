@@ -203,6 +203,94 @@ static Expr* rt_try_li(Expr* f, Expr* x) {
     return result;
 }
 
+/* g = Exp[D] for the additive terms of D, built as Prod_i Exp[t_i] so the
+ * evaluator's Exp[Log[u]] -> u collapse recovers the mixed exp/log kernel
+ * (Exp[x + Log[x]] -> x E^x) WITHOUT a full Simplify.  Adopts D-free copies. */
+static Expr* rt_exp_of_sum(Expr* D) {
+    bool is_sum = (D->type == EXPR_FUNCTION && rt_head_is(D, "Plus"));
+    size_t n = is_sum ? D->data.function.arg_count : 1;
+    Expr** terms = malloc(n * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) {
+        Expr* t = is_sum ? D->data.function.args[i] : D;
+        terms[i] = expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_new_symbol("E"), expr_copy(t) }, 2);
+    }
+    Expr* prod = (n == 1) ? terms[0]
+        : expr_new_function(expr_new_symbol("Times"), terms, n);
+    free(terms);
+    return rt_eval_own(prod);
+}
+
+/* Generalized single-LogIntegral recognizer for a mixed exp/log kernel:
+ *   f = c g'(x) / Log[g]  ->  c LogIntegral[g],   c a nonzero constant in x.
+ * The polynomial-w engines above (rt_try_li / rt_cherry_li) only accept a
+ * literal Log[w] node with w a polynomial in x, so they miss arguments that are
+ * themselves exponential/logarithmic — e.g. INT (E^x(1+x))/(x+Log[x]) dx, whose
+ * antiderivative is LogIntegral[x E^x] with Log[x E^x] = x + Log[x] present as a
+ * SUM, not a Log node.  Here the kernel is DISCOVERED from the denominator:
+ * writing f = N/D (Together), the only elementary g with f proportional to
+ * g'/Log[g] has Log[g] = D, i.e. g = Exp[D].  The certificate
+ * cand = Together[f D / g'] must be a nonzero constant free of x, proving
+ * f = cand d/dx LogIntegral[g] exactly (Log[g] = D on the principal branch,
+ * the convention LogIntegral answers are stated under); a final PowerExpand
+ * diff-back re-confirms the branch identity.  Correct by construction: any
+ * mismatch declines (NULL), never a wrong closed form. */
+static Expr* rt_try_li_kernel(Expr* f, Expr* x) {
+    Expr* ff = rt_eval1("Together", expr_copy(f));
+    if (!ff) return NULL;
+    Expr* D = rt_eval1("Denominator", ff);   /* adopts ff */
+    /* D must genuinely depend on x — a constant denominator is not a Log[g] —
+     * AND contain a logarithm: for a li kernel D = Log[g], so a genuine (non-Ei)
+     * argument g = Exp[D] leaves a Log of its algebraic part in D (Log[x E^x] =
+     * x + Log[x]).  A Log-free D (e.g. a trig denominator 2 + Cos[x]) is either
+     * Ei-reducible (li[Exp[u]] = Ei[u], owned elsewhere) or spurious; declining
+     * here also avoids a Together blow-up over an Exp[trig] generator. */
+    if (!D || rt_free_of_x(D, x) || rt_free_of_head(D, "Log")) {
+        if (D) expr_free(D);
+        return NULL;
+    }
+
+    /* Candidate kernel g = Exp[D]; the evaluator collapses Exp[Log[u]] -> u. */
+    Expr* g = rt_exp_of_sum(D);
+    if (!g || rt_free_of_x(g, x)) { if (g) expr_free(g); expr_free(D); return NULL; }
+
+    Expr* gp = rt_eval2("D", expr_copy(g), expr_copy(x));   /* g' */
+    Expr* result = NULL;
+    if (gp && !rt_is_zero(gp)) {
+        /* cand = Together[f * D / g']  (D stands in for Log[g]). */
+        Expr* frac = expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_copy(f), expr_copy(D),
+                expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_copy(gp), expr_new_integer(-1) }, 2) }, 3);
+        Expr* cand = rt_eval1("Together", frac);
+        if (cand && rt_free_of_x(cand, x) && !rt_is_zero(cand)) {
+            Expr* li = expr_new_function(expr_new_symbol("LogIntegral"),
+                (Expr*[]){ expr_copy(g) }, 1);
+            Expr* Q = rt_eval_own(expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_copy(cand), li }, 2));
+            /* PowerExpand diff-back: Log[g] = D convention (branch-cut safety). */
+            if (Q && rt_free_of_head(Q, "Integrate")) {
+                Expr* diff = expr_new_function(expr_new_symbol("Plus"),
+                    (Expr*[]){ rt_eval2("D", expr_copy(Q), expr_copy(x)),
+                        expr_new_function(expr_new_symbol("Times"),
+                            (Expr*[]){ expr_new_integer(-1), expr_copy(f) }, 2) }, 2);
+                Expr* chk = rt_eval1("Simplify", rt_eval1("PowerExpand", diff));
+                if (chk && chk->type == EXPR_INTEGER && chk->data.integer == 0)
+                    result = Q;
+                else
+                    expr_free(Q);
+                if (chk) expr_free(chk);
+            } else if (Q) {
+                expr_free(Q);
+            }
+        }
+        if (cand) expr_free(cand);
+    }
+    if (gp) expr_free(gp);
+    expr_free(g);
+    expr_free(D);
+    return result;
+}
 
 
 /* K Log[1 + p x] / x  ->  -K PolyLog[2, -p x]  (dilogarithm form).
@@ -264,6 +352,7 @@ static const RtSpecialForm RT_SPECIAL_FORMS[] = {
     { "Erf",           knowles_erf_liouvillian, RT_SF_TOP_EXP }, /* erf-Liouvillian tower (Knowles 92/93) */
     { "LogIntegral",   rt_try_li,       RT_SF_TOP_LOG }, /* c w^(p-1) w' / Log[w]      [fast path] */
     { "LogIntegral",   rt_cherry_li,    RT_SF_TOP_LOG }, /* multi-li over C(x,Log[w])  (Cherry 1986) */
+    { "LogIntegral",   rt_try_li_kernel, RT_SF_TOP_LOG }, /* c g'/Log[g], g=Exp[D] mixed exp/log kernel */
     { "PolyLog",       rt_try_dilog,    RT_SF_TOP_LOG }, /* K Log[1 + p x] / x        [fast path] */
     { "PolyLog",       rt_cherry_dilog, RT_SF_TOP_LOG }, /* R Log[w] -> LogLog + PolyLog[2] (Cherry) */
 };
