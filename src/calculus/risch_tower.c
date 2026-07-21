@@ -184,6 +184,39 @@ void rt_collect_logs(Expr* e, Expr* x, Expr*** arr, size_t* n, size_t* cap) {
         rt_collect_logs(e->data.function.args[i], x, arr, n, cap);
 }
 
+/* Non-elementary primitive special functions Knowles admits as tower monomials:
+ * each is a single-argument primitive theta = SF[u] with theta' = Dcoef a field
+ * element of the lower tower (Erf: (2/Sqrt[Pi])E^(-u^2)u'; Erfi: (2/Sqrt[Pi])E^(u^2)u';
+ * Erfc: -(2/Sqrt[Pi])E^(-u^2)u'; ExpIntegralEi: E^u u'/u; LogIntegral: u'/Log[u]).
+ * All have D-rules in deriv.c.  (SinIntegral/CosIntegral/Fresnel are reducible but
+ * their derivatives introduce trig kernels — deferred; see KNOWLES_DESIGN.md §2.1.) */
+bool rt_is_primitive_head(const char* h) {
+    return h == intern_symbol("Erf")  || h == intern_symbol("Erfi")
+        || h == intern_symbol("Erfc") || h == intern_symbol("ExpIntegralEi")
+        || h == intern_symbol("LogIntegral");
+}
+
+/* Collect (owned, deduplicated) every primitive-SF kernel of `e` whose single
+ * argument depends on x. */
+void rt_collect_primitives(Expr* e, Expr* x, Expr*** arr, size_t* n, size_t* cap) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && rt_is_primitive_head(e->data.function.head->data.symbol.name)
+        && e->data.function.arg_count == 1
+        && !rt_free_of_x(e->data.function.args[0], x)) {
+        bool dup = false;
+        for (size_t i = 0; i < *n; i++) if (expr_eq((*arr)[i], e)) { dup = true; break; }
+        if (!dup) {
+            if (*n == *cap) { *cap = *cap ? *cap * 2 : 4;
+                              *arr = realloc(*arr, *cap * sizeof(Expr*)); }
+            (*arr)[(*n)++] = expr_copy(e);
+        }
+    }
+    rt_collect_primitives(e->data.function.head, x, arr, n, cap);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        rt_collect_primitives(e->data.function.args[i], x, arr, n, cap);
+}
+
 /* Structural containment: does `big` contain `small` as a subexpression? */
 bool rt_contains(Expr* big, Expr* small) {
     if (!big) return false;
@@ -342,11 +375,41 @@ bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
     T->tsg = NULL; T->marg = NULL; T->mprim = NULL; T->mmult = NULL;
     T->subrules = NULL; T->n = 0; T->nm = 0;
 
-    Expr** logs = NULL; size_t nl = 0, lc = 0; rt_collect_logs(f, x, &logs, &nl, &lc);
+    /* Knowles Liouvillian primitives (Erf/Erfi/Erfc/ExpIntegralEi/LogIntegral).
+     * Collect them FIRST: when present, a merged prim-bearing exponential must be
+     * split (E^(-x^2 - Erf[x]^2) -> E^(-x^2) E^(-Erf[x]^2)) so each factor is a
+     * proper tower monomial — otherwise the merged kernel's Dcoef would reference a
+     * lower exponential that is not itself a tower generator and the structure check
+     * would reject it.  We therefore collect the log/exp/tan kernels from the
+     * prim-split form fx.  Elementary integrands carry no primitive kernel: fx == f,
+     * so this is byte-identical to before (rt_expand_exp_sums is not even called). */
+    Expr** prims = NULL; size_t npr = 0, prc = 0;
+    rt_collect_primitives(f, x, &prims, &npr, &prc);
+    Expr* fx = (npr > 0) ? rt_expand_exp_sums(f) : f;
+
+    Expr** logs = NULL; size_t nl = 0, lc = 0; rt_collect_logs(fx, x, &logs, &nl, &lc);
     Expr** exps = NULL; size_t ne = 0, ec = 0;
-    rt_collect_exp_exponents(f, x, &exps, &ne, &ec);
+    rt_collect_exp_exponents(fx, x, &exps, &ne, &ec);
     Expr** tans = NULL; long* tsigs = NULL; size_t nt = 0, ntc = 0;
-    rt_collect_tangents(f, x, &tans, &tsigs, &nt, &ntc);   /* tangent-family monomials */
+    rt_collect_tangents(fx, x, &tans, &tsigs, &nt, &ntc);   /* tangent-family monomials */
+    if (npr > 0) expr_free(fx);
+
+    /* CLOSE the tower under each primitive's derivative — theta' introduces exp/log
+     * kernels (Erf -> E^(-u^2), Ei -> E^u, li -> Log[u]) that must themselves be
+     * lower tower monomials.  Split the derivative's prim-bearing exponentials the
+     * same way and seed the exps/logs/prims arrays BEFORE the commensurability pass
+     * (npr may grow via nested SF like Erf[Erf[x]] — the loop condition re-reads it). */
+    for (size_t i = 0; i < npr; i++) {
+        Expr* dP = rt_eval2("D", expr_copy(prims[i]), expr_copy(x));
+        if (dP) {
+            Expr* dPx = rt_expand_exp_sums(dP);
+            rt_collect_logs(dPx, x, &logs, &nl, &lc);
+            rt_collect_exp_exponents(dPx, x, &exps, &ne, &ec);
+            rt_collect_primitives(dPx, x, &prims, &npr, &prc);
+            expr_free(dPx); expr_free(dP);
+        }
+    }
+
     Expr** mprim_pexp = malloc((ne ? ne : 1) * sizeof(Expr*)); /* per-member class primitive (borrowed) */
 
     /* --- Multiplicatively commensurate reduction of the exponential kernels. ---
@@ -399,14 +462,15 @@ bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
     }
     size_t np = 0;
     for (size_t rep = 0; rep < ne; rep++) if (clsrep[rep] == (long)rep) np++;
-    size_t n = nl + np + nt;
+    size_t n = nl + np + nt + npr;
     if (!okc || n < min_n) {                         /* no upper depth cap */
         for (size_t rep = 0; rep < ne; rep++) if (clsprim[rep]) expr_free(clsprim[rep]);
         free(clsprim); free(clsrep); free(multof); free(mprim_pexp);
         for (size_t i = 0; i < nl; i++) expr_free(logs[i]);
         for (size_t i = 0; i < ne; i++) expr_free(exps[i]);
         for (size_t i = 0; i < nt; i++) expr_free(tans[i]);
-        free(logs); free(exps); free(tans); free(tsigs);
+        for (size_t i = 0; i < npr; i++) expr_free(prims[i]);
+        free(logs); free(exps); free(tans); free(tsigs); free(prims);
         return false;
     }
     /* Allocate the tower arrays now the depth n and member bound ne are known. */
@@ -449,6 +513,15 @@ bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
     }
     for (size_t i = 0; i < nt; i++) expr_free(tans[i]);
     free(tans); free(tsigs);
+    /* One RT_PRIM tower kernel per collected primitive SF.  theta' = D[kernel]
+     * is computed in the Dcoef pass below (expressed in the lower tower vars). */
+    for (size_t i = 0; i < npr; i++) {
+        T->kind[idx] = RT_PRIM;
+        T->kernel[idx] = prims[i];                                 /* adopt SF[u] */
+        T->arg[idx] = expr_copy(prims[i]->data.function.args[0]);  /* u */
+        idx++;
+    }
+    free(prims);
     /* Every exp member that is not itself the class primitive is an alias
      * E^w -> t[prim]^k; store its primitive exponent for the post-reorder remap. */
     for (size_t i = 0; i < ne; i++) {
@@ -473,8 +546,19 @@ bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
             bool swap = false;
             if (rt_contains(T->kernel[i], T->kernel[i + 1])) swap = true;
             else if (!rt_contains(T->kernel[i + 1], T->kernel[i])
-                     && T->kind[i] == RT_LOG
+                     && (T->kind[i] == RT_LOG || T->kind[i] == RT_PRIM)
                      && (T->kind[i + 1] == RT_EXP || T->kind[i + 1] == RT_TAN)) swap = true;
+            /* Knowles towers only (npr>0): two monomials independent by structural
+             * containment can still be dependency-ordered when one's argument nests a
+             * transcendental kernel and the other's is base-field.  E.g. E^(-Erf[x]^2)
+             * and E^(-x^2) do not contain each other, yet the former's derivation
+             * coefficient needs Erf[x] (hence E^(-x^2)) below it.  Sink the base one
+             * deeper.  Gated on npr>0 so elementary towers are byte-identical. */
+            else if (npr > 0
+                     && !rt_contains(T->kernel[i + 1], T->kernel[i])
+                     && !rt_contains(T->kernel[i], T->kernel[i + 1])
+                     && rt_has_explog_kernel(T->arg[i])
+                     && !rt_has_explog_kernel(T->arg[i + 1])) swap = true;
             if (swap) {
                 RtKind kk = T->kind[i]; T->kind[i] = T->kind[i + 1]; T->kind[i + 1] = kk;
                 long sg = T->tsg[i]; T->tsg[i] = T->tsg[i + 1]; T->tsg[i + 1] = sg;
@@ -491,7 +575,7 @@ bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
     for (size_t i = 0; i < n; i++) {
         char nm[32]; snprintf(nm, sizeof(nm), "rmR%zu", i);
         T->t[i] = expr_new_symbol(nm);
-        if (T->kind[i] == RT_LOG) {
+        if (T->kind[i] == RT_LOG || T->kind[i] == RT_PRIM) {
             rules[nr++] = expr_new_function(expr_new_symbol("Rule"),
                 (Expr*[]){ expr_copy(T->kernel[i]), expr_copy(T->t[i]) }, 2);
         } else if (T->kind[i] == RT_TAN) {
@@ -577,6 +661,12 @@ bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
             Expr* du = rt_eval2("D", expr_copy(T->arg[i]), expr_copy(x));
             d = expr_new_function(expr_new_symbol("Times"),
                 (Expr*[]){ expr_new_integer(T->tsg[i]), du }, 2);
+        } else if (T->kind[i] == RT_PRIM) {
+            /* theta' = D[SF[u]] straight from deriv.c — this introduces the lower
+             * exp/log kernel (Erf -> E^(-u^2), Ei -> E^u, li -> Log[u]) which the
+             * kernel substitution below folds back to the tower variable, so Dcoef
+             * lands in K_{i-1}. */
+            d = rt_eval2("D", expr_copy(T->kernel[i]), expr_copy(x));
         } else {
             d = rt_eval2("D", expr_copy(T->arg[i]), expr_copy(x));   /* RT_EXP: w' */
         }
@@ -618,7 +708,7 @@ bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
 /* Dt_i: the derivation of the tower variable t_i — Dcoef (log), Dcoef*t (exp),
  * or Dcoef*(t^2 + sigma) (tan, sigma = +-1).  Owned. */
 Expr* rt_dt_i(RtTower* T, size_t i) {
-    if (T->kind[i] == RT_LOG) return expr_copy(T->Dcoef[i]);
+    if (T->kind[i] == RT_LOG || T->kind[i] == RT_PRIM) return expr_copy(T->Dcoef[i]);
     if (T->kind[i] == RT_TAN)
         return expr_new_function(expr_new_symbol("Times"),
             (Expr*[]){ expr_copy(T->Dcoef[i]),
@@ -661,15 +751,21 @@ Expr* rt_build_deriv_rules(RtTower* T, Expr* x) {
     free(rules);
     return r;
 }
-/* True if `e` contains an exponential (Exp[...] / E^...) or logarithm (Log[...])
- * kernel anywhere.  Used to tell a "base-field" exponent term (rational in x, no
- * nested transcendental — e.g. 1, 1/x) from a term carrying a nested kernel
- * (x E^(1+1/x)) when deciding how to split a merged exponential. */
+/* True if `e` contains an exponential (Exp[...] / E^...), logarithm (Log[...]), or
+ * a Knowles primitive SF kernel (Erf/Erfi/Erfc/ExpIntegralEi/LogIntegral) anywhere.
+ * Used to tell a "base-field" exponent term (rational in x, no nested transcendental
+ * — e.g. 1, 1/x) from a term carrying a nested kernel (x E^(1+1/x), or the Erf-bearing
+ * -Erf[x]^2 term of exp(-x^2 - Erf[x]^2)) when deciding how to split a merged
+ * exponential.  Including the primitive kernels lets rt_expand_exp_sums split
+ * E^(-x^2 - Erf[x]^2) -> E^(-x^2) E^(-Erf[x]^2) so each factor is a proper tower
+ * monomial (KNOWLES_DESIGN.md §2.1).  Elementary integrands carry no primitive
+ * kernel, so this predicate is unchanged for them (byte-identical towers). */
 bool rt_has_explog_kernel(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* h = e->data.function.head->data.symbol.name;
         if (h == intern_symbol("Exp") || h == intern_symbol("Log")) return true;
+        if (rt_is_primitive_head(h) && e->data.function.arg_count == 1) return true;
         if (h == intern_symbol("Power") && e->data.function.arg_count == 2
             && e->data.function.args[0]->type == EXPR_SYMBOL
             && e->data.function.args[0]->data.symbol.name == intern_symbol("E"))

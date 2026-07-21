@@ -11,6 +11,7 @@
 #include "cherry_ei.h"
 #include "cherry_li.h"
 #include "cherry_dilog.h"
+#include "knowles_erf.h"
 
 #include "expr.h"
 #include "eval.h"
@@ -260,6 +261,7 @@ static const RtSpecialForm RT_SPECIAL_FORMS[] = {
     { "ExpIntegralEi", rt_try_ei,       RT_SF_TOP_EXP }, /* M E^(a x + b) / (c x + d)   [fast path] */
     { "ExpIntegralEi", rt_cherry_ei,    RT_SF_TOP_EXP }, /* g E^f, g,f in C(x): ei + erf (Cherry 1989) */
     { "ExpIntegralEi", rt_cherry_exp_multiterm, RT_SF_TOP_EXP }, /* Sum_i p_i E^(i w): Thm 5.4 case b */
+    { "Erf",           knowles_erf_liouvillian, RT_SF_TOP_EXP }, /* erf-Liouvillian tower (Knowles 92/93) */
     { "LogIntegral",   rt_try_li,       RT_SF_TOP_LOG }, /* c w^(p-1) w' / Log[w]      [fast path] */
     { "LogIntegral",   rt_cherry_li,    RT_SF_TOP_LOG }, /* multi-li over C(x,Log[w])  (Cherry 1986) */
     { "PolyLog",       rt_try_dilog,    RT_SF_TOP_LOG }, /* K Log[1 + p x] / x        [fast path] */

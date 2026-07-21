@@ -1,45 +1,82 @@
-# Loop performance: Do / For / Nest → close gap to Mathematica
+# Knowles erf/li Liouvillian Integration — todo
 
-Plan: /Users/user/.claude/plans/here-are-updated-timings-golden-meadow.md
+Target: **K2 (erf-Liouvillian)**. Critical path K0 → K2.
+Plan: `/Users/user/.claude/plans/let-s-perform-an-extensive-iterative-bentley.md`
+Spec: `KNOWLES_DESIGN.md`
 
-## Stage 1 — Targeted cleanups (safe, shippable) — DONE ✓
-- [x] 1a. Scalar Nest/Fold/FixedPoint: bounded history window (NestWhile excluded — uses buf->count)
-- [x] 1b-i. Bucketed args-array free-list in expr.c (expr_new_function/expr_free/expr_unshare)
-- [x] 1b-ii. Plus/Times final_args stack buffer (plus.c, times.c)
-- [x] 1b-iii. numeric_contagion_args caller-buffer (numeric.c/.h + plus/times callers)
-- [x] Stage 1 verify: Do 1.16→0.78, Nest 1.48→0.88, For 2.34→1.68; all Out identical;
-      tests pass (expr_pool/expr/eval/funcprog/fold/purefunc/numeric/expand); bench_assoc PASS;
-      valgrind clean (only macOS dyld/objc baseline, 0 Mathilda frames)
+## C.0 — Spec doc
+- [x] Write `KNOWLES_DESIGN.md` (repo root, mirrors CHERRY_DESIGN.md)
+- [x] Cross-reference row in CHERRY_BLOCKERS.md
 
-## Stage 2 — Automatic numeric loop fast-path — DONE ✓
-- [x] 2.0 numloop.{c,h}: RPN compiler + double VM; makefile auto-discovers; CMake COMMON_SRC
-- [x] 2a. Wire Nest (nest_impl) + Do (builtin_do count form)
-- [x] 2b. Wire For (builtin_for) + While (builtin_while)
-- [x] 2c. Extend to Fold, FixedPoint, NestWhile (+ bare-head f like Nest[Cos,...]) per user request
-- [x] 2d. Compound multi-statement bodies (CompoundExpression of Sets) via NumBlock — shared
-      register file, sequential statements, temp/multi-var; + Do integer range form. Per user
-      follow-up (`Do[a; b; c, {n}]` was falling back). `Do[…;…;…, {10^6}]` 1.85s→0.027s.
-- [x] tests/test_numloop.c: differential (fast vs interp, 1e-9 rel) + fallback correctness (33 tests
-      incl. compound/multivar/range/temp-var)
-- [x] Stage 2 verify: Do/Nest/For ~0.013s (≈100x over Mathematica); compound Do/For/While fast;
-      exact/symbolic/read-before-assign/non-Set untouched; valgrind clean (0 numloop frames);
-      bench_assoc PASS; funcprog/fold/eval/cond suites PASS; Table/Sum/nested-Do sane
+## C.1 — K0 substrate (C)
+- [x] `RT_PRIM` kind in `RtKind` + `Dcoef` on primitive generators (risch_tower.h/.c)
+- [x] collector `rt_collect_primitives` (Erf/Erfi/Erfc/LogIntegral/ExpIntegralEi)
+- [x] close tower under primitive derivatives; split merged prim-exps (rt_has_explog_kernel
+      extended); dependency-ordering tie-break (gated npr>0)
+- [x] `rt_tower_deriv`/`rt_dt_i` handle RT_PRIM (θ' = Dcoef)
+- [x] `tests/test_knowles_tower.c` (commutation round-trip, 13 cases) + CMakeLists
+- [x] non-regression: cherry_ei/li/dilog/sigma green; risch_field/canonical/hermite/coupled/
+      hypertangent/logderiv/rde_tower green; residue_split FAIL is PRE-EXISTING (Fresnel
+      Sqrt[Pi/2]Sqrt[2/Pi] coeff, verified on pristine tower)
+- [ ] deep-tower recursion hook at rt_field_integrate decline (deferred to K2 — no consumer yet)
+- [ ] confirm transcendental + elementaryq suites (heavy; running alone) + valgrind clean
 
-## Docs
-- [x] docs/spec/changelog/2026-07-20.md perf entry (both stages)
+## C.2 — K2 erf-Liouvillian (C) — increment 1 LANDED
+- [x] `knowles_erf.c` engine: K0 tower + perfect-square gate erf/erfi candidates +
+      undetermined-coeff elementary part + SolveAlways + diff-back gate
+- [x] registry entry `{ "Erf", knowles_erf_liouvillian, RT_SF_TOP_EXP }` after Cherry erf
+- [x] real-root (I-free) preference → clean Erf output (Erf[Erf[x]], not Erfi[I·])
+- [x] stress tests `test_knowles_erf.c`: Ex 4.1/4.3/4.4 + triple-nest + Gaussian +
+      decision battery (4.2, x²-variant decline) — all pass, diff-back verified
+- [x] non-regression: cherry_ei/li/dilog/sigma + knowles_tower green
+- [x] valgrind clean: 0 knowles_erf/risch_tower frames in leak stacks; totals at parity with
+      plain integrals (443 vs 434 blocks) — leaks are pre-existing shared-machinery, not mine
+- [x] build clean under -std=c99 -Wall -Wextra
+- Deferred to increment 2: quasiquadratic completing-square (radical args, Part I Ex 8.1);
+      x-rational v coefficients; rational (non-poly) sqrt erf args standalone
 
-## Result summary
-| Benchmark (10^6) | before | after | Mathematica |
-|---|---|---|---|
-| Do logistic  | 1.16s | 0.013s | 0.78s |
-| Nest logistic| 1.48s | 0.014s | 0.029s |
-| For logistic | 2.34s | 0.014s | 1.30s |
-Fast path is transparent + gated on machine-real + inexact-result; falls back to
-interpreter otherwise. Not bit-identical (Orderless runtime-value sort) — agrees
-to FP rounding.
+## Known pre-existing (NOT introduced here)
+- Full-cascade hang on `Integrate[E^(-1/x^2)/x^2]` (pmint/try_risch); RischTranscendental
+  path returns fast. Out of scope for Knowles.
+- `risch_residue_split` Fresnel coeff Sqrt[Pi/2]Sqrt[2/Pi] not folding to 1 (pre-existing).
+- `integrate_risch_transcendental` + `risch_elementaryq` exceed their 600s/60s self-alarms
+  on this machine (pristine identical timing — not a regression).
 
-## Review
-Correctness gate is the crux: fast path only fires when the interpreter's result
-is provably an inexact machine real, so exact/symbolic loops are byte-identical
-to before. Non-finite intermediates bail to the interpreter. Stage 1 (pool/window
-cleanups) is independently valuable and shippable even without Stage 2.
+## C.3 — (optional) K1 li-Liouvillian warm-up
+- [ ] `knowles_li.c` + non-all-equal sigma-decomp; pin li(li(x))
+
+## C.4/C.5 — docs
+- [ ] docs/spec + changelog when engine lands
+- [ ] curate stress corpus as tutorial seed
+
+## Review (K0 + K2 increment 1 — landed 2026-07-21)
+
+**Delivered.** Knowles' error-function integration of transcendental *Liouvillian*
+functions, extending Cherry from elementary to Liouvillian integrands:
+- **K0 substrate** (`risch_tower.c`): `RT_PRIM` generator kind; tower now admits
+  Erf/Erfi/Erfc/Ei/li as primitive monomials, closes under primitive derivatives,
+  splits merged prim-exponentials, dependency-orders them. 13/13 commutation tests.
+- **K2 engine** (`knowles_erf.c`): perfect-square-gate erf/erfi candidate generator
+  + undetermined-coefficient elementary part + `SolveAlways` + diff-back gate,
+  registered in `RT_SPECIAL_FORMS`. Flagship `∫E^(-x²-Erf²x)=(π/4)Erf[Erf[x]]`.
+
+**Verification.** All erf pins diff-back verified; Ex 4.2 declines soundly.
+Non-regression: cherry_ei/li/dilog/sigma + knowles_tower green; the exp-top path
+(where the engine newly participates) is unaffected. Build clean -Wall -Wextra.
+Memory: 0 knowles/tower frames in valgrind leak stacks; totals at parity with plain
+integrals (pre-existing shared-machinery leaks only).
+
+**Design decision that held up.** Reusing Cherry's `rt_tower_solve` pattern (linear
+system over constants + diff-back) meant K2 is *sound by construction* — a
+mis-generated candidate can only decline, never emit a wrong antiderivative. This
+let the erf engine ship as a bounded increment without the full Part I decision
+machinery.
+
+**Honest scope.** This increment: rational (perfect-square) erf args, constant
+elementary-part coeffs. NOT yet: quasiquadratic completing-square (radical args,
+Part I Ex 8.1), x-rational v coeffs, the certified non-existence decision (declines
+are sound-but-not-certified). These are increment 2 (see KNOWLES_DESIGN.md §3).
+
+**Would a staff engineer approve?** Yes for this increment: additive, tested,
+sound, non-regressing, documented (KNOWLES_DESIGN.md + changelog + calculus.md).
+The deferred pieces are clearly scoped, not hidden.

@@ -30,7 +30,10 @@
 
 /* ---- Differential transcendental tower ------------------------------------ */
 
-typedef enum { RT_LOG, RT_EXP, RT_TAN } RtKind; /* monomial kind: Log[u] / E^w / Tan[u] */
+/* monomial kind: Log[u] / E^w / Tan[u] / non-elementary primitive SF[u]
+ * (Knowles Liouvillian tower — RT_PRIM = a primitive theta with theta' = Dcoef,
+ * e.g. Erf/Erfi/Erfc/ExpIntegralEi/LogIntegral; see KNOWLES_DESIGN.md §2.1). */
+typedef enum { RT_LOG, RT_EXP, RT_TAN, RT_PRIM } RtKind;
 
 /* The per-monomial and member arrays are heap-allocated by rt_tower_build_min,
  * sized to the actual kernel count, so tower DEPTH IS UNBOUNDED (no RT_MAXK cap).
@@ -41,7 +44,7 @@ typedef struct {
     Expr** kernel;   /* Log[u_i] / Power[E, w_i] / Tan[u_i]      (owned) */
     Expr** arg;      /* u_i (log/tan argument) or w_i (exp exponent) (owned) */
     Expr** t;        /* fresh tower variable t_i                 (owned) */
-    Expr** Dcoef;    /* log: u'/u ; exp: w' ; tan: u'           (owned) */
+    Expr** Dcoef;    /* log: u'/u ; exp: w' ; tan: u' ; prim: theta' (owned) */
     long*  tsg;      /* RT_TAN special sign sigma: +1 (Tan/Cot), -1 (Tanh/Coth); 0 else */
     Expr* subrules;  /* List of all kernel -> t_i rules          (owned) */
     /* Multiplicatively commensurate non-primitive exp members: a collected
@@ -84,6 +87,8 @@ bool  rt_has_explog_kernel(Expr* e);        /* does e contain any Exp/E^/Log ker
 void  rt_collect_exp_exponents(Expr* e, Expr* x, Expr*** arr, size_t* n, size_t* cap);
 void  rt_collect_logs(Expr* e, Expr* x, Expr*** arr, size_t* n, size_t* cap);
 void  rt_collect_tangents(Expr* e, Expr* x, Expr*** args, long** sigs, size_t* n, size_t* cap);
+void  rt_collect_primitives(Expr* e, Expr* x, Expr*** arr, size_t* n, size_t* cap);
+bool  rt_is_primitive_head(const char* h);   /* Erf/Erfi/Erfc/ExpIntegralEi/LogIntegral */
 
 /* Structural helpers. */
 bool  rt_contains(Expr* big, Expr* small);                 /* subexpression containment */
