@@ -25,7 +25,9 @@ extension to transcendental *Liouvillian* integrands** (the integrand may itself
 
 > **This document is a design/spec, not an implementation** — the same discipline as
 > `CHERRY_DESIGN.md`. The executable tracker is `tasks/todo.md`; the full planning record is
-> `/Users/user/.claude/plans/let-s-perform-an-extensive-iterative-bentley.md`.
+> `/Users/user/.claude/plans/let-s-perform-an-extensive-iterative-bentley.md`. Remaining
+> extensions, each with a concrete integral it would unlock, are in
+> [`KNOWLES_FUTURE.md`](KNOWLES_FUTURE.md).
 
 ---
 

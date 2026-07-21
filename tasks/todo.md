@@ -57,6 +57,13 @@ Flagship pin: `∫ E^(½ Log[Log x] − 1/Log x)/(x Log²x) dx = −√π Erf[1/
       Sqrt[Pi/2]Sqrt[2/Pi]); valgrind: 0 knowles/collapse/rall frames in leak stacks
       (clean exit, pre-existing shared-machinery leaks only)
 
+## Future extensions — see KNOWLES_FUTURE.md (concrete unlock examples, all verified declines)
+- [ ] x-rational (non-constant) elementary-part v coefficients
+- [ ] mixed erf+li / deep-tower recursion (additive decomposition across SF families)
+- [ ] completing-square erf arguments (affine shift, Part I Lemma 6.2)
+- [ ] certified non-existence ("NO" verdict; Part I Cases 1–2.3.2)
+- [ ] algebraic constant solve (C=C̄; shared Cherry A1 FLINT number-field infra)
+
 ## C.3 — (optional) K1 li-Liouvillian warm-up  [li(li(x)) already evaluates — deprioritised]
 - [ ] `knowles_li.c` + non-all-equal sigma-decomp; pin li(li(x))
 
