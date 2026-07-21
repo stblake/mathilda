@@ -295,7 +295,12 @@ $(TARGET): $(OBJ)
 #        USE_LAPACK=0 USE_GRAPHICS=0 USE_FLINT=0 USE_REGEX=0 USE_FFTW=0
 AR ?= ar
 LIB_OBJ = $(filter-out $(SRC_DIR)/repl.o,$(OBJ))
+# Remove any existing archive first: `ar rcs` MERGES into an existing .a rather
+# than replacing it, so without this a cross-arch rebuild (iOS/Android) would
+# leave stale host-arch members (render.o, hershey_font.o, …) behind, producing
+# "neither ET_REL nor LLVM bitcode" linker warnings and a polluted archive.
 libmathilda.a: $(LIB_OBJ)
+	rm -f $@
 	$(AR) rcs $@ $(LIB_OBJ)
 
 # -MMD writes a .d file next to each .o listing the (non-system) headers it

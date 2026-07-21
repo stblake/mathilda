@@ -18,6 +18,15 @@ use tauri::ipc::Channel;
 use tauri::Manager;
 use tokio::sync::Mutex;
 
+// The internal module tree (init.m + derivative/integral tables) embedded at
+// compile time — extracted to the app data dir at startup on Android, where
+// APK-bundled assets are not reachable via the C loader's fopen(). Path is
+// relative to this crate (src-tauri): ../../src/internal is the repo tree.
+#[cfg(target_os = "android")]
+use include_dir::{include_dir, Dir};
+#[cfg(target_os = "android")]
+static INTERNAL_TREE: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../../src/internal");
+
 /// Handle stored in Tauri State — owns the in-process kernel lifecycle.
 pub struct MathildaKernel {
     /// Serializes access to the non-reentrant C kernel.
@@ -49,6 +58,7 @@ impl MathildaKernel {
     /// resources under `<resources>/assets/…`, but the exact prefix has varied
     /// across versions/platforms, so probe the known candidates and return the
     /// first that actually contains `init.m`.
+    #[cfg(not(target_os = "android"))]
     fn home_dir(&self) -> Option<String> {
         let res = self.app.path().resource_dir().ok()?;
         for sub in ["assets/internal", "internal", "_up_/src/internal"] {
@@ -60,6 +70,23 @@ impl MathildaKernel {
         // Fall back to the conventional location even if the probe missed, so
         // the loader emits a diagnostic path rather than nothing.
         Some(res.join("assets/internal").to_string_lossy().into_owned())
+    }
+
+    /// Android bundles app resources inside the APK, which the C loader cannot
+    /// `fopen()`. So the `internal/` module tree (init.m + tables, ~160 KB) is
+    /// embedded in the binary at compile time and extracted once to the app's
+    /// writable data dir; MATHILDA_HOME then points at that real path.
+    #[cfg(target_os = "android")]
+    fn home_dir(&self) -> Option<String> {
+        let base = self.app.path().app_data_dir().ok()?;
+        let dst = base.join("mathilda-internal");
+        if !dst.join("init.m").is_file() {
+            let _ = std::fs::create_dir_all(&dst);
+            if let Err(e) = INTERNAL_TREE.extract(&dst) {
+                log::error!("failed to extract internal tree to {dst:?}: {e}");
+            }
+        }
+        Some(dst.to_string_lossy().into_owned())
     }
 
     /// Initialize the kernel on a blocking thread (idempotent). Sets

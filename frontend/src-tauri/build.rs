@@ -30,6 +30,26 @@ fn main() {
         // Accelerate provides BLAS/LAPACK on Apple platforms (harmless if the
         // kernel was built without USE_LAPACK — no symbols are referenced).
         println!("cargo:rustc-link-lib=framework=Accelerate");
+    } else if target_os == "android" {
+        // Android also links the kernel in-process (no sidecar). Archives are
+        // produced per-ABI by `frontend/build-android-lib.sh` into
+        //   <src-tauri>/gen/android-libs/<target-triple>/lib*.a
+        // Absolute path via CARGO_MANIFEST_DIR: the Gradle/cargo integration
+        // runs from its own cwd, so a relative path is unreliable.
+        let libdir = std::env::var("MATHILDA_ANDROID_LIBDIR").unwrap_or_else(|_| {
+            let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
+            let target = std::env::var("TARGET").unwrap_or_default();
+            format!("{manifest}/gen/android-libs/{target}")
+        });
+        println!("cargo:rerun-if-env-changed=MATHILDA_ANDROID_LIBDIR");
+        println!("cargo:rerun-if-env-changed=MATHILDA_ANDROID_WITH_MPFR");
+        println!("cargo:rustc-link-search=native={libdir}");
+        println!("cargo:rustc-link-lib=static=mathilda");
+        println!("cargo:rustc-link-lib=static=gmp");
+        if std::env::var("MATHILDA_ANDROID_WITH_MPFR").as_deref() != Ok("0") {
+            println!("cargo:rustc-link-lib=static=mpfr");
+        }
+        // libm/libc come from the NDK sysroot automatically; no extra libs.
     }
 
     tauri_build::build()

@@ -12,7 +12,11 @@
     "ios:libs": "./build-ios-lib.sh sim",
     "ios:init": "tauri ios init",
     "ios:dev": "tauri ios dev",
-    "ios:build": "tauri ios build"
+    "ios:build": "tauri ios build",
+    "android:libs": "./build-android-lib.sh arm64",
+    "android:init": "tauri android init",
+    "android:dev": "tauri android dev",
+    "android:build": "tauri android build"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
