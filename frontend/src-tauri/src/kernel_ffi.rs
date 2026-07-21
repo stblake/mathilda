@@ -45,11 +45,21 @@ impl MathildaKernel {
 
     /// Locate the bundled `internal/` module tree (init.m + tables) inside the
     /// app bundle's resources, so the kernel finds its bootstrap on a device
-    /// where there is no source tree and no writable CWD.
+    /// where there is no source tree and no writable CWD. Tauri places declared
+    /// resources under `<resources>/assets/…`, but the exact prefix has varied
+    /// across versions/platforms, so probe the known candidates and return the
+    /// first that actually contains `init.m`.
     fn home_dir(&self) -> Option<String> {
         let res = self.app.path().resource_dir().ok()?;
-        let candidate = res.join("internal");
-        Some(candidate.to_string_lossy().into_owned())
+        for sub in ["assets/internal", "internal", "_up_/src/internal"] {
+            let cand = res.join(sub);
+            if cand.join("init.m").is_file() {
+                return Some(cand.to_string_lossy().into_owned());
+            }
+        }
+        // Fall back to the conventional location even if the probe missed, so
+        // the loader emits a diagnostic path rather than nothing.
+        Some(res.join("assets/internal").to_string_lossy().into_owned())
     }
 
     /// Initialize the kernel on a blocking thread (idempotent). Sets

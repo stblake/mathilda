@@ -8,8 +8,17 @@ fn main() {
     // libmpfr.a is linked unless MATHILDA_IOS_WITH_MPFR=0 is set explicitly.
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     if target_os == "ios" {
-        let libdir = std::env::var("MATHILDA_IOS_LIBDIR")
-            .unwrap_or_else(|_| "gen/ios-libs".to_string());
+        // Default to the conventional location build-ios-lib.sh writes to:
+        //   <src-tauri>/gen/ios-libs/<target-triple>/lib*.a
+        // Use an ABSOLUTE path (via CARGO_MANIFEST_DIR) because `tauri ios
+        // build` invokes cargo from an Xcode script phase whose cwd and
+        // environment differ — a relative path or an exported env var is not
+        // reliably visible there. MATHILDA_IOS_LIBDIR still overrides.
+        let libdir = std::env::var("MATHILDA_IOS_LIBDIR").unwrap_or_else(|_| {
+            let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
+            let target = std::env::var("TARGET").unwrap_or_default();
+            format!("{manifest}/gen/ios-libs/{target}")
+        });
         println!("cargo:rerun-if-env-changed=MATHILDA_IOS_LIBDIR");
         println!("cargo:rerun-if-env-changed=MATHILDA_IOS_WITH_MPFR");
         println!("cargo:rustc-link-search=native={libdir}");

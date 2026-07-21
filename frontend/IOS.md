@@ -51,31 +51,40 @@ curl -LO https://www.mpfr.org/mpfr-current/mpfr-4.2.1.tar.xz
 
 ## Build & run in the Simulator
 
+Verified working on Xcode 26.6 / iOS 26.5 Simulator (arm64), Tauri CLI 2.11.
+
 ```bash
 cd frontend
+npm install
 
 # 1. Cross-compile GMP + MPFR + libmathilda.a for the Simulator (arm64).
+#    Writes src-tauri/gen/ios-libs/aarch64-apple-ios-sim/{libmathilda,libgmp,libmpfr}.a
 GMP_TARBALL=/path/to/gmp-6.3.0.tar.xz \
 MPFR_TARBALL=/path/to/mpfr-4.2.1.tar.xz \
   ./build-ios-lib.sh sim
-# → src-tauri/gen/ios-libs/aarch64-apple-ios-sim/{libmathilda,libgmp,libmpfr}.a
 
-# 2. One-time: generate the Xcode project.
-npm install
+# 2. One-time: generate the Xcode project. tauri.ios.conf.json bundles the
+#    internal/ module tree (init.m + tables) as an app resource automatically.
 npm run ios:init
 
-# 3. Bundle the internal module tree (init.m + tables) as an app resource so
-#    the kernel finds its bootstrap on-device. Point tauri.conf.json bundle
-#    resources at ../../src/internal → "internal" (see "Bundling init.m" below),
-#    or copy it into src-tauri/resources/internal before building.
+# 3. Build + run in the Simulator. build.rs auto-locates the libs under
+#    gen/ios-libs/<target>/ — no env var needed.
+npm run ios:dev                       # builds, boots a simulator, launches
 
-# 4. Run in the Simulator.
-MATHILDA_IOS_LIBDIR="$(pwd)/src-tauri/gen/ios-libs/aarch64-apple-ios-sim" \
-  npm run ios:dev
+# Build only (no launch), e.g. to validate linking:
+npx tauri ios build --target aarch64-sim --debug --ci
 ```
 
 For a device / TestFlight build use `./build-ios-lib.sh device` and
 `npm run ios:build` (device builds require an Apple signing identity).
+
+### Manual install/launch (if you already built the .app)
+
+```bash
+xcrun simctl boot "iPhone 17 Pro"; open -a Simulator
+xcrun simctl install booted src-tauri/gen/apple/build/arm64-sim/Mathilda.app
+xcrun simctl launch booted com.mathilda.notebook
+```
 
 ## Bundling init.m
 

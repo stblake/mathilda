@@ -79,7 +79,9 @@ SYSROOT="$(xcrun --sdk "$SDK" --show-sdk-path)"
 CC_BIN="$(xcrun --sdk "$SDK" --find clang)"
 AR_BIN="$(xcrun --sdk "$SDK" --find ar)"
 RANLIB_BIN="$(xcrun --sdk "$SDK" --find ranlib)"
-IOS_CFLAGS="-arch $ARCH -isysroot $SYSROOT $MINFLAG -O2 -fembed-bitcode-marker"
+# NOTE: no -fembed-bitcode-marker — bitcode was removed in Xcode 14+ and the
+# flag makes the modern linker fail (it treats "marker" as a missing file).
+IOS_CFLAGS="-arch $ARCH -isysroot $SYSROOT $MINFLAG -O2"
 
 echo ">>> target=$TARGET sdk=$SDK arch=$ARCH"
 echo ">>> sysroot=$SYSROOT"
@@ -90,6 +92,9 @@ mkdir -p "$OUT_DIR"
 # GMP must be cross-compiled; its assembly does not build for the iOS toolchain,
 # so we disable it (--disable-assembly) at a modest perf cost.
 build_gmp() {
+  if [ -f "$OUT_DIR/libgmp.a" ] && [ "${FORCE_DEPS:-0}" != "1" ]; then
+    echo ">>> libgmp.a already present (set FORCE_DEPS=1 to rebuild)"; return 0
+  fi
   local src="${GMP_SRC:-}"
   if [ -z "$src" ] && [ -n "${GMP_TARBALL:-}" ]; then
     src="$(mktemp -d)/gmp"
@@ -121,6 +126,9 @@ build_gmp() {
 # --- 1b. MPFR (against the cross-built GMP) ---------------------------------
 build_mpfr() {
   [ "$WITH_MPFR" = "1" ] || return 0
+  if [ -f "$OUT_DIR/libmpfr.a" ] && [ "${FORCE_DEPS:-0}" != "1" ]; then
+    echo ">>> libmpfr.a already present (set FORCE_DEPS=1 to rebuild)"; return 0
+  fi
   local src="${MPFR_SRC:-}"
   if [ -z "$src" ] && [ -n "${MPFR_TARBALL:-}" ]; then
     src="$(mktemp -d)/mpfr"
@@ -158,7 +166,6 @@ build_mpfr() {
 build_kernel() {
   echo ">>> building libmathilda.a for iOS"
   local mpfr_flag="USE_MPFR=0"
-  local extra_inc="-I$OUT_DIR"          # our cross-built gmp.h / mpfr.h live here
   if [ "$WITH_MPFR" = "1" ]; then
     mpfr_flag="USE_MPFR=1"
     if [ ! -f "$OUT_DIR/libmpfr.a" ]; then
@@ -166,12 +173,23 @@ build_kernel() {
       exit 1
     fi
   fi
+
+  # Inject the iOS arch/sysroot via a CC wrapper rather than overriding the
+  # makefile's CFLAGS (which carries the full -I include list). -I$OUT_DIR is
+  # prepended so our cross-built gmp.h/mpfr.h win over any Homebrew copy the
+  # makefile adds via -I/opt/homebrew/include.
+  local wrapper="$OUT_DIR/cc-ios.sh"
+  cat > "$wrapper" <<EOF
+#!/bin/sh
+exec "$CC_BIN" $IOS_CFLAGS -I"$OUT_DIR" "\$@"
+EOF
+  chmod +x "$wrapper"
+
   ( cd "$REPO_ROOT"
     make clean >/dev/null 2>&1 || true
     make libmathilda.a \
-      CC="$CC_BIN" \
+      CC="$wrapper" \
       AR="$AR_BIN" \
-      CFLAGS="$IOS_CFLAGS -std=c99 -I./src -I./src/ffi $extra_inc" \
       USE_READLINE=0 USE_THREADS=0 USE_ECM=0 $mpfr_flag \
       USE_LAPACK=0 USE_GRAPHICS=0 USE_FLINT=0 USE_REGEX=0 USE_FFTW=0 \
       -j"$(sysctl -n hw.ncpu)"
