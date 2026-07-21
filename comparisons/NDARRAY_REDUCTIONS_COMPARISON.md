@@ -1,48 +1,63 @@
-# NDArray reductions & sort — Mathilda vs NumPy vs Mathematica
+# NDArray performance — Mathilda vs NumPy vs Mathematica
 
-Time to reduce or sort a dense **10,000,000-element `float64`** array, best of
-3–5 runs, same machine (Apple M-series, macOS). Mathilda uses
-`First[Timing[…]]` (CPU time; ≈ wall for these serial memory-bound loops); NumPy
-uses `min(perf_counter)` (NumPy 2.4.4); Mathematica uses
-`Min[Table[First[AbsoluteTiming[…]], …]]` (Mathematica 14, packed array).
-Reproduce with `comparisons/ndarray_reductions_bench.sh`.
+Wall-clock time on a dense **10,000,000-element `float64`** array (matmul on two
+**1000×1000** matrices), best of several runs, same machine (Intel i9-9880H, 8
+cores, AVX2; macOS). NumPy 2.4.4; Mathematica 14.0 (packed arrays). Reproduce
+with `comparisons/ndarray_reductions_bench.sh`.
+
+Mathilda's NDArray fast paths are **multithreaded** (the shared
+`nd_parallel_for` / `nd_parallel_reduce` machinery) and route matrix multiply
+through the platform **BLAS** (`cblas_dgemm`). Timing must be measured as
+wall-clock, not `Timing[]` (which reports summed CPU time across threads).
 
 | Operation | Mathilda | NumPy | Mathematica |
 |-----------|---------:|------:|------------:|
-| `Total`             |   5.2 ms |   4.7 ms |   **2.4 ms** |
-| `Mean`              |   5.2 ms |   4.3 ms |   **2.6 ms** |
-| `StandardDeviation` | **11.9 ms** |  33.2 ms |  20.6 ms |
-| `Max`               |   7.1 ms |   4.3 ms |   **2.4 ms** |
-| `Median`            | 108 ms   | 114 ms   |  **67 ms**   |
-| `Sort`              | 858 ms   | **150 ms** | 734 ms   |
+| `Total`             |     3.1 ms |   4.3 ms |   **2.5 ms** |
+| `Mean`              |     3.1 ms |   4.3 ms |   **2.7 ms** |
+| `StandardDeviation` | **5.8 ms** |  31.7 ms |  19.6 ms |
+| `Max`               | **2.4 ms** |   4.2 ms |   4.0 ms |
+| `Median`            |   110 ms   | 111 ms   |  **71 ms**   |
+| `Sort`              |   310 ms   | **148 ms** | 745 ms   |
+| `arr + 2.5`         | **8.0 ms** |  11.7 ms |  13.6 ms |
+| `3 arr`             | **7.7 ms** |  12.3 ms |  14.1 ms |
+| `arr + arr`         | **7.7 ms** |  11.5 ms |  14.6 ms |
+| `arr^2`             |    15 ms   | **11.5 ms** | 14.9 ms |
+| `Sin[arr]`          | **9.7 ms** |  68 ms   |  13.2 ms |
+| `Exp[arr]`          | **10 ms**  |  51 ms   |  13.2 ms |
+| `A . B` (1000²)     |   9.2 ms   |   8.6 ms |   **6.6 ms** |
 
 (Bold = fastest of the three.)
 
-## Reading the table
+## Summary
 
-- **O(n) reductions (`Total`, `Mean`, `Max`)** — all three are memory-bound.
-  Mathematica's packed-array kernels lead (~2.4 ms ≈ single-thread memory
-  bandwidth on this machine); Mathilda and NumPy trail by a small constant
-  factor. Mathilda's loops use several independent accumulators so the compiler
-  vectorizes an associativity-preserving reduction without `-ffast-math`; the
-  residual gap to Mathematica is hand-tuned SIMD kernel quality, not algorithm.
-- **`StandardDeviation` / `Variance`** — Mathilda is **fastest** here: a two-pass
-  (mean, then Σ|x−μ|²) through the same pairwise/unrolled kernel beats both
-  NumPy and Mathematica.
-- **`Median`** — quickselect (O(n), no full sort). Competitive with NumPy;
-  Mathematica's is fastest.
-- **`Sort`** — NumPy leads decisively: NumPy 2.x sorts with a vectorized
-  AVX-2/AVX-512 quicksort (Intel *x86-simd-sort*). Mathilda's fast path is a
-  scalar median-of-three introsort — already faster than the old `qsort`
-  behaviour and comparable to Mathematica's `Sort`, but a portable scalar sort
-  cannot match a bespoke SIMD sort. This is a deliberate scope boundary.
+After multithreading + BLAS, Mathilda is the **fastest of the three on 7 of 13**
+operations (StandardDeviation, Max, the three elementwise arithmetic forms, and
+— by a wide margin — `Sin`/`Exp`, whose NumPy versions aren't SIMD-vectorized),
+and within a small constant factor of the best on `Total`, `Mean`, `arr^2`, and
+matrix multiply. Two operations still trail the best rival:
 
-## Takeaway
+- **`Sort`** — NumPy leads with its AVX-2 vectorized quicksort (Intel
+  *x86-simd-sort*). Mathilda now uses an 8-pass LSD **radix sort** on the double
+  bit-patterns (2.6× faster than the previous introsort, and well ahead of
+  Mathematica); a portable scalar radix still trails a bespoke SIMD sort by ~2×.
+- **`Median`** — a single sequential quickselect; matches NumPy, ~1.5× behind
+  Mathematica's.
 
-Mathilda's NDArray reductions are in the same performance class as NumPy and
-Mathematica — matching or beating them on the variance family and holding a small
-constant-factor gap on the cheapest memory-bound reductions — while returning an
-`NDArray` (or scalar) exactly as they do. All results are exact matches to
-Mathilda's equivalent `List` computation (the fast paths fall back to the `List`
-path — the oracle — for any dtype/shape/spec they do not handle), and every
-summation uses pairwise accumulation, so accuracy matches NumPy.
+## How
+
+- **Reductions** (`Total`/`Mean`/`Variance`/`StandardDeviation`/`Max`/`Min`):
+  `nd_parallel_reduce` splits the flat range across cores, each folding a private
+  pairwise partial, then combines — reaching memory bandwidth on ~4 cores.
+  Columnwise (matrix) reductions parallelize over output columns.
+- **Elementwise arithmetic** (`Plus`/`Times`/`Power`) and **`Clip`**: the scalar
+  operands are folded once so the hot loop touches only array buffers
+  (`c * arr` / `arr + c` vectorize), and the element range is threaded. Small
+  integer powers (`x^2`, `x^3`, `1/x`) skip the libm `pow()`.
+- **Elementwise functions** (`Sin`/`Exp`/`Log`/…): already threaded; the
+  real-axis-escaping tail (`Sqrt`/`Log`/`ArcSin`) is now threaded too.
+- **`Dot`**: rank-2 float64 matrix multiply routes to `cblas_dgemm` (Apple
+  Accelerate / system BLAS — multithreaded + vectorized), replacing a naive
+  O(m·n·k) scalar loop.
+
+All results are exact matches to Mathilda's equivalent `List` computation, and
+every summation uses pairwise accumulation, so accuracy matches NumPy.

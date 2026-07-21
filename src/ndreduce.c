@@ -13,6 +13,8 @@
 #include "ndarray_internal.h"
 #include "sym_names.h"
 #include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
 #include <math.h>
 
 /* Below this many summands a strided range is summed by a plain loop; above it
@@ -124,6 +126,43 @@ static size_t nd_dim_prod(const int64_t* dims, int lo, int hi) {
     return p;
 }
 
+/* ------------------------------- parallel reduction over a contiguous run */
+/* Large flat reductions (a vector Total/Mean/Variance/…, or a full flatten) are
+ * memory-bound: a single core tops out well below the machine's memory
+ * bandwidth, so we split the range across threads (each folds its own private
+ * partial) and combine — reaching bandwidth on 3-4 cores. Small arrays and
+ * thread-less builds fall back to one serial chunk inside nd_parallel_reduce. */
+
+typedef struct { const void* buf; NDType dt; } nd_sum_ctx;
+static void nd_sum_reduce(void* c, size_t lo, size_t hi, double* slot) {
+    const nd_sum_ctx* x = (const nd_sum_ctx*)c;
+    nd_sum_strided(x->buf, x->dt, lo, 1, hi - lo, &slot[0], &slot[1]);
+}
+/* Sum of `n` contiguous elements, threaded, into (*re, *im). */
+static void nd_full_sum(const void* buf, NDType dt, size_t n, double* re, double* im) {
+    nd_sum_ctx c = { buf, dt };
+    double slots[NDARRAY_MAX_THREADS * 2];
+    int k = nd_parallel_reduce(n, nd_sum_reduce, &c, 2, slots);
+    double r = 0.0, m = 0.0;
+    for (int t = 0; t < k; t++) { r += slots[2 * t]; m += slots[2 * t + 1]; }
+    *re = r; *im = m;
+}
+
+typedef struct { const void* buf; NDType dt; double mr, mi; } nd_sq_ctx;
+static void nd_sq_reduce(void* c, size_t lo, size_t hi, double* slot) {
+    const nd_sq_ctx* x = (const nd_sq_ctx*)c;
+    slot[0] = nd_sumsq_strided(x->buf, x->dt, lo, 1, hi - lo, x->mr, x->mi);
+}
+/* Sum of |x-(mr,mi)|^2 over `n` contiguous elements, threaded. */
+static double nd_full_sumsq(const void* buf, NDType dt, size_t n, double mr, double mi) {
+    nd_sq_ctx c = { buf, dt, mr, mi };
+    double slots[NDARRAY_MAX_THREADS];
+    int k = nd_parallel_reduce(n, nd_sq_reduce, &c, 1, slots);
+    double s = 0.0;
+    for (int t = 0; t < k; t++) s += slots[t];
+    return s;
+}
+
 /* ---------------------------------------- shared buffer helpers (internal) */
 
 void nd_gather_real(const void* buf, NDType dt, size_t base, size_t stride,
@@ -192,8 +231,49 @@ static void nd_qsort(double* s, size_t lo, size_t hi) {
     }
 }
 
+/* Order-preserving double <-> uint64 key: flip the sign bit for positives, and
+ * all bits for negatives, so unsigned ascending order == double ascending order
+ * (handles -0.0/+0.0; NaNs cluster at an end). */
+static uint64_t nd_d2key(double d) {
+    uint64_t u; memcpy(&u, &d, sizeof u);
+    return (u >> 63) ? ~u : (u | 0x8000000000000000ULL);
+}
+static double nd_key2d(uint64_t k) {
+    uint64_t u = (k & 0x8000000000000000ULL) ? (k ^ 0x8000000000000000ULL) : ~k;
+    double d; memcpy(&d, &u, sizeof d);
+    return d;
+}
+
+/* Below this, the introsort's lower constant factor wins; above it an 8-pass
+ * LSD radix sort (memory-bound, no comparisons) is far faster on machine
+ * doubles. */
+#define ND_RADIX_MIN ((size_t)2048)
+
+/* LSD radix sort of the doubles in `s` (ascending). Falls back to introsort if
+ * the scratch allocation fails. */
+static void nd_radix_sort(double* s, size_t n) {
+    uint64_t* a = malloc(n * sizeof(uint64_t));
+    uint64_t* b = malloc(n * sizeof(uint64_t));
+    if (!a || !b) { free(a); free(b); nd_qsort(s, 0, n - 1); return; }
+    for (size_t i = 0; i < n; i++) a[i] = nd_d2key(s[i]);
+    uint64_t* src = a; uint64_t* dst = b;
+    for (int pass = 0; pass < 8; pass++) {          /* one byte per pass */
+        size_t count[256] = {0};
+        int sh = pass * 8;
+        for (size_t i = 0; i < n; i++) count[(src[i] >> sh) & 0xff]++;
+        size_t off = 0;
+        for (int d = 0; d < 256; d++) { size_t c = count[d]; count[d] = off; off += c; }
+        for (size_t i = 0; i < n; i++) dst[count[(src[i] >> sh) & 0xff]++] = src[i];
+        uint64_t* t = src; src = dst; dst = t;      /* 8 passes: ends back in `a` */
+    }
+    for (size_t i = 0; i < n; i++) s[i] = nd_key2d(src[i]);
+    free(a); free(b);
+}
+
 void nd_sort_ascending(double* s, size_t n) {
-    if (n > 1) nd_qsort(s, 0, n - 1);
+    if (n < 2) return;
+    if (n < ND_RADIX_MIN) nd_qsort(s, 0, n - 1);
+    else nd_radix_sort(s, n);
 }
 
 /* ----------------------------------------------------------------- Median */
@@ -374,6 +454,19 @@ Expr* ndred_ema(Expr* res) {
 /* Sum the leading `m` axes of `a` (1 <= m <= rank). m == rank collapses to a
  * scalar; otherwise the result is a rank-(rank-m) NDArray of the trailing dims.
  * dtype is preserved (a real sum stays real, a complex sum stays complex). */
+/* Columnwise (strided) sum: each output column j = sum over its `blocks`
+ * summands at stride T. Parallelized over disjoint output columns. */
+typedef struct { const void* buf; NDType dt; void* out; size_t T, blocks; double inv; } nd_col_ctx;
+static bool nd_total_cols(void* c, size_t lo, size_t hi) {
+    const nd_col_ctx* x = (const nd_col_ctx*)c;
+    for (size_t j = lo; j < hi; j++) {
+        double re, im;
+        nd_sum_strided(x->buf, x->dt, j, x->T, x->blocks, &re, &im);
+        ndt_set(x->out, j, x->dt, re * x->inv, im * x->inv);
+    }
+    return true;
+}
+
 static Expr* nd_total_leading(const Expr* a, int m) {
     int rank = a->data.ndarray.rank;
     const int64_t* dims = a->data.ndarray.dims;
@@ -386,17 +479,14 @@ static Expr* nd_total_leading(const Expr* a, int m) {
 
     if (m == rank) {                             /* full reduction -> scalar */
         double re, im;
-        nd_sum_strided(buf, dt, 0, 1, blocks, &re, &im);
+        nd_full_sum(buf, dt, blocks, &re, &im);
         return nd_scalar(re, im, cplx);
     }
 
     void* out = malloc(ndt_elem_size(dt) * T);
     if (!out) return NULL;
-    for (size_t j = 0; j < T; j++) {
-        double re, im;
-        nd_sum_strided(buf, dt, j, T, blocks, &re, &im);
-        ndt_set(out, j, dt, re, im);
-    }
+    nd_col_ctx c = { buf, dt, out, T, blocks, 1.0 };
+    nd_parallel_for(T, nd_total_cols, &c);
     return expr_new_ndarray(rank - m, dims + m, out, dt); /* adopts out */
 }
 
@@ -442,28 +532,52 @@ Expr* ndred_mean(Expr* res) {
 
     if (rank == 1) {                             /* vector -> scalar */
         double re, im;
-        nd_sum_strided(buf, dt, 0, 1, blocks, &re, &im);
+        nd_full_sum(buf, dt, blocks, &re, &im);
         return nd_scalar(re * inv, im * inv, cplx);
     }
 
     void* out = malloc(ndt_elem_size(dt) * T);
     if (!out) return ndarray_delist_and_reeval(res);
-    for (size_t j = 0; j < T; j++) {
-        double re, im;
-        nd_sum_strided(buf, dt, j, T, blocks, &re, &im);
-        ndt_set(out, j, dt, re * inv, im * inv);
-    }
+    nd_col_ctx c = { buf, dt, out, T, blocks, inv };  /* inv scales sum -> mean */
+    nd_parallel_for(T, nd_total_cols, &c);
     return expr_new_ndarray(rank - 1, dims + 1, out, dt);
 }
 
 /* ------------------------------------------------- Variance / Std / RMS */
+
+/* One column's second moment at (base, stride) over `blocks` summands, serial
+ * (used per-column in the columnwise path). mode: 0=Variance, 1=Std, 2=RMS. */
+static double nd_moment_at(const void* buf, NDType dt, size_t base, size_t stride,
+                           size_t blocks, int mode) {
+    if (mode == 2) {
+        double ss = nd_sumsq_strided(buf, dt, base, stride, blocks, 0.0, 0.0);
+        return sqrt(ss / (double)blocks);
+    }
+    double sr, si;
+    nd_sum_strided(buf, dt, base, stride, blocks, &sr, &si);
+    double mr = sr / (double)blocks, mi = si / (double)blocks;
+    double ss = nd_sumsq_strided(buf, dt, base, stride, blocks, mr, mi);
+    double var_ = ss / (double)(blocks - 1);
+    return (mode == 1) ? sqrt(var_) : var_;
+}
+
+typedef struct {
+    const void* buf; NDType dt; void* out; NDType odt; size_t T, blocks; int mode;
+} nd_mom_ctx;
+static bool nd_moment_cols(void* c, size_t lo, size_t hi) {
+    const nd_mom_ctx* x = (const nd_mom_ctx*)c;
+    for (size_t j = lo; j < hi; j++)
+        ndt_set(x->out, j, x->odt, nd_moment_at(x->buf, x->dt, j, x->T, x->blocks, x->mode), 0.0);
+    return true;
+}
 
 /* Columnwise (leading-axis) second-moment reduction. `mode`:
  *   0 = Variance (Sum|x-mean|^2 / (n-1)),
  *   1 = StandardDeviation (sqrt of Variance),
  *   2 = RootMeanSquare (sqrt(Sum|x|^2 / n)).
  * Always produces a REAL result (a complex column yields a real spread), so the
- * output dtype is the real dtype of matching component width. */
+ * output dtype is the real dtype of matching component width. The rank-1 case
+ * runs the two passes (mean, then Σ|x−μ|²) through the threaded full reducers. */
 static Expr* nd_moment_leading(Expr* res, int mode) {
     Expr* a = res->data.function.args[0];
     int rank = a->data.ndarray.rank;
@@ -477,35 +591,26 @@ static Expr* nd_moment_leading(Expr* res, int mode) {
     size_t T = nd_dim_prod(dims, 1, rank);
     NDType odt = nd_real_of(dt);
 
-    /* Compute one output value for column j into *val. */
-    #define ND_MOMENT_AT(j, val) do {                                        \
-        if (mode == 2) {                                                     \
-            double ss = nd_sumsq_strided(buf, dt, (j), T, blocks, 0.0, 0.0); \
-            (val) = sqrt(ss / (double)blocks);                              \
-        } else {                                                            \
-            double sr, si;                                                  \
-            nd_sum_strided(buf, dt, (j), T, blocks, &sr, &si);             \
-            double mr = sr / (double)blocks, mi = si / (double)blocks;     \
-            double ss = nd_sumsq_strided(buf, dt, (j), T, blocks, mr, mi);  \
-            double var_ = ss / (double)(blocks - 1);                       \
-            (val) = (mode == 1) ? sqrt(var_) : var_;                       \
-        }                                                                   \
-    } while (0)
-
-    if (rank == 1) {
-        double v = 0.0;
-        ND_MOMENT_AT(0, v);
+    if (rank == 1) {                             /* vector -> scalar (threaded) */
+        double v;
+        if (mode == 2) {
+            double ss = nd_full_sumsq(buf, dt, blocks, 0.0, 0.0);
+            v = sqrt(ss / (double)blocks);
+        } else {
+            double sr, si;
+            nd_full_sum(buf, dt, blocks, &sr, &si);
+            double mr = sr / (double)blocks, mi = si / (double)blocks;
+            double ss = nd_full_sumsq(buf, dt, blocks, mr, mi);
+            double var_ = ss / (double)(blocks - 1);
+            v = (mode == 1) ? sqrt(var_) : var_;
+        }
         return expr_new_real(v);
     }
 
     void* out = malloc(ndt_elem_size(odt) * T);
     if (!out) return ndarray_delist_and_reeval(res);
-    for (size_t j = 0; j < T; j++) {
-        double v = 0.0;
-        ND_MOMENT_AT(j, v);
-        ndt_set(out, j, odt, v, 0.0);
-    }
-    #undef ND_MOMENT_AT
+    nd_mom_ctx c = { buf, dt, out, odt, T, blocks, mode };
+    nd_parallel_for(T, nd_moment_cols, &c);
     return expr_new_ndarray(rank - 1, dims + 1, out, odt);
 }
 
@@ -524,52 +629,69 @@ Expr* ndred_rms(Expr* res) {
 
 /* --------------------------------------------------------------- Max / Min */
 
+/* Extreme of the flat range [lo, hi): *best gets the max/min, *sawnan is set if
+ * any element was NaN. float64 uses four independent running extrema so the
+ * ternary compiles to a vector max/min reduction (NaN flagged branchlessly via
+ * v != v); other dtypes go through ndt_get. */
+static void nd_range_extreme(const void* buf, NDType dt, size_t lo, size_t hi,
+                             bool want_max, double* best, int* sawnan) {
+    double b = want_max ? -INFINITY : INFINITY;
+    int nan = 0;
+    if (dt == NDT_FLOAT64) {
+        const double* p = (const double*)buf;
+        double b0=b, b1=b, b2=b, b3=b;
+        size_t k = lo;
+        for (; k + 4 <= hi; k += 4) {
+            double v0=p[k], v1=p[k+1], v2=p[k+2], v3=p[k+3];
+            nan |= (v0!=v0)|(v1!=v1)|(v2!=v2)|(v3!=v3);
+            if (want_max) { b0=v0>b0?v0:b0; b1=v1>b1?v1:b1; b2=v2>b2?v2:b2; b3=v3>b3?v3:b3; }
+            else          { b0=v0<b0?v0:b0; b1=v1<b1?v1:b1; b2=v2<b2?v2:b2; b3=v3<b3?v3:b3; }
+        }
+        for (; k < hi; k++) {
+            double v = p[k]; nan |= (v != v);
+            b = want_max ? (v > b ? v : b) : (v < b ? v : b);
+        }
+        double u = want_max ? (b0>b1?b0:b1) : (b0<b1?b0:b1);
+        double w = want_max ? (b2>b3?b2:b3) : (b2<b3?b2:b3);
+        double m = want_max ? (u>w?u:w) : (u<w?u:w);
+        b = want_max ? (m>b?m:b) : (m<b?m:b);
+    } else {
+        for (size_t k = lo; k < hi; k++) {
+            double r, im; ndt_get(buf, k, dt, &r, &im);
+            nan |= (r != r);
+            b = want_max ? (r > b ? r : b) : (r < b ? r : b);
+        }
+    }
+    *best = b; *sawnan = nan;
+}
+
+typedef struct { const void* buf; NDType dt; bool want_max; } nd_ext_ctx;
+static void nd_ext_reduce(void* c, size_t lo, size_t hi, double* slot) {
+    const nd_ext_ctx* x = (const nd_ext_ctx*)c;
+    double b; int nan;
+    nd_range_extreme(x->buf, x->dt, lo, hi, x->want_max, &b, &nan);
+    slot[0] = b; slot[1] = (double)nan;         /* slot: {extreme, nan-flag} */
+}
+
 /* Max (want_max=true) / Min over every element (full flatten) -> real scalar.
  * Complex has no order and a NaN element would make the List result symbolic,
- * so both degrade. */
+ * so both degrade. Threaded over the flat range. */
 static Expr* nd_extreme(Expr* res, bool want_max) {
     Expr* a = res->data.function.args[0];
     if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
     NDType dt = a->data.ndarray.dtype;
     if (ndt_is_complex(dt)) return ndarray_delist_and_reeval(res);
-    const void* buf = a->data.ndarray.data;
     size_t sz = ndarray_size(a);
 
+    nd_ext_ctx c = { a->data.ndarray.data, dt, want_max };
+    double slots[NDARRAY_MAX_THREADS * 2];
+    int k = nd_parallel_reduce(sz, nd_ext_reduce, &c, 2, slots);
     double best = want_max ? -INFINITY : INFINITY;
     int sawnan = 0;
-    if (dt == NDT_FLOAT64) {
-        /* Four independent running extrema break the loop-carried dependency so
-         * the ternary compiles to a vector max/min reduction; NaN is flagged
-         * branchlessly via v != v so a NaN element still degrades to the exact
-         * List result. */
-        const double* p = (const double*)buf;
-        double b0 = best, b1 = best, b2 = best, b3 = best;
-        size_t k = 0;
-        for (; k + 4 <= sz; k += 4) {
-            double v0=p[k], v1=p[k+1], v2=p[k+2], v3=p[k+3];
-            sawnan |= (v0!=v0)|(v1!=v1)|(v2!=v2)|(v3!=v3);
-            if (want_max) {
-                b0=v0>b0?v0:b0; b1=v1>b1?v1:b1; b2=v2>b2?v2:b2; b3=v3>b3?v3:b3;
-            } else {
-                b0=v0<b0?v0:b0; b1=v1<b1?v1:b1; b2=v2<b2?v2:b2; b3=v3<b3?v3:b3;
-            }
-        }
-        for (; k < sz; k++) {
-            double v = p[k];
-            sawnan |= (v != v);
-            best = want_max ? (v > best ? v : best) : (v < best ? v : best);
-        }
-        double u = want_max ? (b0>b1?b0:b1) : (b0<b1?b0:b1);
-        double w = want_max ? (b2>b3?b2:b3) : (b2<b3?b2:b3);
-        double m = want_max ? (u>w?u:w) : (u<w?u:w);
-        best = want_max ? (m>best?m:best) : (m<best?m:best);
-    } else {
-        for (size_t k = 0; k < sz; k++) {
-            double r, im;
-            ndt_get(buf, k, dt, &r, &im);
-            sawnan |= (r != r);
-            best = want_max ? (r > best ? r : best) : (r < best ? r : best);
-        }
+    for (int t = 0; t < k; t++) {
+        double b = slots[2 * t];
+        best = want_max ? (b > best ? b : best) : (b < best ? b : best);
+        sawnan |= (slots[2 * t + 1] != 0.0);
     }
     if (sawnan) return ndarray_delist_and_reeval(res);
     return expr_new_real(best);

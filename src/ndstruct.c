@@ -208,8 +208,33 @@ Expr* ndstruct_drop(Expr* res) {
 
 /* ------------------------------------------------------------------- Clip */
 
+/* Elementwise clamp chunk. float64 clamps a raw double buffer (vectorizes);
+ * other real dtypes go through the ndt_get/ndt_set choke point. */
+typedef struct { const void* buf; void* out; NDType dt; double lo, hi; } nd_clip_ctx;
+static bool nd_clip_chunk(void* c, size_t lo_k, size_t hi_k) {
+    const nd_clip_ctx* x = (const nd_clip_ctx*)c;
+    double lo = x->lo, hi = x->hi;
+    if (x->dt == NDT_FLOAT64) {
+        const double* p = (const double*)x->buf;
+        double* o = (double*)x->out;
+        for (size_t k = lo_k; k < hi_k; k++) {
+            double r = p[k];
+            r = r < lo ? lo : (r > hi ? hi : r);
+            o[k] = r;
+        }
+    } else {
+        for (size_t k = lo_k; k < hi_k; k++) {
+            double r, im;
+            ndt_get(x->buf, k, x->dt, &r, &im);
+            r = r < lo ? lo : (r > hi ? hi : r);
+            ndt_set(x->out, k, x->dt, r, 0.0);
+        }
+    }
+    return true;
+}
+
 /* Clip[a] clamps to [-1, 1]; Clip[a, {min, max}] to [min, max]. Elementwise,
- * real dtype only. The 3-arg replacement form and complex dtypes degrade. */
+ * real dtype only, threaded. The 3-arg replacement form and complex dtypes degrade. */
 Expr* ndstruct_clip(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return ndarray_delist_and_reeval(res);
@@ -229,15 +254,10 @@ Expr* ndstruct_clip(Expr* res) {
             return ndarray_delist_and_reeval(res);
     }
 
-    const void* buf = a->data.ndarray.data;
     size_t sz = ndarray_size(a);
     void* out = malloc(ndt_elem_size(dt) * sz);
     if (!out) return ndarray_delist_and_reeval(res);
-    for (size_t k = 0; k < sz; k++) {
-        double r, im;
-        ndt_get(buf, k, dt, &r, &im);
-        if (r < lo) r = lo; else if (r > hi) r = hi;
-        ndt_set(out, k, dt, r, 0.0);
-    }
+    nd_clip_ctx c = { a->data.ndarray.data, out, dt, lo, hi };
+    nd_parallel_for(sz, nd_clip_chunk, &c);
     return expr_new_ndarray(a->data.ndarray.rank, a->data.ndarray.dims, out, dt);
 }

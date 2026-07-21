@@ -13,6 +13,33 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef USE_LAPACK
+#include "lapack.h"   /* pulls in Accelerate.h / cblas.h (CBLAS declarations) */
+
+/* Real matrix*matrix via the platform BLAS dgemm (Apple Accelerate or system
+ * CBLAS — multithreaded + vectorized). Both operands must be rank-2 float64
+ * NDArrays with compatible inner dims; returns NULL otherwise so the caller
+ * falls back to ndarray_dot2 (rank-1, complex, shape errors). This is the
+ * difference between a naive O(m·n·k) scalar loop and a tuned kernel. */
+static Expr* nd_blas_matmul(const Expr* a, const Expr* b) {
+    if (a->data.ndarray.rank != 2 || b->data.ndarray.rank != 2) return NULL;
+    if (a->data.ndarray.dtype != NDT_FLOAT64 ||
+        b->data.ndarray.dtype != NDT_FLOAT64) return NULL;
+    int64_t m = a->data.ndarray.dims[0], k = a->data.ndarray.dims[1];
+    int64_t k2 = b->data.ndarray.dims[0], n = b->data.ndarray.dims[1];
+    if (k != k2) return NULL;                 /* shape error: let ndarray_dot2 report */
+    double* out = malloc(sizeof(double) * (size_t)m * (size_t)n);
+    if (!out) return NULL;
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                (int)m, (int)n, (int)k, 1.0,
+                (const double*)a->data.ndarray.data, (int)k,
+                (const double*)b->data.ndarray.data, (int)n,
+                0.0, out, (int)n);
+    int64_t dims[2] = { m, n };
+    return expr_new_ndarray(2, dims, out, NDT_FLOAT64); /* adopts out */
+}
+#endif
+
 /* Build a nested-List tensor of shape dims[0..rank-1] by consuming leaves
  * from `flat` in row-major order.  Each leaf is deep-copied. */
 static Expr* build_tensor(int64_t* dims, int rank, Expr** flat, size_t* idx) {
@@ -36,6 +63,10 @@ Expr* dot2(Expr* a, Expr* b, bool* error_printed) {
      * Times/Plus per element. Higher-rank NDArray operands fall through to
      * the generic tensor path below via a nested-List conversion. */
     if (a->type == EXPR_NDARRAY && b->type == EXPR_NDARRAY) {
+#ifdef USE_LAPACK
+        Expr* bl = nd_blas_matmul(a, b);   /* rank-2 f64 matmul -> BLAS dgemm */
+        if (bl) return bl;
+#endif
         bool shape_error = false;
         Expr* fast = ndarray_dot2(a, b, &shape_error);
         if (fast) return fast;
