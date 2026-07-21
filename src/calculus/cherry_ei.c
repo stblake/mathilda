@@ -286,16 +286,6 @@ static size_t gen_alpha_candidates(Expr* g1, Expr* p, Expr* q, Expr* x,
                      * Q(i) — defer those. */
                     if (numeric_complex(val) && (degq != 0 || rt_degree(g1, x) != 2))
                         continue;
-                    /* A COMPLEX root carrying a radical lives in Q(i sqrt d) (d not
-                     * a perfect square).  The coefficient solve routes to the
-                     * number-field fallback, but its diff-back verifier
-                     * (rt_verify_antideriv) still falls to Simplify over Q(i sqrt d)
-                     * with the E^x kernel, which does not certify and hangs — so the
-                     * closed form cannot be admitted yet.  Decline cleanly rather
-                     * than hang.  Q(i) pairs (roots p + q I, no radical) and
-                     * real-radical roots (sqrt2) are unaffected and still close.
-                     * Un-gate once the number-field zero-test lands (Track B). */
-                    if (numeric_complex(val) && expr_has_radical(val)) continue;
                     /* dedup */
                     bool dup = false;
                     for (size_t k = 0; k < n; k++)
@@ -656,9 +646,23 @@ Expr* rt_cherry_ei(Expr* f, Expr* x) {
     Expr* rhs_sum = expr_new_function(mk_sym("Plus"), rhs, nrhs);
     free(rhs);
 
+    /* A lone complex-conjugate ei pair whose constants carry a radical lives in
+     * Q(i sqrt d) (d not a perfect square).  The primary Together/GCD on the full
+     * ansatz residual blows up in exact_poly_div over that field; the number-field
+     * fallback (rt_cherry_ei_conjpair_nf, below) solves it over Q with a SYMBOLIC
+     * generator chs instead, and the diff-back now certifies via ComplexExpand
+     * (rt_verify_antideriv).  Skip the primary solve for this case and let the
+     * fallback handle it.  Q(i) pairs (roots p + q I, no radical) reduce over Q(i)
+     * and stay on the fast primary path. */
+    bool lone_complex_pair = (m == 2 && me == 0
+        && numeric_complex(alphas[0]) && numeric_complex(alphas[1])
+        && expr_has_radical(alphas[0]));
+
     /* resid = g - rhs;  numerator of Together must vanish identically in x. */
     Expr* resid = mk_plus2(expr_copy(g), mk_neg(rhs_sum));
-    Expr* rnum = rt_eval1("Numerator", rt_eval1("Together", resid));
+    Expr* rnum = lone_complex_pair ? NULL
+        : rt_eval1("Numerator", rt_eval1("Together", resid));
+    if (lone_complex_pair) expr_free(resid);
     Expr* sol = NULL;
     if (rnum) {
         /* Every x-coefficient of the numerator must vanish.  Solve for OUR

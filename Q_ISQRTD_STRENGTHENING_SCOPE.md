@@ -94,7 +94,21 @@ This is exactly the wall the Cherry engine hits: the coefficient solve and the d
 
 ## 3. Where Mathilda must be strengthened (two independent tracks)
 
-> **Update (2026-07-21): Track A partially LANDED.** The general `Simplify`/`FullSimplify`
+> **Update (2026-07-21): Track B LANDED — the Q(i√d) ei cases now EVALUATE.** All nine §1
+> examples close to a complex-conjugate `ExpIntegralEi` pair (diff-back 0). The fix was *not*
+> a full number-field GCD but a targeted, exact **diff-back zero-test**: the Cherry
+> number-field fallback already solved the coefficients over `Q` (symbolic generator `chs`);
+> the only remaining blocker was `rt_verify_antideriv` failing to certify `E^x·R(x) = 0` over
+> `Q(i√d)`. Adding `Together[ComplexExpand[TrigToExp[diff]]]` *before* the hang-prone
+> `Simplify` certifies it — `ComplexExpand` splits `I·Sqrt[d]` into real/imaginary parts over
+> ℝ, where `Together` decides exactly (it is additive — real-radical diffs fall through to
+> `Simplify` — and sound — `ComplexExpand` is an exact identity). The full
+> `integrate_risch_transcendental` battery stays green. **Track B (a general FLINT
+> number-field GCD) is therefore no longer needed for these integrals**; it remains the
+> durable hardening only if the *generic* `exact_poly_div` must be made safe for arbitrary
+> algebraic-coefficient inputs elsewhere.
+>
+> **Update (2026-07-21): Track A LANDED.** The general `Simplify`/`FullSimplify`
 > hang over Q(i√d) is **fixed** — the denominator-rationalisation pass
 > (`simp_rationalize.c` `denom_compute_inverse`) now bails when the denominator carries an
 > explicit complex literal (it is meant for *real* radical denominators; a complex one left
