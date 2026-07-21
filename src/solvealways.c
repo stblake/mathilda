@@ -162,12 +162,70 @@ static EqnsKind normalise_eqns(Expr* eqns_arg, Expr** scratch_slot,
 /*  Step 4 -- form lhs - rhs and expand                                */
 /* ------------------------------------------------------------------ */
 
-/* Returns an owned, expanded `lhs - rhs`.  The caller must `expr_free`. */
-static Expr* normalise_to_polynomial(const Expr* eq) {
+/* True iff `ex` is a negative number (integer / bigint / rational), or a Times whose
+ * leading factor is one — the exponent shape of a denominator Power[base, ex]. */
+static bool sa_is_negative_number(const Expr* ex) {
+    if (!ex) return false;
+    if (ex->type == EXPR_INTEGER) return ex->data.integer < 0;
+    if (ex->type == EXPR_BIGINT)  return mpz_sgn(ex->data.bigint) < 0;
+    if (head_is(ex, SYM_Rational) && ex->data.function.arg_count == 2
+        && ex->data.function.args[0]->type == EXPR_INTEGER)
+        return ex->data.function.args[0]->data.integer < 0;
+    if (head_is(ex, SYM_Times) && ex->data.function.arg_count >= 1)
+        return sa_is_negative_number(ex->data.function.args[0]);
+    return false;
+}
+
+/* True iff `e` contains any of the `vars` as a subexpression. */
+static bool sa_involves_any_var(const Expr* e, Expr* const* vars, size_t nvars) {
+    for (size_t i = 0; i < nvars; i++)
+        if (expr_eq((Expr*)e, vars[i])) return true;
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (sa_involves_any_var(e->data.function.head, vars, nvars)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (sa_involves_any_var(e->data.function.args[i], vars, nvars)) return true;
+    return false;
+}
+
+/* True iff `e` contains a denominator that involves one of the vars — a
+ * Power[base, neg] with `base` depending on a var.  Such an equation is a genuine
+ * rational function of the vars whose denominator must be cleared before
+ * coefficient extraction. */
+static bool sa_has_var_denominator(const Expr* e, Expr* const* vars, size_t nvars) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2
+        && sa_is_negative_number(e->data.function.args[1])
+        && sa_involves_any_var(e->data.function.args[0], vars, nvars))
+        return true;
+    if (sa_has_var_denominator(e->data.function.head, vars, nvars)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (sa_has_var_denominator(e->data.function.args[i], vars, nvars)) return true;
+    return false;
+}
+
+/* Returns an owned, expanded `lhs - rhs`.  The caller must `expr_free`.
+ *
+ * When `lhs - rhs` is a rational function of the vars (has a var-denominator), the
+ * identity `lhs == rhs` for ALL vars holds iff the NUMERATOR of the combined
+ * fraction vanishes — so we clear the denominator with Together (robust / FLINT-fast,
+ * incl. Q(i)) + Numerator before extracting coefficients.  Feeding the raw rational
+ * function to CoefficientList instead yields a spurious no-solution (e.g.
+ * SolveAlways[a/(x-1)+b/(x-2) == (3x-5)/((x-1)(x-2)), x] returned {} rather than
+ * {a->2, b->1}).  A diff with no var-denominator takes the byte-identical
+ * Expand-only path (zero extra cost on the polynomial hot path). */
+static Expr* normalise_to_polynomial(const Expr* eq, Expr* const* vars, size_t nvars) {
     Expr* lhs = expr_copy(eq->data.function.args[0]);
     Expr* rhs = expr_copy(eq->data.function.args[1]);
     /* internal_subtract consumes its args. */
     Expr* diff = internal_subtract((Expr*[]){ lhs, rhs }, 2);
+    if (sa_has_var_denominator(diff, vars, nvars)) {
+        Expr* tog = eval_and_free(expr_new_function(expr_new_symbol(SYM_Together),
+            (Expr*[]){ diff }, 1));                       /* adopts diff */
+        Expr* num = eval_and_free(expr_new_function(expr_new_symbol(SYM_Numerator),
+            (Expr*[]){ tog }, 1));                        /* adopts tog */
+        Expr* expanded = internal_expand((Expr*[]){ num }, 1);
+        return eval_and_free(expanded);
+    }
     /* Then Expand to canonicalise into a sum of monomials. */
     Expr* expanded = internal_expand((Expr*[]){ diff }, 1);
     /* One evaluate pass lets the evaluator simplify any leftover heads
@@ -344,12 +402,12 @@ Expr* builtin_solvealways(Expr* res) {
         /* Skip sentinel True survivors from list/And filtering. */
         if (eq && eq->type == EXPR_SYMBOL && eq->data.symbol.name == SYM_True)
             continue;
-        Expr* poly  = normalise_to_polynomial(eq);
+        Expr* poly  = normalise_to_polynomial(eq, var_items, n_vars);
         Expr* clist = call_coefficient_list(poly, vars_list_view);
         expr_free(poly);
         if (!clist) {
             /* CoefficientList declined: treat poly as a single leaf. */
-            Expr* poly2 = normalise_to_polynomial(eq);
+            Expr* poly2 = normalise_to_polynomial(eq, var_items, n_vars);
             if (!is_syntactic_zero(poly2)) {
                 push_owned(&all_coeffs, &n_coeffs, &cap_coeffs, poly2);
             } else {

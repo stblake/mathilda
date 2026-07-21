@@ -105,6 +105,19 @@ static void test_one_unknown_relation(void) {
              "List[List[Rule[b, a]]]");
 }
 
+/* Rational (denominator-bearing) equations: the identity holds for all x iff the
+ * NUMERATOR of the combined fraction vanishes, so SolveAlways must clear the
+ * var-denominator (Together + Numerator) before coefficient extraction.  Feeding the
+ * raw rational function to CoefficientList previously gave a spurious {} no-solution. */
+static void test_rational_clear_denominator(void) {
+    run_test("SolveAlways[a/(x - 1) + b/(x - 2) == (3 x - 5)/((x - 1)(x - 2)), x]",
+             "List[List[Rule[a, 2], Rule[b, 1]]]");
+    run_test("SolveAlways[A/(x - 1) + B/(x + 1) == 1/(x^2 - 1), x]",
+             "List[List[Rule[A, Rational[1, 2]], Rule[B, Rational[-1, 2]]]]");
+    /* A genuinely inconsistent rational identity is still {}. */
+    run_test("SolveAlways[a/(x - 1) == 1/(x - 2), x]", "List[]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -119,6 +132,7 @@ int main(void) {
     TEST(test_empty_list_of_equations);
     TEST(test_tautology);
     TEST(test_one_unknown_relation);
+    TEST(test_rational_clear_denominator);
     printf("All solvealways tests passed!\n");
     return 0;
 }
