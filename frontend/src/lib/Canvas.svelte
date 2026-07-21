@@ -14,6 +14,7 @@
   import { get } from 'svelte/store';
   import NotebookCard from './NotebookCard.svelte';
   import Minimap from './Minimap.svelte';
+  import { isTouchDevice } from './platform';
   import {
     canvasState,
     addNotebook,
@@ -214,7 +215,121 @@
     addNotebookAt(worldX, worldY);  // notebook appears at cursor, no zoom change
   }
 
+  // ---------------------------------------------------------------------------
+  // Touch (coarse pointer): 1-finger pan, 2-finger pinch-zoom.
+  //
+  // On mouse, panning rides on wheel events and dragging a card moves it. Touch
+  // devices fire neither wheel nor a hoverable cursor, so here a single finger
+  // on empty canvas pans, two fingers anywhere pan+zoom, and a single finger on
+  // a card is left alone (tap to focus, scroll the card body) — card dragging
+  // and rubber-band selection are disabled (see NotebookCard: isTouchDevice).
+  //
+  // We drive the store *and* seed the animated display values so touch tracks
+  // the finger 1:1; the rAF lerp (tuned for the mouse-wheel spring) would
+  // otherwise add visible lag to direct manipulation.
+
+  const touchPts = new Map<number, { x: number; y: number }>();
+  let touchPanning = false;
+  let pinchPrevDist = 0;
+  let gestPrevX = 0;   // previous anchor (finger, or 2-finger midpoint) in screen px
+  let gestPrevY = 0;
+
+  function twoFingerDist(): number {
+    const p = [...touchPts.values()];
+    return p.length < 2 ? 0 : Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+  }
+  function twoFingerMid(): { x: number; y: number } {
+    const p = [...touchPts.values()];
+    return { x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 };
+  }
+
+  // Commit a new view and snap the animated display to it (no lerp lag).
+  function applyView(zoomV: number, px: number, py: number) {
+    canvasState.update(s => ({ ...s, zoom: zoomV, panX: px, panY: py }));
+    zoom = targetZoom = zoomV;
+    panX = targetPanX = px;
+    panY = targetPanY = py;
+  }
+
+  function onTouchDown(e: PointerEvent) {
+    const el = e.target as HTMLElement;
+    const overCard = el.closest('.nb-card');
+    const overInteractive = el.closest(
+      'button, input, a, [role="button"], .cm-editor, [contenteditable="true"]'
+    );
+    touchPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (touchPts.size >= 2) {
+      // Second finger down → begin pinch-zoom/pan (works even over a card).
+      pinchPrevDist = twoFingerDist();
+      const m = twoFingerMid();
+      gestPrevX = m.x; gestPrevY = m.y;
+      touchPanning = true;
+      canvasEl.setPointerCapture(e.pointerId);
+      e.preventDefault();
+      return;
+    }
+
+    // Single finger over a card / control → let the card handle it (tap, scroll,
+    // edit). No canvas pan, no card drag.
+    if (overCard || overInteractive) return;
+
+    // Single finger on empty canvas → pan.
+    touchPanning = true;
+    gestPrevX = e.clientX; gestPrevY = e.clientY;
+    canvasEl.setPointerCapture(e.pointerId);
+  }
+
+  function onTouchMove(e: PointerEvent) {
+    if (!touchPts.has(e.pointerId)) return;
+    touchPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (!touchPanning) return;
+
+    if (touchPts.size >= 2) {
+      const dist = twoFingerDist();
+      const m = twoFingerMid();
+      const rect = canvasEl.getBoundingClientRect();
+      const cx = m.x - rect.left, cy = m.y - rect.top;
+      if (pinchPrevDist > 0 && dist > 0) {
+        const factor = dist / pinchPrevDist;
+        const newZoom = Math.max(0.08, Math.min(3, zoom * factor));
+        const zf = newZoom / zoom;
+        const mdx = m.x - gestPrevX, mdy = m.y - gestPrevY;   // midpoint travel → pan
+        applyView(newZoom, cx - zf * (cx - panX) + mdx, cy - zf * (cy - panY) + mdy);
+      }
+      pinchPrevDist = dist;
+      gestPrevX = m.x; gestPrevY = m.y;
+      e.preventDefault();
+      return;
+    }
+
+    // Single-finger pan.
+    const dx = e.clientX - gestPrevX, dy = e.clientY - gestPrevY;
+    gestPrevX = e.clientX; gestPrevY = e.clientY;
+    applyView(zoom, panX + dx, panY + dy);
+    e.preventDefault();
+  }
+
+  function onTouchUp(e: PointerEvent) {
+    touchPts.delete(e.pointerId);
+    if (touchPts.size < 2) pinchPrevDist = 0;
+    if (touchPts.size === 1) {
+      // Dropped from two fingers to one → re-anchor pan on the remaining finger
+      // so the view doesn't jump.
+      const p = [...touchPts.values()][0];
+      gestPrevX = p.x; gestPrevY = p.y;
+    } else if (touchPts.size === 0) {
+      touchPanning = false;
+    }
+  }
+
+  // Route by the actual pointer that fired, not a device-wide flag: a mouse on
+  // a touchscreen laptop still gets the mouse model (drag / rubber-band), while
+  // a finger anywhere gets pan / pinch. On phones every event is `touch`.
+  const isTouchEvent = (e: PointerEvent) => e.pointerType === 'touch' || e.pointerType === 'pen';
+
   function onPointerDown(e: PointerEvent) {
+    if (isTouchEvent(e)) { onTouchDown(e); return; }
     if (e.button !== 0) return;
     const overCard = (e.target as HTMLElement).closest('.nb-card');
     // Interactive elements inside cards — don't interfere
@@ -243,6 +358,7 @@
   }
 
   function onPointerMove(e: PointerEvent) {
+    if (isTouchEvent(e)) { onTouchMove(e); return; }
     if (groupDragActive) { updateGroupDrag(e); return; }
     if (selStart) { updateSelection(e); return; }
     if (!dragging) return;
@@ -254,6 +370,7 @@
   }
 
   function onPointerUp(_e: PointerEvent) {
+    if (isTouchEvent(_e)) { onTouchUp(_e); return; }
     if (groupDragActive) { endGroupDrag(); return; }
     if (selStart) { finishSelection(); return; }
     dragging = false;
@@ -283,6 +400,10 @@
   // ---------------------------------------------------------------------------
   // Right-click = add notebook at cursor world position
   function onContextMenu(e: MouseEvent) {
+    // On touch, contextmenu fires on long-press and would spawn a notebook
+    // mid-pan. Suppress it there; the "＋ New Notebook" button and double-tap
+    // remain as add paths.
+    if (isTouchDevice) { e.preventDefault(); return; }
     if ((e.target as HTMLElement).closest('.nb-card-wrapper, .nb-card, button')) return;
     e.preventDefault();
     const rect   = canvasEl?.getBoundingClientRect() ?? { left: 0, top: 0 };
@@ -470,6 +591,10 @@
     /* prevent text selection while dragging */
     user-select: none;
     -webkit-user-select: none;
+    /* Take over touch gestures (finger pan / pinch-zoom) instead of letting the
+       browser scroll or page-zoom. Card bodies re-enable vertical scrolling via
+       their own touch-action (see NotebookCard .card-body). */
+    touch-action: none;
   }
 
   .canvas-world {
@@ -498,7 +623,8 @@
   /* Canvas hints must NOT scale with Cmd+/- — use px not rem */
   .canvas-hints {
     position: fixed;
-    bottom: 14px;
+    /* Sit above the device's bottom gesture/nav bar on mobile (0 on desktop). */
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
     left: 50%;
     transform: translateX(-50%);
     display: flex;

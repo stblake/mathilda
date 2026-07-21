@@ -24,3 +24,9 @@ serde       = { version = "1", features = ["derive"] }
 serde_json  = "1"
 log         = "0.4"
 tokio       = { version = "1", features = ["full"] }
+
+# Android embeds the internal module tree (init.m + tables) in the binary and
+# extracts it at startup, since APK-bundled assets are not fopen()-able by the
+# C kernel. Other targets bundle it as a normal app resource instead.
+[target.'cfg(target_os = "android")'.dependencies]
+include_dir = "0.7"

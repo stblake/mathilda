@@ -1,11 +1,29 @@
 mod commands;
+
+// Kernel backend is chosen at compile time:
+//   * desktop  -> `kernel.rs`: spawns the `mathilda` sidecar over stdio.
+//   * mobile   -> `kernel_ffi.rs`: runs the kernel in-process via FFI, because
+//                 iOS/Android sandboxes forbid spawning child processes.
+// Both expose an identical `MathildaKernel` API, so the rest of the app is
+// backend-agnostic.
+#[cfg(not(mobile))]
+mod kernel;
+#[cfg(mobile)]
+mod ffi;
+#[cfg(mobile)]
+#[path = "kernel_ffi.rs"]
 mod kernel;
 
 use commands::{evaluate_cell, interrupt_kernel, load_library, load_notebook, ping_kernel, restart_kernel, save_library, save_notebook, set_window_title};
 use kernel::MathildaKernel;
+#[cfg(desktop)]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::{Emitter, Manager};
+#[cfg(desktop)]
+use tauri::Emitter;
+use tauri::Manager;
 
+// Native menu bar is a desktop-only concept; iOS/Android have no app menu.
+#[cfg(desktop)]
 fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
     let file = Submenu::with_items(
         app,
@@ -87,13 +105,16 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
-            // Native menu
-            let menu = build_menu(app)?;
-            app.set_menu(menu)?;
-            app.on_menu_event(|app, event| {
-                let id = event.id().as_ref().to_string();
-                let _ = app.emit(&format!("menu:{id}"), ());
-            });
+            // Native menu (desktop only — mobile has no app menu bar).
+            #[cfg(desktop)]
+            {
+                let menu = build_menu(app)?;
+                app.set_menu(menu)?;
+                app.on_menu_event(|app, event| {
+                    let id = event.id().as_ref().to_string();
+                    let _ = app.emit(&format!("menu:{id}"), ());
+                });
+            }
 
             // Kernel — managed synchronously, spawned async
             let kernel = MathildaKernel::empty(app.handle().clone());
