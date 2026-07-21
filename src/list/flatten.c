@@ -1,5 +1,7 @@
 #include "list_common.h"
 #include "flatten.h"
+#include "ndarray.h"
+#include "ndstruct.h"
 
 static void flatten_rec(Expr* e, const char* h, int64_t level, Expr*** results, size_t* count, size_t* cap) {
     if (level != 0 && head_is(e, intern_symbol(h))) {
@@ -19,6 +21,10 @@ Expr* builtin_flatten(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 3) return NULL;
 
     Expr* list = res->data.function.args[0];
+
+    /* Flatten[ndarray]: reshape the flat buffer to rank 1 (see ndstruct.c). */
+    if (is_ndarray(list)) return ndstruct_flatten(res);
+
     if (list->type != EXPR_FUNCTION) return expr_copy(list);
 
     int64_t n = -1; // -1 means infinity

@@ -1,5 +1,7 @@
 #include "list_common.h"
 #include "transpose.h"
+#include "ndarray.h"
+#include "ndstruct.h"
 
 static int get_array_dimensions(Expr* e, int64_t* dims, const char* head_name) {
     if (!head_is(e, intern_symbol(head_name))) {
@@ -51,6 +53,10 @@ static Expr* build_transposed(const char* head, int64_t* out_dims, size_t out_de
 Expr* builtin_transpose(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     Expr* list = res->data.function.args[0];
+
+    /* Transpose[ndarray] (rank 2) swaps axes on the buffer (see ndstruct.c). */
+    if (is_ndarray(list)) return ndstruct_transpose(res);
+
     if (list->type != EXPR_FUNCTION || list->data.function.head->type != EXPR_SYMBOL) return NULL;
     const char* head = list->data.function.head->data.symbol.name;
 

@@ -229,12 +229,27 @@ Out[8]= {0.557674, 0.557674, 0.557674}
 ```
 
 ## Map (/@)
-- `f /@ expr` or `Map[f, expr]`
+- `f /@ expr` or `Map[f, expr]` applies `f` to each element at level 1;
+  `Map[f, expr, levelspec]` maps at the parts selected by `levelspec`.
+- **NDArray**: `Map[f, NDArray[…]]` applies `f` to each leading-axis part — a
+  scalar for a rank-1 array, a sub-array row for higher rank. If every result is
+  a machine number the output repacks into an `NDArray` (packed in → packed out,
+  like `Sin[arr]`); a symbolic result yields a `List`. A non-default level spec
+  materializes the array and maps generically.
+
+```mathematica
+In[1]:= Map[#^2 &, NDArray[Range[4]]]
+Out[1]= NDArray[{1., 4., 9., 16.}]
+
+In[2]:= Map[f, NDArray[Range[3]]]
+Out[2]= {f[1.], f[2.], f[3.]}
+```
 
 ## MapIndexed
 Maps `f` over the elements together with their positions.
 - `MapIndexed[f, list]`: gives `{f[e1, {1}], f[e2, {2}], ...}` — the second argument is the position `{i}`.
 - `MapIndexed[f, assoc]`: gives `<|k -> f[v, {Key[k]}]|>` — the criterion sees each value and its `{Key[k]}` position (the same shape `Position` reports), keys preserved.
+- `MapIndexed[f, NDArray[…]]`: pairs each leading-axis part with its position `{i}` (a scalar for rank 1, a sub-array row for higher rank), giving a `List`.
 
 ```mathematica
 In[1]:= MapIndexed[f, {10, 20, 30}]
@@ -256,6 +271,8 @@ argument lists are given separately.
   through level `n`; `n = 0` gives `f[e1, e2, ...]`.
 - Lists of associations with identical key sequences thread over their values:
   `MapThread[f, {<|a -> 1|>, <|a -> 2|>}]` gives `<|a -> f[1, 2]|>`.
+- An `NDArray` entry threads like a list:
+  `MapThread[f, {NDArray[{1, 2}], {a, b}}]` gives `{f[1., a], f[2., b]}`.
 
 A dimension mismatch (unequal lengths, a non-list argument, or mismatched
 association keys) leaves the expression unevaluated.
@@ -276,7 +293,9 @@ Out[3]= {a + u + x, b + v + y, c + w + z}
 - `f @@@ expr`: Level 1.
 
 ## MapAll (//@)
-- `f //@ expr`: Recursive map.
+- `f //@ expr`: Recursive map (applies `f` at every level, `{0, Infinity}`).
+- `MapAll[f, NDArray[…]]` materializes the array and applies `f` at every level,
+  including each scalar leaf and the whole array at level 0.
 
 ## MapAt
 Applies a function to selected parts of an expression, identified by position specifications of the same form as those returned by `Position`.
@@ -917,11 +936,40 @@ Out[3]= None
 
 ## Scan
 `Scan[f, expr]` applies `f` to each element of `expr` for its side effects and
-returns `Null`. Over an association it applies `f` to each value.
+returns `Null`, discarding the results (unlike `Map`, it builds no new
+expression). `Scan[f, expr, levelspec]` applies `f` to the parts of `expr`
+selected by `levelspec` (default `{1}`), traversing depth-first with leaves
+visited before roots.
+
+`levelspec` follows the standard convention: `n` = levels 1 through `n`,
+`{n}` = level `n` only, `{n1, n2}` = levels `n1` through `n2`, `Infinity` =
+all levels; negative levels count depth from the bottom (`-1` = leaves), and
+positive/negative bounds may be mixed (e.g. `{2, -3}`). Level 0 is the whole
+expression.
+
+Early exit: a `Throw` inside `f` propagates to an enclosing `Catch`;
+`Return[ret]` makes the final value of `Scan` equal to `ret`. With
+`Heads -> True`, heads of expressions are also visited. Over an association at
+the default level, `f` is applied to each value. `Scan` also fast-paths over a
+packed `NDArray`, applying `f` to each leading-axis part (a scalar for a rank-1
+array, a sub-array row for higher rank).
 
 ```mathematica
 In[1]:= s = 0; Scan[(s = s + #) &, <|"a" -> 1, "b" -> 2, "c" -> 3|>]; s
 Out[1]= 6
+
+In[2]:= Scan[Print, {{{a}}}, Infinity]
+        a
+        {a}
+        {{a}}
+
+In[3]:= Catch[Scan[If[# > 5, Throw[#]] &, {2, 4, 6, 8}]]
+Out[3]= 6
+
+In[4]:= Scan[Print, {a, b}, Heads -> True]
+        List
+        a
+        b
 ```
 
 ## Fold, FoldList over associations

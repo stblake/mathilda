@@ -1,6 +1,7 @@
 #include "list_common.h"
 #include "total.h"
 #include "assoc.h"
+#include "ndreduce.h"
 
 static int64_t get_depth_for_total(Expr* e) {
     if (e->type != EXPR_FUNCTION) return 1;
@@ -47,6 +48,9 @@ Expr* builtin_total(Expr* res) {
 
     /* Total[assoc] sums the association's values. */
     { Expr* r = assoc_apply_over_values(res); if (r) return r; }
+
+    /* NDArray fast path: sum the flat buffer directly (see ndreduce.c). */
+    if (ndred_call_has_ndarray(res)) return ndred_total(res);
 
     Expr* list = res->data.function.args[0];
     Expr* level_spec = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;

@@ -1,6 +1,8 @@
 #include "list_common.h"
 #include "minmax.h"
 #include "assoc.h"
+#include "ndarray.h"
+#include "ndreduce.h"
 
 /* MinMax[list] gives {Min[list], Max[list]} in the natural single pass a caller
  * would otherwise write by hand. Over an association it uses the values (Min and
@@ -34,6 +36,9 @@ Expr* builtin_min(Expr* res) {
     if (n == 1 && is_association(res->data.function.args[0])) {
         Expr* r = assoc_apply_over_values(res); if (r) return r;
     }
+
+    /* Min[ndarray] scans the flat buffer (see ndreduce.c). */
+    if (n == 1 && is_ndarray(res->data.function.args[0])) return ndred_min(res);
 
     // Check for List arguments to flatten
     bool has_list = false;
@@ -159,6 +164,9 @@ Expr* builtin_max(Expr* res) {
     if (n == 1 && is_association(res->data.function.args[0])) {
         Expr* r = assoc_apply_over_values(res); if (r) return r;
     }
+
+    /* Max[ndarray] scans the flat buffer (see ndreduce.c). */
+    if (n == 1 && is_ndarray(res->data.function.args[0])) return ndred_max(res);
 
     // Check for List arguments to flatten
     bool has_list = false;

@@ -5,6 +5,7 @@
 #include "arithmetic.h"
 #include "assoc.h"
 #include "ndarray.h"   /* ndt_get for NDArray canonical ordering */
+#include "ndstruct.h"  /* ndstruct_sort NDArray fast path */
 #include <ctype.h>
 #include <math.h>
 #include <stdbool.h>
@@ -382,6 +383,10 @@ Expr* builtin_sort(Expr* res) {
     }
     
     Expr* list = res->data.function.args[0];
+
+    /* Sort[ndarray]: sort the flat buffer directly (see ndstruct.c). */
+    if (is_ndarray(list)) return ndstruct_sort(res);
+
     if (list->type != EXPR_FUNCTION) {
         return expr_copy(list);
     }

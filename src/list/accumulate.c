@@ -1,6 +1,8 @@
 #include "list_common.h"
 #include "accumulate.h"
 #include "assoc.h"
+#include "ndarray.h"
+#include "ndreduce.h"
 
 /* Accumulate[list] returns the running cumulative totals of list, with the
  * same head and the same length as the input. The intermediate sums are
@@ -43,6 +45,9 @@ Expr* builtin_accumulate(Expr* res) {
     /* Accumulate[assoc] gives the running totals of the values, keeping every
      * key aligned with its cumulative sum. */
     if (is_association(lst)) { Expr* r = assoc_rekey_over_values(res); if (r) return r; }
+
+    /* Accumulate[ndarray] prefix-sums the leading axis on the buffer (ndreduce.c). */
+    if (argc == 1 && is_ndarray(lst)) return ndred_accumulate(res);
 
     if (lst->type != EXPR_FUNCTION) return NULL;
 

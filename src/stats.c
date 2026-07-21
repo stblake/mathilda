@@ -7,6 +7,8 @@
 #include "complex.h"
 #include "sym_names.h"
 #include "assoc.h"
+#include "ndarray.h"
+#include "ndreduce.h"
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -61,6 +63,9 @@ Expr* builtin_mean(Expr* res) {
 
     /* Mean[assoc] is the mean of the association's values. */
     if (is_association(data)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
+
+    /* NDArray fast path (see ndreduce.c). */
+    if (ndred_call_has_ndarray(res)) return ndred_mean(res);
 
     // Check if it's a matrix
     Expr* matrixq_args[1] = { expr_copy(data) };
@@ -155,6 +160,9 @@ Expr* builtin_mean(Expr* res) {
 Expr* builtin_rootmeansquare(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* data = res->data.function.args[0];
+
+    /* NDArray fast path (see ndreduce.c). */
+    if (ndred_call_has_ndarray(res)) return ndred_rms(res);
 
     // Check if it's a matrix
     Expr* matrixq_args[1] = { expr_copy(data) };
@@ -277,6 +285,9 @@ Expr* builtin_variance(Expr* res) {
 
     /* Variance[assoc] is the variance of the association's values. */
     if (is_association(data)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
+
+    /* NDArray fast path (see ndreduce.c). */
+    if (ndred_call_has_ndarray(res)) return ndred_variance(res);
 
     // Check if it's a matrix
     Expr* matrixq_args[1] = { expr_copy(data) };
@@ -420,6 +431,9 @@ Expr* builtin_standard_deviation(Expr* res) {
     /* StandardDeviation[assoc] uses the association's values. */
     if (is_association(data)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
 
+    /* NDArray fast path (see ndreduce.c). */
+    if (ndred_call_has_ndarray(res)) return ndred_std(res);
+
     // Check if it's a matrix
     Expr* matrixq_args[1] = { expr_copy(data) };
     Expr* matrixq_call = expr_new_function(expr_new_symbol(SYM_MatrixQ), matrixq_args, 1);
@@ -501,6 +515,9 @@ Expr* builtin_median(Expr* res) {
     /* Median[assoc] is the median of the association's values. */
     if (is_association(data)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
 
+    /* NDArray fast path: quickselect on the flat buffer (see ndreduce.c). */
+    if (ndred_call_has_ndarray(res)) return ndred_median(res);
+
     // Check if it's a vector or tensor. If it's empty or not a list, return NULL.
     if (data->type != EXPR_FUNCTION || data->data.function.head->type != EXPR_SYMBOL || data->data.function.head->data.symbol.name != SYM_List) {
         return expr_copy(res);
@@ -573,6 +590,9 @@ Expr* builtin_quartiles(Expr* res) {
     if (res->data.function.arg_count == 2) {
         param_expr = res->data.function.args[1];
     }
+
+    /* NDArray fast path: sort the flat buffer, default quartile method (ndreduce.c). */
+    if (ndred_call_has_ndarray(res)) return ndred_quartiles(res);
 
     if (data->type != EXPR_FUNCTION || data->data.function.head->type != EXPR_SYMBOL || data->data.function.head->data.symbol.name != SYM_List) {
         return expr_copy(res);
@@ -752,6 +772,9 @@ Expr* builtin_moving_average(Expr* res) {
     Expr* data = res->data.function.args[0];
     Expr* spec = res->data.function.args[1];
 
+    /* NDArray fast path: sliding-window mean on the buffer (see ndreduce.c). */
+    if (is_ndarray(data)) return ndred_moving_average(res);
+
     if (data->type != EXPR_FUNCTION ||
         data->data.function.head->type != EXPR_SYMBOL ||
         data->data.function.head->data.symbol.name != SYM_List) {
@@ -855,6 +878,9 @@ Expr* builtin_moving_median(Expr* res) {
     Expr* data = res->data.function.args[0];
     Expr* spec = res->data.function.args[1];
 
+    /* NDArray fast path: sliding-window median on the buffer (see ndreduce.c). */
+    if (is_ndarray(data)) return ndred_moving_median(res);
+
     if (data->type != EXPR_FUNCTION ||
         data->data.function.head->type != EXPR_SYMBOL ||
         data->data.function.head->data.symbol.name != SYM_List) {
@@ -957,6 +983,9 @@ Expr* builtin_exponential_moving_average(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* data = res->data.function.args[0];
     Expr* alpha = res->data.function.args[1];
+
+    /* NDArray fast path: EMA recurrence on the buffer (see ndreduce.c). */
+    if (is_ndarray(data)) return ndred_ema(res);
 
     if (data->type != EXPR_FUNCTION ||
         data->data.function.head->type != EXPR_SYMBOL ||

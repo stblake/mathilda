@@ -53,6 +53,7 @@
 #include "list.h"
 #include "assoc.h"
 #include "ndarray.h"
+#include "ndstruct.h"
 #include "replace.h"
 #include "patterns.h"
 #include "cond.h"
@@ -466,7 +467,12 @@ void core_init(void) {
     symtab_get_def("Scan")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Scan",
         "Scan[f, expr]\n\tApplies f to each element of expr for its side effects\n"
-        "\tand returns Null. Over an association, applies f to each value.");
+        "\tand returns Null, discarding the results.\n"
+        "Scan[f, expr, levelspec]\n\tApplies f to the parts of expr selected by\n"
+        "\tlevelspec (default {1}), depth-first with leaves before roots.\n"
+        "\tOption Heads->True also visits heads. Throw exits to an enclosing\n"
+        "\tCatch; Return[ret] makes the final value ret. Over an association,\n"
+        "\tapplies f to each value.");
     symtab_add_builtin("Throw", builtin_throw);
     symtab_get_def("Throw")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Throw",
@@ -1528,6 +1534,9 @@ Expr* builtin_clip(Expr* res) {
     if (argc < 1 || argc > 3) return NULL;
 
     Expr* x = res->data.function.args[0];
+
+    /* Clip[ndarray, ...]: elementwise clamp on the flat buffer (see ndstruct.c). */
+    if (is_ndarray(x)) return ndstruct_clip(res);
 
     /* Manual first-argument threading: Clip[{x1, x2, ...}, ...]
      *   -> {Clip[x1, ...], Clip[x2, ...], ...}.

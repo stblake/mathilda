@@ -232,6 +232,8 @@ set(COMMON_SRC
     ../src/assoc.c
     ../src/ndarray.c
     ../src/ndkernels.c
+    ../src/ndreduce.c
+    ../src/ndstruct.c
     ../src/print.c
     ../src/print_latex.c
     ../src/plus.c
@@ -913,6 +915,11 @@ target_link_libraries(ndarray_functions_tests m)
 target_include_directories(ndarray_functions_tests PRIVATE ../src)
 add_test(NAME ndarray_functions_tests COMMAND ndarray_functions_tests)
 
+add_executable(ndarray_reduce_tests test_ndarray_reduce.c ${COMMON_SRC})
+target_link_libraries(ndarray_reduce_tests m)
+target_include_directories(ndarray_reduce_tests PRIVATE ../src)
+add_test(NAME ndarray_reduce_tests COMMAND ndarray_reduce_tests)
+
 add_executable(ndarray_linalg_tests test_ndarray_linalg.c ${COMMON_SRC})
 target_link_libraries(ndarray_linalg_tests m)
 target_include_directories(ndarray_linalg_tests PRIVATE ../src)
@@ -1043,6 +1050,14 @@ target_include_directories(numloop_tests PRIVATE ../src)
 
 add_executable(mapat_tests test_mapat.c ${COMMON_SRC})
 target_include_directories(mapat_tests PRIVATE ../src)
+
+add_executable(scan_tests test_scan.c ${COMMON_SRC})
+target_include_directories(scan_tests PRIVATE ../src)
+add_test(NAME scan_tests COMMAND scan_tests)
+
+add_executable(map_ndarray_tests test_map_ndarray.c ${COMMON_SRC})
+target_include_directories(map_ndarray_tests PRIVATE ../src)
+add_test(NAME map_ndarray_tests COMMAND map_ndarray_tests)
 
 add_executable(replaceat_tests test_replaceat.c ${COMMON_SRC})
 target_include_directories(replaceat_tests PRIVATE ../src)
@@ -2528,6 +2543,8 @@ if(USE_ECM)
     add_dependencies(modular_tests build_ecm)
     add_dependencies(funcprog_through_tests build_ecm)
     add_dependencies(mapat_tests build_ecm)
+    add_dependencies(scan_tests build_ecm)
+    add_dependencies(map_ndarray_tests build_ecm)
     add_dependencies(replaceat_tests build_ecm)
     add_dependencies(nest_tests build_ecm)
     add_dependencies(nestlist_tests build_ecm)

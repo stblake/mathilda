@@ -1,5 +1,7 @@
 #include "list_common.h"
 #include "reverse.h"
+#include "ndarray.h"
+#include "ndstruct.h"
 
 static bool should_reverse_at_level(Expr* level_spec, size_t current_level) {
     if (!level_spec) return current_level == 1;
@@ -33,6 +35,10 @@ static Expr* reverse_rec(Expr* expr, Expr* level_spec, size_t current_level) {
 Expr* builtin_reverse(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     Expr* expr = res->data.function.args[0];
+
+    /* Reverse[ndarray]: block-reverse the leading axis on the buffer (ndstruct.c). */
+    if (is_ndarray(expr)) return ndstruct_reverse(res);
+
     Expr* level_spec = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
 
     return reverse_rec(expr, level_spec, 1);

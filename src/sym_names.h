@@ -460,6 +460,7 @@ extern const char* SYM_RuleDelayed;
 extern const char* SYM_SameQ;
 extern const char* SYM_SameTest;
 extern const char* SYM_Scale;
+extern const char* SYM_Scan;
 extern const char* SYM_Sec;
 extern const char* SYM_Sech;
 extern const char* SYM_Sequence;

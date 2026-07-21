@@ -1,5 +1,13 @@
 # Lists and Iteration
 
+**NDArray fast paths.** `Total`, `Accumulate`, `Max`, `Min`, `Sort`, `Reverse`,
+`Transpose`, `Flatten`, `Take`, `Drop` and `Clip` operate directly on an
+`NDArray`'s flat machine-precision buffer, returning an `NDArray` (or a scalar
+for full reductions). Reductions collapse the leading axis, matching the `List`
+semantics. Specs outside the fast domain (multi-axis `Take`, custom `Sort`
+comparators, partial `Flatten`, …) fall back to the exact `List` result. See
+`src/ndreduce.c` and `src/ndstruct.c`.
+
 ## Tuples
 Generates a list of all possible combinations or tuples of elements.
 - `Tuples[list, n]`: generates a list of all possible n-tuples of elements from `list`.

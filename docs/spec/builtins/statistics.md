@@ -1,5 +1,13 @@
 # Statistics
 
+**NDArray fast paths.** `Mean`, `Median`, `Variance`, `StandardDeviation`,
+`RootMeanSquare`, `Quartiles`, `MovingAverage`, `MovingMedian` and
+`ExponentialMovingAverage` operate directly on an `NDArray`'s flat buffer at C
+speed, returning a scalar or a lower-rank `NDArray` (matrix reductions are
+columnwise). Cases outside the fast domain (complex order statistics, weighted
+moving-average specs, …) fall back to the exact `List` result. See
+`src/ndreduce.c`.
+
 
 ## Median
 Gives the median estimate of the elements in data.

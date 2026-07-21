@@ -8,6 +8,7 @@
 #include "assoc.h"
 #include "common.h"
 #include "numloop.h"
+#include "ndarray.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -183,6 +184,40 @@ static Expr* map_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec 
     return intermediate;
 }
 
+/* If `list` (owned) is a rectangular List of machine numbers, repack it into an
+ * NDArray of dtype `dt` (freeing `list`), so mapping a numeric function over a
+ * packed array yields a packed array again — matching Sin[arr], arr + 1, etc.
+ * A symbolic or non-rectangular result is returned unchanged as a List. */
+static Expr* map_try_repack(Expr* list, NDType dt) {
+    if (!list || list->type != EXPR_FUNCTION) return list;
+    Expr* packed = ndarray_from_nested_list(list, dt);
+    if (packed) { expr_free(list); return packed; }
+    return list;
+}
+
+/* Map f over the leading axis of NDArray `a` at the default level {1}: apply f
+ * to each part (a scalar leaf for rank 1, a sub-NDArray row for rank >= 2),
+ * collect the evaluated results, and repack them when they are numeric. */
+static Expr* map_ndarray_axis(Expr* f, Expr* a) {
+    int64_t n = a->data.ndarray.dims[0];
+    size_t count = (n > 0) ? (size_t)n : 0;
+    Expr** results = malloc(sizeof(Expr*) * (count ? count : 1));
+    for (int64_t i = 0; i < n; i++) {
+        Expr* idx = expr_new_integer(i + 1);
+        Expr* iargs[1] = { idx };
+        bool degrade = false;
+        Expr* part = ndarray_part(a, iargs, 1, &degrade);   /* owned */
+        expr_free(idx);
+        if (!part) part = expr_new_symbol(SYM_Null);
+        Expr* call = expr_new_function(expr_copy(f), &part, 1);  /* adopts part */
+        results[i] = evaluate(call);
+        expr_free(call);
+    }
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), results, count);
+    free(results);
+    return map_try_repack(list, a->data.ndarray.dtype);
+}
+
 Expr* builtin_map(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
 
@@ -209,6 +244,18 @@ Expr* builtin_map(Expr* res) {
     LevelSpec spec = parse_level_spec(ls, 1, 1);
     parse_options(res, ls ? 3 : 2, &spec);
 
+    /* NDArray is atomic, so the generic level-mapper would never descend into
+     * it. At the default level iterate the leading axis directly; otherwise
+     * materialize once and reuse the generic path. Numeric results repack. */
+    if (is_ndarray(expr)) {
+        if (spec.min == 1 && spec.max == 1 && !spec.heads)
+            return map_ndarray_axis(f, expr);
+        Expr* nested = ndarray_to_nested_list(expr);
+        Expr* out = map_at_level(f, nested, 0, spec);
+        expr_free(nested);
+        return map_try_repack(out, expr->data.ndarray.dtype);
+    }
+
     return map_at_level(f, expr, 0, spec);
 }
 
@@ -226,6 +273,32 @@ Expr* builtin_mapindexed(Expr* res) {
     Expr* f    = res->data.function.args[0];
     Expr* expr = res->data.function.args[1];
     bool assoc = is_association(expr);
+
+    /* MapIndexed over an NDArray pairs each leading-axis part with its position
+     * {i}: {f[part1, {1}], f[part2, {2}], ...}. Parts come from ndarray_part (a
+     * scalar for rank 1, a sub-NDArray row for rank >= 2). The f[...] nodes are
+     * left for the evaluator to reduce, matching the list case. */
+    if (!assoc && is_ndarray(expr)) {
+        int64_t nd = expr->data.ndarray.dims[0];
+        size_t cnt = (nd > 0) ? (size_t)nd : 0;
+        Expr** out = malloc(sizeof(Expr*) * (cnt ? cnt : 1));
+        for (int64_t i = 0; i < nd; i++) {
+            Expr* idx = expr_new_integer(i + 1);
+            Expr* iargs[1] = { idx };
+            bool degrade = false;
+            Expr* part = ndarray_part(expr, iargs, 1, &degrade);   /* owned */
+            expr_free(idx);
+            if (!part) part = expr_new_symbol(SYM_Null);
+            Expr* pos_inner = expr_new_integer(i + 1);
+            Expr* pos = expr_new_function(expr_new_symbol(SYM_List), &pos_inner, 1);
+            Expr* fargs[2] = { part, pos };   /* both adopted */
+            out[i] = expr_new_function(expr_copy(f), fargs, 2);
+        }
+        Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, cnt);
+        free(out);
+        return result;
+    }
+
     if (!assoc && expr->type != EXPR_FUNCTION) return NULL;
 
     size_t n = expr->data.function.arg_count;
@@ -478,6 +551,15 @@ Expr* builtin_map_all(Expr* res) {
     
     LevelSpec spec = {0, 1000000, false}; // {0, Infinity}
     parse_options(res, 2, &spec);
+
+    /* NDArray is atomic; materialize to a nested list so f is applied at every
+     * level (including the whole array at level 0), as MapAll does for lists. */
+    if (is_ndarray(expr)) {
+        Expr* nested = ndarray_to_nested_list(expr);
+        Expr* out = map_at_level(f, nested, 0, spec);
+        expr_free(nested);
+        return out;
+    }
 
     return map_at_level(f, expr, 0, spec);
 }
@@ -733,30 +815,174 @@ Expr* builtin_catch(Expr* res) {
 
 /* ------------------- Scan -------------------
  *
- * Scan[f, expr] applies f to each element of expr for its side effects and
- * returns Null. Over an association it applies f to each value. */
-Expr* builtin_scan(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
-    Expr* f = res->data.function.args[0];
-    Expr* coll = res->data.function.args[1];
-    if (coll->type != EXPR_FUNCTION) return NULL;
+ * Scan[f, expr] / Scan[f, expr, levelspec] applies f to each part of expr
+ * selected by levelspec (default {1}) for its side effects and returns Null,
+ * discarding f's results. Traversal is depth-first, leaves before roots
+ * (post-order). Supports the Heads->True option, early exit via Throw
+ * (propagates to an enclosing Catch) and Return (Return[ret] makes the final
+ * Scan value ret). Over an association at the default level, scans the values.
+ *
+ * These helpers mirror Map's LevelSpec/get_depth/parse_options machinery above.
+ * A dedicated level-spec parser is used (rather than the shared
+ * parse_level_spec) so Scan can accept Infinity in either slot of a two-element
+ * spec (e.g. {0, Infinity}) without altering Map/Apply. */
 
-    bool assoc = is_association(coll);
-    size_t n = coll->data.function.arg_count;
-    for (size_t i = 0; i < n; i++) {
-        Expr* elem = coll->data.function.args[i];
-        /* Over an association, scan the values. */
-        if (assoc && elem->type == EXPR_FUNCTION && elem->data.function.arg_count == 2)
-            elem = elem->data.function.args[1];
-        Expr* call_args[1] = { expr_copy(elem) };
-        Expr* call = expr_new_function(expr_copy(f), call_args, 1);
-        Expr* r = evaluate(call);
-        expr_free(call);
-        /* A Throw from f propagates (Scan otherwise discards f's result). */
-        if (eval_is_inflight_throw(r)) return r;
-        if (r) expr_free(r);   /* result discarded; f is run for effect */
+#define SCAN_LEVEL_INF 1000000  /* Infinity sentinel, matching parse_level_spec */
+
+/* Parse one level bound: an integer yields its value; Infinity yields
+ * +SCAN_LEVEL_INF. Returns false for anything else. */
+static bool scan_bound(Expr* e, int64_t* out) {
+    if (e->type == EXPR_INTEGER) { *out = e->data.integer; return true; }
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity) {
+        *out = SCAN_LEVEL_INF;
+        return true;
     }
-    return expr_new_symbol(SYM_Null);
+    return false;
+}
+
+/* Parse a Scan level specification into *spec (heads left untouched here).
+ * Accepts n, {n}, {n1,n2} (each bound integer or Infinity), and Infinity.
+ * Default (ls == NULL) is {1, 1}. Returns false for an unrecognized spec so
+ * the caller can leave Scan unevaluated. */
+static bool scan_parse_spec(Expr* ls, LevelSpec* spec) {
+    spec->min = 1;
+    spec->max = 1;
+    spec->heads = false;
+    if (!ls) return true;
+
+    if (ls->type == EXPR_INTEGER) {          /* n -> {1, n} */
+        spec->min = 1;
+        spec->max = ls->data.integer;
+        return true;
+    }
+    if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_Infinity) {
+        spec->min = 1;                        /* Infinity -> {1, Infinity} */
+        spec->max = SCAN_LEVEL_INF;
+        return true;
+    }
+    if (ls->type == EXPR_FUNCTION && ls->data.function.head->type == EXPR_SYMBOL &&
+        ls->data.function.head->data.symbol.name == SYM_List) {
+        size_t n = ls->data.function.arg_count;
+        if (n == 1) {                         /* {n} -> {n, n} */
+            int64_t v;
+            if (scan_bound(ls->data.function.args[0], &v)) {
+                spec->min = spec->max = v;
+                return true;
+            }
+        } else if (n == 2) {                  /* {n1, n2} */
+            int64_t a, b;
+            if (scan_bound(ls->data.function.args[0], &a) &&
+                scan_bound(ls->data.function.args[1], &b)) {
+                spec->min = a;
+                spec->max = b;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/* Apply f to `part` for its side effects. CONSUMES `part` (adopts ownership).
+ * Returns NULL to continue scanning, or non-NULL as the value builtin_scan
+ * must return: an in-flight Throw sentinel, a propagating Return[v, h], or the
+ * payload of a Return consumed at the Scan boundary. */
+static Expr* scan_apply(Expr* f, Expr* part) {
+    Expr* call = expr_new_function(expr_copy(f), &part, 1);  /* adopts part */
+    Expr* r = evaluate(call);
+    expr_free(call);                                         /* frees f-copy + part */
+    if (eval_is_inflight_throw(r)) return r;                 /* propagate Throw */
+    Expr* rv = NULL;
+    EvalReturnAction ra = eval_classify_return(r, SYM_Scan, &rv);
+    if (ra == EVAL_RETURN_CONSUME)   { expr_free(r); return rv; }  /* Return[ret] */
+    if (ra == EVAL_RETURN_PROPAGATE) return r;                     /* Return[v, h] */
+    if (r) expr_free(r);                                    /* result discarded */
+    return NULL;
+}
+
+/* Depth-first, leaves-before-roots traversal. Visits sub-parts (and, with
+ * Heads->True, the head) before the node itself. Returns NULL to continue, or
+ * the sentinel/return value to stop and hand back to builtin_scan. */
+static Expr* scan_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec spec) {
+    if (expr->type == EXPR_FUNCTION) {
+        if (spec.heads) {
+            Expr* s = scan_at_level(f, expr->data.function.head, current_level + 1, spec);
+            if (s) return s;
+        }
+        size_t count = expr->data.function.arg_count;
+        for (size_t i = 0; i < count; i++) {
+            Expr* s = scan_at_level(f, expr->data.function.args[i], current_level + 1, spec);
+            if (s) return s;
+        }
+    }
+
+    /* Standard mixed positive/negative level membership: a bound >= 0 is a
+     * level counted from the root; a bound < 0 is a negative depth (leaves at
+     * depth 1 have negative level -1). */
+    int64_t d = get_depth(expr);
+    bool lo = (spec.min >= 0) ? (current_level >= spec.min) : (-d >= spec.min);
+    bool hi = (spec.max >= 0) ? (current_level <= spec.max) : (-d <= spec.max);
+    if (lo && hi)
+        return scan_apply(f, expr_copy(expr));   /* visit this node last */
+    return NULL;
+}
+
+Expr* builtin_scan(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc == 0) return builtin_arg_error("Scan", 0, 1, 3);  /* Scan::argb */
+    if (argc < 2) return NULL;                                  /* Scan[f]: leave alone */
+
+    Expr* f = res->data.function.args[0];
+    Expr* expr = res->data.function.args[1];
+
+    Expr* ls = (argc >= 3) ? res->data.function.args[2] : NULL;
+    if (ls && ls->type == EXPR_FUNCTION &&
+        ls->data.function.head->data.symbol.name == SYM_Rule) ls = NULL;  /* option in slot 2 */
+
+    LevelSpec spec;
+    if (!scan_parse_spec(ls, &spec)) return NULL;              /* unrecognized levelspec */
+    parse_options(res, ls ? 3 : 2, &spec);                     /* Heads->True */
+
+    /* Association at the default level: scan the values (mirrors Map). */
+    if (ls == NULL && is_association(expr)) {
+        size_t n = expr->data.function.arg_count;
+        for (size_t i = 0; i < n; i++) {
+            Expr* elem = expr->data.function.args[i];
+            Expr* val = (elem->type == EXPR_FUNCTION && elem->data.function.arg_count == 2)
+                        ? elem->data.function.args[1] : elem;
+            Expr* s = scan_apply(f, expr_copy(val));
+            if (s) return s;
+        }
+        return expr_new_symbol(SYM_Null);
+    }
+
+    /* NDArray fast path: NDArray is an atomic value, so the generic traversal
+     * would never descend into it. At the default level iterate the leading
+     * axis directly (scalar leaf for rank 1, sub-NDArray row for rank >= 2);
+     * for any other level spec, materialize once and reuse the generic path. */
+    if (is_ndarray(expr)) {
+        if (spec.min == 1 && spec.max == 1 && !spec.heads) {
+            int64_t n = expr->data.ndarray.dims[0];
+            for (int64_t i = 1; i <= n; i++) {
+                Expr* idx = expr_new_integer(i);
+                Expr* iargs[1] = { idx };
+                bool degrade = false;
+                Expr* part = ndarray_part(expr, iargs, 1, &degrade);  /* owned */
+                expr_free(idx);
+                if (!part) continue;
+                Expr* s = scan_apply(f, part);   /* consumes part */
+                if (s) return s;
+            }
+            return expr_new_symbol(SYM_Null);
+        }
+        Expr* nested = ndarray_to_nested_list(expr);
+        Expr* s = scan_at_level(f, nested, 0, spec);
+        expr_free(nested);
+        return s ? s : expr_new_symbol(SYM_Null);
+    }
+
+    Expr* s = scan_at_level(f, expr, 0, spec);
+    return s ? s : expr_new_symbol(SYM_Null);
 }
 
 /* ------------------- AllTrue / AnyTrue / NoneTrue -------------------
@@ -2641,7 +2867,26 @@ Expr* builtin_mapthread(Expr* res) {
     if (k == 0)                              /* MapThread[f, {}] -> {} */
         return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
 
-    Expr* built = mapthread_rec(f, lists->data.function.args, k, level);
+    /* Materialize any NDArray entry to a nested list so it threads like a list:
+     * MapThread[f, {NDArray[{1,2}], NDArray[{3,4}]}] -> {f[1,3], f[2,4]}. */
+    Expr** entries = lists->data.function.args;
+    Expr** delisted = NULL;
+    bool any_nd = false;
+    for (size_t j = 0; j < k; j++)
+        if (is_ndarray(entries[j])) { any_nd = true; break; }
+    if (any_nd) {
+        delisted = malloc(sizeof(Expr*) * k);
+        for (size_t j = 0; j < k; j++)
+            delisted[j] = is_ndarray(entries[j]) ? ndarray_to_nested_list(entries[j])
+                                                 : expr_copy(entries[j]);
+        entries = delisted;
+    }
+
+    Expr* built = mapthread_rec(f, entries, k, level);
+    if (delisted) {
+        for (size_t j = 0; j < k; j++) expr_free(delisted[j]);
+        free(delisted);
+    }
     if (!built) return NULL;                 /* structural mismatch -> unchanged */
 
     /* Evaluate so f's attributes fire and the f[...] leaves reduce

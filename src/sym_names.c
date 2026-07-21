@@ -460,6 +460,7 @@ const char* SYM_SameTest = NULL;
 const char* SYM_Sec = NULL;
 const char* SYM_Sech = NULL;
 const char* SYM_Scale = NULL;
+const char* SYM_Scan = NULL;
 const char* SYM_Sequence = NULL;
 const char* SYM_SequenceHold = NULL;
 const char* SYM_SequenceLimit = NULL;
@@ -1259,6 +1260,7 @@ void sym_names_init(void) {
     SYM_Scale                      = intern_symbol("Scale");
     SYM_Sec                        = intern_symbol("Sec");
     SYM_Sech                       = intern_symbol("Sech");
+    SYM_Scan                       = intern_symbol("Scan");
     SYM_Sequence                   = intern_symbol("Sequence");
     SYM_SequenceHold               = intern_symbol("SequenceHold");
     SYM_SequenceLimit              = intern_symbol("SequenceLimit");

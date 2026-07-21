@@ -1,5 +1,7 @@
 #include "list_common.h"
 #include "take_drop.h"
+#include "ndarray.h"
+#include "ndstruct.h"
 
 static bool get_seq_spec_indices(Expr* spec, int64_t len, int64_t** out_indices, size_t* out_count) {
     int64_t m = 0, n = 0, s = 1;
@@ -169,10 +171,13 @@ static Expr* apply_take_drop(Expr* expr, Expr** specs, size_t nspecs, bool is_ta
 
 Expr* builtin_take(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
+    /* Take[ndarray, spec]: contiguous leading-axis slice on the buffer (ndstruct.c). */
+    if (is_ndarray(res->data.function.args[0])) return ndstruct_take(res);
     return apply_take_drop(res->data.function.args[0], res->data.function.args + 1, res->data.function.arg_count - 1, true);
 }
 
 Expr* builtin_drop(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
+    if (is_ndarray(res->data.function.args[0])) return ndstruct_drop(res);
     return apply_take_drop(res->data.function.args[0], res->data.function.args + 1, res->data.function.arg_count - 1, false);
 }
