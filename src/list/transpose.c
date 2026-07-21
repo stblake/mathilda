@@ -115,6 +115,19 @@ Expr* builtin_conjugate_transpose(Expr* res) {
     if (argc < 1 || argc > 2) return NULL;
     Expr* m = res->data.function.args[0];
 
+    /* ConjugateTranspose[ndarray, ...] = Conjugate[Transpose[ndarray, ...]]:
+     * Transpose has a native NDArray path (ndstruct_transpose) and Conjugate is
+     * an NDArray element-wise kernel, so build the composite and let both fire. */
+    if (is_ndarray(m)) {
+        Expr** tr = malloc(sizeof(Expr*) * argc);
+        for (size_t i = 0; i < argc; i++) tr[i] = expr_copy(res->data.function.args[i]);
+        Expr* tcall = eval_and_free(expr_new_function(expr_new_symbol(SYM_Transpose), tr, argc));
+        free(tr);
+        Expr** ca = malloc(sizeof(Expr*) * 1);
+        ca[0] = tcall;
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Conjugate), ca, 1));
+    }
+
     int64_t dims[64];
     int depth = 0;
     if (m->type == EXPR_FUNCTION && m->data.function.head->type == EXPR_SYMBOL &&

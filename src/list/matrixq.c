@@ -1,5 +1,18 @@
 #include "list_common.h"
 #include "matrixq.h"
+#include "ndarray.h"
+
+/* An NDArray is a distinct atomic node, so the List-based matrix predicates
+ * below would otherwise answer False for a genuine packed matrix. Route any
+ * NDArray argument through the exact List path (ndarray_delist_and_reeval
+ * rebuilds the call with NDArrays converted to nested Lists and re-evaluates —
+ * no recursion, since the rebuilt call has no NDArray args). */
+#define ND_MATRIXQ_DELIST(res)                                                  \
+    do {                                                                        \
+        if ((res)->data.function.arg_count >= 1 &&                              \
+            is_ndarray((res)->data.function.args[0]))                           \
+            return ndarray_delist_and_reeval(res);                             \
+    } while (0)
 
 /* --- HermitianMatrixQ ----------------------------------------------------
  *
@@ -106,6 +119,7 @@ static bool hermitian_pair_tolerance(Expr* a, Expr* b, Expr* tol) {
 
 Expr* builtin_hermitian_matrix_q(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    ND_MATRIXQ_DELIST(res);
     size_t argc = res->data.function.arg_count;
     if (argc < 1) return NULL;
 
@@ -241,6 +255,7 @@ static bool symmetric_pair_tolerance(Expr* a, Expr* b, Expr* tol) {
 
 Expr* builtin_symmetric_matrix_q(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    ND_MATRIXQ_DELIST(res);
     size_t argc = res->data.function.arg_count;
     if (argc < 1) return NULL;
 
@@ -329,6 +344,7 @@ Expr* builtin_symmetric_matrix_q(Expr* res) {
  */
 Expr* builtin_square_matrix_q(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    ND_MATRIXQ_DELIST(res);
     if (res->data.function.arg_count != 1) {
         size_t n = res->data.function.arg_count;
         fprintf(stderr,
@@ -444,6 +460,7 @@ static Expr* diag_emit_nonopt(Expr* bad, Expr* res) {
 
 Expr* builtin_diagonal_matrix_q(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    ND_MATRIXQ_DELIST(res);
     size_t argc = res->data.function.arg_count;
     if (argc == 0) return diag_emit_argt(0);
 
@@ -611,6 +628,7 @@ static Expr* utri_emit_nonopt(Expr* bad, Expr* res) {
 
 Expr* builtin_upper_triangular_matrix_q(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    ND_MATRIXQ_DELIST(res);
     size_t argc = res->data.function.arg_count;
     if (argc == 0) return utri_emit_argt(0);
 

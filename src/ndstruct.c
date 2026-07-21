@@ -83,6 +83,12 @@ Expr* ndstruct_reverse(Expr* res) {
 
 /* Transpose[a] for a rank-2 array: out[c, r] = in[r, c]. Higher rank or an
  * explicit permutation spec degrades. */
+/* Cache-blocked transpose tile size (elements). A 32x32 f64 tile is 8 KB per
+ * source/dest window — comfortably inside L1, so each tile is read and written
+ * with unit stride on one side and short strided hops on the other, instead of
+ * the full-matrix stride that thrashes cache on a naive i/j double loop. */
+#define ND_TRANSPOSE_TILE 32
+
 Expr* ndstruct_transpose(Expr* res) {
     if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
     Expr* a = res->data.function.args[0];
@@ -90,16 +96,35 @@ Expr* ndstruct_transpose(Expr* res) {
     const int64_t* dims = a->data.ndarray.dims;
     NDType dt = a->data.ndarray.dtype;
     const void* buf = a->data.ndarray.data;
-    size_t R = (size_t)dims[0], C = (size_t)dims[1];
+    size_t R = (size_t)dims[0], C = (size_t)dims[1];   /* in[r,c] -> out[c,r] */
 
     void* out = malloc(ndt_elem_size(dt) * R * C);
     if (!out) return ndarray_delist_and_reeval(res);
-    for (size_t r = 0; r < R; r++)
-        for (size_t c = 0; c < C; c++) {
-            double re, im;
-            ndt_get(buf, r * C + c, dt, &re, &im);
-            ndt_set(out, c * R + r, dt, re, im);
-        }
+    const size_t T = ND_TRANSPOSE_TILE;
+    if (dt == NDT_FLOAT64) {                            /* raw-double blocked path */
+        const double* p = (const double*)buf;
+        double* o = (double*)out;
+        for (size_t rr = 0; rr < R; rr += T)
+            for (size_t cc = 0; cc < C; cc += T) {
+                size_t rmax = rr + T < R ? rr + T : R;
+                size_t cmax = cc + T < C ? cc + T : C;
+                for (size_t r = rr; r < rmax; r++)
+                    for (size_t c = cc; c < cmax; c++)
+                        o[c * R + r] = p[r * C + c];
+            }
+    } else {                                            /* dtype-generic blocked */
+        for (size_t rr = 0; rr < R; rr += T)
+            for (size_t cc = 0; cc < C; cc += T) {
+                size_t rmax = rr + T < R ? rr + T : R;
+                size_t cmax = cc + T < C ? cc + T : C;
+                for (size_t r = rr; r < rmax; r++)
+                    for (size_t c = cc; c < cmax; c++) {
+                        double re, im;
+                        ndt_get(buf, r * C + c, dt, &re, &im);
+                        ndt_set(out, c * R + r, dt, re, im);
+                    }
+            }
+    }
     int64_t odims[2] = { (int64_t)C, (int64_t)R };
     return expr_new_ndarray(2, odims, out, dt);
 }
