@@ -22,7 +22,7 @@ endif
 # `gcc` only, macOS Homebrew ships `gcc-NN`). A plain `=` (not `?=`) is required:
 # Make pre-defines CC=cc as a built-in, which would defeat `?=`.
 CC = gcc
-CFLAGS = -O3 -std=c99 -Wall -Wextra -g -I./src -I./src/list -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/graph -I./src/strings -I./src/strings/regex -I/usr/include -I/usr/local/include
+CFLAGS = -O3 -std=c99 -Wall -Wextra -g -I./src -I./src/list -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/graph -I./src/strings -I./src/strings/regex -I./src/ffi -I/usr/include -I/usr/local/include
 
 # Readline is available on macOS and Linux but not on Windows (MinGW).
 # Build with USE_READLINE=0 to disable it explicitly (e.g. for cross-builds
@@ -261,6 +261,7 @@ endif
 SRC_DIR = src
 SRC = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/list/*.c) $(wildcard $(SRC_DIR)/linalg/*.c) $(wildcard $(SRC_DIR)/numbertheory/*.c) $(wildcard $(SRC_DIR)/poly/*.c) $(wildcard $(SRC_DIR)/simp/*.c) $(wildcard $(SRC_DIR)/calculus/*.c) $(wildcard $(SRC_DIR)/sum/*.c) $(wildcard $(SRC_DIR)/product/*.c) $(wildcard $(SRC_DIR)/special_functions/*.c) $(wildcard $(SRC_DIR)/numerical_calculus/*.c) $(wildcard $(SRC_DIR)/numerical_roots/*.c) $(wildcard $(SRC_DIR)/graphics/*.c) $(wildcard $(SRC_DIR)/graph/*.c) $(wildcard $(SRC_DIR)/strings/*.c) $(wildcard $(SRC_DIR)/strings/regex/*.c)
 ifneq ($(USE_GRAPHICS), 1)
+SRC += $(wildcard $(SRC_DIR)/ffi/*.c)
 SRC := $(filter-out $(SRC_DIR)/graphics/render.c $(SRC_DIR)/graphics/render3d.c $(SRC_DIR)/graphics/hershey_font.c, $(SRC))
 endif
 OBJ = $(SRC:.c=.o)
@@ -278,6 +279,24 @@ all: $(TARGET)
 
 $(TARGET): $(OBJ)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(EXTRA_LIBS)
+
+# ---------------------------------------------------------------------------
+# Static library for embedding the kernel in-process (mobile hosts, FFI tests).
+#
+# iOS/Android sandboxes forbid spawning the `mathilda` sidecar, so the kernel is
+# linked directly into the host app via src/ffi/mathilda_ffi.c. The archive is
+# every kernel object EXCEPT repl.o (which carries main() + readline + the stdio
+# pipe loop — none of which belong in an embedded library). The host links this
+# .a plus -lgmp and provides its own entry point.
+#
+# The default host build works as-is. For a minimal, dependency-light kernel
+# (what the iOS cross-build uses) pass the USE_* toggles off, e.g.:
+#   make libmathilda.a USE_READLINE=0 USE_THREADS=0 USE_ECM=0 USE_MPFR=0 \
+#        USE_LAPACK=0 USE_GRAPHICS=0 USE_FLINT=0 USE_REGEX=0 USE_FFTW=0
+AR ?= ar
+LIB_OBJ = $(filter-out $(SRC_DIR)/repl.o,$(OBJ))
+libmathilda.a: $(LIB_OBJ)
+	$(AR) rcs $@ $(LIB_OBJ)
 
 # -MMD writes a .d file next to each .o listing the (non-system) headers it
 # includes; -MP adds a phony target for each header so deleting a header does
