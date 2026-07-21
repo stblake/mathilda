@@ -754,6 +754,21 @@ static void walk_gather(Expr* e, Expr* B, Expr* A,
 }
 
 bool poly_find_radical_gen(Expr* e, Expr** base_out, Expr** atom_out, int64_t* m_out) {
+    /* A pure numeric constant (no polynomial variable — e.g. (1 - I Sqrt[3])/2)
+     * has nothing to cancel: substituting its radical for a fresh generator only
+     * fabricates a polynomial in that generator, and the downstream multivariate
+     * GCD then blows up in exact_poly_div (Simplify/Together/Cancel/Apart hang
+     * over Q(i sqrt d)).  Decline for every caller; ordinary arithmetic already
+     * reduces such constants.  (Radicals in a genuine polynomial — with a real
+     * variable present — still substitute as before.) */
+    {
+        size_t vc = 0, vcap = 8;
+        Expr** vs = malloc(sizeof(Expr*) * vcap);
+        collect_variables(e, &vs, &vc, &vcap);
+        for (size_t i = 0; i < vc; i++) expr_free(vs[i]);
+        free(vs);
+        if (vc == 0) return false;
+    }
     Expr* base = NULL;
     Expr* atom = NULL;
     if (!walk_find_radical_base(e, &base, &atom)) return false;

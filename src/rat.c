@@ -708,6 +708,43 @@ static bool rat_has_dependent_power_generators(Expr* num, Expr* den) {
     return dep;
 }
 
+/* True iff `e` is a pure numeric constant — a number, a recognised numeric
+ * constant symbol (Pi, E, I, EulerGamma, ...), or a NumericFunction / Complex /
+ * Rational built from such (mirrors core.c's is_numeric_quantity).  A fraction
+ * whose numerator AND denominator are both numeric constants carries NO genuine
+ * polynomial variable, so the generic multivariate PolynomialGCD below has
+ * nothing to cancel — yet on an algebraic-irrational atom FLINT can't pack
+ * (e.g. (1 - I Sqrt[3])/2) it treats I and Sqrt[3] as independent generators and
+ * spins forever in exact_poly_div.  Detecting the constant case and skipping the
+ * GCD is always correctness-preserving (a constant fraction needs no polynomial
+ * cancellation) and kills a whole class of Simplify/Together hangs. */
+static bool rat_is_numeric_const(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_REAL || e->type == EXPR_BIGINT)
+        return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    if (e->type == EXPR_SYMBOL) {
+        const char* n = e->data.symbol.name;
+        return n == SYM_Pi || n == SYM_E || n == SYM_I || n == SYM_Infinity ||
+               n == SYM_ComplexInfinity || n == SYM_EulerGamma ||
+               n == SYM_GoldenRatio || n == SYM_Catalan || n == SYM_Degree ||
+               n == SYM_GoldenAngle || n == SYM_Glaisher || n == SYM_Khinchin;
+    }
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if (h == SYM_Complex || h == SYM_Rational) return true;
+        SymbolDef* def = symtab_get_def(h);
+        if (def && (def->attributes & ATTR_NUMERICFUNCTION)) {
+            for (size_t i = 0; i < e->data.function.arg_count; i++)
+                if (!rat_is_numeric_const(e->data.function.args[i])) return false;
+            return true;
+        }
+    }
+    return false;
+}
+
 static Expr* cancel_recursive(Expr* e) {
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
@@ -784,6 +821,15 @@ static Expr* cancel_recursive(Expr* e) {
      * from Integrate[1/(1+x^n), x]).  Leaving the fraction uncancelled is always
      * correctness-preserving, and such fractions do not cancel anyway. */
     if (!g && rat_has_dependent_power_generators(num, den)) {
+        cancel_recursive_inside_gcd--;
+        expr_free(num);
+        expr_free(den);
+        return expr_copy(e);
+    }
+    /* Numeric-constant fraction over an algebraic-irrational atom FLINT declined
+     * (e.g. (1 - I Sqrt[3])/2): no polynomial variable to cancel, and the generic
+     * GCD would spin in exact_poly_div.  Leave uncancelled (already reduced). */
+    if (!g && rat_is_numeric_const(num) && rat_is_numeric_const(den)) {
         cancel_recursive_inside_gcd--;
         expr_free(num);
         expr_free(den);
@@ -1698,16 +1744,25 @@ static Expr* builtin_cancel_compute(Expr* res) {
         Expr* atom = NULL;
         int64_t m = 1;
         if (poly_find_radical_gen(arg, &base, &atom, &m)) {
-            char* gen = poly_make_fresh_gen(arg);
-            Expr* substituted = poly_subst_radical_to_gen(arg, base, atom, m, gen);
-            Expr* combined = together_recursive(substituted);
-            expr_free(substituted);
-            Expr* final = poly_subst_radical_from_gen(combined, base, atom, m, gen);
-            expr_free(combined);
-            expr_free(base);
-            expr_free(atom);
-            free(gen);
-            return final;
+            /* A pure numeric constant (e.g. (1 - I Sqrt[3])/2) has no polynomial
+             * variable to cancel; substituting the radical for a fresh generator
+             * would make it look like a polynomial in that generator and blow up
+             * the downstream GCD (exact_poly_div swell).  Skip the pass — fall to
+             * cancel_recursive, whose numeric-const guard leaves it reduced. */
+            if (rat_is_numeric_const(arg)) {
+                expr_free(base); expr_free(atom);
+            } else {
+                char* gen = poly_make_fresh_gen(arg);
+                Expr* substituted = poly_subst_radical_to_gen(arg, base, atom, m, gen);
+                Expr* combined = together_recursive(substituted);
+                expr_free(substituted);
+                Expr* final = poly_subst_radical_from_gen(combined, base, atom, m, gen);
+                expr_free(combined);
+                expr_free(base);
+                expr_free(atom);
+                free(gen);
+                return final;
+            }
         }
     }
 
@@ -1994,16 +2049,22 @@ static Expr* builtin_together_compute(Expr* res) {
         Expr* atom = NULL;
         int64_t m = 1;
         if (poly_find_radical_gen(arg, &base, &atom, &m)) {
-            char* gen = poly_make_fresh_gen(arg);
-            Expr* substituted = poly_subst_radical_to_gen(arg, base, atom, m, gen);
-            Expr* combined = together_recursive(substituted);
-            expr_free(substituted);
-            Expr* final = poly_subst_radical_from_gen(combined, base, atom, m, gen);
-            expr_free(combined);
-            expr_free(base);
-            expr_free(atom);
-            free(gen);
-            return final;
+            /* Numeric constant: skip the radical->generator pass (would blow up
+             * the GCD); cancel_recursive's numeric-const guard handles it. */
+            if (rat_is_numeric_const(arg)) {
+                expr_free(base); expr_free(atom);
+            } else {
+                char* gen = poly_make_fresh_gen(arg);
+                Expr* substituted = poly_subst_radical_to_gen(arg, base, atom, m, gen);
+                Expr* combined = together_recursive(substituted);
+                expr_free(substituted);
+                Expr* final = poly_subst_radical_from_gen(combined, base, atom, m, gen);
+                expr_free(combined);
+                expr_free(base);
+                expr_free(atom);
+                free(gen);
+                return final;
+            }
         }
     }
 

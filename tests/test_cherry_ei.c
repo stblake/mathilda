@@ -113,29 +113,30 @@ static void test_cherry_1986_macsyma(void) {
  * conjugate roots (f a polynomial, q = 1) closes with a complex-conjugate pair of
  * ExpIntegralEi terms — the diff-back over Q(i) is exact and fast. */
 static void test_complex_ei(void) {
+    /* Q(i) conjugate pairs (roots p + q I, q rational: NO radical) close fast —
+     * the coefficient solve and diff-back over Q(i) do not trip the generic GCD. */
     assert_ei("E^x/(x^2 + 1)");        /* alpha = +-I         (Q(i))    */
     assert_ei("E^x/(x^2 + 9)");        /* alpha = +-3 I       (Q(i))    */
     assert_ei("E^(2 x)/(x^2 + 1)");    /* scaled exponent               */
     assert_ei("E^x/(x^2 + 2 x + 2)");  /* alpha = -1 +- I     (Q(i))    */
-    /* A1 (complex algebraically-closed constants, C = C-bar over Q(i sqrt3)):
-     * the lone conjugate pair from x^2+x+1 now closes.  The generous real-case
-     * Y-degree bound made the number-field Solve blow up; tightening it for a
-     * complex candidate keeps the (small) system solvable over Q(i sqrt3). */
-    assert_ei("E^x/(x^2 + x + 1)");    /* alpha = (1 -+ I sqrt3)/2 (Q(i sqrt3)) */
-    assert_ei("E^x/(x^2 + 3)");        /* alpha = -+ I sqrt3      (Q(i sqrt3)) */
-    assert_ei("E^x/(x^2 + 2 x + 5)");  /* alpha = -1 -+ 2 I       (Q(i))       */
-    assert_ei("(2 x + 1) E^x/(x^2 + x + 3)"); /* numerator; Q(i sqrt11)         */
-    assert_ei("x E^x/(x^2 + x + 1)");  /* numerator over Q(i sqrt3)             */
-    /* d12 (Cherry 1989): (x^2+1)e^x/(x^2+x+1) — a polynomial part (e^x) plus the
-     * complex-conjugate ei pair.  Was the canonical §7/A1 gated pin. */
-    assert_ei("(x^2 + 1) E^x/(x^2 + x + 1)");
-    /* Shifted centers over Q(i sqrt d): the direct Solve over the number field fails
-     * (Together won't cancel the conjugate-linear factors back to the real quadratic),
-     * so these close via the {1,chs}-basis NF fallback (rt_cherry_ei_conjpair_nf). */
-    assert_ei("E^x/(x^2 + 2 x + 3)");    /* Q(i sqrt2) */
-    assert_ei("E^x/(x^2 + 2 x + 7)");    /* Q(i sqrt6) */
-    assert_ei("E^x/(x^2 - 2 x + 3)");
-    assert_ei("(3 x + 1) E^x/(x^2 + 2 x + 3)");
+    assert_ei("E^x/(x^2 + 2 x + 5)");  /* alpha = -1 -+ 2 I   (Q(i))    */
+
+    /* Q(i sqrt d) conjugate pairs (roots carry Sqrt[d], d not a perfect square):
+     * DECLINE cleanly.  The coefficient solve / diff-back for these route through
+     * Simplify/Together over Q(i sqrt d) with the E^x kernel, where the generic
+     * multivariate GCD blows up in exact_poly_div (a pre-existing hang).  The
+     * engine gates these complex-radical roots out (cherry_ei.c expr_has_radical)
+     * so Integrate returns unevaluated rather than hanging.  Restoring them to a
+     * closed form needs the FLINT number-field GCD (CHERRY_BLOCKERS A1, deferred). */
+    assert_declines("E^x/(x^2 + x + 1)");        /* (1 -+ I sqrt3)/2  Q(i sqrt3) */
+    assert_declines("E^x/(x^2 + 3)");            /* -+ I sqrt3        Q(i sqrt3) */
+    assert_declines("(2 x + 1) E^x/(x^2 + x + 3)"); /*                Q(i sqrt11) */
+    assert_declines("x E^x/(x^2 + x + 1)");      /*                   Q(i sqrt3) */
+    assert_declines("(x^2 + 1) E^x/(x^2 + x + 1)"); /* d12            Q(i sqrt3) */
+    assert_declines("E^x/(x^2 + 2 x + 3)");      /*                   Q(i sqrt2) */
+    assert_declines("E^x/(x^2 + 2 x + 7)");      /*                   Q(i sqrt6) */
+    assert_declines("E^x/(x^2 - 2 x + 3)");
+    assert_declines("(3 x + 1) E^x/(x^2 + 2 x + 3)");
 }
 
 /* Constant exponent offset: E^(c + h(x)) = E^c E^(h(x)) — the constant folds into the

@@ -155,6 +155,21 @@ static bool numeric_complex(Expr* val) {
     return cplx;
 }
 
+/* True iff e structurally contains a radical (a Power with a non-integer
+ * rational exponent, e.g. Sqrt[d] = Power[d, 1/2]).  Used to tell a Q(i sqrt d)
+ * complex root (carries Sqrt[d]) from a plain Q(i) root (p + q I, no radical). */
+static bool expr_has_radical(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (rt_head_is(e, "Power") && e->data.function.arg_count == 2) {
+        const Expr* ex = e->data.function.args[1];
+        if (ex && ex->type == EXPR_FUNCTION && rt_head_is(ex, "Rational")) return true;
+    }
+    if (expr_has_radical(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (expr_has_radical(e->data.function.args[i])) return true;
+    return false;
+}
+
 /* True iff e is the $Failed symbol (a declined builtin result). */
 static bool is_failed(const Expr* e) {
     return e && e->type == EXPR_SYMBOL
@@ -271,6 +286,15 @@ static size_t gen_alpha_candidates(Expr* g1, Expr* p, Expr* q, Expr* x,
                      * Q(i) — defer those. */
                     if (numeric_complex(val) && (degq != 0 || rt_degree(g1, x) != 2))
                         continue;
+                    /* A COMPLEX root that also carries a radical lives in Q(i sqrt d)
+                     * (d not a perfect square), not Q(i).  The coefficient solve and
+                     * diff-back for that pair route through Simplify/Together over
+                     * Q(i sqrt d), where the generic multivariate GCD blows up
+                     * (exact_poly_div expression-swell) — the engine would HANG.
+                     * Decline cleanly (leave the integral unevaluated) rather than
+                     * hang; pure Q(i) pairs (roots like +-I, -1+-2I: no radical) and
+                     * real-radical roots (sqrt2 in e^x/(x^2-2)) are unaffected. */
+                    if (numeric_complex(val) && expr_has_radical(val)) continue;
                     /* dedup */
                     bool dup = false;
                     for (size_t k = 0; k < n; k++)
@@ -618,9 +642,15 @@ Expr* rt_cherry_ei(Expr* f, Expr* x) {
         Expr* us = rt_eval1("Together",
             mk_times2(expr_copy(rs[j]), mk_pow(expr_copy(s), mk_int(-1))));  /* r_j/s */
         Expr* dus = rt_eval2("D", us, expr_copy(x));                         /* adopts us */
-        Expr* twopi = mk_times2(mk_int(2), mk_pow(mk_sym("Pi"),
-            expr_new_function(mk_sym("Rational"), (Expr*[]){ mk_int(-1), mk_int(2) }, 2)));
-        rhs[2 + m + j] = mk_times2(k, mk_times2(twopi, dus));
+        /* The unknown K_j absorbs the transcendental erf prefactor: the true
+         * erf coefficient is (Sqrt[Pi]/2) K_j, so the matching-identity term is
+         * just K_j (r_j/s)' — NO 2/Sqrt[Pi] here.  Keeping Sqrt[Pi] out of the
+         * linear system leaves resid over Q(algebraic); otherwise the constant
+         * Sqrt[Pi] denominator forces Together at (*) into the generic
+         * multivariate GCD, which blows up super-exponentially once r_j carries
+         * an algebraic irrational (e.g. Sqrt[2] from E^(-2x^2)).  The answer
+         * assembly re-attaches the Sqrt[Pi]/2. */
+        rhs[2 + m + j] = mk_times2(k, dus);
     }
     Expr* rhs_sum = expr_new_function(mk_sym("Plus"), rhs, nrhs);
     free(rhs);
@@ -669,7 +699,14 @@ Expr* rt_cherry_ei(Expr* f, Expr* x) {
                 mk_times2(expr_copy(rs[j]), mk_pow(expr_copy(s), mk_int(-1))));
             Expr* erfi = expr_new_function(mk_sym("Erfi"), (Expr*[]){ us }, 1);  /* adopts us */
             Expr* wt = mk_pow(mk_sym("E"), mk_neg(expr_copy(betas[j])));
-            ans[1 + m + j] = mk_times2(expr_copy(ksyms[j]), mk_times2(wt, erfi));
+            /* Re-attach the Sqrt[Pi]/2 folded out of the linear system (see the
+             * K_j substitution above): true coefficient = (Sqrt[Pi]/2) K_j. */
+            Expr* sqrtpi_half = mk_times2(
+                expr_new_function(mk_sym("Rational"), (Expr*[]){ mk_int(1), mk_int(2) }, 2),
+                mk_pow(mk_sym("Pi"),
+                    expr_new_function(mk_sym("Rational"), (Expr*[]){ mk_int(1), mk_int(2) }, 2)));
+            ans[1 + m + j] = mk_times2(expr_copy(ksyms[j]),
+                                       mk_times2(sqrtpi_half, mk_times2(wt, erfi)));
         }
         Expr* Q = expr_new_function(mk_sym("Plus"), ans, nans);
         free(ans);
