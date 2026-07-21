@@ -122,32 +122,35 @@ impl MathildaKernel {
         }
     }
 
-    /// Evaluate `expr` in-process and stream one `expr` (or `error`) message to
-    /// `channel`. The desktop kernel streams many NDJSON lines then a "done";
-    /// here the C API returns a single formatted result, so we emit one message
-    /// and return (the frontend treats the resolved promise as "done").
+    /// Evaluate `expr` in-process and stream one message to `channel`. The
+    /// desktop kernel streams many NDJSON lines then a "done"; here the C API
+    /// returns a single structured result, so we emit one message and return
+    /// (the frontend treats the resolved promise as "done").
     pub async fn evaluate(&self, expr: String, channel: Channel<Value>) -> Result<(), String> {
         if !self.ready.load(Ordering::Acquire) {
             // Lazily initialize if evaluate arrives before start() completed.
             self.start().await?;
         }
         let lock = self.lock.clone();
-        let (text, latex) = tauri::async_runtime::spawn_blocking(move || {
+        // One structured eval (not eval + eval_latex): a single evaluation keeps
+        // side effects from running twice AND carries the Plotly payload for
+        // Graphics/Graphics3D, so Plot[...] renders as a chart instead of raw
+        // red Graphics[...] text.
+        let raw = tauri::async_runtime::spawn_blocking(move || {
             let _guard = lock.blocking_lock();
-            let text = ffi::eval(&expr);
-            let latex = ffi::eval_latex(&expr);
-            (text, latex)
+            ffi::eval_json(&expr)
         })
         .await
         .map_err(|e| format!("eval join error: {e}"))?;
 
-        let msg = if text == "$Failed (parse error)" {
-            json!({ "id": 0, "type": "error", "message": text })
-        } else if latex.is_empty() {
-            json!({ "id": 0, "type": "expr", "payload": text })
-        } else {
-            json!({ "id": 0, "type": "expr", "payload": text, "latex": latex })
-        };
+        // The kernel already emitted {"type":...,"payload"/"latex"/"message":...};
+        // stamp the request id and forward it verbatim.
+        let mut msg = serde_json::from_str::<Value>(&raw).unwrap_or_else(|_| {
+            json!({ "type": "error", "message": format!("bad kernel output: {raw}") })
+        });
+        if let Some(obj) = msg.as_object_mut() {
+            obj.insert("id".into(), json!(0));
+        }
         channel.send(msg).map_err(|e| format!("channel: {e}"))?;
         Ok(())
     }

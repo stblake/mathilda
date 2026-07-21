@@ -46,6 +46,22 @@ char* mathilda_ffi_eval(const char* input);
  * mathilda_ffi_free(). Never returns NULL. */
 char* mathilda_ffi_eval_latex(const char* input);
 
+/* Parse and evaluate `input` ONCE, returning a single JSON object describing
+ * the result — the mobile counterpart to the sidecar's per-line NDJSON (see
+ * repl.c: pipe_process_input), minus the "id"/"done" framing the host adds.
+ * This is the preferred entry point for the notebook UI: a lone eval keeps
+ * side effects (assignments, counters, RandomReal) from running twice, and it
+ * carries the plot payload that _eval / _eval_latex cannot.
+ *
+ * The returned string is one of:
+ *   {"type":"error","message":"Parse error: ..."}       parse failure
+ *   {"type":"plot","payload":<plotly-json>}              Graphics[...] / Graphics3D[...]
+ *   {"type":"expr","payload":"<text>","latex":"<latex>"} normal result (latex omitted if empty)
+ *   {"type":"expr","payload":""}                         evaluated to nothing
+ *
+ * Caller-owned memory; free with mathilda_ffi_free(). Never returns NULL. */
+char* mathilda_ffi_eval_json(const char* input);
+
 /* Release a string returned by mathilda_ffi_eval / _eval_latex. NULL-safe. */
 void mathilda_ffi_free(char* s);
 

@@ -16,6 +16,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "expr.h"
 #include "parse.h"
@@ -26,6 +27,8 @@
 #include "core.h"
 #include "loadmodule.h"
 #include "version.h"
+#include "sym_names.h"
+#include "graphics_json.h"
 
 /* One-time init guard. The kernel's global symbol table is process-wide, so a
  * second symtab_init()/core_init() would leak or corrupt it. */
@@ -103,6 +106,116 @@ char* mathilda_ffi_eval_latex(const char* input) {
     expr_free(evaluated);
     if (!latex) return ffi_strdup("");
     return latex;
+}
+
+/* Minimal JSON string escaper — a self-contained copy of repl.c's json_escape
+ * (that one is static and lives in repl.o, which is excluded from libmathilda.a).
+ * Writes at most outlen-1 bytes plus a NUL. */
+static void ffi_json_escape(const char* s, char* out, size_t outlen) {
+    size_t i = 0;
+    while (*s && i + 7 < outlen) {
+        unsigned char c = (unsigned char)*s;
+        if (c == '"')       { out[i++] = '\\'; out[i++] = '"'; }
+        else if (c == '\\') { out[i++] = '\\'; out[i++] = '\\'; }
+        else if (c == '\n') { out[i++] = '\\'; out[i++] = 'n'; }
+        else if (c == '\r') { out[i++] = '\\'; out[i++] = 'r'; }
+        else if (c == '\t') { out[i++] = '\\'; out[i++] = 't'; }
+        else if (c < 0x20)  { i += (size_t)snprintf(out + i, outlen - i, "\\u%04x", (unsigned)c); }
+        else                { out[i++] = (char)c; }
+        s++;
+    }
+    out[i] = '\0';
+}
+
+/* Empty-expr sentinel: a lone result with no renderable payload. */
+static char* ffi_empty_expr(void) {
+    return ffi_strdup("{\"type\":\"expr\",\"payload\":\"\"}");
+}
+
+char* mathilda_ffi_eval_json(const char* input) {
+    int parse_failed = 0;
+    Expr* evaluated = ffi_parse_eval(input, &parse_failed);
+
+    if (parse_failed) {
+        /* Echo the (escaped) input so a stray char / bracket mismatch is
+         * diagnosable rather than an opaque "parse error" (matches repl.c). */
+        const char* in = input ? input : "";
+        size_t esc_cap = strlen(in) * 6 + 8;
+        char* esc = malloc(esc_cap);
+        char* out = NULL;
+        if (esc) {
+            ffi_json_escape(in, esc, esc_cap);
+            size_t bcap = esc_cap + 64;
+            out = malloc(bcap);
+            if (out)
+                snprintf(out, bcap,
+                    "{\"type\":\"error\",\"message\":\"Parse error: %s\"}", esc);
+        }
+        free(esc);
+        return out ? out
+                   : ffi_strdup("{\"type\":\"error\",\"message\":\"Parse error\"}");
+    }
+    if (!evaluated) return ffi_empty_expr();
+
+    /* Graphics[...] / Graphics3D[...] → Plotly JSON payload for the notebook.
+     * The front end auto-displays a top-level Graphics result, so Plot[...],
+     * Show[...], Plot3D[...] and `g // Graphics` all land here. */
+    if (evaluated->type == EXPR_FUNCTION
+        && evaluated->data.function.head
+        && evaluated->data.function.head->type == EXPR_SYMBOL) {
+        const char* head_sym = evaluated->data.function.head->data.symbol.name;
+        char* plotly = NULL;
+        if (head_sym == SYM_Graphics)        plotly = graphics_to_plotly_json(evaluated);
+        else if (head_sym == SYM_Graphics3D) plotly = graphics3d_to_plotly_json(evaluated);
+        if (plotly) {
+            expr_free(evaluated);
+            size_t n = strlen(plotly) + 48;
+            char* out = malloc(n);
+            if (out) snprintf(out, n, "{\"type\":\"plot\",\"payload\":%s}", plotly);
+            free(plotly);
+            return out ? out : ffi_empty_expr();
+        }
+        /* Non-convertible Graphics (e.g. empty): emit nothing renderable rather
+         * than dumping the raw Graphics[...] tree as red KaTeX. */
+        if (head_sym == SYM_Graphics || head_sym == SYM_Graphics3D) {
+            expr_free(evaluated);
+            return ffi_empty_expr();
+        }
+    }
+
+    char* text  = expr_to_string(evaluated);
+    char* latex = expr_to_latex(evaluated);   /* must be produced before free */
+    expr_free(evaluated);
+    if (!text) { free(latex); return ffi_empty_expr(); }
+
+    size_t tlen = strlen(text) * 6 + 4;
+    char* tesc = malloc(tlen);
+    if (tesc) ffi_json_escape(text, tesc, tlen);
+    free(text);
+
+    char* lesc = NULL;
+    if (latex) {
+        size_t llen = strlen(latex) * 6 + 4;
+        lesc = malloc(llen);
+        if (lesc) ffi_json_escape(latex, lesc, llen);
+        free(latex);
+    }
+
+    char* out = NULL;
+    if (tesc) {
+        size_t n = strlen(tesc) + (lesc ? strlen(lesc) : 0) + 64;
+        out = malloc(n);
+        if (out) {
+            if (lesc && lesc[0])
+                snprintf(out, n,
+                    "{\"type\":\"expr\",\"payload\":\"%s\",\"latex\":\"%s\"}", tesc, lesc);
+            else
+                snprintf(out, n, "{\"type\":\"expr\",\"payload\":\"%s\"}", tesc);
+        }
+    }
+    free(tesc);
+    free(lesc);
+    return out ? out : ffi_empty_expr();
 }
 
 void mathilda_ffi_free(char* s) {

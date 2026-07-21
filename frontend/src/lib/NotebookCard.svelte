@@ -23,6 +23,7 @@
   const dispatch = createEventDispatcher();
   import { get } from 'svelte/store';
   import CellShell from './CellShell.svelte';
+  import { isTouchDevice } from './platform';
   import type { CanvasNotebook } from './canvas';
   import {
     canvasState,
@@ -85,6 +86,7 @@
   let resizeStartW = 0;
 
   function onResizePointerDown(e: PointerEvent) {
+    if (isTouchDevice) return;  // touch: no edge-resize (would hijack pan)
     if (e.button !== 0) return;
     e.stopPropagation();
     resizing = true;
@@ -117,6 +119,7 @@
   }
 
   function onBottomResizeDown(e: PointerEvent) {
+    if (isTouchDevice) return;  // touch: no resize (would hijack pan)
     if (e.button !== 0) return;
     e.stopPropagation();
     resizingBottom = true;
@@ -128,6 +131,7 @@
   }
 
   function onCornerResizeDown(e: PointerEvent) {
+    if (isTouchDevice) return;  // touch: no resize (would hijack pan)
     if (e.button !== 0) return;
     e.stopPropagation();
     resizingCorner = true;
@@ -155,6 +159,9 @@
   }
 
   function onTitlePointerDown(e: PointerEvent) {
+    // Touch: no card dragging — a finger on the titlebar should pan the canvas
+    // (the event bubbles to Canvas). Titlebar buttons keep working via click.
+    if (isTouchDevice) return;
     if (e.button !== 0) return;  // left-click drag only
     if (focused) return;         // no drag in full-screen mode
     if ((e.target as HTMLElement).closest('button, input')) return;
@@ -753,14 +760,20 @@
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     cursor: default;
-    /* Use relative + absolute to true-center the title */
-    position: sticky;
+    /* Extend the bar up under the device status bar / notch so its buttons sit
+       BELOW it (they otherwise collide with the clock/battery on mobile). The
+       bar's dark background fills the inset strip for a native look; env() is 0
+       on desktop, leaving the 36px bar unchanged. box-sizing is border-box, so
+       height must be auto to grow by the padding rather than shrink content. */
+    height: auto;
+    padding-top: env(safe-area-inset-top, 0px);
   }
-  /* Title centered regardless of ← Canvas button width */
+  /* Title centered in the 36px button row, below the status-bar inset */
   .nb-card.focused-card .card-title {
     position: absolute;
     left: 50%;
-    transform: translateX(-50%);
+    top: calc(env(safe-area-inset-top, 0px) + 18px);
+    transform: translate(-50%, -50%);
     pointer-events: none;
     max-width: 60%;
   }
@@ -898,6 +911,9 @@
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(137,180,250,0.2) transparent;
+    /* The canvas sets touch-action:none to own pan/zoom; re-enable vertical
+       finger-scroll inside the card body. */
+    touch-action: pan-y;
   }
 
   /* In focused (full-screen) mode, remove max-height — let .focused-view scroll */

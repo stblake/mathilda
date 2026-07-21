@@ -204,8 +204,9 @@
   /* ---- Corner overlay ---- */
   .corner-overlay {
     position: fixed;
-    top: 8px;
-    right: 12px;
+    /* Clear the status bar / notch on mobile (env() is 0 on desktop). */
+    top: calc(8px + env(safe-area-inset-top, 0px));
+    right: calc(12px + env(safe-area-inset-right, 0px));
     display: flex;
     align-items: center;
     gap: 0.5rem;

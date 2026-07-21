@@ -20,6 +20,7 @@ extern "C" {
     fn mathilda_ffi_set_home(dir: *const c_char);
     fn mathilda_ffi_eval(input: *const c_char) -> *mut c_char;
     fn mathilda_ffi_eval_latex(input: *const c_char) -> *mut c_char;
+    fn mathilda_ffi_eval_json(input: *const c_char) -> *mut c_char;
     fn mathilda_ffi_free(s: *mut c_char);
     fn mathilda_ffi_version() -> *const c_char;
 }
@@ -71,6 +72,23 @@ pub fn eval_latex(input: &str) -> String {
     };
     // SAFETY: as in `eval`.
     unsafe { take_c_string(mathilda_ffi_eval_latex(c.as_ptr())) }
+}
+
+/// Evaluate `input` exactly ONCE and return a JSON object string describing the
+/// result — the notebook's preferred entry point. It carries the Plotly plot
+/// payload for `Graphics`/`Graphics3D` (which `eval`/`eval_latex` cannot) and,
+/// by evaluating a single time, avoids double-running side effects. Shape:
+///   {"type":"plot","payload":{...}}
+///   {"type":"expr","payload":"...","latex":"..."}   (latex may be absent)
+///   {"type":"error","message":"..."}
+/// See `mathilda_ffi_eval_json` in `src/ffi/mathilda_ffi.c`.
+pub fn eval_json(input: &str) -> String {
+    let c = match CString::new(input) {
+        Ok(c) => c,
+        Err(_) => return r#"{"type":"error","message":"embedded NUL in input"}"#.into(),
+    };
+    // SAFETY: as in `eval`.
+    unsafe { take_c_string(mathilda_ffi_eval_json(c.as_ptr())) }
 }
 
 /// Kernel version string (e.g. "0.015").
