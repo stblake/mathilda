@@ -847,8 +847,14 @@ monotonically down.
         `Integrate[Erf[x] E^(-x^2-Erf[x]^2),x] = -(Sqrt[Pi]/4) E^(-Erf[x]^2)`,
         `Integrate[2 E^(-x^2) Erf[x] - 3 E^(-1/x^2)/x^2,x] = (Sqrt[Pi]/2) Erf[x]^2 +
         (3 Sqrt[Pi]/2) Erf[1/x]`; `Integrate[x E^(-x^2-Erf[x]^2),x]` correctly
-        declines (no erf-elementary antiderivative). Radical (quasiquadratic) erf
-        arguments and `x`-rational elementary-part coefficients are later increments;
+        declines (no erf-elementary antiderivative). The **radical (quasiquadratic)**
+        case is also handled (Knowles Part I §6, Ex 8.1): when a top exponential
+        hides an algebraic factor `E^(l/2 Log[g]) = g^(l/2)`, it is pulled out first,
+        surfacing a half-integer power of a log tower variable; the erf argument is
+        then a radical `1/Sqrt[Log g]`, solved in `s = Sqrt[Log g]` — e.g.
+        `Integrate[E^(1/2 Log[Log[x]] - 1/Log[x])/(x Log[x]^2),x] =
+        -Sqrt[Pi] Erf[1/Sqrt[Log[x]]]` (and its `Erfi` dual). `x`-rational
+        elementary-part coefficients remain a later increment;
       - `c w^(p-1) w'/Log[w]` → `c LogIntegral[w^p]` (single-li fast path) —
         subsumes `K/Log[x] → K LogIntegral[x]`, a scaled/affine argument
         (`1/Log[2x] → LogIntegral[2x]/2`) and a monomial numerator (`x/Log[x] →

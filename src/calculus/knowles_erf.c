@@ -33,10 +33,20 @@
  *   INT (2 E^(-x^2) Erf[x] - 3 E^(-1/x^2)/x^2) dx = Erf[x]^2 + 3 Erf[1/x]  (Ex 4.4)
  *   INT x E^(-x^2 - Erf[x]^2) dx         -> declines (no erf-elementary antideriv, Ex 4.2)
  *
- * Scope of THIS increment: rational (perfect-square) erf arguments with constant
- * elementary-part coefficients.  The quasiquadratic completing-square case (Part I
- * Ex 8.1, radical arguments like 1/Sqrt[log x]) and x-rational v coefficients are
- * later increments (KNOWLES_DESIGN.md §3, K2 sub-milestones).
+ * Radical (quasiquadratic) case (Part I §6, Ex 8.1; 1986 Ex 3.2): when a top
+ * exponential hides an algebraic factor E^(l/2 Log[g]) = g^(l/2) (e.g. the
+ * E^(1/2 loglog x) = Sqrt[Log x] of INT E^(1/2 loglog x - 1/log x)/(x log^2 x)),
+ * collapse_exp_of_log() pulls it out first, surfacing a half-integer power of a
+ * LOG tower variable g_k.  The erf argument is then a radical 1/Sqrt[g_k]: the
+ * perfect-square gate and SolveAlways run in s_k = Sqrt[g_k] (g_k -> s_k^2, so
+ * every power is an integer/polynomial), while the emitted argument keeps
+ * g_k^(1/2), back-substituting to Sqrt[Log[...]].  Rational integrands set no
+ * radical flag, so their path is byte-identical.  Pins Ex 8.1:
+ *   INT E^(1/2 loglog x - 1/log x)/(x log^2 x) = -Sqrt[Pi] Erf[1/Sqrt[Log x]].
+ *
+ * Still deferred (KNOWLES_DESIGN.md §3): x-rational (non-constant) v coefficients;
+ * multi-radical towers; the certified non-existence decision (declines are
+ * sound-but-not-certified).
  */
 
 #include "knowles_erf.h"
@@ -72,6 +82,83 @@ static bool is_failed(Expr* e) {
     return e && e->type == EXPR_SYMBOL && e->data.symbol.name == intern_symbol("$Failed");
 }
 
+/* ReplaceAll[e, rules], evaluated; TAKES OWNERSHIP of both operands. */
+static Expr* rall_own(Expr* e, Expr* rules) {
+    return rt_eval_own(expr_new_function(mk_sym("ReplaceAll"), (Expr*[]){ e, rules }, 2));
+}
+
+/* Does `e` contain a Power[tv, Rational[..]] anywhere — i.e. a half-integer (or
+ * any non-integer) power of the tower variable `tv`?  Signals that an erf
+ * argument for `tv` must be a radical (the Knowles quasiquadratic case). */
+static bool halfint_power_of(Expr* e, Expr* tv) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (rt_head_is(e, "Power") && e->data.function.arg_count == 2
+        && expr_eq(e->data.function.args[0], tv)
+        && e->data.function.args[1]->type == EXPR_FUNCTION
+        && rt_head_is(e->data.function.args[1], "Rational"))
+        return true;
+    if (halfint_power_of(e->data.function.head, tv)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (halfint_power_of(e->data.function.args[i], tv)) return true;
+    return false;
+}
+
+/* Collapse an algebraic exp-of-log factor E^(r Log[g]) -> g^r (r a rational
+ * constant).  E^(1/2 Log[Log x]) is the algebraic factor Sqrt[Log x], NOT a
+ * transcendental exp extension: Knowles' quasiquadratic exponential (Part I §6)
+ * hides exactly such a factor, and pulling it out is what exposes the half-integer
+ * power (Log[x]^(3/2)) the radical erf argument needs.  Applied to the integrand
+ * before the tower build; a symbolic/irrational coefficient is left untouched (a
+ * genuine exp extension).  Recurses; a no-op on integrands without such a factor. */
+static Expr* collapse_exp_of_log(Expr* e) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    size_t k = e->data.function.arg_count;
+    Expr* nh = collapse_exp_of_log(e->data.function.head);
+    Expr** na = malloc((k ? k : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < k; i++) na[i] = collapse_exp_of_log(e->data.function.args[i]);
+    Expr* r = expr_new_function(nh, na, k);
+    free(na);
+
+    Expr* expo = NULL;
+    if (rt_head_is(r, "Power") && r->data.function.arg_count == 2
+        && r->data.function.args[0]->type == EXPR_SYMBOL
+        && r->data.function.args[0]->data.symbol.name == intern_symbol("E"))
+        expo = r->data.function.args[1];
+    else if (rt_head_is(r, "Exp") && r->data.function.arg_count == 1)
+        expo = r->data.function.args[0];
+    if (!expo) return r;
+
+    /* expo == Log[g], or Times[ rationals..., Log[g] ] with exactly one Log. */
+    Expr* logarg = NULL; Expr* coeff = NULL;
+    if (rt_head_is(expo, "Log") && expo->data.function.arg_count == 1) {
+        logarg = expo->data.function.args[0]; coeff = mk_int(1);
+    } else if (rt_head_is(expo, "Times")) {
+        size_t m = expo->data.function.arg_count;
+        Expr** cf = malloc(m * sizeof(Expr*)); size_t ncf = 0; bool ok = true;
+        for (size_t i = 0; i < m; i++) {
+            Expr* fac = expo->data.function.args[i];
+            if (!logarg && rt_head_is(fac, "Log") && fac->data.function.arg_count == 1)
+                logarg = fac->data.function.args[0];
+            else if (fac->type == EXPR_INTEGER
+                     || (fac->type == EXPR_FUNCTION && rt_head_is(fac, "Rational")))
+                cf[ncf++] = expr_copy(fac);
+            else { ok = false; break; }
+        }
+        if (ok && logarg)   /* evaluate so a lone factor is a clean Rational, not Times[Rational] */
+            coeff = ncf ? rt_eval_own(expr_new_function(mk_sym("Times"), cf, ncf)) : mk_int(1);
+        else { for (size_t i = 0; i < ncf; i++) expr_free(cf[i]); logarg = NULL; }
+        free(cf);
+    }
+    if (logarg && coeff) {
+        Expr* pw = mk_pow(expr_copy(logarg), coeff);   /* g^r (consumes coeff) */
+        expr_free(r);
+        return pw;
+    }
+    if (coeff) expr_free(coeff);
+    return r;
+}
+
 /* A candidate erf/erfi term: head Erf|Erfi, argument u (in tower variables), and
  * the tower variable expvar = e^{w} = e^{-/+ u^2}. */
 typedef struct { const char* head; Expr* u; Expr* expvar; } ErfCand;
@@ -95,8 +182,12 @@ static Expr* perfect_sqrt(Expr* target) {
 }
 
 Expr* knowles_erf_liouvillian(Expr* f, Expr* x) {
-    /* 1. Pre-normalise (split prim-bearing exponentials) and build the K0 tower. */
-    Expr* fx = rt_expand_exp_sums(f);
+    /* 1. Pre-normalise: split prim-bearing exponentials, then pull out algebraic
+     *    exp-of-log factors (E^(r Log g) -> g^r) so the quasiquadratic case's
+     *    Sqrt[Log x] surfaces as a half-integer power; build the K0 tower. */
+    Expr* fx0 = rt_expand_exp_sums(f);
+    Expr* fx  = collapse_exp_of_log(fx0);
+    expr_free(fx0);
     RtTower T;
     if (!rt_tower_build_min(fx, x, &T, 1)) { rt_tower_free(&T); expr_free(fx); return NULL; }
 
@@ -114,6 +205,40 @@ Expr* knowles_erf_liouvillian(Expr* f, Expr* x) {
         rt_tower_free(&T); expr_free(fx); return NULL;
     }
 
+    /* 2b. Radical (quasiquadratic) mode.  If F carries a half-integer power of a
+     *     LOG tower variable g_k — e.g. Log[x]^(3/2), which arises when an exp
+     *     monomial hides an algebraic factor E^(l/2 loglog x) = Sqrt[Log x]^l
+     *     (Knowles Part I §6, Ex 8.1) — the erf argument is a radical 1/Sqrt[g_k]
+     *     and F is not rational in the tower variables.  Flag each such g_k and
+     *     carry the substitution g_k -> s_k^2 (s_k = Sqrt[g_k]): run the
+     *     perfect-square gate and SolveAlways in the s_k so every power is an
+     *     integer (polynomial), while the EMITTED argument keeps g_k^(1/2), which
+     *     back-substitutes to Sqrt[Log[...]].  Rational integrands set no flag, so
+     *     `radical` stays false and the path below is byte-identical to before. */
+    bool*  radvar = calloc(T.n ? T.n : 1, sizeof(bool));
+    Expr** ssym   = calloc(T.n ? T.n : 1, sizeof(Expr*));
+    bool   radical = false;
+    for (size_t i = 0; i < T.n; i++)
+        if (T.kind[i] == RT_LOG && halfint_power_of(F, T.t[i])) { radvar[i] = true; radical = true; }
+    Expr* to_s = NULL;    /* List[ g_k -> s_k^2 ] over flagged k */
+    Expr* from_s = NULL;  /* List[ s_k -> Sqrt[g_k] ] over flagged k */
+    if (radical) {
+        Expr** tr = malloc(T.n * sizeof(Expr*)); size_t ntr = 0;
+        Expr** fr = malloc(T.n * sizeof(Expr*)); size_t nfr = 0;
+        for (size_t i = 0; i < T.n; i++) {
+            if (!radvar[i]) continue;
+            char nm[32]; snprintf(nm, sizeof(nm), "kerf$s%zu", i);
+            ssym[i] = mk_sym(nm);
+            tr[ntr++] = expr_new_function(mk_sym("Rule"),
+                (Expr*[]){ expr_copy(T.t[i]), mk_pow(expr_copy(ssym[i]), mk_int(2)) }, 2);
+            fr[nfr++] = expr_new_function(mk_sym("Rule"),
+                (Expr*[]){ expr_copy(ssym[i]), mk_pow(expr_copy(T.t[i]),
+                    expr_new_function(mk_sym("Rational"), (Expr*[]){ mk_int(1), mk_int(2) }, 2)) }, 2);
+        }
+        to_s   = expr_new_function(mk_sym("List"), tr, ntr); free(tr);
+        from_s = expr_new_function(mk_sym("List"), fr, nfr); free(fr);
+    }
+
     /* 3. Erf/Erfi candidates from the perfect-square gate over the exp kernels.
      *    For e^{w}: Erf needs w = -u^2 (target -w), Erfi needs w = +u^2 (target w).
      *    Exactly one target is a REAL perfect square for real w — prefer that (so
@@ -125,9 +250,17 @@ Expr* knowles_erf_liouvillian(Expr* f, Expr* x) {
         if (T.kind[j] != RT_EXP) continue;
         Expr* wsub = rt_subst_kernels(T.arg[j], &T);          /* exponent w in tower vars */
         if (!wsub) continue;
-        Expr* u_erf  = perfect_sqrt(rt_eval1("Cancel", mk_neg(expr_copy(wsub))));
-        Expr* u_erfi = perfect_sqrt(rt_eval1("Cancel", expr_copy(wsub)));
+        /* radical: solve the perfect-square gate in s_k = Sqrt[g_k] (g_k -> s_k^2,
+         * PowerExpand collapsing (s_k^2)^(p/2) -> s_k^p), then map roots back to
+         * tower vars (s_k -> Sqrt[g_k]) so the emitted argument carries g_k^(1/2). */
+        Expr* ws = radical ? rt_eval1("PowerExpand", rall_own(expr_copy(wsub), expr_copy(to_s)))
+                           : expr_copy(wsub);
         expr_free(wsub);
+        Expr* u_erf  = perfect_sqrt(rt_eval1("Cancel", mk_neg(expr_copy(ws))));
+        Expr* u_erfi = perfect_sqrt(rt_eval1("Cancel", expr_copy(ws)));
+        expr_free(ws);
+        if (radical && u_erf)  u_erf  = rall_own(u_erf,  expr_copy(from_s));
+        if (radical && u_erfi) u_erfi = rall_own(u_erfi, expr_copy(from_s));
         /* choose head/u: prefer the real (I-free) root */
         const char* head = NULL; Expr* u = NULL;
         Expr* fq_erf  = u_erf  ? rt_eval2("FreeQ", expr_copy(u_erf),  expr_copy(Isym)) : NULL;
@@ -154,7 +287,10 @@ Expr* knowles_erf_liouvillian(Expr* f, Expr* x) {
     }
     if (Isym) expr_free(Isym);
     if (nc == 0) {                                            /* no erf term possible here */
-        expr_free(F); rt_tower_free(&T); expr_free(fx);
+        expr_free(F);
+        for (size_t ri = 0; ri < T.n; ri++) if (ssym[ri]) expr_free(ssym[ri]);
+        free(ssym); free(radvar); if (to_s) expr_free(to_s); if (from_s) expr_free(from_s);
+        rt_tower_free(&T); expr_free(fx);
         for (size_t c = 0; c < nc; c++) { expr_free(cand[c].u); expr_free(cand[c].expvar); }
         return NULL;
     }
@@ -164,6 +300,8 @@ Expr* knowles_erf_liouvillian(Expr* f, Expr* x) {
     long dlo[24], dhi[24];
     if (T.n > 24) { /* absurdly deep tower — decline */
         expr_free(F); for (size_t c=0;c<nc;c++){expr_free(cand[c].u);expr_free(cand[c].expvar);}
+        for (size_t ri = 0; ri < T.n; ri++) if (ssym[ri]) expr_free(ssym[ri]);
+        free(ssym); free(radvar); if (to_s) expr_free(to_s); if (from_s) expr_free(from_s);
         rt_tower_free(&T); expr_free(fx); return NULL;
     }
     size_t total = 1;
@@ -174,6 +312,8 @@ Expr* knowles_erf_liouvillian(Expr* f, Expr* x) {
         total *= (size_t)(dhi[i] - dlo[i] + 1);
         if (total > 512) {                                   /* keep SolveAlways tractable */
             expr_free(F); for (size_t c=0;c<nc;c++){expr_free(cand[c].u);expr_free(cand[c].expvar);}
+            for (size_t ri = 0; ri < T.n; ri++) if (ssym[ri]) expr_free(ssym[ri]);
+            free(ssym); free(radvar); if (to_s) expr_free(to_s); if (from_s) expr_free(from_s);
             rt_tower_free(&T); expr_free(fx); return NULL;
         }
     }
@@ -224,13 +364,19 @@ Expr* knowles_erf_liouvillian(Expr* f, Expr* x) {
     Expr* Dexpr = expr_new_function(mk_sym("Plus"), dterms, nd);
     free(dterms);
 
-    /* 6. residual numerator == 0 identically in the tower variables + x. */
+    /* 6. residual numerator == 0 identically in the tower variables + x.  In
+     *    radical mode, map g_k -> s_k^2 (PowerExpand collapsing the half-integer
+     *    powers) so the residual is polynomial in s_k, and solve over s_k. */
     Expr* resid = mk_plus2(expr_copy(F), mk_neg(Dexpr));
+    if (radical) resid = rt_eval1("PowerExpand", rall_own(resid, expr_copy(to_s)));
     Expr* rnum  = rt_eval1("Numerator", rt_eval1("Together", resid));
     Expr* sol = NULL;
     if (rnum) {
         Expr** vl = malloc((T.n + 1) * sizeof(Expr*));
-        for (size_t i = 0; i < T.n; i++) vl[i] = expr_copy(T.t[T.n - 1 - i]);
+        for (size_t i = 0; i < T.n; i++) {
+            size_t idx = T.n - 1 - i;
+            vl[i] = (radical && radvar[idx]) ? expr_copy(ssym[idx]) : expr_copy(T.t[idx]);
+        }
         vl[T.n] = expr_copy(x);
         Expr* varlist = expr_new_function(mk_sym("List"), vl, T.n + 1);
         free(vl);
@@ -291,6 +437,8 @@ Expr* knowles_erf_liouvillian(Expr* f, Expr* x) {
     free(kd);
     for (size_t jj = 0; jj < nsym; jj++) expr_free(syms[jj]);
     free(syms);
+    for (size_t ri = 0; ri < T.n; ri++) if (ssym[ri]) expr_free(ssym[ri]);
+    free(ssym); free(radvar); if (to_s) expr_free(to_s); if (from_s) expr_free(from_s);
     expr_free(v_ansatz); expr_free(F);
     rt_tower_free(&T); expr_free(fx);
     return result;

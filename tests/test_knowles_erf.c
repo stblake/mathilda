@@ -98,6 +98,21 @@ int main(void) {
      * inside the ei engine's degenerate erf ansatz). */
     pos("E^(-1/x^2)/x^2", "Erf");
 
+    /* --- Radical / quasiquadratic case (Part I Ex 8.1; 1986 Ex 3.2) --------- */
+    /* INT exp(1/2 loglog x - 1/log x)/(x log^2 x) = -Sqrt[Pi] Erf[1/Sqrt[Log x]]
+     * (Knowles: 2 erf(1/sqrt log x)).  The algebraic factor E^(1/2 loglog x) =
+     * Sqrt[Log x] hides a half-integer power of Log[x], so the erf argument is a
+     * RADICAL 1/Sqrt[Log x] — the engine solves it in s = Sqrt[Log x] (Log x -> s^2). */
+    pos("E^(1/2 Log[Log[x]] - 1/Log[x])/(x Log[x]^2)", "Erf");
+    /* Already-reduced spelling (explicit half-integer power). */
+    pos("E^(-1/Log[x])/(x Log[x]^(3/2))", "Erf");
+    exact("E^(-1/Log[x])/(x Log[x]^(3/2))",
+          "Times[-1, Power[Pi, Rational[1, 2]], Erf[Power[Log[x], Rational[-1, 2]]]]");
+    /* Erfi radical dual: +1/log x = u^2 -> Erfi[1/Sqrt[Log x]]. */
+    pos("E^(1/Log[x])/(x Log[x]^(3/2))", "Erfi");
+    exact("E^(1/Log[x])/(x Log[x]^(3/2))",
+          "Times[-1, Power[Pi, Rational[1, 2]], Erfi[Power[Log[x], Rational[-1, 2]]]]");
+
     /* --- Decision battery (sound declines) ---------------------------------- */
     /* Ex 4.2: no erf-elementary antiderivative. */
     declines("x E^(-x^2 - Erf[x]^2)");

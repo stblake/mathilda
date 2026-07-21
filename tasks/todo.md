@@ -42,7 +42,22 @@ Spec: `KNOWLES_DESIGN.md`
 - `integrate_risch_transcendental` + `risch_elementaryq` exceed their 600s/60s self-alarms
   on this machine (pristine identical timing — not a regression).
 
-## C.3 — (optional) K1 li-Liouvillian warm-up
+## C.2 increment 2 — radical (quasiquadratic) erf arguments (LANDED 2026-07-21)
+Flagship pin: `∫ E^(½ Log[Log x] − 1/Log x)/(x Log²x) dx = −√π Erf[1/√Log x]` (Part I Ex 8.1).
+- [x] `knowles_erf.c`: `collapse_exp_of_log` pre-pass pulls out `E^(r Log g) → g^r`
+      (r rational) exposing the half-integer power; radical mode detects half-int
+      power of a log tower var g_k; solve in s_k = Sqrt[g_k] (g_k → s_k²) so
+      PolynomialSqrt/SolveAlways stay polynomial; emitted u keeps g_k^(1/2) →
+      back-subs to Sqrt[Log[…]]. Gated on half-integer signature → rational
+      integrands byte-identical. Bug found+fixed: `Times[Rational]` one-arg coeff
+      (evaluate so exponent is a clean `Rational`, else halfint detector misses it).
+- [x] test_knowles_erf.c: Ex 8.1 (raw + reduced) + Erfi dual, exact + diff-back pins
+- [x] non-regression: knowles_erf(15)/tower + cherry ei/li/dilog/sigma/stress +
+      dispatch/derivdivides green; risch_residue_split FAIL is PRE-EXISTING (Fresnel
+      Sqrt[Pi/2]Sqrt[2/Pi]); valgrind: 0 knowles/collapse/rall frames in leak stacks
+      (clean exit, pre-existing shared-machinery leaks only)
+
+## C.3 — (optional) K1 li-Liouvillian warm-up  [li(li(x)) already evaluates — deprioritised]
 - [ ] `knowles_li.c` + non-all-equal sigma-decomp; pin li(li(x))
 
 ## C.4/C.5 — docs
