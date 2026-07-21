@@ -220,6 +220,18 @@ void test_together() {
     run_test("Together[x^2/(x - y) - x y/(x - y)]", "x");
     run_test("Together[{1/x + 1/(x + 1), 1/(x + 2) + 1/(x + 3)}]", "List[Times[Power[Plus[x, Power[x, 2]], -1], Plus[1, Times[2, x]]], Times[Plus[5, Times[2, x]], Power[Plus[6, Times[5, x], Power[x, 2]], -1]]]");
     run_test("Together[(x - 1)/(x^2 - 1) + (x - 2)/(x^2 - 4)]", "Times[Plus[3, Times[2, x]], Power[Plus[2, Times[3, x], Power[x, 2]], -1]]");
+
+    /* Q(i) Gaussian rationals: the plain-Q FLINT fast path declines on I, so these
+     * route through flint_gaussian_together (I -> t, plain-Q combine, t -> I) rather
+     * than the classical multivariate-GCD combine that blows up super-exponentially
+     * on complex-coefficient residuals (regression: Integrate[E^(-1/x^2)/x^2] hang). */
+    run_test("Together[1/(x - I) + 1/(x + I)]",
+             "Times[2, x, Power[Plus[1, Power[x, 2]], -1]]");
+    /* Complex coefficient over a real denominator (the undetermined-coefficient shape). */
+    run_test("Together[a/(x - 1) + I b/(x - 2)]",
+             "Times[Power[Plus[2, Times[-3, x], Power[x, 2]], -1], "
+             "Plus[Times[-2, a], Times[Complex[0, -1], b], Times[a, x], "
+             "Times[Complex[0, 1], Times[b, x]]]]");
 }
 
 int main() {

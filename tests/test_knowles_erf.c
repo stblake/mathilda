@@ -92,6 +92,11 @@ int main(void) {
     pos("E^(-x^2 - Erf[x]^2 - Erf[Erf[x]]^2)", "Erf");
     /* Scaled argument: INT e^{-4 x^2} = (Sqrt[Pi]/4) Erf[2 x]. */
     pos("E^(-4 x^2)", "Erf");
+    /* Reciprocal case INT e^{-1/x^2}/x^2 = -(Sqrt[Pi]/2) Erf[1/x].  Regression guard
+     * for the cherry_ei complex-r gate + the Q(i) Together fast path: this integrand
+     * used to HANG the whole Integrate cascade (a Gaussian-rational Together blow-up
+     * inside the ei engine's degenerate erf ansatz). */
+    pos("E^(-1/x^2)/x^2", "Erf");
 
     /* --- Decision battery (sound declines) ---------------------------------- */
     /* Ex 4.2: no erf-elementary antiderivative. */

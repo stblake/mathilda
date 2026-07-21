@@ -1901,6 +1901,55 @@ static Expr* together_recursive(Expr* e) {
     return cancel_recursive(e);
 }
 
+#ifdef USE_FLINT
+/* True if e structurally contains the imaginary unit (a Complex[..] atom, which is
+ * how the evaluator stores I, or a bare symbol I). */
+static bool rat_contains_i(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_I;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Complex) return true;
+    if (rat_contains_i(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rat_contains_i(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Together over Q(i): the plain-Q fmpz_mpoly_q fast path (flint_rational_together)
+ * declines on I, so a multivariate Gaussian rational — e.g. an undetermined-
+ * coefficient residual with complex coefficients — falls to the classical
+ * multivariate-GCD combine (together_recursive), which blows up super-exponentially
+ * in the number of unknowns.  Substitute I -> a fresh indeterminate t, run the fast
+ * plain-Q Together over Q[vars, t], then substitute t -> I (the evaluator reduces
+ * I^k).  Correct for any well-defined input: N(t)/D(t) = sum_j n_j/d_j is an
+ * identity in the FREE variable t, so evaluating at t = I preserves it (no
+ * denominator vanishes at t = I for a well-defined fraction).  Declines (NULL) when
+ * I is absent, when the I->t image still carries an algebraic atom (a genuine
+ * Q(i, sqrt d) tower, left to the extension path), or when the plain-Q path
+ * declines. */
+static Expr* flint_gaussian_together(const Expr* arg) {
+    if (!rat_contains_i(arg)) return NULL;
+    Expr* t = expr_new_symbol("Rat$gaussI");
+    Expr* fwd = expr_new_function(expr_new_symbol(SYM_Rule),
+        (Expr*[]){ expr_new_symbol(SYM_I), expr_copy(t) }, 2);
+    Expr* e2 = eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+        (Expr*[]){ expr_copy((Expr*)arg), fwd }, 2));
+    if (!e2 || rat_contains_i(e2) || rat_has_algebraic_atom(e2)) {
+        if (e2) expr_free(e2);
+        expr_free(t);
+        return NULL;
+    }
+    Expr* tog = flint_rational_together(e2);
+    expr_free(e2);
+    if (!tog) { expr_free(t); return NULL; }
+    Expr* bwd = expr_new_function(expr_new_symbol(SYM_Rule),
+        (Expr*[]){ t, expr_new_symbol(SYM_I) }, 2);          /* adopts t */
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+        (Expr*[]){ tog, bwd }, 2));                          /* adopts tog */
+}
+#endif
+
 static Expr* builtin_together_compute(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
@@ -1935,6 +1984,11 @@ static Expr* builtin_together_compute(Expr* res) {
     if (!alpha && !auto_flag) {
         Expr* ft = flint_rational_together(arg);
         if (ft) return ft;
+        /* Q(i) Gaussian rational: the plain-Q path above declines on I; combine
+         * over Q[vars, t] with I -> t and map back, avoiding the classical
+         * multivariate-GCD blow-up on a complex-coefficient residual. */
+        Expr* gi = flint_gaussian_together(arg);
+        if (gi) return gi;
     }
 #endif
 

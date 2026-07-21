@@ -225,7 +225,14 @@ static size_t gen_beta_candidates(Expr* p, Expr* q, Expr* x,
         Expr* pbqv = rt_eval1("Expand",
             mk_plus2(expr_copy(p), mk_times2(expr_copy(bv), expr_copy(q))));
         Expr* r = rt_eval2("PolynomialSqrt", expr_copy(pbqv), expr_copy(x));
-        bool ok = r && !is_failed(r) && rt_is_poly(r, x);
+        /* r must be a REAL polynomial.  A complex r (e.g. beta=0 with p+beta q = -1
+         * giving r = I, the reciprocal case f = -1/x^2 -> u~ = I/x) is not a genuine
+         * Cherry real-erf argument u~ = r/s; admitting it builds a degenerate y-ansatz
+         * whose residual Together (a multivariate rational over x plus ~10 unknown
+         * coefficients) blows up.  The real erf whose square root is e^f directly
+         * (INT e^(-1/x^2)/x^2 = -(Sqrt[Pi]/2) Erf[1/x]) is not this completing-square
+         * form and is handled elsewhere, so declining here is correct, not a miss. */
+        bool ok = r && !is_failed(r) && rt_is_poly(r, x) && !numeric_complex(r);
         if (ok) {                                             /* exact certificate */
             Expr* chk = rt_eval1("Expand",
                 mk_plus2(mk_pow(expr_copy(r), mk_int(2)), mk_neg(expr_copy(pbqv))));
@@ -333,7 +340,9 @@ static Expr* rt_cherry_ei_conjpair_nf(Expr* f, Expr* v, Expr* g, Expr* a0, Expr*
         mk_times2(mk_plus2(expr_copy(a0), mk_neg(expr_copy(a1))), rhalf));      /* (a0-a1)/2 = chs value */
     Expr* disc = rt_eval1("Simplify", mk_pow(expr_copy(hd), mk_int(2)));        /* hd^2 (neg rational) */
     if (!center || !hd || !disc || !rt_free_of_x(center, x) || !rt_free_of_x(disc, x)) {
-        if (center) expr_free(center); if (hd) expr_free(hd); if (disc) expr_free(disc);
+        if (center) expr_free(center);
+        if (hd) expr_free(hd);
+        if (disc) expr_free(disc);
         return NULL;
     }
     Expr* chs = mk_sym("chei$s");
