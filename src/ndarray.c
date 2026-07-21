@@ -543,8 +543,19 @@ static bool same_shape(const Expr* a, const Expr* b) {
  * (re, im) pair. Returns false for a symbolic or non-machine scalar, so a Plus /
  * Times containing such a term falls through to the generic symbolic path. */
 static bool scalar_value(const Expr* e, double* re, double* im, bool* is_cplx) {
+    int64_t rn, rd;
     *im = 0.0; *is_cplx = false;
     if (leaf_real(e, re)) return true;
+    /* An NDArray is a machine-float buffer, so a Rational / BigInt / MPFR scalar
+     * broadcasts at its machine value (no exactness to preserve). This is what
+     * folds 1/2 NDArray[...] (= Times[1/2, NDArray]) and Mod[NDArray, 1/2]
+     * instead of leaving them symbolic. Note leaf_real (used for List->buffer
+     * packing) deliberately stays Integer/Real-only. */
+    if (e->type == EXPR_BIGINT) { *re = mpz_get_d(e->data.bigint); return true; }
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR)   { *re = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true; }
+#endif
+    if (is_rational(e, &rn, &rd)) { *re = (double)rn / (double)rd; return true; }
     if (head_is(e, SYM_Complex) && e->data.function.arg_count == 2 &&
         leaf_real(e->data.function.args[0], re) &&
         leaf_real(e->data.function.args[1], im)) {

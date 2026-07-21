@@ -514,13 +514,22 @@ static Expr* simplify_exp_log(Expr* base, Expr* exp) {
 }
 
 /* Decode a scalar exponent Expr into a (re, im) pair for the NDArray power fast
- * path: Integer/Real → real, Complex[re, im] with Integer/Real parts → complex.
- * Returns false for anything else (symbolic, Rational, BigInt, MPFR), so those
- * fall through to the generic symbolic Power. */
+ * path: Integer/Real/BigInt/Rational/MPFR → real, Complex[re, im] with numeric
+ * parts → complex. A rational exponent decodes to its machine-precision value
+ * (an NDArray is a machine-float buffer, so there is no exactness to preserve):
+ * this is what routes Sqrt[NDArray] = NDArray^(1/2) and NDArray^(p/q) through
+ * the C power loop instead of the generic Power that renames x^(1/2) → Sqrt[x].
+ * Returns false for anything symbolic, which falls through to symbolic Power. */
 static bool power_scalar_components(const Expr* e, double* re, double* im) {
+    int64_t rn, rd;
     *im = 0.0;
     if (e->type == EXPR_INTEGER) { *re = (double)e->data.integer; return true; }
     if (e->type == EXPR_REAL)    { *re = e->data.real; return true; }
+    if (e->type == EXPR_BIGINT)  { *re = mpz_get_d(e->data.bigint); return true; }
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR)    { *re = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true; }
+#endif
+    if (is_rational(e, &rn, &rd)) { *re = (double)rn / (double)rd; return true; }
     if (head_is(e, SYM_Complex) && e->data.function.arg_count == 2) {
         const Expr* a = e->data.function.args[0];
         const Expr* b = e->data.function.args[1];

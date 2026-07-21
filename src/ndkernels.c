@@ -115,6 +115,29 @@ static bool ndk_Sign_c(double ar, double ai, double* rr, double* ri) {
 }
 static const NDUnaryKernel NDKU_Sign = { ndk_Sign_c, ndk_Sign_r, true, false };
 
+/* ---- rounding / integer-part (real-closed, real-only) ------------------- */
+/* Floor/Ceiling/Round/IntegerPart/FractionalPart over a real array via libc.
+ * Real-only (cplx = NULL): a complex NDArray declines and degrades to the List
+ * path, where the scalar builtin applies the componentwise complex rule. Round
+ * replicates piecewise.c's round_half_even (banker's rounding) exactly rather
+ * than trusting the ambient FP rounding mode. */
+static bool ndk_Floor_r(double x, double* o)   { double v = floor(x); *o = v; return isfinite(v); }
+static bool ndk_Ceiling_r(double x, double* o)  { double v = ceil(x);  *o = v; return isfinite(v); }
+static bool ndk_IntegerPart_r(double x, double* o) { double v = trunc(x); *o = v; return isfinite(v); }
+static bool ndk_FractionalPart_r(double x, double* o) { double v = x - trunc(x); *o = v; return isfinite(v); }
+static bool ndk_Round_r(double x, double* o) {
+    double f = floor(x), r = x - f, v;
+    if (r < 0.5)      v = f;
+    else if (r > 0.5) v = f + 1.0;
+    else              v = (fmod(fabs(f), 2.0) == 0.0) ? f : f + 1.0; /* half -> even */
+    *o = v; return isfinite(v);
+}
+static const NDUnaryKernel NDKU_Floor          = { NULL, ndk_Floor_r,          true, false };
+static const NDUnaryKernel NDKU_Ceiling        = { NULL, ndk_Ceiling_r,        true, false };
+static const NDUnaryKernel NDKU_Round          = { NULL, ndk_Round_r,          true, false };
+static const NDUnaryKernel NDKU_IntegerPart    = { NULL, ndk_IntegerPart_r,    true, false };
+static const NDUnaryKernel NDKU_FractionalPart = { NULL, ndk_FractionalPart_r, true, false };
+
 /* ---- binary (scalar-index) ---------------------------------------------- */
 
 /* Log[b, z] = clog(z)/clog(b). Kernel receives (a0, a1) = (base, arg). May
@@ -142,6 +165,25 @@ static bool ndk_ArcTan2_c(double xre, double xim, double yre, double yim,
 }
 static const NDBinaryKernel NDKB_ArcTan = { ndk_ArcTan2_c, true };
 
+/* Mod[m, n] = m - n floor(m/n) and Quotient[m, n] = floor(m/n) over real
+ * arrays (floored division, result carrying the divisor's sign — matches
+ * builtin_mod / builtin_quotient in core.c). Kernel receives (m, n); declines
+ * any complex operand or a zero divisor -> List path. real_closed. */
+static bool ndk_Mod_c(double mre, double mim, double nre, double nim,
+                      double* rr, double* ri) {
+    if (mim != 0.0 || nim != 0.0 || nre == 0.0) return false;
+    double v = mre - nre * floor(mre / nre);
+    *rr = v; *ri = 0.0; return isfinite(v);
+}
+static bool ndk_Quotient_c(double mre, double mim, double nre, double nim,
+                           double* rr, double* ri) {
+    if (mim != 0.0 || nim != 0.0 || nre == 0.0) return false;
+    double v = floor(mre / nre);
+    *rr = v; *ri = 0.0; return isfinite(v);
+}
+static const NDBinaryKernel NDKB_Mod      = { ndk_Mod_c,      true };
+static const NDBinaryKernel NDKB_Quotient = { ndk_Quotient_c, true };
+
 /* ---- special functions: real machine kernels ---------------------------- */
 /* These cover the common real-array case at C speed via libc; a complex NDArray
  * (no cplx kernel) or an out-of-fast-domain element (order non-integer, pole)
@@ -149,6 +191,11 @@ static const NDBinaryKernel NDKB_ArcTan = { ndk_ArcTan2_c, true };
 
 static bool ndk_Gamma_r(double x, double* o) { double v = tgamma(x); *o = v; return isfinite(v); }
 static const NDUnaryKernel NDKU_Gamma = { NULL, ndk_Gamma_r, true, false };
+
+/* Factorial[x] = Gamma[x + 1] over a real array (matches builtin_factorial's
+ * real path). A pole (negative integer) yields non-finite -> declines. */
+static bool ndk_Factorial_r(double x, double* o) { double v = tgamma(x + 1.0); *o = v; return isfinite(v); }
+static const NDUnaryKernel NDKU_Factorial = { NULL, ndk_Factorial_r, true, false };
 
 /* LogGamma is real only for x > 0; for x <= 0 it is complex (lgamma loses the
  * imaginary part), so decline and let the List path handle it. */
@@ -213,12 +260,17 @@ void ndkernels_init(void) {
     REG_U(ArcCoth); REG_U(ArcSech); REG_U(ArcCsch);
     REG_U(Abs); REG_U(Re); REG_U(Im); REG_U(Arg);
     REG_U(Conjugate); REG_U(Sign);
+    REG_U(Floor); REG_U(Ceiling); REG_U(Round);
+    REG_U(IntegerPart); REG_U(FractionalPart);
 
     REG_B(Log, NDKB_Log);      /* two-arg Log[b, x] */
     REG_B(ArcTan, NDKB_ArcTan); /* two-arg ArcTan[x, y] */
+    REG_B(Mod, NDKB_Mod);       /* Mod[array, n] */
+    REG_B(Quotient, NDKB_Quotient); /* Quotient[array, n] */
 
     /* Special functions: real C-loop where libc provides it. */
     REG_U(Gamma); REG_U(LogGamma); REG_U(Erf); REG_U(Erfc);
+    REG_U(Factorial);
     REG_B(BesselJ, NDKB_BesselJ);
     REG_B(BesselY, NDKB_BesselY);
     REG_B(Beta,    NDKB_Beta);
