@@ -96,7 +96,7 @@ build_gmp() {
       "$src/configure" --host="$CONFIG_HOST" \
         --disable-shared --enable-static --disable-assembly \
         --prefix="$bd/install"
-    make -j"$(sysctl -n hw.ncpu)"; make install )
+    make -j"$(command -v nproc >/dev/null 2>&1 && nproc || sysctl -n hw.ncpu)"; make install )
   cp "$bd/install/lib/libgmp.a" "$OUT_DIR/libgmp.a"
   cp "$bd/install/include/gmp.h" "$OUT_DIR/gmp.h"
   echo ">>> libgmp.a ready"
@@ -122,7 +122,7 @@ build_mpfr() {
       "$src/configure" --host="$CONFIG_HOST" \
         --disable-shared --enable-static --with-gmp="$gmp_install" \
         --prefix="$bd/install"
-    make -j"$(sysctl -n hw.ncpu)"; make install )
+    make -j"$(command -v nproc >/dev/null 2>&1 && nproc || sysctl -n hw.ncpu)"; make install )
   cp "$bd/install/lib/libmpfr.a" "$OUT_DIR/libmpfr.a"
   cp "$bd/install/include/mpfr.h" "$OUT_DIR/mpfr.h"
   echo ">>> libmpfr.a ready"
@@ -150,7 +150,7 @@ EOF
       CC="$wrapper" AR="$AR_BIN" \
       USE_READLINE=0 USE_THREADS=0 USE_ECM=0 $mpfr_flag \
       USE_LAPACK=0 USE_GRAPHICS=0 USE_FLINT=0 USE_REGEX=0 USE_FFTW=0 \
-      -j"$(sysctl -n hw.ncpu)" )
+      -j"$(command -v nproc >/dev/null 2>&1 && nproc || sysctl -n hw.ncpu)" )
   cp "$REPO_ROOT/libmathilda.a" "$OUT_DIR/libmathilda.a"
   echo ">>> libmathilda.a ready"
 }

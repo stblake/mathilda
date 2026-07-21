@@ -111,6 +111,10 @@ char* mathilda_ffi_eval_latex(const char* input) {
 /* Minimal JSON string escaper — a self-contained copy of repl.c's json_escape
  * (that one is static and lives in repl.o, which is excluded from libmathilda.a).
  * Writes at most outlen-1 bytes plus a NUL. */
+/* Worst-case escaped size of an n-byte string: each byte can become the 6-byte
+ * "\uXXXX", plus room for the NUL and a little slack. Use everywhere a buffer
+ * is sized for ffi_json_escape so the margin can't drift between call sites. */
+#define FFI_JSON_ESC_BOUND(n) ((n) * 6 + 8)
 static void ffi_json_escape(const char* s, char* out, size_t outlen) {
     size_t i = 0;
     while (*s && i + 7 < outlen) {
@@ -140,7 +144,7 @@ char* mathilda_ffi_eval_json(const char* input) {
         /* Echo the (escaped) input so a stray char / bracket mismatch is
          * diagnosable rather than an opaque "parse error" (matches repl.c). */
         const char* in = input ? input : "";
-        size_t esc_cap = strlen(in) * 6 + 8;
+        size_t esc_cap = FFI_JSON_ESC_BOUND(strlen(in));
         char* esc = malloc(esc_cap);
         char* out = NULL;
         if (esc) {
@@ -188,14 +192,14 @@ char* mathilda_ffi_eval_json(const char* input) {
     expr_free(evaluated);
     if (!text) { free(latex); return ffi_empty_expr(); }
 
-    size_t tlen = strlen(text) * 6 + 4;
+    size_t tlen = FFI_JSON_ESC_BOUND(strlen(text));
     char* tesc = malloc(tlen);
     if (tesc) ffi_json_escape(text, tesc, tlen);
     free(text);
 
     char* lesc = NULL;
     if (latex) {
-        size_t llen = strlen(latex) * 6 + 4;
+        size_t llen = FFI_JSON_ESC_BOUND(strlen(latex));
         lesc = malloc(llen);
         if (lesc) ffi_json_escape(latex, lesc, llen);
         free(latex);

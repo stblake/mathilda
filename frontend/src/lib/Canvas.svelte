@@ -323,8 +323,13 @@
     }
   }
 
+  // Route by the actual pointer that fired, not a device-wide flag: a mouse on
+  // a touchscreen laptop still gets the mouse model (drag / rubber-band), while
+  // a finger anywhere gets pan / pinch. On phones every event is `touch`.
+  const isTouchEvent = (e: PointerEvent) => e.pointerType === 'touch' || e.pointerType === 'pen';
+
   function onPointerDown(e: PointerEvent) {
-    if (isTouchDevice) { onTouchDown(e); return; }
+    if (isTouchEvent(e)) { onTouchDown(e); return; }
     if (e.button !== 0) return;
     const overCard = (e.target as HTMLElement).closest('.nb-card');
     // Interactive elements inside cards — don't interfere
@@ -353,7 +358,7 @@
   }
 
   function onPointerMove(e: PointerEvent) {
-    if (isTouchDevice) { onTouchMove(e); return; }
+    if (isTouchEvent(e)) { onTouchMove(e); return; }
     if (groupDragActive) { updateGroupDrag(e); return; }
     if (selStart) { updateSelection(e); return; }
     if (!dragging) return;
@@ -365,7 +370,7 @@
   }
 
   function onPointerUp(_e: PointerEvent) {
-    if (isTouchDevice) { onTouchUp(_e); return; }
+    if (isTouchEvent(_e)) { onTouchUp(_e); return; }
     if (groupDragActive) { endGroupDrag(); return; }
     if (selStart) { finishSelection(); return; }
     dragging = false;

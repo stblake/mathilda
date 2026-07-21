@@ -1,25 +1,34 @@
 // platform.ts — runtime device-capability detection.
 //
-// The notebook canvas offers mouse affordances (drag a card to move it,
-// drag on empty space to rubber-band select) that make no sense without a
-// pointer you can hover and click precisely. On a touch device those same
-// gestures fight the natural expectation that one finger pans and two fingers
-// zoom. We branch on the device being touch-primary rather than sniffing the
-// OS, so it is correct on Android, iOS, and touch tablets alike with no
-// Tauri/OS plugin.
+// The notebook canvas offers mouse affordances (drag a card to move it, drag on
+// empty space to rubber-band select) that make no sense on a touch device,
+// where one finger should pan and two should zoom. `isTouchDevice` selects
+// between the two interaction models.
 //
-// Detection: `navigator.maxTouchPoints > 0` is the reliable signal for "has a
-// touchscreen" and, unlike the `(pointer: coarse)` media query, it is true in
-// the Android emulator (whose WebView advertises a mouse-like fine pointer
-// because the host cursor drives it, so `(pointer: coarse)` reports false
-// there). We keep the media query as a fallback for any engine that reports
-// touch only that way. A conventional desktop (macOS/Windows Tauri webview)
-// has maxTouchPoints === 0 and a fine pointer, so it stays on the mouse path.
+// We key off the OS/WebView, NOT a pointer-capability media query or
+// `maxTouchPoints` alone, because neither distinguishes the two cases that must
+// behave differently:
+//   - Android emulator — advertises a mouse (`(pointer: coarse)` is *false*,
+//     `(hover: hover)` is true) yet is a touch device. `maxTouchPoints` catches
+//     it; the media query does not.
+//   - Desktop touchscreen (a Windows/Linux 2-in-1 running the *desktop* app) —
+//     has touch points but is mouse-primary here and must stay on the mouse
+//     path. A bare `maxTouchPoints > 0` check would wrongly flip it to touch.
 //
-// Evaluated once at module load; the primary input type does not change during
-// a session on real devices.
+// The Tauri WebView user-agent is the reliable discriminator: Android and iOS
+// WebViews carry their platform token; desktop WebViews (macOS/Windows/Linux)
+// do not. iPadOS is the one exception — its WKWebView reports a desktop
+// "Macintosh" UA — so it is caught via touch points (a real Mac has none).
+function detectTouchDevice(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  if (/Android|iPhone|iPod|iPad/i.test(ua)) return true;
+  // iPadOS in a native WKWebView presents a "Macintosh" UA; desktop Macs have
+  // no touchscreen, so touch points > 1 means this is really an iPad.
+  if (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) return true;
+  return false;
+}
+
+// Evaluated once at module load; the platform does not change during a session.
 export const isTouchDevice: boolean =
-  typeof window !== 'undefined' &&
-  ((typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0) ||
-    (typeof window.matchMedia === 'function' &&
-      window.matchMedia('(pointer: coarse)').matches));
+  typeof window !== 'undefined' && detectTouchDevice();

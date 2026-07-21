@@ -23,7 +23,6 @@
   const dispatch = createEventDispatcher();
   import { get } from 'svelte/store';
   import CellShell from './CellShell.svelte';
-  import { isTouchDevice } from './platform';
   import type { CanvasNotebook } from './canvas';
   import {
     canvasState,
@@ -86,7 +85,7 @@
   let resizeStartW = 0;
 
   function onResizePointerDown(e: PointerEvent) {
-    if (isTouchDevice) return;  // touch: no edge-resize (would hijack pan)
+    if (e.pointerType === "touch" || e.pointerType === "pen") return;  // finger: pan the canvas, do not resize
     if (e.button !== 0) return;
     e.stopPropagation();
     resizing = true;
@@ -119,7 +118,7 @@
   }
 
   function onBottomResizeDown(e: PointerEvent) {
-    if (isTouchDevice) return;  // touch: no resize (would hijack pan)
+    if (e.pointerType === "touch" || e.pointerType === "pen") return;  // finger: pan the canvas, do not resize
     if (e.button !== 0) return;
     e.stopPropagation();
     resizingBottom = true;
@@ -131,7 +130,7 @@
   }
 
   function onCornerResizeDown(e: PointerEvent) {
-    if (isTouchDevice) return;  // touch: no resize (would hijack pan)
+    if (e.pointerType === "touch" || e.pointerType === "pen") return;  // finger: pan the canvas, do not resize
     if (e.button !== 0) return;
     e.stopPropagation();
     resizingCorner = true;
@@ -159,9 +158,10 @@
   }
 
   function onTitlePointerDown(e: PointerEvent) {
-    // Touch: no card dragging — a finger on the titlebar should pan the canvas
-    // (the event bubbles to Canvas). Titlebar buttons keep working via click.
-    if (isTouchDevice) return;
+    // Finger: no card dragging — a touch on the titlebar should pan the canvas
+    // (the event bubbles to Canvas). A mouse still drags (even on a touchscreen
+    // laptop). Titlebar buttons keep working via click.
+    if (e.pointerType === "touch" || e.pointerType === "pen") return;
     if (e.button !== 0) return;  // left-click drag only
     if (focused) return;         // no drag in full-screen mode
     if ((e.target as HTMLElement).closest('button, input')) return;

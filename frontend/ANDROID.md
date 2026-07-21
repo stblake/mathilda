@@ -97,3 +97,8 @@ adb shell monkey -p com.mathilda.notebook -c android.intent.category.LAUNCHER 1
   no reset entry point yet.
 - Release/Play Store builds require a signing keystore (`tauri android build`
   without `--debug`).
+- Release builds targeting API 35+ also need 16 KB page alignment
+  (`-Wl,-z,max-page-size=16384` on the cdylib link); debug builds only warn.
+- The webview uses `user-scalable=no` (so OS pinch-zoom doesn't fight the
+  canvas's own pinch-zoom), which disables system accessibility zoom inside the
+  app — an intentional trade-off worth revisiting if a11y zoom is needed.
