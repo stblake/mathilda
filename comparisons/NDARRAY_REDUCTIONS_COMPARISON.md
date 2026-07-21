@@ -28,6 +28,26 @@ wall-clock, not `Timing[]` (which reports summed CPU time across threads).
 
 (Bold = fastest of the three.)
 
+## Linear algebra (NDArray, LAPACK/BLAS-backed)
+
+| Operation | Mathilda | NumPy |
+|-----------|---------:|------:|
+| `A . B` matmul (1000²)     |   9.2 ms |   8.6 ms |
+| `Det` (500²)               |   2.2 ms |   1.5 ms |
+| `Inverse` (500²)           |   9.3 ms |   6.4 ms |
+| `LinearSolve` (500²)       |   3.1 ms |   3.0 ms |
+| `Transpose` (2000²)        |    33 ms |    21 ms |
+| `Eigenvalues` (200²)       |    24 ms |    15 ms |
+
+`Dot`/`Det`/`Inverse`/`LinearSolve`/`Norm` (matrix) route to the platform
+BLAS/LAPACK (Apple Accelerate) — within ~1.5× of NumPy (both LAPACK; the residual
+is Accelerate vs NumPy's threaded OpenBLAS on this Intel host). `Transpose` is
+32×32 cache-blocked. `Eigenvalues`/`Eigenvectors` use Mathilda's in-house numeric
+QR (already ~1.7× NumPy); a LAPACK path is deferred because the eigenvalue
+ordering convention (|λ| ties broken by position) can't be reproduced from LAPACK
+output without risking parity. The `*MatrixQ` predicates and `ConjugateTranspose`,
+which previously mishandled a packed NDArray, now answer correctly.
+
 ## Summary
 
 After multithreading + BLAS, Mathilda is the **fastest of the three on 7 of 13**

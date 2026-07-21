@@ -410,13 +410,57 @@ Expr* ndla_tr(Expr* res)
 /*  Norm (vectors: default 2-norm, integer/real p, or Infinity)        */
 /* ------------------------------------------------------------------ */
 
+/* Matrix norm of a rank-2 NDArray. Default (or p==2) is the spectral norm (the
+ * largest singular value, via LAPACK gesdd); p==1 / Infinity / "Frobenius" go
+ * through LAPACK lange. Returns NULL to signal "defer" (no LAPACK, or an
+ * unsupported p). */
+static Expr* nd_matrix_norm(Expr* v, Expr* pe)
+{
+    char kind = 'S';                                  /* S = spectral (2-norm) */
+    if (pe) {
+        if (pe->type == EXPR_INTEGER && pe->data.integer == 2) kind = 'S';
+        else if (pe->type == EXPR_INTEGER && pe->data.integer == 1) kind = '1';
+        else if (pe->type == EXPR_SYMBOL && pe->data.symbol.name == SYM_Infinity) kind = 'I';
+        else if (pe->type == EXPR_STRING && pe->data.string &&
+                 strcmp(pe->data.string, "Frobenius") == 0) kind = 'F';
+        else return NULL;
+    }
+    if (!mathilda_lapack_probe()) return NULL;
+    bool cplx = nd_arg_is_complex(v);
+    int r, c; double* A = NULL;                        /* column-major r x c */
+    if (!na_load_matrix(v, cplx, true, &r, &c, &A)) return NULL;
+
+    double out;
+    if (kind == 'S') {
+        int mn = r < c ? r : c;
+        double* S = (double*)malloc(sizeof(double) * (size_t)mn);
+        int info = cplx ? mat_lapack_zgesdd('N', r, c, A, r, S, NULL, 1, NULL, 1)
+                        : mat_lapack_dgesdd('N', r, c, A, r, S, NULL, 1, NULL, 1);
+        out = (info == 0) ? S[0] : -1.0;               /* gesdd sorts S descending */
+        free(S);
+        if (info != 0) { free(A); return NULL; }
+    } else {
+        out = cplx ? mat_lapack_zlange(kind, r, c, A, r)
+                   : mat_lapack_dlange(kind, r, c, A, r);
+        if (out < 0.0) { free(A); return NULL; }
+    }
+    free(A);
+    return expr_new_real(out);
+}
+
 Expr* ndla_norm(Expr* res)
 {
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return linalg_delist_and_reeval(res);
     Expr* v = res->data.function.args[0];
-    if (!is_ndarray(v) || v->data.ndarray.rank != 1)
-        return linalg_delist_and_reeval(res);        /* matrix/spectral norm defers */
+    if (!is_ndarray(v)) return linalg_delist_and_reeval(res);
+
+    if (v->data.ndarray.rank == 2) {                  /* matrix norm via LAPACK */
+        Expr* r = nd_matrix_norm(v, argc == 2 ? res->data.function.args[1] : NULL);
+        return r ? r : linalg_delist_and_reeval(res);
+    }
+    if (v->data.ndarray.rank != 1)
+        return linalg_delist_and_reeval(res);
 
     /* Resolve p: default 2, positive Integer/Real, or Infinity. */
     double p = 2.0; bool p_inf = false;
