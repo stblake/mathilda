@@ -2,6 +2,7 @@
 #include "total.h"
 #include "assoc.h"
 #include "ndreduce.h"
+#include "plus.h"
 
 static int64_t get_depth_for_total(Expr* e) {
     if (e->type != EXPR_FUNCTION) return 1;
@@ -28,9 +29,19 @@ static Expr* total_at_exactly_level_k(Expr* e, int64_t k) {
         for (size_t i = 0; i < count; i++) plus_args[i] = expr_copy(e->data.function.args[i]);
         Expr* plus_expr = expr_new_function(expr_new_symbol(SYM_Plus), plus_args, count);
         free(plus_args);
-        Expr* res = evaluate(plus_expr);
-        expr_free(plus_expr);
-        return res;
+        /* The list elements are already evaluated (Total is not HoldAll), so
+         * collect like terms directly via builtin_plus — skipping the O(n)
+         * re-evaluation of every already-normal term and the redundant
+         * ORDERLESS sort of the raw input. builtin_plus does NOT free its
+         * argument (only the evaluator frees a builtin's input), so we own and
+         * free plus_expr here. eval_and_free then finalizes the small collapsed
+         * result: Flat-flattens any nested Plus element and sorts. */
+        Expr* collected = builtin_plus(plus_expr);
+        if (collected) {
+            expr_free(plus_expr);
+            return eval_and_free(collected);
+        }
+        return eval_and_free(plus_expr);  /* builtin declined: evaluate as usual */
     } else {
         size_t count = e->data.function.arg_count;
         Expr** new_args = malloc(sizeof(Expr*) * count);
