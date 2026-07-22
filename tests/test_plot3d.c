@@ -9,8 +9,28 @@
 #include "symtab.h"
 #include "core.h"
 #include "test_utils.h"
+#include "graphics_json.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
+
+/* Bracket balance of a JSON string, ignoring brackets inside "quoted" strings.
+ * A negative return means a premature close; nonzero at end means unbalanced —
+ * either way the JSON is malformed. Catches the mesh3d "unclosed array" bug. */
+static int json_brackets_balanced(const char* s) {
+    int depth = 0, in_str = 0;
+    for (; *s; s++) {
+        if (in_str) {
+            if (*s == '\\' && s[1]) { s++; continue; }
+            if (*s == '"') in_str = 0;
+            continue;
+        }
+        if (*s == '"') in_str = 1;
+        else if (*s == '[' || *s == '{') depth++;
+        else if (*s == ']' || *s == '}') { if (--depth < 0) return -1; }
+    }
+    return depth;
+}
 
 void test_plot3d_returns_graphics3d_head(void) {
     assert_eval_eq("Head[Plot3D[x + y, {x, -1, 1}, {y, -1, 1}]]", "Graphics3D", 0);
@@ -317,6 +337,31 @@ void test_plot3d_plot_label_stored_in_options(void) {
         "\"My Surface\"", 0);
 }
 
+/* Regression: a Plot3D surface colours its faces and then draws a wireframe,
+ * so a colour change mid-Graphics3D flushes the accumulated mesh3d block. That
+ * mid-flush previously emitted the vertex/face arrays WITHOUT their closing
+ * ']', producing invalid JSON ("x":[...,"y":[...) that failed to parse — no
+ * plot on mobile. The payload must be well-formed (balanced brackets) and
+ * carry a mesh3d trace. */
+void test_plot3d_plotly_json_is_well_formed(void) {
+    struct Expr* g = evaluate(parse_expression(
+        "Plot3D[Sin[x] Cos[y], {x, 0, 3}, {y, 0, 3}]"));
+    if (!g) { printf("FAIL: Plot3D did not evaluate\n"); exit(1); }
+    char* json = graphics3d_to_plotly_json(g);
+    if (!json) { printf("FAIL: graphics3d_to_plotly_json returned NULL\n"); expr_free(g); exit(1); }
+    if (json_brackets_balanced(json) != 0) {
+        printf("FAIL: mesh3d Plotly JSON has unbalanced brackets (malformed)\n");
+        exit(1);
+    }
+    if (!strstr(json, "\"type\":\"mesh3d\"")) {
+        printf("FAIL: no mesh3d trace in Plot3D payload\n");
+        exit(1);
+    }
+    free(json);
+    expr_free(g);
+    printf("test_plot3d_plotly_json_is_well_formed passed\n");
+}
+
 int main(void) {
     setenv("MATHILDA_NO_GRAPHICS_WINDOW", "1", 1);
     symtab_init();
@@ -342,6 +387,7 @@ int main(void) {
     TEST(test_plot3d_region_function_2arg_form);
     TEST(test_plot3d_plot_range_stored_in_options);
     TEST(test_plot3d_plot_label_stored_in_options);
+    TEST(test_plot3d_plotly_json_is_well_formed);
 
     printf("All Plot3D tests passed!\n");
     symtab_clear();

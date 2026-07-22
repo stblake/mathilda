@@ -1404,10 +1404,15 @@ static int pick_best_tower_generator(const Expr* arg, const QATower* t) {
     return best_idx;
 }
 
-#ifdef USE_FLINT
 /* True if `e` contains an algebraic-number atom: I, Sqrt[..], Complex[..], or
  * Power[base, p/q] with a non-integer rational exponent.  Distinguishes an
- * over-an-extension fraction from a plain rational one. */
+ * over-an-extension fraction from a plain rational one.
+ *
+ * Defined unconditionally: it is pure Expr inspection with no FLINT dependency,
+ * and it is called from FLINT-independent paths (lines ~740, ~2012). Keeping it
+ * inside `#ifdef USE_FLINT` left those calls referencing an undefined static in
+ * a USE_FLINT=0 build (the default when FLINT is absent, and what the mobile
+ * cross-builds use), breaking the link. */
 static bool rat_has_algebraic_atom(const Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_I;
@@ -1428,6 +1433,7 @@ static bool rat_has_algebraic_atom(const Expr* e) {
     return false;
 }
 
+#ifdef USE_FLINT
 /* Cancel a single fraction rigorously over a detected algebraic-extension field
  * (Q(sqrt d), Q(zeta_n), radical tower) using the FLINT engine: g = gcd(num,den)
  * then num/g, den/g by exact division. Returns NULL — deferring to the classical

@@ -643,6 +643,11 @@ char* graphics3d_to_plotly_json(const Expr* g) {
         rgba_str(mc, sizeof(mc), mesh_r, mesh_g_val, mesh_b_color, mesh_opacity); \
         if (!first_trace) buf_cat(&data_buf, ","); \
         first_trace = 0; \
+        /* Close the vertex/face arrays HERE so every flush is well-formed — a \
+         * color change mid-surface flushes an in-progress block, not just the \
+         * final one. (The next block is re-primed with "[" below.) */ \
+        buf_cat(&mesh_x, "]"); buf_cat(&mesh_y, "]"); buf_cat(&mesh_z, "]"); \
+        buf_cat(&mesh_i, "]"); buf_cat(&mesh_j, "]"); buf_cat(&mesh_k, "]"); \
         buf_cat(&data_buf, "{\"type\":\"mesh3d\","); \
         buf_cat(&data_buf, "\"x\":"); buf_cat(&data_buf, mesh_x.buf); \
         buf_cat(&data_buf, ",\"y\":"); buf_cat(&data_buf, mesh_y.buf); \
@@ -762,9 +767,7 @@ char* graphics3d_to_plotly_json(const Expr* g) {
         }
     }
 
-    /* Flush any remaining mesh. */
-    buf_cat(&mesh_x, "]"); buf_cat(&mesh_y, "]"); buf_cat(&mesh_z, "]");
-    buf_cat(&mesh_i, "]"); buf_cat(&mesh_j, "]"); buf_cat(&mesh_k, "]");
+    /* Flush any remaining mesh (FLUSH_MESH closes the arrays itself). */
     FLUSH_MESH();
 #undef FLUSH_MESH
 
