@@ -697,6 +697,12 @@ Expr* rat_canon_reduce(const RatCanonForm* f, RcMode mode) {
         if (rco_has_radical(den)) {
             /* Phase 3c: constant-radicand pre-formed cancellation via number-field
              * GCD; NULL if coprime / WL-kept (decline to classical). */
+            /* Phase 3c: constant-radicand pre-formed cancellation via number-field
+             * GCD; NULL if coprime / WL-kept / unhandled -> decline to classical,
+             * which gives the canonical form (and fully reduces the cases the
+             * builder under-represents, e.g. commensurate radicals
+             * y^(1/2)/y^(1/3)/y^(1/6)).  Blanket-keeping those regressed rat/
+             * simplify — see plan Phase 3d. */
             Expr* done = rat_canon_nf_complete(num, den);
             expr_free(num); expr_free(den);
             if (!done) { expr_free(res); return NULL; }

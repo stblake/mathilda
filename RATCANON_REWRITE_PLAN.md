@@ -470,11 +470,23 @@ degree-32/leaf-200/iter-50 caps) is the **genuine fallback** for every input
 `rat_canon_normalize` declines — coprime WL-kept radicals (`1/(x-Sqrt2)`),
 Gaussian pre-formed cancels (`(x^2+1)/(x-I)`), forward trig, inexact, and
 multi-arg/option forms.  Deleting any of it now would regress those cases, so it
-is NOT safe until `rat_canon` covers them.  The remaining coverage work
-(a **Phase 3d**: clean coprime-radical output form — the gen-leading ordering
-currently yields `-1/(Sqrt2-x)`; a **Phase 3e**: Gaussian pre-formed cancel) is
-the prerequisite; only then can each cascade path be proven dead and removed
-one-by-one, suite-verified.  Net LOC across the rewrite decreases at that point.
+is NOT safe until `rat_canon` covers them.  The remaining coverage work is the prerequisite; only then can each cascade path
+be proven dead and removed one-by-one, suite-verified.  Net LOC across the
+rewrite decreases at that point.
+
+**Phase 3d attempt (accept coprime instead of decline) — REVERTED.**  The
+Phase-4 max-degree sign rule *does* clean the coprime WL-kept form
+(`1/(x-Sqrt2)` came out right, matching classical), so blanket-accepting the
+sign-normalized result when `nf_complete` returns NULL looked promising and
+passed the direct coprime parity.  But it regressed `rat`/`simplify`: it also
+kept the UNDER-reduced forms the builder under-represents — commensurate radicals
+`(y^(1/2)-y^(1/3))/(y^(1/6)-1)` (three independent gens `g2,g3,g6` instead of one
+`g=y^(1/6)` with `g2=g^3,g3=g^2`) came out as a mess instead of `y^(1/3)`, and a
+cyclotomic Simplify scored differently.  `nf_complete==NULL` conflates "coprime
+(safe to keep)" with "GCD/builder couldn't reduce (must decline)"; separating
+them needs a **commensurate-radical builder** (the radical analogue of the
+exp-fundamental collapse — recognise `y^(p/q)` as powers of one `y^(1/lcm q)`),
+which is the real Phase 3d.  Until then, coprime declines to classical (stable).
 
 **Goal.** `Together`/`Cancel` route entirely through `rat_canon_normalize`; the
 classical cascade shrinks to a thin fallback for `build`-declines only; the
