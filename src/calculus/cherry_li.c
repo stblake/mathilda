@@ -88,6 +88,7 @@ Expr* rt_cherry_li(Expr* f, Expr* x) {
     long m = denF ? rt_degree(denF, t) : 0;
     long dxF = numF ? rt_degree(numF, x) : 0;
     long dw  = rt_degree(w, x);
+    long ddx = denF ? rt_degree(denF, x) : 0;   /* Laurent depth: x-degree of den(F) */
     if (numF) expr_free(numF);
 
     /* Constant nonzero roots rho of the theta-denominator give transcendental-
@@ -129,34 +130,49 @@ Expr* rt_cherry_li(Expr* f, Expr* x) {
         mk_pow(expr_copy(w), mk_int(-1))));
 
     /* 4. Ansatz bounds (derived, generous — the tower identity certifies soundness).
-     *    Laurent theta powers i in [-(m-1), 1]; b_i in x of degree <= Dx; li powers
-     *    k in [1, K]. */
+     *    Laurent theta powers i in [-(m-1), 1]; b_i in x over powers [Jlo, Dx]; li
+     *    powers k in [K_lo, K] (excluding 0).  A LAURENT integrand (x in the
+     *    denominator, ddx > 0) forces two negative extensions: the reduced 1/theta
+     *    residue A/w' is a Laurent (not just positive-power) polynomial in w, so li
+     *    args w^k must admit negative k (li(w^k) = Ei(k Log[w])); and the elementary
+     *    part v = Sum_i b_i(x) theta^i then needs Laurent b_i (higher Log poles, e.g.
+     *    INT 1/(x^4 Log[x]^2) = -3 Ei(-3 Log x) - 1/(x^3 Log x), b_{-1} = -1/x^3).
+     *    b_i powers are in x directly (depth ~ ddx); li powers scale as w^k
+     *    (depth ~ ddx/deg w).  Unused terms pin to 0; the diff-back certifies. */
+    long Jlo = 0, K_lo = 0;
+    if (ddx > 0) {
+        Jlo  = -(ddx + 2);
+        K_lo = -((dw > 0 ? ddx / dw : ddx) + 2);
+    }
     long lo = -(m - 1), hi = 1;
     long Dx = dxF + dw + 2;               if (Dx < 0) Dx = 0;
     long K  = (dw > 0 ? dxF / dw : dxF) + 3; if (K < 2) K = 2;
 
+    long bw   = Dx - Jlo + 1;    /* number of x-powers per b_i           */
+    long Klen = K - K_lo;        /* number of li powers (0 excluded)     */
+
     size_t nlau = (size_t)(hi - lo + 1);
-    size_t nsym = nlau * (size_t)(Dx + 1) + (size_t)K + ns;
+    size_t nsym = nlau * (size_t)bw + (size_t)Klen + ns;
     Expr** syms = malloc(nsym * sizeof(Expr*));
     size_t si = 0;
 
     /* v = Sum_{i=lo}^{hi} b_i(x) theta^i,  b_i = Sum_j a_ij x^j.
      * D_tower[v] = Sum_i ( b_i' theta^i + i b_i eta theta^(i-1) ). */
-    Expr** dterms = malloc((2 * nlau + (size_t)K + ns) * sizeof(Expr*));
+    Expr** dterms = malloc((2 * nlau + (size_t)Klen + ns) * sizeof(Expr*));
     size_t nd = 0;
     Expr** vterms = malloc(nlau * sizeof(Expr*));         /* for the emitted answer */
     for (long i = lo; i <= hi; i++) {
-        Expr** bt = malloc((size_t)(Dx + 1) * sizeof(Expr*));
-        Expr** bt2 = malloc((size_t)(Dx + 1) * sizeof(Expr*));
-        for (long j = 0; j <= Dx; j++) {
-            char nm[64]; snprintf(nm, sizeof(nm), "chli$a%ld_%ld", i - lo, j);
+        Expr** bt = malloc((size_t)bw * sizeof(Expr*));
+        Expr** bt2 = malloc((size_t)bw * sizeof(Expr*));
+        for (long j = Jlo; j <= Dx; j++) {
+            char nm[64]; snprintf(nm, sizeof(nm), "chli$a%ld_%ld", i - lo, j - Jlo);
             Expr* a = mk_sym(nm);
             syms[si++] = expr_copy(a);
-            bt[j]  = mk_times2(expr_copy(a), mk_pow(expr_copy(x), mk_int(j)));
-            bt2[j] = mk_times2(a, mk_pow(expr_copy(x), mk_int(j)));
+            bt[j - Jlo]  = mk_times2(expr_copy(a), mk_pow(expr_copy(x), mk_int(j)));
+            bt2[j - Jlo] = mk_times2(a, mk_pow(expr_copy(x), mk_int(j)));
         }
-        Expr* bi  = expr_new_function(mk_sym("Plus"), bt,  (size_t)(Dx + 1));
-        Expr* biA = expr_new_function(mk_sym("Plus"), bt2, (size_t)(Dx + 1));
+        Expr* bi  = expr_new_function(mk_sym("Plus"), bt,  (size_t)bw);
+        Expr* biA = expr_new_function(mk_sym("Plus"), bt2, (size_t)bw);
         free(bt); free(bt2);
         /* emitted v term: b_i theta^i */
         vterms[i - lo] = mk_times2(biA, mk_pow(expr_copy(t), mk_int(i)));
@@ -170,19 +186,28 @@ Expr* rt_cherry_li(Expr* f, Expr* x) {
             expr_free(bi);
     }
 
-    /* li terms: contribution d_k w^(k-1) w' / theta, and record the answer terms. */
-    Expr** dsyms = malloc((size_t)K * sizeof(Expr*));
-    Expr** liargs = malloc((size_t)K * sizeof(Expr*));
-    for (long k = 1; k <= K; k++) {
-        char nm[32]; snprintf(nm, sizeof(nm), "chli$d%ld", k);
+    /* li terms: contribution d_k w^(k-1) w' / theta, and record the answer terms.
+     * Enumerate k over [K_lo, K] \ {0} with a running index ki (NOT k-1, which is a
+     * negative index for k < 0); kvals[ki] records the power for emission. */
+    Expr** dsyms = malloc((size_t)Klen * sizeof(Expr*));
+    Expr** liargs = malloc((size_t)Klen * sizeof(Expr*));
+    long*  kvals = malloc((size_t)Klen * sizeof(long));
+    long   ki = 0;
+    for (long k = K_lo; k <= K; k++) {
+        if (k == 0) continue;
+        char nm[32];
+        if (k < 0) snprintf(nm, sizeof(nm), "chli$dn%ld", -k);   /* hyphen-free name */
+        else       snprintf(nm, sizeof(nm), "chli$d%ld", k);
         Expr* d = mk_sym(nm);
-        dsyms[k - 1] = expr_copy(d);
+        dsyms[ki] = expr_copy(d);
         syms[si++] = expr_copy(d);
-        liargs[k - 1] = mk_pow(expr_copy(w), mk_int(k));       /* w^k */
+        kvals[ki] = k;
+        liargs[ki] = mk_pow(expr_copy(w), mk_int(k));       /* w^k */
         Expr* term = mk_times2(d, mk_times2(
             mk_times2(mk_pow(expr_copy(w), mk_int(k - 1)), expr_copy(wp)),
             mk_pow(expr_copy(t), mk_int(-1))));
         dterms[nd++] = term;
+        ki++;
     }
 
     /* rescaled-li (shift) terms: k_i w'/(theta - rho_i). */
@@ -218,20 +243,30 @@ Expr* rt_cherry_li(Expr* f, Expr* x) {
         && rt_head_is(sol->data.function.args[0], "List");
     if (solved) {
         Expr* rules = sol->data.function.args[0];
-        size_t nans = nlau + (size_t)K + ns;
+        size_t nans = nlau + (size_t)Klen + ns;
         Expr** ans = malloc(nans * sizeof(Expr*));
         for (size_t i = 0; i < nlau; i++) ans[i] = expr_copy(vterms[i]);
-        for (long k = 1; k <= K; k++)
-            ans[nlau + (size_t)(k - 1)] = mk_times2(expr_copy(dsyms[k - 1]),
-                expr_new_function(mk_sym("LogIntegral"),
-                    (Expr*[]){ expr_copy(liargs[k - 1]) }, 1));
+        for (long kk = 0; kk < Klen; kk++) {
+            Expr* fn;
+            if (kvals[kk] < 0) {
+                /* li(w^k) = ExpIntegralEi[k Log[w]] for k < 0 — the Wolfram form,
+                 * and avoids LogIntegral of an argument < 1 (branch-fragile). */
+                Expr* klogw = mk_times2(mk_int(kvals[kk]),
+                    expr_new_function(mk_sym("Log"), (Expr*[]){ expr_copy(w) }, 1));
+                fn = expr_new_function(mk_sym("ExpIntegralEi"), (Expr*[]){ klogw }, 1);
+            } else {
+                fn = expr_new_function(mk_sym("LogIntegral"),
+                    (Expr*[]){ expr_copy(liargs[kk]) }, 1);
+            }
+            ans[nlau + (size_t)kk] = mk_times2(expr_copy(dsyms[kk]), fn);
+        }
         /* rescaled-li answer: k_i e^rho_i LogIntegral[e^(-rho_i) w] */
         for (size_t i = 0; i < ns; i++) {
             Expr* erho  = mk_pow(mk_sym("E"), expr_copy(shifts[i]));
             Expr* liarg = mk_times2(mk_pow(mk_sym("E"), mk_neg(expr_copy(shifts[i]))),
                                     expr_copy(w));
             Expr* li = expr_new_function(mk_sym("LogIntegral"), (Expr*[]){ liarg }, 1);
-            ans[nlau + (size_t)K + i] = mk_times2(expr_copy(ssyms[i]),
+            ans[nlau + (size_t)Klen + i] = mk_times2(expr_copy(ssyms[i]),
                                                   mk_times2(erho, li));
         }
         Expr* Q = expr_new_function(mk_sym("Plus"), ans, nans);
@@ -274,8 +309,8 @@ Expr* rt_cherry_li(Expr* f, Expr* x) {
 
     for (size_t i = 0; i < nlau; i++) expr_free(vterms[i]);
     free(vterms);
-    for (long k = 0; k < K; k++) { expr_free(dsyms[k]); expr_free(liargs[k]); }
-    free(dsyms); free(liargs);
+    for (long k = 0; k < Klen; k++) { expr_free(dsyms[k]); expr_free(liargs[k]); }
+    free(dsyms); free(liargs); free(kvals);
     for (size_t i = 0; i < ns; i++) { expr_free(shifts[i]); expr_free(ssyms[i]); }
     free(ssyms);
     for (size_t j = 0; j < nsym; j++) expr_free(syms[j]);

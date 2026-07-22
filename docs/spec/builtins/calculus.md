@@ -870,7 +870,17 @@ monotonically down.
         `e^rho LogIntegral[e^(-rho) w]`): `Integrate[1/(Log[x]+3),x] =
         LogIntegral[E^3 x]/E^3`, `Integrate[(Log[x]^2+3)/(Log[x]^2+3Log[x]+2),x] =
         x + 4 LogIntegral[E x]/E - 7 LogIntegral[E^2 x]/E^2`. Multi-log towers
-        (reducible `w` needing a product decomposition) decline;
+        (reducible `w` needing a product decomposition) decline. The tower
+        Sigma-decomposition is **Laurent**: a negative-degree (Laurent-polynomial)
+        numerator over `Log[w]` admits negative li powers `w^k`, emitted as
+        `ExpIntegralEi[k Log[w]]` (`= LogIntegral[w^k]`, the Wolfram form, which
+        also avoids `LogIntegral` of an argument `<1`), and higher `Log` poles
+        carry an elementary Laurent part `Sum_i b_i(x) Log[w]^i` with `b_i`
+        themselves Laurent in `x`: `Integrate[1/(x^4 Log[x]),x] =
+        ExpIntegralEi[-3 Log[x]]`, `Integrate[1/(x^4 Log[x]^2),x] =
+        -3 ExpIntegralEi[-3 Log[x]] - 1/(x^3 Log[x])`,
+        `Integrate[(x-1)^2/(x^4 Log[x]^3),x]` (three `ExpIntegralEi` terms plus a
+        Laurent elementary part);
       - `c g'(x)/Log[g]` → `c LogIntegral[g]` for a **mixed exp/log kernel** `g`
         that is not a polynomial in `x` (so `Log[g]` appears as a SUM, not a
         `Log[...]` node, and the polynomial-`w` engines above cannot see it). The

@@ -55,6 +55,25 @@ static void assert_li(const char* f) {
     ASSERT_MSG(eval_is(buf, "True"), "%s: numeric diff-back nonzero", f);
 }
 
+/* Integrate f via RischTranscendental; assert it closes to an ExpIntegralEi form
+ * (the Wolfram rendering of li(w^k) for negative k) that (a) PowerExpand-diff-backs
+ * to 0 exactly and (b) numeric-diff-backs to 0 at an interior point. */
+static void assert_ei(const char* f) {
+    char buf[1500];
+    snprintf(buf, sizeof(buf),
+        "With[{r = Integrate[%s, x, Method -> \"RischTranscendental\"]},"
+        " Head[r] =!= Integrate && !FreeQ[r, ExpIntegralEi]]", f);
+    ASSERT_MSG(eval_is(buf, "True"), "%s: expected a closed ExpIntegralEi form", f);
+    snprintf(buf, sizeof(buf),
+        "Simplify[PowerExpand[D[Integrate[%s, x, Method -> \"RischTranscendental\"], x]"
+        " - (%s)]]", f, f);
+    ASSERT_MSG(eval_is(buf, "0"), "%s: PowerExpand diff-back nonzero", f);
+    snprintf(buf, sizeof(buf),
+        "Abs[N[(D[Integrate[%s, x, Method -> \"RischTranscendental\"], x] - (%s))"
+        " /. x -> 17/10]] < 1/10^6", f, f);
+    ASSERT_MSG(eval_is(buf, "True"), "%s: numeric diff-back nonzero", f);
+}
+
 static void assert_declines(const char* f) {
     char buf[1024];
     snprintf(buf, sizeof(buf),
@@ -105,6 +124,24 @@ static void test_cherry_li_rescale(void) {
     assert_li("1/((Log[x]+1)(Log[x]+2))");
 }
 
+/* Laurent extension: a Laurent-polynomial numerator over Log[x] closes to a sum
+ * of ExpIntegralEi terms (li(w^k) = Ei(k Log[w]) for negative k), and higher Log
+ * poles bring an elementary Laurent part v = Sum_i b_i(x) Log[x]^i with b_i itself
+ * Laurent in x.  All verified by exact PowerExpand + numeric diff-back. */
+static void test_cherry_li_laurent(void) {
+    /* Single Log pole — pure Ei.  INT 1/(x^4 Log[x]) = Ei(-3 Log x). */
+    assert_ei("1/(x^4 Log[x])");
+    ASSERT_MSG(eval_is(
+        "Simplify[PowerExpand[Integrate[1/(x^4 Log[x]), x, Method -> \"RischTranscendental\"]"
+        " - ExpIntegralEi[-3 Log[x]]]]", "0"), "1/(x^4 Log[x]) exact form");
+    assert_ei("1/(x^2 Log[x])");        /* Ei(-Log x)   */
+    assert_ei("1/(x^3 Log[x])");        /* Ei(-2 Log x) */
+    /* Higher Log poles — Ei terms + Laurent elementary part (user examples). */
+    assert_ei("1/(x^4 Log[x]^2)");      /* -3 Ei(-3 Log x) - 1/(x^3 Log x)         */
+    assert_ei("(x-1)/(x^4 Log[x]^2)");  /* 3 Ei(-3 Log x) - 2 Ei(-2 Log x) + ...   */
+    assert_ei("(x-1)^2/(x^4 Log[x]^3)");/* 3-Ei + 2-Laurent form                   */
+}
+
 /* Decline-safety (later increments): multi-log towers requiring a product
  * Sigma-decomposition, and a non-polynomial log argument — decline cleanly. */
 static void test_cherry_li_declines(void) {
@@ -126,6 +163,7 @@ int main(void) {
     TEST(test_cherry_1986_li);
     TEST(test_cherry_li_stress);
     TEST(test_cherry_li_rescale);
+    TEST(test_cherry_li_laurent);
     TEST(test_cherry_li_declines);
     TEST(test_cherry_li_kernel);
     printf("All Cherry LogIntegral tests passed.\n");
