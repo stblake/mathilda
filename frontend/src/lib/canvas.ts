@@ -103,6 +103,8 @@ export function loadStartupContent() {
     { cells: [{ type: 'section', source: 'Filled Plots' }] },
     { cells: [{ type: 'code',    source: 'Plot[Sin[x] + Sin[5 x], {x, 0, 4 Pi}, Filling -> Axis]' }] },
     { cells: [{ type: 'code',    source: 'Plot[Exp[-x^2/2]/Sqrt[2 Pi], {x, -4, 4}, Filling -> Axis]' }] },
+    { cells: [{ type: 'section', source: '3D Plots' }] },
+    { cells: [{ type: 'code',    source: 'Plot3D[Sin[x] Cos[y], {x, 0, 3}, {y, 0, 3}]' }] },
   ]);
 
   // Cluster 2 — Algebra & Numbers
