@@ -378,6 +378,29 @@ classical Tan path emits `2/(1-Tan^2)` — math-equal, one consistent FLINT sign
 convention. Phase 4 must update the SPEC's Tan row to the FLINT form (a
 consistency improvement, reviewed via the baseline diff).
 
+### Phase 3b — LANDED (2026-07-22): variable-radicand cancellations
+
+Folded the VARIABLE-radicand pre-formed cancellations back in with essentially no
+new code, via a **variable-ordering change** in `flint_tower_reduce**: free
+variables that appear in a relation (radicand-variables) are ordered ABOVE the
+generators.  Then the relation `g^q - radicand` is a Gröbner basis with leading
+term `radicand`, so `fmpz_mpoly_divrem_ideal` eliminates the radicand
+(`y -> g^q`), and the re-canonicalise performs the cancellation over the free
+ring.  Acceptance relaxed from "result radical-free" to "**denominator**
+radical-free" (a radical in the numerator, e.g. `a+Sqrt b`, is fully reduced).
+
+Now covered (clean forms, parity-verified against classical Cancel/Together):
+`(a^2-b)/(a-Sqrt b) -> a+Sqrt b`, `(y-1)/(y^(1/3)-1) -> 1+y^(1/3)+y^(2/3)`,
+`(x^3-y)/(x-y^(1/3)) -> x^2+x y^(1/3)+y^(2/3)`, `(x^2-k)/(x-Sqrt k)`,
+`(a-b)/(Sqrt a-Sqrt b) -> Sqrt a+Sqrt b` (two radicands).  A CONSTANT radicand
+contributes no radicand-variable, so its generator still leads (`g^q -> const`) —
+sum-of-conjugates still work, and CONSTANT-radicand pre-formed cancels
+(`(x^2-2)/(x-Sqrt2)`), WL-kept radicals (`1/(x-Sqrt2)`), and coprime multi-radical
+sums still decline to classical.  The number-field GCD for those constant cases
+is **Phase 3c** (or left to Phase 4's classical fallback, which is correct today).
+`ratcanon_reduce_tests` updated (three former declines are now accepted-form
+rows); all green; valgrind == baseline.
+
 ---
 
 ## Phase 4 — Switch the builtins and DELETE the zoo

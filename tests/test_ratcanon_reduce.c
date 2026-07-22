@@ -108,12 +108,19 @@ static void test_accept_forms(void) {
     /* Cancel leaves a sum of fractions uncombined (per-term). */
     accept_form("a/b+c/d", RCM_CANCEL,
                 "Plus[Times[a, Power[b, -1]], Times[c, Power[d, -1]]]");
+    /* Phase 3b: VARIABLE-radicand pre-formed cancellations (radicand-var ordering
+     * eliminates the radicand; the radical lands only in the numerator). */
+    accept_form("(a^2-b)/(a-Sqrt[b])", RCM_CANCEL, "Plus[a, Power[b, Rational[1, 2]]]");
+    accept_form("(y-1)/(y^(1/3)-1)", RCM_CANCEL,
+                "Plus[1, Power[y, Rational[1, 3]], Power[y, Rational[2, 3]]]");
+    accept_form("(x^3-y)/(x-y^(1/3))", RCM_CANCEL,
+                "Plus[Power[x, 2], Times[x, Power[y, Rational[1, 3]]], Power[y, Rational[2, 3]]]");
 }
 
 static void test_declines(void) {
+    /* CONSTANT-radicand pre-formed cancel + WL-kept radical: need a number-field
+     * GCD (Phase 3c); decline to classical for now. */
     declines("(x^2-2)/(x-Sqrt[2])", RCM_TOGETHER);       /* pre-formed number-field cancel */
-    declines("(a^2-b)/(a-Sqrt[b])", RCM_TOGETHER);       /* pre-formed parametric cancel   */
-    declines("(y-1)/(y^(1/3)-1)", RCM_CANCEL);           /* cube root                      */
     declines("1/(x-Sqrt[2])", RCM_TOGETHER);             /* radical WL-kept in denom       */
     declines("1/(x-Sqrt[3])+1/(x-Sqrt[5])", RCM_TOGETHER); /* coprime multi-radical sum    */
     declines("1/(1+Cos[x])+1/Sin[x]", RCM_TOGETHER);     /* forward trig (dependent)       */
@@ -133,7 +140,10 @@ static void test_parity(void) {
     for (int i = 0; tog[i]; i++) parity(tog[i], RCM_TOGETHER);
     const char* can[] = {
         "(x^2-1)/(x-1)", "(x^3-1)/(x-1)", "(2 x^2+4x)/(x^2-4)", "a/b+c/d",
-        "(x^2+2x+1)/(x+1)", "(a x^2 - a)/(x-1)", NULL };
+        "(x^2+2x+1)/(x+1)", "(a x^2 - a)/(x-1)",
+        /* Phase 3b variable-radicand cancellations: */
+        "(a^2-b)/(a-Sqrt[b])", "(y-1)/(y^(1/3)-1)", "(x^3-y)/(x-y^(1/3))",
+        "(k x^2-1)/(x-1/Sqrt[k])", NULL };
     for (int i = 0; can[i]; i++) parity(can[i], RCM_CANCEL);
 }
 

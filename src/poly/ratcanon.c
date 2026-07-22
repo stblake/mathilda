@@ -590,15 +590,22 @@ Expr* rat_canon_reduce(const RatCanonForm* f, RcMode mode) {
     Expr* res = eval_and_free(rat_canon_subst_back(f, reduced));
     expr_free(reduced);
 
-    /* Accept only a fully-reduced, radical-FREE result: the free/transcendental
-     * cases and the sum-of-conjugates cases where the combine + ideal reduction
-     * eliminated every algebraic generator (Q(i), Sqrt[k] and Sqrt[d] conjugate
-     * sums -> radical-free denominator).  Anything with a residual radical is
-     * either WL-faithfully kept (1/(x-Sqrt2)), a coprime multi-radical sum, or a
-     * pre-formed cancellation that needs a field GCD this engine does not do
-     * (cube roots): decline to the classical path, which produces the canonical
-     * form for all of those.  (The field-GCD completion is Phase 3b.) */
-    if (n_alg > 0 && rco_has_radical(res)) { expr_free(res); return NULL; }
+    /* Accept when the DENOMINATOR is radical-free — the result is fully reduced.
+     * Covers: free/transcendental; sum-of-conjugates (Q(i), Sqrt[k]/Sqrt[d] sums
+     * -> radical-free denominator); and, via the radicand-variable ordering in
+     * flint_tower_reduce, the pre-formed VARIABLE-radicand cancellations whose
+     * radical lands only in the numerator ((a^2-b)/(a-Sqrt b) -> a+Sqrt b;
+     * (y-1)/(y^(1/3)-1) -> 1+y^(1/3)+y^(2/3)).  A radical REMAINING in the
+     * denominator is either WL-faithfully kept (1/(x-Sqrt2)), a coprime
+     * multi-radical sum, or a CONSTANT-radicand pre-formed cancellation needing a
+     * number-field GCD (Phase 3c): decline to the classical path, which produces
+     * the canonical form for all of those. */
+    if (n_alg > 0) {
+        Expr* num; Expr* den; extract_num_den(res, &num, &den);
+        bool bail = rco_has_radical(den);
+        expr_free(num); expr_free(den);
+        if (bail) { expr_free(res); return NULL; }
+    }
     return rco_sign_normalize(res);
 }
 

@@ -3343,16 +3343,38 @@ Expr* flint_tower_reduce(const Expr* frac,
                          const Expr* const* relations, int n_alg) {
     if (!frac) return NULL;
 
-    VarSet fvars; memset(&fvars, 0, sizeof fvars);
-    for (int i = 0; i < n_alg; i++) varset_add(&fvars, alg_syms[i]);   /* leading */
+    /* LEX variable order: radicand-variables (free vars appearing in a relation)
+     * FIRST, then the generators, then the remaining params/main var.  Ordering a
+     * VARIABLE radicand above its generator makes the relation g^q - radicand a
+     * Groebner basis with leading term `radicand`, so divrem_ideal eliminates the
+     * radicand (y -> g^q); the re-canonicalise then cancels — this is what folds
+     * in the cube-root and symbolic-radicand pre-formed cancellations
+     * ((y-1)/(y^(1/3)-1) -> 1+y^(1/3)+y^(2/3), (a^2-b)/(a-Sqrt b) -> a+Sqrt b).
+     * A CONSTANT radicand contributes no radicand-variable, so its generator
+     * leads naturally (g^q -> const), preserving the sum-of-conjugates path. */
+    VarSet gens; memset(&gens, 0, sizeof gens);
+    for (int i = 0; i < n_alg; i++) varset_add(&gens, alg_syms[i]);
+    VarSet relv; memset(&relv, 0, sizeof relv);
+    for (int i = 0; i < n_alg; i++) collect_all_symbols(relations[i], &relv);
     VarSet all; memset(&all, 0, sizeof all);
     collect_all_symbols(frac, &all);
-    for (int i = 0; i < n_alg; i++) collect_all_symbols(relations[i], &all);
+    for (size_t i = 0; i < relv.count; i++) varset_add(&all, relv.names[i]);
+
+    VarSet fvars; memset(&fvars, 0, sizeof fvars);
+    /* radicand-variables: relation vars that are not generators */
+    VarSet rvars; memset(&rvars, 0, sizeof rvars);
+    for (size_t i = 0; i < relv.count; i++)
+        if (var_index(&gens, relv.names[i]) < 0) varset_add(&rvars, relv.names[i]);
+    qsort(rvars.names, rvars.count, sizeof(char*), cmp_str);
+    for (size_t i = 0; i < rvars.count; i++) varset_add(&fvars, rvars.names[i]);
+    for (int i = 0; i < n_alg; i++) varset_add(&fvars, alg_syms[i]);
+    /* remaining params / main var (sorted) */
     VarSet params; memset(&params, 0, sizeof params);
     for (size_t i = 0; i < all.count; i++)
         if (var_index(&fvars, all.names[i]) < 0) varset_add(&params, all.names[i]);
     qsort(params.names, params.count, sizeof(char*), cmp_str);
     for (size_t i = 0; i < params.count; i++) varset_add(&fvars, params.names[i]);
+    varset_free(&gens); varset_free(&relv); varset_free(&rvars);
     varset_free(&params); varset_free(&all);
     if (fvars.count == 0) { varset_free(&fvars); return NULL; }
 
