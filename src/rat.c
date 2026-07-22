@@ -708,6 +708,47 @@ static bool rat_has_dependent_power_generators(Expr* num, Expr* den) {
     return dep;
 }
 
+static bool rat_has_algebraic_atom(const Expr* e);   /* defined below */
+
+/* True iff `v` is a trigonometric / hyperbolic function kernel Cos[u], Sin[u],
+ * … whose argument is not constant (so distinct such kernels of a common
+ * variable are algebraically DEPENDENT — Cos[2x] = 2 Cos[x]^2 - 1, etc.). */
+static bool rat_is_trig_kernel(Expr* v) {
+    if (!v || v->type != EXPR_FUNCTION ||
+        v->data.function.head->type != EXPR_SYMBOL ||
+        v->data.function.arg_count != 1) return false;
+    const char* h = v->data.function.head->data.symbol.name;
+    static const char* const ks[] = {
+        "Sin", "Cos", "Tan", "Cot", "Sec", "Csc",
+        "Sinh", "Cosh", "Tanh", "Coth", "Sech", "Csch", NULL };
+    for (int i = 0; ks[i]; i++) if (strcmp(h, ks[i]) == 0) return true;
+    return false;
+}
+
+/* True when the classical multivariate GCD would run over TWO OR MORE
+ * trigonometric / hyperbolic kernels AND an algebraic constant (i, √d) is
+ * present.  Such generators are algebraically dependent (Pythagorean /
+ * multiple-angle identities) and the subresultant Euclid over the extension
+ * field Q(i, √d) explodes super-exponentially (the rational-trig
+ * a Sin[x] + b Cos[x] antiderivative-verification hang).  Bailing — leaving the
+ * expression uncombined — is always correctness-preserving: a sum of trig terms
+ * over an extension has no genuine common factor to cancel, and the surrounding
+ * simplification handles it structurally.  Gated on the algebraic constant so
+ * pure-Q trig Together/Cancel (e.g. 1/(1+Cos[x]) + 1/Sin[x], kept in Cos/Cot/Csc
+ * form by contract) is untouched. */
+static bool rat_has_dependent_trig_algebraic(Expr* num, Expr* den) {
+    if (!rat_has_algebraic_atom(num) && !rat_has_algebraic_atom(den)) return false;
+    size_t vc = 0, vp = 16;
+    Expr** vv = malloc(sizeof(Expr*) * vp);
+    collect_variables(num, &vv, &vc, &vp);
+    collect_variables(den, &vv, &vc, &vp);
+    int trig = 0;
+    for (size_t i = 0; i < vc; i++) if (rat_is_trig_kernel(vv[i])) trig++;
+    for (size_t i = 0; i < vc; i++) expr_free(vv[i]);
+    free(vv);
+    return trig >= 2;
+}
+
 /* True iff `e` is a pure numeric constant — a number, a recognised numeric
  * constant symbol (Pi, E, I, EulerGamma, ...), or a NumericFunction / Complex /
  * Rational built from such (mirrors core.c's is_numeric_quantity).  A fraction
@@ -821,6 +862,15 @@ static Expr* cancel_recursive(Expr* e) {
      * from Integrate[1/(1+x^n), x]).  Leaving the fraction uncancelled is always
      * correctness-preserving, and such fractions do not cancel anyway. */
     if (!g && rat_has_dependent_power_generators(num, den)) {
+        cancel_recursive_inside_gcd--;
+        expr_free(num);
+        expr_free(den);
+        return expr_copy(e);
+    }
+    /* Dependent trig/hyperbolic kernels over an algebraic field Q(i, √d): the
+     * classical Euclid explodes (the a Sin[x] + b Cos[x] antiderivative hang).
+     * Leave uncombined — correctness-preserving; pure-Q trig is excluded. */
+    if (!g && rat_has_dependent_trig_algebraic(num, den)) {
         cancel_recursive_inside_gcd--;
         expr_free(num);
         expr_free(den);
@@ -1383,6 +1433,8 @@ static bool rat_has_algebraic_atom(const Expr* e) {
  * then num/g, den/g by exact division. Returns NULL — deferring to the classical
  * extension path — when no algebraic generator is present, the fraction is
  * already reduced (g = 1), or an exact division does not apply. */
+static Expr* flint_gaussian_cancel(const Expr* arg);   /* defined below */
+
 static Expr* flint_cancel_fraction(Expr* arg) {
     /* Genuine-algebraic parametric tower Q(params)(alpha_1..alpha_r): reduce the
      * whole expression modulo the generators' minimal-polynomial ideal (cube
@@ -1502,6 +1554,12 @@ static Expr* builtin_cancel_compute(Expr* res) {
          * denominator; output form (expanded, reduced num/den) is unchanged. */
         Expr* rc = flint_rational_cancel(res->data.function.args[0]);
         if (rc) return rc;
+        /* Q(i) Gaussian rational: the plain-Q path declines on I; reduce over
+         * Q[vars, t] with I -> t and map back, avoiding the classical
+         * multivariate-GCD blow-up (the trig-rationalization Cancel hang over the
+         * complex-coefficient placeholder residual). */
+        Expr* gi = flint_gaussian_cancel(res->data.function.args[0]);
+        if (gi) return gi;
     }
 #endif
 
@@ -1916,23 +1974,39 @@ static bool rat_contains_i(const Expr* e) {
     return false;
 }
 
-/* Together over Q(i): the plain-Q fmpz_mpoly_q fast path (flint_rational_together)
- * declines on I, so a multivariate Gaussian rational — e.g. an undetermined-
- * coefficient residual with complex coefficients — falls to the classical
- * multivariate-GCD combine (together_recursive), which blows up super-exponentially
- * in the number of unknowns.  Substitute I -> a fresh indeterminate t, run the fast
- * plain-Q Together over Q[vars, t], then substitute t -> I (the evaluator reduces
- * I^k).  Correct for any well-defined input: N(t)/D(t) = sum_j n_j/d_j is an
- * identity in the FREE variable t, so evaluating at t = I preserves it (no
- * denominator vanishes at t = I for a well-defined fraction).  Declines (NULL) when
- * I is absent, when the I->t image still carries an algebraic atom (a genuine
- * Q(i, sqrt d) tower, left to the extension path), or when the plain-Q path
- * declines. */
-static Expr* flint_gaussian_together(const Expr* arg) {
+/* Together/Cancel over Q(i): the plain-Q fmpz_mpoly_q fast path
+ * (flint_rational_together / _cancel) declines on I, so a multivariate Gaussian
+ * rational — e.g. an undetermined-coefficient residual with complex coefficients —
+ * falls to the classical multivariate-GCD combine, which blows up
+ * super-exponentially in the number of unknowns.  Substitute the Gaussian
+ * constants onto Q[t] (t a fresh indeterminate), run `reduce` over the plain-Q
+ * image, then restore t -> I (the evaluator reduces I^k).  Correct for any
+ * well-defined input: N(t)/D(t) = sum_j n_j/d_j is an identity in the FREE
+ * variable t, so evaluating at t = I preserves it (no denominator vanishes at
+ * t = I for a well-defined fraction).  Declines (NULL) when I is absent, when the
+ * image still carries an algebraic atom (a genuine Q(i, √d) tower, left to the
+ * extension path), or when the plain-Q reduction declines. */
+static Expr* rat_gaussian_reduce(const Expr* arg, Expr* (*reduce)(const Expr*)) {
     if (!rat_contains_i(arg)) return NULL;
     Expr* t = expr_new_symbol("Rat$gaussI");
-    Expr* fwd = expr_new_function(expr_new_symbol(SYM_Rule),
-        (Expr*[]){ expr_new_symbol(SYM_I), expr_copy(t) }, 2);
+    /* The imaginary unit is stored as Complex[0, 1] (and a+b I as Complex[a, b]),
+     * NOT as the symbol I, so a bare `I -> t` rule never matches. Substitute the
+     * Complex atom itself: Complex[a_, b_] :> a + b t maps every Gaussian constant
+     * onto Q[t], after which the plain-Q reduction runs and t -> I restores it. */
+    Expr* pa = expr_new_function(expr_new_symbol(SYM_Pattern),
+        (Expr*[]){ expr_new_symbol("Rat$gaussA"),
+                   expr_new_function(expr_new_symbol(SYM_Blank), NULL, 0) }, 2);
+    Expr* pb = expr_new_function(expr_new_symbol(SYM_Pattern),
+        (Expr*[]){ expr_new_symbol("Rat$gaussB"),
+                   expr_new_function(expr_new_symbol(SYM_Blank), NULL, 0) }, 2);
+    Expr* lhs = expr_new_function(expr_new_symbol(SYM_Complex),
+        (Expr*[]){ pa, pb }, 2);
+    Expr* rhs = expr_new_function(expr_new_symbol(SYM_Plus),
+        (Expr*[]){ expr_new_symbol("Rat$gaussA"),
+                   expr_new_function(expr_new_symbol(SYM_Times),
+                       (Expr*[]){ expr_new_symbol("Rat$gaussB"), expr_copy(t) }, 2) }, 2);
+    Expr* fwd = expr_new_function(expr_new_symbol(SYM_RuleDelayed),
+        (Expr*[]){ lhs, rhs }, 2);
     Expr* e2 = eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
         (Expr*[]){ expr_copy((Expr*)arg), fwd }, 2));
     if (!e2 || rat_contains_i(e2) || rat_has_algebraic_atom(e2)) {
@@ -1940,14 +2014,23 @@ static Expr* flint_gaussian_together(const Expr* arg) {
         expr_free(t);
         return NULL;
     }
-    Expr* tog = flint_rational_together(e2);
+    Expr* red = reduce(e2);
     expr_free(e2);
-    if (!tog) { expr_free(t); return NULL; }
+    if (!red) { expr_free(t); return NULL; }
     Expr* bwd = expr_new_function(expr_new_symbol(SYM_Rule),
-        (Expr*[]){ t, expr_new_symbol(SYM_I) }, 2);          /* adopts t */
+        (Expr*[]){ t, expr_new_symbol(SYM_I) }, 2);           /* adopts t */
     return eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
-        (Expr*[]){ tog, bwd }, 2));                          /* adopts tog */
+        (Expr*[]){ red, bwd }, 2));                           /* adopts red */
 }
+
+static Expr* flint_gaussian_together(const Expr* arg) {
+    return rat_gaussian_reduce(arg, flint_rational_together);
+}
+
+static Expr* flint_gaussian_cancel(const Expr* arg) {
+    return rat_gaussian_reduce(arg, flint_rational_cancel);
+}
+
 #endif
 
 static Expr* builtin_together_compute(Expr* res) {
@@ -2120,6 +2203,20 @@ static Expr* builtin_together_compute(Expr* res) {
                 return final;
             }
         }
+    }
+
+    /* Dependent trig/hyperbolic kernels over an algebraic field Q(i, √d): the
+     * classical Plus-combine (PolynomialLCM + content GCD) explodes on the
+     * multiple-angle / conjugate-residue forms of an a Sin[x] + b Cos[x]
+     * antiderivative check.  Leave uncombined — correctness-preserving (a sum of
+     * trig terms over an extension has no genuine common factor), pure-Q trig
+     * excluded by the algebraic-constant gate (see cancel_recursive). */
+    {
+        Expr* n; Expr* d;
+        extract_num_den(arg, &n, &d);
+        bool bail = rat_has_dependent_trig_algebraic(n, d);
+        expr_free(n); expr_free(d);
+        if (bail) return expr_copy(arg);
     }
 
     return together_recursive(arg);

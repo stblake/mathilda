@@ -655,6 +655,26 @@ static bool atom_is_one(Expr* e) {
     return e && e->type == EXPR_INTEGER && e->data.integer == 1;
 }
 
+/* Opaque analytic-kernel heads: Log / (inverse) circular & hyperbolic. A radical
+ * inside such a kernel's argument (e.g. Log[.../Sqrt[3]]) is part of that opaque
+ * generator of the outer rational function, NOT a free algebraic generator — so
+ * the radical-to-generator substitution must NOT descend into it (matching how
+ * collect_variables treats Log[u]/Cos[u] as atoms). Descending there fabricates a
+ * bogus polynomial in a nested-radical "variable" and the downstream multivariate
+ * GCD explodes (the Together[Log[...]/Sqrt[3]] hang from the Risch LogToReal
+ * reconstruction). */
+static bool poly_is_opaque_kernel_head(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION ||
+        e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    if (strncmp(h, "Arc", 3) == 0) return true;   /* ArcSin … ArcCsch */
+    static const char* const ks[] = {
+        "Log", "Sin", "Cos", "Tan", "Cot", "Sec", "Csc",
+        "Sinh", "Cosh", "Tanh", "Coth", "Sech", "Csch", NULL };
+    for (int i = 0; ks[i]; i++) if (strcmp(h, ks[i]) == 0) return true;
+    return false;
+}
+
 /* Find the first Power[B, exp] subterm with a non-trivial decomposition:
  *   - exp is rational with non-trivial denominator (radical case), or
  *   - exp has a non-trivial atom (exponential case).
@@ -662,6 +682,7 @@ static bool atom_is_one(Expr* e) {
  * *atom_out (always non-null on success). */
 static bool walk_find_radical_base(Expr* e, Expr** base_out, Expr** atom_out) {
     if (!e || e->type != EXPR_FUNCTION) return false;
+    if (poly_is_opaque_kernel_head(e)) return false;   /* don't peek inside Log/trig */
     if (e->data.function.head->type == EXPR_SYMBOL &&
         e->data.function.head->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2) {
@@ -745,6 +766,11 @@ static void walk_gather(Expr* e, Expr* B, Expr* A,
         return;
     }
     if (e->type != EXPR_FUNCTION) return;
+    /* A radical nested inside an opaque kernel's argument (Log[.../Sqrt[3]]) is
+     * part of that opaque generator — do not gather it. But when the kernel IS the
+     * radical's base (Sqrt[Log[r]] -> base = Log[r]), its own occurrences are
+     * genuine and must be counted, so only skip kernels other than B. */
+    if (poly_is_opaque_kernel_head(e) && !expr_eq(e, B)) return;
     walk_gather(e->data.function.head, B, A, m_out, count_out, nontrivial_out,
                 seen_out, first_cn, first_cd, varied_out);
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
@@ -830,6 +856,12 @@ bool poly_find_radical_gen(Expr* e, Expr** base_out, Expr** atom_out, int64_t* m
 
 Expr* poly_subst_radical_to_gen(Expr* e, Expr* base, Expr* atom, int64_t m, const char* gen) {
     if (!e) return NULL;
+    /* Leave radicals inside an opaque analytic kernel (Log[u], Cos[u], …) alone —
+     * they belong to that opaque generator, not the outer rational function (see
+     * poly_is_opaque_kernel_head).  Exception: when the kernel IS the radical base
+     * (Sqrt[Log[r]] -> base = Log[r]), it must still be traversed so its own
+     * powers substitute correctly. */
+    if (poly_is_opaque_kernel_head(e) && !expr_eq(e, base)) return expr_copy(e);
     int64_t cn, cd;
     if (is_target_power(e, base, atom, &cn, &cd)) {
         int64_t k = cn * (m / cd);

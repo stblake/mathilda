@@ -2580,10 +2580,22 @@ static int km_is_generic_kernel_head(const char* h) {
     return 0;
 }
 
-/* Pass-1 walk: gather independent kernels into gk, Exp kernels into xk (both
+/* Pass-1 walk: gather independent kernels into gk, Exp kernels into xk, and
+ * algebraic-number CONSTANT atoms (Sqrt[int], int^(p/q), Complex) into ck (all
  * deduped structurally). Recurses only through the ring ops (Plus/Times and
- * integer Power). Returns 0 to DECLINE on any unsupported atom. */
-static int km_walk(const Expr* e, EPtrList* gk, EPtrList* xk) {
+ * integer Power). Returns 0 to DECLINE on any unsupported atom.
+ *
+ * Constant atoms are captured so a rational function over an algebraic field
+ * Q(√d, i, …) whose OTHER atoms are exp kernels — e.g. the I-laden E^(±i x)
+ * antiderivative of a rational-trig integrand, which carries an irrational
+ * discriminant √3 — still reaches the fast fmpz_mpoly_q reduction. Each such
+ * constant becomes a fresh independent symbol during the Q reduction (which
+ * clears the E^(-i x) → g^(-1) Laurent structure the classical multivariate
+ * GCD chokes on); km_backward restores the atom and the caller's final
+ * evaluate() collapses the algebraic relations (√3² → 3, I² → -1). Whether the
+ * capture is actually USED is decided in km_build (gated on an Exp kernel being
+ * present) so pure-radical Together/Cancel keep their classical output form. */
+static int km_walk(const Expr* e, EPtrList* gk, EPtrList* xk, EPtrList* ck) {
     switch (e->type) {
         case EXPR_INTEGER: case EXPR_BIGINT:
             return 1;
@@ -2595,9 +2607,11 @@ static int km_walk(const Expr* e, EPtrList* gk, EPtrList* xk) {
             if (!h) return 0;
             size_t n = e->data.function.arg_count;
             if (strcmp(h, "Rational") == 0) return 1;            /* rational constant */
+            if (strcmp(h, "Complex") == 0)                       /* i, a+b i (const) */
+                return epl_push_unique(ck, e);
             if (strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) {
                 for (size_t i = 0; i < n; i++)
-                    if (!km_walk(e->data.function.args[i], gk, xk)) return 0;
+                    if (!km_walk(e->data.function.args[i], gk, xk, ck)) return 0;
                 return 1;
             }
             if (strcmp(h, "Power") == 0) {
@@ -2605,15 +2619,21 @@ static int km_walk(const Expr* e, EPtrList* gk, EPtrList* xk) {
                 const Expr* base = e->data.function.args[0];
                 const Expr* ex   = e->data.function.args[1];
                 if (ex->type == EXPR_INTEGER)                    /* ring power */
-                    return km_walk(base, gk, xk);
-                /* non-integer exponent: only E^e (an exponential) is supported */
+                    return km_walk(base, gk, xk, ck);
+                /* non-integer exponent: E^e is an exponential kernel; an integer
+                 * base to a rational power (Sqrt[d], d^(p/q), (-1)^(p/q)) is an
+                 * algebraic-number constant. */
                 if (base->type == EXPR_SYMBOL && strcmp(base->data.symbol.name, "E") == 0)
                     return epl_push_unique(xk, e);
+                if ((base->type == EXPR_INTEGER || base->type == EXPR_BIGINT) &&
+                    ex->type == EXPR_FUNCTION && fn_head_name(ex) &&
+                    strcmp(fn_head_name(ex), "Rational") == 0)
+                    return epl_push_unique(ck, e);
                 return 0;                                        /* Sqrt[x], a^x, … */
             }
             if (km_is_generic_kernel_head(h))
                 return epl_push_unique(gk, e);                   /* opaque kernel */
-            return 0;   /* trig/hyperbolic, Complex, and every other head */
+            return 0;   /* trig/hyperbolic, and every other head */
         }
         default:
             return 0;   /* REAL, STRING, NDARRAY, MPFR */
@@ -2679,16 +2699,38 @@ static Expr* km_int_ratio(const Expr* a, const Expr* b) {
 
 /* Build the kernel map for `e`. Returns 0 to decline (see block comment). */
 static int km_build(const Expr* e, KernMap* km) {
-    EPtrList gk = {0}, xk = {0};
-    if (!km_walk(e, &gk, &xk)) { epl_free(&gk); epl_free(&xk); return 0; }
+    EPtrList gk = {0}, xk = {0}, ck = {0};
+    if (!km_walk(e, &gk, &xk, &ck)) { epl_free(&gk); epl_free(&xk); epl_free(&ck); return 0; }
+
+    /* Substitute algebraic-number constants (Sqrt[d], i, …) so the reduction runs
+     * over Q(√d, i)[generators] via fmpz_mpoly_q instead of the classical
+     * multivariate GCD, which blows up super-exponentially on such fields (the
+     * rational-trig antiderivative / Rothstein-Trager residue hang). Only do so
+     * when the classical path would actually struggle: an Exp/Log/inverse kernel
+     * is present (xk/gk), OR there are TWO+ distinct algebraic constants (a
+     * genuine multi-generator field like Q(i, √2)). A lone radical with no kernel
+     * (e.g. 1/(2x - Sqrt[5])) reduces fine classically and keeps its canonical
+     * sign form there — leave it. (ck.n == 0 means no constants captured: a plain
+     * rational, handled by the normal path below.) Note km already declines on
+     * trig kernels, so pure-trig Together/Cancel (kept in Cos/Cot/Csc form by
+     * contract) never reaches here. */
+    if (ck.n == 1 && xk.n == 0 && gk.n == 0) {
+        epl_free(&gk); epl_free(&xk); epl_free(&ck); return 0;
+    }
 
     char buf[32];
-    /* Independent kernels: one fresh symbol each. */
+    /* Independent kernels (incl. algebraic constants): one fresh symbol each. */
     for (size_t i = 0; i < gk.n; i++) {
         snprintf(buf, sizeof buf, "$flk%d", km->ctr++);
         Expr* sym = expr_new_symbol(buf);
         if (!km_add_bwd(km, expr_copy(sym), expr_copy((Expr*)gk.v[i])) ||
             !km_add_fwd(km, expr_copy((Expr*)gk.v[i]), sym)) goto fail;
+    }
+    for (size_t i = 0; i < ck.n; i++) {
+        snprintf(buf, sizeof buf, "$flk%d", km->ctr++);
+        Expr* sym = expr_new_symbol(buf);
+        if (!km_add_bwd(km, expr_copy(sym), expr_copy((Expr*)ck.v[i])) ||
+            !km_add_fwd(km, expr_copy((Expr*)ck.v[i]), sym)) goto fail;
     }
 
     /* Exp kernels: map E^(k·u) → g^k for a common fundamental exponent u. */
@@ -2721,10 +2763,10 @@ static int km_build(const Expr* e, KernMap* km) {
         }
     }
 
-    epl_free(&gk); epl_free(&xk);
+    epl_free(&gk); epl_free(&xk); epl_free(&ck);
     return 1;
 fail:
-    epl_free(&gk); epl_free(&xk);
+    epl_free(&gk); epl_free(&xk); epl_free(&ck);
     return 0;
 }
 
