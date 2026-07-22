@@ -1,13 +1,65 @@
 # Together / Cancel / Simplify — unified rational-normalization rewrite
 
-**Status:** planning. Phases are scoped to be executed one-per-session from a
-fresh context. Read §0 (primer) first every time, then the one phase you are
-executing. Do not skip the per-phase acceptance gate.
+**Status:** Phases 1–3d + Phase 4 Step 1 & 2a LANDED and live on branch
+`feature/ratcanon-unified-classifier`; Step 2b (delete the cascade) is BLOCKED on
+coverage of the remaining decline classes. Phases are scoped to be executed
+one-per-session from a fresh context. Read §0 (primer) first every time, then the
+one phase you are executing. Do not skip the per-phase acceptance gate.
 
-Related memory: `[[project_ratcanon_unified_classifier]]`. Prior work
-(the classifier + shadow harness now on branch
-`feature/ratcanon-unified-classifier`) is the *starting point*, not the target
-— see §0.3.
+Related memory: `[[project_ratcanon_unified_classifier]]`.
+
+---
+
+## Current state (2026-07-22)
+
+The unified engine is **live and primary**.  `builtin_cancel`/`builtin_together`
+call `rat_canon_normalize` first (`MATHILDA_RATCANON=off` reverts); the classical
+cascade is the fallback.  Pipeline: `rat_canon_build` → one `flint_tower_reduce`
+(fmpz_mpoly_q combine + `fmpz_mpoly_divrem_ideal` mod the relation ideal) →
+map-back with ONE output convention (`rco_sign_normalize`, max-degree sign rule).
+
+**Covered directly by `rat_canon_normalize`** (all parity-verified vs the
+classical builtins; zero off/on divergence across the whole suite):
+- plain-Q; transcendental (Log / Exp with commensurate-exponent collapse / Tan /
+  inverse-trig);
+- Gaussian and Sqrt[d]/Sqrt[k] sum-of-conjugates (`1/(x-I)+1/(x+I) → 2x/(1+x^2)`);
+- variable-radicand pre-formed cancels via radicand-var ordering + `elim_vars`
+  (cube roots `(y-1)/(y^(1/3)-1) → 1+y^(1/3)+y^(2/3)`, `(a^2-b)/(a-Sqrt b)`);
+- constant-radicand pre-formed cancels via number-field GCD
+  (`(x^2-2)/(x-Sqrt2) → x+Sqrt2`);
+- commensurate radicals `y^(p/q)` as powers of one `y^(1/lcm q)`
+  (`(y^(1/2)-y^(1/3))/(y^(1/6)-1) → y^(1/3)`);
+- coprime GENUINE-radical results kept WL-faithfully (`1/(x-Sqrt2)`, coprime
+  `Sqrt[d]` sums).
+
+**Still DECLINED → classical cascade fallback** (each is its own future coverage
+feature; the cascade cannot be deleted until they are covered):
+- root-of-unity / Complex pre-formed & coprime forms (dedicated cyclotomic/
+  Gaussian handling, notably in Simplify's search — see Phase 3d `rco_den_has_rou`);
+- forward trig `Sin`/`Cos`/`Sec`/`Csc` (algebraically dependent);
+- inexact / numeric inputs (the classical rationalize-then-renumericalise path);
+- multi-argument / `Extension ->` option forms.
+
+**Code deltas so far:** new `src/poly/ratcanon.{c,h}` (build + reduce engine) and
+`flint_tower_reduce` in `flint_bridge.c`; `src/rat_internal.h` exposes three
+rat.c helpers; Phase-2 dispatch/shadow scaffolding deleted from `rat.c` (−411).
+Net LOC is still positive (the cascade remains as fallback); it decreases once
+the declined classes are covered and the cascade is removed (Step 2b).
+
+**Tests:** `ratcanon_spec_tests` (canonical-form contract — note it pins the FLINT
+form so it passes ON, "fails" 2 rows under `MATHILDA_RATCANON=off`),
+`ratcanon_build_tests`, `ratcanon_reduce_tests`.  Validate any change with the
+off-vs-on suite sweep (should be identical) + these three binaries + valgrind.
+
+### Next steps (to unblock Step 2b, in rough value order)
+1. Forward-trig canonicalization (or a clean decline that lets a trig engine own
+   it) so `Sin/Cos` inputs stop needing the classical trig path.
+2. Root-of-unity / Gaussian pre-formed cancel that does NOT perturb Simplify's
+   cyclotomic search (the Phase-3d `rco_den_has_rou` carve-out is the current
+   guard; covering it needs a form Simplify accepts).
+3. Inexact path inside `rat_canon` (or a principled hand-off).
+4. Then delete cascade paths one-by-one, each off/on- and spec-verified, until
+   `poly_gcd_internal` is unreachable from Together/Cancel and net LOC drops.
 
 ---
 
