@@ -7,7 +7,7 @@
 
 ```text
 BeginPackage["ctx`"] sets the current context to "ctx`" and restricts
-$ContextPath to {"ctx`", "System`"}, matching Mathematica's package
+$ContextPath to {"ctx`", "System`"}, matching the standard package
 prologue.
 BeginPackage["ctx`", {"need1`", ...}] additionally prepends the
 listed contexts to $ContextPath.
@@ -52,4 +52,4 @@ Out[4]= {"MyPkg`", "System`"}
 
 ### Notes
 
-`BeginPackage["ctx`"]` sets `$Context` to `ctx`` and restricts `$ContextPath` to `{"ctx`", "System`"}`, matching Mathematica's package prologue so only system symbols and the package's own symbols resolve under short names. Use the matching `EndPackage[]` to close it.
+`BeginPackage["ctx`"]` sets `$Context` to `ctx`` and restricts `$ContextPath` to `{"ctx`", "System`"}`, matching the standard package prologue so only system symbols and the package's own symbols resolve under short names. Use the matching `EndPackage[]` to close it.

@@ -46,7 +46,7 @@ Out[7]= True
 - *Stage 2 — numeric:* for symbol-free inputs, numericalize at machine precision and compare `|z|` against an IEEE catastrophic-cancellation threshold, climbing a precision ladder (53 -> 200 -> 500 -> 1000 bits) while ambiguous; a true zero shrinks geometrically across precisions (`decide_numeric`).
 - *Stage 3 — Schwartz–Zippel:* for inputs with free symbols, substitute each free symbol with a random rational drawn from `Q[i]` (to probe branch cuts) and require several independent Stage-2 confirmations (`decide_schwartz_zippel`).
 
-**Result mapping.** A definite `False` returns `False`; both `True` and `UNKNOWN` return `True`, matching Mathematica's documented "assume zero when uncertain" behaviour (the accompanying `PossibleZeroQ::ztest1` message is not emitted). The symbol is `Listable`.
+**Result mapping.** A definite `False` returns `False`; both `True` and `UNKNOWN` return `True`, following the documented "assume zero when uncertain" behaviour (the accompanying `PossibleZeroQ::ztest1` message is not emitted). The symbol is `Listable`.
 
 **Attributes:** `Listable`, `Protected`.
 

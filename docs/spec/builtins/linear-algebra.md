@@ -929,7 +929,7 @@ Gives a basis for the null space of a matrix.
   big-integer, and symbolic matrices.
 - The matrix `m` may be square or rectangular.
 - Basis vectors are returned with the **rightmost free column first**,
-  matching Mathematica's ordering.
+  matching the standard ordering.
 - For exact integer / rational input each basis vector is scaled to
   clear integer denominators, so the result is integer-valued whenever
   the input is integer-valued. For symbolic input the basis vectors

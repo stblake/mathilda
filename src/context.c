@@ -467,7 +467,7 @@ void context_init(void) {
         "Context[\"name\"] gives the context of the symbol named \"name\" if it exists.");
     symtab_set_docstring("BeginPackage",
         "BeginPackage[\"ctx`\"] sets the current context to \"ctx`\" and restricts\n"
-        "$ContextPath to {\"ctx`\", \"System`\"}, matching Mathematica's package\n"
+        "$ContextPath to {\"ctx`\", \"System`\"}, matching the standard package\n"
         "prologue.\nBeginPackage[\"ctx`\", {\"need1`\", ...}] additionally prepends the\n"
         "listed contexts to $ContextPath.");
     symtab_set_docstring("Begin",

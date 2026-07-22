@@ -32,7 +32,7 @@ Out[4]= <|"a" -> 1, "b" -> 3, "c" -> 4|>
 
 **Algorithm.** `builtin_sort` deep-copies the argument list's elements into an `Expr**` array
 and sorts it in place with the C library `qsort`. With no ordering function it uses
-`expr_compare` (the canonical Mathematica `Order`); with a second argument `p` it calls
+`expr_compare` (the canonical `Order`); with a second argument `p` it calls
 `p[a, b]`, evaluates the result, and treats `True`/`1` as "in order" and `False`/`-1` as "out
 of order". The custom comparator is passed to `qsort` through a file-scope `current_sort_p`
 pointer (saved/restored around the call so reentrant sorts nest correctly). The original head is

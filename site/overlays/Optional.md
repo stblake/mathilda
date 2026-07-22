@@ -34,7 +34,7 @@ Out[3]= 4 + 3 x + 2 x^2
 
 The `_.` sugar draws the default from `Default[f]` at the call site, so a
 pattern like `x_ + y_.` matches a bare term by treating the missing summand as
-its additive identity `0` — the mechanism Mathematica uses to make rules robust
+its additive identity `0` — the mechanism used to make rules robust
 against absent structure:
 
 ```mathematica

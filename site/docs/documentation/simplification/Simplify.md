@@ -13,7 +13,7 @@ Simplify[expr, assum]
 
 Options:
   Assumptions (default $Assumptions) -- facts assumed while simplifying.
-  ComplexityFunction (default: leaf count plus integer-digit count, matching Mathematica) -- ranks candidate forms; the lowest-scoring form is returned.
+  ComplexityFunction (default: leaf count plus integer-digit count) -- ranks candidate forms; the lowest-scoring form is returned.
   TransformationFunctions (default Automatic) -- the functions applied to try to transform parts of expr. Automatic uses the built-in collection; {f1, f2, ...} uses only the fi; {Automatic, f1, ...} uses the built-in functions together with the fi.
 
 The built-in collection tries Together, Cancel, Expand, Factor, FactorSquareFree, Apart, TrigExpand, TrigFactor, and a TrigToExp/ExpToTrig roundtrip, keeping the smallest result.

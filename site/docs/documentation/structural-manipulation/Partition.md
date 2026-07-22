@@ -40,7 +40,7 @@ it reads the block size `n` and offset `d` for that level (a plain integer appli
 or a `List` gives a per-level spec), computes the number of full blocks `(len − n)/d + 1`, and
 emits each sublist `args[i·d .. i·d + n)` wrapped in the list's head. An `UpTo[n]` size allows a
 short final block. It recurses into each element so multi-level specs partition nested arrays.
-Trailing partial blocks (when no `UpTo`) are dropped, matching Mathematica's no-padding default.
+Trailing partial blocks (when no `UpTo`) are dropped, following the no-padding default.
 
 - `Protected`.
 - Works on any expression with arguments.

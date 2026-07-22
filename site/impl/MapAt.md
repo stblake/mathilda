@@ -12,7 +12,7 @@ rebuilds the current `EXPR_FUNCTION` with the chosen child replaced by the
 recursive result. A path step may be a positive/negative integer (negatives
 count from the end, `0` targets the head), the symbol `All` (apply to every
 child at that level), or a `Span[a, b]` / `Span[a, b, step]` range. Out-of-range
-indices are silently ignored, matching Mathematica's permissive behaviour.
+indices are silently ignored, a permissive convention.
 
 For the multiple-positions form the paths are applied **sequentially** to a
 running copy of the expression, so repeated positions apply `f` more than once.

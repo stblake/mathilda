@@ -9,7 +9,7 @@ Attempts to solve an equation or system of equations for one or more variables.
 - `Solve[expr, vars, dom]`: Solve over the domain `dom`. Supported: `Complexes` (default), `Reals`, `Integers`.
 
 **Features**:
-- `Protected`.  Matches Mathematica's attribute set -- arguments are
+- `Protected`.  Uses the standard attribute set -- arguments are
   evaluated by the evaluator before reaching the router.  When the
   second argument has been substituted to a numeric atom (typically
   because an OwnValue like `x = 5` was previously set, or the user
