@@ -69,7 +69,12 @@ void test_evaluate_wrong_args() {
  * Evaluate[] vanishes and Evaluate[a,b] forces then splices both. */
 void test_evaluate_seq_in_hold() {
     assert_eval_eq("Hold[Evaluate[]]", "Hold[]", 0);
-    assert_eval_eq("Hold[Evaluate[], 1+1]", "Hold[2]", 0);
+    /* An empty Evaluate[] splices away (-> Sequence[]) but does NOT force its
+     * siblings: only an Evaluate whose head is directly on a held slot overrides
+     * Hold for that slot. So 1+1 stays held. This mirrors the non-empty case
+     * Hold[Evaluate[1+1], 2+2] -> Hold[2, 2+2] (see test_evaluate_in_hold): an
+     * empty Evaluate cannot have more reach than a non-empty one. (beads-planning-0c8) */
+    assert_eval_eq("Hold[Evaluate[], 1+1]", "Hold[1 + 1]", 0);
     assert_eval_eq("Hold[Evaluate[1+1, 2+2]]", "Hold[2, 4]", 0);
     assert_eval_eq("Hold[a, Evaluate[1+1, 2+2], b]", "Hold[a, 2, 4, b]", 0);
 }
