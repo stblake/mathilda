@@ -746,6 +746,8 @@ void core_init(void) {
     void minpoly_init(void);
     minpoly_init();
     rat_init();
+    void ratcanon_init(void);
+    ratcanon_init();
     void rootreduce_init(void);
     rootreduce_init();
     expand_init();

@@ -486,6 +486,7 @@ set(COMMON_SRC
     ../src/poly/qa.c
     ../src/poly/qaupoly.c
     ../src/poly/qafactor.c
+    ../src/poly/ratcanon.c
     ../src/poly/rootofunity.c
     ../src/poly/squarefreeq.c
     ../src/poly/exponent.c
@@ -2897,3 +2898,15 @@ else()
 endif()
 add_test(NAME fullsimplify_corpus_tests
          COMMAND fullsimplify_corpus_tests ../fullsimplify_corpus.m)
+
+# ratcanon SPEC: canonical output-form contract for the Together/Cancel rewrite
+# (RATCANON_REWRITE_PLAN.md). Pins the WL-faithful forms + prototype correctness.
+add_executable(ratcanon_spec_tests test_ratcanon_spec.c ${COMMON_SRC})
+target_include_directories(ratcanon_spec_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(ratcanon_spec_tests gmp m ${ECM_LIB})
+    add_dependencies(ratcanon_spec_tests build_ecm)
+else()
+    target_link_libraries(ratcanon_spec_tests gmp m)
+endif()
+add_test(NAME ratcanon_spec_tests COMMAND ratcanon_spec_tests)

@@ -175,6 +175,35 @@ representative inputs via a single fmpz_mpoly_q(+ideal) reduction (not by callin
 the old engines). If any regime cannot be reduced this way, STOP and record the
 gap here before proceeding — that is a design finding, not a detail.
 
+### Phase 1 — LANDED (2026-07-22)
+
+- `src/poly/ratcanon.{c,h}` + builtin `RatCanonPrototype`; registered in
+  `core.c`, added to `tests/CMakeLists.txt` COMMON_SRC.
+- `tests/test_ratcanon_spec.c` — 44 hard assertions (plain-Q, transcendental,
+  Gaussian, number field incl. hard cancels + WL-faithful, cyclotomic, symbolic
+  radical, cube root, Cancel-vs-Together, `Q(√d)` d=5/7 no-crash) + 6
+  prototype-correctness rows. Target `ratcanon_spec_tests`. All green.
+- Prototype pipeline (substitute every kernel/constant/radical → fresh free
+  symbol → `flint_rational_together` → map back → `eval` applies relations)
+  reduces all four representative regimes correctly. Verified math-equal via
+  `Together[RatCanonPrototype[e] - e] == 0`. Leak-clean (valgrind == baseline).
+
+**KEY DESIGN FINDING (input to Phase 3).** The prototype's simple pipeline
+(reduce with all generators FREE, apply relations only via `eval` at map-back)
+covers plain-Q, transcendental, Q(i), and the *sum-of-conjugates* algebraic
+cases (where combining clears the radical). It does NOT do the hard cancellation
+of a *pre-formed* algebraic fraction — e.g. `Cancel[(x^2-2)/(x-Sqrt2)] -> x+Sqrt2`
+— because that requires GCD in the quotient field `K[mainvar]`, not free-ring
+gcd + relation-eval. The real builtins already do this via the number-field /
+tower GCD engines (`flint_extension_gcd` family). Therefore **Phase 3's one
+reduction = fmpz_mpoly_q for the free/transcendental part + field-GCD over
+`K[mainvar]` for the algebraic part** (generalizing `flint_algebraic_field_*` +
+the number-field GCD into ONE tower-field GCD). This is the crux and the main
+technical risk; `test_ratcanon_spec.c`'s number-field rows are its acceptance
+gate. Note also: `flint_algebraic_field_together` reduces with all gens free
+(relations via eval), which is why it expands radicands and misses cube-root
+cancellation — do NOT reuse it as the algebraic reducer.
+
 ---
 
 ## Phase 2 — The tower IR + builder (`rat_canon_build`)
