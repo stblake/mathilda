@@ -368,7 +368,8 @@ Expr* flint_algebraic_field_together(const Expr* e);
  * mutates its arguments.
  */
 Expr* flint_tower_reduce(const Expr* frac, const char* const* alg_syms,
-                         const Expr* const* relations, int n_alg);
+                         const Expr* const* relations, int n_alg,
+                         const char* const* elim_vars, int n_elim);
 
 /*
  * Callback invoked once per monomial term by flint_linear_system_terms.

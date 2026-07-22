@@ -97,8 +97,11 @@ static void test_transcendental(void) {
     spec("Cancel[(E^(2x)-1)/(E^x+1)]", "Plus[-1, Power[E, x]]");
     spec("Together[1/(E^x-1)+1/(E^x+1)]",
          "Times[2, Power[E, x], Power[Plus[-1, Power[E, Times[2, x]]], -1]]");
+    /* Tan is a transcendental generator reduced via FLINT (one consistent sign
+     * convention: leading-coefficient-positive denominator), so this is
+     * -2/(-1+Tan^2), math-equal to the classical path's 2/(1-Tan^2). */
     spec("Together[1/(1+Tan[x])+1/(1-Tan[x])]",
-         "Times[2, Power[Plus[1, Times[-1, Power[Tan[x], 2]]], -1]]");
+         "Times[-2, Power[Plus[-1, Power[Tan[x], 2]], -1]]");
     spec("Together[1/Sinh[x]+1/Cosh[x]]", "Plus[Csch[x], Sech[x]]");
 }
 

@@ -426,6 +426,33 @@ cancel, forward trig (Sin/Cos/…), and inputs with un-substitutable kernels.
 
 ## Phase 4 — Switch the builtins and DELETE the zoo
 
+### Phase 4 Step 1 — SWITCH LANDED (2026-07-22)
+
+`builtin_cancel_compute` / `builtin_together_compute` now call
+`rat_canon_normalize` as the primary path (replacing the Phase-2
+`rat_canon_dispatch` call); the classical cascade below is the single fallback
+for declines.  Two real issues surfaced by the full-suite run and fixed:
+
+1. **Polynomial radicand corruption.** Phase 3b's radicand-variable ordering
+   rewrote `x^2 -> g^2-1` for `Sqrt[1+x^2]`, mangling `(1+x^2)^(3/2) poly(x)`
+   (broke a `simplify` row).  Fixed by passing explicit `elim_vars` to
+   `flint_tower_reduce` — only a BARE-SYMBOL radicand (`Sqrt[b]`, `y^(1/3)`) is
+   ordered above its generator; constant/polynomial radicands are not.
+2. **Leading-sign convention.** `1/(x^2-5)+1/(x-Sqrt5)` reduced to
+   `(-1-Sqrt5-x)/(5-x^2)` (negative-leading denominator).  Generalised
+   `rco_sign_normalize` to flip when every MAXIMUM-total-degree denominator term
+   is negative (not only when ALL terms are), and to `Expand` the numerator so
+   the `extract_num_den` `Times[-1, Plus[...]]` artifact collapses.  `a^2-a b`
+   (mixed leading) is untouched (poly_tests green).
+
+The SPEC's Tan row was updated to the FLINT-consistent `-2/(-1+Tan^2)`.
+Verification: **zero off/on difference** across rat/simplify/trigrat/radical/poly/
+parfrac/mpoly/fullsimplify/logexp/invtrig/factorial/intrat and every integrate
+suite tried; `ratcanon_spec/reduce/build` green; valgrind == baseline.
+`MATHILDA_RATCANON=off` reverts to the pure classical cascade.
+
+### Phase 4 Step 2 — DELETE the zoo (pending)
+
 **Goal.** `Together`/`Cancel` route entirely through `rat_canon_normalize`; the
 classical cascade shrinks to a thin fallback for `build`-declines only; the
 redundant engines and their hacks are removed so the code actually shrinks.

@@ -514,6 +514,28 @@ Expr* rat_canon_roundtrip(const RatCanonForm* f) {
 /* §0.4 denominator-sign convention: flip only the FLINT all-negative-denominator
  * -(N)/(-D) artifact (never a mixed-sign polynomial).  Mirrors rat.c's
  * rc_sign_normalize; the one place the output convention is applied. */
+/* Total degree of a monomial term: sum of integer powers of its variable factors
+ * (radicals / numbers / kernels count 0).  Used to pick a Plus's leading terms. */
+static int rco_term_degree(const Expr* t) {
+    if (!t || t->type != EXPR_FUNCTION) return t && t->type == EXPR_SYMBOL ? 1 : 0;
+    const char* h = t->data.function.head->type == EXPR_SYMBOL
+                    ? t->data.function.head->data.symbol.name : NULL;
+    if (h == SYM_Power && t->data.function.arg_count == 2 &&
+        t->data.function.args[1]->type == EXPR_INTEGER) {
+        return t->data.function.args[0]->type == EXPR_SYMBOL
+               ? (int)t->data.function.args[1]->data.integer : 0;
+    }
+    if (h == SYM_Times) {
+        int s = 0;
+        for (size_t i = 0; i < t->data.function.arg_count; i++)
+            s += rco_term_degree(t->data.function.args[i]);
+        return s;
+    }
+    return 0;
+}
+
+static Expr* rc_expand(Expr* e);   /* fwd: Expand[e], defined below */
+
 static Expr* rco_sign_normalize(Expr* r) {
     if (!r) return r;
     Expr* n; Expr* d;
@@ -522,12 +544,31 @@ static Expr* rco_sign_normalize(Expr* r) {
     if (d->type == EXPR_FUNCTION && d->data.function.head->type == EXPR_SYMBOL &&
         d->data.function.head->data.symbol.name == SYM_Plus &&
         d->data.function.arg_count > 0) {
+        /* Flip iff every MAXIMUM-total-degree term is negative — i.e. the leading
+         * coefficient is negative (5 - x^2 -> x^2 - 5), never a mixed-degree
+         * denominator whose leading term is positive (a^2 - a b, x - 1). */
+        int maxdeg = 0;
+        for (size_t i = 0; i < d->data.function.arg_count; i++) {
+            int dg = rco_term_degree(d->data.function.args[i]);
+            if (dg > maxdeg) maxdeg = dg;
+        }
         flip = true;
         for (size_t i = 0; i < d->data.function.arg_count; i++)
-            if (!is_superficially_negative(d->data.function.args[i])) { flip = false; break; }
+            if (rco_term_degree(d->data.function.args[i]) == maxdeg &&
+                !is_superficially_negative(d->data.function.args[i])) { flip = false; break; }
     } else flip = is_superficially_negative(d);
-    if (!flip) { expr_free(n); expr_free(d); return r; }
-    Expr* nn = negate_expr(n);
+    if (!flip) {
+        /* Even without a flip, Expand the numerator so an undistributed
+         * Times[-1, Plus[...]] artifact of extract_num_den collapses. */
+        Expr* nn = rc_expand(n);
+        if (d->type == EXPR_INTEGER && d->data.integer == 1) { expr_free(d); expr_free(r); return nn; }
+        expr_free(r);
+        Expr* inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ d, expr_new_integer(-1) }, 2));
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){ nn, inv }, 2));
+    }
+    Expr* nn = rc_expand(negate_expr(n));   /* distribute the sign */
     Expr* nd;
     if (d->type == EXPR_FUNCTION && d->data.function.head->type == EXPR_SYMBOL &&
         d->data.function.head->data.symbol.name == SYM_Plus) {
@@ -538,6 +579,7 @@ static Expr* rco_sign_normalize(Expr* r) {
         free(ar);
     } else nd = negate_expr(d);
     expr_free(n); expr_free(d); expr_free(r);
+    if (nd->type == EXPR_INTEGER && nd->data.integer == 1) { expr_free(nd); return nn; }
     Expr* inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){ nd, expr_new_integer(-1) }, 2));
     return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
@@ -602,13 +644,28 @@ static Expr* rat_canon_nf_complete(const Expr* num, const Expr* den) {
 Expr* rat_canon_reduce(const RatCanonForm* f, RcMode mode) {
     (void)mode;   /* single-fraction reduction is mode-agnostic; the Cancel
                      per-term split happens in rat_canon_normalize */
-    /* collect algebraic generators + relations */
+    /* collect algebraic generators + relations, and the eliminable radicand
+     * variables: a gen whose radicand (kernel argument) is a BARE SYMBOL
+     * (Sqrt[b], y^(1/3)) — ordering that symbol above the generator lets the
+     * ideal reduction eliminate it (enabling the cancellation).  A constant or
+     * POLYNOMIAL radicand (Sqrt2, Sqrt[1+x^2]) is NOT eliminable — its variables
+     * must stay below the generator so x^2 is never rewritten to g^2-1. */
     const char** asyms = malloc(sizeof(char*) * (f->n ? f->n : 1));
     const Expr** rels = malloc(sizeof(Expr*) * (f->n ? f->n : 1));
-    int n_alg = 0;
+    const char** elim = malloc(sizeof(char*) * (f->n ? f->n : 1));
+    int n_alg = 0, n_elim = 0;
     for (size_t i = 0; i < f->n; i++)
         if (f->gens[i].kind == RCG_ALGEBRAIC) {
             asyms[n_alg] = f->gens[i].sym; rels[n_alg] = f->gens[i].relation; n_alg++;
+            Expr* k = f->gens[i].kernel;   /* Sqrt[r] / Power[r,1/q] / I */
+            if (k->type == EXPR_FUNCTION && k->data.function.arg_count >= 1) {
+                const char* hn = k->data.function.head->type == EXPR_SYMBOL
+                                 ? k->data.function.head->data.symbol.name : NULL;
+                Expr* r = k->data.function.args[0];
+                if ((hn == SYM_Sqrt || hn == SYM_Power) && r->type == EXPR_SYMBOL &&
+                    r->data.symbol.name[0] != '$')
+                    elim[n_elim++] = r->data.symbol.name;
+            }
         }
 
     /* frac = num / den in generator symbols */
@@ -618,8 +675,8 @@ Expr* rat_canon_reduce(const RatCanonForm* f, RcMode mode) {
         expr_copy(f->num), expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){ expr_copy(f->den), expr_new_integer(-1) }, 2) }, 2);
 
-    Expr* reduced = flint_tower_reduce(frac, asyms, rels, n_alg);
-    expr_free(frac); free(asyms); free(rels);
+    Expr* reduced = flint_tower_reduce(frac, asyms, rels, n_alg, elim, n_elim);
+    expr_free(frac); free(asyms); free(rels); free(elim);
     if (!reduced) return NULL;
 
     Expr* res = eval_and_free(rat_canon_subst_back(f, reduced));

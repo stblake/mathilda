@@ -11,6 +11,7 @@
 #include "sym_names.h"
 #include "options.h"
 #include "qafactor.h"
+#include "ratcanon.h"
 #include "facpoly.h"
 #include "core.h"
 #include "print.h"
@@ -1974,7 +1975,7 @@ static Expr* builtin_cancel_compute(Expr* res) {
         size_t rac = res->data.function.arg_count; bool raf = false;
         (void)extract_extension_option_full(res, &rac, &raf);
         if (rac == 1) {
-            Expr* rd = rat_canon_dispatch(res->data.function.args[0], RC_CANCEL);
+            Expr* rd = rat_canon_normalize(res->data.function.args[0], RCM_CANCEL);
             if (rd) return rd;
         }
     }
@@ -2481,7 +2482,7 @@ static Expr* builtin_together_compute(Expr* res) {
         size_t rac = res->data.function.arg_count; bool raf = false;
         (void)extract_extension_option_full(res, &rac, &raf);
         if (rac == 1) {
-            Expr* rd = rat_canon_dispatch(res->data.function.args[0], RC_TOGETHER);
+            Expr* rd = rat_canon_normalize(res->data.function.args[0], RCM_TOGETHER);
             if (rd) return rd;
         }
     }
