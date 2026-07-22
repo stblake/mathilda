@@ -11,11 +11,15 @@
 #include "sym_names.h"
 #include "options.h"
 #include "qafactor.h"
+#include "ratcanon.h"
 #include "facpoly.h"
 #include "core.h"
+#include "print.h"
+#include "rat_internal.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 /* Together's recursive walker.  Cancel and Together both share the
  * algebraic-generator (radical) pass exported from poly.c, but
@@ -23,11 +27,11 @@
  * logic specific to combining over a common denominator. */
 static Expr* together_recursive(Expr* e);
 
-static Expr* negate_expr(Expr* e) {
+Expr* negate_expr(Expr* e) {
     return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), expr_copy(e)}, 2));
 }
 
-static bool is_superficially_negative(Expr* e) {
+bool is_superficially_negative(Expr* e) {
     if (e->type == EXPR_INTEGER) return e->data.integer < 0;
     if (e->type == EXPR_REAL) return e->data.real < 0.0;
     int64_t n, d;
@@ -69,7 +73,7 @@ static bool den_has_negative_lead(Expr* e) {
     return false;
 }
 
-static void extract_num_den(Expr* expr, Expr** num_out, Expr** den_out) {
+void extract_num_den(Expr* expr, Expr** num_out, Expr** den_out) {
     int64_t n, d;
     if (is_rational(expr, &n, &d)) {
         *num_out = expr_new_integer(n);
@@ -1542,10 +1546,37 @@ static Expr* flint_cancel_fraction(Expr* arg) {
 }
 #endif
 
+/* rat_canon_normalize (src/poly/ratcanon.c) is the primary Together/Cancel path;
+ * MATHILDA_RATCANON=off reverts to the pure classical cascade below. */
+static Expr* flint_gaussian_together(const Expr* arg);   /* defined below */
+
+static bool rat_canon_enabled(void) {
+    static int en = -1;
+    if (en < 0) {
+        const char* e = getenv("MATHILDA_RATCANON");
+        en = (e && strcmp(e, "off") == 0) ? 0 : 1;
+    }
+    return en;
+}
+
 static Expr* builtin_cancel_compute(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
 #ifdef USE_FLINT
+    /* Phase 2: unified field-structure dispatch first.  One classification, one
+     * engine — proven math-equal to the cascade below across the corpus by the
+     * shadow harness (MATHILDA_RATCANON=shadow).  Declines (NULL) fall through
+     * to the classical cascade unchanged.  Exact inputs only (the classical
+     * inexact path rationalises/renumericalises separately). */
+    if (rat_canon_enabled() && !internal_args_contain_inexact(res)) {
+        size_t rac = res->data.function.arg_count; bool raf = false;
+        (void)extract_extension_option_full(res, &rac, &raf);
+        if (rac == 1) {
+            Expr* rd = rat_canon_normalize(res->data.function.args[0], RCM_CANCEL);
+            if (rd) return rd;
+        }
+    }
+
     /* Rigorous algebraic-extension cancellation via FLINT, ahead of the QA
      * extension path. Returns NULL for plain-rational / non-extension inputs,
      * which then take the existing code below. */
@@ -2041,6 +2072,18 @@ static Expr* flint_gaussian_cancel(const Expr* arg) {
 
 static Expr* builtin_together_compute(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+
+#ifdef USE_FLINT
+    /* Phase 2: unified field-structure dispatch first (see builtin_cancel_compute). */
+    if (rat_canon_enabled() && !internal_args_contain_inexact(res)) {
+        size_t rac = res->data.function.arg_count; bool raf = false;
+        (void)extract_extension_option_full(res, &rac, &raf);
+        if (rac == 1) {
+            Expr* rd = rat_canon_normalize(res->data.function.args[0], RCM_TOGETHER);
+            if (rd) return rd;
+        }
+    }
+#endif
 
     /* Strip a trailing Extension -> α option, if any.  `Extension ->
      * Automatic` triggers extension_autodetect on the polynomial

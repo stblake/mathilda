@@ -486,6 +486,7 @@ set(COMMON_SRC
     ../src/poly/qa.c
     ../src/poly/qaupoly.c
     ../src/poly/qafactor.c
+    ../src/poly/ratcanon.c
     ../src/poly/rootofunity.c
     ../src/poly/squarefreeq.c
     ../src/poly/exponent.c
@@ -2897,3 +2898,37 @@ else()
 endif()
 add_test(NAME fullsimplify_corpus_tests
          COMMAND fullsimplify_corpus_tests ../fullsimplify_corpus.m)
+
+# ratcanon SPEC: canonical output-form contract for the Together/Cancel rewrite
+# (RATCANON_REWRITE_PLAN.md). Pins the WL-faithful forms + prototype correctness.
+add_executable(ratcanon_spec_tests test_ratcanon_spec.c ${COMMON_SRC})
+target_include_directories(ratcanon_spec_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(ratcanon_spec_tests gmp m ${ECM_LIB})
+    add_dependencies(ratcanon_spec_tests build_ecm)
+else()
+    target_link_libraries(ratcanon_spec_tests gmp m)
+endif()
+add_test(NAME ratcanon_spec_tests COMMAND ratcanon_spec_tests)
+
+# ratcanon build (Phase 2): the tower IR + builder (rat_canon_build).
+add_executable(ratcanon_build_tests test_ratcanon_build.c ${COMMON_SRC})
+target_include_directories(ratcanon_build_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(ratcanon_build_tests gmp m ${ECM_LIB})
+    add_dependencies(ratcanon_build_tests build_ecm)
+else()
+    target_link_libraries(ratcanon_build_tests gmp m)
+endif()
+add_test(NAME ratcanon_build_tests COMMAND ratcanon_build_tests)
+
+# ratcanon reduce (Phase 3): the reduction engine (rat_canon_reduce/_normalize).
+add_executable(ratcanon_reduce_tests test_ratcanon_reduce.c ${COMMON_SRC})
+target_include_directories(ratcanon_reduce_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(ratcanon_reduce_tests gmp m ${ECM_LIB})
+    add_dependencies(ratcanon_reduce_tests build_ecm)
+else()
+    target_link_libraries(ratcanon_reduce_tests gmp m)
+endif()
+add_test(NAME ratcanon_reduce_tests COMMAND ratcanon_reduce_tests)
