@@ -12,6 +12,8 @@
 #include "sym_names.h"
 #include "arithmetic.h"
 #include "flint_bridge.h"
+#include "risch_tower.h"    /* rt_expand_logs, rt_expand_exp_sums */
+#include "rat_internal.h"   /* extract_num_den */
 #include "core.h"
 #include <string.h>
 #include <stdlib.h>
@@ -151,6 +153,357 @@ static Expr* builtin_ratcanon_prototype(Expr* res) {
     expr_free(reduced);
     rcp_map_free(&m);
     return eval_and_free(back);   /* applies I^2->-1, Sqrt[k]^2->k, ... */
+}
+
+/* ======================================================================== *
+ *  Phase 2: the tower IR + builder (rat_canon_build)
+ * ======================================================================== */
+
+static int64_t rcp_igcd(int64_t a, int64_t b) {
+    if (a < 0) a = -a; if (b < 0) b = -b;
+    while (b) { int64_t t = a % b; a = b; b = t; }
+    return a ? a : 1;
+}
+static int64_t rcp_ilcm(int64_t a, int64_t b) {
+    if (a < 0) a = -a; if (b < 0) b = -b;
+    if (!a || !b) return 1;
+    return a / rcp_igcd(a, b) * b;
+}
+
+/* rational gcd: gcd(an/ad, bn/bd) = gcd(an,bn)/lcm(ad,bd), reduced. */
+static void rcp_qgcd(int64_t an, int64_t ad, int64_t bn, int64_t bd,
+                     int64_t* gn, int64_t* gd) {
+    int64_t n = rcp_igcd(an, bn), d = rcp_ilcm(ad, bd);
+    int64_t g = rcp_igcd(n, d);
+    *gn = n / g; *gd = d / g;
+}
+
+/* Split an exponent w into rational coeff (cn/cd) * base.  base is a fresh
+ * owned Expr (Integer 1 when w is a pure number). */
+static void rcp_exp_split(const Expr* w, int64_t* cn, int64_t* cd, Expr** base) {
+    int64_t p, q;
+    if (w->type == EXPR_INTEGER) { *cn = w->data.integer; *cd = 1; *base = expr_new_integer(1); return; }
+    if (is_rational(w, &p, &q)) { *cn = p; *cd = q; *base = expr_new_integer(1); return; }
+    if (w->type == EXPR_FUNCTION && w->data.function.head->type == EXPR_SYMBOL &&
+        w->data.function.head->data.symbol.name == SYM_Times &&
+        w->data.function.arg_count >= 2) {
+        Expr* f0 = w->data.function.args[0];
+        int64_t fp, fq;
+        if (f0->type == EXPR_INTEGER || is_rational(f0, &fp, &fq)) {
+            if (f0->type == EXPR_INTEGER) { *cn = f0->data.integer; *cd = 1; }
+            else { *cn = fp; *cd = fq; }
+            size_t rest = w->data.function.arg_count - 1;
+            if (rest == 1) { *base = expr_copy(w->data.function.args[1]); return; }
+            Expr** ra = malloc(sizeof(Expr*) * rest);
+            for (size_t i = 0; i < rest; i++) ra[i] = expr_copy(w->data.function.args[i + 1]);
+            *base = expr_new_function(expr_new_symbol(SYM_Times), ra, rest);
+            free(ra);
+            return;
+        }
+    }
+    *cn = 1; *cd = 1; *base = expr_copy((Expr*)w);
+}
+
+static bool rcp_is_indep_head(const char* h) {
+    if (h == SYM_Log || rcp_is_indep_kernel_head(h)) return true;
+    /* Tangent-family: a single such kernel is a valid free monomial (Risch
+     * RT_TAN).  Sin/Cos/Sec/Csc/Sinh/Cosh are algebraically dependent and are
+     * left un-substituted (out of tower scope; declined downstream). */
+    static const char* const tg[] = { "Tan","Cot","Tanh","Coth", NULL };
+    for (int i = 0; tg[i]; i++) if (strcmp(h, tg[i]) == 0) return true;
+    return false;
+}
+
+static bool rcp_is_const_name(const char* n) {
+    static const char* const ks[] = { "Pi","E","I","EulerGamma","GoldenRatio",
+        "Catalan","Degree","Glaisher","Khinchin","Infinity", NULL };
+    for (int i = 0; ks[i]; i++) if (strcmp(n, ks[i]) == 0) return true;
+    return false;
+}
+
+/* Exp-fundamental bookkeeping during a build. */
+typedef struct { Expr* base; int64_t gn, gd; char* sym; } ExpFund;
+typedef struct {
+    RatCanonForm* f;
+    int ctr;
+    ExpFund* ef; size_t nef, capef;
+} Builder;
+
+static char* rcp_fresh(Builder* b) {
+    char buf[32]; snprintf(buf, sizeof buf, "$rcg%d$", b->ctr++);
+    char* s = malloc(strlen(buf) + 1); strcpy(s, buf); return s;
+}
+
+/* Pass 1: collect exp fundamentals.  For each E^w with an x-dependent exponent,
+ * fold w's rational coeff into the gcd of its base's fundamental. */
+static void rcp_collect_exps(const Expr* e, Builder* b) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power &&
+        e->data.function.arg_count == 2 &&
+        e->data.function.args[0]->type == EXPR_SYMBOL &&
+        e->data.function.args[0]->data.symbol.name == SYM_E) {
+        int64_t cn, cd; Expr* base;
+        rcp_exp_split(e->data.function.args[1], &cn, &cd, &base);
+        if (!(base->type == EXPR_INTEGER)) {   /* skip constant exponents */
+            size_t i = 0;
+            for (; i < b->nef; i++) if (expr_eq(b->ef[i].base, base)) break;
+            if (i == b->nef) {
+                if (b->nef == b->capef) { b->capef = b->capef ? b->capef * 2 : 4;
+                    b->ef = realloc(b->ef, b->capef * sizeof(ExpFund)); }
+                b->ef[i].base = expr_copy(base); b->ef[i].gn = cn < 0 ? -cn : cn;
+                b->ef[i].gd = cd; b->ef[i].sym = NULL; b->nef++;
+            } else {
+                int64_t gn, gd; rcp_qgcd(b->ef[i].gn, b->ef[i].gd, cn, cd, &gn, &gd);
+                b->ef[i].gn = gn; b->ef[i].gd = gd;
+            }
+        }
+        expr_free(base);
+        return;   /* do not descend into the exponent */
+    }
+    rcp_collect_exps(h, b);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        rcp_collect_exps(e->data.function.args[i], b);
+}
+
+/* Add (or find) an algebraic/transcendental generator by its surface kernel;
+ * returns its fresh symbol name (owned by the form). `relation` and `kernel` are
+ * adopted on first insert, freed on a dedup hit. */
+static const char* rcf_gen(RatCanonForm* f, Builder* b, Expr* kernel,
+                           RcGenKind kind, Expr* relation) {
+    for (size_t i = 0; i < f->n; i++)
+        if (expr_eq(f->gens[i].kernel, kernel)) {
+            expr_free(kernel); if (relation) expr_free(relation);
+            return f->gens[i].sym;
+        }
+    if (f->n == f->cap) { f->cap = f->cap ? f->cap * 2 : 8;
+        f->gens = realloc(f->gens, f->cap * sizeof(RcGen)); }
+    f->gens[f->n].kernel = kernel;
+    f->gens[f->n].sym = rcp_fresh(b);
+    f->gens[f->n].kind = kind;
+    f->gens[f->n].relation = relation;
+    return f->gens[f->n++].sym;
+}
+
+/* Build relation `sym^deg - radicand` (deg>=2). */
+static Expr* rcp_radical_relation(const char* sym, int64_t deg, const Expr* radicand) {
+    Expr* pw = expr_new_function(expr_new_symbol(SYM_Power),
+                 (Expr*[]){ expr_new_symbol(sym), expr_new_integer(deg) }, 2);
+    Expr* neg = expr_new_function(expr_new_symbol(SYM_Times),
+                 (Expr*[]){ expr_new_integer(-1), expr_copy((Expr*)radicand) }, 2);
+    return expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ pw, neg }, 2);
+}
+
+/* Pass 2: substitute every kernel -> its generator symbol (E^(c*base) ->
+ * sym^(c/g); Complex[a,b] -> a + b*symI; radical Power[r,p/q] -> sym^p). */
+static Expr* rcp_build_forward(const Expr* e, Builder* b) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    RatCanonForm* f = b->f;
+    const Expr* h = e->data.function.head;
+    size_t ac = e->data.function.arg_count;
+    Expr** av = e->data.function.args;
+    if (h->type == EXPR_SYMBOL) {
+        const char* hn = h->data.symbol.name;
+        /* exponential */
+        if (hn == SYM_Power && ac == 2 && av[0]->type == EXPR_SYMBOL &&
+            av[0]->data.symbol.name == SYM_E) {
+            int64_t cn, cd; Expr* base;
+            rcp_exp_split(av[1], &cn, &cd, &base);
+            if (base->type == EXPR_INTEGER) { expr_free(base); }
+            else {
+                size_t i = 0; for (; i < b->nef; i++) if (expr_eq(b->ef[i].base, base)) break;
+                if (i < b->nef) {
+                    ExpFund* ef = &b->ef[i];
+                    if (!ef->sym) {
+                        /* fundamental kernel E^((gn/gd)*base) */
+                        Expr* fexp;
+                        if (ef->gn == 1 && ef->gd == 1) fexp = expr_copy(ef->base);
+                        else {
+                            Expr* c = (ef->gd == 1) ? expr_new_integer(ef->gn)
+                                : expr_new_function(expr_new_symbol(SYM_Rational),
+                                    (Expr*[]){ expr_new_integer(ef->gn), expr_new_integer(ef->gd) }, 2);
+                            fexp = expr_new_function(expr_new_symbol(SYM_Times),
+                                    (Expr*[]){ c, expr_copy(ef->base) }, 2);
+                        }
+                        Expr* fk = expr_new_function(expr_new_symbol(SYM_Power),
+                                    (Expr*[]){ expr_new_symbol(SYM_E), fexp }, 2);
+                        ef->sym = (char*)rcf_gen(f, b, fk, RCG_TRANSCENDENTAL, NULL);
+                    }
+                    /* m = (cn/cd) / (gn/gd) = (cn*gd)/(cd*gn), integer */
+                    int64_t m = (cn * ef->gd) / (cd * ef->gn);
+                    expr_free(base);
+                    if (m == 1) return expr_new_symbol(ef->sym);
+                    return expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ expr_new_symbol(ef->sym), expr_new_integer(m) }, 2);
+                }
+                expr_free(base);
+            }
+        }
+        /* imaginary unit */
+        if (hn == SYM_Complex && ac == 2) {
+            Expr* rel = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){
+                expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ expr_new_symbol("I"), expr_new_integer(2) }, 2),
+                expr_new_integer(1) }, 2);
+            const char* s = rcf_gen(f, b, expr_new_symbol("I"), RCG_ALGEBRAIC, rel);
+            return expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){
+                expr_copy(av[0]),
+                expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ expr_copy(av[1]), expr_new_symbol(s) }, 2) }, 2);
+        }
+        /* Sqrt[r] */
+        if (hn == SYM_Sqrt && ac == 1) {
+            Expr* kern = expr_copy((Expr*)e);
+            Expr* rel = rcp_radical_relation("$tmp$", 2, av[0]);   /* patched below */
+            const char* s = rcf_gen(f, b, kern, RCG_ALGEBRAIC, rel);
+            /* fix relation to use the actual sym (rcf_gen may have deduped) */
+            for (size_t i = 0; i < f->n; i++)
+                if (strcmp(f->gens[i].sym, s) == 0 && f->gens[i].relation) {
+                    expr_free(f->gens[i].relation);
+                    f->gens[i].relation = rcp_radical_relation(s, 2, av[0]);
+                    break;
+                }
+            return expr_new_symbol(s);
+        }
+        /* radical Power[r, p/q], q>1 -> sym^p with sym = r^(1/q) */
+        if (hn == SYM_Power && ac == 2) {
+            int64_t p, q;
+            if (is_rational(av[1], &p, &q) && q != 1) {
+                Expr* onq = expr_new_function(expr_new_symbol(SYM_Rational),
+                    (Expr*[]){ expr_new_integer(1), expr_new_integer(q) }, 2);
+                Expr* kern = expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ expr_copy(av[0]), onq }, 2);   /* r^(1/q) */
+                const char* s = rcf_gen(f, b, kern, RCG_ALGEBRAIC,
+                                        rcp_radical_relation("$tmp$", q, av[0]));
+                for (size_t i = 0; i < f->n; i++)
+                    if (strcmp(f->gens[i].sym, s) == 0 && f->gens[i].relation) {
+                        expr_free(f->gens[i].relation);
+                        f->gens[i].relation = rcp_radical_relation(s, q, av[0]);
+                        break;
+                    }
+                if (p == 1) return expr_new_symbol(s);
+                return expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ expr_new_symbol(s), expr_new_integer(p) }, 2);
+            }
+        }
+        /* Log / inverse-trig / Tan (transcendental, opaque) */
+        if (rcp_is_indep_head(hn) && ac == 1)
+            return expr_new_symbol(rcf_gen(f, b, expr_copy((Expr*)e), RCG_TRANSCENDENTAL, NULL));
+    }
+    /* recurse */
+    Expr* nh = rcp_build_forward(h, b);
+    Expr** na = malloc(sizeof(Expr*) * (ac ? ac : 1));
+    for (size_t i = 0; i < ac; i++) na[i] = rcp_build_forward(av[i], b);
+    Expr* r = expr_new_function(nh, na, ac);
+    free(na);
+    return r;
+}
+
+/* Pick a heuristic main variable: the first free symbol (not a generator, not a
+ * numeric constant) encountered in num/den. */
+static void rcp_find_var(const Expr* e, RatCanonForm* f, Expr** out) {
+    if (*out || !e) return;
+    if (e->type == EXPR_SYMBOL) {
+        const char* n = e->data.symbol.name;
+        if (n[0] == '$') return;                       /* generator symbol */
+        if (rcp_is_const_name(n)) return;              /* Pi, E, I, ... */
+        for (size_t i = 0; i < f->n; i++)
+            if (f->gens[i].kernel->type == EXPR_SYMBOL &&
+                strcmp(f->gens[i].kernel->data.symbol.name, n) == 0) return;
+        *out = expr_new_symbol(n);
+        return;
+    }
+    if (e->type != EXPR_FUNCTION) return;
+    rcp_find_var(e->data.function.head, f, out);
+    for (size_t i = 0; i < e->data.function.arg_count && !*out; i++)
+        rcp_find_var(e->data.function.args[i], f, out);
+}
+
+/* stable sort: algebraic generators before transcendental (LEX-leading). */
+static void rcp_order_gens(RatCanonForm* f) {
+    for (size_t i = 1; i < f->n; i++) {
+        RcGen key = f->gens[i]; size_t j = i;
+        while (j > 0 && f->gens[j - 1].kind == RCG_TRANSCENDENTAL &&
+               key.kind == RCG_ALGEBRAIC) { f->gens[j] = f->gens[j - 1]; j--; }
+        f->gens[j] = key;
+    }
+}
+
+RatCanonForm* rat_canon_build(const Expr* e) {
+    RatCanonForm* f = calloc(1, sizeof(RatCanonForm));
+    if (!f) return NULL;
+    Builder b; memset(&b, 0, sizeof b); b.f = f;
+
+    /* Pre-normalize: expose atomic kernels (Log[ab]->Log a+Log b, split E^(a+b)).
+     * rt_expand_logs / rt_expand_exp_sums BORROW their argument (return a fresh
+     * tree, do not free the input), so free each intermediate explicitly. */
+    Expr* c0 = expr_copy((Expr*)e);
+    Expr* mid = rt_expand_logs(c0);
+    expr_free(c0);
+    Expr* pre = rt_expand_exp_sums(mid);
+    expr_free(mid);
+
+    rcp_collect_exps(pre, &b);
+    Expr* sub = rcp_build_forward(pre, &b);
+    expr_free(pre);
+
+    extract_num_den(sub, &f->num, &f->den);
+    expr_free(sub);
+
+    rcp_order_gens(f);
+    rcp_find_var(f->num, f, &f->var);
+    if (!f->var) rcp_find_var(f->den, f, &f->var);
+
+    for (size_t i = 0; i < b.nef; i++) expr_free(b.ef[i].base);
+    free(b.ef);
+    return f;
+}
+
+void rat_canon_free(RatCanonForm* f) {
+    if (!f) return;
+    for (size_t i = 0; i < f->n; i++) {
+        expr_free(f->gens[i].kernel); free(f->gens[i].sym);
+        if (f->gens[i].relation) expr_free(f->gens[i].relation);
+    }
+    free(f->gens);
+    if (f->num) expr_free(f->num);
+    if (f->den) expr_free(f->den);
+    if (f->var) expr_free(f->var);
+    free(f);
+}
+
+/* Substitute generator symbols back to their kernels in `e`. */
+static Expr* rcp_subst_back(const Expr* e, const RatCanonForm* f) {
+    if (!e) return NULL;
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t i = 0; i < f->n; i++)
+            if (strcmp(e->data.symbol.name, f->gens[i].sym) == 0)
+                return expr_copy(f->gens[i].kernel);
+        return expr_copy((Expr*)e);
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t ac = e->data.function.arg_count;
+    Expr* nh = rcp_subst_back(e->data.function.head, f);
+    Expr** na = malloc(sizeof(Expr*) * (ac ? ac : 1));
+    for (size_t i = 0; i < ac; i++) na[i] = rcp_subst_back(e->data.function.args[i], f);
+    Expr* r = expr_new_function(nh, na, ac);
+    free(na);
+    return r;
+}
+
+Expr* rat_canon_subst_back(const RatCanonForm* f, const Expr* e) {
+    return rcp_subst_back(e, f);
+}
+
+Expr* rat_canon_roundtrip(const RatCanonForm* f) {
+    Expr* deninv = expr_new_function(expr_new_symbol(SYM_Power),
+                     (Expr*[]){ expr_copy(f->den), expr_new_integer(-1) }, 2);
+    Expr* frac = expr_new_function(expr_new_symbol(SYM_Times),
+                     (Expr*[]){ expr_copy(f->num), deninv }, 2);
+    Expr* back = rcp_subst_back(frac, f);
+    expr_free(frac);
+    return eval_and_free(back);
 }
 
 void ratcanon_init(void) {

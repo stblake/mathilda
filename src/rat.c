@@ -14,6 +14,7 @@
 #include "facpoly.h"
 #include "core.h"
 #include "print.h"
+#include "rat_internal.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -25,11 +26,11 @@
  * logic specific to combining over a common denominator. */
 static Expr* together_recursive(Expr* e);
 
-static Expr* negate_expr(Expr* e) {
+Expr* negate_expr(Expr* e) {
     return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), expr_copy(e)}, 2));
 }
 
-static bool is_superficially_negative(Expr* e) {
+bool is_superficially_negative(Expr* e) {
     if (e->type == EXPR_INTEGER) return e->data.integer < 0;
     if (e->type == EXPR_REAL) return e->data.real < 0.0;
     int64_t n, d;
@@ -71,7 +72,7 @@ static bool den_has_negative_lead(Expr* e) {
     return false;
 }
 
-static void extract_num_den(Expr* expr, Expr** num_out, Expr** den_out) {
+void extract_num_den(Expr* expr, Expr** num_out, Expr** den_out) {
     int64_t n, d;
     if (is_rational(expr, &n, &d)) {
         *num_out = expr_new_integer(n);

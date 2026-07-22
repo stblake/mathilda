@@ -257,6 +257,42 @@ change.
 **Acceptance gate.** All structure + round-trip tests pass; valgrind clean;
 builtins unchanged (shadow harness still DIVERGED=0 since nothing is wired).
 
+### Phase 2 — LANDED (2026-07-22)
+
+- `src/rat_internal.h` exposes `extract_num_den` / `is_superficially_negative` /
+  `negate_expr` (de-static'd in `rat.c`).
+- `src/poly/ratcanon.{c,h}`: `RatCanonForm` + `RcGen` + `rat_canon_build` /
+  `rat_canon_free` / `rat_canon_roundtrip` / `rat_canon_subst_back`. One
+  generator-profiling build: pre-normalize (`rt_expand_logs`/`rt_expand_exp_sums`
+  — they BORROW their arg, free intermediates), substitute every kernel to a
+  fresh `$rcgN$` symbol, `extract_num_den`, order algebraic-leading, pick a
+  heuristic `var`. Commensurate exponentials collapse to a common fundamental
+  (rational-gcd of the base coefficients; `E^(c·u) -> fund^(c/g)`); `Log[ab]`
+  expanded; algebraic gens (`I`, `Sqrt`, `r^(p/q)`, roots of unity) carry the
+  explicit relation `sym^q - radicand` / `sym^2 + 1`.
+- `tests/test_ratcanon_build.c` (`ratcanon_build_tests`): structure (counts +
+  kind + algebraic-leading order), independence (commensurate exps → 1 gen,
+  `Log[x^2]` → `Log[x]`), relation-validity (every algebraic relation vanishes at
+  its kernel; transcendental gens have none), round-trip
+  (`Together[roundtrip - e] == 0`). All green.
+- rat_tests + ratcanon_spec green; shadow DIVERGED=0; valgrind == baseline.
+
+**DESIGN SIMPLIFICATION (vs the struct sketch above).** `RatCanonForm` drops the
+`QATower* K` field: algebraic constants are NOT collapsed to one primitive
+element. Each algebraic generator (constant or function) carries its own minimal
+polynomial as a per-gen `relation`, and Phase 3 reduces mod the *set* of
+relations (an ideal), ordering the algebraic gens as leading LEX vars so they
+form a Gröbner basis — exactly `flint_algebraic_field_normalize`'s model. No
+`qa_resolve_extension_tower` / `risch_rational_span` call is needed in the
+builder; independence of the transcendental gens is achieved structurally
+(log-expansion + exp-commensurability), and the round-trip test is the
+correctness gate. Phase 3 may still build a primitive element internally if the
+field-GCD needs `gr_ctx_init_nf`, but that is a reduction detail, not IR state.
+Forward trig (`Sin/Cos/Sec/Csc/Sinh/Cosh`) is left un-substituted (algebraically
+dependent — out of tower scope); only `Tan/Cot/Tanh/Coth` and Log/inverse-trig
+are transcendental generators. Phase 3/4 declines forms carrying un-substituted
+kernels to the classical path.
+
 ---
 
 ## Phase 3 — The reduction engine (`rat_canon_reduce`)
