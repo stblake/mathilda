@@ -164,8 +164,10 @@ static void system_constants_init(void) {
      * other constants it is user-settable, so it is NOT marked Protected. */
     {
         Expr* sym = expr_new_symbol(SYM_DollarMaxExtraPrecision);
-        symtab_add_own_value("$MaxExtraPrecision", sym, expr_new_real(50.0));
+        Expr* val = expr_new_real(50.0);
+        symtab_add_own_value("$MaxExtraPrecision", sym, val);
         expr_free(sym);
+        expr_free(val);
     }
     register_system_constant("$MachineEpsilon",   expr_new_real(DBL_EPSILON));
     register_system_constant("$MinMachineNumber", expr_new_real(DBL_MIN));
