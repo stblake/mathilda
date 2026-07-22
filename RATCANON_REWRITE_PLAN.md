@@ -486,7 +486,23 @@ cyclotomic Simplify scored differently.  `nf_complete==NULL` conflates "coprime
 (safe to keep)" with "GCD/builder couldn't reduce (must decline)"; separating
 them needs a **commensurate-radical builder** (the radical analogue of the
 exp-fundamental collapse — recognise `y^(p/q)` as powers of one `y^(1/lcm q)`),
-which is the real Phase 3d.  Until then, coprime declines to classical (stable).
+which is the real Phase 3d.
+
+**Phase 3d — LANDED (2026-07-22).**  Two parts:
+1. **Commensurate-radical builder** (`RadFund`/`rcp_collect_rads`/`rcp_rad_sym`,
+   commit `accd893`): radicals of a common radicand are powers of one
+   `r^(1/Q)`, `Q = lcm(roots)`; `(y^(1/2)-y^(1/3))/(y^(1/6)-1)` now builds one
+   `g=y^(1/6)` and reduces to `y^(1/3)` directly.  Clean win, zero regressions.
+2. **Accept coprime instead of decline:** `rat_canon_nf_complete` now sets a
+   `*coprime` flag (field GCD RAN and returned 1) vs "couldn't run"; when coprime
+   AND the residual is a GENUINE radical (not a root of unity / Complex —
+   `rco_den_has_rou`, which have dedicated cyclotomic/Gaussian handling in
+   Simplify's search), the sign-normalized WL-faithful result is kept
+   (`1/(x-Sqrt2)`, `(2x-Sqrt3-Sqrt5)/...`).  Zero off/on divergence across 11+
+   suites and the integrate suites; `ratcanon_reduce_tests` updated; valgrind
+   baseline.  `rat_canon` now declines only: root-of-unity/Gaussian pre-formed &
+   coprime, forward trig, inexact, and multi-arg/option forms — still the
+   cascade's job (Step 2b remains gated on those).
 
 **Goal.** `Together`/`Cancel` route entirely through `rat_canon_normalize`; the
 classical cascade shrinks to a thin fallback for `build`-declines only; the

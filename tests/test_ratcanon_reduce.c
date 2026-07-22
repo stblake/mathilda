@@ -119,13 +119,14 @@ static void test_accept_forms(void) {
     accept_form("(x^2-2)/(x-Sqrt[2])", RCM_CANCEL, "Plus[Power[2, Rational[1, 2]], x]");
     accept_form("(x^2-3)/(x+Sqrt[3])", RCM_CANCEL,
                 "Plus[Times[-1, Power[3, Rational[1, 2]]], x]");
+    /* Phase 3d: coprime GENUINE radical kept WL-faithfully (field GCD proved g=1). */
+    accept_form("1/(x-Sqrt[2])", RCM_TOGETHER,
+                "Power[Plus[Times[-1, Power[2, Rational[1, 2]]], x], -1]");
 }
 
 static void test_declines(void) {
-    /* Coprime / WL-kept radical in the denominator: classical gives the cleaner
-     * form; decline. */
-    declines("1/(x-Sqrt[2])", RCM_TOGETHER);             /* radical WL-kept in denom       */
-    declines("1/(x-Sqrt[3])+1/(x-Sqrt[5])", RCM_TOGETHER); /* coprime multi-radical sum    */
+    /* Root-of-unity / Complex residual: dedicated cyclotomic/Gaussian handling
+     * downstream (Phase 3d does not keep these); forward trig is dependent. */
     declines("1/(1+Cos[x])+1/Sin[x]", RCM_TOGETHER);     /* forward trig (dependent)       */
 }
 
@@ -137,8 +138,10 @@ static void test_parity(void) {
         "1/(E^x-1)+1/(E^x+1)", "1/(1+Tan[x])+1/(1-Tan[x])",
         "1/(x-I)+1/(x+I)", "1/(1-I x)+1/(1+I x)",
         "1/(x-Sqrt[2])+1/(x+Sqrt[2])", "1/(b-a Sqrt[k])+1/(b+a Sqrt[k])",
-        /* declined ones return NULL and are skipped: */
         "(x^2-2)/(x-Sqrt[2])", "(y-1)/(y^(1/3)-1)", "1/(x-Sqrt[2])",
+        /* Phase 3d coprime genuine-radical keeps: */
+        "1/(x-Sqrt[3])+1/(x-Sqrt[5])", "b/(x-Sqrt[2])+c/(x+Sqrt[2])",
+        "(y^(1/2)-y^(1/3))/(y^(1/6)-1)",
         NULL };
     for (int i = 0; tog[i]; i++) parity(tog[i], RCM_TOGETHER);
     const char* can[] = {

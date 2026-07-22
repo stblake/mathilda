@@ -669,6 +669,26 @@ static bool rco_has_radical(const Expr* e) {
     return false;
 }
 
+/* True if `e` contains a root of unity ((-1)^(p/q)) or Complex — cases with
+ * dedicated cyclotomic/Gaussian handling that Phase 3d does not keep. */
+static bool rco_den_has_rou(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL) {
+        if (h->data.symbol.name == SYM_Complex) return true;
+        if (h->data.symbol.name == SYM_Power && e->data.function.arg_count == 2) {
+            Expr* b = e->data.function.args[0];
+            int64_t p, q;
+            if ((b->type == EXPR_INTEGER && b->data.integer == -1) &&
+                is_rational(e->data.function.args[1], &p, &q) && q != 1) return true;
+        }
+    }
+    if (rco_den_has_rou(h)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rco_den_has_rou(e->data.function.args[i])) return true;
+    return false;
+}
+
 /* Phase 3c: complete a CONSTANT-radicand pre-formed cancellation via the
  * number-field GCD.  `num`/`den` are borrowed (den carries a radical the ideal
  * reduction could not eliminate).  Returns the cancelled, Expand-cleaned result
@@ -679,11 +699,14 @@ static Expr* rc_expand(Expr* e) {  /* owns e; returns Expand[e] */
     return eval_and_free(expr_new_function(expr_new_symbol("Expand"),
                                            (Expr*[]){ e }, 1));
 }
-static Expr* rat_canon_nf_complete(const Expr* num, const Expr* den) {
+static Expr* rat_canon_nf_complete(const Expr* num, const Expr* den, int* coprime) {
+    *coprime = 0;
     Expr* g = flint_extension_gcd(num, den);
-    if (!g) return NULL;
+    if (!g) return NULL;   /* field GCD couldn't run -> not proven coprime */
     Expr* ge = eval_and_free(g);
-    if (ge->type == EXPR_INTEGER && ge->data.integer == 1) { expr_free(ge); return NULL; }
+    if (ge->type == EXPR_INTEGER && ge->data.integer == 1) {
+        expr_free(ge); *coprime = 1; return NULL;   /* proven coprime -> keep */
+    }
     Expr* nn = flint_extension_divexact(num, ge);
     Expr* nd = flint_extension_divexact(den, ge);
     expr_free(ge);
@@ -760,16 +783,22 @@ Expr* rat_canon_reduce(const RatCanonForm* f, RcMode mode) {
         if (rco_has_radical(den)) {
             /* Phase 3c: constant-radicand pre-formed cancellation via number-field
              * GCD; NULL if coprime / WL-kept (decline to classical). */
-            /* Phase 3c: constant-radicand pre-formed cancellation via number-field
-             * GCD; NULL if coprime / WL-kept / unhandled -> decline to classical,
-             * which gives the canonical form (and fully reduces the cases the
-             * builder under-represents, e.g. commensurate radicals
-             * y^(1/2)/y^(1/3)/y^(1/6)).  Blanket-keeping those regressed rat/
-             * simplify — see plan Phase 3d. */
-            Expr* done = rat_canon_nf_complete(num, den);
+            /* Phase 3c: pre-formed cancellation via number-field GCD.
+             * Phase 3d: if the field GCD RAN and proved the fraction coprime,
+             * KEEP the sign-normalized WL-faithful result (1/(x-Sqrt2),
+             * (2x-Sqrt3-Sqrt5)/...); if the GCD could not run (unhandled field, or
+             * a form the builder under-represents), decline to classical. */
+            int coprime = 0;
+            Expr* done = rat_canon_nf_complete(num, den, &coprime);
+            /* Only KEEP a coprime residual for GENUINE radicals (Sqrt / cube root
+             * of a non-(-1) radicand).  Root-of-unity / Complex denominators have
+             * dedicated cyclotomic/Gaussian handling downstream (notably in
+             * Simplify's search); keep the classical form for those. */
+            int keep = coprime && !rco_den_has_rou(den);
             expr_free(num); expr_free(den);
-            if (!done) { expr_free(res); return NULL; }
-            expr_free(res); res = done;
+            if (done) { expr_free(res); res = done; }
+            else if (!keep) { expr_free(res); return NULL; }
+            /* coprime genuine radical: keep res (sign-normalized below) */
         } else { expr_free(num); expr_free(den); }
     }
     return rco_sign_normalize(res);
