@@ -451,7 +451,30 @@ parfrac/mpoly/fullsimplify/logexp/invtrig/factorial/intrat and every integrate
 suite tried; `ratcanon_spec/reduce/build` green; valgrind == baseline.
 `MATHILDA_RATCANON=off` reverts to the pure classical cascade.
 
-### Phase 4 Step 2 — DELETE the zoo (pending)
+### Phase 4 Step 2 — DELETE the zoo (in progress)
+
+**2a — Phase-2 scaffolding removed (2026-07-22).** Deleted the now-superseded
+Phase-2 classifier/dispatch/shadow layer from `rat.c` (`rat_canon_dispatch`,
+`rat_canon_classify`, `rc_profile_walk`/`_atom`, `rc_arg_has_denom`,
+`rc_is_indep_inverse_head`, `rc_sign_normalize`, `rc_negate`, `RatAtomProfile`,
+`RatCanonRegime`, `RatCanonMode`, the whole `rat_canon_shadow`/`rc_math_equal`
+harness, and the memo-wrapper shadow calls).  **−411 net lines**; kept
+`rat_canon_enabled()` (the `MATHILDA_RATCANON=off` toggle) and the
+`flint_gaussian_together` forward decl.  All suites green; off/on unchanged.
+
+**2b — cascade engines: BLOCKED on coverage.**  The classical cascade
+(`flint_cancel_fraction`, `flint_gaussian_*`, `flint_rational_*`, the QA/tower
+paths, Phase E `qa_cancel_with_poly_radical`, `poly_find_radical_gen`,
+`pick_best_tower_generator`, the `rat_has_dependent_*` bails, the
+degree-32/leaf-200/iter-50 caps) is the **genuine fallback** for every input
+`rat_canon_normalize` declines — coprime WL-kept radicals (`1/(x-Sqrt2)`),
+Gaussian pre-formed cancels (`(x^2+1)/(x-I)`), forward trig, inexact, and
+multi-arg/option forms.  Deleting any of it now would regress those cases, so it
+is NOT safe until `rat_canon` covers them.  The remaining coverage work
+(a **Phase 3d**: clean coprime-radical output form — the gen-leading ordering
+currently yields `-1/(Sqrt2-x)`; a **Phase 3e**: Gaussian pre-formed cancel) is
+the prerequisite; only then can each cascade path be proven dead and removed
+one-by-one, suite-verified.  Net LOC across the rewrite decreases at that point.
 
 **Goal.** `Together`/`Cancel` route entirely through `rat_canon_normalize`; the
 classical cascade shrinks to a thin fallback for `build`-declines only; the
