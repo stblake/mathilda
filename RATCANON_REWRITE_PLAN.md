@@ -401,6 +401,27 @@ is **Phase 3c** (or left to Phase 4's classical fallback, which is correct today
 `ratcanon_reduce_tests` updated (three former declines are now accepted-form
 rows); all green; valgrind == baseline.
 
+### Phase 3c — LANDED (2026-07-22): constant-radicand cancellations
+
+`rat_canon_nf_complete` (ratcanon.c): in the decline branch, when the denominator
+carries a CONSTANT radical, run the number-field GCD (`flint_extension_gcd`); if
+it is non-trivial and the cancelled denominator is radical-free, accept the
+`Expand`-cleaned quotient, else decline (coprime / WL-kept → classical).  Fixes
+the sign-unit form: `divexact` returns `nn/nd` with `nd == -1`, so a numeric `nd`
+is folded and `Expand`ed (`(-Sqrt2-x)/(-1) -> Sqrt2+x`, not `-(-Sqrt2-x)`).
+
+Now covered, parity-verified vs classical Cancel: `(x^2-2)/(x-Sqrt2) -> x+Sqrt2`,
+`(x^2-3)/(x+Sqrt3) -> x-Sqrt3`, `(x^3-3Sqrt3)/(x-Sqrt3)`, `(x^4-4)/(x^2-2)`.
+Still declines (correct — classical gives the cleaner form / covers the gap):
+coprime WL-kept radicals (`1/(x-Sqrt2)`, coprime multi-radical sums) — a form-only
+issue (the gen-leading order yields `-1/(Sqrt2-x)`), and the Gaussian `I`
+pre-formed cancel (`(x^2+1)/(x-I)` — `flint_extension_gcd` defers `Complex[0,1]`).
+`ratcanon_reduce_tests` updated; all green; valgrind == baseline.
+
+**Remaining declined classes (all correct via Phase-4 classical fallback):**
+coprime radical-in-denominator (WL-faithful, form-only), Gaussian pre-formed
+cancel, forward trig (Sin/Cos/…), and inputs with un-substitutable kernels.
+
 ---
 
 ## Phase 4 — Switch the builtins and DELETE the zoo

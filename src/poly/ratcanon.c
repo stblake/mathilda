@@ -564,6 +564,41 @@ static bool rco_has_radical(const Expr* e) {
     return false;
 }
 
+/* Phase 3c: complete a CONSTANT-radicand pre-formed cancellation via the
+ * number-field GCD.  `num`/`den` are borrowed (den carries a radical the ideal
+ * reduction could not eliminate).  Returns the cancelled, Expand-cleaned result
+ * when the GCD is non-trivial AND the cancelled denominator is radical-free
+ * ((x^2-2)/(x-Sqrt2) -> x+Sqrt2), else NULL (coprime / WL-kept / partial — the
+ * classical path gives the canonical form). */
+static Expr* rc_expand(Expr* e) {  /* owns e; returns Expand[e] */
+    return eval_and_free(expr_new_function(expr_new_symbol("Expand"),
+                                           (Expr*[]){ e }, 1));
+}
+static Expr* rat_canon_nf_complete(const Expr* num, const Expr* den) {
+    Expr* g = flint_extension_gcd(num, den);
+    if (!g) return NULL;
+    Expr* ge = eval_and_free(g);
+    if (ge->type == EXPR_INTEGER && ge->data.integer == 1) { expr_free(ge); return NULL; }
+    Expr* nn = flint_extension_divexact(num, ge);
+    Expr* nd = flint_extension_divexact(den, ge);
+    expr_free(ge);
+    if (!nn || !nd) { if (nn) expr_free(nn); if (nd) expr_free(nd); return NULL; }
+    nn = rc_expand(nn);
+    nd = rc_expand(nd);
+    if (rco_has_radical(nd)) { expr_free(nn); expr_free(nd); return NULL; }
+    /* Fold the divexact result nn/nd.  A numeric nd (often the sign unit -1)
+     * makes the quotient a polynomial: Expand distributes the scalar so
+     * (-Sqrt2-x)/(-1) collapses to Sqrt2+x rather than -(-Sqrt2-x). */
+    int nd_numeric = (nd->type == EXPR_INTEGER || nd->type == EXPR_BIGINT ||
+                      (nd->type == EXPR_FUNCTION && nd->data.function.head->type == EXPR_SYMBOL &&
+                       nd->data.function.head->data.symbol.name == SYM_Rational));
+    Expr* inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ nd, expr_new_integer(-1) }, 2));
+    Expr* out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ nn, inv }, 2));
+    return nd_numeric ? rc_expand(out) : out;
+}
+
 Expr* rat_canon_reduce(const RatCanonForm* f, RcMode mode) {
     (void)mode;   /* single-fraction reduction is mode-agnostic; the Cancel
                      per-term split happens in rat_canon_normalize */
@@ -602,9 +637,14 @@ Expr* rat_canon_reduce(const RatCanonForm* f, RcMode mode) {
      * the canonical form for all of those. */
     if (n_alg > 0) {
         Expr* num; Expr* den; extract_num_den(res, &num, &den);
-        bool bail = rco_has_radical(den);
-        expr_free(num); expr_free(den);
-        if (bail) { expr_free(res); return NULL; }
+        if (rco_has_radical(den)) {
+            /* Phase 3c: constant-radicand pre-formed cancellation via number-field
+             * GCD; NULL if coprime / WL-kept (decline to classical). */
+            Expr* done = rat_canon_nf_complete(num, den);
+            expr_free(num); expr_free(den);
+            if (!done) { expr_free(res); return NULL; }
+            expr_free(res); res = done;
+        } else { expr_free(num); expr_free(den); }
     }
     return rco_sign_normalize(res);
 }

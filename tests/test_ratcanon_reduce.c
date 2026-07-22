@@ -115,12 +115,15 @@ static void test_accept_forms(void) {
                 "Plus[1, Power[y, Rational[1, 3]], Power[y, Rational[2, 3]]]");
     accept_form("(x^3-y)/(x-y^(1/3))", RCM_CANCEL,
                 "Plus[Power[x, 2], Times[x, Power[y, Rational[1, 3]]], Power[y, Rational[2, 3]]]");
+    /* Phase 3c: CONSTANT-radicand pre-formed cancellations via number-field GCD. */
+    accept_form("(x^2-2)/(x-Sqrt[2])", RCM_CANCEL, "Plus[Power[2, Rational[1, 2]], x]");
+    accept_form("(x^2-3)/(x+Sqrt[3])", RCM_CANCEL,
+                "Plus[Times[-1, Power[3, Rational[1, 2]]], x]");
 }
 
 static void test_declines(void) {
-    /* CONSTANT-radicand pre-formed cancel + WL-kept radical: need a number-field
-     * GCD (Phase 3c); decline to classical for now. */
-    declines("(x^2-2)/(x-Sqrt[2])", RCM_TOGETHER);       /* pre-formed number-field cancel */
+    /* Coprime / WL-kept radical in the denominator: classical gives the cleaner
+     * form; decline. */
     declines("1/(x-Sqrt[2])", RCM_TOGETHER);             /* radical WL-kept in denom       */
     declines("1/(x-Sqrt[3])+1/(x-Sqrt[5])", RCM_TOGETHER); /* coprime multi-radical sum    */
     declines("1/(1+Cos[x])+1/Sin[x]", RCM_TOGETHER);     /* forward trig (dependent)       */
@@ -143,7 +146,10 @@ static void test_parity(void) {
         "(x^2+2x+1)/(x+1)", "(a x^2 - a)/(x-1)",
         /* Phase 3b variable-radicand cancellations: */
         "(a^2-b)/(a-Sqrt[b])", "(y-1)/(y^(1/3)-1)", "(x^3-y)/(x-y^(1/3))",
-        "(k x^2-1)/(x-1/Sqrt[k])", NULL };
+        "(k x^2-1)/(x-1/Sqrt[k])",
+        /* Phase 3c constant-radicand cancellations: */
+        "(x^2-2)/(x-Sqrt[2])", "(x^2-3)/(x+Sqrt[3])",
+        "(x-Sqrt[2])(x+Sqrt[2])/(x-Sqrt[2])", NULL };
     for (int i = 0; can[i]; i++) parity(can[i], RCM_CANCEL);
 }
 
