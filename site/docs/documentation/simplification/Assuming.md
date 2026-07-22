@@ -26,7 +26,7 @@ Out[1]= -x y
 **Algorithm.** `builtin_assuming` (`Assuming[assum, body]`, `ATTR_HOLDREST`)
 desugars to `Block[{$Assumptions = $Assumptions && assum}, body]` and evaluates
 that block. A `List` of assumptions is first normalised to an `And` conjunction
-(matching Mathematica). Building it as `Set[$Assumptions, And[$Assumptions,
+(the standard convention). Building it as `Set[$Assumptions, And[$Assumptions,
 assum]]` inside the `Block` variable list reuses Block's existing scope save /
 restore machinery, so `$Assumptions` is temporarily extended for the dynamic
 extent of `body` and restored afterward. Nested `Assuming` calls compose

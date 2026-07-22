@@ -81,7 +81,7 @@ The `dom` third argument selects the solution domain: default `Complexes`; `Real
 
 **Complexity / limits.** Dominated by the chosen specialist (polynomial root-finding, linear-system elimination, radical isolation). The router itself is linear in expression size plus the substitution passes. The compound-variable cap is 32 distinct variables per call.
 
-- `Protected`.  Matches Mathematica's attribute set -- arguments are
+- `Protected`.  Uses the standard attribute set -- arguments are
 
 **Attributes:** `Protected`.
 

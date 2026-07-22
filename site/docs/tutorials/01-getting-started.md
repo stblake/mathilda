@@ -1,6 +1,6 @@
 # Getting started
 
-Welcome to Mathilda, a tiny Mathematica-like computer algebra system written in
+Welcome to Mathilda, an open source, high-performance symbolic computer algebra system written in
 C. This first tutorial gets you from a fresh checkout to a working REPL session,
 and walks through the handful of things you need to know to start computing:
 the `In[]`/`Out[]` loop, the surface syntax, getting help, and assigning values.
@@ -34,7 +34,7 @@ Once the build finishes, launch the interactive REPL:
 You'll be greeted with a short banner and the first input prompt:
 
 ```
-Mathilda - A tiny, LLM-generated, Mathematica-like computer algebra system.
+Mathilda - A small, open source computer algebra system.
 
 This program is free, open source software and comes with ABSOLUTELY NO WARRANTY.
 
@@ -78,7 +78,7 @@ No overflow, no scientific-notation approximation — every digit is correct.
 
 ## Surface syntax essentials
 
-Mathilda's syntax mirrors the Wolfram Language. A few conventions cover most of
+Mathilda's syntax follows a familiar symbolic style. A few conventions cover most of
 what you'll type day to day.
 
 **Function calls use square brackets.** You write `f[x]`, not `f(x)`. Round

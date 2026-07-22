@@ -11,7 +11,7 @@ indexing.
 
 It then scans the masked, `h`-headed arguments to determine the common threading
 length `L`; if two such arguments have different lengths the expression is
-returned unchanged (Mathematica issues a message here, which Mathilda elides).
+returned unchanged (a diagnostic is issued here in some systems; Mathilda elides it).
 For each `k` in `0..L-1` it builds `f[...]` taking element `k` from every masked
 threadable argument and copying all other arguments verbatim, then wraps the `L`
 calls under `h[...]` and runs `evaluate()` so `f`'s attributes (`Listable`,

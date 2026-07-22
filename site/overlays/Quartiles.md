@@ -29,6 +29,6 @@ Out[1]= {5/2, 9/2, 13/2}
 ### Notes
 
 `Quartiles[data]` gives the three quartile estimates `{q1, q2, q3}` (lower,
-median, upper) of the data. The default uses Mathematica's standard quantile
+median, upper) of the data. The default uses the standard quantile
 definition; an optional parameter list `{{a, b}, {c, d}}` selects an
 alternative quantile convention.

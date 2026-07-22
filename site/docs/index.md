@@ -8,7 +8,7 @@ hide:
 
 # Mathilda
 
-**A small Mathematica-like computer algebra system — written from scratch in C99.**
+**An open source, high-performance symbolic Computer Algebra System (CAS) kernel written entirely from scratch in C.**
 
 [Explore the documentation :material-book-open-variant:](documentation/index.md){ .mathilda-cta .md-button .md-button--primary }
 [Start the tutorials :material-school:](tutorials/index.md){ .mathilda-cta .md-button }
@@ -17,7 +17,7 @@ hide:
 </div>
 
 Mathilda is a small computer algebra system that recreates the **core
-architecture and evaluation semantics of the Mathematica programming language** — a recursive
+architecture and evaluation semantics of a modern symbolic programming language** — a recursive
 expression model, attribute-driven evaluation, structural pattern matching with
 backtracking, and a rewrite-rule engine — together with an extensive library of
 **~695 built-in functions**.

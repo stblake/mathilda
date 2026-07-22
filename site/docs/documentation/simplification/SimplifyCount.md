@@ -37,7 +37,7 @@ Out[4]= 2
 **Algorithm.** `builtin_simplify_count` returns `simp_default_complexity(arg)` as
 an Integer — the complexity measure Simplify uses by default (when no
 `ComplexityFunction`, or `ComplexityFunction -> Automatic`, is given). It is a
-recursive leaf count with Mathematica-faithful adjustments: `Symbol -> 1`;
+recursive leaf count with the standard adjustments: `Symbol -> 1`;
 `String -> 1`; `Real`/`MPFR -> 2` (NumberQ but not Integer/Rational); `Integer 0
 -> 1`, positive integer `p -> digits(p)`, negative `-> digits(|p|) + 1` (the
 leading minus sign costs one unit, computed by `int_digit_count_int64` /

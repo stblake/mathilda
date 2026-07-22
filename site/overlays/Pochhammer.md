@@ -68,5 +68,5 @@ Useful short-circuits avoid unnecessary work: `Pochhammer[a, 0] = 1` for any
 `a`; `Pochhammer[0, n] = 0` for positive integer `n` (so `Pochhammer[0, 1285]`
 returns `0` without forming a 1284-term factorial); and
 `Pochhammer[Infinity, n] = Infinity` for positive integer `n`. Derivatives and
-series — which Mathematica expresses through `PolyGamma` — are not yet
+series — expressible through `PolyGamma` — are not yet
 implemented.
