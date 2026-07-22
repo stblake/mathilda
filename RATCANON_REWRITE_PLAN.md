@@ -340,6 +340,44 @@ in one place.
 across the heavy suites in shadow; the two open bugs closed; valgrind clean.
 Builtins still unchanged.
 
+### Phase 3 — LANDED (2026-07-22)
+
+- `flint_tower_reduce(frac, alg_syms, relations, n_alg)` in `flint_bridge.{c,h}`:
+  one `fmpz_mpoly_q` combine + `fmpz_mpoly_divrem_ideal` reduce mod the relation
+  set (algebraic gens leading) + re-canonicalise. Modeled on
+  `flint_algebraic_field_normalize`.
+- `rat_canon_reduce` / `rat_canon_normalize` + `rco_sign_normalize` (§0.4 sign)
+  in `ratcanon.c`; test builtins `RatCanonNormalize` / `RatCanonCancel`.
+  `rat_canon_normalize` splits a Cancel over top-level additive terms.
+- `tests/test_ratcanon_reduce.c` (`ratcanon_reduce_tests`): accepted-form,
+  decline, and parity-vs-builtin rows. All green. rat_tests/spec/build green;
+  valgrind == build-baseline (a `builtin_of` test-helper borrow-leak was fixed).
+
+**SCOPE DECISION (important for Phase 3b / Phase 4).** `rat_canon_reduce`
+**accepts only a fully radical-FREE reduced result** and otherwise **declines to
+NULL** (→ classical path in Phase 4). Covered by the one FLINT reduction:
+plain-Q, transcendental (Log/Exp/Tan/inverse-trig), Gaussian, and the
+sum-of-conjugates radical cases where the combine + ideal reduction eliminates
+every generator (`1/(x-Sqrt2)+1/(x+Sqrt2) -> 2x/(x^2-2)`; the Sqrt[k] open bug).
+Declined (residual radical remains): WL-faithful-kept radicals
+(`1/(x-Sqrt2)`), coprime multi-radical sums, and **pre-formed algebraic-fraction
+cancellations** (`(x^2-2)/(x-Sqrt2) -> x+Sqrt2`, cube roots). Rationale: the
+field GCD in `K[x]` that those need is genuinely multi-case (number field vs
+symbolic-radicand vs cube root — the existing `flint_extension_gcd` family), and
+wiring it into `rat_canon_reduce` reintroduced the engines' inconsistent output
+forms (`-(-Sqrt2-x)` etc.). Keeping the reduction **radical-free-only** preserves
+ONE clean output convention; the field-GCD completion is deferred to **Phase 3b**
+(a proper unified tower-field GCD) — until then Phase 4's classical fallback
+covers the declined cases exactly as today. Parity: where `rat_canon_normalize`
+does not decline, it is math-equal to the classical builtin (verified on ~35
+inputs; pure numeric constants also decline — nothing to normalize).
+
+Also note: `rat_canon` treats `Tan/Tanh/Cot/Coth` as transcendental generators,
+so it reduces them via FLINT and emits `-2/(-1+Tan^2)` where the classifier's
+classical Tan path emits `2/(1-Tan^2)` — math-equal, one consistent FLINT sign
+convention. Phase 4 must update the SPEC's Tan row to the FLINT form (a
+consistency improvement, reviewed via the baseline diff).
+
 ---
 
 ## Phase 4 — Switch the builtins and DELETE the zoo

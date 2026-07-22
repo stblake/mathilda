@@ -356,6 +356,21 @@ Expr* flint_algebraic_field_canonical(const Expr* e);
 Expr* flint_algebraic_field_together(const Expr* e);
 
 /*
+ * Unified reduction for the ratcanon rewrite (RATCANON_REWRITE_PLAN.md, Phase 3).
+ * Reduce `frac` (num/den in generator symbols; transcendental generators are
+ * free variables, the `n_alg` algebraic generators `alg_syms[i]` carry the
+ * relation `relations[i] == 0`) to WL-faithful lowest terms: combine via
+ * fmpz_mpoly_q, reduce num/den modulo the relation ideal (fmpz_mpoly_divrem_ideal,
+ * algebraic generators ordered leading), re-canonicalise. Fully reduces the
+ * free/transcendental and sum-of-conjugates algebraic cases; does NOT rationalize
+ * and does NOT do the pre-formed-fraction field GCD (caller delegates). Returns a
+ * fresh Expr in generator symbols, or NULL out of scope / FLINT absent. Never
+ * mutates its arguments.
+ */
+Expr* flint_tower_reduce(const Expr* frac, const char* const* alg_syms,
+                         const Expr* const* relations, int n_alg);
+
+/*
  * Callback invoked once per monomial term by flint_linear_system_terms.
  *   base_exp[0..nbase-1] — exponents in the base variables (the row key).
  *   col                  — 0-based unknown column (0..nunk-1), or nunk for

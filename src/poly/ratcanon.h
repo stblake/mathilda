@@ -67,4 +67,20 @@ Expr* rat_canon_roundtrip(const RatCanonForm* f);
  * Exposed for tests (e.g. checking a relation vanishes at its kernel). */
 Expr* rat_canon_subst_back(const RatCanonForm* f, const Expr* e);
 
+/* ---- Phase 3: the reduction --------------------------------------------- */
+
+typedef enum { RCM_TOGETHER, RCM_CANCEL } RcMode;
+
+/* Reduce a built form to WL-faithful lowest terms via flint_tower_reduce (one
+ * fmpz_mpoly_q combine + reduce mod the relation ideal), completing any
+ * pre-formed algebraic-fraction cancellation with the field GCD, and applying
+ * the §0.4 denominator-sign convention.  Returns a fresh Expr, or NULL to
+ * decline (out of tower scope / FLINT absent). */
+Expr* rat_canon_reduce(const RatCanonForm* f, RcMode mode);
+
+/* build -> reduce -> free.  For RCM_CANCEL the reduction is mapped over the
+ * top-level additive terms (Cancel leaves a sum of fractions uncombined);
+ * RCM_TOGETHER combines.  NULL declines. */
+Expr* rat_canon_normalize(const Expr* e, RcMode mode);
+
 #endif /* MATHILDA_RATCANON_H */

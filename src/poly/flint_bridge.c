@@ -3315,6 +3315,106 @@ Expr* flint_algebraic_field_normalize(const Expr* e) {
     return out;
 }
 
+/* ================================================================== *
+ *  flint_tower_reduce — the unified reduction for the ratcanon rewrite
+ *  (RATCANON_REWRITE_PLAN.md, Phase 3).
+ *
+ *  Reduce `frac` (a rational function num/den already in generator symbols:
+ *  transcendental generators are ordinary free variables, algebraic generators
+ *  `alg_syms[i]` are free variables carrying the relation `relations[i] == 0`)
+ *  to WL-faithful lowest terms.  One pass:
+ *    1. combine over the free ring (fmpz_mpoly_q_canonicalise);
+ *    2. reduce numerator and denominator modulo the relation ideal
+ *       (fmpz_mpoly_divrem_ideal, algebraic generators ordered leading so the
+ *       relations are a Groebner basis);
+ *    3. re-canonicalise (free gcd-cancel of the reduced parts).
+ *
+ *  This fully reduces the free/transcendental case AND the sum-of-conjugates
+ *  algebraic case (the combine forms the norm-like product `(x-g)(x+g)=x^2-g^2`,
+ *  step 2 sends `g^2 -> radicand`, giving the generator-free denominator).  It
+ *  does NOT rationalize (radicals kept in the denominator when they genuinely
+ *  remain, e.g. 1/(x-Sqrt2)).  It does NOT do the pre-formed-fraction field GCD
+ *  ((x^2-2)/(x-Sqrt2) -> x+Sqrt2), which needs GCD in K[x]; the caller detects
+ *  that and delegates.  Returns a fresh Expr (still in generator symbols) or
+ *  NULL out of scope / on failure.  Never mutates its arguments.
+ * ================================================================== */
+Expr* flint_tower_reduce(const Expr* frac,
+                         const char* const* alg_syms,
+                         const Expr* const* relations, int n_alg) {
+    if (!frac) return NULL;
+
+    VarSet fvars; memset(&fvars, 0, sizeof fvars);
+    for (int i = 0; i < n_alg; i++) varset_add(&fvars, alg_syms[i]);   /* leading */
+    VarSet all; memset(&all, 0, sizeof all);
+    collect_all_symbols(frac, &all);
+    for (int i = 0; i < n_alg; i++) collect_all_symbols(relations[i], &all);
+    VarSet params; memset(&params, 0, sizeof params);
+    for (size_t i = 0; i < all.count; i++)
+        if (var_index(&fvars, all.names[i]) < 0) varset_add(&params, all.names[i]);
+    qsort(params.names, params.count, sizeof(char*), cmp_str);
+    for (size_t i = 0; i < params.count; i++) varset_add(&fvars, params.names[i]);
+    varset_free(&params); varset_free(&all);
+    if (fvars.count == 0) { varset_free(&fvars); return NULL; }
+
+    fmpz_mpoly_ctx_t mctx;
+    fmpz_mpoly_ctx_init(mctx, (slong)fvars.count, ORD_LEX);
+    fmpz_mpoly_q_t q; fmpz_mpoly_q_init(q, mctx);
+
+    Expr* out = NULL;
+    if (expr_to_mpolyq(frac, q, mctx, &fvars)) {
+        fmpz_mpoly_q_canonicalise(q, mctx);
+        int ok = 1;
+        if (n_alg > 0) {
+            fmpz_mpoly_struct* B = malloc(sizeof(fmpz_mpoly_struct) * (size_t)n_alg);
+            fmpz_mpoly_struct* Qb = malloc(sizeof(fmpz_mpoly_struct) * (size_t)n_alg);
+            for (int i = 0; i < n_alg; i++) { fmpz_mpoly_init(&B[i], mctx); fmpz_mpoly_init(&Qb[i], mctx); }
+            for (int i = 0; i < n_alg && ok; i++) {
+                fmpz_mpoly_q_t rq; fmpz_mpoly_q_init(rq, mctx);
+                if (expr_to_mpolyq(relations[i], rq, mctx, &fvars) &&
+                    fmpz_mpoly_is_one(fmpz_mpoly_q_denref(rq), mctx))
+                    fmpz_mpoly_set(&B[i], fmpz_mpoly_q_numref(rq), mctx);
+                else ok = 0;
+                fmpz_mpoly_q_clear(rq, mctx);
+            }
+            if (ok) {
+                const fmpz_mpoly_struct* Bset[GENALG_MAXGEN];
+                fmpz_mpoly_struct* Qset[GENALG_MAXGEN];
+                if (n_alg > GENALG_MAXGEN) ok = 0;
+                for (int i = 0; i < n_alg && ok; i++) { Bset[i] = &B[i]; Qset[i] = &Qb[i]; }
+                if (ok) {
+                    fmpz_mpoly_t Rn, Rd; fmpz_mpoly_init(Rn, mctx); fmpz_mpoly_init(Rd, mctx);
+                    fmpz_mpoly_divrem_ideal(Qset, Rn, fmpz_mpoly_q_numref(q),
+                                            (fmpz_mpoly_struct* const*)Bset, n_alg, mctx);
+                    fmpz_mpoly_divrem_ideal(Qset, Rd, fmpz_mpoly_q_denref(q),
+                                            (fmpz_mpoly_struct* const*)Bset, n_alg, mctx);
+                    fmpz_mpoly_set(fmpz_mpoly_q_numref(q), Rn, mctx);
+                    fmpz_mpoly_set(fmpz_mpoly_q_denref(q), Rd, mctx);
+                    fmpz_mpoly_clear(Rn, mctx); fmpz_mpoly_clear(Rd, mctx);
+                    fmpz_mpoly_q_canonicalise(q, mctx);   /* free gcd-cancel + sign */
+                }
+            }
+            for (int i = 0; i < n_alg; i++) { fmpz_mpoly_clear(&B[i], mctx); fmpz_mpoly_clear(&Qb[i], mctx); }
+            free(B); free(Qb);
+        }
+        if (ok) {
+            Expr* num = fmpz_mpoly_to_expr(fmpz_mpoly_q_numref(q), mctx, &fvars);
+            if (fmpz_mpoly_is_one(fmpz_mpoly_q_denref(q), mctx)) {
+                out = num;
+            } else {
+                Expr* den = fmpz_mpoly_to_expr(fmpz_mpoly_q_denref(q), mctx, &fvars);
+                out = expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ num, expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ den, expr_new_integer(-1) }, 2) }, 2);
+            }
+        }
+    }
+
+    fmpz_mpoly_q_clear(q, mctx);
+    fmpz_mpoly_ctx_clear(mctx);
+    varset_free(&fvars);
+    return out;
+}
+
 /* ================================================================== */
 /*  Milestone B: full field arithmetic (inversion / canonical form)   */
 /*  over the genuine-algebraic tower K = Q(params)(gen_0..gen_{r-1}).  */
@@ -4046,6 +4146,10 @@ Expr* flint_algebraic_field_canonical(const Expr* e) { (void)e; return NULL; }
 Expr* flint_algebraic_field_together(const Expr* e) { (void)e; return NULL; }
 Expr* flint_rational_together(const Expr* e) { (void)e; return NULL; }
 Expr* flint_rational_cancel(const Expr* e) { (void)e; return NULL; }
+Expr* flint_tower_reduce(const Expr* frac, const char* const* alg_syms,
+                         const Expr* const* relations, int n_alg) {
+    (void)frac; (void)alg_syms; (void)relations; (void)n_alg; return NULL;
+}
 Expr* flint_apart_over_q(const Expr* R, const Expr* const* bases,
                          const int64_t* ks, int m,
                          const Expr* C, const char* var) {

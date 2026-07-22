@@ -14,6 +14,7 @@
 #include "flint_bridge.h"
 #include "risch_tower.h"    /* rt_expand_logs, rt_expand_exp_sums */
 #include "rat_internal.h"   /* extract_num_den */
+#include "expand.h"         /* expr_expand */
 #include "core.h"
 #include <string.h>
 #include <stdlib.h>
@@ -506,7 +507,138 @@ Expr* rat_canon_roundtrip(const RatCanonForm* f) {
     return eval_and_free(back);
 }
 
+/* ======================================================================== *
+ *  Phase 3: the reduction (rat_canon_reduce / rat_canon_normalize)
+ * ======================================================================== */
+
+/* §0.4 denominator-sign convention: flip only the FLINT all-negative-denominator
+ * -(N)/(-D) artifact (never a mixed-sign polynomial).  Mirrors rat.c's
+ * rc_sign_normalize; the one place the output convention is applied. */
+static Expr* rco_sign_normalize(Expr* r) {
+    if (!r) return r;
+    Expr* n; Expr* d;
+    extract_num_den(r, &n, &d);
+    bool flip;
+    if (d->type == EXPR_FUNCTION && d->data.function.head->type == EXPR_SYMBOL &&
+        d->data.function.head->data.symbol.name == SYM_Plus &&
+        d->data.function.arg_count > 0) {
+        flip = true;
+        for (size_t i = 0; i < d->data.function.arg_count; i++)
+            if (!is_superficially_negative(d->data.function.args[i])) { flip = false; break; }
+    } else flip = is_superficially_negative(d);
+    if (!flip) { expr_free(n); expr_free(d); return r; }
+    Expr* nn = negate_expr(n);
+    Expr* nd;
+    if (d->type == EXPR_FUNCTION && d->data.function.head->type == EXPR_SYMBOL &&
+        d->data.function.head->data.symbol.name == SYM_Plus) {
+        size_t c = d->data.function.arg_count;
+        Expr** ar = malloc(sizeof(Expr*) * c);
+        for (size_t i = 0; i < c; i++) ar[i] = negate_expr(d->data.function.args[i]);
+        nd = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), ar, c));
+        free(ar);
+    } else nd = negate_expr(d);
+    expr_free(n); expr_free(d); expr_free(r);
+    Expr* inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ nd, expr_new_integer(-1) }, 2));
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ nn, inv }, 2));
+}
+
+/* True if `e` carries an algebraic atom (radical / Complex / root of unity) that
+ * remains in a denominator — the reduction did not eliminate it, so either it is
+ * WL-faithfully kept (1/(x-Sqrt2)) or the pre-formed cancellation needs a field
+ * GCD this engine does not do (cube roots).  Either way, decline to classical. */
+static bool rco_has_radical(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL) {
+        if (h->data.symbol.name == SYM_Sqrt || h->data.symbol.name == SYM_Complex) return true;
+        if (h->data.symbol.name == SYM_Power && e->data.function.arg_count == 2) {
+            int64_t p, q;
+            if (is_rational(e->data.function.args[1], &p, &q) && q != 1) return true;
+        }
+    }
+    if (rco_has_radical(h)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rco_has_radical(e->data.function.args[i])) return true;
+    return false;
+}
+
+Expr* rat_canon_reduce(const RatCanonForm* f, RcMode mode) {
+    (void)mode;   /* single-fraction reduction is mode-agnostic; the Cancel
+                     per-term split happens in rat_canon_normalize */
+    /* collect algebraic generators + relations */
+    const char** asyms = malloc(sizeof(char*) * (f->n ? f->n : 1));
+    const Expr** rels = malloc(sizeof(Expr*) * (f->n ? f->n : 1));
+    int n_alg = 0;
+    for (size_t i = 0; i < f->n; i++)
+        if (f->gens[i].kind == RCG_ALGEBRAIC) {
+            asyms[n_alg] = f->gens[i].sym; rels[n_alg] = f->gens[i].relation; n_alg++;
+        }
+
+    /* frac = num / den in generator symbols */
+    Expr* frac;
+    if (f->den->type == EXPR_INTEGER && f->den->data.integer == 1) frac = expr_copy(f->num);
+    else frac = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
+        expr_copy(f->num), expr_new_function(expr_new_symbol(SYM_Power),
+            (Expr*[]){ expr_copy(f->den), expr_new_integer(-1) }, 2) }, 2);
+
+    Expr* reduced = flint_tower_reduce(frac, asyms, rels, n_alg);
+    expr_free(frac); free(asyms); free(rels);
+    if (!reduced) return NULL;
+
+    Expr* res = eval_and_free(rat_canon_subst_back(f, reduced));
+    expr_free(reduced);
+
+    /* Accept only a fully-reduced, radical-FREE result: the free/transcendental
+     * cases and the sum-of-conjugates cases where the combine + ideal reduction
+     * eliminated every algebraic generator (Q(i), Sqrt[k] and Sqrt[d] conjugate
+     * sums -> radical-free denominator).  Anything with a residual radical is
+     * either WL-faithfully kept (1/(x-Sqrt2)), a coprime multi-radical sum, or a
+     * pre-formed cancellation that needs a field GCD this engine does not do
+     * (cube roots): decline to the classical path, which produces the canonical
+     * form for all of those.  (The field-GCD completion is Phase 3b.) */
+    if (n_alg > 0 && rco_has_radical(res)) { expr_free(res); return NULL; }
+    return rco_sign_normalize(res);
+}
+
+Expr* rat_canon_normalize(const Expr* e, RcMode mode) {
+    /* Cancel maps the reduction over the top-level additive terms. */
+    if (mode == RCM_CANCEL && e->type == EXPR_FUNCTION &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Plus) {
+        size_t nt = e->data.function.arg_count;
+        Expr** parts = malloc(sizeof(Expr*) * nt);
+        for (size_t i = 0; i < nt; i++) {
+            parts[i] = rat_canon_normalize(e->data.function.args[i], mode);
+            if (!parts[i]) { for (size_t j = 0; j < i; j++) expr_free(parts[j]); free(parts); return NULL; }
+        }
+        Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), parts, nt);
+        free(parts);
+        return eval_and_free(sum);
+    }
+    RatCanonForm* f = rat_canon_build(e);
+    if (!f) return NULL;
+    Expr* r = rat_canon_reduce(f, mode);
+    rat_canon_free(f);
+    return r;
+}
+
+/* Test builtins for the reduction (Phase 3). */
+static Expr* builtin_ratcanon_normalize(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    return rat_canon_normalize(res->data.function.args[0], RCM_TOGETHER);
+}
+static Expr* builtin_ratcanon_cancel(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    return rat_canon_normalize(res->data.function.args[0], RCM_CANCEL);
+}
+
 void ratcanon_init(void) {
+    symtab_add_builtin("RatCanonNormalize", builtin_ratcanon_normalize);
+    symtab_get_def("RatCanonNormalize")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("RatCanonCancel", builtin_ratcanon_cancel);
+    symtab_get_def("RatCanonCancel")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("RatCanonPrototype", builtin_ratcanon_prototype);
     symtab_get_def("RatCanonPrototype")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("RatCanonPrototype",
