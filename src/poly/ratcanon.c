@@ -224,10 +224,15 @@ static bool rcp_is_const_name(const char* n) {
 
 /* Exp-fundamental bookkeeping during a build. */
 typedef struct { Expr* base; int64_t gn, gd; char* sym; } ExpFund;
+/* Radical fundamental: all radicals of a common radicand r (Sqrt[r]=r^(1/2),
+ * r^(p/q)) are powers of one generator r^(1/Q), Q = lcm of the roots.  The
+ * radical analogue of ExpFund — r^(p/q) = (r^(1/Q))^(p*Q/q). */
+typedef struct { Expr* radicand; int64_t Q; char* sym; } RadFund;
 typedef struct {
     RatCanonForm* f;
     int ctr;
     ExpFund* ef; size_t nef, capef;
+    RadFund* rf; size_t nrf, caprf;
 } Builder;
 
 static char* rcp_fresh(Builder* b) {
@@ -265,6 +270,73 @@ static void rcp_collect_exps(const Expr* e, Builder* b) {
     rcp_collect_exps(h, b);
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         rcp_collect_exps(e->data.function.args[i], b);
+}
+
+/* Note a radical of radicand `r` with root `q` (q>=2): fold q into the lcm Q of
+ * r's fundamental group. */
+static void rcp_rad_note(Builder* b, const Expr* r, int64_t q) {
+    size_t i = 0;
+    for (; i < b->nrf; i++) if (expr_eq(b->rf[i].radicand, (Expr*)r)) break;
+    if (i == b->nrf) {
+        if (b->nrf == b->caprf) { b->caprf = b->caprf ? b->caprf * 2 : 4;
+            b->rf = realloc(b->rf, b->caprf * sizeof(RadFund)); }
+        b->rf[i].radicand = expr_copy((Expr*)r); b->rf[i].Q = q; b->rf[i].sym = NULL; b->nrf++;
+    } else b->rf[i].Q = rcp_ilcm(b->rf[i].Q, q);
+}
+
+/* Pass 1 (radicals): collect the fundamental root Q = lcm(roots) per radicand. */
+static void rcp_collect_rads(const Expr* e, Builder* b) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL) {
+        const char* hn = h->data.symbol.name;
+        if (hn == SYM_Sqrt && e->data.function.arg_count == 1) {
+            rcp_rad_note(b, e->data.function.args[0], 2);
+            rcp_collect_rads(e->data.function.args[0], b);
+            return;
+        }
+        if (hn == SYM_Power && e->data.function.arg_count == 2) {
+            int64_t p, q;
+            if (is_rational(e->data.function.args[1], &p, &q) && q != 1) {
+                rcp_rad_note(b, e->data.function.args[0], q);
+                rcp_collect_rads(e->data.function.args[0], b);
+                return;
+            }
+        }
+    }
+    rcp_collect_rads(h, b);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        rcp_collect_rads(e->data.function.args[i], b);
+}
+
+static Expr* rcp_radical_relation(const char* sym, int64_t deg, const Expr* radicand);
+static const char* rcf_gen(RatCanonForm* f, Builder* b, Expr* kernel,
+                           RcGenKind kind, Expr* relation);
+
+/* Fundamental generator symbol for radicand `r`; creates the gen r^(1/Q) with
+ * relation sym^Q - r on first use.  *Q_out receives the group's Q. */
+static const char* rcp_rad_sym(Builder* b, RatCanonForm* f, const Expr* r, int64_t* Q_out) {
+    size_t i = 0;
+    for (; i < b->nrf; i++) if (expr_eq(b->rf[i].radicand, (Expr*)r)) break;
+    if (i == b->nrf) { *Q_out = 0; return NULL; }
+    RadFund* rd = &b->rf[i];
+    *Q_out = rd->Q;
+    if (!rd->sym) {
+        Expr* onQ = expr_new_function(expr_new_symbol(SYM_Rational),
+                        (Expr*[]){ expr_new_integer(1), expr_new_integer(rd->Q) }, 2);
+        Expr* fk = expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ expr_copy((Expr*)r), onQ }, 2);   /* r^(1/Q) */
+        const char* s = rcf_gen(f, b, fk, RCG_ALGEBRAIC,
+                                rcp_radical_relation("$tmp$", rd->Q, r));
+        for (size_t j = 0; j < f->n; j++)
+            if (strcmp(f->gens[j].sym, s) == 0 && f->gens[j].relation) {
+                expr_free(f->gens[j].relation);
+                f->gens[j].relation = rcp_radical_relation(s, rd->Q, r);
+                break;
+            }
+        rd->sym = (char*)s;
+    }
+    return rd->sym;
 }
 
 /* Add (or find) an algebraic/transcendental generator by its surface kernel;
@@ -353,39 +425,27 @@ static Expr* rcp_build_forward(const Expr* e, Builder* b) {
                 expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ expr_copy(av[1]), expr_new_symbol(s) }, 2) }, 2);
         }
-        /* Sqrt[r] */
+        /* Sqrt[r] = r^(1/2) = (r^(1/Q))^(Q/2) with Q = the group's lcm root. */
         if (hn == SYM_Sqrt && ac == 1) {
-            Expr* kern = expr_copy((Expr*)e);
-            Expr* rel = rcp_radical_relation("$tmp$", 2, av[0]);   /* patched below */
-            const char* s = rcf_gen(f, b, kern, RCG_ALGEBRAIC, rel);
-            /* fix relation to use the actual sym (rcf_gen may have deduped) */
-            for (size_t i = 0; i < f->n; i++)
-                if (strcmp(f->gens[i].sym, s) == 0 && f->gens[i].relation) {
-                    expr_free(f->gens[i].relation);
-                    f->gens[i].relation = rcp_radical_relation(s, 2, av[0]);
-                    break;
-                }
-            return expr_new_symbol(s);
+            int64_t Q; const char* s = rcp_rad_sym(b, f, av[0], &Q);
+            if (s) {
+                int64_t m = Q / 2;
+                if (m == 1) return expr_new_symbol(s);
+                return expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ expr_new_symbol(s), expr_new_integer(m) }, 2);
+            }
         }
-        /* radical Power[r, p/q], q>1 -> sym^p with sym = r^(1/q) */
+        /* radical Power[r, p/q], q>1 -> sym^(p*Q/q) with sym = r^(1/Q). */
         if (hn == SYM_Power && ac == 2) {
             int64_t p, q;
             if (is_rational(av[1], &p, &q) && q != 1) {
-                Expr* onq = expr_new_function(expr_new_symbol(SYM_Rational),
-                    (Expr*[]){ expr_new_integer(1), expr_new_integer(q) }, 2);
-                Expr* kern = expr_new_function(expr_new_symbol(SYM_Power),
-                    (Expr*[]){ expr_copy(av[0]), onq }, 2);   /* r^(1/q) */
-                const char* s = rcf_gen(f, b, kern, RCG_ALGEBRAIC,
-                                        rcp_radical_relation("$tmp$", q, av[0]));
-                for (size_t i = 0; i < f->n; i++)
-                    if (strcmp(f->gens[i].sym, s) == 0 && f->gens[i].relation) {
-                        expr_free(f->gens[i].relation);
-                        f->gens[i].relation = rcp_radical_relation(s, q, av[0]);
-                        break;
-                    }
-                if (p == 1) return expr_new_symbol(s);
-                return expr_new_function(expr_new_symbol(SYM_Power),
-                    (Expr*[]){ expr_new_symbol(s), expr_new_integer(p) }, 2);
+                int64_t Q; const char* s = rcp_rad_sym(b, f, av[0], &Q);
+                if (s) {
+                    int64_t m = p * (Q / q);
+                    if (m == 1) return expr_new_symbol(s);
+                    return expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ expr_new_symbol(s), expr_new_integer(m) }, 2);
+                }
             }
         }
         /* Log / inverse-trig / Tan (transcendental, opaque) */
@@ -446,6 +506,7 @@ RatCanonForm* rat_canon_build(const Expr* e) {
     expr_free(mid);
 
     rcp_collect_exps(pre, &b);
+    rcp_collect_rads(pre, &b);
     Expr* sub = rcp_build_forward(pre, &b);
     expr_free(pre);
 
@@ -458,6 +519,8 @@ RatCanonForm* rat_canon_build(const Expr* e) {
 
     for (size_t i = 0; i < b.nef; i++) expr_free(b.ef[i].base);
     free(b.ef);
+    for (size_t i = 0; i < b.nrf; i++) expr_free(b.rf[i].radicand);
+    free(b.rf);
     return f;
 }
 
