@@ -190,6 +190,14 @@ odd/`Pi`-minus fold. The circular functions `Sin`, `Cos`, `Tan`, … stay
 unevaluated at real infinities (they oscillate). See `Limit` in the calculus
 reference for how these feed the compose-at-infinity rule.
 
+`ArcTan` also resolves *directionless* and *directed* infinities:
+`ArcTan[ComplexInfinity] = Indeterminate` (the approach direction is unknown),
+while `ArcTan[DirectedInfinity[d]] = ±Pi/2` picks the sign from the quadrant of
+`d` — `Re[d] > 0 -> Pi/2`, `Re[d] < 0 -> -Pi/2`, and on the imaginary axis by
+the sign of `Im[d]` (so `ArcTan[DirectedInfinity[I Sqrt[2]]] = Pi/2`). This is
+what lets `Limit[2 ArcTan[Sqrt[(1 + x)/(1 - x)]], x -> 1]` reach `Pi` via the
+compose-at-infinity rule.
+
 
 ## TrigToExp
 Converts trigonometric and hyperbolic functions in `expr` to exponentials.

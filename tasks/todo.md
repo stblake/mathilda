@@ -1,59 +1,50 @@
-# Trace: produce Mathematica's nested evaluation trace  [DONE 2026-07-23]
+# Fix: Limit[2 ArcTan[Sqrt[(1+x)/(1-x)]], x -> 1] returns -Pi (should be Pi)
 
-Plan: `/Users/user/.claude/plans/trace-doesn-t-trace-an-reactive-hammock.md`
+## Root-cause chain
+1. `ArcTan[ComplexInfinity]` folds to `-Pi/2` because `exact_arctan` spuriously
+   matches `Tan[-Pi/2] == ComplexInfinity` (n=-1 is tried before n=+1). WL gives
+   `Indeterminate`.
+2. Limit's layer1 numeric substitution does `ArcTan[Sqrt[2/0]]` =
+   `ArcTan[ComplexInfinity]` = `-Pi/2`, accepts the (finite, wrong) value, and
+   never reaches the series/compose layers. `2 * -Pi/2 = -Pi`.
+3. `layer_compose_at_infinity` only accepts *real* +/-Infinity inner limits, so
+   even after deferral it cannot fold `ArcTan[DirectedInfinity[I Sqrt[2]]]`.
+4. No constant-factor linearity, so `2 ArcTan[...]` never reduces to
+   `2 Limit[ArcTan[...]]` (`Limit[3 ArcTan[t], t->Infinity]` is also unevaluated).
 
-- [x] Replace flat depth-gated `TraceCollector` with a frame stack in `src/eval.c`
-      (`TraceFrame`, `g_trace_top`/`g_trace_root_result`/`g_tracing`, push/pop/splice)
-- [x] Record hooks in `evaluate()` loop into the current frame (dedup-by-last)
-- [x] Snapshot the reassembled `f[evaluated_args]` form in `evaluate_step` (line 960)
-      so `8 + 16 + 1` shows, not the pre-arg-eval `2^3 + 4^2 + 1`
-- [x] Suppression counter (`g_trace_suppress`) around the builtin call and
-      `Listable` threading so Range-internal / thread-element evals stay atomic
-- [x] `eval_collect_trace` sets up/tears down the stack; resets suppression (Trace
-      is itself a builtin, called under the caller's suppression)
-- [x] `src/trace.c`: recursive HoldForm wrapping + recursive form-filter (flatten)
-- [x] Both reported cases match exactly; DownValue/chain/nested-Trace verified
-- [x] `trace_tests` pass (updated `x+1` multistep + `2*3+1,_Integer`→`{6,7}`;
-      added nested test); eval/evaluate/core/iter/match/unevaluated/eager-exit/
-      timestamps suites pass; no core-eval regression (change is `g_tracing`-gated)
-- [x] valgrind: 0 leaks from trace code (11648B/146blk == macOS dyld baseline)
-- [x] Docs: `docs/spec/builtins/expression-information.md` + changelog `2026-07-20.md`
+Both one-sided limits genuinely -> Pi, so the two-sided answer is Pi.
 
-Review: The evaluator's semantics are unchanged — the collector was rewritten to
-*observe* the evaluator's existing recursion (frames per `evaluate()` call), plus
-two observation points (reassembled-form snapshot; suppression of builtin/Listable
-internal evals). Untraced hot path adds one predicted-false bool read per
-`evaluate()` call.
+## Fixes
+- [x] trig.c `builtin_arctan`: handle infinite args before exact folds.
+      `ArcTan[ComplexInfinity] -> Indeterminate`;
+      `ArcTan[DirectedInfinity[dir]] -> +/-Pi/2` by the quadrant of `dir`
+      (`arctan_direction_sign` via N + get_approx, so `I Sqrt[2]` resolves).
+- [x] limit.c `layer_compose_at_infinity`: also accept ComplexInfinity /
+      DirectedInfinity inner limits, applying the head; accept only an
+      unambiguous folded value (reject Indeterminate / residual infinity).
+- [x] limit.c new `layer_constant_factor` (late in cascade): pull x-free
+      factors out of a Times and recurse.
 
----
-
-# Implement Sow and Reap  [DONE 2026-07-23]
-
-Plan: `/Users/user/.claude/plans/we-should-implement-sow-twinkly-spring.md`
-
-- [x] Add SYM_Sow / SYM_Reap to sym_names.{h,c}
-- [x] Write src/sowreap.h (prototypes)
-- [x] Write src/sowreap.c (collector stack, builtin_sow, builtin_reap)
-- [x] Register Sow/Reap in core.c (builtins, attributes, docstrings)
-- [x] Write tests/test_sow_reap.c (11 test groups)
-- [x] Add sowreap.c to COMMON_SRC + test block in tests/CMakeLists.txt
-- [x] Build REPL clean (gcc -std=c99 -Wall -Wextra, EXIT 0), spot-checked all spec examples
-- [x] Build + run sow_reap_tests -> all pass
-- [x] valgrind: 0 leaks in Mathilda source (all definite-lost are macOS dyld/Accelerate baseline)
-- [~] Docs: docs/spec tree does NOT exist in this checkout (not git-tracked) -> nothing to update;
-      in-system docs are the docstrings (verified via Information[Sow]/Information[Reap]).
+## Verify
+- [x] Target -> Pi; FromBelow/FromAbove -> Pi.
+- [x] `Limit[3 ArcTan[t], t->Infinity] -> 3Pi/2`, `ArcTan[ComplexInfinity] ->
+      Indeterminate`, `ArcTan[DirectedInfinity[I]] / [I Sqrt[2]] -> Pi/2`,
+      `ArcTan[DirectedInfinity[-1]] / [-I] -> -Pi/2`.
+- [x] Unchanged real-infinity paths (`ArcTan[x]`, `Tanh[x]`, `Erf[x]`,
+      `ArcTan[x^2-x^4]` at ±Infinity) and constant-factor finite limits
+      (`2x@3`, `5 Sin[x]/x @0`) still correct.
+- [x] limit/trig/hyperbolic suites: identical soft-fail counts to pristine
+      main (2 pre-existing, unrelated; 0 new). numeric_tests pass.
+- [x] valgrind: leak profile identical to trivial-input baseline
+      (13,440B/420blk = macOS dyld/libobjc noise); no stack in my code.
 
 ## Review
-
-- Sow/Reap implemented in a self-contained `src/sowreap.c` with a file-global
-  stack of `ReapFrame` (each frame on builtin_reap's C stack, linked via `prev`;
-  balanced LIFO push/pop). Values/tag-groups are singly linked lists of Expr as
-  requested -> O(1) ordered append, exact Sow order preserved.
-- Full semantics: default/tagged/tag-list Sow, single-pattern and pattern-list
-  Reap, f[tag,{vals}] handler form, tag-selective reaping, nested-Reap routing
-  (innermost matching frame wins; non-match propagates outward), Throw-across-Reap
-  unwind. All spec examples reproduce exactly.
-- KNOWN DIVERGENCE (not a Sow bug): Mathilda's `Sum` evaluates its summand
-  symbolically once and closed-forms it, so `Sow`/`Print` inside `Sum` fire once
-  (WL iterates). `Do`/`Table`/`Module`+`Do` iterate faithfully; the test uses
-  `Do` for the "reap across a loop" case. Fixing Sum is out of scope.
+Root defect was a wrong-branch fold: `exact_arctan` matched the `Tan[-Pi/2]`
+pole for `ArcTan[ComplexInfinity]`, and `Limit`'s numeric-substitution fast
+path trusted the resulting `-Pi/2`. Fixed at the source (correct `ArcTan`
+values at all infinities) rather than by guarding the substitution, then
+taught `Limit` to (a) fold heads over directed/complex inner infinities and
+(b) factor out constants. The composite now resolves because both one-sided
+limits legitimately reach `Pi`. Minimal blast radius: the constant-factor
+layer runs last (only rescues previously-unresolved shapes), and the compose
+change preserves the existing real-infinity path byte-for-byte.

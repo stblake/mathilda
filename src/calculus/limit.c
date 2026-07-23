@@ -1528,7 +1528,12 @@ static Expr* layer_compose_at_infinity(Expr* f, LimitCtx* ctx) {
     if (!lim_inner) return NULL;
     if (expr_contains(lim_inner, ctx->x)) { expr_free(lim_inner); return NULL; }
 
-    if (!is_infinity_sym(lim_inner) && !is_neg_infinity(lim_inner)) {
+    bool inner_real_inf = is_infinity_sym(lim_inner) || is_neg_infinity(lim_inner);
+    /* A directionless (ComplexInfinity) or directed (DirectedInfinity[d])
+     * inner limit is also foldable when the head has a definite value there,
+     * e.g. ArcTan[DirectedInfinity[I Sqrt[2]]] = Pi/2. */
+    bool inner_dir_inf = is_complex_infinity(lim_inner) || is_directed_infinity(lim_inner);
+    if (!inner_real_inf && !inner_dir_inf) {
         expr_free(lim_inner);
         return NULL;
     }
@@ -1539,10 +1544,18 @@ static Expr* layer_compose_at_infinity(Expr* f, LimitCtx* ctx) {
 
     /* Accept only when the head actually resolved (no residual head[...] and no
      * pending x). Rejects Sin[Infinity], Cos[Infinity], ... that stay symbolic. */
-    if (val && !contains_head_symbol(val, head->data.symbol.name) &&
-        !expr_contains(val, ctx->x)) {
-        return val;
+    bool resolved = val && !contains_head_symbol(val, head->data.symbol.name) &&
+                    !expr_contains(val, ctx->x);
+    /* For a directionless / complex inner infinity, additionally require an
+     * unambiguous value: reject Indeterminate and any residual infinity
+     * (ArcTan[ComplexInfinity] = Indeterminate must NOT be accepted as a
+     * limit). A clean finite value or a real signed Infinity is genuine. */
+    if (resolved && inner_dir_inf &&
+        (is_indeterminate(val) || is_complex_infinity(val) ||
+         is_directed_infinity(val))) {
+        resolved = false;
     }
+    if (resolved) return val;
     expr_free(val);
     return NULL;
 }
@@ -2477,6 +2490,56 @@ static Expr* layer_onesided_disagree(Expr* f, LimitCtx* ctx) {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Layer -- constant-factor linearity                                      */
+/*                                                                         */
+/* Limit[c f(x), x -> a] = c Limit[f(x), x -> a] for any factor c free of  */
+/* the limit variable. Runs late in the cascade -- only after the analytic */
+/* layers have failed -- so it never pre-empts a direct evaluation. It      */
+/* rescues composite shapes like 2 ArcTan[g(x)] whose constant multiple    */
+/* keeps the single-argument layer_compose_at_infinity from firing on the  */
+/* enclosing Times (also fixes Limit[3 ArcTan[t], t -> Infinity]).         */
+/* ---------------------------------------------------------------------- */
+static Expr* layer_constant_factor(Expr* f, LimitCtx* ctx) {
+    if (!head_is(f, SYM_Times)) return NULL;
+    size_t n = f->data.function.arg_count;
+
+    Expr* c = mk_int(1);
+    Expr** var_factors = (Expr**)malloc(n * sizeof(Expr*));
+    size_t nv = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = f->data.function.args[i];
+        if (free_of(a, ctx->x)) c = simp(mk_times(c, expr_copy(a)));
+        else var_factors[nv++] = expr_copy(a);
+    }
+
+    /* Need a genuine split (at least one constant and one x-dependent
+     * factor) and a finite, nonzero constant so that c * (a possibly
+     * divergent inner limit) stays well-defined -- 0 * Infinity would be
+     * an indeterminate form we must not fabricate. */
+    if (nv == 0 || nv == n || is_divergent(c) || is_lit_zero(c)) {
+        expr_free(c);
+        for (size_t i = 0; i < nv; i++) expr_free(var_factors[i]);
+        free(var_factors);
+        return NULL;
+    }
+
+    Expr* rest = (nv == 1)
+        ? var_factors[0]
+        : expr_new_function(expr_new_symbol(SYM_Times), var_factors, nv);
+    free(var_factors);
+
+    LimitCtx sub = *ctx; sub.depth += 1;
+    Expr* lim_rest = compute_limit(rest, &sub);
+    expr_free(rest);
+    if (!lim_rest || expr_contains(lim_rest, ctx->x) || is_indeterminate(lim_rest)) {
+        expr_free(c);
+        if (lim_rest) expr_free(lim_rest);
+        return NULL;
+    }
+    return simp(mk_times(c, lim_rest));
+}
+
+/* ---------------------------------------------------------------------- */
 /* Top-level dispatch                                                      */
 /* ---------------------------------------------------------------------- */
 static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
@@ -2608,6 +2671,12 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
      * (-1 + 3^(2/x))/(1 + 3^(2/x)) at x -> 0 one-sided, where Series
      * hits the essential singularity but the ratio is polynomial-in-u. */
     TRY(LIMIT_M_SUBSTITUTION, layer_atom_substitute(f, ctx));
+
+    /* Constant-factor linearity: Limit[c f, x->a] = c Limit[f, x->a]. Runs
+     * late so it only rescues shapes the analytic layers left unresolved
+     * (e.g. 2 ArcTan[g] where compose-at-infinity can't see through the
+     * enclosing Times). */
+    TRY(LIMIT_M_SUBSTITUTION, layer_constant_factor(f, ctx));
 
     /* Last-resort one-sided disagreement probe for two-sided limits at a
      * finite numeric point with an x-bearing exponent. Returns

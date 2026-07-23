@@ -184,12 +184,13 @@ static void test_entry_points(void) {
 static void test_unevaluated(void) {
     /* No closed-form antiderivative -> stays a definite Integrate. */
     check_eq("Head[Integrate[Sin[x^2 + Log[x]] Cos[x], {x, 0, 1}]]", "Integrate");
-    /* Gaussian: the Newton-Leibniz mechanism itself cannot do it (no Erf
-     * antiderivative / Limit[Erf, Inf]), so it stays unevaluated under the
-     * strict method.  (The auto-dispatch now closes it via the even-symmetry
-     * reduction -> half-line Ramanujan, giving Sqrt[Pi] -- see below.) */
-    check_eq("Head[Integrate[E^(-x^2), {x, -Infinity, Infinity}, "
-             "Method -> \"NewtonLeibniz\"]]", "Integrate");
+    /* Gaussian: the strict Newton-Leibniz method now closes it directly. The
+     * antiderivative is (Sqrt[Pi]/2) Erf[x], and constant-factor linearity in
+     * Limit resolves Limit[(Sqrt[Pi]/2) Erf[x], x -> Infinity] = Sqrt[Pi]/2,
+     * so the boundary difference evaluates to Sqrt[Pi]. (The auto-dispatch
+     * also closes it via the even-symmetry -> half-line Ramanujan route.) */
+    check_eq("Integrate[E^(-x^2), {x, -Infinity, Infinity}, "
+             "Method -> \"NewtonLeibniz\"]", "Sqrt[Pi]");
     check_eq("Integrate[E^(-x^2), {x, -Infinity, Infinity}]", "Sqrt[Pi]");
 }
 

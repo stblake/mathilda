@@ -1150,6 +1150,34 @@ Expr* builtin_arccos(Expr* res) {
 }
 
 /*
+ * arctan_direction_sign:
+ * Quadrant sign for ArcTan at DirectedInfinity[dir]. ArcTan[z] -> Pi/2 for
+ * Re[z] > 0 and -Pi/2 for Re[z] < 0; on the imaginary axis (Re == 0) the
+ * on-cut value is +Pi/2 for the upper half (Im > 0) and -Pi/2 for the lower
+ * half (matching the direct evaluation of ArcTan at large imaginary
+ * arguments). Returns +1 / -1, or 0 when the quadrant cannot be determined.
+ */
+static int arctan_direction_sign(Expr* dir) {
+    /* Numerically approximate the direction and read off the quadrant. Going
+     * through N resolves symbolic-but-numeric directions (I Sqrt[2], 1 + I,
+     * ...) that expr_numeric_sign's literal-only view would miss. */
+    Expr* nd = eval_and_free(expr_new_function(expr_new_symbol(SYM_N),
+                   (Expr*[]){ expr_copy(dir) }, 1));
+    double complex c;
+    bool inexact = false;
+    bool ok = get_approx(nd, &c, &inexact);
+    expr_free(nd);
+    if (!ok) return 0;
+    const double tol = 1e-9;
+    double re = creal(c), im = cimag(c);
+    if (re >  tol) return +1;
+    if (re < -tol) return -1;
+    if (im >  tol) return +1;
+    if (im < -tol) return -1;
+    return 0;
+}
+
+/*
  * builtin_arctan:
  * Implements the evaluation logic for the inverse tangent (ArcTan).
  * Supports both ArcTan[z] (1 argument) and ArcTan[x, y] (2 arguments).
@@ -1166,6 +1194,26 @@ Expr* builtin_arctan(Expr* res) {
     // Single argument ArcTan[z]
     if (res->data.function.arg_count == 1) {
         Expr* arg = res->data.function.args[0];
+
+        // Infinite arguments. Handle these BEFORE the odd / exact folds:
+        // exact_arctan otherwise spuriously matches Tan[-Pi/2] ==
+        // ComplexInfinity (n = -1 is tried before n = +1) and returns -Pi/2
+        // for ArcTan[ComplexInfinity]. The genuine values are:
+        //   ArcTan[ComplexInfinity]      -> Indeterminate (direction unknown)
+        //   ArcTan[DirectedInfinity[d]]  -> +/-Pi/2 by the quadrant of d.
+        if (arg->type == EXPR_SYMBOL &&
+            arg->data.symbol.name == SYM_ComplexInfinity) {
+            return expr_new_symbol(SYM_Indeterminate);
+        }
+        if (arg->type == EXPR_FUNCTION &&
+            arg->data.function.head->type == EXPR_SYMBOL &&
+            arg->data.function.head->data.symbol.name == SYM_DirectedInfinity &&
+            arg->data.function.arg_count == 1) {
+            int s = arctan_direction_sign(arg->data.function.args[0]);
+            if (s > 0) return make_times(make_rational(1, 2), expr_new_symbol(SYM_Pi));
+            if (s < 0) return make_times(make_rational(-1, 2), expr_new_symbol(SYM_Pi));
+            // s == 0: quadrant undetermined; leave ArcTan[...] unevaluated.
+        }
 
         // ArcTan is odd: ArcTan[-x] -> -ArcTan[x]
         { Expr* f = odd_fold(arg, "ArcTan"); if (f) return f; }
