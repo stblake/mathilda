@@ -1064,6 +1064,18 @@ static Expr* exact_arccsc(Expr* arg) {
  * Reverses exact algebraic mappings for supported inputs.
  * Falls back to C standard math (casin) for approximate numerical inputs.
  */
+/* True for any flavour of infinite argument: Infinity, -Infinity,
+ * ComplexInfinity, or DirectedInfinity[_]. The reciprocal inverse-trig
+ * functions (ArcCot, ArcSec, ArcCsc) satisfy f[z] = g[1/z] and 1/z -> 0 for
+ * every one of these, so f attains its value at 0 for any approach. */
+static bool is_any_infinity_arg(Expr* e) {
+    if (!e) return false;
+    if (is_infinity_sym(e) || is_complex_infinity_sym(e) || is_neg_infinity_form(e))
+        return true;
+    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_DirectedInfinity;
+}
+
 Expr* builtin_arcsin(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count != 1)
@@ -1072,6 +1084,10 @@ Expr* builtin_arcsin(Expr* res) {
 
     // ArcSin is odd: ArcSin[-x] -> -ArcSin[x]
     { Expr* f = odd_fold(arg, "ArcSin"); if (f) return f; }
+
+    // ArcSin grows without bound; a directionless infinite argument maps to
+    // ComplexInfinity (magnitude infinite, direction undefined).
+    if (is_complex_infinity_sym(arg)) return expr_new_symbol(SYM_ComplexInfinity);
 
     // ArcSin[I y] -> I ArcSinh[y]  (principal-branch identity)
     { Expr* f = trig_i_fold(arg, "ArcSinh", +1); if (f) return f; }
@@ -1118,6 +1134,10 @@ Expr* builtin_arccos(Expr* res) {
 
     // ArcCos[-x] -> Pi - ArcCos[x]
     { Expr* f = arc_pi_minus_fold(arg, "ArcCos"); if (f) return f; }
+
+    // ArcCos grows without bound; a directionless infinite argument maps to
+    // ComplexInfinity.
+    if (is_complex_infinity_sym(arg)) return expr_new_symbol(SYM_ComplexInfinity);
 
     // ArcCos[I y] -> Pi/2 - I ArcSinh[y]
     { Expr* f = arccos_i_fold(arg); if (f) return f; }
@@ -1324,8 +1344,8 @@ Expr* builtin_arccot(Expr* res) {
     // ArcCot[I y] -> -I ArcCoth[y]
     { Expr* f = trig_i_fold(arg, "ArcCoth", -1); if (f) return f; }
 
-    // ArcCot[Infinity] = 0  (ArcCot[-Infinity] -> 0 via the odd fold above)
-    if (is_infinity_sym(arg)) return expr_new_integer(0);
+    // ArcCot[z] = ArcTan[1/z] -> ArcTan[0] = 0 for every infinite z.
+    if (is_any_infinity_arg(arg)) return expr_new_integer(0);
 
     // Attempt exact inverse evaluation
     Expr* exact = exact_arccot(arg);
@@ -1366,8 +1386,8 @@ Expr* builtin_arcsec(Expr* res) {
     // ArcSec[-x] -> Pi - ArcSec[x]
     { Expr* f = arc_pi_minus_fold(arg, "ArcSec"); if (f) return f; }
 
-    // ArcSec[+-Infinity] = Pi/2  (ArcSec[-Infinity] -> Pi - Pi/2 via the fold above)
-    if (is_infinity_sym(arg))
+    // ArcSec[z] = ArcCos[1/z] -> ArcCos[0] = Pi/2 for every infinite z.
+    if (is_any_infinity_arg(arg))
         return make_times(make_rational(1, 2), expr_new_symbol(SYM_Pi));
 
     // Attempt exact inverse evaluation
@@ -1412,8 +1432,8 @@ Expr* builtin_arccsc(Expr* res) {
     // ArcCsc[I y] -> -I ArcCsch[y]
     { Expr* f = trig_i_fold(arg, "ArcCsch", -1); if (f) return f; }
 
-    // ArcCsc[Infinity] = 0  (ArcCsc[-Infinity] -> 0 via the odd fold above)
-    if (is_infinity_sym(arg)) return expr_new_integer(0);
+    // ArcCsc[z] = ArcSin[1/z] -> ArcSin[0] = 0 for every infinite z.
+    if (is_any_infinity_arg(arg)) return expr_new_integer(0);
 
     // Attempt exact inverse evaluation
     Expr* exact = exact_arccsc(arg);

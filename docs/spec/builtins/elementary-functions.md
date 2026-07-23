@@ -198,6 +198,27 @@ the sign of `Im[d]` (so `ArcTan[DirectedInfinity[I Sqrt[2]]] = Pi/2`). This is
 what lets `Limit[2 ArcTan[Sqrt[(1 + x)/(1 - x)]], x -> 1]` reach `Pi` via the
 compose-at-infinity rule.
 
+The **reciprocal** inverse functions reduce as `f[z] = g[1/z]`, and `1/z -> 0`
+for *every* flavour of infinity (`Infinity`, `-Infinity`, `ComplexInfinity`,
+`DirectedInfinity[_]`), so each returns its value at `0` for any of them —
+direction cannot matter:
+
+| Function | value at any infinity | via |
+|----------|----------------------|-----|
+| `ArcCot`  | `0`      | `ArcTan[1/z] -> ArcTan[0]`  |
+| `ArcSec`  | `Pi/2`   | `ArcCos[1/z] -> ArcCos[0]`  |
+| `ArcCsc`  | `0`      | `ArcSin[1/z] -> ArcSin[0]`  |
+| `ArcCoth` | `0`      | `ArcTanh[1/z] -> ArcTanh[0]` |
+| `ArcCsch` | `0`      | `ArcSinh[1/z] -> ArcSinh[0]` |
+| `ArcSech` | `I Pi/2` | `ArcCosh[1/z] -> ArcCosh[0]` |
+
+The **primary** functions grow without bound, so a directionless argument maps
+to `ComplexInfinity`: `ArcSin[ComplexInfinity]`, `ArcCos[ComplexInfinity]`,
+`ArcSinh[ComplexInfinity]`, `ArcCosh[ComplexInfinity]`. Finally
+`ArcTanh[Infinity] = -I Pi/2` and `ArcTanh[-Infinity] = I Pi/2`; `ArcTanh` at
+`ComplexInfinity`/`DirectedInfinity` stays unevaluated because the value
+(`∓ I Pi/2`) depends on the direction of approach.
+
 
 ## TrigToExp
 Converts trigonometric and hyperbolic functions in `expr` to exponentials.

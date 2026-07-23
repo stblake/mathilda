@@ -301,6 +301,30 @@ static bool is_minus_infinity(Expr* e) {
     return false;
 }
 
+/* True for any flavour of infinite argument: Infinity, -Infinity,
+ * ComplexInfinity, or DirectedInfinity[_]. The reciprocal inverse-hyperbolic
+ * functions (ArcCoth, ArcSech, ArcCsch) all satisfy f[z] = g[1/z], and
+ * 1/z -> 0 for every one of these, so f attains its value at 0 regardless of
+ * the direction of approach. */
+static bool is_any_infinity(Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL &&
+        (e->data.symbol.name == SYM_Infinity ||
+         e->data.symbol.name == SYM_ComplexInfinity)) return true;
+    if (is_minus_infinity(e)) return true;
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_DirectedInfinity) return true;
+    return false;
+}
+
+/* Builds the constant  s * I * Pi/2  (s = +1 or -1). Used for the
+ * inverse-hyperbolic values at infinity that land on the imaginary axis:
+ * ArcSech[oo] = I Pi/2, ArcTanh[Infinity] = -I Pi/2. */
+static Expr* half_i_pi(int s) {
+    return make_times(make_complex(expr_new_integer(0), expr_new_integer(s)),
+                      make_times(make_rational(1, 2), expr_new_symbol(SYM_Pi)));
+}
+
 Expr* builtin_sinh(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count != 1)
@@ -544,6 +568,10 @@ Expr* builtin_arcsinh(Expr* res) {
 
     if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_integer(0);
     if (is_infinity(arg)) return expr_new_symbol(SYM_Infinity);
+    // ArcSinh grows without bound; a directionless infinite argument maps to
+    // ComplexInfinity (magnitude infinite, direction undefined).
+    if (arg->type == EXPR_SYMBOL && arg->data.symbol.name == SYM_ComplexInfinity)
+        return expr_new_symbol(SYM_ComplexInfinity);
 
     double complex c;
     bool inexact = false;
@@ -571,6 +599,10 @@ Expr* builtin_arccosh(Expr* res) {
     
     if (arg->type == EXPR_INTEGER && arg->data.integer == 1) return expr_new_integer(0);
     if (is_infinity(arg)) return expr_new_symbol(SYM_Infinity);
+    // ArcCosh grows without bound; a directionless infinite argument maps to
+    // ComplexInfinity.
+    if (arg->type == EXPR_SYMBOL && arg->data.symbol.name == SYM_ComplexInfinity)
+        return expr_new_symbol(SYM_ComplexInfinity);
 
     double complex c;
     bool inexact = false;
@@ -607,6 +639,11 @@ Expr* builtin_arctanh(Expr* res) {
      * -ArcTanh[1] via the odd fold above, giving -Infinity. */
     if (arg->type == EXPR_INTEGER && arg->data.integer == 1)
         return expr_new_symbol(SYM_Infinity);
+    /* ArcTanh[Infinity] = -I Pi/2 (real part vanishes, imaginary -> -Pi/2).
+     * ArcTanh[-Infinity] = +I Pi/2 is reached via the odd fold above.
+     * ComplexInfinity / DirectedInfinity are left unevaluated: the value
+     * (+/- I Pi/2) depends on the direction of approach. */
+    if (is_infinity(arg)) return half_i_pi(-1);
 
     double complex c;
     bool inexact = false;
@@ -642,7 +679,8 @@ Expr* builtin_arccoth(Expr* res) {
     // ArcCoth[I y] -> -I ArcCot[y]
     { Expr* f = hyp_i_fold(arg, "ArcCot", -1); if (f) return f; }
 
-    if (is_infinity(arg) || is_minus_infinity(arg)) return expr_new_integer(0);
+    /* ArcCoth[z] = ArcTanh[1/z] -> ArcTanh[0] = 0 for every infinite z. */
+    if (is_any_infinity(arg)) return expr_new_integer(0);
     /* ArcCoth[1] = Infinity (a genuine pole).  ArcCoth[-1] is reached as
      * -ArcCoth[1] via the odd fold above, giving -Infinity. */
     if (arg->type == EXPR_INTEGER && arg->data.integer == 1)
@@ -671,8 +709,10 @@ Expr* builtin_arcsech(Expr* res) {
     if (res->data.function.arg_count != 1)
         return builtin_arg_error("ArcSech", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
-    
+
     if (arg->type == EXPR_INTEGER && arg->data.integer == 1) return expr_new_integer(0);
+    /* ArcSech[z] = ArcCosh[1/z] -> ArcCosh[0] = I Pi/2 for every infinite z. */
+    if (is_any_infinity(arg)) return half_i_pi(+1);
 
     double complex c;
     bool inexact = false;
@@ -704,7 +744,8 @@ Expr* builtin_arccsch(Expr* res) {
     // ArcCsch[I y] -> -I ArcCsc[y]
     { Expr* f = hyp_i_fold(arg, "ArcCsc", -1); if (f) return f; }
 
-    if (is_infinity(arg) || is_minus_infinity(arg)) return expr_new_integer(0);
+    /* ArcCsch[z] = ArcSinh[1/z] -> ArcSinh[0] = 0 for every infinite z. */
+    if (is_any_infinity(arg)) return expr_new_integer(0);
 
     double complex c;
     bool inexact = false;

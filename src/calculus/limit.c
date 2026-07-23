@@ -2092,16 +2092,15 @@ static Expr* layer_plus_termwise(Expr* f, LimitCtx* ctx) {
         free(terms);
         return NULL;
     }
-    /* All terms converge. At a finite point we defer the plain sum to the
-     * analytic layers (Series etc.) to preserve established behaviour --
-     * only the single-dominant-divergent case above is emitted there.
-     * The all-finite termwise sum is reserved for the at-infinity shapes
-     * this layer was built for (x + Sin[x], etc.). */
-    if (!at_infinity) {
-        for (size_t j = 0; j < n; j++) if (terms[j]) expr_free(terms[j]);
-        free(terms);
-        return NULL;
-    }
+    /* dominant_count == 0 and no bounded placeholder: every term has a
+     * finite limit. The limit of a sum equals the sum of the limits whenever
+     * each summand converges -- valid at a finite point as well as at
+     * infinity. Any summand that diverges (ComplexInfinity, an unresolved
+     * oscillation, ...) has already caused a bail above, so a cancellation
+     * shape like 1/x - Cot[x] never reaches here and is left to Series; only
+     * genuinely convergent sums are folded. This closes branch-point
+     * boundaries such as  -2 Sqrt[r]/(1+r) + 2 ArcTan[Sqrt[r]]  at r -> oo,
+     * where each summand converges but Series cannot expand. */
     Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), terms, n);
     free(terms);
     return simp(sum);
