@@ -77,38 +77,55 @@ static Expr* residue_eval1(const char* head, Expr* a) {
     return eval_and_free(call);
 }
 
-/* Rewrite `f` so that the singularity at z = z0 is expanded about w = 0 with an
- * EXPANDED denominator: returns Numerator[Together[f/.z->z0+w]] /
- * Expand[Denominator[Together[f/.z->z0+w]]] in the fresh variable `w`.  This is
- * what makes an algebraic pole location (z0 a sum of radicals) detectable: the
- * expansion collapses the radical arithmetic in the denominator's constant term
- * to a literal 0.  Returns an owned Expr* (in the variable `w`) or NULL.  `f`,
- * `z`, `z0`, `w` are borrowed. */
-static Expr* residue_shift_form(Expr* f, Expr* z, Expr* z0, Expr* w) {
-    /* g = f /. z -> z0 + w */
+/* Expand[p /. z -> z0 + w]: shift a polynomial `p` in z to the local variable w
+ * about z0 and expand it out.  `p` is consumed; `z`, `z0`, `w` borrowed.
+ * Returns an owned polynomial in w, or NULL. */
+static Expr* residue_shift_poly(Expr* p, Expr* z, Expr* z0, Expr* w) {
     Expr* shift = expr_new_function(expr_new_symbol(SYM_Plus),
                       (Expr*[]){ expr_copy(z0), expr_copy(w) }, 2);
     Expr* rule  = expr_new_function(expr_new_symbol(SYM_Rule),
                       (Expr*[]){ expr_copy(z), shift }, 2);
     Expr* repl  = expr_new_function(expr_new_symbol("ReplaceAll"),
-                      (Expr*[]){ expr_copy(f), rule }, 2);
+                      (Expr*[]){ p, rule }, 2);       /* adopts p */
     Expr* g = eval_and_free(repl);
     if (!g) return NULL;
+    return residue_eval1("Expand", g);                /* consumes g */
+}
 
-    Expr* tog = residue_eval1("Together", g);          /* consumes g */
+/* Rewrite the rational integrand `f` so that its singularity at z = z0 is
+ * expanded about w = 0: returns Expand[P(z0+w)] / Expand[Q(z0+w)] in the fresh
+ * variable `w`, where P/Q = Together[f].  The numerator and denominator
+ * polynomials are shifted SEPARATELY and each expanded, rather than Together-ing
+ * the shifted integrand.  This is what keeps an algebraic pole location (z0 a
+ * radical) tractable: the binomial expansion of Q(z0+w) only ever produces
+ * powers of the single radical present in z0, so its coefficients stay in one
+ * minimal spelling that the polynomial Expand engine can reduce (e.g.
+ * ((-1)^(1/4))^4 -> -1).  Together-ing the shifted rational instead re-normalises
+ * the algebraic field and can emit a SECOND, independent spelling of the same
+ * number (e.g. (-1)^(3/4) beside (-1)^(1/4)); Expand then treats the two
+ * spellings as independent generators, the base-power reductions no longer fire,
+ * and the downstream series inversion blows up combinatorially.  P and Q are
+ * coprime, so shifting them without re-cancelling loses no common w-factor and
+ * the w^-1 coefficient -- the residue -- is unchanged.  The expansion also
+ * collapses Q's constant term to a literal 0, exposing the pole as a w-factor.
+ * Returns an owned Expr* (in `w`) or NULL.  `f`, `z`, `z0`, `w` are borrowed. */
+static Expr* residue_shift_form(Expr* f, Expr* z, Expr* z0, Expr* w) {
+    Expr* tog = residue_eval1("Together", expr_copy(f));
     if (!tog) return NULL;
-    Expr* num = residue_eval1("Numerator", expr_copy(tog));
-    Expr* den = residue_eval1("Denominator", tog);     /* consumes tog */
-    if (!num || !den) { if (num) expr_free(num); if (den) expr_free(den); return NULL; }
-    Expr* denx = residue_eval1("Expand", den);         /* consumes den */
-    if (!denx) { expr_free(num); return NULL; }
+    Expr* P = residue_eval1("Numerator", expr_copy(tog));
+    Expr* Q = residue_eval1("Denominator", tog);       /* consumes tog */
+    if (!P || !Q) { if (P) expr_free(P); if (Q) expr_free(Q); return NULL; }
 
-    /* form = num * denx^-1 */
-    Expr* denpow = expr_new_function(expr_new_symbol(SYM_Power),
-                      (Expr*[]){ denx, expr_new_integer(-1) }, 2);
-    Expr* form   = expr_new_function(expr_new_symbol(SYM_Times),
-                      (Expr*[]){ num, denpow }, 2);
-    return form;
+    Expr* A = residue_shift_poly(P, z, z0, w);         /* consumes P */
+    if (!A) { expr_free(Q); return NULL; }
+    Expr* B = residue_shift_poly(Q, z, z0, w);         /* consumes Q */
+    if (!B) { expr_free(A); return NULL; }
+
+    /* form = A * B^-1 */
+    Expr* bpow = expr_new_function(expr_new_symbol(SYM_Power),
+                     (Expr*[]){ B, expr_new_integer(-1) }, 2);
+    return expr_new_function(expr_new_symbol(SYM_Times),
+                     (Expr*[]){ A, bpow }, 2);
 }
 
 /* True iff PolynomialQ[p, z]. */
@@ -137,6 +154,67 @@ static bool residue_is_rational_in(Expr* f, Expr* z) {
     expr_free(num);
     expr_free(den);
     return ok;
+}
+
+/* Build head[a, b] and evaluate it, freeing the call.  `a`, `b` consumed. */
+static Expr* residue_eval2(const char* head, Expr* a, Expr* b) {
+    Expr* call = expr_new_function(expr_new_symbol(head),
+                                   (Expr*[]){ a, b }, 2);
+    return eval_and_free(call);
+}
+
+/* expr /. z -> z0, evaluated.  `expr`, `z`, `z0` borrowed; returns owned. */
+static Expr* residue_subst(Expr* expr, Expr* z, Expr* z0) {
+    Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
+                     (Expr*[]){ expr_copy(z), expr_copy(z0) }, 2);
+    return residue_eval2("ReplaceAll", expr_copy(expr), rule);
+}
+
+/* True iff PossibleZeroQ[e] is True.  `e` borrowed. */
+static bool residue_is_zero(Expr* e) {
+    Expr* pz = residue_eval1("PossibleZeroQ", expr_copy(e));
+    bool z = pz && pz->type == EXPR_SYMBOL && pz->data.symbol.name == SYM_True;
+    if (pz) expr_free(pz);
+    return z;
+}
+
+/* Simple-pole fast path for a rational integrand.  For f = P/Q with a SIMPLE
+ * zero of Q at z0, Res_{z0} f = P(z0)/Q'(z0).  This bypasses the Laurent-series
+ * expansion, which for an algebraic pole location (z0 a nested radical such as
+ * (-1)^(1/4)) can blow up catastrophically in the generic series inverter
+ * (unbounded growth of un-reduced radical coefficients).  Returns an owned
+ * residue Expr* on success, or NULL to signal "not a decidable simple pole" so
+ * the caller falls back to the series engine.  `f`, `z`, `z0` borrowed. */
+static Expr* residue_simple_pole(Expr* f, Expr* z, Expr* z0) {
+    Expr* tog = residue_eval1("Together", expr_copy(f));
+    if (!tog) return NULL;
+    Expr* P = residue_eval1("Numerator", expr_copy(tog));
+    Expr* Q = residue_eval1("Denominator", tog);   /* consumes tog */
+    if (!P || !Q) { if (P) expr_free(P); if (Q) expr_free(Q); return NULL; }
+
+    /* z0 must actually be a pole: Q(z0) == 0.  If not provably zero, defer to the
+     * series engine (which correctly returns 0 at an analytic point). */
+    Expr* Qat = residue_subst(Q, z, z0);
+    bool q_zero = Qat && residue_is_zero(Qat);
+    if (Qat) expr_free(Qat);
+    if (!q_zero) { expr_free(P); expr_free(Q); return NULL; }
+
+    /* Simple pole requires Q'(z0) != 0. */
+    Expr* Qp = residue_eval2("D", Q, expr_copy(z));   /* consumes Q */
+    if (!Qp) { expr_free(P); return NULL; }
+    Expr* Qpat = residue_subst(Qp, z, z0);
+    expr_free(Qp);
+    if (!Qpat || residue_is_zero(Qpat)) {   /* undecidable or higher-order pole */
+        expr_free(P); if (Qpat) expr_free(Qpat); return NULL;
+    }
+
+    /* Res = P(z0) / Q'(z0). */
+    Expr* Pat = residue_subst(P, z, z0);
+    expr_free(P);
+    if (!Pat) { expr_free(Qpat); return NULL; }
+    Expr* inv = expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ Qpat, expr_new_integer(-1) }, 2);
+    return residue_eval2("Times", Pat, inv);
 }
 
 /* Adaptive Laurent-coefficient extraction: expand `expr` about `spt` in `svar`
@@ -200,6 +278,13 @@ Expr* residue_compute(Expr* f, Expr* z, Expr* z0) {
     if (!f || !z || !z0 || z->type != EXPR_SYMBOL) return NULL;
 
     if (residue_is_rational_in(f, z)) {
+        /* Simple-pole fast path: Res = P(z0)/Q'(z0) when Q has a simple zero at
+         * z0.  Skips the Laurent-series inversion, which blows up on algebraic
+         * pole locations (nested radicals).  NULL falls through to the series
+         * engine, which still owns higher-order poles and undecidable cases. */
+        Expr* fast = residue_simple_pole(f, z, z0);
+        if (fast) return fast;
+
         /* Rational integrand: expand about z0 with an EXPANDED denominator so an
          * algebraic pole location (z0 a sum of radicals) is exposed as a w-factor. */
         Expr* w = expr_new_symbol("Residue`$w");

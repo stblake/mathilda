@@ -145,14 +145,37 @@ static int build_fmpz_poly(const Expr* e, const char* var, fmpz_poly_t out) {
 /*  WL-faithful root ordering                                          */
 /* ------------------------------------------------------------------ */
 
-/* Ordering: real roots first, ascending by real part; then non-real roots by
- * qqbar's canonical root order. Matches WL's Root indexing on the (common) case
- * of real roots; exotic all-complex orderings may differ. */
+/* Root ordering, matching Mathilda's own Root[] canonical order EXACTLY (see
+ * root_canonical_cmp_mpfr in root_numeric.c and the Root docstring): real roots
+ * first, ascending by real part; then non-real roots by real part ascending,
+ * then |Im| ascending, then the more-negative-Im member of a conjugate pair
+ * first.  This MUST agree with the numeric Root builtin: RootReduce emits
+ * Root[minpoly, k] with the index k this order assigns to the algebraic value,
+ * and `N[Root[minpoly, k]]` re-derives the k-th root with the mpfr order above.
+ * The previous code ordered non-real roots by FLINT's qqbar_cmp_root_order,
+ * which disagrees for complex roots — so RootReduce of a degree>=3 (or
+ * quartic-via-quadratic) complex algebraic number emitted a Root pointing at the
+ * WRONG conjugate/sibling root (e.g. RootReduce[Sqrt[-1+I]] came back as its own
+ * negative). */
 static int wl_cmp_qq(const qqbar_t a, const qqbar_t b) {
     int ra = qqbar_is_real(a), rb = qqbar_is_real(b);
     if (ra != rb) return ra ? -1 : 1;
     if (ra) return qqbar_cmp_re(a, b);
-    return qqbar_cmp_root_order(a, b);
+    /* both non-real: Re ascending */
+    int c = qqbar_cmp_re(a, b);
+    if (c != 0) return c;
+    /* |Im| ascending */
+    qqbar_t ia, ib; qqbar_init(ia); qqbar_init(ib);
+    qqbar_im(ia, a); qqbar_im(ib, b);
+    qqbar_abs(ia, ia); qqbar_abs(ib, ib);       /* real qqbars: |Im| */
+    c = qqbar_cmp_re(ia, ib);                    /* compares their (real) values */
+    qqbar_clear(ia); qqbar_clear(ib);
+    if (c != 0) return c;
+    /* tie: more-negative Im first */
+    int sa = qqbar_sgn_im(a), sb = qqbar_sgn_im(b);
+    if (sa < sb) return -1;
+    if (sa > sb) return  1;
+    return 0;
 }
 
 /* Selection-sort an index permutation of `roots` into WL order (n <= cap). */
@@ -275,8 +298,27 @@ static int to_qqbar(const Expr* e, qqbar_t out) {
                 qqbar_pow_si(out, base, (slong)xe->data.integer);
             } else {
                 fmpq_t ef; fmpq_init(ef);
-                if (fmpq_from_expr(xe, ef)) qqbar_pow_fmpq(out, base, ef);
-                else ok = 0;
+                if (fmpq_from_expr(xe, ef)) {
+                    /* x^(p/q) as (PRINCIPAL q-th root of x)^p.  FLINT's
+                     * qqbar_pow_fmpq does NOT use the principal analytic branch
+                     * for a fractional power -- it can return a different root of
+                     * the value's minimal polynomial, so RootReduce would emit an
+                     * algebraic number NOT equal to its input (e.g.
+                     * Sqrt[-1/2 - I Sqrt[3]/2] came back as its own negative,
+                     * -0.5+0.866 I instead of 0.5-0.866 I).  qqbar_root_ui IS the
+                     * principal n-th root (argument in (-pi/n, pi/n]), matching
+                     * Mathematica's Power convention and Mathilda's numeric N[].
+                     * Raising by the integer numerator p afterwards is branch-
+                     * unambiguous, so (x^(1/q))^p = the principal x^(p/q). */
+                    const fmpz* nump = fmpq_numref(ef);
+                    const fmpz* denp = fmpq_denref(ef);
+                    if (fmpz_fits_si(nump) && fmpz_fits_si(denp)) {
+                        ulong qden = (ulong)fmpz_get_si(denp);   /* denom > 0 */
+                        slong pnum = fmpz_get_si(nump);
+                        qqbar_root_ui(out, base, qden);          /* principal root */
+                        qqbar_pow_si(out, out, pnum);
+                    } else ok = 0;
+                } else ok = 0;
                 fmpq_clear(ef);
             }
         }

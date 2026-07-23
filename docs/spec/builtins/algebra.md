@@ -140,8 +140,12 @@ rigorous FLINT engines by the shape of the input:
 roots of unity, the imaginary unit and `Root[]` objects combined by `+,-,*,/,^`
 — are canonicalised via FLINT `qqbar` (`src/poly/flint_qqbar.c`) to a single
 representative: a **rational number**, a **quadratic radical expression**, or a
-`Root[Function[minpoly&], k]` object (degree ≥ 3). The `Root` index `k` follows
-the Wolfram ordering (real roots ascending first, then non-real roots).
+`Root[Function[minpoly&], k]` object (degree ≥ 3). Fractional powers use the
+**principal branch** (via `qqbar_root_ui`, argument in `(-π/n, π/n]`), matching
+Mathematica's `Power` and Mathilda's numeric `N[]`; the `Root` index `k` follows
+Mathilda's own canonical order (real roots ascending first, then non-real roots
+by `Re` ascending, `|Im|` ascending, the negative-`Im` member of a conjugate pair
+first) so that `N[Root[minpoly, k]]` re-derives the reduced value exactly.
 
 **Algebraic functions** over a tower `Q(params)(radicals)` — radicals whose
 radicand carries a free variable (e.g. the Goursat `k^(1/3)` towers) — have

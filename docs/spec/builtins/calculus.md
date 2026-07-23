@@ -297,14 +297,21 @@ coefficient is among the explicit terms (bounded, to stay safe at essential
 singularities). A fractional-power (Puiseux) expansion, `den > 1`, signals a
 **branch point**, where the residue is undefined — the call is left unevaluated.
 
-For a **rational** integrand the expansion is taken about `z0` with an *expanded*
-denominator (`z -> z0 + w`, then `Expand`): this collapses the radical arithmetic
-in the denominator's constant term (`Sqrt[3]^2 -> 3`, …) so a pole whose location
-is a **sum of radicals** — e.g. `z0 = -2 + Sqrt[3]`, a root of `1 + 4 z + z^2` —
-is detected (a naïve `Series` would evaluate `Denominator(z0)` to a non-simplified
-nonzero form and wrongly report residue `0`). Transcendental / special-function
-integrands keep the direct expansion, which uses the engine's own knowledge of
-the Laurent series at `z0` (e.g. `Zeta` at `1`).
+For a **rational** integrand two paths handle an algebraic (radical) pole
+location robustly. A *simple* pole short-circuits to `Res = P(z0)/Q'(z0)`
+(`P/Q = Together[f]`), computed directly through the evaluator — no Laurent
+series at all, so a nested-radical location like `z0 = (-1)^(1/4)` cannot trip
+the series inverter. Higher-order poles take the shift form, now built by
+expanding the numerator and denominator polynomials *separately*
+(`Expand[P(z0+w)] / Expand[Q(z0+w)]`) rather than `Together`-ing the shifted
+rational: binomial expansion of `Q(z0+w)` keeps every algebraic coefficient in
+the single minimal radical spelling of `z0` (so `((-1)^(1/4))^4 -> -1` still
+reduces), collapses `Q`'s constant term to a literal `0` (exposing the pole as a
+`w`-factor), and avoids the combinatorial blow-up that a second, `Together`-
+introduced spelling (`(-1)^(3/4)` beside `(-1)^(1/4)`) would cause. `P`/`Q` are
+coprime, so the `w^-1` coefficient is unchanged. Transcendental /
+special-function integrands keep the direct expansion, which uses the engine's
+own knowledge of the Laurent series at `z0` (e.g. `Zeta` at `1`).
 
 ```
 In[1]:= Residue[1/z, {z, 0}]
