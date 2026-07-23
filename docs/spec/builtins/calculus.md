@@ -238,7 +238,12 @@ Out[8]= 6 a b^2
     builtin's own value at Infinity (`Erf[Infinity] = 1`, `Tanh[Infinity] = 1`,
     `ArcTan[Infinity] = Pi/2`, `Gamma[Infinity] = Infinity`, …). Functions that
     do not self-evaluate there (oscillatory `Sin`, `Cos`) fall through and yield
-    `Indeterminate`.
+    `Indeterminate`. Also splits a `Plus` at `±Infinity` whose term-wise sum
+    fails because several summands each diverge: the finitely-converging terms
+    are peeled off and the leftover group is re-limited together so its mutual
+    divergences cancel — closing the real log-part of a rational antiderivative
+    (`- b Log[1 - c x + x^2] + b Log[1 + c x + x^2] -> 0`), which is what lets
+    `Integrate[1/(1 + x^4), {x, -Infinity, Infinity}]` close on the FTC path.
   - `"Bounded"` — squeeze envelope and bounded-oscillation `Interval`. Also
     covers a bounded base raised to a divergent positive power (`exp -> +Infinity`):
     with `B >= |base|` the pointwise magnitude bound, the limit is `0` when

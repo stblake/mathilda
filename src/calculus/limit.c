@@ -327,6 +327,7 @@ static Expr* layer_bounded_envelope(Expr* f, LimitCtx* ctx);
 static Expr* layer_log_merge(Expr* f, LimitCtx* ctx);
 static Expr* layer_log_of_finite(Expr* f, LimitCtx* ctx);
 static Expr* layer_plus_termwise(Expr* f, LimitCtx* ctx);
+static Expr* layer_plus_split_convergent(Expr* f, LimitCtx* ctx);
 static Expr* layer_abs_rewrite(Expr* f, LimitCtx* ctx);
 static Expr* rewrite_reciprocal_trig(Expr* e);
 static Expr* magnitude_upper_bound(Expr* e, Expr* x, bool var_abs);
@@ -677,12 +678,49 @@ static int literal_sign(Expr* e) {
     if (head_is(e, SYM_Rational) && e->data.function.arg_count == 2) {
         return literal_sign(e->data.function.args[0]);
     }
-    /* Pattern Times[c, ...] with a leading negative numeric factor. */
+    /* Positive real constants. */
+    if (e->type == EXPR_SYMBOL) {
+        const char* nm = e->data.symbol.name;
+        if (nm == SYM_Pi || nm == SYM_E || nm == SYM_EulerGamma ||
+            nm == SYM_GoldenRatio || nm == SYM_Catalan || nm == SYM_Degree)
+            return +1;
+        return 0;
+    }
+    /* Power[b, e]: a positive base raised to a real exponent is positive
+     * (Sqrt[2] = 2^(1/2), 1/Sqrt[2] = 2^(-1/2), ...). A negative base with
+     * an integer exponent follows the parity of the exponent; any other
+     * shape (negative base, fractional exponent -> complex) is undecidable. */
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
+        Expr* b = e->data.function.args[0];
+        Expr* ex = e->data.function.args[1];
+        int sb = literal_sign(b);
+        if (sb > 0) return +1;
+        if (sb < 0 && ex->type == EXPR_INTEGER)
+            return (ex->data.integer % 2 == 0) ? +1 : -1;
+        return 0;
+    }
+    /* Times[...]: product of the signs of every factor. Undecidable (0) as
+     * soon as any factor's sign is unknown -- covers 1/(2 Sqrt[2]) ArcTan...
+     * coefficients whose sign the old leading-factor-only test missed. */
     if (head_is(e, SYM_Times) && e->data.function.arg_count > 0) {
-        int s = literal_sign(e->data.function.args[0]);
-        /* we don't try to be clever about symbolic factors; return sign
-         * only if unambiguous from the leading literal. */
-        return s;
+        int prod = 1;
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            int s = literal_sign(e->data.function.args[i]);
+            if (s == 0) return 0;
+            prod *= s;
+        }
+        return prod;
+    }
+    /* Plus[...]: decidable only when every summand shares one nonzero sign. */
+    if (head_is(e, SYM_Plus) && e->data.function.arg_count > 0) {
+        int common = 0;
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            int s = literal_sign(e->data.function.args[i]);
+            if (s == 0) return 0;
+            if (common == 0) common = s;
+            else if (common != s) return 0;
+        }
+        return common;
     }
     /* Log[c] for a positive real literal c: sign follows c vs 1.
      * This is the narrow shape the log-reduction layer leaves behind
@@ -2107,6 +2145,105 @@ static Expr* layer_plus_termwise(Expr* f, LimitCtx* ctx) {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Layer -- Plus split: convergent terms + jointly-convergent remainder    */
+/*                                                                         */
+/* layer_plus_termwise fails when two-or-more summands each diverge, even   */
+/* if their divergences cancel.  The archetype is the real log-part of a    */
+/* rational-function antiderivative,                                        */
+/*                                                                         */
+/*     ... + a ArcTan[p] + a ArcTan[q]                                      */
+/*         - b Log[1 - c x + x^2] + b Log[1 + c x + x^2]                    */
+/*                                                                         */
+/* at x -> +/-Infinity: the two ArcTan terms converge, but each Log term    */
+/* individually -> +/-Infinity so termwise sees two dominant infinities and */
+/* bails -- even though the Log pair together -> 0 (their ratio -> 1).      */
+/*                                                                         */
+/* The rescue rests on the identity                                        */
+/*                                                                         */
+/*     lim (A + B) = (lim A) + (lim B)   whenever  lim A  exists (finite),  */
+/*                                                                         */
+/* so it is always valid to (1) sum the summands whose INDIVIDUAL limit is  */
+/* a finite value, then (2) take the limit of the leftover group as a       */
+/* SINGLE sub-expression and add it.  The leftover group -- handed back to  */
+/* compute_limit intact -- reaches layer_log_merge / Series, which cancel   */
+/* the mutual divergences that no single term's limit exposes.  Requires at */
+/* least one finite ("easy") summand, so the recursion runs on a strictly   */
+/* smaller expression (termination), and at least one leftover summand.     */
+/* ---------------------------------------------------------------------- */
+
+/* A limit value is directly usable as a finite contribution iff it is a
+ * concrete value free of the limit variable, not a divergence sentinel, and
+ * not an Interval (an oscillation envelope has no single limit). */
+static bool limit_value_is_finite(Expr* v, Expr* x) {
+    return v && !is_divergent(v) && !expr_contains(v, x) &&
+           !head_is(v, SYM_Interval);
+}
+
+static Expr* layer_plus_split_convergent(Expr* f, LimitCtx* ctx) {
+    if (!head_is(f, SYM_Plus)) return NULL;
+    size_t n = f->data.function.arg_count;
+    if (n < 2) return NULL;
+
+    Expr** easy = malloc(sizeof(Expr*) * n);   /* owned finite limits */
+    Expr** hard = malloc(sizeof(Expr*) * n);   /* borrowed leftover terms */
+    size_t ne = 0, nh = 0;
+
+    for (size_t i = 0; i < n; i++) {
+        Expr* t = f->data.function.args[i];
+        if (free_of(t, ctx->x)) { easy[ne++] = expr_copy(t); continue; }
+        LimitCtx sub = *ctx; sub.depth += 1;
+        Expr* lim_t = compute_limit(t, &sub);
+        if (limit_value_is_finite(lim_t, ctx->x)) {
+            easy[ne++] = lim_t;                 /* finite -> peel off */
+        } else {
+            if (lim_t) expr_free(lim_t);
+            hard[nh++] = t;                     /* borrowed leftover */
+        }
+    }
+
+    /* Need >=1 finite term (recursion strictly shrinks) and a leftover. */
+    if (ne == 0 || nh == 0) {
+        for (size_t i = 0; i < ne; i++) expr_free(easy[i]);
+        free(easy); free(hard);
+        return NULL;
+    }
+
+    /* Limit of the leftover group, taken together so cancellations show. */
+    Expr* sub_f;
+    if (nh == 1) {
+        sub_f = expr_copy(hard[0]);
+    } else {
+        Expr** ha = malloc(sizeof(Expr*) * nh);
+        for (size_t i = 0; i < nh; i++) ha[i] = expr_copy(hard[i]);
+        sub_f = expr_new_function(expr_new_symbol(SYM_Plus), ha, nh);
+        free(ha);
+    }
+    free(hard);
+
+    LimitCtx sub = *ctx; sub.depth += 1;
+    Expr* H = compute_limit(sub_f, &sub);
+    expr_free(sub_f);
+
+    if (!H || expr_contains(H, ctx->x)) {
+        for (size_t i = 0; i < ne; i++) expr_free(easy[i]);
+        free(easy);
+        if (H) expr_free(H);
+        return NULL;
+    }
+
+    /* (sum of finite limits) + H.  simp folds finite+finite, and
+     * finite + (+/-Infinity) -> that infinity, so a genuinely divergent
+     * leftover still surfaces correctly rather than being masked. */
+    Expr** all = malloc(sizeof(Expr*) * (ne + 1));
+    for (size_t i = 0; i < ne; i++) all[i] = easy[i];
+    all[ne] = H;
+    free(easy);
+    Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), all, ne + 1);
+    free(all);
+    return simp(sum);
+}
+
+/* ---------------------------------------------------------------------- */
 /* Layer -- Atom substitution for Power-in-x-exponent shapes               */
 /*                                                                         */
 /* Replaces a uniform Power[b, e(x)] subterm with a fresh symbol u, then   */
@@ -2664,6 +2801,14 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
 
     /* Layer 6: bounded-oscillation Interval. */
     TRY(LIMIT_M_BOUNDED, layer6_bounded(f, ctx));
+
+    /* Last-resort Plus split: peel off the summands with a finite individual
+     * limit and recurse on the leftover group so its mutual divergences can
+     * cancel (e.g. the  a ArcTan[p] + a ArcTan[q] - b Log[u] + b Log[v]  real
+     * log-part of a rational antiderivative at +/-Infinity). Placed after
+     * Series / L'Hospital so it only fires on Plus shapes those cannot fold,
+     * never pre-empting a cleaner whole-expression evaluation. */
+    TRY(LIMIT_M_ASYMPTOTIC, layer_plus_split_convergent(f, ctx));
 
     /* Atom substitution: rewrite a Power[b, e(x)] subterm as a fresh
      * symbol u and recurse on the u-limit. Catches shapes like
