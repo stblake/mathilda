@@ -2490,6 +2490,16 @@ void info_init(void) {
         "Break[] inside body exits the loop.\n"
         "Continue[] inside body skips the rest of body and re-evaluates test.\n"
         "Return[v] inside body causes While to yield v; otherwise While returns Null.");
+    symtab_set_docstring("Break",
+        "Break[] exits the nearest enclosing Do, For, or While loop.\n"
+        "After Break[], the enclosing loop returns Null.\n"
+        "Break[] takes effect as soon as it is evaluated.\n"
+        "Break has attribute Protected.");
+    symtab_set_docstring("Continue",
+        "Continue[] proceeds to the next iteration of the nearest enclosing Do, For, or While loop.\n"
+        "Continue[] skips the remainder of the current loop body.\n"
+        "Continue[] takes effect as soon as it is evaluated.\n"
+        "Continue has attribute Protected.");
     symtab_set_docstring("If",
         "If[cond, t]\n"
         "\tgives t if cond evaluates to True; gives Null otherwise.\n"

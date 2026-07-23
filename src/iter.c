@@ -42,6 +42,7 @@
 #include "symtab.h"
 #include "eval.h"
 #include "core.h"
+#include "common.h"
 #include "arithmetic.h"
 #include "sym_names.h"
 #include "assoc.h"
@@ -657,10 +658,42 @@ Expr* builtin_while(Expr* res) {
 }
 
 /*
- * Register the iteration builtins and set their attributes. All three are
+ * ============================================================================
+ *  Break / Continue
+ * ============================================================================
+ *
+ * Break[] and Continue[] are their own in-flight flow-control markers, exactly
+ * like Throw[...] (src/funcprog.c): the unevaluated node itself is the signal.
+ * The builtins here return NULL ("cannot evaluate"), so the node is left inert
+ * and bubbles up through CompoundExpression (src/core.c) until the nearest
+ * enclosing Do/For/While detects its head via iter_flow_classify (above) and
+ * acts on it -- Break exits the loop (which then yields Null), Continue jumps to
+ * the next iteration.
+ *
+ * Both take zero arguments; wrong arity emits the standard Head::argx message
+ * and leaves the call unevaluated. A marker that escapes every loop and reaches
+ * top level is reported (Break::nofwd / Continue::nofwd) and rewritten to
+ * Hold[...] by eval_report_uncaught_break_continue (src/eval.c).
+ */
+Expr* builtin_break(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 0)
+        return builtin_arg_error(SYM_Break, res->data.function.arg_count, 0, 0);
+    return NULL;   /* Break[] stands as the flow-control marker */
+}
+
+Expr* builtin_continue(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 0)
+        return builtin_arg_error(SYM_Continue, res->data.function.arg_count, 0, 0);
+    return NULL;   /* Continue[] stands as the flow-control marker */
+}
+
+/*
+ * Register the iteration builtins and set their attributes. Do/For/While are
  * HoldAll (so that test, body, and iterator-spec expressions are not pre-
  * evaluated by the standard evaluator) and Protected to prevent user
- * redefinition.
+ * redefinition. Break/Continue are zero-arg markers: Protected, no HoldAll.
  */
 void iter_init(void) {
     symtab_add_builtin("Do", builtin_do);
@@ -671,4 +704,10 @@ void iter_init(void) {
 
     symtab_add_builtin("While", builtin_while);
     symtab_get_def("While")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+
+    symtab_add_builtin("Break", builtin_break);
+    symtab_get_def("Break")->attributes |= ATTR_PROTECTED;
+
+    symtab_add_builtin("Continue", builtin_continue);
+    symtab_get_def("Continue")->attributes |= ATTR_PROTECTED;
 }

@@ -41,6 +41,88 @@ void test_for() {
 }
 
 /* ===================================================================== */
+/*  Break / Continue                                                     */
+/* ===================================================================== */
+
+/* Break[] exits the nearest enclosing Do/For/While; the loop then yields
+ * Null. Continue[] skips the remainder of the body and moves to the next
+ * iteration. These cases mirror the Wolfram Language reference transcripts. */
+void test_break_in_all_loops() {
+    // Do: sum 1+2 then Break when i>2  -> 3
+    assert_eval_eq("s=0; Do[If[i>2,Break[]]; s=s+i, {i,10}]; s", "3", 0);
+    // For: exit as soon as i>2  -> i left at 3
+    assert_eval_eq("For[i=1,i<=10,i++,If[i>2,Break[]]]; i", "3", 0);
+    // While: exit as soon as i>2  -> i left at 3
+    assert_eval_eq("i=1; While[i<=10, If[i>2,Break[]]; i++]; i", "3", 0);
+}
+
+void test_continue_in_all_loops() {
+    // Skip even i, sum the odds 1..10  -> 25 in each loop kind.
+    assert_eval_eq("r=0; Do[If[EvenQ[i],Continue[]]; r+=i, {i,10}]; r", "25", 0);
+    assert_eval_eq("r=0; For[i=1,i<=10,i++, If[EvenQ[i],Continue[]]; r+=i]; r", "25", 0);
+    assert_eval_eq("r=0; i=0; While[i<10, i++; If[EvenQ[i],Continue[]]; r+=i]; r", "25", 0);
+}
+
+// Continue must still advance a Do arithmetic-progression counter (guards the
+// iter.c range-advance branch) -- sum odds in {i,1,6,2} skipping 3 -> 1+5 = 6.
+void test_continue_advances_do_range_counter() {
+    assert_eval_eq("r=0; Do[If[i==3,Continue[]]; r+=i, {i,1,6,2}]; r", "6", 0);
+}
+
+// A loop exited via Break yields Null.
+void test_break_loop_returns_null() {
+    assert_eval_eq("Do[Break[], {i,5}]", "Null", 0);
+    assert_eval_eq("Clear[i]; i=0; While[True, Break[]]", "Null", 0);
+}
+
+// Break escapes only the innermost loop, not the enclosing one.
+void test_break_is_local_to_innermost_loop() {
+    // Inner Do increments s once (j==2 breaks after one add) per outer i.
+    assert_eval_eq("s=0; Do[Do[If[j==2,Break[]]; s=s+1, {j,5}], {i,3}]; s", "3", 0);
+}
+
+// Break[]/Continue[] with no enclosing loop: emit <head>::nofwd (stderr) and
+// return Hold[...] so the marker is rendered inert.
+void test_break_continue_out_of_loop() {
+    assert_eval_eq("Break[]", "Hold[Break[]]", 0);
+    assert_eval_eq("Continue[]", "Hold[Continue[]]", 0);
+    // Reached at the end of a CompoundExpression, still uncaught at top level.
+    assert_eval_eq("1; Break[]", "Hold[Break[]]", 0);
+}
+
+// Wrong arity: Break/Continue take no arguments; the call stays unevaluated
+// (an argx message is emitted to stderr).
+void test_break_continue_arity() {
+    assert_eval_eq("Break[1]", "Break[1]", 0);
+    assert_eval_eq("Continue[1, 2]", "Continue[1, 2]", 0);
+}
+
+// Both are Protected builtins and cannot be redefined.
+void test_break_continue_protected() {
+    assert_eval_eq("MemberQ[Attributes[Break], Protected]", "True", 0);
+    assert_eval_eq("MemberQ[Attributes[Continue], Protected]", "True", 0);
+}
+
+// Docstrings are attached and describe the loop behaviour.
+void test_break_continue_docstrings() {
+    struct Expr* eb = parse_expression("Information[\"Break\"]");
+    struct Expr* rb = evaluate(eb);
+    ASSERT(rb != NULL && rb->type == EXPR_STRING);
+    ASSERT(strstr(rb->data.string, "Break") != NULL);
+    ASSERT(strstr(rb->data.string, "loop") != NULL);
+    expr_free(eb);
+    expr_free(rb);
+
+    struct Expr* ec = parse_expression("Information[\"Continue\"]");
+    struct Expr* rc = evaluate(ec);
+    ASSERT(rc != NULL && rc->type == EXPR_STRING);
+    ASSERT(strstr(rc->data.string, "Continue") != NULL);
+    ASSERT(strstr(rc->data.string, "loop") != NULL);
+    expr_free(ec);
+    expr_free(rc);
+}
+
+/* ===================================================================== */
 /*  While                                                                */
 /* ===================================================================== */
 
@@ -187,6 +269,16 @@ int main() {
 
     TEST(test_do);
     TEST(test_for);
+
+    TEST(test_break_in_all_loops);
+    TEST(test_continue_in_all_loops);
+    TEST(test_continue_advances_do_range_counter);
+    TEST(test_break_loop_returns_null);
+    TEST(test_break_is_local_to_innermost_loop);
+    TEST(test_break_continue_out_of_loop);
+    TEST(test_break_continue_arity);
+    TEST(test_break_continue_protected);
+    TEST(test_break_continue_docstrings);
 
     TEST(test_while_false_test_never_executes_body);
     TEST(test_while_basic_accumulate);

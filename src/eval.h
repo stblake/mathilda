@@ -50,6 +50,15 @@ bool eval_is_inflight_throw(const Expr* e);
  * Unlike Throw it is consumed at a CompoundExpression, not a Catch. */
 bool eval_is_inflight_goto(const Expr* e);
 
+/* True iff `e` is an uncaught Break[]/Continue[] marker: head SYM_Break or
+ * SYM_Continue with zero arguments. Unlike Throw/Goto, these do NOT short-
+ * circuit the argument-evaluation loop -- they propagate only through
+ * CompoundExpression, If, and the Do/For/While loop boundaries that inspect
+ * their evaluated result's head. This predicate is used at the top level of
+ * evaluate() to detect a marker that escaped every enclosing loop, so it can
+ * be reported (Break::nofwd / Continue::nofwd) and rendered inert. */
+bool eval_is_inflight_break_continue(const Expr* e);
+
 // Recursion-depth limit for nested evaluate() calls. Guards C-stack overflow
 // when expressions trigger deeply recursive sub-evaluation (Listable, Flat,
 // user DownValues that re-evaluate, etc.). Default 1024 (matches Mathematica).

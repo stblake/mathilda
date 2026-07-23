@@ -8,6 +8,8 @@
 Expr* builtin_do(Expr* res);
 Expr* builtin_for(Expr* res);
 Expr* builtin_while(Expr* res);
+Expr* builtin_break(Expr* res);
+Expr* builtin_continue(Expr* res);
 
 void iter_init(void);
 

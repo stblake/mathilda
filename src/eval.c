@@ -172,6 +172,14 @@ bool eval_is_inflight_goto(const Expr* e) {
            e->data.function.arg_count == 1;
 }
 
+bool eval_is_inflight_break_continue(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           (e->data.function.head->data.symbol.name == SYM_Break ||
+            e->data.function.head->data.symbol.name == SYM_Continue) &&
+           e->data.function.arg_count == 0;
+}
+
 EvalReturnAction eval_classify_return(Expr* e,
                                       const char* boundary_head,
                                       Expr** out_value) {
@@ -1431,6 +1439,22 @@ static Expr* eval_report_uncaught_goto(Expr* g) {
     return g;
 }
 
+/* A Break[]/Continue[] that survives to the top level had no enclosing Do/For/
+ * While to consume it. Emit <head>::nofwd (same stderr channel as the other
+ * flow-control reporters) and rewrite to Hold[Break[]] / Hold[Continue[]] so
+ * feeding the result back does not re-trigger the marker. Takes ownership of
+ * and consumes `e`, returning the Hold[] wrapper. */
+static Expr* eval_report_uncaught_break_continue(Expr* e) {
+    const char* h = e->data.function.head->data.symbol.name;  /* Break | Continue */
+    char* s = expr_to_string(e);
+    fprintf(stderr,
+            "%s::nofwd: No enclosing For, While, Until or Do found for %s.\n",
+            h, s ? s : (h == SYM_Break ? "Break[]" : "Continue[]"));
+    free(s);
+    Expr* one[1] = { e };
+    return expr_new_function(expr_new_symbol(SYM_Hold), one, 1);
+}
+
 Expr* evaluate(Expr* e) {
     if (!e) return NULL;
 
@@ -1530,6 +1554,8 @@ Expr* evaluate(Expr* e) {
                 current = eval_report_uncaught_throw(current);
             else if (is_top_level && eval_is_inflight_goto(current))
                 current = eval_report_uncaught_goto(current);
+            else if (is_top_level && eval_is_inflight_break_continue(current))
+                current = eval_report_uncaught_break_continue(current);
             return current;
         }
 
@@ -1558,6 +1584,8 @@ Expr* evaluate(Expr* e) {
         current = eval_report_uncaught_throw(current);
     else if (is_top_level && eval_is_inflight_goto(current))
         current = eval_report_uncaught_goto(current);
+    else if (is_top_level && eval_is_inflight_break_continue(current))
+        current = eval_report_uncaught_break_continue(current);
     return current;
 }
 

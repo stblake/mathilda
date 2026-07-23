@@ -65,6 +65,47 @@ In[3]:= n = 1; While[True, If[n > 10, Break[]]; n = n + 1]; n
 Out[3]= 11
 ```
 
+## Break
+Exits the nearest enclosing `Do`, `For`, or `While` loop.
+- `Break[]`: Takes no arguments; the enclosing loop terminates and yields `Null`.
+
+**Features**:
+- Has attribute `Protected`.
+- Takes effect as soon as it is evaluated (e.g. inside an `If` within the body),
+  escaping only the *innermost* enclosing loop.
+- Outside any loop, `Break[]` emits the message `Break::nofwd` and returns
+  `Hold[Break[]]` (inert, so feeding it back does not re-trigger).
+
+```mathematica
+In[1]:= Do[Print[i]; If[i > 2, Break[]], {i, 10}]
+1
+2
+3
+
+In[2]:= For[i = 1, i <= 10, i++, If[i > 2, Break[]]]; i
+Out[2]= 3
+```
+
+## Continue
+Proceeds to the next iteration of the nearest enclosing `Do`, `For`, or `While` loop.
+- `Continue[]`: Takes no arguments; the remainder of the current loop body is skipped.
+
+**Features**:
+- Has attribute `Protected`.
+- Takes effect as soon as it is evaluated. In `Do` it advances the iterator and
+  re-tests; in `For` it evaluates the increment step then re-tests; in `While` it
+  re-evaluates the test.
+- Outside any loop, `Continue[]` emits the message `Continue::nofwd` and returns
+  `Hold[Continue[]]`.
+
+```mathematica
+In[1]:= r = 0; Do[If[EvenQ[i], Continue[]]; r += i, {i, 10}]; r
+Out[1]= 25
+
+In[2]:= r = 0; For[i = 1, i <= 10, i++, If[EvenQ[i], Continue[]]; r += i]; r
+Out[2]= 25
+```
+
 ## If
 Evaluates condition and executes the corresponding branch.
 - `If[condition, t, f]`: Gives `t` if `condition` evaluates to `True`, and `f` if it evaluates to `False`.
