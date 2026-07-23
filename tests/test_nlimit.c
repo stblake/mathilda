@@ -96,6 +96,30 @@ static void test_complex_result(void) {
 }
 
 /* ------------------------------------------------------------------------
+ *  Automatic method: branch-point / fractional-power approach
+ *
+ *  2 ArcTan[Sqrt[(1+x)/(1-x)]] -> Pi as x -> 1.  From the default larger-values
+ *  side (1+x)/(1-x) < 0, so the samples are complex with an imaginary part that
+ *  decays like sqrt(step): a fractional-power tail Richardson's fixed 2^j-1
+ *  denominators cannot annihilate (it leaves ~0.08 I), but Wynn's epsilon can.
+ *  Method -> Automatic (the default) must pick the accurate extrapolant.
+ * ---------------------------------------------------------------------- */
+
+static void test_automatic_branch_point(void) {
+    /* Default (Automatic): imaginary residual is tiny, real part is Pi. */
+    ASSERT_CLOSE("NLimit[2 ArcTan[Sqrt[(1+x)/(1-x)]], x -> 1]", "Pi", 1e-3);
+    /* More Terms drive it to a Chop-clean Pi. */
+    ASSERT_CLOSE("NLimit[2 ArcTan[Sqrt[(1+x)/(1-x)]], x -> 1, Terms -> 12]",
+                 "Pi", 1e-9);
+    /* Automatic must beat plain EulerSum here (which leaves ~0.08 I). */
+    char* s = eval_str(
+        "N[Abs[NLimit[2 ArcTan[Sqrt[(1+x)/(1-x)]], x -> 1]-Pi]"
+        " < Abs[NLimit[2 ArcTan[Sqrt[(1+x)/(1-x)]], x -> 1, Method -> EulerSum]-Pi]]");
+    ASSERT_MSG(strcmp(s, "True") == 0, "Automatic should beat EulerSum: %s", s);
+    free(s);
+}
+
+/* ------------------------------------------------------------------------
  *  SequenceLimit (Wynn epsilon) and WynnDegree
  * ---------------------------------------------------------------------- */
 
@@ -269,6 +293,7 @@ int main(void) {
     TEST(test_complex_point);
     TEST(test_complex_result);
 
+    TEST(test_automatic_branch_point);
     TEST(test_sequencelimit);
     TEST(test_wynndegree_improves);
 

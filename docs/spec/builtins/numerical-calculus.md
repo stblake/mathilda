@@ -330,10 +330,20 @@ recovers the limit by sequence acceleration:
 
 ### Methods
 
-- **`EulerSum`** (default) -- Richardson / Romberg extrapolation of the sample
-  sequence, using the all-powers denominator `2^j - 1` (the same convention as
-  `ND`'s `EulerSum`).  Best for smooth power-series approaches; depth is set by
-  `Terms`.
+- **`Automatic`** (default) -- runs *both* Richardson/Romberg and Wynn's epsilon
+  (at every admissible degree) and returns the estimate whose internal
+  convergence residual is smallest.  Richardson's fixed `2^j - 1` denominators
+  can only annihilate an integer-power (analytic) error tail; a geometric or
+  fractional-power tail -- e.g. the `sqrt(step)` imaginary part of
+  `2 ArcTan[Sqrt[(1+x)/(1-x)]]` as `x -> 1` from larger values -- defeats it but
+  is captured by Wynn's epsilon.  Selecting by best self-consistency keeps
+  Richardson's accuracy on smooth limits while gaining Wynn's on branch-point /
+  algebraic approaches, so this case now returns `Pi` (imaginary residual
+  `~6e-5` at the default `Terms`, shrinking rapidly with more) instead of the
+  spurious `Pi + 0.08 I` that plain Richardson produced.
+- **`EulerSum`** -- Richardson / Romberg extrapolation of the sample sequence,
+  using the all-powers denominator `2^j - 1` (the same convention as `ND`'s
+  `EulerSum`).  Best for smooth power-series approaches; depth is set by `Terms`.
 - **`SequenceLimit`** -- Wynn's epsilon algorithm (iterated Shanks transform).
   Exact in one step for a geometric / exponential tail; the number of
   iterations is `WynnDegree` (which needs at least `2(WynnDegree + 1)` terms).
@@ -344,7 +354,7 @@ recovers the limit by sequence acceleration:
 
 | Option | Default | Meaning |
 |--------|---------|---------|
-| `Method` | `EulerSum` | `EulerSum` or `SequenceLimit`. |
+| `Method` | `Automatic` | `Automatic` (best of both), `EulerSum`, or `SequenceLimit`. |
 | `WorkingPrecision` | `MachinePrecision` | `MachinePrecision`, or digits → MPFR. |
 | `Direction` | `Automatic` (≡ `-1`) | complex approach vector for finite `z0`. |
 | `Scale` | `1` | initial step (finite) / distance from origin (infinite). |

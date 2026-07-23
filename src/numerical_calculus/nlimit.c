@@ -18,9 +18,20 @@
  *
  *   Acceleration
  *   ------------
- *   Method -> EulerSum (default): Richardson / Romberg extrapolation of the
- *     sequence S_k, treated as a function of the geometric step.  Following the
- *     same convention as ND's "EulerSum" (see nderiv.c) the tableau uses the
+ *   Method -> Automatic (default): run BOTH Richardson and Wynn's epsilon (at
+ *     every admissible degree) and return the estimate whose internal
+ *     convergence residual is smallest.  Richardson models an integer-power
+ *     (analytic) error tail; its fixed 2^j-1 denominators cannot annihilate a
+ *     geometric or fractional-power (branch-point) tail — e.g. the sqrt(step)
+ *     imaginary part of 2 ArcTan[Sqrt[(1+x)/(1-x)]] approaching x -> 1 from the
+ *     larger-values side.  Wynn's epsilon captures exactly those tails.
+ *     Selecting by best self-consistency (smallest step) picks the right tool
+ *     per problem, so smooth limits keep Richardson's accuracy while
+ *     algebraic/branch approaches gain Wynn's.
+ *
+ *   Method -> EulerSum: Richardson / Romberg extrapolation of the sequence S_k,
+ *     treated as a function of the geometric step.  Following the same
+ *     convention as ND's "EulerSum" (see nderiv.c) the tableau uses the
  *     all-powers denominator 2^j - 1:
  *         T(i,0) = S_i,
  *         T(i,j) = T(i,j-1) + (T(i,j-1) - T(i-1,j-1)) / (2^j - 1),
@@ -40,7 +51,7 @@
  *   Mathematica, spurious tiny residuals are *not* recognised as zero — apply
  *   Chop when needed.
  *
- * Options: Method (EulerSum | SequenceLimit), WorkingPrecision (MachinePrecision
+ * Options: Method (Automatic | EulerSum | SequenceLimit), WorkingPrecision (MachinePrecision
  * | digits -> MPFR), Direction (Automatic == -1, or a complex approach vector),
  * Scale (initial step / distance, default 1), Terms (default 7), WynnDegree
  * (default 1).
@@ -390,7 +401,7 @@ static double nl_l1_d(const mpfr_t re, const mpfr_t im) {
  * ------------------------------------------------------------------ */
 
 typedef struct {
-    const char* method;    /* SYM_EulerSum (default) or SYM_SequenceLimit */
+    const char* method;    /* SYM_Automatic (default) / SYM_EulerSum / SYM_SequenceLimit */
     Expr*       direction; /* borrowed Direction value (NULL => Automatic) */
     Expr*       scale;     /* borrowed Scale value (NULL => 1)             */
     int         terms;     /* sample count / tableau depth (default 7)     */
@@ -445,10 +456,11 @@ static bool nl_apply_option(Expr* rule, NlOpts* o) {
             o->method = rhs->data.symbol.name; return true;
         }
         if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) {
-            o->method = SYM_EulerSum; return true;
+            o->method = SYM_Automatic; return true;
         }
-        nl_warn("badmeth", "Method must be EulerSum or SequenceLimit; using EulerSum");
-        o->method = SYM_EulerSum;
+        nl_warn("badmeth", "Method must be Automatic, EulerSum or SequenceLimit; "
+                           "using Automatic");
+        o->method = SYM_Automatic;
         return true;
     }
     if (name == SYM_Direction) {
@@ -483,6 +495,46 @@ static bool nl_apply_option(Expr* rule, NlOpts* o) {
         }
         return true;
     }
+    return false;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Extrapolation dispatch (Automatic = best-of Richardson + Wynn)      *
+ * ------------------------------------------------------------------ */
+
+/* Automatic method: try Richardson and Wynn's epsilon at every admissible
+ * degree, and return the estimate whose internal convergence residual (*step)
+ * is smallest, i.e. the extrapolant that is most self-consistent.  Richardson's
+ * diagonal step of exactly zero means genuine exact convergence (as for an
+ * integer-power tail such as 1 - 2^-k) and is fully trusted; a Wynn residual of
+ * exactly zero is instead treated as unreliable — it arises from a degenerate
+ * single-entry column or a singular-bridge coincidence, not from certified
+ * convergence — and is used only as a last resort.  Returns false if no
+ * candidate could be built. */
+static bool nl_auto_machine(const double _Complex* S, int terms,
+                            double _Complex* result, double* step) {
+    double _Complex best_r = 0.0;   double best_s = INFINITY; bool have = false;
+    double _Complex first_r = 0.0;  bool have_first = false;
+    double _Complex r; double s;
+
+    /* Richardson: eligible for any finite step, including exact zero. */
+    if (seqaccel_richardson_machine(S, terms, &r, &s)
+        && isfinite(creal(r)) && isfinite(cimag(r))) {
+        if (!have_first) { first_r = r; have_first = true; }
+        if (isfinite(s) && s < best_s) { best_r = r; best_s = s; have = true; }
+    }
+    /* Wynn: require a strictly positive residual (a certified convergence gap). */
+    int maxdeg = (terms - 1) / 2;
+    for (int d = 1; d <= maxdeg; d++) {
+        if (!seqaccel_wynn_machine(S, terms, d, &r, &s)) continue;
+        if (!isfinite(creal(r)) || !isfinite(cimag(r))) continue;
+        if (!have_first) { first_r = r; have_first = true; }
+        if (isfinite(s) && s > 0.0 && s < best_s) {
+            best_r = r; best_s = s; have = true;
+        }
+    }
+    if (have)       { *result = best_r;  *step = best_s; return true; }
+    if (have_first) { *result = first_r; *step = 0.0;    return true; }
     return false;
 }
 
@@ -526,8 +578,10 @@ static Expr* nl_run_machine(Expr* expr, const char* var, double _Complex z0,
     bool got;
     if (o->method == SYM_SequenceLimit)
         got = seqaccel_wynn_machine(S, terms, o->wynn, &result, &step);
-    else
+    else if (o->method == SYM_EulerSum)
         got = seqaccel_richardson_machine(S, terms, &result, &step);
+    else
+        got = nl_auto_machine(S, terms, &result, &step);   /* Automatic */
     free(S);
     if (!got) { nl_warn("ndterm", "not enough Terms for the chosen Method"); return NULL; }
 
@@ -541,6 +595,45 @@ static Expr* nl_run_machine(Expr* expr, const char* var, double _Complex z0,
 }
 
 #ifdef USE_MPFR
+/* MPFR analogue of nl_auto_machine: best-of Richardson + Wynn (all degrees) by
+ * smallest internal residual.  (out_re, out_im) are pre-initialised by the
+ * caller.  Same zero-residual-is-unreliable policy as the machine path. */
+static bool nl_auto_mpfr(const mpfr_t* Sr, const mpfr_t* Si, int terms,
+                         long bits, mpfr_t out_re, mpfr_t out_im,
+                         double* step, bool* finite) {
+    mpfr_prec_t p = (mpfr_prec_t)bits;
+    mpfr_t tr, ti;
+    mpfr_init2(tr, p); mpfr_init2(ti, p);
+    double best_s = INFINITY; bool have = false, have_first = false;
+    double s; bool fin;
+
+    if (seqaccel_richardson_mpfr(Sr, Si, terms, bits, tr, ti, &s, &fin) && fin) {
+        if (!have_first) {
+            mpfr_set(out_re, tr, MPFR_RNDN); mpfr_set(out_im, ti, MPFR_RNDN);
+            *finite = true; *step = s; have_first = true;
+        }
+        if (isfinite(s) && s < best_s) {   /* exact-zero step = exact convergence */
+            mpfr_set(out_re, tr, MPFR_RNDN); mpfr_set(out_im, ti, MPFR_RNDN);
+            *finite = true; best_s = s; *step = s; have = true;
+        }
+    }
+    int maxdeg = (terms - 1) / 2;
+    for (int d = 1; d <= maxdeg; d++) {
+        if (!seqaccel_wynn_mpfr(Sr, Si, terms, d, bits, tr, ti, &s, &fin)) continue;
+        if (!fin) continue;
+        if (!have_first) {
+            mpfr_set(out_re, tr, MPFR_RNDN); mpfr_set(out_im, ti, MPFR_RNDN);
+            *finite = true; *step = s; have_first = true;
+        }
+        if (isfinite(s) && s > 0.0 && s < best_s) {
+            mpfr_set(out_re, tr, MPFR_RNDN); mpfr_set(out_im, ti, MPFR_RNDN);
+            *finite = true; best_s = s; *step = s; have = true;
+        }
+    }
+    mpfr_clear(tr); mpfr_clear(ti);
+    return have || have_first;
+}
+
 static Expr* nl_run_mpfr(Expr* expr, const char* var, Expr* z0_expr,
                          Expr* dir_expr, Expr* scale_expr, bool infinite,
                          Expr* ray_expr, NlOpts* o) {
@@ -631,8 +724,10 @@ static Expr* nl_run_mpfr(Expr* expr, const char* var, Expr* z0_expr,
         bool finite = false, got;
         if (o->method == SYM_SequenceLimit)
             got = seqaccel_wynn_mpfr(Sr, Si, terms, o->wynn, bits, rr, ri, &step, &finite);
-        else
+        else if (o->method == SYM_EulerSum)
             got = seqaccel_richardson_mpfr(Sr, Si, terms, bits, rr, ri, &step, &finite);
+        else
+            got = nl_auto_mpfr(Sr, Si, terms, bits, rr, ri, &step, &finite);  /* Automatic */
         bool converged = got && finite && nl_accept(nl_l1_d(rr, ri), step, maxsample);
         if (converged) {
             out = nl_from_complex_mpfr(rr, ri);
@@ -688,7 +783,7 @@ Expr* builtin_nlimit(Expr* res) {
     Expr* expr = res->data.function.args[0];
 
     NlOpts o;
-    o.method = SYM_EulerSum;
+    o.method = SYM_Automatic;
     o.direction = NULL;
     o.scale = NULL;
     o.terms = 7;
