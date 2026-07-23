@@ -215,7 +215,8 @@ Out[8]= 6 a b^2
 `Limit[f, {x1, ...} -> {a1, ...}]` the joint multivariate limit.
 
 **Features**:
-- `HoldAll`, `Protected`, `ReadProtected`.
+- `Protected`, `ReadProtected` (matches Mathematica; `Limit` does *not*
+  hold its arguments, so `Limit[%, x -> Infinity]` sees the evaluated `f`).
 - Options: `Direction -> Automatic`, `Assumptions -> Automatic`,
   `Method -> Automatic`.
 - **Direction** selects the approach: `Reals`/`"TwoSided"` (default),

@@ -3494,12 +3494,14 @@ Expr* builtin_limit(Expr* res) {
 void limit_init(void) {
     symtab_add_builtin("Limit", builtin_limit);
 
-    /* Limit has HoldFirst-ish behaviour in Mathematica (its second
-     * argument, the rule, must not be prematurely evaluated if x has an
-     * OwnValue in scope). We use HoldAll here as the safest option --
-     * individual layers force evaluation where needed via evaluate(). */
+    /* Limit does not hold its arguments in Mathematica -- Attributes[Limit]
+     * is {Protected, ReadProtected}. The first argument f must be evaluated
+     * so forms like Limit[%, x -> Infinity] (where % is Out[-1]) see the
+     * actual expression, and the spec rule x -> a evaluates to Rule[x, a]
+     * for a free symbol x. The internal layers evaluate/substitute as
+     * needed, so they remain correct with pre-evaluated arguments. */
     symtab_get_def("Limit")->attributes |=
-        ATTR_PROTECTED | ATTR_READPROTECTED | ATTR_HOLDALL;
+        ATTR_PROTECTED | ATTR_READPROTECTED;
 
     symtab_set_docstring("Limit",
         "Limit[f, x -> a]\n"

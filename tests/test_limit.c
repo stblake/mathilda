@@ -230,9 +230,11 @@ static void test_bounded_envelope(void) {
     check("Limit[(2 Sin[1/x])^(1/x^2), x -> 0]",
           "Limit[(2 Sin[1/x])^(1/x^2), x -> 0]");
     /* Negative divergent exponent: the bound inequality flips and a
-     * vanishing base blows up, so this too stays unevaluated.            */
+     * vanishing base blows up, so this too stays unevaluated. Limit no
+     * longer holds its first argument, so the echoed (still unevaluated)
+     * form is the canonicalised Sin[1/x]/2 -> 1/2 Sin[1/x].              */
     check("Limit[(Sin[1/x]/2)^(-1/x^2), x -> 0]",
-          "Limit[(Sin[1/x]/2)^(-1/x^2), x -> 0]");
+          "Limit[(1/2 Sin[1/x])^(-1/x^2), x -> 0]");
 
     /* Shrinking (x-dependent) magnitude bound: |x Sin[1/x]/2| <= Abs[x]/2,
      * whose limit is 0 < 1, so the squeeze fires even though the bound is
@@ -448,7 +450,7 @@ static void test_wp8_numeric_point_bypass(void) {
      * printer-formatting changes don't break the test. */
     check_equiv(
         "Limit[Log[1 - (Log[Exp[z]/z - 1] + Log[z])/z]/z, z -> 100]",
-        "Log[1 + (-Log[100] - Log[-1 + E^100/100])/100]/100");
+        "Log[1 - (Log[100] + Log[-1 + E^100/100])/100]/100");
 
     /* Trivial analytic-at-numeric-point cases that exercise the new
      * fast path; they used to resolve through the Together path too,
@@ -675,9 +677,10 @@ static void test_wp5_dominant_term_at_infinity(void) {
     check("Limit[x + Sin[x], x -> -Infinity]", "-Infinity");
 
     /* Two bounded terms with no dominant -> unresolved (safer than a
-     * wrong finite answer). */
+     * wrong finite answer). Limit no longer holds its first argument, so
+     * the echoed sum is canonically ordered (Cos before Sin). */
     check("Limit[Sin[x^2] + Cos[x], x -> Infinity]",
-          "Limit[Sin[x^2] + Cos[x], x -> Infinity]");
+          "Limit[Cos[x] + Sin[x^2], x -> Infinity]");
 }
 
 /* ----------------------------------------------------------------- */
