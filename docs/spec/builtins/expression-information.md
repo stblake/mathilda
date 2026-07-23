@@ -493,35 +493,35 @@ Out[11]= Hold[2, 4]
 ```
 
 ## Trace
-Records the successive top-level expressions produced while evaluating `expr`.
-- `Trace[expr]`: Returns a flat `List` of the intermediate expressions the
-  evaluator passes through while reducing `expr` to a fixed point, in order:
-  `{e0, e1, ..., eN}` where `e0` is the (held) input and `eN` is the final
-  result. Returns `{}` when `expr` needs no top-level rewriting.
-- `Trace[expr, form]`: The same flat trace, filtered to the steps whose
-  expression matches the pattern `form` (structural match, as in `MatchQ`).
-  `form` is held, so pattern literals such as `_Integer` or `f[_]` may be given
-  directly. Returns `{}` when no step matches.
+Records the expressions produced while evaluating `expr`, as a **nested** list
+that mirrors the structure of the evaluation (as in Mathematica).
+- `Trace[expr]`: Returns a `List` of the forms `expr` passes through. Each
+  argument sub-evaluation that takes a step appears as a nested sublist, in the
+  order it occurs, and the reassembled intermediate form (`f[evaluated_args]`,
+  before the head's rule fires) appears as a step. Returns `{}` when `expr`
+  needs no rewriting.
+- `Trace[expr, form]`: The trace filtered to the step leaves whose expression
+  matches the pattern `form` (structural match, as in `MatchQ`), flattening the
+  nesting away into a plain `List` of matches. `form` is held, so pattern
+  literals such as `_Integer` or `f[_]` may be given directly. Returns `{}` when
+  no step matches.
 
 **Features**:
 - `HoldAll`, `Protected`. The argument is held so its rewrite sequence can be
   observed from the start.
-- **Flat, top-level only (v1).** Only rewrites in `expr`'s own outermost
-  evaluation loop are recorded; sub-evaluations of arguments (nested
-  `evaluate` calls) are not. Step granularity follows the evaluator's actual
-  iterations, so Mathilda may record fewer intermediates than a reference
-  system that shows every substitution separately.
-- Each intermediate is returned wrapped in `HoldForm` (printed transparently),
-  so the result list is inert and does not re-evaluate.
+- **Nested.** Evaluation semantics are unchanged — the collector merely observes
+  the evaluator's own recursion. Argument and head sub-evaluations that take a
+  step become sublists; a sub-evaluation that takes no step contributes nothing.
+- **Automatic-rewrite steps are atomic.** A builtin's internal computation (e.g.
+  `Range` folding) and `Listable` threading of the threaded elements are shown as
+  a single rewrite, not decomposed — so `Range[10]` and `x^{1..10}` each appear
+  as one step, matching Mathematica.
+- Each step leaf is returned wrapped in `HoldForm` (printed transparently), so
+  the result stays inert and does not re-evaluate.
 - Not memoized: `Trace` bumps the evaluation clock once per call so an
   already-evaluated argument is still traced in full.
 - Reentrant: `Trace` may appear inside a traced expression; the inner list is
-  produced independently.
-- **`Trace[expr, form]`** matches `form` against each recorded top-level step
-  (never against argument sub-evaluations, per the flat v1 semantics), so it is
-  the flat analogue of Mathematica's form-restricted trace rather than a full
-  nested one. A bare symbol `form` matches only that literal symbol among the
-  steps, not "every use of the symbol".
+  produced independently and appears to the outer trace as one reduced value.
 - `TraceDepth` and arities other than 1 or 2 are not implemented; e.g.
   `Trace[expr, form, extra]` stays unevaluated.
 
@@ -532,17 +532,20 @@ Out[1]= {1 + 1, 2}
 In[2]:= Trace[5]
 Out[2]= {}
 
-In[3]:= x = 3; Trace[x + 1]
-Out[3]= {x + 1, 4}
+In[3]:= Trace[2^3 + 4^2 + 1]
+Out[3]= {{2^3, 8}, {4^2, 16}, 8 + 16 + 1, 25}
 
-In[4]:= Trace[{Trace[1 + 1], 2 + 2}]
-Out[4]= {{Trace[1 + 1], 2 + 2}, {{1 + 1, 2}, 4}}
+In[4]:= Trace[x^Range[10]]
+Out[4]= {{Range[10], {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}, x^{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, {x, x^2, x^3, x^4, x^5, x^6, x^7, x^8, x^9, x^10}}
 
-In[5]:= Trace[1 + 2 + 3, _Integer]
-Out[5]= {6}
+In[5]:= g[y_] := y^2; Trace[g[1 + 1]]
+Out[5]= {{1 + 1, 2}, g[2], 2^2, 4}
 
-In[6]:= Trace[Nest[f, x, 3], _f]
-Out[6]= {f[f[f[x]]]}
+In[6]:= Trace[1 + 2 + 3, _Integer]
+Out[6]= {6}
+
+In[7]:= Trace[Nest[f, x, 3], _f]
+Out[7]= {f[f[f[x]]]}
 ```
 
 ## ReleaseHold

@@ -83,12 +83,14 @@ static void test_inert_symbol(void) {
 static void test_multistep(void) {
     assert_eval_eq("x = 3", "3", 0);
     Expr* t = trace_of("x + 1");
-    /* At least the held form plus the final value. */
+    /* Nested trace of Plus[x, 1] with x = 3: the x -> 3 argument
+     * sub-evaluation nests as {x, 3}, then the reassembled 3 + 1, then 4:
+     * {{x, 3}, 3 + 1, 4}. */
     ASSERT(t->type == EXPR_FUNCTION);
     ASSERT(t->data.function.arg_count >= 2);
-    /* First element is the held input, verbatim. */
+    /* First element is the nested x -> 3 sub-evaluation, not the held input. */
     char* first = expr_to_string(t->data.function.args[0]);
-    ASSERT_STR_EQ(first, "x + 1");
+    ASSERT_STR_EQ(first, "{x, 3}");
     free(first);
     /* Last element is the final result 4, and it appears exactly once at the
      * end (the fixed point is not double-recorded). */
@@ -149,13 +151,44 @@ static void test_builtin_holdform_idempotent(void) {
     assert_eval_eq("Trace[1 + 1]", "{1 + 1, 2}", 0);
 }
 
-/* The two-argument form Trace[expr, form] (h4u): the flat trace filtered to the
- * steps whose expression matches the pattern form. HoldAll delivers form to the
- * builtin unevaluated, so pattern literals like _Integer work directly. */
+/* Nested traces: argument sub-evaluations appear as sublists and the
+ * reassembled intermediate form appears as a step (matching Mathematica). */
+static void test_builtin_nested(void) {
+    /* Each Power argument reduces first (nested), then the reassembled sum,
+     * then Plus fires. */
+    assert_eval_eq("Trace[2^3 + 4^2 + 1]",
+                   "{{2^3, 8}, {4^2, 16}, 8 + 16 + 1, 25}", 0);
+    /* Range[10] reduces (nested); reassembled x^{...}; Listable result. The
+     * builtin-internal Range folding and the threaded element evaluations are
+     * suppressed, so each shows as a single rewrite. */
+    assert_eval_eq("Trace[x^Range[10]]",
+                   "{{Range[10], {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}, "
+                   "x^{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, "
+                   "{x, x^2, x^3, x^4, x^5, x^6, x^7, x^8, x^9, x^10}}", 0);
+    /* Times over a reduced sum. */
+    assert_eval_eq("Trace[2 (3 + 4)]", "{{3 + 4, 7}, 2 7, 14}", 0);
+    /* Argument changes but the head has no rule: reassembled f[2] recorded,
+     * result f[2] deduped away. */
+    assert_eval_eq("Trace[f[1 + 1]]", "{{1 + 1, 2}, f[2]}", 0);
+    /* A DownValue firing is a traced step, and its RHS re-evaluates at the
+     * outer level. */
+    assert_eval_eq("gg[y_] := y^2", "Null", 0);
+    assert_eval_eq("Trace[gg[1 + 1]]", "{{1 + 1, 2}, gg[2], 2^2, 4}", 0);
+    assert_eval_eq("Clear[gg]", "Null", 0);
+    /* A no-sub-evaluation expression is unchanged from the flat form. */
+    assert_eval_eq("Trace[1 + 1]", "{1 + 1, 2}", 0);
+}
+
+/* The two-argument form Trace[expr, form] (h4u): the trace filtered to the
+ * step leaves whose expression matches the pattern form, flattening away
+ * nesting. HoldAll delivers form to the builtin unevaluated, so pattern
+ * literals like _Integer work directly. */
 static void test_builtin_two_arg_form(void) {
     /* _Integer keeps only the integer results, dropping the unevaluated Plus. */
     assert_eval_eq("Trace[1 + 2 + 3, _Integer]", "{6}", 0);
-    assert_eval_eq("Trace[2*3 + 1, _Integer]", "{7}", 0);
+    /* 2*3 is now a (nested) sub-evaluation, so its result 6 is a matched
+     * integer step too; matches are flattened out of the nesting. */
+    assert_eval_eq("Trace[2*3 + 1, _Integer]", "{6, 7}", 0);
     /* Blank matches every step -> identical to the one-arg form. */
     assert_eval_eq("Trace[1 + 2 + 3, _]", "{1 + 2 + 3, 6}", 0);
     /* A form nothing matches -> {} (there are steps, but none is a Real). */
@@ -181,6 +214,7 @@ int main(void) {
     TEST(test_reentrancy_and_repeat);
     TEST(test_builtin_basic);
     TEST(test_builtin_holdform_idempotent);
+    TEST(test_builtin_nested);
     TEST(test_builtin_two_arg_form);
 
     printf("All trace tests passed!\n");

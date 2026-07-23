@@ -91,56 +91,121 @@ static uint64_t g_eval_clock = 1;
 uint64_t eval_clock_get(void) { return g_eval_clock; }
 void     eval_clock_bump(void) { g_eval_clock++; }
 
-/* ---- Trace collector (beads-planning-b3k, Phase 2) -----------------------
- * Trace[expr] records the sequence of top-level intermediate expressions the
- * fixed-point loop below produces while reducing expr. A single collector is
- * installed at a time via g_trace_active; nested Trace saves/installs/restores
- * it through the natural C call stack (see eval_collect_trace). While a
- * collector is installed, evaluate()'s loop appends each real top-level
- * rewrite, gated to the exact recursion depth of the traced expression's own
- * loop so that argument sub-evaluations (which run at greater depth) are
- * excluded -- the flat, top-level-only v1 semantics.
+/* ---- Trace collector (nested) --------------------------------------------
+ * Trace[expr] returns a list that mirrors the *structure* of expr's
+ * evaluation: each argument sub-evaluation that takes >=1 step appears as a
+ * nested sublist, and the reassembled intermediate form (f[evaluated_args],
+ * before the head's rule fires) appears as a step. This is NOT a change to
+ * evaluation semantics -- the evaluator already performs every sub-evaluation;
+ * the collector merely *observes* more of it than the earlier flat v1 did.
  *
- * Ownership: every expression handed to the collector is inc-ref'd
- * (expr_copy) before storage, so the steps survive the evaluator freeing the
- * transient `current`/`next` trees; eval_collect_trace hands the array to
- * expr_new_function (which takes ownership of the elements) and frees the
- * array shell. Cost when not tracing: one predicted-false global-pointer read
- * per loop iteration, matching the existing eval_overflow check. */
-typedef struct TraceCollector {
-    Expr**  steps;         /* each element inc-ref'd (owned by the collector) */
+ * Mechanism: a stack of frames, one per active evaluate() call. Nesting then
+ * follows the evaluator's own recursion automatically -- no depth arithmetic.
+ *   - evaluate() pushes a frame on entry (when g_tracing) and pops it on exit.
+ *   - On pop, a frame that recorded >=1 entry is turned into a List and spliced
+ *     as ONE nested entry into its parent frame; an empty frame (atom / no-op
+ *     sub-evaluation) contributes nothing and is discarded. The outermost
+ *     frame's List becomes g_trace_root_result, which eval_collect_trace hands
+ *     back.
+ *   - The fixed-point loop records each real current->next rewrite into the
+ *     current (top) frame. The "before" form it records is the reassembled
+ *     f[evaluated_args] snapshot (pending_reassembled, set by evaluate_step)
+ *     when present, else `current` itself (symbol rewrites, atoms).
+ *
+ * Reentrancy: eval_collect_trace saves/restores g_trace_top / g_trace_root_result
+ * / g_tracing on the C stack, so a nested Trace runs on a fresh stack and
+ * appears to the outer trace as a single already-reduced value.
+ *
+ * Ownership: frame entries are owned by the frame (each a fresh expr_copy or a
+ * spliced child List) until the frame is turned into a List via
+ * expr_new_function (which takes the elements) -- exactly the earlier v1
+ * contract. Cost when not tracing: one predicted-false bool read (g_tracing)
+ * per evaluate() call, matching the old g_trace_active check. */
+typedef struct TraceFrame {
+    Expr**  entries;             /* owned; each a recorded form OR nested List */
     size_t  count, cap;
-    int     record_depth;  /* record only when eval_recursion_depth == this */
-    bool    seeded;        /* whether the initial e0 has been recorded yet */
-} TraceCollector;
+    Expr*   pending_reassembled; /* f[evaluated_args] snapshot for this step    */
+    struct TraceFrame* parent;
+} TraceFrame;
 
-static TraceCollector* g_trace_active = NULL;  /* NULL when not tracing */
+static TraceFrame* g_trace_top         = NULL;  /* current frame; NULL = none  */
+static Expr*       g_trace_root_result = NULL;  /* outermost frame's List      */
+static bool        g_tracing           = false; /* true only inside a Trace[]  */
 
-/* Push an inc-ref'd copy of `e` onto the active collector, growing on demand. */
-static void trace_push(TraceCollector* tc, Expr* e) {
-    if (tc->count == tc->cap) {
-        size_t newcap = tc->cap ? tc->cap * 2 : 8;
-        Expr** grown = realloc(tc->steps, newcap * sizeof(Expr*));
-        if (!grown) return;   /* OOM: drop this step rather than crash */
-        tc->steps = grown;
-        tc->cap = newcap;
+/* Suppression depth: while > 0, evaluate() neither pushes frames nor records.
+ * Bumped around machinery whose internal evaluate() calls are NOT user-visible
+ * argument sub-evaluations -- a builtin computing its result (e.g. Range folding
+ * i+1) and Listable threading evaluating the threaded elements. Argument and
+ * head evaluation happen *before* these bumps, so they are still traced; only
+ * the rule's own internal reductions are hidden, matching Mathematica (Range[10]
+ * and x^{1..10} each appear as a single rewrite, not a decomposed one). */
+static int         g_trace_suppress    = 0;
+#define TRACE_ACTIVE() (g_tracing && g_trace_suppress == 0)
+
+/* Append an already-owned entry to a frame, growing on demand. On OOM the
+ * entry is freed rather than leaked (the step is dropped). */
+static void frame_append(TraceFrame* f, Expr* owned) {
+    if (f->count == f->cap) {
+        size_t newcap = f->cap ? f->cap * 2 : 8;
+        Expr** grown = realloc(f->entries, newcap * sizeof(Expr*));
+        if (!grown) { expr_free(owned); return; }
+        f->entries = grown;
+        f->cap = newcap;
     }
-    tc->steps[tc->count++] = expr_copy(e);
+    f->entries[f->count++] = owned;
 }
 
-/* Record one real top-level rewrite. `before` is the pre-step expression and
- * `after` is the result of the step; both are borrowed. Called only from the
- * evaluate() change branch. Depth-gated: a no-op unless the currently running
- * loop is the traced expression's own. On the first recorded step the pre-step
- * e0 is seeded first, so an evaluation that never takes a step yields {}. */
-static void trace_record_step(Expr* before, Expr* after) {
-    TraceCollector* tc = g_trace_active;
-    if (!tc || eval_recursion_depth != tc->record_depth) return;
-    if (!tc->seeded) {
-        trace_push(tc, before);
-        tc->seeded = true;
+/* Record a form (borrowed) into the current top frame, with consecutive-dedup:
+ * a form structurally equal to the last recorded entry is skipped. Dedup turns
+ * a symbol chain a->b->c->1 into {a,b,c,1} and prevents a doubled final form
+ * when the reassembled form equals the step result (e.g. f[1+1] -> f[2]). */
+static void frame_record(Expr* form) {
+    TraceFrame* f = g_trace_top;
+    if (!f) return;
+    if (f->count > 0 && expr_eq(f->entries[f->count - 1], form)) return;
+    frame_append(f, expr_copy(form));
+}
+
+/* Push a fresh frame for the evaluate() call now entering. */
+static void trace_frame_push(void) {
+    TraceFrame* f = calloc(1, sizeof(TraceFrame));
+    if (!f) return;                 /* OOM: skip this frame level              */
+    f->parent = g_trace_top;
+    g_trace_top = f;
+}
+
+/* Pop the current frame as the evaluate() call exits: an empty frame is
+ * discarded; a non-empty one becomes a List spliced into the parent (or, at the
+ * outermost level, stored as g_trace_root_result). */
+static void trace_frame_pop(void) {
+    TraceFrame* f = g_trace_top;
+    if (!f) return;
+    g_trace_top = f->parent;
+    if (f->pending_reassembled) expr_free(f->pending_reassembled);
+
+    if (f->count == 0) {            /* no steps: contribute nothing            */
+        free(f->entries);
+        free(f);
+        return;
     }
-    trace_push(tc, after);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), f->entries, f->count);
+    free(f->entries);
+    free(f);
+    if (g_trace_top) {
+        frame_append(g_trace_top, list);          /* nested sublist            */
+    } else {
+        if (g_trace_root_result) expr_free(g_trace_root_result);
+        g_trace_root_result = list;               /* outermost trace           */
+    }
+}
+
+/* Discard any reassembled snapshot left on the current frame (a step that did
+ * not end up rewriting). Called on the fixed-point / loop-exit paths. */
+static void trace_clear_pending(void) {
+    if (g_trace_top && g_trace_top->pending_reassembled) {
+        expr_free(g_trace_top->pending_reassembled);
+        g_trace_top->pending_reassembled = NULL;
+    }
 }
 
 /*
@@ -959,6 +1024,17 @@ Expr* evaluate_step(Expr* e, bool* changed) {
             
             Expr* res = expr_new_function(head, new_args, argc);
             if (new_args != new_args_stack) free(new_args);
+
+            /* Trace: snapshot the reassembled f[evaluated_args] form, before
+             * flatten/Flat/Listable/Orderless and before any rule fires, so the
+             * trace can show e.g. `8 + 16 + 1` rather than the pre-arg-eval
+             * `2^3 + 4^2 + 1`. Stored on the current frame (not a global) so a
+             * builtin that itself re-enters evaluate() cannot clobber it. */
+            if (TRACE_ACTIVE() && g_trace_top) {
+                if (g_trace_top->pending_reassembled)
+                    expr_free(g_trace_top->pending_reassembled);
+                g_trace_top->pending_reassembled = expr_copy(res);
+            }
             
     /* 2.5 Flatten Sequences - must happen before attributes.
      * Suppressed for heads carrying SequenceHold (e.g. Set/SetDelayed/Rule/
@@ -1025,7 +1101,12 @@ Expr* evaluate_step(Expr* e, bool* changed) {
 
             /* Listable: automatic threading */
             if ((attrs & ATTR_LISTABLE) && has_list_arg(res)) {
+                /* Trace: threading evaluates the threaded elements internally;
+                 * hide those sub-evaluations so x^{1..10} shows as a single
+                 * rewrite to {x,x^2,...} rather than a decomposed one. */
+                g_trace_suppress++;
                 Expr* list_res = apply_listable(res);
+                g_trace_suppress--;
                 if (list_res) {
                     expr_free(res);
                     *changed = true; /* List threading reshaped the call */
@@ -1114,7 +1195,14 @@ Expr* evaluate_step(Expr* e, bool* changed) {
 
                 /* 5. Call C-level Built-in Functions (internal "down code") */
                 if (hdef && hdef->builtin_func) {
+                    /* Trace: a builtin's internal evaluate() calls (e.g. Range
+                     * folding i+1) are the rule's own computation, not user
+                     * argument sub-evaluations -- hide them so the builtin shows
+                     * as a single rewrite. Arguments were already evaluated (and
+                     * traced) above, before this bump. */
+                    g_trace_suppress++;
                     Expr* ret = hdef->builtin_func(res);
+                    g_trace_suppress--;
                     if (ret) {
                         expr_free(res);
                         *changed = true; /* Built-in produced a rewrite */
@@ -1496,6 +1584,13 @@ Expr* evaluate(Expr* e) {
 
     eval_recursion_depth++;
 
+    /* Trace: this evaluate() call gets its own frame; nested sub-evaluations
+     * push child frames and splice back on exit (see trace_frame_pop). While
+     * suppressed (inside a builtin / Listable threading) nothing is pushed, so
+     * that whole subtree stays out of the trace. */
+    bool trace_here = TRACE_ACTIVE();
+    if (trace_here) trace_frame_push();
+
     Expr* current = expr_copy(e);
     Expr* next = NULL;
     int iterations = 0;
@@ -1548,6 +1643,9 @@ Expr* evaluate(Expr* e) {
                 current->last_evaluated_at = g_eval_clock;
             }
             eval_recursion_depth--;
+            /* Trace: the last step didn't rewrite; drop its reassembled
+             * snapshot and finalize this frame (splice into parent or discard). */
+            if (trace_here) { trace_clear_pending(); trace_frame_pop(); }
             /* An in-flight Throw that survives to the top level is uncaught
              * (any enclosing Catch would have consumed it at depth >= 1). */
             if (is_top_level && eval_is_inflight_throw(current))
@@ -1559,11 +1657,18 @@ Expr* evaluate(Expr* e) {
             return current;
         }
 
-        /* Trace: this is a real top-level rewrite (current -> next). Record it
-         * before we drop `current`. Depth-gated inside trace_record_step so
-         * only the traced expression's own loop contributes; the g_trace_active
-         * guard keeps the untraced hot path to a single predicted-false read. */
-        if (g_trace_active) trace_record_step(current, next);
+        /* Trace: a real top-level rewrite (current -> next). Record the
+         * "before" form -- the reassembled f[evaluated_args] snapshot when
+         * evaluate_step produced one, else `current` (symbol/atom rewrites) --
+         * then the result. frame_record's consecutive-dedup collapses chains
+         * and avoids doubling a result equal to its reassembled form. */
+        if (trace_here && g_trace_top) {
+            Expr* before = g_trace_top->pending_reassembled
+                               ? g_trace_top->pending_reassembled : current;
+            frame_record(before);
+            frame_record(next);
+            trace_clear_pending();
+        }
 
         /* Prepare for the next iteration */
         expr_free(current);
@@ -1580,6 +1685,8 @@ Expr* evaluate(Expr* e) {
         fprintf(stderr, "$IterationLimit exceeded\n");
     }
     eval_recursion_depth--;
+    /* Trace: iteration-cap / overflow exit -- finalize this frame too. */
+    if (trace_here) { trace_clear_pending(); trace_frame_pop(); }
     if (is_top_level && eval_is_inflight_throw(current))
         current = eval_report_uncaught_throw(current);
     else if (is_top_level && eval_is_inflight_goto(current))
@@ -1589,40 +1696,43 @@ Expr* evaluate(Expr* e) {
     return current;
 }
 
-/* See eval.h. Evaluate `held_expr` to a fixed point while recording each
- * top-level rewrite, returning a fresh flat List of the intermediates (Trace
- * v1 semantics). `held_expr` is BORROWED -- evaluate() copies it and the
- * caller retains ownership. Reentrant: the previously-active collector is
- * saved on the C stack and restored on return, so a nested Trace produces its
- * own list without perturbing the outer one (the inner trace appears to the
- * outer as a single already-reduced value). */
+/* See eval.h. Evaluate `held_expr` to a fixed point while recording the nested
+ * structure of its evaluation, returning a fresh List (with nested sublists for
+ * each sub-evaluation that took a step). `held_expr` is BORROWED -- evaluate()
+ * copies it and the caller retains ownership. Reentrant: the previous trace
+ * state (frame stack, root result, tracing flag) is saved on the C stack and
+ * restored on return, so a nested Trace runs on a fresh stack and appears to the
+ * outer trace as a single already-reduced value. */
 Expr* eval_collect_trace(Expr* held_expr) {
     if (!held_expr) return NULL;
 
-    TraceCollector* prev = g_trace_active;
-    TraceCollector tc;
-    tc.steps        = NULL;
-    tc.count        = 0;
-    tc.cap          = 0;
-    /* The traced expression's own loop runs one level below the current depth
-     * (evaluate() increments eval_recursion_depth on entry). Recording only at
-     * that depth excludes argument sub-evaluations -> flat, top-level steps. */
-    tc.record_depth = eval_recursion_depth + 1;
-    tc.seeded       = false;
-    g_trace_active  = &tc;
+    TraceFrame* saved_top      = g_trace_top;
+    Expr*       saved_result   = g_trace_root_result;
+    bool        saved_on       = g_tracing;
+    int         saved_suppress = g_trace_suppress;
+    g_trace_top         = NULL;    /* fresh stack for this Trace */
+    g_trace_root_result = NULL;
+    g_tracing           = true;
+    g_trace_suppress    = 0;       /* Trace itself runs under the caller's
+                                    * builtin suppression; clear it so the
+                                    * traced expression is actually recorded. */
 
-    /* Phase-1 mitigation A: bump the eval clock so the timestamp early-exit
-     * (see top of evaluate()) cannot short-circuit an already-stamped root --
-     * a full re-evaluation is required to observe its steps. Trace is thereby
-     * documented as non-memoized (it invalidates the eval cache once per call).*/
+    /* Bump the eval clock so the timestamp early-exit (see top of evaluate())
+     * cannot short-circuit an already-stamped root -- a full re-evaluation is
+     * required to observe its steps. Trace is thereby non-memoized (it
+     * invalidates the eval cache once per call). */
     eval_clock_bump();
 
     Expr* final = evaluate(held_expr);   /* borrowed in; fresh copy out */
-    expr_free(final);                    /* == the last recorded step; discard */
+    expr_free(final);
 
-    g_trace_active = prev;               /* restore the outer collector, if any */
+    Expr* list = g_trace_root_result;    /* outermost frame's collected List */
+    if (!list)                           /* no step taken -> {} */
+        list = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
 
-    Expr* list = expr_new_function(expr_new_symbol(SYM_List), tc.steps, tc.count);
-    free(tc.steps);                      /* elements now owned by `list` */
+    g_trace_top         = saved_top;     /* restore the outer trace state */
+    g_trace_root_result = saved_result;
+    g_tracing           = saved_on;
+    g_trace_suppress    = saved_suppress;
     return list;
 }

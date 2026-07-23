@@ -1,82 +1,59 @@
-# Unified Risch-structure rational normalization (Together / Cancel / Simplify)
+# Trace: produce Mathematica's nested evaluation trace  [DONE 2026-07-23]
 
-Plan: `/Users/user/.claude/plans/it-seems-like-we-fancy-bumblebee.md`
+Plan: `/Users/user/.claude/plans/trace-doesn-t-trace-an-reactive-hammock.md`
 
-## Key finding from exploration
-The FLINT canonicaliser engines already exist and are correct; the mess is the
-**routing** — 8 terminal paths, `extension_autodetect` run 3×, duplicated
-radical recombination, dependent-generator bail guards, Simplify re-implementing
-the routing. The redesign is a **single field-structure classifier + one
-dispatch** (`rat_canon_*`) reusing the existing engines, validated by a shadow
-parity harness before switching the builtins over.
+- [x] Replace flat depth-gated `TraceCollector` with a frame stack in `src/eval.c`
+      (`TraceFrame`, `g_trace_top`/`g_trace_root_result`/`g_tracing`, push/pop/splice)
+- [x] Record hooks in `evaluate()` loop into the current frame (dedup-by-last)
+- [x] Snapshot the reassembled `f[evaluated_args]` form in `evaluate_step` (line 960)
+      so `8 + 16 + 1` shows, not the pre-arg-eval `2^3 + 4^2 + 1`
+- [x] Suppression counter (`g_trace_suppress`) around the builtin call and
+      `Listable` threading so Range-internal / thread-element evals stay atomic
+- [x] `eval_collect_trace` sets up/tears down the stack; resets suppression (Trace
+      is itself a builtin, called under the caller's suppression)
+- [x] `src/trace.c`: recursive HoldForm wrapping + recursive form-filter (flatten)
+- [x] Both reported cases match exactly; DownValue/chain/nested-Trace verified
+- [x] `trace_tests` pass (updated `x+1` multistep + `2*3+1,_Integer`→`{6,7}`;
+      added nested test); eval/evaluate/core/iter/match/unevaluated/eager-exit/
+      timestamps suites pass; no core-eval regression (change is `g_tracing`-gated)
+- [x] valgrind: 0 leaks from trace code (11648B/146blk == macOS dyld baseline)
+- [x] Docs: `docs/spec/builtins/expression-information.md` + changelog `2026-07-20.md`
 
-Reusable engines (`src/poly/flint_bridge.c`, public in `flint_bridge.h`):
-- `flint_rational_together/cancel`  — plain Q + transcendental kernels (km)
-- `flint_algebraic_field_canonical` — rationalised form over algebraic tower
-- `flint_algebraic_field_together`  — WL-faithful, cube+ roots, symbolic radicand
-- `flint_parametric_field_normalize`— Q(t..)(√k), symbolic radicand √k
-- `flint_algebraic_field_normalize` — identically-zero test over tower (fix d≥5 SIGSEGV)
-- `extension_autodetect` (`qafactor.h`) — algebraic constant field (one call)
+Review: The evaluator's semantics are unchanged — the collector was rewritten to
+*observe* the evaluator's existing recursion (frames per `evaluate()` call), plus
+two observation points (reassembled-form snapshot; suppression of builtin/Listable
+internal evals). Untraced hot path adds one predicted-false bool read per
+`evaluate()` call.
 
-## Phase 0 — Parity harness  [DONE 2026-07-22]
-- [x] Classifier + dispatcher live in `src/rat.c` (NOT a new `poly/ratcanon.c` —
-      the reused helpers `flint_cancel_fraction`/`flint_gaussian_*`/`extract_num_den`
-      are static to rat.c, so a separate module can't reach them). Functions:
-      `rat_canon_classify`, `rat_canon_dispatch`, `rat_canon_shadow`, `rc_math_equal`.
-- [x] No CMake change needed (rat.c already in the build).
-- [x] Shadow hook in `builtin_cancel`/`builtin_together` wrappers gated by
-      `MATHILDA_RATCANON=shadow` (env cached; reentrancy-guarded; atexit summary).
-      Oracle = numerator of `Together[a−b]==0`, RootReduce fallback for cyclotomic
-      disguised-zeros. Only DIVERGENCE lines + summary printed.
-- [x] Parity proven: DIVERGED=0 across risch_transcendental(7919 cov),
-      goursat(859), simplify(144), rat/poly/trigrat/radical. All 46 initial
-      goursat "divergences" were false positives (sign convention + cyclotomic
-      disguised-zeros, verified 0 by RootReduce). Normal-mode suites unchanged.
+---
 
-## Phase 1 — Field-structure classifier + dispatch  [PARTIAL]
-- [x] One-pass classify: PLAIN_Q | TRANSCENDENTAL | ALG_CONST | ALG_FUNC | DECLINE.
-- [x] PLAIN_Q + TRANSCENDENTAL: real FLINT dispatch (flint_rational_*), proven parity.
-- [ ] ALG_CONST + ALG_FUNC dispatch is INCOMPLETE — declines many Plus shapes the
-      old cascade handles (e.g. Together[1/(b-a√k)+1/(b+a√k)], Cancel[…√2…,Ext->Auto]).
-      Declining is safe (falls back to classical, no divergence) but must be COVERED
-      before Phase 2 so the classical algebraic paths can be deleted. Next: trace how
-      the old cascade routes these (flint_cancel_fraction gate on a Plus, the
-      autodetect/together_recursive_ext number-field combine) and reproduce as single
-      dispatch. Then run FULL suite in shadow to expand coverage.
-- [ ] Fix `flint_algebraic_field_normalize` unbounded recursion (Q(√d) d≥5 SIGSEGV).
-      NOTE: 1/(x^2-5)+1/(x-Sqrt[5]) and d=7 did NOT crash via the old path in testing;
-      need the exact partial-fraction trigger from TOGETHER_ALGEBRAIC_OVERFLOW.md.
-- [ ] Together vs Cancel read-back policy (combine vs per-additive-term) — dispatch
-      currently uses flint_rational_together/cancel gates; verify per-term Cancel.
+# Implement Sow and Reap  [DONE 2026-07-23]
 
-## Phase 2 — Switch builtins  [DONE 2026-07-22]
-- [x] `builtin_cancel_compute`/`builtin_together_compute` call `rat_canon_dispatch`
-      first (gated `rat_canon_enabled()`, default ON; `MATHILDA_RATCANON=off` reverts).
-- [x] `rc_sign_normalize`: match classical denom-sign convention (flip only the
-      FLINT all-negative-denom -(N)/(-D) artifact; term-wise `rc_negate`).
-- [x] All direct suites pass; every integrate suite identical off-vs-on; simplify
-      soft-fail 4=4 pre-existing; valgrind definitely-lost identical off/on (macOS
-      dyld baseline only). User-facing shadow formdiff=0.
-- Result: `Together[1/(x-I)+1/(x+I)]` -> `(2x)/(1+x^2)` (was ugly intermediate).
+Plan: `/Users/user/.claude/plans/we-should-implement-sow-twinkly-spring.md`
 
-## Phase 3 — Delete dead cascade paths  [BLOCKED — needs broader dispatch coverage]
-- Dispatch declines many regimes (alg-const rationalization, cube roots, poly
-  radicands) to the classical cascade, which is STILL the needed fallback.
-  Deleting the cascade requires those regimes covered by dispatch first (FLINT
-  engines producing classical-matching forms). Do incrementally, shadow-verified.
+- [x] Add SYM_Sow / SYM_Reap to sym_names.{h,c}
+- [x] Write src/sowreap.h (prototypes)
+- [x] Write src/sowreap.c (collector stack, builtin_sow, builtin_reap)
+- [x] Register Sow/Reap in core.c (builtins, attributes, docstrings)
+- [x] Write tests/test_sow_reap.c (11 test groups)
+- [x] Add sowreap.c to COMMON_SRC + test block in tests/CMakeLists.txt
+- [x] Build REPL clean (gcc -std=c99 -Wall -Wextra, EXIT 0), spot-checked all spec examples
+- [x] Build + run sow_reap_tests -> all pass
+- [x] valgrind: 0 leaks in Mathilda source (all definite-lost are macOS dyld/Accelerate baseline)
+- [~] Docs: docs/spec tree does NOT exist in this checkout (not git-tracked) -> nothing to update;
+      in-system docs are the docstrings (verified via Information[Sow]/Information[Reap]).
 
-## Phase 4 — Simplify: drop duplicated top-level autodetect+Together cascade. Pending.
+## Review
 
-## Also pending
-- Fix `flint_algebraic_field_normalize` Q(√d) d≥5 SIGSEGV (exact trigger from
-  TOGETHER_ALGEBRAIC_OVERFLOW.md; `1/(x^2-5)+1/(x-Sqrt[5])` did NOT reproduce).
-- 509 internal risch formdiffs (Gaussian coeff-clearing (1/2 I)/(I+Log) ->
-  I/(2I+2Log)) — harmless (integrate suites off==on); reconcile if Phase 3 needs it.
-
-## Verification anchors
-- `Cancel[(a+b Sqrt[k]-a^2 k)/(b-a Sqrt[k]+b^2 k-a^2 k^2), Extension->Automatic]` <1s
-- `Together[1/(b-a Sqrt[k])+1/(b+a Sqrt[k])]` -> (2b)/(b^2-a^2 k)
-- `Together`/`Cancel`/`Simplify` over Q(Sqrt d), d=5..8 — no SIGSEGV
-- Regression: `Cancel[(1+Sqrt[2])/(1-Sqrt[2]),Extension->Automatic]` -> -3-2Sqrt[2];
-  cyclotomic unchanged; `Together[(E^(2x)-1)/(E^x-1)]` -> 1+E^x; no Expand[Power[Plus,n]]
-- Tests: rat/poly/simp/integrate `*_tests` only; valgrind on reproducers.
+- Sow/Reap implemented in a self-contained `src/sowreap.c` with a file-global
+  stack of `ReapFrame` (each frame on builtin_reap's C stack, linked via `prev`;
+  balanced LIFO push/pop). Values/tag-groups are singly linked lists of Expr as
+  requested -> O(1) ordered append, exact Sow order preserved.
+- Full semantics: default/tagged/tag-list Sow, single-pattern and pattern-list
+  Reap, f[tag,{vals}] handler form, tag-selective reaping, nested-Reap routing
+  (innermost matching frame wins; non-match propagates outward), Throw-across-Reap
+  unwind. All spec examples reproduce exactly.
+- KNOWN DIVERGENCE (not a Sow bug): Mathilda's `Sum` evaluates its summand
+  symbolically once and closed-forms it, so `Sow`/`Print` inside `Sum` fire once
+  (WL iterates). `Do`/`Table`/`Module`+`Do` iterate faithfully; the test uses
+  `Do` for the "reap across a loop" case. Fixing Sum is out of scope.
