@@ -508,6 +508,8 @@ const char* SYM_Throw = NULL;
 const char* SYM_Catch = NULL;
 const char* SYM_Goto = NULL;
 const char* SYM_Label = NULL;
+const char* SYM_Sow = NULL;
+const char* SYM_Reap = NULL;
 const char* SYM_TimeConstrained = NULL;
 const char* SYM_Times = NULL;
 const char* SYM_ToeplitzMatrix = NULL;
@@ -1308,6 +1310,8 @@ void sym_names_init(void) {
     SYM_Catch                      = intern_symbol("Catch");
     SYM_Goto                       = intern_symbol("Goto");
     SYM_Label                      = intern_symbol("Label");
+    SYM_Sow                        = intern_symbol("Sow");
+    SYM_Reap                       = intern_symbol("Reap");
     SYM_TimeConstrained            = intern_symbol("TimeConstrained");
     SYM_Times                      = intern_symbol("Times");
     SYM_ToeplitzMatrix             = intern_symbol("ToeplitzMatrix");

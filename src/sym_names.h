@@ -510,6 +510,8 @@ extern const char* SYM_Throw;
 extern const char* SYM_Catch;
 extern const char* SYM_Goto;
 extern const char* SYM_Label;
+extern const char* SYM_Sow;
+extern const char* SYM_Reap;
 extern const char* SYM_TimeConstrained;
 extern const char* SYM_Times;
 extern const char* SYM_ToeplitzMatrix;

@@ -95,6 +95,7 @@
 #include "times.h"
 #include "power.h"
 #include "funcprog.h"
+#include "sowreap.h"
 #include "match.h"
 #include "print.h"
 #include <stdio.h>
@@ -488,6 +489,19 @@ void core_init(void) {
         "\tevaluating expr, or expr if none. Catch[expr, form] catches only a\n"
         "\tThrow[value, tag] whose tag matches form (tag is re-evaluated per\n"
         "\tcomparison); Catch[expr, form, f] returns f[value, tag].");
+    symtab_add_builtin("Sow", builtin_sow);
+    symtab_get_def("Sow")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Sow",
+        "Sow[e]\n\tCollects e into the nearest enclosing Reap and returns e.\n"
+        "\tSow[e, tag] collects e for the Reap whose pattern matches tag;\n"
+        "\tSow[e, {tag1, tag2, ...}] collects e once for each tag_i.");
+    symtab_add_builtin("Reap", builtin_reap);
+    symtab_get_def("Reap")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
+    symtab_set_docstring("Reap",
+        "Reap[expr]\n\tEvaluates expr and returns {value, {sown...}}, collecting\n"
+        "\tevery expression sown by Sow during the evaluation. Reap[expr, patt]\n"
+        "\treaps only tags matching patt; Reap[expr, {p1, ...}] makes one sublist\n"
+        "\tper pattern; Reap[expr, patt, f] returns f[tag, {e...}] per tag.");
     symtab_add_builtin("Goto", builtin_goto);
     symtab_get_def("Goto")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Goto",

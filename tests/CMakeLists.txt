@@ -376,6 +376,7 @@ set(COMMON_SRC
     ../src/purefunc.c
     ../src/modular.c
     ../src/sort.c
+    ../src/sowreap.c
     ../src/stats.c
     ../src/fit.c
     ../src/info.c
@@ -873,6 +874,11 @@ add_executable(goto_label_tests test_goto_label.c ${COMMON_SRC})
 target_link_libraries(goto_label_tests m)
 target_include_directories(goto_label_tests PRIVATE ../src)
 add_test(NAME goto_label_tests COMMAND goto_label_tests)
+
+add_executable(sow_reap_tests test_sow_reap.c ${COMMON_SRC})
+target_link_libraries(sow_reap_tests m)
+target_include_directories(sow_reap_tests PRIVATE ../src)
+add_test(NAME sow_reap_tests COMMAND sow_reap_tests)
 
 add_executable(boolean_tests test_boolean.c ${COMMON_SRC})
 target_link_libraries(boolean_tests m)
