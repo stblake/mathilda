@@ -251,6 +251,14 @@ Out[8]= 6 a b^2
     shrinking-bound `(x Sin[1/x]/2)^(1/x^2) -> 0` at `x -> 0`), and `Infinity`
     when the base is bounded below by a constant `> 1` and positive (e.g.
     `(2 + Sin[1/x]/2)^(1/x^2) -> Infinity`).
+- **Joint multivariate** limits at the origin or `+Infinity` are decided by a
+  polar/spherical substitution: the integrand is `Simplify`-normalised in
+  `r`/angle coordinates (cancelling common `r`-powers so buried `0/0` shapes
+  like `ArcTan[y^2/(x^2 + x^3)]` do not fold to a spurious value), the radial
+  `r`-limit is taken, and the resulting angular form is inspected — an
+  angle-free constant is the limit, while two probe directions that disagree
+  yield `Indeterminate`. Direction sampling of the original integrand is used
+  only as a fallback when the polar analysis is inconclusive.
 - May return a finite value, `Infinity`, `-Infinity`, `ComplexInfinity`,
   `Indeterminate`, an `Interval[{lo, hi}]`, or the original expression
   unevaluated when the limit cannot be determined.

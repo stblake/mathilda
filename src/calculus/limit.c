@@ -3134,8 +3134,13 @@ static Expr* polar_2d_limit(Expr* f, Expr** vars, int kind,
     Expr* f_polar = subst_all(f, vars, vals, 2);
     expr_free(rcos); expr_free(rsin);
 
-    Expr* rlim = limit_r_fromabove(f_polar, r_sym, kind);
-    expr_free(f_polar);
+    /* Simplify before the r-limit: cancelling the common r-powers exposes
+     * shapes like ArcTan[(r Sin[t])^2/((r Cos[t])^2 + (r Cos[t])^3)] as
+     * ArcTan[Tan[t]^2/(1 + r Cos[t])], removing the buried 0/0 that
+     * Mathilda's arithmetic would otherwise fold to a spurious 0. */
+    Expr* f_simp = simp(mk_fn1("Simplify", f_polar));
+    Expr* rlim = limit_r_fromabove(f_simp, r_sym, kind);
+    expr_free(f_simp);
     return rlim;
 }
 
@@ -3155,8 +3160,10 @@ static Expr* polar_3d_limit(Expr* f, Expr** vars, int kind,
     Expr* f_sph = subst_all(f, vars, vals, 3);
     expr_free(vx); expr_free(vy); expr_free(vz);
 
-    Expr* rlim = limit_r_fromabove(f_sph, r_sym, kind);
-    expr_free(f_sph);
+    /* Simplify first (see polar_2d_limit) so buried 0/0 shapes cancel. */
+    Expr* f_simp = simp(mk_fn1("Simplify", f_sph));
+    Expr* rlim = limit_r_fromabove(f_simp, r_sym, kind);
+    expr_free(f_simp);
     return rlim;
 }
 
@@ -3253,6 +3260,73 @@ static Expr* sample_joint_limit(Expr* f, Expr** vars, size_t n, int kind) {
     expr_free(t_sym);
     if (!ok) { if (common) expr_free(common); return NULL; }
     return common;
+}
+
+/* One sample value for a polar angle: rational multiples of Pi and a
+ * plain rational, all strictly inside (0, Pi/2) so they name valid
+ * directions for both the origin (kind 0) and positive-orthant infinity
+ * (kind 1) cases, while avoiding the axis degeneracies at 0 / Pi/2 where
+ * Tan blows up. */
+static Expr* mk_angle_value(int idx) {
+    static const int tbl[][3] = {   /* {numerator, denominator, timesPi} */
+        {1, 6, 1}, {1, 4, 1}, {1, 3, 1}, {1, 5, 1}, {2, 7, 1}, {2, 5, 0}
+    };
+    int n = (int)(sizeof(tbl) / sizeof(tbl[0]));
+    const int* t = tbl[((idx % n) + n) % n];
+    Expr* frac = mk_fn2("Times", mk_int(t[0]),
+                        mk_fn2("Power", mk_int(t[1]), mk_int(-1)));
+    return t[2] ? mk_times(frac, mk_sym("Pi")) : frac;
+}
+#define N_ANGLE_SAMPLES 6
+
+/* Decide the joint limit from the polar radial limit `rlim` (a function of
+ * the angle symbols, and possibly still of r_sym if the r-limit was only
+ * partial):
+ *   - reduces to an angle-free, r-free constant  -> that constant is the value
+ *   - two sampled directions give different finite values -> Indeterminate
+ *   - residual r, or fewer than two clean samples -> NULL (inconclusive)
+ * This samples the clean 1-/2-parameter angular form directly, which is far
+ * more reliable than re-deriving straight-line path limits from the original
+ * (0/0-prone) integrand. Does not take ownership of `rlim`. */
+static Expr* resolve_angular_limit(Expr* rlim, Expr** angle_syms,
+                                   size_t n_angles, Expr* r_sym) {
+    Expr* s = simp(expr_copy(rlim));
+    if (is_divergent(s)) { expr_free(s); return NULL; }
+    /* The r-limit must have eliminated r; if not, we cannot decide here. */
+    if (expr_contains(s, r_sym)) { expr_free(s); return NULL; }
+    bool angular = false;
+    for (size_t j = 0; j < n_angles; j++)
+        if (expr_contains(s, angle_syms[j])) { angular = true; break; }
+    if (!angular) return s;              /* angle-free constant -> the limit */
+
+    /* Genuinely angle-dependent: numerically confirm a disagreement. */
+    Expr* common = NULL;
+    int n_clean = 0;
+    bool disagree = false;
+    for (int k = 0; k < N_ANGLE_SAMPLES && !disagree; k++) {
+        Expr* v = expr_copy(s);
+        for (size_t j = 0; j < n_angles; j++) {
+            Expr* a = mk_angle_value(k + (int)j);
+            Expr* nv = subst_eval(v, angle_syms[j], a);
+            expr_free(a); expr_free(v); v = nv;
+        }
+        bool clean = !is_divergent(v);
+        for (size_t j = 0; j < n_angles && clean; j++)
+            if (expr_contains(v, angle_syms[j])) clean = false;
+        if (!clean) { expr_free(v); continue; }
+        n_clean++;
+        if (!common) { common = v; continue; }
+        if (!expr_eq(v, common)) disagree = true;
+        expr_free(v);
+    }
+    expr_free(s);
+    if (disagree) {
+        if (common) expr_free(common);
+        return mk_sym("Indeterminate");
+    }
+    if (n_clean >= 2 && common) return common;   /* samples agree -> constant */
+    if (common) expr_free(common);
+    return NULL;                                 /* inconclusive */
 }
 
 /* Handle Limit[f, {x1,...,xn} -> {a1,...,an}] as a joint limit. */
@@ -3393,31 +3467,21 @@ static Expr* run_multivariate(Expr* f_in, Expr* vars, Expr* points) {
     if (n == 2) {
         Expr* rlim = polar_2d_limit(f, vars_arr, kind, r_sym, t_sym);
         if (rlim) {
-            if (!expr_contains(rlim, t_sym) && !expr_contains(rlim, r_sym) &&
-                !is_divergent(rlim)) {
-                result = rlim;
-            } else {
-                expr_free(rlim);
-                /* r-limit depends on theta or failed -> sample directions. */
-                result = sample_joint_limit(f, vars_arr, n, kind);
-            }
-        } else {
-            result = sample_joint_limit(f, vars_arr, n, kind);
+            Expr* angs[1] = { t_sym };
+            result = resolve_angular_limit(rlim, angs, 1, r_sym);
+            expr_free(rlim);
         }
+        /* Inconclusive polar analysis -> fall back to direction sampling. */
+        if (!result) result = sample_joint_limit(f, vars_arr, n, kind);
     } else if (n == 3) {
         Expr* p_sym = mk_sym("$LimitPolarPhi$");
         Expr* rlim = polar_3d_limit(f, vars_arr, kind, r_sym, t_sym, p_sym);
         if (rlim) {
-            if (!expr_contains(rlim, t_sym) && !expr_contains(rlim, p_sym) &&
-                !expr_contains(rlim, r_sym) && !is_divergent(rlim)) {
-                result = rlim;
-            } else {
-                expr_free(rlim);
-                result = sample_joint_limit(f, vars_arr, n, kind);
-            }
-        } else {
-            result = sample_joint_limit(f, vars_arr, n, kind);
+            Expr* angs[2] = { t_sym, p_sym };
+            result = resolve_angular_limit(rlim, angs, 2, r_sym);
+            expr_free(rlim);
         }
+        if (!result) result = sample_joint_limit(f, vars_arr, n, kind);
         expr_free(p_sym);
     } else {
         /* n >= 4: skip polar, just sample. */
