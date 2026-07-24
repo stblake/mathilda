@@ -385,6 +385,7 @@ static Expr* limitinf_core(const Expr* e, const Expr* x);
 static void  mrv_leadterm_core(const Expr* e, const Expr* x,
                                Expr** c0_out, Expr** e0_out);
 static Expr* make_exponent(int64_t num, int64_t den);
+static bool  contains_complex_head(const Expr* e);
 static int64_t gz_leaf_count(const Expr* e);
 
 /* ---------------------------------------------------------------------- */
@@ -941,12 +942,20 @@ static Expr* expand_logs(const Expr* e, const Expr* w, const Expr* x, const Expr
                 }
                 if (rok) expr_free(clead);
                 expr_free(gsd);   /* vspec consumed by mk_fn2 */
+                /* A surviving Complex[] means the sign-tracking was still beaten
+                 * at a deeper level; drop the contaminated expansion and leave
+                 * the log unexpanded (series_leadterm's wsym/complex guards then
+                 * abstain FAST rather than feeding Series a blow-up). */
+                if (factored && contains_complex_head(factored)) {
+                    expr_free(factored); factored = NULL;
+                }
                 if (factored) { expr_free(G2); expr_free(node); return factored; }
 
                 Expr* spec = expr_new_function(mk_sym("List"),
                     (Expr*[]){ expr_copy((Expr*)w), mk_int(0), mk_int(order) }, 3);
                 Expr* ser = simp(mk_fn1("Normal",
-                    mk_fn2("Series", mk_log(G2), spec)));
+                    mk_fn2("Series", mk_log(G2), spec)));  /* mk_log consumes G2 */
+                if (contains_complex_head(ser)) { expr_free(ser); return node; }
                 expr_free(node);
                 return ser;
             }
@@ -976,6 +985,22 @@ static bool contains_log_of_sym(const Expr* e, const Expr* sym) {
     if (contains_log_of_sym(e->data.function.head, sym)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         if (contains_log_of_sym(e->data.function.args[i], sym)) return true;
+    return false;
+}
+
+/* True if e contains an imaginary unit (Complex[..]) anywhere. Used to reject a
+ * frozen-scale Series input contaminated by a branch artefact: the mrv engine
+ * works with real, positive log-scales, so once the P = -Log[w] substitution
+ * has run, any surviving Complex[] means the sign-tracking was defeated at a
+ * deeper log level (a 3+-level tower re-introduces Log[-P] -> Log[P] + I Pi
+ * inside expand_logs) and feeding it to Series would blow up / return a wrong
+ * complex value. Bail to the fallback / abstention instead. */
+static bool contains_complex_head(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is(e, SYM_Complex)) return true;
+    if (contains_complex_head(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (contains_complex_head(e->data.function.args[i])) return true;
     return false;
 }
 
@@ -1011,6 +1036,10 @@ static bool series_leadterm(const Expr* f, const Expr* wsym, const Expr* x, cons
         Expr* negP = mk_neg(expr_copy(pos_sym));
         Expr* f4 = simp(xreplace(f3, lw_sym, negP));
         expr_free(negP); expr_free(f3);
+
+        /* A surviving Complex[] (I Pi) means the sign-tracking was defeated at a
+         * deeper log level; Series would hang / go complex. Abstain instead. */
+        if (contains_complex_head(f4)) { expr_free(f4); break; }
 
         Expr* spec = expr_new_function(mk_sym("List"),
             (Expr*[]){ expr_copy((Expr*)wsym), mk_int(0), mk_int(ord) }, 3);

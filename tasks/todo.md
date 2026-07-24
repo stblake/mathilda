@@ -22,7 +22,48 @@ Per GRUNTZ_STATE.md "Known gaps"; the chosen next Gruntz gap.
 - [x] Docs: `GRUNTZ_STATE.md` (Phase 3 + gap update), `calculus.md` (Gruntz
       coverage), weekly changelog `2026-07-20.md`.
 
-## Review
+# Gruntz `Limit` Phase 3b — fix the Automatic/Series cascade hang on 8.19
+
+Follow-up to Phase 3 (user: "triage and fix the asymptotic series hangs").
+
+- [x] Triage: plain `Limit[8.19]` (and `Method->"Series"/"Asymptotic"`) hung.
+      Instrumented `limit.c`'s `TRY` cascade -> the recursion reaches the Gruntz
+      layer at depth ~23 on a `x->1/x`-substituted deep sub-limit and hangs
+      there (not in the asymptotic layers themselves).
+- [x] Root cause: `series_leadterm` fed `Series` a complex-contaminated `f4`
+      (`P + I Pi ...`). A 3+-level tower re-introduces `Log[-Log[w]] ->
+      Log[Log[w]] + I Pi` below the single positive-scale substitution; Series
+      loops on it.
+- [x] Fix: `contains_complex_head` guard — reject a frozen-scale Series input
+      carrying `I` (mrv engine is real-valued, so it is always a branch
+      artefact). `series_leadterm` abstains; `expand_logs` leaves such a log
+      unexpanded. Fast abstention on the sub-limit; top-level Gruntz then closes
+      8.19 -> 1.
+- [x] Fixed a double-free introduced mid-work (`mk_log(G2)` consumes G2; the
+      `ser` complex-guard must not also free G2).
+- [x] Tests: `test_log_tower_no_hang` (Automatic 8.19 -> 1; Series/Asymptotic
+      terminate). Un-hangs `test_series_infinity_no_inv_var_leak`, so
+      `series_tests` now completes.
+- [x] Stress: 21-case log-tower battery (`scratchpad/stress.py`) — 0 hangs, 0
+      wrong values (one deep 3-tower is a bounded ~15s honest abstention).
+- [x] Regression: gruntz/limit/limit_assumptions/nlimit/nseries green; series
+      failures are a SUPERSET of committed (proven: the 3 extra D/Integrate ones
+      are pre-existing, previously hidden behind the hang). valgrind == baseline.
+
+## Review (Phase 3b)
+
+**Net effect.** Plain `Limit[8.19]` now resolves to 1 instead of hanging, and
+the fix un-hangs `series_tests` (which contained a plain-`Limit[8.19]` test).
+The key insight: the mrv engine is real-valued, so any `Complex[]` surviving in
+a frozen-scale `Series` input is a branch artefact — rejecting it both prevents
+the hang and preserves "never wrong" (the engine abstains rather than returning
+a complex/garbage value). Verified there is no regression: the 3 newly-visible
+`series_tests` failures are pre-existing `SeriesData` D/Integrate normalisation
+gaps that the committed suite never reached because it hung first.
+
+---
+
+# Gruntz `Limit` Phase 3 — deep log-tower cancellation (thesis 8.19), review
 
 **What shipped.** Three surgical fixes confined to `src/calculus/gruntz.c`
 (`expand_logs`, `series_leadterm`) make the `Method->"Gruntz"` engine resolve

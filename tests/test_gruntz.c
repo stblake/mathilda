@@ -110,6 +110,31 @@ static void test_log_tower(void) {
            "Log[Log[x] + Log[Log[Log[x]]]] Log[x]", "1");
 }
 
+/* Robustness of the log-tower path: the mrv engine must NEVER hang, even on a
+ * deep tower it cannot resolve. A 3+-level tower re-introduces a Log[-Log[w]]
+ * branch (I Pi) at a depth the single positive-scale substitution cannot fix;
+ * feeding that to Series would blow up, so a Complex[] in the frozen-scale
+ * input is rejected and the engine abstains FAST instead of looping. These
+ * cases previously made plain Limit (Automatic) and Method->"Series"/"Asymptotic"
+ * hang because the cascade recurses through the Gruntz layer on deep sub-limits.
+ * Each assertion here simply completing (no timeout) is the regression check. */
+static void test_log_tower_no_hang(void) {
+    /* Plain Limit (Automatic) must resolve 8.19 -- the asymptotic/series cascade
+     * layers abstain, then the top-level Gruntz layer closes it. */
+    assert_eval_eq("Limit[(Log[Log[x] + Log[Log[x]]] - Log[Log[x]])/"
+                   "Log[Log[x] + Log[Log[Log[x]]]] Log[x], x -> Infinity]", "1", 0);
+    /* Under the slower cascade methods, 8.19 must terminate (abstain is fine). */
+    assert_eval_startswith("Limit[(Log[Log[x] + Log[Log[x]]] - Log[Log[x]])/"
+        "Log[Log[x] + Log[Log[Log[x]]]] Log[x], x -> Infinity, Method -> \"Asymptotic\"]",
+        "Limit[");
+    assert_eval_startswith("Limit[(Log[Log[x] + Log[Log[x]]] - Log[Log[x]])/"
+        "Log[Log[x] + Log[Log[Log[x]]]] Log[x], x -> Infinity, Method -> \"Series\"]",
+        "Limit[");
+    /* (A still-deeper 3-level tower the engine cannot resolve also abstains
+     * without hanging -- exercised by the stress battery, kept out of the fast
+     * suite because its bounded fallback search costs ~15s.) */
+}
+
 /* ---- Home-made hard limits, batch 1: elementary but non-trivial. ------- */
 static void test_stress_elementary(void) {
     GRUNTZ("x^(1/x)", "1");
@@ -279,6 +304,7 @@ int main(void) {
     TEST(test_thesis_trig);
     TEST(test_worked_examples);
     TEST(test_log_tower);
+    TEST(test_log_tower_no_hang);
     TEST(test_stress_elementary);
     TEST(test_stress_nested_exp);
     TEST(test_stress_reductions);
