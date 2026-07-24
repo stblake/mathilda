@@ -188,6 +188,16 @@ static void test_series_at_infinity(void) {
         "0, 11, 1]");
 }
 
+/* 10b. Stirling asymptotic expansion of LogGamma at Infinity: an additive
+ * exp-log head (x-1/2)Log[x] - x + Log[2 Pi]/2 plus a Bernoulli Laurent tail
+ * B_{2k}/(2k(2k-1)) x^-(2k-1) = 1/(12x) - 1/(360 x^3) + ... (DLMF 5.11.1). */
+static void test_series_loggamma_at_infinity(void) {
+    setup_full();
+    assert_outputform(
+        "Normal[Series[LogGamma[x], {x, Infinity, 5}]]",
+        "1/2 Log[2 Pi] - x - 1/360/x^3 + 1/1260/x^5 + 1/12/x + Log[x] (-1/2 + x)");
+}
+
 /* 11. Multivariate iterated expansion. Each inner coefficient is itself a
  * SeriesData in the next variable. */
 static void test_series_bivariate(void) {
@@ -1750,6 +1760,7 @@ int main(void) {
     TEST(test_series_binomial_symbolic);
     TEST(test_series_deep_laurent);
     TEST(test_series_at_infinity);
+    TEST(test_series_loggamma_at_infinity);
     TEST(test_series_bivariate);
     TEST(test_series_list_threading);
     TEST(test_series_approximate_numbers);

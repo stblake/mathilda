@@ -44,6 +44,7 @@
                           * internal probes would otherwise emit while poking
                           * at candidate sub-expressions. */
 #include "sym_names.h"
+#include "gruntz.h"       /* Gruntz mrv-algorithm limit engine (layer_gruntz) */
 /* Note: Series and D are invoked symbolically (through the evaluator),
  * not via direct C calls, so series.h / deriv.h are intentionally not
  * included here. Adding the Series and Derivative symbols to the symbol
@@ -117,6 +118,7 @@
 #define LIMIT_M_BOUNDED       4
 #define LIMIT_M_SERIES        5
 #define LIMIT_M_LHOSPITAL     6
+#define LIMIT_M_GRUNTZ        7
 
 /* ---------------------------------------------------------------------- */
 /* LimitCtx -- threaded through the pipeline                               */
@@ -329,6 +331,7 @@ static Expr* layer_log_of_finite(Expr* f, LimitCtx* ctx);
 static Expr* layer_plus_termwise(Expr* f, LimitCtx* ctx);
 static Expr* layer_plus_split_convergent(Expr* f, LimitCtx* ctx);
 static Expr* layer_abs_rewrite(Expr* f, LimitCtx* ctx);
+static Expr* layer_gruntz(Expr* f, LimitCtx* ctx);
 static Expr* rewrite_reciprocal_trig(Expr* e);
 static Expr* magnitude_upper_bound(Expr* e, Expr* x, bool var_abs);
 static bool  contains_bounded_head(Expr* e);
@@ -634,6 +637,7 @@ static bool parse_direction(Expr* dir, int* out) {
 static bool parse_method(Expr* m, int* out) {
     if (!m) { *out = LIMIT_M_AUTOMATIC; return true; }
     if (is_sym(m, "Automatic")) { *out = LIMIT_M_AUTOMATIC; return true; }
+    if (is_sym(m, "Gruntz"))    { *out = LIMIT_M_GRUNTZ;    return true; }
     if (m->type == EXPR_STRING) {
         const char* s = m->data.string;
         if (strcmp(s, "Automatic")        == 0) { *out = LIMIT_M_AUTOMATIC;    return true; }
@@ -643,6 +647,7 @@ static bool parse_method(Expr* m, int* out) {
         if (strcmp(s, "Bounded")          == 0) { *out = LIMIT_M_BOUNDED;      return true; }
         if (strcmp(s, "Series")           == 0) { *out = LIMIT_M_SERIES;       return true; }
         if (strcmp(s, "LHospital")        == 0) { *out = LIMIT_M_LHOSPITAL;    return true; }
+        if (strcmp(s, "Gruntz")           == 0) { *out = LIMIT_M_GRUNTZ;       return true; }
     }
     return false;
 }
@@ -2676,6 +2681,24 @@ static Expr* layer_constant_factor(Expr* f, LimitCtx* ctx) {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Gruntz mrv-algorithm layer. Thin adapter around gruntz_limit(): the      */
+/* engine works at a fixed limit point/direction, so we hand it the ctx's   */
+/* variable, point, and direction. Only real directions are supported;      */
+/* complex/branch-cut requests fall through. Returns a fresh Expr* or NULL. */
+/* ---------------------------------------------------------------------- */
+static Expr* layer_gruntz(Expr* f, LimitCtx* ctx) {
+    int gdir;
+    switch (ctx->dir) {
+        case LIMIT_DIR_FROMABOVE: gdir =  1; break;
+        case LIMIT_DIR_FROMBELOW: gdir = -1; break;
+        case LIMIT_DIR_TWOSIDED:
+        case LIMIT_DIR_REALS:     gdir =  0; break;
+        default:                  return NULL; /* complex / imaginary: skip */
+    }
+    return gruntz_limit(f, ctx->x, ctx->point, gdir, ctx->depth);
+}
+
+/* ---------------------------------------------------------------------- */
 /* Top-level dispatch                                                      */
 /* ---------------------------------------------------------------------- */
 static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
@@ -2795,6 +2818,12 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
 
     /* Layer 2: series-based evaluation -- the workhorse. */
     TRY(LIMIT_M_SERIES, layer2_series(f, ctx));
+
+    /* Gruntz's mrv algorithm. Reached exclusively under Method->"Gruntz",
+     * and as a last-resort fallback under Automatic (fires only when the
+     * cheaper series/log layers above returned NULL). Handles the hard
+     * cancellation-heavy nested-exponential exp-log limits. */
+    TRY(LIMIT_M_GRUNTZ, layer_gruntz(f, ctx));
 
     /* Layer 5.1: L'Hospital's rule with guardrails. */
     TRY(LIMIT_M_LHOSPITAL, layer5_lhospital(f, ctx));

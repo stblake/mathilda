@@ -1,50 +1,112 @@
-# Fix: Limit[2 ArcTan[Sqrt[(1+x)/(1-x)]], x -> 1] returns -Pi (should be Pi)
+# Gruntz `Limit` Phase 3 — deep log-tower cancellation (thesis 8.19)
 
-## Root-cause chain
-1. `ArcTan[ComplexInfinity]` folds to `-Pi/2` because `exact_arctan` spuriously
-   matches `Tan[-Pi/2] == ComplexInfinity` (n=-1 is tried before n=+1). WL gives
-   `Indeterminate`.
-2. Limit's layer1 numeric substitution does `ArcTan[Sqrt[2/0]]` =
-   `ArcTan[ComplexInfinity]` = `-Pi/2`, accepts the (finite, wrong) value, and
-   never reaches the series/compose layers. `2 * -Pi/2 = -Pi`.
-3. `layer_compose_at_infinity` only accepts *real* +/-Infinity inner limits, so
-   even after deferral it cannot fold `ArcTan[DirectedInfinity[I Sqrt[2]]]`.
-4. No constant-factor linearity, so `2 ArcTan[...]` never reduces to
-   `2 Limit[ArcTan[...]]` (`Limit[3 ArcTan[t], t->Infinity]` is also unevaluated).
+Per GRUNTZ_STATE.md "Known gaps"; the chosen next Gruntz gap.
 
-Both one-sided limits genuinely -> Pi, so the two-sided answer is Pi.
-
-## Fixes
-- [x] trig.c `builtin_arctan`: handle infinite args before exact folds.
-      `ArcTan[ComplexInfinity] -> Indeterminate`;
-      `ArcTan[DirectedInfinity[dir]] -> +/-Pi/2` by the quadrant of `dir`
-      (`arctan_direction_sign` via N + get_approx, so `I Sqrt[2]` resolves).
-- [x] limit.c `layer_compose_at_infinity`: also accept ComplexInfinity /
-      DirectedInfinity inner limits, applying the head; accept only an
-      unambiguous folded value (reject Indeterminate / residual infinity).
-- [x] limit.c new `layer_constant_factor` (late in cascade): pull x-free
-      factors out of a Times and recurse.
-
-## Verify
-- [x] Target -> Pi; FromBelow/FromAbove -> Pi.
-- [x] `Limit[3 ArcTan[t], t->Infinity] -> 3Pi/2`, `ArcTan[ComplexInfinity] ->
-      Indeterminate`, `ArcTan[DirectedInfinity[I]] / [I Sqrt[2]] -> Pi/2`,
-      `ArcTan[DirectedInfinity[-1]] / [-I] -> -Pi/2`.
-- [x] Unchanged real-infinity paths (`ArcTan[x]`, `Tanh[x]`, `Erf[x]`,
-      `ArcTan[x^2-x^4]` at ±Infinity) and constant-factor finite limits
-      (`2x@3`, `5 Sin[x]/x @0`) still correct.
-- [x] limit/trig/hyperbolic suites: identical soft-fail counts to pristine
-      main (2 pre-existing, unrelated; 0 new). numeric_tests pass.
-- [x] valgrind: leak profile identical to trivial-input baseline
-      (13,440B/420blk = macOS dyld/libobjc noise); no stack in my code.
+- [x] Diagnose: `Method->"Gruntz"` abstains on 8.19; failing atom is the
+      leading-order cancellation `Log[x+Log[x]]-Log[x]`.
+- [x] Fix 1 (`expand_logs`): factor the `w`-pole out of each `Log`
+      (`Log[G]=k Log[w]+Log[H]`, `H=Expand[G w^{-k}]`) so `Series` never splits
+      it into the branch-contaminated `Log[-a]+Log[-1/a]` (`=2 Pi I`).
+- [x] Fix 2 (`series_leadterm`): run `Series` in the positive log-scale
+      `P=-Log[w]` (substitute `lw_sym->-P`, restore `P->-Log[w]`) so
+      `Log[-Log[w]]` stays real; drop the now-unnecessary `Log[lw_sym]` bail.
+- [x] Fix 3 (`series_leadterm`): accept a `w`-free level as the sub-scale
+      coefficient (`limitinf` recurses) instead of abstaining.
+- [x] Tests: new `test_log_tower` (atoms + full 8.19 `->1`); 8.19 removed from
+      `test_honest_abstentions`; `gruntz_tests` green.
+- [x] Regression: `limit`/`limit_assumptions`/`nlimit`/`nseries` 0 FAIL;
+      `series`/`residue` fail-modes IDENTICAL to pre-change (ArcCoth family +
+      NResidue convergence warnings, both pre-existing).
+- [x] valgrind: definitely-lost 13,440B/420blk == documented macOS baseline; no
+      new gruntz frames in any leak stack.
+- [x] Docs: `GRUNTZ_STATE.md` (Phase 3 + gap update), `calculus.md` (Gruntz
+      coverage), weekly changelog `2026-07-20.md`.
 
 ## Review
-Root defect was a wrong-branch fold: `exact_arctan` matched the `Tan[-Pi/2]`
-pole for `ArcTan[ComplexInfinity]`, and `Limit`'s numeric-substitution fast
-path trusted the resulting `-Pi/2`. Fixed at the source (correct `ArcTan`
-values at all infinities) rather than by guarding the substitution, then
-taught `Limit` to (a) fold heads over directed/complex inner infinities and
-(b) factor out constants. The composite now resolves because both one-sided
-limits legitimately reach `Pi`. Minimal blast radius: the constant-factor
-layer runs last (only rescues previously-unresolved shapes), and the compose
-change preserves the existing real-infinity path byte-for-byte.
+
+**What shipped.** Three surgical fixes confined to `src/calculus/gruntz.c`
+(`expand_logs`, `series_leadterm`) make the `Method->"Gruntz"` engine resolve
+thesis 8.19 and the class of pure log-tower limits with leading-order
+cancellation. Root cause was two ways `Series` mishandles the frozen
+`lw_sym = Log[w]` (whose sign it doesn't know): it splits a `w`-pole log into a
+spurious `2 Pi I` constant, and it mis-branches `Log[-lw_sym]` (a real,
+positive-scale log) to `Log[lw_sym] + I Pi`. Factoring the pole out first and
+expanding in the positive scale `-Log[w]` both address that at the source; the
+third fix lets a fully-collapsed level recurse as its sub-scale limit.
+
+**Scope honesty.** Only the explicit `Method->"Gruntz"` reaches the fix. Plain
+`Limit` (Automatic) still hangs on 8.19 inside `limit.c`'s Asymptotic/Series
+cascade layers, which run before the Gruntz layer and never call `gruntz_limit`
+— a pre-existing issue (byte-identical before/after this change), left as a
+separate follow-up.
+
+---
+
+# FLINT-backed multivariate zero test (`flint_mpoly_is_zero`)
+
+Implements FLINT_ZERO_TEST_PLAN.md.
+
+## Phase 1 — Primitive
+- [x] `flint_bridge.h`: declare `int flint_mpoly_is_zero(const Expr* e);`
+- [x] `flint_bridge.c` (USE_FLINT): kernel-aware `to_mpoly_kernels` + `flint_mpoly_is_zero`
+      - operate on `expr_expand(e)` (mirrors classical; captures Tan·Cos→Sin reductions)
+      - generator set = poly.c `collect_variables` (symbols + opaque kernels)
+      - match-generator-first, then Plus/Times/Power(nonneg int)/Rational/Integer/Bigint
+      - decline (-1) on anything FLINT can't model (Complex, Real, Pi, frac power, …)
+- [x] `flint_bridge.c` (!USE_FLINT): stub returning -1
+
+## Phase 2 — Wiring + differential harness
+- [x] `poly.c`: `is_zero_poly` dispatches to FLINT path, classical `is_zero_poly_depth` fallback
+- [x] env-gated (`MATHILDA_ZEROTEST_DIFF`) differential harness: run both, abort on disagreement
+
+## Phase 3 — Tests
+- [x] extend `tests/test_zero_test.c`: kernel-generator zeros/non-zeros, decline cases
+- [x] random-polynomial fuzzer under differential mode (400 iters, 0 disagreements)
+
+## Phase 4 — Verify
+- [x] Build clean (make + cmake tests)
+- [x] Differential run: 1 disagreement found (Tan·Cos) → fixed (expand-first); zero_test+simplify clean
+- [x] Regression suites (20 core + 9 integrate/corpus): 0 disagreements everywhere;
+      simplify/ratcanon_spec/intrat/series/intrat_corpus/goursat/cherry_ei fail-modes
+      IDENTICAL to pristine (all pre-existing, verified by stash+rebuild)
+- [x] valgrind clean — definitely-lost 13,440B/420blk == documented macOS baseline; no
+      leak stack in new code (flint_mpoly_is_zero/to_mpoly_kernels/collect_variables)
+
+## Phase 5 — Gruntz Gamma acceptance (stretch) — DONE
+- [x] re-enabled Gamma isolation in gruntz.c (Gamma[g]=Exp[LogGamma[g]] branch)
+- [x] Stirling ratio -> 1 (0.06s), thesis 5.5 -> Infinity (0.81s) NOW RESOLVE
+      (promoted to test_thesis_gamma); 8.31 still abstains (residual Series cost)
+- [x] BENCHMARK: 8.31 abstention 173.9s (classical zero) -> 14.9s (FLINT) = ~11.7x
+      — directly confirms is_zero_poly was the mrv bottleneck that forced Gamma out
+- [x] gruntz_tests green
+
+## Phase 6 — Docs — DONE
+- [x] docs/spec/builtins/expression-information.md — PossibleZeroQ Stage-2 FLINT note
+- [x] flint_bridge.h contract comment + weekly changelog (2026-07-20.md)
+- [x] memory note updated (project_flint_zero_test DONE) + MEMORY.md pointer
+- [x] GRUNTZ_STATE.md — Gamma re-enabled section
+
+## Review
+
+**What shipped.** `flint_mpoly_is_zero` (`src/poly/flint_bridge.{c,h}`) — a
+FLINT `fmpq_mpoly`-backed accelerator for `is_zero_poly`, wired into
+`src/poly/poly.c` with the classical `is_zero_poly_depth` as the decline
+fallback and an env-gated (`MATHILDA_ZEROTEST_DIFF`) differential harness. Plus
+the Gruntz `Gamma` isolation it unblocks (`src/calculus/gruntz.c`).
+
+**Key design decision.** The accelerator operates on `expr_expand(e)`, not the
+raw tree — the classical predicate does too, and expansion performs kernel
+reductions (`Tan[k]·Cos[k]→Sin[k]`) that the raw generators hide. The
+differential harness *caught* this as a real disagreement during bring-up; the
+expand-first design makes the verdict bit-for-bit classical while still removing
+the multiplicative re-expansion fan-out.
+
+**Verification.** 0 differential disagreements across 29 suites + a 400-iter
+fuzzer; all non-green suites verified fail-identical to pristine (stash+rebuild);
+valgrind at macOS baseline; clean strict-C99 build. Gamma benchmark
+173.9s→14.9s confirms the diagnosed bottleneck.
+
+**Scope honesty.** The `p - Expand[p]` micro-bench shows no speedup (its cost is
+the outer Expand). The real win is the deep-cancellation multi-generator mrv
+towers — exactly the Gamma cases. 8.31 still abstains (residual `Series` depth,
+out of scope for this zero-test project).

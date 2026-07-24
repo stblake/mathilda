@@ -251,6 +251,34 @@ Out[8]= 6 a b^2
     shrinking-bound `(x Sin[1/x]/2)^(1/x^2) -> 0` at `x -> 0`), and `Infinity`
     when the base is bounded below by a constant `> 1` and positive (e.g.
     `(2 + Sin[1/x]/2)^(1/x^2) -> Infinity`).
+  - `"Gruntz"` — Gruntz's most-rapidly-varying (mrv) algorithm for exp-log
+    functions (his 1996 ETH thesis). The whole function is expanded as a
+    series in its most rapidly varying subexpression `w -> 0+`, which
+    structurally avoids the intermediate expression swell that defeats
+    bottom-up series methods on cancellation-heavy nested exponentials —
+    e.g. `E^x (E^(1/x - E^-x) - E^(1/x)) -> -1`, `(3^x + 5^x)^(1/x) -> 5`,
+    `x/Log[x^(Log[x]^(2/Log[x]))] -> Infinity`. It also runs as a last-resort
+    fallback inside `Automatic` (after the series/L'Hospital layers), so these
+    hard limits resolve without naming a method. Scope: real exp-log towers
+    (`Exp`, `Log`, `Power`, `+`, `*`) plus tractable trig at a vanishing
+    argument (`Sin`, `Cos`, …). A pre-processing pass also isolates the
+    essential singularity of the semi-tractable special functions `Erf`,
+    `Erfc`, `ExpIntegralEi`, and `LogGamma` at infinity (thesis §5.2 transforms
+    5.6/5.7/5.8): each `F[g]` with `g -> ±oo` is replaced by its asymptotic
+    expansion — obtained from `Series[F, {·, Infinity, n}]` — so the singular
+    part becomes an explicit `Exp`/log head the mrv engine can handle, e.g.
+    `ExpIntegralEi[x + E^-x] E^-x x -> 1` (thesis 5.4),
+    `(Erf[x - E^-x] - Erf[x]) E^x E^(x^2) -> -2/Sqrt[Pi]`,
+    `LogGamma[x]/(x Log[x]) -> 1`, and deep log-towers whose leading terms
+    cancel, e.g. thesis 8.19
+    `(Log[Log[x]+Log[Log[x]]]-Log[Log[x]])/Log[Log[x]+Log[Log[Log[x]]]] Log[x] -> 1`
+    (each `Log` is expanded by factoring its `w`-pole out first, then the mrv
+    `Series` runs in the positive log-scale `-Log[w]` so `Log[-Log[w]]` stays
+    real). Still **not covered** (left unevaluated — never a wrong value): the
+    thesis-8.31 `Gamma` Stirling difference (whose x^x-scale tower needs a
+    deeper `Series` cancellation than the machinery reaches — a flagged `Series`
+    limitation, not a wrong answer) and `PolyGamma`/`Zeta`/`BesselJ`/`Max`/`Min`
+    at infinity.
 - **Joint multivariate** limits at the origin or `+Infinity` are decided by a
   polar/spherical substitution: the integrand is `Simplify`-normalised in
   `r`/angle coordinates (cancelling common `r`-powers so buried `0/0` shapes
@@ -291,6 +319,18 @@ Out[8]= 2
 
 In[9]:= Limit[Sin[x]/x, x -> 0, Method -> "RationalFunction"]
 Out[9]= Limit[Sin[x]/x, x -> 0, Method -> "RationalFunction"]
+
+In[10]:= Limit[E^x (E^(1/x - E^-x) - E^(1/x)), x -> Infinity, Method -> "Gruntz"]
+Out[10]= -1
+
+In[11]:= Limit[(3^x + 5^x)^(1/x), x -> Infinity]
+Out[11]= 5
+
+In[12]:= Limit[ExpIntegralEi[x + E^-x] E^-x x, x -> Infinity, Method -> "Gruntz"]
+Out[12]= 1
+
+In[13]:= Limit[(Erf[x - E^-x] - Erf[x]) E^x E^(x^2), x -> Infinity]
+Out[13]= -2/Sqrt[Pi]
 ```
 
 ## Residue

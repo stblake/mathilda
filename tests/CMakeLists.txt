@@ -471,6 +471,7 @@ set(COMMON_SRC
     ../src/calculus/series.c
     ../src/calculus/deriv.c
     ../src/calculus/limit.c
+    ../src/calculus/gruntz.c
     ../src/calculus/residue.c
     ../src/context.c
     ../src/numeric.c
@@ -2343,6 +2344,9 @@ target_include_directories(limit_tests PRIVATE ../src)
 
 add_executable(limit_assumptions_tests test_limit_assumptions.c ${COMMON_SRC})
 target_include_directories(limit_assumptions_tests PRIVATE ../src)
+
+add_executable(gruntz_tests test_gruntz.c ${COMMON_SRC})
+target_include_directories(gruntz_tests PRIVATE ../src)
 
 add_executable(collect_corpus_tests test_collect_corpus.c ${COMMON_SRC})
 target_include_directories(collect_corpus_tests PRIVATE ../src)

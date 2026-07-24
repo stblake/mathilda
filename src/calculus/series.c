@@ -3070,11 +3070,11 @@ static Expr* seriesdata_to_normal(Expr* arg) {
     Expr* sum;
     if (tc == 0)      sum = expr_new_integer(0);
     else if (tc == 1) sum = terms[0];
-    else {
-        sum = expr_new_function(mk_symbol("Plus"), terms, tc);
-        terms = NULL;
-    }
-    if (terms) free(terms);
+    else              sum = expr_new_function(mk_symbol("Plus"), terms, tc);
+    /* expr_new_function memcpy's the pointer array into its own storage, so we
+     * always own (and must free) `terms` itself -- only its element ownership
+     * transfers into `sum`. */
+    free(terms);
 
     return simp(sum);
 }
@@ -3912,6 +3912,58 @@ static Expr* try_series_erfi_at_infinity(Expr* f, Expr* x, int64_t n) {
     if (!expr_eq(f->data.function.args[0], x)) return NULL;
     Expr* mult = erf_family_series(x, n, +1, +1);   /* +1/Sqrt[Pi], all positive */
     return mk_times(erf_exp_prefactor(x, +1), mult);
+}
+
+/* Stirling asymptotic expansion of LogGamma[x] at x = Infinity (DLMF 5.11.1):
+ *
+ *   LogGamma(x) ~ (x - 1/2) Log[x] - x + Log[2 Pi]/2
+ *                 + Sum_{k>=1} B_{2k} / (2k (2k-1)) x^-(2k-1)
+ *               = (x-1/2) Log[x] - x + Log[2Pi]/2 + 1/(12x) - 1/(360x^3) + ...
+ *
+ * The (x-1/2)Log[x] - x + Log[2Pi]/2 head carries the growth (LogGamma ->
+ * Infinity) and stays symbolic, exactly as the Exp[x] prefactor does for
+ * ExpIntegralEi; the Bernoulli tail is a Laurent series in 1/x. `n` counts the
+ * 1/x tail terms (exponents 1..n, O-term at n+1). Returns NULL unless f is
+ * exactly LogGamma[x] in the expansion variable. */
+static Expr* try_series_loggamma_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "LogGamma") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+
+    size_t ncoef = (size_t)n;                 /* 1/x exponents 1 .. n */
+    Expr** coefs = calloc(ncoef, sizeof(Expr*));
+    for (size_t i = 0; i < ncoef; i++) coefs[i] = expr_new_integer(0);
+    /* Nonzero only at odd exponents m = 2k-1: coef = B_{2k} / (2k(2k-1)). */
+    for (int64_t k = 1; ; k++) {
+        int64_t m = 2 * k - 1;                /* exponent */
+        if (m > n) break;
+        Expr* b2k = eval_and_free(mk_fn1("BernoulliB", expr_new_integer(2 * k)));
+        Expr* coef = eval_and_free(
+            mk_times(b2k, make_rational(1, (int64_t)(2 * k) * (int64_t)(2 * k - 1))));
+        expr_free(coefs[m - 1]);
+        coefs[m - 1] = coef;
+    }
+    Expr* coef_list = expr_new_function(mk_symbol("List"), coefs, ncoef);
+    free(coefs);
+
+    Expr** sd = calloc(6, sizeof(Expr*));
+    sd[0] = mk_power(expr_copy(x), expr_new_integer(-1)); /* expansion var 1/x */
+    sd[1] = expr_new_integer(0);
+    sd[2] = coef_list;
+    sd[3] = expr_new_integer(1);                          /* nmin              */
+    sd[4] = expr_new_integer(n + 1);                      /* nmax (O-term)     */
+    sd[5] = expr_new_integer(1);
+    Expr* tail = expr_new_function(mk_symbol("SeriesData"), sd, 6);
+    free(sd);
+
+    /* head = (x - 1/2) Log[x] - x + Log[2 Pi]/2 */
+    Expr* head = mk_times(mk_plus(expr_copy(x), make_rational(-1, 2)),
+                          mk_fn1("Log", expr_copy(x)));
+    head = mk_plus(head, mk_times(expr_new_integer(-1), expr_copy(x)));
+    head = mk_plus(head, mk_times(make_rational(1, 2),
+                    mk_fn1("Log", mk_times(expr_new_integer(2), mk_symbol("Pi")))));
+    return mk_plus(head, tail);
 }
 
 /* Asymptotic expansion of AiryAi[x] at x = Infinity (DLMF 9.7.5):
@@ -5373,6 +5425,14 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
             expr_free(f_eval);
             expr_free(x0_eval);
             return erfi;
+        }
+        /* LogGamma[x] at Infinity: Stirling series, growth head (x-1/2)Log[x]-x
+         * kept symbolic plus a Bernoulli Laurent tail. */
+        Expr* lgam = try_series_loggamma_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (lgam) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return lgam;
         }
         /* ProductLog[x] at Infinity: nested-logarithm asymptotic expansion
          * (the x^0 coefficient), not a power series in 1/x. */
