@@ -9,9 +9,9 @@
 NSum[f, {i, imin, imax}]
     gives a numerical approximation to the sum of f for i from imin to imax.
 
-NSum[f, {i, imin, imax, di}] uses step di. imax may be Infinity. NSum[f, {i, ...}, {j, ...}, ...] evaluates a multidimensional sum (an inner bound may depend on an outer index). The index is localised (HoldAll). Method -> Automatic picks Euler-Maclaurin for monotone series, the Cohen-Villegas-Zagier method for alternating series, and Wynn's epsilon (partial-sum acceleration) otherwise; large finite sums use the difference of two infinite tails. Machine or arbitrary precision via WorkingPrecision.
+NSum[f, {i, imin, imax, di}] uses step di. imax may be Infinity. NSum[f, {i, ...}, {j, ...}, ...] evaluates a multidimensional sum (an inner bound may depend on an outer index). The index is localised (HoldAll). Method -> Automatic picks Euler-Maclaurin for monotone series, the Cohen-Villegas-Zagier method for alternating series, and Wynn's epsilon (partial-sum acceleration) otherwise, with Levin's u-transform as a last resort; large finite sums use the difference of two infinite tails. Method -> "Levin" forces Levin's transformation ("LevinU" | "LevinT" | "LevinV" select the u/t/v variant). Machine or arbitrary precision via WorkingPrecision.
 
-Options: Method (Automatic | EulerMaclaurin | AlternatingSigns | WynnEpsilon), WorkingPrecision (default MachinePrecision), NSumTerms (head terms summed explicitly, default 15), NSumExtraTerms, WynnDegree, VerifyConvergence (default True; a divergent sum gives ComplexInfinity), AccuracyGoal, PrecisionGoal.
+Options: Method (Automatic | EulerMaclaurin | AlternatingSigns | WynnEpsilon | "Levin"), WorkingPrecision (default MachinePrecision), NSumTerms (head terms summed explicitly, default 15), NSumExtraTerms, WynnDegree, VerifyConvergence (default True; a divergent sum gives ComplexInfinity), AccuracyGoal, PrecisionGoal.
 ```
 
 ## Examples
@@ -81,6 +81,11 @@ In[1]:= NSum[1/n^4, {n, 1, Infinity}, WorkingPrecision -> 30]
 Out[1]= 1.082323233711138191516003696543
 ```
 
+```mathematica
+In[1]:= NSum[1/n^2, {n, 1, Infinity}, Method -> "Levin"]
+Out[1]= 1.64493
+```
+
 ### Notes
 
 `NSum[f, {i, imin, imax}]` numerically sums a series, with `imax` allowed to be
@@ -89,5 +94,8 @@ the alternating harmonic sum `Log[2] = 0.693147...`. With `WorkingPrecision -> 3
 the Basel sum is computed to 30 digits, and `Sum[1/n^4]` returns
 `Pi^4/90 = 1.082323233711...`. `Method -> Automatic` chooses Euler–Maclaurin for
 monotone series, the Cohen–Villegas–Zagier method for alternating series, and
-Wynn's epsilon otherwise. With `VerifyConvergence -> True` (default) a divergent
-sum gives `ComplexInfinity`.
+Wynn's epsilon otherwise, with Levin's u-transform as a last resort. Any
+accelerator can be forced: `Method -> "Levin"` (`"LevinU"`/`"LevinT"`/`"LevinV"`)
+selects Levin's transformation, which reaches full `WorkingPrecision` on smooth
+series. With `VerifyConvergence -> True` (default) a divergent sum gives
+`ComplexInfinity`.

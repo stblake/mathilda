@@ -302,6 +302,7 @@ typedef struct {
     bool  nsum_terms_user;  /* user pinned NSumTerms (suppress adaptive base)     */
     int   extra_terms;      /* extrapolation-sequence length (-1 => auto)         */
     int   wynn;             /* WynnDegree                                         */
+    int   levin_variant;    /* SeqaccelLevinVariant when method == SYM_Levin       */
     bool  verify;           /* VerifyConvergence                                  */
     bool  prec_mpfr;        /* WorkingPrecision selects MPFR                       */
     long  bits;             /* MPFR *internal* working precision in bits (guarded) */
@@ -371,6 +372,9 @@ static bool ns_apply_option(Expr* rule, NsOpts* o) {
             if (!strcmp(s, "WynnEpsilon") || !strcmp(s, "SequenceLimit")) o->method = SYM_WynnEpsilon;
             else if (!strcmp(s, "EulerMaclaurin") || !strcmp(s, "Integrate")) o->method = SYM_EulerMaclaurin;
             else if (!strcmp(s, "AlternatingSigns")) o->method = SYM_AlternatingSigns;
+            else if (!strcmp(s, "Levin") || !strcmp(s, "LevinU")) { o->method = SYM_Levin; o->levin_variant = SEQACCEL_LEVIN_U; }
+            else if (!strcmp(s, "LevinT")) { o->method = SYM_Levin; o->levin_variant = SEQACCEL_LEVIN_T; }
+            else if (!strcmp(s, "LevinV")) { o->method = SYM_Levin; o->levin_variant = SEQACCEL_LEVIN_V; }
             else o->method = SYM_Automatic;
             return true;
         }
@@ -380,6 +384,7 @@ static bool ns_apply_option(Expr* rule, NsOpts* o) {
             else if (sym == SYM_EulerMaclaurin || sym == SYM_Integrate
                      || sym == SYM_EulerSum) o->method = SYM_EulerMaclaurin;
             else if (sym == SYM_AlternatingSigns) o->method = SYM_AlternatingSigns;
+            else if (sym == SYM_Levin) { o->method = SYM_Levin; o->levin_variant = SEQACCEL_LEVIN_U; }
             else o->method = SYM_Automatic;
             return true;
         }
@@ -543,6 +548,109 @@ static Expr* ns_wynn_mpfr(NsCtx* c, long count, const NsOpts* o) {
         mpfr_t rr, ri; mpfr_init2(rr, p); mpfr_init2(ri, p);
         double step = 0.0; bool finite = false;
         bool got = seqaccel_wynn_mpfr(Pr, Pi, L, o->wynn, bits, rr, ri, &step, &finite);
+        if (got && finite && ns_accept(ns_l1_d(rr, ri), step, maxsample))
+            out = ns_from_complex_mpfr(rr, ri);
+        else
+            ns_warn("ncvg", "failed to converge; try more NSumExtraTerms or higher WorkingPrecision");
+        mpfr_clear(rr); mpfr_clear(ri);
+    } else {
+        ns_warn("nnum", "summand is not numerical at a term");
+    }
+
+    for (int j = 0; j < L; j++) { mpfr_clear(Pr[j]); mpfr_clear(Pi[j]); }
+    free(Pr); free(Pi);
+    mpfr_clears(accr, acci, tr, ti, (mpfr_ptr)0);
+    return out;
+}
+#endif
+
+/* ------------------------------------------------------------------ *
+ *  Method: Levin (partial-sum transformation, u/t/v)                  *
+ * ------------------------------------------------------------------ */
+
+/* Machine path.  Structurally identical to ns_wynn_machine but drives the
+ * shared Levin kernel with o->levin_variant. */
+static Expr* ns_levin_machine(NsCtx* c, long count, const NsOpts* o) {
+    int head = o->nsum_terms < 0 ? 0 : o->nsum_terms;
+    int L = ns_seq_len(o);
+    double _Complex* P = malloc(sizeof(double _Complex) * (size_t)L);
+    if (!P) return NULL;
+
+    double _Complex acc = 0.0;
+    bool ok = true;
+    long k = 0;
+    for (; k < head; k++) {
+        if (count >= 0 && k >= count) break;
+        double _Complex t;
+        if (!ns_term_machine(c, k, &t)) { ok = false; break; }
+        acc += t;
+    }
+    P[0] = acc;
+    for (int j = 1; ok && j < L; j++) {
+        if (count >= 0 && k >= count) { P[j] = acc; k++; continue; }
+        double _Complex t;
+        if (!ns_term_machine(c, k, &t)) { ok = false; break; }
+        acc += t;
+        P[j] = acc;
+        k++;
+    }
+    if (!ok) { free(P); ns_warn("nnum", "summand is not numerical at a term"); return NULL; }
+
+    double maxsample = 0.0;
+    for (int j = 0; j < L; j++) { double v = cabs(P[j]); if (v > maxsample) maxsample = v; }
+
+    double _Complex result; double step = 0.0;
+    bool got = seqaccel_levin_machine(P, L, o->levin_variant, 1.0, &result, &step);
+    free(P);
+    if (!got) { ns_warn("ndterm", "not enough terms for Levin"); return NULL; }
+    if (!ns_accept(cabs(result), step, maxsample)) {
+        ns_warn("ncvg", "failed to converge; try more NSumExtraTerms or higher WorkingPrecision");
+        return NULL;
+    }
+    return ns_from_complex_d(result);
+}
+
+#ifdef USE_MPFR
+static Expr* ns_levin_mpfr(NsCtx* c, long count, const NsOpts* o) {
+    int head = o->nsum_terms < 0 ? 0 : o->nsum_terms;
+    int L = ns_seq_len(o);
+    long bits = o->bits;
+    mpfr_prec_t p = (mpfr_prec_t)bits;
+
+    mpfr_t* Pr = malloc(sizeof(mpfr_t) * (size_t)L);
+    mpfr_t* Pi = malloc(sizeof(mpfr_t) * (size_t)L);
+    for (int j = 0; j < L; j++) { mpfr_init2(Pr[j], p); mpfr_init2(Pi[j], p); }
+    mpfr_t accr, acci, tr, ti;
+    mpfr_inits2(p, accr, acci, tr, ti, (mpfr_ptr)0);
+    mpfr_set_ui(accr, 0, MPFR_RNDN); mpfr_set_ui(acci, 0, MPFR_RNDN);
+
+    bool ok = true;
+    long k = 0;
+    for (; k < head; k++) {
+        if (count >= 0 && k >= count) break;
+        if (!ns_term_mpfr(c, k, tr, ti)) { ok = false; break; }
+        mpfr_add(accr, accr, tr, MPFR_RNDN);
+        mpfr_add(acci, acci, ti, MPFR_RNDN);
+    }
+    mpfr_set(Pr[0], accr, MPFR_RNDN); mpfr_set(Pi[0], acci, MPFR_RNDN);
+    for (int j = 1; ok && j < L; j++) {
+        if (count >= 0 && k >= count) {
+            mpfr_set(Pr[j], accr, MPFR_RNDN); mpfr_set(Pi[j], acci, MPFR_RNDN); k++; continue;
+        }
+        if (!ns_term_mpfr(c, k, tr, ti)) { ok = false; break; }
+        mpfr_add(accr, accr, tr, MPFR_RNDN);
+        mpfr_add(acci, acci, ti, MPFR_RNDN);
+        mpfr_set(Pr[j], accr, MPFR_RNDN); mpfr_set(Pi[j], acci, MPFR_RNDN);
+        k++;
+    }
+
+    Expr* out = NULL;
+    if (ok) {
+        double maxsample = 0.0;
+        for (int j = 0; j < L; j++) { double v = ns_l1_d(Pr[j], Pi[j]); if (v > maxsample) maxsample = v; }
+        mpfr_t rr, ri; mpfr_init2(rr, p); mpfr_init2(ri, p);
+        double step = 0.0; bool finite = false;
+        bool got = seqaccel_levin_mpfr(Pr, Pi, L, o->levin_variant, 1.0, bits, rr, ri, &step, &finite);
         if (got && finite && ns_accept(ns_l1_d(rr, ri), step, maxsample))
             out = ns_from_complex_mpfr(rr, ri);
         else
@@ -1413,6 +1521,7 @@ static Expr* ns_direct(NsCtx* c, long count, const NsOpts* o) {
  * `do_verify`, a clearly divergent series returns the ComplexInfinity symbol. */
 static Expr* ns_sum_infinite(NsCtx* c, const char* var, NsOpts* o, bool do_verify) {
     const char* method = o->method;
+    bool is_auto = (o->method == SYM_Automatic);
     long settle = -1;
     if (do_verify || method == SYM_Automatic) {
         NsProfile prof;
@@ -1442,6 +1551,13 @@ static Expr* ns_sum_infinite(NsCtx* c, const char* var, NsOpts* o, bool do_verif
         out = ns_em_machine(c, var, o, settle);
 #endif
         used = (out != NULL);                           /* else fall back to Wynn */
+    } else if (method == SYM_Levin) {
+#ifdef USE_MPFR
+        out = o->prec_mpfr ? ns_levin_mpfr(c, -1, o) : ns_levin_machine(c, -1, o);
+#else
+        out = ns_levin_machine(c, -1, o);
+#endif
+        used = (out != NULL);                           /* else fall back to Wynn */
     }
     if (!used) {
 #ifdef USE_MPFR
@@ -1449,6 +1565,17 @@ static Expr* ns_sum_infinite(NsCtx* c, const char* var, NsOpts* o, bool do_verif
 #else
         out = ns_wynn_machine(c, -1, o);
 #endif
+        /* Automatic last resort: when Wynn does not converge, give Levin's
+         * u-transform a shot.  Purely additive — an existing Wynn result is
+         * never replaced, so previously-converging Automatic sums are
+         * unaffected. */
+        if (!out && is_auto) {
+#ifdef USE_MPFR
+            out = o->prec_mpfr ? ns_levin_mpfr(c, -1, o) : ns_levin_machine(c, -1, o);
+#else
+            out = ns_levin_machine(c, -1, o);
+#endif
+        }
     }
     return out;
 }
@@ -1545,6 +1672,7 @@ Expr* builtin_nsum(Expr* res) {
     o.nsum_terms_user = false;
     o.extra_terms = -1;
     o.wynn = NS_DEF_WYNN;
+    o.levin_variant = SEQACCEL_LEVIN_U;
     o.verify = true;
     o.prec_mpfr = false;
     o.bits = 0;

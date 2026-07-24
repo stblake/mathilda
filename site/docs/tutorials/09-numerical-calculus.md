@@ -133,6 +133,17 @@ That is `π²/6` to 30 digits. If you feed `NSum` a series that does not converg
 it tells you so by returning `ComplexInfinity` (you can switch this convergence
 check off with `VerifyConvergence -> False`).
 
+You can also force a particular accelerator with the `Method` option. Alongside
+`"EulerMaclaurin"`, `"AlternatingSigns"` and `"WynnEpsilon"`, Levin's nonlinear
+transformation is available as `Method -> "Levin"` (with `"LevinU"`, `"LevinT"`,
+`"LevinV"` selecting the u/t/v variants) — it reaches full `WorkingPrecision` on
+smoothly convergent series:
+
+```mathematica
+In[1]:= NSum[1/n^2, {n, 1, Infinity}, Method -> "Levin"]
+Out[1]= 1.64493
+```
+
 ## Numerical products with NProduct
 
 `NProduct[f, {i, imin, imax}]` is the multiplicative analogue of `NSum`.
@@ -165,8 +176,10 @@ Out[2]= 2.71828
 `In[1]` is the indeterminate `0/0` form `sin(x)/x → 1`. `In[2]` is the limit that
 *defines* Euler's number, `(1 + 1/n)ⁿ → e ≈ 2.71828`; note the target `z0` can be
 `Infinity` (or even a complex infinite point like `I Infinity`). The approach
-direction and method (`EulerSum` Richardson extrapolation, or `SequenceLimit`
-Wynn's epsilon) are both options.
+direction and method are both options: `Method -> Automatic` (the default) keeps
+the most self-consistent of Richardson extrapolation (`EulerSum`), Wynn's epsilon
+(`SequenceLimit`) and Levin's u-transform, while `Method -> "Levin"`
+(`"LevinU"`/`"LevinT"`/`"LevinV"`) forces Levin's transformation.
 
 ## Numerical series with NSeries
 

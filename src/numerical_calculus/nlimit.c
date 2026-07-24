@@ -401,7 +401,8 @@ static double nl_l1_d(const mpfr_t re, const mpfr_t im) {
  * ------------------------------------------------------------------ */
 
 typedef struct {
-    const char* method;    /* SYM_Automatic (default) / SYM_EulerSum / SYM_SequenceLimit */
+    const char* method;    /* SYM_Automatic (default) / SYM_EulerSum / SYM_SequenceLimit / SYM_Levin */
+    int         levin_variant; /* SeqaccelLevinVariant when method == SYM_Levin (default u) */
     Expr*       direction; /* borrowed Direction value (NULL => Automatic) */
     Expr*       scale;     /* borrowed Scale value (NULL => 1)             */
     int         terms;     /* sample count / tableau depth (default 7)     */
@@ -458,8 +459,28 @@ static bool nl_apply_option(Expr* rule, NlOpts* o) {
         if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) {
             o->method = SYM_Automatic; return true;
         }
-        nl_warn("badmeth", "Method must be Automatic, EulerSum or SequenceLimit; "
-                           "using Automatic");
+        /* Levin transform: bare symbol Levin (= u), or string "Levin"/"LevinU"/
+         * "LevinT"/"LevinV" selecting the remainder-estimate variant. */
+        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Levin) {
+            o->method = SYM_Levin; o->levin_variant = SEQACCEL_LEVIN_U; return true;
+        }
+        if (rhs->type == EXPR_STRING) {
+            const char* s = rhs->data.string;
+            if (!strcmp(s, "Levin") || !strcmp(s, "LevinU")) {
+                o->method = SYM_Levin; o->levin_variant = SEQACCEL_LEVIN_U; return true;
+            }
+            if (!strcmp(s, "LevinT")) {
+                o->method = SYM_Levin; o->levin_variant = SEQACCEL_LEVIN_T; return true;
+            }
+            if (!strcmp(s, "LevinV")) {
+                o->method = SYM_Levin; o->levin_variant = SEQACCEL_LEVIN_V; return true;
+            }
+            if (!strcmp(s, "EulerSum"))      { o->method = SYM_EulerSum;      return true; }
+            if (!strcmp(s, "SequenceLimit")) { o->method = SYM_SequenceLimit; return true; }
+            if (!strcmp(s, "Automatic"))     { o->method = SYM_Automatic;     return true; }
+        }
+        nl_warn("badmeth", "Method must be Automatic, EulerSum, SequenceLimit or "
+                           "\"Levin\"; using Automatic");
         o->method = SYM_Automatic;
         return true;
     }
@@ -533,6 +554,18 @@ static bool nl_auto_machine(const double _Complex* S, int terms,
             best_r = r; best_s = s; have = true;
         }
     }
+    /* Levin u: same "positive residual = certified gap" policy as Wynn.  Strong
+     * on logarithmically/algebraically convergent samples the tableau misses.
+     * Only admitted when the sample sequence is actually settling (its last
+     * increment is smaller than its first): on a divergent sequence Levin can
+     * collapse to a spurious finite value with a deceptively small residual, so
+     * this gate keeps it from hijacking the best-of. */
+    if (terms >= 3 && cabs(S[terms - 1] - S[terms - 2]) < cabs(S[1] - S[0])
+        && seqaccel_levin_machine(S, terms, SEQACCEL_LEVIN_U, 1.0, &r, &s)
+        && isfinite(creal(r)) && isfinite(cimag(r))) {
+        if (!have_first) { first_r = r; have_first = true; }
+        if (isfinite(s) && s > 0.0 && s < best_s) { best_r = r; best_s = s; have = true; }
+    }
     if (have)       { *result = best_r;  *step = best_s; return true; }
     if (have_first) { *result = first_r; *step = 0.0;    return true; }
     return false;
@@ -580,6 +613,8 @@ static Expr* nl_run_machine(Expr* expr, const char* var, double _Complex z0,
         got = seqaccel_wynn_machine(S, terms, o->wynn, &result, &step);
     else if (o->method == SYM_EulerSum)
         got = seqaccel_richardson_machine(S, terms, &result, &step);
+    else if (o->method == SYM_Levin)
+        got = seqaccel_levin_machine(S, terms, o->levin_variant, 1.0, &result, &step);
     else
         got = nl_auto_machine(S, terms, &result, &step);   /* Automatic */
     free(S);
@@ -621,6 +656,34 @@ static bool nl_auto_mpfr(const mpfr_t* Sr, const mpfr_t* Si, int terms,
     for (int d = 1; d <= maxdeg; d++) {
         if (!seqaccel_wynn_mpfr(Sr, Si, terms, d, bits, tr, ti, &s, &fin)) continue;
         if (!fin) continue;
+        if (!have_first) {
+            mpfr_set(out_re, tr, MPFR_RNDN); mpfr_set(out_im, ti, MPFR_RNDN);
+            *finite = true; *step = s; have_first = true;
+        }
+        if (isfinite(s) && s > 0.0 && s < best_s) {
+            mpfr_set(out_re, tr, MPFR_RNDN); mpfr_set(out_im, ti, MPFR_RNDN);
+            *finite = true; best_s = s; *step = s; have = true;
+        }
+    }
+    /* Levin u: same positive-residual policy as Wynn, gated on the sample
+     * sequence actually settling (see nl_auto_machine for the rationale). */
+    bool contracting = false;
+    if (terms >= 3) {
+        mpfr_t d0, dn; mpfr_init2(d0, p); mpfr_init2(dn, p);
+        mpfr_sub(d0, Sr[1], Sr[0], MPFR_RNDN);
+        double first_inc = fabs(mpfr_get_d(d0, MPFR_RNDN));
+        mpfr_sub(d0, Si[1], Si[0], MPFR_RNDN);
+        first_inc += fabs(mpfr_get_d(d0, MPFR_RNDN));
+        mpfr_sub(dn, Sr[terms - 1], Sr[terms - 2], MPFR_RNDN);
+        double last_inc = fabs(mpfr_get_d(dn, MPFR_RNDN));
+        mpfr_sub(dn, Si[terms - 1], Si[terms - 2], MPFR_RNDN);
+        last_inc += fabs(mpfr_get_d(dn, MPFR_RNDN));
+        contracting = last_inc < first_inc;
+        mpfr_clear(d0); mpfr_clear(dn);
+    }
+    if (contracting
+        && seqaccel_levin_mpfr(Sr, Si, terms, SEQACCEL_LEVIN_U, 1.0, bits, tr, ti, &s, &fin)
+        && fin) {
         if (!have_first) {
             mpfr_set(out_re, tr, MPFR_RNDN); mpfr_set(out_im, ti, MPFR_RNDN);
             *finite = true; *step = s; have_first = true;
@@ -726,6 +789,8 @@ static Expr* nl_run_mpfr(Expr* expr, const char* var, Expr* z0_expr,
             got = seqaccel_wynn_mpfr(Sr, Si, terms, o->wynn, bits, rr, ri, &step, &finite);
         else if (o->method == SYM_EulerSum)
             got = seqaccel_richardson_mpfr(Sr, Si, terms, bits, rr, ri, &step, &finite);
+        else if (o->method == SYM_Levin)
+            got = seqaccel_levin_mpfr(Sr, Si, terms, o->levin_variant, 1.0, bits, rr, ri, &step, &finite);
         else
             got = nl_auto_mpfr(Sr, Si, terms, bits, rr, ri, &step, &finite);  /* Automatic */
         bool converged = got && finite && nl_accept(nl_l1_d(rr, ri), step, maxsample);
@@ -784,6 +849,7 @@ Expr* builtin_nlimit(Expr* res) {
 
     NlOpts o;
     o.method = SYM_Automatic;
+    o.levin_variant = SEQACCEL_LEVIN_U;
     o.direction = NULL;
     o.scale = NULL;
     o.terms = 7;

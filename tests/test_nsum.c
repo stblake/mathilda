@@ -96,6 +96,18 @@ static void test_methods_explicit(void) {
     ASSERT_CLOSE("NSum[(-1)^k/(2k+1),{k,0,Infinity},Method->AlternatingSigns]", "Pi/4", 1e-12);
 }
 
+static void test_levin(void) {
+    /* u-transform (string, bare symbol) on monotone and alternating series. */
+    ASSERT_CLOSE("NSum[1/i^2,{i,1,Infinity},Method->\"Levin\"]", "Pi^2/6", 1e-5);
+    ASSERT_CLOSE("NSum[1/i^4,{i,1,Infinity},Method->Levin]", "Pi^4/90", 1e-7);
+    ASSERT_CLOSE("NSum[(-1)^k/(k+1),{k,0,Infinity},Method->\"LevinU\"]", "Log[2]", 1e-8);
+    /* t-transform is near-exact on a pure geometric tail. */
+    ASSERT_CLOSE("NSum[1/2^i,{i,0,Infinity},Method->\"LevinT\"]", "2", 1e-10);
+    /* MPFR: reaches full precision on a smooth series. */
+    ASSERT_CLOSE("NSum[1/i^2,{i,1,Infinity},Method->\"Levin\",WorkingPrecision->30]",
+                 "Pi^2/6", 1e-25);
+}
+
 static void test_step_di(void) {
     ASSERT_CLOSE("NSum[1/2^i,{i,0,Infinity,2}]", "4/3", 1e-10);
     ASSERT_CLOSE("NSum[1/2^(2j),{j,0,Infinity}]", "4/3", 1e-10);
@@ -219,6 +231,7 @@ int main(void) {
     TEST(test_infinite_monotone);
     TEST(test_alternating);
     TEST(test_methods_explicit);
+    TEST(test_levin);
     TEST(test_step_di);
     TEST(test_complex_summand);
     TEST(test_large_finite);

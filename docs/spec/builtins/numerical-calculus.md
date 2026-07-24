@@ -330,17 +330,19 @@ recovers the limit by sequence acceleration:
 
 ### Methods
 
-- **`Automatic`** (default) -- runs *both* Richardson/Romberg and Wynn's epsilon
-  (at every admissible degree) and returns the estimate whose internal
-  convergence residual is smallest.  Richardson's fixed `2^j - 1` denominators
-  can only annihilate an integer-power (analytic) error tail; a geometric or
-  fractional-power tail -- e.g. the `sqrt(step)` imaginary part of
+- **`Automatic`** (default) -- runs Richardson/Romberg, Wynn's epsilon
+  (at every admissible degree) and Levin's u-transform, and returns the estimate
+  whose internal convergence residual is smallest.  Richardson's fixed `2^j - 1`
+  denominators can only annihilate an integer-power (analytic) error tail; a
+  geometric or fractional-power tail -- e.g. the `sqrt(step)` imaginary part of
   `2 ArcTan[Sqrt[(1+x)/(1-x)]]` as `x -> 1` from larger values -- defeats it but
   is captured by Wynn's epsilon.  Selecting by best self-consistency keeps
   Richardson's accuracy on smooth limits while gaining Wynn's on branch-point /
   algebraic approaches, so this case now returns `Pi` (imaginary residual
   `~6e-5` at the default `Terms`, shrinking rapidly with more) instead of the
-  spurious `Pi + 0.08 I` that plain Richardson produced.
+  spurious `Pi + 0.08 I` that plain Richardson produced.  Levin's u-transform is
+  admitted only when the sample increments are contracting, so a divergent
+  sequence cannot let it collapse to a spurious value.
 - **`EulerSum`** -- Richardson / Romberg extrapolation of the sample sequence,
   using the all-powers denominator `2^j - 1` (the same convention as `ND`'s
   `EulerSum`).  Best for smooth power-series approaches; depth is set by `Terms`.
@@ -349,12 +351,18 @@ recovers the limit by sequence acceleration:
   iterations is `WynnDegree` (which needs at least `2(WynnDegree + 1)` terms).
   The estimate is read from the `ε_{2·WynnDegree}` column at the entry that best
   agrees with its neighbour (avoiding the roundoff-amplified bottom corner).
+- **`"Levin"`** -- Levin's nonlinear transformation of the sample sequence,
+  driven by remainder estimates `ω_i` built from the sample increments
+  `a_i = S_i − S_{i-1}`.  `"Levin"`/`"LevinU"` use `ω_i = (β+i) a_i` (the
+  u-transform, `β = 1`), `"LevinT"` uses `ω_i = a_i`, `"LevinV"` uses
+  `ω_i = a_i a_{i+1}/(a_i − a_{i+1})`.  Strong on logarithmically /
+  algebraically convergent approaches.
 
 ### Options
 
 | Option | Default | Meaning |
 |--------|---------|---------|
-| `Method` | `Automatic` | `Automatic` (best of both), `EulerSum`, or `SequenceLimit`. |
+| `Method` | `Automatic` | `Automatic` (best of Richardson / Wynn / Levin-u), `EulerSum`, `SequenceLimit`, or `"Levin"` / `"LevinU"` / `"LevinT"` / `"LevinV"`. |
 | `WorkingPrecision` | `MachinePrecision` | `MachinePrecision`, or digits → MPFR. |
 | `Direction` | `Automatic` (≡ `-1`) | complex approach vector for finite `z0`. |
 | `Scale` | `1` | initial step (finite) / distance from origin (infinite). |
@@ -421,6 +429,9 @@ Out[8]= 0.693147180559945309417232121458   (= Log[2])
 In[9]:= NLimit[1/x, x -> 0]
         NLimit::noise: Cannot recognize a limiting value. ...
 Out[9]= NLimit[1/x, x -> 0]
+
+In[10]:= NLimit[Sin[x]/x, x -> 0, Method -> "Levin"]
+Out[10]= 1.                                (Levin's u-transform; "LevinT"/"LevinV" select the t/v variants)
 ```
 
 
@@ -470,13 +481,20 @@ The terms are reindexed to `k = 0, 1, 2, …`; the head terms (`NSumTerms`, defa
 - **`WynnEpsilon`** (alias `SequenceLimit`) -- Wynn's epsilon algorithm applied
   to the partial sums (shared with `NLimit` via `seqaccel.{c,h}`).  General
   fallback; excellent for alternating / geometric tails, weak on monotone ones.
+- **`"Levin"`** (`"LevinU"` / `"LevinT"` / `"LevinV"`) -- Levin's nonlinear
+  transformation of the partial sums (shared kernel in `seqaccel.{c,h}`), with
+  remainder estimates `ω_k` built from the terms `a_k`: u uses `(β+k) a_k`
+  (`β = 1`), t uses `a_k`, v uses `a_k a_{k+1}/(a_k − a_{k+1})`.  Reaches full
+  `WorkingPrecision` on smoothly-convergent series (e.g. `Σ 1/n²`).
 - **`Automatic`** (default) -- probes the first terms, and (when the head is not
   already monotone) a geometric far-tail ladder that locates a late peak or
   sustained growth far beyond the head window.  Chooses `AlternatingSigns` for a
   strictly alternating decreasing summand, `EulerMaclaurin` for a monotone /
-  late-settling tail, else `WynnEpsilon`.  The far-tail ladder also drives
-  convergence verification, so a summand that merely peaks late (e.g.
-  `1/(1 + (k-20)^2)`) is no longer mistaken for divergent.
+  late-settling tail, else `WynnEpsilon` -- with Levin's u-transform as a purely
+  additive last resort when Wynn does not converge (an existing Wynn result is
+  never replaced).  The far-tail ladder also drives convergence verification, so
+  a summand that merely peaks late (e.g. `1/(1 + (k-20)^2)`) is no longer
+  mistaken for divergent.
 
 A **large finite** sum is evaluated as the difference of two infinite tails,
 `Σ_{imin}^∞ − Σ_{imax+di}^∞`, when the summand decays.
@@ -485,7 +503,7 @@ A **large finite** sum is evaluated as the difference of two infinite tails,
 
 | Option | Default | Meaning |
 |--------|---------|---------|
-| `Method` | `Automatic` | `Automatic`, `EulerMaclaurin`, `AlternatingSigns`, `WynnEpsilon`. |
+| `Method` | `Automatic` | `Automatic`, `EulerMaclaurin`, `AlternatingSigns`, `WynnEpsilon`, `"Levin"` / `"LevinU"` / `"LevinT"` / `"LevinV"`. |
 | `WorkingPrecision` | `MachinePrecision` | `MachinePrecision`, or digits → MPFR. |
 | `NSumTerms` | `15` | head terms summed explicitly before extrapolation. |
 | `NSumExtraTerms` | auto | length of the Wynn partial-sum sequence. |
@@ -541,6 +559,9 @@ Out[8]= 0.770188
 In[9]:= NSum[2^i, {i, 0, Infinity}]
         NSum::div: the sum does not appear to converge
 Out[9]= ComplexInfinity
+
+In[10]:= NSum[1/n^2, {n, 1, Infinity}, Method -> "Levin", WorkingPrecision -> 30]
+Out[10]= 1.644934066848226436472415166646   (= Pi^2/6; Levin reaches full precision on smooth series)
 ```
 
 ### Resolved limitations

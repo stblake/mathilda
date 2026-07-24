@@ -98,6 +98,70 @@ bool seqaccel_wynn_machine(const double _Complex* S, int terms, int degree,
     return true;
 }
 
+/* Levin estimate at a single degree k (base index n): the direct ratio of sums.
+ * Returns false on a zero remainder estimate, a vanishing denominator, or a
+ * non-finite result. */
+static bool levin_eval_degree_machine(const double _Complex* S,
+                                      const double _Complex* omega,
+                                      int n, int k, double beta,
+                                      double _Complex* out) {
+    double _Complex num = 0.0, den = 0.0;
+    double binom = 1.0;                      /* C(k,0) */
+    double denbase = beta + (double)(n + k);
+    for (int j = 0; j <= k; j++) {
+        int idx = n + j;
+        double _Complex om = omega[idx];
+        if (cabs(om) == 0.0) return false;
+        double ratio = (k - 1 == 0)
+            ? 1.0
+            : pow((beta + (double)(n + j)) / denbase, (double)(k - 1));
+        double w = (j & 1) ? -binom * ratio : binom * ratio;
+        num += w * S[idx] / om;
+        den += w / om;
+        binom = binom * (double)(k - j) / (double)(j + 1);   /* C(k,j+1) */
+    }
+    if (cabs(den) == 0.0) return false;
+    double _Complex L = num / den;
+    if (!isfinite(creal(L)) || !isfinite(cimag(L))) return false;
+    *out = L;
+    return true;
+}
+
+bool seqaccel_levin_machine(const double _Complex* S, int terms, int variant,
+                            double beta, double _Complex* result, double* step) {
+    if (variant < 0 || variant > SEQACCEL_LEVIN_V) variant = SEQACCEL_LEVIN_U;
+    int n = 1;                               /* a_i needs i >= 1 */
+    int kmax = (variant == SEQACCEL_LEVIN_V) ? terms - 3 : terms - 2;
+    if (kmax < 1) return false;              /* u/t: terms>=3, v: terms>=4 */
+
+    double _Complex* a     = malloc(sizeof(double _Complex) * (size_t)terms);
+    double _Complex* omega = malloc(sizeof(double _Complex) * (size_t)terms);
+    if (!a || !omega) { free(a); free(omega); return false; }
+
+    for (int i = 1; i < terms; i++) a[i] = S[i] - S[i - 1];
+    for (int i = 1; i < terms; i++) {
+        if (variant == SEQACCEL_LEVIN_T)      omega[i] = a[i];
+        else if (variant == SEQACCEL_LEVIN_U) omega[i] = (beta + (double)i) * a[i];
+        else {                                /* v: needs a[i+1] */
+            if (i + 1 < terms) {
+                double _Complex d = a[i] - a[i + 1];
+                omega[i] = (cabs(d) == 0.0) ? 0.0 : a[i] * a[i + 1] / d;
+            } else omega[i] = 0.0;
+        }
+    }
+
+    double _Complex Lk, Lk1;
+    bool ok  = levin_eval_degree_machine(S, omega, n, kmax, beta, &Lk);
+    bool ok1 = (kmax >= 2)
+             && levin_eval_degree_machine(S, omega, n, kmax - 1, beta, &Lk1);
+    free(a); free(omega);
+    if (!ok) return false;
+
+    *result = Lk;
+    *step = ok1 ? cabs(Lk - Lk1) : cabs(Lk - S[terms - 1]);
+    return true;
+}
+
 /* ------------------------------------------------------------------ *
  *  MPFR precision                                                     *
  * ------------------------------------------------------------------ */
@@ -235,5 +299,136 @@ bool seqaccel_wynn_mpfr(const mpfr_t* Sr, const mpfr_t* Si, int terms,
     free(er); free(ei);
     mpfr_clears(dr, di, rr, ri, one, zero, (mpfr_ptr)0);
     return true;
+}
+
+/* Levin estimate at a single degree k (base index n), MPFR.  (Lr,Li) must be
+ * pre-initialised.  Returns false on a zero remainder estimate, a vanishing
+ * denominator, or a non-finite result. */
+static bool levin_eval_degree_mpfr(const mpfr_t* Sr, const mpfr_t* Si,
+                                   const mpfr_t* omr, const mpfr_t* omi,
+                                   int n, int k, double beta, long bits,
+                                   mpfr_t Lr, mpfr_t Li) {
+    mpfr_prec_t p = (mpfr_prec_t)bits;
+    mpfr_t numr, numi, denr, deni, binom, ratio, base, denbase,
+           qr, qi, rr, ri, w, one, zero;
+    mpfr_inits2(p, numr, numi, denr, deni, binom, ratio, base, denbase,
+                qr, qi, rr, ri, w, one, zero, (mpfr_ptr)0);
+    mpfr_set_ui(numr, 0, MPFR_RNDN); mpfr_set_ui(numi, 0, MPFR_RNDN);
+    mpfr_set_ui(denr, 0, MPFR_RNDN); mpfr_set_ui(deni, 0, MPFR_RNDN);
+    mpfr_set_ui(one, 1, MPFR_RNDN);  mpfr_set_ui(zero, 0, MPFR_RNDN);
+    mpfr_set_ui(binom, 1, MPFR_RNDN);            /* C(k,0) */
+    mpfr_set_d(denbase, beta + (double)(n + k), MPFR_RNDN);
+
+    bool ok = true;
+    for (int j = 0; j <= k; j++) {
+        int idx = n + j;
+        if (mpfr_zero_p(omr[idx]) && mpfr_zero_p(omi[idx])) { ok = false; break; }
+        /* ratio = ((beta+n+j)/denbase)^(k-1) */
+        if (k - 1 == 0) {
+            mpfr_set_ui(ratio, 1, MPFR_RNDN);
+        } else {
+            mpfr_set_d(base, beta + (double)(n + j), MPFR_RNDN);
+            mpfr_div(base, base, denbase, MPFR_RNDN);
+            mpfr_pow_ui(ratio, base, (unsigned long)(k - 1), MPFR_RNDN);
+        }
+        mpfr_mul(w, binom, ratio, MPFR_RNDN);    /* magnitude of the weight */
+        mpfr_complex_div(qr, qi, Sr[idx], Si[idx], omr[idx], omi[idx]);  /* S/omega */
+        mpfr_complex_div(rr, ri, one, zero, omr[idx], omi[idx]);         /* 1/omega */
+        mpfr_mul(qr, qr, w, MPFR_RNDN); mpfr_mul(qi, qi, w, MPFR_RNDN);
+        mpfr_mul(rr, rr, w, MPFR_RNDN); mpfr_mul(ri, ri, w, MPFR_RNDN);
+        if (j & 1) {
+            mpfr_sub(numr, numr, qr, MPFR_RNDN); mpfr_sub(numi, numi, qi, MPFR_RNDN);
+            mpfr_sub(denr, denr, rr, MPFR_RNDN); mpfr_sub(deni, deni, ri, MPFR_RNDN);
+        } else {
+            mpfr_add(numr, numr, qr, MPFR_RNDN); mpfr_add(numi, numi, qi, MPFR_RNDN);
+            mpfr_add(denr, denr, rr, MPFR_RNDN); mpfr_add(deni, deni, ri, MPFR_RNDN);
+        }
+        mpfr_mul_ui(binom, binom, (unsigned long)(k - j), MPFR_RNDN);
+        mpfr_div_ui(binom, binom, (unsigned long)(j + 1), MPFR_RNDN);    /* C(k,j+1) */
+    }
+    if (ok && mpfr_zero_p(denr) && mpfr_zero_p(deni)) ok = false;
+    if (ok) {
+        mpfr_complex_div(Lr, Li, numr, numi, denr, deni);
+        if (!mpfr_number_p(Lr) || !mpfr_number_p(Li)) ok = false;
+    }
+    mpfr_clears(numr, numi, denr, deni, binom, ratio, base, denbase,
+                qr, qi, rr, ri, w, one, zero, (mpfr_ptr)0);
+    return ok;
+}
+
+bool seqaccel_levin_mpfr(const mpfr_t* Sr, const mpfr_t* Si, int terms,
+                         int variant, double beta, long bits,
+                         mpfr_t out_re, mpfr_t out_im, double* step, bool* finite) {
+    if (variant < 0 || variant > SEQACCEL_LEVIN_V) variant = SEQACCEL_LEVIN_U;
+    int n = 1;
+    int kmax = (variant == SEQACCEL_LEVIN_V) ? terms - 3 : terms - 2;
+    if (kmax < 1) return false;
+
+    mpfr_prec_t p = (mpfr_prec_t)bits;
+    mpfr_t* ar  = malloc(sizeof(mpfr_t) * (size_t)terms);
+    mpfr_t* ai  = malloc(sizeof(mpfr_t) * (size_t)terms);
+    mpfr_t* omr = malloc(sizeof(mpfr_t) * (size_t)terms);
+    mpfr_t* omi = malloc(sizeof(mpfr_t) * (size_t)terms);
+    if (!ar || !ai || !omr || !omi) { free(ar); free(ai); free(omr); free(omi); return false; }
+    for (int i = 0; i < terms; i++) {
+        mpfr_init2(ar[i], p);  mpfr_init2(ai[i], p);
+        mpfr_init2(omr[i], p); mpfr_init2(omi[i], p);
+        mpfr_set_ui(ar[i], 0, MPFR_RNDN);  mpfr_set_ui(ai[i], 0, MPFR_RNDN);
+        mpfr_set_ui(omr[i], 0, MPFR_RNDN); mpfr_set_ui(omi[i], 0, MPFR_RNDN);
+    }
+    mpfr_t t0, t1, dcr, dci;
+    mpfr_inits2(p, t0, t1, dcr, dci, (mpfr_ptr)0);
+
+    for (int i = 1; i < terms; i++) {
+        mpfr_sub(ar[i], Sr[i], Sr[i - 1], MPFR_RNDN);
+        mpfr_sub(ai[i], Si[i], Si[i - 1], MPFR_RNDN);
+    }
+    for (int i = 1; i < terms; i++) {
+        if (variant == SEQACCEL_LEVIN_T) {
+            mpfr_set(omr[i], ar[i], MPFR_RNDN); mpfr_set(omi[i], ai[i], MPFR_RNDN);
+        } else if (variant == SEQACCEL_LEVIN_U) {
+            mpfr_mul_d(omr[i], ar[i], beta + (double)i, MPFR_RNDN);
+            mpfr_mul_d(omi[i], ai[i], beta + (double)i, MPFR_RNDN);
+        } else {                              /* v: a[i]*a[i+1]/(a[i]-a[i+1]) */
+            if (i + 1 < terms) {
+                /* numerator = a[i]*a[i+1] */
+                mpfr_mul(t0, ar[i], ar[i + 1], MPFR_RNDN);
+                mpfr_mul(t1, ai[i], ai[i + 1], MPFR_RNDN);
+                mpfr_sub(t0, t0, t1, MPFR_RNDN);            /* Re */
+                mpfr_mul(t1, ar[i], ai[i + 1], MPFR_RNDN);
+                mpfr_mul(dcr, ai[i], ar[i + 1], MPFR_RNDN);
+                mpfr_add(t1, t1, dcr, MPFR_RNDN);           /* Im */
+                /* denominator = a[i]-a[i+1] */
+                mpfr_sub(dcr, ar[i], ar[i + 1], MPFR_RNDN);
+                mpfr_sub(dci, ai[i], ai[i + 1], MPFR_RNDN);
+                if (mpfr_zero_p(dcr) && mpfr_zero_p(dci)) {
+                    mpfr_set_ui(omr[i], 0, MPFR_RNDN); mpfr_set_ui(omi[i], 0, MPFR_RNDN);
+                } else {
+                    mpfr_complex_div(omr[i], omi[i], t0, t1, dcr, dci);
+                }
+            }
+        }
+    }
+
+    mpfr_t Lr, Li, L1r, L1i;
+    mpfr_inits2(p, Lr, Li, L1r, L1i, (mpfr_ptr)0);
+    bool ok  = levin_eval_degree_mpfr(Sr, Si, omr, omi, n, kmax, beta, bits, Lr, Li);
+    bool ok1 = (kmax >= 2)
+             && levin_eval_degree_mpfr(Sr, Si, omr, omi, n, kmax - 1, beta, bits, L1r, L1i);
+    if (ok) {
+        mpfr_set(out_re, Lr, MPFR_RNDN); mpfr_set(out_im, Li, MPFR_RNDN);
+        *finite = mpfr_number_p(Lr) && mpfr_number_p(Li);
+        if (ok1) { mpfr_sub(t0, Lr, L1r, MPFR_RNDN); mpfr_sub(t1, Li, L1i, MPFR_RNDN); }
+        else     { mpfr_sub(t0, Lr, Sr[terms - 1], MPFR_RNDN);
+                   mpfr_sub(t1, Li, Si[terms - 1], MPFR_RNDN); }
+        *step = sa_l1_d(t0, t1);
+    }
+
+    for (int i = 0; i < terms; i++) {
+        mpfr_clear(ar[i]); mpfr_clear(ai[i]); mpfr_clear(omr[i]); mpfr_clear(omi[i]);
+    }
+    free(ar); free(ai); free(omr); free(omi);
+    mpfr_clears(t0, t1, dcr, dci, Lr, Li, L1r, L1i, (mpfr_ptr)0);
+    return ok;
 }
 #endif /* USE_MPFR */

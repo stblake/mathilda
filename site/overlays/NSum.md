@@ -20,6 +20,11 @@ In[1]:= NSum[1/n^4, {n, 1, Infinity}, WorkingPrecision -> 30]
 Out[1]= 1.082323233711138191516003696543
 ```
 
+```mathematica
+In[1]:= NSum[1/n^2, {n, 1, Infinity}, Method -> "Levin"]
+Out[1]= 1.64493
+```
+
 ### Notes
 
 `NSum[f, {i, imin, imax}]` numerically sums a series, with `imax` allowed to be
@@ -28,5 +33,8 @@ the alternating harmonic sum `Log[2] = 0.693147...`. With `WorkingPrecision -> 3
 the Basel sum is computed to 30 digits, and `Sum[1/n^4]` returns
 `Pi^4/90 = 1.082323233711...`. `Method -> Automatic` chooses Euler–Maclaurin for
 monotone series, the Cohen–Villegas–Zagier method for alternating series, and
-Wynn's epsilon otherwise. With `VerifyConvergence -> True` (default) a divergent
-sum gives `ComplexInfinity`.
+Wynn's epsilon otherwise, with Levin's u-transform as a last resort. Any
+accelerator can be forced: `Method -> "Levin"` (`"LevinU"`/`"LevinT"`/`"LevinV"`)
+selects Levin's transformation, which reaches full `WorkingPrecision` on smooth
+series. With `VerifyConvergence -> True` (default) a divergent sum gives
+`ComplexInfinity`.

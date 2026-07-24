@@ -3,17 +3,26 @@
  *
  * Numerically finds the limiting value of `expr` as z -> z0.  A geometric
  * sequence of sample points approaching z0 is constructed and the limit is
- * recovered by sequence acceleration / extrapolation.  Two methods:
+ * recovered by sequence acceleration / extrapolation.  Methods:
  *
- *   Method -> EulerSum       (default) Richardson / Romberg extrapolation of
- *                            the sample sequence viewed as a function of the
- *                            geometric step.  Best for smooth (power-series)
- *                            approaches.  Depth set by Terms (default 7).
+ *   Method -> Automatic      (default) best-of Richardson, Wynn's epsilon (all
+ *                            degrees) and Levin's u-transform, chosen by the
+ *                            smallest internal convergence residual.
+ *
+ *   Method -> EulerSum       Richardson / Romberg extrapolation of the sample
+ *                            sequence viewed as a function of the geometric
+ *                            step.  Best for smooth (power-series) approaches.
+ *                            Depth set by Terms (default 7).
  *
  *   Method -> SequenceLimit  Wynn's epsilon algorithm (iterated Shanks
  *                            transform) on the sample sequence.  Exact in one
  *                            step for a geometric/exponential tail; controlled
  *                            by WynnDegree (default 1, needs >= 2(d+1) terms).
+ *
+ *   Method -> "Levin"        Levin's nonlinear transformation.  "Levin"/"LevinU"
+ *                            select the u-transform, "LevinT" the t-transform,
+ *                            "LevinV" the v-transform.  Strong on logarithmically
+ *                            / algebraically convergent samples.
  *
  * Attributes: Protected (not Listable — the z -> z0 spec must not be split).
  */

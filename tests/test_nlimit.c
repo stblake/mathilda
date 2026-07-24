@@ -145,6 +145,29 @@ static void test_wynndegree_improves(void) {
 }
 
 /* ------------------------------------------------------------------------
+ *  Levin's transformation — u / t / v variants (string + symbol methods)
+ * ---------------------------------------------------------------------- */
+
+static void test_levin(void) {
+    /* u-transform via the "Levin" string and the bare Levin symbol. */
+    ASSERT_CLOSE("NLimit[(10^x-1)/x,x->0,Method->\"Levin\"]", "Log[10]", 5e-3);
+    ASSERT_CLOSE("NLimit[x(E^(1/x)-1),x->Infinity,Method->\"LevinU\"]", "1", 5e-4);
+    ASSERT_CLOSE("NLimit[Sin[x]/x,x->0,Method->Levin,Terms->12]", "1", 1e-10);
+    ASSERT_CLOSE("NLimit[n Sin[1/n],n->Infinity,Method->\"Levin\"]", "1", 1e-6);
+    /* t- and v-transforms. */
+    ASSERT_CLOSE("NLimit[Sqrt[x^2+x]-x,x->Infinity,Method->\"LevinT\"]", "1/2", 1e-4);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2+x]-x,x->Infinity,Method->\"LevinV\"]", "1/2", 1e-3);
+    /* MPFR path. */
+    ASSERT_CLOSE("NLimit[(2^x-1)/x,x->0,WorkingPrecision->30,Terms->14,Method->\"Levin\"]",
+                 "Log[2]", 1e-8);
+    /* A divergent sequence must still stay unevaluated even though Levin now
+     * participates in Automatic (the contraction gate excludes it). */
+    char* s = eval_str("NLimit[1/x,x->0]");
+    ASSERT_MSG(strstr(s, "NLimit[") != NULL, "1/x must stay unevaluated: %s", s);
+    free(s);
+}
+
+/* ------------------------------------------------------------------------
  *  Direction — one-sided and arbitrary complex rays
  * ---------------------------------------------------------------------- */
 
@@ -296,6 +319,7 @@ int main(void) {
     TEST(test_automatic_branch_point);
     TEST(test_sequencelimit);
     TEST(test_wynndegree_improves);
+    TEST(test_levin);
 
     TEST(test_direction);
     TEST(test_scale_terms);
