@@ -4515,22 +4515,33 @@ static Expr* try_series_logintegral_at_zero(Expr* f, Expr* x, int64_t n, int x_s
      * an additive I*Pi (the x^0 term) appears in front of the series. */
     bool neg = (x_sign < 0);
 
-    /* x^1 coefficient: Sum_{k=0}^{2n+1} k! / Log[.]^(k+1). */
+    /* x^1 coefficient: Sum_{k=0}^{2n+1} k! / Log[.]^(k+1).
+     *
+     * Build and Together the sum over a neutral placeholder kernel rather than
+     * the real log argument. For x < 0 the kernel is Log[-x] = Log[Times[-1,x]],
+     * and Together's rational-normaliser expands that to I*Pi + Log[x] (via
+     * Log[-1] = I*Pi), combining the sum over (I*Pi + Log[x])^(2n+2) and
+     * producing a Pi/Log[x] mess instead of MMA's clean Log[-x]^(-(2n+2)) form.
+     * Combining over an opaque symbol keeps the kernel atomic; we substitute the
+     * real log back afterward (ReplaceAll leaves Log[-x] atomic, no re-expand). */
     int64_t kmax = 2 * n + 1;
     Expr* logx = neg ? mk_fn1("Log", mk_times(expr_new_integer(-1), expr_copy(x)))
                      : mk_fn1("Log", expr_copy(x));
+    Expr* ker = mk_symbol("$LiLogKernel$");
     Expr** terms = calloc((size_t)kmax + 1, sizeof(Expr*));
     for (int64_t k = 0; k <= kmax; k++) {
         Expr* fact = eval_and_free(mk_fn1("Factorial", expr_new_integer(k)));
-        Expr* logpow = mk_power(expr_copy(logx), expr_new_integer(-(k + 1)));
+        Expr* logpow = mk_power(expr_copy(ker), expr_new_integer(-(k + 1)));
         terms[k] = mk_times(fact, logpow);
     }
-    expr_free(logx);
     Expr* sum = expr_new_function(mk_symbol("Plus"), terms, (size_t)kmax + 1);
     free(terms);
-    /* Combine over a common Log[x]^(2n+2) denominator to match MMA's form;
+    /* Combine over a common kernel^(2n+2) denominator to match MMA's form;
      * Together falls through to the raw sum if it cannot combine. */
-    Expr* coef1 = eval_and_free(mk_fn1("Together", sum));
+    Expr* coef1_ker = eval_and_free(mk_fn1("Together", sum));
+    /* Restore the real log argument (ker -> Log[x] or Log[-x]). */
+    Expr* coef1 = eval_and_free(
+        mk_fn2("ReplaceAll", coef1_ker, mk_fn2("Rule", ker, logx)));
 
     /* Principal branch: coefficients span exponents 1 .. n (length n, leading
      * x^1). For x < 0 the additive I*Pi is an x^0 term, so the series starts

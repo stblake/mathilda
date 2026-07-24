@@ -1470,13 +1470,14 @@ static void test_series_infinity_no_inv_var_leak(void) {
     setup_full();
     /* Grep-style check: the OutputForm must not contain the internal
      * variable name. We compare full form to keep the assertion stable
-     * across printer changes. */
+     * across printer changes. (The deep-log-tower Limit that exercises the
+     * Gruntz never-hang guard lives in gruntz_tests::test_log_tower_no_hang;
+     * it is a limit computation, not a Series-at-Infinity leak check, and
+     * belongs there rather than in this suite.) */
     const char* inputs[] = {
         "Series[Log[x], {x, Infinity, 2}]",
         "Series[Log[Log[x]], {x, Infinity, 2}]",
         "Series[1/x + Log[x], {x, Infinity, 2}]",
-        "Limit[(Log[Log[x] + Log[Log[x]]] - Log[Log[x]])"
-        "/Log[Log[x] + Log[Log[Log[x]]]] Log[x], x -> Infinity]",
         NULL
     };
     for (int i = 0; inputs[i]; i++) {

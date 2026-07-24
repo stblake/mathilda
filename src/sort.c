@@ -51,6 +51,22 @@ static bool is_atomic_numeric(const Expr* e) {
     return false;
 }
 
+/* True for a literal complex number Complex[re, im] whose real and imaginary
+ * parts are both real numeric atoms (Integer / Rational / Real / BigInt /
+ * MPFR). Such a node is a NUMBER, not a polynomial expression -- it must not
+ * be routed through the polynomial-degree machinery, whose symbol collector
+ * would otherwise mistake the wrapper heads `Complex` (and `Rational`, when a
+ * component is rational) for polynomial variables. That misroute made
+ * `I/2 * Pi` canonicalize as `Pi * I/2` while `I * Pi` (integer imaginary
+ * part, no `Rational` head) canonicalized correctly -- an inconsistency. */
+static bool is_complex_number(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 2) return false;
+    const Expr* h = e->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL || h->data.symbol.name != SYM_Complex) return false;
+    return is_atomic_numeric(e->data.function.args[0]) &&
+           is_atomic_numeric(e->data.function.args[1]);
+}
+
 static double get_numeric_value(const Expr* e) {
     if (e->type == EXPR_INTEGER) return (double)e->data.integer;
     if (e->type == EXPR_BIGINT) return mpz_get_d(e->data.bigint);
@@ -263,6 +279,24 @@ int expr_compare(const Expr* a, const Expr* b) {
     }
     if (a_atomic) return -1;
     if (b_atomic) return 1;
+
+    /* 1b. Complex numbers. A literal complex sits in its own tier just after
+     * the real numeric atoms and before all symbolic material (symbols, Pi,
+     * Log, Power, ...), mirroring Mathematica's `real < non-real complex <
+     * symbol` canonical order. Ordering among complexes is by real part then
+     * imaginary part (each a real numeric atom, compared exactly by the block
+     * above). This keeps `Complex[re, im]` out of the polynomial-degree
+     * machinery entirely, so its ordering no longer depends on whether a
+     * component happens to be an Integer or a Rational. */
+    bool a_cplx = is_complex_number(a);
+    bool b_cplx = is_complex_number(b);
+    if (a_cplx && b_cplx) {
+        int c = expr_compare(a->data.function.args[0], b->data.function.args[0]);
+        if (c != 0) return c;
+        return expr_compare(a->data.function.args[1], b->data.function.args[1]);
+    }
+    if (a_cplx) return -1;
+    if (b_cplx) return 1;
 
     /* 2. Strings. */
     if (a->type == EXPR_STRING && b->type == EXPR_STRING) {
