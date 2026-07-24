@@ -114,6 +114,23 @@ static int get_expr_prec(Expr* e) {
     return 1000;
 }
 
+/* Print a string literal with surrounding quotes, re-escaping the control
+ * characters that the lexer decodes (`\n`, `\t`, `\r`) so the output is a
+ * faithful, re-parseable rendering. Quote/backslash are printed verbatim,
+ * matching the historical printer behaviour. */
+static void print_string_literal(const char* s) {
+    putchar('"');
+    for (const char* p = s; *p; p++) {
+        switch (*p) {
+            case '\n': fputs("\\n", stdout); break;
+            case '\t': fputs("\\t", stdout); break;
+            case '\r': fputs("\\r", stdout); break;
+            default:   putchar((unsigned char)*p); break;
+        }
+    }
+    putchar('"');
+}
+
 static void print_function_fullform(Expr* e) {
     expr_print_fullform(e->data.function.head);
     printf("[");
@@ -136,7 +153,7 @@ void expr_print_fullform(Expr* e) {
             break;
         }
         case EXPR_SYMBOL: printf("%s", context_display_name(e->data.symbol.name)); break;
-        case EXPR_STRING: printf("\"%s\"", e->data.string); break;
+        case EXPR_STRING: print_string_literal(e->data.string); break;
         case EXPR_FUNCTION: print_function_fullform(e); break;
         case EXPR_NDARRAY: {
             /* Always wrapped in NDArray[...] so it can never be mistaken
@@ -716,7 +733,7 @@ static void print_standard(Expr* e, int parent_prec) {
             if (idx->type == EXPR_INTEGER) {
                 printf("%" PRId64, idx->data.integer);
             } else if (idx->type == EXPR_STRING) {
-                printf("\"%s\"", idx->data.string);
+                print_string_literal(idx->data.string);
             } else {
                 print_standard(idx, 1000);
             }

@@ -148,9 +148,9 @@ static void test_split_zero_width(void) {
     /* Zero-width delimiters at line starts / ends; result printed via InputForm.
      * Mathilda prints newlines raw, so the expected strings embed real '\n'. */
     assert_eval_eq("InputForm[StringSplit[\"line1\nline2\nline3\", RegularExpression[\"(?m)^\"]]]",
-                   "{\"line1\n\", \"line2\n\", \"line3\"}", 0);
+                   "{\"line1\\n\", \"line2\\n\", \"line3\"}", 0);
     assert_eval_eq("InputForm[StringSplit[\"line1\nline2\nline3\", RegularExpression[\"(?m)$\"]]]",
-                   "{\"line1\", \"\nline2\", \"\nline3\"}", 0);
+                   "{\"line1\", \"\\nline2\", \"\\nline3\"}", 0);
 }
 
 static void test_split_no_match(void) {
@@ -311,8 +311,8 @@ static void test_extract_positions(void) {
 
 /* {pos..} is equivalent to Part[StringSplit[..], {pos..}]. */
 static void test_extract_part_equivalence(void) {
-    assert_eval_eq("StringExtract[\"a bbb  cccc aa   d\", {1, 4, 5}]",
-                   "Part[StringSplit[\"a bbb  cccc aa   d\"], {1, 4, 5}]", 0);
+    assert_eval_eq("StringExtract[\"a bbb  cccc aa   d\", {1, 4, 5}] === "
+                   "Part[StringSplit[\"a bbb  cccc aa   d\"], {1, 4, 5}]", "True", 0);
 }
 
 /* All extracts every whitespace-delimited token (== StringSplit). */
@@ -320,16 +320,16 @@ static void test_extract_all(void) {
     assert_eval_eq("StringExtract[\"A tree, an apple, four pears. And more: two sacks\", All]",
                    "{\"A\", \"tree,\", \"an\", \"apple,\", \"four\", \"pears.\", "
                    "\"And\", \"more:\", \"two\", \"sacks\"}", 0);
-    assert_eval_eq("StringExtract[\"A tree, an apple, four pears. And more: two sacks\", All]",
-                   "StringSplit[\"A tree, an apple, four pears. And more: two sacks\"]", 0);
+    assert_eval_eq("StringExtract[\"A tree, an apple, four pears. And more: two sacks\", All] === "
+                   "StringSplit[\"A tree, an apple, four pears. And more: two sacks\"]", "True", 0);
 }
 
 /* sep -> pos with a literal separator and a pattern separator. */
 static void test_extract_separator(void) {
     assert_eval_eq("StringExtract[\"a--bbb--ccc--dddd\", \"--\" -> 3]", "\"ccc\"", 0);
     /* sep -> All is exactly StringSplit[string, sep]. */
-    assert_eval_eq("StringExtract[\"a--bbb---ccc--dddd\", \"--\" -> All]",
-                   "StringSplit[\"a--bbb---ccc--dddd\", \"--\"]", 0);
+    assert_eval_eq("StringExtract[\"a--bbb---ccc--dddd\", \"--\" -> All] === "
+                   "StringSplit[\"a--bbb---ccc--dddd\", \"--\"]", "True", 0);
     /* A string pattern as separator: runs of non-word characters. */
     assert_eval_eq("StringExtract[\"A tree, an apple, four pears. And more: two sacks\", "
                    "Except[WordCharacter] .. -> All]",

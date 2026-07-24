@@ -607,8 +607,22 @@ static Expr* parse_string(ParserState* s) {
     size_t i = 0;
     
     while (*s->pos && *s->pos != '"') {
-        if (*s->pos == '\\') s->pos++;  // Handle escapes
-        if (i < sizeof(buffer)-1) buffer[i++] = *s->pos;
+        char c = *s->pos;
+        if (c == '\\' && s->pos[1] != '\0') {
+            /* Decode standard C-style escapes. `\\` and `\"` decode to the
+             * literal character (unchanged from the historical behaviour);
+             * `\n`, `\t`, `\r` decode to the actual control characters
+             * (previously mis-handled as the bare letter). Unknown escapes
+             * keep the following character verbatim (backslash dropped). */
+            s->pos++;
+            switch (*s->pos) {
+                case 'n': c = '\n'; break;
+                case 't': c = '\t'; break;
+                case 'r': c = '\r'; break;
+                default:  c = *s->pos; break;
+            }
+        }
+        if (i < sizeof(buffer)-1) buffer[i++] = c;
         s->pos++;
     }
     

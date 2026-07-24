@@ -3,11 +3,10 @@
  *
  * StringRiffle has no regex dependency, so the tests are unconditional.
  *
- * Note on newlines: the Mathilda lexer does not decode backslash escapes (an
- * input "\n" parses to the literal string "n"), so the default newline scheme
- * is exercised via real newline bytes in the *expected* C literals (our C code
- * emits real newlines), while explicit-separator tests use printable
- * separators.
+ * Note on newlines: StringRiffle's default row separator is a real newline
+ * character. The printer renders a newline inside a string as the escaped "\n"
+ * (InputForm-faithful, re-parseable), so the *expected* C literals below spell
+ * the escape as "\\n"; explicit-separator tests use printable separators.
  */
 
 #include "test_utils.h"
@@ -45,11 +44,11 @@ static void test_default_nested(void) {
     /* 2-D: rows separated by one newline, cells by a space. */
     assert_eval_eq(
         "StringRiffle[{{\"a\", \"b\", \"c\"}, {\"d\", \"e\", \"f\"}}]",
-        "\"a b c\nd e f\"", 0);
+        "\"a b c\\nd e f\"", 0);
     /* 3-D: blocks by two newlines, rows by one, cells by a space. */
     assert_eval_eq(
         "StringRiffle[{{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}]",
-        "\"1 2\n3 4\n\n5 6\n7 8\"", 0);
+        "\"1 2\\n3 4\\n\\n5 6\\n7 8\"", 0);
 }
 
 /* Per-level separators (level 1 = outermost). Uses printable separators. */
@@ -82,7 +81,7 @@ static void test_edges(void) {
     /* A bare string argument is returned unchanged. */
     assert_eval_eq("StringRiffle[\"abc\"]", "\"abc\"", 0);
     /* Nested empty rows: two empty rows joined by a newline. */
-    assert_eval_eq("StringRiffle[{{}, {}}]", "\"\n\"", 0);
+    assert_eval_eq("StringRiffle[{{}, {}}]", "\"\\n\"", 0);
 }
 
 /* Invalid arguments leave the call unevaluated. */

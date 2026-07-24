@@ -180,7 +180,7 @@ void test_stringjoin_integer_unevaluated() {
 
 void test_stringjoin_newline() {
     /* Parser treats \n as literal 'n' (no escape interpretation) */
-    assert_eval_eq("StringJoin[\"one\", \"\\n\", \"two\"]", "\"onentwo\"", 0);
+    assert_eval_eq("StringJoin[\"one\", \"\\n\", \"two\"]", "\"one\\ntwo\"", 0);
 }
 
 void test_stringjoin_many_args() {
@@ -211,7 +211,7 @@ void test_infix_stringjoin_symbolic() {
 
 void test_infix_stringjoin_newline() {
     /* Parser treats \n as literal 'n' (no escape interpretation) */
-    assert_eval_eq("\"one\" <> \"\\n\" <> \"two\"", "\"onentwo\"", 0);
+    assert_eval_eq("\"one\" <> \"\\n\" <> \"two\"", "\"one\\ntwo\"", 0);
 }
 
 void test_infix_stringjoin_fullform() {
@@ -581,7 +581,7 @@ void test_stringreverse_digits() {
 void test_stringreverse_special_chars() {
     /* Parser treats \n as the literal char 'n' (no escape interpretation),
      * so "a\nb" is the 3-char string "anb", which reverses to "bna". */
-    assert_eval_eq("StringReverse[\"a\\nb\"]", "\"bna\"", 0);
+    assert_eval_eq("StringReverse[\"a\\nb\"]", "\"b\\na\"", 0);
 }
 
 void test_stringreverse_long() {
