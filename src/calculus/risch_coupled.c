@@ -77,6 +77,26 @@ static bool rc_is_zero(const Expr* e) {
     return r;
 }
 
+/* Exact division a / b in k(i)[t] via schoolbook long division in t.
+ *
+ * The tangent-cancellation recursion divides N by (t - i), whose quotient lies
+ * in k(i)[t].  `Cancel` (and hence risch_field_divexact_t) does NOT perform a
+ * polynomial GCD over Q(i)[t], so `Cancel[N/(t-i)]` leaves the fraction
+ * unreduced even when (t - i) divides N exactly.  Long division's
+ * per-coefficient arithmetic collapses i^2 = -1 correctly and recovers the
+ * exact quotient.  Returns the owned quotient, or NULL when the division is
+ * not exact.  This is scoped to the coupled tangent case so the shared
+ * risch_field_divexact_t (whose Cancel-fail path many other Risch code paths
+ * rely on returning NULL) keeps its original behaviour. */
+static Expr* rc_divexact_gaussian_t(const Expr* a, const Expr* b, const Expr* t) {
+    Expr* q = NULL; Expr* r = NULL;
+    if (!risch_field_divmod_t(a, b, t, &q, &r)) return NULL;
+    bool exact = r && rc_is_zero(r);
+    if (r) expr_free(r);
+    if (!exact) { if (q) expr_free(q); return NULL; }
+    return q;
+}
+
 /* ------------------------------------------------------------------ */
 /* Base-field Risch DE bridge and Gaussian conjugation.                */
 /* ------------------------------------------------------------------ */
@@ -320,7 +340,7 @@ static bool rc_cancel_tan(const Expr* b0, const Expr* b2,
 
     /* c = N / (t - i) in k(i)[t]; split into d1 + d2 i (d1, d2 in k[t]). */
     Expr* pI = rc_eval_adopt(rc_plus(rc_cp(t), rc_times(expr_new_integer(-1), rc_I())));
-    Expr* Q = risch_field_divexact_t(N, pI, t);
+    Expr* Q = rc_divexact_gaussian_t(N, pI, t);
     expr_free(N); expr_free(pI);
     if (!Q) { expr_free(s1); expr_free(s2); return false; }       /* not exact */
     Expr* d1 = NULL; Expr* d2 = NULL;

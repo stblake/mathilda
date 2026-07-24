@@ -214,7 +214,7 @@ static void test_power_of_power_positive_base(void) {
     /* (E^x)^y with symbolic exponents must stay nested -- x may be complex,
      * so the core evaluator must not fold it to E^(x y). PowerExpand handles
      * the merge when the user asserts it is safe. */
-    assert_eval_eq("(E^x)^y", "E^x^y", 0);
+    assert_eval_eq("(E^x)^y", "(E^x)^y", 0);
     assert_eval_eq("(E^x)^y", "Power[Power[E, x], y]", 1);
 }
 

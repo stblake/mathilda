@@ -165,9 +165,10 @@ static void test_primitive_root_listable(void) {
 static void test_primitive_root_symbolic(void) {
     /* Bare symbol: PrimitiveRoot[x] stays unevaluated, no diagnostic. */
     check_eq("PrimitiveRoot[x]", "PrimitiveRoot[x]");
-    /* Symbolic call: same. */
-    check_eq("PrimitiveRoot[Prime[1000000]]",
-             "PrimitiveRoot[Prime[1000000]]");
+    /* Prime[1000000] = 15485863 now evaluates (fast prime counting), so
+     * this reduces to a concrete primitive-root computation: 6 is the
+     * smallest primitive root (2, 3, 5 are non-residues of full order). */
+    check_eq("PrimitiveRoot[Prime[1000000]]", "6");
 }
 
 /* ------------------------------------------------------------------ */

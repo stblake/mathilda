@@ -268,15 +268,16 @@ static void test_polydecomp_canonical(void) {
  * which the polynomial specialist solves, and each u-root is then
  * unwound through peel_exp into the periodic var-family.  The two
  * resulting branches are x = 2 k Pi (textbook root from Sin = 0,
- * Cos = 1) and x = -I Log[I] + 2 k Pi (= Pi/2 + 2 k Pi). */
+ * Cos = 1) and x = Pi/2 + 2 k Pi (the -I Log[I] constant now collapses
+ * to Pi/2 under the consistent complex canonical ordering). */
 static void test_trig_pre_pass_sin_plus_cos(void) {
     run_test("Solve[Sin[x] + Cos[x] == 1, x]",
              "List[List[Rule[x, ConditionalExpression["
                  "Times[2, C[1], Pi], "
                  "Element[C[1], Integers]]]], "
                   "List[Rule[x, ConditionalExpression["
-                 "Plus[Times[Complex[0, -1], Log[Complex[0, 1]]], "
-                       "Times[2, Times[C[1], Pi]]], "
+                 "Plus[Times[2, Times[C[1], Pi]], "
+                       "Times[Rational[1, 2], Pi]], "
                  "Element[C[1], Integers]]]]]");
 }
 
@@ -1153,15 +1154,22 @@ static void test_linsys_false_conjunct(void) {
              "List[]");
 }
 
-/* Non-affine system declines to dispatch -- left unevaluated. */
+/* Non-affine systems are now dispatched to the nonlinear (0-dimensional
+ * polynomial) solver, which returns the exact algebraic solutions. */
 static void test_linsys_nonlinear_declined(void) {
+    /* x^2 + y == 1, x == y  =>  x^2 + x - 1 == 0  =>  x = (-1 +/- Sqrt[5])/2. */
     run_test("Solve[x^2 + y == 1 && x - y == 0, {x, y}]",
-             "Solve[And[Equal[Plus[Power[x, 2], y], 1], "
-                       "Equal[Plus[x, Times[-1, y]], 0]], List[x, y]]");
-    /* Cross-term x*y -- non-affine. */
+             "List[List[Rule[x, Times[Rational[-1, 2], "
+                       "Plus[1, Times[-1, Power[5, Rational[1, 2]]]]]], "
+                  "Rule[y, Times[Rational[1, 2], "
+                       "Plus[-1, Power[5, Rational[1, 2]]]]]], "
+                  "List[Rule[x, Times[Rational[-1, 2], "
+                       "Plus[1, Power[5, Rational[1, 2]]]]], "
+                  "Rule[y, Times[Rational[1, 2], "
+                       "Plus[-1, Times[-1, Power[5, Rational[1, 2]]]]]]]]");
+    /* Cross-term x*y: x y == 1, x + y == 2  =>  x = y = 1 (double root). */
     run_test("Solve[x y == 1 && x + y == 2, {x, y}]",
-             "Solve[And[Equal[Times[x, y], 1], Equal[Plus[x, y], 2]], "
-                  "List[x, y]]");
+             "List[List[Rule[x, 1], Rule[y, 1]]]");
 }
 
 /* Direct invocation of the qualified builtin Solve`SolveLinearSystem. */

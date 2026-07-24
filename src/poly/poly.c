@@ -49,6 +49,7 @@
 #include "print.h"
 #include "match.h"
 #include "rationalize.h"
+#include "numeric.h"
 #include "sym_names.h"
 #include "options.h"
 #include "qa.h"
@@ -780,24 +781,33 @@ static void walk_gather(Expr* e, Expr* B, Expr* A,
 }
 
 bool poly_find_radical_gen(Expr* e, Expr** base_out, Expr** atom_out, int64_t* m_out) {
+    Expr* base = NULL;
+    Expr* atom = NULL;
+    if (!walk_find_radical_base(e, &base, &atom)) return false;
+
     /* A pure numeric constant (no polynomial variable — e.g. (1 - I Sqrt[3])/2)
      * has nothing to cancel: substituting its radical for a fresh generator only
      * fabricates a polynomial in that generator, and the downstream multivariate
      * GCD then blows up in exact_poly_div (Simplify/Together/Cancel/Apart hang
      * over Q(i sqrt d)).  Decline for every caller; ordinary arithmetic already
      * reduces such constants.  (Radicals in a genuine polynomial — with a real
-     * variable present — still substitute as before.) */
+     * variable present — still substitute as before.)
+     *
+     * For the EXPONENTIAL case (atom A != 1, e.g. E^x with base E, atom x) the
+     * generator's variable lives in the exponent atom, which collect_variables
+     * on the whole expression cannot see (E is a constant symbol, so it never
+     * descends into the exponent — Variables[Exp[2x]+2Exp[x]+1] == {}).  Probe
+     * the atom instead so E^x (atom x -> {x}, proceed) is distinguished from a
+     * genuine constant exponential like E^Sqrt[2] (atom Sqrt[2] -> {}, decline). */
     {
+        Expr* probe = atom_is_one(atom) ? e : atom;
         size_t vc = 0, vcap = 8;
         Expr** vs = malloc(sizeof(Expr*) * vcap);
-        collect_variables(e, &vs, &vc, &vcap);
+        collect_variables(probe, &vs, &vc, &vcap);
         for (size_t i = 0; i < vc; i++) expr_free(vs[i]);
         free(vs);
-        if (vc == 0) return false;
+        if (vc == 0) { expr_free(base); expr_free(atom); return false; }
     }
-    Expr* base = NULL;
-    Expr* atom = NULL;
-    if (!walk_find_radical_base(e, &base, &atom)) return false;
     int64_t m = 1;
     size_t count = 0;
     bool nontrivial_c = false;
@@ -2462,7 +2472,37 @@ Expr* builtin_polynomialgcd(Expr* res) {
         if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
         Expr* trimmed = expr_rebuild_call(res, res->data.function.args,
                                           poly_argc);
-        Expr* result = builtin_polynomialgcd(trimmed);
+        /* Under Extension -> Automatic, normalise a non-integer numeric content
+         * factor so the GCD is monic in the polynomial variables (e.g.
+         * PolynomialGCD[x - 1.5, x^2 - 2.25] -> -1.5 + x, not -0.75 + 0.5 x).
+         * only_noninteger = true preserves the integer-domain primitive-part
+         * convention for pure integer inputs. */
+        Expr* result;
+        if (auto_flag && internal_args_contain_inexact(trimmed)) {
+            /* Inexact input: rationalise, take the exact GCD, make it monic in
+             * the exact domain, then numericalise — so the leading coefficient
+             * stays exact (x, not 1.0 x). */
+            size_t na = trimmed->data.function.arg_count;
+            Expr** ra = (na > 0) ? (Expr**)malloc(sizeof(Expr*) * na) : NULL;
+            for (size_t i = 0; i < na; i++)
+                ra[i] = internal_force_rationalize(trimmed->data.function.args[i]);
+            Expr* rclone = expr_new_function(
+                expr_copy(trimmed->data.function.head), ra, na);
+            free(ra);
+            Expr* exact = builtin_polynomialgcd(rclone);
+            expr_free(rclone);
+            if (exact) {
+                exact = qa_make_poly_numerically_monic(exact, true);
+                result = numericalize(exact, numeric_machine_spec());
+                expr_free(exact);
+            } else {
+                result = builtin_polynomialgcd(trimmed);
+            }
+        } else {
+            result = builtin_polynomialgcd(trimmed);
+            if (result && auto_flag)
+                result = qa_make_poly_numerically_monic(result, true);
+        }
         expr_free(trimmed);
         return result;
     }

@@ -182,6 +182,32 @@ static void rr_collect_symnames(const Expr* e, const char*** set, int* n, int* c
     }
 }
 
+/* Collect the distinct free VARIABLE names of `e` — like rr_collect_symnames but
+ * SKIPPING each function node's operator head (Plus, Times, Power, Rational, …),
+ * which name operators, not variables.  Used to count the parameter variables a
+ * radical base couples: base `Sqrt[x] + x` has ONE variable (x), not four
+ * (Plus/Power/Rational/x).  A non-symbol head (e.g. a Derivative[…][x] operator)
+ * is still traversed. */
+static void rr_collect_varnames(const Expr* e, const char*** set, int* n, int* cap) {
+    if (!e) return;
+    if (e->type == EXPR_SYMBOL) {
+        for (int i = 0; i < *n; i++)
+            if (strcmp((*set)[i], e->data.symbol.name) == 0) return;
+        if (*n >= *cap) {
+            *cap = *cap ? *cap * 2 : 8;
+            *set = realloc(*set, sizeof(char*) * (size_t)*cap);
+        }
+        (*set)[(*n)++] = e->data.symbol.name;
+        return;
+    }
+    if (e->type == EXPR_FUNCTION) {
+        if (e->data.function.head->type != EXPR_SYMBOL)
+            rr_collect_varnames(e->data.function.head, set, n, cap);
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            rr_collect_varnames(e->data.function.args[i], set, n, cap);
+    }
+}
+
 /* True if `e` contains a Power[g, m] whose base g is one of the generator
  * symbols and whose exponent m is NOT a non-negative integer (a Laurent or
  * fractional generator power).  Such a term makes a relation g_k^{q_k} - V_k
@@ -300,6 +326,30 @@ Expr* simp_radical_rational(const Expr* input,
     if (overflow || n < 2) {
         for (int i = 0; i < n; i++) expr_free(gens[i].base);
         return NULL;
+    }
+
+    /* Scope guard: the per-generator rationalisation (Step 4b) reduces the
+     * denominator against g_k^{q_k} - V_k with PolynomialExtendedGCD taken
+     * UNIVARIATELY in the generator g_k — its coefficient ring is Q[parameters].
+     * When the generator bases span TWO OR MORE distinct parameter variables, that
+     * coefficient ring is multivariate and the univariate pseudo-remainder
+     * sequence suffers classic coefficient explosion (e.g. the cube root of the
+     * degree-3 bivariate x (1-x) (1-k x) from the Goursat integrand: the extended
+     * GCD over Q[x, k] ground the whole Simplify to a halt).  This normal-form
+     * method is a decision procedure only over a single-parameter coefficient
+     * field; multivariate is out of scope, so decline cleanly (Simplify falls
+     * through to Together / Cancel / Factor, which reduce the same input without
+     * the generator-ring blow-up).  All in-scope radical-rational simplifications
+     * are single-parameter, so this never fires on them. */
+    {
+        const char** pset = NULL; int pn = 0, pcap = 0;
+        for (int i = 0; i < n; i++)
+            rr_collect_varnames(gens[i].base, &pset, &pn, &pcap);
+        free(pset);
+        if (pn >= 2) {
+            for (int i = 0; i < n; i++) expr_free(gens[i].base);
+            return NULL;
+        }
     }
 
     /* Order outer-base-first (descending leaf count) so a containing base

@@ -107,9 +107,13 @@ static void test_bivariate_hensel(void) {
 
 /* Multivariate via factor_roots fallback (still works after Phase 0+1). */
 static void test_multivariate_via_factor_roots(void) {
+    /* = (a - x)(a + x)(3 a^2 - 2 x y).  Wolfram normalises each irreducible
+     * factor to a positive leading coefficient in the FIRST (alphabetically
+     * smallest) variable it contains — a for (a - x), a^2 for (3 a^2 - 2 x y)
+     * — giving a-leading factors, not the x-leading associates. */
     eval_check("Factor[2 x^3 y - 2 a^2 x y - 3 a^2 x^2 + 3 a^4]",
-               "Times[Plus[a, x], Plus[Times[-1, a], x], "
-                     "Plus[Times[-3, Power[a, 2]], Times[2, Times[x, y]]]]", 100.0);
+               "Times[Plus[a, x], Plus[a, Times[-1, x]], "
+                     "Plus[Times[3, Power[a, 2]], Times[-2, Times[x, y]]]]", 100.0);
 }
 
 /* Irreducibility short-circuit (Phase 1) -- 60x speedup vs main. */
@@ -234,15 +238,19 @@ static void test_factor_trig_monomial(void) {
  * full Factor call to under 1.5 s.  Mathematica solves it in 2 ms,
  * Mathics in 100 ms; we're not at parity but we're no longer hung.
  *
- * Expected: x^2 * (z^13 - x^12) * (17 - 5y - z^14) * (z^4 + 3x^9 - y^13). */
+ * Expected: x^2 * (z^13 - x^12) * (17 - 5y - z^14) * (z^4 + 3x^9 - y^13).
+ * Each irreducible factor is normalised to a positive leading (highest-total-
+ * degree) term, so the two factors whose top-degree term is negative are
+ * emitted as their negated associates: (-17 + 5y + z^14) and
+ * (-3x^9 + y^13 - z^4), with the two sign flips cancelling overall. */
 static void test_factor_trivariate_high_degree_squarefree(void) {
     double ms = eval_check(
         "Factor[Expand[x^2 (z^13 - x^12) (z^4 + 3 x^9 - y^13) (17 - 5 y - z^14)]]",
         "Times["
             "Power[x, 2], "
             "Plus[Times[-1, Power[x, 12]], Power[z, 13]], "
-            "Plus[17, Times[-5, y], Times[-1, Power[z, 14]]], "
-            "Plus[Times[3, Power[x, 9]], Times[-1, Power[y, 13]], Power[z, 4]]"
+            "Plus[-17, Times[5, y], Power[z, 14]], "
+            "Plus[Times[-3, Power[x, 9]], Power[y, 13], Times[-1, Power[z, 4]]]"
         "]",
         5000.0);
     fprintf(stderr, "  trivariate user case: %.0f ms\n", ms);

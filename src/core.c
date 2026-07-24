@@ -1414,6 +1414,25 @@ static Expr* chop_recursive(Expr* e, double delta) {
         return result;
     }
 
+    /* Dense ndarray: chop each element of the (always machine-precision) buffer
+     * in place on a private copy. For complex dtypes the real and imaginary
+     * components are chopped independently, matching Chop on a Complex atom. */
+    if (e->type == EXPR_NDARRAY) {
+        Expr* out = expr_copy(e);           /* deep-copies dims + data buffer */
+        NDType dt = out->data.ndarray.dtype;
+        size_t n = 1;
+        for (int i = 0; i < out->data.ndarray.rank; i++)
+            n *= (size_t)out->data.ndarray.dims[i];
+        for (size_t k = 0; k < n; k++) {
+            double kre, kim;
+            ndt_get(out->data.ndarray.data, k, dt, &kre, &kim);
+            if (fabs(kre) < delta) kre = 0.0;
+            if (fabs(kim) < delta) kim = 0.0;
+            ndt_set(out->data.ndarray.data, k, dt, kre, kim);
+        }
+        return out;
+    }
+
     /* Atom (Integer, BigInt, Symbol, String, Rational components): no change. */
     return expr_copy(e);
 }

@@ -542,26 +542,38 @@ static bool pcx_polygamma(long n, const mpfr_t zre, const mpfr_t zim,
 
 /* PolyGamma[n, z] for an inexact real z (Real or MPFR). */
 static Expr* pg_numeric_real(long n, const Expr* z) {
-    mpfr_prec_t prec = (z->type == EXPR_MPFR) ? mpfr_get_prec(z->data.mpfr) : 53;
+    mpfr_prec_t out_prec = (z->type == EXPR_MPFR) ? mpfr_get_prec(z->data.mpfr) : 53;
+    /* Evaluate the transcendental at guard precision and round to out_prec only
+     * on emission. mpfr_digamma computed at exactly out_prec bits leaves the
+     * requested last digit sitting on the function's own rounding boundary, so
+     * N[PolyGamma[q], p] for a non-dyadic rational q lost its final one or two
+     * digits (e.g. N[PolyGamma[22/10], 50]). The extra 64 bits push that
+     * boundary well past the reported precision, matching the guard-and-round
+     * discipline the other special-function kernels use. */
+    mpfr_prec_t wp = out_prec + 64;
     mpfr_t x;
-    mpfr_init2(x, prec);
+    mpfr_init2(x, wp);
     if (!pg_set_mpfr(x, z)) { mpfr_clear(x); return NULL; }
 
     Expr* out = NULL;
     if (n == 0) {
         mpfr_t rv;
-        mpfr_init2(rv, prec);
+        mpfr_init2(rv, wp);
         mpfr_digamma(rv, x, GRND);
         if (mpfr_nan_p(rv))      out = NULL;
         else if (mpfr_inf_p(rv)) out = expr_new_symbol(SYM_ComplexInfinity);
-        else out = (z->type == EXPR_MPFR) ? expr_new_mpfr_copy(rv)
-                                          : expr_new_real(mpfr_get_d(rv, GRND));
+        else if (z->type == EXPR_MPFR) {
+            out = expr_new_mpfr_bits(out_prec);
+            mpfr_set(out->data.mpfr, rv, GRND);
+        } else {
+            out = expr_new_real(mpfr_get_d(rv, GRND));
+        }
         mpfr_clear(rv);
     } else {
         mpfr_t zi, rre, rim;
-        mpfr_inits2(prec, zi, rre, rim, (mpfr_ptr)0);
+        mpfr_inits2(out_prec, zi, rre, rim, (mpfr_ptr)0);
         mpfr_set_zero(zi, 1);
-        if (pcx_polygamma(n, x, zi, rre, rim, prec))
+        if (pcx_polygamma(n, x, zi, rre, rim, out_prec))
             out = (z->type == EXPR_MPFR) ? expr_new_mpfr_copy(rre)
                                          : expr_new_real(mpfr_get_d(rre, GRND));
         mpfr_clears(zi, rre, rim, (mpfr_ptr)0);
@@ -616,7 +628,16 @@ static Expr* pg_int(int64_t v) { return expr_new_integer(v); }
  * algebraic/elementary value on evaluation, so the result is elementary.
  * Returns NULL for non-positive or large-denominator arguments (stay symbolic).*/
 static Expr* pg_gauss_digamma(int64_t num, int64_t den) {
-    if (num <= 0 || den < 2 || den > POLYGAMMA_EXACT_ARG_CAP) return NULL;
+    /* Only half-integer arguments (den == 2) are auto-evaluated to the exact
+     * closed form, matching Wolfram: PolyGamma[0, 5/2] simplifies but
+     * PolyGamma[0, 11/5] stays symbolic. Beyond WL fidelity this avoids a real
+     * numerical trap: the general Gauss closed form is a sum of O(1) terms
+     * (-gamma, -ln(2q), (pi/2)cot, cos*ln sin, ...) that cancel to the small
+     * digamma value, so numericalising it at the requested precision loses one
+     * or two digits to catastrophic cancellation (e.g. N[PolyGamma[22/10], 50]).
+     * Keeping general rationals symbolic routes N through the correctly-rounded
+     * mpfr_digamma path instead. */
+    if (num <= 0 || den != 2 || den > POLYGAMMA_EXACT_ARG_CAP) return NULL;
     int64_t M = num / den;          /* integer part >= 0 */
     int64_t a = num - M * den;      /* fractional numerator, 0 < a < den */
 

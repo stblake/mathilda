@@ -148,8 +148,11 @@ void test_ci_pure_imaginary() {
 /* ---- arbitrary-precision complex ------------------------------------ */
 
 void test_ci_arbitrary_complex() {
-    assert_eval_startswith("N[CosIntegral[2.5 + I], 30]",
-        "0.331465009905098695330849523088");
+    /* Exact input (5/2 = 2.5 exactly) so N[..., 30] genuinely exercises the
+     * MPFR complex path: a machine 2.5 + I is MachinePrecision and N cannot
+     * manufacture 30 digits from it (matches WL). */
+    assert_eval_startswith("N[CosIntegral[5/2 + I], 30]",
+        "0.331465009905098675607661557472");
     /* Pure imaginary at high precision: imaginary part is exactly Pi/2. */
     assert_eval_startswith("N[CosIntegral[3 I], 30]",
         "4.96039209476560976029791763669");

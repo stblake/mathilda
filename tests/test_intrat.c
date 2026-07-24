@@ -146,7 +146,7 @@ static void test_integrate_polynomial(void) {
 static void test_hermite_simple(void) {
     /* deg(D̄) starts at 0 ⇒ f stays as-is, g == 0. */
     run_eq("Integrate`HermiteReduce[1/x, x]", "{0, 1/x}");
-    run_eq("Integrate`HermiteReduce[1/(x-a), x]", "{0, 1/(-a + x)}");
+    run_eq("Integrate`HermiteReduce[1/(x-a), x]", "{0, -1/(a - x)}");
 
     /* 1/(x-a)^2: classical reduction down to g = -1/(x-a), h = 0. */
     assert_hermite_correct("1/(x-1)^2");
@@ -247,9 +247,12 @@ static void test_intrationallogpart(void) {
     /* Simple: 1/(x^2+1) ⇒ Q=1+4t^2, S=2t+x. */
     run_eq("Integrate`IntRationalLogPart[1/(x^2+1), x, t]",
            "{{1 + 4 t^2, 2 t + x}}");
-    /* Linear factors: 1/((x-1)(x-2)). */
+    /* Linear factors: 1/((x-1)(x-2)).  The log-argument S is content-primitive
+     * (integer coefficients); it is equal up to the constant factor 2 to the
+     * monic-in-x form -3/2 - t/2 + x, and a constant multiple inside a Log is
+     * absorbed into the RootSum constant. */
     run_eq("Integrate`IntRationalLogPart[1/((x-1)(x-2)), x, t]",
-           "{{1 - t^2, -3/2 - 1/2 t + x}}");
+           "{{1 - t^2, -3 - t + 2 x}}");
     /* RootSum -> True wraps in symbolic RootSum heads. */
     run_eq("Integrate`IntRationalLogPart[1/(x^2+1), x, t, RootSum -> True]",
            "RootSum[Function[t, 1 + 4 t^2], Function[t, t Log[2 t + x]]]");

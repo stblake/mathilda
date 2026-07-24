@@ -144,8 +144,11 @@ void test_chi_machine_complex() {
 /* ---- arbitrary-precision complex ------------------------------------ */
 
 void test_chi_arbitrary_complex() {
-    assert_eval_startswith("N[CoshIntegral[3.5 + I], 30]",
-        "5.366675935843617573084429750452");
+    /* Exact input (7/2 = 3.5 exactly) so N[..., 30] genuinely exercises the
+     * MPFR complex path: a machine 3.5 + I is MachinePrecision and N cannot
+     * manufacture 30 digits from it (matches WL). */
+    assert_eval_startswith("N[CoshIntegral[7/2 + I], 30]",
+        "5.36667593584361750026705329022");
     /* Imaginary-axis Stokes constant: Chi(i y) -> i Pi/2, residual is Ci(y). */
     assert_eval_startswith("N[CoshIntegral[I*10^60`120] - I Pi/2, 20]",
         "8.3038976521934266466");

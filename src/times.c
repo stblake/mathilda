@@ -41,6 +41,45 @@ static bool is_positive_numeric_expr(Expr* e) {
     return false;
 }
 
+/* Sound (conservative) positivity oracle for the radical-fusion guard: returns
+ * true only when e is provably strictly positive.  Extends
+ * is_positive_numeric_expr to the positive real constants Pi, E and EulerGamma
+ * and to Times/Power/Plus built from provably-positive operands, so that e.g.
+ * Sqrt[Pi/2] Sqrt[2/Pi] fuses to Sqrt[1] = 1 (both radicands are positive, and
+ * their product is a positive numeric).  Any operand it cannot prove positive
+ * makes the whole expression fall through to false — the guard is never
+ * loosened on the principal-branch validity of a^q b^q = (a b)^q. */
+static bool is_positive_constant_expr(Expr* e) {
+    if (!e) return false;
+    if (is_positive_numeric_expr(e)) return true;
+    if (e->type == EXPR_SYMBOL) {
+        const char* s = e->data.symbol.name;
+        return s == SYM_Pi || s == SYM_E || s == SYM_EulerGamma;
+    }
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        Expr** args = e->data.function.args;
+        size_t n = e->data.function.arg_count;
+        if (h == SYM_Times || h == SYM_Plus) {
+            /* product / sum of provably-positive operands is positive */
+            for (size_t i = 0; i < n; i++)
+                if (!is_positive_constant_expr(args[i])) return false;
+            return n > 0;
+        }
+        if (h == SYM_Power && n == 2) {
+            /* positive base raised to a real exponent stays positive */
+            Expr* ex = args[1];
+            bool real_exp = (ex->type == EXPR_INTEGER || ex->type == EXPR_REAL
+                             || ex->type == EXPR_BIGINT || is_rational(ex, NULL, NULL));
+#ifdef USE_MPFR
+            real_exp = real_exp || ex->type == EXPR_MPFR;
+#endif
+            return real_exp && is_positive_constant_expr(args[0]);
+        }
+    }
+    return false;
+}
+
 static Expr* multiply_numbers(Expr* a, Expr* b) {
     if (is_overflow(a) || is_overflow(b)) return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
 #ifdef USE_MPFR
@@ -714,14 +753,14 @@ Expr* builtin_times(Expr* res) {
      * q > 1 so we don't compete with ordinary arithmetic on integer
      * exponents (which the base-grouping pass has already merged). */
     for (size_t i = 0; i < group_count; i++) {
-        if (!is_positive_numeric_expr(groups[i].base)) continue;
+        if (!is_positive_constant_expr(groups[i].base)) continue;
         int64_t pi_n, pi_d;
         if (!is_rational(groups[i].exponent, &pi_n, &pi_d)) continue;
         if (pi_d == 1) continue;
         if (pi_n == 0) continue;
 
         for (size_t j = i + 1; j < group_count; j++) {
-            if (!is_positive_numeric_expr(groups[j].base)) continue;
+            if (!is_positive_constant_expr(groups[j].base)) continue;
             int64_t pj_n, pj_d;
             if (!is_rational(groups[j].exponent, &pj_n, &pj_d)) continue;
             if (pj_d != pi_d) continue;

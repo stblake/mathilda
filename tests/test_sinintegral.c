@@ -130,8 +130,11 @@ void test_si_machine_complex() {
 /* ---- arbitrary-precision complex ------------------------------------ */
 
 void test_si_arbitrary_complex() {
-    assert_eval_startswith("N[SinIntegral[2.5 + I], 30]",
-        "1.99548728538027453360825802519");
+    /* Exact input (5/2 = 2.5 exactly) so N[..., 30] genuinely exercises the
+     * MPFR complex path: a machine 2.5 + I is MachinePrecision and N cannot
+     * manufacture 30 digits from it (matches WL). */
+    assert_eval_startswith("N[SinIntegral[5/2 + I], 30]",
+        "1.99548728538027450640511853314");
 }
 
 /* ---- derivatives ---------------------------------------------------- */

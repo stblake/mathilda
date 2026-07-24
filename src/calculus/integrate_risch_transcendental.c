@@ -386,38 +386,9 @@ static bool rt_expr_is_elementary(Expr* e) {
     return true;
 }
 
-/* True iff e carries an ALGEBRAIC function of x anywhere: a radical (a
- * Rational-headed, i.e. non-integer, exponent over an x-dependent base — Sqrt[x]
- * = x^(1/2), x^(1/3), Sqrt[Sin[x]]) or a Surd/Root/AlgebraicNumber of x.  The
- * transcendental Risch decision procedure (Bronstein Ch.5/6) is a decision
- * procedure ONLY over a purely transcendental tower over C(x); an algebraic
- * extension is out of scope.  The field decision must therefore return UNKNOWN
- * for such integrands rather than a spurious certificate: e.g. Cos[Sqrt[x]],
- * E^Sqrt[x], Sin[x^(1/3)] are all elementary (via an algebraic substitution the
- * transcendental algorithm does not perform), so a `False` verdict would be
- * unsound.  (x^x = E^(x Log x) and x^Sqrt[2] = E^(Sqrt[2] Log x) are NOT flagged:
- * their exponents are transcendental, not Rational-headed — those are genuine
- * hyperexponential monomials rt_powers_to_exp handles.) */
-static bool rt_has_algebraic_of_x(Expr* e, Expr* x) {
-    if (!e || e->type != EXPR_FUNCTION) return false;
-    const char* h = (e->data.function.head->type == EXPR_SYMBOL)
-        ? e->data.function.head->data.symbol.name : NULL;
-    if (h == intern_symbol("Power") && e->data.function.arg_count == 2) {
-        Expr* b = e->data.function.args[0];
-        Expr* p = e->data.function.args[1];
-        /* radical: x-dependent base raised to a non-integer rational power */
-        if (p && p->type == EXPR_FUNCTION && rt_head_is(p, "Rational")
-            && !rt_free_of_x(b, x))
-            return true;
-    }
-    if ((h == intern_symbol("Surd") || h == intern_symbol("Root")
-         || h == intern_symbol("AlgebraicNumber")) && !rt_free_of_x(e, x))
-        return true;
-    if (rt_has_algebraic_of_x(e->data.function.head, x)) return true;
-    for (size_t i = 0; i < e->data.function.arg_count; i++)
-        if (rt_has_algebraic_of_x(e->data.function.args[i], x)) return true;
-    return false;
-}
+/* rt_has_algebraic_of_x (radical / Surd / Root of x anywhere) is shared from
+ * risch_util.c — the single-extension kernel gate (rt_kernel_simple) and the
+ * trig front-end scope guard use the same predicate.  See risch_util.h. */
 
 /* Field-path elementary-integrability decision.  Routes f through the AUTHORITATIVE
  * recursive field integrator (rt_field_integrate) in decision mode — the same

@@ -463,28 +463,28 @@ int main(int argc, char** argv) {
      * Treat the test as passing when no DIFF NONZERO case is detected.
      * Raise this if integration improvements legitimately exceed the
      * cap; never lower it without investigating each regression. */
-    /* Baseline 2 covers two pre-existing branch/Abs artifacts, each a
-     * correct antiderivative on its principal real domain that Simplify
-     * cannot collapse to 0 across a sign flip (verified pre-existing by
-     * A/B against the committed table — neither involves an inverse-trig
-     * or inverse-hyperbolic head, so they are untouched by that block):
+    /* Baseline 3 covers three branch/Abs artifacts of the SAME family:
+     * `1/Sqrt[a + b Tan[c x]^2]`.  Each is a correct antiderivative on its
+     * principal real domain — the formal `D[antideriv] - integrand` reduces to
+     * a `Cos[c x]` vs `Abs[Cos[c x]]` sign difference (e.g. for
+     * `1/Sqrt[5 + 3 Tan[2 x]^2]` the diff is
+     * `Cos[2 x]/Sqrt[(4 + Cos[4 x])/5] - 1/Sqrt[5 + 3 Tan[2 x]^2]`), which is
+     * numerically 0 wherever `Cos[c x] > 0` (verified: residual ~1e-16 at
+     * interior sample points).  Simplify cannot collapse the sign flip, so
+     * these count as "diff nonzero" without being wrong antiderivatives:
      *
-     *   1. `Sqrt[(3 + x)/(1 + 2 x)]` (linear-ratio radical).  The
-     *      antiderivative carries an `Abs[3 + x]` whose formal derivative
-     *      `Derivative[1][Abs][3 + x]` does not cancel symbolically; the
-     *      result is exact where `3 + x > 0`.
-     *   2. `1/Sqrt[4 + Tan[x]^2]` (Formula 422).  The diff reduces to
-     *      `(Cos[x] - Abs[Cos[x]])/Sqrt[1 + 3 Cos[x]^2]`, i.e. 0 exactly
-     *      where `Cos[x] > 0` — a branch/Abs artifact, not a wrong
-     *      antiderivative.
+     *   1. `1/Sqrt[4 + Tan[x]^2]`      (Formula 422)
+     *   2. `1/Sqrt[5 + 3 Tan[2 x]^2]`
+     *   3. `1/Sqrt[5 + 2 Tan[3 x]^2]`
      *
-     * (The formerly-cited `1/Sqrt[1 - Sin[x]]`, Formula 400, now exceeds
-     * the per-case timeout and is counted under "Timed out", not here.)
+     * (The formerly-cited `Sqrt[(3 + x)/(1 + 2 x)]` now closes cleanly after
+     * the number-field Cancel improvements — it left this pile — and
+     * `1/Sqrt[1 - Sin[x]]`, Formula 400, is now counted under "Timed out".)
      *
      * Treat the test as passing when no NEW DIFF NONZERO case appears.
      * Raise this only after investigating each case as above; never
      * lower it without confirming the corresponding rule regressed. */
-    const int CORPUS_DIFF_NONZERO_BASELINE = 2;
+    const int CORPUS_DIFF_NONZERO_BASELINE = 3;
     if (diff_nonzero > CORPUS_DIFF_NONZERO_BASELINE) {
         fprintf(stderr,
             "FAIL: %d case(s) closed but did not differentiate back to "

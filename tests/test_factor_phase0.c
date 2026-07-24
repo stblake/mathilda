@@ -157,12 +157,11 @@ static void test_monomial_no_common_factor(void) {
 }
 
 static void test_monomial_negative_coefficient(void) {
-    /* -x^2 y - x y^2.  Mathematically equals -x y (x + y).  Mathilda'
-     * canonical printer prefers to push the negative inside the Plus
-     * rather than emit a leading -1 factor; both forms are equivalent
-     * factorisations.  We accept the actual surface form. */
+    /* -x^2 y - x y^2 = -x y (x + y).  Wolfram's canonical Factor keeps each
+     * irreducible factor positive-leading (x + y) and carries the overall
+     * sign as a leading -1, rather than pushing the negative inside the Plus. */
     expect_fullform("Factor[-x^2 y - x y^2]",
-                    "Times[x, y, Plus[Times[-1, x], Times[-1, y]]]");
+                    "Times[-1, x, y, Plus[x, y]]");
 }
 
 static void test_monomial_bigint_coefficient(void) {
@@ -188,14 +187,12 @@ static void test_monomial_bigint_coefficient(void) {
 static void test_monomial_bigint_mixed_coefficients(void) {
     /* Plus[Times[2^100, a, b], Times[3 * 2^100, b]] = 2^100 * b * (a + 3).
      * The two terms have *different* BIGINT coefficients (2^100 and
-     * 3 * 2^100); the GCD-monomial in *variables* is {b} only -- which
-     * is what factor_monomial_content (the F6-widened path) extracts.
-     * The residue 3*2^100 + 2^100 a remains as-is because poly_content
-     * is still int64-bound (a follow-up cleanup item).  The b
-     * extraction is the F6 deliverable verified here. */
+     * 3 * 2^100); the shared 2^100 integer content is now pulled out as a
+     * leading BIGINT factor and the primitive residue (a + 3) is factored,
+     * giving 2^100 (a + 3) b. */
     expect_fullform("Factor[2^100 * a * b + 3 * 2^100 * b]",
-                    "Times[Plus[3802951800684688204490109616128, "
-                    "Times[1267650600228229401496703205376, a]], b]");
+                    "Times[1267650600228229401496703205376, "
+                    "Plus[3, a], b]");
 }
 
 /* =====================================================================
@@ -265,8 +262,10 @@ static void test_regression_factor_roots_case(void) {
     /* This case relies on factor_roots' trial-division to find linear
      * factors.  It is the canonical reducible bivariate case in
      * test_facpoly.c. */
+    /* = (a - x)(a + x)(3 a^2 - 2 x y): each factor positive-leading in its
+     * first (alphabetically smallest) variable a / a^2. */
     expect_fullform("Factor[2 x^3 y - 2 a^2 x y - 3 a^2 x^2 + 3 a^4]",
-                    "Times[Plus[a, x], Plus[Times[-1, a], x], Plus[Times[-3, Power[a, 2]], Times[2, Times[x, y]]]]");
+                    "Times[Plus[a, x], Plus[a, Times[-1, x]], Plus[Times[3, Power[a, 2]], Times[-2, Times[x, y]]]]");
 }
 
 /* =====================================================================
@@ -290,9 +289,12 @@ static void test_hensel_quadratic_y_in_two_factors(void) {
     /* (x + y^2 - 1)(x - y^2 + 1) = x^2 - (y^2 - 1)^2.
      * Higher y-degree forces multiple Hensel iterations.  Note the
      * factor order is determined by the canonical Orderless ordering
-     * of Times, not by our algorithm. */
+     * of Times, not by our algorithm.  Each factor is normalised to a
+     * positive leading (highest-degree) term y^2: the second factor
+     * x - y^2 + 1 becomes -(y^2 - x - 1) with the sign pulled to a
+     * leading -1. */
     expect_fullform("Factor[(x + y^2 - 1)(x - y^2 + 1)]",
-                    "Times[Plus[-1, x, Power[y, 2]], Plus[1, x, Times[-1, Power[y, 2]]]]");
+                    "Times[-1, Plus[-1, x, Power[y, 2]], Plus[-1, Times[-1, x], Power[y, 2]]]");
 }
 
 static void test_hensel_three_factor_lift(void) {

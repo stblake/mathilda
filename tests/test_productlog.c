@@ -150,8 +150,8 @@ void test_productlog_series() {
                            "-1 + Sqrt[2 E] Sqrt[x + 1/E]");
     /* Infinity: nested-logarithm asymptotic expansion (the x^0 coefficient). */
     assert_eval_eq("Normal[Series[ProductLog[x], {x, Infinity, 0}]]",
-                   "Log[x] - Log[Log[x]] + Log[Log[x]]/Log[x] - "
-                   "Log[Log[x]]/Log[x]^2 + 1/2 Log[Log[x]]^2/Log[x]^2", 0);
+                   "Log[x] - Log[Log[x]] - Log[Log[x]]/Log[x]^2 + "
+                   "Log[Log[x]]/Log[x] + 1/2 Log[Log[x]]^2/Log[x]^2", 0);
 }
 
 void test_productlog_seriescoefficient() {

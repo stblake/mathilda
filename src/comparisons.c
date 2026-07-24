@@ -12,6 +12,9 @@
 #include "arithmetic.h"
 #include "eval.h"
 #include "numeric.h"
+#include "internal.h"
+#include "zero_test.h"
+#include <stdio.h>
 #include <gmp.h>
 #include <stdbool.h>
 #include <string.h>
@@ -204,10 +207,29 @@ Expr* builtin_equal(Expr* res) {
         }
 
         if (!equal) {
-            if (definitely_unequal || (is_raw_data(a) && is_raw_data(b))) {
+            if (definitely_unequal) {
+                /* compare_numeric found a nonzero difference.  On EXACT operands
+                 * (not raw machine floats) catastrophic cancellation over an
+                 * algebraic tower — e.g. Sqrt[5 + 2 Sqrt[6]] - Sqrt[3] - Sqrt[2],
+                 * which is exactly 0 — collapses to a tiny-but-nonzero residual
+                 * at machine precision, so the numeric verdict is unreliable.
+                 * Confirm with the exact zero test before committing to
+                 * inequality; only override to equal when it PROVES the
+                 * difference zero. */
+                if (!is_raw_data(a) || !is_raw_data(b)) {
+                    Expr* diff = eval_and_free(
+                        internal_subtract((Expr*[]){ expr_copy(a), expr_copy(b) }, 2));
+                    ZeroTestResult zt = diff ? zero_test_decide(diff) : ZERO_TEST_UNKNOWN;
+                    if (diff) expr_free(diff);
+                    if (zt == ZERO_TEST_TRUE) { equal = true; }
+                    else return expr_new_symbol(SYM_False);
+                } else {
+                    return expr_new_symbol(SYM_False);
+                }
+            } else if (is_raw_data(a) && is_raw_data(b)) {
                 return expr_new_symbol(SYM_False);
             }
-            all_equal = false;
+            if (!equal) all_equal = false;
         }
     }
 

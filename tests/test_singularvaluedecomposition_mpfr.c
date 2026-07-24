@@ -289,9 +289,12 @@ static void test_gen_mpfr_tall_30digit(void) {
 
 static void test_complex_recon_2x2_30digit(void) {
     /* Both entries carry imaginary parts; the dispatcher must route
-     * through the complex Jacobi kernel. */
+     * through the complex Jacobi kernel. Exact rational imaginary parts (I/2)
+     * so N[.., 30] yields a genuine 30-digit MPFR matrix -- a machine 0.5 I is
+     * MachinePrecision and N cannot manufacture 30 digits from it, so the
+     * reconstruction would only reach ~1e-15 (matching WL). */
     assert_reconstruction(
-        "N[{{1 + 0.5 I, 2}, {3, 4 - 0.5 I}}, 30]", 1e-25);
+        "N[{{1 + I/2, 2}, {3, 4 - I/2}}, 30]", 1e-25);
 }
 
 static void test_complex_recon_tall_30digit(void) {

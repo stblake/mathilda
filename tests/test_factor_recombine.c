@@ -341,10 +341,12 @@ static void test_f1_polylc_linear_lc(void) {
 
 static void test_f1_polylc_y_plus_one_squared(void) {
     /* ((y+1)x + 1)((y+1)x + 2).  lc_x = (y+1)^2.  Distribution
-     * q_u = (y+1), q_v = (y+1).  At α=0, A=1, image = (x+1)(x+2). */
+     * q_u = (y+1), q_v = (y+1).  At α=0, A=1, image = (x+1)(x+2).
+     * Wolfram emits each irreducible factor fully expanded — 1 + x + x y —
+     * rather than the grouped 1 + x(1 + y) associate. */
     check_factor("Factor[Expand[((y+1)*x + 1)*((y+1)*x + 2)]]",
-                 "Times[Plus[1, Times[x, Plus[1, y]]], "
-                 "Plus[2, Times[x, Plus[1, y]]]]");
+                 "Times[Plus[1, x, Times[x, y]], "
+                 "Plus[2, x, Times[x, y]]]");
 }
 
 static void test_f1_polylc_xy_minus_versions(void) {

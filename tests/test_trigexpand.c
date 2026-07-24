@@ -62,7 +62,7 @@ void test_trigexpand_multi_term_sum(void) {
 void test_trigexpand_mixed_sum(void) {
     /* Sinh[x - 2y] = Cosh[y]^2 Sinh[x] + Sinh[x] Sinh[y]^2 - 2 Cosh[x] Cosh[y] Sinh[y] */
     assert_eval_eq("TrigExpand[Sinh[x-2y]]",
-        "Sinh[x] Sinh[y]^2 + Sinh[x] Cosh[y]^2 - 2 Cosh[x] Cosh[y] Sinh[y]", 0);
+        "Sinh[x] Sinh[y]^2 - 2 Cosh[x] Cosh[y] Sinh[y] + Sinh[x] Cosh[y]^2", 0);
 }
 
 void test_trigexpand_pythagorean(void) {

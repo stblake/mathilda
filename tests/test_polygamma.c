@@ -138,8 +138,11 @@ void test_polygamma_symbolic() {
     /* Symbolic / non-integer-order arguments stay unevaluated. */
     assert_eval_eq("PolyGamma[0, x]", "PolyGamma[0, x]", 0);
     assert_eval_eq("PolyGamma[n, x]", "PolyGamma[n, x]", 0);
-    /* Exact non-integer rational argument has no closed form here. */
-    assert_eval_eq("PolyGamma[0, 5/2]", "PolyGamma[0, 5/2]", 0);
+    /* Half-integer arguments auto-evaluate to the exact closed form (matching
+     * Wolfram: psi(5/2) = 8/3 - EulerGamma - Log[4]). */
+    assert_eval_eq("PolyGamma[0, 5/2]", "8/3 - EulerGamma - Log[4]", 0);
+    /* General rationals stay symbolic (WL requires FunctionExpand). */
+    assert_eval_eq("PolyGamma[0, 11/5]", "PolyGamma[0, 11/5]", 0);
 }
 
 /* ---- machine-precision numerics ------------------------------------ */

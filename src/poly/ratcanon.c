@@ -669,6 +669,32 @@ static bool rco_has_radical(const Expr* e) {
     return false;
 }
 
+/* True if `e` contains a genuine polynomial variable — any EXPR_SYMBOL that is
+ * not a recognised numeric constant (Pi, E, EulerGamma, ...).  Radical kernels
+ * over a constant radicand (Sqrt[2] = Power[2, 1/2], I = Complex[0,1]) carry no
+ * symbol, so a pure number-field fraction like (1+Sqrt2)/(1-Sqrt2) returns
+ * false.  Used to tell a genuine rational function (keep rat_canon's
+ * sign-normalized form) from a pure algebraic-number constant (decline to the
+ * classical path, which leaves the input's sign convention untouched — WL does
+ * not sign-flip Cancel[(1+Sqrt2)/(1-Sqrt2)]). */
+static bool rco_has_variable(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) {
+        const char* n = e->data.symbol.name;
+        if (n == SYM_Pi || n == SYM_E || n == SYM_EulerGamma ||
+            n == SYM_GoldenRatio || n == SYM_Degree || n == SYM_Catalan)
+            return false;
+        return true;
+    }
+    if (e->type != EXPR_FUNCTION) return false;
+    /* Do NOT descend into the head: operator symbols (Power, Plus, Sqrt, ...)
+     * are structural, not polynomial variables.  Only argument positions can
+     * hold a genuine variable. */
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rco_has_variable(e->data.function.args[i])) return true;
+    return false;
+}
+
 /* True if `e` contains a root of unity ((-1)^(p/q)) or Complex — cases with
  * dedicated cyclotomic/Gaussian handling that Phase 3d does not keep. */
 static bool rco_den_has_rou(const Expr* e) {
@@ -800,13 +826,31 @@ Expr* rat_canon_reduce(const RatCanonForm* f, RcMode mode) {
             /* Only KEEP a coprime residual for GENUINE radicals (Sqrt / cube root
              * of a non-(-1) radicand).  Root-of-unity / Complex denominators have
              * dedicated cyclotomic/Gaussian handling downstream (notably in
-             * Simplify's search); keep the classical form for those. */
-            int keep = coprime && !rco_den_has_rou(den);
+             * Simplify's search); keep the classical form for those.  A pure
+             * algebraic-number constant ((1+Sqrt2)/(1-Sqrt2), no polynomial
+             * variable) has nothing to cancel and WL leaves it verbatim; keeping
+             * rat_canon's sign-normalized form would gratuitously flip the sign,
+             * so decline it to the classical path. */
+            int keep = coprime && !rco_den_has_rou(den) &&
+                       (rco_has_variable(num) || rco_has_variable(den));
             expr_free(num); expr_free(den);
             if (done) { expr_free(res); res = done; }
             else if (!keep) { expr_free(res); return NULL; }
             /* coprime genuine radical: keep res (sign-normalized below) */
-        } else { expr_free(num); expr_free(den); }
+        } else {
+            /* Denominator is radical-free, but if the NUMERATOR still carries an
+             * algebraic constant over a non-constant polynomial denominator, the
+             * fraction may share a factor over the number field that this ideal
+             * reduction did not cancel (e.g. (x-Sqrt2)/(x^2-2) -> 1/(x+Sqrt2),
+             * which needs Sqrt2^2 = 2).  Decline to the classical path, whose
+             * number-field GCD (flint_cancel_fraction) performs that cancellation
+             * WL-faithfully.  A radical-free numerator is already a plain reduced
+             * rational -> keep. */
+            bool num_rad = rco_has_radical(num);
+            bool den_has_var = rco_has_variable(den);
+            expr_free(num); expr_free(den);
+            if (num_rad && den_has_var) { expr_free(res); return NULL; }
+        }
     }
     return rco_sign_normalize(res);
 }

@@ -28,7 +28,7 @@ void test_trigfactor_pythagorean_hyperbolic(void) {
     assert_eval_eq("TrigFactor[Cosh[x]^2-Sinh[x]^2]", "1", 0);
     assert_eval_eq("TrigFactor[Sinh[x]^2-Cosh[x]^2]", "-1", 0);
     assert_eval_eq("TrigFactor[a Cosh[x]^2 - a Sinh[x]^2]", "a", 0);
-    assert_eval_eq("TrigFactor[7 Cosh[x]^2 - 7 Sinh[x]^2]", "1", 0);
+    assert_eval_eq("TrigFactor[7 Cosh[x]^2 - 7 Sinh[x]^2]", "7", 0);
 }
 
 void test_trigfactor_double_angle_circular(void) {

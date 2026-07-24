@@ -2613,6 +2613,9 @@ Expr* qa_polynomialgcd_with_tower(Expr* const* argv, size_t argc,
     if (g) qaupoly_free(g);
 
     tower_lift_cleanup(subst, subst_n, vars, vc, ps, argc);
+    /* Strip any uniform rational content factor left by the single-variable
+     * Q(γ) lift so the GCD is monic in all polynomial variables. */
+    if (result) result = qa_make_poly_numerically_monic(result, false);
     return result;
 }
 
@@ -2661,7 +2664,104 @@ Expr* qa_polynomiallcm_with_tower(Expr* const* argv, size_t argc,
     if (L) qaupoly_free(L);
 
     tower_lift_cleanup(subst, subst_n, vars, vc, ps, argc);
+    /* qaupoly_make_monic normalises the leading coefficient over Q(γ) only in
+     * the single lifted variable; a second polynomial variable folded into the
+     * coefficient field (or a γ-denominator) can still leave a uniform rational
+     * content factor.  Strip it so the LCM is monic in all polynomial
+     * variables. */
+    if (result) result = qa_make_poly_numerically_monic(result, false);
     return result;
+}
+
+/* Numeric prefactor of a polynomial term: an OWNED copy of its leading
+ * Integer/Rational/Real/Bigint coefficient, or Integer 1 when the term carries
+ * no numeric factor (a bare monomial, or a monomial with an algebraic
+ * coefficient such as Sqrt[2] x). */
+static Expr* qa_term_numeric_coeff(const Expr* t) {
+    if (!t) return expr_new_integer(1);
+    if (t->type == EXPR_INTEGER || t->type == EXPR_BIGINT
+        || t->type == EXPR_REAL || is_rational(t, NULL, NULL))
+        return expr_copy((Expr*)t);
+    if (t->type == EXPR_FUNCTION && t->data.function.head
+        && t->data.function.head->type == EXPR_SYMBOL
+        && t->data.function.head->data.symbol.name == SYM_Times
+        && t->data.function.arg_count >= 1) {
+        const Expr* first = t->data.function.args[0];
+        if (first->type == EXPR_INTEGER || first->type == EXPR_BIGINT
+            || first->type == EXPR_REAL || is_rational(first, NULL, NULL))
+            return expr_copy((Expr*)first);
+    }
+    return expr_new_integer(1);
+}
+
+/* Render a multivariate polynomial `p` monic in its polynomial variables by
+ * dividing out the (rational/real) leading coefficient of its lex-leading
+ * monomial.  `p` is consumed; returns a new Expr (which may be structurally
+ * `p` unchanged when no numeric normalisation applies).
+ *
+ * Why this exists: an extension GCD/LCM assembled over a primitive-element
+ * tower can carry a spurious rational content factor.  The primitive element
+ * γ has γ-polynomial images of the generators with rational denominators
+ * (e.g. Sqrt[2] = (γ^3 − 9γ)/2 for γ = Sqrt[2] + Sqrt[3]), and the intermediate
+ * Q[γ, x, …] GCD/LCM content normalisation leaks that denominator into the
+ * result as a uniform scalar.  Wolfram normalises PolynomialGCD / PolynomialLCM
+ * so the leading polynomial term is monic; this restores that convention and
+ * matches the sibling passing tests (`x + y`, `2^(1/3) + x`, …).
+ *
+ * Only a *numeric* (Integer/Rational/Real) leading coefficient is divided out.
+ * When the leading monomial's coefficient is algebraic (e.g. Sqrt[2] + Sqrt[3])
+ * the result is a legitimate associate over Q(γ) that must be preserved — see
+ * the documented Phase-D unit-factor boundary tests.  When `only_noninteger`
+ * is true, a pure *integer* leading coefficient is also left intact (the
+ * integer-domain primitive-part convention, e.g. PolynomialGCD[2x−3, 4x²−9] =
+ * 2x−3); only genuine fractions / inexact leads are cleared.  When false, any
+ * numeric lead ≠ ±1 is divided out (the tower path, whose inputs are monic in
+ * the polynomial variables so the result should be monic too). */
+Expr* qa_make_poly_numerically_monic(Expr* p, bool only_noninteger) {
+    if (!p) return NULL;
+    /* Fully expand + evaluate so the polynomial is a flat, canonically ordered
+     * sum of monomials (tower renderers hand back un-evaluated Power/Times
+     * trees; Coefficient/Exponent are unreliable across algebraic-number
+     * coefficients, so we read the leading monomial off the canonical order
+     * directly instead). */
+    p = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand),
+        (Expr*[]){ p }, 1));
+    if (!p) return NULL;
+
+    /* Mathilda's canonical Plus ordering places the leading (highest-degree)
+     * monomial last; a non-Plus is its own leading term. */
+    const Expr* lead = p;
+    if (p->type == EXPR_FUNCTION && p->data.function.head
+        && p->data.function.head->type == EXPR_SYMBOL
+        && p->data.function.head->data.symbol.name == SYM_Plus
+        && p->data.function.arg_count >= 1) {
+        lead = p->data.function.args[p->data.function.arg_count - 1];
+    }
+    Expr* lc = qa_term_numeric_coeff(lead);
+
+    /* Decide whether `lc` is a numeric factor worth dividing out. */
+    int divide = 0;
+    int64_t rp, rq;
+    if (lc->type == EXPR_INTEGER) {
+        divide = (!only_noninteger) && lc->data.integer != 0
+                 && lc->data.integer != 1 && lc->data.integer != -1;
+    } else if (lc->type == EXPR_BIGINT) {
+        divide = !only_noninteger;
+    } else if (lc->type == EXPR_REAL) {
+        divide = (lc->data.real != 0.0 && lc->data.real != 1.0
+                  && lc->data.real != -1.0);
+    } else if (is_rational(lc, &rp, &rq)) {
+        divide = 1; /* genuine fraction (denominator != 1) */
+    }
+    if (!divide) { expr_free(lc); return p; }
+
+    Expr* inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+        (Expr*[]){ lc, expr_new_integer(-1) }, 2));
+    Expr* scaled = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ p, inv }, 2));
+    Expr* expanded = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand),
+        (Expr*[]){ scaled }, 1));
+    return expanded;
 }
 
 /* Phase D core: multivariate tower-based GCD/LCM via substitute-back.
@@ -2748,6 +2848,13 @@ static Expr* tower_multivar_combine(Expr* const* argv, size_t argc,
 
     Expr* canon = evaluate(expanded);
     expr_free(expanded);
+
+    /* Normalise away the spurious rational content factor the primitive-element
+     * tower arithmetic can leave behind, so the result is monic in the
+     * polynomial variables (matching Wolfram and the sibling passing tests).
+     * only_noninteger = false: over a field extension the result should be
+     * monic even when the stray factor is a plain integer. */
+    canon = qa_make_poly_numerically_monic(canon, false);
     return canon;
 }
 
@@ -4190,6 +4297,95 @@ static int64_t polyrad_leaf_count(const Expr* e) {
         c += polyrad_leaf_count(e->data.function.args[i]);
     }
     return c;
+}
+
+/* Sign of a polynomial term's numeric coefficient: -1, 0, or +1. A bare
+ * number reports its own sign; a Times reports the sign of its (canonically
+ * leading) numeric factor; anything else has an implicit +1 coefficient. */
+static int polyrad_term_sign(const Expr* t) {
+    if (!t) return 1;
+    if (t->type == EXPR_INTEGER)
+        return t->data.integer < 0 ? -1 : (t->data.integer > 0 ? 1 : 0);
+    if (t->type == EXPR_REAL)
+        return t->data.real < 0.0 ? -1 : (t->data.real > 0.0 ? 1 : 0);
+    if (t->type == EXPR_BIGINT)
+        return mpz_sgn(t->data.bigint);
+    { int64_t np, nq; if (is_rational(t, &np, &nq)) return np < 0 ? -1 : 1; }
+    if (t->type == EXPR_FUNCTION && t->data.function.head
+        && t->data.function.head->type == EXPR_SYMBOL
+        && t->data.function.head->data.symbol.name == SYM_Times
+        && t->data.function.arg_count >= 1) {
+        return polyrad_term_sign(t->data.function.args[0]);
+    }
+    return 1;
+}
+
+/* True when the leading (highest-degree) term of `den` carries a negative
+ * coefficient.  Mathilda's canonical Plus ordering places the leading
+ * monomial last, so the last summand is inspected; a non-Plus is treated as
+ * its own leading term. */
+static bool polyrad_leading_coeff_is_negative(const Expr* den) {
+    if (!den) return false;
+    const Expr* lead = den;
+    if (den->type == EXPR_FUNCTION && den->data.function.head
+        && den->data.function.head->type == EXPR_SYMBOL
+        && den->data.function.head->data.symbol.name == SYM_Plus
+        && den->data.function.arg_count >= 1) {
+        lead = den->data.function.args[den->data.function.arg_count - 1];
+    }
+    return polyrad_term_sign(lead) < 0;
+}
+
+/* Canonicalise the sign of a rational result so its denominator's leading term
+ * is positive (Wolfram's Together convention): if the denominator leads with a
+ * negative coefficient, negate numerator and denominator together (value-
+ * preserving).  A non-fraction, or one whose denominator already leads
+ * positive, is returned unchanged.  `e` is consumed.
+ *
+ * The algebraic Together engine (flint_algebraic_field_together) can emit the
+ * sign-flipped associate -(2 x)/((p+q)^(2/3) - x^2) where the equivalent
+ * Sqrt-radicand case yields the canonical (2 x)/(x^2 - (p+q)^(2/3)); this makes
+ * the two consistent. */
+Expr* qa_normalize_fraction_sign(Expr* e) {
+    if (!e) return NULL;
+    Expr* den = eval_and_free(expr_new_function(expr_new_symbol(SYM_Denominator),
+        (Expr*[]){ expr_copy(e) }, 1));
+    bool neg = polyrad_leading_coeff_is_negative(den);
+    /* Only canonicalise the sign of a genuine *polynomial* denominator.  A
+     * purely numeric denominator (e.g. 1 - 2^(2/3), a single negative constant)
+     * has no leading monomial to make positive; flipping it would gratuitously
+     * disagree with the explicit Extension -> alpha form (2/(1 - 2^(2/3))). */
+    bool has_var = false;
+    if (neg && den) {
+        Expr* vars = eval_and_free(expr_new_function(expr_new_symbol(SYM_Variables),
+            (Expr*[]){ expr_copy(den) }, 1));
+        has_var = vars && vars->type == EXPR_FUNCTION && vars->data.function.head
+            && vars->data.function.head->type == EXPR_SYMBOL
+            && vars->data.function.head->data.symbol.name == SYM_List
+            && vars->data.function.arg_count > 0;
+        if (vars) expr_free(vars);
+    }
+    if (den) expr_free(den);
+    if (!neg || !has_var) return e;
+
+    Expr* num = eval_and_free(expr_new_function(expr_new_symbol(SYM_Numerator),
+        (Expr*[]){ expr_copy(e) }, 1));
+    Expr* den2 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Denominator),
+        (Expr*[]){ expr_copy(e) }, 1));
+    expr_free(e);
+    /* Expand the negation so -1 distributes into the Plus (an un-distributed
+     * Times[-1, Plus[...]] would re-surface the sign through Power[...,-1] and
+     * defeat the normalisation). */
+    Expr* nneg = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand),
+        (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Times),
+            (Expr*[]){ expr_new_integer(-1), num }, 2) }, 1));
+    Expr* dneg = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand),
+        (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Times),
+            (Expr*[]){ expr_new_integer(-1), den2 }, 2) }, 1));
+    Expr* inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+        (Expr*[]){ dneg, expr_new_integer(-1) }, 2));
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ nneg, inv }, 2));
 }
 
 /* Public entry point.  Returns the simplified Expr (caller owns) or

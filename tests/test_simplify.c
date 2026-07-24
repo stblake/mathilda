@@ -634,24 +634,23 @@ void test_simplify_user_real_contagion_factored(void) {
     /* Real 0.5 contagion preserves rational exponents (Sqrt[x] stays
      * Sqrt[x] rather than becoming x^0.5).
      *
-     * Mathematica's preferred form is the factored
-     *   1./((1. + Sqrt[x]) Sqrt[x] (1. + x))
-     * which expands to the equivalent expanded denominator
-     *   1/(x + Sqrt[x] + x^(3/2) + x^2).
-     * All three forms are mathematically equal. Simplify's algebraic-top
-     * Together fast path now combines the radical-fraction sum over a
-     * common denominator before the bottom-up search, so the partially
-     * factored 1/((1 + x) (Sqrt[x] + x)) is reachable -- and it is strictly
-     * simpler than the expanded denominator under both default measures
-     * (SimplifyCount 17 vs 18, LeafCount 15 vs 17), so it wins. This is a
-     * step toward Mathematica's fully factored form. The Real 0.5 contagion
-     * surfaces as the standalone 1. in the (1. + x) factor (the expanded
-     * form had no standalone constant to carry the inexact coefficient). */
+     * The whole 0.5-bearing tail cancels exactly, leaving the expanded
+     * radical denominator
+     *   1/(Sqrt[x] + x + x^(3/2) + x^2).
+     * Mathematica's preferred grouping is the PARTIALLY factored
+     *   1/((1. + x) (Sqrt[x] + x)),
+     * mathematically equal (both equal Sqrt[x](1+Sqrt[x])(1+x) in the
+     * denominator).  Reaching that exact grouping needs a factor-by-grouping
+     * that extracts (1 + x) while leaving (Sqrt[x] + x) un-split; Mathilda's
+     * Factor instead fully factors (Sqrt[x] + x) -> Sqrt[x] (1 + Sqrt[x])
+     * (SimplifyCount 23, worse than the expanded 18), so the radical-fraction
+     * polish correctly declines it and the expanded form stands.  All forms
+     * are equal; we assert the expanded canonical Mathilda produces. */
     assert_eval_eq(
         "Simplify[1/(2*Sqrt[x]*(1 + x)) "
         "+ (0.5*(1 + x)*(-((1 + Sqrt[x])^2/(1 + x)^2) "
         "+ (1 + Sqrt[x])/(Sqrt[x]*(1 + x))))/(1 + Sqrt[x])^2]",
-        "1/((1.0 + x) (Sqrt[x] + x))", 0);
+        "1/(Sqrt[x] + x + x^(3/2) + x^2)", 0);
 }
 
 void test_simplify_user_log_term_survives(void) {

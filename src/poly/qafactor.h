@@ -294,6 +294,23 @@ struct Expr* qa_polynomiallcm_with_tower_multivar(struct Expr* const* argv,
                                                   size_t argc,
                                                   const QATower* t);
 
+/* Render a multivariate polynomial monic in its polynomial variables by
+ * dividing out the numeric leading coefficient of its lex-leading monomial.
+ * Consumes `p`; returns a new Expr (possibly `p` unchanged).  Used to strip
+ * the spurious rational content an extension GCD/LCM assembled over a
+ * primitive-element tower can leave behind.  When `only_noninteger` is true a
+ * pure integer leading coefficient is preserved (integer-domain primitive-part
+ * convention); when false any numeric lead != +-1 is cleared.  An algebraic
+ * leading coefficient is always preserved (legitimate Q(gamma)-associate). */
+struct Expr* qa_make_poly_numerically_monic(struct Expr* p,
+                                            bool only_noninteger);
+
+/* Canonicalise the sign of a rational result so its denominator's leading term
+ * is positive (Wolfram's Together convention), negating numerator and
+ * denominator together to preserve value.  Consumes `e`; returns it unchanged
+ * when it is not a fraction or its denominator already leads positive. */
+struct Expr* qa_normalize_fraction_sign(struct Expr* e);
+
 /* Predicate: true when any tower generator has a non-integer base, i.e.
  * surfaces as `Sqrt[non_int]` or `Power[non_int, p/q]` (a nested radical
  * like `Sqrt[5 + 2 Sqrt[6]]`).

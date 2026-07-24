@@ -676,6 +676,20 @@ static bool rat_contains_expr(Expr* hay, Expr* needle) {
  * generator case) and is tried first, so this gate — checked only when FLINT
  * declined — never rejects a fraction that would actually cancel.  Bailing
  * (leaving it uncancelled) is always correctness-preserving. */
+/* True if `e` carries at least one free polynomial variable (a symbol that
+ * collect_variables surfaces — not a numeric constant / radical kernel).  Used
+ * to confine the nested-radical autodetect exception to pure algebraic-number
+ * constants (cheap towers absorbed by Phase-F canonicalise_post), preserving
+ * the perf skip for the common variable-bearing nested-radical inputs. */
+static bool rat_has_free_variable(const Expr* e) {
+    size_t vc = 0, vp = 16;
+    Expr** vv = malloc(sizeof(Expr*) * vp);
+    collect_variables((Expr*)e, &vv, &vc, &vp);
+    for (size_t i = 0; i < vc; i++) expr_free(vv[i]);
+    free(vv);
+    return vc > 0;
+}
+
 static bool rat_has_dependent_power_generators(Expr* num, Expr* den) {
     size_t vc = 0, vp = 16;
     Expr** vv = malloc(sizeof(Expr*) * vp);
@@ -1664,8 +1678,19 @@ static Expr* builtin_cancel_compute(Expr* res) {
      * rejected — the γ-substitution leaves the outer Power opaque to
      * the no-extension Together (see qa_tower_has_nested_radical doc).
      * Skip the autodetect call entirely and fall straight through to
-     * the no-extension path. */
-    if (!alpha && auto_flag && !expr_has_nested_radical_radicand(arg)) {
+     * the no-extension path.
+     *
+     * Exception: a nested radical whose radicand is a pure algebraic-number
+     * constant over an integer-base tower (e.g. Sqrt[-1/9/2^(2/3) + 2/9 2^(1/3)]
+     * = 1/(2^(1/3) Sqrt[3])) is ABSORBED by extension_autodetect's Phase-F
+     * canonicalise_post BEFORE the compositum build, so it is cheap and lets
+     * the cancellation fire (Cancel[Sqrt[..] Sqrt[3] 2^(1/3) - 1, Ext -> Auto]
+     * -> 0).  Allow the autodetect call for such constant radicands; the
+     * qa_tower_has_nested_radical net below still rejects any genuinely-nested
+     * tower (e.g. Sqrt[1 + Sqrt[2]]) that survives canonicalisation. */
+    if (!alpha && auto_flag &&
+        (!expr_has_nested_radical_radicand(arg) ||
+         !rat_has_free_variable(arg))) {
         auto_tower = extension_autodetect(arg);
         if (auto_tower && auto_tower->n == 1) {
             alpha_auto = expr_copy(auto_tower->alpha_renders[0]);
@@ -2280,25 +2305,57 @@ static Expr* builtin_together_compute(Expr* res) {
  * issued from different code paths in the search.  Skip the cache
  * when no Simplify is active (factor_memo_active() returns NULL) so
  * standalone Cancel calls see no overhead. */
+/* Together/Cancel mutually recurse (cancel_recursive -> exact_poly_div ->
+ * expand -> evaluate -> internal_together -> ...) and, on a pathological
+ * rational function over an algebraic kernel (e.g. a denominator carrying
+ * 2^(1/2)), that cycle can fail to make progress and recurse without bound,
+ * overflowing the C stack.  A shared re-entry depth counter caps the cycle:
+ * beyond the cap the normalisation is left as-is (a correct, if unsimplified,
+ * result), which keeps the process alive instead of crashing.  The cap is far
+ * above any genuine nesting depth. */
+#define RAT_TOGETHER_CANCEL_MAX_DEPTH 400
+static int rat_together_cancel_depth = 0;
+
 Expr* builtin_cancel(Expr* res) {
+    if (rat_together_cancel_depth >= RAT_TOGETHER_CANCEL_MAX_DEPTH)
+        return expr_copy(res);
     FactorMemo* memo = factor_memo_active();
     if (memo) {
         const Expr* hit = factor_memo_lookup(memo, res);
         if (hit) return expr_copy((Expr*)hit);
     }
+    rat_together_cancel_depth++;
     Expr* out = builtin_cancel_compute(res);
+    rat_together_cancel_depth--;
     if (out && memo) factor_memo_store(memo, res, out);
     return out;
 }
 
 /* Layer-5 memoisation wrapper for Together (see builtin_cancel above). */
 Expr* builtin_together(Expr* res) {
+    if (rat_together_cancel_depth >= RAT_TOGETHER_CANCEL_MAX_DEPTH)
+        return expr_copy(res);
     FactorMemo* memo = factor_memo_active();
     if (memo) {
         const Expr* hit = factor_memo_lookup(memo, res);
         if (hit) return expr_copy((Expr*)hit);
     }
+    rat_together_cancel_depth++;
     Expr* out = builtin_together_compute(res);
+    rat_together_cancel_depth--;
+    /* Under Extension -> Automatic, canonicalise the denominator sign of a
+     * fractional result so its leading term is positive — Wolfram's Together
+     * convention.  The algebraic / parametric field engines can emit the
+     * sign-flipped associate (e.g. -(2 x)/((p+q)^(2/3) - x^2) or
+     * -(2 x)/(p^2 - x^2)) where the canonical form is (2 x)/(x^2 - (p+q)^(2/3))
+     * / (2 x)/(x^2 - p^2).  Scoped to Extension -> Automatic to leave the
+     * default Together output paths untouched. */
+    if (out) {
+        size_t argc_probe = 0;
+        bool auto_flag = false;
+        (void)extract_extension_option_full(res, &argc_probe, &auto_flag);
+        if (auto_flag) out = qa_normalize_fraction_sign(out);
+    }
     if (out && memo) factor_memo_store(memo, res, out);
     return out;
 }

@@ -381,6 +381,14 @@ static bool power_factor_composes_cleanly(Expr* f,
 static bool find_min_perfect_base(const mpz_t n_in, mpz_t b_out, int64_t* k_out) {
     if (mpz_sgn(n_in) <= 0) return false;
     if (mpz_cmp_ui(n_in, 1) <= 0) return false;
+    /* GMP's mpz_perfect_power_p allocates working scratch (partly via alloca on
+     * the C stack) proportional to the operand size.  A pathologically large
+     * radicand — e.g. one produced while expanding a high-degree corpus
+     * integrand carrying large coefficients — can overflow the stack inside
+     * GMP and crash the process.  No realistic radical simplification needs a
+     * base this large, so decline the perfect-power reduction above a generous
+     * bit-size cap (the radical is simply left unreduced). */
+    if (mpz_sizeinbase(n_in, 2) > 200000) return false;
     if (!mpz_perfect_power_p(n_in)) return false;
 
     static const unsigned long primes[] = {

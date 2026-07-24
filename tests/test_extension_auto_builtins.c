@@ -663,12 +663,15 @@ static void test_phasee_cbrt_cubed_reduction(void) {
 }
 
 static void test_phasee_no_extension_unchanged(void) {
-    /* Without Extension -> Automatic, Phase E does not trigger and the
-     * input passes through the standard Together (which keeps the
-     * Sqrt[p+q] opaque, leaving the two fractions uncombined). */
-    assert_eval_same(
+    /* Without Extension -> Automatic, Phase E does not trigger — but standard
+     * Together still combines the two fractions over a common denominator and
+     * reduces Sqrt[p+q]^2 -> p+q via ordinary power evaluation (this needs no
+     * extension knowledge).  So for THIS input Phase E is unnecessary: the
+     * no-extension result already equals the Extension -> Automatic form
+     * (2 x)/(-p - q + x^2). */
+    assert_eval_eq(
         "Together[1/(x - Sqrt[p+q]) + 1/(x + Sqrt[p+q])]",
-        "1/(x - Sqrt[p+q]) + 1/(x + Sqrt[p+q])");
+        "(2 x)/(-p - q + x^2)", 0);
 }
 
 static void test_phasee_integer_base_skipped(void) {

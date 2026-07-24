@@ -992,6 +992,35 @@ Expr* builtin_simplify(Expr* res) {
             best = canon;
         }
     }
+
+    /* Radical-fraction polish.  Simplify's Together/Cancel can leave a radical
+     * Sqrt[p] in the NUMERATOR over an EXPANDED polynomial denominator, e.g.
+     *   (Sqrt[6] Sqrt[6 + x^2]) / (6 x + x^3)
+     * whose factored denominator x (6 + x^2) would cancel the radical back
+     * into the denominator via the automatic Power[p, 1/2] Power[p, -1] ->
+     * Power[p, -1/2] rule, giving WL's canonical Sqrt[6]/(x Sqrt[6 + x^2]).
+     * The per-pass search never re-Factors its own Together output, so it
+     * stops one step short.  Factoring the result exposes the shared radicand.
+     * Gated on an actual radical (rational-root) present and a STRICT score
+     * improvement, so non-radical results and no-improvement cases are
+     * untouched, and Factor's own cost gates keep it bounded. */
+    if (simp_has_rational_root(best)) {
+        Expr* fac = expr_new_function(expr_new_symbol(SYM_Factor),
+                                      (Expr*[]){ expr_copy(best) }, 1);
+        Expr* factored = eval_and_free(fac);
+        if (factored && !expr_eq(factored, best)) {
+            size_t s_fac  = score_with_func(factored, opt_complexity);
+            size_t s_best = score_with_func(best, opt_complexity);
+            if (s_fac < s_best) {
+                expr_free(best);
+                best = factored;
+            } else {
+                expr_free(factored);
+            }
+        } else if (factored) {
+            expr_free(factored);
+        }
+    }
     } else {
         /* TransformationFunctions -> {f1, ...} without Automatic: the
          * built-in pipeline is suppressed, so the search starts from the

@@ -52,7 +52,7 @@ int main(void) {
     chk("Options[NSeries]", "{Radius -> 1.0, WorkingPrecision -> MachinePrecision}");
     /* Symbolic builtins now carry their honored options (was empty {}). */
     chk("Options[Integrate]", "{Method -> Automatic}");
-    chk("Options[Limit]", "{Direction -> Automatic, Assumptions -> Automatic}");
+    chk("Options[Limit]", "{Direction -> Automatic, Assumptions -> Automatic, Method -> Automatic}");
     chk("Options[D]", "{NonConstants -> {}}");
     chk("Options[GroebnerBasis]",
         "{MonomialOrder -> Lexicographic, CoefficientDomain -> Rationals, "

@@ -1230,6 +1230,34 @@ static Expr* frullani_scale(const Expr* t, const Expr* x) {
     return k;
 }
 
+/* Resolve a boundary value that Limit could not close because the direction of
+ * an exponential infinity depends on a parameter sign: E^DirectedInfinity[dir]
+ * (or E^(±Infinity)).  Under the assumptions, a provably-negative real
+ * direction decays to 0, a provably-positive one diverges (returns Infinity so
+ * the finiteness gate rejects it).  Any other value is returned untouched.
+ * Consumes `val`; borrows `assumptions`; returns owned. */
+static Expr* frullani_resolve_boundary(Expr* val, Expr* assumptions) {
+    if (!val) return val;
+    Expr* ex = exp_exponent(val);          /* exponent of E^... / Exp[...] */
+    if (!ex) return val;
+    Expr* dir = NULL;
+    if (head_name_is(ex, "DirectedInfinity") && ex->data.function.arg_count == 1) {
+        dir = ex->data.function.args[0];   /* E^DirectedInfinity[dir] */
+    } else if (ex->type == EXPR_SYMBOL && strcmp(ex->data.symbol.name, "Infinity") == 0) {
+        dir = ex;                            /* E^(+Infinity) => dir > 0 */
+    }
+    if (!dir) return val;
+    if (prove_true(Gt(Neg(cp(dir)), mk_int(0)), assumptions)) {  /* dir < 0 */
+        expr_free(val);
+        return mk_int(0);
+    }
+    if (prove_true(Gt(cp(dir), mk_int(0)), assumptions)) {       /* dir > 0 */
+        expr_free(val);
+        return mk_sym("Infinity");
+    }
+    return val;
+}
+
 /* Integrate[(f(a x) - f(b x))/x, {x, 0, Infinity}].  Borrows f, x, assumptions;
  * returns the owned value or NULL (out of scope / boundary limits not finite). */
 static Expr* frullani_try(Expr* f, const Expr* x, Expr* assumptions) {
@@ -1267,6 +1295,12 @@ static Expr* frullani_try(Expr* f, const Expr* x, Expr* assumptions) {
                 Expr* f0   = ev2("Limit", cp(t1), mk_fn2("Rule", cp((Expr*)x), mk_int(0)));
                 Expr* finf = ev2("Limit", cp(t1),
                                  mk_fn2("Rule", cp((Expr*)x), mk_sym("Infinity")));
+                /* Limit reports the x -> Infinity boundary of an exponential as
+                 * E^DirectedInfinity[dir] when dir's sign is parametric; resolve
+                 * it against the assumptions (a, b > 0 make -a, -b < 0, so the
+                 * decaying tail is 0). */
+                f0   = frullani_resolve_boundary(f0, assumptions);
+                finf = frullani_resolve_boundary(finf, assumptions);
                 if (is_finite_value(f0) && is_finite_value(finf) &&
                     !contains_symbol(f0, x) && !contains_symbol(finf, x)) {
                     result = simp2(Tms(Pls(cp(f0), Neg(cp(finf))),

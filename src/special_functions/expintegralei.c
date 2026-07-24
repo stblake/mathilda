@@ -453,10 +453,15 @@ static void ei_ecx_asymptotic(ecx* out, const ecx* z, mpfr_prec_t wp,
 
 /* Build a complex result from (re, im) at out_prec: machine precision (<= 53)
  * yields Real parts, higher yields MPFR parts. make_complex drops a zero
- * imaginary part to a bare real. */
-static Expr* ei_complex_result(const mpfr_t re, const mpfr_t im, mpfr_prec_t out_prec) {
+ * imaginary part to a bare real. When `force_mpfr` is set the result is always
+ * emitted as an MPFR at out_prec, even for out_prec <= 53 -- this preserves an
+ * explicit low-precision request (e.g. N[..., 8], ~27 bits) so the value prints
+ * the requested number of digits instead of collapsing to a machine double
+ * (which prints only ~6 significant figures). */
+static Expr* ei_complex_result(const mpfr_t re, const mpfr_t im,
+                               mpfr_prec_t out_prec, bool force_mpfr) {
     Expr *rr, *ii;
-    if (out_prec <= 53) {
+    if (!force_mpfr && out_prec <= 53) {
         rr = expr_new_real(mpfr_get_d(re, ERND));
         ii = expr_new_real(mpfr_get_d(im, ERND));
     } else {
@@ -539,7 +544,8 @@ static Expr* ei_mpfr_real(const Expr* arg, mpfr_prec_t out_prec) {
 /* Ei(z) for a numeric complex `arg` (Complex[..] with at least one inexact
  * part) at out_prec bits, via the MPFR series. Returns the result, or NULL if
  * the parts are not numeric / the series diverges / the result overflows. */
-static Expr* ei_mpfr_complex(Expr* re, Expr* im, mpfr_prec_t out_prec) {
+static Expr* ei_mpfr_complex(Expr* re, Expr* im, mpfr_prec_t out_prec,
+                             bool force_mpfr) {
     double red = 0.0, imd = 0.0;
     (void)ei_to_double(re, &red);
     (void)ei_to_double(im, &imd);
@@ -560,7 +566,7 @@ static Expr* ei_mpfr_complex(Expr* re, Expr* im, mpfr_prec_t out_prec) {
             ei_ecx_asymptotic(&g, &z, wp, zabs, im_sign);
             if (!mpfr_nan_p(g.re) && !mpfr_nan_p(g.im) &&
                 !mpfr_inf_p(g.re) && !mpfr_inf_p(g.im))
-                out = ei_complex_result(g.re, g.im, out_prec);
+                out = ei_complex_result(g.re, g.im, out_prec, force_mpfr);
         }
         ecx_clear(&z); ecx_clear(&g);
         return out;
@@ -578,7 +584,7 @@ static Expr* ei_mpfr_complex(Expr* re, Expr* im, mpfr_prec_t out_prec) {
         ei_ecx_series(&g, &z, wp, zabs) &&
         !mpfr_nan_p(g.re) && !mpfr_nan_p(g.im) &&
         !mpfr_inf_p(g.re) && !mpfr_inf_p(g.im)) {
-        out = ei_complex_result(g.re, g.im, out_prec);
+        out = ei_complex_result(g.re, g.im, out_prec, force_mpfr);
     }
     ecx_clear(&z); ecx_clear(&g);
     return out;
@@ -629,8 +635,20 @@ static Expr* ei_one_arg(Expr* arg) {
         if (is_complex(arg, &re, &im) && (ei_is_inexact(re) || ei_is_inexact(im))) {
 #ifdef USE_MPFR
             long bits = numeric_min_inexact_bits(arg);
-            mpfr_prec_t out_prec = (bits && bits > 53) ? (mpfr_prec_t)bits : 53;
-            Expr* out = ei_mpfr_complex(re, im, out_prec);
+            /* A genuine arbitrary-precision input (any MPFR leaf) carries an
+             * explicit precision request -- e.g. N[Ei[-50 I], 8] numericalises
+             * the exact -50 I to a 27-bit MPFR complex. Honour that precision
+             * even below 53 bits and emit an MPFR result so the value prints
+             * the requested digits; a plain machine-double input (53 bits, no
+             * MPFR leaf) still yields a machine-double result. */
+            bool force_mpfr = numeric_expr_is_mpfr(arg);
+            mpfr_prec_t out_prec;
+            if (force_mpfr) {
+                out_prec = (mpfr_prec_t)(bits > 0 ? bits : 53);
+            } else {
+                out_prec = (bits && bits > 53) ? (mpfr_prec_t)bits : 53;
+            }
+            Expr* out = ei_mpfr_complex(re, im, out_prec, force_mpfr);
             if (out) return out;
 #else
             double rr, ii;

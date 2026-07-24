@@ -422,6 +422,13 @@ static Expr* intrat_primitive_part_mod(Expr* p, Expr* q,
     Expr* rem = intrat_polyrem_t(rp, q, var_q);
     expr_free(rp);
     if (!rem) return NULL;
+    /* S is the argument of a Log, so it is only defined up to a constant
+     * multiple.  We take the integer-content-primitive part (rather than the
+     * var_p-monic form): clearing rational denominators in the K(var_q)
+     * coefficient field keeps the downstream real-log expansion (LogToReal /
+     * LogToAtan over the residue-root algebraic field) on integer-coefficient
+     * polynomials, which is markedly faster and avoids the fractional-coefficient
+     * blow-up that stalls high-degree cases such as 1/(x^5 + 1). */
     Expr* out = intrat_primitive(rem, var_p);
     expr_free(rem);
     return out;
@@ -2007,13 +2014,18 @@ static Expr* intrat_log_part_core(Expr* a, Expr* d, Expr* x, Expr* t,
                 if (get_degree_poly(Qi, t) <= 0) { expr_free(Qi); continue; }
             }
 
-            /* RootSum[Function[t, Qi], Function[t, t Log[S[i]]]]. */
+            /* RootSum[Function[t, Qi], Function[t, t Log[S[i]]]].  Canonicalise
+             * the held Function bodies up front (Function is HoldAll, so the
+             * evaluator will not normalise them afterwards): sort the resultant
+             * factor Qi and fold the t*Log[S] product so the RootSum prints in
+             * normal form. */
+            Qi = eval_and_free(Qi);
             Expr* func1 = expr_new_function(expr_new_symbol(SYM_Function),
                 (Expr*[]){expr_copy(t), Qi}, 2);
             Expr* logS = expr_new_function(expr_new_symbol(SYM_Log),
                 (Expr*[]){expr_copy(S[i_idx])}, 1);
-            Expr* tlog = internal_times(
-                (Expr*[]){expr_copy(t), logS}, 2);
+            Expr* tlog = eval_and_free(internal_times(
+                (Expr*[]){expr_copy(t), logS}, 2));
             Expr* func2 = expr_new_function(expr_new_symbol(SYM_Function),
                 (Expr*[]){expr_copy(t), tlog}, 2);
             terms[nterms++] = expr_new_function(expr_new_symbol(SYM_RootSum),

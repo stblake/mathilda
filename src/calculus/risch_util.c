@@ -363,13 +363,50 @@ bool rt_verify_antideriv(Expr* result, Expr* f, Expr* x) {
     return z;
 }
 
+/* True iff `e` carries an ALGEBRAIC function of x anywhere: a radical (an
+ * x-dependent base raised to a non-integer Rational power — Sqrt[x] = x^(1/2),
+ * x^(1/3), Sqrt[Sin[x]] = Sin[x]^(1/2)) or a Surd / Root / AlgebraicNumber of x.
+ * The single-transcendental-extension procedures (and the exponential tower
+ * builder) are decision procedures ONLY over a purely transcendental tower over
+ * C(x); an algebraic extension (C(x, Sqrt[x])) is out of scope.  An x-FREE
+ * radical (Sqrt[2], an algebraic CONSTANT coefficient) is deliberately NOT
+ * flagged — those are legitimate transcendental-integrand coefficients. */
+bool rt_has_algebraic_of_x(Expr* e, Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const char* h = (e->data.function.head->type == EXPR_SYMBOL)
+        ? e->data.function.head->data.symbol.name : NULL;
+    if (h == intern_symbol("Power") && e->data.function.arg_count == 2) {
+        Expr* b = e->data.function.args[0];
+        Expr* p = e->data.function.args[1];
+        /* radical: x-dependent base raised to a non-integer rational power */
+        if (p && p->type == EXPR_FUNCTION && rt_head_is(p, "Rational")
+            && !rt_free_of_x(b, x))
+            return true;
+    }
+    if ((h == intern_symbol("Surd") || h == intern_symbol("Root")
+         || h == intern_symbol("AlgebraicNumber")) && !rt_free_of_x(e, x))
+        return true;
+    if (rt_has_algebraic_of_x(e->data.function.head, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rt_has_algebraic_of_x(e->data.function.args[i], x)) return true;
+    return false;
+}
+
 /* A single-extension case is valid only when its kernel's defining function `u`
- * (a Log argument or an exp exponent) is a rational function of x ALONE — i.e.
- * free of any other exp/log of x.  A NESTED kernel (e.g. u = E^x for the outer
- * kernel of E^(E^x)) is a two-extension tower: the single-kernel derivation
- * Dt = u' theta would carry the unsubstituted inner kernel, and SolveAlways would
- * treat it as a free parameter and certify a WRONG residue.  Such integrands must
- * be left to the tower cases (rt_log_tower_case / rt_exp_tower_case). */
+ * (a Log argument or an exp exponent) is a RATIONAL function of x ALONE — i.e.
+ * free of any other exp/log of x AND of any algebraic (radical) function of x.  A
+ * NESTED kernel (e.g. u = E^x for the outer kernel of E^(E^x)) is a two-extension
+ * tower: the single-kernel derivation Dt = u' theta would carry the unsubstituted
+ * inner kernel, and SolveAlways would treat it as a free parameter and certify a
+ * WRONG residue.  Such integrands must be left to the tower cases
+ * (rt_log_tower_case / rt_exp_tower_case).  An ALGEBRAIC exponent (u = I Sqrt[x]
+ * in E^(I Sqrt[x]), from TrigToExp of Cos[Sqrt[x]]) is likewise out of scope: the
+ * derivation u' = I/(2 Sqrt[x]) makes the RDE / Hermite / SolveAlways solve run
+ * over C(x, Sqrt[x]) — outside the pure-transcendental single-extension field,
+ * where the coefficient arithmetic does not terminate (the Cos[Sqrt[x]] /
+ * Sin[x^(1/3)] hang).  Declining here is sound: the transcendental Risch path
+ * bows out and DerivativeDivides / the algebraic-substitution routes handle it. */
 bool rt_kernel_simple(Expr* u, Expr* x) {
-    return rt_find_exp_of_x(u, x) == NULL && rt_find_log_of_x(u, x) == NULL;
+    return rt_find_exp_of_x(u, x) == NULL && rt_find_log_of_x(u, x) == NULL
+        && !rt_has_algebraic_of_x(u, x);
 }

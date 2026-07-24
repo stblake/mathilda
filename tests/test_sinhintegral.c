@@ -142,8 +142,11 @@ void test_shi_machine_complex() {
 /* ---- arbitrary-precision complex ------------------------------------ */
 
 void test_shi_arbitrary_complex() {
-    assert_eval_startswith("N[SinhIntegral[2.5 + I], 30]",
-        "2.846494698401862422088015591726");
+    /* Exact input (5/2 = 2.5 exactly) so N[..., 30] genuinely exercises the
+     * MPFR complex path: a machine 2.5 + I is MachinePrecision and N cannot
+     * manufacture 30 digits from it (matches WL). */
+    assert_eval_startswith("N[SinhIntegral[5/2 + I], 30]",
+        "2.84649469840186263382040071739");
     /* Imaginary-axis Stokes constant: Shi(i y) -> i Pi/2, residual is i Si-tail.
      * With an explicit-precision argument the ~1e-61 residual survives. */
     assert_eval_startswith("N[SinhIntegral[I*10^60`120] - I Pi/2, 20]",

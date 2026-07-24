@@ -32,7 +32,10 @@ void run_test(const char* input, const char* expected) {
 void test_factorsquarefree() {
     run_test("FactorSquareFree[x^5-x^3-x^2+1]", "Times[Power[Plus[-1, x], 2], Plus[1, Times[2, x], Times[2, Power[x, 2]], Power[x, 3]]]");
     run_test("FactorSquareFree[x^4-9x^3+29x^2-39x+18]", "Times[Power[Plus[-3, x], 2], Plus[2, Times[-3, x], Power[x, 2]]]");
-    run_test("FactorSquareFree[x^5-x^3*y^2-x^2*y^3+y^5]", "Times[Power[Plus[Times[-1, x], y], 2], Plus[Power[x, 3], Times[2, Times[Power[x, 2], y]], Times[2, Times[x, Power[y, 2]]], Power[y, 3]]]");
+    /* Squared factor (x - y)^2: Wolfram normalises it to a positive leading
+     * coefficient in the FIRST variable x, i.e. (x - y), not the (y - x)
+     * associate (both square to the same thing). */
+    run_test("FactorSquareFree[x^5-x^3*y^2-x^2*y^3+y^5]", "Times[Power[Plus[x, Times[-1, y]], 2], Plus[Power[x, 3], Times[2, Times[Power[x, 2], y]], Times[2, Times[x, Power[y, 2]]], Power[y, 3]]]");
     run_test("FactorSquareFree[{(x^2-1)(x-1),(x^4-1)(x^2-1)}]", "List[Times[Plus[1, x], Power[Plus[-1, x], 2]], Times[Plus[1, Power[x, 2]], Power[Plus[-1, Power[x, 2]], 2]]]");
     run_test("FactorSquareFree[Exp[2 x] - Log[x] - 1/x]", "Plus[Times[-1, Power[x, -1]], Times[-1, Log[x]], Power[E, Times[2, x]]]");
     run_test("FactorSquareFree[1 - x^3]", "Plus[1, Times[-1, Power[x, 3]]]");
@@ -55,9 +58,11 @@ void test_factorsquarefree_f4_fastpath() {
     run_test("FactorSquareFree[Expand[(x*y - 1)^2*(x + y + z)]]",
              "Times[Power[Plus[-1, Times[x, y]], 2], Plus[x, y, z]]");
 
-    /* Multivariate non-squarefree with two squared factors. */
+    /* Multivariate non-squarefree with two squared factors.  The squared
+     * base (x^2 - y^2)^2 is normalised to a positive leading (highest-degree)
+     * term x^2, i.e. (x^2 - y^2), not the (y^2 - x^2) associate. */
     run_test("FactorSquareFree[Expand[(x + y)^2*(x - y)^2*(x*y - 1)]]",
-             "Times[Plus[-1, Times[x, y]], Power[Plus[Times[-1, Power[x, 2]], Power[y, 2]], 2]]");
+             "Times[Plus[-1, Times[x, y]], Power[Plus[Power[x, 2], Times[-1, Power[y, 2]]], 2]]");
 
     /* Three-variable squarefree input -- this is the kind of case
      * the F4 fast path is targeting. */

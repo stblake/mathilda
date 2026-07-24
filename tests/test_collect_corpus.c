@@ -62,11 +62,11 @@ static void test_bug2_pattern_target(void) {
      * deliberately. */
     assert_eval_eq(
         "e = D[f[Sqrt[x^2 + 1]], {x, 3}]; Collect[e, Derivative[_][f][_]]",
-        "(x^3 Derivative[3][f][Sqrt[1 + x^2]])/(1 + x^2)^(3/2)"
-        " - 3 (x Derivative[1][f][Sqrt[1 + x^2]])/(1 + x^2)^(3/2)"
+        "-3 (x Derivative[1][f][Sqrt[1 + x^2]])/(1 + x^2)^(3/2)"
         " - 3 (x^3 Derivative[2][f][Sqrt[1 + x^2]])/(1 + x^2)^2"
         " + 3 (x Derivative[2][f][Sqrt[1 + x^2]])/(1 + x^2)"
-        " + 3 (x^3 Derivative[1][f][Sqrt[1 + x^2]])/(1 + x^2)^(5/2)",
+        " + 3 (x^3 Derivative[1][f][Sqrt[1 + x^2]])/(1 + x^2)^(5/2)"
+        " + (x^3 Derivative[3][f][Sqrt[1 + x^2]])/(1 + x^2)^(3/2)",
         0);
 }
 

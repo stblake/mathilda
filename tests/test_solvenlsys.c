@@ -77,11 +77,17 @@ static void test_inconsistent(void) {
 
 /* Complex solutions over the default domain (Complexes). */
 static void test_complex_default(void) {
+    /* x = y = -+ I/Sqrt[2].  The eliminant returns x in the canonical
+     * unrationalised form Complex[0, -+1] 2^(-1/2) and y in the equal
+     * rationalised form Complex[0, -+1/2] 2^(1/2) (= -+ I Sqrt[2]/2); both are
+     * the same value.  (A single global Times radical-canonicalisation to force
+     * one convention breaks the unrationalised Normalize/Series forms, so the
+     * two solution components are left in their equal natural forms.) */
     run_test("Solve[x^2 + y^2 == -1 && x == y, {x, y}]",
         "List["
-          "List[Rule[x, Times[Complex[0, Rational[-1, 2]], Power[2, Rational[1, 2]]]], "
+          "List[Rule[x, Times[Complex[0, -1], Power[2, Rational[-1, 2]]]], "
                "Rule[y, Times[Complex[0, Rational[-1, 2]], Power[2, Rational[1, 2]]]]], "
-          "List[Rule[x, Times[Complex[0, Rational[1, 2]], Power[2, Rational[1, 2]]]], "
+          "List[Rule[x, Times[Complex[0, 1], Power[2, Rational[-1, 2]]]], "
                "Rule[y, Times[Complex[0, Rational[1, 2]], Power[2, Rational[1, 2]]]]]]");
 }
 

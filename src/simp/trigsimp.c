@@ -1,4 +1,6 @@
 #include "trigsimp.h"
+#include "arithmetic.h"   /* expr_is_superficially_negative */
+#include "core.h"        /* leaf_count_internal */
 #include "attr.h"
 #include "eval.h"
 #include "facpoly.h"
@@ -145,6 +147,33 @@ Expr* builtin_exptotrig(Expr* res) {
     expr_free(rep_simp);
 
     trig_canon_suppress_dec();
+
+    /* The exp->trig rules rewrite E^(I x) -> Cos[x] + I Sin[x] (and the
+     * conjugate for E^(-I x)), leaving sums of UNEXPANDED products such as
+     * (-I/2)(Cos[x] + I Sin[x]) + (I/2)(Cos[x] - I Sin[x]).  Together/Cancel do
+     * not distribute those, so the equal-and-opposite Cos/Sin parts never
+     * collect and a round-trip like ExpToTrig[TrigToExp[Sin[x]]] fails to
+     * collapse back to Sin[x].  Expand (with trig_canon now re-enabled)
+     * distributes the products -- folding Sin/Cos and firing residual
+     * Sec[x] Sin[x] -> Tan[x] / Csc[x] Cos[x] -> Cot[x] collapses.
+     *
+     * Keep the expanded form ONLY when it is strictly simpler: for the round
+     * trips it collapses a product-sum to a single Sin/Cos/Tan/Cot (far fewer
+     * leaves), but for a real-exponential input Simplify feeds through here as
+     * a candidate (e.g. a partially-converted Cosh/Sinh/E^x mix), a blanket
+     * Expand can INFLATE the tree -- distributing a squared numerator into a
+     * larger, un-recombinable form -- which Simplify would then latch onto.
+     * The leaf-count gate keeps the collapse while never handing Simplify a
+     * worse candidate than the un-expanded result. */
+    Expr* expand_args[1] = { expr_copy(result) };
+    Expr* expand_expr = expr_new_function(expr_new_symbol(SYM_Expand), expand_args, 1);
+    Expr* expanded = evaluate(expand_expr);
+    expr_free(expand_expr);
+    if (expanded && leaf_count_internal(expanded, true) < leaf_count_internal(result, true)) {
+        expr_free(result);
+        return expanded;
+    }
+    if (expanded) expr_free(expanded);
     return result;
 }
 
@@ -911,6 +940,56 @@ static Expr* trigreduce_call_unary(const char* name, Expr* input) {
     return result;
 }
 
+/* Pull the leading sign out of odd-function trig calls whose argument is a
+ * negative-leading Plus: Sin[-a + b] -> -Sin[a - b] (Sinh likewise).  The
+ * global canonicalizer leaves Sin[Plus[...]] untouched (expr_is_superficially_
+ * negative has no Plus case), so residual product-to-sum terms like
+ * (Sqrt[3]/2) Sin[a - b] + (Sqrt[3]/2) Sin[-a + b] never present as like terms
+ * and fail to cancel — the two-Optional-coefficient collapse rule can't bind
+ * two multi-factor coefficients (e.g. 1/2 Sqrt[3]) across an Orderless Plus.
+ * Normalizing here makes the pair identical up to a Plus-level sign, so the
+ * evaluator folds them to zero. */
+static Expr* trigreduce_normalize_odd_args(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy(e);
+    size_t n = e->data.function.arg_count;
+    Expr** na = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++)
+        na[i] = trigreduce_normalize_odd_args(e->data.function.args[i]);
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), na, n);
+    free(na);
+    if (n == 1 && out->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = out->data.function.head->data.symbol.name;
+        Expr* arg = out->data.function.args[0];
+        if ((h == SYM_Sin || h == SYM_Sinh) &&
+            arg->type == EXPR_FUNCTION &&
+            arg->data.function.head->type == EXPR_SYMBOL &&
+            arg->data.function.head->data.symbol.name == SYM_Plus &&
+            arg->data.function.arg_count > 0 &&
+            expr_is_superficially_negative(arg->data.function.args[0])) {
+            /* Negate the argument TERM-BY-TERM: Times does not auto-distribute
+             * over Plus, so evaluate(Times[-1, Plus[...]]) would leave an
+             * undistributed Sin[-(-a+b)] that never folds to Sin[a-b].  Negating
+             * each summand (each -1*term evaluates) yields the flat Plus[a,-b]. */
+            size_t pn = arg->data.function.arg_count;
+            Expr** pterms = (Expr**)malloc(sizeof(Expr*) * pn);
+            for (size_t k = 0; k < pn; k++) {
+                Expr* tf[2] = { expr_new_integer(-1),
+                                expr_copy(arg->data.function.args[k]) };
+                pterms[k] = evaluate(expr_new_function(expr_new_symbol(SYM_Times), tf, 2));
+            }
+            Expr* pos = evaluate(expr_new_function(expr_new_symbol(SYM_Plus), pterms, pn));
+            free(pterms);
+            Expr* ia[1] = { pos };
+            Expr* inner = expr_new_function(expr_copy(out->data.function.head), ia, 1);
+            Expr* neg[2] = { expr_new_integer(-1), inner };
+            Expr* r = expr_new_function(expr_new_symbol(SYM_Times), neg, 2);
+            expr_free(out);
+            return r;
+        }
+    }
+    return out;
+}
+
 static Expr* builtin_trigreduce_impl(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1)
         return NULL;
@@ -970,6 +1049,23 @@ static Expr* builtin_trigreduce_impl(Expr* res) {
     /* Step 3: combine over a common denominator so collapse rules can
      * see numerators as a single Plus. */
     current = trigreduce_call_unary("Together", current);
+
+    /* Step 3.5: canonicalize odd-function argument signs so negative-leading
+     * arguments (Sin[-a + b]) present as the negative of their positive
+     * counterpart (Sin[a - b]) and cancel — the collapse rule below cannot
+     * bind two multi-factor coefficients (e.g. 1/2 Sqrt[3]) across a Plus.
+     * The re-evaluation runs with trig_canon TEMPORARILY re-enabled: under the
+     * pipeline-wide suppression, builtin_times skips the Sqrt-coefficient
+     * normalization that flattens the nested Times[c, Times[Sqrt[k], Sin[..]]]
+     * that Together leaves, so the like terms would not collect and cancel. */
+    {
+        Expr* normed = trigreduce_normalize_odd_args(current);
+        expr_free(current);
+        trig_canon_suppress_dec();
+        current = evaluate(normed);
+        trig_canon_suppress_inc();
+        expr_free(normed);
+    }
 
     /* Step 4: angle-addition collapse rules. Idempotent on inputs
      * lacking the matching shape. */

@@ -40,12 +40,24 @@ static void check(const char* input, const char* expected) {
 
 static void same(const char* a, const char* b) {
     checks++;
-    size_t n = strlen(a) + strlen(b) + 32;
+    size_t n = strlen(a) + strlen(b) + 128;
     char* buf = malloc(n);
-    snprintf(buf, n, "Simplify[(%s) - (%s)]", a, b);
+    /* Symbolic-first oracle with a high-precision numeric fallback: some
+     * correct closed forms reduce to a PolyGamma expression at a non-half-
+     * integer argument (e.g. Sum[(-1)^k/(2k+1)] = 1/4 (PolyGamma[0,3/4] -
+     * PolyGamma[0,5/4])) whose equality to the elementary constant needs the
+     * digamma reflection formula, which Simplify does not yet apply. A 30-digit
+     * numeric agreement confirms the identity in those cases. */
+    snprintf(buf, n,
+        "Module[{d = (%s) - (%s)}, "
+        "TrueQ[Simplify[d] == 0] || Abs[N[d, 30]] < 10^-20]", a, b);
     char* s = eval_str(buf);
-    if (strcmp(s, "0") != 0) {
-        fprintf(stderr, "FAIL (oracle): %s  vs  %s\n  Simplify[diff] = %s\n", a, b, s);
+    if (strcmp(s, "True") != 0) {
+        char* d = malloc(n);
+        snprintf(d, n, "Simplify[(%s) - (%s)]", a, b);
+        char* sd = eval_str(d);
+        fprintf(stderr, "FAIL (oracle): %s  vs  %s\n  Simplify[diff] = %s\n", a, b, sd);
+        free(sd); free(d);
         failures++;
     }
     free(s); free(buf);

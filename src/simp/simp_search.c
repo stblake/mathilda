@@ -43,6 +43,22 @@
 bool contains_factorial(const Expr* e);
 bool simp_eq_head_sym(const Expr* e, const char* name);
 
+/* True if `e` contains a Root[...] head anywhere.  RootReduce canonicalises an
+ * algebraic number to a Root[] object when no shorter radical spelling exists;
+ * such an output is worse than the radical input, so the RootReduce pre-pass
+ * only accepts a result that collapsed to a Root-free (rational / radical)
+ * form. */
+static bool simp_contains_root_head(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head && e->data.function.head->type == EXPR_SYMBOL &&
+        strcmp(e->data.function.head->data.symbol.name, "Root") == 0)
+        return true;
+    if (simp_contains_root_head(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (simp_contains_root_head(e->data.function.args[i])) return true;
+    return false;
+}
+
 static const char* SIMP_TRANSFORMS[] = {
     "Together",
     "Cancel",
@@ -72,6 +88,10 @@ static const char* SIMP_TRANSFORMS[] = {
      * with strictly higher complexity than the original, so the original
      * still wins -- no regression on Sin/Cos identities. */
     "TrigToExp"
+    /* RootReduce is NOT a general round transform (it would introduce Root[]
+     * objects on subexpressions).  It runs as a filtered pre-pass in
+     * simp_search, gated to variable-free radical constants and accepted only
+     * when it collapses to a Root-free form. */
 };
 static const size_t SIMP_TRANSFORM_COUNT =
     sizeof(SIMP_TRANSFORMS) / sizeof(SIMP_TRANSFORMS[0]);
@@ -206,6 +226,24 @@ bool transform_can_fire(const char* name, const Expr* e,
      * waste a memo slot per leaf. */
     if (strcmp(name, "TrigReduce") == 0) {
         if (!contains_plus_or_times(e)) return false;
+    }
+    /* RootReduce: only on radical NUMERIC constants (no free variables).  On
+     * symbolic inputs it is a no-op or prohibitively slow, and on non-radical
+     * numbers it does nothing useful; restricting it keeps the exact algebraic-
+     * number canonicalisation available exactly where the multi-spelling
+     * radical cancellation problem arises. */
+    if (strcmp(name, "RootReduce") == 0) {
+        if (!has_non_integer_power(e)) return false;
+        /* Variable-free only: Variables[] ignores function heads (contains_variable
+         * would count the `Power` head of a Sqrt as a variable). */
+        Expr* vars = call_unary_copy("Variables", e);
+        bool has_vars = vars && vars->type == EXPR_FUNCTION
+                        && vars->data.function.head
+                        && vars->data.function.head->type == EXPR_SYMBOL
+                        && vars->data.function.head->data.symbol.name == SYM_List
+                        && vars->data.function.arg_count > 0;
+        if (vars) expr_free(vars);
+        if (has_vars) return false;
     }
     /* Abs rules. */
     if (strcmp(name, "AbsRules") == 0) {
@@ -1243,6 +1281,28 @@ Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
         if (sqsq_pre) { expr_free(sqsq_pre); sqsq_pre = NULL; }
     }
 
+    /* Phase 0c: radical NUMERIC-CONSTANT canonicalisation via RootReduce.  The
+     * evaluator keeps distinct radical spellings of one algebraic number
+     * (Sqrt[3/2] vs Sqrt[6]/2, Power[2,-1/2] vs Sqrt[2]/2) that block
+     * cancellation in the leaf-count search, so a genuinely-zero difference of
+     * radical constants survives as a nonzero-looking form.  RootReduce
+     * canonicalises the algebraic number exactly; anchor the search on it when
+     * strictly simpler (gated to variable-free radical inputs in
+     * transform_can_fire, so this is a no-op on symbolic expressions). */
+    Expr* rr_pre = transform_can_fire("RootReduce", input, ctx)
+                       ? traced_call_unary("RootReduce", input)
+                       : NULL;
+    if (rr_pre && !expr_eq(rr_pre, input) &&
+        !simp_contains_root_head(rr_pre) &&
+        score_with_func(rr_pre, complexity_func)
+            < score_with_func((Expr*)input, complexity_func)) {
+        if (simp_debug_enabled())
+            simp_debug_log("RootReduce", input, rr_pre, 0.0);
+        input = rr_pre;
+    } else {
+        if (rr_pre) { expr_free(rr_pre); rr_pre = NULL; }
+    }
+
     Expr* best = expr_copy((Expr*)input);
     size_t best_score = score_with_func(best, complexity_func);
 
@@ -2001,6 +2061,7 @@ search_done:
     cs_free(&seeds);
     if (abs_pre) expr_free(abs_pre);
     if (sqsq_pre) expr_free(sqsq_pre);
+    if (rr_pre) expr_free(rr_pre);
     return best;
 }
 

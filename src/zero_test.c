@@ -411,7 +411,20 @@ static ZeroTestResult decide_rational(const Expr* e) {
         }
     }
     expr_free(canon);
-    if (z) return ZERO_TEST_TRUE;
+    if (z) {
+        /* The Together ∘ Cancel normalization returned zero.  This is a RIGOROUS
+         * zero only for a pure rational function of the free symbols, where the
+         * Q-normalization is exact.  When the expression carries transcendental
+         * kernels, Together applies branch-unsound identities on the way — it
+         * expands Log[x^2] -> 2 Log[x] and Log[a b] -> Log[a] + Log[b] (correct
+         * for the Risch log-tower machinery, but NOT valid across the branch
+         * cuts of the principal-value Log) — which can collapse a genuine
+         * NON-identity such as Log[x^2] - 2 Log[x] to zero.  Defer those to the
+         * numeric sampler, which confirms true identities and detects the branch
+         * dependence of the false ones. */
+        if (is_pure_rational_function(e)) return ZERO_TEST_TRUE;
+        return ZERO_TEST_UNKNOWN;
+    }
     /* Normalization completed but the numerator is a non-zero polynomial.  If the
      * whole input is a pure rational function of its free symbols over Q, the
      * normalization was exact and complete, so this is a RIGOROUS non-zero

@@ -137,11 +137,12 @@ void test_power_of_power_integer_inner(void) {
 
 void test_power_of_power_no_real_inner(void) {
     /* Inner exponent's signedness/realness unknown -- rule must not fire.
-     * Mathilda's printer emits Power[Power[a, p], q] without disambiguating
-     * parentheses, so the result string reads "a^p^q". This is the
-     * unchanged input, NOT a^(p^q). */
+     * The result is the unchanged input Power[Power[a, p], q], which the
+     * printer renders with disambiguating parentheses as "(a^p)^q" (NOT
+     * a^(p^q)).  The identity (a^p)^q -> a^(p q) needs p real, so under
+     * a > 0 alone WL also leaves this unchanged. */
     assert_eval_eq("Simplify[(a^p)^q, a > 0]",
-                   "a^p^q", 0);
+                   "(a^p)^q", 0);
 }
 
 /* ---- Composite cancellation cases enabled by the cascade ---- */

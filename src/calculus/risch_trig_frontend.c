@@ -268,6 +268,18 @@ static Expr* rt_realify(Expr* G, Expr* x, Expr* f) {
  * rewrites are exact, so the result is correct by construction; rt_realify then
  * reconstructs a real closed form (diff-back gated) from the I-laden output. */
 Expr* rt_trig_frontend(Expr* f, Expr* x) {
+    /* Scope guard: a trig / radical-trig of an ALGEBRAIC function of x
+     * (Cos[Sqrt[x]], Sin[x^(1/3)], Sqrt[Sin[x]]) exponentializes to an
+     * exp form whose primitive exponent — or whose base — is algebraic in x
+     * (E^(I Sqrt[x]), Sin[x]^(1/2)).  The single-extension and tower exp cases
+     * below then attempt to build a transcendental tower over C(x, Sqrt[x]) and
+     * their RDE / Hermite / SolveAlways coefficient arithmetic does not
+     * terminate (the Cos[Sqrt[x]] hang).  Such integrands are elementary via an
+     * ALGEBRAIC substitution the transcendental algorithm does not perform, so
+     * decline cleanly here — DerivativeDivides / the algebraic routes handle
+     * them, and the field decision (rt_decide_field) reports UNKNOWN, never a
+     * spurious verdict. */
+    if (rt_has_algebraic_of_x(f, x)) return NULL;
     Expr* fe = rt_eval1("TrigToExp", expr_copy(f));
     if (!fe) return NULL;
     if (expr_eq(fe, f)) { expr_free(fe); return NULL; }   /* no trig/hyperbolic */
@@ -383,21 +395,41 @@ Expr* rt_exp_ratreduce_case(Expr* f, Expr* x) {
         && rt_free_of_x(up, x);
 
     if (ok) {
-        /* G = F / (u' t). */
+        /* G = F / (u' t), still expressed in the reserved kernel symbol t = rmT. */
         Expr* denom = expr_new_function(expr_new_symbol("Times"),
             (Expr*[]){ expr_copy(up), expr_copy(t) }, 2);
         Expr* G = rt_eval1("Together", expr_new_function(expr_new_symbol("Times"),
             (Expr*[]){ expr_copy(F),
                 expr_new_function(expr_new_symbol("Power"),
                     (Expr*[]){ denom, expr_new_integer(-1) }, 2) }, 2));
-        /* Pure rational integral in t. */
-        Expr* A = G ? rt_eval2("Integrate", expr_copy(G), expr_copy(t)) : NULL;
+        /* Recurse over a FRESH variable distinct from the reserved kernel symbol
+         * "rmT".  rt_exp_kernelize bakes "rmT" into every exponential
+         * kernelization, so integrating G over "rmT" ITSELF makes a nested Risch
+         * call conflate its own kernel with the integration variable: e.g.
+         * Integrate[Cos[E^x]] kernelizes E^x -> rmT, forms G = Cos[rmT]/rmT and
+         * recurses Integrate[Cos[rmT]/rmT, rmT]; the nested trig front-end then
+         * kernelizes E^(I rmT) -> rmT on top of the standalone rmT, producing a
+         * degenerate rational integrand whose pseudo-remainder GCD spins forever.
+         * Renaming rmT -> s (a name that is never itself a kernel symbol) breaks
+         * the collision; back-substitute s -> E^u afterwards. */
+        static unsigned long ratreduce_ctr = 0;
+        char sname[64];
+        snprintf(sname, sizeof(sname), "Integrate`RischExpRatReduce`s$%lu",
+                 ratreduce_ctr++);
+        Expr* s = expr_new_symbol(sname);
+        Expr* Gs = G ? rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+            (Expr*[]){ expr_copy(G),
+                expr_new_function(expr_new_symbol("List"),
+                    (Expr*[]){ expr_new_function(expr_new_symbol("Rule"),
+                        (Expr*[]){ expr_copy(t), expr_copy(s) }, 2) }, 1) }, 2)) : NULL;
+        /* Pure rational integral in s. */
+        Expr* A = Gs ? rt_eval2("Integrate", expr_copy(Gs), expr_copy(s)) : NULL;
         bool declined = !A || rt_expr_has_head(A, "Integrate");
         if (!declined) {
-            /* Back-substitute t -> E^u and diff-back verify against f. */
+            /* Back-substitute s -> E^u and diff-back verify against f. */
             Expr* back = expr_new_function(expr_new_symbol("List"),
                 (Expr*[]){ expr_new_function(expr_new_symbol("Rule"),
-                    (Expr*[]){ expr_copy(t),
+                    (Expr*[]){ expr_copy(s),
                         expr_new_function(expr_new_symbol("Power"),
                             (Expr*[]){ expr_new_symbol("E"), expr_copy(uexp) }, 2) }, 2) }, 1);
             Expr* Q = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
@@ -412,6 +444,8 @@ Expr* rt_exp_ratreduce_case(Expr* f, Expr* x) {
             else if (Q) expr_free(Q);
         }
         if (A) expr_free(A);
+        if (Gs) expr_free(Gs);
+        expr_free(s);
         if (G) expr_free(G);
     }
 

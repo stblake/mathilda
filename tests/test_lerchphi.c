@@ -124,7 +124,7 @@ void test_lp_negative_integer_s() {
     /* LerchPhi[z, -n, a] = (z d/dz + a)^n [1/(1-z)], a rational function. */
     assert_eval_eq("LerchPhi[2, -1, a]", "2 - a", 0);
     assert_eval_eq("LerchPhi[3, -1, a]", "1/4 (3 - 2 a)", 0);
-    assert_eval_eq("LerchPhi[2, -2, a]", "2 (-3 + a) + a (2 - a)", 0);
+    assert_eval_eq("LerchPhi[2, -2, a]", "-6 + 4 a - a^2", 0);
     /* Rational z: LerchPhi[1/3, -1, 2] = Sum (k+2)(1/3)^k = 15/4. */
     assert_eval_eq("LerchPhi[1/3, -1, 2]", "15/4", 0);
 }

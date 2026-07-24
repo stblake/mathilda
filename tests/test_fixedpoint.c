@@ -143,8 +143,10 @@ static void test_fp_monotone_decrement(void) {
 /* ---------- Throw exit ---------- */
 
 static void test_fp_throw_exits(void) {
-    /* Throw[#] inside f exits FixedPoint early, propagating the Throw */
-    run_full("FixedPoint[If[# > 5, Throw[#], # + 1] &, 0]", "Throw[6]");
+    /* Throw[#] inside f exits FixedPoint early, propagating the Throw. With no
+     * enclosing Catch the uncaught Throw returns to top level wrapped in Hold
+     * (matching Wolfram's Throw::nocatch behaviour: Hold[Throw[6]]). */
+    run_full("FixedPoint[If[# > 5, Throw[#], # + 1] &, 0]", "Hold[Throw[6]]");
 }
 
 /* ---------- Unevaluated cases ---------- */

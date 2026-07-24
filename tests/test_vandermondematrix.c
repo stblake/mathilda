@@ -144,9 +144,13 @@ static void test_determinant_symbolic(void) {
         "Expand[Det[VandermondeMatrix[{a, b, c}]] - "
         "(b - a) (c - a) (c - b)]",
         "0", 0);
-    /* Factoring the determinant recovers the product of node differences. */
+    /* Factoring the determinant recovers the product of node differences.
+     * Wolfram's canonical Factor normalises each irreducible factor to a
+     * positive leading coefficient in the FIRST (alphabetically smallest)
+     * variable it contains — a for (a - b) and (a - c), b for (b - c) — and
+     * carries the overall sign as a leading -1: -(a - b)(a - c)(b - c). */
     assert_eval_eq("Factor[Det[VandermondeMatrix[{a, b, c}]]]",
-                   "(-a + b) (-a + c) (-b + c)", 0);
+                   "-(a - b) (a - c) (b - c)", 0);
 }
 
 /* LinearSolve[V, b] recovers the coefficients {a0, a1, ...} of the polynomial

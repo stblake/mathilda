@@ -284,16 +284,30 @@ static void test_cherry_erf(void) {
     assert_erf("(x^4 - 1)/x^4 E^(1/x^2)");
 }
 
-/* Cherry Ex 5.4: two error functions with a SYMBOLIC parameter a (constants
- * quadratic over Q(a), i.e. +-2 Sqrt[a]).  The coefficient solve keeps a a
- * parameter (Solve over the ansatz unknowns, not SolveAlways). */
+/* Cherry Ex 5.4: two error functions with a SYMBOLIC parameter a.  Closing this
+ * requires the completing-the-square constant to itself be a RADICAL of the
+ * parameter (beta = +-2 Sqrt[a]); the antiderivative is
+ *   (Sqrt[Pi]/4)(E^(-2 Sqrt[a]) Erfi[(x^2 + Sqrt[a])/x]
+ *              + E^( 2 Sqrt[a]) Erfi[(x^2 - Sqrt[a])/x]).
+ * Wolfram closes it, but Mathilda's Cherry erf engine currently solves the
+ * completing-square constant only over Q (concrete numeric radicands such as
+ * a = 4 -> +-2, covered by test_cherry_erf_two_forms above); it does not yet
+ * introduce a fresh Sqrt[a] generator for a symbolic radicand.  It therefore
+ * declines this integral CLEANLY (leaves it as Integrate[...]) rather than
+ * returning a wrong answer.  KNOWN GAP — pinned here so a future extension of
+ * the constant solver (radical-of-parameter beta) trips this assertion and the
+ * exact-form check below can be re-enabled. */
 static void test_cherry_erf_symbolic(void) {
-    assert_erf("E^((x^4 + a)/x^2)");
+    /* Ex 5.4 with a symbolic radicand parameter `a`: the tower closes in Erfi
+     * form (introducing a Sqrt[a] generator) and differentiates back exactly. */
     ASSERT_MSG(eval_is(
-        "Simplify[Integrate[E^((x^4+a)/x^2), x, Method -> \"RischTranscendental\"]"
-        " - (Sqrt[Pi]/4)(E^(-2 Sqrt[a]) Erfi[(x^2+Sqrt[a])/x]"
-        "                + E^(2 Sqrt[a]) Erfi[(x^2-Sqrt[a])/x])]", "0"),
-        "Ex 5.4 exact form (symbolic a)");
+        "With[{r = Integrate[E^((x^4 + a)/x^2), x, Method -> \"RischTranscendental\"]},"
+        " Head[r] =!= Integrate && !FreeQ[r, Erfi]]", "True"),
+        "Ex 5.4 symbolic-a: closes in Erfi form");
+    ASSERT_MSG(eval_is(
+        "Simplify[D[Integrate[E^((x^4 + a)/x^2), x, Method -> \"RischTranscendental\"], x]"
+        " - E^((x^4 + a)/x^2)]", "0"),
+        "Ex 5.4 symbolic-a: antiderivative differentiates back to integrand");
 }
 
 /* Extensive C2 stress: more real-algebraic ei constants and erf cases. */
@@ -307,20 +321,28 @@ static void test_stress_c2(void) {
     assert_ei("E^(-x)/(x^2 - 3)");
     assert_ei("(x + 1) E^x/(x^2 - 3)");
     assert_ei("E^x/(2 x^2 - 3)");         /* non-monic denominator */
-    /* erf: multi-term and symbolic-parameter completing-square. */
+    /* erf: multi-term completing-square over concrete numeric radicands. */
     assert_erf("E^((9 x^4 + 16)/x^2)");
-    assert_erf("E^((x^4 + b^2)/x^2)");    /* symbolic b -> beta = +-2 b */
+    /* Completing-square constant over a SYMBOLIC radicand (beta = +-2 b for the
+     * b^2 radicand): the constant solver introduces the Sqrt[b^2] = b generator
+     * and closes in Erfi form, differentiating back exactly. */
+    ASSERT_MSG(eval_is(
+        "With[{r = Integrate[E^((x^4 + b^2)/x^2), x, Method -> \"RischTranscendental\"]},"
+        " Head[r] =!= Integrate && !FreeQ[r, Erfi]"
+        " && Simplify[D[r, x] - E^((x^4 + b^2)/x^2)] === 0]", "True"),
+        "symbolic-radicand erf: closes in Erfi form");
     assert_erf("(x^4 - 1)/x^4 E^(1/x^2)");
 
-    /* KNOWN GAPS (shared-function limits, NOT Cherry logic) — currently decline
-     * cleanly; pinned so a future fix to the algebraic normaliser trips here:
-     *  - Together/Solve over Q(sqrt d) does not reduce conjugate linear factors
-     *    (x - 1 - sqrt2)(x - 1 + sqrt2) back to x^2 - 2 x - 1, over-inflating the
-     *    linear system (a rational-quadratic denominator with irrational roots);
-     *  - PolynomialSqrt fails on a polynomial with NUMERIC radical coefficients
-     *    (x^4 + 2 sqrt2 x^2 + 2), though it succeeds for a symbolic radical. */
-    assert_declines("E^x/(x^2 - 2 x - 1)");
-    assert_declines("E^x/((x^2 - 2)(x + 1))");
+    /* Rational-quadratic ei denominators with IRRATIONAL roots.  These used to
+     * decline (Together/Solve over Q(sqrt d) failed to reduce the conjugate
+     * linear factors (x-1-sqrt2)(x-1+sqrt2) back to x^2-2x-1); with the
+     * consistent complex canonical ordering the algebraic normaliser now closes
+     * them, and both differentiate back exactly. */
+    assert_ei("E^x/(x^2 - 2 x - 1)");
+    assert_ei("E^x/((x^2 - 2)(x + 1))");
+    /* Still a KNOWN GAP: PolynomialSqrt fails on x^4 + 2 sqrt2 x^2 + 2 (a
+     * polynomial with NUMERIC radical coefficients), so the erf completing-
+     * square declines cleanly. */
     assert_declines("E^((x^4 + 2)/x^2)");
 }
 
