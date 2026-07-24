@@ -1,3 +1,63 @@
+# Fix: `D`/`Integrate` of `SeriesData` — leading-zero handling (3 pre-existing failures)
+
+User: "Let's fix the 3 pre-existing failures for D/Integrate of SeriesData
+objects. Add extensive unit tests for this fix."
+
+- [x] Diagnose the 3 failures (they were hidden behind the pre-existing
+      in-suite slowdown; enumerated directly via the REPL):
+  - `test_series_integrate_laurent` assert A & B: expected coefficient lists
+    (`[-1,0,1]`, `[-2]`) were **structurally invalid** — shorter than
+    `nmax - nmin`, which `so_from_seriesdata` rejects. The actual full-length
+    output (trailing zeros kept, matching Wolfram) is correct → **test bug**.
+  - `test_series_calculus_other_variable` assert A: `D[Series[Exp[a x]], a]`
+    trimmed a genuine leading zero (`nmin` `0 -> 1`), breaking
+    `D[Series[f], a] == Series[D[f, a]]` → **code bug**.
+- [x] Code fix (`src/calculus/series.c`, `series_differentiate`): remove the
+      `so_trim_leading` call in the **other-variable** branch. That branch
+      shifts no exponents, so a zero coefficient is genuine and must be kept
+      (matching the Integrate other-variable branch, which never trimmed, and
+      `Series`, which keeps genuine leading zeros). The same-variable power-rule
+      branches keep trimming (their shift opens a real phantom slot).
+- [x] Test fix: corrected the two invalid expected values in
+      `test_series_integrate_laurent` to the full-length coefficient lists.
+- [x] Added nine tests (`tests/test_series.c`): other-variable identity for
+      `D` and `Integrate`, higher-order/repeated `D`, free-variable `D` (`-> 0`),
+      fractional-power (`den = 2`), nonzero center, the `SameQ` commutation
+      identity, the same-variable power-rule contrast, and Laurent/residue guard.
+- [x] Verify: ran the 15 calculus-on-`SeriesData` tests through the real
+      `assert_fullform` harness (temporarily registered first, then reverted) —
+      **0 FAIL**. Clean `-std=c99 -Wall -Wextra` build. valgrind == documented
+      macOS baseline (13,440 B / 420 blk; no new leak — the fix removes an
+      allocation-touching call, it adds none).
+- [x] Docs: `docs/spec/builtins/power-series.md` (leading-zero contract for the
+      other-variable branch) + this week's changelog `2026-07-20.md`.
+
+## Review
+
+**Root cause.** Mathilda's `Series` keeps genuine leading zeros (pins `nmin` to
+the expansion base: `Series[Sin[x], {x,0,4}]` = `{0,1,0,-1/6,0}`, `nmin=0`).
+The `D`-other-variable path diverged by calling `so_trim_leading`, which is only
+appropriate for the same-variable power rule (whose exponent shift creates a
+phantom boundary slot). Threading `D` into coefficients introduces no shift, so
+its zeros are real — trimming them raised `nmin` and broke the `D∘Series =
+Series∘D` identity (confirmed with `===`: now `True`). The two "trailing-zero"
+failures were never code bugs — the test expectations were malformed
+`SeriesData` the reader itself rejects.
+
+**Scope honesty.** The full `series_tests` binary does not run to completion on
+this machine: a **pre-existing** per-test re-init in `setup_full` (it calls
+`symtab_init`+`core_init`+`Get[init.m]` every test without teardown) bloats
+memory across ~115 tests until the `Limit[8.19]` test thrashes and the 60 s
+global `alarm` in `test_utils.h` fires. This is environment-dependent
+(memory-pressure), predates this change (standalone `Limit[8.19]` = 0.5 s at
+both revisions), and is unrelated to `SeriesData` calculus. My tests were
+verified by registering them ahead of the heavy branch-cut tests. Not fixed
+here (harness issue, out of scope). The 14 pre-existing branch-cut `Series`
+`FAIL`s (ArcCoth/ArcTan/ArcSinh at complex points, LogIntegral) are likewise
+unchanged.
+
+---
+
 # Gruntz `Limit` Phase 3 — deep log-tower cancellation (thesis 8.19)
 
 Per GRUNTZ_STATE.md "Known gaps"; the chosen next Gruntz gap.

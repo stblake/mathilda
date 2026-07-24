@@ -56,7 +56,13 @@ Out[5]= Sqrt[x] + 2 x + 3 x^(3/2) + O[x]^(7/2)
   case.
 - **With respect to a different variable** (when the expansion point `x0` is
   free of that variable), `D`/`Integrate` thread into the coefficients and keep
-  the powers of `(x - x0)` unchanged.
+  the powers of `(x - x0)` unchanged. This branch introduces no exponent shift,
+  so a coefficient that becomes zero (e.g. the `a`-derivative of an
+  `a`-independent term) is a **genuine** zero coefficient and is retained —
+  `nmin` is not raised — exactly as `Series` keeps genuine leading zeros. This
+  makes `D[Series[f, {x, x0, n}], a]` equal `Series[D[f, a], {x, x0, n}]`.
+  (Only the same-variable power rule above trims a leading zero, because its
+  exponent shift opens a phantom boundary slot.)
 
 ```mathematica
 In[1]:= Integrate[Series[Exp[x], {x, 0, 8}], x]

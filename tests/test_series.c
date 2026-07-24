@@ -1566,16 +1566,19 @@ static void test_series_diff_integrate_roundtrip(void) {
 }
 
 /* Laurent series with no residue integrates term-by-term:
- * Integrate[1/x^2 + 1 + O[x]^4, x] = -1/x + x + O[x]^5. */
+ * Integrate[1/x^2 + 1 + O[x]^4, x] = -1/x + x + O[x]^5. The coefficient list
+ * spans every exponent from nmin (-1) up to nmax (5), so the trailing zeros
+ * for x^2..x^4 are retained -- the list length must equal nmax - nmin, which
+ * Mathilda's SeriesData reader enforces. */
 static void test_series_integrate_laurent(void) {
     setup_full();
     assert_fullform(
         "Integrate[Series[1/x^2 + 1, {x, 0, 3}], x]",
-        "SeriesData[x, 0, List[-1, 0, 1], -1, 5, 1]");
-    /* D of the same Laurent series: -2/x^3 + O[x]^3. */
+        "SeriesData[x, 0, List[-1, 0, 1, 0, 0, 0], -1, 5, 1]");
+    /* D of the same Laurent series: -2/x^3 + O[x]^3 (list spans x^-3..x^2). */
     assert_fullform(
         "D[Series[1/x^2 + 1, {x, 0, 3}], x]",
-        "SeriesData[x, 0, List[-2], -3, 3, 1]");
+        "SeriesData[x, 0, List[-2, 0, 0, 0, 0, 0], -3, 3, 1]");
 }
 
 /* A genuine (x)^-1 residue term has no SeriesData antiderivative (it is a
@@ -1600,6 +1603,145 @@ static void test_series_calculus_other_variable(void) {
         "SeriesData[x, 0, List[a, Times[Rational[1, 2], Power[a, 2]], "
         "Times[Rational[1, 6], Power[a, 3]], "
         "Times[Rational[1, 24], Power[a, 4]]], 0, 4, 1]");
+}
+
+/* ----------------------------------------------------------------------------
+ * Regression: D / Integrate on SeriesData with respect to a variable OTHER
+ * than the expansion variable must NOT trim a genuine leading-zero
+ * coefficient. This branch shifts no exponents (it threads the operator into
+ * each coefficient, leaving the powers of x untouched), so a zero coefficient
+ * is real -- e.g. D of the a-independent constant term of Series[Exp[a x]] is
+ * a genuine zero x^0 coefficient. Trimming it (as an earlier version did for
+ * the D branch) raised nmin spuriously and broke the identity
+ *   D[Series[f, {x, x0, n}], a]  ==  Series[D[f, a], {x, x0, n}],
+ * since Series itself pins nmin to the expansion base and keeps leading zeros.
+ * The Integrate branch never trimmed; these tests lock both branches together.
+ * -------------------------------------------------------------------------- */
+
+/* The exact SeriesData that motivated the fix: the x^0 slot is D[1, a] = 0 and
+ * must survive with nmin = 0 (not be trimmed to nmin = 1). */
+static void test_series_d_other_var_keeps_leading_zero(void) {
+    setup_full();
+    assert_fullform(
+        "D[Series[Exp[a x], {x, 0, 3}], a]",
+        "SeriesData[x, 0, List[0, 1, a, Times[Rational[1, 2], Power[a, 2]]], "
+        "0, 4, 1]");
+    /* Two genuine leading zeros (x^0 and x^1 slots both vanish): keep both. */
+    assert_fullform(
+        "D[Series[Cos[b x], {x, 0, 5}], b]",
+        "SeriesData[x, 0, List[0, 0, Times[-1, b], 0, "
+        "Times[Rational[1, 6], Power[b, 3]], 0], 0, 6, 1]");
+    /* A polynomial coefficient whose x^0 term is a-free -> zero, kept. */
+    assert_fullform(
+        "D[Series[a^2 x + a^3 x^2, {x, 0, 4}], a]",
+        "SeriesData[x, 0, List[0, Times[2, a], Times[3, Power[a, 2]], 0, 0], "
+        "0, 5, 1]");
+}
+
+/* Higher-order and repeated differentiation w.r.t. the other variable keeps
+ * accumulating genuine leading zeros rather than trimming them. */
+static void test_series_d_other_var_higher_order(void) {
+    setup_full();
+    /* d^2/da^2 Series[Exp[a x]] = Series[x^2 Exp[a x]]: two leading zeros. */
+    assert_fullform(
+        "D[D[Series[Exp[a x], {x, 0, 3}], a], a]",
+        "SeriesData[x, 0, List[0, 0, 1, a], 0, 4, 1]");
+    assert_fullform(
+        "D[Series[Exp[a x], {x, 0, 3}], {a, 2}]",
+        "SeriesData[x, 0, List[0, 0, 1, a], 0, 4, 1]");
+}
+
+/* Differentiating w.r.t. a variable the series does not depend on gives 0. */
+static void test_series_d_free_variable(void) {
+    setup_full();
+    assert_fullform("D[Series[Exp[a x], {x, 0, 3}], y]", "0");
+}
+
+/* Integrate w.r.t. the other variable threads term-by-term; a genuine
+ * leading-zero coefficient (Integrate of the vanishing x^0 slot of Sin) is
+ * kept, matching the D branch. */
+static void test_series_integrate_other_var_keeps_leading_zero(void) {
+    setup_full();
+    assert_fullform(
+        "Integrate[Series[Sin[b x], {x, 0, 4}], b]",
+        "SeriesData[x, 0, List[0, Times[Rational[1, 2], Power[b, 2]], 0, "
+        "Times[Rational[-1, 24], Power[b, 4]], 0], 0, 5, 1]");
+    assert_fullform(
+        "Integrate[Series[Cos[b x], {x, 0, 4}], b]",
+        "SeriesData[x, 0, List[b, 0, Times[Rational[-1, 6], Power[b, 3]], 0, "
+        "Times[Rational[1, 120], Power[b, 5]]], 0, 5, 1]");
+}
+
+/* Fractional-power (den = 2) series: threading D into the coefficients keeps
+ * the half-integer power grid and the genuine leading zero. */
+static void test_series_d_other_var_fractional_power(void) {
+    setup_full();
+    assert_fullform(
+        "D[Series[Sqrt[x] Exp[a x], {x, 0, 2}], a]",
+        "SeriesData[x, 0, List[0, 0, 1, 0], 1, 5, 2]");
+}
+
+/* Series expanded about a nonzero point: the other-variable identity still
+ * holds coefficient-by-coefficient (here the leading coefficient is nonzero,
+ * exercising the shift-free threading at x0 != 0). */
+static void test_series_d_other_var_shifted_center(void) {
+    setup_full();
+    assert_fullform(
+        "D[Series[a x^2 + a^2 x^3, {x, 1, 3}], a]",
+        "SeriesData[x, 1, List[Plus[1, Times[2, a]], Plus[2, Times[6, a]], "
+        "Plus[1, Times[6, a]], Times[2, a]], 0, 4, 1]");
+}
+
+/* The defining identity, asserted structurally with SameQ: differentiating a
+ * SeriesData w.r.t. a free variable equals expanding the differentiated
+ * function. (Holds for D; NOT asserted for Integrate, whose symbolic
+ * antiderivative can introduce a 1/x the coefficient-wise thread does not.) */
+static void test_series_d_other_var_commutes_with_series(void) {
+    setup_full();
+    assert_fullform(
+        "D[Series[Exp[a x], {x, 0, 3}], a] === Series[D[Exp[a x], a], {x, 0, 3}]",
+        "True");
+    assert_fullform(
+        "D[Series[Cos[b x], {x, 0, 5}], b] === Series[D[Cos[b x], b], {x, 0, 5}]",
+        "True");
+    assert_fullform(
+        "D[Series[a x^2 + a^2 x^3, {x, 1, 3}], a] === "
+        "Series[D[a x^2 + a^2 x^3, a], {x, 1, 3}]",
+        "True");
+}
+
+/* Same-variable calculus (the power rule) DOES raise nmin: differentiating or
+ * integrating w.r.t. the expansion variable shifts every exponent, so the
+ * boundary slot it opens up is a phantom (no such term exists) and is trimmed.
+ * This is the deliberate counterpart to the other-variable behavior above --
+ * these tests pin the contrast so the two branches cannot silently converge. */
+static void test_series_same_var_power_rule_trims_phantom(void) {
+    setup_full();
+    /* D[x^3 + O[x]^7] = 3 x^2 + O[x]^6: nmin rises 0 -> 2 (phantom x^-1, x^0,
+     * x^1 slots from the shift are dropped). */
+    assert_fullform(
+        "D[Series[x^3, {x, 0, 6}], x]",
+        "SeriesData[x, 0, List[3, 0, 0, 0], 2, 6, 1]");
+    /* Integrate[Sin[x] series] = -Cos + const-0: lowest term is x^2. */
+    assert_fullform(
+        "Integrate[Series[Sin[x], {x, 0, 5}], x]",
+        "SeriesData[x, 0, List[Rational[1, 2], 0, Rational[-1, 24], 0, "
+        "Rational[1, 720]], 2, 7, 1]");
+}
+
+/* Laurent input (negative starting power) with no residue: trailing zeros up
+ * to nmax are retained; a genuine (x-x0)^-1 residue term instead leaves
+ * Integrate unevaluated (its antiderivative is a Log). */
+static void test_series_integrate_laurent_and_residue(void) {
+    setup_full();
+    /* 1/x^2 + 3 -> -1/x + 3 x + O[x]^4, full-length coefficient list. */
+    assert_fullform(
+        "Integrate[Series[1/x^2 + 3, {x, 0, 2}], x]",
+        "SeriesData[x, 0, List[-1, 0, 3, 0, 0], -1, 4, 1]");
+    /* A deep Laurent tail with a real 1/x term: residue guard -> unevaluated. */
+    assert_fullform(
+        "Head[Integrate[Series[1/x^3 + 1/x + x, {x, 0, 4}], x]]",
+        "Integrate");
 }
 
 /* ----------------------------------------------------------------------------
@@ -1879,6 +2021,15 @@ int main(void) {
     TEST(test_series_integrate_laurent);
     TEST(test_series_integrate_residue_unevaluated);
     TEST(test_series_calculus_other_variable);
+    TEST(test_series_d_other_var_keeps_leading_zero);
+    TEST(test_series_d_other_var_higher_order);
+    TEST(test_series_d_free_variable);
+    TEST(test_series_integrate_other_var_keeps_leading_zero);
+    TEST(test_series_d_other_var_fractional_power);
+    TEST(test_series_d_other_var_shifted_center);
+    TEST(test_series_d_other_var_commutes_with_series);
+    TEST(test_series_same_var_power_rule_trims_phantom);
+    TEST(test_series_integrate_laurent_and_residue);
 
     /* Arithmetic on SeriesData. */
     TEST(test_series_plus_scalar);

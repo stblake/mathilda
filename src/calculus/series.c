@@ -2714,14 +2714,20 @@ Expr* series_differentiate(Expr* sd, Expr* var) {
 
     /* Differentiating with respect to a variable other than the series
      * variable: thread D into the coefficients (powers unchanged). Only valid
-     * when the expansion point does not itself depend on var. */
+     * when the expansion point does not itself depend on var. Do NOT trim
+     * leading zeros here: this branch introduces no exponent shift, so a zero
+     * coefficient is genuine (e.g. D of a constant coefficient is a real,
+     * zero x^k term). Keeping it preserves the identity D[Series[f], a] ==
+     * Series[D[f, a]] -- Series itself pins nmin to the expansion base and
+     * keeps genuine leading zeros -- and mirrors the Integrate branch below,
+     * which likewise does not trim. (The power-rule branch further down DOES
+     * trim, because its exponent shift creates a phantom boundary slot.) */
     if (!expr_eq(s->x, var)) {
         if (!expr_free_of(s->x0, var)) { so_free(s); return NULL; }
         SeriesObj* r = so_alloc(s->x, s->x0, s->nmin, s->order, s->den);
         for (size_t i = 0; i < s->coef_count; i++) {
             so_set_coef(r, i, simp(mk_fn2("D", expr_copy(s->coefs[i]), expr_copy(var))));
         }
-        so_trim_leading(r);
         Expr* out = so_to_expr(r);
         so_free(s); so_free(r);
         return out;
