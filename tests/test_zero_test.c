@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <time.h>
 
 /* Evaluate a Mathilda input string and assert that the result prints as
@@ -759,6 +760,134 @@ static void test_perf_large_rational_nonzero_instant(void) {
 }
 
 /* ============================================================== */
+/*  15. FLINT kernel-generator zero test (flint_mpoly_is_zero)     */
+/*                                                                */
+/*  These exercise the FLINT-backed is_zero_poly accelerator on   */
+/*  the "opaque generator" regime it was written for: polynomials */
+/*  whose indeterminates are not bare symbols but maximal          */
+/*  non-polynomial kernels (Log[x], Sin[x], x^x, …). The verdict   */
+/*  must be identical to the classical path; running the whole     */
+/*  binary under MATHILDA_ZEROTEST_DIFF=1 additionally aborts on   */
+/*  any FLINT-vs-classical disagreement.                           */
+/* ============================================================== */
+
+/* Kernel generators expand atomically: (Log[x]+1)^3 - its expansion == 0. */
+static void test_flint_kernel_log_cube_zero(void) {
+    assert_pzq("PossibleZeroQ[(Log[x] + 1)^3 - Expand[(Log[x] + 1)^3]]", "True");
+}
+/* Several distinct kernel generators sharing an inner symbol stay independent. */
+static void test_flint_kernel_multi_zero(void) {
+    assert_pzq(
+        "PossibleZeroQ[(Log[x] + Sin[x] + x)^2 - Expand[(Log[x] + Sin[x] + x)^2]]",
+        "True");
+}
+/* x^x is one generator; x is another — a genuine multi-generator identity. */
+static void test_flint_kernel_powtower_zero(void) {
+    assert_pzq("PossibleZeroQ[(x^x + x)^2 - x^(2 x) - 2 x^x x - x^2]", "True");
+}
+/* Rational coefficients over Q must be carried exactly by fmpq_mpoly. */
+static void test_flint_kernel_rational_coeff_zero(void) {
+    assert_pzq(
+        "PossibleZeroQ[(1/3) Log[x]^2 + (2/5) Log[x] - Expand[(1/3) Log[x]^2 + (2/5) Log[x]]]",
+        "True");
+}
+/* A near-miss: same shape but one coefficient off — provably non-zero. */
+static void test_flint_kernel_nonzero(void) {
+    assert_pzq("PossibleZeroQ[(Log[x] + 1)^2 - Log[x]^2 - 2 Log[x]]", "False");
+}
+static void test_flint_kernel_nonzero_multi(void) {
+    assert_pzq("PossibleZeroQ[Sin[x] Cos[y] - Cos[y] Sin[x] + Sin[x]]", "False");
+}
+/* Orderless commuting kernels cancel to zero. */
+static void test_flint_kernel_commute_zero(void) {
+    assert_pzq("PossibleZeroQ[Sin[x] Cos[y] - Cos[y] Sin[x]]", "True");
+}
+/* Decline cases: FLINT can't model these coefficients, so is_zero_poly must
+ * fall back to the classical path and still return the right verdict. */
+static void test_flint_decline_pi_coeff_zero(void) {
+    assert_pzq("PossibleZeroQ[Pi Log[x] - Log[x] Pi]", "True");
+}
+static void test_flint_decline_complex_coeff_zero(void) {
+    assert_pzq("PossibleZeroQ[(2 + 3 I) x - x (2 + 3 I)]", "True");
+}
+static void test_flint_decline_frac_power_nonzero(void) {
+    /* x^(1/2) is not a polynomial in x — classical returns non-zero. */
+    assert_pzq("PossibleZeroQ[Sqrt[x] + 1]", "False");
+}
+
+/* ---- Differential fuzzer over random kernel polynomials ---------------- *
+ * Builds random polynomials in a fixed generator set that mixes bare symbols
+ * and opaque kernels, then asserts the two invariants that must hold for ANY
+ * polynomial P:  P - Expand[P] == 0  and  P - Expand[P] + g != 0  (g a
+ * generator). Deterministic (fixed-seed LCG) so failures reproduce. Under
+ * MATHILDA_ZEROTEST_DIFF=1 every one of these calls also cross-checks the
+ * FLINT and classical verdicts inside is_zero_poly and aborts on any mismatch,
+ * making this the primary correctness gate for the accelerator. */
+static uint64_t fz_state;
+static void fz_seed(uint64_t s) { fz_state = s ? s : 1; }
+static uint32_t fz_rand(void) {
+    /* SplitMix64 step — good distribution, fully deterministic. */
+    fz_state += 0x9E3779B97F4A7C15ULL;
+    uint64_t z = fz_state;
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+    z = z ^ (z >> 31);
+    return (uint32_t)z;
+}
+
+/* The generator alphabet the fuzzer draws from: bare symbols and kernels that
+ * collect_variables treats as opaque indeterminates. */
+static const char* const FZ_GENS[] = {
+    "x", "y", "Log[x]", "Sin[y]", "x^x", "Cos[x]", "z"
+};
+#define FZ_NGEN ((int)(sizeof(FZ_GENS) / sizeof(FZ_GENS[0])))
+
+/* Append a random monomial "c g1^e1 g2^e2 ..." to buf. Returns bytes written. */
+static void fz_build_poly(char* buf, size_t cap, int nterms) {
+    size_t len = 0;
+    buf[0] = '\0';
+    for (int t = 0; t < nterms; t++) {
+        char term[256];
+        int64_t num = (int64_t)(fz_rand() % 9) + 1;          /* 1..9 */
+        int64_t den = (int64_t)(fz_rand() % 4) + 1;          /* 1..4 */
+        int sign = (fz_rand() & 1) ? 1 : -1;
+        int n = snprintf(term, sizeof term, "%s%lld/%lld",
+                         sign < 0 ? "-" : "+", (long long)num, (long long)den);
+        int ngfac = 1 + (int)(fz_rand() % 3);                /* 1..3 gens */
+        for (int f = 0; f < ngfac; f++) {
+            const char* g = FZ_GENS[fz_rand() % FZ_NGEN];
+            int e = 1 + (int)(fz_rand() % 3);                /* exp 1..3 */
+            n += snprintf(term + n, sizeof term - (size_t)n, " %s^%d", g, e);
+        }
+        if (len + (size_t)n + 1 >= cap) break;
+        memcpy(buf + len, term, (size_t)n + 1);
+        len += (size_t)n;
+    }
+    if (len == 0) snprintf(buf, cap, "1");
+}
+
+static void test_flint_fuzz_kernel_differential(void) {
+    fz_seed(0xC0FFEEULL);
+    char poly[4096], input[8300];
+    const int ITERS = 400;
+    for (int i = 0; i < ITERS; i++) {
+        int nterms = 2 + (int)(fz_rand() % 6);
+        fz_build_poly(poly, sizeof poly, nterms);
+
+        /* Invariant 1: P - Expand[P] is identically zero. */
+        snprintf(input, sizeof input,
+                 "PossibleZeroQ[(%s) - Expand[(%s)]]", poly, poly);
+        assert_pzq(input, "True");
+
+        /* Invariant 2: P - Expand[P] + g is non-zero for a generator g. */
+        const char* g = FZ_GENS[fz_rand() % FZ_NGEN];
+        snprintf(input, sizeof input,
+                 "PossibleZeroQ[(%s) - Expand[(%s)] + %s]", poly, poly, g);
+        assert_pzq(input, "False");
+    }
+}
+
+/* ============================================================== */
 /*  Main driver                                                   */
 /* ============================================================== */
 
@@ -903,6 +1032,19 @@ int main(void) {
     /* Group 14 — Large-tree performance guard (B2) */
     TEST(test_perf_large_algebraic_zero);
     TEST(test_perf_large_rational_nonzero_instant);
+
+    /* Group 15 — FLINT kernel-generator zero test + differential fuzzer */
+    TEST(test_flint_kernel_log_cube_zero);
+    TEST(test_flint_kernel_multi_zero);
+    TEST(test_flint_kernel_powtower_zero);
+    TEST(test_flint_kernel_rational_coeff_zero);
+    TEST(test_flint_kernel_nonzero);
+    TEST(test_flint_kernel_nonzero_multi);
+    TEST(test_flint_kernel_commute_zero);
+    TEST(test_flint_decline_pi_coeff_zero);
+    TEST(test_flint_decline_complex_coeff_zero);
+    TEST(test_flint_decline_frac_power_nonzero);
+    TEST(test_flint_fuzz_kernel_differential);
 
     printf("\nAll PossibleZeroQ tests passed.\n");
     return 0;

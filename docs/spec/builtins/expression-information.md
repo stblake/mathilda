@@ -129,7 +129,16 @@ Pipeline (each stage exits early on a definite verdict):
    The `False` is trusted only under this pure-rational gate; a
    transcendental head treated as an opaque indeterminate (`Sin[2 x] -
    2 Sin[x] Cos[x]`) can look like a non-zero polynomial and so defers to
-   the numeric sampler instead.
+   the numeric sampler instead. `is_zero_poly` itself is FLINT-accelerated:
+   the expanded expression is mapped to a packed `fmpq_mpoly` over its opaque
+   generators (free symbols **and** maximal non-polynomial kernels such as
+   `Log[x]`, `Sin[x]`, `x^x`) and settled with `fmpq_mpoly_is_zero`, replacing
+   the classical `CoefficientList` recursion that re-expanded a large
+   multivariate `Expr` at every level — an exponential fan-out on
+   multi-generator inputs. The verdict is bit-for-bit the classical one (same
+   generator set, exact rational arithmetic); FLINT declines back to the
+   classical predicate only for coefficients it cannot model (an inexact real,
+   an irrational constant such as `Pi`, or a `Complex` coefficient).
 3. **Numeric precision ladder** — for closed-form numeric inputs,
    numericalize at machine precision. A residual that is a non-trivial
    fraction of the operand scale is a genuine non-zero (`False`); a

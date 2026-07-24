@@ -16,6 +16,7 @@
 #include "attr.h"
 #include "eval.h"
 #include "poly.h"
+#include "expand.h"
 #include "sym_names.h"
 
 #ifdef USE_FLINT
@@ -333,6 +334,168 @@ Expr* flint_expand_polynomial(const Expr* e) {
     fmpq_mpoly_ctx_clear(ctx);
     varset_free(&vs);
     return out;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Kernel-aware zero test (accelerator for poly.c is_zero_poly)      */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Convert `e` to an fmpq_mpoly whose variables are the opaque generators in
+ * `gens` (as produced by poly.c's collect_variables): symbols AND maximal
+ * non-polynomial kernels (Log[x], Sin[x], x^x, …). Each whole node that is
+ * structurally equal to some gens[i] becomes fmpq_mpoly variable i and is NOT
+ * descended into — exactly the atomic treatment collect_variables/CoefficientList
+ * give a kernel, so the polynomial built here is the faithful expansion of `e`
+ * in those generators. Everything else must be a rational coefficient built from
+ * Plus / Times / Power(non-negative integer) / Integer / Bigint / Rational;
+ * anything FLINT cannot model (Complex, inexact real, a constant symbol such as
+ * Pi used as a coefficient, a non-integer/symbolic exponent) makes it return 0
+ * so the caller declines and the classical path decides.
+ *
+ * Returns 1 on success (out is set), 0 on decline (out left in a valid state).
+ * Note the generator check precedes the structural dispatch, so a bare symbol
+ * that is a generator is matched as a variable, and a constant symbol (never a
+ * generator) falls through to the EXPR_SYMBOL decline.
+ */
+static int to_mpoly_kernels(const Expr* e, fmpq_mpoly_t out,
+                            const fmpq_mpoly_ctx_t ctx,
+                            Expr* const* gens, int ngen) {
+    /* Whole-node generator match first: kernels are atomic. */
+    for (int i = 0; i < ngen; i++) {
+        if (expr_eq((Expr*)e, gens[i])) {
+            fmpq_mpoly_gen(out, i, ctx);
+            return 1;
+        }
+    }
+    switch (e->type) {
+        case EXPR_INTEGER:
+            fmpq_mpoly_set_si(out, e->data.integer, ctx);
+            return 1;
+        case EXPR_BIGINT: {
+            fmpq_t c; fmpq_init(c);
+            fmpz_set_mpz(fmpq_numref(c), e->data.bigint);
+            fmpz_one(fmpq_denref(c));
+            fmpq_mpoly_set_fmpq(out, c, ctx);
+            fmpq_clear(c);
+            return 1;
+        }
+        case EXPR_SYMBOL:
+            /* A free symbol is always a generator (matched above); reaching here
+             * means a constant symbol (Pi, E, …) — not representable over Q. */
+            return 0;
+        case EXPR_FUNCTION: {
+            const char* h = fn_head_name(e);
+            if (!h) return 0;
+            size_t n = e->data.function.arg_count;
+
+            if (strcmp(h, "Rational") == 0) {
+                if (n != 2) return 0;
+                fmpq_t c; fmpq_init(c);
+                if (!fmpz_from_int_expr(fmpq_numref(c), e->data.function.args[0]) ||
+                    !fmpz_from_int_expr(fmpq_denref(c), e->data.function.args[1])) {
+                    fmpq_clear(c);
+                    return 0;
+                }
+                fmpq_canonicalise(c);
+                fmpq_mpoly_set_fmpq(out, c, ctx);
+                fmpq_clear(c);
+                return 1;
+            }
+            if (strcmp(h, "Plus") == 0) {
+                fmpq_mpoly_zero(out, ctx);
+                fmpq_mpoly_t t; fmpq_mpoly_init(t, ctx);
+                int ok = 1;
+                for (size_t i = 0; i < n && ok; i++) {
+                    ok = to_mpoly_kernels(e->data.function.args[i], t, ctx, gens, ngen);
+                    if (ok) fmpq_mpoly_add(out, out, t, ctx);
+                }
+                fmpq_mpoly_clear(t, ctx);
+                return ok;
+            }
+            if (strcmp(h, "Times") == 0) {
+                fmpq_mpoly_one(out, ctx);
+                fmpq_mpoly_t t; fmpq_mpoly_init(t, ctx);
+                int ok = 1;
+                for (size_t i = 0; i < n && ok; i++) {
+                    ok = to_mpoly_kernels(e->data.function.args[i], t, ctx, gens, ngen);
+                    if (ok) fmpq_mpoly_mul(out, out, t, ctx);
+                }
+                fmpq_mpoly_clear(t, ctx);
+                return ok;
+            }
+            if (strcmp(h, "Power") == 0) {
+                if (n != 2) return 0;
+                const Expr* exp = e->data.function.args[1];
+                if (exp->type != EXPR_INTEGER || exp->data.integer < 0) return 0;
+                fmpq_mpoly_t b; fmpq_mpoly_init(b, ctx);
+                int ok = to_mpoly_kernels(e->data.function.args[0], b, ctx, gens, ngen);
+                if (ok) ok = fmpq_mpoly_pow_ui(out, b, (ulong)exp->data.integer, ctx);
+                fmpq_mpoly_clear(b, ctx);
+                return ok;
+            }
+            /* Any other head is either a generator (matched above) or out of
+             * scope for the ring — decline. */
+            return 0;
+        }
+        default:
+            /* EXPR_REAL / EXPR_MPFR / EXPR_STRING: not exact over Q. */
+            return 0;
+    }
+}
+
+int flint_mpoly_is_zero(const Expr* e) {
+    if (!e) return 1;   /* classical is_zero_poly_depth(NULL) == true */
+
+    /* Cheap literal shortcut (mirror is_zero_poly_depth's fast path). */
+    if (e->type == EXPR_INTEGER) return e->data.integer == 0 ? 1 : 0;
+
+    /* Decide zero-ness of expr_expand(e) — EXACTLY what the classical
+     * is_zero_poly_depth does. This matters for faithfulness: expansion performs
+     * kernel reductions the raw tree does not expose (e.g. Tan[k] Cos[k] ->
+     * Sin[k]), so a formal polynomial that is non-zero in the raw generators can
+     * expand to the true zero. Operating on the same expanded form guarantees the
+     * generator set and the verdict match the classical path bit-for-bit. The
+     * performance win is intact: this is ONE expansion feeding one packed FLINT
+     * zero test, versus the classical CoefficientList recursion that re-expands
+     * at every level (the multiplicative fan-out this project removes). */
+    Expr* ex = expr_expand((Expr*)e);
+    if (!ex) return -1;
+    if (ex->type == EXPR_INTEGER) {
+        int r = ex->data.integer == 0 ? 1 : 0;
+        expr_free(ex);
+        return r;
+    }
+    if (ex->type == EXPR_REAL) {
+        int r = ex->data.real == 0.0 ? 1 : 0;
+        expr_free(ex);
+        return r;
+    }
+
+    /* Generator set — IDENTICAL to the classical predicate's, by construction. */
+    size_t gc = 0, gcap = 16;
+    Expr** gens = malloc(sizeof(Expr*) * gcap);
+    if (!gens) { expr_free(ex); return -1; }
+    collect_variables(ex, &gens, &gc, &gcap);
+
+    /* One fmpq_mpoly variable per generator (ORD_LEX, arbitrary but consistent
+     * order — zero-ness is order-independent). A purely numeric input (gc == 0)
+     * still works: fmpq_mpoly over 0 generators is the constant ring Q. */
+    fmpq_mpoly_ctx_t ctx;
+    fmpq_mpoly_ctx_init(ctx, (slong)gc, ORD_LEX);
+    fmpq_mpoly_t P;
+    fmpq_mpoly_init(P, ctx);
+
+    int result = -1;   /* decline unless conversion succeeds */
+    if (to_mpoly_kernels(ex, P, ctx, gens, (int)gc))
+        result = fmpq_mpoly_is_zero(P, ctx) ? 1 : 0;
+
+    fmpq_mpoly_clear(P, ctx);
+    fmpq_mpoly_ctx_clear(ctx);
+    for (size_t i = 0; i < gc; i++) expr_free(gens[i]);
+    free(gens);
+    expr_free(ex);
+    return result;
 }
 
 /* Shared core: compute the multivariate GCD of a, b over Q[vars]. When
@@ -4153,6 +4316,7 @@ int   flint_bridge_available(void) { return 0; }
 Expr* flint_multivariate_gcd(const Expr* a, const Expr* b) { (void)a; (void)b; return NULL; }
 Expr* flint_expand_polynomial(const Expr* e) { (void)e; return NULL; }
 int   flint_is_polynomial_over_q(const Expr* e) { (void)e; return 0; }
+int   flint_mpoly_is_zero(const Expr* e) { (void)e; return -1; }
 Expr* flint_algebraic_field_normalize(const Expr* e) { (void)e; return NULL; }
 Expr* flint_algebraic_field_canonical(const Expr* e) { (void)e; return NULL; }
 Expr* flint_algebraic_field_together(const Expr* e) { (void)e; return NULL; }

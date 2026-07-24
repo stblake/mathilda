@@ -86,6 +86,30 @@ Expr* flint_expand_polynomial(const Expr* e);
 int flint_is_polynomial_over_q(const Expr* e);
 
 /*
+ * Decide whether `e` is the zero polynomial in its opaque generators — the SAME
+ * generator set poly.c's is_zero_poly / collect_variables use: bare symbols AND
+ * maximal non-polynomial kernels (Log[x], Sin[x], x^x, …), each treated as an
+ * independent indeterminate. This is the FLINT-backed accelerator for
+ * is_zero_poly: it converts `e` (with every generator mapped to an fmpq_mpoly
+ * variable) to packed FLINT arithmetic and calls fmpq_mpoly_is_zero, turning the
+ * classical per-level Expr-expand / CoefficientList recursion — exponential on
+ * multi-generator inputs — into one linear-ish conversion.
+ *
+ * Returns:
+ *    1  -> provably the zero polynomial,
+ *    0  -> provably non-zero,
+ *   -1  -> declined (FLINT absent, or a generator/coefficient FLINT can't model
+ *          — an inexact real, an irrational/symbolic constant such as Pi used as
+ *          a coefficient, a Complex coefficient, a non-integer/symbolic exponent,
+ *          or FLINT-internal overflow). The caller falls back to the classical
+ *          is_zero_poly_depth, which decides the same verdict.
+ *
+ * Deterministic and pure (no randomness), matching the classical predicate's
+ * contract. Never mutates `e`. Always returns -1 without FLINT.
+ */
+int flint_mpoly_is_zero(const Expr* e);
+
+/*
  * Native base-field Risch differential-equation solver for the exponential
  * tower, over Q(xvar): solves  Dq + f q = g  (D = d/d(xvar)) for the solution
  * y, where f is a polynomial (f = i·u' for e^u, u a polynomial in xvar, so

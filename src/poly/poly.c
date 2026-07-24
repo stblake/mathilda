@@ -1152,7 +1152,46 @@ static bool is_zero_poly_depth(Expr* e, int depth) {
     return res;
 }
 
+/*
+ * Public zero-polynomial predicate. Dispatches to the FLINT-backed
+ * flint_mpoly_is_zero (packed fmpq_mpoly arithmetic — linear-ish where the
+ * classical CoefficientList recursion fans out multiplicatively on
+ * multi-generator inputs). flint_mpoly_is_zero uses the IDENTICAL generator set
+ * (poly.c collect_variables), so its verdict is bit-for-bit the classical one;
+ * it returns -1 only when FLINT cannot model a generator/coefficient, in which
+ * case we fall back to the classical is_zero_poly_depth (which decides the same
+ * verdict, just slower). Without FLINT the accelerator is a -1 stub and this is
+ * exactly the classical path.
+ *
+ * Setting MATHILDA_ZEROTEST_DIFF in the environment turns on a differential
+ * self-check: BOTH paths run on every call and any disagreement aborts the
+ * process with the offending expression. This is the primary correctness gate
+ * for the accelerator (run the whole suite + fuzzer under it); it is off by
+ * default and adds no cost to normal runs.
+ */
 bool is_zero_poly(Expr* e) {
+    int f = flint_mpoly_is_zero(e);
+
+    static int diff_mode = -1;
+    if (diff_mode < 0)
+        diff_mode = getenv("MATHILDA_ZEROTEST_DIFF") ? 1 : 0;
+
+    if (diff_mode) {
+        bool classical = is_zero_poly_depth(e, 0);
+        if (f >= 0 && ((f == 1) != classical)) {
+            char* s = expr_to_string(e);
+            fprintf(stderr,
+                    "\n*** is_zero_poly DISAGREEMENT: flint=%d classical=%d\n"
+                    "    expr: %s\n",
+                    f, (int)classical, s ? s : "<null>");
+            free(s);
+            fflush(stderr);
+            abort();
+        }
+        return classical;   /* trust the reference implementation while auditing */
+    }
+
+    if (f >= 0) return f == 1;
     return is_zero_poly_depth(e, 0);
 }
 
