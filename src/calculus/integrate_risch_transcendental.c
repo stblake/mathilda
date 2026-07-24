@@ -510,6 +510,15 @@ Expr* builtin_rischtranscendental(Expr* res) {
     /* The integration variable must be a single symbol. */
     if (x->type != EXPR_SYMBOL) return NULL;
 
+    /* Scope gate: the recursive transcendental Risch algorithm is a decision
+     * procedure ONLY over a purely transcendental tower over C(x).  An algebraic
+     * function of x — a radical (Sqrt[1+Sin[x]] = (1+Sin[x])^(1/2)), Surd, or
+     * Root of x — puts the integrand in an algebraic extension it does not
+     * handle, so bail immediately rather than churn through rt_integrate (which
+     * would decline anyway, after needless work).  An x-free algebraic constant
+     * (Sqrt[2]) is a legitimate transcendental coefficient and is NOT flagged. */
+    if (rt_has_algebraic_of_x(f, x)) return NULL;
+
     /* Correct by construction: rt_integrate returns a result only behind an
      * exact certificate, so no differentiation check is applied (a Risch
      * integrator is a decision procedure, not a guess-and-verify search).

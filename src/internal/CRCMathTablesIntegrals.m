@@ -1386,15 +1386,20 @@ IntegrateTable[Sqrt[1 - Cos[a_. x_]], x_] /; FreeQ[a, x] := -(2/a) Cot[(a x)/2] 
 (* Formula 395: branch-correct counterpart.  See Formula 394. *)
 IntegrateTable[Sqrt[1 + Cos[a_. x_]], x_] /; FreeQ[a, x] := (2/a) Tan[(a x)/2] Sqrt[1 + Cos[a x]];
 
-(* Formula 396: Primary Branch *)
-IntegrateTable[Sqrt[1 + Sin[x_]], x_] := 2 (Sin[x/2] - Cos[x/2]);
+(* Formula 396: branch-correct.  The classical primary-branch form
+   2 (Sin[x/2] - Cos[x/2]) differentiates to Cos[x/2] + Sin[x/2], but
+   Sqrt[1 + Sin[x]] = |Sin[x/2] + Cos[x/2]|, so it is correct only where
+   that sum is >= 0.  Keeping the radical literally, -2 Cos[x]/Sqrt[1+Sin[x]]
+   differentiates to (Sin^2 + 2 Sin + 1)/(1+Sin)^(3/2) = Sqrt[1+Sin[x]] on
+   every branch. *)
+IntegrateTable[Sqrt[1 + Sin[x_]], x_] := -((2 Cos[x])/Sqrt[1 + Sin[x]]);
 
 (* Formula 397: branch-correct.  The classical form 2 (Sin[x/2] + Cos[x/2])
    differentiates to Cos[x/2] - Sin[x/2], matching Sqrt[1 - Sin[x]] only
-   when Cos[x/2] - Sin[x/2] >= 0.  Using u = Pi/2 - x and the branch-correct
-   Formula 394 yields the form below, whose derivative equals
-   Sqrt[1 - Sin[x]] on every branch. *)
-IntegrateTable[Sqrt[1 - Sin[x_]], x_] := 2 Tan[Pi/4 + x/2] Sqrt[1 - Sin[x]];
+   when Cos[x/2] - Sin[x/2] >= 0.  Keeping the radical literally,
+   2 Cos[x]/Sqrt[1-Sin[x]] differentiates to (Sin^2 - 2 Sin + 1)/(1-Sin)^(3/2)
+   = Sqrt[1-Sin[x]] on every branch. *)
+IntegrateTable[Sqrt[1 - Sin[x_]], x_] := (2 Cos[x])/Sqrt[1 - Sin[x]];
 
 (* Formulas 398-401: branch-correct.  The classical primary-branch forms
    Sqrt[2] Log[Tan[x/4 (+ shift)]] are real on only every other inter-pole

@@ -16,12 +16,25 @@ else
   BUILD_PLATFORM := Windows
 endif
 
-# Compiler. Defaults to the plain `gcc` on PATH; override on the command line
-# (e.g. `make CC=gcc-16`) if a specific version is needed. Do NOT hardcode a
-# versioned name here — not every host has it (Linux distros generally ship
-# `gcc` only, macOS Homebrew ships `gcc-NN`). A plain `=` (not `?=`) is required:
-# Make pre-defines CC=cc as a built-in, which would defeat `?=`.
-CC = gcc
+# Compiler. Mathilda must be built with a REAL GCC, never Apple's clang shim:
+# on macOS the plain `gcc` is a symlink to Apple clang, so a naive `CC = gcc`
+# silently builds with LLVM (the $Version banner then reads "Apple LLVM ...").
+# Auto-detect a genuine GCC by trying the newest Homebrew `gcc-NN` first and
+# falling back to a plain `gcc` (which IS real GCC on most Linux distros). We
+# only pick a name when CC was not set explicitly, so `make CC=clang` (or any
+# other override on the command line / in the environment) is still honoured.
+# A versioned name is fine here because it is *tried*, not hardcoded — hosts
+# without it fall through to the next candidate.
+ifeq ($(origin CC),default)
+  CC := $(shell for c in gcc-16 gcc-15 gcc-14 gcc-13 gcc; do \
+                  command -v $$c >/dev/null 2>&1 && { echo $$c; break; }; \
+                done)
+  # Warn loudly if the only `gcc` we found is really Apple clang — the build
+  # still proceeds, but the operator should install a real GCC (brew install gcc).
+  ifneq ($(shell $(CC) --version 2>/dev/null | grep -ci clang),0)
+    $(warning Mathilda: '$(CC)' is Apple clang, not real GCC — install Homebrew GCC (brew install gcc) for a supported build.)
+  endif
+endif
 CFLAGS = -O3 -std=c99 -Wall -Wextra -g -I./src -I./src/list -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/graph -I./src/strings -I./src/strings/regex -I./src/ffi -I/usr/include -I/usr/local/include
 
 # Readline is available on macOS and Linux but not on Windows (MinGW).
