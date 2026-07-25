@@ -1120,9 +1120,14 @@ stencils. The grid and stencil are set with
 `Method -> {"MethodOfLines", "SpatialDiscretization" -> {"TensorProductGrid", "MinPoints" -> n, "DifferenceOrder" -> q}}`.
 Diffusion-dominated (stiff) problems should use `Method -> "BDF"` (auto-selected
 for parabolic problems). **Two spatial dimensions** are also supported on a
-rectangle — `NDSolve[eqns, u, {t,..}, {x,..}, {y,..}]` — with Dirichlet
-conditions on all four edges and unmixed spatial derivatives (2-D heat, wave,
-advection–diffusion); the result is a 3-D `InterpolatingFunction` `u[t,x,y]`.
+rectangle — `NDSolve[eqns, u, {t,..}, {x,..}, {y,..}]` — with general linear
+boundary conditions (**Dirichlet** `u[t,x0,y]==g`, **Neumann**
+`Derivative[0,1,0][u][t,x0,y]==g`, **Robin** `a u + b u_x + r == 0`, and their
+`y`-edge analogues) on each of the four edges and unmixed spatial derivatives
+(2-D heat, wave, advection–diffusion); the result is a 3-D
+`InterpolatingFunction` `u[t,x,y]`. As in 1-D, each Neumann/Robin boundary node
+is eliminated into the interior stencils via a one-sided first-derivative
+formula; corners resolve through the transverse edge.
 **Complex-valued PDEs (Schrödinger).** When the solved RHS carries the imaginary
 unit (e.g. `I D[u[t,x],t] == -D[u[t,x],{x,2}]`), the front-end **realifies** the
 system — each complex unknown is split into interleaved (Re, Im) real unknowns
@@ -1143,7 +1148,9 @@ cubic-Hermite interpolation (query at MPFR node abscissae for full precision).
 
 Adaptive-implicit stepping (variable-step variable-order BDF with Newton-failure
 recovery) handles the incompatible IC/BC corners that previously diverged.
-Remaining (deferred): Neumann/Robin/periodic and mixed derivatives in 2-D.
+Remaining (deferred): periodic BCs and mixed spatial derivatives in 2-D (a
+periodic coupling `u[t,xmin,y]==u[t,xmax,y]` is detected and reported rather than
+mis-solved).
 
 ### Beyond / unlike Mathematica's NDSolve
 

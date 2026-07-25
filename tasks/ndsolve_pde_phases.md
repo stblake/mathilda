@@ -26,5 +26,11 @@ extensive unit/stress tests + valgrind clean + docs/changelog + commit.
 - [x] **Stiff arbitrary precision** — MPFR variable-order BDF (`mpfr_bdf_dir`):
       MPFR state/coeffs/residual/solve, double Jacobian. Stiff ODEs+PDEs at
       WP>machine. (`ndsolve_mpfr.c`; +test_bdf_mpfr_stiff) — DONE.
-- [ ] **2-D general BCs** (Neumann/Robin/periodic + mixed derivs); **robustness
-      cluster** (BackwardEuler maxsteps, complex ODE realification, x0!=xmin).
+- [x] **2-D general BCs (Neumann/Robin)** — the tensor-grid solver
+      (`nd_mol_solve_2d`) now accepts `a·u + b·u_n + r == 0` on each edge
+      (Dirichlet/Neumann/Robin), eliminating boundary nodes into interior
+      stencils (`nd_bc_eliminate_2d`); corners resolve via the transverse edge.
+      Periodic + mixed derivatives stay deferred but are detected/reported.
+      (+test_pde_2d_neumann, +test_pde_2d_robin_steady) — DONE.
+- [ ] **2-D periodic + mixed derivatives**; **robustness cluster**
+      (BackwardEuler maxsteps, complex ODE realification, x0!=xmin).

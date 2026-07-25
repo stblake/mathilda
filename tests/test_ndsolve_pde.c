@@ -651,6 +651,73 @@ static void test_pde_2d_wave(void) {
 }
 
 /* ============================================================= *
+ *  18b. 2-D insulated heat (homogeneous Neumann on all edges).  *
+ *       IC cos(pi x) cos(pi y); the exact PDE solution decays as *
+ *       e^{-2 pi^2 t} cos(pi x) cos(pi y).  Checks accuracy and  *
+ *       grid convergence (spatial error shrinks as nx grows).    *
+ * ============================================================= */
+static double heat2d_neumann_err(int n, double T, double xq, double yq, double exact) {
+    char buf[1500], q[128];
+    snprintf(buf, sizeof buf,
+        "hn = NDSolve[{D[u[t,x,y],t]==D[u[t,x,y],{x,2}]+D[u[t,x,y],{y,2}], "
+        "u[0,x,y]==Cos[Pi x] Cos[Pi y], "
+        "Derivative[0,1,0][u][t,0,y]==0, Derivative[0,1,0][u][t,1,y]==0, "
+        "Derivative[0,0,1][u][t,x,0]==0, Derivative[0,0,1][u][t,x,1]==0}, u, "
+        "{t,0,%.4f}, {x,0,1}, {y,0,1}, Method->{\"MethodOfLines\","
+        "\"SpatialDiscretization\"->{\"TensorProductGrid\",\"MinPoints\"->%d,"
+        "\"DifferenceOrder\"->4}}, MaxSteps->4000];", T, n);
+    run(buf);
+    snprintf(q, sizeof q, "First[u[%.4f, %.8f, %.8f] /. hn]", T, xq, yq);
+    double v;
+    return eval_double(q, &v) ? fabs(v - exact) : 1e9;
+}
+static void test_pde_2d_neumann(void) {
+    const double T = 0.03;
+    double xq = 0.25, yq = 0.25;
+    double exact = exp(-2.0 * PI * PI * T) * cos(PI * xq) * cos(PI * yq);
+    double e15 = heat2d_neumann_err(15, T, xq, yq, exact);
+    double e29 = heat2d_neumann_err(29, T, xq, yq, exact);
+    printf("ok:   2D Neumann heat nx=15 err=%.2e nx=29 err=%.2e\n", e15, e29);
+    check_true("2D Neumann accurate", e29 < 5e-4, "|err| < 5e-4 at nx=29");
+    check_true("2D Neumann converges", e29 < e15, "finer grid smaller error");
+}
+
+/* ============================================================= *
+ *  18c. 2-D Robin/Neumann steady state.  u = x + y is harmonic  *
+ *       (u_xx=u_yy=0), so u_t=0 and it is stationary.  Two edges  *
+ *       carry a genuine Robin condition a*u + b*u_n + r == 0     *
+ *       (both coefficients nonzero), two carry Neumann.  The FD   *
+ *       elimination is exact for a linear field, so interior,    *
+ *       edge, and corner values all reproduce x+y to ~machine.   *
+ * ============================================================= */
+static void test_pde_2d_robin_steady(void) {
+    const double T = 0.1;
+    run("rb = NDSolve[{D[u[t,x,y],t]==D[u[t,x,y],{x,2}]+D[u[t,x,y],{y,2}], "
+        "u[0,x,y]==x+y, "
+        "Derivative[0,1,0][u][t,0,y]==1, "
+        "u[t,1,y]+Derivative[0,1,0][u][t,1,y]==2+y, "
+        "Derivative[0,0,1][u][t,x,0]==1, "
+        "u[t,x,1]+Derivative[0,0,1][u][t,x,1]==2+x}, u, "
+        "{t,0,0.1}, {x,0,1}, {y,0,1}, "
+        "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->13,\"DifferenceOrder\"->4}}, "
+        "MaxSteps->4000];");
+    struct { double x, y; const char* tag; } probes[] = {
+        { 0.3, 0.7, "interior" },   /* interior node               */
+        { 0.0, 0.5, "x=0 Neumann" },/* left edge (Neumann)         */
+        { 1.0, 0.5, "x=1 Robin"    },/* right edge (Robin)          */
+        { 0.5, 1.0, "y=1 Robin"    },/* top edge (Robin)            */
+        { 0.0, 0.0, "corner"       },/* corner (two edges meet)     */
+    };
+    char q[128], lbl[64];
+    for (size_t i = 0; i < sizeof probes / sizeof probes[0]; i++) {
+        snprintf(q, sizeof q, "First[u[%.4f, %.6f, %.6f] /. rb]", T, probes[i].x, probes[i].y);
+        snprintf(lbl, sizeof lbl, "2D Robin steady (%s)", probes[i].tag);
+        CHECK(lbl, q, probes[i].x + probes[i].y, 1e-8);
+    }
+}
+
+/* ============================================================= *
  *  19. Viscous Burgers (nonlinear advection):                   *
  *      u_t = nu u_xx - u u_x + S, manufactured U=e^{-t}sin(pi x).*
  *      Exercises the u*u_x nonlinearity via the symbolic sampler.*
@@ -793,6 +860,8 @@ int main(void) {
     test_operator_scale();
     test_pde_2d_heat();
     test_pde_2d_wave();
+    test_pde_2d_neumann();
+    test_pde_2d_robin_steady();
     test_burgers();
     test_mpfr_pde();
     test_schrodinger();
