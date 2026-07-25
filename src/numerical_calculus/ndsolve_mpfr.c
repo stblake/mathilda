@@ -283,6 +283,105 @@ static Expr* mpfr_build_result(NdProblem* P, const MpSol* sol, long out_bits) {
     return outer;
 }
 
+/* Evaluate a (bound) boundary expression to mpfr at the current binding. */
+static bool mp_eval_expr(NdProblem* P, Expr* e, mpfr_t out, long bits) {
+    arith_warnings_mute_push();
+    Expr* raw = eval_and_free(expr_copy(e));
+    arith_warnings_mute_pop();
+    if (!raw) return false;
+    Expr* num = numericalize(raw, P->spec);
+    expr_free(raw);
+    mpfr_t im; mpfr_init2(im, bits);
+    bool inexact;
+    bool ok = num && get_approx_mpfr(num, out, im, &inexact) && mpfr_number_p(out);
+    mpfr_clear(im);
+    expr_free(num);
+    return ok;
+}
+
+/* Run the shared mpfr integration of P into `sol`; returns the status. */
+static NdStatus mpfr_integrate(NdProblem* P, const NdOpts* o, const NdStepper* S,
+                               MpSol* sol, long bits) {
+    NdTol tol = nd_resolve_tol(o);
+    bool adaptive = !(S && S->name && strcmp(S->name, "RK4") == 0);
+    mpfr_t t0m; mpfr_init2(t0m, bits); mpfr_set_d(t0m, P->t0, MPFR_RNDN);
+    mpfr_t* Y0 = mp_vec(P->d, bits);
+    mpfr_t* f0 = mp_vec(P->d, bits);
+    for (size_t i = 0; i < P->d; i++) mpfr_set_d(Y0[i], P->Y0[i], MPFR_RNDN);
+    NdStatus st = ND_OK;
+    if (!nd_rhs_mpfr(P, t0m, Y0, f0, bits)) st = ND_ERR_SAMPLE;
+    else {
+        mpsol_push(sol, t0m, Y0, f0);
+        int64_t budget = (o->max_steps > 0) ? o->max_steps : 10000;
+        if (P->tmax > P->t0) st = mpfr_dir(P, o, sol, tol, adaptive, P->tmax, bits, &budget);
+        if (P->tmin < P->t0) { NdStatus s2 = mpfr_dir(P, o, sol, tol, adaptive, P->tmin, bits, &budget);
+                               if (st == ND_OK) st = s2; }
+    }
+    mp_vec_free(Y0, P->d); mp_vec_free(f0, P->d); mpfr_clear(t0m);
+    mpsol_sort(sol);
+    return st;
+}
+
+Expr* nd_solve_mpfr_mol(NdProblem* P, const NdOpts* o, const NdStepper* S,
+                        const NdMolGrid* g) {
+    long out_bits = o->wp_bits > 53 ? o->wp_bits : 53;
+    long bits = out_bits + 64;
+    MpSol sol; mpsol_init(&sol, P->d, bits);
+    NdStatus st = mpfr_integrate(P, o, S, &sol, bits);
+    (void)st;
+    size_t n = sol.n, d = sol.d, nx = g->nx;
+    Expr* result = NULL;
+    if (n >= 2) {
+        size_t npts = n * nx;
+        Expr** entries = malloc(sizeof(Expr*) * npts);
+        size_t p = 0;
+        mpfr_t xg, val, hb; mpfr_init2(xg, out_bits); mpfr_init2(val, out_bits); mpfr_init2(hb, out_bits);
+        mpfr_set_d(hb, g->h, MPFR_RNDN);
+        for (size_t i = 0; i < n; i++) {
+            /* bind t and all states for boundary-value evaluation */
+            nd_bind_set(&P->bind_t, expr_new_mpfr_copy(sol.t[i]));
+            for (size_t k = 0; k < d; k++) nd_bind_set(&P->bind_y[k], expr_new_mpfr_copy(sol.Y[i*d + k]));
+            for (size_t gi = 0; gi < nx; gi++) {
+                mpfr_mul_ui(xg, hb, (unsigned long)gi, MPFR_RNDN);
+                mpfr_add_d(xg, xg, g->xmin, MPFR_RNDN);
+                if (g->periodic) {
+                    size_t gg = (gi == nx - 1) ? 0 : gi;
+                    mpfr_set(val, sol.Y[i*d + gg * (size_t)g->torder + 0], MPFR_RNDN);
+                } else if (gi == 0) {
+                    if (!mp_eval_expr(P, g->bc_left, val, bits)) mpfr_set_zero(val, 1);
+                } else if (gi == nx - 1) {
+                    if (!mp_eval_expr(P, g->bc_right, val, bits)) mpfr_set_zero(val, 1);
+                } else {
+                    mpfr_set(val, sol.Y[i*d + (gi - 1) * (size_t)g->torder + 0], MPFR_RNDN);
+                }
+                Expr* coord[2] = { expr_new_mpfr_copy(sol.t[i]), expr_new_mpfr_copy(xg) };
+                Expr* coordL = expr_new_function(expr_new_symbol(SYM_List), coord, 2);
+                Expr* pair[2] = { coordL, expr_new_mpfr_copy(val) };
+                entries[p++] = expr_new_function(expr_new_symbol(SYM_List), pair, 2);
+            }
+        }
+        mpfr_clear(xg); mpfr_clear(val); mpfr_clear(hb);
+        Expr* data = expr_new_function(expr_new_symbol(SYM_List), entries, npts);
+        free(entries);
+        Expr* ifun = eval_and_free(expr_new_function(expr_new_symbol(SYM_Interpolation), &data, 1));
+        if (head_is(ifun, SYM_InterpolatingFunction)) {
+            Expr* lhs;
+            if (g->applied) {
+                Expr* ar[2] = { expr_new_symbol(g->tvar), expr_new_symbol(g->xvar) };
+                lhs = expr_new_function(expr_new_symbol(g->fname), ar, 2);
+                Expr* ar2[2] = { expr_new_symbol(g->tvar), expr_new_symbol(g->xvar) };
+                ifun = expr_new_function(ifun, ar2, 2);
+            } else lhs = expr_new_symbol(g->fname);
+            Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
+                                           (Expr*[]){ lhs, ifun }, 2);
+            Expr* inner = expr_new_function(expr_new_symbol(SYM_List), &rule, 1);
+            result = expr_new_function(expr_new_symbol(SYM_List), &inner, 1);
+        } else expr_free(ifun);
+    }
+    mpsol_free(&sol);
+    return result;
+}
+
 Expr* nd_solve_mpfr(NdProblem* P, const NdOpts* o, const NdStepper* S) {
     long out_bits = o->wp_bits > 53 ? o->wp_bits : 53;
     long bits = out_bits + 64;               /* guard digits */

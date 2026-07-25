@@ -313,6 +313,26 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o, const char* forced_method);
  * pair (or fixed RK4 when the requested method is RK4) and returns the assembled
  * MPFR InterpolatingFunction rule list, or NULL on failure. */
 Expr* nd_solve_mpfr(NdProblem* P, const NdOpts* o, const NdStepper* S);
+
+/* Grid parameters describing a 1-D method-of-lines problem, so the MPFR path can
+ * assemble the 2-D InterpolatingFunction over (t, x). */
+typedef struct {
+    const char* fname;
+    bool        applied;
+    const char* tvar;
+    const char* xvar;
+    double      xmin, h;
+    size_t      nx;
+    int         torder;
+    bool        periodic;
+    Expr*       bc_left;    /* boundary value exprs (in t, and states for       */
+    Expr*       bc_right;   /* Neumann/Robin), or NULL when periodic             */
+} NdMolGrid;
+
+/* Integrate a 1-D MoL NdProblem at MPFR precision and assemble the 2-D MPFR
+ * InterpolatingFunction u[t, x].  Returns NULL on failure. */
+Expr* nd_solve_mpfr_mol(NdProblem* P, const NdOpts* o, const NdStepper* S,
+                        const NdMolGrid* g);
 #endif
 
 #endif /* NDSOLVE_COMMON_H */

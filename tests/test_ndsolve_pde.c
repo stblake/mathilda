@@ -644,6 +644,59 @@ static void test_pde_2d_wave(void) {
         }
 }
 
+/* ============================================================= *
+ *  19. Viscous Burgers (nonlinear advection):                   *
+ *      u_t = nu u_xx - u u_x + S, manufactured U=e^{-t}sin(pi x).*
+ *      Exercises the u*u_x nonlinearity via the symbolic sampler.*
+ * ============================================================= */
+static double burgers_err(int nx, double T, double xq, double exact) {
+    char buf[1500], q[96];
+    snprintf(buf, sizeof buf,
+        "bg = NDSolve[{D[u[t,x],t]==(1/10)D[u[t,x],{x,2}] - u[t,x] D[u[t,x],x] "
+        "+ ((1/10)Pi^2-1)Exp[-t]Sin[Pi x] + Pi Exp[-2t]Sin[Pi x]Cos[Pi x], "
+        "u[0,x]==Sin[Pi x], u[t,0]==0, u[t,1]==0}, u, {t,0,%.4f}, {x,0,1}, "
+        "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->4}}, "
+        "Method->\"BDF\", MaxSteps->3000];", T, nx);
+    run(buf);
+    snprintf(q, sizeof q, "First[u[%.4f, %.4f] /. bg]", T, xq);
+    double v;
+    return eval_double(q, &v) ? fabs(v - exact) : 1e9;
+}
+static void test_burgers(void) {
+    const double T = 0.3, xq = 0.5, exact = exp(-T) * sin(PI * xq);
+    double e21 = burgers_err(21, T, xq, exact);
+    double e41 = burgers_err(41, T, xq, exact);
+    printf("ok:   Burgers nx=21 err=%.2e  nx=41 err=%.2e\n", e21, e41);
+    check_true("viscous Burgers accurate", e41 < 1e-4, "|err| < 1e-4 at nx=41");
+    check_true("Burgers converges (u u_x nonlinearity)", e41 < e21, "refines");
+}
+
+/* ============================================================= *
+ *  20. Arbitrary precision (MPFR) PDE — non-stiff wave.         *
+ *      The output is an MPFR-valued InterpolatingFunction; node  *
+ *      values carry the working precision.                      *
+ * ============================================================= */
+static void test_mpfr_pde(void) {
+    char hd[64];
+    run("wv = NDSolve[{D[u[t,x],{t,2}]==D[u[t,x],{x,2}], u[0,x]==Sin[Pi x], "
+        "Derivative[1,0][u][0,x]==0, u[t,0]==0, u[t,1]==0}, u, {t,0,1/50}, "
+        "{x,0,1}, Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->7,\"DifferenceOrder\"->2}}, "
+        "WorkingPrecision->25, PrecisionGoal->8, MaxSteps->5000];");
+    eval_head("wv", hd, sizeof hd);
+    check_true("MPFR PDE returns a solution", strcmp(hd, "List") == 0, hd[0] ? hd : "(null)");
+    /* correctness: the value at the initial slice reproduces the IC */
+    CHECK("MPFR PDE u(0,1/3) = Sin[Pi/3]",
+          "First[u[N[0,25], N[1/3,25]] /. wv]", sin(PI / 3.0), 1e-12);
+    /* high precision: the node value matches the reference well beyond machine
+     * epsilon (the subtraction is done in MPFR, then read back). */
+    double dv;
+    bool ok = eval_double("First[u[N[0,25], N[1/2,25]] /. wv] - N[1, 25]", &dv);
+    check_true("MPFR node value beyond machine precision", ok && fabs(dv) < 1e-17,
+               "|u(0,1/2) - 1| < 1e-17");
+}
+
 int main(void) {
     mute_stderr_once();
     core_init();
@@ -667,6 +720,8 @@ int main(void) {
     test_operator_scale();
     test_pde_2d_heat();
     test_pde_2d_wave();
+    test_burgers();
+    test_mpfr_pde();
 
     if (failures == 0) printf("\nAll NDSolve PDE tests passed.\n");
     else printf("\n%d NDSolve PDE test(s) FAILED.\n", failures);

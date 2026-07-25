@@ -1099,8 +1099,16 @@ for parabolic problems). **Two spatial dimensions** are also supported on a
 rectangle — `NDSolve[eqns, u, {t,..}, {x,..}, {y,..}]` — with Dirichlet
 conditions on all four edges and unmixed spatial derivatives (2-D heat, wave,
 advection–diffusion); the result is a 3-D `InterpolatingFunction` `u[t,x,y]`.
-Later phases add MPFR and adaptive-implicit stepping (needed for incompatible
-IC/BC corners), plus Neumann/Robin/periodic and mixed derivatives in 2-D.
+**Arbitrary precision.** `WorkingPrecision -> p` (p > machine) runs the MPFR
+integrator on the discretized system, giving an MPFR-valued 2-D
+`InterpolatingFunction` (1-D PDEs). As for MPFR ODEs the integrator is explicit,
+so this is practical for **non-stiff** PDEs (wave, advection) but not stiff
+diffusion; achievable precision at interior query points is bounded by the
+cubic-Hermite interpolation (query at MPFR node abscissae for full precision).
+
+Remaining (deferred): complex-valued PDEs (Schrödinger, via Re/Im realification),
+adaptive-implicit stepping for incompatible IC/BC corners and stiff MPFR, plus
+Neumann/Robin/periodic and mixed derivatives in 2-D.
 
 ### Beyond / unlike Mathematica's NDSolve
 

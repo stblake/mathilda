@@ -412,12 +412,11 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
     if (forced_method && strcmp(forced_method, "MethodOfLines") != 0)
         o.method = intern_symbol(forced_method);
 #ifdef USE_MPFR
-    if (o0->spec.mode == NUMERIC_MODE_MPFR)
-        nd_mol_warn("mppde", "arbitrary-precision PDEs are not yet supported; "
-                             "using machine precision");
+    bool use_mpfr = (o0->spec.mode == NUMERIC_MODE_MPFR);
+#else
+    bool use_mpfr = false;
 #endif
-    o.spec = numeric_machine_spec();
-    o.wp_bits = 53;
+    if (!use_mpfr) { o.spec = numeric_machine_spec(); o.wp_bits = 53; }
     NumericSpec spec = o.spec;
 
     Expr** A = res->data.function.args;
@@ -728,7 +727,7 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
     P.t0 = t0; P.tmin = tmin; P.tmax = tmax;
 
     /* ---- compile a linear operator (fast RHS / exact Jacobian) if possible ---- */
-    if (build_ok && compiled) P.op = nd_operator_try_build(&P);
+    if (build_ok && compiled && !use_mpfr) P.op = nd_operator_try_build(&P);
 
     /* Parabolic problems (a diffusion term with first-order time evolution) are
      * stiff; default them to BDF when the user didn't force a method. */
@@ -745,6 +744,16 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
         const NdStepper* S = tim ? nd_lookup_stepper(tim)
                            : (parabolic ? nd_lookup_stepper("BDF") : nd_default_stepper());
         if (!S) S = nd_default_stepper();
+#ifdef USE_MPFR
+        if (use_mpfr) {
+            /* Arbitrary precision: integrate at MPFR precision (explicit) and
+             * assemble the MPFR 2-D InterpolatingFunction. */
+            NdMolGrid grid = { fname, applied, tvar, xvar, xmin, h, nx, torder,
+                               periodic, bc_left, bc_right };
+            result = nd_solve_mpfr_mol(&P, &o, S, &grid);
+        } else
+#endif
+        {
         NdSolution sol; nd_solution_init(&sol, d);
         NdStatus st = nd_integrate(&P, S, &o, &sol);
         if (st == ND_ERR_MAXSTEPS) nd_mol_warn("mxst", "maximum number of steps reached; returning partial solution");
@@ -756,6 +765,7 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
         result = nd_mol_build_result(&P, fname, applied, tvar, xvar, xmin, h, nx, torder,
                                      periodic, bc_left, bc_right, &sol, spec);
         nd_solution_free(&sol);
+        }
     }
     nd_bind_restore(&P.bind_t);
     for (size_t i = 0; i < d; i++) nd_bind_restore(&P.bind_y[i]);
