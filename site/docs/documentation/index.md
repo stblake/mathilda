@@ -2,7 +2,7 @@
 
 Every public built-in function in Mathilda, grouped by category. Each page follows the same shape: **Description** (the function's docstring), **Examples** (verified against the current build), **Implementation notes**, **Implementation status**, and **References**.
 
-_695 functions across 32 categories. Use the search box (press `/`) to jump to any function._
+_700 functions across 32 categories. Use the search box (press `/`) to jump to any function._
 
 ## Categories
 
@@ -28,7 +28,7 @@ _695 functions across 32 categories. Use the search box (press `/`) to jump to a
 
 ### [Control Flow](control-flow/index.md)
 
-[`$Epilog`](control-flow/$Epilog.md)  [`$Post`](control-flow/$Post.md)  [`$Pre`](control-flow/$Pre.md)  [`$PrePrint`](control-flow/$PrePrint.md)  [`$PreRead`](control-flow/$PreRead.md)  [`$RecursionLimit`](control-flow/$RecursionLimit.md)  [`Boole`](control-flow/Boole.md)  [`Catch`](control-flow/Catch.md)  [`ConditionalExpression`](control-flow/ConditionalExpression.md)  [`Do`](control-flow/Do.md)  [`For`](control-flow/For.md)  [`Goto`](control-flow/Goto.md)  [`If`](control-flow/If.md)  [`Label`](control-flow/Label.md)  [`Piecewise`](control-flow/Piecewise.md)  [`Return`](control-flow/Return.md)  [`Switch`](control-flow/Switch.md)  [`Throw`](control-flow/Throw.md)  [`TrueQ`](control-flow/TrueQ.md)  [`Which`](control-flow/Which.md)  [`While`](control-flow/While.md)
+[`$Epilog`](control-flow/$Epilog.md)  [`$Post`](control-flow/$Post.md)  [`$Pre`](control-flow/$Pre.md)  [`$PrePrint`](control-flow/$PrePrint.md)  [`$PreRead`](control-flow/$PreRead.md)  [`$RecursionLimit`](control-flow/$RecursionLimit.md)  [`Boole`](control-flow/Boole.md)  [`Break`](control-flow/Break.md)  [`Catch`](control-flow/Catch.md)  [`ConditionalExpression`](control-flow/ConditionalExpression.md)  [`Continue`](control-flow/Continue.md)  [`Do`](control-flow/Do.md)  [`For`](control-flow/For.md)  [`Goto`](control-flow/Goto.md)  [`If`](control-flow/If.md)  [`Label`](control-flow/Label.md)  [`Piecewise`](control-flow/Piecewise.md)  [`Return`](control-flow/Return.md)  [`Switch`](control-flow/Switch.md)  [`Throw`](control-flow/Throw.md)  [`TrueQ`](control-flow/TrueQ.md)  [`Which`](control-flow/Which.md)  [`While`](control-flow/While.md)
 
 ### [Data Structures](data-structures/index.md)
 
@@ -128,7 +128,7 @@ _695 functions across 32 categories. Use the search box (press `/`) to jump to a
 
 ### [Other & Advanced](other-advanced/index.md)
 
-[`$PlotLegendData`](other-advanced/$PlotLegendData.md)  [`$PlotResample`](other-advanced/$PlotResample.md)  [`$StreamColorBar`](other-advanced/$StreamColorBar.md)  [`AdjacencyGraph`](other-advanced/AdjacencyGraph.md)  [`AdjacencyList`](other-advanced/AdjacencyList.md)  [`AdjacencyMatrix`](other-advanced/AdjacencyMatrix.md)  [`AiryAiPrime`](other-advanced/AiryAiPrime.md)  [`AiryBiPrime`](other-advanced/AiryBiPrime.md)  [`AspectRatio`](other-advanced/AspectRatio.md)  [`BarSpacing`](other-advanced/BarSpacing.md)  [`BesselJZero`](other-advanced/BesselJZero.md)  [`Black`](other-advanced/Black.md)  [`Blue`](other-advanced/Blue.md)  [`Brown`](other-advanced/Brown.md)  [`ChartLabels`](other-advanced/ChartLabels.md)  [`ChartStyle`](other-advanced/ChartStyle.md)  [`CompleteGraph`](other-advanced/CompleteGraph.md)  [`ConnectedComponents`](other-advanced/ConnectedComponents.md)  [`ConnectedGraphQ`](other-advanced/ConnectedGraphQ.md)  [`ContourLabels`](other-advanced/ContourLabels.md)  [`ContourShading`](other-advanced/ContourShading.md)  [`ContourStyle`](other-advanced/ContourStyle.md)  [`Contours`](other-advanced/Contours.md)  [`Cyan`](other-advanced/Cyan.md)  [`CycleGraph`](other-advanced/CycleGraph.md)  [`DataType`](other-advanced/DataType.md)  [`DirectedGraphQ`](other-advanced/DirectedGraphQ.md)  [`EdgeCount`](other-advanced/EdgeCount.md)  [`EdgeList`](other-advanced/EdgeList.md)  [`FindShortestPath`](other-advanced/FindShortestPath.md)  [`FindSpanningTree`](other-advanced/FindSpanningTree.md)  [`FourierParameters`](other-advanced/FourierParameters.md)  [`Frame`](other-advanced/Frame.md)  [`FrameStyle`](other-advanced/FrameStyle.md)  [`FrameTicks`](other-advanced/FrameTicks.md)  [`FresnelC`](other-advanced/FresnelC.md)  [`FresnelS`](other-advanced/FresnelS.md)  [`GraphDistance`](other-advanced/GraphDistance.md)  [`GraphPlot`](other-advanced/GraphPlot.md)  [`Gray`](other-advanced/Gray.md)  [`Green`](other-advanced/Green.md)  [`HoldFirst`](other-advanced/HoldFirst.md)  [`HoldRest`](other-advanced/HoldRest.md)  [`ImageSize`](other-advanced/ImageSize.md)  [`IncidenceMatrix`](other-advanced/IncidenceMatrix.md)  [`LightBlue`](other-advanced/LightBlue.md)  [`LightBrown`](other-advanced/LightBrown.md)  [`LightCyan`](other-advanced/LightCyan.md)  [`LightGray`](other-advanced/LightGray.md)  [`LightGreen`](other-advanced/LightGreen.md)  [`LightMagenta`](other-advanced/LightMagenta.md)  [`LightOrange`](other-advanced/LightOrange.md)  [`LightPink`](other-advanced/LightPink.md)  [`LightPurple`](other-advanced/LightPurple.md)  [`LightRed`](other-advanced/LightRed.md)  [`LightYellow`](other-advanced/LightYellow.md)  [`Lighting`](other-advanced/Lighting.md)  [`List`](other-advanced/List.md)  [`Magenta`](other-advanced/Magenta.md)  [`NDArrayQ`](other-advanced/NDArrayQ.md)  [`Orange`](other-advanced/Orange.md)  [`PathGraph`](other-advanced/PathGraph.md)  [`Pink`](other-advanced/Pink.md)  [`PolynomialSqrt`](other-advanced/PolynomialSqrt.md)  [`Purple`](other-advanced/Purple.md)  [`RandomGraph`](other-advanced/RandomGraph.md)  [`Red`](other-advanced/Red.md)  [`ScalingFunctions`](other-advanced/ScalingFunctions.md)  [`StringExpression`](other-advanced/StringExpression.md)  [`StronglyConnectedComponents`](other-advanced/StronglyConnectedComponents.md)  [`VectorPoints`](other-advanced/VectorPoints.md)  [`VectorScale`](other-advanced/VectorScale.md)  [`VectorStyle`](other-advanced/VectorStyle.md)  [`VertexConnectivity`](other-advanced/VertexConnectivity.md)  [`VertexCount`](other-advanced/VertexCount.md)  [`VertexDegree`](other-advanced/VertexDegree.md)  [`VertexInDegree`](other-advanced/VertexInDegree.md)  [`VertexList`](other-advanced/VertexList.md)  [`VertexOutDegree`](other-advanced/VertexOutDegree.md)  [`WeaklyConnectedComponents`](other-advanced/WeaklyConnectedComponents.md)  [`White`](other-advanced/White.md)  [`Yellow`](other-advanced/Yellow.md)
+[`$PlotLegendData`](other-advanced/$PlotLegendData.md)  [`$PlotResample`](other-advanced/$PlotResample.md)  [`$StreamColorBar`](other-advanced/$StreamColorBar.md)  [`AdjacencyGraph`](other-advanced/AdjacencyGraph.md)  [`AdjacencyList`](other-advanced/AdjacencyList.md)  [`AdjacencyMatrix`](other-advanced/AdjacencyMatrix.md)  [`AiryAiPrime`](other-advanced/AiryAiPrime.md)  [`AiryBiPrime`](other-advanced/AiryBiPrime.md)  [`AspectRatio`](other-advanced/AspectRatio.md)  [`BarSpacing`](other-advanced/BarSpacing.md)  [`BesselJZero`](other-advanced/BesselJZero.md)  [`Black`](other-advanced/Black.md)  [`Blue`](other-advanced/Blue.md)  [`Brown`](other-advanced/Brown.md)  [`ChartLabels`](other-advanced/ChartLabels.md)  [`ChartStyle`](other-advanced/ChartStyle.md)  [`CompleteGraph`](other-advanced/CompleteGraph.md)  [`ConnectedComponents`](other-advanced/ConnectedComponents.md)  [`ConnectedGraphQ`](other-advanced/ConnectedGraphQ.md)  [`ContourLabels`](other-advanced/ContourLabels.md)  [`ContourShading`](other-advanced/ContourShading.md)  [`ContourStyle`](other-advanced/ContourStyle.md)  [`Contours`](other-advanced/Contours.md)  [`Cyan`](other-advanced/Cyan.md)  [`CycleGraph`](other-advanced/CycleGraph.md)  [`DataType`](other-advanced/DataType.md)  [`DirectedGraphQ`](other-advanced/DirectedGraphQ.md)  [`EdgeCount`](other-advanced/EdgeCount.md)  [`EdgeList`](other-advanced/EdgeList.md)  [`FindShortestPath`](other-advanced/FindShortestPath.md)  [`FindSpanningTree`](other-advanced/FindSpanningTree.md)  [`FourierParameters`](other-advanced/FourierParameters.md)  [`Frame`](other-advanced/Frame.md)  [`FrameStyle`](other-advanced/FrameStyle.md)  [`FrameTicks`](other-advanced/FrameTicks.md)  [`FresnelC`](other-advanced/FresnelC.md)  [`FresnelS`](other-advanced/FresnelS.md)  [`GraphDistance`](other-advanced/GraphDistance.md)  [`GraphPlot`](other-advanced/GraphPlot.md)  [`Gray`](other-advanced/Gray.md)  [`Green`](other-advanced/Green.md)  [`HoldFirst`](other-advanced/HoldFirst.md)  [`HoldRest`](other-advanced/HoldRest.md)  [`ImageSize`](other-advanced/ImageSize.md)  [`IncidenceMatrix`](other-advanced/IncidenceMatrix.md)  [`LightBlue`](other-advanced/LightBlue.md)  [`LightBrown`](other-advanced/LightBrown.md)  [`LightCyan`](other-advanced/LightCyan.md)  [`LightGray`](other-advanced/LightGray.md)  [`LightGreen`](other-advanced/LightGreen.md)  [`LightMagenta`](other-advanced/LightMagenta.md)  [`LightOrange`](other-advanced/LightOrange.md)  [`LightPink`](other-advanced/LightPink.md)  [`LightPurple`](other-advanced/LightPurple.md)  [`LightRed`](other-advanced/LightRed.md)  [`LightYellow`](other-advanced/LightYellow.md)  [`Lighting`](other-advanced/Lighting.md)  [`List`](other-advanced/List.md)  [`Magenta`](other-advanced/Magenta.md)  [`NDArrayQ`](other-advanced/NDArrayQ.md)  [`Orange`](other-advanced/Orange.md)  [`PathGraph`](other-advanced/PathGraph.md)  [`Pink`](other-advanced/Pink.md)  [`PolynomialSqrt`](other-advanced/PolynomialSqrt.md)  [`Purple`](other-advanced/Purple.md)  [`RandomGraph`](other-advanced/RandomGraph.md)  [`RatCanonPrototype`](other-advanced/RatCanonPrototype.md)  [`Reap`](other-advanced/Reap.md)  [`Red`](other-advanced/Red.md)  [`ScalingFunctions`](other-advanced/ScalingFunctions.md)  [`Sow`](other-advanced/Sow.md)  [`StringExpression`](other-advanced/StringExpression.md)  [`StronglyConnectedComponents`](other-advanced/StronglyConnectedComponents.md)  [`VectorPoints`](other-advanced/VectorPoints.md)  [`VectorScale`](other-advanced/VectorScale.md)  [`VectorStyle`](other-advanced/VectorStyle.md)  [`VertexConnectivity`](other-advanced/VertexConnectivity.md)  [`VertexCount`](other-advanced/VertexCount.md)  [`VertexDegree`](other-advanced/VertexDegree.md)  [`VertexInDegree`](other-advanced/VertexInDegree.md)  [`VertexList`](other-advanced/VertexList.md)  [`VertexOutDegree`](other-advanced/VertexOutDegree.md)  [`WeaklyConnectedComponents`](other-advanced/WeaklyConnectedComponents.md)  [`White`](other-advanced/White.md)  [`Yellow`](other-advanced/Yellow.md)
 
 ### [FLINT context](flint/index.md)
 
@@ -210,6 +210,7 @@ _695 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`Block`](scoping-constructs/Block.md)
 - [`Blue`](other-advanced/Blue.md)
 - [`Boole`](control-flow/Boole.md)
+- [`Break`](control-flow/Break.md)
 - [`Brown`](other-advanced/Brown.md)
 - [`ByteCount`](expression-information/ByteCount.md)
 - [`CMYKColor`](graphics/CMYKColor.md)
@@ -247,6 +248,7 @@ _695 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`ConnectedGraphQ`](other-advanced/ConnectedGraphQ.md)
 - [`ConstantArray`](lists-and-iteration/ConstantArray.md)
 - [`Context`](scoping-constructs/Context.md)
+- [`Continue`](control-flow/Continue.md)
 - [`ContinuedFraction`](number-theory/ContinuedFraction.md)
 - [`ContourLabels`](other-advanced/ContourLabels.md)
 - [`ContourPlot`](graphics/ContourPlot.md)
@@ -653,6 +655,7 @@ _695 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`RandomReal`](random-number-generation/RandomReal.md)
 - [`RandomSample`](random-number-generation/RandomSample.md)
 - [`Range`](lists-and-iteration/Range.md)
+- [`RatCanonPrototype`](other-advanced/RatCanonPrototype.md)
 - [`Rational`](arithmetic/Rational.md)
 - [`Rationalize`](arithmetic/Rationalize.md)
 - [`Ratios`](arithmetic/Ratios.md)
@@ -660,6 +663,7 @@ _695 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`ReIm`](arithmetic/ReIm.md)
 - [`RealDigits`](arithmetic/RealDigits.md)
 - [`RealExponent`](arithmetic/RealExponent.md)
+- [`Reap`](other-advanced/Reap.md)
 - [`Red`](other-advanced/Red.md)
 - [`RegularExpression`](string-operations/RegularExpression.md)
 - [`ReleaseHold`](expression-information/ReleaseHold.md)
@@ -725,6 +729,7 @@ _695 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`SolveAlways`](solutions-of-equations/SolveAlways.md)
 - [`Sort`](data-structures/Sort.md)
 - [`SortBy`](data-structures/SortBy.md)
+- [`Sow`](other-advanced/Sow.md)
 - [`Span`](structural-manipulation/Span.md)
 - [`Split`](structural-manipulation/Split.md)
 - [`Sqrt`](arithmetic/Sqrt.md)

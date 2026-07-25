@@ -1,6 +1,6 @@
 # Control Flow
 
-21 built-in function(s) in this category.
+23 built-in function(s) in this category.
 
 - [`$Epilog`]($Epilog.md) — $Epilog  _(Stable)_
 - [`$Post`]($Post.md) — $Post  _(Stable)_
@@ -9,8 +9,10 @@
 - [`$PreRead`]($PreRead.md) — $PreRead  _(Stable)_
 - [`$RecursionLimit`]($RecursionLimit.md) — $RecursionLimit  _(Stable)_
 - [`Boole`](Boole.md) — Boole[expr]  _(Stable)_
+- [`Break`](Break.md) — Break[] exits the nearest enclosing Do, For, or While loop.  _(Stable)_
 - [`Catch`](Catch.md) — Catch[expr]  _(Stable)_
 - [`ConditionalExpression`](ConditionalExpression.md) — ConditionalExpression[expr, cond]  _(Stable)_
+- [`Continue`](Continue.md) — Continue[] proceeds to the next iteration of the nearest enclosing Do, For, or While loop.  _(Stable)_
 - [`Do`](Do.md) — Do[expr, n] evaluates expr n times.  _(Stable)_
 - [`For`](For.md) — For[start, test, incr, body] executes start, then repeatedly evaluates body and incr until test fails to give True.  _(Stable)_
 - [`Goto`](Goto.md) — Goto[tag]  _(Stable)_

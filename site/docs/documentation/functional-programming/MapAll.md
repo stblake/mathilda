@@ -1,7 +1,7 @@
 # MapAll
 
-!!! note "Status: Experimental"
-    present and registered, but lightly documented and not yet covered by dedicated tests.
+!!! success "Status: Stable"
+    documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## Description
 
@@ -29,7 +29,7 @@ mapped children and then wraps each node (including the whole expression at leve
 
 ## Implementation status
 
-**Experimental** — present and registered, but lightly documented and not yet covered by dedicated tests.
+**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## References
 

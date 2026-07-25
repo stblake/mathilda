@@ -142,6 +142,19 @@ evaluates plain `Limit[8.19]` and previously hung the whole `series_tests` binar
 (exposing 3 **pre-existing** `D`/`Integrate`-of-`SeriesData` normalisation
 failures that were hidden behind that hang — unrelated to this work).
 
+## Generalized stress battery + tutorial (2026-07-25)
+
+- **`tests/test_gruntz_stress.c`** (`gruntz_stress_tests`): 141 hand-verified
+  *generalizations* of the thesis examples across 11 families (dominant base,
+  cancellation `→-c`, exp-tower ratios `→E^a`, trig-at-vanishing-arg, nested-log
+  ratios, Hardy sub-polynomial, conjugate radicals, finite-point power series,
+  `Erfc`/`Ei`/`Zeta`/`PolyGamma`/`LogGamma` singularities, `Max`/`Min`) + 4 pinned
+  honest abstentions. Each case pins ONLY where an independent hand derivation and
+  the engine's output agree; abstentions/wrong answers dropped. Complements (does
+  not duplicate) `test_gruntz.c`, which pins the exact thesis expressions.
+- **`site/docs/tutorials/computing-limits-gruntz.md`**: advanced tutorial over the
+  same families; all 53 transcripts verified exact against the binary.
+
 ## Coverage (all verified, all in `tests/test_gruntz.c`)
 
 - **Thesis exp-log (Table 8.1):** 8.1, 8.5–8.9, 8.11–8.13, 8.17, 8.20–8.22.

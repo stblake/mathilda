@@ -76,10 +76,9 @@ The core `compute_limit` runs (in order): reciprocal-trig rewrite; at ±∞ a hy
 
 **Complexity / limits.** `Series` subsumes most classical cases; L'Hospital is reserved for shapes `Series` can't expand and is guarded against complexity blow-up. Discontinuous-head and undefined-head inputs are deliberately refused rather than evaluated at a single side.
 
-- `HoldAll`, `Protected`, `ReadProtected`.
-- Options: `Direction -> Automatic`, `Assumptions -> Automatic`,
+- `Protected`, `ReadProtected` (matches Mathematica; `Limit` does *not*
 
-**Attributes:** `HoldAll`, `Protected`, `ReadProtected`.
+**Attributes:** `Protected`, `ReadProtected`.
 
 ## Implementation status
 

@@ -1,6 +1,6 @@
 # Other & Advanced
 
-82 built-in function(s) in this category.
+85 built-in function(s) in this category.
 
 - [`$PlotLegendData`]($PlotLegendData.md) — $PlotLegendData[{color1, label1}, ...]  _(Stable)_
 - [`$PlotResample`]($PlotResample.md) — $PlotResample[var, {f...}, {plotPoints, maxRecursion, maxPlotPoints, mesh, regionFunction, exclusions, colorFunction, colorFunctionScaling, filling, fillingStyle}]  _(Experimental)_
@@ -68,8 +68,11 @@
 - [`PolynomialSqrt`](PolynomialSqrt.md) — PolynomialSqrt[p] gives a polynomial s with s^2 == p when p is a perfect square (every non-constant irreducible factor has even multiplicity; the numeric content is carried through Sqrt), and $Failed otherwise. PolynomialSqrt[p, x] treats p as a polynomial in x.  _(Stable)_
 - [`Purple`](Purple.md) — Purple  _(Experimental)_
 - [`RandomGraph`](RandomGraph.md) — RandomGraph[{n, m}] gives a random undirected graph with n vertices and m edges.  _(Stable)_
+- [`RatCanonPrototype`](RatCanonPrototype.md) — RatCanonPrototype[expr] (Phase-1 prototype) reduces a rational function over the differential/algebraic tower of expr via one FLINT reduction.  _(Stable)_
+- [`Reap`](Reap.md) — Reap[expr]  _(Stable)_
 - [`Red`](Red.md) — Red  _(Experimental)_
 - [`ScalingFunctions`](ScalingFunctions.md) — ScalingFunctions  _(Experimental)_
+- [`Sow`](Sow.md) — Sow[e]  _(Stable)_
 - [`StringExpression`](StringExpression.md) — StringExpression[p1, p2, ...] or p1 ~~ p2 ~~ ...  _(Stable)_
 - [`StronglyConnectedComponents`](StronglyConnectedComponents.md) — StronglyConnectedComponents[g] gives the strongly connected components of g (following edge directions).  _(Stable)_
 - [`VectorPoints`](VectorPoints.md) — VectorPoints  _(Experimental)_

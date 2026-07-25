@@ -15,12 +15,7 @@ All examples below are verified against the current Mathilda build.
 
 ```mathematica
 In[1]:= ?Range
-Out[1]= "Range[n]
-	generates the list {1, 2, 3, ..., n}.
-Range[n, m]
-	generates the list {n, n + 1, ..., m - 1, m}.
-Range[n, m, d]
-	uses step d."
+Out[1]= "Range[n]\n\tgenerates the list {1, 2, 3, ..., n}.\nRange[n, m]\n\tgenerates the list {n, n + 1, ..., m - 1, m}.\nRange[n, m, d]\n\tuses step d."
 ```
 
 ## Implementation notes

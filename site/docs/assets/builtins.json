@@ -592,6 +592,14 @@
     "url": "documentation/control-flow/Boole/"
   },
   {
+    "name": "Break",
+    "category": "Control Flow",
+    "slug": "control-flow",
+    "status": "Stable",
+    "summary": "Break[] exits the nearest enclosing Do, For, or While loop.",
+    "url": "documentation/control-flow/Break/"
+  },
+  {
     "name": "Brown",
     "category": "Other & Advanced",
     "slug": "other-advanced",
@@ -886,6 +894,14 @@
     "status": "Stable",
     "summary": "Context[] gives the current context ($Context).",
     "url": "documentation/scoping-constructs/Context/"
+  },
+  {
+    "name": "Continue",
+    "category": "Control Flow",
+    "slug": "control-flow",
+    "status": "Stable",
+    "summary": "Continue[] proceeds to the next iteration of the nearest enclosing Do, For, or While loop.",
+    "url": "documentation/control-flow/Continue/"
   },
   {
     "name": "ContinuedFraction",
@@ -3083,7 +3099,7 @@
     "name": "MapAll",
     "category": "Functional Programming",
     "slug": "functional-programming",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "f //@ expr or MapAll[f, expr]",
     "url": "documentation/functional-programming/MapAll/"
   },
@@ -4136,6 +4152,14 @@
     "url": "documentation/lists-and-iteration/Range/"
   },
   {
+    "name": "RatCanonPrototype",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "RatCanonPrototype[expr] (Phase-1 prototype) reduces a rational function over the differential/algebraic tower of expr via one FLINT reduction.",
+    "url": "documentation/other-advanced/RatCanonPrototype/"
+  },
+  {
     "name": "Rational",
     "category": "Arithmetic",
     "slug": "arithmetic",
@@ -4190,6 +4214,14 @@
     "status": "Stable",
     "summary": "RealExponent[x] gives Log[10, |x|] -- the base-10 real exponent of x.",
     "url": "documentation/arithmetic/RealExponent/"
+  },
+  {
+    "name": "Reap",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "Reap[expr]",
+    "url": "documentation/other-advanced/Reap/"
   },
   {
     "name": "Red",
@@ -4710,6 +4742,14 @@
     "status": "Stable",
     "summary": "SortBy[list, f]",
     "url": "documentation/data-structures/SortBy/"
+  },
+  {
+    "name": "Sow",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "Sow[e]",
+    "url": "documentation/other-advanced/Sow/"
   },
   {
     "name": "Span",

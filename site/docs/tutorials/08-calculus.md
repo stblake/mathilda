@@ -333,6 +333,13 @@ reference for what each covers). Pinning a method is mainly useful for teaching
 and for isolating which strategy handles a given limit; for everyday work,
 `Automatic` is the right choice.
 
+The most powerful strategy — `Method -> "Gruntz"`, a faithful implementation of
+Dominik Gruntz's most-rapidly-varying algorithm — is the last layer of the
+automatic cascade and handles the hard cases the others cannot: deeply nested
+exponentials, cancelling logarithm towers, and essential singularities of special
+functions. It has a tutorial of its own:
+[**Computing limits with Gruntz's algorithm**](computing-limits-gruntz.md).
+
 ## Sums
 
 `Sum[expr, {k, lo, hi}]` adds up `expr` as the index `k` runs from `lo` to `hi`.

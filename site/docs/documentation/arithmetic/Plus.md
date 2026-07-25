@@ -34,8 +34,7 @@ It first distributes `Times[-1, Plus[...]]` over the outer sum (`is_neg_of_plus`
 
 - `Flat`, `Orderless`, `Listable`.
 - Combines numeric constants and collects like terms (e.g., `x + 2x` becomes `3x`).
-- Returns `0` if no arguments are provided.
-- Returns `Overflow[]` if integer addition overflows or if any argument is `Overflow[]`.
+- Like-term collection is hash-based (O(N) expected) and canonically sorts only
 
 **Attributes:** `Flat`, `Listable`, `NumericFunction`, `OneIdentity`, `Orderless`, `Protected`.
 

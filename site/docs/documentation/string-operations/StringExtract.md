@@ -39,7 +39,7 @@ In[3]:= StringExtract["a--bbb--ccc--dddd", "--" -> 3]
 Out[3]= "ccc"
 
 In[4]:= StringExtract["a 1\nb 2\nc 3 x", All, 3]
-Out[4]= {"2nc"}
+Out[4]= {Missing["PartAbsent", 3], Missing["PartAbsent", 3], "x"}
 ```
 
 ## Implementation notes
