@@ -3,7 +3,8 @@
 Numerical (as opposed to symbolic) calculus routines: the numerical derivative
 `ND`, numerical integration `NIntegrate`, numerical summation `NSum`, numerical
 products `NProduct`, numerical limits `NLimit`, the numerical series expansion
-`NSeries`, and the numerical residue `NResidue`. They return machine-precision
+`NSeries`, the numerical residue `NResidue`, and the numerical differential-
+equation solver `NDSolve`. They return machine-precision
 or arbitrary-precision (MPFR) numbers, and several succeed on inputs that the
 symbolic engine cannot close — essential singularities, non-elementary
 integrands, slowly-convergent or alternating sums, and limits with no closed
@@ -971,3 +972,112 @@ Out[6]= {{x -> -1.097911672722823576416400 + 0.839886921615659203622803 I, …},
 `In[2]` is the global solver returning all six complex solutions;
 `In[4]` is an inconsistent linear system; `In[5]` uses FindRoot grid-seeding
 for a transcendental equation Solve cannot reduce.
+
+## NDSolve
+
+`NDSolve[eqns, u, {x, xmin, xmax}]` finds a numerical solution to the ordinary
+differential equations `eqns` for the function `u` with independent variable `x`
+on `xmin ≤ x ≤ xmax`, returning a list of rules
+`{{u -> InterpolatingFunction[...]}}`. The `InterpolatingFunction` can be applied
+(`u[x0]`) and differentiated (`u'[x0]`).
+
+- `NDSolve[eqns, {u1, u2, ...}, {x, xmin, xmax}]` — a coupled system.
+- `NDSolve[eqns, u[x], {x, xmin, xmax}]` — gives `u[x] -> InterpolatingFunction[...][x]`.
+
+Equations are stated with derivatives (`u'[x]`, `u''[x]`, i.e. `Derivative`, not
+`Dt`). Higher-order equations are automatically reduced to a first-order system
+(state `[u, u', …, u^(n-1)]`); the ODEs must be solvable (linearly) for the
+highest derivative. Initial conditions `u[x0] == c`, `u'[x0] == c`, … supply the
+starting state; there must be enough to determine the solution.
+
+### Architecture
+
+Two-way modularity under `src/numerical_calculus/ndsolve*`:
+
+1. **Problem class** — a user problem is compiled into a first-order reduced
+   system `dY/dt = f(t, Y)` (`NdProblem`). ODE IVPs are supported; BVP/DAE/PDE
+   are the deferred extension seam.
+2. **Method** — each integrator is a self-contained module exposing an
+   `NdStepper` single-step vtable; a shared adaptive driver owns the time loop,
+   error-controlled step-size selection (WRMS norm, Hairer starting step),
+   rejection, monitors, and dense output. Every method is reachable both as
+   `Method -> "Name"` and as the standalone builtin `NDSolve`Name[...]`.
+
+The symbolic right-hand side is evaluated at numeric points by Block-localizing
+the reduced-state symbols and the independent variable (the NIntegrate binding
+pattern); implicit steppers reuse a symbolic/finite-difference Jacobian and a
+dense Gaussian-elimination solve (the FindRoot pattern). Output is built as
+cubic-Hermite `{{t_i}, y_i, y'_i}` triples fed to `Interpolation`.
+
+### Methods
+
+| Method | Order | Kind |
+|---|---|---|
+| `"ExplicitEuler"` | 1 | explicit, fixed |
+| `"ExplicitMidpoint"` | 2 | explicit, fixed |
+| `"RK4"` | 4 | classical Runge–Kutta, fixed |
+| `"ExplicitRungeKutta"` / `"DOPRI5"` | 5(4) | **adaptive embedded (Automatic default)** |
+| `"BackwardEuler"` | 1 | implicit (Newton), A-stable |
+| `"ImplicitTrapezoid"` | 2 | implicit (Newton), A-stable |
+| `"BDF"` | 2 | backward-differentiation multistep (stiff) |
+| `"Adams"` | 2 | Adams predictor–corrector (PECE) multistep |
+
+The fixed and implicit one-step methods are driven with step-doubling error
+control so accuracy goals are honoured. The default `Automatic` method is the
+adaptive Dormand–Prince 5(4) pair — the same algorithm as MATLAB's **ode45** —
+and it uses the FSAL (first-same-as-last) property so the last stage of an
+accepted step becomes both the node slope and the next step's first stage: **~6
+function evaluations per accepted step**, matching ode45's cost. (ode23 is the
+Bogacki–Shampine 3(2) pair; comparable low-order adaptive behaviour is obtained
+here at cruder accuracy goals.)
+
+### Options
+
+`Method`, `WorkingPrecision` (machine default; higher selects the MPFR
+integrator), `AccuracyGoal`/`PrecisionGoal` (Automatic = WorkingPrecision/2),
+`MaxSteps` (default 10000), `MaxStepSize`, `MaxStepFraction` (1/10),
+`StartingStepSize`, `InterpolationOrder` (Automatic = 3, cubic Hermite),
+`StepMonitor`, `EvaluationMonitor`.
+
+### Arbitrary precision
+
+`WorkingPrecision -> p` (with `p > $MachinePrecision`) runs a dedicated MPFR
+integrator whose state, independent variable, and step size are all carried at a
+guard-padded precision, so non-autonomous right-hand sides are evaluated at full
+precision. It uses the adaptive DOPRI5 pair (or fixed RK4). Note that accuracy at
+the achieved node values is bounded by `PrecisionGoal` (default `p/2`), and
+interior interpolated values are bounded by the cubic-Hermite interpolation
+order — query at an MPFR abscissa (`u[N[t, p]]`) to read a high-precision node.
+
+### Beyond / unlike Mathematica's NDSolve
+
+Supported: ODE initial-value problems — scalar, systems, and higher-order — with
+the methods above, at machine or arbitrary precision. Not yet handled (deferred,
+with the `NdProblem`/`NdStepper` seams in place): PDEs (method of lines), DAEs,
+boundary-value problems, event location (`"EventLocator"`), and the controller
+methods (`"StiffnessSwitching"`, `"Projection"`, `"Splitting"`,
+`"Composition"`, `"Extrapolation"`, symplectic integrators). `"StiffnessSwitching"`
+currently maps to `"BDF"`. Complex-valued ODEs and `x0 != xmin` boundary points
+are limited in this landing. BDF/Adams are fixed-order (2) multistep; higher
+variable orders are the documented extension.
+
+### Examples
+
+```mathematica
+In[1]:= sol = NDSolve[{y'[x] == -y[x], y[0] == 1}, y, {x, 0, 5}];
+        y[1] /. sol
+Out[1]= {0.367879}                          (* = E^-1 *)
+
+In[2]:= NDSolve[{y''[x] + y[x] == 0, y[0] == 1, y'[0] == 0}, y, {x, 0, 6}];
+        y[3.0] /. %                          (* = Cos[3] *)
+Out[2]= {-0.989992}
+
+In[3]:= NDSolve[{x'[t] == y[t], y'[t] == -x[t], x[0] == 1, y[0] == 0},
+                {x, y}, {t, 0, 6}]           (* circle: {Cos t, -Sin t} *)
+
+In[4]:= NDSolve[{y'[x] == -1000 (y[x] - Cos[x]) - Sin[x], y[0] == 1},
+                y, {x, 0, 3}, Method -> "BackwardEuler"]     (* stiff *)
+
+In[5]:= NDSolve[{y'[x] == y[x], y[0] == 1}, y, {x, 0, 1},
+                WorkingPrecision -> 30, PrecisionGoal -> 22, MaxSteps -> 200000]
+```

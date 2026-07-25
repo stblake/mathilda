@@ -786,6 +786,8 @@ void core_init(void) {
     nprod_init();
     void nintegrate_init(void);
     nintegrate_init();
+    void ndsolve_init(void);
+    ndsolve_init();
     void nroots_init(void);
     nroots_init();
     void nsolve_init(void);
