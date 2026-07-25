@@ -175,6 +175,20 @@ static void test_unevaluated(void) {
           "Limit[x, x -> 0, Direction -> foo]");
 }
 
+/* Regression: a limit value must be free of the limit variable. The series
+ * layer's leading-term reader used to hand back the x-dependent, undecidable
+ * `Infinity x^-s` for Log[x]/x^s (whose sign depends on Sign[s]); it is now
+ * discarded so the limit stays honestly unevaluated. The decidable siblings
+ * must still resolve. */
+static void test_symbolic_exponent_no_garbage(void) {
+    check("Limit[Log[x]/x^s, x -> Infinity]",
+          "Limit[Log[x] x^(-s), x -> Infinity]");
+    check("Limit[Log[x]/x^s, x -> Infinity, Method -> \"Series\"]",
+          "Limit[Log[x] x^(-s), x -> Infinity, Method -> \"Series\"]");
+    check_equiv("Limit[Log[x]/x^2, x -> Infinity]", "0");
+    check_equiv("Limit[x^s/x^s, x -> Infinity]",    "1");
+}
+
 /* ----------------------------------------------------------------- */
 /* Reciprocal trig at singular points                                 */
 /*                                                                    */
@@ -943,6 +957,7 @@ int main(void) {
     TEST(test_interval_returns);
     TEST(test_iterated);
     TEST(test_unevaluated);
+    TEST(test_symbolic_exponent_no_garbage);
 
     TEST(test_reciprocal_trig);
     TEST(test_bounded_envelope);

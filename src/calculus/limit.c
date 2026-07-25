@@ -1227,6 +1227,15 @@ static Expr* layer2_series(Expr* f, LimitCtx* ctx) {
         Expr* s    = simp(call);
         LimitCtx leaf = { x_use, x0_use, effective_dir, ctx->depth, ctx->method };
         result = read_leading_term_limit(s, &leaf);
+        /* A genuine limit value is free of the expansion variable. If the
+         * leading-term reader handed back something that still depends on it
+         * -- e.g. the undecidable symbolic exponent in Log[x]/x^s, whose
+         * "leading term" came out as `Infinity x^-s` -- it did NOT resolve the
+         * limit; discard it so the cascade abstains instead of returning a
+         * malformed (x-dependent) answer. */
+        if (result && expr_contains(result, x_use)) {
+            expr_free(result); result = NULL;
+        }
         /* If the series expansion still mentions the limit variable in
          * its coefficients (asymptotic shapes like Log[E^x-E^a] at x->a
          * whose leading "coefficient" is Log[x-a]), escalating to higher

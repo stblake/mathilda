@@ -226,9 +226,16 @@ failures that were hidden behind that hang — unrelated to this work).
   `Limit[ArcTan[x],x->oo,Method->"Gruntz"] -> Pi/2` and
   `Limit[x(Pi/2-ArcTan[x]),x->oo] -> 1` (both Automatic and Gruntz). See
   `test_arctan_at_infinity` / `test_series_arctan_at_infinity`.
-- Under an **exclusive** `Method->"Gruntz"`: bare oscillation (`Sin[x]@oo`),
-  symbolic-sign (`Log[x]/x^s`). The `Automatic` cascade handles most of these
-  via its other layers.
+- Genuinely undecidable / no-limit (correct honest abstentions, never wrong):
+  bare oscillation (`Sin[x]@oo` has no limit — `Indeterminate` under Automatic,
+  abstains under exclusive Gruntz); symbolic-sign `Log[x]/x^s` and symbolic-order
+  `PolyGamma[n,x]` (value depends on `Sign[s]` / `n`, need assumptions). NOTE
+  (2026-07-25): `Log[x]/x^s` previously returned the **malformed** `Infinity x^-s`
+  (an x-dependent "value") — `layer2_series` now discards any leading-term value
+  that still mentions the expansion variable, so it abstains cleanly. See
+  `test_symbolic_exponent_no_garbage`.
+- thesis-8.31 `Gamma` Stirling difference: bounded ~15s abstention (needs a
+  deeper `x^x`-tower `Series` cancellation), pinned in `test_honest_abstentions`.
 
 ## Gamma re-enabling — DONE (2026-07-24)
 
