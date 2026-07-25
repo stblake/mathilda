@@ -1690,6 +1690,21 @@ static Expr* resolve_maxmin(const Expr* e, const Expr* x, int* failed) {
             int saved = g_fail; g_fail = 0;
             int s = gz_sign(d, x);
             bool cmp_failed = g_fail;
+            /* If the raw sign test failed and the difference involves a
+             * semi-tractable special function (PolyGamma, Zeta, BesselK/I, Erf,
+             * ..), isolate it to its asymptotic exp-log form and retry -- so
+             * e.g. Max[PolyGamma[x], Log[x]] or Max[BesselK[0,x], BesselK[0,2x]]
+             * can be ordered. Expand first so leading constants cancel. */
+            if (cmp_failed && contains_semitractable(d)) {
+                g_fail = 0;
+                Expr* iso = isolate_semitractable(d, x, 4);
+                iso = gz_powerexpand(iso, x);
+                iso = simp(mk_fn1("Expand", iso));
+                g_fail = 0;
+                s = gz_sign(iso, x);
+                cmp_failed = g_fail;
+                expr_free(iso);
+            }
             g_fail = saved;
             expr_free(d);
             if (cmp_failed) { *failed = 1; continue; /* keep current best */ }

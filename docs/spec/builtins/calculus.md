@@ -290,8 +290,12 @@ Out[8]= 6 a b^2
     decided by the **leading-term** sign of `a - b` (so `Max[1/x, 2/x] = 2/x`
     though both `-> 0`), recursing so nested and factor-wrapped forms work —
     `Max[x, x^2] -> Infinity`, `x Max[1/x, 2/x] -> 2`, `Min[x, Log[x]] ->
-    Infinity`, `Exp[x] Max[Exp[-x], Exp[-2x]] -> 1`; a comparison that hinges on
-    bounded oscillation (`Max[Sin[x], 2]`) has no leading-term sign and abstains.
+    Infinity`, `Exp[x] Max[Exp[-x], Exp[-2x]] -> 1`. When the difference `a - b`
+    involves a semi-tractable special function it is isolated to its asymptotic
+    form before the sign is read, so `Max[PolyGamma[x], Log[x]] - Log[x] -> 0`
+    and `Exp[x] Sqrt[x] Max[BesselK[0,x], BesselK[0,2x]] -> Sqrt[Pi/2]` resolve.
+    A comparison that hinges on bounded oscillation (`Max[Sin[x], 2]`) has no
+    leading-term sign and abstains.
     Still **not covered** (left unevaluated — never a wrong value): the
     thesis-8.31 `Gamma` Stirling difference (whose x^x-scale tower needs a
     deeper `Series` cancellation than the machinery reaches — a flagged `Series`
@@ -299,10 +303,15 @@ Out[8]= 6 a b^2
     `-Infinity` (pole lattice), `Zeta` at `-Infinity` (trivial zeros) or
     same-mrv-class Zeta-difference ratios like
     `(Zeta[x]-1)/(Zeta[x+1]-1)` (a general mrv-engine gap on base-shifted
-    exponential sums, not Zeta-specific), the *oscillatory* `BesselJ`/`BesselY`
-    at infinity (a `Cos[x-π/4]` envelope the monotonic mrv engine cannot expand;
-    the decay-to-0 case needs a bounded-oscillation squeeze), and `Max`/`Min`
-    whose argument ordering hinges on bounded oscillation.
+    exponential sums, not Zeta-specific), and — under an *exclusive*
+    `Method -> "Gruntz"` — the oscillatory `BesselJ`/`BesselY` and bounded
+    `Max`/`Min` cases below (the monotonic mrv engine cannot expand bounded
+    oscillation). Under `Automatic` those resolve via a squeeze layer:
+    `BesselJ[nu, x]`/`BesselY[nu, x] -> 0` (and as bounded factors, e.g.
+    `BesselJ[0, x]/x -> 0`, while `x BesselJ[0, x]` correctly stays
+    unevaluated — it has no limit), and `Max`/`Min` of a bounded oscillation
+    against a dominating definite limit, e.g. `Max[Sin[x], 2] -> 2`,
+    `Max[Sin[x], x] -> Infinity`, `Min[Cos[x], -x] -> -Infinity`.
 - **Joint multivariate** limits at the origin or `+Infinity` are decided by a
   polar/spherical substitution: the integrand is `Simplify`-normalised in
   `r`/angle coordinates (cancelling common `r`-powers so buried `0/0` shapes

@@ -263,6 +263,35 @@ static void test_bounded_envelope(void) {
 }
 
 /* ----------------------------------------------------------------- */
+/* Bessel decay + bounded Max/Min (squeeze-style bounded reasoning)   */
+/* ----------------------------------------------------------------- */
+static void test_bessel_maxmin_bounded(void) {
+    /* BesselJ/BesselY oscillate with a Sqrt[2/(Pi x)] envelope -> 0. */
+    check_equiv("Limit[BesselJ[0, x], x -> Infinity]",      "0");
+    check_equiv("Limit[BesselJ[1, x], x -> Infinity]",      "0");
+    check_equiv("Limit[BesselY[0, x], x -> Infinity]",      "0");
+    check_equiv("Limit[BesselJ[0, x]/x, x -> Infinity]",    "0");
+    check_equiv("Limit[BesselJ[0, x^2], x -> Infinity]",    "0");
+    /* Envelope Sqrt[x] / const -> no limit -> stays unevaluated (never a
+     * false 0 or Infinity). */
+    check("Limit[x BesselJ[0, x], x -> Infinity]",
+          "Limit[x BesselJ[0, x], x -> Infinity]");
+    check("Limit[Sqrt[x] BesselJ[0, x], x -> Infinity]",
+          "Limit[Sqrt[x] BesselJ[0, x], x -> Infinity]");
+
+    /* Max/Min of a bounded oscillation vs a dominating definite limit. */
+    check_equiv("Limit[Max[Sin[x], 2], x -> Infinity]",     "2");
+    check_equiv("Limit[Max[Sin[x], x], x -> Infinity]",     "Infinity");
+    check_equiv("Limit[Min[Cos[x], -x], x -> Infinity]",    "-Infinity");
+    check_equiv("Limit[Min[Sin[x], -2], x -> Infinity]",    "-2");
+    /* No unambiguous winner -> genuinely no limit -> unevaluated. */
+    check("Limit[Max[Cos[x], 1/2], x -> Infinity]",
+          "Limit[Max[1/2, Cos[x]], x -> Infinity]");
+    check("Limit[Min[Sin[x], 2], x -> Infinity]",
+          "Limit[Min[2, Sin[x]], x -> Infinity]");
+}
+
+/* ----------------------------------------------------------------- */
 /* ArcTan / ArcCot with divergent inner argument                     */
 /* ----------------------------------------------------------------- */
 static void test_arctan_infinity(void) {
@@ -917,6 +946,7 @@ int main(void) {
 
     TEST(test_reciprocal_trig);
     TEST(test_bounded_envelope);
+    TEST(test_bessel_maxmin_bounded);
     TEST(test_arctan_infinity);
     TEST(test_asymptotic_at_infinity);
     TEST(test_exp_indeterminate);

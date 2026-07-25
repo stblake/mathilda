@@ -148,6 +148,23 @@ static void test_maxmin_at_infinity(void) {
     assert_eval_eq("Limit[x Max[1/x, 2/x], x -> Infinity]", "2", 0);
 }
 
+/* Max/Min whose argument ordering needs a semi-tractable special function to be
+ * isolated first: resolve_maxmin isolates the difference (PolyGamma/Zeta/Bessel/
+ * Erf/... -> asymptotic exp-log) before taking its leading-term sign. */
+static void test_maxmin_semitractable(void) {
+    /* psi(x) ~ Log[x] - 1/(2x) < Log[x], so Max picks Log[x]. */
+    GRUNTZ("Max[PolyGamma[x], Log[x]] - Log[x]", "0");
+    GRUNTZ("Max[PolyGamma[x], Log[x]]", "Infinity");
+    /* BesselK envelope selection: Max keeps the slower-decaying Exp[-x]. */
+    GRUNTZ("Exp[x] Sqrt[x] Max[BesselK[0, x], BesselK[0, 2 x]]", "Sqrt[1/2 Pi]");
+    GRUNTZ("Exp[x] Sqrt[x] Min[BesselK[0, x], BesselK[0, 2 x]]", "0");
+    /* Gamma outgrows any power. */
+    GRUNTZ("Max[Gamma[x], x^10]", "Infinity");
+    /* PolyGamma decay vs an explicit power. */
+    GRUNTZ("x Max[PolyGamma[1, x], 2/x]", "2");
+    GRUNTZ("Min[PolyGamma[1, x], 1/x^2]", "0");
+}
+
 /* Modified Bessel functions at Infinity (monotonic, mrv-tractable).
  * BesselK[nu, x] ~ Sqrt[Pi/(2x)] E^-x (decay); BesselI[nu, x] ~ E^x/Sqrt[2 Pi x]
  * (growth, plus an exponentially-dominated I E^-x subdominant term the engine
@@ -366,6 +383,70 @@ static void test_thesis_gamma(void) {
     GRUNTZ("Log[Gamma[Gamma[x]]]/E^x", "Infinity");
 }
 
+/* ====================================================================== *
+ *  Extended battery for the EXISTING mrv engine (regression lock-in).      *
+ *  Every value is the mathematically correct limit and is currently        *
+ *  produced by the engine; these guard the comparability-class ordering,   *
+ *  rational/algebraic/hyperbolic reductions, and standard calculus forms.  *
+ * ====================================================================== */
+
+/* Comparability-class hierarchy: constants < Log^k < x^a < a^x < x^x <
+ * E^E^x. The mrv `compare` oracle must order every adjacent pair correctly,
+ * so a ratio across classes is 0 or Infinity, and a within-class ratio is a
+ * finite constant. */
+static void test_growth_hierarchy(void) {
+    GRUNTZ("Log[x]^10/x", "0");
+    GRUNTZ("x/Log[x]^10", "Infinity");
+    GRUNTZ("x^100/E^x", "0");
+    GRUNTZ("E^x/x^100", "Infinity");
+    GRUNTZ("x^x/E^(x^2)", "0");            /* x Log x << x^2 */
+    GRUNTZ("E^(x^2)/x^x", "Infinity");
+    GRUNTZ("E^(E^x)/E^(x^100)", "Infinity");
+    GRUNTZ("Log[x]/Log[Log[x]]", "Infinity");
+    GRUNTZ("Log[Log[x]]/Log[x]", "0");
+    GRUNTZ("Log[x^2 + x]/Log[x]", "2");    /* same Log-class, ratio -> 2 */
+    GRUNTZ("Gamma[x + 1]^(1/x)/x", "1/E"); /* Stirling: (x/e)/x -> 1/e */
+}
+
+/* Rational functions at infinity: the limit is the leading-coefficient ratio
+ * when degrees match, 0 when the denominator wins, Infinity when the
+ * numerator wins. */
+static void test_rational_limits(void) {
+    GRUNTZ("x^3/(2 x^3 + x)", "1/2");
+    GRUNTZ("(3 x^2 + 1)/(x^2 - x)", "3");
+    GRUNTZ("(x^3 - 2 x)/(5 x^3 + 7)", "1/5");
+    GRUNTZ("(x^2 + 1)/(x^3 + 1)", "0");
+    GRUNTZ("(x^3 + 1)/(x^2 + 1)", "Infinity");
+}
+
+/* Algebraic (root) and hyperbolic reductions. */
+static void test_algebraic_hyperbolic(void) {
+    GRUNTZ("Sqrt[x^2 + 1]/x", "1");
+    GRUNTZ("x (Sqrt[1 + 1/x] - 1)", "1/2");
+    GRUNTZ("Sqrt[x^2 + x] - Sqrt[x^2 + 1]", "1/2");
+    GRUNTZ("Coth[x] - 1", "0");
+    GRUNTZ("x (Tanh[x] - 1)", "0");
+    GRUNTZ("x - Log[Cosh[x]]", "-Log[1/2]");   /* Cosh[x] ~ E^x/2 -> Log[2] */
+    GRUNTZ("E^(-x) (Cosh[x] + Sinh[x])", "1");
+}
+
+/* Standard textbook forms: (1 + a/x)^x families and finite-point /
+ * one-sided / -Infinity reductions the driver handles by substitution. */
+static void test_standard_forms(void) {
+    GRUNTZ("(1 + 2/x)^(3 x)", "E^6");
+    GRUNTZ("(1 - 1/x)^x", "1/E");
+    GRUNTZ("(1 + a/x)^x", "E^a");              /* symbolic parameter */
+    GRUNTZ("x^(2/x)", "1");
+    /* finite point x -> 0 */
+    assert_eval_eq("Limit[Sin[3 x]/x, x -> 0, Method -> \"Gruntz\"]", "3", 0);
+    assert_eval_eq("Limit[(E^(2 x) - 1)/x, x -> 0, Method -> \"Gruntz\"]", "2", 0);
+    assert_eval_eq("Limit[Log[Cos[x]]/x^2, x -> 0, Method -> \"Gruntz\"]", "-1/2", 0);
+    assert_eval_eq("Limit[(Tan[x] - x)/x^3, x -> 0, Method -> \"Gruntz\"]", "1/3", 0);
+    /* -Infinity */
+    assert_eval_eq("Limit[x^2 E^x, x -> -Infinity, Method -> \"Gruntz\"]", "0", 0);
+    assert_eval_eq("Limit[E^x/x, x -> -Infinity, Method -> \"Gruntz\"]", "0", 0);
+}
+
 /* The engine is wired into Limit's Automatic cascade as a fallback: these
  * hard limits must resolve WITHOUT an explicit Method. */
 static void test_automatic_fallback(void) {
@@ -450,10 +531,15 @@ int main(void) {
     TEST(test_thesis_exp_log);
     TEST(test_thesis_trig);
     TEST(test_worked_examples);
+    TEST(test_growth_hierarchy);
+    TEST(test_rational_limits);
+    TEST(test_algebraic_hyperbolic);
+    TEST(test_standard_forms);
     TEST(test_polygamma_at_infinity);
     TEST(test_zeta_at_infinity);
     TEST(test_bessel_at_infinity);
     TEST(test_maxmin_at_infinity);
+    TEST(test_maxmin_semitractable);
     TEST(test_arctan_at_infinity);
     TEST(test_log_tower);
     TEST(test_log_tower_no_hang);

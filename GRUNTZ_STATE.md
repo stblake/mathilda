@@ -206,8 +206,17 @@ failures that were hidden behind that hang — unrelated to this work).
   `Derivative[Max]` garbage) → Automatic falls through to Gruntz. Resolves
   `x Max[1/x,2/x]->2`, `Min[x,Log[x]]->Infinity`, nested/n-ary. Bounded-osc
   comparisons (`Max[Sin[x],2]`) abstain. See `test_maxmin_at_infinity`.
-- `BesselJ`/`BesselY` at infinity — no isolation. J/Y oscillate (`Cos[x-π/4]`);
-  the decay-to-0 case would need a bounded-oscillation squeeze layer.
+- `BesselJ`/`BesselY` at infinity — **decay-to-0 DONE (2026-07-25, Automatic)**.
+  `magnitude_upper_bound` gives them the `Sqrt[2/(Pi x)]` envelope so the squeeze
+  layer resolves `BesselJ[0,x]->0`, `BesselJ[0,x]/x->0`; `x BesselJ[0,x]` stays
+  unevaluated (no limit). Exclusive `Method->"Gruntz"` still abstains (oscillatory).
+- `Max`/`Min` of bounded oscillation vs a dominating constant/∞ — **DONE
+  (2026-07-25, Automatic)**. `layer_maxmin_bounded`: `Max[Sin[x],2]->2`,
+  `Max[Sin[x],x]->Infinity`, `Min[Cos[x],-x]->-Infinity`. Ambiguous cases
+  (`Max[Cos[x],1/2]`) correctly stay unevaluated.
+- `Max`/`Min` of semi-tractable functions — **DONE (2026-07-25)**.
+  `resolve_maxmin` isolates the difference before the sign test:
+  `Max[PolyGamma[x],Log[x]]-Log[x]->0`, `Max[Gamma[x],x^10]->Infinity`.
 - Deep log-tower cancellation (8.19) — **DONE**, both `Method->"Gruntz"` and
   plain `Limit` (Automatic) resolve it to 1 (Phase 3 above).
 - `ArcTan[x]@oo` — **DONE (2026-07-25)**. Added `Series[ArcTan[x],

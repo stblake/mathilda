@@ -336,6 +336,7 @@ static Expr* rewrite_reciprocal_trig(Expr* e);
 static Expr* magnitude_upper_bound(Expr* e, Expr* x, bool var_abs);
 static bool  contains_bounded_head(Expr* e);
 static bool  contains_head_symbol(Expr* e, const char* head_sym);
+static Expr* layer_maxmin_bounded(Expr* f, LimitCtx* ctx);
 #define LIMIT_UNKNOWN_GROWTH INT64_MAX
 static int64_t growth_exponent_upper(Expr* e, Expr* x);
 
@@ -501,7 +502,8 @@ static bool contains_bounded_head(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (head_is(e, SYM_Sin) || head_is(e, SYM_Cos) ||
         head_is(e, SYM_Tanh) || head_is(e, SYM_ArcTan) ||
-        head_is(e, SYM_ArcCot)) return true;
+        head_is(e, SYM_ArcCot) ||
+        head_is(e, SYM_BesselJ) || head_is(e, SYM_BesselY)) return true;
     if (contains_bounded_head(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         if (contains_bounded_head(e->data.function.args[i])) return true;
@@ -530,6 +532,18 @@ static Expr* magnitude_upper_bound(Expr* e, Expr* x, bool var_abs) {
     if (head_is(e, SYM_ArcTan) || head_is(e, SYM_ArcCot)) {
         return mk_fn2("Times", mk_fn2("Power", mk_int(2), mk_int(-1)),
                                mk_sym("Pi"));
+    }
+    if ((head_is(e, SYM_BesselJ) || head_is(e, SYM_BesselY)) &&
+        e->data.function.arg_count == 2) {
+        /* |J_nu(z)|, |Y_nu(z)| ~ Sqrt[2/(Pi z)] = O(z^-1/2) -> 0 as z -> +oo.
+         * A z^-1/2 envelope is a valid eventual upper bound (leading constant
+         * Sqrt[2/Pi] < 1) and drives the general squeeze: bare BesselJ[nu,x] ->
+         * 0, BesselJ[nu,x]/x -> 0, while x BesselJ[nu,x] (envelope Sqrt[x] ->
+         * oo) and Sqrt[x] BesselJ[nu,x] (envelope const) stay inconclusive and
+         * abstain -- exactly right, since those genuinely have no limit. */
+        return simp(mk_fn2("Power", expr_copy(e->data.function.args[1]),
+                           mk_fn2("Times", mk_int(-1),
+                                  mk_fn2("Power", mk_int(2), mk_int(-1)))));
     }
 
     if (head_is(e, SYM_Plus)) {
@@ -1735,6 +1749,62 @@ static Expr* envelope_bounded_power(Expr* f, LimitCtx* ctx) {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Max/Min at +Infinity where one argument oscillates within a *constant*
+ * magnitude bound and the other converges to (or diverges past) that bound,
+ * so the definite argument wins: Max[Sin[x], 2] -> 2, Max[Sin[x], x] ->
+ * Infinity, Min[Cos[x], -x] -> -Infinity. The mrv engine's resolve_maxmin
+ * abstains here (bounded oscillation has no leading-term sign), so this
+ * squeeze-style layer closes the gap. Only concludes when the ordering is
+ * unambiguous; otherwise returns NULL (e.g. Min[Sin[x], 2] genuinely has no
+ * limit -- the 2 never wins the Min, and Sin[x] oscillates). */
+static Expr* layer_maxmin_bounded(Expr* f, LimitCtx* ctx) {
+    if (!f || f->type != EXPR_FUNCTION) return NULL;
+    bool is_max = head_is(f, SYM_Max);
+    bool is_min = head_is(f, SYM_Min);
+    if (!is_max && !is_min) return NULL;
+    if (!is_infinity_sym(ctx->point)) return NULL;   /* +Infinity only */
+    if (f->data.function.arg_count != 2) return NULL;
+
+    for (int swap = 0; swap < 2; swap++) {
+        Expr* dom = f->data.function.args[swap ? 1 : 0];  /* candidate winner */
+        Expr* osc = f->data.function.args[swap ? 0 : 1];  /* bounded arg      */
+        /* osc must have a finite, x-free magnitude bound M (|osc| <= M). */
+        Expr* mb = magnitude_upper_bound(osc, ctx->x, /*var_abs=*/false);
+        if (!mb || !free_of(mb, ctx->x) || contains_bounded_head(mb)) {
+            if (mb) expr_free(mb); continue;
+        }
+        /* dom must have a definite limit L (finite constant or +/-Infinity). */
+        LimitCtx sub = *ctx; sub.depth += 1;
+        Expr* Ld = compute_limit(dom, &sub);
+        if (!Ld || !free_of(Ld, ctx->x)) { if (Ld) expr_free(Ld); expr_free(mb); continue; }
+
+        bool pos_inf = is_infinity_sym(Ld);
+        bool neg_inf = is_neg_infinity(Ld);
+        Expr* result = NULL;
+        if (is_max) {
+            /* dom wins Max if L = +oo, or L finite with L > M. */
+            if (pos_inf) result = expr_copy(Ld);
+            else if (!neg_inf) {
+                Expr* diff = simp(mk_fn2("Plus", expr_copy(Ld), mk_neg(expr_copy(mb))));
+                if (literal_sign(diff) > 0) result = expr_copy(Ld);
+                expr_free(diff);
+            }
+        } else {
+            /* dom wins Min if L = -oo, or L finite with L < -M. */
+            if (neg_inf) result = expr_copy(Ld);
+            else if (!pos_inf) {
+                Expr* sum = simp(mk_fn2("Plus", expr_copy(Ld), expr_copy(mb)));
+                if (literal_sign(sum) < 0) result = expr_copy(Ld);
+                expr_free(sum);
+            }
+        }
+        expr_free(mb); expr_free(Ld);
+        if (result) return result;
+    }
+    return NULL;
+}
+
+/* ---------------------------------------------------------------------- */
 static Expr* layer_bounded_envelope(Expr* f, LimitCtx* ctx) {
     if (!contains_bounded_head(f)) return NULL;
 
@@ -2827,6 +2897,11 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
      * so we try to squeeze to 0 first. Gating is enforced inside the
      * layer (currently only fires at +Infinity). */
     TRY(LIMIT_M_BOUNDED, layer_bounded_envelope(f, ctx));
+
+    /* Max/Min of a bounded oscillation vs a dominating definite limit
+     * (Max[Sin[x], 2] -> 2). The mrv engine's dominance test can't order a
+     * bounded oscillator, so this bounded-comparison layer handles it. */
+    TRY(LIMIT_M_BOUNDED, layer_maxmin_bounded(f, ctx));
 
     /* Layer 2: series-based evaluation -- the workhorse. */
     TRY(LIMIT_M_SERIES, layer2_series(f, ctx));
