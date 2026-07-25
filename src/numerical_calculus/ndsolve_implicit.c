@@ -1,7 +1,8 @@
 /* Mathilda — NDSolve implicit / stiff steppers: BackwardEuler, ImplicitTrapezoid
- * (one-step, via the shared theta-method Newton solve) and BDF (adaptive
- * variable-step backward differentiation, orders 1-2, with local error control
- * and Newton-failure step recovery; self-started at order 1). */
+ * (one-step, via the shared theta-method Newton solve) and BDF (variable-step
+ * variable-order backward differentiation, orders 1-5, with exact nonuniform-mesh
+ * coefficients, local error control, order ramping and Newton-failure step/order
+ * recovery; self-started at order 1). */
 #include "ndsolve_common.h"
 #include <math.h>
 #include <float.h>
@@ -42,31 +43,92 @@ static bool implicit_trapezoid_step(const NdStepper* S, NdProblem* P, double t, 
     return ok;
 }
 
-/* ------------------ BDF multistep (variable step, orders 1-2) ---------------- *
+/* ------------- BDF multistep: variable step, variable order 1-5 -------------- *
  *
- * Adaptive variable-step-size BDF, self-started at order 1 (backward Euler) and
- * rising to order 2 once a second node exists.  Three ingredients make it robust
- * on the stiff / awkward problems fixed-step BDF cannot handle:
+ * A variable-step variable-order (VSVO) BDF integrator — the standard stiff
+ * workhorse (LSODE/CVODE/DASSL family), giving high accuracy at few steps.
  *
- *   1. Local error control (Milne device).  Each step forms an explicit
- *      predictor of the SAME order as the BDF corrector; the (corrector -
- *      predictor) difference is a cheap local truncation-error estimate (no
- *      extra RHS/Newton work).  A WRMS norm <= 1 accepts the step; otherwise it
- *      is rejected and the step shrunk.
- *        order 1:  predictor = explicit Euler  y_n + h f_n
- *        order 2:  predictor = Hermite quadratic through (t_{n-1}, y_{n-1}) and
- *                  (t_n, y_n, f_n), extrapolated to t_{n+1}.
- *   2. Newton-failure recovery.  When nd_newton_theta diverges (the classic
- *      failure at incompatible IC/BC corners, `ndcf`), the step is halved and
- *      retried instead of aborting; after repeated trouble the order is dropped
- *      to the L-stable backward Euler.  Only a genuine step-size collapse is
- *      terminal.
- *   3. Variable-step BDF2 coefficients.  With ratio w = h_n / h_{n-1},
- *        a*y_{n+1} - b*y_n + c*y_{n-1} = h_n f(t_{n+1}, y_{n+1}),
- *        a=(1+2w)/(1+w),  b=(1+w),  c=w^2/(1+w),
- *      solved as the theta-method  y = Ybase + (h_n/a) f  with
- *        Ybase=(b/a)y_n-(c/a)y_{n-1},  theta=1/a  (w=1 recovers 4/3,1/3,2/3).
+ *  * Exact variable-step coefficients.  BDF-q enforces  L'(t_{n+1}) = f, where L
+ *    is the degree-q polynomial interpolating (t_{n+1},y_{n+1}) and the q most
+ *    recent nodes.  Differentiating the Lagrange basis at t_{n+1} gives the
+ *    coefficients  c_j = L_j'(t_{n+1})  directly from the actual (nonuniform)
+ *    node times — exact for any step distribution and any order (bdf_coeffs).
+ *    The implicit relation  c_0 y_{n+1} + sum_{j>=1} c_j y_{n+1-j} = f  is solved
+ *    as the shared theta-method  y = Ybase + (1/c_0) f  (Ybase = -(1/c_0) sum
+ *    c_j y_{n+1-j}, theta = 1/(c_0 h)).  (q=1 recovers backward Euler; q=2, equal
+ *    steps, recovers 4/3, 1/3, 2/3.)
+ *  * Milne local-error estimate.  The predictor is the degree-q polynomial
+ *    through the q+1 most recent nodes, extrapolated to t_{n+1} (lagrange_predict)
+ *    — same order as the corrector, so (corrector - predictor) estimates the
+ *    local truncation error with no extra RHS/Newton work.  WRMS <= 1 accepts.
+ *  * Order control.  Order ramps up by one per successful step (up to the number
+ *    of available history points and BDF_QMAX) and drops on trouble.  Step growth
+ *    is capped tighter at higher order to respect variable-step BDF's zero-
+ *    stability step-ratio bounds, and small step changes are suppressed (held at
+ *    the current h) to keep the mesh smooth — both stabilize high-order BDF.
+ *  * Newton-failure recovery.  A diverging Newton iteration (the `ndcf` failure at
+ *    incompatible IC/BC corners) halves the step, drops the order toward the
+ *    L-stable backward Euler, and retries; only a step-size collapse is terminal.
  */
+#define BDF_QMAX 5
+
+/* BDF-q coefficients c[0..q]: c_j is the derivative at t1 of the Lagrange basis
+ * for node x_j, where x_0 = t1 (the unknown y_{n+1}) and x_{1..q} = th[0..q-1]
+ * (the q most recent nodes, th[0] most recent).  Then
+ *   c_0 y_{n+1} + sum_{j=1}^{q} c_j y_{n+1-j} = f(t_{n+1}, y_{n+1}). */
+static void bdf_coeffs(double t1, const double* th, int q, double* c) {
+    double x[BDF_QMAX + 1];
+    x[0] = t1;
+    for (int j = 1; j <= q; j++) x[j] = th[j - 1];
+    double s = 0.0;
+    for (int m = 1; m <= q; m++) s += 1.0 / (x[0] - x[m]);
+    c[0] = s;                                     /* L_0'(t1) = sum 1/(x0-xm) */
+    for (int j = 1; j <= q; j++) {
+        double num = 1.0, den = 1.0;
+        for (int m = 0; m <= q; m++) {
+            if (m == j) continue;
+            den *= (x[j] - x[m]);                 /* all m != j                */
+            if (m == 0) continue;
+            num *= (x[0] - x[m]);                 /* m != j and m != 0         */
+        }
+        c[j] = num / den;
+    }
+}
+
+/* Degree-q polynomial through the q+1 most recent nodes (th[0..q], yh rows),
+ * extrapolated to t1 -> pred[0..d).  th[0] is the most recent node. */
+static void lagrange_predict(double t1, const double* th, const double* yh,
+                             int q, size_t d, double* pred) {
+    double w[BDF_QMAX + 1];
+    for (int j = 0; j <= q; j++) {
+        double num = 1.0, den = 1.0;
+        for (int m = 0; m <= q; m++) {
+            if (m == j) continue;
+            num *= (t1 - th[m]);
+            den *= (th[j] - th[m]);
+        }
+        w[j] = num / den;
+    }
+    for (size_t i = 0; i < d; i++) {
+        double acc = 0.0;
+        for (int j = 0; j <= q; j++) acc += w[j] * yh[(size_t)j * d + i];
+        pred[i] = acc;
+    }
+}
+
+/* Per-reassessment cap on a step jump.  The step is held constant between
+ * reassessments (uniform mesh -> BDF zero-stable at every order <= 6), so the cap
+ * only bounds the size of an occasional jump; it tightens with order because a
+ * large ratio is riskier at high order.  Index by order 1..5. */
+static double bdf_grow_cap(int q) {
+    switch (q) {
+        case 1: case 2: return 5.0;
+        case 3:         return 4.0;
+        case 4:         return 3.0;
+        default:        return 2.0;   /* q >= 5 */
+    }
+}
+
 static NdStatus bdf_dir(NdProblem* P, const NdOpts* o, NdSolution* sol, NdTol tol,
                         double target, int64_t* budget) {
     size_t d = P->d;
@@ -74,34 +136,35 @@ static NdStatus bdf_dir(NdProblem* P, const NdOpts* o, NdSolution* sol, NdTol to
     double span = fabs(P->tmax - P->tmin);
     if (fabs(target - P->t0) <= 16.0 * DBL_EPSILON * (span + 1.0)) return ND_OK;
 
-    double* yprev = malloc(sizeof(double) * d);   /* y_{n-1}                    */
-    double* ycur  = malloc(sizeof(double) * d);   /* y_n                        */
-    double* ynext = malloc(sizeof(double) * d);   /* trial y_{n+1}             */
-    double* base  = malloc(sizeof(double) * d);   /* theta-method Ybase        */
-    double* pred  = malloc(sizeof(double) * d);   /* explicit predictor        */
-    double* fcur  = malloc(sizeof(double) * d);   /* f(t_n, y_n)               */
-    double* fnext = malloc(sizeof(double) * d);   /* f(t_{n+1}, y_{n+1})       */
+    /* history ring: th[0]/yh row 0 = most recent node, up to BDF_QMAX+1 nodes */
+    const int CAP = BDF_QMAX + 1;
+    double  th[BDF_QMAX + 1];
+    double* yh    = malloc(sizeof(double) * (size_t)CAP * d);
+    double  cc[BDF_QMAX + 1];
+    double* ynext = malloc(sizeof(double) * d);
+    double* base  = malloc(sizeof(double) * d);
+    double* pred  = malloc(sizeof(double) * d);
+    double* fcur  = malloc(sizeof(double) * d);   /* f(t_n, y_n) (order-1 start) */
+    double* fnext = malloc(sizeof(double) * d);
 
-    memcpy(ycur, P->Y0, sizeof(double) * d);
-    memcpy(yprev, P->Y0, sizeof(double) * d);
+    th[0] = P->t0;
+    memcpy(yh, P->Y0, sizeof(double) * d);
+    int    m = 1;               /* number of stored history nodes               */
     double t = P->t0;
     NdStatus st = ND_OK;
-    if (!nd_rhs_real(P, t, ycur, fcur)) { st = ND_ERR_SAMPLE; goto done; }
+    if (!nd_rhs_real(P, t, yh, fcur)) { st = ND_ERR_SAMPLE; goto done; }
 
-    /* starting step: Hairer heuristic (order 1), then adapted */
     double h = (o->starting_step > 0.0) ? dir * o->starting_step
-                                        : nd_initial_step(P, o, tol, t, ycur, fcur, 1, dir);
+                                        : nd_initial_step(P, o, tol, t, yh, fcur, 1, dir);
     if (h == 0.0) h = dir * span / 100.0;
 
-    double h_prev = 0.0;        /* size of the last accepted step (for w)       */
-    bool   have_prev = false;   /* is y_{n-1} a genuine second history point?    */
+    int    qtarget = 1;         /* desired order                                 */
+    int    hold = 0;            /* steps to hold (order, step) before reassessing */
     bool   no_grow = false;     /* just recovered from a reject/failure          */
-    int    trouble = 0;         /* consecutive rejects/failures at this t        */
     double h_cap = (o->max_step_size > 0.0) ? o->max_step_size : HUGE_VAL;
     double frac_cap = (o->max_step_fraction > 0.0) ? o->max_step_fraction * span : HUGE_VAL;
 
     while ((target - t) * dir > 16.0 * DBL_EPSILON * (fabs(t) + 1.0)) {
-        /* clamp magnitude, then land exactly on the target */
         double hmag = fabs(h);
         if (hmag > h_cap) hmag = h_cap;
         if (hmag > frac_cap) hmag = frac_cap;
@@ -110,69 +173,111 @@ static NdStatus bdf_dir(NdProblem* P, const NdOpts* o, NdSolution* sol, NdTol to
         if (fabs(hs) < 16.0 * DBL_EPSILON * (fabs(t) + 1.0)) { st = ND_ERR_STEPSIZE; break; }
         if (--(*budget) < 0) { st = ND_ERR_MAXSTEPS; break; }
 
-        /* Order 2 only with a valid second point; after repeated trouble drop to
-         * the very robust backward Euler for one attempt. */
-        bool order2 = have_prev && trouble < 2;
-        double q;               /* step-control exponent = order + 1            */
+        double t1 = t + hs;
+        int q;                  /* order actually used this step                 */
         bool ok;
-        if (order2) {
-            double w = hs / h_prev;
-            double a = (1.0 + 2.0*w) / (1.0 + w);
-            double b = 1.0 + w;
-            double c = (w*w) / (1.0 + w);
-            for (size_t i = 0; i < d; i++) {
-                base[i] = (b/a) * ycur[i] - (c/a) * yprev[i];
-                /* Hermite quadratic predictor through y_{n-1}, (y_n, f_n) */
-                double A = (yprev[i] - ycur[i] + fcur[i]*h_prev) / (h_prev*h_prev);
-                pred[i] = ycur[i] + fcur[i]*hs + A*hs*hs;
-            }
-            ok = nd_newton_theta(P, t + hs, base, hs, 1.0/a, NULL, pred, ynext, tol);
-            q = 3.0;
+        if (m == 1) {
+            /* first step: order 1 with explicit-Euler predictor */
+            q = 1;
+            for (size_t i = 0; i < d; i++) pred[i] = yh[i] + hs * fcur[i];
+            ok = nd_newton_theta(P, t1, yh, hs, 1.0, NULL, pred, ynext, tol);
         } else {
-            for (size_t i = 0; i < d; i++) pred[i] = ycur[i] + hs*fcur[i]; /* Euler */
-            ok = nd_newton_theta(P, t + hs, ycur, hs, 1.0, NULL, pred, ynext, tol);
-            q = 2.0;
+            /* order-q needs q history nodes for the corrector and q+1 for the
+             * same-order predictor: q <= m-1 (qtarget is dropped on trouble). */
+            q = qtarget;
+            if (q > m - 1) q = m - 1;
+            if (q > BDF_QMAX) q = BDF_QMAX;
+            if (q < 1) q = 1;
+            bdf_coeffs(t1, th, q, cc);
+            for (size_t i = 0; i < d; i++) {
+                double acc = 0.0;
+                for (int j = 1; j <= q; j++) acc += cc[j] * yh[(size_t)(j - 1) * d + i];
+                base[i] = -acc / cc[0];
+            }
+            lagrange_predict(t1, th, yh, q, d, pred);
+            ok = nd_newton_theta(P, t1, base, hs, 1.0 / (cc[0] * hs), NULL, pred, ynext, tol);
         }
 
         if (!ok) {
-            /* Newton diverged: shrink and retry; escalate the order-1 fallback. */
-            trouble++; no_grow = true;
+            /* Newton diverged: drop order toward backward Euler, halve, retry. */
+            no_grow = true;
+            if (qtarget > 1) qtarget--;
             h = 0.5 * hs;
             if (fabs(h) < 16.0 * DBL_EPSILON * (fabs(t) + 1.0)) { st = ND_ERR_NONCONV; break; }
             continue;
         }
 
-        /* Milne local-error estimate: corrector - predictor. */
-        for (size_t i = 0; i < d; i++) pred[i] = ynext[i] - pred[i];
-        double err = nd_wrms_norm(d, pred, ycur, ynext, tol);
+        /* Milne error estimate = corrector - predictor (same order q). */
+        for (size_t i = 0; i < d; i++) base[i] = ynext[i] - pred[i];  /* base: scratch */
+        double err = nd_wrms_norm(d, base, yh, ynext, tol);
+        double qexp = (double)q + 1.0;
 
         if (err <= 1.0) {
-            /* accept */
-            t += hs;
+            /* --- accept --- */
+            t = t1;
             if (!nd_rhs_real(P, t, ynext, fnext)) { st = ND_ERR_SAMPLE; break; }
             nd_solution_push(sol, t, ynext, fnext);
-            if (o->step_monitor) { Expr* m = eval_and_free(expr_copy(o->step_monitor)); expr_free(m); }
-            memcpy(yprev, ycur, sizeof(double) * d);
-            memcpy(ycur,  ynext, sizeof(double) * d);
-            memcpy(fcur,  fnext, sizeof(double) * d);
-            h_prev = hs; have_prev = true; trouble = 0;
-            double fac = (err > 0.0) ? 0.9 * pow(1.0/err, 1.0/q) : 5.0;
-            if (fac < 0.2) fac = 0.2;
-            if (fac > (no_grow ? 1.0 : 5.0)) fac = no_grow ? 1.0 : 5.0;
+            if (o->step_monitor) { Expr* mo = eval_and_free(expr_copy(o->step_monitor)); expr_free(mo); }
+
+            /* Decide the next (order, step).  Between reassessments the step and
+             * order are HELD constant for a run of q+1 steps: a uniform mesh makes
+             * BDF zero-stable at every order <= 6, which is what lets high order be
+             * used safely.  Only at the end of a hold window do we consider a
+             * (possibly large) jump or an order change.  History is still t_n.. */
+            int    qnew = q;
+            double fac  = 1.0;
+            if (no_grow) {
+                fac = 1.0; hold = q + 1;        /* recovered from trouble: settle  */
+            } else if (hold > 0) {
+                fac = 1.0; hold--;              /* inside a hold window            */
+            } else {
+                double fac_same = pow(1.0 / (err > 1e-300 ? err : 1e-300), 1.0 / qexp);
+                /* Lowering signal: if the order-(q-1) polynomial predictor implies
+                 * a substantially larger step, the high-order differences are not
+                 * decaying (advection / near-imaginary spectra where high-order
+                 * BDF is unstable) — drop.  The 1.5 bias avoids spurious drops on
+                 * smooth, locally-polynomial data (the exponent asymmetry). */
+                if (q > 1) {
+                    lagrange_predict(t1, th, yh, q - 1, d, fcur);   /* fcur scratch */
+                    for (size_t i = 0; i < d; i++) fcur[i] = ynext[i] - fcur[i];
+                    double err_dn = nd_wrms_norm(d, fcur, yh, ynext, tol);
+                    double fac_dn = pow(1.0 / (err_dn > 1e-300 ? err_dn : 1e-300), 1.0 / (double)q);
+                    if (fac_dn > 1.5 * fac_same) qnew = q - 1;
+                }
+                /* Raising: climb one order per reassessment; the lowering signal
+                 * pulls it back where high order does not pay, so the order settles
+                 * at the best value for the local spectrum. */
+                if (qnew == q && q < BDF_QMAX && q <= m - 1) qnew = q + 1;
+                fac = 0.9 * fac_same;
+                double cap = bdf_grow_cap(qnew);
+                if (fac < 0.2) fac = 0.2;
+                if (fac > cap) fac = cap;
+                hold = qnew + 1;                /* hold the new (order, step)      */
+            }
+            /* shift the history ring, record the new front node */
+            int keep = (m < CAP) ? m : CAP - 1;
+            for (int j = keep; j >= 1; j--) {
+                th[j] = th[j - 1];
+                memcpy(&yh[(size_t)j * d], &yh[(size_t)(j - 1) * d], sizeof(double) * d);
+            }
+            th[0] = t;
+            memcpy(yh, ynext, sizeof(double) * d);
+            if (m < CAP) m++;
+            qtarget = qnew;
             no_grow = false;
             h = dir * fabs(hs) * fac;
         } else {
-            /* reject: shrink, never grow */
-            trouble++; no_grow = true;
-            double fac = 0.9 * pow(1.0/err, 1.0/q);
+            /* reject: shrink, drop the order, force a reassessment next accept */
+            no_grow = true; hold = 0;
+            if (qtarget > 1) qtarget--;
+            double fac = 0.9 * pow(1.0 / err, 1.0 / qexp);
             if (fac < 0.2) fac = 0.2;
             if (fac > 1.0) fac = 1.0;
             h = dir * fabs(hs) * fac;
         }
     }
 done:
-    free(yprev); free(ycur); free(ynext); free(base);
-    free(pred); free(fcur); free(fnext);
+    free(yh); free(ynext); free(base); free(pred); free(fcur); free(fnext);
     return st;
 }
 
@@ -206,9 +311,10 @@ const NdStepper nd_stepper_implicit_trapezoid = {
 };
 
 const NdStepper nd_stepper_bdf = {
-    "BDF", ND_IMPLICIT | ND_MULTISTEP, 2, 1, 0, NULL,
+    "BDF", ND_IMPLICIT | ND_MULTISTEP, 5, 1, 0, NULL,
     "NDSolve`BDF[eqns, u, {x, xmin, xmax}]\n"
-    "\tBackward differentiation formula, a stiff implicit multistep method.\n"
-    "\tAdaptive variable step size (orders 1-2) with predictor-corrector local\n"
-    "\terror control and Newton-failure step recovery; self-started at order 1."
+    "\tBackward differentiation formula, the stiff implicit multistep workhorse.\n"
+    "\tVariable step size and variable order (1-5) with exact nonuniform-mesh\n"
+    "\tcoefficients, predictor-corrector local error control, order ramping and\n"
+    "\tNewton-failure step/order recovery; self-started at order 1."
 };

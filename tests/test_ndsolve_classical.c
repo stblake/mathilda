@@ -381,6 +381,48 @@ static void test_adaptive_implicit(void) {
         "PrecisionGoal->9]]-Exp[-3.0]]", 1e-6);
 }
 
+/* ================= higher-order (variable-order) BDF ================= *
+ *
+ * BDF is a variable-step VARIABLE-ORDER method (orders 1-5).  High order shows
+ * up as high accuracy at few steps on smooth stiff problems, and as accuracy
+ * that tracks the tolerance goals — an order-2-only method would need ~50x more
+ * steps for the tight-tolerance cases below. */
+static void test_bdf_high_order(void) {
+    /* Accuracy tracks the goals: PG/AG 10 on stiff decay -> ~1e-9 or better. */
+    CHECK("BDF hi-order accuracy y'=-y",
+          "First[y[10.0]/.NDSolve[{y'[t]==-y[t],y[0]==1},y,{t,0,10},Method->\"BDF\","
+          "PrecisionGoal->10,AccuracyGoal->10]]", exp(-10.0), 1e-8);
+
+    /* Efficiency: tight tolerance is reached in few steps (variable order).  An
+     * order-2 method needs O((1/rtol)^(1/3)) ~ 5000 steps for rtol 1e-10; the
+     * variable-order method uses far fewer.  Bound generously but well below. */
+    check_le("BDF hi-order step count (tight goal)",
+        "N[Length[NDSolve[{y'[t]==-y[t],y[0]==1},y,{t,0,10},Method->\"BDF\","
+        "PrecisionGoal->10,AccuracyGoal->10][[1,1,2,2]]]]", 1500.0);
+
+    /* Tighter goals give a strictly smaller error (order/step adapt to tol). */
+    check_le("BDF loose-goal error",
+        "Abs[First[y[8.0]/.NDSolve[{y'[t]==-y[t],y[0]==1},y,{t,0,10},Method->\"BDF\","
+        "PrecisionGoal->4,AccuracyGoal->6]]-Exp[-8.0]]", 1e-4);
+    check_le("BDF tight-goal error (few digits more)",
+        "Abs[First[y[8.0]/.NDSolve[{y'[t]==-y[t],y[0]==1},y,{t,0,10},Method->\"BDF\","
+        "PrecisionGoal->11,AccuracyGoal->13]]-Exp[-8.0]]", 1e-9);
+
+    /* Smooth non-stiff ODE at high order: sin over several periods. */
+    CHECK("BDF hi-order harmonic x=cos",
+          "First[x[12.0]/.NDSolve[{x'[t]==y[t],y'[t]==-x[t],x[0]==1,y[0]==0},{x,y},"
+          "{t,0,12},Method->\"BDF\",PrecisionGoal->10,AccuracyGoal->10]]", cos(12.0), 1e-6);
+
+    /* Stiff linear system (eigenvalues -500, -1) at high order + tight goal. */
+    run("hs=NDSolve[{x'[t]==-500 x[t]+499 y[t],y'[t]==-y[t],x[0]==2,y[0]==1},{x,y},"
+        "{t,0,3},Method->\"BDF\",PrecisionGoal->9,AccuracyGoal->9];");
+    /* y = e^{-t}; x = e^{-t} (particular) since x'=-500x+499 e^{-t}, x(0)=2:
+     * homogeneous e^{-500t} (coeff 1) + particular e^{-t}: x=e^{-500t}+e^{-t}. */
+    CHECK("BDF stiff-system slow part", "First[y[3.0]/.hs]", exp(-3.0), 1e-7);
+    CHECK("BDF stiff-system x=e^{-500t}+e^{-t}", "First[x[3.0]/.hs]",
+          exp(-500.0*3.0) + exp(-3.0), 1e-7);
+}
+
 /* ================= incompatible IC/BC corner PDE (the headline fix) ======= *
  *
  * u_t = u_xx with u(0,x)=0 but u(t,1)=1 has a discontinuous corner at (0,1).
@@ -471,6 +513,7 @@ int main(void) {
     TEST(test_backward_and_interior_ic);
     TEST(test_pde_method_of_lines);
     TEST(test_adaptive_implicit);
+    TEST(test_bdf_high_order);
     TEST(test_corner_pde);
     TEST(test_adaptive_adams);
     TEST(test_parity_and_precision);

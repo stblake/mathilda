@@ -1024,7 +1024,7 @@ cubic-Hermite `{{t_i}, y_i, y'_i}` triples fed to `Interpolation`.
 | `"ExplicitRungeKutta"` / `"DOPRI5"` | 5(4) | **adaptive embedded (Automatic default)** |
 | `"BackwardEuler"` | 1 | implicit (Newton), A-stable |
 | `"ImplicitTrapezoid"` | 2 | implicit (Newton), A-stable |
-| `"BDF"` | 1–2 | **adaptive** backward-differentiation multistep (stiff) |
+| `"BDF"` | 1–5 | **adaptive, variable-order** backward-differentiation multistep (stiff) |
 | `"Adams"` | 2 | **adaptive** Adams predictor–corrector (PECE) multistep |
 
 The fixed and implicit one-step methods are driven with step-doubling error
@@ -1032,12 +1032,20 @@ control so accuracy goals are honoured. The two multistep methods (**BDF**,
 **Adams**) are **adaptive variable-step**: each step forms an explicit predictor
 of the same order as the corrector, and the predictor–corrector difference is a
 free Milne local-error estimate that drives step accept/reject (WRMS norm ≤ 1),
-just like the one-step adaptive pair. BDF additionally recovers from a diverging
-Newton iteration by halving the step and dropping to the L-stable backward Euler
-— the key to solving stiff problems with **incompatible initial/boundary corners**
-(e.g. the discontinuous-corner heat equation), which fixed-step BDF could not.
-BDF self-starts at order 1 and rises to the variable-step order-2 formula once a
-second node exists. The default `Automatic` method is the
+just like the one-step adaptive pair. **BDF is additionally variable-order
+(1–5)** — the stiff workhorse (the LSODE/CVODE family). Its coefficients are the
+exact derivatives of the Lagrange interpolant on the actual nonuniform mesh
+(so any step ratio and order is exact); the order ramps up while the higher
+differences keep decaying and is pulled back where they do not (advection /
+near-imaginary spectra, where high-order BDF is unstable); and between changes
+the step and order are held constant for a run of steps so the mesh stays uniform
+(BDF is zero-stable at every order ≤ 6 on a uniform mesh). It also recovers from a
+diverging Newton iteration by halving the step and dropping order toward the
+L-stable backward Euler — the key to solving stiff problems with **incompatible
+initial/boundary corners** (e.g. the discontinuous-corner heat equation), which
+fixed-step BDF could not. High order means tight tolerances are reached in far
+fewer steps (a decaying test at `PrecisionGoal`/`AccuracyGoal` 10 uses ~300 steps
+where an order-2 method needs thousands). The default `Automatic` method is the
 adaptive Dormand–Prince 5(4) pair — the same algorithm as MATLAB's **ode45** —
 and it uses the FSAL (first-same-as-last) property so the last stage of an
 accepted step becomes both the node slope and the next step's first stage: **~6
@@ -1139,9 +1147,9 @@ seams in place): multi-dimensional PDEs, DAEs, boundary-value problems, event
 location (`"EventLocator"`), and the controller methods (`"Projection"`,
 `"Splitting"`, `"Composition"`, `"Extrapolation"`, symplectic integrators).
 `"StiffnessSwitching"` currently maps to `"BDF"`. Complex-valued ODEs and
-`x0 != xmin` boundary points are limited in this landing. BDF/Adams are adaptive
-variable-step but capped at order 2; higher variable orders are the documented
-extension.
+`x0 != xmin` boundary points are limited in this landing. BDF is adaptive
+variable-step variable-order (1–5); Adams is adaptive variable-step but capped at
+order 2.
 
 ### Examples
 
