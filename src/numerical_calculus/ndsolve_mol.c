@@ -409,7 +409,7 @@ static Expr* nd_mol_build_result(NdProblem* P, const char* fname, bool applied,
  * ================================================================== */
 
 /* True if `e` involves the imaginary unit (a Complex[...] node or symbol I). */
-static bool nd_has_imaginary(const Expr* e) {
+bool nd_has_imaginary(const Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, "I") == 0;
     if (e->type == EXPR_FUNCTION) {
@@ -423,7 +423,7 @@ static bool nd_has_imaginary(const Expr* e) {
 }
 
 /* Evaluate `e` (numericalized) and extract its real and imaginary parts. */
-static bool nd_split_reim(Expr* val, NumericSpec spec, double* re, double* im) {
+bool nd_split_reim(Expr* val, NumericSpec spec, double* re, double* im) {
     Expr* nv = numericalize(val, spec);
     if (!nv) return false;
     Expr* reE = eval_and_free(nd_call1(intern_symbol("Re"), expr_copy(nv)));
@@ -461,7 +461,7 @@ static bool nd_bound_eval_complex(Expr* bc, NumericSpec spec, double* re, double
  * nunk) into the real system of the interleaved parts (2k = Re Z_k, 2k+1 = Im).
  * Each f_k is expanded with Z_j -> wR_j + I wI_j and split by ComplexExpand into
  * its Re/Im parts.  Replaces P->f/ysym/Y0/bind_y/d in place. */
-static bool nd_realify(NdProblem* P, size_t nunk, const double* Y0re, const double* Y0im) {
+bool nd_realify(NdProblem* P, size_t nunk, const double* Y0re, const double* Y0im) {
     size_t d = P->d;                 /* == nunk (temporal order 1) */
     size_t dR = 2 * nunk;
     Expr** ysymR = malloc(sizeof(Expr*) * dR);

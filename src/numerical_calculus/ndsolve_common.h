@@ -302,6 +302,25 @@ double nd_initial_step(NdProblem* P, const NdOpts* o, NdTol tol,
  * Consumes nothing; caller owns the returned Expr*. */
 Expr* nd_build_result(NdProblem* P, const NdOpts* o, const NdSolution* sol);
 
+/* Build the result for a realified complex system: each dependent function k
+ * combines its Re component (reduced state 2*fun_state0[k]) and Im component
+ * (2*fun_state0[k]+1) into u -> Function[{t}, ifRe[t] + I ifIm[t]] (or u[t] ->
+ * ifRe[t] + I ifIm[t] when P->fun_applied).  Call after integrating the realified
+ * problem. */
+Expr* nd_build_result_complex(NdProblem* P, const NdOpts* o, const NdSolution* sol);
+
+/* ------------------------------------------------------------------ *
+ *  Complex realification helpers — ndsolve_mol.c                      *
+ * ------------------------------------------------------------------ */
+/* True if `e` contains the imaginary unit I or a Complex[..] head. */
+bool nd_has_imaginary(const Expr* e);
+/* Numericalize `val` and split into real/imag doubles (both must be finite). */
+bool nd_split_reim(Expr* val, NumericSpec spec, double* re, double* im);
+/* Transform the complex first-order system dZ/dt=f(Z) (Z=P->ysym, length nunk)
+ * into the real interleaved system (2k=Re Z_k, 2k+1=Im Z_k) in place, doubling
+ * P->d.  Y0re/Y0im (length nunk) seed the real initial state. */
+bool nd_realify(NdProblem* P, size_t nunk, const double* Y0re, const double* Y0im);
+
 /* ------------------------------------------------------------------ *
  *  PDE front-end (Method of Lines) — ndsolve_mol.c                    *
  * ------------------------------------------------------------------ */

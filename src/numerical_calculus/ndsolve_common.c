@@ -769,3 +769,43 @@ Expr* nd_build_result(NdProblem* P, const NdOpts* o, const NdSolution* sol) {
     Expr* outer = expr_new_function(expr_new_symbol(SYM_List), &inner, 1);
     return outer;
 }
+
+Expr* nd_build_result_complex(NdProblem* P, const NdOpts* o, const NdSolution* sol) {
+    (void)o;
+    if (sol->n < 2) return NULL;
+    Expr** rules = malloc(sizeof(Expr*) * P->nfun);
+    size_t nr = 0;
+    for (size_t k = 0; k < P->nfun; k++) {
+        size_t comp = P->fun_state0[k];
+        Expr* ifRe = nd_build_component(sol, 2 * comp);
+        Expr* ifIm = nd_build_component(sol, 2 * comp + 1);
+        if (!ifRe || !ifIm) {
+            expr_free(ifRe); expr_free(ifIm);
+            for (size_t q = 0; q < nr; q++) expr_free(rules[q]);
+            free(rules); return NULL;
+        }
+        /* body = ifRe[t] + I ifIm[t] */
+        Expr* ta = expr_new_symbol(P->tvar);
+        Expr* reApp = expr_new_function(ifRe, &ta, 1);
+        Expr* tb = expr_new_symbol(P->tvar);
+        Expr* imApp = expr_new_function(ifIm, &tb, 1);
+        Expr* body = nd_call2("Plus", reApp,
+                              nd_call2("Times", expr_new_symbol("I"), imApp));
+        Expr* lhs, *rhs;
+        if (P->fun_applied) {
+            Expr* xa = expr_new_symbol(P->tvar);
+            lhs = expr_new_function(expr_new_symbol(P->fun_names[k]), &xa, 1);
+            rhs = body;
+        } else {
+            lhs = expr_new_symbol(P->fun_names[k]);
+            Expr* param = expr_new_symbol(P->tvar);
+            Expr* plist = expr_new_function(expr_new_symbol(SYM_List), &param, 1);
+            Expr* fargs[2] = { plist, body };
+            rhs = expr_new_function(expr_new_symbol("Function"), fargs, 2);
+        }
+        rules[nr++] = nd_call2(SYM_Rule, lhs, rhs);
+    }
+    Expr* inner = expr_new_function(expr_new_symbol(SYM_List), rules, nr);
+    free(rules);
+    return expr_new_function(expr_new_symbol(SYM_List), &inner, 1);
+}

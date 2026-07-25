@@ -208,6 +208,32 @@ static void test_backward_and_interior_ic(void) {
     snprintf(buf, sizeof buf, "First[y[2.0]/.%s]", M); CHECK("interior IC, y[2]=e^2", buf, exp(2.0), 1e-4);
 }
 
+/* Complex-valued ODEs via realification (split Re/Im, double the dimension). */
+static void test_complex_ode(void) {
+    char buf[320];
+    /* y' = I y, y(0)=1  ->  e^{I x} = cos x + I sin x */
+    const char* A = "s=NDSolve[{y'[x]==I y[x],y[0]==1},y,{x,0,7}]; yf=y/.First[s];";
+    run(A);
+    CHECK("cplx y'=Iy Re->cos", "Re[yf[1.0]]", cos(1.0), 1e-5);
+    CHECK("cplx y'=Iy Im->sin", "Im[yf[1.0]]", sin(1.0), 1e-5);
+    CHECK("cplx y'=Iy at pi ->-1", "Re[yf[3.14159265358979]]", -1.0, 1e-4);
+
+    /* complex initial condition: y(0)=I -> y = I e^{I x} */
+    run("s2=NDSolve[{y'[x]==I y[x],y[0]==I},y,{x,0,3.3}]; g=y/.First[s2];");
+    CHECK("cplx IC y(0)=I Re", "Re[g[1.5707963267949]]", -1.0, 1e-4);
+    CHECK("cplx IC y(0)=I Im", "Im[g[1.5707963267949]]",  0.0, 1e-4);
+
+    /* complex coefficient: y' = (-1+2I) y -> e^{(-1+2I)x} */
+    run("s3=NDSolve[{y'[x]==(-1+2 I) y[x],y[0]==1},y,{x,0,2}]; h=y/.First[s3];");
+    CHECK("cplx coef Re", "Re[h[1.0]]", exp(-1.0) * cos(2.0), 1e-4);
+    CHECK("cplx coef Im", "Im[h[1.0]]", exp(-1.0) * sin(2.0), 1e-4);
+
+    /* higher-order complex: y''=-y, y(0)=1, y'(0)=I -> y = e^{I x} */
+    run("s4=NDSolve[{y''[x]==-y[x],y[0]==1,y'[0]==I},y,{x,0,3.3}]; k=y/.First[s4];");
+    CHECK("cplx 2nd-order Re", "Re[k[1.0]]", cos(1.0), 1e-4);
+    CHECK("cplx 2nd-order Im", "Im[k[1.0]]", sin(1.0), 1e-4);
+}
+
 /* ================= method-of-lines PDEs ================= */
 
 /* Build the heat-equation MOL ODE system on N interior points of [0,1] with
@@ -533,6 +559,7 @@ int main(void) {
     TEST(test_higher_and_varcoef);
     TEST(test_systems);
     TEST(test_backward_and_interior_ic);
+    TEST(test_complex_ode);
     TEST(test_pde_method_of_lines);
     TEST(test_adaptive_implicit);
     TEST(test_bdf_high_order);

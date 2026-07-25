@@ -32,5 +32,11 @@ extensive unit/stress tests + valgrind clean + docs/changelog + commit.
       stencils (`nd_bc_eliminate_2d`); corners resolve via the transverse edge.
       Periodic + mixed derivatives stay deferred but are detected/reported.
       (+test_pde_2d_neumann, +test_pde_2d_robin_steady) — DONE.
-- [ ] **2-D periodic + mixed derivatives**; **robustness cluster**
-      (BackwardEuler maxsteps, complex ODE realification, x0!=xmin).
+- [x] **Robustness cluster** — complex-valued ODEs via realification
+      (`nd_realify`/`nd_has_imaginary`/`nd_split_reim` shared out of
+      `ndsolve_mol.c`; +`nd_build_result_complex`); confirmed `x0!=xmin`
+      bidirectional integration and `MaxSteps` partial-solution + `dmval`
+      extrapolation warnings already correct — both now regression-tested
+      (`test_complex_ode`, `test_backward_and_interior_ic`) — DONE.
+- [ ] **2-D periodic + mixed derivatives** (deferred; periodic couplings are
+      detected and reported via `NDSolve::pdebc`).

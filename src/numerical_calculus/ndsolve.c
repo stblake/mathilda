@@ -358,8 +358,9 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
     }
     for (size_t i = 0; i < d; i++) if (!P.f[i]) build_ok = false;
 
-    /* ---- initial conditions -> Y0, t0 ---- */
+    /* ---- initial conditions -> Y0 (Y0im for complex ICs), t0 ---- */
     P.Y0 = calloc(d, sizeof(double));
+    double* Y0im = calloc(d, sizeof(double));
     bool* have_ic = calloc(d, sizeof(bool));
     double t0 = tmin; bool t0_set = false;
     for (size_t e = 0; e < neq; e++) {
@@ -378,16 +379,38 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
         if (!fk || ord >= maxorder[k]) continue;
         double pt;
         if (nd_eval_to_double((Expr*)arg, o.spec, &pt)) { t0 = pt; t0_set = true; }
-        double cv;
-        if (!nd_eval_to_double(val, o.spec, &cv)) continue;
+        double re, im = 0.0;
+        if (nd_eval_to_double(val, o.spec, &re)) { /* real IC */ }
+        else if (!nd_split_reim(val, o.spec, &re, &im)) continue;   /* complex IC */
         size_t gi = base[k] + (size_t)ord;
-        P.Y0[gi] = cv; have_ic[gi] = true;
+        P.Y0[gi] = re; Y0im[gi] = im; have_ic[gi] = true;
     }
     (void)t0_set;
     bool ic_ok = true;
     for (size_t i = 0; i < d; i++) if (!have_ic[i]) ic_ok = false;
     free(have_ic);
     P.t0 = t0; P.tmin = tmin; P.tmax = tmax;
+
+    /* ---- complex-valued ODE: realify (split Re/Im, double the dimension) ----
+     * Detected when any reduced RHS carries I or any IC is non-real.  The real
+     * machinery (sampler, steppers, Hermite output) is then reused; the output
+     * recombines the paired components into a complex value. */
+    bool cplx = false;
+    for (size_t i = 0; i < d; i++) if (Y0im[i] != 0.0) cplx = true;
+    for (size_t i = 0; i < d && !cplx; i++) if (nd_has_imaginary(P.f[i])) cplx = true;
+    if (cplx && build_ok && ic_ok) {
+#ifdef USE_MPFR
+        if (numeric_spec_is_mpfr(o.spec)) {
+            nd_warn("cmplx", "complex-valued ODEs are integrated at machine precision");
+            o.spec = numeric_machine_spec(); P.spec = o.spec;
+        }
+#endif
+        double* Y0re = malloc(d * sizeof(double));
+        memcpy(Y0re, P.Y0, d * sizeof(double));
+        if (!nd_realify(&P, d, Y0re, Y0im)) build_ok = false;
+        free(Y0re);
+    }
+    free(Y0im);
 
     Expr* result = NULL;
     if (build_ok && ic_ok) {
@@ -399,25 +422,26 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
              * implicit/multistep methods, the MPFR variable-order BDF. */
             result = nd_solve_mpfr(&P, &o, S);
             nd_bind_restore(&P.bind_t);
-            for (size_t i = 0; i < d; i++) nd_bind_restore(&P.bind_y[i]);
+            for (size_t i = 0; i < P.d; i++) nd_bind_restore(&P.bind_y[i]);
         } else
 #endif
         {
-        NdSolution sol; nd_solution_init(&sol, d);
+        NdSolution sol; nd_solution_init(&sol, P.d);
         NdStatus st = nd_integrate(&P, S, &o, &sol);
         /* restore bindings before building the result (uses x, u symbolically) */
         nd_bind_restore(&P.bind_t);
-        for (size_t i = 0; i < d; i++) nd_bind_restore(&P.bind_y[i]);
+        for (size_t i = 0; i < P.d; i++) nd_bind_restore(&P.bind_y[i]);
         if (st == ND_ERR_MAXSTEPS) nd_warn("mxst", "maximum number of steps reached; returning partial solution");
         else if (st == ND_ERR_STEPSIZE) nd_warn("ndsz", "step size effectively zero; singularity or stiffness suspected");
         else if (st == ND_ERR_NONCONV) nd_warn("ndcf", "corrector failed to converge");
         else if (st == ND_ERR_SAMPLE) nd_warn("nrnum", "right-hand side did not evaluate to a number");
-        result = nd_build_result(&P, &o, &sol);
+        result = cplx ? nd_build_result_complex(&P, &o, &sol)
+                      : nd_build_result(&P, &o, &sol);
         nd_solution_free(&sol);
         }
     } else {
         nd_bind_restore(&P.bind_t);
-        for (size_t i = 0; i < d; i++) nd_bind_restore(&P.bind_y[i]);
+        for (size_t i = 0; i < P.d; i++) nd_bind_restore(&P.bind_y[i]);
         if (!ic_ok) nd_warn("underdet", "insufficient initial conditions to determine the solution");
     }
 

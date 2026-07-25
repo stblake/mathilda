@@ -1154,16 +1154,22 @@ mis-solved).
 
 ### Beyond / unlike Mathematica's NDSolve
 
-Supported: ODE initial-value problems — scalar, systems, and higher-order — plus
-1-D evolution PDEs by the method of lines (above), at machine (PDEs) or arbitrary
+Supported: ODE initial-value problems — scalar, systems, and higher-order,
+including **complex-valued** ODEs (via realification: each complex unknown is
+split into interleaved Re/Im real unknowns and the solution recombines to
+`u -> Function[{x}, ifRe[x] + I ifIm[x]]`, integrated at machine precision) and
+initial conditions posed at an **interior** point `x0 != xmin` (the driver
+integrates both forward to `xmax` and backward to `xmin`) — plus 1-D and 2-D
+evolution PDEs by the method of lines (above), at machine (PDEs) or arbitrary
 (ODEs) precision. Not yet handled (deferred, with the `NdProblem`/`NdStepper`
-seams in place): multi-dimensional PDEs, DAEs, boundary-value problems, event
-location (`"EventLocator"`), and the controller methods (`"Projection"`,
-`"Splitting"`, `"Composition"`, `"Extrapolation"`, symplectic integrators).
-`"StiffnessSwitching"` currently maps to `"BDF"`. Complex-valued ODEs and
-`x0 != xmin` boundary points are limited in this landing. BDF is adaptive
-variable-step variable-order (1–5); Adams is adaptive variable-step but capped at
-order 2.
+seams in place): DAEs, boundary-value problems, event location
+(`"EventLocator"`), and the controller methods (`"Projection"`, `"Splitting"`,
+`"Composition"`, `"Extrapolation"`, symplectic integrators).
+`"StiffnessSwitching"` currently maps to `"BDF"`. BDF is adaptive variable-step
+variable-order (1–5); Adams is adaptive variable-step but capped at order 2. When
+`MaxSteps` is exhausted the partial `InterpolatingFunction` is returned with an
+`NDSolve::mxst` warning; querying it beyond the reached domain additionally emits
+`InterpolatingFunction::dmval` (extrapolation), as in Mathematica.
 
 ### Examples
 
