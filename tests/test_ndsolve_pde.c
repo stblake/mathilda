@@ -429,6 +429,95 @@ static void test_difference_order(void) {
                "ratio well above 4 (2nd-order); ~16 expected");
 }
 
+/* ============================================================= *
+ *  13. Neumann BC: insulated heat  u_x(t,0)=u_x(t,1)=0.         *
+ *      cos(pi x) satisfies homogeneous Neumann; exact solution  *
+ *      e^{-pi^2 t} cos(pi x).  One-sided boundary elimination    *
+ *      gives O(h^q) error -> check accuracy + convergence.       *
+ * ============================================================= */
+static double neumann_err(int nx, int order, double T, double xq, double exact) {
+    char buf[1100], q[96];
+    snprintf(buf, sizeof buf,
+        "nm = NDSolve[{D[u[t,x],t]==D[u[t,x],{x,2}], u[0,x]==Cos[Pi x], "
+        "Derivative[0,1][u][t,0]==0, Derivative[0,1][u][t,1]==0}, u, {t,0,%.4f}, "
+        "{x,0,1}, Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->%d}}, "
+        "Method->\"BDF\", MaxSteps->3000];", T, nx, order);
+    run(buf);
+    snprintf(q, sizeof q, "First[u[%.4f, %.4f] /. nm]", T, xq);
+    double v;
+    return eval_double(q, &v) ? fabs(v - exact) : 1e9;
+}
+static void test_neumann_bc(void) {
+    const double T = 0.03, xq = 0.25, exact = exp(-PI * PI * T) * cos(PI * xq);
+    double e = neumann_err(41, 4, T, xq, exact);
+    printf("ok:   Neumann heat u(T,0.25) err=%.2e (exact=%.6f)\n", e, exact);
+    check_true("Neumann BC accurate", e < 5e-3, "|err| < 5e-3 at nx=41, order 4");
+    double c21 = neumann_err(21, 4, T, xq, exact);
+    double c41 = neumann_err(41, 4, T, xq, exact);
+    printf("ok:   Neumann conv nx=21 err=%.2e nx=41 err=%.2e ratio=%.1f\n",
+           c21, c41, c41 > 0 ? c21 / c41 : 0.0);
+    check_true("Neumann converges on refinement", c41 < c21 * 0.6, "error shrinks");
+}
+
+/* ============================================================= *
+ *  14. Robin BC: Dirichlet left, Robin right  u+u_x=2.          *
+ *      Steady state is u=x (exact discrete fixed point); with    *
+ *      IC u(0,x)=x the solution must stay x -> validates the     *
+ *      Robin coefficient extraction + elimination.               *
+ * ============================================================= */
+static void test_robin_bc(void) {
+    const int nx = 15;
+    char buf[1100], q[96], lbl[64];
+    snprintf(buf, sizeof buf,
+        "rb = NDSolve[{D[u[t,x],t]==D[u[t,x],{x,2}], u[0,x]==x, "
+        "u[t,0]==0, u[t,1]+Derivative[0,1][u][t,1]==2}, u, {t,0,1.0}, {x,0,1}, "
+        "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->2}}, "
+        "Method->\"BDF\", MaxSteps->3000];", nx);
+    run(buf);
+    double hh = 1.0 / (nx - 1);
+    for (int i = 3; i <= nx - 2; i += 4) {
+        double xi = i * hh;
+        snprintf(q, sizeof q, "First[u[1.0, %.10f] /. rb]", xi);
+        snprintf(lbl, sizeof lbl, "Robin steady u(1,x%d)=x", i);
+        CHECK(lbl, q, xi, 2e-3);
+    }
+    /* the Robin edge value is held at the eliminated value (u(1)=1) */
+    CHECK("Robin right value", "First[u[1.0, 1.0] /. rb]", 1.0, 5e-3);
+}
+
+/* ============================================================= *
+ *  15. Periodic BC: heat with u(t,0)==u(t,1), IC sin(2 pi x).   *
+ *      sin(2 pi x) is an exact eigenmode of the cyclic discrete  *
+ *      Laplacian -> exact semi-discrete e^{lambda t} sin(2 pi x),*
+ *      lambda = -(2/h^2)(1-cos(2 pi h)).                         *
+ * ============================================================= */
+static void test_periodic_bc(void) {
+    const int nx = 21;
+    const double T = 0.02, h = 1.0 / (nx - 1);
+    const double lam = -2.0 * (1.0 - cos(2.0 * PI * h)) / (h * h);
+    char buf[1100], q[96], lbl[64];
+    snprintf(buf, sizeof buf,
+        "pd = NDSolve[{D[u[t,x],t]==D[u[t,x],{x,2}], u[0,x]==Sin[2 Pi x], "
+        "u[t,0]==u[t,1]}, u, {t,0,%.4f}, {x,0,1}, "
+        "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->2}}, "
+        "Method->\"BDF\", MaxSteps->3000];", T, nx);
+    run(buf);
+    for (int i = 2; i <= nx - 2; i += 4) {
+        double xi = i * h, exact = exp(lam * T) * sin(2.0 * PI * xi);
+        snprintf(q, sizeof q, "First[u[%.4f, %.10f] /. pd]", T, xi);
+        snprintf(lbl, sizeof lbl, "periodic heat u(T,x%d)", i);
+        CHECK(lbl, q, exact, 1e-4);
+    }
+    /* periodicity: the two ends carry the same value */
+    double v0, v1;
+    bool ok = eval_double("First[u[0.01, 0.0] /. pd]", &v0) &&
+              eval_double("First[u[0.01, 1.0] /. pd]", &v1);
+    check_true("periodic endpoints match", ok && fabs(v0 - v1) < 1e-9, "u(t,0)==u(t,1)");
+}
+
 int main(void) {
     mute_stderr_once();
     core_init();
@@ -445,6 +534,9 @@ int main(void) {
     test_advection_diffusion();
     test_large_grid_stress();
     test_difference_order();
+    test_neumann_bc();
+    test_robin_bc();
+    test_periodic_bc();
 
     if (failures == 0) printf("\nAll NDSolve PDE tests passed.\n");
     else printf("\n%d NDSolve PDE test(s) FAILED.\n", failures);

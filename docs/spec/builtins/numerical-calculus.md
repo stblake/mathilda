@@ -1074,14 +1074,17 @@ is a complete tensor grid handed to the multidimensional `Interpolation` builtin
 
 Currently supported: one spatial dimension; one dependent function; temporal
 order 1 (parabolic — heat, advection–diffusion, reaction–diffusion, Burgers) and
-2 (hyperbolic — wave); arbitrary spatial derivative order; **Dirichlet** boundary
-conditions (constant or time-dependent); arbitrary-order (Fornberg) stencils via
-`DifferenceOrder`; machine precision. The grid and stencil are set with
+2 (hyperbolic — wave); arbitrary spatial derivative order; boundary conditions —
+**Dirichlet** `u[t,x0]==g`, **Neumann** `Derivative[0,1][u][t,x0]==g`, **Robin**
+`a u[t,x0] + b Derivative[0,1][u][t,x0]==g`, and **Periodic** `u[t,xmin]==u[t,xmax]`
+(all constant or time-dependent); arbitrary-order (Fornberg) stencils via
+`DifferenceOrder`; machine precision. Neumann/Robin edges are eliminated with a
+one-sided finite-difference of the same order; periodic domains use cyclic
+stencils. The grid and stencil are set with
 `Method -> {"MethodOfLines", "SpatialDiscretization" -> {"TensorProductGrid", "MinPoints" -> n, "DifferenceOrder" -> q}}`.
 Diffusion-dominated (stiff) problems should use `Method -> "BDF"`. Later phases
-add Neumann/Robin/periodic conditions, a compiled banded operator with exact
-Jacobian, two spatial dimensions, MPFR, and adaptive-implicit stepping (needed
-for incompatible IC/BC corners).
+add a compiled banded operator with exact Jacobian, two spatial dimensions, MPFR,
+and adaptive-implicit stepping (needed for incompatible IC/BC corners).
 
 ### Beyond / unlike Mathematica's NDSolve
 
