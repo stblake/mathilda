@@ -205,8 +205,18 @@ static void test_zeta_at_infinity(void) {
     GRUNTZ("(Zeta[2 x] - 1) 4^x", "1");
     /* Different mrv classes (2^-x vs 4^-x) -> clean domination. */
     GRUNTZ("(Zeta[x] - 1)/(Zeta[2 x] - 1)", "Infinity");
+    /* Same-mrv-class ratios with a base-SHIFTED argument: Zeta[x+-1]-1 ~
+     * 2^-(x+-1), which the constant-exponent split lines up onto the 2^-x
+     * scale (Zeta[x]-1 ~ 2^-x): (Zeta[x]-1)/(Zeta[x+1]-1) -> 2^-x/(2^-x/2). */
+    GRUNTZ("(Zeta[x] - 1)/(Zeta[x + 1] - 1)", "2");
+    GRUNTZ("(Zeta[x] - 1)/(Zeta[x - 1] - 1)", "1/2");
+    GRUNTZ("(Zeta[x - 1] - 1)/(Zeta[x] - 1)", "2");
+    /* The underlying Zeta-free exp-sum ratio resolves the same way. */
+    GRUNTZ("(2^(-x) + 3^(-x))/(2^(-(x+1)) + 3^(-(x+1)))", "2");
+    GRUNTZ("(5^(x + 2) - 5^x)/5^x", "24");
     /* Automatic cascade resolves the headline case too. */
     assert_eval_eq("Limit[(Zeta[x] - 1) 2^x, x -> Infinity]", "1", 0);
+    assert_eval_eq("Limit[(Zeta[x] - 1)/(Zeta[x + 1] - 1), x -> Infinity]", "2", 0);
 }
 
 /* ArcTan at Infinity. ArcTan[x] -> Pi/2 needs the at-infinity Series hook
@@ -493,12 +503,6 @@ static void test_honest_abstentions(void) {
     /* Zeta at -Infinity diverges through the trivial zeros -- no asymptotic. */
     assert_eval_startswith(
         "Limit[Zeta[x], x -> -Infinity, Method -> \"Gruntz\"]", "Limit[");
-    /* Same-mrv-class ratio of multi-term exp sums with a base-shifted argument:
-     * a *general* mrv-engine gap (the same limit with Zeta stripped out,
-     * (2^-x + 3^-x)/(2^-(x+1) + 3^-(x+1)), also abstains), not Zeta-specific. */
-    assert_eval_startswith(
-        "Limit[(Zeta[x] - 1)/(Zeta[x + 1] - 1), x -> Infinity, Method -> \"Gruntz\"]",
-        "Limit[");
     /* Oscillatory Bessel functions (Cos/Sin[x] envelopes) have no mrv
      * expansion: bare J/Y stay unevaluated (their decaying-to-0 case needs a
      * bounded-oscillation squeeze the mrv engine does not do), and amplitude

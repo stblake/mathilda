@@ -1377,6 +1377,55 @@ static Expr* gz_powerexpand(Expr* e, const Expr* x) {
     return simp(mk_fn2("PowerExpand", e, wlist));
 }
 
+/* Pull the x-free part of a constant-base exponent out as a constant factor:
+ * b^(f(x) + c) -> b^c * b^f(x)  when b is a positive constant (2, 3, E, ...).
+ * PowerExpand does NOT do this, so `2^-(x+1)` stays an atomic mrv element the
+ * engine cannot line up with `2^-x`. After the split, `2^-(x+1) = (1/2) 2^-x`
+ * shares the `2^-x` scale, letting same-class ratios like
+ * (2^-x + 3^-x)/(2^-(x+1) + 3^-(x+1)) -> 2 resolve. Recurses over the tree;
+ * returns a new owned expr. */
+static Expr* gz_split_const_exp(const Expr* e, const Expr* x) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    Expr* head = gz_split_const_exp(e->data.function.head, x);
+    size_t n = e->data.function.arg_count;
+    Expr** args = n ? (Expr**)malloc(n * sizeof(Expr*)) : NULL;
+    for (size_t i = 0; i < n; i++)
+        args[i] = gz_split_const_exp(e->data.function.args[i], x);
+    Expr* r = expr_new_function(head, args, n);
+    if (args) free(args);
+
+    if (head_is(r, SYM_Power) && r->data.function.arg_count == 2) {
+        Expr* b = r->data.function.args[0];
+        Expr* ex = r->data.function.args[1];
+        /* Base must be a positive constant free of x (so b^c is a constant). */
+        if (!has_x(b, x) && numeric_sign_of(b) == 1) {
+            Expr* exE = simp(mk_fn1("Expand", expr_copy(ex)));
+            if (head_is(exE, SYM_Plus)) {
+                Expr* xfree = mk_int(0);
+                Expr* xdep  = mk_int(0);
+                int nf = 0, nd = 0;
+                for (size_t i = 0; i < exE->data.function.arg_count; i++) {
+                    Expr* t = exE->data.function.args[i];
+                    if (has_x(t, x)) { xdep = mk_plus(xdep, expr_copy(t)); nd++; }
+                    else             { xfree = mk_plus(xfree, expr_copy(t)); nf++; }
+                }
+                if (nf > 0 && nd > 0) {
+                    Expr* bf = mk_pow(expr_copy(b), simp(xfree));
+                    Expr* bd = mk_pow(expr_copy(b), simp(xdep));
+                    Expr* prod = simp(mk_times(bf, bd));
+                    expr_free(exE); expr_free(r);
+                    return prod;
+                }
+                expr_free(xfree); expr_free(xdep);
+            }
+            expr_free(exE);
+        }
+    }
+    return r;
+}
+
 /* Reject a "result" that is not a clean limit value: exactly +/-Infinity is
  * fine, but a ComplexInfinity / Indeterminate / DirectedInfinity, or an
  * Infinity buried inside a function (e.g. Sin[ComplexInfinity] from an
@@ -1635,6 +1684,9 @@ static Expr* gruntz_semitractable_limit(const Expr* e0, const Expr* x) {
         g_fail = 0; g_work = 0; cache_clear_all();
         Expr* iso = isolate_semitractable(e0, x, NS[i]);
         iso = gz_powerexpand(iso, x);
+        /* Split constant-base shifted exponents (e.g. Zeta's isolated
+         * 2^-(x+1) -> (1/2) 2^-x) so same-class ratios line up on one scale. */
+        { Expr* sp = gz_split_const_exp(iso, x); expr_free(iso); iso = sp; }
         /* Distribute so the constant parts of the asymptotic expansions (e.g.
          * the leading 1 in Erf -> 1 + ...) cancel across a difference before
          * the engine sees it; otherwise the engine must resolve a spurious
@@ -1783,6 +1835,7 @@ Expr* gruntz_limit(Expr* f, Expr* x, Expr* point, int dir, int depth) {
     }
 
     e0 = gz_powerexpand(e0, x);
+    { Expr* sp = gz_split_const_exp(e0, x); expr_free(e0); e0 = sp; }
 
     /* Resolve Max/Min by eventual dominance before the mrv engine (which has no
      * generic Max/Min rule). An unresolvable comparison is an honest abstention. */

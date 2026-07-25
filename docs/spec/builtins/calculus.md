@@ -277,7 +277,9 @@ Out[8]= 6 a b^2
     `Log[x]` growth head, `PolyGamma[m≥1]` decays like `x^-m`; the order `m`
     rides the 2-arg node fixed), `(Zeta[x] - 1) 2^x -> 1`,
     `Log[Zeta[x] - 1]/x -> -Log[2]` (`Zeta[x] = 1 + 2^-x + 3^-x + ...` collapses
-    onto its exponential-scale Dirichlet head), `Exp[x] Sqrt[x] BesselK[0, x]
+    onto its exponential-scale Dirichlet head; a constant-exponent split
+    normalises base-shifted terms like `2^-(x+1) -> (1/2) 2^-x` so same-class
+    ratios `(Zeta[x]-1)/(Zeta[x+1]-1) -> 2` resolve), `Exp[x] Sqrt[x] BesselK[0, x]
     -> Sqrt[Pi/2]`, `BesselI[0, x] Exp[-x] Sqrt[x] -> 1/Sqrt[2 Pi]` (the Bessel
     order `nu` may be symbolic — the leading envelope is order-independent), and
     deep log-towers whose leading terms
@@ -300,10 +302,8 @@ Out[8]= 6 a b^2
     thesis-8.31 `Gamma` Stirling difference (whose x^x-scale tower needs a
     deeper `Series` cancellation than the machinery reaches — a flagged `Series`
     limitation, not a wrong answer), `PolyGamma` with a symbolic order or at
-    `-Infinity` (pole lattice), `Zeta` at `-Infinity` (trivial zeros) or
-    same-mrv-class Zeta-difference ratios like
-    `(Zeta[x]-1)/(Zeta[x+1]-1)` (a general mrv-engine gap on base-shifted
-    exponential sums, not Zeta-specific), and — under an *exclusive*
+    `-Infinity` (pole lattice), `Zeta` at `-Infinity` (trivial zeros), and —
+    under an *exclusive*
     `Method -> "Gruntz"` — the oscillatory `BesselJ`/`BesselY` and bounded
     `Max`/`Min` cases below (the monotonic mrv engine cannot expand bounded
     oscillation). Under `Automatic` those resolve via a squeeze layer:

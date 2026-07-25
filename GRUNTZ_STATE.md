@@ -188,8 +188,8 @@ failures that were hidden behind that hang — unrelated to this work).
   emits the exp-log Dirichlet head `1 + 2^-x + 3^-x + ...` (exponential scale,
   not `1/x`); `Zeta` admitted to `is_semitractable_head` (`+oo` only). Resolves
   `(Zeta[x]-1) 2^x->1`, `Log[Zeta[x]-1]/x->-Log[2]`, `x(Zeta[x]-1)->0`, etc.
-  Same-mrv-class ratios `(Zeta[x]-1)/(Zeta[x+1]-1)` remain a *general* mrv gap
-  (base-shifted exp sums; Zeta-free analog abstains too). See
+  Same-mrv-class ratios `(Zeta[x]-1)/(Zeta[x+1]-1)->2` now resolve too
+  (`gz_split_const_exp` normalises `2^-(x+1) -> (1/2)2^-x`). See
   `test_zeta_at_infinity` / `test_series_zeta_at_infinity`.
 - Modified Bessel `BesselK`/`BesselI` at infinity — **DONE (2026-07-25)**.
   2-arg isolation (shared `asymptotic_expansion_2arg` with PolyGamma); monotonic
