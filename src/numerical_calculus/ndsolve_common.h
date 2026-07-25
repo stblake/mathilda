@@ -51,6 +51,23 @@ void nd_bind_restore(NdBind* b);
 bool nd_to_double(const Expr* e, double* out);
 
 /* ------------------------------------------------------------------ *
+ *  Small expr helpers shared by the ODE and MOL/PDE front-ends        *
+ * ------------------------------------------------------------------ */
+/* head[a] / head[a, b] — `head` is an interned/plain symbol name; the argument
+ * Exprs are consumed into the new call. */
+Expr* nd_call1(const char* head, Expr* a);
+Expr* nd_call2(const char* head, Expr* a, Expr* b);
+
+/* Evaluate + numericalize `e` (borrowed) to a finite double under `spec`.
+ * Returns false (leaving *out untouched) if it does not reduce to a real. */
+bool nd_eval_to_double(Expr* e, NumericSpec spec, double* out);
+
+/* Apply {lits[i] -> subs[i]} to `body` (CONSUMED) via ReplaceAll, evaluating.
+ * The lits/subs arrays are borrowed (copied internally).  Returns the rewritten
+ * expression (caller owns). */
+Expr* nd_replace_all(Expr* body, Expr** lits, Expr** subs, size_t n);
+
+/* ------------------------------------------------------------------ *
  *  Compiled problem: dY/dt = f(t, Y)                                  *
  * ------------------------------------------------------------------ */
 typedef struct NdProblem NdProblem;
@@ -251,6 +268,18 @@ double nd_fixed_step(NdProblem* P, const NdOpts* o, NdTol tol, double dir);
  * (or {u[x] -> IF[x], ...} when P->fun_applied) from the accumulated solution.
  * Consumes nothing; caller owns the returned Expr*. */
 Expr* nd_build_result(NdProblem* P, const NdOpts* o, const NdSolution* sol);
+
+/* ------------------------------------------------------------------ *
+ *  PDE front-end (Method of Lines) — ndsolve_mol.c                    *
+ * ------------------------------------------------------------------ */
+/* Solve a partial differential equation problem by the method of lines: the
+ * spatial operator is discretized on a grid, reducing the PDE to the large
+ * first-order ODE system the shared driver already integrates.  `res` is the
+ * whole NDSolve[eqns, u, {t,..}, {x,..}, opts...] call; `o` carries the parsed
+ * options; `forced_method` (or NULL) forces a time-integration stepper.
+ * Returns the {{u -> InterpolatingFunction[...]}} result, or NULL to leave the
+ * call unevaluated. */
+Expr* nd_mol_solve(Expr* res, const NdOpts* o, const char* forced_method);
 
 #ifdef USE_MPFR
 /* Arbitrary-precision integrator (state, time and step size all MPFR).  Used

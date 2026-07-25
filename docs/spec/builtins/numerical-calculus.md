@@ -983,6 +983,8 @@ on `xmin ≤ x ≤ xmax`, returning a list of rules
 
 - `NDSolve[eqns, {u1, u2, ...}, {x, xmin, xmax}]` — a coupled system.
 - `NDSolve[eqns, u[x], {x, xmin, xmax}]` — gives `u[x] -> InterpolatingFunction[...][x]`.
+- `NDSolve[eqns, u, {t, tmin, tmax}, {x, xmin, xmax}]` — a partial differential
+  equation over a rectangular region (method of lines); see below.
 
 Equations are stated with derivatives (`u'[x]`, `u''[x]`, i.e. `Derivative`, not
 `Dt`). Higher-order equations are automatically reduced to a first-order system
@@ -995,7 +997,8 @@ starting state; there must be enough to determine the solution.
 Two-way modularity under `src/numerical_calculus/ndsolve*`:
 
 1. **Problem class** — a user problem is compiled into a first-order reduced
-   system `dY/dt = f(t, Y)` (`NdProblem`). ODE IVPs are supported; BVP/DAE/PDE
+   system `dY/dt = f(t, Y)` (`NdProblem`). ODE IVPs and 1-D evolution PDEs (by
+   the method of lines, `ndsolve_mol.c`) are supported; multi-D PDEs, BVP and DAE
    are the deferred extension seam.
 2. **Method** — each integrator is a self-contained module exposing an
    `NdStepper` single-step vtable; a shared adaptive driver owns the time loop,
@@ -1049,17 +1052,46 @@ the achieved node values is bounded by `PrecisionGoal` (default `p/2`), and
 interior interpolated values are bounded by the cubic-Hermite interpolation
 order — query at an MPFR abscissa (`u[N[t, p]]`) to read a high-precision node.
 
+### Partial differential equations (method of lines)
+
+`NDSolve[eqns, u, {t, tmin, tmax}, {x, xmin, xmax}]` solves a PDE over a
+rectangular region by the **method of lines**: the spatial operator is
+discretized on a uniform grid (second-order central finite differences), turning
+the PDE into the large first-order ODE system the time integrator above already
+solves. The result is a **2-D `InterpolatingFunction`** over `(t, x)`, applied as
+`u[t, x]`.
+
+The front-end lives in `ndsolve_mol.c` (registered as the controller
+`` NDSolve`MethodOfLines ``, reachable via `Method -> "MethodOfLines"`). It
+solves the PDE symbolically for its highest temporal derivative, then per grid
+node substitutes the finite-difference stencils and the node coordinate into that
+expression — so variable-coefficient and **nonlinear** PDEs in one spatial
+dimension work through the same Block-localized sampler, with no extra machinery.
+Because every accepted time node carries the whole spatial vector, the solution
+is a complete tensor grid handed to the multidimensional `Interpolation` builtin.
+
+Currently supported (Phase 1): one spatial dimension; one dependent function;
+temporal order 1 (parabolic — heat, advection–diffusion, reaction–diffusion,
+Burgers) and 2 (hyperbolic — wave); spatial orders 1 and 2; **Dirichlet**
+boundary conditions (constant or time-dependent); machine precision. The grid
+resolution is set with
+`Method -> {"MethodOfLines", "SpatialDiscretization" -> {"TensorProductGrid", "MinPoints" -> n}}`.
+Diffusion-dominated (stiff) problems should use `Method -> "BDF"`. Later phases
+add higher-order (Fornberg) stencils, Neumann/Robin/periodic conditions, a
+compiled banded operator with exact Jacobian, two spatial dimensions, MPFR, and
+adaptive-implicit stepping (needed for incompatible IC/BC corners).
+
 ### Beyond / unlike Mathematica's NDSolve
 
-Supported: ODE initial-value problems — scalar, systems, and higher-order — with
-the methods above, at machine or arbitrary precision. Not yet handled (deferred,
-with the `NdProblem`/`NdStepper` seams in place): PDEs (method of lines), DAEs,
-boundary-value problems, event location (`"EventLocator"`), and the controller
-methods (`"StiffnessSwitching"`, `"Projection"`, `"Splitting"`,
-`"Composition"`, `"Extrapolation"`, symplectic integrators). `"StiffnessSwitching"`
-currently maps to `"BDF"`. Complex-valued ODEs and `x0 != xmin` boundary points
-are limited in this landing. BDF/Adams are fixed-order (2) multistep; higher
-variable orders are the documented extension.
+Supported: ODE initial-value problems — scalar, systems, and higher-order — plus
+1-D evolution PDEs by the method of lines (above), at machine (PDEs) or arbitrary
+(ODEs) precision. Not yet handled (deferred, with the `NdProblem`/`NdStepper`
+seams in place): multi-dimensional PDEs, DAEs, boundary-value problems, event
+location (`"EventLocator"`), and the controller methods (`"Projection"`,
+`"Splitting"`, `"Composition"`, `"Extrapolation"`, symplectic integrators).
+`"StiffnessSwitching"` currently maps to `"BDF"`. Complex-valued ODEs and
+`x0 != xmin` boundary points are limited in this landing. BDF/Adams are
+fixed-order (2) multistep; higher variable orders are the documented extension.
 
 ### Examples
 
@@ -1080,4 +1112,16 @@ In[4]:= NDSolve[{y'[x] == -1000 (y[x] - Cos[x]) - Sin[x], y[0] == 1},
 
 In[5]:= NDSolve[{y'[x] == y[x], y[0] == 1}, y, {x, 0, 1},
                 WorkingPrecision -> 30, PrecisionGoal -> 22, MaxSteps -> 200000]
+
+In[6]:= (* heat equation u_t = u_xx, Dirichlet, method of lines *)
+        sol = NDSolve[{D[u[t, x], t] == D[u[t, x], {x, 2}], u[0, x] == Sin[Pi x],
+                       u[t, 0] == 0, u[t, 1] == 0}, u, {t, 0, 0.05}, {x, 0, 1},
+                      Method -> "BDF"];
+        u[0.05, 0.5] /. sol                 (* ~ E^(-Pi^2 0.05) Sin[Pi/2] *)
+Out[6]= {0.612973}
+
+In[7]:= (* wave equation u_tt = u_xx (default adaptive DOPRI5) *)
+        NDSolve[{D[u[t, x], {t, 2}] == D[u[t, x], {x, 2}], u[0, x] == Sin[Pi x],
+                 Derivative[1, 0][u][0, x] == 0, u[t, 0] == 0, u[t, 1] == 0},
+                u, {t, 0, 0.5}, {x, 0, 1}]
 ```

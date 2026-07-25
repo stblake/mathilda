@@ -24,25 +24,9 @@ static const char* OPT_StartingStepSize;
 static const char* OPT_DependentVariables;
 
 /* ------------------------------------------------------------------ *
- *  Small expr helpers                                                 *
+ *  Small expr helpers (nd_call1/nd_call2/nd_eval_to_double/            *
+ *  nd_replace_all are shared, defined in ndsolve_common.c)             *
  * ------------------------------------------------------------------ */
-static Expr* nd_call1(const char* head, Expr* a) {
-    Expr* args[1] = { a }; return expr_new_function(expr_new_symbol(head), args, 1);
-}
-static Expr* nd_call2(const char* head, Expr* a, Expr* b) {
-    Expr* args[2] = { a, b }; return expr_new_function(expr_new_symbol(head), args, 2);
-}
-
-/* Evaluate + numericalize an expression to a finite double. */
-static bool nd_eval_to_double(Expr* e, NumericSpec spec, double* out) {
-    Expr* v = eval_and_free(expr_copy(e));
-    if (!v) return false;
-    Expr* nv = numericalize(v, spec);
-    expr_free(v);
-    bool ok = nv && nd_to_double(nv, out) && isfinite(*out);
-    expr_free(nv);
-    return ok;
-}
 
 /* Build the literal  u[x]  (order 0) or  Derivative[m][u][x]  (m>=1). */
 static Expr* nd_make_funcapp(const char* fname, int order, const char* xvar) {
@@ -96,19 +80,6 @@ static void nd_scan(const Expr* e, const char** funcs, size_t nfun, const char* 
         for (size_t i = 0; i < e->data.function.arg_count; i++)
             nd_scan(e->data.function.args[i], funcs, nfun, xvar, maxorder, has_x);
     }
-}
-
-/* Apply {lit -> sub, ...} to a (consumed) body via ReplaceAll, evaluating. */
-static Expr* nd_replace_all(Expr* body, Expr** lits, Expr** subs, size_t n) {
-    Expr** rules = malloc(sizeof(Expr*) * n);
-    for (size_t i = 0; i < n; i++) {
-        Expr* ra[2] = { expr_copy(lits[i]), expr_copy(subs[i]) };
-        rules[i] = expr_new_function(expr_new_symbol(SYM_Rule), ra, 2);
-    }
-    Expr* rl = expr_new_function(expr_new_symbol(SYM_List), rules, n);
-    free(rules);
-    Expr* call = nd_call2(SYM_ReplaceAll, body, rl);
-    return eval_and_free(call);
 }
 
 /* ------------------------------------------------------------------ *
@@ -233,7 +204,23 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
     while (pos_end > 3 && nd_is_option(A[pos_end - 1])) pos_end--;
     /* allow exactly 3 positional args; options after */
     for (size_t i = 3; i < argc; i++) if (nd_is_option(A[i])) nd_apply_option(A[i], &o);
-    if (forced_method) o.method = intern_symbol(forced_method);
+    /* "MethodOfLines" is a PDE controller, not a time-integration stepper — it
+     * must not clobber a Method-> time-integration choice given alongside it. */
+    if (forced_method && strcmp(forced_method, "MethodOfLines") != 0)
+        o.method = intern_symbol(forced_method);
+
+    /* ---- PDE?  Two or more independent-variable ranges {t,..},{x,..}[,{y,..}]
+     * means a partial differential equation: hand off to the Method-of-Lines
+     * front-end, which discretizes space into the ODE system solved below. ---- */
+    {
+        size_t nranges = 0;
+        for (size_t i = 2; i < pos_end; i++) {
+            const Expr* r = A[i];
+            if (head_is((Expr*)r, SYM_List) && r->data.function.arg_count == 3
+                && r->data.function.args[0]->type == EXPR_SYMBOL) nranges++;
+        }
+        if (nranges >= 2) return nd_mol_solve(res, &o, forced_method);
+    }
 
     /* ---- range {x, xmin, xmax} ---- */
     Expr* range = A[2];
@@ -477,6 +464,9 @@ void ndsolve_init(void) {
         "NDSolve[eqns, {u1, u2, ...}, {x, xmin, xmax}] solves a system.\n"
         "NDSolve[eqns, u[x], {x, xmin, xmax}] gives u[x] -> InterpolatingFunction[...][x].\n"
         "\tHigher-order equations (u''[x] == ...) are reduced to first order.\n"
+        "NDSolve[eqns, u, {t, tmin, tmax}, {x, xmin, xmax}] solves a partial\n"
+        "\tdifferential equation over a rectangular region by the method of lines,\n"
+        "\tgiving a 2-D InterpolatingFunction applied as u[t, x].\n"
         "\tOptions: Method, WorkingPrecision, AccuracyGoal, PrecisionGoal,\n"
         "\tMaxSteps, MaxStepSize, MaxStepFraction, StartingStepSize,\n"
         "\tInterpolationOrder, StepMonitor, EvaluationMonitor.");
@@ -502,4 +492,15 @@ void ndsolve_init(void) {
             "NDSolve`<method>[eqns, u, {x, xmin, xmax}] — solve forcing this "
             "time-integration method (see NDSolve).");
     }
+
+    /* PDE controller: the Method-of-Lines spatial discretization. */
+    symtab_add_builtin("NDSolve`MethodOfLines", builtin_ndsolve_method);
+    symtab_get_def("NDSolve`MethodOfLines")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("NDSolve`MethodOfLines",
+        "NDSolve`MethodOfLines[eqns, u, {t, tmin, tmax}, {x, xmin, xmax}]\n"
+        "\tsolves a partial differential equation by the method of lines: the\n"
+        "\tspatial operator is discretized on a uniform grid (central finite\n"
+        "\tdifferences) reducing the PDE to an ODE system integrated in time.\n"
+        "\tThe grid resolution is set via Method -> {\"MethodOfLines\",\n"
+        "\t\"SpatialDiscretization\" -> {\"TensorProductGrid\", \"MinPoints\" -> n}}.");
 }

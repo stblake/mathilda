@@ -87,6 +87,38 @@ bool nd_to_double(const Expr* e, double* out) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  Small expr helpers shared by the ODE and MOL/PDE front-ends         *
+ * ------------------------------------------------------------------ */
+Expr* nd_call1(const char* head, Expr* a) {
+    Expr* args[1] = { a }; return expr_new_function(expr_new_symbol(head), args, 1);
+}
+Expr* nd_call2(const char* head, Expr* a, Expr* b) {
+    Expr* args[2] = { a, b }; return expr_new_function(expr_new_symbol(head), args, 2);
+}
+
+bool nd_eval_to_double(Expr* e, NumericSpec spec, double* out) {
+    Expr* v = eval_and_free(expr_copy(e));
+    if (!v) return false;
+    Expr* nv = numericalize(v, spec);
+    expr_free(v);
+    bool ok = nv && nd_to_double(nv, out) && isfinite(*out);
+    expr_free(nv);
+    return ok;
+}
+
+Expr* nd_replace_all(Expr* body, Expr** lits, Expr** subs, size_t n) {
+    Expr** rules = malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) {
+        Expr* ra[2] = { expr_copy(lits[i]), expr_copy(subs[i]) };
+        rules[i] = expr_new_function(expr_new_symbol(SYM_Rule), ra, 2);
+    }
+    Expr* rl = expr_new_function(expr_new_symbol(SYM_List), rules, n);
+    free(rules);
+    Expr* call = nd_call2(SYM_ReplaceAll, body, rl);
+    return eval_and_free(call);
+}
+
+/* ------------------------------------------------------------------ *
  *  RHS + Jacobian evaluation                                          *
  * ------------------------------------------------------------------ */
 
