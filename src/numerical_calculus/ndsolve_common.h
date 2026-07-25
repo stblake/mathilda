@@ -290,6 +290,13 @@ NdStatus nd_multistep_adams(NdProblem* P, const NdOpts* o, NdSolution* sol);
  * clamped).  `dir` is +1 (toward tmax) or -1 (toward tmin). */
 double nd_fixed_step(NdProblem* P, const NdOpts* o, NdTol tol, double dir);
 
+/* Hairer's starting-step-size heuristic (HNW I.II.4), clamped by MaxStepSize /
+ * MaxStepFraction.  Returns a signed step (magnitude times `dir`).  Shared by
+ * the adaptive one-step driver and the adaptive multistep (BDF/Adams) loops. */
+double nd_initial_step(NdProblem* P, const NdOpts* o, NdTol tol,
+                       double t0, const double* Y0, const double* f0,
+                       int order, double dir);
+
 /* Build the NDSolve result: a rule list {u -> InterpolatingFunction[...], ...}
  * (or {u[x] -> IF[x], ...} when P->fun_applied) from the accumulated solution.
  * Consumes nothing; caller owns the returned Expr*. */

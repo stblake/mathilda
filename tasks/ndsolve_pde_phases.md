@@ -16,3 +16,9 @@ extensive unit/stress tests + valgrind clean + docs/changelog + commit.
 - [x] **Phase 5** — MPFR MoL (non-stiff, `nd_solve_mpfr_mol`) + nonlinear
       (viscous Burgers) + **complex (Schrödinger, `nd_realify` + two-real-IF
       output)** — DONE (99 tests). All phases complete.
+- [x] **Adaptive-implicit stepping** — variable-step BDF (orders 1-2) + Adams
+      with predictor-corrector (Milne) local error control and Newton-failure
+      step recovery; solves incompatible IC/BC corners that previously diverged
+      (ndcf). (`ndsolve_implicit.c`, `ndsolve_adams.c`; +test_adaptive_implicit /
+      test_corner_pde / test_adaptive_adams in `ndsolve_classical_tests`) — DONE.
+      Remaining deferral: stiff MPFR (MPFR integrator is explicit-only).

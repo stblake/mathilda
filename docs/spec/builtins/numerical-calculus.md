@@ -1024,11 +1024,20 @@ cubic-Hermite `{{t_i}, y_i, y'_i}` triples fed to `Interpolation`.
 | `"ExplicitRungeKutta"` / `"DOPRI5"` | 5(4) | **adaptive embedded (Automatic default)** |
 | `"BackwardEuler"` | 1 | implicit (Newton), A-stable |
 | `"ImplicitTrapezoid"` | 2 | implicit (Newton), A-stable |
-| `"BDF"` | 2 | backward-differentiation multistep (stiff) |
-| `"Adams"` | 2 | Adams predictor–corrector (PECE) multistep |
+| `"BDF"` | 1–2 | **adaptive** backward-differentiation multistep (stiff) |
+| `"Adams"` | 2 | **adaptive** Adams predictor–corrector (PECE) multistep |
 
 The fixed and implicit one-step methods are driven with step-doubling error
-control so accuracy goals are honoured. The default `Automatic` method is the
+control so accuracy goals are honoured. The two multistep methods (**BDF**,
+**Adams**) are **adaptive variable-step**: each step forms an explicit predictor
+of the same order as the corrector, and the predictor–corrector difference is a
+free Milne local-error estimate that drives step accept/reject (WRMS norm ≤ 1),
+just like the one-step adaptive pair. BDF additionally recovers from a diverging
+Newton iteration by halving the step and dropping to the L-stable backward Euler
+— the key to solving stiff problems with **incompatible initial/boundary corners**
+(e.g. the discontinuous-corner heat equation), which fixed-step BDF could not.
+BDF self-starts at order 1 and rises to the variable-step order-2 formula once a
+second node exists. The default `Automatic` method is the
 adaptive Dormand–Prince 5(4) pair — the same algorithm as MATLAB's **ode45** —
 and it uses the FSAL (first-same-as-last) property so the last stage of an
 accepted step becomes both the node slope and the next step's first stage: **~6
@@ -1116,8 +1125,10 @@ so this is practical for **non-stiff** PDEs (wave, advection) but not stiff
 diffusion; achievable precision at interior query points is bounded by the
 cubic-Hermite interpolation (query at MPFR node abscissae for full precision).
 
-Remaining (deferred): adaptive-implicit stepping for incompatible IC/BC corners
-and stiff MPFR, plus Neumann/Robin/periodic and mixed derivatives in 2-D.
+Adaptive-implicit stepping (variable-step BDF with Newton-failure recovery) now
+handles the incompatible IC/BC corners that previously diverged. Remaining
+(deferred): stiff MPFR (the MPFR integrator is explicit-only), plus
+Neumann/Robin/periodic and mixed derivatives in 2-D.
 
 ### Beyond / unlike Mathematica's NDSolve
 
@@ -1128,8 +1139,9 @@ seams in place): multi-dimensional PDEs, DAEs, boundary-value problems, event
 location (`"EventLocator"`), and the controller methods (`"Projection"`,
 `"Splitting"`, `"Composition"`, `"Extrapolation"`, symplectic integrators).
 `"StiffnessSwitching"` currently maps to `"BDF"`. Complex-valued ODEs and
-`x0 != xmin` boundary points are limited in this landing. BDF/Adams are
-fixed-order (2) multistep; higher variable orders are the documented extension.
+`x0 != xmin` boundary points are limited in this landing. BDF/Adams are adaptive
+variable-step but capped at order 2; higher variable orders are the documented
+extension.
 
 ### Examples
 

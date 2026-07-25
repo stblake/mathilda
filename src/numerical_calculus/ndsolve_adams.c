@@ -1,6 +1,8 @@
 /* Mathilda — NDSolve Adams predictor–corrector (order 2 PECE: AB2 predictor +
- * trapezoidal corrector), self-started with one RK4 step.  Adams is an explicit
- * multistep family; higher orders are the documented extension. */
+ * trapezoidal corrector), self-started with one RK4 step.  Adaptive variable
+ * step size: the (corrector - predictor) difference is a free Milne local-error
+ * estimate driving accept/reject.  Adams is an explicit multistep family;
+ * higher orders are the documented extension. */
 #include "ndsolve_common.h"
 #include <math.h>
 #include <float.h>
@@ -24,14 +26,17 @@ static bool adams_rk4(NdProblem* P, double t, const double* Y, double h, double*
     return ok;
 }
 
+/* Adaptive PECE loop.  Once history exists, the AB2 predictor and trapezoidal
+ * corrector are both order-2, so their difference (corrector - predictor) is a
+ * ready-made Milne local-error estimate — free, since both are already formed.
+ * A WRMS norm <= 1 accepts the step; otherwise the step is shrunk and retried.
+ * The RK4 self-start step is accepted as-is (no cheap same-order estimate). */
 static NdStatus adams_dir(NdProblem* P, const NdOpts* o, NdSolution* sol, NdTol tol,
                           double target, int64_t* budget) {
     size_t d = P->d;
     double dir = (target > P->t0) ? 1.0 : -1.0;
     double span = fabs(P->tmax - P->tmin);
     if (fabs(target - P->t0) <= 16.0 * DBL_EPSILON * (span + 1.0)) return ND_OK;
-    double h = nd_fixed_step(P, o, tol, dir);
-    if (h == 0.0) h = dir * span / 100.0;
 
     double* ycur  = malloc(sizeof(double) * d);
     double* ynext = malloc(sizeof(double) * d);
@@ -46,28 +51,77 @@ static NdStatus adams_dir(NdProblem* P, const NdOpts* o, NdSolution* sol, NdTol 
 
     if (!nd_rhs_real(P, t, ycur, fcur)) { st = ND_ERR_SAMPLE; goto done; }
 
+    double h = (o->starting_step > 0.0) ? dir * o->starting_step
+                                        : nd_initial_step(P, o, tol, t, ycur, fcur, 4, dir);
+    if (h == 0.0) h = dir * span / 100.0;
+    double h_prev = 0.0;        /* last accepted step, for the variable-step AB2 */
+    bool   no_grow = false;
+    double h_cap = (o->max_step_size > 0.0) ? o->max_step_size : HUGE_VAL;
+    double frac_cap = (o->max_step_fraction > 0.0) ? o->max_step_fraction * span : HUGE_VAL;
+
     while ((target - t) * dir > 16.0 * DBL_EPSILON * (fabs(t) + 1.0)) {
-        double hs = h;
+        double hmag = fabs(h);
+        if (hmag > h_cap) hmag = h_cap;
+        if (hmag > frac_cap) hmag = frac_cap;
+        double hs = dir * hmag;
         if ((t + hs - target) * dir > 0.0) hs = target - t;
+        if (fabs(hs) < 16.0 * DBL_EPSILON * (fabs(t) + 1.0)) { st = ND_ERR_STEPSIZE; break; }
         if (--(*budget) < 0) { st = ND_ERR_MAXSTEPS; break; }
+
         if (!have_hist) {
-            /* RK4 self-start for the very first step. */
+            /* RK4 self-start for the very first step (accepted unconditionally). */
             if (!adams_rk4(P, t, ycur, hs, ynext)) { st = ND_ERR_SAMPLE; break; }
-        } else {
-            /* AB2 predictor then trapezoidal corrector (PECE). */
-            for (size_t i = 0; i < d; i++) pred[i] = ycur[i] + hs*(1.5*fcur[i] - 0.5*fprev[i]);
-            if (!nd_rhs_real(P, t + hs, pred, fp)) { st = ND_ERR_SAMPLE; break; }
-            for (size_t i = 0; i < d; i++) ynext[i] = ycur[i] + 0.5*hs*(fcur[i] + fp[i]);
+            t += hs;
+            double* fnext = fp;
+            if (!nd_rhs_real(P, t, ynext, fnext)) { st = ND_ERR_SAMPLE; break; }
+            nd_solution_push(sol, t, ynext, fnext);
+            if (o->step_monitor) { Expr* m = eval_and_free(expr_copy(o->step_monitor)); expr_free(m); }
+            memcpy(fprev, fcur, sizeof(double) * d);
+            memcpy(fcur, fnext, sizeof(double) * d);
+            memcpy(ycur, ynext, sizeof(double) * d);
+            h_prev = hs; have_hist = true; no_grow = false;
+            continue;
         }
+
+        /* Variable-step AB2 predictor: y_n + h[(1 + w/2) f_n - (w/2) f_{n-1}],
+         * w = h/h_prev (w=1 recovers 3/2, -1/2).  Trapezoidal corrector.
+         * fcur is maintained as f(t, ycur) across accept/reject, so no re-eval. */
+        double w = hs / h_prev;
+        for (size_t i = 0; i < d; i++)
+            pred[i] = ycur[i] + hs*((1.0 + 0.5*w)*fcur[i] - (0.5*w)*fprev[i]);
+        if (!nd_rhs_real(P, t + hs, pred, fp)) { st = ND_ERR_SAMPLE; break; }
+        for (size_t i = 0; i < d; i++) ynext[i] = ycur[i] + 0.5*hs*(fcur[i] + fp[i]);
+
+        /* Milne error estimate = corrector - predictor (both order 2). */
+        double err = 0.0;
+        { double* e = pred;   /* reuse pred as the difference buffer */
+          for (size_t i = 0; i < d; i++) e[i] = ynext[i] - pred[i];
+          err = nd_wrms_norm(d, e, ycur, ynext, tol); }
+
+        if (err > 1.0) {
+            /* reject: shrink and retry (do not advance). */
+            double fac = 0.9 * pow(1.0/err, 1.0/3.0);
+            if (fac < 0.2) fac = 0.2;
+            if (fac > 1.0) fac = 1.0;
+            h = dir * fabs(hs) * fac; no_grow = true;
+            continue;
+        }
+
+        /* accept */
         t += hs;
-        double* fnext = fp;   /* reuse buffer */
+        double* fnext = fp;
         if (!nd_rhs_real(P, t, ynext, fnext)) { st = ND_ERR_SAMPLE; break; }
         nd_solution_push(sol, t, ynext, fnext);
         if (o->step_monitor) { Expr* m = eval_and_free(expr_copy(o->step_monitor)); expr_free(m); }
         memcpy(fprev, fcur, sizeof(double) * d);
         memcpy(fcur, fnext, sizeof(double) * d);
         memcpy(ycur, ynext, sizeof(double) * d);
-        have_hist = true;
+        h_prev = hs;
+        double fac = (err > 0.0) ? 0.9 * pow(1.0/err, 1.0/3.0) : 5.0;
+        if (fac < 0.2) fac = 0.2;
+        if (fac > (no_grow ? 1.0 : 5.0)) fac = no_grow ? 1.0 : 5.0;
+        no_grow = false;
+        h = dir * fabs(hs) * fac;
     }
 done:
     free(ycur); free(ynext); free(fprev); free(fcur); free(pred); free(fp);
@@ -91,8 +145,9 @@ NdStatus nd_multistep_adams(NdProblem* P, const NdOpts* o, NdSolution* sol) {
 }
 
 const NdStepper nd_stepper_adams = {
-    "Adams", ND_MULTISTEP, 2, 0, 0, NULL,
+    "Adams", ND_MULTISTEP, 2, 1, 0, NULL,
     "NDSolve`Adams[eqns, u, {x, xmin, xmax}]\n"
     "\tAdams predictor–corrector multistep method (order 2 PECE: AB2 predictor,\n"
-    "\ttrapezoidal corrector), self-started with RK4."
+    "\ttrapezoidal corrector), self-started with RK4.  Adaptive variable step\n"
+    "\tsize via the predictor-corrector local error estimate."
 };

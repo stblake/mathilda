@@ -282,6 +282,156 @@ static void test_pde_method_of_lines(void) {
     }
 }
 
+/* result head is exactly List (i.e. NDSolve solved, not $Failed/unevaluated) */
+static bool result_is_list(const char* input) {
+    Expr* e = parse_expression(input);
+    Expr* r = evaluate(e);
+    bool ok = r && r->type == EXPR_FUNCTION
+              && r->data.function.head->type == EXPR_SYMBOL
+              && strcmp(r->data.function.head->data.symbol.name, "List") == 0
+              && r->data.function.arg_count >= 1;
+    expr_free(e); expr_free(r);
+    return ok;
+}
+static void check_list(const char* label, const char* input) {
+    if (result_is_list(input)) printf("ok:   %-42s = solved (List)\n", label);
+    else { printf("FAIL: %s -> did not solve to a List [%s]\n", label, input); failures++; }
+}
+
+/* check a >= lo (used for step-count bounds) */
+static void check_ge(const char* label, const char* input, double lo) {
+    double v;
+    if (!eval_double(input, &v)) { printf("FAIL: %s -> not numeric\n", label); failures++; return; }
+    if (!(v >= lo)) { printf("FAIL: %s -> %.6g (expected >= %.6g)\n", label, v, lo); failures++; }
+    else printf("ok:   %-42s = %.6g (>= %.6g)\n", label, v, lo);
+}
+
+/* Exact solution of the discontinuous-corner heat problem
+ *   u_t = u_xx,  u(0,x)=0,  u(t,0)=0,  u(t,1)=1
+ * u(t,x) = x + (2/pi) sum_{n>=1} ((-1)^n/n) sin(n pi x) e^{-n^2 pi^2 t}. */
+static double corner_heat_ref(double t, double x) {
+    double s = x;
+    for (int n = 1; n <= 500; n++) {
+        double term = (((n & 1) ? -1.0 : 1.0) / n) * sin(n * PI * x)
+                      * exp(-(double)n * n * PI * PI * t);
+        s += (2.0 / PI) * term;
+        if (fabs(term) < 1e-18) break;
+    }
+    return s;
+}
+
+/* ================= adaptive implicit (stiff) stepping ================= *
+ *
+ * BDF is now an adaptive variable-step method (orders 1-2) with predictor-
+ * corrector local error control and Newton-failure step recovery.  These tests
+ * exercise the stiff regimes where the old fixed-step BDF either lost accuracy
+ * or (at incompatible IC/BC corners) diverged in Newton and returned nothing. */
+static void test_adaptive_implicit(void) {
+    /* Stiff linear scalar: y' = -1000(y - cos t) - sin t, y0=1 -> cos t.
+     * The fast -1000 mode makes this stiff; adaptive BDF nails it. */
+    CHECK("stiff BDF y'=-1000(y-cos)-sin",
+          "First[y[1.0]/.NDSolve[{y'[t]==-1000 (y[t]-Cos[t])-Sin[t],y[0]==1},y,{t,0,1},"
+          "Method->\"BDF\"]]", cos(1.0), 1e-7);
+
+    /* Same via the StiffnessSwitching alias (resolves to BDF). */
+    CHECK("stiff StiffnessSwitching -> cos",
+          "First[y[1.0]/.NDSolve[{y'[t]==-1000 (y[t]-Cos[t])-Sin[t],y[0]==1},y,{t,0,1},"
+          "Method->\"StiffnessSwitching\"]]", cos(1.0), 1e-7);
+
+    /* Stiff manufactured variable-coefficient problem: y' = -50(y - t^2) + 2 t,
+     * y0=0 -> y = t^2 exactly (transient e^{-50t} has zero coefficient).
+     * Exercises the symbolic RHS sampler under stiff BDF. */
+    CHECK("stiff BDF y'=-50(y-t^2)+2t -> t^2",
+          "First[y[2.0]/.NDSolve[{y'[t]==-50 (y[t]-t^2)+2 t,y[0]==0},y,{t,0,2},"
+          "Method->\"BDF\"]]", 4.0, 1e-5);
+
+    /* Stiff linear system, well-separated eigenvalues -1000 and -1:
+     *   x'=-1000 x, y'=-y  ->  x=e^{-1000 t}, y=e^{-t}.
+     * The slow (accurately resolved) component is checked tightly; the fast
+     * component has decayed below the absolute tolerance, so only that it is
+     * ~0 is meaningful. */
+    run("stf=NDSolve[{x'[t]==-1000 x[t],y'[t]==-y[t],x[0]==1,y[0]==1},{x,y},"
+        "{t,0,0.02},Method->\"BDF\"];");
+    CHECK("stiff system slow comp y=e^{-t}", "First[y[0.02]/.stf]", exp(-0.02), 1e-6);
+    check_le("stiff system fast comp ~0",   "Abs[First[x[0.02]/.stf]]", 1e-6);
+
+    /* ImplicitTrapezoid (order 2, one-step) on the stiff forced problem. */
+    CHECK("ImplicitTrapezoid stiff -> cos",
+          "First[y[1.0]/.NDSolve[{y'[t]==-50 (y[t]-Cos[t])+(-Sin[t]),y[0]==1},y,{t,0,1},"
+          "Method->\"ImplicitTrapezoid\"]]", cos(1.0), 1e-4);
+
+    /* BackwardEuler (order 1) on a gentle short stiff problem where its step
+     * budget suffices: y'=-20(y-1), y0=0 -> 1 - e^{-20 t}. */
+    CHECK("BackwardEuler gentle stiff",
+          "First[y[0.4]/.NDSolve[{y'[t]==-20 (y[t]-1),y[0]==0},y,{t,0,0.5},"
+          "Method->\"BackwardEuler\",PrecisionGoal->6]]", 1.0 - exp(-8.0), 1e-4);
+
+    /* Adaptivity: a looser PrecisionGoal must take strictly fewer steps than a
+     * tight one (and both must stay well within the MaxSteps budget). */
+    run("nlo=Length[NDSolve[{y'[t]==-100 (y[t]-1),y[0]==0},y,{t,0,5},Method->\"BDF\","
+        "PrecisionGoal->4][[1,1,2,2]]];");
+    run("nhi=Length[NDSolve[{y'[t]==-100 (y[t]-1),y[0]==0},y,{t,0,5},Method->\"BDF\","
+        "PrecisionGoal->9][[1,1,2,2]]];");
+    check_ge("BDF adaptivity: tighter goal -> more steps", "N[nhi-nlo]", 1.0);
+    check_le("BDF loose goal well under budget",           "N[nlo]", 9000.0);
+
+    /* Tight vs loose accuracy under BDF. */
+    check_le("BDF tight-goal error",
+        "Abs[First[y[3.0]/.NDSolve[{y'[t]==-y[t],y[0]==1},y,{t,0,5},Method->\"BDF\","
+        "PrecisionGoal->9]]-Exp[-3.0]]", 1e-6);
+}
+
+/* ================= incompatible IC/BC corner PDE (the headline fix) ======= *
+ *
+ * u_t = u_xx with u(0,x)=0 but u(t,1)=1 has a discontinuous corner at (0,1).
+ * Fixed-step BDF Newton diverged here (ndcf) and NDSolve returned nothing; the
+ * adaptive BDF (Newton-failure step recovery) now solves it.  We compare the
+ * method-of-lines solution to the exact PDE Fourier series (loose tolerance,
+ * since the comparison includes spatial-discretization error). */
+static void test_corner_pde(void) {
+    const char* SOL =
+        "csol=NDSolve[{D[u[t,x],t]==D[u[t,x],x,x],u[0,x]==0,u[t,0]==0,u[t,1]==1},"
+        "u,{t,0,0.2},{x,0,1}];";
+    run(SOL);
+    /* headline: it solved at all (was $Failed/unevaluated before). */
+    check_list("corner heat solves (was ndcf)", "csol");
+
+    double T = 0.2;
+    CHECK("corner heat u(T,0.5)", "First[u[0.2,0.5]/.csol]", corner_heat_ref(T, 0.5), 5e-3);
+    CHECK("corner heat u(T,0.9)", "First[u[0.2,0.9]/.csol]", corner_heat_ref(T, 0.9), 5e-3);
+    CHECK("corner heat u(T,0.25)", "First[u[0.2,0.25]/.csol]", corner_heat_ref(T, 0.25), 5e-3);
+
+    /* Boundary values are honoured exactly. */
+    CHECK("corner heat BC u(T,1)=1", "First[u[0.2,1.0]/.csol]", 1.0, 1e-6);
+    CHECK("corner heat BC u(T,0)=0", "First[u[0.2,0.0]/.csol]", 0.0, 1e-6);
+}
+
+/* ================= adaptive Adams (non-stiff multistep) ================= */
+static void test_adaptive_adams(void) {
+    /* accuracy on decay */
+    CHECK("Adams decay y'=-y",
+          "First[y[3.0]/.NDSolve[{y'[t]==-y[t],y[0]==1},y,{t,0,5},Method->\"Adams\"]]",
+          exp(-3.0), 1e-5);
+
+    /* adaptive step responds to the goal: tighter goal is at least as accurate */
+    check_le("Adams loose-goal error",
+        "Abs[First[y[5.0]/.NDSolve[{y'[t]==-y[t],y[0]==1},y,{t,0,5},Method->\"Adams\","
+        "PrecisionGoal->4]]-Exp[-5.0]]", 1e-4);
+    check_le("Adams tight-goal error",
+        "Abs[First[y[5.0]/.NDSolve[{y'[t]==-y[t],y[0]==1},y,{t,0,5},Method->\"Adams\","
+        "PrecisionGoal->9]]-Exp[-5.0]]", 1e-5);
+
+    /* nonlinear (logistic) under adaptive Adams */
+    CHECK("Adams logistic",
+          "First[y[2.0]/.NDSolve[{y'[t]==y[t](1-y[t]),y[0]==1/2},y,{t,0,5},Method->\"Adams\"]]",
+          1.0/(1.0+exp(-2.0)), 1e-5);
+
+    /* oscillatory system (harmonic): adaptive Adams tracks cos over many periods */
+    CHECK("Adams harmonic x=cos",
+          "First[x[5.0]/.NDSolve[{x'[t]==y[t],y'[t]==-x[t],x[0]==1,y[0]==0},{x,y},"
+          "{t,0,8},Method->\"Adams\"]]", cos(5.0), 1e-3);
+}
+
 /* ================= accuracy/efficiency parity + precision ================= */
 static void test_parity_and_precision(void) {
     /* ode45-parity: default (adaptive DOPRI5) accuracy on a full period of the
@@ -320,6 +470,9 @@ int main(void) {
     TEST(test_systems);
     TEST(test_backward_and_interior_ic);
     TEST(test_pde_method_of_lines);
+    TEST(test_adaptive_implicit);
+    TEST(test_corner_pde);
+    TEST(test_adaptive_adams);
     TEST(test_parity_and_precision);
 
     if (failures == 0) printf("\nAll classical NDSolve tests passed.\n");

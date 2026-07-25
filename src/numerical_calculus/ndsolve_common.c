@@ -439,10 +439,11 @@ void nd_solution_push(NdSolution* s, double t, const double* Y, const double* dY
  *  Adaptive driver                                                    *
  * ------------------------------------------------------------------ */
 
-/* Hairer's starting-step-size heuristic (HNW I.II.4). */
-static double nd_initial_step(NdProblem* P, const NdOpts* o, NdTol tol,
-                              double t0, const double* Y0, const double* f0,
-                              int order, double dir) {
+/* Hairer's starting-step-size heuristic (HNW I.II.4).  Exported so the adaptive
+ * multistep drivers (BDF/Adams) can share a well-scaled first step. */
+double nd_initial_step(NdProblem* P, const NdOpts* o, NdTol tol,
+                       double t0, const double* Y0, const double* f0,
+                       int order, double dir) {
     size_t d = P->d;
     double d0 = nd_wrms_norm(d, Y0, Y0, NULL, tol);
     double d1 = nd_wrms_norm(d, f0, Y0, NULL, tol);
@@ -574,9 +575,16 @@ static NdStatus nd_integrate_dir(NdProblem* P, const NdStepper* S, const NdOpts*
         steps++;
         if (steps > max_steps) { status = ND_ERR_MAXSTEPS; break; }
         if (!ok) {
-            if (S->flags & ND_IMPLICIT) { status = ND_ERR_NONCONV; }
+            /* Failed step (implicit: Newton diverged; explicit: bad sample).
+             * Shrink and retry — do NOT latch an error, since a smaller step
+             * usually recovers.  Only a step-size collapse is terminal, and for
+             * an implicit method that collapse means "Newton won't converge even
+             * at a tiny step", reported as ND_ERR_NONCONV. */
             h *= 0.5;
-            if (fabs(h) < 16.0 * DBL_EPSILON * (fabs(t) + 1.0)) { status = ND_ERR_STEPSIZE; break; }
+            if (fabs(h) < 16.0 * DBL_EPSILON * (fabs(t) + 1.0)) {
+                status = (S->flags & ND_IMPLICIT) ? ND_ERR_NONCONV : ND_ERR_STEPSIZE;
+                break;
+            }
             continue;
         }
         if (err <= 1.0) {
