@@ -27,6 +27,7 @@
  * through the symbolic sampler.
  */
 #include "ndsolve_common.h"
+#include "ndsolve_stencil.h"
 #include "../sym_names.h"
 #include "../sym_intern.h"
 #include "../eval.h"
@@ -36,6 +37,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+
+#define ND_MAX_SORDER 8    /* highest spatial derivative order handled */
 
 static void nd_mol_warn(const char* tag, const char* msg) {
     fprintf(stderr, "NDSolve::%s: %s\n", tag, msg);
@@ -124,23 +127,25 @@ static bool nd_contains_func(const Expr* e, const char* fname) {
     return false;
 }
 
-/* Recursively track the temporal order, which spatial orders (1,2) appear, and
- * whether an unsupported term (mixed derivative or spatial order > 2) shows up. */
+/* Recursively track the temporal order, which spatial orders appear
+ * (has_s[1..ND_MAX_SORDER]), and whether an unsupported term (mixed
+ * space-time derivative, or spatial order beyond ND_MAX_SORDER) shows up. */
 static void nd_scan_orders(const Expr* e, const char* fname, int* torder,
-                           bool* has_s1, bool* has_s2, bool* unsupported) {
+                           bool* has_s, bool* unsupported) {
     if (!e) return;
     int a, b; const Expr *g0, *g1;
     if (nd_pde_match(e, fname, &a, &b, &g0, &g1)) {
         if (a > *torder) *torder = a;
-        if (a == 0 && b == 1) *has_s1 = true;
-        if (a == 0 && b == 2) *has_s2 = true;
+        if (a == 0 && b >= 1) {
+            if (b <= ND_MAX_SORDER) has_s[b] = true;
+            else *unsupported = true;
+        }
         if (a > 0 && b > 0) *unsupported = true;   /* mixed space-time */
-        if (b > 2) *unsupported = true;            /* spatial order > 2 */
     }
     if (e->type == EXPR_FUNCTION) {
-        nd_scan_orders(e->data.function.head, fname, torder, has_s1, has_s2, unsupported);
+        nd_scan_orders(e->data.function.head, fname, torder, has_s, unsupported);
         for (size_t i = 0; i < e->data.function.arg_count; i++)
-            nd_scan_orders(e->data.function.args[i], fname, torder, has_s1, has_s2, unsupported);
+            nd_scan_orders(e->data.function.args[i], fname, torder, has_s, unsupported);
     }
 }
 
@@ -150,14 +155,6 @@ static void nd_scan_orders(const Expr* e, const char* fname, int* torder,
 static Expr* nd_scaled(double c, Expr* e) {          /* c * e */
     Expr* ar[2] = { expr_new_real(c), e };
     return expr_new_function(expr_new_symbol(SYM_Times), ar, 2);
-}
-static Expr* nd_plus2(Expr* a, Expr* b) {
-    Expr* ar[2] = { a, b };
-    return expr_new_function(expr_new_symbol(SYM_Plus), ar, 2);
-}
-static Expr* nd_plus3(Expr* a, Expr* b, Expr* c) {
-    Expr* ar[3] = { a, b, c };
-    return expr_new_function(expr_new_symbol(SYM_Plus), ar, 3);
 }
 
 /* Evaluate a one-variable expression (borrowed) at var==value to a double. */
@@ -205,36 +202,30 @@ static bool nd_scan_int_subopt(const Expr* e, const char* name, long* out) {
 }
 
 /* ------------------------------------------------------------------ *
- *  Second-order central spatial stencils at interior node `jj`         *
- *  (interior index 0..N-1 ↔ grid index jj+1; boundaries are Dirichlet)*
+ *  Spatial-derivative stencil at grid node `jgrid` (Fornberg weights)  *
+ *  as a symbolic combination of the neighbouring node values.  A node  *
+ *  value is an interior reduced-state symbol, or a Dirichlet boundary   *
+ *  value expression at grid index 0 / nx-1.                             *
  * ------------------------------------------------------------------ */
-static Expr* nd_neighbor(size_t jj, size_t N, int dir, int torder,
-                         Expr** ysym, Expr* bc_left, Expr* bc_right) {
-    /* dir = -1 (left) or +1 (right).  Grid boundary → Dirichlet value expr. */
-    if (dir < 0 && jj == 0)     return expr_copy(bc_left);
-    if (dir > 0 && jj == N - 1) return expr_copy(bc_right);
-    size_t nb = (dir < 0) ? jj - 1 : jj + 1;
-    return expr_copy(ysym[nb * (size_t)torder + 0]);
-}
-
-static Expr* nd_stencil1(size_t jj, size_t N, int torder, double h,
-                         Expr** ysym, Expr* bc_left, Expr* bc_right) {
-    Expr* left  = nd_neighbor(jj, N, -1, torder, ysym, bc_left, bc_right);
-    Expr* right = nd_neighbor(jj, N, +1, torder, ysym, bc_left, bc_right);
-    /* (right - left) / (2h) */
-    return nd_plus2(nd_scaled(1.0 / (2.0 * h), right),
-                    nd_scaled(-1.0 / (2.0 * h), left));
-}
-
-static Expr* nd_stencil2(size_t jj, size_t N, int torder, double h,
-                         Expr** ysym, Expr* bc_left, Expr* bc_right) {
-    Expr* left   = nd_neighbor(jj, N, -1, torder, ysym, bc_left, bc_right);
-    Expr* right  = nd_neighbor(jj, N, +1, torder, ysym, bc_left, bc_right);
-    Expr* center = expr_copy(ysym[jj * (size_t)torder + 0]);
-    double c = 1.0 / (h * h);
-    /* (left - 2 center + right) / h^2 */
-    return nd_plus3(nd_scaled(c, left), nd_scaled(-2.0 * c, center),
-                    nd_scaled(c, right));
+static Expr* nd_mol_stencil_expr(int jgrid, int nx, int deriv, int order, double h,
+                                 int torder, Expr** ysym, Expr* bc_left, Expr* bc_right) {
+    int idx[64]; double w[64]; int npts;
+    nd_stencil_build(jgrid, nx, deriv, order, h, idx, w, &npts);
+    Expr** terms = malloc(sizeof(Expr*) * (size_t)npts);
+    int nt = 0;
+    for (int k = 0; k < npts; k++) {
+        if (w[k] == 0.0) continue;
+        Expr* val;
+        if (idx[k] == 0)          val = expr_copy(bc_left);
+        else if (idx[k] == nx - 1) val = expr_copy(bc_right);
+        else val = expr_copy(ysym[(size_t)(idx[k] - 1) * (size_t)torder + 0]);
+        terms[nt++] = nd_scaled(w[k], val);
+    }
+    Expr* r;
+    if (nt == 0) { free(terms); r = expr_new_integer(0); }
+    else if (nt == 1) { r = terms[0]; free(terms); }
+    else { r = expr_new_function(expr_new_symbol(SYM_Plus), terms, (size_t)nt); free(terms); }
+    return r;
 }
 
 /* ------------------------------------------------------------------ *
@@ -349,12 +340,15 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
         fname = fitem->data.function.head->data.symbol.name; applied = true;
     } else return NULL;
 
-    /* ---- grid resolution ---- */
+    /* ---- grid resolution + finite-difference order ---- */
     long nx_l = 25;
+    long dord_l = 4;                   /* DifferenceOrder default (WL-faithful) */
     for (size_t i = pos_end; i < argc; i++) {
         if (!nd_mol_is_option(A[i])) continue;
-        if (A[i]->data.function.args[0]->data.symbol.name == SYM_Method)
+        if (A[i]->data.function.args[0]->data.symbol.name == SYM_Method) {
             nd_scan_int_subopt(A[i], "MinPoints", &nx_l);
+            nd_scan_int_subopt(A[i], "DifferenceOrder", &dord_l);
+        }
     }
     if (nx_l < 5) nx_l = 5;
     if (nx_l > 20000) nx_l = 20000;
@@ -362,6 +356,9 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
     double h = (xmax - xmin) / (double)(nx - 1);
     size_t N = nx - 2;                 /* interior unknowns (Dirichlet) */
     if (N < 1) return NULL;
+    if (dord_l < 1) dord_l = 1;
+    if (dord_l > (long)nx - 1) dord_l = (long)nx - 1;   /* need <= nx nodes */
+    int dord = (int)dord_l;
 
     /* ---- normalize equations (flatten + canonicalize D -> Derivative) ---- */
     Expr* eqns = A[0];
@@ -372,19 +369,22 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
     for (size_t e = 0; e < neq; e++) eqitems[e] = nd_normalize_derivs(eqsrc[e]);
 
     /* ---- scan orders ---- */
-    int torder = 0; bool has_s1 = false, has_s2 = false, unsupported = false;
+    int torder = 0; bool unsupported = false;
+    bool has_s[ND_MAX_SORDER + 1] = { 0 };
     for (size_t e = 0; e < neq; e++)
-        nd_scan_orders(eqitems[e], fname, &torder, &has_s1, &has_s2, &unsupported);
+        nd_scan_orders(eqitems[e], fname, &torder, has_s, &unsupported);
+    /* list of distinct spatial derivative orders present */
+    int sord[ND_MAX_SORDER]; int nsord = 0;
+    for (int b = 1; b <= ND_MAX_SORDER; b++) if (has_s[b]) sord[nsord++] = b;
     if (unsupported || torder < 1 || torder > 2) {
         nd_mol_warn(unsupported ? "pdeord" : "pdetime",
-                    unsupported ? "only spatial orders 1 and 2 (unmixed) are supported "
-                                  "in this phase"
+                    unsupported ? "mixed space-time derivatives (and spatial order "
+                                  "above 8) are not supported"
                                 : "temporal order must be 1 or 2 in this phase");
         for (size_t e = 0; e < neq; e++) expr_free(eqitems[e]);
         free(eqitems);
         return NULL;
     }
-    (void)has_s1; (void)has_s2;
 
     /* ---- classify equations: evolution PDE, ICs, Dirichlet BCs ---- */
     Expr* pde_eq = NULL;
@@ -483,34 +483,42 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
     for (size_t idx = 0; idx < d; idx++)
         nd_bind_snapshot(&P.bind_y[idx], ysym[idx]->data.symbol.name);
 
-    /* Literals of the derivative forms substituted per node. */
+    /* Literals of the derivative forms substituted per node: u[t,x], each
+     * spatial order present, each lower temporal order, and the coordinate x. */
     Expr* lit_u   = nd_pde_lit(fname, 0, 0, tvar, xvar);
-    Expr* lit_ux  = nd_pde_lit(fname, 0, 1, tvar, xvar);
-    Expr* lit_uxx = nd_pde_lit(fname, 0, 2, tvar, xvar);
     Expr* lit_xv  = expr_new_symbol(xvar);
+    Expr** lit_sx = malloc(sizeof(Expr*) * (size_t)(nsord ? nsord : 1)); /* D[0,b] */
+    for (int i = 0; i < nsord; i++) lit_sx[i] = nd_pde_lit(fname, 0, sord[i], tvar, xvar);
     Expr** lit_ut = malloc(sizeof(Expr*) * (size_t)torder);    /* lit_ut[m] = D[m,0] */
     for (int m = 1; m < torder; m++) lit_ut[m] = nd_pde_lit(fname, m, 0, tvar, xvar);
 
     for (size_t jj = 0; jj < N && G; jj++) {
         size_t base = jj * (size_t)torder;
-        double xj = xmin + (double)(jj + 1) * h;
+        int jgrid = (int)jj + 1;
+        double xj = xmin + (double)jgrid * h;
         /* chain: dU^(m)/dt = U^(m+1) */
         for (int m = 0; m + 1 < torder; m++)
             P.f[base + (size_t)m] = expr_copy(ysym[base + (size_t)m + 1]);
-        /* top: substitute stencils + node coordinate into G */
+        /* top: substitute stencils + lower time derivatives + coordinate into G */
         size_t cnt = 0;
-        Expr* lits[8]; Expr* subs[8];
-        lits[cnt] = lit_u;   subs[cnt] = expr_copy(ysym[base + 0]);                cnt++;
-        lits[cnt] = lit_ux;  subs[cnt] = nd_stencil1(jj, N, torder, h, ysym, bc_left, bc_right); cnt++;
-        lits[cnt] = lit_uxx; subs[cnt] = nd_stencil2(jj, N, torder, h, ysym, bc_left, bc_right); cnt++;
+        Expr* lits[ND_MAX_SORDER + 4]; Expr* subs[ND_MAX_SORDER + 4];
+        lits[cnt] = lit_u; subs[cnt] = expr_copy(ysym[base + 0]); cnt++;
+        for (int i = 0; i < nsord; i++) {
+            lits[cnt] = lit_sx[i];
+            subs[cnt] = nd_mol_stencil_expr(jgrid, (int)nx, sord[i], dord, h,
+                                            torder, ysym, bc_left, bc_right);
+            cnt++;
+        }
         for (int m = 1; m < torder; m++) {
             lits[cnt] = lit_ut[m]; subs[cnt] = expr_copy(ysym[base + (size_t)m]); cnt++;
         }
-        lits[cnt] = lit_xv;  subs[cnt] = expr_new_real(xj);                        cnt++;
+        lits[cnt] = lit_xv; subs[cnt] = expr_new_real(xj); cnt++;
         P.f[base + (size_t)torder - 1] = nd_replace_all(expr_copy(G), lits, subs, cnt);
         for (size_t s = 0; s < cnt; s++) expr_free(subs[s]);   /* lits are shared */
     }
-    expr_free(lit_u); expr_free(lit_ux); expr_free(lit_uxx); expr_free(lit_xv);
+    expr_free(lit_u); expr_free(lit_xv);
+    for (int i = 0; i < nsord; i++) expr_free(lit_sx[i]);
+    free(lit_sx);
     for (int m = 1; m < torder; m++) expr_free(lit_ut[m]);
     free(lit_ut);
 

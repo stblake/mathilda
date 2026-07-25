@@ -617,6 +617,7 @@ set(COMMON_SRC
     ../src/numerical_calculus/ndsolve_adams.c
     ../src/numerical_calculus/ndsolve_mpfr.c
     ../src/numerical_calculus/ndsolve_mol.c
+    ../src/numerical_calculus/ndsolve_stencil.c
     ../src/numerical_roots/nroots.c
     ../src/numerical_roots/nroots_aberth.c
     ../src/numerical_roots/nroots_jt.c

@@ -108,7 +108,7 @@ static void test_heat_eigenmode(void) {
         "hs = NDSolve[{D[u[t,x],t]==D[u[t,x],{x,2}], u[0,x]==Sin[Pi x], "
         "u[t,0]==0, u[t,1]==0}, u, {t,0,%.4f}, {x,0,1}, "
         "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
-        "{\"TensorProductGrid\",\"MinPoints\"->%d}}, MaxSteps->3000];", T, nx);
+        "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->2}}, MaxSteps->3000];", T, nx);
     run(buf);
     for (int i = 1; i <= nx - 2; i++) {
         double xi = i * h, exact = exp(lam * T) * sin(PI * xi);
@@ -133,7 +133,7 @@ static void test_heat_spatial_convergence(void) {
             "cs = NDSolve[{D[u[t,x],t]==D[u[t,x],{x,2}], u[0,x]==Sin[Pi x], "
             "u[t,0]==0, u[t,1]==0}, u, {t,0,%.4f}, {x,0,1}, "
             "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
-            "{\"TensorProductGrid\",\"MinPoints\"->%d}}, MaxSteps->3000];", T, nx);
+            "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->2}}, MaxSteps->3000];", T, nx);
         run(buf);
         snprintf(q, sizeof q, "First[u[%.4f, %.4f] /. cs]", T, xq);
         double v; err[g] = eval_double(q, &v) ? fabs(v - exact) : 1e9;
@@ -160,7 +160,7 @@ static void test_wave_eigenmode(void) {
         "ws = NDSolve[{D[u[t,x],{t,2}]==D[u[t,x],{x,2}], u[0,x]==Sin[Pi x], "
         "Derivative[1,0][u][0,x]==0, u[t,0]==0, u[t,1]==0}, u, {t,0,%.4f}, "
         "{x,0,1}, Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
-        "{\"TensorProductGrid\",\"MinPoints\"->%d}}, MaxSteps->100000];", T, nx);
+        "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->2}}, MaxSteps->100000];", T, nx);
     run(buf);
     for (int i = 4; i <= nx - 2; i += 5) {
         double xi = i * h, exact = cos(omega * T) * sin(PI * xi);
@@ -183,7 +183,7 @@ static void test_reaction_diffusion(void) {
         "rs = NDSolve[{D[u[t,x],t]==D[u[t,x],{x,2}]+%.1f u[t,x], u[0,x]==Sin[Pi x], "
         "u[t,0]==0, u[t,1]==0}, u, {t,0,%.4f}, {x,0,1}, "
         "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
-        "{\"TensorProductGrid\",\"MinPoints\"->%d}}, Method->\"BDF\", MaxSteps->3000];",
+        "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->2}}, Method->\"BDF\", MaxSteps->3000];",
         a, T, nx);
     run(buf);
     for (int i = 2; i <= nx - 2; i += 3) {
@@ -208,7 +208,7 @@ static void test_inhomogeneous_bc(void) {
         "is = NDSolve[{D[u[t,x],t]==D[u[t,x],{x,2}], u[0,x]==x + Sin[Pi x], "
         "u[t,0]==0, u[t,1]==1}, u, {t,0,%.4f}, {x,0,1}, "
         "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
-        "{\"TensorProductGrid\",\"MinPoints\"->%d}}, Method->\"BDF\", MaxSteps->3000];",
+        "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->2}}, Method->\"BDF\", MaxSteps->3000];",
         T, nx);
     run(buf);
     double h = 1.0 / (nx - 1);
@@ -233,7 +233,7 @@ static void test_time_dependent_bc(void) {
         "ts = NDSolve[{D[u[t,x],t]==D[u[t,x],{x,2}], u[0,x]==0, "
         "u[t,0]==Sin[t], u[t,1]==0}, u, {t,0,1.0}, {x,0,1}, "
         "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
-        "{\"TensorProductGrid\",\"MinPoints\"->%d}}, Method->\"BDF\", MaxSteps->3000];", nx);
+        "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->2}}, Method->\"BDF\", MaxSteps->3000];", nx);
     run(buf);
     CHECK("time-dependent left BC u(0.7,0)=Sin[0.7]",
           "First[u[0.7, 0.0] /. ts]", sin(0.7), 1e-6);
@@ -252,7 +252,7 @@ static void nonlin_solve(int nx, double T) {
         "+ (Pi^2-1) Exp[-t] Sin[Pi x] + (Exp[-t] Sin[Pi x])^3, "
         "u[0,x]==Sin[Pi x], u[t,0]==0, u[t,1]==0}, u, {t,0,%.4f}, {x,0,1}, "
         "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
-        "{\"TensorProductGrid\",\"MinPoints\"->%d}}, Method->\"BDF\", MaxSteps->2000];",
+        "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->2}}, Method->\"BDF\", MaxSteps->2000];",
         T, nx);
     run(buf);
 }
@@ -325,7 +325,7 @@ static void test_offgrid_interpolation(void) {
         "os = NDSolve[{D[u[t,x],t]==D[u[t,x],{x,2}], u[0,x]==Sin[Pi x], "
         "u[t,0]==0, u[t,1]==0}, u, {t,0,%.4f}, {x,0,1}, "
         "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
-        "{\"TensorProductGrid\",\"MinPoints\"->%d}}, Method->\"BDF\", MaxSteps->3000];", T, nx);
+        "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->2}}, Method->\"BDF\", MaxSteps->3000];", T, nx);
     run(buf);
     /* midway between grid nodes: still ~e^{lam t} sin(pi x) to interpolation order */
     double xq = 2.5 * h;                               /* between nodes 2 and 3 */
@@ -352,7 +352,7 @@ static void adv_diff_solve(int nx, double T) {
         "+ (Pi^2-1) Exp[-t] Sin[Pi x] + 2 Pi Exp[-t] Cos[Pi x], "
         "u[0,x]==Sin[Pi x], u[t,0]==0, u[t,1]==0}, u, {t,0,%.4f}, {x,0,1}, "
         "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
-        "{\"TensorProductGrid\",\"MinPoints\"->%d}}, Method->\"BDF\", MaxSteps->2000];",
+        "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->2}}, Method->\"BDF\", MaxSteps->2000];",
         T, nx);
     run(buf);
 }
@@ -385,7 +385,7 @@ static void test_large_grid_stress(void) {
         "ls = NDSolve[{D[u[t,x],{t,2}]==D[u[t,x],{x,2}], u[0,x]==Sin[Pi x], "
         "Derivative[1,0][u][0,x]==0, u[t,0]==0, u[t,1]==0}, u, {t,0,%.4f}, "
         "{x,0,1}, Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
-        "{\"TensorProductGrid\",\"MinPoints\"->%d}}, MaxSteps->200000];", T, nx);
+        "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->2}}, MaxSteps->200000];", T, nx);
     run(buf);
     for (int i = 8; i <= nx - 2; i += 12) {
         double xi = i * h, exact = cos(omega * T) * sin(PI * xi);
@@ -393,6 +393,40 @@ static void test_large_grid_stress(void) {
         snprintf(lbl, sizeof lbl, "large-grid wave u(T,x%d) nx=41", i);
         CHECK(lbl, q, exact, 1e-3);
     }
+}
+
+/* ============================================================= *
+ *  12. DifferenceOrder: higher-order stencils converge faster.  *
+ *      Heat vs true PDE e^{-pi^2 t} sin(pi x); error ~ h^q.      *
+ * ============================================================= */
+static double heat_order_err(int nx, int order, double T, double xq, double exact) {
+    char buf[1024], q[96];
+    snprintf(buf, sizeof buf,
+        "os = NDSolve[{D[u[t,x],t]==D[u[t,x],{x,2}], u[0,x]==Sin[Pi x], "
+        "u[t,0]==0, u[t,1]==0}, u, {t,0,%.4f}, {x,0,1}, "
+        "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->%d}}, "
+        "Method->\"BDF\", MaxSteps->3000];", T, nx, order);
+    run(buf);
+    snprintf(q, sizeof q, "First[u[%.4f, %.4f] /. os]", T, xq);
+    double v;
+    return eval_double(q, &v) ? fabs(v - exact) : 1e9;
+}
+static void test_difference_order(void) {
+    const double T = 0.02, xq = 0.5, exact = exp(-PI * PI * T) * sin(PI * xq);
+    double e2 = heat_order_err(21, 2, T, xq, exact);
+    double e4 = heat_order_err(21, 4, T, xq, exact);
+    double e6 = heat_order_err(21, 6, T, xq, exact);
+    printf("ok:   DifferenceOrder err nx=21: o2=%.2e o4=%.2e o6=%.2e\n", e2, e4, e6);
+    check_true("order 4 beats order 2", e4 < e2 * 0.2, "higher order -> smaller error");
+    check_true("order 6 beats order 4", e6 < e4, "still smaller at order 6");
+    /* 4th-order spatial convergence: halving h drops the error by ~2^4. */
+    double c11 = heat_order_err(11, 4, T, xq, exact);
+    double c21 = heat_order_err(21, 4, T, xq, exact);
+    printf("ok:   order-4 conv nx=11 err=%.2e nx=21 err=%.2e ratio=%.1f\n",
+           c11, c21, c21 > 0 ? c11 / c21 : 0.0);
+    check_true("order-4 stencil converges >O(h^2)", c21 < c11 * 0.16,
+               "ratio well above 4 (2nd-order); ~16 expected");
 }
 
 int main(void) {
@@ -410,6 +444,7 @@ int main(void) {
     test_offgrid_interpolation();
     test_advection_diffusion();
     test_large_grid_stress();
+    test_difference_order();
 
     if (failures == 0) printf("\nAll NDSolve PDE tests passed.\n");
     else printf("\n%d NDSolve PDE test(s) FAILED.\n", failures);

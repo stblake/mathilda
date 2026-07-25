@@ -1056,10 +1056,12 @@ order — query at an MPFR abscissa (`u[N[t, p]]`) to read a high-precision node
 
 `NDSolve[eqns, u, {t, tmin, tmax}, {x, xmin, xmax}]` solves a PDE over a
 rectangular region by the **method of lines**: the spatial operator is
-discretized on a uniform grid (second-order central finite differences), turning
-the PDE into the large first-order ODE system the time integrator above already
-solves. The result is a **2-D `InterpolatingFunction`** over `(t, x)`, applied as
-`u[t, x]`.
+discretized on a uniform grid (Fornberg finite-difference weights, `ndsolve_stencil.c`),
+turning the PDE into the large first-order ODE system the time integrator above
+already solves. The result is a **2-D `InterpolatingFunction`** over `(t, x)`,
+applied as `u[t, x]`. Stencils are central where they fit and one-sided of the
+same order near a boundary; `DifferenceOrder` (default 4) selects the accuracy —
+error is `O(h^DifferenceOrder)`. Any spatial derivative order is handled.
 
 The front-end lives in `ndsolve_mol.c` (registered as the controller
 `` NDSolve`MethodOfLines ``, reachable via `Method -> "MethodOfLines"`). It
@@ -1070,16 +1072,16 @@ dimension work through the same Block-localized sampler, with no extra machinery
 Because every accepted time node carries the whole spatial vector, the solution
 is a complete tensor grid handed to the multidimensional `Interpolation` builtin.
 
-Currently supported (Phase 1): one spatial dimension; one dependent function;
-temporal order 1 (parabolic — heat, advection–diffusion, reaction–diffusion,
-Burgers) and 2 (hyperbolic — wave); spatial orders 1 and 2; **Dirichlet**
-boundary conditions (constant or time-dependent); machine precision. The grid
-resolution is set with
-`Method -> {"MethodOfLines", "SpatialDiscretization" -> {"TensorProductGrid", "MinPoints" -> n}}`.
+Currently supported: one spatial dimension; one dependent function; temporal
+order 1 (parabolic — heat, advection–diffusion, reaction–diffusion, Burgers) and
+2 (hyperbolic — wave); arbitrary spatial derivative order; **Dirichlet** boundary
+conditions (constant or time-dependent); arbitrary-order (Fornberg) stencils via
+`DifferenceOrder`; machine precision. The grid and stencil are set with
+`Method -> {"MethodOfLines", "SpatialDiscretization" -> {"TensorProductGrid", "MinPoints" -> n, "DifferenceOrder" -> q}}`.
 Diffusion-dominated (stiff) problems should use `Method -> "BDF"`. Later phases
-add higher-order (Fornberg) stencils, Neumann/Robin/periodic conditions, a
-compiled banded operator with exact Jacobian, two spatial dimensions, MPFR, and
-adaptive-implicit stepping (needed for incompatible IC/BC corners).
+add Neumann/Robin/periodic conditions, a compiled banded operator with exact
+Jacobian, two spatial dimensions, MPFR, and adaptive-implicit stepping (needed
+for incompatible IC/BC corners).
 
 ### Beyond / unlike Mathematica's NDSolve
 
