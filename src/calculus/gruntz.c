@@ -1428,8 +1428,27 @@ static bool gz_result_ok(const Expr* r) {
 static bool is_semitractable_head(const Expr* e, const char** hn_out) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     Expr* h = e->data.function.head;
-    if (h->type != EXPR_SYMBOL || e->data.function.arg_count != 1) return false;
+    if (h->type != EXPR_SYMBOL) return false;
     const char* hn = h->data.symbol.name;
+    /* 2-arg heads whose asymptotic argument is slot 1, order rides in slot 0.
+     *   PolyGamma[m, z]  -- m a literal non-negative integer; digamma (m=0)
+     *     grows like Log[z], m>=1 decays like z^-m (DLMF 5.11.2).
+     *   BesselK[nu, z]   -- monotonic decay Exp[-z] Sqrt[Pi/(2z)] (any nu).
+     *   BesselI[nu, z]   -- monotonic growth Exp[z]/Sqrt[2 Pi z] (any nu).
+     * (BesselJ/BesselY are OSCILLATORY -- Cos/Sin[z] envelopes -- so the mrv
+     *  engine cannot expand them; they are deliberately excluded.) */
+    if (e->data.function.arg_count == 2) {
+        if (strcmp(hn, "PolyGamma") == 0) {
+            Expr* mo = e->data.function.args[0];
+            if (mo->type == EXPR_INTEGER && mo->data.integer >= 0) { *hn_out = hn; return true; }
+            return false;
+        }
+        if (strcmp(hn, "BesselK") == 0 || strcmp(hn, "BesselI") == 0) {
+            *hn_out = hn; return true;
+        }
+        return false;
+    }
+    if (e->data.function.arg_count != 1) return false;
     /* Erf/Erfc/Ei carry the singularity as an explicit Exp[-x^2]/Exp[x] prefix
      * times a Laurent tail; LogGamma's Stirling expansion is an *additive*
      * exp-log head plus a Laurent tail. Both keep the engine's series
@@ -1445,6 +1464,11 @@ static bool is_semitractable_head(const Expr* e, const char** hn_out) {
         strcmp(hn, "Gamma") == 0) {
         *hn_out = hn; return true;
     }
+    /* Zeta[z] at +oo collapses onto its Dirichlet head 1 + 2^-z + 3^-z + ...,
+     * a truncated exp-log sum the mrv engine expands and cancels natively (its
+     * Series-at-Infinity hook emits exactly that). Only +oo is admitted; at -oo
+     * Zeta grows/hits the trivial zeros, so isolation leaves it alone. */
+    if (strcmp(hn, "Zeta") == 0) { *hn_out = hn; return true; }
     return false;
 }
 
@@ -1482,13 +1506,34 @@ static Expr* asymptotic_expansion(const char* head, const Expr* arg, int nterms)
     return simp(sub);
 }
 
+/* Like asymptotic_expansion but for a 2-arg head head[order, y] (PolyGamma,
+ * BesselK, BesselI): expand in y about Infinity and substitute y -> arg. The
+ * first slot `order` (derivative index / Bessel order) rides along unchanged. */
+static Expr* asymptotic_expansion_2arg(const char* head, const Expr* order,
+                                       const Expr* arg, int nterms) {
+    Expr* d = fresh_dummy();
+    Expr* fd = mk_fn2(head, expr_copy((Expr*)order), expr_copy(d));
+    Expr* spec = expr_new_function(mk_sym("List"),
+        (Expr*[]){ expr_copy(d), mk_sym("Infinity"), mk_int(nterms) }, 3);
+    Expr* norm = simp(mk_fn1("Normal", mk_fn2("Series", fd, spec)));
+    Expr* sub  = xreplace(norm, d, arg);
+    expr_free(norm);
+    expr_free(d);
+    return simp(sub);
+}
+
 /* Rewrite every semi-tractable node F[g] (g -> +/-oo) as its exp-log
  * asymptotic expansion; recurse bottom-up so nested arguments are isolated
  * first. Leaves the node untouched when g's limit is finite/undecidable. */
 static Expr* isolate_semitractable(const Expr* e, const Expr* x, int nterms) {
     const char* hn;
     if (is_semitractable_head(e, &hn)) {
-        Expr* g2 = isolate_semitractable(e->data.function.args[0], x, nterms);
+        bool is_polygamma = (strcmp(hn, "PolyGamma") == 0);
+        bool is_zeta = (strcmp(hn, "Zeta") == 0);
+        bool is_bessel2 = (strcmp(hn, "BesselK") == 0 || strcmp(hn, "BesselI") == 0);
+        bool two_arg = is_polygamma || is_bessel2;   /* order in slot 0 */
+        size_t argslot = two_arg ? 1 : 0;            /* asymptotic arg slot */
+        Expr* g2 = isolate_semitractable(e->data.function.args[argslot], x, nterms);
 
         int saved = g_fail; g_fail = 0;
         Expr* L = limitinf(g2, x);
@@ -1504,6 +1549,14 @@ static Expr* isolate_semitractable(const Expr* e, const Expr* x, int nterms) {
         bool is_loggamma = (strcmp(hn, "LogGamma") == 0);
 
         if (cls == 1) {
+            if (two_arg) {
+                /* PolyGamma[m,g]/BesselK[nu,g]/BesselI[nu,g] -> its asymptotic
+                 * expansion in g (order in slot 0 rides along). */
+                Expr* r = asymptotic_expansion_2arg(hn, e->data.function.args[0],
+                                                    g2, nterms);
+                expr_free(g2);
+                return simp(r);
+            }
             if (strcmp(hn, "Gamma") == 0) {
                 /* Gamma[g] = Exp[LogGamma[g]]: build the additive Stirling tower
                  * from LogGamma's cheap series and wrap it in Exp, giving the
@@ -1516,7 +1569,7 @@ static Expr* isolate_semitractable(const Expr* e, const Expr* x, int nterms) {
             expr_free(g2);
             return simp(r);
         }
-        if (cls == -1 && !is_loggamma) {
+        if (cls == -1 && !is_loggamma && !two_arg && !is_zeta) {
             if (strcmp(hn, "ExpIntegralEi") == 0) {
                 /* Ei's asymptotic series E^y(1/y+1/y^2+...) is valid for
                  * y -> -oo as well (E^y -> 0). */
@@ -1534,8 +1587,11 @@ static Expr* isolate_semitractable(const Expr* e, const Expr* x, int nterms) {
                  ? simp(mk_neg(r))
                  : simp(mk_plus(mk_int(2), mk_neg(r)));
         }
-        /* finite / undecidable / LogGamma at -oo (poles): keep the node
-         * (honest gap). */
+        /* finite / undecidable / LogGamma at -oo / 2-arg heads at -oo (poles,
+         * complex/oscillatory negative-argument regime): keep the node (honest
+         * gap). */
+        if (two_arg)
+            return mk_fn2(hn, expr_copy(e->data.function.args[0]), g2);
         return mk_fn1(hn, g2);
     }
 
@@ -1603,6 +1659,54 @@ static Expr* gruntz_semitractable_limit(const Expr* e0, const Expr* x) {
     return NULL;
 }
 
+/* Rewrite Max/Min by eventual dominance as x -> +oo. The mrv engine has no
+ * generic Max/Min rule, but Max[a, b] eventually equals whichever argument is
+ * larger for large x -- decided by the *leading-term* sign of a - b (gz_sign),
+ * NOT the limit of a - b: Max[1/x, 2/x] is 2/x (both -> 0, but 2/x is
+ * eventually larger). Recurses bottom-up so nested Max/Min and Max inside a
+ * larger expression (e.g. x Max[1/x, 2/x] -> 2) are handled. Returns a new
+ * owned expr; sets *failed if any Max/Min could not be ordered (undecidable
+ * comparison) so the caller can abstain rather than guess. */
+static Expr* resolve_maxmin(const Expr* e, const Expr* x, int* failed) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    Expr* head = resolve_maxmin(e->data.function.head, x, failed);
+    size_t n = e->data.function.arg_count;
+    Expr** args = n ? (Expr**)malloc(n * sizeof(Expr*)) : NULL;
+    for (size_t i = 0; i < n; i++)
+        args[i] = resolve_maxmin(e->data.function.args[i], x, failed);
+
+    const Expr* h = e->data.function.head;
+    bool is_max = (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "Max") == 0);
+    bool is_min = (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "Min") == 0);
+
+    if ((is_max || is_min) && n >= 1) {
+        expr_free(head);
+        Expr* best = expr_copy(args[0]);
+        for (size_t i = 1; i < n; i++) {
+            /* Compare best vs args[i] by the eventual sign of their difference. */
+            Expr* d = simp(mk_plus(expr_copy(best), mk_neg(expr_copy(args[i]))));
+            int saved = g_fail; g_fail = 0;
+            int s = gz_sign(d, x);
+            bool cmp_failed = g_fail;
+            g_fail = saved;
+            expr_free(d);
+            if (cmp_failed) { *failed = 1; continue; /* keep current best */ }
+            /* Max keeps the larger (s >= 0 -> best >= arg); Min the smaller. */
+            bool keep_best = is_max ? (s >= 0) : (s <= 0);
+            if (!keep_best) { expr_free(best); best = expr_copy(args[i]); }
+        }
+        for (size_t i = 0; i < n; i++) expr_free(args[i]);
+        if (args) free(args);
+        return best;
+    }
+
+    Expr* r = expr_new_function(head, args, n);
+    if (args) free(args);
+    return r;
+}
+
 Expr* gruntz_limit(Expr* f, Expr* x, Expr* point, int dir, int depth) {
     if (!f || !x || !point) return NULL;
     if (x->type != EXPR_SYMBOL) return NULL;
@@ -1664,6 +1768,17 @@ Expr* gruntz_limit(Expr* f, Expr* x, Expr* point, int dir, int depth) {
     }
 
     e0 = gz_powerexpand(e0, x);
+
+    /* Resolve Max/Min by eventual dominance before the mrv engine (which has no
+     * generic Max/Min rule). An unresolvable comparison is an honest abstention. */
+    {
+        int mmfail = 0;
+        Expr* rmm = resolve_maxmin(e0, x, &mmfail);
+        expr_free(e0);
+        e0 = rmm;
+        if (mmfail) { expr_free(e0); return NULL; }
+        g_fail = 0; g_work = 0; cache_clear_all();
+    }
 
     /* Phase 2: a special function with an essential singularity at infinity
      * needs the isolation pre-pass (thesis 5.2) before the mrv engine. */

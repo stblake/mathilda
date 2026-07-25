@@ -335,6 +335,7 @@ static Expr* layer_gruntz(Expr* f, LimitCtx* ctx);
 static Expr* rewrite_reciprocal_trig(Expr* e);
 static Expr* magnitude_upper_bound(Expr* e, Expr* x, bool var_abs);
 static bool  contains_bounded_head(Expr* e);
+static bool  contains_head_symbol(Expr* e, const char* head_sym);
 #define LIMIT_UNKNOWN_GROWTH INT64_MAX
 static int64_t growth_exponent_upper(Expr* e, Expr* x);
 
@@ -1163,6 +1164,12 @@ apply_prefactor:
 }
 
 static Expr* layer2_series(Expr* f, LimitCtx* ctx) {
+    /* Max/Min are piecewise, not analytic: Series would Taylor-expand them into
+     * meaningless Derivative[Max][...] terms. Bail so the cascade reaches the
+     * Gruntz layer, which resolves Max/Min by eventual dominance. (Symbols are
+     * interned, so contains_head_symbol takes the SYM_* pointers, not literals.) */
+    if (contains_head_symbol(f, SYM_Max) || contains_head_symbol(f, SYM_Min))
+        return NULL;
     /* We rely on Series's native at-Infinity handling: Series[f, {x,
      * Infinity, k}] produces SeriesData[Power[x, -1], 0, ...] -- i.e.
      * the expansion variable is 1/x. The leading-term reader only looks
@@ -1359,6 +1366,11 @@ done:
  * Indeterminate). Strict growth of the leaf count in three consecutive
  * iterations is treated as "not making progress". */
 static Expr* layer5_lhospital(Expr* f, LimitCtx* ctx) {
+    /* Max/Min are not differentiable in general -- differentiating them yields
+     * meaningless Derivative[Max][...] terms. Bail (the Gruntz layer, which runs
+     * before this one, resolves Max/Min by dominance). */
+    if (contains_head_symbol(f, SYM_Max) || contains_head_symbol(f, SYM_Min))
+        return NULL;
     /* Require f = N/D structurally via Together + Numerator/Denominator. */
     Expr* together = simp(mk_fn1("Together", expr_copy(f)));
     Expr* num = simp(mk_fn1("Numerator",   expr_copy(together)));

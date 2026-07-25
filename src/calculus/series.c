@@ -2510,6 +2510,13 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                     int sc = so_branch_point_imag_sign(inner);
                     if (sc != 0) r = so_apply_arctan_branch_point(inner, sc, ctx->target_order, ctx);
                 }
+                /* If arg blows up at x0 (e.g. 1/x), use the +oo-direction
+                 * identity ArcTan[u] = Pi/2 - ArcTan[1/u] = ArcCot-of-(1/u),
+                 * mirroring the ArcCot at-infinity branch below. */
+                if (!r && inner->nmin < 0) {
+                    SeriesObj* inv = so_inv(inner);
+                    if (inv) { r = so_apply_arccot(inv); so_free(inv); }
+                }
             }
             else if (strcmp(head, "SinIntegral") == 0) {
                 /* Si is entire and odd (Si(0)=0), analytic at u=0 like ArcTan. */
@@ -3408,6 +3415,51 @@ static int64_t so_first_nonzero_exp(SeriesObj* s, int64_t from_exp) {
     return INT64_MAX;
 }
 
+/* Asymptotic expansion of ArcTan[x] at x = Infinity (x -> +oo):
+ *
+ *   ArcTan(x) ~ Pi/2 - 1/x + 1/(3 x^3) - 1/(5 x^5) + ...
+ *             = Pi/2 + Sum_{k>=0} (-1)^{k+1} / ((2k+1) x^(2k+1)).
+ *
+ * Unlike ArcCot/ArcCsc/ArcSec/ArcCoth (whose reciprocal-argument value at the
+ * singular point is finite, so the generic x -> 1/u Taylor path handles them),
+ * ArcTan[1/u] probes ArcTan[ComplexInfinity] = Indeterminate at u = 0, so the
+ * has_infinity guard bails. Emit the known series directly. Result form matches
+ * Mathematica: `Pi/2 - 1/x + 1/(3 x^3) + O[1/x]^(n+1)` (the constant Pi/2 folds
+ * into the x^0 coefficient of the SeriesData when the caller evaluates it).
+ *
+ * Returns NULL unless f is exactly ArcTan[x] in the expansion variable. */
+static Expr* try_series_arctan_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "ArcTan") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+
+    /* Coefficients at 1/x exponents 1 .. n; odd exponents 2k+1 carry
+     * (-1)^{k+1}/(2k+1), even exponents are zero. */
+    size_t nc = (size_t)n;
+    Expr** cf = calloc(nc, sizeof(Expr*));
+    for (size_t i = 0; i < nc; i++) cf[i] = expr_new_integer(0);
+    for (int64_t k = 0; ; k++) {
+        int64_t p = 2 * k + 1;                 /* 1/x exponent */
+        if (p > n) break;
+        int64_t sign = (k % 2 == 0) ? -1 : 1;  /* (-1)^{k+1} */
+        expr_free(cf[(size_t)(p - 1)]);
+        cf[(size_t)(p - 1)] = make_rational(sign, p);
+    }
+    Expr** sd = calloc(6, sizeof(Expr*));
+    sd[0] = mk_power(expr_copy(x), expr_new_integer(-1)); /* expansion var 1/x */
+    sd[1] = expr_new_integer(0);                          /* x0 (in 1/x)       */
+    sd[2] = expr_new_function(mk_symbol("List"), cf, nc); /* coefficients      */
+    sd[3] = expr_new_integer(1);                          /* nmin = 1          */
+    sd[4] = expr_new_integer(n + 1);                      /* nmax (O-term)     */
+    sd[5] = expr_new_integer(1);                          /* denominator       */
+    Expr* series = expr_new_function(mk_symbol("SeriesData"), sd, 6);
+    free(sd); free(cf);
+
+    Expr* halfpi = simp(mk_times(make_rational(1, 2), mk_symbol("Pi")));
+    return mk_plus(halfpi, series);
+}
+
 /* Asymptotic expansion of ExpIntegralEi[x] at x = Infinity (DLMF 6.12.2):
  *
  *   Ei(x) ~ E^x * Sum_{k>=0} k! / x^(k+1)
@@ -3970,6 +4022,136 @@ static Expr* try_series_loggamma_at_infinity(Expr* f, Expr* x, int64_t n) {
     head = mk_plus(head, mk_times(make_rational(1, 2),
                     mk_fn1("Log", mk_times(expr_new_integer(2), mk_symbol("Pi")))));
     return mk_plus(head, tail);
+}
+
+/* Build a bare Laurent SeriesData in 1/x from a coefficient array covering
+ * exponents nmin..(nmin+len-1), with O-term at exponent (n+1). Adopts the
+ * coefs[] entries (caller allocated them) and frees the array. */
+static Expr* build_recip_seriesdata(Expr* x, Expr** coefs, size_t len,
+                                    int64_t nmin, int64_t n) {
+    Expr* coef_list = expr_new_function(mk_symbol("List"), coefs, len);
+    free(coefs);
+    Expr** sd = calloc(6, sizeof(Expr*));
+    sd[0] = mk_power(expr_copy(x), expr_new_integer(-1)); /* expansion var 1/x */
+    sd[1] = expr_new_integer(0);
+    sd[2] = coef_list;
+    sd[3] = expr_new_integer(nmin);
+    sd[4] = expr_new_integer(n + 1);                      /* nmax (O-term) */
+    sd[5] = expr_new_integer(1);
+    Expr* series = expr_new_function(mk_symbol("SeriesData"), sd, 6);
+    free(sd);
+    return series;
+}
+
+/* Asymptotic (Stirling) expansion of PolyGamma[m, x] at x = Infinity
+ * (DLMF 5.11.2). Digamma (m = 0):
+ *
+ *   psi(x) ~ Log[x] - 1/(2x) - Sum_{k>=1} B_{2k}/(2k) x^-(2k)
+ *          = Log[x] - 1/(2x) - 1/(12 x^2) + 1/(120 x^4) - ...
+ *
+ * a Log[x] growth head (kept symbolic, as LogGamma's does) plus a Laurent tail.
+ * For m >= 1 it is a pure Laurent series in 1/x (leading power x^-m, decays to
+ * 0):
+ *
+ *   psi^(m)(x) ~ (-1)^(m-1) [ (m-1)!/x^m + m!/(2 x^(m+1))
+ *                             + Sum_{k>=1} B_{2k} (2k+m-1)!/(2k)! x^-(2k+m) ].
+ *
+ * `n` is the requested order (largest 1/x power kept). Returns NULL unless f is
+ * PolyGamma[m, x] (or PolyGamma[x] = digamma) with m a literal non-negative
+ * integer and the argument the expansion variable. */
+static Expr* try_series_polygamma_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (!has_symbol_head(f, "PolyGamma")) return NULL;
+    size_t ac = f->data.function.arg_count;
+    int64_t m;
+    Expr* arg;
+    if (ac == 1) { m = 0; arg = f->data.function.args[0]; }
+    else if (ac == 2) {
+        Expr* mo = f->data.function.args[0];
+        if (mo->type != EXPR_INTEGER || mo->data.integer < 0) return NULL;
+        m = mo->data.integer;
+        arg = f->data.function.args[1];
+    } else return NULL;
+    if (!expr_eq(arg, x)) return NULL;
+    if (n < 1) n = 1;
+
+    if (m == 0) {
+        /* Digamma: Log[x] head + tail (exponents 1..n). */
+        size_t ncoef = (size_t)n;
+        Expr** coefs = calloc(ncoef, sizeof(Expr*));
+        for (size_t i = 0; i < ncoef; i++) coefs[i] = expr_new_integer(0);
+        expr_free(coefs[0]);
+        coefs[0] = make_rational(-1, 2);                  /* x^-1: -1/2 */
+        for (int64_t k = 1; ; k++) {
+            int64_t p = 2 * k;                            /* exponent 2k */
+            if (p > n) break;
+            Expr* b2k = eval_and_free(mk_fn1("BernoulliB", expr_new_integer(2 * k)));
+            Expr* coef = eval_and_free(mk_times(b2k, make_rational(-1, 2 * k)));
+            expr_free(coefs[(size_t)(p - 1)]);
+            coefs[(size_t)(p - 1)] = coef;
+        }
+        Expr* tail = build_recip_seriesdata(x, coefs, ncoef, 1, n);
+        return mk_plus(mk_fn1("Log", expr_copy(x)), tail);
+    }
+
+    /* m >= 1: pure Laurent, leading power x^-m. */
+    int64_t sgn = (m % 2 == 1) ? 1 : -1;
+    if (n < m) {
+        /* Whole series is beyond the requested order: pure O[1/x]^(n+1). */
+        return build_recip_seriesdata(x, calloc(0, sizeof(Expr*)), 0, n + 1, n);
+    }
+    size_t ncoef = (size_t)(n - m + 1);                   /* exponents m..n */
+    Expr** coefs = calloc(ncoef, sizeof(Expr*));
+    for (size_t i = 0; i < ncoef; i++) coefs[i] = expr_new_integer(0);
+    /* x^-m: (m-1)! * sgn */
+    expr_free(coefs[0]);
+    coefs[0] = eval_and_free(mk_times(expr_new_integer(sgn),
+                    mk_fn1("Factorial", expr_new_integer(m - 1))));
+    /* x^-(m+1): m!/2 * sgn */
+    if (m + 1 <= n) {
+        expr_free(coefs[1]);
+        coefs[1] = eval_and_free(mk_times(make_rational(sgn, 2),
+                        mk_fn1("Factorial", expr_new_integer(m))));
+    }
+    /* x^-(m+2k): B_{2k} (2k+m-1)!/(2k)! * sgn, k >= 1 */
+    for (int64_t k = 1; ; k++) {
+        int64_t p = m + 2 * k;
+        if (p > n) break;
+        Expr* b2k = eval_and_free(mk_fn1("BernoulliB", expr_new_integer(2 * k)));
+        Expr* ratio = mk_times(mk_fn1("Factorial", expr_new_integer(2 * k + m - 1)),
+                        mk_power(mk_fn1("Factorial", expr_new_integer(2 * k)),
+                                 expr_new_integer(-1)));
+        Expr* coef = eval_and_free(mk_times(expr_new_integer(sgn),
+                        mk_times(b2k, ratio)));
+        expr_free(coefs[(size_t)(p - m)]);
+        coefs[(size_t)(p - m)] = coef;
+    }
+    return build_recip_seriesdata(x, coefs, ncoef, m, n);
+}
+
+/* Asymptotic form of Zeta[x] at x = Infinity. Zeta[x] = Sum_{k>=1} k^-x, and as
+ * x -> +oo the tail collapses onto its leading terms: Zeta[x] = 1 + 2^-x + 3^-x
+ * + ..., each k^-x = Exp[-x Log[k]] exponentially smaller than the previous.
+ * The natural scale is exponential (2^-x), not a power of 1/x, so there is no
+ * Laurent SeriesData; we return the truncated exp-log Dirichlet sum
+ *
+ *   1 + Sum_{k=2}^{n+1} k^-x
+ *
+ * directly (a plain Plus of Powers). `n` counts the correction terms kept
+ * (bases 2..n+1); the leading 1 is always present. This is exactly the form the
+ * Gruntz mrv engine consumes (via Normal[Series[...]]), letting it resolve
+ * limits like (Zeta[x]-1) 2^x -> 1 and Log[Zeta[x]-1]/x -> -Log[2]. Returns
+ * NULL unless f is exactly Zeta[x] in the expansion variable. */
+static Expr* try_series_zeta_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "Zeta") || f->data.function.arg_count != 1) return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+    Expr* sum = expr_new_integer(1);
+    for (int64_t k = 2; k <= n + 1; k++) {
+        Expr* term = mk_power(expr_new_integer(k),
+                        mk_times(expr_new_integer(-1), expr_copy(x)));
+        sum = mk_plus(sum, term);
+    }
+    return simp(sum);
 }
 
 /* Asymptotic expansion of AiryAi[x] at x = Infinity (DLMF 9.7.5):
@@ -5333,6 +5515,14 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
      * substitution would hand a pole to naive Taylor. Emit their known
      * asymptotic expansions (with the E^x prefactor kept symbolic) directly. */
     if (x0_eval->type == EXPR_SYMBOL && x0_eval->data.symbol.name == SYM_Infinity) {
+        /* ArcTan[x] -> Pi/2 - 1/x + ...: generic Taylor probes the
+         * Indeterminate ArcTan[ComplexInfinity], so emit its series directly. */
+        Expr* atn = try_series_arctan_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (atn) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return atn;
+        }
         Expr* ei = try_series_ei_at_infinity(f_eval, x, leading_only ? 1 : n);
         if (ei) {
             expr_free(f_eval);
@@ -5450,6 +5640,22 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
             expr_free(f_eval);
             expr_free(x0_eval);
             return lgam;
+        }
+        /* PolyGamma[m, x] at Infinity: digamma (m=0) has a Log[x] growth head
+         * plus a Laurent tail; m>=1 is a pure 1/x Laurent series (DLMF 5.11.2). */
+        Expr* pg = try_series_polygamma_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (pg) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return pg;
+        }
+        /* Zeta[x] at Infinity: exponential-scale asymptotic 1 + 2^-x + 3^-x +
+         * ... (truncated exp-log Dirichlet sum, not a 1/x Laurent series). */
+        Expr* zta = try_series_zeta_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (zta) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return zta;
         }
         /* ProductLog[x] at Infinity: nested-logarithm asymptotic expansion
          * (the x^0 coefficient), not a power series in 1/x. */

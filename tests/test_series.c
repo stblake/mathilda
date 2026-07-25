@@ -198,6 +198,66 @@ static void test_series_loggamma_at_infinity(void) {
         "1/2 Log[2 Pi] - x - 1/360/x^3 + 1/1260/x^5 + 1/12/x + Log[x] (-1/2 + x)");
 }
 
+/* 10c. Stirling asymptotic expansions of PolyGamma[m, x] at Infinity
+ * (DLMF 5.11.2). Digamma (m=0): a Log[x] growth head plus a Laurent tail
+ * -1/(2x) - Sum_{k>=1} B_{2k}/(2k) x^-2k. For m>=1: a pure Laurent series in
+ * 1/x with leading power x^-m, coefficient (-1)^(m-1)(m-1)! at x^-m. */
+static void test_series_polygamma_at_infinity(void) {
+    setup_full();
+    /* Digamma: Log[x] head + {-1/2, -1/12, 0, 1/120} at 1/x^{1..4}. */
+    assert_fullform(
+        "Series[PolyGamma[0, x], {x, Infinity, 4}]",
+        "Plus[Log[x], SeriesData[Power[x, -1], 0, "
+        "List[Rational[-1, 2], Rational[-1, 12], 0, Rational[1, 120]], 1, 5, 1]]");
+    /* PolyGamma[x] (unindexed) normalises to PolyGamma[0, x] -> same head. */
+    assert_outputform(
+        "Normal[Series[PolyGamma[x], {x, Infinity, 4}]]",
+        "Log[x] - 1/2/x - 1/12/x^2 + 1/120/x^4");
+    /* Trigamma (m=1): 1/x + 1/(2x^2) + 1/(6x^3) - 1/(30x^5). */
+    assert_fullform(
+        "Series[PolyGamma[1, x], {x, Infinity, 5}]",
+        "SeriesData[Power[x, -1], 0, "
+        "List[1, Rational[1, 2], Rational[1, 6], 0, Rational[-1, 30]], 1, 6, 1]");
+    /* Tetragamma (m=2): leading x^-2, sign (-1)^1 = negative. */
+    assert_fullform(
+        "Series[PolyGamma[2, x], {x, Infinity, 6}]",
+        "SeriesData[Power[x, -1], 0, "
+        "List[-1, -1, Rational[-1, 2], 0, Rational[1, 6]], 2, 7, 1]");
+    /* m=3: leading x^-3, sign (-1)^2 = positive, coefficient (m-1)! = 2. */
+    assert_fullform(
+        "Series[PolyGamma[3, x], {x, Infinity, 7}]",
+        "SeriesData[Power[x, -1], 0, List[2, 3, 2, 0, -1], 3, 8, 1]");
+    /* Edge: requested order below the leading power -> pure O-term. */
+    assert_fullform(
+        "Series[PolyGamma[5, x], {x, Infinity, 2}]",
+        "SeriesData[Power[x, -1], 0, List[], 3, 3, 1]");
+    /* Edge: order == leading power -> single leading term. */
+    assert_outputform(
+        "Normal[Series[PolyGamma[2, x], {x, Infinity, 2}]]",
+        "-1/x^2");
+    /* Numeric agreement with the exact value at a finite point (truncation
+     * error only): |series(30) - PolyGamma[2, 30]| < 10^-12. */
+    assert_eval_eq(
+        "Abs[(Normal[Series[PolyGamma[2, x], {x, Infinity, 9}]] /. x -> 30) "
+        "- PolyGamma[2, 30]] < 10^-12", "True", 0);
+}
+
+/* 10d. Zeta[x] at Infinity: the exponential-scale asymptotic
+ * 1 + 2^-x + 3^-x + ... (a truncated exp-log Dirichlet sum, NOT a 1/x Laurent
+ * series). n counts the correction terms kept (bases 2..n+1). */
+static void test_series_zeta_at_infinity(void) {
+    setup_full();
+    assert_outputform(
+        "Series[Zeta[x], {x, Infinity, 3}]", "1 + 2^(-x) + 3^(-x) + 4^(-x)");
+    assert_outputform(
+        "Normal[Series[Zeta[x], {x, Infinity, 4}]]",
+        "1 + 2^(-x) + 3^(-x) + 4^(-x) + 5^(-x)");
+    /* Numeric agreement at a finite point: |series(12) - Zeta[12]| tiny. */
+    assert_eval_eq(
+        "Abs[(Series[Zeta[x], {x, Infinity, 20}] /. x -> 12) - Zeta[12]] < 10^-12",
+        "True", 0);
+}
+
 /* 11. Multivariate iterated expansion. Each inner coefficient is itself a
  * SeriesData in the next variable. */
 static void test_series_bivariate(void) {
@@ -435,6 +495,22 @@ static void test_series_arctan(void) {
         "Series[ArcTan[x], {x, 0, 7}]",
         "SeriesData[x, 0, List[0, 1, 0, Rational[-1, 3], 0, Rational[1, 5], 0, "
         "Rational[-1, 7]], 0, 8, 1]");
+}
+/* ArcTan[x] at x = Infinity: the asymptotic series Pi/2 - 1/x + 1/(3x^3) - ...
+ * (x -> +oo). Unlike ArcCot/ArcCsc/ArcSec, the reciprocal-argument value
+ * ArcTan[ComplexInfinity] is Indeterminate, so a dedicated hook emits it and a
+ * kernel-level at-infinity branch (ArcTan[u] = Pi/2 - ArcTan[1/u]) makes it
+ * compose inside Plus/Times (needed for Limit[x(Pi/2-ArcTan[x]),x->oo] -> 1). */
+static void test_series_arctan_at_infinity(void) {
+    setup_full();
+    assert_fullform(
+        "Series[ArcTan[x], {x, Infinity, 5}]",
+        "SeriesData[Power[x, -1], 0, List[Times[Rational[1, 2], Pi], -1, 0, "
+        "Rational[1, 3], 0, Rational[-1, 5]], 0, 6, 1]");
+    /* Composes under Times: x (Pi/2 - ArcTan[x]) -> 1 - 1/(3x^2) + ... */
+    assert_outputform(
+        "Normal[Series[x (Pi/2 - ArcTan[x]), {x, Infinity, 4}]]",
+        "1 - 1/3/x^2 + 1/5/x^4");
 }
 static void test_series_arctanh(void) {
     setup_full();
@@ -1904,10 +1980,13 @@ int main(void) {
     TEST(test_series_deep_laurent);
     TEST(test_series_at_infinity);
     TEST(test_series_loggamma_at_infinity);
+    TEST(test_series_polygamma_at_infinity);
+    TEST(test_series_zeta_at_infinity);
     TEST(test_series_bivariate);
     TEST(test_series_list_threading);
     TEST(test_series_approximate_numbers);
     TEST(test_series_arctan);
+    TEST(test_series_arctan_at_infinity);
     TEST(test_series_arctanh);
     TEST(test_series_arcsin);
     TEST(test_series_arcsinh);

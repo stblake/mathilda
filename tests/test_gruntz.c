@@ -94,6 +94,116 @@ static void test_worked_examples(void) {
     GRUNTZ("ExpIntegralEi[x + E^-x] E^-x x", "1");
 }
 
+/* PolyGamma at Infinity (Phase-2 isolation, DLMF 5.11.2). Digamma
+ * PolyGamma[0,x] ~ Log[x] - 1/(2x) - ...; PolyGamma[m,x] (m>=1) ~
+ * (-1)^(m-1)(m-1)!/x^m + .... The isolation branch rewrites PolyGamma[m,g]
+ * (g -> +oo) as its Stirling series so the mrv engine can cancel it. */
+static void test_polygamma_at_infinity(void) {
+    /* Digamma growth rate and its Log[x] head. */
+    GRUNTZ("PolyGamma[x]/Log[x]", "1");
+    GRUNTZ("PolyGamma[0, x]/Log[x]", "1");
+    GRUNTZ("PolyGamma[x] - Log[x]", "0");
+    /* Next-order term: psi(x) - Log[x] ~ -1/(2x), so x(...) -> -1/2. */
+    GRUNTZ("x (PolyGamma[x] - Log[x])", "-1/2");
+    /* Polygamma decay rates: psi^(m)(x) ~ (-1)^(m-1)(m-1)!/x^m. */
+    GRUNTZ("x PolyGamma[1, x]", "1");
+    GRUNTZ("x^2 PolyGamma[2, x]", "-1");
+    GRUNTZ("x^3 PolyGamma[3, x]", "2");
+    GRUNTZ("x^4 PolyGamma[4, x]", "-6");
+    /* Ratios that exercise the argument-scaling of the series. */
+    GRUNTZ("PolyGamma[1, x]/PolyGamma[1, 2 x]", "2");   /* (2x/x)^1 = 2   */
+    GRUNTZ("PolyGamma[2, x]/PolyGamma[2, 3 x]", "9");   /* (3x/x)^2 = 9   */
+    /* Nested digamma: psi(psi(x)) ~ Log[psi(x)] ~ Log[Log[x]]. */
+    GRUNTZ("PolyGamma[0, PolyGamma[0, x]] - Log[Log[x]]", "0");
+    /* Exp of digamma: E^psi(x) ~ x E^(-1/(2x)) ~ x. */
+    GRUNTZ("Exp[PolyGamma[0, x]]/x", "1");
+    /* Plain Automatic must resolve the headline cases too. */
+    assert_eval_eq("Limit[PolyGamma[x] - Log[x], x -> Infinity]", "0", 0);
+    assert_eval_eq("Limit[x PolyGamma[1, x], x -> Infinity]", "1", 0);
+}
+
+/* Max/Min at Infinity, resolved by eventual dominance. Max[a, b] eventually
+ * equals whichever argument is larger for large x -- decided by the
+ * leading-term sign of a - b (so Max[1/x, 2/x] = 2/x though both -> 0), and the
+ * rewrite recurses so nested Max/Min and Max inside a larger expression work. */
+static void test_maxmin_at_infinity(void) {
+    GRUNTZ("Max[x, x^2]", "Infinity");
+    GRUNTZ("Min[x, x^2]", "Infinity");               /* Min = x -> Infinity */
+    /* Both arguments -> 0, but 2/x is eventually larger. */
+    GRUNTZ("x Max[1/x, 2/x]", "2");
+    GRUNTZ("x Min[1/x, 2/x]", "1");
+    GRUNTZ("x Max[1/x, 2/x, 3/x]", "3");             /* n-ary */
+    /* Converging-from-below: 1 - 1/x > 1 - 2/x eventually. */
+    GRUNTZ("Max[1 - 1/x, 1 - 2/x]", "1");
+    /* Decaying exponentials: Max keeps the slower-decaying Exp[-x]. */
+    GRUNTZ("Exp[x] Max[Exp[-x], Exp[-2 x]]", "1");
+    GRUNTZ("Exp[2 x] Min[Exp[-x], Exp[-2 x]]", "1"); /* Min keeps Exp[-2x] */
+    GRUNTZ("Min[x, Log[x]]", "Infinity");            /* Log[x] is the smaller */
+    GRUNTZ("Max[x + 1, x]", "Infinity");             /* tie-break by constant */
+    /* Nested: inner Max = x^2, then Min[x^2, x^3] = x^2. */
+    GRUNTZ("Min[Max[x, x^2], x^3]", "Infinity");
+    /* Max and Min of the same pair combine cleanly: (2/x - 1/x) x = 1. */
+    GRUNTZ("x (Max[1/x, 2/x] - Min[1/x, 2/x])", "1");
+    /* Automatic cascade resolves them via the Gruntz layer too. */
+    assert_eval_eq("Limit[x Max[1/x, 2/x], x -> Infinity]", "2", 0);
+}
+
+/* Modified Bessel functions at Infinity (monotonic, mrv-tractable).
+ * BesselK[nu, x] ~ Sqrt[Pi/(2x)] E^-x (decay); BesselI[nu, x] ~ E^x/Sqrt[2 Pi x]
+ * (growth, plus an exponentially-dominated I E^-x subdominant term the engine
+ * discards). The leading envelope is nu-independent, so a symbolic order works.
+ * (BesselJ/BesselY are OSCILLATORY and stay honest abstentions -- see below.) */
+static void test_bessel_at_infinity(void) {
+    /* BesselK: decay Exp[-x] Sqrt[Pi/(2x)]. */
+    GRUNTZ("BesselK[0, x]", "0");
+    GRUNTZ("Exp[x] Sqrt[x] BesselK[0, x]", "Sqrt[1/2 Pi]");
+    GRUNTZ("x Exp[x] BesselK[0, x]", "Infinity");
+    GRUNTZ("BesselK[0, x]/BesselK[0, 2 x]", "Infinity");   /* E^-x / E^-2x */
+    GRUNTZ("BesselK[2, x]/BesselK[0, x]", "1");            /* same envelope */
+    /* Symbolic order: leading envelope is order-independent. */
+    GRUNTZ("Exp[x] Sqrt[x] BesselK[nu, x]", "Sqrt[1/2 Pi]");
+    /* BesselI: growth Exp[x]/Sqrt[2 Pi x]. */
+    GRUNTZ("BesselI[0, x] Exp[-x] Sqrt[x]", "1/Sqrt[2 Pi]");
+    GRUNTZ("BesselI[0, x] Exp[-x]", "0");
+    GRUNTZ("BesselI[0, x]/BesselI[0, 2 x]", "0");          /* E^x / E^2x */
+    /* Automatic cascade resolves them too. */
+    assert_eval_eq("Limit[Exp[x] Sqrt[x] BesselK[0, x], x -> Infinity]", "Sqrt[1/2 Pi]", 0);
+    assert_eval_eq("Limit[BesselI[0, x] Exp[-x] Sqrt[x], x -> Infinity]", "1/Sqrt[2 Pi]", 0);
+}
+
+/* Zeta at Infinity. Zeta[x] = 1 + 2^-x + 3^-x + ... collapses onto its
+ * Dirichlet head as x -> +oo; the isolation replaces Zeta[g] by that truncated
+ * exp-log sum so the mrv engine cancels it. The dominant correction is 2^-x. */
+static void test_zeta_at_infinity(void) {
+    GRUNTZ("Zeta[x]", "1");
+    /* Leading correction 2^-x. */
+    GRUNTZ("(Zeta[x] - 1) 2^x", "1");
+    GRUNTZ("x (Zeta[x] - 1)", "0");                 /* 2^-x beats any power */
+    GRUNTZ("Zeta[x]^x", "1");                        /* x 2^-x -> 0 */
+    GRUNTZ("Log[Zeta[x] - 1]/x", "-Log[2]");        /* log of the 2^-x scale */
+    /* Second correction 3^-x, exposed after subtracting 2^-x. */
+    GRUNTZ("(Zeta[x] - 1 - 2^(-x)) 3^x", "1");
+    /* Shifted argument in the isolation (fresh-dummy expansion handles it). */
+    GRUNTZ("(Zeta[x - 1] - 1) 2^x", "2");
+    GRUNTZ("(Zeta[2 x] - 1) 4^x", "1");
+    /* Different mrv classes (2^-x vs 4^-x) -> clean domination. */
+    GRUNTZ("(Zeta[x] - 1)/(Zeta[2 x] - 1)", "Infinity");
+    /* Automatic cascade resolves the headline case too. */
+    assert_eval_eq("Limit[(Zeta[x] - 1) 2^x, x -> Infinity]", "1", 0);
+}
+
+/* ArcTan at Infinity. ArcTan[x] -> Pi/2 needs the at-infinity Series hook
+ * (Pi/2 - 1/x + 1/(3x^3) - ...); the rate limit x(Pi/2 - ArcTan[x]) -> 1 needs
+ * that series to compose inside a product (kernel identity
+ * ArcTan[u] = Pi/2 - ArcTan[1/u] when the argument blows up). */
+static void test_arctan_at_infinity(void) {
+    GRUNTZ("ArcTan[x]", "1/2 Pi");
+    GRUNTZ("x (Pi/2 - ArcTan[x])", "1");
+    GRUNTZ("x^2 (Pi/2 - ArcTan[x]) - x", "0");
+    /* Plain Automatic must also resolve the rate limit. */
+    assert_eval_eq("Limit[x (Pi/2 - ArcTan[x]), x -> Infinity]", "1", 0);
+}
+
 /* Deep log-tower limits with leading-order cancellation (thesis 8.19). Two
  * nested logs of nearly-equal scale cancel, leaving a lower-order tail; the
  * engine surfaces it by factoring the w-pole out of each Log before Series
@@ -293,6 +403,43 @@ static void test_honest_abstentions(void) {
     /* Bare oscillation under an exclusive Gruntz method. */
     assert_eval_startswith(
         "Limit[Sin[x], x -> Infinity, Method -> \"Gruntz\"]", "Limit[");
+    /* PolyGamma with a symbolic order has no known asymptotic form. */
+    assert_eval_startswith(
+        "Limit[PolyGamma[n, x], x -> Infinity, Method -> \"Gruntz\"]", "Limit[");
+    /* PolyGamma at -Infinity runs into the pole lattice (reflection needed). */
+    assert_eval_startswith(
+        "Limit[PolyGamma[0, x], x -> -Infinity, Method -> \"Gruntz\"]", "Limit[");
+    /* Zeta at -Infinity diverges through the trivial zeros -- no asymptotic. */
+    assert_eval_startswith(
+        "Limit[Zeta[x], x -> -Infinity, Method -> \"Gruntz\"]", "Limit[");
+    /* Same-mrv-class ratio of multi-term exp sums with a base-shifted argument:
+     * a *general* mrv-engine gap (the same limit with Zeta stripped out,
+     * (2^-x + 3^-x)/(2^-(x+1) + 3^-(x+1)), also abstains), not Zeta-specific. */
+    assert_eval_startswith(
+        "Limit[(Zeta[x] - 1)/(Zeta[x + 1] - 1), x -> Infinity, Method -> \"Gruntz\"]",
+        "Limit[");
+    /* Oscillatory Bessel functions (Cos/Sin[x] envelopes) have no mrv
+     * expansion: bare J/Y stay unevaluated (their decaying-to-0 case needs a
+     * bounded-oscillation squeeze the mrv engine does not do), and amplitude
+     * factors that expose the oscillation (Sqrt[x] BesselJ) genuinely have no
+     * limit. Never a wrong value. */
+    assert_eval_startswith(
+        "Limit[BesselJ[0, x], x -> Infinity, Method -> \"Gruntz\"]", "Limit[");
+    assert_eval_startswith(
+        "Limit[BesselY[0, x], x -> Infinity, Method -> \"Gruntz\"]", "Limit[");
+    assert_eval_startswith(
+        "Limit[Sqrt[x] BesselJ[0, x], x -> Infinity, Method -> \"Gruntz\"]", "Limit[");
+    /* BesselK at -Infinity enters the complex/oscillatory negative-argument
+     * regime -- left unevaluated. */
+    assert_eval_startswith(
+        "Limit[BesselK[0, x], x -> -Infinity, Method -> \"Gruntz\"]", "Limit[");
+    /* Max/Min whose argument ordering hinges on bounded oscillation cannot be
+     * decided by the leading-term sign oracle (Sin[x] has no eventual sign),
+     * so they abstain -- even though Max[Sin[x], 2] is mathematically 2. */
+    assert_eval_startswith(
+        "Limit[Max[x, x + Sin[x]], x -> Infinity, Method -> \"Gruntz\"]", "Limit[");
+    assert_eval_startswith(
+        "Limit[Max[Sin[x], 2], x -> Infinity, Method -> \"Gruntz\"]", "Limit[");
 }
 
 int main(void) {
@@ -303,6 +450,11 @@ int main(void) {
     TEST(test_thesis_exp_log);
     TEST(test_thesis_trig);
     TEST(test_worked_examples);
+    TEST(test_polygamma_at_infinity);
+    TEST(test_zeta_at_infinity);
+    TEST(test_bessel_at_infinity);
+    TEST(test_maxmin_at_infinity);
+    TEST(test_arctan_at_infinity);
     TEST(test_log_tower);
     TEST(test_log_tower_no_hang);
     TEST(test_stress_elementary);

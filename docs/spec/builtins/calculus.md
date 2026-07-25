@@ -263,22 +263,46 @@ Out[8]= 6 a b^2
     (`Exp`, `Log`, `Power`, `+`, `*`) plus tractable trig at a vanishing
     argument (`Sin`, `Cos`, …). A pre-processing pass also isolates the
     essential singularity of the semi-tractable special functions `Erf`,
-    `Erfc`, `ExpIntegralEi`, and `LogGamma` at infinity (thesis §5.2 transforms
-    5.6/5.7/5.8): each `F[g]` with `g -> ±oo` is replaced by its asymptotic
-    expansion — obtained from `Series[F, {·, Infinity, n}]` — so the singular
-    part becomes an explicit `Exp`/log head the mrv engine can handle, e.g.
+    `Erfc`, `ExpIntegralEi`, `LogGamma`, `Gamma`, `PolyGamma[m, ·]`, `Zeta`,
+    and the *modified* Bessel functions `BesselK[nu, ·]` / `BesselI[nu, ·]`
+    (monotonic `Exp[∓z]` envelopes; the oscillatory `BesselJ`/`BesselY` are
+    excluded) at infinity (thesis §5.2 transforms 5.6/5.7/5.8): each `F[g]` with
+    `g -> ±oo` is replaced by its asymptotic expansion — obtained from
+    `Series[F, {·, Infinity, n}]` — so the singular part becomes an explicit
+    `Exp`/log head the mrv engine can handle, e.g.
     `ExpIntegralEi[x + E^-x] E^-x x -> 1` (thesis 5.4),
     `(Erf[x - E^-x] - Erf[x]) E^x E^(x^2) -> -2/Sqrt[Pi]`,
-    `LogGamma[x]/(x Log[x]) -> 1`, and deep log-towers whose leading terms
+    `LogGamma[x]/(x Log[x]) -> 1`, `PolyGamma[x]/Log[x] -> 1`,
+    `x PolyGamma[1, x] -> 1`, `x (PolyGamma[x] - Log[x]) -> -1/2` (digamma has a
+    `Log[x]` growth head, `PolyGamma[m≥1]` decays like `x^-m`; the order `m`
+    rides the 2-arg node fixed), `(Zeta[x] - 1) 2^x -> 1`,
+    `Log[Zeta[x] - 1]/x -> -Log[2]` (`Zeta[x] = 1 + 2^-x + 3^-x + ...` collapses
+    onto its exponential-scale Dirichlet head), `Exp[x] Sqrt[x] BesselK[0, x]
+    -> Sqrt[Pi/2]`, `BesselI[0, x] Exp[-x] Sqrt[x] -> 1/Sqrt[2 Pi]` (the Bessel
+    order `nu` may be symbolic — the leading envelope is order-independent), and
+    deep log-towers whose leading terms
     cancel, e.g. thesis 8.19
     `(Log[Log[x]+Log[Log[x]]]-Log[Log[x]])/Log[Log[x]+Log[Log[Log[x]]]] Log[x] -> 1`
     (each `Log` is expanded by factoring its `w`-pole out first, then the mrv
     `Series` runs in the positive log-scale `-Log[w]` so `Log[-Log[w]]` stays
-    real). Still **not covered** (left unevaluated — never a wrong value): the
+    real). A separate pre-pass resolves `Max`/`Min` by *eventual dominance*:
+    `Max[a, b]` eventually equals whichever argument is larger for large `x`,
+    decided by the **leading-term** sign of `a - b` (so `Max[1/x, 2/x] = 2/x`
+    though both `-> 0`), recursing so nested and factor-wrapped forms work —
+    `Max[x, x^2] -> Infinity`, `x Max[1/x, 2/x] -> 2`, `Min[x, Log[x]] ->
+    Infinity`, `Exp[x] Max[Exp[-x], Exp[-2x]] -> 1`; a comparison that hinges on
+    bounded oscillation (`Max[Sin[x], 2]`) has no leading-term sign and abstains.
+    Still **not covered** (left unevaluated — never a wrong value): the
     thesis-8.31 `Gamma` Stirling difference (whose x^x-scale tower needs a
     deeper `Series` cancellation than the machinery reaches — a flagged `Series`
-    limitation, not a wrong answer) and `PolyGamma`/`Zeta`/`BesselJ`/`Max`/`Min`
-    at infinity.
+    limitation, not a wrong answer), `PolyGamma` with a symbolic order or at
+    `-Infinity` (pole lattice), `Zeta` at `-Infinity` (trivial zeros) or
+    same-mrv-class Zeta-difference ratios like
+    `(Zeta[x]-1)/(Zeta[x+1]-1)` (a general mrv-engine gap on base-shifted
+    exponential sums, not Zeta-specific), the *oscillatory* `BesselJ`/`BesselY`
+    at infinity (a `Cos[x-π/4]` envelope the monotonic mrv engine cannot expand;
+    the decay-to-0 case needs a bounded-oscillation squeeze), and `Max`/`Min`
+    whose argument ordering hinges on bounded oscillation.
 - **Joint multivariate** limits at the origin or `+Infinity` are decided by a
   polar/spherical substitution: the integrand is `Simplify`-normalised in
   `r`/angle coordinates (cancelling common `r`-powers so buried `0/0` shapes
