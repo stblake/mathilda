@@ -1066,10 +1066,17 @@ integrator), `AccuracyGoal`/`PrecisionGoal` (Automatic = WorkingPrecision/2),
 `WorkingPrecision -> p` (with `p > $MachinePrecision`) runs a dedicated MPFR
 integrator whose state, independent variable, and step size are all carried at a
 guard-padded precision, so non-autonomous right-hand sides are evaluated at full
-precision. It uses the adaptive DOPRI5 pair (or fixed RK4). Note that accuracy at
-the achieved node values is bounded by `PrecisionGoal` (default `p/2`), and
-interior interpolated values are bounded by the cubic-Hermite interpolation
-order — query at an MPFR abscissa (`u[N[t, p]]`) to read a high-precision node.
+precision. Explicit methods use the adaptive DOPRI5 pair (or fixed RK4);
+**stiff (implicit/multistep) methods run the MPFR variable-order BDF** — the
+state, node times, coefficients, Newton residual and linear solve are all MPFR
+(the Jacobian stays double, since its accuracy only affects Newton's convergence
+rate, not the root), so a stiff problem — where the explicit integrator would
+need an impractically tiny step — is solved to full working precision (e.g. a
+`1000`-stiff forced oscillator at `WorkingPrecision -> 30` reaches ~1e-19). Note
+that accuracy at the achieved node values is bounded by `PrecisionGoal` (default
+`p/2`), and interior interpolated values are bounded by the cubic-Hermite
+interpolation order — query at an MPFR abscissa (`u[N[t, p]]`) to read a
+high-precision node. High precision needs a larger `MaxSteps`.
 
 ### Partial differential equations (method of lines)
 
@@ -1128,15 +1135,15 @@ semi-discrete Schrödinger eigenmode and by norm conservation (`Σ|ψ|²` drifts
 
 **Arbitrary precision.** `WorkingPrecision -> p` (p > machine) runs the MPFR
 integrator on the discretized system, giving an MPFR-valued 2-D
-`InterpolatingFunction` (1-D PDEs). As for MPFR ODEs the integrator is explicit,
-so this is practical for **non-stiff** PDEs (wave, advection) but not stiff
-diffusion; achievable precision at interior query points is bounded by the
+`InterpolatingFunction` (1-D PDEs). Explicit methods handle non-stiff PDEs (wave,
+advection); **stiff diffusion uses the MPFR variable-order BDF** (`Method -> "BDF"`,
+the auto-selection for parabolic problems), so stiff PDEs now run at arbitrary
+precision too. Achievable precision at interior query points is bounded by the
 cubic-Hermite interpolation (query at MPFR node abscissae for full precision).
 
-Adaptive-implicit stepping (variable-step BDF with Newton-failure recovery) now
-handles the incompatible IC/BC corners that previously diverged. Remaining
-(deferred): stiff MPFR (the MPFR integrator is explicit-only), plus
-Neumann/Robin/periodic and mixed derivatives in 2-D.
+Adaptive-implicit stepping (variable-step variable-order BDF with Newton-failure
+recovery) handles the incompatible IC/BC corners that previously diverged.
+Remaining (deferred): Neumann/Robin/periodic and mixed derivatives in 2-D.
 
 ### Beyond / unlike Mathematica's NDSolve
 

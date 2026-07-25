@@ -395,9 +395,8 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
         if (!S) { nd_warn("method", "unknown Method; using Automatic"); S = nd_default_stepper(); }
 #ifdef USE_MPFR
         if (numeric_spec_is_mpfr(o.spec)) {
-            /* Arbitrary-precision path: explicit mpfr integrator. */
-            if (S->flags & (ND_IMPLICIT | ND_MULTISTEP))
-                nd_warn("mpmeth", "WorkingPrecision > MachinePrecision uses the adaptive explicit integrator");
+            /* Arbitrary-precision path: explicit (DOPRI5/RK4) or, for stiff
+             * implicit/multistep methods, the MPFR variable-order BDF. */
             result = nd_solve_mpfr(&P, &o, S);
             nd_bind_restore(&P.bind_t);
             for (size_t i = 0; i < d; i++) nd_bind_restore(&P.bind_y[i]);

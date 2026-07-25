@@ -19,6 +19,12 @@ extensive unit/stress tests + valgrind clean + docs/changelog + commit.
 - [x] **Adaptive-implicit stepping** — variable-step BDF (orders 1-2) + Adams
       with predictor-corrector (Milne) local error control and Newton-failure
       step recovery; solves incompatible IC/BC corners that previously diverged
-      (ndcf). (`ndsolve_implicit.c`, `ndsolve_adams.c`; +test_adaptive_implicit /
-      test_corner_pde / test_adaptive_adams in `ndsolve_classical_tests`) — DONE.
-      Remaining deferral: stiff MPFR (MPFR integrator is explicit-only).
+      (ndcf). (`ndsolve_implicit.c`, `ndsolve_adams.c`) — DONE.
+- [x] **Higher-order BDF (VSVO, orders 1-5)** — exact nonuniform-mesh Lagrange
+      coefficients, order ramp/hold, uniform-mesh stability. (`ndsolve_implicit.c`;
+      +test_bdf_high_order) — DONE.
+- [x] **Stiff arbitrary precision** — MPFR variable-order BDF (`mpfr_bdf_dir`):
+      MPFR state/coeffs/residual/solve, double Jacobian. Stiff ODEs+PDEs at
+      WP>machine. (`ndsolve_mpfr.c`; +test_bdf_mpfr_stiff) — DONE.
+- [ ] **2-D general BCs** (Neumann/Robin/periodic + mixed derivs); **robustness
+      cluster** (BackwardEuler maxsteps, complex ODE realification, x0!=xmin).

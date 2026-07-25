@@ -474,6 +474,28 @@ static void test_adaptive_adams(void) {
           "{t,0,8},Method->\"Adams\"]]", cos(5.0), 1e-3);
 }
 
+#ifdef USE_MPFR
+/* ================= stiff arbitrary precision (MPFR implicit BDF) ============ *
+ *
+ * At WorkingPrecision > machine the explicit MPFR integrator would need an
+ * impractically tiny step on a stiff problem; the MPFR variable-order BDF (MPFR
+ * state/coefficients/residual, double Jacobian) solves it to full precision. */
+static void test_bdf_mpfr_stiff(void) {
+    check_le("MPFR stiff BDF (WP30) -> cos",
+        "Abs[First[y[N[1,30]]/.NDSolve[{y'[t]==-1000 (y[t]-Cos[t])-Sin[t],y[0]==1},y,{t,0,1},"
+        "Method->\"BDF\",WorkingPrecision->30,PrecisionGoal->20,AccuracyGoal->20,MaxSteps->200000]]"
+        "-N[Cos[1],30]]", 1e-17);
+    check_le("MPFR BDF (WP25) decay -> e^{-3}",
+        "Abs[First[y[N[3,30]]/.NDSolve[{y'[t]==-y[t],y[0]==1},y,{t,0,3},Method->\"BDF\","
+        "WorkingPrecision->25,PrecisionGoal->18,AccuracyGoal->18,MaxSteps->200000]]-N[Exp[-3],30]]", 1e-15);
+    /* stiff linear system (eigenvalues -1000, -1) at 30-digit WP: slow part. */
+    check_le("MPFR BDF (WP30) stiff system slow part",
+        "Abs[First[y[N[2,30]]/.NDSolve[{x'[t]==-1000 x[t],y'[t]==-y[t],x[0]==1,y[0]==1},{x,y},"
+        "{t,0,2},Method->\"BDF\",WorkingPrecision->30,PrecisionGoal->18,AccuracyGoal->18,MaxSteps->200000]]"
+        "-N[Exp[-2],30]]", 1e-15);
+}
+#endif
+
 /* ================= accuracy/efficiency parity + precision ================= */
 static void test_parity_and_precision(void) {
     /* ode45-parity: default (adaptive DOPRI5) accuracy on a full period of the
@@ -516,6 +538,9 @@ int main(void) {
     TEST(test_bdf_high_order);
     TEST(test_corner_pde);
     TEST(test_adaptive_adams);
+#ifdef USE_MPFR
+    TEST(test_bdf_mpfr_stiff);
+#endif
     TEST(test_parity_and_precision);
 
     if (failures == 0) printf("\nAll classical NDSolve tests passed.\n");
