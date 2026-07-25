@@ -1061,6 +1061,9 @@ integrator), `AccuracyGoal`/`PrecisionGoal` (Automatic = WorkingPrecision/2),
 `StartingStepSize`, `InterpolationOrder` (Automatic = 3, cubic Hermite),
 `StepMonitor`, `EvaluationMonitor`.
 
+`Options[NDSolve]` returns the full default list; the `Automatic` sentinels
+above are what the solver resolves internally when an option is omitted.
+
 ### Arbitrary precision
 
 `WorkingPrecision -> p` (with `p > $MachinePrecision`) runs a dedicated MPFR

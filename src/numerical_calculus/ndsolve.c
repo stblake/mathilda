@@ -479,6 +479,39 @@ void ndsolve_init(void) {
 
     symtab_add_builtin("NDSolve", builtin_ndsolve);
     symtab_get_def("NDSolve")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+
+    /* Options[NDSolve] — defaults mirror nd_opts_default() (see
+     * ndsolve_common.c): every value shown here is the resolved behavior when
+     * the option is omitted. `Automatic` corresponds to the sentinel defaults
+     * (NULL method, -1 goals/steps/order, 0 step sizes) the solver interprets
+     * internally; MaxStepFraction is a concrete 1/10. */
+    {
+        struct { const char* lhs; Expr* rhs; } defs[] = {
+            { SYM_Method,             expr_new_symbol(SYM_Automatic) },
+            { SYM_WorkingPrecision,   expr_new_symbol(SYM_MachinePrecision) },
+            { SYM_AccuracyGoal,       expr_new_symbol(SYM_Automatic) },
+            { SYM_PrecisionGoal,      expr_new_symbol(SYM_Automatic) },
+            { OPT_MaxSteps,           expr_new_symbol(SYM_Automatic) },
+            { OPT_MaxStepSize,        expr_new_symbol(SYM_Automatic) },
+            { OPT_MaxStepFraction,    expr_new_function(expr_new_symbol(SYM_Rational),
+                                        (Expr*[]){ expr_new_integer(1), expr_new_integer(10) }, 2) },
+            { OPT_StartingStepSize,   expr_new_symbol(SYM_Automatic) },
+            { SYM_InterpolationOrder, expr_new_symbol(SYM_Automatic) },
+            { SYM_StepMonitor,        expr_new_symbol(SYM_None) },
+            { SYM_EvaluationMonitor,  expr_new_symbol(SYM_None) },
+            { SYM_NormFunction,       expr_new_symbol(SYM_Automatic) },
+            { OPT_DependentVariables, expr_new_symbol(SYM_Automatic) },
+        };
+        size_t nopt = sizeof(defs) / sizeof(defs[0]);
+        Expr** rules = malloc(nopt * sizeof(Expr*));
+        for (size_t i = 0; i < nopt; i++)
+            rules[i] = expr_new_function(expr_new_symbol(SYM_Rule),
+                (Expr*[]){ expr_new_symbol(defs[i].lhs), defs[i].rhs }, 2);
+        Expr* opts = expr_new_function(expr_new_symbol(SYM_List), rules, nopt);
+        free(rules);
+        symtab_set_options("NDSolve", opts);  /* takes ownership */
+    }
+
     symtab_set_docstring("NDSolve",
         "NDSolve[eqns, u, {x, xmin, xmax}]\n"
         "\tsolves the ordinary differential equations eqns numerically for the\n"

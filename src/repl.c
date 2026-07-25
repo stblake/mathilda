@@ -133,8 +133,20 @@ void process_input(const char* input, int line_number) {
      * copy. */
     Expr* to_print = repl_apply_pre_print(expr_copy(evaluated));
 
+    /* `?sym` / Information[sym] yields the raw docstring as a String. Print it
+     * as a formatted usage message (real newlines/tabs, no surrounding quotes
+     * or InputForm escaping) — Mathematica's behavior — rather than as a quoted
+     * string literal. Keyed on the *input* head so only help queries take this
+     * path; an ordinary string result still prints quoted. */
+    int is_info_query =
+        parsed && parsed->type == EXPR_FUNCTION
+        && parsed->data.function.head->type == EXPR_SYMBOL
+        && parsed->data.function.head->data.symbol.name == SYM_Information
+        && to_print && to_print->type == EXPR_STRING;
+
     printf("Out[%d]= ", line_number);
-    expr_print(to_print);
+    if (is_info_query) fputs(to_print->data.string, stdout);
+    else               expr_print(to_print);
     printf("\n"); // extra blank line
 
     /* Mathematica's front end auto-displays a top-level Graphics[...] (or
