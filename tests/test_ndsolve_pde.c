@@ -697,6 +697,73 @@ static void test_mpfr_pde(void) {
                "|u(0,1/2) - 1| < 1e-17");
 }
 
+/* ============================================================= *
+ *  21. Complex PDE — free-particle Schrödinger  i psi_t = -psi_xx.*
+ *      Semi-discrete eigenmode psi = e^{i lam t} sin(pi x),      *
+ *      lam = -(2/h^2)(1-cos(pi h)):  Re = cos(lam t) sin(pi x),  *
+ *      Im = sin(lam t) sin(pi x), and |psi|^2 = sin^2(pi x)      *
+ *      conserved at every node.                                  *
+ * ============================================================= */
+static void test_schrodinger(void) {
+    const int nx = 13;
+    const double T = 0.03, h = 1.0 / (nx - 1), lam = disc_lambda(nx);
+    char buf[1200], q[128], lbl[64];
+    snprintf(buf, sizeof buf,
+        "sc = NDSolve[{I D[u[t,x],t]==-D[u[t,x],{x,2}], u[0,x]==Sin[Pi x], "
+        "u[t,0]==0, u[t,1]==0}, u, {t,0,%.4f}, {x,0,1}, "
+        "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->2}}, "
+        "MaxSteps->100000];", T, nx);
+    run(buf);
+    char hd[64]; eval_head("sc", hd, sizeof hd);
+    check_true("Schrödinger result is a List", strcmp(hd, "List") == 0, hd[0] ? hd : "(null)");
+    for (int i = 3; i <= nx - 2; i += 3) {
+        double xi = i * h, s = sin(PI * xi);
+        snprintf(q, sizeof q, "Re[First[u[%.4f, %.10f] /. sc]]", T, xi);
+        snprintf(lbl, sizeof lbl, "Schrodinger Re(T,x%d)", i);
+        CHECK(lbl, q, cos(lam * T) * s, 1e-4);
+        snprintf(q, sizeof q, "Im[First[u[%.4f, %.10f] /. sc]]", T, xi);
+        snprintf(lbl, sizeof lbl, "Schrodinger Im(T,x%d)", i);
+        CHECK(lbl, q, sin(lam * T) * s, 1e-4);
+        snprintf(q, sizeof q, "Abs[First[u[%.4f, %.10f] /. sc]]^2", T, xi);
+        snprintf(lbl, sizeof lbl, "Schrodinger |psi|^2(T,x%d)", i);
+        CHECK(lbl, q, s * s, 1e-4);   /* norm conserved per node */
+    }
+}
+
+/* ============================================================= *
+ *  22. Schrödinger with a potential well  i psi_t=-psi_xx+V psi. *
+ *      No closed form, but the total norm sum|psi|^2 is a        *
+ *      conserved quantity (unitary evolution) — a strong stress. *
+ * ============================================================= */
+static void test_schrodinger_potential(void) {
+    const int nx = 15;
+    const double T = 0.02, h = 1.0 / (nx - 1);
+    char buf[1300], q[128];
+    snprintf(buf, sizeof buf,
+        "sp = NDSolve[{I D[u[t,x],t]==-D[u[t,x],{x,2}] + 200 (x-1/2)^2 u[t,x], "
+        "u[0,x]==Sin[Pi x], u[t,0]==0, u[t,1]==0}, u, {t,0,%.4f}, {x,0,1}, "
+        "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->2}}, "
+        "MaxSteps->200000];", T, nx);
+    run(buf);
+    double nT = 0.0, n0 = 0.0;
+    for (int i = 1; i <= nx - 2; i++) {
+        double xi = i * h, re, im;
+        snprintf(q, sizeof q, "Re[First[u[%.4f, %.10f] /. sp]]", T, xi);
+        if (!eval_double(q, &re)) { printf("FAIL: potential Re query\n"); failures++; return; }
+        snprintf(q, sizeof q, "Im[First[u[%.4f, %.10f] /. sp]]", T, xi);
+        if (!eval_double(q, &im)) { printf("FAIL: potential Im query\n"); failures++; return; }
+        nT += re * re + im * im;
+        double s = sin(PI * xi);
+        n0 += s * s;
+    }
+    printf("ok:   Schrodinger+V total norm: t=0 %.8g  T %.8g  rel-drift %.2e\n",
+           n0, nT, fabs(nT - n0) / n0);
+    check_true("Schrödinger potential: norm conserved", fabs(nT - n0) / n0 < 2e-3,
+               "sum|psi|^2 conserved under unitary evolution");
+}
+
 int main(void) {
     mute_stderr_once();
     core_init();
@@ -722,6 +789,8 @@ int main(void) {
     test_pde_2d_wave();
     test_burgers();
     test_mpfr_pde();
+    test_schrodinger();
+    test_schrodinger_potential();
 
     if (failures == 0) printf("\nAll NDSolve PDE tests passed.\n");
     else printf("\n%d NDSolve PDE test(s) FAILED.\n", failures);

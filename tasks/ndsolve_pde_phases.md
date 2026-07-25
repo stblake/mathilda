@@ -13,6 +13,6 @@ extensive unit/stress tests + valgrind clean + docs/changelog + commit.
       Jacobian, banded LU solve, stiffness auto-select. ~10x speedup. (68 tests) — DONE
 - [x] **Phase 4** — 2 spatial dimensions (tensor grid, 2-D stencils, Dirichlet). (81 tests) — DONE
       Tests: 2-D heat/wave separable eigenmodes.
-- [~] **Phase 5** — MPFR MoL (non-stiff, `nd_solve_mpfr_mol`) + nonlinear
-      (viscous Burgers) DONE (87 tests). Complex (Schrödinger, Re/Im
-      realification) still OUTSTANDING — needs a realify pass in the front-end.
+- [x] **Phase 5** — MPFR MoL (non-stiff, `nd_solve_mpfr_mol`) + nonlinear
+      (viscous Burgers) + **complex (Schrödinger, `nd_realify` + two-real-IF
+      output)** — DONE (99 tests). All phases complete.

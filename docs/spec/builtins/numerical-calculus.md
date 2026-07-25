@@ -1099,6 +1099,16 @@ for parabolic problems). **Two spatial dimensions** are also supported on a
 rectangle — `NDSolve[eqns, u, {t,..}, {x,..}, {y,..}]` — with Dirichlet
 conditions on all four edges and unmixed spatial derivatives (2-D heat, wave,
 advection–diffusion); the result is a 3-D `InterpolatingFunction` `u[t,x,y]`.
+**Complex-valued PDEs (Schrödinger).** When the solved RHS carries the imaginary
+unit (e.g. `I D[u[t,x],t] == -D[u[t,x],{x,2}]`), the front-end **realifies** the
+system — each complex unknown is split into interleaved (Re, Im) real unknowns
+via `ComplexExpand` — and returns the solution as
+`u -> Function[{t,x}, ifRe[t,x] + I ifIm[t,x]]` (two real `InterpolatingFunction`s),
+so `u[t,x]` evaluates to a complex number. The realified system is real and
+linear, so the compiled operator still applies. Verified against the exact
+semi-discrete Schrödinger eigenmode and by norm conservation (`Σ|ψ|²` drifts
+~1e-10 under a potential well).
+
 **Arbitrary precision.** `WorkingPrecision -> p` (p > machine) runs the MPFR
 integrator on the discretized system, giving an MPFR-valued 2-D
 `InterpolatingFunction` (1-D PDEs). As for MPFR ODEs the integrator is explicit,
@@ -1106,9 +1116,8 @@ so this is practical for **non-stiff** PDEs (wave, advection) but not stiff
 diffusion; achievable precision at interior query points is bounded by the
 cubic-Hermite interpolation (query at MPFR node abscissae for full precision).
 
-Remaining (deferred): complex-valued PDEs (Schrödinger, via Re/Im realification),
-adaptive-implicit stepping for incompatible IC/BC corners and stiff MPFR, plus
-Neumann/Robin/periodic and mixed derivatives in 2-D.
+Remaining (deferred): adaptive-implicit stepping for incompatible IC/BC corners
+and stiff MPFR, plus Neumann/Robin/periodic and mixed derivatives in 2-D.
 
 ### Beyond / unlike Mathematica's NDSolve
 

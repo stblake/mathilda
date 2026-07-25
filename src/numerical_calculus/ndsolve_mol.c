@@ -404,6 +404,191 @@ static Expr* nd_mol_build_result(NdProblem* P, const char* fname, bool applied,
     return outer;
 }
 
+/* ================================================================== *
+ *  Complex-valued PDEs (Schrödinger): Re/Im realification            *
+ * ================================================================== */
+
+/* True if `e` involves the imaginary unit (a Complex[...] node or symbol I). */
+static bool nd_has_imaginary(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, "I") == 0;
+    if (e->type == EXPR_FUNCTION) {
+        const Expr* h = e->data.function.head;
+        if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "Complex") == 0) return true;
+        if (nd_has_imaginary(h)) return true;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (nd_has_imaginary(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
+/* Evaluate `e` (numericalized) and extract its real and imaginary parts. */
+static bool nd_split_reim(Expr* val, NumericSpec spec, double* re, double* im) {
+    Expr* nv = numericalize(val, spec);
+    if (!nv) return false;
+    Expr* reE = eval_and_free(nd_call1(intern_symbol("Re"), expr_copy(nv)));
+    Expr* imE = eval_and_free(nd_call1(intern_symbol("Im"), expr_copy(nv)));
+    expr_free(nv);
+    bool ok = reE && imE && nd_to_double(reE, re) && nd_to_double(imE, im)
+              && isfinite(*re) && isfinite(*im);
+    expr_free(reE); expr_free(imE);
+    return ok;
+}
+
+/* Evaluate a one-variable expression at var==value to a complex (re, im). */
+static bool nd_eval_complex_at(const Expr* e, const char* var, double value,
+                               NumericSpec spec, double* re, double* im) {
+    Expr* lit = expr_new_symbol(var);
+    Expr* sub = expr_new_real(value);
+    Expr* r = nd_replace_all(expr_copy((Expr*)e), &lit, &sub, 1);
+    expr_free(lit); expr_free(sub);
+    if (!r) return false;
+    bool ok = nd_split_reim(r, spec, re, im);
+    expr_free(r);
+    return ok;
+}
+
+/* Evaluate a (bound) boundary expression to a complex (re, im). */
+static bool nd_bound_eval_complex(Expr* bc, NumericSpec spec, double* re, double* im) {
+    Expr* raw = eval_and_free(expr_copy(bc));
+    if (!raw) return false;
+    bool ok = nd_split_reim(raw, spec, re, im);
+    expr_free(raw);
+    return ok;
+}
+
+/* Transform the complex first-order system dZ/dt = f(Z) (Z = P->ysym, length
+ * nunk) into the real system of the interleaved parts (2k = Re Z_k, 2k+1 = Im).
+ * Each f_k is expanded with Z_j -> wR_j + I wI_j and split by ComplexExpand into
+ * its Re/Im parts.  Replaces P->f/ysym/Y0/bind_y/d in place. */
+static bool nd_realify(NdProblem* P, size_t nunk, const double* Y0re, const double* Y0im) {
+    size_t d = P->d;                 /* == nunk (temporal order 1) */
+    size_t dR = 2 * nunk;
+    Expr** ysymR = malloc(sizeof(Expr*) * dR);
+    for (size_t i = 0; i < dR; i++) {
+        /* keep the "NDSolve`w<index>" convention the operator builder parses */
+        char b[48]; snprintf(b, sizeof b, "NDSolve`w%zu", i);
+        ysymR[i] = expr_new_symbol(intern_symbol(b));
+    }
+    /* substitution Z_k -> wR_k + I wI_k */
+    Expr** subs = malloc(sizeof(Expr*) * nunk);
+    for (size_t k = 0; k < nunk; k++) {
+        Expr* iw = nd_call2("Times", expr_new_symbol("I"), expr_copy(ysymR[2*k+1]));
+        subs[k] = nd_call2("Plus", expr_copy(ysymR[2*k]), iw);
+    }
+    Expr** fR = calloc(dR, sizeof(Expr*));
+    bool ok = true;
+    for (size_t k = 0; k < nunk && ok; k++) {
+        Expr* fsub = nd_replace_all(expr_copy(P->f[k]), P->ysym, subs, nunk);
+        Expr* reP = nd_call1("Re", expr_copy(fsub));
+        Expr* imP = nd_call1("Im", expr_copy(fsub));
+        expr_free(fsub);
+        fR[2*k]   = eval_and_free(nd_call1("ComplexExpand", reP));
+        fR[2*k+1] = eval_and_free(nd_call1("ComplexExpand", imP));
+        if (!fR[2*k] || !fR[2*k+1]) ok = false;
+    }
+    for (size_t k = 0; k < nunk; k++) expr_free(subs[k]);
+    free(subs);
+    if (!ok) {
+        for (size_t i = 0; i < dR; i++) expr_free(fR[i]);
+        free(fR);
+        for (size_t k = 0; k < nunk; k++) expr_free(ysymR[k*2]), expr_free(ysymR[k*2+1]);
+        free(ysymR);
+        return false;
+    }
+    /* tear down the old complex state, install the real one */
+    for (size_t i = 0; i < d; i++) nd_bind_restore(&P->bind_y[i]);
+    for (size_t i = 0; i < d; i++) { expr_free(P->f[i]); expr_free(P->ysym[i]); }
+    free(P->f); free(P->ysym); free(P->Y0); free(P->bind_y);
+    P->d = dR; P->ysym = ysymR; P->f = fR;
+    P->Y0 = malloc(sizeof(double) * dR);
+    for (size_t k = 0; k < nunk; k++) { P->Y0[2*k] = Y0re[k]; P->Y0[2*k+1] = Y0im[k]; }
+    P->bind_y = malloc(sizeof(NdBind) * dR);
+    for (size_t i = 0; i < dR; i++) nd_bind_snapshot(&P->bind_y[i], ysymR[i]->data.symbol.name);
+    return true;
+}
+
+/* Build one real InterpolatingFunction over (t,x) selecting either the Re
+ * (part=0) or Im (part=1) component of a realified complex solution. */
+static Expr* nd_build_cplx_if(NdProblem* P, const char* tvar, double xmin, double h,
+                              size_t nx, size_t nunk, int gbase, bool periodic,
+                              Expr* bc_left, Expr* bc_right, const NdSolution* sol,
+                              NumericSpec spec, int part) {
+    size_t n = sol->n, d = sol->d;
+    size_t npts = n * nx;
+    Expr** entries = malloc(sizeof(Expr*) * npts);
+    size_t p = 0;
+    for (size_t i = 0; i < n; i++) {
+        double ti = sol->ts[i];
+        if (!periodic) {
+            nd_bind_set(&P->bind_t, expr_new_real(ti));
+            for (size_t k = 0; k < d; k++) nd_bind_set(&P->bind_y[k], expr_new_real(sol->Ys[i*d + k]));
+        }
+        for (size_t g = 0; g < nx; g++) {
+            double xg = xmin + (double)g * h;
+            double val = 0.0;
+            bool interior = periodic ? (g < nx - 1)
+                                     : (g >= 1 && g + 1 < nx);
+            if (interior) {
+                size_t node = periodic ? g : (g - 1);   /* interior node index */
+                val = sol->Ys[i*d + 2*node + (size_t)part];
+            } else if (periodic) {
+                val = sol->Ys[i*d + 0 + (size_t)part];   /* wrap to node 0 */
+            } else {
+                double re, im;
+                Expr* bc = (g == 0) ? bc_left : bc_right;
+                if (nd_bound_eval_complex(bc, spec, &re, &im)) val = part ? im : re;
+            }
+            Expr* coord[2] = { expr_new_real(ti), expr_new_real(xg) };
+            Expr* coordL = expr_new_function(expr_new_symbol(SYM_List), coord, 2);
+            Expr* pair[2] = { coordL, expr_new_real(val) };
+            entries[p++] = expr_new_function(expr_new_symbol(SYM_List), pair, 2);
+        }
+    }
+    Expr* data = expr_new_function(expr_new_symbol(SYM_List), entries, npts);
+    free(entries);
+    Expr* ifun = eval_and_free(expr_new_function(expr_new_symbol(SYM_Interpolation), &data, 1));
+    if (!head_is(ifun, SYM_InterpolatingFunction)) { expr_free(ifun); return NULL; }
+    (void)tvar; (void)nunk; (void)gbase;
+    return ifun;
+}
+
+/* Assemble the complex result: u -> Function[{t,x}, ifRe[t,x] + I ifIm[t,x]]. */
+static Expr* nd_mol_build_result_complex(NdProblem* P, const char* fname, bool applied,
+                                         const char* tvar, const char* xvar, double xmin,
+                                         double h, size_t nx, size_t nunk, int gbase,
+                                         bool periodic, Expr* bc_left, Expr* bc_right,
+                                         const NdSolution* sol, NumericSpec spec) {
+    if (sol->n < 2) return NULL;
+    Expr* ifRe = nd_build_cplx_if(P, tvar, xmin, h, nx, nunk, gbase, periodic,
+                                  bc_left, bc_right, sol, spec, 0);
+    Expr* ifIm = nd_build_cplx_if(P, tvar, xmin, h, nx, nunk, gbase, periodic,
+                                  bc_left, bc_right, sol, spec, 1);
+    if (!ifRe || !ifIm) { expr_free(ifRe); expr_free(ifIm); return NULL; }
+    /* body = ifRe[t,x] + I ifIm[t,x] */
+    Expr* ra[2] = { expr_new_symbol(tvar), expr_new_symbol(xvar) };
+    Expr* reApp = expr_new_function(ifRe, ra, 2);
+    Expr* ia[2] = { expr_new_symbol(tvar), expr_new_symbol(xvar) };
+    Expr* imApp = expr_new_function(ifIm, ia, 2);
+    Expr* iTimes = nd_call2("Times", expr_new_symbol("I"), imApp);
+    Expr* body = nd_call2("Plus", reApp, iTimes);
+    Expr* lhs, *rhs;
+    if (applied) {
+        Expr* la[2] = { expr_new_symbol(tvar), expr_new_symbol(xvar) };
+        lhs = expr_new_function(expr_new_symbol(fname), la, 2);
+        rhs = body;
+    } else {
+        lhs = expr_new_symbol(fname);
+        Expr* params[2] = { expr_new_symbol(tvar), expr_new_symbol(xvar) };
+        Expr* plist = expr_new_function(expr_new_symbol(SYM_List), params, 2);
+        Expr* fargs[2] = { plist, body };
+        rhs = expr_new_function(expr_new_symbol("Function"), fargs, 2);
+    }
+    Expr* rule = nd_call2(SYM_Rule, lhs, rhs);
+    Expr* inner = expr_new_function(expr_new_symbol(SYM_List), &rule, 1);
+    return expr_new_function(expr_new_symbol(SYM_List), &inner, 1);
+}
+
 /* ------------------------------------------------------------------ *
  *  Method of Lines solver (Phase 1)                                   *
  * ------------------------------------------------------------------ */
@@ -640,6 +825,23 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
         return NULL;
     }
 
+    /* Complex-valued PDE (e.g. Schrödinger): the solved RHS carries the
+     * imaginary unit.  Handled by Re/Im realification below (temporal order 1);
+     * the realified system is real, integrated at machine precision. */
+    bool cplx = nd_has_imaginary(G);
+    if (cplx) { use_mpfr = false; o.spec = numeric_machine_spec(); o.wp_bits = 53; spec = o.spec; }
+    if (cplx && torder != 1) {
+        nd_mol_warn("pdecplx", "complex PDEs are supported only at temporal order 1");
+        expr_free(G);
+        for (int a = 0; a < torder; a++) expr_free(ic[a]);
+        free(ic);
+        expr_free(aL); expr_free(bL); expr_free(rL);
+        expr_free(aR); expr_free(bR); expr_free(rR);
+        for (size_t e = 0; e < neq; e++) expr_free(eqitems[e]);
+        free(eqitems);
+        return NULL;
+    }
+
     /* ---- unknown grid nodes ----
      * Dirichlet/Neumann/Robin: interior nodes 1..nx-2 (grid base 1).
      * Periodic: nodes 0..nx-2 (node nx-1 is the image of node 0). */
@@ -716,22 +918,36 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
     for (size_t i = 0; i < d; i++) if (!P.f[i]) build_ok = false;
 
     /* ---- initial data ---- */
+    double* Y0re = NULL; double* Y0im = NULL;   /* complex path */
+    if (cplx) { Y0re = malloc(sizeof(double) * nunk); Y0im = malloc(sizeof(double) * nunk); }
     for (size_t u = 0; u < nunk && build_ok; u++) {
         double xj = xmin + (double)((int)u + gbase) * h;
-        for (int m = 0; m < torder; m++) {
-            double v;
-            if (!nd_eval_at(ic[m], xvar, xj, spec, &v)) { build_ok = false; break; }
-            P.Y0[u * (size_t)torder + (size_t)m] = v;
+        if (cplx) {
+            if (!nd_eval_complex_at(ic[0], xvar, xj, spec, &Y0re[u], &Y0im[u])) build_ok = false;
+        } else {
+            for (int m = 0; m < torder; m++) {
+                double v;
+                if (!nd_eval_at(ic[m], xvar, xj, spec, &v)) { build_ok = false; break; }
+                P.Y0[u * (size_t)torder + (size_t)m] = v;
+            }
         }
     }
     P.t0 = t0; P.tmin = tmin; P.tmax = tmax;
+
+    /* ---- realify a complex system into interleaved (Re, Im) real unknowns ---- */
+    if (build_ok && cplx) {
+        if (!nd_realify(&P, nunk, Y0re, Y0im)) build_ok = false;
+        d = P.d;
+    }
+    free(Y0re); free(Y0im);
 
     /* ---- compile a linear operator (fast RHS / exact Jacobian) if possible ---- */
     if (build_ok && compiled && !use_mpfr) P.op = nd_operator_try_build(&P);
 
     /* Parabolic problems (a diffusion term with first-order time evolution) are
-     * stiff; default them to BDF when the user didn't force a method. */
-    bool parabolic = (torder == 1) &&
+     * stiff; default them to BDF when the user didn't force a method.  Complex
+     * (Schrödinger) systems have imaginary spectra — keep the explicit default. */
+    bool parabolic = (torder == 1) && !cplx &&
                      (has_s[2] || has_s[4] || has_s[6] || has_s[8]);
 
     /* ---- integrate ---- */
@@ -745,7 +961,7 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
                            : (parabolic ? nd_lookup_stepper("BDF") : nd_default_stepper());
         if (!S) S = nd_default_stepper();
 #ifdef USE_MPFR
-        if (use_mpfr) {
+        if (use_mpfr && !cplx) {
             /* Arbitrary precision: integrate at MPFR precision (explicit) and
              * assemble the MPFR 2-D InterpolatingFunction. */
             NdMolGrid grid = { fname, applied, tvar, xvar, xmin, h, nx, torder,
@@ -762,18 +978,24 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
         else if (st == ND_ERR_SAMPLE) nd_mol_warn("nrnum", "spatial operator did not evaluate to a number");
         /* build the result while the bindings are still live (boundary/periodic
          * node values may depend on the reduced-state symbols). */
-        result = nd_mol_build_result(&P, fname, applied, tvar, xvar, xmin, h, nx, torder,
-                                     periodic, bc_left, bc_right, &sol, spec);
+        if (cplx)
+            result = nd_mol_build_result_complex(&P, fname, applied, tvar, xvar, xmin, h,
+                                                 nx, nunk, gbase, periodic, bc_left, bc_right,
+                                                 &sol, spec);
+        else
+            result = nd_mol_build_result(&P, fname, applied, tvar, xvar, xmin, h, nx, torder,
+                                         periodic, bc_left, bc_right, &sol, spec);
         nd_solution_free(&sol);
         }
     }
     nd_bind_restore(&P.bind_t);
     for (size_t i = 0; i < d; i++) nd_bind_restore(&P.bind_y[i]);
 
-    /* ---- cleanup ---- */
+    /* ---- cleanup (P.ysym/P.f may have been replaced by realification) ---- */
     nd_operator_free(P.op);
-    for (size_t i = 0; i < d; i++) { expr_free(P.f[i]); expr_free(ysym[i]); }
-    free(P.f); free(ysym); free(P.Y0); free(P.bind_y);
+    for (size_t i = 0; i < d; i++) { expr_free(P.f[i]); expr_free(P.ysym[i]); }
+    free(P.f); free(P.ysym); free(P.Y0); free(P.bind_y);
+    (void)ysym;
     if (P.jac) {
         for (size_t i = 0; i < d; i++) {
             for (size_t j = 0; j < d; j++) expr_free(P.jac[i][j]);
