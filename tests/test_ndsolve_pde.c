@@ -518,6 +518,74 @@ static void test_periodic_bc(void) {
     check_true("periodic endpoints match", ok && fabs(v0 - v1) < 1e-9, "u(t,0)==u(t,1)");
 }
 
+/* ============================================================= *
+ *  16. Compiled operator: fast path == symbolic path.          *
+ *      Same linear PDE with Compiled->True vs Compiled->False    *
+ *      must agree; and the auto-selected method (no Method given) *
+ *      solves stiff heat correctly.                              *
+ * ============================================================= */
+static double advdiff_compiled(int nx, int comp, double T, double xq) {
+    char buf[1300], q[96];
+    snprintf(buf, sizeof buf,
+        "cp = NDSolve[{D[u[t,x],t]==D[u[t,x],{x,2}] - D[u[t,x],x], u[0,x]==Sin[Pi x], "
+        "u[t,0]==0, u[t,1]==0}, u, {t,0,%.4f}, {x,0,1}, "
+        "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->4}}, "
+        "Method->\"BDF\", Compiled->%s, MaxSteps->3000];", T, nx, comp ? "True" : "False");
+    run(buf);
+    snprintf(q, sizeof q, "First[u[%.4f, %.4f] /. cp]", T, xq);
+    double v;
+    return eval_double(q, &v) ? v : NAN;
+}
+static void test_compiled_operator(void) {
+    double vt = advdiff_compiled(21, 1, 0.2, 0.5);   /* compiled operator */
+    double vf = advdiff_compiled(21, 0, 0.2, 0.5);   /* symbolic sampler  */
+    printf("ok:   compiled=%.12g  symbolic=%.12g  diff=%.2e\n", vt, vf, fabs(vt - vf));
+    check_true("compiled operator == symbolic RHS", fabs(vt - vf) < 1e-9,
+               "fast path agrees with symbolic path");
+
+    /* auto-method: parabolic heat with NO time-integration method specified
+     * (only the MoL controller) must auto-select BDF and stay accurate. */
+    const int nx = 11;
+    const double T = 0.05, h = 1.0 / (nx - 1);
+    const double lam = disc_lambda(nx);
+    char buf[1024], q[96];
+    snprintf(buf, sizeof buf,
+        "au = NDSolve[{D[u[t,x],t]==D[u[t,x],{x,2}], u[0,x]==Sin[Pi x], "
+        "u[t,0]==0, u[t,1]==0}, u, {t,0,%.4f}, {x,0,1}, "
+        "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->2}}, "
+        "MaxSteps->5000];", T, nx);
+    run(buf);
+    snprintf(q, sizeof q, "First[u[%.4f, %.10f] /. au]", T, 5 * h);
+    CHECK("auto-selected method (stiff heat)", q, exp(lam * T) * sin(PI * 5 * h), 1e-4);
+}
+
+/* ============================================================= *
+ *  17. Efficiency/scale: a larger stiff grid solves quickly and *
+ *      accurately with the compiled banded operator + BDF.      *
+ *      (Without it this would be O(d^3) dense + symbolic Jacobian *
+ *      per step.)                                               *
+ * ============================================================= */
+static void test_operator_scale(void) {
+    const int nx = 81;
+    const double T = 0.02, h = 1.0 / (nx - 1), lam = disc_lambda(nx);
+    char buf[1024], q[96], lbl[64];
+    snprintf(buf, sizeof buf,
+        "sc = NDSolve[{D[u[t,x],t]==D[u[t,x],{x,2}], u[0,x]==Sin[Pi x], "
+        "u[t,0]==0, u[t,1]==0}, u, {t,0,%.4f}, {x,0,1}, "
+        "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->2}}, "
+        "Method->\"BDF\", MaxSteps->4000];", T, nx);
+    run(buf);
+    for (int i = 20; i <= nx - 2; i += 20) {
+        double xi = i * h, exact = exp(lam * T) * sin(PI * xi);
+        snprintf(q, sizeof q, "First[u[%.4f, %.10f] /. sc]", T, xi);
+        snprintf(lbl, sizeof lbl, "scale nx=81 u(T,x%d)", i);
+        CHECK(lbl, q, exact, 1e-4);
+    }
+}
+
 int main(void) {
     mute_stderr_once();
     core_init();
@@ -537,6 +605,8 @@ int main(void) {
     test_neumann_bc();
     test_robin_bc();
     test_periodic_bc();
+    test_compiled_operator();
+    test_operator_scale();
 
     if (failures == 0) printf("\nAll NDSolve PDE tests passed.\n");
     else printf("\n%d NDSolve PDE test(s) FAILED.\n", failures);

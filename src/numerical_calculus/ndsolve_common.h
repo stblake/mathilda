@@ -68,6 +68,31 @@ bool nd_eval_to_double(Expr* e, NumericSpec spec, double* out);
 Expr* nd_replace_all(Expr* body, Expr** lits, Expr** subs, size_t n);
 
 /* ------------------------------------------------------------------ *
+ *  Compiled linear operator (fast path)                               *
+ * ------------------------------------------------------------------ *
+ * When the reduced RHS is linear in the state — dY/dt = A·Y + s(t) with a
+ * constant matrix A — the method-of-lines front-end compiles it into this
+ * numeric operator so the driver evaluates the RHS by a (banded) matrix–vector
+ * product instead of re-evaluating symbolic expressions, uses A directly as the
+ * exact Jacobian, and solves the implicit iteration matrix with a banded LU. */
+typedef struct {
+    size_t  n;              /* system size (= d)                              */
+    double* A;              /* constant n*n matrix, row-major (owned)         */
+    int     kl, ku;         /* lower/upper half-bandwidth of the nonzeros     */
+    bool    banded;         /* narrow enough for the banded solve             */
+    double* s0;             /* constant forcing vector (n), or NULL           */
+    Expr**  st;             /* per-node time-dependent forcing (n), or NULL   */
+    bool    time_forcing;   /* forcing depends on t (use st, bind t per call) */
+} NdOperator;
+
+void nd_operator_free(NdOperator* op);
+
+/* Banded no-pivot LU solve of the n*n dense matrix `M` (nonzeros within
+ * bandwidth kl/ku) against `b` (overwritten with the solution).  Returns false
+ * on a (near-)zero pivot, so the caller can fall back to the dense solve. */
+bool nd_banded_solve(size_t n, int kl, int ku, double* M, double* b);
+
+/* ------------------------------------------------------------------ *
  *  Compiled problem: dY/dt = f(t, Y)                                  *
  * ------------------------------------------------------------------ */
 typedef struct NdProblem NdProblem;
@@ -82,6 +107,7 @@ struct NdProblem {
     Expr**   ysym;          /* array[d] reduced-state symbol Exprs (owned)    */
     NumericSpec spec;       /* machine double vs MPFR                          */
     Expr*    eval_monitor;  /* borrowed EvaluationMonitor body, or NULL       */
+    NdOperator* op;         /* compiled linear fast path, or NULL (owned)     */
 
     /* Jacobian (implicit steppers only; built lazily, owned) */
     Expr***  jac;           /* jac[i][j] = D[f_i, y_j], or NULL entry -> FD    */

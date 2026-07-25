@@ -144,6 +144,32 @@ static bool nd_eval_bound(NdProblem* P, Expr* e, double* out) {
 }
 
 bool nd_rhs_real(NdProblem* P, double t, const double* Y, double* out) {
+    /* Compiled linear fast path: out = A*Y + s(t), pure arithmetic. */
+    if (P->op) {
+        NdOperator* op = P->op;
+        size_t n = op->n;
+        for (size_t i = 0; i < n; i++) {
+            const double* Ai = &op->A[i * n];
+            double acc = 0.0;
+            for (size_t j = 0; j < n; j++) acc += Ai[j] * Y[j];
+            out[i] = acc;
+        }
+        if (op->time_forcing) {
+            nd_bind_set(&P->bind_t, expr_new_real(t));
+            for (size_t i = 0; i < n; i++) {
+                double s;
+                if (!nd_eval_bound(P, op->st[i], &s)) return false;
+                out[i] += s;
+            }
+        } else if (op->s0) {
+            for (size_t i = 0; i < n; i++) out[i] += op->s0[i];
+        }
+        if (P->eval_monitor) {
+            nd_bind_point(P, t, Y);
+            Expr* m = eval_and_free(expr_copy(P->eval_monitor)); expr_free(m);
+        }
+        return true;
+    }
     nd_bind_point(P, t, Y);
     if (P->eval_monitor) { Expr* m = eval_and_free(expr_copy(P->eval_monitor)); expr_free(m); }
     for (size_t i = 0; i < P->d; i++)
@@ -170,6 +196,8 @@ static void nd_build_jacobian(NdProblem* P) {
 
 bool nd_jacobian_real(NdProblem* P, double t, const double* Y, double* Jout) {
     size_t d = P->d;
+    /* Compiled linear fast path: the Jacobian is exactly the constant A. */
+    if (P->op) { memcpy(Jout, P->op->A, sizeof(double) * d * d); return true; }
     nd_build_jacobian(P);
     /* Try the symbolic Jacobian first. */
     bool ok_all = (P->jac != NULL);
@@ -279,6 +307,33 @@ bool nd_dense_solve(size_t n, double* A, double* b) {
     return true;
 }
 
+/* Banded no-pivot LU solve on a dense-stored matrix M (nonzeros within
+ * bandwidth kl/ku).  Elimination touches only the band, so it costs
+ * O(n·kl·ku).  Suitable for the diagonally-dominant iteration matrix
+ * I - h·theta·A of a discretized elliptic operator.  Returns false on a small
+ * pivot so the caller can retry with the dense solve. */
+bool nd_banded_solve(size_t n, int kl, int ku, double* M, double* b) {
+    for (size_t k = 0; k < n; k++) {
+        double piv = M[k*n + k];
+        if (fabs(piv) < 1e-300) return false;
+        size_t ilast = (k + (size_t)kl < n - 1) ? k + (size_t)kl : n - 1;
+        size_t jlast = (k + (size_t)ku < n - 1) ? k + (size_t)ku : n - 1;
+        for (size_t i = k + 1; i <= ilast; i++) {
+            double m = M[i*n + k] / piv;
+            if (m == 0.0) continue;
+            for (size_t j = k + 1; j <= jlast; j++) M[i*n + j] -= m * M[k*n + j];
+            b[i] -= m * b[k];
+        }
+    }
+    for (size_t i = n; i-- > 0; ) {
+        double s = b[i];
+        size_t jlast = (i + (size_t)ku < n - 1) ? i + (size_t)ku : n - 1;
+        for (size_t j = i + 1; j <= jlast; j++) s -= M[i*n + j] * b[j];
+        b[i] = s / M[i*n + i];
+    }
+    return true;
+}
+
 /* ------------------------------------------------------------------ *
  *  Implicit theta-method Newton solve                                 *
  * ------------------------------------------------------------------ */
@@ -303,7 +358,19 @@ bool nd_newton_theta(NdProblem* P, double t1, const double* Ybase,
             for (size_t j = 0; j < d; j++)
                 M[i*d + j] = (i == j ? 1.0 : 0.0) - h*theta*J[i*d + j];
         memcpy(dZ, G, sizeof(double) * d);
-        if (!nd_dense_solve(d, M, dZ)) break;
+        /* Banded LU for the compiled operator's iteration matrix; fall back to
+         * the dense solve (rebuilding M, which the banded pass overwrote). */
+        bool solved = false;
+        if (P->op && P->op->banded) {
+            solved = nd_banded_solve(d, P->op->kl, P->op->ku, M, dZ);
+            if (!solved) {
+                for (size_t i = 0; i < d; i++)
+                    for (size_t j = 0; j < d; j++)
+                        M[i*d + j] = (i == j ? 1.0 : 0.0) - h*theta*J[i*d + j];
+                memcpy(dZ, G, sizeof(double) * d);
+            }
+        }
+        if (!solved && !nd_dense_solve(d, M, dZ)) break;
         for (size_t i = 0; i < d; i++) Z[i] -= dZ[i];
         double nrm = nd_wrms_norm(d, dZ, Z, NULL, tol);
         if (nrm <= 1e-2) { converged = true; break; }

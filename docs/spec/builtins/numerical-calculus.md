@@ -1072,6 +1072,16 @@ dimension work through the same Block-localized sampler, with no extra machinery
 Because every accepted time node carries the whole spatial vector, the solution
 is a complete tensor grid handed to the multidimensional `Interpolation` builtin.
 
+**Compiled operator (efficiency).** When the discretized system is linear —
+`dU/dt = A·U + s(t)` with a constant matrix — the front-end (`ndsolve_operator.c`)
+compiles the numeric banded `A` and forcing `s(t)`, so the RHS is a banded
+matrix–vector product (no per-call symbolic evaluation), the Jacobian is exactly
+`A` (free), and the implicit iteration matrix is solved with a banded LU. This is
+~10× faster on moderate stiff grids; `Compiled -> False` forces the symbolic
+sampler (identical results). Nonlinear PDEs use the symbolic sampler. **Stiffness
+auto-selection:** parabolic problems (a diffusion term with first-order time
+evolution) default to `"BDF"` when no time-integration method is given.
+
 Currently supported: one spatial dimension; one dependent function; temporal
 order 1 (parabolic — heat, advection–diffusion, reaction–diffusion, Burgers) and
 2 (hyperbolic — wave); arbitrary spatial derivative order; boundary conditions —

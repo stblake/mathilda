@@ -28,6 +28,7 @@
  */
 #include "ndsolve_common.h"
 #include "ndsolve_stencil.h"
+#include "ndsolve_operator.h"
 #include "../sym_names.h"
 #include "../sym_intern.h"
 #include "../eval.h"
@@ -462,14 +463,22 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
         fname = fitem->data.function.head->data.symbol.name; applied = true;
     } else return NULL;
 
-    /* ---- grid resolution + finite-difference order ---- */
+    /* ---- grid resolution + finite-difference order + Compiled ---- */
     long nx_l = 25;
     long dord_l = 4;                   /* DifferenceOrder default (WL-faithful) */
+    bool compiled = true;              /* Compiled -> False forces symbolic RHS */
+    const char* SYM_Compiled = intern_symbol("Compiled");
     for (size_t i = pos_end; i < argc; i++) {
         if (!nd_mol_is_option(A[i])) continue;
-        if (A[i]->data.function.args[0]->data.symbol.name == SYM_Method) {
+        const char* opt = A[i]->data.function.args[0]->data.symbol.name;
+        if (opt == SYM_Method) {
             nd_scan_int_subopt(A[i], "MinPoints", &nx_l);
             nd_scan_int_subopt(A[i], "DifferenceOrder", &dord_l);
+        } else if (opt == SYM_Compiled) {
+            Expr* v = eval_and_free(expr_copy(A[i]->data.function.args[1]));
+            if (v && v->type == EXPR_SYMBOL && v->data.symbol.name == intern_symbol("False"))
+                compiled = false;
+            expr_free(v);
         }
     }
     if (nx_l < 5) nx_l = 5;
@@ -715,10 +724,23 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
     }
     P.t0 = t0; P.tmin = tmin; P.tmax = tmax;
 
+    /* ---- compile a linear operator (fast RHS / exact Jacobian) if possible ---- */
+    if (build_ok && compiled) P.op = nd_operator_try_build(&P);
+
+    /* Parabolic problems (a diffusion term with first-order time evolution) are
+     * stiff; default them to BDF when the user didn't force a method. */
+    bool parabolic = (torder == 1) &&
+                     (has_s[2] || has_s[4] || has_s[6] || has_s[8]);
+
     /* ---- integrate ---- */
     Expr* result = NULL;
     if (build_ok) {
-        const NdStepper* S = nd_lookup_stepper(o.method);
+        /* "MethodOfLines" is the spatial controller, not a time stepper — treat
+         * it (and Automatic) as unset so stiffness auto-selection can apply. */
+        const char* tim = o.method;
+        if (tim && strcmp(tim, "MethodOfLines") == 0) tim = NULL;
+        const NdStepper* S = tim ? nd_lookup_stepper(tim)
+                           : (parabolic ? nd_lookup_stepper("BDF") : nd_default_stepper());
         if (!S) S = nd_default_stepper();
         NdSolution sol; nd_solution_init(&sol, d);
         NdStatus st = nd_integrate(&P, S, &o, &sol);
@@ -736,6 +758,7 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
     for (size_t i = 0; i < d; i++) nd_bind_restore(&P.bind_y[i]);
 
     /* ---- cleanup ---- */
+    nd_operator_free(P.op);
     for (size_t i = 0; i < d; i++) { expr_free(P.f[i]); expr_free(ysym[i]); }
     free(P.f); free(ysym); free(P.Y0); free(P.bind_y);
     if (P.jac) {
