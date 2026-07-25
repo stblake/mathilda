@@ -586,6 +586,64 @@ static void test_operator_scale(void) {
     }
 }
 
+/* ============================================================= *
+ *  18. Two spatial dimensions: heat u_t = u_xx + u_yy and wave  *
+ *      u_tt = u_xx + u_yy on the unit square, Dirichlet 0.       *
+ *      sin(pi x) sin(pi y) is an exact eigenmode of the discrete *
+ *      2-D Laplacian -> exact semi-discrete solution.           *
+ * ============================================================= */
+static void test_pde_2d_heat(void) {
+    const int n = 13;
+    const double h = 1.0 / (n - 1);
+    const double lam = 2.0 * (-2.0 * (1.0 - cos(PI * h)) / (h * h));  /* lx+ly */
+    const double T = 0.015;
+    char buf[1400], q[128], lbl[64];
+    snprintf(buf, sizeof buf,
+        "h2 = NDSolve[{D[u[t,x,y],t]==D[u[t,x,y],{x,2}]+D[u[t,x,y],{y,2}], "
+        "u[0,x,y]==Sin[Pi x] Sin[Pi y], u[t,0,y]==0, u[t,1,y]==0, "
+        "u[t,x,0]==0, u[t,x,1]==0}, u, {t,0,%.4f}, {x,0,1}, {y,0,1}, "
+        "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->2}}, "
+        "MaxSteps->4000];", T, n);
+    run(buf);
+    int pts[3] = { 3, 6, 9 };
+    for (int a = 0; a < 3; a++)
+        for (int b = 0; b < 3; b++) {
+            int ix = pts[a], iy = pts[b];
+            double xi = ix * h, yi = iy * h;
+            double exact = exp(lam * T) * sin(PI * xi) * sin(PI * yi);
+            snprintf(q, sizeof q, "First[u[%.4f, %.8f, %.8f] /. h2]", T, xi, yi);
+            snprintf(lbl, sizeof lbl, "2D heat u(T,x%d,y%d)", ix, iy);
+            CHECK(lbl, q, exact, 1e-4);
+        }
+}
+static void test_pde_2d_wave(void) {
+    const int n = 13;
+    const double h = 1.0 / (n - 1);
+    const double lam = 2.0 * (-2.0 * (1.0 - cos(PI * h)) / (h * h));
+    const double omega = sqrt(-lam);
+    const double T = 0.3;
+    char buf[1500], q[128], lbl[64];
+    snprintf(buf, sizeof buf,
+        "w2 = NDSolve[{D[u[t,x,y],{t,2}]==D[u[t,x,y],{x,2}]+D[u[t,x,y],{y,2}], "
+        "u[0,x,y]==Sin[Pi x] Sin[Pi y], Derivative[1,0,0][u][0,x,y]==0, "
+        "u[t,0,y]==0, u[t,1,y]==0, u[t,x,0]==0, u[t,x,1]==0}, u, {t,0,%.4f}, "
+        "{x,0,1}, {y,0,1}, Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->2}}, "
+        "MaxSteps->100000];", T, n);
+    run(buf);
+    int pts[2] = { 4, 8 };
+    for (int a = 0; a < 2; a++)
+        for (int b = 0; b < 2; b++) {
+            int ix = pts[a], iy = pts[b];
+            double xi = ix * h, yi = iy * h;
+            double exact = cos(omega * T) * sin(PI * xi) * sin(PI * yi);
+            snprintf(q, sizeof q, "First[u[%.4f, %.8f, %.8f] /. w2]", T, xi, yi);
+            snprintf(lbl, sizeof lbl, "2D wave u(T,x%d,y%d)", ix, iy);
+            CHECK(lbl, q, exact, 2e-3);
+        }
+}
+
 int main(void) {
     mute_stderr_once();
     core_init();
@@ -607,6 +665,8 @@ int main(void) {
     test_periodic_bc();
     test_compiled_operator();
     test_operator_scale();
+    test_pde_2d_heat();
+    test_pde_2d_wave();
 
     if (failures == 0) printf("\nAll NDSolve PDE tests passed.\n");
     else printf("\n%d NDSolve PDE test(s) FAILED.\n", failures);

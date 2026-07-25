@@ -985,6 +985,8 @@ on `xmin ≤ x ≤ xmax`, returning a list of rules
 - `NDSolve[eqns, u[x], {x, xmin, xmax}]` — gives `u[x] -> InterpolatingFunction[...][x]`.
 - `NDSolve[eqns, u, {t, tmin, tmax}, {x, xmin, xmax}]` — a partial differential
   equation over a rectangular region (method of lines); see below.
+- `NDSolve[eqns, u, {t, tmin, tmax}, {x, xmin, xmax}, {y, ymin, ymax}]` — a PDE
+  in two spatial dimensions, giving a 3-D `InterpolatingFunction` `u[t, x, y]`.
 
 Equations are stated with derivatives (`u'[x]`, `u''[x]`, i.e. `Derivative`, not
 `Dt`). Higher-order equations are automatically reduced to a first-order system
@@ -1092,9 +1094,13 @@ order 1 (parabolic — heat, advection–diffusion, reaction–diffusion, Burger
 one-sided finite-difference of the same order; periodic domains use cyclic
 stencils. The grid and stencil are set with
 `Method -> {"MethodOfLines", "SpatialDiscretization" -> {"TensorProductGrid", "MinPoints" -> n, "DifferenceOrder" -> q}}`.
-Diffusion-dominated (stiff) problems should use `Method -> "BDF"`. Later phases
-add a compiled banded operator with exact Jacobian, two spatial dimensions, MPFR,
-and adaptive-implicit stepping (needed for incompatible IC/BC corners).
+Diffusion-dominated (stiff) problems should use `Method -> "BDF"` (auto-selected
+for parabolic problems). **Two spatial dimensions** are also supported on a
+rectangle — `NDSolve[eqns, u, {t,..}, {x,..}, {y,..}]` — with Dirichlet
+conditions on all four edges and unmixed spatial derivatives (2-D heat, wave,
+advection–diffusion); the result is a 3-D `InterpolatingFunction` `u[t,x,y]`.
+Later phases add MPFR and adaptive-implicit stepping (needed for incompatible
+IC/BC corners), plus Neumann/Robin/periodic and mixed derivatives in 2-D.
 
 ### Beyond / unlike Mathematica's NDSolve
 

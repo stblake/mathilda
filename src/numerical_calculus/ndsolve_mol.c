@@ -45,6 +45,8 @@ static void nd_mol_warn(const char* tag, const char* msg) {
     fprintf(stderr, "NDSolve::%s: %s\n", tag, msg);
 }
 
+static Expr* nd_mol_solve_2d(Expr* res, const NdOpts* o0, const char* forced_method);
+
 /* ------------------------------------------------------------------ *
  *  PDE funcapp matching:  u[t,x]  or  Derivative[a,b][u][t,x]         *
  * ------------------------------------------------------------------ */
@@ -426,8 +428,9 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
     while (pos_end < argc && !nd_mol_is_option(A[pos_end])) pos_end++;
     size_t nranges = (pos_end >= 2) ? pos_end - 2 : 0;
     if (nranges < 2) return NULL;
-    if (nranges > 2) {
-        nd_mol_warn("pdedim", "only one spatial dimension is supported in this phase");
+    if (nranges == 3) return nd_mol_solve_2d(res, o0, forced_method);   /* two spatial dims */
+    if (nranges > 3) {
+        nd_mol_warn("pdedim", "at most two spatial dimensions are supported");
         return NULL;
     }
 
@@ -774,6 +777,453 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
     expr_free(aL); expr_free(bL); expr_free(rL);
     expr_free(aR); expr_free(bR); expr_free(rR);
     expr_free(bc_left); expr_free(bc_right);
+    for (size_t e = 0; e < neq; e++) expr_free(eqitems[e]);
+    free(eqitems);
+    return result;
+}
+
+/* ================================================================== *
+ *  Two spatial dimensions (Phase 4)                                   *
+ *                                                                     *
+ *  u(t, x, y) on a rectangle, discretized on an nx*ny tensor grid.    *
+ *  Interior nodes are the unknowns; Dirichlet values on the four      *
+ *  edges fold into the stencils.  Pure x- and y-derivatives use the   *
+ *  Fornberg stencils along each axis; the result is a 3-D             *
+ *  InterpolatingFunction applied as u[t, x, y].  Scope: Dirichlet     *
+ *  boundary conditions, unmixed spatial derivatives.                  *
+ * ================================================================== */
+
+/* Match  u[t,x,y]  or  Derivative[a,b,c][u][t,x,y]. */
+static bool nd_pde3_match(const Expr* e, const char* fname, int* a, int* b, int* c,
+                          const Expr** g0, const Expr** g1, const Expr** g2) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 3) return false;
+    const Expr* head = e->data.function.head;
+    *g0 = e->data.function.args[0];
+    *g1 = e->data.function.args[1];
+    *g2 = e->data.function.args[2];
+    if (head->type == EXPR_SYMBOL) {
+        if (head->data.symbol.name != fname) return false;
+        *a = 0; *b = 0; *c = 0; return true;
+    }
+    if (head->type == EXPR_FUNCTION && head->data.function.arg_count == 1
+        && head->data.function.args[0]->type == EXPR_SYMBOL
+        && head->data.function.args[0]->data.symbol.name == fname) {
+        const Expr* d = head->data.function.head;
+        if (d->type == EXPR_FUNCTION && d->data.function.arg_count == 3
+            && d->data.function.head->type == EXPR_SYMBOL
+            && d->data.function.head->data.symbol.name == SYM_Derivative
+            && d->data.function.args[0]->type == EXPR_INTEGER
+            && d->data.function.args[1]->type == EXPR_INTEGER
+            && d->data.function.args[2]->type == EXPR_INTEGER) {
+            *a = (int)d->data.function.args[0]->data.integer;
+            *b = (int)d->data.function.args[1]->data.integer;
+            *c = (int)d->data.function.args[2]->data.integer;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Build  Derivative[a,b,c][u][t,x,y]  (a==b==c==0 -> u[t,x,y]). */
+static Expr* nd_pde3_lit(const char* fname, int a, int b, int c,
+                         const char* tv, const char* xv, const char* yv) {
+    if (a == 0 && b == 0 && c == 0) {
+        Expr* ar[3] = { expr_new_symbol(tv), expr_new_symbol(xv), expr_new_symbol(yv) };
+        return expr_new_function(expr_new_symbol(fname), ar, 3);
+    }
+    Expr* di[3] = { expr_new_integer(a), expr_new_integer(b), expr_new_integer(c) };
+    Expr* dhead = expr_new_function(expr_new_symbol(SYM_Derivative), di, 3);
+    Expr* uu[1] = { expr_new_symbol(fname) };
+    Expr* d2 = expr_new_function(dhead, uu, 1);
+    Expr* ar[3] = { expr_new_symbol(tv), expr_new_symbol(xv), expr_new_symbol(yv) };
+    return expr_new_function(d2, ar, 3);
+}
+
+static void nd_scan3(const Expr* e, const char* fname, int* torder,
+                     int (*sp)[2], int* nsp, bool* unsupported) {
+    if (!e) return;
+    int a, b, c; const Expr *g0, *g1, *g2;
+    if (nd_pde3_match(e, fname, &a, &b, &c, &g0, &g1, &g2)) {
+        if (a > *torder) *torder = a;
+        if (a == 0 && (b > 0 || c > 0)) {
+            if (b > 0 && c > 0) *unsupported = true;          /* mixed x-y */
+            else if (b > ND_MAX_SORDER || c > ND_MAX_SORDER) *unsupported = true;
+            else {
+                bool found = false;
+                for (int i = 0; i < *nsp; i++) if (sp[i][0] == b && sp[i][1] == c) found = true;
+                if (!found && *nsp < 2 * ND_MAX_SORDER) { sp[*nsp][0] = b; sp[*nsp][1] = c; (*nsp)++; }
+            }
+        }
+        if (a > 0 && (b > 0 || c > 0)) *unsupported = true;   /* mixed space-time */
+    }
+    if (e->type == EXPR_FUNCTION) {
+        nd_scan3(e->data.function.head, fname, torder, sp, nsp, unsupported);
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            nd_scan3(e->data.function.args[i], fname, torder, sp, nsp, unsupported);
+    }
+}
+
+/* 2-D grid context passed to the node-value / stencil builders. */
+typedef struct {
+    size_t nx, ny;
+    double xmin, ymin, hx, hy;
+    int torder;
+    Expr** ysym;
+    const char *tv, *xv, *yv;
+    Expr *bcxl, *bcxr, *bcyl, *bcyr;   /* Dirichlet edge value exprs */
+    NumericSpec spec;
+} Nd2D;
+
+/* Value at grid node (ix,iy): interior reduced-state symbol, or the Dirichlet
+ * edge value with the tangential coordinate substituted (an expr in t). */
+static Expr* nd_nodeval_2d(const Nd2D* G, int ix, int iy) {
+    int nx = (int)G->nx, ny = (int)G->ny;
+    if (ix >= 1 && ix <= nx - 2 && iy >= 1 && iy <= ny - 2) {
+        size_t iu = (size_t)(iy - 1) * (size_t)(nx - 2) + (size_t)(ix - 1);
+        return expr_copy(G->ysym[iu * (size_t)G->torder + 0]);
+    }
+    Expr* g; const char* fv; double fval;
+    if (ix <= 0)            { g = G->bcxl; fv = G->yv; fval = G->ymin + (double)iy * G->hy; }
+    else if (ix >= nx - 1)  { g = G->bcxr; fv = G->yv; fval = G->ymin + (double)iy * G->hy; }
+    else if (iy <= 0)       { g = G->bcyl; fv = G->xv; fval = G->xmin + (double)ix * G->hx; }
+    else                    { g = G->bcyr; fv = G->xv; fval = G->xmin + (double)ix * G->hx; }
+    if (!g) return expr_new_integer(0);
+    Expr* lit = expr_new_symbol(fv);
+    Expr* sub = expr_new_real(fval);
+    Expr* r = nd_replace_all(expr_copy(g), &lit, &sub, 1);
+    expr_free(lit); expr_free(sub);
+    return r;
+}
+
+/* Stencil for the `deriv`-th derivative along axis (0=x,1=y) at node (ix,iy). */
+static Expr* nd_stencil2d(const Nd2D* G, int ix, int iy, int axis, int deriv, int order) {
+    int idx[64]; double w[64]; int npts;
+    int j = (axis == 0) ? ix : iy;
+    int n = (axis == 0) ? (int)G->nx : (int)G->ny;
+    double h = (axis == 0) ? G->hx : G->hy;
+    nd_stencil_build(j, n, deriv, order, h, idx, w, &npts);
+    Expr** terms = malloc(sizeof(Expr*) * (size_t)npts);
+    int nt = 0;
+    for (int k = 0; k < npts; k++) {
+        if (w[k] == 0.0) continue;
+        Expr* val = (axis == 0) ? nd_nodeval_2d(G, idx[k], iy)
+                                : nd_nodeval_2d(G, ix, idx[k]);
+        terms[nt++] = nd_scaled(w[k], val);
+    }
+    Expr* r;
+    if (nt == 0) { free(terms); r = expr_new_integer(0); }
+    else if (nt == 1) { r = terms[0]; free(terms); }
+    else { r = expr_new_function(expr_new_symbol(SYM_Plus), terms, (size_t)nt); free(terms); }
+    return r;
+}
+
+static Expr* nd_mol_solve_2d(Expr* res, const NdOpts* o0, const char* forced_method) {
+    NdOpts o = *o0;
+    if (forced_method && strcmp(forced_method, "MethodOfLines") != 0)
+        o.method = intern_symbol(forced_method);
+    o.spec = numeric_machine_spec(); o.wp_bits = 53;
+    NumericSpec spec = o.spec;
+
+    Expr** A = res->data.function.args;
+    size_t argc = res->data.function.arg_count;
+    size_t pos_end = 2;
+    while (pos_end < argc && !nd_mol_is_option(A[pos_end])) pos_end++;
+
+    Expr* rt = A[2]; Expr* rx = A[3]; Expr* ry = A[4];
+    Expr* rng[3] = { rt, rx, ry };
+    for (int i = 0; i < 3; i++)
+        if (!head_is(rng[i], SYM_List) || rng[i]->data.function.arg_count != 3
+            || rng[i]->data.function.args[0]->type != EXPR_SYMBOL) return NULL;
+    const char* tv = rt->data.function.args[0]->data.symbol.name;
+    const char* xv = rx->data.function.args[0]->data.symbol.name;
+    const char* yv = ry->data.function.args[0]->data.symbol.name;
+    double tmin, tmax, xmin, xmax, ymin, ymax;
+    if (!nd_eval_to_double(rt->data.function.args[1], spec, &tmin)) return NULL;
+    if (!nd_eval_to_double(rt->data.function.args[2], spec, &tmax)) return NULL;
+    if (!nd_eval_to_double(rx->data.function.args[1], spec, &xmin)) return NULL;
+    if (!nd_eval_to_double(rx->data.function.args[2], spec, &xmax)) return NULL;
+    if (!nd_eval_to_double(ry->data.function.args[1], spec, &ymin)) return NULL;
+    if (!nd_eval_to_double(ry->data.function.args[2], spec, &ymax)) return NULL;
+    if (!(xmax > xmin) || !(ymax > ymin)) return NULL;
+
+    /* dependent function */
+    Expr* funcs = A[1]; Expr* fitem = funcs;
+    if (head_is(funcs, SYM_List)) {
+        if (funcs->data.function.arg_count != 1) return NULL;
+        fitem = funcs->data.function.args[0];
+    }
+    const char* fname; bool applied;
+    if (fitem->type == EXPR_SYMBOL) { fname = fitem->data.symbol.name; applied = false; }
+    else if (fitem->type == EXPR_FUNCTION && fitem->data.function.head->type == EXPR_SYMBOL
+             && fitem->data.function.arg_count == 3) {
+        fname = fitem->data.function.head->data.symbol.name; applied = true;
+    } else return NULL;
+
+    /* grid + difference order */
+    long nx_l = 15, ny_l = 15, dord_l = 4;
+    for (size_t i = pos_end; i < argc; i++) {
+        if (!nd_mol_is_option(A[i])) continue;
+        if (A[i]->data.function.args[0]->data.symbol.name == SYM_Method) {
+            nd_scan_int_subopt(A[i], "MinPoints", &nx_l);
+            nd_scan_int_subopt(A[i], "MinPoints", &ny_l);
+            nd_scan_int_subopt(A[i], "DifferenceOrder", &dord_l);
+        }
+    }
+    if (nx_l < 5) nx_l = 5;
+    if (nx_l > 400) nx_l = 400;
+    if (ny_l < 5) ny_l = 5;
+    if (ny_l > 400) ny_l = 400;
+    size_t nx = (size_t)nx_l, ny = (size_t)ny_l;
+    double hx = (xmax - xmin) / (double)(nx - 1), hy = (ymax - ymin) / (double)(ny - 1);
+    if (dord_l < 1) dord_l = 1;
+    if (dord_l > (long)nx - 1) dord_l = (long)nx - 1;
+    if (dord_l > (long)ny - 1) dord_l = (long)ny - 1;
+    int dord = (int)dord_l;
+
+    /* normalize equations */
+    Expr* eqns = A[0]; Expr** eqsrc; size_t neq;
+    if (head_is(eqns, SYM_List)) { neq = eqns->data.function.arg_count; eqsrc = eqns->data.function.args; }
+    else { neq = 1; eqsrc = &eqns; }
+    Expr** eqitems = malloc(sizeof(Expr*) * neq);
+    for (size_t e = 0; e < neq; e++) eqitems[e] = nd_normalize_derivs(eqsrc[e]);
+
+    /* scan orders */
+    int torder = 0, nsp = 0; bool unsupported = false;
+    int sp[2 * ND_MAX_SORDER][2];
+    for (size_t e = 0; e < neq; e++)
+        nd_scan3(eqitems[e], fname, &torder, sp, &nsp, &unsupported);
+    if (unsupported || torder < 1 || torder > 2) {
+        nd_mol_warn("pdeord", "2-D PDEs support unmixed spatial derivatives and "
+                              "temporal order 1 or 2");
+        for (size_t e = 0; e < neq; e++) expr_free(eqitems[e]);
+        free(eqitems); return NULL;
+    }
+
+    /* classify: PDE / IC / Dirichlet edge BCs */
+    Expr* pde_eq = NULL;
+    Expr** ic = calloc((size_t)torder, sizeof(Expr*));    /* ic[a]: value in x,y  */
+    Expr *bcxl = NULL, *bcxr = NULL, *bcyl = NULL, *bcyr = NULL;
+    double t0 = tmin;
+    for (size_t e = 0; e < neq; e++) {
+        Expr* eq = eqitems[e];
+        if (!head_is(eq, SYM_Equal) || eq->data.function.arg_count != 2) continue;
+        Expr* L = eq->data.function.args[0];
+        Expr* R = eq->data.function.args[1];
+        int a, b, c; const Expr *g0, *g1, *g2; Expr* fa = NULL; Expr* val = NULL;
+        if (nd_pde3_match(L, fname, &a, &b, &c, &g0, &g1, &g2) && !nd_contains_func(R, fname)) { fa = L; val = R; }
+        else if (nd_pde3_match(R, fname, &a, &b, &c, &g0, &g1, &g2) && !nd_contains_func(L, fname)) { fa = R; val = L; }
+        if (fa && b == 0 && c == 0) {
+            bool g0_t = g0->type == EXPR_SYMBOL && g0->data.symbol.name == tv;
+            bool g1_x = g1->type == EXPR_SYMBOL && g1->data.symbol.name == xv;
+            bool g2_y = g2->type == EXPR_SYMBOL && g2->data.symbol.name == yv;
+            double n0, n1, n2;
+            bool g0_n = nd_eval_to_double((Expr*)g0, spec, &n0);
+            bool g1_n = nd_eval_to_double((Expr*)g1, spec, &n1);
+            bool g2_n = nd_eval_to_double((Expr*)g2, spec, &n2);
+            if (g0_n && g1_x && g2_y && a < torder) {            /* IC */
+                if (!ic[a]) ic[a] = expr_copy(val);
+                t0 = n0;
+                continue;
+            }
+            if (g0_t && g1_n && g2_y) {                          /* x-edge */
+                if (fabs(n1 - xmin) <= 1e-9 * (fabs(xmin) + 1.0)) { if (!bcxl) bcxl = expr_copy(val); }
+                else if (fabs(n1 - xmax) <= 1e-9 * (fabs(xmax) + 1.0)) { if (!bcxr) bcxr = expr_copy(val); }
+                continue;
+            }
+            if (g0_t && g1_x && g2_n) {                          /* y-edge */
+                if (fabs(n2 - ymin) <= 1e-9 * (fabs(ymin) + 1.0)) { if (!bcyl) bcyl = expr_copy(val); }
+                else if (fabs(n2 - ymax) <= 1e-9 * (fabs(ymax) + 1.0)) { if (!bcyr) bcyr = expr_copy(val); }
+                continue;
+            }
+        }
+        if (!pde_eq) pde_eq = eq;
+    }
+    bool ok = pde_eq && bcxl && bcxr && bcyl && bcyr;
+    for (int a = 0; a < torder && ok; a++) if (!ic[a]) ok = false;
+    if (!ok) {
+        nd_mol_warn("pdeic", "2-D PDEs need Dirichlet conditions on all four edges "
+                             "and full initial data");
+        for (int a = 0; a < torder; a++) expr_free(ic[a]);
+        free(ic);
+        expr_free(bcxl); expr_free(bcxr); expr_free(bcyl); expr_free(bcyr);
+        for (size_t e = 0; e < neq; e++) expr_free(eqitems[e]);
+        free(eqitems);
+        return NULL;
+    }
+
+    /* solve for the top temporal derivative -> G */
+    Expr* R0 = nd_call2(SYM_Subtract, expr_copy(pde_eq->data.function.args[0]),
+                                      expr_copy(pde_eq->data.function.args[1]));
+    Expr* topLit = nd_pde3_lit(fname, torder, 0, 0, tv, xv, yv);
+    Expr* Psym = expr_new_symbol("NDSolve`Pt");
+    Expr* Rp = nd_replace_all(R0, &topLit, &Psym, 1);
+    Expr* dargs[2] = { expr_copy(Rp), expr_copy(Psym) };
+    Expr* aE = eval_and_free(expr_new_function(expr_new_symbol(SYM_D), dargs, 2));
+    Expr* zero = expr_new_integer(0);
+    Expr* bE = nd_replace_all(expr_copy(Rp), &Psym, &zero, 1);
+    expr_free(zero);
+    Expr* invE = nd_call2(SYM_Power, expr_copy(aE), expr_new_integer(-1));
+    Expr* g3[3] = { expr_new_integer(-1), expr_copy(bE), invE };
+    Expr* Gexpr = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), g3, 3));
+    expr_free(topLit); expr_free(Psym); expr_free(Rp); expr_free(aE); expr_free(bE);
+
+    size_t Nint = (nx - 2) * (ny - 2);
+    size_t d = Nint * (size_t)torder;
+    Expr** ysym = malloc(sizeof(Expr*) * d);
+    for (size_t i = 0; i < d; i++) {
+        char buf[48]; snprintf(buf, sizeof(buf), "NDSolve`w%zu", i);
+        ysym[i] = expr_new_symbol(intern_symbol(buf));
+    }
+
+    Nd2D GC;
+    GC.nx = nx; GC.ny = ny; GC.xmin = xmin; GC.ymin = ymin; GC.hx = hx; GC.hy = hy;
+    GC.torder = torder; GC.ysym = ysym; GC.tv = tv; GC.xv = xv; GC.yv = yv;
+    GC.bcxl = bcxl; GC.bcxr = bcxr; GC.bcyl = bcyl; GC.bcyr = bcyr; GC.spec = spec;
+
+    NdProblem P; memset(&P, 0, sizeof(P));
+    P.d = d; P.spec = spec; P.tvar = tv;
+    P.eval_monitor = o.eval_monitor;
+    P.ysym = ysym;
+    P.f = calloc(d, sizeof(Expr*));
+    P.Y0 = calloc(d, sizeof(double));
+    P.bind_y = malloc(sizeof(NdBind) * d);
+    nd_bind_snapshot(&P.bind_t, tv);
+    for (size_t i = 0; i < d; i++) nd_bind_snapshot(&P.bind_y[i], ysym[i]->data.symbol.name);
+
+    Expr* lit_u  = nd_pde3_lit(fname, 0, 0, 0, tv, xv, yv);
+    Expr* lit_xv = expr_new_symbol(xv);
+    Expr* lit_yv = expr_new_symbol(yv);
+    Expr** lit_sp = malloc(sizeof(Expr*) * (size_t)(nsp ? nsp : 1));
+    for (int i = 0; i < nsp; i++) lit_sp[i] = nd_pde3_lit(fname, 0, sp[i][0], sp[i][1], tv, xv, yv);
+    Expr** lit_ut = malloc(sizeof(Expr*) * (size_t)torder);
+    for (int m = 1; m < torder; m++) lit_ut[m] = nd_pde3_lit(fname, m, 0, 0, tv, xv, yv);
+
+    bool build_ok = (Gexpr != NULL);
+    for (size_t iy = 1; iy + 1 < ny && build_ok; iy++)
+        for (size_t ix = 1; ix + 1 < nx && build_ok; ix++) {
+            size_t iu = (iy - 1) * (nx - 2) + (ix - 1);
+            size_t base = iu * (size_t)torder;
+            double xj = xmin + (double)ix * hx, yj = ymin + (double)iy * hy;
+            for (int m = 0; m + 1 < torder; m++)
+                P.f[base + (size_t)m] = expr_copy(ysym[base + (size_t)m + 1]);
+            size_t cnt = 0;
+            Expr* lits[2 * ND_MAX_SORDER + 5]; Expr* subs[2 * ND_MAX_SORDER + 5];
+            lits[cnt] = lit_u; subs[cnt] = expr_copy(ysym[base + 0]); cnt++;
+            for (int i = 0; i < nsp; i++) {
+                int axis = (sp[i][0] > 0) ? 0 : 1;
+                int deriv = (axis == 0) ? sp[i][0] : sp[i][1];
+                lits[cnt] = lit_sp[i];
+                subs[cnt] = nd_stencil2d(&GC, (int)ix, (int)iy, axis, deriv, dord);
+                cnt++;
+            }
+            for (int m = 1; m < torder; m++) {
+                lits[cnt] = lit_ut[m]; subs[cnt] = expr_copy(ysym[base + (size_t)m]); cnt++;
+            }
+            lits[cnt] = lit_xv; subs[cnt] = expr_new_real(xj); cnt++;
+            lits[cnt] = lit_yv; subs[cnt] = expr_new_real(yj); cnt++;
+            P.f[base + (size_t)torder - 1] = nd_replace_all(expr_copy(Gexpr), lits, subs, cnt);
+            for (size_t s = 0; s < cnt; s++) expr_free(subs[s]);
+        }
+    expr_free(lit_u); expr_free(lit_xv); expr_free(lit_yv);
+    for (int i = 0; i < nsp; i++) expr_free(lit_sp[i]);
+    free(lit_sp);
+    for (int m = 1; m < torder; m++) expr_free(lit_ut[m]);
+    free(lit_ut);
+    for (size_t i = 0; i < d; i++) if (!P.f[i]) build_ok = false;
+
+    /* initial data */
+    for (size_t iy = 1; iy + 1 < ny && build_ok; iy++)
+        for (size_t ix = 1; ix + 1 < nx && build_ok; ix++) {
+            size_t iu = (iy - 1) * (nx - 2) + (ix - 1);
+            double xj = xmin + (double)ix * hx, yj = ymin + (double)iy * hy;
+            for (int m = 0; m < torder; m++) {
+                Expr* lit2[2] = { expr_new_symbol(xv), expr_new_symbol(yv) };
+                Expr* sub2[2] = { expr_new_real(xj), expr_new_real(yj) };
+                Expr* r = nd_replace_all(expr_copy(ic[m]), lit2, sub2, 2);
+                expr_free(lit2[0]); expr_free(lit2[1]); expr_free(sub2[0]); expr_free(sub2[1]);
+                double v; bool okv = r && nd_eval_to_double(r, spec, &v);
+                expr_free(r);
+                if (!okv) { build_ok = false; break; }
+                P.Y0[iu * (size_t)torder + (size_t)m] = v;
+            }
+        }
+    P.t0 = t0; P.tmin = tmin; P.tmax = tmax;
+
+    if (build_ok) P.op = nd_operator_try_build(&P);
+    bool parabolic = (torder == 1);   /* 2-D evolution PDEs are diffusion-like */
+
+    Expr* result = NULL;
+    if (build_ok) {
+        const char* tim = o.method;
+        if (tim && strcmp(tim, "MethodOfLines") == 0) tim = NULL;
+        const NdStepper* S = tim ? nd_lookup_stepper(tim)
+                           : (parabolic ? nd_lookup_stepper("BDF") : nd_default_stepper());
+        if (!S) S = nd_default_stepper();
+        NdSolution sol; nd_solution_init(&sol, d);
+        NdStatus st = nd_integrate(&P, S, &o, &sol);
+        if (st == ND_ERR_MAXSTEPS) nd_mol_warn("mxst", "maximum number of steps reached");
+        else if (st == ND_ERR_STEPSIZE) nd_mol_warn("ndsz", "step size effectively zero");
+        else if (st == ND_ERR_NONCONV) nd_mol_warn("ndcf", "corrector failed to converge");
+        else if (st == ND_ERR_SAMPLE) nd_mol_warn("nrnum", "spatial operator did not evaluate");
+
+        /* assemble the 3-D InterpolatingFunction over (t,x,y) */
+        if (sol.n >= 2) {
+            size_t npts = sol.n * nx * ny;
+            Expr** entries = malloc(sizeof(Expr*) * npts);
+            size_t p = 0;
+            for (size_t i = 0; i < sol.n; i++) {
+                double ti = sol.ts[i];
+                nd_bind_set(&P.bind_t, expr_new_real(ti));
+                for (size_t iy = 0; iy < ny; iy++)
+                    for (size_t ix = 0; ix < nx; ix++) {
+                        double xg = xmin + (double)ix * hx, yg = ymin + (double)iy * hy;
+                        double val;
+                        if (ix >= 1 && ix + 1 < nx && iy >= 1 && iy + 1 < ny) {
+                            size_t iu = (iy - 1) * (nx - 2) + (ix - 1);
+                            val = sol.Ys[i * d + iu * (size_t)torder + 0];
+                        } else {
+                            Expr* bv = nd_nodeval_2d(&GC, (int)ix, (int)iy);
+                            if (!nd_bound_eval(bv, spec, &val)) val = 0.0;
+                            expr_free(bv);
+                        }
+                        Expr* coord[3] = { expr_new_real(ti), expr_new_real(xg), expr_new_real(yg) };
+                        Expr* coordL = expr_new_function(expr_new_symbol(SYM_List), coord, 3);
+                        Expr* pair[2] = { coordL, expr_new_real(val) };
+                        entries[p++] = expr_new_function(expr_new_symbol(SYM_List), pair, 2);
+                    }
+            }
+            Expr* data = expr_new_function(expr_new_symbol(SYM_List), entries, npts);
+            free(entries);
+            Expr* ifun = eval_and_free(expr_new_function(expr_new_symbol(SYM_Interpolation), &data, 1));
+            if (head_is(ifun, SYM_InterpolatingFunction)) {
+                Expr* lhs;
+                if (applied) {
+                    Expr* ar[3] = { expr_new_symbol(tv), expr_new_symbol(xv), expr_new_symbol(yv) };
+                    lhs = expr_new_function(expr_new_symbol(fname), ar, 3);
+                    Expr* ar2[3] = { expr_new_symbol(tv), expr_new_symbol(xv), expr_new_symbol(yv) };
+                    ifun = expr_new_function(ifun, ar2, 3);
+                } else lhs = expr_new_symbol(fname);
+                Expr* rule = nd_call2(SYM_Rule, lhs, ifun);
+                Expr* inner = expr_new_function(expr_new_symbol(SYM_List), &rule, 1);
+                result = expr_new_function(expr_new_symbol(SYM_List), &inner, 1);
+            } else expr_free(ifun);
+        }
+        nd_solution_free(&sol);
+    }
+    nd_bind_restore(&P.bind_t);
+    for (size_t i = 0; i < d; i++) nd_bind_restore(&P.bind_y[i]);
+
+    nd_operator_free(P.op);
+    for (size_t i = 0; i < d; i++) { expr_free(P.f[i]); expr_free(ysym[i]); }
+    free(P.f); free(ysym); free(P.Y0); free(P.bind_y);
+    if (P.jac) {
+        for (size_t i = 0; i < d; i++) { for (size_t j = 0; j < d; j++) expr_free(P.jac[i][j]); free(P.jac[i]); }
+        free(P.jac);
+    }
+    expr_free(Gexpr);
+    for (int a = 0; a < torder; a++) expr_free(ic[a]);
+    free(ic);
+    expr_free(bcxl); expr_free(bcxr); expr_free(bcyl); expr_free(bcyr);
     for (size_t e = 0; e < neq; e++) expr_free(eqitems[e]);
     free(eqitems);
     return result;

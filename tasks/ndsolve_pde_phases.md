@@ -11,7 +11,7 @@ extensive unit/stress tests + valgrind clean + docs/changelog + commit.
       (62 tests) — DONE
 - [x] **Phase 3** — compiled banded operator (linear PDE → A·U+s), exact
       Jacobian, banded LU solve, stiffness auto-select. ~10x speedup. (68 tests) — DONE
-- [ ] **Phase 4** — 2 spatial dimensions (tensor grid, 2-D stencils/BCs).
+- [x] **Phase 4** — 2 spatial dimensions (tensor grid, 2-D stencils, Dirichlet). (81 tests) — DONE
       Tests: 2-D heat/wave separable eigenmodes.
 - [ ] **Phase 5** — MPFR MoL (stencils+operator+output), plus nonlinear
       (Burgers) and complex (Schrödinger) stress. Tests: high-precision digits,
