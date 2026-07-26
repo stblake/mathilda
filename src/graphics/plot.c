@@ -15,6 +15,7 @@
 #include "sampling.h"
 #include "iter.h"
 #include "eval.h"
+#include "compile/autocompile.h"
 #include "symtab.h"
 #include "sym_names.h"
 #include "print.h"
@@ -62,17 +63,32 @@ static bool plotrange_yband(Expr* rhs, double* lo, double* hi) {
 }
 
 typedef struct {
-    Expr*       var;             /* iterator symbol, borrowed */
-    Expr*       body;            /* f, borrowed */
-    Expr*       region_function; /* borrowed; NULL = none */
-    ScaleFnType sf_x;            /* x-axis scaling (sampler receives world x) */
-    ScaleFnType sf_y;            /* y-axis scaling applied to output */
+    Expr*         var;             /* iterator symbol, borrowed */
+    Expr*         body;            /* f, borrowed */
+    Expr*         region_function; /* borrowed; NULL = none */
+    ScaleFnType   sf_x;            /* x-axis scaling (sampler receives world x) */
+    ScaleFnType   sf_y;            /* y-axis scaling applied to output */
+    AutoCompiled* ac;              /* compiled body fast path; NULL = interpreter */
 } PlotEvalCtx;
 
 static bool plot_eval_fn(double u, void* ctx_, double* y_out) {
     PlotEvalCtx* ctx = (PlotEvalCtx*)ctx_;
     /* u is in world space; invert to get the original x for evaluation */
     double x = scale_invert(ctx->sf_x, u);
+
+    /* Compiled fast path: evaluate the body over machine numbers with no Expr
+     * allocation.  A non-finite / non-real result excludes the point, exactly as
+     * the interpreter path below does (expr_to_real_double rejects complex). */
+    if (ctx->ac) {
+        double y;
+        if (!autocompiled_eval_real(ctx->ac, &x, &y) || !isfinite(y)) return false;
+        if (ctx->region_function && !eval_region(ctx->region_function, x, y)) return false;
+        double wy = scale_apply(ctx->sf_y, y);
+        if (!isfinite(wy)) return false;
+        *y_out = wy;
+        return true;
+    }
+
     Expr* xval = expr_new_real(x);
     symtab_add_own_value(ctx->var->data.symbol.name, ctx->var, xval);
     Expr* result = evaluate(ctx->body);
@@ -484,12 +500,16 @@ static Expr** sample_lines(Expr* body, Expr* var, double xmin, double xmax,
     Range1D* ranges = split_at_exclusions(xmin, xmax, excl, nexcl, &nranges);
     free(excl);
 
+    /* Compile the body once as f(var); shared read-only across all sub-ranges.
+     * NULL (uncompilable body) leaves every sample on the interpreter path. */
+    AutoCompiled* ac = autocompile_new(body, (const Expr* const*)&var, 1);
+
     PlotPoint* pts = NULL;
     size_t npts = 0, cap = 0;
     for (size_t r = 0; r < nranges; r++) {
         if (!(ranges[r].lo < ranges[r].hi)) continue;
         PlotEvalCtx ctx = { .var = var, .body = body, .region_function = sopts->region_function,
-                            .sf_x = sopts->sf_x, .sf_y = sopts->sf_y };
+                            .sf_x = sopts->sf_x, .sf_y = sopts->sf_y, .ac = ac };
         /* Sample in world (scaled) space so the grid is uniform on-screen */
         double slo = scale_apply(sopts->sf_x, ranges[r].lo);
         double shi = scale_apply(sopts->sf_x, ranges[r].hi);
@@ -509,6 +529,7 @@ static Expr** sample_lines(Expr* body, Expr* var, double xmin, double xmax,
         plot_points_free(rpts);
     }
     free(ranges);
+    autocompiled_free(ac);
 
     if (!pts || npts == 0) { free(pts); return NULL; }
 

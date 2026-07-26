@@ -628,6 +628,7 @@ set(COMMON_SRC
     ../src/numerical_calculus/ndsolve_compile.c
     ../src/compile/compile.c
     ../src/compile/compiled_function.c
+    ../src/compile/autocompile.c
     ../src/numerical_roots/nroots.c
     ../src/numerical_roots/nroots_aberth.c
     ../src/numerical_roots/nroots_jt.c
@@ -1023,6 +1024,9 @@ target_include_directories(compile_tests PRIVATE ../src ../src/compile)
 
 add_executable(compiledfunction_tests test_compiledfunction.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(compiledfunction_tests PRIVATE ../src ../src/compile)
+
+add_executable(autocompile_tests test_autocompile.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(autocompile_tests PRIVATE ../src ../src/compile)
 
 add_executable(levincoll_tests test_levincoll.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(levincoll_tests PRIVATE ../src ../src/numerical_calculus)

@@ -22,6 +22,7 @@
 #include "plot3d.h"
 #include "plot_common.h"
 #include "sampling.h"
+#include "compile/autocompile.h"
 #include "iter.h"
 #include "eval.h"
 #include "symtab.h"
@@ -205,6 +206,7 @@ typedef struct {
     Expr* vary;             /* iterator symbol, borrowed */
     Expr* body;             /* f, borrowed */
     Expr* region_function;  /* borrowed; NULL = none */
+    AutoCompiled* ac;       /* compiled body fast path f(x,y); NULL = interpreter */
 } Plot3DEvalCtx;
 
 /* RegionFunction: f[x,y,z] (3-arg) tried first (Mathematica's Plot3D
@@ -227,6 +229,12 @@ static bool eval_region3(Expr* region_fn, double x, double y, double z) {
 /* Evaluate f(x,y) and store the result in *z_out when finite. Does NOT
  * apply RegionFunction -- use plot3d_eval_fn for the combined check. */
 static bool plot3d_eval_z(double x, double y, Plot3DEvalCtx* ctx, double* z_out) {
+    if (ctx->ac) {
+        double xs[2] = { x, y }, z;
+        if (!autocompiled_eval_real(ctx->ac, xs, &z) || !isfinite(z)) return false;
+        *z_out = z;
+        return true;
+    }
     Expr* xval = expr_new_real(x);
     Expr* yval = expr_new_real(y);
     symtab_add_own_value(ctx->varx->data.symbol.name, ctx->varx, xval);
@@ -242,6 +250,13 @@ static bool plot3d_eval_z(double x, double y, Plot3DEvalCtx* ctx, double* z_out)
 }
 
 static bool plot3d_eval_fn(double x, double y, Plot3DEvalCtx* ctx, double* z_out) {
+    if (ctx->ac) {
+        double xs[2] = { x, y }, z;
+        if (!autocompiled_eval_real(ctx->ac, xs, &z) || !isfinite(z)) return false;
+        if (ctx->region_function && !eval_region3(ctx->region_function, x, y, z)) return false;
+        *z_out = z;
+        return true;
+    }
     Expr* xval = expr_new_real(x);
     Expr* yval = expr_new_real(y);
     symtab_add_own_value(ctx->varx->data.symbol.name, ctx->varx, xval);
@@ -496,10 +511,14 @@ static Expr* build_surface_primitives(Expr** bodies, size_t nfun, Expr* varx, Ex
     } while (0)
 
     for (size_t fi = 0; fi < nfun; fi++) {
-        Plot3DEvalCtx ctx = { .varx = varx, .vary = vary, .body = bodies[fi], .region_function = sopts->region_function };
+        const Expr* vars2[2] = { varx, vary };
+        AutoCompiled* ac = autocompile_new(bodies[fi], vars2, 2);
+        Plot3DEvalCtx ctx = { .varx = varx, .vary = vary, .body = bodies[fi],
+                              .region_function = sopts->region_function, .ac = ac };
         long n;
         GridPt* grid = sample_surface(&ctx, xmin, xmax, ymin, ymax, sopts->plot_points, sopts->max_recursion,
                                        sopts->zclip_lo, sopts->zclip_hi, &n);
+        autocompiled_free(ac);
 
         /* Per-surface color directive from PlotStyle (or palette fallback for
          * multi-surface plots). */
