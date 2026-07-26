@@ -1,5 +1,6 @@
 #include "list_common.h"
 #include "table.h"
+#include "compile/autocompile.h"
 
 Expr* builtin_table(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
@@ -74,31 +75,48 @@ Expr* builtin_table(Expr* res) {
             results[results_count++] = eval_expr;
         }
     } else {
+        /* Auto-compile fast path — ONLY for an inexact (machine-real) iterator,
+         * where the interpreter already produces machine reals, so exactness is
+         * never at stake.  Exact (Integer/BigInt/Rational) iterators keep the
+         * pure-interpreter path below and their results are bit-for-bit
+         * unchanged.  A non-finite / complex compiled result falls back to the
+         * interpreter for that element (which yields the complex/singular value).
+         * When compiling, the exact running value `curr_e` is not needed, so its
+         * per-element evaluate(Plus[...]) advance is skipped too. */
+        AutoCompiled* ac = is_real ? autocompile_new(expr, (const Expr* const*)&var_sym, 1) : NULL;
         double val = min_val;
         int steps = 0;
-        Expr* curr_e = expr_copy(imin_e);
+        Expr* curr_e = ac ? NULL : expr_copy(imin_e);
         while ((di_val > 0 && val <= max_val + 1e-14) || (di_val < 0 && val >= max_val - 1e-14)) {
-            Expr* i_val = is_real ? expr_new_real(val) : expr_copy(curr_e);
-            symtab_add_own_value(var_sym->data.symbol.name, var_sym, i_val);
-            
-            Expr* eval_expr = evaluate(expr);
+            Expr* eval_expr = NULL;
+            if (ac) {
+                double y;
+                if (autocompiled_eval_real(ac, &val, &y)) eval_expr = expr_new_real(y);
+            }
+            if (!eval_expr) {   /* interpreter path (and per-element fallback) */
+                Expr* i_val = is_real ? expr_new_real(val) : expr_copy(curr_e);
+                symtab_add_own_value(var_sym->data.symbol.name, var_sym, i_val);
+                eval_expr = evaluate(expr);
+                expr_free(i_val);
+            }
             if (results_count == results_cap) { results_cap *= 2; results = realloc(results, sizeof(Expr*) * results_cap); }
             results[results_count++] = eval_expr;
-            
-            expr_free(i_val);
-            
-            Expr* next_args[2] = { expr_copy(curr_e), expr_copy(di_e) };
-            Expr* next_expr = expr_new_function(expr_new_symbol(SYM_Plus), next_args, 2);
-            Expr* next_e = evaluate(next_expr);
-            expr_free(next_expr);
-            expr_free(curr_e);
-            curr_e = next_e;
-            
+
+            if (!ac) {   /* advance the exact running value (unused when compiling) */
+                Expr* next_args[2] = { expr_copy(curr_e), expr_copy(di_e) };
+                Expr* next_expr = expr_new_function(expr_new_symbol(SYM_Plus), next_args, 2);
+                Expr* next_e = evaluate(next_expr);
+                expr_free(next_expr);
+                expr_free(curr_e);
+                curr_e = next_e;
+            }
+
             val += di_val;
             steps++;
-            if (steps > 1000000) break; 
+            if (steps > 1000000) break;
         }
         if (curr_e) expr_free(curr_e);
+        autocompiled_free(ac);
     }
 
     iter_spec_restore(var_sym, old_own);

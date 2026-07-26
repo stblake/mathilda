@@ -45,6 +45,31 @@ void test_plot3d_parity(void) {
     assert_eval_eq("Head[Plot3D[Zeta[x + y], {x, 2, 3}, {y, 2, 3}]]", "Graphics3D", 0);
 }
 
+/* Table: exact/symbolic iterators are UNTOUCHED; only inexact (machine-real)
+ * iterators take the compiled path. */
+void test_table_exact_untouched(void) {
+    assert_eval_eq("Table[i^2, {i, 1, 5}]", "{1, 4, 9, 16, 25}", 0);          /* exact Integers */
+    assert_eval_eq("Table[2^i, {i, 62, 64}]",
+                   "{4611686018427387904, 9223372036854775808, 18446744073709551616}", 0); /* BigInt, no int64 overflow */
+    assert_eval_eq("Table[Sin[i], {i, 1, 3}]", "{Sin[1], Sin[2], Sin[3]}", 0); /* symbolic */
+    assert_eval_eq("Table[1/i, {i, 1, 4}]", "{1, 1/2, 1/3, 1/4}", 0);          /* exact Rationals */
+}
+
+/* Real iterator: compiled result matches the interpreter to machine precision. */
+void test_table_real_parity(void) {
+    assert_eval_eq(
+        "Max[Table[Abs[Table[Sin[x] + x^2, {x, 0., 10., 0.1}][[k]] - (Sin[(k-1) 0.1] + ((k-1) 0.1)^2)], "
+        "{k, 1, 101}]] < 10^-11",
+        "True", 0);
+    assert_eval_eq("Table[x^2, {x, 1., 4., 1.}]", "{1.0, 4.0, 9.0, 16.0}", 0);
+}
+
+/* Real iterator where the body goes complex → per-element interpreter fallback. */
+void test_table_real_complex_fallback(void) {
+    /* Sqrt[-1.] must still come back complex (I), not NaN. */
+    assert_eval_eq("Chop[Table[Sqrt[x], {x, -1., 1., 1.}] - {I, 0., 1.}] == {0, 0, 0}", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -53,6 +78,9 @@ int main(void) {
     TEST(test_plot_fallback);
     TEST(test_plot_complex_excluded);
     TEST(test_plot3d_parity);
+    TEST(test_table_exact_untouched);
+    TEST(test_table_real_parity);
+    TEST(test_table_real_complex_fallback);
 
     printf("All auto-compile tests passed!\n");
     return 0;
