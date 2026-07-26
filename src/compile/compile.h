@@ -51,6 +51,15 @@ bool compiled_eval(const CompiledProgram* p, const CompileValue* args, CompileVa
  * all-Real or the result is non-finite. */
 bool compiled_eval_real(const CompiledProgram* p, const double* args, double* out);
 
+/* Evaluate `nprogs` all-Real programs that share the SAME argument layout
+ * (compiled with identical arg_names/arg_types), writing out[i].  The shared
+ * arguments are loaded once into a single scratch frame (the largest program's),
+ * so a system of N components costs O(nargs + total instructions), not O(N·nargs)
+ * — the fast path for a vector RHS (e.g. NDSolve).  Returns false on the first
+ * non-real signature or non-finite result. */
+bool compiled_eval_real_batch(const CompiledProgram* const* progs, size_t nprogs,
+                              const double* args, size_t nargs, double* out);
+
 /* Which argument indices the program actually reads (sorted).  Writes up to
  * `cap` entries into `deps`, returns the count.  Used by clients (e.g. NDSolve
  * colored-FD Jacobian) that need the sparsity of the compiled function. */

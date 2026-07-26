@@ -858,6 +858,25 @@ bool compiled_eval_real(const CompiledProgram* p, const double* args, double* ou
     return isfinite(*out);
 }
 
+bool compiled_eval_real_batch(const CompiledProgram* const* progs, size_t nprogs,
+                              const double* args, size_t nargs, double* out) {
+    if (nprogs == 0) return true;
+    /* one shared frame = the widest program's (big enough for every program's
+     * registers); the argument region [0,nargs) is loaded once and never written
+     * by any program (dst registers are always temporaries >= nargs). */
+    size_t im = 0;
+    for (size_t i = 1; i < nprogs; i++) if (progs[i]->nreg > progs[im]->nreg) im = i;
+    Slot* F = progs[im]->frame;
+    for (size_t k = 0; k < nargs; k++) F[k].r = args[k];
+    for (size_t i = 0; i < nprogs; i++) {
+        if (!progs[i]->all_real) return false;
+        vm_run(progs[i]->code, progs[i]->n, F);
+        out[i] = F[(size_t)progs[i]->result_reg].r;
+        if (!isfinite(out[i])) return false;
+    }
+    return true;
+}
+
 void compiled_free(CompiledProgram* p) {
     if (!p) return;
     free(p->code); free(p->arg_types); free(p->argdep); free(p->frame);

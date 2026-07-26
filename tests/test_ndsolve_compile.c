@@ -235,9 +235,12 @@ int main(void) {
     }
 
     /* ---- graceful bail on unsupported constructs ---- */
-    check_bail("unsupported head (BesselJ)", "NDSolve`w0 + BesselJ[0, NDSolve`w0]");
-    check_bail("unsupported head (Gamma)",   "NDSolve`w0 + Gamma[NDSolve`w0]");
-    check_bail("free parameter symbol",      "NDSolve`w0 + freeParameter");
+    /* Functions WITH a machine kernel (Gamma, BesselJ, ...) now compile through
+     * the shared engine's generic-kernel path; genuine bails are functions with
+     * no ndkernels entry (Zeta, PolyLog) or a free symbol. */
+    check_bail("no kernel (Zeta)",       "NDSolve`w0 + Zeta[NDSolve`w0]");
+    check_bail("no kernel (PolyLog)",    "NDSolve`w0 + PolyLog[2, NDSolve`w0]");
+    check_bail("free parameter symbol",  "NDSolve`w0 + freeParameter");
 
     if (failures == 0) printf("\nAll NDSolve compile tests passed.\n");
     else printf("\n%d NDSolve compile test(s) FAILED.\n", failures);
