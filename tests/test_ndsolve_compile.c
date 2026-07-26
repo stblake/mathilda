@@ -138,21 +138,50 @@ cleanup:
     free(f); free(P.ysym);
 }
 
-/* A system that must fail to compile (unsupported construct) -> NULL. */
-static void check_bail(const char* name, const char** fstr, size_t d) {
-    Expr** f = malloc(d * sizeof(Expr*));
-    for (size_t i = 0; i < d; i++) f[i] = eval_and_free(parse_expression(fstr[i]));
+/* A single-component system that must fail to compile (unsupported construct)
+ * -> NULL, so the solver keeps the symbolic sampler. `expr` references only the
+ * state symbol NDSolve`w0 plus the offending construct. */
+static void check_bail(const char* name, const char* expr) {
+    Expr* f0 = eval_and_free(parse_expression(expr));
     NdProblem P; memset(&P, 0, sizeof(P));
-    P.d = d; P.tvar = intern_symbol("t"); P.f = f;
+    P.d = 1; P.tvar = intern_symbol("t");
+    P.f = &f0;
+    Expr* y0 = wsym(0);
+    P.ysym = &y0;
     NdCompiled* C = nd_compile_rhs(&P);
     if (C) { printf("FAIL: %s -> compiled but should bail\n", name); failures++; nd_compiled_free(C); }
     else printf("ok:   %-34s bailed to symbolic fallback\n", name);
-    for (size_t i = 0; i < d; i++) expr_free(f[i]);
-    free(f);
+    expr_free(f0); expr_free(y0);
+}
+
+/* Regression guard: the compiler must recognize state symbols by matching the
+ * problem's actual reduced-state names, NOT a hardcoded convention.  The ODE
+ * front-end names its state NDSolve`y<k> (the PDE front-end uses NDSolve`w<k>);
+ * both must compile. */
+static void check_naming(void) {
+    Expr** f = malloc(2 * sizeof(Expr*));
+    f[0] = eval_and_free(parse_expression("NDSolve`y0 NDSolve`y1 + Sin[t]"));
+    f[1] = eval_and_free(parse_expression("-NDSolve`y0 + NDSolve`y1^2"));
+    NdProblem P; memset(&P, 0, sizeof(P));
+    P.d = 2; P.tvar = intern_symbol("t"); P.f = f;
+    P.ysym = malloc(2 * sizeof(Expr*));
+    P.ysym[0] = expr_new_symbol(intern_symbol("NDSolve`y0"));
+    P.ysym[1] = expr_new_symbol(intern_symbol("NDSolve`y1"));
+    NdCompiled* C = nd_compile_rhs(&P);
+    double Y[2] = { 1.5, 2.0 }, out[2] = { 0, 0 };
+    bool ok = C && nd_compiled_eval(C, 0.5, Y, out);
+    double e0 = 1.5 * 2.0 + sin(0.5), e1 = -1.5 + 4.0;
+    if (ok && fabs(out[0] - e0) < 1e-12 && fabs(out[1] - e1) < 1e-12)
+        printf("ok:   %-34s ODE-named state compiles+evals\n", "state naming (NDSolve`y<k>)");
+    else { printf("FAIL: ODE-named state (NDSolve`y<k>) not recognized by compiler\n"); failures++; }
+    nd_compiled_free(C);
+    for (size_t i = 0; i < 2; i++) { expr_free(f[i]); expr_free(P.ysym[i]); }
+    free(f); free(P.ysym);
 }
 
 int main(void) {
     core_init();
+    check_naming();
 
     /* ---- broad arithmetic/elementary battery (positive domain) ---- */
     const char* battery[] = {
@@ -206,12 +235,9 @@ int main(void) {
     }
 
     /* ---- graceful bail on unsupported constructs ---- */
-    const char* bail1[] = { "NDSolve`w0 + BesselJ[0, NDSolve`w1]" };
-    check_bail("unsupported head (BesselJ)", bail1, 1);
-    const char* bail2[] = { "NDSolve`w0 + Gamma[NDSolve`w1]" };
-    check_bail("unsupported head (Gamma)", bail2, 1);
-    const char* bail3[] = { "NDSolve`w0 + freeParameter NDSolve`w1" };
-    check_bail("free parameter symbol", bail3, 2);
+    check_bail("unsupported head (BesselJ)", "NDSolve`w0 + BesselJ[0, NDSolve`w0]");
+    check_bail("unsupported head (Gamma)",   "NDSolve`w0 + Gamma[NDSolve`w0]");
+    check_bail("free parameter symbol",      "NDSolve`w0 + freeParameter");
 
     if (failures == 0) printf("\nAll NDSolve compile tests passed.\n");
     else printf("\n%d NDSolve compile test(s) FAILED.\n", failures);

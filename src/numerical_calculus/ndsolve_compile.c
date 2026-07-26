@@ -29,6 +29,38 @@ enum {
 
 typedef struct { uint8_t op; int32_t i; double d; } NdInstr;
 
+/* Interned-name -> reduced-state-index map (open addressing on the interned
+ * pointer).  Built from P->ysym so the compiler recognizes the state symbols of
+ * ANY front-end — MoL PDEs (NDSolve`w<k>), ODEs (NDSolve`y<k>), etc. — instead
+ * of a hardcoded naming convention. */
+typedef struct { const char** key; int* val; size_t cap; } NameMap;
+
+static bool namemap_init(NameMap* m, const NdProblem* P) {
+    size_t cap = 8;
+    while (cap < P->d * 2) cap <<= 1;
+    m->cap = cap;
+    m->key = calloc(cap, sizeof(const char*));
+    m->val = malloc(cap * sizeof(int));
+    if (!m->key || !m->val) { free(m->key); free(m->val); m->key = NULL; return false; }
+    for (size_t k = 0; k < P->d; k++) {
+        if (!P->ysym[k] || P->ysym[k]->type != EXPR_SYMBOL) continue;
+        const char* nm = P->ysym[k]->data.symbol.name;
+        size_t h = ((uintptr_t)nm >> 4) & (cap - 1);
+        while (m->key[h]) h = (h + 1) & (cap - 1);
+        m->key[h] = nm; m->val[h] = (int)k;
+    }
+    return true;
+}
+static int namemap_get(const NameMap* m, const char* nm) {
+    size_t h = ((uintptr_t)nm >> 4) & (m->cap - 1);
+    while (m->key[h]) {
+        if (m->key[h] == nm) return m->val[h];
+        h = (h + 1) & (m->cap - 1);
+    }
+    return -1;
+}
+static void namemap_free(NameMap* m) { free(m->key); free(m->val); }
+
 typedef struct {
     NdInstr* code;
     size_t   n;          /* instruction count                 */
@@ -60,6 +92,7 @@ typedef struct {
     bool*    seen;       /* [d] */
     size_t   d;
     const char* tvar;
+    const NameMap* map;  /* state-symbol name -> index */
 } Emitter;
 
 static void em_ins(Emitter* E, uint8_t op, int32_t iv, double dv, int delta) {
@@ -78,17 +111,6 @@ static void em_ins(Emitter* E, uint8_t op, int32_t iv, double dv, int delta) {
 #define PUSH(E, op, iv, dv) em_ins(E, op, iv, dv, +1)
 #define UNARY(E, op)        em_ins(E, op, 0, 0.0, 0)
 #define BINARY(E, op)       em_ins(E, op, 0, 0.0, -1)
-
-/* Parse a reduced-state symbol name "…`w<k>"; returns k in *out. */
-static bool state_index(const char* nm, int* out) {
-    const char* tick = strrchr(nm, '`');
-    if (!tick || tick[1] != 'w' || tick[2] == '\0') return false;
-    char* end = NULL;
-    long v = strtol(tick + 2, &end, 10);
-    if (!end || *end != '\0' || v < 0) return false;
-    *out = (int)v;
-    return true;
-}
 
 static bool named_const(const char* nm, double* out) {
     if (strcmp(nm, "Pi") == 0)         { *out = M_PI; return true; }
@@ -148,8 +170,8 @@ static bool emit(Emitter* E, const Expr* e) {
 
     if (e->type == EXPR_SYMBOL) {
         const char* nm = e->data.symbol.name;
-        int k;
-        if (state_index(nm, &k) && k >= 0 && (size_t)k < E->d) {
+        int k = namemap_get(E->map, nm);
+        if (k >= 0 && (size_t)k < E->d) {
             E->seen[k] = true;
             PUSH(E, OP_VAR, k, 0.0);
             return E->ok;
@@ -259,13 +281,16 @@ NdCompiled* nd_compile_rhs(const NdProblem* P) {
     C->d = d;
     C->prog = calloc(d, sizeof(NdProg));
     bool* seen = malloc(sizeof(bool) * d);
-    if (!C->prog || !seen) { free(seen); nd_compiled_free(C); return NULL; }
+    NameMap map;
+    if (!C->prog || !seen || !P->ysym || !namemap_init(&map, P)) {
+        free(seen); nd_compiled_free(C); return NULL;
+    }
 
     int gstackmax = 1;
     bool ok = true;
     for (size_t i = 0; i < d && ok; i++) {
         Emitter E; memset(&E, 0, sizeof(E));
-        E.ok = true; E.seen = seen; E.d = d; E.tvar = P->tvar;
+        E.ok = true; E.seen = seen; E.d = d; E.tvar = P->tvar; E.map = &map;
         memset(seen, 0, sizeof(bool) * d);
         if (!emit(&E, P->f[i]) || !E.ok) { free(E.code); ok = false; break; }
         C->prog[i].code = E.code;
@@ -280,6 +305,7 @@ NdCompiled* nd_compile_rhs(const NdProblem* P) {
         for (size_t j = 0; j < d; j++) if (seen[j]) C->prog[i].dep[p++] = (int)j;
     }
     free(seen);
+    namemap_free(&map);
     if (!ok) { nd_compiled_free(C); return NULL; }
 
     C->stack = malloc(sizeof(double) * (size_t)gstackmax);
