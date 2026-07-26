@@ -1550,10 +1550,35 @@ typedef struct {
     NiBind* binds;
     size_t d;
     NumericSpec spec;
+    AutoCompiled* ac;   /* compiled body f(v_1..v_d); NULL = interpreter */
 } NiMcCtx;
+
+/* Compile `body` as a function of the d bound variables (machine reals).  NULL
+ * if uncompilable.  Caller frees with autocompiled_free. */
+static AutoCompiled* ni_mc_compile(Expr* body, NiBind* binds, size_t d) {
+    const Expr** syms = malloc(d * sizeof(*syms));
+    Expr** owned = malloc(d * sizeof(*owned));
+    if (!syms || !owned) { free(syms); free(owned); return NULL; }
+    for (size_t j = 0; j < d; j++) { owned[j] = expr_new_symbol(binds[j].name); syms[j] = owned[j]; }
+    AutoCompiled* ac = autocompile_new(body, syms, d);
+    for (size_t j = 0; j < d; j++) expr_free(owned[j]);
+    free(syms); free(owned);
+    return ac;
+}
 
 static bool ni_mc_sample(void* vctx, const double* x, size_t d, double _Complex* out) {
     NiMcCtx* c = (NiMcCtx*)vctx;
+    /* Compiled fast path: evaluate over the d machine abscissae directly.  A
+     * non-finite / non-real compiled result (e.g. the interpreter would return a
+     * complex value here) falls through to the interpreter for this point. */
+    if (c->ac) {
+        double _Complex z;
+        if (autocompiled_eval_complex(c->ac, x, &z)
+            && isfinite(creal(z)) && isfinite(cimag(z))) {
+            *out = z;
+            return true;
+        }
+    }
     for (size_t j = 0; j < d; j++) {
         Expr* xe = expr_new_real(x[j]);
         ni_bind_set(&c->binds[j], xe);
@@ -1601,6 +1626,7 @@ static Expr* ni_run_mc(Expr* body, Expr** specs, size_t d, const NiOpts* o, bool
     NiMcCtx ctx;
     ctx.body = body; ctx.binds = binds; ctx.d = d;
     ctx.spec = numeric_machine_spec();
+    ctx.ac = ni_mc_compile(body, binds, d);
 
     /* Monte-Carlo precision goal defaults low (≈2 digits), per Mathematica. */
     double reltol = (o->prec_goal > 0.0) ? pow(10.0, -o->prec_goal) : 1e-2;
@@ -1612,6 +1638,7 @@ static Expr* ni_run_mc(Expr* body, Expr** specs, size_t d, const NiOpts* o, bool
                                      abstol, reltol, maxp, &val, &abserr);
 
     for (size_t j = 0; j < d; j++) ni_bind_restore(&binds[j]);
+    autocompiled_free(ctx.ac);
     free(a); free(b); free(binds);
 
     if (!isfinite(creal(val)) || !isfinite(cimag(val))) return NULL;
@@ -1655,6 +1682,7 @@ static Expr* ni_try_cubature(Expr* body, Expr** specs, size_t d, const NiOpts* o
     NiMcCtx ctx;
     ctx.body = body; ctx.binds = binds; ctx.d = d;
     ctx.spec = numeric_machine_spec();
+    ctx.ac = ni_mc_compile(body, binds, d);
 
     double reltol, abstol;
     ni_machine_tols(o, &reltol, &abstol);
@@ -1665,6 +1693,7 @@ static Expr* ni_try_cubature(Expr* body, Expr** specs, size_t d, const NiOpts* o
                                          abstol, reltol, max_eval, &val, &abserr);
 
     for (size_t j = 0; j < d; j++) ni_bind_restore(&binds[j]);
+    autocompiled_free(ctx.ac);
     free(a); free(b); free(binds);
 
     if (st == CUB_NONNUMERIC) return NULL;   /* fall back to iterated quadrature */

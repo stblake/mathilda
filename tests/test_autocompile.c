@@ -91,6 +91,18 @@ void test_nintegrate_complex_fallback(void) {
     assert_eval_eq("Chop[NIntegrate[Sqrt[x - 1], {x, 0, 2}] - (2/3 + 2 I/3)] == 0", "True", 0);
 }
 
+/* Multi-dimensional NIntegrate (cubature / Monte-Carlo, ni_mc_sample). */
+void test_nintegrate_multidim(void) {
+    assert_eval_eq("Abs[NIntegrate[x y, {x, 0, 1}, {y, 0, 1}] - 1/4] < 10^-8", "True", 0);
+    assert_eval_eq("Abs[NIntegrate[x y z, {x, 0, 1}, {y, 0, 1}, {z, 0, 1}] - 1/8] < 10^-7", "True", 0);
+    assert_eval_eq("Abs[NIntegrate[Exp[-(x^2 + y^2)], {x, -2, 2}, {y, -2, 2}] "
+                   "- (NIntegrate[Exp[-x^2], {x, -2, 2}])^2] < 10^-6", "True", 0);
+    /* Monte-Carlo (low default accuracy) */
+    assert_eval_eq("Abs[NIntegrate[x^2 + y^2, {x, 0, 1}, {y, 0, 1}, Method -> \"MonteCarlo\"] - 2/3] < 10^-2", "True", 0);
+    /* complex-going integrand → per-point interpreter fallback (nonzero imaginary part) */
+    assert_eval_eq("Im[Chop[NIntegrate[Sqrt[x + y - 1], {x, 0, 1}, {y, 0, 1}]]] > 0", "True", 0);
+}
+
 void test_nintegrate_uncompilable(void) {
     /* Zeta has no machine kernel → the integrand stays on the interpreter path;
      * cross-check the machine result against the arbitrary-precision one. */
@@ -128,6 +140,7 @@ int main(void) {
     TEST(test_table_real_parity);
     TEST(test_table_real_complex_fallback);
     TEST(test_nintegrate_parity);
+    TEST(test_nintegrate_multidim);
     TEST(test_nintegrate_oscillatory);
     TEST(test_nintegrate_complex_fallback);
     TEST(test_nintegrate_uncompilable);
