@@ -96,6 +96,9 @@ void nd_operator_free(NdOperator* op);
  * scalar fallback), no forcing term.  out and Y are length op->n. */
 void nd_operator_matvec(const NdOperator* op, const double* Y, double* out);
 
+/* Compiled nonlinear RHS (ndsolve_compile.{c,h}); opaque here. */
+typedef struct NdCompiled NdCompiled;
+
 /* Banded no-pivot LU solve of the n*n dense matrix `M` (nonzeros within
  * bandwidth kl/ku) against `b` (overwritten with the solution).  Returns false
  * on a (near-)zero pivot, so the caller can fall back to the dense solve. */
@@ -131,6 +134,8 @@ struct NdProblem {
     NumericSpec spec;       /* machine double vs MPFR                          */
     Expr*    eval_monitor;  /* borrowed EvaluationMonitor body, or NULL       */
     NdOperator* op;         /* compiled linear fast path, or NULL (owned)     */
+    NdCompiled* compiled;   /* compiled nonlinear RHS fast path, or NULL      */
+    bool     compile_failed;/* nonlinear RHS could not be compiled (use eval) */
 
     /* Jacobian (implicit steppers only; built lazily, owned) */
     Expr***  jac;           /* jac[i][j] = D[f_i, y_j], or NULL entry -> FD    */

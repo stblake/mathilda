@@ -7,6 +7,7 @@
 #include <math.h>
 #include <float.h>
 #include <string.h>
+#include "ndsolve_compile.h"    /* nonlinear RHS bytecode compiler */
 #ifdef USE_LAPACK
 #include "../linalg/lapack.h"   /* dgbtrf_/dgbtrs_/dgetrf_/dgetrs_ */
 #endif
@@ -168,6 +169,17 @@ bool nd_rhs_real(NdProblem* P, double t, const double* Y, double* out) {
         }
         return true;
     }
+    /* Compiled nonlinear fast path: run bytecode over the state, no evaluator.
+     * Compile lazily on first use; fall back to the symbolic sampler if the RHS
+     * uses a construct the compiler does not support, or an EvaluationMonitor is
+     * attached (which must run through the evaluator). */
+    if (!P->compile_failed && !P->compiled && !P->eval_monitor && P->f) {
+        P->compiled = nd_compile_rhs(P);
+        if (!P->compiled) P->compile_failed = true;
+    }
+    if (P->compiled)
+        return nd_compiled_eval(P->compiled, t, Y, out);
+
     nd_bind_point(P, t, Y);
     if (P->eval_monitor) { Expr* m = eval_and_free(expr_copy(P->eval_monitor)); expr_free(m); }
     for (size_t i = 0; i < P->d; i++)
@@ -196,6 +208,14 @@ bool nd_jacobian_real(NdProblem* P, double t, const double* Y, double* Jout) {
     size_t d = P->d;
     /* Compiled linear fast path: the Jacobian is exactly the constant A. */
     if (P->op) { memcpy(Jout, P->op->A, sizeof(double) * d * d); return true; }
+    /* Compiled nonlinear fast path: colored finite differences over the bytecode
+     * RHS (O(bandwidth) evaluations, no evaluator). */
+    if (!P->compile_failed && !P->compiled && !P->eval_monitor && P->f) {
+        P->compiled = nd_compile_rhs(P);
+        if (!P->compiled) P->compile_failed = true;
+    }
+    if (P->compiled)
+        return nd_compiled_jacobian(P->compiled, t, Y, Jout);
     nd_build_jacobian(P);
     /* Try the symbolic Jacobian first. */
     bool ok_all = (P->jac != NULL);

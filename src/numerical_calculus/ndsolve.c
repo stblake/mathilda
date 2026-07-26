@@ -4,6 +4,7 @@
  * modules; see ndsolve_common.h. */
 #include "ndsolve.h"
 #include "ndsolve_common.h"
+#include "ndsolve_compile.h"
 #include "../sym_names.h"
 #include "../sym_intern.h"
 #include "../eval.h"
@@ -171,6 +172,8 @@ static void nd_apply_option(const Expr* opt, NdOpts* o) {
  *  Problem cleanup                                                    *
  * ------------------------------------------------------------------ */
 static void nd_problem_free(NdProblem* P) {
+    nd_operator_free(P->op);
+    nd_compiled_free(P->compiled);
     if (P->f) { for (size_t i = 0; i < P->d; i++) expr_free(P->f[i]); free(P->f); }
     if (P->ysym) { for (size_t i = 0; i < P->d; i++) expr_free(P->ysym[i]); free(P->ysym); }
     if (P->jac) {

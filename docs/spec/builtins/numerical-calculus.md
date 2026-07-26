@@ -1114,8 +1114,21 @@ the narrow FD structure, a pivoted dense factor for wide bands. Nonlinear
 (symbolic-Jacobian) stiff problems detect the band and use the same banded
 factor per iteration. Measured ~10× on stiff coupled grids over the previous
 per-iteration dense refactorization; `Compiled -> False` forces the symbolic
-sampler (identical results). Nonlinear PDEs use the symbolic sampler for the
-RHS. **Stiffness auto-selection:** parabolic problems (a diffusion term with
+sampler (identical results).
+
+**Nonlinear RHS compiler.** When the operator does not apply (a nonlinear or
+non-affine RHS), each reduced component is compiled once into a numeric
+stack-machine program (`ndsolve_compile.c`) so the stepper evaluates the RHS as
+bytecode over the state vector — no symbol binding, no `Expr` copy, no
+`numericalize` per call. The Jacobian is then formed by Curtis–Powell–Reid
+**colored finite differences** over the bytecode (`O(bandwidth)` evaluations for
+a banded discretization). Any construct the VM does not support makes the
+compile bail and the symbolic sampler takes over (an `EvaluationMonitor` also
+forces the symbolic path). Measured ~8× on an explicit shallow-water dam break
+and >100× on a stiff nonlinear-diffusion grid (the colored-FD Jacobian replaces
+the per-entry symbolic Jacobian). Nonlinear ODEs share this path.
+
+**Stiffness auto-selection:** parabolic problems (a diffusion term with
 first-order time evolution) default to `"BDF"` when no time-integration method
 is given.
 
