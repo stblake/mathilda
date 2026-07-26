@@ -95,6 +95,7 @@ static bool cf_box(const Expr* e, CompileType t, CompileValue* out) {
             if (!cf_to_complex(e, &re, &im)) return false;
             out->v.z = re + im * I; return true;
         }
+        default: break;   /* array types: no user argspec surface yet (M3b) */
     }
     return false;
 }
@@ -109,6 +110,7 @@ static Expr* cf_unbox(const CompileValue* v) {
             if (im == 0.0) return expr_new_real(re);
             return make_complex(expr_new_real(re), expr_new_real(im));
         }
+        default: break;   /* array types: no user argspec surface yet (M3b) */
     }
     return NULL;
 }

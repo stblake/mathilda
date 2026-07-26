@@ -2,10 +2,10 @@
 
 Snapshot for resuming the `Compile[]` numeric-compiler work with fresh context.
 Companion to [`compile.md`](compile.md) (the full design) and the memory files
-`project_compile_engine`, `project_autocompile_numeric_builtins`,
-`project_compile_engine` (read those too).
+`project_compile_engine`, `project_autocompile_numeric_builtins` (read those
+too).
 
-_Last updated: 2026-07-27. All work below is committed and pushed to `main`._
+_Last updated: 2026-07-27._
 
 ---
 
@@ -15,25 +15,26 @@ The engine lives in **`src/compile/`** — a typed register-machine bytecode VM 
 evaluates numeric expressions over machine numbers with no `Expr` allocation and
 no runtime type dispatch (the opcode carries the type).
 
-- **`compile.c`** — the VM + the emitter (`compile_expr`). Scalar type lattice
-  `CT_BOOL/CT_INT/CT_REAL/CT_COMPLEX`; bottom-up inference; widening coercions;
-  monomorphic typed opcodes; stack-discipline register allocation; reusable
-  per-program `frame` (no per-call malloc); computed-goto dispatch on GCC/Clang.
-  Coverage: full arithmetic, comparisons, boolean, elementary + special-function
-  kernels (via the shared `ndkernels` registry), `If`, `Sum`/`Product`,
-  `With`/`Module` locals, `Set`/`AddTo`/…/`Increment`, `CompoundExpression`,
-  `Do`/`While`/`For`, `Nest`.
+- **`compile.c`** — the VM + the emitter (`compile_expr`). Type lattice
+  `CT_BOOL/CT_INT/CT_REAL/CT_COMPLEX` plus packed array types (§3); bottom-up
+  inference; widening coercions; monomorphic typed opcodes; stack-discipline
+  register allocation; reusable per-program `frame` (no per-call malloc);
+  computed-goto dispatch on GCC/Clang. Coverage: full arithmetic, comparisons,
+  boolean, elementary + special-function kernels (via the shared `ndkernels`
+  registry), `If`, `Sum`/`Product`, `With`/`Module` locals, `Set`/`AddTo`/…/
+  `Increment`, `CompoundExpression`, `Do`/`While`/`For`, `Nest`, and **rank-1
+  machine arrays** (§3).
 - **`compiled_function.{c,h}`** — user-facing `Compile[argspec, body]` →
   `CompiledFunction` object (new `EXPR_COMPILED` atom, refcounted immutable
   payload). Numeric args run the bytecode; symbolic args / uncompilable bodies
-  fall back to the interpreter. `HoldAll | Protected`.
+  fall back to the interpreter. `HoldAll | Protected`. **No array argspec yet.**
 - **`autocompile.{c,h}`** — the adapter that lets the numeric builtins compile a
   held body once and evaluate it over machine numbers, with per-point interpreter
   fallback. Header is deliberately self-contained (NO `<complex.h>`/`compile.h`
   include — `double _Complex` is a builtin type — so it never leaks the `I`
   macro into callers).
 
-### Auto-compile wiring (all shipped this session)
+### Auto-compile wiring
 
 | Builtin | Chokepoint | Scope | Speedup |
 |---|---|---|---|
@@ -52,144 +53,199 @@ that one point. MPFR paths are UNTOUCHED everywhere. Uncompilable bodies (e.g.
 `Zeta`) → `NULL` program → interpreter.
 
 ### Tests
-`tests/test_compile.c` (engine, 63 checks), `tests/test_compiledfunction.c`
+`tests/test_compile.c` (engine, scalar + array), `tests/test_compiledfunction.c`
 (user `Compile[]`), `tests/test_autocompile.c` (all 6 builtin wirings, parity +
-fallback + oscillatory-regression + systems). All pass; `leaks`-clean. The only
-red suite is `simplify_tests` (1 pre-existing radical failure, unrelated —
-verified against HEAD).
+fallback + oscillatory-regression + systems). All pass; `leaks`- and ASan-clean.
 
-### Milestones: M0, M1a, M1b, M2 (a/b/c), M4 (auto-compile) DONE.
+### Milestones: M0, M1a, M1b, M2 (a/b/c), M3a (rank-1 arrays), M4 (auto-compile) DONE.
 
 ---
 
 ## 2. Build & disk discipline (IMPORTANT — read before rebuilding)
 
 - Main binary: `make -j4` (produces `./Mathilda`). ~53 MB objects + 7 MB binary.
-- Tests: `tests/CMakeLists.txt` now compiles all `COMMON_SRC` **once** into an
+- Tests: `tests/CMakeLists.txt` compiles all `COMMON_SRC` **once** into an
   `OBJECT` library `mathilda_common`, spliced into every test target via
   `$<TARGET_OBJECTS:mathilda_common>` (commit `9ec6ad9`). Build a target:
-  `cd tests/build && cmake --build . --target mathilda_common <target> -j4`.
-- **Disk gotcha (bit us hard this session):** editing a `COMMON_SRC` file forces a
-  `mathilda_common` rebuild + relink of every built test exe (~6 MB each). Dozens
-  of build/test cycles = many GB of *write churn* (net small, but fills activity
-  monitors). Prefer incremental builds; build only the specific target you need.
-- **The real disk killer was `.claude/worktrees/`** — stale git worktrees from
-  prior `isolation: worktree` subagents, each holding a full pre-OBJECT-lib
-  `tests/build` (~1.3 GB). Reclaimed 7.5 GB by deleting their build artifacts
-  (source + uncommitted changes preserved). If disk fills again, check
-  `du -sh .claude/worktrees` and `git worktree list` first. Those 6 worktrees
-  still exist (~456 MB, uncommitted risch/poly/core edits) pending the user's
-  decision to `git worktree remove --force`.
+  `cmake --build tests/build --target mathilda_common <target> -j4`.
+  Use **absolute paths** — the Bash tool's working directory persists between
+  calls, so a bare `cd tests/build` can silently run a stale binary.
+- ASan gate: configure a throwaway tree in the scratchpad, build only the target
+  you need, run, then delete it (~174 MB):
+  `cmake -S tests -B <scratch>/asan -DCMAKE_BUILD_TYPE=Debug
+   -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g -O1"
+   -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address"`, then
+  `ASAN_OPTIONS=detect_leaks=0 <scratch>/asan/compile_tests`.
+- **Disk gotcha:** editing a `COMMON_SRC` file forces a `mathilda_common` rebuild
+  + relink of every built test exe (~6 MB each). Build only the target you need.
+- **The `.claude/worktrees/` risk** — stale git worktrees from prior
+  `isolation: worktree` subagents each held a full pre-OBJECT-lib `tests/build`
+  (~1.3 GB); 7.5 GB was reclaimed once. Six worktrees still exist (~456 MB, with
+  uncommitted risch/poly/core edits) pending the user's decision to
+  `git worktree remove --force`. If disk fills, check `du -sh .claude/worktrees`
+  and `git worktree list` first.
 
 ---
 
-## 3. NEXT: M3 — arrays / NDArray in the compiler
+## 3. M3a as built — rank-1 machine arrays
 
-The engine is scalar-only. M3 adds machine **arrays** as a first-class value
-category, delegating to the existing NDArray infra. Ship in slices; **M3a =
-rank-1 machine-real/complex vectors** (proves the architecture end-to-end).
+### 3.1 Type representation
 
-### 3.1 Design decisions (made, ready to implement)
+`CompileType` packs array types into the same integer as the scalars:
 
-**Type representation.** Extend `CompileType` (currently the enum
-`CT_BOOL/INT/REAL/COMPLEX`) to encode array types compactly — `CT_ARR` base with
-`CT_IS_ARRAY(t)/CT_ELEM(t)/CT_RANK(t)/CT_ARRAY(elem,rank)` helper macros. This
-keeps the single-int flow through `infer_type` (returns `CompileType`), `Val.type`,
-`Ctx.scope[].type`, `Ctx.arg_types[]`, `num_common`, `coerce`. M3a uses rank-1
-only: `CT_ARRAY(CT_REAL,1)`, `CT_ARRAY(CT_COMPLEX,1)`. Matrices (rank-2) = M3b.
+```c
+typedef enum { CT_ERR = -1, CT_BOOL = 0, CT_INT, CT_REAL, CT_COMPLEX, CT_ARR = 4 } CompileType;
+#define CT_ARRAY(elem, rank)  /* CT_ARR + 4*(rank-1) + elem */
+#define CT_IS_ARRAY(t) / CT_ELEM(t) / CT_RANK(t)
+```
 
-**Value slot.** `Slot` (`compile.c:29`) is `union { long long i; double r; double
-_Complex z; const void* p; }` — the `p` field already exists; an array register
-holds an owned `NDArrayData*`/`Expr*` there.
+Every field that already carried a `CompileType` — `infer_type`'s result,
+`Val.type`, `Ctx.scope[].type`, `Ctx.arg_types[]` — carries array types unchanged.
+`CT_ERR` exists so the enum's underlying type is signed and the pre-existing
+`(int)t < 0` checks stay well defined. `num_common` was extended: an array
+absorbs a scalar (broadcast), two arrays must agree on rank, element types widen
+as scalars do.
 
-**Lifetime — THE crux (frame is reused across calls, so NEVER free-on-overwrite;
-that would touch a stale pointer from a prior call).** Instead emit explicit
-`OP_ARR_FREE dst` driven by the existing compile-time temp-stack discipline: when
-`free_if_tmp` pops an ARRAY-typed temp, emit `ARR_FREE`. Array **args are
-borrowed** (never freed). The **result array's** ownership transfers to the
-caller (not freed). Invariant: every allocated array temp is paired with an
-`ARR_FREE` or is the result. This mirrors malloc/free and needs no runtime
-liveness pass. (Design doc §13 mentions an arena/free-list optimization — defer.)
+`CompileValue` gained `Expr* a` — an EXPR_NDARRAY. **Argument arrays are
+borrowed; a result array is owned by the caller.**
 
-**Result / args API.** Add an array case to `CompileValue` (boxed) or a new
-`compiled_eval_array` entry point: caller passes `NDArray*`/`Expr*` array args,
-receives an owned array (or scalar). For M3a the *user surface*
-(`Compile[{{v,_Real,1}}, …]` argspec parsing in `compiled_function.c`) can come
-last — prove the engine first with direct `compile_expr` + NDArray build/read in
-`test_compile.c`.
+### 3.2 The three decisions that make it safe
 
-### 3.2 ND delegation API (researched — these are the functions to call)
+1. **Array registers live in their own bank.** Array temps are allocated into a
+   virtual range tagged `ARR_VREG (0x40000000)`; at finalize, `patch_reg` rewrites
+   the tags to `maxreg + k`, so every array register sits in one contiguous bank
+   *above* the scalar registers. A slot is therefore either always-array or
+   never-array, and teardown can never mistake a `double` for a pointer. (Jump
+   targets also live in the `b` field but are small integers, so the rewrite skips
+   `OP_JMP`/`OP_JZ`.)
+2. **Ownership transfer is encoded in the instruction, not in separate frees.**
+   `Instr` gained a `uint16_t flags` field in what was padding after `op` (verified:
+   `sizeof(Instr)` is 32 either way). `AF_FREE_A`/`AF_FREE_B` tell the op to free
+   the operand *after* reading it, so the result may still reuse an operand's
+   register exactly as the scalar `binop` does. `free_if_tmp` (value is dead)
+   emits an explicit `OP_ARR_FREE`; `pop_tmp` (consumer handles the free) does not
+   — that split is what keeps a temp inside a `Do` loop from accumulating one
+   buffer per iteration.
+3. **Teardown is a range sweep.** Every array register is NULLed before a call
+   (the frame is reused across calls, so a handle from a previous call must never
+   be touched) and swept afterwards — including on the abort path, which is why
+   `vm_run` gained a `bool* failed` out-param.
+
+### 3.3 Opcodes and delegation
+
+`OP_ARR_FREE`, `OP_V_EW` (→ `ndarray_elementwise`, which already folds broadcast
+scalars), `OP_V_POW` (→ `ndarray_elementwise_power` / `ndarray_scalar_power` /
+`ndarray_base_scalar_power`), `OP_V_KERN` (→ `ndarray_map_unary`), `OP_V_KERN2`
+(→ `ndarray_map_binary`), `OP_V_TOTAL` (→ the new `ndred_total_all`), `OP_V_LEN`.
+
+Lowerings with no direct ND counterpart: `a - b` → `a + (-1)b`, `-v` → `(-1)v`,
+`a / b` → `a * b^-1` (scalar divisor reciprocated in a register), `Sqrt[v]` →
+`v^0.5` (Sqrt has no registered ND unary kernel).
+
+`ndreduce.h` gained **`ndred_total_all(const Expr* a)`** — full reduction taking
+the *array* rather than the enclosing call, so the VM needs no wrapper call node.
+Shares `ndred_total`'s summation, so rounding is identical.
+
+### 3.4 Guard rails
+
+- **`scalar_only()` in `binop`/`unop`/`kern_unop`/`kern_binop`** is the single
+  choke point: every scalar opcode is emitted through one of those four, so any
+  head with no array lowering (comparisons, `Max`/`Min`, `Mod`, …) bails the
+  moment an array reaches it rather than reinterpreting a handle as a double.
+- **Explicit array bails at every `OP_MOVE` site** (`If` branches, `Sum`/`Product`
+  accumulator, `With`/`Module` locals, `Set` family, `Nest` state): a MOVE
+  duplicates a handle without duplicating ownership, so array values are not in
+  the M3a subset there. Emit-time types are ground truth for these checks —
+  `infer_type` can under-report arrays inside nested expressions, which is fine
+  (it only routes; a wrong "false" still ends in a bail).
+- **A borrowed argument array cannot be the whole result** (`compile_expr`
+  rejects it), otherwise the caller would free a value it does not own.
+- **Element-type promise check at runtime:** if a program promised a real element
+  type and the ND layer returned a complex dtype (`Sqrt[v]` with a negative
+  entry, `Log[v]` of a negative), the op fails → whole call fails → interpreter.
+  This is the scalar "non-finite where the interpreter would go complex" contract
+  lifted to buffers.
+
+### 3.5 THE FINDING THAT SHOULD SHAPE M3b
+
+Parity with the interpreter is **exact** (max relative error 0.0 across 34 array
+bodies) — because both paths call the same ND kernels. Which is also why the
+speedup is small: delegation only removes the per-operation evaluator round-trip.
+
+| body | length | speedup |
+|---|---|---|
+| `Total[Sin[v] Exp[-v] + Sqrt[v]]` | 16 | **2.3×** |
+| same | 4096 | **1.0×** |
+
+Contrast the scalar engine's 11–353×. **Array speed does not come from removing
+interpretation; it comes from removing intermediate buffers.** That body
+currently makes five full-length passes and allocates four temporary buffers.
+
+So the highest-value M3b item is **elementwise fusion**: lower a chain of
+elementwise array ops into ONE buffer pass that runs the existing scalar VM over
+each element (the scalar engine is already the right per-element machine — this
+is mostly a matter of compiling the chain's scalar body once and looping it over
+the buffers, with the reduction folded into the same pass for `Total[...]`).
+Expect that to be where the real multiple appears, especially for long vectors.
+
+---
+
+## 4. NEXT: M3b
+
+In rough value order:
+
+1. **Elementwise fusion** (§3.5) — the actual performance win.
+2. **`Dot`/`MatMul`** → `ndarray_dot2` (`ndarray.h:118`) / BLAS `dgemm` wrapper
+   `dot2` (`src/linalg/dot.c:60`). Needs rank-2 first.
+3. **Rank-2 arrays.** The type encoding already supports rank ≤ 8
+   (`CT_MAX_RANK`); `compile_expr` currently rejects rank ≠ 1 and `Total` requires
+   rank 1 (`ndred_total_all` collapses every axis, so a rank-2 `Total` — which
+   reduces only the LEADING axis — needs the `ndred_total` call path or a new
+   partial-reduction entry point).
+4. **Array locals / `If` branches / `Nest` state** — needs either an
+   `OP_ARR_COPY` or handle refcounting (`expr_ref` on EXPR_NDARRAY; verify
+   whether `expr_copy` shares or deep-copies the buffer before relying on it).
+5. **User `Compile[]` array argspec** — `{v, _Real, 1}` in
+   `compiled_function.c`'s `parse_typespec`/argspec loop, plus array cases in
+   `cf_box`/`cf_unbox` (both currently have a `default: break` that routes array
+   types to the interpreter fallback). Decide whether a `List` argument is packed
+   at the boundary (and freed after the call) and whether an array result comes
+   back as `NDArray[...]` or a `List`.
+6. **`Part`/`Slice`** → `ndarray_part` (`ndarray.h:99`), `ndstruct_*`
+   (`ndstruct.h`). `MAKEARR` (pack a fixed tuple), Int arrays, Map/Table fusion.
+
+### ND delegation API reference (still accurate)
 
 Kernel structs & helpers live in **`src/ndarray.h`** (there is NO `ndkernels.h`).
 Buffer = row-major flat, complex interleaved (re,im), NOT C99 `_Complex`.
 
 - **Elementwise arith / broadcast:** `ndarray_elementwise(Expr** args, size_t n,
-  bool is_plus)` (`ndarray.h:127`) — Plus/Times over flat buffers with numpy
-  scalar broadcast; new EXPR_NDARRAY or NULL. Power: `ndarray_elementwise_power`,
-  `ndarray_scalar_power`, `ndarray_base_scalar_power` (`ndarray.h:134-145`).
-- **Unary/binary kernel map:** `ndarray_map_unary(const Expr* a, const
-  NDUnaryKernel* k)` / `ndarray_map_binary(a0,a1,k)` (`ndarray.h:185-186`) — loop
-  the whole buffer for you, allocate a new array, multithreaded. Look up the
-  kernel via `symtab_lookup(head)->ndarray_unary_kernel` /
-  `->ndarray_binary_kernel` (`symtab.h:88-89`). Kernel structs `NDUnaryKernel`
-  (`ndarray.h:166`, fns cplx/real/real_closed/to_real), `NDBinaryKernel`
-  (`ndarray.h:179`).
-- **Reductions:** `ndred_total/mean/max/min/...(Expr* res)` (`ndreduce.h:35-48`) —
-  reduce the LEADING axis; take the WHOLE call Expr (borrowed). For a bare buffer,
-  wrap it in an EXPR_NDARRAY + call node, or use raw helpers in
-  `ndarray_internal.h` (`nd_parallel_reduce`, `nd_gather_real`, …).
-- **Dot/MatMul:** `ndarray_dot2(const Expr* a, const Expr* b, bool* shape_error)`
-  (`ndarray.h:118`); BLAS `dgemm` wrapper `dot2(Expr*,Expr*,bool*)`
-  (`src/linalg/dot.c:60`). — M3b.
-- **Part/structural:** `ndarray_part(a, indices, n, &degrade)` (`ndarray.h:99`);
-  `ndstruct_sort/reverse/transpose/...(Expr* res)` (`ndstruct.h`). — M3b.
-- **Build/read buffers:** construct with `expr_new_ndarray(rank, dims, buf,
-  dtype)` (adopts `buf`, copies `dims`; `expr.h:164`). Element access with
-  `ndt_get/ndt_set(buf,k,dtype,&re,&im)` (`ndarray.h`). `na_load_vector` /
-  `na_build_vector` / `na_read_scalar` / `na_scalar` (`src/linalg/numarray.h`) move
-  between Expr and raw `double*` buffers. Free a built array with `expr_free`.
-  **All ND fast paths allocate a new buffer and never mutate inputs — none are
-  in-place.** `NDType`: `NDT_FLOAT64=0` (default), `FLOAT32`, `COMPLEX64`,
-  `COMPLEX32` (`expr.h:45`).
+  bool is_plus)` (`ndarray.h:127`) — folds scalar operands into one constant, so
+  broadcast is free. Power: `ndarray_elementwise_power`, `ndarray_scalar_power`,
+  `ndarray_base_scalar_power` (`ndarray.h:134-145`).
+- **Unary/binary kernel map:** `ndarray_map_unary(a, k)` /
+  `ndarray_map_binary(a0, a1, k)` (`ndarray.h:185-186`); look the kernel up via
+  `symtab_lookup(head)->ndarray_unary_kernel` / `->ndarray_binary_kernel`
+  (`symtab.h:88-89`). Kernel structs `NDUnaryKernel` (`ndarray.h:166`),
+  `NDBinaryKernel` (`ndarray.h:179`). A NULL `cplx` is the *degrade sentinel*
+  (no machine kernel — `Sqrt`, `Zeta`, `Erfi`, … ) → bail to the interpreter.
+- **Reductions:** `ndred_total_all(a)` (new, operand-taking) or
+  `ndred_total/mean/max/min/…(Expr* res)` (`ndreduce.h`), which take the WHOLE
+  call Expr (borrowed) and reduce the LEADING axis.
+- **Build/read buffers:** `expr_new_ndarray(rank, dims, buf, dtype)` (adopts
+  `buf`, copies `dims`; `expr.h:164`); `ndt_get/ndt_set(buf, k, dtype, &re, &im)`.
+  `NDType`: `NDT_FLOAT64=0` (default), `FLOAT32`, `COMPLEX64`, `COMPLEX32`.
+  **All ND fast paths allocate a new buffer and never mutate inputs.**
 
-### 3.3 M3a opcode sketch (finalize during impl)
+### Watch-outs carried forward
 
-- Elementwise vec⊕vec `+ - * /`: either dedicated `OP_VADD_R/C` etc. or a generic
-  `OP_VKERN2` carrying the binary-kernel fn ptr; simplest to call
-  `ndarray_elementwise`/`ndarray_map_binary` from the VM op. Shape-checked at
-  runtime (bail → the whole `compiled_eval` fails, caller falls back).
-- Scalar⊕vec broadcast: `ndarray_elementwise` already broadcasts; emit a splat or
-  a dedicated `OP_VBCAST_*`.
-- Unary fn over buffer `Sin[v]`, `Exp[v]`: `OP_VKERN` carrying the unary-kernel ptr
-  → `ndarray_map_unary`.
-- Reduction `Total[v]` (vec→scalar): `OP_VTOTAL_R/C` → `ndred_total` (wrap buffer).
-- `OP_ARR_FREE dst`, `OP_VLEN` (vec→int).
-
-### 3.4 M3a step list
-
-1. `CompileType` array encoding + helper macros.
-2. Array-register plumbing in `Slot`/`Val`; `OP_ARR_FREE` + emit frees on
-   `free_if_tmp` of an array temp; array-arg loading (borrowed).
-3. `emit`: array-arg symbol resolution; elementwise; broadcast; unary kernel;
-   `Total`. `infer_type` array cases.
-4. VM cases delegating to `ndarray_elementwise`/`ndarray_map_unary`/`ndred_total`
-   (allocate/free NDArray buffers; write handle into `Slot.p`).
-5. Public array in/out eval API.
-6. `test_compile.c`: build an NDArray, compile `v → v+1` / `2 v` / `Sin[v]` /
-   `Total[v]`, compare buffers to interpreter; ownership (leaks + ASan clean,
-   repeated calls reuse the frame with no leak/UAF).
-7. Docs + changelog (`docs/spec/changelog/2026-07-27.md`) + memory.
-
-**Deferred to M3b+:** rank-2 matrices, `DOT`/`MATMUL` (BLAS), `Part`/`Slice`,
-`MAKEARR` (pack a fixed tuple), Int arrays, List-of-machine-numbers coercion at
-the boundary, user `Compile[]` array argspec, Map/Table fusion.
-
-### 3.5 Watch-outs
-
-- Frame reuse ⇒ never free-on-overwrite; only the explicit `ARR_FREE`/result model.
-- `ndreduce`/`ndstruct` take the whole *call* Expr (borrow-only); the
-  map/elementwise/dot helpers take *operand* Exprs. Wrap a bare buffer accordingly.
-- Verify the `CompiledFunction` `expr_free` path frees any array-returning
-  program's result correctly (ownership handoff), like `InterpolatingFunction`.
-- Gate leaks with BOTH `leaks` and an ASan build (ASan caught a latent OOB the
-  memcheck missed earlier in this project).
+- Frame reuse ⇒ never free-on-overwrite; only the explicit `ARR_FREE`/flag/result
+  model.
+- Array bodies in tests must be parsed **without** evaluating: with the array
+  parameters still free symbols the evaluator rewrites the constructs under test
+  (`Total[v]` collapses to `v`, `With[{u=v},…]` inlines, `Length[v]` → `0`).
+  For the same reason the interpreter reference substitutes via
+  `env_new`/`env_set`/`replace_bindings`, not `ReplaceAll` — `ReplaceAll`
+  evaluates its first argument before binding.
+- Verify the `CompiledFunction` `expr_free` path frees an array-returning
+  program's result correctly once the user argspec lands.

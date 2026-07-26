@@ -33,6 +33,14 @@
 bool ndred_call_has_ndarray(const Expr* res);
 
 Expr* ndred_total(Expr* res);       /* Total[a] / Total[a,n] / Total[a,Infinity] */
+
+/* Full reduction of NDArray `a` (borrowed) to a scalar — every axis collapsed,
+ * i.e. Total[a, Infinity]. Unlike the entry points above this takes the ARRAY
+ * rather than the enclosing call, so a caller that already holds the operand
+ * (the Compile VM's OP_V_TOTAL) needs no wrapper call node. Shares
+ * ndred_total's summation, so the rounding is identical. Caller owns the
+ * result; NULL if `a` is not an NDArray. */
+Expr* ndred_total_all(const Expr* a);
 Expr* ndred_mean(Expr* res);        /* Mean[a] */
 Expr* ndred_max(Expr* res);         /* Max[a] */
 Expr* ndred_min(Expr* res);         /* Min[a] */

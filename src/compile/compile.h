@@ -8,9 +8,11 @@
  * using the symbolic interpreter.  This is the reusable substrate for NDSolve,
  * Plot, NIntegrate, a user-facing Compile[], etc.  See docs/design/compile.md.
  *
- * Scope of this module (M0): scalar lattice Bool/Int/Real/Complex, arithmetic,
- * comparisons, boolean logic, and elementary functions.  Control flow, arrays,
- * and the generic special-function kernel path are later milestones.
+ * Scope of this module: scalar lattice Bool/Int/Real/Complex with arithmetic,
+ * comparisons, boolean logic, elementary + special-function kernels, control
+ * flow and procedural constructs (M0–M2), plus rank-1 machine arrays delegating
+ * to the NDArray subsystem (M3a).  Rank >= 2, Dot/Part, and array locals are
+ * later milestones.
  */
 #ifndef MATHILDA_COMPILE_H
 #define MATHILDA_COMPILE_H
@@ -20,13 +22,40 @@
 #include <complex.h>
 #include "../expr.h"
 
-/* Scalar type lattice, ordered by widening (Bool is not numeric). */
-typedef enum { CT_BOOL = 0, CT_INT = 1, CT_REAL = 2, CT_COMPLEX = 3 } CompileType;
+/* Type lattice.
+ *
+ * Scalars occupy 0..3, ordered by widening (Bool is not numeric).  Array types
+ * (M3) are packed into the same integer above CT_ARR as
+ * `CT_ARR + 4*(rank-1) + elem`, so every field that already carries a
+ * CompileType — infer_type's result, a register's static type, the declared
+ * argument types — carries array types with no parallel plumbing, and the
+ * scalar comparisons `t == CT_REAL` / `t < CT_REAL` keep their meanings.
+ *
+ * CT_ERR is the "no common type" sentinel.  Keeping it in the enum forces a
+ * signed underlying type, so both the `(int)t < 0` error checks and the
+ * `(int)t >= CT_ARR` array test are well defined. */
+typedef enum {
+    CT_ERR     = -1,
+    CT_BOOL    = 0,
+    CT_INT     = 1,
+    CT_REAL    = 2,
+    CT_COMPLEX = 3,
+    CT_ARR     = 4       /* == CT_ARRAY(CT_BOOL, 1); first array encoding */
+} CompileType;
 
-/* A boxed scalar value (compile-time-known type). */
+/* Highest rank the packed encoding supports (M3a implements rank 1 only). */
+#define CT_MAX_RANK 8
+#define CT_ARRAY(elem, rank) ((CompileType)((int)CT_ARR + 4 * ((rank) - 1) + (int)(elem)))
+#define CT_IS_ARRAY(t)       ((int)(t) >= (int)CT_ARR)
+#define CT_ELEM(t)           ((CompileType)(((int)(t) - (int)CT_ARR) & 3))
+#define CT_RANK(t)           ((((int)(t) - (int)CT_ARR) >> 2) + 1)
+
+/* A boxed value (compile-time-known type).  For an array type `a` holds an
+ * EXPR_NDARRAY node: BORROWED when passed in as an argument (the program never
+ * frees an argument array), OWNED by the caller when returned as a result. */
 typedef struct {
     CompileType type;
-    union { long long i; double r; double _Complex z; unsigned char b; } v;
+    union { long long i; double r; double _Complex z; unsigned char b; Expr* a; } v;
 } CompileValue;
 
 typedef struct CompiledProgram CompiledProgram;
@@ -34,7 +63,8 @@ typedef struct CompiledProgram CompiledProgram;
 /* Compile `body` (borrowed) as a function of `nargs` argument symbols with the
  * given interned names and declared types.  Returns NULL if any construct is not
  * compilable (caller falls back to the interpreter).  The result is independent
- * of `body` and must be freed with compiled_free. */
+ * of `body` and must be freed with compiled_free.  An argument may be declared
+ * `CT_ARRAY(elem, 1)` — a rank-1 machine vector supplied as an EXPR_NDARRAY. */
 CompiledProgram* compile_expr(const Expr* body,
                               const char* const* arg_names,
                               const CompileType* arg_types, size_t nargs);
@@ -43,7 +73,16 @@ CompileType compiled_result_type(const CompiledProgram* p);
 size_t      compiled_num_args(const CompiledProgram* p);
 
 /* Evaluate with `nargs` boxed argument values (coerced to the declared arg
- * types).  Writes *out.  Returns false if a numeric result is non-finite. */
+ * types).  Writes *out.  Returns false if the call could not produce a usable
+ * value: a non-finite numeric result, an argument that does not match its
+ * declared type, or an array operation that left the promised element type
+ * (a real-typed program whose buffer went complex, exactly mirroring the scalar
+ * "returns non-finite where the interpreter would go complex" rule).  On false
+ * the caller falls back to the interpreter.
+ *
+ * When the result type is an array, `out->v.a` is a NEW EXPR_NDARRAY the caller
+ * owns and must expr_free; every array temporary the program allocated is
+ * released before returning, on both the success and failure paths. */
 bool compiled_eval(const CompiledProgram* p, const CompileValue* args, CompileValue* out);
 
 /* Fast path for an all-Real signature (every arg and the result CT_REAL):

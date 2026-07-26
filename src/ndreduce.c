@@ -514,6 +514,11 @@ Expr* ndred_total(Expr* res) {
     return r ? r : ndarray_delist_and_reeval(res);
 }
 
+Expr* ndred_total_all(const Expr* a) {
+    if (!a || a->type != EXPR_NDARRAY) return NULL;
+    return nd_total_leading(a, a->data.ndarray.rank);
+}
+
 /* -------------------------------------------------------------------- Mean */
 
 Expr* ndred_mean(Expr* res) {

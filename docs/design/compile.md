@@ -468,6 +468,26 @@ Remaining: `Which`/`Piecewise`, `Fold`/`NestList`/`FoldList` (need arrays, M3),
 M3 arrays/NDArray, M4 full special-function kernel coverage, complex-contour
 NIntegrate compilation, and MPFR fast paths.
 
+**Status update (2026-07-27) — M3a done.** Rank-1 machine arrays are now a
+first-class value category. `CompileType` packs array types into the same
+integer as the scalars (`CT_ARR + 4*(rank-1) + elem`); array registers live in a
+dedicated contiguous bank above the scalar registers; operand ownership transfer
+is encoded in the consuming instruction's flag bits. Elementwise arithmetic,
+broadcast, power, the unary/binary `ndkernel` maps, and the `Total`/`Length`
+reductions all delegate to the NDArray subsystem, giving *exact* parity with the
+interpreter.
+
+The measurement that should shape M3b: because both paths call the same ND
+kernels, delegation alone buys only the per-operation evaluator round-trip —
+**2.3× at length 16, 1.0× at length 4096**. Unlike the scalar case (11–353×),
+array speed does *not* come from removing interpretation; it comes from removing
+**intermediate buffers**. `Sin[v] Exp[-v] + Sqrt[v]` currently makes five
+full-length passes and four temporary buffers. The high-value M3b item is
+therefore **elementwise fusion** — lowering a chain of elementwise ops to one
+buffer pass driven by the existing scalar VM over each element — with `Dot`
+(BLAS) and `Part` next. Rank-2, array locals (which need a copy op or handle
+refcounting), and the user `Compile[]` array argspec follow.
+
 ---
 
 ## 17. Risks & open questions

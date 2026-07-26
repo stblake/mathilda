@@ -11,6 +11,8 @@
 #include "core.h"
 #include "parse.h"
 #include "sym_intern.h"
+#include "match.h"
+#include "ndarray.h"
 #include "compile/compile.h"
 #include <math.h>
 #include <complex.h>
@@ -139,15 +141,142 @@ static void parity(const char* name, const char* body_s,
     expr_free(body);
 }
 
-static void must_bail(const char* name, const char* body_s, const char* const* names,
+/* ------------------------------------------------------------------ *
+ *  Arrays (M3a): rank-1 machine vectors                               *
+ * ------------------------------------------------------------------ */
+
+/* A rank-1 float64 NDArray of `n` entries drawn from [lo,hi]. */
+static Expr* make_vec(size_t n, double lo, double hi) {
+    double* buf = malloc(n * sizeof(double));
+    for (size_t k = 0; k < n; k++) buf[k] = urand(lo, hi);
+    int64_t dims[1]; dims[0] = (int64_t)n;
+    return expr_new_ndarray(1, dims, buf, NDT_FLOAT64);   /* adopts buf */
+}
+
+/* A rank-1 complex64 NDArray (interleaved re,im) with entries from [lo,hi]^2. */
+static Expr* make_cvec(size_t n, double lo, double hi) {
+    double* buf = malloc(2 * n * sizeof(double));
+    for (size_t k = 0; k < n; k++) { buf[2 * k] = urand(lo, hi); buf[2 * k + 1] = urand(lo, hi); }
+    int64_t dims[1]; dims[0] = (int64_t)n;
+    return expr_new_ndarray(1, dims, buf, NDT_COMPLEX64);   /* adopts buf */
+}
+
+/* Interpreter reference: substitute the NDArray arguments and evaluate, so the
+ * comparison is against the very same NDArray fast paths the VM delegates to.
+ * Substitution goes through the binder rather than ReplaceAll, because
+ * ReplaceAll evaluates its first argument first — which would collapse the
+ * unevaluated body (Length[v] -> 0) before v was ever bound. */
+static Expr* ref_eval_arr(const Expr* body, const char* const* names,
+                          Expr* const* vals, size_t n) {
+    MatchEnv* env = env_new();
+    for (size_t k = 0; k < n; k++) env_set(env, names[k], vals[k]);
+    Expr* sub = replace_bindings((Expr*)body, env);
+    env_free(env);
+    return eval_and_free(sub);
+}
+
+/* (Re, Im) of a numeric scalar Expr — Real, Integer, or Complex[re, im]. */
+static bool scalar_reim(const Expr* e, double* re, double* im) {
+    if (expr_to_double(e, re)) { *im = 0.0; return true; }
+    Expr* reA[1] = { expr_new_function(expr_new_symbol("Re"), (Expr*[]){ expr_copy((Expr*)e) }, 1) };
+    Expr* imA[1] = { expr_new_function(expr_new_symbol("Im"), (Expr*[]){ expr_copy((Expr*)e) }, 1) };
+    Expr* reE = eval_and_free(expr_new_function(expr_new_symbol("N"), reA, 1));
+    Expr* imE = eval_and_free(expr_new_function(expr_new_symbol("N"), imA, 1));
+    bool ok = expr_to_double(reE, re) && expr_to_double(imE, im);
+    expr_free(reE); expr_free(imE);
+    return ok;
+}
+
+/* Accumulate the max relative difference between two results (array or scalar).
+ * Returns false when the two do not even agree on shape/kind. */
+static bool arr_cmp(const Expr* got, const Expr* want, double* maxerr) {
+    if (!got || !want) return false;
+    if (got->type == EXPR_NDARRAY || want->type == EXPR_NDARRAY) {
+        if (got->type != EXPR_NDARRAY || want->type != EXPR_NDARRAY) return false;
+        size_t n = ndarray_size(got);
+        if (n != ndarray_size(want) || got->data.ndarray.rank != want->data.ndarray.rank) return false;
+        for (size_t k = 0; k < n; k++) {
+            double ar, ai, br, bi;
+            ndt_get(got->data.ndarray.data, k, got->data.ndarray.dtype, &ar, &ai);
+            ndt_get(want->data.ndarray.data, k, want->data.ndarray.dtype, &br, &bi);
+            double e = (fabs(ar - br) + fabs(ai - bi)) / (1.0 + fabs(br) + fabs(bi));
+            if (e > *maxerr) *maxerr = e;
+        }
+        return true;
+    }
+    double gr, gi, wr, wi;
+    if (!scalar_reim(got, &gr, &gi) || !scalar_reim(want, &wr, &wi)) return false;
+    double e = (fabs(gr - wr) + fabs(gi - wi)) / (1.0 + fabs(wr) + fabs(wi));
+    if (e > *maxerr) *maxerr = e;
+    return true;
+}
+
+/* Box a compiled array/scalar result as an Expr the comparison can read.
+ * Takes ownership of an array result. */
+static Expr* aval_to_expr(CompileValue v) {
+    if (CT_IS_ARRAY(v.type)) return v.v.a;
+    return val_to_expr(v);
+}
+
+/* Compile `body` over array-typed args and compare to the interpreter over
+ * `trials` freshly built vectors.  The body is parsed but NOT evaluated: with
+ * the array parameters still free symbols the evaluator would rewrite the very
+ * constructs under test (Total[v] collapses to v, With[{u=v},...] inlines), so
+ * only the raw parse tree exercises the array lowering. */
+static void parity_arr(const char* name, const char* body_s,
+                       const char* const* names, const CompileType* types, size_t n,
+                       size_t len, double lo, double hi, int trials) {
+    Expr* body = parse_expression(body_s);
+    const char* inames[4];
+    for (size_t k = 0; k < n; k++) inames[k] = intern_symbol(names[k]);
+    CompiledProgram* p = compile_expr(body, inames, types, n);
+    if (!p) { printf("FAIL: %-30s -> did not compile\n", name); failures++; expr_free(body); return; }
+
+    int cmp = 0; double maxerr = 0.0; bool shape_ok = true;
+    for (int t = 0; t < trials; t++) {
+        Expr* vecs[4]; CompileValue args[4], outc;
+        for (size_t k = 0; k < n; k++) {
+            vecs[k] = CT_ELEM(types[k]) == CT_COMPLEX ? make_cvec(len, lo, hi)
+                                                      : make_vec(len, lo, hi);
+            args[k].type = types[k]; args[k].v.a = vecs[k];
+        }
+        bool cok = compiled_eval(p, args, &outc);
+        if (cok) {
+            Expr* want = ref_eval_arr(body, inames, vecs, n);
+            Expr* got  = aval_to_expr(outc);
+            if (!arr_cmp(got, want, &maxerr)) shape_ok = false;
+            else cmp++;
+            expr_free(got); expr_free(want);
+        }
+        for (size_t k = 0; k < n; k++) expr_free(vecs[k]);   /* args are borrowed */
+        if (!shape_ok) break;
+    }
+    if (!shape_ok) { printf("FAIL: %-30s -> result shape/kind mismatch\n", name); failures++; }
+    else if (cmp < trials) { printf("FAIL: %-30s -> only %d/%d evaluated\n", name, cmp, trials); failures++; }
+    else if (maxerr > 1e-12) { printf("FAIL: %-30s -> max_rel=%.2e\n", name, maxerr); failures++; }
+    else printf("ok:   %-30s max_rel=%.1e (%d cmps)\n", name, maxerr, cmp);
+    compiled_free(p);
+    expr_free(body);
+}
+
+static void bail_body(const char* name, Expr* body, const char* const* names,
                       const CompileType* types, size_t n) {
-    Expr* body = eval_and_free(parse_expression(body_s));
     const char* inames[8];
     for (size_t k = 0; k < n; k++) inames[k] = intern_symbol(names[k]);
     CompiledProgram* p = compile_expr(body, inames, types, n);
     if (p) { printf("FAIL: %-30s -> compiled but should bail\n", name); failures++; compiled_free(p); }
     else printf("ok:   %-30s bailed\n", name);
     expr_free(body);
+}
+static void must_bail(const char* name, const char* body_s, const char* const* names,
+                      const CompileType* types, size_t n) {
+    bail_body(name, eval_and_free(parse_expression(body_s)), names, types, n);
+}
+/* Same, on the raw parse tree — see parity_arr on why array bodies must not be
+ * pre-evaluated. */
+static void must_bail_raw(const char* name, const char* body_s, const char* const* names,
+                          const CompileType* types, size_t n) {
+    bail_body(name, parse_expression(body_s), names, types, n);
 }
 
 int main(void) {
@@ -253,6 +382,154 @@ int main(void) {
     must_bail("no kernel (Zeta)", "Zeta[x]", x1, RRR, 1);        /* not in ndkernels -> bail */
     must_bail("free symbol", "x + unknownParam", x1, RRR, 1);
     must_bail("list body", "{x, x^2}", x1, RRR, 1);
+
+    /* ---- arrays (M3a): rank-1 machine vectors ----
+     * The compiled array ops delegate to the same NDArray fast paths the
+     * interpreter uses, so parity here is exact, not just to rounding. */
+    {
+        const char* vw[] = { "v", "w" };
+        const CompileType AA[] = { CT_ARRAY(CT_REAL, 1), CT_ARRAY(CT_REAL, 1) };
+        const int N = 40;
+
+        /* array -> array */
+        parity_arr("vec + scalar",      "v + 1",        vw, AA, 1, 64, 0.3, 4.0, N);
+        parity_arr("vec * scalar",      "2 v",          vw, AA, 1, 64, 0.3, 4.0, N);
+        parity_arr("vec + vec",         "v + w",        vw, AA, 2, 64, 0.3, 4.0, N);
+        parity_arr("vec * vec",         "v w",          vw, AA, 2, 64, 0.3, 4.0, N);
+        parity_arr("vec - vec",         "v - w",        vw, AA, 2, 64, 0.3, 4.0, N);
+        parity_arr("vec - scalar",      "v - 2",        vw, AA, 1, 64, 0.3, 4.0, N);
+        parity_arr("scalar - vec",      "3 - v",        vw, AA, 1, 64, 0.3, 4.0, N);
+        parity_arr("vec negate",        "-v",           vw, AA, 1, 64, 0.3, 4.0, N);
+        parity_arr("vec / scalar",      "v / 3",        vw, AA, 1, 64, 0.3, 4.0, N);
+        parity_arr("vec / vec",         "v / w",        vw, AA, 2, 64, 0.3, 4.0, N);
+        parity_arr("vec ^ integer",     "v^3",          vw, AA, 1, 64, 0.3, 4.0, N);
+        parity_arr("vec ^ vec",         "v^w",          vw, AA, 2, 64, 0.3, 2.0, N);
+        parity_arr("scalar ^ vec",      "2^v",          vw, AA, 1, 64, 0.3, 4.0, N);
+        parity_arr("Sqrt[vec]",         "Sqrt[v]",      vw, AA, 1, 64, 0.3, 4.0, N);
+        parity_arr("Sin[vec]",          "Sin[v]",       vw, AA, 1, 64, -3.0, 3.0, N);
+        parity_arr("Exp/Log[vec]",      "Exp[-v] + Log[v]", vw, AA, 1, 64, 0.3, 4.0, N);
+        parity_arr("Abs[vec]",          "Abs[v]",       vw, AA, 1, 64, -4.0, 4.0, N);
+        parity_arr("Gamma[vec]",        "Gamma[v]",     vw, AA, 1, 64, 0.5, 4.0, N);
+        parity_arr("Log[b, vec]",       "Log[2, v]",    vw, AA, 1, 64, 0.3, 4.0, N);
+        parity_arr("ArcTan[vec, y]",    "ArcTan[v, 2]", vw, AA, 1, 64, 0.3, 4.0, N);
+        parity_arr("nested vec expr",   "Sin[v w] + Exp[-v] (w + 2)", vw, AA, 2, 64, 0.3, 3.0, N);
+
+        /* array -> scalar */
+        parity_arr("Total[vec]",        "Total[v]",     vw, AA, 1, 64, 0.3, 4.0, N);
+        parity_arr("Total[Sin[vec]]",   "Total[Sin[v]]", vw, AA, 1, 64, -3.0, 3.0, N);
+        parity_arr("Length[vec]",       "Length[v]",    vw, AA, 1, 64, 0.3, 4.0, N);
+        parity_arr("mean",              "Total[v] / Length[v]", vw, AA, 1, 64, 0.3, 4.0, N);
+        parity_arr("dot product",       "Total[v w]",   vw, AA, 2, 64, 0.3, 4.0, N);
+        parity_arr("scalar in array expr", "Total[(v - Total[v]/Length[v])^2] / Length[v]",
+                   vw, AA, 1, 64, 0.3, 4.0, N);
+
+        /* complex-element vectors: the complex64 buffer and the complex scalar
+         * broadcast, both of which read the other half of the register slot. */
+        {
+            const CompileType CA[] = { CT_ARRAY(CT_COMPLEX, 1), CT_ARRAY(CT_COMPLEX, 1) };
+            parity_arr("cvec + cvec",   "v + w",      vw, CA, 2, 32, 0.3, 3.0, N);
+            parity_arr("cvec * cvec",   "v w",        vw, CA, 2, 32, 0.3, 3.0, N);
+            parity_arr("cvec + I",      "v + 2 I",    vw, CA, 1, 32, 0.3, 3.0, N);
+            parity_arr("Exp[cvec]",     "Exp[v]",     vw, CA, 1, 32, 0.3, 2.0, N);
+            parity_arr("Abs[cvec]",     "Abs[v]",     vw, CA, 1, 32, 0.3, 3.0, N);
+            parity_arr("Total[cvec]",   "Total[v]",   vw, CA, 1, 32, 0.3, 3.0, N);
+            parity_arr("cvec ^ 2",      "v^2",        vw, CA, 1, 32, 0.3, 3.0, N);
+        }
+
+        /* Constructs that would need to COPY an array handle rather than move
+         * it — deferred to M3b, and each must bail rather than alias. */
+        must_bail_raw("array identity",     "v",                 vw, AA, 1);
+        must_bail_raw("array If branch",    "If[1 < 2, v, v+1]", vw, AA, 1);
+        must_bail_raw("array With local",   "With[{u = v}, u + 1]", vw, AA, 1);
+        must_bail_raw("array Sum body",     "Sum[v, {i, 1, 3}]", vw, AA, 1);
+        must_bail_raw("array comparison",   "v < w",             vw, AA, 2);
+        must_bail_raw("array Max",          "Max[v, w]",         vw, AA, 2);
+        must_bail_raw("array Mod",          "Mod[v, w]",         vw, AA, 2);
+
+        /* Runtime contract: a real-typed program that would have to leave the
+         * real axis fails the call (caller falls back), it does not lie. */
+        {
+            const char* inm[1] = { intern_symbol("v") };
+            Expr* b = parse_expression("Sqrt[v]");
+            CompiledProgram* p = compile_expr(b, inm, AA, 1);
+            double neg[3] = { 1.0, -4.0, 9.0 }, pos[3] = { 1.0, 4.0, 9.0 };
+            int bad = 0;
+            for (int t = 0; t < 2; t++) {
+                double* src = t ? pos : neg;
+                double* buf = malloc(3 * sizeof(double));
+                memcpy(buf, src, 3 * sizeof(double));
+                int64_t dims[1] = { 3 };
+                Expr* v = expr_new_ndarray(1, dims, buf, NDT_FLOAT64);
+                CompileValue a, o; a.type = AA[0]; a.v.a = v;
+                bool ok = p && compiled_eval(p, &a, &o);
+                if (ok != (t == 1)) bad++;
+                if (ok) expr_free(o.v.a);
+                expr_free(v);
+            }
+            if (!p || bad) { printf("FAIL: %-30s -> complex-promotion not rejected\n", "Sqrt[vec] real contract"); failures++; }
+            else printf("ok:   %-30s negative entry -> fallback\n", "Sqrt[vec] real contract");
+            compiled_free(p); expr_free(b);
+        }
+
+        /* Array temporaries must be released every call (the frame is reused),
+         * and released again when a later call aborts partway through. */
+        {
+            const char* inm[1] = { intern_symbol("v") };
+            Expr* b = parse_expression("Total[Sin[v] Exp[-v] + Sqrt[v]]");
+            CompiledProgram* p = compile_expr(b, inm, AA, 1);
+            double acc = 0; int ok = 1;
+            for (int t = 0; t < 5000 && p; t++) {
+                Expr* v = make_vec(32, 0.3, 3.0);
+                CompileValue a, o; a.type = AA[0]; a.v.a = v;
+                if (!compiled_eval(p, &a, &o)) ok = 0; else acc += o.v.r;
+                expr_free(v);
+            }
+            if (!p || !ok) { printf("FAIL: %-30s -> repeated array calls failed\n", "array temp lifetime"); failures++; }
+            else printf("ok:   %-30s 5000 calls, acc=%.3f\n", "array temp lifetime", acc);
+            compiled_free(p); expr_free(b);
+        }
+
+        /* Where the array path pays.  The buffer work is the SAME code the
+         * interpreter runs (both call the ND kernels), so the win is purely the
+         * per-operation evaluator round-trip — Expr build, attribute lookup,
+         * dispatch — that the compiled program does not pay.  It is therefore
+         * largest for short vectors, where the buffer pass is cheap relative to
+         * that fixed cost, and shrinks as the vector grows. */
+        for (int which = 0; which < 2; which++) {
+            size_t len = which ? 4096 : 16;
+            const char* inm[1] = { intern_symbol("v") };
+            Expr* b = parse_expression("Total[Sin[v] Exp[-v] + Sqrt[v]]");
+            CompiledProgram* p = compile_expr(b, inm, AA, 1);
+            Expr* v = make_vec(len, 0.3, 3.0);
+            CompileValue a, o; a.type = AA[0]; a.v.a = v;
+            const int NC = which ? 300 : 20000, NI = which ? 300 : 20000;
+            double acc = 0;
+            clock_t t0 = clock();
+            for (int t = 0; t < NC; t++) { if (compiled_eval(p, &a, &o)) acc += o.v.r; }
+            double tc = (double)(clock() - t0) / CLOCKS_PER_SEC / NC;
+            t0 = clock();
+            for (int t = 0; t < NI; t++) { Expr* r = ref_eval_arr(b, inm, &v, 1); expr_free(r); }
+            double ti = (double)(clock() - t0) / CLOCKS_PER_SEC / NI;
+            printf("ok:   %-30s len=%-5zu %.1fx faster (%.2f us vs %.2f us)\n",
+                   "array performance", len, ti / tc, tc * 1e6, ti * 1e6);
+            (void)acc;
+            expr_free(v); compiled_free(p); expr_free(b);
+        }
+
+        /* An array temporary produced inside a Do loop must be freed per
+         * iteration, not accumulated until teardown. */
+        {
+            const char* inm[1] = { intern_symbol("v") };
+            Expr* b = parse_expression("Module[{s = 0.0}, Do[s = s + Total[Sin[v]], {i, 1, 2000}]; s]");
+            CompiledProgram* p = compile_expr(b, inm, AA, 1);
+            Expr* v = make_vec(16, 0.3, 3.0);
+            CompileValue a, o; a.type = AA[0]; a.v.a = v;
+            bool ok = p && compiled_eval(p, &a, &o);
+            if (!ok) { printf("FAIL: %-30s -> loop over array temps failed\n", "array temp freed in loop"); failures++; }
+            else printf("ok:   %-30s s=%.3f\n", "array temp freed in loop", o.v.r);
+            expr_free(v); compiled_free(p); expr_free(b);
+        }
+    }
 
     /* ---- control flow: Sum / Product (integer-counted loops) ----
      * Parsed WITHOUT evaluation so the loop stays symbolic (the future Compile[]
