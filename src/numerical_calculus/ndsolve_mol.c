@@ -19,12 +19,14 @@
  * multidimensional Interpolation builtin to produce a 2-D InterpolatingFunction
  * over (t, x), applied as u[t, x].
  *
- * Phase 1 scope: one spatial dimension, one dependent function, temporal order
- * 1 or 2, spatial orders 1 and 2, Dirichlet boundary conditions, machine
- * precision.  Higher-order stencils (Fornberg), other boundary conditions, the
- * compiled linear operator, 2-D regions, MPFR and nonlinear stress cases are
- * later phases.  Nonlinear/variable-coefficient PDEs in 1-D already work here
- * through the symbolic sampler.
+ * Scope: one spatial dimension, temporal order 1 or 2, spatial orders 1-8,
+ * Dirichlet/Neumann/Robin/periodic boundary conditions, Fornberg stencils, the
+ * compiled linear operator, complex (Schrödinger) PDEs, MPFR precision, and
+ * nonlinear/variable-coefficient PDEs through the symbolic sampler; two spatial
+ * dimensions in nd_mol_solve_2d.  Coupled *systems* of 1-D PDEs are handled by
+ * nd_mol_solve_system (block-per-function reduced state), which also offers
+ * donor-cell / Lax-Friedrichs upwind schemes for advective terms; the scalar
+ * path here supports the same upwind options.
  */
 #include "ndsolve_common.h"
 #include "ndsolve_stencil.h"
@@ -46,6 +48,7 @@ static void nd_mol_warn(const char* tag, const char* msg) {
 }
 
 static Expr* nd_mol_solve_2d(Expr* res, const NdOpts* o0, const char* forced_method);
+static Expr* nd_mol_solve_system(Expr* res, const NdOpts* o0, const char* forced_method);
 
 /* ------------------------------------------------------------------ *
  *  PDE funcapp matching:  u[t,x]  or  Derivative[a,b][u][t,x]         *
@@ -589,6 +592,620 @@ static Expr* nd_mol_build_result_complex(NdProblem* P, const char* fname, bool a
     return expr_new_function(expr_new_symbol(SYM_List), &inner, 1);
 }
 
+/* ================================================================== *
+ *  Coupled systems of 1-D PDEs                                        *
+ *                                                                     *
+ *  {u1, u2, ...}(t, x) evolving under a coupled system of evolution   *
+ *  equations.  Each dependent function gets its own block of interior *
+ *  reduced-state unknowns in one global first-order ODE vector; the   *
+ *  per-node right-hand side of function f substitutes the finite-     *
+ *  difference stencils / node values of *every* function (so coupling *
+ *  terms like (h u)_x or g h_x resolve), then the shared driver       *
+ *  integrates the whole vector.  Each function yields its own 2-D      *
+ *  InterpolatingFunction, returned as {{u1 -> if1, u2 -> if2, ...}}.   *
+ *                                                                     *
+ *  Scope: one spatial dimension, temporal order 1 or 2 per function,  *
+ *  each evolution equation already solvable for exactly one function's *
+ *  highest temporal derivative (no coupled mass matrix), real-valued, *
+ *  machine precision.  Spatial scheme: centered Fornberg (default) or  *
+ *  an upwind option (Lax-Friedrichs / donor-cell) for advective terms. *
+ * ================================================================== */
+
+/* Spatial discretization scheme for first-derivative (advective) terms. */
+typedef enum { ND_SCHEME_CENTERED = 0, ND_SCHEME_UPWIND_LF, ND_SCHEME_UPWIND_DONOR } NdScheme;
+
+/* Per-function descriptor for a coupled system. */
+typedef struct {
+    const char* fname;
+    bool  applied;
+    int   torder;                       /* highest temporal order            */
+    bool  has_s[ND_MAX_SORDER + 1];     /* which spatial orders appear        */
+    int   sord[ND_MAX_SORDER];          /* distinct spatial orders (sorted)   */
+    int   nsord;
+    Expr** ic;                          /* [torder] initial data in x (owned) */
+    Expr *aL, *bL, *rL;                 /* left BC  a u + b u_x + r == 0       */
+    Expr *aR, *bR, *rR;                 /* right BC                            */
+    bool  periodic;
+    Expr* pde_eq;                       /* borrowed evolution eq (in eqitems)  */
+    Expr* G;                            /* solved top temporal derivative      */
+    double t0;
+    size_t nunk;                        /* interior unknown nodes             */
+    int    gbase;                       /* first unknown grid index (0 or 1)   */
+    size_t base;                        /* offset of this block in state vec   */
+    Expr*  bc_left; Expr* bc_right;     /* eliminated boundary node values     */
+} NdSysFunc;
+
+/* Detect a Method-selected upwind spatial scheme.  DifferenceOrder -> 1 (or an
+ * explicit "Upwind"/"DonorCell" spatial method) selects donor-cell upwinding for
+ * scalar-separable advection; "LaxFriedrichs" selects artificial-viscosity
+ * stabilization (robust for nonlinear systems).  Centered otherwise. */
+/* Recursively test for a boolean flag sub-option `name`: a rule `name -> True`
+ * (or a bare string element "name" inside the Method/SpatialDiscretization
+ * lists).  Coexists with the standard SpatialDiscretization grid list. */
+static bool nd_scan_flag_subopt(const Expr* e, const char* name) {
+    if (!e) return false;
+    if (e->type == EXPR_STRING) return strcmp(e->data.string, name) == 0;
+    if (e->type != EXPR_FUNCTION) return false;
+    if ((head_is((Expr*)e, SYM_Rule) || head_is((Expr*)e, SYM_RuleDelayed))
+        && e->data.function.arg_count == 2) {
+        const Expr* lhs = e->data.function.args[0];
+        const char* key = NULL;
+        if (lhs->type == EXPR_STRING) key = lhs->data.string;
+        else if (lhs->type == EXPR_SYMBOL) key = lhs->data.symbol.name;
+        if (key && strcmp(key, name) == 0) {
+            const Expr* v = e->data.function.args[1];
+            return !(v->type == EXPR_SYMBOL && v->data.symbol.name == intern_symbol("False"));
+        }
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (nd_scan_flag_subopt(e->data.function.args[i], name)) return true;
+    return false;
+}
+
+/* First-derivative stencil at grid node `jgrid` for one function, honoring the
+ * selected scheme.  Centered -> the shared Fornberg stencil.  Donor-cell upwind
+ * -> a symbolic one-sided difference biased by the sign of `wind` (a constant
+ * advection speed expr, borrowed) via Max[Sign[.],0]; the wind sign selects the
+ * backward (wind>0) or forward (wind<0) neighbor.  Lax-Friedrichs is handled by
+ * the caller as an added viscosity term, so it uses the centered stencil here. */
+static Expr* nd_first_deriv_stencil(NdScheme scheme, const Expr* wind,
+                                    int jgrid, int nx, bool periodic, int order,
+                                    double h, int torder, Expr** ysym,
+                                    Expr* bc_left, Expr* bc_right) {
+    if (scheme != ND_SCHEME_UPWIND_DONOR)
+        return nd_mol_stencil_expr(jgrid, nx, periodic, 1, order, h, torder, ysym,
+                                   bc_left, bc_right);
+    /* Donor-cell: backward = (u_j - u_{j-1})/h, forward = (u_{j+1} - u_j)/h. */
+    Expr* uj  = nd_node_value(jgrid,     nx, periodic, torder, ysym, bc_left, bc_right);
+    Expr* ujm = nd_node_value(jgrid - 1, nx, periodic, torder, ysym, bc_left, bc_right);
+    Expr* ujp = nd_node_value(jgrid + 1, nx, periodic, torder, ysym, bc_left, bc_right);
+    Expr* back = nd_scaled(1.0 / h, nd_plus2any(expr_copy(uj), nd_scaled(-1.0, ujm)));
+    Expr* fwd  = nd_scaled(1.0 / h, nd_plus2any(ujp, nd_scaled(-1.0, expr_copy(uj))));
+    expr_free(uj);
+    /* weight_back = Max[Sign[wind], 0], weight_fwd = Max[-Sign[wind], 0]. */
+    Expr* sgn  = nd_call1(intern_symbol("Sign"), expr_copy((Expr*)wind));
+    Expr* wb   = eval_and_free(nd_call2(intern_symbol("Max"), expr_copy(sgn), expr_new_integer(0)));
+    Expr* wf   = eval_and_free(nd_call2(intern_symbol("Max"),
+                               nd_scaled(-1.0, sgn), expr_new_integer(0)));
+    Expr* tb   = nd_call2(SYM_Times, wb, back);
+    Expr* tf   = nd_call2(SYM_Times, wf, fwd);
+    return nd_plus2any(tb, tf);
+}
+
+static Expr* nd_mol_solve_system(Expr* res, const NdOpts* o0, const char* forced_method) {
+    NdOpts o = *o0;
+    if (forced_method && strcmp(forced_method, "MethodOfLines") != 0)
+        o.method = intern_symbol(forced_method);
+    o.spec = numeric_machine_spec(); o.wp_bits = 53;   /* systems: machine precision */
+    NumericSpec spec = o.spec;
+
+    Expr** A = res->data.function.args;
+    size_t argc = res->data.function.arg_count;
+
+    size_t pos_end = 2;
+    while (pos_end < argc && !nd_mol_is_option(A[pos_end])) pos_end++;
+    size_t nranges = (pos_end >= 2) ? pos_end - 2 : 0;
+    if (nranges != 2) {
+        if (nranges >= 3) nd_mol_warn("pdesys", "systems are supported in one spatial "
+                                                "dimension only");
+        return NULL;
+    }
+
+    /* ---- temporal + spatial ranges ---- */
+    Expr* rt = A[2]; Expr* rx = A[3];
+    if (!head_is(rt, SYM_List) || rt->data.function.arg_count != 3 ||
+        rt->data.function.args[0]->type != EXPR_SYMBOL) return NULL;
+    if (!head_is(rx, SYM_List) || rx->data.function.arg_count != 3 ||
+        rx->data.function.args[0]->type != EXPR_SYMBOL) return NULL;
+    const char* tvar = rt->data.function.args[0]->data.symbol.name;
+    const char* xvar = rx->data.function.args[0]->data.symbol.name;
+    double tmin, tmax, xmin, xmax;
+    if (!nd_eval_to_double(rt->data.function.args[1], spec, &tmin)) return NULL;
+    if (!nd_eval_to_double(rt->data.function.args[2], spec, &tmax)) return NULL;
+    if (!nd_eval_to_double(rx->data.function.args[1], spec, &xmin)) return NULL;
+    if (!nd_eval_to_double(rx->data.function.args[2], spec, &xmax)) return NULL;
+    if (!(xmax > xmin)) return NULL;
+
+    /* ---- dependent functions ---- */
+    Expr* funcs = A[1];
+    if (!head_is(funcs, SYM_List) || funcs->data.function.arg_count < 2) return NULL;
+    size_t nfun = funcs->data.function.arg_count;
+    NdSysFunc* F = calloc(nfun, sizeof(NdSysFunc));
+    bool parse_ok = true;
+    for (size_t fi = 0; fi < nfun; fi++) {
+        Expr* it = funcs->data.function.args[fi];
+        if (it->type == EXPR_SYMBOL) { F[fi].fname = it->data.symbol.name; F[fi].applied = false; }
+        else if (it->type == EXPR_FUNCTION && it->data.function.head->type == EXPR_SYMBOL
+                 && it->data.function.arg_count == 2) {
+            F[fi].fname = it->data.function.head->data.symbol.name; F[fi].applied = true;
+        } else { parse_ok = false; break; }
+    }
+    if (!parse_ok) { free(F); return NULL; }
+
+    /* ---- grid + difference order + scheme ---- */
+    long nx_l = 25, dord_l = 4;
+    bool compiled = true;
+    NdScheme scheme = ND_SCHEME_CENTERED;
+    const char* SYM_Compiled = intern_symbol("Compiled");
+    for (size_t i = pos_end; i < argc; i++) {
+        if (!nd_mol_is_option(A[i])) continue;
+        const char* opt = A[i]->data.function.args[0]->data.symbol.name;
+        if (opt == SYM_Method) {
+            nd_scan_int_subopt(A[i], "MinPoints", &nx_l);
+            long dv = dord_l;
+            if (nd_scan_int_subopt(A[i], "DifferenceOrder", &dv)) {
+                dord_l = dv;
+                if (dv == 1) scheme = ND_SCHEME_UPWIND_LF;   /* first-order = LF upwinding */
+            }
+            /* Systems use Lax-Friedrichs-family upwinding (donor-cell needs a
+             * per-characteristic wind that is ill-defined for coupled fluxes). */
+            if (nd_scan_flag_subopt(A[i], "Upwind") || nd_scan_flag_subopt(A[i], "DonorCell") ||
+                nd_scan_flag_subopt(A[i], "LaxFriedrichs") || nd_scan_flag_subopt(A[i], "Rusanov"))
+                scheme = ND_SCHEME_UPWIND_LF;
+        } else if (opt == SYM_Compiled) {
+            Expr* v = eval_and_free(expr_copy(A[i]->data.function.args[1]));
+            if (v && v->type == EXPR_SYMBOL && v->data.symbol.name == intern_symbol("False"))
+                compiled = false;
+            expr_free(v);
+        }
+    }
+    if (nx_l < 5) nx_l = 5;
+    if (nx_l > 20000) nx_l = 20000;
+    size_t nx = (size_t)nx_l;
+    double h = (xmax - xmin) / (double)(nx - 1);
+    if (dord_l < 1) dord_l = 1;
+    if (dord_l > (long)nx - 1) dord_l = (long)nx - 1;
+    int dord = (int)dord_l;
+    int sten_ord = dord;
+    if (scheme != ND_SCHEME_CENTERED && sten_ord < 2) sten_ord = 2;   /* keep centered base */
+    if (sten_ord > (long)nx - 1) sten_ord = (int)nx - 1;
+
+    /* ---- normalize equations ---- */
+    Expr* eqns = A[0];
+    Expr** eqsrc; size_t neq;
+    if (head_is(eqns, SYM_List)) { neq = eqns->data.function.arg_count; eqsrc = eqns->data.function.args; }
+    else { neq = 1; eqsrc = &eqns; }
+    Expr** eqitems = malloc(sizeof(Expr*) * neq);
+    for (size_t e = 0; e < neq; e++) eqitems[e] = nd_normalize_derivs(eqsrc[e]);
+
+    /* ---- per-function order scan (over every equation) ---- */
+    bool sys_unsupported = false;
+    for (size_t fi = 0; fi < nfun; fi++) {
+        int torder = 0; bool uns = false;
+        for (size_t e = 0; e < neq; e++)
+            nd_scan_orders(eqitems[e], F[fi].fname, &torder, F[fi].has_s, &uns);
+        F[fi].torder = torder;
+        F[fi].nsord = 0;
+        for (int b = 1; b <= ND_MAX_SORDER; b++) if (F[fi].has_s[b]) F[fi].sord[F[fi].nsord++] = b;
+        if (uns || torder < 1 || torder > 2) sys_unsupported = true;
+        F[fi].ic = calloc((size_t)(torder > 0 ? torder : 1), sizeof(Expr*));
+        F[fi].t0 = tmin;
+    }
+    if (sys_unsupported) {
+        nd_mol_warn("pdeord", "each function must have temporal order 1 or 2 with no "
+                              "mixed space-time derivatives");
+        goto cleanup_early;
+    }
+
+    /* ---- classify every equation ---- */
+    for (size_t e = 0; e < neq; e++) {
+        Expr* eq = eqitems[e];
+        if (!head_is(eq, SYM_Equal) || eq->data.function.arg_count != 2) continue;
+        Expr* L = eq->data.function.args[0];
+        Expr* R = eq->data.function.args[1];
+
+        /* scan the fapps of each function to categorize this equation */
+        bool any_tx = false, any_ic = false, any_bc = false;
+        int ic_fi = -1, ic_ord = 0; double ic_t0 = tmin;
+        int bc_fi = -1;
+        for (size_t fi = 0; fi < nfun; fi++) {
+            NdFApp fa[16]; int nfa = 0;
+            nd_collect_fapps(eq, F[fi].fname, fa, &nfa, 16);
+            for (int i = 0; i < nfa; i++) {
+                bool a0_t = fa[i].arg0->type == EXPR_SYMBOL && fa[i].arg0->data.symbol.name == tvar;
+                bool a1_x = fa[i].arg1->type == EXPR_SYMBOL && fa[i].arg1->data.symbol.name == xvar;
+                double n0, n1;
+                bool a0_num = nd_eval_to_double((Expr*)fa[i].arg0, spec, &n0);
+                bool a1_num = nd_eval_to_double((Expr*)fa[i].arg1, spec, &n1);
+                if (a0_t && a1_x) any_tx = true;
+                else if (a0_num && a1_x) { any_ic = true; ic_fi = (int)fi; ic_ord = fa[i].a; ic_t0 = n0; }
+                else if (a0_t && a1_num) { any_bc = true; bc_fi = (int)fi; }
+            }
+        }
+
+        if (any_ic && ic_fi >= 0) {
+            const char* fn = F[ic_fi].fname;
+            int a, b; const Expr *g0, *g1; Expr* val = NULL;
+            if (nd_pde_match(L, fn, &a, &b, &g0, &g1) && !nd_contains_func(R, fn)) val = R;
+            else if (nd_pde_match(R, fn, &a, &b, &g0, &g1) && !nd_contains_func(L, fn)) val = L;
+            if (val && ic_ord < F[ic_fi].torder && !F[ic_fi].ic[ic_ord]) {
+                F[ic_fi].ic[ic_ord] = expr_copy(val);
+                F[ic_fi].t0 = ic_t0;
+            }
+            continue;
+        }
+
+        if (any_bc && bc_fi >= 0) {
+            const char* fn = F[bc_fi].fname;
+            /* periodic: fn[t,c1] == fn[t,c2] with distinct boundaries */
+            int la, lb, ra, rb; const Expr *l0, *l1, *r0, *r1;
+            bool Lm = nd_pde_match(L, fn, &la, &lb, &l0, &l1);
+            bool Rm = nd_pde_match(R, fn, &ra, &rb, &r0, &r1);
+            if (Lm && Rm && la == 0 && lb == 0 && ra == 0 && rb == 0) {
+                double x1, x2;
+                if (nd_eval_to_double((Expr*)l1, spec, &x1) &&
+                    nd_eval_to_double((Expr*)r1, spec, &x2) && fabs(x1 - x2) > 1e-9) {
+                    F[bc_fi].periodic = true; continue;
+                }
+            }
+            /* general linear BC: recover a,b,r at the boundary point */
+            const Expr* bnd_pt = NULL; double bnd_x = 0.0;
+            NdFApp fa[16]; int nfa = 0; nd_collect_fapps(eq, fn, fa, &nfa, 16);
+            for (int i = 0; i < nfa; i++) {
+                double n1;
+                if (fa[i].arg0->type == EXPR_SYMBOL && fa[i].arg0->data.symbol.name == tvar
+                    && nd_eval_to_double((Expr*)fa[i].arg1, spec, &n1)) { bnd_pt = fa[i].arg1; bnd_x = n1; }
+            }
+            if (!bnd_pt) continue;
+            Expr* sub0 = nd_call2(SYM_Subtract, expr_copy(L), expr_copy(R));
+            Expr* Ulit = nd_bc_lit(fn, 0, tvar, bnd_pt);
+            Expr* Uxlit = nd_bc_lit(fn, 1, tvar, bnd_pt);
+            Expr* Us = expr_new_symbol("NDSolve`Ub");
+            Expr* Uxs = expr_new_symbol("NDSolve`Uxb");
+            Expr* subL[2] = { Ulit, Uxlit }; Expr* subR[2] = { Us, Uxs };
+            Expr* sub2 = nd_replace_all(sub0, subL, subR, 2);
+            Expr* da[2] = { expr_copy(sub2), expr_copy(Us) };
+            Expr* aco = eval_and_free(expr_new_function(expr_new_symbol(SYM_D), da, 2));
+            Expr* db[2] = { expr_copy(sub2), expr_copy(Uxs) };
+            Expr* bco = eval_and_free(expr_new_function(expr_new_symbol(SYM_D), db, 2));
+            Expr* z0 = expr_new_integer(0), *z1 = expr_new_integer(0);
+            Expr* zl[2] = { Us, Uxs }; Expr* zs[2] = { z0, z1 };
+            Expr* rco = nd_replace_all(expr_copy(sub2), zl, zs, 2);
+            expr_free(z0); expr_free(z1);
+            expr_free(Ulit); expr_free(Uxlit); expr_free(Us); expr_free(Uxs); expr_free(sub2);
+            bool left = fabs(bnd_x - xmin) <= 1e-9 * (fabs(xmin) + 1.0);
+            if (left && !F[bc_fi].aL) { F[bc_fi].aL = aco; F[bc_fi].bL = bco; F[bc_fi].rL = rco; }
+            else if (!left && !F[bc_fi].aR) { F[bc_fi].aR = aco; F[bc_fi].bR = bco; F[bc_fi].rR = rco; }
+            else { expr_free(aco); expr_free(bco); expr_free(rco); }
+            continue;
+        }
+
+        if (any_tx) {
+            /* interior evolution equation: owner = the single function whose
+             * highest temporal derivative appears here. */
+            int owner = -1, nowner = 0;
+            for (size_t fi = 0; fi < nfun; fi++) {
+                NdFApp fa[16]; int nfa = 0; nd_collect_fapps(eq, F[fi].fname, fa, &nfa, 16);
+                for (int i = 0; i < nfa; i++) {
+                    bool a0_t = fa[i].arg0->type == EXPR_SYMBOL && fa[i].arg0->data.symbol.name == tvar;
+                    bool a1_x = fa[i].arg1->type == EXPR_SYMBOL && fa[i].arg1->data.symbol.name == xvar;
+                    if (a0_t && a1_x && fa[i].a == F[fi].torder && fa[i].b == 0) {
+                        owner = (int)fi; nowner++; break;
+                    }
+                }
+            }
+            if (nowner == 1 && !F[owner].pde_eq) F[owner].pde_eq = eq;
+            else if (nowner != 1) sys_unsupported = true;   /* coupled mass matrix */
+        }
+    }
+
+    if (sys_unsupported) {
+        nd_mol_warn("pdesys", "each evolution equation must be solvable for exactly one "
+                              "function's highest temporal derivative");
+        goto cleanup_early;
+    }
+
+    /* ---- validate completeness per function ---- */
+    for (size_t fi = 0; fi < nfun; fi++) {
+        bool have_bc = F[fi].periodic || (F[fi].aL && F[fi].aR);
+        bool ok = F[fi].pde_eq && have_bc;
+        for (int a = 0; a < F[fi].torder && ok; a++) if (!F[fi].ic[a]) ok = false;
+        if (!ok) { sys_unsupported = true; break; }
+    }
+    if (sys_unsupported) {
+        nd_mol_warn("pdeic", "each function needs an evolution equation, a boundary "
+                             "condition at each end (or periodicity), and full initial data");
+        goto cleanup_early;
+    }
+
+    /* ---- solve each evolution equation for its top temporal derivative ---- */
+    bool solve_ok = true, solve_warned = false;
+    for (size_t fi = 0; fi < nfun && solve_ok; fi++) {
+        Expr* pde_eq = F[fi].pde_eq;
+        Expr* R0 = nd_call2(SYM_Subtract, expr_copy(pde_eq->data.function.args[0]),
+                                          expr_copy(pde_eq->data.function.args[1]));
+        Expr* topLit = nd_pde_lit(F[fi].fname, F[fi].torder, 0, tvar, xvar);
+        Expr* Psym = expr_new_symbol("NDSolve`Pt");
+        Expr* Rp = nd_replace_all(R0, &topLit, &Psym, 1);
+        Expr* dargs[2] = { expr_copy(Rp), expr_copy(Psym) };
+        Expr* aE = eval_and_free(expr_new_function(expr_new_symbol(SYM_D), dargs, 2));
+        Expr* zero = expr_new_integer(0);
+        Expr* bE = nd_replace_all(expr_copy(Rp), &Psym, &zero, 1);
+        expr_free(zero);
+        Expr* invE = nd_call2(SYM_Power, expr_copy(aE), expr_new_integer(-1));
+        Expr* g3[3] = { expr_new_integer(-1), expr_copy(bE), invE };
+        F[fi].G = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), g3, 3));
+        expr_free(topLit); expr_free(Psym); expr_free(Rp); expr_free(aE); expr_free(bE);
+        if (!F[fi].G) solve_ok = false;
+        else if (nd_has_imaginary(F[fi].G)) {
+            nd_mol_warn("pdecplx", "complex-valued systems are not supported");
+            solve_ok = false; solve_warned = true;
+        }
+    }
+    if (!solve_ok) {
+        if (!solve_warned) nd_mol_warn("pdesolve", "could not solve an evolution "
+                                                   "equation for its temporal derivative");
+        goto cleanup_solved;
+    }
+
+    /* ---- global block-per-function reduced-state layout ---- */
+    size_t d = 0;
+    for (size_t fi = 0; fi < nfun; fi++) {
+        F[fi].nunk  = F[fi].periodic ? (nx - 1) : (nx - 2);
+        F[fi].gbase = F[fi].periodic ? 0 : 1;
+        F[fi].base  = d;
+        d += F[fi].nunk * (size_t)F[fi].torder;
+    }
+    Expr** ysym = malloc(sizeof(Expr*) * d);
+    for (size_t idx = 0; idx < d; idx++) {
+        char buf[48]; snprintf(buf, sizeof(buf), "NDSolve`w%zu", idx);
+        ysym[idx] = expr_new_symbol(intern_symbol(buf));
+    }
+
+    /* ---- eliminate boundary nodes per function ---- */
+    for (size_t fi = 0; fi < nfun; fi++) {
+        if (F[fi].periodic) continue;
+        F[fi].bc_left  = nd_bc_make_value(F[fi].aL, F[fi].bL, F[fi].rL, 0, (int)nx,
+                                          sten_ord, h, F[fi].torder, &ysym[F[fi].base]);
+        F[fi].bc_right = nd_bc_make_value(F[fi].aR, F[fi].bR, F[fi].rR, (int)nx - 1, (int)nx,
+                                          sten_ord, h, F[fi].torder, &ysym[F[fi].base]);
+    }
+
+    /* ---- assemble the global NdProblem ---- */
+    NdProblem P; memset(&P, 0, sizeof(P));
+    P.d = d; P.spec = spec; P.tvar = tvar;
+    P.eval_monitor = o.eval_monitor;
+    P.ysym = ysym;
+    P.f = calloc(d, sizeof(Expr*));
+    P.Y0 = calloc(d, sizeof(double));
+    P.bind_y = malloc(sizeof(NdBind) * d);
+    nd_bind_snapshot(&P.bind_t, tvar);
+    for (size_t idx = 0; idx < d; idx++)
+        nd_bind_snapshot(&P.bind_y[idx], ysym[idx]->data.symbol.name);
+
+    /* Precompute the substitution literal patterns (shared across all nodes):
+     * for every function g -> its value, each spatial order, each lower temporal
+     * order; plus the spatial coordinate x. */
+    typedef struct { int kind; size_t g; int p; } SubSpec;  /* kind:0 val 1 spat 2 time 3 x */
+    size_t maxlits = 1;
+    for (size_t g = 0; g < nfun; g++)
+        maxlits += 1 + (size_t)F[g].nsord + (size_t)(F[g].torder - 1);
+    Expr** lits = malloc(sizeof(Expr*) * maxlits);
+    SubSpec* spec_of = malloc(sizeof(SubSpec) * maxlits);
+    size_t nlits = 0;
+    for (size_t g = 0; g < nfun; g++) {
+        lits[nlits] = nd_pde_lit(F[g].fname, 0, 0, tvar, xvar);
+        spec_of[nlits] = (SubSpec){ 0, g, 0 }; nlits++;
+        for (int i = 0; i < F[g].nsord; i++) {
+            lits[nlits] = nd_pde_lit(F[g].fname, 0, F[g].sord[i], tvar, xvar);
+            spec_of[nlits] = (SubSpec){ 1, g, F[g].sord[i] }; nlits++;
+        }
+        for (int m = 1; m < F[g].torder; m++) {
+            lits[nlits] = nd_pde_lit(F[g].fname, m, 0, tvar, xvar);
+            spec_of[nlits] = (SubSpec){ 2, g, m }; nlits++;
+        }
+    }
+    lits[nlits] = expr_new_symbol(xvar);
+    spec_of[nlits] = (SubSpec){ 3, 0, 0 }; nlits++;
+
+    /* ---- build the per-node RHS for every function ---- */
+    bool build_ok = true;
+    for (size_t fi = 0; fi < nfun && build_ok; fi++) {
+        int torder_f = F[fi].torder;
+        /* Lax-Friedrichs viscosity coefficient (grid-scaled): applied to purely
+         * hyperbolic functions (first spatial order present, no diffusion). */
+        bool hyperbolic = F[fi].has_s[1] && !F[fi].has_s[2];
+        double lf_nu = (scheme == ND_SCHEME_UPWIND_LF && hyperbolic) ? (0.5 * h) : 0.0;
+        for (size_t u = 0; u < F[fi].nunk; u++) {
+            size_t base = F[fi].base + u * (size_t)torder_f;
+            int jgrid = (int)u + F[fi].gbase;
+            double xj = xmin + (double)jgrid * h;
+            for (int m = 0; m + 1 < torder_f; m++)
+                P.f[base + (size_t)m] = expr_copy(ysym[base + (size_t)m + 1]);
+            /* build substitutions for this node across all functions */
+            Expr** subs = malloc(sizeof(Expr*) * nlits);
+            for (size_t s = 0; s < nlits; s++) {
+                SubSpec sp = spec_of[s];
+                size_t g = sp.g;
+                Expr** ys = &ysym[F[g].base];
+                if (sp.kind == 0) {
+                    subs[s] = nd_node_value(jgrid, (int)nx, F[g].periodic, F[g].torder, ys,
+                                            F[g].bc_left, F[g].bc_right);
+                } else if (sp.kind == 1) {
+                    if (sp.p == 1)
+                        subs[s] = nd_first_deriv_stencil(scheme, ys[0] /*unused for centered*/,
+                                       jgrid, (int)nx, F[g].periodic, sten_ord, h,
+                                       F[g].torder, ys, F[g].bc_left, F[g].bc_right);
+                    else
+                        subs[s] = nd_mol_stencil_expr(jgrid, (int)nx, F[g].periodic, sp.p,
+                                       sten_ord, h, F[g].torder, ys, F[g].bc_left, F[g].bc_right);
+                } else if (sp.kind == 2) {
+                    int gnode = jgrid - F[g].gbase;
+                    if (gnode >= 0 && gnode < (int)F[g].nunk)
+                        subs[s] = expr_copy(ys[(size_t)gnode * (size_t)F[g].torder + (size_t)sp.p]);
+                    else
+                        subs[s] = expr_new_integer(0);
+                } else {
+                    subs[s] = expr_new_real(xj);
+                }
+            }
+            Expr* rhs = nd_replace_all(expr_copy(F[fi].G), lits, subs, nlits);
+            for (size_t s = 0; s < nlits; s++) expr_free(subs[s]);
+            free(subs);
+            /* Lax-Friedrichs artificial viscosity: + nu * u_xx (centered). */
+            if (lf_nu > 0.0 && rhs) {
+                Expr* visc = nd_mol_stencil_expr(jgrid, (int)nx, F[fi].periodic, 2, sten_ord,
+                                                 h, torder_f, &ysym[F[fi].base],
+                                                 F[fi].bc_left, F[fi].bc_right);
+                rhs = nd_plus2any(rhs, nd_scaled(lf_nu, visc));
+            }
+            P.f[base + (size_t)torder_f - 1] = rhs;
+            if (!rhs) build_ok = false;
+        }
+    }
+    for (size_t s = 0; s < nlits; s++) expr_free(lits[s]);
+    free(lits); free(spec_of);
+    for (size_t i = 0; i < d; i++) if (!P.f[i]) build_ok = false;
+
+    /* ---- initial data ---- */
+    for (size_t fi = 0; fi < nfun && build_ok; fi++) {
+        for (size_t u = 0; u < F[fi].nunk; u++) {
+            int jgrid = (int)u + F[fi].gbase;
+            double xj = xmin + (double)jgrid * h;
+            for (int m = 0; m < F[fi].torder; m++) {
+                double v;
+                if (!nd_eval_at(F[fi].ic[m], xvar, xj, spec, &v)) { build_ok = false; break; }
+                P.Y0[F[fi].base + u * (size_t)F[fi].torder + (size_t)m] = v;
+            }
+        }
+    }
+    P.t0 = tmin; P.tmin = tmin; P.tmax = tmax;
+
+    /* ---- compile a linear operator if the whole system is linear ---- */
+    if (build_ok && compiled) P.op = nd_operator_try_build(&P);
+
+    /* parabolic (stiff) if any function is diffusion-driven at temporal order 1 */
+    bool parabolic = false;
+    for (size_t fi = 0; fi < nfun; fi++)
+        if (F[fi].torder == 1 && (F[fi].has_s[2] || F[fi].has_s[4] || F[fi].has_s[6] || F[fi].has_s[8]))
+            parabolic = true;
+
+    /* ---- integrate ---- */
+    Expr* result = NULL;
+    if (build_ok) {
+        const char* tim = o.method;
+        if (tim && strcmp(tim, "MethodOfLines") == 0) tim = NULL;
+        const NdStepper* S = tim ? nd_lookup_stepper(tim)
+                           : (parabolic ? nd_lookup_stepper("BDF") : nd_default_stepper());
+        if (!S) S = nd_default_stepper();
+        NdSolution sol; nd_solution_init(&sol, d);
+        NdStatus st = nd_integrate(&P, S, &o, &sol);
+        if (st == ND_ERR_MAXSTEPS) nd_mol_warn("mxst", "maximum number of steps reached; returning partial solution");
+        else if (st == ND_ERR_STEPSIZE) nd_mol_warn("ndsz", "step size effectively zero; stiffness suspected (try Method->\"BDF\")");
+        else if (st == ND_ERR_NONCONV) nd_mol_warn("ndcf", "corrector failed to converge");
+        else if (st == ND_ERR_SAMPLE) nd_mol_warn("nrnum", "spatial operator did not evaluate to a number");
+
+        /* one InterpolatingFunction per function -> {{u1->if1, u2->if2, ...}} */
+        if (sol.n >= 2) {
+            Expr** rules = malloc(sizeof(Expr*) * nfun);
+            bool res_ok = true;
+            for (size_t fi = 0; fi < nfun && res_ok; fi++) {
+                size_t npts = sol.n * nx;
+                Expr** entries = malloc(sizeof(Expr*) * npts);
+                size_t pp = 0;
+                for (size_t i = 0; i < sol.n; i++) {
+                    double ti = sol.ts[i];
+                    nd_bind_set(&P.bind_t, expr_new_real(ti));
+                    for (size_t k = 0; k < d; k++) nd_bind_set(&P.bind_y[k], expr_new_real(sol.Ys[i * d + k]));
+                    for (size_t g = 0; g < nx; g++) {
+                        double xg = xmin + (double)g * h;
+                        double val;
+                        if (F[fi].periodic) {
+                            size_t gg = (g == nx - 1) ? 0 : g;
+                            val = sol.Ys[i * d + F[fi].base + gg * (size_t)F[fi].torder + 0];
+                        } else if (g == 0) {
+                            if (!nd_bound_eval(F[fi].bc_left, spec, &val)) val = 0.0;
+                        } else if (g == nx - 1) {
+                            if (!nd_bound_eval(F[fi].bc_right, spec, &val)) val = 0.0;
+                        } else {
+                            val = sol.Ys[i * d + F[fi].base + (g - 1) * (size_t)F[fi].torder + 0];
+                        }
+                        Expr* coord[2] = { expr_new_real(ti), expr_new_real(xg) };
+                        Expr* coordL = expr_new_function(expr_new_symbol(SYM_List), coord, 2);
+                        Expr* pair[2] = { coordL, expr_new_real(val) };
+                        entries[pp++] = expr_new_function(expr_new_symbol(SYM_List), pair, 2);
+                    }
+                }
+                Expr* data = expr_new_function(expr_new_symbol(SYM_List), entries, npts);
+                free(entries);
+                Expr* ifun = eval_and_free(expr_new_function(expr_new_symbol(SYM_Interpolation), &data, 1));
+                if (!head_is(ifun, SYM_InterpolatingFunction)) { expr_free(ifun); res_ok = false; break; }
+                Expr* lhs;
+                if (F[fi].applied) {
+                    Expr* ar[2] = { expr_new_symbol(tvar), expr_new_symbol(xvar) };
+                    lhs = expr_new_function(expr_new_symbol(F[fi].fname), ar, 2);
+                    Expr* ar2[2] = { expr_new_symbol(tvar), expr_new_symbol(xvar) };
+                    ifun = expr_new_function(ifun, ar2, 2);
+                } else lhs = expr_new_symbol(F[fi].fname);
+                rules[fi] = nd_call2(SYM_Rule, lhs, ifun);
+            }
+            if (res_ok) {
+                Expr* inner = expr_new_function(expr_new_symbol(SYM_List), rules, nfun);
+                result = expr_new_function(expr_new_symbol(SYM_List), &inner, 1);
+            }
+            free(rules);
+        }
+        nd_solution_free(&sol);
+    }
+    nd_bind_restore(&P.bind_t);
+    for (size_t i = 0; i < d; i++) nd_bind_restore(&P.bind_y[i]);
+
+    nd_operator_free(P.op);
+    for (size_t i = 0; i < d; i++) { expr_free(P.f[i]); expr_free(P.ysym[i]); }
+    free(P.f); free(P.ysym); free(P.Y0); free(P.bind_y);
+    if (P.jac) {
+        for (size_t i = 0; i < d; i++) { for (size_t j = 0; j < d; j++) expr_free(P.jac[i][j]); free(P.jac[i]); }
+        free(P.jac);
+    }
+
+    for (size_t fi = 0; fi < nfun; fi++) { expr_free(F[fi].bc_left); expr_free(F[fi].bc_right); }
+    /* fallthrough cleanup below */
+    for (size_t fi = 0; fi < nfun; fi++) {
+        expr_free(F[fi].G);
+        for (int a = 0; a < F[fi].torder; a++) expr_free(F[fi].ic[a]);
+        free(F[fi].ic);
+        expr_free(F[fi].aL); expr_free(F[fi].bL); expr_free(F[fi].rL);
+        expr_free(F[fi].aR); expr_free(F[fi].bR); expr_free(F[fi].rR);
+    }
+    for (size_t e = 0; e < neq; e++) expr_free(eqitems[e]);
+    free(eqitems);
+    free(F);
+    return result;
+
+cleanup_solved:
+    for (size_t fi = 0; fi < nfun; fi++) expr_free(F[fi].G);
+cleanup_early:
+    for (size_t fi = 0; fi < nfun; fi++) {
+        if (F[fi].ic) { for (int a = 0; a < F[fi].torder; a++) expr_free(F[fi].ic[a]); free(F[fi].ic); }
+        expr_free(F[fi].aL); expr_free(F[fi].bL); expr_free(F[fi].rL);
+        expr_free(F[fi].aR); expr_free(F[fi].bR); expr_free(F[fi].rR);
+    }
+    for (size_t e = 0; e < neq; e++) expr_free(eqitems[e]);
+    free(eqitems);
+    free(F);
+    return NULL;
+}
+
 /* ------------------------------------------------------------------ *
  *  Method of Lines solver (Phase 1)                                   *
  * ------------------------------------------------------------------ */
@@ -637,10 +1254,9 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
     Expr* funcs = A[1];
     Expr* fitem = funcs;
     if (head_is(funcs, SYM_List)) {
-        if (funcs->data.function.arg_count != 1) {
-            nd_mol_warn("pdesys", "systems of PDEs are not yet supported");
-            return NULL;
-        }
+        if (funcs->data.function.arg_count == 0) return NULL;
+        if (funcs->data.function.arg_count > 1)
+            return nd_mol_solve_system(res, o0, forced_method);   /* coupled system */
         fitem = funcs->data.function.args[0];
     }
     const char* fname; bool applied;
@@ -654,13 +1270,22 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
     long nx_l = 25;
     long dord_l = 4;                   /* DifferenceOrder default (WL-faithful) */
     bool compiled = true;              /* Compiled -> False forces symbolic RHS */
+    NdScheme scheme = ND_SCHEME_CENTERED;   /* opt-in upwinding for advective terms */
     const char* SYM_Compiled = intern_symbol("Compiled");
     for (size_t i = pos_end; i < argc; i++) {
         if (!nd_mol_is_option(A[i])) continue;
         const char* opt = A[i]->data.function.args[0]->data.symbol.name;
         if (opt == SYM_Method) {
             nd_scan_int_subopt(A[i], "MinPoints", &nx_l);
-            nd_scan_int_subopt(A[i], "DifferenceOrder", &dord_l);
+            long dv = dord_l;
+            if (nd_scan_int_subopt(A[i], "DifferenceOrder", &dv)) {
+                dord_l = dv;
+                if (dv == 1) scheme = ND_SCHEME_UPWIND_DONOR;   /* first-order = upwind */
+            }
+            if (nd_scan_flag_subopt(A[i], "Upwind") || nd_scan_flag_subopt(A[i], "DonorCell"))
+                scheme = ND_SCHEME_UPWIND_DONOR;
+            else if (nd_scan_flag_subopt(A[i], "LaxFriedrichs") || nd_scan_flag_subopt(A[i], "Rusanov"))
+                scheme = ND_SCHEME_UPWIND_LF;
         } else if (opt == SYM_Compiled) {
             Expr* v = eval_and_free(expr_copy(A[i]->data.function.args[1]));
             if (v && v->type == EXPR_SYMBOL && v->data.symbol.name == intern_symbol("False"))
@@ -675,6 +1300,11 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
     if (dord_l < 1) dord_l = 1;
     if (dord_l > (long)nx - 1) dord_l = (long)nx - 1;   /* need <= nx nodes */
     int dord = (int)dord_l;
+    /* Upwinding is realized by the donor-cell first derivative or the LF
+     * viscosity term; the underlying centered stencils still want an even
+     * accuracy order (DifferenceOrder->1 selects the scheme, not one-sided base). */
+    if (scheme != ND_SCHEME_CENTERED && dord < 2) dord = 2;
+    if (dord > (long)nx - 1) dord = (int)nx - 1;
 
     /* ---- normalize equations (flatten + canonicalize D -> Derivative) ---- */
     Expr* eqns = A[0];
@@ -884,6 +1514,22 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
     Expr** lit_ut = malloc(sizeof(Expr*) * (size_t)torder);    /* lit_ut[m] = D[m,0] */
     for (int m = 1; m < torder; m++) lit_ut[m] = nd_pde_lit(fname, m, 0, tvar, xvar);
 
+    /* Donor-cell upwind wind field: wind = -dG/d(u_x), so the upwind direction can
+     * switch with the (possibly state-dependent) local advection speed at runtime. */
+    Expr* wind_lit = NULL;
+    if (scheme == ND_SCHEME_UPWIND_DONOR && has_s[1] && G) {
+        Expr* lit_ux = nd_pde_lit(fname, 0, 1, tvar, xvar);
+        Expr* Q = expr_new_symbol("NDSolve`Wq");
+        Expr* Gq = nd_replace_all(expr_copy(G), &lit_ux, &Q, 1);
+        Expr* da[2] = { Gq, expr_copy(Q) };
+        Expr* coef = eval_and_free(expr_new_function(expr_new_symbol(SYM_D), da, 2));
+        wind_lit = coef ? eval_and_free(nd_scaled(-1.0, coef)) : NULL;
+        expr_free(lit_ux); expr_free(Q);
+    }
+    /* Lax-Friedrichs artificial-viscosity coefficient (grid-scaled), applied to a
+     * purely hyperbolic (advective, non-diffusive) scalar equation. */
+    double lf_nu = (scheme == ND_SCHEME_UPWIND_LF && has_s[1] && !has_s[2]) ? (0.5 * h) : 0.0;
+
     for (size_t u = 0; u < nunk && G; u++) {
         size_t base = u * (size_t)torder;
         int jgrid = (int)u + gbase;
@@ -897,17 +1543,34 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
         lits[cnt] = lit_u; subs[cnt] = expr_copy(ysym[base + 0]); cnt++;
         for (int i = 0; i < nsord; i++) {
             lits[cnt] = lit_sx[i];
-            subs[cnt] = nd_mol_stencil_expr(jgrid, (int)nx, periodic, sord[i], dord, h,
-                                            torder, ysym, bc_left, bc_right);
+            if (scheme == ND_SCHEME_UPWIND_DONOR && sord[i] == 1 && wind_lit) {
+                Expr* wl[2] = { lit_u, lit_xv };
+                Expr* ws[2] = { expr_copy(ysym[base + 0]), expr_new_real(xj) };
+                Expr* wind_node = nd_replace_all(expr_copy(wind_lit), wl, ws, 2);
+                expr_free(ws[0]); expr_free(ws[1]);
+                subs[cnt] = nd_first_deriv_stencil(scheme, wind_node, jgrid, (int)nx, periodic,
+                                                   dord, h, torder, ysym, bc_left, bc_right);
+                expr_free(wind_node);
+            } else {
+                subs[cnt] = nd_mol_stencil_expr(jgrid, (int)nx, periodic, sord[i], dord, h,
+                                                torder, ysym, bc_left, bc_right);
+            }
             cnt++;
         }
         for (int m = 1; m < torder; m++) {
             lits[cnt] = lit_ut[m]; subs[cnt] = expr_copy(ysym[base + (size_t)m]); cnt++;
         }
         lits[cnt] = lit_xv; subs[cnt] = expr_new_real(xj); cnt++;
-        P.f[base + (size_t)torder - 1] = nd_replace_all(expr_copy(G), lits, subs, cnt);
+        Expr* rhs = nd_replace_all(expr_copy(G), lits, subs, cnt);
         for (size_t s = 0; s < cnt; s++) expr_free(subs[s]);   /* lits are shared */
+        if (lf_nu > 0.0 && rhs) {
+            Expr* visc = nd_mol_stencil_expr(jgrid, (int)nx, periodic, 2, dord, h,
+                                             torder, ysym, bc_left, bc_right);
+            rhs = nd_plus2any(rhs, nd_scaled(lf_nu, visc));
+        }
+        P.f[base + (size_t)torder - 1] = rhs;
     }
+    expr_free(wind_lit);
     expr_free(lit_u); expr_free(lit_xv);
     for (int i = 0; i < nsord; i++) expr_free(lit_sx[i]);
     free(lit_sx);

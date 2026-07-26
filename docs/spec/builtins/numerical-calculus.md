@@ -1131,6 +1131,37 @@ boundary conditions (**Dirichlet** `u[t,x0,y]==g`, **Neumann**
 `InterpolatingFunction` `u[t,x,y]`. As in 1-D, each Neumann/Robin boundary node
 is eliminated into the interior stencils via a one-sided first-derivative
 formula; corners resolve through the transverse edge.
+
+**Coupled systems of 1-D PDEs.** `NDSolve[eqns, {u1, u2, ...}, {t,..}, {x,..}]`
+solves a coupled system in one spatial dimension: each dependent function is
+discretized on its own block of interior unknowns within one global first-order
+ODE vector, and each function's per-node right-hand side substitutes the
+stencils/node-values of *every* function, so coupling terms — `(h u)_x`,
+`u u_x`, `g h_x`, cross-diffusion/reaction — resolve. The result is one
+`InterpolatingFunction` per function: `{{u1 -> if1, u2 -> if2, ...}}`. Each
+function may be temporal order 1 or 2 (mixed within a system), and each evolution
+equation must be solvable for exactly one function's highest temporal derivative
+(no coupled mass matrix). Per-function Dirichlet/Neumann/Robin or periodic BCs
+plus full initial data are required. Parabolic systems auto-select `BDF`;
+first-order hyperbolic systems (e.g. **shallow water** `{h_t+(h u)_x==0,
+u_t+u u_x+g h_x==0}`) keep the explicit default. A system missing a condition, a
+coupled mass matrix, a complex-valued system, or a 2-D system stays unevaluated
+with a diagnostic. Navier–Stokes (incompressible) is **not** supported — it needs
+a pressure/divergence-free constraint (a DAE) the method-of-lines driver lacks.
+
+**Upwind schemes for advective terms** (opt-in; centered Fornberg is the
+default). Two first-order schemes stabilize hyperbolic/advection-dominated
+problems that centered high-order stencils would ring on:
+- **Donor-cell upwind** (scalar) — `"DifferenceOrder" -> 1` or `"Upwind" -> True`
+  in the `SpatialDiscretization` list. The first-derivative stencil is biased by
+  the sign of the local advection speed (`wind = -∂G/∂u_x`), evaluated per node
+  so the upwind direction follows a state-dependent (nonlinear) wind at runtime.
+  Monotone and non-oscillatory; first-order accurate and convergent.
+- **Lax–Friedrichs viscosity** (systems and scalar) — `"LaxFriedrichs" -> True`
+  (or `"DifferenceOrder" -> 1` on a system, where donor-cell's per-characteristic
+  wind is ill-defined). Adds grid-scaled artificial dissipation to purely
+  hyperbolic equations; robust for nonlinear systems such as a dam break.
+
 **Complex-valued PDEs (Schrödinger).** When the solved RHS carries the imaginary
 unit (e.g. `I D[u[t,x],t] == -D[u[t,x],{x,2}]`), the front-end **realifies** the
 system — each complex unknown is split into interleaved (Re, Im) real unknowns

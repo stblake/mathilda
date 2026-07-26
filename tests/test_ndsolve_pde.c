@@ -837,6 +837,438 @@ static void test_schrodinger_potential(void) {
                "sum|psi|^2 conserved under unitary evolution");
 }
 
+/* ============================================================= *
+ *  23. Multi-mode heat: superposition of two eigenmodes vs the  *
+ *      TRUE PDE.  IC sin(pi x) + 1/2 sin(3 pi x) evolves to      *
+ *      e^{-pi^2 t} sin(pi x) + 1/2 e^{-9 pi^2 t} sin(3 pi x).    *
+ *      The modes decay at rates differing 9x (multi-scale        *
+ *      stiffness); a fine 4th-order grid + BDF resolves both.    *
+ * ============================================================= */
+static void test_multimode_heat(void) {
+    const double T = 0.02;
+    run("mm = NDSolve[{D[u[t,x],t]==D[u[t,x],{x,2}], "
+        "u[0,x]==Sin[Pi x]+(1/2)Sin[3 Pi x], u[t,0]==0, u[t,1]==0}, u, "
+        "{t,0,0.02}, {x,0,1}, Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->81,\"DifferenceOrder\"->4}}, "
+        "Method->\"BDF\", MaxSteps->5000];");
+    double xs[3] = { 0.25, 0.5, 0.75 };
+    char q[96], lbl[64];
+    for (int i = 0; i < 3; i++) {
+        double x = xs[i];
+        double exact = exp(-PI * PI * T) * sin(PI * x)
+                     + 0.5 * exp(-9 * PI * PI * T) * sin(3 * PI * x);
+        snprintf(q, sizeof q, "First[u[%.4f, %.4f] /. mm]", T, x);
+        snprintf(lbl, sizeof lbl, "multimode heat u(T,%.2f)", x);
+        CHECK(lbl, q, exact, 1e-3);
+    }
+}
+
+/* ============================================================= *
+ *  24. Variable-coefficient diffusion  u_t = (1+x^2) u_xx + S.   *
+ *      Manufactured U = e^{-t} sin(pi x); S = U_t - (1+x^2)U_xx  *
+ *      makes it exact.  Exercises a spatially varying diffusion  *
+ *      coefficient through the symbolic sampler; order-4 stencil.*
+ * ============================================================= */
+static void test_variable_coefficient(void) {
+    const double T = 0.3;
+    run("vc = NDSolve[{D[u[t,x],t]==(1+x^2)D[u[t,x],{x,2}] "
+        "- Exp[-t]Sin[Pi x] + (1+x^2)Pi^2 Exp[-t]Sin[Pi x], "
+        "u[0,x]==Sin[Pi x], u[t,0]==0, u[t,1]==0}, u, {t,0,0.3}, {x,0,1}, "
+        "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->41,\"DifferenceOrder\"->4}}, "
+        "Method->\"BDF\", MaxSteps->4000];");
+    double xs[3] = { 0.25, 0.5, 0.75 };
+    char q[96], lbl[64];
+    for (int i = 0; i < 3; i++) {
+        double x = xs[i], exact = exp(-T) * sin(PI * x);
+        snprintf(q, sizeof q, "First[u[%.4f, %.4f] /. vc]", T, x);
+        snprintf(lbl, sizeof lbl, "var-coeff diffusion u(T,%.2f)", x);
+        CHECK(lbl, q, exact, 2e-3);
+    }
+}
+
+/* ============================================================= *
+ *  25. Klein-Gordon  u_tt = u_xx - m^2 u  (m=2).  sin(pi x) is   *
+ *      an exact discrete-Laplacian eigenvector and the mass term *
+ *      is diagonal, so the semi-discrete solution is exactly     *
+ *      cos(omega t) sin(pi x), omega = sqrt(m^2 + |lambda_disc|).*
+ *      Isolates time-integration error at temporal order 2.      *
+ * ============================================================= */
+static void test_klein_gordon(void) {
+    const int nx = 21;
+    const double T = 0.5, h = 1.0 / (nx - 1), m = 2.0;
+    const double omega = sqrt(m * m - disc_lambda(nx));
+    run("kg = NDSolve[{D[u[t,x],{t,2}]==D[u[t,x],{x,2}] - 4 u[t,x], "
+        "u[0,x]==Sin[Pi x], Derivative[1,0][u][0,x]==0, u[t,0]==0, u[t,1]==0}, "
+        "u, {t,0,0.5}, {x,0,1}, Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->21,\"DifferenceOrder\"->2}}, MaxSteps->100000];");
+    char q[96], lbl[64];
+    for (int i = 4; i <= nx - 2; i += 5) {
+        double xi = i * h, exact = cos(omega * T) * sin(PI * xi);
+        snprintf(q, sizeof q, "First[u[%.6f, %.10f] /. kg]", T, xi);
+        snprintf(lbl, sizeof lbl, "Klein-Gordon u(T,x%d)", i);
+        CHECK(lbl, q, exact, 1e-4);
+    }
+}
+
+/* ============================================================= *
+ *  26. Damped (telegraph) wave  u_tt = u_xx - a u_t  (a=1).      *
+ *      A first-order time derivative sits INSIDE a second-order- *
+ *      in-time PDE: the solver must introduce v=u_t and feed it  *
+ *      back into the RHS.  sin(pi x) stays an eigenmode; each     *
+ *      node obeys  U'' + a U' + |lam| U = 0  exactly, so          *
+ *      U(t) = e^{-a t/2}(cos(wd t) + a/(2 wd) sin(wd t)),         *
+ *      wd = sqrt(|lam| - a^2/4).  Exact semi-discrete reference.  *
+ * ============================================================= */
+static void test_damped_wave(void) {
+    const int nx = 21;
+    const double T = 0.5, h = 1.0 / (nx - 1), a = 1.0;
+    const double absl = -disc_lambda(nx), wd = sqrt(absl - a * a / 4.0);
+    const double U = exp(-a * T / 2.0) * (cos(wd * T) + (a / (2.0 * wd)) * sin(wd * T));
+    run("dw = NDSolve[{D[u[t,x],{t,2}]==D[u[t,x],{x,2}] - D[u[t,x],t], "
+        "u[0,x]==Sin[Pi x], Derivative[1,0][u][0,x]==0, u[t,0]==0, u[t,1]==0}, "
+        "u, {t,0,0.5}, {x,0,1}, Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->21,\"DifferenceOrder\"->2}}, MaxSteps->100000];");
+    char q[96], lbl[64];
+    for (int i = 4; i <= nx - 2; i += 5) {
+        double xi = i * h, exact = U * sin(PI * xi);
+        snprintf(q, sizeof q, "First[u[%.6f, %.10f] /. dw]", T, xi);
+        snprintf(lbl, sizeof lbl, "damped wave u(T,x%d)", i);
+        CHECK(lbl, q, exact, 2e-4);
+    }
+}
+
+/* ============================================================= *
+ *  27. Nonlinear (porous-medium-type) diffusion                 *
+ *      u_t = u u_xx + u_x^2 + S = (u u_x)_x + S.                 *
+ *      The diffusion coefficient depends on the solution ->      *
+ *      full nonlinear symbolic sampler + Newton per BDF step.    *
+ *      Manufactured U = e^{-t} sin(pi x) + 2 (kept positive;     *
+ *      inhomogeneous Dirichlet u=2 at both ends).                *
+ * ============================================================= */
+static void test_nonlinear_diffusion(void) {
+    const double T = 0.1;
+    run("nd = NDSolve[{D[u[t,x],t]==u[t,x] D[u[t,x],{x,2}] + D[u[t,x],x]^2 "
+        "- Exp[-t]Sin[Pi x] + (Exp[-t]Sin[Pi x]+2)Pi^2 Exp[-t]Sin[Pi x] "
+        "- Pi^2 Exp[-2t]Cos[Pi x]^2, u[0,x]==Sin[Pi x]+2, u[t,0]==2, u[t,1]==2}, "
+        "u, {t,0,0.1}, {x,0,1}, Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->21,\"DifferenceOrder\"->4}}, "
+        "Method->\"BDF\", MaxSteps->10000];");
+    double xs[3] = { 0.25, 0.5, 0.75 };
+    char q[96], lbl[64];
+    for (int i = 0; i < 3; i++) {
+        double x = xs[i], exact = exp(-T) * sin(PI * x) + 2.0;
+        snprintf(q, sizeof q, "First[u[%.4f, %.4f] /. nd]", T, x);
+        snprintf(lbl, sizeof lbl, "nonlinear diffusion u(T,%.2f)", x);
+        CHECK(lbl, q, exact, 2e-3);
+    }
+}
+
+/* ============================================================= *
+ *  28. Wave with insulated (Neumann) ends  u_tt = u_xx,         *
+ *      u_x(t,0)=u_x(t,1)=0, IC cos(pi x), zero velocity.         *
+ *      True PDE solution cos(pi t) cos(pi x).  A fine 4th-order  *
+ *      grid tracks it and validates one-sided Neumann            *
+ *      elimination in a second-order-in-time PDE.                *
+ * ============================================================= */
+static void test_wave_neumann(void) {
+    const double T = 0.2;
+    run("wn = NDSolve[{D[u[t,x],{t,2}]==D[u[t,x],{x,2}], u[0,x]==Cos[Pi x], "
+        "Derivative[1,0][u][0,x]==0, Derivative[0,1][u][t,0]==0, "
+        "Derivative[0,1][u][t,1]==0}, u, {t,0,0.2}, {x,0,1}, "
+        "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->41,\"DifferenceOrder\"->4}}, MaxSteps->200000];");
+    double xs[3] = { 0.1, 0.25, 0.75 };
+    char q[96], lbl[64];
+    for (int i = 0; i < 3; i++) {
+        double x = xs[i], exact = cos(PI * T) * cos(PI * x);
+        snprintf(q, sizeof q, "First[u[%.4f, %.4f] /. wn]", T, x);
+        snprintf(lbl, sizeof lbl, "wave Neumann u(T,%.2f)", x);
+        CHECK(lbl, q, exact, 2e-3);
+    }
+}
+
+/* ============================================================= *
+ *  29. 2-D reaction-diffusion  u_t = u_xx + u_yy + c u  (c=3).   *
+ *      sin(pi x) sin(pi y) is an exact eigenmode of the discrete *
+ *      2-D Laplacian, so the semi-discrete solution is           *
+ *      e^{(2 lam + c) t} sin sin exactly (lx = ly = lam).        *
+ * ============================================================= */
+static void test_2d_reaction_diffusion(void) {
+    const int n = 13;
+    const double h = 1.0 / (n - 1), T = 0.02, c = 3.0;
+    const double rate = 2.0 * disc_lambda(n) + c;
+    run("r2 = NDSolve[{D[u[t,x,y],t]==D[u[t,x,y],{x,2}]+D[u[t,x,y],{y,2}]+3 u[t,x,y], "
+        "u[0,x,y]==Sin[Pi x]Sin[Pi y], u[t,0,y]==0, u[t,1,y]==0, u[t,x,0]==0, u[t,x,1]==0}, "
+        "u, {t,0,0.02}, {x,0,1}, {y,0,1}, Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->13,\"DifferenceOrder\"->2}}, MaxSteps->5000];");
+    int pts[3] = { 3, 6, 9 };
+    char q[128], lbl[64];
+    for (int a = 0; a < 3; a++)
+        for (int b = 0; b < 3; b++) {
+            int ix = pts[a], iy = pts[b];
+            double xi = ix * h, yi = iy * h;
+            double exact = exp(rate * T) * sin(PI * xi) * sin(PI * yi);
+            snprintf(q, sizeof q, "First[u[%.4f, %.8f, %.8f] /. r2]", T, xi, yi);
+            snprintf(lbl, sizeof lbl, "2D reaction u(T,x%d,y%d)", ix, iy);
+            CHECK(lbl, q, exact, 1e-4);
+        }
+}
+
+/* ============================================================= *
+ *  30. 2-D anisotropic heat  u_t = 2 u_xx + u_yy.  Unequal       *
+ *      diffusion coefficients: the sin sin eigenmode decays at   *
+ *      rate 2 lx + ly = 3 lam on the square grid (lx = ly = lam).*
+ *      Exact semi-discrete reference.                            *
+ * ============================================================= */
+static void test_2d_anisotropic(void) {
+    const int n = 13;
+    const double h = 1.0 / (n - 1), T = 0.02;
+    const double rate = 3.0 * disc_lambda(n);
+    run("a2 = NDSolve[{D[u[t,x,y],t]==2 D[u[t,x,y],{x,2}]+D[u[t,x,y],{y,2}], "
+        "u[0,x,y]==Sin[Pi x]Sin[Pi y], u[t,0,y]==0, u[t,1,y]==0, u[t,x,0]==0, u[t,x,1]==0}, "
+        "u, {t,0,0.02}, {x,0,1}, {y,0,1}, Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->13,\"DifferenceOrder\"->2}}, MaxSteps->5000];");
+    int pts[3] = { 3, 6, 9 };
+    char q[128], lbl[64];
+    for (int a = 0; a < 3; a++)
+        for (int b = 0; b < 3; b++) {
+            int ix = pts[a], iy = pts[b];
+            double xi = ix * h, yi = iy * h;
+            double exact = exp(rate * T) * sin(PI * xi) * sin(PI * yi);
+            snprintf(q, sizeof q, "First[u[%.4f, %.8f, %.8f] /. a2]", T, xi, yi);
+            snprintf(lbl, sizeof lbl, "2D aniso u(T,x%d,y%d)", ix, iy);
+            CHECK(lbl, q, exact, 1e-4);
+        }
+}
+
+/* ============================================================= *
+ *  31. Time-integrator equivalence.  The same mild heat problem *
+ *      solved with an explicit RK4 stepper and with stiff BDF    *
+ *      must both track the semi-discrete eigenmode and agree     *
+ *      with each other -- verifies Method-> routes to genuinely  *
+ *      different integrators computing the same field.           *
+ * ============================================================= */
+static void test_method_equivalence_rk_bdf(void) {
+    const int nx = 11;
+    const double T = 0.02, lam = disc_lambda(nx);
+    const char* stub =
+        "NDSolve[{D[u[t,x],t]==D[u[t,x],{x,2}], u[0,x]==Sin[Pi x], u[t,0]==0, u[t,1]==0}, "
+        "u, {t,0,0.02}, {x,0,1}, Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->11,\"DifferenceOrder\"->2}}, ";
+    char buf[1200];
+    snprintf(buf, sizeof buf, "mrk = %sMethod->\"RungeKutta\", MaxSteps->50000];", stub);
+    run(buf);
+    snprintf(buf, sizeof buf, "mbd = %sMethod->\"BDF\", MaxSteps->5000];", stub);
+    run(buf);
+    double vr, vb;
+    bool ok = eval_double("First[u[0.02,0.5] /. mrk]", &vr) &&
+              eval_double("First[u[0.02,0.5] /. mbd]", &vb);
+    double exact = exp(lam * T) * sin(PI * 0.5);
+    check_true("RK4 tracks semi-discrete", ok && fabs(vr - exact) < 1e-4, "explicit RK accurate");
+    check_true("BDF tracks semi-discrete", ok && fabs(vb - exact) < 1e-4, "stiff BDF accurate");
+    check_true("RK4 == BDF (integrator equivalence)", ok && fabs(vr - vb) < 1e-4,
+               "two different steppers agree");
+}
+
+/* ============================================================= *
+ *  32. Graceful degradation.  Cases outside the MoL scope must  *
+ *      return the NDSolve expression UNEVALUATED (head NDSolve)  *
+ *      -- not crash, not fabricate a solution.  Systems of PDEs, *
+ *      > 2 spatial dims, temporal order > 2, and 2-D periodic    *
+ *      BCs are all deferred and must be left symbolic.           *
+ * ============================================================= */
+/* ============================================================= *
+ *  33. Coupled system: reaction-diffusion, manufactured        *
+ *      u_t = u_xx + w + Su,  w_t = w_xx + u + Sv  with exact    *
+ *      u = e^{-t} sin(pi x), w = e^{-2t} sin(pi x).  Each        *
+ *      equation reads the OTHER function (genuine coupling).    *
+ * ============================================================= */
+static void test_system_reaction_diffusion(void) {
+    const double T = 0.2;
+    char buf[1400], q[128], lbl[64];
+    snprintf(buf, sizeof buf,
+        "rd = NDSolve[{"
+        "D[u[t,x],t]==D[u[t,x],{x,2}]+w[t,x]+((Pi^2-1)Exp[-t]Sin[Pi x]-Exp[-2t]Sin[Pi x]), "
+        "D[w[t,x],t]==D[w[t,x],{x,2}]+u[t,x]+((Pi^2-2)Exp[-2t]Sin[Pi x]-Exp[-t]Sin[Pi x]), "
+        "u[0,x]==Sin[Pi x], w[0,x]==Sin[Pi x], u[t,0]==0,u[t,1]==0,w[t,0]==0,w[t,1]==0}, "
+        "{u,w}, {t,0,%.4f}, {x,0,1}, "
+        "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->41,\"DifferenceOrder\"->2}}, MaxSteps->20000];", T);
+    run(buf);
+    const double xs[3] = { 0.25, 0.5, 0.75 };
+    for (int i = 0; i < 3; i++) {
+        double xi = xs[i];
+        double ue = exp(-T) * sin(PI * xi), we = exp(-2 * T) * sin(PI * xi);
+        snprintf(q, sizeof q, "First[u[%.4f,%.4f] /. rd]", T, xi);
+        snprintf(lbl, sizeof lbl, "reac-diff system u(T,%.2f)", xi);
+        CHECK(lbl, q, ue, 2e-3);
+        snprintf(q, sizeof q, "First[w[%.4f,%.4f] /. rd]", T, xi);
+        snprintf(lbl, sizeof lbl, "reac-diff system w(T,%.2f)", xi);
+        CHECK(lbl, q, we, 2e-3);
+    }
+}
+
+/* ============================================================= *
+ *  34. Shallow-water system, linearized standing gravity wave.  *
+ *      h_t+(h u)_x=0, u_t+u u_x+g h_x=0 (g=1), periodic.  Small  *
+ *      A: h = 1 + A cos(2 pi x) => standing wave at c=sqrt(gH)=1;*
+ *      at t=1/2 (half period) h = 1 - A cos(2 pi x), u ~ 0.      *
+ * ============================================================= */
+static void test_system_shallow_water(void) {
+    const double A = 1e-3;
+    char buf[1400], q[128], lbl[64];
+    snprintf(buf, sizeof buf,
+        "sw = NDSolve[{D[h[t,x],t]+D[h[t,x] u[t,x],x]==0, "
+        "D[u[t,x],t]+u[t,x] D[u[t,x],x]+D[h[t,x],x]==0, "
+        "h[0,x]==1+%.6f Cos[2 Pi x], u[0,x]==0, h[t,0]==h[t,1], u[t,0]==u[t,1]}, "
+        "{h,u}, {t,0,0.5}, {x,0,1}, "
+        "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->81}}];", A);
+    run(buf);
+    const double xs[3] = { 0.0, 0.5, 0.25 };
+    for (int i = 0; i < 3; i++) {
+        double xi = xs[i], he = 1.0 - A * cos(2 * PI * xi);
+        snprintf(q, sizeof q, "First[h[0.5,%.4f] /. sw]", xi);
+        snprintf(lbl, sizeof lbl, "shallow-water h(1/2,%.2f)", xi);
+        CHECK(lbl, q, he, 5e-4);
+    }
+    double uval;
+    if (eval_double("First[u[0.5,0.3] /. sw]", &uval))
+        check_true("shallow-water u ~ 0 at half period", fabs(uval) < 1e-3, "|u|<1e-3");
+}
+
+/* ============================================================= *
+ *  35. Coupled 2nd-order (wave) system via normal modes.        *
+ *      u_tt=u_xx-u+w, w_tt=w_xx-w+u; ICs u=sin(pi x),w=0,rest 0. *
+ *      s=u+w solves the wave eqn, d=u-w solves u_tt=u_xx-2u, so  *
+ *      u=(cos os t + cos od t)/2 sin(pi x), w=(cos os t - cos od *
+ *      t)/2 sin(pi x), os=sqrt(-lam), od=sqrt(-lam+2) EXACT on   *
+ *      the order-2 semi-discrete operator.                       *
+ * ============================================================= */
+static void test_system_coupled_wave(void) {
+    const int nx = 21;
+    const double T = 0.3, lam = disc_lambda(nx);
+    const double os = sqrt(-lam), od = sqrt(-lam + 2.0);
+    char buf[1400], q[128];
+    snprintf(buf, sizeof buf,
+        "cw = NDSolve[{D[u[t,x],t,t]==D[u[t,x],{x,2}]-u[t,x]+w[t,x], "
+        "D[w[t,x],t,t]==D[w[t,x],{x,2}]-w[t,x]+u[t,x], "
+        "u[0,x]==Sin[Pi x], w[0,x]==0, Derivative[1,0][u][0,x]==0, Derivative[1,0][w][0,x]==0, "
+        "u[t,0]==0,u[t,1]==0,w[t,0]==0,w[t,1]==0}, {u,w}, {t,0,%.4f}, {x,0,1}, "
+        "Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->%d,\"DifferenceOrder\"->2}}];", T, nx);
+    run(buf);
+    double ue = 0.5 * (cos(os * T) + cos(od * T)) * sin(PI * 0.5);
+    double we = 0.5 * (cos(os * T) - cos(od * T)) * sin(PI * 0.5);
+    snprintf(q, sizeof q, "First[u[%.4f,0.5] /. cw]", T);
+    CHECK("coupled wave u(T,1/2)", q, ue, 1e-3);
+    snprintf(q, sizeof q, "First[w[%.4f,0.5] /. cw]", T);
+    CHECK("coupled wave w(T,1/2)", q, we, 1e-3);
+}
+
+/* ============================================================= *
+ *  36. Scalar linear advection u_t + u_x = 0, periodic.         *
+ *      Exact u(t,x)=sin(2 pi(x-t)); at t=1/4, u(x)=-cos(2 pi x). *
+ *      Centered is near-exact; donor-cell upwind advects with    *
+ *      correct phase but first-order amplitude diffusion that    *
+ *      shrinks as the grid refines; the reversed wind stays      *
+ *      stable (wrong upwind direction would blow up).            *
+ * ============================================================= */
+static void test_advection_upwind(void) {
+    const char* base =
+        "%s = NDSolve[{D[u[t,x],t]%sD[u[t,x],x]==0, u[0,x]==Sin[2 Pi x], u[t,0]==u[t,1]}, "
+        "u, {t,0,0.25}, {x,0,1}, Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->%d%s}}];";
+    char buf[900];
+    /* centered: near-exact -1 */
+    snprintf(buf, sizeof buf, base, "aC", "+", 81, "");
+    run(buf);
+    CHECK("advection centered u(1/4,0)", "First[u[0.25,0.0] /. aC]", -1.0, 1e-2);
+    /* donor-cell upwind, coarse and fine */
+    snprintf(buf, sizeof buf, base, "aU", "+", 81, ",\"DifferenceOrder\"->1");
+    run(buf);
+    snprintf(buf, sizeof buf, base, "aF", "+", 321, ",\"DifferenceOrder\"->1");
+    run(buf);
+    double uc, uf, ur;
+    bool okc = eval_double("First[u[0.25,0.0] /. aU]", &uc);
+    bool okf = eval_double("First[u[0.25,0.0] /. aF]", &uf);
+    check_true("upwind advects with correct phase, diffused",
+               okc && uc < -0.85 && uc > -0.999, "value in (-0.999,-0.85)");
+    check_true("upwind amplitude converges on refinement",
+               okc && okf && fabs(uf) > fabs(uc), "|fine| > |coarse|");
+    /* reversed wind: donor-cell must stay stable (correct upwind direction) */
+    snprintf(buf, sizeof buf, base, "aR", "-", 81, ",\"DifferenceOrder\"->1");
+    run(buf);
+    bool okr = eval_double("First[u[0.25,0.0] /. aR]", &ur);
+    check_true("reversed-wind upwind stays stable",
+               okr && ur > 0.5 && ur < 1.0, "value in (0.5,1.0)");
+}
+
+/* ============================================================= *
+ *  37. Upwind monotonicity: advecting a sharp top-hat, centered *
+ *      high-order stencils ring (Gibbs over/undershoot) while    *
+ *      the upwind schemes stay within the data bounds [0,1].     *
+ * ============================================================= */
+static void test_upwind_monotonicity(void) {
+    const char* base =
+        "%s = NDSolve[{D[u[t,x],t]+D[u[t,x],x]==0, "
+        "u[0,x]==(Tanh[(x-3/10)/(1/50)]-Tanh[(x-6/10)/(1/50)])/2, u[t,0]==u[t,1]}, "
+        "u, {t,0,0.3}, {x,0,1}, Method->{\"MethodOfLines\",\"SpatialDiscretization\"->"
+        "{\"TensorProductGrid\",\"MinPoints\"->81%s}}];";
+    char buf[900];
+    snprintf(buf, sizeof buf, base, "hC", "");
+    run(buf);
+    snprintf(buf, sizeof buf, base, "hU", ",\"Upwind\"->True");
+    run(buf);
+    double cmax, cmin, umax, umin;
+    /* build min/max over a sampled grid for each solution */
+    run("cMax = Max[Table[(u/.First[hC])[0.3,x], {x,0.01,0.99,0.01}]];"
+        "cMin = Min[Table[(u/.First[hC])[0.3,x], {x,0.01,0.99,0.01}]];"
+        "uMax = Max[Table[(u/.First[hU])[0.3,x], {x,0.01,0.99,0.01}]];"
+        "uMin = Min[Table[(u/.First[hU])[0.3,x], {x,0.01,0.99,0.01}]];");
+    bool o1 = eval_double("cMax", &cmax), o2 = eval_double("cMin", &cmin);
+    bool o3 = eval_double("uMax", &umax), o4 = eval_double("uMin", &umin);
+    check_true("centered rings on sharp front (Gibbs)",
+               o1 && o2 && (cmax > 1.01 || cmin < -0.01), "over/undershoot present");
+    check_true("upwind stays within data bounds [0,1]",
+               o3 && o4 && umax < 1.005 && umin > -0.005, "no over/undershoot");
+}
+
+static void test_unsupported_guards(void) {
+    char hd[64];
+    /* well-posed systems now solve; malformed ones must stay unevaluated. */
+    eval_head("NDSolve[{D[u[t,x],t]==D[u[t,x],{x,2}], D[w[t,x],t]==D[w[t,x],{x,2}], "
+              "u[0,x]==Sin[Pi x], w[0,x]==Sin[Pi x], u[t,0]==0,u[t,1]==0,w[t,0]==0}, "
+              "{u,w}, {t,0,0.1}, {x,0,1}]", hd, sizeof hd);
+    check_true("system missing a BC stays unevaluated", strcmp(hd, "NDSolve") == 0, hd[0] ? hd : "(null)");
+
+    eval_head("NDSolve[{D[u[t,x],t]+D[w[t,x],t]==D[u[t,x],{x,2}], D[w[t,x],t]==D[w[t,x],{x,2}], "
+              "u[0,x]==Sin[Pi x], w[0,x]==Sin[Pi x], u[t,0]==0,u[t,1]==0,w[t,0]==0,w[t,1]==0}, "
+              "{u,w}, {t,0,0.1}, {x,0,1}]", hd, sizeof hd);
+    check_true("coupled mass matrix stays unevaluated", strcmp(hd, "NDSolve") == 0, hd[0] ? hd : "(null)");
+
+    eval_head("NDSolve[{I D[u[t,x],t]==D[u[t,x],{x,2}], D[w[t,x],t]==D[w[t,x],{x,2}], "
+              "u[0,x]==Sin[Pi x], w[0,x]==Sin[Pi x], u[t,0]==0,u[t,1]==0,w[t,0]==0,w[t,1]==0}, "
+              "{u,w}, {t,0,0.1}, {x,0,1}]", hd, sizeof hd);
+    check_true("complex-valued system stays unevaluated", strcmp(hd, "NDSolve") == 0, hd[0] ? hd : "(null)");
+
+    eval_head("NDSolve[{D[u[t,x,y,z],t]==D[u[t,x,y,z],{x,2}], u[0,x,y,z]==1, "
+              "u[t,0,y,z]==0,u[t,1,y,z]==0,u[t,x,0,z]==0,u[t,x,1,z]==0,"
+              "u[t,x,y,0]==0,u[t,x,y,1]==0}, u, {t,0,0.1},{x,0,1},{y,0,1},{z,0,1}]",
+              hd, sizeof hd);
+    check_true(">2 spatial dims stays unevaluated", strcmp(hd, "NDSolve") == 0, hd[0] ? hd : "(null)");
+
+    eval_head("NDSolve[{D[u[t,x],{t,3}]==D[u[t,x],{x,2}], u[0,x]==Sin[Pi x], "
+              "u[t,0]==0,u[t,1]==0}, u, {t,0,0.1},{x,0,1}]", hd, sizeof hd);
+    check_true("temporal order 3 stays unevaluated", strcmp(hd, "NDSolve") == 0, hd[0] ? hd : "(null)");
+
+    eval_head("NDSolve[{D[u[t,x,y],t]==D[u[t,x,y],{x,2}]+D[u[t,x,y],{y,2}], "
+              "u[0,x,y]==Sin[2 Pi x]Sin[Pi y], u[t,0,y]==u[t,1,y], "
+              "u[t,x,0]==0, u[t,x,1]==0}, u, {t,0,0.01},{x,0,1},{y,0,1}]", hd, sizeof hd);
+    check_true("2-D periodic BC stays unevaluated", strcmp(hd, "NDSolve") == 0, hd[0] ? hd : "(null)");
+}
+
 int main(void) {
     mute_stderr_once();
     core_init();
@@ -866,6 +1298,21 @@ int main(void) {
     test_mpfr_pde();
     test_schrodinger();
     test_schrodinger_potential();
+    test_multimode_heat();
+    test_variable_coefficient();
+    test_klein_gordon();
+    test_damped_wave();
+    test_nonlinear_diffusion();
+    test_wave_neumann();
+    test_2d_reaction_diffusion();
+    test_2d_anisotropic();
+    test_method_equivalence_rk_bdf();
+    test_system_reaction_diffusion();
+    test_system_shallow_water();
+    test_system_coupled_wave();
+    test_advection_upwind();
+    test_upwind_monotonicity();
+    test_unsupported_guards();
 
     if (failures == 0) printf("\nAll NDSolve PDE tests passed.\n");
     else printf("\n%d NDSolve PDE test(s) FAILED.\n", failures);
