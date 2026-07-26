@@ -54,6 +54,7 @@
 #include "eval.h"
 #include "expr.h"
 #include "numeric.h"
+#include "compile/autocompile.h"
 #include "sym_names.h"
 #include "symtab.h"
 
@@ -97,6 +98,12 @@ typedef struct {
     Expr*      jacobian;         /* borrowed; user-supplied or NULL      */
     Expr*      step_monitor;     /* borrowed; or NULL                    */
     Expr*      eval_monitor;     /* borrowed; or NULL                    */
+    /* Auto-compile fast path for the scalar, machine-precision, real case: the
+     * compiled main function and the exact Expr pointer it was built from, so
+     * fr_eval_with_bindings only takes the fast path for that function (not for
+     * a symbolic derivative or a finite-difference of some other body). */
+    Expr*         main_f;        /* borrowed; the function ac_f compiles */
+    AutoCompiled* ac_f;          /* owned; NULL unless scalar/machine/real */
 } FrOpts;
 
 /* Per-variable temporary OwnValue snapshot, restored on exit. */
@@ -466,13 +473,29 @@ static NumericSpec fr_numeric_spec(const FrOpts* opts) {
  * frees) or NULL. */
 static Expr* fr_eval_with_bindings(Expr* f, FrVarBind* binds,
                                    Expr* const* values, size_t n,
-                                   Expr* eval_monitor,
-                                   NumericSpec spec) {
+                                   const FrOpts* opts) {
+    NumericSpec spec = fr_numeric_spec(opts);
+    /* Compiled fast path — the main function only (pointer identity), scalar,
+     * machine precision, real argument.  A non-finite / non-real compiled result
+     * falls through to the interpreter (which supplies the complex/singular
+     * value the iteration then rejects as non-real, exactly as before). */
+    if (opts->ac_f && f == opts->main_f && spec.mode == NUMERIC_MODE_MACHINE
+        && n == 1 && autocompiled_num_vars(opts->ac_f) == 1) {
+        double x;
+        if (fr_expr_to_double_real(values[0], &x)) {
+            double _Complex z;
+            if (autocompiled_eval_complex(opts->ac_f, &x, &z)
+                && isfinite(creal(z)) && isfinite(cimag(z)))
+                return (cimag(z) == 0.0)
+                    ? expr_new_real(creal(z))
+                    : make_complex(expr_new_real(creal(z)), expr_new_real(cimag(z)));
+        }
+    }
     for (size_t i = 0; i < n; i++) {
         fr_bind_set(&binds[i], values[i]);
     }
     eval_clock_bump();
-    fr_fire_monitor(eval_monitor);
+    fr_fire_monitor(opts->eval_monitor);
     Expr* raw = eval_and_free(expr_copy(f));
     if (!raw) return NULL;
     Expr* num = numericalize(raw, spec);
@@ -517,13 +540,13 @@ static bool fr_fd_deriv_real(Expr* f, FrVarBind* bind, double x,
     Expr* arr[1];
     Expr* e;
     arr[0] = expr_new_real(x + h);
-    e = fr_eval_with_bindings(f, bind, arr, 1, opts->eval_monitor, fr_numeric_spec(opts));
+    e = fr_eval_with_bindings(f, bind, arr, 1, opts);
     expr_free(arr[0]);
     if (!e) return false;
     bool ok = fr_expr_to_double_real(e, &fph); expr_free(e);
     if (!ok) return false;
     arr[0] = expr_new_real(x - h);
-    e = fr_eval_with_bindings(f, bind, arr, 1, opts->eval_monitor, fr_numeric_spec(opts));
+    e = fr_eval_with_bindings(f, bind, arr, 1, opts);
     expr_free(arr[0]);
     if (!e) return false;
     ok = fr_expr_to_double_real(e, &fmh); expr_free(e);
@@ -540,13 +563,13 @@ static bool fr_fd_deriv_complex(Expr* f, FrVarBind* bind, double complex z,
     Expr* arr[1];
     Expr* e;
     arr[0] = fr_expr_from_complex_d(z + h);
-    e = fr_eval_with_bindings(f, bind, arr, 1, opts->eval_monitor, fr_numeric_spec(opts));
+    e = fr_eval_with_bindings(f, bind, arr, 1, opts);
     expr_free(arr[0]);
     if (!e) return false;
     bool ok = fr_expr_to_complex(e, &fph); expr_free(e);
     if (!ok) return false;
     arr[0] = fr_expr_from_complex_d(z - h);
-    e = fr_eval_with_bindings(f, bind, arr, 1, opts->eval_monitor, fr_numeric_spec(opts));
+    e = fr_eval_with_bindings(f, bind, arr, 1, opts);
     expr_free(arr[0]);
     if (!e) return false;
     ok = fr_expr_to_complex(e, &fmh); expr_free(e);
@@ -570,14 +593,14 @@ static bool fr_fd_deriv_mpfr_real(Expr* f, FrVarBind* bind, const mpfr_t x,
     Expr* e;
     mpfr_add(xp, x, h, MPFR_RNDN);
     a[0] = expr_new_mpfr_copy(xp);
-    e = fr_eval_with_bindings(f, bind, a, 1, opts->eval_monitor, fr_numeric_spec(opts));
+    e = fr_eval_with_bindings(f, bind, a, 1, opts);
     expr_free(a[0]);
     ok = e && get_approx_mpfr(e, fph, im, &dummy) && mpfr_zero_p(im);
     if (e) expr_free(e);
     if (ok) {
         mpfr_sub(xp, x, h, MPFR_RNDN);
         a[0] = expr_new_mpfr_copy(xp);
-        e = fr_eval_with_bindings(f, bind, a, 1, opts->eval_monitor, fr_numeric_spec(opts));
+        e = fr_eval_with_bindings(f, bind, a, 1, opts);
         expr_free(a[0]);
         ok = e && get_approx_mpfr(e, fmh, im, &dummy) && mpfr_zero_p(im);
         if (e) expr_free(e);
@@ -607,14 +630,14 @@ static bool fr_fd_deriv_mpfr_complex(Expr* f, FrVarBind* bind,
     Expr* e;
     mpfr_add(t, zr, h, MPFR_RNDN);
     a[0] = fr_expr_from_complex_mpfr(t, zi);
-    e = fr_eval_with_bindings(f, bind, a, 1, opts->eval_monitor, fr_numeric_spec(opts));
+    e = fr_eval_with_bindings(f, bind, a, 1, opts);
     expr_free(a[0]);
     ok = e && get_approx_mpfr(e, fpr, fpi, &dummy);
     if (e) expr_free(e);
     if (ok) {
         mpfr_sub(t, zr, h, MPFR_RNDN);
         a[0] = fr_expr_from_complex_mpfr(t, zi);
-        e = fr_eval_with_bindings(f, bind, a, 1, opts->eval_monitor, fr_numeric_spec(opts));
+        e = fr_eval_with_bindings(f, bind, a, 1, opts);
         expr_free(a[0]);
         ok = e && get_approx_mpfr(e, fmr, fmi, &dummy);
         if (e) expr_free(e);
@@ -660,9 +683,7 @@ static Expr* fr_run_newton_real(Expr* f, Expr* df,
     for (int64_t k = 0; k < opts->max_iter; k++) {
         Expr* xv = expr_new_real(x);
         Expr* arr[1] = { xv };
-        Expr* fv_expr = fr_eval_with_bindings(f, bind, arr, 1,
-                                              opts->eval_monitor,
-                                              fr_numeric_spec(opts));
+        Expr* fv_expr = fr_eval_with_bindings(f, bind, arr, 1, opts);
         expr_free(xv);
         if (!fv_expr) { fr_warn("nlnum", "could not evaluate f"); return NULL; }
         double fv;
@@ -677,9 +698,7 @@ static Expr* fr_run_newton_real(Expr* f, Expr* df,
         if (df) {
             xv = expr_new_real(x);
             Expr* arr2[1] = { xv };
-            Expr* dv_expr = fr_eval_with_bindings(df, bind, arr2, 1,
-                                                  opts->eval_monitor,
-                                                  fr_numeric_spec(opts));
+            Expr* dv_expr = fr_eval_with_bindings(df, bind, arr2, 1, opts);
             expr_free(xv);
             if (!dv_expr) { fr_warn("nlnum", "could not evaluate derivative"); return NULL; }
             bool ok_d = fr_expr_to_double_real(dv_expr, &dv);
@@ -717,9 +736,7 @@ static Expr* fr_run_newton_complex(Expr* f, Expr* df,
     for (int64_t k = 0; k < opts->max_iter; k++) {
         Expr* zv = fr_expr_from_complex_d(z);
         Expr* arr[1] = { zv };
-        Expr* fv_expr = fr_eval_with_bindings(f, bind, arr, 1,
-                                              opts->eval_monitor,
-                                              fr_numeric_spec(opts));
+        Expr* fv_expr = fr_eval_with_bindings(f, bind, arr, 1, opts);
         expr_free(zv);
         if (!fv_expr) { fr_warn("nlnum", "could not evaluate f"); return NULL; }
         double complex fv;
@@ -732,9 +749,7 @@ static Expr* fr_run_newton_complex(Expr* f, Expr* df,
         if (df) {
             zv = fr_expr_from_complex_d(z);
             Expr* arr2[1] = { zv };
-            Expr* dv_expr = fr_eval_with_bindings(df, bind, arr2, 1,
-                                                  opts->eval_monitor,
-                                                  fr_numeric_spec(opts));
+            Expr* dv_expr = fr_eval_with_bindings(df, bind, arr2, 1, opts);
             expr_free(zv);
             if (!dv_expr) { fr_warn("nlnum", "could not evaluate derivative"); return NULL; }
             bool ok_d = fr_expr_to_complex(dv_expr, &dv);
@@ -774,7 +789,7 @@ static Expr* fr_run_secant_real(Expr* f, FrVarBind* bind,
     double xa = x0, xb = x1;
     Expr* xv0 = expr_new_real(xa);
     Expr* a0[1] = { xv0 };
-    Expr* fa_e = fr_eval_with_bindings(f, bind, a0, 1, opts->eval_monitor, fr_numeric_spec(opts));
+    Expr* fa_e = fr_eval_with_bindings(f, bind, a0, 1, opts);
     expr_free(xv0);
     double fa = 0.0;
     if (!fa_e || !fr_expr_to_double_real(fa_e, &fa)) {
@@ -785,7 +800,7 @@ static Expr* fr_run_secant_real(Expr* f, FrVarBind* bind,
     for (int64_t k = 0; k < opts->max_iter; k++) {
         Expr* xv = expr_new_real(xb);
         Expr* a1[1] = { xv };
-        Expr* fb_e = fr_eval_with_bindings(f, bind, a1, 1, opts->eval_monitor, fr_numeric_spec(opts));
+        Expr* fb_e = fr_eval_with_bindings(f, bind, a1, 1, opts);
         expr_free(xv);
         double fb;
         if (!fb_e || !fr_expr_to_double_real(fb_e, &fb)) {
@@ -820,11 +835,11 @@ static Expr* fr_run_brent_real(Expr* f, FrVarBind* bind,
 
     Expr* xv = expr_new_real(xa);
     Expr* a0[1] = { xv };
-    Expr* fa_e = fr_eval_with_bindings(f, bind, a0, 1, opts->eval_monitor, fr_numeric_spec(opts));
+    Expr* fa_e = fr_eval_with_bindings(f, bind, a0, 1, opts);
     expr_free(xv);
     xv = expr_new_real(xb);
     Expr* a1[1] = { xv };
-    Expr* fb_e = fr_eval_with_bindings(f, bind, a1, 1, opts->eval_monitor, fr_numeric_spec(opts));
+    Expr* fb_e = fr_eval_with_bindings(f, bind, a1, 1, opts);
     expr_free(xv);
     double fa, fb;
     if (!fa_e || !fb_e
@@ -870,7 +885,7 @@ static Expr* fr_run_brent_real(Expr* f, FrVarBind* bind,
         }
         Expr* sv = expr_new_real(s);
         Expr* aS[1] = { sv };
-        Expr* fs_e = fr_eval_with_bindings(f, bind, aS, 1, opts->eval_monitor, fr_numeric_spec(opts));
+        Expr* fs_e = fr_eval_with_bindings(f, bind, aS, 1, opts);
         expr_free(sv);
         if (!fs_e || !fr_expr_to_double_real(fs_e, &fs)) {
             expr_free(fs_e);
@@ -935,9 +950,7 @@ static Expr* fr_run_newton_mpfr_real(Expr* f, Expr* df,
     for (int64_t k = 0; k < opts->max_iter; k++) {
         Expr* xv = expr_new_mpfr_copy(x);
         Expr* a0[1] = { xv };
-        Expr* fv_e = fr_eval_with_bindings(f, bind, a0, 1,
-                                           opts->eval_monitor,
-                                           fr_numeric_spec(opts));
+        Expr* fv_e = fr_eval_with_bindings(f, bind, a0, 1, opts);
         expr_free(xv);
         if (!fv_e) {
             fr_warn("nlnum", "could not evaluate f at MPFR precision");
@@ -963,9 +976,7 @@ static Expr* fr_run_newton_mpfr_real(Expr* f, Expr* df,
         if (df) {
             xv = expr_new_mpfr_copy(x);
             Expr* a1[1] = { xv };
-            Expr* dv_e = fr_eval_with_bindings(df, bind, a1, 1,
-                                               opts->eval_monitor,
-                                               fr_numeric_spec(opts));
+            Expr* dv_e = fr_eval_with_bindings(df, bind, a1, 1, opts);
             expr_free(xv);
             if (!dv_e) {
                 fr_warn("nlnum", "could not evaluate derivative at MPFR precision");
@@ -1097,9 +1108,7 @@ static Expr* fr_run_newton_mpfr_complex(Expr* f, Expr* df,
     for (int64_t k = 0; k < opts->max_iter; k++) {
         Expr* zv = fr_expr_from_complex_mpfr(zr, zi);
         Expr* a0[1] = { zv };
-        Expr* fv_e = fr_eval_with_bindings(f, bind, a0, 1,
-                                           opts->eval_monitor,
-                                           fr_numeric_spec(opts));
+        Expr* fv_e = fr_eval_with_bindings(f, bind, a0, 1, opts);
         expr_free(zv);
         if (!fv_e) {
             fr_warn("nlnum", "could not evaluate f at MPFR precision");
@@ -1124,9 +1133,7 @@ static Expr* fr_run_newton_mpfr_complex(Expr* f, Expr* df,
         if (df) {
             zv = fr_expr_from_complex_mpfr(zr, zi);
             Expr* a1[1] = { zv };
-            Expr* dv_e = fr_eval_with_bindings(df, bind, a1, 1,
-                                               opts->eval_monitor,
-                                               fr_numeric_spec(opts));
+            Expr* dv_e = fr_eval_with_bindings(df, bind, a1, 1, opts);
             expr_free(zv);
             if (!dv_e) {
                 fr_warn("nlnum", "could not evaluate derivative at MPFR precision");
@@ -1233,7 +1240,7 @@ static Expr* fr_run_newton_system_real(Expr* flist_normalized,
         double max_f_pre = 0.0;
         for (size_t i = 0; i < n; i++) {
             Expr* fi = flist_normalized->data.function.args[i];
-            Expr* fv_e = fr_eval_with_bindings(fi, binds, xv, n, opts->eval_monitor, fr_numeric_spec(opts));
+            Expr* fv_e = fr_eval_with_bindings(fi, binds, xv, n, opts);
             if (!fv_e || !fr_expr_to_double_real(fv_e, &fvec[i])) {
                 expr_free(fv_e);
                 fr_warn("nlnum", "non-real f_%zu during iteration", i);
@@ -1259,9 +1266,7 @@ static Expr* fr_run_newton_system_real(Expr* flist_normalized,
         double* J = malloc(sizeof(double) * n * n);
         for (size_t i = 0; i < n; i++) {
             for (size_t j = 0; j < n; j++) {
-                Expr* dv_e = fr_eval_with_bindings(jac[i][j], binds, xv, n,
-                                                   opts->eval_monitor,
-                                                   fr_numeric_spec(opts));
+                Expr* dv_e = fr_eval_with_bindings(jac[i][j], binds, xv, n, opts);
                 if (!dv_e || !fr_expr_to_double_real(dv_e, &J[i*n + j])) {
                     expr_free(dv_e);
                     fr_warn("nlnum", "non-real Jacobian[%zu,%zu]", i, j);
@@ -1334,7 +1339,7 @@ static Expr* fr_run_newton_system_real(Expr* flist_normalized,
         for (size_t i = 0; i < n; i++) xv2[i] = expr_new_real(x_vec[i]);
         for (size_t i = 0; i < n; i++) {
             Expr* fi = flist_normalized->data.function.args[i];
-            Expr* fv_e = fr_eval_with_bindings(fi, binds, xv2, n, opts->eval_monitor, fr_numeric_spec(opts));
+            Expr* fv_e = fr_eval_with_bindings(fi, binds, xv2, n, opts);
             double v;
             if (fv_e && fr_expr_to_double_real(fv_e, &v) && fabs(v) > max_f) {
                 max_f = fabs(v);
@@ -1413,6 +1418,8 @@ Expr* builtin_findroot(Expr* res) {
     opts.jacobian = NULL;
     opts.step_monitor = NULL;
     opts.eval_monitor = NULL;
+    opts.main_f = NULL;
+    opts.ac_f = NULL;
 
     for (size_t i = pos_end; i < argc; i++) {
         if (!fr_apply_option(res->data.function.args[i], &opts)) return NULL;
@@ -1540,6 +1547,15 @@ Expr* builtin_findroot(Expr* res) {
     /* Detect complex search. */
     bool want_complex = fr_is_complex_value(x0_e);
 
+    /* Auto-compile the function for the scalar, machine-precision, real path.
+     * The compiled program has real inputs, so complex/MPFR searches never use
+     * it (fr_eval_with_bindings guards on spec.mode and a real argument). */
+    if (!want_complex && opts.prec_mode == FR_PREC_MACHINE) {
+        const Expr* vs[1] = { var };
+        opts.ac_f = autocompile_new(fnorm, vs, 1);
+        opts.main_f = fnorm;
+    }
+
     if (method == FR_METHOD_BRENT) {
         /* Brent accepts a {var, x0, x1} pair as the bracket, or a
          * full {var, xstart, xmin, xmax} spec. */
@@ -1615,6 +1631,7 @@ Expr* builtin_findroot(Expr* res) {
 
 scalar_cleanup:
     fr_bind_restore(&bind);
+    autocompiled_free(opts.ac_f);
     expr_free(fnorm);
     expr_free(x0_e); expr_free(x1_e); expr_free(xmin_e); expr_free(xmax_e);
 

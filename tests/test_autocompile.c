@@ -98,6 +98,24 @@ void test_nintegrate_uncompilable(void) {
                    "- NIntegrate[Zeta[x]/x^3, {x, 2, 4}, WorkingPrecision -> 30]] < 10^-6", "True", 0);
 }
 
+/* FindRoot: the compiled machine-real path converges to the same root as the
+ * interpreter (checked by residual and by parity against an uncompilable
+ * perturbation). Complex/MPFR/inert-derivative paths keep working. */
+void test_findroot_parity(void) {
+    /* residual f(root) ~ 0 for Newton / secant / bracket */
+    assert_eval_eq("With[{r = x /. FindRoot[Cos[x] - x, {x, 0.5}]}, Abs[Cos[r] - r] < 10^-8]", "True", 0);
+    assert_eval_eq("With[{r = x /. FindRoot[x^3 - x - 2, {x, 1, 2}]}, Abs[r^3 - r - 2] < 10^-8]", "True", 0);
+    assert_eval_eq("With[{r = x /. FindRoot[x^2 - 2, {x, 1.5, 0, 3}]}, Abs[r^2 - 2] < 10^-8]", "True", 0);
+    /* compiled result equals the interpreter (uncompilable perturbation) result */
+    assert_eval_eq("Abs[(x /. FindRoot[Cos[x] - x, {x, 0.5}]) "
+                   "- (x /. FindRoot[Cos[x] - x + 10^-290 Zeta[x + 100], {x, 0.5}])] < 10^-11", "True", 0);
+}
+
+void test_findroot_complex_and_inert(void) {
+    assert_eval_eq("Chop[(x /. FindRoot[x^2 + 1, {x, I}]) - I] == 0", "True", 0);       /* complex root */
+    assert_eval_eq("With[{r = x /. FindRoot[Zeta[x] - 2, {x, 1.5}]}, Abs[Zeta[r] - 2] < 10^-8]", "True", 0); /* inert deriv → FD */
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -113,6 +131,8 @@ int main(void) {
     TEST(test_nintegrate_oscillatory);
     TEST(test_nintegrate_complex_fallback);
     TEST(test_nintegrate_uncompilable);
+    TEST(test_findroot_parity);
+    TEST(test_findroot_complex_and_inert);
 
     printf("All auto-compile tests passed!\n");
     return 0;
