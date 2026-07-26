@@ -361,3 +361,48 @@ In[2]:= f[a_] := Module[{x = 1., xp}, Label[begin];
 Out[2]= 1.41421
 ```
 
+
+## Compile / CompiledFunction
+
+`Compile[{arg, ...}, expr]` or `Compile[{{arg, _Type}, ...}, expr]` builds a
+`CompiledFunction` object that evaluates `expr` over raw machine numbers,
+bypassing the symbolic evaluator entirely. Argument types are `_Real` (the
+default for a bare symbol), `_Integer`, or `_Complex`. Applying the object to
+numeric arguments runs typed bytecode with no `Expr` allocation; a symbolic
+argument, or a body outside the compilable subset, transparently falls back to
+the interpreter, so a `CompiledFunction` always returns what the original
+expression would.
+
+- **Attributes:** `HoldAll`, `Protected`. The body is compiled in its raw
+  (unevaluated) form; the argument symbols stay local, so a global value for one
+  of them does not leak in.
+- **Compilable subset** (shared with the internal engine behind NDSolve): full
+  scalar arithmetic and comparisons, `Mod`/`Quotient`, integer/real/complex
+  `Power`, all elementary functions and every special function that has a
+  machine kernel (`Gamma`, `Erf`, `BesselJ`, …), `If`, `Sum`/`Product`,
+  `With`/`Module` locals with `Set`/`AddTo`/`Increment`/…, `Do`/`While`/`For`,
+  `Nest`, and `CompoundExpression`. Anything else (e.g. `Zeta`, exact symbolic
+  algebra) routes that application through the interpreter fallback.
+- **Result** is a boxed machine number: an `Integer`, `Real`, or `Complex`
+  (real part only if the imaginary part is zero), or `True`/`False` for a
+  Boolean body.
+- Applying with the wrong number of arguments leaves the application
+  unevaluated. The object is reference-counted and leak-free.
+
+```mathematica
+In[1]:= f = Compile[{{x, _Real}}, x^2 + 1]
+Out[1]= CompiledFunction[{x}, x^2 + 1]
+
+In[2]:= f[3.0]
+Out[2]= 10.0
+
+In[3]:= f[a]                 (* symbolic argument -> interpreter fallback *)
+Out[3]= 1 + a^2
+
+In[4]:= g = Compile[{{n, _Integer}}, Module[{s = 0.}, Do[s = s + 1/i^2, {i, 1, n}]; s]];
+        g[100]
+Out[4]= 1.63498
+
+In[5]:= Compile[{{z, _Complex}}, z^2][1.0 + 2.0 I]
+Out[5]= -3.0 + 4.0 I
+```

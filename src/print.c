@@ -13,6 +13,7 @@
 #include "context.h"
 #include "sym_names.h"
 #include "ndarray.h"
+#include "compile/compiled_function.h"
 #include "graph.h"   /* graph_is_list, for the Graph[...] summary form */
 #include <stdio.h>
 #include <stdarg.h>
@@ -164,6 +165,17 @@ void expr_print_fullform(Expr* e) {
             Expr* nested = ndarray_to_nested_list(e);
             print_standard(nested, 0);
             expr_free(nested);
+            printf("]");
+            break;
+        }
+        case EXPR_COMPILED: {
+            const CompiledFunction* cf = e->data.compiled;
+            size_t n = compiled_function_num_args(cf);
+            const char* const* names = compiled_function_arg_names(cf);
+            printf("CompiledFunction[{");
+            for (size_t i = 0; i < n; i++) { if (i) printf(", "); printf("%s", names[i] ? names[i] : "?"); }
+            printf("}, ");
+            print_standard((Expr*)compiled_function_body(cf), 0);
             printf("]");
             break;
         }
@@ -1256,6 +1268,17 @@ static void print_tex(Expr* e, int parent_prec) {
         Expr* nested = ndarray_to_nested_list(e);
         print_tex(nested, 0);
         expr_free(nested);
+        printf("\\right]");
+        return;
+    }
+    if (e->type == EXPR_COMPILED) {
+        const CompiledFunction* cf = e->data.compiled;
+        size_t n = compiled_function_num_args(cf);
+        const char* const* names = compiled_function_arg_names(cf);
+        printf("\\text{CompiledFunction}\\left[\\{");
+        for (size_t i = 0; i < n; i++) { if (i) printf(", "); print_tex_symbol(names[i]); }
+        printf("\\}, ");
+        print_tex((Expr*)compiled_function_body(cf), 0);
         printf("\\right]");
         return;
     }

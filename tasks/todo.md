@@ -1,51 +1,49 @@
-# Compile[] engine — M0 substrate (scalar core)
+# Compile[] engine — M1b: user-facing Compile[] / CompiledFunction object
 
-Per docs/design/compile.md. This increment: the reusable engine core, scalar
-lattice only (Bool/Int/Real/Complex). Register VM designed for control flow.
-Extensive unit + stress tests. Highly efficient VM (monomorphic typed opcodes,
-no runtime type dispatch, Real hot path, stack-discipline register reuse).
+Goal: expose the numeric compiler to the REPL. `Compile[argspec, body]` returns a
+`CompiledFunction` object; applying it to numeric args runs the bytecode (Expr-free);
+symbolic args / uncompilable bodies fall back to the interpreter.
 
-## Scope (this pass)
-- [ ] src/compile/compile.{h,c}: typed value slots, IR, register VM, front-end
-      (type inference + lowering + bail), arithmetic/comparison/boolean/
-      elementary opcodes, coercions.
-- [ ] compiled_eval (boxed) + compiled_eval_real (fast all-real path) +
-      compiled_arg_deps (for NDSolve reuse later).
-- [ ] makefile SRC += src/compile/*.c ; tests/CMakeLists target.
-- [ ] tests/test_compile.c: parity vs interpreter across all types/ops/coercions/
-      nesting; stress (deep+wide expressions, many args, fuzz); perf smoke.
-- [ ] valgrind + ASan clean.
+## Representation
+- New `EXPR_COMPILED` atom; union member `struct CompiledFunction* compiled`
+  (a pointer — does NOT grow the union, low ABI risk). Own refcount on the
+  payload (immutable after build) → expr_copy shares the node, expr_unshare refs
+  the payload, expr_free dec-refs.
+- `CompiledFunction` owns: `CompiledProgram* prog` (NULL if body uncompilable),
+  interned `arg_names`, `arg_types`, `nargs`, and `Expr* body` (fallback + print).
 
-## Deferred to later milestones (design doc)
-- Generic KERNEL over shared ndkernels registry (all numeric special fns) — M1/M4.
-- Control flow If/Do/For/While/Nest — M2.
-- Arrays / NDArray / lists of machine numbers — M3.
-- User-facing Compile[] builtin + CompiledFunction object — M1.
-- NDSolve migration onto the engine — after core is proven.
+## Tasks
+- [ ] expr.h: EXPR_COMPILED enum, forward-decl, union member, `expr_new_compiled`.
+- [ ] expr.c: constructor; expr_free / expr_unshare / expr_eq / expr_hash /
+      expr_compare cases (identity by payload pointer).
+- [ ] src/compile/compiled_function.{h,c}: CompiledFunction struct + new/ref/free/
+      apply + accessors; argspec parser ({x}|{{x,_Real}}...); numeric box/unbox;
+      interpreter fallback (replace_bindings + eval_and_free).
+- [ ] Compile builtin + `compiled_function_init()` (HoldAll, Protected, docstring);
+      call from core_init.
+- [ ] eval.c: EXPR_COMPILED atomic self-eval; application dispatch (head is
+      EXPR_COMPILED → compiled_function_apply).
+- [ ] print.c: EXPR_COMPILED → `CompiledFunction[{args}, body]` (or -compiled-).
+- [ ] tests/CMakeLists.txt COMMON_SRC += compiled_function.c; tests.
+- [ ] docs/spec/builtins + changelog + memory.
+
+## Deferred (later milestones)
+- Array/NDArray arg types ({x,_Real,rank}) — M3.
+- Compile options (RuntimeAttributes, parallelization) — later.
 
 ## Review — DONE (2026-07-26)
 
-Delivered the reusable engine core: `src/compile/compile.{h,c}`.
-- Type lattice Bool/Int/Real/Complex; bottom-up inference; widening coercions
-  inserted where operand types differ; bail (NULL) on anything outside the subset.
-- Monomorphic typed opcodes (a Real add is one instruction; no runtime tag);
-  register machine with stack-discipline temp allocation (O(depth) registers);
-  reusable frame per program (no per-call malloc).
-- Ops: arithmetic (I/R/C), Mod/Quotient, integer/real/complex Power, all the
-  elementary functions (Sqrt/Exp/Log/trig/hyperbolic/inverse/Erf/…), Abs/Sign,
-  Floor/Ceiling/Round (→Int), Re/Im/Arg/Conjugate, Max/Min, ArcTan[x,y],
-  comparisons (→Bool), And/Or/Not/Xor, named constants.
-- API: compile_expr / compiled_eval (boxed) / compiled_eval_real (fast all-real,
-  no boxing) / compiled_arg_deps (sparsity, for NDSolve reuse) / compiled_free.
+Shipped `Compile[]` / `CompiledFunction` (M1b). New `EXPR_COMPILED` atom with a
+reference-counted, immutable `CompiledFunction` payload (bare pointer in the
+union), wired through expr copy/unshare/free/eq/hash/compare, print (+TeX), and
+the evaluator (atomic self-eval + `object[args]` dispatch). `Compile[argspec,
+body]` (HoldAll|Protected) parses `_Real`/`_Integer`/`_Complex` argspecs, compiles
+the raw body, and keeps it for the interpreter fallback. Application runs the
+bytecode for numeric args and boxes the result; symbolic args / uncompilable
+bodies (e.g. `Zeta`) fall back to substitution+evaluate; wrong arity stays
+unevaluated. `src/compile/compiled_function.{c,h}`;
+`tests/test_compiledfunction.c` (all pass); silenced 6 new `-Wswitch` sites for
+the enum; `leaks`-clean; `simplify_tests`' 1 failure is pre-existing (verified
+against HEAD). Docs + changelog updated.
 
-Tests: `tests/test_compile.c` (33 checks) — parity vs the interpreter to machine
-precision (max_rel ~1e-16) across all types/ops/coercions/nesting; all-real fast
-path == boxed path; arg-dep introspection; graceful bail; stress (400-deep nest,
-500-term sum, 8 args); performance **~234× faster** than the interpreter
-(~86 ns/call). Valgrind + ASan clean. Existing suites unaffected.
-
-## Next (per design doc)
-- M1: generic KERNEL over shared ndkernels (all special fns) + user Compile[]
-  builtin + CompiledFunction object.
-- M2: control flow (If/Do/For/While/Nest). M3: arrays/NDArray.
-- Then migrate NDSolve onto the engine.
+Next: M3 arrays/NDArray, or wire Plot/NIntegrate/FindRoot/Table to auto-compile.

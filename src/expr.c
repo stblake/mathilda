@@ -10,6 +10,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* EXPR_COMPILED payload lifecycle — implemented in compile/compiled_function.c.
+ * Forward-declared here so the core Expr node can adopt / share / release the
+ * opaque payload without pulling the compiler headers into expr.c. */
+struct CompiledFunction* compiled_function_ref(struct CompiledFunction* cf);
+void                     compiled_function_free(struct CompiledFunction* cf);
+uint64_t                 compiled_function_identity(const struct CompiledFunction* cf);
+
 /* Portable strdup (strdup is POSIX, not C99). See expr.h. */
 char* mathilda_strdup(const char* s) {
     if (!s) return NULL;
@@ -301,6 +308,18 @@ Expr* expr_new_ndarray(int rank, const int64_t* dims, void* data, NDType dtype) 
     return e;
 }
 
+/* EXPR_COMPILED.  The payload is reference-counted in its own module; this node
+ * simply adopts the single reference handed in. */
+Expr* expr_new_compiled(struct CompiledFunction* cf) {
+    Expr* e = expr_alloc_node();
+    if (!e) return NULL;
+    e->type = EXPR_COMPILED;
+    e->refcount = 1;
+    e->last_evaluated_at = 0;
+    e->data.compiled = cf;
+    return e;
+}
+
 #ifdef USE_MPFR
 /* MPFR constructors. All allocate an Expr and initialize the payload
  * `mpfr_t` at the requested precision; the caller owns the result and
@@ -470,6 +489,10 @@ Expr* expr_unshare(Expr* e) {
             memcpy(fresh->data.ndarray.data, e->data.ndarray.data, bytes);
             break;
         }
+        case EXPR_COMPILED:
+            /* Immutable payload: share it (inc its own refcount). */
+            fresh->data.compiled = compiled_function_ref(e->data.compiled);
+            break;
 #ifdef USE_MPFR
         case EXPR_MPFR:
             mpfr_init2(fresh->data.mpfr, mpfr_get_prec(e->data.mpfr));
@@ -539,6 +562,9 @@ void expr_free(Expr* e) {
         case EXPR_NDARRAY:
             free(e->data.ndarray.dims);
             free(e->data.ndarray.data);
+            break;
+        case EXPR_COMPILED:
+            compiled_function_free(e->data.compiled);
             break;
 #ifdef USE_MPFR
         case EXPR_MPFR:
@@ -625,6 +651,10 @@ bool expr_eq(const Expr* a, const Expr* b) {
             size_t bytes = ndt_elem_size(a->data.ndarray.dtype) * n;
             return memcmp(a->data.ndarray.data, b->data.ndarray.data, bytes) == 0;
         }
+        case EXPR_COMPILED:
+            /* Object identity: two CompiledFunctions are SameQ iff they wrap the
+             * same payload (matches the opaque-object convention). */
+            return a->data.compiled == b->data.compiled;
 #ifdef USE_MPFR
         case EXPR_MPFR:
             /* Equal iff same precision AND same value (matches SameQ
@@ -713,6 +743,10 @@ uint64_t expr_hash(const Expr* e) {
             }
             break;
         }
+        case EXPR_COMPILED:
+            /* Identity hash (see expr_eq): mix the payload's stable id. */
+            h ^= compiled_function_identity(e->data.compiled); h *= prime;
+            break;
 #ifdef USE_MPFR
         case EXPR_MPFR: {
             /* Hash precision + IEEE double approximation. Not perfectly

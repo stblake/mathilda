@@ -18,6 +18,7 @@
 #include "sym_names.h"
 #include "sym_intern.h"
 #include "interp.h"
+#include "compile/compiled_function.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -857,6 +858,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
         case EXPR_STRING:
         case EXPR_BIGINT:
         case EXPR_NDARRAY:        /* dense ndarray: an atomic value */
+        case EXPR_COMPILED:       /* compiled function object: an atomic value */
 #ifdef USE_MPFR
         case EXPR_MPFR:
 #endif
@@ -1474,6 +1476,18 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 if (applied) {
                     expr_free(res);
                     *changed = true; /* InterpolatingFunction evaluated */
+                    return applied;
+                }
+            } else if (head->type == EXPR_COMPILED) {
+                /* 7e. CompiledFunction[...][args] -> numeric result (or the
+                 * interpreter fallback for symbolic args).  Returns NULL only on
+                 * an arity mismatch, leaving the application unevaluated. */
+                Expr* applied = compiled_function_apply(head->data.compiled,
+                                                        res->data.function.args,
+                                                        res->data.function.arg_count);
+                if (applied) {
+                    expr_free(res);
+                    *changed = true; /* CompiledFunction applied */
                     return applied;
                 }
             }

@@ -23,7 +23,8 @@ typedef enum {
     EXPR_STRING,
     EXPR_FUNCTION,
     EXPR_BIGINT,
-    EXPR_NDARRAY               /* dense machine-precision ndarray, see ndarray.h */
+    EXPR_NDARRAY,              /* dense machine-precision ndarray, see ndarray.h */
+    EXPR_COMPILED              /* compiled numeric function, see compile/compiled_function.h */
 #ifdef USE_MPFR
     , EXPR_MPFR                /* arbitrary-precision real (MPFR) */
 #endif
@@ -109,6 +110,11 @@ typedef struct Expr {
         } function;
         mpz_t bigint;
         NDArrayData ndarray;
+        /* EXPR_COMPILED: opaque, reference-counted, immutable-after-build
+         * compiled-function payload.  Defined in compile/compiled_function.h;
+         * only a forward declaration is visible here to keep the layering clean
+         * (a bare pointer never grows the union). */
+        struct CompiledFunction* compiled;
 #ifdef USE_MPFR
         mpfr_t mpfr;          /* carries its own precision in bits */
 #endif
@@ -160,6 +166,14 @@ Expr* expr_new_bigint_from_str(const char* str);
  * or reuse it afterwards). `rank` >= 1, `dims[i]` >= 1, `data` must have
  * exactly product(dims) elements of `dtype` (ndt_elem_size(dtype) bytes each). */
 Expr* expr_new_ndarray(int rank, const int64_t* dims, void* data, NDType dtype);
+
+/* EXPR_COMPILED constructor.  Takes ownership of one reference to `cf` (the
+ * caller must not free it afterwards; expr_free will dec-ref).  See
+ * compile/compiled_function.h. */
+Expr* expr_new_compiled(struct CompiledFunction* cf);
+/* A stable per-object identity (used by expr_eq/hash/compare for EXPR_COMPILED).
+ * Implemented in compile/compiled_function.c. */
+uint64_t compiled_function_identity(const struct CompiledFunction* cf);
 
 #ifdef USE_MPFR
 /* MPFR constructors. Each allocates an Expr whose payload `mpfr_t` is

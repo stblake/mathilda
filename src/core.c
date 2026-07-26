@@ -859,6 +859,9 @@ void core_init(void) {
     void convolutions_init(void);   /* registers ListConvolve + ListCorrelate */
     convolutions_init();
 
+    void compiled_function_init(void);   /* registers Compile[] / CompiledFunction */
+    compiled_function_init();
+
     /* Options/SetOptions/OptionValue + the default-options registry. Runs last
      * so every option-name symbol used by the registry is already interned. */
     void options_builtin_init(void);

@@ -372,6 +372,17 @@ int expr_compare(const Expr* a, const Expr* b) {
     if (a->type == EXPR_NDARRAY) return 1;
     if (b->type == EXPR_NDARRAY) return -1;
 
+    /* 6. CompiledFunction objects: order by payload identity (stable within a
+     * run; distinct objects compare unequal). */
+    if (a->type == EXPR_COMPILED && b->type == EXPR_COMPILED) {
+        uint64_t ia = compiled_function_identity(a->data.compiled);
+        uint64_t ib = compiled_function_identity(b->data.compiled);
+        if (ia != ib) return (ia < ib) ? -1 : 1;
+        return 0;
+    }
+    if (a->type == EXPR_COMPILED) return 1;
+    if (b->type == EXPR_COMPILED) return -1;
+
     return 0;
 }
 

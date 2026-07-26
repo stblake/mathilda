@@ -98,6 +98,9 @@ static Expr* precision_of(const Expr* e) {
         case EXPR_NDARRAY:
             /* Dense machine-precision ndarray: every entry is a double. */
             return make_machineprecision();
+        case EXPR_COMPILED:
+            /* Opaque object; carries no numeric value → exact. */
+            return make_infinity();
         case EXPR_FUNCTION: {
             /* Rational is exact; Complex reduces to min of parts;
              * anything else — conservatively take the min across parts. */
@@ -190,6 +193,9 @@ static Expr* accuracy_of(const Expr* e) {
             return expr_new_real(prec_digits - expr_log10_abs(e));
         }
 #endif
+        case EXPR_COMPILED:
+            /* Opaque object; carries no numeric value → exact (infinite accuracy). */
+            return make_infinity();
         case EXPR_NDARRAY: {
             /* Machine-precision doubles: minimum accuracy across all entries,
              * matching the per-component minimum taken for lists. */

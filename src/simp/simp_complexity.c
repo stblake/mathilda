@@ -84,6 +84,7 @@ size_t simp_default_complexity(const Expr* e) {
         case EXPR_REAL:    return 2;
         case EXPR_SYMBOL:  return 1;
         case EXPR_STRING:  return 1;
+        case EXPR_COMPILED: return 1;   /* opaque atom */
         case EXPR_NDARRAY: {
             /* Each entry is a machine-precision Real (score 2); +1 for the
              * NDArray wrapper. Keeps Simplify from preferring a large packed

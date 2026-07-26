@@ -640,6 +640,10 @@ static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch
                 /* A literal NDArray pattern matches an identical dense array. */
                 if (expr_eq(expr, pattern)) return call_parent(env, parent);
                 return false;
+            case EXPR_COMPILED:
+                /* CompiledFunction objects match by identity. */
+                if (expr_eq(expr, pattern)) return call_parent(env, parent);
+                return false;
             case EXPR_FUNCTION: {
                 size_t saved_env_count = env->count;
                 if (match_internal(expr->data.function.head, pattern->data.function.head, env, NULL)) {
