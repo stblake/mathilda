@@ -620,6 +620,7 @@ set(COMMON_SRC
     ../src/numerical_calculus/ndsolve_stencil.c
     ../src/numerical_calculus/ndsolve_operator.c
     ../src/numerical_calculus/ndsolve_compile.c
+    ../src/compile/compile.c
     ../src/numerical_roots/nroots.c
     ../src/numerical_roots/nroots_aberth.c
     ../src/numerical_roots/nroots_jt.c
@@ -997,6 +998,9 @@ target_include_directories(ndsolve_pde_tests PRIVATE ../src ../src/numerical_cal
 
 add_executable(ndsolve_compile_tests test_ndsolve_compile.c ${COMMON_SRC})
 target_include_directories(ndsolve_compile_tests PRIVATE ../src ../src/numerical_calculus)
+
+add_executable(compile_tests test_compile.c ${COMMON_SRC})
+target_include_directories(compile_tests PRIVATE ../src ../src/compile)
 
 add_executable(levincoll_tests test_levincoll.c ${COMMON_SRC})
 target_include_directories(levincoll_tests PRIVATE ../src ../src/numerical_calculus)
