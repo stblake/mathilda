@@ -62,6 +62,8 @@ enum {
     OP_LT_I, OP_LT_R, OP_LE_I, OP_LE_R, OP_GT_I, OP_GT_R, OP_GE_I, OP_GE_R,
     OP_EQ_I, OP_EQ_R, OP_EQ_C, OP_NE_I, OP_NE_R, OP_NE_C,
     OP_AND, OP_OR, OP_XOR, OP_NOT,
+    OP_JMP,   /* pc = imm target in .b */
+    OP_JZ,    /* if R[.a] (bool) is false, pc = .b; else fall through */
     OP_RET
 };
 
@@ -264,6 +266,65 @@ static bool emit_unary_math(Ctx* c, const Expr* arg, uint16_t op_r, uint16_t op_
     coerce(c, &a, CT_REAL);
     *out = unop(c, op_r, a, CT_REAL);
     return c->ok;
+}
+
+/* Pure type inference (no code emission) — needed to type an If's result
+ * register before both branches are lowered.  Mirrors emit's result-type rules;
+ * returns false for anything not compilable. */
+static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
+    if (!e) return false;
+    Slot imm; CompileType lt;
+    if (literal(e, &imm, &lt)) { *out = lt; return true; }
+    if (e->type == EXPR_SYMBOL) {
+        const char* nm = e->data.symbol.name;
+        int k = nm_get(&c->map, nm);
+        if (k >= 0) { *out = c->arg_types[k]; return true; }
+        if (strcmp(nm, "True") == 0 || strcmp(nm, "False") == 0) { *out = CT_BOOL; return true; }
+        if (strcmp(nm, "I") == 0) { *out = CT_COMPLEX; return true; }
+        double cv; if (named_const(nm, &cv)) { *out = CT_REAL; return true; }
+        return false;
+    }
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    Expr** A = e->data.function.args; size_t na = e->data.function.arg_count;
+    CompileType ta, tb;
+    #define IT(idx, dst) do { if (!infer_type(c, A[idx], &dst)) return false; } while (0)
+    if (strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) {
+        if (na == 0) { *out = CT_INT; return true; }
+        IT(0, ta); for (size_t i = 1; i < na; i++) { IT(i, tb); ta = num_common(ta, tb); if ((int)ta < 0) return false; }
+        *out = ta; return true;
+    }
+    if (strcmp(h, "Subtract") == 0 && na == 2) { IT(0, ta); IT(1, tb); ta = num_common(ta, tb); if ((int)ta < 0) return false; *out = ta; return true; }
+    if (strcmp(h, "Minus") == 0 && na == 1)    { IT(0, ta); if (ta == CT_BOOL) return false; *out = ta; return true; }
+    if (strcmp(h, "Divide") == 0 && na == 2)   { IT(0, ta); IT(1, tb); ta = num_common(ta, tb); if ((int)ta < 0) return false; if (ta < CT_REAL) ta = CT_REAL; *out = ta; return true; }
+    if ((strcmp(h, "Mod") == 0 || strcmp(h, "Quotient") == 0) && na == 2) { IT(0, ta); IT(1, tb); if (ta != CT_INT || tb != CT_INT) return false; *out = CT_INT; return true; }
+    if (strcmp(h, "Power") == 0 && na == 2) {
+        IT(0, ta);
+        if (A[1]->type == EXPR_INTEGER) { *out = (ta == CT_INT && A[1]->data.integer >= 0) ? CT_INT : (ta == CT_COMPLEX ? CT_COMPLEX : CT_REAL); return true; }
+        int64_t rn, rd; if (is_rational(A[1], &rn, &rd) && rd == 2 && (rn == 1 || rn == -1)) { *out = ta == CT_COMPLEX ? CT_COMPLEX : CT_REAL; return true; }
+        IT(1, tb); ta = num_common(ta, tb); if ((int)ta < 0) return false; if (ta < CT_REAL) ta = CT_REAL; *out = ta; return true;
+    }
+    uint16_t or_, oc_;
+    if (na == 1 && (unary_math(h, &or_, &oc_) || strcmp(h, "Tanh") == 0)) { IT(0, ta); *out = ta == CT_COMPLEX ? CT_COMPLEX : CT_REAL; return true; }
+    if (strcmp(h, "Log") == 0 && na == 2) { IT(0, ta); IT(1, tb); ta = num_common(ta, tb); *out = ta == CT_COMPLEX ? CT_COMPLEX : CT_REAL; return true; }
+    if (strcmp(h, "Abs") == 0 && na == 1)  { IT(0, ta); *out = ta == CT_COMPLEX ? CT_REAL : ta; return true; }
+    if (strcmp(h, "Sign") == 0 && na == 1) { IT(0, ta); if (ta == CT_COMPLEX) return false; *out = ta; return true; }
+    if ((strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0 || strcmp(h, "Round") == 0) && na == 1) { IT(0, ta); *out = CT_INT; return true; }
+    if ((strcmp(h, "Re") == 0 || strcmp(h, "Im") == 0 || strcmp(h, "Arg") == 0) && na == 1) { IT(0, ta); if (strcmp(h, "Arg") == 0 && ta != CT_COMPLEX) return false; *out = CT_REAL; return true; }
+    if (strcmp(h, "Conjugate") == 0 && na == 1) { IT(0, ta); *out = ta; return true; }
+    if ((strcmp(h, "Max") == 0 || strcmp(h, "Min") == 0) && na >= 1) { IT(0, ta); for (size_t i = 1; i < na; i++) { IT(i, tb); ta = num_common(ta, tb); if ((int)ta < 0 || ta == CT_COMPLEX) return false; } *out = ta; return true; }
+    if (strcmp(h, "ArcTan") == 0) { if (na == 1) { IT(0, ta); *out = ta == CT_COMPLEX ? CT_COMPLEX : CT_REAL; return true; } if (na == 2) { *out = CT_REAL; return true; } return false; }
+    if (na == 2 && (!strcmp(h, "Less") || !strcmp(h, "LessEqual") || !strcmp(h, "Greater") || !strcmp(h, "GreaterEqual") || !strcmp(h, "Equal") || !strcmp(h, "Unequal"))) { *out = CT_BOOL; return true; }
+    if (!strcmp(h, "And") || !strcmp(h, "Or") || !strcmp(h, "Xor") || !strcmp(h, "Not")) { *out = CT_BOOL; return true; }
+    if (strcmp(h, "If") == 0 && na == 3) {
+        CompileType tt, te; if (!infer_type(c, A[1], &tt) || !infer_type(c, A[2], &te)) return false;
+        if (tt == te) { *out = tt; return true; }
+        *out = num_common(tt, te); return (int)*out >= 0;
+    }
+    if (na == 1) { SymbolDef* d = symtab_lookup(h); if (d && d->ndarray_unary_kernel) { const NDUnaryKernel* k = d->ndarray_unary_kernel; if (k->cplx || k->real) { IT(0, ta); if (k->to_real) { *out = CT_REAL; return true; } if (ta == CT_COMPLEX) { if (!k->cplx) return false; *out = CT_COMPLEX; return true; } *out = (k->real_closed || k->real) ? CT_REAL : CT_COMPLEX; return true; } } }
+    if (na == 2) { SymbolDef* d = symtab_lookup(h); if (d && d->ndarray_binary_kernel) { const NDBinaryKernel* k = d->ndarray_binary_kernel; if (k->cplx) { IT(0, ta); IT(1, tb); CompileType t = num_common(ta, tb); if ((int)t < 0) return false; *out = (t <= CT_REAL && k->real_closed) ? CT_REAL : CT_COMPLEX; return true; } } }
+    #undef IT
+    return false;
 }
 
 /* Generic special-function path: any numeric function registered in the shared
@@ -498,6 +559,34 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
         *out = unop(c, OP_NOT, a, CT_BOOL); return c->ok;
     }
 
+    /* If[cond, then, else]: branch control flow.  Result lands in one register
+     * that whichever branch runs writes; the other branch is jumped over. */
+    if (strcmp(h, "If") == 0 && na == 3) {
+        CompileType tt, te;
+        if (!infer_type(c, A[1], &tt) || !infer_type(c, A[2], &te)) { c->ok = false; return false; }
+        CompileType rt = (tt == te) ? tt : num_common(tt, te);
+        if ((int)rt < 0) { c->ok = false; return false; }
+        int rr = alloc_temp(c);                     /* persistent result reg */
+        Slot z = { 0 };
+        Val cond; if (!emit(c, A[0], &cond)) return false;
+        if (cond.type != CT_BOOL) { c->ok = false; return false; }
+        size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)cond.reg, 0, z);
+        free_if_tmp(c, cond);
+        Val th; if (!emit(c, A[1], &th)) return false;
+        coerce(c, &th, rt);
+        ins(c, OP_MOVE, (uint32_t)rr, (uint32_t)th.reg, 0, z);
+        free_if_tmp(c, th);
+        size_t jmp = c->n; ins(c, OP_JMP, 0, 0, 0, z);
+        if (c->ok) c->code[jz].b = (uint32_t)c->n;   /* else label */
+        Val el; if (!emit(c, A[2], &el)) return false;
+        coerce(c, &el, rt);
+        ins(c, OP_MOVE, (uint32_t)rr, (uint32_t)el.reg, 0, z);
+        free_if_tmp(c, el);
+        if (c->ok) c->code[jmp].b = (uint32_t)c->n;   /* end label */
+        out->reg = rr; out->tmp = true; out->type = rt;
+        return c->ok;
+    }
+
     /* last resort: any numeric function with a machine kernel in ndkernels */
     Val kv;
     if (try_kernel(c, h, A, na, &kv)) { *out = kv; return c->ok; }
@@ -513,10 +602,13 @@ static double    ipow_r(double b, long long n) { if (n < 0) { b = 1.0 / b; n = -
 static double _Complex ipow_c(double _Complex b, long long n) { if (n < 0) { b = 1.0 / b; n = -n; } double _Complex r = 1; while (n) { if (n & 1) r *= b; b *= b; n >>= 1; } return r; }
 
 static void vm_run(const Instr* code, size_t n, Slot* R) {
-    for (size_t k = 0; k < n; k++) {
-        const Instr* c = &code[k];
+    size_t pc = 0;
+    while (pc < n) {
+        const Instr* c = &code[pc];
         Slot* d = &R[c->dst]; const Slot* a = &R[c->a]; const Slot* b = &R[c->b];
         switch (c->op) {
+            case OP_JMP: pc = c->b; continue;
+            case OP_JZ:  pc = a->i ? pc + 1 : c->b; continue;   /* branch if false */
             case OP_CONST: *d = c->imm; break;
             case OP_MOVE:  *d = *a; break;
             case OP_I2R: d->r = (double)a->i; break;
@@ -599,8 +691,10 @@ static void vm_run(const Instr* code, size_t n, Slot* R) {
             case OP_OR:  d->i = a->i || b->i; break;
             case OP_XOR: d->i = (!!a->i) ^ (!!b->i); break;
             case OP_NOT: d->i = !a->i; break;
-            case OP_RET: default: return;
+            case OP_RET: return;
+            default: return;
         }
+        pc++;
     }
 }
 

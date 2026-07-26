@@ -208,6 +208,15 @@ int main(void) {
     /* ---- pi/e constants ---- */
     parity("named constants", "Pi x + E y - x/Pi", xy, RRR, 2, 0.2, 3.0, 0, 0, 200);
 
+    /* ---- control flow: If (branches) ---- */
+    parity("If real branches", "If[x < y, x^2 + 1, Sin[y] - z]", xyz, RRR, 3, -2.0, 2.0, 0, 0, 300);
+    parity("If nested", "If[x < 0, If[y < 0, x + y, x - y], x y]", xyz, RRR, 3, -2.0, 2.0, 0, 0, 300);
+    parity("If int branches", "If[x > y, x + z, x - z]", xyz, III, 3, 0, 0, -10, 10, 300);
+    parity("If widen branches", "If[x < y, x, 5 y/2]", xy, ((const CompileType[]){ CT_INT, CT_REAL }), 2, -3.0, 3.0, -5, 5, 300);
+    parity("If complex branches", "If[Re[x] < 1, x^2, Exp[y]]", xy, CCC, 2, -1.5, 1.5, 0, 0, 300);
+    parity("If bool branches", "If[x < y, y < z, x < z]", xyz, RRR, 3, -2.0, 2.0, 0, 0, 300);
+    parity("If in arithmetic", "3 If[x < y, x, y] + Abs[z]", xyz, RRR, 3, -2.0, 2.0, 0, 0, 300);
+
     /* ---- all-real fast path parity ---- */
     {
         const char* nm[] = { "x", "y" };
