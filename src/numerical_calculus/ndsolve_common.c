@@ -7,6 +7,9 @@
 #include <math.h>
 #include <float.h>
 #include <string.h>
+#ifdef USE_LAPACK
+#include "../linalg/lapack.h"   /* dgbtrf_/dgbtrs_/dgetrf_/dgetrs_ */
+#endif
 
 /* ------------------------------------------------------------------ *
  *  Block-style variable binding                                       *
@@ -148,12 +151,7 @@ bool nd_rhs_real(NdProblem* P, double t, const double* Y, double* out) {
     if (P->op) {
         NdOperator* op = P->op;
         size_t n = op->n;
-        for (size_t i = 0; i < n; i++) {
-            const double* Ai = &op->A[i * n];
-            double acc = 0.0;
-            for (size_t j = 0; j < n; j++) acc += Ai[j] * Y[j];
-            out[i] = acc;
-        }
+        nd_operator_matvec(op, Y, out);       /* out = A·Y (banded/dense BLAS) */
         if (op->time_forcing) {
             nd_bind_set(&P->bind_t, expr_new_real(t));
             for (size_t i = 0; i < n; i++) {
@@ -335,48 +333,173 @@ bool nd_banded_solve(size_t n, int kl, int ku, double* M, double* b) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  Iteration-matrix factor + solve  (I - coef*J) x = b                *
+ *                                                                     *
+ *  Factor ONCE, then back-substitute per Newton iteration.  For the   *
+ *  compiled operator the Jacobian J = A is constant so the factor is   *
+ *  reused across every iteration of a solve; for a symbolic Jacobian   *
+ *  the factor is rebuilt each iteration (J changes).  A banded pivoted *
+ *  LAPACK factor is used when the matrix is narrow (the FD structure   *
+ *  of a discretized operator), a dense pivoted LAPACK factor for wide  *
+ *  bands, and the scalar band/dense LU when built without LAPACK.      *
+ * ------------------------------------------------------------------ */
+struct NdIterFactor {
+    size_t d;
+    int    mode;        /* 0 banded-LAPACK, 1 dense-LAPACK, 2 scalar fallback   */
+    int    kl, ku, ldab;
+    double* ab;         /* factor band (mode 0) or dense col-major LU (mode 1)  */
+    int*    ipiv;
+    double* M;          /* scalar fallback: I - coef*J, row-major (mode 2)      */
+    bool    fb_banded;  /* scalar fallback uses the banded solver               */
+    double  coef;
+};
+
+/* Detect the half-bandwidths of a dense d x d row-major matrix A. */
+static void nd_detect_band(const double* A, size_t d, int* kl, int* ku) {
+    int lo = 0, hi = 0;
+    for (size_t i = 0; i < d; i++)
+        for (size_t j = 0; j < d; j++)
+            if (A[i * d + j] != 0.0) {
+                if ((long)i - (long)j > lo) lo = (int)((long)i - (long)j);
+                if ((long)j - (long)i > hi) hi = (int)((long)j - (long)i);
+            }
+    *kl = lo; *ku = hi;
+}
+
+NdIterFactor* nd_iter_factor(const NdOperator* op, size_t d, double coef,
+                             const double* Jdense) {
+    /* how to read A(i,j): the operator's packed band, else a dense row-major J */
+    const double* AB = (op && op->banded && op->AB) ? op->AB : NULL;
+    int mv_ld = AB ? (op->kl + op->ku + 1) : 0;
+    const double* Adense = AB ? NULL : (op ? op->A : Jdense);
+    if (!AB && !Adense) return NULL;
+
+    int kl, ku;
+    if (op) { kl = op->kl; ku = op->ku; }
+    else    { nd_detect_band(Adense, d, &kl, &ku); }
+    bool banded = ((size_t)(kl + ku + 1) <= d / 2 + 2);
+
+    /* read M(i,j) = (i==j) - coef*A(i,j) */
+    #define A_IJ(i, j) (AB ? AB[(size_t)(ku + (long)(i) - (long)(j)) + (size_t)(j) * (size_t)mv_ld] \
+                            : Adense[(size_t)(i) * d + (size_t)(j)])
+
+    NdIterFactor* F = calloc(1, sizeof(*F));
+    if (!F) return NULL;
+    F->d = d; F->kl = kl; F->ku = ku; F->coef = coef;
+
+#ifdef USE_LAPACK
+    if (banded) {
+        int n = (int)d, ldab = 2 * kl + ku + 1;
+        double* ab = calloc((size_t)ldab * d, sizeof(double));
+        int* ipiv = malloc(sizeof(int) * d);
+        if (!ab || !ipiv) { free(ab); free(ipiv); free(F); return NULL; }
+        for (size_t j = 0; j < d; j++) {
+            size_t i0 = (j > (size_t)ku) ? j - (size_t)ku : 0;
+            size_t i1 = (j + (size_t)kl < d - 1) ? j + (size_t)kl : d - 1;
+            for (size_t i = i0; i <= i1; i++)
+                ab[(size_t)(kl + ku + (long)i - (long)j) + j * (size_t)ldab] =
+                    (i == j ? 1.0 : 0.0) - coef * A_IJ(i, j);
+        }
+        int info = 0;
+        dgbtrf_(&n, &n, &kl, &ku, ab, &ldab, ipiv, &info);
+        if (info != 0) { free(ab); free(ipiv); free(F); return NULL; }
+        F->mode = 0; F->ab = ab; F->ipiv = ipiv; F->ldab = ldab;
+        return F;
+    }
+    {   /* dense pivoted LU (wide band / full coupling) */
+        int n = (int)d;
+        double* ab = malloc(sizeof(double) * d * d);   /* col-major */
+        int* ipiv = malloc(sizeof(int) * d);
+        if (!ab || !ipiv) { free(ab); free(ipiv); free(F); return NULL; }
+        for (size_t j = 0; j < d; j++)
+            for (size_t i = 0; i < d; i++)
+                ab[i + j * d] = (i == j ? 1.0 : 0.0) - coef * A_IJ(i, j);
+        int info = 0;
+        dgetrf_(&n, &n, ab, &n, ipiv, &info);
+        if (info != 0) { free(ab); free(ipiv); free(F); return NULL; }
+        F->mode = 1; F->ab = ab; F->ipiv = ipiv;
+        return F;
+    }
+#else
+    {   /* no LAPACK: keep M row-major, re-run the hand LU per solve */
+        double* M = malloc(sizeof(double) * d * d);
+        if (!M) { free(F); return NULL; }
+        for (size_t i = 0; i < d; i++)
+            for (size_t j = 0; j < d; j++)
+                M[i * d + j] = (i == j ? 1.0 : 0.0) - coef * A_IJ(i, j);
+        F->mode = 2; F->M = M; F->fb_banded = banded;
+        return F;
+    }
+#endif
+    #undef A_IJ
+}
+
+bool nd_iter_solve(NdIterFactor* F, double* b) {
+    if (!F) return false;
+    int n = (int)F->d, nrhs = 1, info = 0;
+#ifdef USE_LAPACK
+    if (F->mode == 0) {
+        dgbtrs_("N", &n, &F->kl, &F->ku, &nrhs, F->ab, &F->ldab, F->ipiv, b, &n, &info);
+        return info == 0;
+    }
+    if (F->mode == 1) {
+        dgetrs_("N", &n, &nrhs, F->ab, &n, F->ipiv, b, &n, &info);
+        return info == 0;
+    }
+#endif
+    {   /* scalar fallback: solve a fresh copy so F->M survives for reuse */
+        double* M = malloc(sizeof(double) * F->d * F->d);
+        if (!M) return false;
+        memcpy(M, F->M, sizeof(double) * F->d * F->d);
+        bool ok = F->fb_banded ? nd_banded_solve(F->d, F->kl, F->ku, M, b) : false;
+        if (!ok) { memcpy(M, F->M, sizeof(double) * F->d * F->d); ok = nd_dense_solve(F->d, M, b); }
+        free(M);
+        return ok;
+    }
+}
+
+void nd_iter_factor_free(NdIterFactor* F) {
+    if (!F) return;
+    free(F->ab); free(F->ipiv); free(F->M); free(F);
+}
+
+/* ------------------------------------------------------------------ *
  *  Implicit theta-method Newton solve                                 *
  * ------------------------------------------------------------------ */
 bool nd_newton_theta(NdProblem* P, double t1, const double* Ybase,
                      double h, double theta, const double* rhs_const,
                      const double* Zguess, double* Ynew, NdTol tol) {
     size_t d = P->d;
+    double coef = h * theta;
+    bool op_const = (P->op != NULL);   /* constant Jacobian -> factor once */
     double* Z  = malloc(sizeof(double) * d);
     double* f  = malloc(sizeof(double) * d);
     double* G  = malloc(sizeof(double) * d);
-    double* J  = malloc(sizeof(double) * d * d);
-    double* M  = malloc(sizeof(double) * d * d);
+    double* J  = op_const ? NULL : malloc(sizeof(double) * d * d);
     double* dZ = malloc(sizeof(double) * d);
+    NdIterFactor* F = op_const ? nd_iter_factor(P->op, d, coef, NULL) : NULL;
+    if (op_const && !F) { free(Z); free(f); free(G); free(dZ); return false; }
     memcpy(Z, Zguess ? Zguess : Ybase, sizeof(double) * d);
     bool converged = false;
     for (int it = 0; it < 12; it++) {
         if (!nd_rhs_real(P, t1, Z, f)) break;
         for (size_t i = 0; i < d; i++)
-            G[i] = Z[i] - Ybase[i] - h*theta*f[i] - (rhs_const ? rhs_const[i] : 0.0);
-        if (!nd_jacobian_real(P, t1, Z, J)) break;
-        for (size_t i = 0; i < d; i++)
-            for (size_t j = 0; j < d; j++)
-                M[i*d + j] = (i == j ? 1.0 : 0.0) - h*theta*J[i*d + j];
-        memcpy(dZ, G, sizeof(double) * d);
-        /* Banded LU for the compiled operator's iteration matrix; fall back to
-         * the dense solve (rebuilding M, which the banded pass overwrote). */
-        bool solved = false;
-        if (P->op && P->op->banded) {
-            solved = nd_banded_solve(d, P->op->kl, P->op->ku, M, dZ);
-            if (!solved) {
-                for (size_t i = 0; i < d; i++)
-                    for (size_t j = 0; j < d; j++)
-                        M[i*d + j] = (i == j ? 1.0 : 0.0) - h*theta*J[i*d + j];
-                memcpy(dZ, G, sizeof(double) * d);
-            }
+            G[i] = Z[i] - Ybase[i] - coef * f[i] - (rhs_const ? rhs_const[i] : 0.0);
+        if (!op_const) {
+            if (!nd_jacobian_real(P, t1, Z, J)) break;
+            nd_iter_factor_free(F);
+            F = nd_iter_factor(NULL, d, coef, J);   /* J changes each iteration */
+            if (!F) break;
         }
-        if (!solved && !nd_dense_solve(d, M, dZ)) break;
+        memcpy(dZ, G, sizeof(double) * d);
+        if (!nd_iter_solve(F, dZ)) break;
         for (size_t i = 0; i < d; i++) Z[i] -= dZ[i];
         double nrm = nd_wrms_norm(d, dZ, Z, NULL, tol);
         if (nrm <= 1e-2) { converged = true; break; }
     }
     if (converged) memcpy(Ynew, Z, sizeof(double) * d);
-    free(Z); free(f); free(G); free(J); free(M); free(dZ);
+    nd_iter_factor_free(F);
+    free(Z); free(f); free(G); free(J); free(dZ);
     return converged;
 }
 

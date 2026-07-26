@@ -83,14 +83,37 @@ typedef struct {
     double* s0;             /* constant forcing vector (n), or NULL           */
     Expr**  st;             /* per-node time-dependent forcing (n), or NULL   */
     bool    time_forcing;   /* forcing depends on t (use st, bind t per call) */
+    /* BLAS/LAPACK band storage of A (column-major, ld = kl+ku+1), packed once
+     * at build time when `banded` and built with USE_LAPACK; NULL otherwise.
+     * A(i,j) lives at AB[(ku + i - j) + j*(kl+ku+1)].  Feeds cblas_dgbmv for the
+     * matvec and seeds the dgbtrf factor band for the implicit solve. */
+    double* AB;
 } NdOperator;
 
 void nd_operator_free(NdOperator* op);
+
+/* out = A·Y for the compiled operator (banded BLAS dgbmv, dense BLAS dgemv, or a
+ * scalar fallback), no forcing term.  out and Y are length op->n. */
+void nd_operator_matvec(const NdOperator* op, const double* Y, double* out);
 
 /* Banded no-pivot LU solve of the n*n dense matrix `M` (nonzeros within
  * bandwidth kl/ku) against `b` (overwritten with the solution).  Returns false
  * on a (near-)zero pivot, so the caller can fall back to the dense solve. */
 bool nd_banded_solve(size_t n, int kl, int ku, double* M, double* b);
+
+/* Solve (I - coef*A)·x = b for the compiled operator `op` (constant Jacobian).
+ * Builds and LU-factors the iteration matrix ONCE per call; when `op` is banded
+ * and LAPACK is present this uses the pivoted banded factor/solve, else a dense
+ * pivoted (or scalar-fallback) path.  `b` is overwritten with x.  Returns false
+ * only on a singular iteration matrix.  For reuse across Newton iterations with
+ * the SAME coef, see nd_iter_factor / nd_iter_solve below. */
+typedef struct NdIterFactor NdIterFactor;
+/* Build+factor (I - coef*A); reused across Newton iterations at fixed coef. */
+NdIterFactor* nd_iter_factor(const NdOperator* op, size_t d, double coef,
+                             const double* Jdense);
+/* Solve using a prebuilt factor; `b` overwritten with the solution. */
+bool nd_iter_solve(NdIterFactor* F, double* b);
+void nd_iter_factor_free(NdIterFactor* F);
 
 /* ------------------------------------------------------------------ *
  *  Compiled problem: dY/dt = f(t, Y)                                  *

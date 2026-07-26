@@ -1103,13 +1103,21 @@ is a complete tensor grid handed to the multidimensional `Interpolation` builtin
 
 **Compiled operator (efficiency).** When the discretized system is linear —
 `dU/dt = A·U + s(t)` with a constant matrix — the front-end (`ndsolve_operator.c`)
-compiles the numeric banded `A` and forcing `s(t)`, so the RHS is a banded
-matrix–vector product (no per-call symbolic evaluation), the Jacobian is exactly
-`A` (free), and the implicit iteration matrix is solved with a banded LU. This is
-~10× faster on moderate stiff grids; `Compiled -> False` forces the symbolic
-sampler (identical results). Nonlinear PDEs use the symbolic sampler. **Stiffness
-auto-selection:** parabolic problems (a diffusion term with first-order time
-evolution) default to `"BDF"` when no time-integration method is given.
+compiles the numeric banded `A` and forcing `s(t)`, so the RHS is a
+matrix–vector product (no per-call symbolic evaluation) and the Jacobian is
+exactly `A` (free). These kernels use **BLAS/LAPACK** (Accelerate on macOS,
+system BLAS/LAPACK elsewhere; scalar fallback without `USE_LAPACK`): the matvec
+is `cblas_dgbmv`/`cblas_dgemv`, and the implicit iteration matrix `I − hθA` is
+**LU-factored once per Newton solve** (constant Jacobian) and back-substituted
+per iteration — a pivoted **banded** factor (`dgbtrf`/`dgbtrs`, `O(d·bw)`) for
+the narrow FD structure, a pivoted dense factor for wide bands. Nonlinear
+(symbolic-Jacobian) stiff problems detect the band and use the same banded
+factor per iteration. Measured ~10× on stiff coupled grids over the previous
+per-iteration dense refactorization; `Compiled -> False` forces the symbolic
+sampler (identical results). Nonlinear PDEs use the symbolic sampler for the
+RHS. **Stiffness auto-selection:** parabolic problems (a diffusion term with
+first-order time evolution) default to `"BDF"` when no time-integration method
+is given.
 
 Currently supported: one spatial dimension; one dependent function; temporal
 order 1 (parabolic — heat, advection–diffusion, reaction–diffusion, Burgers) and

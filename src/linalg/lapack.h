@@ -210,6 +210,20 @@ void dgesv_(const int* n, const int* nrhs, double* a, const int* lda,
 void zgesv_(const int* n, const int* nrhs, double* a, const int* lda,
             int* ipiv, double* b, const int* ldb, int* info);
 
+/* dgetrs -- solve A X = B from an existing dgetrf LU factorisation. */
+void dgetrs_(const char* trans, const int* n, const int* nrhs,
+             const double* a, const int* lda, const int* ipiv,
+             double* b, const int* ldb, int* info);
+
+/* dgbtrf / dgbtrs -- LU factor (partial pivoting) and solve for a banded matrix
+ * in LAPACK band storage (leading dimension 2*kl+ku+1; rows 0..kl-1 reserved for
+ * fill-in, A(i,j) at AB[(kl+ku+i-j) + j*ldab]). */
+void dgbtrf_(const int* m, const int* n, const int* kl, const int* ku,
+             double* ab, const int* ldab, int* ipiv, int* info);
+void dgbtrs_(const char* trans, const int* n, const int* kl, const int* ku,
+             const int* nrhs, const double* ab, const int* ldab,
+             const int* ipiv, double* b, const int* ldb, int* info);
+
 /* dgetri / zgetri -- inverse from an existing dgetrf/zgetrf LU factorisation. */
 void dgetri_(const int* n, double* a, const int* lda, const int* ipiv,
              double* work, const int* lwork, int* info);

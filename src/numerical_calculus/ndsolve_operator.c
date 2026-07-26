@@ -5,6 +5,35 @@
 #include "../numeric.h"
 #include <stdlib.h>
 #include <string.h>
+#ifdef USE_LAPACK
+#include "../linalg/lapack.h"    /* cblas_dgbmv / cblas_dgemv */
+#endif
+
+/* out = A·Y for the compiled operator: banded BLAS dgbmv when a packed band is
+ * available, dense BLAS dgemv otherwise, and a scalar loop with no BLAS. */
+void nd_operator_matvec(const NdOperator* op, const double* Y, double* out) {
+    size_t n = op->n;
+#ifdef USE_LAPACK
+    if (op->banded && op->AB) {
+        /* dgbmv: y = alpha*A*x + beta*y, A in band storage (kl+ku+1 x n). */
+        cblas_dgbmv(CblasColMajor, CblasNoTrans, (int)n, (int)n, op->kl, op->ku,
+                    1.0, op->AB, op->kl + op->ku + 1, Y, 1, 0.0, out, 1);
+        return;
+    }
+    /* A is row-major n x n; dgemv on it as column-major A^T with Trans reads the
+     * same memory as row-major A, giving A·Y. */
+    cblas_dgemv(CblasColMajor, CblasTrans, (int)n, (int)n, 1.0, op->A, (int)n,
+                Y, 1, 0.0, out, 1);
+    return;
+#else
+    for (size_t i = 0; i < n; i++) {
+        const double* Ai = &op->A[i * n];
+        double acc = 0.0;
+        for (size_t j = 0; j < n; j++) acc += Ai[j] * Y[j];
+        out[i] = acc;
+    }
+#endif
+}
 
 /* Collect the reduced-state indices (symbols named "NDSolve`w<k>") that appear
  * in `e`, marking seen[k] = true.  This bounds the coupling of a row to just the
@@ -31,6 +60,7 @@ static void nd_collect_state_indices(const Expr* e, size_t d, bool* seen) {
 void nd_operator_free(NdOperator* op) {
     if (!op) return;
     free(op->A);
+    free(op->AB);
     free(op->s0);
     if (op->st) { for (size_t i = 0; i < op->n; i++) expr_free(op->st[i]); free(op->st); }
     free(op);
@@ -109,6 +139,24 @@ NdOperator* nd_operator_try_build(NdProblem* P) {
     NdOperator* op = malloc(sizeof(NdOperator));
     op->n = d; op->A = A; op->kl = kl; op->ku = ku;
     op->banded = ((size_t)(kl + ku + 1) <= d / 2 + 2);
+    op->AB = NULL;
+#ifdef USE_LAPACK
+    /* Pack A into BLAS band storage (kl+ku+1 x d, col-major) for dgbmv; the
+     * implicit solve reuses it to seed the dgbtrf factor band. */
+    if (op->banded) {
+        int ldab = kl + ku + 1;
+        double* AB = calloc((size_t)ldab * d, sizeof(double));
+        if (AB) {
+            for (size_t j = 0; j < d; j++) {
+                size_t i0 = (j > (size_t)ku) ? j - (size_t)ku : 0;
+                size_t i1 = (j + (size_t)kl < d - 1) ? j + (size_t)kl : d - 1;
+                for (size_t i = i0; i <= i1; i++)
+                    AB[(size_t)(ku + (long)i - (long)j) + j * (size_t)ldab] = A[i * d + j];
+            }
+            op->AB = AB;
+        }
+    }
+#endif
     if (const_forcing) {
         op->s0 = s0; op->st = NULL; op->time_forcing = false;
         for (size_t i = 0; i < d; i++) expr_free(st[i]);
