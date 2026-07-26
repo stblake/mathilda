@@ -9,6 +9,8 @@
  */
 #include "compile.h"
 #include "../arithmetic.h"
+#include "../symtab.h"
+#include "../ndarray.h"    /* NDUnaryKernel / NDBinaryKernel — shared kernel layer */
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -24,7 +26,12 @@
 /* ------------------------------------------------------------------ *
  *  Runtime slot, instruction, program                                 *
  * ------------------------------------------------------------------ */
-typedef union { long long i; double r; double _Complex z; } Slot;
+typedef union { long long i; double r; double _Complex z; const void* p; } Slot;
+
+/* scalar kernel signatures exposed by the shared ndkernels layer */
+typedef bool (*kfn_r)(double, double*);
+typedef bool (*kfn_c)(double, double, double*, double*);
+typedef bool (*kfn_c2)(double, double, double, double, double*, double*);
 
 enum {
     OP_CONST, OP_MOVE,
@@ -47,6 +54,11 @@ enum {
     OP_RE_C, OP_IM_C, OP_ARG_C, OP_CONJ_C,   /* RE/IM/ARG -> real */
     OP_ATAN2_R, OP_MAX_I, OP_MAX_R, OP_MIN_I, OP_MIN_R,
     OP_ERF_R, OP_ERFC_R,
+    /* generic special-function kernels from the shared ndkernels registry:
+     * imm.p is the scalar kernel fn.  RR real->real; R2R real->real via cplx;
+     * RC real->complex; CC complex->complex; CR complex->real (projection). */
+    OP_KERN_RR, OP_KERN_R2R, OP_KERN_RC, OP_KERN_CC, OP_KERN_CR,
+    OP_KERN2_RR, OP_KERN2_RC, OP_KERN2_CC,
     OP_LT_I, OP_LT_R, OP_LE_I, OP_LE_R, OP_GT_I, OP_GT_R, OP_GE_I, OP_GE_R,
     OP_EQ_I, OP_EQ_R, OP_EQ_C, OP_NE_I, OP_NE_R, OP_NE_C,
     OP_AND, OP_OR, OP_XOR, OP_NOT,
@@ -176,6 +188,23 @@ static Val emit_const(Ctx* c, Slot imm, CompileType type) {
     Val r = { dst, true, type };
     return r;
 }
+/* unary/binary op carrying a kernel function pointer in imm.p */
+static Val kern_unop(Ctx* c, uint16_t op, Val a, CompileType rt, const void* fn) {
+    free_if_tmp(c, a);
+    int dst = alloc_temp(c);
+    Slot z; z.p = fn;
+    ins(c, op, (uint32_t)dst, (uint32_t)a.reg, 0, z);
+    Val r = { dst, true, rt };
+    return r;
+}
+static Val kern_binop(Ctx* c, uint16_t op, Val a, Val b, CompileType rt, const void* fn) {
+    free_if_tmp(c, b); free_if_tmp(c, a);
+    int dst = alloc_temp(c);
+    Slot z; z.p = fn;
+    ins(c, op, (uint32_t)dst, (uint32_t)a.reg, (uint32_t)b.reg, z);
+    Val r = { dst, true, rt };
+    return r;
+}
 
 /* numeric literal? -> value + type */
 static bool literal(const Expr* e, Slot* imm, CompileType* type) {
@@ -235,6 +264,47 @@ static bool emit_unary_math(Ctx* c, const Expr* arg, uint16_t op_r, uint16_t op_
     coerce(c, &a, CT_REAL);
     *out = unop(c, op_r, a, CT_REAL);
     return c->ok;
+}
+
+/* Generic special-function path: any numeric function registered in the shared
+ * ndkernels layer (Gamma, LogGamma, Zeta, PolyGamma, Bessel*, ...) is lowered to
+ * a KERNEL op that calls the machine kernel — no Expr, no opcode per function.
+ * Returns true if a kernel handled the node; false otherwise (caller bails). */
+static bool try_kernel(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
+    if (na == 1) {
+        SymbolDef* d = symtab_lookup(h);
+        if (!d || !d->ndarray_unary_kernel) return false;
+        const NDUnaryKernel* k = (const NDUnaryKernel*)d->ndarray_unary_kernel;
+        if (!k->cplx && !k->real) return false;   /* degrade sentinel: no kernel */
+        Val a; if (!emit(c, A[0], &a)) return false;
+        if (a.type == CT_COMPLEX) {
+            if (!k->cplx) return false;           /* real-only kernel: can't do complex */
+            *out = k->to_real ? kern_unop(c, OP_KERN_CR, a, CT_REAL, (const void*)k->cplx)
+                              : kern_unop(c, OP_KERN_CC, a, CT_COMPLEX, (const void*)k->cplx);
+            return true;
+        }
+        coerce(c, &a, CT_REAL);
+        if (k->to_real && k->cplx)          *out = kern_unop(c, OP_KERN_R2R, a, CT_REAL, (const void*)k->cplx);
+        else if (k->real_closed && k->real) *out = kern_unop(c, OP_KERN_RR, a, CT_REAL, (const void*)k->real);
+        else if (k->real_closed && k->cplx) *out = kern_unop(c, OP_KERN_R2R, a, CT_REAL, (const void*)k->cplx);
+        else if (k->real)                   *out = kern_unop(c, OP_KERN_RR, a, CT_REAL, (const void*)k->real);
+        else if (k->cplx)                   *out = kern_unop(c, OP_KERN_RC, a, CT_COMPLEX, (const void*)k->cplx);
+        else return false;
+        return true;
+    }
+    if (na == 2) {
+        SymbolDef* d = symtab_lookup(h);
+        if (!d || !d->ndarray_binary_kernel) return false;
+        const NDBinaryKernel* k = (const NDBinaryKernel*)d->ndarray_binary_kernel;
+        if (!k->cplx) return false;   /* degrade sentinel: no machine kernel -> bail */
+        Val a, b; if (!emit(c, A[0], &a) || !emit(c, A[1], &b)) return false;
+        CompileType t = num_common(a.type, b.type); if ((int)t < 0) { c->ok = false; return false; }
+        if (t <= CT_REAL && k->real_closed) { coerce(c, &a, CT_REAL); coerce(c, &b, CT_REAL); *out = kern_binop(c, OP_KERN2_RR, a, b, CT_REAL, (const void*)k->cplx); }
+        else if (t <= CT_REAL)              { coerce(c, &a, CT_REAL); coerce(c, &b, CT_REAL); *out = kern_binop(c, OP_KERN2_RC, a, b, CT_COMPLEX, (const void*)k->cplx); }
+        else                                { coerce(c, &a, CT_COMPLEX); coerce(c, &b, CT_COMPLEX); *out = kern_binop(c, OP_KERN2_CC, a, b, CT_COMPLEX, (const void*)k->cplx); }
+        return true;
+    }
+    return false;
 }
 
 static bool emit(Ctx* c, const Expr* e, Val* out) {
@@ -428,6 +498,10 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
         *out = unop(c, OP_NOT, a, CT_BOOL); return c->ok;
     }
 
+    /* last resort: any numeric function with a machine kernel in ndkernels */
+    Val kv;
+    if (try_kernel(c, h, A, na, &kv)) { *out = kv; return c->ok; }
+
     c->ok = false; return false;   /* unsupported head -> bail */
 }
 
@@ -505,6 +579,14 @@ static void vm_run(const Instr* code, size_t n, Slot* R) {
             case OP_MIN_R: d->r = a->r < b->r ? a->r : b->r; break;
             case OP_ERF_R: d->r = erf(a->r); break;
             case OP_ERFC_R: d->r = erfc(a->r); break;
+            case OP_KERN_RR: { double o; d->r = ((kfn_r)c->imm.p)(a->r, &o) ? o : NAN; } break;
+            case OP_KERN_R2R: { double orr, oi; d->r = ((kfn_c)c->imm.p)(a->r, 0.0, &orr, &oi) ? orr : NAN; } break;
+            case OP_KERN_RC: { double orr, oi; if (((kfn_c)c->imm.p)(a->r, 0.0, &orr, &oi)) d->z = orr + oi * I; else d->z = NAN + NAN * I; } break;
+            case OP_KERN_CC: { double orr, oi; if (((kfn_c)c->imm.p)(creal(a->z), cimag(a->z), &orr, &oi)) d->z = orr + oi * I; else d->z = NAN + NAN * I; } break;
+            case OP_KERN_CR: { double orr, oi; d->r = ((kfn_c)c->imm.p)(creal(a->z), cimag(a->z), &orr, &oi) ? orr : NAN; } break;
+            case OP_KERN2_RR: { double orr, oi; d->r = ((kfn_c2)c->imm.p)(a->r, 0.0, b->r, 0.0, &orr, &oi) ? orr : NAN; } break;
+            case OP_KERN2_RC: { double orr, oi; if (((kfn_c2)c->imm.p)(a->r, 0.0, b->r, 0.0, &orr, &oi)) d->z = orr + oi * I; else d->z = NAN + NAN * I; } break;
+            case OP_KERN2_CC: { double orr, oi; if (((kfn_c2)c->imm.p)(creal(a->z), cimag(a->z), creal(b->z), cimag(b->z), &orr, &oi)) d->z = orr + oi * I; else d->z = NAN + NAN * I; } break;
             case OP_LT_I: d->i = a->i < b->i; break;  case OP_LT_R: d->i = a->r < b->r; break;
             case OP_LE_I: d->i = a->i <= b->i; break; case OP_LE_R: d->i = a->r <= b->r; break;
             case OP_GT_I: d->i = a->i > b->i; break;  case OP_GT_R: d->i = a->r > b->r; break;

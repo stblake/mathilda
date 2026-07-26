@@ -184,6 +184,14 @@ int main(void) {
     parity("complex re/im/abs/arg", "Re[x] + Im[y] + Abs[z] + Arg[x] + Re[Conjugate[y]]", xyz, CCC, 3, -2.0, 2.0, 0, 0, 300);
     parity("I literal", "x + 2 I y - I", xy, CCC, 2, -2.0, 2.0, 0, 0, 300);
 
+    /* ---- generic special-function kernels (shared ndkernels registry) ---- */
+    parity("Gamma real (kernel)", "Gamma[x] + Gamma[2 y]", xy, RRR, 2, 0.3, 3.0, 0, 0, 300);
+    parity("hyperbolic/inverse extras", "ArcSinh[x] + Coth[y] + Sech[z] + ArcTanh[x/4]", xyz, RRR, 3, 0.3, 2.0, 0, 0, 300);
+    parity("complex generic kernel", "ArcSinh[x] + Coth[y]", xy, CCC, 2, 0.3, 1.8, 0, 0, 300);
+    parity("Beta (binary kernel)", "Beta[x, y]", xy, RRR, 2, 0.4, 3.0, 0, 0, 300);
+    parity("BesselJ/Y (binary kernel)", "BesselJ[2, x] + BesselY[1, y]", xy, RRR, 2, 0.5, 6.0, 0, 0, 300);
+    parity("Factorial", "Factorial[x] + FractionalPart[3 y]", xy, RRR, 2, 0.3, 3.0, 0, 0, 250);
+
     /* ---- coercions (mixed arg types in one expression) ---- */
     { const CompileType m[] = { CT_INT, CT_REAL, CT_COMPLEX };
       parity("mixed int+real+complex", "x + y + z + x y - z^2", xyz, m, 3, 0.3, 2.0, -5, 5, 300); }
@@ -233,7 +241,7 @@ int main(void) {
     }
 
     /* ---- graceful bail ---- */
-    must_bail("unsupported head (BesselJ)", "x + BesselJ[0, x]", x1, RRR, 1);
+    must_bail("no kernel (Zeta)", "Zeta[x]", x1, RRR, 1);        /* not in ndkernels -> bail */
     must_bail("free symbol", "x + unknownParam", x1, RRR, 1);
     must_bail("list body", "{x, x^2}", x1, RRR, 1);
 
