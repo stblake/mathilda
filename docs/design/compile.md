@@ -456,11 +456,16 @@ numeric functions" requirements.
 `KERNEL` over `ndkernels`), M2 control flow (`If`, `Sum`/`Product`,
 `With`/`Module` mutable locals, `Set`/`AddTo`/`SubtractFrom`/`TimesBy`/
 `Increment`/`Decrement`, `CompoundExpression`, `Do`/`While`/`For`,
-`Nest[Function[u, body], x, n]`), and **M1b** (user-facing
+`Nest[Function[u, body], x, n]`), **M1b** (user-facing
 `Compile[]`/`CompiledFunction` — `EXPR_COMPILED` opaque atom, numeric bytecode
-path + interpreter fallback) are done. Remaining: `Which`/`Piecewise`,
-`Fold`/`NestList`/`FoldList` (need arrays, M3), M3 arrays/NDArray, M4 full kernel
-coverage, wiring Plot/NIntegrate/FindRoot/Table to auto-compile.
+path + interpreter fallback), and the **M4 auto-compile wiring** of the numeric
+builtins are done. The shared adapter `src/compile/autocompile.{c,h}` transparently
+compiles a held body once and evaluates it over machine numbers, with interpreter
+fallback; it is wired into **Plot/Plot3D** (~215×/~11×), **Table** (real iterator
+only, ~128×), **NIntegrate** (1-D machine, ~353×), and **FindRoot** (scalar
+machine real, ~19×). Remaining: `Which`/`Piecewise`, `Fold`/`NestList`/`FoldList`
+(need arrays, M3), M3 arrays/NDArray, M4 full special-function kernel coverage,
+multi-D NIntegrate / FindRoot systems / complex-contour compilation.
 
 ---
 

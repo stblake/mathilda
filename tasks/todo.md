@@ -43,3 +43,21 @@ program can't).
 ## Deferred
 - Multi-D NIntegrate (ni_mc_sample), FindRoot systems, complex-contour NIntegrate
   compilation, MPFR fast paths.
+
+## Review — DONE (2026-07-27)
+
+Shared adapter `src/compile/autocompile.{c,h}` (real+complex eval, interpreter
+fallback, self-contained header). Wired into all four builtins, each its own
+commit with parity/fallback tests + micro-benchmark, all leaks-clean, MPFR
+untouched:
+- Plot/Plot3D (27f5ccd): ~215× / ~11×; non-real sample excludes the point.
+- Table (4595cf7): machine-real iterator only; exact iterators bit-for-bit
+  unchanged; ~128×.
+- NIntegrate (ee4eb3a): 1-D machine ni_eval_at; complex per-sample fallback;
+  ~353×. Fixed ni_ctx_rebody bug (context copy carried stale compiled program).
+- FindRoot (c1edf83): scalar machine real via pointer-identity guard in
+  fr_eval_with_bindings; ~19×.
+tests/test_autocompile.c covers all four end-to-end. Docs: changelog
+2026-07-27.md, design compile.md status, control-flow.md Compile section.
+
+Next: M3 arrays/NDArray; or multi-D NIntegrate / FindRoot systems.
