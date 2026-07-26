@@ -64,6 +64,7 @@ enum {
     OP_AND, OP_OR, OP_XOR, OP_NOT,
     OP_JMP,   /* pc = imm target in .b */
     OP_JZ,    /* if R[.a] (bool) is false, pc = .b; else fall through */
+    OP_INC_I, /* R[.dst].i += imm.i (loop-counter step) */
     OP_RET
 };
 
@@ -118,8 +119,18 @@ typedef struct {
     const CompileType* arg_types;
     NameMap map;
     unsigned char* argdep;
+    /* lexically-scoped loop variables (Sum/Product/Nest), innermost last */
+    struct { const char* name; int reg; CompileType type; } scope[16];
+    int nscope;
     bool ok;
 } Ctx;
+
+/* resolve a symbol name to a scoped loop variable, or -1 */
+static int scope_find(const Ctx* c, const char* nm, CompileType* type) {
+    for (int s = c->nscope - 1; s >= 0; s--)
+        if (c->scope[s].name == nm) { *type = c->scope[s].type; return c->scope[s].reg; }
+    return -1;
+}
 
 typedef struct { int reg; bool tmp; CompileType type; } Val;
 
@@ -277,6 +288,7 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     if (literal(e, &imm, &lt)) { *out = lt; return true; }
     if (e->type == EXPR_SYMBOL) {
         const char* nm = e->data.symbol.name;
+        CompileType st; if (scope_find(c, nm, &st) >= 0) { *out = st; return true; }
         int k = nm_get(&c->map, nm);
         if (k >= 0) { *out = c->arg_types[k]; return true; }
         if (strcmp(nm, "True") == 0 || strcmp(nm, "False") == 0) { *out = CT_BOOL; return true; }
@@ -320,6 +332,22 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         CompileType tt, te; if (!infer_type(c, A[1], &tt) || !infer_type(c, A[2], &te)) return false;
         if (tt == te) { *out = tt; return true; }
         *out = num_common(tt, te); return (int)*out >= 0;
+    }
+    if ((strcmp(h, "Sum") == 0 || strcmp(h, "Product") == 0) && na == 2) {
+        const Expr* spec = A[1];
+        if (spec->type != EXPR_FUNCTION || spec->data.function.head->type != EXPR_SYMBOL
+            || strcmp(spec->data.function.head->data.symbol.name, "List") != 0
+            || spec->data.function.arg_count != 3
+            || spec->data.function.args[0]->type != EXPR_SYMBOL || c->nscope >= 16) return false;
+        CompileType t0, t1;
+        if (!infer_type(c, spec->data.function.args[1], &t0) || !infer_type(c, spec->data.function.args[2], &t1)
+            || t0 != CT_INT || t1 != CT_INT) return false;
+        c->scope[c->nscope].name = spec->data.function.args[0]->data.symbol.name;
+        c->scope[c->nscope].reg = 0; c->scope[c->nscope].type = CT_INT; c->nscope++;
+        CompileType T; bool okT = infer_type(c, A[0], &T);
+        c->nscope--;
+        if (!okT || T == CT_BOOL) return false;
+        *out = T; return true;
     }
     if (na == 1) { SymbolDef* d = symtab_lookup(h); if (d && d->ndarray_unary_kernel) { const NDUnaryKernel* k = d->ndarray_unary_kernel; if (k->cplx || k->real) { IT(0, ta); if (k->to_real) { *out = CT_REAL; return true; } if (ta == CT_COMPLEX) { if (!k->cplx) return false; *out = CT_COMPLEX; return true; } *out = (k->real_closed || k->real) ? CT_REAL : CT_COMPLEX; return true; } } }
     if (na == 2) { SymbolDef* d = symtab_lookup(h); if (d && d->ndarray_binary_kernel) { const NDBinaryKernel* k = d->ndarray_binary_kernel; if (k->cplx) { IT(0, ta); IT(1, tb); CompileType t = num_common(ta, tb); if ((int)t < 0) return false; *out = (t <= CT_REAL && k->real_closed) ? CT_REAL : CT_COMPLEX; return true; } } }
@@ -376,6 +404,8 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
 
     if (e->type == EXPR_SYMBOL) {
         const char* nm = e->data.symbol.name;
+        CompileType st; int sr = scope_find(c, nm, &st);
+        if (sr >= 0) { out->reg = sr; out->tmp = false; out->type = st; return true; }
         int k = nm_get(&c->map, nm);
         if (k >= 0) { c->argdep[k] = 1; out->reg = k; out->tmp = false; out->type = c->arg_types[k]; return true; }
         if (strcmp(nm, "True") == 0)  { imm.i = 1; *out = emit_const(c, imm, CT_BOOL); return c->ok; }
@@ -587,6 +617,54 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
         return c->ok;
     }
 
+    /* Sum[body, {i, lo, hi}] / Product[...]: integer-counted accumulation loop.
+     * The loop variable lives in a scoped register; the accumulator survives the
+     * body's temporaries and is the result. */
+    if ((strcmp(h, "Sum") == 0 || strcmp(h, "Product") == 0) && na == 2) {
+        bool prod = h[0] == 'P';
+        const Expr* spec = A[1];
+        if (spec->type != EXPR_FUNCTION || spec->data.function.head->type != EXPR_SYMBOL
+            || strcmp(spec->data.function.head->data.symbol.name, "List") != 0
+            || spec->data.function.arg_count != 3
+            || spec->data.function.args[0]->type != EXPR_SYMBOL) { c->ok = false; return false; }
+        const char* iname = spec->data.function.args[0]->data.symbol.name;
+        Expr* lo = spec->data.function.args[1];
+        Expr* hi = spec->data.function.args[2];
+        CompileType t0, t1;
+        if (!infer_type(c, lo, &t0) || !infer_type(c, hi, &t1) || t0 != CT_INT || t1 != CT_INT
+            || c->nscope >= 16) { c->ok = false; return false; }        /* integer iteration only */
+        /* body type with i bound as INT */
+        c->scope[c->nscope].name = iname; c->scope[c->nscope].reg = 0; c->scope[c->nscope].type = CT_INT; c->nscope++;
+        CompileType T; bool okT = infer_type(c, A[0], &T);
+        c->nscope--;
+        if (!okT || T == CT_BOOL) { c->ok = false; return false; }
+        Slot z = { 0 };
+        int racc = alloc_temp(c), rhi = alloc_temp(c), ri = alloc_temp(c);
+        Slot iz; iz.i = 0; if (T == CT_INT) iz.i = prod ? 1 : 0; else if (T == CT_REAL) iz.r = prod ? 1.0 : 0.0; else iz.z = prod ? 1.0 : 0.0;
+        ins(c, OP_CONST, (uint32_t)racc, 0, 0, iz);
+        Val vlo; if (!emit(c, lo, &vlo)) return false; ins(c, OP_MOVE, (uint32_t)ri, (uint32_t)vlo.reg, 0, z); free_if_tmp(c, vlo);
+        Val vhi; if (!emit(c, hi, &vhi)) return false; ins(c, OP_MOVE, (uint32_t)rhi, (uint32_t)vhi.reg, 0, z); free_if_tmp(c, vhi);
+        c->scope[c->nscope].name = iname; c->scope[c->nscope].reg = ri; c->scope[c->nscope].type = CT_INT; c->nscope++;
+        size_t L = c->n;
+        int rc = alloc_temp(c);
+        ins(c, OP_LE_I, (uint32_t)rc, (uint32_t)ri, (uint32_t)rhi, z);
+        size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z);
+        c->temp_top--;                                          /* free the guard temp */
+        Val rb; if (!emit(c, A[0], &rb)) { c->nscope--; return false; }
+        coerce(c, &rb, T);
+        uint16_t acc = prod ? (T == CT_INT ? OP_MUL_I : T == CT_REAL ? OP_MUL_R : OP_MUL_C)
+                            : (T == CT_INT ? OP_ADD_I : T == CT_REAL ? OP_ADD_R : OP_ADD_C);
+        ins(c, acc, (uint32_t)racc, (uint32_t)racc, (uint32_t)rb.reg, z);
+        free_if_tmp(c, rb);
+        Slot one; one.i = 1; ins(c, OP_INC_I, (uint32_t)ri, 0, 0, one);
+        ins(c, OP_JMP, 0, 0, (uint32_t)L, z);
+        if (c->ok) c->code[jz].b = (uint32_t)c->n;               /* loop-exit label */
+        c->nscope--;
+        c->temp_top -= 2;                                       /* free ri, rhi; racc is result */
+        out->reg = racc; out->tmp = true; out->type = T;
+        return c->ok;
+    }
+
     /* last resort: any numeric function with a machine kernel in ndkernels */
     Val kv;
     if (try_kernel(c, h, A, na, &kv)) { *out = kv; return c->ok; }
@@ -609,6 +687,7 @@ static void vm_run(const Instr* code, size_t n, Slot* R) {
         switch (c->op) {
             case OP_JMP: pc = c->b; continue;
             case OP_JZ:  pc = a->i ? pc + 1 : c->b; continue;   /* branch if false */
+            case OP_INC_I: d->i += c->imm.i; break;
             case OP_CONST: *d = c->imm; break;
             case OP_MOVE:  *d = *a; break;
             case OP_I2R: d->r = (double)a->i; break;

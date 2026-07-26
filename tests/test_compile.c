@@ -254,6 +254,45 @@ int main(void) {
     must_bail("free symbol", "x + unknownParam", x1, RRR, 1);
     must_bail("list body", "{x, x^2}", x1, RRR, 1);
 
+    /* ---- control flow: Sum / Product (integer-counted loops) ----
+     * Parsed WITHOUT evaluation so the loop stays symbolic (the future Compile[]
+     * builtin is HoldAll); references are computed directly in C. */
+    {
+        const char* inm[2] = { intern_symbol("x"), intern_symbol("n") };
+        CompileType ty[2] = { CT_REAL, CT_INT };
+        struct { const char* nm; const char* body; } cases[] = {
+            { "Sum Sin", "Sum[Sin[i x], {i, 1, n}]" },
+            { "Sum i^2 x", "Sum[i^2 x, {i, 1, n}]" },
+            { "Sum with If", "Sum[If[Mod[i,2] == 0, i x, -i x], {i, 1, n}]" },
+            { "Product 1+x/i", "Product[1 + x/i, {i, 1, n}]" },
+            { "Sum Gamma[i]", "Sum[Gamma[i] x, {i, 1, n}]" },
+            { "nested Sum", "Sum[Sum[i j x, {j, 1, i}], {i, 1, n}]" },
+        };
+        for (size_t k = 0; k < sizeof cases / sizeof cases[0]; k++) {
+            Expr* b = parse_expression(cases[k].body);   /* NOT evaluated */
+            CompiledProgram* p = compile_expr(b, inm, ty, 2);
+            if (!p) { printf("FAIL: %-30s -> did not compile\n", cases[k].nm); failures++; expr_free(b); continue; }
+            double maxerr = 0; int cmp = 0;
+            for (int t = 0; t < 200; t++) {
+                double x = urand(0.2, 1.5); long long n = irand(1, 9);
+                CompileValue av[2] = { { CT_REAL, { .r = x } }, { CT_INT, { .i = n } } }, o;
+                if (!compiled_eval(p, av, &o)) continue;
+                double ref;
+                if (k == 0) { ref = 0; for (long long i = 1; i <= n; i++) ref += sin(i * x); }
+                else if (k == 1) { ref = 0; for (long long i = 1; i <= n; i++) ref += (double)(i * i) * x; }
+                else if (k == 2) { ref = 0; for (long long i = 1; i <= n; i++) ref += (i % 2 == 0 ? 1 : -1) * i * x; }
+                else if (k == 3) { ref = 1; for (long long i = 1; i <= n; i++) ref *= 1 + x / (double)i; }
+                else if (k == 4) { ref = 0; for (long long i = 1; i <= n; i++) ref += tgamma((double)i) * x; }
+                else { ref = 0; for (long long i = 1; i <= n; i++) for (long long j = 1; j <= i; j++) ref += (double)(i * j) * x; }
+                double err = fabs(o.v.r - ref) / (1.0 + fabs(ref));
+                if (err > maxerr) maxerr = err; cmp++;
+            }
+            if (cmp < 50 || maxerr > 1e-9) { printf("FAIL: %-30s -> max_rel=%.2e (%d)\n", cases[k].nm, maxerr, cmp); failures++; }
+            else printf("ok:   %-30s max_rel=%.1e (%d cmps)\n", cases[k].nm, maxerr, cmp);
+            compiled_free(p); expr_free(b);
+        }
+    }
+
     /* ================= STRESS ================= */
 
     /* deep nesting: Sin applied 400 times */
