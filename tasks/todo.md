@@ -1,64 +1,57 @@
-# NDSolve: systems of 1-D PDEs + upwind schemes
+# NDSolve: numeric RHS compiler (evaluator-free nonlinear stepping)
 
 ## Goal
-Extend the method-of-lines engine to solve **coupled 1-D PDE systems**
-(`{h, u}` shallow-water, coupled reaction-diffusion, coupled waves) and add
-two selectable **upwind** spatial schemes for hyperbolic/advective terms.
+Compile the nonlinear reduced RHS f_i(t, Y) into fast numeric bytecode so the
+time-stepper evaluates it WITHOUT the symbolic evaluator (no symbol binding, no
+expr copy, no numericalize). Big win for explicit nonlinear (shallow-water,
+Burgers) and nonlinear stiff (Newton residual + FD Jacobian).
 
-## Design decision
-- Keep the proven scalar path in `nd_mol_solve` **untouched** (152-check suite
-  is the regression gate). Add a dedicated `nd_mol_solve_system` for N>1,
-  reusing all existing static helpers (they are already parameterized by
-  fname/ysym/torder). Route to it when `{...}` has >1 function.
+Requirements (user): extensive unit tests, highly efficient, no memory leaks.
 
-## Phase 1 — N-equation systems, centered stencils
-- [ ] Per-function descriptor array (fname, torder, sord, ic, BCs, periodic, layout base)
-- [ ] Global block-per-function reduced-state layout
-- [ ] Equation classification: interior (owner = fn whose top-time-deriv appears),
-      IC, BC, periodic — dispatched per function
-- [ ] Solve each evolution eq for its top time-derivative -> G_f
-- [ ] Coupled RHS build: substitute literals of ALL functions (values + spatial
-      stencils + lower time-derivs) into each G_f
-- [ ] Per-function BC elimination + IC sampling
-- [ ] Result: one InterpolatingFunction per function -> {{u->IF, v->IF, ...}}
-- [ ] Guards: complex systems, MPFR systems, implicit/coupled mass matrix -> warn
-- [ ] Tests: coupled reaction-diffusion (manufactured), coupled waves (eigenmode),
-      shallow-water small-perturbation (gravity-wave speed), missing-BC guard
+## Design
+- New module `ndsolve_compile.{c,h}`: a stack-machine compiler + VM.
+  - `nd_compile_rhs(P)` -> NdCompiled* or NULL (graceful bail on any unsupported
+    construct -> existing symbolic sampler remains the fallback).
+  - `nd_compiled_eval(C,t,Y,out)` -> out[0..d-1] via the VM.
+  - `nd_compiled_jacobian(C,t,Y,Jout)` -> sparse colored FD (CPR) using the
+    per-component variable dependencies the compiler already records.
+  - `nd_compiled_free`.
+- Opcodes: CONST/VAR/TVAR, ADD/SUB/MUL/DIV/NEG/INV, POW/POWI, and unary
+  elementary fns (Sqrt/Exp/Log/Sin/Cos/Tan/.../Abs/Sign/Erf...), MAX/MIN/ATAN2.
+- Leaves: numeric (nd_to_double) -> CONST; state sym NDSolve`w<k> -> VAR k;
+  tvar -> TVAR; Pi/E/EulerGamma/... -> CONST; anything else -> bail.
+- NdProblem gains `NdCompiled* compiled; bool compile_failed;` (zero-init).
+  nd_rhs_real lazily compiles on first non-operator call; nd_jacobian_real
+  prefers the compiled colored FD when available.
 
-## Phase 2 — upwind schemes
-- [ ] B1: Lax-Friedrichs artificial viscosity (default for hyperbolic systems)
-- [ ] B2: sign-biased donor-cell upwind (scalar, sharp)
-- [ ] Scheme selection via Method/DifferenceOrder option
-- [ ] Tests: linear-advection translate (centered vs upwind, convergence),
-      dam-break bounded & positive under B1
+## Stages
+- [ ] S1: compiler + VM; standalone unit test vs evaluate() on a big battery.
+- [ ] S2: wire nd_rhs_real (lazy) + free at all teardown sites; end-to-end
+      nonlinear NDSolve correctness (Burgers, shallow-water, nonlinear RD).
+- [ ] S3: colored sparse FD Jacobian; prefer it in nd_jacobian_real.
+- [ ] S4: valgrind (no leaks), benchmarks, docs, commit.
 
 ## Review — DONE (2026-07-26)
 
-Both phases complete, verified, no regressions.
+New module `ndsolve_compile.{c,h}`: stack-machine compiler + VM for the nonlinear
+reduced RHS. `nd_rhs_real` lazily compiles on first non-operator call and runs
+bytecode (no symbol binding / expr copy / numericalize); bails to the symbolic
+sampler on any unsupported construct or when an EvaluationMonitor is attached.
+`nd_jacobian_real` uses a CPR colored finite-difference Jacobian over the
+bytecode (O(bandwidth) evals) via the per-component variable dependencies the
+compiler records. Freed at all NdProblem teardown sites (mol ×3, ODE
+nd_problem_free); NdProblem gained `compiled`/`compile_failed` (zero-init).
 
-**Phase 1 (systems):** added `nd_mol_solve_system` in `ndsolve_mol.c`; scalar
-path untouched. `NDSolve[{u,v,...}, ...]` routes there. Block-per-function
-reduced state in one global ODE vector; each function's RHS substitutes all
-functions' stencils/node-values (coupling). One InterpolatingFunction per
-function → `{{u->if,...}}`. Guards: missing BC/IC, coupled mass matrix,
-complex, 2-D system → unevaluated.
+**Tests** (`tests/test_ndsolve_compile.c`, 6 groups): compiled eval vs the
+symbolic evaluator on a broad arithmetic/elementary battery + nonlinear-PDE
+couplings + a tridiagonal system — matched to **machine precision** (<1e-15);
+colored-FD Jacobian vs analytic (symbolic-D) to ~1e-9; banded coloring gives 3
+colors for 24 vars; and three graceful-bail cases. All NDSolve suites stay green
+(172 PDE + 27 ODE + 87 classical + 6 compile).
 
-**Phase 2 (upwind):** donor-cell (scalar, `DifferenceOrder->1`/`"Upwind"->True`,
-wind = `-∂G/∂u_x` per node) + Lax-Friedrichs viscosity (systems + scalar,
-`"LaxFriedrichs"->True`). Centered default unchanged.
-
-**Verified vs exact references:** decoupled/coupled reaction-diffusion
-(manufactured), linearized shallow-water gravity wave (`c=√(gH)`), coupled 2nd-
-order wave (normal-mode, exact to semi-discrete eigenvalue), linear advection
-(centered exact / donor phase-accurate-diffusive-convergent / reversed-wind
-stable), top-hat monotonicity (centered rings, upwind bounded), guards.
-
-**Tests:** `tests/test_ndsolve_pde.c` 151→172 checks, 0 failures. ODE (27) and
-classical (87) suites unchanged. Valgrind: only macOS ObjC/dyld baseline noise
-(no stacks reference the new code).
-
-**Docs:** `docs/spec/changelog/2026-07-20.md` + `docs/spec/builtins/numerical-
-calculus.md` updated; file header scope note refreshed.
-
-**Out of scope (stated):** incompressible Navier–Stokes (needs pressure-Poisson
-DAE constraint).
+**Measured** (compiler ON vs OFF): shallow-water dam-break (explicit) 1.83s ->
+0.22s (~8.3x); porous-medium nonlinear diffusion (BDF stiff) >120s -> 0.14s
+(>800x, the colored-FD Jacobian replaces the pathological symbolic per-entry
+Jacobian). Valgrind: production compiler leak-free (main binary = macOS
+baseline; zero compiler stacks); test-harness evaluate()-input leaks fixed with
+eval_and_free.
