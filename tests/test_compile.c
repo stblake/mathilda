@@ -385,6 +385,30 @@ int main(void) {
         compiled_free(p); expr_free(b);
     }
 
+    /* dispatch-bound micro-benchmark: a deep Horner polynomial is pure add/mul,
+     * so VM instruction dispatch (not libm) dominates — the regime where a
+     * threaded interpreter helps and which matches a stencil RHS. */
+    {
+        char buf[4096]; size_t pos = 0;
+        const int DEG = 40;
+        for (int i = 0; i < DEG; i++) pos += (size_t)snprintf(buf + pos, sizeof buf - pos, "(");
+        pos += (size_t)snprintf(buf + pos, sizeof buf - pos, "x");
+        for (int i = 0; i < DEG; i++) pos += (size_t)snprintf(buf + pos, sizeof buf - pos, " + %d) x", (i % 9) + 1);
+        const char* inm[1] = { intern_symbol("x") };
+        Expr* b = parse_expression(buf);           /* NOT evaluated: keep Horner nesting */
+        CompiledProgram* p = compile_expr(b, inm, RRR, 1);
+        if (!p) { printf("FAIL: dispatch-perf body did not compile\n"); failures++; }
+        else {
+            const int NC = 5000000; double acc = 0, a;
+            clock_t t0 = clock();
+            for (int i = 0; i < NC; i++) { a = 0.3 + 1e-9 * i; double o; compiled_eval_real(p, &a, &o); acc += o; }
+            double per = (double)(clock() - t0) / CLOCKS_PER_SEC / NC;
+            printf("ok:   %-30s %.2f ns/call (%d arith ops)\n", "dispatch perf", per * 1e9, 2 * DEG);
+            (void)acc;
+        }
+        compiled_free(p); expr_free(b);
+    }
+
     if (failures == 0) printf("\nAll Compile engine tests passed.\n");
     else printf("\n%d Compile engine test(s) FAILED.\n", failures);
     return failures ? 1 : 0;
