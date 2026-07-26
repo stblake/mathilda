@@ -24,6 +24,7 @@
 #include "cubature.h"
 #include "ncrule.h"
 #include "levincoll.h"
+#include "compile/autocompile.h"
 
 #include <complex.h>
 #include <math.h>
@@ -195,12 +196,29 @@ typedef struct {
     NiMapMode   map_mode;
     double      end_a;   /* singular endpoint coordinate                   */
     double      span;    /* b − a > 0                                      */
+    /* Auto-compile fast path (machine-precision, real-abscissa integrals only).
+     * Opt-in per entry point via ac_enabled; compiled lazily on first sample and
+     * freed by the caller after ni_bind_restore. */
+    bool          ac_enabled;
+    bool          ac_tried;
+    AutoCompiled* ac;
 } NiCtx;
 
 static void ni_ctx_init(NiCtx* c, Expr* body, NiBind* bind, NumericSpec spec) {
     c->body = body; c->bind = bind; c->spec = spec;
     c->x_scale = 1.0; c->x_shift = 0.0;
     c->map_mode = NI_MAP_AFFINE; c->end_a = 0.0; c->span = 0.0;
+    c->ac_enabled = false; c->ac_tried = false; c->ac = NULL;
+}
+
+/* Point a (value-copied) context at a different body.  The lazily-compiled `ac`
+ * belongs to the OLD body, so it must be dropped — otherwise a copy made after
+ * the parent already compiled would evaluate the new body with the wrong
+ * program.  The derived sub-body keeps the interpreter path (ac stays off), so
+ * there is nothing to free on the copy. */
+static void ni_ctx_rebody(NiCtx* c, Expr* body) {
+    c->body = body;
+    c->ac_enabled = false; c->ac_tried = false; c->ac = NULL;
 }
 
 /* Build the numeric leaf the variable is bound to from an affine-mapped
@@ -220,6 +238,34 @@ static double ni_exp_abscissa(const NiCtx* c, double z) {
 /* Evaluate the integrand with the variable bound to `value` (consumed).
  * Returns the numericalised result (caller frees) or NULL. */
 static Expr* ni_eval_at(NiCtx* c, Expr* value) {
+    /* Compiled fast path (opt-in, machine precision only — the MPFR sampler also
+     * routes through here and must keep full precision).  Compiled lazily so the
+     * spec.mode is already settled.  Only a REAL abscissa uses it; a complex
+     * (contour) abscissa or a non-finite compiled result — e.g. the interpreter
+     * would produce a complex value from Sqrt of a negative — falls through to
+     * the interpreter, which supplies that contribution. */
+    if (c->ac_enabled && !c->ac_tried) {
+        c->ac_tried = true;
+        if (c->spec.mode == NUMERIC_MODE_MACHINE) {
+            Expr* vsym = expr_new_symbol(c->bind->name);
+            const Expr* vs[1] = { vsym };
+            c->ac = autocompile_new(c->body, vs, 1);
+            expr_free(vsym);
+        }
+    }
+    if (c->ac) {
+        double xin;
+        if (ni_to_double_real(value, &xin)) {
+            double _Complex z;
+            if (autocompiled_eval_complex(c->ac, &xin, &z)
+                && isfinite(creal(z)) && isfinite(cimag(z))) {
+                expr_free(value);
+                return (cimag(z) == 0.0)
+                    ? expr_new_real(creal(z))
+                    : make_complex(expr_new_real(creal(z)), expr_new_real(cimag(z)));
+            }
+        }
+    }
     ni_bind_set(c->bind, value);
     expr_free(value);
     eval_clock_bump();
@@ -944,9 +990,9 @@ static NiAtt ni_try_levin_collocation(NiCtx* ctx, double a, double b,
 
     /* Three sampler contexts sharing the binding/precision but evaluating the
      * amplitude, the phase, and its derivative respectively. */
-    NiCtx camp = *ctx; camp.body = amp;
-    NiCtx cg   = *ctx; cg.body   = g;
-    NiCtx cgp  = *ctx; cgp.body  = gp;
+    NiCtx camp = *ctx; ni_ctx_rebody(&camp, amp);
+    NiCtx cg   = *ctx; ni_ctx_rebody(&cg,   g);
+    NiCtx cgp  = *ctx; ni_ctx_rebody(&cgp,  gp);
 
     /* Spot-check the symbolic g' against a central difference of g at the
      * midpoint — a cheap guard against a mis-evaluated derivative. */
@@ -987,9 +1033,9 @@ static bool ni_try_levin_collocation_mpfr(NiCtx* ctx, double a, double b,
     Expr* gp = levin_phase_derivative(g, var);
     if (!gp) { expr_free(g); expr_free(amp); return false; }
 
-    NiCtx camp = *ctx; camp.body = amp;
-    NiCtx cg   = *ctx; cg.body   = g;
-    NiCtx cgp  = *ctx; cgp.body  = gp;
+    NiCtx camp = *ctx; ni_ctx_rebody(&camp, amp);
+    NiCtx cg   = *ctx; ni_ctx_rebody(&cg,   g);
+    NiCtx cgp  = *ctx; ni_ctx_rebody(&cgp,  gp);
     bool ok = levin_collocation_mpfr(
         a, b, o->bits, ni_sample_mpfr, &camp, ni_sample_mpfr, &cgp,
         ni_sample_mpfr, &cg, kind, ni_mpfr_reltol(o), 64, re, im, conv);
@@ -1173,6 +1219,7 @@ static Expr* ni_run_1d_finite_real(Expr* body, const char* var,
     ni_bind_snapshot(&bind, var);
     NiCtx ctx;
     ni_ctx_init(&ctx, body, &bind, numeric_machine_spec());
+    ctx.ac_enabled = true;
 
     double sign = 1.0;
     if (a > b) { double t = a; a = b; b = t; sign = -1.0; }
@@ -1233,6 +1280,7 @@ static Expr* ni_run_1d_finite_real(Expr* body, const char* var,
 
     NiAtt best = ni_core_finite(&ctx, a, b, o);
     ni_bind_restore(&bind);
+    autocompiled_free(ctx.ac);
 
     if (!best.have) return NULL;        /* no numeric estimate at all */
     if (!best.conv)
@@ -1311,6 +1359,7 @@ static Expr* ni_run_1d_halfline(Expr* body, const char* var, double a,
     ni_bind_snapshot(&bind, var);
     NiCtx ctx;
     ni_ctx_init(&ctx, body, &bind, numeric_machine_spec());
+    ctx.ac_enabled = true;
     if (reflect) ctx.x_scale = -1.0;
 
 #ifdef USE_MPFR
@@ -1403,6 +1452,7 @@ static Expr* ni_run_1d_halfline(Expr* body, const char* var, double a,
         }
     }
     ni_bind_restore(&bind);
+    autocompiled_free(ctx.ac);
 
     if (!isfinite(creal(val)) || !isfinite(cimag(val))) return NULL;
     if (!conv)
@@ -1418,6 +1468,7 @@ static Expr* ni_run_1d_wholeline(Expr* body, const char* var, double sign,
     ni_bind_snapshot(&bind, var);
     NiCtx ctx;
     ni_ctx_init(&ctx, body, &bind, numeric_machine_spec());
+    ctx.ac_enabled = true;
 
 #ifdef USE_MPFR
     if (o->prec_mpfr) {
@@ -1468,6 +1519,7 @@ static Expr* ni_run_1d_wholeline(Expr* body, const char* var, double sign,
     }
 
     ni_bind_restore(&bind);
+    autocompiled_free(ctx.ac);
 
     if (!isfinite(creal(val)) || !isfinite(cimag(val))) return NULL;
     if (!conv)

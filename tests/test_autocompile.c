@@ -70,6 +70,34 @@ void test_table_real_complex_fallback(void) {
     assert_eval_eq("Chop[Table[Sqrt[x], {x, -1., 1., 1.}] - {I, 0., 1.}] == {0, 0, 0}", "True", 0);
 }
 
+/* NIntegrate: finite / half-line / whole-line agree with the interpreter; the
+ * oscillatory sub-method (which re-bodies a copied context) stays correct; a
+ * body that goes complex falls back per-sample; uncompilable bodies still work. */
+void test_nintegrate_parity(void) {
+    assert_eval_eq("Abs[NIntegrate[Sin[x]^2, {x, 0, Pi}] - Pi/2] < 10^-8", "True", 0);
+    assert_eval_eq("Abs[NIntegrate[Exp[-x], {x, 0, Infinity}] - 1] < 10^-8", "True", 0);
+    assert_eval_eq("Abs[NIntegrate[Exp[-x^2], {x, -Infinity, Infinity}] - Sqrt[Pi]] < 10^-7", "True", 0);
+}
+
+void test_nintegrate_oscillatory(void) {
+    /* Regression: the amplitude/phase decomposition copies the sampler context
+     * and swaps the body — the compiled program must not carry over. */
+    assert_eval_eq("Abs[NIntegrate[Cos[100000 x], {x, 0, 1}] - Sin[100000]/100000] < 10^-9", "True", 0);
+}
+
+void test_nintegrate_complex_fallback(void) {
+    /* Sqrt[x-1] is imaginary on [0,1], real on [1,2]; the compiled real program
+     * returns NaN on the imaginary part and the interpreter supplies it. */
+    assert_eval_eq("Chop[NIntegrate[Sqrt[x - 1], {x, 0, 2}] - (2/3 + 2 I/3)] == 0", "True", 0);
+}
+
+void test_nintegrate_uncompilable(void) {
+    /* Zeta has no machine kernel → the integrand stays on the interpreter path;
+     * cross-check the machine result against the arbitrary-precision one. */
+    assert_eval_eq("Abs[NIntegrate[Zeta[x]/x^3, {x, 2, 4}] "
+                   "- NIntegrate[Zeta[x]/x^3, {x, 2, 4}, WorkingPrecision -> 30]] < 10^-6", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -81,6 +109,10 @@ int main(void) {
     TEST(test_table_exact_untouched);
     TEST(test_table_real_parity);
     TEST(test_table_real_complex_fallback);
+    TEST(test_nintegrate_parity);
+    TEST(test_nintegrate_oscillatory);
+    TEST(test_nintegrate_complex_fallback);
+    TEST(test_nintegrate_uncompilable);
 
     printf("All auto-compile tests passed!\n");
     return 0;
