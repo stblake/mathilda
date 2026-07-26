@@ -279,6 +279,31 @@ static bool emit_unary_math(Ctx* c, const Expr* arg, uint16_t op_r, uint16_t op_
     return c->ok;
 }
 
+/* Extract a single-parameter pure function's parameter name and body from
+ * Function[u, body] or Function[{u}, body].  Returns false for anything else. */
+static bool extract_function(const Expr* f, const char** pname, const Expr** body) {
+    if (!f || f->type != EXPR_FUNCTION || f->data.function.head->type != EXPR_SYMBOL
+        || strcmp(f->data.function.head->data.symbol.name, "Function") != 0
+        || f->data.function.arg_count != 2) return false;
+    const Expr* p = f->data.function.args[0];
+    if (p->type == EXPR_SYMBOL) *pname = p->data.symbol.name;
+    else if (p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL
+             && strcmp(p->data.function.head->data.symbol.name, "List") == 0
+             && p->data.function.arg_count == 1
+             && p->data.function.args[0]->type == EXPR_SYMBOL)
+        *pname = p->data.function.args[0]->data.symbol.name;
+    else return false;
+    *body = f->data.function.args[1];
+    return true;
+}
+
+/* Fixed-point accumulator type for Nest[Function[u,body], x, n]: the body's
+ * output feeds back as its input, so the accumulator register must hold a type
+ * wide enough to absorb every iteration.  Starting from x's type, widen until
+ * the body's output type no longer grows (bounded lattice → converges fast).
+ * Returns the fixed-point CompileType, or -1 if it can't be compiled. */
+static int nest_fixed_type(Ctx* c, const char* pname, const Expr* body, CompileType t0);
+
 /* Pure type inference (no code emission) — needed to type an If's result
  * register before both branches are lowered.  Mirrors emit's result-type rules;
  * returns false for anything not compilable. */
@@ -349,10 +374,66 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         if (!okT || T == CT_BOOL) return false;
         *out = T; return true;
     }
+    if (strcmp(h, "CompoundExpression") == 0 && na >= 1) return infer_type(c, A[na - 1], out);
+    if ((strcmp(h, "With") == 0 || strcmp(h, "Module") == 0) && na == 2) {
+        const Expr* L = A[0];
+        if (L->type != EXPR_FUNCTION || L->data.function.head->type != EXPR_SYMBOL
+            || strcmp(L->data.function.head->data.symbol.name, "List") != 0
+            || L->data.function.arg_count == 0
+            || (int)(c->nscope + L->data.function.arg_count) > 16) return false;
+        int pushed = 0;
+        for (size_t i = 0; i < L->data.function.arg_count; i++) {
+            const Expr* spec = L->data.function.args[i];
+            const char* vname = NULL; CompileType vt = CT_REAL;
+            if (spec->type == EXPR_SYMBOL) vname = spec->data.symbol.name;
+            else if (spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL
+                     && strcmp(spec->data.function.head->data.symbol.name, "Set") == 0
+                     && spec->data.function.arg_count == 2 && spec->data.function.args[0]->type == EXPR_SYMBOL) {
+                vname = spec->data.function.args[0]->data.symbol.name;
+                if (!infer_type(c, spec->data.function.args[1], &vt)) { c->nscope -= pushed; return false; }
+            } else { c->nscope -= pushed; return false; }
+            c->scope[c->nscope].name = vname; c->scope[c->nscope].reg = 0; c->scope[c->nscope].type = vt;
+            c->nscope++; pushed++;
+        }
+        bool okb = infer_type(c, A[1], out);
+        c->nscope -= pushed; return okb;
+    }
+    if ((!strcmp(h, "Set") || !strcmp(h, "AddTo") || !strcmp(h, "SubtractFrom") || !strcmp(h, "TimesBy")) && na == 2
+        && A[0]->type == EXPR_SYMBOL) {
+        CompileType vt; if (scope_find(c, A[0]->data.symbol.name, &vt) < 0) return false; *out = vt; return true;
+    }
+    if ((!strcmp(h, "Increment") || !strcmp(h, "Decrement")) && na == 1 && A[0]->type == EXPR_SYMBOL) {
+        CompileType vt; if (scope_find(c, A[0]->data.symbol.name, &vt) < 0) return false; *out = vt; return true;
+    }
+    if ((!strcmp(h, "Do") && na == 2) || (!strcmp(h, "While") && na == 2) || (!strcmp(h, "For") && na == 4)) { *out = CT_INT; return true; }
+    if (!strcmp(h, "Nest") && na == 3) {
+        const char* pn; const Expr* bd; CompileType tn, tx;
+        if (!extract_function(A[0], &pn, &bd) || !infer_type(c, A[2], &tn) || tn != CT_INT
+            || !infer_type(c, A[1], &tx)) return false;
+        int tfp = nest_fixed_type(c, pn, bd, tx);
+        if (tfp < 0) return false;
+        *out = (CompileType)tfp; return true;
+    }
     if (na == 1) { SymbolDef* d = symtab_lookup(h); if (d && d->ndarray_unary_kernel) { const NDUnaryKernel* k = d->ndarray_unary_kernel; if (k->cplx || k->real) { IT(0, ta); if (k->to_real) { *out = CT_REAL; return true; } if (ta == CT_COMPLEX) { if (!k->cplx) return false; *out = CT_COMPLEX; return true; } *out = (k->real_closed || k->real) ? CT_REAL : CT_COMPLEX; return true; } } }
     if (na == 2) { SymbolDef* d = symtab_lookup(h); if (d && d->ndarray_binary_kernel) { const NDBinaryKernel* k = d->ndarray_binary_kernel; if (k->cplx) { IT(0, ta); IT(1, tb); CompileType t = num_common(ta, tb); if ((int)t < 0) return false; *out = (t <= CT_REAL && k->real_closed) ? CT_REAL : CT_COMPLEX; return true; } } }
     #undef IT
     return false;
+}
+
+static int nest_fixed_type(Ctx* c, const char* pname, const Expr* body, CompileType t0) {
+    if (c->nscope >= 16) return -1;
+    CompileType t = t0;
+    for (int iter = 0; iter < 4; iter++) {
+        c->scope[c->nscope].name = pname; c->scope[c->nscope].reg = 0;
+        c->scope[c->nscope].type = t; c->nscope++;
+        CompileType tb; bool okb = infer_type(c, body, &tb);
+        c->nscope--;
+        if (!okb || (int)tb < 0) return -1;
+        if (tb == CT_BOOL && t != CT_BOOL) return -1;    /* can't fold a bool into a number */
+        if (tb <= t) return (int)t;                       /* output coerces down into the accumulator */
+        t = tb;                                           /* output widened it; grow and re-check */
+    }
+    return -1;
 }
 
 /* Generic special-function path: any numeric function registered in the shared
@@ -663,6 +744,167 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
         c->temp_top -= 2;                                       /* free ri, rhi; racc is result */
         out->reg = racc; out->tmp = true; out->type = T;
         return c->ok;
+    }
+
+    /* ---- procedural constructs: local variables, mutation, loops ---- */
+
+    /* CompoundExpression[e1,...,en]: run each for side effects, return the last. */
+    if (strcmp(h, "CompoundExpression") == 0 && na >= 1) {
+        for (size_t i = 0; i + 1 < na; i++) { Val v; if (!emit(c, A[i], &v)) return false; free_if_tmp(c, v); }
+        return emit(c, A[na - 1], out);
+    }
+
+    /* With[{v=init,...}, body] / Module[{v or v=init,...}, body]: numeric locals
+     * as mutable registers.  The body result is relocated onto the first local's
+     * register so the locals free cleanly (LIFO). */
+    if ((strcmp(h, "With") == 0 || strcmp(h, "Module") == 0) && na == 2) {
+        const Expr* L = A[0];
+        if (L->type != EXPR_FUNCTION || L->data.function.head->type != EXPR_SYMBOL
+            || strcmp(L->data.function.head->data.symbol.name, "List") != 0
+            || L->data.function.arg_count == 0
+            || (int)(c->nscope + L->data.function.arg_count) > 16) { c->ok = false; return false; }
+        size_t nl = L->data.function.arg_count;
+        Slot z = { 0 };
+        int base_reg = -1, pushed = 0;
+        for (size_t i = 0; i < nl; i++) {
+            const Expr* spec = L->data.function.args[i];
+            const char* vname = NULL; const Expr* init = NULL;
+            if (spec->type == EXPR_SYMBOL) vname = spec->data.symbol.name;
+            else if (spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL
+                     && strcmp(spec->data.function.head->data.symbol.name, "Set") == 0
+                     && spec->data.function.arg_count == 2
+                     && spec->data.function.args[0]->type == EXPR_SYMBOL) {
+                vname = spec->data.function.args[0]->data.symbol.name; init = spec->data.function.args[1];
+            } else { c->nscope -= pushed; c->ok = false; return false; }
+            int reg = alloc_temp(c);
+            if (base_reg < 0) base_reg = reg;
+            CompileType vt = CT_REAL;
+            if (init) {
+                Val iv; if (!emit(c, init, &iv)) { c->nscope -= pushed; return false; }
+                vt = iv.type; ins(c, OP_MOVE, (uint32_t)reg, (uint32_t)iv.reg, 0, z); free_if_tmp(c, iv);
+            } else { Slot s; s.r = 0.0; ins(c, OP_CONST, (uint32_t)reg, 0, 0, s); }
+            c->scope[c->nscope].name = vname; c->scope[c->nscope].reg = reg; c->scope[c->nscope].type = vt;
+            c->nscope++; pushed++;
+        }
+        Val body; if (!emit(c, A[1], &body)) { c->nscope -= pushed; return false; }
+        if (body.reg != base_reg) ins(c, OP_MOVE, (uint32_t)base_reg, (uint32_t)body.reg, 0, z);
+        c->nscope -= pushed;
+        c->temp_top = (base_reg - c->nlocals) + 1;   /* free above base_reg; keep result */
+        out->reg = base_reg; out->tmp = true; out->type = body.type;
+        return c->ok;
+    }
+
+    /* Set / AddTo / SubtractFrom / TimesBy on a scoped local (return new value);
+     * Increment / Decrement (v++ / v--) return the OLD value. */
+    {
+        int kind = -1;
+        if (strcmp(h, "Set") == 0) kind = 0; else if (strcmp(h, "AddTo") == 0) kind = 1;
+        else if (strcmp(h, "SubtractFrom") == 0) kind = 2; else if (strcmp(h, "TimesBy") == 0) kind = 3;
+        else if (strcmp(h, "Increment") == 0) kind = 4; else if (strcmp(h, "Decrement") == 0) kind = 5;
+        if (kind >= 0) {
+            size_t want = (kind >= 4) ? 1 : 2;
+            if (na != want || A[0]->type != EXPR_SYMBOL) { c->ok = false; return false; }
+            CompileType vt; int vreg = scope_find(c, A[0]->data.symbol.name, &vt);
+            if (vreg < 0 || vt == CT_BOOL) { c->ok = false; return false; }   /* mutable numeric locals only */
+            Slot z = { 0 };
+            if (kind >= 4) {
+                int old = alloc_temp(c); ins(c, OP_MOVE, (uint32_t)old, (uint32_t)vreg, 0, z);
+                if (vt == CT_INT) { Slot s; s.i = (kind == 4) ? 1 : -1; ins(c, OP_INC_I, (uint32_t)vreg, 0, 0, s); }
+                else { int one = alloc_temp(c); Slot s; s.r = (kind == 4) ? 1.0 : -1.0; ins(c, OP_CONST, (uint32_t)one, 0, 0, s);
+                       ins(c, vt == CT_COMPLEX ? OP_ADD_C : OP_ADD_R, (uint32_t)vreg, (uint32_t)vreg, (uint32_t)one, z); c->temp_top--; }
+                out->reg = old; out->tmp = true; out->type = vt; return c->ok;
+            }
+            Val val; if (!emit(c, A[1], &val)) return false;
+            coerce(c, &val, vt); if (!c->ok) return false;
+            if (kind == 0) ins(c, OP_MOVE, (uint32_t)vreg, (uint32_t)val.reg, 0, z);
+            else { uint16_t op = kind == 1 ? (vt == CT_INT ? OP_ADD_I : vt == CT_REAL ? OP_ADD_R : OP_ADD_C)
+                              : kind == 2 ? (vt == CT_INT ? OP_SUB_I : vt == CT_REAL ? OP_SUB_R : OP_SUB_C)
+                                          : (vt == CT_INT ? OP_MUL_I : vt == CT_REAL ? OP_MUL_R : OP_MUL_C);
+                   ins(c, op, (uint32_t)vreg, (uint32_t)vreg, (uint32_t)val.reg, z); }
+            free_if_tmp(c, val);
+            out->reg = vreg; out->tmp = false; out->type = vt; return c->ok;
+        }
+    }
+
+    /* Do[body, {i, lo, hi}]: counted loop for side effects; returns a dummy 0. */
+    if (strcmp(h, "Do") == 0 && na == 2) {
+        const Expr* spec = A[1];
+        if (spec->type != EXPR_FUNCTION || spec->data.function.head->type != EXPR_SYMBOL
+            || strcmp(spec->data.function.head->data.symbol.name, "List") != 0
+            || spec->data.function.arg_count != 3
+            || spec->data.function.args[0]->type != EXPR_SYMBOL || c->nscope >= 16) { c->ok = false; return false; }
+        const char* iname = spec->data.function.args[0]->data.symbol.name;
+        CompileType t0, t1;
+        if (!infer_type(c, spec->data.function.args[1], &t0) || !infer_type(c, spec->data.function.args[2], &t1)
+            || t0 != CT_INT || t1 != CT_INT) { c->ok = false; return false; }
+        Slot z = { 0 };
+        int rhi = alloc_temp(c), ri = alloc_temp(c);
+        Val vlo; if (!emit(c, spec->data.function.args[1], &vlo)) return false; ins(c, OP_MOVE, (uint32_t)ri, (uint32_t)vlo.reg, 0, z); free_if_tmp(c, vlo);
+        Val vhi; if (!emit(c, spec->data.function.args[2], &vhi)) return false; ins(c, OP_MOVE, (uint32_t)rhi, (uint32_t)vhi.reg, 0, z); free_if_tmp(c, vhi);
+        c->scope[c->nscope].name = iname; c->scope[c->nscope].reg = ri; c->scope[c->nscope].type = CT_INT; c->nscope++;
+        size_t Lp = c->n;
+        int rc = alloc_temp(c); ins(c, OP_LE_I, (uint32_t)rc, (uint32_t)ri, (uint32_t)rhi, z);
+        size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z); c->temp_top--;
+        Val bod; if (!emit(c, A[0], &bod)) { c->nscope--; return false; } free_if_tmp(c, bod);
+        Slot one; one.i = 1; ins(c, OP_INC_I, (uint32_t)ri, 0, 0, one);
+        ins(c, OP_JMP, 0, 0, (uint32_t)Lp, z);
+        if (c->ok) c->code[jz].b = (uint32_t)c->n;
+        c->nscope--; c->temp_top -= 2;
+        int r0 = alloc_temp(c); Slot s0; s0.i = 0; ins(c, OP_CONST, (uint32_t)r0, 0, 0, s0);
+        out->reg = r0; out->tmp = true; out->type = CT_INT; return c->ok;
+    }
+
+    /* While[test, body] / For[start, test, incr, body]: data-dependent loops. */
+    if ((strcmp(h, "While") == 0 && na == 2) || (strcmp(h, "For") == 0 && na == 4)) {
+        bool isfor = h[0] == 'F';
+        Slot z = { 0 };
+        if (isfor) { Val s; if (!emit(c, A[0], &s)) return false; free_if_tmp(c, s); }
+        size_t Lp = c->n;
+        Val t; if (!emit(c, isfor ? A[1] : A[0], &t)) return false;
+        if (t.type != CT_BOOL) { c->ok = false; return false; }
+        size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)t.reg, 0, z); free_if_tmp(c, t);
+        Val bod; if (!emit(c, isfor ? A[3] : A[1], &bod)) return false; free_if_tmp(c, bod);
+        if (isfor) { Val ic; if (!emit(c, A[2], &ic)) return false; free_if_tmp(c, ic); }
+        ins(c, OP_JMP, 0, 0, (uint32_t)Lp, z);
+        if (c->ok) c->code[jz].b = (uint32_t)c->n;
+        int r0 = alloc_temp(c); Slot s0; s0.i = 0; ins(c, OP_CONST, (uint32_t)r0, 0, 0, s0);
+        out->reg = r0; out->tmp = true; out->type = CT_INT; return c->ok;
+    }
+
+    /* Nest[Function[u, body], x, n]: apply body n times, feeding each result
+     * back in as u.  The accumulator lives in one persistent register (racc)
+     * typed to the fixed-point type; the counted loop mirrors Do. */
+    if (strcmp(h, "Nest") == 0 && na == 3) {
+        const char* pname; const Expr* body;
+        if (!extract_function(A[0], &pname, &body) || c->nscope >= 16) { c->ok = false; return false; }
+        CompileType tn; if (!infer_type(c, A[2], &tn) || tn != CT_INT) { c->ok = false; return false; }
+        CompileType tx; if (!infer_type(c, A[1], &tx)) { c->ok = false; return false; }
+        int tfp = nest_fixed_type(c, pname, body, tx);
+        if (tfp < 0) { c->ok = false; return false; }
+        CompileType t = (CompileType)tfp;
+        Slot z = { 0 };
+        /* Persistent registers FIRST, so freeing the init/count temps (which sit
+         * above them) cannot clobber them. */
+        int racc = alloc_temp(c), rn = alloc_temp(c), rcnt = alloc_temp(c);
+        Val vx; if (!emit(c, A[1], &vx)) return false; coerce(c, &vx, t); if (!c->ok) return false;
+        ins(c, OP_MOVE, (uint32_t)racc, (uint32_t)vx.reg, 0, z); free_if_tmp(c, vx);
+        Val vn; if (!emit(c, A[2], &vn)) return false;
+        ins(c, OP_MOVE, (uint32_t)rn, (uint32_t)vn.reg, 0, z); free_if_tmp(c, vn);
+        Slot s0; s0.i = 0; ins(c, OP_CONST, (uint32_t)rcnt, 0, 0, s0);
+        size_t Lp = c->n;
+        int rc = alloc_temp(c); ins(c, OP_LT_I, (uint32_t)rc, (uint32_t)rcnt, (uint32_t)rn, z);
+        size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z); c->temp_top--;
+        c->scope[c->nscope].name = pname; c->scope[c->nscope].reg = racc; c->scope[c->nscope].type = t; c->nscope++;
+        Val vb; if (!emit(c, body, &vb)) { c->nscope--; return false; }
+        coerce(c, &vb, t); if (!c->ok) { c->nscope--; return false; }
+        if (vb.reg != racc) ins(c, OP_MOVE, (uint32_t)racc, (uint32_t)vb.reg, 0, z);
+        free_if_tmp(c, vb);
+        c->nscope--;
+        Slot one; one.i = 1; ins(c, OP_INC_I, (uint32_t)rcnt, 0, 0, one);
+        ins(c, OP_JMP, 0, 0, (uint32_t)Lp, z);
+        if (c->ok) c->code[jz].b = (uint32_t)c->n;
+        c->temp_top = (racc - c->nlocals) + 1;   /* keep racc; free rn, rcnt */
+        out->reg = racc; out->tmp = true; out->type = t; return c->ok;
     }
 
     /* last resort: any numeric function with a machine kernel in ndkernels */

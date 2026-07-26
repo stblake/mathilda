@@ -452,6 +452,15 @@ M0+M1 generalize the NDSolve win to all straight-line scalar numeric callers and
 ship `Compile[]`; M2 is the procedural unification; M3+M4 are the array / "all
 numeric functions" requirements.
 
+**Status (2026-07-26).** M0 (substrate + NDSolve migration), M1a (generic
+`KERNEL` over `ndkernels`), and M2 control flow are done: `If`, `Sum`/`Product`,
+`With`/`Module` mutable locals, `Set`/`AddTo`/`SubtractFrom`/`TimesBy`/
+`Increment`/`Decrement`, `CompoundExpression`, `Do`/`While`/`For`, and
+`Nest[Function[u, body], x, n]` (fixed-point accumulator typing). Remaining:
+`Which`/`Piecewise`, `Fold`/`NestList`/`FoldList` (need arrays, M3), the
+user-facing `Compile[]`/`CompiledFunction` object (M1b), M3 arrays/NDArray,
+M4 full kernel coverage.
+
 ---
 
 ## 17. Risks & open questions

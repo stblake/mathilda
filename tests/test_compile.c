@@ -285,10 +285,94 @@ int main(void) {
                 else if (k == 4) { ref = 0; for (long long i = 1; i <= n; i++) ref += tgamma((double)i) * x; }
                 else { ref = 0; for (long long i = 1; i <= n; i++) for (long long j = 1; j <= i; j++) ref += (double)(i * j) * x; }
                 double err = fabs(o.v.r - ref) / (1.0 + fabs(ref));
-                if (err > maxerr) maxerr = err; cmp++;
+                if (err > maxerr) maxerr = err;
+                cmp++;
             }
             if (cmp < 50 || maxerr > 1e-9) { printf("FAIL: %-30s -> max_rel=%.2e (%d)\n", cases[k].nm, maxerr, cmp); failures++; }
             else printf("ok:   %-30s max_rel=%.1e (%d cmps)\n", cases[k].nm, maxerr, cmp);
+            compiled_free(p); expr_free(b);
+        }
+    }
+
+    /* ---- procedural: Module/With locals, Set/AddTo/Increment, Do/While/For,
+     * CompoundExpression.  Parsed unevaluated; C references. ---- */
+    {
+        const char* in1[1] = { intern_symbol("x") };
+        const char* in2[2] = { intern_symbol("x"), intern_symbol("n") };
+        CompileType ty1[1] = { CT_REAL };
+        CompileType ty2[2] = { CT_REAL, CT_INT };
+        struct { const char* nm; const char* body; int na; } cases[] = {
+            { "Module+Set+CompoundExpr", "Module[{s = 0., t = 1.}, s = s + x; t = t x; s + t]", 1 },
+            { "Do accumulation",         "Module[{s = 0.}, Do[s = s + 1/i^2, {i, 1, n}]; s]", 2 },
+            { "While Newton sqrt",       "Module[{r = x, k = 0}, While[k < 25, r = (r + x/r)/2; k = k + 1]; r]", 1 },
+            { "For sum 1..n",            "Module[{s = 0, i = 0}, For[i = 1, i <= n, i = i + 1, s = s + i]; s]", 2 },
+            { "Increment + i^2 sum",     "Module[{s = 0, i = 0}, While[i < n, i++; s = s + i i]; s]", 2 },
+            { "With + AddTo/TimesBy",    "With[{a = x}, Module[{s = 0.}, s += a; TimesBy[s, 3]; s]]", 1 },
+        };
+        for (size_t k = 0; k < sizeof cases / sizeof cases[0]; k++) {
+            Expr* b = parse_expression(cases[k].body);
+            const char* const* nm = cases[k].na == 1 ? in1 : in2;
+            const CompileType* ty = cases[k].na == 1 ? ty1 : ty2;
+            CompiledProgram* p = compile_expr(b, nm, ty, (size_t)cases[k].na);
+            if (!p) { printf("FAIL: %-30s -> did not compile\n", cases[k].nm); failures++; expr_free(b); continue; }
+            double maxerr = 0; int cmp = 0;
+            for (int t = 0; t < 150; t++) {
+                double x = urand(0.5, 3.0); long long n = irand(1, 12);
+                CompileValue av[2] = { { CT_REAL, { .r = x } }, { CT_INT, { .i = n } } }, o;
+                if (!compiled_eval(p, av, &o)) continue;
+                double got = (o.type == CT_INT) ? (double)o.v.i : o.v.r, ref = 0;
+                if (k == 0) ref = 2 * x;
+                else if (k == 1) { for (long long i = 1; i <= n; i++) ref += 1.0 / (double)(i * i); }
+                else if (k == 2) ref = sqrt(x);
+                else if (k == 3) { for (long long i = 1; i <= n; i++) ref += (double)i; }
+                else if (k == 4) { for (long long i = 1; i <= n; i++) ref += (double)(i * i); }
+                else if (k == 5) ref = 3.0 * x;   /* With+AddTo/TimesBy: (0+x)*3 */
+                else if (k == 8) ref = 3.0 * x;    /* diag TimesBy int */
+                else ref = x;                       /* diag: return local == x */
+                double err = fabs(got - ref) / (1.0 + fabs(ref));
+                if (err > maxerr) maxerr = err;
+                cmp++;
+            }
+            if (cmp < 40 || maxerr > 1e-9) { printf("FAIL: %-30s -> max_rel=%.2e (%d)\n", cases[k].nm, maxerr, cmp); failures++; }
+            else printf("ok:   %-30s max_rel=%.1e (%d cmps)\n", cases[k].nm, maxerr, cmp);
+            compiled_free(p); expr_free(b);
+        }
+    }
+
+    /* ---- Nest[Function[u, body], x, n]: parsed unevaluated; C references. ---- */
+    {
+        const char* in1[1] = { intern_symbol("x") };
+        const char* in2[2] = { intern_symbol("x"), intern_symbol("n") };
+        CompileType ty1[1] = { CT_REAL };
+        CompileType ty2[2] = { CT_REAL, CT_INT };
+        struct { const char* nm; const char* body; int na; } nc[] = {
+            { "Nest linear map",       "Nest[Function[u, u/2 + 1], x, n]", 2 },
+            { "Nest Newton sqrt",      "Nest[Function[{u}, (u + x/u)/2], x, 8]", 1 },
+            { "Nest 2^n (int)",        "Nest[Function[u, 2 u], 1, n]", 2 },
+            { "Nest widen int->real",  "Nest[Function[u, u + 0.5], 0, n]", 2 },
+        };
+        for (size_t k = 0; k < sizeof nc / sizeof nc[0]; k++) {
+            Expr* b = parse_expression(nc[k].body);
+            const char* const* nm = nc[k].na == 1 ? in1 : in2;
+            const CompileType* ty = nc[k].na == 1 ? ty1 : ty2;
+            CompiledProgram* p = compile_expr(b, nm, ty, (size_t)nc[k].na);
+            if (!p) { printf("FAIL: %-30s -> did not compile\n", nc[k].nm); failures++; expr_free(b); continue; }
+            double maxerr = 0; int cmp = 0;
+            for (int t = 0; t < 150; t++) {
+                double x = urand(1.0, 3.0); long long n = irand(0, 10);
+                CompileValue av[2] = { { CT_REAL, { .r = x } }, { CT_INT, { .i = n } } }, o;
+                if (!compiled_eval(p, av, &o)) continue;
+                double got = (o.type == CT_INT) ? (double)o.v.i : o.v.r, ref = 0;
+                if (k == 0) { ref = x; for (long long i = 0; i < n; i++) ref = ref / 2 + 1; }
+                else if (k == 1) { ref = x; for (int i = 0; i < 8; i++) ref = (ref + x / ref) / 2; }
+                else if (k == 2) { long long r = 1; for (long long i = 0; i < n; i++) r *= 2; ref = (double)r; }
+                else { ref = 0; for (long long i = 0; i < n; i++) ref += 0.5; }
+                double err = fabs(got - ref) / (1.0 + fabs(ref));
+                if (err > maxerr) maxerr = err;
+                cmp++;
+            }
+            if (cmp < 40 || maxerr > 1e-9) { printf("FAIL: %-30s -> max_rel=%.2e (%d)\n", nc[k].nm, maxerr, cmp); failures++; }
+            else printf("ok:   %-30s max_rel=%.1e (%d cmps)\n", nc[k].nm, maxerr, cmp);
             compiled_free(p); expr_free(b);
         }
     }
