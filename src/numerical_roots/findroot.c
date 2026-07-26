@@ -471,25 +471,38 @@ static NumericSpec fr_numeric_spec(const FrOpts* opts) {
  * so that exact subexpressions like `Power[E, 1.0]` collapse to a
  * concrete numeric leaf. Returns a freshly-allocated Expr* (caller
  * frees) or NULL. */
+#define FR_MAXV 32   /* compiled fast path caps the variable count here */
+
+/* Evaluate a compiled program `ac` at the real-valued `values` (machine spec,
+ * matching arity).  Returns a freshly boxed numeric Expr, or NULL to signal
+ * "use the interpreter" — a non-numeric argument, a non-finite result, or a spec
+ * mismatch.  Shared by the scalar and system code. */
+static Expr* fr_try_compiled(AutoCompiled* ac, Expr* const* values, size_t n,
+                             NumericSpec spec) {
+    if (!ac || spec.mode != NUMERIC_MODE_MACHINE
+        || n == 0 || n > FR_MAXV || n != autocompiled_num_vars(ac)) return NULL;
+    double xs[FR_MAXV];
+    for (size_t i = 0; i < n; i++)
+        if (!fr_expr_to_double_real(values[i], &xs[i])) return NULL;
+    double _Complex z;
+    if (!autocompiled_eval_complex(ac, xs, &z)
+        || !isfinite(creal(z)) || !isfinite(cimag(z))) return NULL;
+    return (cimag(z) == 0.0)
+        ? expr_new_real(creal(z))
+        : make_complex(expr_new_real(creal(z)), expr_new_real(cimag(z)));
+}
+
 static Expr* fr_eval_with_bindings(Expr* f, FrVarBind* binds,
                                    Expr* const* values, size_t n,
                                    const FrOpts* opts) {
     NumericSpec spec = fr_numeric_spec(opts);
-    /* Compiled fast path — the main function only (pointer identity), scalar,
-     * machine precision, real argument.  A non-finite / non-real compiled result
-     * falls through to the interpreter (which supplies the complex/singular
-     * value the iteration then rejects as non-real, exactly as before). */
-    if (opts->ac_f && f == opts->main_f && spec.mode == NUMERIC_MODE_MACHINE
-        && n == 1 && autocompiled_num_vars(opts->ac_f) == 1) {
-        double x;
-        if (fr_expr_to_double_real(values[0], &x)) {
-            double _Complex z;
-            if (autocompiled_eval_complex(opts->ac_f, &x, &z)
-                && isfinite(creal(z)) && isfinite(cimag(z)))
-                return (cimag(z) == 0.0)
-                    ? expr_new_real(creal(z))
-                    : make_complex(expr_new_real(creal(z)), expr_new_real(cimag(z)));
-        }
+    /* Compiled fast path — the main function only (pointer identity).  A
+     * non-finite / non-real compiled result falls through to the interpreter
+     * (which supplies the complex/singular value the iteration then handles,
+     * exactly as before). */
+    if (f == opts->main_f) {
+        Expr* c = fr_try_compiled(opts->ac_f, values, n, spec);
+        if (c) return c;
     }
     for (size_t i = 0; i < n; i++) {
         fr_bind_set(&binds[i], values[i]);
@@ -1228,6 +1241,20 @@ static Expr* fr_run_newton_system_real(Expr* flist_normalized,
         }
     }
 
+    /* Compile each component f_i and Jacobian entry J_ij as a function of all n
+     * variables (machine fast path); a NULL entry falls back to the interpreter.
+     * Systems are machine-precision, so the spec is fixed here. */
+    NumericSpec mspec = fr_numeric_spec(opts);
+    AutoCompiled**  ac_f   = malloc(sizeof(*ac_f) * n);
+    AutoCompiled*** ac_jac = malloc(sizeof(*ac_jac) * n);
+    for (size_t i = 0; i < n; i++) {
+        ac_f[i] = autocompile_new(flist_normalized->data.function.args[i],
+                                  (const Expr* const*)vars, n);
+        ac_jac[i] = malloc(sizeof(**ac_jac) * n);
+        for (size_t j = 0; j < n; j++)
+            ac_jac[i][j] = autocompile_new(jac[i][j], (const Expr* const*)vars, n);
+    }
+
     Expr* result = NULL;
     bool converged = false;
 
@@ -1240,7 +1267,8 @@ static Expr* fr_run_newton_system_real(Expr* flist_normalized,
         double max_f_pre = 0.0;
         for (size_t i = 0; i < n; i++) {
             Expr* fi = flist_normalized->data.function.args[i];
-            Expr* fv_e = fr_eval_with_bindings(fi, binds, xv, n, opts);
+            Expr* fv_e = fr_try_compiled(ac_f[i], xv, n, mspec);
+            if (!fv_e) fv_e = fr_eval_with_bindings(fi, binds, xv, n, opts);
             if (!fv_e || !fr_expr_to_double_real(fv_e, &fvec[i])) {
                 expr_free(fv_e);
                 fr_warn("nlnum", "non-real f_%zu during iteration", i);
@@ -1266,7 +1294,8 @@ static Expr* fr_run_newton_system_real(Expr* flist_normalized,
         double* J = malloc(sizeof(double) * n * n);
         for (size_t i = 0; i < n; i++) {
             for (size_t j = 0; j < n; j++) {
-                Expr* dv_e = fr_eval_with_bindings(jac[i][j], binds, xv, n, opts);
+                Expr* dv_e = fr_try_compiled(ac_jac[i][j], xv, n, mspec);
+                if (!dv_e) dv_e = fr_eval_with_bindings(jac[i][j], binds, xv, n, opts);
                 if (!dv_e || !fr_expr_to_double_real(dv_e, &J[i*n + j])) {
                     expr_free(dv_e);
                     fr_warn("nlnum", "non-real Jacobian[%zu,%zu]", i, j);
@@ -1339,7 +1368,8 @@ static Expr* fr_run_newton_system_real(Expr* flist_normalized,
         for (size_t i = 0; i < n; i++) xv2[i] = expr_new_real(x_vec[i]);
         for (size_t i = 0; i < n; i++) {
             Expr* fi = flist_normalized->data.function.args[i];
-            Expr* fv_e = fr_eval_with_bindings(fi, binds, xv2, n, opts);
+            Expr* fv_e = fr_try_compiled(ac_f[i], xv2, n, mspec);
+            if (!fv_e) fv_e = fr_eval_with_bindings(fi, binds, xv2, n, opts);
             double v;
             if (fv_e && fr_expr_to_double_real(fv_e, &v) && fabs(v) > max_f) {
                 max_f = fabs(v);
@@ -1370,10 +1400,17 @@ static Expr* fr_run_newton_system_real(Expr* flist_normalized,
 
 cleanup:
     for (size_t i = 0; i < n; i++) {
-        for (size_t j = 0; j < n; j++) expr_free(jac[i][j]);
+        for (size_t j = 0; j < n; j++) {
+            expr_free(jac[i][j]);
+            autocompiled_free(ac_jac[i][j]);
+        }
         free(jac[i]);
+        free(ac_jac[i]);
+        autocompiled_free(ac_f[i]);
     }
     free(jac);
+    free(ac_jac);
+    free(ac_f);
     return result;
 }
 

@@ -128,6 +128,21 @@ void test_findroot_complex_and_inert(void) {
     assert_eval_eq("With[{r = x /. FindRoot[Zeta[x] - 2, {x, 1.5}]}, Abs[Zeta[r] - 2] < 10^-8]", "True", 0); /* inert deriv → FD */
 }
 
+/* FindRoot systems: each component f_i and Jacobian entry is compiled as a
+ * function of all variables; the linear-solve Newton is otherwise unchanged. */
+void test_findroot_system(void) {
+    assert_eval_eq("{x, y} /. FindRoot[{x + y == 3, x - y == 1}, {{x, 0}, {y, 0}}]", "{2.0, 1.0}", 0);
+    assert_eval_eq("With[{s = {x, y} /. FindRoot[{x^2 + y^2 == 4, x - y == 0}, {{x, 1}, {y, 1}}]}, "
+                   "Max[Abs[s - {Sqrt[2], Sqrt[2]}]] < 10^-8]", "True", 0);
+    assert_eval_eq("With[{s = {x, y, z} /. FindRoot[{x + y + z == 6, x^2 - y == 2, z - x == 1}, "
+                   "{{x, 1}, {y, 1}, {z, 1}}]}, "
+                   "Max[Abs[{s[[1]]+s[[2]]+s[[3]]-6, s[[1]]^2-s[[2]]-2, s[[3]]-s[[1]]-1}]] < 10^-8]", "True", 0);
+    /* one component uncompilable (LogGamma) but with an evaluable derivative →
+     * that component and its Jacobian row use the interpreter, the rest compile. */
+    assert_eval_eq("With[{s = {x, y} /. FindRoot[{LogGamma[x] - y == 0, x - 3 == 0}, {{x, 2.5}, {y, 0}}]}, "
+                   "Abs[s[[2]] - LogGamma[3]] < 10^-7]", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -146,6 +161,7 @@ int main(void) {
     TEST(test_nintegrate_uncompilable);
     TEST(test_findroot_parity);
     TEST(test_findroot_complex_and_inert);
+    TEST(test_findroot_system);
 
     printf("All auto-compile tests passed!\n");
     return 0;
