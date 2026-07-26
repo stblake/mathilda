@@ -462,10 +462,11 @@ path + interpreter fallback), and the **M4 auto-compile wiring** of the numeric
 builtins are done. The shared adapter `src/compile/autocompile.{c,h}` transparently
 compiles a held body once and evaluates it over machine numbers, with interpreter
 fallback; it is wired into **Plot/Plot3D** (~215×/~11×), **Table** (real iterator
-only, ~128×), **NIntegrate** (1-D machine, ~353×), and **FindRoot** (scalar
-machine real, ~19×). Remaining: `Which`/`Piecewise`, `Fold`/`NestList`/`FoldList`
-(need arrays, M3), M3 arrays/NDArray, M4 full special-function kernel coverage,
-multi-D NIntegrate / FindRoot systems / complex-contour compilation.
+only, ~128×), **NIntegrate** (1-D machine ~353×, multi-D cubature/Monte-Carlo
+~504×), and **FindRoot** (scalar machine real ~19×, multivariate systems ~6.9×).
+Remaining: `Which`/`Piecewise`, `Fold`/`NestList`/`FoldList` (need arrays, M3),
+M3 arrays/NDArray, M4 full special-function kernel coverage, complex-contour
+NIntegrate compilation, and MPFR fast paths.
 
 ---
 
