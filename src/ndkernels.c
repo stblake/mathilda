@@ -285,6 +285,14 @@ static const NDUnaryKernel NDKU_HarmonicNumber = { NULL, ndk_HarmonicNumber_r, t
 static const NDUnaryKernel NDKU_Zeta           = { NULL, ndk_Zeta_r,           true, false };
 static const NDUnaryKernel NDKU_Fibonacci      = { NULL, ndk_Fibonacci_r,      true, false };
 static const NDUnaryKernel NDKU_LucasL         = { NULL, ndk_LucasL_r,         true, false };
+static bool ndk_AiryAi_r(double x, double* o)      { return sf_machine_airy_ai(x, o); }
+static bool ndk_AiryBi_r(double x, double* o)      { return sf_machine_airy_bi(x, o); }
+static bool ndk_AiryAiPrime_r(double x, double* o) { return sf_machine_airy_ai_prime(x, o); }
+static bool ndk_AiryBiPrime_r(double x, double* o) { return sf_machine_airy_bi_prime(x, o); }
+static const NDUnaryKernel NDKU_AiryAi      = { NULL, ndk_AiryAi_r,      true, false };
+static const NDUnaryKernel NDKU_AiryBi      = { NULL, ndk_AiryBi_r,      true, false };
+static const NDUnaryKernel NDKU_AiryAiPrime = { NULL, ndk_AiryAiPrime_r, true, false };
+static const NDUnaryKernel NDKU_AiryBiPrime = { NULL, ndk_AiryBiPrime_r, true, false };
 
 /* PolyGamma[n, x] and HurwitzZeta[s, a].  PolyGamma matters as a BINARY kernel
  * even when written unary: the evaluator canonicalises PolyGamma[x] to
@@ -381,11 +389,11 @@ void ndkernels_init(void) {
     REG_B(Pochhammer,  NDKB_Pochhammer);
     REG_B(Binomial,    NDKB_Binomial);
     REG_B(LegendreP,   NDKB_LegendreP);
+    REG_U(AiryAi); REG_U(AiryBi); REG_U(AiryAiPrime); REG_U(AiryBiPrime);
 
     /* Special functions with libc-free algorithms: correct results on NDArray
      * via the degrade path (List threading), pending dedicated machine kernels. */
     static const char* deg_u[] = {
-        "AiryAi", "AiryBi", "AiryAiPrime", "AiryBiPrime",
     };
     for (unsigned i = 0; i < sizeof(deg_u) / sizeof(deg_u[0]); i++)
         REG_DEG_U(deg_u[i]);

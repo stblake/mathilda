@@ -57,10 +57,6 @@ static const Gap KNOWN_GAPS[] = {
      * those that still need genuinely new numerics rather than a wrapper. */
     { "PolyLog",              "no double kernel (MPFR-only module)" },
     { "LerchPhi",             "no double kernel (MPFR-only module)" },
-    { "AiryAi",               "no double kernel (MPFR-only module)" },
-    { "AiryBi",               "no double kernel (MPFR-only module)" },
-    { "AiryAiPrime",          "no double kernel (MPFR-only module)" },
-    { "AiryBiPrime",          "no double kernel (MPFR-only module)" },
     { "BesselI",              "no double kernel (MPFR-only module)" },
     { "BesselK",              "no double kernel (MPFR-only module)" },
     { "BesselJZero",          "no double kernel (root-finding module)" },

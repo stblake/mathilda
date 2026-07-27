@@ -42,6 +42,10 @@ bool sf_machine_polygamma(double n, double x, double* out);     /* PolyGamma[n, 
 bool sf_machine_pochhammer(double a, double n, double* out);    /* Pochhammer */
 bool sf_machine_binomial(double n, double k, double* out);      /* Binomial */
 bool sf_machine_legendre_p(double n, double x, double* out);    /* LegendreP, integer n */
+bool sf_machine_airy_ai(double x, double* out);        /* AiryAi */
+bool sf_machine_airy_bi(double x, double* out);        /* AiryBi */
+bool sf_machine_airy_ai_prime(double x, double* out);  /* AiryAiPrime */
+bool sf_machine_airy_bi_prime(double x, double* out);  /* AiryBiPrime */
 
 /* Already-existing double algorithms in inverf.c / inverfc.c, exposed so the
  * same two consumers can use them rather than degrading. */

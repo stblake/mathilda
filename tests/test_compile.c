@@ -613,6 +613,16 @@ int main(void) {
     parity("Binomial real",   "Binomial[x, 2.5]",  xyz, RRR, 1, 3.0, 12.0, 0, 0, 300);
     parity("LegendreP",       "LegendreP[3, x]",   xyz, RRR, 1, -0.99, 0.99, 0, 0, 300);
     parity("LegendreP high",  "LegendreP[12, x]",  xyz, RRR, 1, -0.9, 0.9, 0, 0, 300);
+    /* Airy: the ascending series and the asymptotic expansion do not meet in
+     * double precision, so the kernel covers |x| <= 2.5 and |x| >= 8 and
+     * DECLINES the band between — checked in both directions here. */
+    parity("AiryAi small",    "AiryAi[x]",         xyz, RRR, 1, -2.5, 2.5, 0, 0, 300);
+    parity("AiryBi small",    "AiryBi[x]",         xyz, RRR, 1, -2.5, 2.5, 0, 0, 300);
+    parity("AiryAiPrime",     "AiryAiPrime[x]",    xyz, RRR, 1, -2.5, 2.5, 0, 0, 300);
+    parity("AiryBiPrime",     "AiryBiPrime[x]",    xyz, RRR, 1, -2.5, 2.5, 0, 0, 300);
+    parity("AiryAi large",    "AiryAi[x]",         xyz, RRR, 1, 8.0, 30.0, 0, 0, 200);
+    parity("AiryAi large -",  "AiryAi[-x]",        xyz, RRR, 1, 8.0, 30.0, 0, 0, 200);
+    parity("AiryBi large",    "AiryBi[x]",         xyz, RRR, 1, 8.0, 40.0, 0, 0, 200);
 
     /* UnitStep / Clip / Rescale are lowered by hand, not registered as kernels,
      * because their result TYPE is the difficulty: UnitStep must stay an
@@ -642,6 +652,9 @@ int main(void) {
             { "ProductLog[x]",    -0.5 },          /* below the branch point */
             { "Zeta[x]",           1.0 },          /* pole */
             { "PolyGamma[x]",      0.0 }, { "PolyGamma[x]", -3.0 },   /* poles */
+            /* Airy's uncovered band, where neither expansion converges. */
+            { "AiryAi[x]",         4.0 }, { "AiryBi[x]",        -5.0 },
+            { "AiryAiPrime[x]",    6.0 }, { "AiryBiPrime[x]",   -7.0 },
         };
         int bad = 0, n = (int)(sizeof DECLINE / sizeof DECLINE[0]);
         for (int i = 0; i < n; i++) {
@@ -735,7 +748,7 @@ int main(void) {
     }
 
     /* ---- graceful bail ---- */
-    must_bail("no kernel (AiryAi)", "AiryAi[x]", x1, RRR, 1);   /* no machine kernel -> bail */
+    must_bail("no kernel (BarnesG)", "BarnesG[x]", x1, RRR, 1); /* no machine kernel -> bail */
     must_bail("free symbol", "x + unknownParam", x1, RRR, 1);
     must_bail("list body", "{x, x^2}", x1, RRR, 1);
 
