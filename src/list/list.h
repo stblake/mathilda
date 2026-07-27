@@ -17,11 +17,13 @@
 #include "take_drop.h"
 #include "flatten.h"
 #include "partition.h"
+#include "pick.h"
 #include "rotate.h"
 #include "reverse.h"
 #include "transpose.h"
 #include "setops.h"
 #include "split.h"
+#include "splitby.h"
 #include "rescale.h"
 #include "pad.h"
 #include "total.h"
@@ -32,6 +34,7 @@
 #include "matrixq.h"
 #include "minmax.h"
 #include "join.h"
+#include "subsets.h"
 
 void list_init(void);
 

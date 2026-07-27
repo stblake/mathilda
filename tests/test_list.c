@@ -403,6 +403,59 @@ void test_partition() {
     expr_free(t2); expr_free(res2);
 }
 
+void test_pick() {
+    struct {
+        const char* input;
+        const char* expected;
+    } tests[] = {
+        /* Two-argument form: literal True selects. */
+        {"Pick[{a, b, c, d}, {True, False, True, False}]", "{a, c}"},
+        {"Pick[{a, b}, {True, True}]", "{a, b}"},
+        {"Pick[{a, b}, {False, False}]", "{}"},
+        {"Pick[{}, {}]", "{}"},
+        /* Only literal True selects; other selector values are dropped. */
+        {"Pick[{a, b, c}, {1, True, xyz}]", "{b}"},
+
+        /* Three-argument form: the selector must match the pattern. */
+        {"Pick[{a, b, c, d}, {1, 2, 3, 4}, 3]", "{c}"},
+        {"Pick[{a, b, c, d}, {1, 2, 3, 4}, _Integer]", "{a, b, c, d}"},
+        {"Pick[{a, b, c, d}, {1, 2, 3, 4}, _String]", "{}"},
+
+        /* All levels; sel mirrors the structure of expr. */
+        {"Pick[{{a, b}, {c, d}}, {{1, 0}, {0, 1}}, 1]", "{{a}, {d}}"},
+        {"Pick[{{a, b}, {c, d}}, {{True, False}, {False, True}}]", "{{a}, {d}}"},
+        /* A matching selector at an outer level keeps that element whole. */
+        {"Pick[{{a, b}, {c, d}}, {True, False}]", "{{a, b}}"},
+
+        /* The head comes from expr, not from sel. */
+        {"Pick[f[a, b, c], {True, False, True}]", "f[a, c]"},
+
+        /* Structure mismatch -> unevaluated, never a partial result. */
+        {"Pick[{a, b, c}, {True, False}]", "Pick[{a, b, c}, {True, False}]"},
+        {"Pick[{a, b}, {{1, 0}, {0, 1}}, 1]", "Pick[{a, b}, {{1, 0}, {0, 1}}, 1]"},
+        {"Pick[{{a, b}, {c}}, {{1, 0}, {0, 1}}, 1]",
+         "Pick[{{a, b}, {c}}, {{1, 0}, {0, 1}}, 1]"},
+        {"Pick[a, {True}]", "Pick[a, {True}]"},
+        {"Pick[{a, b}, sel]", "Pick[{a, b}, sel]"},
+
+        {"Attributes[Pick]", "{Protected}"},
+    };
+
+    for (int i = 0; i < (int)(sizeof(tests) / sizeof(tests[0])); i++) {
+        Expr* e = parse_expression(tests[i].input);
+        Expr* res = evaluate(e);
+        char* res_str = expr_to_string(res);
+        if (strcmp(res_str, tests[i].expected) != 0) {
+            printf("Pick test failed: %s expected %s, got %s\n",
+                   tests[i].input, tests[i].expected, res_str);
+            ASSERT(0);
+        }
+        free(res_str);
+        expr_free(e);
+        expr_free(res);
+    }
+}
+
 void test_rotate() {
     Expr* t1 = parse_expression("RotateLeft[{a, b, c}, 1]");
     Expr* res1 = evaluate(t1);
@@ -498,6 +551,71 @@ void test_commonest() {
     }
 }
 
+void test_splitby() {
+    struct {
+        const char* input;
+        const char* expected;
+    } tests[] = {
+        /* Core semantics: runs of consecutive elements with equal f[e]. */
+        {"SplitBy[{1, 3, 2, 4, 5}, EvenQ]", "{{1, 3}, {2, 4}, {5}}"},
+        {"SplitBy[{1, 2, 3, 4, 5, 6}, EvenQ]", "{{1}, {2}, {3}, {4}, {5}, {6}}"},
+        {"SplitBy[{1, 1, 2, 2, 3}, Identity]", "{{1, 1}, {2, 2}, {3}}"},
+
+        /* Only adjacent elements group -- this is not GatherBy. */
+        {"SplitBy[{2, 1, 4}, EvenQ]", "{{2}, {1}, {4}}"},
+
+        /* Empty list. */
+        {"SplitBy[{}, EvenQ]", "{}"},
+        {"SplitBy[{}, Identity]", "{}"},
+
+        /* Single element. */
+        {"SplitBy[{a}, Identity]", "{{a}}"},
+        {"SplitBy[{7}, EvenQ]", "{{7}}"},
+
+        /* All elements share a key: one run holding everything. */
+        {"SplitBy[{2, 4, 6, 8}, EvenQ]", "{{2, 4, 6, 8}}"},
+        {"SplitBy[{5, 5, 5}, Identity]", "{{5, 5, 5}}"},
+
+        /* All keys distinct: one singleton run per element. */
+        {"SplitBy[{1, 2, 3}, Identity]", "{{1}, {2}, {3}}"},
+
+        /* An f that stays unevaluated still groups adjacent elements whose
+         * keys are structurally identical (keyfn[x] == keyfn[x]). */
+        {"SplitBy[{x, x, y}, keyfn]", "{{x, x}, {y}}"},
+        {"SplitBy[{x, y, x}, keyfn]", "{{x}, {y}, {x}}"},
+
+        /* Single-function list form matches the scalar form. */
+        {"SplitBy[{1, 3, 2, 4}, {EvenQ}]", "{{1, 3}, {2, 4}}"},
+
+        /* Multiple functions nest one level deeper per function. */
+        {"SplitBy[{1, 1, 3, 2, 4, 4}, {EvenQ, Identity}]",
+         "{{{1, 1}, {3}}, {{2}, {4, 4}}}"},
+        {"SplitBy[{1, 3, 2, 4}, {EvenQ, Identity}]", "{{{1}, {3}}, {{2}, {4}}}"},
+
+        /* Empty function list: nothing to split by, left unevaluated. */
+        {"SplitBy[{1, 2, 3}, {}]", "SplitBy[{1, 2, 3}, {}]"},
+
+        /* Atoms have no elements to split; left unevaluated. */
+        {"SplitBy[x, EvenQ]", "SplitBy[x, EvenQ]"},
+
+        /* Wrong arity is left unevaluated. */
+        {"SplitBy[{1, 2}]", "SplitBy[{1, 2}]"},
+    };
+
+    for (int i = 0; i < (int)(sizeof(tests) / sizeof(tests[0])); i++) {
+        Expr* e = parse_expression(tests[i].input);
+        Expr* res = evaluate(e);
+        char* res_str = expr_to_string(res);
+        if (strcmp(res_str, tests[i].expected) != 0) {
+            printf("SplitBy test failed: %s expected %s, got %s\n", tests[i].input, tests[i].expected, res_str);
+            ASSERT(0);
+        }
+        free(res_str);
+        expr_free(e);
+        expr_free(res);
+    }
+}
+
 void test_join_basic() {
     /* Basic concatenation of lists */
     assert_eval_eq("Join[{a, b, c}, {x, y}, {u, v, w}]",
@@ -546,6 +664,95 @@ void test_join_level2_ragged_unequal_lengths() {
                    "{{x, 1, 2}, {3, 4}}", 0);
 }
 
+void test_subsets() {
+    struct {
+        const char* input;
+        const char* expected;
+    } tests[] = {
+        /* Power set: increasing length, lexicographic by position within a
+         * length. Empty subset first, full set last. */
+        {"Subsets[{a, b, c}]",
+         "{{}, {a}, {b}, {c}, {a, b}, {a, c}, {b, c}, {a, b, c}}"},
+        {"Subsets[{a, b, c, d}]",
+         "{{}, {a}, {b}, {c}, {d}, {a, b}, {a, c}, {a, d}, {b, c}, {b, d}, "
+         "{c, d}, {a, b, c}, {a, b, d}, {a, c, d}, {b, c, d}, {a, b, c, d}}"},
+        {"Subsets[{}]", "{{}}"},
+        {"Subsets[{a}]", "{{}, {a}}"},
+
+        /* Subsets[list, All] behaves as Subsets[list]. */
+        {"Subsets[{a, b, c}, All]",
+         "{{}, {a}, {b}, {c}, {a, b}, {a, c}, {b, c}, {a, b, c}}"},
+
+        /* Subsets[list, n] — lengths 0..n inclusive. */
+        {"Subsets[{a, b, c}, 2]", "{{}, {a}, {b}, {c}, {a, b}, {a, c}, {b, c}}"},
+        {"Subsets[{a, b, c}, 0]", "{{}}"},
+        /* n past the end clamps to the full power set. */
+        {"Subsets[{a, b, c}, 7]",
+         "{{}, {a}, {b}, {c}, {a, b}, {a, c}, {b, c}, {a, b, c}}"},
+        /* Negative n selects nothing. */
+        {"Subsets[{a, b, c}, -1]", "{}"},
+
+        /* Subsets[list, {n}] — exactly length n. */
+        {"Subsets[{a, b, c}, {2}]", "{{a, b}, {a, c}, {b, c}}"},
+        {"Subsets[{a, b, c}, {0}]", "{{}}"},
+        {"Subsets[{a, b, c}, {3}]", "{{a, b, c}}"},
+        /* Exactly-n does NOT clamp: no subsets are that long. */
+        {"Subsets[{a, b, c}, {5}]", "{}"},
+
+        /* Subsets[list, {nmin, nmax}] — inclusive length range. */
+        {"Subsets[{a, b, c}, {1, 2}]", "{{a}, {b}, {c}, {a, b}, {a, c}, {b, c}}"},
+        {"Subsets[{a, b, c}, {2, 3}]", "{{a, b}, {a, c}, {b, c}, {a, b, c}}"},
+        /* An over-long upper bound clamps. */
+        {"Subsets[{a, b, c}, {2, 9}]", "{{a, b}, {a, c}, {b, c}, {a, b, c}}"},
+        {"Subsets[{a, b, c}, {1, Infinity}]",
+         "{{a}, {b}, {c}, {a, b}, {a, c}, {b, c}, {a, b, c}}"},
+        /* nmin > nmax selects nothing. */
+        {"Subsets[{a, b, c}, {3, 1}]", "{}"},
+        {"Subsets[{a, b, c}, {-2, -1}]", "{}"},
+        /* Three-element spec adds a length step. */
+        {"Subsets[{a, b, c}, {0, 3, 2}]", "{{}, {a, b}, {a, c}, {b, c}}"},
+
+        /* Subsets[list, spec, s] — first s subsets, same order. */
+        {"Subsets[{a, b, c}, All, 3]", "{{}, {a}, {b}}"},
+        {"Subsets[{a, b, c}, {2}, 2]", "{{a, b}, {a, c}}"},
+        {"Subsets[{a, b, c}, All, 0]", "{}"},
+        /* s past the number of available subsets returns all of them. */
+        {"Subsets[{a, b}, All, 99]", "{{}, {a}, {b}, {a, b}}"},
+        {"Subsets[{a, b}, All, All]", "{{}, {a}, {b}, {a, b}}"},
+
+        /* The head of the input is preserved on the inner subsets; the outer
+         * wrapper is always a List. */
+        {"Subsets[f[a, b]]", "{f[], f[a], f[b], f[a, b]}"},
+        {"Subsets[f[a, b, c], {2}]", "{f[a, b], f[a, c], f[b, c]}"},
+
+        /* Duplicates are distinct by position — no dedup. */
+        {"Subsets[{a, a}]", "{{}, {a}, {a}, {a, a}}"},
+        {"Subsets[{1, 1, 1}, {2}]", "{{1, 1}, {1, 1}, {1, 1}}"},
+
+        /* Elements are evaluated normally before being distributed. */
+        {"Subsets[{1 + 1, 2 * 3}, {1}]", "{{2}, {6}}"},
+
+        /* Not a length spec at all: the call stays unevaluated. */
+        {"Subsets[{a, b}, x]", "Subsets[{a, b}, x]"},
+        /* An atom has no sublists. */
+        {"Subsets[5]", "Subsets[5]"},
+
+        /* PERFORMANCE: the 3-argument form must generate lazily. A 40-element
+         * list has 2^40 subsets; materializing them would never finish, so
+         * this returning promptly is itself the assertion. */
+        {"Subsets[Range[40], All, 5]",
+         "{{}, {1}, {2}, {3}, {4}}"},
+        {"Subsets[Range[40], {20}, 3]",
+         "{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}, "
+         "{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21}, "
+         "{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22}}"},
+    };
+
+    for (int i = 0; i < (int)(sizeof(tests) / sizeof(tests[0])); i++) {
+        assert_eval_eq(tests[i].input, tests[i].expected, 0);
+    }
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -577,11 +784,13 @@ int main() {
     TEST(test_drop);
     TEST(test_flatten);
     TEST(test_partition);
+    TEST(test_pick);
     TEST(test_rotate);
     TEST(test_reverse);
     TEST(test_transpose);
     TEST(test_total);
     TEST(test_commonest);
+    TEST(test_splitby);
 
     TEST(test_join_basic);
     TEST(test_join_two_lists);
@@ -592,6 +801,8 @@ int main() {
     TEST(test_join_level2_matrices);
     TEST(test_join_level2_ragged);
     TEST(test_join_level2_ragged_unequal_lengths);
+
+    TEST(test_subsets);
 
     printf("All list tests passed!\n");
     return 0;
