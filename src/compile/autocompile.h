@@ -35,6 +35,18 @@ typedef struct AutoCompiled AutoCompiled;
  * var is not a symbol. */
 AutoCompiled* autocompile_new(const Expr* body, const Expr* const* vars, size_t nvars);
 
+/* As autocompile_new, but the variables are declared CT_COMPLEX — the program
+ * takes complex INPUTS, not merely a complex result.  For samplers whose
+ * variable ranges over a region of the plane rather than an interval
+ * (ComplexPlot), where binding a real and hoping for a complex answer would be
+ * the wrong function.
+ *
+ * Compiles a strictly smaller set of bodies than the real version: a head needs
+ * a complex kernel, not just a real one, and many special functions have only
+ * the latter (see NUMERIC_FUNCTION_MISSING.md).  Read it back with
+ * autocompiled_eval_z. */
+AutoCompiled* autocompile_new_z(const Expr* body, const Expr* const* vars, size_t nvars);
+
 size_t autocompiled_num_vars(const AutoCompiled* ac);
 
 /* Evaluate at real inputs xs[nvars].  Writes a real *out and returns true, or
@@ -55,6 +67,13 @@ bool autocompiled_eval_complex(const AutoCompiled* ac, const double* xs, double 
  * interpreter exactly.  For collection builtins (Table) where the element type
  * is user-visible, prefer this over autocompiled_eval_real. */
 Expr* autocompiled_eval_boxed(const AutoCompiled* ac, const double* xs);
+
+/* Evaluate a program built by autocompile_new_z at complex inputs zs[nvars].
+ * Returns false on a non-finite result, or if `ac` is a real-argument program.
+ * (Contrast autocompiled_eval_complex, whose INPUTS are real and only whose
+ * result may be complex.) */
+bool autocompiled_eval_z(const AutoCompiled* ac, const double _Complex* zs,
+                         double _Complex* out);
 
 void autocompiled_free(AutoCompiled* ac);
 

@@ -24,6 +24,7 @@
 
 #include "parametricplot3d.h"
 #include "plot_common.h"
+#include "compile/autocompile.h"   /* machine fast path for each coordinate */
 #include "iter.h"
 #include "eval.h"
 #include "symtab.h"
@@ -53,7 +54,38 @@ typedef struct {
     Expr* var2;             /* second iterator variable; NULL for 1-iterator form */
     Expr* body;             /* expression that evaluates to {x, y, z} */
     Expr* region_function;  /* borrowed; NULL = no filter */
+    AutoCompiled* ac[3];    /* x/y/z compiled as f(vars); ac[0] NULL = interpreter */
 } Param3DEvalCtx;
+
+/* Compile the three components of a literal {x(t), y(t), z(t)} body.  The
+ * engine returns one machine number per program, so a coordinate triple needs
+ * three of them; all-or-nothing, since a partial fast path would still pay the
+ * whole interpreter round-trip. */
+static void param3d_ctx_compile(Param3DEvalCtx* ctx) {
+    for (int i = 0; i < 3; i++) ctx->ac[i] = NULL;
+    const Expr* b = ctx->body;
+    if (!b || b->type != EXPR_FUNCTION || b->data.function.head->type != EXPR_SYMBOL
+        || b->data.function.head->data.symbol.name != SYM_List
+        || b->data.function.arg_count != 3)
+        return;
+    const Expr* vars[2] = { ctx->var1, ctx->var2 };
+    size_t nv = ctx->var2 ? 2 : 1;
+    for (int i = 0; i < 3; i++) {
+        ctx->ac[i] = autocompile_new(b->data.function.args[i], vars, nv);
+        if (!ctx->ac[i]) {
+            for (int j = 0; j < i; j++) { autocompiled_free(ctx->ac[j]); ctx->ac[j] = NULL; }
+            return;
+        }
+    }
+}
+
+static void param3d_ctx_free(Param3DEvalCtx* ctx) {
+    for (int i = 0; i < 3; i++) { autocompiled_free(ctx->ac[i]); ctx->ac[i] = NULL; }
+}
+
+static bool param3d_region_ok(const Param3DEvalCtx* ctx, double x, double y, double z) {
+    return !ctx->region_function || eval_region3d(ctx->region_function, x, y, z);
+}
 
 /* Evaluate ctx->body (with vars already set in symtab) and extract {x,y,z}.
  * Returns true on success and stores the coordinates in xo, yo, zo. */
@@ -67,21 +99,48 @@ static bool eval_body_xyz(Param3DEvalCtx* ctx, double* xo, double* yo, double* z
         double x, y, z;
         if (expr_to_real_double(result->data.function.args[0], &x) && isfinite(x)
             && expr_to_real_double(result->data.function.args[1], &y) && isfinite(y)
-            && expr_to_real_double(result->data.function.args[2], &z) && isfinite(z)) {
-            if (!ctx->region_function || eval_region3d(ctx->region_function, x, y, z)) {
-                *xo = x; *yo = y; *zo = z; ok = true;
-            }
+            && expr_to_real_double(result->data.function.args[2], &z) && isfinite(z)
+            && param3d_region_ok(ctx, x, y, z)) {
+            *xo = x; *yo = y; *zo = z; ok = true;
         }
     }
     expr_free(result);
     return ok;
 }
 
+/* Evaluate the body at the given variable values.  The one place that binds the
+ * iterator variables, and it binds only when the interpreter is reached. */
+static bool param3d_eval_at(Param3DEvalCtx* ctx, const double* vals, size_t nvals,
+                            double* xo, double* yo, double* zo) {
+    if (ctx->ac[0]) {
+        double c[3];
+        bool ok = true;
+        for (int i = 0; i < 3 && ok; i++)
+            ok = autocompiled_eval_real(ctx->ac[i], vals, &c[i]) && isfinite(c[i]);
+        if (ok) {
+            if (!param3d_region_ok(ctx, c[0], c[1], c[2])) return false;
+            *xo = c[0]; *yo = c[1]; *zo = c[2];
+            return true;
+        }
+        /* Fall through: a declining component may still have a real value. */
+    }
+    /* symtab_add_own_value COPIES its replacement, so the temporary is ours to
+     * free — passing expr_new_real(...) inline leaked one Expr per sample. */
+    Expr* v1 = expr_new_real(vals[0]);
+    symtab_add_own_value(ctx->var1->data.symbol.name, ctx->var1, v1);
+    expr_free(v1);
+    if (nvals > 1 && ctx->var2) {
+        Expr* v2 = expr_new_real(vals[1]);
+        symtab_add_own_value(ctx->var2->data.symbol.name, ctx->var2, v2);
+        expr_free(v2);
+    }
+    return eval_body_xyz(ctx, xo, yo, zo);
+}
+
 /* Set var1 = t and evaluate the body (1-iterator form). */
 static bool param3d_eval(double t, Param3DEvalCtx* ctx,
                           double* xo, double* yo, double* zo) {
-    symtab_add_own_value(ctx->var1->data.symbol.name, ctx->var1, expr_new_real(t));
-    return eval_body_xyz(ctx, xo, yo, zo);
+    return param3d_eval_at(ctx, &t, 1, xo, yo, zo);
 }
 
 /* ---- 3D adaptive sampler (1-iterator form) ---- */
@@ -372,11 +431,13 @@ static Expr** build_param3d_curve(Expr* body, Expr* var1,
 
     Param3DEvalCtx ctx = { .var1 = var1, .var2 = NULL, .body = body,
                              .region_function = sopts->region_function };
+    param3d_ctx_compile(&ctx);
 
     size_t npts;
     ParamPt3D* pts = param3d_sample(&ctx, tmin, tmax,
                                       sopts->plot_points, sopts->max_recursion,
                                       sopts->max_plot_points, &npts);
+    param3d_ctx_free(&ctx);
     if (!pts || npts == 0) { free(pts); return NULL; }
 
     /* Compute xyz range for ColorFunction spatial scaling. */
@@ -474,6 +535,7 @@ static Expr** build_param3d_surface(Expr* body, Expr* var1, Expr* var2,
 
     Param3DEvalCtx ctx = { .var1 = var1, .var2 = var2, .body = body,
                              .region_function = sopts->region_function };
+    param3d_ctx_compile(&ctx);
 
     /* Sample the grid and compute xyz bbox for ColorFunction scaling. */
     double xlo = 1e300, xhi = -1e300;
@@ -483,13 +545,12 @@ static Expr** build_param3d_surface(Expr* body, Expr* var1, Expr* var2,
     for (long i = 0; i < n; i++) {
         double t = (n > 1) ? t1min + (t1max - t1min) * (double)i / (double)(n-1) : t1min;
         if (i == n-1) t = t1max;
-        symtab_add_own_value(ctx.var1->data.symbol.name, ctx.var1, expr_new_real(t));
         for (long j = 0; j < n; j++) {
             double u = (n > 1) ? t2min + (t2max - t2min) * (double)j / (double)(n-1) : t2min;
             if (j == n-1) u = t2max;
-            symtab_add_own_value(ctx.var2->data.symbol.name, ctx.var2, expr_new_real(u));
+            double v[2] = { t, u };
             GridPt3DParam* p = &grid[i * n + j];
-            p->valid = eval_body_xyz(&ctx, &p->x, &p->y, &p->z);
+            p->valid = param3d_eval_at(&ctx, v, 2, &p->x, &p->y, &p->z);
             if (p->valid) {
                 if (p->x < xlo) xlo = p->x;
                 if (p->x > xhi) xhi = p->x;
@@ -500,6 +561,7 @@ static Expr** build_param3d_surface(Expr* body, Expr* var1, Expr* var2,
             }
         }
     }
+    param3d_ctx_free(&ctx);
 
     /* Worst-case capacity: 2 per cell (color+polygon) + mesh lines. */
     long ncells = (n-1) * (n-1);

@@ -11,6 +11,17 @@
 #include "parse.h"
 #include "compile/autocompile.h"
 
+/* A reference body that is guaranteed to run in the interpreter while computing
+ * exactly the same numbers: `uncid[t_] := t` is an identity whose DownValue the
+ * compiler cannot lower, so wrapping a body forces the slow path with no
+ * perturbation at all.
+ *
+ * Prefer this over "wrap it in a head with no machine kernel".  That reference
+ * expires the day the head gets a kernel, silently turning a compiled-vs-
+ * interpreted check into a compiled-vs-compiled one — which is exactly what
+ * happened here to `Zeta`. */
+#define AC_UNCID "uncid[t_] := t; "
+
 /* Every sampled Plot point lies on the true curve (compiled path == interpreter). */
 void test_plot_parity(void) {
     assert_eval_eq(
@@ -270,9 +281,14 @@ void test_findroot_parity(void) {
     assert_eval_eq("With[{r = x /. FindRoot[Cos[x] - x, {x, 0.5}]}, Abs[Cos[r] - r] < 10^-8]", "True", 0);
     assert_eval_eq("With[{r = x /. FindRoot[x^3 - x - 2, {x, 1, 2}]}, Abs[r^3 - r - 2] < 10^-8]", "True", 0);
     assert_eval_eq("With[{r = x /. FindRoot[x^2 - 2, {x, 1.5, 0, 3}]}, Abs[r^2 - 2] < 10^-8]", "True", 0);
-    /* compiled result equals the interpreter (uncompilable perturbation) result */
-    assert_eval_eq("Abs[(x /. FindRoot[Cos[x] - x, {x, 0.5}]) "
-                   "- (x /. FindRoot[Cos[x] - x + 10^-290 Zeta[x + 100], {x, 0.5}])] < 10^-11", "True", 0);
+    /* Compiled result equals the interpreter result.  The reference wraps the
+     * body in an identity DownValue the compiler cannot lower — NOT in an
+     * "uncompilable head", which is what this used to do with `Zeta` until
+     * Zeta got a machine kernel and quietly turned the check into
+     * compiled-vs-compiled.  A reference built out of a coverage gap expires
+     * when the gap is closed; one built out of a user rule does not. */
+    assert_eval_eq(AC_UNCID "Abs[(x /. FindRoot[Cos[x] - x, {x, 0.5}]) "
+                   "- (x /. FindRoot[uncid[Cos[x] - x], {x, 0.5}])] < 10^-11", "True", 0);
 }
 
 void test_findroot_complex_and_inert(void) {
@@ -293,6 +309,211 @@ void test_findroot_system(void) {
      * that component and its Jacobian row use the interpreter, the rest compile. */
     assert_eval_eq("With[{s = {x, y} /. FindRoot[{LogGamma[x] - y == 0, x - 3 == 0}, {{x, 2.5}, {y, 0}}]}, "
                    "Abs[s[[2]] - LogGamma[3]] < 10^-7]", "True", 0);
+}
+
+/* ------------------------------------------------------------------ *
+ *  The grid / field / term samplers                                    *
+ *                                                                      *
+ *  Each of these compares a plot against the SAME plot with its body    *
+ *  wrapped in `uncid[t_] := t` — an identity whose DownValue the        *
+ *  compiler cannot lower, so the reference runs entirely in the         *
+ *  interpreter while computing bit-for-bit the same numbers.  That is    *
+ *  what makes the comparison exact rather than approximate, and it       *
+ *  cannot go vacuous the way an "uncompilable head" reference does the   *
+ *  day that head gets a kernel (which is exactly what happened to        *
+ *  `Zeta` below).                                                       *
+ *                                                                      *
+ *  `Cases[g, _Real, Infinity]` pulls out every machine number in the    *
+ *  Graphics in order — coordinates AND colours — so one comparison       *
+ *  covers the whole output, and the Length check catches a structural    *
+ *  divergence (an adaptive sampler subdividing differently) that a       *
+ *  value comparison alone would miss.                                    *
+ * ------------------------------------------------------------------ */
+
+/* Every machine number in the two Graphics agrees, and there are the same
+ * number of them. */
+static void assert_plot_parity(const char* compiled, const char* interpreted,
+                               const char* tol) {
+    char buf[2048];
+    snprintf(buf, sizeof buf,
+             AC_UNCID
+             "With[{a = Cases[%s, _Real, Infinity], b = Cases[%s, _Real, Infinity]}, "
+             "Length[a] == Length[b] && Length[a] > 0 && Max[Abs[a - b]] < %s]",
+             compiled, interpreted, tol);
+    assert_eval_eq(buf, "True", 0);
+}
+
+void test_contourplot_parity(void) {
+    assert_plot_parity(
+        "ContourPlot[Sin[x] Cos[y] + x^2/10, {x, -2, 2}, {y, -2, 2}, PlotPoints -> 30]",
+        "ContourPlot[uncid[Sin[x] Cos[y] + x^2/10], {x, -2, 2}, {y, -2, 2}, PlotPoints -> 30]",
+        "10^-12");
+    /* Equation form takes a different grid path (one grid per equation). */
+    assert_plot_parity(
+        "ContourPlot[x^2 + y^2 == 2, {x, -2, 2}, {y, -2, 2}, PlotPoints -> 20]",
+        "ContourPlot[uncid[x^2 + y^2] == 2, {x, -2, 2}, {y, -2, 2}, PlotPoints -> 20]",
+        "10^-12");
+    assert_eval_eq("Head[ContourPlot[uncid[x + y], {x, 0, 1}, {y, 0, 1}, PlotPoints -> 5]]",
+                   "Graphics", 0);
+}
+
+void test_densityplot_parity(void) {
+    assert_plot_parity(
+        "DensityPlot[Sin[x] Cos[y] + Exp[-x^2 - y^2], {x, -2, 2}, {y, -2, 2}, PlotPoints -> 20]",
+        "DensityPlot[uncid[Sin[x] Cos[y] + Exp[-x^2 - y^2]], {x, -2, 2}, {y, -2, 2}, PlotPoints -> 20]",
+        "10^-12");
+}
+
+/* ComplexPlot is the only sampler whose variable ranges over the PLANE, so it
+ * compiles with a complex argument (autocompile_new_z).  Parity is to one ulp
+ * rather than exact: C99 complex division and the interpreter's Complex[]
+ * arithmetic round differently, both correctly. */
+void test_complexplot_parity(void) {
+    assert_plot_parity(
+        "ComplexPlot[(z^2 - 1)/(z^2 + 2), {z, -2 - 2 I, 2 + 2 I}, PlotPoints -> 20]",
+        "ComplexPlot[uncid[(z^2 - 1)/(z^2 + 2)], {z, -2 - 2 I, 2 + 2 I}, PlotPoints -> 20]",
+        "10^-9");
+    assert_plot_parity(
+        "ComplexPlot[Sin[z] Exp[z], {z, -2 - 2 I, 2 + 2 I}, PlotPoints -> 20]",
+        "ComplexPlot[uncid[Sin[z] Exp[z]], {z, -2 - 2 I, 2 + 2 I}, PlotPoints -> 20]",
+        "10^-9");
+    /* A head with a real kernel but no complex one must fall back, not bail
+     * the plot: Zeta[z] compiles for _Real and does not for _Complex. */
+    assert_eval_eq("Head[ComplexPlot[Zeta[z], {z, 2 - I, 3 + I}, PlotPoints -> 5]]",
+                   "Graphics", 0);
+}
+
+/* A parametric body is a pair, so each coordinate compiles as its own program.
+ * The 1-iterator form also drives the ADAPTIVE sampler, whose subdivision
+ * depends on the sampled values — so equal output lengths here is itself a
+ * check that the compiled values steered the sampler identically. */
+void test_parametricplot_parity(void) {
+    assert_plot_parity(
+        "ParametricPlot[{Sin[3 t] Cos[t], Sin[3 t] Sin[t]}, {t, 0, 2 Pi}]",
+        "ParametricPlot[uncid[{Sin[3 t] Cos[t], Sin[3 t] Sin[t]}], {t, 0, 2 Pi}]",
+        "10^-12");
+    /* 2-iterator (region) form. */
+    assert_plot_parity(
+        "ParametricPlot[{u Cos[v], u Sin[v]}, {u, 0, 1}, {v, 0, 2 Pi}, PlotPoints -> 12]",
+        "ParametricPlot[uncid[{u Cos[v], u Sin[v]}], {u, 0, 1}, {v, 0, 2 Pi}, PlotPoints -> 12]",
+        "10^-12");
+    /* PolarPlot desugars to ParametricPlot, so it inherits the fast path. */
+    assert_plot_parity(
+        "PolarPlot[1 + Cos[3 t]/2, {t, 0, 2 Pi}]",
+        "PolarPlot[uncid[1 + Cos[3 t]/2], {t, 0, 2 Pi}]",
+        "10^-12");
+}
+
+void test_parametricplot3d_parity(void) {
+    assert_plot_parity(
+        "ParametricPlot3D[{Cos[t], Sin[t], t/5}, {t, 0, 10}]",
+        "ParametricPlot3D[uncid[{Cos[t], Sin[t], t/5}], {t, 0, 10}]",
+        "10^-12");
+    assert_plot_parity(
+        "ParametricPlot3D[{Cos[u] Sin[v], Sin[u] Sin[v], Cos[v]}, {u, 0, 2 Pi}, {v, 0, Pi}, "
+        "PlotPoints -> 12]",
+        "ParametricPlot3D[uncid[{Cos[u] Sin[v], Sin[u] Sin[v], Cos[v]}], {u, 0, 2 Pi}, "
+        "{v, 0, Pi}, PlotPoints -> 12]",
+        "10^-12");
+}
+
+void test_vectorplot_parity(void) {
+    assert_plot_parity(
+        "VectorPlot[{-y Exp[-x^2], x Sin[y]}, {x, -2, 2}, {y, -2, 2}, VectorPoints -> 10]",
+        "VectorPlot[{uncid[-y Exp[-x^2]], uncid[x Sin[y]]}, {x, -2, 2}, {y, -2, 2}, "
+        "VectorPoints -> 10]",
+        "10^-12");
+    /* One component uncompilable ⇒ both stay interpreted, and it still plots. */
+    assert_eval_eq("Head[VectorPlot[{-y, uncid[x]}, {x, -1, 1}, {y, -1, 1}, VectorPoints -> 4]]",
+                   "Graphics", 0);
+}
+
+/* Streamline integration takes several field samples per RK step, so this is
+ * the hottest sampler of the group — and the most sensitive to a divergence,
+ * since a difference in one sample steers the whole streamline. */
+void test_streamplot_parity(void) {
+    assert_plot_parity(
+        "StreamPlot[{-y Exp[-x^2], x Sin[y]}, {x, -2, 2}, {y, -2, 2}]",
+        "StreamPlot[{uncid[-y Exp[-x^2]], uncid[x Sin[y]]}, {x, -2, 2}, {y, -2, 2}]",
+        "10^-12");
+}
+
+/* NSum draws every term through one chokepoint, so Direct / Wynn / Levin /
+ * Euler-Maclaurin / CVZ / the far-tail ladder all take the compiled path — and
+ * so does the EM correction's CONTINUOUS sampling of the same summand, which is
+ * where most of an EM sum's work goes.  NProduct is Exp[NSum[Log f]] and
+ * inherits it. */
+void test_nsum_parity(void) {
+    assert_eval_eq(AC_UNCID "Abs[NSum[Sin[n]/n^3, {n, 1, Infinity}] "
+                   "- NSum[uncid[Sin[n]/n^3], {n, 1, Infinity}]] < 10^-12", "True", 0);
+    assert_eval_eq(AC_UNCID "Abs[NSum[1/(n^2 + 1), {n, 1, Infinity}] "
+                   "- NSum[uncid[1/(n^2 + 1)], {n, 1, Infinity}]] < 10^-12", "True", 0);
+    assert_eval_eq(AC_UNCID "Abs[NSum[(-1)^n/n, {n, 1, Infinity}] "
+                   "- NSum[uncid[(-1)^n/n], {n, 1, Infinity}]] < 10^-12", "True", 0);
+    /* known closed forms */
+    assert_eval_eq("Abs[NSum[1/n^2, {n, 1, Infinity}] - Pi^2/6] < 10^-8", "True", 0);
+    assert_eval_eq("Abs[NSum[Exp[-n], {n, 0, Infinity}] - 1/(1 - Exp[-1])] < 10^-8", "True", 0);
+    /* A complex-valued summand takes the boxed compiled path (complex result
+     * type), and must still agree with the interpreter. */
+    assert_eval_eq(AC_UNCID "Abs[NSum[I^n/n^2, {n, 1, Infinity}] "
+                   "- NSum[uncid[I^n/n^2], {n, 1, Infinity}]] < 10^-10", "True", 0);
+    assert_eval_eq(AC_UNCID "Abs[NProduct[1 + 1/n^2, {n, 1, Infinity}] "
+                   "- NProduct[uncid[1 + 1/n^2], {n, 1, Infinity}]] < 10^-10", "True", 0);
+}
+
+/* The MPFR path must never take the compiled route: a double cannot carry the
+ * terms of a 30-digit sum. */
+void test_nsum_mpfr_untouched(void) {
+    assert_eval_eq("Abs[NSum[1/n^2, {n, 1, Infinity}, WorkingPrecision -> 30] - Pi^2/6] < 10^-25",
+                   "True", 0);
+}
+
+/* ANTI-VACUITY GUARD for the group above: assert through the very API these
+ * builtins use that the bodies really do compile.  Every parity test would pass
+ * trivially if nothing compiled at all. */
+void test_sampler_bodies_really_compile(void) {
+    struct { const char* body; const char* v1; const char* v2; } cases[] = {
+        { "Sin[x] Cos[y] + x^2/10",       "x", "y"    },   /* Contour / Density */
+        { "-y Exp[-x^2]",                 "x", "y"    },   /* Vector / Stream   */
+        { "Sin[3 t] Cos[t]",              "t", NULL   },   /* Parametric        */
+        { "Cos[u] Sin[v]",                "u", "v"    },   /* ParametricPlot3D  */
+        { "Sin[n]/n^3",                   "n", NULL   },   /* NSum summand      */
+    };
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        Expr* b  = parse_expression(cases[i].body);
+        Expr* v1 = parse_expression(cases[i].v1);
+        Expr* v2 = cases[i].v2 ? parse_expression(cases[i].v2) : NULL;
+        const Expr* vs[2] = { v1, v2 };
+        AutoCompiled* ac = autocompile_new(b, vs, v2 ? 2 : 1);
+        if (!ac) fprintf(stderr, "FAIL: sampler body `%s` did not compile\n", cases[i].body);
+        assert(ac != NULL);
+        autocompiled_free(ac);
+        expr_free(b); expr_free(v1); expr_free(v2);
+    }
+    /* ComplexPlot needs the COMPLEX-argument constructor, and its subset is
+     * genuinely smaller — assert both halves of that. */
+    Expr* zb = parse_expression("(z^2 - 1)/(z^2 + 2)");
+    Expr* zv = parse_expression("z");
+    const Expr* zs[1] = { zv };
+    AutoCompiled* zc = autocompile_new_z(zb, zs, 1);
+    if (!zc) fprintf(stderr, "FAIL: ComplexPlot body did not compile at complex argument\n");
+    assert(zc != NULL);
+    autocompiled_free(zc);
+    expr_free(zb);
+
+    /* The complex subset really is smaller: Zeta has a real machine kernel and
+     * no complex one, so the same body compiles one way and not the other.  If
+     * this ever stops holding, a complex Zeta kernel landed and
+     * NUMERIC_FUNCTION_MISSING.md needs updating — which is the point. */
+    Expr* rb = parse_expression("Zeta[z]");
+    AutoCompiled* rr = autocompile_new(rb, zs, 1);
+    assert(rr != NULL);
+    autocompiled_free(rr);
+    AutoCompiled* zz = autocompile_new_z(rb, zs, 1);
+    if (zz) fprintf(stderr, "NOTE: Zeta gained a complex kernel; "
+                            "update NUMERIC_FUNCTION_MISSING.md\n");
+    autocompiled_free(zz);
+    expr_free(rb); expr_free(zv);
 }
 
 int main(void) {
@@ -320,6 +541,16 @@ int main(void) {
     TEST(test_findroot_parity);
     TEST(test_findroot_complex_and_inert);
     TEST(test_findroot_system);
+    TEST(test_sampler_bodies_really_compile);   /* precondition: they DO compile */
+    TEST(test_contourplot_parity);
+    TEST(test_densityplot_parity);
+    TEST(test_complexplot_parity);
+    TEST(test_parametricplot_parity);
+    TEST(test_parametricplot3d_parity);
+    TEST(test_vectorplot_parity);
+    TEST(test_streamplot_parity);
+    TEST(test_nsum_parity);
+    TEST(test_nsum_mpfr_untouched);
 
     printf("All auto-compile tests passed!\n");
     return 0;

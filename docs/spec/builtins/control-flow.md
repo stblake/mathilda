@@ -379,10 +379,11 @@ expression would.
 - **Compilable subset** (shared with the internal engine behind NDSolve): full
   scalar arithmetic and comparisons, `Mod`/`Quotient`, integer/real/complex
   `Power`, all elementary functions and every special function that has a
-  machine kernel (`Gamma`, `Erf`, `BesselJ`, …), `If`, `Sum`/`Product`,
+  machine kernel (`Gamma`, `Erf`, `BesselJ`, `Zeta`, …), `If`, `Sum`/`Product`,
   `With`/`Module` locals with `Set`/`AddTo`/`Increment`/…, `Do`/`While`/`For`,
-  `Nest`, and `CompoundExpression`. Anything else (e.g. `Zeta`, exact symbolic
-  algebra) routes that application through the interpreter fallback.
+  `Nest`, and `CompoundExpression`. Anything else (a user-defined function, exact
+  symbolic algebra) routes that application through the interpreter fallback.
+  Use `CompileDiagnostics` to find out which.
 - **Counted iterators** in `Do`/`Sum`/`Product` accept every integer-bounded
   spelling the interpreter does: `Do[body, n]` and `Do[body, {n}]` (repeat n
   times), `{i, hi}`, `{i, lo, hi}`, and `{i, lo, hi, di}` with a nonzero integer
@@ -412,4 +413,53 @@ Out[4]= 1.63498
 
 In[5]:= Compile[{{z, _Complex}}, z^2][1.0 + 2.0 I]
 Out[5]= -3.0 + 4.0 I
+```
+
+## CompileDiagnostics
+
+`CompileDiagnostics[argspec, expr]` reports whether `expr` compiles for the given
+`Compile[]` argument specification, and if not, **which subexpression stopped
+it**. `argspec` is exactly what `Compile` takes.
+
+This exists because a bail is otherwise invisible. When the compiler meets a
+construct it cannot lower it returns nothing, the caller quietly interprets, and
+the answer is still correct — just an order of magnitude slower. And the cost is
+not proportional: the compilable subset is a *cliff*, so a single unsupported
+head anywhere in a body costs the **entire** body, including everything in it
+that would have compiled.
+
+- **Attributes:** `HoldAll`, `Protected`.
+- **On success** the result carries `"Compiled" -> True`, the `"ResultType"`
+  (`"Real"`, `"Integer"`, `"Complex"`, `"Boolean"`), the `"Instructions"` count,
+  the number of `"CommonSubexpressions"` the optimiser hoisted, and
+  `"InstructionsUnoptimized"` — the same body compiled with the optimiser off,
+  so what code generation actually removed is visible.
+- **On failure** it gives `"Compiled" -> False`, a `"Reason"`, and the
+  `"Subexpression"` — the **innermost** node the emitter could not lower, which
+  is the actual cause rather than the construct that happens to contain it.
+- A malformed argspec leaves the call unevaluated, exactly as `Compile` does.
+
+Setting the environment variable `MATHILDA_COMPILE_DIAG=1` makes the same report
+appear on stderr whenever a numeric builtin (`Plot`, `NIntegrate`, `NSum`,
+`ContourPlot`, …) falls back to the interpreter because its body did not compile.
+
+```mathematica
+In[1]:= CompileDiagnostics[{{x, _Real}}, Sin[x] + x^2]
+Out[1]= {"Compiled" -> True, "ResultType" -> "Real", "Instructions" -> 4,
+         "CommonSubexpressions" -> 0, "InstructionsUnoptimized" -> 4}
+
+In[2]:= CompileDiagnostics[{{x, _Real}}, Sin[x] + BarnesG[x]]
+Out[2]= {"Compiled" -> False,
+         "Reason" -> "no machine lowering for this head at these argument types",
+         "Subexpression" -> "BarnesG[x]"}
+
+In[3]:= CompileDiagnostics[{{x, _Real}}, Sin[x] + y]
+Out[3]= {"Compiled" -> False,
+         "Reason" -> "symbol is not a declared argument and holds no machine value",
+         "Subexpression" -> "y"}
+
+In[4]:= CompileDiagnostics[{{z, _Complex}}, Zeta[z]]   (* real kernel, no complex one *)
+Out[4]= {"Compiled" -> False,
+         "Reason" -> "no machine lowering for this head at these argument types",
+         "Subexpression" -> "Zeta[z]"}
 ```

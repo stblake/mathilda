@@ -17,6 +17,7 @@
 
 #include "densityplot.h"
 #include "plot_common.h"
+#include "compile/autocompile.h"   /* machine fast path for the grid body */
 #include "iter.h"
 #include "eval.h"
 #include "symtab.h"
@@ -125,7 +126,16 @@ static bool split_density_options(Expr* res, DensityOpts* o,
 
 /* ---- grid evaluation ---- */
 
-static double dp_eval(Expr* xvar, Expr* yvar, Expr* body, double x, double y) {
+static double dp_eval(const AutoCompiled* ac,
+                      Expr* xvar, Expr* yvar, Expr* body, double x, double y) {
+    if (ac) {
+        double in[2] = { x, y }, v;
+        if (autocompiled_eval_real(ac, in, &v) && isfinite(v)) return v;
+        /* Fall through: a compiled decline can mean either "no real value here"
+         * or "a kernel is outside its covered domain", and only the interpreter
+         * distinguishes them.  Re-evaluating those few nodes is no worse than
+         * never compiling. */
+    }
     Expr* xv = expr_new_real(x);
     Expr* yv = expr_new_real(y);
     symtab_add_own_value(xvar->data.symbol.name, xvar, xv);
@@ -217,6 +227,11 @@ Expr* builtin_densityplot(Expr* res) {
     Rule* old_x = iter_spec_shadow(xspec.var);
     Rule* old_y = iter_spec_shadow(yspec.var);
 
+    /* Compile the body once as f(x, y); NULL keeps every sample on the
+     * interpreter, exactly as before. */
+    const Expr* dvars[2] = { xspec.var, yspec.var };
+    AutoCompiled* ac = autocompile_new(body, dvars, 2);
+
     double zmin =  1e300, zmax = -1e300;
     for (int iy = 0; iy <= N; iy++) {
         double uy = u_ymin + iy * du_y;
@@ -224,7 +239,7 @@ Expr* builtin_densityplot(Expr* res) {
         for (int ix = 0; ix <= N; ix++) {
             double ux = u_xmin + ix * du_x;
             double x  = scale_invert(opts.sf_x, ux);
-            double v  = dp_eval(xspec.var, yspec.var, body, x, y);
+            double v  = dp_eval(ac, xspec.var, yspec.var, body, x, y);
             grid[iy * (N + 1) + ix] = v;
             if (isfinite(v)) {
                 if (v < zmin) zmin = v;
@@ -233,6 +248,7 @@ Expr* builtin_densityplot(Expr* res) {
         }
     }
 
+    autocompiled_free(ac);
     iter_spec_restore(xspec.var, old_x);
     iter_spec_restore(yspec.var, old_y);
 

@@ -38,6 +38,7 @@
 
 #include "arithmetic.h"   /* is_complex, make_complex, is_rational */
 #include "attr.h"
+#include "compile/autocompile.h"   /* machine fast path for the summand */
 #include "eval.h"
 #include "numeric.h"
 #include "seqaccel.h"
@@ -183,6 +184,13 @@ typedef struct {
     Expr*       di;      /* borrowed evaluated step (a number, default 1)  */
     NsBind*     bind;
     NumericSpec spec;
+    /* Machine fast path for the summand, or NULL when the body is outside the
+     * compilable subset.  Every acceleration method here — direct, Wynn, Levin,
+     * Euler–Maclaurin, CVZ, the far-tail ladder and the profiler — draws its
+     * terms through ns_term_machine, so compiling once at the top covers all of
+     * them.  Only built for a machine-precision request: the MPFR path needs
+     * more than 53 bits per term and must keep the interpreter. */
+    AutoCompiled* ac;
 } NsCtx;
 
 /* The actual index value x_k = imin + k·di as a fresh evaluated number. */
@@ -220,8 +228,34 @@ static Expr* ns_eval_at(NsCtx* c, Expr* value) {
     return ns_eval_expr_at(c, c->body, value);
 }
 
+/* The summand at a real machine point via the compiled program, or false to
+ * mean "use the interpreter for this one".  A failure is never an error: the
+ * compiled program declines exactly where the interpreter would produce
+ * something a double cannot carry (an exact value, a pole, a complex branch),
+ * and the caller simply takes the slow path there. */
+static bool ns_compiled_at(const NsCtx* c, double x, double _Complex* out) {
+    if (!c->ac) return false;
+    double _Complex v;
+    if (!autocompiled_eval_complex(c->ac, &x, &v)) return false;
+    if (!isfinite(creal(v)) || !isfinite(cimag(v))) return false;
+    *out = v;
+    return true;
+}
+
+/* The index value x_k = imin + k·di as a plain double, for the compiled path.
+ * Returns false when either bound is not a real machine number (a complex or
+ * symbolic step), which sends the term back to the interpreter. */
+static bool ns_index_double(const NsCtx* c, long k, double* out) {
+    double lo, step;
+    if (!ns_to_double_real(c->imin, &lo) || !ns_to_double_real(c->di, &step)) return false;
+    *out = lo + (double)k * step;
+    return isfinite(*out);
+}
+
 /* term_k as a machine complex. */
 static bool ns_term_machine(NsCtx* c, long k, double _Complex* out) {
+    double idx;
+    if (c->ac && ns_index_double(c, k, &idx) && ns_compiled_at(c, idx, out)) return true;
     Expr* num = ns_eval_at(c, ns_index_value(c, k));
     if (!num) return false;
     bool ok = ns_to_complex(num, out);
@@ -732,8 +766,21 @@ static bool ns_const_machine(Expr* e, double _Complex* out) {
     return ok;
 }
 
-/* Evaluate `e` at the index value `value` (consumed) to a machine complex. */
+/* Evaluate `e` at the index value `value` (consumed) to a machine complex.
+ *
+ * The compiled program covers this too, not just the integer-indexed terms: the
+ * Euler–Maclaurin correction samples the SAME summand at continuous real x
+ * (through ns_sample_x_machine below, once per quadrature node), and that is
+ * where most of the work in an EM sum actually goes.  It applies only when the
+ * expression being sampled IS the summand — the derivative expressions this
+ * function is also called with are different trees and are not compiled. */
 static bool ns_eval_complex_machine(NsCtx* c, Expr* e, Expr* value, double _Complex* out) {
+    double x;
+    if (c->ac && e == c->body && ns_to_double_real(value, &x)
+        && ns_compiled_at(c, x, out)) {
+        expr_free(value);
+        return true;
+    }
     Expr* num = ns_eval_expr_at(c, e, value);
     if (!num) return false;
     bool ok = ns_to_complex(num, out);
@@ -1589,12 +1636,25 @@ static Expr* ns_run_single(Expr* body, const char* var, Expr* imin, Expr* imax,
     NsBind bind; ns_bind_snapshot(&bind, var);
     NsCtx ctx;
     ctx.body = body; ctx.imin = imin; ctx.di = di; ctx.bind = &bind;
+    ctx.ac = NULL;
 #ifdef USE_MPFR
     if (o->prec_mpfr) { ctx.spec.mode = NUMERIC_MODE_MPFR; ctx.spec.bits = o->bits; ctx.spec.preserve_inexact = false; }
     else ctx.spec = numeric_machine_spec();
 #else
     ctx.spec = numeric_machine_spec();
 #endif
+
+    /* Compile the summand once, as a function of the index.  Skipped for an
+     * MPFR request, where every term needs more than a double can hold.  The
+     * index is bound here through the symbol table, so an inner NSum's body
+     * (which sees the outer index only as a symbol) is left to the interpreter
+     * by the usual bail — no special case needed. */
+    if (!o->prec_mpfr) {
+        Expr* vsym = expr_new_symbol(var);
+        const Expr* vs[1] = { vsym };
+        ctx.ac = autocompile_new(body, vs, 1);
+        expr_free(vsym);
+    }
 
     Expr* out = NULL;
     if (infinite) {
@@ -1631,6 +1691,7 @@ static Expr* ns_run_single(Expr* body, const char* var, Expr* imin, Expr* imax,
         }
     }
 
+    autocompiled_free(ctx.ac);
     ns_bind_restore(&bind);
     return out;
 }

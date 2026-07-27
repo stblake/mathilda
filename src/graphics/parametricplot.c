@@ -22,6 +22,7 @@
 
 #include "parametricplot.h"
 #include "plot_common.h"
+#include "compile/autocompile.h"   /* machine fast path for each coordinate */
 #include "iter.h"
 #include "eval.h"
 #include "symtab.h"
@@ -36,7 +37,41 @@ typedef struct {
     Expr* var2;             /* second iterator variable; NULL for 1-iterator form */
     Expr* body;             /* expression that evaluates to {x, y} when vars are set */
     Expr* region_function;  /* borrowed; NULL = no filter */
+    /* The two coordinate components compiled separately.  The engine returns one
+     * machine number per program, and a parametric body IS a pair, so a single
+     * program cannot express it — but the pair is written out literally as
+     * List[x(t), y(t)], so each half compiles on its own.  Both NULL unless both
+     * compiled: half a fast path would still pay for the whole interpreter
+     * round-trip and only complicate the parity story. */
+    AutoCompiled* acx;
+    AutoCompiled* acy;
 } ParamEvalCtx;
+
+/* Compile the two components of a literal {x(t), y(t)} body against the
+ * iterator variables.  A non-literal body (a symbol, or f[t] that returns a
+ * pair) is left to the interpreter. */
+static void param_ctx_compile(ParamEvalCtx* ctx) {
+    ctx->acx = ctx->acy = NULL;
+    const Expr* b = ctx->body;
+    if (!b || b->type != EXPR_FUNCTION || b->data.function.head->type != EXPR_SYMBOL
+        || b->data.function.head->data.symbol.name != SYM_List
+        || b->data.function.arg_count != 2)
+        return;
+    const Expr* vars[2] = { ctx->var1, ctx->var2 };
+    size_t nv = ctx->var2 ? 2 : 1;
+    ctx->acx = autocompile_new(b->data.function.args[0], vars, nv);
+    ctx->acy = ctx->acx ? autocompile_new(b->data.function.args[1], vars, nv) : NULL;
+    if (!ctx->acy) { autocompiled_free(ctx->acx); ctx->acx = NULL; }
+}
+
+static void param_ctx_free(ParamEvalCtx* ctx) {
+    autocompiled_free(ctx->acx); ctx->acx = NULL;
+    autocompiled_free(ctx->acy); ctx->acy = NULL;
+}
+
+static bool param_region_ok(const ParamEvalCtx* ctx, double x, double y) {
+    return !ctx->region_function || eval_region(ctx->region_function, x, y);
+}
 
 /* Evaluate ctx->body (with vars already set in the symbol table) and
  * extract the resulting {x, y} pair.  Returns true on success.
@@ -50,20 +85,50 @@ static bool eval_body_xy(ParamEvalCtx* ctx, double* x_out, double* y_out) {
         && result->data.function.arg_count == 2) {
         double x, y;
         if (expr_to_real_double(result->data.function.args[0], &x) && isfinite(x)
-            && expr_to_real_double(result->data.function.args[1], &y) && isfinite(y)) {
-            if (!ctx->region_function || eval_region(ctx->region_function, x, y)) {
-                *x_out = x; *y_out = y; ok = true;
-            }
+            && expr_to_real_double(result->data.function.args[1], &y) && isfinite(y)
+            && param_region_ok(ctx, x, y)) {
+            *x_out = x; *y_out = y; ok = true;
         }
     }
     expr_free(result);
     return ok;
 }
 
+/* Evaluate the body at the given variable values.
+ *
+ * This is the ONE place that binds the iterator variables, and it binds them
+ * only when the interpreter is actually reached — the compiled path never
+ * touches the symbol table, which is most of what makes it fast. */
+static bool param_eval_at(ParamEvalCtx* ctx, const double* vals, size_t nvals,
+                          double* x_out, double* y_out) {
+    if (ctx->acx) {
+        double x, y;
+        if (autocompiled_eval_real(ctx->acx, vals, &x) && isfinite(x)
+            && autocompiled_eval_real(ctx->acy, vals, &y) && isfinite(y)) {
+            if (!param_region_ok(ctx, x, y)) return false;
+            *x_out = x; *y_out = y;
+            return true;
+        }
+        /* Fall through: a component that declines may still have a real value
+         * the interpreter can produce. */
+    }
+    /* symtab_add_own_value COPIES its replacement, so the temporary is ours to
+     * free — passing expr_new_real(...) inline leaked one Expr per sample, which
+     * is what this path did before the fast path existed to expose it. */
+    Expr* v1 = expr_new_real(vals[0]);
+    symtab_add_own_value(ctx->var1->data.symbol.name, ctx->var1, v1);
+    expr_free(v1);
+    if (nvals > 1 && ctx->var2) {
+        Expr* v2 = expr_new_real(vals[1]);
+        symtab_add_own_value(ctx->var2->data.symbol.name, ctx->var2, v2);
+        expr_free(v2);
+    }
+    return eval_body_xy(ctx, x_out, y_out);
+}
+
 /* Set var1 = t and evaluate the body (1-iterator form). */
 static bool param_eval(double t, ParamEvalCtx* ctx, double* x_out, double* y_out) {
-    symtab_add_own_value(ctx->var1->data.symbol.name, ctx->var1, expr_new_real(t));
-    return eval_body_xy(ctx, x_out, y_out);
+    return param_eval_at(ctx, &t, 1, x_out, y_out);
 }
 
 /* ---- 2D adaptive sampler (1-iterator form) ---- */
@@ -334,11 +399,13 @@ static Expr** build_param_curve(Expr* body, Expr* var1,
 
     ParamEvalCtx ctx = { .var1 = var1, .var2 = NULL, .body = body,
                           .region_function = sopts->region_function };
+    param_ctx_compile(&ctx);
 
     size_t npts;
     ParamPt* pts = param_sample(&ctx, tmin, tmax,
                                   sopts->plot_points, sopts->max_recursion,
                                   sopts->max_plot_points, &npts);
+    param_ctx_free(&ctx);
     if (!pts || npts == 0) { free(pts); return NULL; }
 
     Expr** prims = malloc(sizeof(Expr*) * (npts * 4 + 4));
@@ -452,20 +519,20 @@ static Expr** build_param_region(Expr* body, Expr* var1, Expr* var2,
 
     ParamEvalCtx ctx = { .var1 = var1, .var2 = var2, .body = body,
                           .region_function = sopts->region_function };
+    param_ctx_compile(&ctx);
 
     for (long i = 0; i < n; i++) {
         double t = (n > 1) ? t1min + (t1max - t1min) * (double)i / (double)(n-1) : t1min;
         if (i == n-1) t = t1max;
-        /* Set var1 once per row. */
-        symtab_add_own_value(ctx.var1->data.symbol.name, ctx.var1, expr_new_real(t));
         for (long j = 0; j < n; j++) {
             double r = (n > 1) ? t2min + (t2max - t2min) * (double)j / (double)(n-1) : t2min;
             if (j == n-1) r = t2max;
-            symtab_add_own_value(ctx.var2->data.symbol.name, ctx.var2, expr_new_real(r));
+            double v[2] = { t, r };
             GridPt2D* p = &grid[i * n + j];
-            p->valid = eval_body_xy(&ctx, &p->x, &p->y);
+            p->valid = param_eval_at(&ctx, v, 2, &p->x, &p->y);
         }
     }
+    param_ctx_free(&ctx);
 
     /* Worst-case allocation: one Polygon per cell + color + opacity + mesh. */
     long ncells = (n-1) * (n-1);

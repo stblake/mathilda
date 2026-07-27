@@ -6,6 +6,7 @@
 
 #include "streamplot.h"
 #include "plot_common.h"
+#include "compile/autocompile.h"   /* machine fast path for the field components */
 #include "show.h"
 #include "iter.h"
 #include "eval.h"
@@ -35,12 +36,40 @@ typedef struct {
     Expr* yvar;  /* borrowed */
     Expr* vx;    /* borrowed */
     Expr* vy;    /* borrowed */
+    AutoCompiled* acx;   /* vx compiled as f(x,y); NULL = interpreter */
+    AutoCompiled* acy;
 } FieldCtx;
+
+/* Compile both field components as f(x, y).  All-or-nothing: one interpreted
+ * component costs the evaluator round-trip the fast path exists to avoid.
+ * Streamline integration takes several field samples per step, so this is the
+ * hottest sampler in the file. */
+static void field_compile(FieldCtx* ctx) {
+    const Expr* vars[2] = { ctx->xvar, ctx->yvar };
+    ctx->acx = autocompile_new(ctx->vx, vars, 2);
+    ctx->acy = ctx->acx ? autocompile_new(ctx->vy, vars, 2) : NULL;
+    if (!ctx->acy) { autocompiled_free(ctx->acx); ctx->acx = NULL; }
+}
+
+static void field_free(FieldCtx* ctx) {
+    autocompiled_free(ctx->acx); ctx->acx = NULL;
+    autocompiled_free(ctx->acy); ctx->acy = NULL;
+}
 
 /* Evaluate the vector field at (x, y), storing results in (*vx_out, *vy_out).
  * Returns false if either component is non-finite or fails to evaluate. */
 static bool eval_field(const FieldCtx* ctx, double x, double y,
                        double* vx_out, double* vy_out) {
+    if (ctx->acx) {
+        double in[2] = { x, y }, dvx, dvy;
+        if (autocompiled_eval_real(ctx->acx, in, &dvx) && isfinite(dvx)
+            && autocompiled_eval_real(ctx->acy, in, &dvy) && isfinite(dvy)) {
+            *vx_out = dvx; *vy_out = dvy;
+            return true;
+        }
+        /* Fall through: a component that declines may still have a real value
+         * the interpreter can produce. */
+    }
     Expr* xval = expr_new_real(x);
     Expr* yval = expr_new_real(y);
     symtab_add_own_value(ctx->xvar->data.symbol.name, ctx->xvar, xval);
@@ -446,6 +475,7 @@ Expr* builtin_streamplot(Expr* res) {
 
     FieldCtx ctx = { .xvar = xspec.var, .yvar = yspec.var,
                      .vx = vx_body, .vy = vy_body };
+    field_compile(&ctx);
 
     /* Integration parameters in world space (for consistent arrow sizing). */
     double w_dx = u_xmax - u_xmin, w_dy = u_ymax - u_ymin;
@@ -519,6 +549,7 @@ Expr* builtin_streamplot(Expr* res) {
     }
 
     free(seeds.xs); free(seeds.ys);
+    field_free(&ctx);
 
     /* Restore iterator variable bindings. */
     iter_spec_restore(xspec.var, old_x);

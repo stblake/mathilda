@@ -109,6 +109,22 @@ CompiledProgram* compile_expr_ex(const Expr* body,
                                  const CompileType* arg_types, size_t nargs,
                                  unsigned flags);
 
+/* Why the most recent compile_expr[_ex] call bailed.
+ *
+ * A bail is otherwise invisible: the caller quietly interprets, the answer is
+ * still correct, and the only symptom is being 10-40x slower.  And it is not
+ * proportional — the compilable subset is a cliff, so ONE unsupported head costs
+ * the entire body, including every head in it that would have compiled.
+ *
+ * `compiled_bail_expr` is the printed form of the INNERMOST subexpression the
+ * emitter could not lower (the actual cause, not the enclosing construct);
+ * `compiled_bail_reason` is a short static classification of it.  Both are NULL
+ * after a successful compile, and both are valid only until the next compile
+ * call on this thread.  Compilation is single-threaded (workers run finished
+ * programs, they never compile), so no synchronisation is involved. */
+const char* compiled_bail_reason(void);
+const char* compiled_bail_expr(void);
+
 CompileType compiled_result_type(const CompiledProgram* p);
 size_t      compiled_num_args(const CompiledProgram* p);
 

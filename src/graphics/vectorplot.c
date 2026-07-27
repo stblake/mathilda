@@ -20,6 +20,7 @@
 
 #include "vectorplot.h"
 #include "plot_common.h"
+#include "compile/autocompile.h"   /* machine fast path for the field components */
 #include "iter.h"
 #include "eval.h"
 #include "symtab.h"
@@ -153,9 +154,36 @@ static bool split_vector_options(Expr* res, VecOpts* o,
 
 typedef struct { double vx, vy; bool ok; } Vec2;
 
-static Vec2 vp_eval(Expr* xvar, Expr* yvar,
+/* Both field components compiled as f(x, y), or both NULL.  All-or-nothing: a
+ * single interpreted component still costs the evaluator round-trip the fast
+ * path exists to remove. */
+typedef struct { AutoCompiled *x, *y; } VpField;
+
+static VpField vp_compile(Expr* xvar, Expr* yvar, Expr* vx_body, Expr* vy_body) {
+    const Expr* vars[2] = { xvar, yvar };
+    VpField f;
+    f.x = autocompile_new(vx_body, vars, 2);
+    f.y = f.x ? autocompile_new(vy_body, vars, 2) : NULL;
+    if (!f.y) { autocompiled_free(f.x); f.x = NULL; }
+    return f;
+}
+
+static void vp_field_free(VpField* f) {
+    autocompiled_free(f->x); f->x = NULL;
+    autocompiled_free(f->y); f->y = NULL;
+}
+
+static Vec2 vp_eval(const VpField* f, Expr* xvar, Expr* yvar,
                      Expr* vx_body, Expr* vy_body,
                      double x, double y) {
+    if (f->x) {
+        double in[2] = { x, y }, vx_val, vy_val;
+        if (autocompiled_eval_real(f->x, in, &vx_val) && isfinite(vx_val)
+            && autocompiled_eval_real(f->y, in, &vy_val) && isfinite(vy_val))
+            return (Vec2){ vx_val, vy_val, true };
+        /* Fall through: a component that declines may still have a real value
+         * the interpreter can produce. */
+    }
     Expr* xv = expr_new_real(x);
     Expr* yv = expr_new_real(y);
     symtab_add_own_value(xvar->data.symbol.name, xvar, xv);
@@ -273,6 +301,7 @@ Expr* builtin_vectorplot(Expr* res) {
 
     Rule* old_x = iter_spec_shadow(xspec.var);
     Rule* old_y = iter_spec_shadow(yspec.var);
+    VpField vfield = vp_compile(xspec.var, yspec.var, vx_body, vy_body);
 
     for (int iy = 0; iy < N; iy++) {
         double wy = u_ymin + iy * du_y;           /* world y */
@@ -281,7 +310,7 @@ Expr* builtin_vectorplot(Expr* res) {
             double wx = u_xmin + ix * du_x;
             double x  = scale_invert(opts.sf_x, wx);
             if (opts.region_function && !eval_region(opts.region_function, x, y)) continue;
-            Vec2 v = vp_eval(xspec.var, yspec.var, vx_body, vy_body, x, y);
+            Vec2 v = vp_eval(&vfield, xspec.var, yspec.var, vx_body, vy_body, x, y);
             if (!v.ok) continue;
             /* Apply Jacobian of the scaling transform to arrow direction so it
              * points correctly in world (rendered) coordinates.
@@ -303,6 +332,7 @@ Expr* builtin_vectorplot(Expr* res) {
         }
     }
 
+    vp_field_free(&vfield);
     iter_spec_restore(xspec.var, old_x);
     iter_spec_restore(yspec.var, old_y);
 

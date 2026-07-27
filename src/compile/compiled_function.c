@@ -167,17 +167,22 @@ static bool parse_typespec(const Expr* ts, CompileType* out) {
  *  Lifecycle                                                          *
  * ------------------------------------------------------------------ */
 
-CompiledFunction* compiled_function_new(const Expr* argspec, const Expr* body) {
-    if (!argspec || !body) return NULL;
+/* Parse `{x, {y, _Real}, {v, _Real, 2}, ...}` into interned names + types.
+ * Shared by Compile[] and CompileDiagnostics[] so the two can never disagree
+ * about which signatures are legal.  On success the caller owns both arrays. */
+static bool cf_parse_argspec(const Expr* argspec,
+                             const char*** names_out, CompileType** types_out,
+                             size_t* n_out) {
+    if (!argspec) return false;
     if (argspec->type != EXPR_FUNCTION || argspec->data.function.head->type != EXPR_SYMBOL
         || argspec->data.function.head->data.symbol.name != SYM_List
         || argspec->data.function.arg_count == 0)
-        return NULL;
+        return false;
 
     size_t n = argspec->data.function.arg_count;
     const char** names = malloc(n * sizeof(*names));
     CompileType* types = malloc(n * sizeof(*types));
-    if (!names || !types) { free(names); free(types); return NULL; }
+    if (!names || !types) { free(names); free(types); return false; }
 
     for (size_t i = 0; i < n; i++) {
         const Expr* el = argspec->data.function.args[i];
@@ -196,26 +201,35 @@ CompiledFunction* compiled_function_new(const Expr* argspec, const Expr* body) {
              * Integer array. */
             if (el->data.function.arg_count == 3) {
                 const Expr* rk = el->data.function.args[2];
-                if (rk->type != EXPR_INTEGER) { free(names); free(types); return NULL; }
+                if (rk->type != EXPR_INTEGER) { free(names); free(types); return false; }
                 long long r = (long long)rk->data.integer;
                 if (r == 0) {
                     /* rank 0 is just the scalar */
                 } else if (r < 1 || r > CT_MAX_RANK
                            || (ty != CT_REAL && ty != CT_COMPLEX)) {
-                    free(names); free(types); return NULL;
+                    free(names); free(types); return false;
                 } else {
                     ty = CT_ARRAY(ty, (int)r);
                 }
             }
             nm = el->data.function.args[0]->data.symbol.name;
-        } else { free(names); free(types); return NULL; }
+        } else { free(names); free(types); return false; }
 
         const char* in = intern_symbol(nm);
         for (size_t j = 0; j < i; j++)
-            if (names[j] == in) { free(names); free(types); return NULL; }  /* duplicate param */
+            if (names[j] == in) { free(names); free(types); return false; }  /* duplicate param */
         names[i] = in;
         types[i] = ty;
     }
+
+    *names_out = names; *types_out = types; *n_out = n;
+    return true;
+}
+
+CompiledFunction* compiled_function_new(const Expr* argspec, const Expr* body) {
+    if (!body) return NULL;
+    const char** names; CompileType* types; size_t n;
+    if (!cf_parse_argspec(argspec, &names, &types, &n)) return NULL;
 
     CompiledFunction* cf = calloc(1, sizeof *cf);
     if (!cf) { free(names); free(types); return NULL; }
@@ -367,6 +381,78 @@ static Expr* builtin_compile(Expr* res) {
     return expr_new_compiled(cf);
 }
 
+/* ------------------------------------------------------------------ *
+ *  CompileDiagnostics                                                  *
+ * ------------------------------------------------------------------ */
+
+static const char* ct_name(CompileType t) {
+    switch (t) {
+        case CT_BOOL:    return "Boolean";
+        case CT_INT:     return "Integer";
+        case CT_REAL:    return "Real";
+        case CT_COMPLEX: return "Complex";
+        default: break;
+    }
+    return CT_IS_ARRAY(t) ? "Array" : "Unknown";
+}
+
+static Expr* diag_rule(const char* key, Expr* value) {
+    Expr* a[2] = { expr_new_string(key), value };
+    return expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
+}
+
+/* CompileDiagnostics[argspec, body] (HoldAll) — did this body compile, and if
+ * not, what stopped it?
+ *
+ * The engine's central usability problem is that a bail is silent: the caller
+ * interprets, the answer stays correct, and the only symptom is being an order
+ * of magnitude slower.  Worse, the compilable subset is a cliff — one head
+ * outside it costs the whole body — so "why is this slow" is almost always
+ * "which single subexpression bailed", a question nothing could answer before.
+ *
+ * On success it also reports the instruction count with and without the
+ * optimiser, which is the cheapest way to see what code generation did. */
+static Expr* builtin_compile_diagnostics(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    const Expr* argspec = res->data.function.args[0];
+    const Expr* body    = res->data.function.args[1];
+
+    const char** names; CompileType* types; size_t n;
+    if (!cf_parse_argspec(argspec, &names, &types, &n)) return NULL;
+
+    CompiledProgram* p = compile_expr(body, names, types, n);
+
+    Expr* items[6];
+    size_t ni = 0;
+    if (p) {
+        items[ni++] = diag_rule("Compiled", expr_new_symbol("True"));
+        items[ni++] = diag_rule("ResultType",
+                                expr_new_string(ct_name(compiled_result_type(p))));
+        items[ni++] = diag_rule("Instructions",
+                                expr_new_integer((int64_t)compiled_num_instructions(p)));
+        items[ni++] = diag_rule("CommonSubexpressions",
+                                expr_new_integer((int64_t)compiled_num_cse(p)));
+        /* Recompiling with the optimiser off is the honest way to report what it
+         * removed: the passes rewrite in place, so the pre-pass count is gone by
+         * the time anyone can ask for it. */
+        CompiledProgram* raw = compile_expr_ex(body, names, types, n, COMPILE_NO_OPT);
+        if (raw) {
+            items[ni++] = diag_rule("InstructionsUnoptimized",
+                                    expr_new_integer((int64_t)compiled_num_instructions(raw)));
+            compiled_free(raw);
+        }
+        compiled_free(p);
+    } else {
+        const char* why  = compiled_bail_reason();
+        const char* what = compiled_bail_expr();
+        items[ni++] = diag_rule("Compiled", expr_new_symbol("False"));
+        items[ni++] = diag_rule("Reason", expr_new_string(why ? why : "unknown"));
+        if (what) items[ni++] = diag_rule("Subexpression", expr_new_string(what));
+    }
+    free(names); free(types);
+    return expr_new_function(expr_new_symbol(SYM_List), items, ni);
+}
+
 void compiled_function_init(void) {
     symtab_add_builtin("Compile", builtin_compile);
     SymbolDef* d = symtab_get_def("Compile");
@@ -376,4 +462,14 @@ void compiled_function_init(void) {
         "CompiledFunction that evaluates expr over machine numbers (types _Real, "
         "_Integer, _Complex; default _Real), falling back to the interpreter for "
         "symbolic arguments or non-compilable bodies.");
+
+    symtab_add_builtin("CompileDiagnostics", builtin_compile_diagnostics);
+    SymbolDef* dd = symtab_get_def("CompileDiagnostics");
+    if (dd) dd->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("CompileDiagnostics",
+        "CompileDiagnostics[argspec, expr] reports whether expr compiles for the "
+        "given Compile[] argument specification, and if not, the innermost "
+        "subexpression that could not be lowered. For a compiled body it also "
+        "gives the result type and the instruction count with and without the "
+        "optimiser.");
 }

@@ -34,10 +34,52 @@ void test_cf_symbolic_fallback(void) {
     assert_eval_eq("Compile[{{x, _Real}}, x^2 + 1][a]", "1 + a^2", 0);
 }
 
-/* Body outside the compilable subset (Zeta has no machine kernel) → the object
- * is still built and application falls back to the interpreter. */
+/* Body outside the compilable subset → the object is still built and
+ * application falls back to the interpreter.
+ *
+ * The marker is a user DownValue, not a head that happens to lack a kernel:
+ * this test used `Zeta` until Zeta got one, at which point it was quietly
+ * exercising the COMPILED path and no longer testing the fallback at all.
+ * CompileDiagnostics below asserts the marker really does bail. */
 void test_cf_uncompilable_fallback(void) {
-    assert_eval_eq("Compile[{{x, _Real}}, Zeta[x]][2] == Zeta[2]", "True", 0);
+    assert_eval_eq("uncid[t_] := t; Compile[{{x, _Real}}, uncid[x^2]][3] == 9", "True", 0);
+    assert_eval_eq("uncid2[t_] := t; "
+                   "CompileDiagnostics[{{x, _Real}}, uncid2[x^2]][[1]] == (\"Compiled\" -> False)",
+                   "True", 0);
+}
+
+/* CompileDiagnostics: the answer to "why is this slow".  A bail is otherwise
+ * invisible — same result, 10-40x slower — and because the compilable subset is
+ * a cliff, the useful report is the single INNERMOST subexpression that stopped
+ * the whole body, not the body itself. */
+void test_compile_diagnostics(void) {
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{x, _Real}}, Sin[x] + x^2]", "True", 0);
+    assert_eval_eq("\"ResultType\" /. CompileDiagnostics[{{x, _Real}}, Sin[x]]", "\"Real\"", 0);
+    assert_eval_eq("\"ResultType\" /. CompileDiagnostics[{{x, _Real}}, x > 0]", "\"Boolean\"", 0);
+    assert_eval_eq("\"ResultType\" /. CompileDiagnostics[{{z, _Complex}}, z^2]", "\"Complex\"", 0);
+    assert_eval_eq("(\"Instructions\" /. CompileDiagnostics[{{x, _Real}}, Sin[x] + x^2]) > 0",
+                   "True", 0);
+
+    /* The innermost cause, not the enclosing construct: the report must name
+     * BarnesG[x], not the Plus that contains it. */
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{x, _Real}}, Sin[x] + BarnesG[x]]",
+                   "False", 0);
+    assert_eval_eq("\"Subexpression\" /. CompileDiagnostics[{{x, _Real}}, Sin[x] + BarnesG[x]]",
+                   "\"BarnesG[x]\"", 0);
+    /* A free symbol is diagnosed as a symbol, not as an unsupported head. */
+    assert_eval_eq("\"Subexpression\" /. CompileDiagnostics[{{x, _Real}}, Sin[x] + freevar]",
+                   "\"freevar\"", 0);
+
+    /* The optimiser's effect is reportable: a body with a repeated subtree
+     * compiles to fewer instructions than the same body with the passes off. */
+    assert_eval_eq("With[{d = CompileDiagnostics[{{x, _Real}}, (x + 1)^2 (x + 1)^3 + Sin[x + 1]]}, "
+                   "(\"Instructions\" /. d) <= (\"InstructionsUnoptimized\" /. d)]", "True", 0);
+    assert_eval_eq("(\"CommonSubexpressions\" /. "
+                   "CompileDiagnostics[{{x, _Real}}, (x + 1)^2 (x + 1)^3 + Sin[x + 1]]) > 0",
+                   "True", 0);
+
+    /* A malformed argspec leaves the call unevaluated, as Compile does. */
+    assert_eval_startswith("CompileDiagnostics[x, x^2]", "CompileDiagnostics[");
 }
 
 /* Procedural / control-flow bodies (M2c) reachable through Compile. */
@@ -114,6 +156,7 @@ int main(void) {
     TEST(test_cf_procedural);
     TEST(test_cf_object_and_arity);
     TEST(test_cf_array_argspec);
+    TEST(test_compile_diagnostics);
 
     printf("All CompiledFunction tests passed!\n");
     return 0;

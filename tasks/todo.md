@@ -118,9 +118,39 @@ arith ops = 8.0 ns/op; mixed-libm 150 ns/call; array len-4096 1.0x, 61 ns/elemen
       **Next:** extend their coverage with the complex continued fraction for
       E1 (the real path already has one past |x|=40), which would lift the
       whole family's declines; then the complex hypergeometrics.
-- [ ] **`CompileDiag`** — a bail still reports nothing. The audit covers heads;
-      per-body diagnostics would cover the rest.
+- [x] **`CompileDiagnostics` — DONE.** `CompileDiagnostics[argspec, expr]`
+      reports whether a body compiles and, on failure, the INNERMOST
+      subexpression that stopped it; on success the result type, instruction
+      count, CSE count, and the instruction count with the optimiser off.
+      `MATHILDA_COMPILE_DIAG=1` prints the same whenever an auto-compiled
+      builtin falls back. One wrapper around `emit` (the lowering proper is now
+      `emit_node`) does it, so no bail site knows diagnostics exist and a bail
+      added tomorrow is diagnosed the day it is written.
+      It immediately found two tests that had rotted into vacuity when `Zeta`
+      gained a machine kernel — **never build an interpreter reference out of a
+      coverage gap; build it out of a user DownValue**, which cannot expire and
+      is exactly value-preserving.
+- [x] **Auto-compile nine more builtins — DONE**, measured against the previous
+      build rather than a proxy: PolarPlot 16.8x, ParametricPlot 8.4x,
+      NProduct 8.0x, StreamPlot 7.1x, NSum 6.4x, ContourPlot 5.2x,
+      ComplexPlot 2.5x, DensityPlot 2.0x, VectorPlot 1.5x,
+      ParametricPlot3D 1.1x.
+      New `autocompile_new_z` — ComplexPlot needs a complex ARGUMENT, not just a
+      complex result, and its subset is genuinely smaller.
+      `NSum` gave ZERO speedup until its second sampler (the Euler–Maclaurin
+      continuous-x path) was covered too.
+      Also fixed a real leak on the way: ParametricPlot/ParametricPlot3D/
+      PolarPlot passed `expr_new_real(t)` inline to `symtab_add_own_value`,
+      which COPIES — one leaked node per sample point (529 blocks / 34 KB for
+      one default ParametricPlot).
+- [ ] **Plot primitive construction** — now the bottleneck for DensityPlot /
+      VectorPlot / ParametricPlot3D: one `Rectangle`/`Arrow`/`Polygon` `Expr`
+      per cell. All three bodies compile; sampling is simply no longer where the
+      time goes. Not a compiler problem.
 - [ ] **Native backend** (`CompilationTarget -> "C"`), behind a build flag.
+- [ ] **Pre-existing diffuse leaks in `builtin_parametricplot`'s option
+      handling** (~1–9 blocks per option path, unrelated to sampling). Surfaced
+      while leak-checking the wiring above; not chased.
 
 ## Review — the last 12 numerics
 

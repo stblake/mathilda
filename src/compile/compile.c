@@ -16,6 +16,7 @@
 #include "../ndarray.h"    /* NDUnaryKernel / NDBinaryKernel — shared kernel layer */
 #include "../ndreduce.h"   /* ndred_total — array reductions (M3a) */
 #include "../ndarray_internal.h"  /* nd_parallel_for — threading the fused map loop */
+#include "../print.h"      /* expr_to_string — printing the node a bail choked on */
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -155,6 +156,14 @@ typedef struct {
     CompileType cse_type[CSE_MAX];
     bool        cse_ready[CSE_MAX];
     int         ncse;
+
+    /* Diagnostics: the INNERMOST subexpression `emit` could not lower.  A bail is
+     * otherwise invisible — the caller just interprets, an order of magnitude
+     * slower, and a body one head outside the subset costs the whole body.  Set
+     * in the emit wrapper (first writer wins, so recursion unwinding leaves the
+     * deepest cause) and rolled back with speculative lowering.  Borrowed: the
+     * body outlives the compile. */
+    const Expr* bail_node;
 } Ctx;
 
 /* The caller's argument symbols are NOT in scope inside an inlined
@@ -1215,6 +1224,7 @@ static bool try_kernel(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
 typedef struct {
     size_t n; int temp_top, maxreg, arr_top, arr_max, nscope; bool ok;
     int tile_top, tile_max; bool vector_mode;
+    const Expr* bail_node;
 } EmitMark;
 
 static EmitMark emit_mark(const Ctx* c) {
@@ -1222,12 +1232,16 @@ static EmitMark emit_mark(const Ctx* c) {
     m.n = c->n; m.temp_top = c->temp_top; m.maxreg = c->maxreg;
     m.arr_top = c->arr_top; m.arr_max = c->arr_max; m.nscope = c->nscope; m.ok = c->ok;
     m.tile_top = c->tile_top; m.tile_max = c->tile_max; m.vector_mode = c->vector_mode;
+    /* A speculative lowering that fails is not a bail — the caller falls through
+     * to another strategy — so its diagnostic must not survive the rollback. */
+    m.bail_node = c->bail_node;
     return m;
 }
 static void emit_rollback(Ctx* c, EmitMark m) {
     c->n = m.n; c->temp_top = m.temp_top; c->maxreg = m.maxreg;
     c->arr_top = m.arr_top; c->arr_max = m.arr_max; c->nscope = m.nscope; c->ok = m.ok;
     c->tile_top = m.tile_top; c->tile_max = m.tile_max; c->vector_mode = m.vector_mode;
+    c->bail_node = m.bail_node;
 }
 
 #define FUSE_MAX_LEAVES 8
@@ -1466,7 +1480,10 @@ static bool try_fuse(Ctx* c, const Expr* e, Val* out) {
     return true;
 }
 
-static bool emit(Ctx* c, const Expr* e, Val* out) {
+/* The lowering proper.  Every bail is a plain `return false` from somewhere in
+ * here; the `emit` wrapper below is what turns that into a diagnostic, so no
+ * bail site needs to know diagnostics exist. */
+static bool emit_node(Ctx* c, const Expr* e, Val* out) {
     if (!e || !c->ok) { c->ok = false; return false; }
 
     Slot imm; CompileType lt;
@@ -2307,6 +2324,19 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
     }
 
     c->ok = false; return false;   /* unsupported head -> bail */
+}
+
+/* Lower `e`, recording the innermost failure.
+ *
+ * Every recursive descent in emit_node goes through this wrapper, so on the way
+ * back up the first writer is the deepest subexpression that could not be
+ * lowered — which is the one a user needs to see.  Doing it in one place rather
+ * than at each of the ~40 bail sites means a new bail is diagnosed the day it is
+ * written, with no chance of a site being forgotten. */
+static bool emit(Ctx* c, const Expr* e, Val* out) {
+    bool r = emit_node(c, e, out);
+    if (!r && !c->bail_node) c->bail_node = e;
+    return r;
 }
 
 /* ------------------------------------------------------------------ *
@@ -3223,6 +3253,59 @@ static uint32_t patch_reg(uint32_t r, int arr_base, int tile_base) {
     return r;
 }
 
+/* ------------------------------------------------------------------ *
+ *  Bail diagnostics                                                    *
+ *                                                                      *
+ *  A bail is silent by construction: compile_expr returns NULL, the     *
+ *  caller interprets, the answer is still right, and the only symptom   *
+ *  is being 10-40x slower.  Worse, the compilable subset is a cliff —   *
+ *  one unsupported head costs the WHOLE body.  So the emitter records   *
+ *  the innermost subexpression it could not lower, and this is where    *
+ *  that becomes readable.                                               *
+ *                                                                      *
+ *  Single-writer state: compilation happens on the calling thread only  *
+ *  (workers execute finished programs, they never compile), and the     *
+ *  values are valid until the next compile call.                        *
+ * ------------------------------------------------------------------ */
+
+static char*       g_bail_expr   = NULL;   /* printed innermost failing node */
+static const char* g_bail_reason = NULL;   /* static classification, or NULL */
+
+static void bail_clear(void) {
+    free(g_bail_expr);
+    g_bail_expr   = NULL;
+    g_bail_reason = NULL;
+}
+
+/* What kind of thing the emitter choked on.  Derived from the node rather than
+ * threaded out of each bail site, which keeps the ~40 sites free of diagnostic
+ * bookkeeping at the cost of a coarser message. */
+static const char* bail_classify(const Expr* e) {
+    if (!e) return "empty expression";
+    switch (e->type) {
+        case EXPR_SYMBOL:
+            return "symbol is not a declared argument and holds no machine value";
+        case EXPR_STRING:
+            return "a string is not a machine number";
+        case EXPR_FUNCTION:
+            if (e->data.function.head->type != EXPR_SYMBOL)
+                return "the head is not a symbol";
+            return "no machine lowering for this head at these argument types";
+        default:
+            return "not a machine number";
+    }
+}
+
+static void bail_record(const Ctx* c) {
+    bail_clear();
+    if (!c->bail_node) { g_bail_reason = "the body has no machine result type"; return; }
+    g_bail_reason = bail_classify(c->bail_node);
+    g_bail_expr   = expr_to_string((Expr*)c->bail_node);
+}
+
+const char* compiled_bail_reason(void) { return g_bail_reason; }
+const char* compiled_bail_expr(void)   { return g_bail_expr; }
+
 CompiledProgram* compile_expr(const Expr* body, const char* const* arg_names,
                               const CompileType* arg_types, size_t nargs) {
     return compile_expr_ex(body, arg_names, arg_types, nargs, 0u);
@@ -3231,7 +3314,8 @@ CompiledProgram* compile_expr(const Expr* body, const char* const* arg_names,
 CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
                                  const CompileType* arg_types, size_t nargs,
                                  unsigned flags) {
-    if (!body) return NULL;
+    bail_clear();
+    if (!body) { g_bail_reason = "empty body"; return NULL; }
     Ctx c; memset(&c, 0, sizeof(c));
     for (size_t k = 0; k < nargs; k++)
         if (CT_IS_ARRAY(arg_types[k])) {
@@ -3240,7 +3324,10 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
              * so rank > 1 needs no separate machinery.  Constructs that DO care
              * about the shape (Total over the leading axis, Length) still gate
              * on rank themselves. */
-            if (CT_RANK(arg_types[k]) < 1 || CT_RANK(arg_types[k]) > CT_MAX_RANK) return NULL;
+            if (CT_RANK(arg_types[k]) < 1 || CT_RANK(arg_types[k]) > CT_MAX_RANK) {
+                g_bail_reason = "declared argument array rank is out of range";
+                return NULL;
+            }
             c.array_args = true;
         }
     c.flags = flags;
@@ -3259,10 +3346,13 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
     bool ok = emit(&c, body, &res) && c.ok;
     /* A borrowed argument array cannot be the result: the caller owns what it
      * gets back, and freeing an argument would corrupt the caller's value. */
-    if (ok && CT_IS_ARRAY(res.type) && !res.tmp) ok = false;
+    if (ok && CT_IS_ARRAY(res.type) && !res.tmp) {
+        ok = false;
+        c.bail_node = body;   /* the whole body is a borrowed argument array */
+    }
     if (ok) { Slot z = { 0 }; ins(&c, OP_RET, (uint32_t)res.reg, 0, 0, z); ok = c.ok; }
     nm_free(&c.map);
-    if (!ok) { free(c.code); free(c.argdep); return NULL; }
+    if (!ok) { bail_record(&c); free(c.code); free(c.argdep); return NULL; }
 
     /* Three contiguous banks: scalars, then array handles, then strip-mining
      * tiles.  A slot therefore has one kind for the whole life of the program,

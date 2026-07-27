@@ -25,6 +25,7 @@
 
 #include "complexplot.h"
 #include "plot_common.h"
+#include "compile/autocompile.h"   /* machine fast path, complex argument */
 #include "iter.h"
 #include "eval.h"
 #include "symtab.h"
@@ -33,6 +34,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <complex.h>   /* the I in x + y I; included AFTER the headers above */
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -207,8 +209,19 @@ static bool parse_complex_iterator(Expr* iter, Expr** zvar_out,
 /* Bind z = Complex[x, y], evaluate body, extract (re, im) of result.
  * Returns true and sets *re_out, *im_out on success; returns false on
  * failure (unevaluated, non-numeric, or infinite result). */
-static bool cp_eval(Expr* zvar, Expr* body, double x, double y,
+static bool cp_eval(const AutoCompiled* ac, Expr* zvar, Expr* body, double x, double y,
                     double* re_out, double* im_out) {
+    /* Compiled f(z) with a genuinely COMPLEX argument — the only sampler here
+     * whose variable ranges over the plane, so it needs autocompile_new_z rather
+     * than a real-input program.  A decline falls through to the interpreter,
+     * which also covers every head that has a real kernel but no complex one. */
+    if (ac) {
+        double _Complex z = x + y * (double _Complex)I, w;
+        if (autocompiled_eval_z(ac, &z, &w)) {
+            *re_out = creal(w); *im_out = cimag(w);
+            return true;
+        }
+    }
     Expr* ra[2] = { expr_new_real(x), expr_new_real(y) };
     Expr* zval  = expr_new_function(expr_new_symbol(SYM_Complex), ra, 2);
     symtab_add_own_value(zvar->data.symbol.name, zvar, zval);
@@ -361,6 +374,9 @@ static CGrid* build_cgrid(Expr* zvar, Expr* body, Expr* region_fn,
     double dx = (xmax - xmin) / N;
     double dy = (ymax - ymin) / N;
 
+    const Expr* zv[1] = { zvar };
+    AutoCompiled* ac = autocompile_new_z(body, zv, 1);
+
     for (int iy = 0; iy <= N; iy++) {
         double y = ymin + iy * dy;
         if (iy == N) y = ymax;
@@ -369,13 +385,14 @@ static CGrid* build_cgrid(Expr* zvar, Expr* body, Expr* region_fn,
             if (ix == N) x = xmax;
             CGrid* p = &grid[iy * (N + 1) + ix];
             double re, im;
-            bool ok = cp_eval(zvar, body, x, y, &re, &im);
+            bool ok = cp_eval(ac, zvar, body, x, y, &re, &im);
             if (ok && region_fn && !eval_region(region_fn, x, y)) ok = false;
             p->re    = ok ? re : 0.0;
             p->im    = ok ? im : 0.0;
             p->valid = ok;
         }
     }
+    autocompiled_free(ac);
     return grid;
 }
 

@@ -17,6 +17,7 @@
 
 #include "contourplot.h"
 #include "plot_common.h"
+#include "compile/autocompile.h"   /* machine fast path for the grid body */
 #include "show.h"
 #include "iter.h"
 #include "eval.h"
@@ -244,10 +245,28 @@ typedef struct {
     Expr* xvar;  /* borrowed */
     Expr* yvar;  /* borrowed */
     Expr* body;  /* borrowed */
+    AutoCompiled* ac;   /* compiled f(x,y), or NULL → interpreter */
 } GridCtx;
+
+/* Compile the body as f(x, y) once per grid.  NULL simply means the body is
+ * outside the compilable subset and every sample goes through the interpreter,
+ * exactly as before. */
+static AutoCompiled* grid_compile(const GridCtx* ctx) {
+    const Expr* vs[2] = { ctx->xvar, ctx->yvar };
+    return autocompile_new(ctx->body, vs, 2);
+}
 
 /* Evaluate f at (x, y), returning NaN on failure. */
 static double eval_at(const GridCtx* ctx, double x, double y) {
+    if (ctx->ac) {
+        double in[2] = { x, y }, v;
+        if (autocompiled_eval_real(ctx->ac, in, &v) && isfinite(v)) return v;
+        /* Fall through rather than reporting a hole.  A compiled real program
+         * declines both where the interpreter has no real value (the same
+         * exclusion) and where a kernel is outside its covered domain — and only
+         * the interpreter can tell those apart.  Re-evaluating the handful of
+         * declining nodes costs no more than not compiling at all. */
+    }
     Expr* xv = expr_new_real(x);
     Expr* yv = expr_new_real(y);
     symtab_add_own_value(ctx->xvar->data.symbol.name, ctx->xvar, xv);
@@ -540,6 +559,7 @@ Expr* builtin_contourplot(Expr* res) {
             GridCtx lctx = { .xvar = xspec.var, .yvar = yspec.var, .body = sub_body };
             Rule* lox = iter_spec_shadow(xspec.var);
             Rule* loy = iter_spec_shadow(yspec.var);
+            lctx.ac = grid_compile(&lctx);
             for (int iy = 0; iy <= N; iy++) {
                 double yj = scale_invert(co.sf_y, u_ymin + iy * du_y);
                 for (int ix = 0; ix <= N; ix++) {
@@ -547,6 +567,7 @@ Expr* builtin_contourplot(Expr* res) {
                     grid[iy * (N + 1) + ix] = eval_at(&lctx, xi, yj);
                 }
             }
+            autocompiled_free(lctx.ac);
             iter_spec_restore(xspec.var, lox);
             iter_spec_restore(yspec.var, loy);
             expr_free(sub_body);
@@ -663,6 +684,7 @@ Expr* builtin_contourplot(Expr* res) {
     GridCtx ctx = { .xvar = xspec.var, .yvar = yspec.var, .body = eval_body };
     Rule* old_x = iter_spec_shadow(xspec.var);
     Rule* old_y = iter_spec_shadow(yspec.var);
+    ctx.ac = grid_compile(&ctx);
 
     double zmin = 1e300, zmax = -1e300;
     for (int iy = 0; iy <= N; iy++) {
@@ -678,6 +700,7 @@ Expr* builtin_contourplot(Expr* res) {
         }
     }
 
+    autocompiled_free(ctx.ac);
     iter_spec_restore(xspec.var, old_x);
     iter_spec_restore(yspec.var, old_y);
 

@@ -6,7 +6,36 @@ Companion to [`compile.md`](compile.md) (the full design) and the memory files
 too).
 
 _Last updated: 2026-07-27 (M5: optimiser, coverage audit, any-rank arrays,
-strip-mined fusion, Expr-level CSE, per-call frames, OP_CALL)._
+strip-mined fusion, Expr-level CSE, per-call frames, OP_CALL; M6: bail
+diagnostics + nine more auto-compiled builtins)._
+
+---
+
+## 0b. M6 — bails are no longer silent
+
+`CompileDiagnostics[argspec, expr]` (and `MATHILDA_COMPILE_DIAG=1` for the
+internal wirings) reports whether a body compiles and, if not, the **innermost**
+subexpression that stopped it. Built as ONE wrapper around `emit` — the lowering
+proper is now `emit_node`, and `emit` records the node on the way back up — so
+no bail site knows diagnostics exist and a bail added tomorrow is diagnosed the
+day it is written. `EmitMark` carries the record so speculative lowering (fusion
+probing) rolls it back; a speculative failure is not a bail.
+
+Three findings from having it:
+
+1. **Two tests had silently rotted.** Both built their "interpreter reference"
+   out of `Zeta` because it had no machine kernel. It got one during M5, and both
+   became compiled-vs-compiled. **A reference built out of a coverage gap expires
+   when the gap closes.** The replacement is a user DownValue (`uncid[t_] := t`)
+   — uncompilable by construction, and exactly value-preserving, so parity checks
+   became exact instead of approximate.
+2. **The complex gap is measurable, not theoretical.** `ComplexPlot[Zeta[z], …]`
+   on a 40×40 grid takes 0.7 s because `Zeta` has a real kernel and no complex
+   one. That is `NUMERIC_FUNCTION_MISSING.md` Class B showing up as wall-clock.
+3. **Wiring a builtin can give zero speedup and still be right.** `NSum` gained
+   nothing until its *second* sampler (the Euler–Maclaurin continuous-x path) was
+   covered too. Check for a second path to the same body before blaming the
+   engine.
 
 ---
 
@@ -157,6 +186,25 @@ no runtime type dispatch (the opcode carries the type).
 | NIntegrate multi-D | `ni_mc_sample` | cubature + Monte-Carlo | ~504× |
 | FindRoot scalar | `fr_eval_with_bindings` (pointer-identity `main_f`) | machine real Newton/Secant/Brent + FD | ~19× |
 | FindRoot systems | `fr_run_newton_system_real` | per-component + Jacobian programs | ~6.9× |
+| ContourPlot | `eval_at` (`GridCtx.ac`) | both grid paths (function + equation form) | 5.2× |
+| DensityPlot | `dp_eval` | grid | 2.0× |
+| ComplexPlot | `cp_eval` | **complex argument** (`autocompile_new_z`) | 2.5× |
+| ParametricPlot / PolarPlot | `param_eval_at` | each coordinate its own program; 1- and 2-iterator | 8.4× / 16.8× |
+| ParametricPlot3D | `param3d_eval_at` | three programs | 1.1× |
+| VectorPlot | `vp_eval` | both field components | 1.5× |
+| StreamPlot | `eval_field` | both components; hottest (several samples per RK step) | 7.1× |
+| NSum / NProduct | `ns_term_machine` **and** `ns_eval_complex_machine` | machine precision only; MPFR untouched | 6.4× / 8.0× |
+
+The sub-2× rows are not underperforming fast paths — the diagnostic confirms all
+three bodies compile. Sampling is no longer their bottleneck: they build one
+`Rectangle`/`Arrow`/`Polygon` `Expr` per cell and that construction now dominates.
+
+**`NSum` had two samplers, not one.** Wiring only the integer-indexed term
+chokepoint gave *no speedup*, because the Euler–Maclaurin correction samples the
+same summand at CONTINUOUS real x through a different function. Covering both
+took `Sin[n]/n^3` from 122 ms to 18 ms. When a wiring shows no gain, look for a
+second path to the same body before concluding the fast path is not the
+bottleneck.
 
 **Shared correctness rule:** a compiled REAL program returns non-finite exactly
 where the interpreter would produce a COMPLEX value (`Sqrt` of a negative).

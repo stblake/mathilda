@@ -5,21 +5,49 @@
 
 #include <stdlib.h>
 #include <math.h>
+#include <stdio.h>
 #include <complex.h>
 
 #include "../expr.h"
 #include "../arithmetic.h"   /* make_complex */
 #include "../sym_intern.h"   /* intern_symbol */
+#include "../print.h"        /* expr_to_string — the diagnostic below */
 
 #define AC_MAX_VARS 16       /* boxed fallback path caps here; real path is unbounded */
+
+/* When a numeric builtin's body does not compile, that builtin silently keeps
+ * its interpreter path: same answer, 10-40x slower, no symptom anywhere.  Set
+ * MATHILDA_COMPILE_DIAG=1 to have each such fallback name itself and, more
+ * usefully, name the single subexpression that caused it — the compilable subset
+ * is a cliff, so one head outside it costs the whole body.
+ *
+ * The env var is read once: this runs on a path that is already slow, but a
+ * getenv per fallback would still be per-Plot-call noise for no reason. */
+static void ac_report_bail(const Expr* body) {
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char* s = getenv("MATHILDA_COMPILE_DIAG");
+        enabled = (s && *s && *s != '0') ? 1 : 0;
+    }
+    if (!enabled) return;
+    const char* why  = compiled_bail_reason();
+    const char* what = compiled_bail_expr();
+    char* full = expr_to_string((Expr*)body);
+    fprintf(stderr, "[compile] interpreting: %s\n           cause: %s%s%s\n",
+            full ? full : "?", what ? what : "(none)",
+            why ? " — " : "", why ? why : "");
+    free(full);
+}
 
 struct AutoCompiled {
     CompiledProgram* prog;
     size_t           nvars;
     bool             real_result;   /* result type is CT_REAL → all-real fast path */
+    CompileType      arg_type;      /* CT_REAL, or CT_COMPLEX for an _z program */
 };
 
-AutoCompiled* autocompile_new(const Expr* body, const Expr* const* vars, size_t nvars) {
+static AutoCompiled* ac_make(const Expr* body, const Expr* const* vars, size_t nvars,
+                             CompileType argt) {
     if (!body || nvars == 0) return NULL;
     const char** names = malloc(nvars * sizeof(*names));
     CompileType* types = malloc(nvars * sizeof(*types));
@@ -27,7 +55,7 @@ AutoCompiled* autocompile_new(const Expr* body, const Expr* const* vars, size_t 
     for (size_t i = 0; i < nvars; i++) {
         if (!vars[i] || vars[i]->type != EXPR_SYMBOL) { free(names); free(types); return NULL; }
         names[i] = intern_symbol(vars[i]->data.symbol.name);
-        types[i] = CT_REAL;
+        types[i] = argt;
     }
     /* FOLD_GLOBALS is safe here and nowhere else: an AutoCompiled is built and
      * freed inside one builtin call, so a folded symbol (e.g. the outer
@@ -37,14 +65,25 @@ AutoCompiled* autocompile_new(const Expr* body, const Expr* const* vars, size_t 
     CompiledProgram* prog = compile_expr_ex(body, names, types, nvars,
                                             COMPILE_FOLD_GLOBALS);
     free(names); free(types);
-    if (!prog) return NULL;
+    if (!prog) { ac_report_bail(body); return NULL; }
 
     AutoCompiled* ac = calloc(1, sizeof *ac);
     if (!ac) { compiled_free(prog); return NULL; }
     ac->prog = prog;
     ac->nvars = nvars;
-    ac->real_result = (compiled_result_type(prog) == CT_REAL);
+    ac->arg_type = argt;
+    /* The unboxed entry point needs an all-Real SIGNATURE, not just a real
+     * result — a complex-argument program never qualifies. */
+    ac->real_result = (argt == CT_REAL) && (compiled_result_type(prog) == CT_REAL);
     return ac;
+}
+
+AutoCompiled* autocompile_new(const Expr* body, const Expr* const* vars, size_t nvars) {
+    return ac_make(body, vars, nvars, CT_REAL);
+}
+
+AutoCompiled* autocompile_new_z(const Expr* body, const Expr* const* vars, size_t nvars) {
+    return ac_make(body, vars, nvars, CT_COMPLEX);
 }
 
 size_t autocompiled_num_vars(const AutoCompiled* ac) { return ac->nvars; }
@@ -108,6 +147,20 @@ Expr* autocompiled_eval_boxed(const AutoCompiled* ac, const double* xs) {
                  ? expr_new_real(creal(o.v.z))
                  : make_complex(expr_new_real(creal(o.v.z)), expr_new_real(cimag(o.v.z)));
         default: return NULL;                   /* BOOL / array: interpreter handles it */
+    }
+}
+
+bool autocompiled_eval_z(const AutoCompiled* ac, const double _Complex* zs,
+                         double _Complex* out) {
+    if (!ac || ac->arg_type != CT_COMPLEX || ac->nvars > AC_MAX_VARS) return false;
+    CompileValue args[AC_MAX_VARS], o;
+    for (size_t i = 0; i < ac->nvars; i++) { args[i].type = CT_COMPLEX; args[i].v.z = zs[i]; }
+    if (!compiled_eval(ac->prog, args, &o)) return false;   /* false ⇒ non-finite */
+    switch (o.type) {
+        case CT_INT:     *out = (double)o.v.i; return true;
+        case CT_REAL:    *out = o.v.r;         return true;
+        case CT_COMPLEX: *out = o.v.z;         return true;
+        default:         return false;         /* BOOL / array: not a sample value */
     }
 }
 
