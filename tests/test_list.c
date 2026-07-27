@@ -753,6 +753,48 @@ void test_subsets() {
     }
 }
 
+/* Riffle — every row here is one row of the acceptance table on md-czh.1. */
+void test_riffle() {
+    struct {
+        const char* input;
+        const char* expected;
+    } tests[] = {
+        /* A non-list separator goes in every gap. n elements, n - 1 gaps. */
+        {"Riffle[{1, 2, 3}, 0]", "{1, 0, 2, 0, 3}"},
+        {"Riffle[{1, 2}, 0]", "{1, 0, 2}"},
+        /* No gaps to fill, so the separator is ignored entirely. */
+        {"Riffle[{1}, 0]", "{1}"},
+        {"Riffle[{}, 0]", "{}"},
+        {"Riffle[{a, b, c}, x]", "{a, x, b, x, c}"},
+
+        /* A List separator is consumed cyclically, left to right: 3 gaps take
+         * x, y, x. */
+        {"Riffle[{a, b, c, d}, {x, y}]", "{a, x, b, y, c, x, d}"},
+        /* Only 2 gaps here, so z is never used. */
+        {"Riffle[{a, b, c}, {x, y, z}]", "{a, x, b, y, c}"},
+        {"Riffle[{1, 2, 3}, {x}]", "{1, x, 2, x, 3}"},
+        {"Riffle[{a}, {x, y}]", "{a}"},
+        {"Riffle[{1, 2, 3}, {0, 0}]", "{1, 0, 2, 0, 3}"},
+
+        /* An empty separator list supplies nothing (the k == 0 case) — must
+         * not divide by zero computing the cycling index. */
+        {"Riffle[{a, b}, {}]", "{a, b}"},
+        /* n == 0 reached with a list separator: the no-gaps check has to come
+         * before any 2n - 1 sizing, which would underflow size_t. */
+        {"Riffle[{}, {x, y}]", "{}"},
+        /* More separators than gaps: both z and w go unused. */
+        {"Riffle[{a, b, c}, {x, y, z, w}]", "{a, x, b, y, c}"},
+        /* Exactly one gap, which takes only the first separator. */
+        {"Riffle[{a, b}, {x, y}]", "{a, x, b}"},
+        /* The head of the first argument is preserved, not forced to List. */
+        {"Riffle[f[a, b], x]", "f[a, x, b]"},
+    };
+
+    for (int i = 0; i < (int)(sizeof(tests) / sizeof(tests[0])); i++) {
+        assert_eval_eq(tests[i].input, tests[i].expected, 0);
+    }
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -803,6 +845,7 @@ int main() {
     TEST(test_join_level2_ragged_unequal_lengths);
 
     TEST(test_subsets);
+    TEST(test_riffle);
 
     printf("All list tests passed!\n");
     return 0;

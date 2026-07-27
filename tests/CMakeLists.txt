@@ -355,6 +355,7 @@ set(COMMON_SRC
     ../src/list/list_common.c
     ../src/list/list_init.c
     ../src/list/subsets.c
+    ../src/list/riffle.c
     ../src/patterns.c
     ../src/patterns.c
     ../src/replace.c

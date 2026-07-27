@@ -96,6 +96,16 @@ void list_init(void) {
         "\tinclusive range nmin to nmax; a third element gives a length step.\n"
         "Subsets[list, spec, s]\n\tGives only the first s subsets spec would\n"
         "\tproduce, generated lazily.");
+    symtab_add_builtin("Riffle", builtin_riffle);
+    symtab_get_def("Riffle")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Riffle",
+        "Riffle[list, x]\n\tInterleaves x into the gaps between successive\n"
+        "\telements of list, giving {e1, x, e2, x, ..., x, en}. Nothing is\n"
+        "\tplaced before the first or after the last element, so a list of\n"
+        "\tlength 0 or 1 comes back unchanged.\n"
+        "Riffle[list, {x1, x2, ...}]\n\tUses the xi cyclically, filling the\n"
+        "\tn - 1 gaps left to right; separators beyond the last gap are\n"
+        "\tunused. The head of list is preserved.");
 
     symtab_get_def("Table")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_get_def("Range")->attributes |= ATTR_PROTECTED;

@@ -35,6 +35,7 @@
 #include "minmax.h"
 #include "join.h"
 #include "subsets.h"
+#include "riffle.h"
 
 void list_init(void);
 
