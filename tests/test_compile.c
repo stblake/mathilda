@@ -279,6 +279,80 @@ static void must_bail_raw(const char* name, const char* body_s, const char* cons
     bail_body(name, parse_expression(body_s), names, types, n);
 }
 
+/* ---- optimiser A/B ------------------------------------------------------
+ * Compile the same body twice, with and without the optimiser, and require the
+ * two programs to agree BITWISE over a randomised argument sweep.  Bitwise (not
+ * "to rounding") is the right gate: a pass that reassociated a sum or contracted
+ * a multiply-add would still look accurate but would break the engine's stated
+ * parity contract with the interpreter. */
+static long long* ab_opt_tot = NULL;
+static long long* ab_raw_tot = NULL;
+static int*       ab_count   = NULL;
+static void ab_opt_init(long long* o, long long* r, int* n) {
+    ab_opt_tot = o; ab_raw_tot = r; ab_count = n;
+}
+
+static void ab_opt(const char* name, const char* body_s, const char* const* names,
+                   const CompileType* types, size_t n, bool raw_parse) {
+    const char* inames[4];
+    for (size_t k = 0; k < n; k++) inames[k] = intern_symbol(names[k]);
+    Expr* body = raw_parse ? parse_expression(body_s)
+                           : eval_and_free(parse_expression(body_s));
+    CompiledProgram* po = compile_expr_ex(body, inames, types, n, 0u);
+    CompiledProgram* pr = compile_expr_ex(body, inames, types, n, COMPILE_NO_OPT);
+
+    if (!po != !pr) {
+        printf("FAIL: %-30s optimiser changed whether the body compiles\n", name);
+        failures++;
+        compiled_free(po); compiled_free(pr); expr_free(body);
+        return;
+    }
+    if (!po) {   /* both bailed: nothing to compare, and that is consistent */
+        expr_free(body);
+        return;
+    }
+
+    int bad = 0;
+    for (int trial = 0; trial < 60 && !bad; trial++) {
+        CompileValue av[4];
+        for (size_t k = 0; k < n; k++) {
+            av[k].type = types[k];
+            switch (types[k]) {
+                case CT_INT:     av[k].v.i = irand(1, 12); break;
+                case CT_COMPLEX: av[k].v.z = urand(0.3, 2.5) + urand(-2.0, 2.0) * I; break;
+                default:         av[k].v.r = urand(0.35, 3.0); break;
+            }
+        }
+        CompileValue oo, rr;
+        bool so = compiled_eval(po, av, &oo);
+        bool sr = compiled_eval(pr, av, &rr);
+        if (so != sr) { bad = 1; break; }
+        if (!so) continue;                       /* both declined, consistently */
+        if (oo.type != rr.type) { bad = 1; break; }
+        /* memcmp, not ==: NaN must equal NaN and -0.0 must differ from +0.0,
+         * because either would mean a pass changed the arithmetic. */
+        switch (oo.type) {
+            case CT_BOOL:    if (oo.v.b != rr.v.b) bad = 1; break;
+            case CT_INT:     if (oo.v.i != rr.v.i) bad = 1; break;
+            case CT_REAL:    if (memcmp(&oo.v.r, &rr.v.r, sizeof(double)) != 0) bad = 1; break;
+            case CT_COMPLEX: if (memcmp(&oo.v.z, &rr.v.z, sizeof(double _Complex)) != 0) bad = 1; break;
+            default: break;
+        }
+    }
+
+    size_t no = compiled_num_instructions(po), nr = compiled_num_instructions(pr);
+    if (bad) {
+        printf("FAIL: %-30s optimised result differs from unoptimised\n", name);
+        failures++;
+    } else if (no > nr) {
+        printf("FAIL: %-30s optimiser GREW the program (%zu -> %zu)\n", name, nr, no);
+        failures++;
+    } else {
+        if (ab_opt_tot) { *ab_opt_tot += (long long)no; *ab_raw_tot += (long long)nr; (*ab_count)++; }
+    }
+    compiled_free(po); compiled_free(pr); expr_free(body);
+}
+
 int main(void) {
     core_init();
 
@@ -902,6 +976,57 @@ int main(void) {
             (void)acc;
         }
         compiled_free(p); expr_free(b);
+    }
+
+    /* ================= OPTIMISER A/B =================
+     * The bytecode optimiser (constant folding, CSE, copy propagation, DCE,
+     * LICM) is required to be RESULT-PRESERVING, not merely accurate: it must
+     * never reassociate floating point or contract a multiply-add.  So the gate
+     * is bitwise identity between a body compiled with and without the passes,
+     * over a randomised argument sweep — plus bail parity, since a pass must not
+     * change which bodies compile at all. */
+    {
+        long long tot_opt = 0, tot_raw = 0;
+        int ab_bodies = 0;
+        ab_opt_init(&tot_opt, &tot_raw, &ab_bodies);
+        #define AB(nm, src, na, ty, raw) ab_opt(nm, src, xyz, ty, na, raw)
+
+        AB("straight-line arith",   "x + 2 y - x y + 3",            2, RRR, false);
+        AB("shared subexpression",  "Sin[x y] + Cos[x y] + Sin[x y]^2", 2, RRR, false);
+        AB("repeated power",        "x^2 + x^2 y + (x^2)^3",        2, RRR, false);
+        AB("constant subtree",      "x + 2 Pi + Sqrt[2] Exp[1]",    1, RRR, false);
+        AB("nested constants",      "x (1 + 2) (3 - 1) / 4",        1, RRR, false);
+        AB("libm chain",            "Sin[Exp[-x^2/2]] + Sqrt[Abs[x]] - Log[1 + x^2]", 1, RRR, false);
+        AB("complex arith",         "(x + I y)^3 + Exp[x + I y]",   2, CCC, false);
+        AB("int arith",             "x y + Mod[x, 7] - Quotient[y, 3]", 2, III, false);
+        AB("comparisons",           "If[x < y, x^2 + Sin[y], y^2 - Cos[x]]", 2, RRR, false);
+        AB("kernel heads",          "Gamma[x] + BesselJ[2, y] + Erf[x]", 2, RRR, false);
+        AB("Max/Min",               "Max[x, y] - Min[x, y] + Max[x, 2]", 2, RRR, false);
+        /* Loop bodies: the LICM pass only has anything to do here.  Parsed
+         * UNEVALUATED, or the interpreter closed-forms the Sum before we see it. */
+        AB("Do loop",               "Module[{s = 0.}, Do[s = s + Sin[x] i, {i, 1, 20}]; s]", 1, RRR, true);
+        AB("Sum invariant body",    "Sum[Sin[x] Cos[y] i, {i, 1, 30}]", 2, RRR, true);
+        AB("nested loops",          "Sum[Sum[x y i j, {j, 1, 8}], {i, 1, 8}]", 2, RRR, true);
+        AB("While loop",            "Module[{t = x, k = 0}, While[k < 12, t = (t + x/t)/2; k = k + 1]; t]", 1, RRR, true);
+        AB("For loop",              "Module[{s = 0.}, For[i = 1, i <= 15, i = i + 1, s = s + x^2 i]; s]", 1, RRR, true);
+        AB("Nest",                  "Nest[Function[u, (u + x/u)/2], x, 14]", 1, RRR, true);
+        AB("With locals",           "With[{a = Sin[x], b = Cos[x]}, a b + a/b + a^2]", 1, RRR, true);
+        AB("loop-invariant heavy",  "Sum[Exp[-x^2] Sqrt[Abs[y]] + i, {i, 1, 25}]", 2, RRR, true);
+
+        #undef AB
+        if (ab_bodies)
+            printf("ok:   %-30s %d bodies bitwise-identical, %lld -> %lld instrs (%.0f%% removed)\n",
+                   "optimiser A/B", ab_bodies, tot_raw, tot_opt,
+                   100.0 * (double)(tot_raw - tot_opt) / (double)(tot_raw ? tot_raw : 1));
+    }
+
+    /* Arrays must survive the optimiser untouched — their ownership lives in
+     * instruction flags, not in the dataflow the scalar passes reason about. */
+    {
+        const char* vw[] = { "v", "w" };
+        const CompileType AA[] = { CT_ARRAY(CT_REAL, 1), CT_ARRAY(CT_REAL, 1) };
+        parity_arr("opt: vec chain",  "Total[Sin[v] Exp[-v] + Sqrt[v]]", vw, AA, 1, 64, 0.3, 4.0, 20);
+        parity_arr("opt: vec + vec",  "v w + v - w",  vw, AA, 2, 64, 0.3, 4.0, 20);
     }
 
     if (failures == 0) printf("\nAll Compile engine tests passed.\n");

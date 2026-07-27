@@ -81,6 +81,12 @@ CompiledProgram* compile_expr(const Expr* body,
  * the global is later redefined. */
 #define COMPILE_FOLD_GLOBALS 0x1u
 
+/* Skip the bytecode optimiser (constant folding, CSE, copy propagation, dead-code
+ * elimination, loop-invariant code motion).  For A/B testing only: the optimiser
+ * is required to be result-preserving, so any body that answers differently with
+ * and without this flag is a bug in a pass. */
+#define COMPILE_NO_OPT       0x2u
+
 CompiledProgram* compile_expr_ex(const Expr* body,
                                  const char* const* arg_names,
                                  const CompileType* arg_types, size_t nargs,
@@ -88,6 +94,10 @@ CompiledProgram* compile_expr_ex(const Expr* body,
 
 CompileType compiled_result_type(const CompiledProgram* p);
 size_t      compiled_num_args(const CompiledProgram* p);
+
+/* Number of bytecode instructions in the finished program.  Exposed so tests and
+ * benchmarks can measure what the optimiser removed; not needed to run a program. */
+size_t      compiled_num_instructions(const CompiledProgram* p);
 
 /* Evaluate with `nargs` boxed argument values (coerced to the declared arg
  * types).  Writes *out.  Returns false if the call could not produce a usable

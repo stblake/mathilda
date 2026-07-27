@@ -630,6 +630,7 @@ set(COMMON_SRC
     ../src/numerical_calculus/ndsolve_operator.c
     ../src/numerical_calculus/ndsolve_compile.c
     ../src/compile/compile.c
+    ../src/compile/optimize.c
     ../src/compile/compiled_function.c
     ../src/compile/autocompile.c
     ../src/numerical_roots/nroots.c
@@ -943,6 +944,14 @@ add_executable(bench_eval bench_eval.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(bench_eval m)
 target_include_directories(bench_eval PRIVATE ../src)
 add_test(NAME bench_eval COMMAND bench_eval)
+
+# Compile[] engine gate: asserts every benchmarked body actually COMPILES (a
+# silent bail costs 10-40x and looks exactly like success), and that the
+# optimiser never makes a body slower than the code it started from.
+add_executable(bench_compile bench_compile.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(bench_compile m)
+target_include_directories(bench_compile PRIVATE ../src)
+add_test(NAME bench_compile COMMAND bench_compile)
 
 add_executable(bench_ndarray_linalg bench_ndarray_linalg.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(bench_ndarray_linalg m)
@@ -2608,6 +2617,7 @@ if(USE_ECM)
     add_dependencies(association_tests build_ecm)
     add_dependencies(bench_assoc build_ecm)
     add_dependencies(bench_ndarray_linalg build_ecm)
+    add_dependencies(bench_compile build_ecm)
     add_dependencies(ndarray_tests build_ecm)
     add_dependencies(ndarray_linalg_tests build_ecm)
     add_dependencies(patterns_tests build_ecm)

@@ -8,6 +8,7 @@
  * a stack-discipline allocator, so a program needs O(expression-depth) registers.
  */
 #include "compile.h"
+#include "compile_internal.h"    /* Slot / Instr / opcodes, shared with optimize.c */
 #include "compiled_function.h"   /* inlining a CompiledFunction callee */
 #include "../arithmetic.h"
 #include "../symtab.h"
@@ -28,78 +29,9 @@
 /* ------------------------------------------------------------------ *
  *  Runtime slot, instruction, program                                 *
  * ------------------------------------------------------------------ */
-/* A register (or an instruction's immediate).  `p` carries an ndkernel function
- * pointer in an immediate; `arr` carries the OWNED EXPR_NDARRAY handle of an
- * array register (M3a).  The opcode says which member is live. */
-typedef union { long long i; double r; double _Complex z; const void* p; Expr* arr; } Slot;
+/* Slot, the kfn_* kernel signatures, Instr, the opcode enum and the AF_*
+ * array flags all live in compile_internal.h — shared with the optimiser. */
 
-/* scalar kernel signatures exposed by the shared ndkernels layer */
-typedef bool (*kfn_r)(double, double*);
-typedef bool (*kfn_c)(double, double, double*, double*);
-typedef bool (*kfn_c2)(double, double, double, double, double*, double*);
-
-enum {
-    OP_CONST, OP_MOVE,
-    OP_I2R, OP_I2C, OP_R2C,
-    OP_ADD_I, OP_ADD_R, OP_ADD_C,
-    OP_SUB_I, OP_SUB_R, OP_SUB_C,
-    OP_MUL_I, OP_MUL_R, OP_MUL_C,
-    OP_DIV_R, OP_DIV_C,
-    OP_MOD_I, OP_QUOT_I,
-    OP_NEG_I, OP_NEG_R, OP_NEG_C,
-    OP_INV_R, OP_INV_C,
-    OP_POWI_I, OP_POWI_R, OP_POWI_C, OP_POW_R, OP_POW_C,
-    OP_SQRT_R, OP_SQRT_C, OP_EXP_R, OP_EXP_C, OP_LOG_R, OP_LOG_C,
-    OP_SIN_R, OP_SIN_C, OP_COS_R, OP_COS_C, OP_TAN_R, OP_TAN_C,
-    OP_SINH_R, OP_SINH_C, OP_COSH_R, OP_COSH_C, OP_TANH_R, OP_TANH_C,
-    OP_ASIN_R, OP_ASIN_C, OP_ACOS_R, OP_ACOS_C, OP_ATAN_R, OP_ATAN_C,
-    OP_ABS_I, OP_ABS_R, OP_ABS_C,   /* ABS_C -> real */
-    OP_SIGN_I, OP_SIGN_R,
-    OP_FLOOR_R, OP_CEIL_R, OP_ROUND_R,   /* real -> int */
-    OP_RE_C, OP_IM_C, OP_ARG_C, OP_CONJ_C,   /* RE/IM/ARG -> real */
-    OP_ATAN2_R, OP_MAX_I, OP_MAX_R, OP_MIN_I, OP_MIN_R,
-    OP_ERF_R, OP_ERFC_R,
-    /* generic special-function kernels from the shared ndkernels registry:
-     * imm.p is the scalar kernel fn.  RR real->real; R2R real->real via cplx;
-     * RC real->complex; CC complex->complex; CR complex->real (projection). */
-    OP_KERN_RR, OP_KERN_R2R, OP_KERN_RC, OP_KERN_CC, OP_KERN_CR,
-    OP_KERN2_RR, OP_KERN2_RC, OP_KERN2_CC,
-    OP_LT_I, OP_LT_R, OP_LE_I, OP_LE_R, OP_GT_I, OP_GT_R, OP_GE_I, OP_GE_R,
-    OP_EQ_I, OP_EQ_R, OP_EQ_C, OP_NE_I, OP_NE_R, OP_NE_C,
-    OP_AND, OP_OR, OP_XOR, OP_NOT,
-    OP_JMP,   /* pc = imm target in .b */
-    OP_JZ,    /* if R[.a] (bool) is false, pc = .b; else fall through */
-    OP_INC_I, /* R[.dst].i += imm.i (loop-counter step) */
-    /* ---- arrays (M3a) -------------------------------------------------
-     * An array register holds an owned EXPR_NDARRAY in Slot.arr and lives in a
-     * dedicated bank at the top of the frame (see ARR_VREG), so a slot is
-     * either always-array or never-array and teardown is one range sweep.
-     * These ops delegate the buffer work to the NDArray subsystem; `flags`
-     * says which operands are arrays, which the op consumes (frees), and what
-     * element type the program promised. */
-    OP_ARR_FREE,  /* expr_free R[dst]'s array and NULL the slot */
-    OP_V_EW,      /* elementwise Plus (imm.i != 0) / Times, with scalar broadcast */
-    OP_V_POW,     /* Power: array^array, array^scalar, scalar^array */
-    OP_V_KERN,    /* map a unary ndkernel (imm.p) over the buffer */
-    OP_V_KERN2,   /* binary ndkernel (imm.p) over one array + one scalar */
-    OP_V_TOTAL,   /* full reduction of a rank-1 array -> scalar */
-    OP_V_LEN,     /* leading dimension -> int */
-    OP_RET
-};
-
-/* `flags` bit layout for the array opcodes.  `flags` occupies what was pure
- * padding after `op`, so Instr does not grow. */
-#define AF_FREE_A     0x0001u   /* the op consumes (frees) R[a]'s array */
-#define AF_FREE_B     0x0002u   /* the op consumes (frees) R[b]'s array */
-#define AF_A_SHIFT    2         /* operand-a kind, 3 bits */
-#define AF_B_SHIFT    5         /* operand-b kind, 3 bits */
-#define AF_R_SHIFT    8         /* promised result element type, 2 bits */
-#define AF_A(f)       (((f) >> AF_A_SHIFT) & 7u)
-#define AF_B(f)       (((f) >> AF_B_SHIFT) & 7u)
-#define AF_R(f)       (((f) >> AF_R_SHIFT) & 3u)
-enum { AK_ARR = 0, AK_REAL = 1, AK_COMPLEX = 2 };   /* operand kinds */
-
-typedef struct { uint16_t op, flags; uint32_t dst, a, b; Slot imm; } Instr;
 
 struct CompiledProgram {
     Instr*      code;
@@ -150,8 +82,6 @@ static void nm_free(NameMap* m) { free(m->key); free(m->val); }
  * slot (so teardown can never mistake a double for a pointer) without a
  * second allocator or a liveness pass.  Jump targets, which also live in the
  * `b` field, are ordinary small integers and are left alone by the rewrite. */
-#define ARR_VREG 0x40000000
-
 typedef struct {
     Instr* code; size_t n, cap;
     int nlocals;        /* registers [0,nlocals) are args/locals */
@@ -336,8 +266,19 @@ static Val unop(Ctx* c, uint16_t op, Val a, CompileType rtype) {
     return r;
 }
 static Val emit_const(Ctx* c, Slot imm, CompileType type) {
+    /* Normalise the immediate: `literal()` and friends assign only the member
+     * matching the type, leaving the rest of the union indeterminate.  Zeroing
+     * first makes two CONSTs of the same value bitwise identical, which is what
+     * lets the optimiser's value numbering compare them. */
+    Slot k; memset(&k, 0, sizeof k);
+    switch (type) {
+        case CT_BOOL: case CT_INT: k.i = imm.i; break;
+        case CT_REAL:              k.r = imm.r; break;
+        case CT_COMPLEX:           k.z = imm.z; break;
+        default:                   k = imm;     break;
+    }
     int dst = alloc_temp(c);
-    ins(c, OP_CONST, (uint32_t)dst, 0, 0, imm);
+    ins(c, OP_CONST, (uint32_t)dst, 0, 0, k);
     Val r = { dst, true, type };
     return r;
 }
@@ -1536,26 +1477,8 @@ static bool vm_array_op(const Instr* c, Slot* d, Slot* a, Slot* b) {
 }
 
 /* Every opcode, for the computed-goto jump table (must cover the whole enum). */
-#define OPLIST \
-    X(JMP) X(JZ) X(INC_I) X(CONST) X(MOVE) X(I2R) X(I2C) X(R2C) \
-    X(ADD_I) X(ADD_R) X(ADD_C) X(SUB_I) X(SUB_R) X(SUB_C) \
-    X(MUL_I) X(MUL_R) X(MUL_C) X(DIV_R) X(DIV_C) X(MOD_I) X(QUOT_I) \
-    X(NEG_I) X(NEG_R) X(NEG_C) X(INV_R) X(INV_C) \
-    X(POWI_I) X(POWI_R) X(POWI_C) X(POW_R) X(POW_C) \
-    X(SQRT_R) X(SQRT_C) X(EXP_R) X(EXP_C) X(LOG_R) X(LOG_C) \
-    X(SIN_R) X(SIN_C) X(COS_R) X(COS_C) X(TAN_R) X(TAN_C) \
-    X(SINH_R) X(SINH_C) X(COSH_R) X(COSH_C) X(TANH_R) X(TANH_C) \
-    X(ASIN_R) X(ASIN_C) X(ACOS_R) X(ACOS_C) X(ATAN_R) X(ATAN_C) \
-    X(ABS_I) X(ABS_R) X(ABS_C) X(SIGN_I) X(SIGN_R) \
-    X(FLOOR_R) X(CEIL_R) X(ROUND_R) X(RE_C) X(IM_C) X(ARG_C) X(CONJ_C) \
-    X(ATAN2_R) X(MAX_I) X(MAX_R) X(MIN_I) X(MIN_R) X(ERF_R) X(ERFC_R) \
-    X(KERN_RR) X(KERN_R2R) X(KERN_RC) X(KERN_CC) X(KERN_CR) \
-    X(KERN2_RR) X(KERN2_RC) X(KERN2_CC) \
-    X(LT_I) X(LT_R) X(LE_I) X(LE_R) X(GT_I) X(GT_R) X(GE_I) X(GE_R) \
-    X(EQ_I) X(EQ_R) X(EQ_C) X(NE_I) X(NE_R) X(NE_C) \
-    X(AND) X(OR) X(XOR) X(NOT) \
-    X(ARR_FREE) X(V_EW) X(V_POW) X(V_KERN) X(V_KERN2) X(V_TOTAL) X(V_LEN) \
-    X(RET)
+/* OPLIST now lives in compile_internal.h: one list drives the opcode enum, the
+ * VM jump table below, and the optimiser's instruction-property table. */
 
 /* The bytecode interpreter.  A threaded (computed-goto) dispatch is used on
  * GCC/Clang — each opcode ends by jumping straight to the next, which the branch
@@ -1580,7 +1503,7 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
     #define RA (R[c->a])
     #define RB (R[c->b])
 #if VM_THREADED
-    #define X(name) [OP_##name] = &&L_##name,
+    #define X(name, kind) [OP_##name] = &&L_##name,
     static const void* const tbl[] = { OPLIST };
     #undef X
     #define OP(name) L_##name
@@ -1691,6 +1614,7 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(V_KERN2):  ARROP();
             OP(V_TOTAL):  ARROP();
             OP(V_LEN):    ARROP();
+            OP(NOP): NEXT();
             OP(RET): return;
 #if !VM_THREADED
             default: return;
@@ -1707,7 +1631,6 @@ vm_fail:
     #undef JUMP
     #undef ARROP
 }
-#undef OPLIST
 
 /* ------------------------------------------------------------------ *
  *  Public API                                                         *
@@ -1757,6 +1680,12 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
     }
     int result_reg = (int)patch_reg((uint32_t)res.reg, arr_base);
 
+    /* Optimise the emitted bytecode.  Runs after patch_reg so the array bank is
+     * already at its final place and `arr_base` means what the optimiser expects.
+     * Register numbers are preserved, so `result_reg` stays valid.  A failure
+     * here is non-fatal: the unoptimised code is still correct. */
+    if (!(flags & COMPILE_NO_OPT)) compile_optimize(c.code, &c.n, nreg, arr_base);
+
     CompiledProgram* p = calloc(1, sizeof(*p));
     if (!p) { free(c.code); free(c.argdep); return NULL; }
     p->code = c.code; p->n = c.n; p->nreg = nreg; p->arr_base = arr_base;
@@ -1773,6 +1702,7 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
 
 CompileType compiled_result_type(const CompiledProgram* p) { return p->result_type; }
 size_t compiled_num_args(const CompiledProgram* p) { return p->nargs; }
+size_t compiled_num_instructions(const CompiledProgram* p) { return p->n; }
 
 size_t compiled_arg_deps(const CompiledProgram* p, int* deps, size_t cap) {
     size_t n = 0;
