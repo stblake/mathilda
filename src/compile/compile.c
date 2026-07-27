@@ -1572,109 +1572,115 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
     if (n == 0) return;
     size_t pc = 0;
     const Instr* c = &code[pc];
-    Slot* d = &R[c->dst]; Slot* a = &R[c->a]; Slot* b = &R[c->b];
+    /* Operands are addressed lazily: an opcode pays only for the registers it
+     * actually reads.  Computing all three up front in NEXT() cost three
+     * shift-and-adds per instruction where the hottest ops (ADD_R, MUL_R) use
+     * two and the unary ops use one. */
+    #define RD (R[c->dst])
+    #define RA (R[c->a])
+    #define RB (R[c->b])
 #if VM_THREADED
     #define X(name) [OP_##name] = &&L_##name,
     static const void* const tbl[] = { OPLIST };
     #undef X
     #define OP(name) L_##name
-    #define NEXT() do { pc++; c = &code[pc]; d = &R[c->dst]; a = &R[c->a]; b = &R[c->b]; goto *tbl[c->op]; } while (0)
-    #define JUMP() do { c = &code[pc]; d = &R[c->dst]; a = &R[c->a]; b = &R[c->b]; goto *tbl[c->op]; } while (0)
+    #define NEXT() do { c = &code[++pc]; goto *tbl[c->op]; } while (0)
+    #define JUMP() do { c = &code[pc]; goto *tbl[c->op]; } while (0)
     goto *tbl[c->op];
 #else
     #define OP(name) case OP_##name
     #define NEXT() break
     #define JUMP() continue
     while (pc < n) {
-        c = &code[pc]; d = &R[c->dst]; a = &R[c->a]; b = &R[c->b];
+        c = &code[pc];
         switch (c->op) {
 #endif
-    #define ARROP() do { if (!vm_array_op(c, d, a, b)) goto vm_fail; } while (0); NEXT()
+    #define ARROP() do { if (!vm_array_op(c, &RD, &RA, &RB)) goto vm_fail; } while (0); NEXT()
             OP(JMP): pc = c->b; JUMP();
-            OP(JZ):  pc = a->i ? pc + 1 : c->b; JUMP();   /* branch if false */
-            OP(INC_I): d->i += c->imm.i; NEXT();
-            OP(CONST): *d = c->imm; NEXT();
-            OP(MOVE):  *d = *a; NEXT();
-            OP(I2R): d->r = (double)a->i; NEXT();
-            OP(I2C): d->z = (double)a->i; NEXT();
-            OP(R2C): d->z = a->r; NEXT();
-            OP(ADD_I): d->i = a->i + b->i; NEXT();
-            OP(ADD_R): d->r = a->r + b->r; NEXT();
-            OP(ADD_C): d->z = a->z + b->z; NEXT();
-            OP(SUB_I): d->i = a->i - b->i; NEXT();
-            OP(SUB_R): d->r = a->r - b->r; NEXT();
-            OP(SUB_C): d->z = a->z - b->z; NEXT();
-            OP(MUL_I): d->i = a->i * b->i; NEXT();
-            OP(MUL_R): d->r = a->r * b->r; NEXT();
-            OP(MUL_C): d->z = a->z * b->z; NEXT();
-            OP(DIV_R): d->r = a->r / b->r; NEXT();
-            OP(DIV_C): d->z = a->z / b->z; NEXT();
-            OP(MOD_I): { long long m = b->i; long long q = a->i % m; if (q != 0 && ((q < 0) != (m < 0))) q += m; d->i = q; } NEXT();
-            OP(QUOT_I): { long long m = b->i, x = a->i, q = x / m; if ((x % m != 0) && ((x < 0) != (m < 0))) q -= 1; d->i = q; } NEXT();
-            OP(NEG_I): d->i = -a->i; NEXT();
-            OP(NEG_R): d->r = -a->r; NEXT();
-            OP(NEG_C): d->z = -a->z; NEXT();
-            OP(INV_R): d->r = 1.0 / a->r; NEXT();
-            OP(INV_C): d->z = 1.0 / a->z; NEXT();
-            OP(POWI_I): d->i = ipow_i(a->i, c->imm.i); NEXT();
-            OP(POWI_R): d->r = ipow_r(a->r, c->imm.i); NEXT();
-            OP(POWI_C): d->z = ipow_c(a->z, c->imm.i); NEXT();
-            OP(POW_R): d->r = pow(a->r, b->r); NEXT();
-            OP(POW_C): d->z = cpow(a->z, b->z); NEXT();
-            OP(SQRT_R): d->r = sqrt(a->r); NEXT();
-            OP(SQRT_C): d->z = csqrt(a->z); NEXT();
-            OP(EXP_R): d->r = exp(a->r); NEXT();
-            OP(EXP_C): d->z = cexp(a->z); NEXT();
-            OP(LOG_R): d->r = log(a->r); NEXT();
-            OP(LOG_C): d->z = clog(a->z); NEXT();
-            OP(SIN_R): d->r = sin(a->r); NEXT();   OP(SIN_C): d->z = csin(a->z); NEXT();
-            OP(COS_R): d->r = cos(a->r); NEXT();   OP(COS_C): d->z = ccos(a->z); NEXT();
-            OP(TAN_R): d->r = tan(a->r); NEXT();   OP(TAN_C): d->z = ctan(a->z); NEXT();
-            OP(SINH_R): d->r = sinh(a->r); NEXT(); OP(SINH_C): d->z = csinh(a->z); NEXT();
-            OP(COSH_R): d->r = cosh(a->r); NEXT(); OP(COSH_C): d->z = ccosh(a->z); NEXT();
-            OP(TANH_R): d->r = tanh(a->r); NEXT(); OP(TANH_C): d->z = ctanh(a->z); NEXT();
-            OP(ASIN_R): d->r = asin(a->r); NEXT(); OP(ASIN_C): d->z = casin(a->z); NEXT();
-            OP(ACOS_R): d->r = acos(a->r); NEXT(); OP(ACOS_C): d->z = cacos(a->z); NEXT();
-            OP(ATAN_R): d->r = atan(a->r); NEXT(); OP(ATAN_C): d->z = catan(a->z); NEXT();
-            OP(ABS_I): d->i = a->i < 0 ? -a->i : a->i; NEXT();
-            OP(ABS_R): d->r = fabs(a->r); NEXT();
-            OP(ABS_C): d->r = cabs(a->z); NEXT();
-            OP(SIGN_I): d->i = (a->i > 0) - (a->i < 0); NEXT();
-            OP(SIGN_R): d->r = (a->r > 0) - (a->r < 0); NEXT();
-            OP(FLOOR_R): d->i = (long long)floor(a->r); NEXT();
-            OP(CEIL_R):  d->i = (long long)ceil(a->r); NEXT();
-            OP(ROUND_R): d->i = (long long)llround(a->r); NEXT();
-            OP(RE_C): d->r = creal(a->z); NEXT();
-            OP(IM_C): d->r = cimag(a->z); NEXT();
-            OP(ARG_C): d->r = carg(a->z); NEXT();
-            OP(CONJ_C): d->z = conj(a->z); NEXT();
-            OP(ATAN2_R): d->r = atan2(b->r, a->r); NEXT();   /* ArcTan[x,y]=atan2(y,x); a=x,b=y */
-            OP(MAX_I): d->i = a->i > b->i ? a->i : b->i; NEXT();
-            OP(MAX_R): d->r = a->r > b->r ? a->r : b->r; NEXT();
-            OP(MIN_I): d->i = a->i < b->i ? a->i : b->i; NEXT();
-            OP(MIN_R): d->r = a->r < b->r ? a->r : b->r; NEXT();
-            OP(ERF_R): d->r = erf(a->r); NEXT();
-            OP(ERFC_R): d->r = erfc(a->r); NEXT();
-            OP(KERN_RR): { double o; d->r = ((kfn_r)c->imm.p)(a->r, &o) ? o : NAN; } NEXT();
-            OP(KERN_R2R): { double orr, oi; d->r = ((kfn_c)c->imm.p)(a->r, 0.0, &orr, &oi) ? orr : NAN; } NEXT();
-            OP(KERN_RC): { double orr, oi; if (((kfn_c)c->imm.p)(a->r, 0.0, &orr, &oi)) d->z = orr + oi * I; else d->z = NAN + NAN * I; } NEXT();
-            OP(KERN_CC): { double orr, oi; if (((kfn_c)c->imm.p)(creal(a->z), cimag(a->z), &orr, &oi)) d->z = orr + oi * I; else d->z = NAN + NAN * I; } NEXT();
-            OP(KERN_CR): { double orr, oi; d->r = ((kfn_c)c->imm.p)(creal(a->z), cimag(a->z), &orr, &oi) ? orr : NAN; } NEXT();
-            OP(KERN2_RR): { double orr, oi; d->r = ((kfn_c2)c->imm.p)(a->r, 0.0, b->r, 0.0, &orr, &oi) ? orr : NAN; } NEXT();
-            OP(KERN2_RC): { double orr, oi; if (((kfn_c2)c->imm.p)(a->r, 0.0, b->r, 0.0, &orr, &oi)) d->z = orr + oi * I; else d->z = NAN + NAN * I; } NEXT();
-            OP(KERN2_CC): { double orr, oi; if (((kfn_c2)c->imm.p)(creal(a->z), cimag(a->z), creal(b->z), cimag(b->z), &orr, &oi)) d->z = orr + oi * I; else d->z = NAN + NAN * I; } NEXT();
-            OP(LT_I): d->i = a->i < b->i; NEXT();  OP(LT_R): d->i = a->r < b->r; NEXT();
-            OP(LE_I): d->i = a->i <= b->i; NEXT(); OP(LE_R): d->i = a->r <= b->r; NEXT();
-            OP(GT_I): d->i = a->i > b->i; NEXT();  OP(GT_R): d->i = a->r > b->r; NEXT();
-            OP(GE_I): d->i = a->i >= b->i; NEXT(); OP(GE_R): d->i = a->r >= b->r; NEXT();
-            OP(EQ_I): d->i = a->i == b->i; NEXT(); OP(EQ_R): d->i = a->r == b->r; NEXT();
-            OP(EQ_C): d->i = a->z == b->z; NEXT();
-            OP(NE_I): d->i = a->i != b->i; NEXT(); OP(NE_R): d->i = a->r != b->r; NEXT();
-            OP(NE_C): d->i = a->z != b->z; NEXT();
-            OP(AND): d->i = a->i && b->i; NEXT();
-            OP(OR):  d->i = a->i || b->i; NEXT();
-            OP(XOR): d->i = (!!a->i) ^ (!!b->i); NEXT();
-            OP(NOT): d->i = !a->i; NEXT();
+            OP(JZ):  pc = RA.i ? pc + 1 : c->b; JUMP();   /* branch if false */
+            OP(INC_I): RD.i += c->imm.i; NEXT();
+            OP(CONST): RD = c->imm; NEXT();
+            OP(MOVE):  RD = RA; NEXT();
+            OP(I2R): RD.r = (double)RA.i; NEXT();
+            OP(I2C): RD.z = (double)RA.i; NEXT();
+            OP(R2C): RD.z = RA.r; NEXT();
+            OP(ADD_I): RD.i = RA.i + RB.i; NEXT();
+            OP(ADD_R): RD.r = RA.r + RB.r; NEXT();
+            OP(ADD_C): RD.z = RA.z + RB.z; NEXT();
+            OP(SUB_I): RD.i = RA.i - RB.i; NEXT();
+            OP(SUB_R): RD.r = RA.r - RB.r; NEXT();
+            OP(SUB_C): RD.z = RA.z - RB.z; NEXT();
+            OP(MUL_I): RD.i = RA.i * RB.i; NEXT();
+            OP(MUL_R): RD.r = RA.r * RB.r; NEXT();
+            OP(MUL_C): RD.z = RA.z * RB.z; NEXT();
+            OP(DIV_R): RD.r = RA.r / RB.r; NEXT();
+            OP(DIV_C): RD.z = RA.z / RB.z; NEXT();
+            OP(MOD_I): { long long m = RB.i; long long q = RA.i % m; if (q != 0 && ((q < 0) != (m < 0))) q += m; RD.i = q; } NEXT();
+            OP(QUOT_I): { long long m = RB.i, x = RA.i, q = x / m; if ((x % m != 0) && ((x < 0) != (m < 0))) q -= 1; RD.i = q; } NEXT();
+            OP(NEG_I): RD.i = -RA.i; NEXT();
+            OP(NEG_R): RD.r = -RA.r; NEXT();
+            OP(NEG_C): RD.z = -RA.z; NEXT();
+            OP(INV_R): RD.r = 1.0 / RA.r; NEXT();
+            OP(INV_C): RD.z = 1.0 / RA.z; NEXT();
+            OP(POWI_I): RD.i = ipow_i(RA.i, c->imm.i); NEXT();
+            OP(POWI_R): RD.r = ipow_r(RA.r, c->imm.i); NEXT();
+            OP(POWI_C): RD.z = ipow_c(RA.z, c->imm.i); NEXT();
+            OP(POW_R): RD.r = pow(RA.r, RB.r); NEXT();
+            OP(POW_C): RD.z = cpow(RA.z, RB.z); NEXT();
+            OP(SQRT_R): RD.r = sqrt(RA.r); NEXT();
+            OP(SQRT_C): RD.z = csqrt(RA.z); NEXT();
+            OP(EXP_R): RD.r = exp(RA.r); NEXT();
+            OP(EXP_C): RD.z = cexp(RA.z); NEXT();
+            OP(LOG_R): RD.r = log(RA.r); NEXT();
+            OP(LOG_C): RD.z = clog(RA.z); NEXT();
+            OP(SIN_R): RD.r = sin(RA.r); NEXT();   OP(SIN_C): RD.z = csin(RA.z); NEXT();
+            OP(COS_R): RD.r = cos(RA.r); NEXT();   OP(COS_C): RD.z = ccos(RA.z); NEXT();
+            OP(TAN_R): RD.r = tan(RA.r); NEXT();   OP(TAN_C): RD.z = ctan(RA.z); NEXT();
+            OP(SINH_R): RD.r = sinh(RA.r); NEXT(); OP(SINH_C): RD.z = csinh(RA.z); NEXT();
+            OP(COSH_R): RD.r = cosh(RA.r); NEXT(); OP(COSH_C): RD.z = ccosh(RA.z); NEXT();
+            OP(TANH_R): RD.r = tanh(RA.r); NEXT(); OP(TANH_C): RD.z = ctanh(RA.z); NEXT();
+            OP(ASIN_R): RD.r = asin(RA.r); NEXT(); OP(ASIN_C): RD.z = casin(RA.z); NEXT();
+            OP(ACOS_R): RD.r = acos(RA.r); NEXT(); OP(ACOS_C): RD.z = cacos(RA.z); NEXT();
+            OP(ATAN_R): RD.r = atan(RA.r); NEXT(); OP(ATAN_C): RD.z = catan(RA.z); NEXT();
+            OP(ABS_I): RD.i = RA.i < 0 ? -RA.i : RA.i; NEXT();
+            OP(ABS_R): RD.r = fabs(RA.r); NEXT();
+            OP(ABS_C): RD.r = cabs(RA.z); NEXT();
+            OP(SIGN_I): RD.i = (RA.i > 0) - (RA.i < 0); NEXT();
+            OP(SIGN_R): RD.r = (RA.r > 0) - (RA.r < 0); NEXT();
+            OP(FLOOR_R): RD.i = (long long)floor(RA.r); NEXT();
+            OP(CEIL_R):  RD.i = (long long)ceil(RA.r); NEXT();
+            OP(ROUND_R): RD.i = (long long)llround(RA.r); NEXT();
+            OP(RE_C): RD.r = creal(RA.z); NEXT();
+            OP(IM_C): RD.r = cimag(RA.z); NEXT();
+            OP(ARG_C): RD.r = carg(RA.z); NEXT();
+            OP(CONJ_C): RD.z = conj(RA.z); NEXT();
+            OP(ATAN2_R): RD.r = atan2(RB.r, RA.r); NEXT();   /* ArcTan[x,y]=atan2(y,x); a=x,b=y */
+            OP(MAX_I): RD.i = RA.i > RB.i ? RA.i : RB.i; NEXT();
+            OP(MAX_R): RD.r = RA.r > RB.r ? RA.r : RB.r; NEXT();
+            OP(MIN_I): RD.i = RA.i < RB.i ? RA.i : RB.i; NEXT();
+            OP(MIN_R): RD.r = RA.r < RB.r ? RA.r : RB.r; NEXT();
+            OP(ERF_R): RD.r = erf(RA.r); NEXT();
+            OP(ERFC_R): RD.r = erfc(RA.r); NEXT();
+            OP(KERN_RR): { double o; RD.r = ((kfn_r)c->imm.p)(RA.r, &o) ? o : NAN; } NEXT();
+            OP(KERN_R2R): { double orr, oi; RD.r = ((kfn_c)c->imm.p)(RA.r, 0.0, &orr, &oi) ? orr : NAN; } NEXT();
+            OP(KERN_RC): { double orr, oi; if (((kfn_c)c->imm.p)(RA.r, 0.0, &orr, &oi)) RD.z = orr + oi * I; else RD.z = NAN + NAN * I; } NEXT();
+            OP(KERN_CC): { double orr, oi; if (((kfn_c)c->imm.p)(creal(RA.z), cimag(RA.z), &orr, &oi)) RD.z = orr + oi * I; else RD.z = NAN + NAN * I; } NEXT();
+            OP(KERN_CR): { double orr, oi; RD.r = ((kfn_c)c->imm.p)(creal(RA.z), cimag(RA.z), &orr, &oi) ? orr : NAN; } NEXT();
+            OP(KERN2_RR): { double orr, oi; RD.r = ((kfn_c2)c->imm.p)(RA.r, 0.0, RB.r, 0.0, &orr, &oi) ? orr : NAN; } NEXT();
+            OP(KERN2_RC): { double orr, oi; if (((kfn_c2)c->imm.p)(RA.r, 0.0, RB.r, 0.0, &orr, &oi)) RD.z = orr + oi * I; else RD.z = NAN + NAN * I; } NEXT();
+            OP(KERN2_CC): { double orr, oi; if (((kfn_c2)c->imm.p)(creal(RA.z), cimag(RA.z), creal(RB.z), cimag(RB.z), &orr, &oi)) RD.z = orr + oi * I; else RD.z = NAN + NAN * I; } NEXT();
+            OP(LT_I): RD.i = RA.i < RB.i; NEXT();  OP(LT_R): RD.i = RA.r < RB.r; NEXT();
+            OP(LE_I): RD.i = RA.i <= RB.i; NEXT(); OP(LE_R): RD.i = RA.r <= RB.r; NEXT();
+            OP(GT_I): RD.i = RA.i > RB.i; NEXT();  OP(GT_R): RD.i = RA.r > RB.r; NEXT();
+            OP(GE_I): RD.i = RA.i >= RB.i; NEXT(); OP(GE_R): RD.i = RA.r >= RB.r; NEXT();
+            OP(EQ_I): RD.i = RA.i == RB.i; NEXT(); OP(EQ_R): RD.i = RA.r == RB.r; NEXT();
+            OP(EQ_C): RD.i = RA.z == RB.z; NEXT();
+            OP(NE_I): RD.i = RA.i != RB.i; NEXT(); OP(NE_R): RD.i = RA.r != RB.r; NEXT();
+            OP(NE_C): RD.i = RA.z != RB.z; NEXT();
+            OP(AND): RD.i = RA.i && RB.i; NEXT();
+            OP(OR):  RD.i = RA.i || RB.i; NEXT();
+            OP(XOR): RD.i = (!!RA.i) ^ (!!RB.i); NEXT();
+            OP(NOT): RD.i = !RA.i; NEXT();
             /* Array ops are out of line: they allocate, they can fail, and
              * keeping them out of the scalar cases costs the scalar path
              * nothing. */
