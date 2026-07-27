@@ -1,54 +1,58 @@
-# Compile engine M3 — arrays / NDArray (increment M3a: rank-1 vectors)
+# Compile[] M5 — optimising code generation, coverage, any-rank NDArray
 
-Goal: machine arrays as first-class Compile values, delegating to the existing
-NDArray infra (ndkernels/ndreduce/ndstruct/BLAS). Big milestone → ship in slices.
-**M3a = rank-1 machine-real/complex vectors** (proves the architecture:
-array-typed registers, NDArray ownership in the VM, EWKERNEL delegation,
-broadcast, reduction, array args + result). Matrices/DOT/MATMUL/Part = M3b.
+Plan: `~/.claude/plans/i-would-like-to-fluffy-whisper.md`
+Handoff: `docs/design/compile_state.md` §0
+Changelog: `docs/spec/changelog/2026-07-27.md`
 
-## Type representation
-- Extend `CompileType` with array types. Encode (elem, rank) compactly:
-  `CT_ARR` base; `CT_IS_ARRAY(t)`, `CT_ELEM(t)`, `CT_RANK(t)`, `CT_ARRAY(elem,rank)`.
-  M3a uses rank-1 only (CT_ARRAY(CT_REAL,1), CT_ARRAY(CT_COMPLEX,1)).
-- Arg spec `{v, _Real, 1}` → rank-1 real array arg. (extend compiled_function
-  argspec parser later; for now the internal compile_expr accepts array arg_types.)
+Baseline (2026-07-27, before any change): Horner dispatch 649 ns/call for 80
+arith ops = 8.0 ns/op; mixed-libm 150 ns/call; array len-4096 1.0x, 61 ns/element.
 
-## Value / lifetime model (the crux)
-- Array register uses `Slot.p` = owned `NDArrayData*` (args: borrowed).
-- Frame is REUSED across calls → NEVER free-on-overwrite (stale ptr). Instead:
-  emit explicit `OP_ARR_FREE dst` driven by the compile-time temp-stack
-  discipline — when free_if_tmp pops an ARRAY temp, emit ARR_FREE. Args borrowed
-  (never freed). Result array's ownership transfers to caller (not freed).
-  Invariant: every allocated array temp is paired with ARR_FREE or is the result.
+## Done
 
-## Opcodes (finalize against ndkernels/ndreduce APIs — research pending)
-- Elementwise vec⊕vec: delegate to ndkernels binary kernel if Plus/Times/... have
-  one (OP_VKERN2 carrying fn ptr), else dedicated OP_VADD_R/C etc. Shape-checked
-  at runtime (bail/NaN on mismatch).
-- Broadcast scalar⊕vec: OP_VBCAST_* (or fold into VKERN2 with a splat).
-- Unary fn over buffer: OP_VKERN (Sin/Exp/... via ndkernels vectorized path).
-- Reduction: OP_VTOTAL_R/C (ndreduce Total) vec→scalar.
-- OP_VLEN vec→int. OP_ARR_FREE.
+- [x] **Benchmark gate** — `tests/bench_compile.c`. Primary assertion is that
+      every benchmarked body *compiled*; plus a machine-independent ratio check
+      that the optimiser never makes a body slower.
+- [x] **Lazy operand addressing** — `NEXT()` no longer computes all three operand
+      pointers per instruction. 649 → 427 ns/call (1.53x).
+- [x] **Bytecode optimiser** — `src/compile/optimize.c`: CFG + backward liveness,
+      per-block value numbering (folding/CSE/copy-prop), DCE, LICM. Plus
+      `compile_internal.h` (KIND-carrying `OPLIST` drives enum + jump table +
+      property table) and `OP_LOOP`. 427 → 335 ns/call. Nest 1.29x, Newton 1.25x.
+- [x] **Optimiser correctness gate** — 18 bodies, opt vs `COMPILE_NO_OPT`, must
+      agree *bitwise* (`memcmp`: NaN == NaN, -0.0 != +0.0).
+- [x] **Any rank** — lifted the rank-1 front gate; rank 2/3/4 exact parity.
+- [x] **Elementwise fusion** — `COMPILE_FUSE`, correct at every rank, real and
+      complex, gated on `Listable`. **Off by default: not yet faster.**
+- [x] **Coverage audit** — `tests/test_compile_coverage.c`. 103 NumericFunction
+      heads, 55 compile, 48 listed gaps; fails in both directions.
+- [x] **Closed 3 silent gaps the audit found** — real `Mod`, real `Quotient`,
+      real `Arg`. Each verified against the interpreter first; parity 0.0.
+- [x] **Call boundary** — no malloc/free per `cf[x]`; all-Real signatures take
+      the unboxed `compiled_eval_real` path.
 
-## Public API
-- `compiled_eval_array` or extend compiled_eval to accept/return NDArray handles
-  via CompileValue (add an array case to the boxed union). Caller passes NDArray*
-  args, receives an owned NDArray* result (or scalar).
-- User surface (Compile[{{v,_Real,1}}, ...]) wiring = later; M3a proves the engine
-  via test_compile.c with direct compile_expr + NDArray build/read.
+## Next, in value order
 
-## Steps
-- [ ] Research ND APIs (agent) → finalize opcodes.
-- [ ] CompileType array encoding + helpers.
-- [ ] Slot/array-register plumbing; ARR_FREE + temp-stack frees.
-- [ ] emit: array arg resolution, elementwise, broadcast, unary kernel, Total.
-- [ ] VM cases (delegate to ndkernels/ndreduce; allocate/free NDArray buffers).
-- [ ] Public eval API for array in/out.
-- [ ] test_compile.c: parity vs interpreter (build NDArray, compile v→..., compare
-      buffers); ownership (ASan/leaks clean, repeated calls reuse frame).
-- [ ] Docs + changelog + memory.
-
-## Deferred (M3b+)
-- Rank-2 matrices, DOT/MATMUL (BLAS), Part/Slice, MAKEARR (pack tuple), Int
-  arrays, List-of-machine-numbers coercion at the boundary, user Compile[] array
-  argspec, Map/Table fusion.
+- [ ] **Block strip-mining for fusion** — each opcode processes a tile of ~64
+      elements in a vectorisable C loop; dispatch amortises 64x and temporaries
+      stay in L1. This is where the array order of magnitude is. Fusion stays
+      off until this lands.
+- [ ] **Make CSE actually fire** — it is defeated structurally: `binop`/`unop`
+      write into an operand's register, invalidating the value-number entry the
+      same instruction created. Either emit in SSA form + linear-scan regalloc,
+      or (much cheaper) do CSE at the `Expr` level in `emit`, hoisting
+      structurally-equal subtrees into persistent registers like `With` locals.
+- [ ] **`OP_CALL`** — compiled-to-compiled calls without the inline depth cap of
+      8, which is what recursion needs. Requires the frame stack (below).
+- [ ] **Frame stack** — replace the single per-program `p->frame`, which makes a
+      `CompiledProgram` non-reentrant and non-thread-safe today. Prerequisite for
+      `OP_CALL` and for threading a strip-mined loop.
+- [ ] **Fill the remaining kernels** — 48 listed gaps. Most are MPFR-only modules
+      (`Zeta`, `PolyLog`, `Airy*`, …) needing genuinely new double implementations,
+      each with a parity test against the MPFR path. Trivial tier first
+      (`Sinc`, `UnitStep`, `Fibonacci`, `InverseErf`/`Erfc` — the last two already
+      have double kernels, just unregistered).
+- [ ] **User `Compile[]` array argspec** — `{v, _Real, 1}`; `cf_box`/`cf_unbox`
+      still have `default: break` for array types.
+- [ ] **`CompileDiag`** — a bail still reports nothing. The audit covers heads;
+      per-body diagnostics would cover the rest.
+- [ ] **Native backend** (`CompilationTarget -> "C"`), behind a build flag.

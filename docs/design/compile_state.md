@@ -5,7 +5,52 @@ Companion to [`compile.md`](compile.md) (the full design) and the memory files
 `project_compile_engine`, `project_autocompile_numeric_builtins` (read those
 too).
 
-_Last updated: 2026-07-27._
+_Last updated: 2026-07-27 (M5: optimiser, coverage audit, any-rank arrays)._
+
+---
+
+## 0. M5 — read this first
+
+Four things changed since M4. Full write-up in
+[`../spec/changelog/2026-07-27.md`](../spec/changelog/2026-07-27.md).
+
+1. **There is a middle end now** — `src/compile/optimize.c`. CFG + backward
+   liveness, per-block value numbering (folding/CSE/copy-prop), liveness-driven
+   DCE, and LICM. `compile_internal.h` holds `Slot`/`Instr`/the opcode enum;
+   `OPLIST` carries a KIND per opcode and drives the enum, the VM jump table and
+   the optimiser's property table from one list. **Add an opcode there or the VM
+   crashes.** `COMPILE_NO_OPT` is the A/B switch and the gate is *bitwise*
+   identity, not accuracy.
+2. **Scalar dispatch is 2.0× faster** — 649 → 335 ns/call on the Horner
+   micro-bench (8.0 → 4.2 ns per arithmetic op), from lazy operand addressing in
+   `NEXT()` plus the optimiser and `OP_LOOP`.
+3. **Any rank works** and needed no new machinery: the delegated ND path was
+   already rank-general, and the compiler's own rank-1 front gate was the only
+   blocker. `Total` stays rank-1 on purpose (it reduces the leading axis only).
+4. **Coverage is audited by the build** — `tests/test_compile_coverage.c` probes
+   every `NumericFunction` head by compiling `Head[x]`. 103 heads, 55 compile,
+   48 listed gaps. It fails if a listed gap starts compiling too, so the
+   exception list cannot go stale.
+
+**Two findings that should shape the next round:**
+
+- **Fusion is implemented and correct but NOT yet a win** (`COMPILE_FUSE`,
+  off by default). An elementwise chain lowers to one flat-index loop of scalar
+  bytecode — no temporary buffers, any rank, `Total` folded in — but the loop
+  runs the VM once per element and ~4 ns/instruction costs more than the buffers
+  it saves: 70 ns/element fused vs 61 delegated. **The fix is block
+  strip-mining**: each opcode processing a tile of ~64 elements in a vectorisable
+  C loop, so dispatch amortises 64× and temporaries stay in L1 (the NumExpr
+  design). That is where the array order of magnitude is; the lowering committed
+  is its foundation.
+- **CSE almost never fires**, and the reason is structural: `binop`/`unop` pop
+  their operands before allocating the destination, so a computation usually
+  writes *into* one of its own operand registers. The value-number entry for that
+  register is invalidated by the very instruction that produced it. Fixing it
+  means emitting in SSA form (monotonic register allocation) and adding a
+  linear-scan pass to compact afterwards — or, much cheaper, doing CSE at the
+  `Expr` level in `emit`, hoisting structurally-equal subtrees into persistent
+  registers the way `With` locals already are.
 
 ---
 
