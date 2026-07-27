@@ -53,6 +53,55 @@ void test_cf_object_and_arity(void) {
     assert_eval_startswith("Compile[{{x, _Real}}, x][1.0, 2.0]", "CompiledFunction[{x}");
 }
 
+/* Array argspec: `{v, _Real, r}` declares a rank-r machine array, the same
+ * spelling the Wolfram Language uses.  Until this landed the whole array engine
+ * — fusion, any-rank, the reductions — was reachable only from C. */
+void test_cf_array_argspec(void) {
+    /* A List argument is packed at the boundary and comes back as a List: the
+     * result KIND must follow the argument kind, or the compiled path would
+     * answer with a different head from the interpreter fallback on the same
+     * input.  The two lines below are exactly that pair — the second has a
+     * symbolic element, so it falls back — and they must agree in shape. */
+    assert_eval_eq("Compile[{{v, _Real, 1}}, v^2 + 2 v + 1][{1., 2., 3.}]",
+                   "{4.0, 9.0, 16.0}", 0);
+    assert_eval_eq("Head[Compile[{{v, _Real, 1}}, 2 v][{1., 2.}]]", "List", 0);
+    assert_eval_eq("Head[Compile[{{v, _Real, 1}}, 2 v][{1., 2., x}]]", "List", 0);
+
+    /* An NDArray argument stays an NDArray — borrowed in, new one out. */
+    assert_eval_eq("Head[Compile[{{v, _Real, 1}}, 2 v][NDArray[{1., 2.}]]]", "NDArray", 0);
+
+    /* Any rank. */
+    assert_eval_eq("Compile[{{m, _Real, 2}}, m + 1][{{1., 2.}, {3., 4.}}]",
+                   "{{2.0, 3.0}, {4.0, 5.0}}", 0);
+    assert_eval_eq("Compile[{{t, _Real, 3}}, 2 t][{{{1., 2.}}, {{3., 4.}}}]",
+                   "{{{2.0, 4.0}}, {{6.0, 8.0}}}", 0);
+
+    /* Reduction to a scalar, and several array parameters. */
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Total[v^2]][{1., 2., 3.}] == 14", "True", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}, {u, _Real, 1}}, v u + v][{1., 2.}, {3., 4.}]",
+                   "{4.0, 10.0}", 0);
+
+    /* Complex elements. */
+    assert_eval_eq("Chop[Total[Compile[{{v, _Complex, 1}}, v v][{1. + 2. I, 3.}]"
+                   " - {-3 + 4 I, 9}]] == 0", "True", 0);
+
+    /* Parity with the interpreter over a libm chain — same body, same data. */
+    assert_eval_eq("Max[Abs[Compile[{{v, _Real, 1}}, Sin[v] Exp[-v] + Sqrt[v]][{0.5, 1.5, 2.5}]"
+                   " - (Sin[#] Exp[-#] + Sqrt[#] & /@ {0.5, 1.5, 2.5})]] < 10^-12", "True", 0);
+
+    /* Shapes that must NOT take the fast path: a ragged list cannot be packed,
+     * a rank mismatch is not this function's signature, and a symbolic element
+     * is not a machine number.  All three fall back and stay correct. */
+    assert_eval_eq("Compile[{{v, _Real, 1}}, 2 v][{{1., 2.}, {3.}}]",
+                   "{{2.0, 4.0}, {6.0}}", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, 2 v][{{1., 2.}, {3., 4.}}]",
+                   "{{2.0, 4.0}, {6.0, 8.0}}", 0);
+
+    /* Malformed argspecs must leave Compile[] unevaluated rather than guess. */
+    assert_eval_eq("Head[Compile[{{v, _Real, 0.5}}, v]]", "Compile", 0);
+    assert_eval_eq("Head[Compile[{{v, _Integer, 2}}, v]]", "Compile", 0);  /* no integer dtype */
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -64,6 +113,7 @@ int main(void) {
     TEST(test_cf_uncompilable_fallback);
     TEST(test_cf_procedural);
     TEST(test_cf_object_and_arity);
+    TEST(test_cf_array_argspec);
 
     printf("All CompiledFunction tests passed!\n");
     return 0;

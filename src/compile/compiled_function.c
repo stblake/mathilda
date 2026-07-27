@@ -12,6 +12,7 @@
 #include "../arithmetic.h"     /* is_complex, make_complex, is_rational */
 #include "../sym_intern.h"     /* intern_symbol */
 #include "../sym_names.h"      /* SYM_Real / SYM_Integer / SYM_Complex / ... */
+#include "../ndarray.h"        /* ndarray_from_nested_list — packing a List argument */
 #include "../symtab.h"         /* symtab_add_builtin / _set_docstring / _get_def */
 #include "../attr.h"           /* ATTR_HOLDALL / ATTR_PROTECTED */
 #include "../match.h"          /* env_new / env_set / replace_bindings */
@@ -81,7 +82,7 @@ static bool cf_to_complex(const Expr* e, double* re, double* im) {
 /* Box an argument Expr into a CompileValue of the declared type.  Returns false
  * if the argument is not a concrete number of that type (→ interpreter
  * fallback). */
-static bool cf_box(const Expr* e, CompileType t, CompileValue* out) {
+static bool cf_box(const Expr* e, CompileType t, CompileValue* out, bool* packed) {
     out->type = t;
     switch (t) {
         case CT_BOOL:
@@ -95,7 +96,29 @@ static bool cf_box(const Expr* e, CompileType t, CompileValue* out) {
             if (!cf_to_complex(e, &re, &im)) return false;
             out->v.z = re + im * I; return true;
         }
-        default: break;   /* array types: no user argspec surface yet (M3b) */
+        default: break;
+    }
+    if (CT_IS_ARRAY(t)) {
+        /* An NDArray argument is BORROWED — the program never frees it, and the
+         * caller still owns the node it passed in.  A plain nested List is
+         * packed here instead, and that temporary IS ours to free after the
+         * call; `packed` tells the caller which is which. */
+        if (e->type == EXPR_NDARRAY) {
+            if (e->data.ndarray.rank != CT_RANK(t)) return false;
+            out->v.a = (Expr*)e;
+            return true;
+        }
+        if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+            && e->data.function.head->data.symbol.name == SYM_List) {
+            Expr* nd = ndarray_from_nested_list(e, CT_ELEM(t) == CT_COMPLEX
+                                                   ? NDT_COMPLEX64 : NDT_FLOAT64);
+            if (!nd) return false;                       /* ragged or symbolic */
+            if (nd->data.ndarray.rank != CT_RANK(t)) { expr_free(nd); return false; }
+            out->v.a = nd;
+            if (packed) *packed = true;
+            return true;
+        }
+        return false;
     }
     return false;
 }
@@ -110,8 +133,11 @@ static Expr* cf_unbox(const CompileValue* v) {
             if (im == 0.0) return expr_new_real(re);
             return make_complex(expr_new_real(re), expr_new_real(im));
         }
-        default: break;   /* array types: no user argspec surface yet (M3b) */
+        default: break;
     }
+    /* compiled_eval hands back a NEW EXPR_NDARRAY that the caller owns, so it
+     * becomes the result directly — no copy, no conversion to a nested List. */
+    if (CT_IS_ARRAY(v->type)) return v->v.a;
     return NULL;
 }
 
@@ -160,9 +186,27 @@ CompiledFunction* compiled_function_new(const Expr* argspec, const Expr* body) {
             nm = el->data.symbol.name;
         } else if (el->type == EXPR_FUNCTION && el->data.function.head->type == EXPR_SYMBOL
                    && el->data.function.head->data.symbol.name == SYM_List
-                   && el->data.function.arg_count == 2
+                   && (el->data.function.arg_count == 2 || el->data.function.arg_count == 3)
                    && el->data.function.args[0]->type == EXPR_SYMBOL
                    && parse_typespec(el->data.function.args[1], &ty)) {
+            /* `{v, _Real, r}` — a rank-r machine array, the same third-element
+             * rank spelling Compile[] uses in the Wolfram Language.  The element
+             * type must be Real or Complex: the packed buffer formats are
+             * float/complex only, there is no integer dtype to hold a rank-r
+             * Integer array. */
+            if (el->data.function.arg_count == 3) {
+                const Expr* rk = el->data.function.args[2];
+                if (rk->type != EXPR_INTEGER) { free(names); free(types); return NULL; }
+                long long r = (long long)rk->data.integer;
+                if (r == 0) {
+                    /* rank 0 is just the scalar */
+                } else if (r < 1 || r > CT_MAX_RANK
+                           || (ty != CT_REAL && ty != CT_COMPLEX)) {
+                    free(names); free(types); return NULL;
+                } else {
+                    ty = CT_ARRAY(ty, (int)r);
+                }
+            }
             nm = el->data.function.args[0]->data.symbol.name;
         } else { free(names); free(types); return NULL; }
 
@@ -237,9 +281,27 @@ Expr* compiled_function_apply(const CompiledFunction* cf, Expr* const* args, siz
             if (!heap) return cf_fallback(cf, args, nargs);
             cv = heap;
         }
+        /* A List argument packed into a temporary NDArray is ours to release;
+         * an NDArray passed in directly is borrowed and must be left alone. */
+        bool packed[CF_APPLY_STACK_ARGS];
+        bool* packed_p = packed;
+        bool* packed_heap = NULL;
+        if (nargs > CF_APPLY_STACK_ARGS) {
+            packed_heap = calloc(nargs, sizeof(bool));
+            if (!packed_heap) { free(heap); return cf_fallback(cf, args, nargs); }
+            packed_p = packed_heap;
+        } else {
+            for (size_t i = 0; i < nargs; i++) packed[i] = false;
+        }
+
         bool all_numeric = true;
         for (size_t i = 0; i < nargs; i++)
-            if (!cf_box(args[i], cf->arg_types[i], &cv[i])) { all_numeric = false; break; }
+            if (!cf_box(args[i], cf->arg_types[i], &cv[i], &packed_p[i])) { all_numeric = false; break; }
+        #define CF_RELEASE_PACKED() do { \
+            for (size_t q = 0; q < nargs; q++) \
+                if (packed_p[q] && CT_IS_ARRAY(cf->arg_types[q])) expr_free(cv[q].v.a); \
+            free(packed_heap); \
+        } while (0)
         if (all_numeric) {
             /* An all-Real signature takes the unboxed entry point: no per-argument
              * type switch on the way in and no CompileValue on the way out. */
@@ -247,14 +309,37 @@ Expr* compiled_function_apply(const CompiledFunction* cf, Expr* const* args, siz
                 double av[CF_APPLY_STACK_ARGS], o;
                 if (nargs <= CF_APPLY_STACK_ARGS) {
                     for (size_t i = 0; i < nargs; i++) av[i] = cv[i].v.r;
-                    if (compiled_eval_real(cf->prog, av, &o)) { free(heap); return expr_new_real(o); }
+                    bool ok = compiled_eval_real(cf->prog, av, &o);
+                    CF_RELEASE_PACKED();
                     free(heap);
-                    return cf_fallback(cf, args, nargs);
+                    return ok ? expr_new_real(o) : cf_fallback(cf, args, nargs);
                 }
             }
             CompileValue out;
-            if (compiled_eval(cf->prog, cv, &out)) { free(heap); return cf_unbox(&out); }
+            if (compiled_eval(cf->prog, cv, &out)) {
+                Expr* r = cf_unbox(&out);
+                /* The result KIND must follow the argument kind, or the compiled
+                 * path would answer with a different head from the interpreter
+                 * fallback for the very same input: given Lists the interpreter
+                 * threads and returns a List, so an array result is unpacked
+                 * back to one.  Given NDArrays it returns an NDArray, and so do
+                 * we — no conversion, no copy. */
+                if (r && CT_IS_ARRAY(out.type)) {
+                    bool from_lists = false;
+                    for (size_t q = 0; q < nargs; q++) if (packed_p[q]) from_lists = true;
+                    if (from_lists) {
+                        Expr* lst = ndarray_to_nested_list(r);
+                        if (lst) { expr_free(r); r = lst; }
+                    }
+                }
+                CF_RELEASE_PACKED();
+                free(heap);
+                if (r) return r;
+                return cf_fallback(cf, args, nargs);
+            }
         }
+        CF_RELEASE_PACKED();
+        #undef CF_RELEASE_PACKED
         free(heap);
     }
     return cf_fallback(cf, args, nargs);
