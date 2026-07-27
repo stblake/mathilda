@@ -737,7 +737,17 @@ static Expr* build_surface_primitives(Expr** bodies, size_t nfun, Expr* varx, Ex
     iter_spec_restore(varx, old_ownx);
     iter_spec_restore(vary, old_owny);
 
-    if (!any) { free(prims); return NULL; }
+    /* `any` is set only by the polygon-fill passes, but the per-surface colour
+     * directive, the mesh lines and the ExclusionStyle edges are all pushed
+     * independently of it.  A plot that produces those but no filled cell —
+     * every cell clipped away by RegionFunction, or every sample excluded —
+     * therefore arrives here with primitives already in the array, and freeing
+     * only the array leaked every one of them. */
+    if (!any) {
+        for (size_t k = 0; k < prim_count; k++) expr_free(prims[k]);
+        free(prims);
+        return NULL;
+    }
     Expr* prim_list = expr_new_function(expr_new_symbol(SYM_List), prims, prim_count);
     free(prims);
     return prim_list;
