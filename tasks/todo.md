@@ -40,18 +40,22 @@ arith ops = 8.0 ns/op; mixed-libm 150 ns/call; array len-4096 1.0x, 61 ns/elemen
       21 fused-vs-delegated, 120 randomised trees, 200 repeated calls.
       leaks-clean and ASan+UBSan clean.
 
-## Next, in value order
+- [x] **Expr-level CSE** — the bytecode CSE was defeated structurally, so
+      repeated subtrees are hoisted to registers reserved below the temp stack.
+      1.48x on a body with repeats. Found a real `pass_vn` bug on the way (a
+      write cleared aliases pointing AT the register but not its own).
+- [x] **C-stack frames** — a program is now reentrant and thread-safe; tile
+      storage moved into the frame.
+- [x] **`OP_CALL`** — a non-inlined compiled callee is called rather than bailing
+      the whole body. Inlining stays the default via a size cost model.
 
-- [ ] **Make CSE actually fire** — it is defeated structurally: `binop`/`unop`
-      write into an operand's register, invalidating the value-number entry the
-      same instruction created. Either emit in SSA form + linear-scan regalloc,
-      or (much cheaper) do CSE at the `Expr` level in `emit`, hoisting
-      structurally-equal subtrees into persistent registers like `With` locals.
-- [ ] **`OP_CALL`** — compiled-to-compiled calls without the inline depth cap of
-      8, which is what recursion needs. Requires the frame stack (below).
-- [ ] **Frame stack** — replace the single per-program `p->frame`, which makes a
-      `CompiledProgram` non-reentrant and non-thread-safe today. Prerequisite for
-      `OP_CALL` and for threading a strip-mined loop.
+## Next, in value order
+- [ ] **Self-recursive `Compile[]`** — still cannot compile. `Compile[]`
+      deliberately does not fold globals (the object outlives its scope), so a
+      body cannot resolve the symbol it is about to be assigned to. Needs a
+      self-reference patch at object construction.
+- [ ] **Thread the strip-mined loop** via `nd_parallel_for` — now unblocked by
+      C-stack frames. Note `-DMATHILDA_THREADS` is not set in tests/CMakeLists.
 - [ ] **Fill the remaining kernels** — 48 listed gaps. Most are MPFR-only modules
       (`Zeta`, `PolyLog`, `Airy*`, …) needing genuinely new double implementations,
       each with a parity test against the MPFR path. Trivial tier first
