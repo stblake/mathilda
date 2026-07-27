@@ -60,8 +60,17 @@ arith ops = 8.0 ns/op; mixed-libm 150 ns/call; array len-4096 1.0x, 61 ns/elemen
       deliberately does not fold globals (the object outlives its scope), so a
       body cannot resolve the symbol it is about to be assigned to. Needs a
       self-reference patch at object construction.
-- [ ] **Thread the strip-mined loop** via `nd_parallel_for` — now unblocked by
-      C-stack frames. Note `-DMATHILDA_THREADS` is not set in tests/CMakeLists.
+- [x] **Thread the strip-mined loop — DONE. 3.2x / 5.5x / 6.6x at 1M elements.**
+      `OP_APAR` fans a fused MAP out over `nd_parallel_for` and jumps past the
+      loop, or falls through to run it serially — the fallback IS the serial
+      loop, so declining is free. Maps only: a map is bit-identical however it
+      is split (asserted by `memcmp` under `COMPILE_NO_PAR`), a reduction is not.
+      The loop is lifted into a standalone sub-program at finalize so workers
+      call the ordinary `vm_run`. TSan clean, zero leaks.
+      Also fixed two things that had been hiding results: `tests/CMakeLists.txt`
+      never defined `MATHILDA_THREADS` (so NO test had ever run the threaded ND
+      path), and `bench_compile.c` timed with `clock()` — CPU time summed over
+      threads, which reports perfect scaling as an N-fold SLOWDOWN.
 - [x] **Fill the remaining kernels — DONE. Coverage 93/103 (90%), from 55, and
       no pending numerics remain.** `src/special_functions/sf_machine.c` covers
       the exponential-integral family, Erfi, ProductLog, Fresnel, PolyGamma,
@@ -123,3 +132,48 @@ Verified: `compile_tests`, `compile_coverage_tests`, `compiledfunction_tests`,
 `numeric_tests`, `beta_tests`, `integrate_ramanujan_tests`, `legendre_tests`,
 `sum_tests` all pass; `bench_compile` within gate; `leaks` reports 0 bytes on
 all four compile suites.
+
+## Review — threading the fused map
+
+3.2x on `Sqrt[v] + v^2`, 5.5x on `Sin[v] Exp[-v] + Sqrt[v]`, 6.6x on
+`Gamma[v] + Erf[v]`, at 1M elements on 16 cores. The gain rises with per-element
+cost, which is the right shape: the cheap body moves 16 MB for three flops and is
+bandwidth-bound long before it is core-bound.
+
+Two design choices worth keeping:
+
+**Fall through, don't branch to a fallback.** `OP_APAR` either fans out and jumps
+past the loop, or falls through into the serial loop that was already emitted
+immediately after it. There is no second implementation to keep in step, so
+declining — too small, no threads, a worker failed — is always safe by
+construction rather than by care.
+
+**Lift the loop instead of teaching the VM to stop.** A worker needs to run one
+instruction range, and the obvious way is a stop-pc argument to `vm_run` — which
+costs a comparison on every dispatch, forever, for one loop. Copying the range
+out at finalize with rebased targets and its own `OP_RET` costs nothing at run
+time. It has to happen after the optimiser: LICM and compaction both move
+instruction indices, so a range recorded at emit time names the wrong
+instructions by the time it is used.
+
+**Two measurement bugs, and the more embarrassing one is mine.** The first round
+of numbers said threading was a 0.56-0.83x LOSS. It was not: `bench_compile.c`
+timed with `clock()`, which sums CPU time over threads, so perfect scaling reads
+as an N-fold slowdown. I had already recorded this exact trap in memory for the
+NDArray parallel map and walked into it again. Before that I also chased a wrong
+explanation (concurrent first-touch page faults) far enough to write a pre-fault
+pass, which measurement then showed cost about 5%; it was removed. The lesson
+that generalises: instrument the region directly before theorising about why a
+number is bad — `clock_gettime` around `nd_parallel_for` gave the answer in one
+run and said 6.4x while the benchmark was still calling it a loss.
+
+Separately, `tests/CMakeLists.txt` never defined `MATHILDA_THREADS`, so the whole
+threaded ND layer had been dead in the test build — every `nd_parallel_for` there
+compiled to its serial fallback and no test had ever exercised it. Now on; the ND
+suites pass with it.
+
+Verified: compile, compile_coverage, compiledfunction, autocompile,
+ndsolve_compile, ndarray, ndarray_functions, ndarray_reduce, ndarray_linalg,
+mapthread, linalg, ndsolve all pass; `bench_compile` within gate (and now gates
+that threading never makes a body slower); `leaks` 0 bytes; ThreadSanitizer
+reports no races.

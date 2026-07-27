@@ -50,6 +50,11 @@ typedef struct { uint16_t op, flags; uint32_t dst, a, b; Slot imm; } Instr;
  *   K_JZ      if !a then pc = b               (b is a TARGET, not a register)
  *   K_LOOP    if ++dst < a then pc = b        (b is a TARGET; increment, test and
  *                                              branch in one instruction)
+ *   K_APAR    run the strip loop that FOLLOWS this instruction in parallel over
+ *             [0, a) and then pc = b; or fall through to run it serially.
+ *             dst is the loop index and a the element count, exactly as for the
+ *             K_LOOP that closes the range. `b` is a TARGET (one past the loop).
+ *             Impure and never moved: it owns the decision to fan out.
  *   K_RET     return dst                      (READS dst)
  *   K_ARR     array op: impure, may allocate/free — never reordered or removed
  *   K_ASTORE  writes array memory or checks a shape: impure and never moved, but
@@ -67,7 +72,7 @@ typedef struct { uint16_t op, flags; uint32_t dst, a, b; Slot imm; } Instr;
 enum {
     K_CONST, K_MOVE, K_UN, K_BIN, K_POWI, K_KERN1, K_KERN2,
     K_INC, K_JMP, K_JZ, K_LOOP, K_RET, K_ARR, K_ASTORE, K_VACC, K_CALL,
-    K_NARY, K_NOP
+    K_NARY, K_APAR, K_NOP
 };
 
 /* ------------------------------------------------------------------ *
@@ -95,7 +100,7 @@ enum {
 
 #define OPLIST \
     X(NOP,   K_NOP)   X(JMP,   K_JMP)  X(JZ,    K_JZ)   X(INC_I, K_INC)   \
-    X(LOOP,  K_LOOP)                                                       \
+    X(LOOP,  K_LOOP)  X(APAR,  K_APAR)                                     \
     X(CONST, K_CONST) X(MOVE,  K_MOVE)                                     \
     X(I2R,   K_UN)    X(I2C,   K_UN)   X(R2C,   K_UN)                      \
     X(ADD_I, K_BIN)   X(ADD_R, K_BIN)  X(ADD_C, K_BIN)                     \

@@ -67,6 +67,12 @@ static OpDesc op_desc(unsigned op) {
         /* increment + test + branch in one: reads and writes the counter,
          * reads the limit, and `b` is a target rather than a register. */
         case K_LOOP:   o.wd = 1; o.rd = 1;   o.ra = 1;   o.jump = 1;    break;
+        /* Fans the FOLLOWING strip loop out across threads, or falls through to
+         * run it serially.  Reads the counter and the limit and writes neither
+         * (each thread works on its own copy), but it must never be moved,
+         * duplicated or removed: it decides how the range that follows is
+         * executed, so it is a branch and it is not pure. */
+        case K_APAR:             o.rd = 1;   o.ra = 1;   o.jump = 1;    break;
         case K_RET:              o.rd = 1;                              break;
         /* Array ops allocate, free, and can fail.  Treated as reading and
          * writing all three operands and never removable — the scalar passes
@@ -141,6 +147,13 @@ static void bs_set(uint64_t* s, int r)   { s[r >> 6] |= (uint64_t)1 << (r & 63);
 static void bs_clr(uint64_t* s, int r)   { s[r >> 6] &= ~((uint64_t)1 << (r & 63)); }
 static bool bs_get(const uint64_t* s, int r) { return (s[r >> 6] >> (r & 63)) & 1u; }
 
+/* Does this kind end a block by branching?  Every pass that walks jump targets
+ * must agree on this set — there are four such places, and a new branch kind
+ * added to only three of them corrupts the CFG silently. */
+static bool kind_branches(int k) {
+    return k == K_JMP || k == K_JZ || k == K_LOOP || k == K_APAR;
+}
+
 /* Successors of the block ending at instruction `e`.  Returns the count and
  * fills o->succ. */
 static int succ_of(Opt* o, size_t e) {
@@ -148,8 +161,10 @@ static int succ_of(Opt* o, size_t e) {
     int k = compile_op_kind[op];
     if (k == K_RET) return 0;
     if (k == K_JMP) { o->succ[0] = o->code[e].b; return 1; }
-    if (k == K_JZ || k == K_LOOP) { o->succ[0] = o->code[e].b; o->succ[1] = e + 1;
-                      return (e + 1 < o->n) ? 2 : 1; }
+    if (k == K_JZ || k == K_LOOP || k == K_APAR) {
+        o->succ[0] = o->code[e].b; o->succ[1] = e + 1;
+        return (e + 1 < o->n) ? 2 : 1;
+    }
     if (e + 1 < o->n) { o->succ[0] = e + 1; return 1; }
     return 0;
 }
@@ -162,7 +177,7 @@ static bool build_cfg(Opt* o) {
     leader[0] = 1;
     for (size_t i = 0; i < o->n; i++) {
         int k = compile_op_kind[o->code[i].op];
-        if (k == K_JMP || k == K_JZ || k == K_LOOP) {
+        if (kind_branches(k)) {
             size_t t = o->code[i].b;
             if (t < o->n) leader[t] = 1;
             if (i + 1 < o->n) leader[i + 1] = 1;
@@ -533,7 +548,7 @@ static bool pass_rebuild(Opt* o, const size_t* hoist_to) {
      * next surviving instruction, which map[] already gives. */
     for (size_t i = 0; i < m; i++) {
         int k = compile_op_kind[out[i].op];
-        if (k == K_JMP || k == K_JZ || k == K_LOOP) {
+        if (kind_branches(k)) {
             size_t t = out[i].b;
             out[i].b = (uint32_t)map[t <= o->n ? t : o->n];
         }

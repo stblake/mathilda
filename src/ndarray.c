@@ -836,8 +836,6 @@ Expr* ndarray_scalar_power(const Expr* a, double er, double ei) {
 
 /* Arrays smaller than this run serially: below it the thread spawn/join cost
  * dominates the actual kernel work. */
-#define NDARRAY_THREAD_THRESHOLD ((size_t)100000)
-
 typedef struct { nd_chunk_fn fn; void* ctx; size_t lo, hi; bool ok; } nd_thread_job;
 
 static void* nd_thread_run(void* p) {

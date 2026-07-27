@@ -37,7 +37,19 @@
 
 static int failures = 0;
 
-static double now_s(void) { return (double)clock() / (double)CLOCKS_PER_SEC; }
+/* WALL clock, not `clock()`.
+ *
+ * `clock()` returns CPU time summed over every thread, so a parallel region that
+ * scales PERFECTLY reports as N times SLOWER.  That is exactly what happened
+ * here: the threaded fused map measured 0.56-0.83x against the serial one while
+ * the region itself was running 6.4x faster.  Any benchmark that a threaded code
+ * path can reach has to be wall-clock, and the rest of tests/bench_*.c already
+ * is — this file was the exception. */
+static double now_s(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec * 1.0e-9;
+}
 
 /* Minimum-of-`reps` wall time for `iters` calls of a compiled all-real program. */
 static double time_real(const CompiledProgram* p, size_t nargs, int iters, int reps) {
@@ -114,6 +126,50 @@ static double time_arr(CompiledProgram* p, Expr* v, CompileType at, int iters) {
         if (t < best) best = t;
     }
     return best / iters;
+}
+
+/* Threaded fused map vs the SAME fused map on one thread.  Separate from
+ * bench_arr because that one measures fusion against delegation, and the
+ * delegated ND path threads too — so at large lengths it would compare two
+ * threaded implementations and report ~1x while hiding whether either scaled. */
+static void bench_par(const char* name, const char* src, size_t len, int iters) {
+    const char* inm[1] = { intern_symbol("v") };
+    const CompileType AT[1] = { CT_ARRAY(CT_REAL, 1) };
+    Expr* b = parse_expression(src);
+    CompiledProgram* pp = compile_expr_ex(b, inm, AT, 1, 0u);
+    CompiledProgram* ps = compile_expr_ex(b, inm, AT, 1, COMPILE_NO_PAR);
+    if (!pp || !ps) {
+        printf("FAIL: %-26s DID NOT COMPILE\n", name);
+        failures++; compiled_free(pp); compiled_free(ps); expr_free(b); return;
+    }
+    /* Identical programs mean the fan-out marker never got emitted, i.e. this
+     * benchmark is timing the same thing twice and its ratio means nothing. */
+    if (compiled_num_instructions(pp) <= compiled_num_instructions(ps)) {
+        printf("FAIL: %-26s len=%zu: parallel fan-out did not engage\n", name, len);
+        failures++;
+    }
+    int64_t dims[1]; dims[0] = (int64_t)len;
+    double* buf = malloc(len * sizeof(double));
+    for (size_t i = 0; i < len; i++) buf[i] = 0.3 + 1.7 * (double)i / (double)len;
+    Expr* v = expr_new_ndarray(1, dims, buf, NDT_FLOAT64);
+
+    double ts = time_arr(ps, v, AT[0], iters);
+    double tp = time_arr(pp, v, AT[0], iters);
+    /* No absolute speed gate: the ratio is bounded by the core count, which is a
+     * property of the machine, not of the compiler.  But threading must never
+     * make a body SLOWER — that is machine-independent, and it is what a
+     * reintroduced CPU-time clock, a lock in the worker path or a contention bug
+     * would each look like.  (On a single-core box no fan-out happens at all and
+     * the ratio sits at 1.0, so the gate stays quiet rather than flaky.) */
+    double ratio = ts / tp;
+    if (ratio < 0.9) {
+        printf("FAIL: %-26s len=%zu: threaded is SLOWER (%.2fx)\n", name, len, ratio);
+        failures++;
+    }
+    printf("ok:   %-26s len=%-8zu threaded %8.1f us (%5.2f ns/el)  serial %8.1f us  -> %.2fx\n",
+           name, len, tp * 1e6, tp / (double)len * 1e9, ts * 1e6, ratio);
+    expr_free(v);
+    compiled_free(pp); compiled_free(ps); expr_free(b);
 }
 
 /* Strip-mined fusion vs the delegated NDArray path, same body, same data.  This
@@ -196,6 +252,11 @@ int main(void) {
      * full-length output array. */
     bench_arr("Total[v^2 + 2v + 1]",  "Total[v^2 + 2 v + 1]",           65536, 500);
     bench_arr("Total[v w-ish]",       "Total[v + v v]",                 65536, 500);
+
+    printf("\n=== Compile[] threaded fused map (OP_APAR) ===\n");
+    bench_par("Sqrt v + v^2",         "Sqrt[v] + v^2",                   1000000, 60);
+    bench_par("Sin v Exp -v",         "Sin[v] Exp[-v] + Sqrt[v]",        1000000, 40);
+    bench_par("Gamma v",              "Gamma[v] + Erf[v]",               1000000, 20);
 
     if (failures == 0) printf("\nAll Compile benchmarks within gate.\n");
     else printf("\n%d Compile benchmark gate(s) FAILED.\n", failures);

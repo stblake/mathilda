@@ -13,6 +13,18 @@ if(USE_MPFR)
     link_libraries(mpfr)
 endif()
 
+# Threads.  The top-level makefile has always set -DMATHILDA_THREADS -pthread;
+# this build did not, so every `nd_parallel_for` / `nd_parallel_reduce` call
+# compiled down to its serial fallback and NO test ever executed the threaded ND
+# path or the compiler's parallel fused loop.  A test suite that cannot reach the
+# code it is guarding is worse than no guard, because it reads as covered.
+find_package(Threads)
+if(Threads_FOUND)
+    add_compile_definitions(MATHILDA_THREADS)
+    add_compile_options(-pthread)
+    link_libraries(Threads::Threads)
+endif()
+
 # BLAS/LAPACK autodetection — mirror the four-tier ladder used by the
 # top-level makefile.  Auto-degrades to USE_LAPACK=OFF when not found
 # so the test build never fails purely on a missing system library.

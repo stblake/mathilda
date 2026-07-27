@@ -1536,6 +1536,68 @@ int main(void) {
         compiled_free(p); expr_free(b);
     }
 
+    /* ================= THREADED FUSED MAP (OP_APAR) =================
+     * A fused MAP is split across threads above NDARRAY_THREAD_THRESHOLD.  Each
+     * output element is computed by the same operations on the same inputs
+     * whichever core runs it, so the threaded and single-threaded programs must
+     * agree BITWISE — not "to 1e-12".  memcmp is the assertion precisely because
+     * a race, a shared tile buffer or an off-by-one chunk boundary would show up
+     * as a handful of wrong elements that any tolerance-based check would pass.
+     *
+     * The lengths straddle the fan-out threshold and are deliberately NOT
+     * multiples of VBLOCK, so the last tile of every chunk is short. */
+    {
+        const char* inm[2] = { intern_symbol("v"), intern_symbol("w") };
+        const CompileType AT[2] = { CT_ARRAY(CT_REAL, 1), CT_ARRAY(CT_REAL, 1) };
+        static const char* BODIES[] = {
+            "Sqrt[v] + v^2",
+            "Sin[v] Exp[-v] + Sqrt[v]",
+            "v w + Log[v] Cos[w]",
+            "Gamma[v] + Erf[w]",              /* via the machine-kernel path */
+        };
+        static const size_t LENS[] = { 99999, 100000, 100001, 262144, 1000003 };
+        int bad = 0, ran = 0, threaded_seen = 0;
+        for (size_t bi = 0; bi < sizeof BODIES / sizeof BODIES[0]; bi++) {
+            Expr* b = parse_expression(BODIES[bi]);
+            CompiledProgram* pp = compile_expr_ex(b, inm, AT, 2, 0u);
+            CompiledProgram* ps = compile_expr_ex(b, inm, AT, 2, COMPILE_NO_PAR);
+            if (!pp || !ps) { printf("FAIL: par A/B body %zu did not compile\n", bi); failures++; }
+            else {
+                /* The two programs must differ by exactly the APAR marker; if
+                 * they are identical the fan-out never got emitted and this
+                 * whole section is silently testing nothing. */
+                if (compiled_num_instructions(pp) <= compiled_num_instructions(ps)) bad++;
+                else threaded_seen++;
+                for (size_t li = 0; li < sizeof LENS / sizeof LENS[0]; li++) {
+                    size_t len = LENS[li];
+                    Expr* v = make_vec(len, 0.4, 3.0);
+                    Expr* w = make_vec(len, 0.4, 3.0);
+                    CompileValue args[2], op_, os_;
+                    args[0].type = AT[0]; args[0].v.a = v;
+                    args[1].type = AT[1]; args[1].v.a = w;
+                    bool sp = compiled_eval(pp, args, &op_);
+                    bool ss = compiled_eval(ps, args, &os_);
+                    ran++;
+                    if (sp != ss) bad++;
+                    else if (sp) {
+                        Expr* ap = aval_to_expr(op_);
+                        Expr* as = aval_to_expr(os_);
+                        if (ndarray_size(ap) != ndarray_size(as)
+                            || memcmp(ap->data.ndarray.data, as->data.ndarray.data,
+                                      len * sizeof(double)) != 0)
+                            bad++;
+                        expr_free(ap); expr_free(as);
+                    }
+                    expr_free(v); expr_free(w);
+                }
+            }
+            compiled_free(pp); compiled_free(ps); expr_free(b);
+        }
+        if (bad) { printf("FAIL: threaded fused map: %d/%d mismatched\n", bad, ran); failures++; }
+        else if (!threaded_seen) { printf("FAIL: threaded fused map: fan-out never emitted\n"); failures++; }
+        else printf("ok:   %-30s %d runs bitwise identical\n", "threaded fused map (APAR)", ran);
+    }
+
     /* ================= COMPILED -> COMPILED CALLS =================
      * A CompiledFunction callee is INLINED up to a depth cap, beyond which the
      * whole body used to bail — a chain of eleven compiled functions dropped

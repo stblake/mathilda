@@ -22,6 +22,12 @@
 
 #define NDARRAY_MAX_THREADS 16
 
+/* Below this many elements a parallel_for runs serially: spawn and join cost
+ * more than the work saved.  Shared rather than private to ndarray.c because the
+ * Compile[] engine's fused map loop fans out on the same terms — two thresholds
+ * for one decision is how they drift apart. */
+#define NDARRAY_THREAD_THRESHOLD ((size_t)100000)
+
 /* A chunk callback processes the half-open flat range [lo, hi), writing to
  * disjoint output indices (no cross-chunk dependency). Returns false to signal
  * the kernel declined an element (caller degrades). */

@@ -15,6 +15,7 @@
 #include "../attr.h"      /* ATTR_LISTABLE — the gate on elementwise fusion */
 #include "../ndarray.h"    /* NDUnaryKernel / NDBinaryKernel — shared kernel layer */
 #include "../ndreduce.h"   /* ndred_total — array reductions (M3a) */
+#include "../ndarray_internal.h"  /* nd_parallel_for — threading the fused map loop */
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -44,9 +45,29 @@
  * array flags all live in compile_internal.h — shared with the optimiser. */
 
 
+/* A strip-mined MAP loop lifted out as a self-contained program, so a worker
+ * thread can run it with the ordinary `vm_run` entry over its own index range.
+ *
+ * Extracting rather than teaching `vm_run` to stop at an arbitrary pc is what
+ * keeps the change out of the hot path entirely: a stop-pc test would cost a
+ * comparison on EVERY dispatch, for a feature that concerns one loop. The
+ * lifted copy ends in its own OP_RET, so the VM's inner loop is untouched. */
+typedef struct {
+    Instr*   code;        /* [n], internal jump targets rebased to 0 */
+    size_t   n;
+    uint32_t ri, rn;      /* loop index / element-count registers, in frame coords */
+    /* Enough of the parent's frame shape to build a worker's own frame. Carried
+     * here rather than reached through the CompiledProgram so that `vm_run`
+     * needs no extra parameter — it is called on every scalar body too. */
+    size_t   frame_slots;
+    int      nreg, tile_base, ntiles;
+} ParLoop;
+
 struct CompiledProgram {
     Instr*      code;
     size_t      n;
+    ParLoop*    ploops;       /* [nploops] parallelisable strip loops */
+    int         nploops;
     int         nreg;
     int         arr_base;     /* array registers are [arr_base, tile_base) */
     int         tile_base;    /* tile registers are [tile_base, nreg) */
@@ -1344,6 +1365,26 @@ static bool try_fuse(Ctx* c, const Expr* e, Val* out) {
     size_t jz = c->n;
     ins(c, OP_JZ, 0, (uint32_t)rc, 0, z);
     c->temp_top--;                                   /* rc is dead after the test */
+
+    /* Fan-out marker for the strip loop that follows.  MAP ONLY.
+     *
+     * A map writes each output element from its own input element, so splitting
+     * the index range across threads is bit-identical to running it serially —
+     * no element's value depends on which chunk computed it, and the chunks
+     * write disjoint memory.  A REDUCTION is not: floating-point addition is not
+     * associative, so per-thread partial sums would give a different (not
+     * merely differently-rounded) answer from the serial fold, and the compiled
+     * path is required to agree with the interpreter, not merely to be close to
+     * it.  Reductions therefore stay serial until there is a reason to match
+     * some specific chunking, which would be a promise about thread count.
+     *
+     * At runtime this either fans out and jumps past the loop, or falls straight
+     * through into exactly the serial loop that was always emitted here. */
+    size_t apar = (size_t)-1;
+    if (!reduce && !(c->flags & COMPILE_NO_PAR)) {
+        apar = c->n;
+        ins(c, OP_APAR, (uint32_t)ri, (uint32_t)rn, 0, z);
+    }
     size_t head = c->n;
 
     /* Live length of this tile (short only on the final one). */
@@ -1397,6 +1438,7 @@ static bool try_fuse(Ctx* c, const Expr* e, Val* out) {
     ins(c, OP_LOOP, (uint32_t)ri, (uint32_t)rn, (uint32_t)head, step);
     if (!c->ok) { emit_rollback(c, mark); return false; }
     c->code[jz].b = (uint32_t)c->n;
+    if (apar != (size_t)-1) c->code[apar].b = (uint32_t)c->n;
 
     if (reduce) {
         c->temp_top = (racc - c->nlocals) + 1;       /* keep racc, drop rn/ri */
@@ -2409,6 +2451,79 @@ static bool vm_array_op(const Instr* c, Slot* d, Slot* a, Slot* b) {
 #endif
 
 static bool vm_call(const CompiledProgram* cp, const Slot* argv, unsigned nargs, Slot* dst);
+static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed);
+
+/* ------------------------------------------------------------------ *
+ *  Parallel strip loop (OP_APAR)                                      *
+ * ------------------------------------------------------------------ *
+ * A fused MAP is embarrassingly parallel: element i of the output depends only
+ * on element i of the inputs, so a worker can be handed a sub-range of the flat
+ * index space and the result is BIT-IDENTICAL to the serial pass — same
+ * operations, same order, on the same values. Nothing here changes an answer;
+ * it only changes which core computes it.
+ *
+ * Each worker gets its OWN frame, seeded by copying the parent's registers.
+ * That copy is what makes this safe with no locking anywhere:
+ *   - scalars and loop bounds are inherited by value;
+ *   - array registers are inherited as raw pointers, which is correct because
+ *     the workers only READ the inputs and write DISJOINT output elements;
+ *   - tile registers are re-pointed at the worker's own tile storage, so no two
+ *     workers ever touch the same VBLOCK scratch buffer.
+ * No worker allocates or frees an array (the output buffer was allocated by the
+ * parent before the loop), so no ownership crosses a thread boundary.
+ *
+ * Returns false to DECLINE — too small to be worth threading, out of memory, or
+ * a worker failed. Declining is always safe: OP_APAR then falls through into the
+ * serial loop, which is still sitting immediately after it and which recomputes
+ * the same map from the same starting index. */
+#define VM_STACK_SLOTS 512
+
+typedef struct { const ParLoop* pl; const Slot* parent; } ParCtx;
+
+static bool par_chunk(void* vctx, size_t lo, size_t hi) {
+    const ParCtx* x = (const ParCtx*)vctx;
+    const ParLoop* pl = x->pl;
+
+    Slot stackframe[VM_STACK_SLOTS];
+    Slot* heap = NULL;
+    Slot* R = stackframe;
+    if (pl->frame_slots > VM_STACK_SLOTS) {
+        heap = malloc(pl->frame_slots * sizeof(Slot));
+        if (!heap) return false;
+        R = heap;
+    }
+    memcpy(R, x->parent, (size_t)pl->nreg * sizeof(Slot));
+    Slot* tiles = R + pl->nreg;
+    for (int k = 0; k < pl->ntiles; k++)
+        R[pl->tile_base + k].p = tiles + (size_t)k * VBLOCK;
+
+    R[pl->ri].i = (long long)lo;
+    R[pl->rn].i = (long long)hi;
+
+
+    bool failed = false;
+    vm_run(pl->code, pl->n, R, &failed);
+    free(heap);
+    return !failed;
+}
+
+static bool vm_par_run(const ParLoop* pl, Slot* R) {
+#ifdef MATHILDA_THREADS
+    long long n = R[pl->rn].i;
+    /* nd_parallel_for owns the "is this worth threading" decision and the
+     * chunking, so the compiled path fans out on exactly the same terms as the
+     * rest of the ND layer rather than inventing a second policy. It runs the
+     * range serially below its threshold, which for us would be pure overhead —
+     * hence the explicit check first. */
+    if (n < (long long)NDARRAY_THREAD_THRESHOLD) return false;
+
+    ParCtx ctx; ctx.pl = pl; ctx.parent = R;
+    return nd_parallel_for((size_t)n, par_chunk, &ctx);
+#else
+    (void)pl; (void)R;
+    return false;
+#endif
+}
 
 static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
     *failed = false;
@@ -2452,6 +2567,10 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
              * JMP), which is most of the body when the body is one element of a
              * fused array pass. */
             OP(LOOP): { RD.i += c->imm.i; if (RD.i < RA.i) { pc = c->b; JUMP(); } } NEXT();
+            /* Run the strip loop that follows across threads and skip past it;
+             * on a decline, fall through and run it right here, serially. */
+            OP(APAR): if (vm_par_run((const ParLoop*)c->imm.p, R)) { pc = c->b; JUMP(); }
+                      NEXT();
             OP(CONST): RD = c->imm; NEXT();
             OP(MOVE):  RD = RA; NEXT();
             OP(I2R): RD.r = (double)RA.i; NEXT();
@@ -2991,6 +3110,62 @@ static void cse_plan(Ctx* c, const Expr* body) {
 /* Rewrite a virtual array register to its final slot in the array bank above
  * the scalar registers.  Ordinary register numbers and jump targets (also
  * carried in the `b` field) are far below ARR_VREG and pass through. */
+/* Lift every OP_APAR's strip loop into a standalone ParLoop.
+ *
+ * Runs AFTER the optimiser, which is the only correct place: LICM and compaction
+ * both move instruction indices, so a range recorded at emit time would name the
+ * wrong instructions by the time it mattered.
+ *
+ * An APAR whose loop cannot be lifted (a branch leaving the range — nothing
+ * emits one today, but an `If` lowering that grew a jump past the loop would)
+ * is turned into a NOP, and execution simply falls into the serial loop that is
+ * still sitting right there. Declining to parallelise is always safe; the serial
+ * path is the same code. */
+static void extract_par_loops(CompiledProgram* p) {
+    int cap = 0;
+    for (size_t i = 0; i < p->n; i++) if (p->code[i].op == OP_APAR) cap++;
+    if (!cap) return;
+    p->ploops = calloc((size_t)cap, sizeof(ParLoop));
+    if (!p->ploops) return;
+
+    for (size_t i = 0; i < p->n; i++) {
+        if (p->code[i].op != OP_APAR) continue;
+        size_t lo = i + 1, hi = p->code[i].b;      /* body is [lo, hi) */
+        if (hi <= lo || hi > p->n) { p->code[i].op = OP_NOP; continue; }
+
+        bool liftable = true;
+        for (size_t j = lo; j < hi && liftable; j++) {
+            int k = compile_op_kind[p->code[j].op];
+            if (k != K_JMP && k != K_JZ && k != K_LOOP && k != K_APAR) continue;
+            size_t t = p->code[j].b;
+            if (t < lo || t > hi) liftable = false;   /* escapes the range */
+        }
+        size_t len = hi - lo;
+        Instr* sub = liftable ? malloc((len + 1) * sizeof(Instr)) : NULL;
+        if (!sub) { p->code[i].op = OP_NOP; continue; }
+
+        memcpy(sub, &p->code[lo], len * sizeof(Instr));
+        for (size_t j = 0; j < len; j++) {
+            int k = compile_op_kind[sub[j].op];
+            if (k == K_JMP || k == K_JZ || k == K_LOOP || k == K_APAR)
+                sub[j].b = (uint32_t)(sub[j].b - lo);
+        }
+        /* Falling off the end of the lifted loop must RETURN, not run into
+         * whatever followed it in the parent program. */
+        memset(&sub[len], 0, sizeof sub[len]);
+        sub[len].op = OP_RET;
+
+        ParLoop* pl = &p->ploops[p->nploops];
+        pl->code = sub; pl->n = len + 1;
+        pl->ri = p->code[i].dst; pl->rn = p->code[i].a;
+        pl->frame_slots = p->frame_slots; pl->nreg = p->nreg;
+        pl->tile_base = p->tile_base;     pl->ntiles = p->ntiles;
+        /* The array is fully sized up front, so this pointer stays valid. */
+        p->code[i].imm.p = pl;
+        p->nploops++;
+    }
+}
+
 static uint32_t patch_reg(uint32_t r, int arr_base, int tile_base) {
     if (r >= (uint32_t)ARR_VREG)  return (uint32_t)arr_base  + (r - (uint32_t)ARR_VREG);
     if (r >= (uint32_t)TILE_VREG) return (uint32_t)tile_base + (r - (uint32_t)TILE_VREG);
@@ -3048,7 +3223,12 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
     for (size_t i = 0; i < c.n; i++) {
         c.code[i].dst = patch_reg(c.code[i].dst, arr_base, tile_base);
         c.code[i].a   = patch_reg(c.code[i].a, arr_base, tile_base);
-        if (c.code[i].op != OP_JMP && c.code[i].op != OP_JZ && c.code[i].op != OP_LOOP)
+        /* `b` is a branch TARGET on the jumping kinds and a register everywhere
+         * else.  Asking the kind table rather than listing the opcodes means a
+         * new branch opcode cannot have its target silently relocated into the
+         * array bank — which is a corruption with no symptom until it jumps. */
+        int bk = compile_op_kind[c.code[i].op];
+        if (bk != K_JMP && bk != K_JZ && bk != K_LOOP && bk != K_APAR)
             c.code[i].b = patch_reg(c.code[i].b, arr_base, tile_base);
     }
     int result_reg = (int)patch_reg((uint32_t)res.reg, arr_base, tile_base);
@@ -3073,6 +3253,7 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
     memcpy(p->arg_types, arg_types, nargs * sizeof(CompileType));
     p->all_real = (res.type == CT_REAL) && c.arr_max == 0;
     for (size_t k = 0; k < nargs; k++) if (arg_types[k] != CT_REAL) p->all_real = false;
+    extract_par_loops(p);
     return p;
 }
 
@@ -3136,8 +3317,8 @@ static bool finite_result(const Slot* s, CompileType t) {
  *
  * Layout: `nreg` register Slots, then `ntiles * VBLOCK` Slots of tile storage.
  * A Slot is exactly `sizeof(double _Complex)`, so tile storage is correctly
- * aligned for both real and complex tiles. */
-#define VM_STACK_SLOTS 512
+ * aligned for both real and complex tiles.  VM_STACK_SLOTS is defined up with
+ * the parallel strip loop, which needs the same frame shape for its workers. */
 
 /* Point each tile register at its slice of the frame's tile storage. */
 static void frame_bind_tiles(const CompiledProgram* p, Slot* R) {
@@ -3286,6 +3467,8 @@ bool compiled_eval_real_batch(const CompiledProgram* const* progs, size_t nprogs
 
 void compiled_free(CompiledProgram* p) {
     if (!p) return;
+    for (int i = 0; i < p->nploops; i++) free(p->ploops[i].code);
+    free(p->ploops);
     free(p->code); free(p->arg_types); free(p->argdep);
     free(p);
 }

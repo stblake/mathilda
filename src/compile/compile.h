@@ -130,6 +130,17 @@ size_t      compiled_num_cse(const CompiledProgram* p);
 /* Skip Expr-level CSE.  A/B only: results must be identical either way. */
 #define COMPILE_NO_CSE       0x8u
 
+/* Do not emit the parallel fan-out marker on fused MAP loops, so they run on one
+ * thread.  A/B only.
+ *
+ * Threading a map cannot change a result — each output element is computed by
+ * exactly the same operations on exactly the same inputs, whichever core runs
+ * it — so the two builds must agree BITWISE, and a test asserts that at a length
+ * above the fan-out threshold.  (Reductions are never threaded in the first
+ * place: floating-point addition is not associative, so partial sums would give
+ * a different answer from the serial fold.) */
+#define COMPILE_NO_PAR       0x10u
+
 /* Evaluate with `nargs` boxed argument values (coerced to the declared arg
  * types).  Writes *out.  Returns false if the call could not produce a usable
  * value: a non-finite numeric result, an argument that does not match its

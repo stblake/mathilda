@@ -47,10 +47,33 @@ Four things changed since M4. Full write-up in
    vectorisable C loop, so dispatch amortises 64-fold and temporaries stay in L1.
    1.9-3.4x over the delegated NDArray path at `-O3`.
 
-**MEASUREMENT TRAP — read before trusting any number here.** The `tests/` CMake
-build had **no `CMAKE_BUILD_TYPE`**, i.e. no optimisation flags at all. It is now
-`Release`, but anything measured in that tree before 2026-07-27 was `-O0`. Always
-check `grep CMAKE_BUILD_TYPE tests/build/CMakeCache.txt` before quoting a figure.
+5b. **Fused MAPs are threaded** above `NDARRAY_THREAD_THRESHOLD` (`OP_APAR`,
+   `COMPILE_NO_PAR` for A/B). 3.2x / 5.5x / 6.6x at 1M elements on 16 cores,
+   rising with per-element cost as memory bandwidth stops being the limit.
+   **Maps only** — a map is bit-identical however it is split, a reduction is
+   not (FP addition is not associative), so reductions stay serial.
+   The loop is LIFTED into a standalone sub-program at finalize (jump targets
+   rebased, own `OP_RET`) so a worker calls the ordinary `vm_run`; teaching the
+   VM a stop-pc would have cost a compare on every dispatch forever. Extraction
+   MUST run after the optimiser — LICM and compaction move instruction indices.
+   Each worker gets its own frame (registers copied, tiles re-pointed), so there
+   is no lock anywhere; TSan clean.
+
+**MEASUREMENT TRAPS — read before trusting any number here.** Three found so far,
+each of which silently invalidated a whole round of figures:
+
+1. The `tests/` CMake build had **no `CMAKE_BUILD_TYPE`**, i.e. no optimisation
+   flags at all. Now `Release`, but anything measured in that tree before
+   2026-07-27 was `-O0`. Check `grep CMAKE_BUILD_TYPE tests/build/CMakeCache.txt`
+   before quoting a figure.
+2. `tests/CMakeLists.txt` **never defined `MATHILDA_THREADS`** (the makefile
+   always did), so every `nd_parallel_for` in the test build ran serially and no
+   test had ever reached the threaded ND path. Now set via `find_package(Threads)`.
+3. `bench_compile.c` timed with **`clock()`, which is CPU time summed over all
+   threads** — a perfectly scaling parallel region reports as N times SLOWER.
+   The threaded map first measured 0.56-0.83x while actually running 6.4x
+   faster. Any benchmark a threaded path can reach must use
+   `clock_gettime(CLOCK_MONOTONIC)`, as the rest of `tests/bench_*.c` does.
 
 6. **CSE now fires, at the Expr level.** The bytecode value-numbering CSE was
    defeated structurally (`binop`/`unop` write into an operand's register, so the
