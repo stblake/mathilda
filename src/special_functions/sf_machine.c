@@ -449,3 +449,71 @@ bool sf_machine_polygamma(double n, double x, double* out) {
     *out = v;
     return isfinite(v);
 }
+
+/* Sign of Gamma(x), computed rather than taken from lgamma_r or the global
+ * signgam: lgamma_r is POSIX rather than C99 and signgam is not thread-safe.
+ * Gamma alternates sign on the negative axis, negative on (-1,0), positive on
+ * (-2,-1), and so on — so the parity of floor(x) decides it. */
+static double gamma_sign(double x) {
+    if (x > 0.0) return 1.0;
+    long k = (long)floor(x);
+    return (k & 1L) ? -1.0 : 1.0;
+}
+
+/* Pochhammer[a, n] = Gamma(a+n)/Gamma(a), evaluated through lgamma with the
+ * sign tracked separately so the poles of Gamma cancel where the ratio is
+ * finite (a negative integer a with a+n still negative, say). */
+bool sf_machine_pochhammer(double a, double n, double* out) {
+    if (n == 0.0) { *out = 1.0; return true; }
+    /* Small non-negative integer n: the product is exact and pole-free. */
+    if (n == floor(n) && n > 0.0 && n <= 200.0) {
+        double v = 1.0;
+        for (int k = 0; k < (int)n; k++) v *= a + (double)k;
+        *out = v;
+        return isfinite(v);
+    }
+    if (a <= 0.0 && a == floor(a)) return false;          /* pole in Gamma(a) */
+    if (a + n <= 0.0 && a + n == floor(a + n)) return false;
+    double l1 = lgamma(a + n), l2 = lgamma(a);
+    double v = gamma_sign(a + n) * gamma_sign(a) * exp(l1 - l2);
+    *out = v;
+    return isfinite(v);
+}
+
+/* Binomial[n, k] = Gamma(n+1) / (Gamma(k+1) Gamma(n-k+1)).  The interpreter
+ * evaluates this for real arguments (Binomial[5.5, 2.] is 12.375), so a machine
+ * kernel is answering the same question, not a different one. */
+bool sf_machine_binomial(double n, double k, double* out) {
+    double m = n - k;
+    if ((k < 0.0 && k == floor(k)) || (m < 0.0 && m == floor(m))) {
+        /* Gamma pole in a denominator: the coefficient is zero, unless the
+         * numerator is singular too, which the MPFR path should settle. */
+        if (n < 0.0 && n == floor(n)) return false;
+        *out = 0.0;
+        return true;
+    }
+    if (n < 0.0 && n == floor(n)) return false;
+    double l0 = lgamma(n + 1.0), l1 = lgamma(k + 1.0), l2 = lgamma(m + 1.0);
+    double v = gamma_sign(n + 1.0) * gamma_sign(k + 1.0) * gamma_sign(m + 1.0)
+             * exp(l0 - l1 - l2);
+    *out = v;
+    return isfinite(v);
+}
+
+/* LegendreP[n, x] for a non-negative integer degree, by the three-term
+ * recurrence — stable upward for this polynomial family.  A non-integer degree
+ * needs the hypergeometric form and is left to the MPFR path, matching how
+ * BesselJ/BesselY already decline a non-integer order. */
+bool sf_machine_legendre_p(double n, double x, double* out) {
+    if (n != floor(n) || n < 0.0 || n > 1000.0) return false;
+    int N = (int)n;
+    double p0 = 1.0, p1 = x;
+    if (N == 0) { *out = 1.0; return true; }
+    if (N == 1) { *out = x; return isfinite(x); }
+    for (int k = 2; k <= N; k++) {
+        double pk = ((2.0 * k - 1.0) * x * p1 - (k - 1.0) * p0) / (double)k;
+        p0 = p1; p1 = pk;
+    }
+    *out = p1;
+    return isfinite(p1);
+}

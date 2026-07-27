@@ -39,6 +39,9 @@ bool sf_machine_fibonacci(double x, double* out);   /* Fibonacci */
 bool sf_machine_lucasl(double x, double* out);      /* LucasL */
 bool sf_machine_hurwitz_zeta(double s, double a, double* out);  /* s > 1, a > 0 */
 bool sf_machine_polygamma(double n, double x, double* out);     /* PolyGamma[n, x] */
+bool sf_machine_pochhammer(double a, double n, double* out);    /* Pochhammer */
+bool sf_machine_binomial(double n, double k, double* out);      /* Binomial */
+bool sf_machine_legendre_p(double n, double x, double* out);    /* LegendreP, integer n */
 
 /* Already-existing double algorithms in inverf.c / inverfc.c, exposed so the
  * same two consumers can use them rather than degrading. */

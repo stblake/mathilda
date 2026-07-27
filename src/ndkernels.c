@@ -301,6 +301,27 @@ static bool ndk_HurwitzZeta_c(double sre, double sim, double are, double aim,
     double v; if (!sf_machine_hurwitz_zeta(sre, are, &v)) return false;
     *rr = v; *ri = 0.0; return true;
 }
+static bool ndk_Pochhammer_c(double are, double aim, double nre, double nim,
+                             double* rr, double* ri) {
+    if (aim != 0.0 || nim != 0.0) return false;
+    double v; if (!sf_machine_pochhammer(are, nre, &v)) return false;
+    *rr = v; *ri = 0.0; return true;
+}
+static bool ndk_Binomial_c(double nre, double nim, double kre, double kim,
+                           double* rr, double* ri) {
+    if (nim != 0.0 || kim != 0.0) return false;
+    double v; if (!sf_machine_binomial(nre, kre, &v)) return false;
+    *rr = v; *ri = 0.0; return true;
+}
+static bool ndk_LegendreP_c(double nre, double nim, double xre, double xim,
+                            double* rr, double* ri) {
+    if (nim != 0.0 || xim != 0.0) return false;
+    double v; if (!sf_machine_legendre_p(nre, xre, &v)) return false;
+    *rr = v; *ri = 0.0; return true;
+}
+static const NDBinaryKernel NDKB_Pochhammer = { ndk_Pochhammer_c, true };
+static const NDBinaryKernel NDKB_Binomial   = { ndk_Binomial_c,   true };
+static const NDBinaryKernel NDKB_LegendreP  = { ndk_LegendreP_c,  true };
 static const NDBinaryKernel NDKB_PolyGamma   = { ndk_PolyGamma_c,   true };
 static const NDBinaryKernel NDKB_HurwitzZeta = { ndk_HurwitzZeta_c, true };
 
@@ -357,6 +378,9 @@ void ndkernels_init(void) {
     REG_U(Zeta);          REG_U(Fibonacci);    REG_U(LucasL);
     REG_B(PolyGamma,   NDKB_PolyGamma);
     REG_B(HurwitzZeta, NDKB_HurwitzZeta);
+    REG_B(Pochhammer,  NDKB_Pochhammer);
+    REG_B(Binomial,    NDKB_Binomial);
+    REG_B(LegendreP,   NDKB_LegendreP);
 
     /* Special functions with libc-free algorithms: correct results on NDArray
      * via the degrade path (List threading), pending dedicated machine kernels. */
@@ -366,7 +390,7 @@ void ndkernels_init(void) {
     for (unsigned i = 0; i < sizeof(deg_u) / sizeof(deg_u[0]); i++)
         REG_DEG_U(deg_u[i]);
     static const char* deg_b[] = {
-        "BesselI", "BesselK", "PolyLog", "LegendreP",
+        "BesselI", "BesselK", "PolyLog",
     };
     for (unsigned i = 0; i < sizeof(deg_b) / sizeof(deg_b[0]); i++)
         REG_DEG_B(deg_b[i]);

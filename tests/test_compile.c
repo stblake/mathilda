@@ -607,6 +607,12 @@ int main(void) {
     parity("PolyGamma[n,x]",  "PolyGamma[2, x]",   xyz, RRR, 1, 0.3, 20.0, 0, 0, 300);
     parity("PolyGamma[5,x]",  "PolyGamma[5, x]",   xyz, RRR, 1, 0.5, 12.0, 0, 0, 200);
     parity("HurwitzZeta",     "HurwitzZeta[x + 1.2, y]", xyz, RRR, 2, 0.3, 9.0, 0, 0, 300);
+    parity("Pochhammer",      "Pochhammer[x, 3]",  xyz, RRR, 1, 0.3, 9.0, 0, 0, 300);
+    parity("Pochhammer real", "Pochhammer[x, 2.5]", xyz, RRR, 1, 0.4, 9.0, 0, 0, 300);
+    parity("Binomial",        "Binomial[x, 2]",    xyz, RRR, 1, 0.3, 12.0, 0, 0, 300);
+    parity("Binomial real",   "Binomial[x, 2.5]",  xyz, RRR, 1, 3.0, 12.0, 0, 0, 300);
+    parity("LegendreP",       "LegendreP[3, x]",   xyz, RRR, 1, -0.99, 0.99, 0, 0, 300);
+    parity("LegendreP high",  "LegendreP[12, x]",  xyz, RRR, 1, -0.9, 0.9, 0, 0, 300);
 
     /* UnitStep / Clip / Rescale are lowered by hand, not registered as kernels,
      * because their result TYPE is the difficulty: UnitStep must stay an
