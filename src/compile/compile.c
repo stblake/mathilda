@@ -12,6 +12,7 @@
 #include "compiled_function.h"   /* inlining a CompiledFunction callee */
 #include "../arithmetic.h"
 #include "../symtab.h"
+#include "../attr.h"      /* ATTR_LISTABLE — the gate on elementwise fusion */
 #include "../ndarray.h"    /* NDUnaryKernel / NDBinaryKernel — shared kernel layer */
 #include "../ndreduce.h"   /* ndred_total — array reductions (M3a) */
 #include <math.h>
@@ -98,6 +99,8 @@ typedef struct {
     bool ok;
     unsigned flags;     /* COMPILE_FOLD_GLOBALS, ... */
     int inlining;       /* >0 while lowering an inlined CompiledFunction body */
+    int fusing;         /* >0 while lowering the body of a fused elementwise loop */
+    bool array_args;    /* any declared argument is an array: gates fusion probing */
 } Ctx;
 
 /* The caller's argument symbols are NOT in scope inside an inlined
@@ -765,6 +768,237 @@ static bool try_kernel(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
     return false;
 }
 
+/* ------------------------------------------------------------------ *
+ *  Elementwise fusion (M3b)                                           *
+ * ------------------------------------------------------------------ *
+ * The delegated array opcodes (V_EW, V_KERN, ...) call the same NDArray kernels
+ * the interpreter does, so they only ever removed the per-operation evaluator
+ * round-trip: `Total[Sin[v] Exp[-v] + Sqrt[v]]` measured 1.0x at length 4096,
+ * because both paths make five full-length passes and allocate four temporary
+ * buffers.  Array speed is not about removing interpretation; it is about
+ * removing intermediate buffers.
+ *
+ * So an elementwise chain is lowered instead to ONE counted loop over the flat
+ * index, whose body is ordinary scalar bytecode reading elements through
+ * A_LOAD and writing through A_STORE.  Three things fall out of that choice:
+ *
+ *   - it is rank-agnostic (a flat index never looks at the shape),
+ *   - a trailing `Total` folds into an accumulator register in the same pass,
+ *   - the scalar optimiser applies INSIDE the loop, so a loop-invariant
+ *     subexpression is hoisted out of the element loop for free.
+ *
+ * Whether a subtree is fusable is not analysed up front: the body is lowered
+ * speculatively with the array leaves bound to element registers, and if the
+ * ordinary scalar emitter cannot do it, the emitted code is rolled back and the
+ * caller falls through to the delegated path.  That way the fusable set is
+ * exactly the scalar-compilable set, by construction, and cannot drift from it.
+ */
+
+/* Save/restore point for speculative lowering. */
+typedef struct {
+    size_t n; int temp_top, maxreg, arr_top, arr_max, nscope; bool ok;
+} EmitMark;
+
+static EmitMark emit_mark(const Ctx* c) {
+    EmitMark m;
+    m.n = c->n; m.temp_top = c->temp_top; m.maxreg = c->maxreg;
+    m.arr_top = c->arr_top; m.arr_max = c->arr_max; m.nscope = c->nscope; m.ok = c->ok;
+    return m;
+}
+static void emit_rollback(Ctx* c, EmitMark m) {
+    c->n = m.n; c->temp_top = m.temp_top; c->maxreg = m.maxreg;
+    c->arr_top = m.arr_top; c->arr_max = m.arr_max; c->nscope = m.nscope; c->ok = m.ok;
+}
+
+#define FUSE_MAX_LEAVES 8
+
+typedef struct {
+    const char* name[FUSE_MAX_LEAVES];   /* interned symbol pointer */
+    int         reg[FUSE_MAX_LEAVES];    /* the array-valued register */
+    CompileType type[FUSE_MAX_LEAVES];   /* the ARRAY type (element + rank) */
+    int         n;
+} FuseLeaves;
+
+/* Collect the distinct array-valued symbols in `e`.  Returns false if the tree
+ * contains more than FUSE_MAX_LEAVES of them. */
+static bool fuse_collect(Ctx* c, const Expr* e, FuseLeaves* L) {
+    if (!e) return true;
+    if (e->type == EXPR_SYMBOL) {
+        const char* nm = e->data.symbol.name;
+        CompileType t; int reg = scope_find(c, nm, &t);
+        if (reg < 0) {
+            int k = arg_find(c, nm);
+            if (k < 0) return true;                 /* not a value we bind */
+            reg = k; t = c->arg_types[k];
+        }
+        if (!CT_IS_ARRAY(t)) return true;
+        for (int i = 0; i < L->n; i++) if (L->name[i] == nm) return true;   /* seen */
+        if (L->n >= FUSE_MAX_LEAVES) return false;
+        L->name[L->n] = nm; L->reg[L->n] = reg; L->type[L->n] = t; L->n++;
+        return true;
+    }
+    if (e->type != EXPR_FUNCTION) return true;
+    if (!fuse_collect(c, e->data.function.head, L)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!fuse_collect(c, e->data.function.args[i], L)) return false;
+    return true;
+}
+
+/* Is it legal to thread this subtree element by element?
+ *
+ * ONLY if the interpreter would do the same, and the interpreter threads over a
+ * list exactly when the head is Listable.  `Max[v, w]` is the trap: it is not
+ * Listable, so the interpreter returns the single largest element, and an
+ * elementwise fusion would quietly answer something else.  `If`, `With` and
+ * `Sum` are the same story.  The compiled path must never answer where the
+ * interpreter declines — nor differently from it — even when the loop it would
+ * generate is perfectly well defined.
+ *
+ * Returns 1 if the subtree reaches an array leaf legally, 0 if it contains no
+ * array leaf at all (a scalar subtree, which may use any head), -1 to reject. */
+static int fuse_listable(Ctx* c, const Expr* e) {
+    if (!e) return 0;
+    if (e->type == EXPR_SYMBOL) {
+        const char* nm = e->data.symbol.name;
+        CompileType t; int reg = scope_find(c, nm, &t);
+        if (reg < 0) { int k = arg_find(c, nm); if (k < 0) return 0; t = c->arg_types[k]; }
+        return CT_IS_ARRAY(t) ? 1 : 0;
+    }
+    if (e->type != EXPR_FUNCTION) return 0;
+    int any = 0;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        int s = fuse_listable(c, e->data.function.args[i]);
+        if (s < 0) return -1;
+        if (s > 0) any = 1;
+    }
+    if (!any) return 0;                       /* scalar subtree: unconstrained */
+    if (e->data.function.head->type != EXPR_SYMBOL) return -1;
+    const char* h = e->data.function.head->data.symbol.name;
+    if (!(get_attributes(h) & ATTR_LISTABLE)) return -1;
+    return 1;
+}
+
+static bool emit(Ctx* c, const Expr* e, Val* out);
+
+static bool try_fuse(Ctx* c, const Expr* e, Val* out) {
+    if (c->fusing) return false;                   /* already inside a fused loop */
+
+    /* `Total[chain]` folds the reduction into the same pass.  Only for rank 1:
+     * for higher rank Total reduces the LEADING axis, not every element, so it
+     * is a different operation and must keep the delegated path. */
+    const Expr* body = e;
+    bool reduce = false;
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && strcmp(e->data.function.head->data.symbol.name, "Total") == 0
+        && e->data.function.arg_count == 1) {
+        CompileType it;
+        if (infer_type(c, e->data.function.args[0], &it)
+            && CT_IS_ARRAY(it) && CT_RANK(it) == 1) {
+            body = e->data.function.args[0];
+            reduce = true;
+        }
+    }
+
+    CompileType bt;
+    if (!infer_type(c, body, &bt) || !CT_IS_ARRAY(bt)) return false;
+    CompileType elem = CT_ELEM(bt);
+    int rank = CT_RANK(bt);
+    if (elem != CT_REAL && elem != CT_COMPLEX) return false;   /* no int buffers */
+
+    if (fuse_listable(c, body) != 1) return false;
+
+    FuseLeaves L; L.n = 0;
+    if (!fuse_collect(c, body, &L) || L.n == 0) return false;
+    for (int i = 0; i < L.n; i++)
+        if (CT_RANK(L.type[i]) != rank) return false;          /* no broadcasting */
+    if (c->nscope + L.n > (int)(sizeof c->scope / sizeof c->scope[0])) return false;
+
+    EmitMark mark = emit_mark(c);
+
+    /* Persistent loop registers FIRST, then their inits into temps above them:
+     * allocating a persistent register after emitting a temp init lets
+     * free_if_tmp drop temp_top back onto it, and the next alloc clobbers it. */
+    int rn   = alloc_temp(c);                       /* element count */
+    int ri   = alloc_temp(c);                       /* flat index */
+    int racc = reduce ? alloc_temp(c) : -1;         /* folded Total accumulator */
+    int rout = reduce ? -1 : alloc_arr(c);          /* result buffer */
+
+    Slot z; memset(&z, 0, sizeof z);
+    ins(c, OP_A_SIZE, (uint32_t)rn, (uint32_t)L.reg[0], 0, z);
+    for (int i = 1; i < L.n; i++)
+        ins(c, OP_A_SHAPECHK, 0, (uint32_t)L.reg[0], (uint32_t)L.reg[i], z);
+    if (!reduce)
+        ins_f(c, OP_A_NEWLIKE, (uint16_t)((unsigned)elem << AF_R_SHIFT),
+              (uint32_t)rout, (uint32_t)L.reg[0], 0, z);
+    else {
+        Slot k0; memset(&k0, 0, sizeof k0);
+        ins(c, OP_CONST, (uint32_t)racc, 0, 0, k0);   /* 0.0 / 0.0+0.0i */
+    }
+    Slot k0; memset(&k0, 0, sizeof k0);
+    ins(c, OP_CONST, (uint32_t)ri, 0, 0, k0);
+
+    /* Guard once on entry, then close the loop with a single LOOP instruction:
+     * per element that is one control instruction instead of four, which matters
+     * because the body here is only a handful of instructions wide. */
+    int rc = alloc_temp(c);
+    ins(c, OP_LT_I, (uint32_t)rc, (uint32_t)ri, (uint32_t)rn, z);
+    size_t jz = c->n;
+    ins(c, OP_JZ, 0, (uint32_t)rc, 0, z);
+    c->temp_top--;                                   /* rc is dead after the test */
+    size_t head = c->n;
+
+    /* Bind each array leaf to the register holding its current element, then
+     * lower the body with the ORDINARY scalar emitter.  The binding goes on the
+     * scope stack, which emit() and infer_type() already consult ahead of the
+     * argument map, so nothing in the scalar lowering needs to know about
+     * fusion at all. */
+    int elreg[FUSE_MAX_LEAVES];
+    for (int i = 0; i < L.n; i++) {
+        CompileType le = CT_ELEM(L.type[i]);
+        elreg[i] = alloc_temp(c);
+        ins(c, le == CT_COMPLEX ? OP_A_LOAD_C : OP_A_LOAD_R,
+            (uint32_t)elreg[i], (uint32_t)L.reg[i], (uint32_t)ri, z);
+        c->scope[c->nscope].name = L.name[i];
+        c->scope[c->nscope].reg  = elreg[i];
+        c->scope[c->nscope].type = le;
+        c->nscope++;
+    }
+
+    c->fusing++;
+    Val bv;
+    bool bok = emit(c, body, &bv);
+    c->fusing--;
+    c->nscope -= L.n;
+
+    if (!bok || !c->ok || CT_IS_ARRAY(bv.type)) { emit_rollback(c, mark); return false; }
+    coerce(c, &bv, elem);
+    if (!c->ok) { emit_rollback(c, mark); return false; }
+
+    if (reduce)
+        ins(c, elem == CT_COMPLEX ? OP_ADD_C : OP_ADD_R,
+            (uint32_t)racc, (uint32_t)racc, (uint32_t)bv.reg, z);
+    else
+        ins(c, elem == CT_COMPLEX ? OP_A_STORE_C : OP_A_STORE_R,
+            (uint32_t)rout, (uint32_t)ri, (uint32_t)bv.reg, z);
+
+    /* Drop every body temp AND the element registers: the next iteration
+     * rewrites them, so nothing may accumulate across the back edge. */
+    c->temp_top = (rc - c->nlocals);
+
+    ins(c, OP_LOOP, (uint32_t)ri, (uint32_t)rn, (uint32_t)head, z);
+    if (!c->ok) { emit_rollback(c, mark); return false; }
+    c->code[jz].b = (uint32_t)c->n;
+
+    if (reduce) {
+        c->temp_top = (racc - c->nlocals) + 1;       /* keep racc, drop rn/ri */
+        out->reg = racc; out->tmp = true; out->type = elem;
+    } else {
+        c->temp_top = (rn - c->nlocals);             /* rn/ri dead; rout is an arr */
+        out->reg = rout; out->tmp = true; out->type = CT_ARRAY(elem, rank);
+    }
+    return true;
+}
+
 static bool emit(Ctx* c, const Expr* e, Val* out) {
     if (!e || !c->ok) { c->ok = false; return false; }
 
@@ -791,6 +1025,16 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
     const char* h = e->data.function.head->data.symbol.name;
     Expr** A = e->data.function.args;
     size_t na = e->data.function.arg_count;
+
+    /* Elementwise fusion, tried before the delegated array lowering below.  The
+     * `array_args` gate keeps this free for the overwhelmingly common scalar
+     * program: with no array arguments there is nothing to fuse and we never
+     * even run the type probe.  On failure try_fuse rolls back cleanly and the
+     * delegated path handles the node exactly as before. */
+    if (c->array_args && !c->fusing && (c->flags & COMPILE_FUSE)) {
+        Val fv;
+        if (try_fuse(c, e, &fv)) { *out = fv; return c->ok; }
+    }
 
     /* n-ary Plus / Times */
     if (strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) {
@@ -1411,6 +1655,41 @@ static bool vm_array_op(const Instr* c, Slot* d, Slot* a, Slot* b) {
             expr_free(d->arr); d->arr = NULL;
             return true;
 
+        /* ---- fused-loop setup (M3b) -----------------------------------
+         * Out of line because each runs ONCE per call, outside the element
+         * loop; only A_LOAD/A_STORE are inline in the dispatch loop. */
+        case OP_A_SIZE: {                 /* total elements, any rank */
+            const Expr* x = a->arr;
+            if (!x || x->type != EXPR_NDARRAY) return false;
+            d->i = (long long)ndarray_size(x);
+            return true;
+        }
+
+        case OP_A_SHAPECHK: {             /* all leaves of a fused loop agree */
+            const Expr* x = a->arr;
+            const Expr* y = b->arr;
+            if (!x || !y || x->type != EXPR_NDARRAY || y->type != EXPR_NDARRAY) return false;
+            if (x->data.ndarray.rank != y->data.ndarray.rank) return false;
+            for (int i = 0; i < x->data.ndarray.rank; i++)
+                if (x->data.ndarray.dims[i] != y->data.ndarray.dims[i]) return false;
+            return true;
+        }
+
+        case OP_A_NEWLIKE: {              /* result buffer, shape of the operand */
+            const Expr* x = a->arr;
+            if (!x || x->type != EXPR_NDARRAY) return false;
+            NDType dt = (AF_R(f) == (unsigned)CT_COMPLEX) ? NDT_COMPLEX64 : NDT_FLOAT64;
+            size_t nelem = ndarray_size(x);
+            size_t esz = ndt_elem_size(dt);
+            void* buf = calloc(nelem ? nelem : 1, esz);
+            if (!buf) return false;
+            Expr* nw = expr_new_ndarray(x->data.ndarray.rank, x->data.ndarray.dims, buf, dt);
+            if (!nw) { free(buf); return false; }
+            expr_free(d->arr);            /* reused register from a prior call */
+            d->arr = nw;
+            return true;
+        }
+
         case OP_V_LEN: {
             const Expr* x = a->arr;
             if (!x || x->type != EXPR_NDARRAY) return false;
@@ -1522,6 +1801,11 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(JMP): pc = c->b; JUMP();
             OP(JZ):  pc = RA.i ? pc + 1 : c->b; JUMP();   /* branch if false */
             OP(INC_I): RD.i += c->imm.i; NEXT();
+            /* Increment, test and branch in one.  A counted loop otherwise spends
+             * four instructions per iteration on control alone (INC, LT, JZ,
+             * JMP), which is most of the body when the body is one element of a
+             * fused array pass. */
+            OP(LOOP): if (++RD.i < RA.i) { pc = c->b; JUMP(); } NEXT();
             OP(CONST): RD = c->imm; NEXT();
             OP(MOVE):  RD = RA; NEXT();
             OP(I2R): RD.r = (double)RA.i; NEXT();
@@ -1614,6 +1898,49 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(V_KERN2):  ARROP();
             OP(V_TOTAL):  ARROP();
             OP(V_LEN):    ARROP();
+            /* ---- fused elementwise loop (M3b) ----------------------------
+             * A_LOAD/A_STORE are the whole point of fusion: an elementwise
+             * chain becomes ONE pass over the buffers driven by ordinary scalar
+             * bytecode, instead of one full-length ND pass and one temporary
+             * buffer per operation.  They are inline (not routed through
+             * vm_array_op) because they run once per element.
+             *
+             * The source dtype is checked per element rather than hoisted: it is
+             * a perfectly predicted branch next to the arithmetic it feeds, and
+             * hoisting it would mean either specialising the loop at runtime or
+             * refusing float32 arrays that work today. */
+            OP(A_LOAD_R): {
+                const NDArrayData* A_ = &RA.arr->data.ndarray;
+                size_t k_ = (size_t)RB.i;
+                if (A_->dtype == NDT_FLOAT64)      RD.r = ((const double*)A_->data)[k_];
+                else if (A_->dtype == NDT_FLOAT32) RD.r = (double)((const float*)A_->data)[k_];
+                else goto vm_fail;   /* promised real, buffer is complex */
+            } NEXT();
+            OP(A_LOAD_C): {
+                const NDArrayData* A_ = &RA.arr->data.ndarray;
+                size_t k_ = (size_t)RB.i;
+                switch (A_->dtype) {
+                    case NDT_FLOAT64:   RD.z = ((const double*)A_->data)[k_]; break;
+                    case NDT_FLOAT32:   RD.z = (double)((const float*)A_->data)[k_]; break;
+                    case NDT_COMPLEX64: RD.z = ((const double*)A_->data)[2*k_]
+                                             + ((const double*)A_->data)[2*k_+1] * I; break;
+                    default:            RD.z = (double)((const float*)A_->data)[2*k_]
+                                             + (double)((const float*)A_->data)[2*k_+1] * I; break;
+                }
+            } NEXT();
+            OP(A_STORE_R): {
+                NDArrayData* A_ = &RD.arr->data.ndarray;
+                ((double*)A_->data)[(size_t)RA.i] = RB.r;
+            } NEXT();
+            OP(A_STORE_C): {
+                NDArrayData* A_ = &RD.arr->data.ndarray;
+                size_t k_ = (size_t)RA.i;
+                ((double*)A_->data)[2*k_]   = creal(RB.z);
+                ((double*)A_->data)[2*k_+1] = cimag(RB.z);
+            } NEXT();
+            OP(A_SIZE):     ARROP();
+            OP(A_NEWLIKE):  ARROP();
+            OP(A_SHAPECHK): ARROP();
             OP(NOP): NEXT();
             OP(RET): return;
 #if !VM_THREADED
@@ -1651,9 +1978,17 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
                                  const CompileType* arg_types, size_t nargs,
                                  unsigned flags) {
     if (!body) return NULL;
-    for (size_t k = 0; k < nargs; k++)            /* M3a: rank-1 arrays only */
-        if (CT_IS_ARRAY(arg_types[k]) && CT_RANK(arg_types[k]) != 1) return NULL;
     Ctx c; memset(&c, 0, sizeof(c));
+    for (size_t k = 0; k < nargs; k++)
+        if (CT_IS_ARRAY(arg_types[k])) {
+            /* Rank is bounded only by the packed type encoding: the fused
+             * elementwise loop walks a flat index and never looks at the shape,
+             * so rank > 1 needs no separate machinery.  Constructs that DO care
+             * about the shape (Total over the leading axis, Length) still gate
+             * on rank themselves. */
+            if (CT_RANK(arg_types[k]) < 1 || CT_RANK(arg_types[k]) > CT_MAX_RANK) return NULL;
+            c.array_args = true;
+        }
     c.flags = flags;
     c.ok = true; c.nlocals = (int)nargs; c.arg_types = arg_types;
     c.argdep = calloc(nargs ? nargs : 1, 1);

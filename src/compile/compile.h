@@ -87,6 +87,23 @@ CompiledProgram* compile_expr(const Expr* body,
  * and without this flag is a bug in a pass. */
 #define COMPILE_NO_OPT       0x2u
 
+/* Fuse an elementwise array chain into ONE pass over the buffers, instead of
+ * delegating each operation to the NDArray layer (which makes one full-length
+ * pass and allocates one temporary buffer per operation).
+ *
+ * OPT-IN, and off by default, because it is not yet a win: the fused loop runs
+ * the scalar VM once per element, and at ~4 ns per bytecode instruction that
+ * costs more than the temporary buffers it saves — measured 70 ns/element fused
+ * against 61 ns/element delegated for `Total[Sin[v] Exp[-v] + Sqrt[v]]` at
+ * length 65536.  The lowering itself is correct, rank-general and parity-tested;
+ * what it is waiting for is BLOCK strip-mining (each opcode processing a tile of
+ * ~64 elements in a vectorisable C loop, so dispatch is amortised 64x and the
+ * temporaries stay in L1).  That is where the order of magnitude is.
+ *
+ * Rank > 1 does NOT depend on this flag: the delegated NDArray path is already
+ * rank-general. */
+#define COMPILE_FUSE         0x4u
+
 CompiledProgram* compile_expr_ex(const Expr* body,
                                  const char* const* arg_names,
                                  const CompileType* arg_types, size_t nargs,

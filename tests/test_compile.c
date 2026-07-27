@@ -223,13 +223,61 @@ static Expr* aval_to_expr(CompileValue v) {
  * the array parameters still free symbols the evaluator would rewrite the very
  * constructs under test (Total[v] collapses to v, With[{u=v},...] inlines), so
  * only the raw parse tree exercises the array lowering. */
-static void parity_arr(const char* name, const char* body_s,
+/* Rank-N real array with `rank` dims taken from `dims`. */
+static Expr* make_nd(int rank, const int64_t* dims, double lo, double hi) {
+    size_t n = 1;
+    for (int i = 0; i < rank; i++) n *= (size_t)dims[i];
+    double* buf = malloc(n * sizeof(double));
+    for (size_t k = 0; k < n; k++) buf[k] = urand(lo, hi);
+    return expr_new_ndarray(rank, dims, buf, NDT_FLOAT64);   /* adopts buf */
+}
+
+/* Parity for rank >= 2.  The delegated NDArray path is already rank-general, so
+ * lifting the compiler's rank-1 front gate is all that higher rank needs; this
+ * checks that claim against the interpreter for the same body. */
+static void parity_nd(const char* name, const char* body_s,
+                      const char* const* names, size_t n, int rank,
+                      const int64_t* dims, unsigned flags, int trials) {
+    Expr* body = parse_expression(body_s);
+    const char* inames[4];
+    CompileType types[4];
+    for (size_t k = 0; k < n; k++) {
+        inames[k] = intern_symbol(names[k]);
+        types[k] = CT_ARRAY(CT_REAL, rank);
+    }
+    CompiledProgram* p = compile_expr_ex(body, inames, types, n, flags);
+    if (!p) { printf("FAIL: %-30s -> did not compile (rank %d)\n", name, rank); failures++; expr_free(body); return; }
+
+    int cmp = 0; double maxerr = 0.0; bool shape_ok = true;
+    for (int t = 0; t < trials; t++) {
+        Expr* vecs[4]; CompileValue args[4], outc;
+        for (size_t k = 0; k < n; k++) {
+            vecs[k] = make_nd(rank, dims, 0.4, 3.0);
+            args[k].type = types[k]; args[k].v.a = vecs[k];
+        }
+        if (compiled_eval(p, args, &outc)) {
+            Expr* want = ref_eval_arr(body, inames, vecs, n);
+            Expr* got  = aval_to_expr(outc);
+            if (!arr_cmp(got, want, &maxerr)) shape_ok = false; else cmp++;
+            expr_free(got); expr_free(want);
+        }
+        for (size_t k = 0; k < n; k++) expr_free(vecs[k]);
+        if (!shape_ok) break;
+    }
+    if (!shape_ok) { printf("FAIL: %-30s -> rank-%d shape/kind mismatch\n", name, rank); failures++; }
+    else if (cmp < trials) { printf("FAIL: %-30s -> only %d/%d evaluated\n", name, cmp, trials); failures++; }
+    else if (maxerr > 1e-12) { printf("FAIL: %-30s -> max_rel=%.2e\n", name, maxerr); failures++; }
+    else printf("ok:   %-30s rank %d, max_rel=%.1e (%d cmps)\n", name, rank, maxerr, cmp);
+    compiled_free(p); expr_free(body);
+}
+
+static void parity_arr_ex(const char* name, const char* body_s,
                        const char* const* names, const CompileType* types, size_t n,
-                       size_t len, double lo, double hi, int trials) {
+                       size_t len, double lo, double hi, int trials, unsigned flags) {
     Expr* body = parse_expression(body_s);
     const char* inames[4];
     for (size_t k = 0; k < n; k++) inames[k] = intern_symbol(names[k]);
-    CompiledProgram* p = compile_expr(body, inames, types, n);
+    CompiledProgram* p = compile_expr_ex(body, inames, types, n, flags);
     if (!p) { printf("FAIL: %-30s -> did not compile\n", name); failures++; expr_free(body); return; }
 
     int cmp = 0; double maxerr = 0.0; bool shape_ok = true;
@@ -257,6 +305,12 @@ static void parity_arr(const char* name, const char* body_s,
     else printf("ok:   %-30s max_rel=%.1e (%d cmps)\n", name, maxerr, cmp);
     compiled_free(p);
     expr_free(body);
+}
+
+static void parity_arr(const char* name, const char* body_s,
+                       const char* const* names, const CompileType* types, size_t n,
+                       size_t len, double lo, double hi, int trials) {
+    parity_arr_ex(name, body_s, names, types, n, len, lo, hi, trials, 0u);
 }
 
 static void bail_body(const char* name, Expr* body, const char* const* names,
@@ -1027,6 +1081,52 @@ int main(void) {
         const CompileType AA[] = { CT_ARRAY(CT_REAL, 1), CT_ARRAY(CT_REAL, 1) };
         parity_arr("opt: vec chain",  "Total[Sin[v] Exp[-v] + Sqrt[v]]", vw, AA, 1, 64, 0.3, 4.0, 20);
         parity_arr("opt: vec + vec",  "v w + v - w",  vw, AA, 2, 64, 0.3, 4.0, 20);
+    }
+
+    /* ================= ANY RANK =================
+     * The delegated NDArray path was already rank-general; the compiler's own
+     * rank-1 front gate was the only thing keeping matrices and higher tensors
+     * out.  With it lifted, an elementwise body works at any rank the packed
+     * type encoding can name.  (`Total` deliberately stays rank-1: at rank >= 2
+     * it reduces only the LEADING axis, which is a different operation.) */
+    {
+        const char* vw[] = { "v", "w" };
+        const int64_t d2[2] = { 7, 5 };
+        const int64_t d3[3] = { 4, 3, 5 };
+        const int64_t d4[4] = { 3, 2, 4, 3 };
+        parity_nd("rank-2 elementwise",  "v + 2 w",              vw, 2, 2, d2, 0u, 20);
+        parity_nd("rank-2 libm chain",   "Sin[v] Exp[-v] + Sqrt[v]", vw, 1, 2, d2, 0u, 20);
+        parity_nd("rank-2 power",        "v^3 + w^2",            vw, 2, 2, d2, 0u, 20);
+        parity_nd("rank-3 elementwise",  "Sin[v w] + Exp[-v]",   vw, 2, 3, d3, 0u, 20);
+        parity_nd("rank-3 Gamma",        "Gamma[v] + Log[2, w]", vw, 2, 3, d3, 0u, 20);
+        parity_nd("rank-4 elementwise",  "v w - v / w",          vw, 2, 4, d4, 0u, 20);
+    }
+
+    /* ================= ELEMENTWISE FUSION (opt-in) =================
+     * COMPILE_FUSE lowers an elementwise chain to ONE flat-index loop rather
+     * than one NDArray pass (and one temporary buffer) per operation.  It is off
+     * by default because it is not yet faster — see COMPILE_FUSE in compile.h —
+     * but it must stay correct, so it is parity-tested at every rank here. */
+    {
+        const char* vw[] = { "v", "w" };
+        const CompileType AA[] = { CT_ARRAY(CT_REAL, 1), CT_ARRAY(CT_REAL, 1) };
+        const CompileType CA[] = { CT_ARRAY(CT_COMPLEX, 1), CT_ARRAY(CT_COMPLEX, 1) };
+        const int64_t d2[2] = { 7, 5 };
+        const int64_t d3[3] = { 4, 3, 5 };
+        parity_arr_ex("fuse: vec chain",  "Sin[v] Exp[-v] + Sqrt[v]", vw, AA, 1, 64, 0.3, 4.0, 20, COMPILE_FUSE);
+        parity_arr_ex("fuse: Total chain","Total[Sin[v] Exp[-v] + Sqrt[v]]", vw, AA, 1, 64, 0.3, 4.0, 20, COMPILE_FUSE);
+        parity_arr_ex("fuse: vec + vec",  "v w + v - w",   vw, AA, 2, 64, 0.3, 4.0, 20, COMPILE_FUSE);
+        parity_arr_ex("fuse: power",      "v^3 + 2 v + 1", vw, AA, 1, 64, 0.3, 4.0, 20, COMPILE_FUSE);
+        parity_arr_ex("fuse: Gamma",      "Gamma[v] + Erf[w]", vw, AA, 2, 64, 0.5, 3.0, 20, COMPILE_FUSE);
+        parity_arr_ex("fuse: complex vec","v w + Exp[v]",  vw, CA, 2, 32, 0.3, 2.0, 20, COMPILE_FUSE);
+        parity_nd    ("fuse: rank-2",     "Sin[v] + v w",  vw, 2, 2, d2, COMPILE_FUSE, 20);
+        parity_nd    ("fuse: rank-3",     "v^2 - Exp[-w]", vw, 2, 3, d3, COMPILE_FUSE, 20);
+
+        /* Non-Listable heads must NOT fuse: the interpreter does not thread them,
+         * so an elementwise loop would quietly answer something different.
+         * Max[v,w] is the largest single element, not an elementwise maximum. */
+        must_bail_raw("fuse: Max stays scalar", "Max[v, w]", vw, AA, 2);
+        must_bail_raw("fuse: If stays scalar",  "If[v > 0, v, -v]", vw, AA, 1);
     }
 
     if (failures == 0) printf("\nAll Compile engine tests passed.\n");

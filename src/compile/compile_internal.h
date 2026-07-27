@@ -47,17 +47,23 @@ typedef struct { uint16_t op, flags; uint32_t dst, a, b; Slot imm; } Instr;
  *   K_INC     dst = dst + imm.i               (pure, but READS dst)
  *   K_JMP     pc = b                          (b is a TARGET, not a register)
  *   K_JZ      if !a then pc = b               (b is a TARGET, not a register)
+ *   K_LOOP    if ++dst < a then pc = b        (b is a TARGET; increment, test and
+ *                                              branch in one instruction)
  *   K_RET     return dst                      (READS dst)
  *   K_ARR     array op: impure, may allocate/free — never reordered or removed
+ *   K_ASTORE  writes array memory or checks a shape: impure and never moved, but
+ *             (unlike K_ARR) carries no ownership in its flags, so it does not
+ *             stop the optimiser working on the rest of a fused loop
  *   K_NOP     removed by a previous pass; deleted at compaction
  */
 enum {
     K_CONST, K_MOVE, K_UN, K_BIN, K_POWI, K_KERN1, K_KERN2,
-    K_INC, K_JMP, K_JZ, K_RET, K_ARR, K_NOP
+    K_INC, K_JMP, K_JZ, K_LOOP, K_RET, K_ARR, K_ASTORE, K_NOP
 };
 
 #define OPLIST \
     X(NOP,   K_NOP)   X(JMP,   K_JMP)  X(JZ,    K_JZ)   X(INC_I, K_INC)   \
+    X(LOOP,  K_LOOP)                                                       \
     X(CONST, K_CONST) X(MOVE,  K_MOVE)                                     \
     X(I2R,   K_UN)    X(I2C,   K_UN)   X(R2C,   K_UN)                      \
     X(ADD_I, K_BIN)   X(ADD_R, K_BIN)  X(ADD_C, K_BIN)                     \
@@ -93,6 +99,9 @@ enum {
     X(AND, K_BIN)     X(OR, K_BIN)     X(XOR, K_BIN)    X(NOT, K_UN)       \
     X(ARR_FREE, K_ARR) X(V_EW, K_ARR)  X(V_POW, K_ARR)                     \
     X(V_KERN, K_ARR)  X(V_KERN2, K_ARR) X(V_TOTAL, K_ARR) X(V_LEN, K_ARR)  \
+    X(A_SIZE, K_UN)   X(A_NEWLIKE, K_ARR) X(A_SHAPECHK, K_ASTORE)          \
+    X(A_LOAD_R, K_BIN)   X(A_LOAD_C, K_BIN)                                \
+    X(A_STORE_R, K_ASTORE) X(A_STORE_C, K_ASTORE)                          \
     X(RET, K_RET)
 
 /* The opcode enum, generated from OPLIST so the two cannot drift apart. */

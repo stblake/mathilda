@@ -64,11 +64,18 @@ static OpDesc op_desc(unsigned op) {
         case K_INC:    o.wd = 1; o.rd = 1;                  o.pure = 1; break;
         case K_JMP:                                      o.jump = 1;    break;
         case K_JZ:                           o.ra = 1;   o.jump = 1;    break;
+        /* increment + test + branch in one: reads and writes the counter,
+         * reads the limit, and `b` is a target rather than a register. */
+        case K_LOOP:   o.wd = 1; o.rd = 1;   o.ra = 1;   o.jump = 1;    break;
         case K_RET:              o.rd = 1;                              break;
         /* Array ops allocate, free, and can fail.  Treated as reading and
          * writing all three operands and never removable — the scalar passes
          * simply flow around them. */
         case K_ARR:    o.wd = 1; o.rd = 1;   o.ra = 1; o.rb = 1;        break;
+        /* Writes array memory (or fails on a shape mismatch): impure, so never
+         * removed or hoisted, but it owns nothing, so unlike K_ARR it does not
+         * force the surrounding fused loop out of the optimiser's reach. */
+        case K_ASTORE:           o.rd = 1;   o.ra = 1; o.rb = 1;        break;
         default:                                                        break;
     }
     return o;
@@ -120,7 +127,7 @@ static int succ_of(Opt* o, size_t e) {
     int k = compile_op_kind[op];
     if (k == K_RET) return 0;
     if (k == K_JMP) { o->succ[0] = o->code[e].b; return 1; }
-    if (k == K_JZ)  { o->succ[0] = o->code[e].b; o->succ[1] = e + 1;
+    if (k == K_JZ || k == K_LOOP) { o->succ[0] = o->code[e].b; o->succ[1] = e + 1;
                       return (e + 1 < o->n) ? 2 : 1; }
     if (e + 1 < o->n) { o->succ[0] = e + 1; return 1; }
     return 0;
@@ -134,7 +141,7 @@ static bool build_cfg(Opt* o) {
     leader[0] = 1;
     for (size_t i = 0; i < o->n; i++) {
         int k = compile_op_kind[o->code[i].op];
-        if (k == K_JMP || k == K_JZ) {
+        if (k == K_JMP || k == K_JZ || k == K_LOOP) {
             size_t t = o->code[i].b;
             if (t < o->n) leader[t] = 1;
             if (i + 1 < o->n) leader[i + 1] = 1;
@@ -414,7 +421,8 @@ static bool pass_licm(Opt* o, size_t* hoist_to, bool* progress) {
     if (!written || !ndef) { free(written); free(ndef); return false; }
 
     for (size_t j = 0; j < o->n; j++) {
-        if (compile_op_kind[o->code[j].op] != K_JMP) continue;
+        int jk = compile_op_kind[o->code[j].op];
+        if (jk != K_JMP && jk != K_LOOP) continue;
         size_t t = o->code[j].b;
         if (t > j) continue;                                  /* forward jump */
 
@@ -482,7 +490,7 @@ static bool pass_rebuild(Opt* o, const size_t* hoist_to) {
      * next surviving instruction, which map[] already gives. */
     for (size_t i = 0; i < m; i++) {
         int k = compile_op_kind[out[i].op];
-        if (k == K_JMP || k == K_JZ) {
+        if (k == K_JMP || k == K_JZ || k == K_LOOP) {
             size_t t = out[i].b;
             out[i].b = (uint32_t)map[t <= o->n ? t : o->n];
         }
