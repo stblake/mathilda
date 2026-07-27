@@ -337,11 +337,17 @@ Expr* compiled_function_apply(const CompiledFunction* cf, Expr* const* args, siz
                  * fallback for the very same input: given Lists the interpreter
                  * threads and returns a List, so an array result is unpacked
                  * back to one.  Given NDArrays it returns an NDArray, and so do
-                 * we — no conversion, no copy. */
+                 * we — no conversion, no copy.
+                 *
+                 * A body that BUILDS its array (ConstantArray inside a Module,
+                 * M3c) has no array argument to take the kind from, and there
+                 * the interpreter returns a List — so an NDArray result is only
+                 * kept when an NDArray actually came in. */
                 if (r && CT_IS_ARRAY(out.type)) {
-                    bool from_lists = false;
-                    for (size_t q = 0; q < nargs; q++) if (packed_p[q]) from_lists = true;
-                    if (from_lists) {
+                    bool from_nd = false;
+                    for (size_t q = 0; q < nargs; q++)
+                        if (CT_IS_ARRAY(cf->arg_types[q]) && !packed_p[q]) from_nd = true;
+                    if (!from_nd) {
                         Expr* lst = ndarray_to_nested_list(r);
                         if (lst) { expr_free(r); r = lst; }
                     }

@@ -69,18 +69,34 @@ typedef struct { uint16_t op, flags; uint32_t dst, a, b; Slot imm; } Instr;
  *             (unlike K_ARR) carries no ownership in its flags, so it does not
  *             stop the optimiser working on the rest of a fused loop
  *   K_VACC    dst += f(a)  (a strip-mined reduction step: READS and WRITES dst)
+ *   K_AIDX    dst = dst*dim(b, imm.i) + resolve(a)   — one axis of a subscript,
+ *             READS and WRITES dst.  Folding the multiply, the 1-based/negative
+ *             resolution and the per-axis range check into a single instruction
+ *             is what keeps `u[[i, j]]` at four instructions instead of ten;
+ *             the range check is per AXIS, not on the flat index, because
+ *             u[[1, n + 5]] is in range flat and reads the wrong row.  Never
+ *             removed: dropping it would drop the check.
  *   K_CALL    dst = callee(a .. a+flags-1)   — imm.p is the callee program and
  *             `flags` the argument count, so the operands are a RANGE rather
  *             than the usual fixed fields
  *   K_NARY    dst = kernel(a .. a+flags-1)   — same operand range as K_CALL but
  *             PURE: a machine kernel has no side effects, so it may be CSE'd
  *             and removed when dead
+ *   K_ALOAD   dst = a[b], a READ of array memory.  Shaped exactly like K_BIN but
+ *             deliberately NOT pure: it was pure while the only writer was
+ *             fusion, which stores solely into a fresh result buffer, but once
+ *             user code can write a buffer it also reads (`u[[k]] = v` next to
+ *             `u[[k]]`) a pure load would be CSE'd across the store, and LICM
+ *             would hoist a loop-invariant load out of the loop that mutates it.
+ *   K_ARANGE  an array op whose operands are a RANGE: `a` is the first of
+ *             `flags` registers, exactly as for K_CALL.  Used where a subscript
+ *             list or a dimension list has to reach the VM as values.
  *   K_NOP     removed by a previous pass; deleted at compaction
  */
 enum {
     K_CONST, K_MOVE, K_UN, K_BIN, K_BINK, K_POWI, K_KERN1, K_KERN2,
     K_INC, K_JMP, K_JZ, K_LOOP, K_RET, K_ARR, K_ASTORE, K_VACC, K_CALL,
-    K_NARY, K_APAR, K_NOP
+    K_NARY, K_APAR, K_AIDX, K_ARANGE, K_ALOAD, K_NOP
 };
 
 /* ------------------------------------------------------------------ *
@@ -156,8 +172,17 @@ enum {
     X(ARR_FREE, K_ARR) X(V_EW, K_ARR)  X(V_POW, K_ARR)                     \
     X(V_KERN, K_ARR)  X(V_KERN2, K_ARR) X(V_TOTAL, K_ARR) X(V_LEN, K_ARR)  \
     X(A_SIZE, K_UN)   X(A_NEWLIKE, K_ARR) X(A_SHAPECHK, K_ASTORE)          \
-    X(A_LOAD_R, K_BIN)   X(A_LOAD_C, K_BIN)                                \
+    X(A_LOAD_R, K_ALOAD) X(A_LOAD_C, K_ALOAD)                              \
     X(A_STORE_R, K_ASTORE) X(A_STORE_C, K_ASTORE)                          \
+    /* indexed Part (M3c).  A_AXIS resolves ONE subscript against one axis   \
+     * and folds it into the running flat index, so the general A_LOAD /      \
+     * A_STORE above serve both fusion and user indexing.  A_PART / A_PARTSET \
+     * are the escape hatch for every spec that is not a full run of scalar    \
+     * subscripts (Span, All, a list of positions, partial indexing): they     \
+     * delegate to the interpreter's own ndarray_part / ndarray_part_set, so   \
+     * the compiled subset of Part is the interpreted one by construction. */ \
+    X(A_AXIS, K_AIDX)    X(A_COPY, K_ARR)    X(A_XFER, K_ARR)             \
+    X(A_NEW, K_ARANGE)   X(A_PART, K_ARANGE) X(A_PARTSET, K_ARANGE)        \
     /* strip-mined (tile) forms — one opcode, VBLOCK elements */           \
     X(CALL, K_CALL)   X(KERNN, K_NARY)                                     \
     X(VSETLEN, K_ASTORE)                                                   \
@@ -203,6 +228,28 @@ enum { OPLIST OP__COUNT };
 #define AF_B(f)       (((f) >> AF_B_SHIFT) & 7u)
 #define AF_R(f)       (((f) >> AF_R_SHIFT) & 3u)
 enum { AK_ARR = 0, AK_REAL = 1, AK_COMPLEX = 2 };   /* operand kinds */
+
+/* The subscript list of a general (non-scalar) Part, carried in A_PART /
+ * A_PARTSET's immediate as `imm.p`.
+ *
+ * A spec like `u[[i, 2 ;; 5, All]]` mixes subscripts known at compile time with
+ * ones that are only known per call, so neither a plain Expr nor a plain
+ * register list can describe it. `lit[k]` holds the literal spec for axis k, or
+ * NULL when that axis's subscript is computed, in which case `reg[k]` names the
+ * register holding its integer value and the Expr is built at call time.
+ *
+ * The literals are DEEP COPIES: the program can outlive the body it was
+ * compiled from (a CompiledFunction is assigned to a symbol, the body Expr is
+ * freed), and a borrowed pointer here would dangle. The program owns every
+ * PartSpec and frees them in compiled_free. */
+typedef struct {
+    int    n;             /* subscripts given (may be < rank: trailing All) */
+    Expr** lit;           /* [n] literal spec, or NULL if computed */
+    int*   reg;           /* [n] register with the computed index, else -1 */
+    int    rhs_kind;      /* A_PARTSET: AK_ARR / AK_REAL / AK_COMPLEX */
+} PartSpec;
+
+void compile_partspec_free(PartSpec* p);
 
 /* Array and tile temporaries are allocated into virtual ranges and relocated to
  * contiguous banks above the scalar registers at finalize (see patch_reg).  A

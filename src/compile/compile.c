@@ -17,6 +17,7 @@
 #include "../ndreduce.h"   /* ndred_total — array reductions (M3a) */
 #include "../ndarray_internal.h"  /* nd_parallel_for — threading the fused map loop */
 #include "../print.h"      /* expr_to_string — printing the node a bail choked on */
+#include "../sym_names.h" /* SYM_All / SYM_Span / SYM_List — Part subscript specs */
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -69,6 +70,8 @@ struct CompiledProgram {
     size_t      n;
     ParLoop*    ploops;       /* [nploops] parallelisable strip loops */
     int         nploops;
+    PartSpec**  parts;        /* [nparts] general-Part subscript lists */
+    int         nparts;
     int         nreg;
     int         arr_base;     /* array registers are [arr_base, tile_base) */
     int         tile_base;    /* tile registers are [tile_base, nreg) */
@@ -146,6 +149,11 @@ typedef struct {
     int tile_top, tile_max;   /* strip-mining tile registers (TILE_VREG bank) */
     bool vector_mode;   /* inside a strip-mined loop: tile-valued ops are legal */
     bool array_args;    /* any declared argument is an array: gates fusion probing */
+
+    /* General-Part subscript lists (see PartSpec).  Held here while emitting and
+     * handed to the program at finalize; freed here if the compile bails. */
+    PartSpec** parts;
+    int        nparts, parts_cap;
 
     /* Expr-level CSE (see cse_plan).  A chosen repeated subtree is computed once
      * into a register reserved below the temp stack, so no temp allocation and
@@ -579,6 +587,171 @@ static void arr_prep(Ctx* c, Val* v, CompileType elem) {
 /* A Real constant in a fresh scalar temp (exponents / negation factors). */
 static Val arr_real_const(Ctx* c, double x) { Slot s; s.r = x; return emit_const(c, s, CT_REAL); }
 
+/* ------------------------------------------------------------------ *
+ *  Indexed Part (M3c)                                                 *
+ * ------------------------------------------------------------------ *
+ * Part splits into two lowerings with very different costs, and which one
+ * applies is decided purely by the SHAPE of the subscript list:
+ *
+ *   - every axis subscripted by a scalar integer expression, one per axis
+ *     -> the flat index is built inline (one A_AXIS per axis) and the element
+ *        is read with the same A_LOAD the fused elementwise loop uses.  No
+ *        allocation, no call: this is the path a stencil runs in.
+ *   - anything else — Span, All, a list of positions, or fewer subscripts than
+ *     the rank — -> A_PART, which calls the interpreter's own ndarray_part.
+ *     The result is a new array, so it costs an allocation, but the compiled
+ *     answer is the interpreted one by construction rather than by agreement.
+ *
+ * The split is not a subset restriction: both together cover every spec Part
+ * accepts on a dense array.
+ */
+
+static bool infer_type(Ctx* c, const Expr* e, CompileType* out);
+
+/* Is `node` (by identity) somewhere inside `root`?  Used only to keep a bail
+ * diagnostic from pointing into a tree the emitter built and is about to free. */
+static bool expr_subtree_of(const Expr* root, const Expr* node) {
+    if (!root || !node) return false;
+    if (root == node) return true;
+    if (root->type != EXPR_FUNCTION) return false;
+    if (expr_subtree_of(root->data.function.head, node)) return true;
+    for (size_t i = 0; i < root->data.function.arg_count; i++)
+        if (expr_subtree_of(root->data.function.args[i], node)) return true;
+    return false;
+}
+
+/* Ownership: only an array the PROGRAM owns may be written through, because
+ * A_SET writes the buffer in place.  Argument arrays are borrowed (the caller
+ * still owns the node it passed in), and they live in the scalar register range
+ * below nlocals, so the register number alone settles it. */
+static bool reg_is_owned_arr(int r) { return (uint32_t)r >= (uint32_t)ARR_VREG; }
+
+void compile_partspec_free(PartSpec* p) {
+    if (!p) return;
+    for (int i = 0; i < p->n; i++) if (p->lit) expr_free(p->lit[i]);
+    free(p->lit); free(p->reg); free(p);
+}
+
+/* Hand a freshly built PartSpec to the context, which owns it from here on. */
+static bool ctx_own_partspec(Ctx* c, PartSpec* p) {
+    if (c->nparts == c->parts_cap) {
+        int nc = c->parts_cap ? c->parts_cap * 2 : 4;
+        PartSpec** np = realloc(c->parts, (size_t)nc * sizeof *np);
+        if (!np) { compile_partspec_free(p); c->ok = false; return false; }
+        c->parts = np; c->parts_cap = nc;
+    }
+    c->parts[c->nparts++] = p;
+    return true;
+}
+
+/* A subscript that is a compile-time constant spec rather than a value to be
+ * computed: an explicit All, a Span, or a list of positions.  Integers are
+ * deliberately NOT included — an integer subscript is lowered as an expression
+ * so that `u[[2]]` and `u[[i]]` take the same path. */
+static bool subscript_is_literal_spec(const Expr* e) {
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_All;
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    return h == SYM_Span || h == SYM_List;
+}
+
+/* True when `Part[a, A[0..na-1]]` can use the inline scalar path: one scalar
+ * integer subscript per axis, none of them a slice spec. */
+static bool part_is_scalar_indexed(Ctx* c, CompileType at, const Expr* const* A, size_t na) {
+    if ((int)na != CT_RANK(at)) return false;           /* partial -> sub-array */
+    for (size_t i = 0; i < na; i++) {
+        if (subscript_is_literal_spec(A[i])) return false;
+        CompileType t;
+        if (!infer_type(c, A[i], &t) || t != CT_INT) return false;
+    }
+    return true;
+}
+
+/* Lower the subscripts of a scalar-indexed Part into ONE flat-index register.
+ * `arr` must already be emitted.  Each axis costs a single A_AXIS, which does
+ * the multiply by the axis length, the 1-based (or negative) resolution and the
+ * range check together. */
+static bool emit_flat_index(Ctx* c, Val arr, const Expr* const* A, size_t na, int* idx_out) {
+    Slot z; memset(&z, 0, sizeof z);
+    int ridx = alloc_temp(c);
+    Slot k0; memset(&k0, 0, sizeof k0); k0.i = 0;
+    ins(c, OP_CONST, (uint32_t)ridx, 0, 0, k0);
+    for (size_t i = 0; i < na; i++) {
+        Val s;
+        if (!emit(c, A[i], &s)) return false;
+        if (s.type != CT_INT) { c->ok = false; return false; }
+        Slot ax; memset(&ax, 0, sizeof ax); ax.i = (long long)i;
+        ins(c, OP_A_AXIS, (uint32_t)ridx, (uint32_t)s.reg, (uint32_t)arr.reg, ax);
+        free_if_tmp(c, s);
+    }
+    (void)z;
+    *idx_out = ridx;
+    return c->ok;
+}
+
+/* ConstantArray[v, n] / ConstantArray[v, {d1, ..., dr}] — the only way to bring
+ * a new array into existence inside a compiled body.
+ *
+ * The RANK has to come from the source text (a bare dimension, or the length of
+ * a literal dimension list), never from a runtime value, because it is part of
+ * the result's compile-time type.  The dimensions themselves are ordinary
+ * expressions and are evaluated per call. */
+static bool const_array_shape(Ctx* c, const Expr* const* A, int* rank_out, CompileType* elem_out) {
+    const Expr* d = A[1];
+    int rank = 1;
+    if (d->type == EXPR_FUNCTION && d->data.function.head->type == EXPR_SYMBOL
+        && d->data.function.head->data.symbol.name == SYM_List) {
+        rank = (int)d->data.function.arg_count;
+        if (rank < 1 || rank > CT_MAX_RANK || rank > NDARRAY_MAX_RANK) return false;
+    }
+    CompileType et;
+    if (!infer_type(c, A[0], &et)) return false;
+    /* An INTEGER fill is refused on purpose.  ConstantArray[0, n] holds exact
+     * integer zeros in the interpreter and an NDArray has no integer dtype, so
+     * compiling it to a float64 buffer would answer differently, not just
+     * faster.  ConstantArray[0., n] is the compilable spelling. */
+    if (et != CT_REAL && et != CT_COMPLEX) return false;
+    *rank_out = rank; *elem_out = et;
+    return true;
+}
+
+/* Build the PartSpec for a general Part and emit any computed subscripts into a
+ * run of consecutive registers, which is how A_PART finds them. */
+static PartSpec* emit_partspec(Ctx* c, const Expr* const* A, size_t na, int* base_out) {
+    PartSpec* p = calloc(1, sizeof *p);
+    if (!p) { c->ok = false; return NULL; }
+    p->n = (int)na;
+    p->lit = calloc(na, sizeof *p->lit);
+    p->reg = malloc(na * sizeof *p->reg);
+    if (!p->lit || !p->reg) { compile_partspec_free(p); c->ok = false; return NULL; }
+    for (size_t i = 0; i < na; i++) p->reg[i] = -1;
+
+    /* Registers first, all of them, so the computed subscripts are contiguous:
+     * a literal axis still burns a slot rather than perturbing the run. */
+    int base = -1;
+    for (size_t i = 0; i < na; i++) {
+        int r = alloc_temp(c);
+        if (base < 0) base = r;
+        p->reg[i] = r;
+    }
+    for (size_t i = 0; i < na; i++) {
+        if (subscript_is_literal_spec(A[i])) {
+            p->lit[i] = expr_copy((Expr*)A[i]);
+            if (!p->lit[i]) { compile_partspec_free(p); c->ok = false; return NULL; }
+            continue;
+        }
+        Val s;
+        if (!emit(c, A[i], &s) || s.type != CT_INT) {
+            compile_partspec_free(p); c->ok = false; return NULL;
+        }
+        Slot z; memset(&z, 0, sizeof z);
+        ins(c, OP_MOVE, (uint32_t)p->reg[i], (uint32_t)s.reg, 0, z);
+        free_if_tmp(c, s);
+    }
+    *base_out = base;
+    return p;
+}
+
 /* Elementwise Plus/Times over operands of which at least one is an array. */
 static Val arr_ew(Ctx* c, Val a, Val b, CompileType rt, bool is_plus) {
     arr_prep(c, &a, CT_ELEM(rt)); arr_prep(c, &b, CT_ELEM(rt));
@@ -986,14 +1159,15 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         bool okb = infer_type(c, A[1], out);
         c->nscope -= pushed; return okb;
     }
-    if ((!strcmp(h, "Set") || !strcmp(h, "AddTo") || !strcmp(h, "SubtractFrom") || !strcmp(h, "TimesBy")) && na == 2
+    if ((!strcmp(h, "Set") || !strcmp(h, "AddTo") || !strcmp(h, "SubtractFrom")
+         || !strcmp(h, "TimesBy") || !strcmp(h, "DivideBy")) && na == 2
         && A[0]->type == EXPR_SYMBOL) {
         CompileType vt; if (scope_find(c, A[0]->data.symbol.name, &vt) < 0) return false; *out = vt; return true;
     }
     if ((!strcmp(h, "Increment") || !strcmp(h, "Decrement")) && na == 1 && A[0]->type == EXPR_SYMBOL) {
         CompileType vt; if (scope_find(c, A[0]->data.symbol.name, &vt) < 0) return false; *out = vt; return true;
     }
-    if ((!strcmp(h, "Do") && na == 2) || (!strcmp(h, "While") && na == 2) || (!strcmp(h, "For") && na == 4)) { *out = CT_INT; return true; }
+    if ((!strcmp(h, "Do") && na >= 2) || (!strcmp(h, "While") && na == 2) || (!strcmp(h, "For") && na == 4)) { *out = CT_INT; return true; }
     if (!strcmp(h, "Nest") && na == 3) {
         const char* pn; const Expr* bd; CompileType tn, tx;
         if (!extract_function(A[0], &pn, &bd) || !infer_type(c, A[2], &tn) || tn != CT_INT
@@ -1002,11 +1176,34 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         if (tfp < 0) return false;
         *out = (CompileType)tfp; return true;
     }
+    /* Part (M3c).  A full run of scalar subscripts drops every axis and lands
+     * back in the scalar lattice; anything else keeps at least one axis and
+     * stays an array, with the rank counted the way build_axis_selector counts
+     * it: a spec keeps its axis, a scalar subscript drops it, and axes past the
+     * last subscript are implicit Alls and survive. */
+    if (strcmp(h, "Part") == 0 && na >= 2) {
+        IT(0, ta);
+        if (!CT_IS_ARRAY(ta) || (int)(na - 1) > CT_RANK(ta)) return false;
+        if (part_is_scalar_indexed(c, ta, (const Expr* const*)A + 1, na - 1)) {
+            *out = CT_ELEM(ta); return true;
+        }
+        int keep = CT_RANK(ta) - (int)(na - 1);
+        for (size_t i = 1; i < na; i++) if (subscript_is_literal_spec(A[i])) keep++;
+        if (keep < 1 || keep > CT_MAX_RANK) return false;
+        *out = CT_ARRAY(CT_ELEM(ta), keep);
+        return true;
+    }
+    if (strcmp(h, "ConstantArray") == 0 && na == 2) {
+        int rank; CompileType elem;
+        if (!const_array_shape(c, (const Expr* const*)A, &rank, &elem)) return false;
+        *out = CT_ARRAY(elem, rank); return true;
+    }
+
     /* array -> scalar reductions (M3a): the only way an array type re-enters
      * the scalar lattice, so these must be inferable inside If/Sum/... */
     if ((strcmp(h, "Total") == 0 || strcmp(h, "Length") == 0) && na == 1) {
         IT(0, ta);
-        if (!CT_IS_ARRAY(ta) || CT_RANK(ta) != 1) return false;
+        if (!CT_IS_ARRAY(ta) || (h[0] == 'T' && CT_RANK(ta) != 1)) return false;
         *out = (h[0] == 'L') ? CT_INT : CT_ELEM(ta);
         return true;
     }
@@ -1928,12 +2125,126 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         c->ok = false; return false;
     }
 
+    /* ConstantArray[v, dims] (M3c): a zeroed buffer, then a fill loop only when
+     * the value is not already zero.  Emitting the fill as ordinary bytecode
+     * (rather than as a memset variant per element type) means a non-constant
+     * fill costs nothing extra and the optimiser hoists it like any other loop. */
+    if (strcmp(h, "ConstantArray") == 0 && na == 2) {
+        int rank; CompileType elem;
+        if (!const_array_shape(c, (const Expr* const*)A, &rank, &elem)) { c->ok = false; return false; }
+        const Expr* d = A[1];
+        const Expr* const* dexpr = &d;                 /* the bare-dimension case */
+        if (rank > 1 || (d->type == EXPR_FUNCTION && d->data.function.head->type == EXPR_SYMBOL
+                         && d->data.function.head->data.symbol.name == SYM_List))
+            dexpr = (const Expr* const*)d->data.function.args;
+
+        int base = -1;
+        for (int i = 0; i < rank; i++) {               /* dims into consecutive regs */
+            int r = alloc_temp(c);
+            if (base < 0) base = r;
+            Val dv;
+            if (!emit(c, dexpr[i], &dv)) return false;
+            if (dv.type != CT_INT) { c->ok = false; return false; }
+            Slot z; memset(&z, 0, sizeof z);
+            ins(c, OP_MOVE, (uint32_t)r, (uint32_t)dv.reg, 0, z);
+            free_if_tmp(c, dv);
+        }
+        Slot el; memset(&el, 0, sizeof el); el.i = (long long)elem;
+        int rout = alloc_arr(c);
+        ins_f(c, OP_A_NEW, (uint16_t)rank, (uint32_t)rout, (uint32_t)base, (uint32_t)base, el);
+
+        Slot fz; memset(&fz, 0, sizeof fz);
+        bool zero_fill = (A[0]->type == EXPR_REAL && A[0]->data.real == 0.0
+                          && !signbit(A[0]->data.real));
+        if (!zero_fill) {
+            /* for k = 0 .. size-1: out[k] = v   (v hoisted by LICM if invariant) */
+            int rn = alloc_temp(c), rk = alloc_temp(c);
+            ins(c, OP_A_SIZE, (uint32_t)rn, (uint32_t)rout, 0, fz);
+            Slot k0; memset(&k0, 0, sizeof k0); k0.i = 0;
+            ins(c, OP_CONST, (uint32_t)rk, 0, 0, k0);
+            int rc = alloc_temp(c);
+            ins(c, OP_LT_I, (uint32_t)rc, (uint32_t)rk, (uint32_t)rn, fz);
+            size_t jz = c->n;
+            ins(c, OP_JZ, 0, (uint32_t)rc, 0, fz);
+            c->temp_top--;                              /* rc dead after the guard */
+            size_t body = c->n;
+            Val fv;
+            if (!emit(c, A[0], &fv)) return false;
+            coerce(c, &fv, elem);
+            ins(c, elem == CT_COMPLEX ? OP_A_STORE_C : OP_A_STORE_R,
+                (uint32_t)rout, (uint32_t)rk, (uint32_t)fv.reg, fz);
+            free_if_tmp(c, fv);
+            Slot one; memset(&one, 0, sizeof one); one.i = 1;
+            ins(c, OP_LOOP, (uint32_t)rk, (uint32_t)rn, (uint32_t)body, one);
+            if (c->ok) c->code[jz].b = (uint32_t)c->n;
+            c->temp_top -= 2;                           /* rn, rk */
+        }
+        c->temp_top -= rank;                            /* the dimension registers */
+        out->reg = rout; out->tmp = true; out->type = CT_ARRAY(elem, rank);
+        return c->ok;
+    }
+
+    /* Part[a, subscripts...] (M3c).  See the block comment above emit_flat_index
+     * for why this splits in two. */
+    if (strcmp(h, "Part") == 0 && na >= 2) {
+        Val a;
+        if (!emit(c, A[0], &a)) return false;
+        if (!CT_IS_ARRAY(a.type) || (int)(na - 1) > CT_RANK(a.type)) { c->ok = false; return false; }
+        CompileType elem = CT_ELEM(a.type);
+        Slot z; memset(&z, 0, sizeof z);
+
+        if (part_is_scalar_indexed(c, a.type, (const Expr* const*)A + 1, na - 1)) {
+            int ridx;
+            if (!emit_flat_index(c, a, (const Expr* const*)A + 1, na - 1, &ridx)) return false;
+            int rd = alloc_temp(c);
+            ins(c, elem == CT_COMPLEX ? OP_A_LOAD_C : OP_A_LOAD_R,
+                (uint32_t)rd, (uint32_t)a.reg, (uint32_t)ridx, z);
+            /* rd sits above ridx, so drop ridx by relocating rd onto it. */
+            ins(c, OP_MOVE, (uint32_t)ridx, (uint32_t)rd, 0, z);
+            c->temp_top--;                              /* rd */
+            free_if_tmp(c, a);
+            out->reg = ridx; out->tmp = true; out->type = elem;
+            return c->ok;
+        }
+
+        int keep = CT_RANK(a.type) - (int)(na - 1);
+        for (size_t i = 1; i < na; i++) if (subscript_is_literal_spec(A[i])) keep++;
+        if (keep < 1 || keep > CT_MAX_RANK) { c->ok = false; return false; }
+
+        int base = -1;
+        PartSpec* ps = emit_partspec(c, (const Expr* const*)A + 1, na - 1, &base);
+        if (!ps) return false;
+        if (!ctx_own_partspec(c, ps)) return false;
+        Slot ip; memset(&ip, 0, sizeof ip); ip.p = ps;
+        int rout = alloc_arr(c);
+        ins_f(c, OP_A_PART, (uint16_t)(na - 1), (uint32_t)rout, (uint32_t)base,
+              (uint32_t)a.reg, ip);
+        c->temp_top -= (int)(na - 1);                   /* the subscript registers */
+        if (a.tmp) {
+            /* The source was itself a temporary, and it sits BELOW the result in
+             * the array stack, so it cannot simply be popped: the next alloc_arr
+             * would hand out the register the result is living in.  Free it and
+             * slide the result down into its slot, restoring LIFO. */
+            ins(c, OP_ARR_FREE, (uint32_t)a.reg, 0, 0, z);
+            ins(c, OP_A_XFER, (uint32_t)a.reg, (uint32_t)rout, 0, z);
+            c->arr_top--;
+            rout = a.reg;
+        }
+        out->reg = rout; out->tmp = true; out->type = CT_ARRAY(elem, keep);
+        return c->ok;
+    }
+
     /* Total[v] / Length[v]: the array -> scalar reductions.  Total delegates to
      * the NDArray reduction so its summation order — and therefore its
      * rounding — is identical to the interpreter's Total[]. */
     if ((strcmp(h, "Total") == 0 || strcmp(h, "Length") == 0) && na == 1) {
         Val a; if (!emit(c, A[0], &a)) return false;
-        if (!CT_IS_ARRAY(a.type) || CT_RANK(a.type) != 1) { c->ok = false; return false; }
+        /* Length is dims[0] at any rank — the number of ROWS of a matrix, as in
+         * the interpreter.  Total stays rank-1: ndred_total_all collapses every
+         * axis, but Total[] reduces only the leading one, so at rank 2 the two
+         * would disagree. */
+        if (!CT_IS_ARRAY(a.type)
+            || (h[0] == 'T' && CT_RANK(a.type) != 1)) { c->ok = false; return false; }
         Slot z = { 0 };
         *out = (h[0] == 'L') ? arr_op(c, OP_V_LEN, a, arr_noop_val(), CT_INT, z)
                              : arr_op(c, OP_V_TOTAL, a, arr_noop_val(), CT_ELEM(a.type), z);
@@ -2072,6 +2383,11 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         size_t nl = L->data.function.arg_count;
         Slot z = { 0 };
         int base_reg = -1, pushed = 0;
+        /* Array locals (M3c) get a register in the ARRAY bank on top of their
+         * scalar slot, which stays allocated but unused: keeping every local's
+         * scalar register in one run is what makes the single temp_top reset at
+         * the end correct whatever mix of kinds the locals are. */
+        int arr_entry = c->arr_top, arr_regs[16], narr = 0;
         for (size_t i = 0; i < nl; i++) {
             const Expr* spec = L->data.function.args[i];
             const char* vname = NULL; const Expr* init = NULL;
@@ -2087,17 +2403,62 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
             CompileType vt = CT_REAL;
             if (init) {
                 Val iv; if (!emit(c, init, &iv)) { c->nscope -= pushed; return false; }
-                /* an array local would alias, not own, its initialiser's handle */
-                if (CT_IS_ARRAY(iv.type)) { c->nscope -= pushed; c->ok = false; return false; }
+                if (CT_IS_ARRAY(iv.type)) {
+                    /* A local may be written through (u[[i]] = ...), so it has to
+                     * OWN its array.  An initialiser that is already a temporary
+                     * is adopted by leaving its slot allocated for the life of
+                     * the scope; anything else — an argument, an enclosing local
+                     * — is borrowed and is copied, which is exactly the value
+                     * semantics the interpreter gives the same code. */
+                    if (narr >= (int)(sizeof arr_regs / sizeof arr_regs[0])) {
+                        c->nscope -= pushed; c->ok = false; return false;
+                    }
+                    int areg;
+                    if (iv.tmp && reg_is_owned_arr(iv.reg)) areg = iv.reg;
+                    else {
+                        areg = alloc_arr(c);
+                        uint16_t f = (uint16_t)(((unsigned)CT_ELEM(iv.type) & 3u) << AF_R_SHIFT);
+                        ins_f(c, OP_A_COPY, f, (uint32_t)areg, (uint32_t)iv.reg, 0, z);
+                    }
+                    arr_regs[narr++] = areg;
+                    c->scope[c->nscope].name = vname; c->scope[c->nscope].reg = areg;
+                    c->scope[c->nscope].type = iv.type;
+                    c->nscope++; pushed++;
+                    continue;
+                }
                 vt = iv.type; ins(c, OP_MOVE, (uint32_t)reg, (uint32_t)iv.reg, 0, z); free_if_tmp(c, iv);
             } else { Slot s; s.r = 0.0; ins(c, OP_CONST, (uint32_t)reg, 0, 0, s); }
             c->scope[c->nscope].name = vname; c->scope[c->nscope].reg = reg; c->scope[c->nscope].type = vt;
             c->nscope++; pushed++;
         }
         Val body; if (!emit(c, A[1], &body)) { c->nscope -= pushed; return false; }
-        if (CT_IS_ARRAY(body.type)) { c->nscope -= pushed; c->ok = false; return false; }
-        if (body.reg != base_reg) ins(c, OP_MOVE, (uint32_t)base_reg, (uint32_t)body.reg, 0, z);
         c->nscope -= pushed;
+
+        if (CT_IS_ARRAY(body.type)) {
+            /* The result has to outlive the frees below, so every array local
+             * EXCEPT the one carrying it is released, the bank is wound back to
+             * where the scope started, and the value is moved down into the
+             * first slot — a handle transfer, not a copy. */
+            for (int i = narr - 1; i >= 0; i--)
+                if (arr_regs[i] != body.reg) ins(c, OP_ARR_FREE, (uint32_t)arr_regs[i], 0, 0, z);
+            c->arr_top = arr_entry;
+            int rres = alloc_arr(c);
+            if (!reg_is_owned_arr(body.reg)) {
+                /* borrowed (an argument array): copy, or the caller's node would
+                 * be freed twice — once by them and once as our result */
+                uint16_t f = (uint16_t)(((unsigned)CT_ELEM(body.type) & 3u) << AF_R_SHIFT);
+                ins_f(c, OP_A_COPY, f, (uint32_t)rres, (uint32_t)body.reg, 0, z);
+            } else if (rres != body.reg) {
+                ins(c, OP_A_XFER, (uint32_t)rres, (uint32_t)body.reg, 0, z);
+            }
+            c->temp_top = (base_reg - c->nlocals);   /* no scalar result to keep */
+            out->reg = rres; out->tmp = true; out->type = body.type;
+            return c->ok;
+        }
+
+        for (int i = narr - 1; i >= 0; i--) ins(c, OP_ARR_FREE, (uint32_t)arr_regs[i], 0, 0, z);
+        c->arr_top = arr_entry;
+        if (body.reg != base_reg) ins(c, OP_MOVE, (uint32_t)base_reg, (uint32_t)body.reg, 0, z);
         c->temp_top = (base_reg - c->nlocals) + 1;   /* free above base_reg; keep result */
         out->reg = base_reg; out->tmp = true; out->type = body.type;
         return c->ok;
@@ -2110,13 +2471,102 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         if (strcmp(h, "Set") == 0) kind = 0; else if (strcmp(h, "AddTo") == 0) kind = 1;
         else if (strcmp(h, "SubtractFrom") == 0) kind = 2; else if (strcmp(h, "TimesBy") == 0) kind = 3;
         else if (strcmp(h, "Increment") == 0) kind = 4; else if (strcmp(h, "Decrement") == 0) kind = 5;
+        else if (strcmp(h, "DivideBy") == 0) kind = 6;
+        /* 4 and 5 are the unary forms (v++ / v--); everything else takes a value. */
+        #define IC_UNARY(k) ((k) == 4 || (k) == 5)
+        /* Part assignment (M3c): u[[i, j]] = v, and the compound forms.
+         *
+         * The target must be an array the program OWNS, because the write goes
+         * into the buffer in place.  An argument array is borrowed — the caller
+         * still holds the node it passed in — so writing through it would mutate
+         * a value the caller never offered up, and for a List argument (packed
+         * into a temporary at the boundary) the write would silently vanish.
+         * Copy it into a local first; that is what the interpreter's value
+         * semantics do anyway. */
+        if (kind >= 0 && !IC_UNARY(kind) && na == 2 && A[0]->type == EXPR_FUNCTION
+            && A[0]->data.function.head->type == EXPR_SYMBOL
+            && strcmp(A[0]->data.function.head->data.symbol.name, "Part") == 0
+            && A[0]->data.function.arg_count >= 2) {
+            const Expr* pt = A[0];
+            const Expr* const* S = (const Expr* const*)pt->data.function.args;
+            size_t ns = pt->data.function.arg_count - 1;
+            Val arr;
+            if (!emit(c, S[0], &arr)) return false;
+            if (!CT_IS_ARRAY(arr.type) || !reg_is_owned_arr(arr.reg) || arr.tmp
+                || (int)ns > CT_RANK(arr.type)) { c->ok = false; return false; }
+            CompileType elem = CT_ELEM(arr.type);
+            Slot z; memset(&z, 0, sizeof z);
+
+            if (part_is_scalar_indexed(c, arr.type, S + 1, ns)) {
+                int ridx;
+                if (!emit_flat_index(c, arr, S + 1, ns, &ridx)) return false;
+                Val val;
+                if (kind == 0) {                         /* plain Set */
+                    if (!emit(c, A[1], &val)) return false;
+                } else {                                 /* AddTo / SubtractFrom / TimesBy */
+                    int rold = alloc_temp(c);
+                    ins(c, elem == CT_COMPLEX ? OP_A_LOAD_C : OP_A_LOAD_R,
+                        (uint32_t)rold, (uint32_t)arr.reg, (uint32_t)ridx, z);
+                    Val cur = { rold, true, elem }, rhs;
+                    if (!emit(c, A[1], &rhs)) return false;
+                    coerce(c, &rhs, elem);
+                    uint16_t op = kind == 1 ? (elem == CT_COMPLEX ? OP_ADD_C : OP_ADD_R)
+                                : kind == 2 ? (elem == CT_COMPLEX ? OP_SUB_C : OP_SUB_R)
+                                : kind == 3 ? (elem == CT_COMPLEX ? OP_MUL_C : OP_MUL_R)
+                                            : (elem == CT_COMPLEX ? OP_DIV_C : OP_DIV_R);
+                    val = binop(c, op, cur, rhs, elem);
+                }
+                coerce(c, &val, elem);
+                if (!c->ok) return false;
+                ins(c, elem == CT_COMPLEX ? OP_A_STORE_C : OP_A_STORE_R,
+                    (uint32_t)arr.reg, (uint32_t)ridx, (uint32_t)val.reg, z);
+                /* Set returns the stored value; relocate it onto the index
+                 * register so the whole subscript computation is reclaimed. */
+                ins(c, OP_MOVE, (uint32_t)ridx, (uint32_t)val.reg, 0, z);
+                pop_tmp(c, val);
+                c->temp_top = (ridx - c->nlocals) + 1;
+                out->reg = ridx; out->tmp = true; out->type = elem;
+                return c->ok;
+            }
+
+            /* General spec: only a plain Set, because the compound forms would
+             * have to read a whole slice, combine it and write it back — which
+             * is Part-as-an-lvalue on a sub-array, not this. */
+            if (kind != 0) { c->ok = false; return false; }
+            int base = -1;
+            PartSpec* ps = emit_partspec(c, S + 1, ns, &base);
+            if (!ps) return false;
+            if (!ctx_own_partspec(c, ps)) return false;
+            Val val;
+            if (!emit(c, A[1], &val)) return false;
+            if (CT_IS_ARRAY(val.type)) ps->rhs_kind = AK_ARR;
+            else {
+                coerce(c, &val, elem);
+                if (!c->ok) return false;
+                ps->rhs_kind = (elem == CT_COMPLEX) ? AK_COMPLEX : AK_REAL;
+            }
+            Slot ip; memset(&ip, 0, sizeof ip); ip.p = ps;
+            ins_f(c, OP_A_PARTSET, (uint16_t)ns, (uint32_t)arr.reg, (uint32_t)base,
+                  (uint32_t)val.reg, ip);
+            free_if_tmp(c, val);
+            c->temp_top -= (int)ns;
+            /* Set's value is the right-hand side; a general one is an array, and
+             * an array result would need an owner, so this form is a statement:
+             * it reports 0 and is only useful inside a CompoundExpression. */
+            Slot k0; memset(&k0, 0, sizeof k0); k0.i = 0;
+            *out = emit_const(c, k0, CT_INT);
+            return c->ok;
+        }
+
         if (kind >= 0) {
-            size_t want = (kind >= 4) ? 1 : 2;
+            size_t want = IC_UNARY(kind) ? 1 : 2;
             if (na != want || A[0]->type != EXPR_SYMBOL) { c->ok = false; return false; }
             CompileType vt; int vreg = scope_find(c, A[0]->data.symbol.name, &vt);
             if (vreg < 0 || vt == CT_BOOL) { c->ok = false; return false; }   /* mutable numeric locals only */
+            /* DivideBy always produces a Real (or Complex), never an Int. */
+            if (kind == 6 && vt == CT_INT) { c->ok = false; return false; }
             Slot z = { 0 };
-            if (kind >= 4) {
+            if (IC_UNARY(kind)) {
                 int old = alloc_temp(c); ins(c, OP_MOVE, (uint32_t)old, (uint32_t)vreg, 0, z);
                 if (vt == CT_INT) { Slot s; s.i = (kind == 4) ? 1 : -1; ins(c, OP_INC_I, (uint32_t)vreg, 0, 0, s); }
                 else { int one = alloc_temp(c); Slot s; s.r = (kind == 4) ? 1.0 : -1.0; ins(c, OP_CONST, (uint32_t)one, 0, 0, s);
@@ -2129,14 +2579,40 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
             if (kind == 0) ins(c, OP_MOVE, (uint32_t)vreg, (uint32_t)val.reg, 0, z);
             else { uint16_t op = kind == 1 ? (vt == CT_INT ? OP_ADD_I : vt == CT_REAL ? OP_ADD_R : OP_ADD_C)
                               : kind == 2 ? (vt == CT_INT ? OP_SUB_I : vt == CT_REAL ? OP_SUB_R : OP_SUB_C)
-                                          : (vt == CT_INT ? OP_MUL_I : vt == CT_REAL ? OP_MUL_R : OP_MUL_C);
+                              : kind == 3 ? (vt == CT_INT ? OP_MUL_I : vt == CT_REAL ? OP_MUL_R : OP_MUL_C)
+                                          : (vt == CT_COMPLEX ? OP_DIV_C : OP_DIV_R);
                    ins(c, op, (uint32_t)vreg, (uint32_t)vreg, (uint32_t)val.reg, z); }
             free_if_tmp(c, val);
             out->reg = vreg; out->tmp = false; out->type = vt; return c->ok;
         }
+        #undef IC_UNARY
     }
 
     /* Do[body, {i, lo, hi}]: counted loop for side effects; returns a dummy 0. */
+    /* Do[body, spec1, spec2, ...]: the interpreter nests the iterators with the
+     * LAST varying fastest, so rewrite to the nested form and lower that.  Doing
+     * it here rather than teaching the loop lowering about several specs keeps
+     * one implementation of the loop and makes the multi-iterator form correct
+     * by the same argument as the single one. */
+    if (strcmp(h, "Do") == 0 && na > 2) {
+        Expr** ia = malloc((na - 1) * sizeof(Expr*));
+        if (!ia) { c->ok = false; return false; }
+        ia[0] = expr_copy((Expr*)A[0]);
+        for (size_t i = 2; i < na; i++) ia[i - 1] = expr_copy((Expr*)A[i]);
+        Expr* inner = expr_new_function(expr_new_symbol("Do"), ia, na - 1);
+        free(ia);
+        if (!inner) { c->ok = false; return false; }
+        Expr* oa[2] = { inner, expr_copy((Expr*)A[1]) };
+        Expr* outer = expr_new_function(expr_new_symbol("Do"), oa, 2);
+        if (!outer) { expr_free(inner); c->ok = false; return false; }
+        bool r = emit(c, outer, out);
+        /* The rewrite is scaffolding, not the user's own tree: a bail inside it
+         * would leave the diagnostic pointing into a node freed on the next
+         * line, so blame the Do the user actually wrote. */
+        if (!r && expr_subtree_of(outer, c->bail_node)) c->bail_node = e;
+        expr_free(outer);
+        return r;
+    }
     if (strcmp(h, "Do") == 0 && na == 2) {
         LoopSpec s;
         if (!loop_spec_parse(A[1], &s) || !loop_spec_int_bounds(c, &s)
@@ -2402,6 +2878,115 @@ static bool vm_write_scalar(const Expr* e, unsigned relem, Slot* d) {
  * back to the interpreter.  Operands flagged AF_FREE_* are consumed here, AFTER
  * the op has read them, so the result may legitimately reuse an operand's
  * register; each freed slot is NULLed so an abort can never double-free. */
+/* An independent copy of `x` in the program's CANONICAL dtype for `relem`.
+ *
+ * Every array a program owns is float64 or complex64, never float32, and that
+ * is load-bearing rather than tidy: A_STORE writes the buffer at its declared
+ * width, so one float32 array reaching a store would write doubles into half-
+ * sized slots.  Arguments may be any dtype — they are only ever read — so the
+ * narrowing is done here, at the point ownership begins. */
+static Expr* nd_own_copy(const Expr* x, unsigned relem) {
+    if (!x || x->type != EXPR_NDARRAY) return NULL;
+    NDType dt = (relem == (unsigned)CT_COMPLEX) ? NDT_COMPLEX64 : NDT_FLOAT64;
+    NDType sdt = x->data.ndarray.dtype;
+    size_t n = ndarray_size(x), esz = ndt_elem_size(dt);
+    void* buf = malloc(esz * (n ? n : 1));
+    if (!buf) return NULL;
+    if (sdt == dt) memcpy(buf, x->data.ndarray.data, esz * n);
+    else for (size_t k = 0; k < n; k++) {
+        double re, im;
+        ndt_get(x->data.ndarray.data, k, sdt, &re, &im);
+        /* A complex source into a real program is the array form of the scalar
+         * contract: the program promised real, so it fails rather than truncate. */
+        if (im != 0.0 && dt != NDT_COMPLEX64) { free(buf); return NULL; }
+        ndt_set(buf, k, dt, re, im);
+    }
+    Expr* nw = expr_new_ndarray(x->data.ndarray.rank, x->data.ndarray.dims, buf, dt);
+    if (!nw) free(buf);
+    return nw;
+}
+
+/* Materialise a general Part's subscript list for this call: literal specs are
+ * borrowed straight from the PartSpec, computed ones are boxed from registers. */
+static bool ps_build_indices(const PartSpec* ps, const Slot* R, Expr** idx) {
+    for (int i = 0; i < ps->n; i++) {
+        if (ps->lit[i]) { idx[i] = ps->lit[i]; continue; }
+        idx[i] = expr_new_integer((int64_t)R[ps->reg[i]].i);
+        if (!idx[i]) {
+            for (int j = 0; j < i; j++) if (!ps->lit[j]) expr_free(idx[j]);
+            return false;
+        }
+    }
+    return true;
+}
+static void ps_free_indices(const PartSpec* ps, Expr** idx) {
+    for (int i = 0; i < ps->n; i++) if (!ps->lit[i]) expr_free(idx[i]);
+}
+
+/* The array opcodes whose operands are a RUN of registers, so they need the
+ * whole frame rather than three slots.  Same abort contract as vm_array_op. */
+static bool vm_range_array_op(const Instr* c, Slot* R) {
+    switch (c->op) {
+        case OP_A_NEW: {                  /* ConstantArray[0, {d1, ..., dr}] */
+            int rank = (int)c->flags;
+            if (rank < 1 || rank > NDARRAY_MAX_RANK) return false;
+            int64_t dims[NDARRAY_MAX_RANK];
+            size_t n = 1;
+            for (int i = 0; i < rank; i++) {
+                long long d = R[c->a + (unsigned)i].i;
+                if (d < 0) return false;          /* Table[..., {n}] with n < 0 */
+                dims[i] = (int64_t)d;
+                n *= (size_t)d;
+            }
+            NDType dt = (c->imm.i == (long long)CT_COMPLEX) ? NDT_COMPLEX64 : NDT_FLOAT64;
+            void* buf = calloc(n ? n : 1, ndt_elem_size(dt));
+            if (!buf) return false;
+            Expr* nw = expr_new_ndarray(rank, dims, buf, dt);
+            if (!nw) { free(buf); return false; }
+            expr_free(R[c->dst].arr);             /* register reused from a prior call */
+            R[c->dst].arr = nw;
+            return true;
+        }
+
+        case OP_A_PART: {                 /* Span / All / list / partial indexing */
+            const PartSpec* ps = (const PartSpec*)c->imm.p;
+            Expr* idx[NDARRAY_MAX_RANK];
+            const Expr* src = R[c->b].arr;
+            if (!src || src->type != EXPR_NDARRAY) return false;
+            if (!ps_build_indices(ps, R, idx)) return false;
+            bool degrade = false;
+            Expr* r = ndarray_part(src, idx, (size_t)ps->n, &degrade);
+            ps_free_indices(ps, idx);
+            /* A spec ndarray_part cannot do natively (degrade) or an out-of-range
+             * subscript (r == NULL) both abort: the interpreter re-runs the body
+             * and produces whatever Part[] properly produces, including a
+             * diagnostic.  The compiled path never invents an answer. */
+            if (!r) return false;
+            if (r->type != EXPR_NDARRAY) { expr_free(r); return false; }
+            expr_free(R[c->dst].arr);
+            R[c->dst].arr = r;
+            return true;
+        }
+
+        case OP_A_PARTSET: {              /* u[[spec...]] = rhs, in place */
+            const PartSpec* ps = (const PartSpec*)c->imm.p;
+            Expr* idx[NDARRAY_MAX_RANK];
+            Expr* tgt = R[c->dst].arr;
+            if (!tgt || tgt->type != EXPR_NDARRAY) return false;
+            if (!ps_build_indices(ps, R, idx)) return false;
+            Expr* rhs = (ps->rhs_kind == AK_ARR)
+                      ? R[c->b].arr
+                      : vm_box_scalar(&R[c->b], (unsigned)ps->rhs_kind);
+            bool ok = rhs && ndarray_part_set(tgt, idx, (size_t)ps->n, rhs);
+            if (ps->rhs_kind != AK_ARR) expr_free(rhs);
+            ps_free_indices(ps, idx);
+            return ok;
+        }
+
+        default: return false;
+    }
+}
+
 static bool vm_array_op(const Instr* c, Slot* d, Slot* a, Slot* b) {
     const unsigned f = c->flags, ka = AF_A(f), kb = AF_B(f);
     Expr* r = NULL;
@@ -2409,6 +2994,23 @@ static bool vm_array_op(const Instr* c, Slot* d, Slot* a, Slot* b) {
     switch (c->op) {
         case OP_ARR_FREE:
             expr_free(d->arr); d->arr = NULL;
+            return true;
+
+        /* ---- ownership (M3c) ------------------------------------------ */
+        case OP_A_COPY: {                 /* a local initialised from a borrowed array */
+            Expr* nw = nd_own_copy(a->arr, AF_R(f));
+            if (!nw) return false;
+            if (f & AF_FREE_A) { expr_free(a->arr); a->arr = NULL; }
+            expr_free(d->arr);
+            d->arr = nw;
+            return true;
+        }
+
+        case OP_A_XFER:                   /* move the handle, do not duplicate it */
+            if (d == a) return true;
+            expr_free(d->arr);
+            d->arr = a->arr;
+            a->arr = NULL;                /* or teardown would free it twice */
             return true;
 
         /* ---- fused-loop setup (M3b) -----------------------------------
@@ -2810,6 +3412,28 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(A_SIZE):     ARROP();
             OP(A_NEWLIKE):  ARROP();
             OP(A_SHAPECHK): ARROP();
+            OP(A_COPY):     ARROP();
+            OP(A_XFER):     ARROP();
+            /* ---- indexed Part (M3c) --------------------------------------
+             * One instruction per axis, resolving the subscript against that
+             * axis and folding it into the running flat index.  The range check
+             * has to be per axis: u[[1, n + 5]] on an n x n array is inside the
+             * buffer and reads the row below, which is the one indexing bug a
+             * flat bounds check cannot catch. */
+            OP(A_AXIS): {
+                const Expr* A_ = RB.arr;
+                long long ax = c->imm.i;
+                if (!A_ || A_->type != EXPR_NDARRAY
+                    || ax >= (long long)A_->data.ndarray.rank) goto vm_fail;
+                long long len = (long long)A_->data.ndarray.dims[ax];
+                long long k_ = RA.i;
+                if (k_ < 0) k_ = len + k_ + 1;          /* Part counts from the end */
+                if (k_ < 1 || k_ > len) goto vm_fail;   /* -> interpreter, which reports it */
+                RD.i = RD.i * len + (k_ - 1);
+            } NEXT();
+            OP(A_NEW):     do { if (!vm_range_array_op(c, R)) goto vm_fail; } while (0); NEXT();
+            OP(A_PART):    do { if (!vm_range_array_op(c, R)) goto vm_fail; } while (0); NEXT();
+            OP(A_PARTSET): do { if (!vm_range_array_op(c, R)) goto vm_fail; } while (0); NEXT();
 
             /* ---- strip-mined tile ops (M5b) -------------------------------
              * One opcode, VBLOCK elements, in a loop shaped so the C compiler
@@ -3375,7 +3999,12 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
     }
     if (ok) { Slot z = { 0 }; ins(&c, OP_RET, (uint32_t)res.reg, 0, 0, z); ok = c.ok; }
     nm_free(&c.map);
-    if (!ok) { bail_record(&c); free(c.code); free(c.argdep); return NULL; }
+    if (!ok) {
+        bail_record(&c);
+        for (int i = 0; i < c.nparts; i++) compile_partspec_free(c.parts[i]);
+        free(c.parts);
+        free(c.code); free(c.argdep); return NULL;
+    }
 
     /* Three contiguous banks: scalars, then array handles, then strip-mining
      * tiles.  A slot therefore has one kind for the whole life of the program,
@@ -3404,7 +4033,14 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
     if (!(flags & COMPILE_NO_OPT)) compile_optimize(c.code, &c.n, nreg, arr_base, tile_base);
 
     CompiledProgram* p = calloc(1, sizeof(*p));
-    if (!p) { free(c.code); free(c.argdep); return NULL; }
+    if (!p) {
+        for (int i = 0; i < c.nparts; i++) compile_partspec_free(c.parts[i]);
+        free(c.parts);
+        free(c.code); free(c.argdep); return NULL;
+    }
+    /* The general-Part subscript lists become the program's: their literal specs
+     * are pointed at from instruction immediates and must outlive the body. */
+    p->parts = c.parts; p->nparts = c.nparts;
     p->code = c.code; p->n = c.n; p->nreg = nreg; p->arr_base = arr_base;
     p->tile_base = tile_base;
     p->result_reg = result_reg; p->result_type = res.type; p->ncse = c.ncse;
@@ -3633,6 +4269,8 @@ void compiled_free(CompiledProgram* p) {
     if (!p) return;
     for (int i = 0; i < p->nploops; i++) free(p->ploops[i].code);
     free(p->ploops);
+    for (int i = 0; i < p->nparts; i++) compile_partspec_free(p->parts[i]);
+    free(p->parts);
     free(p->code); free(p->arg_types); free(p->argdep);
     free(p);
 }

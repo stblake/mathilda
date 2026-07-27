@@ -7,7 +7,61 @@ too).
 
 _Last updated: 2026-07-27 (M5: optimiser, coverage audit, any-rank arrays,
 strip-mined fusion, Expr-level CSE, per-call frames, OP_CALL; M6: bail
-diagnostics + nine more auto-compiled builtins)._
+diagnostics + nine more auto-compiled builtins; M3c: indexed arrays)._
+
+---
+
+## 0c. M3c — indexed arrays, and what a stencil costs
+
+`Part` is in the subset now, both directions, which is what makes a hand-written
+numeric kernel compilable at all. Before this, one `u[[i, j]]` anywhere put the
+*whole* body on the interpreter.
+
+**Two lowerings, chosen by the shape of the subscript list — and together they
+cover every spec `Part` accepts on a dense array.** One scalar subscript per
+axis lowers inline (`A_AXIS` per axis, then the `A_LOAD` fusion already had);
+everything else — Span, All, position lists, partial indexing, and any mixture —
+delegates to the interpreter's own `ndarray_part` via `A_PART`. The split is not
+a subset restriction, it is a cost distinction: the inline path allocates
+nothing and is where a stencil lives, the delegated path allocates its result.
+
+**`A_AXIS` folds four things into one instruction** — multiply by the axis
+length, 1-based resolution, negative-from-the-end resolution, and the range
+check. Doing them as separate opcodes would have tripled the index cost. **The
+check has to be per axis:** `m[[1, ncols + 5]]` is inside the buffer as a linear
+offset and reads the next row, which a flat bounds check cannot catch.
+
+**`A_LOAD` had to stop being pure.** It was pure while the only writer was
+fusion, which stores solely into a fresh result buffer. Once user code can write
+a buffer it also reads, a pure load is CSE'd across the store (`u[[1]] = 1.;
+a = u[[1]]; u[[1]] = 2.; b = u[[1]]` gives `b - a == 0`) and LICM hoists a
+loop-invariant load out of the loop that mutates it. Both are regression tests
+now. Generalises: *the moment a read and a write of the same memory can appear
+in one body, the read is not pure, however local the analysis looks.*
+
+**Ownership is decided by the register bank.** Array arguments live below
+`nlocals` in the scalar range; owned arrays live in the `ARR_VREG` bank. So
+"may I write through this?" is `reg >= ARR_VREG` — one comparison, no extra
+field for a construction site to forget. Argument arrays are read-only on
+purpose: they are borrowed, and for a `List` argument packed at the boundary a
+write would vanish without a trace.
+
+**What it costs.** The 2-D wave-equation stencil in
+[`COMPILE_EXAMPLE.md`](../../COMPILE_EXAMPLE.md) is 72 instructions per interior
+point and runs a 641x641 grid for 639 steps (2.6e8 updates) in 27 s — **569x**
+the same march interpreted, and **1.9x** Wolfram Language 14.0's own `Compile`.
+Notably WL's `CompilationTarget -> "C"` (verified to be genuine native code, not
+a silent fallback) is *slower* than its bytecode VM on this body past n = 101.
+That is a caution for this project's own "native backend next" plan: in a
+tensor-heavy kernel the cost is array element access, not dispatch.
+
+**Two interpreter bugs fell out of the parity tests**, both of the same kind —
+the compiled path implementing something the interpreter only pretended to do.
+`TimesBy` was registered with no implementation (and `*=` / `/=` did not parse),
+and `Part` assignment into an `NDArray` silently ignored every non-integer spec
+while working fine on the equivalent `List`. Both fixed; `ndarray_part_set` now
+shares the per-axis selector with `ndarray_part`, so a write names exactly the
+elements a read of the same spec would.
 
 ---
 
@@ -425,14 +479,15 @@ In rough value order:
 4. **Array locals / `If` branches / `Nest` state** — needs either an
    `OP_ARR_COPY` or handle refcounting (`expr_ref` on EXPR_NDARRAY; verify
    whether `expr_copy` shares or deep-copies the buffer before relying on it).
-5. **User `Compile[]` array argspec** — `{v, _Real, 1}` in
-   `compiled_function.c`'s `parse_typespec`/argspec loop, plus array cases in
-   `cf_box`/`cf_unbox` (both currently have a `default: break` that routes array
-   types to the interpreter fallback). Decide whether a `List` argument is packed
-   at the boundary (and freed after the call) and whether an array result comes
-   back as `NDArray[...]` or a `List`.
-6. **`Part`/`Slice`** → `ndarray_part` (`ndarray.h:99`), `ndstruct_*`
-   (`ndstruct.h`). `MAKEARR` (pack a fixed tuple), Int arrays, Map/Table fusion.
+5. ~~**User `Compile[]` array argspec**~~ — DONE. A `List` argument is packed at
+   the boundary and freed after the call; the result kind follows the argument
+   kind (Lists in → List out, NDArray in → NDArray out), and a body that BUILDS
+   its array with no array argument returns a List, because that is what the
+   interpreter running the same body returns.
+6. ~~**`Part`/`Slice`**~~ — DONE in M3c (§0c), full spec vocabulary, both
+   directions. Still open from this item: `MAKEARR` (pack a fixed tuple), Int
+   arrays, and `Table` as an array constructor inside a body (today that needs
+   `ConstantArray` plus a `Do` loop).
 
 ### ND delegation API reference (still accurate)
 

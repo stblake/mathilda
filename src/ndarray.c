@@ -468,6 +468,89 @@ Expr* ndarray_part(const Expr* a, Expr** indices, size_t nindices, bool* degrade
     return expr_new_ndarray(subrank, subdims, out, dt); /* takes ownership */
 }
 
+/* ---------------------------------------------------------------------------
+ * Part assignment, IN PLACE.
+ *
+ * `a[[spec...]] = rhs` writes the selected positions of `a`'s buffer directly
+ * instead of rebuilding the array. Mutating in place is only sound because the
+ * one caller — compiled bytecode — emits this exclusively for arrays the
+ * running program OWNS (a Module local or a temporary). An argument array is
+ * borrowed and is rejected at emit time.
+ *
+ * The positions come from the SAME build_axis_selector and mixed-radix walk
+ * that ndarray_part gathers through, so a read and a write of one spec can
+ * never disagree about which elements that spec names.
+ *
+ * `rhs` is either a single number, broadcast to every selected position, or an
+ * NDArray whose element count matches the selection (WL assigns a matching
+ * sub-shape element-wise). Returns false for anything else — an unsupported
+ * spec, an out-of-range subscript, a count mismatch, or a complex value into a
+ * real buffer — having written nothing, so the compiled call fails cleanly and
+ * the interpreter re-runs the whole body.
+ * ------------------------------------------------------------------------ */
+bool ndarray_part_set(Expr* a, Expr* const* indices, size_t nindices,
+                      const Expr* rhs) {
+    if (!a || a->type != EXPR_NDARRAY || !rhs) return false;
+    int rank = a->data.ndarray.rank;
+    const int64_t* dims = a->data.ndarray.dims;
+    NDType dt = a->data.ndarray.dtype;
+    if (nindices == 0 || nindices > (size_t)rank) return false;
+
+    NDAxisSel sel[NDARRAY_MAX_RANK];
+    for (int i = 0; i < rank; i++) { sel[i].pos = NULL; sel[i].n = 0; sel[i].keep = false; }
+
+    int status = NDPART_OK;
+    for (int i = 0; i < rank; i++) {
+        const Expr* spec = ((size_t)i < nindices) ? indices[i] : NULL;
+        status = build_axis_selector(spec, dims[i], &sel[i]);
+        if (status != NDPART_OK) break;
+    }
+    if (status != NDPART_OK) {
+        for (int i = 0; i < rank; i++) free(sel[i].pos);
+        return false;
+    }
+
+    size_t total = 1;
+    for (int i = 0; i < rank; i++) total *= (size_t)sel[i].n;
+
+    /* Validate the whole right-hand side BEFORE the first store, so a rejected
+     * assignment leaves the buffer exactly as it was. */
+    bool rhs_is_arr = (rhs->type == EXPR_NDARRAY);
+    double sre = 0.0, sim = 0.0;
+    if (rhs_is_arr) {
+        size_t rn = ndarray_size(rhs);
+        if (rn != total) { for (int i = 0; i < rank; i++) free(sel[i].pos); return false; }
+        if (ndt_is_complex(rhs->data.ndarray.dtype) && !ndt_is_complex(dt)) {
+            for (int i = 0; i < rank; i++) free(sel[i].pos);
+            return false;
+        }
+    } else if (!leaf_to_component(rhs, dt, &sre, &sim)) {
+        /* Same packability rule a List uses to become a buffer of this dtype,
+         * so it also rejects a complex value into a real array. */
+        for (int i = 0; i < rank; i++) free(sel[i].pos);
+        return false;
+    }
+
+    int64_t stride[NDARRAY_MAX_RANK];
+    { int64_t s = 1; for (int i = rank - 1; i >= 0; i--) { stride[i] = s; s *= dims[i]; } }
+
+    for (size_t oi = 0; oi < total; oi++) {
+        size_t rem = oi, dstpos = 0;
+        for (int i = rank - 1; i >= 0; i--) {
+            int64_t d = sel[i].n;                 /* radix (>=1) */
+            int64_t digit = (int64_t)(rem % (size_t)d);
+            rem /= (size_t)d;
+            dstpos += (size_t)sel[i].pos[digit] * (size_t)stride[i];
+        }
+        double re = sre, im = sim;
+        if (rhs_is_arr) ndt_get(rhs->data.ndarray.data, oi, rhs->data.ndarray.dtype, &re, &im);
+        ndt_set(a->data.ndarray.data, dstpos, dt, re, im);
+    }
+
+    for (int i = 0; i < rank; i++) free(sel[i].pos);
+    return true;
+}
+
 Expr* ndarray_dot2(const Expr* a, const Expr* b, bool* shape_error) {
     int rankA = a->data.ndarray.rank;
     int rankB = b->data.ndarray.rank;

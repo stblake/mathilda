@@ -8,6 +8,24 @@ semantics. Specs outside the fast domain (multi-axis `Take`, custom `Sort`
 comparators, partial `Flatten`, …) fall back to the exact `List` result. See
 `src/ndreduce.c` and `src/ndstruct.c`.
 
+`Part` reads an `NDArray` straight out of the buffer, and `Part` **assignment**
+covers the same spec vocabulary — an integer (negative counting from the end),
+`All`, a `Span`, a list of positions, and fewer subscripts than the rank, so
+`a[[i, j]] = v`, `a[[2 ;; 4]] = 0`, `a[[All, 2]] = 0`, `a[[{1, 3}]] = 7` and
+`a[[1 ;; 3]] = w` (from a matching array) all work. Reads and writes resolve
+positions through the same per-axis selector, so one spec names the same elements
+either way. Assignment keeps value semantics: a new `NDArray` comes back and the
+original is untouched. A value the buffer cannot hold — symbolic, or complex into
+a real array — leaves the array unchanged, as before.
+
+```mathematica
+In[1]:= a = NDArray[{1., 2., 3., 4.}]; a[[2 ;; 3]] = 9.; Normal[a]
+Out[1]= {1.0, 9.0, 9.0, 4.0}
+
+In[2]:= b = NDArray[{{1., 2.}, {3., 4.}}]; b[[All, 1]] = 0.; Normal[b]
+Out[2]= {{0.0, 2.0}, {0.0, 4.0}}
+```
+
 ## Tuples
 Generates a list of all possible combinations or tuples of elements.
 - `Tuples[list, n]`: generates a list of all possible n-tuples of elements from `list`.

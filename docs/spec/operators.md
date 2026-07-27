@@ -23,6 +23,10 @@
 | `=`      | `Set`   | 40 | Right |
 | `:=`     | `SetDelayed` | 40 | Right |
 | `=.`     | `Unset` (postfix) | 40 | None |
+| `+=`     | `AddTo` | 40 | Right |
+| `-=`     | `SubtractFrom` | 40 | Right |
+| `*=`     | `TimesBy` | 40 | Right |
+| `/=`     | `DivideBy` | 40 | Right |
 | `;`      | `CompoundExpression` | 10 | Left |
 
 The Unicode rightwards arrow `→` (U+2192, Wolfram `\[Rule]`) is accepted as a

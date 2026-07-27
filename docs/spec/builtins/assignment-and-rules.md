@@ -5,6 +5,36 @@
 - `lhs := rhs`: `SetDelayed`. Delayed evaluation of `rhs`.
 - `lhs := rhs /; condition`: When the RHS of `SetDelayed` is a `Condition`, it is automatically moved to the LHS pattern. This makes `f[x_] := body /; test` equivalent to `f[x_] /; test := body`.
 
+## AddTo (+=), SubtractFrom (-=), TimesBy (*=), DivideBy (/=)
+
+Combine a value into an existing one and return the **new** value.
+
+| operator | head | equivalent |
+|---|---|---|
+| `x += dx` | `AddTo[x, dx]` | `x = x + dx` |
+| `x -= dx` | `SubtractFrom[x, dx]` | `x = x - dx` |
+| `x *= dx` | `TimesBy[x, dx]` | `x = x dx` |
+| `x /= dx` | `DivideBy[x, dx]` | `x = x/dx` |
+
+All four have attribute `HoldFirst`. The target may be a symbol or a `Part`
+expression referring to an existing value (`v[[2]] += 1`, `m[[i, j]] *= 2`). The
+combination goes through `Plus`/`Times` and is then re-evaluated, so list
+threading and symbolic simplification happen exactly as they would for the same
+expression written out: `a = {1, 2}; a *= 3` gives `{3, 6}`, and `b = x; b *= 2`
+gives `2 x`. If the target has no assigned value, an `X::rvalue` message is
+emitted and the expression is left unevaluated.
+
+```mathematica
+In[1]:= q = 5; q *= 3; q
+Out[1]= 15
+
+In[2]:= w = {1., 2., 3.}; w[[3]] /= 4.; w
+Out[2]= {1.0, 2.0, 0.75}
+```
+
+`Increment` (`++`), `Decrement` (`--`), `PreIncrement` and `PreDecrement` share
+the same machinery; the first two return the **old** value, the rest the new one.
+
 ## Unset (=.)
 
 - `Unset[lhs]` or `lhs =.`: Removes any rule whose left-hand side is `lhs`. A

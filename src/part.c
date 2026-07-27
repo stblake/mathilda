@@ -23,62 +23,38 @@ static void assoc_assign_value(Expr* rule, Expr** rest, size_t nrest, Expr* rhs,
     }
 }
 
-/* Extract the (re, im) machine-double value of a numeric Expr for storing into a
- * typed NDArray buffer. Handles Integer, Real, BigInt, Rational, and Complex. */
-static bool nd_num_reim(Expr* e, double* re, double* im) {
-    if (!e) return false;
-    switch (e->type) {
-        case EXPR_INTEGER: *re = (double)e->data.integer; *im = 0.0; return true;
-        case EXPR_REAL:    *re = e->data.real;            *im = 0.0; return true;
-        case EXPR_BIGINT:  *re = mpz_get_d(e->data.bigint); *im = 0.0; return true;
-        default: break;
-    }
-    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.arg_count == 2) {
-        const char* h = e->data.function.head->data.symbol.name;
-        double a, b, t;
-        if (h == SYM_Rational &&
-            nd_num_reim(e->data.function.args[0], &a, &t) &&
-            nd_num_reim(e->data.function.args[1], &b, &t) && b != 0.0) {
-            *re = a / b; *im = 0.0; return true;
-        }
-        if (h == SYM_Complex &&
-            nd_num_reim(e->data.function.args[0], &a, &t) &&
-            nd_num_reim(e->data.function.args[1], &b, &t)) {
-            *re = a; *im = b; return true;
-        }
-    }
-    return false;
-}
 
-/* Assign a single element of a dense NDArray addressed by a full index list (one
- * integer per axis). Returns a fresh NDArray with the element replaced, or the
- * array unchanged when the pattern isn't a supported single-element numeric set
- * (partial/list/span index, out-of-range, non-numeric or complex-into-real rhs). */
+/* Assign into a dense NDArray. Value semantics, as everywhere else in Part
+ * assignment: a fresh NDArray comes back and `arr` is untouched.
+ *
+ * The whole Part spec vocabulary works — integer (including negative), All,
+ * Span, a list of positions, and fewer subscripts than the rank — because the
+ * write reuses ndarray_part_set, which selects positions through the same
+ * per-axis selector ndarray_part reads through. Before that shared selector
+ * existed this handled only a full run of integer subscripts and returned the
+ * array UNCHANGED for anything else, so `a[[2 ;; 4]] = 0` on an NDArray silently
+ * did nothing while the same code on a List worked.
+ *
+ * Returns the array unchanged (the old behaviour) for a spec or right-hand side
+ * outside what the buffer can represent — a symbolic value, a complex value into
+ * a real buffer, an out-of-range subscript. */
 static Expr* nd_part_assign(Expr* arr, Expr** indices, size_t nindices, Expr* rhs) {
-    int rank = arr->data.ndarray.rank;
-    if ((size_t)rank != nindices) return expr_copy(arr);
-    int64_t offset = 0, N = 1;
-    for (size_t j = 0; j < nindices; j++) {
-        if (indices[j]->type != EXPR_INTEGER) return expr_copy(arr);
-        int64_t dim = arr->data.ndarray.dims[j];
-        int64_t p = indices[j]->data.integer;
-        if (p < 0) p = dim + p + 1;
-        if (p < 1 || p > dim) return expr_copy(arr);
-        offset = offset * dim + (p - 1);
-    }
-    for (int j = 0; j < rank; j++) N *= arr->data.ndarray.dims[j];
-
-    double re, im;
-    if (!nd_num_reim(rhs, &re, &im)) return expr_copy(arr);
-    if (im != 0.0 && !ndt_is_complex(arr->data.ndarray.dtype)) return expr_copy(arr);
-
-    size_t esz = ndt_elem_size(arr->data.ndarray.dtype);
-    void* nb = malloc((size_t)N * esz);
+    /* An INDEPENDENT node with its own buffer.  Not expr_copy: that is a
+     * refcount bump, so writing through it would reach every other holder of
+     * the same array — including the symbol this assignment is meant to leave
+     * untouched until the caller stores the result back. */
+    size_t n = 1;
+    for (int i = 0; i < arr->data.ndarray.rank; i++) n *= (size_t)arr->data.ndarray.dims[i];
+    size_t bytes = ndt_elem_size(arr->data.ndarray.dtype) * n;
+    void* nb = malloc(bytes ? bytes : 1);
     if (!nb) return expr_copy(arr);
-    memcpy(nb, arr->data.ndarray.data, (size_t)N * esz);
-    ndt_set(nb, (size_t)offset, arr->data.ndarray.dtype, re, im);
-    return expr_new_ndarray(rank, arr->data.ndarray.dims, nb, arr->data.ndarray.dtype);
+    memcpy(nb, arr->data.ndarray.data, bytes);
+    Expr* fresh = expr_new_ndarray(arr->data.ndarray.rank, arr->data.ndarray.dims,
+                                   nb, arr->data.ndarray.dtype);   /* adopts nb */
+    if (!fresh) { free(nb); return expr_copy(arr); }
+    if (ndarray_part_set(fresh, (Expr* const*)indices, nindices, rhs)) return fresh;
+    expr_free(fresh);
+    return expr_copy(arr);
 }
 
 static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, Expr* rhs, size_t* rhs_idx, bool is_rhs_list) {

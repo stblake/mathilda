@@ -48,6 +48,13 @@ typedef struct {
     unsigned char jump;    /* `b` is a branch target, NOT a register */
 } OpDesc;
 
+/* Opcodes whose operands are a RUN of registers starting at `a`, `flags` long,
+ * rather than the usual fixed fields.  Liveness and DCE walk the run by hand. */
+static bool op_reads_range(unsigned op) {
+    unsigned k = compile_op_kind[op];
+    return k == K_CALL || k == K_NARY || k == K_ARANGE;
+}
+
 static OpDesc op_desc(unsigned op) {
     OpDesc o;
     memset(&o, 0, sizeof o);
@@ -98,6 +105,21 @@ static OpDesc op_desc(unsigned op) {
          * well as writing it — which is also what keeps LICM from hoisting it
          * out of the tile loop. */
         case K_VACC:   o.wd = 1; o.rd = 1;   o.ra = 1;      o.pure = 1; break;
+        /* One axis of a subscript folded into the running flat index: reads and
+         * writes that index, reads the subscript in `a` and the array in `b`.
+         * NOT pure — it carries the per-axis range check, and a check removed
+         * because its index turned out to be dead is a check that no longer
+         * catches u[[1, n + 5]]. */
+        case K_AIDX:   o.wd = 1; o.rd = 1;   o.ra = 1; o.rb = 1;        break;
+        /* Array op over a RANGE of registers (`a` .. `a`+flags-1), like a call:
+         * `ra` stays clear because one field cannot describe a run, and the run
+         * is walked explicitly by liveness and DCE (op_reads_range). */
+        case K_ARANGE: o.wd = 1; o.rd = 1;             o.rb = 1;        break;
+        /* A read of array memory.  Same operands as K_BIN, but impure: a store
+         * to the same buffer may sit between two identical loads, so CSE would
+         * fold away a re-read that has to happen and LICM would hoist a load out
+         * of the very loop that changes it. */
+        case K_ALOAD:  o.wd = 1;             o.ra = 1; o.rb = 1;        break;
         default:                                                        break;
     }
     return o;
@@ -114,6 +136,7 @@ static bool imm_eq(unsigned op, Slot x, Slot y) {
         case K_BINK:
         case K_CONST: return memcmp(&x, &y, sizeof x) == 0;
         case K_POWI:
+        case K_AIDX:                          /* the axis number */
         case K_INC:   return x.i == y.i;
         case K_KERN1:
         case K_KERN2: return x.p == y.p;
@@ -231,7 +254,7 @@ static bool liveness(Opt* o) {
             if (s.rd && !bs_get(d, (int)c->dst)) bs_set(u, (int)c->dst);
             if (s.ra && !bs_get(d, (int)c->a))   bs_set(u, (int)c->a);
             if (s.rb && !s.jump && !bs_get(d, (int)c->b)) bs_set(u, (int)c->b);
-            if (compile_op_kind[c->op] == K_CALL || compile_op_kind[c->op] == K_NARY)
+            if (op_reads_range(c->op))
                 for (unsigned k = 0; k < c->flags; k++)
                     if (!bs_get(d, (int)c->a + (int)k)) bs_set(u, (int)c->a + (int)k);
             if (s.wd) bs_set(d, (int)c->dst);
@@ -399,7 +422,8 @@ static bool pass_vn(Opt* o, bool* progress) {
         for (size_t i = o->blk_start[b]; i < o->blk_end[b]; i++) {
             Instr* c = &o->code[i];
             OpDesc s = op_desc(c->op);
-            if (compile_op_kind[c->op] == K_ARR) {          /* opaque: reset state */
+            if (compile_op_kind[c->op] == K_ARR
+                || compile_op_kind[c->op] == K_ARANGE) {    /* opaque: reset state */
                 memset(kk, 0, (size_t)nreg);
                 for (int r = 0; r < nreg; r++) alias[r] = (uint32_t)r;
                 nvn = 0;
@@ -537,7 +561,7 @@ static bool pass_dce(Opt* o, bool* progress) {
             if (s.rd && (int)c->dst < o->nreg) bs_set(live, (int)c->dst);
             if (s.ra && (int)c->a   < o->nreg) bs_set(live, (int)c->a);
             if (s.rb && !s.jump && (int)c->b < o->nreg) bs_set(live, (int)c->b);
-            if (compile_op_kind[c->op] == K_CALL || compile_op_kind[c->op] == K_NARY)
+            if (op_reads_range(c->op))
                 for (unsigned k = 0; k < c->flags; k++)
                     if ((int)c->a + (int)k < o->nreg) bs_set(live, (int)c->a + (int)k);
         }

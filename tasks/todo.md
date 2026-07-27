@@ -255,3 +255,66 @@ ndsolve_compile, ndarray, ndarray_functions, ndarray_reduce, ndarray_linalg,
 mapthread, linalg, ndsolve all pass; `bench_compile` within gate (and now gates
 that threading never makes a body slower); `leaks` 0 bytes; ThreadSanitizer
 reports no races.
+
+---
+
+# Compile M3c — indexed machine arrays (2026-07-27)
+
+Motivated by a request for a `Compile[]` tutorial built on a 2-D finite-difference
+wave-equation solver. The solver was not writable: `Part` was outside the
+compilable subset, so `u[[i, j]]` put the whole body on the interpreter.
+
+- [x] `Part` reads, full spec vocabulary — inline path for one scalar subscript
+      per axis (`A_AXIS` + existing `A_LOAD`), delegated path (`A_PART` →
+      `ndarray_part`) for Span / All / position lists / partial indexing / any
+      mixture.
+- [x] `Part` assignment, same vocabulary, plus `+=` `-=` `*=` `/=` on a scalar
+      position. Target must be an owned array (a `Module`/`With` local); writing
+      through a borrowed argument is refused at compile time.
+- [x] `ConstantArray` at any rank (`A_NEW`); array-typed `Module`/`With` locals,
+      including as the result (`A_COPY`, `A_XFER`).
+- [x] `Length` at any rank; multi-iterator `Do`.
+- [x] `A_LOAD` made impure — a pure load is CSE'd across a store and hoisted out
+      of the loop that mutates it. Both regression-tested.
+- [x] Interpreter bugs found by the parity tests: `TimesBy` had no
+      implementation at all (and `*=` / `/=` did not parse); `Part` assignment
+      into an `NDArray` silently ignored every non-integer spec.
+- [x] `COMPILE_EXAMPLE.md` — the tutorial, with an exact-discrete-solution
+      correctness check and measurements against the interpreter, Wolfram
+      Language 14.0 (WVM and native C) and `NDSolve` on both systems.
+
+## Review
+
+**The interesting number is not the 569x.** Compiled-vs-interpreted ratios say as
+much about the interpreter as the compiler, and Mathilda's interpreter is ~12x
+slower than Wolfram's on this array-heavy code. The number that isolates the
+compiler is the cross-system one: Mathilda's compiled stencil is **1.8-2.1x
+faster than Wolfram Language 14.0's**, stable across n = 41 to 641.
+
+**WL's native-C target is slower than its own bytecode VM here** (14.9 s vs
+12.2 s at n = 401), verified to be genuine `LibraryFunction` code rather than a
+silent fallback. Worth weighing before this project's own "native backend next"
+plan: in a tensor-heavy kernel the cost is array element access, not dispatch.
+
+**At matched accuracy `NDSolve` beats the hand-written scheme by ~12x** (0.031 s
+for 5.4e-5, versus 0.357 s at n = 153 for 1.57e-5). That is the honest framing
+for `Compile[]`: it does not make your scheme competitive with a library solver
+on the library solver's home ground; it makes the schemes that are *not* in the
+library run at machine speed.
+
+## New, from this work
+
+- [ ] **`Module` costs 3x in the interpreter.** The identical interpreted march
+      is 4.09 s at top level and 12.28 s inside a `Module` (n = 41). Not a
+      compiler issue; worth its own look, and worth knowing when benchmarking —
+      quoting the Module form would have inflated the speedup to 1700x.
+- [ ] **`Table` as an array constructor inside a compiled body.** Today that
+      needs `ConstantArray` plus a `Do` loop. This is the last obviously-missing
+      array construct.
+- [ ] **Array-valued `If` branches / `Sum` accumulators / `Nest` state.** Each
+      needs either an `OP_ARR_COPY` at the join or handle refcounting.
+- [ ] **Span assignment on a `List`** goes through `expr_part_assign_rec`, which
+      rebuilds the structure per element — O(n) per assignment. The NDArray path
+      is now O(selected); the List path is untouched.
+- [ ] `Increment`/`Decrement` on a `Part` target in compiled code (only the
+      binary forms handle `Part` today).

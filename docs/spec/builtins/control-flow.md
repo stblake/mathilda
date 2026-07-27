@@ -380,10 +380,49 @@ expression would.
   scalar arithmetic and comparisons, `Mod`/`Quotient`, integer/real/complex
   `Power`, all elementary functions and every special function that has a
   machine kernel (`Gamma`, `Erf`, `BesselJ`, `Zeta`, …), `If`, `Sum`/`Product`,
-  `With`/`Module` locals with `Set`/`AddTo`/`Increment`/…, `Do`/`While`/`For`,
-  `Nest`, and `CompoundExpression`. Anything else (a user-defined function, exact
-  symbolic algebra) routes that application through the interpreter fallback.
-  Use `CompileDiagnostics` to find out which.
+  `With`/`Module` locals with `Set`/`AddTo`/`TimesBy`/`Increment`/…,
+  `Do`/`While`/`For`, `Nest`, `CompoundExpression`, and machine arrays
+  (see below). Anything else (a user-defined function, exact symbolic algebra)
+  routes that application through the interpreter fallback. Use
+  `CompileDiagnostics` to find out which.
+- **Machine arrays.** An argument spec `{v, _Real, 1}` (or `_Complex`, any rank)
+  declares an array parameter. A `List` argument is packed into a flat machine
+  buffer at the boundary and the result is unpacked back to a `List`; an
+  `NDArray` argument is used in place and an `NDArray` comes back, so state kept
+  packed across many calls converts once rather than per call. Elementwise
+  expressions over whole arrays are fused into a single strip-mined pass.
+
+  Inside a body:
+
+  - **`Part` reads** accept the full spec vocabulary. One scalar subscript per
+    axis (`v[[i]]`, `m[[i, j]]`, `t[[i, j, k]]`, negatives counting from the
+    end, computed indices) lowers *inline* — no allocation, and each axis is
+    range-checked separately, because `m[[1, ncols + 5]]` is inside the buffer
+    but off the end of its row. Every other spec — `Span`, `All`, a list of
+    positions, partial indexing like `m[[2]]` for a row, or any mixture such as
+    `m[[k, 2 ;; 4]]` — is delegated to the same `ndarray_part` the interpreter
+    uses, so the compiled answer *is* the interpreted one by construction, at
+    the cost of allocating the result.
+  - **`Part` assignment** with the same vocabulary: `u[[i, j]] = x`,
+    `u[[2 ;; 4]] = 0.`, `u[[All, 2]] = 0.`, `u[[{1, 3}]] = 7.`, and
+    `u[[1 ;; 3]] = w` from a matching array. `+=`, `-=`, `*=`, `/=` work on a
+    scalar position. The target must be an array the program **owns** — a
+    `Module`/`With` local — because the write goes into the buffer in place.
+    Writing through an *argument* is not in the subset: argument arrays are
+    borrowed, and for a `List` argument packed at the boundary the write would
+    vanish silently. Copy it into a local first.
+  - **`ConstantArray[v, n]`** and `ConstantArray[v, {n1, n2, …}]` create one,
+    at any rank. The rank must be evident from the source; the dimensions are
+    ordinary expressions evaluated per call. An *integer* fill is refused on
+    purpose — `ConstantArray[0, n]` holds exact integer zeros in the interpreter
+    and an `NDArray` has no integer dtype, so compiling it would answer
+    differently, not just faster. Use `ConstantArray[0., n]`.
+  - **`Module`/`With` locals may be arrays**, including as the result. A local
+    initialised from an argument is a copy, matching the interpreter's value
+    semantics.
+  - Not in the subset: array-valued `If` branches, `Sum` accumulators or `Nest`
+    state (each would duplicate a handle without duplicating ownership), and
+    `Table` as an array constructor.
 - **Counted iterators** in `Do`/`Sum`/`Product` accept every integer-bounded
   spelling the interpreter does: `Do[body, n]` and `Do[body, {n}]` (repeat n
   times), `{i, hi}`, `{i, lo, hi}`, and `{i, lo, hi, di}` with a nonzero integer
@@ -413,7 +452,24 @@ Out[4]= 1.63498
 
 In[5]:= Compile[{{z, _Complex}}, z^2][1.0 + 2.0 I]
 Out[5]= -3.0 + 4.0 I
+
+In[6]:= Compile[{{m, _Real, 2}}, m[[All, 1]]][{{1., 2.}, {3., 4.}}]
+Out[6]= {1.0, 3.0}
+
+In[7]:= (* a 5-point stencil: read an argument grid, write a local copy *)
+        Compile[{{a, _Real, 2}},
+          Module[{n = Length[a], b = a},
+            Do[b[[i, j]] = (a[[i - 1, j]] + a[[i + 1, j]] +
+                            a[[i, j - 1]] + a[[i, j + 1]])/4,
+               {i, 2, n - 1}, {j, 2, n - 1}];
+            b]][Table[1.0 (10 i + j), {i, 1, 3}, {j, 1, 3}]]
+Out[7]= {{11.0, 12.0, 13.0}, {21.0, 22.0, 23.0}, {31.0, 32.0, 33.0}}
 ```
+
+A worked end-to-end example — an explicit finite-difference solver for the 2-D
+wave equation, verified against an exact discrete solution and benchmarked
+against the interpreter, Wolfram Language and `NDSolve` — is in
+[`COMPILE_EXAMPLE.md`](../../../COMPILE_EXAMPLE.md).
 
 ## CompileDiagnostics
 

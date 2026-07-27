@@ -48,6 +48,76 @@ void test_cf_uncompilable_fallback(void) {
                    "True", 0);
 }
 
+/* Indexed Part through the user-facing object (M3c).
+ *
+ * The engine-level battery in test_compile.c drives compile_expr directly on
+ * NDArrays; what is only reachable from here is the BOUNDARY — a List argument
+ * packed on the way in and unpacked on the way out, an array built inside the
+ * body with no array argument to take its kind from, and the interpreter
+ * fallback when a subscript is out of range. */
+void test_cf_part(void) {
+    /* Scalar subscripts, including from the end and computed. */
+    assert_eval_eq("Compile[{{v, _Real, 1}}, v[[2]]][{10., 20., 30.}] == 20", "True", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, v[[-1]]][{10., 20., 30.}] == 30", "True", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}, {k, _Integer}}, v[[k]]][{10., 20., 30.}, 3] == 30",
+                   "True", 0);
+    assert_eval_eq("Compile[{{m, _Real, 2}}, m[[2, 1]]][{{1., 2.}, {3., 4.}}] == 3", "True", 0);
+
+    /* Slices, All, position lists, partial indexing.  A List goes in, so a
+     * List must come back. */
+    assert_eval_eq("Compile[{{v, _Real, 1}}, v[[2 ;; 3]]][{10., 20., 30., 40.}]",
+                   "{20.0, 30.0}", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, v[[{1, 3}]]][{10., 20., 30., 40.}]",
+                   "{10.0, 30.0}", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, v[[1 ;; 4 ;; 2]]][{10., 20., 30., 40.}]",
+                   "{10.0, 30.0}", 0);
+    assert_eval_eq("Compile[{{m, _Real, 2}}, m[[2]]][{{1., 2.}, {3., 4.}}]", "{3.0, 4.0}", 0);
+    assert_eval_eq("Compile[{{m, _Real, 2}}, m[[All, 1]]][{{1., 2.}, {3., 4.}}]", "{1.0, 3.0}", 0);
+
+    /* Out of range: the compiled call fails and the INTERPRETER answers, which
+     * for Part means leaving it unevaluated rather than inventing an element. */
+    assert_eval_eq("Compile[{{v, _Real, 1}}, v[[9]]][{1., 2.}]", "Part[{1.0, 2.0}, 9]", 0);
+    assert_eval_eq("Compile[{{m, _Real, 2}}, m[[1, 5]]][{{1., 2.}, {3., 4.}}]",
+                   "Part[{{1.0, 2.0}, {3.0, 4.0}}, 1, 5]", 0);
+
+    /* Assignment into a local, returned as the result.  With no array ARGUMENT
+     * the result has no kind to inherit, and the interpreter running the same
+     * body returns a List, so this must too. */
+    assert_eval_eq("Compile[{{n, _Integer}}, Module[{u = ConstantArray[0., n]}, "
+                   "Do[u[[i]] = 1. i, {i, 1, n}]; u]][4]", "{1.0, 2.0, 3.0, 4.0}", 0);
+    assert_eval_eq("Head[Compile[{{n, _Integer}}, Module[{u = ConstantArray[0., n]}, u]][3]]",
+                   "List", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Module[{u = v}, u[[2]] = 99.; u]][{1., 2., 3.}]",
+                   "{1.0, 99.0, 3.0}", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Module[{u = v}, u[[2 ;; 3]] = 0.; u]]"
+                   "[{1., 2., 3.}]", "{1.0, 0.0, 0.0}", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Module[{u = v}, u[[1]] += 5.; u]][{1., 2.}]",
+                   "{6.0, 2.0}", 0);
+
+    /* The local is a COPY: an NDArray passed in must come back untouched, or a
+     * compiled body would be mutating a value its caller still owns. */
+    assert_eval_eq("nd = NDArray[{1., 2., 3.}]; "
+                   "Compile[{{v, _Real, 1}}, Module[{u = v}, u[[1]] = 99.; u]][nd]; Normal[nd]",
+                   "{1.0, 2.0, 3.0}", 0);
+
+    /* Writing through an argument is not in the subset, so the object still
+     * builds and the interpreter answers — which is where value semantics live. */
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{v, _Real, 1}}, v[[1]] = 0.]",
+                   "False", 0);
+
+    /* A 5-point stencil: the shape this feature exists for.  Compiled and
+     * interpreted must agree element for element. */
+    assert_eval_eq(
+        "stencil[a_] := Module[{n = Length[a], b = a}, "
+        "  Do[b[[i, j]] = (a[[i - 1, j]] + a[[i + 1, j]] + a[[i, j - 1]] + a[[i, j + 1]])/4, "
+        "     {i, 2, n - 1}, {j, 2, n - 1}]; b]; "
+        "cs = Compile[{{a, _Real, 2}}, Module[{n = Length[a], b = a}, "
+        "  Do[b[[i, j]] = (a[[i - 1, j]] + a[[i + 1, j]] + a[[i, j - 1]] + a[[i, j + 1]])/4, "
+        "     {i, 2, n - 1}, {j, 2, n - 1}]; b]]; "
+        "g = Table[1.0 (10 i + j), {i, 1, 5}, {j, 1, 5}]; "
+        "cs[g] === stencil[g]", "True", 0);
+}
+
 /* CompileDiagnostics: the answer to "why is this slow".  A bail is otherwise
  * invisible — same result, 10-40x slower — and because the compilable subset is
  * a cliff, the useful report is the single INNERMOST subexpression that stopped
@@ -156,6 +226,7 @@ int main(void) {
     TEST(test_cf_procedural);
     TEST(test_cf_object_and_arity);
     TEST(test_cf_array_argspec);
+    TEST(test_cf_part);
     TEST(test_compile_diagnostics);
 
     printf("All CompiledFunction tests passed!\n");

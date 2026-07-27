@@ -323,6 +323,147 @@ static void parity_arr(const char* name, const char* body_s,
     parity_arr_ex(name, body_s, names, types, n, len, lo, hi, trials, 0u);
 }
 
+/* ------------------------------------------------------------------ *
+ *  Indexed Part (M3c)                                                 *
+ * ------------------------------------------------------------------ *
+ * Indexing is about WHICH element a subscript names, so these run one fixed,
+ * deliberately asymmetric input rather than random vectors: with entries
+ * 10*i + j every element is distinct and a wrong index is a wrong VALUE, not a
+ * value that happens to be close.
+ *
+ * Two things are checked on every case beyond agreement with the interpreter:
+ *
+ *   - the ARGUMENTS come back bit-identical.  A compiled Part assignment writes
+ *     a buffer in place, and the failure that would be catastrophic and silent
+ *     is that write reaching an argument, which the caller still owns.
+ *   - the optimised and unoptimised programs agree.  A_LOAD stopped being pure
+ *     when user code gained the ability to write a buffer it also reads, and
+ *     the way that regresses is a load CSE'd across a store.
+ */
+
+/* Rank-`rank` array with entry (i1..ir) = sum over axes of digit * 10^(r-1-k),
+ * so every element is distinct and readable in a failure message. */
+static Expr* make_ramp(int rank, const int64_t* dims) {
+    size_t n = 1;
+    for (int i = 0; i < rank; i++) n *= (size_t)dims[i];
+    double* buf = malloc(n * sizeof(double));
+    for (size_t k = 0; k < n; k++) {
+        size_t rem = k; double v = 0.0, scale = 1.0;
+        for (int a = rank - 1; a >= 0; a--) {
+            v += scale * (double)(rem % (size_t)dims[a] + 1);
+            rem /= (size_t)dims[a];
+            scale *= 100.0;
+        }
+        buf[k] = v;
+    }
+    return expr_new_ndarray(rank, dims, buf, NDT_FLOAT64);   /* adopts buf */
+}
+
+/* Sum of |elements|, as a cheap fingerprint for "was this argument mutated?". */
+static double nd_checksum(const Expr* a) {
+    if (!a || a->type != EXPR_NDARRAY) return 0.0;
+    size_t n = ndarray_size(a);
+    double s = 0.0;
+    for (size_t k = 0; k < n; k++) {
+        double re, im;
+        ndt_get(a->data.ndarray.data, k, a->data.ndarray.dtype, &re, &im);
+        s += fabs(re) + 1.5 * fabs(im);
+    }
+    return s;
+}
+
+enum { PC_AGREE = 0, PC_BAIL = 1, PC_DECLINE = 2 };
+
+/* One indexing case.  `expect` is PC_AGREE (compiles, runs, matches the
+ * interpreter), PC_BAIL (must not compile at all) or PC_DECLINE (compiles, but
+ * the call must fail so the caller falls back — an out-of-range subscript). */
+static void part_case(const char* name, const char* body_s,
+                      const char* const* names, const CompileType* types,
+                      Expr* const* vals, size_t n, int expect) {
+    Expr* body = parse_expression(body_s);
+    const char* inames[4];
+    for (size_t k = 0; k < n; k++) inames[k] = intern_symbol(names[k]);
+
+    CompiledProgram* p = compile_expr(body, inames, types, n);
+    if (expect == PC_BAIL) {
+        if (p) { printf("FAIL: %-38s -> compiled but must bail\n", name); failures++; compiled_free(p); }
+        else printf("ok:   %-38s bailed\n", name);
+        expr_free(body);
+        return;
+    }
+    if (!p) {
+        printf("FAIL: %-38s -> did not compile (%s)\n", name, compiled_bail_expr()
+               ? compiled_bail_expr() : "?");
+        failures++; expr_free(body); return;
+    }
+
+    double sum_before[4];
+    CompileValue args[4], outc;
+    for (size_t k = 0; k < n; k++) {
+        args[k].type = types[k]; args[k].v.a = vals[k];
+        sum_before[k] = nd_checksum(vals[k]);
+    }
+    bool ok = compiled_eval(p, args, &outc);
+
+    for (size_t k = 0; k < n; k++)
+        if (nd_checksum(vals[k]) != sum_before[k]) {
+            printf("FAIL: %-38s -> MUTATED argument %s\n", name, names[k]);
+            failures++;
+        }
+
+    if (expect == PC_DECLINE) {
+        if (ok) {
+            printf("FAIL: %-38s -> evaluated but must decline\n", name);
+            failures++;
+            Expr* g = aval_to_expr(outc); expr_free(g);
+        } else printf("ok:   %-38s declined\n", name);
+        compiled_free(p); expr_free(body); return;
+    }
+
+    if (!ok) { printf("FAIL: %-38s -> call declined\n", name); failures++; }
+    else {
+        Expr* want = ref_eval_arr(body, inames, (Expr* const*)vals, n);
+        Expr* got  = aval_to_expr(outc);
+        double maxerr = 0.0;
+        if (!arr_cmp(got, want, &maxerr)) {
+            printf("FAIL: %-38s -> shape/kind mismatch\n", name); failures++;
+        } else if (maxerr != 0.0) {
+            /* Both sides read the same buffer through the same selector, so the
+             * only correct answer here is EXACT, not "to rounding". */
+            printf("FAIL: %-38s -> max_rel=%.2e (must be exact)\n", name, maxerr);
+            failures++;
+        } else printf("ok:   %-38s exact\n", name);
+        expr_free(got); expr_free(want);
+    }
+
+    /* Optimised vs unoptimised on the same input.  Both are re-run here rather
+     * than reusing the result above, which aval_to_expr has already consumed. */
+    CompiledProgram* praw = compile_expr_ex(body, inames, types, n, COMPILE_NO_OPT);
+    if (praw) {
+        CompileValue a2[4], o2, a3[4], o3;
+        for (size_t k = 0; k < n; k++) {
+            a2[k].type = types[k]; a2[k].v.a = vals[k];
+            a3[k].type = types[k]; a3[k].v.a = vals[k];
+        }
+        bool okraw = compiled_eval(praw, a2, &o2);
+        bool okopt = compiled_eval(p, a3, &o3);
+        if (okraw != okopt) {
+            printf("FAIL: %-38s -> opt/no-opt disagree on success\n", name); failures++;
+        } else if (okraw) {
+            Expr* graw = aval_to_expr(o2);
+            Expr* gopt = aval_to_expr(o3);
+            double d = 0.0;
+            if (!arr_cmp(gopt, graw, &d) || d != 0.0) {
+                printf("FAIL: %-38s -> opt/no-opt differ (%.2e)\n", name, d); failures++;
+            }
+            expr_free(graw); expr_free(gopt);
+        }
+        compiled_free(praw);
+    }
+    compiled_free(p);
+    expr_free(body);
+}
+
 static void bail_body(const char* name, Expr* body, const char* const* names,
                       const CompileType* types, size_t n) {
     const char* inames[8];
@@ -931,15 +1072,251 @@ int main(void) {
             parity_arr("cvec ^ 2",      "v^2",        vw, CA, 1, 32, 0.3, 3.0, N);
         }
 
-        /* Constructs that would need to COPY an array handle rather than move
-         * it — deferred to M3b, and each must bail rather than alias. */
+        /* Constructs that would have to COPY an array handle rather than move
+         * it.  A With/Module local now DOES copy (M3c gave locals ownership, so
+         * they can be written through), which is why it is no longer here; the
+         * rest still bail rather than alias. */
         must_bail_raw("array identity",     "v",                 vw, AA, 1);
         must_bail_raw("array If branch",    "If[1 < 2, v, v+1]", vw, AA, 1);
-        must_bail_raw("array With local",   "With[{u = v}, u + 1]", vw, AA, 1);
         must_bail_raw("array Sum body",     "Sum[v, {i, 1, 3}]", vw, AA, 1);
         must_bail_raw("array comparison",   "v < w",             vw, AA, 2);
         must_bail_raw("array Max",          "Max[v, w]",         vw, AA, 2);
         must_bail_raw("array Mod",          "Mod[v, w]",         vw, AA, 2);
+        parity_arr("array With local",      "With[{u = v}, u + 1]", vw, AA, 1, 64, 0.3, 4.0, N);
+        parity_arr("array Module local",    "Module[{u = v w}, Total[u]]", vw, AA, 2, 64, 0.3, 4.0, N);
+
+        /* ---- indexed Part (M3c) ----
+         * Split by lowering: a full run of scalar subscripts is built inline
+         * (A_AXIS + A_LOAD, no allocation); every other spec delegates to the
+         * interpreter's own ndarray_part.  Both halves are checked against the
+         * interpreter for the same body on the same buffer. */
+        {
+            const char* vv[]  = { "v" };
+            const char* mm[]  = { "m" };
+            const char* tt[]  = { "t" };
+            const CompileType A1[]  = { CT_ARRAY(CT_REAL, 1) };
+            const CompileType A2[]  = { CT_ARRAY(CT_REAL, 2) };
+            const CompileType A2I[] = { CT_ARRAY(CT_REAL, 2), CT_INT };
+            const CompileType A3[]  = { CT_ARRAY(CT_REAL, 3) };
+            const CompileType C1[]  = { CT_ARRAY(CT_COMPLEX, 1) };
+
+            int64_t d1[1] = { 7 }, d2[2] = { 4, 5 }, d3[3] = { 3, 4, 5 };
+            Expr* vec = make_ramp(1, d1);
+            Expr* mat = make_ramp(2, d2);
+            Expr* ten = make_ramp(3, d3);
+            Expr* cvec = make_cvec(7, 0.5, 3.0);
+            Expr* one[1];
+
+            /* -- scalar subscripts: the inline path -- */
+            one[0] = vec;
+            part_case("v[[1]]",            "v[[1]]",            vv, A1, one, 1, PC_AGREE);
+            part_case("v[[4]]",            "v[[4]]",            vv, A1, one, 1, PC_AGREE);
+            part_case("v[[7]] (last)",     "v[[7]]",            vv, A1, one, 1, PC_AGREE);
+            part_case("v[[-1]]",           "v[[-1]]",           vv, A1, one, 1, PC_AGREE);
+            part_case("v[[-7]]",           "v[[-7]]",           vv, A1, one, 1, PC_AGREE);
+            part_case("v[[2]] + v[[5]]",   "v[[2]] + v[[5]]",   vv, A1, one, 1, PC_AGREE);
+            part_case("Sin[v[[3]]] v[[1]]","Sin[v[[3]]] v[[1]]",vv, A1, one, 1, PC_AGREE);
+            part_case("v[[8]] out of range",  "v[[8]]",         vv, A1, one, 1, PC_DECLINE);
+            part_case("v[[0]] (1-based)",     "v[[0]]",         vv, A1, one, 1, PC_DECLINE);
+            part_case("v[[-8]] out of range", "v[[-8]]",        vv, A1, one, 1, PC_DECLINE);
+
+            one[0] = mat;
+            part_case("m[[1,1]]",          "m[[1, 1]]",         mm, A2, one, 1, PC_AGREE);
+            part_case("m[[4,5]]",          "m[[4, 5]]",         mm, A2, one, 1, PC_AGREE);
+            part_case("m[[-1,-1]]",        "m[[-1, -1]]",       mm, A2, one, 1, PC_AGREE);
+            part_case("m[[2,-2]]",         "m[[2, -2]]",        mm, A2, one, 1, PC_AGREE);
+            /* The bug a FLAT bounds check cannot catch: in range as a linear
+             * offset, but off the end of its own row. */
+            part_case("m[[1,6]] wraps a row", "m[[1, 6]]",      mm, A2, one, 1, PC_DECLINE);
+            part_case("m[[5,1]] past rows",   "m[[5, 1]]",      mm, A2, one, 1, PC_DECLINE);
+
+            one[0] = ten;
+            part_case("t[[1,1,1]]",        "t[[1, 1, 1]]",      tt, A3, one, 1, PC_AGREE);
+            part_case("t[[3,4,5]]",        "t[[3, 4, 5]]",      tt, A3, one, 1, PC_AGREE);
+            part_case("t[[2,-1,3]]",       "t[[2, -1, 3]]",     tt, A3, one, 1, PC_AGREE);
+            part_case("t[[2,5,1]] mid-axis OOR", "t[[2, 5, 1]]", tt, A3, one, 1, PC_DECLINE);
+
+            one[0] = cvec;
+            part_case("complex v[[2]]",    "v[[2]]",            vv, C1, one, 1, PC_AGREE);
+            part_case("complex Abs[v[[2]]]","Abs[v[[2]]]",      vv, C1, one, 1, PC_AGREE);
+            part_case("complex v[[1;;3]]", "v[[1 ;; 3]]",       vv, C1, one, 1, PC_AGREE);
+
+            /* -- computed subscripts -- */
+            {   /* k comes in as a scalar, so part_case's array-only harness
+                 * cannot carry it; run these directly. */
+                const char* inm[2] = { intern_symbol("v"), intern_symbol("k") };
+                const CompileType A1I[] = { CT_ARRAY(CT_REAL, 1), CT_INT };
+                struct { const char* nm; const char* src; long long k; bool decline; } CS[] = {
+                    { "v[[k]]",        "v[[k]]",        3, false },
+                    { "v[[k+1]]",      "v[[k + 1]]",    3, false },
+                    { "v[[k-2]]",      "v[[k - 2]]",    3, false },
+                    { "v[[-k]]",       "v[[-k]]",       2, false },
+                    { "v[[2 k]]",      "v[[2 k]]",      3, false },
+                    { "v[[k]] runtime OOR", "v[[k]]",   9, true  },
+                    { "v[[k]] runtime 0",   "v[[k]]",   0, true  },
+                };
+                for (size_t q = 0; q < sizeof CS / sizeof CS[0]; q++) {
+                    Expr* b = parse_expression(CS[q].src);
+                    CompiledProgram* pp = compile_expr(b, inm, A1I, 2);
+                    if (!pp) { printf("FAIL: %-38s -> did not compile\n", CS[q].nm); failures++; }
+                    else {
+                        CompileValue a[2], o;
+                        a[0].type = A1I[0]; a[0].v.a = vec;
+                        a[1].type = CT_INT; a[1].v.i = CS[q].k;
+                        bool ok2 = compiled_eval(pp, a, &o);
+                        if (CS[q].decline) {
+                            if (ok2) { printf("FAIL: %-38s -> must decline\n", CS[q].nm); failures++; }
+                            else printf("ok:   %-38s declined\n", CS[q].nm);
+                        } else if (!ok2) {
+                            printf("FAIL: %-38s -> declined\n", CS[q].nm); failures++;
+                        } else {
+                            Expr* kexp = expr_new_integer(CS[q].k);
+                            Expr* vals2[2] = { vec, kexp };
+                            Expr* want = ref_eval_arr(b, inm, vals2, 2);
+                            Expr* got = aval_to_expr(o);
+                            double d = 0.0;
+                            if (!arr_cmp(got, want, &d) || d != 0.0) {
+                                printf("FAIL: %-38s -> mismatch (%.2e)\n", CS[q].nm, d); failures++;
+                            } else printf("ok:   %-38s exact\n", CS[q].nm);
+                            expr_free(got); expr_free(want); expr_free(kexp);
+                        }
+                        compiled_free(pp);
+                    }
+                    expr_free(b);
+                }
+            }
+
+            /* -- general specs: the delegated path -- */
+            one[0] = vec;
+            part_case("v[[2;;5]]",         "v[[2 ;; 5]]",       vv, A1, one, 1, PC_AGREE);
+            part_case("v[[3;;]]",          "v[[3 ;; ]]",        vv, A1, one, 1, PC_AGREE);
+            part_case("v[[;;4]]",          "v[[ ;; 4]]",        vv, A1, one, 1, PC_AGREE);
+            part_case("v[[1;;7;;2]]",      "v[[1 ;; 7 ;; 2]]",  vv, A1, one, 1, PC_AGREE);
+            part_case("v[[-3;;-1]]",       "v[[-3 ;; -1]]",     vv, A1, one, 1, PC_AGREE);
+            part_case("v[[All]]",          "v[[All]]",          vv, A1, one, 1, PC_AGREE);
+            part_case("v[[{1,4,2}]]",      "v[[{1, 4, 2}]]",    vv, A1, one, 1, PC_AGREE);
+            part_case("v[[{3,3,3}]] repeats","v[[{3, 3, 3}]]",  vv, A1, one, 1, PC_AGREE);
+            part_case("v[[{-1,1}]]",       "v[[{-1, 1}]]",      vv, A1, one, 1, PC_AGREE);
+            part_case("Total[v[[2;;5]]]",  "Total[v[[2 ;; 5]]]",vv, A1, one, 1, PC_AGREE);
+            part_case("v[[2;;5]] + 1",     "v[[2 ;; 5]] + 1",   vv, A1, one, 1, PC_AGREE);
+            part_case("v[[2;;9]] OOR span","v[[2 ;; 9]]",       vv, A1, one, 1, PC_DECLINE);
+            part_case("v[[{1,9}]] OOR list","v[[{1, 9}]]",      vv, A1, one, 1, PC_DECLINE);
+
+            one[0] = mat;
+            part_case("m[[2]] row",        "m[[2]]",            mm, A2, one, 1, PC_AGREE);
+            part_case("m[[-1]] last row",  "m[[-1]]",           mm, A2, one, 1, PC_AGREE);
+            part_case("m[[All,2]] column", "m[[All, 2]]",       mm, A2, one, 1, PC_AGREE);
+            part_case("m[[2;;3, 2;;4]]",   "m[[2 ;; 3, 2 ;; 4]]", mm, A2, one, 1, PC_AGREE);
+            part_case("m[[{1,3}, All]]",   "m[[{1, 3}, All]]",  mm, A2, one, 1, PC_AGREE);
+            part_case("m[[All, All]]",     "m[[All, All]]",     mm, A2, one, 1, PC_AGREE);
+            part_case("m[[2, 2;;4]] mixed","m[[2, 2 ;; 4]]",    mm, A2, one, 1, PC_AGREE);
+            part_case("Total[m[[2]]]",     "Total[m[[2]]]",     mm, A2, one, 1, PC_AGREE);
+            part_case("m[[2]] + m[[3]]",   "m[[2]] + m[[3]]",   mm, A2, one, 1, PC_AGREE);
+            part_case("m[[5]] OOR row",    "m[[5]]",            mm, A2, one, 1, PC_DECLINE);
+
+            one[0] = ten;
+            part_case("t[[2]] rank-3 slab", "t[[2]]",           tt, A3, one, 1, PC_AGREE);
+            part_case("t[[2,3]] rank-3 row","t[[2, 3]]",        tt, A3, one, 1, PC_AGREE);
+            part_case("t[[All,2,All]]",     "t[[All, 2, All]]", tt, A3, one, 1, PC_AGREE);
+            part_case("t[[1;;2, All, 2;;4]]","t[[1 ;; 2, All, 2 ;; 4]]", tt, A3, one, 1, PC_AGREE);
+
+            /* A computed subscript mixed with a literal slice — the case that
+             * needs the PartSpec to carry registers AND literals together. */
+            {
+                const char* inm[2] = { intern_symbol("m"), intern_symbol("k") };
+                Expr* b = parse_expression("m[[k, 2 ;; 4]]");
+                CompiledProgram* pp = compile_expr(b, inm, A2I, 2);
+                if (!pp) { printf("FAIL: %-38s -> did not compile\n", "m[[k, 2;;4]]"); failures++; }
+                else {
+                    CompileValue a[2], o;
+                    a[0].type = A2I[0]; a[0].v.a = mat;
+                    a[1].type = CT_INT; a[1].v.i = 3;
+                    if (!compiled_eval(pp, a, &o)) { printf("FAIL: m[[k, 2;;4]] declined\n"); failures++; }
+                    else {
+                        Expr* kexp = expr_new_integer(3);
+                        Expr* vals2[2] = { mat, kexp };
+                        Expr* want = ref_eval_arr(b, inm, vals2, 2);
+                        Expr* got = aval_to_expr(o);
+                        double d = 0.0;
+                        if (!arr_cmp(got, want, &d) || d != 0.0) {
+                            printf("FAIL: %-38s -> mismatch (%.2e)\n", "m[[k, 2;;4]]", d); failures++;
+                        } else printf("ok:   %-38s exact\n", "m[[k, 2;;4]]");
+                        expr_free(got); expr_free(want); expr_free(kexp);
+                    }
+                    compiled_free(pp);
+                }
+                expr_free(b);
+            }
+
+            /* -- assignment -- */
+            one[0] = vec;
+            part_case("local scalar set",   "Module[{u = v}, u[[2]] = 99.; u]",   vv, A1, one, 1, PC_AGREE);
+            part_case("local set negative", "Module[{u = v}, u[[-1]] = 99.; u]",  vv, A1, one, 1, PC_AGREE);
+            part_case("local AddTo",        "Module[{u = v}, u[[3]] += 5.; u]",   vv, A1, one, 1, PC_AGREE);
+            part_case("local SubtractFrom", "Module[{u = v}, u[[3]] -= 5.; u]",   vv, A1, one, 1, PC_AGREE);
+            /* Spelled as the head: Mathilda's parser has no `*=` operator (even
+             * `x *= 2` is a parse error), though TimesBy itself works. */
+            part_case("local TimesBy",      "Module[{u = v}, u[[3]] *= 2.; u]",    vv, A1, one, 1, PC_AGREE);
+            part_case("local DivideBy",     "Module[{u = v}, u[[3]] /= 4.; u]",   vv, A1, one, 1, PC_AGREE);
+            part_case("local set returns rhs","Module[{u = v}, u[[2]] = 99.]",    vv, A1, one, 1, PC_AGREE);
+            part_case("local span set",     "Module[{u = v}, u[[2 ;; 4]] = 0.; u]", vv, A1, one, 1, PC_AGREE);
+            part_case("local All set",      "Module[{u = v}, u[[All]] = 1.; u]",  vv, A1, one, 1, PC_AGREE);
+            part_case("local list set",     "Module[{u = v}, u[[{1, 3}]] = 7.; u]", vv, A1, one, 1, PC_AGREE);
+            part_case("local set from array","Module[{u = v}, u[[1 ;; 3]] = v[[5 ;; 7]]; u]",
+                      vv, A1, one, 1, PC_AGREE);
+            part_case("local set OOR",      "Module[{u = v}, u[[9]] = 1.; u]",    vv, A1, one, 1, PC_DECLINE);
+            part_case("local loop fill",
+                      "Module[{u = v}, Do[u[[i]] = 2. u[[i]], {i, 1, 7}]; u]",    vv, A1, one, 1, PC_AGREE);
+            /* Read-modify-write in one block: the regression that a PURE A_LOAD
+             * would produce, by CSE-ing the second read onto the first. */
+            part_case("store then reload",
+                      "Module[{u = v, a = 0., b = 0.}, u[[1]] = 1.; a = u[[1]]; "
+                      "u[[1]] = 2.; b = u[[1]]; b - a]",                          vv, A1, one, 1, PC_AGREE);
+            /* Loop-invariant subscript across a store in the SAME loop: what
+             * LICM would hoist if the load were movable. */
+            part_case("loop-invariant load + store",
+                      "Module[{u = v, s = 0.}, Do[s = s + u[[1]]; u[[1]] = u[[1]] + 1., {i, 1, 4}]; s]",
+                      vv, A1, one, 1, PC_AGREE);
+
+            one[0] = mat;
+            part_case("matrix scalar set",  "Module[{u = m}, u[[2, 3]] = 99.; u]", mm, A2, one, 1, PC_AGREE);
+            part_case("matrix row set",     "Module[{u = m}, u[[2]] = 0.; u]",     mm, A2, one, 1, PC_AGREE);
+            part_case("matrix column set",  "Module[{u = m}, u[[All, 2]] = 0.; u]",mm, A2, one, 1, PC_AGREE);
+            part_case("matrix block set",   "Module[{u = m}, u[[2 ;; 3, 2 ;; 4]] = 5.; u]",
+                      mm, A2, one, 1, PC_AGREE);
+            part_case("matrix stencil",
+                      "Module[{u = m}, Do[Do[u[[i, j]] = u[[i - 1, j]] + u[[i, j - 1]], "
+                      "{j, 2, 5}], {i, 2, 4}]; u]",                                mm, A2, one, 1, PC_AGREE);
+            part_case("matrix multi-iterator Do",
+                      "Module[{u = m}, Do[u[[i, j]] = u[[i - 1, j]] + u[[i, j - 1]], "
+                      "{i, 2, 4}, {j, 2, 5}]; u]",                                 mm, A2, one, 1, PC_AGREE);
+            part_case("Length at rank 2",   "Length[m]",                           mm, A2, one, 1, PC_AGREE);
+
+            /* Writing through an ARGUMENT is the one thing that must never
+             * compile: the array is borrowed, and for a List argument packed at
+             * the boundary the write would vanish without a trace. */
+            one[0] = vec;
+            part_case("write to argument",     "v[[1]] = 0.",                   vv, A1, one, 1, PC_BAIL);
+            part_case("write to argument span","v[[1 ;; 2]] = 0.",              vv, A1, one, 1, PC_BAIL);
+            part_case("write via CompoundExpr","v[[1]] = 0.; Total[v]",         vv, A1, one, 1, PC_BAIL);
+
+            /* ConstantArray: the only way to make a new array in a body. */
+            part_case("ConstantArray rank 1",
+                      "Module[{u = ConstantArray[0., 5]}, u[[2]] = 3.; Total[u]]", vv, A1, one, 1, PC_AGREE);
+            part_case("ConstantArray rank 2",
+                      "Module[{u = ConstantArray[0., {3, 4}]}, u[[2, 3]] = 3.; Total[u[[2]]]]",
+                      vv, A1, one, 1, PC_AGREE);
+            part_case("ConstantArray nonzero fill",
+                      "Module[{u = ConstantArray[2.5, 4]}, Total[u]]",             vv, A1, one, 1, PC_AGREE);
+            part_case("ConstantArray computed dim",
+                      "Module[{u = ConstantArray[1., Length[v]]}, Total[u]]",      vv, A1, one, 1, PC_AGREE);
+            /* An INTEGER fill would be an exact-integer list in the interpreter
+             * and a float64 buffer here — a different answer, not a faster one. */
+            part_case("ConstantArray integer fill",
+                      "Module[{u = ConstantArray[0, 5]}, Total[u]]",               vv, A1, one, 1, PC_BAIL);
+
+            expr_free(vec); expr_free(mat); expr_free(ten); expr_free(cvec);
+        }
 
         /* Runtime contract: a real-typed program that would have to leave the
          * real axis fails the call (caller falls back), it does not lie. */

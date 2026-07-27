@@ -98,6 +98,21 @@ Expr* ndarray_to_nested_list(const Expr* a);
  * false (leave the Part unevaluated). Caller owns any returned Expr. */
 Expr* ndarray_part(const Expr* a, Expr** indices, size_t nindices, bool* degrade);
 
+/* Part[a, i1, ..., iN] = rhs, written straight into `a`'s buffer. The positions
+ * come from the same per-axis selector ndarray_part gathers through, so the
+ * full spec vocabulary (Integer / negative / All / Span / List of positions /
+ * implicit trailing axes) names the same elements for a write as for a read.
+ * `rhs` is one number broadcast to every selected position, or an NDArray with
+ * a matching element count. Returns false — having written NOTHING — for an
+ * unsupported spec, an out-of-range subscript, a count mismatch, or a complex
+ * value into a real buffer.
+ *
+ * IN PLACE: only sound for an array the caller owns outright. Compiled bytecode
+ * is the intended caller and checks that at emit time; the interpreter's Part
+ * assignment is value semantics and rebuilds the array instead. */
+bool ndarray_part_set(Expr* a, Expr* const* indices, size_t nindices,
+                      const Expr* rhs);
+
 /* NDArray[nested_list] constructor builtin: packs `res`'s sole argument, or
  * returns NULL (leave unevaluated) if it can't be packed. */
 Expr* builtin_ndarray(Expr* res);

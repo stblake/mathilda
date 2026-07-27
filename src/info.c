@@ -2748,6 +2748,25 @@ void info_init(void) {
         "symbol or a Part expression referring to an existing value; dx may be a\n"
         "number, a symbolic expression, or a list. If x has no assigned value,\n"
         "SubtractFrom::rvalue is emitted and the expression is left unevaluated.");
+    symtab_set_docstring("TimesBy",
+        "TimesBy[x, dx] or x *= dx\n"
+        "\tmultiplies x by dx and returns the new value of x.\n"
+        "\tx *= dx is equivalent to x = x dx.\n"
+        "\n"
+        "TimesBy has attribute HoldFirst. The first argument x can be a symbol or\n"
+        "a Part expression referring to an existing value; dx may be a number, a\n"
+        "symbolic expression, or a list (combined element-wise via the Listable\n"
+        "attribute of Times). If x has no assigned value, TimesBy::rvalue is\n"
+        "emitted and the expression is left unevaluated.");
+    symtab_set_docstring("DivideBy",
+        "DivideBy[x, dx] or x /= dx\n"
+        "\tdivides x by dx and returns the new value of x.\n"
+        "\tx /= dx is equivalent to x = x/dx.\n"
+        "\n"
+        "DivideBy has attribute HoldFirst. The first argument x can be a symbol\n"
+        "or a Part expression referring to an existing value. If x has no\n"
+        "assigned value, DivideBy::rvalue is emitted and the expression is left\n"
+        "unevaluated.");
     symtab_set_docstring("SetDelayed",
         "lhs := rhs or SetDelayed[lhs, rhs]\n"
         "\tassigns rhs to lhs as a delayed rule: rhs is held and evaluated\n"

@@ -275,12 +275,16 @@ void core_init(void) {
     symtab_add_builtin("PreDecrement", builtin_predecrement);
     symtab_add_builtin("AddTo", builtin_addto);
     symtab_add_builtin("SubtractFrom", builtin_subtractfrom);
+    symtab_add_builtin("TimesBy", builtin_timesby);
+    symtab_add_builtin("DivideBy", builtin_divideby);
     symtab_get_def("Increment")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
     symtab_get_def("Decrement")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
     symtab_get_def("PreIncrement")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
     symtab_get_def("PreDecrement")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
     symtab_get_def("AddTo")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
     symtab_get_def("SubtractFrom")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
+    symtab_get_def("TimesBy")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
+    symtab_get_def("DivideBy")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
     symtab_add_builtin("TimeConstrained", builtin_time_constrained);
     symtab_get_def("TimeConstrained")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_add_builtin("Chop", builtin_chop);
@@ -2997,11 +3001,16 @@ static const char* lvalue_symbol_name(Expr* lhs) {
     return NULL;
 }
 
-/* Shared worker. dx is the amount to add (caller owns; we make our own copies).
- * If negate is true, dx is subtracted instead. If pre is true, the new value
- * is returned; otherwise the old value is returned. op_name is used only to
- * compose the X::rvalue diagnostic. */
-static Expr* increment_core(Expr* lhs, Expr* dx, bool negate, bool pre, const char* op_name) {
+/* How the current value and dx are combined.  Kept as a mode rather than a
+ * `negate` flag because TimesBy/DivideBy differ from AddTo/SubtractFrom in the
+ * HEAD, not the sign, and every other step of the six operators is identical. */
+enum { IC_ADD = 0, IC_SUB, IC_MUL, IC_DIV };
+
+/* Shared worker. dx is the amount to combine in (caller owns; we make our own
+ * copies) and `mode` says how. If pre is true, the new value is returned;
+ * otherwise the old value is returned. op_name is used only to compose the
+ * X::rvalue diagnostic. */
+static Expr* increment_core(Expr* lhs, Expr* dx, int mode, bool pre, const char* op_name) {
     const char* sym = lvalue_symbol_name(lhs);
     if (!sym || symtab_get_own_values(sym) == NULL) {
         fprintf(stderr,
@@ -3012,21 +3021,30 @@ static Expr* increment_core(Expr* lhs, Expr* dx, bool negate, bool pre, const ch
 
     Expr* old_val = evaluate(lhs);
 
-    /* Build Plus[old_val, dx_or_-dx] and evaluate. */
+    /* Build Plus[old, +-dx] or Times[old, dx^+-1] and evaluate, so list
+     * threading and symbolic simplification happen exactly as they would for
+     * the same expression written out. */
     Expr* delta_term;
-    if (negate) {
+    if (mode == IC_SUB || mode == IC_DIV) {
         Expr** neg_args = malloc(sizeof(Expr*) * 2);
-        neg_args[0] = expr_new_integer(-1);
-        neg_args[1] = expr_copy(dx);
-        delta_term = expr_new_function(expr_new_symbol(SYM_Times), neg_args, 2);
+        neg_args[0] = expr_copy(dx);
+        neg_args[1] = expr_new_integer(-1);
+        /* -dx for SubtractFrom, 1/dx for DivideBy */
+        delta_term = (mode == IC_SUB)
+            ? expr_new_function(expr_new_symbol(SYM_Times),
+                                (Expr*[]){ expr_new_integer(-1), expr_copy(dx) }, 2)
+            : expr_new_function(expr_new_symbol(SYM_Power), neg_args, 2);
+        if (mode == IC_SUB) { expr_free(neg_args[0]); expr_free(neg_args[1]); }
         free(neg_args);
     } else {
         delta_term = expr_copy(dx);
     }
+    bool mult = (mode == IC_MUL || mode == IC_DIV);
     Expr** plus_args = malloc(sizeof(Expr*) * 2);
     plus_args[0] = expr_copy(old_val);
     plus_args[1] = delta_term;
-    Expr* plus_expr = expr_new_function(expr_new_symbol(SYM_Plus), plus_args, 2);
+    Expr* plus_expr = expr_new_function(
+        expr_new_symbol(mult ? SYM_Times : SYM_Plus), plus_args, 2);
     free(plus_args);
     Expr* new_val = evaluate(plus_expr);
     expr_free(plus_expr);
@@ -3054,7 +3072,7 @@ static Expr* increment_core(Expr* lhs, Expr* dx, bool negate, bool pre, const ch
 Expr* builtin_increment(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* one = expr_new_integer(1);
-    Expr* out = increment_core(res->data.function.args[0], one, false, false, "Increment");
+    Expr* out = increment_core(res->data.function.args[0], one, IC_ADD, false, "Increment");
     expr_free(one);
     return out;
 }
@@ -3062,7 +3080,7 @@ Expr* builtin_increment(Expr* res) {
 Expr* builtin_decrement(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* one = expr_new_integer(1);
-    Expr* out = increment_core(res->data.function.args[0], one, true, false, "Decrement");
+    Expr* out = increment_core(res->data.function.args[0], one, IC_SUB, false, "Decrement");
     expr_free(one);
     return out;
 }
@@ -3070,7 +3088,7 @@ Expr* builtin_decrement(Expr* res) {
 Expr* builtin_preincrement(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* one = expr_new_integer(1);
-    Expr* out = increment_core(res->data.function.args[0], one, false, true, "PreIncrement");
+    Expr* out = increment_core(res->data.function.args[0], one, IC_ADD, true, "PreIncrement");
     expr_free(one);
     return out;
 }
@@ -3078,19 +3096,29 @@ Expr* builtin_preincrement(Expr* res) {
 Expr* builtin_predecrement(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* one = expr_new_integer(1);
-    Expr* out = increment_core(res->data.function.args[0], one, true, true, "PreDecrement");
+    Expr* out = increment_core(res->data.function.args[0], one, IC_SUB, true, "PreDecrement");
     expr_free(one);
     return out;
 }
 
 Expr* builtin_addto(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
-    return increment_core(res->data.function.args[0], res->data.function.args[1], false, true, "AddTo");
+    return increment_core(res->data.function.args[0], res->data.function.args[1], IC_ADD, true, "AddTo");
 }
 
 Expr* builtin_subtractfrom(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
-    return increment_core(res->data.function.args[0], res->data.function.args[1], true, true, "SubtractFrom");
+    return increment_core(res->data.function.args[0], res->data.function.args[1], IC_SUB, true, "SubtractFrom");
+}
+
+Expr* builtin_timesby(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    return increment_core(res->data.function.args[0], res->data.function.args[1], IC_MUL, true, "TimesBy");
+}
+
+Expr* builtin_divideby(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    return increment_core(res->data.function.args[0], res->data.function.args[1], IC_DIV, true, "DivideBy");
 }
 
 Expr* builtin_quotientremainder(Expr* res) {

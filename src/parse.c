@@ -835,6 +835,8 @@ typedef enum {
     OP_DECREMENT,
     OP_ADDTO,
     OP_SUBTRACTFROM,
+    OP_TIMESBY,
+    OP_DIVIDEBY,
     OP_DERIVATIVE,
     OP_COMPOSITION,
     OP_PUT,
@@ -963,6 +965,10 @@ static OperatorDef get_operator(const char* pos) {
         def.type = OP_ADDTO; def.prec = 40; def.right_assoc = 1; def.head_name = "AddTo"; def.len = 2;
     } else if (strncmp(pos, "-=", 2) == 0) {
         def.type = OP_SUBTRACTFROM; def.prec = 40; def.right_assoc = 1; def.head_name = "SubtractFrom"; def.len = 2;
+    } else if (strncmp(pos, "*=", 2) == 0) {
+        def.type = OP_TIMESBY; def.prec = 40; def.right_assoc = 1; def.head_name = "TimesBy"; def.len = 2;
+    } else if (strncmp(pos, "/=", 2) == 0) {
+        def.type = OP_DIVIDEBY; def.prec = 40; def.right_assoc = 1; def.head_name = "DivideBy"; def.len = 2;
     } else if (*pos == '+') {
         def.type = OP_PLUS; def.prec = 310; def.head_name = "Plus"; def.len = 1;
     } else if (*pos == '-') {
