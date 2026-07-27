@@ -48,6 +48,12 @@ arith ops = 8.0 ns/op; mixed-libm 150 ns/call; array len-4096 1.0x, 61 ns/elemen
       storage moved into the frame.
 - [x] **`OP_CALL`** — a non-inlined compiled callee is called rather than bailing
       the whole body. Inlining stays the default via a size cost model.
+- [x] **User `Compile[]` array argspec** — `Compile[{{v, _Real, r}}, body]`. A
+      List argument is packed at the boundary and the result KIND follows the
+      argument kind, so the compiled path and the interpreter fallback agree.
+- [x] **Exponential-integral kernels** — 9 heads, coverage 55 -> 64 of 103.
+- [x] **Plot3D leak** — `build_surface_primitives` freed the primitive array but
+      not the primitives, on the no-surface path.
 
 ## Next, in value order
 - [ ] **Self-recursive `Compile[]`** — still cannot compile. `Compile[]`
@@ -56,13 +62,12 @@ arith ops = 8.0 ns/op; mixed-libm 150 ns/call; array len-4096 1.0x, 61 ns/elemen
       self-reference patch at object construction.
 - [ ] **Thread the strip-mined loop** via `nd_parallel_for` — now unblocked by
       C-stack frames. Note `-DMATHILDA_THREADS` is not set in tests/CMakeLists.
-- [ ] **Fill the remaining kernels** — 48 listed gaps. Most are MPFR-only modules
-      (`Zeta`, `PolyLog`, `Airy*`, …) needing genuinely new double implementations,
-      each with a parity test against the MPFR path. Trivial tier first
-      (`Sinc`, `UnitStep`, `Fibonacci`, `InverseErf`/`Erfc` — the last two already
-      have double kernels, just unregistered).
-- [ ] **User `Compile[]` array argspec** — `{v, _Real, 1}`; `cf_box`/`cf_unbox`
-      still have `default: break` for array types.
+- [ ] **Fill the remaining kernels** — 39 listed gaps (was 48). The
+      exponential-integral family is done (`src/special_functions/expint_machine.c`).
+      Remaining are genuinely new numerics: `Zeta`, `PolyLog`, `HurwitzZeta`,
+      `LerchPhi`, `PolyGamma`, `Erfi`, `Fresnel*`, `Airy*`, `ProductLog`,
+      `BesselI/K`, `LegendreP`, the hypergeometrics. Plus `UnitStep`/`Clip`/
+      `Rescale`, which need an n-ary kernel form (the registry is unary/binary).
 - [ ] **`CompileDiag`** — a bail still reports nothing. The audit covers heads;
       per-body diagnostics would cover the rest.
 - [ ] **Native backend** (`CompilationTarget -> "C"`), behind a build flag.
