@@ -6,7 +6,7 @@ Companion to [`compile.md`](compile.md) (the full design) and the memory files
 too).
 
 _Last updated: 2026-07-27 (M5: optimiser, coverage audit, any-rank arrays,
-strip-mined fusion)._
+strip-mined fusion, Expr-level CSE, per-call frames, OP_CALL)._
 
 ---
 
@@ -44,16 +44,23 @@ build had **no `CMAKE_BUILD_TYPE`**, i.e. no optimisation flags at all. It is no
 `Release`, but anything measured in that tree before 2026-07-27 was `-O0`. Always
 check `grep CMAKE_BUILD_TYPE tests/build/CMakeCache.txt` before quoting a figure.
 
+6. **CSE now fires, at the Expr level.** The bytecode value-numbering CSE was
+   defeated structurally (`binop`/`unop` write into an operand's register, so the
+   entry is invalidated by the instruction that created it). A repeated subtree
+   is instead hoisted to a register reserved BELOW the temp stack by raising
+   `nlocals`. 1.48x on a body with repeats. `COMPILE_NO_CSE` is the A/B switch.
+7. **Frames come from the C stack, and `OP_CALL` exists.** A program is now
+   reentrant and thread-safe (it was neither: one shared register file, and after
+   M5b one shared set of tile buffers). A non-inlined compiled callee is CALLed
+   rather than bailing the whole body. Inlining stays the default and the choice
+   is a size-based cost model.
+
 **Findings that should shape the next round:**
 
-- **CSE almost never fires**, and the reason is structural: `binop`/`unop` pop
-  their operands before allocating the destination, so a computation usually
-  writes *into* one of its own operand registers. The value-number entry for that
-  register is invalidated by the very instruction that produced it. Fixing it
-  means emitting in SSA form (monotonic register allocation) and adding a
-  linear-scan pass to compact afterwards — or, much cheaper, doing CSE at the
-  `Expr` level in `emit`, hoisting structurally-equal subtrees into persistent
-  registers the way `With` locals already are.
+- **Self-recursive `Compile[]` still does not compile**, and `OP_CALL` does not
+  change that: `Compile[]` deliberately does not fold globals, so a body cannot
+  resolve the symbol it is about to be assigned to. Would need a self-reference
+  patch at object construction.
 - **`infer_type` is load-bearing now.** It used to be a routing hint — a branch
   that reported a scalar where the value was really an array cost nothing,
   because the ND layer picked its own result dtype. Fusion sizes the output
