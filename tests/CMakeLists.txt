@@ -322,11 +322,13 @@ set(COMMON_SRC
     ../src/list/take_drop.c
     ../src/list/flatten.c
     ../src/list/partition.c
+    ../src/list/pick.c
     ../src/list/rotate.c
     ../src/list/reverse.c
     ../src/list/transpose.c
     ../src/list/setops.c
     ../src/list/split.c
+    ../src/list/splitby.c
     ../src/list/rescale.c
     ../src/list/pad.c
     ../src/list/total.c
@@ -339,6 +341,7 @@ set(COMMON_SRC
     ../src/list/join.c
     ../src/list/list_common.c
     ../src/list/list_init.c
+    ../src/list/subsets.c
     ../src/patterns.c
     ../src/patterns.c
     ../src/replace.c

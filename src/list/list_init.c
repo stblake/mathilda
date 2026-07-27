@@ -11,6 +11,16 @@ void list_init(void) {
     symtab_add_builtin("Drop", builtin_drop);
     symtab_add_builtin("Flatten", builtin_flatten);
     symtab_add_builtin("Partition", builtin_partition);
+    symtab_add_builtin("Pick", builtin_pick);
+    symtab_get_def("Pick")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Pick",
+        "Pick[expr, sel]\n\tPicks out the elements of expr for which the\n"
+        "\tcorresponding element of sel is True.\n"
+        "Pick[expr, sel, patt]\n\tPicks out the elements of expr for which the\n"
+        "\tcorresponding element of sel matches patt.\n"
+        "\tOperates at all levels; sel must mirror the structure of expr, and\n"
+        "\tthe head of expr is preserved. Returns unevaluated if the structures\n"
+        "\tdisagree.");
     symtab_add_builtin("RotateLeft", builtin_rotateleft);
     symtab_add_builtin("RotateRight", builtin_rotateright);
     symtab_add_builtin("Reverse", builtin_reverse);
@@ -45,6 +55,15 @@ void list_init(void) {
         "\tf[element], preserving order. Over an association, f is applied to the\n"
         "\tvalues and the surviving entries are kept (keys preserved).");
     symtab_add_builtin("Split", builtin_split);
+    symtab_add_builtin("SplitBy", builtin_splitby);
+    symtab_set_docstring("SplitBy",
+        "SplitBy[list, f]\n"
+        "\tsplits list into runs of consecutive elements that give the same\n"
+        "\tvalue of f[element]. Only adjacent elements are grouped (unlike\n"
+        "\tGatherBy, which collects equal keys from anywhere in the list).\n"
+        "SplitBy[list, {f1, f2, ...}]\n"
+        "\tsplits by f1, then splits each resulting run by f2, and so on,\n"
+        "\tnesting one level deeper per function.");
     symtab_add_builtin("Total", builtin_total);
     symtab_add_builtin("Accumulate", builtin_accumulate);
     symtab_add_builtin("Differences", builtin_differences);
@@ -65,6 +84,18 @@ void list_init(void) {
     symtab_add_builtin("SquareMatrixQ", builtin_square_matrix_q);
     symtab_add_builtin("DiagonalMatrixQ", builtin_diagonal_matrix_q);
     symtab_add_builtin("UpperTriangularMatrixQ", builtin_upper_triangular_matrix_q);
+    symtab_add_builtin("Subsets", builtin_subsets);
+    symtab_get_def("Subsets")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Subsets",
+        "Subsets[list]\n\tGives all subsets of list (the power set), ordered by\n"
+        "\tincreasing length and lexicographically by element position within\n"
+        "\teach length. The head of list is kept on the subsets.\n"
+        "Subsets[list, n]\n\tGives subsets of length 0 through n.\n"
+        "Subsets[list, {n}]\n\tGives subsets of length exactly n.\n"
+        "Subsets[list, {nmin, nmax}]\n\tGives subsets whose length lies in the\n"
+        "\tinclusive range nmin to nmax; a third element gives a length step.\n"
+        "Subsets[list, spec, s]\n\tGives only the first s subsets spec would\n"
+        "\tproduce, generated lazily.");
 
     symtab_get_def("Table")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_get_def("Range")->attributes |= ATTR_PROTECTED;
@@ -89,6 +120,7 @@ void list_init(void) {
     symtab_get_def("Complement")->attributes |= ATTR_PROTECTED;
     symtab_get_def("DeleteDuplicates")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Split")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("SplitBy")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Total")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Accumulate")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Differences")->attributes |= ATTR_PROTECTED;
