@@ -5,6 +5,7 @@
 #include "test_utils.h"
 #include "parse.h"
 #include "print.h"
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -664,6 +665,67 @@ void test_join_level2_ragged_unequal_lengths() {
                    "{{x, 1, 2}, {3, 4}}", 0);
 }
 
+/* Evaluate `input` and return the printed result (caller frees). */
+static char* eval_to_string(const char* input) {
+    Expr* parsed = parse_expression(input);
+    ASSERT(parsed != NULL);
+    Expr* evaluated = evaluate(parsed);
+    expr_free(parsed);
+    char* str = expr_to_string(evaluated);
+    expr_free(evaluated);
+    return str;
+}
+
+void test_gather() {
+    struct {
+        const char* input;
+        const char* expected;
+    } tests[] = {
+        /* Groups are ordered by FIRST occurrence of their element (1, 7, 3, 2,
+         * 9 here), not by sorted order; within a group, input order is kept. */
+        {"Gather[{1, 7, 3, 7, 2, 3, 9}]", "{{1}, {7, 7}, {3, 3}, {2}, {9}}"},
+        {"Gather[{}]", "{}"},
+        {"Gather[{5}]", "{{5}}"},
+        {"Gather[{2, 2, 2}]", "{{2, 2, 2}}"},
+        {"Gather[{1, 2, 3}]", "{{1}, {2}, {3}}"},
+        /* Equal elements are collected from anywhere in the list, so the two
+         * non-adjacent a's share a group and that group leads because a occurs
+         * first. This is Gather, not Split. */
+        {"Gather[{a, b, a}]", "{{a, a}, {b}}"},
+        {"Gather[{3, 1, 3, 1, 2}]", "{{3, 3}, {1, 1}, {2}}"},
+        {"Gather[{x, y, x, x}]", "{{x, x, x}, {y}}"},
+    };
+
+    for (int i = 0; i < (int)(sizeof(tests) / sizeof(tests[0])); i++) {
+        assert_eval_eq(tests[i].input, tests[i].expected, 0);
+    }
+
+    /* Gather[list] must agree with GatherBy[list, Identity] on every case
+     * above — they share one grouping engine, and this pins that down. */
+    const char* args[] = {
+        "{1, 7, 3, 7, 2, 3, 9}", "{}", "{5}", "{2, 2, 2}",
+        "{1, 2, 3}", "{a, b, a}", "{3, 1, 3, 1, 2}", "{x, y, x, x}",
+    };
+    for (int i = 0; i < (int)(sizeof(args) / sizeof(args[0])); i++) {
+        char gather_in[128], gatherby_in[128];
+        snprintf(gather_in,   sizeof(gather_in),   "Gather[%s]", args[i]);
+        snprintf(gatherby_in, sizeof(gatherby_in), "GatherBy[%s, Identity]", args[i]);
+        char* g  = eval_to_string(gather_in);
+        char* gb = eval_to_string(gatherby_in);
+        if (strcmp(g, gb) != 0) {
+            printf("Gather/GatherBy mismatch for %s: Gather gave %s, "
+                   "GatherBy[..., Identity] gave %s\n", args[i], g, gb);
+            ASSERT(0);
+        }
+        free(g);
+        free(gb);
+    }
+
+    /* Non-list arguments stay unevaluated; wrong arity does too. */
+    assert_eval_eq("Gather[x]", "Gather[x]", 0);
+    assert_eval_eq("Gather[{1, 1}, foo]", "Gather[{1, 1}, foo]", 0);
+}
+
 void test_subsets() {
     struct {
         const char* input;
@@ -846,6 +908,7 @@ int main() {
 
     TEST(test_subsets);
     TEST(test_riffle);
+    TEST(test_gather);
 
     printf("All list tests passed!\n");
     return 0;

@@ -24,6 +24,7 @@
 #include "setops.h"
 #include "split.h"
 #include "splitby.h"
+#include "gather.h"
 #include "rescale.h"
 #include "pad.h"
 #include "total.h"

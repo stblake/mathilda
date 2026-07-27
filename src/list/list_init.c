@@ -64,6 +64,16 @@ void list_init(void) {
         "SplitBy[list, {f1, f2, ...}]\n"
         "\tsplits by f1, then splits each resulting run by f2, and so on,\n"
         "\tnesting one level deeper per function.");
+    symtab_add_builtin("Gather", builtin_gather);
+    symtab_get_def("Gather")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Gather",
+        "Gather[list]\n"
+        "\tGathers identical elements of list into sublists, giving\n"
+        "\t{{group1}, {group2}, ...}. Sublists appear in order of the first\n"
+        "\toccurrence of their element, and elements keep their input order\n"
+        "\twithin a sublist. Equal elements are collected from anywhere in the\n"
+        "\tlist, not only from adjacent runs (unlike Split).\n"
+        "\tGather[list] is equivalent to GatherBy[list, Identity].");
     symtab_add_builtin("Total", builtin_total);
     symtab_add_builtin("Accumulate", builtin_accumulate);
     symtab_add_builtin("Differences", builtin_differences);
