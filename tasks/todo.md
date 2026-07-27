@@ -29,13 +29,19 @@ arith ops = 8.0 ns/op; mixed-libm 150 ns/call; array len-4096 1.0x, 61 ns/elemen
       real `Arg`. Each verified against the interpreter first; parity 0.0.
 - [x] **Call boundary** — no malloc/free per `cf[x]`; all-Real signatures take
       the unboxed `compiled_eval_real` path.
+- [x] **Block strip-mining** — each opcode processes a tile of VBLOCK=64 elements
+      in a vectorisable C loop. Fusion is now ON by default and 1.9-3.4x over the
+      delegated path. Turned up five array-blind `infer_type` branches, a tile
+      aliasing rule, and one place fusion had to be made less capable than it
+      could be (ArcTan[nd,nd], which the interpreter declines).
+- [x] **Fixed the test build's missing CMAKE_BUILD_TYPE** — it was compiling at
+      -O0, so every absolute figure measured there had been inflated.
+- [x] **Stress tests** — 340 body x length combinations across the tile boundary,
+      21 fused-vs-delegated, 120 randomised trees, 200 repeated calls.
+      leaks-clean and ASan+UBSan clean.
 
 ## Next, in value order
 
-- [ ] **Block strip-mining for fusion** — each opcode processes a tile of ~64
-      elements in a vectorisable C loop; dispatch amortises 64x and temporaries
-      stay in L1. This is where the array order of magnitude is. Fusion stays
-      off until this lands.
 - [ ] **Make CSE actually fire** — it is defeated structurally: `binop`/`unop`
       write into an operand's register, invalidating the value-number entry the
       same instruction created. Either emit in SSA form + linear-scan regalloc,

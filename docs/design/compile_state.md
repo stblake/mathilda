@@ -32,17 +32,18 @@ Four things changed since M4. Full write-up in
    48 listed gaps. It fails if a listed gap starts compiling too, so the
    exception list cannot go stale.
 
-**Two findings that should shape the next round:**
+5. **Elementwise fusion is ON by default and strip-mined** (`COMPILE_NO_FUSE`
+   disables it). Each opcode processes a tile of `VBLOCK` = 64 elements in a
+   vectorisable C loop, so dispatch amortises 64-fold and temporaries stay in L1.
+   1.9-3.4x over the delegated NDArray path at `-O3`.
 
-- **Fusion is implemented and correct but NOT yet a win** (`COMPILE_FUSE`,
-  off by default). An elementwise chain lowers to one flat-index loop of scalar
-  bytecode — no temporary buffers, any rank, `Total` folded in — but the loop
-  runs the VM once per element and ~4 ns/instruction costs more than the buffers
-  it saves: 70 ns/element fused vs 61 delegated. **The fix is block
-  strip-mining**: each opcode processing a tile of ~64 elements in a vectorisable
-  C loop, so dispatch amortises 64× and temporaries stay in L1 (the NumExpr
-  design). That is where the array order of magnitude is; the lowering committed
-  is its foundation.
+**MEASUREMENT TRAP — read before trusting any number here.** The `tests/` CMake
+build had **no `CMAKE_BUILD_TYPE`**, i.e. no optimisation flags at all. It is now
+`Release`, but anything measured in that tree before 2026-07-27 was `-O0`. Always
+check `grep CMAKE_BUILD_TYPE tests/build/CMakeCache.txt` before quoting a figure.
+
+**Findings that should shape the next round:**
+
 - **CSE almost never fires**, and the reason is structural: `binop`/`unop` pop
   their operands before allocating the destination, so a computation usually
   writes *into* one of its own operand registers. The value-number entry for that
@@ -51,6 +52,21 @@ Four things changed since M4. Full write-up in
   linear-scan pass to compact afterwards — or, much cheaper, doing CSE at the
   `Expr` level in `emit`, hoisting structurally-equal subtrees into persistent
   registers the way `With` locals already are.
+- **`infer_type` is load-bearing now.** It used to be a routing hint — a branch
+  that reported a scalar where the value was really an array cost nothing,
+  because the ND layer picked its own result dtype. Fusion sizes the output
+  buffer from it, so the same sloppiness is now a wrong answer. Five branches had
+  to be fixed (unary math, 2-arg `Log`, `ArcTan`, `Power` with a literal
+  exponent, the binary-kernel path). **Any new head must propagate array-ness.**
+- **The tile bank has its own aliasing rule.** A tile op whose result element
+  WIDTH differs from its operand's (complex-to-real: `Abs`, `Re`, `Im`, `Arg`)
+  must not reuse the operand's register — it reads `double _Complex*` and writes
+  `double*`, and the compiler may assume those cannot overlap. This is invisible
+  until the loop vectorises.
+- **Fusion may only thread where the interpreter threads.** Listable is necessary
+  but not sufficient: with BOTH operands arrays, a head with a registered binary
+  kernel has no interpreter path at all (`ArcTan[nd, nd]` comes back
+  unevaluated), so fusion must decline it too.
 
 ---
 
