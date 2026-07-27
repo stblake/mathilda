@@ -182,6 +182,20 @@ typedef struct {
     bool real_closed;
 } NDBinaryKernel;
 
+/* N-ary scalar kernel: f[a1, ..., an] for n >= 3 (LerchPhi, Hypergeometric1F1,
+ * Hypergeometric2F1, ...).  The unary/binary descriptors above cannot express
+ * these, and the Compile[] VM is the consumer that needs them — the NDArray
+ * element-wise path still degrades for such heads, since "one array plus
+ * broadcast scalars" is a different question from "n scalars".  Arguments arrive
+ * as parallel (re, im) arrays of length n, the same choke point the other
+ * kernels use. */
+typedef struct {
+    bool (*cplx)(const double* re, const double* im, size_t n,
+                 double* ore, double* oim);
+    size_t nargs;            /* exact arity this kernel accepts */
+    bool real_closed;
+} NDNaryKernel;
+
 /* Map unary kernel `k` over NDArray `a`, returning a new EXPR_NDARRAY of the
  * same shape (dtype narrowed/promoted per the kernel's real-closedness). Returns
  * NULL if `a` isn't an NDArray or any element's kernel reports failure (caller

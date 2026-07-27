@@ -330,6 +330,61 @@ static bool ndk_LegendreP_c(double nre, double nim, double xre, double xim,
 static const NDBinaryKernel NDKB_Pochhammer = { ndk_Pochhammer_c, true };
 static const NDBinaryKernel NDKB_Binomial   = { ndk_Binomial_c,   true };
 static const NDBinaryKernel NDKB_LegendreP  = { ndk_LegendreP_c,  true };
+
+#define NDK_BIN2(NAME, FN)                                                     \
+static bool ndk_##NAME##_c(double are, double aim, double bre, double bim,     \
+                           double* rr, double* ri) {                           \
+    if (aim != 0.0 || bim != 0.0) return false;                                \
+    double v; if (!FN(are, bre, &v)) return false;                             \
+    *rr = v; *ri = 0.0; return true;                                           \
+}                                                                              \
+static const NDBinaryKernel NDKB_##NAME = { ndk_##NAME##_c, true };
+NDK_BIN2(BesselI,           sf_machine_bessel_i)
+NDK_BIN2(BesselK,           sf_machine_bessel_k)
+NDK_BIN2(PolyLog,           sf_machine_polylog)
+NDK_BIN2(QPochhammer,       sf_machine_qpochhammer)
+NDK_BIN2(Hypergeometric0F1, sf_machine_hyper0f1)
+#undef NDK_BIN2
+
+/* N-ary kernels: arity >= 3, which the unary/binary descriptors cannot express.
+ * Consumed by the Compile[] VM; the NDArray element-wise path still degrades for
+ * these heads, since "one array plus broadcast scalars" is a different question. */
+static bool ndk_LerchPhi_n(const double* re, const double* im, size_t n,
+                           double* rr, double* ri) {
+    if (n != 3 || im[0] || im[1] || im[2]) return false;
+    double v; if (!sf_machine_lerchphi(re[0], re[1], re[2], &v)) return false;
+    *rr = v; *ri = 0.0; return true;
+}
+static bool ndk_Hyper1F1_n(const double* re, const double* im, size_t n,
+                           double* rr, double* ri) {
+    if (n != 3 || im[0] || im[1] || im[2]) return false;
+    double v; if (!sf_machine_hyper1f1(re[0], re[1], re[2], &v)) return false;
+    *rr = v; *ri = 0.0; return true;
+}
+static bool ndk_Hyper2F1_n(const double* re, const double* im, size_t n,
+                           double* rr, double* ri) {
+    if (n != 4 || im[0] || im[1] || im[2] || im[3]) return false;
+    double v; if (!sf_machine_hyper2f1(re[0], re[1], re[2], re[3], &v)) return false;
+    *rr = v; *ri = 0.0; return true;
+}
+/* PFQ arrives already flattened by the compiler's lowering: re[0] carries p, so
+ * q is whatever is left after the p upper parameters and the final z. */
+static bool ndk_HypergeometricPFQ_n(const double* re, const double* im, size_t n,
+                                    double* rr, double* ri) {
+    if (n < 2) return false;
+    for (size_t i = 0; i < n; i++) if (im[i] != 0.0) return false;
+    size_t p = (size_t)re[0];
+    if (n < p + 2) return false;
+    size_t q = n - p - 2;
+    double v;
+    if (!sf_machine_pfq(re + 1, p, re + 1 + p, q, re[n - 1], &v)) return false;
+    *rr = v; *ri = 0.0; return true;
+}
+static const NDNaryKernel NDKN_HypergeometricPFQ = { ndk_HypergeometricPFQ_n, 0, true };
+static const NDNaryKernel NDKN_LerchPhi            = { ndk_LerchPhi_n, 3, true };
+static const NDNaryKernel NDKN_Hypergeometric1F1   = { ndk_Hyper1F1_n, 3, true };
+static const NDNaryKernel NDKN_Hypergeometric2F1   = { ndk_Hyper2F1_n, 4, true };
+#define REG_N(NAME) symtab_set_ndarray_nary_kernel(#NAME, &NDKN_##NAME)
 static const NDBinaryKernel NDKB_PolyGamma   = { ndk_PolyGamma_c,   true };
 static const NDBinaryKernel NDKB_HurwitzZeta = { ndk_HurwitzZeta_c, true };
 
@@ -390,6 +445,13 @@ void ndkernels_init(void) {
     REG_B(Binomial,    NDKB_Binomial);
     REG_B(LegendreP,   NDKB_LegendreP);
     REG_U(AiryAi); REG_U(AiryBi); REG_U(AiryAiPrime); REG_U(AiryBiPrime);
+    REG_B(BesselI,           NDKB_BesselI);
+    REG_B(BesselK,           NDKB_BesselK);
+    REG_B(PolyLog,           NDKB_PolyLog);
+    REG_B(QPochhammer,       NDKB_QPochhammer);
+    REG_B(Hypergeometric0F1, NDKB_Hypergeometric0F1);
+    REG_N(LerchPhi); REG_N(Hypergeometric1F1); REG_N(Hypergeometric2F1);
+    REG_N(HypergeometricPFQ);
 
     /* Special functions with libc-free algorithms: correct results on NDArray
      * via the degrade path (List threading), pending dedicated machine kernels. */
@@ -398,7 +460,6 @@ void ndkernels_init(void) {
     for (unsigned i = 0; i < sizeof(deg_u) / sizeof(deg_u[0]); i++)
         REG_DEG_U(deg_u[i]);
     static const char* deg_b[] = {
-        "BesselI", "BesselK", "PolyLog",
     };
     for (unsigned i = 0; i < sizeof(deg_b) / sizeof(deg_b[0]); i++)
         REG_DEG_B(deg_b[i]);

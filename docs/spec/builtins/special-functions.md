@@ -749,6 +749,17 @@ HypergeometricPFQ[{a1,…,ap}, {b1,…,bq}, z]
   with `|z| < 1`; outside that regime (and `p > q+1`) the call stays
   unevaluated (analytic continuation beyond the unit disk is not yet
   implemented).
+- **Cancellation is handled, not ignored.** For negative real `z` the series
+  alternates and its largest term exceeds the sum by a factor of order `e^|z|`,
+  so a doubles-only summation silently loses that many bits. The machine path
+  measures the loss (`max|term| / |sum|`) and re-sums through the MPFR path at
+  enough working precision to absorb it, then rounds back. The answer stays
+  machine precision — it is simply the correctly rounded one. `1F1(1;2;-40)`
+  agrees with its closed form `(E^z-1)/z` to one ulp; before this it was wrong
+  in the second decimal place.
+- Has a machine kernel, so bodies containing it compile
+  (`Compile`, `Plot`, `NIntegrate`, `NDSolve`, …) rather than falling back to
+  the interpreter. `Hypergeometric0F1`/`1F1`/`2F1` share that one kernel.
 - `D[HypergeometricPFQ[{a},{b},x], x]
    = (prod a_i / prod b_j) HypergeometricPFQ[{a_i+1},{b_j+1},x]`.
 

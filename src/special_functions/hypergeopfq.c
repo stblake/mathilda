@@ -404,9 +404,11 @@ static bool near_nonpos_int(double complex z) {
 static Expr* machine_sum(double complex zc,
                          const double complex* ac, size_t p,
                          const double complex* bc, size_t q,
-                         bool all_real) {
+                         bool all_real, double* lost_bits) {
     double complex term = 1.0, sum = 1.0;
+    double maxmag = 1.0;
     int settled = 0;
+    *lost_bits = 0.0;
     for (long k = 0; k < HGPFQ_MACHINE_MAX_TERMS; k++) {
         double complex fac = zc / (double)(k + 1);
         for (size_t i = 0; i < p; i++) fac *= (ac[i] + (double)k);
@@ -416,6 +418,8 @@ static Expr* machine_sum(double complex zc,
             fac /= d;
         }
         term *= fac;
+        double tm = cabs(term);
+        if (tm > maxmag) maxmag = tm;
         sum += term;
         if (cabs(term) <= cabs(sum) * 1e-16) {
             if (++settled >= 2) break;
@@ -424,6 +428,17 @@ static Expr* machine_sum(double complex zc,
         }
         if (!isfinite(creal(sum)) || !isfinite(cimag(sum))) return NULL;
     }
+    /* How much of the double's precision this summation has already destroyed.
+     * The series is alternating for negative real z, so its terms grow far past
+     * the value they sum to (|term|_max ~ e^|z| for the confluent cases); every
+     * bit of that excess magnitude is a bit of the answer that cancelled away
+     * and cannot be recovered by summing more carefully in the same precision.
+     * The caller re-sums in MPFR when this is large -- reporting it here rather
+     * than guessing from |z| keeps the estimate exact for every p, q and every
+     * parameter set, including the ones where no cancellation happens at all. */
+    double as = cabs(sum);
+    if (as > 0.0 && maxmag > as) *lost_bits = log2(maxmag / as);
+
     if (all_real && cimag(sum) == 0.0) return expr_new_real(creal(sum));
     return make_complex(expr_new_real(creal(sum)), expr_new_real(cimag(sum)));
 }
@@ -569,6 +584,28 @@ static Expr* hgpfq_mpfr_sum(const Expr* z, Expr* a, Expr* b,
     free(ac); free(bc);
     return result;
 }
+/* Round a high-precision sum back down to machine precision, preserving the
+ * shape (bare real, or Complex[re, im]).  Returns NULL if `e` is not one of
+ * those forms, in which case the caller keeps the plain machine result. */
+static double hgpfq_num_to_d(const Expr* e) {
+    switch (e->type) {
+        case EXPR_REAL:    return e->data.real;
+        case EXPR_INTEGER: return (double)e->data.integer;
+        case EXPR_MPFR:    return mpfr_get_d(e->data.mpfr, MPFR_RNDN);
+        default:           return 0.0;
+    }
+}
+static bool hgpfq_is_num(const Expr* e) {
+    return e->type == EXPR_REAL || e->type == EXPR_INTEGER || e->type == EXPR_MPFR;
+}
+static Expr* hgpfq_demote_to_machine(Expr* e) {
+    if (hgpfq_is_num(e)) return expr_new_real(hgpfq_num_to_d(e));
+    Expr *re = NULL, *im = NULL;
+    if (is_complex(e, &re, &im) && hgpfq_is_num(re) && hgpfq_is_num(im))
+        return make_complex(expr_new_real(hgpfq_num_to_d(re)),
+                            expr_new_real(hgpfq_num_to_d(im)));
+    return NULL;
+}
 #endif /* USE_MPFR */
 
 /* ------------------------------------------------------------------ */
@@ -627,7 +664,24 @@ static Expr* try_numeric(Expr* a, Expr* b, Expr* z) {
         }
     }
 #endif
-    result = machine_sum(zc, ac, p, bc, q, all_real);
+    double lost = 0.0;
+    result = machine_sum(zc, ac, p, bc, q, all_real, &lost);
+#ifdef USE_MPFR
+    /* Machine-precision arguments must still give a machine-precision ANSWER,
+     * and a doubles-only sum of a badly cancelling series does not: 1F1(1;2;-40)
+     * came back with 5e-2 relative error because its largest term is ~2e17 times
+     * the result.  Re-sum with enough working precision to absorb the loss and
+     * round back, so the argument precision -- not the conditioning of the
+     * series -- decides the output type. */
+    if (result && lost > 4.0 && lost < 4096.0) {
+        Expr* hi = hgpfq_mpfr_sum(z, a, b, p, q, 53 + (long)lost + 16);
+        if (hi) {
+            Expr* dn = hgpfq_demote_to_machine(hi);
+            expr_free(hi);
+            if (dn) { expr_free(result); result = dn; }
+        }
+    }
+#endif
     free(ac); free(bc);
     return result;
 }

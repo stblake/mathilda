@@ -845,6 +845,26 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         return true;
     }
     if (strcmp(h, "Conjugate") == 0 && na == 1) { IT(0, ta); *out = ta; return true; }
+    if (strcmp(h, "HypergeometricPFQ") == 0 && na == 3) {
+        const Expr* la = A[0];
+        const Expr* lb = A[1];
+        if (la->type != EXPR_FUNCTION || la->data.function.head->type != EXPR_SYMBOL
+            || strcmp(la->data.function.head->data.symbol.name, "List") != 0
+            || lb->type != EXPR_FUNCTION || lb->data.function.head->type != EXPR_SYMBOL
+            || strcmp(lb->data.function.head->data.symbol.name, "List") != 0) return false;
+        size_t np = la->data.function.arg_count, nq = lb->data.function.arg_count;
+        if (np + nq + 2 > 8) return false;
+        for (size_t i = 0; i < np; i++) {
+            CompileType t;
+            if (!infer_type(c, la->data.function.args[i], &t) || CT_IS_ARRAY(t) || t == CT_BOOL) return false;
+        }
+        for (size_t j = 0; j < nq; j++) {
+            CompileType t;
+            if (!infer_type(c, lb->data.function.args[j], &t) || CT_IS_ARRAY(t) || t == CT_BOOL) return false;
+        }
+        IT(2, ta); if (CT_IS_ARRAY(ta) || ta == CT_BOOL) return false;
+        *out = CT_REAL; return true;
+    }
     if (strcmp(h, "UnitStep") == 0 && na >= 1) {
         for (size_t i = 0; i < na; i++) { IT(i, ta); if (CT_IS_ARRAY(ta) || ta == CT_BOOL) return false; }
         *out = CT_INT; return true;                    /* UnitStep[0.5] is 1, not 1. */
@@ -945,6 +965,19 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         return true;
     }
     if (na == 1) { SymbolDef* d = symtab_lookup(h); if (d && d->ndarray_unary_kernel) { const NDUnaryKernel* k = d->ndarray_unary_kernel; if (k->cplx || k->real) { IT(0, ta); if (CT_IS_ARRAY(ta)) { *out = CT_ARRAY(k->to_real ? CT_REAL : CT_ELEM(ta), CT_RANK(ta)); return true; } if (k->to_real) { *out = CT_REAL; return true; } if (ta == CT_COMPLEX) { if (!k->cplx) return false; *out = CT_COMPLEX; return true; } *out = (k->real_closed || k->real) ? CT_REAL : CT_COMPLEX; return true; } } }
+    if (na >= 3 && na <= 8) {
+        SymbolDef* d = symtab_lookup(h);
+        if (d && d->ndarray_nary_kernel) {
+            const NDNaryKernel* k = (const NDNaryKernel*)d->ndarray_nary_kernel;
+            if (k->cplx && k->nargs == na) {
+                for (size_t i = 0; i < na; i++) {
+                    CompileType t;
+                    if (!infer_type(c, A[i], &t) || CT_IS_ARRAY(t) || t == CT_BOOL) return false;
+                }
+                *out = CT_REAL; return true;
+            }
+        }
+    }
     if (na == 2) {
         SymbolDef* d = symtab_lookup(h);
         if (d && d->ndarray_binary_kernel) {
@@ -1056,6 +1089,38 @@ static bool try_kernel(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
         else if (k->cplx)                   *out = kern_unop(c, OP_KERN_RC, a, CT_COMPLEX, (const void*)k->cplx);
         else return false;
         return true;
+    }
+    if (na >= 3 && na <= 8 && !c->vector_mode) {
+        /* N-ary machine kernel.  Arguments must land in CONSECUTIVE registers
+         * because the instruction carries only their base and count, so the
+         * block is reserved first and each argument lowered into it — the same
+         * shape OP_CALL uses. */
+        SymbolDef* d = symtab_lookup(h);
+        if (!d || !d->ndarray_nary_kernel) return false;
+        const NDNaryKernel* k = (const NDNaryKernel*)d->ndarray_nary_kernel;
+        if (!k->cplx || k->nargs != na) return false;
+        for (size_t i = 0; i < na; i++) {
+            CompileType t;
+            if (!infer_type(c, A[i], &t) || CT_IS_ARRAY(t) || t == CT_BOOL) return false;
+        }
+        int base = alloc_temp(c);
+        for (size_t i = 1; i < na; i++) (void)alloc_temp(c);
+        int after = c->temp_top;
+        Slot z; memset(&z, 0, sizeof z);
+        for (size_t i = 0; i < na && c->ok; i++) {
+            Val v;
+            if (!emit(c, A[i], &v)) return false;
+            coerce(c, &v, CT_REAL);
+            if (!c->ok) return false;
+            ins(c, OP_MOVE, (uint32_t)(base + (int)i), (uint32_t)v.reg, 0, z);
+            c->temp_top = after;
+        }
+        if (!c->ok) return false;
+        c->temp_top = (base - c->nlocals) + 1;
+        Slot kp; memset(&kp, 0, sizeof kp); kp.p = (const void*)k->cplx;
+        ins_f(c, OP_KERNN, (uint16_t)na, (uint32_t)base, (uint32_t)base, 0, kp);
+        out->reg = base; out->tmp = true; out->type = CT_REAL;
+        return c->ok;
     }
     if (na == 2) {
         SymbolDef* d = symtab_lookup(h);
@@ -1619,6 +1684,61 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
      *   are gated on the bounds being REAL: with exact bounds the interpreter
      *   returns an exact value where it clips (Clip[5, {1, 3}] is the Integer 3)
      *   and a Real where it does not, which no single compiled type can match. */
+    /* HypergeometricPFQ[{a1..ap}, {b1..bq}, z] — the head that actually matters,
+     * because the evaluator canonicalises Hypergeometric0F1, 1F1 and 2F1 into it
+     * before anything downstream sees them.  Its LIST arguments are what no
+     * kernel signature can express, so the two literal Lists are destructured
+     * here and flattened into the consecutive block the n-ary opcode wants,
+     * with p passed as the leading element so the kernel can find the split. */
+    if (strcmp(h, "HypergeometricPFQ") == 0 && na == 3) {
+        const Expr* la = A[0];
+        const Expr* lb = A[1];
+        if (la->type != EXPR_FUNCTION || la->data.function.head->type != EXPR_SYMBOL
+            || strcmp(la->data.function.head->data.symbol.name, "List") != 0
+            || lb->type != EXPR_FUNCTION || lb->data.function.head->type != EXPR_SYMBOL
+            || strcmp(lb->data.function.head->data.symbol.name, "List") != 0)
+            { c->ok = false; return false; }
+        size_t np = la->data.function.arg_count, nq = lb->data.function.arg_count;
+        if (np + nq + 2 > 8) { c->ok = false; return false; }   /* KERNN operand cap */
+
+        const Expr* parts[8];
+        size_t total = 0;
+        for (size_t i = 0; i < np; i++) parts[total++] = la->data.function.args[i];
+        for (size_t j = 0; j < nq; j++) parts[total++] = lb->data.function.args[j];
+        parts[total++] = A[2];
+        for (size_t i = 0; i < total; i++) {
+            CompileType t;
+            if (!infer_type(c, parts[i], &t) || CT_IS_ARRAY(t) || t == CT_BOOL)
+                { c->ok = false; return false; }
+        }
+
+        SymbolDef* d = symtab_lookup(h);
+        if (!d || !d->ndarray_nary_kernel) { c->ok = false; return false; }
+        const NDNaryKernel* k = (const NDNaryKernel*)d->ndarray_nary_kernel;
+        if (!k->cplx) { c->ok = false; return false; }
+
+        Slot z; memset(&z, 0, sizeof z);
+        int base = alloc_temp(c);                     /* slot 0 holds p */
+        for (size_t i = 0; i < total; i++) (void)alloc_temp(c);
+        int after = c->temp_top;
+        Slot pk; memset(&pk, 0, sizeof pk); pk.r = (double)np;
+        ins(c, OP_CONST, (uint32_t)base, 0, 0, pk);
+        for (size_t i = 0; i < total && c->ok; i++) {
+            Val v;
+            if (!emit(c, parts[i], &v)) return false;
+            coerce(c, &v, CT_REAL);
+            if (!c->ok) return false;
+            ins(c, OP_MOVE, (uint32_t)(base + 1 + (int)i), (uint32_t)v.reg, 0, z);
+            c->temp_top = after;
+        }
+        if (!c->ok) return false;
+        c->temp_top = (base - c->nlocals) + 1;
+        Slot kp; memset(&kp, 0, sizeof kp); kp.p = (const void*)k->cplx;
+        ins_f(c, OP_KERNN, (uint16_t)(total + 1), (uint32_t)base, (uint32_t)base, 0, kp);
+        out->reg = base; out->tmp = true; out->type = CT_REAL;
+        return c->ok;
+    }
+
     if (strcmp(h, "UnitStep") == 0 && na >= 1) {
         Val acc; bool have = false;
         for (size_t i = 0; i < na; i++) {
@@ -2670,6 +2790,16 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
              * rather than pasted in, so deep chains compile instead of bailing. */
             OP(CALL): { if (!vm_call((const CompiledProgram*)c->imm.p,
                                      &RA, c->flags, &RD)) goto vm_fail; } NEXT();
+            /* An n-ary machine kernel: arguments in `flags` consecutive
+             * registers starting at `a`, the kernel pointer in the immediate. */
+            OP(KERNN): {
+                double ar[8], ai[8], orr, oi;
+                unsigned na_ = c->flags;
+                if (na_ > 8) goto vm_fail;
+                for (unsigned k_ = 0; k_ < na_; k_++) { ar[k_] = R[c->a + k_].r; ai[k_] = 0.0; }
+                if (!((kfn_cn)c->imm.p)(ar, ai, (size_t)na_, &orr, &oi)) RD.r = NAN;
+                else RD.r = orr;
+            } NEXT();
             OP(NOP): NEXT();
             OP(RET): return;
 #if !VM_THREADED

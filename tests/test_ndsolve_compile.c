@@ -235,14 +235,18 @@ int main(void) {
     }
 
     /* ---- graceful bail on unsupported constructs ---- */
-    /* Functions WITH a machine kernel (Gamma, BesselJ, ...) now compile through
-     * the shared engine's generic-kernel path; genuine bails are functions with
-     * no machine kernel (BarnesG, PolyLog) or a free symbol.  Zeta and then
-     * AiryAi were the example here and now compile — the coverage audit exists so
-     * that stops being a silent assumption. */
-    check_bail("no kernel (BarnesG)",    "NDSolve`w0 + BarnesG[NDSolve`w0]");
-    check_bail("no kernel (PolyLog)",    "NDSolve`w0 + PolyLog[2, NDSolve`w0]");
-    check_bail("free parameter symbol",  "NDSolve`w0 + freeParameter");
+    /* Functions WITH a machine kernel (Gamma, BesselJ, ...) compile through the
+     * shared engine's generic-kernel path, so a bail example has to be a head
+     * that will never acquire one.  Zeta, then AiryAi, then PolyLog were each
+     * used here and each in turn started compiling — the choice below is
+     * deliberately from the STRUCTURAL half of KNOWN_GAPS (see
+     * test_compile_coverage.c): the interpreter leaves BarnesG[real]
+     * unevaluated, and QuotientRemainder returns a two-element list rather than
+     * one machine number.  Neither can become a scalar kernel without the
+     * compiled path diverging from the interpreter, so neither will move. */
+    check_bail("no kernel (BarnesG)",         "NDSolve`w0 + BarnesG[NDSolve`w0]");
+    check_bail("non-scalar (QuotientRem)",    "NDSolve`w0 + QuotientRemainder[NDSolve`w0, 3.]");
+    check_bail("free parameter symbol",       "NDSolve`w0 + freeParameter");
 
     if (failures == 0) printf("\nAll NDSolve compile tests passed.\n");
     else printf("\n%d NDSolve compile test(s) FAILED.\n", failures);

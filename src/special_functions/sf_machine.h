@@ -19,6 +19,7 @@
 #define MATHILDA_SF_MACHINE_H
 
 #include <stdbool.h>
+#include <stddef.h>
 
 bool sf_machine_ei(double x, double* out);    /* ExpIntegralEi */
 bool sf_machine_e1(double x, double* out);    /* E_1, x > 0 */
@@ -46,6 +47,16 @@ bool sf_machine_airy_ai(double x, double* out);        /* AiryAi */
 bool sf_machine_airy_bi(double x, double* out);        /* AiryBi */
 bool sf_machine_airy_ai_prime(double x, double* out);  /* AiryAiPrime */
 bool sf_machine_airy_bi_prime(double x, double* out);  /* AiryBiPrime */
+bool sf_machine_bessel_i(double nu, double x, double* out);     /* BesselI */
+bool sf_machine_hyper0f1(double a, double z, double* out);      /* Hypergeometric0F1 */
+bool sf_machine_qpochhammer(double a, double q, double* out);   /* QPochhammer, |q|<1 */
+bool sf_machine_bessel_k(double nu, double x, double* out);     /* BesselK, x > 0 */
+bool sf_machine_polylog(double s, double x, double* out);       /* PolyLog, |x| <= 1 */
+bool sf_machine_lerchphi(double z, double s, double a, double* out);        /* LerchPhi */
+bool sf_machine_hyper1f1(double a, double b, double z, double* out);        /* 1F1 */
+bool sf_machine_hyper2f1(double a, double b, double c, double z, double* out); /* 2F1 */
+bool sf_machine_pfq(const double* a, size_t p, const double* b, size_t q,
+                    double z, double* out);                    /* HypergeometricPFQ */
 
 /* Already-existing double algorithms in inverf.c / inverfc.c, exposed so the
  * same two consumers can use them rather than degrading. */

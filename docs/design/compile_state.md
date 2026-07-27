@@ -29,10 +29,18 @@ Four things changed since M4. Full write-up in
 3. **Any rank works** and needed no new machinery: the delegated ND path was
    already rank-general, and the compiler's own rank-1 front gate was the only
    blocker. `Total` stays rank-1 on purpose (it reduces the leading axis only).
-4. **Coverage is audited by the build** — `tests/test_compile_coverage.c` probes
-   every `NumericFunction` head by compiling `Head[x]`. 103 heads, 55 compile,
-   48 listed gaps. It fails if a listed gap starts compiling too, so the
-   exception list cannot go stale.
+4. **Coverage is audited by the build, and is now 93 of 103 (90%), from 55** —
+   `tests/test_compile_coverage.c` probes every `NumericFunction` head by
+   actually compiling `Head[x]` … `Head[x,y,z,w]`. It fails if a listed gap
+   starts compiling too, so the exception list cannot go stale.
+   **All 10 remaining entries are deliberate exclusions, not pending work**: five
+   heads the *interpreter* leaves unevaluated on machine reals (`BesselJZero`,
+   `BarnesG`, `Hyperfactorial`, `Factorial2`, `FactorialPower` — a kernel there
+   would answer where the interpreter declines), and five that are not one
+   machine number (`GCD`, `LCM`, `DigitSum`, `ReIm`, `QuotientRemainder`).
+   Heads whose real signature is not a flat scalar list need a `PROBES` entry
+   (`Clip`, `Rescale`, `HypergeometricPFQ`) — pFq was reported as a coverage gap
+   for a while purely because the probe used the wrong shape.
 
 5. **Elementwise fusion is ON by default and strip-mined** (`COMPILE_NO_FUSE`
    disables it). Each opcode processes a tile of `VBLOCK` = 64 elements in a
@@ -76,6 +84,18 @@ check `grep CMAKE_BUILD_TYPE tests/build/CMakeCache.txt` before quoting a figure
   but not sufficient: with BOTH operands arrays, a head with a registered binary
   kernel has no interpreter path at all (`ArcTan[nd, nd]` comes back
   unevaluated), so fusion must decline it too.
+- **The parity tests keep finding INTERPRETER bugs, not kernel bugs.** Three so
+  far, each surfaced only because a fast double path was written next to the
+  existing one and the two were then compared over a few hundred points:
+  `ProductLog` wrong on `[0.35, 1/e]` (seed gap), `Zeta` at 0, and
+  `HypergeometricPFQ` at negative real `z` — off by 5e-2 at `z = -40` because
+  `machine_sum` summed a series whose largest term is `e^|z|` times its own sum
+  in plain doubles. The fix pattern that generalises: **measure the cancellation
+  (`max|term| / |sum|`) rather than estimating it from the argument**, and
+  re-sum through the MPFR path at `53 + lost + 16` bits, rounding back so the
+  argument precision still decides the output type. Costs nothing when nothing
+  cancels. When a parity test fails, check which side is wrong before assuming
+  it is the new one.
 
 ---
 

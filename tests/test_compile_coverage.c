@@ -32,44 +32,36 @@
 
 static int failures = 0;
 
-/* Heads that carry NumericFunction but are not expected to compile yet.
+/* Heads that carry NumericFunction but do not compile.
  *
- * Two distinct reasons, and only the first is a coverage gap worth closing:
+ * As of the M5 kernel work this list contains NO pending numerics — every head
+ * here is one that SHOULD stay uncompiled, for one of two reasons:
  *
- *  (a) NO MACHINE KERNEL.  The module computes in MPFR at >= 53 bits and rounds
- *      at the end (see special_functions/zeta.c), so there is no double-precision
- *      code path to lift into the kernel registry — closing these means writing
- *      genuinely new double/double-complex implementations, each needing a parity
- *      test against the MPFR path.  Registered as explicit degrade sentinels in
- *      ndkernels.c, or absent from the registry entirely.
+ *  (a) THE INTERPRETER ITSELF DECLINES on real arguments.  `BesselJZero[2., 1.]`,
+ *      `BarnesG[3.5]`, `Hyperfactorial[3.5]`, `Factorial2[5.5]` and
+ *      `FactorialPower[5.5, 2.]` all come back UNEVALUATED.  A machine kernel
+ *      would make the compiled path ANSWER where the interpreter does not —
+ *      the one divergence the engine forbids, and a far worse bug than a bail.
+ *      (Check this before writing numerics for anything on this list:
+ *      `Binomial[5.5, 2.]` DOES evaluate to 12.375, which is why Binomial is
+ *      covered and these are not.)
  *
- *  (b) NOT A SCALAR MACHINE FUNCTION.  Exact integer semantics that a double
- *      cannot represent faithfully (GCD, Binomial on big arguments), or a result
- *      that is not one number (ReIm, QuotientRemainder return lists).  These
- *      should stay uncompiled; they are listed so the audit stays honest about
- *      why, not because they are pending work. */
+ *  (b) NOT A SCALAR MACHINE FUNCTION.  Exact integer semantics a double cannot
+ *      represent faithfully (GCD, LCM, DigitSum), or a result that is not one
+ *      number (ReIm, QuotientRemainder return lists).
+ *
+ * So an entry appearing here is a statement about the FUNCTION, not about
+ * unfinished work.  If a genuinely-pending kernel is ever added back to this
+ * list, say so explicitly — otherwise the distinction rots. */
 typedef struct { const char* name; const char* why; } Gap;
 static const Gap KNOWN_GAPS[] = {
-    /* (a) no machine kernel yet — real coverage gaps.
-     *
-     * The exponential-integral family used to live here; sf_machine.c now
-     * provides real double implementations for it, so the ones remaining are
-     * those that still need genuinely new numerics rather than a wrapper. */
-    { "PolyLog",              "no double kernel (MPFR-only module)" },
-    { "LerchPhi",             "no double kernel (MPFR-only module)" },
-    { "BesselI",              "no double kernel (MPFR-only module)" },
-    { "BesselK",              "no double kernel (MPFR-only module)" },
-    { "BesselJZero",          "no double kernel (root-finding module)" },
-    { "BarnesG",              "no double kernel" },
-    { "Hyperfactorial",       "no double kernel" },
-    { "QPochhammer",          "no double kernel" },
-    { "Hypergeometric0F1",    "no double kernel" },
-    { "Hypergeometric1F1",    "no double kernel" },
-    { "Hypergeometric2F1",    "no double kernel" },
-    { "HypergeometricPFQ",    "no double kernel" },
+    /* (a) the interpreter leaves these unevaluated on machine reals. */
+    { "BesselJZero",          "interpreter leaves BesselJZero[n,k] unevaluated" },
+    { "BarnesG",              "interpreter leaves BarnesG[real] unevaluated" },
+    { "Hyperfactorial",       "interpreter leaves Hyperfactorial[real] unevaluated" },
     { "Factorial2",           "interpreter leaves Factorial2[real] unevaluated" },
     { "FactorialPower",       "interpreter leaves FactorialPower[real,real] unevaluated" },
-    /* (b) deliberately not machine-scalar functions */
+    /* (b) deliberately not machine-scalar functions. */
     { "GCD",                  "exact integer semantics; not a double kernel" },
     { "LCM",                  "exact integer semantics; not a double kernel" },
     { "DigitSum",             "exact integer semantics; not a double kernel" },
@@ -90,8 +82,9 @@ static const char* gap_reason(const char* nm) {
  * that is really a defect in the probe. */
 typedef struct { const char* name; const char* probe; } Probe;
 static const Probe PROBES[] = {
-    { "Clip",    "Clip[x, {1., 3.}]" },
-    { "Rescale", "Rescale[x, {0., 4.}]" },
+    { "Clip",              "Clip[x, {1., 3.}]" },
+    { "Rescale",           "Rescale[x, {0., 4.}]" },
+    { "HypergeometricPFQ", "HypergeometricPFQ[{1.5}, {2.5}, x]" },
 };
 static const char* probe_for(const char* nm) {
     for (size_t i = 0; i < sizeof PROBES / sizeof PROBES[0]; i++)
@@ -115,12 +108,15 @@ static int cmp_name(const void* a, const void* b) {
     return strcmp(*(const char* const*)a, *(const char* const*)b);
 }
 
-/* Does a body containing this head compile, at any arity from 1 to 3? */
+/* Does a body containing this head compile, at any arity from 1 to 4?
+ * Four, not three: Hypergeometric2F1[a, b, c, z] is 4-ary, and probing only to
+ * three reported it as a coverage gap when the kernel was there all along. */
+#define PROBE_MAXARITY 4
 static bool head_compiles(const char* h) {
-    static const char* an[3] = { "x", "y", "z" };
-    const char* inm[3];
-    const CompileType RRR[3] = { CT_REAL, CT_REAL, CT_REAL };
-    for (int i = 0; i < 3; i++) inm[i] = intern_symbol(an[i]);
+    static const char* an[PROBE_MAXARITY] = { "x", "y", "z", "w" };
+    const char* inm[PROBE_MAXARITY];
+    const CompileType RRR[PROBE_MAXARITY] = { CT_REAL, CT_REAL, CT_REAL, CT_REAL };
+    for (int i = 0; i < PROBE_MAXARITY; i++) inm[i] = intern_symbol(an[i]);
 
     const char* override = probe_for(h);
     if (override) {
@@ -132,7 +128,7 @@ static bool head_compiles(const char* h) {
         return false;
     }
 
-    for (int arity = 1; arity <= 3; arity++) {
+    for (int arity = 1; arity <= PROBE_MAXARITY; arity++) {
         char buf[256];
         int p = snprintf(buf, sizeof buf, "%s[x", h);
         for (int i = 1; i < arity; i++) p += snprintf(buf + p, sizeof buf - (size_t)p, ", %s", an[i]);

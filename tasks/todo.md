@@ -62,21 +62,64 @@ arith ops = 8.0 ns/op; mixed-libm 150 ns/call; array len-4096 1.0x, 61 ns/elemen
       self-reference patch at object construction.
 - [ ] **Thread the strip-mined loop** via `nd_parallel_for` — now unblocked by
       C-stack frames. Note `-DMATHILDA_THREADS` is not set in tests/CMakeLists.
-- [ ] **Fill the remaining kernels** — **19 listed gaps, from 48.** Coverage is
-      84/103 (82%), from 55. Done so far in `src/special_functions/sf_machine.c`:
+- [x] **Fill the remaining kernels — DONE. Coverage 93/103 (90%), from 55, and
+      no pending numerics remain.** `src/special_functions/sf_machine.c` covers
       the exponential-integral family, Erfi, ProductLog, Fresnel, PolyGamma,
       HurwitzZeta, HarmonicNumber, Zeta, Fibonacci/LucasL, Pochhammer, Binomial,
-      LegendreP, Airy x4; plus UnitStep/Clip/Rescale as bespoke lowerings (their
-      result TYPE is the difficulty, not the numerics).
-      **12 pending numerics:** `PolyLog`, `LerchPhi`, `BesselI`, `BesselK`,
-      `BesselJZero`, `BarnesG`, `Hyperfactorial`, `QPochhammer`, and the four
-      hypergeometrics.
-      **7 deliberate exclusions:** `Factorial2`/`FactorialPower` (the interpreter
-      leaves them unevaluated on reals) and `GCD`/`LCM`/`DigitSum`/`ReIm`/
-      `QuotientRemainder` (exact-integer, or not a single machine number).
+      LegendreP, Airy x4, and the final twelve — PolyLog, LerchPhi, QPochhammer,
+      BesselI/K and the four hypergeometrics (one `sf_machine_pfq`; 0F1/1F1/2F1
+      are wrappers, since 1F1 canonicalises to pFq before the evaluator sees it).
+      UnitStep/Clip/Rescale stay bespoke lowerings — their result TYPE is the
+      difficulty, not the numerics.
+      **The 10 remaining listed gaps are all deliberate**, and the audit's header
+      now says so rather than calling them pending: `BesselJZero`, `BarnesG`,
+      `Hyperfactorial`, `Factorial2`, `FactorialPower` (the *interpreter* leaves
+      these unevaluated on machine reals, so a kernel would answer where it
+      declines) and `GCD`/`LCM`/`DigitSum`/`ReIm`/`QuotientRemainder`
+      (exact-integer, or not a single machine number).
 - [ ] **Airy's uncovered band** — `2.5 < |x| < 8`, where neither the ascending
       series nor the asymptotic expansion reaches double precision. Needs a third
       method (Chebyshev fits, or the modified-Bessel route). Declines today.
 - [ ] **`CompileDiag`** — a bail still reports nothing. The audit covers heads;
       per-body diagnostics would cover the rest.
 - [ ] **Native backend** (`CompilationTarget -> "C"`), behind a build flag.
+
+## Review — the last 12 numerics
+
+Coverage 84 -> 93 of 103. The work split unevenly: nine of the twelve were
+ordinary double implementations, and the twelfth (`HypergeometricPFQ`) cost more
+than the other eleven combined, for two reasons worth recording.
+
+**pFq was never actually an uncovered head.** The audit probes with
+`Head[x]` … `Head[x,y,z,w]`, and pFq takes *two lists and a scalar*. It had a
+lowering the whole time; the probe was measuring the wrong signature and
+reporting a gap that was really a defect in the audit. `PROBES` now carries the
+shape override alongside `Clip` and `Rescale`. Worth remembering that a coverage
+number is only as honest as its probe.
+
+**The parity failure was the interpreter's, not the kernel's.** This is now the
+third time (`ProductLog`, `Zeta`, pFq) — writing a second implementation and
+diffing it over a few hundred points is turning out to be a better bug-finder for
+the existing numerics than it is a risk to them. Do not assume the new side is
+wrong.
+
+`machine_sum` summed pFq in plain doubles. For negative real `z` the series
+alternates and `max|term|` exceeds the sum by ~`e^|z|`, so `1F1(1;2;-40)` came
+back with 5.3e-2 relative error against its closed form `(E^z-1)/z` — the bits
+were gone before the loop ended, and no amount of extra terms recovers them. The
+fix measures the loss instead of guessing it from `|z|`: track `max|term|/|sum|`,
+report `log2` of it, and re-sum through the MPFR path at `53 + lost + 16` bits
+when it exceeds 4, rounding back. Exact for every `p`, `q` and parameter set, and
+free where nothing cancels (all-positive terms give `lost = 0`). Machine
+arguments still give a machine answer; it is now the correctly rounded one.
+
+Also moved the NDSolve bail example onto the structural half of `KNOWN_GAPS`.
+`Zeta`, `AiryAi` and `PolyLog` were each used as "a head with no machine kernel"
+and each in turn started compiling; `BarnesG` and `QuotientRemainder` cannot move
+without breaking interpreter parity, so they will not.
+
+Verified: `compile_tests`, `compile_coverage_tests`, `compiledfunction_tests`,
+`autocompile_tests`, `ndsolve_compile_tests`, `hypergeopfq_tests`,
+`numeric_tests`, `beta_tests`, `integrate_ramanujan_tests`, `legendre_tests`,
+`sum_tests` all pass; `bench_compile` within gate; `leaks` reports 0 bytes on
+all four compile suites.

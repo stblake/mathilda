@@ -624,6 +624,32 @@ int main(void) {
     parity("AiryAi large -",  "AiryAi[-x]",        xyz, RRR, 1, 8.0, 30.0, 0, 0, 200);
     parity("AiryBi large",    "AiryBi[x]",         xyz, RRR, 1, 8.0, 40.0, 0, 0, 200);
 
+    /* Bessel I/K, PolyLog, QPochhammer and the hypergeometrics.  BesselK needed
+     * a continued fraction for x > 2: both small-x forms compute a decaying K
+     * from quantities growing like e^x and lose ~2x/ln(10) digits. */
+    parity("BesselI int order",  "BesselI[2, x]",   xyz, RRR, 1, 0.05, 18.0, 0, 0, 300);
+    parity("BesselI real order", "BesselI[2.5, x]", xyz, RRR, 1, 0.05, 18.0, 0, 0, 300);
+    parity("BesselI order 0",    "BesselI[0, x]",   xyz, RRR, 1, 0.05, 25.0, 0, 0, 300);
+    parity("BesselK int order",  "BesselK[2, x]",   xyz, RRR, 1, 0.05, 40.0, 0, 0, 400);
+    parity("BesselK real order", "BesselK[2.5, x]", xyz, RRR, 1, 0.05, 40.0, 0, 0, 400);
+    parity("BesselK order 0",    "BesselK[0, x]",   xyz, RRR, 1, 0.05, 40.0, 0, 0, 400);
+    parity("BesselK high order", "BesselK[7, x]",   xyz, RRR, 1, 0.5, 40.0, 0, 0, 300);
+    parity("PolyLog 2",       "PolyLog[2, x]",     xyz, RRR, 1, -0.99, 0.99, 0, 0, 400);
+    parity("PolyLog 3",       "PolyLog[3, x]",     xyz, RRR, 1, -0.99, 0.99, 0, 0, 300);
+    parity("PolyLog real s",  "PolyLog[2.5, x]",   xyz, RRR, 1, -0.95, 0.95, 0, 0, 300);
+    parity("QPochhammer",     "QPochhammer[x, 0.3]", xyz, RRR, 1, -2.0, 2.0, 0, 0, 300);
+    parity("QPochhammer q",   "QPochhammer[0.5, x]", xyz, RRR, 1, -0.95, 0.95, 0, 0, 300);
+    parity("Hypergeometric0F1", "Hypergeometric0F1[2., x]", xyz, RRR, 1, -20.0, 20.0, 0, 0, 300);
+    parity("LerchPhi",        "LerchPhi[x, 2., 1.]", xyz, RRR, 1, -0.95, 0.95, 0, 0, 300);
+    parity("LerchPhi s",      "LerchPhi[0.4, x, 2.]", xyz, RRR, 1, 0.5, 6.0, 0, 0, 300);
+    parity("Hypergeometric1F1", "Hypergeometric1F1[1., 2., x]", xyz, RRR, 1, -40.0, 20.0, 0, 0, 300);
+    parity("Hypergeometric1F1 b", "Hypergeometric1F1[0.5, x, 1.5]", xyz, RRR, 1, 0.3, 9.0, 0, 0, 300);
+    parity("Hypergeometric2F1", "Hypergeometric2F1[1., 2., 3., x]", xyz, RRR, 1, -0.95, 0.95, 0, 0, 300);
+    parity("Zeta at 0",       "Zeta[x - 1.]",      xyz, RRR, 1, 0.5, 1.5, 0, 0, 200);
+    parity("sf batch 3 chain",
+           "BesselK[1, x] + PolyLog[2, y/10.] Hypergeometric0F1[2., x] + BesselI[0, y]",
+           xyz, RRR, 2, 0.4, 6.0, 0, 0, 300);
+
     /* UnitStep / Clip / Rescale are lowered by hand, not registered as kernels,
      * because their result TYPE is the difficulty: UnitStep must stay an
      * Integer, and Clip/Rescale take a list of bounds. */
@@ -655,6 +681,10 @@ int main(void) {
             /* Airy's uncovered band, where neither expansion converges. */
             { "AiryAi[x]",         4.0 }, { "AiryBi[x]",        -5.0 },
             { "AiryAiPrime[x]",    6.0 }, { "AiryBiPrime[x]",   -7.0 },
+            { "BesselK[1, x]",    -1.0 },          /* complex for x < 0 */
+            { "PolyLog[2, x]",     1.5 },          /* past the branch cut */
+            { "QPochhammer[0.5, x]", 1.5 },        /* |q| >= 1: no convergence */
+            { "Hypergeometric2F1[1., 2., 3., x]", 1.5 },  /* outside the disc */
         };
         int bad = 0, n = (int)(sizeof DECLINE / sizeof DECLINE[0]);
         for (int i = 0; i < n; i++) {

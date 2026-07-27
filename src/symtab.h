@@ -87,6 +87,7 @@ typedef struct SymbolDef {
      * Point at static-const descriptors, so the SymbolDef never owns them. */
     const void* ndarray_unary_kernel;
     const void* ndarray_binary_kernel;
+    const void* ndarray_nary_kernel;   /* const NDNaryKernel*, arity >= 3 */
     struct SymbolDef* next;   // hash-bucket chain (replaces the old SymEntry)
 } SymbolDef;
 
@@ -138,6 +139,7 @@ const char* symtab_get_docstring(const char* symbol_name);
 // NDArray argument at C speed instead of falling back to List threading.
 void symtab_set_ndarray_unary_kernel(const char* symbol_name, const void* kernel);
 void symtab_set_ndarray_binary_kernel(const char* symbol_name, const void* kernel);
+void symtab_set_ndarray_nary_kernel(const char* symbol_name, const void* kernel);
 
 // Set/get the default option settings (a List[Rule[name,val], ...]) for a
 // symbol -- the store behind Options[f] and SetOptions[f]. symtab_set_options

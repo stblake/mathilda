@@ -361,10 +361,17 @@ bool sf_machine_harmonic(double x, double* out) {
  * functional equation below it. */
 bool sf_machine_zeta(double s, double* out) {
     if (s == 1.0) return false;                       /* pole */
+    /* zeta(0) = -1/2.  The functional equation cannot reach it: sin(pi s/2) is
+     * zero there while zeta(1-s) has its pole, so the product is 0 * infinity.
+     * Treating that zero sine as a trivial zero returned 0 instead of -1/2 —
+     * which then propagated into PolyLog, whose expansion sums zeta(n-k) and so
+     * hits s = 0 for every integer order. */
+    if (s == 0.0) { *out = -0.5; return true; }
+    /* The trivial zeros are the NEGATIVE EVEN integers, and only those. */
+    if (s < 0.0 && s == floor(s) && fmod(s, 2.0) == 0.0) { *out = 0.0; return true; }
     if (s < 0.5) {
         /* zeta(s) = 2^s pi^(s-1) sin(pi s/2) Gamma(1-s) zeta(1-s) */
         double sn = sin(M_PI * s / 2.0);
-        if (sn == 0.0) { *out = 0.0; return true; }   /* trivial zeros */
         double zr;
         if (!sf_machine_zeta(1.0 - s, &zr)) return false;
         double v = pow(2.0, s) * pow(M_PI, s - 1.0) * sn * tgamma(1.0 - s) * zr;
@@ -654,4 +661,334 @@ bool sf_machine_airy_ai_prime(double x, double* out) {
 bool sf_machine_airy_bi_prime(double x, double* out) {
     double a, b, ap, bp; if (!airy_all(x, &a, &b, &ap, &bp)) return false;
     *out = bp; return isfinite(bp);
+}
+
+/* ---- Modified Bessel I, and friends ------------------------------------- */
+
+/* I_nu(x) from the ascending series sum (x/2)^(2k+nu) / (k! Gamma(k+nu+1)).
+ * Every term is positive for x > 0, so unlike most series of this shape there is
+ * no cancellation at all and the accuracy holds right up to where I_nu itself
+ * overflows.  The first term is formed through lgamma so a large nu cannot
+ * overflow Gamma before the ratio is taken. */
+bool sf_machine_bessel_i(double nu, double x, double* out) {
+    double sgn = 1.0;
+    if (x < 0.0) {
+        /* I_nu(-x) = (-1)^nu I_nu(x) only for integer nu; otherwise complex. */
+        if (nu != floor(nu)) return false;
+        if (fmod(fabs(nu), 2.0) == 1.0) sgn = -1.0;
+        x = -x;
+    }
+    if (nu < 0.0 && nu == floor(nu)) nu = -nu;        /* I_-n = I_n */
+    if (x == 0.0) { *out = (nu == 0.0) ? 1.0 : 0.0; return true; }
+
+    double h = x / 2.0;
+    double lt = nu * log(h) - lgamma(nu + 1.0);
+    if (lt < -745.0) { *out = 0.0; return true; }     /* underflows to zero */
+    double term = gamma_sign(nu + 1.0) * exp(lt);
+    double sum = term, h2 = h * h;
+    for (int k = 0; k < 4000; k++) {
+        term *= h2 / ((k + 1.0) * (k + 1.0 + nu));
+        sum += term;
+        if (fabs(term) < fabs(sum) * EI_EPS) break;
+    }
+    *out = sgn * sum;
+    return isfinite(*out);
+}
+
+/* 0F1(;a;z) = sum z^k / ((a)_k k!) — entire, so the series is the whole story. */
+bool sf_machine_pfq(const double* a, size_t p, const double* b, size_t q,
+                    double z, double* out);   /* defined below */
+
+bool sf_machine_hyper0f1(double a, double z, double* out) {
+    return sf_machine_pfq(NULL, 0, &a, 1, z, out);
+}
+
+/* QPochhammer[a, q] = prod_{k>=0} (1 - a q^k), convergent for |q| < 1. */
+bool sf_machine_qpochhammer(double a, double q, double* out) {
+    if (!(fabs(q) < 1.0)) return false;
+    double p = 1.0, qk = 1.0;
+    for (int k = 0; k < 100000; k++) {
+        double f = 1.0 - a * qk;
+        p *= f;
+        if (p == 0.0) break;
+        qk *= q;
+        if (fabs(a * qk) < EI_EPS * 0.5) break;       /* remaining factors are 1 */
+    }
+    *out = p;
+    return isfinite(p);
+}
+
+/* K_nu(x), x > 0.
+ *
+ * Three regimes, because no single form covers the range in double:
+ *   - large x: the asymptotic sqrt(pi/2x) e^-x sum a_k/x^k, which is where the
+ *     I-difference below would lose everything to cancellation (I_nu and I_-nu
+ *     both grow like e^x while K decays like e^-x);
+ *   - nu far from an integer: K = pi/2 (I_-nu - I_nu)/sin(nu pi) directly;
+ *   - nu at (or near) an integer, where that formula is 0/0: the classical
+ *     log-series, whose psi terms reuse the digamma above.
+ */
+/* Steed-Barnett continued fraction for K_mu and K_{mu+1}, |mu| <= 1/2, x > 2.
+ *
+ * This is the piece that makes K usable in the middle of its range.  Both the
+ * ascending log-series and the I_-nu - I_nu difference compute a decaying K from
+ * quantities that grow like e^x, so they lose ~2x/ln(10) digits — measured
+ * against MPFR, 3e-10 by x = 8 and no correct digits at all by x = 20 — while
+ * the large-x asymptotic only reaches machine precision beyond x ~ 20.  The
+ * continued fraction has neither problem. */
+static bool bessk_cf2(double xmu, double x, double* kmu, double* kmu1) {
+    double xmu2 = xmu * xmu;
+    double a1 = 0.25 - xmu2;
+    double b = 2.0 * (1.0 + x);
+    double d = 1.0 / b, delh = d, h = d;
+    double q1 = 0.0, q2 = 1.0;
+    double c = a1, q = c, a = -a1, s = 1.0 + q * delh;
+    for (int i = 2; i <= 20000; i++) {
+        a -= 2.0 * (i - 1);
+        c = -a * c / i;
+        double qnew = (q1 - b * q2) / a;
+        q1 = q2; q2 = qnew;
+        q += c * qnew;
+        b += 2.0;
+        d = 1.0 / (b + a * d);
+        delh = (b * d - 1.0) * delh;
+        h += delh;
+        double dels = q * delh;
+        s += dels;
+        if (fabs(dels / s) < EI_EPS) break;
+    }
+    h = a1 * h;
+    *kmu  = sqrt(M_PI / (2.0 * x)) * exp(-x) / s;
+    *kmu1 = *kmu * (xmu + x + 0.5 - h) / x;
+    return isfinite(*kmu) && isfinite(*kmu1);
+}
+
+bool sf_machine_bessel_k(double nu, double x, double* out) {
+    if (!(x > 0.0)) return false;                     /* complex for x < 0 */
+    nu = fabs(nu);                                    /* K_-nu = K_nu */
+
+    if (x > 2.0) {
+        /* Continued fraction at the fractional order, then UPWARD recurrence in
+         * nu, which is the stable direction for K. */
+        int nl = (int)(nu + 0.5);
+        double xmu = nu - (double)nl;
+        double kmu, kmu1;
+        if (!bessk_cf2(xmu, x, &kmu, &kmu1)) return false;
+        for (int i = 1; i <= nl; i++) {
+            double knew = kmu + 2.0 * (xmu + (double)i) / x * kmu1;
+            kmu = kmu1; kmu1 = knew;
+            if (!isfinite(kmu1)) return false;
+        }
+        *out = kmu;
+        return isfinite(kmu) && kmu > 0.0;
+    }
+
+    double n_round = floor(nu + 0.5);
+    if (fabs(nu - n_round) > 1e-6) {                  /* generic order, small x */
+        double ip, im;
+        if (!sf_machine_bessel_i(nu, x, &ip)) return false;
+        if (!sf_machine_bessel_i(-nu, x, &im)) return false;
+        double v = M_PI / 2.0 * (im - ip) / sin(nu * M_PI);
+        *out = v;
+        return isfinite(v);
+    }
+
+    /* Integer order n, small x: K_n(x) = 1/2 sum_{k<n} (-1)^k (n-k-1)!/k! (x/2)^(2k-n)
+     *                                 + (-1)^(n+1) sum_k (x/2)^(2k+n)/(k!(n+k)!)
+     *                                   * [log(x/2) - (psi(k+1) + psi(n+k+1))/2] */
+    int n = (int)n_round;
+    if (n > 200) return false;
+    double h = x / 2.0, lh = log(h), v = 0.0;
+    for (int k = 0; k < n; k++) {                     /* the finite part */
+        double c = exp(lgamma((double)(n - k)) - lgamma((double)(k + 1)));
+        v += 0.5 * ((k & 1) ? -1.0 : 1.0) * c * pow(h, 2.0 * k - (double)n);
+    }
+    double sgn = ((n + 1) & 1) ? -1.0 : 1.0;
+    double term = pow(h, (double)n) / tgamma((double)n + 1.0);
+    double psi1, psin;
+    if (!sf_machine_digamma(1.0, &psi1)) return false;
+    if (!sf_machine_digamma((double)n + 1.0, &psin)) return false;
+    double sm = 0.0, pk = psi1, pnk = psin;
+    for (int k = 0; k < 4000; k++) {
+        double add = term * (lh - 0.5 * (pk + pnk));
+        sm += add;
+        if (fabs(add) < fabs(sm) * EI_EPS && k > n) break;
+        term *= h * h / ((k + 1.0) * (k + 1.0 + n));
+        pk  += 1.0 / (k + 1.0);                       /* psi(k+2) = psi(k+1) + 1/(k+1) */
+        pnk += 1.0 / (k + 1.0 + n);
+    }
+    v += sgn * sm;
+    *out = v;
+    return isfinite(v);
+}
+
+/* Li_s(x) on the reals, |x| <= 1.
+ *
+ * The defining series only converges usefully for |x| <~ 1/2, so closer to 1 the
+ * Jonquiere expansion in mu = log x takes over; for negative x the duplication
+ * identity folds the problem back onto positive arguments.  Beyond |x| = 1 the
+ * function is complex and the kernel declines. */
+static bool polylog_mu(double s, double x, double* out) {
+    /* Li_s(x) = Gamma(1-s) (-mu)^(s-1) + sum_k zeta(s-k) mu^k / k!,  mu = log x */
+    double mu = log(x);
+    if (s == floor(s) && s >= 1.0) {
+        /* Integer s: the Gamma pole and the zeta pole cancel; the standard
+         * replacement for the k = s-1 term is mu^(n-1)/(n-1)! (H_{n-1} - log(-mu)). */
+        int n = (int)s;
+        double sum = 0.0, mk = 1.0;
+        int small = 0;
+        for (int k = 0; k < 200; k++) {
+            if (k != n - 1) {
+                double z;
+                if (!sf_machine_zeta((double)(n - k), &z)) return false;
+                double add = z * mk / tgamma((double)k + 1.0);
+                sum += add;
+                /* TWO consecutive negligible terms, not one: zeta vanishes at
+                 * every negative even integer, so this series has a zero term
+                 * every other step and a single-term test stops it early. */
+                if (k > n && fabs(add) < fabs(sum) * EI_EPS) { if (++small >= 2) break; }
+                else small = 0;
+            }
+            mk *= mu;
+        }
+        double H = 0.0;
+        for (int j = 1; j <= n - 1; j++) H += 1.0 / j;
+        double lm = (mu < 0.0) ? log(-mu) : log(mu);
+        sum += pow(mu, (double)(n - 1)) / tgamma((double)n) * (H - lm);
+        *out = sum;
+        return isfinite(sum);
+    }
+    double sum = tgamma(1.0 - s) * pow(-mu, s - 1.0), mk = 1.0;
+    int small = 0;
+    for (int k = 0; k < 200; k++) {
+        double z;
+        if (!sf_machine_zeta(s - k, &z)) return false;
+        double add = z * mk / tgamma((double)k + 1.0);
+        sum += add;
+        if (k > 2 && fabs(add) < fabs(sum) * EI_EPS) { if (++small >= 2) break; }
+        else small = 0;
+        mk *= mu;
+    }
+    *out = sum;
+    return isfinite(sum);
+}
+
+bool sf_machine_polylog(double s, double x, double* out) {
+    if (fabs(x) > 1.0) return false;                  /* complex past the cut */
+    if (x == 0.0) { *out = 0.0; return true; }
+    if (x == 1.0) { if (!(s > 1.0)) return false; return sf_machine_zeta(s, out); }
+    if (x == -1.0) {
+        double z;
+        if (!sf_machine_zeta(s, &z)) return false;
+        *out = -(1.0 - pow(2.0, 1.0 - s)) * z;
+        return isfinite(*out);
+    }
+    if (fabs(x) <= 0.5) {                             /* the defining series */
+        double sum = 0.0, xk = x;
+        for (int k = 1; k < 2000; k++) {
+            double add = xk / pow((double)k, s);
+            sum += add;
+            if (fabs(add) < fabs(sum) * EI_EPS) break;
+            xk *= x;
+        }
+        *out = sum;
+        return isfinite(sum);
+    }
+    if (x > 0.0) return polylog_mu(s, x, out);
+    /* Duplication: Li_s(-y) = 2^(1-s) Li_s(y^2) - Li_s(y). */
+    double y = -x, a, b;
+    if (!sf_machine_polylog(s, y * y, &a)) return false;
+    if (!sf_machine_polylog(s, y, &b)) return false;
+    double v = pow(2.0, 1.0 - s) * a - b;
+    *out = v;
+    return isfinite(v);
+}
+
+/* ---- n-ary ------------------------------------------------------------- */
+
+/* LerchPhi[z, s, a] = sum_{k>=0} z^k / (k+a)^s.
+ * The defining series converges for |z| < 1 and is used directly; at z = 1 the
+ * function IS the Hurwitz zeta, which has a proper expansion above. */
+bool sf_machine_lerchphi(double z, double s, double a, double* out) {
+    if (a <= 0.0 && a == floor(a)) return false;      /* term k = -a is a pole */
+    if (z == 1.0) return sf_machine_hurwitz_zeta(s, a, out);
+    if (fabs(z) >= 1.0) return false;
+    double sum = 0.0, zk = 1.0;
+    for (int k = 0; k < 200000; k++) {
+        double d = a + k;
+        if (d == 0.0) return false;
+        double add = zk / pow(d, s);
+        sum += add;
+        if (fabs(add) < fabs(sum) * EI_EPS && k > 2) break;
+        zk *= z;
+        if (zk == 0.0) break;
+    }
+    *out = sum;
+    return isfinite(sum);
+}
+
+/* 1F1(a; b; z).  For z very negative the direct series alternates and loses
+ * everything to cancellation, so Kummer's transformation moves it to +z. */
+bool sf_machine_hyper1f1(double a, double b, double z, double* out) {
+    /* One implementation, not two: pFq is what the evaluator actually reaches
+     * (Hypergeometric1F1 canonicalises to HypergeometricPFQ), and keeping a
+     * second copy here meant a fix to one silently missed the other. */
+    return sf_machine_pfq(&a, 1, &b, 1, z, out);
+}
+
+/* 2F1(a, b; c; z), |z| < 1 by the defining series.  Outside the disc the
+ * function needs a connection formula and may be complex, so the kernel
+ * declines and the MPFR path answers. */
+bool sf_machine_hyper2f1(double a, double b, double cc, double z, double* out) {
+    double ab[2] = { a, b };
+    return sf_machine_pfq(ab, 2, &cc, 1, z, out);
+}
+
+/* pFq({a1..ap}, {b1..bq}, z) = sum_k prod (a_i)_k / prod (b_j)_k * z^k / k!.
+ *
+ * This is the head that actually matters: the evaluator canonicalises
+ * Hypergeometric0F1, 1F1 and 2F1 all into HypergeometricPFQ before anything
+ * downstream sees them.
+ *
+ * Convergence is decided by p against q: p <= q is entire, p = q+1 needs
+ * |z| < 1, and p > q+1 diverges — the last is declined rather than truncated. */
+bool sf_machine_pfq(const double* a, size_t p, const double* b, size_t q,
+                    double z, double* out) {
+    for (size_t j = 0; j < q; j++)
+        if (b[j] <= 0.0 && b[j] == floor(b[j])) return false;   /* (b)_k hits zero */
+    if (p > q + 1) return false;
+    if (p == q + 1 && !(fabs(z) < 1.0)) return false;
+
+    /* 1F1 at ANY negative z: the raw series alternates with terms larger than
+     * the sum, so Kummer's transformation moves it to +z where every term is
+     * positive and nothing cancels.  The condition b - a > 0 is what guarantees
+     * the transformed series is positive-term; without the transform the answer
+     * was wrong in the second decimal place at z = -40, and still 5e-9 at -20. */
+    if (p == 1 && q == 1 && z < 0.0 && (b[0] - a[0]) > 0.0) {
+        double ba = b[0] - a[0], v;
+        if (!sf_machine_pfq(&ba, 1, b, 1, -z, &v)) return false;
+        *out = exp(z) * v;
+        return isfinite(*out);
+    }
+
+    double maxterm = 1.0;
+    double term = 1.0, sum = 1.0;
+    for (int k = 0; k < 200000; k++) {
+        double num = 1.0, den = 1.0;
+        for (size_t i = 0; i < p; i++) num *= (a[i] + k);
+        for (size_t j = 0; j < q; j++) den *= (b[j] + k);
+        if (den == 0.0) return false;
+        term *= num * z / (den * (k + 1.0));
+        if (term == 0.0) break;                 /* an upper parameter terminated it */
+        sum += term;
+        if (fabs(term) > maxterm) maxterm = fabs(term);
+        if (!isfinite(term)) return false;
+        if (fabs(term) < fabs(sum) * EI_EPS) break;
+    }
+    /* Cancellation guard: if the largest term dwarfed the result, the sum has
+     * lost most of its digits and the kernel must DECLINE rather than hand back
+     * a confidently wrong number — the MPFR path carries enough precision. */
+    if (maxterm > fabs(sum) * 1.0e13) return false;
+    *out = sum;
+    return isfinite(sum);
 }

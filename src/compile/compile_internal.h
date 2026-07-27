@@ -26,6 +26,7 @@ typedef union { long long i; double r; double _Complex z; const void* p; Expr* a
 typedef bool (*kfn_r)(double, double*);
 typedef bool (*kfn_c)(double, double, double*, double*);
 typedef bool (*kfn_c2)(double, double, double, double, double*, double*);
+typedef bool (*kfn_cn)(const double*, const double*, size_t, double*, double*);
 
 typedef struct { uint16_t op, flags; uint32_t dst, a, b; Slot imm; } Instr;
 
@@ -58,11 +59,15 @@ typedef struct { uint16_t op, flags; uint32_t dst, a, b; Slot imm; } Instr;
  *   K_CALL    dst = callee(a .. a+flags-1)   — imm.p is the callee program and
  *             `flags` the argument count, so the operands are a RANGE rather
  *             than the usual fixed fields
+ *   K_NARY    dst = kernel(a .. a+flags-1)   — same operand range as K_CALL but
+ *             PURE: a machine kernel has no side effects, so it may be CSE'd
+ *             and removed when dead
  *   K_NOP     removed by a previous pass; deleted at compaction
  */
 enum {
     K_CONST, K_MOVE, K_UN, K_BIN, K_POWI, K_KERN1, K_KERN2,
-    K_INC, K_JMP, K_JZ, K_LOOP, K_RET, K_ARR, K_ASTORE, K_VACC, K_CALL, K_NOP
+    K_INC, K_JMP, K_JZ, K_LOOP, K_RET, K_ARR, K_ASTORE, K_VACC, K_CALL,
+    K_NARY, K_NOP
 };
 
 /* ------------------------------------------------------------------ *
@@ -130,7 +135,7 @@ enum {
     X(A_LOAD_R, K_BIN)   X(A_LOAD_C, K_BIN)                                \
     X(A_STORE_R, K_ASTORE) X(A_STORE_C, K_ASTORE)                          \
     /* strip-mined (tile) forms — one opcode, VBLOCK elements */           \
-    X(CALL, K_CALL)                                                        \
+    X(CALL, K_CALL)   X(KERNN, K_NARY)                                     \
     X(VSETLEN, K_ASTORE)                                                   \
     X(VLOAD_R, K_BIN)   X(VLOAD_C, K_BIN)                                  \
     X(VSTORE_R, K_ASTORE) X(VSTORE_C, K_ASTORE)                            \
