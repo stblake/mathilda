@@ -5,7 +5,8 @@ Companion to [`compile.md`](compile.md) (the full design) and the memory files
 `project_compile_engine`, `project_autocompile_numeric_builtins` (read those
 too).
 
-_Last updated: 2026-07-27 (M5: optimiser, coverage audit, any-rank arrays)._
+_Last updated: 2026-07-27 (M5: optimiser, coverage audit, any-rank arrays,
+strip-mined fusion)._
 
 ---
 
@@ -21,9 +22,10 @@ Four things changed since M4. Full write-up in
    the optimiser's property table from one list. **Add an opcode there or the VM
    crashes.** `COMPILE_NO_OPT` is the A/B switch and the gate is *bitwise*
    identity, not accuracy.
-2. **Scalar dispatch is 2.0× faster** — 649 → 335 ns/call on the Horner
-   micro-bench (8.0 → 4.2 ns per arithmetic op), from lazy operand addressing in
-   `NEXT()` plus the optimiser and `OP_LOOP`.
+2. **Scalar dispatch is ~1.45× faster** — 295 → 200 ns/call on the Horner
+   micro-bench at `-O3` (3.7 → 2.5 ns per arithmetic op), from lazy operand
+   addressing in `NEXT()` plus the optimiser and `OP_LOOP`.  (An earlier `-O0`
+   measurement made this look like 2.0×; see the measurement trap below.)
 3. **Any rank works** and needed no new machinery: the delegated ND path was
    already rank-general, and the compiler's own rank-1 front gate was the only
    blocker. `Total` stays rank-1 on purpose (it reduces the leading axis only).
