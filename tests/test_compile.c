@@ -361,6 +361,49 @@ static Expr* ref_at(const char* src, double xv) {
     return eval_and_free(sub);
 }
 
+/* Does the compiled program's DECLARED RESULT TYPE agree with the HEAD the
+ * interpreter produces for the same call?
+ *
+ * The numeric parity tests cannot see this.  They compare values, and a value
+ * compares equal whether it came back as the Integer -1 or the Real -1. — but
+ * the two are not interchangeable downstream (`IntegerQ`, exact arithmetic,
+ * printing all differ), so a compiled path that answers with the wrong head is
+ * answering DIFFERENTLY from the interpreter, which the engine forbids.
+ *
+ * This is not hypothetical: it is why `UnitStep` is lowered by hand rather than
+ * registered as a kernel, and `Sign[-2.5]` shipped as `-1.` against the
+ * interpreter's `-1` until this check existed. */
+static void parity_head(const char* name, const char* src, double xv) {
+    Expr* body = parse_expression(src);
+    const char* inm[1] = { intern_symbol("xq") };
+    const CompileType RR[1] = { CT_REAL };
+    CompiledProgram* p = compile_expr(body, inm, RR, 1);
+    if (!p) { printf("FAIL: head %-24s did not compile\n", name); failures++; expr_free(body); return; }
+
+    Expr* want = ref_at(src, xv);
+    const char* wh = want->type == EXPR_INTEGER ? "Integer"
+                   : want->type == EXPR_REAL    ? "Real"
+                   : (want->type == EXPR_FUNCTION
+                      && want->data.function.head->type == EXPR_SYMBOL
+                      && strcmp(want->data.function.head->data.symbol.name, "Complex") == 0)
+                     ? "Complex" : "other";
+    CompileType rt = compiled_result_type(p);
+    const char* gh = rt == CT_INT ? "Integer" : rt == CT_REAL ? "Real"
+                   : rt == CT_COMPLEX ? "Complex" : "other";
+    /* A Complex whose imaginary part is exactly zero is unboxed back to a Real,
+     * so CT_COMPLEX legitimately produces a Real head at some arguments. */
+    bool ok = strcmp(wh, gh) == 0
+              || (rt == CT_COMPLEX && strcmp(wh, "Real") == 0);
+    if (!ok) {
+        printf("FAIL: head %-24s at x=%g: interpreter gives %s, compiled declares %s\n",
+               name, xv, wh, gh);
+        failures++;
+    } else {
+        printf("ok:   head %-24s %s\n", name, gh);
+    }
+    expr_free(want); compiled_free(p); expr_free(body);
+}
+
 /* ---- strip-mining stress helpers ---------------------------------------- */
 
 /* Compile the same array body fused and delegated, and require agreement.  Not
@@ -728,6 +771,14 @@ int main(void) {
     parity("Gamma real (kernel)", "Gamma[x] + Gamma[2 y]", xy, RRR, 2, 0.3, 3.0, 0, 0, 300);
     parity("hyperbolic/inverse extras", "ArcSinh[x] + Coth[y] + Sech[z] + ArcTanh[x/4]", xyz, RRR, 3, 0.3, 2.0, 0, 0, 300);
     parity("complex generic kernel", "ArcSinh[x] + Coth[y]", xy, CCC, 2, 0.3, 1.8, 0, 0, 300);
+    /* Complex Sign, FractionalPart and Rescale.  These bailed for _Complex
+     * until the audit was given a complex column — Sign's kernel was already in
+     * the registry and the compiler's own inline lowering was shadowing it. */
+    parity("complex Sign",    "Sign[x]",               x1i, CCC, 1, 0.3, 2.0, 0, 0, 300);
+    parity("complex Sign sum", "Sign[x] + Sign[y]",    xy,  CCC, 2, -2.0, 2.0, 0, 0, 300);
+    parity("complex FracPart", "FractionalPart[x]",    x1i, CCC, 1, -4.0, 4.0, 0, 0, 300);
+    parity("complex Rescale", "Rescale[x, {0., 4.}]",  x1i, CCC, 1, -3.0, 5.0, 0, 0, 300);
+    parity("complex Rescale 2", "Rescale[x, {1., 5.}] + Sign[y]", xy, CCC, 2, -3.0, 5.0, 0, 0, 300);
     parity("Beta (binary kernel)", "Beta[x, y]", xy, RRR, 2, 0.4, 3.0, 0, 0, 300);
     parity("BesselJ/Y (binary kernel)", "BesselJ[2, x] + BesselY[1, y]", xy, RRR, 2, 0.5, 6.0, 0, 0, 300);
     parity("Factorial", "Factorial[x] + FractionalPart[3 y]", xy, RRR, 2, 0.3, 3.0, 0, 0, 250);
@@ -1547,6 +1598,29 @@ int main(void) {
         }
         compiled_free(p); expr_free(b);
     }
+
+    /* ================= RESULT HEAD, NOT JUST RESULT VALUE =================
+     * Every head whose result TYPE differs from its argument type, checked
+     * against the interpreter.  See parity_head on why the numeric tests miss
+     * this entirely. */
+    parity_head("Sign real +",      "Sign[xq]",              2.5);
+    parity_head("Sign real -",      "Sign[xq]",             -2.5);
+    parity_head("Sign real 0",      "Sign[xq]",              0.0);
+    parity_head("Floor",            "Floor[xq]",             2.5);
+    parity_head("Ceiling",          "Ceiling[xq]",           2.5);
+    parity_head("Round",            "Round[xq]",             2.5);
+    parity_head("UnitStep",         "UnitStep[xq]",          0.5);
+    parity_head("IntegerPart",      "IntegerPart[xq]",       2.5);
+    parity_head("IntegerPart -",    "IntegerPart[xq]",      -2.5);
+    parity_head("Floor -",          "Floor[xq]",            -2.5);
+    parity_head("FractionalPart",   "FractionalPart[xq]",    2.5);
+    parity_head("FractionalPart -", "FractionalPart[xq]",   -2.5);
+    parity_head("Quotient",         "Quotient[xq, 3.]",      5.5);
+    parity_head("Abs",              "Abs[xq]",              -2.5);
+    parity_head("Clip",             "Clip[xq, {1., 3.}]",    2.0);
+    parity_head("Rescale",          "Rescale[xq, {0., 4.}]", 2.0);
+    parity_head("Max",              "Max[xq, 1.]",           2.5);
+    parity_head("Sqrt",             "Sqrt[xq]",              2.5);
 
     /* ================= THREADED FUSED MAP (OP_APAR) =================
      * A fused MAP is split across threads above NDARRAY_THREAD_THRESHOLD.  Each

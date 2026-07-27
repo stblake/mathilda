@@ -2665,7 +2665,13 @@ Expr* builtin_quotient(Expr* res) {
             .im = (m_minus_d.im * n.re - m_minus_d.re * n.im) / n_norm_sq
         };
 
-        Cplx result_cplx = { round(z.re), round(z.im) };
+        /* FLOOR, not round.  Quotient[m, n, d] is Floor[(m - d)/n] by definition,
+         * and every other branch of this function agrees — the integer path uses
+         * mpz_fdiv_q and the real path uses floor().  This one rounded, so
+         * Quotient[5.5 + 1. I, 3.] came back 2 while Floor[(5.5 + 1. I)/3.] gave
+         * 1, and the complex result disagreed with the real result for the same
+         * quotient. */
+        Cplx result_cplx = { floor(z.re), floor(z.im) };
 
         if (result_cplx.im == 0.0) {
             return expr_new_integer((int64_t)result_cplx.re);

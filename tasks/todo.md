@@ -95,11 +95,12 @@ arith ops = 8.0 ns/op; mixed-libm 150 ns/call; array len-4096 1.0x, 61 ns/elemen
       one's growth — 2.4e5 across this band.
 - [ ] **Complex arguments — 41 heads compile for `_Real` and bail for
       `_Complex`.** See `NUMERIC_FUNCTION_MISSING.md`: this is now the single
-      largest source of silent interpreter fallback in the engine. 35 are genuine
-      gaps (the interpreter answers), 6 are correct declines. **Start with the 8
-      that need no numerics**: `Floor`, `Ceiling`, `Round`, `IntegerPart`,
-      `FractionalPart`, `Sign`, `Rescale`, `Quotient` — componentwise or
-      one-liners, bailing only because the `cplx` pointer was never written.
+      largest source of silent interpreter fallback in the engine.
+      **Done: `Sign`, `FractionalPart`, `Rescale`** (52 -> 55 of 103).
+      `Floor`/`Ceiling`/`Round`/`IntegerPart` turned out TYPE-BLOCKED, not
+      mechanical — they return `Complex[Integer, Integer]` and the lattice has no
+      complex-integer type. Remaining: 28 special functions needing genuine
+      complex numerics with matching branch cuts.
 - [ ] **`CompileDiag`** — a bail still reports nothing. The audit covers heads;
       per-body diagnostics would cover the rest.
 - [ ] **Native backend** (`CompilationTarget -> "C"`), behind a build flag.

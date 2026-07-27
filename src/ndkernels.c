@@ -126,6 +126,14 @@ static bool ndk_Floor_r(double x, double* o)   { double v = floor(x); *o = v; re
 static bool ndk_Ceiling_r(double x, double* o)  { double v = ceil(x);  *o = v; return isfinite(v); }
 static bool ndk_IntegerPart_r(double x, double* o) { double v = trunc(x); *o = v; return isfinite(v); }
 static bool ndk_FractionalPart_r(double x, double* o) { double v = x - trunc(x); *o = v; return isfinite(v); }
+/* Componentwise, like Floor/Ceiling/Round on a complex: FractionalPart[z] is
+ * FractionalPart[Re z] + I FractionalPart[Im z].  Unlike those three it is safe
+ * to answer here — they produce Complex[Integer, Integer], which the compile
+ * engine's type lattice cannot express, while this one is Complex[Real, Real]. */
+static bool ndk_FractionalPart_c(double ar, double ai, double* rr, double* ri) {
+    *rr = ar - trunc(ar); *ri = ai - trunc(ai);
+    return isfinite(*rr) && isfinite(*ri);
+}
 static bool ndk_Round_r(double x, double* o) {
     double f = floor(x), r = x - f, v;
     if (r < 0.5)      v = f;
@@ -137,7 +145,7 @@ static const NDUnaryKernel NDKU_Floor          = { NULL, ndk_Floor_r,          t
 static const NDUnaryKernel NDKU_Ceiling        = { NULL, ndk_Ceiling_r,        true, false };
 static const NDUnaryKernel NDKU_Round          = { NULL, ndk_Round_r,          true, false };
 static const NDUnaryKernel NDKU_IntegerPart    = { NULL, ndk_IntegerPart_r,    true, false };
-static const NDUnaryKernel NDKU_FractionalPart = { NULL, ndk_FractionalPart_r, true, false };
+static const NDUnaryKernel NDKU_FractionalPart = { ndk_FractionalPart_c, ndk_FractionalPart_r, true, false };
 
 /* ---- binary (scalar-index) ---------------------------------------------- */
 
@@ -388,19 +396,19 @@ static const NDNaryKernel NDKN_Hypergeometric2F1   = { ndk_Hyper2F1_n, 4, true }
 static const NDBinaryKernel NDKB_PolyGamma   = { ndk_PolyGamma_c,   true };
 static const NDBinaryKernel NDKB_HurwitzZeta = { ndk_HurwitzZeta_c, true };
 
-/* Degrade sentinels: no machine kernel available (libc-free algorithms). The
- * NULL cplx makes the map decline for every element, so the evaluator threads
- * the call over the equivalent nested List (correct results, per-element scalar
- * builtin) — NDArray inputs still evaluate, just not through a C buffer loop. */
-static const NDUnaryKernel  ND_DEGRADE_U = { NULL, NULL, false, false };
-static const NDBinaryKernel ND_DEGRADE_B = { NULL, false };
-
 /* ---- registration ------------------------------------------------------- */
+
+/* There were DEGRADE SENTINELS here — descriptors with NULL function pointers,
+ * registered for heads with no machine numerics so the map declined per element
+ * and the evaluator threaded over the equivalent nested List.  Every one of
+ * those heads now has a real kernel, so the sentinels, the lists naming them
+ * and the loops walking those lists are all gone.  If a head ever again has
+ * genuinely unavailable numerics, register `{NULL, NULL, false, false}` for it:
+ * an explicit "known, and deliberately has no fast path" reads differently from
+ * an absent registry entry, and the coverage audit distinguishes them. */
 
 #define REG_U(NAME) symtab_set_ndarray_unary_kernel(#NAME, &NDKU_##NAME)
 #define REG_B(NAME, DESC) symtab_set_ndarray_binary_kernel(#NAME, &DESC)
-#define REG_DEG_U(NAME) symtab_set_ndarray_unary_kernel((NAME), &ND_DEGRADE_U)
-#define REG_DEG_B(NAME) symtab_set_ndarray_binary_kernel((NAME), &ND_DEGRADE_B)
 
 void ndkernels_init(void) {
     REG_U(Sin);  REG_U(Cos);  REG_U(Tan);
@@ -453,14 +461,4 @@ void ndkernels_init(void) {
     REG_N(LerchPhi); REG_N(Hypergeometric1F1); REG_N(Hypergeometric2F1);
     REG_N(HypergeometricPFQ);
 
-    /* Special functions with libc-free algorithms: correct results on NDArray
-     * via the degrade path (List threading), pending dedicated machine kernels. */
-    static const char* deg_u[] = {
-    };
-    for (unsigned i = 0; i < sizeof(deg_u) / sizeof(deg_u[0]); i++)
-        REG_DEG_U(deg_u[i]);
-    static const char* deg_b[] = {
-    };
-    for (unsigned i = 0; i < sizeof(deg_b) / sizeof(deg_b[0]); i++)
-        REG_DEG_B(deg_b[i]);
 }

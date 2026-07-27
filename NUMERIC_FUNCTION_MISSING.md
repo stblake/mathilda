@@ -30,9 +30,12 @@ behaviour rather than a gap.
 
 | | count | of 103 |
 |---|---|---|
-| Full fast path (real **and** complex) | 52 | 51% |
-| Real only — **complex bails** | 41 | 40% |
+| Full fast path (real **and** complex) | 55 | 53% |
+| Real only — **complex bails** | 38 | 37% |
 | No fast path at all | 10 | 10% |
+
+_(52 / 41 / 10 when first measured; `Sign`, `FractionalPart` and `Rescale` have
+since been closed.)_
 
 **The headline is the middle row, and it is the one least visible today.** Real
 coverage went 55 → 93 of 103 during M5 and is effectively finished: all ten
@@ -140,12 +143,23 @@ Verified against the interpreter directly:
 
 Plus `Zeta`, `AiryAiPrime`, `AiryBiPrime` by the same argument.
 
-Two natural tiers of difficulty:
+Three tiers, and the first two are **not** the same size they first appeared:
 
-- **Cheap and mechanical (7):** `Floor`, `Ceiling`, `Round`, `IntegerPart`,
-  `FractionalPart`, `Sign`, `Rescale`, `Quotient`. These are componentwise or
-  one-line (`Sign[z] = z/Abs[z]`) and need no new numerics at all — they are
-  bails purely because nobody wrote the `cplx` function pointer. **Start here.**
+- **~~Cheap and mechanical~~ — DONE (3):** `Sign`, `FractionalPart`, `Rescale`
+  are closed. `Sign`'s complex kernel had been in the registry the whole time;
+  the compiler's own inline lowering for `Sign` was shadowing it and bailing
+  before `try_kernel` was ever consulted.
+
+- **TYPE-BLOCKED, not mechanical (4):** `Floor`, `Ceiling`, `Round`,
+  `IntegerPart` on a complex return **`Complex[Integer, Integer]`** —
+  `Head /@ ReIm[Floor[1.5 + 2.5 I]]` is `{Integer, Integer}`. The compile
+  engine's type lattice has `CT_INT` and `CT_COMPLEX` (a `double _Complex`) but
+  nothing for a complex *integer*, so answering with `CT_COMPLEX` would produce
+  `Complex[Real, Real]` and differ from the interpreter in HEAD. These need a
+  new type, not a new function pointer. (This is why the tier was originally
+  listed as eight cheap heads and is not: worth checking result *types*, not
+  just values, before calling anything mechanical.)
+
 - **Genuine complex numerics (28):** the special functions. `Gamma`/`LogGamma`
   need Lanczos with the reflection formula; the exponential-integral family
   needs branch-cut handling; the hypergeometrics need the complex series (which
@@ -153,6 +167,9 @@ Two natural tiers of difficulty:
   internally). Each needs a parity test against the MPFR path, and each must
   respect the same branch cuts the interpreter uses — a kernel that picks a
   different branch is worse than no kernel.
+
+`Quotient` came off this list for a different reason — see the interpreter bug
+note below.
 
 ### B2. Correct declines — the interpreter declines too (6)
 
@@ -227,10 +244,12 @@ call back to the interpreter which can.
 ## Recommended order
 
 1. ~~**Airy `2.5 < |x| < 8`**~~ — **done**, see C1.
-2. **The 7 mechanical complex kernels** — `Floor`, `Ceiling`, `Round`,
-   `IntegerPart`, `FractionalPart`, `Sign`, `Rescale`, `Quotient`. Componentwise
-   or one-liners, no new numerics, and each removes a whole class of bailing
-   bodies. Best ratio of coverage to risk in the document.
+2. ~~**The mechanical complex kernels**~~ — **done** for the three that are
+   cleanly typed (`Sign`, `FractionalPart`, `Rescale`). The other four
+   (`Floor`, `Ceiling`, `Round`, `IntegerPart`) turned out to be type-blocked,
+   not mechanical: they return `Complex[Integer, Integer]`, which the type
+   lattice cannot express. Closing them means adding a complex-integer type —
+   a real design change, and worth doing only if something wants it.
 3. **Complex `Gamma`/`LogGamma`** — they sit under the largest number of other
    things (`Beta`, `Binomial`, `Pochhammer`, the hypergeometrics), so one kernel
    unlocks several.

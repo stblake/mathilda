@@ -360,7 +360,12 @@ Square root.
 ## Mod, Quotient, QuotientRemainder
 
 - `Mod[n, m]`: Remainder of `n/m`.
-- `Quotient[n, m]`: Integer part of `n/m`.
+- `Quotient[n, m]`: `Floor[n/m]` — floored, not truncated or rounded, so
+  `Quotient[-5.5, 3.]` is `-2`. The three-argument form `Quotient[n, m, d]` is
+  `Floor[(n - d)/m]`. Complex arguments are handled componentwise on the
+  quotient (`Quotient[10 + 2 I, 3 + I]` is `3 - I`) and agree with
+  `Floor[n/m]`; before 2026-07-27 the complex branch rounded instead of
+  flooring and disagreed with both the real branch and `Floor`.
 - `QuotientRemainder[n, m]`: Returns `{Quotient[n, m], Mod[n, m]}`.
 
 ## IntegerDigits

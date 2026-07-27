@@ -121,7 +121,7 @@ enum {
     X(ATAN_R, K_UN)   X(ATAN_C, K_UN)                                      \
     X(ABS_I, K_UN)    X(ABS_R, K_UN)   X(ABS_C, K_UN)                      \
     X(SIGN_I, K_UN)   X(SIGN_R, K_UN)                                      \
-    X(FLOOR_R, K_UN)  X(CEIL_R, K_UN)  X(ROUND_R, K_UN)                    \
+    X(FLOOR_R, K_UN)  X(CEIL_R, K_UN)  X(ROUND_R, K_UN)  X(TRUNC_R, K_UN)   \
     X(RE_C, K_UN)     X(IM_C, K_UN)    X(ARG_C, K_UN)   X(CONJ_C, K_UN)    \
     X(ATAN2_R, K_BIN) X(MAX_I, K_BIN)  X(MAX_R, K_BIN)                     \
     X(MIN_I, K_BIN)   X(MIN_R, K_BIN)                                      \

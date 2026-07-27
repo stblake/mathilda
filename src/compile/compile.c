@@ -857,8 +857,18 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         }
         *out = ta == CT_COMPLEX ? CT_REAL : ta; return true;
     }
-    if (strcmp(h, "Sign") == 0 && na == 1) { IT(0, ta); if (ta == CT_COMPLEX) return false; *out = ta; return true; }
-    if ((strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0 || strcmp(h, "Round") == 0) && na == 1) { IT(0, ta); if (CT_IS_ARRAY(ta)) return false; *out = CT_INT; return true; }
+    /* Sign of a real is the INTEGER -1, 0 or 1 — `Sign[-2.5]` is `-1`, not
+     * `-1.` — so the result type is CT_INT, not the argument's type.  Sign of a
+     * complex is z/|z|, which is genuinely complex. */
+    if (strcmp(h, "Sign") == 0 && na == 1) {
+        IT(0, ta);
+        if (CT_IS_ARRAY(ta)) { *out = ta; return true; }
+        *out = (ta == CT_COMPLEX) ? CT_COMPLEX : CT_INT;
+        return true;
+    }
+    if ((strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0 || strcmp(h, "Round") == 0
+         || strcmp(h, "IntegerPart") == 0) && na == 1) {
+        IT(0, ta); if (CT_IS_ARRAY(ta)) return false; *out = CT_INT; return true; }
     if ((strcmp(h, "Re") == 0 || strcmp(h, "Im") == 0 || strcmp(h, "Arg") == 0) && na == 1) {
         IT(0, ta);
         if (ta == CT_BOOL) return false;
@@ -900,6 +910,12 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         if (!infer_type(c, bnd->data.function.args[0], &tl)
             || !infer_type(c, bnd->data.function.args[1], &tu)) return false;
         if (tl != CT_REAL || tu != CT_REAL || CT_IS_ARRAY(ta) || ta == CT_BOOL) return false;
+        /* Rescale carries a complex argument through; Clip cannot (Min/Max need
+         * an order, and the interpreter leaves complex Clip unevaluated). */
+        if (ta == CT_COMPLEX) {
+            if (h[0] == 'C') return false;
+            *out = CT_COMPLEX; return true;
+        }
         *out = CT_REAL; return true;
     }
     if ((strcmp(h, "Max") == 0 || strcmp(h, "Min") == 0) && na >= 1) { IT(0, ta); for (size_t i = 1; i < na; i++) { IT(i, tb); ta = num_common(ta, tb); if ((int)ta < 0 || ta == CT_COMPLEX) return false; } *out = ta; return true; }
@@ -1683,14 +1699,33 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
     if (strcmp(h, "Sign") == 0 && na == 1) {
         Val a; if (!emit(c, A[0], &a)) return false;
         if (a.type == CT_INT)  { *out = unop(c, OP_SIGN_I, a, CT_INT); return c->ok; }
-        if (a.type == CT_REAL) { *out = unop(c, OP_SIGN_R, a, CT_REAL); return c->ok; }
-        c->ok = false; return false;    /* complex Sign deferred */
+        /* CT_INT, not CT_REAL: `Sign[-2.5]` is the Integer -1 in the
+         * interpreter, and a compiled path answering -1. would differ in HEAD
+         * from the one it is supposed to be interchangeable with.  Same reason
+         * UnitStep is lowered by hand. */
+        if (a.type == CT_REAL) { *out = unop(c, OP_SIGN_R, a, CT_INT); return c->ok; }
+        if (a.type == CT_COMPLEX) {
+            /* z/|z|, and 0 at the origin — already in the shared kernel
+             * registry, which this branch was shadowing by bailing first. */
+            SymbolDef* d = symtab_lookup("Sign");
+            const NDUnaryKernel* k = d ? (const NDUnaryKernel*)d->ndarray_unary_kernel : NULL;
+            if (!k || !k->cplx) { c->ok = false; return false; }
+            *out = kern_unop(c, OP_KERN_CC, a, CT_COMPLEX, (const void*)k->cplx);
+            return c->ok;
+        }
+        c->ok = false; return false;
     }
-    if ((strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0 || strcmp(h, "Round") == 0) && na == 1) {
+    if ((strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0 || strcmp(h, "Round") == 0
+         || strcmp(h, "IntegerPart") == 0) && na == 1) {
         Val a; if (!emit(c, A[0], &a)) return false;
         if (a.type == CT_INT) { *out = a; return c->ok; }
         if (a.type != CT_REAL) coerce(c, &a, CT_REAL);
-        uint16_t op = h[0] == 'F' ? OP_FLOOR_R : h[0] == 'C' ? OP_CEIL_R : OP_ROUND_R;
+        /* IntegerPart is here rather than on its registered kernel because the
+         * kernel returns a double and the interpreter returns an Integer —
+         * `IntegerPart[2.5]` is `2`, not `2.`.  The kernel stays for the ARRAY
+         * path, where a packed real buffer is the right answer. */
+        uint16_t op = h[0] == 'F' ? OP_FLOOR_R : h[0] == 'C' ? OP_CEIL_R
+                    : h[0] == 'R' ? OP_ROUND_R : OP_TRUNC_R;
         *out = unop(c, op, a, CT_INT); return c->ok;
     }
     if ((strcmp(h, "Re") == 0 || strcmp(h, "Im") == 0 || strcmp(h, "Arg") == 0 || strcmp(h, "Conjugate") == 0) && na == 1) {
@@ -1809,6 +1844,12 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
             || !infer_type(c, bnd->data.function.args[1], &tu)) { c->ok = false; return false; }
         /* Real bounds only — see the note above. */
         if (tl != CT_REAL || tu != CT_REAL || CT_IS_ARRAY(tx) || tx == CT_BOOL) { c->ok = false; return false; }
+        /* Rescale is just (x - lo)/(hi - lo), which is defined for a complex x
+         * and which the interpreter evaluates (`Rescale[1. + I, {0., 2.}]` is
+         * `0.5 + 0.5 I`).  Clip is NOT: the interpreter leaves `Clip[1. + I,
+         * {0., 2.}]` unevaluated, because Min/Max need an order. */
+        bool cx = (tx == CT_COMPLEX);
+        if (cx && h[0] == 'C') { c->ok = false; return false; }
         /* Temporaries are a STACK: binop pops its two operands and allocates the
          * destination, so both operands must be the top of it at that moment.
          * Everything below is therefore emitted in exactly the order it is
@@ -1819,7 +1860,7 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
         const Expr* ehi = bnd->data.function.args[1];
         Val x, lo, hi;
         if (!emit(c, A[0], &x)) return false;
-        coerce(c, &x, CT_REAL);
+        coerce(c, &x, cx ? CT_COMPLEX : CT_REAL);
         if (!c->ok) return false;
 
         if (h[0] == 'C') {                       /* Clip[x, {lo, hi}] = Min[Max[x, lo], hi] */
@@ -1828,13 +1869,17 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
             if (!emit(c, ehi, &hi)) return false;
             *out = binop(c, OP_MIN_R, mx, hi, CT_REAL);
         } else {                                 /* Rescale[x, {lo, hi}] = (x - lo)/(hi - lo) */
+            CompileType t = cx ? CT_COMPLEX : CT_REAL;
             if (!emit(c, elo, &lo)) return false;
-            Val num = binop(c, OP_SUB_R, x, lo, CT_REAL);
+            if (cx) coerce(c, &lo, CT_COMPLEX);
+            Val num = binop(c, cx ? OP_SUB_C : OP_SUB_R, x, lo, t);
             Val lo2, hi2;
             if (!emit(c, ehi, &hi2)) return false;
+            if (cx) coerce(c, &hi2, CT_COMPLEX);
             if (!emit(c, elo, &lo2)) return false;
-            Val den = binop(c, OP_SUB_R, hi2, lo2, CT_REAL);
-            *out = binop(c, OP_DIV_R, num, den, CT_REAL);
+            if (cx) coerce(c, &lo2, CT_COMPLEX);
+            Val den = binop(c, cx ? OP_SUB_C : OP_SUB_R, hi2, lo2, t);
+            *out = binop(c, cx ? OP_DIV_C : OP_DIV_R, num, den, t);
         }
         return c->ok;
     }
@@ -2618,8 +2663,14 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(ABS_R): RD.r = fabs(RA.r); NEXT();
             OP(ABS_C): RD.r = cabs(RA.z); NEXT();
             OP(SIGN_I): RD.i = (RA.i > 0) - (RA.i < 0); NEXT();
-            OP(SIGN_R): RD.r = (RA.r > 0) - (RA.r < 0); NEXT();
+            /* Writes the INTEGER slot: Sign of a real is an Integer in the
+             * interpreter.  (The tile form VSIGN_R stays real — it feeds packed
+             * float arrays, where the ND kernel's result dtype is real.) */
+            OP(SIGN_R): RD.i = (RA.r > 0) - (RA.r < 0); NEXT();
             OP(FLOOR_R): RD.i = (long long)floor(RA.r); NEXT();
+            /* IntegerPart truncates TOWARD ZERO, which is not Floor for a
+             * negative argument: IntegerPart[-1.5] is -1, Floor[-1.5] is -2. */
+            OP(TRUNC_R): RD.i = (long long)trunc(RA.r); NEXT();
             OP(CEIL_R):  RD.i = (long long)ceil(RA.r); NEXT();
             OP(ROUND_R): RD.i = (long long)llround(RA.r); NEXT();
             OP(RE_C): RD.r = creal(RA.z); NEXT();
