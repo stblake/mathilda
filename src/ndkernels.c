@@ -10,7 +10,7 @@
 
 #include "ndarray.h"
 #include "symtab.h"
-#include "special_functions/expint_machine.h"
+#include "special_functions/sf_machine.h"
 #include <complex.h>
 #include <math.h>
 #include <stdbool.h>
@@ -237,7 +237,7 @@ static const NDBinaryKernel NDKB_Beta = { ndk_Beta_c, true };
 
 /* Exponential-integral family and friends.  These modules compute in MPFR and
  * round at the end, so there was no double path to reuse — the kernels in
- * expint_machine.c are written for exactly this.  All are registered
+ * sf_machine.c are written for exactly this.  All are registered
  * real-closed with a `real` function only: the function DECLINES (returns
  * false) for an argument whose true value is complex or infinite, which is the
  * engine's standing contract, and a complex argument has no `cplx` to call so
@@ -266,6 +266,43 @@ static const NDUnaryKernel NDKU_CoshIntegral  = { NULL, ndk_CoshIntegral_r,  tru
 static const NDUnaryKernel NDKU_Sinc          = { NULL, ndk_Sinc_r,          true, false };
 static const NDUnaryKernel NDKU_InverseErf    = { NULL, ndk_InverseErf_r,    true, false };
 static const NDUnaryKernel NDKU_InverseErfc   = { NULL, ndk_InverseErfc_r,   true, false };
+
+static bool ndk_Erfi_r(double x, double* o)          { return sf_machine_erfi(x, o); }
+static bool ndk_ProductLog_r(double x, double* o)    { return sf_machine_productlog(x, o); }
+static bool ndk_FresnelC_r(double x, double* o)      { return sf_machine_fresnel_c(x, o); }
+static bool ndk_FresnelS_r(double x, double* o)      { return sf_machine_fresnel_s(x, o); }
+static bool ndk_PolyGamma_r(double x, double* o)     { return sf_machine_digamma(x, o); }
+static bool ndk_HarmonicNumber_r(double x, double* o){ return sf_machine_harmonic(x, o); }
+static bool ndk_Zeta_r(double x, double* o)          { return sf_machine_zeta(x, o); }
+static bool ndk_Fibonacci_r(double x, double* o)     { return sf_machine_fibonacci(x, o); }
+static bool ndk_LucasL_r(double x, double* o)        { return sf_machine_lucasl(x, o); }
+static const NDUnaryKernel NDKU_Erfi           = { NULL, ndk_Erfi_r,           true, false };
+static const NDUnaryKernel NDKU_ProductLog     = { NULL, ndk_ProductLog_r,     true, false };
+static const NDUnaryKernel NDKU_FresnelC       = { NULL, ndk_FresnelC_r,       true, false };
+static const NDUnaryKernel NDKU_FresnelS       = { NULL, ndk_FresnelS_r,       true, false };
+static const NDUnaryKernel NDKU_PolyGamma      = { NULL, ndk_PolyGamma_r,      true, false };
+static const NDUnaryKernel NDKU_HarmonicNumber = { NULL, ndk_HarmonicNumber_r, true, false };
+static const NDUnaryKernel NDKU_Zeta           = { NULL, ndk_Zeta_r,           true, false };
+static const NDUnaryKernel NDKU_Fibonacci      = { NULL, ndk_Fibonacci_r,      true, false };
+static const NDUnaryKernel NDKU_LucasL         = { NULL, ndk_LucasL_r,         true, false };
+
+/* PolyGamma[n, x] and HurwitzZeta[s, a].  PolyGamma matters as a BINARY kernel
+ * even when written unary: the evaluator canonicalises PolyGamma[x] to
+ * PolyGamma[0, x] before anything downstream sees it. */
+static bool ndk_PolyGamma_c(double nre, double nim, double xre, double xim,
+                            double* rr, double* ri) {
+    if (nim != 0.0 || xim != 0.0) return false;
+    double v; if (!sf_machine_polygamma(nre, xre, &v)) return false;
+    *rr = v; *ri = 0.0; return true;
+}
+static bool ndk_HurwitzZeta_c(double sre, double sim, double are, double aim,
+                              double* rr, double* ri) {
+    if (sim != 0.0 || aim != 0.0) return false;
+    double v; if (!sf_machine_hurwitz_zeta(sre, are, &v)) return false;
+    *rr = v; *ri = 0.0; return true;
+}
+static const NDBinaryKernel NDKB_PolyGamma   = { ndk_PolyGamma_c,   true };
+static const NDBinaryKernel NDKB_HurwitzZeta = { ndk_HurwitzZeta_c, true };
 
 /* Degrade sentinels: no machine kernel available (libc-free algorithms). The
  * NULL cplx makes the map decline for every element, so the evaluator threads
@@ -308,24 +345,28 @@ void ndkernels_init(void) {
     REG_B(BesselY, NDKB_BesselY);
     REG_B(Beta,    NDKB_Beta);
 
-    /* Exponential-integral family (expint_machine.c) + two already-existing
+    /* Exponential-integral family (sf_machine.c) + two already-existing
      * double algorithms that were simply never registered. */
     REG_U(ExpIntegralEi); REG_U(LogIntegral);
     REG_U(SinIntegral);   REG_U(CosIntegral);
     REG_U(SinhIntegral);  REG_U(CoshIntegral);
     REG_U(Sinc);          REG_U(InverseErf);   REG_U(InverseErfc);
+    REG_U(Erfi);          REG_U(ProductLog);
+    REG_U(FresnelC);      REG_U(FresnelS);
+    REG_U(PolyGamma);     REG_U(HarmonicNumber);
+    REG_U(Zeta);          REG_U(Fibonacci);    REG_U(LucasL);
+    REG_B(PolyGamma,   NDKB_PolyGamma);
+    REG_B(HurwitzZeta, NDKB_HurwitzZeta);
 
     /* Special functions with libc-free algorithms: correct results on NDArray
      * via the degrade path (List threading), pending dedicated machine kernels. */
     static const char* deg_u[] = {
-        "Erfi",
-        "FresnelS", "FresnelC", "AiryAi", "AiryBi",
-        "AiryAiPrime", "AiryBiPrime", "ProductLog", "Zeta",
+        "AiryAi", "AiryBi", "AiryAiPrime", "AiryBiPrime",
     };
     for (unsigned i = 0; i < sizeof(deg_u) / sizeof(deg_u[0]); i++)
         REG_DEG_U(deg_u[i]);
     static const char* deg_b[] = {
-        "BesselI", "BesselK", "PolyLog", "HurwitzZeta", "LegendreP",
+        "BesselI", "BesselK", "PolyLog", "LegendreP",
     };
     for (unsigned i = 0; i < sizeof(deg_b) / sizeof(deg_b[0]); i++)
         REG_DEG_B(deg_b[i]);

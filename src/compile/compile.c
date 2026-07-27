@@ -845,6 +845,22 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         return true;
     }
     if (strcmp(h, "Conjugate") == 0 && na == 1) { IT(0, ta); *out = ta; return true; }
+    if (strcmp(h, "UnitStep") == 0 && na >= 1) {
+        for (size_t i = 0; i < na; i++) { IT(i, ta); if (CT_IS_ARRAY(ta) || ta == CT_BOOL) return false; }
+        *out = CT_INT; return true;                    /* UnitStep[0.5] is 1, not 1. */
+    }
+    if ((strcmp(h, "Clip") == 0 || strcmp(h, "Rescale") == 0) && na == 2) {
+        const Expr* bnd = A[1];
+        if (bnd->type != EXPR_FUNCTION || bnd->data.function.head->type != EXPR_SYMBOL
+            || strcmp(bnd->data.function.head->data.symbol.name, "List") != 0
+            || bnd->data.function.arg_count != 2) return false;
+        IT(0, ta);
+        CompileType tl, tu;
+        if (!infer_type(c, bnd->data.function.args[0], &tl)
+            || !infer_type(c, bnd->data.function.args[1], &tu)) return false;
+        if (tl != CT_REAL || tu != CT_REAL || CT_IS_ARRAY(ta) || ta == CT_BOOL) return false;
+        *out = CT_REAL; return true;
+    }
     if ((strcmp(h, "Max") == 0 || strcmp(h, "Min") == 0) && na >= 1) { IT(0, ta); for (size_t i = 1; i < na; i++) { IT(i, tb); ta = num_common(ta, tb); if ((int)ta < 0 || ta == CT_COMPLEX) return false; } *out = ta; return true; }
     if (strcmp(h, "ArcTan") == 0) {
         if (na == 1) {
@@ -1590,6 +1606,77 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
         if (strcmp(h, "Arg") == 0)  { *out = unop(c, OP_ARG_C, a, CT_REAL); return c->ok; }
         *out = unop(c, OP_CONJ_C, a, CT_COMPLEX); return c->ok;
     }
+    /* UnitStep / Clip / Rescale: lowered by hand rather than registered as
+     * kernels, because for these the RESULT TYPE is the whole difficulty.
+     *
+     *   UnitStep returns an INTEGER (UnitStep[0.5] is 1, not 1.) — a real-valued
+     *   kernel would answer with a different head from the interpreter.  A
+     *   comparison already leaves 0/1 in the integer half of the slot, so the
+     *   lowering is just the comparison, typed CT_INT.
+     *
+     *   Clip and Rescale take a LIST of bounds, which no kernel signature can
+     *   express; a literal two-element List is destructured here instead.  Both
+     *   are gated on the bounds being REAL: with exact bounds the interpreter
+     *   returns an exact value where it clips (Clip[5, {1, 3}] is the Integer 3)
+     *   and a Real where it does not, which no single compiled type can match. */
+    if (strcmp(h, "UnitStep") == 0 && na >= 1) {
+        Val acc; bool have = false;
+        for (size_t i = 0; i < na; i++) {
+            CompileType at;
+            if (!infer_type(c, A[i], &at) || CT_IS_ARRAY(at) || at == CT_BOOL) { c->ok = false; return false; }
+            Val v; if (!emit(c, A[i], &v)) return false;
+            Val z;
+            if (at == CT_INT) { Slot k; memset(&k, 0, sizeof k); z = emit_const(c, k, CT_INT); }
+            else { coerce(c, &v, CT_REAL); Slot k; memset(&k, 0, sizeof k); k.r = 0.0; z = emit_const(c, k, CT_REAL); }
+            if (!c->ok) return false;
+            Val ge = binop(c, (at == CT_INT) ? OP_GE_I : OP_GE_R, v, z, CT_INT);
+            acc = have ? binop(c, OP_MUL_I, acc, ge, CT_INT) : ge;
+            have = true;
+        }
+        if (!have) { c->ok = false; return false; }
+        *out = acc;
+        return c->ok;
+    }
+    if ((strcmp(h, "Clip") == 0 || strcmp(h, "Rescale") == 0) && na == 2) {
+        const Expr* bnd = A[1];
+        if (bnd->type != EXPR_FUNCTION || bnd->data.function.head->type != EXPR_SYMBOL
+            || strcmp(bnd->data.function.head->data.symbol.name, "List") != 0
+            || bnd->data.function.arg_count != 2) { c->ok = false; return false; }
+        CompileType tx, tl, tu;
+        if (!infer_type(c, A[0], &tx) || !infer_type(c, bnd->data.function.args[0], &tl)
+            || !infer_type(c, bnd->data.function.args[1], &tu)) { c->ok = false; return false; }
+        /* Real bounds only — see the note above. */
+        if (tl != CT_REAL || tu != CT_REAL || CT_IS_ARRAY(tx) || tx == CT_BOOL) { c->ok = false; return false; }
+        /* Temporaries are a STACK: binop pops its two operands and allocates the
+         * destination, so both operands must be the top of it at that moment.
+         * Everything below is therefore emitted in exactly the order it is
+         * consumed — and `lo`, which Rescale needs twice, is emitted twice
+         * rather than held across an intervening allocation.  (It is a literal
+         * bound; the optimiser's value numbering folds the duplicate away.) */
+        const Expr* elo = bnd->data.function.args[0];
+        const Expr* ehi = bnd->data.function.args[1];
+        Val x, lo, hi;
+        if (!emit(c, A[0], &x)) return false;
+        coerce(c, &x, CT_REAL);
+        if (!c->ok) return false;
+
+        if (h[0] == 'C') {                       /* Clip[x, {lo, hi}] = Min[Max[x, lo], hi] */
+            if (!emit(c, elo, &lo)) return false;
+            Val mx = binop(c, OP_MAX_R, x, lo, CT_REAL);
+            if (!emit(c, ehi, &hi)) return false;
+            *out = binop(c, OP_MIN_R, mx, hi, CT_REAL);
+        } else {                                 /* Rescale[x, {lo, hi}] = (x - lo)/(hi - lo) */
+            if (!emit(c, elo, &lo)) return false;
+            Val num = binop(c, OP_SUB_R, x, lo, CT_REAL);
+            Val lo2, hi2;
+            if (!emit(c, ehi, &hi2)) return false;
+            if (!emit(c, elo, &lo2)) return false;
+            Val den = binop(c, OP_SUB_R, hi2, lo2, CT_REAL);
+            *out = binop(c, OP_DIV_R, num, den, CT_REAL);
+        }
+        return c->ok;
+    }
+
     if ((strcmp(h, "Max") == 0 || strcmp(h, "Min") == 0) && na >= 1) {
         bool mx = h[1] == 'a';
         Val acc; if (!emit(c, A[0], &acc)) return false;

@@ -237,8 +237,9 @@ int main(void) {
     /* ---- graceful bail on unsupported constructs ---- */
     /* Functions WITH a machine kernel (Gamma, BesselJ, ...) now compile through
      * the shared engine's generic-kernel path; genuine bails are functions with
-     * no ndkernels entry (Zeta, PolyLog) or a free symbol. */
-    check_bail("no kernel (Zeta)",       "NDSolve`w0 + Zeta[NDSolve`w0]");
+     * no machine kernel (AiryAi, PolyLog) or a free symbol.  Zeta used to be the
+     * example here and now compiles, which is what the coverage audit is for. */
+    check_bail("no kernel (AiryAi)",     "NDSolve`w0 + AiryAi[NDSolve`w0]");
     check_bail("no kernel (PolyLog)",    "NDSolve`w0 + PolyLog[2, NDSolve`w0]");
     check_bail("free parameter symbol",  "NDSolve`w0 + freeParameter");
 

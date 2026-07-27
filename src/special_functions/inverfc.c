@@ -76,7 +76,7 @@ static Expr* ifc_neg_infinity(void) {
 /* erfcinv(x) for x strictly inside (0, 2) at full double accuracy. The seed
  * is Winitzki's closed-form erfinv on w = 1 - x (since erfcinv(x)=erfinv(1-x));
  * Newton then polishes directly on the libm erfc, converging quadratically. */
-/* Exposed (see expint_machine.h's rationale): this is already a pure
+/* Exposed (see sf_machine.h's rationale): this is already a pure
  * double algorithm, so the NDArray fast path and the Compile[] VM can use
  * it directly instead of sitting on a degrade sentinel. */
 double inverfc_double(double x) {

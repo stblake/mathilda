@@ -212,8 +212,16 @@ static void pl_initial(ncpx* w, long k, const ncpx* z, mpfr_prec_t wp) {
         done = true;
     }
 
-    /* Principal branch near 0: Maclaurin seed w = z(1 - z + 3/2 z^2). */
-    if (!done && k == 0 && mpfr_cmp_d(mag_z, 0.35) < 0) {
+    /* Principal branch near 0: Maclaurin seed w = z(1 - z + 3/2 z^2).
+     *
+     * The bound must reach past 1/e = 0.3678..., because the next seed down
+     * only applies once |log z| < 1, i.e. |z| > 1/e.  At 0.35 the two regions
+     * did not meet and |z| in [0.35, 1/e] fell through to the ASYMPTOTIC seed
+     * L1 - log L1 — with log z negative there, log(log z) is complex and the
+     * seed is meaningless, so the iteration converged to something that is not
+     * a Lambert W value at all (ProductLog[0.35] came back -2.6422, whose
+     * w e^w is -0.188, not 0.35).  0.5 leaves margin on both sides. */
+    if (!done && k == 0 && mpfr_cmp_d(mag_z, 0.5) < 0) {
         ncpx_mul(&tmp, z, z, wp);            /* z^2 */
         mpfr_set_d(e_const, 1.5, PRND);
         ncpx_scale(w, &tmp, e_const);        /* 3/2 z^2 */

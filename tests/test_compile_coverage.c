@@ -52,41 +52,28 @@ typedef struct { const char* name; const char* why; } Gap;
 static const Gap KNOWN_GAPS[] = {
     /* (a) no machine kernel yet — real coverage gaps.
      *
-     * The exponential-integral family used to live here; expint_machine.c now
+     * The exponential-integral family used to live here; sf_machine.c now
      * provides real double implementations for it, so the ones remaining are
      * those that still need genuinely new numerics rather than a wrapper. */
-    { "Zeta",                 "no double kernel (MPFR-only module)" },
-    { "HurwitzZeta",          "no double kernel (MPFR-only module)" },
     { "PolyLog",              "no double kernel (MPFR-only module)" },
     { "LerchPhi",             "no double kernel (MPFR-only module)" },
-    { "PolyGamma",            "no double kernel (MPFR-only module)" },
-    { "Erfi",                 "no double kernel (MPFR-only module)" },
-    { "FresnelS",             "no double kernel (MPFR-only module)" },
-    { "FresnelC",             "no double kernel (MPFR-only module)" },
     { "AiryAi",               "no double kernel (MPFR-only module)" },
     { "AiryBi",               "no double kernel (MPFR-only module)" },
     { "AiryAiPrime",          "no double kernel (MPFR-only module)" },
     { "AiryBiPrime",          "no double kernel (MPFR-only module)" },
-    { "ProductLog",           "no double kernel (MPFR-only module)" },
     { "BesselI",              "no double kernel (MPFR-only module)" },
     { "BesselK",              "no double kernel (MPFR-only module)" },
     { "BesselJZero",          "no double kernel (root-finding module)" },
     { "LegendreP",            "no double kernel (MPFR-only module)" },
     { "BarnesG",              "no double kernel" },
     { "Hyperfactorial",       "no double kernel" },
-    { "HarmonicNumber",       "no double kernel" },
     { "Pochhammer",           "no double kernel" },
     { "QPochhammer",          "no double kernel" },
     { "Hypergeometric0F1",    "no double kernel" },
     { "Hypergeometric1F1",    "no double kernel" },
     { "Hypergeometric2F1",    "no double kernel" },
     { "HypergeometricPFQ",    "no double kernel" },
-    { "UnitStep",             "no double kernel registered" },
-    { "Clip",                 "n-ary; kernel registry is unary/binary only" },
-    { "Rescale",              "n-ary; kernel registry is unary/binary only" },
-    { "Fibonacci",            "no double kernel" },
-    { "LucasL",               "no double kernel" },
-    { "Factorial2",           "no double kernel" },
+    { "Factorial2",           "interpreter leaves Factorial2[real] unevaluated" },
     { "FactorialPower",       "no double kernel" },
     /* (b) deliberately not machine-scalar functions */
     { "GCD",                  "exact integer semantics; not a double kernel" },
@@ -101,6 +88,21 @@ static const size_t NGAPS = sizeof KNOWN_GAPS / sizeof KNOWN_GAPS[0];
 static const char* gap_reason(const char* nm) {
     for (size_t i = 0; i < NGAPS; i++)
         if (strcmp(KNOWN_GAPS[i].name, nm) == 0) return KNOWN_GAPS[i].why;
+    return NULL;
+}
+
+/* A few heads cannot be probed by the generic `Head[x, y, ...]` form because
+ * their real signature is not a flat list of scalars — Clip and Rescale take a
+ * LIST of bounds.  Probing them with the wrong shape would report a coverage gap
+ * that is really a defect in the probe. */
+typedef struct { const char* name; const char* probe; } Probe;
+static const Probe PROBES[] = {
+    { "Clip",    "Clip[x, {1., 3.}]" },
+    { "Rescale", "Rescale[x, {0., 4.}]" },
+};
+static const char* probe_for(const char* nm) {
+    for (size_t i = 0; i < sizeof PROBES / sizeof PROBES[0]; i++)
+        if (strcmp(PROBES[i].name, nm) == 0) return PROBES[i].probe;
     return NULL;
 }
 
@@ -126,6 +128,16 @@ static bool head_compiles(const char* h) {
     const char* inm[3];
     const CompileType RRR[3] = { CT_REAL, CT_REAL, CT_REAL };
     for (int i = 0; i < 3; i++) inm[i] = intern_symbol(an[i]);
+
+    const char* override = probe_for(h);
+    if (override) {
+        Expr* b = parse_expression(override);
+        if (!b) return false;
+        CompiledProgram* prog = compile_expr(b, inm, RRR, 1);
+        expr_free(b);
+        if (prog) { compiled_free(prog); return true; }
+        return false;
+    }
 
     for (int arity = 1; arity <= 3; arity++) {
         char buf[256];

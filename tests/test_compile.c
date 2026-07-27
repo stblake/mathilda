@@ -562,7 +562,7 @@ int main(void) {
     parity("real Arg (negative)", "Arg[-x]", xyz, RRR, 1, 0.3, 6.0, 0, 0, 200);
     parity("Mod/Arg in a chain", "Sin[Mod[x, y]] + Arg[-x] Quotient[x, y]", xyz, RRR, 2, 0.4, 5.0, 0, 0, 200);
 
-    /* Exponential-integral family: new machine kernels (expint_machine.c) for
+    /* Exponential-integral family: new machine kernels (sf_machine.c) for
      * modules that previously computed only in MPFR, so these heads used to bail
      * and take the whole surrounding body with them.  Ranges stay inside each
      * function's real domain; the out-of-domain behaviour is checked separately
@@ -583,6 +583,43 @@ int main(void) {
            "Sin[SinIntegral[x]] + CosIntegral[x] Sinc[y] + ExpIntegralEi[-x]",
            xyz, RRR, 2, 0.4, 8.0, 0, 0, 300);
 
+    /* Second kernel batch: Erfi, ProductLog, Fresnel, digamma, Zeta and the
+     * real continuations of Fibonacci/LucasL.  Ranges stay inside each real
+     * domain; the poles and branch points are covered by the decline list. */
+    parity("Erfi",            "Erfi[x]",           xyz, RRR, 1, -6.0, 6.0, 0, 0, 300);
+    parity("Erfi large",      "Erfi[x]",           xyz, RRR, 1, 6.0, 20.0, 0, 0, 200);
+    parity("ProductLog",      "ProductLog[x]",     xyz, RRR, 1, -0.36, 40.0, 0, 0, 300);
+    parity("ProductLog small","ProductLog[x]",     xyz, RRR, 1, 0.001, 1.0, 0, 0, 200);
+    parity("FresnelC",        "FresnelC[x]",       xyz, RRR, 1, -12.0, 12.0, 0, 0, 400);
+    parity("FresnelS",        "FresnelS[x]",       xyz, RRR, 1, -12.0, 12.0, 0, 0, 400);
+    parity("PolyGamma",       "PolyGamma[x]",      xyz, RRR, 1, 0.2, 30.0, 0, 0, 300);
+    parity("PolyGamma neg",   "PolyGamma[-x - 0.3]", xyz, RRR, 1, 0.1, 8.0, 0, 0, 200);
+    parity("HarmonicNumber",  "HarmonicNumber[x]", xyz, RRR, 1, 0.1, 60.0, 0, 0, 300);
+    parity("Zeta",            "Zeta[x]",           xyz, RRR, 1, 1.2, 30.0, 0, 0, 300);
+    parity("Zeta strip",      "Zeta[x]",           xyz, RRR, 1, 0.55, 0.95, 0, 0, 200);
+    parity("Zeta negative",   "Zeta[-x]",          xyz, RRR, 1, 0.2, 12.0, 0, 0, 300);
+    parity("Fibonacci real",  "Fibonacci[x]",      xyz, RRR, 1, -6.0, 25.0, 0, 0, 300);
+    parity("LucasL real",     "LucasL[x]",         xyz, RRR, 1, -6.0, 25.0, 0, 0, 300);
+    parity("sf batch chain",  "Erfi[x]/100 + FresnelC[y] + PolyGamma[x] Zeta[y + 2]",
+           xyz, RRR, 2, 0.4, 5.0, 0, 0, 300);
+    /* PolyGamma matters as a BINARY kernel even written unary: the evaluator
+     * canonicalises PolyGamma[x] to PolyGamma[0, x] before the compiler sees it. */
+    parity("PolyGamma[n,x]",  "PolyGamma[2, x]",   xyz, RRR, 1, 0.3, 20.0, 0, 0, 300);
+    parity("PolyGamma[5,x]",  "PolyGamma[5, x]",   xyz, RRR, 1, 0.5, 12.0, 0, 0, 200);
+    parity("HurwitzZeta",     "HurwitzZeta[x + 1.2, y]", xyz, RRR, 2, 0.3, 9.0, 0, 0, 300);
+
+    /* UnitStep / Clip / Rescale are lowered by hand, not registered as kernels,
+     * because their result TYPE is the difficulty: UnitStep must stay an
+     * Integer, and Clip/Rescale take a list of bounds. */
+    parity("UnitStep",        "UnitStep[x]",       xyz, RRR, 1, -3.0, 3.0, 0, 0, 300);
+    parity("UnitStep 2-arg",  "UnitStep[x, y]",    xyz, RRR, 2, -3.0, 3.0, 0, 0, 300);
+    parity("UnitStep in sum", "UnitStep[x - 1.] x + UnitStep[1. - x] x^2",
+           xyz, RRR, 1, -3.0, 3.0, 0, 0, 300);
+    parity("Clip",            "Clip[x, {1., 3.}]", xyz, RRR, 1, -5.0, 8.0, 0, 0, 300);
+    parity("Rescale",         "Rescale[x, {0., 4.}]", xyz, RRR, 1, -5.0, 9.0, 0, 0, 300);
+    parity("Clip+Rescale",    "Rescale[x, {1., 5.}] + Clip[x, {2., 4.}]",
+           xyz, RRR, 1, -5.0, 9.0, 0, 0, 300);
+
     /* Out of domain, the machine kernel must DECLINE so the caller falls back —
      * these are exactly the arguments where the interpreter leaves the real
      * axis (Ci, Chi and li of a negative) or hits a pole (Ei at 0, li at 1).
@@ -596,6 +633,9 @@ int main(void) {
             { "LogIntegral[x]",    0.0 }, { "ExpIntegralEi[x]",  0.0 },
             { "InverseErf[x]",     1.0 }, { "InverseErf[x]",    -1.0 },
             { "InverseErfc[x]",    0.0 }, { "InverseErfc[x]",    2.0 },
+            { "ProductLog[x]",    -0.5 },          /* below the branch point */
+            { "Zeta[x]",           1.0 },          /* pole */
+            { "PolyGamma[x]",      0.0 }, { "PolyGamma[x]", -3.0 },   /* poles */
         };
         int bad = 0, n = (int)(sizeof DECLINE / sizeof DECLINE[0]);
         for (int i = 0; i < n; i++) {
@@ -689,7 +729,7 @@ int main(void) {
     }
 
     /* ---- graceful bail ---- */
-    must_bail("no kernel (Zeta)", "Zeta[x]", x1, RRR, 1);        /* not in ndkernels -> bail */
+    must_bail("no kernel (AiryAi)", "AiryAi[x]", x1, RRR, 1);   /* no machine kernel -> bail */
     must_bail("free symbol", "x + unknownParam", x1, RRR, 1);
     must_bail("list body", "{x, x^2}", x1, RRR, 1);
 
