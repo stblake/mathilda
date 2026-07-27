@@ -62,12 +62,21 @@ arith ops = 8.0 ns/op; mixed-libm 150 ns/call; array len-4096 1.0x, 61 ns/elemen
       self-reference patch at object construction.
 - [ ] **Thread the strip-mined loop** via `nd_parallel_for` — now unblocked by
       C-stack frames. Note `-DMATHILDA_THREADS` is not set in tests/CMakeLists.
-- [ ] **Fill the remaining kernels** — 39 listed gaps (was 48). The
-      exponential-integral family is done (`src/special_functions/expint_machine.c`).
-      Remaining are genuinely new numerics: `Zeta`, `PolyLog`, `HurwitzZeta`,
-      `LerchPhi`, `PolyGamma`, `Erfi`, `Fresnel*`, `Airy*`, `ProductLog`,
-      `BesselI/K`, `LegendreP`, the hypergeometrics. Plus `UnitStep`/`Clip`/
-      `Rescale`, which need an n-ary kernel form (the registry is unary/binary).
+- [ ] **Fill the remaining kernels** — **19 listed gaps, from 48.** Coverage is
+      84/103 (82%), from 55. Done so far in `src/special_functions/sf_machine.c`:
+      the exponential-integral family, Erfi, ProductLog, Fresnel, PolyGamma,
+      HurwitzZeta, HarmonicNumber, Zeta, Fibonacci/LucasL, Pochhammer, Binomial,
+      LegendreP, Airy x4; plus UnitStep/Clip/Rescale as bespoke lowerings (their
+      result TYPE is the difficulty, not the numerics).
+      **12 pending numerics:** `PolyLog`, `LerchPhi`, `BesselI`, `BesselK`,
+      `BesselJZero`, `BarnesG`, `Hyperfactorial`, `QPochhammer`, and the four
+      hypergeometrics.
+      **7 deliberate exclusions:** `Factorial2`/`FactorialPower` (the interpreter
+      leaves them unevaluated on reals) and `GCD`/`LCM`/`DigitSum`/`ReIm`/
+      `QuotientRemainder` (exact-integer, or not a single machine number).
+- [ ] **Airy's uncovered band** — `2.5 < |x| < 8`, where neither the ascending
+      series nor the asymptotic expansion reaches double precision. Needs a third
+      method (Chebyshev fits, or the modified-Bessel route). Declines today.
 - [ ] **`CompileDiag`** — a bail still reports nothing. The audit covers heads;
       per-body diagnostics would cover the rest.
 - [ ] **Native backend** (`CompilationTarget -> "C"`), behind a build flag.
