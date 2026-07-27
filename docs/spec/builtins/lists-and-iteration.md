@@ -122,6 +122,50 @@ Generates a list of values.
 - `Range[imax]`
 - `Range[imin, imax, di]`
 
+## Subdivide
+Generates equally spaced points spanning an interval, **including both
+endpoints**. Attributes: `Protected`.
+- `Subdivide[n]`: the `n + 1` points `{0, 1/n, 2/n, ..., 1}` spanning 0 to 1.
+- `Subdivide[max, n]`: `n + 1` points spanning 0 to `max`.
+- `Subdivide[min, max, n]`: `n + 1` points spanning `min` to `max`; point `i`
+  (0-based) is `min + i (max - min)/n`.
+
+Every form returns `n + 1` points, because `n` counts the *parts* the interval
+is cut into, not the points produced. Contrast `Range`, which takes a step size
+and need not land on its upper bound.
+
+**Features**:
+- Results are **exact** for exact input: rationals come back in lowest terms,
+  and a point landing on a whole number prints as an integer, so
+  `Subdivide[10, 4]` gives `{0, 5/2, 5, 15/2, 10}`.
+- Both **endpoints are exact**. They are copied from the input rather than
+  computed, and each interior point is derived directly from its own index
+  rather than by accumulating a step, so no rounding can drift.
+- **Descending intervals** (`min > max`) are allowed: the formula is applied
+  unchanged, giving a negative step. A degenerate interval (`min == max`) has
+  step 0 and repeats the endpoint.
+- Bigint, rational, real, and purely symbolic endpoints all work; arithmetic
+  outside the machine-integer fast path is deferred to the core evaluator. Real
+  endpoints give machine reals, as elsewhere in the system.
+- `n` must be a **positive integer**. Zero, negative, rational, real, and
+  symbolic `n` leave the expression unevaluated, as does an `n` large enough
+  that the result list would be unbuildable.
+
+```
+In[1]:= Subdivide[4]
+Out[1]= {0, 1/4, 1/2, 3/4, 1}
+In[2]:= Subdivide[10, 4]
+Out[2]= {0, 5/2, 5, 15/2, 10}
+In[3]:= Subdivide[2, 8, 3]
+Out[3]= {2, 4, 6, 8}
+In[4]:= Subdivide[3, 1, 4]
+Out[4]= {3, 5/2, 2, 3/2, 1}
+In[5]:= Subdivide[a, b, 2]
+Out[5]= {a, a + 1/2 (-a + b), b}
+In[6]:= Subdivide[0]
+Out[6]= Subdivide[0]
+```
+
 ## Array
 Generates an array by applying a function to indices.
 - `Array[f, n]`

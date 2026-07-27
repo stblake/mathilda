@@ -117,6 +117,19 @@ void list_init(void) {
         "\tn - 1 gaps left to right; separators beyond the last gap are\n"
         "\tunused. The head of list is preserved.");
 
+    symtab_add_builtin("Subdivide", builtin_subdivide);
+    symtab_get_def("Subdivide")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Subdivide",
+        "Subdivide[n]\n\tGives the list {0, 1/n, 2/n, ..., 1} of n + 1 equally\n"
+        "\tspaced points spanning 0 to 1, including both endpoints.\n"
+        "Subdivide[max, n]\n\tGives n + 1 equally spaced points spanning 0 to\n"
+        "\tmax.\n"
+        "Subdivide[min, max, n]\n\tGives n + 1 equally spaced points spanning\n"
+        "\tmin to max; point i is min + i (max - min)/n. Descending intervals\n"
+        "\t(min > max) are allowed and give a negative step. Exact input gives\n"
+        "\texact results in lowest terms, with both endpoints exact. Returns\n"
+        "\tunevaluated unless n is a positive integer.");
+
     symtab_get_def("Table")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_get_def("Range")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Array")->attributes |= ATTR_PROTECTED;

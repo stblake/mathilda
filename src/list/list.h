@@ -37,6 +37,7 @@
 #include "join.h"
 #include "subsets.h"
 #include "riffle.h"
+#include "subdivide.h"
 
 void list_init(void);
 

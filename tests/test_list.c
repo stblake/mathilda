@@ -857,6 +857,53 @@ void test_riffle() {
     }
 }
 
+void test_subdivide() {
+    struct {
+        const char* input;
+        const char* expected;
+    } tests[] = {
+        /* Subdivide[n] — n + 1 points spanning 0 to 1. n counts the parts the
+         * interval is cut into, not the points produced. */
+        {"Subdivide[1]", "{0, 1}"},
+        {"Subdivide[2]", "{0, 1/2, 1}"},
+        {"Subdivide[3]", "{0, 1/3, 2/3, 1}"},
+        /* Rationals reduce: the middle point is 1/2, not 2/4. */
+        {"Subdivide[4]", "{0, 1/4, 1/2, 3/4, 1}"},
+
+        /* Subdivide[max, n] — spans 0 to max. */
+        {"Subdivide[10, 5]", "{0, 2, 4, 6, 8, 10}"},
+        /* Step 5/2: points landing on whole numbers print as integers,
+         * mixed with rationals in the same list. */
+        {"Subdivide[10, 4]", "{0, 5/2, 5, 15/2, 10}"},
+
+        /* Subdivide[min, max, n] — the lower endpoint is min, not 0. */
+        {"Subdivide[1, 3, 4]", "{1, 3/2, 2, 5/2, 3}"},
+        {"Subdivide[2, 8, 3]", "{2, 4, 6, 8}"},
+
+        /* DESCENDING INTERVALS. No special case: min + i (max - min)/n is
+         * applied verbatim, so max < min simply gives a negative step and
+         * still yields n + 1 points. */
+        {"Subdivide[3, 1, 4]", "{3, 5/2, 2, 3/2, 1}"},
+        /* The two-argument form descends when max is negative. */
+        {"Subdivide[-10, 5]", "{0, -2, -4, -6, -8, -10}"},
+        /* An interval straddling zero descends through it. */
+        {"Subdivide[1, -1, 4]", "{1, 1/2, 0, -1/2, -1}"},
+        /* Degenerate interval: step 0 repeats the endpoint. n is a positive
+         * integer, which is the only validity condition, so this evaluates. */
+        {"Subdivide[5, 5, 2]", "{5, 5, 5}"},
+
+        /* n must be a positive integer; otherwise the call stays
+         * unevaluated and prints back exactly as written. */
+        {"Subdivide[0]", "Subdivide[0]"},
+        {"Subdivide[-1]", "Subdivide[-1]"},
+        {"Subdivide[5, 0]", "Subdivide[5, 0]"},
+    };
+
+    for (int i = 0; i < (int)(sizeof(tests) / sizeof(tests[0])); i++) {
+        assert_eval_eq(tests[i].input, tests[i].expected, 0);
+    }
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -909,6 +956,7 @@ int main() {
     TEST(test_subsets);
     TEST(test_riffle);
     TEST(test_gather);
+    TEST(test_subdivide);
 
     printf("All list tests passed!\n");
     return 0;
