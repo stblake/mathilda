@@ -436,6 +436,10 @@ static void rand_arr_body(char* buf, size_t cap, int depth) {
  * "to rounding") is the right gate: a pass that reassociated a sum or contracted
  * a multiply-add would still look accurate but would break the engine's stated
  * parity contract with the interpreter. */
+/* Which pass the A/B is currently disabling, so one harness gates them all. */
+static unsigned    ab_off_flag = 0;
+static const char* ab_what = "the optimiser";
+
 static long long* ab_opt_tot = NULL;
 static long long* ab_raw_tot = NULL;
 static int*       ab_count   = NULL;
@@ -450,10 +454,10 @@ static void ab_opt(const char* name, const char* body_s, const char* const* name
     Expr* body = raw_parse ? parse_expression(body_s)
                            : eval_and_free(parse_expression(body_s));
     CompiledProgram* po = compile_expr_ex(body, inames, types, n, 0u);
-    CompiledProgram* pr = compile_expr_ex(body, inames, types, n, COMPILE_NO_OPT);
+    CompiledProgram* pr = compile_expr_ex(body, inames, types, n, ab_off_flag);
 
     if (!po != !pr) {
-        printf("FAIL: %-30s optimiser changed whether the body compiles\n", name);
+        printf("FAIL: %-30s %s changed whether the body compiles\n", name, ab_what);
         failures++;
         compiled_free(po); compiled_free(pr); expr_free(body);
         return;
@@ -493,10 +497,10 @@ static void ab_opt(const char* name, const char* body_s, const char* const* name
 
     size_t no = compiled_num_instructions(po), nr = compiled_num_instructions(pr);
     if (bad) {
-        printf("FAIL: %-30s optimised result differs from unoptimised\n", name);
+        printf("FAIL: %-30s result differs with %s\n", name, ab_what);
         failures++;
     } else if (no > nr) {
-        printf("FAIL: %-30s optimiser GREW the program (%zu -> %zu)\n", name, nr, no);
+        printf("FAIL: %-30s %s GREW the program (%zu -> %zu)\n", name, ab_what, nr, no);
         failures++;
     } else {
         if (ab_opt_tot) { *ab_opt_tot += (long long)no; *ab_raw_tot += (long long)nr; (*ab_count)++; }
@@ -1150,6 +1154,9 @@ int main(void) {
         int ab_bodies = 0;
         ab_opt_init(&tot_opt, &tot_raw, &ab_bodies);
         #define AB(nm, src, na, ty, raw) ab_opt(nm, src, xyz, ty, na, raw)
+        for (int pass = 0; pass < 2; pass++) {
+        ab_off_flag = pass ? COMPILE_NO_CSE : COMPILE_NO_OPT;
+        ab_what     = pass ? "CSE" : "the optimiser";
 
         AB("straight-line arith",   "x + 2 y - x y + 3",            2, RRR, false);
         AB("shared subexpression",  "Sin[x y] + Cos[x y] + Sin[x y]^2", 2, RRR, false);
@@ -1172,6 +1179,16 @@ int main(void) {
         AB("Nest",                  "Nest[Function[u, (u + x/u)/2], x, 14]", 1, RRR, true);
         AB("With locals",           "With[{a = Sin[x], b = Cos[x]}, a b + a/b + a^2]", 1, RRR, true);
         AB("loop-invariant heavy",  "Sum[Exp[-x^2] Sqrt[Abs[y]] + i, {i, 1, 25}]", 2, RRR, true);
+        /* Bodies with genuinely repeated subtrees — what Expr-level CSE exists
+         * for, and the shapes where hoisting could go wrong. */
+        AB("repeat: same call thrice", "Sin[x y] + Cos[x y] Sin[x y] + Sin[x y]^3", 2, RRR, false);
+        AB("repeat: nested repeats",   "Exp[Sin[x] + Sin[x]] + Sin[x] (Sin[x] + 1)", 1, RRR, false);
+        AB("repeat: deep shared",      "Sqrt[Abs[x y]] + Log[1 + Sqrt[Abs[x y]]] + Sqrt[Abs[x y]]^2", 2, RRR, false);
+        AB("repeat: under a loop",     "Sum[Sin[x] Cos[y] + Sin[x] i, {i, 1, 12}]", 2, RRR, true);
+        AB("repeat: inside If",        "If[x < y, Sin[x y] + Sin[x y], Cos[x y] - Cos[x y]^2]", 2, RRR, false);
+        AB("repeat: with locals",      "With[{a = Sin[x y]}, a + Sin[x y] + a Sin[x y]]", 2, RRR, true);
+        AB("repeat: complex",          "(x + I y)^2 + Exp[(x + I y)^2]", 2, CCC, false);
+        }
 
         #undef AB
         if (ab_bodies)

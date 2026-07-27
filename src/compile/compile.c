@@ -42,6 +42,7 @@ struct CompiledProgram {
     int         tile_base;    /* tile registers are [tile_base, nreg) */
     double _Complex* tile_mem;/* backing storage, VBLOCK elements per tile */
     int         result_reg;
+    int         ncse;         /* repeated subtrees hoisted by cse_plan */
     CompileType result_type;
     size_t      nargs;
     CompileType* arg_types;   /* [nargs] */
@@ -85,6 +86,9 @@ static void nm_free(NameMap* m) { free(m->key); free(m->val); }
  * slot (so teardown can never mistake a double for a pointer) without a
  * second allocator or a liveness pass.  Jump targets, which also live in the
  * `b` field, are ordinary small integers and are left alone by the rewrite. */
+#define CSE_MAX       16     /* reserved CSE registers; bounds frame growth */
+#define CSE_OCC_MAX  256     /* occurrence map entries */
+
 typedef struct {
     Instr* code; size_t n, cap;
     int nlocals;        /* registers [0,nlocals) are args/locals */
@@ -105,6 +109,16 @@ typedef struct {
     int tile_top, tile_max;   /* strip-mining tile registers (TILE_VREG bank) */
     bool vector_mode;   /* inside a strip-mined loop: tile-valued ops are legal */
     bool array_args;    /* any declared argument is an array: gates fusion probing */
+
+    /* Expr-level CSE (see cse_plan).  A chosen repeated subtree is computed once
+     * into a register reserved below the temp stack, so no temp allocation and
+     * none of the explicit temp_top resets in the loop lowerings can reach it. */
+    struct { const Expr* node; int idx; } cse_occ[CSE_OCC_MAX];
+    size_t      cse_nocc;
+    int         cse_reg[CSE_MAX];
+    CompileType cse_type[CSE_MAX];
+    bool        cse_ready[CSE_MAX];
+    int         ncse;
 } Ctx;
 
 /* The caller's argument symbols are NOT in scope inside an inlined
@@ -292,6 +306,7 @@ static void coerce(Ctx* c, Val* v, CompileType target) {
 }
 
 static bool emit(Ctx* c, const Expr* e, Val* out);
+static int cse_lookup(const Ctx* c, const Expr* e);
 
 /* Single choke point protecting every SCALAR opcode from an array operand.
  * Each scalar op is emitted through binop / unop / kern_unop / kern_binop, so
@@ -1320,6 +1335,17 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
     }
 
     if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) { c->ok = false; return false; }
+
+    /* Already computed once at program entry?  The register is reserved below
+     * the temp stack, so it is still live and is never a temp to be freed. */
+    if (c->ncse) {
+        int slot = cse_lookup(c, e);
+        if (slot >= 0 && c->cse_ready[slot]) {
+            out->reg = c->cse_reg[slot]; out->tmp = false; out->type = c->cse_type[slot];
+            return true;
+        }
+    }
+
     const char* h = e->data.function.head->data.symbol.name;
     Expr** A = e->data.function.args;
     size_t na = e->data.function.arg_count;
@@ -2498,6 +2524,173 @@ vm_fail:
 }
 
 /* ------------------------------------------------------------------ *
+ *  Common-subexpression elimination, at the Expr level                *
+ * ------------------------------------------------------------------ *
+ * The bytecode optimiser has a value-numbering CSE, and it almost never fires.
+ * The reason is structural rather than a bug in the pass: binop/unop pop their
+ * operands BEFORE allocating the destination, so a computation normally writes
+ * into one of its own operand registers (`SIN_R t1, t1`).  The value-number
+ * entry keyed on that register is therefore invalidated by the very instruction
+ * that created it, and the value is genuinely gone — no bytecode-level pass can
+ * recover it without first changing how registers are allocated.
+ *
+ * Doing it on the Expr instead sidesteps all of that, and is where the
+ * information is richest anyway: repeated subtrees are visible directly.  A
+ * chosen subtree is computed ONCE into a register reserved BELOW the temp stack
+ * (by raising `nlocals`), which is exactly the discipline that already protects
+ * arguments — no temp allocation, and none of the explicit `temp_top` resets in
+ * the loop lowerings, can reach it.
+ *
+ * Eligibility is deliberately narrow, and every clause earns its place:
+ *   - every free symbol must be an ARGUMENT.  A subtree mentioning a loop
+ *     variable or a With/Module local cannot be hoisted to program entry, where
+ *     that name is not bound yet.  (Loop-INVARIANT hoisting is the optimiser's
+ *     LICM pass; this is a different job.)
+ *   - no control flow and no assignment anywhere inside, so evaluating it early
+ *     and unconditionally is observationally identical.
+ *   - scalar-typed: an array value carries ownership, and a tile belongs to the
+ *     fused loop that created it.
+ */
+#define CSE_MAX_NODES 4000   /* skip planning on very large trees */
+
+static bool cse_head_is_pure(const char* h) {
+    static const char* impure[] = {
+        "Set", "SetDelayed", "AddTo", "SubtractFrom", "TimesBy", "DivideBy",
+        "Increment", "Decrement", "CompoundExpression", "Do", "While", "For",
+        "Sum", "Product", "Nest", "If", "With", "Module", "Block", "Function",
+        "Which", "Piecewise", "Total", "Length"
+    };
+    for (size_t i = 0; i < sizeof impure / sizeof impure[0]; i++)
+        if (strcmp(h, impure[i]) == 0) return false;
+    return true;
+}
+
+/* Every free symbol an argument, every head pure.  Also counts nodes. */
+static bool cse_eligible(Ctx* c, const Expr* e, int* nodes) {
+    if (!e) return false;
+    (*nodes)++;
+    if (*nodes > CSE_MAX_NODES) return false;
+    Slot imm; CompileType lt;
+    if (literal(e, &imm, &lt)) return true;
+    if (e->type == EXPR_SYMBOL) {
+        const char* nm = e->data.symbol.name;
+        if (nm_get(&c->map, nm) >= 0) return true;          /* an argument */
+        double cv;
+        if (strcmp(nm, "I") == 0 || named_const(nm, &cv)) return true;
+        return false;                    /* loop var, local, or free symbol */
+    }
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    if (!cse_head_is_pure(e->data.function.head->data.symbol.name)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!cse_eligible(c, e->data.function.args[i], nodes)) return false;
+    return true;
+}
+
+typedef struct { const Expr* rep; uint64_t hash; int nodes; int count; int slot; } CseCand;
+
+/* Collect eligible subtrees, count structural duplicates, and record where each
+ * one occurs.  Occurrences are keyed on the Expr POINTER — the planner walks the
+ * very tree the emitter will walk, so pointer identity is exact and the
+ * emit-time lookup needs no structural comparison. */
+static void cse_scan(Ctx* c, const Expr* e, CseCand* cand, int* ncand) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    int nodes = 0;
+    if (e->data.function.head->type == EXPR_SYMBOL && cse_eligible(c, e, &nodes) && nodes >= 3) {
+        CompileType t;
+        if (infer_type(c, e, &t) && (int)t >= 0 && !CT_IS_ARRAY(t)) {
+            uint64_t h = expr_hash(e);
+            int found = -1;
+            for (int i = 0; i < *ncand; i++)
+                if (cand[i].hash == h && expr_eq(cand[i].rep, e)) { found = i; break; }
+            if (found < 0 && *ncand < CSE_MAX * 4) {
+                found = (*ncand)++;
+                cand[found].rep = e; cand[found].hash = h;
+                cand[found].nodes = nodes; cand[found].count = 0; cand[found].slot = -1;
+            }
+            if (found >= 0) {
+                cand[found].count++;
+                if (c->cse_nocc < CSE_OCC_MAX) {
+                    c->cse_occ[c->cse_nocc].node = e;
+                    c->cse_occ[c->cse_nocc].idx  = found;
+                    c->cse_nocc++;
+                }
+            }
+        }
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        cse_scan(c, e->data.function.args[i], cand, ncand);
+}
+
+/* Slot of the CSE register holding `e`, or -1. */
+static int cse_lookup(const Ctx* c, const Expr* e) {
+    for (size_t i = 0; i < c->cse_nocc; i++)
+        if (c->cse_occ[i].node == e) return c->cse_occ[i].idx;
+    return -1;
+}
+
+/* Choose repeated subtrees, reserve a register for each, and emit each once.
+ * Smallest first, so a larger candidate containing a smaller one picks up the
+ * smaller one's register rather than recomputing it. */
+static void cse_plan(Ctx* c, const Expr* body) {
+    CseCand cand[CSE_MAX * 4];
+    int ncand = 0;
+    cse_scan(c, body, cand, &ncand);
+    if (!ncand) { c->cse_nocc = 0; return; }
+
+    int chosen[CSE_MAX], nchosen = 0;
+    while (nchosen < CSE_MAX) {
+        int best = -1;
+        for (int i = 0; i < ncand; i++) {
+            if (cand[i].count < 2 || cand[i].slot >= 0) continue;
+            if (best < 0 || cand[i].nodes < cand[best].nodes) best = i;
+        }
+        if (best < 0) break;
+        cand[best].slot = nchosen;
+        c->cse_reg[nchosen] = c->nlocals + nchosen;   /* reserved BELOW the temps */
+        c->cse_ready[nchosen] = false;
+        chosen[nchosen++] = best;
+    }
+    if (!nchosen) { c->cse_nocc = 0; return; }
+
+    /* Keep only occurrences of chosen candidates, remapped to their slot. */
+    size_t w = 0;
+    for (size_t i = 0; i < c->cse_nocc; i++) {
+        int slot = cand[c->cse_occ[i].idx].slot;
+        if (slot < 0) continue;
+        c->cse_occ[w].node = c->cse_occ[i].node;
+        c->cse_occ[w].idx  = slot;
+        w++;
+    }
+    c->cse_nocc = w;
+
+    c->nlocals += nchosen;
+    if (c->nlocals > c->maxreg) c->maxreg = c->nlocals;
+    c->ncse = nchosen;
+
+    /* Emit each chosen subtree once.  `cse_ready` is switched on as we go, so
+     * candidate k reuses candidates 0..k-1 and can never reference itself. */
+    for (int k = 0; k < nchosen; k++) {
+        Val v;
+        if (!emit(c, cand[chosen[k]].rep, &v) || !c->ok) {
+            /* Not compilable in isolation after all — drop this one and every
+             * later one, and carry on without them rather than failing. */
+            c->ok = true;
+            c->ncse = k;
+            for (size_t i = 0; i < c->cse_nocc; ) {
+                if (c->cse_occ[i].idx >= k) c->cse_occ[i] = c->cse_occ[--c->cse_nocc];
+                else i++;
+            }
+            return;
+        }
+        Slot z; memset(&z, 0, sizeof z);
+        ins(c, OP_MOVE, (uint32_t)c->cse_reg[k], (uint32_t)v.reg, 0, z);
+        free_if_tmp(c, v);
+        c->cse_type[k]  = v.type;
+        c->cse_ready[k] = true;
+    }
+}
+
+/* ------------------------------------------------------------------ *
  *  Public API                                                         *
  * ------------------------------------------------------------------ */
 /* Rewrite a virtual array register to its final slot in the array bank above
@@ -2536,6 +2729,11 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
     if (!nm_init(&c.map, arg_names, nargs)) { free(c.argdep); return NULL; }
     c.maxreg = (int)nargs;
 
+    /* Hoist repeated subtrees into reserved registers before lowering the body.
+     * Must run before ANY temp is allocated: it works by raising `nlocals`, the
+     * floor the temp allocator builds on. */
+    if (!(flags & COMPILE_NO_CSE)) cse_plan(&c, body);
+
     Val res;
     bool ok = emit(&c, body, &res) && c.ok;
     /* A borrowed argument array cannot be the result: the caller owns what it
@@ -2570,7 +2768,7 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
     if (!p) { free(c.code); free(c.argdep); return NULL; }
     p->code = c.code; p->n = c.n; p->nreg = nreg; p->arr_base = arr_base;
     p->tile_base = tile_base;
-    p->result_reg = result_reg; p->result_type = res.type;
+    p->result_reg = result_reg; p->result_type = res.type; p->ncse = c.ncse;
     p->nargs = nargs; p->argdep = c.argdep;
     p->arg_types = malloc((nargs ? nargs : 1) * sizeof(CompileType));
     p->frame = malloc((size_t)(nreg ? nreg : 1) * sizeof(Slot));
@@ -2594,6 +2792,7 @@ CompileType compiled_result_type(const CompiledProgram* p) { return p->result_ty
 size_t compiled_num_args(const CompiledProgram* p) { return p->nargs; }
 size_t compiled_num_instructions(const CompiledProgram* p) { return p->n; }
 bool compiled_program_all_real(const CompiledProgram* p) { return p && p->all_real; }
+size_t compiled_num_cse(const CompiledProgram* p) { return p ? (size_t)p->ncse : 0; }
 
 size_t compiled_arg_deps(const CompiledProgram* p, int* deps, size_t cap) {
     size_t n = 0;

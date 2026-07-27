@@ -90,8 +90,8 @@ static void bench(const char* name, const char* src, const char* const* names,
         printf("FAIL: %-26s optimiser made it SLOWER (%.2fx)\n", name, ratio);
         failures++;
     } else {
-        printf("ok:   %-26s %7.1f ns/call  opt %.2fx  instrs %zu -> %zu\n",
-               name, to * 1e9, ratio, nr, no);
+        printf("ok:   %-26s %7.1f ns/call  opt %.2fx  instrs %zu -> %zu  cse %zu\n",
+               name, to * 1e9, ratio, nr, no, compiled_num_cse(po));
     }
     compiled_free(po); compiled_free(pr); expr_free(b);
 }

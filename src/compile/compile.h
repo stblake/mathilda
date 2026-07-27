@@ -122,6 +122,14 @@ size_t      compiled_num_instructions(const CompiledProgram* p);
  * paying for CompileValue boxing on every call. */
 bool        compiled_program_all_real(const CompiledProgram* p);
 
+/* How many repeated subtrees the Expr-level CSE hoisted into reserved registers.
+ * Exposed so tests can assert that CSE actually engaged — a pass that silently
+ * does nothing looks exactly like one that is working. */
+size_t      compiled_num_cse(const CompiledProgram* p);
+
+/* Skip Expr-level CSE.  A/B only: results must be identical either way. */
+#define COMPILE_NO_CSE       0x8u
+
 /* Evaluate with `nargs` boxed argument values (coerced to the declared arg
  * types).  Writes *out.  Returns false if the call could not produce a usable
  * value: a non-finite numeric result, an argument that does not match its
