@@ -948,6 +948,13 @@ add_test(NAME bench_eval COMMAND bench_eval)
 # Compile[] engine gate: asserts every benchmarked body actually COMPILES (a
 # silent bail costs 10-40x and looks exactly like success), and that the
 # optimiser never makes a body slower than the code it started from.
+# Coverage audit: every NumericFunction head must either compile or be a listed,
+# justified gap. A silent bail costs an order of magnitude and looks like success.
+add_executable(compile_coverage_tests test_compile_coverage.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(compile_coverage_tests m)
+target_include_directories(compile_coverage_tests PRIVATE ../src)
+add_test(NAME compile_coverage_tests COMMAND compile_coverage_tests)
+
 add_executable(bench_compile bench_compile.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(bench_compile m)
 target_include_directories(bench_compile PRIVATE ../src)
@@ -2618,6 +2625,7 @@ if(USE_ECM)
     add_dependencies(bench_assoc build_ecm)
     add_dependencies(bench_ndarray_linalg build_ecm)
     add_dependencies(bench_compile build_ecm)
+    add_dependencies(compile_coverage_tests build_ecm)
     add_dependencies(ndarray_tests build_ecm)
     add_dependencies(ndarray_linalg_tests build_ecm)
     add_dependencies(patterns_tests build_ecm)

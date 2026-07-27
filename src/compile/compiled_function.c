@@ -207,6 +207,10 @@ uint64_t compiled_function_identity(const CompiledFunction* cf) {
  *  Application                                                        *
  * ------------------------------------------------------------------ */
 
+/* Argument count that boxes without touching the heap.  Compile[] signatures
+ * are small; anything wider falls back to one allocation. */
+#define CF_APPLY_STACK_ARGS 8
+
 /* Interpreter fallback: substitute the args for the parameter symbols in the
  * original body and evaluate.  replace_bindings shares the arg nodes by
  * refcount, so eval_and_free just dec-refs them — the caller keeps ownership. */
@@ -222,17 +226,36 @@ Expr* compiled_function_apply(const CompiledFunction* cf, Expr* const* args, siz
     if (!cf || nargs != cf->nargs) return NULL;   /* arity mismatch ⇒ leave unevaluated */
 
     if (cf->prog) {
-        CompileValue* cv = malloc((nargs ? nargs : 1) * sizeof(*cv));
-        if (cv) {
-            bool all_numeric = true;
-            for (size_t i = 0; i < nargs; i++)
-                if (!cf_box(args[i], cf->arg_types[i], &cv[i])) { all_numeric = false; break; }
-            if (all_numeric) {
-                CompileValue out;
-                if (compiled_eval(cf->prog, cv, &out)) { free(cv); return cf_unbox(&out); }
-            }
-            free(cv);
+        /* Small arities — every realistic one — box into stack storage.  This
+         * path runs once per call of `cf[x]`, so a malloc/free pair here was
+         * pure overhead on the hot path it exists to make fast. */
+        CompileValue stackv[CF_APPLY_STACK_ARGS];
+        CompileValue* cv = stackv;
+        CompileValue* heap = NULL;
+        if (nargs > CF_APPLY_STACK_ARGS) {
+            heap = malloc(nargs * sizeof(*heap));
+            if (!heap) return cf_fallback(cf, args, nargs);
+            cv = heap;
         }
+        bool all_numeric = true;
+        for (size_t i = 0; i < nargs; i++)
+            if (!cf_box(args[i], cf->arg_types[i], &cv[i])) { all_numeric = false; break; }
+        if (all_numeric) {
+            /* An all-Real signature takes the unboxed entry point: no per-argument
+             * type switch on the way in and no CompileValue on the way out. */
+            if (compiled_program_all_real(cf->prog)) {
+                double av[CF_APPLY_STACK_ARGS], o;
+                if (nargs <= CF_APPLY_STACK_ARGS) {
+                    for (size_t i = 0; i < nargs; i++) av[i] = cv[i].v.r;
+                    if (compiled_eval_real(cf->prog, av, &o)) { free(heap); return expr_new_real(o); }
+                    free(heap);
+                    return cf_fallback(cf, args, nargs);
+                }
+            }
+            CompileValue out;
+            if (compiled_eval(cf->prog, cv, &out)) { free(heap); return cf_unbox(&out); }
+        }
+        free(heap);
     }
     return cf_fallback(cf, args, nargs);
 }

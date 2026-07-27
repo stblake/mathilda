@@ -116,6 +116,12 @@ size_t      compiled_num_args(const CompiledProgram* p);
  * benchmarks can measure what the optimiser removed; not needed to run a program. */
 size_t      compiled_num_instructions(const CompiledProgram* p);
 
+/* True when every argument and the result are CT_REAL with no array temporaries,
+ * i.e. compiled_eval_real applies.  Callers that hold a generic program (a user
+ * CompiledFunction, say) use this to take the unboxed entry point instead of
+ * paying for CompileValue boxing on every call. */
+bool        compiled_program_all_real(const CompiledProgram* p);
+
 /* Evaluate with `nargs` boxed argument values (coerced to the declared arg
  * types).  Writes *out.  Returns false if the call could not produce a usable
  * value: a non-finite numeric result, an argument that does not match its

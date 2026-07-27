@@ -566,7 +566,18 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     if (strcmp(h, "Subtract") == 0 && na == 2) { IT(0, ta); IT(1, tb); ta = num_common(ta, tb); if ((int)ta < 0) return false; *out = ta; return true; }
     if (strcmp(h, "Minus") == 0 && na == 1)    { IT(0, ta); if (ta == CT_BOOL) return false; *out = ta; return true; }
     if (strcmp(h, "Divide") == 0 && na == 2)   { IT(0, ta); IT(1, tb); ta = num_common(ta, tb); if ((int)ta < 0) return false; if (ta < CT_REAL) ta = CT_REAL; *out = ta; return true; }
-    if ((strcmp(h, "Mod") == 0 || strcmp(h, "Quotient") == 0) && na == 2) { IT(0, ta); IT(1, tb); if (ta != CT_INT || tb != CT_INT) return false; *out = CT_INT; return true; }
+    if ((strcmp(h, "Mod") == 0 || strcmp(h, "Quotient") == 0) && na == 2) {
+        IT(0, ta); IT(1, tb);
+        if (ta == CT_INT && tb == CT_INT) { *out = CT_INT; return true; }
+        if (ta <= CT_REAL && tb <= CT_REAL && ta != CT_BOOL && tb != CT_BOOL) {
+            /* Real Mod/Quotient: the interpreter evaluates both (Mod[2.5,1.2] is
+             * 0.1, Quotient[7.5,2.] is 3), so declining here would drop a whole
+             * body to the interpreter over an operation we can do. */
+            *out = (h[0] == 'M') ? CT_REAL : CT_INT;
+            return true;
+        }
+        return false;
+    }
     if (strcmp(h, "Power") == 0 && na == 2) {
         IT(0, ta);
         if (A[1]->type == EXPR_INTEGER) { *out = (ta == CT_INT && A[1]->data.integer >= 0) ? CT_INT : (ta == CT_COMPLEX ? CT_COMPLEX : CT_REAL); return true; }
@@ -579,7 +590,7 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     if (strcmp(h, "Abs") == 0 && na == 1)  { IT(0, ta); *out = ta == CT_COMPLEX ? CT_REAL : ta; return true; }
     if (strcmp(h, "Sign") == 0 && na == 1) { IT(0, ta); if (ta == CT_COMPLEX) return false; *out = ta; return true; }
     if ((strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0 || strcmp(h, "Round") == 0) && na == 1) { IT(0, ta); *out = CT_INT; return true; }
-    if ((strcmp(h, "Re") == 0 || strcmp(h, "Im") == 0 || strcmp(h, "Arg") == 0) && na == 1) { IT(0, ta); if (strcmp(h, "Arg") == 0 && ta != CT_COMPLEX) return false; *out = CT_REAL; return true; }
+    if ((strcmp(h, "Re") == 0 || strcmp(h, "Im") == 0 || strcmp(h, "Arg") == 0) && na == 1) { IT(0, ta); if (CT_IS_ARRAY(ta) || ta == CT_BOOL) return false; *out = CT_REAL; return true; }
     if (strcmp(h, "Conjugate") == 0 && na == 1) { IT(0, ta); *out = ta; return true; }
     if ((strcmp(h, "Max") == 0 || strcmp(h, "Min") == 0) && na >= 1) { IT(0, ta); for (size_t i = 1; i < na; i++) { IT(i, tb); ta = num_common(ta, tb); if ((int)ta < 0 || ta == CT_COMPLEX) return false; } *out = ta; return true; }
     if (strcmp(h, "ArcTan") == 0) { if (na == 1) { IT(0, ta); *out = ta == CT_COMPLEX ? CT_COMPLEX : CT_REAL; return true; } if (na == 2) { *out = CT_REAL; return true; } return false; }
@@ -1105,10 +1116,27 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
         return c->ok;
     }
     if ((strcmp(h, "Mod") == 0 || strcmp(h, "Quotient") == 0) && na == 2) {
-        Val a, b; if (!emit(c, A[0], &a) || !emit(c, A[1], &b)) return false;
-        if (a.type != CT_INT || b.type != CT_INT) { c->ok = false; return false; }
-        *out = binop(c, h[0] == 'M' ? OP_MOD_I : OP_QUOT_I, a, b, CT_INT);
-        return c->ok;
+        CompileType mt, nt;
+        if (!infer_type(c, A[0], &mt) || !infer_type(c, A[1], &nt)) { c->ok = false; return false; }
+        if (mt == CT_INT && nt == CT_INT) {
+            Val a, b; if (!emit(c, A[0], &a) || !emit(c, A[1], &b)) return false;
+            *out = binop(c, h[0] == 'M' ? OP_MOD_I : OP_QUOT_I, a, b, CT_INT);
+            return c->ok;
+        }
+        if (mt <= CT_REAL && nt <= CT_REAL && mt != CT_BOOL && nt != CT_BOOL) {
+            if (h[0] == 'M') {          /* the registered machine kernel for Mod */
+                Val kv;
+                if (try_kernel(c, h, A, na, &kv)) { *out = kv; return c->ok; }
+                c->ok = false; return false;
+            }
+            /* Quotient[a,b] == Floor[a/b], and an INTEGER like the interpreter's. */
+            Val a, b; if (!emit(c, A[0], &a) || !emit(c, A[1], &b)) return false;
+            coerce(c, &a, CT_REAL); coerce(c, &b, CT_REAL);
+            Val q = binop(c, OP_DIV_R, a, b, CT_REAL);
+            *out = unop(c, OP_FLOOR_R, q, CT_INT);
+            return c->ok;
+        }
+        c->ok = false; return false;
     }
     if (strcmp(h, "Power") == 0 && na == 2) {
         const Expr* base = A[0]; const Expr* ex = A[1];
@@ -1205,7 +1233,15 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
         Val a; if (!emit(c, A[0], &a)) return false;
         if (a.type != CT_COMPLEX) {
             if (strcmp(h, "Im") == 0) { free_if_tmp(c, a); imm.r = 0.0; *out = emit_const(c, imm, CT_REAL); return c->ok; }
-            if (strcmp(h, "Arg") == 0) { /* real Arg: 0 if >=0 else Pi — deferred; require complex */ c->ok = false; return false; }
+            /* Arg of a real is 0 or Pi, which the interpreter evaluates, so
+             * widen and use the same opcode rather than bailing the whole body:
+             * carg(x + 0i) gives exactly 0 for x > 0 and Pi for x < 0. */
+            if (strcmp(h, "Arg") == 0) {
+                coerce(c, &a, CT_COMPLEX);
+                if (!c->ok) return false;
+                *out = unop(c, OP_ARG_C, a, CT_REAL);
+                return c->ok;
+            }
             *out = a; return c->ok;   /* Re/Conjugate of real = itself */
         }
         if (strcmp(h, "Re") == 0)   { *out = unop(c, OP_RE_C, a, CT_REAL); return c->ok; }
@@ -2038,6 +2074,7 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
 CompileType compiled_result_type(const CompiledProgram* p) { return p->result_type; }
 size_t compiled_num_args(const CompiledProgram* p) { return p->nargs; }
 size_t compiled_num_instructions(const CompiledProgram* p) { return p->n; }
+bool compiled_program_all_real(const CompiledProgram* p) { return p && p->all_real; }
 
 size_t compiled_arg_deps(const CompiledProgram* p, int* deps, size_t cap) {
     size_t n = 0;

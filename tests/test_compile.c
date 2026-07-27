@@ -432,6 +432,15 @@ int main(void) {
     parity("int arithmetic", "x y + x - 2 z", xyz, III, 3, 0, 0, -20, 20, 300);
     parity("int power", "x^3 + y^2 - z", xyz, III, 3, 0, 0, -6, 6, 300);
     parity("int mod/quotient", "Mod[x, y] + Quotient[z, y]", xyz, III, 3, 0, 0, 1, 30, 300);
+    /* Heads the coverage audit caught bailing even though the interpreter
+     * evaluates them: real Mod/Quotient and Arg of a real.  Each one bailing
+     * cost the WHOLE surrounding body, silently. */
+    parity("real Mod", "Mod[x, y]", xyz, RRR, 2, 0.3, 6.0, 0, 0, 300);
+    parity("real Mod negative", "Mod[-x, y]", xyz, RRR, 2, 0.3, 6.0, 0, 0, 300);
+    parity("real Quotient", "Quotient[x, y]", xyz, RRR, 2, 0.3, 6.0, 0, 0, 300);
+    parity("real Arg (positive)", "Arg[x]", xyz, RRR, 1, 0.3, 6.0, 0, 0, 200);
+    parity("real Arg (negative)", "Arg[-x]", xyz, RRR, 1, 0.3, 6.0, 0, 0, 200);
+    parity("Mod/Arg in a chain", "Sin[Mod[x, y]] + Arg[-x] Quotient[x, y]", xyz, RRR, 2, 0.4, 5.0, 0, 0, 200);
     parity("int abs/sign/minmax", "Abs[x] + Sign[y] + Max[x,y,z] - Min[x,z]", xyz, III, 3, 0, 0, -20, 20, 300);
 
     /* ---- complex ---- */
