@@ -24,6 +24,14 @@
 
 static int failures = 0;
 
+/* When set, a compiled array call that DECLINES (returns false) is accepted
+ * rather than failing the test.  Declining is the documented contract for a
+ * real-typed program whose buffer would have gone complex, or that hit a pole —
+ * the caller falls back to the interpreter — so randomised bodies, which hit
+ * those cases by construction, must not treat it as an error. */
+static bool allow_decline = false;
+
+
 static uint64_t rng_state = 0x243f6a8885a308d3ULL;
 static double urand(double lo, double hi) {
     uint64_t x = rng_state; x ^= x << 13; x ^= x >> 7; x ^= x << 17; rng_state = x;
@@ -265,7 +273,8 @@ static void parity_nd(const char* name, const char* body_s,
         if (!shape_ok) break;
     }
     if (!shape_ok) { printf("FAIL: %-30s -> rank-%d shape/kind mismatch\n", name, rank); failures++; }
-    else if (cmp < trials) { printf("FAIL: %-30s -> only %d/%d evaluated\n", name, cmp, trials); failures++; }
+    else if (cmp < trials && !allow_decline) { printf("FAIL: %-30s -> only %d/%d evaluated\n", name, cmp, trials); failures++; }
+    else if (cmp == 0 && allow_decline) { /* declined every trial: the contract, not a bug */ }
     else if (maxerr > 1e-12) { printf("FAIL: %-30s -> max_rel=%.2e\n", name, maxerr); failures++; }
     else printf("ok:   %-30s rank %d, max_rel=%.1e (%d cmps)\n", name, rank, maxerr, cmp);
     compiled_free(p); expr_free(body);
@@ -300,7 +309,8 @@ static void parity_arr_ex(const char* name, const char* body_s,
         if (!shape_ok) break;
     }
     if (!shape_ok) { printf("FAIL: %-30s -> result shape/kind mismatch\n", name); failures++; }
-    else if (cmp < trials) { printf("FAIL: %-30s -> only %d/%d evaluated\n", name, cmp, trials); failures++; }
+    else if (cmp < trials && !allow_decline) { printf("FAIL: %-30s -> only %d/%d evaluated\n", name, cmp, trials); failures++; }
+    else if (cmp == 0 && allow_decline) { /* declined every trial: the contract, not a bug */ }
     else if (maxerr > 1e-12) { printf("FAIL: %-30s -> max_rel=%.2e\n", name, maxerr); failures++; }
     else printf("ok:   %-30s max_rel=%.1e (%d cmps)\n", name, maxerr, cmp);
     compiled_free(p);
@@ -331,6 +341,93 @@ static void must_bail(const char* name, const char* body_s, const char* const* n
 static void must_bail_raw(const char* name, const char* body_s, const char* const* names,
                           const CompileType* types, size_t n) {
     bail_body(name, parse_expression(body_s), names, types, n);
+}
+
+/* ---- strip-mining stress helpers ---------------------------------------- */
+
+/* Compile the same array body fused and delegated, and require agreement.  Not
+ * bitwise: the delegated reduction sums pairwise while the fused one accumulates
+ * a tile at a time, so the two legitimately differ in the last bits. */
+static bool fused_matches_delegated(const char* body_s, const char* const* names,
+                                    const CompileType* types, size_t n, size_t len) {
+    const char* inames[4];
+    for (size_t k = 0; k < n; k++) inames[k] = intern_symbol(names[k]);
+    Expr* body = parse_expression(body_s);
+    CompiledProgram* pf = compile_expr_ex(body, inames, types, n, 0u);
+    CompiledProgram* pd = compile_expr_ex(body, inames, types, n, COMPILE_NO_FUSE);
+    bool ok = true;
+    if (!pf) ok = (pd == NULL);          /* fusion must not be the weaker path */
+    else if (!pd) ok = true;             /* fusion compiles strictly more: fine */
+    else {
+        Expr* vecs[4]; CompileValue args[4], of, od;
+        for (size_t k = 0; k < n; k++) {
+            vecs[k] = make_vec(len, 0.4, 3.0);
+            args[k].type = types[k]; args[k].v.a = vecs[k];
+        }
+        bool sf = compiled_eval(pf, args, &of), sd = compiled_eval(pd, args, &od);
+        if (sf != sd) ok = false;
+        else if (sf) {
+            if (CT_IS_ARRAY(of.type) != CT_IS_ARRAY(od.type)) ok = false;
+            else if (CT_IS_ARRAY(of.type)) {
+                double err = 0;
+                Expr* a = aval_to_expr(of); Expr* b2 = aval_to_expr(od);
+                if (!arr_cmp(a, b2, &err) || err > 1e-12) ok = false;
+                expr_free(a); expr_free(b2);
+            } else if (fabs(of.v.r - od.v.r) > 1e-11 * (fabs(od.v.r) + 1.0)) ok = false;
+            if (CT_IS_ARRAY(of.type)) { } /* aval_to_expr already consumed copies */
+        }
+        for (size_t k = 0; k < n; k++) expr_free(vecs[k]);
+    }
+    compiled_free(pf); compiled_free(pd); expr_free(body);
+    return ok;
+}
+
+/* A random elementwise body over `v` and `w`.
+ *
+ * ONLY Listable heads appear — that is precisely the set fusion may thread over,
+ * so the generator cannot produce something the compiler is right to refuse.
+ * Two further constraints keep every generated body a legitimate test rather
+ * than a known-uncompilable one: at least one ARRAY leaf must reach the root
+ * (`want_arr`), because a body of pure scalars is not an array program at all
+ * and a bare argument array cannot be the result (the caller would end up
+ * freeing a value it does not own); and `Total` only ever wraps the finished
+ * tree, because Total of a scalar is not compilable and never should be. */
+static void rand_arr_tree(char* buf, size_t cap, int depth, bool want_arr) {
+    if (depth <= 0) {
+        if (want_arr) snprintf(buf, cap, "%s", irand(0, 1) ? "v" : "w");
+        else {
+            /* Scalar leaves must be INEXACT.  With an exact integer the
+             * interpreter keeps Cos[3] symbolic while the compiler folds it to a
+             * machine number, so the reference and the compiled result would
+             * differ in kind for reasons that have nothing to do with fusion. */
+            static const char* leaf[] = { "v", "w", "2.", "0.5", "3.25" };
+            snprintf(buf, cap, "%s", leaf[irand(0, 4)]);
+        }
+        return;
+    }
+    char a[256], b[256];
+    int pick = (int)irand(0, 8);
+    if (pick <= 4) {                       /* binary: one side carries the array */
+        static const char* op[] = { "+", "-", "*", "/", "+" };
+        bool left = irand(0, 1) != 0;
+        rand_arr_tree(a, sizeof a, depth - 1, want_arr && left);
+        rand_arr_tree(b, sizeof b, depth - 1, want_arr && !left);
+        snprintf(buf, cap, "(%s) %s (%s)", a, op[pick], b);
+    } else if (pick <= 6) {                /* unary Listable head */
+        static const char* fn[] = { "Sin", "Cos", "Exp", "Sqrt", "Abs", "Tanh" };
+        rand_arr_tree(a, sizeof a, depth - 1, want_arr);
+        snprintf(buf, cap, "%s[%s]", fn[irand(0, 5)], a);
+    } else {                               /* integer power */
+        rand_arr_tree(a, sizeof a, depth - 1, want_arr);
+        snprintf(buf, cap, "(%s)^%d", a, (int)irand(2, 4));
+    }
+}
+
+static void rand_arr_body(char* buf, size_t cap, int depth) {
+    char inner[400];
+    rand_arr_tree(inner, sizeof inner, depth, true);
+    if (irand(0, 3) == 0) snprintf(buf, cap, "Total[%s]", inner);
+    else                  snprintf(buf, cap, "(%s) + (v)", inner);
 }
 
 /* ---- optimiser A/B ------------------------------------------------------
@@ -1103,39 +1200,162 @@ int main(void) {
         const int64_t d2[2] = { 7, 5 };
         const int64_t d3[3] = { 4, 3, 5 };
         const int64_t d4[4] = { 3, 2, 4, 3 };
-        parity_nd("rank-2 elementwise",  "v + 2 w",              vw, 2, 2, d2, 0u, 20);
-        parity_nd("rank-2 libm chain",   "Sin[v] Exp[-v] + Sqrt[v]", vw, 1, 2, d2, 0u, 20);
-        parity_nd("rank-2 power",        "v^3 + w^2",            vw, 2, 2, d2, 0u, 20);
-        parity_nd("rank-3 elementwise",  "Sin[v w] + Exp[-v]",   vw, 2, 3, d3, 0u, 20);
-        parity_nd("rank-3 Gamma",        "Gamma[v] + Log[2, w]", vw, 2, 3, d3, 0u, 20);
-        parity_nd("rank-4 elementwise",  "v w - v / w",          vw, 2, 4, d4, 0u, 20);
+        parity_nd("rank-2 elementwise",  "v + 2 w",              vw, 2, 2, d2, COMPILE_NO_FUSE, 20);
+        parity_nd("rank-2 libm chain",   "Sin[v] Exp[-v] + Sqrt[v]", vw, 1, 2, d2, COMPILE_NO_FUSE, 20);
+        parity_nd("rank-2 power",        "v^3 + w^2",            vw, 2, 2, d2, COMPILE_NO_FUSE, 20);
+        parity_nd("rank-3 elementwise",  "Sin[v w] + Exp[-v]",   vw, 2, 3, d3, COMPILE_NO_FUSE, 20);
+        parity_nd("rank-3 Gamma",        "Gamma[v] + Log[2, w]", vw, 2, 3, d3, COMPILE_NO_FUSE, 20);
+        parity_nd("rank-4 elementwise",  "v w - v / w",          vw, 2, 4, d4, COMPILE_NO_FUSE, 20);
     }
 
     /* ================= ELEMENTWISE FUSION (opt-in) =================
-     * COMPILE_FUSE lowers an elementwise chain to ONE flat-index loop rather
-     * than one NDArray pass (and one temporary buffer) per operation.  It is off
-     * by default because it is not yet faster — see COMPILE_FUSE in compile.h —
-     * but it must stay correct, so it is parity-tested at every rank here. */
+     * Fusion strip-mines an elementwise chain into ONE pass over the buffers
+     * rather than one NDArray pass (and one temporary buffer) per operation.  It
+     * is ON by default (COMPILE_NO_FUSE disables it), so these run the fused
+     * path; the block above runs the same shapes delegated. */
     {
         const char* vw[] = { "v", "w" };
         const CompileType AA[] = { CT_ARRAY(CT_REAL, 1), CT_ARRAY(CT_REAL, 1) };
         const CompileType CA[] = { CT_ARRAY(CT_COMPLEX, 1), CT_ARRAY(CT_COMPLEX, 1) };
         const int64_t d2[2] = { 7, 5 };
         const int64_t d3[3] = { 4, 3, 5 };
-        parity_arr_ex("fuse: vec chain",  "Sin[v] Exp[-v] + Sqrt[v]", vw, AA, 1, 64, 0.3, 4.0, 20, COMPILE_FUSE);
-        parity_arr_ex("fuse: Total chain","Total[Sin[v] Exp[-v] + Sqrt[v]]", vw, AA, 1, 64, 0.3, 4.0, 20, COMPILE_FUSE);
-        parity_arr_ex("fuse: vec + vec",  "v w + v - w",   vw, AA, 2, 64, 0.3, 4.0, 20, COMPILE_FUSE);
-        parity_arr_ex("fuse: power",      "v^3 + 2 v + 1", vw, AA, 1, 64, 0.3, 4.0, 20, COMPILE_FUSE);
-        parity_arr_ex("fuse: Gamma",      "Gamma[v] + Erf[w]", vw, AA, 2, 64, 0.5, 3.0, 20, COMPILE_FUSE);
-        parity_arr_ex("fuse: complex vec","v w + Exp[v]",  vw, CA, 2, 32, 0.3, 2.0, 20, COMPILE_FUSE);
-        parity_nd    ("fuse: rank-2",     "Sin[v] + v w",  vw, 2, 2, d2, COMPILE_FUSE, 20);
-        parity_nd    ("fuse: rank-3",     "v^2 - Exp[-w]", vw, 2, 3, d3, COMPILE_FUSE, 20);
+        parity_arr_ex("fuse: vec chain",  "Sin[v] Exp[-v] + Sqrt[v]", vw, AA, 1, 64, 0.3, 4.0, 20, 0u);
+        parity_arr_ex("fuse: Total chain","Total[Sin[v] Exp[-v] + Sqrt[v]]", vw, AA, 1, 64, 0.3, 4.0, 20, 0u);
+        parity_arr_ex("fuse: vec + vec",  "v w + v - w",   vw, AA, 2, 64, 0.3, 4.0, 20, 0u);
+        parity_arr_ex("fuse: power",      "v^3 + 2 v + 1", vw, AA, 1, 64, 0.3, 4.0, 20, 0u);
+        parity_arr_ex("fuse: Gamma",      "Gamma[v] + Erf[w]", vw, AA, 2, 64, 0.5, 3.0, 20, 0u);
+        parity_arr_ex("fuse: complex vec","v w + Exp[v]",  vw, CA, 2, 32, 0.3, 2.0, 20, 0u);
+        parity_nd    ("fuse: rank-2",     "Sin[v] + v w",  vw, 2, 2, d2, 0u, 20);
+        parity_nd    ("fuse: rank-3",     "v^2 - Exp[-w]", vw, 2, 3, d3, 0u, 20);
 
         /* Non-Listable heads must NOT fuse: the interpreter does not thread them,
          * so an elementwise loop would quietly answer something different.
          * Max[v,w] is the largest single element, not an elementwise maximum. */
         must_bail_raw("fuse: Max stays scalar", "Max[v, w]", vw, AA, 2);
         must_bail_raw("fuse: If stays scalar",  "If[v > 0, v, -v]", vw, AA, 1);
+        /* The interpreter leaves ArcTan[NDArray, NDArray] unevaluated because the
+         * ND binary kernels are one-array-plus-scalar only.  Fusion could compute
+         * it, and must not: answering where the interpreter declines is the same
+         * class of bug as answering differently. */
+        must_bail_raw("fuse: ArcTan[v,w] declines", "ArcTan[v, w]", vw, AA, 2);
+        must_bail_raw("fuse: BesselJ[v,w] declines", "BesselJ[v, w]", vw, AA, 2);
+    }
+
+    /* ================= STRIP-MINING STRESS =================
+     * Fusion processes VBLOCK elements per opcode, so the tail of the last tile
+     * is the one thing a length-64 test can never exercise.  Every body is run
+     * at lengths straddling the tile boundary — and at lengths shorter than one
+     * tile, where the very first tile is already partial. */
+    {
+        static const size_t LENS[] = { 1, 2, 3, 7, 31, 63, 64, 65, 66, 127, 128, 129,
+                                       255, 256, 257, 1000, 4097 };
+        static const size_t NLEN = sizeof LENS / sizeof LENS[0];
+        static const char* BODIES[] = {
+            "v + 1", "2 v", "v w", "v + w", "v - w", "v / w", "v^2", "v^3",
+            "v^2 + 2 v + 1", "Sqrt[v]", "Sin[v]", "Exp[-v] + Log[v]",
+            "Sin[v w] + Exp[-v] (w + 2)", "Gamma[v] + Erf[w]",
+            "Total[v]", "Total[v w]", "Total[Sin[v] Exp[-v] + Sqrt[v]]",
+            /* Log[b,x] lowers to the arithmetic identity Log[x]/Log[b], so it
+             * threads array-by-array in both paths.  ArcTan does NOT (see
+             * fuse_listable): the interpreter leaves ArcTan[nd, nd] unevaluated,
+             * so it is checked as a bail below rather than for parity. */
+            "Log[v, w]", "ArcTan[v, 2]",
+            "Total[(v - Total[v]/Length[v])^2] / Length[v]",
+        };
+        static const size_t NBODY = sizeof BODIES / sizeof BODIES[0];
+        const char* vw[] = { "v", "w" };
+        const CompileType AA[] = { CT_ARRAY(CT_REAL, 1), CT_ARRAY(CT_REAL, 1) };
+        int checked = 0, bad = 0;
+        for (size_t bi = 0; bi < NBODY; bi++) {
+            for (size_t li = 0; li < NLEN; li++) {
+                int before = failures;
+                parity_arr("(stress)", BODIES[bi], vw, AA, 2, LENS[li], 0.4, 3.0, 2);
+                if (failures > before) {
+                    printf("      ^ body \"%s\" at length %zu\n", BODIES[bi], LENS[li]);
+                    bad++;
+                }
+                checked++;
+            }
+        }
+        /* parity_arr prints a line per call; the summary is what matters. */
+        printf("ok:   %-30s %d body x length combinations, %d bad\n",
+               "stress: tile boundaries", checked, bad);
+    }
+
+    /* Fused and delegated must agree.  Not bitwise — the delegated reduction
+     * sums pairwise while the fused one accumulates a tile at a time — but far
+     * inside any tolerance that could hide a real disagreement. */
+    {
+        const char* vw[] = { "v", "w" };
+        const CompileType AA[] = { CT_ARRAY(CT_REAL, 1), CT_ARRAY(CT_REAL, 1) };
+        static const char* BODIES[] = {
+            "v w + v - w", "v^3 + 2 v + 1", "Sin[v] Exp[-v] + Sqrt[v]",
+            "Gamma[v] + Log[2, w]", "Abs[v - w] + ArcTan[v, w]",
+            "Total[v w]", "Total[Sqrt[v] + w^2]",
+        };
+        int bad = 0, n = 0;
+        for (size_t i = 0; i < sizeof BODIES / sizeof BODIES[0]; i++) {
+            for (size_t len = 63; len <= 129; len += 33) {
+                if (!fused_matches_delegated(BODIES[i], vw, AA, 2, len)) {
+                    printf("FAIL: fused != delegated for \"%s\" at length %zu\n", BODIES[i], len);
+                    failures++; bad++;
+                }
+                n++;
+            }
+        }
+        if (!bad) printf("ok:   %-30s %d bodies agree with the delegated path\n",
+                         "stress: fused vs delegated", n);
+    }
+
+    /* Randomised elementwise trees.  Only Listable heads are generated, because
+     * that is exactly the set fusion is allowed to thread over; the point is to
+     * cover shapes the hand-written bodies do not. */
+    {
+        const char* vw[] = { "v", "w" };
+        const CompileType AA[] = { CT_ARRAY(CT_REAL, 1), CT_ARRAY(CT_REAL, 1) };
+        int bad = 0, ncompiled = 0;
+        allow_decline = true;
+        for (int t = 0; t < 120; t++) {
+            char buf[512];
+            rand_arr_body(buf, sizeof buf, 3);
+            size_t len = (size_t)irand(1, 200);
+            int before = failures;
+            parity_arr("(random)", buf, vw, AA, 2, len, 0.4, 3.0, 1);
+            if (failures > before) { printf("      ^ random body \"%s\" len %zu\n", buf, len); bad++; }
+            else ncompiled++;
+        }
+        allow_decline = false;
+        printf("ok:   %-30s %d random trees, %d bad\n",
+               "stress: random array bodies", ncompiled, bad);
+    }
+
+    /* The frame and the tile bank are reused across calls, so a stale handle or
+     * a tile left holding the previous call's data would only show up on the
+     * SECOND call.  Same program, many calls, alternating lengths. */
+    {
+        const char* inm[1] = { intern_symbol("v") };
+        const CompileType AT[1] = { CT_ARRAY(CT_REAL, 1) };
+        Expr* b = parse_expression("Total[Sqrt[v] + v^2]");
+        CompiledProgram* p = compile_expr(b, inm, AT, 1);
+        int bad = 0;
+        if (!p) { printf("FAIL: reuse body did not compile\n"); failures++; }
+        else {
+            for (int it = 0; it < 200; it++) {
+                size_t len = (size_t)(1 + (it * 37) % 300);
+                Expr* v = make_vec(len, 0.4, 3.0);
+                CompileValue av, out;
+                av.type = AT[0]; av.v.a = v;
+                double want = 0;
+                const double* raw = (const double*)v->data.ndarray.data;
+                for (size_t k = 0; k < len; k++) want += sqrt(raw[k]) + raw[k] * raw[k];
+                if (!compiled_eval(p, &av, &out) || fabs(out.v.r - want) > 1e-9 * (fabs(want) + 1))
+                    bad++;
+                expr_free(v);
+            }
+            if (bad) { printf("FAIL: %d/200 repeated calls wrong (frame/tile reuse)\n", bad); failures++; }
+            else printf("ok:   %-30s 200 calls, varying lengths\n", "stress: frame + tile reuse");
+        }
+        compiled_free(p); expr_free(b);
     }
 
     if (failures == 0) printf("\nAll Compile engine tests passed.\n");

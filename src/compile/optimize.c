@@ -76,6 +76,10 @@ static OpDesc op_desc(unsigned op) {
          * removed or hoisted, but it owns nothing, so unlike K_ARR it does not
          * force the surrounding fused loop out of the optimiser's reach. */
         case K_ASTORE:           o.rd = 1;   o.ra = 1; o.rb = 1;        break;
+        /* Strip-mined reduction step: accumulates into dst, so it READS dst as
+         * well as writing it — which is also what keeps LICM from hoisting it
+         * out of the tile loop. */
+        case K_VACC:   o.wd = 1; o.rd = 1;   o.ra = 1;      o.pure = 1; break;
         default:                                                        break;
     }
     return o;
@@ -102,7 +106,8 @@ static bool imm_eq(unsigned op, Slot x, Slot y) {
 typedef struct {
     size_t   n;            /* instruction count */
     int      nreg;
-    int      arr_base;     /* registers >= this are array handles */
+    int      arr_base;     /* registers in [arr_base, tile_base) are array handles */
+    int      tile_base;    /* registers >= this are tile pointers */
     Instr*   code;
 
     size_t   nblk;
@@ -115,6 +120,13 @@ typedef struct {
     uint64_t* live_in;     /* [nblk * nw] */
     uint64_t* live_out;    /* [nblk * nw] */
 } Opt;
+
+/* A register whose slot holds a POINTER rather than a number: an array handle or
+ * a tile buffer.  The scalar passes must not fold, rewrite or duplicate these —
+ * in particular CSE must never turn a tile-producing op into a MOVE, which would
+ * copy the pointer and silently alias two tiles onto one buffer. */
+static bool is_ptr_reg(const Opt* o, int r) { return r >= o->arr_base; }
+static bool is_tile_reg(const Opt* o, int r) { return r >= o->tile_base; }
 
 static void bs_set(uint64_t* s, int r)   { s[r >> 6] |= (uint64_t)1 << (r & 63); }
 static void bs_clr(uint64_t* s, int r)   { s[r >> 6] &= ~((uint64_t)1 << (r & 63)); }
@@ -312,7 +324,7 @@ static bool pass_vn(Opt* o, bool* progress) {
             if (s.rb && !s.jump && (int)c->b < nreg && c->b != alias[c->b]) { c->b = alias[c->b]; *progress = true; }
 
             /* constant folding */
-            if (s.pure && s.wd && (int)c->dst < o->arr_base) {
+            if (s.pure && s.wd && !is_ptr_reg(o, (int)c->dst)) {
                 bool ka = !s.ra || ((int)c->a < nreg && kk[c->a]);
                 bool kb = !s.rb || ((int)c->b < nreg && kk[c->b]);
                 if (compile_op_kind[c->op] != K_CONST && s.ra && ka && kb && !s.rd) {
@@ -332,7 +344,7 @@ static bool pass_vn(Opt* o, bool* progress) {
              * value — never deleted outright, so the destination is still
              * written and no later reader can observe a stale slot.  Copy
              * propagation then routes readers past the MOVE and DCE removes it. */
-            if (s.pure && s.wd && !s.rd && (int)c->dst < o->arr_base
+            if (s.pure && s.wd && !s.rd && !is_ptr_reg(o, (int)c->dst)
                 && compile_op_kind[c->op] != K_MOVE) {
                 bool found = false;
                 for (size_t v = 0; v < nvn; v++) {
@@ -389,7 +401,11 @@ static bool pass_dce(Opt* o, bool* progress) {
             Instr* c = &o->code[i];
             OpDesc s = op_desc(c->op);
             if (compile_op_kind[c->op] == K_NOP) continue;
-            if (s.pure && s.wd && (int)c->dst < o->arr_base && !bs_get(live, (int)c->dst)) {
+            /* A dead tile op IS removable — the tile buffer itself is owned by
+             * the frame, not by the instruction, so dropping the write leaks
+             * nothing.  Array registers stay untouchable: they own an Expr. */
+            if (s.pure && s.wd && (!is_ptr_reg(o, (int)c->dst) || is_tile_reg(o, (int)c->dst))
+                && !bs_get(live, (int)c->dst)) {
                 c->op = OP_NOP;                      /* result never read */
                 *progress = true;
                 continue;
@@ -447,7 +463,9 @@ static bool pass_licm(Opt* o, size_t* hoist_to, bool* progress) {
             OpDesc s = op_desc(c->op);
             if (!s.pure || !s.wd || s.rd) continue;
             if (compile_op_kind[c->op] == K_NOP) continue;
-            if ((int)c->dst >= o->arr_base) continue;
+            /* Tiles may be hoisted (a splat of a loop-invariant scalar is
+             * exactly what we want out of the strip loop); array handles may not. */
+            if (is_ptr_reg(o, (int)c->dst) && !is_tile_reg(o, (int)c->dst)) continue;
             if (hoist_to[i] != (size_t)-1) continue;             /* already moving */
             if (ndef[c->dst] != 1) continue;      /* destination re-assigned */
             if (bs_get(live_at_head, (int)c->dst)) continue;   /* would clobber */
@@ -512,12 +530,13 @@ static void opt_free(Opt* o) {
 /* ------------------------------------------------------------------ *
  *  Driver                                                             *
  * ------------------------------------------------------------------ */
-bool compile_optimize(Instr* code, size_t* np, int nreg, int arr_base) {
+bool compile_optimize(Instr* code, size_t* np, int nreg, int arr_base, int tile_base) {
     if (!code || !np || *np == 0 || nreg <= 0) return true;
 
     Opt o;
     memset(&o, 0, sizeof o);
-    o.code = code; o.n = *np; o.nreg = nreg; o.arr_base = arr_base;
+    o.code = code; o.n = *np; o.nreg = nreg;
+    o.arr_base = arr_base; o.tile_base = tile_base;
 
     size_t* hoist = malloc(o.n * sizeof(size_t));
     if (!hoist) return false;

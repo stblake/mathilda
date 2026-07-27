@@ -54,12 +54,36 @@ typedef struct { uint16_t op, flags; uint32_t dst, a, b; Slot imm; } Instr;
  *   K_ASTORE  writes array memory or checks a shape: impure and never moved, but
  *             (unlike K_ARR) carries no ownership in its flags, so it does not
  *             stop the optimiser working on the rest of a fused loop
+ *   K_VACC    dst += f(a)  (a strip-mined reduction step: READS and WRITES dst)
  *   K_NOP     removed by a previous pass; deleted at compaction
  */
 enum {
     K_CONST, K_MOVE, K_UN, K_BIN, K_POWI, K_KERN1, K_KERN2,
-    K_INC, K_JMP, K_JZ, K_LOOP, K_RET, K_ARR, K_ASTORE, K_NOP
+    K_INC, K_JMP, K_JZ, K_LOOP, K_RET, K_ARR, K_ASTORE, K_VACC, K_NOP
 };
+
+/* ------------------------------------------------------------------ *
+ *  Strip mining                                                       *
+ * ------------------------------------------------------------------ *
+ * Running the scalar VM once per array element does not pay: at a few ns per
+ * bytecode instruction, per-element interpretation costs more than the
+ * temporary buffers a fused loop saves.  So a fused elementwise chain is
+ * strip-mined instead — each opcode processes a TILE of VBLOCK elements in a
+ * tight C loop.  Dispatch is then amortised VBLOCK-fold, the loop bodies are
+ * shaped so the C compiler can vectorise them, and every temporary is a tile
+ * that stays in L1 instead of a full-length heap buffer that page-faults.
+ *
+ * VBLOCK is chosen so that a handful of live tiles fit comfortably in L1:
+ * 64 elements is 512 B as doubles, 1 KiB as complex.
+ *
+ * Tile registers live in their own bank (like the array bank) and hold a
+ * pointer to their tile storage, fixed for the life of the program.  Arithmetic
+ * ops always process the FULL VBLOCK — the tail of a partial tile is padded
+ * with 1.0 by the load, so no operation ever sees uninitialised memory and no
+ * op needs to know the live length.  Only the load, the store and the reduction
+ * consult the live length, and they are pinned inside the loop anyway because
+ * they read the loop index. */
+#define VBLOCK 64
 
 #define OPLIST \
     X(NOP,   K_NOP)   X(JMP,   K_JMP)  X(JZ,    K_JZ)   X(INC_I, K_INC)   \
@@ -102,6 +126,32 @@ enum {
     X(A_SIZE, K_UN)   X(A_NEWLIKE, K_ARR) X(A_SHAPECHK, K_ASTORE)          \
     X(A_LOAD_R, K_BIN)   X(A_LOAD_C, K_BIN)                                \
     X(A_STORE_R, K_ASTORE) X(A_STORE_C, K_ASTORE)                          \
+    /* strip-mined (tile) forms — one opcode, VBLOCK elements */           \
+    X(VSETLEN, K_ASTORE)                                                   \
+    X(VLOAD_R, K_BIN)   X(VLOAD_C, K_BIN)                                  \
+    X(VSTORE_R, K_ASTORE) X(VSTORE_C, K_ASTORE)                            \
+    X(VSUM_R, K_VACC)   X(VSUM_C, K_VACC)                                  \
+    X(VSPLAT_R, K_UN)   X(VSPLAT_C, K_UN)   X(VR2C, K_UN)                  \
+    X(VADD_R, K_BIN)    X(VSUB_R, K_BIN)    X(VMUL_R, K_BIN)               \
+    X(VDIV_R, K_BIN)    X(VNEG_R, K_UN)     X(VINV_R, K_UN)                \
+    X(VADD_C, K_BIN)    X(VSUB_C, K_BIN)    X(VMUL_C, K_BIN)               \
+    X(VDIV_C, K_BIN)    X(VNEG_C, K_UN)     X(VINV_C, K_UN)                \
+    X(VPOWI_R, K_POWI)  X(VPOWI_C, K_POWI)                                 \
+    X(VPOW_R, K_BIN)    X(VPOW_C, K_BIN)    X(VATAN2_R, K_BIN)             \
+    X(VSQRT_R, K_UN)    X(VSQRT_C, K_UN)                                   \
+    X(VEXP_R, K_UN)     X(VEXP_C, K_UN)     X(VLOG_R, K_UN)  X(VLOG_C, K_UN) \
+    X(VSIN_R, K_UN)     X(VSIN_C, K_UN)     X(VCOS_R, K_UN)  X(VCOS_C, K_UN) \
+    X(VTAN_R, K_UN)     X(VTAN_C, K_UN)                                    \
+    X(VSINH_R, K_UN)    X(VSINH_C, K_UN)    X(VCOSH_R, K_UN) X(VCOSH_C, K_UN) \
+    X(VTANH_R, K_UN)    X(VTANH_C, K_UN)                                   \
+    X(VASIN_R, K_UN)    X(VASIN_C, K_UN)    X(VACOS_R, K_UN) X(VACOS_C, K_UN) \
+    X(VATAN_R, K_UN)    X(VATAN_C, K_UN)                                   \
+    X(VABS_R, K_UN)     X(VABS_C, K_UN)     X(VSIGN_R, K_UN)               \
+    X(VRE_C, K_UN)      X(VIM_C, K_UN)      X(VARG_C, K_UN) X(VCONJ_C, K_UN) \
+    X(VERF_R, K_UN)     X(VERFC_R, K_UN)                                   \
+    X(VKERN_RR, K_KERN1)  X(VKERN_R2R, K_KERN1) X(VKERN_RC, K_KERN1)       \
+    X(VKERN_CC, K_KERN1)  X(VKERN_CR, K_KERN1)                             \
+    X(VKERN2_RR, K_KERN2) X(VKERN2_RC, K_KERN2) X(VKERN2_CC, K_KERN2)      \
     X(RET, K_RET)
 
 /* The opcode enum, generated from OPLIST so the two cannot drift apart. */
@@ -121,21 +171,26 @@ enum { OPLIST OP__COUNT };
 #define AF_R(f)       (((f) >> AF_R_SHIFT) & 3u)
 enum { AK_ARR = 0, AK_REAL = 1, AK_COMPLEX = 2 };   /* operand kinds */
 
-/* Array temporaries are allocated into a virtual range and relocated to a
- * contiguous bank above the scalar registers at finalize (see patch_reg). */
-#define ARR_VREG 0x40000000
+/* Array and tile temporaries are allocated into virtual ranges and relocated to
+ * contiguous banks above the scalar registers at finalize (see patch_reg).  A
+ * slot is then always-scalar, always-array or always-tile, so teardown can never
+ * mistake a double for a pointer. */
+#define ARR_VREG  0x40000000
+#define TILE_VREG 0x20000000
 
 /* Kind of each opcode, indexed by opcode.  Defined in optimize.c. */
 extern const unsigned char compile_op_kind[OP__COUNT];
 
 /* Optimise `code` (length *n, updated in place) for a program with `nreg`
  * registers whose array bank starts at `arr_base`, and whose result lives in
- * *result_reg (updated if the result instruction moves).  Registers >= arr_base
- * are array handles and are never touched by the scalar passes.
+ * *result_reg (updated if the result instruction moves).  Registers in
+ * [arr_base, tile_base) are array handles and are never touched by the scalar
+ * passes; registers >= tile_base are strip-mining tiles, which may be hoisted or
+ * removed but never copied (a MOVE would alias two tiles onto one buffer).
  *
  * Purely a bytecode-to-bytecode transform: same observable results, fewer
  * instructions.  Returns false only on allocation failure, in which case `code`
  * is left exactly as it was (the caller can still run it). */
-bool compile_optimize(Instr* code, size_t* n, int nreg, int arr_base);
+bool compile_optimize(Instr* code, size_t* n, int nreg, int arr_base, int tile_base);
 
 #endif /* MATHILDA_COMPILE_INTERNAL_H */

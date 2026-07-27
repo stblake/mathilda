@@ -38,7 +38,9 @@ struct CompiledProgram {
     Instr*      code;
     size_t      n;
     int         nreg;
-    int         arr_base;     /* array registers are [arr_base, nreg) */
+    int         arr_base;     /* array registers are [arr_base, tile_base) */
+    int         tile_base;    /* tile registers are [tile_base, nreg) */
+    double _Complex* tile_mem;/* backing storage, VBLOCK elements per tile */
     int         result_reg;
     CompileType result_type;
     size_t      nargs;
@@ -100,6 +102,8 @@ typedef struct {
     unsigned flags;     /* COMPILE_FOLD_GLOBALS, ... */
     int inlining;       /* >0 while lowering an inlined CompiledFunction body */
     int fusing;         /* >0 while lowering the body of a fused elementwise loop */
+    int tile_top, tile_max;   /* strip-mining tile registers (TILE_VREG bank) */
+    bool vector_mode;   /* inside a strip-mined loop: tile-valued ops are legal */
     bool array_args;    /* any declared argument is an array: gates fusion probing */
 } Ctx;
 
@@ -154,9 +158,31 @@ static int scope_find(const Ctx* c, const char* nm, CompileType* type) {
 
 typedef struct { int reg; bool tmp; CompileType type; } Val;
 
+static bool reg_is_tile(int r);
+
+/* The tile opcodes occupy one contiguous run of OPLIST, from VSETLEN to the last
+ * kernel form.  Used only by the safety net below. */
+static bool is_tile_op(uint16_t op) {
+    return op >= OP_VSETLEN && op <= OP_VKERN2_CC;
+}
+
 static void ins_f(Ctx* c, uint16_t op, uint16_t flags,
                   uint32_t dst, uint32_t a, uint32_t b, Slot imm) {
     if (!c->ok) return;
+    /* SAFETY NET for strip mining.  A scalar opcode handed a tile register would
+     * read the tile's POINTER as a double and quietly return nonsense — which is
+     * exactly what happened when Power's integer-exponent path emitted POWI
+     * directly instead of through unop().  Every lowering that can see a tile is
+     * supposed to go through binop/unop/kern_unop/kern_binop; this catches any
+     * that does not, and turns a wrong answer into a clean bail.  Control flow is
+     * exempt: JMP/JZ/LOOP carry a jump target in `b`, not a register. */
+    if (c->vector_mode && !is_tile_op(op)
+        && op != OP_JMP && op != OP_JZ && op != OP_LOOP) {
+        if (reg_is_tile((int)dst) || reg_is_tile((int)a) || reg_is_tile((int)b)) {
+            c->ok = false;
+            return;
+        }
+    }
     if (c->n == c->cap) {
         size_t nc = c->cap ? c->cap * 2 : 64;
         Instr* nb = realloc(c->code, nc * sizeof(Instr));
@@ -183,12 +209,29 @@ static int alloc_arr(Ctx* c) {
     return r;
 }
 
+/* A strip-mining tile register.  Like array registers these are allocated into
+ * a virtual range and relocated into their own contiguous bank at finalize, so
+ * "is this value a tile?" is answered by the register number alone — no extra
+ * field on Val that a construction site could forget to initialise. */
+static int alloc_tile(Ctx* c) {
+    int r = TILE_VREG + c->tile_top;
+    c->tile_top++;
+    if (c->tile_top > c->tile_max) c->tile_max = c->tile_top;
+    return r;
+}
+static bool reg_is_tile(int r) {
+    return (uint32_t)r >= (uint32_t)TILE_VREG && (uint32_t)r < (uint32_t)ARR_VREG;
+}
+static bool val_is_tile(Val v) { return reg_is_tile(v.reg); }
+
 /* Pop a temporary WITHOUT emitting anything: for operands whose array (if any)
  * the consuming instruction frees itself via its AF_FREE_* flags, so the free
  * happens after the operand has been read. */
 static void pop_tmp(Ctx* c, Val v) {
     if (!v.tmp) return;
-    if (CT_IS_ARRAY(v.type)) c->arr_top--; else c->temp_top--;
+    if (CT_IS_ARRAY(v.type)) c->arr_top--;
+    else if (val_is_tile(v)) c->tile_top--;
+    else c->temp_top--;
 }
 /* Pop a temporary whose value is now DEAD.  An array temp needs its handle
  * released here and now — inside a loop body the alternative (relying on
@@ -199,6 +242,8 @@ static void free_if_tmp(Ctx* c, Val v) {
         Slot z = { 0 };
         ins(c, OP_ARR_FREE, (uint32_t)v.reg, 0, 0, z);
         c->arr_top--;
+    } else if (val_is_tile(v)) {
+        c->tile_top--;      /* tile storage belongs to the frame, never freed */
     } else c->temp_top--;
 }
 
@@ -223,6 +268,17 @@ static CompileType num_common(CompileType a, CompileType b) {
 static void coerce(Ctx* c, Val* v, CompileType target) {
     if (!c->ok || v->type == target) return;
     if (CT_IS_ARRAY(v->type) || CT_IS_ARRAY(target)) { c->ok = false; return; }
+    if (val_is_tile(*v)) {
+        /* Tiles only ever hold Real or Complex elements, so the single widening
+         * that can arise is real -> complex. */
+        if (v->type != CT_REAL || target != CT_COMPLEX) { c->ok = false; return; }
+        Slot z; memset(&z, 0, sizeof z);
+        pop_tmp(c, *v);
+        int dst = alloc_tile(c);
+        ins(c, OP_VR2C, (uint32_t)dst, (uint32_t)v->reg, 0, z);
+        v->reg = dst; v->tmp = true; v->type = CT_COMPLEX;
+        return;
+    }
     if (v->type == CT_BOOL || v->type > target) { c->ok = false; return; }
     uint16_t op = 0;
     if (v->type == CT_INT && target == CT_REAL) op = OP_I2R;
@@ -247,9 +303,114 @@ static bool scalar_only(Ctx* c, CompileType a, CompileType b, CompileType r) {
     return true;
 }
 
+/* ------------------------------------------------------------------ *
+ *  Strip mining: scalar opcode -> tile opcode                         *
+ * ------------------------------------------------------------------ *
+ * Inside a strip-mined loop the ordinary lowering runs unchanged — Plus, Power,
+ * the kernel dispatch, the coercions, all of it — and the four choke points
+ * below swap in the tile form of whatever opcode it chose.  So the vectorisable
+ * set is defined by this one table rather than by a second emitter that could
+ * drift from the first.  An opcode with no tile form (comparisons, Floor, the
+ * integer ops) returns 0 and the whole strip-mined attempt is rolled back. */
+static uint16_t vec_op(uint16_t op) {
+    switch (op) {
+        case OP_ADD_R: return OP_VADD_R;   case OP_ADD_C: return OP_VADD_C;
+        case OP_SUB_R: return OP_VSUB_R;   case OP_SUB_C: return OP_VSUB_C;
+        case OP_MUL_R: return OP_VMUL_R;   case OP_MUL_C: return OP_VMUL_C;
+        case OP_DIV_R: return OP_VDIV_R;   case OP_DIV_C: return OP_VDIV_C;
+        case OP_NEG_R: return OP_VNEG_R;   case OP_NEG_C: return OP_VNEG_C;
+        case OP_INV_R: return OP_VINV_R;   case OP_INV_C: return OP_VINV_C;
+        case OP_POWI_R: return OP_VPOWI_R; case OP_POWI_C: return OP_VPOWI_C;
+        case OP_POW_R: return OP_VPOW_R;   case OP_POW_C: return OP_VPOW_C;
+        case OP_ATAN2_R: return OP_VATAN2_R;
+        case OP_SQRT_R: return OP_VSQRT_R; case OP_SQRT_C: return OP_VSQRT_C;
+        case OP_EXP_R: return OP_VEXP_R;   case OP_EXP_C: return OP_VEXP_C;
+        case OP_LOG_R: return OP_VLOG_R;   case OP_LOG_C: return OP_VLOG_C;
+        case OP_SIN_R: return OP_VSIN_R;   case OP_SIN_C: return OP_VSIN_C;
+        case OP_COS_R: return OP_VCOS_R;   case OP_COS_C: return OP_VCOS_C;
+        case OP_TAN_R: return OP_VTAN_R;   case OP_TAN_C: return OP_VTAN_C;
+        case OP_SINH_R: return OP_VSINH_R; case OP_SINH_C: return OP_VSINH_C;
+        case OP_COSH_R: return OP_VCOSH_R; case OP_COSH_C: return OP_VCOSH_C;
+        case OP_TANH_R: return OP_VTANH_R; case OP_TANH_C: return OP_VTANH_C;
+        case OP_ASIN_R: return OP_VASIN_R; case OP_ASIN_C: return OP_VASIN_C;
+        case OP_ACOS_R: return OP_VACOS_R; case OP_ACOS_C: return OP_VACOS_C;
+        case OP_ATAN_R: return OP_VATAN_R; case OP_ATAN_C: return OP_VATAN_C;
+        case OP_ABS_R: return OP_VABS_R;   case OP_ABS_C: return OP_VABS_C;
+        case OP_SIGN_R: return OP_VSIGN_R;
+        case OP_RE_C: return OP_VRE_C;     case OP_IM_C: return OP_VIM_C;
+        case OP_ARG_C: return OP_VARG_C;   case OP_CONJ_C: return OP_VCONJ_C;
+        case OP_ERF_R: return OP_VERF_R;   case OP_ERFC_R: return OP_VERFC_R;
+        case OP_R2C: return OP_VR2C;
+        case OP_KERN_RR: return OP_VKERN_RR;   case OP_KERN_R2R: return OP_VKERN_R2R;
+        case OP_KERN_RC: return OP_VKERN_RC;   case OP_KERN_CC: return OP_VKERN_CC;
+        case OP_KERN_CR: return OP_VKERN_CR;
+        case OP_KERN2_RR: return OP_VKERN2_RR; case OP_KERN2_RC: return OP_VKERN2_RC;
+        case OP_KERN2_CC: return OP_VKERN2_CC;
+        default: return 0;                 /* no tile form: abandon vectorisation */
+    }
+}
+
+/* Broadcast a scalar operand into a tile so every tile op is tile-by-tile.  The
+ * splat depends only on the scalar, so when that scalar is loop-invariant the
+ * optimiser's LICM hoists it clean out of the strip loop. */
+static Val vsplat(Ctx* c, Val v) {
+    if (val_is_tile(v)) return v;
+    if (CT_IS_ARRAY(v.type) || v.type == CT_BOOL || v.type == CT_INT) { c->ok = false; return v; }
+    Slot z; memset(&z, 0, sizeof z);
+    pop_tmp(c, v);
+    int t = alloc_tile(c);
+    ins(c, v.type == CT_COMPLEX ? OP_VSPLAT_C : OP_VSPLAT_R,
+        (uint32_t)t, (uint32_t)v.reg, 0, z);
+    Val r = { t, true, v.type };
+    return r;
+}
+
+/* May a tile op write its result into an operand's register?
+ *
+ * Only when the element WIDTH is unchanged.  A complex-to-real op (Abs, Re, Im,
+ * Arg) reads through `double _Complex*` and writes through `double*`; those are
+ * different types, so the compiler is entitled to assume they cannot overlap and
+ * to vectorise accordingly — which silently produces wrong results if the
+ * emitter has pointed them at the same buffer.  Element-at-a-time the overlap
+ * happens to be benign (the write always trails the read), which is exactly what
+ * makes this the kind of bug that only appears once the loop vectorises.
+ *
+ * Not reusing costs one extra tile slot, and the whole tile bank is reclaimed at
+ * the end of the loop body anyway. */
+static bool tile_same_width(CompileType a, CompileType b) {
+    return (a == CT_COMPLEX) == (b == CT_COMPLEX);
+}
+
+static Val vec_binop(Ctx* c, uint16_t op, Val a, Val b, CompileType rtype, Slot imm) {
+    uint16_t vop = vec_op(op);
+    if (!vop) { c->ok = false; return a; }
+    a = vsplat(c, a); b = vsplat(c, b);
+    if (tile_same_width(a.type, rtype) && tile_same_width(b.type, rtype)) {
+        pop_tmp(c, b); pop_tmp(c, a);
+    }
+    int dst = alloc_tile(c);
+    ins(c, vop, (uint32_t)dst, (uint32_t)a.reg, (uint32_t)b.reg, imm);
+    Val r = { dst, true, rtype };
+    return r;
+}
+static Val vec_unop(Ctx* c, uint16_t op, Val a, CompileType rtype, Slot imm) {
+    uint16_t vop = vec_op(op);
+    if (!vop) { c->ok = false; return a; }
+    a = vsplat(c, a);
+    if (tile_same_width(a.type, rtype)) pop_tmp(c, a);
+    int dst = alloc_tile(c);
+    ins(c, vop, (uint32_t)dst, (uint32_t)a.reg, 0, imm);
+    Val r = { dst, true, rtype };
+    return r;
+}
+
 /* value in `a` (already at `type`), value in `b` (already at `type`): emit a
  * typed binary op, freeing operand temps LIFO and reusing a register. */
 static Val binop(Ctx* c, uint16_t op, Val a, Val b, CompileType rtype) {
+    if (c->vector_mode && (val_is_tile(a) || val_is_tile(b))) {
+        Slot z; memset(&z, 0, sizeof z);
+        return vec_binop(c, op, a, b, rtype, z);
+    }
     scalar_only(c, a.type, b.type, rtype);
     pop_tmp(c, b);
     pop_tmp(c, a);
@@ -260,6 +421,10 @@ static Val binop(Ctx* c, uint16_t op, Val a, Val b, CompileType rtype) {
     return r;
 }
 static Val unop(Ctx* c, uint16_t op, Val a, CompileType rtype) {
+    if (c->vector_mode && val_is_tile(a)) {
+        Slot z; memset(&z, 0, sizeof z);
+        return vec_unop(c, op, a, rtype, z);
+    }
     scalar_only(c, a.type, a.type, rtype);
     pop_tmp(c, a);
     int dst = alloc_temp(c);
@@ -287,6 +452,10 @@ static Val emit_const(Ctx* c, Slot imm, CompileType type) {
 }
 /* unary/binary op carrying a kernel function pointer in imm.p */
 static Val kern_unop(Ctx* c, uint16_t op, Val a, CompileType rt, const void* fn) {
+    if (c->vector_mode && val_is_tile(a)) {
+        Slot k; memset(&k, 0, sizeof k); k.p = fn;
+        return vec_unop(c, op, a, rt, k);
+    }
     scalar_only(c, a.type, a.type, rt);
     pop_tmp(c, a);
     int dst = alloc_temp(c);
@@ -296,6 +465,10 @@ static Val kern_unop(Ctx* c, uint16_t op, Val a, CompileType rt, const void* fn)
     return r;
 }
 static Val kern_binop(Ctx* c, uint16_t op, Val a, Val b, CompileType rt, const void* fn) {
+    if (c->vector_mode && (val_is_tile(a) || val_is_tile(b))) {
+        Slot k; memset(&k, 0, sizeof k); k.p = fn;
+        return vec_binop(c, op, a, b, rt, k);
+    }
     scalar_only(c, a.type, b.type, rt);
     pop_tmp(c, b); pop_tmp(c, a);
     int dst = alloc_temp(c);
@@ -537,6 +710,20 @@ static int nest_fixed_type(Ctx* c, const char* pname, const Expr* body, CompileT
 /* Pure type inference (no code emission) — needed to type an If's result
  * register before both branches are lowered.  Mirrors emit's result-type rules;
  * returns false for anything not compilable. */
+/* Lift a scalar result element type back over an array operand.
+ *
+ * Several inference branches compute "the element type this head produces" and
+ * then returned it directly, which silently turned an array-valued node into a
+ * scalar one.  That was invisible while every array operation was delegated to
+ * the ND layer — which decides its own result dtype — and became two distinct
+ * bugs once fusion started trusting these types: the wrong output buffer, and
+ * whole bodies (anything rooted at Sin/Exp/Log/ArcTan over an array) never
+ * being recognised as fusable at all. */
+static CompileType arr_like(CompileType operand, CompileType elem_result) {
+    return CT_IS_ARRAY(operand) ? CT_ARRAY(elem_result, CT_RANK(operand)) : elem_result;
+}
+static CompileType elem_of(CompileType t) { return CT_IS_ARRAY(t) ? CT_ELEM(t) : t; }
+
 static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     if (!e) return false;
     Slot imm; CompileType lt;
@@ -580,20 +767,69 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     }
     if (strcmp(h, "Power") == 0 && na == 2) {
         IT(0, ta);
-        if (A[1]->type == EXPR_INTEGER) { *out = (ta == CT_INT && A[1]->data.integer >= 0) ? CT_INT : (ta == CT_COMPLEX ? CT_COMPLEX : CT_REAL); return true; }
-        int64_t rn, rd; if (is_rational(A[1], &rn, &rd) && rd == 2 && (rn == 1 || rn == -1)) { *out = ta == CT_COMPLEX ? CT_COMPLEX : CT_REAL; return true; }
+        if (A[1]->type == EXPR_INTEGER) {
+            CompileType el = elem_of(ta);
+            CompileType res = (el == CT_INT && A[1]->data.integer >= 0)
+                            ? CT_INT : (el == CT_COMPLEX ? CT_COMPLEX : CT_REAL);
+            *out = arr_like(ta, res); return true;
+        }
+        int64_t rn, rd;
+        if (is_rational(A[1], &rn, &rd) && rd == 2 && (rn == 1 || rn == -1)) {
+            *out = arr_like(ta, elem_of(ta) == CT_COMPLEX ? CT_COMPLEX : CT_REAL);
+            return true;
+        }
         IT(1, tb); ta = num_common(ta, tb); if ((int)ta < 0) return false; if (ta < CT_REAL) ta = CT_REAL; *out = ta; return true;
     }
     uint16_t or_, oc_;
-    if (na == 1 && (unary_math(h, &or_, &oc_) || strcmp(h, "Tanh") == 0)) { IT(0, ta); *out = ta == CT_COMPLEX ? CT_COMPLEX : CT_REAL; return true; }
-    if (strcmp(h, "Log") == 0 && na == 2) { IT(0, ta); IT(1, tb); ta = num_common(ta, tb); *out = ta == CT_COMPLEX ? CT_COMPLEX : CT_REAL; return true; }
-    if (strcmp(h, "Abs") == 0 && na == 1)  { IT(0, ta); *out = ta == CT_COMPLEX ? CT_REAL : ta; return true; }
+    if (na == 1 && (unary_math(h, &or_, &oc_) || strcmp(h, "Tanh") == 0)) {
+        IT(0, ta);
+        *out = arr_like(ta, elem_of(ta) == CT_COMPLEX ? CT_COMPLEX : CT_REAL);
+        return true;
+    }
+    if (strcmp(h, "Log") == 0 && na == 2) {
+        IT(0, ta); IT(1, tb); ta = num_common(ta, tb);
+        if ((int)ta < 0) return false;
+        *out = arr_like(ta, elem_of(ta) == CT_COMPLEX ? CT_COMPLEX : CT_REAL);
+        return true;
+    }
+    /* Projections: the result is real even for a complex operand, and over an
+     * array that means a REAL-element array, not an array of the operand's own
+     * element type.  Getting this wrong is invisible while each operation is
+     * delegated to the ND layer (which decides the result dtype itself), and
+     * becomes a wrong answer the moment a fused loop allocates the output buffer
+     * from this type instead. */
+    if (strcmp(h, "Abs") == 0 && na == 1) {
+        IT(0, ta);
+        if (CT_IS_ARRAY(ta)) {
+            CompileType el = CT_ELEM(ta) == CT_COMPLEX ? CT_REAL : CT_ELEM(ta);
+            *out = CT_ARRAY(el, CT_RANK(ta)); return true;
+        }
+        *out = ta == CT_COMPLEX ? CT_REAL : ta; return true;
+    }
     if (strcmp(h, "Sign") == 0 && na == 1) { IT(0, ta); if (ta == CT_COMPLEX) return false; *out = ta; return true; }
-    if ((strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0 || strcmp(h, "Round") == 0) && na == 1) { IT(0, ta); *out = CT_INT; return true; }
-    if ((strcmp(h, "Re") == 0 || strcmp(h, "Im") == 0 || strcmp(h, "Arg") == 0) && na == 1) { IT(0, ta); if (CT_IS_ARRAY(ta) || ta == CT_BOOL) return false; *out = CT_REAL; return true; }
+    if ((strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0 || strcmp(h, "Round") == 0) && na == 1) { IT(0, ta); if (CT_IS_ARRAY(ta)) return false; *out = CT_INT; return true; }
+    if ((strcmp(h, "Re") == 0 || strcmp(h, "Im") == 0 || strcmp(h, "Arg") == 0) && na == 1) {
+        IT(0, ta);
+        if (ta == CT_BOOL) return false;
+        *out = CT_IS_ARRAY(ta) ? CT_ARRAY(CT_REAL, CT_RANK(ta)) : CT_REAL;
+        return true;
+    }
     if (strcmp(h, "Conjugate") == 0 && na == 1) { IT(0, ta); *out = ta; return true; }
     if ((strcmp(h, "Max") == 0 || strcmp(h, "Min") == 0) && na >= 1) { IT(0, ta); for (size_t i = 1; i < na; i++) { IT(i, tb); ta = num_common(ta, tb); if ((int)ta < 0 || ta == CT_COMPLEX) return false; } *out = ta; return true; }
-    if (strcmp(h, "ArcTan") == 0) { if (na == 1) { IT(0, ta); *out = ta == CT_COMPLEX ? CT_COMPLEX : CT_REAL; return true; } if (na == 2) { *out = CT_REAL; return true; } return false; }
+    if (strcmp(h, "ArcTan") == 0) {
+        if (na == 1) {
+            IT(0, ta);
+            *out = arr_like(ta, elem_of(ta) == CT_COMPLEX ? CT_COMPLEX : CT_REAL);
+            return true;
+        }
+        if (na == 2) {
+            IT(0, ta); IT(1, tb); ta = num_common(ta, tb);
+            if ((int)ta < 0) return false;
+            *out = arr_like(ta, CT_REAL);
+            return true;
+        }
+        return false;
+    }
     if (na == 2 && (!strcmp(h, "Less") || !strcmp(h, "LessEqual") || !strcmp(h, "Greater") || !strcmp(h, "GreaterEqual") || !strcmp(h, "Equal") || !strcmp(h, "Unequal"))) { *out = CT_BOOL; return true; }
     if (!strcmp(h, "And") || !strcmp(h, "Or") || !strcmp(h, "Xor") || !strcmp(h, "Not")) { *out = CT_BOOL; return true; }
     if (strcmp(h, "If") == 0 && na == 3) {
@@ -663,7 +899,29 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         return true;
     }
     if (na == 1) { SymbolDef* d = symtab_lookup(h); if (d && d->ndarray_unary_kernel) { const NDUnaryKernel* k = d->ndarray_unary_kernel; if (k->cplx || k->real) { IT(0, ta); if (CT_IS_ARRAY(ta)) { *out = CT_ARRAY(k->to_real ? CT_REAL : CT_ELEM(ta), CT_RANK(ta)); return true; } if (k->to_real) { *out = CT_REAL; return true; } if (ta == CT_COMPLEX) { if (!k->cplx) return false; *out = CT_COMPLEX; return true; } *out = (k->real_closed || k->real) ? CT_REAL : CT_COMPLEX; return true; } } }
-    if (na == 2) { SymbolDef* d = symtab_lookup(h); if (d && d->ndarray_binary_kernel) { const NDBinaryKernel* k = d->ndarray_binary_kernel; if (k->cplx) { IT(0, ta); IT(1, tb); CompileType t = num_common(ta, tb); if ((int)t < 0) return false; *out = (t <= CT_REAL && k->real_closed) ? CT_REAL : CT_COMPLEX; return true; } } }
+    if (na == 2) {
+        SymbolDef* d = symtab_lookup(h);
+        if (d && d->ndarray_binary_kernel) {
+            const NDBinaryKernel* k = d->ndarray_binary_kernel;
+            if (k->cplx) {
+                IT(0, ta); IT(1, tb);
+                CompileType t = num_common(ta, tb);
+                if ((int)t < 0) return false;
+                /* Over an array the result is an ARRAY, mirroring the unary
+                 * branch above and the emit-side lowering.  Reporting a scalar
+                 * here was harmless while every array op was delegated (the ND
+                 * layer picks its own result dtype), and becomes a wrong output
+                 * buffer as soon as a fused loop is sized from this type. */
+                if (CT_IS_ARRAY(t)) {
+                    CompileType er = CT_ELEM(t);
+                    *out = CT_ARRAY(k->real_closed ? er : CT_COMPLEX, CT_RANK(t));
+                    return true;
+                }
+                *out = (t <= CT_REAL && k->real_closed) ? CT_REAL : CT_COMPLEX;
+                return true;
+            }
+        }
+    }
     #undef IT
     /* Inlined CompiledFunction call — must type here too, or a call inside an
      * If branch / Sum body could not be lowered.  Mirrors emit's binding. */
@@ -808,17 +1066,20 @@ static bool try_kernel(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
 /* Save/restore point for speculative lowering. */
 typedef struct {
     size_t n; int temp_top, maxreg, arr_top, arr_max, nscope; bool ok;
+    int tile_top, tile_max; bool vector_mode;
 } EmitMark;
 
 static EmitMark emit_mark(const Ctx* c) {
     EmitMark m;
     m.n = c->n; m.temp_top = c->temp_top; m.maxreg = c->maxreg;
     m.arr_top = c->arr_top; m.arr_max = c->arr_max; m.nscope = c->nscope; m.ok = c->ok;
+    m.tile_top = c->tile_top; m.tile_max = c->tile_max; m.vector_mode = c->vector_mode;
     return m;
 }
 static void emit_rollback(Ctx* c, EmitMark m) {
     c->n = m.n; c->temp_top = m.temp_top; c->maxreg = m.maxreg;
     c->arr_top = m.arr_top; c->arr_max = m.arr_max; c->nscope = m.nscope; c->ok = m.ok;
+    c->tile_top = m.tile_top; c->tile_max = m.tile_max; c->vector_mode = m.vector_mode;
 }
 
 #define FUSE_MAX_LEAVES 8
@@ -876,16 +1137,33 @@ static int fuse_listable(Ctx* c, const Expr* e) {
         return CT_IS_ARRAY(t) ? 1 : 0;
     }
     if (e->type != EXPR_FUNCTION) return 0;
-    int any = 0;
+    int any = 0, narr = 0;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         int s = fuse_listable(c, e->data.function.args[i]);
         if (s < 0) return -1;
-        if (s > 0) any = 1;
+        if (s > 0) { any = 1; narr++; }
     }
     if (!any) return 0;                       /* scalar subtree: unconstrained */
     if (e->data.function.head->type != EXPR_SYMBOL) return -1;
     const char* h = e->data.function.head->data.symbol.name;
     if (!(get_attributes(h) & ATTR_LISTABLE)) return -1;
+
+    /* Being Listable is necessary but not sufficient when BOTH operands are
+     * arrays.  The NDArray layer's binary kernels are defined as "one array plus
+     * one broadcast scalar", so for a head that has one the interpreter has no
+     * array-by-array path at all and leaves the expression UNEVALUATED —
+     * verified: `ArcTan[NDArray[...], NDArray[...]]` comes back untouched.  A
+     * fused loop would happily compute it, which is precisely the divergence the
+     * engine is not allowed to introduce.
+     *
+     * `Log[b, x]` is the exception, and not an arbitrary one: it never reaches a
+     * binary kernel because its lowering is the arithmetic identity
+     * Log[x]/Log[b], so the interpreter evaluates it array-by-array too (it
+     * returns an NDArray). */
+    if (narr >= 2 && e->data.function.arg_count == 2 && strcmp(h, "Log") != 0) {
+        SymbolDef* d = symtab_lookup(h);
+        if (d && d->ndarray_binary_kernel) return -1;
+    }
     return 1;
 }
 
@@ -949,8 +1227,7 @@ static bool try_fuse(Ctx* c, const Expr* e, Val* out) {
     ins(c, OP_CONST, (uint32_t)ri, 0, 0, k0);
 
     /* Guard once on entry, then close the loop with a single LOOP instruction:
-     * per element that is one control instruction instead of four, which matters
-     * because the body here is only a handful of instructions wide. */
+     * per tile that is one control instruction instead of four. */
     int rc = alloc_temp(c);
     ins(c, OP_LT_I, (uint32_t)rc, (uint32_t)ri, (uint32_t)rn, z);
     size_t jz = c->n;
@@ -958,19 +1235,23 @@ static bool try_fuse(Ctx* c, const Expr* e, Val* out) {
     c->temp_top--;                                   /* rc is dead after the test */
     size_t head = c->n;
 
-    /* Bind each array leaf to the register holding its current element, then
-     * lower the body with the ORDINARY scalar emitter.  The binding goes on the
-     * scope stack, which emit() and infer_type() already consult ahead of the
-     * argument map, so nothing in the scalar lowering needs to know about
-     * fusion at all. */
-    int elreg[FUSE_MAX_LEAVES];
+    /* Live length of this tile (short only on the final one). */
+    ins(c, OP_VSETLEN, 0, (uint32_t)ri, (uint32_t)rn, z);
+
+    /* Bind each array leaf to the TILE holding its current block of elements,
+     * then lower the body with the ORDINARY scalar emitter.  The binding goes on
+     * the scope stack, which emit() and infer_type() already consult ahead of the
+     * argument map, and the tile-ness rides on the register number — so nothing
+     * in the scalar lowering needs to know about strip mining at all. */
+    c->vector_mode = true;
+    int tlreg[FUSE_MAX_LEAVES];
     for (int i = 0; i < L.n; i++) {
         CompileType le = CT_ELEM(L.type[i]);
-        elreg[i] = alloc_temp(c);
-        ins(c, le == CT_COMPLEX ? OP_A_LOAD_C : OP_A_LOAD_R,
-            (uint32_t)elreg[i], (uint32_t)L.reg[i], (uint32_t)ri, z);
+        tlreg[i] = alloc_tile(c);
+        ins(c, le == CT_COMPLEX ? OP_VLOAD_C : OP_VLOAD_R,
+            (uint32_t)tlreg[i], (uint32_t)L.reg[i], (uint32_t)ri, z);
         c->scope[c->nscope].name = L.name[i];
-        c->scope[c->nscope].reg  = elreg[i];
+        c->scope[c->nscope].reg  = tlreg[i];
         c->scope[c->nscope].type = le;
         c->nscope++;
     }
@@ -983,20 +1264,26 @@ static bool try_fuse(Ctx* c, const Expr* e, Val* out) {
 
     if (!bok || !c->ok || CT_IS_ARRAY(bv.type)) { emit_rollback(c, mark); return false; }
     coerce(c, &bv, elem);
+    /* A body that never touched a leaf (all-scalar) yields a scalar; broadcast it
+     * so the store below always has a tile to write. */
+    if (c->ok && !val_is_tile(bv)) bv = vsplat(c, bv);
     if (!c->ok) { emit_rollback(c, mark); return false; }
 
     if (reduce)
-        ins(c, elem == CT_COMPLEX ? OP_ADD_C : OP_ADD_R,
-            (uint32_t)racc, (uint32_t)racc, (uint32_t)bv.reg, z);
+        ins(c, elem == CT_COMPLEX ? OP_VSUM_C : OP_VSUM_R,
+            (uint32_t)racc, (uint32_t)bv.reg, 0, z);
     else
-        ins(c, elem == CT_COMPLEX ? OP_A_STORE_C : OP_A_STORE_R,
+        ins(c, elem == CT_COMPLEX ? OP_VSTORE_C : OP_VSTORE_R,
             (uint32_t)rout, (uint32_t)ri, (uint32_t)bv.reg, z);
 
-    /* Drop every body temp AND the element registers: the next iteration
-     * rewrites them, so nothing may accumulate across the back edge. */
+    /* Drop every body tile AND the leaf tiles: the next iteration rewrites them,
+     * so nothing may accumulate across the back edge. */
     c->temp_top = (rc - c->nlocals);
+    c->tile_top = mark.tile_top;
+    c->vector_mode = mark.vector_mode;
 
-    ins(c, OP_LOOP, (uint32_t)ri, (uint32_t)rn, (uint32_t)head, z);
+    Slot step; memset(&step, 0, sizeof step); step.i = VBLOCK;
+    ins(c, OP_LOOP, (uint32_t)ri, (uint32_t)rn, (uint32_t)head, step);
     if (!c->ok) { emit_rollback(c, mark); return false; }
     c->code[jz].b = (uint32_t)c->n;
 
@@ -1042,7 +1329,7 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
      * program: with no array arguments there is nothing to fuse and we never
      * even run the type probe.  On failure try_fuse rolls back cleanly and the
      * delegated path handles the node exactly as before. */
-    if (c->array_args && !c->fusing && (c->flags & COMPILE_FUSE)) {
+    if (c->array_args && !c->fusing && !(c->flags & COMPILE_NO_FUSE)) {
         Val fv;
         if (try_fuse(c, e, &fv)) { *out = fv; return c->ok; }
     }
@@ -1156,10 +1443,23 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
         if (ex->type == EXPR_INTEGER) {
             long long nexp = ex->data.integer;
             Val a; if (!emit(c, base, &a)) return false;
-            if (a.type == CT_INT && nexp >= 0) { Slot s; s.i = nexp; free_if_tmp(c, a); int d = alloc_temp(c); ins(c, OP_POWI_I, (uint32_t)d, (uint32_t)a.reg, 0, s); out->reg = d; out->tmp = true; out->type = CT_INT; return c->ok; }
-            if (a.type == CT_COMPLEX) { Slot s; s.i = nexp; free_if_tmp(c, a); int d = alloc_temp(c); ins(c, OP_POWI_C, (uint32_t)d, (uint32_t)a.reg, 0, s); out->reg = d; out->tmp = true; out->type = CT_COMPLEX; return c->ok; }
+            /* Integer exponents emit POWI directly rather than through unop(),
+             * because the exponent rides in the immediate.  That means this site
+             * has to make the tile decision itself — routing it through vec_unop
+             * is what keeps a strip-mined `v^3` from reading a tile POINTER as a
+             * double. */
+            Slot s; memset(&s, 0, sizeof s); s.i = nexp;
+            if (c->vector_mode && val_is_tile(a)) {
+                CompileType rt = (a.type == CT_COMPLEX) ? CT_COMPLEX : CT_REAL;
+                if (rt == CT_REAL) coerce(c, &a, CT_REAL);
+                if (!c->ok) return false;
+                *out = vec_unop(c, rt == CT_COMPLEX ? OP_POWI_C : OP_POWI_R, a, rt, s);
+                return c->ok;
+            }
+            if (a.type == CT_INT && nexp >= 0) { free_if_tmp(c, a); int d = alloc_temp(c); ins(c, OP_POWI_I, (uint32_t)d, (uint32_t)a.reg, 0, s); out->reg = d; out->tmp = true; out->type = CT_INT; return c->ok; }
+            if (a.type == CT_COMPLEX) { free_if_tmp(c, a); int d = alloc_temp(c); ins(c, OP_POWI_C, (uint32_t)d, (uint32_t)a.reg, 0, s); out->reg = d; out->tmp = true; out->type = CT_COMPLEX; return c->ok; }
             coerce(c, &a, CT_REAL);
-            Slot s; s.i = nexp; free_if_tmp(c, a); int d = alloc_temp(c); ins(c, OP_POWI_R, (uint32_t)d, (uint32_t)a.reg, 0, s); out->reg = d; out->tmp = true; out->type = CT_REAL; return c->ok;
+            free_if_tmp(c, a); int d = alloc_temp(c); ins(c, OP_POWI_R, (uint32_t)d, (uint32_t)a.reg, 0, s); out->reg = d; out->tmp = true; out->type = CT_REAL; return c->ok;
         }
         int64_t rn, rd;
         if (is_rational(ex, &rn, &rd) && rd == 2 && (rn == 1 || rn == -1)) {
@@ -1810,6 +2110,11 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
     if (n == 0) return;
     size_t pc = 0;
     const Instr* c = &code[pc];
+    /* Live elements of the current tile, set by VSETLEN.  Only the load, store
+     * and reduction read it — every arithmetic tile op covers the full VBLOCK —
+     * and all three are pinned inside the strip loop because they read the loop
+     * index, so this cannot be stranded by a hoist. */
+    int vlen = VBLOCK;
     /* Operands are addressed lazily: an opcode pays only for the registers it
      * actually reads.  Computing all three up front in NEXT() cost three
      * shift-and-adds per instruction where the hottest ops (ADD_R, MUL_R) use
@@ -1841,7 +2146,7 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
              * four instructions per iteration on control alone (INC, LT, JZ,
              * JMP), which is most of the body when the body is one element of a
              * fused array pass. */
-            OP(LOOP): if (++RD.i < RA.i) { pc = c->b; JUMP(); } NEXT();
+            OP(LOOP): { RD.i += c->imm.i; if (RD.i < RA.i) { pc = c->b; JUMP(); } } NEXT();
             OP(CONST): RD = c->imm; NEXT();
             OP(MOVE):  RD = RA; NEXT();
             OP(I2R): RD.r = (double)RA.i; NEXT();
@@ -1977,6 +2282,203 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(A_SIZE):     ARROP();
             OP(A_NEWLIKE):  ARROP();
             OP(A_SHAPECHK): ARROP();
+
+            /* ---- strip-mined tile ops (M5b) -------------------------------
+             * One opcode, VBLOCK elements, in a loop shaped so the C compiler
+             * can vectorise it.  Arithmetic always covers the FULL tile: the
+             * load pads a short tail with 1.0, so no op reads uninitialised
+             * memory and only load/store/reduce need the live length. */
+            #define TD_R  ((double*)RD.p)
+            #define TA_R  ((const double*)RA.p)
+            #define TB_R  ((const double*)RB.p)
+            #define TD_C  ((double _Complex*)RD.p)
+            #define TA_C  ((const double _Complex*)RA.p)
+            #define TB_C  ((const double _Complex*)RB.p)
+            #define VBIN(NAME, TAG, CTY, EXPR) \
+                OP(NAME): { CTY* d_ = TD_##TAG; const CTY* a_ = TA_##TAG; \
+                            const CTY* b_ = TB_##TAG; (void)a_; (void)b_; \
+                            for (int k_ = 0; k_ < VBLOCK; k_++) d_[k_] = (EXPR); } NEXT()
+            #define VUN(NAME, TAG, CTY, EXPR) \
+                OP(NAME): { CTY* d_ = TD_##TAG; const CTY* a_ = TA_##TAG; \
+                            for (int k_ = 0; k_ < VBLOCK; k_++) d_[k_] = (EXPR); } NEXT()
+
+            OP(VSETLEN): {                    /* live elements of this tile */
+                long long rem = RB.i - RA.i;
+                vlen = (int)(rem < VBLOCK ? rem : VBLOCK);
+                if (vlen < 0) vlen = 0;
+            } NEXT();
+
+            OP(VLOAD_R): {
+                const NDArrayData* A_ = &RA.arr->data.ndarray;
+                size_t off = (size_t)RB.i;
+                double* d_ = TD_R;
+                if (A_->dtype == NDT_FLOAT64) {
+                    const double* s_ = (const double*)A_->data + off;
+                    for (int k_ = 0; k_ < vlen; k_++) d_[k_] = s_[k_];
+                } else if (A_->dtype == NDT_FLOAT32) {
+                    const float* s_ = (const float*)A_->data + off;
+                    for (int k_ = 0; k_ < vlen; k_++) d_[k_] = (double)s_[k_];
+                } else goto vm_fail;          /* promised real, buffer is complex */
+                for (int k_ = vlen; k_ < VBLOCK; k_++) d_[k_] = 1.0;   /* safe pad */
+            } NEXT();
+            OP(VLOAD_C): {
+                const NDArrayData* A_ = &RA.arr->data.ndarray;
+                size_t off = (size_t)RB.i;
+                double _Complex* d_ = TD_C;
+                switch (A_->dtype) {
+                    case NDT_FLOAT64: { const double* s_ = (const double*)A_->data + off;
+                        for (int k_ = 0; k_ < vlen; k_++) d_[k_] = s_[k_]; break; }
+                    case NDT_FLOAT32: { const float* s_ = (const float*)A_->data + off;
+                        for (int k_ = 0; k_ < vlen; k_++) d_[k_] = (double)s_[k_]; break; }
+                    case NDT_COMPLEX64: { const double* s_ = (const double*)A_->data + 2 * off;
+                        for (int k_ = 0; k_ < vlen; k_++) d_[k_] = s_[2*k_] + s_[2*k_+1] * I; break; }
+                    default: { const float* s_ = (const float*)A_->data + 2 * off;
+                        for (int k_ = 0; k_ < vlen; k_++)
+                            d_[k_] = (double)s_[2*k_] + (double)s_[2*k_+1] * I; break; }
+                }
+                for (int k_ = vlen; k_ < VBLOCK; k_++) d_[k_] = 1.0;
+            } NEXT();
+            /* The store is where a fused loop honours the element-type promise.
+             * A real-typed program that produced a non-finite element is exactly
+             * the case where the interpreter would have gone complex (Sqrt of a
+             * negative, Log of a negative) or hit a pole, and the delegated path
+             * fails there too because its kernels reject non-finite elements.
+             * Returning a buffer full of NaN instead would silently hand back a
+             * real array where the interpreter gives a complex one.
+             *
+             * The check is accumulated branchlessly and tested once per tile, so
+             * it does not break the vectorisation of the copy. */
+            OP(VSTORE_R): {
+                double* d_ = (double*)RD.arr->data.ndarray.data + (size_t)RA.i;
+                const double* s_ = TB_R;
+                int bad_ = 0;
+                for (int k_ = 0; k_ < vlen; k_++) {
+                    double x_ = s_[k_];
+                    d_[k_] = x_;
+                    bad_ |= !(x_ - x_ == 0.0);          /* NaN or +-Inf */
+                }
+                if (bad_) goto vm_fail;
+            } NEXT();
+            OP(VSTORE_C): {
+                double* d_ = (double*)RD.arr->data.ndarray.data + 2 * (size_t)RA.i;
+                const double _Complex* s_ = TB_C;
+                int bad_ = 0;
+                for (int k_ = 0; k_ < vlen; k_++) {
+                    double re_ = creal(s_[k_]), im_ = cimag(s_[k_]);
+                    d_[2*k_] = re_; d_[2*k_+1] = im_;
+                    bad_ |= !(re_ - re_ == 0.0) | !(im_ - im_ == 0.0);
+                }
+                if (bad_) goto vm_fail;
+            } NEXT();
+            /* Sequential accumulation, deliberately: it reproduces the
+             * element-at-a-time fused loop's summation order exactly, so
+             * strip-mining does not change any already-tested result. */
+            OP(VSUM_R): { const double* s_ = TA_R; double acc_ = RD.r;
+                          for (int k_ = 0; k_ < vlen; k_++) acc_ += s_[k_];
+                          RD.r = acc_; } NEXT();
+            OP(VSUM_C): { const double _Complex* s_ = TA_C; double _Complex acc_ = RD.z;
+                          for (int k_ = 0; k_ < vlen; k_++) acc_ += s_[k_];
+                          RD.z = acc_; } NEXT();
+
+            OP(VSPLAT_R): { double* d_ = TD_R; double v_ = RA.r;
+                            for (int k_ = 0; k_ < VBLOCK; k_++) d_[k_] = v_; } NEXT();
+            OP(VSPLAT_C): { double _Complex* d_ = TD_C; double _Complex v_ = RA.z;
+                            for (int k_ = 0; k_ < VBLOCK; k_++) d_[k_] = v_; } NEXT();
+            OP(VR2C): { double _Complex* d_ = TD_C; const double* a_ = TA_R;
+                        for (int k_ = 0; k_ < VBLOCK; k_++) d_[k_] = a_[k_]; } NEXT();
+
+            VBIN(VADD_R, R, double, a_[k_] + b_[k_]);
+            VBIN(VSUB_R, R, double, a_[k_] - b_[k_]);
+            VBIN(VMUL_R, R, double, a_[k_] * b_[k_]);
+            VBIN(VDIV_R, R, double, a_[k_] / b_[k_]);
+            VUN(VNEG_R, R, double, -a_[k_]);
+            VUN(VINV_R, R, double, 1.0 / a_[k_]);
+            VBIN(VADD_C, C, double _Complex, a_[k_] + b_[k_]);
+            VBIN(VSUB_C, C, double _Complex, a_[k_] - b_[k_]);
+            VBIN(VMUL_C, C, double _Complex, a_[k_] * b_[k_]);
+            VBIN(VDIV_C, C, double _Complex, a_[k_] / b_[k_]);
+            VUN(VNEG_C, C, double _Complex, -a_[k_]);
+            VUN(VINV_C, C, double _Complex, 1.0 / a_[k_]);
+            /* Small exponents are unrolled with EXACTLY the association
+             * ipow_* uses (x^2 = x*x, x^3 = x*(x*x), x^4 = (x*x)*(x*x)), so the
+             * result is bitwise identical to the general path while the tile
+             * loop becomes a vectorisable multiply instead of a per-element
+             * function call with a loop inside it. */
+            OP(VPOWI_R): { double* d_ = TD_R; const double* a_ = TA_R; long long e_ = c->imm.i;
+                if (e_ == 2)      for (int k_ = 0; k_ < VBLOCK; k_++) { double t_ = a_[k_]; d_[k_] = t_ * t_; }
+                else if (e_ == 3) for (int k_ = 0; k_ < VBLOCK; k_++) { double t_ = a_[k_]; d_[k_] = t_ * (t_ * t_); }
+                else if (e_ == 4) for (int k_ = 0; k_ < VBLOCK; k_++) { double t_ = a_[k_], s_ = t_ * t_; d_[k_] = s_ * s_; }
+                else              for (int k_ = 0; k_ < VBLOCK; k_++) d_[k_] = ipow_r(a_[k_], e_);
+            } NEXT();
+            OP(VPOWI_C): { double _Complex* d_ = TD_C; const double _Complex* a_ = TA_C; long long e_ = c->imm.i;
+                if (e_ == 2)      for (int k_ = 0; k_ < VBLOCK; k_++) { double _Complex t_ = a_[k_]; d_[k_] = t_ * t_; }
+                else if (e_ == 3) for (int k_ = 0; k_ < VBLOCK; k_++) { double _Complex t_ = a_[k_]; d_[k_] = t_ * (t_ * t_); }
+                else if (e_ == 4) for (int k_ = 0; k_ < VBLOCK; k_++) { double _Complex t_ = a_[k_], s_ = t_ * t_; d_[k_] = s_ * s_; }
+                else              for (int k_ = 0; k_ < VBLOCK; k_++) d_[k_] = ipow_c(a_[k_], e_);
+            } NEXT();
+            VBIN(VPOW_R, R, double, pow(a_[k_], b_[k_]));
+            VBIN(VPOW_C, C, double _Complex, cpow(a_[k_], b_[k_]));
+            VBIN(VATAN2_R, R, double, atan2(b_[k_], a_[k_]));
+            VUN(VSQRT_R, R, double, sqrt(a_[k_]));   VUN(VSQRT_C, C, double _Complex, csqrt(a_[k_]));
+            VUN(VEXP_R, R, double, exp(a_[k_]));    VUN(VEXP_C, C, double _Complex, cexp(a_[k_]));
+            VUN(VLOG_R, R, double, log(a_[k_]));    VUN(VLOG_C, C, double _Complex, clog(a_[k_]));
+            VUN(VSIN_R, R, double, sin(a_[k_]));    VUN(VSIN_C, C, double _Complex, csin(a_[k_]));
+            VUN(VCOS_R, R, double, cos(a_[k_]));    VUN(VCOS_C, C, double _Complex, ccos(a_[k_]));
+            VUN(VTAN_R, R, double, tan(a_[k_]));    VUN(VTAN_C, C, double _Complex, ctan(a_[k_]));
+            VUN(VSINH_R, R, double, sinh(a_[k_]));   VUN(VSINH_C, C, double _Complex, csinh(a_[k_]));
+            VUN(VCOSH_R, R, double, cosh(a_[k_]));   VUN(VCOSH_C, C, double _Complex, ccosh(a_[k_]));
+            VUN(VTANH_R, R, double, tanh(a_[k_]));   VUN(VTANH_C, C, double _Complex, ctanh(a_[k_]));
+            VUN(VASIN_R, R, double, asin(a_[k_]));   VUN(VASIN_C, C, double _Complex, casin(a_[k_]));
+            VUN(VACOS_R, R, double, acos(a_[k_]));   VUN(VACOS_C, C, double _Complex, cacos(a_[k_]));
+            VUN(VATAN_R, R, double, atan(a_[k_]));   VUN(VATAN_C, C, double _Complex, catan(a_[k_]));
+            VUN(VABS_R, R, double, fabs(a_[k_]));
+            VUN(VSIGN_R, R, double, (double)((a_[k_] > 0) - (a_[k_] < 0)));
+            VUN(VERF_R, R, double, erf(a_[k_]));
+            VUN(VERFC_R, R, double, erfc(a_[k_]));
+            /* complex tile in, real tile out */
+            OP(VABS_C): { double* d_ = TD_R; const double _Complex* a_ = TA_C;
+                          for (int k_ = 0; k_ < VBLOCK; k_++) d_[k_] = cabs(a_[k_]); } NEXT();
+            OP(VRE_C):  { double* d_ = TD_R; const double _Complex* a_ = TA_C;
+                          for (int k_ = 0; k_ < VBLOCK; k_++) d_[k_] = creal(a_[k_]); } NEXT();
+            OP(VIM_C):  { double* d_ = TD_R; const double _Complex* a_ = TA_C;
+                          for (int k_ = 0; k_ < VBLOCK; k_++) d_[k_] = cimag(a_[k_]); } NEXT();
+            OP(VARG_C): { double* d_ = TD_R; const double _Complex* a_ = TA_C;
+                          for (int k_ = 0; k_ < VBLOCK; k_++) d_[k_] = carg(a_[k_]); } NEXT();
+            VUN(VCONJ_C, C, double _Complex, conj(a_[k_]));
+
+            /* Kernel tiles: the indirect call per element blocks vectorisation,
+             * but these are libm-class kernels where the call dominates anyway —
+             * the win here is purely the amortised dispatch. */
+            OP(VKERN_RR): { double* d_ = TD_R; const double* a_ = TA_R; double o_;
+                for (int k_ = 0; k_ < VBLOCK; k_++)
+                    d_[k_] = ((kfn_r)c->imm.p)(a_[k_], &o_) ? o_ : NAN; } NEXT();
+            OP(VKERN_R2R): { double* d_ = TD_R; const double* a_ = TA_R; double or_, oi_;
+                for (int k_ = 0; k_ < VBLOCK; k_++)
+                    d_[k_] = ((kfn_c)c->imm.p)(a_[k_], 0.0, &or_, &oi_) ? or_ : NAN; } NEXT();
+            OP(VKERN_RC): { double _Complex* d_ = TD_C; const double* a_ = TA_R; double or_, oi_;
+                for (int k_ = 0; k_ < VBLOCK; k_++)
+                    d_[k_] = ((kfn_c)c->imm.p)(a_[k_], 0.0, &or_, &oi_) ? or_ + oi_ * I : NAN + NAN * I; } NEXT();
+            OP(VKERN_CC): { double _Complex* d_ = TD_C; const double _Complex* a_ = TA_C; double or_, oi_;
+                for (int k_ = 0; k_ < VBLOCK; k_++)
+                    d_[k_] = ((kfn_c)c->imm.p)(creal(a_[k_]), cimag(a_[k_]), &or_, &oi_)
+                             ? or_ + oi_ * I : NAN + NAN * I; } NEXT();
+            OP(VKERN_CR): { double* d_ = TD_R; const double _Complex* a_ = TA_C; double or_, oi_;
+                for (int k_ = 0; k_ < VBLOCK; k_++)
+                    d_[k_] = ((kfn_c)c->imm.p)(creal(a_[k_]), cimag(a_[k_]), &or_, &oi_) ? or_ : NAN; } NEXT();
+            OP(VKERN2_RR): { double* d_ = TD_R; const double* a_ = TA_R; const double* b_ = TB_R; double or_, oi_;
+                for (int k_ = 0; k_ < VBLOCK; k_++)
+                    d_[k_] = ((kfn_c2)c->imm.p)(a_[k_], 0.0, b_[k_], 0.0, &or_, &oi_) ? or_ : NAN; } NEXT();
+            OP(VKERN2_RC): { double _Complex* d_ = TD_C; const double* a_ = TA_R; const double* b_ = TB_R; double or_, oi_;
+                for (int k_ = 0; k_ < VBLOCK; k_++)
+                    d_[k_] = ((kfn_c2)c->imm.p)(a_[k_], 0.0, b_[k_], 0.0, &or_, &oi_)
+                             ? or_ + oi_ * I : NAN + NAN * I; } NEXT();
+            OP(VKERN2_CC): { double _Complex* d_ = TD_C; const double _Complex* a_ = TA_C;
+                             const double _Complex* b_ = TB_C; double or_, oi_;
+                for (int k_ = 0; k_ < VBLOCK; k_++)
+                    d_[k_] = ((kfn_c2)c->imm.p)(creal(a_[k_]), cimag(a_[k_]), creal(b_[k_]), cimag(b_[k_]),
+                                                &or_, &oi_) ? or_ + oi_ * I : NAN + NAN * I; } NEXT();
+            #undef VBIN
+            #undef VUN
             OP(NOP): NEXT();
             OP(RET): return;
 #if !VM_THREADED
@@ -2001,8 +2503,10 @@ vm_fail:
 /* Rewrite a virtual array register to its final slot in the array bank above
  * the scalar registers.  Ordinary register numbers and jump targets (also
  * carried in the `b` field) are far below ARR_VREG and pass through. */
-static uint32_t patch_reg(uint32_t r, int base) {
-    return r >= (uint32_t)ARR_VREG ? (uint32_t)base + (r - (uint32_t)ARR_VREG) : r;
+static uint32_t patch_reg(uint32_t r, int arr_base, int tile_base) {
+    if (r >= (uint32_t)ARR_VREG)  return (uint32_t)arr_base  + (r - (uint32_t)ARR_VREG);
+    if (r >= (uint32_t)TILE_VREG) return (uint32_t)tile_base + (r - (uint32_t)TILE_VREG);
+    return r;
 }
 
 CompiledProgram* compile_expr(const Expr* body, const char* const* arg_names,
@@ -2041,30 +2545,45 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
     nm_free(&c.map);
     if (!ok) { free(c.code); free(c.argdep); return NULL; }
 
-    /* Place the array bank above the scalar registers and resolve the tags. */
-    int arr_base = c.maxreg, nreg = c.maxreg + c.arr_max;
+    /* Three contiguous banks: scalars, then array handles, then strip-mining
+     * tiles.  A slot therefore has one kind for the whole life of the program,
+     * so teardown can never mistake a double for a pointer, and each bank is a
+     * range sweep. */
+    int arr_base  = c.maxreg;
+    int tile_base = arr_base + c.arr_max;
+    int nreg      = tile_base + c.tile_max;
     for (size_t i = 0; i < c.n; i++) {
-        c.code[i].dst = patch_reg(c.code[i].dst, arr_base);
-        c.code[i].a   = patch_reg(c.code[i].a, arr_base);
-        if (c.code[i].op != OP_JMP && c.code[i].op != OP_JZ)
-            c.code[i].b = patch_reg(c.code[i].b, arr_base);
+        c.code[i].dst = patch_reg(c.code[i].dst, arr_base, tile_base);
+        c.code[i].a   = patch_reg(c.code[i].a, arr_base, tile_base);
+        if (c.code[i].op != OP_JMP && c.code[i].op != OP_JZ && c.code[i].op != OP_LOOP)
+            c.code[i].b = patch_reg(c.code[i].b, arr_base, tile_base);
     }
-    int result_reg = (int)patch_reg((uint32_t)res.reg, arr_base);
+    int result_reg = (int)patch_reg((uint32_t)res.reg, arr_base, tile_base);
 
     /* Optimise the emitted bytecode.  Runs after patch_reg so the array bank is
      * already at its final place and `arr_base` means what the optimiser expects.
      * Register numbers are preserved, so `result_reg` stays valid.  A failure
      * here is non-fatal: the unoptimised code is still correct. */
-    if (!(flags & COMPILE_NO_OPT)) compile_optimize(c.code, &c.n, nreg, arr_base);
+    if (!(flags & COMPILE_NO_OPT)) compile_optimize(c.code, &c.n, nreg, arr_base, tile_base);
 
     CompiledProgram* p = calloc(1, sizeof(*p));
     if (!p) { free(c.code); free(c.argdep); return NULL; }
     p->code = c.code; p->n = c.n; p->nreg = nreg; p->arr_base = arr_base;
+    p->tile_base = tile_base;
     p->result_reg = result_reg; p->result_type = res.type;
     p->nargs = nargs; p->argdep = c.argdep;
     p->arg_types = malloc((nargs ? nargs : 1) * sizeof(CompileType));
     p->frame = malloc((size_t)(nreg ? nreg : 1) * sizeof(Slot));
     if (!p->arg_types || !p->frame) { compiled_free(p); return NULL; }
+    if (c.tile_max > 0) {
+        /* One tile buffer per tile register, sized for the widest element type so
+         * a real and a complex tile are interchangeable storage.  Allocated once
+         * and pointed at from the frame, so the strip loop never allocates. */
+        p->tile_mem = malloc((size_t)c.tile_max * VBLOCK * sizeof(double _Complex));
+        if (!p->tile_mem) { compiled_free(p); return NULL; }
+        for (int k = 0; k < c.tile_max; k++)
+            p->frame[tile_base + k].p = p->tile_mem + (size_t)k * VBLOCK;
+    }
     memcpy(p->arg_types, arg_types, nargs * sizeof(CompileType));
     p->all_real = (res.type == CT_REAL) && c.arr_max == 0;
     for (size_t k = 0; k < nargs; k++) if (arg_types[k] != CT_REAL) p->all_real = false;
@@ -2115,11 +2634,13 @@ static bool finite_result(const Slot* s, CompileType t) {
  * be touched) and any that is still live afterwards is released here — the
  * belt to OP_ARR_FREE's braces, and the only cleanup on the abort path.
  * A result array is NULLed out by the caller first, so it survives. */
+/* Only the ARRAY bank: tile slots hold frame-owned buffer pointers that must
+ * survive every call, and clearing them would strand the storage. */
 static void arr_reset(const CompiledProgram* p) {
-    for (int r = p->arr_base; r < p->nreg; r++) p->frame[r].arr = NULL;
+    for (int r = p->arr_base; r < p->tile_base; r++) p->frame[r].arr = NULL;
 }
 static void arr_sweep(const CompiledProgram* p) {
-    for (int r = p->arr_base; r < p->nreg; r++)
+    for (int r = p->arr_base; r < p->tile_base; r++)
         if (p->frame[r].arr) { expr_free(p->frame[r].arr); p->frame[r].arr = NULL; }
 }
 
@@ -2180,5 +2701,6 @@ bool compiled_eval_real_batch(const CompiledProgram* const* progs, size_t nprogs
 void compiled_free(CompiledProgram* p) {
     if (!p) return;
     free(p->code); free(p->arg_types); free(p->argdep); free(p->frame);
+    free(p->tile_mem);
     free(p);
 }

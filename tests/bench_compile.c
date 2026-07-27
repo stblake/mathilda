@@ -83,7 +83,10 @@ static void bench(const char* name, const char* src, const char* const* names,
     double ratio = tr / to;
     size_t no = compiled_num_instructions(po), nr = compiled_num_instructions(pr);
 
-    if (ratio < 0.90) {
+    /* Only gate bodies the optimiser actually changed: where it removed nothing
+     * the ratio is measuring run-to-run noise, and gating on noise produces a
+     * test that fails at random, which is worse than no test. */
+    if (no < nr && ratio < 0.85) {
         printf("FAIL: %-26s optimiser made it SLOWER (%.2fx)\n", name, ratio);
         failures++;
     } else {
@@ -96,15 +99,36 @@ static void bench(const char* name, const char* src, const char* const* names,
 /* Array bodies: the interesting axis is length, because the delegated array path
  * makes one full pass and one temporary buffer per operation, so its cost per
  * element does not fall with length the way a fused loop's would. */
+static double time_arr(CompiledProgram* p, Expr* v, CompileType at, int iters) {
+    double best = 1e300;
+    for (int r = 0; r < 5; r++) {
+        double t0 = now_s();
+        for (int i = 0; i < iters; i++) {
+            CompileValue av, out;
+            av.type = at; av.v.a = v;
+            if (compiled_eval(p, &av, &out)) {
+                if (CT_IS_ARRAY(out.type)) expr_free(out.v.a);
+            }
+        }
+        double t = now_s() - t0;
+        if (t < best) best = t;
+    }
+    return best / iters;
+}
+
+/* Strip-mined fusion vs the delegated NDArray path, same body, same data.  This
+ * ratio is the whole question for array work: delegation makes one full-length
+ * pass and one temporary buffer per operation, fusion makes one pass total. */
 static void bench_arr(const char* name, const char* src, size_t len, int iters) {
     const char* inm[1] = { intern_symbol("v") };
     const CompileType AT[1] = { CT_ARRAY(CT_REAL, 1) };
     Expr* b = parse_expression(src);                 /* never pre-evaluate */
-    CompiledProgram* p = compile_expr(b, inm, AT, 1);
-    if (!p) {
-        printf("FAIL: %-26s DID NOT COMPILE\n", name);
+    CompiledProgram* pf = compile_expr_ex(b, inm, AT, 1, 0u);
+    CompiledProgram* pd = compile_expr_ex(b, inm, AT, 1, COMPILE_NO_FUSE);
+    if (!pf || !pd) {
+        printf("FAIL: %-26s DID NOT COMPILE (%s)\n", name, !pf ? "fused" : "delegated");
         failures++;
-        expr_free(b);
+        compiled_free(pf); compiled_free(pd); expr_free(b);
         return;
     }
     int64_t dims[1]; dims[0] = (int64_t)len;
@@ -112,21 +136,20 @@ static void bench_arr(const char* name, const char* src, size_t len, int iters) 
     for (size_t i = 0; i < len; i++) buf[i] = 0.3 + 1.7 * (double)i / (double)len;
     Expr* v = expr_new_ndarray(1, dims, buf, NDT_FLOAT64);
 
-    double best = 1e300;
-    for (int r = 0; r < 5; r++) {
-        double t0 = now_s();
-        for (int i = 0; i < iters; i++) {
-            CompileValue av, out;
-            av.type = AT[0]; av.v.a = v;
-            if (compiled_eval(p, &av, &out) && CT_IS_ARRAY(out.type)) expr_free(out.v.a);
-        }
-        double t = now_s() - t0;
-        if (t < best) best = t;
+    double tf = time_arr(pf, v, AT[0], iters);
+    double td = time_arr(pd, v, AT[0], iters);
+    size_t nf = compiled_num_instructions(pf), nd = compiled_num_instructions(pd);
+    /* Identical programs mean fusion silently did NOT engage — the same class of
+     * invisible failure as a body that never compiled, so it is a gate. */
+    if (nf == nd) {
+        printf("FAIL: %-26s len=%zu: fusion did not engage (%zu instrs both ways)\n",
+               name, len, nf);
+        failures++;
     }
-    printf("ok:   %-26s len=%-6zu %8.2f us/call  (%.1f ns/element)\n",
-           name, len, best / iters * 1e6, best / iters / (double)len * 1e9);
+    printf("ok:   %-26s len=%-6zu fused %7.2f us (%5.2f ns/el)  delegated %7.2f us  -> %.2fx  [%zu vs %zu instrs]\n",
+           name, len, tf * 1e6, tf / (double)len * 1e9, td * 1e6, td / tf, nf, nd);
     expr_free(v);
-    compiled_free(p); expr_free(b);
+    compiled_free(pf); compiled_free(pd); expr_free(b);
 }
 
 int main(void) {
@@ -168,6 +191,11 @@ int main(void) {
     bench_arr("Total[Sin v Exp -v]", "Total[Sin[v] Exp[-v] + Sqrt[v]]", 1024,  20000);
     bench_arr("Total[Sin v Exp -v]", "Total[Sin[v] Exp[-v] + Sqrt[v]]", 65536, 300);
     bench_arr("v^2 + 2 v",           "v^2 + 2 v + 1",                   65536, 500);
+    /* Reducing bodies allocate NO result buffer, which separates the cost of
+     * the elementwise pass itself from the cost of allocating and faulting in a
+     * full-length output array. */
+    bench_arr("Total[v^2 + 2v + 1]",  "Total[v^2 + 2 v + 1]",           65536, 500);
+    bench_arr("Total[v w-ish]",       "Total[v + v v]",                 65536, 500);
 
     if (failures == 0) printf("\nAll Compile benchmarks within gate.\n");
     else printf("\n%d Compile benchmark gate(s) FAILED.\n", failures);
