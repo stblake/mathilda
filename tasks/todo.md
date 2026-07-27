@@ -107,7 +107,17 @@ arith ops = 8.0 ns/op; mixed-libm 150 ns/call; array len-4096 1.0x, 61 ns/elemen
       existing `static double complex` implementation before writing a kernel.
       The real work was a branch-cut bug: the `Re < 1/2` reflection used a
       PRINCIPAL log in both the machine and MPFR paths, correct only in the
-      strip `-1 < Re < 0`. Next: the exponential-integral family.
+      strip `-1 < Re < 0`.
+      **Done: the exponential-integral family** — ExpIntegralEi, LogIntegral,
+      SinIntegral, CosIntegral, SinhIntegral, CoshIntegral (57 -> 63). Again no
+      new numerics: each had a `double complex` series dead behind
+      `#ifndef USE_MPFR`. The work was a CANCELLATION GATE with the budget set
+      from measurement (1e9 -> 1.3e-8 error; 1e3 -> 4e-13 at the SAME coverage).
+      The gate lives in the ABI wrapper, not the series, so the interpreter's
+      no-MPFR last resort keeps answering where it has no fallback.
+      **Next:** extend their coverage with the complex continued fraction for
+      E1 (the real path already has one past |x|=40), which would lift the
+      whole family's declines; then the complex hypergeometrics.
 - [ ] **`CompileDiag`** — a bail still reports nothing. The audit covers heads;
       per-body diagnostics would cover the rest.
 - [ ] **Native backend** (`CompilationTarget -> "C"`), behind a build flag.

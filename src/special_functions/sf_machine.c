@@ -1068,3 +1068,21 @@ bool sf_machine_pfq(const double* a, size_t p, const double* b, size_t q,
     *out = sum;
     return isfinite(sum);
 }
+
+/* The ascending series above converges everywhere, but it is not USABLE
+ * everywhere: wherever the value is small compared with the terms that build it
+ * (which is most of the plane once |z| is large), the sum is a difference of
+ * quantities far bigger than itself and the double has already thrown the answer
+ * away.  Peak term over result is exactly how many bits went, so it is measured
+ * rather than guessed from |z| — the loss depends on the direction of z, not
+ * only its modulus.
+ *
+ * Above the budget the kernel DECLINES and the MPFR path answers.  A fast path
+ * that is quietly wrong in half the plane would be far worse than a slow one. */
+#define SF_SERIES_MAX_LOSS 1.0e3      /* ~10 bits lost; leaves ~43 for the answer */
+
+bool sf_series_usable(double peak, double result) {
+    if (!(peak > 0.0)) return true;                 /* nothing accumulated */
+    if (!(result > 0.0)) return false;              /* total cancellation */
+    return peak <= result * SF_SERIES_MAX_LOSS;
+}

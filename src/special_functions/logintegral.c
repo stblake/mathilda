@@ -32,6 +32,9 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <complex.h>
+#include <math.h>
+#include "expintegralei.h"
 #include "arithmetic.h"   /* is_complex, make_complex */
 #include "attr.h"
 #include "eval.h"         /* eval_and_free */
@@ -147,4 +150,19 @@ void logintegral_init(void) {
     symtab_get_def("LogIntegral")->attributes |=
         (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
     /* Docstring lives in info.c (info_init). */
+}
+
+/* li(z) = Ei(Log z) for a machine complex z, in the shared kernel ABI.
+ *
+ * The same identity the symbolic path uses, so the branch is the same one: a
+ * PRINCIPAL log, which puts the cut on the negative real axis and makes
+ * li[-1.] complex (Ei(i Pi)), exactly as the interpreter returns.  Declines
+ * wherever Ei does — including z = 1, where Log z = 0 and li has its pole, and
+ * z = 0, where the interpreter answers Indeterminate rather than a number. */
+bool logintegral_machine_complex(double are, double aim, double* ore, double* oim) {
+    if (are == 0.0 && aim == 0.0) return false;            /* Indeterminate */
+    if (are == 1.0 && aim == 0.0) return false;            /* pole */
+    double complex lz = clog(are + aim * I);
+    if (!isfinite(creal(lz)) || !isfinite(cimag(lz))) return false;
+    return expintegralei_machine_complex(creal(lz), cimag(lz), ore, oim);
 }

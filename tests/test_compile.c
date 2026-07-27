@@ -793,6 +793,25 @@ int main(void) {
     parity("complex LogGamma refl-","LogGamma[Conjugate[x] - 3.]", x1i, CCC, 1, 0.2, 4.0, 0, 0, 300);
     parity("complex LogGamma far",  "LogGamma[x + 12. I]",         x1i, CCC, 1, 0.3, 3.0, 0, 0, 300);
     parity("complex Gamma chain", "Gamma[x] Gamma[y] / Gamma[x + y]", xy, CCC, 2, 0.3, 2.5, 0, 0, 300);
+
+    /* The exponential-integral family at complex argument.  These share the
+     * interpreter's ascending series but NOT its answer: the interpreter's
+     * complex path is MPFR, so unlike Gamma these are approximations and are
+     * held to a tolerance rather than to bit-identity.  Ranges stay inside the
+     * cancellation budget; the declines beyond it are checked separately. */
+    parity("complex ExpIntegralEi", "ExpIntegralEi[x]", x1i, CCC, 1, 0.3, 3.0, 0, 0, 300);
+    parity("complex ExpIntegralEi -", "ExpIntegralEi[-x]", x1i, CCC, 1, 0.3, 3.0, 0, 0, 300);
+    parity("complex SinIntegral",  "SinIntegral[x]",  x1i, CCC, 1, 0.3, 3.0, 0, 0, 300);
+    parity("complex CosIntegral",  "CosIntegral[x]",  x1i, CCC, 1, 0.3, 3.0, 0, 0, 300);
+    parity("complex SinhIntegral", "SinhIntegral[x]", x1i, CCC, 1, 0.3, 3.0, 0, 0, 300);
+    parity("complex CoshIntegral", "CoshIntegral[x]", x1i, CCC, 1, 0.3, 3.0, 0, 0, 300);
+    parity("complex LogIntegral",  "LogIntegral[x]",  x1i, CCC, 1, 1.4, 4.0, 0, 0, 300);
+    /* li's cut is on the negative real axis (principal Log), so a negative real
+     * part is the case that pins the branch rather than merely the value. */
+    parity("complex LogIntegral -", "LogIntegral[-x]", x1i, CCC, 1, 0.4, 3.0, 0, 0, 300);
+    parity("complex expint chain",
+           "ExpIntegralEi[x] + CosIntegral[y] SinIntegral[x] - CoshIntegral[y]",
+           xy, CCC, 2, 0.4, 2.5, 0, 0, 300);
     parity("Beta (binary kernel)", "Beta[x, y]", xy, RRR, 2, 0.4, 3.0, 0, 0, 300);
     parity("BesselJ/Y (binary kernel)", "BesselJ[2, x] + BesselY[1, y]", xy, RRR, 2, 0.5, 6.0, 0, 0, 300);
     parity("Factorial", "Factorial[x] + FractionalPart[3 y]", xy, RRR, 2, 0.3, 3.0, 0, 0, 250);
@@ -1611,6 +1630,47 @@ int main(void) {
             else printf("ok:   %-30s 200 calls, varying lengths\n", "stress: frame + tile reuse");
         }
         compiled_free(p); expr_free(b);
+    }
+
+    /* The cancellation gate on the exponential-integral family.  The ascending
+     * series converges everywhere but is only USABLE where the terms do not
+     * dwarf the value they sum to; past that the kernel must DECLINE so the MPFR
+     * path answers, and a test is the only thing standing between "declines" and
+     * "returns eight correct digits and calls it a fast path".
+     *
+     * Both directions matter.  Inside the budget it must NOT decline (or the
+     * fast path silently is not one); outside it, it must. */
+    {
+        const char* inm[1] = { intern_symbol("x") };
+        const CompileType CC1[1] = { CT_COMPLEX };
+        static const struct { const char* body; double re, im; bool want; } G[] = {
+            /* comfortably inside: must answer */
+            { "CosIntegral[x]",   2.0,  1.0, true  },
+            { "SinIntegral[x]",   3.0, -2.0, true  },
+            { "ExpIntegralEi[x]", 4.0,  2.0, true  },
+            { "CoshIntegral[x]",  1.0,  3.0, true  },
+            { "LogIntegral[x]",   3.0,  1.0, true  },
+            /* far outside: the series has thrown the answer away, so decline */
+            { "CosIntegral[x]",  40.0, 30.0, false },
+            { "SinIntegral[x]",  40.0, 30.0, false },
+        };
+        int bad = 0, n = (int)(sizeof G / sizeof G[0]);
+        for (int i = 0; i < n; i++) {
+            Expr* b = parse_expression(G[i].body);
+            CompiledProgram* p = compile_expr(b, inm, CC1, 1);
+            if (!p) { printf("      %s did not compile\n", G[i].body); bad++; expr_free(b); continue; }
+            CompileValue av, out;
+            av.type = CT_COMPLEX; av.v.z = G[i].re + G[i].im * I;
+            bool got = compiled_eval(p, &av, &out);
+            if (got != G[i].want) {
+                printf("      %s at %g%+gI: %s, expected %s\n", G[i].body, G[i].re, G[i].im,
+                       got ? "answered" : "declined", G[i].want ? "answer" : "decline");
+                bad++;
+            }
+            compiled_free(p); expr_free(b);
+        }
+        if (bad) { printf("FAIL: %-30s %d/%d wrong\n", "expint cancellation gate", bad, n); failures++; }
+        else printf("ok:   %-30s %d points, both directions\n", "expint cancellation gate", n);
     }
 
     /* ================= RESULT HEAD, NOT JUST RESULT VALUE =================

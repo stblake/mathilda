@@ -34,6 +34,7 @@
 #include "sym_names.h"
 
 #include <complex.h>
+#include "sf_machine.h"   /* sf_series_usable — the cancellation budget */
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -187,8 +188,11 @@ static bool si_machine_real(double x, double* out) {
     return true;
 }
 
+#endif /* !USE_MPFR */
+
 /* Si(z) for a machine double-complex z via the convergent series. */
-static bool si_machine_complex(double complex z, double complex* out) {
+static bool si_machine_complex(double complex z, double complex* out, double* peak_out) {
+    double peak_ = 0.0;
     double complex w = (creal(z) < 0.0) ? -z : z;
     double zabs = cabs(w);
     double complex term = w, sum = w, w2 = w * w;
@@ -196,14 +200,31 @@ static bool si_machine_complex(double complex z, double complex* out) {
         term *= -w2 * (double)(2 * k - 1)
                 / ((double)(2 * k) * (2 * k + 1) * (2 * k + 1));
         sum += term;
+        { double m_ = cabs(term); if (m_ > peak_) peak_ = m_; }
         if ((double)(2 * k) > zabs && cabs(term) <= 1e-17 * (cabs(sum) + 1.0)) break;
     }
     double complex v = (creal(z) < 0.0) ? -sum : sum;
     if (!isfinite(creal(v)) || !isfinite(cimag(v))) return false;
     *out = v;
+    if (peak_out) *peak_out = peak_;
     return true;
 }
-#endif /* !USE_MPFR */
+
+/* SinIntegral in the shared machine-kernel ABI, for the Compile[] engine and the NDArray
+ * element-wise path.  Wraps the series above rather than duplicating it, so the
+ * cancellation gate and the branch of clog are the same ones the interpreter
+ * uses when it has no MPFR. */
+bool sinintegral_machine_complex(double are, double aim, double* ore, double* oim) {
+    double complex r; double peak = 0.0;
+    if (!si_machine_complex(are + aim * I, &r, &peak)) return false;
+    /* The gate lives HERE, not in the series: this path has somewhere to fall
+     * back to (the MPFR implementation), so declining costs only speed.  The
+     * interpreter's own no-MPFR path has no fallback, and for it an answer good
+     * to eight digits beats no answer at all. */
+    if (!sf_series_usable(peak, cabs(r))) return false;
+    *ore = creal(r); *oim = cimag(r);
+    return true;
+}
 
 #ifdef USE_MPFR
 /* Set an already-init2'd mpfr from an exact-or-real leaf. */
@@ -565,7 +586,7 @@ static Expr* si_one_arg(Expr* arg) {
             double rr, ii;
             if (si_to_double(re, &rr) && si_to_double(im, &ii)) {
                 double complex v;
-                if (si_machine_complex(rr + ii * I, &v)) {
+                if (si_machine_complex(rr + ii * I, &v, NULL)) {
                     if (cimag(v) == 0.0) return expr_new_real(creal(v));
                     return make_complex(expr_new_real(creal(v)),
                                         expr_new_real(cimag(v)));

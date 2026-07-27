@@ -11,6 +11,15 @@
 #include "ndarray.h"
 #include "gamma.h"
 #include "loggamma.h"
+/* The complex forms of the exponential-integral family are the interpreter's own
+ * ascending series, shared rather than reimplemented — each declines where the
+ * series has cancelled away too much of the answer for a double to carry. */
+#include "expintegralei.h"
+#include "sinintegral.h"
+#include "cosintegral.h"
+#include "sinhintegral.h"
+#include "coshintegral.h"
+#include "logintegral.h"
 #include "symtab.h"
 #include "special_functions/sf_machine.h"
 #include <complex.h>
@@ -274,12 +283,12 @@ static bool ndk_InverseErfc_r(double x, double* o) {
     if (!(x > 0.0 && x < 2.0)) return false;
     double v = inverfc_double(x); *o = v; return isfinite(v);
 }
-static const NDUnaryKernel NDKU_ExpIntegralEi = { NULL, ndk_ExpIntegralEi_r, true, false };
-static const NDUnaryKernel NDKU_LogIntegral   = { NULL, ndk_LogIntegral_r,   true, false };
-static const NDUnaryKernel NDKU_SinIntegral   = { NULL, ndk_SinIntegral_r,   true, false };
-static const NDUnaryKernel NDKU_CosIntegral   = { NULL, ndk_CosIntegral_r,   true, false };
-static const NDUnaryKernel NDKU_SinhIntegral  = { NULL, ndk_SinhIntegral_r,  true, false };
-static const NDUnaryKernel NDKU_CoshIntegral  = { NULL, ndk_CoshIntegral_r,  true, false };
+static const NDUnaryKernel NDKU_ExpIntegralEi = { expintegralei_machine_complex, ndk_ExpIntegralEi_r, true, false };
+static const NDUnaryKernel NDKU_LogIntegral   = { logintegral_machine_complex, ndk_LogIntegral_r,   true, false };
+static const NDUnaryKernel NDKU_SinIntegral   = { sinintegral_machine_complex, ndk_SinIntegral_r,   true, false };
+static const NDUnaryKernel NDKU_CosIntegral   = { cosintegral_machine_complex, ndk_CosIntegral_r,   true, false };
+static const NDUnaryKernel NDKU_SinhIntegral  = { sinhintegral_machine_complex, ndk_SinhIntegral_r,  true, false };
+static const NDUnaryKernel NDKU_CoshIntegral  = { coshintegral_machine_complex, ndk_CoshIntegral_r,  true, false };
 static const NDUnaryKernel NDKU_Sinc          = { NULL, ndk_Sinc_r,          true, false };
 static const NDUnaryKernel NDKU_InverseErf    = { NULL, ndk_InverseErf_r,    true, false };
 static const NDUnaryKernel NDKU_InverseErfc   = { NULL, ndk_InverseErfc_r,   true, false };

@@ -31,6 +31,7 @@
 #include "sym_names.h"
 
 #include <complex.h>
+#include "sf_machine.h"   /* sf_series_usable — the cancellation budget */
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -170,22 +171,42 @@ static bool ei_machine_real(double x, double* out) {
     return true;
 }
 
+#endif /* !USE_MPFR */
+
 /* Ei(z) for a machine double-complex z via the convergent series. */
-static bool ei_machine_complex(double complex z, double complex* out) {
+static bool ei_machine_complex(double complex z, double complex* out, double* peak_out) {
+    double peak_ = 0.0;
     double zabs = cabs(z);
     double complex s = 0.0, p = 1.0;
     for (int k = 1; k <= 200000; k++) {
         p *= z / (double)k;              /* z^k/k!     */
         double complex term = p / (double)k;
         s += term;
+        { double m_ = cabs(term); if (m_ > peak_) peak_ = m_; }
         if ((double)k > zabs && cabs(term) <= 1e-17 * cabs(s)) break;
     }
     double complex val = EI_EULER_GAMMA + clog(z) + s;   /* clog: principal */
     if (!isfinite(creal(val)) || !isfinite(cimag(val))) return false;
     *out = val;
+    if (peak_out) *peak_out = peak_;
     return true;
 }
-#endif /* !USE_MPFR */
+
+/* ExpIntegralEi in the shared machine-kernel ABI, for the Compile[] engine and the NDArray
+ * element-wise path.  Wraps the series above rather than duplicating it, so the
+ * cancellation gate and the branch of clog are the same ones the interpreter
+ * uses when it has no MPFR. */
+bool expintegralei_machine_complex(double are, double aim, double* ore, double* oim) {
+    double complex r; double peak = 0.0;
+    if (!ei_machine_complex(are + aim * I, &r, &peak)) return false;
+    /* The gate lives HERE, not in the series: this path has somewhere to fall
+     * back to (the MPFR implementation), so declining costs only speed.  The
+     * interpreter's own no-MPFR path has no fallback, and for it an answer good
+     * to eight digits beats no answer at all. */
+    if (!sf_series_usable(peak, cabs(r))) return false;
+    *ore = creal(r); *oim = cimag(r);
+    return true;
+}
 
 #ifdef USE_MPFR
 /* ------------------------------------------------------------------ */
@@ -654,7 +675,7 @@ static Expr* ei_one_arg(Expr* arg) {
             double rr, ii;
             if (ei_to_double(re, &rr) && ei_to_double(im, &ii)) {
                 double complex v;
-                if (ei_machine_complex(rr + ii * I, &v)) {
+                if (ei_machine_complex(rr + ii * I, &v, NULL)) {
                     if (cimag(v) == 0.0) return expr_new_real(creal(v));
                     return make_complex(expr_new_real(creal(v)),
                                         expr_new_real(cimag(v)));

@@ -63,4 +63,8 @@ bool sf_machine_pfq(const double* a, size_t p, const double* b, size_t q,
 double inverf_double(double x);
 double inverfc_double(double x);
 
+/* Cancellation budget for the ascending series in the exponential-integral
+ * family.  See sf_machine.c for why this is measured, not derived from |z|. */
+bool sf_series_usable(double peak_term, double result_magnitude);
+
 #endif /* MATHILDA_SF_MACHINE_H */
