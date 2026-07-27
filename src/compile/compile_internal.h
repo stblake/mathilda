@@ -16,6 +16,7 @@
 #include <stdint.h>
 #include <complex.h>
 #include "../expr.h"
+#include "compile.h"      /* CompileType, CompiledProgram — completed below */
 
 /* A register (or an instruction's immediate).  `p` carries a machine-kernel
  * function pointer in an immediate; `arr` carries the OWNED EXPR_NDARRAY handle
@@ -33,9 +34,10 @@ typedef struct { uint16_t op, flags; uint32_t dst, a, b; Slot imm; } Instr;
 /* ------------------------------------------------------------------ *
  *  Opcode list                                                        *
  * ------------------------------------------------------------------ *
- * ONE list drives three things: the opcode enum, the VM's computed-goto jump
- * table, and the optimiser's instruction-property table.  Adding an opcode
- * anywhere else is a bug that shows up as a VM crash.
+ * ONE list drives four things: the opcode enum, the VM's computed-goto jump
+ * table, the optimiser's instruction-property table, and the disassembler's
+ * opcode-name table.  Adding an opcode anywhere else is a bug that shows up as
+ * a VM crash.
  *
  * KIND tells the optimiser the instruction's shape:
  *   K_CONST   dst = imm                       (pure, no register reads)
@@ -250,6 +252,53 @@ typedef struct {
 } PartSpec;
 
 void compile_partspec_free(PartSpec* p);
+
+/* ------------------------------------------------------------------ *
+ *  The finished program                                               *
+ * ------------------------------------------------------------------ *
+ * Lives here rather than in compile.c because three modules need to see inside
+ * it: the emitter/VM that builds and runs it, and the disassembler (disasm.c)
+ * that renders it.  It stays out of the PUBLIC compile.h — clients hold it as
+ * an opaque handle and go through the accessors. */
+
+/* A strip-mined MAP loop lifted out as a self-contained program, so a worker
+ * thread can run it with the ordinary `vm_run` entry over its own index range.
+ *
+ * Extracting rather than teaching `vm_run` to stop at an arbitrary pc is what
+ * keeps the change out of the hot path entirely: a stop-pc test would cost a
+ * comparison on EVERY dispatch, for a feature that concerns one loop. The
+ * lifted copy ends in its own OP_RET, so the VM's inner loop is untouched. */
+typedef struct {
+    Instr*   code;        /* [n], internal jump targets rebased to 0 */
+    size_t   n;
+    uint32_t ri, rn;      /* loop index / element-count registers, in frame coords */
+    /* Enough of the parent's frame shape to build a worker's own frame. Carried
+     * here rather than reached through the CompiledProgram so that `vm_run`
+     * needs no extra parameter — it is called on every scalar body too. */
+    size_t   frame_slots;
+    int      nreg, tile_base, ntiles;
+} ParLoop;
+
+struct CompiledProgram {
+    Instr*      code;
+    size_t      n;
+    ParLoop*    ploops;       /* [nploops] parallelisable strip loops */
+    int         nploops;
+    PartSpec**  parts;        /* [nparts] general-Part subscript lists */
+    int         nparts;
+    int         nreg;
+    int         arr_base;     /* array registers are [arr_base, tile_base) */
+    int         tile_base;    /* tile registers are [tile_base, nreg) */
+    int         result_reg;
+    int         ncse;         /* repeated subtrees hoisted by cse_plan */
+    CompileType result_type;
+    size_t      nargs;
+    CompileType* arg_types;   /* [nargs] */
+    unsigned char* argdep;    /* [nargs] which args are read */
+    size_t      frame_slots;  /* registers + tile storage, in Slots */
+    int         ntiles;       /* tile registers; storage is per-CALL, not per-program */
+    bool        all_real;     /* every arg + result is CT_REAL, no array temps */
+};
 
 /* Array and tile temporaries are allocated into virtual ranges and relocated to
  * contiguous banks above the scalar registers at finalize (see patch_reg).  A

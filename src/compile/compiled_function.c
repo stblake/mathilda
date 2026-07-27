@@ -459,6 +459,28 @@ static Expr* builtin_compile_diagnostics(Expr* res) {
     return expr_new_function(expr_new_symbol(SYM_List), items, ni);
 }
 
+/* ------------------------------------------------------------------ *
+ *  CompilePrint                                                        *
+ * ------------------------------------------------------------------ */
+
+/* CompilePrint[cf] — print the bytecode of a CompiledFunction.
+ *
+ * NOT HoldAll, unlike Compile and CompileDiagnostics: the argument has to
+ * evaluate down to the EXPR_COMPILED atom, so that both CompilePrint[Compile[
+ * ...]] and `f = Compile[...]; CompilePrint[f]` work.  Anything else is left
+ * unevaluated rather than reported as an error, the same way the rest of the
+ * system treats an argument it has no meaning for. */
+static Expr* builtin_compile_print(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    const Expr* a = res->data.function.args[0];
+    if (a->type != EXPR_COMPILED) return NULL;
+    char* s = compiled_function_disassemble(a->data.compiled);
+    if (!s) return NULL;
+    printf("%s", s);
+    free(s);
+    return expr_new_symbol(SYM_Null);
+}
+
 void compiled_function_init(void) {
     symtab_add_builtin("Compile", builtin_compile);
     SymbolDef* d = symtab_get_def("Compile");
@@ -478,4 +500,14 @@ void compiled_function_init(void) {
         "subexpression that could not be lowered. For a compiled body it also "
         "gives the result type and the instruction count with and without the "
         "optimiser.");
+
+    symtab_add_builtin("CompilePrint", builtin_compile_print);
+    SymbolDef* dp = symtab_get_def("CompilePrint");
+    if (dp) dp->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("CompilePrint",
+        "CompilePrint[cf] prints the bytecode of the CompiledFunction cf: its "
+        "argument and result registers with their types, the scalar/array/tile "
+        "register banks, and one line per instruction giving both the raw "
+        "operands and a readable rendering. For an object whose body did not "
+        "compile it reports the bail reason instead. Returns Null.");
 }

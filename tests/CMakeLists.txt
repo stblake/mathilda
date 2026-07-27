@@ -644,6 +644,7 @@ set(COMMON_SRC
     ../src/numerical_calculus/ndsolve_compile.c
     ../src/compile/compile.c
     ../src/compile/optimize.c
+    ../src/compile/disasm.c
     ../src/compile/compiled_function.c
     ../src/compile/autocompile.c
     ../src/numerical_roots/nroots.c

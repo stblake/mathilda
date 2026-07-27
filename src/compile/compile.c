@@ -43,48 +43,9 @@
 /* ------------------------------------------------------------------ *
  *  Runtime slot, instruction, program                                 *
  * ------------------------------------------------------------------ */
-/* Slot, the kfn_* kernel signatures, Instr, the opcode enum and the AF_*
- * array flags all live in compile_internal.h — shared with the optimiser. */
-
-
-/* A strip-mined MAP loop lifted out as a self-contained program, so a worker
- * thread can run it with the ordinary `vm_run` entry over its own index range.
- *
- * Extracting rather than teaching `vm_run` to stop at an arbitrary pc is what
- * keeps the change out of the hot path entirely: a stop-pc test would cost a
- * comparison on EVERY dispatch, for a feature that concerns one loop. The
- * lifted copy ends in its own OP_RET, so the VM's inner loop is untouched. */
-typedef struct {
-    Instr*   code;        /* [n], internal jump targets rebased to 0 */
-    size_t   n;
-    uint32_t ri, rn;      /* loop index / element-count registers, in frame coords */
-    /* Enough of the parent's frame shape to build a worker's own frame. Carried
-     * here rather than reached through the CompiledProgram so that `vm_run`
-     * needs no extra parameter — it is called on every scalar body too. */
-    size_t   frame_slots;
-    int      nreg, tile_base, ntiles;
-} ParLoop;
-
-struct CompiledProgram {
-    Instr*      code;
-    size_t      n;
-    ParLoop*    ploops;       /* [nploops] parallelisable strip loops */
-    int         nploops;
-    PartSpec**  parts;        /* [nparts] general-Part subscript lists */
-    int         nparts;
-    int         nreg;
-    int         arr_base;     /* array registers are [arr_base, tile_base) */
-    int         tile_base;    /* tile registers are [tile_base, nreg) */
-    int         result_reg;
-    int         ncse;         /* repeated subtrees hoisted by cse_plan */
-    CompileType result_type;
-    size_t      nargs;
-    CompileType* arg_types;   /* [nargs] */
-    unsigned char* argdep;    /* [nargs] which args are read */
-    size_t      frame_slots;  /* registers + tile storage, in Slots */
-    int         ntiles;       /* tile registers; storage is per-CALL, not per-program */
-    bool        all_real;     /* every arg + result is CT_REAL, no array temps */
-};
+/* Slot, the kfn_* kernel signatures, Instr, the opcode enum, the AF_* array
+ * flags, ParLoop and `struct CompiledProgram` itself all live in
+ * compile_internal.h — shared with the optimiser and the disassembler. */
 
 /* ------------------------------------------------------------------ *
  *  Argument name -> index map (interned-pointer hash)                 *
@@ -1460,6 +1421,12 @@ static bool fuse_collect(Ctx* c, const Expr* e, FuseLeaves* L) {
         if (reg < 0) {
             int k = arg_find(c, nm);
             if (k < 0) return true;                 /* not a value we bind */
+            /* A fused leaf is a READ of the argument like any other.  Recording
+             * it here as well as in emit() matters because a fully fused body
+             * never reaches emit()'s symbol case: without this the argument
+             * looks unread, and compiled_arg_deps would tell a client (an FD
+             * Jacobian, say) the function does not depend on it. */
+            c->argdep[k] = 1;
             reg = k; t = c->arg_types[k];
         }
         if (!CT_IS_ARRAY(t)) return true;

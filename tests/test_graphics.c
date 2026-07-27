@@ -345,6 +345,35 @@ void test_plot_legends_metadata(void) {
         " {RGBColor[0.880722, 0.611041, 0.142051], \"c\"}]}", 0);
 }
 
+/* ColorFunctionScaling -> False must hand the colour function the RAW value.
+ *
+ * The clamp that belongs to the scaling branch used to be applied to both, so
+ * every cell below 0 (or above 1) got the colour of the nearest endpoint. A
+ * signed field then renders as a uniform block -- which looks exactly like a
+ * correct plot of a field that really is constant, so nothing about the picture
+ * gives the mistake away. */
+void test_densityplot_unscaled_color_function_gets_raw_value(void) {
+    assert_eval_eq(
+        "Union[Cases[DensityPlot[-0.5, {x, 0, 1}, {y, 0, 1}, PlotPoints -> 2,"
+        " ColorFunctionScaling -> False,"
+        " ColorFunction -> Function[z, RGBColor[0., 0., -z]]],"
+        " RGBColor[__], Infinity]]",
+        "{RGBColor[0.0, 0.0, 0.5]}", 0);
+    /* Above 1 is raw too, not pinned to the top of the ramp. */
+    assert_eval_eq(
+        "Union[Cases[DensityPlot[3.0, {x, 0, 1}, {y, 0, 1}, PlotPoints -> 2,"
+        " ColorFunctionScaling -> False,"
+        " ColorFunction -> Function[z, GrayLevel[z/4]]],"
+        " GrayLevel[_], Infinity]]",
+        "{GrayLevel[0.75]}", 0);
+    /* Default (scaling on) still normalises: a constant field maps to t = 0. */
+    assert_eval_eq(
+        "Union[Cases[DensityPlot[-0.5, {x, 0, 1}, {y, 0, 1}, PlotPoints -> 2,"
+        " ColorFunction -> Function[z, RGBColor[0., 0., z]]],"
+        " RGBColor[__], Infinity]]",
+        "{RGBColor[0.0, 0.0, 0.0]}", 0);
+}
+
 void test_region_function_and_exclusions_split_domain(void) {
     /* RegionFunction excludes the middle band -- two disjoint runs. */
     assert_eval_eq(
@@ -618,6 +647,7 @@ int main(void) {
     TEST(test_filling_builds_polygon);
     TEST(test_filling_splits_at_baseline_crossing);
     TEST(test_plot_legends_metadata);
+    TEST(test_densityplot_unscaled_color_function_gets_raw_value);
     TEST(test_region_function_and_exclusions_split_domain);
     TEST(test_label_style_passthrough);
     TEST(test_listplot_returns_graphics_head);

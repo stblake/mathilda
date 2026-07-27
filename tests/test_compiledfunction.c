@@ -9,6 +9,10 @@
 #include "test_utils.h"
 #include "symtab.h"
 #include "core.h"
+#include "expr.h"
+#include "sym_intern.h"
+#include "compile/compile.h"
+#include "compile/compiled_function.h"
 
 /* Integer-typed compiled functions return exact Integers. */
 void test_cf_integer(void) {
@@ -214,6 +218,161 @@ void test_cf_array_argspec(void) {
     assert_eval_eq("Head[Compile[{{v, _Integer, 2}}, v]]", "Compile", 0);  /* no integer dtype */
 }
 
+/* ------------------------------------------------------------------ *
+ *  CompilePrint / disassembler                                         *
+ * ------------------------------------------------------------------ *
+ * Asserted through the C entry point rather than through the builtin,
+ * because CompilePrint[] writes to stdout and returns Null — the return
+ * value proves nothing about the listing.  The listing is deterministic
+ * by construction (kernels are resolved to names, callee programs and
+ * parallel loops are numbered, no address is ever printed), which is
+ * exactly what makes these substring assertions stable. */
+
+static char* disasm_of(const char* src) {
+    Expr* parsed = parse_expression(src);
+    ASSERT(parsed != NULL);
+    Expr* v = evaluate(parsed);
+    expr_free(parsed);
+    ASSERT(v != NULL && v->type == EXPR_COMPILED);
+    char* s = compiled_function_disassemble(v->data.compiled);
+    expr_free(v);
+    ASSERT(s != NULL);
+    return s;
+}
+
+static void has(const char* text, const char* needle, const char* what) {
+    if (!strstr(text, needle)) {
+        fprintf(stderr, "FAIL: %s — expected \"%s\" in disassembly:\n%s\n", what, needle, text);
+        exit(1);
+    }
+}
+
+static void lacks(const char* text, const char* needle, const char* what) {
+    if (strstr(text, needle)) {
+        fprintf(stderr, "FAIL: %s — unexpected \"%s\" in disassembly:\n%s\n", what, needle, text);
+        exit(1);
+    }
+}
+
+/* Header, scalar opcodes, and the constants folded INTO the instructions:
+ * `_RK` is the whole point of looking at a polynomial body. */
+void test_disasm_scalar(void) {
+    char* d = disasm_of("Compile[{{x, _Real}}, x^2 + 2.5 x + 1]");
+    has(d, "R0   : Real", "argument register and type");
+    has(d, "Result", "result line");
+    has(d, "all-Real fast path", "all-Real signature reported");
+    has(d, "POWI_R", "integer power opcode");
+    has(d, "MUL_RK", "constant folded into the multiply");
+    has(d, "ADD_RK", "constant folded into the add");
+    has(d, "R0 * 2.5", "rendered constant operand");
+    has(d, "return R", "RET rendering");
+    /* Every CONST that survives must have had its type recovered; raw bits
+     * mean the inference gave up. */
+    lacks(d, "0x", "no un-typed constants");
+    free(d);
+}
+
+/* A special function lowers to a machine kernel whose immediate is a bare
+ * function pointer; the listing must name it, not print an address. */
+void test_disasm_kernel_names(void) {
+    char* d = disasm_of("Compile[{{x, _Real}}, Gamma[x] + Erf[x]]");
+    has(d, "<Gamma>", "unary kernel resolved to its symbol");
+    has(d, "Gamma[R", "kernel rendered as a call");
+    free(d);
+
+    char* n = disasm_of("Compile[{{a, _Real}, {b, _Real}, {c, _Real}, {z, _Real}}, "
+                        "Hypergeometric2F1[a, b, c, z]]");
+    has(n, "KERNN", "n-ary kernel opcode");
+    has(n, "<Hypergeometric2F1>", "n-ary kernel resolved");
+    has(n, "[R", "operand range printed");
+    free(n);
+}
+
+/* Control flow: branch targets are marked and rendered as jumps. */
+void test_disasm_control_flow(void) {
+    char* d = disasm_of("Compile[{{x, _Real}}, If[x > 0, Sqrt[x], -Sqrt[-x]]]");
+    has(d, "JZ", "conditional branch");
+    has(d, "goto", "rendered jump");
+    has(d, "\n>", "branch target marked in the gutter");
+    free(d);
+
+    char* l = disasm_of("Compile[{{n, _Integer}}, Module[{s = 0.}, "
+                        "Do[s = s + 1./k, {k, 1, n}]; s]]");
+    has(l, "INC_I", "loop counter increment");
+    has(l, "R2 = 0.", "Real constant typed through the MOVE that initialises it");
+    free(l);
+}
+
+/* Arrays: the three register banks, the strip-mined loop and the fan-out
+ * marker are the facts a fused body is read for. */
+void test_disasm_arrays(void) {
+    char* d = disasm_of("Compile[{{v, _Real, 1}}, v^2 + 2 v + 1]");
+    has(d, "V0   : Real[1]", "array argument keeps element type and rank");
+    has(d, "APAR", "parallel fan-out marker emitted");
+    has(d, "parallel loop", "fan-out reported in the header");
+    has(d, "VLOAD_R", "strip-mined load");
+    has(d, "VSTORE_R", "strip-mined store");
+    has(d, "T", "tile registers named");
+    /* argdep must count a fused leaf as a read of the argument. */
+    lacks(d, "(unused)", "fused array argument is not reported unused");
+    free(d);
+
+    char* p = disasm_of("Compile[{{v, _Real, 1}}, v[[2 ;; 3]]]");
+    has(p, "A_PART", "general Part opcode");
+    has(p, "Span[2, 3]", "literal subscript rendered from the PartSpec");
+    free(p);
+}
+
+/* A body outside the compilable subset has no bytecode, so the useful
+ * answer is why — the same question CompileDiagnostics answers about a
+ * body, asked about an object. */
+void test_disasm_uncompiled(void) {
+    char* d = disasm_of("Compile[{x}, Integrate[x, x]]");
+    has(d, "not compiled", "reports that there is no program");
+    has(d, "Reason", "bail reason reported");
+    has(d, "Integrate[x, x]", "offending subexpression reported");
+    free(d);
+}
+
+/* OP_CALL's immediate is a borrowed callee program, listed once in its own
+ * numbered section.  A user Compile[] never emits one (that needs
+ * COMPILE_FOLD_GLOBALS, which only the autocompile paths set), so drive the
+ * engine directly rather than leave the worklist untested. */
+void test_disasm_callee_program(void) {
+    /* Big enough that the inliner declines and a real CALL is emitted. */
+    Expr* def = parse_expression(
+        "gBig = Compile[{{x, _Real}}, Sin[x] + Cos[x] + Sin[2 x] + Cos[2 x] + "
+        "Sin[3 x] + Cos[3 x] + Sin[4 x] + Cos[4 x] + Sin[5 x] + Cos[5 x] + "
+        "Sin[6 x] + Cos[6 x] + Sin[7 x] + Cos[7 x]]");
+    ASSERT(def != NULL);
+    expr_free(evaluate(def));
+    expr_free(def);
+
+    Expr* body = parse_expression("gBig[y] + 1.");
+    ASSERT(body != NULL);
+    const char* names[1]; names[0] = intern_symbol("y");
+    CompileType types[1]; types[0] = CT_REAL;
+    CompiledProgram* p = compile_expr_ex(body, names, types, 1, COMPILE_FOLD_GLOBALS);
+    expr_free(body);
+    ASSERT(p != NULL);
+
+    char* d = compiled_disassemble(p, names);
+    ASSERT(d != NULL);
+    has(d, "CALL", "call opcode");
+    has(d, "<call #1>", "callee numbered, not printed as an address");
+    has(d, "--- called program #1 ---", "callee listed in its own section");
+    free(d);
+    compiled_free(p);
+}
+
+/* The language-level contract: prints and returns Null, and leaves anything
+ * that is not a CompiledFunction unevaluated. */
+void test_compile_print_builtin(void) {
+    assert_eval_eq("CompilePrint[Compile[{x}, x^2]]", "Null", 0);
+    assert_eval_eq("CompilePrint[3]", "CompilePrint[3]", 0);
+    assert_eval_eq("CompilePrint[]", "CompilePrint[]", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -228,6 +387,13 @@ int main(void) {
     TEST(test_cf_array_argspec);
     TEST(test_cf_part);
     TEST(test_compile_diagnostics);
+    TEST(test_disasm_scalar);
+    TEST(test_disasm_kernel_names);
+    TEST(test_disasm_control_flow);
+    TEST(test_disasm_arrays);
+    TEST(test_disasm_uncompiled);
+    TEST(test_disasm_callee_program);
+    TEST(test_compile_print_builtin);
 
     printf("All CompiledFunction tests passed!\n");
     return 0;

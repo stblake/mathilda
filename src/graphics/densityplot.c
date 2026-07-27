@@ -278,10 +278,21 @@ Expr* builtin_densityplot(Expr* res) {
                 continue;
 
             double avg = (v00 + v10 + v11 + v01) * 0.25;
-            double t   = opts.color_function_scaling
-                       ? (avg - zmin) / zspan : avg;
-            if (t < 0.0) t = 0.0;
-            if (t > 1.0) t = 1.0;
+            /* The clamp belongs to the SCALING branch only, where it just
+             * absorbs float error at the ends of (avg - zmin)/zspan.  Applying
+             * it to the raw value as well would defeat the whole point of
+             * ColorFunctionScaling -> False: a function whose range is not
+             * inside [0,1] — anything signed, say — would have every negative
+             * cell flattened to the colour of 0, silently, producing a plot
+             * that looks like a correct plot of a different function.  Raw
+             * means raw; the colour function owns its own domain.  Both built-in
+             * ramps (thermal_rgb, named_color_ramp) clamp internally. */
+            double t = avg;
+            if (opts.color_function_scaling) {
+                t = (avg - zmin) / zspan;
+                if (t < 0.0) t = 0.0;
+                if (t > 1.0) t = 1.0;
+            }
 
             prims[np++] = dp_color(opts.color_function, t);
 

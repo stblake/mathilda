@@ -132,6 +132,22 @@ size_t      compiled_num_args(const CompiledProgram* p);
  * benchmarks can measure what the optimiser removed; not needed to run a program. */
 size_t      compiled_num_instructions(const CompiledProgram* p);
 
+/* Human-readable disassembly of the whole program: a header (argument and
+ * result registers with their types, the three register banks, instruction and
+ * CSE counts) followed by one line per instruction giving both the raw operands
+ * and a rendered pseudo-source form, then a section per callee program reached
+ * through OP_CALL.  `arg_names` labels the argument registers and may be NULL.
+ *
+ * The counts from compiled_num_instructions / compiled_num_cse say how much
+ * code there is; this says WHICH code, which is the only way to see whether the
+ * constants folded, the array chain fused, or the map will fan out.  No pointer
+ * values appear in the output — kernels are resolved to symbol names — so it is
+ * stable enough to diff and to assert on.
+ *
+ * Caller owns the returned string and must free() it; NULL on allocation
+ * failure.  Implemented in disasm.c. */
+char*       compiled_disassemble(const CompiledProgram* p, const char* const* arg_names);
+
 /* True when every argument and the result are CT_REAL with no array temporaries,
  * i.e. compiled_eval_real applies.  Callers that hold a generic program (a user
  * CompiledFunction, say) use this to take the unboxed entry point instead of

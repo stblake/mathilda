@@ -51,6 +51,16 @@ const CompileType* compiled_function_arg_types(const CompiledFunction* cf);
  * instead of routing every call back through the evaluator. */
 const CompiledProgram* compiled_function_program(const CompiledFunction* cf);
 
+/* The object's signature followed by compiled_disassemble of its program — what
+ * CompilePrint[] prints.  For an object whose body was outside the compilable
+ * subset there is no program to show, so it reports the bail reason and the
+ * subexpression that caused it instead: "why does this run interpreted" is the
+ * same question, asked of an object rather than of a body.
+ *
+ * Caller owns the returned string and must free() it; NULL on allocation
+ * failure.  Implemented in disasm.c. */
+char* compiled_function_disassemble(const CompiledFunction* cf);
+
 /* Registers the `Compile` builtin (attributes + docstring). Called from
  * core_init. */
 void compiled_function_init(void);
