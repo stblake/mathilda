@@ -668,6 +668,17 @@ primitive for factorial ratios and asymptotics.
 - **Symbolic infinities.** `LogGamma[Infinity] = Infinity`,
   `LogGamma[-Infinity] = Indeterminate`, `LogGamma[I Infinity] =
   LogGamma[ComplexInfinity] = ComplexInfinity`.
+- **Branch continuity across the reflection.** For `Re[z] < 1/2` both numeric
+  paths use `LogGamma[z] = Log[Pi] - Log[Sin[Pi z]] - LogGamma[1-z]`, where the
+  log of the sine must be the *continued* one. Factoring
+  `Sin[Pi z] = E^(-I Pi z) (E^(2 I Pi z) - 1)/(2 I)` puts the whole winding in
+  the exact `-I Pi z` term and leaves a factor near `-1` whose principal log is
+  safe. At `Im[z] = 0` this is the limit from above, matching the
+  `Im = -Ceiling[-z] Pi` convention used on the real axis. Before 2026-07-27 a
+  principal `Log[Pi/Sin[Pi z]]` was used instead: correct only in the strip
+  `-1 < Re[z] < 0`, and short by a multiple of `2 Pi I` outside it, so
+  `LogGamma[-4.5 + 3. I]` equalled `Log[Gamma[-4.5 + 3. I]]` rather than the
+  continuation.
 - **Numerics.** Machine real via `lgamma`; arbitrary-precision real via MPFR
   `lgamma`; machine complex via a Lanczos log-series; arbitrary-precision
   complex via a Stirling series with argument reduction (the continuous

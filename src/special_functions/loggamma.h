@@ -13,10 +13,19 @@
 #define MATHILDA_LOGGAMMA_H
 
 #include "expr.h"
+#include <stdbool.h>
 
 /* Builtin entry point: LogGamma[z]. Takes ownership of res per the builtin
  * contract (returns a new Expr* on success, NULL to stay unevaluated). */
 Expr* builtin_loggamma(Expr* res);
+
+/* Machine-complex LogGamma, in the shared kernel ABI (false to decline, at the
+ * poles and wherever the result is not finite).
+ *
+ * This is the CONTINUED log-gamma, not Log[Gamma[z]] — its imaginary part grows
+ * without bound with Im(z).  Shared with the Compile[] engine and the NDArray
+ * path so there is exactly one place where the branch structure lives. */
+bool loggamma_machine_complex(double are, double aim, double* ore, double* oim);
 
 /* Register the builtin, its attributes and docstring. */
 void loggamma_init(void);

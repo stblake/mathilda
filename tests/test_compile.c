@@ -779,6 +779,20 @@ int main(void) {
     parity("complex FracPart", "FractionalPart[x]",    x1i, CCC, 1, -4.0, 4.0, 0, 0, 300);
     parity("complex Rescale", "Rescale[x, {0., 4.}]",  x1i, CCC, 1, -3.0, 5.0, 0, 0, 300);
     parity("complex Rescale 2", "Rescale[x, {1., 5.}] + Sign[y]", xy, CCC, 2, -3.0, 5.0, 0, 0, 300);
+    /* Complex Gamma and LogGamma, sharing the interpreter's own Lanczos series.
+     * Both half-planes and both sides of the Re = 1/2 reflection boundary: the
+     * reflection is where the branch structure lives, and LogGamma's continued
+     * branch there was wrong (principal, so short by a multiple of 2 pi i) until
+     * this work.  `x - 3.` shifts a positive-quadrant sample into the upper half
+     * plane with mixed real part; Conjugate puts the mirror image in the lower. */
+    parity("complex Gamma",       "Gamma[x]",                 x1i, CCC, 1, 0.3, 3.0, 0, 0, 300);
+    parity("complex Gamma refl",  "Gamma[x - 3.]",            x1i, CCC, 1, 0.2, 4.0, 0, 0, 300);
+    parity("complex Gamma refl-", "Gamma[Conjugate[x] - 3.]", x1i, CCC, 1, 0.2, 4.0, 0, 0, 300);
+    parity("complex LogGamma",      "LogGamma[x]",                 x1i, CCC, 1, 0.3, 3.0, 0, 0, 300);
+    parity("complex LogGamma refl", "LogGamma[x - 3.]",            x1i, CCC, 1, 0.2, 4.0, 0, 0, 300);
+    parity("complex LogGamma refl-","LogGamma[Conjugate[x] - 3.]", x1i, CCC, 1, 0.2, 4.0, 0, 0, 300);
+    parity("complex LogGamma far",  "LogGamma[x + 12. I]",         x1i, CCC, 1, 0.3, 3.0, 0, 0, 300);
+    parity("complex Gamma chain", "Gamma[x] Gamma[y] / Gamma[x + y]", xy, CCC, 2, 0.3, 2.5, 0, 0, 300);
     parity("Beta (binary kernel)", "Beta[x, y]", xy, RRR, 2, 0.4, 3.0, 0, 0, 300);
     parity("BesselJ/Y (binary kernel)", "BesselJ[2, x] + BesselY[1, y]", xy, RRR, 2, 0.5, 6.0, 0, 0, 300);
     parity("Factorial", "Factorial[x] + FractionalPart[3 y]", xy, RRR, 2, 0.3, 3.0, 0, 0, 250);

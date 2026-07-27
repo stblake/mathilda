@@ -198,8 +198,31 @@ static double complex lg_lanczos(double complex z) {
         -0.13857109526572012,      9.9843695780195716e-6,   1.5056327351493116e-7
     };
     if (creal(z) < 0.5) {
-        /* Gamma(z) Gamma(1-z) = pi / sin(pi z); principal-branch log. */
-        return clog(M_PI / csin(M_PI * z)) - lg_lanczos(1.0 - z);
+        /* Reflection: LogGamma(z) = log(pi) - log(sin(pi z)) - LogGamma(1-z).
+         *
+         * The log of the sine must be the CONTINUED one, not the principal one.
+         * `clog(pi/csin(pi z))` is principal, and it happens to be right only in
+         * the strip -1 < Re(z) < 0; beyond that it is short by a multiple of
+         * 2 pi i, so LogGamma[-4.5 + 3 I] came back exactly equal to
+         * Log[Gamma[-4.5 + 3 I]] (i.e. not continued at all) while the real-axis
+         * path and the Re(z) >= 0.5 path both gave the true continuation.  The
+         * function was discontinuous across its own reflection boundary.
+         *
+         * Factor the winding out analytically instead.  From
+         *     sin(pi z) = e^(-i pi z) (e^(2 i pi z) - 1) / (2i),
+         * the second factor stays near -1 whenever Im(z) > 0 (|e^(2 i pi z)| =
+         * e^(-2 pi Im z) < 1), so ITS principal log is safe, and the whole
+         * winding sits in the -i pi z term where it is exact:
+         *     log sin(pi z) = -i pi z + Log((e^(2 i pi z) - 1) / (2i)).
+         * Below the real axis the mirrored form is the stable one.  At Im(z) = 0
+         * this takes the limit from ABOVE, which is the convention the real path
+         * already documents (Im = -Pi Ceiling[-z]) — so the two now agree where
+         * they meet, which they did not before. */
+        double complex ipz = I * M_PI * z;
+        double complex logsin;
+        if (cimag(z) >= 0.0) logsin = -ipz + clog((cexp(2.0 * ipz) - 1.0) / (2.0 * I));
+        else                 logsin =  ipz + clog((cexp(-2.0 * ipz) - 1.0) / (-2.0 * I));
+        return log(M_PI) - logsin - lg_lanczos(1.0 - z);
     }
     double complex z1 = z - 1.0;
     double complex x = c[0];
@@ -207,6 +230,13 @@ static double complex lg_lanczos(double complex z) {
     double complex t = z1 + g + 0.5;
     return 0.5 * log(2.0 * M_PI) + (z1 + 0.5) * clog(t) - t + clog(x);
 }
+
+bool loggamma_machine_complex(double are, double aim, double* ore, double* oim) {
+    double complex r = lg_lanczos(are + aim * I);
+    *ore = creal(r); *oim = cimag(r);
+    return isfinite(*ore) && isfinite(*oim);
+}
+
 
 #ifdef USE_MPFR
 /* ------------------------------------------------------------------ */
@@ -280,16 +310,6 @@ static void lcx_log(lcx* out, const lcx* z, mpfr_prec_t p) {
     mpfr_clears(mag, ang, (mpfr_ptr)0);
 }
 
-/* out = sin(z) = sin(a)cosh(b) + i cos(a)sinh(b). */
-static void lcx_sin(lcx* out, const lcx* z, mpfr_prec_t p) {
-    mpfr_t sa, ca, chb, shb;
-    mpfr_inits2(p, sa, ca, chb, shb, (mpfr_ptr)0);
-    mpfr_sin_cos(sa, ca, z->re, GRND);
-    mpfr_sinh_cosh(shb, chb, z->im, GRND);
-    mpfr_mul(out->re, sa, chb, GRND);
-    mpfr_mul(out->im, ca, shb, GRND);
-    mpfr_clears(sa, ca, chb, shb, (mpfr_ptr)0);
-}
 
 /* Fill be[1..K] with the even Bernoulli numbers B_2, B_4, ..., B_{2K} as exact
  * GMP rationals (the be[] entries must be mpq_init'd by the caller). Uses the
@@ -344,21 +364,76 @@ static void lg_bernoulli_even(mpq_t* be, size_t K) {
  * handles Re(z) < 1/2. */
 static void lcx_loggamma(lcx* out, const lcx* z, mpfr_prec_t wp) {
     if (mpfr_cmp_d(z->re, 0.5) < 0) {
-        /* LogGamma(z) = Log(pi/sin(pi z)) - LogGamma(1-z) (principal branch). */
-        lcx omz, lg1, piz, spz, ratio, pic;
-        lcx_init(&omz, wp); lcx_init(&lg1, wp); lcx_init(&piz, wp);
-        lcx_init(&spz, wp); lcx_init(&ratio, wp); lcx_init(&pic, wp);
+        /* LogGamma(z) = log(pi) - log(sin(pi z)) - LogGamma(1-z), with the
+         * CONTINUED log of the sine.
+         *
+         * `lcx_log(pi / lcx_sin(pi z))` is principal, and a principal log here
+         * truncates the winding: it is right only in the strip -1 < Re(z) < 0
+         * and short by a multiple of 2 pi i beyond it, which made this path
+         * disagree with the Re(z) >= 1/2 branch just below (whose whole point,
+         * per the comment above, is to be branch-continuous) and with the
+         * machine path.  Same defect, same fix as lg_lanczos.
+         *
+         * From sin(pi z) = e^(-i pi z) (e^(2 i pi z) - 1) / (2i), the winding is
+         * entirely in the -i pi z factor, where it is exact; the remaining
+         * factor stays near -1 for Im(z) > 0 and so its principal log is safe.
+         * Writing z = x + i y, the exponential needs no complex exp:
+         *     e^(2 i pi z) = e^(-2 pi y) (cos 2 pi x + i sin 2 pi x)
+         * and (E - 1)/(2i) = (Im E)/2 + i (1 - Re E)/2.  Below the real axis the
+         * mirrored form is the stable one.  At y = 0 this is the limit from
+         * ABOVE, matching the convention the real path documents. */
+        lcx omz, lg1, s, ls, pic;
+        lcx_init(&omz, wp); lcx_init(&lg1, wp); lcx_init(&s, wp);
+        lcx_init(&ls, wp);  lcx_init(&pic, wp);
         mpfr_const_pi(pic.re, GRND); mpfr_set_ui(pic.im, 0, GRND);
         mpfr_ui_sub(omz.re, 1, z->re, GRND);     /* 1 - z */
         mpfr_neg(omz.im, z->im, GRND);
         lcx_loggamma(&lg1, &omz, wp);            /* LogGamma(1-z), Re >= 1/2 */
-        lcx_mul(&piz, &pic, z, wp);              /* pi z */
-        lcx_sin(&spz, &piz, wp);                 /* sin(pi z) */
-        lcx_div(&ratio, &pic, &spz, wp);         /* pi / sin(pi z) */
-        lcx_log(out, &ratio, wp);                /* Log(pi/sin(pi z)) */
+
+        bool upper = (mpfr_sgn(z->im) >= 0);
+        mpfr_t tp, tpx, tpy, r, a, b, lpi;
+        mpfr_init2(tp, wp);  mpfr_init2(tpx, wp); mpfr_init2(tpy, wp);
+        mpfr_init2(r, wp);   mpfr_init2(a, wp);   mpfr_init2(b, wp);
+        mpfr_init2(lpi, wp);
+        mpfr_mul_ui(tp, pic.re, 2, GRND);        /* 2 pi */
+        mpfr_mul(tpx, tp, z->re, GRND);          /* 2 pi x */
+        mpfr_mul(tpy, tp, z->im, GRND);          /* 2 pi y */
+        /* r = e^(-2 pi |y|) <= 1 either way, so no overflow. */
+        if (upper) mpfr_neg(r, tpy, GRND); else mpfr_set(r, tpy, GRND);
+        mpfr_exp(r, r, GRND);
+        mpfr_cos(a, tpx, GRND); mpfr_mul(a, a, r, GRND);      /* Re E */
+        mpfr_sin(b, tpx, GRND); mpfr_mul(b, b, r, GRND);      /* Im E (upper) */
+        if (upper) {
+            mpfr_div_ui(s.re, b, 2, GRND);                    /* (Im E)/2 */
+            mpfr_ui_sub(s.im, 1, a, GRND);
+            mpfr_div_ui(s.im, s.im, 2, GRND);                 /* (1 - Re E)/2 */
+        } else {
+            /* E' = e^(-2 i pi z): Re E' = a, Im E' = -b; (E' - 1)/(-2i). */
+            mpfr_div_ui(s.re, b, 2, GRND);
+            mpfr_sub_ui(s.im, a, 1, GRND);
+            mpfr_div_ui(s.im, s.im, 2, GRND);
+        }
+        lcx_log(&ls, &s, wp);
+
+        /* logsin = (+/- pi y + Re log s) + i (-/+ pi x + Im log s), then
+         * out = log(pi) - logsin - LogGamma(1-z). */
+        mpfr_log(lpi, pic.re, GRND);
+        mpfr_div_ui(tpx, tpx, 2, GRND);          /* pi x */
+        mpfr_div_ui(tpy, tpy, 2, GRND);          /* pi y */
+        if (upper) {
+            mpfr_add(out->re, tpy, ls.re, GRND);
+            mpfr_sub(out->im, ls.im, tpx, GRND);
+        } else {
+            mpfr_sub(out->re, ls.re, tpy, GRND);
+            mpfr_add(out->im, ls.im, tpx, GRND);
+        }
+        mpfr_sub(out->re, lpi, out->re, GRND);
+        mpfr_neg(out->im, out->im, GRND);
         lcx_sub(out, out, &lg1);
-        lcx_clear(&omz); lcx_clear(&lg1); lcx_clear(&piz);
-        lcx_clear(&spz); lcx_clear(&ratio); lcx_clear(&pic);
+
+        mpfr_clears(tp, tpx, tpy, r, a, b, lpi, (mpfr_ptr)0);
+        lcx_clear(&omz); lcx_clear(&lg1); lcx_clear(&s);
+        lcx_clear(&ls);  lcx_clear(&pic);
         return;
     }
 

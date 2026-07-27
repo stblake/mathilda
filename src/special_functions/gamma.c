@@ -146,6 +146,13 @@ static double complex gamma_lanczos(double complex z) {
     return csqrt(2.0 * M_PI) * cpow(t, z + 0.5) * cexp(-t) * x;
 }
 
+bool gamma_machine_complex(double are, double aim, double* ore, double* oim) {
+    double complex r = gamma_lanczos(are + aim * I);
+    *ore = creal(r); *oim = cimag(r);
+    return isfinite(*ore) && isfinite(*oim);
+}
+
+
 /* ------------------------------------------------------------------ */
 /* MPFR helpers                                                       */
 /* ------------------------------------------------------------------ */

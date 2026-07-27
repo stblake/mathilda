@@ -9,6 +9,8 @@
  * their own modules; this file owns only the libc-expressible elementary set. */
 
 #include "ndarray.h"
+#include "gamma.h"
+#include "loggamma.h"
 #include "symtab.h"
 #include "special_functions/sf_machine.h"
 #include <complex.h>
@@ -199,7 +201,10 @@ static const NDBinaryKernel NDKB_Quotient = { ndk_Quotient_c, true };
  * declines and the evaluator degrades that call to the exact List path. */
 
 static bool ndk_Gamma_r(double x, double* o) { double v = tgamma(x); *o = v; return isfinite(v); }
-static const NDUnaryKernel NDKU_Gamma = { NULL, ndk_Gamma_r, true, false };
+/* Complex Gamma is the interpreter's own Lanczos series, shared rather than
+ * reimplemented — see gamma.h.  real_closed stays true, so a real argument
+ * still takes tgamma above and only a complex one reaches the Lanczos path. */
+static const NDUnaryKernel NDKU_Gamma = { gamma_machine_complex, ndk_Gamma_r, true, false };
 
 /* Factorial[x] = Gamma[x + 1] over a real array (matches builtin_factorial's
  * real path). A pole (negative integer) yields non-finite -> declines. */
@@ -212,7 +217,11 @@ static bool ndk_LogGamma_r(double x, double* o) {
     if (!(x > 0.0)) return false;
     double v = lgamma(x); *o = v; return isfinite(v);
 }
-static const NDUnaryKernel NDKU_LogGamma = { NULL, ndk_LogGamma_r, true, false };
+/* Complex LogGamma is the CONTINUED log-gamma (imaginary part unbounded in
+ * Im z), shared with the interpreter so the branch structure has one home.
+ * real_closed stays true: the real kernel above declines for x <= 0, where the
+ * true value is complex and a CT_REAL program cannot carry it. */
+static const NDUnaryKernel NDKU_LogGamma = { loggamma_machine_complex, ndk_LogGamma_r, true, false };
 
 static bool ndk_Erf_r(double x, double* o)  { double v = erf(x);  *o = v; return isfinite(v); }
 static bool ndk_Erfc_r(double x, double* o) { double v = erfc(x); *o = v; return isfinite(v); }

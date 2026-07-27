@@ -115,6 +115,49 @@ void test_loggamma_machine_real_negative() {
     assert_close("Im[LogGamma[-2.5]]", -3.0 * M_PI, 1e-12);
 }
 
+/* The branch structure of the complex path, which is where this function is
+ * actually hard and where it was actually wrong.
+ *
+ * The reflection used for Re(z) < 1/2 was a PRINCIPAL log of pi/sin(pi z).  That
+ * is right only in the strip -1 < Re(z) < 0 — which is exactly where the one
+ * pre-existing reflection test sat (Re = -0.5), so it passed throughout — and is
+ * short by a multiple of 2 pi i beyond it.  LogGamma[-4.5 + 3 I] came back equal
+ * to Log[Gamma[-4.5 + 3 I]], i.e. not continued at all.
+ *
+ * These assertions avoid hand-copied reference constants (which would only
+ * restate whatever the code does) in favour of three properties that pin the
+ * branch independently:
+ *
+ *   1. Exp[LogGamma[z]] == Gamma[z].  Gamma is single-valued and has its own
+ *      separate Lanczos implementation, so this catches everything except the
+ *      winding number.
+ *   2. The limit as Im(z) -> 0+ equals the real-axis value, whose imaginary part
+ *      is fixed independently by this file's stated convention Im = -Pi
+ *      Ceiling[-z].  This is what pins the winding.
+ *   3. Machine and arbitrary-precision paths agree — two implementations that
+ *      had the same defect and were fixed separately. */
+void test_loggamma_complex_branch() {
+    /* 1. Exp[LogGamma] == Gamma, well past the strip the old code got right. */
+    assert_close("Abs[Exp[LogGamma[-4.5 + 3. I]]/Gamma[-4.5 + 3. I] - 1]", 0.0, 1e-12);
+    assert_close("Abs[Exp[LogGamma[-7.5 - 2. I]]/Gamma[-7.5 - 2. I] - 1]", 0.0, 1e-12);
+    assert_close("Abs[Exp[LogGamma[-2.25 + 0.5 I]]/Gamma[-2.25 + 0.5 I] - 1]", 0.0, 1e-12);
+
+    /* 2. Im -> 0+ matches the real-axis convention Im = -Pi Ceiling[-z].
+     *    Ceiling[1.5] = 2, Ceiling[2.5] = 3, Ceiling[4.5] = 5. */
+    assert_close("Im[LogGamma[-1.5 + 1.*^-8 I]]", -2.0 * M_PI, 1e-6);
+    assert_close("Im[LogGamma[-2.5 + 1.*^-8 I]]", -3.0 * M_PI, 1e-6);
+    assert_close("Im[LogGamma[-4.5 + 1.*^-8 I]]", -5.0 * M_PI, 1e-6);
+    /* and the mirror below the axis */
+    assert_close("Im[LogGamma[-4.5 - 1.*^-8 I]]",  5.0 * M_PI, 1e-6);
+
+    /* 3. Machine path == MPFR path (exact arguments force the latter). */
+    assert_close("Abs[LogGamma[-4.5 + 3. I] - N[LogGamma[-9/2 + 3 I], 25]]", 0.0, 1e-12);
+    assert_close("Abs[LogGamma[-10.5 + 3.5 I] - N[LogGamma[-21/2 + 7/2 I], 25]]", 0.0, 1e-11);
+
+    /* Continuity across the Re = 1/2 reflection boundary itself. */
+    assert_close("Abs[LogGamma[0.5 + 3. I] - LogGamma[0.4999999 + 3. I]]", 0.0, 1e-6);
+}
+
 void test_loggamma_machine_complex() {
     assert_close("Re[LogGamma[2.5 + 3 I]]", -1.47095461034884169, 1e-11);
     assert_close("Im[LogGamma[2.5 + 3 I]]",  2.82261563826079945, 1e-11);
@@ -204,6 +247,7 @@ int main() {
     TEST(test_loggamma_machine_real);
     TEST(test_loggamma_machine_real_negative);
     TEST(test_loggamma_machine_complex);
+    TEST(test_loggamma_complex_branch);
     TEST(test_loggamma_arbitrary_precision_real);
     TEST(test_loggamma_arbitrary_precision_complex);
     TEST(test_loggamma_symbolic);

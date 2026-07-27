@@ -30,12 +30,12 @@ behaviour rather than a gap.
 
 | | count | of 103 |
 |---|---|---|
-| Full fast path (real **and** complex) | 55 | 53% |
-| Real only — **complex bails** | 38 | 37% |
+| Full fast path (real **and** complex) | 57 | 55% |
+| Real only — **complex bails** | 36 | 35% |
 | No fast path at all | 10 | 10% |
 
-_(52 / 41 / 10 when first measured; `Sign`, `FractionalPart` and `Rescale` have
-since been closed.)_
+_(52 / 41 / 10 when first measured; `Sign`, `FractionalPart`, `Rescale`,
+`Gamma` and `LogGamma` have since been closed.)_
 
 **The headline is the middle row, and it is the one least visible today.** Real
 coverage went 55 → 93 of 103 during M5 and is effectively finished: all ten
@@ -160,8 +160,15 @@ Three tiers, and the first two are **not** the same size they first appeared:
   listed as eight cheap heads and is not: worth checking result *types*, not
   just values, before calling anything mechanical.)
 
-- **Genuine complex numerics (28):** the special functions. `Gamma`/`LogGamma`
-  need Lanczos with the reflection formula; the exponential-integral family
+- **~~`Gamma`/`LogGamma`~~ — DONE.** Both already had a `double complex` Lanczos
+  series inside the *interpreter* (`gamma.c`, `loggamma.c`); it is now exposed
+  and shared rather than reimplemented, so the compiled and interpreted paths
+  agree bit for bit by construction. Fixing the branch cut was the actual work —
+  see below. `Beta`, `Binomial`, `Pochhammer` and `Hypergeometric0F1` turned out
+  to have complex kernels already.
+
+- **Genuine complex numerics (~26 left):** the rest of the special functions.
+  The exponential-integral family
   needs branch-cut handling; the hypergeometrics need the complex series (which
   the pFq machine kernel is already close to, since it sums with complex terms
   internally). Each needs a parity test against the MPFR path, and each must
@@ -250,9 +257,10 @@ call back to the interpreter which can.
    not mechanical: they return `Complex[Integer, Integer]`, which the type
    lattice cannot express. Closing them means adding a complex-integer type —
    a real design change, and worth doing only if something wants it.
-3. **Complex `Gamma`/`LogGamma`** — they sit under the largest number of other
-   things (`Beta`, `Binomial`, `Pochhammer`, the hypergeometrics), so one kernel
-   unlocks several.
+3. ~~**Complex `Gamma`/`LogGamma`**~~ — **done**. Look for an existing
+   `static double complex` implementation inside the interpreter before writing
+   a kernel: both were already there, and so was `Sign`'s. The work that
+   remained was a branch-cut bug, not numerics.
 4. **Complex exponential-integral family and hypergeometrics** — the bulk of the
    remaining work, and the part that genuinely needs branch-cut care.
 5. **Interpreter first, then kernel** for Class A1, if those functions are ever

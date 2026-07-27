@@ -101,6 +101,13 @@ arith ops = 8.0 ns/op; mixed-libm 150 ns/call; array len-4096 1.0x, 61 ns/elemen
       mechanical — they return `Complex[Integer, Integer]` and the lattice has no
       complex-integer type. Remaining: 28 special functions needing genuine
       complex numerics with matching branch cuts.
+      **Done: `Gamma`, `LogGamma`** (55 -> 57). No new numerics — both already
+      had a `double complex` Lanczos INSIDE the interpreter; exposing and
+      sharing it makes compiled and interpreted agree bit for bit. Check for an
+      existing `static double complex` implementation before writing a kernel.
+      The real work was a branch-cut bug: the `Re < 1/2` reflection used a
+      PRINCIPAL log in both the machine and MPFR paths, correct only in the
+      strip `-1 < Re < 0`. Next: the exponential-integral family.
 - [ ] **`CompileDiag`** — a bail still reports nothing. The audit covers heads;
       per-body diagnostics would cover the rest.
 - [ ] **Native backend** (`CompilationTarget -> "C"`), behind a build flag.
