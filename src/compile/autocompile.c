@@ -8,6 +8,7 @@
 #include <complex.h>
 
 #include "../expr.h"
+#include "../arithmetic.h"   /* make_complex */
 #include "../sym_intern.h"   /* intern_symbol */
 
 #define AC_MAX_VARS 16       /* boxed fallback path caps here; real path is unbounded */
@@ -28,7 +29,13 @@ AutoCompiled* autocompile_new(const Expr* body, const Expr* const* vars, size_t 
         names[i] = intern_symbol(vars[i]->data.symbol.name);
         types[i] = CT_REAL;
     }
-    CompiledProgram* prog = compile_expr(body, names, types, nvars);
+    /* FOLD_GLOBALS is safe here and nowhere else: an AutoCompiled is built and
+     * freed inside one builtin call, so a folded symbol (e.g. the outer
+     * iteration variable of a nested Table) cannot be reassigned while the
+     * program lives.  It is what lets the inner Table of
+     * Table[f[x,y], {y,..}, {x,..}] compile at all. */
+    CompiledProgram* prog = compile_expr_ex(body, names, types, nvars,
+                                            COMPILE_FOLD_GLOBALS);
     free(names); free(types);
     if (!prog) return NULL;
 
@@ -78,6 +85,29 @@ bool autocompiled_eval_complex(const AutoCompiled* ac, const double* xs, double 
         case CT_REAL:    *out = o.v.r;         return true;
         case CT_COMPLEX: *out = o.v.z;         return true;
         default:         return false;         /* BOOL: not a number */
+    }
+}
+
+Expr* autocompiled_eval_boxed(const AutoCompiled* ac, const double* xs) {
+    if (ac->real_result) {                      /* all-real: no boxing, self-guards finite */
+        double y;
+        return compiled_eval_real(ac->prog, xs, &y) ? expr_new_real(y) : NULL;
+    }
+    if (ac->nvars > AC_MAX_VARS) return NULL;
+    CompileValue args[AC_MAX_VARS], o;
+    for (size_t i = 0; i < ac->nvars; i++) { args[i].type = CT_REAL; args[i].v.r = xs[i]; }
+    if (!compiled_eval(ac->prog, args, &o)) return NULL;
+    switch (o.type) {
+        case CT_INT:  return expr_new_integer(o.v.i);
+        case CT_REAL: return isfinite(o.v.r) ? expr_new_real(o.v.r) : NULL;
+        case CT_COMPLEX:
+            if (!isfinite(creal(o.v.z)) || !isfinite(cimag(o.v.z))) return NULL;
+            /* A zero imaginary part is reported as a plain real, matching how the
+             * interpreter's arithmetic collapses Complex[r, 0.]. */
+            return cimag(o.v.z) == 0.0
+                 ? expr_new_real(creal(o.v.z))
+                 : make_complex(expr_new_real(creal(o.v.z)), expr_new_real(cimag(o.v.z)));
+        default: return NULL;                   /* BOOL / array: interpreter handles it */
     }
 }
 

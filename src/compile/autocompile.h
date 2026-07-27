@@ -48,6 +48,14 @@ bool autocompiled_eval_real(const AutoCompiled* ac, const double* xs, double* ou
  * result. */
 bool autocompiled_eval_complex(const AutoCompiled* ac, const double* xs, double _Complex* out);
 
+/* Evaluate at real inputs xs[nvars] → a freshly allocated Expr of the result's
+ * own type, or NULL when the caller should fall back to the interpreter for this
+ * point.  Unlike autocompiled_eval_real this does NOT flatten an integer result
+ * to a double: a body like If[p, 1, 2] yields Integer 1, matching the
+ * interpreter exactly.  For collection builtins (Table) where the element type
+ * is user-visible, prefer this over autocompiled_eval_real. */
+Expr* autocompiled_eval_boxed(const AutoCompiled* ac, const double* xs);
+
 void autocompiled_free(AutoCompiled* ac);
 
 #endif /* MATHILDA_AUTOCOMPILE_H */

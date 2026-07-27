@@ -88,11 +88,9 @@ Expr* builtin_table(Expr* res) {
         int steps = 0;
         Expr* curr_e = ac ? NULL : expr_copy(imin_e);
         while ((di_val > 0 && val <= max_val + 1e-14) || (di_val < 0 && val >= max_val - 1e-14)) {
-            Expr* eval_expr = NULL;
-            if (ac) {
-                double y;
-                if (autocompiled_eval_real(ac, &val, &y)) eval_expr = expr_new_real(y);
-            }
+            /* Boxed (not _eval_real) so an integer-valued body stays an Integer
+             * — the element type is user-visible in the returned list. */
+            Expr* eval_expr = ac ? autocompiled_eval_boxed(ac, &val) : NULL;
             if (!eval_expr) {   /* interpreter path (and per-element fallback) */
                 Expr* i_val = is_real ? expr_new_real(val) : expr_copy(curr_e);
                 symtab_add_own_value(var_sym->data.symbol.name, var_sym, i_val);

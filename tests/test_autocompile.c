@@ -7,6 +7,9 @@
 #include "test_utils.h"
 #include "symtab.h"
 #include "core.h"
+#include "expr.h"
+#include "parse.h"
+#include "compile/autocompile.h"
 
 /* Every sampled Plot point lies on the true curve (compiled path == interpreter). */
 void test_plot_parity(void) {
@@ -63,6 +66,155 @@ void test_table_real_parity(void) {
         "True", 0);
     assert_eval_eq("Table[x^2, {x, 1., 4., 1.}]", "{1.0, 4.0, 9.0, 16.0}", 0);
 }
+
+/* The compiled element must keep its own type: a body whose value is an Integer
+ * (If branches, Round, ...) must not come back as a Real. */
+void test_table_result_type_preserved(void) {
+    assert_eval_eq("Table[If[x > 2.5, 1, 2], {x, 1., 4.}]", "{2, 2, 1, 1}", 0);
+    assert_eval_eq("Table[Round[x], {x, 1.2, 4.2}]", "{1, 2, 3, 4}", 0);
+    assert_eval_eq("Table[x^2, {x, 1., 3.}]", "{1.0, 4.0, 9.0}", 0);   /* Reals stay Real */
+}
+
+/* A nested Table binds the outer iterator through the symbol table, so the inner
+ * body sees it as a free symbol.  COMPILE_FOLD_GLOBALS resolves it to the value
+ * it currently holds; without that the whole inner body is uncompilable. */
+void test_table_nested_folds_outer_var(void) {
+    assert_eval_eq("Table[x + 10 y, {y, 1., 3.}, {x, 1., 2.}]",
+                   "{{11.0, 12.0}, {21.0, 22.0}, {31.0, 32.0}}", 0);
+    /* Folding must re-run per call, never cache a stale value. */
+    assert_eval_eq("g0 = 3.; {Table[g0 x, {x, 1., 2.}], g0 = 10.; Table[g0 x, {x, 1., 2.}]}",
+                   "{{3.0, 6.0}, {10.0, 20.0}}", 0);
+    /* A body that MUTATES a global is not compilable, so the accumulation below
+     * runs in the interpreter and stays correct. */
+    assert_eval_eq("g1 = 0.; {Table[(g1 = g1 + 1.; g1), {x, 1., 4.}], g1}",
+                   "{{1.0, 2.0, 3.0, 4.0}, 4.0}", 0);
+}
+
+/* Calling a CompiledFunction from a compiled body inlines the callee instead of
+ * paying an evaluator round-trip.  Each case is checked against an interpreted
+ * twin (a DownValue never compiles), so a capture bug shows up as a mismatch. */
+void test_table_inlines_compiled_callee(void) {
+    assert_eval_eq("cf1 = Compile[{{a, _Real}}, a^2 + 1]; ci1[a_] := a^2 + 1; "
+                   "Table[cf1[x], {x, 1., 5.}] === Table[ci1[x], {x, 1., 5.}]", "True", 0);
+    /* callee body reads a global */
+    assert_eval_eq("cq = 7.; cf2 = Compile[{{a, _Real}}, a + cq]; ci2[a_] := a + cq; "
+                   "Table[cf2[x], {x, 1., 3.}] === Table[ci2[x], {x, 1., 3.}]", "True", 0);
+    /* callee PARAMETER shares the caller's iterator name — must not capture */
+    assert_eval_eq("cf3 = Compile[{{x, _Real}}, x*2]; ci3[x_] := x*2; "
+                   "Table[cf3[x + 1], {x, 1., 3.}] === Table[ci3[x + 1], {x, 1., 3.}]", "True", 0);
+    /* callee GLOBAL shares the caller's iterator name — must resolve to neither
+     * silently: whatever it does, both paths must agree */
+    assert_eval_eq("cw = 100.; cf4 = Compile[{{a, _Real}}, a + cw]; ci4[a_] := a + cw; "
+                   "Table[cf4[x], {x, 1., 3.}] === Table[ci4[x], {x, 1., 3.}]", "True", 0);
+    /* two parameters, and a nested inline (callee calls another callee) */
+    assert_eval_eq("cf5 = Compile[{{a, _Real}, {b, _Real}}, a - b]; ci5[a_, b_] := a - b; "
+                   "Table[cf5[x, 2 x], {x, 1., 3.}] === Table[ci5[x, 2 x], {x, 1., 3.}]", "True", 0);
+    assert_eval_eq("cf6 = Compile[{{a, _Real}}, a + 1]; cf7 = Compile[{{a, _Real}}, cf6[a]*3]; "
+                   "ci7[a_] := (a + 1)*3; "
+                   "Table[cf7[x], {x, 1., 3.}] === Table[ci7[x], {x, 1., 3.}]", "True", 0);
+    /* an Integer-typed parameter keeps its declared type through the inline */
+    assert_eval_eq("cf8 = Compile[{{a, _Integer}}, a*a]; Table[cf8[Round[x]], {x, 1., 3.}]",
+                   "{1, 4, 9}", 0);
+    /* Wrong arity must bail to a stuck expression — never silently produce a
+     * number from the wrong parameter binding. */
+    assert_eval_eq("cf9 = Compile[{{a, _Real}, {b, _Real}}, a + b]; "
+                   "NumberQ[Table[cf9[x], {x, 1., 2.}][[1]]]", "False", 0);
+}
+
+/* ---- Multi-statement loop bodies through the auto-compiled Table path. -------
+ * A one-liner only exercises loop scaffolding.  This body carries four locals of
+ * three types (Complex u/du, Real acc, Integer cnt), five statements per
+ * iteration, and a two-armed If that mutates state in BOTH arms, run over a
+ * nested Table (so the outer iterator is folded as a constant).  Written three
+ * ways — Do / While / For — which must agree bitwise with each other and match
+ * an interpreted twin; `mlRef` is a DownValue, which never compiles, so any
+ * miscompilation shows up as a mismatch rather than passing silently.
+ * The grid straddles the imaginary axis, so both If arms fire (checked). */
+#define ML_STEP  "du = (2 u + 1/u^2)/3 - u; u = u + du; acc = acc + Abs[du]; " \
+                 "If[Re[u] > 0, cnt = cnt + 1, cnt = cnt - 1]"
+#define ML_DECL  "u = x + I y, du = 0. + 0. I, acc = 0., cnt = 0"
+#define ML_TAIL  "acc + cnt + Re[u]"
+#define ML_GRID  ", {y, 0.4, 1.2, 0.2}, {x, -1.2, 1.2, 0.3}]"
+#define ML_REF   "mlRef[z_, n_] := Module[{u = z, du = 0. + 0. I, acc = 0., cnt = 0, k = 0}, " \
+                 "While[k < n, du = (2 u + 1/u^2)/3 - u; u = u + du; acc = acc + Abs[du]; " \
+                 "If[Re[u] > 0, cnt = cnt + 1, cnt = cnt - 1]; k = k + 1]; acc + cnt + Re[u]]; "
+
+void test_table_multiline_loop_body(void) {
+    /* Do / While / For spellings of the same iteration are the same computation */
+    assert_eval_eq(
+        "tD = Table[Module[{" ML_DECL "}, Do[" ML_STEP ", {8}]; " ML_TAIL "]" ML_GRID "; "
+        "tW = Table[Module[{" ML_DECL ", k = 0}, While[k < 8, " ML_STEP "; k = k + 1]; " ML_TAIL "]" ML_GRID "; "
+        "tF = Table[Module[{" ML_DECL ", k = 0}, For[k = 0, k < 8, k = k + 1, " ML_STEP "]; " ML_TAIL "]" ML_GRID "; "
+        "{tD === tW, tD === tF}", "{True, True}", 0);
+    /* ...and they match the interpreter */
+    assert_eval_eq(ML_REF
+        "Max[Abs[Flatten[tD - Table[mlRef[x + I y, 8]" ML_GRID "]]] < 10^-10", "True", 0);
+    /* both arms of the in-loop If actually fire on this grid */
+    assert_eval_eq("Union[Sign[Flatten[tD]]]", "{-1, 1}", 0);
+    /* a zero-trip loop must still produce the interpreter's value */
+    assert_eval_eq(
+        "Table[Module[{" ML_DECL ", k = 0}, While[k < 0, " ML_STEP "; k = k + 1]; " ML_TAIL "]" ML_GRID
+        " === Table[mlRef[x + I y, 0]" ML_GRID, "True", 0);
+}
+
+/* The same multi-statement body reached through an INLINED CompiledFunction
+ * callee: the loop, its locals and its branch all have to survive being lowered
+ * with only the callee's parameters in scope. */
+void test_table_inlines_multiline_callee(void) {
+    assert_eval_eq(ML_REF
+        "mlC = Compile[{{z, _Complex}, {n, _Integer}}, "
+        "Module[{u = z, du = 0. + 0. I, acc = 0., cnt = 0, k = 0}, "
+        "While[k < n, du = (2 u + 1/u^2)/3 - u; u = u + du; acc = acc + Abs[du]; "
+        "If[Re[u] > 0, cnt = cnt + 1, cnt = cnt - 1]; k = k + 1]; acc + cnt + Re[u]]]; "
+        "Max[Abs[Flatten[Table[mlC[x + I y, 8]" ML_GRID " - Table[mlRef[x + I y, 8]" ML_GRID "]]] < 10^-10",
+        "True", 0);
+    /* Do and For callees inline the same way */
+    assert_eval_eq(
+        "mlCD = Compile[{{z, _Complex}, {n, _Integer}}, "
+        "Module[{u = z, du = 0. + 0. I, acc = 0., cnt = 0}, "
+        "Do[du = (2 u + 1/u^2)/3 - u; u = u + du; acc = acc + Abs[du]; "
+        "If[Re[u] > 0, cnt = cnt + 1, cnt = cnt - 1], {n}]; acc + cnt + Re[u]]]; "
+        "mlCF = Compile[{{z, _Complex}, {n, _Integer}}, "
+        "Module[{u = z, du = 0. + 0. I, acc = 0., cnt = 0, k = 0}, "
+        "For[k = 0, k < n, k = k + 1, du = (2 u + 1/u^2)/3 - u; u = u + du; acc = acc + Abs[du]; "
+        "If[Re[u] > 0, cnt = cnt + 1, cnt = cnt - 1]]; acc + cnt + Re[u]]]; "
+        "{Table[mlCD[x + I y, 8]" ML_GRID " === tD, Table[mlCF[x + I y, 8]" ML_GRID " === tD}",
+        "{True, True}", 0);
+}
+
+/* ANTI-VACUITY GUARD.  Every parity check above would also pass if NOTHING
+ * compiled and all paths ran in the interpreter — agreement with the interpreter
+ * is trivially true when you ARE the interpreter.  So assert directly, through
+ * the very API `Table` uses, that each multi-statement loop body really does
+ * compile as a function of the (real) iterator, with the outer iterator `y`
+ * bound as a global for the fold.  If a future edit drops a loop form out of the
+ * compilable subset, this fails while the parity tests stay green. */
+void test_multiline_bodies_really_compile(void) {
+    const char* forms[3] = {
+        "Module[{" ML_DECL "}, Do[" ML_STEP ", {8}]; " ML_TAIL "]",
+        "Module[{" ML_DECL ", k = 0}, While[k < 8, " ML_STEP "; k = k + 1]; " ML_TAIL "]",
+        "Module[{" ML_DECL ", k = 0}, For[k = 0, k < 8, k = k + 1, " ML_STEP "]; " ML_TAIL "]",
+    };
+    const char* names[3] = { "Do", "While", "For" };
+    expr_free(evaluate(parse_expression("y = 0.7")));    /* the folded outer iterator */
+    Expr* xs = parse_expression("x");
+    for (int i = 0; i < 3; i++) {
+        Expr* b = parse_expression(forms[i]);            /* raw: evaluating rewrites the loop */
+        AutoCompiled* ac = autocompile_new(b, (const Expr* const*)&xs, 1);
+        if (!ac) fprintf(stderr, "FAIL: multi-line %s body did not compile\n", names[i]);
+        assert(ac != NULL);
+        autocompiled_free(ac);
+        expr_free(b);
+    }
+    expr_free(xs);
+    expr_free(evaluate(parse_expression("Clear[y]")));
+}
+
+#undef ML_STEP
+#undef ML_DECL
+#undef ML_TAIL
+#undef ML_GRID
+#undef ML_REF
 
 /* Real iterator where the body goes complex → per-element interpreter fallback. */
 void test_table_real_complex_fallback(void) {
@@ -153,6 +305,12 @@ int main(void) {
     TEST(test_plot3d_parity);
     TEST(test_table_exact_untouched);
     TEST(test_table_real_parity);
+    TEST(test_table_result_type_preserved);
+    TEST(test_table_nested_folds_outer_var);
+    TEST(test_table_inlines_compiled_callee);
+    TEST(test_multiline_bodies_really_compile);   /* precondition: they DO compile */
+    TEST(test_table_multiline_loop_body);
+    TEST(test_table_inlines_multiline_callee);
     TEST(test_table_real_complex_fallback);
     TEST(test_nintegrate_parity);
     TEST(test_nintegrate_multidim);

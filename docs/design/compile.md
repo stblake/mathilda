@@ -488,6 +488,29 @@ buffer pass driven by the existing scalar VM over each element — with `Dot`
 (BLAS) and `Part` next. Rank-2, array locals (which need a copy op or handle
 refcounting), and the user `Compile[]` array argspec follow.
 
+**Status update (2026-07-27) — coverage gaps closed.** A Newton-fractal
+benchmark exposed the *other* way a compiler loses an order of magnitude: not by
+being slow, but by silently not compiling. `Do[body, {n}]` — the plainest
+counted loop — was outside the subset, so the whole `Compile[]` bailed to the
+interpreter, at 37×. Fixed by giving `Do`/`Sum`/`Product` one iterator-spec
+parser matching `src/iter.c`, with `Sum`/`Product` still rejecting the bare
+count because the interpreter does.
+
+Three follow-ons let a nested `Table` compile end to end: `COMPILE_FOLD_GLOBALS`
+(a non-argument symbol holding a machine number folds to that constant — opt-in,
+autocompile-only, because those programs die inside one builtin call while a
+user `Compile[]` object outlives its scope); `autocompiled_eval_boxed` (an
+integer-valued element stays an Integer instead of being flattened to a double);
+and inlining of `CompiledFunction` calls inside a compiled body, which removes
+an evaluator round-trip that was 72% of per-point cost. Together: **4.45 s →
+0.046 s (97×)**, with the un-wrapped form now compiling too.
+
+The design lesson is that the compilable subset is a **cliff, not a slope** — a
+construct just outside it costs the entire body, and `compile_expr` returning
+NULL is indistinguishable from success at the call site. Any future subset
+extension should start by auditing which spellings the interpreter accepts that
+the compiler does not.
+
 ---
 
 ## 17. Risks & open questions

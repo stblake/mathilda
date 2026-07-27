@@ -616,6 +616,140 @@ int main(void) {
         }
     }
 
+    /* ---- Counted iterator spellings.  Do accepts every form the interpreter's
+     * iter_spec_parse does; Sum/Product require a named iterator because the
+     * interpreter rejects a bare count for them.  A missing form here is not a
+     * slow path — it makes the WHOLE surrounding Compile[] bail, which is how
+     * Do[body, {n}] cost the Newton-fractal benchmark ~37x. ---- */
+    {
+        const char* in1[1] = { intern_symbol("n") };
+        CompileType ty1[1] = { CT_INT };
+        struct { const char* nm; const char* body; int compiles; } fc[] = {
+            { "Do {n} bare count",    "Module[{s = 0}, Do[s = s + 1, {n}]; s]",           1 },
+            { "Do n unbraced count",  "Module[{s = 0}, Do[s = s + 1, n]; s]",             1 },
+            { "Do {i, hi}",           "Module[{s = 0}, Do[s = s + i, {i, n}]; s]",        1 },
+            { "Do {i, lo, hi}",       "Module[{s = 0}, Do[s = s + i, {i, 1, n}]; s]",     1 },
+            { "Do {i,lo,hi,+di}",     "Module[{s = 0}, Do[s = s + 1, {i, 1, n, 2}]; s]",  1 },
+            { "Do {i,hi,lo,-di}",     "Module[{s = 0}, Do[s = s + 1, {i, n, 1, -1}]; s]", 1 },
+            { "Sum {i, hi}",          "Sum[i, {i, n}]",                                   1 },
+            { "Sum {n} rejected",     "Sum[2, {n}]",                                       0 },
+            { "Product {n} rejected", "Product[2, {n}]",                                   0 },
+        };
+        for (size_t k = 0; k < sizeof fc / sizeof fc[0]; k++) {
+            Expr* b = parse_expression(fc[k].body);
+            CompiledProgram* p = compile_expr(b, in1, ty1, 1);
+            if (!fc[k].compiles) {
+                /* Must bail: the interpreter leaves these unevaluated, so a
+                 * compiled answer would be a divergence, not a bonus. */
+                if (p) { printf("FAIL: %-30s -> compiled but must bail\n", fc[k].nm); failures++; compiled_free(p); }
+                else printf("ok:   %-30s bails (matches interpreter)\n", fc[k].nm);
+                expr_free(b); continue;
+            }
+            if (!p) { printf("FAIL: %-30s -> did not compile\n", fc[k].nm); failures++; expr_free(b); continue; }
+            int bad = 0, cmp = 0;
+            for (long long n = 0; n <= 12; n++) {
+                CompileValue av[1] = { { CT_INT, { .i = n } } }, o;
+                if (!compiled_eval(p, av, &o) || o.type != CT_INT) { bad++; continue; }
+                long long ref = 0;
+                switch (k) {
+                    case 0: case 1: ref = n > 0 ? n : 0; break;                       /* count */
+                    case 2: case 3: for (long long i = 1; i <= n; i++) ref += i; break;
+                    case 4: for (long long i = 1; i <= n; i += 2) ref++; break;
+                    case 5: for (long long i = n; i >= 1; i--) ref++; break;
+                    case 6: for (long long i = 1; i <= n; i++) ref += i; break;
+                    default: break;
+                }
+                if (o.v.i != ref) { bad++; printf("      n=%lld got=%lld want=%lld\n", n, o.v.i, ref); }
+                cmp++;
+            }
+            if (bad || cmp < 13) { printf("FAIL: %-30s -> %d bad of %d\n", fc[k].nm, bad, cmp); failures++; }
+            else printf("ok:   %-30s %d counts exact\n", fc[k].nm, cmp);
+            compiled_free(p); expr_free(b);
+        }
+    }
+
+    /* ---- Multi-statement loop body, written three ways.  A one-liner only
+     * exercises the loop scaffolding; this body carries four locals of three
+     * different types (Complex u/du, Real acc, Integer cnt), five statements per
+     * iteration, and a two-armed If that mutates state in BOTH arms — so the
+     * accumulator/register discipline is under real pressure across the back
+     * edge.  Do / While / For must agree BITWISE (same arithmetic, only the loop
+     * control differs) and must match an independent C reference. ---- */
+    {
+        const char* inzn[2] = { intern_symbol("z"), intern_symbol("n") };
+        CompileType tyzn[2] = { CT_COMPLEX, CT_INT };
+        /* the shared five statements, spliced into each loop form */
+        #define ML_STEP "du = (2 u + 1/u^2)/3 - u; u = u + du; acc = acc + Abs[du]; " \
+                        "If[Re[u] > 0, cnt = cnt + 1, cnt = cnt - 1]"
+        #define ML_DECL "u = z, du = 0. + 0. I, acc = 0., cnt = 0"
+        #define ML_TAIL "acc + cnt + Re[u]"
+        struct { const char* nm; const char* body; } ml[] = {
+            { "multi-line Do",    "Module[{" ML_DECL "}, Do[" ML_STEP ", {n}]; " ML_TAIL "]" },
+            { "multi-line While", "Module[{" ML_DECL ", k = 0}, While[k < n, " ML_STEP "; k = k + 1]; " ML_TAIL "]" },
+            { "multi-line For",   "Module[{" ML_DECL ", k = 0}, For[k = 0, k < n, k = k + 1, " ML_STEP "]; " ML_TAIL "]" },
+        };
+        #undef ML_STEP
+        #undef ML_DECL
+        #undef ML_TAIL
+        CompiledProgram* mp[3] = { NULL, NULL, NULL };
+        for (size_t k = 0; k < 3; k++) {
+            Expr* b = parse_expression(ml[k].body);   /* raw: evaluating would rewrite the loop */
+            mp[k] = compile_expr(b, inzn, tyzn, 2);
+            if (!mp[k]) { printf("FAIL: %-30s -> did not compile\n", ml[k].nm); failures++; }
+            expr_free(b);
+        }
+        if (mp[0] && mp[1] && mp[2]) {
+            double maxrel = 0; int cmp = 0, disagree = 0;
+            for (int t = 0; t < 200; t++) {
+                /* stay off the Julia boundary: the iteration is chaotic there and
+                 * would amplify the reference's own rounding without telling us
+                 * anything about the lowering */
+                double re = urand(0.35, 1.4), im = urand(0.35, 1.4);
+                if (t & 1) re = -re;
+                if (t & 2) im = -im;
+                long long n = irand(0, 14);
+                double _Complex z = re + im * I;
+                CompileValue av[2] = { { CT_COMPLEX, { .z = 0 } }, { CT_INT, { .i = n } } };
+                av[0].v.z = z;
+                double got[3];
+                int ok3 = 1;
+                for (size_t k = 0; k < 3; k++) {
+                    CompileValue o;
+                    if (!compiled_eval(mp[k], av, &o) || o.type != CT_REAL) { ok3 = 0; break; }
+                    got[k] = o.v.r;
+                }
+                if (!ok3) continue;
+                /* the three spellings are the same computation -> bitwise equal */
+                if (got[0] != got[1] || got[0] != got[2]) {
+                    if (disagree++ < 3)
+                        printf("      n=%lld z=%g%+gi  Do=%.17g While=%.17g For=%.17g\n",
+                               n, re, im, got[0], got[1], got[2]);
+                }
+                /* independent C reference */
+                double _Complex u = z, du = 0;
+                double acc = 0; long long cnt = 0;
+                for (long long q = 0; q < n; q++) {
+                    du = (2.0 * u + 1.0 / (u * u)) / 3.0 - u;
+                    u = u + du;
+                    acc += cabs(du);
+                    if (creal(u) > 0) cnt++; else cnt--;
+                }
+                double ref = acc + (double)cnt + creal(u);
+                double rel = fabs(got[0] - ref) / (1.0 + fabs(ref));
+                if (rel > maxrel) maxrel = rel;
+                cmp++;
+            }
+            if (disagree) { printf("FAIL: multi-line loops disagree (%d of %d)\n", disagree, cmp); failures++; }
+            else if (cmp < 60 || maxrel > 1e-9) {
+                printf("FAIL: multi-line loop body -> max_rel=%.2e (%d cmps)\n", maxrel, cmp); failures++;
+            } else {
+                printf("ok:   %-30s Do==While==For bitwise, max_rel=%.1e (%d cmps)\n",
+                       "multi-line loop body", maxrel, cmp);
+            }
+        }
+        for (size_t k = 0; k < 3; k++) if (mp[k]) compiled_free(mp[k]);
+    }
+
     /* ---- Nest[Function[u, body], x, n]: parsed unevaluated; C references. ---- */
     {
         const char* in1[1] = { intern_symbol("x") };

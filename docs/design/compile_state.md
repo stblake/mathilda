@@ -39,7 +39,7 @@ no runtime type dispatch (the opcode carries the type).
 | Builtin | Chokepoint | Scope | Speedup |
 |---|---|---|---|
 | Plot / Plot3D | `plot_eval_fn`, `plot3d_eval_z/_fn` | real result; non-real → exclude point | ~215× / ~11× |
-| Table | `table.c` numeric-range loop | **inexact iterator only**; exact untouched | ~128× |
+| Table | `table.c` numeric-range loop | **inexact iterator only**; exact untouched; nested via FOLD_GLOBALS | ~128× (97× on the Newton fractal) |
 | NIntegrate 1-D | `ni_eval_at` | finite/half/whole-line machine; complex fallback | ~353× |
 | NIntegrate multi-D | `ni_mc_sample` | cubature + Monte-Carlo | ~504× |
 | FindRoot scalar | `fr_eval_with_bindings` (pointer-identity `main_f`) | machine real Newton/Secant/Brent + FD | ~19× |
@@ -58,6 +58,50 @@ that one point. MPFR paths are UNTOUCHED everywhere. Uncompilable bodies (e.g.
 fallback + oscillatory-regression + systems). All pass; `leaks`- and ASan-clean.
 
 ### Milestones: M0, M1a, M1b, M2 (a/b/c), M3a (rank-1 arrays), M4 (auto-compile) DONE.
+
+### Coverage-gap fixes (2026-07-27) — read this before optimising anything
+
+A Newton-fractal benchmark ran ~30× slower than expected. **Nothing was slow.**
+The body simply did not compile, and a bail is silent: it costs an order of
+magnitude and looks exactly like a working fast path. Four fixes:
+
+1. **`Do` accepted only `{i, lo, hi}`.** `Do[body, {n}]` — the plainest possible
+   loop — made the *whole* `Compile[]` bail. 37× on its own. `Do`/`Sum`/
+   `Product` now share `loop_spec_parse`, matching `src/iter.c`: `n`, `{n}`,
+   `{i, hi}`, `{i, lo, hi}`, `{i, lo, hi, di}` (literal nonzero `di`; the loop
+   test flips to `OP_GE_I` when `di < 0`). `Sum`/`Product` reject the bare count
+   because the interpreter does — **the compiled path must never answer where
+   the interpreter declines**, even when the compiler could.
+2. **`COMPILE_FOLD_GLOBALS`** (`compile_expr_ex`): a non-argument symbol holding
+   a machine-number OwnValue folds to that constant. This is what lets a nested
+   `Table` compile — it desugars to nested `Table`s and the inner body sees the
+   outer variable only through the symbol table. Opt-in, and used **only** by
+   `autocompile.c`, whose programs live and die inside one builtin call. User
+   `Compile[]` must NOT fold: its object outlives the defining scope. Staleness
+   is impossible because any body that could reassign a global (a `Set` to a
+   non-local) already bails.
+3. **`autocompiled_eval_boxed`**: `Table` was flattening every element through a
+   `double`, so `If[…, 1, 2]` produced `1.` instead of `1`. Element type is
+   user-visible in a returned list; `Plot`/`NIntegrate`/`FindRoot` keep the
+   unboxed real path.
+4. **CompiledFunction inlining**: `newt[x + I y, 25]` inside a `Table` body used
+   to bail, costing an evaluator round-trip per point (~2.3 µs of a 3.1 µs call,
+   72% of runtime). `emit`/`infer_type` now inline the callee. The subtle part
+   is scope: arguments lower in the CALLER's environment, then the body lowers
+   with **only** the parameters visible (`c->inlining` makes `arg_find` return
+   -1), or a caller argument sharing a name with a callee global would capture
+   it. Depth-capped at 8 for self-reference.
+
+Net on `Table[newt[x + I y, 25], {y,-1,1,2./199}, {x,-1,1,2./199}]`:
+**4.45 s → 0.046 s (97×)**. Written inline without `Compile[]` it now also fully
+compiles (0.042 s) and agrees element-for-element.
+
+**Generalisable lesson:** the compilable subset is a cliff, not a slope. Any
+construct just outside it costs the whole body. When a compiled path
+underperforms, first check that it *compiled at all* — a `compile_expr`
+returning NULL is indistinguishable from success at the call site. The counted
+iterator forms are now covered; the same audit is worth doing for the other
+constructs the interpreter accepts in more spellings than the compiler does.
 
 ---
 

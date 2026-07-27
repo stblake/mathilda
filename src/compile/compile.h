@@ -69,6 +69,23 @@ CompiledProgram* compile_expr(const Expr* body,
                               const char* const* arg_names,
                               const CompileType* arg_types, size_t nargs);
 
+/* Compile-time folding of non-argument symbols that currently hold a machine
+ * number as their OwnValue (e.g. the outer iteration variable of a nested
+ * Table, which the interpreter binds through the symbol table).  Without it such
+ * a symbol is simply uncompilable and the whole body bails.
+ *
+ * ONLY for programs whose lifetime ends before the symbol can be reassigned —
+ * i.e. the throwaway programs built by autocompile.{c,h} inside a single builtin
+ * call.  A user `Compile[]` object outlives its defining scope, so it must NOT
+ * fold: it keeps the bail-to-interpreter behaviour, which stays correct however
+ * the global is later redefined. */
+#define COMPILE_FOLD_GLOBALS 0x1u
+
+CompiledProgram* compile_expr_ex(const Expr* body,
+                                 const char* const* arg_names,
+                                 const CompileType* arg_types, size_t nargs,
+                                 unsigned flags);
+
 CompileType compiled_result_type(const CompiledProgram* p);
 size_t      compiled_num_args(const CompiledProgram* p);
 

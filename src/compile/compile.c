@@ -8,6 +8,7 @@
  * a stack-discipline allocator, so a program needs O(expression-depth) registers.
  */
 #include "compile.h"
+#include "compiled_function.h"   /* inlining a CompiledFunction callee */
 #include "../arithmetic.h"
 #include "../symtab.h"
 #include "../ndarray.h"    /* NDUnaryKernel / NDBinaryKernel — shared kernel layer */
@@ -165,7 +166,51 @@ typedef struct {
     struct { const char* name; int reg; CompileType type; } scope[16];
     int nscope;
     bool ok;
+    unsigned flags;     /* COMPILE_FOLD_GLOBALS, ... */
+    int inlining;       /* >0 while lowering an inlined CompiledFunction body */
 } Ctx;
+
+/* The caller's argument symbols are NOT in scope inside an inlined
+ * CompiledFunction body: the callee was compiled against its own parameters and
+ * globals only, so a caller argument sharing a name with a callee global would
+ * silently capture it. */
+static int arg_find(const Ctx* c, const char* nm) {
+    return c->inlining ? -1 : nm_get(&c->map, nm);
+}
+
+/* Under COMPILE_FOLD_GLOBALS, resolve a non-argument symbol that currently
+ * holds a machine-number OwnValue (`y = 0.37`) to that constant — the same value
+ * the interpreter would substitute for it right now.  Only an unconditional
+ * assignment counts: the rule's pattern must be the bare symbol, so patterned or
+ * conditional OwnValues are left alone and the symbol stays uncompilable.
+ * See COMPILE_FOLD_GLOBALS in compile.h for why this is opt-in. */
+static bool literal(const Expr* e, Slot* imm, CompileType* type);
+
+static bool global_const(const Ctx* c, const char* nm, Slot* imm, CompileType* type) {
+    if (!(c->flags & COMPILE_FOLD_GLOBALS)) return false;
+    for (Rule* r = symtab_get_own_values(nm); r; r = r->next) {
+        if (!r->pattern || r->pattern->type != EXPR_SYMBOL) continue;
+        if (strcmp(r->pattern->data.symbol.name, nm) != 0) continue;
+        return r->replacement && literal(r->replacement, imm, type);
+    }
+    return false;
+}
+
+/* A head symbol whose OwnValue is a CompiledFunction object — `newt[z, n]`
+ * after `newt = Compile[...]`.  Applying it through the evaluator costs an
+ * expression round-trip per call, so when the caller opted into folding we
+ * inline the callee's body instead.  Same gate as global_const: the object could
+ * be reassigned, which only matters for programs that outlive the call. */
+static const CompiledFunction* compiled_callee(const Ctx* c, const char* nm) {
+    if (!(c->flags & COMPILE_FOLD_GLOBALS)) return NULL;
+    for (Rule* r = symtab_get_own_values(nm); r; r = r->next) {
+        if (!r->pattern || r->pattern->type != EXPR_SYMBOL) continue;
+        if (strcmp(r->pattern->data.symbol.name, nm) != 0) continue;
+        return (r->replacement && r->replacement->type == EXPR_COMPILED)
+             ? r->replacement->data.compiled : NULL;
+    }
+    return NULL;
+}
 
 /* resolve a symbol name to a scoped loop variable, or -1 */
 static int scope_find(const Ctx* c, const char* nm, CompileType* type) {
@@ -473,6 +518,71 @@ static bool extract_function(const Expr* f, const char** pname, const Expr** bod
     return true;
 }
 
+/* ---- counted-loop iterator specs -------------------------------------------
+ * Do/Sum/Product accept the same counted spellings the interpreter does
+ * (src/iter.c, iter_spec_parse):
+ *
+ *     n   or   {n}         repeat n times, binding no iterator symbol
+ *     {i, hi}              i = 1, 2, ..., hi
+ *     {i, lo, hi}          i = lo, ..., hi
+ *     {i, lo, hi, di}      i = lo, lo + di, ...   (di a nonzero integer literal)
+ *
+ * `var == NULL` marks the two count-only forms; `lo == NULL` means the implicit
+ * lower bound 1, so the common case synthesises no nodes.  List iteration
+ * ({i, {a,b,c}}) is not compiled: the bound then fails to infer as CT_INT at the
+ * call site, so it bails to the interpreter like any other unsupported form.
+ * A non-literal step also bails — the loop test's direction has to be known when
+ * the comparison opcode is chosen. */
+typedef struct {
+    const char* var;    /* iterator symbol, or NULL for the count-only forms */
+    const Expr* lo;     /* NULL => literal 1 */
+    const Expr* hi;
+    long long   di;     /* step; nonzero */
+} LoopSpec;
+
+static bool loop_spec_parse(const Expr* spec, LoopSpec* out) {
+    out->var = NULL; out->lo = NULL; out->hi = NULL; out->di = 1;
+    if (!spec) return false;
+    if (spec->type != EXPR_FUNCTION || spec->data.function.head->type != EXPR_SYMBOL
+        || strcmp(spec->data.function.head->data.symbol.name, "List") != 0) {
+        out->hi = spec;                                     /* bare count: Do[body, n] */
+        return true;
+    }
+    size_t len = spec->data.function.arg_count;
+    Expr* const* a = spec->data.function.args;
+    if (len == 1) { out->hi = a[0]; return true; }           /* {n} */
+    if (len < 2 || len > 4 || a[0]->type != EXPR_SYMBOL) return false;
+    out->var = a[0]->data.symbol.name;
+    if (len == 2) { out->hi = a[1]; return true; }           /* {i, hi} */
+    out->lo = a[1]; out->hi = a[2];
+    if (len == 4) {                                          /* {i, lo, hi, di} */
+        if (a[3]->type != EXPR_INTEGER || a[3]->data.integer == 0) return false;
+        out->di = a[3]->data.integer;
+    }
+    return true;
+}
+
+static bool infer_type(Ctx* c, const Expr* e, CompileType* out);
+
+/* Both bounds must be integer-typed: these are integer-counted loops. */
+static bool loop_spec_int_bounds(Ctx* c, const LoopSpec* s) {
+    CompileType t;
+    if (s->lo && (!infer_type(c, s->lo, &t) || t != CT_INT)) return false;
+    return infer_type(c, s->hi, &t) && t == CT_INT;
+}
+
+/* Materialise a loop bound into the persistent register `dst`.  A NULL bound is
+ * the implicit lower limit 1, loaded straight as a constant so the count-only
+ * and {i,hi} forms cost nothing extra. */
+static bool emit_loop_bound(Ctx* c, const Expr* b, int dst) {
+    Slot z = { 0 };
+    if (!b) { Slot one; one.i = 1; ins(c, OP_CONST, (uint32_t)dst, 0, 0, one); return c->ok; }
+    Val v; if (!emit(c, b, &v)) return false;
+    ins(c, OP_MOVE, (uint32_t)dst, (uint32_t)v.reg, 0, z);
+    free_if_tmp(c, v);
+    return c->ok;
+}
+
 /* Fixed-point accumulator type for Nest[Function[u,body], x, n]: the body's
  * output feeds back as its input, so the accumulator register must hold a type
  * wide enough to absorb every iteration.  Starting from x's type, widen until
@@ -490,11 +600,13 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     if (e->type == EXPR_SYMBOL) {
         const char* nm = e->data.symbol.name;
         CompileType st; if (scope_find(c, nm, &st) >= 0) { *out = st; return true; }
-        int k = nm_get(&c->map, nm);
+        int k = arg_find(c, nm);
         if (k >= 0) { *out = c->arg_types[k]; return true; }
         if (strcmp(nm, "True") == 0 || strcmp(nm, "False") == 0) { *out = CT_BOOL; return true; }
         if (strcmp(nm, "I") == 0) { *out = CT_COMPLEX; return true; }
         double cv; if (named_const(nm, &cv)) { *out = CT_REAL; return true; }
+        Slot gi; CompileType gt;
+        if (global_const(c, nm, &gi, &gt)) { *out = gt; return true; }
         return false;
     }
     if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
@@ -535,15 +647,12 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         *out = num_common(tt, te); return (int)*out >= 0;
     }
     if ((strcmp(h, "Sum") == 0 || strcmp(h, "Product") == 0) && na == 2) {
-        const Expr* spec = A[1];
-        if (spec->type != EXPR_FUNCTION || spec->data.function.head->type != EXPR_SYMBOL
-            || strcmp(spec->data.function.head->data.symbol.name, "List") != 0
-            || spec->data.function.arg_count != 3
-            || spec->data.function.args[0]->type != EXPR_SYMBOL || c->nscope >= 16) return false;
-        CompileType t0, t1;
-        if (!infer_type(c, spec->data.function.args[1], &t0) || !infer_type(c, spec->data.function.args[2], &t1)
-            || t0 != CT_INT || t1 != CT_INT) return false;
-        c->scope[c->nscope].name = spec->data.function.args[0]->data.symbol.name;
+        LoopSpec s;
+        /* s.var != NULL: the interpreter's Sum/Product reject a bare count
+         * ({n}), so the compiled path must reject it too — only Do accepts it. */
+        if (!loop_spec_parse(A[1], &s) || !s.var || !loop_spec_int_bounds(c, &s)
+            || c->nscope >= 16) return false;
+        c->scope[c->nscope].name = s.var;
         c->scope[c->nscope].reg = 0; c->scope[c->nscope].type = CT_INT; c->nscope++;
         CompileType T; bool okT = infer_type(c, A[0], &T);
         c->nscope--;
@@ -601,6 +710,36 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     if (na == 1) { SymbolDef* d = symtab_lookup(h); if (d && d->ndarray_unary_kernel) { const NDUnaryKernel* k = d->ndarray_unary_kernel; if (k->cplx || k->real) { IT(0, ta); if (CT_IS_ARRAY(ta)) { *out = CT_ARRAY(k->to_real ? CT_REAL : CT_ELEM(ta), CT_RANK(ta)); return true; } if (k->to_real) { *out = CT_REAL; return true; } if (ta == CT_COMPLEX) { if (!k->cplx) return false; *out = CT_COMPLEX; return true; } *out = (k->real_closed || k->real) ? CT_REAL : CT_COMPLEX; return true; } } }
     if (na == 2) { SymbolDef* d = symtab_lookup(h); if (d && d->ndarray_binary_kernel) { const NDBinaryKernel* k = d->ndarray_binary_kernel; if (k->cplx) { IT(0, ta); IT(1, tb); CompileType t = num_common(ta, tb); if ((int)t < 0) return false; *out = (t <= CT_REAL && k->real_closed) ? CT_REAL : CT_COMPLEX; return true; } } }
     #undef IT
+    /* Inlined CompiledFunction call — must type here too, or a call inside an
+     * If branch / Sum body could not be lowered.  Mirrors emit's binding. */
+    {
+        const CompiledFunction* cf = compiled_callee(c, h);
+        if (cf && na >= 1 && compiled_function_num_args(cf) == na
+            && na + (size_t)c->nscope <= 16 && c->inlining < 8) {
+            const char* const* pn = compiled_function_arg_names(cf);
+            const CompileType* pt = compiled_function_arg_types(cf);
+            /* Type every argument in the CALLER's environment first — binding a
+             * parameter before the later arguments are typed would let it
+             * shadow a caller variable of the same name. */
+            for (size_t i = 0; i < na; i++) {
+                CompileType ta;
+                if (!infer_type(c, A[i], &ta) || CT_IS_ARRAY(ta) || CT_IS_ARRAY(pt[i]))
+                    return false;
+            }
+            int saved_scope = c->nscope;
+            for (size_t i = 0; i < na; i++) {
+                c->scope[c->nscope].name = pn[i];
+                c->scope[c->nscope].reg = 0;
+                c->scope[c->nscope].type = pt[i];
+                c->nscope++;
+            }
+            c->inlining++;
+            bool okb = infer_type(c, compiled_function_body(cf), out);
+            c->inlining--;
+            c->nscope = saved_scope;
+            return okb && !CT_IS_ARRAY(*out);
+        }
+    }
     return false;
 }
 
@@ -695,13 +834,15 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
         const char* nm = e->data.symbol.name;
         CompileType st; int sr = scope_find(c, nm, &st);
         if (sr >= 0) { out->reg = sr; out->tmp = false; out->type = st; return true; }
-        int k = nm_get(&c->map, nm);
+        int k = arg_find(c, nm);
         if (k >= 0) { c->argdep[k] = 1; out->reg = k; out->tmp = false; out->type = c->arg_types[k]; return true; }
         if (strcmp(nm, "True") == 0)  { imm.i = 1; *out = emit_const(c, imm, CT_BOOL); return c->ok; }
         if (strcmp(nm, "False") == 0) { imm.i = 0; *out = emit_const(c, imm, CT_BOOL); return c->ok; }
         if (strcmp(nm, "I") == 0)     { imm.z = I; *out = emit_const(c, imm, CT_COMPLEX); return c->ok; }
         double cv;
         if (named_const(nm, &cv)) { imm.r = cv; *out = emit_const(c, imm, CT_REAL); return c->ok; }
+        CompileType gt;
+        if (global_const(c, nm, &imm, &gt)) { *out = emit_const(c, imm, gt); return c->ok; }
         c->ok = false; return false;
     }
 
@@ -998,19 +1139,13 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
      * body's temporaries and is the result. */
     if ((strcmp(h, "Sum") == 0 || strcmp(h, "Product") == 0) && na == 2) {
         bool prod = h[0] == 'P';
-        const Expr* spec = A[1];
-        if (spec->type != EXPR_FUNCTION || spec->data.function.head->type != EXPR_SYMBOL
-            || strcmp(spec->data.function.head->data.symbol.name, "List") != 0
-            || spec->data.function.arg_count != 3
-            || spec->data.function.args[0]->type != EXPR_SYMBOL) { c->ok = false; return false; }
-        const char* iname = spec->data.function.args[0]->data.symbol.name;
-        Expr* lo = spec->data.function.args[1];
-        Expr* hi = spec->data.function.args[2];
-        CompileType t0, t1;
-        if (!infer_type(c, lo, &t0) || !infer_type(c, hi, &t1) || t0 != CT_INT || t1 != CT_INT
-            || c->nscope >= 16) { c->ok = false; return false; }        /* integer iteration only */
+        LoopSpec s;
+        /* Named iterator required — see the matching note in infer_type. */
+        if (!loop_spec_parse(A[1], &s) || !s.var || !loop_spec_int_bounds(c, &s)
+            || c->nscope >= 16) { c->ok = false; return false; }         /* integer iteration only */
         /* body type with i bound as INT */
-        c->scope[c->nscope].name = iname; c->scope[c->nscope].reg = 0; c->scope[c->nscope].type = CT_INT; c->nscope++;
+        c->scope[c->nscope].name = s.var; c->scope[c->nscope].reg = 0;
+        c->scope[c->nscope].type = CT_INT; c->nscope++;
         CompileType T; bool okT = infer_type(c, A[0], &T);
         c->nscope--;
         /* An array accumulator would need a per-iteration copy, not a MOVE. */
@@ -1019,12 +1154,13 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
         int racc = alloc_temp(c), rhi = alloc_temp(c), ri = alloc_temp(c);
         Slot iz; iz.i = 0; if (T == CT_INT) iz.i = prod ? 1 : 0; else if (T == CT_REAL) iz.r = prod ? 1.0 : 0.0; else iz.z = prod ? 1.0 : 0.0;
         ins(c, OP_CONST, (uint32_t)racc, 0, 0, iz);
-        Val vlo; if (!emit(c, lo, &vlo)) return false; ins(c, OP_MOVE, (uint32_t)ri, (uint32_t)vlo.reg, 0, z); free_if_tmp(c, vlo);
-        Val vhi; if (!emit(c, hi, &vhi)) return false; ins(c, OP_MOVE, (uint32_t)rhi, (uint32_t)vhi.reg, 0, z); free_if_tmp(c, vhi);
-        c->scope[c->nscope].name = iname; c->scope[c->nscope].reg = ri; c->scope[c->nscope].type = CT_INT; c->nscope++;
+        if (!emit_loop_bound(c, s.lo, ri)) return false;
+        if (!emit_loop_bound(c, s.hi, rhi)) return false;
+        c->scope[c->nscope].name = s.var; c->scope[c->nscope].reg = ri;
+        c->scope[c->nscope].type = CT_INT; c->nscope++;
         size_t L = c->n;
         int rc = alloc_temp(c);
-        ins(c, OP_LE_I, (uint32_t)rc, (uint32_t)ri, (uint32_t)rhi, z);
+        ins(c, s.di > 0 ? OP_LE_I : OP_GE_I, (uint32_t)rc, (uint32_t)ri, (uint32_t)rhi, z);
         size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z);
         c->temp_top--;                                          /* free the guard temp */
         Val rb; if (!emit(c, A[0], &rb)) { c->nscope--; return false; }
@@ -1034,7 +1170,7 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
                             : (T == CT_INT ? OP_ADD_I : T == CT_REAL ? OP_ADD_R : OP_ADD_C);
         ins(c, acc, (uint32_t)racc, (uint32_t)racc, (uint32_t)rb.reg, z);
         free_if_tmp(c, rb);
-        Slot one; one.i = 1; ins(c, OP_INC_I, (uint32_t)ri, 0, 0, one);
+        Slot step; step.i = s.di; ins(c, OP_INC_I, (uint32_t)ri, 0, 0, step);
         ins(c, OP_JMP, 0, 0, (uint32_t)L, z);
         if (c->ok) c->code[jz].b = (uint32_t)c->n;               /* loop-exit label */
         c->nscope--;
@@ -1129,28 +1265,26 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
 
     /* Do[body, {i, lo, hi}]: counted loop for side effects; returns a dummy 0. */
     if (strcmp(h, "Do") == 0 && na == 2) {
-        const Expr* spec = A[1];
-        if (spec->type != EXPR_FUNCTION || spec->data.function.head->type != EXPR_SYMBOL
-            || strcmp(spec->data.function.head->data.symbol.name, "List") != 0
-            || spec->data.function.arg_count != 3
-            || spec->data.function.args[0]->type != EXPR_SYMBOL || c->nscope >= 16) { c->ok = false; return false; }
-        const char* iname = spec->data.function.args[0]->data.symbol.name;
-        CompileType t0, t1;
-        if (!infer_type(c, spec->data.function.args[1], &t0) || !infer_type(c, spec->data.function.args[2], &t1)
-            || t0 != CT_INT || t1 != CT_INT) { c->ok = false; return false; }
+        LoopSpec s;
+        if (!loop_spec_parse(A[1], &s) || !loop_spec_int_bounds(c, &s)
+            || c->nscope >= 16) { c->ok = false; return false; }
         Slot z = { 0 };
         int rhi = alloc_temp(c), ri = alloc_temp(c);
-        Val vlo; if (!emit(c, spec->data.function.args[1], &vlo)) return false; ins(c, OP_MOVE, (uint32_t)ri, (uint32_t)vlo.reg, 0, z); free_if_tmp(c, vlo);
-        Val vhi; if (!emit(c, spec->data.function.args[2], &vhi)) return false; ins(c, OP_MOVE, (uint32_t)rhi, (uint32_t)vhi.reg, 0, z); free_if_tmp(c, vhi);
-        c->scope[c->nscope].name = iname; c->scope[c->nscope].reg = ri; c->scope[c->nscope].type = CT_INT; c->nscope++;
+        if (!emit_loop_bound(c, s.lo, ri)) return false;
+        if (!emit_loop_bound(c, s.hi, rhi)) return false;
+        int pushed = 0;
+        if (s.var) {
+            c->scope[c->nscope].name = s.var; c->scope[c->nscope].reg = ri;
+            c->scope[c->nscope].type = CT_INT; c->nscope++; pushed = 1;
+        }
         size_t Lp = c->n;
-        int rc = alloc_temp(c); ins(c, OP_LE_I, (uint32_t)rc, (uint32_t)ri, (uint32_t)rhi, z);
+        int rc = alloc_temp(c); ins(c, s.di > 0 ? OP_LE_I : OP_GE_I, (uint32_t)rc, (uint32_t)ri, (uint32_t)rhi, z);
         size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z); c->temp_top--;
-        Val bod; if (!emit(c, A[0], &bod)) { c->nscope--; return false; } free_if_tmp(c, bod);
-        Slot one; one.i = 1; ins(c, OP_INC_I, (uint32_t)ri, 0, 0, one);
+        Val bod; if (!emit(c, A[0], &bod)) { c->nscope -= pushed; return false; } free_if_tmp(c, bod);
+        Slot step; step.i = s.di; ins(c, OP_INC_I, (uint32_t)ri, 0, 0, step);
         ins(c, OP_JMP, 0, 0, (uint32_t)Lp, z);
         if (c->ok) c->code[jz].b = (uint32_t)c->n;
-        c->nscope--; c->temp_top -= 2;
+        c->nscope -= pushed; c->temp_top -= 2;
         int r0 = alloc_temp(c); Slot s0; s0.i = 0; ins(c, OP_CONST, (uint32_t)r0, 0, 0, s0);
         out->reg = r0; out->tmp = true; out->type = CT_INT; return c->ok;
     }
@@ -1212,6 +1346,54 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
     /* last resort: any numeric function with a machine kernel in ndkernels */
     Val kv;
     if (try_kernel(c, h, A, na, &kv)) { *out = kv; return c->ok; }
+
+    /* g[a1,...,aN] where g is a CompiledFunction: inline its body with the
+     * parameters bound to registers holding the evaluated arguments.  Each
+     * argument is lowered in the CALLER's environment, then the body is lowered
+     * with only the parameters in scope (see arg_find). */
+    {
+        const CompiledFunction* cf = compiled_callee(c, h);
+        if (cf && na >= 1 && compiled_function_num_args(cf) == na
+            && na + (size_t)c->nscope <= 16
+            && c->inlining < 8) {          /* depth cap: a self-referential body */
+            const char* const* pn = compiled_function_arg_names(cf);
+            const CompileType* pt = compiled_function_arg_types(cf);
+            Slot z = { 0 };
+            int preg[16], res_top = 0;
+            for (size_t i = 0; i < na; i++) {
+                Val v;
+                if (!emit(c, A[i], &v)) return false;
+                if (CT_IS_ARRAY(v.type) || CT_IS_ARRAY(pt[i])) { c->ok = false; return false; }
+                coerce(c, &v, pt[i]);
+                if (!c->ok) return false;
+                /* Copy into a dedicated register: the parameter stays live for
+                 * the whole body, while v may sit in a caller temp that the body
+                 * would otherwise be free to reuse. */
+                preg[i] = alloc_temp(c);
+                if (i == 0) res_top = c->temp_top;   /* body result lands here */
+                ins(c, OP_MOVE, (uint32_t)preg[i], (uint32_t)v.reg, 0, z);
+            }
+            int saved_scope = c->nscope;
+            for (size_t i = 0; i < na; i++) {
+                c->scope[c->nscope].name = pn[i];
+                c->scope[c->nscope].reg = preg[i];
+                c->scope[c->nscope].type = pt[i];
+                c->nscope++;
+            }
+            c->inlining++;
+            Val bv; bool okb = emit(c, compiled_function_body(cf), &bv);
+            c->inlining--;
+            c->nscope = saved_scope;
+            if (!okb) return false;
+            if (CT_IS_ARRAY(bv.type)) { c->ok = false; return false; }
+            /* Land the result in the first parameter's register and pop
+             * everything the call allocated above it. */
+            if (bv.reg != preg[0]) ins(c, OP_MOVE, (uint32_t)preg[0], (uint32_t)bv.reg, 0, z);
+            c->temp_top = res_top;
+            out->reg = preg[0]; out->tmp = true; out->type = bv.type;
+            return c->ok;
+        }
+    }
 
     c->ok = false; return false;   /* unsupported head -> bail */
 }
@@ -1533,10 +1715,17 @@ static uint32_t patch_reg(uint32_t r, int base) {
 
 CompiledProgram* compile_expr(const Expr* body, const char* const* arg_names,
                               const CompileType* arg_types, size_t nargs) {
+    return compile_expr_ex(body, arg_names, arg_types, nargs, 0u);
+}
+
+CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
+                                 const CompileType* arg_types, size_t nargs,
+                                 unsigned flags) {
     if (!body) return NULL;
     for (size_t k = 0; k < nargs; k++)            /* M3a: rank-1 arrays only */
         if (CT_IS_ARRAY(arg_types[k]) && CT_RANK(arg_types[k]) != 1) return NULL;
     Ctx c; memset(&c, 0, sizeof(c));
+    c.flags = flags;
     c.ok = true; c.nlocals = (int)nargs; c.arg_types = arg_types;
     c.argdep = calloc(nargs ? nargs : 1, 1);
     if (!c.argdep) return NULL;

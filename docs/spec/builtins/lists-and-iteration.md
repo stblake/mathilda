@@ -82,6 +82,17 @@ Generates a list of expressions.
 **Features**:
 - `HoldAll`: `expr` is evaluated once for each step.
 - Supports nested iterators to create matrices.
+- **Machine-real iterators take a compiled fast path.** When the iterator is
+  inexact (`{x, 0., 1., 0.01}`) and `expr` is in the compilable subset, the body
+  is compiled once and run per point over machine numbers instead of through the
+  evaluator. Exact (Integer / BigInt / Rational) iterators are untouched and
+  stay bit-for-bit identical. Each element keeps its own type, so an
+  integer-valued body still yields Integers. A point where the compiled program
+  cannot produce a value (non-finite, or complex where a real was promised)
+  falls back to the interpreter for that element alone.
+  Nested iterators compile too: the outer variables are folded in as the
+  constants they currently hold. Calls to a `CompiledFunction` inside the body
+  are inlined rather than dispatched per point.
 
 ```mathematica
 In[1]:= Table[i^2, {i, 4}]

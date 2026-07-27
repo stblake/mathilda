@@ -383,6 +383,13 @@ expression would.
   `With`/`Module` locals with `Set`/`AddTo`/`Increment`/…, `Do`/`While`/`For`,
   `Nest`, and `CompoundExpression`. Anything else (e.g. `Zeta`, exact symbolic
   algebra) routes that application through the interpreter fallback.
+- **Counted iterators** in `Do`/`Sum`/`Product` accept every integer-bounded
+  spelling the interpreter does: `Do[body, n]` and `Do[body, {n}]` (repeat n
+  times), `{i, hi}`, `{i, lo, hi}`, and `{i, lo, hi, di}` with a nonzero integer
+  literal step. `Sum`/`Product` require a named iterator, matching the
+  interpreter, which does not accept a bare count for them. A missing spelling
+  is not merely a slower loop — it makes the whole surrounding body fall back to
+  the interpreter.
 - **Result** is a boxed machine number: an `Integer`, `Real`, or `Complex`
   (real part only if the imaginary part is zero), or `True`/`False` for a
   Boolean body.
