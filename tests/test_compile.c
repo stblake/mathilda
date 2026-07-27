@@ -343,6 +343,24 @@ static void must_bail_raw(const char* name, const char* body_s, const char* cons
     bail_body(name, parse_expression(body_s), names, types, n);
 }
 
+/* Evaluate `src` (which mentions the symbol `xq`) at x = xv.
+ *
+ * Substitution, NOT string formatting: printing a double with %.17g yields a
+ * 17-digit literal, which Mathilda reads as an ARBITRARY-PRECISION number, so
+ * the whole reference computes in MPFR and comes back as EXPR_MPFR rather than a
+ * machine Real.  Binding a genuine machine Real sidesteps that entirely. */
+static Expr* ref_at(const char* src, double xv) {
+    Expr* tmpl = parse_expression(src);
+    MatchEnv* env = env_new();
+    Expr* val = expr_new_real(xv);
+    env_set(env, intern_symbol("xq"), val);
+    Expr* sub = replace_bindings(tmpl, env);
+    env_free(env);
+    expr_free(val);
+    expr_free(tmpl);
+    return eval_and_free(sub);
+}
+
 /* ---- strip-mining stress helpers ---------------------------------------- */
 
 /* Compile the same array body fused and delegated, and require agreement.  Not
@@ -1373,6 +1391,112 @@ int main(void) {
             else printf("ok:   %-30s 200 calls, varying lengths\n", "stress: frame + tile reuse");
         }
         compiled_free(p); expr_free(b);
+    }
+
+    /* ================= COMPILED -> COMPILED CALLS =================
+     * A CompiledFunction callee is INLINED up to a depth cap, beyond which the
+     * whole body used to bail — a chain of eleven compiled functions dropped
+     * entirely to the interpreter.  OP_CALL is the fallback: the callee runs on
+     * its own frame with machine values passed in registers, no Expr and no
+     * evaluator round-trip, so the chain compiles instead. */
+    {
+        /* ELEVEN nested applications of one compiled callee.  The inliner
+         * pastes the first eight in; past its depth cap the rest used to bail
+         * the entire body, and are now CALLed.
+         *
+         * (A chain of DISTINCT Compile[] objects would not work here, by design:
+         * user Compile[] does not fold globals, because the object outlives its
+         * defining scope — so gc2's body cannot resolve gc1 at the time gc2 is
+         * compiled.  Nesting one already-compiled callee is the shape that
+         * actually arises.) */
+        const int DEPTH = 11;
+        /* The callee is deliberately LARGER than INLINE_MAX_INSTRS, so the
+         * compiler CALLs it rather than pasting it in — which is what exercises
+         * OP_CALL.  Same body twice: once as a Compile[] object, once as a
+         * DownValue, which never compiles and is therefore an honest reference. */
+        /* `Set` evaluates to the assigned value, so the result must be freed —
+         * eval_and_free only consumes its ARGUMENT. */
+        expr_free(eval_and_free(parse_expression(
+            "gcf = Compile[{x}, Sin[x]/2 + Cos[x]/3 + Sqrt[Abs[x]]/5 + Exp[-x x]/7"
+            " + Log[1 + x x]/11 + Tanh[x]/13 + ArcTan[x]/17 + x/19]")));
+        expr_free(eval_and_free(parse_expression(
+            "icf[a_] := Sin[a]/2 + Cos[a]/3 + Sqrt[Abs[a]]/5 + Exp[-a a]/7"
+            " + Log[1 + a a]/11 + Tanh[a]/13 + ArcTan[a]/17 + a/19")));
+
+        char call[512], ref0[512];
+        { size_t q = 0, r = 0;
+          for (int k = 0; k < DEPTH; k++) q += (size_t)snprintf(call + q, sizeof call - q, "gcf[");
+          q += (size_t)snprintf(call + q, sizeof call - q, "x");
+          for (int k = 0; k < DEPTH; k++) q += (size_t)snprintf(call + q, sizeof call - q, "]");
+          for (int k = 0; k < DEPTH; k++) r += (size_t)snprintf(ref0 + r, sizeof ref0 - r, "icf[");
+          r += (size_t)snprintf(ref0 + r, sizeof ref0 - r, "xq");
+          for (int k = 0; k < DEPTH; k++) r += (size_t)snprintf(ref0 + r, sizeof ref0 - r, "]");
+        }
+
+        const char* inm[1] = { intern_symbol("x") };
+        const CompileType RR1[1] = { CT_REAL };
+        Expr* b = parse_expression(call);
+        CompiledProgram* p = compile_expr_ex(b, inm, RR1, 1, COMPILE_FOLD_GLOBALS);
+        if (!p) {
+            printf("FAIL: %-30s depth-%d nesting did not compile\n", "compiled->compiled call", DEPTH);
+            failures++;
+        } else {
+            int bad = 0, nofin = 0, noref = 0; double maxerr = 0;
+            for (int t = 0; t < 100; t++) {
+                double xv = urand(0.2, 3.0), got;
+                if (!compiled_eval_real(p, &xv, &got)) { bad++; nofin++; continue; }
+                Expr* r = ref_at(ref0, xv);
+                double want;
+                if (!expr_to_double(r, &want)) { bad++; noref++; }
+                else {
+                    double e = fabs(got - want) / (fabs(want) + 1e-30);
+                    if (e > maxerr) { maxerr = e;
+                        if (e > 1e-12) printf("      x=%.17g got=%.17g want=%.17g\n", xv, got, want); }
+                }
+                expr_free(r);
+            }
+            if (bad || maxerr > 1e-12) {
+                printf("FAIL: %-30s %d bad (%d eval-fail, %d ref-fail), max_rel=%.2e\n",
+                       "compiled->compiled call", bad, nofin, noref, maxerr);
+                failures++;
+            } else printf("ok:   %-30s depth %d, max_rel=%.1e (100 pts)\n",
+                          "compiled->compiled call", DEPTH, maxerr);
+            compiled_free(p);
+        }
+        expr_free(b);
+
+        /* The callee gets its OWN frame.  Inside a loop the caller's frame is
+         * live across every re-entry, so a shared frame would corrupt the
+         * accumulator — the test the old per-program frame could not have passed. */
+        {
+            char loop[700];
+            snprintf(loop, sizeof loop,
+                     "Module[{s = 0.}, Do[s = s + %s, {i, 1, 8}]; s]", call);
+            Expr* b2 = parse_expression(loop);
+            CompiledProgram* p2 = compile_expr_ex(b2, inm, RR1, 1, COMPILE_FOLD_GLOBALS);
+            if (!p2) { printf("FAIL: call inside a loop did not compile\n"); failures++; }
+            else {
+                int bad = 0; double maxerr = 0;
+                for (int t = 0; t < 40; t++) {
+                    double xv = urand(0.2, 2.0), got;
+                    if (!compiled_eval_real(p2, &xv, &got)) { bad++; continue; }
+                    Expr* r = ref_at(ref0, xv);
+                    double v = 0;
+                    if (!expr_to_double(r, &v)) bad++;
+                    expr_free(r);
+                    double want = 8.0 * v;           /* body does not depend on i */
+                    double e = fabs(got - want) / (fabs(want) + 1e-30);
+                    if (e > maxerr) maxerr = e;
+                }
+                if (bad || maxerr > 1e-12) {
+                    printf("FAIL: %-30s %d bad, max_rel=%.2e\n", "call inside a loop", bad, maxerr);
+                    failures++;
+                } else printf("ok:   %-30s max_rel=%.1e (40 pts x 8 iters)\n",
+                              "call inside a loop", maxerr);
+                compiled_free(p2);
+            }
+            expr_free(b2);
+        }
     }
 
     if (failures == 0) printf("\nAll Compile engine tests passed.\n");

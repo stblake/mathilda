@@ -46,6 +46,11 @@ const Expr*        compiled_function_body(const CompiledFunction* cf);
 const char* const* compiled_function_arg_names(const CompiledFunction* cf);
 const CompileType* compiled_function_arg_types(const CompiledFunction* cf);
 
+/* The compiled program, or NULL if the body was outside the compilable subset.
+ * Exposed so a compiled CALLER can invoke this callee directly through the VM
+ * instead of routing every call back through the evaluator. */
+const CompiledProgram* compiled_function_program(const CompiledFunction* cf);
+
 /* Registers the `Compile` builtin (attributes + docstring). Called from
  * core_init. */
 void compiled_function_init(void);

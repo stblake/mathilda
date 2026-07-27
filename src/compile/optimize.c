@@ -76,6 +76,12 @@ static OpDesc op_desc(unsigned op) {
          * removed or hoisted, but it owns nothing, so unlike K_ARR it does not
          * force the surrounding fused loop out of the optimiser's reach. */
         case K_ASTORE:           o.rd = 1;   o.ra = 1; o.rb = 1;        break;
+        /* A call reads a RANGE of registers, which this descriptor cannot
+         * express, so `ra` stays clear and the range is handled explicitly in
+         * liveness and DCE.  Not marked pure: removing or duplicating a call
+         * would change which programs fail, and a failing callee is what routes
+         * the whole evaluation back to the interpreter. */
+        case K_CALL:   o.wd = 1;                                        break;
         /* Strip-mined reduction step: accumulates into dst, so it READS dst as
          * well as writing it — which is also what keeps LICM from hoisting it
          * out of the tile loop. */
@@ -201,6 +207,9 @@ static bool liveness(Opt* o) {
             if (s.rd && !bs_get(d, (int)c->dst)) bs_set(u, (int)c->dst);
             if (s.ra && !bs_get(d, (int)c->a))   bs_set(u, (int)c->a);
             if (s.rb && !s.jump && !bs_get(d, (int)c->b)) bs_set(u, (int)c->b);
+            if (compile_op_kind[c->op] == K_CALL)
+                for (unsigned k = 0; k < c->flags; k++)
+                    if (!bs_get(d, (int)c->a + (int)k)) bs_set(u, (int)c->a + (int)k);
             if (s.wd) bs_set(d, (int)c->dst);
         }
     }
@@ -375,6 +384,13 @@ static bool pass_vn(Opt* o, bool* progress) {
                     if (vn[v].valid && (vn[v].dst == d || vn[v].a == d || vn[v].b == d))
                         vn[v].valid = false;
                 for (int r = 0; r < nreg; r++) if (alias[r] == d) alias[r] = (uint32_t)r;
+                /* And d's OWN alias.  Without this, `MOVE d <- a` followed by any
+                 * instruction that WRITES d left alias[d] still pointing at a, so
+                 * a later read of d was copy-propagated back to a — the value
+                 * from before the write.  Every other opcode happened to
+                 * re-establish alias[d] just below; a CALL, which writes d
+                 * without being a MOVE, is what made it visible. */
+                alias[d] = d;
                 kk[d] = 0;
                 if (compile_op_kind[c->op] == K_CONST && (int)d < o->arr_base) {
                     kk[d] = 1; kv[d] = c->imm;
@@ -414,6 +430,9 @@ static bool pass_dce(Opt* o, bool* progress) {
             if (s.rd && (int)c->dst < o->nreg) bs_set(live, (int)c->dst);
             if (s.ra && (int)c->a   < o->nreg) bs_set(live, (int)c->a);
             if (s.rb && !s.jump && (int)c->b < o->nreg) bs_set(live, (int)c->b);
+            if (compile_op_kind[c->op] == K_CALL)
+                for (unsigned k = 0; k < c->flags; k++)
+                    if ((int)c->a + (int)k < o->nreg) bs_set(live, (int)c->a + (int)k);
         }
     }
     free(live);

@@ -20,6 +20,16 @@
 #include <stdlib.h>
 #include <stdint.h>
 
+/* Thread-local storage for the VM's call-depth counter.  `_Thread_local` is C11
+ * and `__thread` is a GNU extension, so both stay behind a guard; without either
+ * the counter is a plain global, which is still correct for the single-threaded
+ * build the project defaults to. */
+#if defined(MATHILDA_THREADS) && (defined(__GNUC__) || defined(__clang__))
+#define VM_TLS __thread
+#else
+#define VM_TLS
+#endif
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -40,14 +50,14 @@ struct CompiledProgram {
     int         nreg;
     int         arr_base;     /* array registers are [arr_base, tile_base) */
     int         tile_base;    /* tile registers are [tile_base, nreg) */
-    double _Complex* tile_mem;/* backing storage, VBLOCK elements per tile */
     int         result_reg;
     int         ncse;         /* repeated subtrees hoisted by cse_plan */
     CompileType result_type;
     size_t      nargs;
     CompileType* arg_types;   /* [nargs] */
     unsigned char* argdep;    /* [nargs] which args are read */
-    Slot*       frame;        /* reusable register file [nreg] (mutable via ptr) */
+    size_t      frame_slots;  /* registers + tile storage, in Slots */
+    int         ntiles;       /* tile registers; storage is per-CALL, not per-program */
     bool        all_real;     /* every arg + result is CT_REAL, no array temps */
 };
 
@@ -86,6 +96,11 @@ static void nm_free(NameMap* m) { free(m->key); free(m->val); }
  * slot (so teardown can never mistake a double for a pointer) without a
  * second allocator or a liveness pass.  Jump targets, which also live in the
  * `b` field, are ordinary small integers and are left alone by the rewrite. */
+/* A compiled callee bigger than this is CALLed rather than pasted in: past this
+ * size inlining costs more in code size and compile time than the call costs at
+ * run time. */
+#define INLINE_MAX_INSTRS 32
+
 #define CSE_MAX       16     /* reserved CSE registers; bounds frame growth */
 #define CSE_OCC_MAX  256     /* occurrence map entries */
 
@@ -1900,7 +1915,21 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
      * with only the parameters in scope (see arg_find). */
     {
         const CompiledFunction* cf = compiled_callee(c, h);
-        if (cf && na >= 1 && compiled_function_num_args(cf) == na
+
+        /* Inline or call?
+         *
+         * Inlining is the faster of the two — no frame, no argument copy — and
+         * stays the default.  But pasting a LARGE callee in at every use site
+         * multiplies code size and compile time, and the inliner also declines
+         * outright when the depth cap or the scope budget is hit, which used to
+         * bail the entire body to the interpreter.  So a big callee is CALLed
+         * instead: machine values in registers, its own frame, no Expr and no
+         * evaluator round-trip.  A callee with no program of its own (its body
+         * did not compile standalone) can only be inlined. */
+        const CompiledProgram* cp = cf ? compiled_function_program(cf) : NULL;
+        bool prefer_call = cp && compiled_num_instructions(cp) > INLINE_MAX_INSTRS;
+
+        if (cf && !prefer_call && na >= 1 && compiled_function_num_args(cf) == na
             && na + (size_t)c->nscope <= 16
             && c->inlining < 8) {          /* depth cap: a self-referential body */
             const char* const* pn = compiled_function_arg_names(cf);
@@ -1939,6 +1968,47 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
             c->temp_top = res_top;
             out->reg = preg[0]; out->tmp = true; out->type = bv.type;
             return c->ok;
+        }
+
+        /* Inlining declined — the depth cap, too many parameters, or an array
+         * signature.  Emit a real CALL rather than bailing: the callee runs on
+         * its own frame with machine values passed in registers, so a deep or
+         * self-referential chain compiles instead of dropping the whole body to
+         * the interpreter.  Arguments go in consecutive registers because the
+         * instruction carries only their base and count. */
+        if (cf && cp && na >= 1 && compiled_function_num_args(cf) == na && na <= 16
+            && !c->vector_mode) {
+            const CompileType* pt = compiled_function_arg_types(cf);
+            bool ok_args = true;
+            for (size_t i = 0; i < na && ok_args; i++)
+                if (CT_IS_ARRAY(pt[i])) ok_args = false;
+            if (ok_args && !CT_IS_ARRAY(compiled_result_type(cp))) {
+                EmitMark mk = emit_mark(c);
+                Slot z; memset(&z, 0, sizeof z);
+                /* Reserve the argument block FIRST so it is contiguous: each
+                 * argument's own lowering allocates temps ABOVE it, which would
+                 * otherwise interleave with the parameter slots. */
+                int base = alloc_temp(c);
+                for (size_t i = 1; i < na; i++) (void)alloc_temp(c);
+                int after_params = c->temp_top;
+                for (size_t i = 0; i < na && c->ok; i++) {
+                    Val v;
+                    if (!emit(c, A[i], &v) || CT_IS_ARRAY(v.type)) { c->ok = false; break; }
+                    coerce(c, &v, pt[i]);
+                    if (!c->ok) break;
+                    ins(c, OP_MOVE, (uint32_t)(base + (int)i), (uint32_t)v.reg, 0, z);
+                    c->temp_top = after_params;         /* drop this argument's temps */
+                }
+                if (c->ok) {
+                    Slot k; memset(&k, 0, sizeof k); k.p = cp;
+                    c->temp_top = (base - c->nlocals) + 1;   /* result lands in base */
+                    ins_f(c, OP_CALL, (uint16_t)na, (uint32_t)base, (uint32_t)base, 0, k);
+                    out->reg = base; out->tmp = true;
+                    out->type = compiled_result_type(cp);
+                    return c->ok;
+                }
+                emit_rollback(c, mk);
+            }
         }
     }
 
@@ -2130,6 +2200,8 @@ static bool vm_array_op(const Instr* c, Slot* d, Slot* a, Slot* b) {
 #else
 #define VM_THREADED 0
 #endif
+
+static bool vm_call(const CompiledProgram* cp, const Slot* argv, unsigned nargs, Slot* dst);
 
 static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
     *failed = false;
@@ -2505,6 +2577,12 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
                                                 &or_, &oi_) ? or_ + oi_ * I : NAN + NAN * I; } NEXT();
             #undef VBIN
             #undef VUN
+            /* A compiled callee, invoked directly: machine values in, machine
+             * value out, no Expr and no evaluator round-trip.  This is what
+             * lifts the inliner's depth cap — beyond it the callee is CALLED
+             * rather than pasted in, so deep chains compile instead of bailing. */
+            OP(CALL): { if (!vm_call((const CompiledProgram*)c->imm.p,
+                                     &RA, c->flags, &RD)) goto vm_fail; } NEXT();
             OP(NOP): NEXT();
             OP(RET): return;
 #if !VM_THREADED
@@ -2771,17 +2849,10 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
     p->result_reg = result_reg; p->result_type = res.type; p->ncse = c.ncse;
     p->nargs = nargs; p->argdep = c.argdep;
     p->arg_types = malloc((nargs ? nargs : 1) * sizeof(CompileType));
-    p->frame = malloc((size_t)(nreg ? nreg : 1) * sizeof(Slot));
-    if (!p->arg_types || !p->frame) { compiled_free(p); return NULL; }
-    if (c.tile_max > 0) {
-        /* One tile buffer per tile register, sized for the widest element type so
-         * a real and a complex tile are interchangeable storage.  Allocated once
-         * and pointed at from the frame, so the strip loop never allocates. */
-        p->tile_mem = malloc((size_t)c.tile_max * VBLOCK * sizeof(double _Complex));
-        if (!p->tile_mem) { compiled_free(p); return NULL; }
-        for (int k = 0; k < c.tile_max; k++)
-            p->frame[tile_base + k].p = p->tile_mem + (size_t)k * VBLOCK;
-    }
+    p->ntiles = c.tile_max;
+    p->frame_slots = (size_t)nreg + (size_t)c.tile_max * VBLOCK;
+    if (p->frame_slots == 0) p->frame_slots = 1;
+    if (!p->arg_types) { compiled_free(p); return NULL; }
     memcpy(p->arg_types, arg_types, nargs * sizeof(CompileType));
     p->all_real = (res.type == CT_REAL) && c.arr_max == 0;
     for (size_t k = 0; k < nargs; k++) if (arg_types[k] != CT_REAL) p->all_real = false;
@@ -2833,28 +2904,104 @@ static bool finite_result(const Slot* s, CompileType t) {
  * be touched) and any that is still live afterwards is released here — the
  * belt to OP_ARR_FREE's braces, and the only cleanup on the abort path.
  * A result array is NULLed out by the caller first, so it survives. */
-/* Only the ARRAY bank: tile slots hold frame-owned buffer pointers that must
- * survive every call, and clearing them would strand the storage. */
-static void arr_reset(const CompiledProgram* p) {
-    for (int r = p->arr_base; r < p->tile_base; r++) p->frame[r].arr = NULL;
+/* ------------------------------------------------------------------ *
+ *  Call frames                                                        *
+ * ------------------------------------------------------------------ *
+ * The frame used to be a single buffer owned by the CompiledProgram and mutated
+ * through a `const CompiledProgram*`, which meant a program was neither
+ * reentrant nor thread-safe: two live calls of the same program shared one
+ * register file, and (once fusion landed) one set of tile buffers.
+ *
+ * Frames now come from the C stack, which is per-thread and naturally nested, so
+ * reentrancy and thread-safety both fall out with no arena to own, grow or free
+ * — and no allocation at all for any program that fits the fixed buffer, which
+ * is every realistic one.  Larger programs fall back to a single malloc.
+ *
+ * Layout: `nreg` register Slots, then `ntiles * VBLOCK` Slots of tile storage.
+ * A Slot is exactly `sizeof(double _Complex)`, so tile storage is correctly
+ * aligned for both real and complex tiles. */
+#define VM_STACK_SLOTS 512
+
+/* Point each tile register at its slice of the frame's tile storage. */
+static void frame_bind_tiles(const CompiledProgram* p, Slot* R) {
+    Slot* tiles = R + p->nreg;
+    for (int k = 0; k < p->ntiles; k++)
+        R[p->tile_base + k].p = tiles + (size_t)k * VBLOCK;
 }
-static void arr_sweep(const CompiledProgram* p) {
+
+/* Only the ARRAY bank: tile slots hold pointers into the frame's own storage,
+ * so clearing them would strand the tiles for the rest of the call. */
+static void arr_reset(const CompiledProgram* p, Slot* R) {
+    for (int r = p->arr_base; r < p->tile_base; r++) R[r].arr = NULL;
+}
+static void arr_sweep(const CompiledProgram* p, Slot* R) {
     for (int r = p->arr_base; r < p->tile_base; r++)
-        if (p->frame[r].arr) { expr_free(p->frame[r].arr); p->frame[r].arr = NULL; }
+        if (R[r].arr) { expr_free(R[r].arr); R[r].arr = NULL; }
+}
+
+/* Depth guard for OP_CALL.  Frames live on the C stack, so unbounded nesting
+ * would overflow it rather than fail cleanly; a compiled program that recurses
+ * past this simply fails and the caller falls back to the interpreter. */
+#define VM_MAX_CALL_DEPTH 200
+static VM_TLS int vm_call_depth = 0;
+
+/* Run `cp` on `nargs` machine values taken straight from the caller's registers.
+ * The caller coerced them to the callee's declared types at emit time, so the
+ * copy is a raw Slot move — no boxing, no Expr, no evaluator.  The callee gets
+ * its OWN frame, which is what makes a compiled program reentrant. */
+static bool vm_call(const CompiledProgram* cp, const Slot* argv, unsigned nargs, Slot* dst) {
+    if (!cp || cp->nargs != (size_t)nargs) return false;
+    if (vm_call_depth >= VM_MAX_CALL_DEPTH) return false;
+
+    Slot stackframe[VM_STACK_SLOTS];
+    Slot* heap = NULL;
+    Slot* R = stackframe;
+    if (cp->frame_slots > VM_STACK_SLOTS) {
+        heap = malloc(cp->frame_slots * sizeof(Slot));
+        if (!heap) return false;
+        R = heap;
+    }
+    if (cp->ntiles) frame_bind_tiles(cp, R);
+    for (unsigned k = 0; k < nargs; k++) R[k] = argv[k];
+    arr_reset(cp, R);
+
+    vm_call_depth++;
+    bool failed = false;
+    vm_run(cp->code, cp->n, R, &failed);
+    vm_call_depth--;
+
+    Slot* r = &R[cp->result_reg];
+    bool good = !failed && finite_result(r, cp->result_type)
+                && !CT_IS_ARRAY(cp->result_type);
+    if (good) *dst = *r;
+    arr_sweep(cp, R);
+    free(heap);
+    return good;
 }
 
 bool compiled_eval(const CompiledProgram* p, const CompileValue* args, CompileValue* out) {
+    Slot stackframe[VM_STACK_SLOTS];
+    Slot* heap = NULL;
+    Slot* R = stackframe;
+    if (p->frame_slots > VM_STACK_SLOTS) {
+        heap = malloc(p->frame_slots * sizeof(Slot));
+        if (!heap) return false;
+        R = heap;
+    }
+    if (p->ntiles) frame_bind_tiles(p, R);
+
     for (size_t k = 0; k < p->nargs; k++)
-        if (!load_arg(&p->frame[k], &args[k], p->arg_types[k])) return false;
-    arr_reset(p);
+        if (!load_arg(&R[k], &args[k], p->arg_types[k])) { free(heap); return false; }
+    arr_reset(p, R);
     bool failed = false;
-    vm_run(p->code, p->n, p->frame, &failed);
-    Slot* r = &p->frame[p->result_reg];
+    vm_run(p->code, p->n, R, &failed);
+    Slot* r = &R[p->result_reg];
     out->type = p->result_type;
     if (CT_IS_ARRAY(p->result_type)) {
         out->v.a = failed ? NULL : r->arr;
         if (!failed) r->arr = NULL;    /* ownership transfers to the caller */
-        arr_sweep(p);
+        arr_sweep(p, R);
+        free(heap);
         return !failed && out->v.a != NULL;
     }
     switch (p->result_type) {
@@ -2864,16 +3011,27 @@ bool compiled_eval(const CompiledProgram* p, const CompileValue* args, CompileVa
         case CT_COMPLEX: out->v.z = r->z; break;
         default: break;
     }
-    arr_sweep(p);
-    return !failed && finite_result(r, p->result_type);
+    arr_sweep(p, R);
+    bool good = !failed && finite_result(r, p->result_type);
+    free(heap);
+    return good;
 }
 
 bool compiled_eval_real(const CompiledProgram* p, const double* args, double* out) {
-    if (!p->all_real) return false;   /* implies no array registers */
-    for (size_t k = 0; k < p->nargs; k++) p->frame[k].r = args[k];
+    if (!p->all_real) return false;   /* implies no array registers and no tiles */
+    Slot stackframe[VM_STACK_SLOTS];
+    Slot* heap = NULL;
+    Slot* R = stackframe;
+    if (p->frame_slots > VM_STACK_SLOTS) {
+        heap = malloc(p->frame_slots * sizeof(Slot));
+        if (!heap) return false;
+        R = heap;
+    }
+    for (size_t k = 0; k < p->nargs; k++) R[k].r = args[k];
     bool failed = false;
-    vm_run(p->code, p->n, p->frame, &failed);
-    *out = p->frame[p->result_reg].r;
+    vm_run(p->code, p->n, R, &failed);
+    *out = R[p->result_reg].r;
+    free(heap);
     return isfinite(*out);
 }
 
@@ -2883,23 +3041,34 @@ bool compiled_eval_real_batch(const CompiledProgram* const* progs, size_t nprogs
     /* one shared frame = the widest program's (big enough for every program's
      * registers); the argument region [0,nargs) is loaded once and never written
      * by any program (dst registers are always temporaries >= nargs). */
-    size_t im = 0;
-    for (size_t i = 1; i < nprogs; i++) if (progs[i]->nreg > progs[im]->nreg) im = i;
-    Slot* F = progs[im]->frame;
+    size_t widest = 0;
+    for (size_t i = 0; i < nprogs; i++)
+        if (progs[i]->frame_slots > widest) widest = progs[i]->frame_slots;
+
+    Slot stackframe[VM_STACK_SLOTS];
+    Slot* heap = NULL;
+    Slot* F = stackframe;
+    if (widest > VM_STACK_SLOTS) {
+        heap = malloc(widest * sizeof(Slot));
+        if (!heap) return false;
+        F = heap;
+    }
     for (size_t k = 0; k < nargs; k++) F[k].r = args[k];
     for (size_t i = 0; i < nprogs; i++) {
-        if (!progs[i]->all_real) return false;   /* implies no array registers */
+        /* all_real implies no array registers and no tiles, so one shared frame
+         * is enough and needs no per-program tile binding. */
+        if (!progs[i]->all_real) { free(heap); return false; }
         bool failed = false;
         vm_run(progs[i]->code, progs[i]->n, F, &failed);
         out[i] = F[(size_t)progs[i]->result_reg].r;
-        if (!isfinite(out[i])) return false;
+        if (!isfinite(out[i])) { free(heap); return false; }
     }
+    free(heap);
     return true;
 }
 
 void compiled_free(CompiledProgram* p) {
     if (!p) return;
-    free(p->code); free(p->arg_types); free(p->argdep); free(p->frame);
-    free(p->tile_mem);
+    free(p->code); free(p->arg_types); free(p->argdep);
     free(p);
 }

@@ -55,11 +55,14 @@ typedef struct { uint16_t op, flags; uint32_t dst, a, b; Slot imm; } Instr;
  *             (unlike K_ARR) carries no ownership in its flags, so it does not
  *             stop the optimiser working on the rest of a fused loop
  *   K_VACC    dst += f(a)  (a strip-mined reduction step: READS and WRITES dst)
+ *   K_CALL    dst = callee(a .. a+flags-1)   — imm.p is the callee program and
+ *             `flags` the argument count, so the operands are a RANGE rather
+ *             than the usual fixed fields
  *   K_NOP     removed by a previous pass; deleted at compaction
  */
 enum {
     K_CONST, K_MOVE, K_UN, K_BIN, K_POWI, K_KERN1, K_KERN2,
-    K_INC, K_JMP, K_JZ, K_LOOP, K_RET, K_ARR, K_ASTORE, K_VACC, K_NOP
+    K_INC, K_JMP, K_JZ, K_LOOP, K_RET, K_ARR, K_ASTORE, K_VACC, K_CALL, K_NOP
 };
 
 /* ------------------------------------------------------------------ *
@@ -127,6 +130,7 @@ enum {
     X(A_LOAD_R, K_BIN)   X(A_LOAD_C, K_BIN)                                \
     X(A_STORE_R, K_ASTORE) X(A_STORE_C, K_ASTORE)                          \
     /* strip-mined (tile) forms — one opcode, VBLOCK elements */           \
+    X(CALL, K_CALL)                                                        \
     X(VSETLEN, K_ASTORE)                                                   \
     X(VLOAD_R, K_BIN)   X(VLOAD_C, K_BIN)                                  \
     X(VSTORE_R, K_ASTORE) X(VSTORE_C, K_ASTORE)                            \

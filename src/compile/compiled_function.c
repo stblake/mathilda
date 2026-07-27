@@ -269,6 +269,7 @@ bool               compiled_function_is_compiled(const CompiledFunction* cf) { r
 const Expr*        compiled_function_body(const CompiledFunction* cf) { return cf ? cf->body : NULL; }
 const char* const* compiled_function_arg_names(const CompiledFunction* cf) { return cf ? cf->arg_names : NULL; }
 const CompileType* compiled_function_arg_types(const CompiledFunction* cf) { return cf ? cf->arg_types : NULL; }
+const CompiledProgram* compiled_function_program(const CompiledFunction* cf) { return cf ? cf->prog : NULL; }
 
 /* Compile[argspec, body] (HoldAll).  Never evaluates the body; the raw held
  * body is compiled, and any non-arg symbol it references simply routes that
