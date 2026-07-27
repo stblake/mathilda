@@ -57,6 +57,9 @@ static OpDesc op_desc(unsigned op) {
         case K_MOVE:   o.wd = 1;             o.ra = 1;      o.pure = 1; break;
         case K_UN:
         case K_KERN1:
+        /* A binary op with its constant operand in the immediate reads ONE
+         * register, which is exactly why it exists. */
+        case K_BINK:
         case K_POWI:   o.wd = 1;             o.ra = 1;      o.pure = 1; break;
         case K_BIN:
         case K_KERN2:  o.wd = 1;             o.ra = 1; o.rb = 1;
@@ -106,6 +109,9 @@ static OpDesc op_desc(unsigned op) {
  * zero-fills for exactly this reason). */
 static bool imm_eq(unsigned op, Slot x, Slot y) {
     switch (compile_op_kind[op]) {
+        /* A K_BINK immediate is a value, and it was copied from a CONST
+         * immediate, which the emitter zero-fills for exactly this reason. */
+        case K_BINK:
         case K_CONST: return memcmp(&x, &y, sizeof x) == 0;
         case K_POWI:
         case K_INC:   return x.i == y.i;
@@ -262,6 +268,39 @@ static bool liveness(Opt* o) {
  * ------------------------------------------------------------------ */
 typedef struct { unsigned op; uint32_t a, b; Slot imm; uint32_t dst; bool valid; } VNEntry;
 
+/* The immediate form of a binary opcode, or 0 if it has none.
+ *
+ * `konst_is_b` says which operand is the constant.  A commutative op takes the
+ * same form either way; a comparison with the constant on the LEFT becomes the
+ * SWAPPED predicate rather than a second opcode, which is NaN-safe (`k < x` and
+ * `x > k` are both false when x is NaN — unlike negating a predicate, which
+ * would flip a NaN comparison from false to true).
+ *
+ * Complex forms are deliberately absent: the immediate is a Slot, so a complex
+ * constant fits, but complex bodies are dominated by the arithmetic itself
+ * rather than by dispatch, and every added opcode is a line of VM to keep
+ * correct. */
+static uint16_t bink_of(unsigned op, bool konst_is_b) {
+    switch (op) {
+        case OP_ADD_R: return OP_ADD_RK;              /* commutative */
+        case OP_MUL_R: return OP_MUL_RK;
+        case OP_ADD_I: return OP_ADD_IK;
+        case OP_MUL_I: return OP_MUL_IK;
+        case OP_SUB_R: return konst_is_b ? OP_SUB_RK : OP_SUB_KR;
+        case OP_SUB_I: return konst_is_b ? OP_SUB_IK : OP_SUB_KI;
+        case OP_DIV_R: return konst_is_b ? OP_DIV_RK : OP_DIV_KR;
+        case OP_LT_R:  return konst_is_b ? OP_LT_RK  : OP_GT_RK;
+        case OP_LE_R:  return konst_is_b ? OP_LE_RK  : OP_GE_RK;
+        case OP_GT_R:  return konst_is_b ? OP_GT_RK  : OP_LT_RK;
+        case OP_GE_R:  return konst_is_b ? OP_GE_RK  : OP_LE_RK;
+        case OP_LT_I:  return konst_is_b ? OP_LT_IK  : OP_GT_IK;
+        case OP_LE_I:  return konst_is_b ? OP_LE_IK  : OP_GE_IK;
+        case OP_GT_I:  return konst_is_b ? OP_GT_IK  : OP_LT_IK;
+        case OP_GE_I:  return konst_is_b ? OP_GE_IK  : OP_LE_IK;
+        default:       return 0;
+    }
+}
+
 /* Constant-fold `op` over known operand constants.  Computes with exactly the
  * expression the VM would have executed, so the folded value is bit-identical.
  * Returns false for anything not folded (always safe). */
@@ -309,6 +348,27 @@ static bool fold_op(unsigned op, Slot a, Slot b, Slot imm, Slot* out) {
         case OP_MIN_R: r.r = a.r < b.r ? a.r : b.r; break;
         case OP_MAX_I: r.i = a.i > b.i ? a.i : b.i; break;
         case OP_MIN_I: r.i = a.i < b.i ? a.i : b.i; break;
+        /* Immediate forms.  `b` is unused; the constant lives in `imm`.  Written
+         * as the identical C expression to the VM's, so folding one is
+         * bit-identical to executing it. */
+        case OP_ADD_RK: r.r = a.r + imm.r; break;
+        case OP_SUB_RK: r.r = a.r - imm.r; break;
+        case OP_SUB_KR: r.r = imm.r - a.r; break;
+        case OP_MUL_RK: r.r = a.r * imm.r; break;
+        case OP_DIV_RK: r.r = a.r / imm.r; break;
+        case OP_DIV_KR: r.r = imm.r / a.r; break;
+        case OP_ADD_IK: r.i = a.i + imm.i; break;
+        case OP_SUB_IK: r.i = a.i - imm.i; break;
+        case OP_SUB_KI: r.i = imm.i - a.i; break;
+        case OP_MUL_IK: r.i = a.i * imm.i; break;
+        case OP_LT_RK: r.i = a.r <  imm.r; break;
+        case OP_LE_RK: r.i = a.r <= imm.r; break;
+        case OP_GT_RK: r.i = a.r >  imm.r; break;
+        case OP_GE_RK: r.i = a.r >= imm.r; break;
+        case OP_LT_IK: r.i = a.i <  imm.i; break;
+        case OP_LE_IK: r.i = a.i <= imm.i; break;
+        case OP_GT_IK: r.i = a.i >  imm.i; break;
+        case OP_GE_IK: r.i = a.i >= imm.i; break;
         case OP_POWI_R: {                    /* mirrors the VM's ipow_r exactly */
             long long e = imm.i;
             unsigned long long m = (unsigned long long)(e < 0 ? -e : e);
@@ -362,6 +422,32 @@ static bool pass_vn(Opt* o, bool* progress) {
                         c->op = OP_CONST; c->a = 0; c->b = 0; c->imm = folded;
                         s = op_desc(c->op);
                         *progress = true;
+                    }
+                }
+
+                /* Not both constant (that folded above), but ONE of them is:
+                 * move it into the immediate.  The CONST that materialised it
+                 * becomes dead and DCE deletes it, so the win is a whole
+                 * instruction per constant operand — a third of the stream in a
+                 * polynomial body, and it re-executed on every call.
+                 *
+                 * The surviving operand becomes `a`, so K_BINK always reads one
+                 * register and the VM never has to ask which side. */
+                if (compile_op_kind[c->op] == K_BIN && ka != kb
+                    && (int)c->a < o->arr_base && (int)c->b < o->arr_base) {
+                    uint16_t nk = bink_of(c->op, kb);
+                    if (nk) {
+                        c->imm = kb ? kv[c->b] : kv[c->a];
+                        c->a   = kb ? c->a : c->b;
+                        c->b   = 0;
+                        c->op  = nk;
+                        s = op_desc(c->op);
+                        /* Deliberately does NOT set *progress.  The only thing
+                         * this enables is deleting the now-dead CONST, and DCE
+                         * runs in THIS round; reporting progress bought nothing
+                         * but an extra CFG build and liveness solve, which cost
+                         * 21% of compile time — a bad trade for the one-shot
+                         * bodies Plot and NIntegrate compile. */
                     }
                 }
             }

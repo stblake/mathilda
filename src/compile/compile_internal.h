@@ -42,6 +42,14 @@ typedef struct { uint16_t op, flags; uint32_t dst, a, b; Slot imm; } Instr;
  *   K_MOVE    dst = a                         (pure)
  *   K_UN      dst = f(a)                      (pure)
  *   K_BIN     dst = f(a, b)                   (pure)
+ *   K_BINK    dst = f(a, imm)                 (pure) -- a binary op with its
+ *             constant operand folded INTO the instruction.  Created by the
+ *             optimiser, never by the emitter: materialising a constant into
+ *             a register costs a whole instruction, that instruction
+ *             re-executes on every call, and in a polynomial body it is a
+ *             THIRD of the stream.  Exactly value-preserving (same C operator
+ *             on the same two values), so the opt/no-opt bitwise gate covers
+ *             it.
  *   K_POWI    dst = f(a, imm.i)               (pure)
  *   K_KERN1   dst = f(a) via imm.p            (pure)
  *   K_KERN2   dst = f(a, b) via imm.p         (pure)
@@ -70,7 +78,7 @@ typedef struct { uint16_t op, flags; uint32_t dst, a, b; Slot imm; } Instr;
  *   K_NOP     removed by a previous pass; deleted at compaction
  */
 enum {
-    K_CONST, K_MOVE, K_UN, K_BIN, K_POWI, K_KERN1, K_KERN2,
+    K_CONST, K_MOVE, K_UN, K_BIN, K_BINK, K_POWI, K_KERN1, K_KERN2,
     K_INC, K_JMP, K_JZ, K_LOOP, K_RET, K_ARR, K_ASTORE, K_VACC, K_CALL,
     K_NARY, K_APAR, K_NOP
 };
@@ -111,6 +119,17 @@ enum {
     X(INV_R, K_UN)    X(INV_C, K_UN)                                       \
     X(POWI_I, K_POWI) X(POWI_R, K_POWI) X(POWI_C, K_POWI)                  \
     X(POW_R, K_BIN)   X(POW_C, K_BIN)                                      \
+    /* immediate forms: the optimiser folds a constant operand into the      \
+     * instruction and DCE then removes the CONST that materialised it.      \
+     * `_RK`/`_IK` = register OP constant; `_KR`/`_KI` = constant OP register \
+     * (only needed where the op is not commutative).  A comparison with the  \
+     * constant on the LEFT is rewritten by SWAPPING the predicate, which is  \
+     * NaN-safe: `k < x` and `x > k` are both false for a NaN x. */          \
+    X(ADD_RK, K_BINK) X(SUB_RK, K_BINK) X(SUB_KR, K_BINK)                   \
+    X(MUL_RK, K_BINK) X(DIV_RK, K_BINK) X(DIV_KR, K_BINK)                   \
+    X(ADD_IK, K_BINK) X(SUB_IK, K_BINK) X(SUB_KI, K_BINK) X(MUL_IK, K_BINK) \
+    X(LT_RK, K_BINK)  X(LE_RK, K_BINK)  X(GT_RK, K_BINK)  X(GE_RK, K_BINK)  \
+    X(LT_IK, K_BINK)  X(LE_IK, K_BINK)  X(GT_IK, K_BINK)  X(GE_IK, K_BINK)  \
     X(SQRT_R, K_UN)   X(SQRT_C, K_UN)  X(EXP_R, K_UN)   X(EXP_C, K_UN)     \
     X(LOG_R, K_UN)    X(LOG_C, K_UN)                                       \
     X(SIN_R, K_UN)    X(SIN_C, K_UN)   X(COS_R, K_UN)   X(COS_C, K_UN)     \

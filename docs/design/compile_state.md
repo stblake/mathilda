@@ -21,7 +21,22 @@ no bail site knows diagnostics exist and a bail added tomorrow is diagnosed the
 day it is written. `EmitMark` carries the record so speculative lowering (fusion
 probing) rolls it back; a speculative failure is not a bail.
 
-Three findings from having it:
+**Codegen: constant operands now live in the instruction** (`K_BINK`, 18
+opcodes). `pass_vn` already tracked which registers hold constants, so a binary
+op with exactly one constant operand becomes its immediate form and DCE deletes
+the `CONST`. The surviving operand always becomes `a` (one register read, no
+branch); a comparison with the constant on the left swaps the PREDICATE rather
+than adding eight opcodes, which is NaN-safe where negating would not be. Each
+form is one arithmetic operation, so no FMA contraction is possible and the
+opt/no-opt `memcmp` gate covers it.
+
+**And the lesson from measuring it: a third fewer instructions bought ~9%, not
+a third.** Horner deg-40 went 121 → 81 instructions for 181 → 173 ns/call. The
+removed `CONST`s were the cheapest instruction in the set and the multiply-add
+chain around them is serially dependent — the VM was never instruction-count
+bound. Quote the wall-clock, not the instruction count.
+
+Three findings from having the diagnostics:
 
 1. **Two tests had silently rotted.** Both built their "interpreter reference"
    out of `Zeta` because it had no machine kernel. It got one during M5, and both

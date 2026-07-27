@@ -1445,6 +1445,20 @@ int main(void) {
         AB("repeat: inside If",        "If[x < y, Sin[x y] + Sin[x y], Cos[x y] - Cos[x y]^2]", 2, RRR, false);
         AB("repeat: with locals",      "With[{a = Sin[x y]}, a + Sin[x y] + a Sin[x y]]", 2, RRR, true);
         AB("repeat: complex",          "(x + I y)^2 + Exp[(x + I y)^2]", 2, CCC, false);
+        /* Constant-operand folding (K_BINK).  A constant reaching a binary op
+         * used to cost a whole CONST instruction; these bodies are where that
+         * rewrite fires, in every shape it has: commutative, non-commutative
+         * both ways round, integer, and comparisons — including the ones with
+         * the constant on the LEFT, which are rewritten by SWAPPING the
+         * predicate rather than negating it. */
+        AB("imm: polynomial",       "1.5 + 2.5 x + 3.5 x^2 + 4.5 x^3 + 5.5 x^4", 1, RRR, false);
+        AB("imm: constant left",    "2.5 - x + 7.5/x - (1.5 - x/3.0)", 1, RRR, false);
+        AB("imm: integer",          "x + 7 - 3 x + Mod[x, 5] y",     2, III, false);
+        AB("imm: compare right",    "If[x < 2.5, x - 1.5, 3.5 - x]", 1, RRR, false);
+        AB("imm: compare left",     "If[2.5 < x, 1.5 x, x/4.0]",     1, RRR, false);
+        AB("imm: compare int",      "If[7 <= x, x - 2, 9 - x]",      1, III, false);
+        AB("imm: in a loop",        "Module[{s = 0.}, Do[s = s 0.5 + 1.25 x, {i, 1, 20}]; s]", 1, RRR, true);
+        AB("imm: NaN through",      "If[x < 2.5, Sqrt[x - 4.0] + 1.5, 2.5 - Sqrt[-x]]", 1, RRR, false);
         }
 
         #undef AB
@@ -1452,6 +1466,45 @@ int main(void) {
             printf("ok:   %-30s %d bodies bitwise-identical, %lld -> %lld instrs (%.0f%% removed)\n",
                    "optimiser A/B", ab_bodies, tot_raw, tot_opt,
                    100.0 * (double)(tot_raw - tot_opt) / (double)(tot_raw ? tot_raw : 1));
+    }
+
+    /* ANTI-VACUITY GUARD for constant-operand folding.
+     *
+     * Every A/B body above stays bitwise-identical whether or not the rewrite
+     * fires — agreement is exactly what a pass that does nothing also achieves.
+     * So assert the SIZE: each of these bodies has K constants that each reach a
+     * binary op exactly once, so K whole instructions (the CONSTs that
+     * materialised them) must disappear. If a future edit drops the rewrite, the
+     * bodies above stay green and this fails. */
+    {
+        static const struct { const char* body; int nconst; } IMM[] = {
+            { "1.5 + 2.5 x",                                   2 },
+            { "1.5 + 2.5 x + 3.5 x^2 + 4.5 x^3",               4 },
+            { "2.5 - x + 7.5/x",                               2 },
+            { "Exp[-x^2/2] 0.3989422804014327",                2 },
+        };
+        const char* nm[1] = { NULL };
+        nm[0] = intern_symbol("x");
+        CompileType ty[1] = { CT_REAL };
+        int checked = 0, bad = 0;
+        for (size_t k = 0; k < sizeof IMM / sizeof IMM[0]; k++) {
+            Expr* b = eval_and_free(parse_expression(IMM[k].body));
+            CompiledProgram* po = compile_expr_ex(b, nm, ty, 1, 0u);
+            CompiledProgram* pr = compile_expr_ex(b, nm, ty, 1, COMPILE_NO_OPT);
+            if (po && pr) {
+                long long saved = (long long)compiled_num_instructions(pr)
+                                - (long long)compiled_num_instructions(po);
+                if (saved < IMM[k].nconst) {
+                    printf("FAIL: constant-operand folding removed %lld instrs for `%s`, "
+                           "expected at least %d\n", saved, IMM[k].body, IMM[k].nconst);
+                    bad = 1; failures++;
+                } else checked++;
+            } else { printf("FAIL: `%s` did not compile\n", IMM[k].body); bad = 1; failures++; }
+            compiled_free(po); compiled_free(pr); expr_free(b);
+        }
+        if (!bad)
+            printf("ok:   %-30s %d bodies, every constant operand folded into its op\n",
+                   "immediate operands", checked);
     }
 
     /* Arrays must survive the optimiser untouched — their ownership lives in

@@ -143,6 +143,25 @@ arith ops = 8.0 ns/op; mixed-libm 150 ns/call; array len-4096 1.0x, 61 ns/elemen
       PolarPlot passed `expr_new_real(t)` inline to `symtab_add_own_value`,
       which COPIES — one leaked node per sample point (529 blocks / 34 KB for
       one default ParametricPlot).
+- [x] **Constant operands folded into the instruction — DONE.** New `K_BINK`
+      kind, 18 opcodes (real/int add/sub/mul/div + the four order comparisons).
+      Rewritten in the optimiser using the constant tracking `pass_vn` already
+      had; DCE removes the dead `CONST`. Horner deg-40 121 -> 81 instructions,
+      `1.5 + 2.5 x` 5 -> 3.
+      **But measure the time, not the count: -33% instructions bought ~9%**
+      (`Table` of a degree-5 polynomial over 10^6 points, 140 -> 129 ms), and
+      1-3% on bodies that are not constant-heavy. The removed `CONST`s were the
+      cheapest instruction in the set and the surrounding chain is serially
+      dependent — the VM was never instruction-count bound.
+      Anti-vacuity guard added: the A/B gate passes whether or not the rewrite
+      fires, so a separate check asserts the instruction count really drops.
+- [ ] **Next codegen step is a native backend, not more peepholes.** At ~2 ns
+      per instruction the VM is memory-port bound (Instr load, operand load,
+      result store, jump-table load), which is why removing a third of the
+      instructions moved 9%. A multiply-add superinstruction is the one
+      remaining cheap idea and it needs floating-point contraction turned off
+      to stay bit-identical — `-ffp-contract=off` on one file, or `#pragma STDC
+      FP_CONTRACT OFF`, whose GCC support is unreliable.
 - [ ] **Plot primitive construction** — now the bottleneck for DensityPlot /
       VectorPlot / ParametricPlot3D: one `Rectangle`/`Arrow`/`Polygon` `Expr`
       per cell. All three bodies compile; sampling is simply no longer where the

@@ -2654,6 +2654,29 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(ADD_I): RD.i = RA.i + RB.i; NEXT();
             OP(ADD_R): RD.r = RA.r + RB.r; NEXT();
             OP(ADD_C): RD.z = RA.z + RB.z; NEXT();
+            /* Immediate forms (K_BINK).  One register read instead of two, and
+             * the CONST that would have materialised the operand is gone.  Each
+             * is a SINGLE arithmetic operation, so no floating-point contraction
+             * is possible and the result is bit-identical to the register form
+             * the optimiser rewrote. */
+            OP(ADD_RK): RD.r = RA.r + c->imm.r; NEXT();
+            OP(SUB_RK): RD.r = RA.r - c->imm.r; NEXT();
+            OP(SUB_KR): RD.r = c->imm.r - RA.r; NEXT();
+            OP(MUL_RK): RD.r = RA.r * c->imm.r; NEXT();
+            OP(DIV_RK): RD.r = RA.r / c->imm.r; NEXT();
+            OP(DIV_KR): RD.r = c->imm.r / RA.r; NEXT();
+            OP(ADD_IK): RD.i = RA.i + c->imm.i; NEXT();
+            OP(SUB_IK): RD.i = RA.i - c->imm.i; NEXT();
+            OP(SUB_KI): RD.i = c->imm.i - RA.i; NEXT();
+            OP(MUL_IK): RD.i = RA.i * c->imm.i; NEXT();
+            OP(LT_RK): RD.i = RA.r <  c->imm.r; NEXT();
+            OP(LE_RK): RD.i = RA.r <= c->imm.r; NEXT();
+            OP(GT_RK): RD.i = RA.r >  c->imm.r; NEXT();
+            OP(GE_RK): RD.i = RA.r >= c->imm.r; NEXT();
+            OP(LT_IK): RD.i = RA.i <  c->imm.i; NEXT();
+            OP(LE_IK): RD.i = RA.i <= c->imm.i; NEXT();
+            OP(GT_IK): RD.i = RA.i >  c->imm.i; NEXT();
+            OP(GE_IK): RD.i = RA.i >= c->imm.i; NEXT();
             OP(SUB_I): RD.i = RA.i - RB.i; NEXT();
             OP(SUB_R): RD.r = RA.r - RB.r; NEXT();
             OP(SUB_C): RD.z = RA.z - RB.z; NEXT();
