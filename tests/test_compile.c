@@ -532,6 +532,7 @@ int main(void) {
     const char* xyz[] = { "x", "y", "z" };
     const char* xy[]  = { "x", "y" };
     const char* x1[]  = { "x" };
+    const char* x1i[] = { intern_symbol("x") };
     const CompileType RRR[] = { CT_REAL, CT_REAL, CT_REAL };
     const CompileType III[] = { CT_INT, CT_INT, CT_INT };
     const CompileType CCC[] = { CT_COMPLEX, CT_COMPLEX, CT_COMPLEX };
@@ -560,6 +561,59 @@ int main(void) {
     parity("real Arg (positive)", "Arg[x]", xyz, RRR, 1, 0.3, 6.0, 0, 0, 200);
     parity("real Arg (negative)", "Arg[-x]", xyz, RRR, 1, 0.3, 6.0, 0, 0, 200);
     parity("Mod/Arg in a chain", "Sin[Mod[x, y]] + Arg[-x] Quotient[x, y]", xyz, RRR, 2, 0.4, 5.0, 0, 0, 200);
+
+    /* Exponential-integral family: new machine kernels (expint_machine.c) for
+     * modules that previously computed only in MPFR, so these heads used to bail
+     * and take the whole surrounding body with them.  Ranges stay inside each
+     * function's real domain; the out-of-domain behaviour is checked separately
+     * below, where the kernel must DECLINE rather than invent a real answer. */
+    parity("ExpIntegralEi",   "ExpIntegralEi[x]",  xyz, RRR, 1, 0.3, 12.0, 0, 0, 300);
+    parity("ExpIntegralEi -",  "ExpIntegralEi[-x]", xyz, RRR, 1, 0.3, 12.0, 0, 0, 300);
+    parity("ExpIntegralEi big","ExpIntegralEi[x]",  xyz, RRR, 1, 45.0, 90.0, 0, 0, 200);
+    parity("LogIntegral",     "LogIntegral[x]",    xyz, RRR, 1, 1.5, 500.0, 0, 0, 300);
+    parity("LogIntegral <1",  "LogIntegral[x]",    xyz, RRR, 1, 0.05, 0.9, 0, 0, 200);
+    parity("SinIntegral",     "SinIntegral[x]",    xyz, RRR, 1, -40.0, 40.0, 0, 0, 400);
+    parity("CosIntegral",     "CosIntegral[x]",    xyz, RRR, 1, 0.05, 40.0, 0, 0, 400);
+    parity("SinhIntegral",    "SinhIntegral[x]",   xyz, RRR, 1, -25.0, 25.0, 0, 0, 300);
+    parity("CoshIntegral",    "CoshIntegral[x]",   xyz, RRR, 1, 0.05, 25.0, 0, 0, 300);
+    parity("Sinc",            "Sinc[x]",           xyz, RRR, 1, -20.0, 20.0, 0, 0, 300);
+    parity("InverseErf",      "InverseErf[x]",     xyz, RRR, 1, -0.98, 0.98, 0, 0, 300);
+    parity("InverseErfc",     "InverseErfc[x]",    xyz, RRR, 1, 0.02, 1.98, 0, 0, 300);
+    parity("expint in a chain",
+           "Sin[SinIntegral[x]] + CosIntegral[x] Sinc[y] + ExpIntegralEi[-x]",
+           xyz, RRR, 2, 0.4, 8.0, 0, 0, 300);
+
+    /* Out of domain, the machine kernel must DECLINE so the caller falls back —
+     * these are exactly the arguments where the interpreter leaves the real
+     * axis (Ci, Chi and li of a negative) or hits a pole (Ei at 0, li at 1).
+     * Returning a real number here would be the compiled path answering
+     * something the interpreter does not. */
+    {
+        static const struct { const char* body; double x; } DECLINE[] = {
+            { "CosIntegral[x]",   -1.0 }, { "CosIntegral[x]",    0.0 },
+            { "CoshIntegral[x]",  -2.0 }, { "CoshIntegral[x]",   0.0 },
+            { "LogIntegral[x]",   -1.0 }, { "LogIntegral[x]",    1.0 },
+            { "LogIntegral[x]",    0.0 }, { "ExpIntegralEi[x]",  0.0 },
+            { "InverseErf[x]",     1.0 }, { "InverseErf[x]",    -1.0 },
+            { "InverseErfc[x]",    0.0 }, { "InverseErfc[x]",    2.0 },
+        };
+        int bad = 0, n = (int)(sizeof DECLINE / sizeof DECLINE[0]);
+        for (int i = 0; i < n; i++) {
+            Expr* b = parse_expression(DECLINE[i].body);
+            CompiledProgram* p = compile_expr(b, x1i, RRR, 1);
+            if (!p) { bad++; expr_free(b); continue; }
+            double xv = DECLINE[i].x, got;
+            if (compiled_eval_real(p, &xv, &got)) {
+                printf("      %s at x=%g returned %g instead of declining\n",
+                       DECLINE[i].body, xv, got);
+                bad++;
+            }
+            compiled_free(p); expr_free(b);
+        }
+        if (bad) { printf("FAIL: %-30s %d/%d did not decline\n", "expint out-of-domain", bad, n); failures++; }
+        else printf("ok:   %-30s %d arguments decline to the interpreter\n",
+                    "expint out-of-domain", n);
+    }
     parity("int abs/sign/minmax", "Abs[x] + Sign[y] + Max[x,y,z] - Min[x,z]", xyz, III, 3, 0, 0, -20, 20, 300);
 
     /* ---- complex ---- */

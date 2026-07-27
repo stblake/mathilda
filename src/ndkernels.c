@@ -10,6 +10,7 @@
 
 #include "ndarray.h"
 #include "symtab.h"
+#include "special_functions/expint_machine.h"
 #include <complex.h>
 #include <math.h>
 #include <stdbool.h>
@@ -234,6 +235,38 @@ static bool ndk_Beta_c(double are, double aim, double bre, double bim,
 }
 static const NDBinaryKernel NDKB_Beta = { ndk_Beta_c, true };
 
+/* Exponential-integral family and friends.  These modules compute in MPFR and
+ * round at the end, so there was no double path to reuse — the kernels in
+ * expint_machine.c are written for exactly this.  All are registered
+ * real-closed with a `real` function only: the function DECLINES (returns
+ * false) for an argument whose true value is complex or infinite, which is the
+ * engine's standing contract, and a complex argument has no `cplx` to call so
+ * it falls back to the interpreter. */
+static bool ndk_ExpIntegralEi_r(double x, double* o) { return sf_machine_ei(x, o); }
+static bool ndk_LogIntegral_r(double x, double* o)   { return sf_machine_li(x, o); }
+static bool ndk_SinIntegral_r(double x, double* o)   { return sf_machine_si(x, o); }
+static bool ndk_CosIntegral_r(double x, double* o)   { return sf_machine_ci(x, o); }
+static bool ndk_SinhIntegral_r(double x, double* o)  { return sf_machine_shi(x, o); }
+static bool ndk_CoshIntegral_r(double x, double* o)  { return sf_machine_chi(x, o); }
+static bool ndk_Sinc_r(double x, double* o)          { return sf_machine_sinc(x, o); }
+static bool ndk_InverseErf_r(double x, double* o) {
+    if (!(x > -1.0 && x < 1.0)) return false;         /* +-1 are the poles */
+    double v = inverf_double(x); *o = v; return isfinite(v);
+}
+static bool ndk_InverseErfc_r(double x, double* o) {
+    if (!(x > 0.0 && x < 2.0)) return false;
+    double v = inverfc_double(x); *o = v; return isfinite(v);
+}
+static const NDUnaryKernel NDKU_ExpIntegralEi = { NULL, ndk_ExpIntegralEi_r, true, false };
+static const NDUnaryKernel NDKU_LogIntegral   = { NULL, ndk_LogIntegral_r,   true, false };
+static const NDUnaryKernel NDKU_SinIntegral   = { NULL, ndk_SinIntegral_r,   true, false };
+static const NDUnaryKernel NDKU_CosIntegral   = { NULL, ndk_CosIntegral_r,   true, false };
+static const NDUnaryKernel NDKU_SinhIntegral  = { NULL, ndk_SinhIntegral_r,  true, false };
+static const NDUnaryKernel NDKU_CoshIntegral  = { NULL, ndk_CoshIntegral_r,  true, false };
+static const NDUnaryKernel NDKU_Sinc          = { NULL, ndk_Sinc_r,          true, false };
+static const NDUnaryKernel NDKU_InverseErf    = { NULL, ndk_InverseErf_r,    true, false };
+static const NDUnaryKernel NDKU_InverseErfc   = { NULL, ndk_InverseErfc_r,   true, false };
+
 /* Degrade sentinels: no machine kernel available (libc-free algorithms). The
  * NULL cplx makes the map decline for every element, so the evaluator threads
  * the call over the equivalent nested List (correct results, per-element scalar
@@ -275,13 +308,19 @@ void ndkernels_init(void) {
     REG_B(BesselY, NDKB_BesselY);
     REG_B(Beta,    NDKB_Beta);
 
+    /* Exponential-integral family (expint_machine.c) + two already-existing
+     * double algorithms that were simply never registered. */
+    REG_U(ExpIntegralEi); REG_U(LogIntegral);
+    REG_U(SinIntegral);   REG_U(CosIntegral);
+    REG_U(SinhIntegral);  REG_U(CoshIntegral);
+    REG_U(Sinc);          REG_U(InverseErf);   REG_U(InverseErfc);
+
     /* Special functions with libc-free algorithms: correct results on NDArray
      * via the degrade path (List threading), pending dedicated machine kernels. */
     static const char* deg_u[] = {
-        "Erfi", "ExpIntegralEi", "LogIntegral",
-        "SinIntegral", "CosIntegral", "SinhIntegral", "CoshIntegral",
+        "Erfi",
         "FresnelS", "FresnelC", "AiryAi", "AiryBi",
-        "AiryAiPrime", "AiryBiPrime", "ProductLog", "Zeta", "Sinc",
+        "AiryAiPrime", "AiryBiPrime", "ProductLog", "Zeta",
     };
     for (unsigned i = 0; i < sizeof(deg_u) / sizeof(deg_u[0]); i++)
         REG_DEG_U(deg_u[i]);

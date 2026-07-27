@@ -284,6 +284,7 @@ set(COMMON_SRC
     ../src/special_functions/fresnel.c
     ../src/special_functions/sinc.c
     ../src/special_functions/inverf.c
+    ../src/special_functions/expint_machine.c
     ../src/special_functions/inverfc.c
     ../src/special_functions/loggamma.c
     ../src/special_functions/polygamma.c

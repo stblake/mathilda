@@ -50,19 +50,17 @@ static int failures = 0;
  *      why, not because they are pending work. */
 typedef struct { const char* name; const char* why; } Gap;
 static const Gap KNOWN_GAPS[] = {
-    /* (a) no machine kernel yet — real coverage gaps */
+    /* (a) no machine kernel yet — real coverage gaps.
+     *
+     * The exponential-integral family used to live here; expint_machine.c now
+     * provides real double implementations for it, so the ones remaining are
+     * those that still need genuinely new numerics rather than a wrapper. */
     { "Zeta",                 "no double kernel (MPFR-only module)" },
     { "HurwitzZeta",          "no double kernel (MPFR-only module)" },
     { "PolyLog",              "no double kernel (MPFR-only module)" },
     { "LerchPhi",             "no double kernel (MPFR-only module)" },
     { "PolyGamma",            "no double kernel (MPFR-only module)" },
     { "Erfi",                 "no double kernel (MPFR-only module)" },
-    { "ExpIntegralEi",        "no double kernel (MPFR-only module)" },
-    { "LogIntegral",          "no double kernel (MPFR-only module)" },
-    { "SinIntegral",          "no double kernel (MPFR-only module)" },
-    { "CosIntegral",          "no double kernel (MPFR-only module)" },
-    { "SinhIntegral",         "no double kernel (MPFR-only module)" },
-    { "CoshIntegral",         "no double kernel (MPFR-only module)" },
     { "FresnelS",             "no double kernel (MPFR-only module)" },
     { "FresnelC",             "no double kernel (MPFR-only module)" },
     { "AiryAi",               "no double kernel (MPFR-only module)" },
@@ -70,13 +68,10 @@ static const Gap KNOWN_GAPS[] = {
     { "AiryAiPrime",          "no double kernel (MPFR-only module)" },
     { "AiryBiPrime",          "no double kernel (MPFR-only module)" },
     { "ProductLog",           "no double kernel (MPFR-only module)" },
-    { "Sinc",                 "no double kernel registered" },
     { "BesselI",              "no double kernel (MPFR-only module)" },
     { "BesselK",              "no double kernel (MPFR-only module)" },
     { "BesselJZero",          "no double kernel (root-finding module)" },
     { "LegendreP",            "no double kernel (MPFR-only module)" },
-    { "InverseErf",           "double kernel exists but is not registered" },
-    { "InverseErfc",          "double kernel exists but is not registered" },
     { "BarnesG",              "no double kernel" },
     { "Hyperfactorial",       "no double kernel" },
     { "HarmonicNumber",       "no double kernel" },

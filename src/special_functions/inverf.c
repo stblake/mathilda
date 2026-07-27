@@ -107,7 +107,10 @@ static Expr* iee_neg_infinity(void) {
 /* erfinv(x) for x strictly inside (-1, 1) at full double accuracy.
  * Winitzki's closed-form approximation seeds Newton's iteration on the
  * libm erf, which converges quadratically to a fixed point. */
-static double inverf_double(double x) {
+/* Exposed (see expint_machine.h's rationale): this is already a pure
+ * double algorithm, so the NDArray fast path and the Compile[] VM can use
+ * it directly instead of sitting on a degrade sentinel. */
+double inverf_double(double x) {
     if (x == 0.0) return 0.0;
     const double a = 0.147;                 /* Winitzki's tuned constant */
     double ln = log(1.0 - x * x);           /* < 0 for |x| < 1 */
