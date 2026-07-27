@@ -542,14 +542,14 @@ bool sf_machine_legendre_p(double n, double x, double* out) {
  * the functions rather than of this code.  The ascending series computes a
  * decaying Ai as a difference of growing terms and loses about 2*zeta/ln(10)
  * digits; the asymptotic series has a smallest attainable error of order
- * e^(-2 zeta).  Measured against the MPFR implementation: the series holds ~1e-14 to
- * |x| = 2.5 (3e-13 by |x| = 3), the asymptotic reaches ~1e-15 from |x| = 8, and in between the best
- * either can do is ~1e-5 at |x| = 3.5.
+ * e^(-2 zeta).  Measured against the MPFR implementation: the series holds ~1e-14
+ * to |x| = 2.5 (3e-13 by |x| = 3), the asymptotic reaches ~1e-15 from |x| = 8,
+ * and in between the best either can do is ~1e-5 at |x| = 3.5.
  *
- * So the band is DECLINED and the MPFR path answers there.  Covering it properly
- * needs a third method (Chebyshev fits, or the modified-Bessel route); shipping
- * a fast path that is quietly wrong to five digits would be far worse than
- * being slower over one interval. */
+ * The band between them is covered by a THIRD method: Taylor marching of the
+ * defining ODE itself (see airy_march).  Nothing is approximated — the same
+ * y'' = x y that generates the ascending series is integrated in short steps
+ * from a point where one of the other two expansions is exact. */
 #define AIRY_SERIES_MAX 2.5
 #define AIRY_ASYMP_MIN  8.0
 
@@ -639,11 +639,87 @@ static bool airy_asymptotic(double x, double* ai, double* bi, double* aip, doubl
     return isfinite(*ai) && isfinite(*bi) && isfinite(*aip) && isfinite(*bip);
 }
 
+/* ---- the band 2.5 < |x| < 8: Taylor marching of y'' = x y ----------------
+ *
+ * Neither expansion reaches double precision here, so the ODE is integrated
+ * instead.  About the point x0, writing y(x0 + h) = sum c_k h^k and matching
+ * y'' = (x0 + h) y term by term gives
+ *
+ *     (k+2)(k+1) c_{k+2} = x0 c_k + c_{k-1},        c_{-1} = 0,
+ *
+ * with c_0 = y(x0) and c_1 = y'(x0).  This is exact, not an approximation: Ai
+ * and Bi are entire, so the series converges for every h, and a short step makes
+ * it converge in a handful of terms.  No fitted coefficients, no new special
+ * function, and the same recurrence shape the ascending series already uses.
+ *
+ * DIRECTION IS THE WHOLE PROBLEM, and getting it wrong is the classic way this
+ * method quietly loses digits.  y'' = x y has one recessive and one dominant
+ * solution, and rounding error in the recessive one gets amplified by the
+ * dominant one's growth.  For x > 0, Ai decays and Bi grows by a factor of
+ * e^(zeta(8) - zeta(2.5)) ~ 2.4e5 across the band — so marching Ai FORWARD from
+ * 2.5 would let a 1e-16 seed error grow to ~1e-11.  Each solution is therefore
+ * marched in the direction in which it DOMINATES:
+ *
+ *   Bi  forward  from  |x| = 2.5 (ascending series exact there), growing;
+ *   Ai  backward from  |x| = 8   (asymptotic exact there), growing as x falls.
+ *
+ * For x < 0 both solutions oscillate with comparable amplitude, neither
+ * dominates, and one forward march from -2.5 carries both. */
+#define AIRY_MARCH_H  0.25          /* step; h^2 = 1/16 makes the series short */
+#define AIRY_MARCH_N  24            /* terms per step, ample at that h */
+
+/* Integrate y'' = x y from `xa` to `xb` (either direction), advancing the
+ * solution given by (*y, *yp) in place. */
+static void airy_march(double xa, double xb, double* y, double* yp) {
+    double span = xb - xa;
+    int nstep = (int)(fabs(span) / AIRY_MARCH_H) + 1;
+    double h = span / (double)nstep;
+    double x0 = xa;
+    for (int s = 0; s < nstep; s++) {
+        double c[AIRY_MARCH_N + 3];
+        c[0] = *y; c[1] = *yp;
+        for (int k = 0; k <= AIRY_MARCH_N; k++)
+            c[k + 2] = (x0 * c[k] + (k >= 1 ? c[k - 1] : 0.0))
+                     / (((double)k + 2.0) * ((double)k + 1.0));
+        /* Horner, from the smallest term down, for both the value and the
+         * derivative — summing the tail first keeps the rounding at the level of
+         * the terms that contribute least. */
+        double sv = 0.0, sd = 0.0;
+        for (int k = AIRY_MARCH_N + 2; k >= 1; k--) {
+            sv = sv * h + c[k];
+            sd = sd * h + (double)k * c[k];
+        }
+        *y  = sv * h + c[0];
+        *yp = sd;
+        x0 += h;
+    }
+}
+
+static bool airy_band(double x, double* ai, double* bi, double* aip, double* bip) {
+    double a, b, ap, bp;
+    if (x > 0.0) {
+        /* Bi is dominant going up: seed from the series and march forward. */
+        if (!airy_series(AIRY_SERIES_MAX, &a, &b, &ap, &bp)) return false;
+        *bi = b; *bip = bp;
+        airy_march(AIRY_SERIES_MAX, x, bi, bip);
+        /* Ai is dominant going down: seed from the asymptotic and march back. */
+        if (!airy_asymptotic(AIRY_ASYMP_MIN, &a, &b, &ap, &bp)) return false;
+        *ai = a; *aip = ap;
+        airy_march(AIRY_ASYMP_MIN, x, ai, aip);
+    } else {
+        if (!airy_series(-AIRY_SERIES_MAX, &a, &b, &ap, &bp)) return false;
+        *ai = a; *aip = ap; *bi = b; *bip = bp;
+        airy_march(-AIRY_SERIES_MAX, x, ai, aip);
+        airy_march(-AIRY_SERIES_MAX, x, bi, bip);
+    }
+    return isfinite(*ai) && isfinite(*bi) && isfinite(*aip) && isfinite(*bip);
+}
+
 static bool airy_all(double x, double* ai, double* bi, double* aip, double* bip) {
     double ax = fabs(x);
     if (ax <= AIRY_SERIES_MAX) return airy_series(x, ai, bi, aip, bip);
     if (ax >= AIRY_ASYMP_MIN)  return airy_asymptotic(x, ai, bi, aip, bip);
-    return false;                       /* neither expansion converges here */
+    return airy_band(x, ai, bi, aip, bip);
 }
 
 bool sf_machine_airy_ai(double x, double* out) {

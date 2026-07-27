@@ -86,9 +86,20 @@ arith ops = 8.0 ns/op; mixed-libm 150 ns/call; array len-4096 1.0x, 61 ns/elemen
       these unevaluated on machine reals, so a kernel would answer where it
       declines) and `GCD`/`LCM`/`DigitSum`/`ReIm`/`QuotientRemainder`
       (exact-integer, or not a single machine number).
-- [ ] **Airy's uncovered band** — `2.5 < |x| < 8`, where neither the ascending
-      series nor the asymptotic expansion reaches double precision. Needs a third
-      method (Chebyshev fits, or the modified-Bessel route). Declines today.
+- [x] **Airy's uncovered band — DONE.** `2.5 < |x| < 8` is covered by Taylor
+      marching of `y'' = x y`, seeded from whichever expansion is exact at the
+      nearer end. Errors 1e-16 to 2.6e-15, at least as good as the two regions
+      already accepted. The direction is the whole problem: each solution is
+      marched where it DOMINATES (Bi forward from 2.5, Ai backward from 8), since
+      marching toward a recessive solution amplifies seed error by the dominant
+      one's growth — 2.4e5 across this band.
+- [ ] **Complex arguments — 41 heads compile for `_Real` and bail for
+      `_Complex`.** See `NUMERIC_FUNCTION_MISSING.md`: this is now the single
+      largest source of silent interpreter fallback in the engine. 35 are genuine
+      gaps (the interpreter answers), 6 are correct declines. **Start with the 8
+      that need no numerics**: `Floor`, `Ceiling`, `Round`, `IntegerPart`,
+      `FractionalPart`, `Sign`, `Rescale`, `Quotient` — componentwise or
+      one-liners, bailing only because the `cplx` pointer was never written.
 - [ ] **`CompileDiag`** — a bail still reports nothing. The audit covers heads;
       per-body diagnostics would cover the rest.
 - [ ] **Native backend** (`CompilationTarget -> "C"`), behind a build flag.

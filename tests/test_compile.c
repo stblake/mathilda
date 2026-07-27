@@ -613,9 +613,10 @@ int main(void) {
     parity("Binomial real",   "Binomial[x, 2.5]",  xyz, RRR, 1, 3.0, 12.0, 0, 0, 300);
     parity("LegendreP",       "LegendreP[3, x]",   xyz, RRR, 1, -0.99, 0.99, 0, 0, 300);
     parity("LegendreP high",  "LegendreP[12, x]",  xyz, RRR, 1, -0.9, 0.9, 0, 0, 300);
-    /* Airy: the ascending series and the asymptotic expansion do not meet in
-     * double precision, so the kernel covers |x| <= 2.5 and |x| >= 8 and
-     * DECLINES the band between — checked in both directions here. */
+    /* Airy: three methods, not two.  The ascending series and the asymptotic
+     * expansion do not meet in double precision, and the band between them is
+     * covered by Taylor marching of y'' = x y from whichever end is exact.  The
+     * band ranges below are the point of these tests — they used to be a decline. */
     parity("AiryAi small",    "AiryAi[x]",         xyz, RRR, 1, -2.5, 2.5, 0, 0, 300);
     parity("AiryBi small",    "AiryBi[x]",         xyz, RRR, 1, -2.5, 2.5, 0, 0, 300);
     parity("AiryAiPrime",     "AiryAiPrime[x]",    xyz, RRR, 1, -2.5, 2.5, 0, 0, 300);
@@ -623,6 +624,20 @@ int main(void) {
     parity("AiryAi large",    "AiryAi[x]",         xyz, RRR, 1, 8.0, 30.0, 0, 0, 200);
     parity("AiryAi large -",  "AiryAi[-x]",        xyz, RRR, 1, 8.0, 30.0, 0, 0, 200);
     parity("AiryBi large",    "AiryBi[x]",         xyz, RRR, 1, 8.0, 40.0, 0, 0, 200);
+    /* The formerly-uncovered band, both signs.  Ai and Bi are marched in
+     * OPPOSITE directions here (each in the one where it dominates), so a test
+     * that only walked x > 0 would miss half the mechanism. */
+    parity("AiryAi band",     "AiryAi[x]",         xyz, RRR, 1, 2.5, 8.0, 0, 0, 300);
+    parity("AiryAi band -",   "AiryAi[-x]",        xyz, RRR, 1, 2.5, 8.0, 0, 0, 300);
+    parity("AiryBi band",     "AiryBi[x]",         xyz, RRR, 1, 2.5, 8.0, 0, 0, 300);
+    parity("AiryBi band -",   "AiryBi[-x]",        xyz, RRR, 1, 2.5, 8.0, 0, 0, 300);
+    parity("AiryAiPrime band", "AiryAiPrime[x]",   xyz, RRR, 1, 2.5, 8.0, 0, 0, 300);
+    parity("AiryAiPrime band -", "AiryAiPrime[-x]", xyz, RRR, 1, 2.5, 8.0, 0, 0, 300);
+    parity("AiryBiPrime band", "AiryBiPrime[x]",   xyz, RRR, 1, 2.5, 8.0, 0, 0, 300);
+    parity("AiryBiPrime band -", "AiryBiPrime[-x]", xyz, RRR, 1, 2.5, 8.0, 0, 0, 300);
+    /* Across both seams, where a discontinuity between methods would show. */
+    parity("AiryAi all",      "AiryAi[x]",         xyz, RRR, 1, -12.0, 12.0, 0, 0, 400);
+    parity("AiryBi all",      "AiryBi[x]",         xyz, RRR, 1, -12.0, 9.0, 0, 0, 400);
 
     /* Bessel I/K, PolyLog, QPochhammer and the hypergeometrics.  BesselK needed
      * a continued fraction for x > 2: both small-x forms compute a decaying K
@@ -678,9 +693,6 @@ int main(void) {
             { "ProductLog[x]",    -0.5 },          /* below the branch point */
             { "Zeta[x]",           1.0 },          /* pole */
             { "PolyGamma[x]",      0.0 }, { "PolyGamma[x]", -3.0 },   /* poles */
-            /* Airy's uncovered band, where neither expansion converges. */
-            { "AiryAi[x]",         4.0 }, { "AiryBi[x]",        -5.0 },
-            { "AiryAiPrime[x]",    6.0 }, { "AiryBiPrime[x]",   -7.0 },
             { "BesselK[1, x]",    -1.0 },          /* complex for x < 0 */
             { "PolyLog[2, x]",     1.5 },          /* past the branch cut */
             { "QPochhammer[0.5, x]", 1.5 },        /* |q| >= 1: no convergence */

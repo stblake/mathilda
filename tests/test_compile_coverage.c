@@ -25,6 +25,7 @@
 #include "sym_intern.h"
 #include "symtab.h"
 #include "attr.h"
+#include "ndarray.h"
 #include "compile/compile.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -112,11 +113,11 @@ static int cmp_name(const void* a, const void* b) {
  * Four, not three: Hypergeometric2F1[a, b, c, z] is 4-ary, and probing only to
  * three reported it as a coverage gap when the kernel was there all along. */
 #define PROBE_MAXARITY 4
-static bool head_compiles(const char* h) {
+static bool head_compiles_as(const char* h, CompileType ty) {
     static const char* an[PROBE_MAXARITY] = { "x", "y", "z", "w" };
     const char* inm[PROBE_MAXARITY];
-    const CompileType RRR[PROBE_MAXARITY] = { CT_REAL, CT_REAL, CT_REAL, CT_REAL };
-    for (int i = 0; i < PROBE_MAXARITY; i++) inm[i] = intern_symbol(an[i]);
+    CompileType RRR[PROBE_MAXARITY];
+    for (int i = 0; i < PROBE_MAXARITY; i++) { inm[i] = intern_symbol(an[i]); RRR[i] = ty; }
 
     const char* override = probe_for(h);
     if (override) {
@@ -145,11 +146,56 @@ static bool head_compiles(const char* h) {
     }
     return false;
 }
+static bool head_compiles(const char* h) { return head_compiles_as(h, CT_REAL); }
+
+/* How a head reaches machine precision, for the report. "compiles" and "has a
+ * kernel" are different questions: UnitStep/Clip/Rescale/HypergeometricPFQ
+ * compile through BESPOKE LOWERINGS because their result type or their argument
+ * shape is the difficulty rather than the numerics, and the arithmetic and
+ * elementary heads are inline opcodes with no registry entry at all. */
+static const char* kernel_kind(const char* nm) {
+    SymbolDef* d = symtab_get_def(nm);
+    if (!d) return "-";
+    bool u = d->ndarray_unary_kernel  != NULL;
+    bool b = d->ndarray_binary_kernel != NULL;
+    bool n = d->ndarray_nary_kernel   != NULL;
+    /* A degrade SENTINEL is a registered descriptor with no function pointers:
+     * it exists to say "this head is known and deliberately has no fast path",
+     * which is not the same as an absent entry. */
+    if (u) {
+        const NDUnaryKernel* k = (const NDUnaryKernel*)d->ndarray_unary_kernel;
+        if (!k->real && !k->cplx) return "sentinel";
+    }
+    if (u && b) return "unary+binary";
+    if (u && n) return "unary+nary";
+    if (n) return "nary";
+    if (b) return "binary";
+    if (u) return "unary";
+    return "-";
+}
+
+static void report(void) {
+    printf("\n%-24s %-6s %-8s %-14s %s\n", "HEAD", "REAL", "COMPLEX", "KERNEL", "NOTE");
+    printf("------------------------ ------ -------- -------------- --------------------------------\n");
+    for (int i = 0; i < nheads; i++) {
+        const char* h = heads[i];
+        const char* why = gap_reason(h);
+        printf("%-24s %-6s %-8s %-14s %s\n", h,
+               head_compiles_as(h, CT_REAL) ? "yes" : "NO",
+               head_compiles_as(h, CT_COMPLEX) ? "yes" : "NO",
+               kernel_kind(h), why ? why : "");
+    }
+}
 
 int main(void) {
     core_init();
     symtab_for_each(collect, NULL);
     qsort(heads, (size_t)nheads, sizeof heads[0], cmp_name);
+
+    /* COVERAGE_REPORT=1 dumps the per-head table the write-up in
+     * NUMERIC_FUNCTION_MISSING.md is generated from, so that document can be
+     * regenerated from the build rather than hand-maintained into staleness. */
+    if (getenv("COVERAGE_REPORT")) { report(); return 0; }
 
     int covered = 0, gaps = 0, stale = 0, regressed = 0;
     for (int i = 0; i < nheads; i++) {
