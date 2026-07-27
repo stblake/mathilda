@@ -15,20 +15,20 @@ be re-run.
 
 **Contents**
 
-1. [The problem, and how we know the answer is right](#1-the-problem)
-2. [The scheme](#2-the-scheme)
-3. [Writing it: the interpreted version](#3-the-interpreted-version)
-4. [Compiling it](#4-compiling-it)
-5. [Is it actually compiled? `CompileDiagnostics`](#5-is-it-actually-compiled)
-6. [What `Compile[]` does to the numbers](#6-results)
-7. [Against Wolfram Language](#7-against-wolfram-language)
-8. [Against `NDSolve`](#8-against-ndsolve)
-9. [What is and is not in the compilable subset](#9-the-compilable-subset)
-10. [Measurement traps found while writing this](#10-measurement-traps)
+1. [The problem, and how we know the answer is right](#the-problem)
+2. [The scheme](#the-scheme)
+3. [Writing it: the interpreted version](#the-interpreted-version)
+4. [Compiling it](#compiling-it)
+5. [Is it actually compiled? `CompileDiagnostics`](#is-it-actually-compiled)
+6. [What `Compile[]` does to the numbers](#results)
+7. [Against Wolfram Language](#against-wolfram-language)
+8. [Against `NDSolve`](#against-ndsolve)
+9. [What is and is not in the compilable subset](#the-compilable-subset)
+10. [Measurement traps found while writing this](#measurement-traps)
 
 ---
 
-## 1. The problem
+## The problem
 
 Solve
 
@@ -50,7 +50,7 @@ apart. So we check both, separately:
 - **Physical error** — distance from the continuum solution. Should fall like
   $O(h^2)$. This validates the scheme.
 - **Discrete error** — distance from the *exact solution of the difference
-  equations*, derived in §2. Should be at roundoff, and stay there for hundreds
+  equations*, derived in [The scheme](#the-scheme). Should be at roundoff, and stay there for hundreds
   of steps. This validates the implementation, and it is the one that catches
   an off-by-one in a stencil.
 
@@ -59,7 +59,7 @@ at all. It is worth setting up whenever you write a scheme by hand.
 
 ---
 
-## 2. The scheme
+## The scheme
 
 Uniform grid $x_i = (i-1)h$, $y_j = (j-1)h$, $h = 1/(n-1)$; the standard
 second-order explicit stencil,
@@ -99,7 +99,7 @@ steps = n - 2;                          (* (steps+1) dt == 0.5 *)
 
 ---
 
-## 3. The interpreted version
+## The interpreted version
 
 One time step, written the way you would write it without a compiler in mind —
 build the new grid with `Table`:
@@ -121,13 +121,13 @@ Max[Abs[Flatten[uc - Cos[(steps + 1) ArcCos[ct]] phi]]]
 At `n = 41` this runs in **4.12 s** and reports a discrete error of
 `2.78e-14` — the scheme is right.
 
-It is also unusably slow. 41² × 39 ≈ 65,000 stencil evaluations took four
+It is also unusably slow. $41^2 \times 39 \approx 65{,}000$ stencil evaluations took four
 seconds, or about 63 µs each, essentially all of it spent building and
 destroying `Expr` trees.
 
 ---
 
-## 4. Compiling it
+## Compiling it
 
 The compiled step is the same arithmetic, but written as an in-place update of a
 grid rather than as a `Table` that constructs one:
@@ -183,7 +183,7 @@ packed across steps costs one conversion at the start rather than three per step
 
 ---
 
-## 5. Is it actually compiled?
+## Is it actually compiled?
 
 **The single most useful habit when working with `Compile[]`.** A body outside
 the compilable subset does not fail loudly — the object is still built, and
@@ -227,7 +227,7 @@ whenever one of them falls back.
 
 ---
 
-## 6. Results
+## Results
 
 Same problem, same scheme, same starting levels, both arms at top level, timed
 in-process. `steps = n - 2` so every row reaches $T = 0.5$.
@@ -256,17 +256,17 @@ compiled program is running the same scheme and not a subtly different one.
 
 The physical error falls by a factor of ~4 whenever $n$ doubles — second order,
 as the scheme promises. The discrete error stays at roundoff across 639 steps on
-a 641 × 641 grid (2.6 × 10⁸ stencil updates), which is the implementation check.
+a 641 × 641 grid ($2.6 \times 10^8$ stencil updates), which is the implementation check.
 
 The last row is the headline: **a 641 × 641 grid marched 639 steps in 27 s** —
-2.6 × 10⁸ stencil updates, about 104 ns each. Extrapolating the interpreted
+$2.6 \times 10^8$ stencil updates, about 104 ns each. Extrapolating the interpreted
 per-update cost measured at `n = 41` (62.8 µs), the same march interpreted would
 take on the order of four and a half hours. That one is an extrapolation, not a
 measurement: it was not run.
 
 ---
 
-## 7. Against Wolfram Language
+## Against Wolfram Language
 
 The identical source, run under `wolframscript` (Wolfram Language 14.0). WL's
 `Compile` has two backends: `"WVM"` (its bytecode virtual machine, the default)
@@ -319,7 +319,7 @@ Read fairly, this says two different things at once. **Mathilda's *interpreter*
 is about 12× slower than Wolfram's on this array-heavy code** — that is a real
 gap and this tutorial is not going to pretend otherwise. And **Mathilda's
 *compiled* code is about 2× faster than Wolfram's.** The 569× headline figure in
-§6 is therefore partly a compliment to `Compile[]` and partly a comment on the
+[Results](#results) is therefore partly a compliment to `Compile[]` and partly a comment on the
 interpreter it is being compared with; the cross-system compiled numbers are the
 ones that isolate the compiler.
 
@@ -331,7 +331,7 @@ compiled code* despite looking like an interpreter baseline.
 
 ---
 
-## 8. Against `NDSolve`
+## Against `NDSolve`
 
 The obvious question about all of this is why write a scheme by hand when
 `NDSolve` will solve the same PDE.
@@ -373,7 +373,7 @@ algorithmic one.)
 
 ---
 
-## 9. The compilable subset
+## The compilable subset
 
 Indexed arrays are new (M3c). What the compiler now accepts:
 
@@ -412,7 +412,7 @@ the result.
 
 What is deliberately **not** in the subset, and why:
 
-- **Writing through an argument array.** Borrowed, not owned — see §4.
+- **Writing through an argument array.** Borrowed, not owned — see [Compiling it](#compiling-it).
 - **`ConstantArray[0, n]` with an *integer* fill.** The interpreter's
   `ConstantArray[0, n]` holds exact integer zeros and an `NDArray` has no integer
   dtype, so compiling it to a float64 buffer would answer *differently*, not just
@@ -429,7 +429,7 @@ When the compiled path cannot honour that, it bails, and you get the interpreter
 
 ---
 
-## 10. Measurement traps
+## Measurement traps
 
 Four things went wrong while measuring this. All four produced plausible numbers.
 
