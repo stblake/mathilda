@@ -3454,7 +3454,9 @@ void info_init(void) {
         "lhs === rhs or SameQ[lhs, rhs]\n"
         "\tyields True if lhs and rhs are structurally identical (head-by-head,\n"
         "\targument-by-argument), and False otherwise.  Numerically equal but\n"
-        "\tdistinct heads (e.g. 1 and 1.) are NOT considered same.");
+        "\tdistinct heads (e.g. 1 and 1.) are NOT considered same.\n"
+        "SameQ tests structure, not value, so unlike Equal it holds for\n"
+        "Indeterminate === Indeterminate.");
     symtab_set_docstring("UnsameQ",
         "lhs =!= rhs or UnsameQ[lhs, rhs]\n"
         "\tis the negation of SameQ: True iff lhs and rhs are not structurally\n"
@@ -3465,29 +3467,36 @@ void info_init(void) {
         "\t(Integer / Rational exact comparison; Real / MPFR comparison with\n"
         "\tprecision tolerance); structurally identical symbolic forms decide\n"
         "\tTrue; otherwise the call stays unevaluated as a symbolic equation.\n"
-        "Equal threads over Lists pairwise; chained Equal becomes Inequality.");
+        "Equal threads over Lists pairwise; chained Equal becomes Inequality.\n"
+        "Following IEEE 754 / ISO 60559, Indeterminate is unordered with every\n"
+        "value including itself, so any Indeterminate argument gives False.");
     symtab_set_docstring("Unequal",
         "lhs != rhs or Unequal[lhs, rhs]\n"
         "\tis the negation of Equal: True if lhs and rhs can be decided unequal,\n"
-        "\tFalse if they can be decided equal, otherwise unevaluated.");
+        "\tFalse if they can be decided equal, otherwise unevaluated.\n"
+        "Per IEEE 754, an Indeterminate argument gives True.");
     symtab_set_docstring("Less",
         "x < y or Less[x, y]\n"
         "\tyields True if x is strictly less than y on numeric inputs, False\n"
         "\tif strictly greater or equal, otherwise unevaluated.\n"
-        "Chained forms (x < y < z) become Inequality, decided pairwise.");
+        "Chained forms (x < y < z) become Inequality, decided pairwise.\n"
+        "Per IEEE 754, an Indeterminate argument gives False.");
     symtab_set_docstring("Greater",
         "x > y or Greater[x, y]\n"
         "\tyields True if x is strictly greater than y on numeric inputs,\n"
         "\tFalse if strictly less or equal, otherwise unevaluated.\n"
-        "Chained forms become Inequality.");
+        "Chained forms become Inequality.\n"
+        "Per IEEE 754, an Indeterminate argument gives False.");
     symtab_set_docstring("LessEqual",
         "x <= y or LessEqual[x, y]\n"
         "\tyields True if x is less than or equal to y on numeric inputs,\n"
-        "\tFalse if strictly greater, otherwise unevaluated.");
+        "\tFalse if strictly greater, otherwise unevaluated.\n"
+        "Per IEEE 754, an Indeterminate argument gives False.");
     symtab_set_docstring("GreaterEqual",
         "x >= y or GreaterEqual[x, y]\n"
         "\tyields True if x is greater than or equal to y on numeric inputs,\n"
-        "\tFalse if strictly less, otherwise unevaluated.");
+        "\tFalse if strictly less, otherwise unevaluated.\n"
+        "Per IEEE 754, an Indeterminate argument gives False.");
     symtab_set_docstring("Inequality",
         "Inequality[v0, op0, v1, op1, v2, ...] is the canonical form for a "
         "chained comparison such as a < b <= c. It returns True if every "

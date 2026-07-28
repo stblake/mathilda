@@ -349,6 +349,63 @@ void test_compare_bigint_adjacent() {
     check_compare_yields("Less[3/4, 4/5]",                  "True");
 }
 
+/* IEEE 754 / ISO 60559: a NaN is unordered with every value, itself
+ * included.  Indeterminate is Mathilda's NaN, so Equal / Less / LessEqual /
+ * Greater / GreaterEqual all yield False against it and Unequal yields True.
+ * SameQ and UnsameQ are exempt — they compare structure, not value. */
+void test_indeterminate_ieee_unordered() {
+    /* The headline case: Equal must not take expr_eq's identity shortcut. */
+    check_compare_yields("Equal[Indeterminate, Indeterminate]",        "False");
+    check_compare_yields("Unequal[Indeterminate, Indeterminate]",      "True");
+
+    /* Unordered against ordinary values, in either operand position. */
+    check_compare_yields("Equal[Indeterminate, 1]",                    "False");
+    check_compare_yields("Equal[1, Indeterminate]",                    "False");
+    check_compare_yields("Equal[Indeterminate, x]",                    "False");
+    check_compare_yields("Unequal[Indeterminate, 1]",                  "True");
+    check_compare_yields("Unequal[Indeterminate, x]",                  "True");
+
+    /* Every ordering predicate is False, including the reflexive ones. */
+    check_compare_yields("Less[Indeterminate, Indeterminate]",         "False");
+    check_compare_yields("LessEqual[Indeterminate, Indeterminate]",    "False");
+    check_compare_yields("Greater[Indeterminate, Indeterminate]",      "False");
+    check_compare_yields("GreaterEqual[Indeterminate, Indeterminate]", "False");
+    check_compare_yields("Less[Indeterminate, 1]",                     "False");
+    check_compare_yields("Greater[1, Indeterminate]",                  "False");
+    check_compare_yields("LessEqual[Indeterminate, 1]",                "False");
+    check_compare_yields("GreaterEqual[Indeterminate, 1]",             "False");
+
+    /* Derived Indeterminates (0/0, Infinity - Infinity) behave identically. */
+    check_compare_yields("Equal[0/0, 0/0]",                            "False");
+    check_compare_yields("Equal[Infinity - Infinity, Indeterminate]",  "False");
+
+    /* Chained comparisons route through Inequality: one NaN kills the chain. */
+    check_compare_yields("1 < Indeterminate < 3",                      "False");
+    check_compare_yields("1 < 2 < Indeterminate",                      "False");
+    check_compare_yields("Indeterminate == Indeterminate == Indeterminate",
+                                                                       "False");
+    check_compare_yields("1 == 1 == Indeterminate",                    "False");
+
+    /* Variadic Unequal is pairwise: a NaN pair is unequal, but an equal
+     * non-NaN pair still decides the whole call False. */
+    check_compare_yields("Unequal[Indeterminate, Indeterminate, 1]",   "True");
+    check_compare_yields("Unequal[1, 1, Indeterminate]",               "False");
+
+    /* Structural identity is a different question and keeps its answer. */
+    check_compare_yields("SameQ[Indeterminate, Indeterminate]",        "True");
+    check_compare_yields("UnsameQ[Indeterminate, Indeterminate]",      "False");
+
+    /* Nothing to compare in the 0- and 1-argument forms; True by convention. */
+    check_compare_yields("Equal[Indeterminate]",                       "True");
+    check_compare_yields("Unequal[Indeterminate]",                     "True");
+
+    /* Ordinary comparisons are untouched. */
+    check_compare_yields("Equal[1, 1]",                                "True");
+    check_compare_yields("Equal[x, x]",                                "True");
+    check_compare_yields("Unequal[1, 2]",                              "True");
+    check_compare_yields("1 < 2 < 3",                                  "True");
+}
+
 void test_unequal_basic() {
     Expr* one = expr_new_integer(1);
     Expr* two = expr_new_integer(2);
@@ -496,6 +553,7 @@ int main() {
     TEST(test_lessequal_mixed);
     TEST(test_greater_unevaluated);
     TEST(test_compare_bigint_adjacent);
+    TEST(test_indeterminate_ieee_unordered);
     TEST(test_not_basic);
     TEST(test_and_basic);
     TEST(test_or_basic);

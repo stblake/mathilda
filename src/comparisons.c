@@ -16,6 +16,7 @@
 #include "zero_test.h"
 #include <stdio.h>
 #include <gmp.h>
+#include <math.h>
 #include <stdbool.h>
 #include <string.h>
 
@@ -123,6 +124,40 @@ static bool is_raw_data(Expr* e) {
 }
 
 /*
+ * IEEE 754 / ISO 60559 makes a NaN *unordered* with respect to every value,
+ * itself included: Equal, Less, LessEqual, Greater and GreaterEqual all yield
+ * False, and Unequal yields True.  Indeterminate is Mathilda's NaN — 0/0,
+ * Infinity - Infinity and 0 ComplexInfinity all normalise to it — so the
+ * comparison heads give it exactly that treatment.  The consequence that
+ * matters most is that Equal must not reach its structural-identity shortcut
+ * for such operands, since expr_eq would otherwise report
+ * Indeterminate == Indeterminate as True.
+ *
+ * An EXPR_REAL carrying a machine NaN is the same object one level down (see
+ * the isnan branch in expr_eq), so it counts here too.
+ *
+ * SameQ and UnsameQ are deliberately exempt: they test structural identity of
+ * expressions, not mathematical equality of values — the same distinction IEEE
+ * draws between its comparison predicates and totalOrder, which does order a
+ * NaN with itself.  Indeterminate === Indeterminate therefore stays True.
+ */
+static bool is_nan_operand(Expr* e) {
+    if (!e) return false;
+    if (is_indeterminate_sym(e)) return true;
+    return e->type == EXPR_REAL && isnan(e->data.real);
+}
+
+/* True if any argument of the comparison `res` is unordered in the IEEE sense.
+ * Every argument of a chained comparison takes part in at least one adjacent
+ * pair, so a single NaN anywhere decides the whole chain. */
+static bool has_nan_operand(Expr* res) {
+    for (size_t i = 0; i < res->data.function.arg_count; i++) {
+        if (is_nan_operand(res->data.function.args[i])) return true;
+    }
+    return false;
+}
+
+/*
  * builtin_sameq: Implements SameQ[x, y, ...].
  * SameQ returns True if all its arguments are identical, and False otherwise.
  * Identical means they have the same structure and atoms.
@@ -186,7 +221,12 @@ Expr* builtin_equal(Expr* res) {
     if (res->data.function.arg_count < 2) {
         return expr_new_symbol(SYM_True);
     }
-    
+
+    /* IEEE unordered: a NaN operand makes every pair it takes part in False. */
+    if (has_nan_operand(res)) {
+        return expr_new_symbol(SYM_False);
+    }
+
     bool all_equal = true;
     for (size_t i = 0; i < res->data.function.arg_count - 1; i++) {
         Expr* a = res->data.function.args[i];
@@ -263,9 +303,13 @@ Expr* builtin_unequal(Expr* res) {
             
             bool equal = false;
             bool definitely_unequal = false;
-            
-            // Structural identity
-            if (expr_eq(a, b)) {
+
+            if (is_nan_operand(a) || is_nan_operand(b)) {
+                /* IEEE unordered: NaN != anything, itself included. Checked
+                 * ahead of expr_eq, which reports two Indeterminates equal. */
+                definitely_unequal = true;
+            } else if (expr_eq(a, b)) {
+                // Structural identity
                 equal = true;
             } else {
                 bool can_compare;
@@ -302,6 +346,9 @@ Expr* builtin_unequal(Expr* res) {
 static Expr* evaluate_inequality(Expr* res, int expected_cmp_1, int expected_cmp_2) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count < 2) return expr_new_symbol(SYM_True);
+
+    /* IEEE unordered: an ordering predicate against a NaN is always False. */
+    if (has_nan_operand(res)) return expr_new_symbol(SYM_False);
 
     for (size_t i = 0; i < res->data.function.arg_count - 1; i++) {
         Expr* a = res->data.function.args[i];
@@ -346,6 +393,12 @@ Expr* builtin_greaterequal(Expr* res) {
  * Equal/Unequal share a small fast path so that, e.g., x == x is True
  * even when x has no numeric value. */
 static int decide_pair(const char* op, Expr* a, Expr* b) {
+    /* IEEE unordered: all five chain heads are False against a NaN operand. */
+    if (is_nan_operand(a) || is_nan_operand(b)) {
+        if (op == SYM_Equal || op == SYM_Less || op == SYM_LessEqual
+         || op == SYM_Greater || op == SYM_GreaterEqual) return 0;
+        return -1;
+    }
     if (op == SYM_Equal) {
         if (expr_eq(a, b)) return 1;
         bool can; int cmp = compare_numeric(a, b, &can);
