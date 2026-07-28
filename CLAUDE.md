@@ -79,9 +79,15 @@ After any change or improvement to the system is made, a summary of the features
 
 -- Code must compile cleanly under strict C99 on Linux (gcc -std=c99 -Wall -Wextra). Do NOT use POSIX-only or non-C99 types/functions without a portable fallback. In particular:
     - Avoid `ssize_t` (POSIX, not C99). For reverse iteration over a `size_t` count, loop from `n` down to `1` and index with `i - 1`, or use a fixed-width signed type like `int64_t` from `<stdint.h>`.
-    - Avoid `strdup`, `strndup`, `asprintf`, `getline`, `fileno`, `popen`, etc. without guarded fallbacks — these are not in C99.
     - Avoid GNU/BSD extensions (e.g., nested functions, statement expressions, `__attribute__` without a portability guard).
-    - Darwin (macOS) headers often expose POSIX symbols implicitly that Linux glibc hides under `-std=c99`. Test any new system-header usage on both platforms, or include the correct feature-test macros / headers explicitly.
+    - Darwin (macOS) headers expose POSIX symbols implicitly that Linux glibc hides under `-std=c99`, so an unguarded use compiles clean here and breaks only for users. This has shipped twice (issues #36, #37). POSIX *functions* — `jn`, `yn`, `strdup`, `strndup`, `asprintf`, `getline`, `fileno`, `popen`, `clock_gettime`, anything from `<unistd.h>` — need a feature-test macro placed **before any `#include`**, matching `src/ndkernels.c`, `src/core.c`, `src/repl.c`, `src/loadmodule.c`:
+        ```c
+        #ifndef _XOPEN_SOURCE       /* or _POSIX_C_SOURCE 200809L, or _GNU_SOURCE */
+        #define _XOPEN_SOURCE 600
+        #endif
+        #include <math.h>
+        ```
+      Below the first `#include` it does nothing — the header has already been parsed with the wrong namespace. Run `make check-c99`; it knows which macro each symbol needs and prints the exact block to paste.
     - `<math.h>` constants `M_PI`, `M_E`, `M_PI_2`, `M_LN2`, etc. are POSIX, NOT C99. glibc hides them under `-std=c99` (macOS exposes them anyway, masking the bug). When a new file needs one, add a guarded fallback right after `#include <math.h>`, matching the pattern already used in `src/trig.c` and `src/numeric.c`:
         ```c
         #ifndef M_PI
@@ -89,6 +95,7 @@ After any change or improvement to the system is made, a summary of the features
         #endif
         ```
       Do NOT use `#define _USE_MATH_DEFINES` — that is an MSVC/Windows mechanism and has no effect on glibc.
+    - Both rules are enforced by `make check-c99` (`tools/check_c99_portability.py`), and backstopped by the Linux CI job in `.github/workflows/build.yml`, which compiles the whole tree against glibc on every push and PR. Adding a POSIX symbol the checker does not yet know about is one line in its `FUNCTIONS` table.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph

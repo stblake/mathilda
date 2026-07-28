@@ -35,7 +35,14 @@ ifeq ($(origin CC),default)
     $(warning Mathilda: '$(CC)' is Apple clang, not real GCC — install Homebrew GCC (brew install gcc) for a supported build.)
   endif
 endif
-CFLAGS = -O3 -std=c99 -Wall -Wextra -g -I./src -I./src/list -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/graph -I./src/strings -I./src/strings/regex -I./src/ffi -I/usr/include -I/usr/local/include
+# `-Werror=implicit-function-declaration`: under -std=c99 glibc hides every
+# POSIX symbol, so reaching for one without a feature-test macro leaves the
+# compiler guessing a signature — `jn` was assumed to return `int`, silently
+# truncating Bessel values (issue #37). GCC 14 makes this an error on its own;
+# older GCC and clang only warn, and a warning in a -j12 build scrolls past.
+# Promote it everywhere so the failure is loud rather than a wrong answer.
+# `make check-c99` catches the same class before the compiler ever sees it.
+CFLAGS = -O3 -std=c99 -Wall -Wextra -Werror=implicit-function-declaration -g -I./src -I./src/list -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/graph -I./src/strings -I./src/strings/regex -I./src/ffi -I/usr/include -I/usr/local/include
 
 # Readline is available on macOS and Linux but not on Windows (MinGW).
 # Build with USE_READLINE=0 to disable it explicitly (e.g. for cross-builds
@@ -366,11 +373,14 @@ docs-build:
 docs-serve:
 	mkdocs serve -f site/mkdocs.yml
 
-# Portability gate: catch POSIX <math.h> constants (M_PI, M_E, ...) used
-# without a C99 fallback. glibc hides them under -std=c99, so these break the
-# Linux build while compiling cleanly on macOS, which exposes them implicitly.
+# Portability gate: catch POSIX-only symbols that glibc hides under -std=c99 —
+# both <math.h> constants (M_PI, M_E, ...) used without a C99 fallback and
+# POSIX functions (jn, yn, strdup, fileno, ...) used without a feature-test
+# macro. macOS exposes all of them implicitly, so these break only on Linux.
+# Not part of `make all` (it needs python3); CI runs it on every push, next to
+# a real Linux build — see .github/workflows/build.yml.
 check-c99:
-	python3 tools/check_math_constants.py
+	python3 tools/check_c99_portability.py
 
 .PHONY: all clean docs docs-build docs-serve check-c99
 

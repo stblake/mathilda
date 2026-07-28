@@ -1,0 +1,81 @@
+name: Linux build
+
+# Mathilda is developed on macOS but shipped to Linux users, and the two
+# platforms disagree about what `-std=c99` means. glibc hides every POSIX
+# symbol under it (M_PI, jn, yn, strdup, ...) while Darwin's headers expose
+# them regardless, so an unguarded use compiles clean locally and reaches users
+# as a build failure — issue #36 (M_PI) and issue #37 (jn/yn) were both exactly
+# this, found by a user rather than by us.
+#
+# This job is the backstop: a real glibc compile of the whole tree with the
+# same flags the makefile uses. `make check-c99` runs first because it names
+# the offending symbol and prints the fix, which a raw compiler error does not.
+
+on:
+  push:
+    branches: [main]
+    paths: ["src/**", "tests/**", "makefile", "tools/**", ".github/workflows/build.yml"]
+  pull_request:
+    paths: ["src/**", "tests/**", "makefile", "tools/**", ".github/workflows/build.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The optional dependencies are installed so the autodetected code paths
+      # (FLINT, LAPACKE, PCRE2, FFTW, ECM, raylib) are actually COMPILED here.
+      # Degrading gracefully is fine for a user; for this job it would mean
+      # silently not checking the very files most likely to break.
+      - name: Install dependencies
+        id: deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgmp-dev libmpfr-dev libreadline-dev \
+            libecm-dev liblapacke-dev libopenblas-dev \
+            libflint-dev libpcre2-dev libfftw3-dev
+          # raylib is universe-only and not on every runner image. USE_GRAPHICS
+          # degrades to a text placeholder without it, so this one is allowed to
+          # fail — but when it succeeds the renderer needs -lX11 spelled out, as
+          # in the invocation from issue #37.
+          if sudo apt-get install -y --no-install-recommends libraylib-dev libx11-dev; then
+            echo 'extra_libs=-llapack -lblas -lX11' >> "$GITHUB_OUTPUT"
+          else
+            echo "raylib unavailable — building with the placeholder renderer"
+            echo 'extra_libs=-llapack -lblas' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Report toolchain
+        run: gcc --version
+
+      # Fast, specific failure: names the symbol and prints the guard to add.
+      - name: Portability gate (make check-c99)
+        run: make check-c99
+
+      # The definitive check — glibc headers, -std=c99, the real flag set.
+      - name: Build
+        run: make -j"$(nproc)" EXTRA_LIBS="${{ steps.deps.outputs.extra_libs }}"
+
+      # Piped stdin switches the REPL from readline to its NDJSON sidecar
+      # protocol, so the smoke test speaks that — and asserts on the answer,
+      # because `echo expr | ./Mathilda` produces nothing and still exits 0.
+      # The BesselJ line is the issue #37 path specifically: built with
+      # `-fpermissive` (the workaround users were reaching for), an implicit
+      # `jn` is assumed to return `int` and every value comes back truncated.
+      - name: Smoke test
+        run: |
+          out=$(printf '%s\n' \
+            '{"id": 1, "expr": "Integrate[1/(x^3 + 1), x]"}' \
+            '{"id": 2, "expr": "Normal[BesselJ[2, NDArray[{2.5, 3.5}]]]"}' \
+            '{"type": "quit"}' | ./Mathilda)
+          echo "$out"
+          echo "$out" | grep -q '0\.44605' || {
+            echo "::error::BesselJ NDArray kernel returned the wrong value (issue #37)"
+            exit 1
+          }

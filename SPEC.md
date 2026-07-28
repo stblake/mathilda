@@ -322,10 +322,19 @@ valgrind --leak-check=full ./Mathilda
 make check-c99         # portability gate; see §10
 ```
 
-`make check-c99` runs `tools/check_math_constants.py`, which flags any POSIX
-`<math.h>` constant (`M_PI`, `M_E`, …) used without a C99 fallback. Those
-compile fine on macOS and fail on Linux, so this is worth running before a
+`make check-c99` runs `tools/check_c99_portability.py`, which flags POSIX-only
+symbols that glibc hides under `-std=c99`: `<math.h>` constants (`M_PI`, `M_E`,
+…) used without a C99 fallback, and POSIX functions (`jn`, `yn`, `strdup`,
+`fileno`, `clock_gettime`, …) used without a feature-test macro — including one
+placed *after* the first `#include`, where it no longer has any effect. All of
+these compile fine on macOS and fail on Linux, so this is worth running before a
 release even though it is not part of `make all`.
+
+The definitive check is a real glibc compile, which
+[`.github/workflows/build.yml`](.github/workflows/build.yml) runs on every push
+and pull request: `make check-c99` for a message that names the symbol and
+prints the fix, then a full `make` with the optional dependencies installed so
+the autodetected code paths are actually compiled.
 
 The makefile auto-discovers `src/*.c`. GMP-ECM is linked by default when the
 system library is present (`USE_ECM=1`, autodetected); install it with
@@ -359,12 +368,20 @@ the baselines only after an *intended* performance change.
 
 ## 10. Coding Standards
 
-- **C99 strictly.** No C11+ features. No POSIX-only types (`ssize_t`) or
-  functions (`strdup`, `getline`, `asprintf`, `popen`, `fileno`, …) without
-  C99-safe fallbacks. `<math.h>` constants like `M_PI` are POSIX, not C99 —
-  guard with `#ifndef M_PI` fallbacks (see `src/trig.c`, `src/numeric.c`).
-  macOS exposes these implicitly, so an unguarded use compiles locally and
-  breaks only on Linux; `make check-c99` catches it before it ships.
+- **C99 strictly.** No C11+ features, and no POSIX-only types (`ssize_t`).
+  glibc hides the entire POSIX surface under `-std=c99` while macOS exposes it
+  implicitly, so an unguarded use compiles locally and breaks only on Linux.
+  Two guards, by kind:
+  - **Constants** (`M_PI`, `M_E`, …) get an `#ifndef` fallback right after
+    `#include <math.h>` — see `src/trig.c`, `src/numeric.c`.
+  - **Functions** (`jn`, `yn`, `strdup`, `getline`, `popen`, `fileno`,
+    `clock_gettime`, …) get a feature-test macro *before any include* — see
+    `src/ndkernels.c`, `src/core.c`, `src/repl.c`, `src/loadmodule.c`. Placed
+    after the first `#include` it does nothing: the header has already been
+    parsed with the wrong namespace.
+
+  `make check-c99` catches both before the compiler does, and the Linux CI job
+  compiles the tree against glibc so nothing in this class reaches a user.
 - **Memory safety.** Trace ownership; valgrind regularly. See §4.
 - **GMP-ECM is a system dependency**, not vendored — do not re-add it to the
   tree.

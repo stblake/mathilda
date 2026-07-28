@@ -1,3 +1,14 @@
+/* `jn` / `yn` (Bessel functions of integer order) are X/Open extensions to
+ * <math.h>, NOT C99. glibc hides them under -std=c99, so the BesselJ / BesselY
+ * kernels below fail to compile on Linux with "implicit declaration of function
+ * 'jn'" while Darwin — which exposes them regardless of the standard — builds
+ * clean, masking the break locally (issue #37). Request the X/Open namespace
+ * explicitly, before any include: a no-op on Darwin, the fix on glibc.
+ * `make check-c99` enforces this convention tree-wide. */
+#ifndef _XOPEN_SOURCE
+#define _XOPEN_SOURCE 600
+#endif
+
 /* ndkernels.c — machine-precision element-wise kernels for the elementary
  * functions, mapped over NDArray buffers at C speed by the evaluator's NDArray
  * fast path (see ndarray_map_unary / ndarray_map_binary and the dispatch hook
