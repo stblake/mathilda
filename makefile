@@ -229,8 +229,18 @@ endif
 # rigorous) code, matching the USE_MPFR=0 / USE_LAPACK=0 graceful-degrade policy.
 ifeq ($(USE_FLINT), 1)
   ifneq ($(shell $(PKG_CONFIG) --exists 'flint >= 3.0' 2>/dev/null && echo y),)
-    CFLAGS  += -DUSE_FLINT $(shell $(PKG_CONFIG) --cflags flint)
-    LDFLAGS += $(shell $(PKG_CONFIG) --libs flint)
+    CFLAGS    += -DUSE_FLINT $(shell $(PKG_CONFIG) --cflags flint)
+    FLINT_LIBS := $(shell $(PKG_CONFIG) --libs flint)
+    # Debian/Ubuntu's flint.pc lists only the transitive `-lgmp -lmpfr` and
+    # omits -lflint itself, so a pkg-config-only link fails with thousands of
+    # undefined references to fmpz_*/arb_*/gr_* while the headers resolve fine.
+    # Homebrew's .pc gets this right, which is why it was never seen locally.
+    # Prepended, not appended: ld resolves left to right, so libflint has to
+    # precede the -lgmp/-lmpfr it depends on.
+    ifeq ($(filter -lflint,$(FLINT_LIBS)),)
+      FLINT_LIBS := -lflint $(FLINT_LIBS)
+    endif
+    LDFLAGS   += $(FLINT_LIBS)
   else
     $(warning FLINT >= 3.0 not detected; building with USE_FLINT=0 (algebraic-extension GCD/Factor use the classical fallback))
     $(warning   macOS (Homebrew): brew install flint)

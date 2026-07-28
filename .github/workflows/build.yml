@@ -54,6 +54,20 @@ jobs:
       - name: Report toolchain
         run: gcc --version
 
+      # Optional dependencies degrade silently by design, which means a code
+      # path can quietly stop being covered here. Surface why each one was or
+      # was not picked up, so a gap is a decision rather than an accident.
+      - name: Dependency detection report
+        run: |
+          echo "--- flint";  pkg-config --modversion flint || echo "no flint.pc"
+          echo "libs: $(pkg-config --libs flint)"
+          echo "--- ecm (compile+link probe, same as the makefile's)"
+          printf '#include <stdio.h>\n#include <ecm.h>\nint main(void){ecm_params p;ecm_init(p);return 0;}\n' > /tmp/ecmprobe.c
+          gcc /tmp/ecmprobe.c -o /tmp/ecmprobe -lecm -lgmp && echo "ecm probe OK" \
+            || echo "ecm probe FAILED — see the error above"
+          echo "--- raylib"; pkg-config --exists raylib && echo "raylib.pc present" || echo "no raylib.pc"
+          apt-cache policy libraylib-dev 2>/dev/null | head -3
+
       # Fast, specific failure: names the symbol and prints the guard to add.
       - name: Portability gate (make check-c99)
         run: make check-c99
