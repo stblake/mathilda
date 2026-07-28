@@ -4,9 +4,11 @@
 
 #include "numeric.h"
 #include "rationalize.h"
+#include "sym_names.h"   /* SYM_Rule / SYM_RuleDelayed / SYM_Method */
 
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -112,4 +114,47 @@ Expr* common_numericalize_result(const Expr* e, long bits) {
     (void)bits;
 #endif
     return numericalize(e, spec);
+}
+
+/* Is `e` a `Method -> ...` (or `Method :> ...`) option rule? */
+static bool is_method_option(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (!head_is(e, SYM_Rule) && !head_is(e, SYM_RuleDelayed)) return false;
+    if (e->data.function.arg_count != 2) return false;
+    const Expr* lhs = e->data.function.args[0];
+    return lhs && lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == SYM_Method;
+}
+
+Expr* common_method_alias(Expr* res, const char* head, size_t n_positional,
+                          const char* method, Expr* (*impl)(Expr*)) {
+    if (!res || res->type != EXPR_FUNCTION || !head || !method || !impl) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < n_positional) return NULL;
+
+    /* One extra slot for the Method option we append; dropping the caller's
+     * Method options only shortens the list. */
+    Expr** args = calloc(argc + 1, sizeof(Expr*));
+    if (!args) return NULL;
+
+    size_t n = 0;
+    for (size_t i = 0; i < argc; i++) {
+        Expr* a = res->data.function.args[i];
+        if (i >= n_positional && is_method_option(a)) continue;
+        args[n++] = expr_copy(a);
+    }
+
+    /* expr_new_function copies the argument array into its own storage, so a
+     * stack array is enough here (the Expr* elements themselves are adopted). */
+    Expr* opt_args[2];
+    opt_args[0] = expr_new_symbol("Method");
+    opt_args[1] = expr_new_string(method);
+    args[n++] = expr_new_function(expr_new_symbol("Rule"), opt_args, 2);
+
+    Expr* call = expr_new_function(expr_new_symbol(head), args, n);
+    free(args);
+
+    /* Direct call, so the ownership contract makes us the evaluator here. */
+    Expr* out = impl(call);
+    expr_free(call);
+    return out;
 }

@@ -1837,7 +1837,8 @@ static Expr* layer_maxmin_bounded(Expr* f, LimitCtx* ctx) {
         /* osc must have a finite, x-free magnitude bound M (|osc| <= M). */
         Expr* mb = magnitude_upper_bound(osc, ctx->x, /*var_abs=*/false);
         if (!mb || !free_of(mb, ctx->x) || contains_bounded_head(mb)) {
-            if (mb) expr_free(mb); continue;
+            if (mb) expr_free(mb);
+            continue;
         }
         /* dom must have a definite limit L (finite constant or +/-Infinity). */
         LimitCtx sub = *ctx; sub.depth += 1;
@@ -3959,6 +3960,50 @@ Expr* builtin_limit(Expr* res) {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Per-method entry points                                                 */
+/*                                                                         */
+/* Every Method setting is also callable as a head of its own --           */
+/* Limit`Series[f, x -> a] is exactly Limit[f, x -> a, Method -> "Series"] */
+/* -- mirroring how the Integrate and Sum cascades expose their            */
+/* sub-algorithms (Integrate`DerivativeDivides, Sum`Gosper, ...). The      */
+/* argument forms, the Direction / Assumptions options and the contract    */
+/* are all inherited unchanged, including the important one: a named       */
+/* method leaves the call unevaluated when it does not apply, rather than  */
+/* silently falling back to the full cascade. That makes these heads the   */
+/* natural way to ask "does *this* strategy decide the limit?" when        */
+/* testing or debugging a layer.                                           */
+/* ---------------------------------------------------------------------- */
+
+/* Limit takes two positional arguments (f and the x -> a spec); everything
+ * after them is an option. See common_method_alias for the rewrite. */
+#define LIMIT_METHOD_ENTRY(fn, name)                                   \
+    static Expr* fn(Expr* res) {                                       \
+        return common_method_alias(res, "Limit", 2, name, builtin_limit); \
+    }
+
+LIMIT_METHOD_ENTRY(builtin_limit_automatic,   "Automatic")
+LIMIT_METHOD_ENTRY(builtin_limit_substitution,"Substitution")
+LIMIT_METHOD_ENTRY(builtin_limit_rational,    "RationalFunction")
+LIMIT_METHOD_ENTRY(builtin_limit_asymptotic,  "Asymptotic")
+LIMIT_METHOD_ENTRY(builtin_limit_bounded,     "Bounded")
+LIMIT_METHOD_ENTRY(builtin_limit_series,      "Series")
+LIMIT_METHOD_ENTRY(builtin_limit_lhospital,   "LHospital")
+LIMIT_METHOD_ENTRY(builtin_limit_gruntz,      "Gruntz")
+LIMIT_METHOD_ENTRY(builtin_limit_oscillatory, "Oscillatory")
+
+#undef LIMIT_METHOD_ENTRY
+
+static void register_limit_method(const char* sym, Expr* (*fn)(Expr*),
+                                  const char* doc) {
+    symtab_add_builtin(sym, fn);
+    /* Same attributes as Limit itself: arguments are evaluated (the spec
+     * rule x -> a must fold to Rule[x, a]), and the definition is not
+     * user-redefinable. */
+    symtab_get_def(sym)->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_set_docstring(sym, doc);
+}
+
+/* ---------------------------------------------------------------------- */
 /* Registration                                                            */
 /* ---------------------------------------------------------------------- */
 void limit_init(void) {
@@ -3998,8 +4043,101 @@ void limit_init(void) {
         "\t  \"Oscillatory\"      -- normal form c0 + Sum cj E^(I thetaj) at +-Inf\n"
         "\t  \"Gruntz\"           -- Gruntz mrv algorithm for exp-log towers\n"
         "\tA named method leaves Limit unevaluated when it does not apply.\n"
+        "\tEach method is also callable directly as Limit`m[f, x -> a].\n"
         "\n"
         "May return a finite value, Infinity, -Infinity, ComplexInfinity,\n"
         "Indeterminate, Interval[{lo, hi}], or the original unevaluated\n"
         "expression when the limit cannot be determined.");
+
+    /* --- The Method settings, exposed as heads --------------------------- */
+
+    register_limit_method("Limit`Automatic", builtin_limit_automatic,
+        "Limit`Automatic[f, x -> a] is Limit[f, x -> a, Method -> Automatic]: "
+        "the full cascade, trying every strategy in the order substitution, "
+        "asymptotic reductions, rational-degree comparison, bounded/squeeze, "
+        "oscillatory normal form, Series, Gruntz, L'Hospital.  This is what "
+        "plain Limit does; the head exists so that every Method setting has a "
+        "callable form.  Accepts the same argument forms and the same "
+        "Direction and Assumptions options as Limit.");
+
+    register_limit_method("Limit`Substitution", builtin_limit_substitution,
+        "Limit`Substitution[f, x -> a] is Limit[f, x -> a, Method -> "
+        "\"Substitution\"]: the structural fast paths.  Substitutes the point "
+        "into the Together-normalised form when f is continuous there (a "
+        "non-vanishing denominator and no inner argument that blows up), "
+        "rewrites Abs[g] by the sign of g on the approached side, replaces a "
+        "Power[b, e(x)] subterm by a fresh symbol and recurses, pulls out a "
+        "constant factor, and probes the two one-sided limits for "
+        "disagreement.  Returns unevaluated when none of these apply.");
+
+    register_limit_method("Limit`RationalFunction", builtin_limit_rational,
+        "Limit`RationalFunction[f, x -> a] is Limit[f, x -> a, Method -> "
+        "\"RationalFunction\"]: the classical degree comparison for a rational "
+        "function P(x)/Q(x).  At +-Infinity the limit is 0, the ratio of "
+        "leading coefficients, or a signed infinity according to "
+        "deg P vs deg Q; at a finite point it reads off the pole order and "
+        "the sign of the approach.  Returns unevaluated when f is not "
+        "rational in x.");
+
+    register_limit_method("Limit`Asymptotic", builtin_limit_asymptotic,
+        "Limit`Asymptotic[f, x -> a] is Limit[f, x -> a, Method -> "
+        "\"Asymptotic\"]: the dominant-term, log and exp reductions.  Folds "
+        "h[g(x)] at +-Infinity through the head's own value there (ArcTan, "
+        "Erf, Tanh, Exp, Gamma, ...), evaluates Log[g] with a finite inner "
+        "limit, reduces Log of a sum with a unique dominant summand, merges a "
+        "diverging Log against a diverging linear term, sums a Plus whose "
+        "summands each converge, splits off the convergent part of a Plus so "
+        "the divergences left behind can cancel, and reduces f^g to "
+        "Exp[Limit[g Log f]].  Returns unevaluated when none apply.");
+
+    register_limit_method("Limit`Bounded", builtin_limit_bounded,
+        "Limit`Bounded[f, x -> a] is Limit[f, x -> a, Method -> \"Bounded\"]: "
+        "the squeeze theorem and the bounded-oscillation Interval.  Bounds a "
+        "bounded head (Sin, Cos, and the other oscillators) by its envelope "
+        "and returns the common limit when the envelope collapses, orders a "
+        "bounded oscillation against a dominating Max/Min argument, and "
+        "returns Interval[{lo, hi}] for an oscillation that neither decays "
+        "nor is dominated.  Returns unevaluated when f carries no bounded "
+        "factor to squeeze.");
+
+    register_limit_method("Limit`Series", builtin_limit_series,
+        "Limit`Series[f, x -> a] is Limit[f, x -> a, Method -> \"Series\"]: "
+        "the series workhorse.  Expands f about the point as a Taylor, "
+        "Laurent or Puiseux series and reads the limit off the leading term "
+        "-- the value of the constant term, 0 for a positive leading "
+        "exponent, and a signed or complex infinity for a negative one, with "
+        "the sign taken from the approach direction and the parity of the "
+        "pole.  Returns unevaluated when no series expansion exists at the "
+        "point (an essential singularity, or an oscillation at infinity).");
+
+    register_limit_method("Limit`LHospital", builtin_limit_lhospital,
+        "Limit`LHospital[f, x -> a] is Limit[f, x -> a, Method -> "
+        "\"LHospital\"]: L'Hospital's rule.  Requires f to present as a "
+        "quotient in a genuine 0/0 or Infinity/Infinity indeterminate form, "
+        "then differentiates numerator and denominator and recurses, with a "
+        "bounded number of rounds and a growth guard so a differentiation "
+        "that makes the quotient worse is abandoned rather than iterated.  "
+        "Returns unevaluated otherwise.");
+
+    register_limit_method("Limit`Gruntz", builtin_limit_gruntz,
+        "Limit`Gruntz[f, x -> a] is Limit[f, x -> a, Method -> \"Gruntz\"]: "
+        "Gruntz's most-rapidly-varying (mrv) algorithm for exp-log functions "
+        "(his 1996 ETH thesis).  Determines the mrv subexpression set, "
+        "rewrites f as a series in w -> 0+ where w is built from it, and "
+        "recurses on the leading coefficient.  This is the method for the "
+        "cancellation-heavy nested-exponential limits that defeat Series and "
+        "L'Hospital.  Returns unevaluated outside the exp-log class.");
+
+    register_limit_method("Limit`Oscillatory", builtin_limit_oscillatory,
+        "Limit`Oscillatory[f, x -> a] is Limit[f, x -> a, Method -> "
+        "\"Oscillatory\"]: the oscillatory normal form.  Rewrites f as "
+        "c0(x) + Sum cj(x) E^(I thetaj(x)) with distinct real phases and "
+        "oscillation-free amplitudes, then decides the limit -- the value of "
+        "Limit[c0] when the oscillations are squeezed away or dominated by "
+        "c0, and Indeterminate (a proof that no limit exists) when one "
+        "oscillation provably survives, either by the intermediate value "
+        "theorem for a dominant group or by the Cesaro mean of |f|^2 for "
+        "polynomial phases.  A finite point a is reduced to +Infinity via "
+        "x = a +- 1/t.  Returns unevaluated when a hypothesis cannot be "
+        "verified, notably for a symbolic amplitude.");
 }

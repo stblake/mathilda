@@ -70,11 +70,17 @@ static void test_boundary_abs_eq_one(void) {
 }
 
 static void test_passthrough_no_assumption(void) {
-    /* Without an Abs constraint, the standard machinery still produces
-     * the unevaluated DirectedInfinity-of-Log form. Pin to confirm
+    /* Without an Abs constraint there is no limit to give -- x^n at
+     * n -> Infinity is 0, ComplexInfinity or Indeterminate according to
+     * |x| -- so the whole Limit stays unevaluated. (This used to come back
+     * as E^DirectedInfinity[Log[x]]: exp_of_limit folded the divergent
+     * log-limit back through Exp and returned the unfolded symbol. That
+     * form is a non-answer dressed up as a value, and the same path made
+     * Limit[E^(I x)/x, x -> Infinity] report it instead of 0, so
+     * exp_of_limit now refuses any residual infinity.) Pinned to confirm
      * the assumption-dispatch only fires when applicable. */
     assert_eval_eq("Limit[x^n, n -> Infinity]",
-                   "E^DirectedInfinity[Log[x]]", 0);
+                   "Limit[x^n, n -> Infinity]", 0);
     /* Concrete |x|<1 base still works via the standard machinery. */
     assert_eval_eq("Limit[(1/2)^n, n -> Infinity]", "0", 0);
 }

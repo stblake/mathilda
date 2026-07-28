@@ -123,3 +123,47 @@ Sin[x + 1/x]`); symbolic amplitudes (`a Sin[x]`, since `a = 0` has limit 0).
 **Worth a separate look.** `TrigToExp` (and therefore `Expand` of its result)
 leaving a nested `Times` is a canonicalisation bug independent of `Limit`; it
 will bite anything that walks factors structurally.
+
+---
+
+# Follow-up: every Limit / NLimit method exposed as a head
+
+- [x] `Limit`m[f, x -> a]` for all nine `Method` settings (`Automatic`,
+      `Substitution`, `RationalFunction`, `Asymptotic`, `Bounded`, `Series`,
+      `LHospital`, `Gruntz`, `Oscillatory`).
+- [x] `NLimit`m[f, z -> z0]` for all seven (`Automatic`, `EulerSum`,
+      `SequenceLimit`, `Levin`, `LevinU`, `LevinT`, `LevinV`) — `?NLimit`EulerSum`
+      previously reported "No information available".
+- [x] A docstring per head describing the rule it applies, the hypotheses it
+      needs, and when it declines.
+- [x] Shared plumbing: `common_method_alias` (`src/common.c`) rebuilds
+      `head`m[args...]` as `head[args..., Method -> "m"]` and calls the standard
+      builtin *directly*, so it stands in the evaluator's seat and owns the
+      constructed call. One implementation instead of two ownership dances.
+- [x] Docs: `docs/spec/builtins/calculus.md`, `docs/spec/builtins/numerical-calculus.md`,
+      `docs/spec/changelog/2026-07-27.md`, plus the `NLimit` docstring in `info.c`
+      (NLimit's own docstring lives there, registered after `nlimit_init`, so
+      adding a second one in the module would have been dead code).
+- [x] Tests: `test_method_heads` in `tests/test_limit.c` and `tests/test_nlimit.c`;
+      the alias path also added to `test_nlimit.c`'s memory loop.
+
+## Design notes
+
+- A `Method` option supplied alongside a method head is **dropped**, not
+  honoured: the head already names the method, and
+  `Limit`Series[f, s, Method -> "Gruntz"]` would otherwise be ambiguous. The
+  NLimit test pins this with the branch-point case, where Richardson and
+  Automatic give measurably different answers.
+- The abstention contract is inherited: a head that does not apply leaves the
+  call unevaluated (echoing the head the user asked for) rather than falling
+  back to the cascade. That is what makes these heads useful for testing a
+  single layer.
+
+## Caught here, from the previous commit
+
+`test_limit_assumptions.c` pinned `Limit[x^n, n -> Infinity]` to
+`E^DirectedInfinity[Log[x]]`. The `exp_of_limit` fix in the oscillatory commit
+made that honestly unevaluated instead, and the pin was stale. It was missed
+because the suite's soft asserts print `FAIL:` and still **exit 0** — and the
+line lands at the *top* of the output, so a `tail` of the log shows only the
+"All ... passed!" banner. Always `grep -c FAIL:`, never `tail`.

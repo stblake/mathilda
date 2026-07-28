@@ -1258,6 +1258,53 @@ static Expr* frullani_resolve_boundary(Expr* val, Expr* assumptions) {
     return val;
 }
 
+/* The boundary value f(point) of a Frullani term.
+ *
+ * Limit is asked first.  It legitimately declines on the parametric
+ * exponential -- Limit[E^(-a x), x -> Infinity] has no value without knowing
+ * sign(a), and returning something like E^DirectedInfinity[-a] would be a
+ * non-answer dressed up as one -- so when it does, the limit of the *exponent*
+ * is taken instead.  That one is decidable (DirectedInfinity[-a]), and
+ * re-wrapping it as E^(...) hands frullani_resolve_boundary exactly the shape
+ * it settles against the assumptions: a > 0 makes -a < 0, so the tail is 0.
+ *
+ * Only the x-dependent exponential factor is treated this way; its x-free
+ * cofactor C rides along, since lim C E^g = C lim E^g.  Borrows every
+ * argument; returns owned (possibly NULL, or a non-finite value the caller's
+ * finiteness gate then rejects). */
+static Expr* frullani_boundary(const Expr* t, const Expr* x, const Expr* point,
+                               Expr* assumptions) {
+    Expr* rule = mk_fn2("Rule", cp(x), cp(point));
+    Expr* lim  = frullani_resolve_boundary(
+                     ev2("Limit", cp(t), cp(rule)), assumptions);
+    if (is_finite_value(lim) && !contains_symbol(lim, x)) {
+        expr_free(rule);
+        return lim;
+    }
+
+    /* Fallback: t = C E^g(x) with a single x-dependent factor. */
+    Expr* facs[32];
+    size_t nf = collect_factors((Expr*)t, facs, 32, 0);
+    Expr* F = NULL;
+    Expr* C = mk_int(1);
+    for (size_t i = 0; i < nf; i++) {
+        if (free_of_x_now(facs[i], x)) { C = Tms(C, cp(facs[i])); continue; }
+        if (F) { expr_free(C); expr_free(rule); return lim; }   /* >1 x-factor */
+        F = facs[i];
+    }
+    Expr* g = F ? exp_exponent(F) : NULL;
+    if (!g) { expr_free(C); expr_free(rule); return lim; }
+
+    Expr* gl  = ev2("Limit", cp(g), rule);                  /* consumes rule */
+    Expr* alt = frullani_resolve_boundary(ExpE(gl), assumptions);
+    if (!is_finite_value(alt) || contains_symbol(alt, x)) {
+        expr_free(alt); expr_free(C);
+        return lim;
+    }
+    expr_free(lim);
+    return simp(Tms(C, alt));
+}
+
 /* Integrate[(f(a x) - f(b x))/x, {x, 0, Infinity}].  Borrows f, x, assumptions;
  * returns the owned value or NULL (out of scope / boundary limits not finite). */
 static Expr* frullani_try(Expr* f, const Expr* x, Expr* assumptions) {
@@ -1292,15 +1339,12 @@ static Expr* frullani_try(Expr* f, const Expr* x, Expr* assumptions) {
             bool identity = is_zero_now(chk);
             expr_free(chk);
             if (identity) {
-                Expr* f0   = ev2("Limit", cp(t1), mk_fn2("Rule", cp((Expr*)x), mk_int(0)));
-                Expr* finf = ev2("Limit", cp(t1),
-                                 mk_fn2("Rule", cp((Expr*)x), mk_sym("Infinity")));
-                /* Limit reports the x -> Infinity boundary of an exponential as
-                 * E^DirectedInfinity[dir] when dir's sign is parametric; resolve
-                 * it against the assumptions (a, b > 0 make -a, -b < 0, so the
-                 * decaying tail is 0). */
-                f0   = frullani_resolve_boundary(f0, assumptions);
-                finf = frullani_resolve_boundary(finf, assumptions);
+                Expr* zero = mk_int(0);
+                Expr* inf  = mk_sym("Infinity");
+                Expr* f0   = frullani_boundary(t1, x, zero, assumptions);
+                Expr* finf = frullani_boundary(t1, x, inf,  assumptions);
+                expr_free(zero);
+                expr_free(inf);
                 if (is_finite_value(f0) && is_finite_value(finf) &&
                     !contains_symbol(f0, x) && !contains_symbol(finf, x)) {
                     result = simp2(Tms(Pls(cp(f0), Neg(cp(finf))),

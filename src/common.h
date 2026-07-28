@@ -114,4 +114,31 @@ Expr* common_rationalize_input(const Expr* e, long bits);
  * Caller owns the returned Expr*. */
 Expr* common_numericalize_result(const Expr* e, long bits);
 
+/* ---------------------------------------------------------------------- *
+ * Per-method head aliases                                                 *
+ *                                                                         *
+ * A builtin that runs a cascade of strategies behind `Method -> m` also   *
+ * exposes each setting as a head of its own -- Limit`Series[f, x -> a] is *
+ * exactly Limit[f, x -> a, Method -> "Series"], NLimit`EulerSum[...] is   *
+ * NLimit[..., Method -> "EulerSum"], and so on.  This is the shared       *
+ * plumbing behind those heads.                                            *
+ *                                                                         *
+ * `res` is rebuilt as head[args..., Method -> method] and handed to       *
+ * `impl`, the standard builtin for `head`.  Any Method option the caller  *
+ * supplied among the trailing options (everything past `n_positional`) is *
+ * dropped: the head already names the method, and honouring a second,     *
+ * possibly conflicting, setting would make                                *
+ * Limit`Series[f, s, Method -> "Gruntz"] ambiguous.  Every other option   *
+ * (Direction, WorkingPrecision, ...) is forwarded untouched.              *
+ *                                                                         *
+ * `impl` is called directly rather than through the evaluator, so the     *
+ * builtin ownership contract puts this function in the evaluator's seat:  *
+ * the constructed call is freed here, and the caller receives either a    *
+ * fresh result it owns or NULL (leaving the alias call unevaluated, which *
+ * is the same "this method does not apply" answer the Method option       *
+ * gives).  `res` itself is never freed.                                   *
+ * ---------------------------------------------------------------------- */
+Expr* common_method_alias(Expr* res, const char* head, size_t n_positional,
+                          const char* method, Expr* (*impl)(Expr*));
+
 #endif /* COMMON_H */

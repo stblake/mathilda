@@ -946,6 +946,57 @@ static void test_method(void) {
     check("Limit[Tan[x], x -> Pi/2, Method -> \"Series\"]", "ComplexInfinity");
 }
 
+/* ----------------------------------------------------------------- */
+/* Per-method heads: Limit`m[f, x -> a] == Limit[f, x -> a, Method -> m] */
+/* ----------------------------------------------------------------- */
+
+static void test_method_heads(void) {
+    /* Every Method setting has a head, resolving the shape it is meant for. */
+    check("Limit`Automatic[Sin[x]/x, x -> 0]", "1");
+    check("Limit`Series[Sin[x]/x, x -> 0]", "1");
+    check("Limit`RationalFunction[(2 x^2 + 1)/(x^2 + x), x -> Infinity]", "2");
+    check("Limit`Substitution[(x^2 - 1)/(x - 1), x -> 1]", "2");
+    check("Limit`LHospital[(Exp[x] - 1)/x, x -> 0]", "1");
+    check("Limit`Asymptotic[(1 + 1/x)^x, x -> Infinity]", "E");
+    check("Limit`Bounded[Sin[x^2]/x, x -> Infinity]", "0");
+    check("Limit`Gruntz[x (E^(1/x) - 1), x -> Infinity]", "1");
+    check("Limit`Oscillatory[Sin[x^2] + Cos[x], x -> Infinity]", "Indeterminate");
+
+    /* A head that does not apply leaves the call unevaluated -- the same
+     * honest abstention the Method option gives, echoed under the head the
+     * user asked for rather than silently falling back to the cascade. */
+    check("Limit`RationalFunction[Sin[x]/x, x -> 0]",
+          "Limit`RationalFunction[Sin[x]/x, x -> 0]");
+    check("Limit`Series[Sin[x^2] + Cos[x], x -> Infinity]",
+          "Limit`Series[Cos[x] + Sin[x^2], x -> Infinity]");
+
+    /* Other options are forwarded untouched. */
+    check("Limit`Substitution[Abs[x]/x, x -> 0, Direction -> \"FromAbove\"]", "1");
+    check("Limit`Substitution[Abs[x]/x, x -> 0, Direction -> \"FromBelow\"]", "-1");
+
+    /* The head names the method, so a Method option is dropped rather than
+     * honoured -- otherwise this would be ambiguous. RationalFunction cannot
+     * see a transcendental numerator, so a result proves Series ran. */
+    check("Limit`Series[Sin[x]/x, x -> 0, Method -> \"RationalFunction\"]", "1");
+
+    /* First-argument list threading survives the rewrite. */
+    check("Limit`Series[{Sin[x]/x, (1 - Cos[x])/x^2}, x -> 0]", "{1, 1/2}");
+
+    /* Attributes match Limit's own. */
+    check("Attributes[Limit`Series]", "{Protected, ReadProtected}");
+
+    /* Every head is documented. */
+    check("StringLength[Information[\"Limit`Oscillatory\"]] > 80", "True");
+    check("StringLength[Information[\"Limit`Gruntz\"]] > 80", "True");
+    check("StringLength[Information[\"Limit`Automatic\"]] > 80", "True");
+    check("StringLength[Information[\"Limit`Substitution\"]] > 80", "True");
+    check("StringLength[Information[\"Limit`RationalFunction\"]] > 80", "True");
+    check("StringLength[Information[\"Limit`Asymptotic\"]] > 80", "True");
+    check("StringLength[Information[\"Limit`Bounded\"]] > 80", "True");
+    check("StringLength[Information[\"Limit`Series\"]] > 80", "True");
+    check("StringLength[Information[\"Limit`LHospital\"]] > 80", "True");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -983,6 +1034,7 @@ int main(void) {
     TEST(test_abs_directional);
     TEST(test_special_log_leading);
     TEST(test_method);
+    TEST(test_method_heads);
 
     printf("All limit tests passed.\n");
     return 0;

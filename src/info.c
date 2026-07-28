@@ -319,7 +319,10 @@ void info_init(void) {
         "Options: Method (Automatic | EulerSum | SequenceLimit | \"Levin\"), WorkingPrecision (default "
         "MachinePrecision), Direction (Automatic == -1, or a complex approach "
         "vector), Scale (initial step / distance, default 1), Terms (default 7), "
-        "WynnDegree (SequenceLimit iterations, default 1).");
+        "WynnDegree (SequenceLimit iterations, default 1).\n\n"
+        "Each method is also callable directly as NLimit`m[expr, z -> z0]: "
+        "NLimit`Automatic, NLimit`EulerSum, NLimit`SequenceLimit, NLimit`Levin, "
+        "NLimit`LevinU, NLimit`LevinT, NLimit`LevinV.");
     symtab_set_docstring("NSum",
         "NSum[f, {i, imin, imax}]\n"
         "\tgives a numerical approximation to the sum of f for i from imin to "

@@ -353,6 +353,19 @@ Out[8]= 6 a b^2
     unevaluated — it has no limit), and `Max`/`Min` of a bounded oscillation
     against a dominating definite limit, e.g. `Max[Sin[x], 2] -> 2`,
     `Max[Sin[x], x] -> Infinity`, `Min[Cos[x], -x] -> -Infinity`.
+- **Every method is also a head.** `Limit`Series[f, x -> a]` is exactly
+  `Limit[f, x -> a, Method -> "Series"]`, so a strategy can be named without
+  threading an option through — the natural way to ask "does *this* layer
+  decide the limit?".  The heads are `Limit`Automatic`, `Limit`Substitution`,
+  `Limit`RationalFunction`, `Limit`Asymptotic`, `Limit`Bounded`,
+  `Limit`Series`, `Limit`LHospital`, `Limit`Gruntz` and `Limit`Oscillatory`,
+  each with its own `Information` string and the attributes
+  `{Protected, ReadProtected}`.  The two positional arguments and every other
+  option (`Direction`, `Assumptions`) are forwarded untouched; a `Method`
+  option is dropped, since the head already names the method.  An abstention
+  echoes the head the user asked for
+  (`Limit`RationalFunction[Sin[x]/x, x -> 0]` stays unevaluated) rather than
+  falling back to the cascade.
 - **Joint multivariate** limits at the origin or `+Infinity` are decided by a
   polar/spherical substitution: the integrand is `Simplify`-normalised in
   `r`/angle coordinates (cancelling common `r`-powers so buried `0/0` shapes
@@ -420,6 +433,15 @@ Out[17]= Limit[a Sin[x], x -> Infinity]
 
 In[18]:= Limit[Sin[1/x]/x, x -> 0]
 Out[18]= Indeterminate
+
+In[19]:= Limit`Series[Sin[x]/x, x -> 0]
+Out[19]= 1
+
+In[20]:= Limit`RationalFunction[Sin[x]/x, x -> 0]
+Out[20]= Limit`RationalFunction[Sin[x]/x, x -> 0]
+
+In[21]:= Limit`Gruntz[x (E^(1/x) - 1), x -> Infinity]
+Out[21]= 1
 ```
 
 ## Residue

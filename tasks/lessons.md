@@ -1209,3 +1209,46 @@ object**.
 
 Rule: never pipe `make` into `head`. Redirect to a log
 (`make -j8 > /tmp/build.log 2>&1; echo rc=$?`) and grep the file afterwards.
+
+## A soft-assert `FAIL:` prints at the TOP of the log and still exits 0 (2026-07-28)
+
+`test_limit_assumptions.c` had been failing since the previous commit —
+`Limit[x^n, n -> Infinity]` was pinned to the old `E^DirectedInfinity[Log[x]]`,
+which the `exp_of_limit` fix correctly turned into an honest unevaluated form.
+I ran the suite, saw `All limit_assumptions tests passed!` in a `tail -4`, and
+committed.
+
+Two traps compounded:
+
+1. The suites are built with `NDEBUG`, so a failed assertion prints
+   `FAIL: <input> / Expected: ... / Actual: ...` and **keeps going**. The exit
+   code is 0 and the closing "All ... passed!" banner still prints.
+2. The failure was in the *first* test, so it scrolled off the top. A `tail` of
+   the log is exactly the wrong window.
+
+Rule: judge a suite by `grep -c 'FAIL'` over its **whole** output, never by the
+exit code and never by the tail. Run it as
+`./t > /tmp/t.log 2>&1; grep -n FAIL /tmp/t.log` and read the count.
+
+Corollary: when a change alters what a limit/integral *returns* in an edge
+case, grep the whole test tree for the old printed form
+(`grep -rn "E^DirectedInfinity" tests/`) before assuming nothing pinned it.
+
+## When a fix removes a malformed output, grep for who was consuming it (2026-07-28)
+
+Making `exp_of_limit` refuse a residual infinity was correct — `Limit[E^(I x)/x,
+x -> Infinity]` had been answering `E^DirectedInfinity[I]` instead of `0`. But
+`E^DirectedInfinity[dir]` was not merely noise: the Frullani pre-pass in
+`integrate_ramanujan.c` *pattern-matched on it*, resolving `dir < 0` under the
+assumptions to get `f(Infinity) = 0`. Deleting the form silently broke
+`Integrate[(E^(-a x) - E^(-b x))/x, {x, 0, Infinity}]` on that route.
+
+A malformed intermediate value is load-bearing more often than it looks — it is
+the only channel through which the producer's internal knowledge reached the
+consumer.
+
+Rule: when a change stops a function returning some distinctive shape, grep the
+tree for that shape (`grep -rn "DirectedInfinity" src/`) before concluding the
+fix is local. Then give the consumer a *legitimate* way to get what it needs —
+here, the limit of the exponent, which is decidable — rather than restoring the
+bad output or leaving the consumer broken.

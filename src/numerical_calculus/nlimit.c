@@ -80,6 +80,7 @@
 
 #include "arithmetic.h"   /* is_complex, make_complex, is_rational */
 #include "attr.h"
+#include "common.h"       /* common_method_alias -- the NLimit`m heads */
 #include "eval.h"
 #include "numeric.h"
 #include "seqaccel.h"     /* shared Richardson + Wynn-epsilon kernels */
@@ -905,6 +906,41 @@ Expr* builtin_nlimit(Expr* res) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  Per-method entry points                                            *
+ *                                                                     *
+ *  Every Method setting is also callable as a head of its own:        *
+ *  NLimit`EulerSum[f, z -> z0] is exactly                             *
+ *  NLimit[f, z -> z0, Method -> "EulerSum"].  The two positional      *
+ *  arguments and every other option (Direction, Scale, Terms,         *
+ *  WynnDegree, WorkingPrecision) are forwarded untouched; see         *
+ *  common_method_alias.  The Levin variants differ only in the        *
+ *  remainder estimate, so each gets its own head rather than hiding   *
+ *  behind a string setting.                                           *
+ * ------------------------------------------------------------------ */
+
+#define NLIMIT_METHOD_ENTRY(fn, name)                                    \
+    static Expr* fn(Expr* res) {                                         \
+        return common_method_alias(res, "NLimit", 2, name, builtin_nlimit); \
+    }
+
+NLIMIT_METHOD_ENTRY(builtin_nlimit_automatic,     "Automatic")
+NLIMIT_METHOD_ENTRY(builtin_nlimit_eulersum,      "EulerSum")
+NLIMIT_METHOD_ENTRY(builtin_nlimit_sequencelimit, "SequenceLimit")
+NLIMIT_METHOD_ENTRY(builtin_nlimit_levin,         "Levin")
+NLIMIT_METHOD_ENTRY(builtin_nlimit_levinu,        "LevinU")
+NLIMIT_METHOD_ENTRY(builtin_nlimit_levint,        "LevinT")
+NLIMIT_METHOD_ENTRY(builtin_nlimit_levinv,        "LevinV")
+
+#undef NLIMIT_METHOD_ENTRY
+
+static void nl_register_method(const char* sym, Expr* (*fn)(Expr*),
+                               const char* doc) {
+    symtab_add_builtin(sym, fn);
+    symtab_get_def(sym)->attributes |= ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_set_docstring(sym, doc);
+}
+
+/* ------------------------------------------------------------------ *
  *  Registration                                                       *
  * ------------------------------------------------------------------ */
 
@@ -913,4 +949,72 @@ void nlimit_init(void) {
     /* Protected only. NLimit is deliberately NOT ATTR_LISTABLE: threading would
      * split the z -> z0 spec across bogus single-argument calls. */
     symtab_get_def("NLimit")->attributes |= ATTR_PROTECTED;
+    /* NLimit's own docstring lives in info.c (registered later in
+     * core_init, so it wins regardless); only the per-method heads are
+     * documented here, next to the code they describe. */
+
+    /* --- The Method settings, exposed as heads ---------------------- */
+
+    nl_register_method("NLimit`Automatic", builtin_nlimit_automatic,
+        "NLimit`Automatic[f, z -> z0] is NLimit[f, z -> z0, Method -> "
+        "Automatic]: run Richardson extrapolation, Wynn's epsilon algorithm "
+        "(at every admissible degree) and Levin's u-transform on the sampled "
+        "sequence, and return the estimate with the smallest internal "
+        "convergence residual.  Richardson models an integer-power (analytic) "
+        "error tail while Wynn captures the geometric and fractional-power "
+        "(branch-point) tails its fixed 2^j-1 denominators cannot annihilate, "
+        "so selecting by best self-consistency picks the right tool per "
+        "problem.  Levin is admitted only when the sample increments are "
+        "contracting, since on a divergent sequence it can collapse to a "
+        "spurious value with a deceptively small residual.  This is what "
+        "plain NLimit does.  (The MPFR path runs Richardson and Wynn only.)");
+
+    nl_register_method("NLimit`EulerSum", builtin_nlimit_eulersum,
+        "NLimit`EulerSum[f, z -> z0] is NLimit[f, z -> z0, Method -> "
+        "EulerSum]: Richardson / Romberg extrapolation of the sampled "
+        "sequence S_k treated as a function of the geometric step.  Following "
+        "the same convention as ND, the tableau uses the all-powers "
+        "denominator 2^j - 1: T(i,0) = S_i, T(i,j) = T(i,j-1) + "
+        "(T(i,j-1) - T(i-1,j-1))/(2^j - 1), and the result is T(n-1,n-1) for "
+        "n = Terms.  Best on a smooth approach with an analytic error tail; "
+        "it cannot annihilate a geometric or fractional-power tail.");
+
+    nl_register_method("NLimit`SequenceLimit", builtin_nlimit_sequencelimit,
+        "NLimit`SequenceLimit[f, z -> z0] is NLimit[f, z -> z0, Method -> "
+        "SequenceLimit]: Wynn's epsilon algorithm (iterated Shanks / Aitken) "
+        "on the sampled sequence.  With eps(-1) = 0 and eps(0) = S_n, "
+        "eps(k+1,n) = eps(k-1,n+1) + 1/(eps(k,n+1) - eps(k,n)); the even "
+        "columns are the limit estimates.  WynnDegree -> d selects column 2d "
+        "and needs at least 2(d+1) terms for a convergence check.  Handles "
+        "the geometric and branch-point tails that defeat Richardson.");
+
+    nl_register_method("NLimit`Levin", builtin_nlimit_levin,
+        "NLimit`Levin[f, z -> z0] is NLimit[f, z -> z0, Method -> \"Levin\"]: "
+        "the Levin sequence transformation with the u-type remainder "
+        "estimate, identical to NLimit`LevinU.  Levin's transformation "
+        "divides out an explicit model of the remainder before extrapolating, "
+        "which makes it markedly stronger than Richardson on slowly "
+        "convergent and alternating sequences.  Use NLimit`LevinT or "
+        "NLimit`LevinV for the other remainder estimates.");
+
+    nl_register_method("NLimit`LevinU", builtin_nlimit_levinu,
+        "NLimit`LevinU[f, z -> z0] is NLimit[f, z -> z0, Method -> "
+        "\"LevinU\"]: the Levin u-transform, whose remainder estimate is "
+        "k a_k (a_k the k-th term difference).  The general-purpose variant, "
+        "and the one NLimit`Levin selects; effective on both logarithmic and "
+        "linear convergence.");
+
+    nl_register_method("NLimit`LevinT", builtin_nlimit_levint,
+        "NLimit`LevinT[f, z -> z0] is NLimit[f, z -> z0, Method -> "
+        "\"LevinT\"]: the Levin t-transform, whose remainder estimate is the "
+        "term difference a_k itself.  Suited to strictly alternating "
+        "sequences, where the remainder is bounded by the first omitted "
+        "term; weaker than the u-variant on monotone sequences.");
+
+    nl_register_method("NLimit`LevinV", builtin_nlimit_levinv,
+        "NLimit`LevinV[f, z -> z0] is NLimit[f, z -> z0, Method -> "
+        "\"LevinV\"]: the Levin v-transform, whose remainder estimate "
+        "a_k a_(k+1) / (a_k - a_(k+1)) interpolates between the t- and "
+        "u-variants.  Often the most robust of the three when the "
+        "convergence type of the sampled sequence is not known in advance.");
 }

@@ -359,6 +359,24 @@ recovers the limit by sequence acceleration:
   `ω_i = a_i a_{i+1}/(a_i − a_{i+1})`.  Strong on logarithmically /
   algebraically convergent approaches.
 
+Every setting is also callable as a head of its own — `NLimit`EulerSum[f,
+z -> z0]` is exactly `NLimit[f, z -> z0, Method -> "EulerSum"]` — so a method
+can be named without threading an option through:
+
+| Head | Method setting |
+|------|----------------|
+| `NLimit`Automatic` | `Automatic` |
+| `NLimit`EulerSum` | `EulerSum` |
+| `NLimit`SequenceLimit` | `SequenceLimit` |
+| `NLimit`Levin` | `"Levin"` (≡ `"LevinU"`) |
+| `NLimit`LevinU` / `NLimit`LevinT` / `NLimit`LevinV` | the u / t / v remainder estimate |
+
+Each head has its own `Information` string.  The two positional arguments and
+every other option (`Direction`, `Scale`, `Terms`, `WynnDegree`,
+`WorkingPrecision`) are forwarded untouched; a `Method` option is dropped,
+since the head already names the method.  Attributes are
+`{Protected, ReadProtected}`.
+
 ### Options
 
 | Option | Default | Meaning |

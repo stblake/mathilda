@@ -244,6 +244,66 @@ static void test_protected(void) {
 }
 
 /* ------------------------------------------------------------------------
+ *  Per-method heads — NLimit`m[f, z -> z0] == NLimit[f, z -> z0, Method -> m]
+ * ---------------------------------------------------------------------- */
+
+static void test_method_heads(void) {
+    /* Every Method setting has a head, and each agrees with the option. */
+    ASSERT_CLOSE("NLimit`Automatic[Sin[x]/x,x->0]",     "1", 1e-9);
+    ASSERT_CLOSE("NLimit`EulerSum[Sin[x]/x,x->0]",      "1", 1e-9);
+    ASSERT_CLOSE("NLimit`SequenceLimit[Sin[x]/x,x->0]", "1", 1e-6);
+    ASSERT_CLOSE("NLimit`Levin[Sin[x]/x,x->0]",         "1", 1e-6);
+    ASSERT_CLOSE("NLimit`LevinU[x(E^(1/x)-1),x->Infinity]",       "1",   5e-4);
+    ASSERT_CLOSE("NLimit`LevinT[Sqrt[x^2+x]-x,x->Infinity]",      "1/2", 1e-4);
+    ASSERT_CLOSE("NLimit`LevinV[Sqrt[x^2+x]-x,x->Infinity]",      "1/2", 1e-3);
+
+    /* Other options are forwarded untouched. */
+    ASSERT_CLOSE("NLimit`EulerSum[(2^x-1)/x,x->0,WorkingPrecision->30,Terms->14]",
+                 "Log[2]", 1e-8);
+    ASSERT_CLOSE("NLimit`Automatic[z+Conjugate[z]/z,z->0,Direction->-I]",
+                 "-1", 1e-9);
+
+    /* The head names the method: a Method option is dropped, not honoured.
+     * The branch-point approach separates the two -- Richardson alone leaves
+     * a ~0.08 I residual where Automatic does not -- so asking for
+     * Method -> Automatic under the EulerSum head must still give exactly
+     * EulerSum's (worse) answer. */
+    ASSERT_CLOSE("NLimit`EulerSum[2 ArcTan[Sqrt[(1+x)/(1-x)]],x->1,Method->Automatic]",
+                 "NLimit[2 ArcTan[Sqrt[(1+x)/(1-x)]],x->1,Method->EulerSum]", 1e-15);
+    {
+        char* s = eval_str(
+            "N[Abs[NLimit`EulerSum[2 ArcTan[Sqrt[(1+x)/(1-x)]],x->1]-Pi]"
+            " > Abs[NLimit`Automatic[2 ArcTan[Sqrt[(1+x)/(1-x)]],x->1]-Pi]]");
+        ASSERT_MSG(strcmp(s, "True") == 0,
+                   "the heads must select different methods: %s", s);
+        free(s);
+    }
+
+    /* Docstrings: `?NLimit`m` must say something. */
+    const char* heads[] = { "Automatic", "EulerSum", "SequenceLimit",
+                            "Levin", "LevinU", "LevinT", "LevinV" };
+    for (size_t i = 0; i < sizeof heads / sizeof heads[0]; i++) {
+        char buf[128];
+        snprintf(buf, sizeof buf, "Information[\"NLimit`%s\"]", heads[i]);
+        char* s = eval_str(buf);
+        ASSERT_MSG(strstr(s, "NLimit`") != NULL && strlen(s) > 80,
+                   "NLimit`%s needs a docstring, got: %s", heads[i], s);
+        free(s);
+    }
+
+    /* Protected, like NLimit itself. */
+    char* s = eval_str("MemberQ[Attributes[NLimit`Levin], Protected]");
+    ASSERT_MSG(strcmp(s, "True") == 0, "NLimit`Levin should be Protected: %s", s);
+    free(s);
+
+    /* A divergent sequence stays unevaluated under a named head too. */
+    s = eval_str("NLimit`EulerSum[1/x,x->0]");
+    ASSERT_MSG(strstr(s, "NLimit`EulerSum[") != NULL,
+               "1/x must stay unevaluated: %s", s);
+    free(s);
+}
+
+/* ------------------------------------------------------------------------
  *  Stress: a broad battery of limits, each checked for correctness
  * ---------------------------------------------------------------------- */
 
@@ -291,6 +351,11 @@ static void test_memory_loop(void) {
         "NLimit[(Exp[I x]-1)/x,x->0,WorkingPrecision->30]",
         "NLimit[1/x,x->0]",                    /* noise path */
         "NLimit[z+Conjugate[z]/z,z->0,Direction->-I]",
+        /* the per-method heads rebuild the call, so they get their own
+         * ownership dance to exercise -- including the abstention path */
+        "NLimit`EulerSum[Sin[x]/x,x->0]",
+        "NLimit`LevinT[Sqrt[x^2+x]-x,x->Infinity]",
+        "NLimit`SequenceLimit[1/x,x->0]",
     };
     for (int i = 0; i < 20; i++) {
         for (size_t k = 0; k < sizeof(inputs)/sizeof(inputs[0]); k++) {
@@ -329,6 +394,7 @@ int main(void) {
     TEST(test_noise);
     TEST(test_unevaluated_forms);
     TEST(test_protected);
+    TEST(test_method_heads);
 
     TEST(test_stress_battery);
     TEST(test_stress_terms_sweep);
