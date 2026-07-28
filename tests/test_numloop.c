@@ -308,6 +308,59 @@ static void test_fallback_do_compound_nonset(void) {
     expect_full("Module[{x = 0}, Do[x = x + 1; x, {3}]; x]", "3");
 }
 
+/* ---------------- No speculative evaluation of user code ---------------- */
+/*
+ * compile_walk() const-folds any variable-free subexpression, and const_fold()
+ * *evaluates* what it is handed. Handing it a user-defined call therefore ran
+ * that call an extra time, which is observable two ways: side effects fire once
+ * too often, and the probe pays the call's full cost only to discard a
+ * non-numeric result. const_foldable() now restricts folding to a syntactic
+ * numeric grammar, so a body carrying a user head bails to the interpreter.
+ */
+static void test_no_speculative_side_effect(void) {
+    /* `f` is called exactly `n` times, not n+1. Regression: this reported 6. */
+    expect_full("Module[{c = 0, y}, f[] := (c = c + 1; 1.5); "
+                "Do[y = f[], {5}]; c]", "5");
+}
+
+static void test_no_speculative_side_effect_range(void) {
+    /* Same for the {i, imin, imax} form, whose RHS is likewise variable-free
+     * (the loop counter does not appear in it). */
+    expect_full("Module[{c = 0, y}, g[] := (c = c + 1; 2.5); "
+                "Do[y = g[], {i, 1, 4}]; c]", "4");
+}
+
+static void test_no_speculative_numericalize(void) {
+    /* const_fold() numericalizes BEFORE evaluating, so a speculative fold of a
+     * user call rewrote exact integer arguments to machine reals. Here that
+     * would turn Table's bound and Part's subscripts into 21., neither of which
+     * resolves -- silently correct (the interpreter re-runs it) but ~4x slower.
+     * Pin the shape: the fold must not happen, so the count stays at 1. */
+    expect_full("Module[{c = 0, grid, y}, "
+                "grid = Table[1. i j, {i, 1, 4}, {j, 1, 4}]; "
+                "h[u_, n_] := (c = c + 1; Table[u[[i, j]] + 1., {i, 1, n}, {j, 1, n}]); "
+                "Do[y = h[grid, 4], {1}]; c]", "1");
+}
+
+static void test_no_fold_of_delayed_ownvalue(void) {
+    /* A SetDelayed OwnValue is re-run on every read, so it must not be frozen
+     * into the compiled program as a loop constant. Regression: the second
+     * form folded `xx` once and reported 1 instead of 5. */
+    expect_full("Module[{c = 0, y}, xx := (c = c + 1; 1.5); "
+                "Do[y = xx, {5}]; c]", "5");
+    expect_full("Module[{c = 0, y}, zz := (c = c + 1; 1.5); "
+                "Do[y = zz + 1., {5}]; c]", "5");
+}
+
+static void test_const_fold_still_folds_numerics(void) {
+    /* The folding this gate protects must survive: Pi, Sqrt[2] and Rational
+     * are still collapsed to a single machine constant, so these stay on the
+     * fast path and agree with the interpreter. */
+    diff("Module[{s = 0.}, Do[s = s + Pi i, {i, 1, 500}]; s]");
+    diff("Module[{s = 0.}, Do[s = s + Sqrt[2] i + 1/3, {i, 1, 500}]; s]");
+    diff("Module[{x = 0.5}, Do[x = Cos[x] + Pi/4, {200}]; x]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -368,6 +421,13 @@ int main(void) {
     TEST(test_fallback_fixedpoint_exact);
     TEST(test_fallback_do_compound_symbolic);
     TEST(test_fallback_do_compound_nonset);
+
+    /* No speculative evaluation of user code in the fast-path builder */
+    TEST(test_no_speculative_side_effect);
+    TEST(test_no_speculative_side_effect_range);
+    TEST(test_no_speculative_numericalize);
+    TEST(test_no_fold_of_delayed_ownvalue);
+    TEST(test_const_fold_still_folds_numerics);
 
     printf("All numloop tests passed!\n");
     return 0;

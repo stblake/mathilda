@@ -283,6 +283,82 @@ static NumOp unary_op_for(const char* head) {
     return (NumOp)255;   /* not a supported unary head */
 }
 
+/* Gate for the variable-free const-fold below.
+ *
+ * const_fold() *evaluates* whatever it is handed (numericalize walks the tree
+ * and applies the evaluator to each node), so handing it an arbitrary
+ * subexpression is a speculative evaluation of user code. That is wrong twice
+ * over:
+ *
+ *   - Side effects fire an extra time. `f[] := (c = c + 1; 1.5)` in
+ *     `Do[y = f[], {5}]` incremented `c` six times: once for the probe, then
+ *     five times for the loop the probe failed to replace.
+ *   - The probe is not even the same computation. numericalize() rewrites
+ *     exact integers to machine reals *before* evaluating, so a call like
+ *     `istep[grid, grid, lam, 41]` was evaluated with 41. in the argument
+ *     that ends up as a `Table` bound and a `Part` subscript. Real subscripts
+ *     do not resolve, so the body collapsed into one huge symbolic `Plus`
+ *     whose like-term hashing is O(grid) *per element* -- the probe ran ~4x
+ *     slower than the real evaluation it was trying to pre-empt, and its
+ *     result was then discarded.
+ *
+ * So fold only what is syntactically closed over numeric literals, numeric
+ * constants and the arithmetic/elementary heads this block already lowers.
+ * Anything else bails to the interpreter, which is always a correct outcome
+ * for a fast path -- numloop is an optimization, never a semantic. */
+static bool const_foldable(const Expr* e) {
+    switch (e->type) {
+        case EXPR_INTEGER:
+        case EXPR_REAL:
+        case EXPR_BIGINT:
+#ifdef USE_MPFR
+        case EXPR_MPFR:
+#endif
+            return true;
+        /* A bare symbol is foldable when reading it is a pure lookup: either it
+         * has no OwnValue at all (Pi, E, Degree -- numericalize resolves the
+         * constant, and const_fold rejects anything else), or its OwnValue is
+         * already a number, as `x = 2.5` leaves it.
+         *
+         * A *delayed* OwnValue (`x := (c = c + 1; 1.5)`) is a held expression
+         * re-run on every read, so folding it both fires its side effects once
+         * and freezes the first value as a loop constant -- `Do[y = x + 1., {5}]`
+         * evaluated the body once instead of five times. Reject anything whose
+         * stored value is not already a number. */
+        case EXPR_SYMBOL: {
+            SymbolDef* def = symtab_lookup(e->data.symbol.name);
+            if (!def || !def->own_values) return true;
+            const Expr* v = def->own_values->replacement;
+            if (!v) return false;
+            if (v->type == EXPR_INTEGER || v->type == EXPR_REAL ||
+                v->type == EXPR_BIGINT) return true;
+#ifdef USE_MPFR
+            if (v->type == EXPR_MPFR) return true;
+#endif
+            {
+                int64_t rn, rd;
+                return is_rational((Expr*)v, &rn, &rd);
+            }
+        }
+        case EXPR_FUNCTION:
+            break;
+        default:
+            return false;
+    }
+
+    const Expr* h = e->data.function.head;
+    if (h->type != EXPR_SYMBOL) return false;
+    const char* nm = h->data.symbol.name;
+    if (!(nm == SYM_Plus || nm == SYM_Times || nm == SYM_Power ||
+          nm == SYM_Subtract || nm == SYM_Divide || nm == SYM_Rational ||
+          nm == SYM_N || unary_op_for(nm) != (NumOp)255))
+        return false;
+
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!const_foldable(e->data.function.args[i])) return false;
+    return true;
+}
+
 static void compile_walk(NumProg* p, const VarCtx* vc, const Expr* e) {
     if (!p->ok) return;
 
@@ -309,10 +385,13 @@ static void compile_walk(NumProg* p, const VarCtx* vc, const Expr* e) {
     if (vi >= 0) { emit(p, OP_VAR, vi, +1); return; }
 
     /* Any variable-free subexpression collapses to a single constant. This
-     * folds Pi, E, Rational[p,q], Sqrt[2], and plain literals uniformly. */
+     * folds Pi, E, Rational[p,q], Sqrt[2], and plain literals uniformly --
+     * but only once const_foldable() has confirmed that folding it cannot
+     * run a user-defined rule (see the note on that predicate). */
     if (!contains_var(vc, e)) {
         double c;
-        if (!const_fold(e, &c)) { p->ok = false; return; }
+        if (!const_foldable(e))    { p->ok = false; return; }
+        if (!const_fold(e, &c))    { p->ok = false; return; }
         emit(p, OP_CONST, add_const(p, c), +1);
         return;
     }
