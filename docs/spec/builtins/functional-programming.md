@@ -365,12 +365,18 @@ Applies a function to selected parts of an expression, identified by position sp
 - `MapAt[f, expr, n]`: applies `f` to the element at position `n` in `expr`. If `n` is negative, the position is counted from the end. `n = 0` targets the head of `expr`.
 - `MapAt[f, expr, {i, j, ...}]`: applies `f` to the part of `expr` at position `{i, j, ...}` (equivalently `expr[[i, j, ...]]`).
 - `MapAt[f, expr, {{i1, j1, ...}, {i2, j2, ...}, ...}]`: applies `f` to each of the listed parts of `expr`. If the same position appears more than once, `f` is applied repeatedly to that part.
+- `MapAt[f, pos]`: the operator form, `MapAt[f, pos][expr] == MapAt[f, expr, pos]`.
 
 **Features**:
 - `Protected`.
-- Path components may be integers (positive or negative), `All` (selects every child at that level), or `Span` expressions such as `i ;; j` or `i ;; j ;; k`.
+- Path components may be integers (positive or negative), `All` (selects every child at that level), or `Span` expressions such as `i ;; j` or `i ;; j ;; k` (including `UpTo[n]` bounds).
 - Works on expressions with any head (not just `List`); after substitution the evaluator re-applies canonical ordering for `Orderless` heads such as `Plus` and `Times`.
-- `MapAt[f, expr, {}]` applies `f` to the entire expression itself.
+- On an `Association` a position is a key, `Key[k]`, or a positional index over the entries, and `f` is applied to the *value*; `All`, `Span` and `0` work there too. See [Data structures](data-structures.md#mapat).
+- `MapAt[f, expr, {}]` is an **empty list of positions** and so maps nothing; the position of the whole expression is the empty path, `MapAt[f, expr, {{}}]`.
+- A position that does not exist — an out-of-range index, an absent key, a malformed `Span`, or a path that runs into an atom such as a `Rational` — leaves `MapAt` unevaluated, as `Part` does for `{a, b, c}[[99]]`.
+- The `f[part]` application is left for the evaluator to reduce, so a surrounding `Hold` suppresses it: `MapAt[f, Hold[1 + 1], 1]` is `Hold[f[1 + 1]]`.
+- An `NDArray` is materialised to a nested list, mapped, then repacked when the result is still numeric.
+- Position resolution is shared with [`ReplaceAt`](assignment-and-rules.md#replaceat) via one walker (`expr_apply_at_path`, `src/part.c`), so the two agree on every position spec by construction.
 
 ```mathematica
 In[1]:= MapAt[f, {a, b, c, d}, 2]
@@ -408,6 +414,18 @@ Out[11]= f[x]^2 + f[y]^2
 
 In[12]:= MapAt[f, {a, b, c}, 0]
 Out[12]= f[List][a, b, c]
+
+In[13]:= MapAt[f, h[a, b], {}]
+Out[13]= h[a, b]
+
+In[14]:= MapAt[f, h[a, b], {{}}]
+Out[14]= f[h[a, b]]
+
+In[15]:= MapAt[f, 2][{a, b, c}]
+Out[15]= {a, f[b], c}
+
+In[16]:= MapAt[f, {a, b, c}, 99]
+Out[16]= MapAt[f, {a, b, c}, 99]
 ```
 
 ## Nest

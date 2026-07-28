@@ -5,22 +5,110 @@
 #include "sym_names.h"
 #include "assoc.h"
 #include "ndarray.h"
+#include "part.h"
+#include "common.h"
 
 static bool is_atomic(Expr* e);
+
+/* True for a 2-argument Rule/RuleDelayed, i.e. a well-formed association entry.
+ * is_association() only checks the head, so Association[1, 2] can reach us and
+ * must never be dereferenced as though its arguments were rules. */
+static bool part_is_entry(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.arg_count == 2;
+}
+
+/*
+ * Resolve one slot of a Span spec against a container length.
+ *
+ * `which` names the slot (0 = start, 1 = end, 2 = step) and selects the
+ * default that All stands for: the first element, the last element, and a
+ * step of 1 respectively.  Negative indices and UpTo[n] are meaningful for
+ * the bounds only, never for the step.  Returns false for a slot that is not
+ * a valid index spec.
+ */
+static bool span_slot(const Expr* slot, int64_t len, int which, int64_t* out) {
+    if (slot->type == EXPR_INTEGER) {
+        int64_t v = slot->data.integer;
+        if (which != 2 && v < 0) v = len + v + 1;
+        *out = v;
+        return true;
+    }
+    if (slot->type == EXPR_SYMBOL && slot->data.symbol.name == SYM_All) {
+        *out = (which == 1) ? len : 1;
+        return true;
+    }
+    if (which != 2 && slot->type == EXPR_FUNCTION &&
+        slot->data.function.head->type == EXPR_SYMBOL &&
+        slot->data.function.head->data.symbol.name == SYM_UpTo &&
+        slot->data.function.arg_count == 1 &&
+        slot->data.function.args[0]->type == EXPR_INTEGER) {
+        int64_t v = slot->data.function.args[0]->data.integer;
+        if (v > len) v = len;
+        if (v < 0) v = len + v + 1;
+        *out = v;
+        return true;
+    }
+    return false;
+}
+
+/*
+ * Normalize Span[a, b] / Span[a, b, step] against a container of `len`
+ * elements into the 1-based index of the first selected element, the stride
+ * between selections, and how many there are -- so a caller iterates
+ *
+ *     for (i = 0, k = *start; i < *count; i++, k += *step)
+ *
+ * with every k guaranteed to be in 1..len.
+ *
+ * Returns false for a malformed spec -- a slot that is not an index, or a
+ * zero step.  A span that selects nothing is *not* malformed: it succeeds
+ * with *count == 0.  Shared by Part and the position-path walker so a read
+ * and a rewrite can never disagree about which elements a span names.
+ */
+static bool span_resolve(const Expr* span, int64_t len,
+                         int64_t* start, int64_t* step, int64_t* count) {
+    int64_t s = 1, e = len, st = 1;
+    size_t argc = span->data.function.arg_count;
+
+    if (argc >= 1 && !span_slot(span->data.function.args[0], len, 0, &s)) return false;
+    if (argc >= 2 && !span_slot(span->data.function.args[1], len, 1, &e)) return false;
+    if (argc >= 3) {
+        if (!span_slot(span->data.function.args[2], len, 2, &st)) return false;
+        if (st == 0) return false;
+    }
+
+    int64_t n = 0;
+    if (st > 0) {
+        if (s <= e && s >= 1 && e <= len) n = (e - s) / st + 1;
+    } else {
+        if (s >= e && s <= len && e >= 1) n = (s - e) / (-st) + 1;
+    }
+    if (n < 0) n = 0;
+
+    *start = s; *step = st; *count = n;
+    return true;
+}
 static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, Expr* rhs, size_t* rhs_idx, bool is_rhs_list);
 /* Single-index association Part: resolve one key/Key[k]/positional index into
  * its value (recursing for any remaining indices), or Missing["KeyAbsent", k].
  * Returns NULL only for an out-of-range positional index. */
 static Expr* assoc_part_single(Expr* assoc, Expr* idx, Expr** rest, size_t nrest);
 
-/* Assign into the value slot (args[1]) of association entry `rule`, recursing
- * for any remaining indices. No-op if `rule` is not a 2-argument rule. */
-static void assoc_assign_value(Expr* rule, Expr** rest, size_t nrest, Expr* rhs, size_t* rhs_idx, bool is_rhs_list) {
-    if (rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2) {
-        Expr* nv = expr_part_assign_rec(rule->data.function.args[1], rest, nrest, rhs, rhs_idx, is_rhs_list);
-        expr_free(rule->data.function.args[1]);
-        rule->data.function.args[1] = nv;
-    }
+/* Assign through the value of association entry `entry`, recursing for any
+ * remaining indices, and return the resulting entry. Takes ownership of `entry`
+ * (the caller's array slot) and hands back a fresh one -- never an in-place
+ * write, because expr_copy is a refcount bump and `entry` is the very node the
+ * caller's association holds. Assigning into args[1] here is what made
+ * `u2 = u1; u2[["x"]] = 9` corrupt `u1`. Returns `entry` unchanged when it is
+ * not a two-argument rule (Association[1, 2] can exist). */
+static Expr* assoc_entry_assigned(Expr* entry, Expr** rest, size_t nrest,
+                                  Expr* rhs, size_t* rhs_idx, bool is_rhs_list) {
+    if (!part_is_entry(entry)) return entry;
+    Expr* nv = expr_part_assign_rec(entry->data.function.args[1], rest, nrest,
+                                    rhs, rhs_idx, is_rhs_list);
+    Expr* fresh = assoc_entry_with_value(entry, nv);   /* adopts nv */
+    expr_free(entry);
+    return fresh;
 }
 
 
@@ -97,7 +185,7 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
          * Non-key structural indices must NOT be appended as literal keys. */
         if (idx->type == EXPR_SYMBOL && idx->data.symbol.name == SYM_All) {
             for (size_t i = 0; i < len; i++)
-                assoc_assign_value(new_args[i], rest, nrest, rhs, rhs_idx, is_rhs_list);
+                new_args[i] = assoc_entry_assigned(new_args[i], rest, nrest, rhs, rhs_idx, is_rhs_list);
         } else if (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
                    idx->data.function.head->data.symbol.name == SYM_Span) {
             int64_t start = 1, end = (int64_t)len, step = 1;
@@ -113,7 +201,7 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
             }
             if (step > 0)
                 for (int64_t i = start; i <= end && i >= 1 && i <= (int64_t)len; i += step)
-                    assoc_assign_value(new_args[i - 1], rest, nrest, rhs, rhs_idx, is_rhs_list);
+                    new_args[i - 1] = assoc_entry_assigned(new_args[i - 1], rest, nrest, rhs, rhs_idx, is_rhs_list);
         } else if (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
                    idx->data.function.head->data.symbol.name == SYM_List) {
             for (size_t j = 0; j < idx->data.function.arg_count; j++) {
@@ -121,7 +209,7 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
                 if (sub->type == EXPR_INTEGER) {
                     int64_t p = sub->data.integer; if (p < 0) p = (int64_t)len + p + 1;
                     if (p >= 1 && p <= (int64_t)len)
-                        assoc_assign_value(new_args[p - 1], rest, nrest, rhs, rhs_idx, is_rhs_list);
+                        new_args[p - 1] = assoc_entry_assigned(new_args[p - 1], rest, nrest, rhs, rhs_idx, is_rhs_list);
                 } else {
                     Expr* k = (sub->type == EXPR_FUNCTION && sub->data.function.head->type == EXPR_SYMBOL &&
                                sub->data.function.head->data.symbol.name == SYM_Key && sub->data.function.arg_count == 1)
@@ -129,7 +217,7 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
                     for (size_t i = 0; i < len; i++)
                         if (new_args[i]->type == EXPR_FUNCTION && new_args[i]->data.function.arg_count == 2 &&
                             expr_eq(new_args[i]->data.function.args[0], k)) {
-                            assoc_assign_value(new_args[i], rest, nrest, rhs, rhs_idx, is_rhs_list); break;
+                            new_args[i] = assoc_entry_assigned(new_args[i], rest, nrest, rhs, rhs_idx, is_rhs_list); break;
                         }
                 }
             }
@@ -137,7 +225,7 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
             int64_t pos = idx->data.integer;
             if (pos < 0) pos = (int64_t)len + pos + 1;
             if (pos >= 1 && pos <= (int64_t)len)
-                assoc_assign_value(new_args[pos - 1], rest, nrest, rhs, rhs_idx, is_rhs_list);
+                new_args[pos - 1] = assoc_entry_assigned(new_args[pos - 1], rest, nrest, rhs, rhs_idx, is_rhs_list);
         } else {
             /* Single key: Key[k] (unwrapped) or a literal key. */
             Expr* lookup_key = (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
@@ -150,7 +238,7 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
                     expr_eq(rule->data.function.args[0], lookup_key)) { found = (int64_t)i; break; }
             }
             if (found >= 0) {
-                assoc_assign_value(new_args[found], rest, nrest, rhs, rhs_idx, is_rhs_list);
+                new_args[found] = assoc_entry_assigned(new_args[found], rest, nrest, rhs, rhs_idx, is_rhs_list);
             } else if (nrest == 0) {
                 /* nrest == 0 -> the recursive call returns the RHS value. */
                 Expr* nv = expr_part_assign_rec(new_head, rest, nrest, rhs, rhs_idx, is_rhs_list);
@@ -373,60 +461,13 @@ Expr* expr_part(Expr* expr, Expr** indices, size_t nindices) {
     }
 
     // Handle "Span"
-    if (idx->type == EXPR_FUNCTION && idx->data.function.head->data.symbol.name == SYM_Span) {
+    if (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
+        idx->data.function.head->data.symbol.name == SYM_Span) {
         if (is_atomic(expr)) return NULL;
         int64_t len = (int64_t)expr->data.function.arg_count;
-        int64_t start = 1, end = len, step = 1;
-        
-        size_t span_argc = idx->data.function.arg_count;
-        if (span_argc >= 1) {
-            Expr* a1 = idx->data.function.args[0];
-            if (a1->type == EXPR_INTEGER) {
-                start = a1->data.integer;
-                if (start < 0) start = len + start + 1;
-            } else if (a1->type == EXPR_SYMBOL && a1->data.symbol.name == SYM_All) {
-                start = 1;
-            } else if (a1->type == EXPR_FUNCTION && a1->data.function.head->data.symbol.name == SYM_UpTo && a1->data.function.arg_count == 1 && a1->data.function.args[0]->type == EXPR_INTEGER) {
-                start = a1->data.function.args[0]->data.integer;
-                if (start > len) start = len;
-                if (start < 0) start = len + start + 1;
-            } else return NULL;
-        }
-        if (span_argc >= 2) {
-            Expr* a2 = idx->data.function.args[1];
-            if (a2->type == EXPR_INTEGER) {
-                end = a2->data.integer;
-                if (end < 0) end = len + end + 1;
-            } else if (a2->type == EXPR_SYMBOL && a2->data.symbol.name == SYM_All) {
-                end = len;
-            } else if (a2->type == EXPR_FUNCTION && a2->data.function.head->data.symbol.name == SYM_UpTo && a2->data.function.arg_count == 1 && a2->data.function.args[0]->type == EXPR_INTEGER) {
-                end = a2->data.function.args[0]->data.integer;
-                if (end > len) end = len;
-                if (end < 0) end = len + end + 1;
-            } else return NULL;
-        }
-        if (span_argc >= 3) {
-            Expr* a3 = idx->data.function.args[2];
-            if (a3->type == EXPR_INTEGER) step = a3->data.integer;
-            else if (a3->type == EXPR_SYMBOL && a3->data.symbol.name == SYM_All) step = 1;
-            else return NULL;
-            if (step == 0) return NULL; // invalid step
-        }
-        
-        // Calculate number of elements
-        int64_t count = 0;
-        if (step > 0) {
-            if (start <= end && start >= 1 && end <= len) {
-                count = (end - start) / step + 1;
-            }
-        } else {
-            if (start >= end && start <= len && end >= 1) {
-                count = (start - end) / (-step) + 1;
-            }
-        }
-        
-        if (count < 0) count = 0;
-        
+        int64_t start, step, count;
+        if (!span_resolve(idx, len, &start, &step, &count)) return NULL;
+
         Expr** args = NULL;
         if (count > 0) {
             args = malloc(sizeof(Expr*) * count);
@@ -1040,4 +1081,171 @@ Expr* builtin_delete(Expr* res) {
         return expr_delete(res->data.function.args[0], res->data.function.args[1]);
     }
     return NULL;
+}
+
+/* ---------------- Position-path walker (MapAt / ReplaceAt) ---------------- */
+
+/*
+ * Resolve one association index spec to a 0-based entry index: Key[k] and a
+ * bare literal key look the key up, an integer is positional over the entries
+ * (negatives counting from the end).  Returns -1 when the key is absent or the
+ * position is out of range.  All, Span and the head index 0 are handled by the
+ * caller, before this triage, because they address the entry *list* rather
+ * than naming a single key.
+ */
+static int64_t assoc_entry_index(const Expr* assoc, const Expr* idx) {
+    size_t n = assoc->data.function.arg_count;
+    const Expr* key;
+
+    if (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
+        idx->data.function.head->data.symbol.name == SYM_Key &&
+        idx->data.function.arg_count == 1) {
+        key = idx->data.function.args[0];
+    } else if (idx->type == EXPR_INTEGER) {
+        int64_t p = idx->data.integer;
+        if (p < 0) p = (int64_t)n + p + 1;
+        if (p < 1 || p > (int64_t)n) return -1;
+        return p - 1;
+    } else {
+        key = idx;   /* a string or any other literal key */
+    }
+
+    for (size_t i = 0; i < n; i++) {
+        Expr* rule = assoc->data.function.args[i];
+        if (part_is_entry(rule) && expr_eq(rule->data.function.args[0], (Expr*)key))
+            return (int64_t)i;
+    }
+    return -1;
+}
+
+/*
+ * Walk the remaining path into child `i` of the rebuilt argument array and
+ * store the result back.  For an association the child is an entry, and it is
+ * the entry's *value* that is walked; a FRESH Rule node is built rather than
+ * assigning into the existing one, because expr_copy is a refcount bump --
+ * new_args[i] is the very node the caller passed in, and writing through it
+ * would mutate the caller's expression.  Returns false if the walk failed.
+ */
+static bool path_descend_child(Expr** new_args, size_t i, bool assoc,
+                               Expr** path, size_t plen, PartLeafFn fn, void* ctx) {
+    Expr* child = new_args[i];
+
+    if (!assoc) {
+        Expr* r = expr_apply_at_path(child, path, plen, fn, ctx);
+        if (!r) return false;
+        expr_free(new_args[i]);
+        new_args[i] = r;
+        return true;
+    }
+
+    if (!part_is_entry(child)) return false;
+    Expr* nv = expr_apply_at_path(child->data.function.args[1], path, plen, fn, ctx);
+    if (!nv) return false;
+
+    new_args[i] = assoc_entry_with_value(child, nv);   /* adopts nv */
+    expr_free(child);
+    return true;
+}
+
+Expr* expr_apply_at_path(Expr* expr, Expr** path, size_t plen,
+                         PartLeafFn fn, void* ctx) {
+    if (!expr || !fn) return NULL;
+    if (plen == 0) return fn(ctx, expr);
+    if (!path) return NULL;
+    /* Cannot descend into an atom. is_atomic (not a bare type check) so that
+     * Rational and Complex -- stored as EXPR_FUNCTION nodes -- stay leaves, as
+     * they do for Part and MapIndexed: MapAt[f, 1/2, 1] must not manufacture
+     * Rational[f[1], 2]. */
+    if (is_atomic(expr)) return NULL;
+
+    Expr*  idx   = path[0];
+    Expr** rest  = path + 1;
+    size_t nrest = plen - 1;
+    size_t len   = expr->data.function.arg_count;
+    bool   assoc = is_association(expr);
+
+    Expr** new_args = NULL;
+    if (len > 0) {
+        new_args = malloc(sizeof(Expr*) * len);
+        if (!new_args) return NULL;
+        for (size_t i = 0; i < len; i++)
+            new_args[i] = expr_copy(expr->data.function.args[i]);
+    }
+    Expr* new_head = expr_copy(expr->data.function.head);
+    bool ok = true;
+
+    if (idx->type == EXPR_INTEGER && idx->data.integer == 0) {
+        /* Position 0 is the head, for associations too. */
+        Expr* r = expr_apply_at_path(expr->data.function.head, rest, nrest, fn, ctx);
+        if (r) { expr_free(new_head); new_head = r; }
+        else ok = false;
+    } else if (idx->type == EXPR_SYMBOL && idx->data.symbol.name == SYM_All) {
+        for (size_t i = 0; i < len && ok; i++)
+            ok = path_descend_child(new_args, i, assoc, rest, nrest, fn, ctx);
+    } else if (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
+               idx->data.function.head->data.symbol.name == SYM_Span) {
+        int64_t start = 1, step = 1, count = 0;
+        if (!span_resolve(idx, (int64_t)len, &start, &step, &count)) {
+            ok = false;
+        } else {
+            int64_t cur = start;
+            for (int64_t c = 0; c < count && ok; c++, cur += step)
+                ok = path_descend_child(new_args, (size_t)(cur - 1), assoc,
+                                        rest, nrest, fn, ctx);
+        }
+    } else if (assoc) {
+        int64_t target = assoc_entry_index(expr, idx);
+        if (target < 0) ok = false;
+        else ok = path_descend_child(new_args, (size_t)target, true, rest, nrest, fn, ctx);
+    } else if (idx->type == EXPR_INTEGER) {
+        int64_t k = idx->data.integer;
+        if (k < 0) k = (int64_t)len + k + 1;
+        if (k < 1 || k > (int64_t)len) ok = false;
+        else ok = path_descend_child(new_args, (size_t)(k - 1), false, rest, nrest, fn, ctx);
+    } else {
+        ok = false;   /* Key[...] on a non-association, a real, a string, ... */
+    }
+
+    if (!ok) {
+        for (size_t i = 0; i < len; i++) expr_free(new_args[i]);
+        free(new_args);
+        expr_free(new_head);
+        return NULL;
+    }
+
+    Expr* result = expr_new_function(new_head, new_args, len);
+    free(new_args);
+    return result;
+}
+
+Expr* expr_apply_at_positions(Expr* expr, Expr* pos, PartLeafFn fn, void* ctx) {
+    if (!expr || !pos || !fn) return NULL;
+
+    bool pos_is_list = head_is(pos, SYM_List);
+
+    /* {} is an empty list of *positions*, so nothing is mapped.  ({{}} is one
+     * position -- the empty path -- and addresses the whole expression.) */
+    if (pos_is_list && pos->data.function.arg_count == 0) return expr_copy(expr);
+
+    /* A List whose first element is itself a List is a list of paths; anything
+     * else is a single path, possibly spelled as a List of indices. */
+    if (pos_is_list && head_is(pos->data.function.args[0], SYM_List)) {
+        Expr* current = expr_copy(expr);
+        for (size_t i = 0; i < pos->data.function.arg_count; i++) {
+            Expr* sub = pos->data.function.args[i];
+            Expr* next = head_is(sub, SYM_List)
+                ? expr_apply_at_path(current, sub->data.function.args,
+                                     sub->data.function.arg_count, fn, ctx)
+                : expr_apply_at_path(current, &sub, 1, fn, ctx);
+            expr_free(current);
+            if (!next) return NULL;
+            current = next;
+        }
+        return current;
+    }
+
+    if (pos_is_list)
+        return expr_apply_at_path(expr, pos->data.function.args,
+                                  pos->data.function.arg_count, fn, ctx);
+    return expr_apply_at_path(expr, &pos, 1, fn, ctx);
 }

@@ -4,6 +4,7 @@
 #include "match.h"
 #include "sym_names.h"
 #include "assoc.h"
+#include "part.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -222,8 +223,17 @@ Expr* builtin_replace_part(Expr* res) {
          * "str" / positional i, or wrapped in a one-element list). Replace-only,
          * matching Wolfram (absent keys are left unchanged, not added). */
         if (is_association(expr)) {
-            Expr* result = expr_copy(expr);
-            size_t len = result->data.function.arg_count;
+            /* Rebuild over a private array. expr_copy is a refcount bump, so
+             * `result` would BE the caller's association and rewriting an
+             * entry's value in place used to corrupt it:
+             *   w = <|"x" -> 1|>; ReplacePart[w, "x" -> 9]  mutated w. */
+            size_t len = expr->data.function.arg_count;
+            Expr** new_args = NULL;
+            if (len > 0) {
+                new_args = malloc(sizeof(Expr*) * len);
+                for (size_t i = 0; i < len; i++)
+                    new_args[i] = expr_copy(expr->data.function.args[i]);
+            }
             for (size_t r = 0; r < num_rules; r++) {
                 Expr* s = rules[r].pos_spec;
                 if (s->type == EXPR_FUNCTION && s->data.function.head->type == EXPR_SYMBOL &&
@@ -247,24 +257,27 @@ Expr* builtin_replace_part(Expr* res) {
                     if (p >= 1 && p <= (int64_t)len) t = p - 1;
                 } else {
                     for (size_t i = 0; i < len; i++) {
-                        Expr* rule = result->data.function.args[i];
-                        if (rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2 &&
+                        Expr* rule = new_args[i];
+                        if (is_rule2(rule) &&
                             expr_eq(rule->data.function.args[0], key)) { t = (int64_t)i; break; }
                     }
                 }
                 if (t < 0) continue;   /* replace-only: leave absent keys */
-                Expr* rule = result->data.function.args[t];
-                if (rule->type != EXPR_FUNCTION || rule->data.function.arg_count != 2) continue;
+                Expr* rule = new_args[t];
+                if (!is_rule2(rule)) continue;
                 Expr* val = rules[r].delayed ? evaluate(rules[r].replacement)
                                              : expr_copy(rules[r].replacement);
-                expr_free(rule->data.function.args[1]);
-                rule->data.function.args[1] = val;
+                new_args[t] = assoc_entry_with_value(rule, val);   /* adopts val */
+                expr_free(rule);
             }
             for (size_t i = 0; i < num_rules; i++) {
                 expr_free(rules[i].pos_spec);
                 expr_free(rules[i].replacement);
             }
             free(rules);
+            Expr* result = expr_new_function(expr_copy(expr->data.function.head),
+                                             new_args, len);
+            free(new_args);
             return result;
         }
 
@@ -728,112 +741,24 @@ static Expr* replaceat_apply_rules(ReplaceRule* rules, size_t num_rules, Expr* t
     return expr_copy(target);
 }
 
+/* Leaf action for ReplaceAt: try the rules at the addressed part. `ctx` is the
+ * ReplaceAtCtx holding the parsed rules. */
+typedef struct { ReplaceRule* rules; size_t count; } ReplaceAtCtx;
+
+static Expr* replaceat_leaf(void* ctx, Expr* leaf) {
+    ReplaceAtCtx* c = (ReplaceAtCtx*)ctx;
+    return replaceat_apply_rules(c->rules, c->count, leaf);
+}
+
 /*
- * Walk path inside expr, applying rules at the leaf indicated by path.
+ * ReplaceAt[expr, rules, pos]   apply rules at one position, or at several.
  *
- * A path element may be:
- *   - integer k (>0 from start, <0 from end, 0 targets the head)
- *   - the symbol All (recurse into every child at this level)
- *   - Span[a, b] or Span[a, b, step]
- *
- * Returns a freshly-allocated expression. Out-of-range integers are silently
- * ignored, matching Mathematica's permissive behaviour.
+ * Position resolution -- integers (negatives from the end, 0 for the head),
+ * All, Span, and Key[k]/literal keys on associations -- lives in the shared
+ * walker expr_apply_at_path (src/part.c), which MapAt uses too. A position
+ * that does not exist makes the walker return NULL and ReplaceAt stay
+ * unevaluated, matching Part[{a, b, c}, 5].
  */
-static Expr* replaceat_at_path(ReplaceRule* rules, size_t num_rules, Expr* expr, Expr** path, size_t plen) {
-    if (plen == 0) {
-        return replaceat_apply_rules(rules, num_rules, expr);
-    }
-    if (expr->type != EXPR_FUNCTION) {
-        return expr_copy(expr);
-    }
-
-    Expr* idx = path[0];
-    size_t len = expr->data.function.arg_count;
-
-    Expr** new_args = NULL;
-    if (len > 0) {
-        new_args = malloc(sizeof(Expr*) * len);
-        for (size_t i = 0; i < len; i++) {
-            new_args[i] = expr_copy(expr->data.function.args[i]);
-        }
-    }
-    Expr* new_head = expr_copy(expr->data.function.head);
-
-    if (idx->type == EXPR_INTEGER) {
-        int64_t k = idx->data.integer;
-        if (k == 0) {
-            Expr* r = replaceat_at_path(rules, num_rules, expr->data.function.head, path + 1, plen - 1);
-            expr_free(new_head);
-            new_head = r;
-        } else {
-            if (k < 0) k = (int64_t)len + k + 1;
-            if (k >= 1 && k <= (int64_t)len) {
-                Expr* r = replaceat_at_path(rules, num_rules, expr->data.function.args[k - 1], path + 1, plen - 1);
-                expr_free(new_args[k - 1]);
-                new_args[k - 1] = r;
-            }
-        }
-    } else if (idx->type == EXPR_SYMBOL && idx->data.symbol.name == SYM_All) {
-        for (size_t i = 0; i < len; i++) {
-            Expr* r = replaceat_at_path(rules, num_rules, expr->data.function.args[i], path + 1, plen - 1);
-            expr_free(new_args[i]);
-            new_args[i] = r;
-        }
-    } else if (idx->type == EXPR_FUNCTION &&
-               idx->data.function.head->type == EXPR_SYMBOL &&
-               idx->data.function.head->data.symbol.name == SYM_Span) {
-        int64_t start = 1, end = (int64_t)len, step = 1;
-        size_t span_argc = idx->data.function.arg_count;
-        if (span_argc >= 1) {
-            Expr* a1 = idx->data.function.args[0];
-            if (a1->type == EXPR_INTEGER) {
-                start = a1->data.integer;
-                if (start < 0) start = (int64_t)len + start + 1;
-            } else if (a1->type == EXPR_SYMBOL && a1->data.symbol.name == SYM_All) {
-                start = 1;
-            }
-        }
-        if (span_argc >= 2) {
-            Expr* a2 = idx->data.function.args[1];
-            if (a2->type == EXPR_INTEGER) {
-                end = a2->data.integer;
-                if (end < 0) end = (int64_t)len + end + 1;
-            } else if (a2->type == EXPR_SYMBOL && a2->data.symbol.name == SYM_All) {
-                end = (int64_t)len;
-            }
-        }
-        if (span_argc >= 3) {
-            Expr* a3 = idx->data.function.args[2];
-            if (a3->type == EXPR_INTEGER) step = a3->data.integer;
-        }
-
-        if (step > 0) {
-            for (int64_t i = start; i <= end && i >= 1 && i <= (int64_t)len; i += step) {
-                Expr* r = replaceat_at_path(rules, num_rules, expr->data.function.args[i - 1], path + 1, plen - 1);
-                expr_free(new_args[i - 1]);
-                new_args[i - 1] = r;
-            }
-        } else if (step < 0) {
-            for (int64_t i = start; i >= end && i >= 1 && i <= (int64_t)len; i += step) {
-                Expr* r = replaceat_at_path(rules, num_rules, expr->data.function.args[i - 1], path + 1, plen - 1);
-                expr_free(new_args[i - 1]);
-                new_args[i - 1] = r;
-            }
-        }
-    }
-
-    Expr* result = expr_new_function(new_head, new_args, len);
-    if (new_args) free(new_args);
-    return result;
-}
-
-/* True iff e is a List expression. */
-static bool replaceat_is_list(Expr* e) {
-    return e->type == EXPR_FUNCTION &&
-           e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol.name == SYM_List;
-}
-
 Expr* builtin_replace_at(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
 
@@ -849,47 +774,8 @@ Expr* builtin_replace_at(Expr* res) {
         return expr_copy(expr);
     }
 
-    /* Disambiguate single-path vs. multiple-paths:
-     *   - multiple-paths iff pos is a non-empty List whose first element is itself a List
-     *   - otherwise, single path (possibly wrapped in a List of indices) */
-    bool multi = false;
-    if (replaceat_is_list(pos) && pos->data.function.arg_count > 0 &&
-        replaceat_is_list(pos->data.function.args[0])) {
-        multi = true;
-    }
-
-    Expr* result;
-    if (!multi) {
-        Expr** path;
-        size_t plen;
-        if (replaceat_is_list(pos)) {
-            plen = pos->data.function.arg_count;
-            path = pos->data.function.args;
-        } else {
-            plen = 1;
-            path = &pos;
-        }
-        result = replaceat_at_path(rules, num_rules, expr, path, plen);
-    } else {
-        /* Apply paths sequentially. Repeated positions apply rules repeatedly. */
-        Expr* current = expr_copy(expr);
-        for (size_t i = 0; i < pos->data.function.arg_count; i++) {
-            Expr* sub = pos->data.function.args[i];
-            Expr** path;
-            size_t plen;
-            if (replaceat_is_list(sub)) {
-                plen = sub->data.function.arg_count;
-                path = sub->data.function.args;
-            } else {
-                plen = 1;
-                path = &sub;
-            }
-            Expr* next = replaceat_at_path(rules, num_rules, current, path, plen);
-            expr_free(current);
-            current = next;
-        }
-        result = current;
-    }
+    ReplaceAtCtx ctx = { rules, num_rules };
+    Expr* result = expr_apply_at_positions(expr, pos, replaceat_leaf, &ctx);
 
     free(rules);
     return result;
@@ -917,6 +803,11 @@ void replace_init(void) {
         "\n"
         "Rules may be a single Rule/RuleDelayed or a list of them; rules are tried\n"
         "in order and the first match wins. Negative indices count from the end;\n"
-        "0 targets the head. All and Span specifications are supported. Repeated\n"
-        "positions cause rules to be applied repeatedly to that part.");
+        "0 targets the head. All and Span specifications are supported. On an\n"
+        "association a position is a key, Key[k], or a positional index over the\n"
+        "entries, and the rules are tried against the value. Repeated positions\n"
+        "cause rules to be applied repeatedly to that part. ReplaceAt[expr, rules,\n"
+        "{}] is an empty list of positions and replaces nothing, while {{}} is the\n"
+        "position of expr itself. A position that does not exist leaves ReplaceAt\n"
+        "unevaluated.");
 }

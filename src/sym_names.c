@@ -590,6 +590,7 @@ const char* SYM_Increment = NULL;
 const char* SYM_Information = NULL;
 const char* SYM_Map = NULL;
 const char* SYM_MapAll = NULL;
+const char* SYM_MapAt = NULL;
 const char* SYM_Mean = NULL;
 const char* SYM_Median = NULL;
 const char* SYM_MemberQ = NULL;
@@ -1400,6 +1401,7 @@ void sym_names_init(void) {
     SYM_Information                = intern_symbol("Information");
     SYM_Map                        = intern_symbol("Map");
     SYM_MapAll                     = intern_symbol("MapAll");
+    SYM_MapAt                      = intern_symbol("MapAt");
     SYM_Mean                       = intern_symbol("Mean");
     SYM_Median                     = intern_symbol("Median");
     SYM_MemberQ                    = intern_symbol("MemberQ");

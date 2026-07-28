@@ -1294,6 +1294,57 @@ void test_mapat_position_composition() {
                    "<|\"a\" -> 1, \"b\" -> neg[9]|>", 0);
 }
 
+/* ---------- Association rewrites must not mutate their input ----------
+ *
+ * expr_copy is a refcount bump, so an association entry reached from the input
+ * is the very node every other holder sees. Rewriting a value in place used to
+ * corrupt aliases: `u2 = u1; u2[["x"]] = 99` changed u1, and ReplacePart on an
+ * association changed its argument. Every value rewrite now goes through
+ * assoc_entry_with_value, which builds a fresh entry.
+ */
+
+void test_assoc_part_assign_does_not_alias() {
+    assert_eval_eq("(pu1 = <|\"x\" -> 1|>; pu2 = pu1; pu2[[\"x\"]] = 99; {pu1, pu2})",
+                   "{<|\"x\" -> 1|>, <|\"x\" -> 99|>}", 0);
+}
+
+void test_assoc_part_assign_nested_does_not_alias() {
+    assert_eval_eq("(pv1 = <|\"k\" -> {1, 2}|>; pv2 = pv1; pv2[[\"k\", 1]] = 99; {pv1, pv2})",
+                   "{<|\"k\" -> {1, 2}|>, <|\"k\" -> {99, 2}|>}", 0);
+}
+
+void test_assoc_part_assign_all_does_not_alias() {
+    assert_eval_eq("(pp1 = <|\"a\" -> 1, \"b\" -> 2|>; pp2 = pp1; pp2[[All]] = 0; {pp1, pp2})",
+                   "{<|\"a\" -> 1, \"b\" -> 2|>, <|\"a\" -> 0, \"b\" -> 0|>}", 0);
+}
+
+void test_assoc_part_assign_span_does_not_alias() {
+    assert_eval_eq("(pq1 = <|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>; pq2 = pq1; pq2[[1 ;; 2]] = 0; {pq1, pq2})",
+                   "{<|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>, <|\"a\" -> 0, \"b\" -> 0, \"c\" -> 3|>}", 0);
+}
+
+void test_assoc_part_assign_keylist_does_not_alias() {
+    assert_eval_eq("(pr1 = <|\"a\" -> 1, \"b\" -> 2|>; pr2 = pr1; pr2[[{\"a\", \"b\"}]] = 7; {pr1, pr2})",
+                   "{<|\"a\" -> 1, \"b\" -> 2|>, <|\"a\" -> 7, \"b\" -> 7|>}", 0);
+}
+
+void test_assoc_part_assign_absent_key_still_appends() {
+    assert_eval_eq("(ps1 = <|\"a\" -> 1|>; ps1[[\"zz\"]] = 5; ps1)",
+                   "<|\"a\" -> 1, \"zz\" -> 5|>", 0);
+}
+
+void test_replacepart_does_not_mutate_input() {
+    assert_eval_eq("(pw1 = <|\"x\" -> 1|>; ReplacePart[pw1, \"x\" -> 9]; pw1)",
+                   "<|\"x\" -> 1|>", 0);
+}
+
+void test_assoc_rewrite_preserves_ruledelayed() {
+    /* Rebuilding an entry must copy its head, or <|k :> v|> silently becomes
+     * an immediate rule. */
+    assert_eval_eq("MapAt[f, Association[RuleDelayed[\"k\", 1]], \"k\"]",
+                   "<|\"k\" :> f[1]|>", 0);
+}
+
 /* ---------- ReplacePart by Key position on associations ---------- */
 
 void test_replacepart_key() {
@@ -1597,6 +1648,14 @@ int main() {
     TEST(test_mapat_nested);
     TEST(test_mapat_position_composition);
 
+    TEST(test_assoc_part_assign_does_not_alias);
+    TEST(test_assoc_part_assign_nested_does_not_alias);
+    TEST(test_assoc_part_assign_all_does_not_alias);
+    TEST(test_assoc_part_assign_span_does_not_alias);
+    TEST(test_assoc_part_assign_keylist_does_not_alias);
+    TEST(test_assoc_part_assign_absent_key_still_appends);
+    TEST(test_replacepart_does_not_mutate_input);
+    TEST(test_assoc_rewrite_preserves_ruledelayed);
     TEST(test_replacepart_key);
     TEST(test_replacepart_bare_key);
     TEST(test_replacepart_multiple);

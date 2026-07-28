@@ -472,7 +472,10 @@ Out[2]= <|"a" -> <|"y" -> 6|>|>
 ## MapAt
 `MapAt[f, assoc, key]` (or `Key[k]`, a positional index, or a nested position
 `{Key[k1], Key[k2]}`) applies `f` to the value at that position — composing with
-the `{Key[k]}` positions `Position` returns.
+the `{Key[k]}` positions `Position` returns. `All`, `Span` and the head index `0`
+address the entry list, as they do for a `List`. An absent key or an
+out-of-range index leaves `MapAt` unevaluated. `ReplaceAt` accepts exactly the
+same association positions.
 
 ```mathematica
 In[1]:= MapAt[#^2 &, <|"a" -> 3, "b" -> 4|>, "b"]
@@ -480,6 +483,15 @@ Out[1]= <|"a" -> 3, "b" -> 16|>
 
 In[2]:= p = <|"a" -> 1, "b" -> 9|>; MapAt[-# &, p, First[Position[p, 9]]]
 Out[2]= <|"a" -> 1, "b" -> -9|>
+
+In[3]:= MapAt[f, <|"a" -> 1, "b" -> 2|>, All]
+Out[3]= <|"a" -> f[1], "b" -> f[2]|>
+
+In[4]:= MapAt[f, <|"a" -> 1, "b" -> 2, "c" -> 3|>, 1 ;; 2]
+Out[4]= <|"a" -> f[1], "b" -> f[2], "c" -> 3|>
+
+In[5]:= ReplaceAt[<|"a" -> 1, "b" -> 2|>, 1 -> 9, Key["a"]]
+Out[5]= <|"a" -> 9, "b" -> 2|>
 ```
 
 ## Position

@@ -104,9 +104,17 @@ bool is_association(const Expr* e) {
 }
 
 /* True for a two-argument Rule[k,v] or RuleDelayed[k,v]. */
-static bool is_rule2(const Expr* e) {
+bool is_rule2(const Expr* e) {
     return (head_is(e, SYM_Rule) || head_is(e, SYM_RuleDelayed)) &&
            e->data.function.arg_count == 2;
+}
+
+/* Rebuild an entry around a new value rather than assigning into the old one.
+ * See the contract in assoc.h: entries are refcount-shared with the caller's
+ * input, so an in-place write reaches every other holder of the association. */
+Expr* assoc_entry_with_value(const Expr* entry, Expr* newval) {
+    Expr* rargs[2] = { expr_copy(entry->data.function.args[0]), newval };  /* adopted */
+    return expr_new_function(expr_copy(entry->data.function.head), rargs, 2);
 }
 
 static Expr* rule_key(const Expr* rule) { return rule->data.function.args[0]; }

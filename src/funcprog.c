@@ -9,6 +9,7 @@
 #include "common.h"
 #include "numloop.h"
 #include "ndarray.h"
+#include "part.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -36,14 +37,9 @@ static int64_t get_depth(Expr* e) {
 /* The Infinity sentinel used for an unbounded upper level. */
 #define LEVEL_SPEC_INF 1000000
 
-/* True for a two-argument Rule[a,b] or RuleDelayed[a,b] — the shape of an
- * option, and of an association entry. NULL-safe, and the arg_count read is
- * guarded by head_is having already established an EXPR_FUNCTION with a
- * symbol head. */
-static bool is_rule2(const Expr* e) {
-    return (head_is(e, SYM_Rule) || head_is(e, SYM_RuleDelayed)) &&
-           e->data.function.arg_count == 2;
-}
+/* is_rule2 — true for a two-argument Rule[a,b] or RuleDelayed[a,b], the shape
+ * of an option and of an association entry — now lives in assoc.c, shared with
+ * the association machinery that needs the same guard. See assoc.h. */
 
 /* Lenient level-spec parser: anything it does not recognise (including
  * {n, Infinity}) silently leaves the caller's defaults in place. Used by
@@ -248,11 +244,12 @@ static Expr* map_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec 
                       (-d >= spec.min && -d <= spec.max);
 
     if (should_map) {
+        /* The f[...] application is left for the evaluator to reduce, so a
+         * surrounding Hold suppresses it: Map[f, Hold[1+1]] is Hold[f[1+1]],
+         * not Hold[f[2]]. Callers that need the reduced form now -- only the
+         * NDArray repack paths -- evaluate the finished tree themselves. */
         Expr* f_copy = expr_copy(f);
-        Expr* call = expr_new_function(f_copy, &intermediate, 1);
-        Expr* result = evaluate(call);
-        expr_free(call);
-        return result;
+        return expr_new_function(f_copy, &intermediate, 1);   /* adopts intermediate */
     }
 
     return intermediate;
@@ -327,7 +324,9 @@ Expr* builtin_map(Expr* res) {
         Expr* nested = ndarray_to_nested_list(expr);
         Expr* out = map_at_level(f, nested, 0, spec);
         expr_free(nested);
-        return map_try_repack(out, expr->data.ndarray.dtype);
+        /* map_at_level leaves the f[...] applications unreduced, but repacking
+         * needs actual machine numbers -- evaluate before offering it back. */
+        return map_try_repack(eval_and_free(out), expr->data.ndarray.dtype);
     }
 
     return map_at_level(f, expr, 0, spec);
@@ -586,209 +585,58 @@ Expr* builtin_mapindexed(Expr* res) {
 
 /* ------------------- MapAt ------------------- */
 
-/* Build evaluate(f[arg]) returning a new owned Expr*. */
-static Expr* mapat_apply_f(Expr* f, Expr* arg) {
-    Expr* arg_copy = expr_copy(arg);
-    Expr* call = expr_new_function(expr_copy(f), &arg_copy, 1);
-    Expr* result = evaluate(call);
-    expr_free(call);
-    return result;
+/* Leaf action for MapAt: build f[part]. The application is left for the
+ * evaluator to reduce, so a surrounding Hold suppresses it the Wolfram way
+ * (MapAt[f, Hold[1+1], 1] is Hold[f[1+1]], not Hold[f[2]]). `ctx` is f. */
+static Expr* mapat_leaf(void* ctx, Expr* leaf) {
+    Expr* arg_copy = expr_copy(leaf);
+    return expr_new_function(expr_copy((Expr*)ctx), &arg_copy, 1);
 }
 
 /*
- * mapat_at_path: apply f at the given position path in expr.
+ * MapAt[f, expr, pos]        apply f at one position, or at each of several.
+ * MapAt[f, pos]              operator form: MapAt[f, pos][expr].
  *
- * Arguments:
- *   f     : function/symbol to apply (borrowed)
- *   expr  : source expression (borrowed)
- *   path  : array of position indices (each index is an Expr*, borrowed)
- *   plen  : number of elements in path
- *
- * Returns a freshly-allocated expression (caller owns).
- *
- * A path element may be:
- *   - integer k (>0 counts from start, <0 counts from end, 0 targets head)
- *   - the symbol All (apply at all children at this level)
- *   - Span[a, b] or Span[a, b, step] (apply to the spanned range)
- *
- * If the path runs past a non-compound sub-expression the remaining path
- * is ignored and the leaf is returned unchanged.  Out-of-range integers
- * are silently ignored, matching Mathematica's permissive behaviour.
+ * Position resolution -- integers (negatives from the end, 0 for the head),
+ * All, Span, and Key[k]/literal keys on associations -- lives in the shared
+ * walker expr_apply_at_path (src/part.c), which ReplaceAt uses too. A position
+ * that does not exist makes the walker return NULL and MapAt stay unevaluated,
+ * matching Part[{a, b, c}, 5].
  */
-static Expr* mapat_at_path(Expr* f, Expr* expr, Expr** path, size_t plen) {
-    if (plen == 0) {
-        return mapat_apply_f(f, expr);
-    }
-    if (expr->type != EXPR_FUNCTION) {
-        return expr_copy(expr);
-    }
-
-    Expr* idx = path[0];
-    size_t len = expr->data.function.arg_count;
-
-    Expr** new_args = NULL;
-    if (len > 0) {
-        new_args = malloc(sizeof(Expr*) * len);
-        for (size_t i = 0; i < len; i++) {
-            new_args[i] = expr_copy(expr->data.function.args[i]);
-        }
-    }
-    Expr* new_head = expr_copy(expr->data.function.head);
-
-    if (is_association(expr)) {
-        /* MapAt into an association applies f to the value at a key
-         * (assoc[[Key[k]]]/["str"]) or the i-th value positionally, matching the
-         * {Key[k]} positions that Position returns. */
-        Expr* key = NULL; bool positional = false; int64_t p = 0;
-        if (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
-            idx->data.function.head->data.symbol.name == SYM_Key && idx->data.function.arg_count == 1) {
-            key = idx->data.function.args[0];
-        } else if (idx->type == EXPR_INTEGER) {
-            positional = true; p = idx->data.integer;
-        } else {
-            key = idx;
-        }
-        int64_t target = -1;
-        if (positional) {
-            if (p < 0) p = (int64_t)len + p + 1;
-            if (p >= 1 && p <= (int64_t)len) target = p - 1;
-        } else {
-            for (size_t i = 0; i < len; i++) {
-                Expr* rule = new_args[i];
-                if (rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2 &&
-                    expr_eq(rule->data.function.args[0], key)) { target = (int64_t)i; break; }
-            }
-        }
-        if (target >= 0) {
-            Expr* rule = new_args[target];
-            if (rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2) {
-                Expr* nv = mapat_at_path(f, rule->data.function.args[1], path + 1, plen - 1);
-                expr_free(rule->data.function.args[1]);
-                rule->data.function.args[1] = nv;
-            }
-        }
-    } else if (idx->type == EXPR_INTEGER) {
-        int64_t k = idx->data.integer;
-        if (k == 0) {
-            Expr* r = mapat_at_path(f, expr->data.function.head, path + 1, plen - 1);
-            expr_free(new_head);
-            new_head = r;
-        } else {
-            if (k < 0) k = (int64_t)len + k + 1;
-            if (k >= 1 && k <= (int64_t)len) {
-                Expr* r = mapat_at_path(f, expr->data.function.args[k - 1], path + 1, plen - 1);
-                expr_free(new_args[k - 1]);
-                new_args[k - 1] = r;
-            }
-        }
-    } else if (idx->type == EXPR_SYMBOL && idx->data.symbol.name == SYM_All) {
-        for (size_t i = 0; i < len; i++) {
-            Expr* r = mapat_at_path(f, expr->data.function.args[i], path + 1, plen - 1);
-            expr_free(new_args[i]);
-            new_args[i] = r;
-        }
-    } else if (idx->type == EXPR_FUNCTION &&
-               idx->data.function.head->type == EXPR_SYMBOL &&
-               idx->data.function.head->data.symbol.name == SYM_Span) {
-        int64_t start = 1, end = (int64_t)len, step = 1;
-        size_t span_argc = idx->data.function.arg_count;
-        if (span_argc >= 1) {
-            Expr* a1 = idx->data.function.args[0];
-            if (a1->type == EXPR_INTEGER) {
-                start = a1->data.integer;
-                if (start < 0) start = (int64_t)len + start + 1;
-            } else if (a1->type == EXPR_SYMBOL && a1->data.symbol.name == SYM_All) {
-                start = 1;
-            }
-        }
-        if (span_argc >= 2) {
-            Expr* a2 = idx->data.function.args[1];
-            if (a2->type == EXPR_INTEGER) {
-                end = a2->data.integer;
-                if (end < 0) end = (int64_t)len + end + 1;
-            } else if (a2->type == EXPR_SYMBOL && a2->data.symbol.name == SYM_All) {
-                end = (int64_t)len;
-            }
-        }
-        if (span_argc >= 3) {
-            Expr* a3 = idx->data.function.args[2];
-            if (a3->type == EXPR_INTEGER) step = a3->data.integer;
-        }
-
-        if (step > 0) {
-            for (int64_t i = start; i <= end && i >= 1 && i <= (int64_t)len; i += step) {
-                Expr* r = mapat_at_path(f, expr->data.function.args[i - 1], path + 1, plen - 1);
-                expr_free(new_args[i - 1]);
-                new_args[i - 1] = r;
-            }
-        } else if (step < 0) {
-            for (int64_t i = start; i >= end && i >= 1 && i <= (int64_t)len; i += step) {
-                Expr* r = mapat_at_path(f, expr->data.function.args[i - 1], path + 1, plen - 1);
-                expr_free(new_args[i - 1]);
-                new_args[i - 1] = r;
-            }
-        }
-    }
-
-    Expr* result = expr_new_function(new_head, new_args, len);
-    if (new_args) free(new_args);
-    return result;
-}
-
-/* True iff e is a List expression. */
-static bool mapat_is_list(Expr* e) {
-    return e->type == EXPR_FUNCTION &&
-           e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol.name == SYM_List;
-}
-
 Expr* builtin_map_at(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
 
-    Expr* f = res->data.function.args[0];
+    if (argc == 2) {
+        /* Operator form: MapAt[f, pos] -> Function[MapAt[f, #1, pos]]. */
+        Expr* slot_args[1] = { expr_new_integer(1) };
+        Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot), slot_args, 1);
+        Expr* inner_args[3] = { expr_copy(res->data.function.args[0]), slot,
+                                expr_copy(res->data.function.args[1]) };
+        Expr* inner = expr_new_function(expr_new_symbol(SYM_MapAt), inner_args, 3);
+        Expr* func_args[1] = { inner };
+        return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
+    }
+    if (argc != 3) return NULL;
+
+    Expr* f    = res->data.function.args[0];
     Expr* expr = res->data.function.args[1];
-    Expr* pos = res->data.function.args[2];
+    Expr* pos  = res->data.function.args[2];
 
-    /* Disambiguate single-path vs. multiple-paths:
-     *   - multiple-paths iff pos is a non-empty List whose first element is itself a List
-     *   - otherwise, single path (possibly wrapped in a List of indices) */
-    bool multi = false;
-    if (mapat_is_list(pos) && pos->data.function.arg_count > 0 &&
-        mapat_is_list(pos->data.function.args[0])) {
-        multi = true;
+    /* An NDArray is atomic, so the walker cannot descend into it. Materialize
+     * to a nested list, map, and repack if the result is still numeric --
+     * applying a symbolic f leaves a plain List, as in MapAll. */
+    if (is_ndarray(expr)) {
+        Expr* nested = ndarray_to_nested_list(expr);
+        Expr* out = expr_apply_at_positions(nested, pos, mapat_leaf, f);
+        expr_free(nested);
+        if (!out) return NULL;
+        /* mapat_leaf leaves f[part] unreduced, but repacking needs actual
+         * machine numbers -- evaluate before offering the result back. */
+        return map_try_repack(eval_and_free(out), expr->data.ndarray.dtype);
     }
 
-    if (!multi) {
-        Expr** path;
-        size_t plen;
-        if (mapat_is_list(pos)) {
-            plen = pos->data.function.arg_count;
-            path = pos->data.function.args;
-        } else {
-            plen = 1;
-            path = &pos;
-        }
-        return mapat_at_path(f, expr, path, plen);
-    }
-
-    /* Multiple positions: apply sequentially. Repeated positions apply f repeatedly. */
-    Expr* current = expr_copy(expr);
-    for (size_t i = 0; i < pos->data.function.arg_count; i++) {
-        Expr* sub = pos->data.function.args[i];
-        Expr** path;
-        size_t plen;
-        if (mapat_is_list(sub)) {
-            plen = sub->data.function.arg_count;
-            path = sub->data.function.args;
-        } else {
-            plen = 1;
-            path = &sub;
-        }
-        Expr* next = mapat_at_path(f, current, path, plen);
-        expr_free(current);
-        current = next;
-    }
-    return current;
+    return expr_apply_at_positions(expr, pos, mapat_leaf, f);
 }
 
 /* ------------------- MapAll ------------------- */

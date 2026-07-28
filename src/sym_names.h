@@ -593,6 +593,7 @@ extern const char* SYM_Increment;
 extern const char* SYM_Information;
 extern const char* SYM_Map;
 extern const char* SYM_MapAll;
+extern const char* SYM_MapAt;
 extern const char* SYM_Mean;
 extern const char* SYM_Median;
 extern const char* SYM_MemberQ;

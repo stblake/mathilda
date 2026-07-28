@@ -135,9 +135,10 @@ static void test_replace_at_no_match_unchanged(void) {
 }
 
 static void test_replace_at_out_of_range(void) {
-    /* Out of range positions silently ignored */
-    run_full("ReplaceAt[{a,b,c}, _ -> z, 99]", "List[a, b, c]");
-    run_full("ReplaceAt[{a,b,c}, _ -> z, -99]", "List[a, b, c]");
+    /* A position that does not exist leaves ReplaceAt unevaluated, as Part
+     * does for {a,b,c}[[99]]. */
+    run_full("ReplaceAt[{a,b,c}, _ -> z, 99]", "ReplaceAt[List[a, b, c], Rule[Blank[], z], 99]");
+    run_full("ReplaceAt[{a,b,c}, _ -> z, -99]", "ReplaceAt[List[a, b, c], Rule[Blank[], z], -99]");
 }
 
 static void test_replace_at_repeated_position(void) {
@@ -168,14 +169,45 @@ static void test_replace_at_span_all_form(void) {
              "List[z, z, z]");
 }
 
-static void test_replace_at_atomic_target(void) {
-    /* When path is empty (i.e. position {}), apply to whole expr */
-    run_full("ReplaceAt[a, a -> b, {}]", "b");
+static void test_replace_at_empty_position_list(void) {
+    /* {} is an empty list of POSITIONS, so nothing is replaced. The position
+     * of the whole expression is the empty path, spelled {{}}. */
+    run_full("ReplaceAt[a, a -> b, {}]", "a");
+    run_full("ReplaceAt[a, a -> b, {{}}]", "b");
 }
 
 static void test_replace_at_atomic_no_descend(void) {
-    /* Walking into an atom: leave unchanged */
-    run_full("ReplaceAt[a, _ -> z, 1]", "a");
+    /* Cannot descend into an atom: the position does not exist. */
+    run_full("ReplaceAt[a, _ -> z, 1]", "ReplaceAt[a, Rule[Blank[], z], 1]");
+}
+
+/* ----- Association positions (shared walker gave ReplaceAt these) ----- */
+
+static void test_replace_at_assoc_key(void) {
+    run_full("ReplaceAt[<|\"a\" -> 1, \"b\" -> 2|>, 1 -> 9, Key[\"a\"]]",
+             "Association[Rule[\"a\", 9], Rule[\"b\", 2]]");
+}
+
+static void test_replace_at_assoc_string_key(void) {
+    run_full("ReplaceAt[<|\"a\" -> 1, \"b\" -> 2|>, 2 -> 9, \"b\"]",
+             "Association[Rule[\"a\", 1], Rule[\"b\", 9]]");
+}
+
+static void test_replace_at_assoc_positional(void) {
+    run_full("ReplaceAt[<|\"a\" -> 1, \"b\" -> 2|>, x_Integer :> 10 x, 2]",
+             "Association[Rule[\"a\", 1], Rule[\"b\", 20]]");
+}
+
+static void test_replace_at_assoc_all(void) {
+    run_full("ReplaceAt[<|\"a\" -> 1, \"b\" -> 2|>, x_Integer :> 10 x, All]",
+             "Association[Rule[\"a\", 10], Rule[\"b\", 20]]");
+}
+
+static void test_replace_at_assoc_does_not_mutate_input(void) {
+    /* expr_copy is a refcount bump, so rebuilding an association entry in
+     * place would corrupt the caller's variable. */
+    run_full("(rax = <|\"p\" -> 1|>; ReplaceAt[rax, 1 -> 9, Key[\"p\"]]; rax)",
+             "Association[Rule[\"p\", 1]]");
 }
 
 static void test_replace_at_first_rule_wins(void) {
@@ -243,8 +275,13 @@ int main(void) {
     TEST(test_replace_at_span_with_step);
     TEST(test_replace_at_span_negative_endpoints);
     TEST(test_replace_at_span_all_form);
-    TEST(test_replace_at_atomic_target);
+    TEST(test_replace_at_empty_position_list);
     TEST(test_replace_at_atomic_no_descend);
+    TEST(test_replace_at_assoc_key);
+    TEST(test_replace_at_assoc_string_key);
+    TEST(test_replace_at_assoc_positional);
+    TEST(test_replace_at_assoc_all);
+    TEST(test_replace_at_assoc_does_not_mutate_input);
     TEST(test_replace_at_first_rule_wins);
     TEST(test_replace_at_pure_function);
     TEST(test_replace_at_immediate_rule);

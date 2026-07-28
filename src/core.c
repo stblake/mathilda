@@ -343,9 +343,16 @@ void core_init(void) {
         "\tapplies f to the part of expr at position {i, j, ...}.\n"
         "MapAt[f, expr, {{i1, j1, ...}, {i2, j2, ...}, ...}]\n"
         "\tapplies f to the parts of expr at each of the listed positions.\n"
+        "MapAt[f, pos]\n"
+        "\tis the operator form: MapAt[f, pos][expr] == MapAt[f, expr, pos].\n"
         "\n"
-        "Positions may contain All or Span specifications. MapAt[f, expr, 0]\n"
-        "applies f to the head of expr. Repeated positions apply f repeatedly.");
+        "Positions take the form Position returns, and may contain All or Span\n"
+        "specifications; 0 targets the head. On an association a position is a\n"
+        "key, Key[k], or a positional index over the entries, and f is applied\n"
+        "to the value. Repeated positions apply f repeatedly. MapAt[f, expr, {}]\n"
+        "is an empty list of positions and maps nothing, while {{}} is the\n"
+        "position of expr itself. A position that does not exist leaves MapAt\n"
+        "unevaluated.");
     symtab_add_builtin("Nest", builtin_nest);
     symtab_get_def("Nest")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Nest",

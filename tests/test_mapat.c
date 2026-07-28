@@ -44,9 +44,10 @@ static void test_mapat_last_position(void) {
 }
 
 static void test_mapat_out_of_range(void) {
-    /* Out of range: leave expression unchanged (no crash, no leak). */
-    run_full("MapAt[f, {a, b, c}, 99]", "List[a, b, c]");
-    run_full("MapAt[f, {a, b, c}, -99]", "List[a, b, c]");
+    /* A position that does not exist leaves MapAt unevaluated, as Part does
+     * for {a,b,c}[[99]]. */
+    run_full("MapAt[f, {a, b, c}, 99]", "MapAt[f, List[a, b, c], 99]");
+    run_full("MapAt[f, {a, b, c}, -99]", "MapAt[f, List[a, b, c], -99]");
 }
 
 /* --- Negative indices --- */
@@ -156,14 +157,93 @@ static void test_mapat_head_zero_path(void) {
 
 /* --- Identity / edge cases --- */
 
-static void test_mapat_empty_path(void) {
-    /* MapAt[f, expr, {}] applies f at position {} == expr itself. */
-    run_full("MapAt[f, {a, b, c}, {}]", "f[List[a, b, c]]");
+static void test_mapat_empty_position_list(void) {
+    /* {} is an empty list of POSITIONS, so nothing is mapped. The position of
+     * the whole expression is the empty path, spelled {{}}. */
+    run_full("MapAt[f, h[a, b], {}]", "h[a, b]");
+    run_full("MapAt[f, h[a, b], {{}}]", "f[h[a, b]]");
+    run_full("MapAt[f, {a, b, c}, {}]", "List[a, b, c]");
 }
 
 static void test_mapat_atomic_integer_position(void) {
-    /* Atomic target with path {n} leaves it alone (cannot descend into an atom). */
-    run_full("MapAt[f, 5, {1}]", "5");
+    /* Cannot descend into an atom: the position does not exist. */
+    run_full("MapAt[f, 5, {1}]", "MapAt[f, 5, List[1]]");
+    /* Rational and Complex are atoms too, so MapAt must not manufacture a
+     * Rational[f[1], 2] out of 1/2. */
+    run_full("MapAt[f, 1/2, 1]", "MapAt[f, Rational[1, 2], 1]");
+}
+
+/* --- Association positions --- */
+
+static void test_mapat_assoc_does_not_mutate_input(void) {
+    /* expr_copy is a refcount bump, so rebuilding an entry in place would
+     * corrupt the caller's variable. */
+    run_full("(max1 = <|\"x\" -> 1, \"y\" -> 2|>; MapAt[f, max1, \"x\"]; max1)",
+             "Association[Rule[\"x\", 1], Rule[\"y\", 2]]");
+    run_full("(max2 = <|\"k\" -> {1, 2}|>; MapAt[f, max2, {\"k\", 1}]; max2)",
+             "Association[Rule[\"k\", List[1, 2]]]");
+}
+
+static void test_mapat_assoc_all(void) {
+    run_full("MapAt[f, <|\"a\" -> 1, \"b\" -> 2|>, All]",
+             "Association[Rule[\"a\", f[1]], Rule[\"b\", f[2]]]");
+}
+
+static void test_mapat_assoc_span(void) {
+    run_full("MapAt[f, <|\"a\" -> 1, \"b\" -> 2, \"c\" -> 3|>, 1;;2]",
+             "Association[Rule[\"a\", f[1]], Rule[\"b\", f[2]], Rule[\"c\", 3]]");
+}
+
+static void test_mapat_assoc_head(void) {
+    run_full("MapAt[f, <|\"a\" -> 1|>, 0]", "f[Association][Rule[\"a\", 1]]");
+}
+
+static void test_mapat_assoc_absent_key(void) {
+    run_full("MapAt[f, <|\"a\" -> 1|>, \"zz\"]",
+             "MapAt[f, Association[Rule[\"a\", 1]], \"zz\"]");
+}
+
+static void test_mapat_assoc_repeated_key(void) {
+    run_full("MapAt[f, <|\"a\" -> 1|>, {{\"a\"}, {\"a\"}}]",
+             "Association[Rule[\"a\", f[f[1]]]]");
+}
+
+/* --- Operator form --- */
+
+static void test_mapat_operator_form(void) {
+    run_full("MapAt[f, 2][{a, b, c}]", "List[a, f[b], c]");
+}
+
+static void test_mapat_operator_form_pure_function(void) {
+    /* The nested Function must not have its slot captured by the outer one. */
+    run_full("MapAt[#^2 &, 2][{2, 3, 5}]", "List[2, 9, 5]");
+}
+
+static void test_mapat_operator_form_nested_path(void) {
+    run_full("MapAt[f, {2, 1}][{{a, b}, {c, d}}]",
+             "List[List[a, b], List[f[c], d]]");
+}
+
+/* --- Held arguments --- */
+
+static void test_mapat_does_not_force_evaluation(void) {
+    /* f[part] is left for the evaluator, so a surrounding Hold suppresses it. */
+    run_full("MapAt[f, Hold[1 + 1], 1]", "Hold[f[Plus[1, 1]]]");
+}
+
+/* --- Malformed specs --- */
+
+static void test_mapat_span_zero_step(void) {
+    run_full("MapAt[f, {1, 2, 3}, 1;;3;;0]", "MapAt[f, List[1, 2, 3], Span[1, 3, 0]]");
+}
+
+static void test_mapat_span_upto(void) {
+    /* UpTo clamps to the length, shared with Part's span normaliser. */
+    run_full("MapAt[f, {a, b, c}, 1;;UpTo[9]]", "List[f[a], f[b], f[c]]");
+}
+
+static void test_mapat_key_on_non_association(void) {
+    run_full("MapAt[f, {a, b}, Key[\"x\"]]", "MapAt[f, List[a, b], Key[\"x\"]]");
 }
 
 static void test_mapat_leaves_unmatched_untouched(void) {
@@ -235,8 +315,21 @@ int main(void) {
     TEST(test_mapat_power_paths);
     TEST(test_mapat_head_zero);
     TEST(test_mapat_head_zero_path);
-    TEST(test_mapat_empty_path);
+    TEST(test_mapat_empty_position_list);
     TEST(test_mapat_atomic_integer_position);
+    TEST(test_mapat_assoc_does_not_mutate_input);
+    TEST(test_mapat_assoc_all);
+    TEST(test_mapat_assoc_span);
+    TEST(test_mapat_assoc_head);
+    TEST(test_mapat_assoc_absent_key);
+    TEST(test_mapat_assoc_repeated_key);
+    TEST(test_mapat_operator_form);
+    TEST(test_mapat_operator_form_pure_function);
+    TEST(test_mapat_operator_form_nested_path);
+    TEST(test_mapat_does_not_force_evaluation);
+    TEST(test_mapat_span_zero_step);
+    TEST(test_mapat_span_upto);
+    TEST(test_mapat_key_on_non_association);
     TEST(test_mapat_leaves_unmatched_untouched);
     TEST(test_mapat_pure_function);
     TEST(test_mapat_numeric_f);

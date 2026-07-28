@@ -90,6 +90,22 @@ Expr* builtin_gatherby(Expr* res);
  * filling absent values with Missing["KeyAbsent", key]. Caller owns result. */
 Expr* builtin_keyunion(Expr* res);
 
+/* A FRESH association entry carrying `entry`'s key and head but the value
+ * `newval` (adopted). Caller owns the result; `entry` is left untouched.
+ *
+ * Use this for EVERY value rewrite on an association. expr_copy is a refcount
+ * bump (src/expr.c), so an entry reached from a caller's input is the very node
+ * every other holder of that association sees -- assigning into its args[1] is
+ * how `u2 = u1; u2[["x"]] = 9` silently corrupted `u1`. Copying the head keeps
+ * a RuleDelayed entry delayed.
+ *
+ * `entry` MUST be a two-argument rule: is_association() only checks the head,
+ * so Association[1, 2] can exist and callers must guard with is_rule2 first. */
+Expr* assoc_entry_with_value(const Expr* entry, Expr* newval);
+
+/* True for a two-argument Rule/RuleDelayed, i.e. a well-formed entry. */
+bool is_rule2(const Expr* e);
+
 /* Register every Association-family builtin, with attributes and docstrings. */
 void assoc_init(void);
 
