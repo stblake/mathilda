@@ -3116,7 +3116,7 @@
     "category": "Functional Programming",
     "slug": "functional-programming",
     "status": "Stable",
-    "summary": "MapIndexed[f, list]",
+    "summary": "MapIndexed[f, expr]",
     "url": "documentation/functional-programming/MapIndexed/"
   },
   {

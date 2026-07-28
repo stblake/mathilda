@@ -749,6 +749,7 @@ void options_register_defaults(void) {
         { "MemberQ", "False" }, { "Position", "True" }, { "FreeQ", "True" },
         { "Level", "False" }, { "Depth", "False" }, { "LeafCount", "False" },
         { "Map", "False" }, { "Apply", "False" }, { "MapAll", "False" },
+        { "MapIndexed", "False" },
     };
     for (size_t i = 0; i < sizeof(heads_fns) / sizeof(heads_fns[0]); i++) {
         ob_init(&b);

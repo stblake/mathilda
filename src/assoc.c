@@ -883,6 +883,11 @@ Expr* assoc_map_values(Expr* f, const Expr* assoc) {
     Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
     for (size_t i = 0; i < n; i++) {
         Expr* r = assoc->data.function.args[i];
+        /* is_association() only checks the head, and builtin_association leaves
+         * a malformed Association[a, b] intact, so an entry is not guaranteed
+         * to be a rule. Reading args[0]/args[1] of a symbol type-puns its
+         * SymbolDef*; pass anything that is not a rule through untouched. */
+        if (!is_rule2(r)) { out[i] = expr_copy(r); continue; }
         Expr* fv_arg = expr_copy(rule_val(r));
         Expr* fv = expr_new_function(expr_copy(f), &fv_arg, 1); /* f[v], evaluated later */
         out[i] = make_rule(expr_copy(rule_key(r)), fv);

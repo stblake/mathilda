@@ -246,17 +246,79 @@ Out[2]= {f[1.], f[2.], f[3.]}
 ```
 
 ## MapIndexed
-Maps `f` over the elements together with their positions.
-- `MapIndexed[f, list]`: gives `{f[e1, {1}], f[e2, {2}], ...}` — the second argument is the position `{i}`.
-- `MapIndexed[f, assoc]`: gives `<|k -> f[v, {Key[k]}]|>` — the criterion sees each value and its `{Key[k]}` position (the same shape `Position` reports), keys preserved.
-- `MapIndexed[f, NDArray[…]]`: pairs each leading-axis part with its position `{i}` (a scalar for rank 1, a sub-array row for higher rank), giving a `List`.
+Maps `f` over the parts of an expression together with their positions.
+- `MapIndexed[f, expr]`: applies `f` to the parts at level 1, giving the part
+  specification of each as a second argument — `{f[e1, {1}], f[e2, {2}], ...}`.
+- `MapIndexed[f, expr, levelspec]`: applies `f` to the parts on the levels
+  selected by `levelspec`. The default is `{1}`.
+
+The position handed to `f` is the one `Part` and `Extract` take, so
+`Extract[expr, #2]` is `#1` at every visited part. Traversal is bottom-up: a
+node's parts are rebuilt before `f` is applied to the node itself.
+
+**Level specifications** follow the standard form:
+
+| Spec | Levels |
+|------|--------|
+| `n` | 1 through `n` |
+| `Infinity` | 1 through `Infinity` |
+| `{n}` | level `n` only |
+| `{n1, n2}` | `n1` through `n2` (either bound may be `Infinity`) |
+
+A positive level `n` is the set of parts specified by `n` indices; a negative
+level `-n` is the set of parts of depth `n`, so level `-1` is the atoms. Level
+`0` is the whole expression, whose position is `{}`. An empty range (`0`,
+`{3,1}`) leaves the expression unchanged.
+
+**Options**: `Heads -> False` (default). With `Heads -> True` the function is
+applied to heads as well, a head having index `0` in its position.
+
+**Associations**: the parts of an association are its values, positioned by
+`{Key[k]}` — the `Rule` wrapper is not a level of its own, so a value two
+associations deep is at level 2 with a two-component position. Keys are
+preserved, and a `RuleDelayed` entry stays delayed. The `Association` head is
+never mapped.
+
+**NDArray**: at the default level `MapIndexed[f, NDArray[…]]` pairs each
+leading-axis part with its position `{i}` (a scalar for rank 1, a sub-array row
+for higher rank), giving a `List`. Any other level spec materializes the array
+and maps generically.
+
+`MapIndexed` always effectively constructs a complete new expression and then
+evaluates it — the `f[…]` applications are not evaluated one at a time, so
+`MapIndexed[f, Hold[1 + 1]]` gives `Hold[f[1 + 1, {1}]]`.
+
+A level spec it does not recognise, a non-option trailing argument
+(`MapIndexed::nonopt`) or an unknown option (`MapIndexed::optx`) leaves the
+call unevaluated; `MapIndexed[]` reports `MapIndexed::argb`.
 
 ```mathematica
 In[1]:= MapIndexed[f, {10, 20, 30}]
 Out[1]= {f[10, {1}], f[20, {2}], f[30, {3}]}
 
-In[2]:= MapIndexed[f, <|"a" -> 10, "b" -> 20|>]
-Out[2]= <|"a" -> f[10, {Key["a"]}], "b" -> f[20, {Key["b"]}]|>
+In[2]:= MapIndexed[First[#2] + f[#1] &, {a, b, c, d}]
+Out[2]= {1 + f[a], 2 + f[b], 3 + f[c], 4 + f[d]}
+
+In[3]:= MapIndexed[f, {{a, b}, {c, d, e}}, {2}]
+Out[3]= {{f[a, {1, 1}], f[b, {1, 2}]}, {f[c, {2, 1}], f[d, {2, 2}], f[e, {2, 3}]}}
+
+In[4]:= MapIndexed[f, {{a, b}, {c, d, {e}}}, {-1}]
+Out[4]= {{f[a, {1, 1}], f[b, {1, 2}]}, {f[c, {2, 1}], f[d, {2, 2}], {f[e, {2, 3, 1}]}}}
+
+In[5]:= MapIndexed[f, h0[h1[h2[h3[h4[a]]]]], {2, -3}]
+Out[5]= h0[h1[f[h2[f[h3[h4[a]], {1, 1, 1}]], {1, 1}]]]
+
+In[6]:= MapIndexed[f, {a, b}, {0, 1}]
+Out[6]= f[{f[a, {1}], f[b, {2}]}, {}]
+
+In[7]:= MapIndexed[f, p[x][a, b, c], Infinity, Heads -> True]
+Out[7]= f[f[p, {0, 0}][f[x, {0, 1}]], {0}][f[a, {1}], f[b, {2}], f[c, {3}]]
+
+In[8]:= MapIndexed[f, <|"a" -> 10, "b" -> 20|>]
+Out[8]= <|"a" -> f[10, {Key["a"]}], "b" -> f[20, {Key["b"]}]|>
+
+In[9]:= MapIndexed[h, <|a -> <|b -> c, p -> <|q -> r|>|>, d -> {e}|>, {2}]
+Out[9]= <|a -> <|b -> h[c, {Key[a], Key[b]}], p -> h[<|q -> r|>, {Key[a], Key[p]}]|>, d -> {h[e, {Key[d], 1}]}|>
 ```
 
 ## MapThread

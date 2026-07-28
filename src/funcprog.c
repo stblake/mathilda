@@ -11,6 +11,7 @@
 #include "ndarray.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 typedef struct {
     int64_t min;
@@ -34,6 +35,15 @@ static int64_t get_depth(Expr* e) {
 
 /* The Infinity sentinel used for an unbounded upper level. */
 #define LEVEL_SPEC_INF 1000000
+
+/* True for a two-argument Rule[a,b] or RuleDelayed[a,b] — the shape of an
+ * option, and of an association entry. NULL-safe, and the arg_count read is
+ * guarded by head_is having already established an EXPR_FUNCTION with a
+ * symbol head. */
+static bool is_rule2(const Expr* e) {
+    return (head_is(e, SYM_Rule) || head_is(e, SYM_RuleDelayed)) &&
+           e->data.function.arg_count == 2;
+}
 
 /* Lenient level-spec parser: anything it does not recognise (including
  * {n, Infinity}) silently leaves the caller's defaults in place. Used by
@@ -123,7 +133,7 @@ static bool parse_level_spec_strict(Expr* ls, LevelSpec* spec) {
 static void parse_options(Expr* res, size_t start_idx, LevelSpec* spec) {
     for (size_t i = start_idx; i < res->data.function.arg_count; i++) {
         Expr* opt = res->data.function.args[i];
-        if (head_is(opt, SYM_Rule) && opt->data.function.arg_count == 2) {
+        if (is_rule2(opt)) {
             if (opt->data.function.args[0]->type == EXPR_SYMBOL &&
                 opt->data.function.args[0]->data.symbol.name == SYM_Heads) {
                 if (opt->data.function.args[1]->type == EXPR_SYMBOL &&
@@ -184,7 +194,7 @@ Expr* builtin_apply(Expr* res) {
     Expr* expr = res->data.function.args[1];
 
     Expr* ls = (res->data.function.arg_count >= 3) ? res->data.function.args[2] : NULL;
-    if (head_is(ls, SYM_Rule)) ls = NULL;   /* option in the level-spec slot */
+    if (is_rule2(ls)) ls = NULL;            /* option in the level-spec slot */
 
     /* Apply[f, assoc] uses the association's values as f's arguments:
      * f @@ <|k1 -> v1, ...|> is f[v1, ...] (matching Wolfram, and consistent
@@ -303,7 +313,7 @@ Expr* builtin_map(Expr* res) {
     }
 
     Expr* ls = (res->data.function.arg_count >= 3) ? res->data.function.args[2] : NULL;
-    if (head_is(ls, SYM_Rule)) ls = NULL;   /* option in the level-spec slot */
+    if (is_rule2(ls)) ls = NULL;            /* option in the level-spec slot */
 
     LevelSpec spec = parse_level_spec(ls, 1, 1);
     parse_options(res, ls ? 3 : 2, &spec);
@@ -325,77 +335,253 @@ Expr* builtin_map(Expr* res) {
 
 /* ------------------- MapIndexed -------------------
  *
- * MapIndexed[f, list]   {f[e1, {1}], f[e2, {2}], ...}
- * MapIndexed[f, assoc]  <|k1 -> f[v1, {Key[k1]}], ...|>
+ * MapIndexed[f, expr]             applies f to the parts of expr at level 1,
+ *                                 handing each part's position to f as a
+ *                                 second argument: {f[e1,{1}], f[e2,{2}], ...}
+ * MapIndexed[f, expr, levelspec]  the same, over the parts selected by
+ *                                 levelspec (default {1}).
  *
- * The index passed as the second argument to f is a position: {i} for a list
- * element, {Key[k]} for an association value — the same {Key[k]} shape Position
- * reports, so the two compose. The f[...] applications are left for the
- * evaluator to reduce (matching Map). */
-Expr* builtin_mapindexed(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
-    Expr* f    = res->data.function.args[0];
-    Expr* expr = res->data.function.args[1];
-    bool assoc = is_association(expr);
+ * The second argument is a full position of the shape Part / Extract /
+ * Position use: {1,2} for the second part of the first part, {0} for a head
+ * under Heads->True, {Key[k]} for an association value, {} for level 0. So
+ * Extract[expr, #2] is #1 at every visited node.
+ *
+ * Traversal is bottom-up: a node's parts are rebuilt before f is applied to
+ * the node itself, so MapIndexed[f, {{a}}, 2] gives f[{f[a, {1,1}]}, {1}].
+ *
+ * The f[...] applications are NOT evaluated here. Wolfram specifies that
+ * MapIndexed "always effectively constructs a complete new expression and then
+ * evaluates it", and the difference is observable: deferring keeps
+ * MapIndexed[f, Hold[1+1]] as Hold[f[1+1, {1}]] instead of collapsing it to
+ * Hold[f[2]]. Returning the assembled tree makes the evaluator do exactly what
+ * that sentence describes. */
 
-    /* MapIndexed over an NDArray pairs each leading-axis part with its position
-     * {i}: {f[part1, {1}], f[part2, {2}], ...}. Parts come from ndarray_part (a
-     * scalar for rank 1, a sub-NDArray row for rank >= 2). The f[...] nodes are
-     * left for the evaluator to reduce, matching the list case. */
-    if (!assoc && is_ndarray(expr)) {
-        int64_t nd = expr->data.ndarray.dims[0];
-        size_t cnt = (nd > 0) ? (size_t)nd : 0;
-        Expr** out = malloc(sizeof(Expr*) * (cnt ? cnt : 1));
-        for (int64_t i = 0; i < nd; i++) {
-            Expr* idx = expr_new_integer(i + 1);
-            Expr* iargs[1] = { idx };
-            bool degrade = false;
-            Expr* part = ndarray_part(expr, iargs, 1, &degrade);   /* owned */
-            expr_free(idx);
-            if (!part) part = expr_new_symbol(SYM_Null);
-            Expr* pos_inner = expr_new_integer(i + 1);
-            Expr* pos = expr_new_function(expr_new_symbol(SYM_List), &pos_inner, 1);
-            Expr* fargs[2] = { part, pos };   /* both adopted */
-            out[i] = expr_new_function(expr_copy(f), fargs, 2);
+/* One position component per recursion level, threaded through the C stack.
+ * `comp` is what this frame contributes to the position (a part index, the
+ * Integer 0 of a head, or Key[k] for an association value) and lives in the
+ * caller's stack frame; `len` is the total path length at this depth. Keeping
+ * the path on the C stack rather than in a heap stack means there is no
+ * push/pop bookkeeping for a future early return to get wrong. */
+typedef struct MIPath {
+    const struct MIPath* prev;
+    Expr*  comp;
+    size_t len;
+} MIPath;
+
+/* The accumulated position as a List. An empty path (level 0) gives {}. */
+static Expr* mi_position(const MIPath* path) {
+    size_t n = path ? path->len : 0;
+    Expr** items = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (const MIPath* p = path; p; p = p->prev)
+        items[p->len - 1] = expr_copy(p->comp);
+    Expr* pos = expr_new_function(expr_new_symbol(SYM_List), items, n);
+    free(items);
+    return pos;
+}
+
+/* True for an Association whose every entry is a two-argument rule.
+ * is_association() only checks the head, and builtin_association leaves a
+ * malformed Association[a, b] intact, so an entry's args[0]/args[1] must not
+ * be read until this has passed — doing so type-puns a symbol's SymbolDef*. */
+static bool mi_is_assoc(const Expr* e) {
+    if (!is_association(e)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!is_rule2(e->data.function.args[i])) return false;
+    return true;
+}
+
+/* Rebuild `expr` bottom-up, wrapping each part selected by `spec` in
+ * f[part, position].
+ *
+ * `*out_depth` receives the depth of the ORIGINAL subtree, never the rebuilt
+ * one — the rebuilt tree carries f[...] wrappers that would shift every
+ * negative level bound. Accumulating it as the recursion unwinds also keeps
+ * the whole traversal O(n); recomputing a depth at each visited node (as
+ * map_at_level and scan_at_level do) is O(n*d). It counts the head when
+ * Heads->True is set, matching Depth[expr, Heads->True]. */
+static Expr* mi_at_level(Expr* f, Expr* expr, int64_t level, LevelSpec spec,
+                         const MIPath* path, int64_t* out_depth) {
+    Expr*   rebuilt;
+    int64_t maxpart = 0;               /* depth of the deepest original part */
+    int64_t depth   = 1;               /* atoms, NDArray, Rational, Complex */
+    size_t  plen = path ? path->len : 0;
+
+    if (mi_is_assoc(expr)) {
+        /* An association's parts are its VALUES, positioned by Key[k]: the
+         * Rule wrapper is not a level of its own, which is what makes a
+         * two-deep association position {Key[a], Key[b]} rather than four
+         * components long. The Association head is never mapped. */
+        size_t n = expr->data.function.arg_count;
+        Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t i = 0; i < n; i++) {
+            Expr* entry = expr->data.function.args[i];
+            Expr* key   = entry->data.function.args[0];
+            Expr* karg[1] = { expr_copy(key) };
+            Expr* comp = expr_new_function(expr_new_symbol(SYM_Key), karg, 1);
+            MIPath frame = { path, comp, plen + 1 };
+            int64_t vd = 1;
+            Expr* newv = mi_at_level(f, entry->data.function.args[1],
+                                     level + 1, spec, &frame, &vd);
+            expr_free(comp);
+            if (vd > maxpart) maxpart = vd;
+            /* Preserve Rule vs RuleDelayed: <|a :> 1|> survives evaluation as
+             * Association[RuleDelayed[a, 1]] and must stay delayed. */
+            Expr* rargs[2] = { expr_copy(key), newv };
+            out[i] = expr_new_function(expr_copy(entry->data.function.head), rargs, 2);
         }
-        Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, cnt);
+        rebuilt = expr_new_function(expr_new_symbol(SYM_Association), out, n);
         free(out);
-        return result;
+        depth = maxpart + 1;
+    } else if (expr->type == EXPR_FUNCTION &&
+               !head_is(expr, SYM_Rational) && !head_is(expr, SYM_Complex)) {
+        /* Rational and Complex are atomic here, as they are for get_depth and
+         * for Level[]: MapIndexed[f, 1/2] is 1/2, not f[1,{1}]/f[2,{2}]. */
+        size_t n = expr->data.function.arg_count;
+        Expr* newhead;
+        if (spec.heads) {
+            Expr* comp = expr_new_integer(0);          /* a head is part 0 */
+            MIPath frame = { path, comp, plen + 1 };
+            int64_t hd = 1;
+            newhead = mi_at_level(f, expr->data.function.head,
+                                  level + 1, spec, &frame, &hd);
+            expr_free(comp);
+            if (hd > maxpart) maxpart = hd;
+        } else {
+            newhead = expr_copy(expr->data.function.head);
+        }
+        Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t i = 0; i < n; i++) {
+            Expr* comp = expr_new_integer((int64_t)(i + 1));
+            MIPath frame = { path, comp, plen + 1 };
+            int64_t cd = 1;
+            out[i] = mi_at_level(f, expr->data.function.args[i],
+                                 level + 1, spec, &frame, &cd);
+            expr_free(comp);
+            if (cd > maxpart) maxpart = cd;
+        }
+        rebuilt = expr_new_function(newhead, out, n);
+        free(out);
+        depth = maxpart + 1;
+    } else {
+        rebuilt = expr_copy(expr);      /* atom, NDArray, Rational, Complex */
     }
 
-    if (!assoc && expr->type != EXPR_FUNCTION) return NULL;
+    *out_depth = depth;
 
-    size_t n = expr->data.function.arg_count;
-    Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
-    for (size_t i = 0; i < n; i++) {
-        Expr* elem = expr->data.function.args[i];
-        Expr* value = assoc ? elem->data.function.args[1] : elem;  /* rule value */
+    /* Standard mixed positive/negative level membership: a bound >= 0 is a
+     * level counted from the root; a bound < 0 is a negative depth (leaves at
+     * depth 1 sit at level -1). */
+    bool lo = (spec.min >= 0) ? (level >= spec.min) : (-depth >= spec.min);
+    bool hi = (spec.max >= 0) ? (level <= spec.max) : (-depth <= spec.max);
+    if (lo && hi) {
+        Expr* fargs[2] = { rebuilt, mi_position(path) };   /* both adopted */
+        return expr_new_function(expr_copy(f), fargs, 2);
+    }
+    return rebuilt;
+}
 
-        /* Position index: {Key[k]} for an association, {i + 1} for a list. */
-        Expr* pos_inner;
-        if (assoc) {
-            Expr* karg[1] = { expr_copy(elem->data.function.args[0]) };
-            pos_inner = expr_new_function(expr_new_symbol(SYM_Key), karg, 1);
-        } else {
-            pos_inner = expr_new_integer((int64_t)(i + 1));
-        }
+/* MapIndexed over an NDArray at the default level pairs each leading-axis part
+ * with its position {i}: {f[part1, {1}], f[part2, {2}], ...}. Parts come from
+ * ndarray_part (a scalar for rank 1, a sub-NDArray row for rank >= 2). The
+ * f[...] nodes are left for the evaluator to reduce, as in the list case. */
+static Expr* mi_ndarray_axis(Expr* f, Expr* arr) {
+    int64_t nd = arr->data.ndarray.dims[0];
+    size_t cnt = (nd > 0) ? (size_t)nd : 0;
+    Expr** out = malloc(sizeof(Expr*) * (cnt ? cnt : 1));
+    for (int64_t i = 0; i < nd; i++) {
+        Expr* idx = expr_new_integer(i + 1);
+        Expr* iargs[1] = { idx };
+        bool degrade = false;
+        Expr* part = ndarray_part(arr, iargs, 1, &degrade);   /* owned */
+        expr_free(idx);
+        if (!part) part = expr_new_symbol(SYM_Null);
+        Expr* pos_inner = expr_new_integer(i + 1);
         Expr* pos = expr_new_function(expr_new_symbol(SYM_List), &pos_inner, 1);
-
-        Expr* fargs[2] = { expr_copy(value), pos };
-        Expr* applied = expr_new_function(expr_copy(f), fargs, 2);
-
-        if (assoc) {
-            Expr* rargs[2] = { expr_copy(elem->data.function.args[0]), applied };
-            out[i] = expr_new_function(expr_new_symbol(SYM_Rule), rargs, 2);
-        } else {
-            out[i] = applied;
-        }
+        Expr* fargs[2] = { part, pos };   /* both adopted */
+        out[i] = expr_new_function(expr_copy(f), fargs, 2);
     }
-    Expr* head = assoc ? expr_new_symbol(SYM_Association)
-                       : expr_copy(expr->data.function.head);
-    Expr* result = expr_new_function(head, out, n);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, cnt);
     free(out);
     return result;
+}
+
+/* Validate the trailing arguments: everything from `start` on must be an
+ * option rule naming a known option. Reports the rightmost offender via
+ * ::nonopt / ::optx and returns false so the call is left unevaluated. */
+static bool mi_check_options(Expr* res, size_t start) {
+    size_t argc = res->data.function.arg_count;
+    Expr* bad_shape = NULL;
+    Expr* bad_name  = NULL;
+    for (size_t i = start; i < argc; i++) {
+        Expr* opt = res->data.function.args[i];
+        if (!is_rule2(opt)) { bad_shape = opt; continue; }
+        Expr* name = opt->data.function.args[0];
+        if (!(name->type == EXPR_SYMBOL && name->data.symbol.name == SYM_Heads))
+            bad_name = name;
+    }
+    if (!bad_shape && !bad_name) return true;
+
+    char* call = expr_to_string(res);
+    char* bad  = expr_to_string(bad_shape ? bad_shape : bad_name);
+    if (bad_shape)
+        fprintf(stderr,
+                "MapIndexed::nonopt: Options expected (instead of %s) beyond "
+                "position %zu in %s. An option must be a rule or a list of "
+                "rules.\n", bad ? bad : "?", start, call ? call : "?");
+    else
+        fprintf(stderr, "MapIndexed::optx: Unknown option %s in %s.\n",
+                bad ? bad : "?", call ? call : "?");
+    free(bad);
+    free(call);
+    return false;
+}
+
+Expr* builtin_mapindexed(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc == 0) return builtin_arg_error("MapIndexed", 0, 1, 3); /* ::argb */
+    if (argc == 1) return NULL;                  /* MapIndexed[f]: leave alone */
+
+    Expr* f    = res->data.function.args[0];
+    Expr* expr = res->data.function.args[1];
+
+    Expr* ls = (argc >= 3) ? res->data.function.args[2] : NULL;
+    if (is_rule2(ls)) ls = NULL;            /* option in the level-spec slot */
+    size_t opt_start = ls ? 3 : 2;
+
+    if (!mi_check_options(res, opt_start)) return NULL;
+
+    LevelSpec spec;
+    if (!parse_level_spec_strict(ls, &spec)) return NULL;  /* bad level spec */
+    parse_options(res, opt_start, &spec);                  /* Heads->True */
+
+    /* An empty level range (0, {3,1}, ...) selects nothing. Returning the
+     * expression itself keeps a packed NDArray packed and skips a full
+     * rebuild that could only produce an identical tree.
+     *
+     * Only two non-negative bounds are comparable this way: a negative bound
+     * is a depth, not a level, so {1,-1} (the spelling of the level spec -1)
+     * spans everything at level 1 or below despite reading as min > max. */
+    if (spec.min >= 0 && spec.max >= 0 && spec.min > spec.max) {
+        res->data.function.args[1] = NULL;   /* transfer ownership; SPEC.md §4 */
+        return expr;
+    }
+
+    /* NDArray is an atomic value, so the generic traversal would never descend
+     * into it. Iterate the leading axis directly at the default level;
+     * otherwise materialize once and reuse the generic path. */
+    if (is_ndarray(expr)) {
+        if (spec.min == 1 && spec.max == 1 && !spec.heads)
+            return mi_ndarray_axis(f, expr);
+        Expr* nested = ndarray_to_nested_list(expr);
+        int64_t depth = 1;
+        Expr* out = mi_at_level(f, nested, 0, spec, NULL, &depth);
+        expr_free(nested);
+        return out;
+    }
+
+    int64_t depth = 1;
+    return mi_at_level(f, expr, 0, spec, NULL, &depth);
 }
 
 /* ------------------- MapAt ------------------- */
@@ -946,7 +1132,7 @@ Expr* builtin_scan(Expr* res) {
     Expr* expr = res->data.function.args[1];
 
     Expr* ls = (argc >= 3) ? res->data.function.args[2] : NULL;
-    if (head_is(ls, SYM_Rule)) ls = NULL;                      /* option in slot 2 */
+    if (is_rule2(ls)) ls = NULL;                               /* option in slot 2 */
 
     LevelSpec spec;
     if (!parse_level_spec_strict(ls, &spec)) return NULL;      /* unrecognized levelspec */

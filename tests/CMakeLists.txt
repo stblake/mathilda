@@ -1158,6 +1158,10 @@ add_executable(map_ndarray_tests test_map_ndarray.c $<TARGET_OBJECTS:mathilda_co
 target_include_directories(map_ndarray_tests PRIVATE ../src)
 add_test(NAME map_ndarray_tests COMMAND map_ndarray_tests)
 
+add_executable(mapindexed_tests test_mapindexed.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(mapindexed_tests PRIVATE ../src)
+add_test(NAME mapindexed_tests COMMAND mapindexed_tests)
+
 add_executable(replaceat_tests test_replaceat.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(replaceat_tests PRIVATE ../src)
 
@@ -2689,6 +2693,7 @@ if(USE_ECM)
     add_dependencies(mapat_tests build_ecm)
     add_dependencies(scan_tests build_ecm)
     add_dependencies(map_ndarray_tests build_ecm)
+    add_dependencies(mapindexed_tests build_ecm)
     add_dependencies(replaceat_tests build_ecm)
     add_dependencies(nest_tests build_ecm)
     add_dependencies(nestlist_tests build_ecm)

@@ -309,8 +309,28 @@ void core_init(void) {
     symtab_add_builtin("MapIndexed", builtin_mapindexed);
     symtab_get_def("MapIndexed")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("MapIndexed",
-        "MapIndexed[f, list]\n\tGives {f[e1, {1}], f[e2, {2}], ...}. Over an\n"
-        "\tassociation, f[value, {Key[k]}] keeping keys.");
+        "MapIndexed[f, expr]\n"
+        "\tApplies f to the elements of expr, giving the part specification\n"
+        "\tof each element as a second argument to f: {f[e1, {1}],\n"
+        "\tf[e2, {2}], ...}.\n"
+        "MapIndexed[f, expr, levelspec]\n"
+        "\tApplies f to all parts of expr on the levels specified by\n"
+        "\tlevelspec:\n"
+        "\t  n            levels 1 through n\n"
+        "\t  Infinity     levels 1 through Infinity\n"
+        "\t  {n}          level n only\n"
+        "\t  {n1, n2}     levels n1 through n2\n"
+        "\tThe default is {1}. A positive level n consists of all parts\n"
+        "\tspecified by n indices; a negative level -n consists of all parts\n"
+        "\twith depth n, so level -1 is the atoms. Level 0 is the whole\n"
+        "\texpression, whose position is {}.\n"
+        "\tThe position handed to f is the one Part and Extract take, so\n"
+        "\tExtract[expr, #2] is #1. Over an association the position of a\n"
+        "\tvalue is {Key[k]}, and keys are preserved.\n"
+        "\tWith Heads -> True the function is applied to heads as well, a\n"
+        "\thead having index 0 in its position.\n"
+        "\tMapIndexed always effectively constructs a complete new expression\n"
+        "\tand then evaluates it.");
     symtab_add_builtin("MapThread", builtin_mapthread);
     symtab_get_def("MapThread")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("MapAll", builtin_map_all);
