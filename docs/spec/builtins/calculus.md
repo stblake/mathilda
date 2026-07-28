@@ -1025,7 +1025,20 @@ monotonically down.
         surfacing a half-integer power of a log tower variable; the erf argument is
         then a radical `1/Sqrt[Log g]`, solved in `s = Sqrt[Log g]` — e.g.
         `Integrate[E^(1/2 Log[Log[x]] - 1/Log[x])/(x Log[x]^2),x] =
-        -Sqrt[Pi] Erf[1/Sqrt[Log[x]]]` (and its `Erfi` dual). `x`-rational
+        -Sqrt[Pi] Erf[1/Sqrt[Log[x]]]` (and its `Erfi` dual). Both **spellings**
+        of that integrand reach the engine: the already-reduced
+        `Integrate[E^(-1/Log[x])/(x Log[x]^(3/2)),x]` carries the half-integer
+        power openly, and the `RischTranscendental` scope gate — which refuses
+        every algebraic function of `x`, rightly, since the recursive Risch
+        algorithm is not a decision procedure over an algebraic extension —
+        admits it as a narrow exception: when *every* algebraic site is a
+        fractional power of a transcendental **kernel**, each is rewritten
+        `g^(p/q) = g^n E^(r Log g)` (the inverse of the collapse above) and the
+        answer is returned only behind a diff-back check, because that rewritten
+        tower hides the algebraic relation `(E^(r Log g))^q = g^p`. A genuine
+        radical of `x` (`Sqrt[x]`, `Sqrt[1+x^2]`, `Cos[Sqrt[x]]`) is still
+        refused and left to the algebraic routes, and the non-elementary
+        decision half never runs on the admitted path. `x`-rational
         elementary-part coefficients remain a later increment;
       - `c w^(p-1) w'/Log[w]` → `c LogIntegral[w^p]` (single-li fast path) —
         subsumes `K/Log[x] → K LogIntegral[x]`, a scaled/affine argument

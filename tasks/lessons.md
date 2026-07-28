@@ -1252,3 +1252,25 @@ tree for that shape (`grep -rn "DirectedInfinity" src/`) before concluding the
 fix is local. Then give the consumer a *legitimate* way to get what it needs —
 here, the limit of the exponent, which is decidable — rather than restoring the
 bad output or leaving the consumer broken.
+
+## Two spellings of one integrand is a routing bug, not a coverage gap (2026-07-28)
+
+`Integrate[E^(1/2 Log[Log x] - 1/Log x)/(x Log x^2), x]` closed to
+`-Sqrt[Pi] Erf[1/Sqrt[Log x]]` while the *identical* function written
+`E^(-1/Log x)/(x Log x^(3/2))` came back unevaluated. It read like a missing
+case in the Knowles erf engine. It was not: the engine was never called. A
+scope gate four layers up (`rt_has_algebraic_of_x` in
+`builtin_rischtranscendental`) saw `Power[Log[x], Rational[-3,2]]`, classified
+it as an algebraic extension, and returned NULL before the dispatcher ran.
+
+Rule: when two spellings of the same expression give different answers, the
+defect is almost always in **routing**, not in the engine that should have
+answered. Find out whether the engine ran at all before reading a line of its
+code — a one-line `getenv`-gated `fprintf` at each entry point localises it in
+one build, where reading the engine can burn an hour on the wrong file.
+
+Corollary on relaxing a soundness gate: do not widen the predicate. Admit the
+narrow case, transform it into the form the working spelling already takes, and
+require an independent certificate (here a diff-back against the *original*
+integrand) — then withhold anything the relaxed field cannot justify, which for
+a Risch path means never emitting the non-elementary certificate from it.

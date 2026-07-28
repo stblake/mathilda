@@ -390,6 +390,132 @@ static bool rt_expr_is_elementary(Expr* e) {
  * risch_util.c — the single-extension kernel gate (rt_kernel_simple) and the
  * trig front-end scope guard use the same predicate.  See risch_util.h. */
 
+/* ================================================================== */
+/* Quasiquadratic radical admission (Knowles Part I §6).              */
+/*                                                                    */
+/* The scope gate below rejects every algebraic function of x, which  */
+/* is right for Sqrt[x] — an algebraic extension the recursive Risch  */
+/* algorithm is not a decision procedure over.  But a fractional      */
+/* power of a TRANSCENDENTAL KERNEL, Log[x]^(3/2), is a different     */
+/* animal: it is Knowles' quasiquadratic case, and knowles_erf.c      */
+/* solves it by working in s = Sqrt[kernel].  That engine is only     */
+/* reachable through rt_integrate, so the gate was hiding it — and    */
+/* only from the *already-reduced* spelling, since the merged form    */
+/* E^(1/2 Log[Log x] - 1/Log x)/(x Log x^2) carries no radical and    */
+/* sailed through.  Two spellings of one integrand, two answers.      */
+/*                                                                    */
+/* Admission works by writing the fractional part of each such power  */
+/* back into exp-log form, g^(p/q) = g^n E^(r Log g) with n = the     */
+/* integer part and r = p/q - n in (0,1) — the exact inverse of       */
+/* knowles' collapse_exp_of_log, and precisely the merged spelling.   */
+/*                                                                    */
+/* SOUNDNESS.  The rewritten tower hides an algebraic relation: the   */
+/* monomial E^(r Log g) is not transcendental over the lower field    */
+/* (its q-th power is g^p).  Nothing on this path may therefore be    */
+/* trusted by construction — the answer is returned ONLY behind a     */
+/* diff-back check against the ORIGINAL integrand, and the            */
+/* non-elementary decision half never runs here.  A verified          */
+/* antiderivative is correct whatever field it was found in; an       */
+/* unverified one is discarded.                                       */
+/* ================================================================== */
+
+/* Is `e` a Power[g, Rational[p, q]] whose base is a transcendental kernel of x
+ * (it contains an Exp or a Log of x) rather than a rational function of x?
+ * Sqrt[x] and Sqrt[1 + x^2] are NOT this; Sqrt[Log[x]] and (1 + E^x)^(1/2) are. */
+static bool rt_frac_power_of_kernel(Expr* e, Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (!rt_head_is(e, "Power") || e->data.function.arg_count != 2) return false;
+    Expr* b = e->data.function.args[0];
+    Expr* p = e->data.function.args[1];
+    if (!p || p->type != EXPR_FUNCTION || !rt_head_is(p, "Rational")) return false;
+    if (rt_free_of_x(b, x)) return false;
+    return rt_find_exp_of_x(b, x) != NULL || rt_find_log_of_x(b, x) != NULL;
+}
+
+/* Every algebraic-of-x site in `e` is a fractional power of a transcendental
+ * kernel — i.e. admitting `e` costs us nothing but the Knowles case.  A single
+ * Sqrt[x] / Surd / Root anywhere disqualifies the whole integrand. */
+static bool rt_algebraic_only_in_kernels(Expr* e, Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return true;
+
+    /* An admissible fractional kernel power.  Accept the node itself, but its
+     * base must not hide a bare radical of x underneath (Sqrt[Log[Sqrt[x]]]). */
+    if (rt_frac_power_of_kernel(e, x))
+        return !rt_has_algebraic_of_x(e->data.function.args[0], x);
+
+    /* Surd / Root / AlgebraicNumber of x is never admissible. */
+    if (e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if ((h == intern_symbol("Surd") || h == intern_symbol("Root")
+             || h == intern_symbol("AlgebraicNumber")) && !rt_free_of_x(e, x))
+            return false;
+    }
+    /* Nor is a fractional power of an x-dependent base that is NOT a kernel:
+     * Sqrt[x], Sqrt[1 + x^2] — the genuine algebraic extensions the gate is for. */
+    if (rt_head_is(e, "Power") && e->data.function.arg_count == 2) {
+        Expr* p = e->data.function.args[1];
+        if (p && p->type == EXPR_FUNCTION && rt_head_is(p, "Rational")
+            && !rt_free_of_x(e->data.function.args[0], x))
+            return false;
+    }
+
+    if (!rt_algebraic_only_in_kernels(e->data.function.head, x)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!rt_algebraic_only_in_kernels(e->data.function.args[i], x)) return false;
+    return true;
+}
+
+/* Rewrite every fractional power of a transcendental kernel as
+ * g^n E^(r Log[g]), n = Floor[p/q], r = p/q - n.  Exact for the branch the
+ * rest of the machinery already assumes (the same one collapse_exp_of_log
+ * inverts), and a no-op elsewhere.  Returns an owned copy. */
+static Expr* rt_kernel_radicals_to_explog(Expr* e, Expr* x) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    size_t k = e->data.function.arg_count;
+    Expr* nh = rt_kernel_radicals_to_explog(e->data.function.head, x);
+    Expr** na = malloc((k ? k : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < k; i++)
+        na[i] = rt_kernel_radicals_to_explog(e->data.function.args[i], x);
+    Expr* r = expr_new_function(nh, na, k);
+    free(na);
+    if (!rt_frac_power_of_kernel(r, x)) return r;
+
+    Expr* g = r->data.function.args[0];
+    Expr* p = r->data.function.args[1];
+    Expr* n = rt_eval1("Floor", expr_copy(p));                    /* integer part  */
+    Expr* frac = rt_eval1("Together", expr_new_function(expr_new_symbol("Plus"),
+        (Expr*[]){ expr_copy(p), expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_new_integer(-1), expr_copy(n) }, 2) }, 2));   /* r = p - n */
+    if (!n || !frac) { if (n) expr_free(n); if (frac) expr_free(frac); return r; }
+
+    Expr* expo = expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ frac, expr_new_function(expr_new_symbol("Log"),
+                             (Expr*[]){ expr_copy(g) }, 1) }, 2);          /* r Log[g] */
+    Expr* out = expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ expr_new_function(expr_new_symbol("Power"),
+                       (Expr*[]){ expr_copy(g), n }, 2),                   /* g^n      */
+                   expr_new_function(expr_new_symbol("Power"),
+                       (Expr*[]){ expr_new_symbol("E"), expo }, 2) }, 2);  /* E^(r Lg) */
+    expr_free(r);
+    return out;
+}
+
+/* The admission itself: rewrite, integrate constructively, and return the
+ * result ONLY if it differentiates back to the original integrand. */
+static Expr* rt_try_kernel_radical(Expr* f, Expr* x) {
+    if (!rt_algebraic_only_in_kernels(f, x)) return NULL;
+    Expr* g = rt_kernel_radicals_to_explog(f, x);
+    if (!g) return NULL;
+    if (expr_eq(g, f)) { expr_free(g); return NULL; }   /* nothing to admit */
+
+    Expr* r = rt_integrate(g, x);
+    expr_free(g);
+    if (!r) return NULL;
+    if (!rt_verify_antideriv(r, f, x)) { expr_free(r); return NULL; }
+    return r;
+}
+
 /* Field-path elementary-integrability decision.  Routes f through the AUTHORITATIVE
  * recursive field integrator (rt_field_integrate) in decision mode — the same
  * tower build / substitution / gate as rt_recursive_tower_case, but reading the
@@ -516,8 +642,19 @@ Expr* builtin_rischtranscendental(Expr* res) {
      * Root of x — puts the integrand in an algebraic extension it does not
      * handle, so bail immediately rather than churn through rt_integrate (which
      * would decline anyway, after needless work).  An x-free algebraic constant
-     * (Sqrt[2]) is a legitimate transcendental coefficient and is NOT flagged. */
-    if (rt_has_algebraic_of_x(f, x)) return NULL;
+     * (Sqrt[2]) is a legitimate transcendental coefficient and is NOT flagged.
+     *
+     * One exception is admitted: when every algebraic site is a fractional power
+     * of a TRANSCENDENTAL kernel (Log[x]^(3/2)), that is Knowles' quasiquadratic
+     * case and the erf engine solves it in s = Sqrt[kernel].  See
+     * rt_try_kernel_radical — the answer is gated on a diff-back check, and the
+     * non-elementary decision half deliberately does not run on that path. */
+    if (rt_has_algebraic_of_x(f, x)) {
+        arith_warnings_mute_push();
+        Expr* kr = rt_try_kernel_radical(f, x);
+        arith_warnings_mute_pop();
+        return kr;
+    }
 
     /* Correct by construction: rt_integrate returns a result only behind an
      * exact certificate, so no differentiation check is applied (a Risch

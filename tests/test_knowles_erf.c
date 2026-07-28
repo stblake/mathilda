@@ -113,6 +113,23 @@ int main(void) {
     exact("E^(1/Log[x])/(x Log[x]^(3/2))",
           "Times[-1, Power[Pi, Rational[1, 2]], Erfi[Power[Log[x], Rational[-1, 2]]]]");
 
+    /* --- The radical scope gate stays strict -------------------------------- */
+    /* Reaching the quasiquadratic case means RischTranscendental now admits an
+     * integrand carrying a fractional power of a TRANSCENDENTAL KERNEL, which it
+     * rewrites to exp-log form and gates on a diff-back.  A genuine algebraic
+     * extension of x must still be refused there and left to the algebraic
+     * routes -- these four are answered by other engines, unchanged, and each
+     * would be a silent wrong answer if the relaxed gate leaked. */
+    exact("Sqrt[x]", "Times[Rational[2, 3], Power[x, Rational[3, 2]]]");
+    pos("Sqrt[Log[x]]", "Erfi");                    /* kernel radical, pre-existing route */
+    for (size_t i = 0; i < 2; i++) {
+        const char* g = i ? "Cos[Sqrt[x]]" : "Sqrt[1 + x^2]";
+        char buf[256];
+        snprintf(buf, sizeof(buf), "Simplify[D[Integrate[%s, x], x] - (%s)]", g, g);
+        if (eval_is(buf, "0")) printf("  ok   INT %s   (algebraic, other route)\n", g);
+        else { printf("    (algebraic route broken for %s)\n", g); failures++; }
+    }
+
     /* --- Decision battery (sound declines) ---------------------------------- */
     /* Ex 4.2: no erf-elementary antiderivative. */
     declines("x E^(-x^2 - Erf[x]^2)");

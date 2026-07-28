@@ -167,3 +167,38 @@ made that honestly unevaluated instead, and the pin was stale. It was missed
 because the suite's soft asserts print `FAIL:` and still **exit 0** — and the
 line lands at the *top* of the output, so a `tail` of the log shows only the
 "All ... passed!" banner. Always `grep -c FAIL:`, never `tail`.
+
+---
+
+# Follow-up: the Knowles quasiquadratic case, reachable from both spellings
+
+- [x] Root cause: `builtin_rischtranscendental`'s scope gate
+      (`if (rt_has_algebraic_of_x(f, x)) return NULL;`) rejected
+      `Log[x]^(-3/2)` as an algebraic extension, so the erf engine — reachable
+      only through `rt_integrate` — was never called. The *merged* spelling
+      `E^(1/2 Log[Log x] - 1/Log x)/(x Log x^2)` carries no radical, sails
+      through, and the engine's own `collapse_exp_of_log` then reduces it to
+      exactly the form the gate had just rejected. Two spellings of one
+      integrand, two answers.
+- [x] `rt_try_kernel_radical`: when *every* algebraic site is a fractional power
+      of a transcendental KERNEL, rewrite `g^(p/q) = g^n E^(r Log g)` (the
+      inverse of `collapse_exp_of_log`) and run the constructive integrator.
+- [x] Soundness: that tower hides `(E^(r Log g))^q = g^p`, so nothing on the
+      path is trusted by construction — diff-back gate against the ORIGINAL
+      integrand, and the non-elementary decision half never runs there.
+- [x] Gate stays strict for genuine algebraic extensions of x.
+- [x] Tests + docs + changelog.
+
+## Verification
+
+`Sqrt[x]`, `Sqrt[1+x^2]`, `Cos[Sqrt[x]]`, `Sqrt[1+E^x]`, `Sqrt[Log[x]]` were
+compared against a `git stash`-built pre-fix binary: byte-identical. The only
+behaviour that changed is the quasiquadratic family. 49 integrate/Risch/erf
+suites clean, then the full 389-suite sweep.
+
+## Known gap (NOT this fix)
+
+`Integrate[1/Sqrt[Log[x]], x]` should be `Sqrt[Pi] Erfi[Sqrt[Log[x]]]` and stays
+unevaluated — unevaluated before this change too. There is no exponential kernel
+for the perfect-square gate to work on; the erf comes from the `u = Log[x]`
+substitution (`INT E^u/Sqrt[u] du`), which is a different route.
