@@ -1145,3 +1145,67 @@ Rules for myself:
 3. Pipe vs C-test divergence: a case can decline deterministically in a cold pipe
    but pass in the warm C-test process (memo/symbol state). Don't conclude "broken"
    from the pipe alone.
+
+## A "clean" fast-path answer can hide a divergence that cancelled (2026-07-28)
+
+`Limit[Cos[1/x] - Cos[1/x + 1], x -> 0]` returned `0`. Substituting `x -> 0`
+makes both terms `Cos[ComplexInfinity]`; the `Plus` cancels them; the
+`is_divergent(result)` guard sees a clean `0` because by then the divergence is
+gone. The function oscillates over `[-2 Sin[1/2], 2 Sin[1/2]]`.
+
+Rule: when a fast path justifies itself with "the substituted answer came out
+finite", the guard belongs on the **inputs to the fold**, not the output. Plain
+substitution is a limit only where `f` is *continuous*, and a divergent inner
+argument IS discontinuity. `has_divergent_inner_arg_at` in `src/calculus/limit.c`
+walks every argument of every function node that mentions `x`, substitutes it
+alone, and refuses if it diverges — on the **`Together`-cancelled** form, not
+the original, or a removable singularity like `(x^2-1)/(x-1)` at 1 gets refused
+too (the first cut did exactly that, and `limit_tests` caught it). The same failure shape lurks anywhere the
+evaluator normalises infinity-valued subterms — a cancelled `Infinity -
+Infinity`, `0 * ComplexInfinity`, `1^ComplexInfinity`.
+
+## A flatness invariant an un-re-evaluated builtin result can violate (2026-07-28)
+
+`TrigToExp[x Sin[x]]` returns `Times[c, Times[x, E^(I x)]]` — a nested `Times`,
+even after `Expand`. The evaluator flattens `Times` when *it* evaluates, but a
+builtin that hands back a freshly built tree can leave the invariant broken.
+
+Rule: any code that walks `Times`/`Plus` factors structurally must recurse
+through nested same-head nodes rather than reading `args` once. In
+`limit_osc.c` this bit hard and silently: `Sin[x]` classified correctly while
+`x Sin[x]` dropped its `E`-factor and mis-classified the whole limit. The
+symptom was "works on the simple case, abstains on the case with one more
+factor" — which reads like a missing rule, not a collector bug.
+
+## PossibleZeroQ before a structural check turns a decay into a wrong answer (2026-07-28)
+
+`limit_osc.c` pruned zero-amplitude groups from the normal form *before*
+checking that every amplitude was oscillation-free. `PossibleZeroQ` samples
+numerically, so `(2 Sin[t])^(t^2)` — which underflows wherever `|2 Sin t| < 1`
+— read as zero. The only group got dropped, the normal form came out empty,
+and `Limit[(2 Sin[1/x])^(1/x^2), x -> 0]` answered a confident `0` for a
+function that is unbounded.
+
+Rule: **structural gates run before numeric ones.** A numeric zero test is a
+heuristic that can only be trusted on inputs a structural check has already
+vouched for. Where the order is forced the other way, ask what a false "zero"
+would do — here a false zero on a genuinely *decaying* amplitude is harmless
+(it is exactly what the squeeze rule would have done), so only the impure case
+needed protecting.
+
+## `make | grep ... | head -N` can SIGPIPE the build and leave a stale link (2026-07-28)
+
+Filtering a build with `make -j8 2>&1 | grep -E "error" | head -3` tears the
+pipeline down early and can kill `make` **after** the objects compile but
+**before** the link. Twice in one session that left `./Mathilda` carrying an
+older `limit.o` with the new layer absent — and because the binary's mtime then
+matched the objects', a follow-up `make` printed "Nothing to be done for
+`all'" and changed nothing.
+
+Symptom to recognise: a feature that worked five minutes ago behaves as if it
+was never written, and re-running `make` prints nothing. The tell is
+`ls -la ./Mathilda src/**/changed.o` showing the **binary older than an
+object**.
+
+Rule: never pipe `make` into `head`. Redirect to a log
+(`make -j8 > /tmp/build.log 2>&1; echo rc=$?`) and grep the file afterwards.

@@ -1,320 +1,125 @@
-# Compile[] M5 — optimising code generation, coverage, any-rank NDArray
+# Limit: oscillatory normal form (proving limits do not exist)
 
-Plan: `~/.claude/plans/i-would-like-to-fluffy-whisper.md`
-Handoff: `docs/design/compile_state.md` §0
-Changelog: `docs/spec/changelog/2026-07-27.md`
+(Previous task — Compile[] M5 — archived to `plans/COMPILE_M5_TODO.md`.)
 
-Baseline (2026-07-27, before any change): Horner dispatch 649 ns/call for 80
-arith ops = 8.0 ns/op; mixed-libm 150 ns/call; array len-4096 1.0x, 61 ns/element.
+Motivating case:
 
-## Done
+    Limit[(Cos[x^2]/x^2 - Cos[(x+1)^2]/(x+1)^2)/(1/x^3), x -> Infinity]
 
-- [x] **Benchmark gate** — `tests/bench_compile.c`. Primary assertion is that
-      every benchmarked body *compiled*; plus a machine-independent ratio check
-      that the optimiser never makes a body slower.
-- [x] **Lazy operand addressing** — `NEXT()` no longer computes all three operand
-      pointers per instruction. 649 → 427 ns/call (1.53x).
-- [x] **Bytecode optimiser** — `src/compile/optimize.c`: CFG + backward liveness,
-      per-block value numbering (folding/CSE/copy-prop), DCE, LICM. Plus
-      `compile_internal.h` (KIND-carrying `OPLIST` drives enum + jump table +
-      property table) and `OP_LOOP`. 427 → 335 ns/call. Nest 1.29x, Newton 1.25x.
-- [x] **Optimiser correctness gate** — 18 bodies, opt vs `COMPILE_NO_OPT`, must
-      agree *bitwise* (`memcmp`: NaN == NaN, -0.0 != +0.0).
-- [x] **Any rank** — lifted the rank-1 front gate; rank 2/3/4 exact parity.
-- [x] **Elementwise fusion** — `COMPILE_FUSE`, correct at every rank, real and
-      complex, gated on `Listable`. **Off by default: not yet faster.**
-- [x] **Coverage audit** — `tests/test_compile_coverage.c`. 103 NumericFunction
-      heads, 55 compile, 48 listed gaps; fails in both directions.
-- [x] **Closed 3 silent gaps the audit found** — real `Mod`, real `Quotient`,
-      real `Arg`. Each verified against the interpreter first; parity 0.0.
-- [x] **Call boundary** — no malloc/free per `cf[x]`; all-Real signatures take
-      the unboxed `compiled_eval_real` path.
-- [x] **Block strip-mining** — each opcode processes a tile of VBLOCK=64 elements
-      in a vectorisable C loop. Fusion is now ON by default and 1.9-3.4x over the
-      delegated path. Turned up five array-blind `infer_type` branches, a tile
-      aliasing rule, and one place fusion had to be made less capable than it
-      could be (ArcTan[nd,nd], which the interpreter declines).
-- [x] **Fixed the test build's missing CMAKE_BUILD_TYPE** — it was compiling at
-      -O0, so every absolute figure measured there had been inflated.
-- [x] **Stress tests** — 340 body x length combinations across the tile boundary,
-      21 fused-vs-delegated, 120 randomised trees, 200 repeated calls.
-      leaks-clean and ASan+UBSan clean.
+Asymptotically `2 x Sin[x^2+x+1/2] Sin[x+1/2] + O(1)` — an unbounded
+oscillation with *no* single dominant term, so none of the existing layers
+(squeeze envelope, Series, Gruntz, L'Hospital) can touch it.
 
-- [x] **Expr-level CSE** — the bytecode CSE was defeated structurally, so
-      repeated subtrees are hoisted to registers reserved below the temp stack.
-      1.48x on a body with repeats. Found a real `pass_vn` bug on the way (a
-      write cleared aliases pointing AT the register but not its own).
-- [x] **C-stack frames** — a program is now reentrant and thread-safe; tile
-      storage moved into the frame.
-- [x] **`OP_CALL`** — a non-inlined compiled callee is called rather than bailing
-      the whole body. Inlining stays the default via a size cost model.
-- [x] **User `Compile[]` array argspec** — `Compile[{{v, _Real, r}}, body]`. A
-      List argument is packed at the boundary and the result KIND follows the
-      argument kind, so the compiled path and the interpreter fallback agree.
-- [x] **Exponential-integral kernels** — 9 heads, coverage 55 -> 64 of 103.
-- [x] **Plot3D leak** — `build_surface_primitives` freed the primitive array but
-      not the primitives, on the no-surface path.
+## The general class
 
-## Next, in value order
-- [ ] **Self-recursive `Compile[]`** — still cannot compile. `Compile[]`
-      deliberately does not fold globals (the object outlives its scope), so a
-      body cannot resolve the symbol it is about to be assigned to. Needs a
-      self-reference patch at object construction.
-- [x] **Thread the strip-mined loop — DONE. 3.2x / 5.5x / 6.6x at 1M elements.**
-      `OP_APAR` fans a fused MAP out over `nd_parallel_for` and jumps past the
-      loop, or falls through to run it serially — the fallback IS the serial
-      loop, so declining is free. Maps only: a map is bit-identical however it
-      is split (asserted by `memcmp` under `COMPILE_NO_PAR`), a reduction is not.
-      The loop is lifted into a standalone sub-program at finalize so workers
-      call the ordinary `vm_run`. TSan clean, zero leaks.
-      Also fixed two things that had been hiding results: `tests/CMakeLists.txt`
-      never defined `MATHILDA_THREADS` (so NO test had ever run the threaded ND
-      path), and `bench_compile.c` timed with `clock()` — CPU time summed over
-      threads, which reports perfect scaling as an N-fold SLOWDOWN.
-- [x] **Fill the remaining kernels — DONE. Coverage 93/103 (90%), from 55, and
-      no pending numerics remain.** `src/special_functions/sf_machine.c` covers
-      the exponential-integral family, Erfi, ProductLog, Fresnel, PolyGamma,
-      HurwitzZeta, HarmonicNumber, Zeta, Fibonacci/LucasL, Pochhammer, Binomial,
-      LegendreP, Airy x4, and the final twelve — PolyLog, LerchPhi, QPochhammer,
-      BesselI/K and the four hypergeometrics (one `sf_machine_pfq`; 0F1/1F1/2F1
-      are wrappers, since 1F1 canonicalises to pFq before the evaluator sees it).
-      UnitStep/Clip/Rescale stay bespoke lowerings — their result TYPE is the
-      difficulty, not the numerics.
-      **The 10 remaining listed gaps are all deliberate**, and the audit's header
-      now says so rather than calling them pending: `BesselJZero`, `BarnesG`,
-      `Hyperfactorial`, `Factorial2`, `FactorialPower` (the *interpreter* leaves
-      these unevaluated on machine reals, so a kernel would answer where it
-      declines) and `GCD`/`LCM`/`DigitSum`/`ReIm`/`QuotientRemainder`
-      (exact-integer, or not a single machine number).
-- [x] **Airy's uncovered band — DONE.** `2.5 < |x| < 8` is covered by Taylor
-      marching of `y'' = x y`, seeded from whichever expansion is exact at the
-      nearer end. Errors 1e-16 to 2.6e-15, at least as good as the two regions
-      already accepted. The direction is the whole problem: each solution is
-      marched where it DOMINATES (Bi forward from 2.5, Ai backward from 8), since
-      marching toward a recessive solution amplifies seed error by the dominant
-      one's growth — 2.4e5 across this band.
-- [ ] **Complex arguments — 41 heads compile for `_Real` and bail for
-      `_Complex`.** See `NUMERIC_FUNCTION_MISSING.md`: this is now the single
-      largest source of silent interpreter fallback in the engine.
-      **Done: `Sign`, `FractionalPart`, `Rescale`** (52 -> 55 of 103).
-      `Floor`/`Ceiling`/`Round`/`IntegerPart` turned out TYPE-BLOCKED, not
-      mechanical — they return `Complex[Integer, Integer]` and the lattice has no
-      complex-integer type. Remaining: 28 special functions needing genuine
-      complex numerics with matching branch cuts.
-      **Done: `Gamma`, `LogGamma`** (55 -> 57). No new numerics — both already
-      had a `double complex` Lanczos INSIDE the interpreter; exposing and
-      sharing it makes compiled and interpreted agree bit for bit. Check for an
-      existing `static double complex` implementation before writing a kernel.
-      The real work was a branch-cut bug: the `Re < 1/2` reflection used a
-      PRINCIPAL log in both the machine and MPFR paths, correct only in the
-      strip `-1 < Re < 0`.
-      **Done: the exponential-integral family** — ExpIntegralEi, LogIntegral,
-      SinIntegral, CosIntegral, SinhIntegral, CoshIntegral (57 -> 63). Again no
-      new numerics: each had a `double complex` series dead behind
-      `#ifndef USE_MPFR`. The work was a CANCELLATION GATE with the budget set
-      from measurement (1e9 -> 1.3e-8 error; 1e3 -> 4e-13 at the SAME coverage).
-      The gate lives in the ABI wrapper, not the series, so the interpreter's
-      no-MPFR last resort keeps answering where it has no fallback.
-      **Next:** extend their coverage with the complex continued fraction for
-      E1 (the real path already has one past |x|=40), which would lift the
-      whole family's declines; then the complex hypergeometrics.
-- [x] **`CompileDiagnostics` — DONE.** `CompileDiagnostics[argspec, expr]`
-      reports whether a body compiles and, on failure, the INNERMOST
-      subexpression that stopped it; on success the result type, instruction
-      count, CSE count, and the instruction count with the optimiser off.
-      `MATHILDA_COMPILE_DIAG=1` prints the same whenever an auto-compiled
-      builtin falls back. One wrapper around `emit` (the lowering proper is now
-      `emit_node`) does it, so no bail site knows diagnostics exist and a bail
-      added tomorrow is diagnosed the day it is written.
-      It immediately found two tests that had rotted into vacuity when `Zeta`
-      gained a machine kernel — **never build an interpreter reference out of a
-      coverage gap; build it out of a user DownValue**, which cannot expire and
-      is exactly value-preserving.
-- [x] **Auto-compile nine more builtins — DONE**, measured against the previous
-      build rather than a proxy: PolarPlot 16.8x, ParametricPlot 8.4x,
-      NProduct 8.0x, StreamPlot 7.1x, NSum 6.4x, ContourPlot 5.2x,
-      ComplexPlot 2.5x, DensityPlot 2.0x, VectorPlot 1.5x,
-      ParametricPlot3D 1.1x.
-      New `autocompile_new_z` — ComplexPlot needs a complex ARGUMENT, not just a
-      complex result, and its subset is genuinely smaller.
-      `NSum` gave ZERO speedup until its second sampler (the Euler–Maclaurin
-      continuous-x path) was covered too.
-      Also fixed a real leak on the way: ParametricPlot/ParametricPlot3D/
-      PolarPlot passed `expr_new_real(t)` inline to `symtab_add_own_value`,
-      which COPIES — one leaked node per sample point (529 blocks / 34 KB for
-      one default ParametricPlot).
-- [x] **Constant operands folded into the instruction — DONE.** New `K_BINK`
-      kind, 18 opcodes (real/int add/sub/mul/div + the four order comparisons).
-      Rewritten in the optimiser using the constant tracking `pass_vn` already
-      had; DCE removes the dead `CONST`. Horner deg-40 121 -> 81 instructions,
-      `1.5 + 2.5 x` 5 -> 3.
-      **But measure the time, not the count: -33% instructions bought ~9%**
-      (`Table` of a degree-5 polynomial over 10^6 points, 140 -> 129 ms), and
-      1-3% on bodies that are not constant-heavy. The removed `CONST`s were the
-      cheapest instruction in the set and the surrounding chain is serially
-      dependent — the VM was never instruction-count bound.
-      Anti-vacuity guard added: the A/B gate passes whether or not the rewrite
-      fires, so a separate check asserts the instruction count really drops.
-- [ ] **Next codegen step is a native backend, not more peepholes.** At ~2 ns
-      per instruction the VM is memory-port bound (Instr load, operand load,
-      result store, jump-table load), which is why removing a third of the
-      instructions moved 9%. A multiply-add superinstruction is the one
-      remaining cheap idea and it needs floating-point contraction turned off
-      to stay bit-identical — `-ffp-contract=off` on one file, or `#pragma STDC
-      FP_CONTRACT OFF`, whose GCC support is unreliable.
-- [ ] **Plot primitive construction** — now the bottleneck for DensityPlot /
-      VectorPlot / ParametricPlot3D: one `Rectangle`/`Arrow`/`Polygon` `Expr`
-      per cell. All three bodies compile; sampling is simply no longer where the
-      time goes. Not a compiler problem.
-- [ ] **Native backend** (`CompilationTarget -> "C"`), behind a build flag.
-- [ ] **Pre-existing diffuse leaks in `builtin_parametricplot`'s option
-      handling** (~1–9 blocks per option path, unrelated to sampling). Surfaced
-      while leak-checking the wiring above; not chased.
+Every existing layer treats an oscillation as an opaque "bounded head". The
+generalisation is to put the whole expression into an **oscillatory normal
+form** at an infinite limit point:
 
-## Review — the last 12 numerics
+    f(x) = c_0(x) + SUM_j c_j(x) E^(I theta_j(x))
 
-Coverage 84 -> 93 of 103. The work split unevenly: nine of the twelve were
-ordinary double implementations, and the twelfth (`HypergeometricPFQ`) cost more
-than the other eleven combined, for two reasons worth recording.
+with the `theta_j` pairwise-distinct real phases carrying **no constant term**
+(constants are absorbed into the amplitude) and the amplitudes `c_j`
+oscillation-free. `TrigToExp` + `Expand` produces exactly this.
 
-**pFq was never actually an uncovered head.** The audit probes with
-`Head[x]` … `Head[x,y,z,w]`, and pFq takes *two lists and a scalar*. It had a
-lowering the whole time; the probe was measuring the wrong signature and
-reporting a gap that was really a defect in the audit. `PROBES` now carries the
-shape override alongside `Clip` and `Rescale`. Worth remembering that a coverage
-number is only as honest as its probe.
+Distinct phases are asymptotically orthogonal, so the normal form is a
+*decision* form: nothing can cancel between groups. The verdicts below are
+theorems, not heuristics.
 
-**The parity failure was the interpreter's, not the kernel's.** This is now the
-third time (`ProductLog`, `Zeta`, pFq) — writing a second implementation and
-diffing it over a few hundred points is turning out to be a better bug-finder for
-the existing numerics than it is a risk to them. Do not assume the new side is
-wrong.
+## Decision rules
 
-`machine_sum` summed pFq in plain doubles. For negative real `z` the series
-alternates and `max|term|` exceeds the sum by ~`e^|z|`, so `1F1(1;2;-40)` came
-back with 5.3e-2 relative error against its closed form `(E^z-1)/z` — the bits
-were gone before the loop ended, and no amount of extra terms recovers them. The
-fix measures the loss instead of guessing it from `|z|`: track `max|term|/|sum|`,
-report `log2` of it, and re-sum through the MPFR path at `53 + lost + 16` bits
-when it exceeds 4, rounding back. Exact for every `p`, `q` and parameter set, and
-free where nothing cancels (all-positive terms give `lost = 0`). Machine
-arguments still give a machine answer; it is now the correctly rounded one.
+Let `S` = groups with a non-constant phase, `gamma_j = lim |c_j|`.
 
-Also moved the NDSolve bail example onto the structural half of `KNOWN_GAPS`.
-`Zeta`, `AiryAi` and `PolyLog` were each used as "a head with no machine kernel"
-and each in turn started compiling; `BarnesG` and `QuotientRemainder` cannot move
-without breaking interpreter parity, so they will not.
+- **R1 (squeeze).** All `gamma_j = 0` (j in S) ⟹ `lim f = lim c_0`, since
+  `|f - c_0| <= SUM |c_j| -> 0`.
+- **R3 (dominated oscillation).** Every `|c_j| = o(|c_0|)` and `c_0 -> ±oo`
+  ⟹ `lim f = lim c_0`.
+- **R0 (strictly dominant oscillation, IVT).** One phase group (with its
+  conjugate mate) strictly dominates every other group, its phase `-> ±oo`
+  continuously, and `arg c_j` is bounded. Then `f = c_0 + A cos(theta+phi) +
+  o(A)` and IVT hands us two sequences with distinct limits ⟹ **no limit**.
+  No polynomial restriction on the phase, so this covers `E^x Cos[x]`,
+  `x^5 Cos[x]`, `Sin[Log[x]]`.
+- **R2 (mean / mean-square, Weyl).** Phases are real polynomials of degree
+  `>= 1` with numeric coefficients. Then
 
-Verified: `compile_tests`, `compile_coverage_tests`, `compiledfunction_tests`,
-`autocompile_tests`, `ndsolve_compile_tests`, `hypergeopfq_tests`,
-`numeric_tests`, `beta_tests`, `integrate_ramanujan_tests`, `legendre_tests`,
-`sum_tests` all pass; `bench_compile` within gate; `leaks` reports 0 bytes on
-all four compile suites.
+      (1/T) INT_0^T |f|^2  ~  SUM_j (1/T) INT_0^T |c_j|^2
+      (1/T) INT_0^T f      ~  (1/T) INT_0^T c_0
 
-## Review — threading the fused map
+  (cross terms die by van der Corput: every phase *difference* is a
+  non-constant polynomial because constant terms were stripped). If `f -> L`
+  finite then `L = lim c_0` and `|L|^2 = |lim c_0|^2 + SUM gamma_j^2`, forcing
+  every `gamma_j = 0`. So **some `gamma_j != 0` ⟹ no finite limit**. `±oo` is
+  excluded by the window mean `(1/T) INT_T^2T f`, which stays bounded when
+  `|c_j| = O(x^deg theta_j)` — or trivially when `f` is bounded.
 
-3.2x on `Sqrt[v] + v^2`, 5.5x on `Sin[v] Exp[-v] + Sqrt[v]`, 6.6x on
-`Gamma[v] + Erf[v]`, at 1M elements on 16 cores. The gain rises with per-element
-cost, which is the right shape: the cheap body moves 16 MB for three flops and is
-bandwidth-bound long before it is core-bound.
+Verdict for R0/R2 is `Indeterminate`, matching Mathilda's existing convention
+(`limit.h`: "Indeterminate -- provably no limit").
 
-Two design choices worth keeping:
+## Tasks
 
-**Fall through, don't branch to a fallback.** `OP_APAR` either fans out and jumps
-past the loop, or falls through into the serial loop that was already emitted
-immediately after it. There is no second implementation to keep in step, so
-declining — too small, no threads, a worker failed — is always safe by
-construction rather than by care.
-
-**Lift the loop instead of teaching the VM to stop.** A worker needs to run one
-instruction range, and the obvious way is a stop-pc argument to `vm_run` — which
-costs a comparison on every dispatch, forever, for one loop. Copying the range
-out at finalize with rebased targets and its own `OP_RET` costs nothing at run
-time. It has to happen after the optimiser: LICM and compaction both move
-instruction indices, so a range recorded at emit time names the wrong
-instructions by the time it is used.
-
-**Two measurement bugs, and the more embarrassing one is mine.** The first round
-of numbers said threading was a 0.56-0.83x LOSS. It was not: `bench_compile.c`
-timed with `clock()`, which sums CPU time over threads, so perfect scaling reads
-as an N-fold slowdown. I had already recorded this exact trap in memory for the
-NDArray parallel map and walked into it again. Before that I also chased a wrong
-explanation (concurrent first-touch page faults) far enough to write a pre-fault
-pass, which measurement then showed cost about 5%; it was removed. The lesson
-that generalises: instrument the region directly before theorising about why a
-number is bad — `clock_gettime` around `nd_parallel_for` gave the answer in one
-run and said 6.4x while the benchmark was still calling it a loss.
-
-Separately, `tests/CMakeLists.txt` never defined `MATHILDA_THREADS`, so the whole
-threaded ND layer had been dead in the test build — every `nd_parallel_for` there
-compiled to its serial fallback and no test had ever exercised it. Now on; the ND
-suites pass with it.
-
-Verified: compile, compile_coverage, compiledfunction, autocompile,
-ndsolve_compile, ndarray, ndarray_functions, ndarray_reduce, ndarray_linalg,
-mapthread, linalg, ndsolve all pass; `bench_compile` within gate (and now gates
-that threading never makes a body slower); `leaks` 0 bytes; ThreadSanitizer
-reports no races.
-
----
-
-# Compile M3c — indexed machine arrays (2026-07-27)
-
-Motivated by a request for a `Compile[]` tutorial built on a 2-D finite-difference
-wave-equation solver. The solver was not writable: `Part` was outside the
-compilable subset, so `u[[i, j]]` put the whole body on the interpreter.
-
-- [x] `Part` reads, full spec vocabulary — inline path for one scalar subscript
-      per axis (`A_AXIS` + existing `A_LOAD`), delegated path (`A_PART` →
-      `ndarray_part`) for Span / All / position lists / partial indexing / any
-      mixture.
-- [x] `Part` assignment, same vocabulary, plus `+=` `-=` `*=` `/=` on a scalar
-      position. Target must be an owned array (a `Module`/`With` local); writing
-      through a borrowed argument is refused at compile time.
-- [x] `ConstantArray` at any rank (`A_NEW`); array-typed `Module`/`With` locals,
-      including as the result (`A_COPY`, `A_XFER`).
-- [x] `Length` at any rank; multi-iterator `Do`.
-- [x] `A_LOAD` made impure — a pure load is CSE'd across a store and hoisted out
-      of the loop that mutates it. Both regression-tested.
-- [x] Interpreter bugs found by the parity tests: `TimesBy` had no
-      implementation at all (and `*=` / `/=` did not parse); `Part` assignment
-      into an `NDArray` silently ignored every non-integer spec.
-- [x] `COMPILE_EXAMPLE.md` — the tutorial, with an exact-discrete-solution
-      correctness check and measurements against the interpreter, Wolfram
-      Language 14.0 (WVM and native C) and `NDSolve` on both systems.
+- [x] Probe existing behaviour; confirm `TrigToExp`/`Expand`/`PolynomialQ`/
+      `Exponent`/`PossibleZeroQ` suffice to build the normal form.
+- [x] `src/calculus/limit_osc.{c,h}` — normal form + the four rules.
+- [x] Wire into the `compute_limit` cascade (before `layer2_series`) and add
+      `Method -> "Oscillatory"`.
+- [x] Reduce a finite limit point to `+Infinity` via `x = a ± 1/t`.
+- [x] Tests: `tests/test_limit_oscillatory.c`.
+- [x] Docs: `docs/spec/builtins/calculus.md` + weekly changelog.
+- [x] Full regression run of the limit/calculus suites.
 
 ## Review
 
-**The interesting number is not the 569x.** Compiled-vs-interpreted ratios say as
-much about the interpreter as the compiler, and Mathilda's interpreter is ~12x
-slower than Wolfram's on this array-heavy code. The number that isolates the
-compiler is the cross-system one: Mathilda's compiled stencil is **1.8-2.1x
-faster than Wolfram Language 14.0's**, stable across n = 41 to 641.
+**What shipped.** `src/calculus/limit_osc.{c,h}` (~840 lines) plus a ~90-line
+hookup in `limit.c`. The layer runs after the cheap squeeze envelope and before
+`Series` — Series has no expansion at infinity for `Sin[x^2]` and would either
+fail or fold an oscillation into a spurious leading term.
 
-**WL's native-C target is slower than its own bytecode VM here** (14.9 s vs
-12.2 s at n = 401), verified to be genuine `LibraryFunction` code rather than a
-silent fallback. Worth weighing before this project's own "native backend next"
-plan: in a tensor-heavy kernel the cost is array element access, not dispatch.
+**Three implementation traps.**
 
-**At matched accuracy `NDSolve` beats the hand-written scheme by ~12x** (0.031 s
-for 5.4e-5, versus 0.357 s at n = 153 for 1.57e-5). That is the honest framing
-for `Compile[]`: it does not make your scheme competitive with a library solver
-on the library solver's home ground; it makes the schemes that are *not* in the
-library run at machine speed.
+1. `TrigToExp` returns **un-flattened** `Times[c, Times[x, E^(I x)]]`. The
+   evaluator flattens `Times` when it evaluates, but an un-re-evaluated builtin
+   result violates the invariant. A factor collector that does not recurse
+   through nested same-head nodes silently drops the `E`-factor — `Sin[x]`
+   worked, `x Sin[x]` did not. `collect_parts` now recurses.
+2. Compare `|c|^2 = c conj(c)`, never `Abs[c]`: `Abs` stays inert on symbolic
+   arguments so its limit is undecidable, while `c conj(c)` expands to a real
+   rational expression. Conjugation under "all symbols are real" is just
+   negating every literal `Complex[a, b]` imaginary part — exact, and unlike
+   `Conjugate[]` it actually reduces.
+3. Take square roots on the *limits*, not the expressions. R3 needs
+   `SUM |c_j| / |c_0| < 1`; computing `lim |c_j|^2/|c_0|^2` per group and
+   `Sqrt`-ing those *numbers* decides `x^2 (2 + Cos[x]) -> Infinity` (ratio
+   1/2), which the term-by-term `o(c_0)` test I started with could not.
 
-## New, from this work
+**Three pre-existing wrong answers fell out** (all verified against a stashed
+`limit.c`, so none of them are regressions from this work):
 
-- [ ] **`Module` costs 3x in the interpreter.** The identical interpreted march
-      is 4.09 s at top level and 12.28 s inside a `Module` (n = 41). Not a
-      compiler issue; worth its own look, and worth knowing when benchmarking —
-      quoting the Module form would have inflated the speedup to 1700x.
-- [ ] **`Table` as an array constructor inside a compiled body.** Today that
-      needs `ConstantArray` plus a `Do` loop. This is the last obviously-missing
-      array construct.
-- [ ] **Array-valued `If` branches / `Sum` accumulators / `Nest` state.** Each
-      needs either an `OP_ARR_COPY` at the join or handle refcounting.
-- [ ] **Span assignment on a `List`** goes through `expr_part_assign_rec`, which
-      rebuilds the structure per element — O(n) per assignment. The NDArray path
-      is now O(selected); the List path is untouched.
-- [ ] `Increment`/`Decrement` on a `Part` target in compiled code (only the
-      binary forms handle `Part` today).
+- `Limit[E^(I x)/x, x -> Infinity]` gave `E^DirectedInfinity[I]` — the `1/x`
+  swallowed. `exp_of_limit` now refuses a folded value that still carries an
+  infinity.
+- `Limit[Cos[1/x] - Cos[1/x + 1], x -> 0]` gave `0`: substitution turns both
+  terms into `Cos[ComplexInfinity]` and the `Plus` cancels them. Both
+  substitution fast paths now refuse when an *inner argument* diverges at the
+  point — which is exactly discontinuity, where substitution was never a valid
+  limit.
+- One assertion in `test_limit.c` recorded an abstention that is now a proof
+  (`Sin[x^2] + Cos[x]`).
+
+**Verification.** `limit_oscillatory_tests` (9 groups), plus `limit_tests`,
+`limit_assumptions_tests`, `gruntz_tests`, `gruntz_stress_tests`,
+`series_tests`, `nlimit_tests`, `nseries_tests`, `residue_tests` and the full
+`tests/build` sweep. Valgrind on the new path: byte-identical leak totals to
+the `Expand[TrigToExp[...]]` baseline (13,376 B / 418 blocks, all dyld/objc).
+`make check-c99` clean.
+
+**Known gaps (honest abstentions, documented in the module header).**
+`x^2 (1 + Cos[x])` — envelope exactly equal to the smooth part; `x E^(I x)` —
+unmated and unbounded, where `ComplexInfinity` may be the intended answer;
+`Tan`/`Sec`/`Csc`, whose `TrigToExp` image leaves an exponential in a
+denominator; phases that neither diverge nor are polynomial (`Sin[x] +
+Sin[x + 1/x]`); symbolic amplitudes (`a Sin[x]`, since `a = 0` has limit 0).
+
+**Worth a separate look.** `TrigToExp` (and therefore `Expand` of its result)
+leaving a nested `Times` is a canonicalisation bug independent of `Limit`; it
+will bite anything that walks factors structurally.

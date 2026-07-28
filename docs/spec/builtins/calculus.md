@@ -251,6 +251,47 @@ Out[8]= 6 a b^2
     shrinking-bound `(x Sin[1/x]/2)^(1/x^2) -> 0` at `x -> 0`), and `Infinity`
     when the base is bounded below by a constant `> 1` and positive (e.g.
     `(2 + Sin[1/x]/2)^(1/x^2) -> Infinity`).
+  - `"Oscillatory"` — the oscillatory normal form at `±Infinity`. `TrigToExp`
+    plus `Expand` rewrites `f` as `c_0(x) + Sum_j c_j(x) E^(I theta_j(x))` with
+    pairwise-distinct real phases carrying no constant term (a constant offset
+    is folded into the amplitude, so `Cos[x]` and `Cos[x + 1]` share the phase
+    `x`) and oscillation-free amplitudes. Distinct phases are asymptotically
+    orthogonal, so the form decides the limit:
+    - every `|c_j| -> 0` — the oscillation is squeezed away and the answer is
+      `Limit[c_0]`: `Sin[x]/x -> 0`, `2 + Cos[x^2]/x -> 2`, and
+      `Sin[x]^2 + Cos[x]^2 -> 1` where every oscillatory group cancels;
+    - `Sum_j |c_j| / |c_0| -> r < 1` with `c_0 -> ±Infinity` — the oscillation
+      cannot change the sign or the order of `f`, so the answer is `Limit[c_0]`:
+      `x + Cos[x] -> Infinity`, `x^2 (2 + Cos[x]) -> Infinity` (`r = 1/2`);
+    - one group strictly dominates all the others, its phase diverges and its
+      amplitude has bounded argument — the intermediate value theorem produces
+      two sequences with different limits, so **no limit exists** and the result
+      is `Indeterminate`: `x Sin[x]`, `E^x Cos[x]`, `Sin[Log[x]]`;
+    - every phase is a real polynomial of degree `>= 1` with numeric
+      coefficients and `Limit[c_0]` is finite — then the Cesàro mean of `f` is
+      `Limit[c_0]` and the Cesàro mean of `|f|^2` is `|Limit[c_0]|^2 +
+      Sum_j (lim |c_j|)^2` (the cross terms die by van der Corput, every phase
+      *difference* being a non-constant polynomial). A surviving oscillation
+      therefore contradicts any finite limit, and `±Infinity` is excluded either
+      because `f` is bounded or, for real `f`, by the window mean when
+      `|c_j| = O(x^deg theta_j)`. Result `Indeterminate`:
+      `Sin[x] + Cos[x]`, `Sin[x]^2`, `Cos[x] - Cos[x + 1]`, `Sin[x] Sin[x^2]`,
+      and — the case with no dominant summand at all —
+      `(Cos[x^2]/x^2 - Cos[(x+1)^2]/(x+1)^2) x^3`, which is asymptotically
+      `2 x Sin[x^2 + x + 1/2] Sin[x + 1/2]`.
+
+    A **finite** limit point reduces to this analysis through `x = a ± 1/t`
+    with `t -> +Infinity` — an oscillation at a point is an oscillation at
+    infinity in `t`, with the identical normal form — and a two-sided limit
+    requires both sides to agree: `Sin[1/x]/x -> Indeterminate`,
+    `Sin[1/x]^2 -> Indeterminate`, `x Sin[1/x] -> 0` at `x -> 0`.
+
+    The layer abstains (leaving `Limit` unevaluated) whenever a hypothesis is
+    not verifiable: a symbolic amplitude (`a Sin[x]`, since `a = 0` has the
+    limit `0`), an amplitude that still carries an oscillation (`Tan`, `Sec` and
+    `Csc` leave an exponential in a denominator), an envelope exactly equal to
+    the smooth part (`x^2 (1 + Cos[x])`), or a phase that neither diverges nor
+    is polynomial.
   - `"Gruntz"` — Gruntz's most-rapidly-varying (mrv) algorithm for exp-log
     functions (his 1996 ETH thesis). The whole function is expanded as a
     series in its most rapidly varying subexpression `w -> 0+`, which
@@ -364,6 +405,21 @@ Out[12]= 1
 
 In[13]:= Limit[(Erf[x - E^-x] - Erf[x]) E^x E^(x^2), x -> Infinity]
 Out[13]= -2/Sqrt[Pi]
+
+In[14]:= Limit[(Cos[x^2]/x^2 - Cos[(x+1)^2]/(x+1)^2)/(1/x^3), x -> Infinity]
+Out[14]= Indeterminate
+
+In[15]:= Limit[Sin[x] + Cos[x], x -> Infinity]
+Out[15]= Indeterminate
+
+In[16]:= Limit[x^2 (2 + Cos[x]), x -> Infinity]
+Out[16]= Infinity
+
+In[17]:= Limit[a Sin[x], x -> Infinity]
+Out[17]= Limit[a Sin[x], x -> Infinity]
+
+In[18]:= Limit[Sin[1/x]/x, x -> 0]
+Out[18]= Indeterminate
 ```
 
 ## Residue

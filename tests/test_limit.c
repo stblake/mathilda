@@ -719,11 +719,13 @@ static void test_wp5_dominant_term_at_infinity(void) {
     /* At -Infinity: dominant x -> -Infinity, Sin[x] is still bounded. */
     check("Limit[x + Sin[x], x -> -Infinity]", "-Infinity");
 
-    /* Two bounded terms with no dominant -> unresolved (safer than a
-     * wrong finite answer). Limit no longer holds its first argument, so
-     * the echoed sum is canonically ordered (Cos before Sin). */
-    check("Limit[Sin[x^2] + Cos[x], x -> Infinity]",
-          "Limit[Cos[x] + Sin[x^2], x -> Infinity]");
+    /* Two bounded oscillations with no dominant term. This layer abstains,
+     * but the oscillatory normal form (limit_osc.c) proves there is no
+     * limit: the phases x^2 and x are distinct non-constant polynomials, so
+     * their amplitudes cannot cancel, and a surviving oscillation with a
+     * finite non-oscillatory part rules out both a finite limit and
+     * +/-Infinity. (This assertion used to record the *abstention*.) */
+    check("Limit[Sin[x^2] + Cos[x], x -> Infinity]", "Indeterminate");
 }
 
 /* ----------------------------------------------------------------- */

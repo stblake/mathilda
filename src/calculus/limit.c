@@ -45,6 +45,7 @@
                           * at candidate sub-expressions. */
 #include "sym_names.h"
 #include "gruntz.h"       /* Gruntz mrv-algorithm limit engine (layer_gruntz) */
+#include "limit_osc.h"    /* oscillatory normal form (layer_oscillatory)     */
 /* Note: Series and D are invoked symbolically (through the evaluator),
  * not via direct C calls, so series.h / deriv.h are intentionally not
  * included here. Adding the Series and Derivative symbols to the symbol
@@ -119,6 +120,7 @@
 #define LIMIT_M_SERIES        5
 #define LIMIT_M_LHOSPITAL     6
 #define LIMIT_M_GRUNTZ        7
+#define LIMIT_M_OSCILLATORY   8
 
 /* ---------------------------------------------------------------------- */
 /* LimitCtx -- threaded through the pipeline                               */
@@ -332,6 +334,7 @@ static Expr* layer_plus_termwise(Expr* f, LimitCtx* ctx);
 static Expr* layer_plus_split_convergent(Expr* f, LimitCtx* ctx);
 static Expr* layer_abs_rewrite(Expr* f, LimitCtx* ctx);
 static Expr* layer_gruntz(Expr* f, LimitCtx* ctx);
+static Expr* layer_oscillatory(Expr* f, LimitCtx* ctx);
 static Expr* rewrite_reciprocal_trig(Expr* e);
 static Expr* magnitude_upper_bound(Expr* e, Expr* x, bool var_abs);
 static bool  contains_bounded_head(Expr* e);
@@ -663,6 +666,7 @@ static bool parse_method(Expr* m, int* out) {
         if (strcmp(s, "Series")           == 0) { *out = LIMIT_M_SERIES;       return true; }
         if (strcmp(s, "LHospital")        == 0) { *out = LIMIT_M_LHOSPITAL;    return true; }
         if (strcmp(s, "Gruntz")           == 0) { *out = LIMIT_M_GRUNTZ;       return true; }
+        if (strcmp(s, "Oscillatory")      == 0) { *out = LIMIT_M_OSCILLATORY;  return true; }
     }
     return false;
 }
@@ -861,6 +865,34 @@ static bool has_divergent_exponent_at(Expr* e, Expr* x, Expr* point) {
     return false;
 }
 
+/* True iff some *argument* of a function node inside `e` blows up at the
+ * point. Plain substitution is only a limit when f is continuous there, and
+ * a divergent inner argument is exactly discontinuity — but the evaluator
+ * will happily fold the substituted tree anyway and hand back a clean-looking
+ * value. The failure that motivates the check:
+ *
+ *     Limit[Cos[1/x] - Cos[1/x + 1], x -> 0]
+ *
+ * substitutes to Cos[ComplexInfinity] - Cos[1 + ComplexInfinity], both terms
+ * canonicalise to Cos[ComplexInfinity], and the Plus cancels them to a
+ * confident 0. The true function oscillates over [-2 Sin[1/2], 2 Sin[1/2]].
+ * The top-level is_divergent(sub) guard cannot see this: the divergence has
+ * already cancelled by the time it looks. */
+static bool has_divergent_inner_arg_at(Expr* e, Expr* x, Expr* point) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        Expr* a = e->data.function.args[i];
+        if (!expr_contains(a, x)) continue;
+        if (has_divergent_inner_arg_at(a, x, point)) return true;
+        if (expr_eq(a, x)) continue;          /* the variable itself is fine */
+        Expr* v = subst_eval(a, x, point);
+        bool bad = is_divergent(v);
+        expr_free(v);
+        if (bad) return true;
+    }
+    return false;
+}
+
 static Expr* try_numeric_point_substitution(Expr* f, LimitCtx* ctx) {
     if (!is_numeric_literal_point(ctx->point)) return NULL;
 
@@ -880,6 +912,16 @@ static Expr* try_numeric_point_substitution(Expr* f, LimitCtx* ctx) {
     bool den_bad = is_lit_zero(den_at) || is_divergent(den_at);
     expr_free(den_at);
     if (den_bad) { expr_free(tog); return NULL; }
+
+    /* Refuse when an inner argument of the *cancelled* form blows up: that is
+     * discontinuity, and the substituted tree can still fold to a clean-
+     * looking value (see has_divergent_inner_arg_at). Testing `tog` rather
+     * than `f` keeps removable singularities -- (x^2-1)/(x-1) at 1, where
+     * Together has already cancelled the 1/(x-1) -- on the fast path. */
+    if (has_divergent_inner_arg_at(tog, ctx->x, ctx->point)) {
+        expr_free(tog);
+        return NULL;
+    }
 
     /* Substitute into the *Together-normalised* form. This matters when
      * the cancel-first form has a non-zero denominator at the point while
@@ -919,6 +961,13 @@ static Expr* try_continuous_substitution(Expr* f, LimitCtx* ctx) {
      *     way, so we scan intermediate sub-expressions too.
      */
     Expr* tog = simp(mk_fn1("Together", expr_copy(f)));
+    /* Discontinuity carried by a divergent inner argument of the *cancelled*
+     * form; the numerator/denominator checks below cannot see it once the
+     * substituted tree has folded it away. */
+    if (has_divergent_inner_arg_at(tog, ctx->x, ctx->point)) {
+        expr_free(tog);
+        return NULL;
+    }
     Expr* num = simp(mk_fn1("Numerator",   expr_copy(tog)));
     Expr* den = simp(mk_fn1("Denominator", expr_copy(tog)));
     expr_free(tog);
@@ -1485,7 +1534,15 @@ static Expr* exp_of_limit(Expr* lim_log) {
     if (is_infinity_sym(lim_log))   return mk_sym("Infinity");
     if (is_neg_infinity(lim_log))   return mk_int(0);
     if (is_complex_infinity(lim_log) || is_indeterminate(lim_log)) return NULL;
-    return simp(mk_fn1("Exp", expr_copy(lim_log)));
+    Expr* out = simp(mk_fn1("Exp", expr_copy(lim_log)));
+    /* A divergent log-limit along any ray other than the real axis leaves
+     * Exp[...] unfolded -- Limit[E^(I x)] would come back as the meaningless
+     * `E^DirectedInfinity[I]` (E^(I x) has no limit; it spins on the unit
+     * circle) and, worse, Limit[E^(I x)/x] would report it instead of 0.
+     * Refuse any residual infinity rather than pass it off as determinate;
+     * the oscillatory layer downstream handles these shapes properly. */
+    if (is_divergent(out)) { expr_free(out); return NULL; }
+    return out;
 }
 
 static Expr* layer5_log_reduction(Expr* f, LimitCtx* ctx) {
@@ -2790,6 +2847,77 @@ static Expr* layer_gruntz(Expr* f, LimitCtx* ctx) {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Oscillatory normal-form layer (src/calculus/limit_osc.c).               */
+/*                                                                         */
+/* Decides the amplitude-modulated-oscillation class at +/-Infinity: sums   */
+/* of c_j(x) E^(I theta_j(x)) with distinct real phases. Either the         */
+/* oscillations provably wash out (a limit), or one provably survives (no   */
+/* limit -> Indeterminate), or it abstains. It needs sub-limits of the      */
+/* amplitudes, which it requests through this adapter so that our recursion */
+/* depth and Direction bookkeeping stay in force.                          */
+/* ---------------------------------------------------------------------- */
+static Expr* osc_sublimit(Expr* g, void* vctx) {
+    LimitCtx* outer = (LimitCtx*)vctx;
+    LimitCtx sub = *outer;
+    sub.method = LIMIT_M_AUTOMATIC;   /* sub-limits always get the full cascade */
+    return compute_limit(g, &sub);
+}
+
+/* One side of a finite limit point: x = a + s/t with t -> +Infinity, so that
+ * s = +1 walks down onto `a` from above and s = -1 from below. An oscillation
+ * at a finite point (Sin[1/x] at 0) becomes an oscillation at infinity in t
+ * with the very same normal form, so the whole analysis carries over. */
+static Expr* osc_at_finite_side(Expr* f, LimitCtx* ctx, int side) {
+    Expr* t_sym = mk_sym("$LimitOscT$");
+    Expr* xsub  = simp(mk_fn2("Plus", expr_copy(ctx->point),
+                              mk_fn2("Times", mk_int(side),
+                                     mk_fn2("Power", expr_copy(t_sym), mk_int(-1)))));
+    Expr* g = subst_eval(f, ctx->x, xsub);
+    expr_free(xsub);
+
+    Expr* inf = mk_sym("Infinity");
+    LimitCtx sub = { t_sym, inf, LIMIT_DIR_TWOSIDED, ctx->depth, LIMIT_M_AUTOMATIC };
+    Expr* r = limit_oscillatory(g, t_sym, inf, osc_sublimit, &sub);
+    expr_free(g);
+    expr_free(inf);
+    /* A residual $LimitOscT$ would be a bug, not an answer. */
+    if (r && expr_contains(r, t_sym)) { expr_free(r); r = NULL; }
+    expr_free(t_sym);
+    return r;
+}
+
+static Expr* layer_oscillatory(Expr* f, LimitCtx* ctx) {
+    if (ctx->dir == LIMIT_DIR_COMPLEX || ctx->dir == LIMIT_DIR_IMAGINARY)
+        return NULL;   /* the whole analysis is on the real line */
+
+    if (is_infinity_sym(ctx->point) || is_neg_infinity(ctx->point))
+        return limit_oscillatory(f, ctx->x, ctx->point, osc_sublimit, ctx);
+
+    /* Finite point: reduce to +Infinity through x = a +/- 1/t. Only a real
+     * numeric point makes the two "sides" meaningful. */
+    if (!expr_is_numeric_like(ctx->point) || head_is(ctx->point, SYM_Complex))
+        return NULL;
+    if (ctx->depth >= LIMIT_MAX_DEPTH - 1) return NULL;
+
+    if (ctx->dir == LIMIT_DIR_FROMABOVE) return osc_at_finite_side(f, ctx, +1);
+    if (ctx->dir == LIMIT_DIR_FROMBELOW) return osc_at_finite_side(f, ctx, -1);
+
+    /* Two-sided: both sides must exist and agree. Indeterminate on either
+     * side settles it immediately -- that side already has no limit. */
+    Expr* up = osc_at_finite_side(f, ctx, +1);
+    if (!up) return NULL;
+    if (is_indeterminate(up)) return up;
+    Expr* down = osc_at_finite_side(f, ctx, -1);
+    if (!down) { expr_free(up); return NULL; }
+    if (is_indeterminate(down)) { expr_free(up); return down; }
+    bool agree = expr_eq(up, down);
+    expr_free(down);
+    if (agree) return up;
+    expr_free(up);
+    return mk_sym("Indeterminate");
+}
+
+/* ---------------------------------------------------------------------- */
 /* Top-level dispatch                                                      */
 /* ---------------------------------------------------------------------- */
 static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
@@ -2911,6 +3039,14 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
      * (Max[Sin[x], 2] -> 2). The mrv engine's dominance test can't order a
      * bounded oscillator, so this bounded-comparison layer handles it. */
     TRY(LIMIT_M_BOUNDED, layer_maxmin_bounded(f, ctx));
+
+    /* Oscillatory normal form at +/-Infinity. Runs after the cheap squeeze
+     * (which already resolves the decaying-envelope shapes) but before
+     * Series, because Series has no expansion at infinity for Sin[x^2] and
+     * would either fail or -- worse -- fold an oscillation into a spurious
+     * leading term. This is the layer that proves a limit does *not* exist
+     * for a sum of oscillations with no single dominant summand. */
+    TRY(LIMIT_M_OSCILLATORY, layer_oscillatory(f, ctx));
 
     /* Layer 2: series-based evaluation -- the workhorse. */
     TRY(LIMIT_M_SERIES, layer2_series(f, ctx));
@@ -3859,6 +3995,8 @@ void limit_init(void) {
         "\t  \"LHospital\"        -- L'Hospital's rule for 0/0 and Inf/Inf\n"
         "\t  \"Asymptotic\"       -- dominant-term / log / exp reductions\n"
         "\t  \"Bounded\"          -- squeeze and bounded-oscillation Interval\n"
+        "\t  \"Oscillatory\"      -- normal form c0 + Sum cj E^(I thetaj) at +-Inf\n"
+        "\t  \"Gruntz\"           -- Gruntz mrv algorithm for exp-log towers\n"
         "\tA named method leaves Limit unevaluated when it does not apply.\n"
         "\n"
         "May return a finite value, Infinity, -Infinity, ComplexInfinity,\n"

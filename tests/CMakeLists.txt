@@ -495,6 +495,7 @@ set(COMMON_SRC
     ../src/calculus/series.c
     ../src/calculus/deriv.c
     ../src/calculus/limit.c
+    ../src/calculus/limit_osc.c
     ../src/calculus/gruntz.c
     ../src/calculus/residue.c
     ../src/context.c
@@ -2450,6 +2451,16 @@ target_include_directories(limit_tests PRIVATE ../src)
 
 add_executable(limit_assumptions_tests test_limit_assumptions.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(limit_assumptions_tests PRIVATE ../src)
+
+add_executable(limit_oscillatory_tests test_limit_oscillatory.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(limit_oscillatory_tests PRIVATE ../src ../src/calculus)
+if(USE_ECM)
+    target_link_libraries(limit_oscillatory_tests gmp m ${ECM_LIB})
+    add_dependencies(limit_oscillatory_tests build_ecm)
+else()
+    target_link_libraries(limit_oscillatory_tests gmp m)
+endif()
+add_test(NAME limit_oscillatory_tests COMMAND limit_oscillatory_tests)
 
 add_executable(gruntz_tests test_gruntz.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(gruntz_tests PRIVATE ../src)
