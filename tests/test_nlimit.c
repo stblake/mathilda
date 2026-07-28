@@ -4,8 +4,9 @@
  * complex-valued and complex-point limits; the SequenceLimit (Wynn epsilon)
  * method and WynnDegree scaling; the Direction option (one-sided and arbitrary
  * complex rays); Scale and Terms; arbitrary precision via WorkingPrecision; the
- * noise / cannot-recognise diagnostic; option/argument-shape edge cases; the
- * Protected attribute; stress batches; and memory hygiene.
+ * noise / cannot-recognise diagnostic; the oscillatory-divergence gate and its
+ * false-positive guards; option/argument-shape edge cases; the Protected
+ * attribute; stress batches; and memory hygiene.
  *
  * Expected values are taken from closed forms where available, otherwise from
  * Mathematica's NumericalCalculus`NLimit documentation. Numerical results are
@@ -219,6 +220,97 @@ static void test_noise(void) {
 }
 
 /* ------------------------------------------------------------------------
+ *  Oscillatory divergence
+ *
+ *  An extrapolator returns a number for any input, including a sequence with
+ *  no limit, so NLimit checks that the oscillation envelope decays before
+ *  trusting one.  Every expression below oscillates with a non-decaying
+ *  envelope; each must stay unevaluated (NLimit::osc) rather than report the
+ *  extrapolant.  Before the gate existed these returned plausible-looking
+ *  numbers -- e.g. the first case yielded -5.28256.
+ * ---------------------------------------------------------------------- */
+
+/* True if `input` stays unevaluated, i.e. its head survives in the output. */
+static bool stays_unevaluated(const char* input, const char* head) {
+    char* s = eval_str(input);
+    bool ok = (strstr(s, head) != NULL);
+    if (!ok) fprintf(stderr, "  expected unevaluated %s..., got: %s\n", head, s);
+    free(s);
+    return ok;
+}
+
+#define ASSERT_UNEVALUATED(input) \
+    ASSERT_MSG(stays_unevaluated((input), "NLimit["), "%s must stay unevaluated", (input))
+
+/* The reported case: an amplitude-modulated oscillation of growing envelope. */
+#define OSC_REPORTED \
+    "(Cos[x^2]/(x^2) - Cos[(x+1)^2]/((x+1)^2))/(1/(x^3))"
+
+static void test_oscillatory_divergence(void) {
+    /* The four cases from the original report. */
+    ASSERT_UNEVALUATED("NLimit[" OSC_REPORTED ",x->Infinity]");
+    ASSERT_UNEVALUATED("NLimit[x Sin[x],x->Infinity]");
+    ASSERT_UNEVALUATED("NLimit[Sin[x] Sin[x^2],x->Infinity]");
+    ASSERT_UNEVALUATED("NLimit[Sin[1/x]/x,x->0]");
+
+    /* Bounded oscillation (envelope constant) -- no limit either. */
+    ASSERT_UNEVALUATED("NLimit[Sin[x],x->Infinity]");
+    ASSERT_UNEVALUATED("NLimit[Cos[x],x->Infinity]");
+    ASSERT_UNEVALUATED("NLimit[Sin[x^2],x->Infinity]");
+    ASSERT_UNEVALUATED("NLimit[2 + Sin[x],x->Infinity]");
+    ASSERT_UNEVALUATED("NLimit[Sin[1/x],x->0]");
+    ASSERT_UNEVALUATED("NLimit[Cos[1/x],x->0]");
+    /* Sin[Log[x]] oscillates so slowly that the default 7-octave sampling
+     * window cannot see it at all; the wide diagnostic ladder can. */
+    ASSERT_UNEVALUATED("NLimit[Sin[Log[x]],x->Infinity]");
+
+    /* Growing envelopes, from x^(1/4) up to x. */
+    ASSERT_UNEVALUATED("NLimit[x Cos[x],x->Infinity]");
+    ASSERT_UNEVALUATED("NLimit[Sqrt[x] Sin[x],x->Infinity]");
+    ASSERT_UNEVALUATED("NLimit[x^(1/4) Sin[x],x->Infinity]");
+    ASSERT_UNEVALUATED("NLimit[Log[x] Sin[x],x->Infinity]");
+}
+
+/* The verdict is a property of the expression, not of the sampling knobs: the
+ * diagnostic ladder is independent of Terms, Scale and Method. */
+static void test_oscillatory_is_option_independent(void) {
+    ASSERT_UNEVALUATED("NLimit[" OSC_REPORTED ",x->Infinity,Terms->5]");
+    ASSERT_UNEVALUATED("NLimit[" OSC_REPORTED ",x->Infinity,Terms->12]");
+    ASSERT_UNEVALUATED("NLimit[" OSC_REPORTED ",x->Infinity,Terms->20]");
+    ASSERT_UNEVALUATED("NLimit[" OSC_REPORTED ",x->Infinity,Scale->3]");
+    ASSERT_UNEVALUATED("NLimit[" OSC_REPORTED ",x->Infinity,Scale->1/8]");
+    ASSERT_UNEVALUATED("NLimit[" OSC_REPORTED ",x->Infinity,Method->EulerSum]");
+    ASSERT_UNEVALUATED("NLimit[" OSC_REPORTED ",x->Infinity,Method->SequenceLimit]");
+    ASSERT_UNEVALUATED("NLimit[" OSC_REPORTED ",x->Infinity,Method->\"Levin\"]");
+    /* MPFR path: the same gate runs at arbitrary precision. */
+    ASSERT_UNEVALUATED("NLimit[" OSC_REPORTED ",x->Infinity,WorkingPrecision->30]");
+    ASSERT_UNEVALUATED("NLimit[x Sin[x],x->Infinity,WorkingPrecision->40,Terms->12]");
+    /* ... and under a per-method head, which rebuilds the call. */
+    ASSERT_MSG(stays_unevaluated("NLimit`EulerSum[x Sin[x],x->Infinity]",
+                                 "NLimit`EulerSum["),
+               "the EulerSum head must refuse an oscillation too");
+}
+
+/* The gate must not fire on an oscillation whose envelope *does* decay: those
+ * limits exist and are still reported.  These are the false-positive guards. */
+static void test_oscillatory_false_positives(void) {
+    /* Decaying envelopes, from x^(-1/4) down to exponential -- all -> 0. */
+    ASSERT_CLOSE("NLimit[Sin[x]/x,x->Infinity]",       "0", 1e-1);
+    ASSERT_CLOSE("NLimit[Sin[x]/Sqrt[x],x->Infinity]", "0", 2e-1);
+    ASSERT_CLOSE("NLimit[Sin[x]/x^(1/4),x->Infinity]", "0", 5e-1);
+    ASSERT_CLOSE("NLimit[Sin[x]/x^2,x->Infinity]",     "0", 1e-2);
+    ASSERT_CLOSE("NLimit[Exp[-x] Sin[x],x->Infinity]", "0", 1e-9);
+    ASSERT_CLOSE("NLimit[x Sin[1/x],x->0]",            "0", 1e-1);
+    /* An oscillatory approach to a *nonzero* limit. */
+    ASSERT_CLOSE("NLimit[1 + Sin[x]/x,x->Infinity]",   "1", 1e-1);
+    /* Smooth limits are untouched: the reversal screen never fires, so these
+     * take exactly the path they took before the gate existed. */
+    ASSERT_CLOSE("NLimit[Sin[x]/x,x->0]",              "1", 1e-6);
+    ASSERT_CLOSE("NLimit[x Sin[1/x],x->Infinity]",     "1", 1e-8);
+    ASSERT_CLOSE("NLimit[Cos[1/x],x->Infinity]",       "1", 1e-8);
+}
+
+/* ------------------------------------------------------------------------
  *  Edge cases / unevaluated forms
  * ---------------------------------------------------------------------- */
 
@@ -350,6 +442,10 @@ static void test_memory_loop(void) {
         "NLimit[Tanh[Pi x]/(1+x^2),x->I]",
         "NLimit[(Exp[I x]-1)/x,x->0,WorkingPrecision->30]",
         "NLimit[1/x,x->0]",                    /* noise path */
+        /* the oscillation gate returns early from inside the variable binding,
+         * on both the machine and the MPFR path -- exercise both */
+        "NLimit[x Sin[x],x->Infinity]",
+        "NLimit[Sin[x] Sin[x^2],x->Infinity,WorkingPrecision->30]",
         "NLimit[z+Conjugate[z]/z,z->0,Direction->-I]",
         /* the per-method heads rebuild the call, so they get their own
          * ownership dance to exercise -- including the abstention path */
@@ -392,6 +488,9 @@ int main(void) {
     TEST(test_working_precision);
 
     TEST(test_noise);
+    TEST(test_oscillatory_divergence);
+    TEST(test_oscillatory_is_option_independent);
+    TEST(test_oscillatory_false_positives);
     TEST(test_unevaluated_forms);
     TEST(test_protected);
     TEST(test_method_heads);

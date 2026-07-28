@@ -395,11 +395,44 @@ limits and branch cuts).
 
 ### Robustness
 
-The last two extrapolates are compared against the *sample scale* (the largest
-`|S_k|`).  A divergent or non-settling sequence -- e.g. a power-law approach to
-infinity like `NLimit[1/x, x -> 0]` -- yields `NLimit::noise` and the form is
-returned unevaluated.  A bounded but only roughly-resolved limit is returned
-rather than refused, matching Mathematica.
+Two independent gates, each returning the form unevaluated when it fires.
+
+**Oscillatory divergence (`NLimit::osc`).**  A sequence acceleration returns a
+number for *any* input, including a sequence with no limit at all, so before
+trusting one `NLimit` checks that the oscillation envelope decays -- the
+property that distinguishes `Sin[x]/x` (limit `0`) from `x Sin[x]` (no limit).
+The check runs in two stages:
+
+1. *Screen.*  Count the direction reversals of the sample increments
+   `S_k − S_{k-1}`.  Monotone and smoothly-converging samples score zero and
+   skip stage 2, so an ordinary limit costs exactly what it did before.
+2. *Envelope.*  Over the default `Terms -> 7` sampling window a decaying and a
+   non-decaying envelope are indistinguishable, so the diagnosis uses its own
+   much wider ladder: 20 octaves sampled twice, at `Scale 2^k` and
+   `Scale φ 2^k` with `φ = (Sqrt[5] - 1)/2`.  The φ offset both doubles the
+   resolution and breaks the power-of-two aliasing that would otherwise hide a
+   function like `Sin[Pi x]`.  Writing `env` for the ratio of `max |f|` over the
+   half nearest the limit point to `max |f|` over the half furthest from it, a
+   verdict of `env > 0.6` refuses the limit.
+
+The verdict is therefore a property of the expression, not of `Terms`, `Scale`
+or `Method`.  It catches growing envelopes (`x Sin[x]`, `Sqrt[x] Sin[x]`,
+`Log[x] Sin[x]`), bounded ones (`Sin[x]`, `Cos[1/x]` as `x -> 0`,
+`Sin[x] Sin[x^2]`), and oscillations too slow for the sampling window to see at
+all (`Sin[Log[x]]`).  Oscillations whose envelope *does* decay keep their limit:
+`Sin[x]/x`, `Sin[x]/Sqrt[x]`, `Sin[x]/x^2`, `Exp[-x] Sin[x]`.
+
+Two known blind spots.  An envelope decaying slower than about `x^(-1/10)`
+across the diagnostic window cannot be told from a non-decaying one, and is
+refused -- the safer of the two errors.  And a function sampled exactly on its
+own zeros (`Sin[Pi x]`, whose samples at `x = 2^k` all vanish) presents no
+reversal for the screen to see.
+
+**Noise (`NLimit::noise`).**  The last two extrapolates are compared against the
+*sample scale* (the largest `|S_k|`).  A divergent or non-settling sequence --
+e.g. a power-law approach to infinity like `NLimit[1/x, x -> 0]` -- is returned
+unevaluated.  A bounded but only roughly-resolved limit is returned rather than
+refused, matching Mathematica.
 
 ### Beyond / unlike Mathematica's NLimit
 
@@ -413,6 +446,7 @@ rather than refused, matching Mathematica.
 
 | Message | When |
 |---------|------|
+| `NLimit::osc` | The sampled values oscillate with a non-decaying envelope, so no limit exists. |
 | `NLimit::noise` | Cannot recognise a limiting value (divergent / noisy sequence). |
 | `NLimit::notnum` | `expr` not numerical at a sample point, or the point/Direction/Scale is not numerical. |
 | `NLimit::ndterm` | Not enough `Terms` for the chosen `Method`. |
@@ -451,6 +485,13 @@ Out[9]= NLimit[1/x, x -> 0]
 
 In[10]:= NLimit[Sin[x]/x, x -> 0, Method -> "Levin"]
 Out[10]= 1.                                (Levin's u-transform; "LevinT"/"LevinV" select the t/v variants)
+
+In[11]:= NLimit[x Sin[x], x -> Infinity]
+         NLimit::osc: The sampled values oscillate with a non-decaying envelope; ...
+Out[11]= NLimit[x Sin[x], x -> Infinity]
+
+In[12]:= NLimit[Sin[x]/x, x -> Infinity]  (* same oscillation, decaying envelope *)
+Out[12]= 0.0142131
 ```
 
 

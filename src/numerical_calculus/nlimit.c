@@ -45,9 +45,17 @@
  *
  *   Robustness
  *   ----------
- *   The last two extrapolates are compared; if they fail to agree to a loose
- *   tolerance relative to the result magnitude (or the result is non-finite),
- *   NLimit::noise is emitted and the form is returned unevaluated.  As with
+ *   Two independent gates, both returning the form unevaluated when they fire.
+ *
+ *   Oscillatory divergence (NLimit::osc).  An extrapolator returns a number for
+ *   any input, including a sequence with no limit, so before trusting one we
+ *   check that the oscillation envelope actually decays: samples whose
+ *   increments keep reversing direction get a wide auxiliary ladder, and a
+ *   non-decaying envelope is refused.  See the NL_OSC_* block below.
+ *
+ *   Noise (NLimit::noise).  The last two extrapolates are compared; if they
+ *   fail to agree to a loose tolerance relative to the result magnitude (or the
+ *   result is non-finite), the form is returned unevaluated.  As with
  *   Mathematica, spurious tiny residuals are *not* recognised as zero — apply
  *   Chop when needed.
  *
@@ -114,6 +122,54 @@ static bool nl_accept(double result_mag, double step, double maxsample) {
     if (step > NL_NOISE_RELTOL * maxsample + NL_NOISE_ABSTOL) return false;
     return true;
 }
+
+/* Oscillatory-divergence gate.
+ * ---------------------------
+ * nl_accept only asks whether the *extrapolant* is plausible next to the sample
+ * scale.  It cannot ask whether the sample sequence converges at all, and the
+ * extrapolators happily return a number for a sequence that has no limit: e.g.
+ * (Cos[x^2]/x^2 - Cos[(x+1)^2]/(x+1)^2) x^3 at x -> Infinity, an amplitude-
+ * modulated oscillation of growing envelope, used to yield -5.28256.
+ *
+ * A limit exists only if the oscillation envelope decays, so that is what we
+ * measure.  Two stages:
+ *
+ *   1. Screen (free).  Count direction reversals of the increments
+ *      D_k = S_k - S_{k-1}; a reversal is Re(D_k conj(D_{k-1})) < 0.  Monotone
+ *      and smoothly-converging samples score 0 and skip stage 2 entirely, so
+ *      every ordinary limit costs exactly what it did before.
+ *
+ *   2. Envelope (only when the screen fires).  Over the default sampling window
+ *      of Terms=7 octaves a decaying and a non-decaying envelope are simply not
+ *      distinguishable, so the diagnosis gets its own, much wider ladder:
+ *      NL_OSC_OCTAVES octaves sampled twice, at Scale*2^k and Scale*phi*2^k.
+ *      Because 1/2 < phi < 1 the merged sequence is a deterministic alternation
+ *      (no sort needed), and the phi offset breaks the power-of-two aliasing
+ *      that hides e.g. Sin[Pi x].  With
+ *          env = (max |f| over the half nearest the limit point)
+ *              / (max |f| over the half furthest from it)
+ *      the measured separation over the regression battery is env <= 0.22 for
+ *      every limit that exists (worst: Sin[x]/x^(1/4) -> 0) against env >= 0.92
+ *      for every non-limit (worst: Sin[x] + Sin[Pi x]).  NL_OSC_ENV_MAX = 0.6
+ *      sits between them with ~2.7x and ~1.5x margin.
+ *
+ * The gate abstains -- never rejects -- when the ladder yields too few finite
+ * points, so overflow or underflow far from the limit point cannot manufacture
+ * a refusal.  Known blind spots: envelopes decaying slower than about x^(-1/10)
+ * across the window are indistinguishable from non-decaying ones (refusing is
+ * the safer error), and a sequence sampled exactly on its own zeros (Sin[Pi x])
+ * shows no reversal for the screen to see. */
+#define NL_OSC_OCTAVES        20
+#define NL_OSC_ENV_MAX        0.6
+#define NL_OSC_PHI            0.6180339887498949  /* (Sqrt[5]-1)/2, in (1/2, 1) */
+#define NL_OSC_MIN_REVERSALS  1
+/* Both ladders over at least half the window: a truncated ladder must still
+ * span enough octaves for the envelope ratio to mean anything. */
+#define NL_OSC_MIN_POINTS     (NL_OSC_OCTAVES)
+
+#define NL_OSC_MESSAGE                                                        \
+    "The sampled values oscillate with a non-decaying envelope; no limiting "  \
+    "value exists as the limit point is approached."
 
 static void nl_warn(const char* tag, const char* fmt, ...) {
     va_list ap;
@@ -398,6 +454,106 @@ static double nl_l1_d(const mpfr_t re, const mpfr_t im) {
 #endif /* USE_MPFR */
 
 /* ------------------------------------------------------------------ *
+ *  Oscillatory-divergence gate (see the NL_OSC_* block above)          *
+ * ------------------------------------------------------------------ */
+
+/* Number of times the sample-to-sample increment turns by more than 90 degrees.
+ * A monotone or smoothly-converging sequence scores 0. */
+static int nl_count_reversals(const double _Complex* S, int n) {
+    int rev = 0;
+    for (int k = 2; k < n; k++) {
+        double _Complex a = S[k] - S[k - 1];
+        double _Complex b = S[k - 1] - S[k - 2];
+        if (creal(a * conj(b)) < 0.0) rev++;
+    }
+    return rev;
+}
+
+/* mags[] holds |f| along the diagnostic ladder, ordered furthest-from ->
+ * nearest-to the limit point.  Stores the near/far envelope ratio and returns
+ * true, or returns false to abstain (too little usable data). */
+static bool nl_envelope_ratio(const double* mags, int n, double* out) {
+    if (n < NL_OSC_MIN_POINTS) return false;
+    int h = n / 2;
+    double far = 0.0, near = 0.0;
+    for (int i = 0; i < h; i++)     if (mags[i] > far)  far  = mags[i];
+    for (int i = n - h; i < n; i++) if (mags[i] > near) near = mags[i];
+    if (!isfinite(far) || !isfinite(near) || far <= 0.0) return false;
+    *out = near / far;
+    return true;
+}
+
+/* The k-th ladder point carries the factor phi on one of its two visits; taking
+ * phi first when marching outward and second when closing in on a finite point
+ * makes the merged sequence run furthest -> nearest without a sort. */
+static bool nl_osc_use_phi(bool infinite, int visit) {
+    return infinite ? (visit == 0) : (visit == 1);
+}
+
+/* True if the sampled function oscillates with a non-decaying envelope. */
+static bool nl_oscillates_machine(NlCtx* c, double _Complex z0,
+                                  double _Complex dir, double _Complex scale,
+                                  bool infinite) {
+    double mags[2 * NL_OSC_OCTAVES];
+    int n = 0;
+    for (int k = 0; k < NL_OSC_OCTAVES; k++) {
+        for (int visit = 0; visit < 2; visit++) {
+            double h = ldexp(1.0, infinite ? k : -k);
+            if (nl_osc_use_phi(infinite, visit)) h *= NL_OSC_PHI;
+            double _Complex z = infinite ? dir * scale * h
+                                         : z0 - dir * scale * h;
+            double _Complex v;
+            if (nl_sample_machine(c, z, &v)) mags[n++] = cabs(v);
+        }
+    }
+    double env;
+    if (!nl_envelope_ratio(mags, n, &env)) return false;
+    return env > NL_OSC_ENV_MAX;
+}
+
+#ifdef USE_MPFR
+/* MPFR analogue.  The ladder is evaluated at the caller's working precision --
+ * measuring the envelope of a high-precision integrand in machine-precision
+ * noise would be its own false-positive source -- but the ratio itself only
+ * needs a double.  (z0r, z0i) is the finite limit point and (dsr, dsi) the
+ * unit-direction * Scale product, exactly as in nl_run_mpfr's sampling loop. */
+static bool nl_oscillates_mpfr(NlCtx* c, const mpfr_t z0r, const mpfr_t z0i,
+                               const mpfr_t dsr, const mpfr_t dsi,
+                               bool infinite, long bits) {
+    mpfr_prec_t p = (mpfr_prec_t)bits;
+    mpfr_t zr, zi, hk, vr, vi, phi;
+    mpfr_inits2(p, zr, zi, hk, vr, vi, phi, (mpfr_ptr)0);
+    mpfr_set_d(phi, NL_OSC_PHI, MPFR_RNDN);
+
+    double mags[2 * NL_OSC_OCTAVES];
+    int n = 0;
+    for (int k = 0; k < NL_OSC_OCTAVES; k++) {
+        for (int visit = 0; visit < 2; visit++) {
+            mpfr_set_ui(hk, 1, MPFR_RNDN);
+            if (infinite) mpfr_mul_2ui(hk, hk, (unsigned long)k, MPFR_RNDN);
+            else          mpfr_div_2ui(hk, hk, (unsigned long)k, MPFR_RNDN);
+            if (nl_osc_use_phi(infinite, visit))
+                mpfr_mul(hk, hk, phi, MPFR_RNDN);
+            mpfr_mul(zr, dsr, hk, MPFR_RNDN);
+            mpfr_mul(zi, dsi, hk, MPFR_RNDN);
+            if (!infinite) {
+                mpfr_sub(zr, z0r, zr, MPFR_RNDN);
+                mpfr_sub(zi, z0i, zi, MPFR_RNDN);
+            }
+            if (nl_sample_mpfr(c, zr, zi, vr, vi))
+                mags[n++] = hypot(mpfr_get_d(vr, MPFR_RNDN),
+                                  mpfr_get_d(vi, MPFR_RNDN));
+        }
+    }
+    mpfr_clears(zr, zi, hk, vr, vi, phi, (mpfr_ptr)0);
+
+    double env;
+    if (!nl_envelope_ratio(mags, n, &env)) return false;
+    return env > NL_OSC_ENV_MAX;
+}
+#endif /* USE_MPFR */
+
+/* ------------------------------------------------------------------ *
  *  Options                                                            *
  * ------------------------------------------------------------------ */
 
@@ -594,10 +750,20 @@ static Expr* nl_run_machine(Expr* expr, const char* var, double _Complex z0,
         else          z = z0 - dir * scale * ldexp(1.0, -k); /* z0 - d*Scale*2^-k */
         if (!nl_sample_machine(&ctx, z, &S[k])) { ok = false; break; }
     }
+    /* The oscillation diagnosis samples expr too, so it must run while the
+     * variable is still bound -- before nl_bind_restore, not after. */
+    bool oscillatory = ok
+        && nl_count_reversals(S, terms) >= NL_OSC_MIN_REVERSALS
+        && nl_oscillates_machine(&ctx, z0, dir, scale, infinite);
     nl_bind_restore(&bind);
     if (!ok) {
         free(S);
         nl_warn("notnum", "the expression is not numerical at a sample point");
+        return NULL;
+    }
+    if (oscillatory) {
+        free(S);
+        nl_warn("osc", NL_OSC_MESSAGE);
         return NULL;
     }
 
@@ -770,6 +936,17 @@ static Expr* nl_run_mpfr(Expr* expr, const char* var, Expr* z0_expr,
         }
         if (!nl_sample_mpfr(&ctx, zr, zi, Sr[k], Si[k])) ok = false;
     }
+    /* Same ordering constraint as the machine path: diagnose before unbinding.
+     * The reversal screen is a sign test, so it reads the samples as doubles. */
+    bool oscillatory = false;
+    if (ok) {
+        double _Complex Sd[NL_MAX_TERMS];
+        for (int k = 0; k < terms; k++)
+            Sd[k] = mpfr_get_d(Sr[k], MPFR_RNDN)
+                  + mpfr_get_d(Si[k], MPFR_RNDN) * I;
+        oscillatory = nl_count_reversals(Sd, terms) >= NL_OSC_MIN_REVERSALS
+                   && nl_oscillates_mpfr(&ctx, z0r, z0i, dsr, dsi, infinite, bits);
+    }
     nl_bind_restore(&bind);
 
     double maxsample = 0.0;
@@ -781,7 +958,9 @@ static Expr* nl_run_mpfr(Expr* expr, const char* var, Expr* z0_expr,
     }
 
     Expr* out = NULL;
-    if (ok) {
+    if (ok && oscillatory) {
+        nl_warn("osc", NL_OSC_MESSAGE);
+    } else if (ok) {
         mpfr_t rr, ri;
         mpfr_init2(rr, p); mpfr_init2(ri, p);
         double step = 0.0;

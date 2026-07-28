@@ -1033,6 +1033,7 @@ target_include_directories(nseries_tests PRIVATE ../src ../src/numerical_calculu
 
 add_executable(nlimit_tests test_nlimit.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(nlimit_tests PRIVATE ../src ../src/numerical_calculus)
+add_test(NAME nlimit_tests COMMAND nlimit_tests)
 
 add_executable(nsum_tests test_nsum.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(nsum_tests PRIVATE ../src ../src/numerical_calculus)
