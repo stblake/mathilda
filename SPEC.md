@@ -318,7 +318,14 @@ cmake .. && make -j$(nproc)
 for t in *_tests; do ./$t; done
 
 valgrind --leak-check=full ./Mathilda
+
+make check-c99         # portability gate; see §10
 ```
+
+`make check-c99` runs `tools/check_math_constants.py`, which flags any POSIX
+`<math.h>` constant (`M_PI`, `M_E`, …) used without a C99 fallback. Those
+compile fine on macOS and fail on Linux, so this is worth running before a
+release even though it is not part of `make all`.
 
 The makefile auto-discovers `src/*.c`. GMP-ECM is linked by default when the
 system library is present (`USE_ECM=1`, autodetected); install it with
@@ -356,6 +363,8 @@ the baselines only after an *intended* performance change.
   functions (`strdup`, `getline`, `asprintf`, `popen`, `fileno`, …) without
   C99-safe fallbacks. `<math.h>` constants like `M_PI` are POSIX, not C99 —
   guard with `#ifndef M_PI` fallbacks (see `src/trig.c`, `src/numeric.c`).
+  macOS exposes these implicitly, so an unguarded use compiles locally and
+  breaks only on Linux; `make check-c99` catches it before it ships.
 - **Memory safety.** Trace ownership; valgrind regularly. See §4.
 - **GMP-ECM is a system dependency**, not vendored — do not re-add it to the
   tree.

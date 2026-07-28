@@ -366,7 +366,13 @@ docs-build:
 docs-serve:
 	mkdocs serve -f site/mkdocs.yml
 
-.PHONY: all clean docs docs-build docs-serve
+# Portability gate: catch POSIX <math.h> constants (M_PI, M_E, ...) used
+# without a C99 fallback. glibc hides them under -std=c99, so these break the
+# Linux build while compiling cleanly on macOS, which exposes them implicitly.
+check-c99:
+	python3 tools/check_math_constants.py
+
+.PHONY: all clean docs docs-build docs-serve check-c99
 
 # Pull in the auto-generated header dependencies. The leading `-` silences the
 # "no such file" notice on a fresh tree (no .d files exist until the first
