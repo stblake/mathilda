@@ -1,7 +1,7 @@
 /*
  * regex_init.c - registration of the regular-expression string builtins.
  *
- * Registers RegularExpression (an inert pattern head) and the four regex-aware
+ * Registers RegularExpression (an inert pattern head) and the regex-aware
  * string functions.  None are Listable: each hand-threads over a list of
  * subject strings so the pattern/rule argument is never threaded (matching the
  * StringReplacePart / Replace precedent).  Docstrings live in info.c.
@@ -21,6 +21,19 @@ static void register_inert(const char* name, const char* doc) {
     if (doc) symtab_set_docstring(name, doc);
 }
 
+/* Options[name] = {IgnoreCase -> False, Overlaps -> overlaps_default}. Each
+ * builtin seeds its option state from these defaults (so SetOptions works) and
+ * lets explicit trailing options in the call override them. */
+static void register_scan_options(const char* name, const char* overlaps_default) {
+    Expr* ic = expr_new_function(expr_new_symbol(SYM_Rule),
+        (Expr*[]){ expr_new_symbol(SYM_IgnoreCase), expr_new_symbol(SYM_False) }, 2);
+    Expr* ov = expr_new_function(expr_new_symbol(SYM_Rule),
+        (Expr*[]){ expr_new_symbol(SYM_Overlaps), expr_new_symbol(overlaps_default) }, 2);
+    Expr* opts = expr_new_function(expr_new_symbol(SYM_List),
+        (Expr*[]){ ic, ov }, 2);
+    symtab_set_options(name, opts);
+}
+
 void regex_init(void) {
     symtab_add_builtin("RegularExpression", builtin_regularexpression);
     symtab_get_def("RegularExpression")->attributes |= ATTR_PROTECTED;
@@ -30,6 +43,11 @@ void regex_init(void) {
 
     symtab_add_builtin("StringCases", builtin_stringcases);
     symtab_get_def("StringCases")->attributes |= ATTR_PROTECTED;
+    register_scan_options("StringCases", SYM_False);
+
+    symtab_add_builtin("StringCount", builtin_stringcount);
+    symtab_get_def("StringCount")->attributes |= ATTR_PROTECTED;
+    register_scan_options("StringCount", SYM_False);
 
     symtab_add_builtin("StringReplace", builtin_stringreplace);
     symtab_get_def("StringReplace")->attributes |= ATTR_PROTECTED;
@@ -61,18 +79,9 @@ void regex_init(void) {
 
     symtab_add_builtin("StringPosition", builtin_stringposition);
     symtab_get_def("StringPosition")->attributes |= ATTR_PROTECTED;
-    /* Options[StringPosition] = {IgnoreCase -> False, Overlaps -> True}. The
-     * builtin seeds its option state from these defaults (so SetOptions works)
-     * and lets explicit trailing options override. */
-    {
-        Expr* ic = expr_new_function(expr_new_symbol(SYM_Rule),
-            (Expr*[]){ expr_new_symbol(SYM_IgnoreCase), expr_new_symbol(SYM_False) }, 2);
-        Expr* ov = expr_new_function(expr_new_symbol(SYM_Rule),
-            (Expr*[]){ expr_new_symbol(SYM_Overlaps), expr_new_symbol(SYM_True) }, 2);
-        Expr* opts = expr_new_function(expr_new_symbol(SYM_List),
-            (Expr*[]){ ic, ov }, 2);
-        symtab_set_options("StringPosition", opts);
-    }
+    /* StringPosition defaults to Overlaps -> True, unlike StringCases and
+     * StringCount, which default to False. This matches Wolfram Language. */
+    register_scan_options("StringPosition", SYM_True);
 
     /* Inert protected heads understood by the string-pattern translator
      * (string_pattern.c). StringExpression (the ~~ operator's head) is Flat so

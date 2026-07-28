@@ -3,14 +3,16 @@
 
 /*
  * regex_common.h - Expr-aware helpers shared by the regex string builtins
- * (StringMatchQ / StringCases / StringReplace / StringSplit).
+ * (StringMatchQ / StringCases / StringCount / StringReplace / StringSplit /
+ * StringPosition).
  *
  * This layer sits above the pure PCRE2 wrapper (regex_engine.h): it turns a
  * Mathilda pattern argument (RegularExpression[...], a literal string, a
- * Rule/RuleDelayed, or a List of those) into an array of compiled rules, and
- * provides $n replacement-template expansion and a small growable string
- * buffer.  It compiles unconditionally; when PCRE2 is absent every build fails
- * cleanly via regex_available().
+ * Rule/RuleDelayed, or a List of those) into an array of compiled rules,
+ * enumerates the matches of that rule set under an Overlaps policy, and
+ * provides $n replacement-template expansion, trailing-option decoding, and a
+ * small growable string buffer.  It compiles unconditionally; when PCRE2 is
+ * absent every build fails cleanly via regex_available().
  */
 
 #include <stddef.h>
@@ -83,6 +85,66 @@ char* regex_expand_template(const char* tpl, const char* subj,
  */
 char* regex_rule_replacement(const RegexRule* r, const char* subj,
                              const size_t* ov, size_t npairs);
+
+/* ------------------------------------------------------------------ */
+/* Shared match scanner                                               */
+/* ------------------------------------------------------------------ */
+
+/*
+ * How overlapping matches are treated, mirroring the Overlaps option of
+ * StringCases / StringCount / StringPosition.
+ *
+ *   REGEX_OV_TRUE   Overlapping substrings count separately, but only the first
+ *                   (natural, leftmost-longest per the engine) match starting at
+ *                   each position is reported.
+ *   REGEX_OV_FALSE  No overlaps: greedy left-to-right, each match resumes the
+ *                   scan at the end of the previous one.
+ *   REGEX_OV_ALL    Every matching substring at every start, all lengths. The
+ *                   caller MUST have built `rules` anchored (\A(?:...)\z), since
+ *                   this mode tests whole candidate substrings.
+ */
+typedef enum { REGEX_OV_TRUE = 0, REGEX_OV_FALSE = 1, REGEX_OV_ALL = 2 }
+        RegexOverlapMode;
+
+/*
+ * One recorded match. [ms, me) are half-open BYTE offsets into the subject;
+ * `rule` is the index of the RegexRule that produced it (so a caller can find
+ * the matching rule's rhs). When the scan was asked for captures,
+ * caps[caps_off .. caps_off + 2*npairs) holds that match's capture offsets in
+ * the same (start, end) layout regex_match writes, always subject-relative and
+ * therefore directly usable with regex_expand_template; npairs is 0 otherwise.
+ */
+typedef struct { size_t ms, me; int rule; size_t caps_off, npairs; } RegexSpan;
+
+/* Result of one scan. Zero-initialise (RegexScan s = {0};) and release with
+ * regex_scan_free(). `caps` is NULL unless captures were requested. */
+typedef struct { RegexSpan* spans; size_t count; size_t* caps; } RegexScan;
+
+/*
+ * Enumerate the matches of `rules` (nr of them) in subj[0, len) under `mode`,
+ * writing them to *out ordered by start offset. Ties at the same start keep
+ * rule order. This is the single shared implementation behind StringCases,
+ * StringCount and StringPosition, so those three agree by construction.
+ *
+ * `want_captures` nonzero allocates the capture pool (only callers that expand
+ * $n replacement templates need it; leaving it 0 makes a pure-counting scan
+ * allocate nothing per match beyond the span array).
+ *
+ * Returns the match count (>= 0), or -1 on allocation failure. A successful
+ * result must be released with regex_scan_free().
+ */
+long regex_scan(const char* subj, size_t len, RegexRule* rules, int nr,
+                RegexOverlapMode mode, int want_captures, RegexScan* out);
+void regex_scan_free(RegexScan* s);
+
+/*
+ * Recognise a trailing option Rule/RuleDelayed[opt_sym, value] and decode its
+ * value into *value: with `overlaps` nonzero, the RegexOverlapMode (All ->
+ * REGEX_OV_ALL, False -> REGEX_OV_FALSE, anything else -> REGEX_OV_TRUE);
+ * otherwise a boolean, 1 iff the value is the symbol True. Returns 1 when `e`
+ * is an option for `opt_sym`, 0 when it is not (and *value is untouched).
+ */
+int regex_match_opt(const Expr* e, const char* opt_sym, int* value, int overlaps);
 
 /* Small growable byte buffer used to assemble result strings. Zero-initialise
  * (RegexBuf b = {0};) and release with free(b.p). */

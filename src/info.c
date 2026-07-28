@@ -3882,8 +3882,31 @@ void info_init(void) {
         "StringCases[\"string\", patt -> rhs]\n"
         "\tGives the rhs for each match, with $n replaced by the n-th captured\n"
         "\tgroup and $0 by the whole match.\n"
+        "StringCases[\"string\", {p1, p2, ...}]\n"
+        "\tGives the matches of any of the pi.\n"
         "StringCases[{s1, s2, ...}, patt]\n"
-        "\tGives the list of results for each of the si.");
+        "\tGives the list of results for each of the si.\n\n"
+        "\tOptions: Overlaps -> False (default; overlapping substrings are not\n"
+        "\ttreated as separate), True (overlaps separate, one substring per\n"
+        "\tstart), or All (every matching substring at every start);\n"
+        "\tIgnoreCase -> True treats upper/lowercase as equivalent.");
+
+    symtab_set_docstring("StringCount",
+        "StringCount[\"string\", \"sub\"]\n"
+        "\tGives the number of times \"sub\" appears as a substring of \"string\".\n"
+        "StringCount[\"string\", patt]\n"
+        "\tGives the number of substrings of \"string\" matching the string\n"
+        "\texpression patt.\n"
+        "StringCount[\"string\", {p1, p2, ...}]\n"
+        "\tCounts the occurrences of any of the pi.\n"
+        "StringCount[{s1, s2, ...}, patt]\n"
+        "\tGives the list of results for each of the si.\n\n"
+        "\tEquivalent to Length[StringCases[...]] but does not build the\n"
+        "\tmatched substrings. Options: Overlaps -> False (default; overlapping\n"
+        "\tsubstrings are not counted as separate), True (overlaps counted\n"
+        "\tseparately, one substring per start), or All (every matching\n"
+        "\tsubstring at every start); IgnoreCase -> True treats upper/lowercase\n"
+        "\tas equivalent.");
 
     symtab_set_docstring("StringReplace",
         "StringReplace[\"string\", patt -> rep]\n"

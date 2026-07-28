@@ -165,6 +165,238 @@ void regex_rules_free(RegexRule* rules, int n) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Shared match scanner                                               */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Accumulator for one scan: the growable span array plus the optional flat
+ * capture pool.  Spans index the pool by offset rather than pointer so that
+ * growing the pool never invalidates already-recorded spans.
+ */
+typedef struct {
+    RegexSpan* spans;
+    size_t     count, cap;
+    size_t*    caps;
+    size_t     caps_len, caps_cap;
+    int        want_captures;
+} ScanState;
+
+/*
+ * Record one match.  `ov` holds `pairs` (start, end) offset pairs as written by
+ * regex_match, relative to `base` (nonzero only in the All mode, which matches
+ * against subj + p); they are rebased so the pool is always subject-relative.
+ * Returns 0, or -1 on allocation failure.
+ */
+static int scan_push(ScanState* st, size_t ms, size_t me, int rule,
+                     const size_t* ov, size_t pairs, size_t base) {
+    if (st->count == st->cap) {
+        size_t nc = st->cap ? st->cap * 2 : 16;
+        RegexSpan* ns = realloc(st->spans, nc * sizeof(RegexSpan));
+        if (!ns) return -1;
+        st->spans = ns;
+        st->cap = nc;
+    }
+
+    size_t off = 0, np = 0;
+    if (st->want_captures && ov && pairs) {
+        np = pairs;
+        if (st->caps_len + 2 * np > st->caps_cap) {
+            size_t nc = st->caps_cap ? st->caps_cap : 32;
+            while (nc < st->caps_len + 2 * np) nc *= 2;
+            size_t* ncaps = realloc(st->caps, nc * sizeof(size_t));
+            if (!ncaps) return -1;
+            st->caps = ncaps;
+            st->caps_cap = nc;
+        }
+        off = st->caps_len;
+        for (size_t k = 0; k < 2 * np; k++)
+            st->caps[off + k] =
+                (ov[k] == REGEX_UNSET) ? REGEX_UNSET : ov[k] + base;
+        st->caps_len += 2 * np;
+    }
+
+    st->spans[st->count].ms       = ms;
+    st->spans[st->count].me       = me;
+    st->spans[st->count].rule     = rule;
+    st->spans[st->count].caps_off = off;
+    st->spans[st->count].npairs   = np;
+    st->count++;
+    return 0;
+}
+
+/*
+ * Offset pairs to request per rule: the whole match plus every capture group,
+ * clamped to the range we expose ($0..$63).  Computed once per scan -- All-mode
+ * probes O(len^2 * nr) substrings, so querying the group count inside that loop
+ * would be pure overhead.  Returns a malloc'd array, or NULL on failure.
+ */
+static size_t* scan_pairs_table(RegexRule* rules, int nr) {
+    size_t* pairs = malloc((size_t)nr * sizeof(size_t));
+    if (!pairs) return NULL;
+    for (int i = 0; i < nr; i++) {
+        int gc = regex_group_count(rules[i].prog) + 1;
+        pairs[i] = (gc > REGEX_MAX_PAIRS) ? (size_t)REGEX_MAX_PAIRS : (size_t)gc;
+    }
+    return pairs;
+}
+
+/*
+ * Overlaps -> False.  Streaming left-to-right: at each position take the match
+ * with the smallest start across all rules (ties broken by rule order), then
+ * resume at its end.  Zero-width matches advance by one so the loop always
+ * makes progress.
+ */
+static int scan_false(const char* subj, size_t len, RegexRule* rules, int nr,
+                      const size_t* pairs, ScanState* st) {
+    size_t pos = 0;
+    while (pos <= len) {
+        int found = 0, best_rule = 0;
+        size_t best_ms = 0, best_me = 0, best_pairs = 0;
+        size_t best_ov[REGEX_MAX_PAIRS * 2];
+
+        for (int i = 0; i < nr; i++) {
+            size_t ov[REGEX_MAX_PAIRS * 2];
+            if (regex_match(rules[i].prog, subj, len, pos, ov, pairs[i]) != 1)
+                continue;
+            if (!found || ov[0] < best_ms) {
+                found = 1;
+                best_rule = i;
+                best_ms = ov[0];
+                best_me = ov[1];
+                best_pairs = pairs[i];
+                memcpy(best_ov, ov, sizeof(size_t) * 2 * pairs[i]);
+            }
+        }
+        if (!found) break;
+
+        if (scan_push(st, best_ms, best_me, best_rule, best_ov, best_pairs, 0) != 0)
+            return -1;
+        pos = (best_me > best_ms) ? best_me : best_ms + 1;   /* progress */
+    }
+    return 0;
+}
+
+/*
+ * Overlaps -> True.  Per rule independently, the leftmost match at or after each
+ * position, advancing by one past the match START so every distinct match start
+ * is enumerated.
+ */
+static int scan_true(const char* subj, size_t len, RegexRule* rules, int nr,
+                     const size_t* pairs, ScanState* st) {
+    for (int i = 0; i < nr; i++) {
+        size_t pos = 0;
+        while (pos <= len) {
+            size_t ov[REGEX_MAX_PAIRS * 2];
+            if (regex_match(rules[i].prog, subj, len, pos, ov, pairs[i]) != 1) break;
+            if (scan_push(st, ov[0], ov[1], i, ov, pairs[i], 0) != 0) return -1;
+            pos = ov[0] + 1;   /* past the match start (overlap-friendly) */
+        }
+    }
+    return 0;
+}
+
+/*
+ * Overlaps -> All.  Every matching substring at every start: for each start p
+ * ascending and end e descending, test an exact match of subj[p, e).  The rules
+ * are anchored (\A(?:...)\z) by the caller, so a match means the pattern covers
+ * [p, e) exactly.
+ */
+static int scan_all(const char* subj, size_t len, RegexRule* rules, int nr,
+                    const size_t* pairs, ScanState* st) {
+    for (size_t p = 0; p < len; p++) {
+        for (size_t e = len; e > p; e--) {
+            for (int i = 0; i < nr; i++) {
+                size_t ov[REGEX_MAX_PAIRS * 2];
+                if (regex_match(rules[i].prog, subj + p, e - p, 0, ov, pairs[i]) != 1)
+                    continue;
+                if (scan_push(st, p, e, i, ov, pairs[i], p) != 0) return -1;
+            }
+        }
+    }
+    return 0;
+}
+
+/* Stable insertion sort by start offset (ties keep discovery order: rule index,
+ * then match order). qsort is not stable, and the input is nearly sorted -- it
+ * is a concatenation of per-rule ascending runs -- so this is close to linear. */
+static void scan_stable_sort(RegexSpan* a, size_t n) {
+    for (size_t i = 1; i < n; i++) {
+        RegexSpan key = a[i];
+        size_t j = i;
+        while (j > 0 && a[j - 1].ms > key.ms) { a[j] = a[j - 1]; j--; }
+        a[j] = key;
+    }
+}
+
+long regex_scan(const char* subj, size_t len, RegexRule* rules, int nr,
+                RegexOverlapMode mode, int want_captures, RegexScan* out) {
+    ScanState st;
+    memset(&st, 0, sizeof st);
+    st.want_captures = want_captures;
+
+    out->spans = NULL;
+    out->count = 0;
+    out->caps  = NULL;
+
+    size_t* pairs = scan_pairs_table(rules, nr);
+    if (!pairs) return -1;
+
+    int rc;
+    if (mode == REGEX_OV_ALL)        rc = scan_all(subj, len, rules, nr, pairs, &st);
+    else if (mode == REGEX_OV_FALSE) rc = scan_false(subj, len, rules, nr, pairs, &st);
+    else                             rc = scan_true(subj, len, rules, nr, pairs, &st);
+    free(pairs);
+
+    if (rc != 0) {                  /* OOM mid-scan: *out stays the zeroed state */
+        free(st.spans);
+        free(st.caps);
+        return -1;
+    }
+
+    /* The False and All scans already emit in ascending start order; only the
+     * True scan concatenates one run per rule and needs merging. */
+    if (mode == REGEX_OV_TRUE && nr > 1) scan_stable_sort(st.spans, st.count);
+
+    out->spans = st.spans;
+    out->count = st.count;
+    out->caps  = st.caps;
+    return (long)st.count;
+}
+
+void regex_scan_free(RegexScan* s) {
+    if (!s) return;
+    free(s->spans);
+    free(s->caps);
+    s->spans = NULL;
+    s->caps  = NULL;
+    s->count = 0;
+}
+
+int regex_match_opt(const Expr* e, const char* opt_sym, int* value, int overlaps) {
+    if (e->type != EXPR_FUNCTION ||
+        e->data.function.head->type != EXPR_SYMBOL ||
+        (e->data.function.head->data.symbol.name != SYM_Rule &&
+         e->data.function.head->data.symbol.name != SYM_RuleDelayed) ||
+        e->data.function.arg_count != 2 ||
+        e->data.function.args[0]->type != EXPR_SYMBOL ||
+        e->data.function.args[0]->data.symbol.name != opt_sym)
+        return 0;
+
+    Expr* v = e->data.function.args[1];
+    if (overlaps) {
+        if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_All)
+            *value = REGEX_OV_ALL;
+        else if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False)
+            *value = REGEX_OV_FALSE;
+        else
+            *value = REGEX_OV_TRUE;
+    } else {
+        *value = (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True);
+    }
+    return 1;
+}
+
+/* ------------------------------------------------------------------ */
 /* Public: $n template expansion                                      */
 /* ------------------------------------------------------------------ */
 

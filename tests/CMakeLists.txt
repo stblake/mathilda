@@ -487,6 +487,7 @@ set(COMMON_SRC
     ../src/strings/regex/regularexpression.c
     ../src/strings/regex/stringmatchq.c
     ../src/strings/regex/stringcases.c
+    ../src/strings/regex/stringcount.c
     ../src/strings/regex/stringreplace.c
     ../src/strings/regex/stringposition.c
     ../src/strings/regex/regex_init.c
@@ -2383,6 +2384,15 @@ else()
 endif()
 add_test(NAME stringposition_tests COMMAND stringposition_tests)
 
+add_executable(stringcount_tests test_stringcount.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(stringcount_tests PRIVATE ../src ../src/strings ../src/strings/regex)
+if(USE_ECM)
+    target_link_libraries(stringcount_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(stringcount_tests gmp m)
+endif()
+add_test(NAME stringcount_tests COMMAND stringcount_tests)
+
 add_executable(stringrepeat_tests test_stringrepeat.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(stringrepeat_tests PRIVATE ../src ../src/strings ../src/strings/regex)
 if(USE_ECM)
@@ -2700,6 +2710,7 @@ if(USE_ECM)
     add_dependencies(stringfns_tests build_ecm)
     add_dependencies(stringpartition_tests build_ecm)
     add_dependencies(stringposition_tests build_ecm)
+    add_dependencies(stringcount_tests build_ecm)
     add_dependencies(stringrepeat_tests build_ecm)
     add_dependencies(stringpad_tests build_ecm)
     add_dependencies(stringriffle_tests build_ecm)

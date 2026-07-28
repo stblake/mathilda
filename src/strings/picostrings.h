@@ -30,6 +30,7 @@ Expr* builtin_stringriffle(Expr* res);
 Expr* builtin_regularexpression(Expr* res);
 Expr* builtin_stringmatchq(Expr* res);
 Expr* builtin_stringcases(Expr* res);
+Expr* builtin_stringcount(Expr* res);
 Expr* builtin_stringreplace(Expr* res);
 Expr* builtin_stringsplit(Expr* res);
 Expr* builtin_stringtrim(Expr* res);

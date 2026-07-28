@@ -1,18 +1,33 @@
 /*
  * stringcases.c - StringCases[subject, pattern]
  *
- * Returns a List of the non-overlapping substrings of `subject` that match
- * `pattern`, left to right.  With a rule pattern (patt -> rhs / patt :> rhs)
- * each match is replaced by the rhs, with $0/$1... expanded to the whole match
- * and capture groups.  The pattern may also be a List of alternatives/rules;
- * at each position the leftmost match wins, ties broken by rule order.  A list
- * of subjects threads.
+ * Returns a List of the substrings of `subject` that match `pattern`, left to
+ * right.  With a rule pattern (patt -> rhs / patt :> rhs) each match is replaced
+ * by the rhs, with $0/$1... expanded to the whole match and capture groups.  The
+ * pattern may also be a List of alternatives/rules; at each position the
+ * leftmost match wins, ties broken by rule order.  A list of subjects threads.
+ *
+ * Options:
+ *   Overlaps -> False (default) | True | All
+ *     False - non-overlapping, greedy left-to-right.
+ *     True  - overlapping substrings count separately, but only the first match
+ *             starting at each position.
+ *     All   - every matching substring at every start (all lengths).
+ *   IgnoreCase -> True | False (default)
+ *     Treat upper/lowercase as equivalent.
+ *
+ * The match enumeration itself is regex_scan() in regex_common.c, shared with
+ * StringCount and StringPosition, so StringCount[s, p, opts] always equals
+ * Length[StringCases[s, p, opts]].
  */
 
 #include "picostrings.h"
 #include "regex_common.h"
 #include "sym_names.h"
+#include "symtab.h"
+#include "common.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 /* New EXPR_STRING from subj[s..e). */
@@ -27,95 +42,124 @@ static Expr* substr_expr(const char* subj, size_t s, size_t e) {
     return r;
 }
 
-static Expr* sc_scalar(const char* subj, RegexRule* rules, int nr) {
-    size_t len = strlen(subj);
-    Expr** items = NULL;
-    size_t count = 0, cap = 0;
+/*
+ * Collect the matches for one subject string.  `want_captures` is set by the
+ * caller when any rule carries a replacement RHS, so a pure-extraction call
+ * never pays for the capture pool.  Returns a fresh List[...], or NULL on OOM.
+ */
+static Expr* sc_scalar(const char* subj, RegexRule* rules, int nr,
+                       RegexOverlapMode mode, int want_captures) {
+    RegexScan scan;
+    if (regex_scan(subj, strlen(subj), rules, nr, mode, want_captures, &scan) < 0)
+        return NULL;
 
-    size_t pos = 0;
-    while (pos <= len) {
-        int found = 0, best_rule = 0;
-        size_t best_ms = 0, best_me = 0, best_pairs = 0;
-        size_t best_ov[REGEX_MAX_PAIRS * 2];
+    Expr** items = malloc(sizeof(Expr*) * (scan.count ? scan.count : 1));
+    if (!items) { regex_scan_free(&scan); return NULL; }
 
-        for (int i = 0; i < nr; i++) {
-            int gc = regex_group_count(rules[i].prog) + 1;
-            size_t pairs = (gc > REGEX_MAX_PAIRS) ? REGEX_MAX_PAIRS : (size_t)gc;
-            size_t ov[REGEX_MAX_PAIRS * 2];
-            if (regex_match(rules[i].prog, subj, len, pos, ov, pairs) == 1) {
-                if (!found || ov[0] < best_ms) {
-                    found = 1;
-                    best_rule = i;
-                    best_ms = ov[0];
-                    best_me = ov[1];
-                    best_pairs = pairs;
-                    memcpy(best_ov, ov, sizeof(size_t) * 2 * pairs);
-                }
-            }
-        }
-        if (!found) break;
-
-        Expr* item;
-        if (rules[best_rule].rhs) {
-            char* rep = regex_rule_replacement(&rules[best_rule], subj,
-                                               best_ov, best_pairs);
+    for (size_t k = 0; k < scan.count; k++) {
+        RegexSpan* sp = &scan.spans[k];
+        Expr* item = NULL;
+        if (rules[sp->rule].rhs && scan.caps) {
+            char* rep = regex_rule_replacement(&rules[sp->rule], subj,
+                                               scan.caps + sp->caps_off,
+                                               sp->npairs);
             if (rep) { item = expr_new_string(rep); free(rep); }
-            else     { item = substr_expr(subj, best_ms, best_me); }
-        } else {
-            item = substr_expr(subj, best_ms, best_me);
         }
-
-        if (count == cap) {
-            cap = cap ? cap * 2 : 8;
-            Expr** ni = realloc(items, cap * sizeof(Expr*));
-            if (!ni) { expr_free(item); break; }
-            items = ni;
-        }
-        items[count++] = item;
-
-        pos = (best_me > best_ms) ? best_me : best_ms + 1;   /* progress */
+        /* Bare pattern, or a rule whose RHS we cannot expand: the match itself. */
+        items[k] = item ? item : substr_expr(subj, sp->ms, sp->me);
     }
 
-    Expr* result = expr_new_function(expr_new_symbol(SYM_List), items, count);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), items, scan.count);
     free(items);
+    regex_scan_free(&scan);
     return result;
 }
 
 Expr* builtin_stringcases(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2)
-        return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    Expr** a = res->data.function.args;
 
-    Expr* arg0 = res->data.function.args[0];
-    Expr* patt = res->data.function.args[1];
+    if (argc == 0) return builtin_arg_error("StringCases", 0, 2, 2);
 
+    /* Seed option state from the registered defaults (so SetOptions[StringCases,
+     * ...] takes effect), then let explicit trailing options override below.
+     * Defaults are {IgnoreCase -> False, Overlaps -> False}. */
+    int caseless = 0;
+    RegexOverlapMode mode = REGEX_OV_FALSE;
+    Expr* defs = symtab_get_options("StringCases");   /* borrowed */
+    if (defs && defs->type == EXPR_FUNCTION) {
+        for (size_t i = 0; i < defs->data.function.arg_count; i++) {
+            int v;
+            if (regex_match_opt(defs->data.function.args[i], SYM_IgnoreCase, &v, 0))
+                caseless = v;
+            else if (regex_match_opt(defs->data.function.args[i], SYM_Overlaps, &v, 1))
+                mode = (RegexOverlapMode)v;
+        }
+    }
+
+    /* Strip trailing IgnoreCase / Overlaps options, leaving positional args. */
+    size_t pargc = argc;
+    while (pargc >= 2) {
+        int v;
+        if (regex_match_opt(a[pargc - 1], SYM_IgnoreCase, &v, 0)) {
+            caseless = v; pargc--;
+        } else if (regex_match_opt(a[pargc - 1], SYM_Overlaps, &v, 1)) {
+            mode = (RegexOverlapMode)v; pargc--;
+        } else {
+            break;
+        }
+    }
+    /* Too few positional args is a genuine arity error. Extra ones are not: the
+     * WL occurrence-limit form StringCases["s", patt, n] is simply unsupported
+     * here, and claiming "2 arguments are expected" would misdescribe it, so it
+     * is left unevaluated silently (as StringCases has always done). */
+    if (pargc < 2) return builtin_arg_error("StringCases", argc, 2, 2);
+    if (pargc > 2) return NULL;
+
+    Expr* subject = a[0];
+    Expr* patt = a[1];
+
+    /* All-mode enumerates exact-substring matches, so build anchored rules. */
+    int anchored = (mode == REGEX_OV_ALL) ? 1 : 0;
     RegexRule* rules;
-    int nr = regex_rules_build(patt, /*anchored=*/0, &rules, "StringCases");
+    int nr = regex_rules_build_ex(patt, anchored, caseless, &rules, "StringCases");
     if (nr < 0) return NULL;
 
-    if (arg0->type == EXPR_FUNCTION &&
-        arg0->data.function.head->type == EXPR_SYMBOL &&
-        arg0->data.function.head->data.symbol.name == SYM_List) {
-        size_t n = arg0->data.function.arg_count;
-        Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
+    /* Capture offsets are only needed to expand a rule's $n template. */
+    int want_captures = 0;
+    for (int i = 0; i < nr; i++) if (rules[i].rhs) { want_captures = 1; break; }
+
+    Expr* result;
+    if (subject->type == EXPR_FUNCTION &&
+        subject->data.function.head->type == EXPR_SYMBOL &&
+        subject->data.function.head->data.symbol.name == SYM_List) {
+        size_t m = subject->data.function.arg_count;
+        Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
         if (!out) { regex_rules_free(rules, nr); return NULL; }
-        for (size_t i = 0; i < n; i++) {
-            Expr* si = arg0->data.function.args[i];
-            out[i] = (si->type == EXPR_STRING)
-                         ? sc_scalar(si->data.string, rules, nr)
-                         : expr_copy(si);
+        size_t built = 0;
+        for (; built < m; built++) {
+            Expr* si = subject->data.function.args[built];
+            Expr* one = (si->type == EXPR_STRING)
+                            ? sc_scalar(si->data.string, rules, nr, mode, want_captures)
+                            : expr_copy(si);
+            if (!one) break;                     /* OOM: unwind and bail out */
+            out[built] = one;
         }
-        Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, n);
+        if (built < m) {                         /* partial: free and leave unevaluated */
+            for (size_t k = 0; k < built; k++) expr_free(out[k]);
+            free(out);
+            regex_rules_free(rules, nr);
+            return NULL;
+        }
+        result = expr_new_function(expr_new_symbol(SYM_List), out, m);
         free(out);
-        regex_rules_free(rules, nr);
-        return result;
+    } else if (subject->type == EXPR_STRING) {
+        result = sc_scalar(subject->data.string, rules, nr, mode, want_captures);
+    } else {
+        result = NULL;   /* non-string subject: leave unevaluated */
     }
 
-    if (arg0->type != EXPR_STRING) {
-        regex_rules_free(rules, nr);
-        return NULL;
-    }
-
-    Expr* result = sc_scalar(arg0->data.string, rules, nr);
     regex_rules_free(rules, nr);
     return result;
 }

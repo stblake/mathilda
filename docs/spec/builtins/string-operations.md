@@ -396,9 +396,17 @@ Extracts the substrings of a string that match a pattern.
   match `patt`, from left to right.
 - `StringCases["string", patt -> rhs]`: the `rhs` for each match, with `$n`
   replaced by the n-th captured group and `$0` by the whole match.
-- `StringCases[{s1, s2, ...}, patt]`: gives the list of results for each `si`.
+- `StringCases[{s1, s2, ...}, patt]`: gives the list of results for each `si`;
+  non-string elements pass through unchanged.
 - `patt` may be `RegularExpression["re"]`, a literal string, or a list of
   patterns/rules (leftmost match wins, ties broken by order).
+- **Options** (`Options[StringCases]` → `{IgnoreCase -> False, Overlaps ->
+  False}`; `SetOptions` changes the defaults): `Overlaps -> False` (default)
+  does not treat overlapping substrings as separate; `Overlaps -> True` counts
+  overlaps but keeps only the first matching substring at each start;
+  `Overlaps -> All` gives every matching substring at every start.
+  `IgnoreCase -> True` folds case. An explicit option in the call overrides the
+  registered default.
 - **Attributes**: `Protected`.
 
 ```mathematica
@@ -407,6 +415,63 @@ Out[1]= {"3", "b", "2", "c", "7", "3", "2"}
 
 In[2]:= StringCases["AaBBccDDeefG", RegularExpression["[[:upper:]]+"]]
 Out[2]= {"A", "BB", "DD", "G"}
+
+In[3]:= StringCases["AAAA", "AA", Overlaps -> True]
+Out[3]= {"AA", "AA", "AA"}
+
+In[4]:= StringCases["AAA", x__, Overlaps -> All]
+Out[4]= {"AAA", "AA", "A", "AA", "A", "A"}
+
+In[5]:= StringCases["aAbB", "a", IgnoreCase -> True]
+Out[5]= {"a", "A"}
+```
+
+## StringCount
+
+Counts the substrings of a string that match a pattern — the counting-only
+companion of `StringCases`, running the same match enumeration but without
+building the matched substrings.
+
+- `StringCount["string", "sub"]`: the number of times `"sub"` appears as a
+  substring of `"string"`.
+- `StringCount["string", patt]`: the number of substrings of `"string"` that
+  match the general string expression `patt`.
+- `StringCount["string", {p1, p2, ...}]`: counts occurrences of any of the `pi`.
+- `StringCount[{s1, s2, ...}, patt]`: gives the list of results for each `si`;
+  non-string elements pass through unchanged.
+- `patt` may also be a `Rule` or `RuleDelayed` — only the left-hand side matters,
+  since a replacement cannot change a count.
+- **Options** (`Options[StringCount]` → `{IgnoreCase -> False, Overlaps ->
+  False}`; `SetOptions` changes the defaults): identical in meaning to the
+  `StringCases` options above.
+- Equal to `Length[StringCases[...]]` for every pattern and option setting: both
+  builtins, and `StringPosition`, share one scanner (`regex_scan` in
+  `src/strings/regex/regex_common.c`).
+- A non-string, non-list subject leaves the call unevaluated; an arity other
+  than two positional arguments emits `StringCount::argrx`.
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringCount["the cat sat on the mat", "at"]
+Out[1]= 3
+
+In[2]:= StringCount["AAAA", "AA"]
+Out[2]= 2
+
+In[3]:= StringCount["AAAA", "AA", Overlaps -> True]
+Out[3]= 3
+
+In[4]:= StringCount["AAAA", x__, Overlaps -> All]
+Out[4]= 10
+
+In[5]:= StringCount[{"a1", "b22", "ccc"}, DigitCharacter]
+Out[5]= {1, 2, 0}
+
+In[6]:= StringCount["aAbB", "a", IgnoreCase -> True]
+Out[6]= 2
+
+In[7]:= StringCount["x=1.5, y=-2", NumberString]
+Out[7]= 2
 ```
 
 ## StringReplace

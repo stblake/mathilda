@@ -82,6 +82,53 @@ static void test_cases_thread(void) {
                    "{{\"1\"}, {\"22\"}}", 0);
 }
 
+/* Overlaps / IgnoreCase, shared with StringCount and StringPosition via
+ * regex_scan().  Exhaustive coverage lives in test_stringcount.c; these guard
+ * the StringCases-specific bits, in particular that $n replacement templates
+ * still resolve when the scan carries capture offsets. */
+static void test_cases_overlaps(void) {
+    /* The default is Overlaps -> False: non-overlapping, left to right. */
+    assert_eval_eq("StringCases[\"AAAA\", \"AA\"]", "{\"AA\", \"AA\"}", 0);
+    assert_eval_eq("StringCases[\"AAAA\", \"AA\", Overlaps -> True]",
+                   "{\"AA\", \"AA\", \"AA\"}", 0);
+    assert_eval_eq("StringCases[\"AAA\", x__, Overlaps -> All]",
+                   "{\"AAA\", \"AA\", \"A\", \"AA\", \"A\", \"A\"}", 0);
+}
+
+static void test_cases_ignorecase(void) {
+    assert_eval_eq("StringCases[\"aAbB\", \"a\", IgnoreCase -> True]",
+                   "{\"a\", \"A\"}", 0);
+    assert_eval_eq("StringCases[\"aAbB\", \"a\", IgnoreCase -> False]", "{\"a\"}", 0);
+    assert_eval_eq("StringCases[\"ABC\", \"b\" -> \"X\", IgnoreCase -> True]",
+                   "{\"X\"}", 0);
+}
+
+static void test_cases_rule_with_options(void) {
+    /* $0 (whole match) under an overlapping scan. */
+    assert_eval_eq("StringCases[\"AAAA\", \"AA\" -> \"$0!\", Overlaps -> True]",
+                   "{\"AA!\", \"AA!\", \"AA!\"}", 0);
+    /* Numbered capture groups survive the shared capture pool. */
+    assert_eval_eq("StringCases[\"a1b22\", "
+                   "RegularExpression[\"([a-z])(\\\\d+)\"] -> \"$2$1\"]",
+                   "{\"1a\", \"22b\"}", 0);
+    /* ... including in the All policy, where matches are found against
+     * substrings and the capture offsets must be rebased to the subject. */
+    assert_eval_eq("StringCases[\"ab\", "
+                   "RegularExpression[\"([a-z])\"] -> \"<$1>\", Overlaps -> All]",
+                   "{\"<a>\", \"<b>\"}", 0);
+}
+
+static void test_cases_arity(void) {
+    /* Below the required arity: StringCases::argrx, call left unevaluated. */
+    assert_eval_eq("StringCases[]", "StringCases[]", 0);
+    assert_eval_eq("StringCases[\"abc\"]", "StringCases[\"abc\"]", 0);
+    /* The WL occurrence-limit form is unsupported: silently unevaluated, with
+     * no (misleading) "2 arguments are expected" message. */
+    assert_eval_eq("StringCases[\"aaa\", \"a\", 2]", "StringCases[\"aaa\", \"a\", 2]", 0);
+    /* Non-string subject leaves the call unevaluated. */
+    assert_eval_eq("StringCases[123, \"a\"]", "StringCases[123, \"a\"]", 0);
+}
+
 /* ============================ StringMatchQ ============================= */
 
 static void test_matchq_basic(void) {
@@ -389,6 +436,10 @@ int main(void) {
     TEST(test_cases_inline_option);
     TEST(test_cases_empty);
     TEST(test_cases_thread);
+    TEST(test_cases_overlaps);
+    TEST(test_cases_ignorecase);
+    TEST(test_cases_rule_with_options);
+    TEST(test_cases_arity);
 
     TEST(test_matchq_basic);
     TEST(test_matchq_newline);
