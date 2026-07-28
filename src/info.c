@@ -3875,6 +3875,59 @@ void info_init(void) {
         "\tpatt may be RegularExpression[\"re\"], a literal string, or a list of\n"
         "\talternatives.");
 
+    symtab_set_docstring("StringContainsQ",
+        "StringContainsQ[\"string\", patt]\n"
+        "\tGives True if any substring of \"string\" matches the string\n"
+        "\texpression patt, and False otherwise.\n"
+        "StringContainsQ[\"string\", {p1, p2, ...}]\n"
+        "\tGives True if any substring matches any of the pi.\n"
+        "StringContainsQ[{s1, s2, ...}, patt]\n"
+        "\tGives the list of results for each of the si.\n"
+        "StringContainsQ[patt]\n"
+        "\tRepresents an operator form that can be applied to a string.\n\n"
+        "\tEquivalent to !StringFreeQ[\"string\", patt], and to\n"
+        "\tStringMatchQ[\"string\", ___ ~~ patt ~~ ___].\n"
+        "\tOptions: IgnoreCase -> True treats upper/lowercase as equivalent.");
+
+    symtab_set_docstring("StringFreeQ",
+        "StringFreeQ[\"string\", patt]\n"
+        "\tGives True if no substring of \"string\" matches the string\n"
+        "\texpression patt, and False otherwise.\n"
+        "StringFreeQ[\"string\", {p1, p2, ...}]\n"
+        "\tGives True if no substring matches any of the pi.\n"
+        "StringFreeQ[{s1, s2, ...}, patt]\n"
+        "\tGives the list of results for each of the si.\n"
+        "StringFreeQ[patt]\n"
+        "\tRepresents an operator form that can be applied to a string.\n\n"
+        "\tEquivalent to !StringContainsQ[\"string\", patt].\n"
+        "\tOptions: IgnoreCase -> True treats upper/lowercase as equivalent.");
+
+    symtab_set_docstring("StringStartsQ",
+        "StringStartsQ[\"string\", patt]\n"
+        "\tGives True if a prefix of \"string\" matches the string expression\n"
+        "\tpatt, and False otherwise.\n"
+        "StringStartsQ[\"string\", {p1, p2, ...}]\n"
+        "\tGives True if a prefix matches any of the pi.\n"
+        "StringStartsQ[{s1, s2, ...}, patt]\n"
+        "\tGives the list of results for each of the si.\n"
+        "StringStartsQ[patt]\n"
+        "\tRepresents an operator form that can be applied to a string.\n\n"
+        "\tEquivalent to StringContainsQ[\"string\", StartOfString ~~ patt].\n"
+        "\tOptions: IgnoreCase -> True treats upper/lowercase as equivalent.");
+
+    symtab_set_docstring("StringEndsQ",
+        "StringEndsQ[\"string\", patt]\n"
+        "\tGives True if a suffix of \"string\" matches the string expression\n"
+        "\tpatt, and False otherwise.\n"
+        "StringEndsQ[\"string\", {p1, p2, ...}]\n"
+        "\tGives True if a suffix matches any of the pi.\n"
+        "StringEndsQ[{s1, s2, ...}, patt]\n"
+        "\tGives the list of results for each of the si.\n"
+        "StringEndsQ[patt]\n"
+        "\tRepresents an operator form that can be applied to a string.\n\n"
+        "\tEquivalent to StringContainsQ[\"string\", patt ~~ EndOfString].\n"
+        "\tOptions: IgnoreCase -> True treats upper/lowercase as equivalent.");
+
     symtab_set_docstring("StringCases",
         "StringCases[\"string\", patt]\n"
         "\tGives the list of non-overlapping substrings of \"string\" that match\n"

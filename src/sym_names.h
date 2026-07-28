@@ -636,6 +636,12 @@ extern const char* SYM_StringPadLeft;
 extern const char* SYM_StringPadRight;
 extern const char* SYM_StringRiffle;
 extern const char* SYM_StringCount;
+/* The substring-predicate family; each builds its own head back into a
+ * Function[...] for the operator (curried) form. */
+extern const char* SYM_StringContainsQ;
+extern const char* SYM_StringFreeQ;
+extern const char* SYM_StringStartsQ;
+extern const char* SYM_StringEndsQ;
 /* String-pattern (StringExpression) heads and the IgnoreCase option, used by the
  * regex string family (StringSplit / StringCases / StringCount / StringReplace /
  * StringMatchQ). */
@@ -646,6 +652,8 @@ extern const char* SYM_WordCharacter;
 extern const char* SYM_LetterCharacter;
 extern const char* SYM_DigitCharacter;
 extern const char* SYM_NumberString;
+extern const char* SYM_StartOfString;
+extern const char* SYM_EndOfString;
 extern const char* SYM_IgnoreCase;
 extern const char* SYM_Overlaps;
 extern const char* SYM_SubresultantPolynomialRemainders;

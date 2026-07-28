@@ -490,6 +490,7 @@ set(COMMON_SRC
     ../src/strings/regex/stringcount.c
     ../src/strings/regex/stringreplace.c
     ../src/strings/regex/stringposition.c
+    ../src/strings/regex/stringcontainsq.c
     ../src/strings/regex/regex_init.c
     ../src/calculus/series.c
     ../src/calculus/deriv.c
@@ -2393,6 +2394,15 @@ else()
 endif()
 add_test(NAME stringcount_tests COMMAND stringcount_tests)
 
+add_executable(stringcontainsq_tests test_stringcontainsq.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(stringcontainsq_tests PRIVATE ../src ../src/strings ../src/strings/regex)
+if(USE_ECM)
+    target_link_libraries(stringcontainsq_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(stringcontainsq_tests gmp m)
+endif()
+add_test(NAME stringcontainsq_tests COMMAND stringcontainsq_tests)
+
 add_executable(stringrepeat_tests test_stringrepeat.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(stringrepeat_tests PRIVATE ../src ../src/strings ../src/strings/regex)
 if(USE_ECM)
@@ -2711,6 +2721,7 @@ if(USE_ECM)
     add_dependencies(stringpartition_tests build_ecm)
     add_dependencies(stringposition_tests build_ecm)
     add_dependencies(stringcount_tests build_ecm)
+    add_dependencies(stringcontainsq_tests build_ecm)
     add_dependencies(stringrepeat_tests build_ecm)
     add_dependencies(stringpad_tests build_ecm)
     add_dependencies(stringriffle_tests build_ecm)

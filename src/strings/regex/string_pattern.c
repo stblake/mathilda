@@ -13,6 +13,8 @@
  *   DigitCharacter                [[:digit:]]
  *   WordCharacter                 [[:alnum:]]
  *   NumberString                  [+-]?(?:\d+\.?\d*|\.\d+)
+ *   StartOfString                 \A             (zero-width, start of subject)
+ *   EndOfString                   \z             (zero-width, end of subject)
  *   StringExpression[a, b, ...]   concatenation  (a ~~ b ~~ ...)
  *   Alternatives[a, b, ...]       (?:a|b|...)    (a | b | ...)
  *   {a, b, ...}                    alternatives (a nested list in a pattern)
@@ -192,6 +194,11 @@ static char* sp_to_regex(Expr* patt, SpCtx* ctx) {
         if (patt->data.symbol.name == SYM_WordCharacter)       return sp_strdup("[[:alnum:]]");
         if (patt->data.symbol.name == SYM_NumberString)
             return sp_strdup("[+-]?(?:\\d+\\.?\\d*|\\.\\d+)");
+        /* Zero-width anchors. \A / \z are absolute (unlike ^ / $, they ignore
+         * multiline mode), so StartOfString ~~ p pins p to offset 0 even for an
+         * unanchored search, which is what StringStartsQ relies on. */
+        if (patt->data.symbol.name == SYM_StartOfString)       return sp_strdup("\\A");
+        if (patt->data.symbol.name == SYM_EndOfString)         return sp_strdup("\\z");
         return NULL;
     }
 

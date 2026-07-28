@@ -388,6 +388,130 @@ In[2]:= StringMatchQ[{"12", "x"}, RegularExpression["\\d+"]]
 Out[2]= {True, False}
 ```
 
+## StringContainsQ
+
+Tests whether *any substring* of a string matches a pattern. Where
+`StringMatchQ` anchors to the whole string, `StringContainsQ` searches inside
+it.
+
+- `StringContainsQ["string", patt]`: `True` if some substring matches `patt`,
+  else `False`.
+- `StringContainsQ["string", {p1, p2, ...}]`: `True` if some substring matches
+  any of the `pi` — equivalent to `StringContainsQ["string", p1 | p2 | ...]`.
+  An empty list matches nothing.
+- `StringContainsQ[{s1, s2, ...}, patt]`: gives the list of results for each
+  `si`. A non-string subject — or a subject list holding one — leaves the call
+  unevaluated rather than passing the element through.
+- `StringContainsQ[patt]`: the operator form, applicable to a string or a list
+  of strings. A curried `IgnoreCase` option is carried through.
+- Equivalent to `!StringFreeQ["string", patt]` and to
+  `StringMatchQ["string", ___ ~~ patt ~~ ___]`.
+- **Options** (`Options[StringContainsQ]` → `{IgnoreCase -> False}`;
+  `SetOptions` changes the default): `IgnoreCase -> True` folds case. An
+  explicit option in the call overrides the registered default.
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringContainsQ["bcde", "b" ~~ __ ~~ "e"]
+Out[1]= True
+
+In[2]:= StringContainsQ[{"a", "b", "ab", "abcd", "bcde"}, "a"]
+Out[2]= {True, False, True, True, False}
+
+In[3]:= StringContainsQ["bac 123", RegularExpression["a.*"] ~~ DigitCharacter ..]
+Out[3]= True
+
+In[4]:= StringContainsQ["abcd", "BC", IgnoreCase -> True]
+Out[4]= True
+
+In[5]:= Select[{"abc", "xyz", "bat"}, StringContainsQ["a"]]
+Out[5]= {"abc", "bat"}
+```
+
+## StringFreeQ
+
+Tests whether *no substring* of a string matches a pattern — the negation of
+`StringContainsQ`, sharing its implementation.
+
+- `StringFreeQ["string", patt]`: `True` if no substring matches `patt`, else
+  `False`.
+- `StringFreeQ["string", {p1, p2, ...}]`: `True` if no substring matches any of
+  the `pi`.
+- `StringFreeQ[{s1, s2, ...}, patt]`: gives the list of results for each `si`.
+- `StringFreeQ[patt]`: the operator form.
+- **Options**: `IgnoreCase -> True` folds case (default `False`).
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringFreeQ["abcd", "a"]
+Out[1]= False
+
+In[2]:= StringFreeQ["abcade", x_ ~~ x_]
+Out[2]= True
+
+In[3]:= StringFreeQ[{"ability", "listable", "argument"}, "a" ~~ __ ~~ "t" ~~ ___]
+Out[3]= {False, True, False}
+
+In[4]:= StringFreeQ["ac", IgnoreCase -> True]["BACCD"]
+Out[4]= False
+```
+
+## StringStartsQ
+
+Tests whether a *prefix* of a string matches a pattern.
+
+- `StringStartsQ["string", patt]`: `True` if `"string"` begins with a substring
+  matching `patt`.
+- `StringStartsQ["string", {p1, p2, ...}]`: `True` if it begins with a match of
+  any of the `pi`.
+- `StringStartsQ[{s1, s2, ...}, patt]`: gives the list of results for each `si`.
+- `StringStartsQ[patt]`: the operator form.
+- Equivalent to `StringContainsQ["string", StartOfString ~~ patt]`.
+- **Options**: `IgnoreCase -> True` folds case (default `False`).
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringStartsQ["commit", "co"]
+Out[1]= True
+
+In[2]:= StringStartsQ["commit", "om"]
+Out[2]= False
+
+In[3]:= StringStartsQ[{"apple", "banana"}, "a"]
+Out[3]= {True, False}
+
+In[4]:= StringStartsQ["a123", LetterCharacter ~~ DigitCharacter ..]
+Out[4]= True
+```
+
+## StringEndsQ
+
+Tests whether a *suffix* of a string matches a pattern.
+
+- `StringEndsQ["string", patt]`: `True` if `"string"` ends with a substring
+  matching `patt`.
+- `StringEndsQ["string", {p1, p2, ...}]`: `True` if it ends with a match of any
+  of the `pi`.
+- `StringEndsQ[{s1, s2, ...}, patt]`: gives the list of results for each `si`.
+- `StringEndsQ[patt]`: the operator form.
+- Equivalent to `StringContainsQ["string", patt ~~ EndOfString]`.
+- **Options**: `IgnoreCase -> True` folds case (default `False`).
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringEndsQ["commit", "it"]
+Out[1]= True
+
+In[2]:= StringEndsQ["commit", "mi"]
+Out[2]= False
+
+In[3]:= StringEndsQ[{"apple", "banana"}, "a"]
+Out[3]= {False, True}
+
+In[4]:= StringEndsQ["a123", DigitCharacter ..]
+Out[4]= True
+```
+
 ## StringCases
 
 Extracts the substrings of a string that match a pattern.
@@ -774,8 +898,9 @@ Out[4]= "{a: 27, b: 28, c: 29}"
 ## String patterns
 
 Beyond `RegularExpression["re"]` and literal strings, `StringMatchQ`,
-`StringCases`, `StringReplace`, and `StringSplit` share a translator
-(`string_pattern.c`) that turns symbolic Wolfram string patterns into PCRE:
+`StringCases`, `StringReplace`, `StringSplit`, and the substring predicates
+(`StringContainsQ` and friends) share a translator (`string_pattern.c`) that
+turns symbolic Wolfram string patterns into PCRE:
 
 | Pattern | Matches |
 |---------|---------|
@@ -783,6 +908,7 @@ Beyond `RegularExpression["re"]` and literal strings, `StringMatchQ`,
 | `WhitespaceCharacter` | one whitespace character |
 | `LetterCharacter` / `DigitCharacter` / `WordCharacter` | one letter / digit / letter-or-digit |
 | `NumberString` | a signed integer or decimal number |
+| `StartOfString` / `EndOfString` | zero-width; the start / end of the whole string (`\A` / `\z`) |
 | `p1 ~~ p2 ~~ ...` (`StringExpression`) | `p1`, then `p2`, ... in sequence |
 | `p1 \| p2` (`Alternatives`) | any of the alternatives |
 | `p ..` / `p ...` (`Repeated` / `RepeatedNull`) | one-or-more / zero-or-more of `p` |

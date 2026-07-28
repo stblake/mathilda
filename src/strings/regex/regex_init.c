@@ -34,6 +34,16 @@ static void register_scan_options(const char* name, const char* overlaps_default
     symtab_set_options(name, opts);
 }
 
+/* Options[name] = {IgnoreCase -> False}.  The substring predicates take no
+ * Overlaps option (a Boolean answer does not depend on the overlap policy), so
+ * they get this one-option sibling of register_scan_options. */
+static void register_ignorecase_option(const char* name) {
+    Expr* ic = expr_new_function(expr_new_symbol(SYM_Rule),
+        (Expr*[]){ expr_new_symbol(SYM_IgnoreCase), expr_new_symbol(SYM_False) }, 2);
+    Expr* opts = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ ic }, 1);
+    symtab_set_options(name, opts);
+}
+
 void regex_init(void) {
     symtab_add_builtin("RegularExpression", builtin_regularexpression);
     symtab_get_def("RegularExpression")->attributes |= ATTR_PROTECTED;
@@ -83,6 +93,25 @@ void regex_init(void) {
      * StringCount, which default to False. This matches Wolfram Language. */
     register_scan_options("StringPosition", SYM_True);
 
+    /* The substring predicates.  StringFreeQ is the negation of
+     * StringContainsQ; StringStartsQ / StringEndsQ are the one-end-anchored
+     * variants.  All four share one core in stringcontainsq.c. */
+    symtab_add_builtin("StringContainsQ", builtin_stringcontainsq);
+    symtab_get_def("StringContainsQ")->attributes |= ATTR_PROTECTED;
+    register_ignorecase_option("StringContainsQ");
+
+    symtab_add_builtin("StringFreeQ", builtin_stringfreeq);
+    symtab_get_def("StringFreeQ")->attributes |= ATTR_PROTECTED;
+    register_ignorecase_option("StringFreeQ");
+
+    symtab_add_builtin("StringStartsQ", builtin_stringstartsq);
+    symtab_get_def("StringStartsQ")->attributes |= ATTR_PROTECTED;
+    register_ignorecase_option("StringStartsQ");
+
+    symtab_add_builtin("StringEndsQ", builtin_stringendsq);
+    symtab_get_def("StringEndsQ")->attributes |= ATTR_PROTECTED;
+    register_ignorecase_option("StringEndsQ");
+
     /* Inert protected heads understood by the string-pattern translator
      * (string_pattern.c). StringExpression (the ~~ operator's head) is Flat so
      * a ~~ b ~~ c collapses to StringExpression[a, b, c]. */
@@ -98,6 +127,10 @@ void regex_init(void) {
         "WordCharacter\n\tA string pattern matching a single letter or digit.");
     register_inert("NumberString",
         "NumberString\n\tA string pattern matching a signed integer or decimal number.");
+    register_inert("StartOfString",
+        "StartOfString\n\tA zero-width string pattern matching the start of the whole string.");
+    register_inert("EndOfString",
+        "EndOfString\n\tA zero-width string pattern matching the end of the whole string.");
     register_inert("IgnoreCase", NULL);
     register_inert("Overlaps", NULL);
 
