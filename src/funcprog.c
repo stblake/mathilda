@@ -32,6 +32,13 @@ static int64_t get_depth(Expr* e) {
     return max_d + 1;
 }
 
+/* The Infinity sentinel used for an unbounded upper level. */
+#define LEVEL_SPEC_INF 1000000
+
+/* Lenient level-spec parser: anything it does not recognise (including
+ * {n, Infinity}) silently leaves the caller's defaults in place. Used by
+ * Map / Apply / MapAll, which have always behaved this way; Scan and
+ * MapIndexed use parse_level_spec_strict below instead. */
 static LevelSpec parse_level_spec(Expr* ls, int64_t default_min, int64_t default_max) {
     LevelSpec spec = {default_min, default_max, false};
     if (!ls) return spec;
@@ -39,10 +46,10 @@ static LevelSpec parse_level_spec(Expr* ls, int64_t default_min, int64_t default
     if (ls->type == EXPR_INTEGER) {
         spec.min = 1;
         spec.max = ls->data.integer;
-    } else if (ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol.name == SYM_List) {
+    } else if (head_is(ls, SYM_List)) {
         if (ls->data.function.arg_count == 1 && ls->data.function.args[0]->type == EXPR_INTEGER) {
             spec.min = spec.max = ls->data.function.args[0]->data.integer;
-        } else if (ls->data.function.arg_count == 2 && 
+        } else if (ls->data.function.arg_count == 2 &&
                    ls->data.function.args[0]->type == EXPR_INTEGER &&
                    ls->data.function.args[1]->type == EXPR_INTEGER) {
             spec.min = ls->data.function.args[0]->data.integer;
@@ -50,17 +57,74 @@ static LevelSpec parse_level_spec(Expr* ls, int64_t default_min, int64_t default
         }
     } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_Infinity) {
         spec.min = 1;
-        spec.max = 1000000; 
+        spec.max = LEVEL_SPEC_INF;
     }
     return spec;
+}
+
+/* Parse one level bound: an integer yields its value; Infinity yields
+ * +LEVEL_SPEC_INF. Returns false for anything else. */
+static bool level_bound(Expr* e, int64_t* out) {
+    if (e->type == EXPR_INTEGER) { *out = e->data.integer; return true; }
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity) {
+        *out = LEVEL_SPEC_INF;
+        return true;
+    }
+    return false;
+}
+
+/* Strict level-spec parser, shared by Scan and MapIndexed. Unlike
+ * parse_level_spec it accepts Infinity in *either* slot of a two-element spec
+ * (e.g. {0, Infinity}) and, crucially, reports failure instead of silently
+ * falling back to a default — so an unrecognised spec leaves the call
+ * unevaluated rather than quietly mapping somewhere else. Map / Apply /
+ * MapAll deliberately still use the lenient parser above.
+ *
+ * Accepts n, {n}, {n1,n2} (each bound integer or Infinity), and Infinity.
+ * Default (ls == NULL) is {1, 1}; `heads` is always reset here so the
+ * subsequent parse_options call is the single source of that flag. */
+static bool parse_level_spec_strict(Expr* ls, LevelSpec* spec) {
+    spec->min = 1;
+    spec->max = 1;
+    spec->heads = false;
+    if (!ls) return true;
+
+    if (ls->type == EXPR_INTEGER) {          /* n -> {1, n} */
+        spec->min = 1;
+        spec->max = ls->data.integer;
+        return true;
+    }
+    if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_Infinity) {
+        spec->min = 1;                        /* Infinity -> {1, Infinity} */
+        spec->max = LEVEL_SPEC_INF;
+        return true;
+    }
+    if (head_is(ls, SYM_List)) {
+        size_t n = ls->data.function.arg_count;
+        if (n == 1) {                         /* {n} -> {n, n} */
+            int64_t v;
+            if (level_bound(ls->data.function.args[0], &v)) {
+                spec->min = spec->max = v;
+                return true;
+            }
+        } else if (n == 2) {                  /* {n1, n2} */
+            int64_t a, b;
+            if (level_bound(ls->data.function.args[0], &a) &&
+                level_bound(ls->data.function.args[1], &b)) {
+                spec->min = a;
+                spec->max = b;
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 static void parse_options(Expr* res, size_t start_idx, LevelSpec* spec) {
     for (size_t i = start_idx; i < res->data.function.arg_count; i++) {
         Expr* opt = res->data.function.args[i];
-        if (opt->type == EXPR_FUNCTION && opt->data.function.head->data.symbol.name == SYM_Rule) {
-            if (opt->data.function.arg_count == 2 && 
-                opt->data.function.args[0]->type == EXPR_SYMBOL &&
+        if (head_is(opt, SYM_Rule) && opt->data.function.arg_count == 2) {
+            if (opt->data.function.args[0]->type == EXPR_SYMBOL &&
                 opt->data.function.args[0]->data.symbol.name == SYM_Heads) {
                 if (opt->data.function.args[1]->type == EXPR_SYMBOL &&
                     opt->data.function.args[1]->data.symbol.name == SYM_True) {
@@ -120,7 +184,7 @@ Expr* builtin_apply(Expr* res) {
     Expr* expr = res->data.function.args[1];
 
     Expr* ls = (res->data.function.arg_count >= 3) ? res->data.function.args[2] : NULL;
-    if (ls && ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol.name == SYM_Rule) ls = NULL;
+    if (head_is(ls, SYM_Rule)) ls = NULL;   /* option in the level-spec slot */
 
     /* Apply[f, assoc] uses the association's values as f's arguments:
      * f @@ <|k1 -> v1, ...|> is f[v1, ...] (matching Wolfram, and consistent
@@ -239,7 +303,7 @@ Expr* builtin_map(Expr* res) {
     }
 
     Expr* ls = (res->data.function.arg_count >= 3) ? res->data.function.args[2] : NULL;
-    if (ls && ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol.name == SYM_Rule) ls = NULL;
+    if (head_is(ls, SYM_Rule)) ls = NULL;   /* option in the level-spec slot */
 
     LevelSpec spec = parse_level_spec(ls, 1, 1);
     parse_options(res, ls ? 3 : 2, &spec);
@@ -549,7 +613,7 @@ Expr* builtin_map_all(Expr* res) {
     Expr* f = res->data.function.args[0];
     Expr* expr = res->data.function.args[1];
     
-    LevelSpec spec = {0, 1000000, false}; // {0, Infinity}
+    LevelSpec spec = {0, LEVEL_SPEC_INF, false}; // {0, Infinity}
     parse_options(res, 2, &spec);
 
     /* NDArray is atomic; materialize to a nested list so f is applied at every
@@ -823,64 +887,10 @@ Expr* builtin_catch(Expr* res) {
  * Scan value ret). Over an association at the default level, scans the values.
  *
  * These helpers mirror Map's LevelSpec/get_depth/parse_options machinery above.
- * A dedicated level-spec parser is used (rather than the shared
- * parse_level_spec) so Scan can accept Infinity in either slot of a two-element
- * spec (e.g. {0, Infinity}) without altering Map/Apply. */
-
-#define SCAN_LEVEL_INF 1000000  /* Infinity sentinel, matching parse_level_spec */
-
-/* Parse one level bound: an integer yields its value; Infinity yields
- * +SCAN_LEVEL_INF. Returns false for anything else. */
-static bool scan_bound(Expr* e, int64_t* out) {
-    if (e->type == EXPR_INTEGER) { *out = e->data.integer; return true; }
-    if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity) {
-        *out = SCAN_LEVEL_INF;
-        return true;
-    }
-    return false;
-}
-
-/* Parse a Scan level specification into *spec (heads left untouched here).
- * Accepts n, {n}, {n1,n2} (each bound integer or Infinity), and Infinity.
- * Default (ls == NULL) is {1, 1}. Returns false for an unrecognized spec so
- * the caller can leave Scan unevaluated. */
-static bool scan_parse_spec(Expr* ls, LevelSpec* spec) {
-    spec->min = 1;
-    spec->max = 1;
-    spec->heads = false;
-    if (!ls) return true;
-
-    if (ls->type == EXPR_INTEGER) {          /* n -> {1, n} */
-        spec->min = 1;
-        spec->max = ls->data.integer;
-        return true;
-    }
-    if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_Infinity) {
-        spec->min = 1;                        /* Infinity -> {1, Infinity} */
-        spec->max = SCAN_LEVEL_INF;
-        return true;
-    }
-    if (ls->type == EXPR_FUNCTION && ls->data.function.head->type == EXPR_SYMBOL &&
-        ls->data.function.head->data.symbol.name == SYM_List) {
-        size_t n = ls->data.function.arg_count;
-        if (n == 1) {                         /* {n} -> {n, n} */
-            int64_t v;
-            if (scan_bound(ls->data.function.args[0], &v)) {
-                spec->min = spec->max = v;
-                return true;
-            }
-        } else if (n == 2) {                  /* {n1, n2} */
-            int64_t a, b;
-            if (scan_bound(ls->data.function.args[0], &a) &&
-                scan_bound(ls->data.function.args[1], &b)) {
-                spec->min = a;
-                spec->max = b;
-                return true;
-            }
-        }
-    }
-    return false;
-}
+ * The level spec goes through parse_level_spec_strict (shared with MapIndexed)
+ * rather than the lenient parse_level_spec, so Scan accepts Infinity in either
+ * slot of a two-element spec (e.g. {0, Infinity}) and leaves the call
+ * unevaluated on a spec it does not recognise. */
 
 /* Apply f to `part` for its side effects. CONSUMES `part` (adopts ownership).
  * Returns NULL to continue scanning, or non-NULL as the value builtin_scan
@@ -936,11 +946,10 @@ Expr* builtin_scan(Expr* res) {
     Expr* expr = res->data.function.args[1];
 
     Expr* ls = (argc >= 3) ? res->data.function.args[2] : NULL;
-    if (ls && ls->type == EXPR_FUNCTION &&
-        ls->data.function.head->data.symbol.name == SYM_Rule) ls = NULL;  /* option in slot 2 */
+    if (head_is(ls, SYM_Rule)) ls = NULL;                      /* option in slot 2 */
 
     LevelSpec spec;
-    if (!scan_parse_spec(ls, &spec)) return NULL;              /* unrecognized levelspec */
+    if (!parse_level_spec_strict(ls, &spec)) return NULL;      /* unrecognized levelspec */
     parse_options(res, ls ? 3 : 2, &spec);                     /* Heads->True */
 
     /* Association at the default level: scan the values (mirrors Map). */
