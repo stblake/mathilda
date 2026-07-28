@@ -42,6 +42,19 @@
 #include <flint/gr_poly.h>
 #include <flint/gr_mat.h>
 
+/* `gr_poly_xgcd` — the wrapper that dispatches between the Euclidean and
+ * half-GCD implementations by degree — only arrived in FLINT 3.2.
+ * `gr_poly_xgcd_euclidean` has the identical signature and has been there
+ * since 3.0, which is the floor the makefile advertises and what Ubuntu 24.04
+ * (libflint-dev 3.0.1) ships: there, the plain name is an implicit declaration
+ * and the build fails. Prefer the dispatching wrapper where it exists so newer
+ * FLINT still gets the half-GCD path on high-degree inputs. */
+#if defined(__FLINT_RELEASE) && __FLINT_RELEASE >= 30200
+#define MATHILDA_GR_POLY_XGCD gr_poly_xgcd
+#else
+#define MATHILDA_GR_POLY_XGCD gr_poly_xgcd_euclidean
+#endif
+
 /* ------------------------------------------------------------------ */
 /*  Variable set: the free symbols that become fmpq_mpoly generators.  */
 /* ------------------------------------------------------------------ */
@@ -2550,7 +2563,7 @@ static Expr* parametric_field_op(const Expr* a, const Expr* b, const Expr* var,
         build_grpolyq(a2, xvar, da, A, gctx, mctx, &fvars) &&
         build_grpolyq(b2, xvar, db, B, gctx, mctx, &fvars)) {
         if (op == FIELD_XGCD) {
-            if (gr_poly_xgcd(G, S, T, A, B, gctx) == GR_SUCCESS) {
+            if (MATHILDA_GR_POLY_XGCD(G, S, T, A, B, gctx) == GR_SUCCESS) {
                 Expr* g = fieldpoly_out(G, gctx, mctx, &fvars, xname, st.kname);
                 Expr* u = fieldpoly_out(S, gctx, mctx, &fvars, xname, st.kname);
                 Expr* v = fieldpoly_out(T, gctx, mctx, &fvars, xname, st.kname);

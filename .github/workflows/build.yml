@@ -73,9 +73,16 @@ jobs:
           out=$(printf '%s\n' \
             '{"id": 1, "expr": "Integrate[1/(x^3 + 1), x]"}' \
             '{"id": 2, "expr": "Normal[BesselJ[2, NDArray[{2.5, 3.5}]]]"}' \
+            '{"id": 3, "expr": "PolynomialExtendedGCD[x^4 - 1, x^2 - 1, x]"}' \
             '{"type": "quit"}' | ./Mathilda)
           echo "$out"
           echo "$out" | grep -q '0\.44605' || {
             echo "::error::BesselJ NDArray kernel returned the wrong value (issue #37)"
+            exit 1
+          }
+          # Exercises the pre-3.2 gr_poly_xgcd_euclidean fallback, which only
+          # compiles in on the older FLINT the distros ship — never locally.
+          echo "$out" | grep -q '{-1 + x\^2, {0, 1}}' || {
+            echo "::error::PolynomialExtendedGCD wrong — check the FLINT xgcd compat shim"
             exit 1
           }
