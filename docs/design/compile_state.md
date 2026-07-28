@@ -46,8 +46,7 @@ field for a construction site to forget. Argument arrays are read-only on
 purpose: they are borrowed, and for a `List` argument packed at the boundary a
 write would vanish without a trace.
 
-**What it costs.** The 2-D wave-equation stencil in
-[`COMPILE_EXAMPLE.md`](../compile_example/COMPILE_EXAMPLE.md) is 72 instructions per interior
+**What it costs.** The 2-D wave-equation stencil worked example is 72 instructions per interior
 point and runs a 641x641 grid for 639 steps (2.6e8 updates) in 27 s — **569x**
 the same march interpreted, and **1.9x** Wolfram Language 14.0's own `Compile`.
 Notably WL's `CompilationTarget -> "C"` (verified to be genuine native code, not

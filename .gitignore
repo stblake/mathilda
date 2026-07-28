@@ -68,3 +68,8 @@ dkms.conf
 
 # GMP-ECM vendored source (now a system dependency; see SPEC.md §build)
 src/external/ecm/
+
+# Compile[] worked example — kept locally, deliberately not tracked. It is a
+# ~200 KB bundle (rendered PDF + snapshot PNG) that no build, test or docs
+# target consumes, so it only ever cost clone size.
+docs/compile_example/

@@ -511,8 +511,8 @@ Out[9]= {{11.0, 12.0, 13.0}, {21.0, 22.0, 23.0}, {31.0, 32.0, 33.0}}
 
 A worked end-to-end example — an explicit finite-difference solver for the 2-D
 wave equation, verified against an exact discrete solution and benchmarked
-against the interpreter, Wolfram Language and `NDSolve` — is in
-[`COMPILE_EXAMPLE.md`](../../compile_example/COMPILE_EXAMPLE.md).
+against the interpreter, Wolfram Language and `NDSolve` — is summarised in
+[`docs/design/compile_state.md`](../../design/compile_state.md).
 
 ## CompileDiagnostics
 
