@@ -458,6 +458,7 @@ extern const char* SYM_RotateRight;
 extern const char* SYM_Round;
 extern const char* SYM_Rule;
 extern const char* SYM_RuleDelayed;
+extern const char* SYM_RuntimeAttributes;
 extern const char* SYM_SameQ;
 extern const char* SYM_SameTest;
 extern const char* SYM_Scale;

@@ -769,6 +769,13 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("SameTest", "Automatic"));
     ob_commit(&b, "Complement");
 
+    /* ---- Compilation ---- RuntimeAttributes -> {} (no threading); the only
+     * other setting is Listable, which makes the CompiledFunction thread over
+     * List arguments. */
+    ob_init(&b);
+    ob_add(&b, r_list0("RuntimeAttributes"));
+    ob_commit(&b, "Compile");
+
     /* ---- File name construction ---- */
     ob_init(&b);
     ob_add(&b, r_str("OperatingSystem", "Unix"));

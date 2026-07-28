@@ -444,6 +444,30 @@ expression would.
   Boolean body.
 - Applying with the wrong number of arguments leaves the application
   unevaluated. The object is reference-counted and leak-free.
+- **Option `RuntimeAttributes`** — default `{}`; the only other setting is
+  `Listable` (written either `RuntimeAttributes -> Listable` or
+  `RuntimeAttributes -> {Listable}`). A `Listable` object threads over its
+  list-valued arguments exactly as a `Listable` symbol does:
+
+  - Threading happens over the levels a parameter does **not** consume, so for a
+    scalar parameter any list threads, while a rank-*r* array parameter
+    (`{v, _Real, r}`) takes an *r*-deep list whole and threads only over deeper
+    ones — a `Listable Compile[{{v, _Real, 1}}, Total[v]]` maps over the rows of
+    a matrix.
+  - Nested lists thread level by level; `{}` threads to `{}`; a non-list
+    argument is reused for every element; and lists of unequal length report
+    `Thread::tdlen` and leave the application unevaluated.
+  - The attribute belongs to the **object**, not to its bytecode: a body outside
+    the compilable subset threads too, and each element independently takes
+    either the compiled or the interpreted path (so a symbolic element in an
+    otherwise numeric list still gives the symbolic answer for that element).
+  - An `NDArray` argument threads by the same rank rule and the result is packed
+    back into an `NDArray`, so a packed array and the `List` it packs give the
+    same answer.
+  - `Options[Compile]` reports the default and `SetOptions[Compile, …]` changes
+    it. An unrecognised option, or a `RuntimeAttributes` setting other than the
+    two above, leaves `Compile[…]` unevaluated rather than quietly ignoring it.
+  - `CompilePrint` shows an `Attributes  Listable` line for such an object.
 
 ```mathematica
 In[1]:= f = Compile[{{x, _Real}}, x^2 + 1]
@@ -465,14 +489,24 @@ Out[5]= -3.0 + 4.0 I
 In[6]:= Compile[{{m, _Real, 2}}, m[[All, 1]]][{{1., 2.}, {3., 4.}}]
 Out[6]= {1.0, 3.0}
 
-In[7]:= (* a 5-point stencil: read an argument grid, write a local copy *)
+In[7]:= (* RuntimeAttributes -> Listable: the object threads over lists *)
+        h = Compile[{{x, _Real}}, If[x > 0, 1., -1.], RuntimeAttributes -> Listable];
+        h[{1., -2., 3.}]
+Out[7]= {1.0, -1.0, 1.0}
+
+In[8]:= (* a rank-1 parameter consumes one level, so this maps over the rows *)
+        Compile[{{v, _Real, 1}}, Total[v], RuntimeAttributes -> Listable][
+          {{1., 2.}, {3., 4.}}]
+Out[8]= {3.0, 7.0}
+
+In[9]:= (* a 5-point stencil: read an argument grid, write a local copy *)
         Compile[{{a, _Real, 2}},
           Module[{n = Length[a], b = a},
             Do[b[[i, j]] = (a[[i - 1, j]] + a[[i + 1, j]] +
                             a[[i, j - 1]] + a[[i, j + 1]])/4,
                {i, 2, n - 1}, {j, 2, n - 1}];
             b]][Table[1.0 (10 i + j), {i, 1, 3}, {j, 1, 3}]]
-Out[7]= {{11.0, 12.0, 13.0}, {21.0, 22.0, 23.0}, {31.0, 32.0, 33.0}}
+Out[9]= {{11.0, 12.0, 13.0}, {21.0, 22.0, 23.0}, {31.0, 32.0, 33.0}}
 ```
 
 A worked end-to-end example — an explicit finite-difference solver for the 2-D
@@ -541,10 +575,12 @@ chain fused, or whether a map will actually fan out across cores.
   object, so both `CompilePrint[Compile[…]]` and `f = Compile[…];
   CompilePrint[f]` work. Anything that is not a `CompiledFunction` is left
   unevaluated. Returns `Null`.
-- **Header** — the signature, each argument's register and declared type (an
-  argument the body never reads is marked `(unused)`), the result register and
-  type, the sizes of the three register banks, and the instruction, CSE and
-  parallel-loop counts.
+- **Header** — the signature, an `Attributes` line when the object carries a
+  `RuntimeAttributes` setting (threading happens before any bytecode runs, so it
+  must not be invisible), each argument's register and declared type (an argument
+  the body never reads is marked `(unused)`), the result register and type, the
+  sizes of the three register banks, and the instruction, CSE and parallel-loop
+  counts.
 - **Registers** are named by bank and numbered by frame slot: `R` scalar, `V`
   array handle, `T` strip-mining tile.
 - **Each instruction** gives the opcode and its raw operands on the left and a

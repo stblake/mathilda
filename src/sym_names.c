@@ -456,6 +456,7 @@ const char* SYM_RotateRight = NULL;
 const char* SYM_Round = NULL;
 const char* SYM_Rule = NULL;
 const char* SYM_RuleDelayed = NULL;
+const char* SYM_RuntimeAttributes = NULL;
 const char* SYM_SameQ = NULL;
 const char* SYM_SameTest = NULL;
 const char* SYM_Sec = NULL;
@@ -1259,6 +1260,7 @@ void sym_names_init(void) {
     SYM_Round                      = intern_symbol("Round");
     SYM_Rule                       = intern_symbol("Rule");
     SYM_RuleDelayed                = intern_symbol("RuleDelayed");
+    SYM_RuntimeAttributes          = intern_symbol("RuntimeAttributes");
     SYM_SameQ                      = intern_symbol("SameQ");
     SYM_SameTest                   = intern_symbol("SameTest");
     SYM_Scale                      = intern_symbol("Scale");

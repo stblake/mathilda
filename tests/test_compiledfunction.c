@@ -365,6 +365,129 @@ void test_disasm_callee_program(void) {
     compiled_free(p);
 }
 
+/* ------------------------------------------------------------------ *
+ *  RuntimeAttributes -> Listable                                       *
+ * ------------------------------------------------------------------ */
+
+/* Threading over scalar parameters.
+ *
+ * The discriminating body is `If[x > 0, ...]`, NOT something like `x^2`: with a
+ * List substituted for x, Power/Plus are themselves Listable, so an arithmetic
+ * body gives the threaded answer through the interpreter fallback whether the
+ * object is Listable or not — a test built on one would pass with the feature
+ * removed.  `Greater` does not thread, so the non-Listable object provably
+ * cannot produce a List here. */
+void test_cf_runtime_attributes(void) {
+    assert_eval_eq("Compile[{{x, _Real}}, If[x > 0, 1., -1.], RuntimeAttributes -> Listable]"
+                   "[{1., -2., 3.}]", "{1.0, -1.0, 1.0}", 0);
+    /* The control: same body, default RuntimeAttributes -> {}, no threading. */
+    assert_eval_eq("Head[Compile[{{x, _Real}}, If[x > 0, 1., -1.]][{1., -2., 3.}]]", "If", 0);
+    assert_eval_eq("Head[Compile[{{x, _Real}}, If[x > 0, 1., -1.], "
+                   "RuntimeAttributes -> {}][{1., -2., 3.}]]", "If", 0);
+
+    /* Both spellings of the setting; scalar arguments are unaffected. */
+    assert_eval_eq("Compile[{{x, _Real}}, x^2, RuntimeAttributes -> {Listable}][{1., 2., 3.}]",
+                   "{1.0, 4.0, 9.0}", 0);
+    assert_eval_eq("Compile[{{x, _Real}}, x^2, RuntimeAttributes -> Listable][3.] == 9",
+                   "True", 0);
+
+    /* Every result type survives threading: Integer, Complex, Boolean. */
+    assert_eval_eq("Compile[{{n, _Integer}}, n^2 + 1, RuntimeAttributes -> Listable][{1, 2, 3}]",
+                   "{2, 5, 10}", 0);
+    assert_eval_eq("Chop[Compile[{{z, _Complex}}, z^2, RuntimeAttributes -> Listable]"
+                   "[{1. + 2. I, 3.}] - {-3 + 4 I, 9}] == {0, 0}", "True", 0);
+    assert_eval_eq("Compile[{{x, _Real}}, x > 0, RuntimeAttributes -> Listable][{1., -1.}]",
+                   "{True, False}", 0);
+
+    /* Nested lists thread level by level; an empty list threads to an empty one. */
+    assert_eval_eq("Compile[{{x, _Real}}, x^2, RuntimeAttributes -> Listable]"
+                   "[{{1., 2.}, {3., 4.}}]", "{{1.0, 4.0}, {9.0, 16.0}}", 0);
+    assert_eval_eq("Compile[{{x, _Real}}, x^2, RuntimeAttributes -> Listable][{}]", "{}", 0);
+
+    /* Several parameters: equal-length lists thread in step, a scalar is reused
+     * for every element, and unequal lengths leave the application unevaluated
+     * (after a Thread::tdlen message), exactly as for a Listable symbol. */
+    assert_eval_eq("Compile[{{x, _Real}, {y, _Real}}, x - y, RuntimeAttributes -> Listable]"
+                   "[{1., 2.}, {10., 20.}]", "{-9.0, -18.0}", 0);
+    assert_eval_eq("Compile[{{x, _Real}, {y, _Real}}, x - y, RuntimeAttributes -> Listable]"
+                   "[{1., 2.}, 10.]", "{-9.0, -8.0}", 0);
+    assert_eval_startswith("Compile[{{x, _Real}, {y, _Real}}, x - y, "
+                           "RuntimeAttributes -> Listable][{1., 2.}, {10., 20., 30.}]",
+                           "CompiledFunction[{x, y}");
+
+    /* Listable belongs to the OBJECT, not to its bytecode: a body outside the
+     * compilable subset threads too, and each element still falls back on its
+     * own (the second element here is symbolic). */
+    assert_eval_eq("uncra[t_] := t; Compile[{{x, _Real}}, uncra[x^2], "
+                   "RuntimeAttributes -> Listable][{2., 3.}]", "{4.0, 9.0}", 0);
+    assert_eval_eq("Compile[{{x, _Real}}, x^2, RuntimeAttributes -> Listable][{a, 2.}]",
+                   "{a^2, 4.0}", 0);
+
+    /* An unusable option leaves Compile[] unevaluated rather than silently
+     * building an object that ignores what was asked for. */
+    assert_eval_eq("Head[Compile[{{x, _Real}}, x, RuntimeAttributes -> Orderless]]",
+                   "Compile", 0);
+    assert_eval_eq("Head[Compile[{{x, _Real}}, x, RuntimeAttributes -> {Listable, Flat}]]",
+                   "Compile", 0);
+    assert_eval_eq("Head[Compile[{{x, _Real}}, x, ThisIsNotAnOption -> True]]", "Compile", 0);
+
+    /* The registered default, and SetOptions changing it. */
+    assert_eval_eq("Options[Compile]", "{RuntimeAttributes -> {}}", 0);
+    assert_eval_eq("SetOptions[Compile, RuntimeAttributes -> Listable]; "
+                   "Compile[{{x, _Real}}, If[x > 0, 1., -1.]][{1., -2.}]", "{1.0, -1.0}", 0);
+    /* Restore, and prove the restore took: leaving this on would silently make
+     * every later test in this file run against a Listable Compile. */
+    assert_eval_eq("SetOptions[Compile, RuntimeAttributes -> {}]; "
+                   "Head[Compile[{{x, _Real}}, If[x > 0, 1., -1.]][{1., -2.}]]", "If", 0);
+
+    /* CompilePrint reports it — a call that threads before running any bytecode
+     * should not be invisible in the listing. */
+    char* d = disasm_of("Compile[{{x, _Real}}, x^2, RuntimeAttributes -> Listable]");
+    has(d, "Attributes  Listable", "RuntimeAttributes reported in the listing");
+    free(d);
+    char* p = disasm_of("Compile[{{x, _Real}}, x^2]");
+    lacks(p, "Attributes", "no attribute line for a plain object");
+    free(p);
+}
+
+/* Threading and the ARRAY signature meet in one place: a rank-r parameter
+ * consumes r levels, so threading is over the levels above it — and a packed
+ * NDArray must answer the same as the List it packs, or the object would
+ * contradict itself depending on how its input happened to be stored. */
+void test_cf_runtime_attributes_arrays(void) {
+    /* Depth == rank: one whole argument, no threading. */
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Total[v], RuntimeAttributes -> Listable]"
+                   "[{1., 2., 3.}] == 6", "True", 0);
+    /* Depth > rank: thread over the rows. */
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Total[v], RuntimeAttributes -> Listable]"
+                   "[{{1., 2.}, {3., 4.}}]", "{3.0, 7.0}", 0);
+    assert_eval_eq("Compile[{{m, _Real, 2}}, Total[Flatten[m]], RuntimeAttributes -> Listable]"
+                   "[{{{1., 2.}, {3., 4.}}, {{5., 6.}, {7., 8.}}}]", "{10.0, 26.0}", 0);
+
+    /* The same three answers from packed arrays, which come back packed. */
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Total[v], RuntimeAttributes -> Listable]"
+                   "[NDArray[{1., 2., 3.}]] == 6", "True", 0);
+    assert_eval_eq("Normal[Compile[{{v, _Real, 1}}, Total[v], RuntimeAttributes -> Listable]"
+                   "[NDArray[{{1., 2.}, {3., 4.}}]]]", "{3.0, 7.0}", 0);
+    assert_eval_eq("Head[Compile[{{v, _Real, 1}}, Total[v], RuntimeAttributes -> Listable]"
+                   "[NDArray[{{1., 2.}, {3., 4.}}]]]", "NDArray", 0);
+
+    /* A rank-2 array over a SCALAR parameter threads twice and is re-packed once
+     * at the top — one rank-2 array back, not a list of rows. */
+    assert_eval_eq("Normal[Compile[{{x, _Real}}, x^2, RuntimeAttributes -> Listable]"
+                   "[NDArray[{{1., 2.}, {3., 4.}}]]]", "{{1.0, 4.0}, {9.0, 16.0}}", 0);
+
+    /* A result that cannot be packed stays a List. */
+    assert_eval_eq("Compile[{{x, _Real}}, x > 0, RuntimeAttributes -> Listable]"
+                   "[NDArray[{1., -1.}]]", "{True, False}", 0);
+
+    /* The argument array is borrowed, not consumed: threading must not disturb
+     * the caller's value. */
+    assert_eval_eq("ndra = NDArray[{{1., 2.}, {3., 4.}}]; "
+                   "Compile[{{x, _Real}}, x^2, RuntimeAttributes -> Listable][ndra]; "
+                   "Normal[ndra]", "{{1.0, 2.0}, {3.0, 4.0}}", 0);
+}
+
 /* The language-level contract: prints and returns Null, and leaves anything
  * that is not a CompiledFunction unevaluated. */
 void test_compile_print_builtin(void) {
@@ -386,6 +509,8 @@ int main(void) {
     TEST(test_cf_object_and_arity);
     TEST(test_cf_array_argspec);
     TEST(test_cf_part);
+    TEST(test_cf_runtime_attributes);
+    TEST(test_cf_runtime_attributes_arrays);
     TEST(test_compile_diagnostics);
     TEST(test_disasm_scalar);
     TEST(test_disasm_kernel_names);

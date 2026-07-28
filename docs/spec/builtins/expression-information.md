@@ -247,7 +247,7 @@ Release identity of the running Mathilda. Both are read-only `Protected`
 symbols holding an `OwnValue`; redefining them emits `Set::wrsym`.
 
 - `$VersionNumber`: the Mathilda version as a `Real` (the single source of
-  truth for the release; currently `0.01`).
+  truth for the release; currently `0.019`).
 - `$Version`: a string describing the running build. It is assembled
   **at compile time** and lists the Mathilda version followed by the
   versions of the libraries it was linked against — the C compiler, GMP,
@@ -258,10 +258,10 @@ symbols holding an `OwnValue`; redefining them emits `Set::wrsym`.
 
 ```mathematica
 In[1]:= $VersionNumber
-Out[1]= 0.01
+Out[1]= 0.019
 
 In[2]:= $Version
-Out[2]= "Mathilda 0.01 (Apple LLVM 17.0.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)"
+Out[2]= "Mathilda 0.019 (Apple LLVM 17.0.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)"
 ```
 
 ## ListQ, VectorQ, MatrixQ

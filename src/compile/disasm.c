@@ -579,7 +579,13 @@ static void render_meaning(DBuf* b, const CompiledProgram* p, size_t i, ProgList
     const Instr* c = &p->code[i];
     unsigned k = compile_op_kind[c->op];
     const char* nm = op_name[c->op];
-    char base[32]; op_base(nm, base, sizeof base);
+    /* Zeroed, not merely NUL-terminated by op_base: the lookup_base comparisons
+     * below are inlined by the optimiser into a vectorised strcmp that reads a
+     * whole word past the terminator, and valgrind then reports a conditional on
+     * the untouched tail of this buffer.  The read is harmless (the comparison
+     * has already decided by then) but the report is not — a memcheck run of the
+     * suite has to stay clean to be worth anything. */
+    char base[32] = { 0 }; op_base(nm, base, sizeof base);
     char rd[24], ra[24], rb[24];
     reg_name(p, c->dst, rd, sizeof rd);
     reg_name(p, c->a, ra, sizeof ra);
@@ -828,6 +834,12 @@ char* compiled_function_disassemble(const CompiledFunction* cf) {
     db_cat(&b, bs ? bs : "?");
     free(bs);
     db_cat(&b, "]\n");
+
+    /* RuntimeAttributes changes what a call DOES before any bytecode runs (a
+     * Listable object threads over List arguments), so it belongs next to the
+     * signature rather than being invisible. */
+    if (compiled_function_attributes(cf) & ATTR_LISTABLE)
+        db_cat(&b, "Attributes  Listable\n");
 
     const CompiledProgram* p = compiled_function_program(cf);
     if (p) {

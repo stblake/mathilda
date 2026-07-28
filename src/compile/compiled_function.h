@@ -26,22 +26,36 @@ typedef struct CompiledFunction CompiledFunction;
  * `{sym, typespec}` pairs where typespec is `_Real`/`_Integer`/`_Complex`
  * (Blank[Real] etc.) or the bare type symbol.  Never fails on an uncompilable
  * body — it keeps the body for the interpreter fallback.  Returns NULL only on a
- * malformed argspec (wrong shape / duplicate or non-symbol parameter). */
-CompiledFunction* compiled_function_new(const Expr* argspec, const Expr* body);
+ * malformed argspec (wrong shape / duplicate or non-symbol parameter).
+ *
+ * `runtime_attrs` carries the `RuntimeAttributes` option as an attribute
+ * bitmask; the only setting the object acts on is ATTR_LISTABLE (pass ATTR_NONE
+ * for the default).  A Listable object threads over List arguments the way a
+ * Listable symbol does — see compiled_function_apply. */
+CompiledFunction* compiled_function_new(const Expr* argspec, const Expr* body,
+                                        uint32_t runtime_attrs);
 
 CompiledFunction* compiled_function_ref(CompiledFunction* cf);
 void              compiled_function_free(CompiledFunction* cf);
 
-/* Apply to `nargs` already-evaluated arguments.  Returns a fresh boxed Expr on
- * success, or NULL only when the object cannot handle the call at all (arity
- * mismatch), so the evaluator leaves the application unevaluated.  Numeric args
- * run the bytecode; symbolic args or an uncompilable body use the interpreter
- * fallback (which still returns a value). */
+/* Apply to `nargs` already-evaluated arguments (borrowed).  Returns a fresh
+ * boxed Expr on success, or NULL only when the object cannot handle the call at
+ * all (arity mismatch, or Listable threading over unequal-length lists), so the
+ * evaluator leaves the application unevaluated.  Numeric args run the bytecode;
+ * symbolic args or an uncompilable body use the interpreter fallback (which
+ * still returns a value).
+ *
+ * A `RuntimeAttributes -> Listable` object first threads over any argument that
+ * is a List deeper than that parameter's declared rank, so `cf[{1., 2.}]`
+ * gives `{cf[1.], cf[2.]}`. */
 Expr* compiled_function_apply(const CompiledFunction* cf, Expr* const* args, size_t nargs);
 
 /* Accessors for the printer. */
 size_t             compiled_function_num_args(const CompiledFunction* cf);
 bool               compiled_function_is_compiled(const CompiledFunction* cf);
+/* The RuntimeAttributes bitmask the object was built with (ATTR_LISTABLE or
+ * ATTR_NONE). */
+uint32_t           compiled_function_attributes(const CompiledFunction* cf);
 const Expr*        compiled_function_body(const CompiledFunction* cf);
 const char* const* compiled_function_arg_names(const CompiledFunction* cf);
 const CompileType* compiled_function_arg_types(const CompiledFunction* cf);
