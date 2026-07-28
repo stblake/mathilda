@@ -13,6 +13,15 @@ Evaluates an expression sequentially over an iteration range.
 - Employs exact dynamic iteration identical to `Table` but discards the evaluated results, returning `Null`.
 - Supports explicit break states (`Return`, `Break`, `Continue`, `Throw`, `Abort`, `Quit`).
 - Can execute an infinite loop using `Do[expr, Infinity]`.
+- A body that is machine-numeric throughout takes an automatic fast path
+  (`src/numloop.c`) that runs it as a double-stack program with no `Expr`
+  allocation. The fast path is built without evaluating anything: loop-invariant
+  terms are folded only when they are syntactically numeric (literals, `Pi`,
+  `Sqrt[2]`, `p/q`, arithmetic and elementary heads). A body containing anything
+  else — notably a call to a user-defined function — declines the fast path and
+  runs interpreted, so `expr` is evaluated exactly as many times as the iterator
+  specifies and its side effects fire exactly that often. The same rule governs
+  `For`, `While`, `Nest`, `NestWhile`, `FixedPoint`, `Fold` and `Map`.
 
 ```mathematica
 In[1]:= Do[Print[i], {i, 3}]
@@ -469,7 +478,7 @@ Out[7]= {{11.0, 12.0, 13.0}, {21.0, 22.0, 23.0}, {31.0, 32.0, 33.0}}
 A worked end-to-end example — an explicit finite-difference solver for the 2-D
 wave equation, verified against an exact discrete solution and benchmarked
 against the interpreter, Wolfram Language and `NDSolve` — is in
-[`COMPILE_EXAMPLE.md`](../../../COMPILE_EXAMPLE.md).
+[`COMPILE_EXAMPLE.md`](../../compile_example/COMPILE_EXAMPLE.md).
 
 ## CompileDiagnostics
 
@@ -518,4 +527,92 @@ In[4]:= CompileDiagnostics[{{z, _Complex}}, Zeta[z]]   (* real kernel, no comple
 Out[4]= {"Compiled" -> False,
          "Reason" -> "no machine lowering for this head at these argument types",
          "Subexpression" -> "Zeta[z]"}
+```
+
+## CompilePrint
+
+`CompilePrint[cf]` prints the bytecode of a `CompiledFunction`. Where
+`CompileDiagnostics` says how *much* code there is, this says **which** code —
+the only way to see whether the optimiser folded the constants, whether an array
+chain fused, or whether a map will actually fan out across cores.
+
+- **Attributes:** `Protected`. Deliberately **not** `HoldAll`, unlike `Compile`
+  and `CompileDiagnostics`: the argument has to evaluate down to the compiled
+  object, so both `CompilePrint[Compile[…]]` and `f = Compile[…];
+  CompilePrint[f]` work. Anything that is not a `CompiledFunction` is left
+  unevaluated. Returns `Null`.
+- **Header** — the signature, each argument's register and declared type (an
+  argument the body never reads is marked `(unused)`), the result register and
+  type, the sizes of the three register banks, and the instruction, CSE and
+  parallel-loop counts.
+- **Registers** are named by bank and numbered by frame slot: `R` scalar, `V`
+  array handle, `T` strip-mining tile.
+- **Each instruction** gives the opcode and its raw operands on the left and a
+  readable rendering on the right. A `>` in the gutter marks a branch target.
+- **No addresses appear.** Machine kernels are resolved back to their symbol
+  names, and callee programs and parallel loops are numbered, so the output is
+  stable enough to diff between two versions of a body.
+- **An uncompiled object** has no bytecode to show, so it reports the bail
+  reason and the offending subexpression instead — the same answer
+  `CompileDiagnostics` gives about a body, asked about an object.
+
+```mathematica
+In[1]:= CompilePrint[Compile[{{x, _Real}}, x^2 + 2.5 x + 1]]
+Signature   CompiledFunction[{x : Real}, x^2 + 2.5 x + 1]
+Arguments   1
+              R0   : Real         x
+Result      R1 : Real
+Registers   3 scalar, 0 array, 0 tile   (frame 3 slots)
+Program     5 instructions, 0 CSE, all-Real fast path
+
+    0  POWI_R     R1, R0, 2                       R1 = R0^2
+    1  MUL_RK     R2, R0, 2.5                     R2 = R0 * 2.5
+    2  ADD_R      R1, R1, R2                      R1 = R1 + R2
+    3  ADD_RK     R1, R1, 1                       R1 = R1 + 1
+    4  RET        R1                              return R1
+```
+
+`MUL_RK` and `ADD_RK` are the optimiser's `K_BINK` forms — the constant lives
+*in* the instruction, so no register has to be materialised for it. Seeing
+`CONST` instructions here instead would mean the folding pass did not engage.
+
+An array body shows all three banks, the strip-mined loop and the fan-out
+marker:
+
+```mathematica
+In[2]:= CompilePrint[Compile[{{v, _Real, 1}}, v^2 + 2 v + 1]]
+Signature   CompiledFunction[{v : Real[1]}, v^2 + 2 v + 1]
+Arguments   1
+              V0   : Real[1]      v
+Result      V4 : Real[1]
+Registers   4 scalar, 1 array, 3 tile   (frame 200 slots)
+Program     19 instructions, 0 CSE, 1 parallel loop
+
+    0  A_SIZE     R1, V0                          R1 = Length[V0] (flat)
+    1  A_NEWLIKE  V4, V0, V0  [a:arr b:arr -> Real]  V4 = buffer like V0 (Real)
+    2  CONST      R2, 0                           R2 = 0
+    3  GT_IK      R3, R1, 0                       R3 = R1 > 0
+    4  JZ         R3, -> 18                       if !R3 goto 18
+    5  APAR       R2, R1, -> 18  <ploop #0>       parallel R2 over [0, R1), else fall through; join 18
+>   6  VSETLEN    R2, R1                          vlen = min(R1 - R2, 64)
+    7  VLOAD_R    T5, V0, R2                      T5 = V0[R2 ...]
+    ...
+   17  LOOP       R2, R1, -> 6                    if ++R2 < R1 goto 6
+>  18  RET        V4                              return V4
+```
+
+Special functions lower to machine kernels, which are named rather than printed
+as pointers:
+
+```mathematica
+In[3]:= CompilePrint[Compile[{{x, _Real}}, Gamma[x^2 + 2.5]]]
+    ...
+    2  KERN_RR    R1, R1, <Gamma>                 R1 = Gamma[R1]
+    3  RET        R1                              return R1
+
+In[4]:= CompilePrint[Compile[{x}, Integrate[x, x]]]
+Signature   CompiledFunction[{x : Real}, Integrate[x, x]]
+Program     not compiled — every call runs the interpreter
+Reason      no machine lowering for this head at these argument types
+Bailed on   Integrate[x, x]
 ```

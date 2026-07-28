@@ -20,11 +20,13 @@ be re-run.
 3. [Writing it: the interpreted version](#the-interpreted-version)
 4. [Compiling it](#compiling-it)
 5. [Is it actually compiled? `CompileDiagnostics`](#is-it-actually-compiled)
-6. [What `Compile[]` does to the numbers](#results)
-7. [Against Wolfram Language](#against-wolfram-language)
-8. [Against `NDSolve`](#against-ndsolve)
-9. [What is and is not in the compilable subset](#the-compilable-subset)
-10. [Measurement traps found while writing this](#measurement-traps)
+6. [Reading the bytecode: `CompilePrint`](#reading-the-bytecode)
+7. [What `Compile[]` does to the numbers](#results)
+8. [The solution, in pictures](#the-solution-in-pictures)
+9. [Against Wolfram Language](#against-wolfram-language)
+10. [Against `NDSolve`](#against-ndsolve)
+11. [What is and is not in the compilable subset](#the-compilable-subset)
+12. [Measurement traps found while writing this](#measurement-traps)
 
 ---
 
@@ -227,6 +229,192 @@ whenever one of them falls back.
 
 ---
 
+## Reading the bytecode
+
+`CompileDiagnostics` says there are 72 instructions. `CompilePrint` says *which*
+72. It takes the `CompiledFunction` itself and prints the program:
+
+```mathematica
+In[1]:= CompilePrint[step]
+
+Signature   CompiledFunction[{up : Real[2], uc : Real[2], lam : Real}, Module[...]]
+Arguments   3
+              V0   : Real[2]      up
+              V1   : Real[2]      uc
+              R2   : Real         lam
+Result      V18 : Real[2]
+Registers   18 scalar, 1 array, 0 tile   (frame 19 slots)
+Program     72 instructions, 1 CSE
+```
+
+Registers are named by bank — `R` scalar, `V` an array handle, `T` a
+strip-mining tile — and numbered by frame slot. This program is all scalar
+arithmetic over array *elements*, so there are no tiles: fusion applies to
+whole-array expressions like `v^2 + 2 v`, and an indexed stencil is not one.
+
+### The prologue: instructions 0–9
+
+```
+    0  CONST      R5, <dead store>                R5 = <dead store>
+    1  CONST      R4, -1                          R4 = -1
+    2  MOVE       R3, R4                          R3 = R4
+    3  V_LEN      R5, V1, V0  [a:arr b:real -> Integer]  R5 = Length[V1]
+    4  MOVE       R4, R5                          R4 = R5
+    5  A_COPY     V18, V1, V0  [a:arr b:arr -> Real]  V18 = copy(V1)
+    6  CONST      R8, 2                           R8 = 2
+    7  MOVE       R7, R8                          R7 = R8
+    8  ADD_I      R8, R4, R3                      R8 = R4 + R3
+    9  MOVE       R6, R8                          R6 = R8
+```
+
+Instruction 3 is `Length[uc]`, and instruction 5 is the `un = uc` that
+[Compiling it](#compiling-it) argued for: one `A_COPY`, once per call, which is
+what makes every write in the loop legal. `V18` is the only array register the
+program allocates — the two arguments are borrowed in `V0`/`V1` and never
+written. Instructions 6–9 set the outer loop's counter to 2 and its bound to
+`n - 1`.
+
+The bracketed suffix on 3 and 5 is the array-op flag word: which operands are
+array handles versus broadcast scalars, which of them this instruction *frees*,
+and the element type it promises to produce. Ownership of a machine buffer is
+encoded in the instruction, which is why array temporaries can be freed
+eagerly without a garbage collector.
+
+### The loops: 10–17 and 67–70
+
+```
+>  10  LE_I       R8, R7, R6                      R8 = R7 <= R6
+   11  JZ         R8, -> 71                       if !R8 goto 71
+   ...
+>  16  LE_I       R10, R9, R8                     R10 = R9 <= R8
+   17  JZ         R10, -> 69                      if !R10 goto 69
+   ...
+   67  INC_I      R9, 1                           R9 = R9 + 1
+   68  JMP        -> 16                           goto 16
+>  69  INC_I      R7, 1                           R7 = R7 + 1
+   70  JMP        -> 10                           goto 10
+>  71  RET        V18                             return V18
+```
+
+The `>` in the gutter marks a branch target. Two counted loops, four
+instructions of overhead each per iteration, `R7` the outer index `i` and `R9`
+the inner `j`. The whole of 18–66 is the loop body: **49 straight-line
+instructions, no branch, no allocation, no `Expr`**. That is the number that
+matters — it is what runs $(n-2)^2$ times per step.
+
+### One stencil point: 18–66
+
+The address arithmetic is the bulk of it. Every indexed access costs three
+instructions:
+
+```
+   21  CONST      R12, 0                          R12 = 0
+   22  A_AXIS     R12, R7, V1, 0                  R12 = R12*dim(V1, 0) + resolve(R7)
+   23  A_AXIS     R12, R9, V1, 1                  R12 = R12*dim(V1, 1) + resolve(R9)
+   24  A_LOAD_R   R13, V1, R12                    R13 = V1[R12]
+```
+
+— a zeroed accumulator and one `A_AXIS` per axis, then the load. `A_AXIS` folds
+three things into one instruction: the multiply by the axis stride, the
+resolution of a 1-based (or negative) subscript, and the range check. The check
+is deliberately **per axis** rather than on the finished flat index, because
+`u[[1, n + 5]]` on an $n \times n$ grid is inside the buffer and would quietly
+read the next row.
+
+There are eight indexed accesses in the body — seven loads and one store — and
+the whole 49 breaks down as:
+
+| opcode | count | what it is |
+|---|---:|---|
+| `A_AXIS` | 16 | one per subscript: stride, resolve, range-check |
+| `CONST` | 8 | the zeroed flat-index accumulator, one per access |
+| `A_LOAD_R` | 7 | the stencil's reads |
+| `ADD_R` | 6 | summing the neighbours and the two halves of the update |
+| `MUL_RK` | 4 | `× 2.`, `× -1.`, `× 4.`, `× -1.` — constants folded in |
+| `ADD_IK` / `ADD_I` | 2 / 2 | the `i ± 1`, `j ± 1` neighbour offsets |
+| `POWI_R` | 1 | `lam^2` |
+| `MUL_R` | 1 | `lam^2 ×` the Laplacian |
+| `A_STORE_R` | 1 | the in-place write |
+| `MOVE` | 1 | |
+
+So **24 of the 49 instructions are address arithmetic** (28 counting the four
+neighbour offsets), against 12 doing the floating-point work. That ratio is the
+single most useful thing this listing says, and it is why WL's native-C backend
+[does not beat its own bytecode VM](#against-wolfram-language) on this body:
+what dominates a stencil is indexing, not dispatch.
+
+The arithmetic is the other half, and the constants are folded into the
+instructions:
+
+```
+   25  MUL_RK     R11, R13, 2.                    R11 = R13 * 2.
+   30  MUL_RK     R12, R14, -1.                   R12 = R14 * -1.
+   31  ADD_R      R11, R11, R12                   R11 = R11 + R12
+   32  POWI_R     R12, R2, 2                      R12 = R2^2
+   ...
+   61  MUL_RK     R15, R17, 4.                    R15 = R17 * 4.
+   62  MUL_RK     R14, R15, -1.                   R14 = R15 * -1.
+   63  ADD_R      R13, R13, R14                   R13 = R13 + R14
+   64  MUL_R      R12, R12, R13                   R12 = R12 * R13
+   65  ADD_R      R11, R11, R12                   R11 = R11 + R12
+   66  A_STORE_R  V18, R10, R11                   V18[R10] = R11
+```
+
+`MUL_RK` is a `K_BINK` form: the `2.`, `-1.` and `4.` live *inside* the
+instruction rather than in a register. That is what the optimiser removed 20 of
+the emitter's 92 instructions doing — materialising a constant costs an
+instruction, and that instruction re-executes on every one of the
+$2.6\times10^8$ stencil updates at `n = 641`. Seeing `CONST` here instead of
+`_RK` forms would mean the folding pass had not engaged. `POWI_R R12, R2, 2` is
+`lam^2` by repeated multiplication, not a `pow()` call.
+
+Note also `MUL_RK ..., -1.` at 30 and 62: subtraction of a subexpression becomes
+"multiply by −1 and add", because `a - b` is `Plus[a, Times[-1, b]]` in the
+expression tree and the compiler lowers what the tree says.
+
+### What the listing also shows is *not* happening
+
+A disassembler earns its keep by making missed work visible. Three things here:
+
+- **Instruction 0 is a dead store** — `R5` is written again at 3 before anything
+  reads it. Harmless (it runs once per call, not once per point), but it is
+  code the optimiser could have removed.
+- **`n - 1` is computed with `-1` held in a register** (`ADD_I R4, R3` at 8 and
+  14) rather than as an `ADD_IK` immediate, because the constant reaches the
+  add through a `MOVE` that copy-propagation did not fold. Instruction 14 also
+  recomputes the inner bound on every outer iteration. Both are outside the
+  inner loop, so the cost is per *row*, not per point.
+- **`uc[[i, j]]` is loaded twice** — at 24 and again at 60 — and the header's
+  one hoisted common subexpression is not it. That one is deliberate: `A_LOAD`
+  is marked impure precisely because this body also *writes* an array. A pure
+  load could be merged across a store, or hoisted out of a loop that mutates
+  the buffer it reads, and `u[[k]] = v` next to `u[[k]]` would then read stale
+  data. The compiler gives up one redundant load rather than open that door.
+
+None of these change the answer, and none of them are in the part of the
+program that dominates. That is the point of being able to look: you can tell
+which category a given inefficiency falls into instead of guessing.
+
+For a body that did *not* compile there is no bytecode to show, so `CompilePrint`
+reports the bail instead — the same answer `CompileDiagnostics` gives about a
+body, asked about an object:
+
+```mathematica
+In[2]:= CompilePrint[Compile[{x}, Integrate[x, x]]]
+
+Signature   CompiledFunction[{x : Real}, Integrate[x, x]]
+Program     not compiled — every call runs the interpreter
+Reason      no machine lowering for this head at these argument types
+Bailed on   Integrate[x, x]
+```
+
+No pointer values appear anywhere in the output — machine kernels are resolved
+back to their symbol names (`<Gamma>`, not an address), and callee programs and
+parallel loops are numbered — so two versions of a body can be diffed against
+each other.
+
+---
+
 ## Results
 
 Same problem, same scheme, same starting levels, both arms at top level, timed
@@ -263,6 +451,89 @@ $2.6 \times 10^8$ stencil updates, about 104 ns each. Extrapolating the interpre
 per-update cost measured at `n = 41` (62.8 µs), the same march interpreted would
 take on the order of four and a half hours. That one is an extrapolation, not a
 measurement: it was not run.
+
+---
+
+## The solution, in pictures
+
+The solver's output at five times, plotted in Mathilda with `DensityPlot`. Each
+panel is the **computed** grid at `n = 41`, not the closed form: the march is
+run, the snapshot interpolated, and the interpolant plotted.
+
+![Five snapshots of the computed solution](wave-snapshots.png)
+
+Red is $u = +1$, blue is $u = -1$, white is zero, and the scale is **shared
+across all five panels** — that is what makes them comparable, and it is why the
+fourth is nearly blank rather than rescaled to look like the others.
+
+Nothing about the shape changes: this is a standing mode, so the spatial profile
+stays $\sin \pi x \sin \pi y$ and only the amplitude moves, as
+$\cos(\sqrt2 \pi t)$. It starts at $+1$, passes through zero at
+$t = 1/(2\sqrt2) \approx 0.354$ — which is why the $t = 0.375$ panel is almost
+white, just past the crossing — and is heading down towards its minimum at
+$t = 1/\sqrt2 \approx 0.707$ when the march stops.
+
+Reading the centre of each panel against the exact amplitude:
+
+| $t$ | computed $u(t, \tfrac12, \tfrac12)$ | exact $\cos(\sqrt2\,\pi t)$ | difference |
+|---:|---:|---:|---:|
+| 0.000 | 1.000000 | 1.000000 | 0 |
+| 0.125 | 0.849748 | 0.849710 | 3.8e-5 |
+| 0.250 | 0.444144 | 0.444016 | 1.3e-4 |
+| 0.375 | −0.094928 | −0.095141 | 2.1e-4 |
+| 0.500 | −0.605473 | −0.605700 | 2.3e-4 |
+
+The difference grows to 2.3e-4 by $T = 0.5$, matching the `n = 41` physical error
+of 2.27e-4 in the [scaling table](#results). That is discretisation error, not
+drift: at `n = 153` the same column would be ~15× smaller.
+
+Note that the amplitude is *not* what the discrete-error check measures. These
+panels differ from the continuum solution at 1e-4; the same data differs from the
+exact solution of the **difference** equations at 2.8e-14. Both are in the table,
+and they are answering different questions — see [The problem](#the-problem).
+
+<details>
+<summary>How the figure was produced</summary>
+
+```mathematica
+(* march, keeping every level *)
+snap = {Normal[pu], Normal[cu]};
+Do[tmp = step[pu, cu, lam]; pu = cu; cu = tmp;
+   snap = Append[snap, Normal[cu]], {39}];
+
+(* the grid as {{x, y}, u} triples, for Interpolation *)
+grid[g_] := Flatten[Table[{{(i - 1) hh, (j - 1) hh}, g[[i, j]]},
+                          {i, 1, nn}, {j, 1, nn}], 1];
+
+(* blue -> white -> red, keyed to the RAW value so all panels share a scale *)
+cf = Function[z, RGBColor[Min[1., 1. + z], 1. - Abs[z], Min[1., 1. - z]]];
+
+fI = Interpolation[grid[snap[[21]]]];        (* t = 0.25 *)
+DensityPlot[fI[x, y], {x, 0, 1}, {y, 0, 1}, PlotPoints -> 48,
+            ColorFunctionScaling -> False, ColorFunction -> cf]
+```
+
+`ColorFunctionScaling -> False` is the load-bearing option: with the default
+(`True`) each panel is normalised to its own min and max, so all five would come
+out looking like the first one and the amplitude decay — the entire content of
+the figure — would be invisible.
+
+Two traps, both of which produce a plausible-looking plot:
+
+- **`DensityPlot` is `HoldAll`.** Writing `DensityPlot[Interpolation[...][x, y], ...]`
+  rebuilds the interpolant at every one of the 2304 sample points. It gives the
+  right picture and takes 145 s per panel instead of 0.1 s. Bind the interpolant
+  to a symbol first.
+- **`Max[Flatten[u]]` is not the amplitude** once the wave goes negative — it
+  returns the zero boundary ring. The table above reads the centre value,
+  `u[[21, 21]]`.
+
+The panels are rendered from the `Graphics[...]` scene Mathilda produces: in
+pipe mode the REPL emits it as JSON, and [`render_scene.py`](render_scene.py)
+(next to this file) rasterises those polygons — their coordinates and their
+colours are all Mathilda's — into the composite PNG.
+
+</details>
 
 ---
 
@@ -431,7 +702,8 @@ When the compiled path cannot honour that, it bails, and you get the interpreter
 
 ## Measurement traps
 
-Four things went wrong while measuring this. All four produced plausible numbers.
+Five things went wrong while writing this. Every one of them produced a
+plausible-looking result.
 
 **A `Hold`-ed body silently compiled to nothing.** Trying to share one body
 between WL's two compilation targets via `Evaluate@ReleaseHold@body` evaluated
@@ -441,12 +713,26 @@ never ran. The compiled function returned its input unchanged and looked
 1.6 instead of 1e-11. **Report an error next to every timing.** A wrong answer is
 usually a fast answer.
 
-**Mathilda's `Module` costs 3× on this loop.** The identical interpreted march
-takes 4.09 s at top level and 12.28 s wrapped in a `Module`. Quoting the second
-would have inflated the `Compile[]` speedup from 569× to 1700× on the strength of
-an unrelated interpreter overhead. Both arms of a comparison have to be in the
-same scoping context. (The overhead itself is a real Mathilda issue, recorded
-separately.)
+**A scoping wrapper cost 3× on this loop — and it was an interpreter bug.** The
+identical interpreted march took 4.09 s at top level and 12.28 s wrapped in
+`run[n_] := Module[...]`. Quoting the second would have inflated the `Compile[]`
+speedup from 569× to 1700× on the strength of an overhead that had nothing to do
+with `Compile[]`. Both arms of a comparison have to be in the same scoping
+context.
+
+The overhead has since been [found and
+fixed](../spec/changelog/2026-07-27.md#fixed-do--for--while--nest-speculatively-evaluated-user-code-2026-07-28):
+`Do`'s numeric fast path was speculatively evaluating the loop body's
+variable-free subexpressions to try to constant-fold them, after first rewriting
+their exact integers to machine reals. That turned the `41` in
+`istep[up, uc, lam, 41]` into `41.`, which does not resolve as a `Table` bound
+or a `Part` subscript, so the probe evaluated a giant symbolic expression, ran
+~4× slower than the real step, and then threw the result away. `Module` and
+`Block` were never the problem; the trigger was a *literal* in the loop body,
+which `With` and any `f[n_] :=` wrapper put there by substitution. All arms now
+run at 4.06–4.10 s. The lesson stands regardless: **when one arm is 3× the
+other and the answers agree to the last bit, suspect the harness, not the
+feature.**
 
 **WL's "interpreted" baseline was already compiled.** `TableCompileLength` is 250
 by default, and the grid has 1681 elements. The honest interpreter baseline needs
@@ -456,6 +742,16 @@ by default, and the grid has 1681 elements. The honest interpreter baseline need
 single-threaded, and the two agreed to 0.3% over a 33 s sweep — but a threaded
 path reports as *N times slower* under `Timing`. It is worth confirming they
 agree before trusting either.
+
+**Two of the five snapshot panels rendered blank.** `DensityPlot` clamped its
+colour-function argument to `[0,1]` even under `ColorFunctionScaling -> False`,
+so every negative cell got the colour of zero and the two panels where the wave
+has gone negative came out uniformly white — which looks exactly like a correct
+plot of a solution that has decayed to nothing. It was caught by the amplitude
+table disagreeing with the picture. Now fixed: with scaling off the raw value
+reaches the colour function unclamped. The general lesson is the same as the
+first trap — **put a number next to every picture**, for the same reason you put
+an error column next to every timing.
 
 ---
 
@@ -490,8 +786,18 @@ run[641]   (* ~27 s *)
 
 ## See also
 
-- [`docs/design/compile.md`](docs/design/compile.md) — the compiler's design.
-- [`docs/design/compile_state.md`](docs/design/compile_state.md) — current state,
+- [`docs/design/compile.md`](../design/compile.md) — the compiler's design.
+- [`docs/design/compile_state.md`](../design/compile_state.md) — current state,
   milestones, and the measurement traps found so far.
-- [`docs/spec/builtins/control-flow.md`](docs/spec/builtins/control-flow.md) —
-  `Compile`, `CompiledFunction`, `CompileDiagnostics`.
+- [`docs/spec/builtins/control-flow.md`](../spec/builtins/control-flow.md) —
+  `Compile`, `CompiledFunction`, `CompileDiagnostics`, `CompilePrint`.
+
+Alongside this file:
+
+- [`wave-snapshots.png`](wave-snapshots.png) — the five-panel figure.
+- [`render_scene.py`](render_scene.py) — rasterises a Mathilda `Graphics[...]`
+  scene (as emitted by the REPL's pipe mode) to PNG; produced the figure.
+- [`COMPILE_EXAMPLE.pdf`](COMPILE_EXAMPLE.pdf) — rendered with
+  [`docs/build-pdf.sh`](../build-pdf.sh):
+  `./docs/build-pdf.sh docs/compile_example/COMPILE_EXAMPLE.md`, from the
+  repository root.

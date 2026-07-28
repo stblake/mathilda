@@ -366,6 +366,22 @@ by `t ∈ [0,1]` (normalised to the data range when
 For custom function forms see the individual plotter's `ColorFunction` option
 table.
 
+**`ColorFunctionScaling -> False` passes the raw value**, unclamped. The colour
+function then owns its own domain — it is called with whatever the data actually
+is, including values outside `[0,1]`, and is responsible for handling them.
+(The built-in named ramps clamp internally, so they stay well defined either
+way.) This is what makes a **shared** scale across several plots possible: with
+the default `True` every plot is normalised to its own min and max, so a series
+of frames showing a decaying amplitude would all come out looking identical.
+
+```mathematica
+(* one blue -> white -> red ramp over u in [-1, 1], the same in every frame *)
+In[1]:= cf = Function[z, RGBColor[Min[1., 1. + z], 1. - Abs[z], Min[1., 1. - z]]];
+In[2]:= DensityPlot[0.5 Sin[Pi x] Sin[Pi y], {x, 0, 1}, {y, 0, 1},
+          ColorFunctionScaling -> False, ColorFunction -> cf]
+Out[2]= -Graphics-
+```
+
 ```mathematica
 (* DensityPlot with each named ramp *)
 In[1]:= DensityPlot[Sin[x] Sin[y], {x, -4, 4}, {y, -3, 3},
