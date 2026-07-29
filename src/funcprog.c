@@ -9,6 +9,7 @@
 #include "common.h"
 #include "numloop.h"
 #include "ndarray.h"
+#include "ndstruct.h"   /* ndstruct_delist_repack — packed-argument fallback */
 #include "part.h"
 #include <string.h>
 #include <stdlib.h>
@@ -688,6 +689,11 @@ Expr* builtin_select(Expr* res) {
     if (is_association(list))
         return assoc_select_values(crit, list, n_max);
 
+    /* An NDArray is atomic, so the element walk below looks straight past one
+     * and the call comes back UNEVALUATED, while the identical List call works.
+     * Materialise, reuse the List implementation, repack — see ndstruct.h. */
+    if (is_ndarray(list)) return ndstruct_delist_repack(res, list);
+
     if (list->type != EXPR_FUNCTION) return NULL; // Can only select from compound expressions
     
     size_t count = list->data.function.arg_count;
@@ -749,6 +755,10 @@ Expr* builtin_takewhile(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* coll = res->data.function.args[0];
     Expr* crit = res->data.function.args[1];
+    /* An NDArray is atomic, so the element walk below looks straight past one
+     * and the call comes back UNEVALUATED, while the identical List call works.
+     * Materialise, reuse the List implementation, repack — see ndstruct.h. */
+    if (is_ndarray(coll)) return ndstruct_delist_repack(res, coll);
     bool assoc = is_association(coll);
     if (!assoc && coll->type != EXPR_FUNCTION) return NULL;
 
@@ -769,6 +779,10 @@ Expr* builtin_lengthwhile(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* coll = res->data.function.args[0];
     Expr* crit = res->data.function.args[1];
+    /* An NDArray is atomic, so the element walk below looks straight past one
+     * and the call comes back UNEVALUATED, while the identical List call works.
+     * Materialise, reuse the List implementation, repack — see ndstruct.h. */
+    if (is_ndarray(coll)) return ndstruct_delist_repack(res, coll);
     bool assoc = is_association(coll);
     if (!assoc && coll->type != EXPR_FUNCTION) return NULL;
 
@@ -791,6 +805,10 @@ Expr* builtin_select_first(Expr* res) {
     Expr* pred = res->data.function.args[1];
     Expr* deflt = (argc == 3) ? res->data.function.args[2] : NULL;
 
+    /* An NDArray is atomic, so the element walk below looks straight past one
+     * and the call comes back UNEVALUATED, while the identical List call works.
+     * Materialise, reuse the List implementation, repack — see ndstruct.h. */
+    if (is_ndarray(coll)) return ndstruct_delist_repack(res, coll);
     if (is_association(coll)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
     if (coll->type != EXPR_FUNCTION) return NULL;
 
@@ -1042,6 +1060,10 @@ static Expr* all_any_none_true(Expr* res, int mode) {
     Expr* coll = res->data.function.args[0];
     Expr* test = res->data.function.args[1];
 
+    /* An NDArray is atomic, so the element walk below looks straight past one
+     * and the call comes back UNEVALUATED, while the identical List call works.
+     * Materialise, reuse the List implementation, repack — see ndstruct.h. */
+    if (is_ndarray(coll)) return ndstruct_delist_repack(res, coll);
     if (is_association(coll)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
     if (coll->type != EXPR_FUNCTION) return NULL;
 
@@ -2939,6 +2961,7 @@ Expr* builtin_mapthread(Expr* res) {
     /* Materialize any NDArray entry to a nested list so it threads like a list:
      * MapThread[f, {NDArray[{1,2}], NDArray[{3,4}]}] -> {f[1,3], f[2,4]}. */
     Expr** entries = lists->data.function.args;
+    Expr* const* entries0 = lists->data.function.args;   /* pre-delisting, for the dtype */
     Expr** delisted = NULL;
     bool any_nd = false;
     for (size_t j = 0; j < k; j++)
@@ -2962,5 +2985,13 @@ Expr* builtin_mapthread(Expr* res) {
      * (mirrors builtin_thread's final evaluate). */
     Expr* out = evaluate(built);
     expr_free(built);
+    /* Packed in, packed out — the same convention Map keeps, so threading over
+     * NDArrays does not silently unpack the data. */
+    if (any_nd && out) {
+        NDType dt = NDT_FLOAT64;
+        for (size_t j = 0; j < k; j++)
+            if (is_ndarray(entries0[j])) { dt = entries0[j]->data.ndarray.dtype; break; }
+        out = map_try_repack(out, dt);
+    }
     return out;
 }

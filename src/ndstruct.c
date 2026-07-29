@@ -286,3 +286,18 @@ Expr* ndstruct_clip(Expr* res) {
     nd_parallel_for(sz, nd_clip_chunk, &c);
     return expr_new_ndarray(a->data.ndarray.rank, a->data.ndarray.dims, out, dt);
 }
+
+/* ------------------------------------------------------------------ *
+ *  Delist-and-repack — see ndstruct.h                                 *
+ * ------------------------------------------------------------------ */
+Expr* ndstruct_delist_repack(const Expr* call, const Expr* src) {
+    Expr* out = ndarray_delist_and_reeval(call);
+    if (!out || !src || !is_ndarray(src)) return out;
+    /* A scalar, a Missing, a symbol — nothing to pack, and the List
+     * implementation's answer is already the right one. */
+    if (out->type != EXPR_FUNCTION) return out;
+    Expr* packed = ndarray_from_nested_list(out, src->data.ndarray.dtype);
+    if (!packed) return out;            /* symbolic, ragged, or empty */
+    expr_free(out);
+    return packed;
+}

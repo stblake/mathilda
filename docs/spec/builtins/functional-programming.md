@@ -907,7 +907,23 @@ Filters elements from an expression matching a criterion.
 - `Select[list, crit]`: Returns an expression with the same head as `list`, containing only those elements `e` for which `crit[e]` evaluates to `True`.
 - `Select[list, crit, n]`: Returns only the first `n` matching elements.
 
+**Features**:
+- **NDArray**: a packed argument gives a packed result, identical to the
+  equivalent `List` call. An empty selection has no packed form and comes back
+  as `{}`, exactly as the `List` call does. The same holds for `TakeWhile`,
+  `LengthWhile`, `SelectFirst`, `AllTrue`/`AnyTrue`/`NoneTrue`, `Join`,
+  `Differences`, `First`/`Last`/`Most`/`Rest`, `RotateLeft`/`RotateRight`,
+  `Riffle` and `Partition` — every one of which used to return the call
+  *unevaluated* on an `NDArray`, because an `NDArray` is atomic and their
+  element walks looked straight past it.
+- **Compilable** inside `Compile[]` over a rank-1 array argument, together with
+  `TakeWhile`, `LengthWhile`, `AllTrue`, `AnyTrue`, `NoneTrue`, `First` and
+  `Last`. See [`control-flow.md`](control-flow.md) § Compile.
+
 ```mathematica
+In[0]:= Select[NDArray[{1., 2., 3.}], # > 1 &]
+Out[0]= NDArray[{2.0, 3.0}]
+
 In[1]:= Select[{1, 2, 4, 7, 6, 2}, EvenQ]
 Out[1]= {2, 4, 6, 2}
 

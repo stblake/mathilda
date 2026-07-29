@@ -1,6 +1,7 @@
 // Part and Head
 
 #include "eval.h"
+#include "ndstruct.h"   /* ndstruct_delist_repack — packed-argument fallback */
 #include "symtab.h"
 #include "sym_names.h"
 #include "assoc.h"
@@ -727,6 +728,10 @@ Expr* builtin_first(Expr* res) {
         res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     Expr* arg = res->data.function.args[0];
     Expr* deflt = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
+    /* An NDArray is atomic, so is_atomic below rejects it and the call comes
+     * back UNEVALUATED, while the identical List call works.  Materialise,
+     * reuse the List implementation, repack — see ndstruct.h. */
+    if (is_ndarray(arg)) return ndstruct_delist_repack(res, arg);
     /* First[expr, def] returns def when expr has no elements (or is atomic);
      * with no default the 1-arg form is left unevaluated, as before. */
     if (is_atomic(arg) || arg->data.function.arg_count < 1)
@@ -739,6 +744,10 @@ Expr* builtin_last(Expr* res) {
         res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     Expr* arg = res->data.function.args[0];
     Expr* deflt = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
+    /* An NDArray is atomic, so is_atomic below rejects it and the call comes
+     * back UNEVALUATED, while the identical List call works.  Materialise,
+     * reuse the List implementation, repack — see ndstruct.h. */
+    if (is_ndarray(arg)) return ndstruct_delist_repack(res, arg);
     if (is_atomic(arg) || arg->data.function.arg_count < 1)
         return deflt ? expr_copy(deflt) : NULL;
     return expr_copy(first_last_element(arg, arg->data.function.args[arg->data.function.arg_count - 1]));
@@ -747,6 +756,10 @@ Expr* builtin_last(Expr* res) {
 Expr* builtin_most(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
+    /* An NDArray is atomic, so is_atomic below rejects it and the call comes
+     * back UNEVALUATED, while the identical List call works.  Materialise,
+     * reuse the List implementation, repack — see ndstruct.h. */
+    if (is_ndarray(arg)) return ndstruct_delist_repack(res, arg);
     if (is_atomic(arg) || arg->data.function.arg_count < 1) return NULL;
     
     size_t new_count = arg->data.function.arg_count - 1;
@@ -765,6 +778,10 @@ Expr* builtin_most(Expr* res) {
 Expr* builtin_rest(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
+    /* An NDArray is atomic, so is_atomic below rejects it and the call comes
+     * back UNEVALUATED, while the identical List call works.  Materialise,
+     * reuse the List implementation, repack — see ndstruct.h. */
+    if (is_ndarray(arg)) return ndstruct_delist_repack(res, arg);
     if (is_atomic(arg) || arg->data.function.arg_count < 1) return NULL;
     
     size_t new_count = arg->data.function.arg_count - 1;

@@ -395,7 +395,9 @@ expression would.
   function, exact symbolic algebra) routes that application through the
   interpreter fallback. Use `CompileDiagnostics` to find out which.
 - **Functional heads.** `Nest`, `NestList`, `Fold`, `FoldList`, `FixedPoint`,
-  `NestWhile`, `Map`, `Scan` and `Table` compile, as do the structural heads
+  `FixedPointList`, `NestWhile`, `NestWhileList`, `Map`, `Scan`, `Select`,
+  `TakeWhile`, `LengthWhile`, `AllTrue`, `AnyTrue`, `NoneTrue`, `First`, `Last`
+  and `Table` compile, as do the structural heads
   `Reverse`, `Sort`, `Accumulate`, `Flatten`, `Transpose`, `Take[a, n]` and
   `Drop[a, n]` — those last are delegated to the same `NDArray` entry points the
   interpreter uses, so their compiled subset is the interpreted one, and a spec
@@ -426,8 +428,12 @@ expression would.
     the source dtype.
   - `Fold` over an empty vector, and `Nest`/`NestList`/`FixedPoint` with a
     negative count, fall back: all are left unevaluated by the interpreter.
-  - `NestList` and `FoldList` refuse an integer element type, for the same
-    reason `Table` does — a packed buffer has no integer dtype.
+  - `NestList`, `FoldList`, `FixedPointList` and `NestWhileList` refuse an
+    integer element type, for the same reason `Table` does — a packed buffer has
+    no integer dtype.
+  - `Select` and `TakeWhile` fall back when nothing is selected: an empty result
+    has no packed form, so the interpreter answers with a `List` and a length-0
+    array would not be the same value.
   - An unbounded `FixedPoint`/`NestWhile` that does not converge falls back at
     the same 10⁶-application cap the interpreter uses, and is then left
     unevaluated exactly as the interpreter leaves it.

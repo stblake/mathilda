@@ -1,4 +1,6 @@
 #include "list_common.h"
+#include "ndarray.h"    /* is_ndarray */
+#include "ndstruct.h"   /* ndstruct_delist_repack — packed-argument fallback */
 #include "join.h"
 #include "assoc.h"
 
@@ -102,6 +104,13 @@ static Expr* join_at_level(Expr** lists, size_t n_lists, int level) {
 Expr* builtin_join(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1)
         return NULL;
+
+    /* An NDArray is atomic, so the element walk below looks straight past one
+     * and the call comes back UNEVALUATED, while the identical List call works.
+     * Materialise, reuse the List implementation, repack — see ndstruct.h. */
+    for (size_t i = 0; i < res->data.function.arg_count; i++)
+        if (is_ndarray(res->data.function.args[i]))
+            return ndstruct_delist_repack(res, res->data.function.args[i]);
 
     size_t n_args = res->data.function.arg_count;
     int level = 1;

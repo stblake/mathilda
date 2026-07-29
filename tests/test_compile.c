@@ -13,6 +13,7 @@
 #include "sym_intern.h"
 #include "match.h"
 #include "ndarray.h"
+#include "print.h"        /* expr_to_string — reporting a structural mismatch */
 #include "compile/compile.h"
 #include <math.h>
 #include <complex.h>
@@ -321,6 +322,56 @@ static void parity_arr(const char* name, const char* body_s,
                        const char* const* names, const CompileType* types, size_t n,
                        size_t len, double lo, double hi, int trials) {
     parity_arr_ex(name, body_s, names, types, n, len, lo, hi, trials, 0u);
+}
+
+/* Parity by STRUCTURAL equality rather than by numeric distance.
+ *
+ * parity_arr compares through arr_cmp, which reduces both sides to (Re, Im)
+ * pairs — so it cannot see a Boolean or a Missing at all, and reports one as a
+ * shape mismatch.  The selection heads answer with `True`/`False` and with
+ * Integers, so they need expr_eq, which is also STRICTER: it compares the head,
+ * the dtype and every bit, so a Real answering where an Integer should is a
+ * failure here rather than an equal number.
+ *
+ * `may_decline` is for the heads whose result can legitimately be empty
+ * (Select, TakeWhile): an empty result has no packed form, so the compiled path
+ * hands those calls back rather than answering with a length-0 array. */
+static void parity_exact(const char* name, const char* body_s,
+                         const char* const* names, const CompileType* types, size_t n,
+                         size_t len, double lo, double hi, int trials, bool may_decline) {
+    Expr* body = parse_expression(body_s);
+    const char* inames[4];
+    for (size_t k = 0; k < n; k++) inames[k] = intern_symbol(names[k]);
+    CompiledProgram* p = compile_expr(body, inames, types, n);
+    if (!p) { printf("FAIL: %-30s -> did not compile\n", name); failures++; expr_free(body); return; }
+
+    int cmp = 0, declined = 0;
+    bool ok = true;
+    for (int t = 0; t < trials && ok; t++) {
+        Expr* vecs[4]; CompileValue args[4], outc;
+        for (size_t k = 0; k < n; k++) {
+            vecs[k] = make_vec(len, lo, hi);
+            args[k].type = types[k]; args[k].v.a = vecs[k];
+        }
+        if (compiled_eval(p, args, &outc)) {
+            Expr* got  = aval_to_expr(outc);
+            Expr* want = ref_eval_arr(body, inames, vecs, n);
+            if (!expr_eq(got, want)) {
+                char* g = expr_to_string(got); char* w = expr_to_string(want);
+                printf("FAIL: %-30s -> compiled %s, interpreted %s\n", name, g, w);
+                free(g); free(w); ok = false;
+            } else cmp++;
+            expr_free(got); expr_free(want);
+        } else declined++;
+        for (size_t k = 0; k < n; k++) expr_free(vecs[k]);
+    }
+    if (!ok) failures++;
+    else if (declined && !may_decline) {
+        printf("FAIL: %-30s -> declined %d/%d\n", name, declined, trials); failures++;
+    } else if (cmp == 0 && !may_decline) {
+        printf("FAIL: %-30s -> never evaluated\n", name); failures++;
+    } else printf("ok:   %-30s exact (%d cmps, %d declined)\n", name, cmp, declined);
+    compiled_free(p); expr_free(body);
 }
 
 /* ------------------------------------------------------------------ *
@@ -1856,6 +1907,68 @@ int main(void) {
         }
     }
 
+    /* ---- the selection heads -------------------------------------------------
+     *
+     * One predicate loop, four things done with the answer.  These only became
+     * compilable once the INTERPRETER grew NDArray paths for them: every one
+     * used to return the call unevaluated on a packed argument, so there was
+     * nothing to be parity with. */
+    {
+        const char* vn[1] = { "v" };
+        const CompileType VT[1] = { CT_ARRAY(CT_REAL, 1) };
+
+        /* The predicate is chosen against the generator's [0.4, 3.0] range so
+         * that each of these has a mixture of hits and misses, and so that
+         * TakeWhile's prefix is sometimes empty and sometimes everything. */
+        parity_arr("Select",      "Select[v, # > 1. &]",                 vn, VT, 1, 20, 0.4, 3.0, 6);
+        parity_arr("Select all",  "Select[v, # > 0. &]",                 vn, VT, 1, 20, 0.4, 3.0, 6);
+        parity_arr("Select lambda","Select[v, Function[u, Sin[u] > 0.]]", vn, VT, 1, 20, 0.4, 3.0, 6);
+        /* A prefix that is sometimes empty: with values drawn from [0.4, 3.0] the
+         * FIRST element is occasionally >= 2.9, and then the compiled path
+         * declines rather than answer with a length-0 array. */
+        parity_exact("TakeWhile",    "TakeWhile[v, # < 2.9 &]",   vn, VT, 1, 20, 0.4, 3.0, 6, true);
+        /* Boolean and Integer answers: expr_eq, not a numeric distance. */
+        parity_exact("LengthWhile",  "LengthWhile[v, # < 2.9 &]", vn, VT, 1, 20, 0.4, 3.0, 6, false);
+        parity_exact("AllTrue",      "AllTrue[v, # > 0. &]",      vn, VT, 1, 20, 0.4, 3.0, 6, false);
+        parity_exact("AllTrue false","AllTrue[v, # > 2. &]",      vn, VT, 1, 20, 0.4, 3.0, 6, false);
+        parity_exact("AnyTrue",      "AnyTrue[v, # > 2. &]",      vn, VT, 1, 20, 0.4, 3.0, 6, false);
+        parity_exact("AnyTrue false","AnyTrue[v, # > 99. &]",     vn, VT, 1, 20, 0.4, 3.0, 6, false);
+        parity_exact("NoneTrue",     "NoneTrue[v, # > 99. &]",    vn, VT, 1, 20, 0.4, 3.0, 6, false);
+        parity_exact("NoneTrue false","NoneTrue[v, # > 2. &]",    vn, VT, 1, 20, 0.4, 3.0, 6, false);
+        parity_exact("First",        "First[v]",                  vn, VT, 1, 20, 0.4, 3.0, 6, false);
+        parity_exact("Last",         "Last[v]",                   vn, VT, 1, 20, 0.4, 3.0, 6, false);
+        parity_exact("Select exact", "Select[v, # > 1. &]",       vn, VT, 1, 20, 0.4, 3.0, 6, true);
+        parity_arr("Select reduced", "Total[Select[v, # > 1. &]]",       vn, VT, 1, 20, 0.4, 3.0, 6);
+        parity_arr("Select then Map","Total[Map[Function[u, u^2], Select[v, # > 1. &]]]",
+                                                                         vn, VT, 1, 20, 0.4, 3.0, 6);
+
+        /* An EMPTY result has no packed form — the interpreter answers with a
+         * List — so the compiled path must decline rather than hand back a
+         * length-0 array, which is a different value. */
+        {
+            const char* iv[1] = { intern_symbol("v") };
+            const char* eb[] = { "Select[v, # > 99. &]", "TakeWhile[v, # > 99. &]" };
+            for (size_t k = 0; k < sizeof eb / sizeof eb[0]; k++) {
+                Expr* b = parse_expression(eb[k]);
+                CompiledProgram* p = compile_expr(b, iv, VT, 1);
+                if (!p) { printf("FAIL: %-30s -> did not compile\n", eb[k]); failures++; expr_free(b); continue; }
+                Expr* vv = make_vec(6, 0.4, 3.0);
+                CompileValue av = { VT[0], { .a = vv } }, o;
+                if (compiled_eval(p, &av, &o)) {
+                    printf("FAIL: %-30s -> answered with an empty result\n", eb[k]);
+                    failures++;
+                    if (CT_IS_ARRAY(o.type)) expr_free(o.v.a);
+                } else printf("ok:   %-30s declined (empty result)\n", eb[k]);
+                compiled_free(p); expr_free(vv); expr_free(b);
+            }
+        }
+        /* Rank >= 2 is not an elementwise selection. */
+        {
+            const CompileType M2[1] = { CT_ARRAY(CT_REAL, 2) };
+            must_bail_raw("Select rank 2", "Select[v, # > 1. &]", vn, M2, 1);
+        }
+    }
+
     /* ---- delegated structural heads ------------------------------------------
      *
      * These call the interpreter's own NDArray entry points, so parity is by
@@ -2022,9 +2135,51 @@ int main(void) {
             }
         }
 
+        /* FixedPointList / NestWhileList: the length is only known once the loop
+         * has run, so the buffer grows (A_PUSH) and is cut to size (A_TRUNC).
+         * The cases below are chosen to exercise both — a run that halts
+         * immediately, one that outgrows the initial capacity several times, and
+         * the bounded and SameTest forms. */
+        {
+            const char* hb[] = {
+                "FixedPointList[Function[u, (u + 2/u)/2], xq]",
+                "FixedPointList[Cos, xq]",                    /* ~90 iterates: grows */
+                "FixedPointList[Cos, xq, 4]",                 /* bounded */
+                "FixedPointList[Function[u, u/2], xq, SameTest -> (Abs[#1 - #2] < 0.01 &)]",
+                "NestWhileList[Function[u, u/2], xq, Function[u, u > 1.]]",
+                "NestWhileList[Function[u, u + 1.], xq, Function[u, u < 0.]]",  /* halts at once */
+                "NestWhileList[Function[u, u + 1.], xq, Function[u, u < 300.]]",/* many growths */
+            };
+            for (size_t k = 0; k < sizeof hb / sizeof hb[0]; k++) {
+                Expr* b = parse_expression(hb[k]);
+                CompiledProgram* p = compile_expr(b, in1, RT1, 1);
+                if (!p) { printf("FAIL: %-30s -> did not compile\n", hb[k]); failures++; expr_free(b); continue; }
+                double maxerr = 0; bool ok = true; int cmp = 0;
+                for (int t = 0; t < 5 && ok; t++) {
+                    double xv = urand(1.5, 9.0);
+                    CompileValue av = { CT_REAL, { .r = xv } }, o;
+                    if (!compiled_eval(p, &av, &o)) { ok = false; break; }
+                    Expr* got = aval_to_expr(o);
+                    Expr* wl = ref_at(hb[k], xv);
+                    Expr* want = ndarray_from_nested_list(wl, NDT_FLOAT64);
+                    /* arr_cmp checks dims first, so a wrong LENGTH — the thing
+                     * a grow/truncate pair gets wrong — fails here, not in the
+                     * element comparison. */
+                    if (!want || !arr_cmp(got, want, &maxerr)) ok = false; else cmp++;
+                    expr_free(got); expr_free(wl); expr_free(want);
+                }
+                if (!ok || cmp == 0)     { printf("FAIL: %-30s -> shape/kind mismatch\n", hb[k]); failures++; }
+                else if (maxerr > 1e-12) { printf("FAIL: %-30s -> max_rel=%.2e\n", hb[k], maxerr); failures++; }
+                else printf("ok:   %-40s max_rel=%.1e (%d)\n", hb[k], maxerr, cmp);
+                compiled_free(p); expr_free(b);
+            }
+        }
+
         /* A built history of exact Integers has no packed representation, the
          * same rule ConstantArray and Table follow. */
         must_bail_raw("NestList integer body", "NestList[Function[u, 2 u], 1, n]", in2, RI2, 1);
+        must_bail_raw("FixedPointList int body",
+                      "FixedPointList[Function[u, Quotient[u, 2]], n]", in2, RI2, 2);
         /* A negative count leaves the whole call unevaluated. */
         {
             Expr* b = parse_expression("NestList[Cos, xq, n]");

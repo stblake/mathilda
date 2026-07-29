@@ -1,4 +1,6 @@
 #include "list_common.h"
+#include "ndarray.h"    /* is_ndarray */
+#include "ndstruct.h"   /* ndstruct_delist_repack — packed-argument fallback */
 #include "differences.h"
 #include "assoc.h"
 
@@ -97,6 +99,11 @@ Expr* builtin_differences(Expr* res) {
     if (argc < 1 || argc > 3) return NULL;
 
     Expr* lst = res->data.function.args[0];
+
+    /* An NDArray is atomic, so the element walk below looks straight past one
+     * and the call comes back UNEVALUATED, while the identical List call works.
+     * Materialise, reuse the List implementation, repack — see ndstruct.h. */
+    if (is_ndarray(lst)) return ndstruct_delist_repack(res, lst);
 
     /* Differences[assoc] gives the successive value differences, keyed by the
      * trailing key of each pair (so the leading key drops, as in Wolfram). */

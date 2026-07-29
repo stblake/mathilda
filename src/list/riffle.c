@@ -40,6 +40,8 @@
  * List and are left unevaluated here; see md-2aa. */
 
 #include "list_common.h"
+#include "ndarray.h"    /* is_ndarray */
+#include "ndstruct.h"   /* ndstruct_delist_repack — packed-argument fallback */
 #include "riffle.h"
 
 Expr* builtin_riffle(Expr* res) {
@@ -48,8 +50,12 @@ Expr* builtin_riffle(Expr* res) {
     Expr* list = res->data.function.args[0];
     Expr* sep = res->data.function.args[1];
 
-    /* Anything without arguments to interleave — an atom, or a packed array
-     * (md-2aa) — stays unevaluated. */
+    /* An NDArray is atomic, so the element walk below looks straight past one
+     * and the call comes back UNEVALUATED, while the identical List call works.
+     * Materialise, reuse the List implementation, repack — see ndstruct.h. */
+    if (is_ndarray(list)) return ndstruct_delist_repack(res, list);
+
+    /* Anything without arguments to interleave — an atom — stays unevaluated. */
     if (list->type != EXPR_FUNCTION) return NULL;
 
     size_t n = list->data.function.arg_count;

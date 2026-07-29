@@ -198,6 +198,15 @@ enum {
     X(A_SIZE, K_UN)   X(A_NEWLIKE, K_ARR) X(A_SHAPECHK, K_ASTORE)          \
     X(A_LOAD_R, K_ALOAD) X(A_LOAD_C, K_ALOAD)                              \
     X(A_STORE_R, K_ASTORE) X(A_STORE_C, K_ASTORE)                          \
+    /* Growable append + shrink, for an iteration whose LENGTH is only known    \
+     * once it has run (FixedPointList, NestWhileList, and later Select).       \
+     * Deliberately separate opcodes rather than a bounds check inside          \
+     * A_STORE: that check would then sit in the innermost loop of every fused  \
+     * map, forever, for a feature that concerns a handful of lowerings.        \
+     * A_PUSH doubles the buffer when the index reaches the end; A_TRUNC sets   \
+     * the final length, so the capacity a run happened to reach is never       \
+     * observable.  Element kind travels in `flags` (AF_R). */                  \
+    X(A_PUSH, K_ASTORE)  X(A_TRUNC, K_ASTORE)                              \
     /* indexed Part (M3c).  A_AXIS resolves ONE subscript against one axis   \
      * and folds it into the running flat index, so the general A_LOAD /      \
      * A_STORE above serve both fusion and user indexing.  A_PART / A_PARTSET \

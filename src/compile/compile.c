@@ -443,7 +443,7 @@ static Val vsplat(Ctx* c, Val v) {
     int t = alloc_tile(c);
     ins(c, v.type == CT_COMPLEX ? OP_VSPLAT_C : OP_VSPLAT_R,
         (uint32_t)t, (uint32_t)v.reg, 0, z);
-    Val r = { t, true, v.type };
+    Val r = { t, true, v.type, false };
     return r;
 }
 
@@ -472,7 +472,7 @@ static Val vec_binop(Ctx* c, uint16_t op, Val a, Val b, CompileType rtype, Slot 
     }
     int dst = alloc_tile(c);
     ins(c, vop, (uint32_t)dst, (uint32_t)a.reg, (uint32_t)b.reg, imm);
-    Val r = { dst, true, rtype };
+    Val r = { dst, true, rtype, false };
     return r;
 }
 static Val vec_unop(Ctx* c, uint16_t op, Val a, CompileType rtype, Slot imm) {
@@ -482,7 +482,7 @@ static Val vec_unop(Ctx* c, uint16_t op, Val a, CompileType rtype, Slot imm) {
     if (tile_same_width(a.type, rtype)) pop_tmp(c, a);
     int dst = alloc_tile(c);
     ins(c, vop, (uint32_t)dst, (uint32_t)a.reg, 0, imm);
-    Val r = { dst, true, rtype };
+    Val r = { dst, true, rtype, false };
     return r;
 }
 
@@ -499,7 +499,7 @@ static Val binop(Ctx* c, uint16_t op, Val a, Val b, CompileType rtype) {
     int dst = alloc_temp(c);
     Slot z = { 0 };
     ins(c, op, (uint32_t)dst, (uint32_t)a.reg, (uint32_t)b.reg, z);
-    Val r = { dst, true, rtype };
+    Val r = { dst, true, rtype, false };
     return r;
 }
 static Val unop(Ctx* c, uint16_t op, Val a, CompileType rtype) {
@@ -512,7 +512,7 @@ static Val unop(Ctx* c, uint16_t op, Val a, CompileType rtype) {
     int dst = alloc_temp(c);
     Slot z = { 0 };
     ins(c, op, (uint32_t)dst, (uint32_t)a.reg, 0, z);
-    Val r = { dst, true, rtype };
+    Val r = { dst, true, rtype, false };
     return r;
 }
 static Val emit_const(Ctx* c, Slot imm, CompileType type) {
@@ -529,7 +529,7 @@ static Val emit_const(Ctx* c, Slot imm, CompileType type) {
     }
     int dst = alloc_temp(c);
     ins(c, OP_CONST, (uint32_t)dst, 0, 0, k);
-    Val r = { dst, true, type };
+    Val r = { dst, true, type, false };
     return r;
 }
 /* unary/binary op carrying a kernel function pointer in imm.p */
@@ -543,7 +543,7 @@ static Val kern_unop(Ctx* c, uint16_t op, Val a, CompileType rt, const void* fn)
     int dst = alloc_temp(c);
     Slot z; z.p = fn;
     ins(c, op, (uint32_t)dst, (uint32_t)a.reg, 0, z);
-    Val r = { dst, true, rt };
+    Val r = { dst, true, rt, false };
     return r;
 }
 static Val kern_binop(Ctx* c, uint16_t op, Val a, Val b, CompileType rt, const void* fn) {
@@ -556,7 +556,7 @@ static Val kern_binop(Ctx* c, uint16_t op, Val a, Val b, CompileType rt, const v
     int dst = alloc_temp(c);
     Slot z; z.p = fn;
     ins(c, op, (uint32_t)dst, (uint32_t)a.reg, (uint32_t)b.reg, z);
-    Val r = { dst, true, rt };
+    Val r = { dst, true, rt, false };
     return r;
 }
 
@@ -588,7 +588,7 @@ static Val arr_op(Ctx* c, uint16_t op, Val a, Val b, CompileType rt, Slot imm) {
 }
 
 /* The unused second operand of a unary array op. */
-static Val arr_noop_val(void) { Val v = { 0, false, CT_REAL }; return v; }
+static Val arr_noop_val(void) { Val v = { 0, false, CT_REAL, false }; return v; }
 
 /* Prepare one operand of an array op: arrays pass through untouched (the ND
  * layer promotes element dtypes itself), scalars widen to Real/Complex so the
@@ -1384,6 +1384,28 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
             *out = rt; return true;
         }
     }
+    /* Select / TakeWhile / LengthWhile / All-, Any-, NoneTrue — one predicate
+     * loop; see the emit-side block. */
+    if (na == 2 && (!strcmp(h, "Select") || !strcmp(h, "TakeWhile")
+                    || !strcmp(h, "LengthWhile") || !strcmp(h, "AllTrue")
+                    || !strcmp(h, "AnyTrue") || !strcmp(h, "NoneTrue"))) {
+        FnSpec s; if (!fn_resolve(A[1], 1, &s)) return false;
+        CompileType el = vec_elem_type(c, A[0]);
+        if ((int)el < 0) return false;
+        CompileType tb;
+        if (!infer_apply(c, &s, &el, 1, &tb) || tb != CT_BOOL) return false;
+        if (!strcmp(h, "Select") || !strcmp(h, "TakeWhile")) *out = CT_ARRAY(el, 1);
+        else if (!strcmp(h, "LengthWhile"))                  *out = CT_INT;
+        else                                                 *out = CT_BOOL;
+        return true;
+    }
+    /* First[v] / Last[v] are v[[1]] and v[[-1]]. */
+    if ((!strcmp(h, "First") || !strcmp(h, "Last")) && na == 1) {
+        IT(0, ta);
+        if (!CT_IS_ARRAY(ta)) return false;
+        *out = CT_RANK(ta) == 1 ? CT_ELEM(ta) : CT_ARRAY(CT_ELEM(ta), CT_RANK(ta) - 1);
+        return true;
+    }
     /* Map / Scan over a rank-1 array — see the emit-side block for why the
      * result element type must equal the source's. */
     if ((!strcmp(h, "Map") || !strcmp(h, "Scan")) && na == 2) {
@@ -1432,6 +1454,30 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
             T = (CompileType)tfp;
         }
         if (T != CT_REAL && T != CT_COMPLEX) return false;
+        *out = CT_ARRAY(T, 1); return true;
+    }
+    /* FixedPointList / NestWhileList — a BUILT history, so Real/Complex only. */
+    if ((!strcmp(h, "FixedPointList") && na >= 2 && na <= 4)
+        || (!strcmp(h, "NestWhileList") && na == 3)) {
+        bool fp = h[0] == 'F';
+        FnSpec s, ss, ts; const Expr *mx = NULL, *st = NULL;
+        if (!fn_resolve(A[0], 1, &s)) return false;
+        if (fp) { if (!fp_opts(A, na, 2, &mx, &st)) return false; }
+        else if (!fn_resolve(A[2], 1, &ts)) return false;
+        CompileType tn;
+        if (mx && (!infer_type(c, mx, &tn) || tn != CT_INT)) return false;
+        CompileType tx; if (!infer_type(c, A[1], &tx)) return false;
+        int tfp = nest_fixed_type(c, &s, tx);
+        if (tfp < 0) return false;
+        CompileType T = (CompileType)tfp;
+        if (T != CT_REAL && T != CT_COMPLEX) return false;
+        CompileType tb;
+        if (fp && st) {
+            CompileType at[2] = { T, T };
+            if (!fn_resolve(st, 2, &ss) || !infer_apply(c, &ss, at, 2, &tb) || tb != CT_BOOL)
+                return false;
+        }
+        if (!fp && (!infer_apply(c, &ts, &T, 1, &tb) || tb != CT_BOOL)) return false;
         *out = CT_ARRAY(T, 1); return true;
     }
     if (!strcmp(h, "FixedPoint") && na >= 2 && na <= 4) {
@@ -3239,7 +3285,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
                     int rold = alloc_temp(c);
                     ins(c, elem == CT_COMPLEX ? OP_A_LOAD_C : OP_A_LOAD_R,
                         (uint32_t)rold, (uint32_t)arr.reg, (uint32_t)ridx, z);
-                    Val cur = { rold, true, elem }, rhs;
+                    Val cur = { rold, true, elem, false }, rhs;
                     if (!emit(c, A[1], &rhs)) return false;
                     coerce(c, &rhs, elem);
                     uint16_t op = kind == 1 ? (elem == CT_COMPLEX ? OP_ADD_C : OP_ADD_R)
@@ -3415,7 +3461,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         size_t Lp = c->n;
         int rc = alloc_temp(c); ins(c, OP_LT_I, (uint32_t)rc, (uint32_t)rcnt, (uint32_t)rn, z);
         size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z); c->temp_top--;
-        Val acc = { racc, false, t }, vb;
+        Val acc = { racc, false, t, false }, vb;
         if (!emit_apply(c, &fs, &acc, 1, &vb)) return false;
         if (CT_IS_ARRAY(vb.type)) { c->ok = false; return false; }
         coerce(c, &vb, t); if (!c->ok) return false;
@@ -3462,6 +3508,159 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
             out->reg = rout; out->tmp = true; out->type = rt; out->built = a.built;
             return c->ok;
         }
+    }
+
+    /* Select / TakeWhile / LengthWhile / AllTrue / AnyTrue / NoneTrue over a
+     * rank-1 array: one predicate loop, four things done with the answer.
+     *
+     * Select and TakeWhile produce a buffer whose length is only known once the
+     * loop has run, so they allocate the upper bound the source gives them and
+     * cut it to size (A_TRUNC).  An EMPTY result declines: the interpreter
+     * cannot pack `{}` either, so it answers with a List, and a length-0 array
+     * would be a different value.
+     *
+     * (These only became compilable once the interpreter itself grew NDArray
+     * paths for them — every one used to return the call UNEVALUATED on a
+     * packed argument, so there was nothing to be parity with.) */
+    {
+        int sel = -1;
+        if (na == 2) {
+            if      (strcmp(h, "Select") == 0)      sel = 0;
+            else if (strcmp(h, "TakeWhile") == 0)   sel = 1;
+            else if (strcmp(h, "LengthWhile") == 0) sel = 2;
+            else if (strcmp(h, "AllTrue") == 0)     sel = 3;
+            else if (strcmp(h, "AnyTrue") == 0)     sel = 4;
+            else if (strcmp(h, "NoneTrue") == 0)    sel = 5;
+        }
+        if (sel >= 0) {
+            bool keeps = (sel <= 1);            /* builds a buffer */
+            bool pred_run = (sel <= 2);         /* scans a prefix / filters */
+            FnSpec ps;
+            if (!fn_resolve(A[1], 1, &ps)) { c->ok = false; return false; }
+            CompileType el = vec_elem_type(c, A[0]);
+            if ((int)el < 0) { c->ok = false; return false; }
+            CompileType tb;
+            if (!infer_apply(c, &ps, &el, 1, &tb) || tb != CT_BOOL) { c->ok = false; return false; }
+
+            Slot z = { 0 }, k0; memset(&k0, 0, sizeof k0); k0.i = 0;
+            Slot k1; memset(&k1, 0, sizeof k1); k1.i = 1;
+            int rn = alloc_temp(c), ri = alloc_temp(c), rk = alloc_temp(c);
+            Val va;
+            if (!emit(c, A[0], &va)) return false;
+            if (!CT_IS_ARRAY(va.type) || CT_RANK(va.type) != 1) { c->ok = false; return false; }
+            ins(c, OP_A_SIZE, (uint32_t)rn, (uint32_t)va.reg, 0, z);
+
+            int rout = -1;
+            if (keeps) {
+                Slot el_i; memset(&el_i, 0, sizeof el_i); el_i.i = (long long)el;
+                rout = alloc_arr(c);
+                ins_f(c, OP_A_NEW, 1, (uint32_t)rout, (uint32_t)rn, (uint32_t)rn, el_i);
+            }
+            /* Boolean accumulator: All and None start True, Any starts False. */
+            if (!pred_run) {
+                Slot init; memset(&init, 0, sizeof init); init.i = (sel == 4) ? 0 : 1;
+                ins(c, OP_CONST, (uint32_t)rk, 0, 0, init);
+            } else ins(c, OP_CONST, (uint32_t)rk, 0, 0, k0);
+            ins(c, OP_CONST, (uint32_t)ri, 0, 0, k0);
+
+            size_t Lp = c->n;
+            int rc = alloc_temp(c);
+            ins(c, OP_LT_I, (uint32_t)rc, (uint32_t)ri, (uint32_t)rn, z);
+            size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z);
+            c->temp_top--;
+
+            int relem = alloc_temp(c);
+            int body_top = c->temp_top;
+            ins(c, el == CT_COMPLEX ? OP_A_LOAD_C : OP_A_LOAD_R,
+                (uint32_t)relem, (uint32_t)va.reg, (uint32_t)ri, z);
+            Val ev = { relem, false, el, false }, vt;
+            if (!emit_apply(c, &ps, &ev, 1, &vt)) return false;
+            if (vt.type != CT_BOOL) { c->ok = false; return false; }
+
+            size_t jstop = 0; bool has_stop = false;
+            if (sel == 0) {                       /* Select: keep when true */
+                size_t jskip = c->n; ins(c, OP_JZ, 0, (uint32_t)vt.reg, 0, z);
+                ins(c, el == CT_COMPLEX ? OP_A_STORE_C : OP_A_STORE_R,
+                    (uint32_t)rout, (uint32_t)rk, (uint32_t)relem, z);
+                ins(c, OP_INC_I, (uint32_t)rk, 0, 0, k1);
+                if (c->ok) c->code[jskip].b = (uint32_t)c->n;
+            } else if (sel == 1 || sel == 2) {
+                /* A prefix, so the write index and the final length are both
+                 * just `ri` — no separate counter to keep in step. */
+                jstop = c->n; has_stop = true;
+                ins(c, OP_JZ, 0, (uint32_t)vt.reg, 0, z);
+                if (sel == 1)
+                    ins(c, el == CT_COMPLEX ? OP_A_STORE_C : OP_A_STORE_R,
+                        (uint32_t)rout, (uint32_t)ri, (uint32_t)relem, z);
+            } else {
+                /* Short-circuit.  AllTrue fires on a FALSE test, AnyTrue and
+                 * NoneTrue on a TRUE one; the value they then answer with is
+                 * True only for AnyTrue. */
+                Slot outv; memset(&outv, 0, sizeof outv); outv.i = (sel == 4) ? 1 : 0;
+                size_t jfalse = c->n; ins(c, OP_JZ, 0, (uint32_t)vt.reg, 0, z);
+                size_t jcont = 0;
+                if (sel == 3) {                   /* AllTrue: true -> keep going */
+                    jcont = c->n; ins(c, OP_JMP, 0, 0, 0, z);
+                    if (c->ok) c->code[jfalse].b = (uint32_t)c->n;   /* false -> fire */
+                }
+                ins(c, OP_CONST, (uint32_t)rk, 0, 0, outv);
+                jstop = c->n; has_stop = true; ins(c, OP_JMP, 0, 0, 0, z);
+                if (c->ok) {
+                    if (sel == 3) c->code[jcont].b = (uint32_t)c->n;
+                    else          c->code[jfalse].b = (uint32_t)c->n; /* false -> keep going */
+                }
+            }
+            c->temp_top = body_top - 1;
+            ins(c, OP_INC_I, (uint32_t)ri, 0, 0, k1);
+            ins(c, OP_JMP, 0, 0, (uint32_t)Lp, z);
+            if (c->ok) {
+                c->code[jz].b = (uint32_t)c->n;
+                if (has_stop) c->code[jstop].b = (uint32_t)c->n;
+            }
+
+            if (keeps) {
+                int rlen = (sel == 0) ? rk : ri;
+                /* An empty result has no packed form; the interpreter answers
+                 * with a List, so a length-0 array would not be the same value. */
+                emit_nonzero_guard(c, rlen);
+                ins_f(c, OP_A_TRUNC, 0, (uint32_t)rout, (uint32_t)rlen, 0, z);
+                if (va.tmp) {          /* restore LIFO, as the Part lowering does */
+                    ins(c, OP_ARR_FREE, (uint32_t)va.reg, 0, 0, z);
+                    ins(c, OP_A_XFER, (uint32_t)va.reg, (uint32_t)rout, 0, z);
+                    c->arr_top--;
+                    rout = va.reg;
+                }
+                c->temp_top = (rn - c->nlocals);
+                out->reg = rout; out->tmp = true; out->type = CT_ARRAY(el, 1);
+                out->built = va.built;     /* filtered, not constructed */
+                return c->ok;
+            }
+            free_if_tmp(c, va);
+            /* LengthWhile's answer is the prefix length, which IS `ri`; the
+             * predicates' is the boolean in `rk`.  Relocate it down onto rn so
+             * the scratch above is reclaimed. */
+            ins(c, OP_MOVE, (uint32_t)rn, (uint32_t)(sel == 2 ? ri : rk), 0, z);
+            c->temp_top = (rn - c->nlocals) + 1;
+            out->reg = rn; out->tmp = true; out->built = false;
+            out->type = (sel == 2) ? CT_INT : CT_BOOL;
+            return c->ok;
+        }
+    }
+
+    /* First[v] / Last[v]: exactly v[[1]] and v[[-1]], so lower them as that
+     * rather than duplicating the indexing — the range check that makes
+     * First[{}] decline comes along for free. */
+    if ((strcmp(h, "First") == 0 || strcmp(h, "Last") == 0) && na == 1) {
+        CompileType ta;
+        if (!infer_type(c, A[0], &ta) || !CT_IS_ARRAY(ta)) { c->ok = false; return false; }
+        Expr* idx = expr_new_integer(h[0] == 'F' ? 1 : -1);
+        Expr* args[2] = { expr_copy(A[0]), idx };
+        Expr* part = expr_new_function(expr_new_symbol("Part"), args, 2);
+        if (!part) { expr_free(idx); c->ok = false; return false; }
+        bool r = emit(c, part, out);
+        if (!r && expr_subtree_of(part, c->bail_node)) c->bail_node = e;
+        expr_free(part);
+        return r;
     }
 
     /* Map[f, v] / Scan[f, v] over a rank-1 array.
@@ -3806,6 +4005,120 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         /* NestList always constructs; FoldList's history is packed by the
          * interpreter with the SOURCE dtype, so it follows the source's kind. */
         out->built = nest ? true : va.built;
+        return c->ok;
+    }
+
+    /* FixedPointList[f, x, ...] / NestWhileList[f, x, test]: the same loops as
+     * their scalar twins, keeping every iterate.
+     *
+     * The length is not known until the loop has run, so the buffer GROWS
+     * (A_PUSH) and is cut to size at the end (A_TRUNC).  Allocating the safety
+     * cap up front instead would be 8 MB per call, and running the body twice
+     * to count first would double every side effect a `Set` in it performs.
+     * The capacity a particular run reached is never observable. */
+    if ((strcmp(h, "FixedPointList") == 0 && na >= 2 && na <= 4)
+        || (strcmp(h, "NestWhileList") == 0 && na == 3)) {
+        bool fp = h[0] == 'F';
+        FnSpec fs, ss, ts;
+        const Expr *mx = NULL, *st = NULL;
+        if (!fn_resolve(A[0], 1, &fs)) { c->ok = false; return false; }
+        if (fp) { if (!fp_opts(A, na, 2, &mx, &st)) { c->ok = false; return false; } }
+        else if (!fn_resolve(A[2], 1, &ts)) { c->ok = false; return false; }
+
+        CompileType tx; if (!infer_type(c, A[1], &tx)) { c->ok = false; return false; }
+        int tfp = nest_fixed_type(c, &fs, tx);
+        if (tfp < 0) { c->ok = false; return false; }
+        CompileType T = (CompileType)tfp;
+        /* A built history, so the ConstantArray element-type rule applies. */
+        if (T != CT_REAL && T != CT_COMPLEX) { c->ok = false; return false; }
+        if (fp && st && !fn_resolve(st, 2, &ss)) { c->ok = false; return false; }
+        if (!fp) {   /* the while-test must yield a Bool on the accumulator */
+            CompileType tb;
+            if (!infer_apply(c, &ts, &T, 1, &tb) || tb != CT_BOOL) { c->ok = false; return false; }
+        }
+
+        Slot z = { 0 }, k0; memset(&k0, 0, sizeof k0); k0.i = 0;
+        Slot k1; memset(&k1, 0, sizeof k1); k1.i = 1;
+        uint16_t pflags = (uint16_t)(((unsigned)T & 3u) << AF_R_SHIFT);
+
+        int rcap = alloc_temp(c), racc = alloc_temp(c);
+        int rk = alloc_temp(c), rcnt = alloc_temp(c), rlim = alloc_temp(c);
+        Slot cap0; memset(&cap0, 0, sizeof cap0); cap0.i = 16;   /* grown as needed */
+        ins(c, OP_CONST, (uint32_t)rcap, 0, 0, cap0);
+
+        Val vx; if (!emit(c, A[1], &vx)) return false;
+        coerce(c, &vx, T); if (!c->ok) return false;
+        ins(c, OP_MOVE, (uint32_t)racc, (uint32_t)vx.reg, 0, z); free_if_tmp(c, vx);
+        if (mx) {
+            Val vn; if (!emit(c, mx, &vn)) return false;
+            if (vn.type != CT_INT) { c->ok = false; return false; }
+            ins(c, OP_MOVE, (uint32_t)rlim, (uint32_t)vn.reg, 0, z); free_if_tmp(c, vn);
+            emit_nonneg_guard(c, rlim);
+        } else {
+            Slot cp; memset(&cp, 0, sizeof cp); cp.i = VM_ITER_SAFETY_CAP;
+            ins(c, OP_CONST, (uint32_t)rlim, 0, 0, cp);
+        }
+
+        Slot el_i; memset(&el_i, 0, sizeof el_i); el_i.i = (long long)T;
+        int rout = alloc_arr(c);
+        ins_f(c, OP_A_NEW, 1, (uint32_t)rout, (uint32_t)rcap, (uint32_t)rcap, el_i);
+
+        ins(c, OP_CONST, (uint32_t)rk, 0, 0, k0);
+        ins(c, OP_CONST, (uint32_t)rcnt, 0, 0, k0);
+        ins_f(c, OP_A_PUSH, pflags, (uint32_t)rout, (uint32_t)rk, (uint32_t)racc, z);
+        ins(c, OP_INC_I, (uint32_t)rk, 0, 0, k1);
+
+        size_t Lp = c->n, jend = 0, jcap = 0;
+        int body_top = c->temp_top;
+        if (!fp) {                       /* NestWhileList tests BEFORE applying */
+            Val acc0 = { racc, false, T, false }, vt;
+            if (!emit_apply(c, &ts, &acc0, 1, &vt)) return false;
+            if (vt.type != CT_BOOL) { c->ok = false; return false; }
+            jend = c->n; ins(c, OP_JZ, 0, (uint32_t)vt.reg, 0, z);
+            c->temp_top = body_top;
+        }
+        int rc = alloc_temp(c);
+        ins(c, OP_LT_I, (uint32_t)rc, (uint32_t)rcnt, (uint32_t)rlim, z);
+        jcap = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z);
+        c->temp_top--;
+
+        Val acc = { racc, false, T, false }, vb;
+        if (!emit_apply(c, &fs, &acc, 1, &vb)) return false;
+        if (CT_IS_ARRAY(vb.type)) { c->ok = false; return false; }
+        coerce(c, &vb, T); if (!c->ok) return false;
+        int rsame = -1;
+        if (fp) {                        /* compare before the accumulator moves */
+            if (st) {
+                Val sargv[2] = { { racc, false, T, false }, vb }, sv;
+                sargv[1].tmp = false;
+                if (!emit_apply(c, &ss, sargv, 2, &sv)) return false;
+                if (sv.type != CT_BOOL) { c->ok = false; return false; }
+                rsame = sv.reg;
+            } else {
+                rsame = alloc_temp(c);
+                ins(c, emit_sameq_op(T), (uint32_t)rsame, (uint32_t)vb.reg, (uint32_t)racc, z);
+            }
+        }
+        if (vb.reg != racc) ins(c, OP_MOVE, (uint32_t)racc, (uint32_t)vb.reg, 0, z);
+        ins(c, OP_INC_I, (uint32_t)rcnt, 0, 0, k1);
+        ins_f(c, OP_A_PUSH, pflags, (uint32_t)rout, (uint32_t)rk, (uint32_t)racc, z);
+        ins(c, OP_INC_I, (uint32_t)rk, 0, 0, k1);
+        if (fp) ins(c, OP_JZ, 0, (uint32_t)rsame, (uint32_t)Lp, z);  /* not same -> iterate */
+        else    ins(c, OP_JMP, 0, 0, (uint32_t)Lp, z);
+        c->temp_top = body_top;
+        size_t jdone = c->n; ins(c, OP_JMP, 0, 0, 0, z);
+        if (c->ok) c->code[jcap].b = (uint32_t)c->n;
+        /* Reaching the cap of an UNBOUNDED run is where the interpreter gives
+         * up too; with a user bound, falling through keeps what was collected. */
+        if (!mx) ins(c, OP_FAIL, 0, 0, 0, z);
+        if (c->ok) {
+            c->code[jdone].b = (uint32_t)c->n;
+            if (!fp) c->code[jend].b = (uint32_t)c->n;
+        }
+        ins_f(c, OP_A_TRUNC, 0, (uint32_t)rout, (uint32_t)rk, 0, z);
+
+        c->temp_top = (rcap - c->nlocals);
+        out->reg = rout; out->tmp = true; out->type = CT_ARRAY(T, 1); out->built = true;
         return c->ok;
     }
 
@@ -4689,6 +5002,45 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
                 size_t k_ = (size_t)RA.i;
                 ((double*)A_->data)[2*k_]   = creal(RB.z);
                 ((double*)A_->data)[2*k_+1] = cimag(RB.z);
+            } NEXT();
+            /* Append at R[a], growing the buffer when it runs out.  The array
+             * was allocated by this call and nothing else holds it, so growing
+             * it in place is safe; `dims[0]` is the CAPACITY until A_TRUNC sets
+             * the real length. */
+            OP(A_PUSH): {
+                Expr* A_ = RD.arr;
+                if (!A_ || A_->type != EXPR_NDARRAY || A_->data.ndarray.rank != 1) goto vm_fail;
+                long long k_ = RA.i;
+                if (k_ < 0) goto vm_fail;
+                NDArrayData* nd_ = &A_->data.ndarray;
+                if (k_ >= nd_->dims[0]) {
+                    int64_t cap_ = nd_->dims[0] > 0 ? nd_->dims[0] * 2 : 16;
+                    if (cap_ <= k_) cap_ = k_ + 1;
+                    if (cap_ > (int64_t)VM_ITER_SAFETY_CAP + 1) goto vm_fail;
+                    size_t es_ = ndt_elem_size(nd_->dtype);
+                    void* nb_ = realloc(nd_->data, (size_t)cap_ * es_);
+                    if (!nb_) goto vm_fail;
+                    nd_->data = nb_;
+                    nd_->dims[0] = cap_;
+                }
+                if (AF_R(c->flags) == (unsigned)CT_COMPLEX) {
+                    ((double*)nd_->data)[2*(size_t)k_]     = creal(RB.z);
+                    ((double*)nd_->data)[2*(size_t)k_ + 1] = cimag(RB.z);
+                } else ((double*)nd_->data)[(size_t)k_] = RB.r;
+            } NEXT();
+            /* Final length, so a capacity the run happened to reach is never
+             * visible.  Shrinking in place: a failed realloc keeps the buffer,
+             * which is still large enough, so only dims[0] has to be right. */
+            OP(A_TRUNC): {
+                Expr* A_ = RD.arr;
+                if (!A_ || A_->type != EXPR_NDARRAY || A_->data.ndarray.rank != 1) goto vm_fail;
+                long long n_ = RA.i;
+                NDArrayData* nd_ = &A_->data.ndarray;
+                if (n_ < 0 || n_ > nd_->dims[0]) goto vm_fail;
+                size_t es_ = ndt_elem_size(nd_->dtype);
+                void* nb_ = realloc(nd_->data, (size_t)(n_ ? n_ : 1) * es_);
+                if (nb_) nd_->data = nb_;
+                nd_->dims[0] = n_;
             } NEXT();
             OP(A_SIZE):     ARROP();
             OP(A_NEWLIKE):  ARROP();

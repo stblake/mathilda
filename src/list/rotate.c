@@ -1,4 +1,6 @@
 #include "list_common.h"
+#include "ndarray.h"    /* is_ndarray */
+#include "ndstruct.h"   /* ndstruct_delist_repack — packed-argument fallback */
 #include "rotate.h"
 
 static Expr* rotate_rec(Expr* expr, Expr* n_spec, size_t level_idx) {
@@ -36,7 +38,11 @@ Expr* builtin_rotateleft(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     Expr* expr = res->data.function.args[0];
     Expr* n_spec = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
-    
+    /* An NDArray is atomic, so the element walk below looks straight past one
+     * and the call comes back UNEVALUATED, while the identical List call works.
+     * Materialise, reuse the List implementation, repack — see ndstruct.h. */
+    if (is_ndarray(expr)) return ndstruct_delist_repack(res, expr);
+
     Expr* default_n = NULL;
     if (!n_spec) {
         default_n = expr_new_integer(1);
@@ -52,7 +58,11 @@ Expr* builtin_rotateright(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     Expr* expr = res->data.function.args[0];
     Expr* n_spec = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
-    
+    /* An NDArray is atomic, so the element walk below looks straight past one
+     * and the call comes back UNEVALUATED, while the identical List call works.
+     * Materialise, reuse the List implementation, repack — see ndstruct.h. */
+    if (is_ndarray(expr)) return ndstruct_delist_repack(res, expr);
+
     Expr* neg_n_spec = NULL;
     if (!n_spec) {
         neg_n_spec = expr_new_integer(-1);

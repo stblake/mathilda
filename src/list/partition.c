@@ -1,4 +1,6 @@
 #include "list_common.h"
+#include "ndarray.h"    /* is_ndarray */
+#include "ndstruct.h"   /* ndstruct_delist_repack — packed-argument fallback */
 #include "partition.h"
 
 static Expr* partition_rec(Expr* list, Expr* n_spec, Expr* d_spec, size_t level_idx) {
@@ -70,6 +72,11 @@ Expr* builtin_partition(Expr* res) {
     Expr* list = res->data.function.args[0];
     Expr* n_spec = res->data.function.args[1];
     Expr* d_spec = (res->data.function.arg_count == 3) ? res->data.function.args[2] : NULL;
+
+    /* An NDArray is atomic, so the element walk below looks straight past one
+     * and the call comes back UNEVALUATED, while the identical List call works.
+     * Materialise, reuse the List implementation, repack — see ndstruct.h. */
+    if (is_ndarray(list)) return ndstruct_delist_repack(res, list);
 
     if (list->type != EXPR_FUNCTION) return expr_copy(list);
 

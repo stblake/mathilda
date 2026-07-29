@@ -1355,3 +1355,24 @@ Rules this session earned:
 - **A test helper's variable name is part of its contract.** `ref_at` binds
   `xq`; eight `Table` parity cases written with `x` all reported "shape/kind
   mismatch" against a reference that was still symbolic.
+
+## NDArray gaps and the selection heads (2026-07-29)
+
+- **An `NDArray` is ATOMIC, so any builtin that walks
+  `arg->data.function.args` silently ignores one** and returns the call
+  unevaluated — while the identical `List` call works. Seventeen heads were in
+  that state (`Select`, `Join`, `First`, `Differences`, `Riffle`, …). The fix
+  that generalises is `ndstruct_delist_repack`: materialise, reuse the ordinary
+  List implementation, repack. The ANSWER then comes from the List path and is
+  identical to it by construction — only the packing is new.
+
+- **A test helper's comparison decides what it can see.** `arr_cmp` reduces both
+  sides to `(Re, Im)`, so it reports a Boolean result as a "shape mismatch". Six
+  passing behaviours looked like failures until the assertion changed to
+  `expr_eq`, which is also stricter — it compares heads and dtypes, so a Real
+  answering where an Integer should now fails rather than compares equal.
+
+- **A legitimate decline is not a test failure.** `parity_arr` counts any
+  declined trial as a failure; `Select`/`TakeWhile` decline on an empty result by
+  design. Give such tests an explicit `may_decline`, or the harness pushes you
+  toward making the code answer where it should not.

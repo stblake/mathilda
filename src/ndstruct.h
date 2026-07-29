@@ -30,4 +30,21 @@ Expr* ndstruct_take(Expr* res);       /* Take[a, spec] */
 Expr* ndstruct_drop(Expr* res);       /* Drop[a, spec] */
 Expr* ndstruct_clip(Expr* res);       /* Clip[a] / Clip[a, {min,max}] */
 
+/* Faithful-degrade primitive for a head that has NO native buffer walk.
+ *
+ * Re-runs `call` with every NDArray argument materialised into a nested List,
+ * then repacks a rectangular machine-numeric result with `src`'s dtype. The
+ * ANSWER therefore comes from the ordinary List implementation and is identical
+ * to the List call by construction; only the packing of the result is new.
+ *
+ * This exists because an NDArray is ATOMIC, so a builtin that walks
+ * `arg->data.function.args` looks straight past one and returns the call
+ * UNEVALUATED — which is what Select, Join, First, Differences and a dozen
+ * others used to do, while the identical List call worked fine.
+ *
+ * A scalar, symbolic, empty or ragged result is returned exactly as the List
+ * implementation produced it (there is nothing to pack), matching what Map does
+ * with a non-numeric result. `call` and `src` are borrowed. */
+Expr* ndstruct_delist_repack(const Expr* call, const Expr* src);
+
 #endif /* MATHILDA_NDSTRUCT_H */
