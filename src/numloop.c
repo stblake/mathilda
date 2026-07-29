@@ -470,7 +470,15 @@ static bool compile_function(NumProg* p, const Expr* f, size_t arity,
     size_t fargc = f->data.function.arg_count;
     const Expr* body = NULL;
     const char* names[8];
-    VarCtx vc;
+    /* Zero-initialised, not merely assigned field-by-field below: the branches
+     * set var_names/nvars/slot_var and nothing else, so `defined`, `arr_names`,
+     * `arr_rank` and `narr` would keep whatever was on the stack. Both optional
+     * pointers are read as "NULL means absent" -- resolve_var dereferences
+     * `defined[i]` the moment `defined` is non-NULL -- so stack litter there is a
+     * wild read, not a wrong answer. It stayed invisible for as long as every
+     * caller happened to leave zeros at those offsets; routing one more head
+     * (FixedPointList) through here changed the stack shape and it faulted. */
+    VarCtx vc = {0};
 
     if (fargc == 1) {                                   /* Function[body] */
         body = f->data.function.args[0];
@@ -620,6 +628,45 @@ static bool value_is_inexact(const Expr* v) {
     return false;
 }
 
+/* ------------------------------------------------------------------------
+ *  Collecting the iterates of a *List head
+ *
+ *  NestList / FoldList / NestWhileList / FixedPointList differ from their
+ *  scalar twins only in keeping every iterate instead of the last. Both stages
+ *  below collect raw doubles and box to Expr only once the loop has finished
+ *  successfully, so a bail -- the common case for a body that leaves the
+ *  compilable subset or goes non-finite midway -- costs no Expr allocation at
+ *  all and has nothing to unwind. (numloop_map predates this and boxes as it
+ *  goes, which is why it carries a `done` counter to free the prefix.)
+ * ---------------------------------------------------------------------- */
+
+/* Box n doubles as List[Real...]. */
+static Expr* reals_to_list(const double* v, size_t n) {
+    Expr** items = malloc((n ? n : 1) * sizeof(Expr*));
+    if (!items) return NULL;
+    for (size_t i = 0; i < n; i++) items[i] = expr_new_real(v[i]);
+    Expr* r = expr_new_function(expr_new_symbol(SYM_List), items, n);
+    free(items);
+    return r;
+}
+
+/* Growable double vector, for the two loops whose length is not known before
+ * they run (NestWhileList, FixedPointList). */
+typedef struct { double* v; size_t n, cap; } DVec;
+
+static bool dvec_push(DVec* d, double x) {
+    if (d->n == d->cap) {
+        size_t cap = d->cap ? d->cap * 2 : 64;
+        double* nv = realloc(d->v, cap * sizeof(double));
+        if (!nv) return false;
+        d->v = nv; d->cap = cap;
+    }
+    d->v[d->n++] = x;
+    return true;
+}
+
+static void dvec_free(DVec* d) { free(d->v); d->v = NULL; d->n = d->cap = 0; }
+
 /* Nest[f, arr, n] over a dense float64 NDArray: the compiled scalar body is run
  * per element (element-local, so the update is safe in place), fusing the whole
  * map with no intermediate array temporaries and no per-iteration Expr/NDArray
@@ -654,14 +701,22 @@ static Expr* numloop_nest_array(const Expr* f, const Expr* x0, int64_t n) {
                             buf, NDT_FLOAT64);   /* takes ownership of buf */
 }
 
-Expr* numloop_nest(const Expr* f, const Expr* x0, int64_t n) {
+static Expr* numloop_nest_impl(const Expr* f, const Expr* x0, int64_t n, bool as_list) {
     if (numloop_off()) return NULL;
     if (n < 0) return NULL;
 
-    if (is_f64_ndarray(x0)) return numloop_nest_array(f, x0, n);
+    /* The fused in-place array map answers with the FINAL array; NestList over
+     * an array seed would have to keep n+1 whole arrays, which is the
+     * interpreter's own allocation problem and none of the loop overhead this
+     * path exists to remove. */
+    if (is_f64_ndarray(x0)) return as_list ? NULL : numloop_nest_array(f, x0, n);
 
     double x;
     if (!to_machine_double(x0, &x)) return NULL;
+
+    /* The iterate buffer is n+1 doubles; refuse a count whose byte size would
+     * not compute, rather than wrapping into a short allocation. */
+    if (as_list && (uint64_t)n + 1 > (uint64_t)(SIZE_MAX / sizeof(double))) return NULL;
 
     NumProg p;
     bool body_inexact;
@@ -671,24 +726,43 @@ Expr* numloop_nest(const Expr* f, const Expr* x0, int64_t n) {
      * Real literal. Otherwise the interpreter would stay exact/symbolic. */
     if (!value_is_inexact(x0) && !body_inexact) { prog_free(&p); return NULL; }
 
+    /* ...but a Real literal in the body only licenses positions the body
+     * COMPUTED. NestList hands back the seed unevaluated at out[[1]], and so
+     * does Nest at n = 0, so those need the seed itself to be Real:
+     * NestList[# + 0. &, 1, 3] is {1, 1., 1., 1.}, not {1., 1., 1., 1.}. */
+    if ((as_list || n == 0) && !value_is_inexact(x0)) { prog_free(&p); return NULL; }
+
     double* stack = malloc(p.max_stack * sizeof(double));
-    if (!stack) { prog_free(&p); return NULL; }
+    double* out   = as_list ? malloc(((size_t)n + 1) * sizeof(double)) : NULL;
+    if (!stack || (as_list && !out)) { free(stack); free(out); prog_free(&p); return NULL; }
 
     bool bail = false;
+    if (as_list) out[0] = x;
     for (int64_t i = 0; i < n; i++) {
         x = numprog_run(&p, &x, stack);
         if (!isfinite(x)) { bail = true; break; }
+        if (as_list) out[i + 1] = x;
     }
     free(stack);
     prog_free(&p);
-    if (bail) return NULL;   /* interpreter re-runs the whole Nest */
-    return expr_new_real(x);
+    if (bail) { free(out); return NULL; }   /* interpreter re-runs the whole Nest */
+    Expr* r = as_list ? reals_to_list(out, (size_t)n + 1) : expr_new_real(x);
+    free(out);
+    return r;
+}
+
+Expr* numloop_nest(const Expr* f, const Expr* x0, int64_t n) {
+    return numloop_nest_impl(f, x0, n, false);
+}
+
+Expr* numloop_nestlist(const Expr* f, const Expr* x0, int64_t n) {
+    return numloop_nest_impl(f, x0, n, true);
 }
 
 /* ------------------------------------------------------------------------
  *  Map[f, expr] at level {1}
  * ---------------------------------------------------------------------- */
-Expr* numloop_map(const Expr* f, const Expr* expr) {
+static Expr* numloop_map_impl(const Expr* f, const Expr* expr, bool as_scan) {
     if (numloop_off()) return NULL;
     if (expr->type != EXPR_FUNCTION) return NULL;
     size_t n = expr->data.function.arg_count;
@@ -698,30 +772,33 @@ Expr* numloop_map(const Expr* f, const Expr* expr) {
     bool body_inexact;
     if (!compile_function(&p, f, 1, &body_inexact)) return NULL;
 
-    /* Every element must be a machine number; note whether any is inexact. */
+    /* Every element must be a machine number; note whether they are ALL inexact. */
     double* vals = malloc(n * sizeof(double));
     if (!vals) { prog_free(&p); return NULL; }
-    bool any_inexact = false, ok = true;
+    bool all_inexact = true, ok = true;
     for (size_t i = 0; i < n; i++) {
         if (!to_machine_double(expr->data.function.args[i], &vals[i])) { ok = false; break; }
-        if (value_is_inexact(expr->data.function.args[i])) any_inexact = true;
+        if (!value_is_inexact(expr->data.function.args[i])) all_inexact = false;
     }
-    /* Result must be inexact (an element is Real, or the body has a Real
-     * literal); otherwise the interpreter would keep an exact/symbolic result. */
-    if (!ok || (!any_inexact && !body_inexact)) { free(vals); prog_free(&p); return NULL; }
+    /* Every result element must be inexact. Element i's is, if the body carries
+     * a Real literal (so every element computes to a Real) or element i is
+     * itself Real. ALL, not ANY: a body that just returns its argument passes
+     * the exact ones straight through, so Map[# &, {1., 2, 3}] is {1., 2, 3} --
+     * one Real element does not make the whole result inexact. */
+    if (!ok || (!all_inexact && !body_inexact)) { free(vals); prog_free(&p); return NULL; }
 
     double* stack = malloc(p.max_stack * sizeof(double));
     if (!stack) { free(vals); prog_free(&p); return NULL; }
-    Expr** out = malloc(n * sizeof(Expr*));
-    if (!out) { free(stack); free(vals); prog_free(&p); return NULL; }
+    /* Scan discards every f[element]; only Map builds a result. */
+    Expr** out = as_scan ? NULL : malloc(n * sizeof(Expr*));
+    if (!as_scan && !out) { free(stack); free(vals); prog_free(&p); return NULL; }
 
     bool bail = false;
     size_t done = 0;
     for (size_t i = 0; i < n; i++) {
         double r = numprog_run(&p, &vals[i], stack);
         if (!isfinite(r)) { bail = true; break; }
-        out[i] = expr_new_real(r);
-        done++;
+        if (!as_scan) { out[i] = expr_new_real(r); done++; }
     }
     free(stack);
     free(vals);
@@ -731,9 +808,24 @@ Expr* numloop_map(const Expr* f, const Expr* expr) {
         free(out);
         return NULL;
     }
+    if (as_scan) return expr_new_symbol(SYM_Null);
     Expr* result = expr_new_function(expr_copy(expr->data.function.head), out, n);
     free(out);
     return result;
+}
+
+Expr* numloop_map(const Expr* f, const Expr* expr) {
+    return numloop_map_impl(f, expr, false);
+}
+
+/* Scan[f, expr] answers Null and exists for f's side effects -- of which a
+ * numeric-closed body has none, so the loop below is observably a no-op and
+ * could in principle be skipped outright. It is run anyway, because the ONE
+ * thing the interpreter would still do is stop at a non-finite element (where
+ * it goes complex, or divides by zero); running the compiled body keeps that
+ * boundary exactly where the interpreter puts it, and hands those cases back. */
+Expr* numloop_scan(const Expr* f, const Expr* expr) {
+    return numloop_map_impl(f, expr, true);
 }
 
 /* ========================================================================
@@ -1401,7 +1493,8 @@ Expr* numloop_while(const Expr* test, const Expr* body) {
 /* ------------------------------------------------------------------------
  *  Fold[f, x0, list]
  * ---------------------------------------------------------------------- */
-Expr* numloop_fold(const Expr* f, const Expr* x0, const Expr* list) {
+static Expr* numloop_fold_impl(const Expr* f, const Expr* x0, const Expr* list,
+                               bool as_list) {
     if (numloop_off()) return NULL;
     if (list->type != EXPR_FUNCTION) return NULL;
     size_t m = list->data.function.arg_count;
@@ -1416,43 +1509,63 @@ Expr* numloop_fold(const Expr* f, const Expr* x0, const Expr* list) {
     if (!compile_function(&p, f, 2, &body_inexact)) return NULL;
 
     /* Every list element must already be a machine number; gather them and note
-     * whether any is inexact (which -- like a Real seed or Real body literal --
-     * forces the interpreter's result inexact). */
+     * whether they are ALL inexact. */
     double* elems = malloc(m * sizeof(double));
     if (!elems) { prog_free(&p); return NULL; }
-    bool elem_inexact = false;
+    bool elems_inexact = true;
     bool ok = true;
     for (size_t i = 0; i < m; i++) {
         const Expr* el = list->data.function.args[i];
         if (!to_machine_double(el, &elems[i])) { ok = false; break; }
-        if (value_is_inexact(el)) elem_inexact = true;
+        if (!value_is_inexact(el)) elems_inexact = false;
     }
     if (!ok) { free(elems); prog_free(&p); return NULL; }
 
-    if (!value_is_inexact(x0) && !body_inexact && !elem_inexact) {
-        free(elems); prog_free(&p); return NULL;
-    }
+    /* Elements must be inexact throughout, not merely somewhere: a body that
+     * returns its second argument (#2 &) hands each element back untouched, so
+     * Fold[#2 &, 1., {1, 2, 3}] is the exact Integer 3.
+     *
+     * Given that, the accumulator is inexact if the seed is, or if the body
+     * carries a Real literal -- except for FoldList, which emits the seed itself
+     * as out[[1]] and so needs it Real however inexact the body is. */
+    bool seed_ok = value_is_inexact(x0) || (!as_list && body_inexact);
+    if (!elems_inexact || !seed_ok) { free(elems); prog_free(&p); return NULL; }
 
     double* stack = malloc(p.max_stack * sizeof(double));
     if (!stack) { free(elems); prog_free(&p); return NULL; }
+    /* FoldList keeps the seed and every partial result: m+1 values. */
+    double* out = as_list ? malloc((m + 1) * sizeof(double)) : NULL;
+    if (as_list && !out) { free(stack); free(elems); prog_free(&p); return NULL; }
 
     bool bail = false;
+    if (as_list) out[0] = acc;
     for (size_t i = 0; i < m; i++) {
         double regs[2] = { acc, elems[i] };
         acc = numprog_run(&p, regs, stack);
         if (!isfinite(acc)) { bail = true; break; }
+        if (as_list) out[i + 1] = acc;
     }
     free(stack);
     free(elems);
     prog_free(&p);
-    if (bail) return NULL;
-    return expr_new_real(acc);
+    if (bail) { free(out); return NULL; }
+    Expr* r = as_list ? reals_to_list(out, m + 1) : expr_new_real(acc);
+    free(out);
+    return r;
+}
+
+Expr* numloop_fold(const Expr* f, const Expr* x0, const Expr* list) {
+    return numloop_fold_impl(f, x0, list, false);
+}
+
+Expr* numloop_foldlist(const Expr* f, const Expr* x0, const Expr* list) {
+    return numloop_fold_impl(f, x0, list, true);
 }
 
 /* ------------------------------------------------------------------------
  *  FixedPoint[f, x0]  (default SameTest, no application cap)
  * ---------------------------------------------------------------------- */
-Expr* numloop_fixedpoint(const Expr* f, const Expr* x0) {
+static Expr* numloop_fixedpoint_impl(const Expr* f, const Expr* x0, bool as_list) {
     if (numloop_off()) return NULL;
 
     double x;
@@ -1463,19 +1576,33 @@ Expr* numloop_fixedpoint(const Expr* f, const Expr* x0) {
     if (!compile_function(&p, f, 1, &body_inexact)) return NULL;
     if (!value_is_inexact(x0) && !body_inexact) { prog_free(&p); return NULL; }
 
+    /* FixedPointList emits the seed unevaluated at out[[1]], so it needs a Real
+     * seed even when the body would make every later iterate Real. The exact
+     * seed also changes the LENGTH -- the interpreter's SameQ separates 1 from
+     * 1., so FixedPointList[# + 0. &, 1] takes one extra step. */
+    if (as_list && !value_is_inexact(x0)) { prog_free(&p); return NULL; }
+
     double* stack = malloc(p.max_stack * sizeof(double));
     if (!stack) { prog_free(&p); return NULL; }
 
     /* Iterate x := f(x) until it stops changing (SameQ on machine reals is
      * exact double equality, matching the interpreter's expr_eq). A non-
-     * converging orbit hits the safety cap and bails to the interpreter. */
+     * converging orbit hits the safety cap and bails to the interpreter.
+     *
+     * FixedPointList keeps the seed and every iterate INCLUDING the repeated
+     * final value, so the list ends ..., fp, fp -- that trailing duplicate is
+     * what the interpreted path produces (FixedPointList[Cos, 1.0] has length
+     * 92 with [[-1]] === [[-2]]) and the fast path has to reproduce it. */
     bool bail = false;
     int64_t guard = 0;
     const int64_t CAP = 1000000;   /* == ITER_SAFETY_CAP */
     double cur = x;
-    while (1) {
+    DVec acc = { NULL, 0, 0 };
+    if (as_list && !dvec_push(&acc, cur)) bail = true;
+    while (!bail) {
         double next = numprog_run(&p, &cur, stack);
         if (!isfinite(next)) { bail = true; break; }
+        if (as_list && !dvec_push(&acc, next)) { bail = true; break; }
         bool same = (next == cur);
         cur = next;
         if (same) break;
@@ -1483,14 +1610,26 @@ Expr* numloop_fixedpoint(const Expr* f, const Expr* x0) {
     }
     free(stack);
     prog_free(&p);
-    if (bail) return NULL;
-    return expr_new_real(cur);
+    if (bail) { dvec_free(&acc); return NULL; }
+    if (!as_list) return expr_new_real(cur);
+    Expr* r = reals_to_list(acc.v, acc.n);
+    dvec_free(&acc);
+    return r;
+}
+
+Expr* numloop_fixedpoint(const Expr* f, const Expr* x0) {
+    return numloop_fixedpoint_impl(f, x0, false);
+}
+
+Expr* numloop_fixedpointlist(const Expr* f, const Expr* x0) {
+    return numloop_fixedpoint_impl(f, x0, true);
 }
 
 /* ------------------------------------------------------------------------
  *  NestWhile[f, x0, test]  (m = 1, default max / n; test a unary predicate)
  * ---------------------------------------------------------------------- */
-Expr* numloop_nestwhile(const Expr* f, const Expr* x0, const Expr* test) {
+static Expr* numloop_nestwhile_impl(const Expr* f, const Expr* x0, const Expr* test,
+                                    bool as_list) {
     if (numloop_off()) return NULL;
 
     double x;
@@ -1521,6 +1660,11 @@ Expr* numloop_nestwhile(const Expr* f, const Expr* x0, const Expr* test) {
     if (!compile_function(&pf, f, 1, &body_inexact)) return NULL;
     if (!value_is_inexact(x0) && !body_inexact) { prog_free(&pf); return NULL; }
 
+    /* NestWhileList emits the seed unevaluated at out[[1]]. The scalar form
+     * hands it back whole when the test fails on the first look, which is not
+     * known until the loop runs -- so that case is caught after the loop. */
+    if (as_list && !value_is_inexact(x0)) { prog_free(&pf); return NULL; }
+
     VarCtx vc = { .var_names = NULL, .nvars = 1, .slot_var = true };
     if (!numprog_compile(&tl, tbody->data.function.args[0], &vc)) { prog_free(&pf); return NULL; }
     if (!numprog_compile(&tr, tbody->data.function.args[1], &vc)) {
@@ -1534,19 +1678,86 @@ Expr* numloop_nestwhile(const Expr* f, const Expr* x0, const Expr* test) {
     if (!stack) { prog_free(&pf); prog_free(&tl); prog_free(&tr); return NULL; }
 
     /* NestWhile: while test(current) holds, apply f; stop at the first value
-     * that fails the test and return it. */
+     * that fails the test and return it. NestWhileList collects the seed and
+     * every iterate up to and including that first failing value. */
     bool bail = false;
     int64_t guard = 0;
     const int64_t CAP = 1000000;
     double cur = x;
-    while (cmp_eval(numprog_run(&tl, &cur, stack),
-                    numprog_run(&tr, &cur, stack), op)) {
+    bool applied = false;
+    DVec acc = { NULL, 0, 0 };
+    if (as_list && !dvec_push(&acc, cur)) bail = true;
+    while (!bail && cmp_eval(numprog_run(&tl, &cur, stack),
+                             numprog_run(&tr, &cur, stack), op)) {
         cur = numprog_run(&pf, &cur, stack);
+        applied = true;
         if (!isfinite(cur)) { bail = true; break; }
+        if (as_list && !dvec_push(&acc, cur)) { bail = true; break; }
         if (++guard >= CAP) { bail = true; break; }
     }
     free(stack);
     prog_free(&pf); prog_free(&tl); prog_free(&tr);
-    if (bail) return NULL;
-    return expr_new_real(cur);
+    /* The test failed immediately: the answer is the seed itself, unevaluated,
+     * so an exact seed must stay exact -- NestWhile[# + 0. &, 1, # < 0 &] is 1,
+     * not 1.. Nothing was computed, so there is no work to lose by handing it
+     * back to the interpreter. */
+    if (!applied && !value_is_inexact(x0)) bail = true;
+    if (bail) { dvec_free(&acc); return NULL; }
+    if (!as_list) return expr_new_real(cur);
+    Expr* r = reals_to_list(acc.v, acc.n);
+    dvec_free(&acc);
+    return r;
+}
+
+Expr* numloop_nestwhile(const Expr* f, const Expr* x0, const Expr* test) {
+    return numloop_nestwhile_impl(f, x0, test, false);
+}
+
+Expr* numloop_nestwhilelist(const Expr* f, const Expr* x0, const Expr* test) {
+    return numloop_nestwhile_impl(f, x0, test, true);
+}
+
+/* ------------------------------------------------------------------------
+ *  Accumulate[list]
+ *
+ *  The one head here with no function argument to compile: its interpreted
+ *  path builds a Plus[running, element] node and calls evaluate() on it once
+ *  per element, which is the entire cost. The running sum below is that same
+ *  binary double addition in the same order, so the two agree bit-for-bit.
+ *
+ *  The gate is every element a machine Real -- not merely convertible. A list
+ *  that mixes exact and inexact keeps an EXACT prefix (Accumulate[{1, 2., 3}]
+ *  is {1, 3., 6.}, whose first element is an Integer), and a uniform buffer of
+ *  doubles cannot express that; requiring Real throughout makes the case
+ *  unreachable instead of approximating it. Rational and BigInt elements, which
+ *  to_machine_double would happily narrow, are excluded for the same reason.
+ * ---------------------------------------------------------------------- */
+Expr* numloop_accumulate(const Expr* list) {
+    if (numloop_off()) return NULL;
+    if (!list || list->type != EXPR_FUNCTION) return NULL;
+    size_t n = list->data.function.arg_count;
+    if (n == 0) return NULL;   /* trivial; let the interpreter copy it */
+
+    for (size_t i = 0; i < n; i++)
+        if (list->data.function.args[i]->type != EXPR_REAL) return NULL;
+
+    double* out = malloc(n * sizeof(double));
+    if (!out) return NULL;
+
+    double sum = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        sum = i ? sum + list->data.function.args[i]->data.real
+                : list->data.function.args[i]->data.real;
+        if (!isfinite(sum)) { free(out); return NULL; }   /* interpreter re-runs */
+        out[i] = sum;
+    }
+
+    /* Accumulate preserves the argument's head, so this is not always a List. */
+    Expr** items = malloc(n * sizeof(Expr*));
+    if (!items) { free(out); return NULL; }
+    for (size_t i = 0; i < n; i++) items[i] = expr_new_real(out[i]);
+    free(out);
+    Expr* r = expr_new_function(expr_copy(list->data.function.head), items, n);
+    free(items);
+    return r;
 }

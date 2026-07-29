@@ -1017,6 +1017,16 @@ Expr* builtin_scan(Expr* res) {
         return expr_new_symbol(SYM_Null);
     }
 
+    /* Automatic numeric fast-path at the default level, mirroring Map's. A
+     * numeric-closed body has no side effects for Scan to produce, so all this
+     * removes is the per-element substitute+evaluate; it still runs the body so
+     * that a non-finite element hands the call back to the interpreter. */
+    if (ls == NULL && spec.min == 1 && spec.max == 1 && !spec.heads &&
+        !is_ndarray(expr)) {
+        Expr* fast = numloop_scan(f, expr);
+        if (fast) return fast;
+    }
+
     /* NDArray fast path: NDArray is an atomic value, so the generic traversal
      * would never descend into it. At the default level iterate the leading
      * axis directly (scalar leaf for rank 1, sub-NDArray row for rank >= 2);
@@ -2177,10 +2187,11 @@ static Expr* nest_impl(Expr* res, bool as_list) {
 
     /* Automatic numeric fast-path: a machine-real-arithmetic pure function
      * iterated over a machine real runs in compiled doubles (no per-step Expr
-     * allocation). Scalar form only; NULL means "not numeric-closed", fall
-     * through to the interpreted loop. */
-    if (!as_list) {
-        Expr* fast = numloop_nest(f, expr, n);
+     * allocation). NULL means "not numeric-closed", fall through to the
+     * interpreted loop. NestList keeps every iterate, so it still allocates the
+     * result -- what it saves is the substitute+evaluate of the body per step. */
+    {
+        Expr* fast = as_list ? numloop_nestlist(f, expr, n) : numloop_nest(f, expr, n);
         if (fast) return fast;
     }
 
@@ -2253,12 +2264,17 @@ static Expr* fold_impl(Expr* res, bool as_list) {
         return r;
     }
 
-    /* Automatic numeric fast-path for the seeded scalar Fold[f, x0, list] over
-     * machine numbers: run the binary reduction in compiled doubles. */
-    if (!as_list && argc == 3) {
-        Expr* fast = numloop_fold(res->data.function.args[0],
-                                  res->data.function.args[1],
-                                  res->data.function.args[2]);
+    /* Automatic numeric fast-path for the seeded Fold[f, x0, list] over machine
+     * numbers: run the binary reduction in compiled doubles. FoldList takes the
+     * same path and keeps every partial result. */
+    if (argc == 3) {
+        Expr* fast = as_list
+            ? numloop_foldlist(res->data.function.args[0],
+                               res->data.function.args[1],
+                               res->data.function.args[2])
+            : numloop_fold(res->data.function.args[0],
+                           res->data.function.args[1],
+                           res->data.function.args[2]);
         if (fast) return fast;
     }
 
@@ -2399,10 +2415,11 @@ static Expr* nestwhile_impl(Expr* res, bool as_list) {
     Expr* expr = res->data.function.args[1];
     Expr* test = res->data.function.args[2];
 
-    /* Automatic numeric fast-path for the default scalar NestWhile[f, x0, test]
+    /* Automatic numeric fast-path for the default NestWhile[f, x0, test]
      * (m = 1, no max, no extra n): iterate in compiled doubles. */
-    if (!as_list && argc == 3) {
-        Expr* fast = numloop_nestwhile(f, expr, test);
+    if (argc == 3) {
+        Expr* fast = as_list ? numloop_nestwhilelist(f, expr, test)
+                             : numloop_nestwhile(f, expr, test);
         if (fast) return fast;
     }
 
@@ -2609,10 +2626,11 @@ static Expr* fixedpoint_impl(Expr* res, bool as_list) {
     bool max_inf = true;
     if (!parse_fp_opts(res, 2, &same_test, &max_apps, &max_inf)) return NULL;
 
-    /* Automatic numeric fast-path for the plain scalar FixedPoint[f, x0] (no
-     * SameTest, no application cap): iterate in compiled doubles. */
-    if (!as_list && same_test == NULL && max_inf) {
-        Expr* fast = numloop_fixedpoint(f, expr);
+    /* Automatic numeric fast-path for the plain FixedPoint[f, x0] (no SameTest,
+     * no application cap): iterate in compiled doubles. */
+    if (same_test == NULL && max_inf) {
+        Expr* fast = as_list ? numloop_fixedpointlist(f, expr)
+                             : numloop_fixedpoint(f, expr);
         if (fast) return fast;
     }
 

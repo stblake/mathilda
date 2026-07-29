@@ -3,6 +3,7 @@
 #include "assoc.h"
 #include "ndarray.h"
 #include "ndreduce.h"
+#include "../numloop.h"
 
 /* Accumulate[list] returns the running cumulative totals of list, with the
  * same head and the same length as the input. The intermediate sums are
@@ -92,6 +93,14 @@ Expr* builtin_accumulate(Expr* res) {
             return result;
         }
         /* Mixed/symbolic input: fall through to the standard accumulator. */
+    }
+
+    /* Automatic numeric fast-path: an all-machine-Real list accumulates as a
+     * running double sum, in place of the evaluate(Plus[..]) per element below.
+     * NULL means the list is not uniformly Real -- fall through. */
+    {
+        Expr* fast = numloop_accumulate(lst);
+        if (fast) return fast;
     }
 
     Expr** out = malloc(sizeof(Expr*) * n);

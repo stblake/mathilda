@@ -361,6 +361,147 @@ static void test_const_fold_still_folds_numerics(void) {
     diff("Module[{x = 0.5}, Do[x = Cos[x] + Pi/4, {200}]; x]");
 }
 
+/* ================= The list-producing heads =================
+ *
+ * NestList / FoldList / NestWhileList / FixedPointList / Scan / Accumulate.
+ * These differ from their scalar twins in EXPOSING every intermediate value
+ * rather than only the last, which is what makes the exactness boundary below
+ * observable at all.
+ */
+
+/* Differential over a whole result tree: same shape and same element types, with
+ * Reals compared to floating-point rounding (the interpreter's Orderless
+ * Plus/Times can fold operands in a data-dependent order, so the last ULP is not
+ * reproducible by a static compile -- see `diff` above). Comparing the TYPES
+ * strictly is the point: the bugs this guards against replace an exact Integer
+ * with a Real of the same value, which no numeric tolerance would catch. */
+static void diff_tree(const Expr* a, const Expr* b, const char* input) {
+    ASSERT_MSG(a && b && a->type == b->type,
+               "%s: type mismatch (%d vs %d)", input,
+               a ? (int)a->type : -1, b ? (int)b->type : -1);
+    if (a->type == EXPR_REAL) {
+        double scale = fabs(b->data.real) > 1.0 ? fabs(b->data.real) : 1.0;
+        ASSERT_MSG(fabs(a->data.real - b->data.real) / scale < 1e-9,
+                   "%s: fast=%.17g interp=%.17g", input, a->data.real, b->data.real);
+        return;
+    }
+    if (a->type == EXPR_FUNCTION) {
+        ASSERT_MSG(a->data.function.arg_count == b->data.function.arg_count,
+                   "%s: length %zu vs %zu", input,
+                   a->data.function.arg_count, b->data.function.arg_count);
+        diff_tree(a->data.function.head, b->data.function.head, input);
+        for (size_t i = 0; i < a->data.function.arg_count; i++)
+            diff_tree(a->data.function.args[i], b->data.function.args[i], input);
+        return;
+    }
+    char* sa = expr_to_string_fullform((Expr*)a);
+    char* sb = expr_to_string_fullform((Expr*)b);
+    ASSERT_MSG(strcmp(sa, sb) == 0, "%s: %s vs %s", input, sa, sb);
+    free(sa); free(sb);
+}
+
+static void diff_list(const char* input) {
+    numloop_set_enabled(true);
+    Expr* e1 = parse_expression(input); Expr* r1 = evaluate(e1);
+    numloop_set_enabled(false);
+    Expr* e2 = parse_expression(input); Expr* r2 = evaluate(e2);
+    numloop_set_enabled(true);
+    diff_tree(r1, r2, input);
+    expr_free(e1); expr_free(r1); expr_free(e2); expr_free(r2);
+}
+
+static void test_diff_nestlist_logistic(void) {
+    diff_list("NestList[3.5 # (1 - #)&, 0.31, 400]");
+    diff_list("NestList[Cos, 1.0, 60]");
+    diff_list("NestList[Sqrt[# + 1.0]&, 2.0, 40]");
+    diff_list("NestList[#^2&, 1.5, 0]");       /* n = 0 -> just the seed */
+}
+static void test_diff_foldlist(void) {
+    diff_list("FoldList[#1 + #2&, 0., Table[N[i]/50, {i, 1, 50}]]");
+    diff_list("FoldList[#1 + Sin[#2]&, 0., Table[N[i], {i, 1, 40}]]");
+    diff_list("FoldList[#1 #2&, 1., {1.5, 2.5, 0.5, 3.5}]");
+}
+static void test_diff_nestwhilelist(void) {
+    diff_list("NestWhileList[# + 1.&, 0., # < 50.&]");
+    diff_list("NestWhileList[#/2.&, 1024., # > 1.&]");
+    diff_list("NestWhileList[2. #&, 1., # < 1000.&]");
+}
+static void test_diff_fixedpointlist(void) {
+    diff_list("FixedPointList[Cos, 1.0]");
+    diff_list("FixedPointList[Sqrt[# + 1.]&, 2.0]");
+}
+static void test_diff_accumulate(void) {
+    diff_list("Accumulate[Table[N[i]/7, {i, 1, 200}]]");
+    diff_list("Accumulate[{-1.5, 2.25, 0., 8.125}]");
+}
+static void test_scan_returns_null(void) {
+    /* Scan answers Null and, for a numeric body, has no side effect to show for
+     * itself -- the fast path must still agree on that, and must not disturb the
+     * list it walked. */
+    expect_full("Scan[Sin[#] + 1.&, {1., 2., 3.}]", "Null");
+    expect_full("Module[{l = {1., 2., 3.}}, Scan[2. #&, l]; l]",
+                "List[1.0, 2.0, 3.0]");
+}
+static void test_scan_side_effects_still_run(void) {
+    /* A body with a side effect is not numeric-closed, so it must NOT be
+     * fast-pathed away -- every element still gets visited. A global counter,
+     * not a Module-local one: a Function body does not close over a Module's
+     * renamed local here, so the Module spelling would be measuring that
+     * (pre-existing) scoping behaviour rather than this fast path. */
+    expect_full("scanctr = 0; Scan[(scanctr = scanctr + 1)&, {1., 2., 3., 4.}]; scanctr",
+                "4");
+    expect_full("scanctr2 = 0; Scan[(scanctr2 = scanctr2 + 1; #)&, {1., 2., 3.}]; scanctr2",
+                "3");
+    /* Print is outside the compilable subset, so Scan[Print, ...] is untouched. */
+    expect_full("Scan[Print, {1., 2.}]", "Null");
+}
+
+/* ---------------- The exactness boundary ----------------
+ *
+ * A Real literal in the body makes every COMPUTED value inexact, but a value the
+ * head passes through UNEVALUATED keeps the exact type it came in with. Each
+ * case below returned a Real where the interpreter answers exact before the
+ * pass-through rule was stated in numloop.h; the first five were live on the
+ * shipped scalar paths, not just the *List ones added alongside them.
+ */
+static void test_exact_passthrough_scalar(void) {
+    expect_full("Nest[# + 0.&, 1, 0]", "1");            /* n = 0: seed, untouched */
+    expect_full("NestWhile[# + 0.&, 1, # < 0&]", "1");  /* test fails immediately */
+    expect_full("Map[#&, {1., 2, 3}]", "List[1.0, 2, 3]");
+    expect_full("Fold[#2&, 1., {1, 2, 3}]", "3");       /* body returns the element */
+    expect_full("Fold[#1&, 1, {1., 2.}]", "1");         /* body returns the seed */
+}
+static void test_exact_passthrough_list(void) {
+    expect_full("NestList[# + 0.&, 1, 3]", "List[1, 1.0, 1.0, 1.0]");
+    expect_full("FoldList[#2&, 1., {1, 2, 3}]", "List[1.0, 1, 2, 3]");
+    expect_full("FoldList[#1 + #2&, 0, {1, 2., 3}]", "List[0, 1, 3.0, 6.0]");
+    /* The exact seed also changes the LENGTH here: SameQ separates 1 from 1.,
+     * so the interpreter takes one extra step. */
+    expect_full("FixedPointList[# + 0.&, 1]", "List[1, 1.0, 1.0]");
+    expect_full("Accumulate[{1, 2., 3}]", "List[1, 3.0, 6.0]");
+}
+static void test_list_fallback_exact_and_symbolic(void) {
+    expect_full("NestList[#^2&, 2, 3]", "List[2, 4, 16, 256]");
+    expect_full("FoldList[#1 + #2&, 0, {1, 2, 3}]", "List[0, 1, 3, 6]");
+    expect_full("Accumulate[{1, 2, 3}]", "List[1, 3, 6]");
+    expect_full("NestWhileList[# + 1&, 0, # < 3&]", "List[0, 1, 2, 3]");
+    /* A symbolic element leaves the whole call to the interpreter. */
+    expect_full("FoldList[#1 + #2&, 0., {1., 2., x}]",
+                "List[0.0, 1.0, 3.0, Plus[3.0, x]]");
+    expect_full("Accumulate[{1., 2., x}]", "List[1.0, 3.0, Plus[3.0, x]]");
+}
+static void test_list_nonfinite_falls_back(void) {
+    /* A non-finite intermediate abandons the compiled run, so what the caller
+     * sees is whatever the interpreter produces -- these assert that outcome,
+     * which is the whole content of the bail contract. (Mathilda's own Real
+     * arithmetic overflows to inf.0 rather than to the symbol Infinity, so the
+     * two paths land on the same answer by construction.) */
+    expect_full("NestList[#^2&, 10.^200, 2]", "List[1e+200, inf.0, inf.0]");
+    expect_full("Accumulate[{1.*^308, 1.*^308}]", "List[1e+308, inf.0]");
+    expect_full("FoldList[#1 + #2&, 0., {1.*^308, 1.*^308}]",
+                "List[0.0, 1e+308, inf.0]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -421,6 +562,21 @@ int main(void) {
     TEST(test_fallback_fixedpoint_exact);
     TEST(test_fallback_do_compound_symbolic);
     TEST(test_fallback_do_compound_nonset);
+
+    /* The list-producing heads */
+    TEST(test_diff_nestlist_logistic);
+    TEST(test_diff_foldlist);
+    TEST(test_diff_nestwhilelist);
+    TEST(test_diff_fixedpointlist);
+    TEST(test_diff_accumulate);
+    TEST(test_scan_returns_null);
+    TEST(test_scan_side_effects_still_run);
+
+    /* The exactness boundary: a passed-through value keeps its exact type */
+    TEST(test_exact_passthrough_scalar);
+    TEST(test_exact_passthrough_list);
+    TEST(test_list_fallback_exact_and_symbolic);
+    TEST(test_list_nonfinite_falls_back);
 
     /* No speculative evaluation of user code in the fast-path builder */
     TEST(test_no_speculative_side_effect);

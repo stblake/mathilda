@@ -1102,3 +1102,43 @@ Out[1]= 6
 In[2]:= FoldList[Plus, 0, <|"a" -> 1, "b" -> 2, "c" -> 3|>]
 Out[2]= {0, 1, 3, 6}
 ```
+
+## The automatic numeric fast path
+
+`Nest`, `NestList`, `Fold`, `FoldList`, `FixedPoint`, `FixedPointList`,
+`NestWhile`, `NestWhileList`, `Map`, `Scan` and `Accumulate` recognise the case
+where the whole loop is machine-real arithmetic and run it as compiled `double`
+bytecode (`src/numloop.c`) instead of re-interpreting the body per element. It
+is entirely transparent — the same answer, several times faster — and needs no
+`Compile[]` wrapper:
+
+```mathematica
+In[1]:= Timing[Length[NestList[3.5 # (1 - #) &, 0.31, 200000]]][[1]]
+Out[1]= 0.032
+```
+
+The path is declined, silently and with no change in result, whenever the body
+leaves the arithmetic subset (a `Print`, an assignment, a symbolic head), any
+element is not a machine number, or an intermediate goes non-finite — the
+interpreter then produces the authoritative answer.
+
+**Exactness is preserved position by position.** A value these heads *compute*
+is inexact once the body carries a real literal, but a value they hand back
+*unevaluated* keeps the exact type it came in with, and the fast path never
+rounds one into the other — it is the same rule that makes `Out[8]` of the
+`NestList` section above open on the exact Integer `1000`:
+
+```mathematica
+In[2]:= NestList[# + 0. &, 1, 3]
+Out[2]= {1, 1., 1., 1.}
+
+In[3]:= Map[# &, {1., 2, 3}]
+Out[3]= {1., 2, 3}
+
+In[4]:= Accumulate[{1, 2., 3}]
+Out[4]= {1, 3., 6.}
+```
+
+The seed at `[[1]]` of every `*List` head, `Nest[f, x, 0]`, a `NestWhile` whose
+test fails immediately, and any element a body simply returns (`#2 &`) are all
+pass-through positions of this kind.

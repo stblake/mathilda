@@ -1,204 +1,118 @@
-# Limit: oscillatory normal form (proving limits do not exist)
+# Auto-compilation parity for the functional-programming heads
 
-(Previous task — Compile[] M5 — archived to `plans/COMPILE_M5_TODO.md`.)
+(Previous task — Limit oscillatory normal form — archived to
+`plans/LIMIT_OSCILLATORY_TODO.md`.)
 
-Motivating case:
+Commit `d42f543` brought the functional-programming heads into `Compile[]`'s
+subset. This task closes the other half: the same heads called **directly**, with
+no `Compile[]` wrapper, should take the automatic machine-number fast path
+(`src/numloop.c`) the way `Nest`, `Map` and `Fold` already do.
 
-    Limit[(Cos[x^2]/x^2 - Cos[(x+1)^2]/(x+1)^2)/(1/x^3), x -> Infinity]
+## Audit — measured, `main` @ d1fb77b, n = 200000
 
-Asymptotically `2 x Sin[x^2+x+1/2] Sin[x+1/2] + O(1)` — an unbounded
-oscillation with *no* single dominant term, so none of the existing layers
-(squeeze envelope, Series, Gruntz, L'Hospital) can touch it.
+`numloop` ON vs `MATHILDA_NO_NUMLOOP=1`, seconds:
 
-## The general class
+| Head | Compile subset | Auto-compiled today | Time | Note |
+|---|---|---|---|---|
+| `Nest` | yes | **yes** (`numloop_nest`) | 0.0028 | 55x vs interp |
+| `Map` | yes | **yes** (`numloop_map`) | 0.030 | 5.9x vs interp |
+| `Fold` | yes | **yes** (`numloop_fold`) | 0.0076 | 12x vs interp |
+| `FixedPoint` | yes | **yes** (`numloop_fixedpoint`) | 5e-6 | 5x vs interp |
+| `NestWhile` | yes | **yes** (`numloop_nestwhile`) | 0.0027 | 46x vs interp |
+| `Table` | yes | **yes** (`autocompile`, inexact iterator) | — | already wired |
+| `NestList` | yes | **no** | 0.179 | 64x slower than `Nest` |
+| `FoldList` | yes | **no** | 0.114 | 15x slower than `Fold` |
+| `Scan` | yes | **no** | 0.138 | 4.6x slower than `Map` |
+| `NestWhileList` | yes | **no** | 0.128 | — |
+| `FixedPointList` | yes | **no** | (converges in 92) | no large case |
+| `Accumulate` | yes | **no** | 0.067 | `evaluate(Plus[..])` per element |
+| `Reverse`/`Sort`/`Take`/`Drop`/`Flatten`/`Transpose` | yes | n/a | 0.006–0.024 | no function body to compile; already native C, allocation-bound |
 
-Every existing layer treats an oscillation as an opaque "bounded head". The
-generalisation is to put the whole expression into an **oscillatory normal
-form** at an infinite limit point:
+The five `*List` / `Scan` heads are the real gap: every hook site in `funcprog.c`
+is guarded `if (!as_list)`, so the list-producing twin of each covered head falls
+straight through to the interpreted loop.
 
-    f(x) = c_0(x) + SUM_j c_j(x) E^(I theta_j(x))
+## Plan
 
-with the `theta_j` pairwise-distinct real phases carrying **no constant term**
-(constants are absorbed into the amplitude) and the amplitudes `c_j`
-oscillation-free. `TrigToExp` + `Expand` produces exactly this.
+- [ ] 1. `numloop_nestlist(f, x0, n)` — n+1 Reals. Gate exactly as `numloop_nest`
+      (machine-real seed, inexact-result guarantee, non-finite -> bail).
+      Scalar seed only; an NDArray seed returns NULL (result would be a List of
+      arrays, not the fused in-place map `numloop_nest_array` does).
+- [ ] 2. `numloop_foldlist(f, x0, list)` — m+1 Reals, gated as `numloop_fold`.
+- [ ] 3. `numloop_nestwhilelist(f, x0, test)` — {x0, ..., first value failing the
+      test}, gated as `numloop_nestwhile`.
+- [ ] 4. `numloop_fixedpointlist(f, x0)` — {x0, ..., fp, fp} (the final duplicate
+      is in Mathilda's output: `FixedPointList[Cos,1.0]` has length 92 with
+      `[[-1]] == [[-2]]`), gated as `numloop_fixedpoint`.
+- [ ] 5. `numloop_scan(f, expr)` — run the compiled body per element for
+      non-finite parity, return `Null`.
+- [ ] 6. `numloop_accumulate(list)` — running sum in doubles, replacing the
+      `evaluate(Plus[out[i-1], args[i]])` per element. Requires **every** element
+      inexact, so the exact prefix of a mixed list cannot be flattened to a Real.
+- [ ] 7. Wire each into `funcprog.c` / `accumulate.c`, dropping the `!as_list`
+      guards.
+- [ ] 8. Differential tests: fast path vs `MATHILDA_NO_NUMLOOP=1` must agree
+      **bit-for-bit**, including the bail cases (non-finite, exact input, symbolic
+      element, empty list).
+- [ ] 9. `docs/spec/builtins/` + this week's changelog.
 
-Distinct phases are asymptotically orthogonal, so the normal form is a
-*decision* form: nothing can cancel between groups. The verdicts below are
-theorems, not heuristics.
+## Non-goals
 
-## Decision rules
+- The structural heads (`Reverse`, `Sort`, `Take`, `Drop`, `Flatten`,
+  `Transpose`) have no function argument. There is nothing to compile: they are
+  already straight C over the argument list and their cost is the Expr
+  allocation of the result. Their `Compile` support exists so they can appear
+  *inside* a compiled body, where the values are unboxed machine arrays.
+- MPFR / arbitrary-precision paths, as everywhere else in `numloop`.
 
-Let `S` = groups with a non-constant phase, `gamma_j = lim |c_j|`.
+## Findings noted along the way
 
-- **R1 (squeeze).** All `gamma_j = 0` (j in S) ⟹ `lim f = lim c_0`, since
-  `|f - c_0| <= SUM |c_j| -> 0`.
-- **R3 (dominated oscillation).** Every `|c_j| = o(|c_0|)` and `c_0 -> ±oo`
-  ⟹ `lim f = lim c_0`.
-- **R0 (strictly dominant oscillation, IVT).** One phase group (with its
-  conjugate mate) strictly dominates every other group, its phase `-> ±oo`
-  continuously, and `arg c_j` is bounded. Then `f = c_0 + A cos(theta+phi) +
-  o(A)` and IVT hands us two sequences with distinct limits ⟹ **no limit**.
-  No polynomial restriction on the phase, so this covers `E^x Cos[x]`,
-  `x^5 Cos[x]`, `Sin[Log[x]]`.
-- **R2 (mean / mean-square, Weyl).** Phases are real polynomials of degree
-  `>= 1` with numeric coefficients. Then
-
-      (1/T) INT_0^T |f|^2  ~  SUM_j (1/T) INT_0^T |c_j|^2
-      (1/T) INT_0^T f      ~  (1/T) INT_0^T c_0
-
-  (cross terms die by van der Corput: every phase *difference* is a
-  non-constant polynomial because constant terms were stripped). If `f -> L`
-  finite then `L = lim c_0` and `|L|^2 = |lim c_0|^2 + SUM gamma_j^2`, forcing
-  every `gamma_j = 0`. So **some `gamma_j != 0` ⟹ no finite limit**. `±oo` is
-  excluded by the window mean `(1/T) INT_T^2T f`, which stays bounded when
-  `|c_j| = O(x^deg theta_j)` — or trivially when `f` is bounded.
-
-Verdict for R0/R2 is `Indeterminate`, matching Mathilda's existing convention
-(`limit.h`: "Indeterminate -- provably no limit").
-
-## Tasks
-
-- [x] Probe existing behaviour; confirm `TrigToExp`/`Expand`/`PolynomialQ`/
-      `Exponent`/`PossibleZeroQ` suffice to build the normal form.
-- [x] `src/calculus/limit_osc.{c,h}` — normal form + the four rules.
-- [x] Wire into the `compute_limit` cascade (before `layer2_series`) and add
-      `Method -> "Oscillatory"`.
-- [x] Reduce a finite limit point to `+Infinity` via `x = a ± 1/t`.
-- [x] Tests: `tests/test_limit_oscillatory.c`.
-- [x] Docs: `docs/spec/builtins/calculus.md` + weekly changelog.
-- [x] Full regression run of the limit/calculus suites.
+- `numloop_nestwhile` and `numloop_fixedpoint` carry `CAP = 1000000`. On hitting
+  it they discard **all** the compiled work and return NULL, so the interpreter
+  redoes the whole loop: `NestWhile[#+1.&, 0., #<1000000.&]` costs 0.664s, versus
+  0.0027s at 200k iterations. Pre-existing, correct-but-wasteful; recorded, not
+  fixed here.
 
 ## Review
 
-**What shipped.** `src/calculus/limit_osc.{c,h}` (~840 lines) plus a ~90-line
-hookup in `limit.c`. The layer runs after the cheap squeeze envelope and before
-`Series` — Series has no expansion at infinity for `Sin[x^2]` and would either
-fail or fold an oscillation into a spurious leading term.
+All nine items done. `src/numloop.c` gained `numloop_nestlist`,
+`numloop_foldlist`, `numloop_nestwhilelist`, `numloop_fixedpointlist`,
+`numloop_scan` and `numloop_accumulate`; each scalar twin became an
+`*_impl(..., bool as_list)` with two thin wrappers, matching how `funcprog.c`
+already spells `nest_impl(res, as_list)`. The two loops whose length is not known
+until they run collect into a growable `DVec` and box to `Expr` only on success,
+so a bail costs no allocation and has nothing to unwind.
 
-**Three implementation traps.**
+Measured at n = 200000 (median of 3, `MATHILDA_NO_NUMLOOP=1` as the control):
+NestList **6.6x**, Scan **11.1x**, NestWhileList **7.5x**, FoldList **5.0x**,
+Accumulate **3.1x**.
 
-1. `TrigToExp` returns **un-flattened** `Times[c, Times[x, E^(I x)]]`. The
-   evaluator flattens `Times` when it evaluates, but an un-re-evaluated builtin
-   result violates the invariant. A factor collector that does not recurse
-   through nested same-head nodes silently drops the `E`-factor — `Sin[x]`
-   worked, `x Sin[x]` did not. `collect_parts` now recurses.
-2. Compare `|c|^2 = c conj(c)`, never `Abs[c]`: `Abs` stays inert on symbolic
-   arguments so its limit is undecidable, while `c conj(c)` expands to a real
-   rational expression. Conjugation under "all symbols are real" is just
-   negating every literal `Complex[a, b]` imaginary part — exact, and unlike
-   `Conjugate[]` it actually reduces.
-3. Take square roots on the *limits*, not the expressions. R3 needs
-   `SUM |c_j| / |c_0| < 1`; computing `lim |c_j|^2/|c_0|^2` per group and
-   `Sqrt`-ing those *numbers* decides `x^2 (2 + Cos[x]) -> Infinity` (ratio
-   1/2), which the term-by-term `o(c_0)` test I started with could not.
+Two bugs came out of it, neither one anticipated by the plan:
 
-**Three pre-existing wrong answers fell out** (all verified against a stashed
-`limit.c`, so none of them are regressions from this work):
+1. **The gate rounded exact values it was only passing through** — and the same
+   hole was live on the shipped SCALAR paths, so `Map[# &, {1., 2, 3}]` answered
+   `{1., 2., 3.}` against the interpreter's `{1., 2, 3}`, and `Fold[#2 &, 1.,
+   {1, 2, 3}]` answered `3.` against `3`. Inexactness is a property of each
+   result POSITION, not of the call: a computed value is Real if the body carries
+   a Real literal, but a passed-through value keeps its input's type. The rule is
+   now stated once in `numloop.h` and enforced per entry point.
+2. **`VarCtx` was used uninitialised** in `compile_function` — three of seven
+   fields set, and the optional `defined` pointer is dereferenced the moment it
+   is non-NULL. Latent for as long as callers happened to leave zeros there;
+   adding one more caller changed the stack shape and it faulted. Found by
+   AddressSanitizer after `compile_tests` started segfaulting; `= {0}` fixes it.
 
-- `Limit[E^(I x)/x, x -> Infinity]` gave `E^DirectedInfinity[I]` — the `1/x`
-  swallowed. `exp_of_limit` now refuses a folded value that still carries an
-  infinity.
-- `Limit[Cos[1/x] - Cos[1/x + 1], x -> 0]` gave `0`: substitution turns both
-  terms into `Cos[ComplexInfinity]` and the `Plus` cancels them. Both
-  substitution fast paths now refuse when an *inner argument* diverges at the
-  point — which is exactly discontinuity, where substitution was never a valid
-  limit.
-- One assertion in `test_limit.c` recorded an abstention that is now a proof
-  (`Sin[x^2] + Cos[x]`).
-
-**Verification.** `limit_oscillatory_tests` (9 groups), plus `limit_tests`,
-`limit_assumptions_tests`, `gruntz_tests`, `gruntz_stress_tests`,
-`series_tests`, `nlimit_tests`, `nseries_tests`, `residue_tests` and the full
-`tests/build` sweep. Valgrind on the new path: byte-identical leak totals to
-the `Expand[TrigToExp[...]]` baseline (13,376 B / 418 blocks, all dyld/objc).
+Verified: a 3057-case differential corpus is byte-identical with the fast path on
+and off; twelve test suites pass (numloop, compile, autocompile,
+compile_coverage, compiledfunction, nestlist, foldlist, nestwhilelist,
+fixedpointlist, list, funcprog_through, scan); `compile_tests` clean under ASAN;
 `make check-c99` clean.
 
-**Known gaps (honest abstentions, documented in the module header).**
-`x^2 (1 + Cos[x])` — envelope exactly equal to the smooth part; `x E^(I x)` —
-unmated and unbounded, where `ComplexInfinity` may be the intended answer;
-`Tan`/`Sec`/`Csc`, whose `TrigToExp` image leaves an exponential in a
-denominator; phases that neither diverge nor are polynomial (`Sin[x] +
-Sin[x + 1/x]`); symbolic amplitudes (`a Sin[x]`, since `a = 0` has limit 0).
+One test expectation of mine was wrong and worth recording: I asserted
+`Module[{c = 0}, Scan[(c = c + 1) &, ...]; c] == 4`, which is Mathematica's
+answer, not Mathilda's — a `Function` body does not close over a `Module`'s
+renamed local here, so both paths answer 0. The test now uses a global counter
+and measures the fast path rather than that (pre-existing) scoping behaviour.
 
-**Worth a separate look.** `TrigToExp` (and therefore `Expand` of its result)
-leaving a nested `Times` is a canonicalisation bug independent of `Limit`; it
-will bite anything that walks factors structurally.
-
----
-
-# Follow-up: every Limit / NLimit method exposed as a head
-
-- [x] `Limit`m[f, x -> a]` for all nine `Method` settings (`Automatic`,
-      `Substitution`, `RationalFunction`, `Asymptotic`, `Bounded`, `Series`,
-      `LHospital`, `Gruntz`, `Oscillatory`).
-- [x] `NLimit`m[f, z -> z0]` for all seven (`Automatic`, `EulerSum`,
-      `SequenceLimit`, `Levin`, `LevinU`, `LevinT`, `LevinV`) — `?NLimit`EulerSum`
-      previously reported "No information available".
-- [x] A docstring per head describing the rule it applies, the hypotheses it
-      needs, and when it declines.
-- [x] Shared plumbing: `common_method_alias` (`src/common.c`) rebuilds
-      `head`m[args...]` as `head[args..., Method -> "m"]` and calls the standard
-      builtin *directly*, so it stands in the evaluator's seat and owns the
-      constructed call. One implementation instead of two ownership dances.
-- [x] Docs: `docs/spec/builtins/calculus.md`, `docs/spec/builtins/numerical-calculus.md`,
-      `docs/spec/changelog/2026-07-27.md`, plus the `NLimit` docstring in `info.c`
-      (NLimit's own docstring lives there, registered after `nlimit_init`, so
-      adding a second one in the module would have been dead code).
-- [x] Tests: `test_method_heads` in `tests/test_limit.c` and `tests/test_nlimit.c`;
-      the alias path also added to `test_nlimit.c`'s memory loop.
-
-## Design notes
-
-- A `Method` option supplied alongside a method head is **dropped**, not
-  honoured: the head already names the method, and
-  `Limit`Series[f, s, Method -> "Gruntz"]` would otherwise be ambiguous. The
-  NLimit test pins this with the branch-point case, where Richardson and
-  Automatic give measurably different answers.
-- The abstention contract is inherited: a head that does not apply leaves the
-  call unevaluated (echoing the head the user asked for) rather than falling
-  back to the cascade. That is what makes these heads useful for testing a
-  single layer.
-
-## Caught here, from the previous commit
-
-`test_limit_assumptions.c` pinned `Limit[x^n, n -> Infinity]` to
-`E^DirectedInfinity[Log[x]]`. The `exp_of_limit` fix in the oscillatory commit
-made that honestly unevaluated instead, and the pin was stale. It was missed
-because the suite's soft asserts print `FAIL:` and still **exit 0** — and the
-line lands at the *top* of the output, so a `tail` of the log shows only the
-"All ... passed!" banner. Always `grep -c FAIL:`, never `tail`.
-
----
-
-# Follow-up: the Knowles quasiquadratic case, reachable from both spellings
-
-- [x] Root cause: `builtin_rischtranscendental`'s scope gate
-      (`if (rt_has_algebraic_of_x(f, x)) return NULL;`) rejected
-      `Log[x]^(-3/2)` as an algebraic extension, so the erf engine — reachable
-      only through `rt_integrate` — was never called. The *merged* spelling
-      `E^(1/2 Log[Log x] - 1/Log x)/(x Log x^2)` carries no radical, sails
-      through, and the engine's own `collapse_exp_of_log` then reduces it to
-      exactly the form the gate had just rejected. Two spellings of one
-      integrand, two answers.
-- [x] `rt_try_kernel_radical`: when *every* algebraic site is a fractional power
-      of a transcendental KERNEL, rewrite `g^(p/q) = g^n E^(r Log g)` (the
-      inverse of `collapse_exp_of_log`) and run the constructive integrator.
-- [x] Soundness: that tower hides `(E^(r Log g))^q = g^p`, so nothing on the
-      path is trusted by construction — diff-back gate against the ORIGINAL
-      integrand, and the non-elementary decision half never runs there.
-- [x] Gate stays strict for genuine algebraic extensions of x.
-- [x] Tests + docs + changelog.
-
-## Verification
-
-`Sqrt[x]`, `Sqrt[1+x^2]`, `Cos[Sqrt[x]]`, `Sqrt[1+E^x]`, `Sqrt[Log[x]]` were
-compared against a `git stash`-built pre-fix binary: byte-identical. The only
-behaviour that changed is the quasiquadratic family. 49 integrate/Risch/erf
-suites clean, then the full 389-suite sweep.
-
-## Known gap (NOT this fix)
-
-`Integrate[1/Sqrt[Log[x]], x]` should be `Sqrt[Pi] Erfi[Sqrt[Log[x]]]` and stays
-unevaluated — unevaluated before this change too. There is no exponential kernel
-for the perfect-square gate to work on; the erf comes from the `u = Log[x]`
-substitution (`INT E^u/Sqrt[u] du`), which is a different route.
+Not done, deliberately: the `CAP = 1000000` waste in `numloop_nestwhile` /
+`numloop_fixedpoint` noted above. It is correct, pre-existing, and orthogonal.
