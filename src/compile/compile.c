@@ -3404,13 +3404,44 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
             c->scope[c->nscope].name = s.var; c->scope[c->nscope].reg = ri;
             c->scope[c->nscope].type = CT_INT; c->nscope++; pushed = 1;
         }
-        size_t Lp = c->n;
-        int rc = alloc_temp(c); ins(c, s.di > 0 ? OP_LE_I : OP_GE_I, (uint32_t)rc, (uint32_t)ri, (uint32_t)rhi, z);
-        size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z); c->temp_top--;
-        Val bod; if (!emit(c, A[0], &bod)) { c->nscope -= pushed; return false; } free_if_tmp(c, bod);
-        Slot step; step.i = s.di; ins(c, OP_INC_I, (uint32_t)ri, 0, 0, step);
-        ins(c, OP_JMP, 0, 0, (uint32_t)Lp, z);
-        if (c->ok) c->code[jz].b = (uint32_t)c->n;
+        /* Unit step gets the fused loop instruction: OP_LOOP increments, tests
+         * and branches in ONE, where the general shape below spends four
+         * instructions per iteration on control alone (test, branch, increment,
+         * back-edge).  On `Do[s = s + 1. i, {i, 1, n}]` that is 8 inner
+         * instructions down to 5.  OP_LOOP compares `++i < a`, so the bound
+         * register holds hi + 1; the entry guard still runs once, because a
+         * loop whose range is empty must execute the body zero times and
+         * OP_LOOP tests only at the bottom.
+         *
+         * A non-unit or negative step keeps the general form — OP_LOOP steps by
+         * one, and the direction of the test is baked into it. */
+        if (s.di == 1) {
+            Slot one; memset(&one, 0, sizeof one); one.i = 1;
+            int rc = alloc_temp(c), rend = alloc_temp(c);
+            /* Entry guard, ONCE: OP_LOOP tests at the bottom, so an empty range
+             * would otherwise run the body a first time. */
+            ins(c, OP_LE_I, (uint32_t)rc, (uint32_t)ri, (uint32_t)rhi, z);
+            size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z);
+            /* OP_LOOP compares `++i < a`, so the bound register holds hi + 1. */
+            ins(c, OP_CONST, (uint32_t)rc, 0, 0, one);
+            ins(c, OP_ADD_I, (uint32_t)rend, (uint32_t)rhi, (uint32_t)rc, z);
+            size_t Lb = c->n;
+            Val bod; if (!emit(c, A[0], &bod)) { c->nscope -= pushed; return false; }
+            free_if_tmp(c, bod);
+            ins(c, OP_LOOP, (uint32_t)ri, (uint32_t)rend, (uint32_t)Lb, one);
+            if (c->ok) c->code[jz].b = (uint32_t)c->n;
+            c->temp_top -= 2;                                /* rc, rend */
+        } else {
+            size_t Lp = c->n;
+            int rc = alloc_temp(c);
+            ins(c, s.di > 0 ? OP_LE_I : OP_GE_I, (uint32_t)rc, (uint32_t)ri, (uint32_t)rhi, z);
+            size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z); c->temp_top--;
+            Val bod; if (!emit(c, A[0], &bod)) { c->nscope -= pushed; return false; }
+            free_if_tmp(c, bod);
+            Slot step; step.i = s.di; ins(c, OP_INC_I, (uint32_t)ri, 0, 0, step);
+            ins(c, OP_JMP, 0, 0, (uint32_t)Lp, z);
+            if (c->ok) c->code[jz].b = (uint32_t)c->n;
+        }
         c->nscope -= pushed; c->temp_top -= 2;
         int r0 = alloc_temp(c); Slot s0; s0.i = 0; ins(c, OP_CONST, (uint32_t)r0, 0, 0, s0);
         out->reg = r0; out->tmp = true; out->type = CT_INT; return c->ok;

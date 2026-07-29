@@ -316,11 +316,25 @@ void test_disasm_control_flow(void) {
     has(d, "\n>", "branch target marked in the gutter");
     free(d);
 
+    /* A unit-step Do closes with OP_LOOP, which increments, tests and branches
+     * in ONE instruction — the whole point of it, since the general shape spends
+     * four instructions per iteration on control alone.  Asserting the opcode
+     * rather than "some increment happens" is what makes a regression to the
+     * four-instruction form visible here rather than only in a benchmark. */
     char* l = disasm_of("Compile[{{n, _Integer}}, Module[{s = 0.}, "
                         "Do[s = s + 1./k, {k, 1, n}]; s]]");
-    has(l, "INC_I", "loop counter increment");
+    has(l, "LOOP", "counted loop closes with the fused increment/test/branch");
+    has(l, "if ++", "OP_LOOP rendered as its increment-and-test");
     has(l, "R2 = 0.", "Real constant typed through the MOVE that initialises it");
     free(l);
+
+    /* A non-unit step cannot use it (OP_LOOP steps by one), so that form keeps
+     * the explicit increment — and both must still be correct, which the
+     * engine's own iterator tests cover. */
+    char* l2 = disasm_of("Compile[{{n, _Integer}}, Module[{s = 0.}, "
+                         "Do[s = s + 1./k, {k, 1, n, 2}]; s]]");
+    has(l2, "INC_I", "explicit increment on a non-unit step");
+    free(l2);
 }
 
 /* Arrays: the three register banks, the strip-mined loop and the fan-out

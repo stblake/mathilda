@@ -1907,6 +1907,48 @@ int main(void) {
         }
     }
 
+    /* ---- Do's two loop shapes ------------------------------------------------
+     *
+     * A unit step closes with OP_LOOP (increment, test and branch in one); every
+     * other step keeps the explicit four-instruction form.  Two shapes means two
+     * chances to get the ENDPOINTS wrong, so these run the spellings where they
+     * differ: a step that does not divide the span, a descending step, the bare
+     * count, and the two empty ranges — where a bottom-tested loop would run the
+     * body once if its entry guard were dropped. */
+    {
+        const char* in1[1] = { intern_symbol("n") };
+        const CompileType TI[1] = { CT_INT };
+        struct { const char* body; long long n; double want; } dl[] = {
+            { "Module[{s = 0.}, Do[s = s + 1. i, {i, 1, n}]; s]",      10,  55.0 },
+            { "Module[{s = 0.}, Do[s = s + 1. i, {i, 1, n, 2}]; s]",   10,  25.0 },
+            { "Module[{s = 0.}, Do[s = s + 1. i, {i, n, 1, -1}]; s]",  10,  55.0 },
+            { "Module[{s = 0.}, Do[s = s + 1. i, {i, 1, n, 3}]; s]",   10,  22.0 },
+            { "Module[{s = 0.}, Do[s = s + 1., {n}]; s]",               7,   7.0 },
+            { "Module[{s = 0.}, Do[s = s + 1. i, {i, 1, n}]; s]",       0,   0.0 },
+            { "Module[{s = 0.}, Do[s = s + 1. i, {i, 1, n}]; s]",      -3,   0.0 },
+            { "Module[{s = 0.}, Do[s = s + 1. i, {i, 1, n, -1}]; s]",  10,   0.0 },
+            { "Module[{s = 0.}, Do[Do[s = s + 1. i j, {j, 1, n}], {i, 1, n}]; s]",
+                                                                        20, 44100.0 },
+        };
+        for (size_t k = 0; k < sizeof dl / sizeof dl[0]; k++) {
+            Expr* b = parse_expression(dl[k].body);
+            CompiledProgram* p = compile_expr(b, in1, TI, 1);
+            if (!p) { printf("FAIL: Do %-40s -> did not compile\n", dl[k].body); failures++; expr_free(b); continue; }
+            CompileValue av = { CT_INT, { .i = dl[k].n } }, o;
+            if (!compiled_eval(p, &av, &o)) {
+                printf("FAIL: Do %-40s (n=%lld) -> declined\n", dl[k].body, dl[k].n); failures++;
+            } else {
+                double got = (o.type == CT_INT) ? (double)o.v.i : o.v.r;
+                if (fabs(got - dl[k].want) > 1e-9) {
+                    printf("FAIL: Do n=%-4lld -> %g, want %g  [%s]\n",
+                           dl[k].n, got, dl[k].want, dl[k].body);
+                    failures++;
+                } else printf("ok:   Do n=%-4lld = %-10g %s\n", dl[k].n, got, dl[k].body);
+            }
+            compiled_free(p); expr_free(b);
+        }
+    }
+
     /* ---- the selection heads -------------------------------------------------
      *
      * One predicate loop, four things done with the answer.  These only became

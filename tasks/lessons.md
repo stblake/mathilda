@@ -1376,3 +1376,25 @@ Rules this session earned:
   declined trial as a failure; `Select`/`TakeWhile` decline on an empty result by
   design. Give such tests an explicit `may_decline`, or the harness pushes you
   toward making the code answer where it should not.
+
+## Retargeting an engine: measure the premise first (2026-07-29)
+
+- **"The new engine dominates the old one, so delete the old one" is a claim to
+  measure, not to assume.** Mine was false: the Compile[] engine beats
+  `src/numloop.c` on `Nest` (2.5x) and `While` (1.6x) but LOSES on `Do` (1.2x)
+  and on `Map` over a plain List (1.1x) — the latter because it must pack 200k
+  `Expr` nodes at the boundary and unpack them again, which numloop skips by
+  walking the List. A wholesale retarget would have slowed the two most common
+  loop constructs. Benchmark both engines on identical bodies before planning a
+  removal.
+
+- **Read the disassembly before blaming dispatch.** The compiled `Do` was losing
+  on INSTRUCTION COUNT, not VM speed: four of eight inner-loop instructions were
+  pure loop control, and `OP_LOOP` (increment+test+branch in one) already existed
+  and was used by the fused array loops but by no counted loop. One `CompilePrint`
+  showed it; no amount of theorising would have.
+
+- **A test that pins codegen shape has to move with the codegen.** An assertion
+  that `INC_I` appears in a `Do` disassembly failed when the loop started closing
+  with `OP_LOOP`. The right fix was to assert the NEW, more specific opcode (and
+  to add a non-unit-step case asserting the old one), not to weaken the check.
