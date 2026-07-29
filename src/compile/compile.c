@@ -14,10 +14,12 @@
 #include "../symtab.h"
 #include "../attr.h"      /* ATTR_LISTABLE — the gate on elementwise fusion */
 #include "../ndarray.h"    /* NDUnaryKernel / NDBinaryKernel — shared kernel layer */
-#include "../ndreduce.h"   /* ndred_total — array reductions (M3a) */
+#include "../ndreduce.h"   /* ndred_total / ndred_accumulate — array reductions */
+#include "../ndstruct.h"   /* ndstruct_reverse / _sort / ... — delegated structure */
 #include "../ndarray_internal.h"  /* nd_parallel_for — threading the fused map loop */
 #include "../print.h"      /* expr_to_string — printing the node a bail choked on */
 #include "../sym_names.h" /* SYM_All / SYM_Span / SYM_List — Part subscript specs */
+#include "../sym_intern.h" /* intern_symbol — the FN_HEAD placeholder parameters */
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -90,6 +92,21 @@ static void nm_free(NameMap* m) { free(m->key); free(m->val); }
 #define CSE_MAX       16     /* reserved CSE registers; bounds frame growth */
 #define CSE_OCC_MAX  256     /* occurrence map entries */
 
+/* Depth of the lexical scope stack.  One entry per live binding, and the
+ * bindings now come from six places at once — Sum/Product iterators, Do
+ * iterators, With/Module locals, inlined CompiledFunction parameters, fusion
+ * leaves, and (since the functional heads landed) every lambda parameter of
+ * every Nest/Fold/Map in the body.  Nesting three of those exhausted 16, and a
+ * scope overflow bails the WHOLE body, so the array is sized for nesting rather
+ * than for a single construct.  It lives on the stack-allocated Ctx, so the
+ * cost is bytes at compile time and nothing at run time. */
+#define CTX_MAX_SCOPE 32
+
+/* Live Slot[] bindings — the parameters of a `Function[body]` being inlined.
+ * Also bounds a lambda's parameter count and hence emit_apply's argument
+ * count, so the three stay consistent by construction. */
+#define FN_MAX_PARAMS 8
+
 typedef struct {
     Instr* code; size_t n, cap;
     int nlocals;        /* registers [0,nlocals) are args/locals */
@@ -101,8 +118,18 @@ typedef struct {
     NameMap map;
     unsigned char* argdep;
     /* lexically-scoped loop variables (Sum/Product/Nest), innermost last */
-    struct { const char* name; int reg; CompileType type; } scope[16];
+    struct { const char* name; int reg; CompileType type; bool built; } scope[CTX_MAX_SCOPE];
     int nscope;
+
+    /* Live Slot[] bindings for an inlined `Function[body]` (`#`, `#1`, `#2`).
+     *
+     * Slot[k] is an EXPR_FUNCTION, not a symbol, so it cannot ride on scope[],
+     * which matches interned symbol POINTERS.  One flat frame is not an
+     * approximation: substitute_slots (src/purefunc.c:76) deliberately does not
+     * recurse into a nested Function, so only the innermost frame is ever
+     * visible, and emit_apply saves/restores nslot around each body. */
+    struct { int reg; CompileType type; } slot[FN_MAX_PARAMS];
+    int nslot;
     bool ok;
     unsigned flags;     /* COMPILE_FOLD_GLOBALS, ... */
     int inlining;       /* >0 while lowering an inlined CompiledFunction body */
@@ -177,14 +204,40 @@ static const CompiledFunction* compiled_callee(const Ctx* c, const char* nm) {
     return NULL;
 }
 
-/* resolve a symbol name to a scoped loop variable, or -1 */
-static int scope_find(const Ctx* c, const char* nm, CompileType* type) {
+/* resolve a symbol name to a scoped loop variable, or -1.  `built` is optional
+ * and only meaningful for an array-typed binding (see Val.built). */
+static int scope_find(const Ctx* c, const char* nm, CompileType* type, bool* built) {
     for (int s = c->nscope - 1; s >= 0; s--)
-        if (c->scope[s].name == nm) { *type = c->scope[s].type; return c->scope[s].reg; }
+        if (c->scope[s].name == nm) {
+            *type = c->scope[s].type;
+            if (built) *built = c->scope[s].built;
+            return c->scope[s].reg;
+        }
     return -1;
 }
 
-typedef struct { int reg; bool tmp; CompileType type; } Val;
+/* A lowered value: its register, whether the consumer must free it, its type,
+ * and — for an array — whether it was CONSTRUCTED by the body rather than
+ * derived from an array argument.
+ *
+ * `built` exists because the result KIND has to match the interpreter's.  Given
+ * a List the interpreter threads and returns a List; given an NDArray it
+ * returns an NDArray; but a body that BUILDS its array (ConstantArray, Table,
+ * NestList) returns a List *whatever the arguments were*, since the construct
+ * itself has no packed form.  Deciding that at the boundary from the argument
+ * kinds alone got it wrong for a body that takes an NDArray and builds a fresh
+ * array from something else. */
+typedef struct { int reg; bool tmp; CompileType type; bool built; } Val;
+
+/* Result of an op over these operands: built unless some array operand traces
+ * back to an argument.  An op with no array operand at all constructs its
+ * result, so it is built. */
+static bool arr_built(Val a, Val b) {
+    bool r = true;
+    if (CT_IS_ARRAY(a.type)) r = r && a.built;
+    if (CT_IS_ARRAY(b.type)) r = r && b.built;
+    return r;
+}
 
 static bool reg_is_tile(int r);
 
@@ -530,7 +583,7 @@ static Val arr_op(Ctx* c, uint16_t op, Val a, Val b, CompileType rt, Slot imm) {
     pop_tmp(c, b); pop_tmp(c, a);
     int dst = CT_IS_ARRAY(rt) ? alloc_arr(c) : alloc_temp(c);
     ins_f(c, op, f, (uint32_t)dst, (uint32_t)a.reg, (uint32_t)b.reg, imm);
-    Val r = { dst, true, rt };
+    Val r = { dst, true, rt, arr_built(a, b) };
     return r;
 }
 
@@ -811,22 +864,194 @@ static bool emit_unary_math(Ctx* c, const char* head, const Expr* arg,
     return c->ok;
 }
 
-/* Extract a single-parameter pure function's parameter name and body from
- * Function[u, body] or Function[{u}, body].  Returns false for anything else. */
-static bool extract_function(const Expr* f, const char** pname, const Expr** body) {
-    if (!f || f->type != EXPR_FUNCTION || f->data.function.head->type != EXPR_SYMBOL
-        || strcmp(f->data.function.head->data.symbol.name, "Function") != 0
-        || f->data.function.arg_count != 2) return false;
-    const Expr* p = f->data.function.args[0];
-    if (p->type == EXPR_SYMBOL) *pname = p->data.symbol.name;
-    else if (p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL
-             && strcmp(p->data.function.head->data.symbol.name, "List") == 0
-             && p->data.function.arg_count == 1
-             && p->data.function.args[0]->type == EXPR_SYMBOL)
-        *pname = p->data.function.args[0]->data.symbol.name;
-    else return false;
-    *body = f->data.function.args[1];
-    return true;
+/* ---- compile-time function values ------------------------------------------
+ *
+ * The VM has no function value: no closure, no function register, and a lambda
+ * is always INLINED at its use site.  What a functional head (Nest, Fold, Map,
+ * ...) needs is therefore not a runtime representation but a compile-time one —
+ * "which function is this, and how do I paste it in?".
+ *
+ * `fn_resolve` answers the first half, purely, so infer_type can ask it too;
+ * `emit_apply` / `infer_apply` answer the second.  Keeping them in ONE place is
+ * what stops two heads from disagreeing about which spellings of `f` they
+ * accept, and it is why adding a functional head is a lowering rather than a
+ * lowering plus a private parser for its function argument.
+ *
+ * The accepted spellings mirror apply_pure_function (src/purefunc.c:207).
+ * Anything else bails, which is correct and not merely cautious: a form the
+ * interpreter leaves symbolic is not a machine value, so answering with one
+ * would diverge rather than merely go faster. */
+typedef enum {
+    FN_LAMBDA,    /* Function[u, body] / Function[{u, ...}, body] */
+    FN_SLOTS,     /* Function[body] with #, #1, #2, ...           */
+    FN_HEAD,      /* a bare head: Sin, Plus, or a CompiledFunction-valued symbol */
+    FN_IDENTITY,  /* Identity                                     */
+    FN_COMPOSE    /* Composition[f1, ..., fn]                     */
+} FnKind;
+
+typedef struct {
+    FnKind      kind;
+    int         nparams;                /* -1 == accepts any arity */
+    const char* pname[FN_MAX_PARAMS];   /* FN_LAMBDA: interned parameter names */
+    const Expr* body;                   /* FN_LAMBDA / FN_SLOTS */
+    const char* head;                   /* FN_HEAD: interned head name */
+    /* The `f` node as written.  FN_COMPOSE walks it; every kind uses it to
+     * blame a bail on the user's own tree rather than on scaffolding. */
+    const Expr* fexpr;
+} FnSpec;
+
+/* Resolve `f` as a function of exactly `want_arity` arguments.  Pure: it
+ * inspects the tree and never emits, so both passes can call it. */
+static bool fn_resolve(const Expr* f, int want_arity, FnSpec* out) {
+    if (!f || want_arity < 1 || want_arity > FN_MAX_PARAMS) return false;
+    memset(out, 0, sizeof *out);
+    out->fexpr = f;
+
+    if (f->type == EXPR_SYMBOL) {
+        const char* nm = f->data.symbol.name;
+        if (nm == SYM_Identity) {
+            if (want_arity != 1) return false;
+            out->kind = FN_IDENTITY; out->nparams = 1; return true;
+        }
+        /* A bare head.  Whether it can actually be lowered at these argument
+         * types is emit_node's business — try_kernel and the CompiledFunction
+         * callee path both live there — so resolution stays a syntactic test and
+         * the single answer to "is this compilable" stays in one place. */
+        out->kind = FN_HEAD; out->nparams = -1; out->head = nm; return true;
+    }
+
+    if (f->type != EXPR_FUNCTION || f->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = f->data.function.head->data.symbol.name;
+    Expr* const* A = f->data.function.args;
+    size_t na = f->data.function.arg_count;
+
+    if (h == SYM_Composition) {
+        /* Composition[] and Composition[f] never survive evaluation (they
+         * normalise to Identity and f — src/core.c:1956-1957), so the general
+         * form is the only one that reaches a body. */
+        if (na < 1) return false;
+        out->kind = FN_COMPOSE; out->nparams = want_arity; return true;
+    }
+    if (h != SYM_Function) return false;
+
+    if (na == 1) { out->kind = FN_SLOTS; out->nparams = -1; out->body = A[0]; return true; }
+    /* Function[params, body, attrs]: the attribute form can hold its arguments
+     * (pure_function_attributes, src/purefunc.c:30), i.e. it changes evaluation
+     * ORDER — which an inlined body does not reproduce. */
+    if (na != 2) return false;
+
+    const Expr* p = A[0];
+    if (p->type == EXPR_SYMBOL && p->data.symbol.name == SYM_Null) {   /* long-hand slot form */
+        out->kind = FN_SLOTS; out->nparams = -1; out->body = A[1]; return true;
+    }
+
+    out->kind = FN_LAMBDA; out->body = A[1];
+    if (p->type == EXPR_SYMBOL) {
+        out->pname[0] = p->data.symbol.name; out->nparams = 1;
+    } else if (p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL
+               && p->data.function.head->data.symbol.name == SYM_List
+               && p->data.function.arg_count >= 1
+               && p->data.function.arg_count <= FN_MAX_PARAMS) {
+        size_t k = p->data.function.arg_count;
+        for (size_t i = 0; i < k; i++) {
+            if (p->data.function.args[i]->type != EXPR_SYMBOL) return false;
+            out->pname[i] = p->data.function.args[i]->data.symbol.name;
+        }
+        /* Duplicate parameter names would make the later binding shadow the
+         * earlier one, where the interpreter substitutes both. */
+        for (size_t i = 0; i < k; i++)
+            for (size_t j = 0; j < i; j++)
+                if (out->pname[i] == out->pname[j]) return false;
+        out->nparams = (int)k;
+    } else return false;
+
+    /* Arity is EXACT.  A short call leaves the surplus parameter symbolic
+     * (apply_pure_function, src/purefunc.c:271), so the interpreter's answer is
+     * not a machine number and the compiled path must not produce one. */
+    return out->nparams == want_arity;
+}
+
+/* `Slot[k]` (`#`, `#k`) resolved against the live slot frame, or -1.  Shared by
+ * both passes so they cannot disagree about which slots are bound. */
+static int fn_slot_index(const Ctx* c, Expr* const* A, size_t na) {
+    long long k = 1;                                   /* bare `#` is Slot[1] */
+    if (na == 1) {
+        if (A[0]->type != EXPR_INTEGER) return -1;
+        k = (long long)A[0]->data.integer;
+    } else if (na != 0) return -1;
+    return (k >= 1 && k <= (long long)c->nslot) ? (int)(k - 1) : -1;
+}
+
+/* Reserved parameter names for the FN_HEAD path (see emit_apply).  The context
+ * mark makes them unproducible from user source, so binding them cannot shadow
+ * anything a body could refer to. */
+static const char* fn_placeholder(int i) {
+    static const char* cache[FN_MAX_PARAMS];
+    static const char* const names[FN_MAX_PARAMS] = {
+        "System`Compile$fn1", "System`Compile$fn2", "System`Compile$fn3", "System`Compile$fn4",
+        "System`Compile$fn5", "System`Compile$fn6", "System`Compile$fn7", "System`Compile$fn8"
+    };
+    if (!cache[i]) cache[i] = intern_symbol(names[i]);
+    return cache[i];
+}
+
+/* Build `head[$1, ..., $n]` over the reserved placeholder symbols.  Caller frees. */
+static Expr* fn_head_call(const char* head, int n) {
+    Expr* args[FN_MAX_PARAMS];
+    for (int i = 0; i < n; i++) {
+        args[i] = expr_new_symbol(fn_placeholder(i));
+        if (!args[i]) { while (i-- > 0) expr_free(args[i]); return NULL; }
+    }
+    Expr* hd = expr_new_symbol(head);
+    if (!hd) { for (int i = 0; i < n; i++) expr_free(args[i]); return NULL; }
+    return expr_new_function(hd, args, (size_t)n);   /* adopts hd and args */
+}
+
+/* ---- delegated structural heads -------------------------------------------
+ *
+ * These already have an NDArray entry point in the interpreter, and each of
+ * those takes the WHOLE call and promises a result identical to the equivalent
+ * List call (src/ndstruct.h:14, src/ndreduce.h:20).  So the compiled form is
+ * that same function, called from the VM — which makes the compiled subset of
+ * these heads the interpreted one by construction, exactly as A_PART does for
+ * the general Part specs.  The win is not the operation (it was already a fast
+ * buffer walk) but that a body CONTAINING one no longer bails wholesale.
+ *
+ * `rank_rule`: 0 = same rank as the operand, 1 = rank 1 (Flatten), 2 = rank 2
+ * in and out (Transpose).  Every entry preserves the element type. */
+typedef struct {
+    const char* head;
+    Expr* (*fn)(Expr*);
+    int nextra;        /* trailing INTEGER arguments, passed through as written */
+    int rank_rule;
+} NdFnSpec;
+
+static const NdFnSpec ND_FNS[] = {
+    { "Reverse",    ndstruct_reverse,   0, 0 },
+    { "Sort",       ndstruct_sort,      0, 0 },   /* 1-arg only: a comparator is a
+                                                   * function value the ND path
+                                                   * cannot call back into */
+    { "Accumulate", ndred_accumulate,   0, 0 },
+    { "Flatten",    ndstruct_flatten,   0, 1 },
+    { "Transpose",  ndstruct_transpose, 0, 2 },
+    { "Take",       ndstruct_take,      1, 0 },
+    { "Drop",       ndstruct_drop,      1, 0 },
+};
+
+static const NdFnSpec* nd_fn_lookup(const char* h, size_t na) {
+    for (size_t i = 0; i < sizeof ND_FNS / sizeof ND_FNS[0]; i++)
+        if (strcmp(h, ND_FNS[i].head) == 0 && na == 1u + (size_t)ND_FNS[i].nextra)
+            return &ND_FNS[i];
+    return NULL;
+}
+
+/* Result type of a delegated head over an operand of type `ta`, or CT_ERR. */
+static CompileType nd_fn_result(const NdFnSpec* s, CompileType ta) {
+    if (!CT_IS_ARRAY(ta)) return CT_ERR;
+    int rank = CT_RANK(ta);
+    if (s->rank_rule == 1) return CT_ARRAY(CT_ELEM(ta), 1);
+    if (s->rank_rule == 2) return rank == 2 ? ta : CT_ERR;
+    return ta;
 }
 
 /* ---- counted-loop iterator specs -------------------------------------------
@@ -894,12 +1119,16 @@ static bool emit_loop_bound(Ctx* c, const Expr* b, int dst) {
     return c->ok;
 }
 
-/* Fixed-point accumulator type for Nest[Function[u,body], x, n]: the body's
- * output feeds back as its input, so the accumulator register must hold a type
- * wide enough to absorb every iteration.  Starting from x's type, widen until
- * the body's output type no longer grows (bounded lattice → converges fast).
- * Returns the fixed-point CompileType, or -1 if it can't be compiled. */
-static int nest_fixed_type(Ctx* c, const char* pname, const Expr* body, CompileType t0);
+/* Defined below infer_apply, which they all use; declared here because the
+ * inference branches for Nest/Fold/FixedPoint/NestWhile need them. */
+static bool infer_apply(Ctx* c, const FnSpec* s, const CompileType* argt, int n,
+                        CompileType* out);
+static int  nest_fixed_type(Ctx* c, const FnSpec* s, CompileType t0);
+static int  accum_fixed_type(Ctx* c, const FnSpec* s, CompileType t0,
+                             const CompileType* rest, int nrest);
+static CompileType vec_elem_type(Ctx* c, const Expr* e);
+static bool fp_opts(Expr* const* A, size_t na, size_t start,
+                    const Expr** max_out, const Expr** same_out);
 
 /* Pure type inference (no code emission) — needed to type an If's result
  * register before both branches are lowered.  Mirrors emit's result-type rules;
@@ -924,7 +1153,7 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     if (literal(e, &imm, &lt)) { *out = lt; return true; }
     if (e->type == EXPR_SYMBOL) {
         const char* nm = e->data.symbol.name;
-        CompileType st; if (scope_find(c, nm, &st) >= 0) { *out = st; return true; }
+        CompileType st; if (scope_find(c, nm, &st, NULL) >= 0) { *out = st; return true; }
         int k = arg_find(c, nm);
         if (k >= 0) { *out = c->arg_types[k]; return true; }
         if (strcmp(nm, "True") == 0 || strcmp(nm, "False") == 0) { *out = CT_BOOL; return true; }
@@ -937,6 +1166,10 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
     const char* h = e->data.function.head->data.symbol.name;
     Expr** A = e->data.function.args; size_t na = e->data.function.arg_count;
+    /* Slot[k] inside an inlined Function[body].  An index past the bound frame
+     * falls through and fails, which is right: the interpreter would leave that
+     * Slot unsubstituted, so its answer is not a machine number either. */
+    if (h == SYM_Slot) { int k = fn_slot_index(c, A, na); if (k >= 0) { *out = c->slot[k].type; return true; } }
     CompileType ta, tb;
     #define IT(idx, dst) do { if (!infer_type(c, A[idx], &dst)) return false; } while (0)
     if (strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) {
@@ -1088,7 +1321,7 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         /* s.var != NULL: the interpreter's Sum/Product reject a bare count
          * ({n}), so the compiled path must reject it too — only Do accepts it. */
         if (!loop_spec_parse(A[1], &s) || !s.var || !loop_spec_int_bounds(c, &s)
-            || c->nscope >= 16) return false;
+            || c->nscope >= CTX_MAX_SCOPE) return false;
         c->scope[c->nscope].name = s.var;
         c->scope[c->nscope].reg = 0; c->scope[c->nscope].type = CT_INT; c->nscope++;
         CompileType T; bool okT = infer_type(c, A[0], &T);
@@ -1102,7 +1335,7 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         if (L->type != EXPR_FUNCTION || L->data.function.head->type != EXPR_SYMBOL
             || strcmp(L->data.function.head->data.symbol.name, "List") != 0
             || L->data.function.arg_count == 0
-            || (int)(c->nscope + L->data.function.arg_count) > 16) return false;
+            || (int)(c->nscope + L->data.function.arg_count) > CTX_MAX_SCOPE) return false;
         int pushed = 0;
         for (size_t i = 0; i < L->data.function.arg_count; i++) {
             const Expr* spec = L->data.function.args[i];
@@ -1123,19 +1356,108 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     if ((!strcmp(h, "Set") || !strcmp(h, "AddTo") || !strcmp(h, "SubtractFrom")
          || !strcmp(h, "TimesBy") || !strcmp(h, "DivideBy")) && na == 2
         && A[0]->type == EXPR_SYMBOL) {
-        CompileType vt; if (scope_find(c, A[0]->data.symbol.name, &vt) < 0) return false; *out = vt; return true;
+        CompileType vt; if (scope_find(c, A[0]->data.symbol.name, &vt, NULL) < 0) return false; *out = vt; return true;
     }
     if ((!strcmp(h, "Increment") || !strcmp(h, "Decrement")) && na == 1 && A[0]->type == EXPR_SYMBOL) {
-        CompileType vt; if (scope_find(c, A[0]->data.symbol.name, &vt) < 0) return false; *out = vt; return true;
+        CompileType vt; if (scope_find(c, A[0]->data.symbol.name, &vt, NULL) < 0) return false; *out = vt; return true;
     }
     if ((!strcmp(h, "Do") && na >= 2) || (!strcmp(h, "While") && na == 2) || (!strcmp(h, "For") && na == 4)) { *out = CT_INT; return true; }
     if (!strcmp(h, "Nest") && na == 3) {
-        const char* pn; const Expr* bd; CompileType tn, tx;
-        if (!extract_function(A[0], &pn, &bd) || !infer_type(c, A[2], &tn) || tn != CT_INT
+        FnSpec s; CompileType tn, tx;
+        if (!fn_resolve(A[0], 1, &s) || !infer_type(c, A[2], &tn) || tn != CT_INT
             || !infer_type(c, A[1], &tx)) return false;
-        int tfp = nest_fixed_type(c, pn, bd, tx);
+        int tfp = nest_fixed_type(c, &s, tx);
         if (tfp < 0) return false;
         *out = (CompileType)tfp; return true;
+    }
+    /* Delegated structural heads — the rank rule lives with the table. */
+    {
+        const NdFnSpec* nf = nd_fn_lookup(h, na);
+        if (nf) {
+            IT(0, ta);
+            for (int i = 0; i < nf->nextra; i++) {
+                CompileType te;
+                if (!infer_type(c, A[1 + i], &te) || te != CT_INT) return false;
+            }
+            CompileType rt = nd_fn_result(nf, ta);
+            if ((int)rt < 0) return false;
+            *out = rt; return true;
+        }
+    }
+    /* Map / Scan over a rank-1 array — see the emit-side block for why the
+     * result element type must equal the source's. */
+    if ((!strcmp(h, "Map") || !strcmp(h, "Scan")) && na == 2) {
+        bool scan = h[0] == 'S';
+        FnSpec s; if (!fn_resolve(A[0], 1, &s)) return false;
+        CompileType el = vec_elem_type(c, A[1]);
+        if ((int)el < 0) return false;
+        CompileType rt;
+        if (!infer_apply(c, &s, &el, 1, &rt) || CT_IS_ARRAY(rt)) return false;
+        if (scan) { *out = CT_INT; return true; }
+        if (rt != el) return false;
+        *out = CT_ARRAY(rt, 1); return true;
+    }
+    /* Fold[f, x0, v] / Fold[f, v]: the accumulator's widening fixed point with
+     * the element type held fixed. */
+    if (!strcmp(h, "Fold") && (na == 2 || na == 3)) {
+        FnSpec s; if (!fn_resolve(A[0], 2, &s)) return false;
+        CompileType el = vec_elem_type(c, A[na - 1]);
+        if ((int)el < 0) return false;
+        CompileType t0 = el;                       /* Fold[f, v] seeds from v[[1]] */
+        if (na == 3 && !infer_type(c, A[1], &t0)) return false;
+        int tfp = accum_fixed_type(c, &s, t0, &el, 1);
+        if (tfp < 0 || CT_IS_ARRAY((CompileType)tfp)) return false;
+        *out = (CompileType)tfp; return true;
+    }
+    /* NestList / FoldList — see the emit-side block for the element-type rule. */
+    if ((!strcmp(h, "NestList") && na == 3)
+        || (!strcmp(h, "FoldList") && (na == 2 || na == 3))) {
+        bool nest = h[0] == 'N';
+        FnSpec s; if (!fn_resolve(A[0], nest ? 1 : 2, &s)) return false;
+        CompileType T;
+        if (nest) {
+            CompileType tn, tx;
+            if (!infer_type(c, A[2], &tn) || tn != CT_INT
+                || !infer_type(c, A[1], &tx)) return false;
+            int tfp = nest_fixed_type(c, &s, tx);
+            if (tfp < 0) return false;
+            T = (CompileType)tfp;
+        } else {
+            CompileType el = vec_elem_type(c, A[na - 1]);
+            if ((int)el < 0) return false;
+            CompileType t0 = el;
+            if (na == 3 && !infer_type(c, A[1], &t0)) return false;
+            int tfp = accum_fixed_type(c, &s, t0, &el, 1);
+            if (tfp < 0) return false;
+            T = (CompileType)tfp;
+        }
+        if (T != CT_REAL && T != CT_COMPLEX) return false;
+        *out = CT_ARRAY(T, 1); return true;
+    }
+    if (!strcmp(h, "FixedPoint") && na >= 2 && na <= 4) {
+        FnSpec s; const Expr *mx, *st;
+        if (!fn_resolve(A[0], 1, &s) || !fp_opts(A, na, 2, &mx, &st)) return false;
+        CompileType tn;
+        if (mx && (!infer_type(c, mx, &tn) || tn != CT_INT)) return false;
+        CompileType tx; if (!infer_type(c, A[1], &tx)) return false;
+        int tfp = nest_fixed_type(c, &s, tx);
+        if (tfp < 0 || CT_IS_ARRAY((CompileType)tfp)) return false;
+        if (st) {                                  /* SameTest must yield a Bool */
+            FnSpec ss; CompileType tb, at[2] = { (CompileType)tfp, (CompileType)tfp };
+            if (!fn_resolve(st, 2, &ss) || !infer_apply(c, &ss, at, 2, &tb) || tb != CT_BOOL)
+                return false;
+        }
+        *out = (CompileType)tfp; return true;
+    }
+    if (!strcmp(h, "NestWhile") && na == 3) {
+        FnSpec s, ts; CompileType tx, tb;
+        if (!fn_resolve(A[0], 1, &s) || !fn_resolve(A[2], 1, &ts)
+            || !infer_type(c, A[1], &tx)) return false;
+        int tfp = nest_fixed_type(c, &s, tx);
+        if (tfp < 0 || CT_IS_ARRAY((CompileType)tfp)) return false;
+        CompileType at = (CompileType)tfp;
+        if (!infer_apply(c, &ts, &at, 1, &tb) || tb != CT_BOOL) return false;
+        *out = at; return true;
     }
     /* Part (M3c).  A full run of scalar subscripts drops every axis and lands
      * back in the scalar lattice; anything else keeps at least one axis and
@@ -1158,6 +1480,26 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         int rank; CompileType elem;
         if (!const_array_shape(c, (const Expr* const*)A, &rank, &elem)) return false;
         *out = CT_ARRAY(elem, rank); return true;
+    }
+    /* Table[body, spec...] — see the emit-side block for why the iterators must
+     * be integer-bounded and the element type Real or Complex. */
+    if (strcmp(h, "Table") == 0 && na >= 2 && (int)na - 1 <= CT_MAX_RANK) {
+        int rank = (int)na - 1;
+        LoopSpec sp[CT_MAX_RANK];
+        for (int j = 0; j < rank; j++)
+            if (!loop_spec_parse(A[j + 1], &sp[j]) || !loop_spec_int_bounds(c, &sp[j])) return false;
+        if (c->nscope + rank > CTX_MAX_SCOPE) return false;
+        int pushed = 0;
+        for (int j = 0; j < rank; j++)
+            if (sp[j].var) {
+                c->scope[c->nscope].name = sp[j].var; c->scope[c->nscope].reg = 0;
+                c->scope[c->nscope].type = CT_INT; c->scope[c->nscope].built = false;
+                c->nscope++; pushed++;
+            }
+        CompileType et; bool okT = infer_type(c, A[0], &et);
+        c->nscope -= pushed;
+        if (!okT || (et != CT_REAL && et != CT_COMPLEX)) return false;
+        *out = CT_ARRAY(et, rank); return true;
     }
 
     /* array -> scalar reductions (M3a): the only way an array type re-enters
@@ -1211,7 +1553,7 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     {
         const CompiledFunction* cf = compiled_callee(c, h);
         if (cf && na >= 1 && compiled_function_num_args(cf) == na
-            && na + (size_t)c->nscope <= 16 && c->inlining < 8) {
+            && na + (size_t)c->nscope <= CTX_MAX_SCOPE && c->inlining < 8) {
             const char* const* pn = compiled_function_arg_names(cf);
             const CompileType* pt = compiled_function_arg_types(cf);
             /* Type every argument in the CALLER's environment first — binding a
@@ -1239,20 +1581,135 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     return false;
 }
 
-static int nest_fixed_type(Ctx* c, const char* pname, const Expr* body, CompileType t0) {
-    if (c->nscope >= 16) return -1;
+/* Type `f[a1, ..., an]` for an already-resolved function value.  Mirrors
+ * emit_apply's binding exactly — the two must agree or a construct types as one
+ * thing and lowers as another. */
+static bool infer_apply(Ctx* c, const FnSpec* s, const CompileType* argt, int n,
+                        CompileType* out) {
+    switch (s->kind) {
+        case FN_IDENTITY:
+            if (n != 1) return false;
+            *out = argt[0]; return true;
+
+        case FN_LAMBDA: {
+            if (n != s->nparams || c->nscope + n > CTX_MAX_SCOPE) return false;
+            int saved_scope = c->nscope, saved_nslot = c->nslot;
+            for (int i = 0; i < n; i++) {
+                c->scope[c->nscope].name = s->pname[i];
+                c->scope[c->nscope].reg = 0;
+                c->scope[c->nscope].type = argt[i];
+                c->nscope++;
+            }
+            c->nslot = 0;                    /* see emit_apply for why */
+            bool ok = infer_type(c, s->body, out);
+            c->nslot = saved_nslot; c->nscope = saved_scope;
+            return ok;
+        }
+
+        case FN_SLOTS: {
+            if (n > FN_MAX_PARAMS) return false;
+            int saved_nslot = c->nslot;
+            struct { int reg; CompileType type; } saved[FN_MAX_PARAMS];
+            memcpy(saved, c->slot, sizeof saved);
+            for (int i = 0; i < n; i++) { c->slot[i].reg = 0; c->slot[i].type = argt[i]; }
+            c->nslot = n;
+            bool ok = infer_type(c, s->body, out);
+            c->nslot = saved_nslot;
+            memcpy(c->slot, saved, sizeof saved);
+            return ok;
+        }
+
+        case FN_COMPOSE: {
+            /* Composition[f1,...,fk][a...] = f1[f2[...fk[a...]]] — the INNERMOST
+             * takes every argument, each outer takes one (src/eval.c:1449). */
+            Expr* const* F = s->fexpr->data.function.args;
+            size_t nf = s->fexpr->data.function.arg_count;
+            CompileType t; FnSpec inner;
+            if (!fn_resolve(F[nf - 1], n, &inner) || !infer_apply(c, &inner, argt, n, &t))
+                return false;
+            for (size_t k = nf - 1; k > 0; k--) {
+                FnSpec g;
+                if (!fn_resolve(F[k - 1], 1, &g) || !infer_apply(c, &g, &t, 1, &t)) return false;
+            }
+            *out = t; return true;
+        }
+
+        case FN_HEAD: {
+            if (n > FN_MAX_PARAMS || c->nscope + n > CTX_MAX_SCOPE) return false;
+            Expr* call = fn_head_call(s->head, n);
+            if (!call) return false;
+            int saved_scope = c->nscope;
+            for (int i = 0; i < n; i++) {
+                c->scope[c->nscope].name = fn_placeholder(i);
+                c->scope[c->nscope].reg = 0;
+                c->scope[c->nscope].type = argt[i];
+                c->nscope++;
+            }
+            bool ok = infer_type(c, call, out);
+            c->nscope = saved_scope;
+            expr_free(call);
+            return ok;
+        }
+    }
+    return false;
+}
+
+/* Fixed-point accumulator type for an iteration that feeds its own output back
+ * in (Nest, Fold, FixedPoint, NestWhile): the register must hold a type wide
+ * enough to absorb every iteration.  Starting from t0, widen until the output
+ * type stops growing — the lattice is bounded, so this converges in a few
+ * passes or not at all.
+ *
+ * Argument 0 is the accumulator; `rest` carries the types of any further
+ * arguments, which do not vary (Fold's list element). */
+static int accum_fixed_type(Ctx* c, const FnSpec* s, CompileType t0,
+                            const CompileType* rest, int nrest) {
+    if (nrest < 0 || nrest + 1 > FN_MAX_PARAMS) return -1;
     CompileType t = t0;
     for (int iter = 0; iter < 4; iter++) {
-        c->scope[c->nscope].name = pname; c->scope[c->nscope].reg = 0;
-        c->scope[c->nscope].type = t; c->nscope++;
-        CompileType tb; bool okb = infer_type(c, body, &tb);
-        c->nscope--;
-        if (!okb || (int)tb < 0) return -1;
+        CompileType at[FN_MAX_PARAMS], tb;
+        at[0] = t;
+        for (int i = 0; i < nrest; i++) at[i + 1] = rest[i];
+        if (!infer_apply(c, s, at, nrest + 1, &tb) || (int)tb < 0) return -1;
         if (tb == CT_BOOL && t != CT_BOOL) return -1;    /* can't fold a bool into a number */
         if (tb <= t) return (int)t;                       /* output coerces down into the accumulator */
         t = tb;                                           /* output widened it; grow and re-check */
     }
     return -1;
+}
+static int nest_fixed_type(Ctx* c, const FnSpec* s, CompileType t0) {
+    return accum_fixed_type(c, s, t0, NULL, 0);
+}
+
+/* The element type of a rank-1 array-valued expression, or CT_ERR.  Fold, Map
+ * and the other list-consuming heads all need exactly this test. */
+static CompileType vec_elem_type(Ctx* c, const Expr* e) {
+    CompileType t;
+    if (!infer_type(c, e, &t) || !CT_IS_ARRAY(t) || CT_RANK(t) != 1) return CT_ERR;
+    return CT_ELEM(t);
+}
+
+/* FixedPoint's trailing arguments: an application bound and/or SameTest -> s,
+ * in either order, exactly as parse_fp_opts accepts them (src/funcprog.c:2511).
+ * Returns false for a spelling the interpreter itself refuses. */
+static bool fp_opts(Expr* const* A, size_t na, size_t start,
+                    const Expr** max_out, const Expr** same_out) {
+    *max_out = NULL; *same_out = NULL;
+    for (size_t i = start; i < na; i++) {
+        const Expr* a = A[i];
+        if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL
+            && (a->data.function.head->data.symbol.name == SYM_Rule
+                || a->data.function.head->data.symbol.name == SYM_RuleDelayed)
+            && a->data.function.arg_count == 2
+            && a->data.function.args[0]->type == EXPR_SYMBOL
+            && a->data.function.args[0]->data.symbol.name == SYM_SameTest) {
+            if (*same_out) return false;
+            *same_out = a->data.function.args[1];
+        } else if (!*max_out) {
+            *max_out = a;        /* the bound; must infer as CT_INT to compile */
+        } else return false;
+    }
+    return true;
 }
 
 /* True when any argument is (or infers to) an array — the signal to take an
@@ -1408,6 +1865,7 @@ typedef struct {
     const char* name[FUSE_MAX_LEAVES];   /* interned symbol pointer */
     int         reg[FUSE_MAX_LEAVES];    /* the array-valued register */
     CompileType type[FUSE_MAX_LEAVES];   /* the ARRAY type (element + rank) */
+    bool        built[FUSE_MAX_LEAVES];  /* leaf constructed here, not an argument */
     int         n;
 } FuseLeaves;
 
@@ -1417,7 +1875,7 @@ static bool fuse_collect(Ctx* c, const Expr* e, FuseLeaves* L) {
     if (!e) return true;
     if (e->type == EXPR_SYMBOL) {
         const char* nm = e->data.symbol.name;
-        CompileType t; int reg = scope_find(c, nm, &t);
+        CompileType t; bool tb = false; int reg = scope_find(c, nm, &t, &tb);
         if (reg < 0) {
             int k = arg_find(c, nm);
             if (k < 0) return true;                 /* not a value we bind */
@@ -1427,12 +1885,12 @@ static bool fuse_collect(Ctx* c, const Expr* e, FuseLeaves* L) {
              * looks unread, and compiled_arg_deps would tell a client (an FD
              * Jacobian, say) the function does not depend on it. */
             c->argdep[k] = 1;
-            reg = k; t = c->arg_types[k];
+            reg = k; t = c->arg_types[k]; tb = false;   /* borrowed from the caller */
         }
         if (!CT_IS_ARRAY(t)) return true;
         for (int i = 0; i < L->n; i++) if (L->name[i] == nm) return true;   /* seen */
         if (L->n >= FUSE_MAX_LEAVES) return false;
-        L->name[L->n] = nm; L->reg[L->n] = reg; L->type[L->n] = t; L->n++;
+        L->name[L->n] = nm; L->reg[L->n] = reg; L->type[L->n] = t; L->built[L->n] = tb; L->n++;
         return true;
     }
     if (e->type != EXPR_FUNCTION) return true;
@@ -1458,7 +1916,7 @@ static int fuse_listable(Ctx* c, const Expr* e) {
     if (!e) return 0;
     if (e->type == EXPR_SYMBOL) {
         const char* nm = e->data.symbol.name;
-        CompileType t; int reg = scope_find(c, nm, &t);
+        CompileType t; int reg = scope_find(c, nm, &t, NULL);
         if (reg < 0) { int k = arg_find(c, nm); if (k < 0) return 0; t = c->arg_types[k]; }
         return CT_IS_ARRAY(t) ? 1 : 0;
     }
@@ -1639,9 +2097,204 @@ static bool try_fuse(Ctx* c, const Expr* e, Val* out) {
         out->reg = racc; out->tmp = true; out->type = elem;
     } else {
         c->temp_top = (rn - c->nlocals);             /* rn/ri dead; rout is an arr */
-        out->reg = rout; out->tmp = true; out->type = CT_ARRAY(elem, rank);
+        /* The fused buffer is built only if every leaf it reads was. */
+        bool blt = true;
+        for (int i = 0; i < L.n; i++) blt = blt && L.built[i];
+        out->reg = rout; out->tmp = true; out->type = CT_ARRAY(elem, rank); out->built = blt;
     }
     return true;
+}
+
+/* Lower `f[a1, ..., an]` for an already-resolved function value, with the
+ * arguments ALREADY in registers.
+ *
+ * The caller owns those registers and must keep them live for the whole body —
+ * a parameter is read wherever the body mentions it, while the body is free to
+ * allocate temps above them.  In practice every caller binds a persistent
+ * register (an accumulator, a loop element), so no copy is made here.
+ *
+ * `out` may share an argument's register when the body is a bare parameter
+ * reference, exactly as an ordinary lowering may return an operand's register;
+ * `out->tmp` says whether the caller must free it. */
+static bool emit_apply(Ctx* c, const FnSpec* s, const Val* argv, int n, Val* out) {
+    if (!c->ok) return false;
+
+    switch (s->kind) {
+        case FN_IDENTITY:
+            if (n != 1) { c->ok = false; return false; }
+            *out = argv[0]; out->tmp = false; return true;
+
+        case FN_LAMBDA: {
+            if (n != s->nparams || c->nscope + n > CTX_MAX_SCOPE) { c->ok = false; return false; }
+            int saved_scope = c->nscope, saved_nslot = c->nslot;
+            for (int i = 0; i < n; i++) {
+                c->scope[c->nscope].name = s->pname[i];
+                c->scope[c->nscope].reg = argv[i].reg;
+                c->scope[c->nscope].type = argv[i].type;
+                c->scope[c->nscope].built = argv[i].built;
+                c->nscope++;
+            }
+            /* Slots are INVISIBLE under a named lambda.  apply_pure_function's
+             * named path runs substitute_names only (src/purefunc.c:247), so a
+             * Slot[1] inside Function[u, # + u] survives into the interpreter's
+             * answer and that answer is not a machine number.  Hiding the frame
+             * is what keeps the compiled path from answering where it declines. */
+            c->nslot = 0;
+            bool ok = emit(c, s->body, out);
+            c->nslot = saved_nslot; c->nscope = saved_scope;
+            return ok;
+        }
+
+        case FN_SLOTS: {
+            if (n > FN_MAX_PARAMS) { c->ok = false; return false; }
+            int saved_nslot = c->nslot;
+            struct { int reg; CompileType type; } saved[FN_MAX_PARAMS];
+            memcpy(saved, c->slot, sizeof saved);
+            for (int i = 0; i < n; i++) { c->slot[i].reg = argv[i].reg; c->slot[i].type = argv[i].type; }
+            c->nslot = n;
+            bool ok = emit(c, s->body, out);
+            c->nslot = saved_nslot;
+            memcpy(c->slot, saved, sizeof saved);
+            return ok;
+        }
+
+        case FN_COMPOSE: {
+            /* Composition[f1,...,fk][a...] = f1[f2[...fk[a...]]] — the INNERMOST
+             * takes every argument, each outer takes one (src/eval.c:1449). */
+            Expr* const* F = s->fexpr->data.function.args;
+            size_t nf = s->fexpr->data.function.arg_count;
+            FnSpec inner; Val v;
+            if (!fn_resolve(F[nf - 1], n, &inner)) { c->ok = false; return false; }
+            if (!emit_apply(c, &inner, argv, n, &v)) return false;
+            for (size_t k = nf - 1; k > 0; k--) {
+                FnSpec g;
+                if (!fn_resolve(F[k - 1], 1, &g)) { c->ok = false; return false; }
+                Val r;
+                if (!emit_apply(c, &g, &v, 1, &r)) return false;
+                free_if_tmp(c, v);
+                v = r;
+            }
+            *out = v; return c->ok;
+        }
+
+        case FN_HEAD: {
+            /* emit_node dispatches on a head name plus an Expr** argument list,
+             * not on Vals, so applying a bare head means synthesizing the call
+             * over reserved placeholder symbols bound to the argument registers.
+             * The alternative — a Val-taking entry point into ~45 lowerings —
+             * would be a large refactor with no behaviour change, and this way
+             * EVERY head emit_node knows (all 93 machine kernels, plus a
+             * CompiledFunction-valued symbol) becomes usable as a function value
+             * with no per-head work.  A handful of nodes per compile, none per
+             * call.  Same scaffolding pattern as the multi-iterator Do. */
+            if (n > FN_MAX_PARAMS || c->nscope + n > CTX_MAX_SCOPE) { c->ok = false; return false; }
+            Expr* call = fn_head_call(s->head, n);
+            if (!call) { c->ok = false; return false; }
+            int saved_scope = c->nscope;
+            for (int i = 0; i < n; i++) {
+                c->scope[c->nscope].name = fn_placeholder(i);
+                c->scope[c->nscope].reg = argv[i].reg;
+                c->scope[c->nscope].type = argv[i].type;
+                c->scope[c->nscope].built = argv[i].built;
+                c->nscope++;
+            }
+            bool ok = emit(c, call, out);
+            c->nscope = saved_scope;
+            /* Blame the user's own node: the scaffolding is freed on the next
+             * line, and a diagnostic pointing into it would dangle. */
+            if (!ok && expr_subtree_of(call, c->bail_node)) c->bail_node = s->fexpr;
+            expr_free(call);
+            return ok;
+        }
+    }
+    c->ok = false; return false;
+}
+
+/* `if (R[reg] > lim) fail` — the interpreter silently truncates a Table at
+ * 1e6 elements (src/list/table.c:114), so beyond that the two would disagree
+ * about the LENGTH.  Declining hands the call back and lets it truncate. */
+static void emit_max_guard(Ctx* c, int reg, long long lim) {
+    Slot z = { 0 }, kl; memset(&kl, 0, sizeof kl); kl.i = lim;
+    int rl = alloc_temp(c), rc = alloc_temp(c);
+    ins(c, OP_CONST, (uint32_t)rl, 0, 0, kl);
+    ins(c, OP_GT_I, (uint32_t)rc, (uint32_t)reg, (uint32_t)rl, z);
+    size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z);   /* in range -> skip */
+    ins(c, OP_FAIL, 0, 0, 0, z);
+    if (c->ok) c->code[jz].b = (uint32_t)c->n;
+    c->temp_top -= 2;
+}
+
+/* Element count of a counted integer iterator, into `dst`.
+ *
+ *     n = max(0, floor((hi - lo) / di) + 1)
+ *
+ * OP_QUOT_I is FLOOR division (it corrects the sign, compile.c's QUOT_I case),
+ * which is what the interpreter's `val <= hi` / `val >= hi` walk amounts to for
+ * an integer step — including the wrong-direction case, where the floor goes
+ * negative and the clamp gives the empty table.  Truncating division would
+ * claim one element for `{i, 1, 0, 2}`, where the interpreter produces none. */
+static bool emit_iter_count(Ctx* c, const LoopSpec* s, int rlo, int dst) {
+    Slot z = { 0 }, k; memset(&k, 0, sizeof k);
+    int rhi = alloc_temp(c), rt = alloc_temp(c), rk = alloc_temp(c);
+    if (!emit_loop_bound(c, s->lo, rlo)) return false;
+    if (!emit_loop_bound(c, s->hi, rhi)) return false;
+    ins(c, OP_SUB_I, (uint32_t)rt, (uint32_t)rhi, (uint32_t)rlo, z);
+    k.i = s->di;  ins(c, OP_CONST, (uint32_t)rk, 0, 0, k);
+    ins(c, OP_QUOT_I, (uint32_t)rt, (uint32_t)rt, (uint32_t)rk, z);
+    k.i = 1;      ins(c, OP_CONST, (uint32_t)rk, 0, 0, k);
+    ins(c, OP_ADD_I, (uint32_t)rt, (uint32_t)rt, (uint32_t)rk, z);
+    k.i = 0;      ins(c, OP_CONST, (uint32_t)rk, 0, 0, k);
+    ins(c, OP_MAX_I, (uint32_t)dst, (uint32_t)rt, (uint32_t)rk, z);
+    c->temp_top -= 3;
+    return c->ok;
+}
+
+/* Does `e` evaluate to Null in the interpreter?  Do/While/For/Scan run for
+ * their side effects and answer Null; the compiled forms answer the integer 0,
+ * which only agrees where the value is thrown away.  See compile_expr_ex. */
+static bool stmt_valued_head(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    return strcmp(h, "Do") == 0 || strcmp(h, "While") == 0
+        || strcmp(h, "For") == 0 || strcmp(h, "Scan") == 0;
+}
+
+/* SameQ opcode for an accumulator type.
+ *
+ * Deliberately NOT the Equal opcode.  The interpreter's default SameTest is
+ * expr_eq (src/funcprog.c:2493), and expr_eq calls two NaNs the same
+ * (src/expr.c:622) — which is what lets FixedPoint terminate on an orbit that
+ * reaches NaN instead of spinning to the safety cap.  Integers have no NaN, so
+ * there OP_EQ_I already IS expr_eq. */
+static uint16_t emit_sameq_op(CompileType t) {
+    return t == CT_INT ? OP_EQ_I : t == CT_COMPLEX ? OP_SAMEQ_C : OP_SAMEQ_R;
+}
+
+/* `if (R[reg] < 0) fail` — a negative application bound leaves Nest and
+ * FixedPoint UNEVALUATED in the interpreter (src/funcprog.c:2153), where a
+ * counted loop would silently run zero times and return the seed. */
+static void emit_nonneg_guard(Ctx* c, int reg) {
+    Slot z = { 0 }, k0; memset(&k0, 0, sizeof k0); k0.i = 0;
+    int rz = alloc_temp(c), rc = alloc_temp(c);
+    ins(c, OP_CONST, (uint32_t)rz, 0, 0, k0);
+    ins(c, OP_LT_I, (uint32_t)rc, (uint32_t)reg, (uint32_t)rz, z);   /* reg < 0 ? */
+    size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z);   /* in range -> skip */
+    ins(c, OP_FAIL, 0, 0, 0, z);
+    if (c->ok) c->code[jz].b = (uint32_t)c->n;
+    c->temp_top -= 2;
+}
+
+/* `if (R[reg] == 0) fail` — Fold[f, {}] stays unevaluated (src/funcprog.c:2282),
+ * so a seedless fold over an empty vector must not answer. */
+static void emit_nonzero_guard(Ctx* c, int reg) {
+    Slot z = { 0 }, k0; memset(&k0, 0, sizeof k0); k0.i = 0;
+    int rz = alloc_temp(c), rc = alloc_temp(c);
+    ins(c, OP_CONST, (uint32_t)rz, 0, 0, k0);
+    ins(c, OP_LE_I, (uint32_t)rc, (uint32_t)reg, (uint32_t)rz, z);   /* reg <= 0 ? */
+    size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z);   /* non-empty -> skip */
+    ins(c, OP_FAIL, 0, 0, 0, z);
+    if (c->ok) c->code[jz].b = (uint32_t)c->n;
+    c->temp_top -= 2;
 }
 
 /* The lowering proper.  Every bail is a plain `return false` from somewhere in
@@ -1655,10 +2308,12 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
 
     if (e->type == EXPR_SYMBOL) {
         const char* nm = e->data.symbol.name;
-        CompileType st; int sr = scope_find(c, nm, &st);
-        if (sr >= 0) { out->reg = sr; out->tmp = false; out->type = st; return true; }
+        CompileType st; bool sb = false; int sr = scope_find(c, nm, &st, &sb);
+        if (sr >= 0) { out->reg = sr; out->tmp = false; out->type = st; out->built = sb; return true; }
         int k = arg_find(c, nm);
-        if (k >= 0) { c->argdep[k] = 1; out->reg = k; out->tmp = false; out->type = c->arg_types[k]; return true; }
+        /* An argument array is borrowed from the caller, so anything derived
+         * from it takes the caller's kind: NOT built. */
+        if (k >= 0) { c->argdep[k] = 1; out->reg = k; out->tmp = false; out->type = c->arg_types[k]; out->built = false; return true; }
         if (strcmp(nm, "True") == 0)  { imm.i = 1; *out = emit_const(c, imm, CT_BOOL); return c->ok; }
         if (strcmp(nm, "False") == 0) { imm.i = 0; *out = emit_const(c, imm, CT_BOOL); return c->ok; }
         if (strcmp(nm, "I") == 0)     { imm.z = I; *out = emit_const(c, imm, CT_COMPLEX); return c->ok; }
@@ -1684,6 +2339,15 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
     const char* h = e->data.function.head->data.symbol.name;
     Expr** A = e->data.function.args;
     size_t na = e->data.function.arg_count;
+
+    /* Slot[k] inside an inlined Function[body].  An index past the bound frame
+     * falls through to the bail below, which is right: the interpreter would
+     * leave that Slot unsubstituted, so its answer is not a machine number. */
+    if (h == SYM_Slot) {
+        int k = fn_slot_index(c, A, na);
+        if (k >= 0) { out->reg = c->slot[k].reg; out->tmp = false; out->type = c->slot[k].type; return true; }
+        c->ok = false; return false;
+    }
 
     /* Elementwise fusion, tried before the delegated array lowering below.  The
      * `array_args` gate keeps this free for the overwhelmingly common scalar
@@ -2147,7 +2811,108 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
             c->temp_top -= 2;                           /* rn, rk */
         }
         c->temp_top -= rank;                            /* the dimension registers */
-        out->reg = rout; out->tmp = true; out->type = CT_ARRAY(elem, rank);
+        /* A construction site: the interpreter's ConstantArray returns a List
+         * whatever the arguments were, so the result kind must not follow them. */
+        out->reg = rout; out->tmp = true; out->type = CT_ARRAY(elem, rank); out->built = true;
+        return c->ok;
+    }
+
+    /* Table[body, spec1, ..., speck]: build a rank-k machine array.
+     *
+     * INTEGER iterators only, and that is not a convenience restriction.  The
+     * interpreter walks a real iterator by repeated addition against a 1e-14
+     * termination slack (src/list/table.c:90), so a closed-form `lo + k di`
+     * differs from it in the last bits and, near the endpoint, in the element
+     * COUNT.  Integer bounds reproduce that walk exactly.
+     *
+     * The element type must be Real or Complex for the same reason
+     * ConstantArray refuses an integer fill (see const_array_shape):
+     * `Table[i, {i, 1, n}]` holds exact Integers in the interpreter and a packed
+     * buffer has no integer dtype, so compiling it would answer differently
+     * rather than merely faster.  `Table[N[i]^2, ...]` is the compilable
+     * spelling.
+     *
+     * One flat store index across k nested loops, innermost varying fastest —
+     * which is row-major, and which is how the interpreter's nested rewrite
+     * orders the elements too (see the multi-iterator Do). */
+    if (strcmp(h, "Table") == 0 && na >= 2 && (int)na - 1 <= CT_MAX_RANK) {
+        int rank = (int)na - 1;
+        LoopSpec sp[CT_MAX_RANK];
+        for (int j = 0; j < rank; j++)
+            if (!loop_spec_parse(A[j + 1], &sp[j]) || !loop_spec_int_bounds(c, &sp[j]))
+                { c->ok = false; return false; }
+        if (c->nscope + rank > CTX_MAX_SCOPE) { c->ok = false; return false; }
+
+        int pushed = 0;
+        for (int j = 0; j < rank; j++)
+            if (sp[j].var) {
+                c->scope[c->nscope].name = sp[j].var; c->scope[c->nscope].reg = 0;
+                c->scope[c->nscope].type = CT_INT; c->scope[c->nscope].built = false;
+                c->nscope++; pushed++;
+            }
+        CompileType et; bool okT = infer_type(c, A[0], &et);
+        c->nscope -= pushed;
+        if (!okT || (et != CT_REAL && et != CT_COMPLEX)) { c->ok = false; return false; }
+
+        Slot z = { 0 }, k0; memset(&k0, 0, sizeof k0); k0.i = 0;
+
+        /* The dimension registers must be ONE contiguous run: A_NEW reads rank
+         * of them starting at `base`. */
+        int rn[CT_MAX_RANK], rlo[CT_MAX_RANK], base = -1;
+        for (int j = 0; j < rank; j++) { int r = alloc_temp(c); if (base < 0) base = r; rn[j] = r; }
+        for (int j = 0; j < rank; j++) rlo[j] = alloc_temp(c);
+        for (int j = 0; j < rank; j++) {
+            if (!emit_iter_count(c, &sp[j], rlo[j], rn[j])) return false;
+            emit_max_guard(c, rn[j], 1000000);
+        }
+
+        Slot el; memset(&el, 0, sizeof el); el.i = (long long)et;
+        int rout = alloc_arr(c);
+        ins_f(c, OP_A_NEW, (uint16_t)rank, (uint32_t)rout, (uint32_t)base, (uint32_t)base, el);
+
+        int rflat = alloc_temp(c);
+        ins(c, OP_CONST, (uint32_t)rflat, 0, 0, k0);
+
+        int riv[CT_MAX_RANK], rk[CT_MAX_RANK];
+        size_t Lp[CT_MAX_RANK], jz[CT_MAX_RANK];
+        int scope_entry = c->nscope;
+        for (int j = 0; j < rank; j++) {
+            riv[j] = alloc_temp(c); rk[j] = alloc_temp(c);
+            ins(c, OP_MOVE, (uint32_t)riv[j], (uint32_t)rlo[j], 0, z);
+            ins(c, OP_CONST, (uint32_t)rk[j], 0, 0, k0);
+            if (sp[j].var) {
+                c->scope[c->nscope].name = sp[j].var; c->scope[c->nscope].reg = riv[j];
+                c->scope[c->nscope].type = CT_INT; c->scope[c->nscope].built = false;
+                c->nscope++;
+            }
+            Lp[j] = c->n;
+            int rc = alloc_temp(c);
+            ins(c, OP_LT_I, (uint32_t)rc, (uint32_t)rk[j], (uint32_t)rn[j], z);
+            jz[j] = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z);
+            c->temp_top--;
+        }
+
+        Val bv;
+        if (!emit(c, A[0], &bv)) { c->nscope = scope_entry; return false; }
+        if (CT_IS_ARRAY(bv.type)) { c->nscope = scope_entry; c->ok = false; return false; }
+        coerce(c, &bv, et);
+        if (!c->ok) { c->nscope = scope_entry; return false; }
+        ins(c, et == CT_COMPLEX ? OP_A_STORE_C : OP_A_STORE_R,
+            (uint32_t)rout, (uint32_t)rflat, (uint32_t)bv.reg, z);
+        free_if_tmp(c, bv);
+        Slot one; memset(&one, 0, sizeof one); one.i = 1;
+        ins(c, OP_INC_I, (uint32_t)rflat, 0, 0, one);
+
+        for (int j = rank - 1; j >= 0; j--) {
+            Slot sd; memset(&sd, 0, sizeof sd); sd.i = sp[j].di;
+            ins(c, OP_INC_I, (uint32_t)riv[j], 0, 0, sd);
+            ins(c, OP_INC_I, (uint32_t)rk[j], 0, 0, one);
+            ins(c, OP_JMP, 0, 0, (uint32_t)Lp[j], z);
+            if (c->ok) c->code[jz[j]].b = (uint32_t)c->n;
+        }
+        c->nscope = scope_entry;
+        c->temp_top = base - c->nlocals;      /* every scalar temp is dead; rout is an arr */
+        out->reg = rout; out->tmp = true; out->type = CT_ARRAY(et, rank); out->built = true;
         return c->ok;
     }
 
@@ -2197,7 +2962,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
             c->arr_top--;
             rout = a.reg;
         }
-        out->reg = rout; out->tmp = true; out->type = CT_ARRAY(elem, keep);
+        out->reg = rout; out->tmp = true; out->type = CT_ARRAY(elem, keep); out->built = a.built;
         return c->ok;
     }
 
@@ -2293,7 +3058,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         LoopSpec s;
         /* Named iterator required — see the matching note in infer_type. */
         if (!loop_spec_parse(A[1], &s) || !s.var || !loop_spec_int_bounds(c, &s)
-            || c->nscope >= 16) { c->ok = false; return false; }         /* integer iteration only */
+            || c->nscope >= CTX_MAX_SCOPE) { c->ok = false; return false; }  /* integer iteration only */
         /* body type with i bound as INT */
         c->scope[c->nscope].name = s.var; c->scope[c->nscope].reg = 0;
         c->scope[c->nscope].type = CT_INT; c->nscope++;
@@ -2346,7 +3111,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         if (L->type != EXPR_FUNCTION || L->data.function.head->type != EXPR_SYMBOL
             || strcmp(L->data.function.head->data.symbol.name, "List") != 0
             || L->data.function.arg_count == 0
-            || (int)(c->nscope + L->data.function.arg_count) > 16) { c->ok = false; return false; }
+            || (int)(c->nscope + L->data.function.arg_count) > CTX_MAX_SCOPE) { c->ok = false; return false; }
         size_t nl = L->data.function.arg_count;
         Slot z = { 0 };
         int base_reg = -1, pushed = 0;
@@ -2389,7 +3154,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
                     }
                     arr_regs[narr++] = areg;
                     c->scope[c->nscope].name = vname; c->scope[c->nscope].reg = areg;
-                    c->scope[c->nscope].type = iv.type;
+                    c->scope[c->nscope].type = iv.type; c->scope[c->nscope].built = iv.built;
                     c->nscope++; pushed++;
                     continue;
                 }
@@ -2419,7 +3184,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
                 ins(c, OP_A_XFER, (uint32_t)rres, (uint32_t)body.reg, 0, z);
             }
             c->temp_top = (base_reg - c->nlocals);   /* no scalar result to keep */
-            out->reg = rres; out->tmp = true; out->type = body.type;
+            out->reg = rres; out->tmp = true; out->type = body.type; out->built = body.built;
             return c->ok;
         }
 
@@ -2528,7 +3293,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         if (kind >= 0) {
             size_t want = IC_UNARY(kind) ? 1 : 2;
             if (na != want || A[0]->type != EXPR_SYMBOL) { c->ok = false; return false; }
-            CompileType vt; int vreg = scope_find(c, A[0]->data.symbol.name, &vt);
+            CompileType vt; int vreg = scope_find(c, A[0]->data.symbol.name, &vt, NULL);
             if (vreg < 0 || vt == CT_BOOL) { c->ok = false; return false; }   /* mutable numeric locals only */
             /* DivideBy always produces a Real (or Complex), never an Int. */
             if (kind == 6 && vt == CT_INT) { c->ok = false; return false; }
@@ -2583,7 +3348,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
     if (strcmp(h, "Do") == 0 && na == 2) {
         LoopSpec s;
         if (!loop_spec_parse(A[1], &s) || !loop_spec_int_bounds(c, &s)
-            || c->nscope >= 16) { c->ok = false; return false; }
+            || c->nscope >= CTX_MAX_SCOPE) { c->ok = false; return false; }
         Slot z = { 0 };
         int rhi = alloc_temp(c), ri = alloc_temp(c);
         if (!emit_loop_bound(c, s.lo, ri)) return false;
@@ -2622,15 +3387,17 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         out->reg = r0; out->tmp = true; out->type = CT_INT; return c->ok;
     }
 
-    /* Nest[Function[u, body], x, n]: apply body n times, feeding each result
-     * back in as u.  The accumulator lives in one persistent register (racc)
-     * typed to the fixed-point type; the counted loop mirrors Do. */
+    /* Nest[f, x, n]: apply f n times, feeding each result back in.  The
+     * accumulator lives in one persistent register (racc) typed to the
+     * fixed-point type; the counted loop mirrors Do.  `f` is any function value
+     * fn_resolve accepts — Function[u,body], #-slots, a bare head, Composition,
+     * a CompiledFunction — so this one lowering covers all of them. */
     if (strcmp(h, "Nest") == 0 && na == 3) {
-        const char* pname; const Expr* body;
-        if (!extract_function(A[0], &pname, &body) || c->nscope >= 16) { c->ok = false; return false; }
+        FnSpec fs;
+        if (!fn_resolve(A[0], 1, &fs)) { c->ok = false; return false; }
         CompileType tn; if (!infer_type(c, A[2], &tn) || tn != CT_INT) { c->ok = false; return false; }
         CompileType tx; if (!infer_type(c, A[1], &tx)) { c->ok = false; return false; }
-        int tfp = nest_fixed_type(c, pname, body, tx);
+        int tfp = nest_fixed_type(c, &fs, tx);
         if (tfp < 0 || CT_IS_ARRAY((CompileType)tfp)) { c->ok = false; return false; }
         CompileType t = (CompileType)tfp;
         Slot z = { 0 };
@@ -2641,22 +3408,528 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         ins(c, OP_MOVE, (uint32_t)racc, (uint32_t)vx.reg, 0, z); free_if_tmp(c, vx);
         Val vn; if (!emit(c, A[2], &vn)) return false;
         ins(c, OP_MOVE, (uint32_t)rn, (uint32_t)vn.reg, 0, z); free_if_tmp(c, vn);
+        /* Nest[f, x, -1] is UNEVALUATED (src/funcprog.c:2153); the counted loop
+         * below would silently run zero times and hand back the seed. */
+        emit_nonneg_guard(c, rn);
         Slot s0; s0.i = 0; ins(c, OP_CONST, (uint32_t)rcnt, 0, 0, s0);
         size_t Lp = c->n;
         int rc = alloc_temp(c); ins(c, OP_LT_I, (uint32_t)rc, (uint32_t)rcnt, (uint32_t)rn, z);
         size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z); c->temp_top--;
-        c->scope[c->nscope].name = pname; c->scope[c->nscope].reg = racc; c->scope[c->nscope].type = t; c->nscope++;
-        Val vb; if (!emit(c, body, &vb)) { c->nscope--; return false; }
-        if (CT_IS_ARRAY(vb.type)) { c->nscope--; c->ok = false; return false; }
-        coerce(c, &vb, t); if (!c->ok) { c->nscope--; return false; }
+        Val acc = { racc, false, t }, vb;
+        if (!emit_apply(c, &fs, &acc, 1, &vb)) return false;
+        if (CT_IS_ARRAY(vb.type)) { c->ok = false; return false; }
+        coerce(c, &vb, t); if (!c->ok) return false;
         if (vb.reg != racc) ins(c, OP_MOVE, (uint32_t)racc, (uint32_t)vb.reg, 0, z);
         free_if_tmp(c, vb);
-        c->nscope--;
         Slot one; one.i = 1; ins(c, OP_INC_I, (uint32_t)rcnt, 0, 0, one);
         ins(c, OP_JMP, 0, 0, (uint32_t)Lp, z);
         if (c->ok) c->code[jz].b = (uint32_t)c->n;
         c->temp_top = (racc - c->nlocals) + 1;   /* keep racc; free rn, rcnt */
         out->reg = racc; out->tmp = true; out->type = t; return c->ok;
+    }
+
+    /* Reverse / Sort / Accumulate / Flatten / Transpose / Take / Drop over a
+     * machine array, delegated to the interpreter's own entry point. */
+    {
+        const NdFnSpec* nf = nd_fn_lookup(h, na);
+        if (nf) {
+            Val a;
+            if (!emit(c, A[0], &a)) return false;
+            CompileType rt = nd_fn_result(nf, a.type);
+            if ((int)rt < 0) { c->ok = false; return false; }
+            Slot z = { 0 };
+            int base = 0;
+            for (int i = 0; i < nf->nextra; i++) {
+                int r = alloc_temp(c);
+                if (i == 0) base = r;
+                Val v;
+                if (!emit(c, A[1 + i], &v)) return false;
+                if (v.type != CT_INT) { c->ok = false; return false; }
+                ins(c, OP_MOVE, (uint32_t)r, (uint32_t)v.reg, 0, z);
+                free_if_tmp(c, v);
+            }
+            Slot ip; memset(&ip, 0, sizeof ip); ip.p = nf;
+            int rout = alloc_arr(c);
+            ins_f(c, OP_A_NDFN, (uint16_t)nf->nextra, (uint32_t)rout,
+                  (uint32_t)base, (uint32_t)a.reg, ip);
+            c->temp_top -= nf->nextra;
+            if (a.tmp) {   /* restore LIFO — the same slide the Part lowering does */
+                ins(c, OP_ARR_FREE, (uint32_t)a.reg, 0, 0, z);
+                ins(c, OP_A_XFER, (uint32_t)a.reg, (uint32_t)rout, 0, z);
+                c->arr_top--;
+                rout = a.reg;
+            }
+            out->reg = rout; out->tmp = true; out->type = rt; out->built = a.built;
+            return c->ok;
+        }
+    }
+
+    /* Map[f, v] / Scan[f, v] over a rank-1 array.
+     *
+     * One element loop serves both: Map stores each result into a fresh buffer,
+     * Scan drops it and answers like Do.  Rank 1 only — at rank >= 2 the
+     * interpreter's Map applies f to each ROW (map_ndarray_axis,
+     * src/funcprog.c:272), which is a different operation from elementwise.
+     *
+     * The result element type must equal the SOURCE's, because Map over a packed
+     * array repacks with the source dtype (src/funcprog.c:289): Map[Abs, cv] on
+     * a complex vector comes back complex-typed with real values.  Anything else
+     * would answer with a different element type, so it declines. */
+    if ((strcmp(h, "Map") == 0 || strcmp(h, "Scan") == 0) && na == 2) {
+        bool scan = h[0] == 'S';
+        FnSpec fs;
+        if (!fn_resolve(A[0], 1, &fs)) { c->ok = false; return false; }
+        CompileType el = vec_elem_type(c, A[1]);
+        if ((int)el < 0) { c->ok = false; return false; }
+        CompileType rt;
+        if (!infer_apply(c, &fs, &el, 1, &rt) || CT_IS_ARRAY(rt)) { c->ok = false; return false; }
+        if (!scan && rt != el) { c->ok = false; return false; }
+        Slot z = { 0 }, k0; memset(&k0, 0, sizeof k0); k0.i = 0;
+
+        int rn = alloc_temp(c), ri = alloc_temp(c);
+        Val va;
+        if (!emit(c, A[1], &va)) return false;
+        if (!CT_IS_ARRAY(va.type) || CT_RANK(va.type) != 1) { c->ok = false; return false; }
+        ins(c, OP_A_SIZE, (uint32_t)rn, (uint32_t)va.reg, 0, z);
+        /* An empty source makes the interpreter's Map return a plain List — the
+         * result of ndarray_from_nested_list declining on List[] — where a
+         * compiled buffer would be an empty NDArray. */
+        if (!scan) emit_nonzero_guard(c, rn);
+
+        /* Fast route.  When the body threads elementwise, Map[Function[u, body], v]
+         * IS `body` with u bound to the whole array — and that is what the
+         * existing elementwise fusion strip-mines into one tiled, optionally
+         * threaded pass.  Measured 6.2x over the per-element loop below on
+         * `#^2 + 1.` at 200k elements, for ten lines and no new machinery.
+         *
+         * Three conditions make the rewrite legal, and each corresponds to a way
+         * the interpreter's Map differs from threading:
+         *   - fuse_listable == 1: the interpreter threads a list exactly when the
+         *     head is Listable, so `Map[Function[u, Total[u]], v]` (Total of each
+         *     SCALAR element) must not become Total[v);
+         *   - exactly one array leaf, and it is the parameter: a second array
+         *     would make Map produce a list OF arrays, not an elementwise result;
+         *   - the result is rank 1 with the promised element type.
+         * Anything else rolls back and takes the general loop, which is correct
+         * for every body — this is a cost split, not a subset restriction. */
+        if (!scan && !(c->flags & COMPILE_NO_FUSE)
+            && fs.kind == FN_LAMBDA && fs.nparams == 1 && c->nscope < CTX_MAX_SCOPE) {
+            EmitMark mk = emit_mark(c);
+            c->scope[c->nscope].name = fs.pname[0]; c->scope[c->nscope].reg = va.reg;
+            c->scope[c->nscope].type = va.type;     c->scope[c->nscope].built = va.built;
+            c->nscope++;
+            FuseLeaves L; L.n = 0;
+            bool legal = fuse_listable(c, fs.body) == 1
+                      && fuse_collect(c, fs.body, &L) && L.n == 1
+                      && L.name[0] == fs.pname[0];
+            Val bv;
+            bool got = legal && emit(c, fs.body, &bv) && CT_IS_ARRAY(bv.type)
+                    && CT_RANK(bv.type) == 1 && CT_ELEM(bv.type) == rt;
+            c->nscope--;
+            if (got) {
+                int res = bv.reg;
+                if (va.tmp && bv.tmp && res != va.reg) {  /* restore LIFO, as Part does */
+                    ins(c, OP_ARR_FREE, (uint32_t)va.reg, 0, 0, z);
+                    ins(c, OP_A_XFER, (uint32_t)va.reg, (uint32_t)res, 0, z);
+                    c->arr_top--;
+                    res = va.reg;
+                }
+                c->temp_top = (rn - c->nlocals);          /* rn, ri unused on this route */
+                out->reg = res; out->tmp = bv.tmp; out->type = bv.type;
+                out->built = va.built;
+                return c->ok;
+            }
+            emit_rollback(c, mk);
+        }
+
+        int rout = -1;
+        if (!scan) {
+            rout = alloc_arr(c);
+            ins_f(c, OP_A_NEWLIKE, (uint16_t)(((unsigned)rt & 3u) << AF_R_SHIFT),
+                  (uint32_t)rout, (uint32_t)va.reg, 0, z);
+        }
+        ins(c, OP_CONST, (uint32_t)ri, 0, 0, k0);
+
+        size_t Lp = c->n;
+        int rc = alloc_temp(c);
+        ins(c, OP_LT_I, (uint32_t)rc, (uint32_t)ri, (uint32_t)rn, z);
+        size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z);
+        c->temp_top--;
+
+        int relem = alloc_temp(c);
+        int body_top = c->temp_top;
+        ins(c, el == CT_COMPLEX ? OP_A_LOAD_C : OP_A_LOAD_R,
+            (uint32_t)relem, (uint32_t)va.reg, (uint32_t)ri, z);
+        Val ev = { relem, false, el, false }, vb;
+        if (!emit_apply(c, &fs, &ev, 1, &vb)) return false;
+        if (CT_IS_ARRAY(vb.type)) { c->ok = false; return false; }
+        if (!scan) {
+            coerce(c, &vb, rt); if (!c->ok) return false;
+            ins(c, rt == CT_COMPLEX ? OP_A_STORE_C : OP_A_STORE_R,
+                (uint32_t)rout, (uint32_t)ri, (uint32_t)vb.reg, z);
+        }
+        c->temp_top = body_top - 1;                     /* body temps and relem */
+        Slot one; memset(&one, 0, sizeof one); one.i = 1;
+        ins(c, OP_INC_I, (uint32_t)ri, 0, 0, one);
+        ins(c, OP_JMP, 0, 0, (uint32_t)Lp, z);
+        if (c->ok) c->code[jz].b = (uint32_t)c->n;
+
+        if (scan) {
+            free_if_tmp(c, va);
+            c->temp_top = (rn - c->nlocals);
+            int r0 = alloc_temp(c); ins(c, OP_CONST, (uint32_t)r0, 0, 0, k0);
+            out->reg = r0; out->tmp = true; out->type = CT_INT; out->built = false;
+            return c->ok;
+        }
+        /* The source may itself be a temporary sitting BELOW the result in the
+         * array stack, so it cannot just be popped: free it and slide the result
+         * down into its slot, restoring LIFO.  Same dance as the Part lowering. */
+        if (va.tmp) {
+            ins(c, OP_ARR_FREE, (uint32_t)va.reg, 0, 0, z);
+            ins(c, OP_A_XFER, (uint32_t)va.reg, (uint32_t)rout, 0, z);
+            c->arr_top--;
+            rout = va.reg;
+        }
+        c->temp_top = (rn - c->nlocals);                /* rn, ri dead; rout is an arr */
+        out->reg = rout; out->tmp = true; out->type = CT_ARRAY(rt, 1);
+        out->built = va.built;                          /* Map follows its source's kind */
+        return c->ok;
+    }
+
+    /* Fold[f, x0, v] / Fold[f, v]: reduce a rank-1 array into a scalar
+     * accumulator.  Nest's loop with an index and a per-iteration element. */
+    if (strcmp(h, "Fold") == 0 && (na == 2 || na == 3)) {
+        FnSpec fs;
+        if (!fn_resolve(A[0], 2, &fs)) { c->ok = false; return false; }
+        CompileType el = vec_elem_type(c, A[na - 1]);
+        if ((int)el < 0) { c->ok = false; return false; }
+        CompileType t0 = el;
+        if (na == 3 && !infer_type(c, A[1], &t0)) { c->ok = false; return false; }
+        int tfp = accum_fixed_type(c, &fs, t0, &el, 1);
+        if (tfp < 0 || CT_IS_ARRAY((CompileType)tfp)) { c->ok = false; return false; }
+        CompileType T = (CompileType)tfp;
+        Slot z = { 0 };
+
+        /* Persistent registers first, so the operand lowerings below allocate
+         * ABOVE them and freeing those temps cannot reach them. */
+        int racc = alloc_temp(c), rn = alloc_temp(c), ri = alloc_temp(c);
+        Val va;
+        if (!emit(c, A[na - 1], &va)) return false;
+        if (!CT_IS_ARRAY(va.type) || CT_RANK(va.type) != 1) { c->ok = false; return false; }
+        ins(c, OP_A_SIZE, (uint32_t)rn, (uint32_t)va.reg, 0, z);
+
+        uint16_t ldop = (el == CT_COMPLEX) ? OP_A_LOAD_C : OP_A_LOAD_R;
+        Slot k0; memset(&k0, 0, sizeof k0); k0.i = 0;
+        if (na == 3) {
+            Val vx; if (!emit(c, A[1], &vx)) return false;
+            coerce(c, &vx, T); if (!c->ok) return false;
+            ins(c, OP_MOVE, (uint32_t)racc, (uint32_t)vx.reg, 0, z); free_if_tmp(c, vx);
+            ins(c, OP_CONST, (uint32_t)ri, 0, 0, k0);
+        } else {
+            /* Fold[f, {}] stays UNEVALUATED (src/funcprog.c:2282), so an empty
+             * vector must fail the call rather than answer with a seed. */
+            emit_nonzero_guard(c, rn);
+            ins(c, OP_CONST, (uint32_t)ri, 0, 0, k0);
+            int rs = alloc_temp(c);
+            ins(c, ldop, (uint32_t)rs, (uint32_t)va.reg, (uint32_t)ri, z);
+            Val sv = { rs, true, el, false };
+            coerce(c, &sv, T); if (!c->ok) return false;
+            ins(c, OP_MOVE, (uint32_t)racc, (uint32_t)sv.reg, 0, z);
+            free_if_tmp(c, sv);
+            Slot k1; memset(&k1, 0, sizeof k1); k1.i = 1;
+            ins(c, OP_CONST, (uint32_t)ri, 0, 0, k1);   /* the seed is consumed */
+        }
+
+        size_t Lp = c->n;
+        int rc = alloc_temp(c);
+        ins(c, OP_LT_I, (uint32_t)rc, (uint32_t)ri, (uint32_t)rn, z);
+        size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z);
+        c->temp_top--;                                  /* guard temp is dead */
+
+        int relem = alloc_temp(c);
+        int body_top = c->temp_top;
+        ins(c, ldop, (uint32_t)relem, (uint32_t)va.reg, (uint32_t)ri, z);
+        Val argv[2] = { { racc, false, T, false }, { relem, false, el, false } }, vb;
+        if (!emit_apply(c, &fs, argv, 2, &vb)) return false;
+        if (CT_IS_ARRAY(vb.type)) { c->ok = false; return false; }
+        coerce(c, &vb, T); if (!c->ok) return false;
+        if (vb.reg != racc) ins(c, OP_MOVE, (uint32_t)racc, (uint32_t)vb.reg, 0, z);
+        c->temp_top = body_top - 1;                     /* drop the body's temps and relem */
+        Slot one; memset(&one, 0, sizeof one); one.i = 1;
+        ins(c, OP_INC_I, (uint32_t)ri, 0, 0, one);
+        ins(c, OP_JMP, 0, 0, (uint32_t)Lp, z);
+        if (c->ok) c->code[jz].b = (uint32_t)c->n;
+
+        free_if_tmp(c, va);                             /* release the source buffer */
+        c->temp_top = (racc - c->nlocals) + 1;          /* keep racc */
+        out->reg = racc; out->tmp = true; out->type = T; out->built = false;
+        return c->ok;
+    }
+
+    /* NestList[f, x, n] / FoldList[f, x0, v] / FoldList[f, v]: the same
+     * accumulator loops as Nest and Fold, writing every iterate into a buffer
+     * whose length is known before the loop starts (n + 1, or the source length
+     * plus one for the seed).
+     *
+     * The element type must be Real or Complex — these BUILD their result, so
+     * the ConstantArray rule applies: `NestList[2 # &, 1, 5]` holds exact
+     * Integers in the interpreter and a packed buffer has no integer dtype. */
+    if ((strcmp(h, "NestList") == 0 && na == 3)
+        || (strcmp(h, "FoldList") == 0 && (na == 2 || na == 3))) {
+        bool nest = h[0] == 'N';
+        FnSpec fs;
+        if (!fn_resolve(A[0], nest ? 1 : 2, &fs)) { c->ok = false; return false; }
+
+        CompileType el = CT_ERR, T;
+        if (nest) {
+            CompileType tn;
+            if (!infer_type(c, A[2], &tn) || tn != CT_INT) { c->ok = false; return false; }
+            CompileType tx;
+            if (!infer_type(c, A[1], &tx)) { c->ok = false; return false; }
+            int tfp = nest_fixed_type(c, &fs, tx);
+            if (tfp < 0) { c->ok = false; return false; }
+            T = (CompileType)tfp;
+        } else {
+            el = vec_elem_type(c, A[na - 1]);
+            if ((int)el < 0) { c->ok = false; return false; }
+            CompileType t0 = el;
+            if (na == 3 && !infer_type(c, A[1], &t0)) { c->ok = false; return false; }
+            int tfp = accum_fixed_type(c, &fs, t0, &el, 1);
+            if (tfp < 0) { c->ok = false; return false; }
+            T = (CompileType)tfp;
+        }
+        if (T != CT_REAL && T != CT_COMPLEX) { c->ok = false; return false; }
+
+        Slot z = { 0 }, k0; memset(&k0, 0, sizeof k0); k0.i = 0;
+        Slot k1; memset(&k1, 0, sizeof k1); k1.i = 1;
+        uint16_t stop = (T == CT_COMPLEX) ? OP_A_STORE_C : OP_A_STORE_R;
+
+        /* Persistent registers first; `rlen` must be the sole dimension operand
+         * of A_NEW, which reads a contiguous run starting there. */
+        int rlen = alloc_temp(c), racc = alloc_temp(c);
+        int rn = alloc_temp(c), rcnt = alloc_temp(c), rone = alloc_temp(c);
+        ins(c, OP_CONST, (uint32_t)rone, 0, 0, k1);
+
+        Val va = { 0, false, CT_REAL, false };
+        if (nest) {
+            Val vn; if (!emit(c, A[2], &vn)) return false;
+            if (vn.type != CT_INT) { c->ok = false; return false; }
+            ins(c, OP_MOVE, (uint32_t)rn, (uint32_t)vn.reg, 0, z); free_if_tmp(c, vn);
+            emit_nonneg_guard(c, rn);                    /* n < 0 is unevaluated */
+            ins(c, OP_ADD_I, (uint32_t)rlen, (uint32_t)rn, (uint32_t)rone, z);
+        } else {
+            if (!emit(c, A[na - 1], &va)) return false;
+            if (!CT_IS_ARRAY(va.type) || CT_RANK(va.type) != 1) { c->ok = false; return false; }
+            ins(c, OP_A_SIZE, (uint32_t)rlen, (uint32_t)va.reg, 0, z);
+            if (na == 3) {
+                /* seeded: the history is the seed plus one entry per element */
+                ins(c, OP_MOVE, (uint32_t)rn, (uint32_t)rlen, 0, z);
+                ins(c, OP_ADD_I, (uint32_t)rlen, (uint32_t)rlen, (uint32_t)rone, z);
+            } else {
+                /* seedless: the first element IS the seed, so one fewer step.
+                 * FoldList[f, {}] is `{}` in the interpreter, and an empty
+                 * packed result is not the same value, so decline it. */
+                emit_nonzero_guard(c, rlen);
+                ins(c, OP_SUB_I, (uint32_t)rn, (uint32_t)rlen, (uint32_t)rone, z);
+            }
+        }
+        emit_max_guard(c, rlen, 1 << 26);   /* bound the allocation, not the answer */
+
+        Slot el_i; memset(&el_i, 0, sizeof el_i); el_i.i = (long long)T;
+        int rout = alloc_arr(c);
+        ins_f(c, OP_A_NEW, 1, (uint32_t)rout, (uint32_t)rlen, (uint32_t)rlen, el_i);
+
+        /* seed into racc, and into slot 0 of the buffer */
+        if (nest) {
+            Val vx; if (!emit(c, A[1], &vx)) return false;
+            coerce(c, &vx, T); if (!c->ok) return false;
+            ins(c, OP_MOVE, (uint32_t)racc, (uint32_t)vx.reg, 0, z); free_if_tmp(c, vx);
+        } else if (na == 3) {
+            Val vx; if (!emit(c, A[1], &vx)) return false;
+            coerce(c, &vx, T); if (!c->ok) return false;
+            ins(c, OP_MOVE, (uint32_t)racc, (uint32_t)vx.reg, 0, z); free_if_tmp(c, vx);
+        } else {
+            int rs = alloc_temp(c);
+            ins(c, OP_CONST, (uint32_t)rcnt, 0, 0, k0);
+            ins(c, el == CT_COMPLEX ? OP_A_LOAD_C : OP_A_LOAD_R,
+                (uint32_t)rs, (uint32_t)va.reg, (uint32_t)rcnt, z);
+            Val sv = { rs, true, el, false };
+            coerce(c, &sv, T); if (!c->ok) return false;
+            ins(c, OP_MOVE, (uint32_t)racc, (uint32_t)sv.reg, 0, z);
+            free_if_tmp(c, sv);
+        }
+        ins(c, OP_CONST, (uint32_t)rcnt, 0, 0, k0);
+        ins(c, stop, (uint32_t)rout, (uint32_t)rcnt, (uint32_t)racc, z);
+
+        size_t Lp = c->n;
+        int rc = alloc_temp(c);
+        ins(c, OP_LT_I, (uint32_t)rc, (uint32_t)rcnt, (uint32_t)rn, z);
+        size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z);
+        c->temp_top--;
+
+        int body_top = c->temp_top, relem = -1;
+        Val argv[2] = { { racc, false, T, false }, { 0, false, CT_REAL, false } }, vb;
+        int nargs = 1;
+        if (!nest) {
+            /* Element k of the source pairs with history slot k+1: seeded folds
+             * consume v[[k+1]] at step k, seedless ones v[[k+2]] (the first
+             * element was the seed). */
+            relem = alloc_temp(c);
+            body_top = c->temp_top;
+            int ridx = alloc_temp(c);
+            if (na == 3) ins(c, OP_MOVE, (uint32_t)ridx, (uint32_t)rcnt, 0, z);
+            else         ins(c, OP_ADD_I, (uint32_t)ridx, (uint32_t)rcnt, (uint32_t)rone, z);
+            ins(c, el == CT_COMPLEX ? OP_A_LOAD_C : OP_A_LOAD_R,
+                (uint32_t)relem, (uint32_t)va.reg, (uint32_t)ridx, z);
+            c->temp_top--;                                /* ridx dead after the load */
+            argv[1].reg = relem; argv[1].type = el;
+            nargs = 2;
+        }
+        if (!emit_apply(c, &fs, argv, nargs, &vb)) return false;
+        if (CT_IS_ARRAY(vb.type)) { c->ok = false; return false; }
+        coerce(c, &vb, T); if (!c->ok) return false;
+        if (vb.reg != racc) ins(c, OP_MOVE, (uint32_t)racc, (uint32_t)vb.reg, 0, z);
+        c->temp_top = nest ? body_top : body_top - 1;
+        ins(c, OP_INC_I, (uint32_t)rcnt, 0, 0, k1);
+        ins(c, stop, (uint32_t)rout, (uint32_t)rcnt, (uint32_t)racc, z);
+        ins(c, OP_JMP, 0, 0, (uint32_t)Lp, z);
+        if (c->ok) c->code[jz].b = (uint32_t)c->n;
+
+        if (!nest && va.tmp) {           /* restore LIFO, as the Part lowering does */
+            ins(c, OP_ARR_FREE, (uint32_t)va.reg, 0, 0, z);
+            ins(c, OP_A_XFER, (uint32_t)va.reg, (uint32_t)rout, 0, z);
+            c->arr_top--;
+            rout = va.reg;
+        }
+        c->temp_top = (rlen - c->nlocals);
+        out->reg = rout; out->tmp = true; out->type = CT_ARRAY(T, 1);
+        /* NestList always constructs; FoldList's history is packed by the
+         * interpreter with the SOURCE dtype, so it follows the source's kind. */
+        out->built = nest ? true : va.built;
+        return c->ok;
+    }
+
+    /* FixedPoint[f, x] / FixedPoint[f, x, n] / SameTest -> s: iterate until two
+     * successive values are SameQ.  See emit_sameq for why that is not Equal. */
+    if (strcmp(h, "FixedPoint") == 0 && na >= 2 && na <= 4) {
+        FnSpec fs, ss; const Expr *mx, *st;
+        if (!fn_resolve(A[0], 1, &fs) || !fp_opts(A, na, 2, &mx, &st)) { c->ok = false; return false; }
+        CompileType tx; if (!infer_type(c, A[1], &tx)) { c->ok = false; return false; }
+        int tfp = nest_fixed_type(c, &fs, tx);
+        if (tfp < 0 || CT_IS_ARRAY((CompileType)tfp)) { c->ok = false; return false; }
+        CompileType T = (CompileType)tfp;
+        if (st && !fn_resolve(st, 2, &ss)) { c->ok = false; return false; }
+        if (!st && T == CT_BOOL) { c->ok = false; return false; }   /* no SameQ opcode for Bool */
+        Slot z = { 0 };
+
+        int racc = alloc_temp(c), rcnt = alloc_temp(c), rlim = alloc_temp(c);
+        Val vx; if (!emit(c, A[1], &vx)) return false;
+        coerce(c, &vx, T); if (!c->ok) return false;
+        ins(c, OP_MOVE, (uint32_t)racc, (uint32_t)vx.reg, 0, z); free_if_tmp(c, vx);
+        if (mx) {
+            Val vn; if (!emit(c, mx, &vn)) return false;
+            if (vn.type != CT_INT) { c->ok = false; return false; }
+            ins(c, OP_MOVE, (uint32_t)rlim, (uint32_t)vn.reg, 0, z); free_if_tmp(c, vn);
+            /* A negative bound leaves the whole call unevaluated. */
+            emit_nonneg_guard(c, rlim);
+        } else {
+            Slot cap; memset(&cap, 0, sizeof cap); cap.i = VM_ITER_SAFETY_CAP;
+            ins(c, OP_CONST, (uint32_t)rlim, 0, 0, cap);
+        }
+        Slot k0; memset(&k0, 0, sizeof k0); k0.i = 0;
+        ins(c, OP_CONST, (uint32_t)rcnt, 0, 0, k0);
+
+        size_t Lp = c->n;
+        int rc = alloc_temp(c);
+        ins(c, OP_LT_I, (uint32_t)rc, (uint32_t)rcnt, (uint32_t)rlim, z);
+        size_t jcap = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z);
+        c->temp_top--;
+
+        int body_top = c->temp_top;
+        Val acc = { racc, false, T, false }, vb;
+        if (!emit_apply(c, &fs, &acc, 1, &vb)) return false;
+        if (CT_IS_ARRAY(vb.type)) { c->ok = false; return false; }
+        coerce(c, &vb, T); if (!c->ok) return false;
+        /* Compare BEFORE the accumulator is overwritten. */
+        int rsame;
+        if (st) {
+            Val sargv[2] = { { racc, false, T, false }, vb }, sv;
+            sargv[1].tmp = false;
+            if (!emit_apply(c, &ss, sargv, 2, &sv)) return false;
+            if (sv.type != CT_BOOL) { c->ok = false; return false; }
+            rsame = sv.reg;
+        } else {
+            rsame = alloc_temp(c);
+            ins(c, emit_sameq_op(T), (uint32_t)rsame, (uint32_t)vb.reg, (uint32_t)racc, z);
+        }
+        if (vb.reg != racc) ins(c, OP_MOVE, (uint32_t)racc, (uint32_t)vb.reg, 0, z);
+        Slot one; memset(&one, 0, sizeof one); one.i = 1;
+        ins(c, OP_INC_I, (uint32_t)rcnt, 0, 0, one);
+        ins(c, OP_JZ, 0, (uint32_t)rsame, (uint32_t)Lp, z);   /* not same -> iterate */
+        c->temp_top = body_top;
+        size_t jend = c->n; ins(c, OP_JMP, 0, 0, 0, z);
+        if (c->ok) c->code[jcap].b = (uint32_t)c->n;
+        /* Reaching the cap of an UNBOUNDED run is where the interpreter gives up
+         * too, so fail the call rather than answer with a non-fixed point.  With
+         * a user bound, falling through returns f^n(x), which is what
+         * FixedPoint[f, x, n] means. */
+        if (!mx) ins(c, OP_FAIL, 0, 0, 0, z);
+        if (c->ok) c->code[jend].b = (uint32_t)c->n;
+
+        c->temp_top = (racc - c->nlocals) + 1;
+        out->reg = racc; out->tmp = true; out->type = T; out->built = false;
+        return c->ok;
+    }
+
+    /* NestWhile[f, x, test]: apply f while test holds on the CURRENT value, so
+     * the test runs before the first application (src/funcprog.c:2323). */
+    if (strcmp(h, "NestWhile") == 0 && na == 3) {
+        FnSpec fs, ts;
+        if (!fn_resolve(A[0], 1, &fs) || !fn_resolve(A[2], 1, &ts)) { c->ok = false; return false; }
+        CompileType tx; if (!infer_type(c, A[1], &tx)) { c->ok = false; return false; }
+        int tfp = nest_fixed_type(c, &fs, tx);
+        if (tfp < 0 || CT_IS_ARRAY((CompileType)tfp)) { c->ok = false; return false; }
+        CompileType T = (CompileType)tfp;
+        Slot z = { 0 };
+
+        int racc = alloc_temp(c), rcnt = alloc_temp(c), rlim = alloc_temp(c);
+        Val vx; if (!emit(c, A[1], &vx)) return false;
+        coerce(c, &vx, T); if (!c->ok) return false;
+        ins(c, OP_MOVE, (uint32_t)racc, (uint32_t)vx.reg, 0, z); free_if_tmp(c, vx);
+        Slot cap; memset(&cap, 0, sizeof cap); cap.i = VM_ITER_SAFETY_CAP;
+        ins(c, OP_CONST, (uint32_t)rlim, 0, 0, cap);
+        Slot k0; memset(&k0, 0, sizeof k0); k0.i = 0;
+        ins(c, OP_CONST, (uint32_t)rcnt, 0, 0, k0);
+
+        size_t Lp = c->n;
+        int body_top = c->temp_top;
+        Val acc = { racc, false, T, false }, vt;
+        if (!emit_apply(c, &ts, &acc, 1, &vt)) return false;
+        if (vt.type != CT_BOOL) { c->ok = false; return false; }
+        size_t jend = c->n; ins(c, OP_JZ, 0, (uint32_t)vt.reg, 0, z);
+        c->temp_top = body_top;
+
+        int rc = alloc_temp(c);
+        ins(c, OP_LT_I, (uint32_t)rc, (uint32_t)rcnt, (uint32_t)rlim, z);
+        size_t jcap = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z);
+        c->temp_top--;
+
+        Val vb;
+        if (!emit_apply(c, &fs, &acc, 1, &vb)) return false;
+        if (CT_IS_ARRAY(vb.type)) { c->ok = false; return false; }
+        coerce(c, &vb, T); if (!c->ok) return false;
+        if (vb.reg != racc) ins(c, OP_MOVE, (uint32_t)racc, (uint32_t)vb.reg, 0, z);
+        c->temp_top = body_top;
+        Slot one; memset(&one, 0, sizeof one); one.i = 1;
+        ins(c, OP_INC_I, (uint32_t)rcnt, 0, 0, one);
+        ins(c, OP_JMP, 0, 0, (uint32_t)Lp, z);
+        if (c->ok) { c->code[jcap].b = (uint32_t)c->n; }
+        ins(c, OP_FAIL, 0, 0, 0, z);                    /* cap: interpreter gives up too */
+        if (c->ok) c->code[jend].b = (uint32_t)c->n;
+
+        c->temp_top = (racc - c->nlocals) + 1;
+        out->reg = racc; out->tmp = true; out->type = T; out->built = false;
+        return c->ok;
     }
 
     /* last resort: any numeric function with a machine kernel in ndkernels */
@@ -2684,12 +3957,14 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         bool prefer_call = cp && compiled_num_instructions(cp) > INLINE_MAX_INSTRS;
 
         if (cf && !prefer_call && na >= 1 && compiled_function_num_args(cf) == na
-            && na + (size_t)c->nscope <= 16
+            && na + (size_t)c->nscope <= CTX_MAX_SCOPE
             && c->inlining < 8) {          /* depth cap: a self-referential body */
             const char* const* pn = compiled_function_arg_names(cf);
             const CompileType* pt = compiled_function_arg_types(cf);
             Slot z = { 0 };
-            int preg[16], res_top = 0;
+            /* Sized from the scope bound, which is what the guard above tests:
+             * the two must be the same constant or raising one overflows this. */
+            int preg[CTX_MAX_SCOPE], res_top = 0;
             for (size_t i = 0; i < na; i++) {
                 Val v;
                 if (!emit(c, A[i], &v)) return false;
@@ -2928,6 +4203,33 @@ static bool vm_range_array_op(const Instr* c, Slot* R) {
              * subscript (r == NULL) both abort: the interpreter re-runs the body
              * and produces whatever Part[] properly produces, including a
              * diagnostic.  The compiled path never invents an answer. */
+            if (!r) return false;
+            if (r->type != EXPR_NDARRAY) { expr_free(r); return false; }
+            expr_free(R[c->dst].arr);
+            R[c->dst].arr = r;
+            return true;
+        }
+
+        case OP_A_NDFN: {                 /* Reverse / Sort / Flatten / Take / ... */
+            const NdFnSpec* fn = (const NdFnSpec*)c->imm.p;
+            Expr* src = R[c->b].arr;
+            if (!src || src->type != EXPR_NDARRAY) return false;
+            size_t nx = (size_t)c->flags;
+            /* The entry point takes the whole CALL, so rebuild it.  expr_copy is
+             * a refcount bump (src/expr.c), not a buffer copy, so this costs a
+             * node — and the array is never mutated: these paths all allocate a
+             * fresh result. */
+            Expr* args[1 + NDARRAY_MAX_RANK];
+            args[0] = expr_copy(src);
+            for (size_t i = 0; i < nx; i++)
+                args[1 + i] = expr_new_integer((int64_t)R[c->a + (unsigned)i].i);
+            Expr* call = expr_new_function(expr_new_symbol(fn->head), args, 1 + nx);
+            if (!call) { expr_free(args[0]); return false; }
+            Expr* r = fn->fn(call);
+            expr_free(call);
+            /* A case the fast path does not handle comes back as a nested List
+             * (ndarray_delist_and_reeval), which is precisely the signal to
+             * decline: the interpreter then answers, exactly as it would have. */
             if (!r) return false;
             if (r->type != EXPR_NDARRAY) { expr_free(r); return false; }
             expr_free(R[c->dst].arr);
@@ -3322,6 +4624,18 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(EQ_C): RD.i = RA.z == RB.z; NEXT();
             OP(NE_I): RD.i = RA.i != RB.i; NEXT(); OP(NE_R): RD.i = RA.r != RB.r; NEXT();
             OP(NE_C): RD.i = RA.z != RB.z; NEXT();
+            /* SameQ on machine numbers, matching expr_eq (src/expr.c:622):
+             * two NaNs ARE the same, which is what lets an iteration whose
+             * orbit reaches NaN terminate instead of spinning.  Complex is
+             * componentwise because expr_eq recurses into Complex[re, im]. */
+            OP(SAMEQ_R): RD.i = (RA.r == RB.r) || (isnan(RA.r) && isnan(RB.r)); NEXT();
+            OP(SAMEQ_C): {
+                double ar = creal(RA.z), ai = cimag(RA.z);
+                double br = creal(RB.z), bi = cimag(RB.z);
+                RD.i = ((ar == br) || (isnan(ar) && isnan(br)))
+                    && ((ai == bi) || (isnan(ai) && isnan(bi)));
+            } NEXT();
+            OP(FAIL): goto vm_fail;
             OP(AND): RD.i = RA.i && RB.i; NEXT();
             OP(OR):  RD.i = RA.i || RB.i; NEXT();
             OP(XOR): RD.i = (!!RA.i) ^ (!!RB.i); NEXT();
@@ -3401,6 +4715,7 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(A_NEW):     do { if (!vm_range_array_op(c, R)) goto vm_fail; } while (0); NEXT();
             OP(A_PART):    do { if (!vm_range_array_op(c, R)) goto vm_fail; } while (0); NEXT();
             OP(A_PARTSET): do { if (!vm_range_array_op(c, R)) goto vm_fail; } while (0); NEXT();
+            OP(A_NDFN):    do { if (!vm_range_array_op(c, R)) goto vm_fail; } while (0); NEXT();
 
             /* ---- strip-mined tile ops (M5b) -------------------------------
              * One opcode, VBLOCK elements, in a loop shaped so the C compiler
@@ -3964,6 +5279,18 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
         ok = false;
         c.bail_node = body;   /* the whole body is a borrowed argument array */
     }
+    /* A statement-shaped head lowers to the integer 0 where the interpreter
+     * answers Null, so it may only appear where its VALUE is discarded.  Inside
+     * a CompoundExpression that is exactly what happens (free_if_tmp drops it
+     * and nothing observes it); in RESULT position the two disagree, which was
+     * reachable as `Compile[{n}, Do[..., {n}]][3]` giving 0 against the
+     * interpreter's Null.  Null is not worth a fifth type in the lattice — it
+     * would ripple through num_common, coerce, finite_result and cf_unbox — so
+     * the honest fix is to decline the one position where it shows. */
+    if (ok && stmt_valued_head(body)) {
+        ok = false;
+        c.bail_node = body;
+    }
     if (ok) { Slot z = { 0 }; ins(&c, OP_RET, (uint32_t)res.reg, 0, 0, z); ok = c.ok; }
     nm_free(&c.map);
     if (!ok) {
@@ -4011,6 +5338,7 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
     p->code = c.code; p->n = c.n; p->nreg = nreg; p->arr_base = arr_base;
     p->tile_base = tile_base;
     p->result_reg = result_reg; p->result_type = res.type; p->ncse = c.ncse;
+    p->result_built = CT_IS_ARRAY(res.type) && res.built;
     p->nargs = nargs; p->argdep = c.argdep;
     p->arg_types = malloc((nargs ? nargs : 1) * sizeof(CompileType));
     p->ntiles = c.tile_max;
@@ -4025,6 +5353,7 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
 }
 
 CompileType compiled_result_type(const CompiledProgram* p) { return p->result_type; }
+bool        compiled_result_built(const CompiledProgram* p) { return p && p->result_built; }
 size_t compiled_num_args(const CompiledProgram* p) { return p->nargs; }
 size_t compiled_num_instructions(const CompiledProgram* p) { return p->n; }
 bool compiled_program_all_real(const CompiledProgram* p) { return p && p->all_real; }
@@ -4197,7 +5526,12 @@ bool compiled_eval_real(const CompiledProgram* p, const double* args, double* ou
     vm_run(p->code, p->n, R, &failed);
     *out = R[p->result_reg].r;
     free(heap);
-    return isfinite(*out);
+    /* `failed` was computed and dropped here for as long as no opcode an
+     * all-Real program could contain was able to abort — array ops can, and an
+     * all-Real program has no array registers.  OP_FAIL changed that: an
+     * unbounded FixedPoint hitting the safety cap must drop the call to the
+     * interpreter, not hand back whatever the accumulator happened to hold. */
+    return !failed && isfinite(*out);
 }
 
 bool compiled_eval_real_batch(const CompiledProgram* const* progs, size_t nprogs,
@@ -4226,7 +5560,7 @@ bool compiled_eval_real_batch(const CompiledProgram* const* progs, size_t nprogs
         bool failed = false;
         vm_run(progs[i]->code, progs[i]->n, F, &failed);
         out[i] = F[(size_t)progs[i]->result_reg].r;
-        if (!isfinite(out[i])) { free(heap); return false; }
+        if (failed || !isfinite(out[i])) { free(heap); return false; }
     }
     free(heap);
     return true;

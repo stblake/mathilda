@@ -1660,6 +1660,461 @@ int main(void) {
         }
     }
 
+    /* ---- function values: every spelling fn_resolve accepts -------------------
+     *
+     * Nest is the probe because it is the one head that took a function argument
+     * before fn_resolve existed, and it accepted exactly ONE spelling
+     * (Function[u, body]).  If these compile, the shared resolver works, and
+     * every functional head added after it inherits the same vocabulary. */
+    {
+        const char* in1[1] = { intern_symbol("x") };
+        CompileType ty1[1] = { CT_REAL };
+        struct { const char* nm; const char* body; int kind; } fv[] = {
+            { "fn bare head",       "Nest[Cos, x, 12]",                    0 },
+            { "fn slot #",          "Nest[# ^ 2 &, x, 4]",                 1 },
+            { "fn slot #1",         "Nest[#1 / 2 + 1 &, x, 9]",            2 },
+            { "fn Function[body]",  "Nest[Function[Cos[#]], x, 12]",       0 },
+            { "fn Composition",     "Nest[Composition[Sin, Cos], x, 7]",   3 },
+            { "fn Identity",        "Nest[Identity, x, 5]",                4 },
+            { "fn named lambda",    "Nest[Function[u, Cos[u]], x, 12]",    0 },
+            { "fn 1-elt list param","Nest[Function[{u}, Cos[u]], x, 12]",  0 },
+        };
+        for (size_t k = 0; k < sizeof fv / sizeof fv[0]; k++) {
+            Expr* b = parse_expression(fv[k].body);
+            CompiledProgram* p = compile_expr(b, in1, ty1, 1);
+            if (!p) {
+                printf("FAIL: %-30s -> did not compile (%s)\n", fv[k].nm,
+                       compiled_bail_expr() ? compiled_bail_expr() : "?");
+                failures++; expr_free(b); continue;
+            }
+            double maxerr = 0; int cmp = 0;
+            for (int t = 0; t < 60; t++) {
+                double x = urand(1.0, 3.0);
+                CompileValue av = { CT_REAL, { .r = x } }, o;
+                if (!compiled_eval(p, &av, &o)) continue;
+                double ref = x;
+                switch (fv[k].kind) {
+                    case 0: for (int i = 0; i < 12; i++) ref = cos(ref); break;
+                    case 1: for (int i = 0; i < 4; i++)  ref = ref * ref;  break;
+                    case 2: for (int i = 0; i < 9; i++)  ref = ref / 2 + 1; break;
+                    case 3: for (int i = 0; i < 7; i++)  ref = sin(cos(ref)); break;
+                    default: break;                       /* Identity */
+                }
+                double err = fabs(o.v.r - ref) / (1.0 + fabs(ref));
+                if (err > maxerr) maxerr = err;
+                cmp++;
+            }
+            if (cmp < 40 || maxerr > 1e-12) { printf("FAIL: %-30s -> max_rel=%.2e (%d)\n", fv[k].nm, maxerr, cmp); failures++; }
+            else printf("ok:   %-30s max_rel=%.1e (%d cmps)\n", fv[k].nm, maxerr, cmp);
+            compiled_free(p); expr_free(b);
+        }
+
+        /* The three refusals, each for a DIFFERENT reason — and each a case
+         * where the interpreter's own answer is not a machine number, so
+         * compiling one would answer where the interpreter declines.
+         *   - a Slot is invisible under a NAMED lambda: apply_pure_function's
+         *     named path substitutes names only (src/purefunc.c:247), so the
+         *     interpreter's result still contains a live Slot[1];
+         *   - arity is exact: a short call leaves the surplus parameter
+         *     symbolic (src/purefunc.c:271);
+         *   - an ordinary undefined symbol is not a function value at all.
+         * Raw parse trees throughout: evaluating `Nest[Cos, x, 5]` with x free
+         * unrolls it into nested Cos and there would be no Nest left to test. */
+        must_bail_raw("fn slot under named lambda", "Nest[Function[u, # + u], x, 5]", in1, ty1, 1);
+        must_bail_raw("fn arity mismatch",          "Nest[Function[{a, b}, a], x, 5]", in1, ty1, 1);
+        must_bail_raw("fn undefined symbol",        "Nest[undefinedfn, x, 5]", in1, ty1, 1);
+        must_bail_raw("fn SlotSequence",            "Nest[Function[Plus[##]], x, 5]", in1, ty1, 1);
+    }
+
+    /* ---- scalar-result iteration: FixedPoint / NestWhile ---------------------
+     *
+     * The interesting part is not the arithmetic, it is the EXIT conditions:
+     * SameQ is not Equal, a negative bound leaves the call unevaluated, and an
+     * unbounded run that never converges has to give up exactly where the
+     * interpreter does. */
+    {
+        const char* in1[1] = { intern_symbol("x") };
+        const char* in2[2] = { intern_symbol("x"), intern_symbol("n") };
+        CompileType ty1[1] = { CT_REAL };
+        CompileType ty2[2] = { CT_REAL, CT_INT };
+
+        struct { const char* nm; const char* body; int kind; } it[] = {
+            { "FixedPoint Cos",        "FixedPoint[Cos, x]",                          0 },
+            { "FixedPoint bounded",    "FixedPoint[Function[u, (u + 2/u)/2], x, 30]", 1 },
+            { "FixedPoint SameTest",   "FixedPoint[Function[u, u/2], x, "
+                                       "SameTest -> (Abs[#1 - #2] < 0.01 &)]",        2 },
+            { "NestWhile halve",       "NestWhile[#/2 &, x, # > 1 &]",                3 },
+        };
+        for (size_t k = 0; k < sizeof it / sizeof it[0]; k++) {
+            Expr* b = parse_expression(it[k].body);
+            CompiledProgram* p = compile_expr(b, in1, ty1, 1);
+            if (!p) {
+                printf("FAIL: %-30s -> did not compile (%s)\n", it[k].nm,
+                       compiled_bail_expr() ? compiled_bail_expr() : "?");
+                failures++; expr_free(b); continue;
+            }
+            double maxerr = 0; int cmp = 0;
+            for (int t = 0; t < 60; t++) {
+                double x = urand(1.5, 40.0);
+                CompileValue av = { CT_REAL, { .r = x } }, o;
+                if (!compiled_eval(p, &av, &o)) continue;
+                double ref = x;
+                if (it[k].kind == 0) {
+                    for (int i = 0; i < 400; i++) { double nx = cos(ref); if (nx == ref) break; ref = nx; }
+                } else if (it[k].kind == 1) {
+                    for (int i = 0; i < 30; i++) { double nx = (ref + 2.0 / ref) / 2; if (nx == ref) break; ref = nx; }
+                } else if (it[k].kind == 2) {
+                    for (;;) { double nx = ref / 2; bool stop = fabs(ref - nx) < 0.01; ref = nx; if (stop) break; }
+                } else {
+                    while (ref > 1.0) ref = ref / 2;
+                }
+                double err = fabs(o.v.r - ref) / (1.0 + fabs(ref));
+                if (err > maxerr) maxerr = err;
+                cmp++;
+            }
+            if (cmp < 40 || maxerr > 1e-12) { printf("FAIL: %-30s -> max_rel=%.2e (%d)\n", it[k].nm, maxerr, cmp); failures++; }
+            else printf("ok:   %-30s max_rel=%.1e (%d cmps)\n", it[k].nm, maxerr, cmp);
+            compiled_free(p); expr_free(b);
+        }
+
+        /* A NaN orbit must TERMINATE.  expr_eq calls two NaNs the same
+         * (src/expr.c:622), so the interpreter stops; a compiled loop using
+         * Equal instead of SameQ would spin to the safety cap and take seconds.
+         * The assertion is therefore wall-clock: 200 calls of a body that goes
+         * non-real on its first step have to be quick. */
+        {
+            Expr* b = parse_expression("FixedPoint[Function[u, Sqrt[u - 2.]], x]");
+            CompiledProgram* p = compile_expr(b, in1, ty1, 1);
+            if (!p) { printf("FAIL: %-30s -> did not compile\n", "FixedPoint NaN orbit"); failures++; }
+            else {
+                clock_t t0 = clock();
+                for (int t = 0; t < 200; t++) {
+                    CompileValue av = { CT_REAL, { .r = 1.0 } }, o;
+                    (void)compiled_eval(p, &av, &o);      /* declines: result is non-finite */
+                }
+                double sec = (double)(clock() - t0) / CLOCKS_PER_SEC;
+                if (sec > 1.0) { printf("FAIL: %-30s -> %.2fs for 200 calls (spinning to the cap?)\n",
+                                        "FixedPoint NaN orbit", sec); failures++; }
+                else printf("ok:   %-30s terminates (%.3fs / 200 calls)\n", "FixedPoint NaN orbit", sec);
+                compiled_free(p);
+            }
+            expr_free(b);
+        }
+
+        /* A negative application bound leaves the whole call UNEVALUATED
+         * (src/funcprog.c:2153), so the compiled program must DECLINE rather
+         * than run zero times and hand back the seed. */
+        {
+            struct { const char* nm; const char* body; } neg[] = {
+                { "Nest n<0 declines",       "Nest[Cos, x, n]" },
+                { "FixedPoint n<0 declines", "FixedPoint[Cos, x, n]" },
+            };
+            for (size_t k = 0; k < sizeof neg / sizeof neg[0]; k++) {
+                Expr* b = parse_expression(neg[k].body);
+                CompiledProgram* p = compile_expr(b, in2, ty2, 2);
+                if (!p) { printf("FAIL: %-30s -> did not compile\n", neg[k].nm); failures++; expr_free(b); continue; }
+                CompileValue av[2] = { { CT_REAL, { .r = 1.0 } }, { CT_INT, { .i = -1 } } }, o;
+                bool ran = compiled_eval(p, av, &o);
+                if (ran) { printf("FAIL: %-30s -> answered %g at n=-1\n", neg[k].nm, o.v.r); failures++; }
+                else printf("ok:   %-30s declined at n=-1\n", neg[k].nm);
+                /* ...and still works at a legal count. */
+                av[1].v.i = 5;
+                if (!compiled_eval(p, av, &o)) { printf("FAIL: %-30s -> declined at n=5\n", neg[k].nm); failures++; }
+                compiled_free(p); expr_free(b);
+            }
+        }
+
+        /* Fold over a rank-1 argument, against the interpreter as reference.
+         * (Fold over an NDArray only became meaningful once the interpreter
+         * itself grew one — it left a packed argument UNEVALUATED, so there was
+         * nothing to be parity WITH.) */
+        {
+            const char* vn[1] = { "v" };
+            const CompileType VT[1] = { CT_ARRAY(CT_REAL, 1) };
+            parity_arr("Fold seeded",        "Fold[Plus, 0., v]",                       vn, VT, 1, 12, 0.5, 3.0, 8);
+            parity_arr("Fold seedless",      "Fold[Times, v]",                          vn, VT, 1, 9,  0.8, 1.3, 8);
+            parity_arr("Fold 2-param lambda","Fold[Function[{a, b}, a + b^2], 0., v]",  vn, VT, 1, 10, 0.5, 3.0, 8);
+            parity_arr("Fold widening seed", "Fold[Function[{a, b}, a + b], 0, v]",     vn, VT, 1, 10, 0.5, 3.0, 8);
+
+            /* Fold[f, {}] is unevaluated (src/funcprog.c:2282), so the compiled
+             * program must decline rather than answer with a seed. */
+            Expr* empty = make_vec(0, 0.0, 1.0);
+            Expr* b = parse_expression("Fold[Times, v]");
+            const char* iv[1] = { intern_symbol("v") };
+            CompiledProgram* p = compile_expr(b, iv, VT, 1);
+            if (!p) { printf("FAIL: %-30s -> did not compile\n", "Fold empty declines"); failures++; }
+            else {
+                CompileValue av = { VT[0], { .a = empty } }, o;
+                if (compiled_eval(p, &av, &o)) {
+                    printf("FAIL: %-30s -> answered on an empty vector\n", "Fold empty declines");
+                    failures++;
+                    if (CT_IS_ARRAY(o.type)) expr_free(o.v.a);
+                } else printf("ok:   %-30s declined on {}\n", "Fold empty declines");
+                compiled_free(p);
+            }
+            expr_free(b); expr_free(empty);
+        }
+    }
+
+    /* ---- delegated structural heads ------------------------------------------
+     *
+     * These call the interpreter's own NDArray entry points, so parity is by
+     * construction and what the tests really check is the plumbing: the result
+     * TYPE the compiler predicts, the LIFO slide when the operand is itself a
+     * temporary, and that an unsupported spec declines instead of inventing an
+     * answer (the ND layer degrades to a nested List, which the VM must treat as
+     * a refusal). */
+    {
+        const char* vn[1] = { "v" };
+        const CompileType VT[1] = { CT_ARRAY(CT_REAL, 1) };
+        const CompileType M2[1] = { CT_ARRAY(CT_REAL, 2) };
+
+        parity_arr("nd Reverse",     "Reverse[v]",            vn, VT, 1, 17, 0.4, 3.0, 6);
+        parity_arr("nd Sort",        "Sort[v]",               vn, VT, 1, 17, 0.4, 3.0, 6);
+        parity_arr("nd Accumulate",  "Accumulate[v]",         vn, VT, 1, 17, 0.4, 3.0, 6);
+        parity_arr("nd Take",        "Take[v, 5]",            vn, VT, 1, 17, 0.4, 3.0, 6);
+        parity_arr("nd Drop",        "Drop[v, 5]",            vn, VT, 1, 17, 0.4, 3.0, 6);
+        parity_arr("nd Take negative","Take[v, -4]",          vn, VT, 1, 17, 0.4, 3.0, 6);
+        /* Operand is a temporary, so the result has to slide down into its slot. */
+        parity_arr("nd nested",      "Reverse[Sort[v]]",      vn, VT, 1, 17, 0.4, 3.0, 6);
+        parity_arr("nd pipeline",    "Total[Take[Sort[v], 3]]", vn, VT, 1, 17, 0.4, 3.0, 6);
+        parity_arr("nd with Map",    "Total[Map[Function[u, u^2], Reverse[v]]]",
+                                                              vn, VT, 1, 17, 0.4, 3.0, 6);
+        { const int64_t d2[2] = { 3, 4 };
+          parity_nd("nd Flatten",   "Flatten[v]",   vn, 1, 2, d2, 0u, 6);
+          parity_nd("nd Transpose", "Transpose[v]", vn, 1, 2, d2, 0u, 6); }
+
+        /* A comparator is a function value the ND path cannot call back into. */
+        must_bail_raw("nd Sort comparator", "Sort[v, Greater]",  vn, VT, 1);
+        /* Only a scalar count is compiled; a Span or a list spec is not (the
+         * result rank would not be knowable at compile time). */
+        must_bail_raw("nd Take list spec",  "Take[v, {2, 4}]",   vn, VT, 1);
+        /* Transpose is rank 2 in and rank 2 out. */
+        must_bail_raw("nd Transpose rank 1","Transpose[v]",      vn, VT, 1);
+    }
+
+    /* ---- Map / Scan ----------------------------------------------------------
+     *
+     * Map has two lowerings and the interesting question is that they agree:
+     * a body that threads elementwise takes the fused strip loop, anything else
+     * the general per-element loop, and the two must produce the same answer as
+     * each other AND as the interpreter. */
+    {
+        const char* vn[1] = { "v" };
+        const CompileType VT[1] = { CT_ARRAY(CT_REAL, 1) };
+        const CompileType CVT[1] = { CT_ARRAY(CT_COMPLEX, 1) };
+
+        parity_arr("Map lambda",       "Map[Function[u, u^2 + 1.], v]",       vn, VT, 1, 40, 0.4, 3.0, 6);
+        parity_arr("Map bare head",    "Map[Sin, v]",                         vn, VT, 1, 40, 0.4, 3.0, 6);
+        parity_arr("Map slot",         "Map[#^2 &, v]",                       vn, VT, 1, 40, 0.4, 3.0, 6);
+        parity_arr("Map Composition",  "Map[Composition[Sin, Cos], v]",       vn, VT, 1, 40, 0.4, 3.0, 6);
+        /* If is NOT Listable, so this one may not take the threading rewrite —
+         * it exercises the general element loop. */
+        parity_arr("Map non-Listable", "Map[Function[u, If[u > 1., Sqrt[u], u^2]], v]",
+                                                                              vn, VT, 1, 40, 0.4, 3.0, 6);
+        parity_arr("Map then reduce",  "Total[Map[Function[u, u^2], v]]",     vn, VT, 1, 40, 0.4, 3.0, 6);
+        parity_arr("Map complex",      "Map[Function[u, u^2 + u], v]",        vn, CVT, 1, 24, 0.4, 3.0, 6);
+        /* THE TRAP: the body mentions the whole array, so threading it would
+         * compute Total[v] once instead of Total of each scalar element.  The
+         * interpreter's answer is a constant vector, and so must ours. */
+        parity_arr("Map body reads whole v", "Map[Function[u, u + Total[v]], v]",
+                                                                              vn, VT, 1, 16, 0.4, 3.0, 6);
+        /* The strip-mined route and the delegated one must agree. */
+        {
+            const char* mb[] = {
+                "Map[Function[u, u^2 + 1.], v]",
+                "Map[Sin, v]",
+                "Map[Function[u, Sin[u] Exp[-u] + Sqrt[u]], v]",
+                "Total[Map[Function[u, u^3], v]]",
+            };
+            for (size_t k = 0; k < sizeof mb / sizeof mb[0]; k++) {
+                bool ok = true;
+                for (size_t len = 1; len <= 200 && ok; len = len * 7 + 1)
+                    ok = fused_matches_delegated(mb[k], vn, VT, 1, len);
+                if (!ok) { printf("FAIL: Map fused vs delegated %-22s\n", mb[k]); failures++; }
+                else printf("ok:   Map fused == delegated %-22s\n", mb[k]);
+            }
+        }
+
+        /* Scan runs for side effects and answers Null, so it is only compilable
+         * where its value is dropped — here, inside a CompoundExpression. */
+        parity_arr("Scan accumulate",
+                   "Module[{s = 0.}, Scan[Function[u, s = s + u^2], v]; s]",
+                   vn, VT, 1, 30, 0.4, 3.0, 6);
+
+        /* Rank >= 2 must decline: Map at level 1 applies f to each ROW
+         * (map_ndarray_axis, src/funcprog.c:272), which is not elementwise. */
+        {
+            const CompileType M2[1] = { CT_ARRAY(CT_REAL, 2) };
+            must_bail_raw("Map rank 2", "Map[Function[u, u^2], v]", vn, M2, 1);
+        }
+        /* An element type the interpreter would not produce: Map over a packed
+         * array repacks with the SOURCE dtype (src/funcprog.c:289), so
+         * Map[Abs, complexvec] comes back COMPLEX-typed with real values. */
+        must_bail_raw("Map changes element type", "Map[Abs, v]", vn, CVT, 1);
+
+        /* Statement-valued heads answer Null in the interpreter and the integer
+         * 0 here, so they may not stand in RESULT position. */
+        {
+            const char* in1[1] = { intern_symbol("xq") };
+            const CompileType RT1[1] = { CT_REAL };
+            must_bail_raw("root Do",    "Do[Sin[xq], {3}]",                    in1, RT1, 1);
+            must_bail_raw("root While", "While[False, xq]",                    in1, RT1, 1);
+            must_bail_raw("root Scan",  "Scan[Function[u, u], v]",             vn, VT, 1);
+            /* ...but they stay compilable where the value is discarded. */
+            Expr* b = parse_expression("Module[{s = 0.}, Do[s = s + 1., {3}]; s]");
+            CompiledProgram* p = compile_expr(b, in1, RT1, 1);
+            if (!p) { printf("FAIL: %-30s -> Do inside CompoundExpression must still compile\n", "stmt in value position"); failures++; }
+            else { printf("ok:   %-30s Do compiles where its value is dropped\n", "stmt in value position"); compiled_free(p); }
+            expr_free(b);
+        }
+    }
+
+    /* ---- NestList / FoldList -------------------------------------------------
+     *
+     * The history buffers.  Their length is known before the loop starts — n + 1
+     * for NestList, the source length (plus one for a seed) for FoldList — so
+     * the interesting cases are the boundaries: n = 0, the seedless form whose
+     * first element IS the seed, and the element-type rule that applies to
+     * anything the body BUILDS. */
+    {
+        const char* vn[1] = { "v" };
+        const CompileType VT[1] = { CT_ARRAY(CT_REAL, 1) };
+        const char* in1[1] = { intern_symbol("xq") };
+        const CompileType RT1[1] = { CT_REAL };
+        const char* in2[2] = { intern_symbol("xq"), intern_symbol("n") };
+        const CompileType RI2[2] = { CT_REAL, CT_INT };
+
+        parity_arr("FoldList seeded",   "FoldList[Plus, 0., v]",                 vn, VT, 1, 9, 0.4, 3.0, 6);
+        parity_arr("FoldList seedless", "FoldList[Times, v]",                    vn, VT, 1, 7, 0.8, 1.3, 6);
+        parity_arr("FoldList lambda",   "FoldList[Function[{p, q}, p + q^2], 0., v]",
+                                                                                 vn, VT, 1, 9, 0.4, 3.0, 6);
+        parity_arr("FoldList reduced",  "Total[FoldList[Plus, 0., v]]",          vn, VT, 1, 9, 0.4, 3.0, 6);
+
+        /* NestList against the interpreter: its result is a built List, so the
+         * reference is compared through the same packing the Table cases use. */
+        {
+            const char* nb[] = {
+                "NestList[Function[u, u/2], xq, 5]",
+                "NestList[Cos, xq, 6]",
+                "NestList[#^2/(1. + #^2) &, xq, 4]",
+                "NestList[Cos, xq, 0]",              /* the seed alone */
+            };
+            for (size_t k = 0; k < sizeof nb / sizeof nb[0]; k++) {
+                Expr* b = parse_expression(nb[k]);
+                CompiledProgram* p = compile_expr(b, in1, RT1, 1);
+                if (!p) { printf("FAIL: %-30s -> did not compile\n", nb[k]); failures++; expr_free(b); continue; }
+                double maxerr = 0; bool ok = true; int cmp = 0;
+                for (int t = 0; t < 6 && ok; t++) {
+                    double xv = urand(0.5, 3.0);
+                    CompileValue av = { CT_REAL, { .r = xv } }, o;
+                    if (!compiled_eval(p, &av, &o)) { ok = false; break; }
+                    Expr* got = aval_to_expr(o);
+                    Expr* wl = ref_at(nb[k], xv);
+                    Expr* want = ndarray_from_nested_list(wl, NDT_FLOAT64);
+                    if (!want || !arr_cmp(got, want, &maxerr)) ok = false; else cmp++;
+                    expr_free(got); expr_free(wl); expr_free(want);
+                }
+                if (!ok || cmp == 0)     { printf("FAIL: %-30s -> shape/kind mismatch\n", nb[k]); failures++; }
+                else if (maxerr > 1e-12) { printf("FAIL: %-30s -> max_rel=%.2e\n", nb[k], maxerr); failures++; }
+                else printf("ok:   %-30s max_rel=%.1e (%d)\n", nb[k], maxerr, cmp);
+                compiled_free(p); expr_free(b);
+            }
+        }
+
+        /* A built history of exact Integers has no packed representation, the
+         * same rule ConstantArray and Table follow. */
+        must_bail_raw("NestList integer body", "NestList[Function[u, 2 u], 1, n]", in2, RI2, 1);
+        /* A negative count leaves the whole call unevaluated. */
+        {
+            Expr* b = parse_expression("NestList[Cos, xq, n]");
+            CompiledProgram* p = compile_expr(b, in2, RI2, 2);
+            if (!p) { printf("FAIL: %-30s -> did not compile\n", "NestList n<0"); failures++; }
+            else {
+                CompileValue av[2] = { { CT_REAL, { .r = 1.0 } }, { CT_INT, { .i = -1 } } }, o;
+                if (compiled_eval(p, av, &o)) {
+                    printf("FAIL: %-30s -> answered at n=-1\n", "NestList n<0"); failures++;
+                    if (CT_IS_ARRAY(o.type)) expr_free(o.v.a);
+                } else printf("ok:   %-30s declined at n=-1\n", "NestList n<0");
+                compiled_free(p);
+            }
+            expr_free(b);
+        }
+    }
+
+    /* ---- Table as an array constructor ---------------------------------------
+     *
+     * The arithmetic is the easy part; the LENGTH is where a compiled counted
+     * loop and the interpreter's `val <= hi` walk can silently disagree, so the
+     * cases below are chosen for their endpoints: a step that does not divide
+     * the span, a descending step, and both empty forms. */
+    {
+        /* `xq` because ref_at binds that name — the reference substitutes a
+         * genuine machine Real rather than formatting one into the source, which
+         * would be read back as an arbitrary-precision number. */
+        const char* in1[1] = { intern_symbol("xq") };
+        CompileType ty1[1] = { CT_REAL };
+        const char* tb[] = {
+            "Table[xq i, {i, 1, 6}]",           /* ascending, unit step        */
+            "Table[xq i, {i, 1, 6, 2}]",        /* step does not divide 5      */
+            "Table[xq i, {i, 10, 1, -2}]",      /* descending                  */
+            "Table[xq i, {i, 1, 0}]",           /* empty: hi < lo              */
+            "Table[xq i, {i, 1, 0, 2}]",        /* empty, and the case where a
+                                                 * TRUNCATING division would
+                                                 * wrongly claim one element   */
+            "Table[xq, {4}]",                   /* bare count, no iterator     */
+            "Table[xq i + 1. j, {i, 1, 3}, {j, 1, 4}]",  /* rank 2, row-major  */
+            "Table[Sin[xq i] Exp[-1. j], {i, 1, 3}, {j, 1, 3}]",
+        };
+        for (size_t k = 0; k < sizeof tb / sizeof tb[0]; k++) {
+            Expr* b = parse_expression(tb[k]);
+            CompiledProgram* p = compile_expr(b, in1, ty1, 1);
+            if (!p) {
+                printf("FAIL: Table %-34s -> did not compile (%s)\n", tb[k],
+                       compiled_bail_expr() ? compiled_bail_expr() : "?");
+                failures++; expr_free(b); continue;
+            }
+            double maxerr = 0; bool ok = true; int cmp = 0;
+            for (int t = 0; t < 6 && ok; t++) {
+                double xv = urand(0.5, 3.0);
+                CompileValue av = { CT_REAL, { .r = xv } }, o;
+                if (!compiled_eval(p, &av, &o)) { ok = false; break; }
+                Expr* got = aval_to_expr(o);
+                /* The compiled result is an NDArray and the interpreter's is a
+                 * nested List, so pack the reference before comparing — that
+                 * also checks the SHAPE, since a wrong element count or rank
+                 * fails arr_cmp rather than comparing element-by-element. */
+                Expr* wl = ref_at(tb[k], xv);
+                Expr* want = ndarray_from_nested_list(wl, NDT_FLOAT64);
+                if (!want) {   /* an empty Table packs to nothing; compare lengths */
+                    ok = (got->type == EXPR_NDARRAY && ndarray_size(got) == 0)
+                      || (wl->type == EXPR_FUNCTION && wl->data.function.arg_count == 0
+                          && got->type == EXPR_NDARRAY && ndarray_size(got) == 0);
+                    if (ok) cmp++;
+                } else if (!arr_cmp(got, want, &maxerr)) ok = false;
+                else cmp++;
+                expr_free(got); expr_free(wl); expr_free(want);
+            }
+            if (!ok || cmp == 0)        { printf("FAIL: Table %-34s -> shape/kind mismatch\n", tb[k]); failures++; }
+            else if (maxerr > 1e-12)    { printf("FAIL: Table %-34s -> max_rel=%.2e\n", tb[k], maxerr); failures++; }
+            else printf("ok:   Table %-34s max_rel=%.1e (%d)\n", tb[k], maxerr, cmp);
+            compiled_free(p); expr_free(b);
+        }
+
+        /* An INTEGER-valued body must decline: the interpreter's Table holds
+         * exact Integers and a packed buffer has no integer dtype, so compiling
+         * it would answer with different element HEADS.  Same rule, and the same
+         * reason, as ConstantArray's refusal of an integer fill. */
+        must_bail_raw("Table integer body",   "Table[i, {i, 1, 6}]",         in1, ty1, 1);
+        must_bail_raw("Table integer body 2", "Table[i^2 + 1, {i, 1, 6}]",   in1, ty1, 1);
+        /* A REAL iterator must decline: the interpreter advances it by repeated
+         * addition against a 1e-14 slack, which a closed form does not
+         * reproduce — in the last bits, and at the endpoint in the COUNT. */
+        must_bail_raw("Table real iterator",  "Table[xq t, {t, 0., 1., 0.1}]", in1, ty1, 1);
+        /* A list iterator is not a counted loop at all. */
+        must_bail_raw("Table list iterator",  "Table[xq i, {i, {1, 2, 3}}]",   in1, ty1, 1);
+    }
+
     /* ================= STRESS ================= */
 
     /* deep nesting: Sin applied 400 times */
@@ -1811,6 +2266,13 @@ int main(void) {
         AB("While loop",            "Module[{t = x, k = 0}, While[k < 12, t = (t + x/t)/2; k = k + 1]; t]", 1, RRR, true);
         AB("For loop",              "Module[{s = 0.}, For[i = 1, i <= 15, i = i + 1, s = s + x^2 i]; s]", 1, RRR, true);
         AB("Nest",                  "Nest[Function[u, (u + x/u)/2], x, 14]", 1, RRR, true);
+        /* The data-dependent exits: the optimiser must not fold, hoist or CSE
+         * anything across a SameQ test or a safety-cap counter. */
+        AB("FixedPoint",            "FixedPoint[Function[u, (u + x/u)/2], x]", 1, RRR, true);
+        AB("FixedPoint bounded",    "FixedPoint[Cos, x, 25]",               1, RRR, true);
+        AB("NestWhile",             "NestWhile[Function[u, u/2], x, Function[u, u > 1]]", 1, RRR, true);
+        AB("Nest bare head",        "Nest[Cos, x, 14]",                     1, RRR, true);
+        AB("Nest slot",             "Nest[#^2/(1 + #^2) &, x, 9]",          1, RRR, true);
         AB("With locals",           "With[{a = Sin[x], b = Cos[x]}, a b + a/b + a^2]", 1, RRR, true);
         AB("loop-invariant heavy",  "Sum[Exp[-x^2] Sqrt[Abs[y]] + i, {i, 1, 25}]", 2, RRR, true);
         /* Bodies with genuinely repeated subtrees — what Expr-level CSE exists

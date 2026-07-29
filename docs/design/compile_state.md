@@ -5,9 +5,107 @@ Companion to [`compile.md`](compile.md) (the full design) and the memory files
 `project_compile_engine`, `project_autocompile_numeric_builtins` (read those
 too).
 
-_Last updated: 2026-07-27 (M5: optimiser, coverage audit, any-rank arrays,
-strip-mined fusion, Expr-level CSE, per-call frames, OP_CALL; M6: bail
-diagnostics + nine more auto-compiled builtins; M3c: indexed arrays)._
+_Last updated: 2026-07-29 (M7: compile-time function values, and the functional
+heads — Nest/Fold/FixedPoint/NestWhile/Map/Scan/Table.  Earlier: M5 optimiser,
+coverage audit, any-rank arrays, strip-mined fusion, Expr-level CSE, per-call
+frames, OP_CALL; M6 bail diagnostics + nine more auto-compiled builtins;
+M3c indexed arrays)._
+
+---
+
+## 0d. M7 — the functional heads, and the abstraction they needed
+
+`Nest`, `Fold`, `FixedPoint`, `NestWhile`, `Map`, `Scan` and `Table` are in the
+subset. What unblocked all seven at once was **one** thing: a compile-time
+function value.
+
+**`fn_resolve` / `emit_apply` / `infer_apply` replace `extract_function`.** The
+VM still has no runtime function value and should not gain one — a lambda is
+inlined. What was missing was the compile-time question "which function is this,
+and how do I paste it in?", answered in one place instead of once per head.
+Retargeting `Nest` onto it made `Nest[Cos, x, n]`, `Nest[#^2 &, x, n]`,
+`Nest[Composition[Sin, Cos], x, n]` and `Nest[compiledFn, x, n]` compile with no
+lowering of their own. **That is the test of whether the abstraction is right:
+adding a head is now a lowering, not a lowering plus a private parser.**
+
+`FN_HEAD` (a bare `Sin`, `Plus`, …) is the awkward case, because `emit_node`
+dispatches on a head name plus an `Expr**`, not on `Val`s. Rather than refactor
+~45 lowerings to take `Val`s — a large change with no behaviour delta — it
+synthesizes `h[$1, …, $n]` over reserved placeholder symbols bound to the
+argument registers, the same scaffolding trick the multi-iterator `Do` uses. A
+few nodes per *compile*, never per call, and every head the compiler already
+knows becomes usable as a function value for free.
+
+**`Slot[k]` needs a binding mechanism of its own** — it is an `EXPR_FUNCTION`,
+not a symbol, and `scope[]` matches interned symbol POINTERS. One flat frame is
+exact, not an approximation: `substitute_slots` (`src/purefunc.c:76`)
+deliberately does not recurse into a nested `Function`, so only the innermost
+frame is ever visible. And slots are hidden under a NAMED lambda, because the
+interpreter's named path substitutes names only — `Function[u, # + u]` leaves a
+live `Slot[1]` in its answer, so that is not a machine number.
+
+**`Map` has two lowerings and it is a cost split, not a subset split.** When the
+body threads elementwise, `Map[Function[u, body], v]` IS `body` with `u` bound to
+the whole array, which the existing fusion strip-mines and threads — ten lines,
+6.6x over the general per-element loop. The legality gate is `fuse_listable`
+(would the interpreter thread this?) plus "exactly one array leaf and it is the
+parameter" plus a result-type check. Everything else takes the general loop,
+which is correct for any body. Same shape as `Part`'s inline/delegated split.
+
+**Three real bugs fell out, all of the same family — a value whose KIND or
+FAILURE was decided in the wrong place:**
+
+1. **A built array took its result kind from an unrelated argument.**
+   `Compile[{{v,_Real,1}}, ConstantArray[1., 3]][NDArray[{1., 2.}]]` returned an
+   `NDArray` where the interpreter's `ConstantArray` returns a `List`. The
+   boundary chose from the arguments alone; a body that CONSTRUCTS its result has
+   no kind to inherit. `Val.built` / `CompiledProgram.result_built` now carry it.
+   Every array-constructing head would have inherited the bug, so this had to be
+   fixed before `Table` landed, not after.
+2. **`compiled_eval_real` computed the abort flag and dropped it.** Invisible for
+   as long as no opcode an all-Real program could contain was able to fail (array
+   ops can; an all-Real program has no array registers). `OP_FAIL` made it
+   reachable in one step.
+3. **`Do`/`While`/`For` in result position returned `0`, not `Null`.**
+   Pre-existing and reachable as `Compile[{n}, Do[…, {n}]][3]`. `Null` is not
+   worth a fifth lattice type — it would ripple through `num_common`, `coerce`,
+   `finite_result` and `cf_unbox` — so a statement-shaped head is declined in the
+   one position where the difference is observable.
+
+**Where these heads decline, they decline because compiling would DIVERGE.**
+That distinction is the whole design and each case is worth remembering:
+`Table` needs integer iterators (the interpreter walks a real one by repeated
+addition against a `1e-14` slack, so a closed form differs in the last bits and
+at the endpoint in the element COUNT) and a non-integer body (no integer dtype);
+`Map` needs rank 1 (rank ≥ 2 maps over ROWS) and a result element type equal to
+the source's (the repack uses the SOURCE dtype, so `Map[Abs, complexvec]` comes
+back complex-typed); `Fold` over `{}` and `Nest`/`FixedPoint` with a negative
+count fail the call because all three are UNEVALUATED in the interpreter.
+
+**`SameQ` is not `Equal`, and that is what makes an unbounded iteration
+terminate.** `expr_eq` calls two NaNs the same (`src/expr.c:622`), so a
+`FixedPoint` whose orbit reaches NaN stops there. `OP_SAMEQ_R`/`OP_SAMEQ_C`
+implement exactly that (componentwise for complex, mirroring `expr_eq`'s
+recursion into `Complex[re, im]` — NOT `creal==creal && cimag==cimag`, which
+differs on a NaN component). Both also carry the interpreter's `ITER_SAFETY_CAP`
+of 10⁶ and `OP_FAIL` on reaching it, so the compiled path gives up exactly where
+the interpreter does.
+
+**A prerequisite nobody would guess: `Fold` left an `NDArray` unevaluated.** An
+`NDArray` is atomic, so `Fold`'s element walk looked straight past it while the
+identical `List` call folded fine. There was nothing to be parity WITH, so
+compiling `Fold` first required giving the *interpreter* a packed path. Expect
+the same for `Select`, `Join`, `First`, `Differences`, `RotateLeft/Right`,
+`Riffle`, `Partition`, `TakeWhile`, `AllTrue`/`AnyTrue`/`NoneTrue` — all of them
+return unevaluated on a packed argument today.
+
+**Measure with a PACKED argument.** Over a plain `List` a compiled `Map` reads
+1.0x, for two reasons that have nothing to do with the loop: both sides are then
+dominated by packing 200 000 `Expr` nodes at the boundary and unpacking them, and
+the interpreter's `Map` over a `List` already has the legacy `numloop` fast path,
+so the "interpreted" side is not interpreted. Packed in and packed out at 200k
+elements: `Map[u^2 + 1. &]` 277x, `Map[Sin[u] Exp[-u] + Sqrt[u] &]` 109x,
+`Map[If[…] &]` (general loop) 47x, `Fold[Plus, 0.]` 19x.
 
 ---
 

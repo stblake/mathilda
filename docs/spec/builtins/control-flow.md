@@ -390,10 +390,50 @@ expression would.
   `Power`, all elementary functions and every special function that has a
   machine kernel (`Gamma`, `Erf`, `BesselJ`, `Zeta`, …), `If`, `Sum`/`Product`,
   `With`/`Module` locals with `Set`/`AddTo`/`TimesBy`/`Increment`/…,
-  `Do`/`While`/`For`, `Nest`, `CompoundExpression`, and machine arrays
-  (see below). Anything else (a user-defined function, exact symbolic algebra)
-  routes that application through the interpreter fallback. Use
-  `CompileDiagnostics` to find out which.
+  `Do`/`While`/`For`, `CompoundExpression`, the functional heads (see below),
+  and machine arrays (see further below). Anything else (a user-defined
+  function, exact symbolic algebra) routes that application through the
+  interpreter fallback. Use `CompileDiagnostics` to find out which.
+- **Functional heads.** `Nest`, `NestList`, `Fold`, `FoldList`, `FixedPoint`,
+  `NestWhile`, `Map`, `Scan` and `Table` compile, as do the structural heads
+  `Reverse`, `Sort`, `Accumulate`, `Flatten`, `Transpose`, `Take[a, n]` and
+  `Drop[a, n]` — those last are delegated to the same `NDArray` entry points the
+  interpreter uses, so their compiled subset is the interpreted one, and a spec
+  outside it (a `Sort` comparator, `Take[v, {2, 4}]`) declines cleanly.
+
+  The function argument may be `Function[u, body]`, `Function[{u, …}, body]`,
+  `Function[body]` using `#`/`#1`/`#2`, a bare head (`Sin`, `Plus`, or any
+  builtin with a machine kernel), a symbol holding another `CompiledFunction`,
+  `Composition[…]`, or `Identity`. It must be one of those *at compile time* —
+  there is no runtime function value — and its arity must match exactly, since
+  a short call leaves a parameter symbolic and so is not a machine value. A
+  `Slot` inside a **named** lambda (`Function[u, # + u]`) is not bound, matching
+  the interpreter, which substitutes names only there.
+
+  `Fold[f, x, v]`, `Fold[f, v]`, `Map[f, v]` and `Scan[f, v]` take a rank-1
+  array. `FixedPoint[f, x]`, `FixedPoint[f, x, n]`, `FixedPoint[f, x, SameTest -> s]`
+  and `NestWhile[f, x, test]` are all supported.
+
+  These decline rather than answer differently:
+
+  - `Table` needs **integer** iterators — a real iterator is walked by repeated
+    addition in the interpreter, which a closed form does not reproduce
+    exactly — and a **non-integer-valued body**, because a packed buffer has no
+    integer dtype and `Table[i, {i, 1, n}]` holds exact `Integer`s.
+    `Table[1.0 i, {i, 1, n}]` is the compilable spelling.
+  - `Map` needs rank 1 (at rank ≥ 2 it maps over *rows*) and a result element
+    type equal to the source's, because mapping over a packed array repacks with
+    the source dtype.
+  - `Fold` over an empty vector, and `Nest`/`NestList`/`FixedPoint` with a
+    negative count, fall back: all are left unevaluated by the interpreter.
+  - `NestList` and `FoldList` refuse an integer element type, for the same
+    reason `Table` does — a packed buffer has no integer dtype.
+  - An unbounded `FixedPoint`/`NestWhile` that does not converge falls back at
+    the same 10⁶-application cap the interpreter uses, and is then left
+    unevaluated exactly as the interpreter leaves it.
+  - `Do`, `While`, `For` and `Scan` answer `Null`, which the machine lattice has
+    no room for, so they compile only where their value is discarded — inside a
+    `CompoundExpression`, not as the whole body.
 - **Machine arrays.** An argument spec `{v, _Real, 1}` (or `_Complex`, any rank)
   declares an array parameter. A `List` argument is packed into a flat machine
   buffer at the boundary and the result is unpacked back to a `List`; an

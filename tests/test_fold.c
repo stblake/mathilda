@@ -31,6 +31,30 @@ static void run_infix(const char* input, const char* expected) {
     expr_free(r);
 }
 
+/* An NDArray is atomic, so Fold's element walk used to look straight past it
+ * and Fold[f, x, NDArray[...]] came back UNEVALUATED while the identical call on
+ * a plain List folded fine.  The contract is that the two agree, so each case
+ * below asserts the packed form against the List form's own answer.
+ *
+ * This is also what makes Fold compilable: `Compile[{{v,_Real,1}}, ...]` may be
+ * handed a genuine NDArray, and a compiled path that answered where the
+ * interpreter declined would be a divergence, not a speedup. */
+static void test_fold_ndarray_matches_list(void) {
+    run_infix("Fold[Plus, 0., NDArray[{1., 2., 3.}]]", "6.0");
+    run_infix("Fold[Times, NDArray[{2., 3., 4.}]]", "24.0");
+    /* Rank 2 folds over ROWS, exactly as the nested-List form does. */
+    run_infix("Fold[Times, 1., NDArray[{{1., 2.}, {3., 4.}}]]", "{3.0, 8.0}");
+    /* Seedless over a singleton is the element itself; no application happens. */
+    run_infix("Fold[Plus, NDArray[{7.}]]", "7.0");
+    /* A packed argument must not be mutated by the fold. */
+    run_infix("ndf = NDArray[{1., 2., 3.}]; Fold[Plus, 0., ndf]; Normal[ndf]",
+              "{1.0, 2.0, 3.0}");
+    /* FoldList gives the history back packed, matching Map[f, NDArray[...]]. */
+    run_infix("FoldList[Plus, 0., NDArray[{1., 2.}]]", "NDArray[{0.0, 1.0, 3.0}]");
+    run_infix("Normal[FoldList[Plus, 0., NDArray[{1., 2.}]]] === FoldList[Plus, 0., {1., 2.}]",
+              "True");
+}
+
 /* ---------- Spec examples ---------- */
 
 static void test_fold_basic_symbolic(void) {
@@ -169,6 +193,7 @@ int main(void) {
     TEST(test_fold_factorial_via_times);
     TEST(test_fold_plus_sum);
     TEST(test_fold_continued_fraction_infix);
+    TEST(test_fold_ndarray_matches_list);
 
     /* Unevaluated cases */
     TEST(test_fold_wrong_arg_count);

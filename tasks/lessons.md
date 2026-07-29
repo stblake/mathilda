@@ -1320,3 +1320,38 @@ Rules this session earned:
    and it is precisely what the bug violated. Pair it with a gap file that fails
    on both an *unlisted* gap and a *stale* one, so the list can neither grow nor
    rot silently.
+
+## Compiled functional programming (2026-07-29)
+
+- **A compiled fast path must never answer where the interpreter declines.**
+  Four heads needed a runtime guard for exactly this: `Fold` over `{}`,
+  `Nest`/`FixedPoint` with a negative count, and any unbounded iteration at the
+  10^6 cap. In each the interpreter leaves the whole expression unevaluated,
+  where a counted loop would silently return the seed. Before compiling a head,
+  read its interpreter implementation for the cases that return `NULL`.
+
+- **A branch guard's test must be the FAILING condition, not the good one.**
+  `JZ` skips the following instruction when the test is false, so
+  `GE_I rc, n, 0; JZ rc -> skip; FAIL` fails on the *good* path. Both guards
+  shipped inverted and the disassembler showed it in one line — `CompilePrint`
+  before theorising about a wrong answer.
+
+- **Check that a failure signal is actually consumed.** `compiled_eval_real`
+  computed `failed` and never read it. Harmless for as long as no opcode an
+  all-Real program could contain was able to fail; the first such opcode made it
+  a wrong answer. When adding a way to fail, grep every entry point for the flag.
+
+- **Compiling a head can require fixing the INTERPRETER first.** `Fold` left an
+  `NDArray` unevaluated (an NDArray is atomic, so the element walk missed it),
+  so there was nothing to be parity with. Same for `Select`, `Join`, `First`,
+  `Differences`, `RotateLeft/Right`, `Riffle`, `Partition`, `TakeWhile`,
+  `AllTrue`/`AnyTrue`/`NoneTrue`.
+
+- **Benchmark the compiled array path with a PACKED argument.** Over a plain
+  `List` a compiled `Map` measured 1.0x — both sides dominated by packing 200k
+  `Expr` nodes at the boundary, and the "interpreted" side already using the
+  legacy `numloop` fast path. Packed in and out, the same body is 277x.
+
+- **A test helper's variable name is part of its contract.** `ref_at` binds
+  `xq`; eight `Table` parity cases written with `x` all reported "shape/kind
+  mismatch" against a reference that was still symbolic.

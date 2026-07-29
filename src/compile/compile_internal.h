@@ -124,6 +124,14 @@ enum {
  * they read the loop index. */
 #define VBLOCK 64
 
+/* Application cap for an iteration with no user-supplied bound (FixedPoint,
+ * NestWhile).  MUST equal ITER_SAFETY_CAP in src/funcprog.c:2062: on reaching
+ * it the interpreter frees its history and leaves the whole expression
+ * unevaluated, so a compiled loop that ran on would answer where the
+ * interpreter declines.  Reaching it emits OP_FAIL, which drops the call to the
+ * interpreter — which then gives up in its turn. */
+#define VM_ITER_SAFETY_CAP 1000000LL
+
 #define OPLIST \
     X(NOP,   K_NOP)   X(JMP,   K_JMP)  X(JZ,    K_JZ)   X(INC_I, K_INC)   \
     X(LOOP,  K_LOOP)  X(APAR,  K_APAR)                                     \
@@ -170,6 +178,20 @@ enum {
     X(GT_I, K_BIN)    X(GT_R, K_BIN)   X(GE_I, K_BIN)   X(GE_R, K_BIN)     \
     X(EQ_I, K_BIN)    X(EQ_R, K_BIN)   X(EQ_C, K_BIN)                      \
     X(NE_I, K_BIN)    X(NE_R, K_BIN)   X(NE_C, K_BIN)                      \
+    /* SameQ, which is NOT Equal: expr_eq calls two NaNs the same            \
+     * (src/expr.c:622), and that is exactly what stops FixedPoint spinning  \
+     * on a NaN orbit.  One opcode rather than a compare/isnan/or chain       \
+     * because it sits in the innermost loop and is easy to get subtly wrong. \
+     * The complex form applies the rule COMPONENTWISE, mirroring expr_eq's   \
+     * recursion into Complex[re, im] — not creal==creal && cimag==cimag,     \
+     * which differs on a NaN component. */                                  \
+    X(SAMEQ_R, K_BIN) X(SAMEQ_C, K_BIN)                                     \
+    /* Abort the call: the result is unusable, so compiled_eval returns false \
+     * and the caller interprets.  Used where the interpreter itself gives up \
+     * (an unbounded iteration reaching ITER_SAFETY_CAP), so the observable    \
+     * behaviour is identical — the compiled path merely burns the iterations  \
+     * first.  Impure and never removed. */                                   \
+    X(FAIL, K_ASTORE)                                                       \
     X(AND, K_BIN)     X(OR, K_BIN)     X(XOR, K_BIN)    X(NOT, K_UN)       \
     X(ARR_FREE, K_ARR) X(V_EW, K_ARR)  X(V_POW, K_ARR)                     \
     X(V_KERN, K_ARR)  X(V_KERN2, K_ARR) X(V_TOTAL, K_ARR) X(V_LEN, K_ARR)  \
@@ -185,6 +207,13 @@ enum {
      * the compiled subset of Part is the interpreted one by construction. */ \
     X(A_AXIS, K_AIDX)    X(A_COPY, K_ARR)    X(A_XFER, K_ARR)             \
     X(A_NEW, K_ARANGE)   X(A_PART, K_ARANGE) X(A_PARTSET, K_ARANGE)        \
+    /* A structural head delegated to the interpreter's OWN NDArray entry      \
+     * point (ndstruct_reverse, ndred_accumulate, ...), which takes the whole   \
+     * call.  Same trick as A_PART, and the same payoff: the compiled subset of \
+     * these heads IS the interpreted one by construction.  Their faithful-      \
+     * degrade path returns a nested List instead of a packed array, which is    \
+     * exactly the signal to hand the call back to the interpreter. */          \
+    X(A_NDFN, K_ARANGE)                                                     \
     /* strip-mined (tile) forms — one opcode, VBLOCK elements */           \
     X(CALL, K_CALL)   X(KERNN, K_NARY)                                     \
     X(VSETLEN, K_ASTORE)                                                   \
@@ -298,6 +327,11 @@ struct CompiledProgram {
     size_t      frame_slots;  /* registers + tile storage, in Slots */
     int         ntiles;       /* tile registers; storage is per-CALL, not per-program */
     bool        all_real;     /* every arg + result is CT_REAL, no array temps */
+    /* The array result was CONSTRUCTED by the body (ConstantArray, Table, ...)
+     * rather than derived from an array argument, so the interpreter running the
+     * same body returns a List however the arguments were spelled.  See Val.built
+     * in compile.c and the result-kind decision in compiled_function.c. */
+    bool        result_built;
 };
 
 /* Array and tile temporaries are allocated into virtual ranges and relocated to

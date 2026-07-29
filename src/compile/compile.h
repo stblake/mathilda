@@ -128,6 +128,17 @@ const char* compiled_bail_expr(void);
 CompileType compiled_result_type(const CompiledProgram* p);
 size_t      compiled_num_args(const CompiledProgram* p);
 
+/* True when an array-typed result was CONSTRUCTED by the body rather than
+ * derived from an array argument.
+ *
+ * The result KIND has to match the interpreter's: given Lists it threads and
+ * returns a List, given NDArrays it returns an NDArray — but a construct like
+ * ConstantArray or Table returns a List whatever the arguments were, because it
+ * has no packed spelling.  Deciding that from the argument kinds alone answered
+ * NDArray for a body that takes an NDArray and builds a fresh array from
+ * something else, so the boundary asks the program instead. */
+bool        compiled_result_built(const CompiledProgram* p);
+
 /* Number of bytecode instructions in the finished program.  Exposed so tests and
  * benchmarks can measure what the optimiser removed; not needed to run a program. */
 size_t      compiled_num_instructions(const CompiledProgram* p);

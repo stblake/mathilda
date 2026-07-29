@@ -91,6 +91,26 @@ void test_cf_part(void) {
                    "Do[u[[i]] = 1. i, {i, 1, n}]; u]][4]", "{1.0, 2.0, 3.0, 4.0}", 0);
     assert_eval_eq("Head[Compile[{{n, _Integer}}, Module[{u = ConstantArray[0., n]}, u]][3]]",
                    "List", 0);
+
+    /* ...and it must STILL be a List when an unrelated NDArray argument is
+     * present.  Deciding the result kind from the arguments alone got this
+     * wrong: `from_nd` was true because a genuine NDArray came in, so a freshly
+     * BUILT array came back as an NDArray where the interpreter's own
+     * ConstantArray gives a List.  Every array-constructing head would have
+     * inherited that, so the program now reports whether its result was built.
+     *
+     * The two cases below are the fault line: the first builds its result and
+     * ignores the argument's kind, the second DERIVES its result and must keep
+     * following it. */
+    assert_eval_eq("Head[Compile[{{v, _Real, 1}}, ConstantArray[1., 3]][NDArray[{1., 2.}]]]",
+                   "List", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, ConstantArray[1., 3]][NDArray[{1., 2.}]]",
+                   "{1.0, 1.0, 1.0}", 0);
+    assert_eval_eq("Head[Compile[{{v, _Real, 1}}, v + 1.][NDArray[{1., 2.}]]]", "NDArray", 0);
+    assert_eval_eq("Head[Compile[{{v, _Real, 1}}, Module[{u = v}, u + 1.]][NDArray[{1., 2.}]]]",
+                   "NDArray", 0);
+    assert_eval_eq("Head[Compile[{{v, _Real, 1}}, v[[1 ;; 2]]][NDArray[{1., 2., 3.}]]]",
+                   "NDArray", 0);
     assert_eval_eq("Compile[{{v, _Real, 1}}, Module[{u = v}, u[[2]] = 99.; u]][{1., 2., 3.}]",
                    "{1.0, 99.0, 3.0}", 0);
     assert_eval_eq("Compile[{{v, _Real, 1}}, Module[{u = v}, u[[2 ;; 3]] = 0.; u]]"

@@ -236,6 +236,12 @@ Out[8]= {0.557674, 0.557674, 0.557674}
   a machine number the output repacks into an `NDArray` (packed in → packed out,
   like `Sin[arr]`); a symbolic result yields a `List`. A non-default level spec
   materializes the array and maps generically.
+- **Compilable** inside `Compile[]` over a rank-1 array argument at the default
+  level. An elementwise body is fused into one strip-mined, optionally threaded
+  pass; any other body runs a per-element loop. Rank ≥ 2 is not compiled, because
+  there `Map` applies `f` to each *row*, and neither is a body whose result
+  element type differs from the source's, because the repack above uses the
+  SOURCE dtype. See [`control-flow.md`](control-flow.md) § Compile.
 
 ```mathematica
 In[1]:= Map[#^2 &, NDArray[Range[4]]]
@@ -438,6 +444,9 @@ Applies a function repeatedly.
 - The function `f` may be a symbol, a built-in, or a pure function (`... &`).
 - Each iteration evaluates `f[current]` before proceeding, so numeric computations collapse immediately.
 - Returns unevaluated if `n` is not a non-negative integer or the argument count is wrong.
+- **Compilable** inside `Compile[]` for a scalar accumulator, with any of the
+  function spellings listed in [`control-flow.md`](control-flow.md) § Compile.
+  A negative `n` declines there too, since it is unevaluated here.
 
 **Examples**:
 ```
@@ -480,6 +489,9 @@ Applies a function repeatedly, collecting every intermediate result.
 - The function `f` may be a symbol, a built-in, or a pure function (`... &`).
 - Each iteration evaluates `f[current]` before proceeding, so numeric computations collapse immediately.
 - Returns unevaluated if `n` is not a non-negative integer or the argument count is wrong.
+- **Compilable** inside `Compile[]` for a scalar accumulator, with any of the
+  function spellings listed in [`control-flow.md`](control-flow.md) § Compile.
+  A negative `n` declines there too, since it is unevaluated here.
 - `Last[NestList[f, expr, n]]` is equivalent to `Nest[f, expr, n]`.
 
 **Examples**:
@@ -675,6 +687,18 @@ Successively applies a binary function to an accumulating seed and the elements 
 - `Fold[f, x, {}]` returns `x` (the function is never applied); `Fold[f, {a}]` returns `a`.
 - `Fold[f, {}]` remains unevaluated (no seed, no elements).
 - Each intermediate application is evaluated before the next one.
+- **NDArray**: a packed argument is folded exactly as the equivalent `List` is —
+  at rank ≥ 2 that means folding over *rows*. `FoldList` gives its history back
+  packed, matching `Map[f, NDArray[…]]`.
+- **Compilable** inside `Compile[]` over a rank-1 array argument, in both the
+  seeded and seedless forms. See
+  [`control-flow.md`](control-flow.md) § Compile for which function arguments
+  are accepted.
+
+```mathematica
+In[0]:= Fold[Plus, 0., NDArray[{1., 2., 3.}]]
+Out[0]= 6.0
+```
 
 ```mathematica
 In[1]:= Fold[f, x, {a, b, c, d}]

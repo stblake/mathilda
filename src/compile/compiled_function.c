@@ -501,15 +501,17 @@ Expr* compiled_function_apply(const CompiledFunction* cf, Expr* const* args, siz
                  * back to one.  Given NDArrays it returns an NDArray, and so do
                  * we — no conversion, no copy.
                  *
-                 * A body that BUILDS its array (ConstantArray inside a Module,
-                 * M3c) has no array argument to take the kind from, and there
-                 * the interpreter returns a List — so an NDArray result is only
-                 * kept when an NDArray actually came in. */
+                 * A body that BUILDS its array (ConstantArray, Table, NestList)
+                 * has no kind to inherit: the interpreter returns a List however
+                 * the arguments were spelled, because the construct has no
+                 * packed form.  Asking only the arguments got that wrong for a
+                 * body that takes an NDArray and builds its result from
+                 * something else, so the PROGRAM is asked as well. */
                 if (r && CT_IS_ARRAY(out.type)) {
                     bool from_nd = false;
                     for (size_t q = 0; q < nargs; q++)
                         if (CT_IS_ARRAY(cf->arg_types[q]) && !packed_p[q]) from_nd = true;
-                    if (!from_nd) {
+                    if (!from_nd || compiled_result_built(cf->prog)) {
                         Expr* lst = ndarray_to_nested_list(r);
                         if (lst) { expr_free(r); r = lst; }
                     }

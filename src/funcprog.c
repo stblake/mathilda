@@ -2255,7 +2255,24 @@ static Expr* fold_impl(Expr* res, bool as_list) {
         seed_from_list = true;
     }
 
-    if (list->type != EXPR_FUNCTION) return NULL;
+    /* An NDArray is atomic, so the element walk below would never see into it
+     * and Fold[f, x, NDArray[...]] came back UNEVALUATED while the same call on
+     * the equivalent List folded fine.  Materialise once and reuse the general
+     * path: the answer is then identical to the List call by construction,
+     * which is the contract the rest of the ND layer keeps (ndstruct.h:14).
+     * `materialized` is freed on every exit below; nothing returned aliases it,
+     * because both the seed and each element are copied on the way into the
+     * history buffer. */
+    Expr* materialized = NULL;
+    NDType list_src_dtype = NDT_FLOAT64;
+    if (is_ndarray(list)) {
+        list_src_dtype = list->data.ndarray.dtype;
+        materialized = ndarray_to_nested_list(list);
+        if (!materialized) return NULL;
+        list = materialized;
+    }
+
+    if (list->type != EXPR_FUNCTION) { expr_free(materialized); return NULL; }
 
     Expr* list_head = list->data.function.head;
     Expr** elems = list->data.function.args;
@@ -2264,8 +2281,10 @@ static Expr* fold_impl(Expr* res, bool as_list) {
 
     if (seed_from_list) {
         if (n == 0) {
-            if (!as_list) return NULL;   /* Fold[f, {}] stays unevaluated */
-            return expr_new_function(expr_copy(list_head), NULL, 0);
+            Expr* empty = as_list ? expr_new_function(expr_copy(list_head), NULL, 0)
+                                  : NULL;               /* Fold[f, {}] stays unevaluated */
+            expr_free(materialized);
+            return empty;
         }
         seed_src = elems[0];
         start = 1;
@@ -2282,9 +2301,16 @@ static Expr* fold_impl(Expr* res, bool as_list) {
     /* Scalar Fold reads only the latest accumulator -> window 1; FoldList keeps all. */
     IterRunResult r = iter_run(&buf, fold_step, &ctx, (int64_t)m, false,
                                as_list ? SIZE_MAX : 1, &early);
-    if (r == ITER_RUN_SAFETY) return NULL;
-    if (r == ITER_RUN_EARLY) return early;
-    return ebuf_finalize(&buf, as_list, expr_copy(list_head));
+    Expr* out;
+    if (r == ITER_RUN_SAFETY)     out = NULL;
+    else if (r == ITER_RUN_EARLY) out = early;
+    else                          out = ebuf_finalize(&buf, as_list, expr_copy(list_head));
+
+    /* A packed argument gives a packed history back, matching Map[f, NDArray[...]]. */
+    if (materialized && as_list && out && r == ITER_RUN_OK)
+        out = map_try_repack(out, list_src_dtype);
+    expr_free(materialized);
+    return out;
 }
 
 Expr* builtin_fold(Expr* res)     { return fold_impl(res, false); }
