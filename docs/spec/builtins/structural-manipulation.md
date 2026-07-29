@@ -354,6 +354,9 @@ Splits a list into sublists of identical adjacent elements.
 - `Protected`.
 - Uses `SameQ` as the default test.
 - Result has the same head as the input.
+- Only *adjacent* elements are grouped. To collect equal elements from anywhere
+  in the list, use [`Gather`](data-structures.md#gather):
+  `Split[{a, b, a}]` gives `{{a}, {b}, {a}}` where `Gather` gives `{{a, a}, {b}}`.
 
 ```mathematica
 In[1]:= Split[{a, a, a, b, b, a, a, c}]

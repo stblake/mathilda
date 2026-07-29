@@ -704,14 +704,18 @@ Expr* builtin_groupby(Expr* res) {
 }
 
 /* ======================================================================
- * GatherBy[list, f] — {group1, group2, ...}: gather elements with equal f[x]
- * into sublists, in first-appearance order (like GroupBy but returning the
- * groups as a plain list of lists). Hash-indexed, O(n) plus the cost of f.
+ * GatherBy[list, f] / Gather[list] — {group1, group2, ...}: gather elements
+ * with equal f[x] into sublists, in first-appearance order (like GroupBy but
+ * returning the groups as a plain list of lists). Hash-indexed, O(n) plus the
+ * cost of f.
+ *
+ * assoc_gather_core is the single grouping engine behind both builtins. A NULL
+ * `f` means "group by the element itself" — the identity key function — which
+ * is exactly what Gather[list] needs; taking that path as a NULL check rather
+ * than as f = Identity avoids n redundant Identity[x] evaluations and makes
+ * Gather[l] === GatherBy[l, Identity] structural rather than coincidental.
  * ====================================================================== */
-Expr* builtin_gatherby(Expr* res) {
-    if (res->data.function.arg_count != 2) return NULL;
-    Expr* list = res->data.function.args[0];
-    Expr* f    = res->data.function.args[1];
+Expr* assoc_gather_core(Expr* list, Expr* f) {
     /* GatherBy[assoc, f] gathers the entries by f[value] into sub-associations
      * (keys preserved), returned as a list in first-appearance order -- like
      * GroupBy[assoc, f] but without the outer group keys. */
@@ -721,7 +725,7 @@ Expr* builtin_gatherby(Expr* res) {
 
     KeyIndex ki;
     if (!ki_init(&ki, n)) return NULL;
-    Expr**  keys   = malloc(sizeof(Expr*)  * (n ? n : 1)); /* owned f-values */
+    Expr**  keys   = malloc(sizeof(Expr*)  * (n ? n : 1)); /* owned group keys */
     Expr*** groups = malloc(sizeof(Expr**) * (n ? n : 1)); /* owned element copies */
     size_t* gcap   = malloc(sizeof(size_t) * (n ? n : 1));
     size_t* gcnt   = malloc(sizeof(size_t) * (n ? n : 1));
@@ -730,10 +734,17 @@ Expr* builtin_gatherby(Expr* res) {
     for (size_t i = 0; i < n; i++) {
         Expr* x = list->data.function.args[i];
         Expr* key_input = assoc_in ? rule_val(x) : x;   /* group by f[value] */
-        Expr* fx_args[1] = { expr_copy(key_input) };
-        Expr* fx = expr_new_function(expr_copy(f), fx_args, 1);
-        Expr* key = evaluate(fx);
-        expr_free(fx);
+        /* Identity key (f == NULL): the element is its own group key, so no
+         * function application is built or evaluated -- just a copy. */
+        Expr* key;
+        if (f) {
+            Expr* fx_args[1] = { expr_copy(key_input) };
+            Expr* fx = expr_new_function(expr_copy(f), fx_args, 1);
+            key = evaluate(fx);
+            expr_free(fx);
+        } else {
+            key = expr_copy(key_input);
+        }
         size_t slot, idx = ki_lookup(&ki, keys, key, &slot);
         if (idx == SIZE_MAX) {
             keys[ng] = key; gcap[ng] = 4; gcnt[ng] = 0;
@@ -751,12 +762,18 @@ Expr* builtin_gatherby(Expr* res) {
         outer[i] = assoc_in
             ? expr_new_function(expr_new_symbol(SYM_Association), groups[i], gcnt[i])
             : make_list(groups[i], gcnt[i]);
-        expr_free(keys[i]);   /* GatherBy discards the keys */
+        expr_free(keys[i]);   /* the groups are returned bare; keys are dropped */
         free(groups[i]);
     }
     Expr* result = make_list(outer, ng);
     free(outer); free(keys); free(groups); free(gcap); free(gcnt); ki_free(&ki);
     return result;
+}
+
+Expr* builtin_gatherby(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    return assoc_gather_core(res->data.function.args[0],
+                             res->data.function.args[1]);
 }
 
 /* ======================================================================

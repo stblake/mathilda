@@ -16,7 +16,7 @@ grouping and lookup.
 | **Keys & values** | `Keys`, `Values`, `KeyMap`, `KeyValueMap` |
 | **Presence** | `KeyExistsQ`, `KeyMemberQ`, `KeyFreeQ`, `MemberQ` |
 | **Transform** | `Map`, `Select`, `KeySelect`, `KeyTake`, `KeyDrop`, `DeleteMissing` |
-| **Aggregate** | `Total`, `Min`, `Max`, `Mean`, `Counts`, `CountsBy`, `GroupBy` (+reducer, `key->val`), `GatherBy`, `Merge`, `PositionIndex` |
+| **Aggregate** | `Total`, `Min`, `Max`, `Mean`, `Counts`, `CountsBy`, `GroupBy` (+reducer, `key->val`), `Gather`, `GatherBy`, `Merge`, `PositionIndex` |
 | **Order / rank** | `Sort`, `SortBy` (multi-key), `ReverseSort`, `ReverseSortBy`, `KeySort`, `KeySortBy`, `MaximalBy`, `MinimalBy`, `TakeLargest`(`By`), `TakeSmallest`(`By`), `Reverse` |
 | **Iterate / reduce** | `Table`/`Do`/`Sum`/`Product` (`{v, assoc}`), `Fold`, `FoldList`, `Scan`, `Cases`, `Count`, `DeleteCases`, `Position`, `SelectFirst`, `FirstCase`, `AllTrue`, `AnyTrue`, `NoneTrue` |
 | **Structural** | `First`, `Last`, `Rest`, `Most`, `Take`, `Drop`, `Length` |
@@ -227,6 +227,35 @@ Out[4]= <|False -> <|"a" -> 1, "c" -> 3|>, True -> <|"b" -> 2, "d" -> 4|>|>
 In[5]:= GroupBy[<|"a" -> 1, "b" -> 2, "c" -> 3, "d" -> 4|>, EvenQ, Total]
 Out[5]= <|False -> 4, True -> 6|>
 ```
+
+## Gather
+Gathers identical elements into sublists, in order of each element's first
+occurrence; within a sublist elements keep their input order. Equal elements are
+collected from anywhere in the list, not only from adjacent runs — this is the
+difference from [`Split`](structural-manipulation.md#split). Equivalent to
+`GatherBy[list, Identity]`, and implemented on the same grouping engine
+(hash-indexed, O(n)) with the identity key applied directly rather than as `n`
+`Identity[x]` applications.
+
+```mathematica
+In[1]:= Gather[{1, 7, 3, 7, 2, 3, 9}]
+Out[1]= {{1}, {7, 7}, {3, 3}, {2}, {9}}
+
+In[2]:= Gather[{a, b, a}]
+Out[2]= {{a, a}, {b}}
+
+In[3]:= Gather[{}]
+Out[3]= {}
+```
+
+Notes:
+- Group order is first-occurrence order, not sorted order.
+- Elements are grouped by structural identity (`expr_eq`), so `1` and `1.0` are
+  distinct: `Gather[{1, 1.0}]` gives `{{1}, {1.0}}`.
+- Over an association, the entries are gathered by value into sub-associations
+  (keys preserved), matching `GatherBy[assoc, Identity]`.
+- Anything other than a list or association, and any arity other than 1, is
+  returned unevaluated.
 
 ## GatherBy
 Gathers the elements with equal `f[element]` into sublists, in first-appearance

@@ -86,6 +86,16 @@ Expr* assoc_delete_duplicate_values(const Expr* assoc);
  * sublists (first-appearance order). Caller owns the result. */
 Expr* builtin_gatherby(Expr* res);
 
+/* Shared grouping engine behind GatherBy[list, f] and Gather[list]: groups the
+ * elements of `list` (a List, or an Association whose entries group by value)
+ * into a list of sublists in first-appearance order, hash-indexed in O(n).
+ *
+ * `f` is the key function; passing NULL selects the identity key — the element
+ * itself is the group key and no function application is evaluated, which is
+ * the Gather[list] path. Returns NULL if `list` is neither a List nor an
+ * Association. Caller owns the result. */
+Expr* assoc_gather_core(Expr* list, Expr* f);
+
 /* KeyUnion[{assoc1, ...}]: pad every association to the union of all keys,
  * filling absent values with Missing["KeyAbsent", key]. Caller owns result. */
 Expr* builtin_keyunion(Expr* res);

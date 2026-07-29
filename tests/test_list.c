@@ -5,6 +5,7 @@
 #include "test_utils.h"
 #include "parse.h"
 #include "print.h"
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -664,6 +665,67 @@ void test_join_level2_ragged_unequal_lengths() {
                    "{{x, 1, 2}, {3, 4}}", 0);
 }
 
+/* Evaluate `input` and return the printed result (caller frees). */
+static char* eval_to_string(const char* input) {
+    Expr* parsed = parse_expression(input);
+    ASSERT(parsed != NULL);
+    Expr* evaluated = evaluate(parsed);
+    expr_free(parsed);
+    char* str = expr_to_string(evaluated);
+    expr_free(evaluated);
+    return str;
+}
+
+void test_gather() {
+    struct {
+        const char* input;
+        const char* expected;
+    } tests[] = {
+        /* Groups are ordered by FIRST occurrence of their element (1, 7, 3, 2,
+         * 9 here), not by sorted order; within a group, input order is kept. */
+        {"Gather[{1, 7, 3, 7, 2, 3, 9}]", "{{1}, {7, 7}, {3, 3}, {2}, {9}}"},
+        {"Gather[{}]", "{}"},
+        {"Gather[{5}]", "{{5}}"},
+        {"Gather[{2, 2, 2}]", "{{2, 2, 2}}"},
+        {"Gather[{1, 2, 3}]", "{{1}, {2}, {3}}"},
+        /* Equal elements are collected from anywhere in the list, so the two
+         * non-adjacent a's share a group and that group leads because a occurs
+         * first. This is Gather, not Split. */
+        {"Gather[{a, b, a}]", "{{a, a}, {b}}"},
+        {"Gather[{3, 1, 3, 1, 2}]", "{{3, 3}, {1, 1}, {2}}"},
+        {"Gather[{x, y, x, x}]", "{{x, x, x}, {y}}"},
+    };
+
+    for (int i = 0; i < (int)(sizeof(tests) / sizeof(tests[0])); i++) {
+        assert_eval_eq(tests[i].input, tests[i].expected, 0);
+    }
+
+    /* Gather[list] must agree with GatherBy[list, Identity] on every case
+     * above — they share one grouping engine, and this pins that down. */
+    const char* args[] = {
+        "{1, 7, 3, 7, 2, 3, 9}", "{}", "{5}", "{2, 2, 2}",
+        "{1, 2, 3}", "{a, b, a}", "{3, 1, 3, 1, 2}", "{x, y, x, x}",
+    };
+    for (int i = 0; i < (int)(sizeof(args) / sizeof(args[0])); i++) {
+        char gather_in[128], gatherby_in[128];
+        snprintf(gather_in,   sizeof(gather_in),   "Gather[%s]", args[i]);
+        snprintf(gatherby_in, sizeof(gatherby_in), "GatherBy[%s, Identity]", args[i]);
+        char* g  = eval_to_string(gather_in);
+        char* gb = eval_to_string(gatherby_in);
+        if (strcmp(g, gb) != 0) {
+            printf("Gather/GatherBy mismatch for %s: Gather gave %s, "
+                   "GatherBy[..., Identity] gave %s\n", args[i], g, gb);
+            ASSERT(0);
+        }
+        free(g);
+        free(gb);
+    }
+
+    /* Non-list arguments stay unevaluated; wrong arity does too. */
+    assert_eval_eq("Gather[x]", "Gather[x]", 0);
+    assert_eval_eq("Gather[{1, 1}, foo]", "Gather[{1, 1}, foo]", 0);
+}
+
 void test_subsets() {
     struct {
         const char* input;
@@ -753,6 +815,95 @@ void test_subsets() {
     }
 }
 
+/* Riffle — every row here is one row of the acceptance table on md-czh.1. */
+void test_riffle() {
+    struct {
+        const char* input;
+        const char* expected;
+    } tests[] = {
+        /* A non-list separator goes in every gap. n elements, n - 1 gaps. */
+        {"Riffle[{1, 2, 3}, 0]", "{1, 0, 2, 0, 3}"},
+        {"Riffle[{1, 2}, 0]", "{1, 0, 2}"},
+        /* No gaps to fill, so the separator is ignored entirely. */
+        {"Riffle[{1}, 0]", "{1}"},
+        {"Riffle[{}, 0]", "{}"},
+        {"Riffle[{a, b, c}, x]", "{a, x, b, x, c}"},
+
+        /* A List separator is consumed cyclically, left to right: 3 gaps take
+         * x, y, x. */
+        {"Riffle[{a, b, c, d}, {x, y}]", "{a, x, b, y, c, x, d}"},
+        /* Only 2 gaps here, so z is never used. */
+        {"Riffle[{a, b, c}, {x, y, z}]", "{a, x, b, y, c}"},
+        {"Riffle[{1, 2, 3}, {x}]", "{1, x, 2, x, 3}"},
+        {"Riffle[{a}, {x, y}]", "{a}"},
+        {"Riffle[{1, 2, 3}, {0, 0}]", "{1, 0, 2, 0, 3}"},
+
+        /* An empty separator list supplies nothing (the k == 0 case) — must
+         * not divide by zero computing the cycling index. */
+        {"Riffle[{a, b}, {}]", "{a, b}"},
+        /* n == 0 reached with a list separator: the no-gaps check has to come
+         * before any 2n - 1 sizing, which would underflow size_t. */
+        {"Riffle[{}, {x, y}]", "{}"},
+        /* More separators than gaps: both z and w go unused. */
+        {"Riffle[{a, b, c}, {x, y, z, w}]", "{a, x, b, y, c}"},
+        /* Exactly one gap, which takes only the first separator. */
+        {"Riffle[{a, b}, {x, y}]", "{a, x, b}"},
+        /* The head of the first argument is preserved, not forced to List. */
+        {"Riffle[f[a, b], x]", "f[a, x, b]"},
+    };
+
+    for (int i = 0; i < (int)(sizeof(tests) / sizeof(tests[0])); i++) {
+        assert_eval_eq(tests[i].input, tests[i].expected, 0);
+    }
+}
+
+void test_subdivide() {
+    struct {
+        const char* input;
+        const char* expected;
+    } tests[] = {
+        /* Subdivide[n] — n + 1 points spanning 0 to 1. n counts the parts the
+         * interval is cut into, not the points produced. */
+        {"Subdivide[1]", "{0, 1}"},
+        {"Subdivide[2]", "{0, 1/2, 1}"},
+        {"Subdivide[3]", "{0, 1/3, 2/3, 1}"},
+        /* Rationals reduce: the middle point is 1/2, not 2/4. */
+        {"Subdivide[4]", "{0, 1/4, 1/2, 3/4, 1}"},
+
+        /* Subdivide[max, n] — spans 0 to max. */
+        {"Subdivide[10, 5]", "{0, 2, 4, 6, 8, 10}"},
+        /* Step 5/2: points landing on whole numbers print as integers,
+         * mixed with rationals in the same list. */
+        {"Subdivide[10, 4]", "{0, 5/2, 5, 15/2, 10}"},
+
+        /* Subdivide[min, max, n] — the lower endpoint is min, not 0. */
+        {"Subdivide[1, 3, 4]", "{1, 3/2, 2, 5/2, 3}"},
+        {"Subdivide[2, 8, 3]", "{2, 4, 6, 8}"},
+
+        /* DESCENDING INTERVALS. No special case: min + i (max - min)/n is
+         * applied verbatim, so max < min simply gives a negative step and
+         * still yields n + 1 points. */
+        {"Subdivide[3, 1, 4]", "{3, 5/2, 2, 3/2, 1}"},
+        /* The two-argument form descends when max is negative. */
+        {"Subdivide[-10, 5]", "{0, -2, -4, -6, -8, -10}"},
+        /* An interval straddling zero descends through it. */
+        {"Subdivide[1, -1, 4]", "{1, 1/2, 0, -1/2, -1}"},
+        /* Degenerate interval: step 0 repeats the endpoint. n is a positive
+         * integer, which is the only validity condition, so this evaluates. */
+        {"Subdivide[5, 5, 2]", "{5, 5, 5}"},
+
+        /* n must be a positive integer; otherwise the call stays
+         * unevaluated and prints back exactly as written. */
+        {"Subdivide[0]", "Subdivide[0]"},
+        {"Subdivide[-1]", "Subdivide[-1]"},
+        {"Subdivide[5, 0]", "Subdivide[5, 0]"},
+    };
+
+    for (int i = 0; i < (int)(sizeof(tests) / sizeof(tests[0])); i++) {
+        assert_eval_eq(tests[i].input, tests[i].expected, 0);
+    }
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -803,6 +954,9 @@ int main() {
     TEST(test_join_level2_ragged_unequal_lengths);
 
     TEST(test_subsets);
+    TEST(test_riffle);
+    TEST(test_gather);
+    TEST(test_subdivide);
 
     printf("All list tests passed!\n");
     return 0;

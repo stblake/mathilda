@@ -64,6 +64,16 @@ void list_init(void) {
         "SplitBy[list, {f1, f2, ...}]\n"
         "\tsplits by f1, then splits each resulting run by f2, and so on,\n"
         "\tnesting one level deeper per function.");
+    symtab_add_builtin("Gather", builtin_gather);
+    symtab_get_def("Gather")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Gather",
+        "Gather[list]\n"
+        "\tGathers identical elements of list into sublists, giving\n"
+        "\t{{group1}, {group2}, ...}. Sublists appear in order of the first\n"
+        "\toccurrence of their element, and elements keep their input order\n"
+        "\twithin a sublist. Equal elements are collected from anywhere in the\n"
+        "\tlist, not only from adjacent runs (unlike Split).\n"
+        "\tGather[list] is equivalent to GatherBy[list, Identity].");
     symtab_add_builtin("Total", builtin_total);
     symtab_add_builtin("Accumulate", builtin_accumulate);
     symtab_add_builtin("Differences", builtin_differences);
@@ -96,6 +106,29 @@ void list_init(void) {
         "\tinclusive range nmin to nmax; a third element gives a length step.\n"
         "Subsets[list, spec, s]\n\tGives only the first s subsets spec would\n"
         "\tproduce, generated lazily.");
+    symtab_add_builtin("Riffle", builtin_riffle);
+    symtab_get_def("Riffle")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Riffle",
+        "Riffle[list, x]\n\tInterleaves x into the gaps between successive\n"
+        "\telements of list, giving {e1, x, e2, x, ..., x, en}. Nothing is\n"
+        "\tplaced before the first or after the last element, so a list of\n"
+        "\tlength 0 or 1 comes back unchanged.\n"
+        "Riffle[list, {x1, x2, ...}]\n\tUses the xi cyclically, filling the\n"
+        "\tn - 1 gaps left to right; separators beyond the last gap are\n"
+        "\tunused. The head of list is preserved.");
+
+    symtab_add_builtin("Subdivide", builtin_subdivide);
+    symtab_get_def("Subdivide")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Subdivide",
+        "Subdivide[n]\n\tGives the list {0, 1/n, 2/n, ..., 1} of n + 1 equally\n"
+        "\tspaced points spanning 0 to 1, including both endpoints.\n"
+        "Subdivide[max, n]\n\tGives n + 1 equally spaced points spanning 0 to\n"
+        "\tmax.\n"
+        "Subdivide[min, max, n]\n\tGives n + 1 equally spaced points spanning\n"
+        "\tmin to max; point i is min + i (max - min)/n. Descending intervals\n"
+        "\t(min > max) are allowed and give a negative step. Exact input gives\n"
+        "\texact results in lowest terms, with both endpoints exact. Returns\n"
+        "\tunevaluated unless n is a positive integer.");
 
     symtab_get_def("Table")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_get_def("Range")->attributes |= ATTR_PROTECTED;

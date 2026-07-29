@@ -24,6 +24,7 @@
 #include "setops.h"
 #include "split.h"
 #include "splitby.h"
+#include "gather.h"
 #include "rescale.h"
 #include "pad.h"
 #include "total.h"
@@ -35,6 +36,8 @@
 #include "minmax.h"
 #include "join.h"
 #include "subsets.h"
+#include "riffle.h"
+#include "subdivide.h"
 
 void list_init(void);
 
