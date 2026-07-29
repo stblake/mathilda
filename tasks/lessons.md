@@ -1274,3 +1274,49 @@ narrow case, transform it into the form the working spelling already takes, and
 require an independent certificate (here a diff-back against the *original*
 integrand) — then withhold anything the relaxed field cannot justify, which for
 a Risch path means never emitting the non-elementary certificate from it.
+
+## A wrong number and a slow number are the same defect (2026-07-29)
+
+`N[Sin[3141592653589793238]]` answered `-0.641653` instead of `-0.446315`.
+The root cause was one line — machine-mode `N` converted the exact leaf with
+`(double)v` before `Sin` ever saw it — but the sweep written to *test* the fix
+found four more defects in the same family, three of which nothing else would
+have caught:
+
+- `N[Exp[1000]]` was `inf.0` (machine numbers have a 53-bit mantissa but an
+  arbitrary exponent; the codebase already knew this for `N[1001!]`);
+- `N[Gamma[2^53+1]]` **aborted the process** inside GMP;
+- `ArcSec`/`ArcCsc`/`ArcCoth` took the wrong branch at machine precision;
+- `Sqrt[3141592653589793238]` took **24 seconds** (trial division to
+  `sqrt(n)`), which the sweep surfaced only as a timeout.
+
+Rules this session earned:
+
+1. **Report an unexplained slowdown as a defect, not as a test-tuning
+   problem.** The first move on `Sqrt@pi-digits` timing out was to exclude it
+   from the suite so the suite stayed under its alarm. That is backwards: 24 s
+   for something `FactorInteger` does in 3.6 ms is the bug. Excluding it hid a
+   ~3400x regression that a one-line trial-division bound fixed. If a case has
+   to be excluded to keep a suite fast, first prove the case *deserves* to be
+   slow.
+
+2. **Give a stress harness a per-case timeout and a fork, from the start.** A
+   suite whose whole job is hostile inputs will meet a hang (`N[Erfi[2^53], 30]`
+   never terminates) and a crash. Run each case in a forked child with its own
+   alarm so both become *recorded outcomes*; a bare `alarm()` in the parent
+   kills the run and tells you nothing about which case did it. A one-line
+   `current_case` buffer printed from the SIGALRM handler localised the hang in
+   a single run.
+
+3. **`expr_to_mpz` initialises its target.** `mpq_init(q)` followed by
+   `expr_to_mpz(x, mpq_numref(q))` allocates limbs and immediately leaks them.
+   Valgrind only names this if you compare against a *baseline run of the same
+   binary* — the macOS startup noise (~13,376 bytes / 418 blocks) is large
+   enough to swallow it otherwise. Always diff the leak summary of the workload
+   against the leak summary of `1+1`.
+
+4. **The invariant `N[f[x]] == N[f[x], 30]` is worth more than a reference
+   table.** It needs no oracle, it applies to every numeric builtin uniformly,
+   and it is precisely what the bug violated. Pair it with a gap file that fails
+   on both an *unlisted* gap and a *stale* one, so the list can neither grow nor
+   rot silently.

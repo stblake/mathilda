@@ -76,6 +76,21 @@
     static const NDUnaryKernel NDKU_##NAME =                                   \
         { ndk_##NAME##_c, NULL, false, false }
 
+/* Same fix for the reciprocal inverses (ArcSec/ArcCsc/ArcCoth): here it is
+ * 1/x that lands on a cut, so the condition is on the input being real with
+ * 0 < |x| < 1 — both cuts, since 1/x is then outside [-1, 1] on either side.
+ * Matches builtin_arcsec / builtin_arccsc (trig.c) and builtin_arccoth
+ * (hyperbolic.c), which reach the negative side through their Pi-minus / odd
+ * folds rather than through this branch. */
+#define UK_ESC_RECIP_FLIP(NAME, CEXPR)                                         \
+    static bool ndk_##NAME##_c(double ar, double ai, double* rr, double* ri) { \
+        double complex z = ar + ai * I; double complex w = (CEXPR);            \
+        *rr = creal(w); *ri = cimag(w);                                        \
+        if (ai == 0.0 && ar != 0.0 && fabs(ar) < 1.0) *ri = -*ri;              \
+        return isfinite(*rr) && isfinite(*ri); }                               \
+    static const NDUnaryKernel NDKU_##NAME =                                   \
+        { ndk_##NAME##_c, NULL, false, false }
+
 /* Projection: always a real result (Abs/Re/Im/Arg), even for complex input.
  * VEXPR (in `ar`, `ai`) is the real-valued result. */
 #define UK_PROJ(NAME, VEXPR)                                                   \
@@ -110,15 +125,15 @@ UK_CLOSED(ArcTan, atan(x),       catan(z));
 UK_CLOSED(ArcCot, atan(1.0 / x), catan(1.0 / z));
 UK_ESC_FLIP(ArcSin, casin(z));
 UK_ESC_FLIP(ArcCos, cacos(z));
-UK_ESC(ArcSec, cacos(1.0 / z));
-UK_ESC(ArcCsc, casin(1.0 / z));
+UK_ESC_RECIP_FLIP(ArcSec, cacos(1.0 / z));
+UK_ESC_RECIP_FLIP(ArcCsc, casin(1.0 / z));
 
 /* ---- inverse hyperbolic ------------------------------------------------- */
 UK_CLOSED(ArcSinh, asinh(x),        casinh(z));
 UK_CLOSED(ArcCsch, asinh(1.0 / x),  casinh(1.0 / z));
 UK_ESC(ArcCosh, cacosh(z));
 UK_ESC_FLIP(ArcTanh, catanh(z));
-UK_ESC(ArcCoth, catanh(1.0 / z));
+UK_ESC_RECIP_FLIP(ArcCoth, catanh(1.0 / z));
 UK_ESC(ArcSech, cacosh(1.0 / z));
 
 /* ---- projections & sign ------------------------------------------------- */

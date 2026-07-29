@@ -11,11 +11,33 @@
 #include "print.h"
 #include "symtab.h"
 #include "attr.h"
+#include <math.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
 #include <gmp.h>
+
+/* Largest exact factorial we are willing to materialize, in bits of result.
+ * 2^31 bits is 256 MB of limbs, which n! reaches around n = 8.5e7 — already
+ * minutes of GMP work. This is a ceiling on what fits in memory, not a limit
+ * on the mathematics: past it Factorial stays symbolic and the numeric route
+ * (N[n!] -> mpfr_gamma) answers instead. */
+#define FACTORIAL_MAX_RESULT_BITS 2147483648.0
+
+/* GMP aborts the whole process on allocation failure ("GMP memory
+ * exhausted") rather than returning an error, so the size has to be
+ * predicted before the call. Stirling: log2(n!) = (n ln(n/e) +
+ * ln(2*pi*n)/2) / ln 2. Reachable from N[Gamma[2^53+1]], which used to
+ * take the binary down. */
+static bool factorial_fits_memory(int64_t n) {
+    if (n <= 20) return true;
+    double x = (double)n;
+    double bits = (x * (log(x) - 1.0) + 0.5 * log(6.283185307179586 * x))
+                / log(2.0);
+    return bits <= FACTORIAL_MAX_RESULT_BITS;
+}
 
 Expr* builtin_factorial(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
@@ -51,13 +73,19 @@ Expr* builtin_factorial(Expr* res) {
                 int64_t f = 1;
                 for (int64_t i = 2; i <= n; i++) f *= i;
                 return expr_new_integer(f);
-            } else {
+            } else if (factorial_fits_memory(n)) {
                 mpz_t result;
                 mpz_init(result);
                 mpz_fac_ui(result, (unsigned long)n);
                 Expr* r = expr_new_bigint_from_mpz(result);
                 mpz_clear(result);
                 return r;
+            } else {
+                /* Too large to hold — same reason the BigInt case above
+                 * declines. Stay symbolic instead of aborting the process
+                 * inside GMP; the numeric route (N[n!], via mpfr_gamma) is
+                 * still available and is what the caller wanted anyway. */
+                return NULL;
             }
         } else if (d == 2 || d == -2) {
             if (d == -2) { n = -n; }

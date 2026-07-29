@@ -65,6 +65,37 @@ static bool get_numeric_value(Expr* e, double* val, int64_t* num, int64_t* den, 
     return ok;
 }
 
+#ifdef USE_MPFR
+/* True when `e` is an arbitrary-precision value a double cannot stand in for:
+ * it overflows to +/-inf, or flushes a nonzero value to zero. A machine
+ * number carries a 53-bit mantissa but an arbitrary exponent, so N[1001!]
+ * (~4e2570) and N[Exp[-1000]] (~5e-435) are both ordinary results here. */
+static bool cmp_out_of_double_range(const Expr* e) {
+    if (!e || e->type != EXPR_MPFR) return false;
+    if (!mpfr_number_p(e->data.mpfr)) return false;
+    double d = mpfr_get_d(e->data.mpfr, MPFR_RNDN);
+    return isinf(d) || (d == 0.0 && !mpfr_zero_p(e->data.mpfr));
+}
+
+/* Compare in MPFR when a double would saturate. Returns false (leaving the
+ * caller on its usual path) unless both operands read cleanly as real
+ * numbers, so symbolic arguments and the in-range tolerant comparison below
+ * are untouched. */
+static bool compare_via_mpfr(Expr* a, Expr* b, int* out) {
+    if (!cmp_out_of_double_range(a) && !cmp_out_of_double_range(b)) return false;
+    long bits = numeric_combined_bits(a, b, 0);
+    mpfr_t ra, ia, rb, ib;
+    mpfr_inits2((mpfr_prec_t)bits, ra, ia, rb, ib, (mpfr_ptr)0);
+    bool ok = get_approx_mpfr(a, ra, ia, NULL)
+           && get_approx_mpfr(b, rb, ib, NULL)
+           && mpfr_zero_p(ia) && mpfr_zero_p(ib)
+           && mpfr_number_p(ra) && mpfr_number_p(rb);
+    if (ok) *out = mpfr_cmp(ra, rb);
+    mpfr_clears(ra, ia, rb, ib, (mpfr_ptr)0);
+    return ok;
+}
+#endif
+
 static int compare_numeric(Expr* a, Expr* b, bool* can_compare) {
     double va, vb;
     int64_t na, da, nb, db;
@@ -89,6 +120,16 @@ static int compare_numeric(Expr* a, Expr* b, bool* can_compare) {
         if (cmp > 0) return 1;
         return 0;
     }
+
+#ifdef USE_MPFR
+    {
+        int cmp;
+        if (compare_via_mpfr(a, b, &cmp)) {
+            *can_compare = true;
+            return cmp < 0 ? -1 : (cmp > 0 ? 1 : 0);
+        }
+    }
+#endif
 
     if (!get_numeric_value(a, &va, &na, &da, &exact_a)) return 0;
     if (!get_numeric_value(b, &vb, &nb, &db, &exact_b)) return 0;

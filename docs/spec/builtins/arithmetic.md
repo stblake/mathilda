@@ -86,6 +86,43 @@ Numerical evaluation.
   results are carried as a machine-precision MPFR real so the arbitrary
   exponent survives (matching `N[1001!]`).
 
+**Working precision** — `N` does not implement numeric math. It replaces
+*leaves* with numeric values and hands the result back to the evaluator, so the
+leaf conversion is the one step that must never be what loses information.
+Rounding an exact leaf to a double costs a relative 2⁻⁵³, and the function then
+amplifies that by its condition number — |x| for the trig family, which for
+`Sin[3141592653589793238]` is enough to destroy every digit. `N` therefore picks
+a working precision from the input, evaluates there, and rounds **once** at the
+end. Both terms are derived, not tuned:
+
+- an exact integer (or dyadic rational) is carried at its own mantissa width, at
+  which it is represented exactly and contributes no error at all;
+- every other exact rational is carried at `p + ⌈log₂|x|⌉ + 64` bits, since a
+  relative 2⁻ᵂ on an argument of size |x| reaches the answer amplified by |x|.
+
+Values that already fit a double exactly — `10^20`, `2^53`, `3/4`, `1/3` — keep
+taking the plain machine path unchanged. The guarantee is that `N[f[x]]` for
+exact `x` is accurate to the precision it reports, for every builtin:
+
+```mathematica
+In[1]:= N[Sin[3141592653589793238]]
+Out[1]= -0.446315
+
+In[2]:= N[Sin[3141592653589793238], 30]
+Out[2]= -0.4463151633593201122016036193238
+```
+
+An *inexact* argument is a different question and is answered differently: a
+machine real is its own exact binary value, so `Sin[1.0*^25]` is the sine of
+that double (`-0.305258`), not of 10²⁵ (`-0.744790`).
+
+**Machine numbers have an arbitrary exponent.** A machine number carries a
+53-bit mantissa but is not restricted to the IEEE exponent range, so
+`N[Exp[1000]]` is `1.97007×10⁴³⁴`, not `Infinity`, and `N[Exp[-1000]]` is
+`5.07596×10⁻⁴³⁵`, not `0.` — the same representation `N[1001!]` has always
+used. Past MPFR's own exponent range (~10³²³²²⁸⁴⁵⁸) the result is genuinely
+infinite and is reported as such.
+
 ```mathematica
 In[1]:= N[Pi, 100] // N
 Out[1]= 3.141592653589793238462643383279502884197169399375105820974944592307816406286208998628034825342117068
@@ -356,6 +393,16 @@ Out[8]= 6^(1/3)
 
 Square root.
 - `Sqrt[z]`: Internally represented as `Power[z, 1/2]`.
+
+**Integer radicands** — `Power[n, p/q]` for exact integer `n` splits `n` into a
+rational coefficient and a `q`-th-power-free residue (`Sqrt[72]` → `6 Sqrt[2]`,
+`54^(1/3)` → `3 2^(1/3)`), which needs `n`'s prime factorisation. Small
+radicands are trial-divided directly; a residue past that limit goes to the
+same factoriser `FactorInteger` uses (Pollard rho / SQUFOF / ECM). Before
+2026-07-29 the trial division ran all the way to `sqrt(n)` — up to 3·10⁹ steps
+for an `int64` — so a single 18–19 digit non-square radicand cost tens of
+seconds (`Sqrt[3141592653589793238]` took 24 s while
+`FactorInteger` of the same number took 3.6 ms).
 
 ## Mod, Quotient, QuotientRemainder
 

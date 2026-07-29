@@ -699,7 +699,13 @@ Expr* builtin_arccoth(Expr* res) {
     if (get_approx(arg, &c, &inexact) && inexact) {
         double complex s = catanh(1.0 / c);
         if (cimag(c) == 0.0 && (creal(c) > 1.0 || creal(c) < -1.0)) return expr_new_real(creal(s));
-        return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
+        double im = cimag(s);
+        /* The same branch-cut correction ArcTanh carries: for real
+         * 0 < x < 1 the reciprocal lands on the (1, inf) cut, where C99
+         * catanh takes the +iPi/2 side and Mathematica the -iPi/2 side.
+         * Without this the machine path contradicted the MPFR path. */
+        if (cimag(c) == 0.0 && creal(c) != 0.0 && fabs(creal(c)) < 1.0) im = -im;
+        return make_complex(expr_new_real(creal(s)), expr_new_real(im));
     }
     return NULL;
 }

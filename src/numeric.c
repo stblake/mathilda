@@ -425,6 +425,33 @@ static bool is_hold_head(const Expr* head) {
         || s == SYM_Unevaluated;
 }
 
+#ifdef USE_MPFR
+/* ------------------------------------------------------------------------
+ *  Machine-precision rendering of an MPFR value
+ *
+ *  A machine number in Mathematica carries a 53-bit mantissa but an
+ *  *arbitrary* exponent, so N[1001!] is 4.0279e2570 rather than Infinity.
+ *  An IEEE double cannot do that, so whenever the value would overflow to
+ *  +/-inf or flush a nonzero value to zero we keep a DBL_MANT_DIG-bit MPFR
+ *  instead: same mantissa, unlimited exponent range.
+ *
+ *  Shared by the EXPR_MPFR down-convert, the bigint / rational leaf escapes
+ *  and the working-precision round-back so all four agree by construction.
+ * ---------------------------------------------------------------------- */
+static Expr* mpfr_to_machine(const mpfr_t v) {
+    double d = mpfr_get_d(v, MPFR_RNDN);
+    if (mpfr_number_p(v)
+        && ((isinf(d) && !mpfr_inf_p(v)) || (d == 0.0 && !mpfr_zero_p(v)))) {
+        Expr* r = expr_new_mpfr_bits(DBL_MANT_DIG);
+        if (r) {
+            mpfr_set(r->data.mpfr, v, MPFR_RNDN);
+            return r;
+        }
+    }
+    return expr_new_real(d);
+}
+#endif
+
 /* ------------------------------------------------------------------------
  *  Leaf conversion
  *
@@ -432,6 +459,37 @@ static bool is_hold_head(const Expr* head) {
  *  Phase 1 always returns EXPR_REAL. Phase 2 will produce EXPR_MPFR when
  *  spec.mode == NUMERIC_MODE_MPFR.
  * ---------------------------------------------------------------------- */
+
+/* GMP's mpz_get_d / mpq_get_d truncate toward zero; IEEE conversion — and
+ * therefore the decimal literal the user could have typed instead — rounds
+ * to nearest. Left alone, N[10^25, MachinePrecision] and 1.0*^25 name two
+ * different doubles, 2^31 apart. Route the inexact cases through MPFR,
+ * which rounds; values that fit exactly need no help. Without MPFR there is
+ * no rounding conversion available and GMP's truncation stands. */
+static double mpz_to_double_rn(const mpz_t v) {
+#ifdef USE_MPFR
+    if (mpz_sizeinbase(v, 2) > (size_t)DBL_MANT_DIG) {
+        mpfr_t t;
+        mpfr_init2(t, DBL_MANT_DIG);
+        mpfr_set_z(t, v, MPFR_RNDN);
+        double d = mpfr_get_d(t, MPFR_RNDN);
+        mpfr_clear(t);
+        return d;
+    }
+#endif
+    return mpz_get_d(v);
+}
+
+#ifdef USE_MPFR
+static double mpq_to_double_rn(const mpq_t q) {
+    mpfr_t t;
+    mpfr_init2(t, DBL_MANT_DIG);
+    mpfr_set_q(t, q, MPFR_RNDN);
+    double d = mpfr_get_d(t, MPFR_RNDN);
+    mpfr_clear(t);
+    return d;
+}
+#endif
 
 static Expr* leaf_from_double(double v, NumericSpec spec) {
 #ifdef USE_MPFR
@@ -476,14 +534,14 @@ static Expr* leaf_from_bigint(const mpz_t v, NumericSpec spec) {
      * magnitude. We keep the IEEE double for in-range values so ordinary
      * machine arithmetic is unaffected. */
     {
-        double d = mpz_get_d(v);
+        double d = mpz_to_double_rn(v);
         if (isinf(d)) {
             return expr_new_mpfr_from_mpz(v, DBL_MANT_DIG);
         }
         return leaf_from_double(d, spec);
     }
 #else
-    return leaf_from_double(mpz_get_d(v), spec);
+    return leaf_from_double(mpz_to_double_rn(v), spec);
 #endif
 }
 
@@ -521,8 +579,10 @@ static Expr* numericalize_symbol(const Expr* e, NumericSpec spec) {
  *  invokes `csin`, how Plus[2.0, 3.0] collapses to 5.0, and how any future
  *  MPFR/GSL-aware per-function code gets reached.
  * ---------------------------------------------------------------------- */
-/* Forward declaration — the non-static definition follows below, since
- * `numericalize` is part of the public module API (declared in numeric.h). */
+/* Forward declaration — the recursion step is defined below. The public
+ * `numericalize` (declared in numeric.h) is a thin wrapper around it that
+ * picks the working precision and rounds the result back. */
+static Expr* numericalize_rec(const Expr* e, NumericSpec spec);
 
 static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
     /* Root[Function[p_in_slot1], k] → companion-matrix all-roots backend,
@@ -569,7 +629,8 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
         && expr_is_integer_like(e->data.function.args[0])
         && expr_is_integer_like(e->data.function.args[1])) {
         mpq_t q;
-        mpq_init(q);
+        /* No mpq_init: expr_to_mpz initialises its target itself, so
+         * pre-initialising would allocate limbs and immediately leak them. */
         expr_to_mpz(e->data.function.args[0], mpq_numref(q));
         expr_to_mpz(e->data.function.args[1], mpq_denref(q));
         mpq_canonicalize(q);
@@ -588,13 +649,15 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
          * machine-precision (DBL_MANT_DIG-bit) MPFR, which is finite and
          * nonzero for any in-range rational. In-range values keep the IEEE
          * double so ordinary machine arithmetic is unaffected. */
-        double dq = mpq_get_d(q);
+        double dq = mpq_to_double_rn(q);
         if (!isfinite(dq) || (dq == 0.0 && mpq_sgn(q) != 0)) {
             mpfr_t r;
             mpfr_init2(r, DBL_MANT_DIG);
             mpfr_set_q(r, q, MPFR_RNDN);
             mpq_clear(q);
-            return expr_new_mpfr_move(r);
+            Expr* out = mpfr_to_machine(r);
+            mpfr_clear(r);
+            return out;
         }
         mpq_clear(q);
         return leaf_from_double(dq, spec);
@@ -609,8 +672,8 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
      * which normalizes (im == 0 → return the real component). */
     Expr *re, *im;
     if (is_complex((Expr*)e, &re, &im)) {
-        Expr* nre = numericalize(re, spec);
-        Expr* nim = numericalize(im, spec);
+        Expr* nre = numericalize_rec(re, spec);
+        Expr* nim = numericalize_rec(im, spec);
         return make_complex(nre, nim);
     }
 
@@ -623,7 +686,7 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
      * feed the result to the evaluator to trigger any numeric fast paths in
      * the per-function builtins (e.g. trig.c's csin, power.c's cpow). */
     const size_t n = e->data.function.arg_count;
-    Expr* new_head = numericalize(e->data.function.head, spec);
+    Expr* new_head = numericalize_rec(e->data.function.head, spec);
 
     /* Power[base, exp] needs special handling for two cases:
      *   1. Integer/bigint exponent: preserve verbatim. Matches Mathematica —
@@ -664,7 +727,7 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
                 continue;
             }
         }
-        new_args[i] = numericalize(e->data.function.args[i], spec);
+        new_args[i] = numericalize_rec(e->data.function.args[i], spec);
     }
     Expr* rebuilt = expr_new_function(new_head, new_args, n);
     free(new_args);  /* expr_new_function copies the pointer list. */
@@ -674,9 +737,13 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
 }
 
 /* ------------------------------------------------------------------------
- *  Top-level dispatch
+ *  Recursive dispatch
+ *
+ *  This is the workhorse. It runs at the *working* precision chosen by
+ *  numericalize() below, which is not necessarily the precision the caller
+ *  asked for — see the "Working precision" section further down.
  * ---------------------------------------------------------------------- */
-Expr* numericalize(const Expr* e, NumericSpec spec) {
+static Expr* numericalize_rec(const Expr* e, NumericSpec spec) {
     if (!e) return NULL;
     switch (e->type) {
         case EXPR_INTEGER: return leaf_from_integer(e->data.integer, spec);
@@ -715,16 +782,10 @@ Expr* numericalize(const Expr* e, NumericSpec spec) {
                 }
                 /* Down-convert to machine precision. A finite MPFR value can
                  * still exceed DBL_MAX (~1.8e308) — e.g. N[1.5 + 1001!], whose
-                 * argument is already an MPFR ~4e2570. Plain mpfr_get_d would
-                 * overflow to +/-inf, so keep such values as a machine-precision
+                 * argument is already an MPFR ~4e2570 — or sit below DBL_MIN.
+                 * mpfr_to_machine keeps those as a machine-precision
                  * (DBL_MANT_DIG-bit) MPFR, which has an arbitrary exponent. */
-                double d = mpfr_get_d(e->data.mpfr, MPFR_RNDN);
-                if (isinf(d) && mpfr_number_p(e->data.mpfr)) {
-                    Expr* r = expr_new_mpfr_bits(DBL_MANT_DIG);
-                    if (r) mpfr_set(r->data.mpfr, e->data.mpfr, MPFR_RNDN);
-                    return r;
-                }
-                return expr_new_real(d);
+                return mpfr_to_machine(e->data.mpfr);
             }
             /* MPFR → MPFR. NUMERIC_MODE_MPFR sets the precision to exactly
              * spec.bits (SetPrecision pads up when the request exceeds the
@@ -749,6 +810,367 @@ Expr* numericalize(const Expr* e, NumericSpec spec) {
 #endif
     }
     return expr_copy((Expr*)e);
+}
+
+/* ------------------------------------------------------------------------
+ *  Working precision
+ *
+ *  `N` replaces leaves and re-evaluates, so the leaf conversion is the one
+ *  step that must never be the thing that loses information. Rounding an
+ *  exact leaf to a double first costs a relative 2^-53, and a function
+ *  amplifies that by its condition number — for Sin/Cos/Tan that factor is
+ *  |x|, so N[Sin[3141592653589793238]] used to answer -0.641653 instead of
+ *  -0.446315: the double nearest that integer is 3141592653589793280, and
+ *  the 42 discarded bits are exactly the ones the argument reduction needs.
+ *  Sin[3141592653589793238.] was right only because the parser builds that
+ *  literal as a 62-bit MPFR straight from its text.
+ *
+ *  So: scan the input, work out the precision at which no exact leaf is
+ *  lossy, evaluate there, and round the result *once* at the end. Both
+ *  quantities below are derived, not tuned:
+ *
+ *    exact integer (and dyadic rational)  needs its mantissa bit count, at
+ *      which it is represented exactly and contributes no error at all;
+ *
+ *    every other exact rational  needs out_bits + ceil(log2|x|) + guard,
+ *      since a relative 2^-W on an argument of size |x| shows up in the
+ *      answer amplified by |x|.
+ *
+ *  The guard is headroom for cancellation *within* the expression, which is
+ *  the general significance-arithmetic problem and not what this is solving;
+ *  64 bits matches the existing convention in bessel.c and contfrac.c.
+ * ---------------------------------------------------------------------- */
+
+#define NUMERIC_GUARD_BITS 64
+
+typedef struct {
+    /* Max mantissa width over exact leaves that ARE finitely representable
+     * (integers, dyadic rationals). Working precision must reach this for
+     * them to survive the conversion intact. */
+    long finite_bits;
+    /* Max ceil(log2|x|) over exact leaves that are NOT finitely
+     * representable (ordinary rationals). Their conversion error is
+     * amplified by |x|, so they need that many bits *on top of* the output
+     * precision. Zero for |x| < 2, where the amplification is nil. */
+    long amplify_bits;
+    bool has_mpfr_leaf;    /* an already-approximate arbitrary-precision leaf */
+    bool has_call;         /* a real function application, not just a number */
+    bool has_infinity;     /* Infinity / ComplexInfinity / DirectedInfinity */
+    bool has_zero;         /* an exact or inexact zero leaf */
+} ExactScan;
+
+/* Mantissa bits an int64 needs to be an exact double, or 0 when it already
+ * is one. Values below 2^DBL_MANT_DIG always are; above it, only those whose
+ * low bits are zero (2^53 yes, 2^53+1 no — and today both answer with the
+ * same Sin, which is the bug in miniature). */
+static long i64_lossy_bits(int64_t v) {
+    if (v == 0) return 0;
+    uint64_t a = (v < 0) ? (uint64_t)(-(v + 1)) + 1u : (uint64_t)v;
+    long bits = 0;
+    for (uint64_t t = a; t; t >>= 1) bits++;
+    if (bits <= DBL_MANT_DIG) return 0;
+    if ((a & ((((uint64_t)1) << (bits - DBL_MANT_DIG)) - 1u)) == 0) return 0;
+    return bits;
+}
+
+/* Same question for an arbitrary-size integer. mpz_get_d truncates toward
+ * zero, so the round-trip through a double is an exact representability
+ * test; an out-of-range magnitude short-circuits it. */
+static long mpz_lossy_bits(const mpz_t v) {
+    if (mpz_sgn(v) == 0) return 0;
+    size_t bits = mpz_sizeinbase(v, 2);
+    if (bits <= (size_t)DBL_MANT_DIG) return 0;
+    double d = mpz_get_d(v);
+    if (isfinite(d)) {
+        mpz_t back;
+        mpz_init(back);
+        mpz_set_d(back, d);
+        int exact = (mpz_cmp(back, v) == 0);
+        mpz_clear(back);
+        if (exact) return 0;
+    }
+    return (long)bits;
+}
+
+static void scan_exact_leaves(const Expr* e, ExactScan* s);
+
+/* Rational[n, d] with integer-like components, of any size. Dyadic
+ * denominators are finitely representable and go in the `finite_bits`
+ * bucket; everything else lands in `amplify_bits`. */
+static void scan_rational(const Expr* num, const Expr* den, ExactScan* s) {
+    mpq_t q;
+    /* expr_to_mpz *initialises* its target (mpz_init_set), so it must be
+     * handed raw slots. An mpq_init first would allocate limbs that the
+     * re-initialisation then leaks. */
+    expr_to_mpz(num, mpq_numref(q));
+    expr_to_mpz(den, mpq_denref(q));
+    if (mpz_sgn(mpq_denref(q)) == 0) {   /* malformed Rational[n, 0] */
+        mpq_clear(q);
+        return;
+    }
+    if (mpq_sgn(q) == 0) {
+        s->has_zero = true;
+        mpq_clear(q);
+        return;
+    }
+    mpq_canonicalize(q);
+
+    if (mpz_cmp_ui(mpq_denref(q), 1) == 0) {
+        long l = mpz_lossy_bits(mpq_numref(q));
+        if (l > s->finite_bits) s->finite_bits = l;
+        mpq_clear(q);
+        return;
+    }
+
+    double d = mpq_get_d(q);
+    if (isfinite(d) && d != 0.0) {
+        mpq_t back;
+        mpq_init(back);
+        mpq_set_d(back, d);
+        int exact = (mpq_equal(back, q) != 0);
+        mpq_clear(back);
+        if (exact) {                       /* dyadic: the double is the value */
+            mpq_clear(q);
+            return;
+        }
+    }
+    long mag = (long)mpz_sizeinbase(mpq_numref(q), 2)
+             - (long)mpz_sizeinbase(mpq_denref(q), 2);
+    if (mag > s->amplify_bits) s->amplify_bits = mag;
+    mpq_clear(q);
+}
+
+static void scan_exact_leaves(const Expr* e, ExactScan* s) {
+    if (!e) return;
+    switch (e->type) {
+        case EXPR_INTEGER: {
+            if (e->data.integer == 0) { s->has_zero = true; break; }
+            long l = i64_lossy_bits(e->data.integer);
+            if (l > s->finite_bits) s->finite_bits = l;
+            break;
+        }
+        case EXPR_BIGINT: {
+            long l = mpz_lossy_bits(e->data.bigint);
+            if (l > s->finite_bits) s->finite_bits = l;
+            break;
+        }
+        case EXPR_REAL:
+            /* A machine Real *is* its own exact binary value; there is
+             * nothing to recover. Sin[1.*^25] is libm's answer for that
+             * double, and that is the correct, Mathematica-matching result. */
+            if (e->data.real == 0.0) s->has_zero = true;
+            break;
+        case EXPR_SYMBOL:
+            if (e->data.symbol.name == SYM_Infinity
+                || e->data.symbol.name == SYM_ComplexInfinity
+                || e->data.symbol.name == SYM_Indeterminate) {
+                s->has_infinity = true;
+            }
+            break;
+        case EXPR_FUNCTION: {
+            const Expr* head = e->data.function.head;
+            /* Hold-forms are returned verbatim; never look inside. */
+            if (is_hold_head(head)) return;
+
+            if (head && head->type == EXPR_SYMBOL) {
+                const char* h = head->data.symbol.name;
+                if (h == SYM_DirectedInfinity) { s->has_infinity = true; return; }
+                if (h == SYM_Rational && e->data.function.arg_count == 2
+                    && expr_is_integer_like(e->data.function.args[0])
+                    && expr_is_integer_like(e->data.function.args[1])) {
+                    scan_rational(e->data.function.args[0],
+                                  e->data.function.args[1], s);
+                    return;
+                }
+                if (h == SYM_Complex) {
+                    /* A structural wrapper, like Rational — descend without
+                     * claiming this is a function that amplifies error. */
+                    for (size_t i = 0; i < e->data.function.arg_count; ++i)
+                        scan_exact_leaves(e->data.function.args[i], s);
+                    return;
+                }
+            }
+            s->has_call = true;
+            scan_exact_leaves(head, s);
+            for (size_t i = 0; i < e->data.function.arg_count; ++i)
+                scan_exact_leaves(e->data.function.args[i], s);
+            break;
+        }
+        default:
+#ifdef USE_MPFR
+            if (e->type == EXPR_MPFR) {
+                s->has_mpfr_leaf = true;
+                if (mpfr_zero_p(e->data.mpfr)) s->has_zero = true;
+            }
+#endif
+            break;
+    }
+}
+
+#ifdef USE_MPFR
+/* Decide the working precision. Returns true (and fills *work) when the
+ * evaluation must be raised, meaning the caller has to round the result
+ * back down afterwards. */
+static bool numeric_plan_working_spec(const ExactScan* s, NumericSpec spec,
+                                      NumericSpec* work) {
+    *work = spec;
+
+    /* A bare number is already correctly rounded by the leaf conversion —
+     * there is no function to amplify anything, so leave the fast path
+     * untouched. Likewise when nothing in the input was lossy. */
+    if (!s->has_call) return false;
+    if (s->finite_bits <= 0 && s->amplify_bits <= 0) return false;
+
+    /* N[expr] preserves the precision of numbers that are already
+     * approximate (N[N[Pi,100]] stays 100 digits). When such a value is
+     * present it governs, and rounding the result back would destroy it —
+     * so keep today's behaviour rather than guess whose precision wins. */
+    if (spec.preserve_inexact && s->has_mpfr_leaf) return false;
+
+    /* The precision the caller wants back, which is also the precision the
+     * unraised evaluation would run at. */
+    const long out_bits = numeric_spec_is_mpfr(spec) && spec.bits > 0
+                        ? spec.bits : (long)DBL_MANT_DIG;
+
+    long required = s->finite_bits;
+    if (s->amplify_bits > 0) {
+        long amplified = out_bits + s->amplify_bits + NUMERIC_GUARD_BITS;
+        if (amplified > required) required = amplified;
+    }
+    if (required <= out_bits) return false;   /* already precise enough */
+
+    long floor_bits = out_bits + NUMERIC_GUARD_BITS;
+    work->bits = required > floor_bits ? required : floor_bits;
+    if (spec.mode == NUMERIC_MODE_MACHINE) {
+        /* Plain MPFR, not MPFR_CAP: exact leaves must be produced at the
+         * full working precision. A machine Real leaf is padded with zeros,
+         * which is exactly right — its bit pattern is the value. */
+        work->mode = NUMERIC_MODE_MPFR;
+        work->preserve_inexact = false;
+    }
+    return true;
+}
+
+/* True when some EXPR_MPFR node would be changed by rounding to `out`. */
+static bool numeric_needs_round(const Expr* e, NumericSpec out) {
+    if (!e) return false;
+    if (e->type == EXPR_MPFR) {
+        if (out.mode == NUMERIC_MODE_MACHINE) return true;
+        return out.bits > 0 && (long)mpfr_get_prec(e->data.mpfr) > out.bits;
+    }
+    if (e->type != EXPR_FUNCTION) return false;
+    if (numeric_needs_round(e->data.function.head, out)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; ++i) {
+        if (numeric_needs_round(e->data.function.args[i], out)) return true;
+    }
+    return false;
+}
+
+/* Round a working-precision result down to what the caller asked for.
+ * Rewrites EXPR_MPFR nodes only — structure, symbols and exact numbers pass
+ * through, and nothing is re-evaluated. Consumes `e` and returns a value the
+ * caller owns. Nodes are rebuilt rather than written through: expr_copy is a
+ * refcount bump, so the tree may be shared. */
+static Expr* numeric_round_result(Expr* e, NumericSpec out) {
+    if (!e || !numeric_needs_round(e, out)) return e;
+
+    if (e->type == EXPR_MPFR) {
+        Expr* r;
+        if (out.mode == NUMERIC_MODE_MACHINE) {
+            r = mpfr_to_machine(e->data.mpfr);
+        } else {
+            r = expr_new_mpfr_bits(out.bits);
+            if (r) mpfr_set(r->data.mpfr, e->data.mpfr, MPFR_RNDN);
+        }
+        if (!r) return e;
+        expr_free(e);
+        return r;
+    }
+
+    const size_t n = e->data.function.arg_count;
+    Expr** args = n ? (Expr**)malloc(n * sizeof(Expr*)) : NULL;
+    if (n && !args) return e;
+    Expr* head = numeric_round_result(expr_copy(e->data.function.head), out);
+    for (size_t i = 0; i < n; ++i) {
+        args[i] = numeric_round_result(expr_copy(e->data.function.args[i]), out);
+    }
+    Expr* rebuilt = expr_new_function(head, args, n);
+    free(args);
+    if (!rebuilt) return e;
+    expr_free(e);
+    return rebuilt;
+}
+
+/* True when some EXPR_REAL in the tree is Inf or NaN. */
+static bool expr_has_nonfinite_real(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL) return !isfinite(e->data.real);
+    if (e->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; ++i) {
+        if (expr_has_nonfinite_real(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
+/* True when some EXPR_REAL in the tree is an exact zero. */
+static bool expr_has_zero_real(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL) return e->data.real == 0.0;
+    if (e->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; ++i) {
+        if (expr_has_zero_real(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+#endif  /* USE_MPFR */
+
+/* ------------------------------------------------------------------------
+ *  Top-level dispatch
+ * ---------------------------------------------------------------------- */
+Expr* numericalize(const Expr* e, NumericSpec spec) {
+    if (!e) return NULL;
+
+#ifndef USE_MPFR
+    return numericalize_rec(e, spec);
+#else
+    ExactScan s;
+    memset(&s, 0, sizeof(s));
+    scan_exact_leaves(e, &s);
+
+    NumericSpec work;
+    bool raised = numeric_plan_working_spec(&s, spec, &work);
+    Expr* r = numericalize_rec(e, work);
+    if (raised) r = numeric_round_result(r, spec);
+
+    /* A machine double has a 53-bit mantissa but only a ~1e308 exponent
+     * range, so Exp[1000] flushes to inf and Exp[-1000] to zero even though
+     * a machine *number* (mantissa + arbitrary exponent, as N[1001!]
+     * already returns) represents both fine. When that happens, and the
+     * input itself held no infinity or zero to explain it, recompute once
+     * in MPFR and keep the answer only if it is genuinely better. Fires
+     * only on a degenerate result, so the normal path pays nothing. */
+    if (spec.mode == NUMERIC_MODE_MACHINE && s.has_call && !s.has_infinity
+        && !(spec.preserve_inexact && s.has_mpfr_leaf)) {
+        bool inf  = expr_has_nonfinite_real(r);
+        bool zero = !inf && !s.has_zero && expr_has_zero_real(r);
+        if (inf || zero) {
+            NumericSpec retry = spec;
+            retry.mode = NUMERIC_MODE_MPFR;
+            retry.bits = (raised && work.bits > (long)DBL_MANT_DIG + NUMERIC_GUARD_BITS)
+                       ? work.bits : (long)DBL_MANT_DIG + NUMERIC_GUARD_BITS;
+            retry.preserve_inexact = false;
+            Expr* alt = numeric_round_result(numericalize_rec(e, retry), spec);
+            bool better = alt && !expr_has_nonfinite_real(alt)
+                       && (inf || !expr_has_zero_real(alt));
+            if (better) {
+                expr_free(r);
+                return alt;
+            }
+            expr_free(alt);
+        }
+    }
+    return r;
+#endif
 }
 
 /* ------------------------------------------------------------------------

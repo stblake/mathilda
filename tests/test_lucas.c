@@ -103,8 +103,12 @@ static void test_numeric_mpfr(void) {
     /* Arbitrary precision tracks the request. */
     assert_eval_startswith("N[LucasL[11/3], 50]",
         "5.923962652961955410135697862194012");
+    /* The true value is 5.923962652961955410135697862194012628752...; this
+     * used to read ...940127, one digit wrong at the 35th, because machine
+     * `N` rounded the exact 11/3 to a double before evaluating and the
+     * expectation was recorded from that. */
     assert_eval_startswith("N[LucasL[11/3], 35]",
-        "5.9239626529619554101356978621940127");
+        "5.9239626529619554101356978621940126");
 }
 #endif
 

@@ -1409,7 +1409,13 @@ Expr* builtin_arcsec(Expr* res) {
         if (c == 0.0) return expr_new_symbol(SYM_ComplexInfinity); // ArcSec[0] = ComplexInfinity
         double complex s = cacos(1.0 / c);
         if (cimag(c) == 0.0 && (creal(c) <= -1.0 || creal(c) >= 1.0)) return expr_new_real(creal(s));
-        return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
+        double im = cimag(s);
+        /* The same branch-cut correction ArcCos carries: for real 0 < x < 1
+         * the reciprocal lands on the (1, inf) cut, where C99 cacos returns
+         * -i*acosh and Mathematica returns +i*acosh. Without this the machine
+         * path contradicted both the MPFR path and ArcCos[1/x]. */
+        if (cimag(c) == 0.0 && creal(c) != 0.0 && fabs(creal(c)) < 1.0) im = -im;
+        return make_complex(expr_new_real(creal(s)), expr_new_real(im));
     }
     return NULL;
 }
@@ -1454,7 +1460,11 @@ Expr* builtin_arccsc(Expr* res) {
         if (c == 0.0) return expr_new_symbol(SYM_ComplexInfinity); // ArcCsc[0] = ComplexInfinity
         double complex s = casin(1.0 / c);
         if (cimag(c) == 0.0 && (creal(c) <= -1.0 || creal(c) >= 1.0)) return expr_new_real(creal(s));
-        return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
+        double im = cimag(s);
+        /* See ArcSec above: for real 0 < x < 1 the reciprocal sits on the
+         * (1, inf) cut, where C99 and Mathematica pick opposite sides. */
+        if (cimag(c) == 0.0 && creal(c) != 0.0 && fabs(creal(c)) < 1.0) im = -im;
+        return make_complex(expr_new_real(creal(s)), expr_new_real(im));
     }
     return NULL;
 }

@@ -118,35 +118,57 @@ static int64_t ipow(int64_t base, int64_t exp, bool* overflow) {
     return (int64_t)res;
 }
 
-static void factor_out_kth_power(int64_t n, int64_t k, int64_t* out_m, int64_t* out_r) {
-    int64_t m = 1;
-    int64_t r = n;
-    int64_t d = 2;
-    while (d * d <= r) {
-        bool ov = false;
-        int64_t dk = ipow(d, k, &ov);
-        if (ov || dk <= 0 || dk > r) {
-            if (ov || dk > r) break;
-            d++;
-            continue;
-        }
-        while (r % dk == 0) {
-            m *= d;
-            r /= dk;
-        }
-        d++;
+/* Trial division stops here. Any residue below POWER_TRIAL_LIMIT^2 that
+ * survives is certified prime; anything larger may be composite and goes to
+ * the general factoriser instead.
+ *
+ * The limit matters: an int64 reaches 9.2e18, so trial-dividing all the way
+ * to sqrt(n) is up to 3e9 iterations. That is what made Sqrt[] of an 18-19
+ * digit non-square take tens of seconds (Sqrt[3141592653589793238] was 24 s,
+ * Sqrt[1000000000000000003] 20 s) while FactorInteger answered the same
+ * question in 3.6 ms. 10^5 iterations is ~0.1 ms and certifies every residue
+ * below 10^10, which covers the small radicands this path sees in practice
+ * without a detour through the factoriser. */
+#define POWER_TRIAL_LIMIT 100000
+
+/* Factor a residue that trial division could not finish, by delegating to
+ * the general integer factoriser (Pollard rho / SQUFOF / ECM) behind
+ * FactorInteger. Appends to primes[]/exps[] from *count. */
+static bool power_factor_big_residue(int64_t n,
+                                     int64_t* primes, int64_t* exps,
+                                     int max_primes, int* count) {
+    Expr* args[1] = { expr_new_integer(n) };   /* consumed by the callee */
+    Expr* fact = internal_factorinteger(args, 1);
+    if (!fact || fact->type != EXPR_FUNCTION
+        || fact->data.function.head->type != EXPR_SYMBOL
+        || fact->data.function.head->data.symbol.name != SYM_List) {
+        if (fact) expr_free(fact);
+        return false;
     }
-    *out_m = m;
-    *out_r = r;
+
+    bool ok = true;
+    for (size_t i = 0; i < fact->data.function.arg_count; ++i) {
+        Expr* pair = fact->data.function.args[i];
+        if (pair->type != EXPR_FUNCTION || pair->data.function.arg_count != 2
+            || pair->data.function.args[0]->type != EXPR_INTEGER
+            || pair->data.function.args[1]->type != EXPR_INTEGER
+            || *count >= max_primes) {
+            ok = false;
+            break;
+        }
+        primes[*count] = pair->data.function.args[0]->data.integer;
+        exps[*count]   = pair->data.function.args[1]->data.integer;
+        (*count)++;
+    }
+    expr_free(fact);
+    return ok;
 }
 
-/* Trial-divide |n| into ascending distinct prime factors. Parallel
- * arrays primes[] / exps[] get the factorisation; *count is the number
- * of distinct primes. Returns false (with partial fill discarded) when
- * more than max_primes distinct factors appear -- caller treats this
- * as "give up, leave the input alone". Cost is O(sqrt(n)) trial
- * divisions, matching factor_out_kth_power's loop bound and intended
- * for the int64-bounded residues that path produces. */
+/* Split |n| into ascending distinct prime factors. Parallel arrays
+ * primes[] / exps[] get the factorisation; *count is the number of distinct
+ * primes. Returns false (with partial fill discarded) when more than
+ * max_primes distinct factors appear -- caller treats this as "give up,
+ * leave the input alone". */
 static bool power_factor_int64(int64_t n,
                                int64_t* primes, int64_t* exps,
                                int max_primes, int* count) {
@@ -154,7 +176,7 @@ static bool power_factor_int64(int64_t n,
     if (n < 0) n = -n;
     if (n <= 1) return true;
     int64_t d = 2;
-    while (d <= n / d) {
+    while (d <= n / d && d <= POWER_TRIAL_LIMIT) {
         if (n % d == 0) {
             if (*count >= max_primes) return false;
             primes[*count] = d;
@@ -166,12 +188,43 @@ static bool power_factor_int64(int64_t n,
         d++;
     }
     if (n > 1) {
-        if (*count >= max_primes) return false;
-        primes[*count] = n;
-        exps[*count] = 1;
-        (*count)++;
+        if (d > n / d) {
+            /* d passed sqrt(n): the residue is prime. */
+            if (*count >= max_primes) return false;
+            primes[*count] = n;
+            exps[*count] = 1;
+            (*count)++;
+        } else if (!power_factor_big_residue(n, primes, exps, max_primes, count)) {
+            return false;
+        }
     }
     return true;
+}
+
+/* Largest m with m^k | n, plus the k-th-power-free residue r = n / m^k.
+ * Derived from the factorisation rather than by its own trial-division
+ * loop, so it inherits the fast residue path above. */
+static void factor_out_kth_power(int64_t n, int64_t k, int64_t* out_m, int64_t* out_r) {
+    enum { KTH_MAX_P = 64 };
+    int64_t primes[KTH_MAX_P], exps[KTH_MAX_P];
+    int np = 0;
+
+    *out_m = 1;
+    *out_r = n;
+    if (n <= 1 || k < 1) return;
+    if (!power_factor_int64(n, primes, exps, KTH_MAX_P, &np)) return;
+
+    int64_t m = 1, r = n;
+    for (int i = 0; i < np; ++i) {
+        int64_t take = exps[i] / k;          /* p^take moves to the coefficient */
+        for (int64_t j = 0; j < take; ++j) {
+            if (m > INT64_MAX / primes[i]) return;   /* leave n unreduced */
+            m *= primes[i];
+            for (int64_t t = 0; t < k; ++t) r /= primes[i];
+        }
+    }
+    *out_m = m;
+    *out_r = r;
 }
 
 /* Canonicalise Power[r, b_rem/q] for positive integer r, integer

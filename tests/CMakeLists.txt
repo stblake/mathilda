@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.10)
 project(Mathilda_tests)
 
+# Without this, CMake generates no CTestTestfile.cmake and `ctest` silently
+# runs zero tests — every add_test() below was inert.  Note that enabling it
+# only makes the registered targets runnable; targets still lacking an
+# add_test() line remain invisible to ctest.
+enable_testing()
+
 option(USE_ECM "Use ECM library for factorisation" ON)
 option(USE_MPFR "Use MPFR for arbitrary-precision reals (N[expr, prec])" ON)
 option(USE_LAPACK "Use BLAS/LAPACK for fast machine-precision linear algebra" ON)
@@ -1097,6 +1103,7 @@ target_include_directories(tostring_toexpression_tests PRIVATE ../src)
 
 add_executable(trig_tests test_trig.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(trig_tests PRIVATE ../src)
+add_test(NAME trig_tests COMMAND trig_tests)
 
 add_executable(trig_canon_tests test_trig_canon.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(trig_canon_tests PRIVATE ../src)
@@ -1130,6 +1137,12 @@ target_include_directories(root_numeric_tests PRIVATE ../src)
 
 add_executable(radicals_tests test_radicals.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(radicals_tests PRIVATE ../src)
+
+# Integer radical extraction: correct forms, and a guard that the radicand
+# factorisation has not regressed to O(sqrt(n)) trial division.
+add_executable(power_integer_radical_tests test_power_integer_radical.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(power_integer_radical_tests PRIVATE ../src)
+add_test(NAME power_integer_radical_tests COMMAND power_integer_radical_tests)
 
 add_executable(groebner_tests test_groebner.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(groebner_tests PRIVATE ../src)
@@ -2499,6 +2512,18 @@ target_include_directories(increment_tests PRIVATE ../src)
 
 add_executable(numeric_tests test_numeric.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(numeric_tests PRIVATE ../src)
+add_test(NAME numeric_tests COMMAND numeric_tests)
+
+# N[] on exact arguments a double cannot hold, plus the machine-number
+# exponent range and the Factorial magnitude guard.
+add_executable(numeric_largearg_tests test_numeric_largearg.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(numeric_largearg_tests PRIVATE ../src)
+add_test(NAME numeric_largearg_tests COMMAND numeric_largearg_tests)
+
+# The same failure mode swept across every elementary and special function.
+add_executable(numeric_stress_tests test_numeric_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(numeric_stress_tests PRIVATE ../src)
+add_test(NAME numeric_stress_tests COMMAND numeric_stress_tests)
 
 add_executable(gamma_tests test_gamma.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(gamma_tests PRIVATE ../src)
