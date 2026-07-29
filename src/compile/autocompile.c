@@ -61,9 +61,22 @@ static AutoCompiled* ac_make(const Expr* body, const Expr* const* vars, size_t n
      * freed inside one builtin call, so a folded symbol (e.g. the outer
      * iteration variable of a nested Table) cannot be reassigned while the
      * program lives.  It is what lets the inner Table of
-     * Table[f[x,y], {y,..}, {x,..}] compile at all. */
-    CompiledProgram* prog = compile_expr_ex(body, names, types, nvars,
-                                            COMPILE_FOLD_GLOBALS);
+     * Table[f[x,y], {y,..}, {x,..}] compile at all.
+     *
+     * COMPILE_WRAP_INT IS DELIBERATELY NOT SET, and must never be.  The user did
+     * not ask for any of this — Plot, Table, NIntegrate and friends compile
+     * behind their backs, purely as an optimisation — so an auto-compiled path
+     * that wrapped a machine integer would turn a transparent speed-up into a
+     * silently wrong answer in code that never mentioned Compile.  Checking on
+     * means the worst an overflow can cost here is the interpreter re-running
+     * that call.
+     *
+     * The mask makes that structural rather than a property of this literal:
+     * `SetOptions[Compile, RuntimeOptions -> ...]` moves the default for the
+     * USER-facing Compile[] only, and if the two are ever wired together this
+     * line still refuses to let the auto-compiled path inherit it. */
+    unsigned ac_flags = COMPILE_FOLD_GLOBALS & ~COMPILE_WRAP_INT;
+    CompiledProgram* prog = compile_expr_ex(body, names, types, nvars, ac_flags);
     free(names); free(types);
     if (!prog) { ac_report_bail(body); return NULL; }
 

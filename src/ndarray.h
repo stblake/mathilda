@@ -28,6 +28,7 @@
 #include "expr.h"
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 /* Maximum supported rank (number of axes). */
 #define NDARRAY_MAX_RANK 64
@@ -54,6 +55,11 @@ void ndt_get(const void* buf, size_t k, NDType dt, double* re, double* im);
 /* Write (re, im) into element k of `buf` (dtype dt), narrowing to the stored
  * component type; im is ignored for real dtypes. */
 void ndt_set(void* buf, size_t k, NDType dt, double re, double im);
+/* EXACT int64 element access. The pair above routes through `double` and is
+ * therefore exact only to 2^53, so every read or write of an NDT_INT64 buffer
+ * that must be faithful goes through these two instead. */
+int64_t ndt_get_i(const void* buf, size_t k, NDType dt);
+void    ndt_set_i(void* buf, size_t k, NDType dt, int64_t v);
 /* Map an option string ("float64"/"float32"/"complex64"/"complex32") to a
  * dtype. Returns true and sets *out on success; false on an unknown name. */
 bool ndt_from_string(const char* s, NDType* out);

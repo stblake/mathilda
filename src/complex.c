@@ -384,6 +384,19 @@ Expr* builtin_abs(Expr* res) {
     }
     if (arg->type == EXPR_INTEGER) {
         int64_t val = arg->data.integer;
+        /* INT64_MIN is the one input whose magnitude does not fit back into an
+         * int64: negating it wraps to itself, so Abs returned a NEGATIVE number.
+         * Promote to a bigint instead, which is what every other arithmetic head
+         * does when a machine integer runs out of range. */
+        if (val == INT64_MIN) {
+            mpz_t z;
+            mpz_init_set_si(z, -1);
+            mpz_mul_2exp(z, z, 63);       /* z = INT64_MIN, exactly */
+            mpz_neg(z, z);
+            Expr* r = expr_new_bigint_from_mpz(z);
+            mpz_clear(z);
+            return r;
+        }
         return expr_new_integer(val < 0 ? -val : val);
     }
     if (arg->type == EXPR_REAL) {

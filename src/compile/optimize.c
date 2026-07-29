@@ -326,16 +326,26 @@ static uint16_t bink_of(unsigned op, bool konst_is_b) {
 
 /* Constant-fold `op` over known operand constants.  Computes with exactly the
  * expression the VM would have executed, so the folded value is bit-identical.
- * Returns false for anything not folded (always safe). */
+ * Returns false for anything not folded (always safe).
+ *
+ * An integer operation that OVERFLOWS is simply not folded, whether or not the
+ * instruction carries IF_NOCHK.  Leaving it in place is correct under both
+ * settings — checked, the runtime test fires and the call falls back to the
+ * interpreter; wrapping, the VM produces the same wrapped value this would
+ * have.  Folding it instead would bake a wrapped constant into a program that
+ * was supposed to defer to the interpreter, which is the very bug the runtime
+ * checks exist to prevent, and it would do so only when the optimiser happened
+ * to run. */
+#define FOLD_I(call)  do { if (call) return false; } while (0)
 static bool fold_op(unsigned op, Slot a, Slot b, Slot imm, Slot* out) {
     Slot r; memset(&r, 0, sizeof r);
     switch (op) {
         case OP_I2R: r.r = (double)a.i; break;
         case OP_I2C: r.z = (double)a.i; break;
         case OP_R2C: r.z = a.r;         break;
-        case OP_ADD_I: r.i = a.i + b.i; break;
-        case OP_SUB_I: r.i = a.i - b.i; break;
-        case OP_MUL_I: r.i = a.i * b.i; break;
+        case OP_ADD_I: FOLD_I(ci_add(a.i, b.i, &r.i)); break;
+        case OP_SUB_I: FOLD_I(ci_sub(a.i, b.i, &r.i)); break;
+        case OP_MUL_I: FOLD_I(ci_mul(a.i, b.i, &r.i)); break;
         case OP_ADD_R: r.r = a.r + b.r; break;
         case OP_SUB_R: r.r = a.r - b.r; break;
         case OP_MUL_R: r.r = a.r * b.r; break;
@@ -344,7 +354,7 @@ static bool fold_op(unsigned op, Slot a, Slot b, Slot imm, Slot* out) {
         case OP_SUB_C: r.z = a.z - b.z; break;
         case OP_MUL_C: r.z = a.z * b.z; break;
         case OP_DIV_C: r.z = a.z / b.z; break;
-        case OP_NEG_I: r.i = -a.i;      break;
+        case OP_NEG_I: FOLD_I(ci_neg(a.i, &r.i)); break;
         case OP_NEG_R: r.r = -a.r;      break;
         case OP_NEG_C: r.z = -a.z;      break;
         case OP_INV_R: r.r = 1.0 / a.r; break;
@@ -354,7 +364,7 @@ static bool fold_op(unsigned op, Slot a, Slot b, Slot imm, Slot* out) {
         case OP_LOG_R:  r.r = log(a.r);  break;
         case OP_SIN_R:  r.r = sin(a.r);  break;
         case OP_COS_R:  r.r = cos(a.r);  break;
-        case OP_ABS_I:  r.i = a.i < 0 ? -a.i : a.i; break;
+        case OP_ABS_I:  FOLD_I(ci_abs(a.i, &r.i)); break;
         case OP_ABS_R:  r.r = fabs(a.r); break;
         case OP_LT_I: r.i = a.i <  b.i; break;
         case OP_LE_I: r.i = a.i <= b.i; break;
@@ -380,10 +390,10 @@ static bool fold_op(unsigned op, Slot a, Slot b, Slot imm, Slot* out) {
         case OP_MUL_RK: r.r = a.r * imm.r; break;
         case OP_DIV_RK: r.r = a.r / imm.r; break;
         case OP_DIV_KR: r.r = imm.r / a.r; break;
-        case OP_ADD_IK: r.i = a.i + imm.i; break;
-        case OP_SUB_IK: r.i = a.i - imm.i; break;
-        case OP_SUB_KI: r.i = imm.i - a.i; break;
-        case OP_MUL_IK: r.i = a.i * imm.i; break;
+        case OP_ADD_IK: FOLD_I(ci_add(a.i, imm.i, &r.i)); break;
+        case OP_SUB_IK: FOLD_I(ci_sub(a.i, imm.i, &r.i)); break;
+        case OP_SUB_KI: FOLD_I(ci_sub(imm.i, a.i, &r.i)); break;
+        case OP_MUL_IK: FOLD_I(ci_mul(a.i, imm.i, &r.i)); break;
         case OP_LT_RK: r.i = a.r <  imm.r; break;
         case OP_LE_RK: r.i = a.r <= imm.r; break;
         case OP_GT_RK: r.i = a.r >  imm.r; break;

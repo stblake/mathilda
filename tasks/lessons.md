@@ -1398,3 +1398,43 @@ Rules this session earned:
   that `INC_I` appears in a `Do` disassembly failed when the loop started closing
   with `OP_LOOP`. The right fix was to assert the NEW, more specific opcode (and
   to add a non-unit-step case asserting the old one), not to weaken the check.
+
+- **`#ifdef` on a name a header `#define`s as a VALUE is always true.** The
+  overflow build switch was first called `COMPILE_WRAP_INT`, which is also the
+  public flag *bit* in `compile.h`. `#ifdef COMPILE_WRAP_INT` in the VM was
+  therefore true in every build, the checks were compiled out, and every test
+  silently exercised the wrap path — the symptom was "my new code is not in the
+  binary", which sent me hunting stale objects for a while. Name a build switch
+  after the layer it controls (`VM_NO_INT_CHECK`, like `VM_NO_THREADED`) so it
+  cannot collide with a flag value.
+
+- **Before delegating a new element type to an existing library function, check
+  what it ACCUMULATES IN.** `NDT_INT64` arrays reached `ndred_total_all` and the
+  `flatten_into` packer, both of which route every element through a `double`.
+  Nothing errored; `Total[{9007199254740993, 1}]` just came back one short. Exact
+  paths (`ndt_get_i`/`ndt_set_i`) had to be added at both ends. A lossy
+  delegation is worse than a bail, because a bail is visibly slow and this is
+  invisibly wrong.
+
+- **A bail test proves nothing unless you know WHICH bail you got.**
+  `must_bail_raw("NestList integer body", …, in2, RI2, 1)` passed for years
+  because nargs=1 left `n` a free symbol — it was asserting "a free symbol
+  bails", not the integer-history rule its comment claimed, and would have kept
+  passing whatever happened to that rule. `CompileDiagnostics` reports the actual
+  cause; assert on it, and add the opposite-direction test (`must_compile_raw`)
+  when a restriction is lifted.
+
+- **Result HEADS need their own sweep; value tests are structurally blind to
+  them.** `35` and `35.` compare equal, so no amount of numeric parity testing
+  could see that ten integer-closed heads were coming back as Reals. A 20-line
+  sweep over every `NumericFunction` head comparing `Head[h[3]]` against
+  `Head[Compile[…][3]]` found all of them in one run, and separated the real bugs
+  (integer-closed) from the inherent divergences (symbolic, Rational) — which
+  hand-enumeration would not have.
+
+- **When a feature flag turns out to buy nothing, say so.** The
+  `"CatchMachineIntegerOverflow" -> False` option was asked for partly for speed;
+  measured, it is 0% because the design bakes the choice into each instruction so
+  the fast path is byte-identical. Reporting it as a semantics switch (and naming
+  the build flag that DOES recover the 4%) is more useful than quietly shipping a
+  knob that does nothing for the stated reason.

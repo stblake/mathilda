@@ -535,6 +535,28 @@ static void must_bail_raw(const char* name, const char* body_s, const char* cons
     bail_body(name, parse_expression(body_s), names, types, n);
 }
 
+/* The other direction: a body that MUST be inside the compilable subset.
+ *
+ * Worth asserting explicitly for the constructs that used to bail and now do
+ * not — an integer Table, an integer ConstantArray fill, an integer NestList
+ * history.  Without this they would quietly slide back out of the subset and
+ * nothing would notice, because a bail is indistinguishable from success at
+ * every call site. */
+static void must_compile_raw(const char* name, const char* body_s, const char* const* names,
+                             const CompileType* types, size_t n) {
+    Expr* b = parse_expression(body_s);
+    if (!b) { printf("FAIL: %-30s -> did not parse\n", name); failures++; return; }
+    CompiledProgram* p = compile_expr(b, names, types, n);
+    if (!p) {
+        printf("FAIL: %-30s -> must compile, but bailed (%s)\n", name, compiled_bail_reason());
+        failures++;
+    } else {
+        printf("ok:   %-30s compiles\n", name);
+        compiled_free(p);
+    }
+    expr_free(b);
+}
+
 /* Evaluate `src` (which mentions the symbol `xq`) at x = xv.
  *
  * Substitution, NOT string formatting: printing a double with %.17g yields a
@@ -1361,10 +1383,15 @@ int main(void) {
                       "Module[{u = ConstantArray[2.5, 4]}, Total[u]]",             vv, A1, one, 1, PC_AGREE);
             part_case("ConstantArray computed dim",
                       "Module[{u = ConstantArray[1., Length[v]]}, Total[u]]",      vv, A1, one, 1, PC_AGREE);
-            /* An INTEGER fill would be an exact-integer list in the interpreter
-             * and a float64 buffer here — a different answer, not a faster one. */
+            /* An INTEGER fill is compiled now that NDT_INT64 exists: the
+             * interpreter's exact-integer list and a packed int64 buffer hold
+             * the same values, so this AGREES rather than bails.  Before the
+             * integer dtype it had to decline, because a float64 buffer would
+             * have answered with different element heads. */
             part_case("ConstantArray integer fill",
-                      "Module[{u = ConstantArray[0, 5]}, Total[u]]",               vv, A1, one, 1, PC_BAIL);
+                      "Module[{u = ConstantArray[0, 5]}, Total[u]]",               vv, A1, one, 1, PC_AGREE);
+            part_case("ConstantArray integer fill nonzero",
+                      "Module[{u = ConstantArray[7, 5]}, Total[u]]",               vv, A1, one, 1, PC_AGREE);
 
             expr_free(vec); expr_free(mat); expr_free(ten); expr_free(cvec);
         }
@@ -2217,11 +2244,16 @@ int main(void) {
             }
         }
 
-        /* A built history of exact Integers has no packed representation, the
-         * same rule ConstantArray and Table follow. */
-        must_bail_raw("NestList integer body", "NestList[Function[u, 2 u], 1, n]", in2, RI2, 1);
-        must_bail_raw("FixedPointList int body",
-                      "FixedPointList[Function[u, Quotient[u, 2]], n]", in2, RI2, 2);
+        /* A built history of exact Integers packs into an NDT_INT64 buffer, so
+         * these compile — the same rule ConstantArray and Table follow, and it
+         * changed for all three at once when the integer dtype arrived. */
+        /* nargs = 2, not 1.  As `must_bail_raw(..., 1)` this passed for a reason
+         * that had nothing to do with its comment: with only `xq` bound, `n` was
+         * a free symbol and the body bailed on THAT.  It would have kept passing
+         * whatever happened to integer histories. */
+        must_compile_raw("NestList integer body", "NestList[Function[u, 2 u], 1, n]", in2, RI2, 2);
+        must_compile_raw("FixedPointList int body",
+                         "FixedPointList[Function[u, Quotient[u, 2]], n]", in2, RI2, 2);
         /* A negative count leaves the whole call unevaluated. */
         {
             Expr* b = parse_expression("NestList[Cos, xq, n]");
@@ -2298,12 +2330,11 @@ int main(void) {
             compiled_free(p); expr_free(b);
         }
 
-        /* An INTEGER-valued body must decline: the interpreter's Table holds
-         * exact Integers and a packed buffer has no integer dtype, so compiling
-         * it would answer with different element HEADS.  Same rule, and the same
-         * reason, as ConstantArray's refusal of an integer fill. */
-        must_bail_raw("Table integer body",   "Table[i, {i, 1, 6}]",         in1, ty1, 1);
-        must_bail_raw("Table integer body 2", "Table[i^2 + 1, {i, 1, 6}]",   in1, ty1, 1);
+        /* An INTEGER-valued body compiles into an NDT_INT64 buffer, which holds
+         * exactly the Integers the interpreter's Table does.  Same rule, and the
+         * same reason, as ConstantArray's integer fill. */
+        must_compile_raw("Table integer body",   "Table[i, {i, 1, 6}]",       in1, ty1, 1);
+        must_compile_raw("Table integer body 2", "Table[i^2 + 1, {i, 1, 6}]", in1, ty1, 1);
         /* A REAL iterator must decline: the interpreter advances it by repeated
          * addition against a 1e-14 slack, which a closed form does not
          * reproduce — in the last bits, and at the endpoint in the COUNT. */

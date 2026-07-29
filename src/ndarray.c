@@ -36,6 +36,7 @@ int ndt_components(NDType dt) {
 }
 
 size_t ndt_comp_size(NDType dt) {
+    if (dt == NDT_INT64) return sizeof(int64_t);
     return (dt == NDT_FLOAT64 || dt == NDT_COMPLEX64) ? sizeof(double)
                                                       : sizeof(float);
 }
@@ -56,6 +57,11 @@ void ndt_get(const void* buf, size_t k, NDType dt, double* re, double* im) {
         case NDT_COMPLEX32:
             *re = (double)((const float*)buf)[2 * k];
             *im = (double)((const float*)buf)[2 * k + 1]; break;
+        case NDT_INT64:
+            /* Exact only to 2^53. Every read of an int64 array that must be
+             * exact goes through ndt_get_i instead; this case exists so the
+             * generic dtype-agnostic consumers stay total. */
+            *re = (double)((const int64_t*)buf)[k]; *im = 0.0; break;
         default:
             /* Unreachable for a valid dtype, but makes the switch total so the
              * compiler can prove re and im are always written — otherwise every
@@ -76,7 +82,24 @@ void ndt_set(void* buf, size_t k, NDType dt, double re, double im) {
         case NDT_COMPLEX32:
             ((float*)buf)[2 * k] = (float)re;
             ((float*)buf)[2 * k + 1] = (float)im; break;
+        case NDT_INT64:
+            ((int64_t*)buf)[k] = (int64_t)re; break;      /* see ndt_set_i */
     }
+}
+
+/* EXACT int64 element access, the pair ndt_get/ndt_set cannot provide because
+ * they route through `double` and so lose the top 11 bits of an int64. Anything
+ * that reads or writes an NDT_INT64 buffer for real — the Compile[] boundary,
+ * the VM's array opcodes — uses these. */
+int64_t ndt_get_i(const void* buf, size_t k, NDType dt) {
+    if (dt == NDT_INT64) return ((const int64_t*)buf)[k];
+    double re, im; ndt_get(buf, k, dt, &re, &im); (void)im;
+    return (int64_t)re;
+}
+
+void ndt_set_i(void* buf, size_t k, NDType dt, int64_t v) {
+    if (dt == NDT_INT64) { ((int64_t*)buf)[k] = v; return; }
+    ndt_set(buf, k, dt, (double)v, 0.0);
 }
 
 bool ndt_from_string(const char* s, NDType* out) {
@@ -94,11 +117,17 @@ const char* ndt_to_string(NDType dt) {
         case NDT_FLOAT32:   return "float32";
         case NDT_COMPLEX64: return "complex64";
         case NDT_COMPLEX32: return "complex32";
+        case NDT_INT64:     return "int64";
     }
     return "float64";
 }
 
 NDType ndt_promote(NDType a, NDType b) {
+    /* int64 is the weakest dtype: meeting any float type yields that float type,
+     * and int64 with itself stays exact. */
+    if (a == NDT_INT64 && b == NDT_INT64) return NDT_INT64;
+    if (a == NDT_INT64) return b;
+    if (b == NDT_INT64) return a;
     bool cplx = ndt_is_complex(a) || ndt_is_complex(b);
     bool wide = ndt_comp_size(a) == sizeof(double) ||
                 ndt_comp_size(b) == sizeof(double);
@@ -112,11 +141,14 @@ NDType ndt_promote(NDType a, NDType b) {
  * (numpy value-based casting: a float32 array meeting a complex value stays at
  * float32 components, i.e. our complex32). */
 NDType ndt_as_complex(NDType dt) {
+    if (dt == NDT_INT64) return NDT_COMPLEX64;
     return (ndt_comp_size(dt) == sizeof(double)) ? NDT_COMPLEX64 : NDT_COMPLEX32;
 }
 
 Expr* ndarray_element_to_expr(const Expr* a, size_t k) {
     NDType dt = a->data.ndarray.dtype;
+    if (dt == NDT_INT64)
+        return expr_new_integer(ndt_get_i(a->data.ndarray.data, k, dt));
     double re, im;
     ndt_get(a->data.ndarray.data, k, dt, &re, &im);
     if (ndt_is_complex(dt)) {
@@ -138,7 +170,25 @@ static bool leaf_real(const Expr* e, double* out) {
  * Real dtypes accept Integer/Real only. Complex dtypes additionally accept a
  * Complex[re, im] literal (and a bare real, im=0). BigInt/Rational/MPFR/symbolic
  * all fail packing so the caller falls back to a nested List. */
+/* An element of an NDT_INT64 buffer: an exact machine Integer and nothing else.
+ *
+ * Not `leaf_to_component`, which routes through a double — that would round
+ * 9007199254740993 on the way in, and would silently accept 1.5 as an element of
+ * an integer array.  A bigint leaf does not fit and is refused here, so the call
+ * falls back to the interpreter, which has GMP. */
+static bool leaf_to_int64(const Expr* e, int64_t* out) {
+    if (!e || e->type != EXPR_INTEGER) return false;
+    *out = e->data.integer;
+    return true;
+}
+
 static bool leaf_to_component(const Expr* e, NDType dt, double* re, double* im) {
+    if (dt == NDT_INT64) {
+        int64_t v;
+        if (!leaf_to_int64(e, &v)) return false;
+        *re = (double)v; *im = 0.0;      /* probe_dims only asks "is this legal" */
+        return true;
+    }
     *im = 0.0;
     if (leaf_real(e, re)) return true;
     if (ndt_is_complex(dt) && head_is(e, SYM_Complex) &&
@@ -186,6 +236,10 @@ static void flatten_into(const Expr* e, void* flat, size_t* idx, NDType dt) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             flatten_into(e->data.function.args[i], flat, idx, dt);
         }
+    } else if (dt == NDT_INT64) {
+        int64_t v = 0;
+        leaf_to_int64(e, &v);               /* already validated by probe_dims */
+        ndt_set_i(flat, (*idx)++, dt, v);   /* EXACT: ndt_set would round */
     } else {
         double re = 0.0, im = 0.0;
         leaf_to_component(e, dt, &re, &im); /* already validated by probe_dims */
@@ -216,6 +270,11 @@ static Expr* rebuild_level(const int64_t* dims, int rank, int level,
                             const void* data, NDType dt, size_t* idx) {
     if (level == rank) {
         size_t k = (*idx)++;
+        /* An int64 buffer rebuilds as exact Integers, and through the EXACT
+         * accessor: ndt_get would route the value through a double and lose
+         * anything above 2^53.  This is the path a Compile[] integer-array
+         * result comes back on, so it is where the element HEAD is decided. */
+        if (dt == NDT_INT64) return expr_new_integer(ndt_get_i(data, k, dt));
         double re, im;
         ndt_get(data, k, dt, &re, &im);
         if (ndt_is_complex(dt)) {

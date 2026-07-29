@@ -1,5 +1,101 @@
 # Compiler build — state & handoff
 
+## 0e. M8 — machine integers as a peer of machine reals (2026-07-29)
+
+READ THIS FIRST if you are touching anything integer-shaped.
+
+**The engine had a real type and an integer type in name only.** 18 integer
+opcodes against 69 real; no integer buffers; and integer arithmetic WRAPPED,
+which is the one thing the engine forbids — a compiled body must answer
+identically to the interpreter or not answer at all.
+
+**Overflow is now detected, and the fallback IS the answer.** `ci_add` / `ci_sub`
+/ `ci_mul` / `ci_neg` / `ci_abs` / `ci_powi` in `compile_internal.h` return TRUE
+ON OVERFLOW (the `__builtin_*_overflow` convention) under a `__GNUC__` guard with
+a strict-C99 fallback; `-DCOMPILE_NO_OVERFLOW_BUILTIN` selects the fallback and
+the two are asserted equal at the boundaries. A VM body is one line:
+`OP(ADD_I): IOP(ci_add(RA.i, RB.i, &RD.i));` where `IOP` branches to `vm_fail`.
+
+- **The optimiser folds too.** `fold_op` uses the same helpers and REFUSES to
+  fold an overflowing operation, so the optimiser cannot bake in a wrapped
+  constant that the runtime check would have deferred.
+- **`OP_LOOP` is deliberately unchecked** while `OP_INC_I` is checked. The loop
+  index only overflows if the limit sits within one step of INT64_MAX, which
+  takes ~10^18 iterations to reach; `INC_I` is also `Increment`'s opcode, and
+  `x = 2^63-1; x++` is ordinary.
+
+**GOTCHA THAT COST A DEBUG CYCLE — do not repeat it.** The build switch was first
+called `COMPILE_WRAP_INT`, the same name as the *public flag bit* in `compile.h`.
+`#ifdef COMPILE_WRAP_INT` in the VM was therefore true in EVERY build, so the
+checks were compiled out and every test silently exercised the wrap path. The
+build switch is now `VM_NO_INT_CHECK` (named for the VM, like `VM_NO_THREADED`).
+An `#ifdef` on a name that `compile.h` `#define`s as a value is always true.
+
+Also re-learned: **`make | head` kills make with SIGPIPE before the LINK**, so
+the binary is older than the objects (see the memory note). And **same-second
+mtimes defeat make** — after restoring a file with `cp`, `touch` it.
+
+**The A/B flag is per-INSTRUCTION, and that is why it is free.** `COMPILE_WRAP_INT`
+(a `compile_expr_ex` flag, surfaced as `RuntimeOptions ->
+{"CatchMachineIntegerOverflow" -> False}`) sets `IF_NOCHK` in the instruction's
+`flags`, stamped in `ins_f` — the one place every instruction passes through.
+`IOP` reads that bit only AFTER `&&` has confirmed an overflow, so the
+no-overflow path is byte-identical either way. **Measured: the option buys 0%;
+only `-DVM_NO_INT_CHECK` recovers the 0–4% the detection costs.** Report it as a
+semantics switch, not a speed one.
+
+`autocompile.c` masks the flag off explicitly (`COMPILE_FOLD_GLOBALS &
+~COMPILE_WRAP_INT`). Auto-compiled Plot/Table/NIntegrate must never wrap: the
+user never asked for compilation there.
+
+**Result HEADS are a separate axis from values, and only a sweep finds them.**
+A value compares equal whether it is `35` or `35.`, so the parity tests are
+structurally blind here. Sweeping all 103 `NumericFunction` heads with `_Integer`
+arguments (`Head[h[3]]` vs `Head[Compile[…][3]]`) found 68 divergences; 10 were
+integer-closed and are fixed via `INT_CLOSED` in compile.c — ONE table consulted
+by both `infer_type` and `emit`, because those two dispatchers drifting apart is
+the failure mode. The other 58 are the accepted divergence (symbolic `Sin[3]`,
+Rational `3/2`). **`LegendreP` looks integer-closed and is not**: `LegendreP[2, 2]`
+is `11/2`.
+
+Every integer-closed head ALSO has a registered real kernel behind it — reaching
+the kernel first is exactly how they came back as Reals — so these branches must
+sit BEFORE the generic kernel dispatch and must DECLINE (not bail) for
+non-integer arguments, or the real fast path disappears silently.
+
+**Integer arrays: `NDT_INT64`, compiler-internal.** Reusing `EXPR_NDARRAY` rather
+than a private buffer keeps the whole M3a ownership discipline intact — `Slot.arr`
+is still an `Expr*`, `OP_ARR_FREE` / the frame sweep / `AF_FREE_A|B` are
+untouched. Containment is what makes it safe: `ndt_from_string` will not produce
+it, `NDArray[…]` never infers it, and the `Compile[]` boundary always unpacks to
+a List of Integers.
+
+**The lossy-`double` trap, hit twice.** `ndt_get` / `ndt_set` route through a
+`double` and are exact only to 2^53. Both the boundary PACK (`flatten_into`) and
+`Total` (`ndred_total_all`) silently went through them, so
+`Total[{9007199254740993, 1}]` came back one short — with no error, because every
+individual step "worked". Exact `ndt_get_i` / `ndt_set_i` now serve every real
+read/write of an int64 buffer, and `OP_V_TOTAL` sums in `int64` with the same
+overflow rule. **Before delegating an integer array to any ND-layer function,
+check what it accumulates in.**
+
+**Still real/complex only:** elementwise FUSION (the tile opcodes `VADD_R`,
+`VMUL_C`, … have no integer forms), so an integer chain takes the ordinary
+per-element loop. `ndstruct_sort` compares through a double as well and would
+need the same treatment. Both bail cleanly, which is the correct default.
+
+`Bit*` is NOT a coverage gap to close: `BitAnd`/`BitOr`/`BitXor`/`BitNot`/
+`BitShiftLeft`/`BitShiftRight` are unimplemented in the INTERPRETER (they return
+unevaluated), so compiling them would answer where the interpreter declines.
+Implement them there first.
+
+**Two tests were passing for the wrong reason** and are worth remembering as a
+class: `must_bail_raw("NestList integer body", …, in2, RI2, 1)` passed with
+nargs=1, so `n` was a free symbol and the body bailed on THAT, not on the integer
+history its comment blamed. A bail test proves nothing unless you know WHICH bail
+you got — `CompileDiagnostics` reports it.
+
+
 Snapshot for resuming the `Compile[]` numeric-compiler work with fresh context.
 Companion to [`compile.md`](compile.md) (the full design) and the memory files
 `project_compile_engine`, `project_autocompile_numeric_builtins` (read those

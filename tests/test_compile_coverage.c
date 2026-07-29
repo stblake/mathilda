@@ -175,15 +175,72 @@ static const char* kernel_kind(const char* nm) {
 }
 
 static void report(void) {
-    printf("\n%-24s %-6s %-8s %-14s %s\n", "HEAD", "REAL", "COMPLEX", "KERNEL", "NOTE");
-    printf("------------------------ ------ -------- -------------- --------------------------------\n");
+    printf("\n%-24s %-6s %-4s %-8s %-14s %s\n",
+           "HEAD", "REAL", "INT", "COMPLEX", "KERNEL", "NOTE");
+    printf("------------------------ ------ ---- -------- -------------- ------------------------\n");
     for (int i = 0; i < nheads; i++) {
         const char* h = heads[i];
         const char* why = gap_reason(h);
-        printf("%-24s %-6s %-8s %-14s %s\n", h,
+        printf("%-24s %-6s %-4s %-8s %-14s %s\n", h,
                head_compiles_as(h, CT_REAL) ? "yes" : "NO",
+               head_compiles_as(h, CT_INT) ? "yes" : "NO",
                head_compiles_as(h, CT_COMPLEX) ? "yes" : "NO",
                kernel_kind(h), why ? why : "");
+    }
+}
+
+/* Integer-CLOSED heads: with integer arguments the interpreter returns an
+ * Integer, so the compiled program must DECLARE an integer result.
+ *
+ * This is the one property the numeric parity tests structurally cannot see: a
+ * value compares equal whether it came back as `35` or `35.`, but the two are
+ * not interchangeable to IntegerQ, to exact arithmetic, or to the printer — and
+ * every head here also has a registered REAL kernel sitting right behind it,
+ * which is exactly what these silently reached before.  Asserting the declared
+ * TYPE rather than a value is what makes the check able to fail. */
+typedef struct { const char* body; const char* name; int nargs; } IntClosedProbe;
+static const IntClosedProbe INT_CLOSED_PROBES[] = {
+    { "x^y",             "Power",          2 },
+    { "Factorial[x]",    "Factorial",      1 },
+    { "Gamma[x]",        "Gamma",          1 },
+    { "Binomial[x, y]",  "Binomial",       2 },
+    { "Pochhammer[x, y]","Pochhammer",     2 },
+    { "Fibonacci[x]",    "Fibonacci",      1 },
+    { "LucasL[x]",       "LucasL",         1 },
+    { "Im[x]",           "Im",             1 },
+    { "Re[x]",           "Re",             1 },
+    { "Arg[x]",          "Arg",            1 },
+    { "FractionalPart[x]","FractionalPart", 1 },
+    /* Already integer-closed before this batch; here so a regression in the
+     * shared dispatch shows up as more than one failure. */
+    { "Abs[x]",          "Abs",            1 },
+    { "Sign[x]",         "Sign",           1 },
+    { "Mod[x, y]",       "Mod",            2 },
+    { "Quotient[x, y]",  "Quotient",       2 },
+    { "Max[x, y]",       "Max",            2 },
+    { "Floor[x]",        "Floor",          1 },
+};
+
+static void check_integer_closed(void) {
+    static const char* an[2] = { "x", "y" };
+    for (size_t i = 0; i < sizeof INT_CLOSED_PROBES / sizeof INT_CLOSED_PROBES[0]; i++) {
+        const IntClosedProbe* p = &INT_CLOSED_PROBES[i];
+        const char* inm[2]; CompileType ty[2];
+        for (int k = 0; k < p->nargs; k++) { inm[k] = intern_symbol(an[k]); ty[k] = CT_INT; }
+        Expr* b = parse_expression(p->body);       /* RAW: see head_compiles_as */
+        if (!b) { printf("FAIL: %-16s probe did not parse\n", p->name); failures++; continue; }
+        CompiledProgram* prog = compile_expr(b, inm, ty, (size_t)p->nargs);
+        expr_free(b);
+        if (!prog) {
+            printf("FAIL: %-16s does not compile with Integer arguments\n", p->name);
+            failures++; continue;
+        }
+        CompileType rt = compiled_result_type(prog);
+        if (rt != CT_INT)
+            { printf("FAIL: %-16s over Integers declares result type %d, not Integer\n"
+                     "      -> the compiled path answers with a different HEAD from the "
+                     "interpreter\n", p->name, (int)rt); failures++; }
+        compiled_free(prog);
     }
 }
 
@@ -196,6 +253,8 @@ int main(void) {
      * NUMERIC_FUNCTION_MISSING.md is generated from, so that document can be
      * regenerated from the build rather than hand-maintained into staleness. */
     if (getenv("COVERAGE_REPORT")) { report(); return 0; }
+
+    check_integer_closed();
 
     int covered = 0, gaps = 0, stale = 0, regressed = 0;
     for (int i = 0; i < nheads; i++) {

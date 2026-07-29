@@ -364,6 +364,15 @@ static Expr* r_real(const char* nm, double v)       { return rule2(expr_new_symb
 static Expr* r_str(const char* nm, const char* val) { return rule2(expr_new_symbol(nm), expr_new_string(val)); }
 /* name -> {} (e.g. D's NonConstants default). */
 static Expr* r_list0(const char* nm) { return rule2(expr_new_symbol(nm), empty_list()); }
+/* {x} — for an option whose value is itself a list of sub-option rules
+ * (Compile's RuntimeOptions). */
+static Expr* list1(Expr* x) {
+    Expr** a = malloc(sizeof(Expr*));
+    a[0] = x;
+    Expr* l = expr_new_function(expr_new_symbol(SYM_List), a, 1);
+    free(a);
+    return l;
+}
 
 void options_register_defaults(void) {
     OptBuf b;
@@ -772,9 +781,16 @@ void options_register_defaults(void) {
 
     /* ---- Compilation ---- RuntimeAttributes -> {} (no threading); the only
      * other setting is Listable, which makes the CompiledFunction thread over
-     * List arguments. */
+     * List arguments.  RuntimeOptions -> {"CatchMachineIntegerOverflow" -> True}:
+     * with True (the default) a machine-integer overflow abandons the compiled
+     * call so the interpreter re-runs it and promotes to a bigint; with False the
+     * wrapped int64 is kept, which is faster and answers differently from the
+     * interpreter once a result leaves the machine-integer range. */
     ob_init(&b);
     ob_add(&b, r_list0("RuntimeAttributes"));
+    ob_add(&b, rule2(expr_new_symbol("RuntimeOptions"),
+                     list1(rule2(expr_new_string("CatchMachineIntegerOverflow"),
+                                 expr_new_symbol("True")))));
     ob_commit(&b, "Compile");
 
     /* ---- File name construction ---- */

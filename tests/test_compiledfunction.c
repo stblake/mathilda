@@ -235,7 +235,73 @@ void test_cf_array_argspec(void) {
 
     /* Malformed argspecs must leave Compile[] unevaluated rather than guess. */
     assert_eval_eq("Head[Compile[{{v, _Real, 0.5}}, v]]", "Compile", 0);
-    assert_eval_eq("Head[Compile[{{v, _Integer, 2}}, v]]", "Compile", 0);  /* no integer dtype */
+    assert_eval_eq("Head[Compile[{{v, _Real, 99}}, v]]", "Compile", 0);   /* rank out of range */
+
+    /* An _Integer array argspec is ACCEPTED (NDT_INT64); it used to be rejected
+     * for want of an integer dtype.  A List of Integers goes in and a List of
+     * Integers comes back — never an NDArray, because no user syntax can build
+     * an int64 one, so handing one back would be a value the rest of the system
+     * has no way to have produced. */
+    assert_eval_eq("Head[Compile[{{v, _Integer, 1}}, Total[v]][{1, 2, 3}]]", "Integer", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, Total[v]][{1, 2, 3}]", "6", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, v[[2]]][{10, 20, 30}]", "20", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, Length[v]][{1, 2, 3}]", "3", 0);
+    assert_eval_eq("Compile[{{m, _Integer, 2}}, m[[2, 1]]][{{1, 2}, {3, 4}}]", "3", 0);
+    /* Exact past 2^53, which is where a float64 buffer would start lying and
+     * where the double-based ndt_get/ndt_set pair would too. */
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, v[[1]]][{9007199254740993}]",
+                   "9007199254740993", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, Total[v]][{9007199254740993, 1}]"
+                   " === 9007199254740994", "True", 0);
+    /* A float64 NDArray is not an integer array: different element types to the
+     * interpreter too, so the call goes back rather than rounding. */
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, Total[v]][NDArray[{1., 2., 3.}]] == 6",
+                   "True", 0);
+}
+
+/* Integer ARRAYS, built rather than passed in.  Each construct here used to bail
+ * for want of an integer dtype, so each is checked against the interpreter
+ * evaluating the same expression — element heads included, since that is the
+ * property the restriction existed to protect. */
+void test_cf_integer_arrays(void) {
+    assert_eval_eq("Compile[{{n, _Integer}}, Range[n]][5] === Range[5]", "True", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Range[n]][0]", "{}", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Range[n]][-3]", "{}", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, Range[a, b]][3, 7] === Range[3, 7]",
+                   "True", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, Range[a, b]][7, 3]", "{}", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, Range[a, b, 2]][1, 9]"
+                   " === Range[1, 9, 2]", "True", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, Range[a, b, -2]][9, 1]"
+                   " === Range[9, 1, -2]", "True", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Total[Range[n]]][100]", "5050", 0);
+    /* A REAL Range must still bail: the interpreter walks a real iterator by
+     * repeated addition against a slack, which a closed-form step does not
+     * reproduce — in the last bits, and at the endpoint in the COUNT. */
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{x, _Real}}, Range[x]]", "False", 0);
+
+    assert_eval_eq("Compile[{{n, _Integer}}, Table[i, {i, 1, n}]][5] === Table[i, {i, 1, 5}]",
+                   "True", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Table[i^2, {i, 1, n}]][4]"
+                   " === Table[i^2, {i, 1, 4}]", "True", 0);
+    assert_eval_eq("Head[First[Compile[{{n, _Integer}}, Table[i, {i, 1, n}]][3]]]", "Integer", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, ConstantArray[7, n]][4] === ConstantArray[7, 4]",
+                   "True", 0);
+    assert_eval_eq("Head[First[Compile[{{n, _Integer}}, ConstantArray[0, n]][3]]]", "Integer", 0);
+
+    /* Build-and-fill through an integer local: A_STORE_I on one side and
+     * A_LOAD_I on the other. */
+    assert_eval_eq("Compile[{{n, _Integer}}, Module[{u = ConstantArray[0, n]}, "
+                   "Do[u[[i]] = i*i, {i, 1, n}]; u]][5] === Table[i^2, {i, 1, 5}]", "True", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Module[{u = Range[n], s = 0}, "
+                   "Do[s = s + u[[i]], {i, 1, n}]; s]][10]", "55", 0);
+
+    /* The overflow rule reaches into array ELEMENTS too: a few elements here
+     * leave the int64 range, so the whole call defers and the interpreter
+     * produces the exact bigints.  Deliberately a SHORT range with large
+     * elements — a long range would make the fallback build a huge list. */
+    assert_eval_eq("Compile[{{n, _Integer}}, Table[(i*4000000000)*4000000000, {i, 1, n}]][3]"
+                   " === Table[(i*4000000000)*4000000000, {i, 1, 3}]", "True", 0);
 }
 
 /* ------------------------------------------------------------------ *
@@ -465,8 +531,10 @@ void test_cf_runtime_attributes(void) {
                    "Compile", 0);
     assert_eval_eq("Head[Compile[{{x, _Real}}, x, ThisIsNotAnOption -> True]]", "Compile", 0);
 
-    /* The registered default, and SetOptions changing it. */
-    assert_eval_eq("Options[Compile]", "{RuntimeAttributes -> {}}", 0);
+    /* The registered defaults, and SetOptions changing them. */
+    assert_eval_eq("Options[Compile]",
+                   "{RuntimeAttributes -> {}, "
+                   "RuntimeOptions -> {\"CatchMachineIntegerOverflow\" -> True}}", 0);
     assert_eval_eq("SetOptions[Compile, RuntimeAttributes -> Listable]; "
                    "Compile[{{x, _Real}}, If[x > 0, 1., -1.]][{1., -2.}]", "{1.0, -1.0}", 0);
     /* Restore, and prove the restore took: leaving this on would silently make
@@ -482,6 +550,265 @@ void test_cf_runtime_attributes(void) {
     char* p = disasm_of("Compile[{{x, _Real}}, x^2]");
     lacks(p, "Attributes", "no attribute line for a plain object");
     free(p);
+}
+
+/* Machine-integer overflow.
+ *
+ * The engine's contract is that a compiled body answers IDENTICALLY to the
+ * interpreter or does not answer at all.  int64 arithmetic breaks that on its
+ * own — the interpreter promotes to a bigint where the machine wraps — so every
+ * integer opcode that can overflow abandons the call and lets the interpreter
+ * redo it.  Each case below is written as a comparison against the interpreter
+ * evaluating the SAME expression, so the test states the contract rather than a
+ * particular number. */
+void test_cf_integer_overflow(void) {
+    /* One case per checked opcode, at or just past the int64 boundary. */
+    assert_eval_eq("Compile[{{n, _Integer}}, n^3][3000000] === 3000000^3", "True", 0);        /* POWI_I */
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, a*b][4000000000, 4000000000]"
+                   " === 4000000000*4000000000", "True", 0);                                  /* MUL_I  */
+    assert_eval_eq("Compile[{{a, _Integer}}, a + 1][9223372036854775807]"
+                   " === 9223372036854775807 + 1", "True", 0);                                /* ADD_IK */
+    assert_eval_eq("Compile[{{a, _Integer}}, a - 1][-9223372036854775808]"
+                   " === -9223372036854775808 - 1", "True", 0);                               /* SUB_IK */
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, a - b][-9223372036854775808, 1]"
+                   " === -9223372036854775808 - 1", "True", 0);                               /* SUB_I  */
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, a + b][9223372036854775807, 1]"
+                   " === 9223372036854775807 + 1", "True", 0);                                /* ADD_I  */
+    assert_eval_eq("Compile[{{a, _Integer}}, -a][-9223372036854775808]"
+                   " === -(-9223372036854775808)", "True", 0);                                /* NEG_I  */
+    assert_eval_eq("Compile[{{a, _Integer}}, Abs[a]][-9223372036854775808]"
+                   " === Abs[-9223372036854775808]", "True", 0);                              /* ABS_I  */
+    assert_eval_eq("Compile[{{a, _Integer}}, a*7][2000000000000000000]"
+                   " === 2000000000000000000*7", "True", 0);                                  /* MUL_IK */
+
+    /* An accumulator inside a loop is the same opcodes, so it inherits the
+     * property — worth pinning because the overflow happens mid-run, after the
+     * loop has already written to the accumulator many times. */
+    assert_eval_eq("Compile[{{n, _Integer}}, Sum[i^2, {i, 1, n}]][3000000]"
+                   " === Sum[i^2, {i, 1, 3000000}]", "True", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Module[{s = 1}, Do[s = s*3, {i, 1, n}]; s]][50]"
+                   " === 3^50", "True", 0);
+
+    /* Values that FIT must not be disturbed by any of this. */
+    assert_eval_eq("Compile[{{n, _Integer}}, n^2 + 3 n + 1][10]", "131", 0);
+    assert_eval_eq("Compile[{{a, _Integer}}, Abs[a]][-5]", "5", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, n^3][2000000] === 2000000^3", "True", 0);
+
+    /* Integer division traps the hardware rather than merely answering wrongly:
+     * a zero divisor and INT64_MIN/-1 both used to take the process down with
+     * SIGFPE.  The interpreter leaves Mod[5, 0] unevaluated, so the compiled
+     * path must hand it back and let it do that. */
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, Mod[a, b]][5, 0]", "Mod[5, 0]", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, Quotient[a, b]][5, 0]",
+                   "Quotient[5, 0]", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, Quotient[a, b]]"
+                   "[-9223372036854775808, -1] === Quotient[-9223372036854775808, -1]",
+                   "True", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, Mod[a, b]][17, 5]", "2", 0);
+}
+
+/* Integer-CLOSED heads: given integer arguments the interpreter returns an
+ * Integer, so the compiled object must too.
+ *
+ * These all have a registered REAL kernel, and reaching it first is how they
+ * came back as `35.` and `120.` — values that compare equal to the interpreter's
+ * but carry a different head, which IntegerQ, exact arithmetic and the printer
+ * all notice.  So each case asserts Head as well as value, and the
+ * out-of-domain cases assert that the interpreter's own answer comes back
+ * (ComplexInfinity, a Rational, a bigint) rather than a machine approximation
+ * of it. */
+void test_cf_integer_closed_heads(void) {
+    /* Power: Integer for a non-negative exponent, Rational below, Indeterminate
+     * at 0^0, exact bigint past the machine range. */
+    assert_eval_eq("Head[Compile[{{a, _Integer}, {b, _Integer}}, a^b][2, 10]]", "Integer", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, a^b][2, 10] === 2^10", "True", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, a^b][7, -3]", "1/343", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, a^b][0, 0]", "Indeterminate", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, a^b][2, 64] === 2^64", "True", 0);
+
+    /* Factorial / Gamma: ComplexInfinity outside the domain, bigint past 20!. */
+    assert_eval_eq("Head[Compile[{{n, _Integer}}, Factorial[n]][5]]", "Integer", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Factorial[n]][20] === 20!", "True", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Factorial[n]][21] === 21!", "True", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Factorial[n]][-1]", "ComplexInfinity", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Factorial[n]][0]", "1", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Gamma[n]][3]", "2", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Gamma[n]][0]", "ComplexInfinity", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Gamma[n]][-2]", "ComplexInfinity", 0);
+
+    /* Binomial: the multiplicative recurrence must stay exact well past the
+     * point where n!/(k!(n-k)!) would overflow — C(60,30) fits an int64 while
+     * 60! does not, so a naive lowering fails this one and not the small ones. */
+    assert_eval_eq("Head[Compile[{{n, _Integer}, {k, _Integer}}, Binomial[n, k]][7, 3]]",
+                   "Integer", 0);
+    assert_eval_eq("Compile[{{n, _Integer}, {k, _Integer}}, Binomial[n, k]][60, 30]"
+                   " === Binomial[60, 30]", "True", 0);
+    assert_eval_eq("Compile[{{n, _Integer}, {k, _Integer}}, Binomial[n, k]][70, 35]"
+                   " === Binomial[70, 35]", "True", 0);
+    assert_eval_eq("Compile[{{n, _Integer}, {k, _Integer}}, Binomial[n, k]][3, 7]", "0", 0);
+    assert_eval_eq("Compile[{{n, _Integer}, {k, _Integer}}, Binomial[n, k]][7, -1]", "0", 0);
+
+    /* Pochhammer: Rational for a negative second argument. */
+    assert_eval_eq("Compile[{{a, _Integer}, {n, _Integer}}, Pochhammer[a, n]][7, 3]", "504", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {n, _Integer}}, Pochhammer[a, n]][7, 0]", "1", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {n, _Integer}}, Pochhammer[a, n]][7, -3]",
+                   "1/120", 0);
+
+    /* Fibonacci / LucasL, including the negative index, where the two have
+     * OPPOSITE sign rules — F[-10] = -55 but L[-10] = +123. */
+    assert_eval_eq("Compile[{{n, _Integer}}, Fibonacci[n]][10]", "55", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Fibonacci[n]][-10]", "-55", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Fibonacci[n]][0]", "0", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Fibonacci[n]][92] === Fibonacci[92]", "True", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Fibonacci[n]][93] === Fibonacci[93]", "True", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, LucasL[n]][10]", "123", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, LucasL[n]][-10]", "123", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, LucasL[n]][-1]", "-1", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, LucasL[n]][0]", "2", 0);
+
+    /* Re / Im / Arg / FractionalPart over the integers. Arg is 0 at or above
+     * zero and the SYMBOL Pi below, which no machine type holds. */
+    assert_eval_eq("Head[Compile[{{n, _Integer}}, Im[n]][3]]", "Integer", 0);
+    assert_eval_eq("Head[Compile[{{n, _Integer}}, Re[n]][3]]", "Integer", 0);
+    assert_eval_eq("Head[Compile[{{n, _Integer}}, FractionalPart[n]][3]]", "Integer", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Arg[n]][3]", "0", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Arg[n]][0]", "0", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Arg[n]][-3]", "Pi", 0);
+
+    /* The REAL lowerings of the same heads must be untouched: these branches sit
+     * in front of the kernel dispatch, so a mistake there silently removes the
+     * real fast path rather than producing a wrong answer. */
+    assert_eval_eq("Compile[{{x, _Real}}, Gamma[x]][3.5] == Gamma[3.5]", "True", 0);
+    assert_eval_eq("Compile[{{x, _Real}, {y, _Real}}, Binomial[x, y]][5.5, 2.] == 12.375",
+                   "True", 0);
+    assert_eval_eq("Head[Compile[{{x, _Real}}, FractionalPart[x]][2.5]]", "Real", 0);
+    assert_eval_eq("Head[Compile[{{x, _Real}}, Im[x]][2.5]]", "Real", 0);
+    assert_eval_eq("Compile[{{x, _Real}, {y, _Real}}, x^y][2., 0.5] == Sqrt[2.]", "True", 0);
+}
+
+/* Integer-ONLY heads: no real counterpart, so they compile over CT_INT or not at
+ * all.  Every case is checked against the interpreter's own answer, including
+ * the ones where the interpreter declines (Infinity, an unevaluated call) — that
+ * is where a compiled path is most tempted to invent something. */
+void test_cf_integer_only_heads(void) {
+    /* GCD / LCM: non-negative, 0 handled the interpreter's way, and n-ary
+     * because both are Flat. */
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, GCD[a, b]][12, 18]", "6", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, GCD[a, b]][-12, 18]", "6", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, GCD[a, b]][0, 0]", "0", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, GCD[a, b]][0, 5]", "5", 0);
+    assert_eval_eq("Head[Compile[{{a, _Integer}, {b, _Integer}}, GCD[a, b]][12, 18]]",
+                   "Integer", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}, {c, _Integer}}, GCD[a, b, c]]"
+                   "[12, 18, 30]", "6", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, LCM[a, b]][4, 6]", "12", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, LCM[a, b]][-4, 6]", "12", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, LCM[a, b]][0, 5]", "0", 0);
+    /* Divide-before-multiply: this product fits an int64 only because the gcd is
+     * taken out first, so it fails a naive |a b|/g. */
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, LCM[a, b]]"
+                   "[3037000499, 3037000493] === LCM[3037000499, 3037000493]", "True", 0);
+
+    /* Predicates, which are Mod-and-compare rather than opcodes of their own —
+     * so they inherit MOD_I's zero-divisor guard. */
+    assert_eval_eq("Compile[{{n, _Integer}}, EvenQ[n]][4]", "True", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, EvenQ[n]][5]", "False", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, EvenQ[n]][-4]", "True", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, EvenQ[n]][0]", "True", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, OddQ[n]][-3]", "True", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, Divisible[a, b]][12, 4]", "True", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, Divisible[a, b]][12, 5]", "False", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, Divisible[a, b]][12, 0]"
+                   " === Divisible[12, 0]", "True", 0);
+
+    /* IntegerLength / IntegerExponent, with and without a base. */
+    assert_eval_eq("Compile[{{n, _Integer}}, IntegerLength[n]][12345]", "5", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, IntegerLength[n]][0]", "0", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, IntegerLength[n]][-12345]", "5", 0);
+    assert_eval_eq("Compile[{{n, _Integer}, {b, _Integer}}, IntegerLength[n, b]][255, 16]",
+                   "2", 0);
+    /* Base 1 is not a base; the interpreter says so and the compiled path must
+     * let it. */
+    assert_eval_eq("Compile[{{n, _Integer}, {b, _Integer}}, IntegerLength[n, b]][255, 1]"
+                   " === IntegerLength[255, 1]", "True", 0);
+    assert_eval_eq("Compile[{{n, _Integer}, {b, _Integer}}, IntegerExponent[n, b]][24, 2]",
+                   "3", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, IntegerExponent[n]][100]", "2", 0);
+    /* IntegerExponent[0, b] is Infinity — not a machine integer. */
+    assert_eval_eq("Compile[{{n, _Integer}, {b, _Integer}}, IntegerExponent[n, b]][0, 2]",
+                   "Infinity", 0);
+
+    /* PowerMod, the one ternary opcode.  Includes the modular INVERSE (negative
+     * exponent), a modulus too large for an int64 intermediate — which defers to
+     * the interpreter and must still agree — and a non-invertible case. */
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}, {m, _Integer}}, PowerMod[a, b, m]]"
+                   "[3, 100, 7]", "4", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}, {m, _Integer}}, PowerMod[a, b, m]]"
+                   "[2, 10, 1000]", "24", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}, {m, _Integer}}, PowerMod[a, b, m]]"
+                   "[7, 100, 1000000007] === PowerMod[7, 100, 1000000007]", "True", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}, {m, _Integer}}, PowerMod[a, b, m]]"
+                   "[3, -1, 7]", "5", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}, {m, _Integer}}, PowerMod[a, b, m]]"
+                   "[3, 100, 4000000000] === PowerMod[3, 100, 4000000000]", "True", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}, {m, _Integer}}, PowerMod[a, b, m]]"
+                   "[2, -1, 4] === PowerMod[2, -1, 4]", "True", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}, {m, _Integer}}, PowerMod[a, b, m]]"
+                   "[2, 3, 0] === PowerMod[2, 3, 0]", "True", 0);
+
+    /* REAL arguments must not reach any of this: the interpreter has no real
+     * GCD either, so the body simply bails and it answers. */
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{x, _Real}, {y, _Real}}, GCD[x, y]]",
+                   "False", 0);
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{x, _Real}}, EvenQ[x]]", "False", 0);
+}
+
+/* RuntimeOptions -> {"CatchMachineIntegerOverflow" -> False} keeps the wrapped
+ * int64 instead of deferring to the interpreter.  It is opt-in precisely because
+ * it makes the object answer differently from the interpreter, so the test
+ * asserts that difference rather than a value: that is the whole feature. */
+void test_cf_runtime_options(void) {
+    assert_eval_eq("Options[Compile]",
+                   "{RuntimeAttributes -> {}, "
+                   "RuntimeOptions -> {\"CatchMachineIntegerOverflow\" -> True}}", 0);
+
+    /* Default: promote via the interpreter. */
+    assert_eval_eq("Compile[{{a, _Integer}}, a*a][4000000000] === 4000000000^2", "True", 0);
+    /* Off: wrap.  Not equal to the exact answer, and equal to it mod 2^64. */
+    assert_eval_eq("Compile[{{a, _Integer}}, a*a, "
+                   "RuntimeOptions -> {\"CatchMachineIntegerOverflow\" -> False}]"
+                   "[4000000000] === 4000000000^2", "False", 0);
+    assert_eval_eq("Mod[Compile[{{a, _Integer}}, a*a, "
+                   "RuntimeOptions -> {\"CatchMachineIntegerOverflow\" -> False}]"
+                   "[4000000000], 2^64] == Mod[4000000000^2, 2^64]", "True", 0);
+    /* The Wolfram shorthands. */
+    assert_eval_eq("Compile[{{a, _Integer}}, a*a, RuntimeOptions -> \"Speed\"]"
+                   "[4000000000] === 4000000000^2", "False", 0);
+    assert_eval_eq("Compile[{{a, _Integer}}, a*a, RuntimeOptions -> \"Quality\"]"
+                   "[4000000000] === 4000000000^2", "True", 0);
+    /* Turning it off must not change any result that FITS. */
+    assert_eval_eq("Compile[{{a, _Integer}}, a*a, RuntimeOptions -> \"Speed\"][7]", "49", 0);
+
+    /* Composes with the other option, in either order. */
+    assert_eval_eq("Compile[{{a, _Integer}}, a*a, RuntimeOptions -> \"Speed\", "
+                   "RuntimeAttributes -> Listable][{3, 4}]", "{9, 16}", 0);
+    assert_eval_eq("Compile[{{a, _Integer}}, a*a, RuntimeAttributes -> Listable, "
+                   "RuntimeOptions -> \"Speed\"][{3, 4}]", "{9, 16}", 0);
+
+    /* A setting we cannot honour leaves Compile[...] unevaluated rather than
+     * being quietly dropped — the same rule RuntimeAttributes follows. */
+    assert_eval_eq("Head[Compile[{{a, _Integer}}, a, RuntimeOptions -> {\"Nope\" -> False}]]",
+                   "Compile", 0);
+    assert_eval_eq("Head[Compile[{{a, _Integer}}, a, "
+                   "RuntimeOptions -> {\"CatchMachineIntegerOverflow\" -> 7}]]", "Compile", 0);
+
+    /* SetOptions moves the default, and the restore takes. */
+    assert_eval_eq("SetOptions[Compile, RuntimeOptions -> "
+                   "{\"CatchMachineIntegerOverflow\" -> False}]; "
+                   "Compile[{{a, _Integer}}, a*a][4000000000] === 4000000000^2", "False", 0);
+    assert_eval_eq("SetOptions[Compile, RuntimeOptions -> "
+                   "{\"CatchMachineIntegerOverflow\" -> True}]; "
+                   "Compile[{{a, _Integer}}, a*a][4000000000] === 4000000000^2", "True", 0);
 }
 
 /* Threading and the ARRAY signature meet in one place: a rank-r parameter
@@ -545,6 +872,11 @@ int main(void) {
     TEST(test_cf_part);
     TEST(test_cf_runtime_attributes);
     TEST(test_cf_runtime_attributes_arrays);
+    TEST(test_cf_integer_overflow);
+    TEST(test_cf_integer_closed_heads);
+    TEST(test_cf_integer_only_heads);
+    TEST(test_cf_integer_arrays);
+    TEST(test_cf_runtime_options);
     TEST(test_compile_diagnostics);
     TEST(test_disasm_scalar);
     TEST(test_disasm_kernel_names);

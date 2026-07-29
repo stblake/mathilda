@@ -14,9 +14,90 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <limits.h>
 #include <complex.h>
 #include "../expr.h"
 #include "compile.h"      /* CompileType, CompiledProgram — completed below */
+
+/* ------------------------------------------------------------------ *
+ *  Checked machine-integer arithmetic                                 *
+ * ------------------------------------------------------------------ *
+ * The interpreter promotes an int64 that overflows to a GMP bigint, so a
+ * compiled body that wrapped would answer DIFFERENTLY from the interpreter on
+ * the same input rather than merely faster — the one thing the engine forbids.
+ * Every integer opcode that can overflow therefore tests for it and aborts the
+ * call, and the caller re-runs the body through the interpreter, which gives the
+ * exact answer.  (This is also what the Wolfram Language does by default, under
+ * RuntimeOptions -> "CatchMachineIntegerOverflow".)
+ *
+ * Each helper returns TRUE ON OVERFLOW, matching the __builtin_*_overflow
+ * convention, and writes the wrapped result either way — callers must test
+ * before using it.
+ *
+ * The builtins compile to the machine's own overflow flag plus a branch the
+ * predictor never takes; the C99 fallback below costs a compare or two more.
+ * Both are exercised: `-DCOMPILE_NO_OVERFLOW_BUILTIN` selects the fallback, and
+ * a test asserts the two agree at the boundaries. */
+#if defined(__GNUC__) && !defined(COMPILE_NO_OVERFLOW_BUILTIN)
+#define ci_add(a, b, out)  __builtin_add_overflow((a), (b), (out))
+#define ci_sub(a, b, out)  __builtin_sub_overflow((a), (b), (out))
+#define ci_mul(a, b, out)  __builtin_mul_overflow((a), (b), (out))
+#else
+/* Strict C99: no GNU builtins, and signed overflow is undefined, so every test
+ * has to be made on operands that have NOT yet overflowed. */
+static inline bool ci_add_fn(long long a, long long b, long long* out) {
+    bool ovf = (b > 0 && a > LLONG_MAX - b) || (b < 0 && a < LLONG_MIN - b);
+    *out = ovf ? (long long)((unsigned long long)a + (unsigned long long)b) : a + b;
+    return ovf;
+}
+static inline bool ci_sub_fn(long long a, long long b, long long* out) {
+    bool ovf = (b < 0 && a > LLONG_MAX + b) || (b > 0 && a < LLONG_MIN + b);
+    *out = ovf ? (long long)((unsigned long long)a - (unsigned long long)b) : a - b;
+    return ovf;
+}
+static inline bool ci_mul_fn(long long a, long long b, long long* out) {
+    bool ovf = false;
+    if (a != 0 && b != 0) {
+        if (a > 0) ovf = (b > 0) ? (a > LLONG_MAX / b) : (b < LLONG_MIN / a);
+        else       ovf = (b > 0) ? (a < LLONG_MIN / b)
+                                 : (a < LLONG_MAX / b);   /* both negative */
+    }
+    *out = ovf ? (long long)((unsigned long long)a * (unsigned long long)b) : a * b;
+    return ovf;
+}
+#define ci_add(a, b, out)  ci_add_fn((a), (b), (out))
+#define ci_sub(a, b, out)  ci_sub_fn((a), (b), (out))
+#define ci_mul(a, b, out)  ci_mul_fn((a), (b), (out))
+#endif
+
+/* Negation and absolute value overflow at exactly one point: -LLONG_MIN is not
+ * representable.  Easy to forget precisely because it is a single input. */
+static inline bool ci_neg(long long a, long long* out) {
+    *out = (a == LLONG_MIN) ? a : -a;
+    return a == LLONG_MIN;
+}
+static inline bool ci_abs(long long a, long long* out) {
+    *out = (a < 0) ? ((a == LLONG_MIN) ? a : -a) : a;
+    return a == LLONG_MIN;
+}
+
+/* Binary exponentiation, overflow-checked at every step.  Mirrors the shape of
+ * the unchecked `ipow_i` it replaces, so a folded constant and a computed value
+ * still agree bit for bit.  `n` must be >= 0: a negative exponent on integers is
+ * a Rational in the interpreter and is rejected before reaching here. */
+static inline bool ci_powi(long long b, long long n, long long* out) {
+    long long r = 1;
+    while (n > 0) {
+        if (n & 1) { if (ci_mul(r, b, &r)) return true; }
+        n >>= 1;
+        /* Squaring on the final round is dead work, and squaring a large base
+         * is exactly where a spurious overflow would be reported for a result
+         * that fits. */
+        if (n > 0 && ci_mul(b, b, &b)) return true;
+    }
+    *out = r;
+    return false;
+}
 
 /* A register (or an instruction's immediate).  `p` carries a machine-kernel
  * function pointer in an immediate; `arr` carries the OWNED EXPR_NDARRAY handle
@@ -166,6 +247,34 @@ enum {
     X(ATAN_R, K_UN)   X(ATAN_C, K_UN)                                      \
     X(ABS_I, K_UN)    X(ABS_R, K_UN)   X(ABS_C, K_UN)                      \
     X(SIGN_I, K_UN)   X(SIGN_R, K_UN)                                      \
+    /* Integer-CLOSED forms of heads whose real kernels return a double.     \
+     * `Binomial[7,3]` is the Integer 35 and `2^10` the Integer 1024, so     \
+     * lowering these through the real kernel would answer 35. and 1024. —   \
+     * a different HEAD from the interpreter's, which the engine forbids     \
+     * however equal the values print.  Each is overflow-checked like the    \
+     * arithmetic opcodes, and each ABANDONS the call outside the domain     \
+     * where the interpreter returns an integer at all: a negative exponent  \
+     * is a Rational, Factorial of a negative is ComplexInfinity, and the    \
+     * interpreter is the only thing that can say so. */                     \
+    X(POW_II, K_BIN)  X(FACT_I, K_UN)  X(GAMMA_I, K_UN)                    \
+    X(BINOM_I, K_BIN) X(POCH_I, K_BIN) X(FIB_I, K_UN)  X(LUCAS_I, K_UN)    \
+    /* Arg of an integer is the Integer 0 at or above zero and the SYMBOL Pi   \
+     * below it — a head that depends on the sign of a value only known per     \
+     * call, so the negative side abandons the call rather than answering       \
+     * 3.14159 where the interpreter says Pi. */                                \
+    X(ARG_I, K_UN)                                                          \
+    /* Integer-only heads: no real counterpart at all, so these have no double \
+     * kernel to fall back on and exist only over CT_INT.  ILEN/IEXP take the  \
+     * base as their second operand (the emitter materialises the default 10). \
+     * PowerMod is K_NARY because it is ternary and an Instr addresses only two \
+     * source registers — same shape as KERNN, a run starting at `a`.          \
+     *                                                                          \
+     * The Bit* family is deliberately absent: BitAnd/BitOr/BitXor/BitNot/       \
+     * BitShiftLeft/BitShiftRight are not implemented in the INTERPRETER (they   \
+     * come back unevaluated), and a compiled path that answered them would      \
+     * answer where the interpreter declines. */                                 \
+    X(GCD_I, K_BIN)   X(LCM_I, K_BIN)  X(ILEN_I, K_BIN) X(IEXP_I, K_BIN)   \
+    X(POWMOD_I, K_NARY)                                                     \
     X(FLOOR_R, K_UN)  X(CEIL_R, K_UN)  X(ROUND_R, K_UN)  X(TRUNC_R, K_UN)   \
     X(RE_C, K_UN)     X(IM_C, K_UN)    X(ARG_C, K_UN)   X(CONJ_C, K_UN)    \
     X(ATAN2_R, K_BIN) X(MAX_I, K_BIN)  X(MAX_R, K_BIN)                     \
@@ -196,8 +305,8 @@ enum {
     X(ARR_FREE, K_ARR) X(V_EW, K_ARR)  X(V_POW, K_ARR)                     \
     X(V_KERN, K_ARR)  X(V_KERN2, K_ARR) X(V_TOTAL, K_ARR) X(V_LEN, K_ARR)  \
     X(A_SIZE, K_UN)   X(A_NEWLIKE, K_ARR) X(A_SHAPECHK, K_ASTORE)          \
-    X(A_LOAD_R, K_ALOAD) X(A_LOAD_C, K_ALOAD)                              \
-    X(A_STORE_R, K_ASTORE) X(A_STORE_C, K_ASTORE)                          \
+    X(A_LOAD_R, K_ALOAD) X(A_LOAD_C, K_ALOAD) X(A_LOAD_I, K_ALOAD)         \
+    X(A_STORE_R, K_ASTORE) X(A_STORE_C, K_ASTORE) X(A_STORE_I, K_ASTORE)   \
     /* Growable append + shrink, for an iteration whose LENGTH is only known    \
      * once it has run (FixedPointList, NestWhileList, and later Select).       \
      * Deliberately separate opcodes rather than a bounds check inside          \
@@ -268,6 +377,42 @@ enum { OPLIST OP__COUNT };
 #define AF_B(f)       (((f) >> AF_B_SHIFT) & 7u)
 #define AF_R(f)       (((f) >> AF_R_SHIFT) & 3u)
 enum { AK_ARR = 0, AK_REAL = 1, AK_COMPLEX = 2 };   /* operand kinds */
+
+/* Scalar-integer opcodes: do not abandon the call on overflow, keep the wrapped
+ * value (COMPILE_WRAP_INT / "CatchMachineIntegerOverflow" -> False).
+ *
+ * It shares the `flags` word with the AF_* bits above, which is safe because the
+ * integer opcodes never carry any of them — an array op is never one of the ops
+ * below.  A top bit rather than a low one so the two groups stay visually
+ * distinct in a disassembly.
+ *
+ * Baking the choice into the instruction is what makes the option free: the VM
+ * evaluates this bit only AFTER an overflow has been detected, so the
+ * no-overflow path — every iteration of every real program — is byte for byte
+ * the path it would take with the option on. */
+#define IF_NOCHK      0x8000u
+
+/* The opcodes IF_NOCHK applies to: the ARITHMETIC ones, whose only failure is
+ * overflow.  Kept as one predicate so the emitter, the optimiser and the
+ * disassembler cannot disagree about which instructions carry the bit.
+ *
+ * The integer-closed heads (POW_II, FACT_I, BINOM_I, ...) are deliberately NOT
+ * here even though their VM bodies also use IOP().  They fail for TWO reasons —
+ * overflow, and an argument outside the domain where the interpreter returns an
+ * integer at all (`7^-3` is a Rational, `Factorial[-1]` is ComplexInfinity) —
+ * and the two are entangled inside one helper.  Wrapping is a coherent answer
+ * for `a*b`; there is no coherent wrapped answer for `Factorial[-1]`, so these
+ * always defer to the interpreter whatever the option says. */
+static inline bool op_is_checked_int(uint16_t op) {
+    switch (op) {
+        case OP_ADD_I:  case OP_SUB_I:  case OP_MUL_I:
+        case OP_ADD_IK: case OP_SUB_IK: case OP_SUB_KI: case OP_MUL_IK:
+        case OP_NEG_I:  case OP_ABS_I:  case OP_POWI_I: case OP_INC_I:
+            return true;
+        default:
+            return false;
+    }
+}
 
 /* The subscript list of a general (non-scalar) Part, carried in A_PART /
  * A_PARTSET's immediate as `imm.p`.

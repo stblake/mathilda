@@ -515,6 +515,42 @@ expression would.
     two above, leaves `Compile[…]` unevaluated rather than quietly ignoring it.
   - `CompilePrint` shows an `Attributes  Listable` line for such an object.
 
+- **Machine integers.** Integer arithmetic is exact: every integer operation that
+  can overflow an `int64` abandons the compiled call, and the interpreter re-runs
+  the body and promotes to a bigint, so `Compile[{{n, _Integer}}, n^3][3000000]`
+  gives `27000000000000000000` and not a wrapped value. Loop accumulators inherit
+  this, as do the integer-CLOSED heads — `Power` with a non-negative exponent,
+  `Factorial`, `Gamma`, `Binomial`, `Pochhammer`, `Fibonacci`, `LucasL`, `Im`,
+  `Arg`, `FractionalPart` — each of which returns an **Integer**, matching the
+  interpreter's head, and defers outside the domain where the interpreter returns
+  an integer at all (`Factorial[-1]` is `ComplexInfinity`, `7^-3` is `1/343`).
+  `GCD`, `LCM`, `PowerMod`, `Divisible`, `EvenQ`, `OddQ`, `IntegerLength` and
+  `IntegerExponent` compile over integer arguments.
+
+  `Sqrt`, `Divide` and the transcendentals still widen an integer argument to a
+  Real, so `Compile[{{n, _Integer}}, n/2][3]` is `1.5` where the interpreter says
+  `3/2`. That divergence is inherent rather than an oversight: Rationals and
+  symbolic radicals are not machine numbers, and the Wolfram Language's `Compile`
+  behaves the same way.
+
+- **`RuntimeOptions`.** `RuntimeOptions -> {"CatchMachineIntegerOverflow" ->
+  False}` keeps the wrapped `int64` instead of deferring to the interpreter;
+  `"Speed"` and `"Quality"` are shorthands for `False` and the default `True`.
+  It is a **semantics** switch, not a performance one — the choice is compiled
+  into each instruction rather than tested per call, so leaving checking on costs
+  nothing measurable. Turning it off makes the object answer differently from the
+  interpreter once a result leaves the machine-integer range, which is why it is
+  opt-in. Auto-compiled paths (`Plot`, `Table`, `NIntegrate`, `NDSolve`) always
+  check, and `SetOptions[Compile, …]` does not reach them.
+
+- **Integer arrays.** `{v, _Integer, r}` is a rank-`r` machine-integer array
+  parameter, alongside `_Real` and `_Complex`. `Range[n]`, an integer-valued
+  `Table`, and `ConstantArray` with an integer fill build packed integer buffers
+  and return Lists of **Integers**, matching the interpreter element for element
+  and staying exact past 2^53. A `List` of Integers goes in and a `List` of
+  Integers comes back — never an `NDArray`, since no user syntax builds an
+  integer-typed one.
+
 ```mathematica
 In[1]:= f = Compile[{{x, _Real}}, x^2 + 1]
 Out[1]= CompiledFunction[{x}, x^2 + 1]

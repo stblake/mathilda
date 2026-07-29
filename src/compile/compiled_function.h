@@ -31,9 +31,12 @@ typedef struct CompiledFunction CompiledFunction;
  * `runtime_attrs` carries the `RuntimeAttributes` option as an attribute
  * bitmask; the only setting the object acts on is ATTR_LISTABLE (pass ATTR_NONE
  * for the default).  A Listable object threads over List arguments the way a
- * Listable symbol does — see compiled_function_apply. */
+ * Listable symbol does — see compiled_function_apply.
+ *
+ * `compile_flags` are compile-engine flags (compile.h) from the `RuntimeOptions`
+ * option — currently only COMPILE_WRAP_INT.  Pass 0 for the defaults. */
 CompiledFunction* compiled_function_new(const Expr* argspec, const Expr* body,
-                                        uint32_t runtime_attrs);
+                                        uint32_t runtime_attrs, unsigned compile_flags);
 
 CompiledFunction* compiled_function_ref(CompiledFunction* cf);
 void              compiled_function_free(CompiledFunction* cf);

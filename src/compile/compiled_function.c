@@ -112,8 +112,15 @@ static bool cf_box(const Expr* e, CompileType t, CompileValue* out, bool* packed
         }
         if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
             && e->data.function.head->data.symbol.name == SYM_List) {
-            Expr* nd = ndarray_from_nested_list(e, CT_ELEM(t) == CT_COMPLEX
-                                                   ? NDT_COMPLEX64 : NDT_FLOAT64);
+            /* The buffer dtype follows the DECLARED element type, so a
+             * `{v, _Integer, r}` parameter packs into an int64 buffer.  Packing
+             * a List of Integers as float64 and letting the program call it
+             * integral would lose everything above 2^53 before a single
+             * instruction ran. */
+            NDType want = CT_ELEM(t) == CT_COMPLEX ? NDT_COMPLEX64
+                        : CT_ELEM(t) == CT_INT     ? NDT_INT64
+                                                   : NDT_FLOAT64;
+            Expr* nd = ndarray_from_nested_list(e, want);
             if (!nd) return false;                       /* ragged or symbolic */
             if (nd->data.ndarray.rank != CT_RANK(t)) { expr_free(nd); return false; }
             out->v.a = nd;
@@ -197,10 +204,9 @@ static bool cf_parse_argspec(const Expr* argspec,
                    && el->data.function.args[0]->type == EXPR_SYMBOL
                    && parse_typespec(el->data.function.args[1], &ty)) {
             /* `{v, _Real, r}` — a rank-r machine array, the same third-element
-             * rank spelling Compile[] uses in the Wolfram Language.  The element
-             * type must be Real or Complex: the packed buffer formats are
-             * float/complex only, there is no integer dtype to hold a rank-r
-             * Integer array. */
+             * rank spelling Compile[] uses in the Wolfram Language.  All three
+             * element types are packable: Real and Complex into float64 and
+             * complex64 buffers, Integer into an int64 one (NDT_INT64). */
             if (el->data.function.arg_count == 3) {
                 const Expr* rk = el->data.function.args[2];
                 if (rk->type != EXPR_INTEGER) { free(names); free(types); return false; }
@@ -208,7 +214,7 @@ static bool cf_parse_argspec(const Expr* argspec,
                 if (r == 0) {
                     /* rank 0 is just the scalar */
                 } else if (r < 1 || r > CT_MAX_RANK
-                           || (ty != CT_REAL && ty != CT_COMPLEX)) {
+                           || (ty != CT_REAL && ty != CT_COMPLEX && ty != CT_INT)) {
                     free(names); free(types); return false;
                 } else {
                     ty = CT_ARRAY(ty, (int)r);
@@ -229,7 +235,7 @@ static bool cf_parse_argspec(const Expr* argspec,
 }
 
 CompiledFunction* compiled_function_new(const Expr* argspec, const Expr* body,
-                                        uint32_t runtime_attrs) {
+                                        uint32_t runtime_attrs, unsigned compile_flags) {
     if (!body) return NULL;
     const char** names; CompileType* types; size_t n;
     if (!cf_parse_argspec(argspec, &names, &types, &n)) return NULL;
@@ -241,7 +247,10 @@ CompiledFunction* compiled_function_new(const Expr* argspec, const Expr* body,
     cf->arg_names = names;
     cf->arg_types = types;
     cf->body      = expr_copy((Expr*)body);
-    cf->prog      = compile_expr(cf->body, names, types, n);  /* NULL ⇒ fallback only */
+    /* NULL ⇒ fallback only.  COMPILE_FOLD_GLOBALS is deliberately NOT passed: a
+     * Compile[] object outlives the scope that defined it, so folding a global's
+     * current value into it would go stale (see compile.h). */
+    cf->prog      = compile_expr_ex(cf->body, names, types, n, compile_flags);
     cf->runtime_attrs = runtime_attrs;
     return cf;
 }
@@ -511,6 +520,12 @@ Expr* compiled_function_apply(const CompiledFunction* cf, Expr* const* args, siz
                     bool from_nd = false;
                     for (size_t q = 0; q < nargs; q++)
                         if (CT_IS_ARRAY(cf->arg_types[q]) && !packed_p[q]) from_nd = true;
+                    /* An INTEGER array always unpacks, whatever the arguments
+                     * were.  NDT_INT64 is internal to the compiler — no user
+                     * syntax builds one and `NDArray[...]` never infers it — so
+                     * returning the buffer itself would hand back a value the
+                     * rest of the system has no way to have produced. */
+                    if (CT_ELEM(out.type) == CT_INT) from_nd = false;
                     if (!from_nd || compiled_result_built(cf->prog)) {
                         Expr* lst = ndarray_to_nested_list(r);
                         if (lst) { expr_free(r); r = lst; }
@@ -578,12 +593,68 @@ static bool cf_match_runtime_attrs_opt(const Expr* e, uint32_t* out, bool* ok) {
     return true;
 }
 
+/* ------------------------- RuntimeOptions -------------------------------- *
+ * `RuntimeOptions -> {"CatchMachineIntegerOverflow" -> False}` turns off the
+ * fallback-to-interpreter on machine-integer overflow, keeping the wrapped
+ * int64 instead.  Default True, and the shorthands "Quality" (= True) and
+ * "Speed" (= False) mirror the Wolfram Language's spelling of the same option.
+ *
+ * Turning it off makes the compiled function answer DIFFERENTLY from the
+ * interpreter once a result leaves the int64 range, which is why it is opt-in
+ * and never the default. */
+static bool cf_str_is(const Expr* e, const char* s) {
+    return e && e->type == EXPR_STRING && strcmp(e->data.string, s) == 0;
+}
+
+/* Parse a RuntimeOptions value into compile-engine flags.  False on any setting
+ * we cannot honour, so the caller leaves Compile[...] unevaluated rather than
+ * quietly ignoring it. */
+static bool cf_parse_runtime_options(const Expr* v, unsigned* out) {
+    if (!v) return false;
+    if (cf_str_is(v, "Quality")) { *out &= ~COMPILE_WRAP_INT; return true; }
+    if (cf_str_is(v, "Speed"))   { *out |=  COMPILE_WRAP_INT; return true; }
+    if (!cf_is_list(v)) return false;
+    for (size_t i = 0; i < v->data.function.arg_count; i++) {
+        const Expr* el = v->data.function.args[i];
+        if (el->type != EXPR_FUNCTION || el->data.function.head->type != EXPR_SYMBOL
+            || el->data.function.arg_count != 2)
+            return false;
+        const char* h = el->data.function.head->data.symbol.name;
+        if (h != SYM_Rule && h != SYM_RuleDelayed) return false;
+        if (!cf_str_is(el->data.function.args[0], "CatchMachineIntegerOverflow"))
+            return false;
+        const Expr* val = el->data.function.args[1];
+        if (val->type != EXPR_SYMBOL) return false;
+        if      (val->data.symbol.name == SYM_True)  *out &= ~COMPILE_WRAP_INT;
+        else if (val->data.symbol.name == SYM_False) *out |=  COMPILE_WRAP_INT;
+        else return false;
+    }
+    return true;
+}
+
+/* Is `e` a `RuntimeOptions -> value` option?  Same contract as the
+ * RuntimeAttributes matcher above. */
+static bool cf_match_runtime_options_opt(const Expr* e, unsigned* out, bool* ok) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL
+        || e->data.function.arg_count != 2)
+        return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    if (h != SYM_Rule && h != SYM_RuleDelayed) return false;
+    const Expr* lhs = e->data.function.args[0];
+    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol.name != SYM_RuntimeOptions)
+        return false;
+    *ok = cf_parse_runtime_options(e->data.function.args[1], out);
+    return true;
+}
+
 /* Compile[argspec, body, opts] (HoldAll).  Never evaluates the body; the raw
  * held body is compiled, and any non-arg symbol it references simply routes that
  * call through the interpreter fallback.
  *
- * The one option is `RuntimeAttributes`, whose only setting is `Listable`: the
- * resulting object then threads over List arguments (default `{}`). */
+ * Two options: `RuntimeAttributes`, whose only setting is `Listable` (the
+ * resulting object then threads over List arguments; default `{}`), and
+ * `RuntimeOptions`, whose only setting is `"CatchMachineIntegerOverflow"`
+ * (default True). */
 static Expr* builtin_compile(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -592,12 +663,14 @@ static Expr* builtin_compile(Expr* res) {
     /* Seed from the registered defaults so SetOptions[Compile, ...] takes
      * effect, then let an explicit trailing option override below. */
     uint32_t rattrs = ATTR_NONE;
+    unsigned cflags = 0u;
     Expr* defs = symtab_get_options("Compile");        /* borrowed */
     if (defs && defs->type == EXPR_FUNCTION) {
         for (size_t i = 0; i < defs->data.function.arg_count; i++) {
-            uint32_t v; bool ok = false;
-            if (cf_match_runtime_attrs_opt(defs->data.function.args[i], &v, &ok) && ok)
-                rattrs = v;
+            const Expr* d = defs->data.function.args[i];
+            uint32_t v; unsigned f = cflags; bool ok = false;
+            if (cf_match_runtime_attrs_opt(d, &v, &ok) && ok) rattrs = v;
+            else if (cf_match_runtime_options_opt(d, &f, &ok) && ok) cflags = f;
         }
     }
 
@@ -605,16 +678,24 @@ static Expr* builtin_compile(Expr* res) {
      * option this function has no meaning for — an unknown name, or a
      * RuntimeAttributes value that is not a supported attribute — leaves
      * Compile[...] unevaluated rather than being quietly ignored. */
-    bool explicit_attrs = false;
+    bool explicit_attrs = false, explicit_opts = false;
     while (argc > 2) {
-        uint32_t v; bool ok = false;
-        if (!cf_match_runtime_attrs_opt(a[argc - 1], &v, &ok) || !ok) return NULL;
-        if (!explicit_attrs) { rattrs = v; explicit_attrs = true; }
+        const Expr* o = a[argc - 1];
+        uint32_t v; unsigned f = cflags; bool ok = false;
+        if (cf_match_runtime_attrs_opt(o, &v, &ok)) {
+            if (!ok) return NULL;
+            if (!explicit_attrs) { rattrs = v; explicit_attrs = true; }
+        } else if (cf_match_runtime_options_opt(o, &f, &ok)) {
+            if (!ok) return NULL;
+            if (!explicit_opts) { cflags = f; explicit_opts = true; }
+        } else {
+            return NULL;
+        }
         argc--;
     }
     if (argc != 2) return NULL;
 
-    CompiledFunction* cf = compiled_function_new(a[0], a[1], rattrs);
+    CompiledFunction* cf = compiled_function_new(a[0], a[1], rattrs, cflags);
     if (!cf) return NULL;   /* malformed argspec ⇒ leave Compile[...] unevaluated */
     return expr_new_compiled(cf);
 }
@@ -723,8 +804,12 @@ void compiled_function_init(void) {
         "_Integer, _Complex; default _Real), falling back to the interpreter for "
         "symbolic arguments or non-compilable bodies. With "
         "RuntimeAttributes -> Listable the object threads over List arguments; "
-        "the default is RuntimeAttributes -> {}.");
-
+        "the default is RuntimeAttributes -> {}. "
+        "RuntimeOptions -> {\"CatchMachineIntegerOverflow\" -> False} (or the "
+        "shorthand RuntimeOptions -> \"Speed\") lets machine-integer arithmetic "
+        "wrap instead of falling back to the interpreter, which is faster and "
+        "gives a different answer from the interpreter once a result leaves the "
+        "machine-integer range; the default True never does.");
     symtab_add_builtin("CompileDiagnostics", builtin_compile_diagnostics);
     SymbolDef* dd = symtab_get_def("CompileDiagnostics");
     if (dd) dd->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;

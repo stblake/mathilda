@@ -173,6 +173,24 @@ size_t      compiled_num_cse(const CompiledProgram* p);
 /* Skip Expr-level CSE.  A/B only: results must be identical either way. */
 #define COMPILE_NO_CSE       0x8u
 
+/* Let machine-integer arithmetic WRAP instead of falling back to the interpreter.
+ *
+ * By default every integer opcode that can overflow detects it and abandons the
+ * call, so the interpreter re-runs the body and promotes to a bigint — the
+ * compiled answer is then always the interpreted one.  With this flag the
+ * wrapped int64 value is kept, which is faster by the width of one
+ * not-taken branch per integer operation and is WRONG whenever a result leaves
+ * the int64 range.  It is the Wolfram Language's
+ * `RuntimeOptions -> {"CatchMachineIntegerOverflow" -> False}`, and it is
+ * surfaced on Compile[] under that same name.
+ *
+ * The choice is baked into the emitted instructions (IF_NOCHK in `flags`), not
+ * tested per execution, so turning checking off costs nothing at run time.
+ * Note that the overflow is still DETECTED — only the branch to the fallback is
+ * suppressed; `-DVM_NO_INT_CHECK` at build time removes the detection too, and
+ * is what measures the feature's true cost. */
+#define COMPILE_WRAP_INT     0x20u
+
 /* Do not emit the parallel fan-out marker on fused MAP loops, so they run on one
  * thread.  A/B only.
  *

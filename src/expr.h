@@ -31,8 +31,8 @@ typedef enum {
 } ExprType;
 
 /* Element data type of an EXPR_NDARRAY, analogous to numpy's dtype. The four
- * types map one-to-one onto BLAS's four precisions (s/d/c/z), where the numeric
- * suffix is the *per-component* bit width:
+ * floating types map one-to-one onto BLAS's four precisions (s/d/c/z), where the
+ * numeric suffix is the *per-component* bit width:
  *   NDT_FLOAT64   double            (BLAS d) — DEFAULT, value 0 so a
  *                                   zero-initialized/legacy struct behaves as
  *                                   today's double-only NDArray.
@@ -41,12 +41,28 @@ typedef enum {
  *   NDT_COMPLEX32 2x float  (re,im) (BLAS c)
  * Complex is stored as interleaved (re, im) plain floats/doubles — no
  * <complex.h>, matching the existing BLAS interleaved-buffer convention and
- * keeping the code strict-C99 portable. See ndarray.h for the ndt_* helpers. */
+ * keeping the code strict-C99 portable. See ndarray.h for the ndt_* helpers.
+ *
+ *   NDT_INT64     int64_t           — COMPILER-INTERNAL, no BLAS counterpart.
+ *
+ * NDT_INT64 exists so Compile[] can hold a packed buffer of machine INTEGERS:
+ * `Range[n]` and `Table[i, {i, 1, n}]` are exact Integers in the interpreter, and
+ * before this there was no integer dtype to put them in, so compiling them would
+ * have answered with a different element type rather than merely faster.
+ *
+ * It is deliberately NOT reachable from user syntax — `ndt_from_string` does not
+ * produce it and `NDArray[...]` never infers it — and the Compile[] boundary
+ * always unpacks an int64 buffer to a List of Integers, so one never escapes
+ * into the interpreter. That containment is what lets the generic ndt_get/ndt_set
+ * pair keep its `double` signature: those two are exact only to 2^53, and the
+ * exact accessors (ndt_get_i/ndt_set_i) are used everywhere an int64 array is
+ * actually read or written. */
 typedef enum {
     NDT_FLOAT64 = 0,
     NDT_FLOAT32,
     NDT_COMPLEX64,
-    NDT_COMPLEX32
+    NDT_COMPLEX32,
+    NDT_INT64
 } NDType;
 
 /* Dense machine-precision ndarray payload for EXPR_NDARRAY. Row-major flat

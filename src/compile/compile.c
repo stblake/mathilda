@@ -270,6 +270,10 @@ static void ins_f(Ctx* c, uint16_t op, uint16_t flags,
         if (!nb) { c->ok = false; return; }
         c->code = nb; c->cap = nc;
     }
+    /* The overflow-checking choice is stamped onto each integer instruction here
+     * — the one place every instruction passes through — rather than threaded
+     * to the two dozen sites that emit integer arithmetic. */
+    if ((c->flags & COMPILE_WRAP_INT) && op_is_checked_int(op)) flags |= IF_NOCHK;
     c->code[c->n].op = op; c->code[c->n].flags = flags; c->code[c->n].dst = dst;
     c->code[c->n].a = a; c->code[c->n].b = b; c->code[c->n].imm = imm;
     c->n++;
@@ -622,6 +626,12 @@ static Val arr_real_const(Ctx* c, double x) { Slot s; s.r = x; return emit_const
 
 static bool infer_type(Ctx* c, const Expr* e, CompileType* out);
 
+/* A machine element type an array buffer can hold.  Bool has no buffer form and
+ * a nested array is not an element; Int became one when NDT_INT64 arrived. */
+static bool ct_is_elem(CompileType t) {
+    return t == CT_INT || t == CT_REAL || t == CT_COMPLEX;
+}
+
 /* Is `node` (by identity) somewhere inside `root`?  Used only to keep a bail
  * diagnostic from pointing into a tree the emitter built and is about to free. */
 static bool expr_subtree_of(const Expr* root, const Expr* node) {
@@ -720,11 +730,12 @@ static bool const_array_shape(Ctx* c, const Expr* const* A, int* rank_out, Compi
     }
     CompileType et;
     if (!infer_type(c, A[0], &et)) return false;
-    /* An INTEGER fill is refused on purpose.  ConstantArray[0, n] holds exact
-     * integer zeros in the interpreter and an NDArray has no integer dtype, so
-     * compiling it to a float64 buffer would answer differently, not just
-     * faster.  ConstantArray[0., n] is the compilable spelling. */
-    if (et != CT_REAL && et != CT_COMPLEX) return false;
+    /* An integer fill is fine now that NDT_INT64 exists: ConstantArray[0, n]
+     * holds exact integer zeros in the interpreter, and a packed int64 buffer
+     * holds exactly those.  Before the integer dtype this had to be refused,
+     * because a float64 buffer would have answered differently rather than
+     * merely faster. */
+    if (!ct_is_elem(et)) return false;
     *rank_out = rank; *elem_out = et;
     return true;
 }
@@ -1107,6 +1118,29 @@ static bool loop_spec_int_bounds(Ctx* c, const LoopSpec* s) {
     return infer_type(c, s->hi, &t) && t == CT_INT;
 }
 
+/* Range[hi] / Range[lo, hi] / Range[lo, hi, di] as a LoopSpec, so Range shares
+ * the element-COUNT arithmetic with Table rather than deriving its own — the
+ * count is the whole difficulty, and two implementations of it would eventually
+ * disagree at an endpoint.
+ *
+ * `var` stays NULL: Range has no iterator symbol to bind, its body IS the
+ * iterator.  Bounds must infer as CT_INT (the interpreter's real Range walks by
+ * repeated addition, which a closed-form step does not reproduce bit for bit)
+ * and the step must be a nonzero literal, so the loop test's direction is known
+ * when the comparison opcode is chosen. */
+static bool range_spec(Ctx* c, Expr* const* A, size_t na, LoopSpec* out) {
+    memset(out, 0, sizeof *out);
+    out->di = 1;
+    if (na == 1) { out->lo = NULL; out->hi = A[0]; }
+    else         { out->lo = A[0]; out->hi = A[1]; }
+    if (na == 3) {
+        if (A[2]->type != EXPR_INTEGER) return false;
+        out->di = (long long)A[2]->data.integer;
+        if (out->di == 0) return false;
+    }
+    return loop_spec_int_bounds(c, out);
+}
+
 /* Materialise a loop bound into the persistent register `dst`.  A NULL bound is
  * the implicit lower limit 1, loaded straight as a constant so the count-only
  * and {i,hi} forms cost nothing extra. */
@@ -1146,6 +1180,78 @@ static CompileType arr_like(CompileType operand, CompileType elem_result) {
     return CT_IS_ARRAY(operand) ? CT_ARRAY(elem_result, CT_RANK(operand)) : elem_result;
 }
 static CompileType elem_of(CompileType t) { return CT_IS_ARRAY(t) ? CT_ELEM(t) : t; }
+
+/* Element access opcode for an array's element type.  One place rather than the
+ * fourteen `elem == CT_COMPLEX ? _C : _R` conditionals this replaces — adding
+ * the integer element type to those by hand is exactly the kind of edit that
+ * gets 13 of 14 sites. */
+static uint16_t a_load_op(CompileType elem) {
+    return elem == CT_COMPLEX ? OP_A_LOAD_C
+         : elem == CT_INT     ? OP_A_LOAD_I
+                              : OP_A_LOAD_R;
+}
+static uint16_t a_store_op(CompileType elem) {
+    return elem == CT_COMPLEX ? OP_A_STORE_C
+         : elem == CT_INT     ? OP_A_STORE_I
+                              : OP_A_STORE_R;
+}
+
+/* Heads that are integer-CLOSED: given integer arguments the interpreter returns
+ * an Integer, so a compiled body must too.  Every one of them also has a
+ * registered real kernel — which is the trap, because reaching the kernel first
+ * silently answers `35.` where the interpreter says `35`, and the numeric parity
+ * tests cannot see the difference (see docs: result-HEAD parity).
+ *
+ * ONE table, consulted by both infer_type and emit, so the type a body is
+ * declared to have and the opcode it actually runs cannot drift apart.
+ *
+ * Heads that look like they belong here and do NOT:
+ *   LegendreP   `LegendreP[2, 2]` is 11/2 — Rational for some integer arguments.
+ *   Beta        Rational.       HarmonicNumber  Rational.
+ *   Divide      Rational; `Divide[7,3]` is 7/3 and no machine type holds it. */
+typedef struct { const char* name; size_t arity; uint16_t op; } IntClosed;
+static const IntClosed INT_CLOSED[] = {
+    { "Factorial",  1, OP_FACT_I  },
+    { "Gamma",      1, OP_GAMMA_I },
+    { "Fibonacci",  1, OP_FIB_I   },
+    { "LucasL",     1, OP_LUCAS_I },
+    { "Binomial",   2, OP_BINOM_I },
+    { "Pochhammer", 2, OP_POCH_I  },
+};
+static const IntClosed* int_closed_head(const char* h, size_t na) {
+    for (size_t i = 0; i < sizeof INT_CLOSED / sizeof INT_CLOSED[0]; i++)
+        if (INT_CLOSED[i].arity == na && strcmp(INT_CLOSED[i].name, h) == 0)
+            return &INT_CLOSED[i];
+    return NULL;
+}
+/* Integer-ONLY heads: ones with no real counterpart at all.  Unlike INT_CLOSED
+ * above there is no kernel behind them to fall through to — non-integer
+ * arguments simply bail, exactly as they did before.
+ *
+ * `*pred` distinguishes the three that answer True/False (CT_BOOL) from the ones
+ * that answer an Integer.  GCD and LCM are Flat and n-ary in the interpreter, so
+ * any arity from 2 up is accepted and folded left. */
+static bool int_only_head(const char* h, size_t na, bool* pred) {
+    *pred = false;
+    if (na >= 2 && (strcmp(h, "GCD") == 0 || strcmp(h, "LCM") == 0)) return true;
+    if ((na == 1 || na == 2)
+        && (strcmp(h, "IntegerLength") == 0 || strcmp(h, "IntegerExponent") == 0)) return true;
+    if (na == 3 && strcmp(h, "PowerMod") == 0) return true;
+    if ((na == 1 && (strcmp(h, "EvenQ") == 0 || strcmp(h, "OddQ") == 0))
+        || (na == 2 && strcmp(h, "Divisible") == 0)) { *pred = true; return true; }
+    return false;
+}
+
+/* Peek at the argument types without emitting anything, so a head that is
+ * integer-closed only on integer arguments can decline to the ordinary real
+ * lowering for every other case. */
+static bool all_args_int(Ctx* c, Expr* const* A, size_t na) {
+    for (size_t i = 0; i < na; i++) {
+        CompileType t;
+        if (!infer_type(c, A[i], &t) || t != CT_INT) return false;
+    }
+    return true;
+}
 
 static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     if (!e) return false;
@@ -1205,7 +1311,14 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
             *out = arr_like(ta, elem_of(ta) == CT_COMPLEX ? CT_COMPLEX : CT_REAL);
             return true;
         }
-        IT(1, tb); ta = num_common(ta, tb); if ((int)ta < 0) return false; if (ta < CT_REAL) ta = CT_REAL; *out = ta; return true;
+        IT(1, tb); ta = num_common(ta, tb); if ((int)ta < 0) return false;
+        /* Integer base and integer exponent stay INTEGER, even though the
+         * exponent's sign is only known per call: `2^n` is the Integer 1024 at
+         * n = 10, and answering 1024. would be the wrong head.  OP_POW_II
+         * abandons the call when the exponent turns out negative, because 2^-3
+         * is the Rational 1/8 and no machine type holds it. */
+        if (ta == CT_INT) { *out = CT_INT; return true; }
+        if (ta < CT_REAL) ta = CT_REAL; *out = ta; return true;
     }
     uint16_t or_, oc_;
     if (na == 1 && (unary_math(h, &or_, &oc_) || strcmp(h, "Tanh") == 0)) {
@@ -1233,6 +1346,19 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         }
         *out = ta == CT_COMPLEX ? CT_REAL : ta; return true;
     }
+    /* Integer-closed heads on integer arguments (see INT_CLOSED).  Must be tested
+     * BEFORE the generic kernel dispatch below: each of these HAS a registered
+     * real kernel, and reaching it first is exactly how `Binomial[7,3]` came back
+     * as 35. instead of 35. */
+    if (int_closed_head(h, na) && all_args_int(c, A, na)) { *out = CT_INT; return true; }
+    /* Integer-ONLY heads: no real counterpart, so they exist over CT_INT or not
+     * at all.  The three predicates answer True/False, hence CT_BOOL. */
+    {
+        bool pred = false;
+        if (int_only_head(h, na, &pred) && all_args_int(c, A, na)) {
+            *out = pred ? CT_BOOL : CT_INT; return true;
+        }
+    }
     /* Sign of a real is the INTEGER -1, 0 or 1 — `Sign[-2.5]` is `-1`, not
      * `-1.` — so the result type is CT_INT, not the argument's type.  Sign of a
      * complex is z/|z|, which is genuinely complex. */
@@ -1248,8 +1374,18 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     if ((strcmp(h, "Re") == 0 || strcmp(h, "Im") == 0 || strcmp(h, "Arg") == 0) && na == 1) {
         IT(0, ta);
         if (ta == CT_BOOL) return false;
+        /* Over the integers all three stay integral: Re is the value, Im is 0,
+         * and Arg is 0 (or Pi, which ARG_I hands back to the interpreter). */
+        if (ta == CT_INT) { *out = CT_INT; return true; }
         *out = CT_IS_ARRAY(ta) ? CT_ARRAY(CT_REAL, CT_RANK(ta)) : CT_REAL;
         return true;
+    }
+    /* FractionalPart of an integer is the Integer 0, not 0. */
+    if (strcmp(h, "FractionalPart") == 0 && na == 1) {
+        IT(0, ta);
+        if (ta == CT_INT) { *out = CT_INT; return true; }
+        if (CT_IS_ARRAY(ta) || ta == CT_BOOL) return false;
+        *out = ta; return true;
     }
     if (strcmp(h, "Conjugate") == 0 && na == 1) { IT(0, ta); *out = ta; return true; }
     if (strcmp(h, "HypergeometricPFQ") == 0 && na == 3) {
@@ -1453,7 +1589,7 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
             if (tfp < 0) return false;
             T = (CompileType)tfp;
         }
-        if (T != CT_REAL && T != CT_COMPLEX) return false;
+        if (!ct_is_elem(T)) return false;
         *out = CT_ARRAY(T, 1); return true;
     }
     /* FixedPointList / NestWhileList — a BUILT history, so Real/Complex only. */
@@ -1470,7 +1606,7 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         int tfp = nest_fixed_type(c, &s, tx);
         if (tfp < 0) return false;
         CompileType T = (CompileType)tfp;
-        if (T != CT_REAL && T != CT_COMPLEX) return false;
+        if (!ct_is_elem(T)) return false;
         CompileType tb;
         if (fp && st) {
             CompileType at[2] = { T, T };
@@ -1527,6 +1663,12 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         if (!const_array_shape(c, (const Expr* const*)A, &rank, &elem)) return false;
         *out = CT_ARRAY(elem, rank); return true;
     }
+    /* Range[hi] / Range[lo, hi] / Range[lo, hi, di] — see the emit-side block. */
+    if (strcmp(h, "Range") == 0 && na >= 1 && na <= 3) {
+        LoopSpec s;
+        if (!range_spec(c, A, na, &s)) return false;
+        *out = CT_ARRAY(CT_INT, 1); return true;
+    }
     /* Table[body, spec...] — see the emit-side block for why the iterators must
      * be integer-bounded and the element type Real or Complex. */
     if (strcmp(h, "Table") == 0 && na >= 2 && (int)na - 1 <= CT_MAX_RANK) {
@@ -1544,7 +1686,7 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
             }
         CompileType et; bool okT = infer_type(c, A[0], &et);
         c->nscope -= pushed;
-        if (!okT || (et != CT_REAL && et != CT_COMPLEX)) return false;
+        if (!okT || !ct_is_elem(et)) return false;
         *out = CT_ARRAY(et, rank); return true;
     }
 
@@ -2022,7 +2164,11 @@ static bool try_fuse(Ctx* c, const Expr* e, Val* out) {
     if (!infer_type(c, body, &bt) || !CT_IS_ARRAY(bt)) return false;
     CompileType elem = CT_ELEM(bt);
     int rank = CT_RANK(bt);
-    if (elem != CT_REAL && elem != CT_COMPLEX) return false;   /* no int buffers */
+    /* Integer element types are excluded from FUSION specifically: the tile
+     * opcodes (VADD_R, VMUL_C, ...) are real and complex only, so an integer
+     * chain takes the ordinary per-element loop instead.  Correct, just not
+     * strip-mined. */
+    if (elem != CT_REAL && elem != CT_COMPLEX) return false;
 
     if (fuse_listable(c, body) != 1) return false;
 
@@ -2542,6 +2688,14 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         }
         Val a, b; if (!emit(c, base, &a) || !emit(c, ex, &b)) return false;
         CompileType t = num_common(a.type, b.type); if ((int)t < 0) { c->ok = false; return false; }
+        /* Integer base AND integer exponent, the exponent's value known only per
+         * call.  `2^n` is an Integer for n >= 0 and a Rational below it, so the
+         * only faithful lowering is one that computes exactly and abandons the
+         * call on a negative exponent (and on 0^0, which is Indeterminate). */
+        if (t == CT_INT && !val_is_tile(a) && !val_is_tile(b)) {
+            *out = binop(c, OP_POW_II, a, b, CT_INT);
+            return c->ok;
+        }
         if (t < CT_REAL) t = CT_REAL;
         coerce(c, &a, t); coerce(c, &b, t);
         *out = binop(c, t == CT_COMPLEX ? OP_POW_C : OP_POW_R, a, b, t);
@@ -2587,6 +2741,91 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         if (a.type == CT_INT)     { *out = unop(c, OP_ABS_I, a, CT_INT); return c->ok; }
         coerce(c, &a, CT_REAL); *out = unop(c, OP_ABS_R, a, CT_REAL); return c->ok;
     }
+    /* Integer-closed heads, before the generic kernel dispatch — see INT_CLOSED.
+     * Declining here (rather than bailing) leaves every non-integer call to the
+     * ordinary real kernel it already used. */
+    {
+        const IntClosed* ic = int_closed_head(h, na);
+        if (ic && all_args_int(c, A, na)) {
+            Val a; if (!emit(c, A[0], &a)) return false;
+            if (na == 1) { *out = unop(c, ic->op, a, CT_INT); return c->ok; }
+            Val b; if (!emit(c, A[1], &b)) return false;
+            *out = binop(c, ic->op, a, b, CT_INT);
+            return c->ok;
+        }
+    }
+    /* Integer-only heads — see int_only_head. */
+    {
+        bool pred = false;
+        if (int_only_head(h, na, &pred) && all_args_int(c, A, na)) {
+            /* GCD / LCM: Flat and n-ary, folded left the way the interpreter's
+             * own Flat attribute would associate them. */
+            if (strcmp(h, "GCD") == 0 || strcmp(h, "LCM") == 0) {
+                uint16_t op = (h[0] == 'G') ? OP_GCD_I : OP_LCM_I;
+                Val acc; if (!emit(c, A[0], &acc)) return false;
+                for (size_t i = 1; i < na; i++) {
+                    Val v; if (!emit(c, A[i], &v)) return false;
+                    acc = binop(c, op, acc, v, CT_INT);
+                    if (!c->ok) return false;
+                }
+                *out = acc; return c->ok;
+            }
+            if (strcmp(h, "IntegerLength") == 0 || strcmp(h, "IntegerExponent") == 0) {
+                uint16_t op = (h[7] == 'L') ? OP_ILEN_I : OP_IEXP_I;
+                Val a; if (!emit(c, A[0], &a)) return false;
+                Val b;
+                if (na == 2) { if (!emit(c, A[1], &b)) return false; }
+                else {
+                    /* The default base is 10 for both. */
+                    memset(&imm, 0, sizeof imm); imm.i = 10;
+                    b = emit_const(c, imm, CT_INT);
+                    if (!c->ok) return false;
+                }
+                *out = binop(c, op, a, b, CT_INT); return c->ok;
+            }
+            if (strcmp(h, "PowerMod") == 0) {
+                /* Ternary: three CONSECUTIVE registers, the K_NARY shape. Same
+                 * allocate-then-MOVE dance as the n-ary kernel path, and for the
+                 * same reason — each argument's own lowering needs temps above
+                 * the run, so the run has to be reserved first. */
+                int base = alloc_temp(c);
+                (void)alloc_temp(c); (void)alloc_temp(c);
+                int after = c->temp_top;
+                Slot z; memset(&z, 0, sizeof z);
+                for (size_t i = 0; i < 3 && c->ok; i++) {
+                    Val v;
+                    if (!emit(c, A[i], &v)) return false;
+                    ins(c, OP_MOVE, (uint32_t)(base + (int)i), (uint32_t)v.reg, 0, z);
+                    c->temp_top = after;
+                }
+                if (!c->ok) return false;
+                c->temp_top = (base - c->nlocals) + 1;
+                ins_f(c, OP_POWMOD_I, 3, (uint32_t)base, (uint32_t)base, 0, z);
+                out->reg = base; out->tmp = true; out->type = CT_INT;
+                return c->ok;
+            }
+            /* EvenQ / OddQ / Divisible are Mod-and-compare, so they need no
+             * opcode of their own — and they inherit MOD_I's guard, which hands
+             * `Divisible[n, 0]` to the interpreter rather than dividing by it. */
+            {
+                Val a; if (!emit(c, A[0], &a)) return false;
+                Val b;
+                if (na == 2) { if (!emit(c, A[1], &b)) return false; }
+                else {
+                    memset(&imm, 0, sizeof imm); imm.i = 2;
+                    b = emit_const(c, imm, CT_INT);
+                    if (!c->ok) return false;
+                }
+                Val m = binop(c, OP_MOD_I, a, b, CT_INT);
+                if (!c->ok) return false;
+                memset(&imm, 0, sizeof imm); imm.i = (strcmp(h, "OddQ") == 0) ? 1 : 0;
+                Val k = emit_const(c, imm, CT_INT);
+                if (!c->ok) return false;
+                *out = binop(c, OP_EQ_I, m, k, CT_BOOL);
+                return c->ok;
+            }
+        }
+    }
     if (strcmp(h, "Sign") == 0 && na == 1) {
         Val a; if (!emit(c, A[0], &a)) return false;
         if (a.type == CT_INT)  { *out = unop(c, OP_SIGN_I, a, CT_INT); return c->ok; }
@@ -2619,8 +2858,29 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
                     : h[0] == 'R' ? OP_ROUND_R : OP_TRUNC_R;
         *out = unop(c, op, a, CT_INT); return c->ok;
     }
+    /* FractionalPart of an integer is the Integer 0.  Its registered kernel
+     * returns a double, so without this the head comes back as 0. — the same
+     * trap IntegerPart is lowered by hand for. */
+    if (strcmp(h, "FractionalPart") == 0 && na == 1) {
+        CompileType at;
+        if (infer_type(c, A[0], &at) && at == CT_INT) {
+            Val a; if (!emit(c, A[0], &a)) return false;
+            free_if_tmp(c, a); memset(&imm, 0, sizeof imm); imm.i = 0;
+            *out = emit_const(c, imm, CT_INT);
+            return c->ok;
+        }
+    }
     if ((strcmp(h, "Re") == 0 || strcmp(h, "Im") == 0 || strcmp(h, "Arg") == 0 || strcmp(h, "Conjugate") == 0) && na == 1) {
         Val a; if (!emit(c, A[0], &a)) return false;
+        if (a.type == CT_INT && strcmp(h, "Conjugate") != 0) {
+            /* Re[n] = n, Im[n] = the Integer 0, Arg[n] = the Integer 0 or Pi. */
+            if (strcmp(h, "Re") == 0) { *out = a; return c->ok; }
+            if (strcmp(h, "Im") == 0) {
+                free_if_tmp(c, a); memset(&imm, 0, sizeof imm); imm.i = 0;
+                *out = emit_const(c, imm, CT_INT); return c->ok;
+            }
+            *out = unop(c, OP_ARG_I, a, CT_INT); return c->ok;
+        }
         if (a.type != CT_COMPLEX) {
             if (strcmp(h, "Im") == 0) { free_if_tmp(c, a); imm.r = 0.0; *out = emit_const(c, imm, CT_REAL); return c->ok; }
             /* Arg of a real is 0 or Pi, which the interpreter evaluates, so
@@ -2848,7 +3108,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
             Val fv;
             if (!emit(c, A[0], &fv)) return false;
             coerce(c, &fv, elem);
-            ins(c, elem == CT_COMPLEX ? OP_A_STORE_C : OP_A_STORE_R,
+            ins(c,a_store_op(elem),
                 (uint32_t)rout, (uint32_t)rk, (uint32_t)fv.reg, fz);
             free_if_tmp(c, fv);
             Slot one; memset(&one, 0, sizeof one); one.i = 1;
@@ -2871,12 +3131,10 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
      * differs from it in the last bits and, near the endpoint, in the element
      * COUNT.  Integer bounds reproduce that walk exactly.
      *
-     * The element type must be Real or Complex for the same reason
-     * ConstantArray refuses an integer fill (see const_array_shape):
-     * `Table[i, {i, 1, n}]` holds exact Integers in the interpreter and a packed
-     * buffer has no integer dtype, so compiling it would answer differently
-     * rather than merely faster.  `Table[N[i]^2, ...]` is the compilable
-     * spelling.
+     * An INTEGER body is compiled, not refused: `Table[i, {i, 1, n}]` holds
+     * exact Integers in the interpreter and a packed NDT_INT64 buffer holds
+     * exactly those.  (Before the integer dtype existed this had to bail, since
+     * a float64 buffer would have answered differently rather than faster.)
      *
      * One flat store index across k nested loops, innermost varying fastest —
      * which is row-major, and which is how the interpreter's nested rewrite
@@ -2898,7 +3156,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
             }
         CompileType et; bool okT = infer_type(c, A[0], &et);
         c->nscope -= pushed;
-        if (!okT || (et != CT_REAL && et != CT_COMPLEX)) { c->ok = false; return false; }
+        if (!okT || !ct_is_elem(et)) { c->ok = false; return false; }
 
         Slot z = { 0 }, k0; memset(&k0, 0, sizeof k0); k0.i = 0;
 
@@ -2943,7 +3201,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         if (CT_IS_ARRAY(bv.type)) { c->nscope = scope_entry; c->ok = false; return false; }
         coerce(c, &bv, et);
         if (!c->ok) { c->nscope = scope_entry; return false; }
-        ins(c, et == CT_COMPLEX ? OP_A_STORE_C : OP_A_STORE_R,
+        ins(c,a_store_op(et),
             (uint32_t)rout, (uint32_t)rflat, (uint32_t)bv.reg, z);
         free_if_tmp(c, bv);
         Slot one; memset(&one, 0, sizeof one); one.i = 1;
@@ -2962,6 +3220,55 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         return c->ok;
     }
 
+    /* Range[hi] / Range[lo, hi] / Range[lo, hi, di] — a rank-1 integer array.
+     *
+     * This is `Table[i, {i, lo, hi, di}]` with the body being the iterator
+     * itself, so it shares the iteration machinery (emit_iter_count reproduces
+     * the interpreter's element COUNT exactly) and simply stores the loop
+     * variable instead of a body.
+     *
+     * INTEGER bounds only, for the reason Table gives: the interpreter walks a
+     * real iterator by repeated addition against a termination slack, so a
+     * closed-form step differs from it in the last bits and, at the endpoint, in
+     * the number of elements. */
+    if (strcmp(h, "Range") == 0 && na >= 1 && na <= 3) {
+        LoopSpec s;
+        if (!range_spec(c, A, na, &s)) { c->ok = false; return false; }
+
+        Slot z = { 0 }, k0; memset(&k0, 0, sizeof k0); k0.i = 0;
+        Slot one; memset(&one, 0, sizeof one); one.i = 1;
+
+        int rn = alloc_temp(c), rlo = alloc_temp(c);
+        if (!emit_iter_count(c, &s, rlo, rn)) return false;
+        emit_max_guard(c, rn, VM_ITER_SAFETY_CAP);
+
+        Slot el; memset(&el, 0, sizeof el); el.i = (long long)CT_INT;
+        int rout = alloc_arr(c);
+        ins_f(c, OP_A_NEW, 1, (uint32_t)rout, (uint32_t)rn, (uint32_t)rn, el);
+
+        int riv = alloc_temp(c), rk = alloc_temp(c);
+        ins(c, OP_MOVE,  (uint32_t)riv, (uint32_t)rlo, 0, z);
+        ins(c, OP_CONST, (uint32_t)rk, 0, 0, k0);
+
+        size_t top = c->n;
+        int rc = alloc_temp(c);
+        ins(c, OP_LT_I, (uint32_t)rc, (uint32_t)rk, (uint32_t)rn, z);
+        size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z);
+        c->temp_top--;
+
+        ins(c, OP_A_STORE_I, (uint32_t)rout, (uint32_t)rk, (uint32_t)riv, z);
+        Slot sd; memset(&sd, 0, sizeof sd); sd.i = s.di;
+        ins(c, OP_INC_I, (uint32_t)riv, 0, 0, sd);
+        ins(c, OP_INC_I, (uint32_t)rk, 0, 0, one);
+        ins(c, OP_JMP, 0, 0, (uint32_t)top, z);
+        if (c->ok) c->code[jz].b = (uint32_t)c->n;
+
+        c->temp_top = rn - c->nlocals;         /* every scalar temp is dead */
+        out->reg = rout; out->tmp = true;
+        out->type = CT_ARRAY(CT_INT, 1); out->built = true;
+        return c->ok;
+    }
+
     /* Part[a, subscripts...] (M3c).  See the block comment above emit_flat_index
      * for why this splits in two. */
     if (strcmp(h, "Part") == 0 && na >= 2) {
@@ -2975,7 +3282,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
             int ridx;
             if (!emit_flat_index(c, a, (const Expr* const*)A + 1, na - 1, &ridx)) return false;
             int rd = alloc_temp(c);
-            ins(c, elem == CT_COMPLEX ? OP_A_LOAD_C : OP_A_LOAD_R,
+            ins(c,a_load_op(elem),
                 (uint32_t)rd, (uint32_t)a.reg, (uint32_t)ridx, z);
             /* rd sits above ridx, so drop ridx by relocating rd onto it. */
             ins(c, OP_MOVE, (uint32_t)ridx, (uint32_t)rd, 0, z);
@@ -3283,7 +3590,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
                     if (!emit(c, A[1], &val)) return false;
                 } else {                                 /* AddTo / SubtractFrom / TimesBy */
                     int rold = alloc_temp(c);
-                    ins(c, elem == CT_COMPLEX ? OP_A_LOAD_C : OP_A_LOAD_R,
+                    ins(c,a_load_op(elem),
                         (uint32_t)rold, (uint32_t)arr.reg, (uint32_t)ridx, z);
                     Val cur = { rold, true, elem, false }, rhs;
                     if (!emit(c, A[1], &rhs)) return false;
@@ -3296,7 +3603,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
                 }
                 coerce(c, &val, elem);
                 if (!c->ok) return false;
-                ins(c, elem == CT_COMPLEX ? OP_A_STORE_C : OP_A_STORE_R,
+                ins(c,a_store_op(elem),
                     (uint32_t)arr.reg, (uint32_t)ridx, (uint32_t)val.reg, z);
                 /* Set returns the stored value; relocate it onto the index
                  * register so the whole subscript computation is reclaimed. */
@@ -3602,7 +3909,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
 
             int relem = alloc_temp(c);
             int body_top = c->temp_top;
-            ins(c, el == CT_COMPLEX ? OP_A_LOAD_C : OP_A_LOAD_R,
+            ins(c,a_load_op(el),
                 (uint32_t)relem, (uint32_t)va.reg, (uint32_t)ri, z);
             Val ev = { relem, false, el, false }, vt;
             if (!emit_apply(c, &ps, &ev, 1, &vt)) return false;
@@ -3611,7 +3918,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
             size_t jstop = 0; bool has_stop = false;
             if (sel == 0) {                       /* Select: keep when true */
                 size_t jskip = c->n; ins(c, OP_JZ, 0, (uint32_t)vt.reg, 0, z);
-                ins(c, el == CT_COMPLEX ? OP_A_STORE_C : OP_A_STORE_R,
+                ins(c,a_store_op(el),
                     (uint32_t)rout, (uint32_t)rk, (uint32_t)relem, z);
                 ins(c, OP_INC_I, (uint32_t)rk, 0, 0, k1);
                 if (c->ok) c->code[jskip].b = (uint32_t)c->n;
@@ -3621,7 +3928,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
                 jstop = c->n; has_stop = true;
                 ins(c, OP_JZ, 0, (uint32_t)vt.reg, 0, z);
                 if (sel == 1)
-                    ins(c, el == CT_COMPLEX ? OP_A_STORE_C : OP_A_STORE_R,
+                    ins(c,a_store_op(el),
                         (uint32_t)rout, (uint32_t)ri, (uint32_t)relem, z);
             } else {
                 /* Short-circuit.  AllTrue fires on a FALSE test, AnyTrue and
@@ -3788,14 +4095,14 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
 
         int relem = alloc_temp(c);
         int body_top = c->temp_top;
-        ins(c, el == CT_COMPLEX ? OP_A_LOAD_C : OP_A_LOAD_R,
+        ins(c,a_load_op(el),
             (uint32_t)relem, (uint32_t)va.reg, (uint32_t)ri, z);
         Val ev = { relem, false, el, false }, vb;
         if (!emit_apply(c, &fs, &ev, 1, &vb)) return false;
         if (CT_IS_ARRAY(vb.type)) { c->ok = false; return false; }
         if (!scan) {
             coerce(c, &vb, rt); if (!c->ok) return false;
-            ins(c, rt == CT_COMPLEX ? OP_A_STORE_C : OP_A_STORE_R,
+            ins(c,a_store_op(rt),
                 (uint32_t)rout, (uint32_t)ri, (uint32_t)vb.reg, z);
         }
         c->temp_top = body_top - 1;                     /* body temps and relem */
@@ -3848,7 +4155,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         if (!CT_IS_ARRAY(va.type) || CT_RANK(va.type) != 1) { c->ok = false; return false; }
         ins(c, OP_A_SIZE, (uint32_t)rn, (uint32_t)va.reg, 0, z);
 
-        uint16_t ldop = (el == CT_COMPLEX) ? OP_A_LOAD_C : OP_A_LOAD_R;
+        uint16_t ldop = a_load_op(el);
         Slot k0; memset(&k0, 0, sizeof k0); k0.i = 0;
         if (na == 3) {
             Val vx; if (!emit(c, A[1], &vx)) return false;
@@ -3928,11 +4235,11 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
             if (tfp < 0) { c->ok = false; return false; }
             T = (CompileType)tfp;
         }
-        if (T != CT_REAL && T != CT_COMPLEX) { c->ok = false; return false; }
+        if (!ct_is_elem(T)) { c->ok = false; return false; }
 
         Slot z = { 0 }, k0; memset(&k0, 0, sizeof k0); k0.i = 0;
         Slot k1; memset(&k1, 0, sizeof k1); k1.i = 1;
-        uint16_t stop = (T == CT_COMPLEX) ? OP_A_STORE_C : OP_A_STORE_R;
+        uint16_t stop = a_store_op(T);
 
         /* Persistent registers first; `rlen` must be the sole dimension operand
          * of A_NEW, which reads a contiguous run starting there. */
@@ -3981,7 +4288,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         } else {
             int rs = alloc_temp(c);
             ins(c, OP_CONST, (uint32_t)rcnt, 0, 0, k0);
-            ins(c, el == CT_COMPLEX ? OP_A_LOAD_C : OP_A_LOAD_R,
+            ins(c,a_load_op(el),
                 (uint32_t)rs, (uint32_t)va.reg, (uint32_t)rcnt, z);
             Val sv = { rs, true, el, false };
             coerce(c, &sv, T); if (!c->ok) return false;
@@ -4009,7 +4316,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
             int ridx = alloc_temp(c);
             if (na == 3) ins(c, OP_MOVE, (uint32_t)ridx, (uint32_t)rcnt, 0, z);
             else         ins(c, OP_ADD_I, (uint32_t)ridx, (uint32_t)rcnt, (uint32_t)rone, z);
-            ins(c, el == CT_COMPLEX ? OP_A_LOAD_C : OP_A_LOAD_R,
+            ins(c,a_load_op(el),
                 (uint32_t)relem, (uint32_t)va.reg, (uint32_t)ridx, z);
             c->temp_top--;                                /* ridx dead after the load */
             argv[1].reg = relem; argv[1].type = el;
@@ -4061,7 +4368,7 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         if (tfp < 0) { c->ok = false; return false; }
         CompileType T = (CompileType)tfp;
         /* A built history, so the ConstantArray element-type rule applies. */
-        if (T != CT_REAL && T != CT_COMPLEX) { c->ok = false; return false; }
+        if (!ct_is_elem(T)) { c->ok = false; return false; }
         if (fp && st && !fn_resolve(st, 2, &ss)) { c->ok = false; return false; }
         if (!fp) {   /* the while-test must yield a Bool on the accumulator */
             CompileType tb;
@@ -4404,8 +4711,187 @@ static bool emit(Ctx* c, const Expr* e, Val* out) {
 /* ------------------------------------------------------------------ *
  *  VM                                                                 *
  * ------------------------------------------------------------------ */
-static long long ipow_i(long long b, long long n) { long long r = 1; while (n > 0) { if (n & 1) r *= b; b *= b; n >>= 1; } return r; }
+/* The integer form is `ci_powi` in compile_internal.h: same binary exponentiation,
+ * overflow-checked at every step, and shared with the optimiser's folding. */
 static double    ipow_r(double b, long long n) { if (n < 0) { b = 1.0 / b; n = -n; } double r = 1; while (n) { if (n & 1) r *= b; b *= b; n >>= 1; } return r; }
+
+/* ------------------------------------------------------------------ *
+ *  Exact integer kernels for the integer-closed heads                 *
+ * ------------------------------------------------------------------ *
+ * Each returns TRUE ON FAILURE — overflow, or an argument outside the domain
+ * where the interpreter yields an integer — matching the ci_* convention, so a
+ * VM body is the same one-line IOP() as an arithmetic opcode.  Failure hands the
+ * call to the interpreter, which then answers exactly (a bigint) or symbolically
+ * (ComplexInfinity, a Rational), whichever is right.
+ *
+ * The domains are not guesses; they are what the interpreter actually does:
+ *   Factorial[-1]     ComplexInfinity     Gamma[0]        ComplexInfinity
+ *   Pochhammer[7,-3]  1/120  (Rational)   7^-3            1/343  (Rational)
+ *   Arg[-3]           Pi     (Symbol)     Binomial[3,7]   0      (all integer)
+ * so Factorial needs n >= 0, Gamma n >= 1, Pochhammer n >= 0, Power e >= 0, and
+ * Binomial no guard at all. */
+
+static bool int_factorial(long long n, long long* out) {
+    if (n < 0) return true;                       /* ComplexInfinity */
+    long long r = 1;
+    for (long long k = 2; k <= n; k++) if (ci_mul(r, k, &r)) return true;
+    *out = r;
+    return false;                                 /* 21! already overflows */
+}
+
+/* Gamma[n] = (n-1)! on the positive integers; Gamma[0] and Gamma of a negative
+ * integer are ComplexInfinity, which is not a machine number. */
+static bool int_gamma(long long n, long long* out) {
+    if (n < 1) return true;
+    return int_factorial(n - 1, out);
+}
+
+/* Binomial[n, k] for machine integers, by the multiplicative recurrence
+ * C(n,k) = C(n,k-1) * (n-k+1) / k, which is exact at every step because the
+ * partial product of k consecutive integers is divisible by k!.  Computing
+ * n!/(k!(n-k)!) directly would overflow at n = 21 for results that fit easily. */
+static bool int_binomial(long long n, long long k, long long* out) {
+    if (n >= 0) {
+        if (k < 0 || k > n) { *out = 0; return false; }       /* Binomial[3,7] = 0 */
+        if (k > n - k) k = n - k;                             /* symmetry: fewer steps */
+        long long r = 1;
+        for (long long i = 1; i <= k; i++) {
+            if (ci_mul(r, n - k + i, &r)) return true;
+            r /= i;                                           /* exact by construction */
+        }
+        *out = r;
+        return false;
+    }
+    /* Negative upper index: Binomial[-n, k] = (-1)^k Binomial[n+k-1, k].  Left to
+     * the interpreter — it is rare, and the identity is easy to get subtly wrong
+     * in a way no test here would catch. */
+    return true;
+}
+
+/* Pochhammer[a, n] = a (a+1) ... (a+n-1); a falling/negative n gives a Rational. */
+static bool int_pochhammer(long long a, long long n, long long* out) {
+    if (n < 0) return true;
+    long long r = 1;
+    for (long long i = 0; i < n; i++) {
+        long long t;
+        if (ci_add(a, i, &t) || ci_mul(r, t, &r)) return true;
+    }
+    *out = r;
+    return false;
+}
+
+/* Fibonacci / LucasL by iteration, including the negative index (the interpreter
+ * defines both there: F[-n] = (-1)^(n+1) F[n], L[-n] = (-1)^n L[n]).  Iterative
+ * rather than the closed form because these must be EXACT — a double loses
+ * Fibonacci exactly where it starts to matter, and F[92] is the last one that
+ * fits in an int64 anyway. */
+static bool int_fib2(long long n, bool lucas, long long* out) {
+    if (n == LLONG_MIN) return true;              /* -n would overflow; test FIRST */
+    bool neg = n < 0;
+    long long m = neg ? -n : n;
+    long long a = lucas ? 2 : 0, b = 1;           /* (L0,L1) = (2,1); (F0,F1) = (0,1) */
+    for (long long i = 0; i < m; i++) {
+        long long t;
+        if (ci_add(a, b, &t)) return true;
+        a = b; b = t;
+    }
+    /* F[-n] flips sign for even n, L[-n] for odd n. */
+    if (neg && ((m % 2 == 0) == !lucas)) { if (ci_neg(a, &a)) return true; }
+    *out = a;
+    return false;
+}
+static bool int_fib(long long n, long long* out)   { return int_fib2(n, false, out); }
+static bool int_lucas(long long n, long long* out) { return int_fib2(n, true,  out); }
+
+/* a^e on the integers.  A negative exponent is a Rational in the interpreter
+ * (7^-3 is 1/343) and 0^0 is Indeterminate, so both abandon the call. */
+static bool int_pow(long long a, long long e, long long* out) {
+    if (e < 0) return true;
+    if (e == 0 && a == 0) return true;            /* Indeterminate */
+    return ci_powi(a, e, out);
+}
+
+/* GCD is non-negative and GCD[0, 0] is 0, matching the interpreter.  The only
+ * failure is INT64_MIN, whose magnitude is not representable. */
+static bool int_gcd(long long a, long long b, long long* out) {
+    if (a == LLONG_MIN || b == LLONG_MIN) return true;
+    if (a < 0) a = -a;
+    if (b < 0) b = -b;
+    while (b) { long long t = a % b; a = b; b = t; }
+    *out = a;
+    return false;
+}
+
+/* LCM[a, b] = |a b| / gcd, non-negative, and 0 when either side is 0.  Divide
+ * BEFORE multiplying so the intermediate stays in range whenever the answer
+ * does. */
+static bool int_lcm(long long a, long long b, long long* out) {
+    if (a == 0 || b == 0) { *out = 0; return false; }
+    long long g;
+    if (int_gcd(a, b, &g) || g == 0) return true;
+    if (a < 0) a = -a;
+    if (b < 0) b = -b;
+    return ci_mul(a / g, b, out);
+}
+
+/* Number of digits of n in the given base; IntegerLength[0] is 0. */
+static bool int_ilen(long long n, long long base, long long* out) {
+    if (base < 2) return true;
+    if (n == LLONG_MIN) return true;
+    if (n < 0) n = -n;
+    long long k = 0;
+    while (n > 0) { n /= base; k++; }
+    *out = k;
+    return false;
+}
+
+/* Largest e with base^e dividing n.  IntegerExponent[0, b] is Infinity in the
+ * interpreter, which is not a machine integer. */
+static bool int_iexp(long long n, long long base, long long* out) {
+    if (base < 2 || n == 0) return true;
+    if (n == LLONG_MIN) return true;
+    if (n < 0) n = -n;
+    long long k = 0;
+    while (n % base == 0) { n /= base; k++; }
+    *out = k;
+    return false;
+}
+
+/* PowerMod[a, e, m], including the negative exponent (a modular INVERSE, which
+ * exists only when gcd(a, m) is 1 — the interpreter reports that, so we defer).
+ *
+ * The modulus is capped at sqrt(INT64_MAX) so every intermediate product fits an
+ * int64.  Going wider needs a 128-bit multiply, and `__int128` is a GNU
+ * extension this file cannot use (CLAUDE.md: strict C99); a larger modulus
+ * therefore hands the call to the interpreter, which has GMP. */
+#define POWMOD_MAX_M 3037000499LL             /* floor(sqrt(2^63 - 1)) */
+static bool int_powmod(long long a, long long e, long long m, long long* out) {
+    if (m == 0 || m > POWMOD_MAX_M || m < -POWMOD_MAX_M) return true;
+    if (m < 0) return true;                   /* interpreter's sign convention */
+    if (m == 1) { *out = 0; return false; }
+    a %= m; if (a < 0) a += m;
+    if (e < 0) {
+        /* Modular inverse by the extended Euclid, then the positive power. */
+        long long r0 = m, r1 = a, s0 = 0, s1 = 1;
+        while (r1) {
+            long long q = r0 / r1;
+            long long t = r0 - q * r1; r0 = r1; r1 = t;
+            t = s0 - q * s1;           s0 = s1; s1 = t;
+        }
+        if (r0 != 1) return true;             /* not invertible */
+        a = s0 % m; if (a < 0) a += m;
+        if (e == LLONG_MIN) return true;      /* -e would overflow */
+        e = -e;
+    }
+    long long r = 1;
+    while (e > 0) {
+        if (e & 1) r = (r * a) % m;
+        e >>= 1;
+        if (e > 0) a = (a * a) % m;
+    }
+    *out = r;
+    return false;
+}
 static double _Complex ipow_c(double _Complex b, long long n) { if (n < 0) { b = 1.0 / b; n = -n; } double _Complex r = 1; while (n) { if (n & 1) r *= b; b *= b; n >>= 1; } return r; }
 
 /* ------------------------------------------------------------------ *
@@ -4471,10 +4957,22 @@ static bool vm_write_scalar(const Expr* e, unsigned relem, Slot* d) {
  * width, so one float32 array reaching a store would write doubles into half-
  * sized slots.  Arguments may be any dtype — they are only ever read — so the
  * narrowing is done here, at the point ownership begins. */
+/* The buffer dtype a program uses for a given element type.  A program owns only
+ * these three — float32 never appears, see nd_own_copy. */
+static NDType ct_elem_ndt(unsigned relem) {
+    return relem == (unsigned)CT_COMPLEX ? NDT_COMPLEX64
+         : relem == (unsigned)CT_INT     ? NDT_INT64
+                                         : NDT_FLOAT64;
+}
+
 static Expr* nd_own_copy(const Expr* x, unsigned relem) {
     if (!x || x->type != EXPR_NDARRAY) return NULL;
-    NDType dt = (relem == (unsigned)CT_COMPLEX) ? NDT_COMPLEX64 : NDT_FLOAT64;
+    NDType dt = ct_elem_ndt(relem);
     NDType sdt = x->data.ndarray.dtype;
+    /* An integer-typed program will not silently take a float buffer: the two
+     * are different element types to the interpreter as well (`Total` of a
+     * float64 NDArray is a Real), so the call goes back rather than rounding. */
+    if ((dt == NDT_INT64) != (sdt == NDT_INT64)) return NULL;
     size_t n = ndarray_size(x), esz = ndt_elem_size(dt);
     void* buf = malloc(esz * (n ? n : 1));
     if (!buf) return NULL;
@@ -4524,7 +5022,7 @@ static bool vm_range_array_op(const Instr* c, Slot* R) {
                 dims[i] = (int64_t)d;
                 n *= (size_t)d;
             }
-            NDType dt = (c->imm.i == (long long)CT_COMPLEX) ? NDT_COMPLEX64 : NDT_FLOAT64;
+            NDType dt = ct_elem_ndt((unsigned)c->imm.i);
             void* buf = calloc(n ? n : 1, ndt_elem_size(dt));
             if (!buf) return false;
             Expr* nw = expr_new_ndarray(rank, dims, buf, dt);
@@ -4649,7 +5147,7 @@ static bool vm_array_op(const Instr* c, Slot* d, Slot* a, Slot* b) {
         case OP_A_NEWLIKE: {              /* result buffer, shape of the operand */
             const Expr* x = a->arr;
             if (!x || x->type != EXPR_NDARRAY) return false;
-            NDType dt = (AF_R(f) == (unsigned)CT_COMPLEX) ? NDT_COMPLEX64 : NDT_FLOAT64;
+            NDType dt = ct_elem_ndt(AF_R(f));
             size_t nelem = ndarray_size(x);
             size_t esz = ndt_elem_size(dt);
             void* buf = calloc(nelem ? nelem : 1, esz);
@@ -4671,6 +5169,24 @@ static bool vm_array_op(const Instr* c, Slot* d, Slot* a, Slot* b) {
         }
 
         case OP_V_TOTAL: {
+            /* An INTEGER array sums here rather than through ndred_total_all,
+             * which accumulates in a double and is therefore exact only to 2^53
+             * — `Total[{9007199254740993, 1}]` came back one short.  Summing in
+             * int64 with the same overflow rule as the scalar opcodes keeps the
+             * answer identical to the interpreter's, or hands the call back. */
+            if (a->arr && a->arr->type == EXPR_NDARRAY
+                && a->arr->data.ndarray.dtype == NDT_INT64) {
+                const NDArrayData* A_ = &a->arr->data.ndarray;
+                const int64_t* p = (const int64_t*)A_->data;
+                size_t n = ndarray_size(a->arr);
+                long long acc = 0;
+                bool ovf = false;
+                for (size_t k = 0; k < n && !ovf; k++) ovf = ci_add(acc, (long long)p[k], &acc);
+                if (f & AF_FREE_A) { expr_free(a->arr); a->arr = NULL; }
+                if (ovf) return false;
+                d->i = acc;
+                return true;
+            }
             Expr* s = ndred_total_all(a->arr);       /* borrows; same rounding as Total[] */
             if (f & AF_FREE_A) { expr_free(a->arr); a->arr = NULL; }
             bool ok = s && vm_write_scalar(s, AF_R(f), d);
@@ -4849,13 +5365,47 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
         switch (c->op) {
 #endif
     #define ARROP() do { if (!vm_array_op(c, &RD, &RA, &RB)) goto vm_fail; } while (0); NEXT()
+    /* An integer opcode that can overflow.  The helper returns true on overflow,
+     * and the call is abandoned exactly as OP_FAIL abandons it, so the caller
+     * falls back to the interpreter and gets the exact bigint answer.
+     *
+     * Two levels of opting out, and they measure different things:
+     *
+     *   IF_NOCHK in the instruction (COMPILE_WRAP_INT / Compile[]'s
+     *   "CatchMachineIntegerOverflow" -> False) keeps the wrapped value instead
+     *   of falling back.  Because `&&` short-circuits, the flag is read only
+     *   once an overflow has actually been detected, so a program that does not
+     *   overflow executes the identical instruction path either way — the option
+     *   costs nothing.
+     *
+     *   `-DVM_NO_INT_CHECK` at BUILD time removes the detection itself.  That is
+     *   the one that measures what the feature really costs, because it is the
+     *   detection — not the never-taken branch — that is the price.  (Named for
+     *   the VM, like VM_NO_THREADED, and deliberately NOT after the
+     *   COMPILE_WRAP_INT flag: compile.h defines that as a bit value, so an
+     *   `#ifdef` on it is true in every build and silently disables the
+     *   checks — which is exactly the bug this comment now prevents.) */
+#ifdef VM_NO_INT_CHECK
+    #define IOP(chk) do { (void)(chk); } while (0); NEXT()
+#else
+    #define IOP(chk) do { if ((chk) && !(c->flags & IF_NOCHK)) goto vm_fail; } while (0); NEXT()
+#endif
             OP(JMP): pc = c->b; JUMP();
             OP(JZ):  pc = RA.i ? pc + 1 : c->b; JUMP();   /* branch if false */
-            OP(INC_I): RD.i += c->imm.i; NEXT();
+            /* Checked: this is Increment/Decrement's opcode as well as a loop
+             * step (compile.c's Increment lowering), and `x = 2^63-1; x++` is a
+             * perfectly ordinary thing to write. */
+            OP(INC_I): IOP(ci_add(RD.i, c->imm.i, &RD.i));
             /* Increment, test and branch in one.  A counted loop otherwise spends
              * four instructions per iteration on control alone (INC, LT, JZ,
              * JMP), which is most of the body when the body is one element of a
-             * fused array pass. */
+             * fused array pass.
+             *
+             * Deliberately NOT overflow-checked, unlike INC_I.  The index only
+             * overflows if the limit sits within one step of INT64_MAX, and
+             * reaching there from the initial value takes on the order of 10^18
+             * iterations — no terminating run gets close.  The check would
+             * otherwise land in the innermost loop of every fused array pass. */
             OP(LOOP): { RD.i += c->imm.i; if (RD.i < RA.i) { pc = c->b; JUMP(); } } NEXT();
             /* Run the strip loop that follows across threads and skip past it;
              * on a decline, fall through and run it right here, serially. */
@@ -4866,7 +5416,7 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(I2R): RD.r = (double)RA.i; NEXT();
             OP(I2C): RD.z = (double)RA.i; NEXT();
             OP(R2C): RD.z = RA.r; NEXT();
-            OP(ADD_I): RD.i = RA.i + RB.i; NEXT();
+            OP(ADD_I): IOP(ci_add(RA.i, RB.i, &RD.i));
             OP(ADD_R): RD.r = RA.r + RB.r; NEXT();
             OP(ADD_C): RD.z = RA.z + RB.z; NEXT();
             /* Immediate forms (K_BINK).  One register read instead of two, and
@@ -4880,10 +5430,10 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(MUL_RK): RD.r = RA.r * c->imm.r; NEXT();
             OP(DIV_RK): RD.r = RA.r / c->imm.r; NEXT();
             OP(DIV_KR): RD.r = c->imm.r / RA.r; NEXT();
-            OP(ADD_IK): RD.i = RA.i + c->imm.i; NEXT();
-            OP(SUB_IK): RD.i = RA.i - c->imm.i; NEXT();
-            OP(SUB_KI): RD.i = c->imm.i - RA.i; NEXT();
-            OP(MUL_IK): RD.i = RA.i * c->imm.i; NEXT();
+            OP(ADD_IK): IOP(ci_add(RA.i, c->imm.i, &RD.i));
+            OP(SUB_IK): IOP(ci_sub(RA.i, c->imm.i, &RD.i));
+            OP(SUB_KI): IOP(ci_sub(c->imm.i, RA.i, &RD.i));
+            OP(MUL_IK): IOP(ci_mul(RA.i, c->imm.i, &RD.i));
             OP(LT_RK): RD.i = RA.r <  c->imm.r; NEXT();
             OP(LE_RK): RD.i = RA.r <= c->imm.r; NEXT();
             OP(GT_RK): RD.i = RA.r >  c->imm.r; NEXT();
@@ -4892,22 +5442,33 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(LE_IK): RD.i = RA.i <= c->imm.i; NEXT();
             OP(GT_IK): RD.i = RA.i >  c->imm.i; NEXT();
             OP(GE_IK): RD.i = RA.i >= c->imm.i; NEXT();
-            OP(SUB_I): RD.i = RA.i - RB.i; NEXT();
+            OP(SUB_I): IOP(ci_sub(RA.i, RB.i, &RD.i));
             OP(SUB_R): RD.r = RA.r - RB.r; NEXT();
             OP(SUB_C): RD.z = RA.z - RB.z; NEXT();
-            OP(MUL_I): RD.i = RA.i * RB.i; NEXT();
+            OP(MUL_I): IOP(ci_mul(RA.i, RB.i, &RD.i));
             OP(MUL_R): RD.r = RA.r * RB.r; NEXT();
             OP(MUL_C): RD.z = RA.z * RB.z; NEXT();
             OP(DIV_R): RD.r = RA.r / RB.r; NEXT();
             OP(DIV_C): RD.z = RA.z / RB.z; NEXT();
-            OP(MOD_I): { long long m = RB.i; long long q = RA.i % m; if (q != 0 && ((q < 0) != (m < 0))) q += m; RD.i = q; } NEXT();
-            OP(QUOT_I): { long long m = RB.i, x = RA.i, q = x / m; if ((x % m != 0) && ((x < 0) != (m < 0))) q -= 1; RD.i = q; } NEXT();
-            OP(NEG_I): RD.i = -RA.i; NEXT();
+            /* Both integer divisions guard the two inputs the hardware traps on
+             * rather than merely answering wrongly: a zero divisor, and
+             * INT64_MIN / -1 whose quotient is not representable.  `Mod[5, 0]`
+             * is left unevaluated by the interpreter, and the compiled path used
+             * to take the whole process down with SIGFPE. */
+            OP(MOD_I): { long long m = RB.i, x = RA.i;
+                         if (m == 0 || (m == -1 && x == LLONG_MIN)) goto vm_fail;
+                         long long q = x % m; if (q != 0 && ((q < 0) != (m < 0))) q += m;
+                         RD.i = q; } NEXT();
+            OP(QUOT_I): { long long m = RB.i, x = RA.i;
+                          if (m == 0 || (m == -1 && x == LLONG_MIN)) goto vm_fail;
+                          long long q = x / m; if ((x % m != 0) && ((x < 0) != (m < 0))) q -= 1;
+                          RD.i = q; } NEXT();
+            OP(NEG_I): IOP(ci_neg(RA.i, &RD.i));
             OP(NEG_R): RD.r = -RA.r; NEXT();
             OP(NEG_C): RD.z = -RA.z; NEXT();
             OP(INV_R): RD.r = 1.0 / RA.r; NEXT();
             OP(INV_C): RD.z = 1.0 / RA.z; NEXT();
-            OP(POWI_I): RD.i = ipow_i(RA.i, c->imm.i); NEXT();
+            OP(POWI_I): IOP(ci_powi(RA.i, c->imm.i, &RD.i));
             OP(POWI_R): RD.r = ipow_r(RA.r, c->imm.i); NEXT();
             OP(POWI_C): RD.z = ipow_c(RA.z, c->imm.i); NEXT();
             OP(POW_R): RD.r = pow(RA.r, RB.r); NEXT();
@@ -4927,10 +5488,29 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(ASIN_R): RD.r = asin(RA.r); NEXT(); OP(ASIN_C): RD.z = casin(RA.z); NEXT();
             OP(ACOS_R): RD.r = acos(RA.r); NEXT(); OP(ACOS_C): RD.z = cacos(RA.z); NEXT();
             OP(ATAN_R): RD.r = atan(RA.r); NEXT(); OP(ATAN_C): RD.z = catan(RA.z); NEXT();
-            OP(ABS_I): RD.i = RA.i < 0 ? -RA.i : RA.i; NEXT();
+            OP(ABS_I): IOP(ci_abs(RA.i, &RD.i));
             OP(ABS_R): RD.r = fabs(RA.r); NEXT();
             OP(ABS_C): RD.r = cabs(RA.z); NEXT();
             OP(SIGN_I): RD.i = (RA.i > 0) - (RA.i < 0); NEXT();
+            /* Integer-closed heads.  Same IOP() shape as the arithmetic
+             * opcodes: the helper reports overflow OR an out-of-domain
+             * argument, and either way the interpreter takes the call. */
+            OP(POW_II):  IOP(int_pow(RA.i, RB.i, &RD.i));
+            OP(FACT_I):  IOP(int_factorial(RA.i, &RD.i));
+            OP(GAMMA_I): IOP(int_gamma(RA.i, &RD.i));
+            OP(BINOM_I): IOP(int_binomial(RA.i, RB.i, &RD.i));
+            OP(POCH_I):  IOP(int_pochhammer(RA.i, RB.i, &RD.i));
+            OP(FIB_I):   IOP(int_fib(RA.i, &RD.i));
+            OP(LUCAS_I): IOP(int_lucas(RA.i, &RD.i));
+            /* Arg[n] is 0 for n >= 0; below that it is the symbol Pi. */
+            OP(ARG_I):   { if (RA.i < 0) goto vm_fail; RD.i = 0; } NEXT();
+            OP(GCD_I):   IOP(int_gcd(RA.i, RB.i, &RD.i));
+            OP(LCM_I):   IOP(int_lcm(RA.i, RB.i, &RD.i));
+            OP(ILEN_I):  IOP(int_ilen(RA.i, RB.i, &RD.i));
+            OP(IEXP_I):  IOP(int_iexp(RA.i, RB.i, &RD.i));
+            /* Ternary, so the operands are a RUN of registers starting at `a`
+             * (the K_NARY shape KERNN uses), not the two operand fields. */
+            OP(POWMOD_I): IOP(int_powmod(R[c->a].i, R[c->a + 1].i, R[c->a + 2].i, &RD.i));
             /* Writes the INTEGER slot: Sign of a real is an Integer in the
              * interpreter.  (The tile form VSIGN_R stays real — it feeds packed
              * float arrays, where the ND kernel's result dtype is real.) */
@@ -5023,6 +5603,20 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
                     default:            RD.z = (double)((const float*)A_->data)[2*k_]
                                              + (double)((const float*)A_->data)[2*k_+1] * I; break;
                 }
+            } NEXT();
+            /* Integer element access.  Unlike the real form there is no width
+             * variation to absorb — a program's integer buffers are always
+             * NDT_INT64 (nd_own_copy refuses to build one from anything else),
+             * so a foreign dtype here means the promised element type was not
+             * kept and the call goes back to the interpreter. */
+            OP(A_LOAD_I): {
+                const NDArrayData* A_ = &RA.arr->data.ndarray;
+                if (A_->dtype != NDT_INT64) goto vm_fail;
+                RD.i = ((const int64_t*)A_->data)[(size_t)RB.i];
+            } NEXT();
+            OP(A_STORE_I): {
+                NDArrayData* A_ = &RD.arr->data.ndarray;
+                ((int64_t*)A_->data)[(size_t)RA.i] = RB.i;
             } NEXT();
             OP(A_STORE_R): {
                 NDArrayData* A_ = &RD.arr->data.ndarray;
