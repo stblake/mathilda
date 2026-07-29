@@ -202,13 +202,48 @@ void test_powermod_listable() {
              "List[2, 3, 4]");
 }
 
+/* A Slot-form pure function -- Function[body], the internal form of
+ * `(... ) &` -- has no parameter list: its single argument IS the body.
+ * Scoping substitution used to treat argument 0 of every Function as a
+ * binding spec and copy it verbatim, so enclosing locals stayed free
+ * inside `&` bodies. `Module[{c = 0}, Scan[(c = c + 1) &, Range[4]]; c]`
+ * then incremented the *global* c -- self-referentially, blowing
+ * $RecursionLimit -- and returned the untouched local 0 instead of 4. */
+void test_slot_function_scoping() {
+    /* The reported bug, and the same shape through Map. */
+    run_test("Module[{c = 0}, Scan[(c = c + 1) &, Range[4]]; c]", "4");
+    run_test("Module[{c = 0}, Map[(c = c + 1) &, Range[4]]; c]", "4");
+    /* Slots and locals coexist in one body. */
+    run_test("Module[{c = 0}, Scan[(c = c + #) &, Range[4]]; c]", "10");
+    run_test("Module[{a = 2}, Map[(a #) &, {1, 2, 3}]]", "List[2, 4, 6]");
+
+    /* The local must be renamed inside the held body, not left free. */
+    run_test("Module[{c = 0}, Map[(c + 1) &, {10}]]", "List[1]");
+    /* With and Block substitute the value in the same position. */
+    run_test("With[{c = 7}, ((c + 1) &)[0]]", "8");
+    run_test("Block[{c = 7}, ((c + 1) &)[0]]", "8");
+
+    /* Nest / Fold drive the same body repeatedly. */
+    run_test("Module[{c = 0}, Nest[(c = c + 1; # + 1) &, 0, 3]; c]", "3");
+    run_test("Module[{s = 0}, Fold[(s = s + #2; #1 + #2) &, 0, {1, 2, 3}]; s]", "6");
+
+    /* Function[params, body] is unaffected: arg 0 really is the parameter
+     * spec there, and both the List and bare-symbol forms bind (and so
+     * shadow an enclosing local of the same name). */
+    run_test("Module[{c = 0}, Scan[Function[Null, c = c + 1], Range[4]]; c]", "4");
+    run_test("Module[{c = 0}, Function[{}, c = c + 1][]; c]", "1");
+    run_test("Module[{x = 5}, Function[{x}, x + 1][10]]", "11");
+    run_test("Module[{x = 5}, Function[x, x + 1][10]]", "11");
+}
+
 int main() {
     symtab_init();
     core_init();
-    
+
     TEST(test_block);
     TEST(test_module);
     TEST(test_with);
+    TEST(test_slot_function_scoping);
     TEST(test_powermod);
     TEST(test_powermod_identities);
     TEST(test_powermod_bignum);

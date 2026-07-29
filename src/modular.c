@@ -31,8 +31,32 @@ typedef struct ScopingEnv {
 static bool is_scoping_construct(Expr* e) {
     if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
     const char* h = e->data.function.head->data.symbol.name;
-    return h == SYM_Module || h == SYM_Block || h == SYM_With || 
+    return h == SYM_Module || h == SYM_Block || h == SYM_With ||
            h == SYM_Function || h == SYM_Table;
+}
+
+// Does this construct carry its bound names in argument 0?
+//
+//   Module/Block/With[{vars}, body]  yes -- arg 0 is the binding list.
+//   Function[params, body, attrs]    yes -- arg 0 is the parameter spec,
+//                                    either a bare symbol or a List of them.
+//   Function[body]                   NO -- the single argument is the *body*
+//                                    of a Slot form (`(# + 1) &`). Nothing is
+//                                    bound: `#` is not a symbol, so there is
+//                                    no name to shadow. Treating arg 0 as a
+//                                    binding list here copies the body
+//                                    verbatim and leaves every enclosing local
+//                                    free inside it -- so `Module[{c = 0},
+//                                    Scan[(c = c + 1) &, ...]]` incremented the
+//                                    *global* c (self-referentially, hence
+//                                    $RecursionLimit) and left the local at 0.
+//   Table[body, {i, ...}]            NO -- it binds in the iterators, args 1..
+static bool scoping_binds_in_arg0(Expr* e) {
+    if (!is_scoping_construct(e)) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    if (h == SYM_Table) return false;
+    if (h == SYM_Function) return e->data.function.arg_count >= 2;
+    return e->data.function.arg_count >= 1;
 }
 
 static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
@@ -59,7 +83,7 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
     // Handle shadowing in scoping constructs
     ScopingEnv* filtered_env = env;
 
-    if (is_scoping_construct(e) && e->data.function.arg_count >= 1) {
+    if (is_table || scoping_binds_in_arg0(e)) {
         // Collect the names this construct binds, so they are removed from the
         // env we push into the body (lexical shadowing).
         const char* shadow_buf[64];
@@ -77,7 +101,13 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
             }
         } else {
             Expr* vars = e->data.function.args[0];
-            if (vars->type == EXPR_FUNCTION && vars->data.function.head->data.symbol.name == SYM_List) {
+            if (vars->type == EXPR_SYMBOL) {
+                // Function[x, body] -- a single bare parameter still binds `x`,
+                // so it must shadow an enclosing local of the same name.
+                shadow_buf[nshadow++] = vars->data.symbol.name;
+            } else if (vars->type == EXPR_FUNCTION
+                       && vars->data.function.head->type == EXPR_SYMBOL
+                       && vars->data.function.head->data.symbol.name == SYM_List) {
                 for (size_t i = 0; i < vars->data.function.arg_count && nshadow < 64; i++) {
                     Expr* v = vars->data.function.args[i];
                     const char* nm = NULL;
@@ -148,7 +178,7 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
         // pattern `With[{q = 4 a c - b^2, k = (4 c)/q}, ...]` (which
         // relies on the outer-substituted k getting the value of q)
         // would fall apart on every q-dependent recursion.
-        if (i == 0 && is_scoping_construct(e)) {
+        if (i == 0 && scoping_binds_in_arg0(e)) {
             Expr* vars_list = e->data.function.args[i];
             if (vars_list->type == EXPR_FUNCTION
                 && vars_list->data.function.head

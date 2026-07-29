@@ -42,3 +42,28 @@ In[1]:= x = 10; With[{x = 5}, x^2]
 Out[1]= 25
 ```
 
+## Scoping and pure functions
+
+`Module` / `Block` / `With` reach into the body of a nested pure function, so a
+local may be read *and assigned* from inside a `&`:
+
+```mathematica
+In[1]:= Module[{c = 0}, Scan[(c = c + 1) &, Range[4]]; c]
+Out[1]= 4
+
+In[2]:= Module[{a = 2}, Map[(a #) &, {1, 2, 3}]]
+Out[2]= {2, 4, 6}
+```
+
+A nested `Function` shadows an enclosing local of the same name, in both the
+list and bare-symbol parameter forms — the parameter wins:
+
+```mathematica
+In[3]:= Module[{x = 5}, Function[x, x + 1][10]]
+Out[3]= 11
+```
+
+Nested *named-parameter* `Function`s are not closures: an inner
+`Function[e, ...]` does not capture an outer `Function`'s parameter. Inject it
+with `With[]` when that is needed.
+
