@@ -13,6 +13,8 @@
 #include "../sym_intern.h"     /* intern_symbol */
 #include "../sym_names.h"      /* SYM_Real / SYM_Integer / SYM_Complex / ... */
 #include "../ndarray.h"        /* ndarray_from_nested_list — packing a List argument */
+#include "../pack.h"           /* pack_offer / pack_repack_like — the packed boundary */
+#include "../checked_int.h"    /* ci_fits_double — decline an inexact int64 cast */
 #include "../symtab.h"         /* symtab_add_builtin / _set_docstring / _get_def */
 #include "../attr.h"           /* ATTR_HOLDALL / ATTR_PROTECTED */
 #include "../match.h"          /* env_new / env_set / replace_bindings */
@@ -81,10 +83,90 @@ static bool cf_to_complex(const Expr* e, double* re, double* im) {
     return false;
 }
 
+/* ------------------------------------------------------------------ *
+ *  What arrived in an array slot                                       *
+ * ------------------------------------------------------------------ *
+ * Two separate questions used to share one bool, and automatic packed arrays
+ * split them apart:
+ *
+ *   OWNERSHIP  -- is the boxed CompileValue's array a temporary we must free, or
+ *                 a node the caller still owns?
+ *   PRESENTATION -- what must an array RESULT present as? The compiled path has
+ *                 to answer with the same head the interpreter would for the
+ *                 same input, and there are now three possible inputs, not two:
+ *                 a plain List, a packed List, and a visible NDArray[...].
+ *
+ * Conflating them was harmless while a borrowed EXPR_NDARRAY could only be the
+ * visible head. Now a packed List is also an EXPR_NDARRAY, so "borrowed" no
+ * longer implies "visible", and a dtype cast makes a temporary out of an argument
+ * whose presentation must still be honoured. */
+typedef enum {
+    CF_ARG_SCALAR  = 0,   /* not an array slot at all */
+    CF_ARG_LIST,          /* a plain List, packed into a temporary */
+    CF_ARG_PACKED,        /* a packed List (Head List, NDArrayQ True) */
+    CF_ARG_NDARRAY        /* the visible NDArray[...] head */
+} CfArgKind;
+
+/* Join over the argument slots, most visible wins -- the same precedence
+ * nd_present_src2 uses inside the interpreter's own array ops, so a mixed call
+ * agrees with `NDArray[...] + packedList`. */
+static CfArgKind cf_kind_join(CfArgKind a, CfArgKind b) {
+    return (a > b) ? a : b;
+}
+
+/* Cast a borrowed array argument to the element type the program declared.
+ *
+ * Reached when a packed list's inferred dtype differs from the slot's: Range[n]
+ * infers int64 and can land in a {u, _Real, 1} parameter, a combination that
+ * simply could not arise while only the compiler made int64 buffers. Without
+ * this the VM's own guard declines the whole call and the interpreter re-runs it
+ * -- correct, but ~75x the cost of one O(n) numeric pass.
+ *
+ * Returns NULL to decline, and declines rather than rounds: an int64 magnitude
+ * past 2^53 has no exact double, and narrowing a float to int64 is a value
+ * change, not a representation change. Both cases leave the interpreter to give
+ * the right answer. */
+static Expr* cf_cast_array(const Expr* e, CompileType t) {
+    NDType want = CT_ELEM(t) == CT_COMPLEX ? NDT_COMPLEX64
+                : CT_ELEM(t) == CT_INT     ? NDT_INT64
+                                           : NDT_FLOAT64;
+    NDType have = e->data.ndarray.dtype;
+    if (have == want) return NULL;                  /* caller borrows as-is */
+    if (want == NDT_INT64) return NULL;             /* would narrow: decline */
+
+    size_t n = ndarray_size(e);
+    if (have == NDT_INT64) {
+        const int64_t* p = (const int64_t*)e->data.ndarray.data;
+        for (size_t k = 0; k < n; k++)
+            if (!ci_fits_double(p[k])) return NULL; /* no exact double: decline */
+    }
+    void* buf = malloc(ndt_elem_size(want) * (n ? n : 1));
+    if (!buf) return NULL;
+    if (have == NDT_INT64) {
+        const int64_t* p = (const int64_t*)e->data.ndarray.data;
+        for (size_t k = 0; k < n; k++) ndt_set(buf, k, want, (double)p[k], 0.0);
+    } else {
+        for (size_t k = 0; k < n; k++) {
+            double re, im;
+            ndt_get(e->data.ndarray.data, k, have, &re, &im);
+            /* A complex source into a real program is the array form of the
+             * scalar contract: the program promised real, so it declines rather
+             * than truncate. */
+            if (im != 0.0 && want != NDT_COMPLEX64) { free(buf); return NULL; }
+            ndt_set(buf, k, want, re, im);
+        }
+    }
+    Expr* nw = expr_new_ndarray_like(e, e->data.ndarray.rank,
+                                     e->data.ndarray.dims, buf, want);
+    if (!nw) free(buf);
+    return nw;
+}
+
 /* Box an argument Expr into a CompileValue of the declared type.  Returns false
  * if the argument is not a concrete number of that type (→ interpreter
  * fallback). */
-static bool cf_box(const Expr* e, CompileType t, CompileValue* out, bool* packed) {
+static bool cf_box(const Expr* e, CompileType t, CompileValue* out,
+                   bool* owned, CfArgKind* kind) {
     out->type = t;
     switch (t) {
         case CT_BOOL:
@@ -104,9 +186,22 @@ static bool cf_box(const Expr* e, CompileType t, CompileValue* out, bool* packed
         /* An NDArray argument is BORROWED — the program never frees it, and the
          * caller still owns the node it passed in.  A plain nested List is
          * packed here instead, and that temporary IS ours to free after the
-         * call; `packed` tells the caller which is which. */
+         * call; `owned` tells the caller which is which. */
         if (e->type == EXPR_NDARRAY) {
             if (e->data.ndarray.rank != CT_RANK(t)) return false;
+            if (kind) *kind = is_packed_list(e) ? CF_ARG_PACKED : CF_ARG_NDARRAY;
+            Expr* cast = cf_cast_array(e, t);
+            if (cast) {                 /* dtype mismatch: one O(n) pass, ours */
+                out->v.a = cast;
+                if (owned) *owned = true;
+                return true;
+            }
+            /* No cast wanted, or one that would not be exact. Borrow when the
+             * dtypes already agree; otherwise decline so the interpreter runs. */
+            NDType want = CT_ELEM(t) == CT_COMPLEX ? NDT_COMPLEX64
+                        : CT_ELEM(t) == CT_INT     ? NDT_INT64
+                                                   : NDT_FLOAT64;
+            if (e->data.ndarray.dtype != want) return false;
             out->v.a = (Expr*)e;
             return true;
         }
@@ -124,7 +219,8 @@ static bool cf_box(const Expr* e, CompileType t, CompileValue* out, bool* packed
             if (!nd) return false;                       /* ragged or symbolic */
             if (nd->data.ndarray.rank != CT_RANK(t)) { expr_free(nd); return false; }
             out->v.a = nd;
-            if (packed) *packed = true;
+            if (owned) *owned = true;
+            if (kind) *kind = CF_ARG_LIST;
             return true;
         }
         return false;
@@ -371,12 +467,19 @@ static void cf_report_tdlen(const CompiledFunction* cf, Expr* const* args, size_
  * after a Thread::tdlen message" answer the evaluator gives a Listable symbol. */
 static bool cf_thread(const CompiledFunction* cf, Expr* const* args, size_t nargs,
                       Expr** out) {
-    bool any = false, from_nd = false;
+    bool any = false;
+    /* The array argument whose PRESENTATION the result inherits -- most visible
+     * wins, so a visible NDArray[...] on any side dominates a packed List, the
+     * same precedence nd_present_src2 uses. NULL when nothing array-shaped
+     * threads, in which case the result stays a plain List. */
+    const Expr* nd_src = NULL;
     size_t len = 0;
     for (size_t i = 0; i < nargs; i++) {
         if (!cf_slot_threads(cf, args[i], i)) continue;
         size_t n = cf_thread_len(args[i]);
-        if (args[i]->type == EXPR_NDARRAY) from_nd = true;
+        if (args[i]->type == EXPR_NDARRAY &&
+            (!nd_src || (is_packed_list(nd_src) && !is_packed_list(args[i]))))
+            nd_src = args[i];
         if (!any) { any = true; len = n; }
         else if (n != len) { cf_report_tdlen(cf, args, nargs); *out = NULL; return true; }
     }
@@ -418,14 +521,14 @@ static bool cf_thread(const CompiledFunction* cf, Expr* const* args, size_t narg
     }
     free(sub); free(owned);
 
-    /* An NDArray went in, so an NDArray comes back — the same result-kind rule
-     * the scalar path follows, and the reason a caller keeps state packed across
+    /* An array went in, so an array comes back — the same result-kind rule the
+     * scalar path follows, and the reason a caller keeps state packed across
      * calls in the first place.  Elements that threaded a level further down are
      * already packed, so flatten them back to Lists first and pack once at the
      * top: that is what makes a rank-2 array over a scalar parameter come back as
      * one rank-2 array rather than a List of rows.  A result that will not pack
      * (Booleans, symbolic leaves from an interpreted element) stays a List. */
-    if (from_nd) {
+    if (nd_src) {
         for (size_t j = 0; j < len; j++) {
             if (items[j]->type != EXPR_NDARRAY) continue;
             Expr* nested = ndarray_to_nested_list(items[j]);
@@ -434,10 +537,25 @@ static bool cf_thread(const CompiledFunction* cf, Expr* const* args, size_t narg
     }
     Expr* r = expr_new_function(expr_new_symbol(SYM_List), items, len);
     free(items);
-    if (from_nd) {
-        Expr* packed = ndarray_from_nested_list(r, NDT_FLOAT64);
-        if (!packed) packed = ndarray_from_nested_list(r, NDT_COMPLEX64);
-        if (packed) { expr_free(r); r = packed; }
+    if (nd_src) {
+        if (is_packed_list(nd_src)) {
+            /* pack_repack_like SNIFFS the dtype rather than forcing float64, so
+             * an integer-valued body over a packed integer list comes back as
+             * Integers. Forcing NDT_FLOAT64 here would have turned
+             * Compile[{{x, _Integer}}, x + 1, RuntimeAttributes -> {Listable}]
+             * over Range[300] into a list of Reals. It also declines a mixed
+             * exact/inexact result and keeps the ordinary List, which is the
+             * right value. */
+            r = pack_repack_like(nd_src, r);
+        } else {
+            /* A visible NDArray[...] keeps its documented machine-buffer
+             * behaviour, including coercing an exact element it is handed.
+             * _like so the result carries the visible head rather than becoming a
+             * packed List. */
+            Expr* packed = ndarray_from_nested_list_like(nd_src, r, NDT_FLOAT64);
+            if (!packed) packed = ndarray_from_nested_list_like(nd_src, r, NDT_COMPLEX64);
+            if (packed) { expr_free(r); r = packed; }
+        }
     }
     *out = r;
     return true;
@@ -466,26 +584,39 @@ Expr* compiled_function_apply(const CompiledFunction* cf, Expr* const* args, siz
             if (!heap) return cf_fallback(cf, args, nargs);
             cv = heap;
         }
-        /* A List argument packed into a temporary NDArray is ours to release;
-         * an NDArray passed in directly is borrowed and must be left alone. */
-        bool packed[CF_APPLY_STACK_ARGS];
-        bool* packed_p = packed;
-        bool* packed_heap = NULL;
+        /* A List argument packed into a temporary NDArray -- or a borrowed one
+         * cast to the declared dtype -- is ours to release; an NDArray passed in
+         * at the right dtype is borrowed and must be left alone. `kinds` records
+         * what arrived, which is a different question from who owns it: see
+         * CfArgKind. */
+        bool owned[CF_APPLY_STACK_ARGS];
+        CfArgKind kinds[CF_APPLY_STACK_ARGS];
+        bool* owned_p = owned;
+        CfArgKind* kinds_p = kinds;
+        bool* owned_heap = NULL;
+        CfArgKind* kinds_heap = NULL;
         if (nargs > CF_APPLY_STACK_ARGS) {
-            packed_heap = calloc(nargs, sizeof(bool));
-            if (!packed_heap) { free(heap); return cf_fallback(cf, args, nargs); }
-            packed_p = packed_heap;
+            owned_heap = calloc(nargs, sizeof(bool));
+            kinds_heap = calloc(nargs, sizeof(CfArgKind));
+            if (!owned_heap || !kinds_heap) {
+                free(owned_heap); free(kinds_heap); free(heap);
+                return cf_fallback(cf, args, nargs);
+            }
+            owned_p = owned_heap;
+            kinds_p = kinds_heap;
         } else {
-            for (size_t i = 0; i < nargs; i++) packed[i] = false;
+            for (size_t i = 0; i < nargs; i++) { owned[i] = false; kinds[i] = CF_ARG_SCALAR; }
         }
 
         bool all_numeric = true;
         for (size_t i = 0; i < nargs; i++)
-            if (!cf_box(args[i], cf->arg_types[i], &cv[i], &packed_p[i])) { all_numeric = false; break; }
+            if (!cf_box(args[i], cf->arg_types[i], &cv[i], &owned_p[i], &kinds_p[i])) {
+                all_numeric = false; break;
+            }
         #define CF_RELEASE_PACKED() do { \
             for (size_t q = 0; q < nargs; q++) \
-                if (packed_p[q] && CT_IS_ARRAY(cf->arg_types[q])) expr_free(cv[q].v.a); \
-            free(packed_heap); \
+                if (owned_p[q] && CT_IS_ARRAY(cf->arg_types[q])) expr_free(cv[q].v.a); \
+            free(owned_heap); free(kinds_heap); \
         } while (0)
         if (all_numeric) {
             /* An all-Real signature takes the unboxed entry point: no per-argument
@@ -503,32 +634,70 @@ Expr* compiled_function_apply(const CompiledFunction* cf, Expr* const* args, siz
             CompileValue out;
             if (compiled_eval(cf->prog, cv, &out)) {
                 Expr* r = cf_unbox(&out);
-                /* The result KIND must follow the argument kind, or the compiled
-                 * path would answer with a different head from the interpreter
-                 * fallback for the very same input: given Lists the interpreter
-                 * threads and returns a List, so an array result is unpacked
-                 * back to one.  Given NDArrays it returns an NDArray, and so do
-                 * we — no conversion, no copy.
+                /* The result's PRESENTATION must be the one the interpreter
+                 * would give for the same input, or the compiled path answers
+                 * with a different Head from its own fallback. Three cases, and
+                 * automatic packed arrays added the middle one:
+                 *
+                 *   plain List in    -> plain List out. The interpreter threads
+                 *                      and returns a List, so unpack.
+                 *   packed List in   -> packed List out. The interpreter's array
+                 *                      ops inherit presentation
+                 *                      (expr_new_ndarray_like), so Sin[packed]
+                 *                      is packed at any size -- no threshold is
+                 *                      re-applied to a DERIVED array.
+                 *   NDArray[...] in  -> NDArray[...] out, as before.
+                 *
+                 * Joined most-visible-wins over the slots, matching
+                 * nd_present_src2 inside the interpreter's own array ops.
                  *
                  * A body that BUILDS its array (ConstantArray, Table, NestList)
-                 * has no kind to inherit: the interpreter returns a List however
-                 * the arguments were spelled, because the construct has no
-                 * packed form.  Asking only the arguments got that wrong for a
-                 * body that takes an NDArray and builds its result from
-                 * something else, so the PROGRAM is asked as well. */
+                 * has no presentation to inherit, and the old rule unpacked it on
+                 * the grounds that "the construct has no packed form". It does
+                 * now -- ConstantArray[1., 300] is a packed list -- so a built
+                 * result follows the PRODUCER rule instead: pack_offer, which
+                 * applies the same size threshold and the same $AutoArrayPacking
+                 * switch the interpreter's producers do. Below the threshold that
+                 * still yields a List, which is why the rule is a call rather
+                 * than a flag flip. */
                 if (r && CT_IS_ARRAY(out.type)) {
-                    bool from_nd = false;
-                    for (size_t q = 0; q < nargs; q++)
-                        if (CT_IS_ARRAY(cf->arg_types[q]) && !packed_p[q]) from_nd = true;
-                    /* An INTEGER array always unpacks, whatever the arguments
-                     * were.  NDT_INT64 is internal to the compiler — no user
-                     * syntax builds one and `NDArray[...]` never infers it — so
-                     * returning the buffer itself would hand back a value the
-                     * rest of the system has no way to have produced. */
-                    if (CT_ELEM(out.type) == CT_INT) from_nd = false;
-                    if (!from_nd || compiled_result_built(cf->prog)) {
+                    if (compiled_result_built(cf->prog)) {
+                        /* pack_offer re-sniffs, so it applies the threshold, the
+                         * $AutoArrayPacking switch AND the complex refusal --
+                         * a built complex result stays the folded List the
+                         * evaluator produced. */
                         Expr* lst = ndarray_to_nested_list(r);
-                        if (lst) { expr_free(r); r = lst; }
+                        if (lst) { expr_free(r); r = pack_offer(lst); }
+                    } else {
+                        CfArgKind k = CF_ARG_SCALAR;
+                        for (size_t q = 0; q < nargs; q++)
+                            if (CT_IS_ARRAY(cf->arg_types[q]))
+                                k = cf_kind_join(k, kinds_p[q]);
+                        /* A COMPLEX buffer may not wear the packed
+                         * presentation, whatever came in. Automatic packing
+                         * refuses complex for a reason (pack.c's leaf_class): a
+                         * zero imaginary part materialises as Complex[re, 0.],
+                         * which the evaluator never produces -- it folds to a
+                         * Real -- so a packed complex list does not round-trip.
+                         * Measured: a float64 argument cast into a
+                         * {u, _Complex, 1} slot came back printing
+                         * {1. + 0.*I, 4. + 0.*I} where the same call on a plain
+                         * List gives {1., 4.}, because the List path is folded by
+                         * the evaluator on the way out and a streamed buffer is
+                         * not. Unpacking restores that fold. A VISIBLE
+                         * NDArray[..., "complex64"] is unaffected: it is a
+                         * legitimate value the user named. */
+                        bool cplx = ndt_is_complex(r->data.ndarray.dtype);
+                        if (k == CF_ARG_PACKED && !cplx) {
+                            /* Free: the buffer is already ours, and presentation
+                             * is one field. This is the whole boundary-out cost
+                             * that made a packed argument ~75x slower than the
+                             * identical visible NDArray. */
+                            r->data.ndarray.present_as = NDA_HEAD_LIST;
+                        } else if (k != CF_ARG_NDARRAY) {
+                            Expr* lst = ndarray_to_nested_list(r);
+                            if (lst) { expr_free(r); r = lst; }
+                        }
                     }
                 }
                 CF_RELEASE_PACKED();

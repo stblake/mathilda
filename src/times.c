@@ -310,6 +310,8 @@ Expr* builtin_times(Expr* res) {
         if (any_nd) {
             Expr* fast = ndarray_elementwise(res->data.function.args, n, false);
             if (fast) return fast;
+            Expr* retry = ndarray_int64_delist_retry(res);
+            if (retry) return retry;
             if (ndarray_warn_shape_mismatch(res->data.function.args, n, "multiplied"))
                 return NULL;
             /* NDArray combined with a symbolic factor (c * NDArray): purely

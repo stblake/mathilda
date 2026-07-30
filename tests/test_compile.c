@@ -159,7 +159,7 @@ static Expr* make_vec(size_t n, double lo, double hi) {
     double* buf = malloc(n * sizeof(double));
     for (size_t k = 0; k < n; k++) buf[k] = urand(lo, hi);
     int64_t dims[1]; dims[0] = (int64_t)n;
-    return expr_new_ndarray(1, dims, buf, NDT_FLOAT64);   /* adopts buf */
+    return expr_new_ndarray_raw(1, dims, buf, NDT_FLOAT64);   /* adopts buf */
 }
 
 /* A rank-1 complex64 NDArray (interleaved re,im) with entries from [lo,hi]^2. */
@@ -167,7 +167,7 @@ static Expr* make_cvec(size_t n, double lo, double hi) {
     double* buf = malloc(2 * n * sizeof(double));
     for (size_t k = 0; k < n; k++) { buf[2 * k] = urand(lo, hi); buf[2 * k + 1] = urand(lo, hi); }
     int64_t dims[1]; dims[0] = (int64_t)n;
-    return expr_new_ndarray(1, dims, buf, NDT_COMPLEX64);   /* adopts buf */
+    return expr_new_ndarray_raw(1, dims, buf, NDT_COMPLEX64);   /* adopts buf */
 }
 
 /* Interpreter reference: substitute the NDArray arguments and evaluate, so the
@@ -194,6 +194,28 @@ static bool scalar_reim(const Expr* e, double* re, double* im) {
     bool ok = expr_to_double(reE, re) && expr_to_double(imE, im);
     expr_free(reE); expr_free(imE);
     return ok;
+}
+
+/* Coerce an interpreter result to a float64 buffer for comparison.
+ *
+ * Automatic packed arrays mean the interpreter can hand back a value that is
+ * ALREADY a dense buffer -- a packed List -- which ndarray_from_nested_list does
+ * not accept (it walks List nodes), so it returned NULL and every comparison
+ * reported a shape/kind mismatch. That is what
+ * NestWhileList[Function[u, u + 1.], xq, Function[u, u < 300.]] tripped over: the
+ * ~300-element iterate history is over the packing threshold while its shorter
+ * neighbours are not. An int64 buffer routes through the nested form so the
+ * widening goes through the exact accessor rather than ndt_get. */
+static Expr* as_f64_buffer(const Expr* e) {
+    if (!e) return NULL;
+    if (e->type == EXPR_NDARRAY) {
+        if (e->data.ndarray.dtype == NDT_FLOAT64) return expr_copy((Expr*)e);
+        Expr* nested = ndarray_to_nested_list(e);
+        Expr* out = ndarray_from_nested_list(nested, NDT_FLOAT64);
+        expr_free(nested);
+        return out;
+    }
+    return ndarray_from_nested_list((Expr*)e, NDT_FLOAT64);
 }
 
 /* Accumulate the max relative difference between two results (array or scalar).
@@ -238,7 +260,7 @@ static Expr* make_nd(int rank, const int64_t* dims, double lo, double hi) {
     for (int i = 0; i < rank; i++) n *= (size_t)dims[i];
     double* buf = malloc(n * sizeof(double));
     for (size_t k = 0; k < n; k++) buf[k] = urand(lo, hi);
-    return expr_new_ndarray(rank, dims, buf, NDT_FLOAT64);   /* adopts buf */
+    return expr_new_ndarray_raw(rank, dims, buf, NDT_FLOAT64);   /* adopts buf */
 }
 
 /* Parity for rank >= 2.  The delegated NDArray path is already rank-general, so
@@ -407,7 +429,7 @@ static Expr* make_ramp(int rank, const int64_t* dims) {
         }
         buf[k] = v;
     }
-    return expr_new_ndarray(rank, dims, buf, NDT_FLOAT64);   /* adopts buf */
+    return expr_new_ndarray_raw(rank, dims, buf, NDT_FLOAT64);   /* adopts buf */
 }
 
 /* Sum of |elements|, as a cheap fingerprint for "was this argument mutated?". */
@@ -1409,7 +1431,7 @@ int main(void) {
                 double* buf = malloc(3 * sizeof(double));
                 memcpy(buf, src, 3 * sizeof(double));
                 int64_t dims[1] = { 3 };
-                Expr* v = expr_new_ndarray(1, dims, buf, NDT_FLOAT64);
+                Expr* v = expr_new_ndarray_raw(1, dims, buf, NDT_FLOAT64);
                 CompileValue a, o; a.type = AA[0]; a.v.a = v;
                 bool ok = p && compiled_eval(p, &a, &o);
                 if (ok != (t == 1)) bad++;
@@ -2193,7 +2215,7 @@ int main(void) {
                     if (!compiled_eval(p, &av, &o)) { ok = false; break; }
                     Expr* got = aval_to_expr(o);
                     Expr* wl = ref_at(nb[k], xv);
-                    Expr* want = ndarray_from_nested_list(wl, NDT_FLOAT64);
+                    Expr* want = as_f64_buffer(wl);
                     if (!want || !arr_cmp(got, want, &maxerr)) ok = false; else cmp++;
                     expr_free(got); expr_free(wl); expr_free(want);
                 }
@@ -2230,7 +2252,7 @@ int main(void) {
                     if (!compiled_eval(p, &av, &o)) { ok = false; break; }
                     Expr* got = aval_to_expr(o);
                     Expr* wl = ref_at(hb[k], xv);
-                    Expr* want = ndarray_from_nested_list(wl, NDT_FLOAT64);
+                    Expr* want = as_f64_buffer(wl);
                     /* arr_cmp checks dims first, so a wrong LENGTH — the thing
                      * a grow/truncate pair gets wrong — fails here, not in the
                      * element comparison. */
@@ -2314,7 +2336,7 @@ int main(void) {
                  * also checks the SHAPE, since a wrong element count or rank
                  * fails arr_cmp rather than comparing element-by-element. */
                 Expr* wl = ref_at(tb[k], xv);
-                Expr* want = ndarray_from_nested_list(wl, NDT_FLOAT64);
+                Expr* want = as_f64_buffer(wl);
                 if (!want) {   /* an empty Table packs to nothing; compare lengths */
                     ok = (got->type == EXPR_NDARRAY && ndarray_size(got) == 0)
                       || (wl->type == EXPR_FUNCTION && wl->data.function.arg_count == 0

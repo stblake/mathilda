@@ -6,6 +6,7 @@
 #include "assoc.h"
 #include "ndarray.h"   /* ndt_get for NDArray canonical ordering */
 #include "ndstruct.h"  /* ndstruct_sort NDArray fast path */
+#include "pack.h"      /* pack_offer — a sorted machine list packs */
 #include <ctype.h>
 #include <math.h>
 #include <stdbool.h>
@@ -247,10 +248,72 @@ static int symbol_reverse_cmp(const void* pa, const void* pb) {
     return strcmp(b, a);
 }
 
+/* Compare two packed lists straight off their buffers. Valid ONLY when the
+ * shapes match exactly and the elements materialise to the same head class,
+ * because the List order is elementwise while a buffer scan would otherwise
+ * order by dims first: {{2.,0.},{1.,9.}} vs {{1.,9.,9.},{2.,0.,0.}} is +1
+ * elementwise (2. > 1.) but -1 by dims (2 < 3). Sets *ok false when it cannot
+ * decide, and the caller materialises instead. */
+static int nd_packed_compare_fast(const Expr* a, const Expr* b, bool* ok) {
+    const NDArrayData* x = &a->data.ndarray;
+    const NDArrayData* y = &b->data.ndarray;
+    *ok = false;
+    if (x->rank != y->rank) return 0;
+    size_t n = 1;
+    for (int i = 0; i < x->rank; i++) {
+        if (x->dims[i] != y->dims[i]) return 0;
+        n *= (size_t)x->dims[i];
+    }
+    bool xi = (x->dtype == NDT_INT64), yi = (y->dtype == NDT_INT64);
+    if (xi != yi) return 0;                                    /* Integer vs Real */
+    if (!xi && ndt_is_complex(x->dtype) != ndt_is_complex(y->dtype))
+        return 0;                                              /* Complex vs Real */
+    *ok = true;
+    if (xi) {
+        for (size_t i = 0; i < n; i++) {
+            int64_t va = ndt_get_i(x->data, i, x->dtype);
+            int64_t vb = ndt_get_i(y->data, i, y->dtype);
+            if (va != vb) return (va < vb) ? -1 : 1;
+        }
+        return 0;
+    }
+    for (size_t i = 0; i < n; i++) {
+        double are, aim, bre, bim;
+        ndt_get(x->data, i, x->dtype, &are, &aim);
+        ndt_get(y->data, i, y->dtype, &bre, &bim);
+        if (are < bre) return -1;
+        if (are > bre) return 1;
+        if (aim < bim) return -1;
+        if (aim > bim) return 1;
+    }
+    return 0;
+}
+
 int expr_compare(const Expr* a, const Expr* b) {
     if (a == b) return 0;
     if (!a) return -1;
     if (!b) return 1;
+
+    /* 0. Packed lists order as the Lists they are, NOT in the NDArray tier at
+     * step 5 below (which sorts after everything and treats dtype as identity).
+     * Two packed lists of matching shape and element class compare straight off
+     * their buffers -- the case that costs, since Orderless sorting of an
+     * arithmetic head hits it. Everything else materialises: correct by
+     * construction, and only paid when a packed list is genuinely being ordered
+     * against structural material. */
+    if (is_packed_list(a) || is_packed_list(b)) {
+        if (is_packed_list(a) && is_packed_list(b)) {
+            bool ok;
+            int c = nd_packed_compare_fast(a, b, &ok);
+            if (ok) return c;
+        }
+        Expr* ma = is_packed_list(a) ? ndarray_to_nested_list(a) : NULL;
+        Expr* mb = is_packed_list(b) ? ndarray_to_nested_list(b) : NULL;
+        int c = expr_compare(ma ? ma : a, mb ? mb : b);
+        if (ma) expr_free(ma);
+        if (mb) expr_free(mb);
+        return c;
+    }
 
     /* 1. Numeric atoms. */
     bool a_atomic = is_atomic_numeric(a);
@@ -463,7 +526,10 @@ Expr* builtin_sort(Expr* res) {
     Expr* result = expr_new_function(expr_copy(list->data.function.head), sorted_args, count);
     free(sorted_args);
 
-    return result;
+    /* A sorted machine-number list is worth packing: it is the shape most
+     * likely to be reduced or indexed next. Declines when the head is not List
+     * (Sort[g[3., 1.]] stays g[...]) or the elements are not uniform. */
+    return pack_offer(result);
 }
 
 /* ------------------- SortBy ------------------- */
@@ -614,26 +680,85 @@ Expr* builtin_minimal_by(Expr* res) { return maximal_minimal_by(res, 1); }
 
 /* ------------------- ReverseSort / ReverseSortBy ------------------- */
 
-/* Reverse the top-level arguments of a freshly-built (owned) expression. */
+/* Reverse the top-level elements of a freshly-built (owned) expression, in
+ * place. Handles both representations of a list.
+ *
+ * The NDArray arm is not an optimisation, it is the correctness fix: an NDArray
+ * is EXPR_NDARRAY, not EXPR_FUNCTION, so the early return silently did nothing
+ * and ReverseSort[NDArray[{3.,1.,4.,1.,5.}]] answered {1.,1.,3.,4.,5.} --
+ * builtin_sort's ascending result, unreversed and indistinguishable from Sort.
+ * A live wrong answer on the visible NDArray surface, and it would have become
+ * one on ordinary lists the moment ReverseSort was marked packed-aware.
+ * ReverseSortBy shares this helper and had the same bug. */
 static Expr* reverse_top_level(Expr* e) {
-    if (!e || e->type != EXPR_FUNCTION) return e;
+    if (!e) return e;
+
+    if (is_ndarray(e)) {
+        int rank = e->data.ndarray.rank;
+        const int64_t* dims = e->data.ndarray.dims;
+        size_t blocks = (size_t)dims[0];
+        if (blocks < 2) return e;
+        size_t rowelts = 1;
+        for (int i = 1; i < rank; i++) rowelts *= (size_t)dims[i];
+        size_t rowbytes = rowelts * ndt_elem_size(e->data.ndarray.dtype);
+        char* data = (char*)e->data.ndarray.data;
+        char* tmp = malloc(rowbytes);
+        if (!tmp) return e;                 /* cannot reverse: leave as built */
+        for (size_t i = 0; i < blocks / 2; i++) {
+            char* lo = data + i * rowbytes;
+            char* hi = data + (blocks - 1 - i) * rowbytes;
+            memcpy(tmp, lo, rowbytes);
+            memcpy(lo, hi, rowbytes);
+            memcpy(hi, tmp, rowbytes);
+        }
+        free(tmp);
+        return e;
+    }
+
+    if (e->type != EXPR_FUNCTION) return e;
     Expr** a = e->data.function.args;
     size_t n = e->data.function.arg_count;
     for (size_t i = 0; i < n / 2; i++) { Expr* t = a[i]; a[i] = a[n - 1 - i]; a[n - 1 - i] = t; }
     return e;
 }
 
+/* Re-head an owned call node's arguments onto `head` for delegation.
+ *
+ * builtin_reverse_sort used to hand its own `res` -- head ReverseSort -- straight
+ * to builtin_sort. That is fine while the ascending routine only looks at the
+ * arguments, and WRONG the moment it degrades: ndarray_delist_and_reeval rebuilds
+ * the call from `res`'s head, so a rank-2 NDArray made it evaluate
+ * ReverseSort[plainList], which is already descending, and the outer
+ * reverse_top_level then flipped it back to ascending.
+ *
+ * Delegating under the correct head removes the whole class: whatever the
+ * ascending routine does internally, including re-evaluating itself, it does as
+ * Sort. Caller owns the returned node. */
+static Expr* sort_call_as(const Expr* res, const char* head) {
+    size_t n = res->data.function.arg_count;
+    Expr** args = (n > 0) ? malloc(sizeof(Expr*) * n) : NULL;
+    for (size_t i = 0; i < n; i++) args[i] = expr_copy(res->data.function.args[i]);
+    Expr* call = expr_new_function(expr_new_symbol(head), args, n);
+    free(args);
+    return call;
+}
+
 /* ReverseSort[list] / ReverseSort[assoc] — descending order (by value for an
  * association), i.e. Reverse of Sort. */
 Expr* builtin_reverse_sort(Expr* res) {
-    Expr* asc = builtin_sort(res);   /* borrows res, returns a new expr */
+    if (res->type != EXPR_FUNCTION) return NULL;
+    Expr* call = sort_call_as(res, "Sort");
+    Expr* asc = builtin_sort(call);   /* borrows call, returns a new expr */
+    expr_free(call);
     return reverse_top_level(asc);
 }
 
 /* ReverseSortBy[coll, f] — descending by f (of each value for an association). */
 Expr* builtin_reverse_sort_by(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
-    Expr* asc = builtin_sort_by(res);
+    Expr* call = sort_call_as(res, "SortBy");
+    Expr* asc = builtin_sort_by(call);
+    expr_free(call);
     return reverse_top_level(asc);
 }
 

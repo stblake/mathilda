@@ -654,6 +654,14 @@ Expr* builtin_power(Expr* res) {
             if (fast) return fast;
         }
     }
+    /* An integer buffer whose exact power is a Rational or a radical: the List
+     * path builds it. Must come before the symbolic warning below, which would
+     * otherwise leave Range[300]^(1/2) unevaluated. */
+    if (is_ndarray(base) || is_ndarray(exp)) {
+        Expr* retry = ndarray_int64_delist_retry(res);
+        if (retry) return retry;
+    }
+
     /* NDArray combined with a symbolic base or exponent (NDArray^n): purely
      * numeric, so it can't be raised elementwise. Warn, then fall through to
      * leave the power unevaluated. Same-shape / scalar cases returned above. */

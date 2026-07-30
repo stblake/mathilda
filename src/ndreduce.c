@@ -12,6 +12,8 @@
 #include "ndarray.h"
 #include "ndarray_internal.h"
 #include "sym_names.h"
+#include "arithmetic.h"       /* make_rational — an exact integer Mean/Median */
+#include "checked_int.h"      /* ci_add_i64 — exact accumulate, bail on overflow */
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
@@ -20,6 +22,11 @@
 /* Below this many summands a strided range is summed by a plain loop; above it
  * the range is split in two and each half summed recursively (pairwise). */
 #define ND_PAIRWISE_BLOCK ((size_t)128)
+
+/* Below this, an introsort's lower constant factor wins; above it an 8-pass LSD
+ * radix sort (memory-bound, no comparisons) is far faster. Used by both the
+ * double and the int64 sorts. */
+#define ND_RADIX_MIN ((size_t)2048)
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -42,6 +49,82 @@ static Expr* nd_scalar(double re, double im, bool cplx) {
  * reduction that produces a real magnitude — Variance/Std/RMS — writes here). */
 static NDType nd_real_of(NDType dt) {
     return (ndt_comp_size(dt) == sizeof(double)) ? NDT_FLOAT64 : NDT_FLOAT32;
+}
+
+/* ------------------------------------------------- exact int64 reductions
+ *
+ * Automatic packing infers NDT_INT64 for an exact list, so Total[Range[10^6]]
+ * now arrives here as a buffer where it used to arrive as a List. Everything
+ * above accumulates through `double`, which is exact only to 2^53 and answers
+ * with a Real -- both wrong for an integer list, whose Total is an Integer that
+ * promotes past int64 when it has to.
+ *
+ * So the int64 arms below are not an optimisation: without them the gate in
+ * evaluate_step has to materialise every integer buffer before any reduction,
+ * and Total[Range[10^6]] measured 1.55x SLOWER packed than plain. With them the
+ * buffer is summed in place and the answer is the interpreter's.
+ *
+ * The rule everywhere: produce the EXACT answer, or return false and let
+ * ndarray_delist_and_reeval re-run on the materialised List where GMP is
+ * waiting. Never wrap, never round. Same contract as src/compile/. */
+static bool nd_sum_i64(const void* buf, NDType dt, size_t base, size_t stride,
+                       size_t count, int64_t* out) {
+    const int64_t* p = (const int64_t*)buf;
+    int64_t acc = 0;
+    if (dt != NDT_INT64) return false;
+    for (size_t i = 0; i < count; i++)
+        if (ci_add_i64(acc, p[base + i * stride], &acc)) return false;
+    *out = acc;
+    return true;
+}
+
+static int nd_i64_cmp(const void* a, const void* b) {
+    int64_t x = *(const int64_t*)a, y = *(const int64_t*)b;
+    return (x < y) ? -1 : (x > y) ? 1 : 0;
+}
+
+/* Ascending sort of an int64 array, in place.
+ *
+ * Radix, like the double path, and for the same reason: qsort's indirect
+ * comparator call per comparison made Sort on a 10^6-element integer buffer ~9x
+ * slower than the float64 radix sort on the same shape, which showed up as
+ * packing being slower than a plain List for Sort[Reverse[Range[10^6]]].
+ *
+ * The key transform is the signed analogue of nd_d2key's: flipping the sign bit
+ * maps int64 order onto uint64 order exactly (INT64_MIN -> 0, -1 -> 2^63-1,
+ * 0 -> 2^63, INT64_MAX -> 2^64-1), so eight unsigned byte passes sort signed
+ * values with no special-casing and no loss. */
+static uint64_t nd_i2key(int64_t v) { return (uint64_t)v ^ 0x8000000000000000ULL; }
+static int64_t  nd_key2i(uint64_t k) { return (int64_t)(k ^ 0x8000000000000000ULL); }
+
+void nd_sort_i64_asc(int64_t* v, size_t n) {
+    if (n < 2) return;
+    if (n < ND_RADIX_MIN) { qsort(v, n, sizeof(int64_t), nd_i64_cmp); return; }
+    uint64_t* a = malloc(n * sizeof(uint64_t));
+    uint64_t* b = malloc(n * sizeof(uint64_t));
+    if (!a || !b) { free(a); free(b); qsort(v, n, sizeof(int64_t), nd_i64_cmp); return; }
+    for (size_t i = 0; i < n; i++) a[i] = nd_i2key(v[i]);
+    uint64_t* src = a; uint64_t* dst = b;
+    for (int pass = 0; pass < 8; pass++) {          /* one byte per pass */
+        size_t count[256] = {0};
+        int sh = pass * 8;
+        for (size_t i = 0; i < n; i++) count[(src[i] >> sh) & 0xff]++;
+        size_t off = 0;
+        for (int d = 0; d < 256; d++) { size_t c = count[d]; count[d] = off; off += c; }
+        for (size_t i = 0; i < n; i++) dst[count[(src[i] >> sh) & 0xff]++] = src[i];
+        uint64_t* t = src; src = dst; dst = t;       /* 8 passes: ends back in `a` */
+    }
+    for (size_t i = 0; i < n; i++) v[i] = nd_key2i(src[i]);
+    free(a); free(b);
+}
+#define nd_sort_i64 nd_sort_i64_asc
+
+/* Max/Min over an int64 range: always exact, no overflow to worry about. */
+static int64_t nd_extreme_i64(const int64_t* p, size_t n, bool want_max) {
+    int64_t b = p[0];
+    for (size_t i = 1; i < n; i++)
+        b = want_max ? (p[i] > b ? p[i] : b) : (p[i] < b ? p[i] : b);
+    return b;
 }
 
 /* Pairwise sum of the `count` elements buf[base], buf[base+stride], ... into
@@ -244,11 +327,6 @@ static double nd_key2d(uint64_t k) {
     return d;
 }
 
-/* Below this, the introsort's lower constant factor wins; above it an 8-pass
- * LSD radix sort (memory-bound, no comparisons) is far faster on machine
- * doubles. */
-#define ND_RADIX_MIN ((size_t)2048)
-
 /* LSD radix sort of the doubles in `s` (ascending). Falls back to introsort if
  * the scratch allocation fails. */
 static void nd_radix_sort(double* s, size_t n) {
@@ -307,8 +385,30 @@ Expr* ndred_median(Expr* res) {
     const int64_t* dims = a->data.ndarray.dims;
     const void* buf = a->data.ndarray.data;
 
-    if (rank == 1)
+    if (rank == 1) {
+        if (dt == NDT_INT64) {
+            /* Median[Range[300]] is 301/2. Quickselect over doubles would be
+             * both inexact past 2^53 and the wrong head, so gather exactly. */
+            size_t n = (size_t)dims[0];
+            if (n == 0) return ndarray_delist_and_reeval(res);
+            const int64_t* p = (const int64_t*)buf;
+            int64_t* t = malloc(sizeof(int64_t) * n);
+            if (!t) return ndarray_delist_and_reeval(res);
+            memcpy(t, p, sizeof(int64_t) * n);
+            nd_sort_i64(t, n);
+            Expr* out;
+            if (n % 2 == 1) out = expr_new_integer(t[n / 2]);
+            else {
+                int64_t s;
+                out = ci_add_i64(t[n / 2 - 1], t[n / 2], &s)
+                        ? NULL : make_rational(s, 2);
+            }
+            free(t);
+            return out ? out : ndarray_delist_and_reeval(res);
+        }
         return expr_new_real(nd_median_of(buf, dt, 0, 1, (size_t)dims[0]));
+    }
+    if (dt == NDT_INT64) return ndarray_delist_and_reeval(res);   /* columnwise */
 
     /* Matrix: columnwise median -> rank-1 vector of length ncols. */
     size_t nrows = (size_t)dims[0], ncols = (size_t)dims[1];
@@ -318,10 +418,20 @@ Expr* ndred_median(Expr* res) {
     for (size_t j = 0; j < ncols; j++)
         ndt_set(out, j, odt, nd_median_of(buf, dt, j, ncols, nrows), 0.0);
     int64_t odims[1] = { (int64_t)ncols };
-    return expr_new_ndarray(1, odims, out, odt);
+    return expr_new_ndarray_like(a, 1, odims, out, odt);
 }
 
 /* --------------------------------------------------------------- Quartiles */
+
+/* The reductions whose exact integer answer is a Rational or a root -- so no
+ * int64 buffer can hold it and there is nothing to gain from trying. The gate in
+ * evaluate_step already materialises an integer argument for every head not on
+ * its INT64_OK list, so this guard is for the surface the user opts into
+ * directly: NDArray[..., DataType -> "int64"], and a buffer arriving from
+ * Compile[]. Without it Variance[intArray] would answer with a Real. */
+static bool nd_int64_degrade(const Expr* a) {
+    return a && a->type == EXPR_NDARRAY && a->data.ndarray.dtype == NDT_INT64;
+}
 
 /* Mathematica's default Quartiles parameters {{1/2, 0}, {0, 1}}: for the k-th
  * quantile q, h = 1/2 + n*q, clamped, then linear interpolation between the
@@ -331,7 +441,8 @@ Expr* ndred_quartiles(Expr* res) {
      * parameter matrix or higher rank degrades to the exact List method. */
     if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
     Expr* a = res->data.function.args[0];
-    if (a->data.ndarray.rank != 1 || ndt_is_complex(a->data.ndarray.dtype))
+    if (a->data.ndarray.rank != 1 || ndt_is_complex(a->data.ndarray.dtype) ||
+        nd_int64_degrade(a))
         return ndarray_delist_and_reeval(res);
 
     size_t n = (size_t)a->data.ndarray.dims[0];
@@ -359,7 +470,7 @@ Expr* ndred_quartiles(Expr* res) {
     }
     free(s);
     int64_t odims[1] = { 3 };
-    return expr_new_ndarray(1, odims, out, odt);
+    return expr_new_ndarray_like(a, 1, odims, out, odt);
 }
 
 /* ---------------------------------------------------- Moving statistics */
@@ -371,7 +482,8 @@ static bool nd_moving_window(Expr* res, Expr** a_out, size_t* r_out) {
     if (res->data.function.arg_count != 2) return false;
     Expr* a = res->data.function.args[0];
     Expr* spec = res->data.function.args[1];
-    if (a->data.ndarray.rank != 1 || ndt_is_complex(a->data.ndarray.dtype))
+    if (a->data.ndarray.rank != 1 || ndt_is_complex(a->data.ndarray.dtype) ||
+        nd_int64_degrade(a))
         return false;
     if (spec->type != EXPR_INTEGER) return false;   /* weight list / bignum -> List path */
     int64_t r = spec->data.integer;
@@ -398,7 +510,7 @@ Expr* ndred_moving_average(Expr* res) {
         ndt_set(out, i, dt, sr * inv, si * inv);
     }
     int64_t odims[1] = { (int64_t)L };
-    return expr_new_ndarray(1, odims, out, dt);
+    return expr_new_ndarray_like(a, 1, odims, out, dt);
 }
 
 Expr* ndred_moving_median(Expr* res) {
@@ -415,7 +527,7 @@ Expr* ndred_moving_median(Expr* res) {
     for (size_t i = 0; i < L; i++)
         ndt_set(out, i, odt, nd_median_of(buf, dt, i, 1, r), 0.0);
     int64_t odims[1] = { (int64_t)L };
-    return expr_new_ndarray(1, odims, out, odt);
+    return expr_new_ndarray_like(a, 1, odims, out, odt);
 }
 
 /* ExponentialMovingAverage[a, alpha]: r[0] = x[0], r[i] = alpha*x[i] +
@@ -426,7 +538,7 @@ Expr* ndred_ema(Expr* res) {
     Expr* a = res->data.function.args[0];
     Expr* alpha = res->data.function.args[1];
     NDType dt = a->data.ndarray.dtype;
-    if (a->data.ndarray.rank != 1 || ndt_is_complex(dt))
+    if (a->data.ndarray.rank != 1 || ndt_is_complex(dt) || nd_int64_degrade(a))
         return ndarray_delist_and_reeval(res);
     double al;
     if (alpha->type == EXPR_REAL) al = alpha->data.real;
@@ -446,7 +558,7 @@ Expr* ndred_ema(Expr* res) {
         prev = al * x + (1.0 - al) * prev;
         ndt_set(out, i, dt, prev, 0.0);
     }
-    return expr_new_ndarray(1, a->data.ndarray.dims, out, dt);
+    return expr_new_ndarray_like(a, 1, a->data.ndarray.dims, out, dt);
 }
 
 /* ------------------------------------------------------------------- Total */
@@ -478,6 +590,11 @@ static Expr* nd_total_leading(const Expr* a, int m) {
     size_t blocks = nd_dim_prod(dims, 0, m);     /* number of summands per output */
 
     if (m == rank) {                             /* full reduction -> scalar */
+        if (dt == NDT_INT64) {
+            int64_t s;
+            if (!nd_sum_i64(buf, dt, 0, 1, blocks, &s)) return NULL;  /* overflow */
+            return expr_new_integer(s);
+        }
         double re, im;
         nd_full_sum(buf, dt, blocks, &re, &im);
         return nd_scalar(re, im, cplx);
@@ -485,9 +602,20 @@ static Expr* nd_total_leading(const Expr* a, int m) {
 
     void* out = malloc(ndt_elem_size(dt) * T);
     if (!out) return NULL;
+    if (dt == NDT_INT64) {
+        /* Serial and un-pairwise on purpose: integer addition is exact and
+         * associative, so there is nothing to compensate for -- and one
+         * overflow anywhere has to abandon the whole result. */
+        for (size_t j = 0; j < T; j++) {
+            int64_t s;
+            if (!nd_sum_i64(buf, dt, j, T, blocks, &s)) { free(out); return NULL; }
+            ndt_set_i(out, j, dt, s);
+        }
+        return expr_new_ndarray_like(a, rank - m, dims + m, out, dt);
+    }
     nd_col_ctx c = { buf, dt, out, T, blocks, 1.0 };
     nd_parallel_for(T, nd_total_cols, &c);
-    return expr_new_ndarray(rank - m, dims + m, out, dt); /* adopts out */
+    return expr_new_ndarray_like(a, rank - m, dims + m, out, dt); /* adopts out */
 }
 
 Expr* ndred_total(Expr* res) {
@@ -536,16 +664,27 @@ Expr* ndred_mean(Expr* res) {
     double inv = 1.0 / (double)blocks;
 
     if (rank == 1) {                             /* vector -> scalar */
+        if (dt == NDT_INT64) {
+            /* Mean[Range[10]] is 11/2, not 5.5 -- an exact Rational, reduced. */
+            int64_t s;
+            if (!nd_sum_i64(buf, dt, 0, 1, blocks, &s))
+                return ndarray_delist_and_reeval(res);
+            Expr* q = make_rational(s, (int64_t)blocks);
+            return q ? q : ndarray_delist_and_reeval(res);
+        }
         double re, im;
         nd_full_sum(buf, dt, blocks, &re, &im);
         return nd_scalar(re * inv, im * inv, cplx);
     }
+    /* A columnwise integer mean is a vector of Rationals, which no buffer can
+     * hold; the List path builds it exactly. */
+    if (dt == NDT_INT64) return ndarray_delist_and_reeval(res);
 
     void* out = malloc(ndt_elem_size(dt) * T);
     if (!out) return ndarray_delist_and_reeval(res);
     nd_col_ctx c = { buf, dt, out, T, blocks, inv };  /* inv scales sum -> mean */
     nd_parallel_for(T, nd_total_cols, &c);
-    return expr_new_ndarray(rank - 1, dims + 1, out, dt);
+    return expr_new_ndarray_like(a, rank - 1, dims + 1, out, dt);
 }
 
 /* ------------------------------------------------- Variance / Std / RMS */
@@ -585,6 +724,9 @@ static bool nd_moment_cols(void* c, size_t lo, size_t hi) {
  * runs the two passes (mean, then Σ|x−μ|²) through the threaded full reducers. */
 static Expr* nd_moment_leading(Expr* res, int mode) {
     Expr* a = res->data.function.args[0];
+    /* Variance[Range[10]] is 55/6 and RootMeanSquare[{1,2}] is Sqrt[5/2]; both
+     * exact answers are outside a machine buffer. */
+    if (nd_int64_degrade(a)) return ndarray_delist_and_reeval(res);
     int rank = a->data.ndarray.rank;
     const int64_t* dims = a->data.ndarray.dims;
     NDType dt = a->data.ndarray.dtype;
@@ -616,7 +758,7 @@ static Expr* nd_moment_leading(Expr* res, int mode) {
     if (!out) return ndarray_delist_and_reeval(res);
     nd_mom_ctx c = { buf, dt, out, odt, T, blocks, mode };
     nd_parallel_for(T, nd_moment_cols, &c);
-    return expr_new_ndarray(rank - 1, dims + 1, out, odt);
+    return expr_new_ndarray_like(a, rank - 1, dims + 1, out, odt);
 }
 
 Expr* ndred_variance(Expr* res) {
@@ -688,6 +830,13 @@ static Expr* nd_extreme(Expr* res, bool want_max) {
     if (ndt_is_complex(dt)) return ndarray_delist_and_reeval(res);
     size_t sz = ndarray_size(a);
 
+    if (dt == NDT_INT64) {
+        /* Exact, and the head matters: Max[Range[300]] is the Integer 300. */
+        if (sz == 0) return ndarray_delist_and_reeval(res);
+        return expr_new_integer(
+            nd_extreme_i64((const int64_t*)a->data.ndarray.data, sz, want_max));
+    }
+
     nd_ext_ctx c = { a->data.ndarray.data, dt, want_max };
     double slots[NDARRAY_MAX_THREADS * 2];
     int k = nd_parallel_reduce(sz, nd_ext_reduce, &c, 2, slots);
@@ -723,6 +872,18 @@ Expr* ndred_accumulate(Expr* res) {
 
     void* out = malloc(ndt_elem_size(dt) * sz);
     if (!out) return ndarray_delist_and_reeval(res);
+    if (dt == NDT_INT64) {
+        const int64_t* in = (const int64_t*)buf;
+        int64_t* o = (int64_t*)out;
+        for (size_t j = 0; j < T; j++) o[j] = in[j];
+        for (size_t b = 1; b < blocks; b++)
+            for (size_t j = 0; j < T; j++)
+                if (ci_add_i64(o[(b - 1) * T + j], in[b * T + j], &o[b * T + j])) {
+                    free(out);
+                    return ndarray_delist_and_reeval(res);   /* bigint answer */
+                }
+        return expr_new_ndarray_like(a, rank, dims, out, dt);
+    }
     /* First block copies through; each later block adds the running total. */
     for (size_t j = 0; j < T; j++) {
         double r, im;
@@ -737,5 +898,5 @@ Expr* ndred_accumulate(Expr* res) {
             ndt_set(out, b * T + j, dt, pr + cr, pi + ci);
         }
     }
-    return expr_new_ndarray(rank, dims, out, dt);
+    return expr_new_ndarray_like(a, rank, dims, out, dt);
 }

@@ -4,6 +4,8 @@
  * ndarray_delist_and_reeval so the result matches the List path exactly. */
 
 #include "ndstruct.h"
+#include "pack.h"    /* pack_repack_like — a packed source re-sniffs its dtype */
+#include "checked_int.h"  /* ci_sub_i64 — Differences abandons on int64 overflow */
 #include "ndarray.h"
 #include "ndarray_internal.h"
 #include "sym_names.h"
@@ -45,6 +47,18 @@ Expr* ndstruct_sort(Expr* res) {
         return ndarray_delist_and_reeval(res);
 
     size_t n = (size_t)a->data.ndarray.dims[0];
+    if (dt == NDT_INT64) {
+        /* Sort an integer buffer in place, in int64: the double gather is exact
+         * only to 2^53, so two large integers would compare equal and the sort
+         * would silently reorder them -- and every element would come back
+         * rounded. */
+        int64_t* o = malloc(sizeof(int64_t) * (n ? n : 1));
+        if (!o) return ndarray_delist_and_reeval(res);
+        memcpy(o, a->data.ndarray.data, sizeof(int64_t) * n);
+        nd_sort_i64_asc(o, n);
+        int64_t idims[1] = { (int64_t)n };
+        return expr_new_ndarray_like(a, 1, idims, o, dt);
+    }
     double* s = malloc(sizeof(double) * n);
     if (!s) return ndarray_delist_and_reeval(res);
     nd_gather_real(a->data.ndarray.data, dt, 0, 1, n, s);
@@ -55,7 +69,7 @@ Expr* ndstruct_sort(Expr* res) {
     for (size_t i = 0; i < n; i++) ndt_set(out, i, dt, s[i], 0.0);
     free(s);
     int64_t dims[1] = { (int64_t)n };
-    return expr_new_ndarray(1, dims, out, dt);
+    return expr_new_ndarray_like(a, 1, dims, out, dt);
 }
 
 /* ---------------------------------------------------------------- Reverse */
@@ -76,7 +90,364 @@ Expr* ndstruct_reverse(Expr* res) {
     if (!out) return ndarray_delist_and_reeval(res);
     for (size_t b = 0; b < blocks; b++)
         memcpy(out + b * rowbytes, buf + (blocks - 1 - b) * rowbytes, rowbytes);
-    return expr_new_ndarray(rank, dims, out, dt);
+    return expr_new_ndarray_like(a, rank, dims, out, dt);
+}
+
+/* ----------------------------------------------------------------- Rotate */
+
+/*
+ * RotateLeft[a, n] / RotateLeft[a, {n1, n2, ...}] straight on the buffer.
+ *
+ * WHY THIS EXISTS. RotateLeft had no buffer walk, so it went through
+ * ndstruct_delist_repack: materialise the array into one Expr per element, run
+ * the generic recursive List rotate, re-sniff, re-pack. On a 512x512 float64
+ * matrix that is 262144 allocations and it measured **42.6 ms** -- against
+ * 0.50 ms for `u + u` and 0.66 ms for Transpose[u] on the very same array, i.e.
+ * ~85x the cost of touching every element once.
+ *
+ * That single number is what made the classical 5-point Jacobi stencil
+ *     Nest[(RotateLeft[u,{1,0}] + RotateRight[u,{1,0}]
+ *         + RotateLeft[u,{0,1}] + RotateRight[u,{0,1}])/4. &, u0, 100]
+ * cost 23 s: four rotates per sweep x 100 sweeps is 17 s of pure marshalling.
+ * Rotation is the idiom for a shifted neighbour in array-style numerical code,
+ * so it sits in the inner loop of every stencil, convolution and cyclic-shift
+ * algorithm anyone writes.
+ *
+ * HOW. A rotation is a permutation of whole contiguous blocks, never an
+ * element-by-element computation. Viewing the array along axis `ax` as
+ * [outer][dims[ax]][inner], output slice i is input slice (i + r) mod dims[ax],
+ * copied as inner*elemsize contiguous bytes. Axes are rotated one at a time
+ * through a scratch buffer, so a rank-N spec costs one pass per NONZERO axis
+ * (all-zero axes are skipped, which is the common {1,0} / {0,1} stencil case).
+ * For axis 0 the inner extent is the whole row block, so the pass degenerates
+ * to two memcpys.
+ *
+ * Degrades (returns NULL, caller falls back) on a non-Integer spec entry or a
+ * spec longer than the rank -- the List path defines those and this must not
+ * guess.
+ */
+static Expr* nd_rotate_axes(Expr* a, const int64_t* rots, int nrots) {
+    int rank = a->data.ndarray.rank;
+    const int64_t* dims = a->data.ndarray.dims;
+    NDType dt = a->data.ndarray.dtype;
+    size_t esz = ndt_elem_size(dt);
+    size_t total = nd_prod(dims, 0, rank);
+    if (total == 0) return NULL;
+
+    char* cur = malloc(total * esz);
+    if (!cur) return NULL;
+    memcpy(cur, a->data.ndarray.data, total * esz);
+
+    char* tmp = NULL;
+    for (int ax = 0; ax < nrots && ax < rank; ax++) {
+        int64_t d = dims[ax];
+        if (d <= 1) continue;
+        int64_t r = rots[ax] % d;
+        if (r < 0) r += d;
+        if (r == 0) continue;                       /* identity on this axis */
+
+        if (!tmp) {
+            tmp = malloc(total * esz);
+            if (!tmp) { free(cur); return NULL; }
+        }
+        size_t outer = nd_prod(dims, 0, ax);
+        size_t inner = nd_prod(dims, ax + 1, rank) * esz;
+        size_t slice = (size_t)d * inner;           /* bytes per outer block */
+        for (size_t o = 0; o < outer; o++) {
+            const char* src = cur + o * slice;
+            char* dst = tmp + o * slice;
+            /* Rotating LEFT by r: out[i] = in[i + r]. Two contiguous runs. */
+            size_t head = (size_t)(d - r) * inner;  /* in[r .. d) -> out[0 ..) */
+            memcpy(dst, src + (size_t)r * inner, head);
+            memcpy(dst + head, src, (size_t)r * inner);
+        }
+        char* swap = cur; cur = tmp; tmp = swap;
+    }
+    free(tmp);
+    return expr_new_ndarray_like(a, rank, dims, cur, dt);
+}
+
+/* Parse a rotation spec into `rots` (caller-provided, capacity >= rank).
+ * An omitted spec means 1 on axis 0. `sign` is +1 for RotateLeft, -1 for
+ * RotateRight. Returns the number of axes covered, or -1 to degrade. */
+static int nd_rotate_spec(const Expr* n_spec, int rank, int64_t sign,
+                          int64_t* rots) {
+    for (int i = 0; i < rank; i++) rots[i] = 0;
+    if (!n_spec) { rots[0] = sign; return 1; }
+    if (n_spec->type == EXPR_INTEGER) {
+        rots[0] = sign * n_spec->data.integer;
+        return 1;
+    }
+    if (n_spec->type == EXPR_FUNCTION && n_spec->data.function.head->type == EXPR_SYMBOL
+        && n_spec->data.function.head->data.symbol.name == SYM_List) {
+        size_t k = n_spec->data.function.arg_count;
+        if (k > (size_t)rank) return -1;            /* spec deeper than the array */
+        for (size_t i = 0; i < k; i++) {
+            const Expr* e = n_spec->data.function.args[i];
+            if (e->type != EXPR_INTEGER) return -1;
+            rots[i] = sign * e->data.integer;
+        }
+        return (int)k;
+    }
+    return -1;
+}
+
+Expr* ndstruct_rotate(Expr* res, bool left) {
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return NULL;
+    Expr* a = res->data.function.args[0];
+    if (!is_ndarray(a)) return NULL;
+    int rank = a->data.ndarray.rank;
+    if (rank < 1 || rank > NDARRAY_MAX_RANK) return NULL;
+
+    int64_t rots[NDARRAY_MAX_RANK];
+    int n = nd_rotate_spec(argc == 2 ? res->data.function.args[1] : NULL,
+                           rank, left ? 1 : -1, rots);
+    if (n < 0) return NULL;
+    return nd_rotate_axes(a, rots, n);
+}
+
+/* ------------------------------------- Join / Partition / Differences /    */
+/* ------------------------------------- Riffle / PadLeft / PadRight        */
+
+/*
+ * Five more structural heads straight on the buffer.
+ *
+ * All five previously went through ndstruct_delist_repack -- one Expr per
+ * element, the generic List implementation, then a re-sniff and re-pack. Against
+ * Mathematica 14.0 on the same machine that cost (Mathilda / Mathematica):
+ *
+ *     Differences, 10^6 reals      834 ms / 0.52 ms     1600x
+ *     Partition[v, 2], 10^6        257 ms / 0.61 ms      420x
+ *     Join, two 10^6 vectors       352 ms / 2.5 ms       140x
+ *     Riffle[v, 0.], 10^6          206 ms / 17.6 ms       12x
+ *     PadRight, 1000x1000           99 ms / 51 ms          2x
+ *
+ * None of that was algorithmic -- every one of these is a block move plus, for
+ * Differences, one subtraction per element. The marshalling WAS the cost.
+ *
+ * THE EXACTNESS RULE, which is what most of the care below is about. A head that
+ * introduces a NEW element (Riffle's separator, Pad's fill) may only use the
+ * buffer when that element is exactly representable at the buffer's dtype AND
+ * has the matching exactness. PadLeft[{1.,2.,3.}, 5] is {0, 0, 1., 2., 3.} --
+ * exact Integer zeros beside Reals -- in Mathilda AND in Mathematica, and no
+ * uniform buffer can hold that, so it must decline and stay a plain List.
+ * (Mathematica's own PadRight is unpacked and slow for exactly this reason.)
+ * Riffle[v, 0.] with a Real separator into a float64 buffer is fine; Riffle[v, 0]
+ * is not. Same rule as pack_repack_like's re-sniff, applied before the work
+ * instead of after.
+ *
+ * Each returns NULL to decline, leaving the caller's existing
+ * ndstruct_delist_repack fallback to define every case not handled here.
+ */
+
+/* The scalar `e` as a raw buffer element of dtype `dt`, but only when it is
+ * exactly representable AND its head matches what `dt` yields on readback:
+ * EXPR_REAL for a float dtype, EXPR_INTEGER for NDT_INT64. Anything else --
+ * an Integer into float64, a Real into int64, Rational, BigInt, MPFR, Complex,
+ * symbol -- is refused, because it would change an element's head. */
+static bool nd_fill_value(const Expr* e, NDType dt, double* re, int64_t* iv) {
+    if (!e) return false;
+    if (dt == NDT_INT64) {
+        if (e->type != EXPR_INTEGER) return false;
+        *iv = e->data.integer; return true;
+    }
+    if (ndt_is_complex(dt)) return false;      /* complex fill: not yet */
+    if (e->type != EXPR_REAL) return false;
+    *re = e->data.real; return true;
+}
+
+/* Write `count` copies of the fill value at element offset `at`. */
+static void nd_fill_run(void* buf, NDType dt, size_t at, size_t count,
+                        double re, int64_t iv) {
+    if (dt == NDT_INT64) {
+        int64_t* d = (int64_t*)buf;
+        for (size_t i = 0; i < count; i++) d[at + i] = iv;
+    } else {
+        for (size_t i = 0; i < count; i++) ndt_set(buf, at + i, dt, re, 0.0);
+    }
+}
+
+/* Join[a1, a2, ...] along the leading axis.
+ *
+ * Every argument must be an ndarray of the SAME dtype and the same trailing
+ * dims. Same dtype rather than a widening promotion on purpose: Join of an
+ * int64 and a float64 buffer is a list of Integers followed by Reals in the
+ * interpreter, and widening would silently turn the Integers into Reals. */
+Expr* ndstruct_join(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1) return NULL;
+    Expr* a0 = res->data.function.args[0];
+    if (!is_ndarray(a0)) return NULL;
+    int rank = a0->data.ndarray.rank;
+    NDType dt = a0->data.ndarray.dtype;
+    size_t esz = ndt_elem_size(dt);
+    size_t rowelts = nd_prod(a0->data.ndarray.dims, 1, rank);
+
+    int64_t lead = 0;
+    for (size_t i = 0; i < argc; i++) {
+        Expr* a = res->data.function.args[i];
+        if (!is_ndarray(a) || a->data.ndarray.rank != rank
+            || a->data.ndarray.dtype != dt) return NULL;
+        for (int d = 1; d < rank; d++)
+            if (a->data.ndarray.dims[d] != a0->data.ndarray.dims[d]) return NULL;
+        lead += a->data.ndarray.dims[0];
+    }
+    int64_t odims[NDARRAY_MAX_RANK];
+    for (int d = 0; d < rank; d++) odims[d] = a0->data.ndarray.dims[d];
+    odims[0] = lead;
+
+    size_t total_bytes = (size_t)lead * rowelts * esz;
+    char* out = malloc(total_bytes ? total_bytes : 1);   /* malloc(0) is impl-defined */
+    if (!out) return NULL;
+    size_t off = 0;
+    for (size_t i = 0; i < argc; i++) {
+        Expr* a = res->data.function.args[i];
+        size_t bytes = (size_t)a->data.ndarray.dims[0] * rowelts * esz;
+        memcpy(out + off, a->data.ndarray.data, bytes);
+        off += bytes;
+    }
+    return expr_new_ndarray_like(a0, rank, odims, out, dt);
+}
+
+/* Partition[a, k] on a rank-1 buffer: rank 2, dims {n/k, k}, one memcpy of the
+ * whole usable prefix. The offset form Partition[a, k, d] and rank >= 2 decline. */
+Expr* ndstruct_partition(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* a = res->data.function.args[0];
+    Expr* ks = res->data.function.args[1];
+    if (!is_ndarray(a) || a->data.ndarray.rank != 1) return NULL;
+    if (ks->type != EXPR_INTEGER || ks->data.integer <= 0) return NULL;
+    int64_t k = ks->data.integer;
+    int64_t n = a->data.ndarray.dims[0];
+    int64_t rows = n / k;                      /* Partition drops the remainder */
+    if (rows <= 0) return NULL;                /* {} -- let the List path answer */
+    NDType dt = a->data.ndarray.dtype;
+    size_t esz = ndt_elem_size(dt);
+    size_t bytes = (size_t)rows * (size_t)k * esz;
+    char* out = malloc(bytes);
+    if (!out) return NULL;
+    memcpy(out, a->data.ndarray.data, bytes);
+    int64_t odims[2] = { rows, k };
+    return expr_new_ndarray_like(a, 2, odims, out, dt);
+}
+
+/* Differences[a] on a rank-1 buffer: n-1 successive differences.
+ *
+ * int64 subtracts in int64 and abandons the whole result on the first overflow
+ * (ci_sub_i64), so the List path re-runs it and GMP gives the exact answer --
+ * never a wrapped one. Higher-order and level-spec forms decline. */
+Expr* ndstruct_differences(Expr* res) {
+    if (res->data.function.arg_count != 1) return NULL;
+    Expr* a = res->data.function.args[0];
+    if (!is_ndarray(a) || a->data.ndarray.rank != 1) return NULL;
+    NDType dt = a->data.ndarray.dtype;
+    if (ndt_is_complex(dt)) return NULL;
+    int64_t n = a->data.ndarray.dims[0];
+    if (n < 2) return NULL;                    /* {} -- let the List path answer */
+    int64_t m = n - 1;
+    int64_t odims[1] = { m };
+
+    if (dt == NDT_INT64) {
+        const int64_t* s = (const int64_t*)a->data.ndarray.data;
+        int64_t* o = malloc(sizeof(int64_t) * (size_t)m);
+        if (!o) return NULL;
+        for (int64_t i = 0; i < m; i++) {
+            /* ci_sub_i64 is __builtin_sub_overflow: it returns TRUE on
+             * OVERFLOW, not on success. Abandon the whole result on the first
+             * one so the List path re-runs it and GMP answers exactly. */
+            if (ci_sub_i64(s[i + 1], s[i], &o[i])) { free(o); return NULL; }
+        }
+        return expr_new_ndarray_like(a, 1, odims, o, dt);
+    }
+    void* o = malloc(ndt_elem_size(dt) * (size_t)m);
+    if (!o) return NULL;
+    for (int64_t i = 0; i < m; i++) {
+        double hi, lo, dummy;
+        ndt_get(a->data.ndarray.data, (size_t)(i + 1), dt, &hi, &dummy);
+        ndt_get(a->data.ndarray.data, (size_t)i, dt, &lo, &dummy);
+        ndt_set(o, (size_t)i, dt, hi - lo, 0.0);
+    }
+    return expr_new_ndarray_like(a, 1, odims, o, dt);
+}
+
+/* Riffle[a, x] on a rank-1 buffer: a[1], x, a[2], x, ..., a[n] -- 2n-1 elements,
+ * no trailing separator. `x` must pass nd_fill_value; a List separator (which
+ * cycles) declines. */
+Expr* ndstruct_riffle(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* a = res->data.function.args[0];
+    Expr* sep = res->data.function.args[1];
+    if (!is_ndarray(a) || a->data.ndarray.rank != 1) return NULL;
+    NDType dt = a->data.ndarray.dtype;
+    double re = 0.0; int64_t iv = 0;
+    if (!nd_fill_value(sep, dt, &re, &iv)) return NULL;
+    int64_t n = a->data.ndarray.dims[0];
+    if (n < 1) return NULL;
+    size_t esz = ndt_elem_size(dt);
+    int64_t m = 2 * n - 1;
+    char* out = malloc((size_t)m * esz);
+    if (!out) return NULL;
+    const char* s = (const char*)a->data.ndarray.data;
+    for (int64_t i = 0; i < n; i++) {
+        memcpy(out + (size_t)(2 * i) * esz, s + (size_t)i * esz, esz);
+        if (i + 1 < n) nd_fill_run(out, dt, (size_t)(2 * i + 1), 1, re, iv);
+    }
+    int64_t odims[1] = { m };
+    return expr_new_ndarray_like(a, 1, odims, out, dt);
+}
+
+/* PadLeft[a, n] / PadRight[a, n] / with an explicit fill, on a rank-1 buffer.
+ *
+ * The fill is only consulted when padding actually happens: PadLeft[a, n] with
+ * n <= Length[a] is pure truncation, which needs no fill and so stays on the
+ * buffer even with the default exact 0 that would otherwise force a decline.
+ * A List size spec (rank >= 2 padding) declines. */
+Expr* ndstruct_pad(Expr* res, bool left) {
+    size_t argc = res->data.function.arg_count;
+    if (argc < 2 || argc > 3) return NULL;
+    Expr* a = res->data.function.args[0];
+    Expr* ns = res->data.function.args[1];
+    if (!is_ndarray(a) || a->data.ndarray.rank != 1) return NULL;
+    if (ns->type != EXPR_INTEGER || ns->data.integer < 0) return NULL;
+    int64_t want = ns->data.integer;
+    int64_t n = a->data.ndarray.dims[0];
+    NDType dt = a->data.ndarray.dtype;
+    size_t esz = ndt_elem_size(dt);
+    const char* s = (const char*)a->data.ndarray.data;
+    int64_t odims[1] = { want };
+
+    if (want <= n) {
+        /* Truncation: PadLeft keeps the LAST `want`, PadRight the first. */
+        if (want == 0) return NULL;            /* {} -- let the List path answer */
+        char* out = malloc((size_t)want * esz);
+        if (!out) return NULL;
+        memcpy(out, s + (left ? (size_t)(n - want) * esz : 0), (size_t)want * esz);
+        return expr_new_ndarray_like(a, 1, odims, out, dt);
+    }
+
+    double re = 0.0; int64_t iv = 0;
+    const Expr* fill = (argc == 3) ? res->data.function.args[2] : NULL;
+    if (argc == 3) {
+        if (!nd_fill_value(fill, dt, &re, &iv)) return NULL;
+    } else if (dt != NDT_INT64) {
+        /* Default fill is the exact Integer 0. In a float64 buffer that would
+         * become 0.0, changing {0, 0, 1., 2., 3.} into {0., 0., 1., 2., 3.} --
+         * a different value. Decline; the List path produces the mixed answer,
+         * which is what Mathematica gives too. */
+        return NULL;
+    }
+    char* out = malloc((size_t)want * esz);
+    if (!out) return NULL;
+    int64_t pad = want - n;
+    if (left) {
+        nd_fill_run(out, dt, 0, (size_t)pad, re, iv);
+        memcpy(out + (size_t)pad * esz, s, (size_t)n * esz);
+    } else {
+        memcpy(out, s, (size_t)n * esz);
+        nd_fill_run(out, dt, (size_t)n, (size_t)pad, re, iv);
+    }
+    return expr_new_ndarray_like(a, 1, odims, out, dt);
 }
 
 /* -------------------------------------------------------------- Transpose */
@@ -117,16 +488,18 @@ Expr* ndstruct_transpose(Expr* res) {
             for (size_t cc = 0; cc < C; cc += T) {
                 size_t rmax = rr + T < R ? rr + T : R;
                 size_t cmax = cc + T < C ? cc + T : C;
+                /* memcpy per element, not a ndt_get/ndt_set round trip: a
+                 * transpose only MOVES values, and routing them through a double
+                 * would round an int64 buffer past 2^53. */
+                size_t esz = ndt_elem_size(dt);
                 for (size_t r = rr; r < rmax; r++)
-                    for (size_t c = cc; c < cmax; c++) {
-                        double re, im;
-                        ndt_get(buf, r * C + c, dt, &re, &im);
-                        ndt_set(out, c * R + r, dt, re, im);
-                    }
+                    for (size_t c = cc; c < cmax; c++)
+                        memcpy((char*)out + (c * R + r) * esz,
+                               (const char*)buf + (r * C + c) * esz, esz);
             }
     }
     int64_t odims[2] = { (int64_t)C, (int64_t)R };
-    return expr_new_ndarray(2, odims, out, dt);
+    return expr_new_ndarray_like(a, 2, odims, out, dt);
 }
 
 /* ---------------------------------------------------------------- Flatten */
@@ -144,7 +517,7 @@ Expr* ndstruct_flatten(Expr* res) {
     if (!out) return ndarray_delist_and_reeval(res);
     memcpy(out, a->data.ndarray.data, bytes);
     int64_t odims[1] = { (int64_t)sz };
-    return expr_new_ndarray(1, odims, out, dt);
+    return expr_new_ndarray_like(a, 1, odims, out, dt);
 }
 
 /* ------------------------------------------------------------- Take / Drop */
@@ -162,7 +535,7 @@ static Expr* nd_rows(const Expr* a, size_t start, size_t count) {
     int64_t odims[NDARRAY_MAX_RANK];
     for (int i = 0; i < rank; i++) odims[i] = dims[i];
     odims[0] = (int64_t)count;
-    return expr_new_ndarray(rank, odims, out, dt);
+    return expr_new_ndarray_like(a, rank, odims, out, dt);
 }
 
 /* Resolve a leading-axis spec into a 1-based inclusive [lo, hi] range over
@@ -228,7 +601,7 @@ Expr* ndstruct_drop(Expr* res) {
     int64_t odims[NDARRAY_MAX_RANK];
     for (int i = 0; i < rank; i++) odims[i] = dims[i];
     odims[0] = (int64_t)kept;
-    return expr_new_ndarray(rank, odims, out, dt);
+    return expr_new_ndarray_like(a, rank, odims, out, dt);
 }
 
 /* ------------------------------------------------------------------- Clip */
@@ -265,7 +638,11 @@ Expr* ndstruct_clip(Expr* res) {
     if (argc < 1 || argc > 2) return ndarray_delist_and_reeval(res);
     Expr* a = res->data.function.args[0];
     NDType dt = a->data.ndarray.dtype;
-    if (ndt_is_complex(dt)) return ndarray_delist_and_reeval(res);
+    /* An integer Clip is exact and its bounds may themselves be exact
+     * (Clip[Range[10], {3, 7}] is a list of Integers) -- but the clamp runs
+     * through doubles below, so hand integer buffers to the List path rather than
+     * round them. */
+    if (ndt_is_complex(dt) || dt == NDT_INT64) return ndarray_delist_and_reeval(res);
 
     double lo = -1.0, hi = 1.0;
     if (argc == 2) {
@@ -284,7 +661,7 @@ Expr* ndstruct_clip(Expr* res) {
     if (!out) return ndarray_delist_and_reeval(res);
     nd_clip_ctx c = { a->data.ndarray.data, out, dt, lo, hi };
     nd_parallel_for(sz, nd_clip_chunk, &c);
-    return expr_new_ndarray(a->data.ndarray.rank, a->data.ndarray.dims, out, dt);
+    return expr_new_ndarray_like(a, a->data.ndarray.rank, a->data.ndarray.dims, out, dt);
 }
 
 /* ------------------------------------------------------------------ *
@@ -296,7 +673,16 @@ Expr* ndstruct_delist_repack(const Expr* call, const Expr* src) {
     /* A scalar, a Missing, a symbol — nothing to pack, and the List
      * implementation's answer is already the right one. */
     if (out->type != EXPR_FUNCTION) return out;
-    Expr* packed = ndarray_from_nested_list(out, src->data.ndarray.dtype);
+    /* A PACKED source re-sniffs the dtype: the operation may have introduced an
+     * element of a different exactness, and repacking at the source's dtype would
+     * coerce it. Join[Range[1., 300.], {1}] gave 1. for the appended exact 1, and
+     * Riffle[Range[1., 300.], 1] turned every interleaved 1 into 1.; both now
+     * decline to pack and keep the ordinary List, which is the right value.
+     *
+     * A VISIBLE NDArray[...] keeps repacking at its own dtype -- coercing what is
+     * put into a machine buffer is what naming that head asks for. */
+    if (is_packed_list(src)) return pack_repack_like(src, out);
+    Expr* packed = ndarray_from_nested_list_like(src, out, src->data.ndarray.dtype);
     if (!packed) return out;            /* symbolic, ragged, or empty */
     expr_free(out);
     return packed;

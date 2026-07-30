@@ -61,4 +61,10 @@ double nd_select_kth(double* scratch, size_t n, size_t k);
 /* Sort scratch[0..n) ascending in place (plain qsort by value). */
 void nd_sort_ascending(double* scratch, size_t n);
 
+/* Ascending sort of an int64 array, in place. The int64 counterpart of the
+ * routine above -- a machine integer buffer must never be sorted through
+ * doubles, which are exact only to 2^53, so two large integers would compare
+ * equal and the sort would reorder them silently. */
+void nd_sort_i64_asc(int64_t* v, size_t n);
+
 #endif /* MATHILDA_NDARRAY_INTERNAL_H */

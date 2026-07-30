@@ -39,6 +39,8 @@
 #include "attr.h"
 #include "sym_names.h"
 #include "numeric.h"
+#include "ndarray.h"
+#include "pack.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -278,7 +280,11 @@ Expr* builtin_randominteger(Expr* res) {
             free(elems);
             mpz_clear(imin);
             mpz_clear(imax);
-            return list;
+            /* Not direct-built: random_integer_range goes through GMP and can
+             * return a BigInt for a wide range, which pack_offer then declines
+             * for the whole list. Offering after the fact keeps that decision in
+             * one place. */
+            return pack_offer(list);
         }
 
         if (dim_arg->type == EXPR_FUNCTION &&
@@ -298,7 +304,7 @@ Expr* builtin_randominteger(Expr* res) {
             mpz_clear(imin);
             mpz_clear(imax);
             if (!result) return NULL;
-            return result;
+            return pack_offer(result);
         }
 
         mpz_clear(imin);
@@ -382,10 +388,13 @@ static double random_uniform_01(void) {
 /*
  * Generate a single random real in [xmin, xmax).
  */
-static Expr* random_real_range(double xmin, double xmax) {
+static double random_real_value(double xmin, double xmax) {
     double u = random_uniform_01();
-    double val = xmin + u * (xmax - xmin);
-    return expr_new_real(val);
+    return xmin + u * (xmax - xmin);
+}
+
+static Expr* random_real_range(double xmin, double xmax) {
+    return expr_new_real(random_real_value(xmin, xmax));
 }
 
 /*
@@ -718,6 +727,15 @@ static Expr* randomreal_machine(Expr* res, size_t effective_argc) {
         if (dim_arg->type == EXPR_INTEGER && dim_arg->data.integer >= 0) {
             /* Flat list of n values */
             size_t n = (size_t)dim_arg->data.integer;
+            /* Straight into a packed buffer when it is big enough to be worth
+             * it: the values are machine reals by construction, so there is
+             * nothing to decide per element. */
+            double* buf = NULL;
+            Expr* packed = ndbuild_open_f64((int64_t)n, &buf);
+            if (packed) {
+                for (size_t i = 0; i < n; i++) buf[i] = random_real_value(xmin, xmax);
+                return packed;
+            }
             Expr** elems = malloc(sizeof(Expr*) * n);
             if (!elems) return NULL;
             for (size_t i = 0; i < n; i++) {
@@ -732,10 +750,30 @@ static Expr* randomreal_machine(Expr* res, size_t effective_argc) {
             dim_arg->data.function.head->type == EXPR_SYMBOL &&
             dim_arg->data.function.head->data.symbol.name == SYM_List) {
             /* Multi-dimensional array */
-            for (size_t i = 0; i < dim_arg->data.function.arg_count; i++) {
+            size_t rank = dim_arg->data.function.arg_count;
+            for (size_t i = 0; i < rank; i++) {
                 Expr* d = dim_arg->data.function.args[i];
                 if (d->type != EXPR_INTEGER || d->data.integer < 0) {
                     return NULL;
+                }
+            }
+            if (rank >= 1 && rank < NDARRAY_MAX_RANK) {
+                int64_t dims[NDARRAY_MAX_RANK];
+                int64_t total = 1;
+                for (size_t i = 0; i < rank; i++) {
+                    dims[i] = dim_arg->data.function.args[i]->data.integer;
+                    total *= dims[i];
+                }
+                void* vbuf = NULL;
+                Expr* packed = ndbuild_open((int)rank, dims, NDT_FLOAT64, &vbuf);
+                if (packed) {
+                    double* buf = (double*)vbuf;
+                    /* Row-major fill order is the same order random_real_array
+                     * visits the leaves in, so a seeded stream gives the same
+                     * array either way. */
+                    for (int64_t i = 0; i < total; i++)
+                        buf[i] = random_real_value(xmin, xmax);
+                    return packed;
                 }
             }
             Expr* result = random_real_array(xmin, xmax, dim_arg, 0);

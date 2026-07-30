@@ -11,6 +11,7 @@
 #include "eval.h"
 #include "symtab.h"
 #include "ndarray.h"
+#include "pack.h"
 #include "core.h"
 #include "purefunc.h"
 #include "print.h"
@@ -19,6 +20,8 @@
 #include "sym_intern.h"
 #include "interp.h"
 #include "compile/compiled_function.h"
+#include "compile/autocompile.h"   /* $AutoCompilation */
+#include "numloop.h"                 /* $AutoCompilation also gates numloop */
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -65,6 +68,13 @@ static int  eval_recursion_limit = DEFAULT_RECURSION_LIMIT;
  * outer iterations at every level of the unwind. The flag is cleared
  * at the top of each top-level evaluate() call. */
 static bool eval_overflow = false;
+
+/* Bumped every time the packed-list gate (step 2.7) materialises an argument.
+ * Monotonic and never reset: evaluate()'s fixed-point test brackets each
+ * evaluate_step with it, because a step whose only effect was materialising a
+ * buffer is invisible to expr_eq. See the use site for why over-reporting is
+ * free and under-reporting would not be. */
+static uint64_t g_pack_gate_ticks = 0;
 
 int  eval_get_recursion_limit(void) { return eval_recursion_limit; }
 int  eval_get_recursion_depth(void) { return eval_recursion_depth; }
@@ -288,6 +298,99 @@ EvalReturnAction eval_classify_return(Expr* e,
     return EVAL_RETURN_PROPAGATE;
 }
 
+/* ---------------------------------------------------------------------------
+ * Boolean system variables that mirror a C-side flag.
+ *
+ * Both switch off an optimisation that is invisible by construction -- the
+ * compiled and packed paths are contracted to give the interpreter's answer --
+ * so turning one off must change speed and nothing else. That is exactly what
+ * makes them worth having: a differential run flips one and diffs every output,
+ * and a user who suspects a fast path has it wrong can confirm in one line.
+ *
+ * A table rather than a strcmp chain, so the whole set is visible at once and
+ * adding one is a line. $RecursionLimit keeps its own hook below: it carries an
+ * integer with validation and a roll-back, not a boolean.
+ * ------------------------------------------------------------------------- */
+typedef struct {
+    const char* name;
+    void (*set)(bool);
+    bool (*get)(void);
+} EvalSysFlag;
+
+/* $AutoCompilation covers BOTH compiled paths, because a user turning it off is
+ * asking for the interpreter and does not care which of the two internal
+ * mechanisms would have compiled their loop: the autocompile adapter (Plot,
+ * Table, NIntegrate, ...) and numloop (Do/For/While/Map/Nest bodies). */
+static void eval_set_autocompilation(bool on) {
+    autocompile_set_enabled(on);
+    numloop_set_enabled(on);
+}
+static bool eval_get_autocompilation(void) { return autocompile_enabled(); }
+
+static const EvalSysFlag EVAL_SYSFLAGS[] = {
+    { "$AutoCompilation",  eval_set_autocompilation, eval_get_autocompilation },
+    { "$AutoArrayPacking", pack_set_enabled,         pack_enabled },
+};
+#define EVAL_N_SYSFLAGS ((size_t)(sizeof(EVAL_SYSFLAGS) / sizeof(EVAL_SYSFLAGS[0])))
+
+/* True when `name` is one of the boolean system variables above. Separate from
+ * the sync below so a caller can decide WITHOUT building a probe value: the
+ * assignment hook is reached by every `$`-prefixed symbol, and the REPL hooks
+ * ($Pre, $PreRead, $Post, $PrePrint, $Epilog) all live in that namespace with
+ * held right-hand sides. Evaluating a probe for those was a regression --
+ * repl_hooks_tests caught it -- so the name is checked first and only a real flag
+ * ever gets one. */
+static bool eval_is_sysflag(const char* name) {
+    for (size_t i = 0; i < EVAL_N_SYSFLAGS; i++)
+        if (strcmp(name, EVAL_SYSFLAGS[i].name) == 0) return true;
+    return false;
+}
+
+/* Push a candidate value into the matching C flag. Returns false when `name` is
+ * not one of these variables (the caller then does nothing).
+ *
+ * Only True and False are accepted. Anything else is rejected with a ::flagset
+ * message and the OwnValue is rolled back to the live C state, so the symbol
+ * never lies about which path is running -- the same discipline
+ * $RecursionLimit::limset follows. */
+static bool eval_sync_sysflag(const char* name, Expr* value) {
+    for (size_t i = 0; i < EVAL_N_SYSFLAGS; i++) {
+        if (strcmp(name, EVAL_SYSFLAGS[i].name) != 0) continue;
+        bool is_true  = value && value->type == EXPR_SYMBOL &&
+                        value->data.symbol.name == SYM_True;
+        bool is_false = value && value->type == EXPR_SYMBOL &&
+                        value->data.symbol.name == SYM_False;
+        if (!is_true && !is_false) {
+            fprintf(stderr, "%s::flagset: %s can only be set to True or False.\n",
+                    EVAL_SYSFLAGS[i].name, EVAL_SYSFLAGS[i].name);
+            Expr* sym  = expr_new_symbol(EVAL_SYSFLAGS[i].name);
+            Expr* curr = expr_new_symbol(EVAL_SYSFLAGS[i].get() ? SYM_True : SYM_False);
+            symtab_add_own_value(EVAL_SYSFLAGS[i].name, sym, curr);
+            expr_free(sym);
+            expr_free(curr);
+            return true;
+        }
+        EVAL_SYSFLAGS[i].set(is_true);
+        return true;
+    }
+    return false;
+}
+
+/* Register the boolean system variables with their live defaults as OwnValues, so
+ * the user can read them back as well as assign. Called from eval_init, i.e.
+ * AFTER the environment overrides (MATHILDA_NO_PACK, MATHILDA_NO_AUTOCOMPILE)
+ * have been read -- so `$AutoArrayPacking` reports False in a run started with
+ * MATHILDA_NO_PACK=1 rather than claiming True and being wrong. */
+static void eval_init_sysflags(void) {
+    for (size_t i = 0; i < EVAL_N_SYSFLAGS; i++) {
+        Expr* sym = expr_new_symbol(EVAL_SYSFLAGS[i].name);
+        Expr* val = expr_new_symbol(EVAL_SYSFLAGS[i].get() ? SYM_True : SYM_False);
+        symtab_add_own_value(EVAL_SYSFLAGS[i].name, sym, val);
+        expr_free(sym);
+        expr_free(val);
+    }
+}
+
 /*
  * eval_init:
  * Registers the user-visible $RecursionLimit symbol with its default value
@@ -297,6 +400,8 @@ EvalReturnAction eval_classify_return(Expr* e,
  * Must be called after symtab_init().
  */
 void eval_init(void) {
+    eval_init_sysflags();
+
     Expr* sym = expr_new_symbol(SYM_DollarRecursionLimit);
     Expr* val = expr_new_integer(eval_recursion_limit);
     symtab_add_own_value("$RecursionLimit", sym, val);
@@ -431,6 +536,63 @@ bool eval_flatten_args(Expr* e, const char* head_name) {
  * Helper for the Listable attribute.
  * Checks if any argument of the function is an explicit List[...].
  */
+/*
+ * Does every DownValue of `def` bind its arguments OPAQUELY -- i.e. is each
+ * top-level argument of every rule's LHS a bare `Pattern[sym, Blank[]]`, with no
+ * head restriction, no PatternTest, no Condition and no nested structure?
+ *
+ * WHY THE GATE NEEDS THIS. A user symbol has no packed_aware bit, so
+ * `f[packedArray]` materialised the buffer -- correctly in general, because
+ * src/match.c cannot descend a buffer to match `f[{a_, b_}]`. But the shape that
+ * actually appears in numerical code is `jac[u_] := ...`: one bare pattern
+ * variable, bound and substituted whole. Nothing looks inside the value, so
+ * nothing needs it to be a List.
+ *
+ * The cost of not having this was the largest single gap left in the packed
+ * surface. A 512x512 Jacobi sweep written the obvious way --
+ *     jac[u_] := (RotateLeft[u,{1,0}] + ... )/4.;  Nest[jac, u0, 100]
+ * -- materialised 262144 Expr nodes on every one of the 100 iterations: 21.6 s,
+ * against 107 ms for Mathematica and 0.19 s for the identical body written as a
+ * pure function, which the gate already exempts. Defining a helper function
+ * should not be what costs 100x.
+ *
+ * A bare Blank[] matches a packed list already: matching it binds without
+ * inspecting, and Head[] answers List. Anything that could look INSIDE -- a
+ * head-restricted Blank[h], a sequence pattern, a literal list of sub-patterns,
+ * a test or condition that might itself pattern-match -- is refused here and
+ * still materialises. Conservative by construction: a shape this does not
+ * recognise keeps today's behaviour exactly.
+ */
+static bool dv_pattern_is_opaque(const Expr* lhs) {
+    if (!lhs || lhs->type != EXPR_FUNCTION) return false;
+    /* The LHS head must be the plain symbol, not f[a][b] or a pattern itself. */
+    if (lhs->data.function.head->type != EXPR_SYMBOL) return false;
+    for (size_t i = 0; i < lhs->data.function.arg_count; i++) {
+        const Expr* a = lhs->data.function.args[i];
+        /* Exactly Pattern[sym, Blank[]] -- two args, second a 0-arg Blank. */
+        if (!a || a->type != EXPR_FUNCTION) return false;
+        if (a->data.function.head->type != EXPR_SYMBOL) return false;
+        if (a->data.function.head->data.symbol.name != SYM_Pattern) return false;
+        if (a->data.function.arg_count != 2) return false;
+        const Expr* b = a->data.function.args[1];
+        if (!b || b->type != EXPR_FUNCTION) return false;
+        if (b->data.function.head->type != EXPR_SYMBOL) return false;
+        if (b->data.function.head->data.symbol.name != SYM_Blank) return false;
+        if (b->data.function.arg_count != 0) return false;   /* _h looks at the head */
+    }
+    return true;
+}
+
+static bool dv_binds_opaquely(const SymbolDef* def) {
+    if (!def || !def->down_values) return false;
+    /* A builtin with DownValues layered on top is not covered: the builtin still
+     * reads the args itself, and packed_aware is the claim for that. */
+    if (def->builtin_func) return false;
+    for (const Rule* r = def->down_values; r; r = r->next)
+        if (!dv_pattern_is_opaque(r->pattern)) return false;
+    return true;
+}
+
 static bool has_list_arg(Expr* e) {
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         Expr* arg = e->data.function.args[i];
@@ -695,6 +857,13 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
         if (strcmp(lhs->data.symbol.name, "$RecursionLimit") == 0) {
             Expr* probe = is_delayed ? evaluate(expr_copy(rhs)) : expr_copy(rhs);
             sync_recursion_limit_from_value(probe);
+            expr_free(probe);
+        } else if (lhs->data.symbol.name[0] == '$' &&
+                   eval_is_sysflag(lhs->data.symbol.name)) {
+            /* Sigil first so an ordinary symbol assignment pays one byte compare,
+             * then the NAME -- never a probe for a symbol that is not a flag. */
+            Expr* probe = is_delayed ? evaluate(expr_copy(rhs)) : expr_copy(rhs);
+            eval_sync_sysflag(lhs->data.symbol.name, probe);
             expr_free(probe);
         }
         return true;
@@ -1087,6 +1256,108 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 }
             }
             free(held_uneval);
+
+            /* 2.7 PACKED-LIST TRANSPARENCY GATE.
+             *
+             * A packed list is an ordinary List stored as a dense buffer -- one
+             * EXPR_NDARRAY node with no args[] array (see pack.h). Roughly 7100
+             * sites in this tree read data.function.args directly, so a head
+             * that has not been taught about packing either crashes on one
+             * (arg_count aliases the payload's data pointer) or, worse, takes
+             * its "not a function" branch and answers confidently wrongly --
+             * Count[packed, _Real] would say 0.
+             *
+             * So a packed list never reaches such a head: materialise here, and
+             * every unaware consumer is correct by construction. That covers
+             * AtomQ, Count, Level, Position, Cases, ReplaceAll, ListQ, Insert,
+             * and any user DownValue with a structural pattern, none of which
+             * need a line of packing-specific code.
+             *
+             * THE POSITION IS FORCED, in both directions:
+             *   - after flatten_sequences and the Unevaluated strip, because
+             *     f[Sequence[packed]] has no packed argument until the splice
+             *     happens (both passes key on EXPR_FUNCTION, so a packed node
+             *     travels through them untouched);
+             *   - before Flat, Listable, Orderless, DownValues and the builtin.
+             *     Listable is the subtle one: has_list_arg tests for an
+             *     EXPR_FUNCTION headed List and returns FALSE for a packed
+             *     node, so an unaware Listable head would silently skip
+             *     threading altogether. Gating first fixes that with no change
+             *     to has_list_arg -- while an AWARE head still skips threading,
+             *     which is what lets its ndarray kernel fire below.
+             *
+             * Sits outside the `head is a symbol` block, so f[x][y] is covered
+             * too. Exactly ONE non-symbol head is exempt: a pure Function/&.
+             * There, substitution drops the packed value into the body and
+             * every head in the body is gated on the next pass, so nothing can
+             * come to rest nested -- and materialising here would cost
+             * (#^2 &)[packed] its fast path.
+             *
+             * The exemption must not be widened to "head is any EXPR_FUNCTION".
+             * An unevaluated application like gg[xx][packed] has no builtin to
+             * run, so it comes to REST with a packed node inside a plain
+             * function node, and the shallow gate at the enclosing level never
+             * looks that deep. Measured, with the exemption too broad:
+             * Count[gg[xx][p], _Real, 2] gave 0 against 4, LeafCount 3 against
+             * 7, Cases {} against the elements, and a ReplaceAll did nothing.
+             *
+             * The `!down_values` term is load-bearing, not caution: Protected
+             * is opt-in per symbol, so even an aware head can carry a user
+             * DownValue, and the matcher cannot descend a buffer. */
+            if (pack_any_created()) {
+                bool pure_fn = head->type == EXPR_FUNCTION &&
+                               head->data.function.head->type == EXPR_SYMBOL &&
+                               head->data.function.head->data.symbol.name == SYM_Function;
+                /* A Listable head holding BOTH a plain List argument and a packed
+                 * one. Threading fires (has_list_arg sees the plain List) and
+                 * treats the buffer as a scalar, so it broadcasts instead of
+                 * threading elementwise: NDArray[{1.,2.,3.}] * {10,20,30} gave
+                 * the 3x3 outer product where {1.,2.,3.} * {10,20,30} gives
+                 * {10., 40., 90.}. Materialising makes every list argument thread
+                 * the same way, at the cost of the buffer path for a mixed call.
+                 *
+                 * The bug is older than packing -- it was always there for an
+                 * explicit NDArray[...] -- but automatic packing is what makes it
+                 * reachable from code that never mentions an array, so it belongs
+                 * to the gate. It surfaced as ListConvolve's reference
+                 * computation being off by 103 once RandomReal[{-1,1},{40,40}]
+                 * started packing. */
+                /* A CompiledFunction object is aware, and had to be told so
+                 * explicitly: its head is an EXPR_COMPILED with no SymbolDef, so
+                 * it read as unaware and the gate materialised the very buffer
+                 * the compiled boundary exists to borrow. That cost the whole
+                 * Phase-5 win invisibly -- f[Range[1., 200000.]] measured 75x
+                 * slower than f[NDArray[Range[1., 200000.]]], the two differing
+                 * only in `present_as`. compiled_function_apply reads the buffer
+                 * directly and returns one with the argument's presentation; if
+                 * it declines, cf_fallback re-runs the body through the
+                 * evaluator, where every head inside is gated on the next pass. */
+                bool compiled_head = head->type == EXPR_COMPILED;
+                bool listable_mixed = (attrs & ATTR_LISTABLE) && has_list_arg(res);
+                bool aware = ((hdef && hdef->packed_aware && !hdef->down_values)
+                              || pure_fn || compiled_head
+                              || dv_binds_opaquely(hdef)) && !listable_mixed;
+                bool int64_ok = pure_fn || compiled_head ||
+                                (hdef && hdef->packed_int64_ok);
+                for (size_t i = 0; i < res->data.function.arg_count; i++) {
+                    Expr* pa = res->data.function.args[i];
+                    if (!is_packed_list(pa)) continue;
+                    /* An int64 buffer needs the stronger claim. Most of the ND
+                     * layer reads through ndt_get, which is exact only to 2^53
+                     * and was written when only Compile[] could make an integer
+                     * buffer -- so without this, Total[{1,2,3}] came back as
+                     * 6. and Sin[{1,2,3}] as {0,0,0}. Materialising is always
+                     * an option; being wrong is not. */
+                    if (aware &&
+                        (pa->data.ndarray.dtype != NDT_INT64 || int64_ok))
+                        continue;
+                    pack_gate_report(head, pa);          /* MATHILDA_PACK_DIAG=gate */
+                    res->data.function.args[i] = ndarray_to_nested_list(pa);
+                    expr_free(pa);
+                    *changed = true;
+                    g_pack_gate_ticks++;
+                }
+            }
 
             /* 3. Apply structural and semantic attributes.
              * Order follows Withoff §3.1: Flat → Sequence (already done above) →
@@ -1492,6 +1763,32 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 }
             }
 
+            /* THE POST-GATE. Nothing above rewrote this node, so it is coming to
+             * REST -- and a packed argument that is still here was kept for a
+             * fast path that did not fire. Whatever the head is, it has now
+             * declined the buffer, so leaving one inside an inert expression can
+             * only differ from the plain list.
+             *
+             * Measured: Mod[buffer] came to rest as Mod[{1., 2., 3.}] where the
+             * plain Mod[{1., 2., 3.}] threads to {Mod[1.], Mod[2.], Mod[3.]} --
+             * an aware Listable head skips threading so its kernel can fire, and
+             * no kernel matches that arity. Materialising here and reporting the
+             * change lets the next pass thread it exactly as the list does.
+             *
+             * Converges in one extra pass: the retry finds no packed argument
+             * left, so nothing changes and the node rests for real. */
+            if (pack_any_created()) {
+                for (size_t i = 0; i < res->data.function.arg_count; i++) {
+                    Expr* pa = res->data.function.args[i];
+                    if (!is_packed_list(pa)) continue;
+                    pack_gate_report(res->data.function.head, pa);
+                    res->data.function.args[i] = ndarray_to_nested_list(pa);
+                    expr_free(pa);
+                    *changed = true;
+                    g_pack_gate_ticks++;
+                }
+            }
+
             return res;
         }
     }
@@ -1622,7 +1919,9 @@ Expr* evaluate(Expr* e) {
         tc_check_deadline();
 
         bool step_changed = false;
+        uint64_t gate_mark = g_pack_gate_ticks;
         next = evaluate_step(current, &step_changed);
+        bool gate_fired = (g_pack_gate_ticks != gate_mark);
 
         /* M3 phase-4 (§3.4): eager early exit. evaluate_step signals via
          * the `step_changed` out-parameter whether any rewrite fired
@@ -1643,6 +1942,26 @@ Expr* evaluate(Expr* e) {
          * common case where nothing fires (atoms, bare symbols, fully
          * reduced functions). */
         bool is_fixed_point = !step_changed || expr_eq(current, next);
+        if (is_fixed_point && gate_fired) {
+            /* The packed-list gate materialised a buffer somewhere in this step,
+             * and expr_eq is DELIBERATELY blind to that -- a packed list and its
+             * plain form are the same value, which is the whole point. So a step
+             * whose only effect was materialising looks like no progress, and
+             * keeping `current` would throw the work away and hand a packed node
+             * to a head that has just declared it cannot read one. Measured
+             * before this: Table[i j, {i,300}, {j,300}] came back as a List of
+             * 300 packed rows (Dimensions {300}, and Total[m, 2] a list instead
+             * of a number) because the outer List's materialisation was
+             * discarded exactly here.
+             *
+             * `current` and `next` are equal, so taking `next` is value-neutral;
+             * it just keeps the newer representation. The tick counter only ever
+             * over-reports (a nested evaluate's gate bumps it too), and an
+             * over-report costs one pointer choice between two equal values. */
+            expr_free(current);
+            current = next;
+            next = NULL;
+        }
         if (is_fixed_point) {
             expr_free(next);
             /* M3 phase-3: stamp the fully-evaluated result with the

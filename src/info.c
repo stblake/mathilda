@@ -3410,7 +3410,8 @@ void info_init(void) {
         "Level traverses expressions in depth-first order, so that the subexpressions in the final list are ordered lexicographically by their indices.");
 
     // Time and Date
-    symtab_set_docstring("Timing", "Timing[expr] evaluates expr, and returns a list of the time in seconds used, together with the result obtained.");
+    symtab_set_docstring("Timing", "Timing[expr] evaluates expr, and returns a list of the time in seconds used, together with the result obtained.\nTiming reports CPU time summed over threads; use AbsoluteTiming to measure elapsed time.");
+    symtab_set_docstring("AbsoluteTiming", "AbsoluteTiming[expr] evaluates expr, and returns a list of the absolute number of seconds of elapsed wall-clock time, together with the result obtained.");
     symtab_set_docstring("RepeatedTiming", "RepeatedTiming[expr] evaluates expr repeatedly and returns a list of the average time in seconds used, together with the result obtained.\nRepeatedTiming[expr, t] does repeated evaluation for at least t seconds.");
     symtab_set_docstring("TimeConstrained",
         "TimeConstrained[expr, t]\n"
@@ -3667,6 +3668,39 @@ void info_init(void) {
         "RandomSample[list, UpTo[n]]\n\tgives a sample of n of the ei, or as many as are available.\n"
         "RandomSample never samples any element more than once.\n"
         "Use SeedRandom to seed the pseudorandom generator for reproducible results.");
+
+    // Optimisation switches (registered in eval.c's eval_init).
+    symtab_set_docstring("$AutoCompilation",
+        "$AutoCompilation\n"
+        "\tcontrols whether Mathilda compiles numeric bodies to bytecode\n"
+        "\tbehind the scenes. True by default; set it to False to force every\n"
+        "\tsuch body through the interpreter.\n"
+        "\n"
+        "Covers both automatic mechanisms: the adapter that compiles a held\n"
+        "body once for many sample points (Plot, Plot3D, Table, NIntegrate,\n"
+        "NSum, FindRoot, the plot samplers) and the numeric-loop compiler for\n"
+        "Do, For, While, Map, Nest, Fold and FixedPoint bodies. Compile[] and\n"
+        "any CompiledFunction the user built explicitly are NOT affected -- those\n"
+        "were asked for.\n"
+        "\n"
+        "A compiled body is contracted to give the interpreter's answer, so this\n"
+        "changes speed and nothing else; it exists so the two paths can be\n"
+        "compared. Reads back False in a session started with the environment\n"
+        "variable MATHILDA_NO_AUTOCOMPILE set. Only True or False is accepted.");
+    symtab_set_docstring("$AutoArrayPacking",
+        "$AutoArrayPacking\n"
+        "\tcontrols whether Mathilda stores large lists of machine numbers as\n"
+        "\tdense buffers (packed arrays). True by default; set it to False to\n"
+        "\tbuild every list one element at a time.\n"
+        "\n"
+        "A packed list is an ordinary List -- same Head, printed form, elements,\n"
+        "ordering and pattern matches -- and only NDArrayQ tells the two apart.\n"
+        "So this changes storage and speed, not answers. Does not affect\n"
+        "ToNDArray or ToPackedArray, which are explicit requests, nor the\n"
+        "explicit NDArray[...] head.\n"
+        "\n"
+        "Reads back False in a session started with the environment variable\n"
+        "MATHILDA_NO_PACK set. Only True or False is accepted.");
 
     // System floating-point constants (registered in core.c).
     symtab_set_docstring("$MachinePrecision",

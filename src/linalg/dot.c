@@ -36,7 +36,7 @@ static Expr* nd_blas_matmul(const Expr* a, const Expr* b) {
                 (const double*)b->data.ndarray.data, (int)n,
                 0.0, out, (int)n);
     int64_t dims[2] = { m, n };
-    return expr_new_ndarray(2, dims, out, NDT_FLOAT64); /* adopts out */
+    return expr_new_ndarray_like(nd_present_src2(a, b), 2, dims, out, NDT_FLOAT64); /* adopts out */
 }
 #endif
 

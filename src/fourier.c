@@ -247,17 +247,85 @@ static void naive_std_transform(double* buf, const int64_t* dims, int rank,
 }
 #endif
 
+/* Gather N elements of a dense buffer into an interleaved (re, im) double
+ * array, specialised per dtype.
+ *
+ * This replaced a `for (o) ndt_get(data, o, dt, &buf[2o], &buf[2o+1])` loop.
+ * ndt_get is the dtype-agnostic choke point and is exactly right for a handful
+ * of elements, but it is an out-of-line call with an internal switch, and this
+ * loop runs once per element of the transform: 2^20 calls on a 1M-point FFT,
+ * against an FFTW execute of 17.6 ms. Hoisting the switch out of the loop makes
+ * each dtype a straight-line copy, and NDT_COMPLEX64 -- already stored as
+ * interleaved (re, im) doubles -- becomes a single memcpy.
+ *
+ * Values are identical to the ndt_get loop by construction: same widening, same
+ * zero imaginary part for real dtypes. */
+static void nd_gather_interleaved(const void* data, NDType dt, int64_t N,
+                                  double* buf) {
+    switch (dt) {
+        case NDT_COMPLEX64:
+            memcpy(buf, data, (size_t)N * 2 * sizeof(double));
+            break;
+        case NDT_FLOAT64: {
+            const double* s = (const double*)data;
+            for (int64_t o = 0; o < N; o++) { buf[2*o] = s[o]; buf[2*o+1] = 0.0; }
+            break;
+        }
+        case NDT_FLOAT32: {
+            const float* s = (const float*)data;
+            for (int64_t o = 0; o < N; o++) { buf[2*o] = (double)s[o]; buf[2*o+1] = 0.0; }
+            break;
+        }
+        case NDT_COMPLEX32: {
+            const float* s = (const float*)data;
+            for (int64_t o = 0; o < N; o++) {
+                buf[2*o] = (double)s[2*o]; buf[2*o+1] = (double)s[2*o+1];
+            }
+            break;
+        }
+        case NDT_INT64: {
+            /* Exact only to 2^53, but a DFT is machine-precision by definition
+             * and this matches what ndt_get did here before. */
+            const int64_t* s = (const int64_t*)data;
+            for (int64_t o = 0; o < N; o++) { buf[2*o] = (double)s[o]; buf[2*o+1] = 0.0; }
+            break;
+        }
+        default:
+            for (int64_t o = 0; o < N; o++)
+                ndt_get(data, (size_t)o, dt, &buf[2*o], &buf[2*o+1]);
+            break;
+    }
+}
+
 /* Real-collapse tolerance test + NDArray construction from an interleaved
  * (re, im) buffer `out` (length 2N, malloc'd — ownership transfers into the
- * returned EXPR_NDARRAY, NDT_COMPLEX64 or NDT_FLOAT64 when roundoff-real). */
-static Expr* machine_build_ndarray(double* out, int64_t N, const int64_t* dims, int rank) {
+ * returned EXPR_NDARRAY, NDT_COMPLEX64 or NDT_FLOAT64 when roundoff-real).
+ *
+ * `src` is the input array whose PRESENTATION the result inherits, or NULL when
+ * the caller is going to materialise the result to a List anyway. It is not
+ * optional for the NDArray paths: the raw constructor always builds the visible
+ * NDArray[...] form, so once Fourier became packed-aware, Fourier[packedList]
+ * answered NDArray[{...}] where the same value as a plain List answered {...} --
+ * a visible change of head from an invisible optimisation. A 200-case
+ * differential sweep failed 148 of them on exactly that. */
+static Expr* machine_build_ndarray(double* out, int64_t N, const int64_t* dims,
+                                   int rank, const Expr* src) {
+    /* Magnitude proxy max(|re|, |im|), NOT hypot. This scan touches every
+     * element, and hypot() is a careful ~20-40 ns libm call (it avoids
+     * intermediate overflow in re^2 + im^2) -- on a 2^20 transform that alone
+     * was tens of milliseconds, comparable to the FFT it is checking.
+     *
+     * Nothing here needs a true modulus. The test below is
+     * `max_im <= tol * max_mag` with tol = 16 N eps, i.e. "is the imaginary
+     * part negligible against the scale of the result". The proxy is within a
+     * factor of sqrt(2) of the modulus, which against a tolerance of that shape
+     * is not a distinction -- and it is exact, overflow-free and branch-light. */
     double max_mag = 0.0, max_im = 0.0;
     for (int64_t o = 0; o < N; o++) {
-        double re = out[2 * o], im = out[2 * o + 1];
-        double mag = hypot(re, im);
+        double re = fabs(out[2 * o]), im = fabs(out[2 * o + 1]);
+        double mag = (re > im) ? re : im;
         if (mag > max_mag) max_mag = mag;
-        double a = fabs(im);
-        if (a > max_im) max_im = a;
+        if (im > max_im) max_im = im;
     }
     double tol = 16.0 * (double)N * DBL_EPSILON;
     bool real_only = (max_mag == 0.0) || (max_im <= tol * max_mag);
@@ -265,9 +333,11 @@ static Expr* machine_build_ndarray(double* out, int64_t N, const int64_t* dims, 
         double* rout = malloc((size_t)N * sizeof(double));
         for (int64_t o = 0; o < N; o++) rout[o] = out[2 * o];
         free(out);
-        return expr_new_ndarray(rank, dims, rout, NDT_FLOAT64);
+        return src ? expr_new_ndarray_like(src, rank, dims, rout, NDT_FLOAT64)
+                   : expr_new_ndarray_raw(rank, dims, rout, NDT_FLOAT64);
     }
-    return expr_new_ndarray(rank, dims, out, NDT_COMPLEX64);
+    return src ? expr_new_ndarray_like(src, rank, dims, out, NDT_COMPLEX64)
+               : expr_new_ndarray_raw(rank, dims, out, NDT_COMPLEX64);
 }
 
 /* Pure standard unnormalised nD DFT (FFTW or naive fallback), in place on an
@@ -279,17 +349,28 @@ void fourier_fft_machine(double* buf, const int64_t* dims, int rank, int sign) {
     for (int i = 0; i < rank; i++) N *= dims[i];
     if (N <= 0) return;
 #ifdef USE_FFTW
-    fftw_complex* fb = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * (size_t)N);
-    memcpy(fb, buf, (size_t)N * 2 * sizeof(double));
     int idims[FOURIER_MAX_RANK];
     for (int i = 0; i < rank; i++) idims[i] = (int)dims[i];
     /* FFTW_BACKWARD (+1) matches our +2πi convention; FFTW_FORWARD (-1) the -. */
     int fsign = (sign > 0) ? FFTW_BACKWARD : FFTW_FORWARD;
-    fftw_plan p = fftw_plan_dft(rank, idims, fb, fb, fsign, FFTW_ESTIMATE);
-    fftw_execute(p);
-    fftw_destroy_plan(p);
-    memcpy(buf, fb, (size_t)N * 2 * sizeof(double));
-    fftw_free(fb);
+    /* Plan and execute IN PLACE on the caller's buffer. This used to bounce
+     * through an fftw_malloc'd copy: an N-element allocation plus a memcpy in
+     * and a memcpy out, i.e. three extra passes over 16 MB on a 2^20 transform
+     * whose own execute is 17.6 ms.
+     *
+     * Two things make it safe. FFTW_ESTIMATE does not touch the arrays while
+     * planning (unlike FFTW_MEASURE, which would destroy the input) -- that is
+     * the documented distinction. And the plan is built per call on the ACTUAL
+     * pointer it will run on, so the alignment a SIMD plan assumes is by
+     * construction the alignment it gets; there is no cached plan that could
+     * later meet a differently-aligned buffer.
+     *
+     * Planning itself is not worth caching: measured at 0.15 ms for 2^20 under
+     * FFTW_ESTIMATE, against a 17.6 ms execute. */
+    fftw_plan p = fftw_plan_dft(rank, idims,
+                                (fftw_complex*)buf, (fftw_complex*)buf,
+                                fsign, FFTW_ESTIMATE);
+    if (p) { fftw_execute(p); fftw_destroy_plan(p); }
 #else
     naive_std_transform(buf, dims, rank, sign);
 #endif
@@ -306,9 +387,27 @@ static double* machine_transform_buf(double* buf, const int64_t* dims, int rank,
 
     fourier_fft_machine(buf, dims, rank, base_sign);
 
+    /* b == 1 -- the FourierParameters default, and so very nearly every call --
+     * makes the gather the IDENTITY: gather_index(1, k, n) is (1*k) % n = k for
+     * 0 <= k < n, so src == o on every axis. All that is left is the scale.
+     *
+     * This is worth a special case because the general loop below costs an
+     * integer division AND a modulo PER ELEMENT PER AXIS, plus a call, and
+     * integer division is ~20-40 cycles. On a 2^20 transform that made
+     * machine_transform_buf the single hottest symbol in the process -- more
+     * samples than every FFTW symbol combined, around a transform whose own
+     * floor is 17.6 ms. Scaling in place also drops an N-element allocation and
+     * a full copy. */
+    if (b == 1) {
+        if (norm != 1.0)
+            for (int64_t o = 0; o < 2 * N; o++) buf[o] *= norm;
+        return buf;
+    }
+
     int64_t strides[FOURIER_MAX_RANK];
     row_major_strides(dims, rank, strides);
     double* out = malloc((size_t)N * 2 * sizeof(double));
+    if (!out) return buf;                 /* out of memory: unscaled beats nothing */
     for (int64_t o = 0; o < N; o++) {
         int64_t src = 0;
         for (int i = 0; i < rank; i++) {
@@ -353,7 +452,7 @@ static Expr* machine_path(const Expr* nested, const int64_t* dims, int rank,
     expr_free(nnum);
 
     double* out = machine_transform_buf(buf, dims, rank, a, b, base_sign);
-    Expr* nd = machine_build_ndarray(out, N, dims, rank);
+    Expr* nd = machine_build_ndarray(out, N, dims, rank, NULL);
     Expr* lst = ndarray_to_nested_list(nd);
     expr_free(nd);
     return lst;
@@ -369,14 +468,12 @@ static Expr* machine_path_ndarray(const Expr* nd, double a, long b, int base_sig
     for (int i = 0; i < rank; i++) N *= dims[i];
     if (N <= 0) return NULL;
 
-    /* Pack every element to an interleaved (re, im) double via the dtype-
-     * agnostic ndt_get choke point (real dtypes give im = 0). */
     double* buf = malloc((size_t)N * 2 * sizeof(double));
-    for (int64_t o = 0; o < N; o++)
-        ndt_get(nd->data.ndarray.data, (size_t)o, dt, &buf[2 * o], &buf[2 * o + 1]);
+    if (!buf) return NULL;
+    nd_gather_interleaved(nd->data.ndarray.data, dt, N, buf);
 
     double* out = machine_transform_buf(buf, dims, rank, a, b, base_sign);
-    return machine_build_ndarray(out, N, dims, rank);
+    return machine_build_ndarray(out, N, dims, rank, nd);
 }
 
 /* ==================================================================== *
@@ -1046,7 +1143,7 @@ static Expr* dct_machine_path(const Expr* nested, const int64_t* dims, int rank,
 
     double* out = dct_transform_buf(buf, dims, rank, type, sine);
     if (!out) return NULL;
-    Expr* nd = machine_build_ndarray(out, N, dims, rank);
+    Expr* nd = machine_build_ndarray(out, N, dims, rank, NULL);
     Expr* lst = ndarray_to_nested_list(nd);
     expr_free(nd);
     return lst;
@@ -1062,12 +1159,12 @@ static Expr* dct_machine_path_ndarray(const Expr* nd, int type, bool sine) {
     if (N <= 0) return NULL;
 
     double* buf = malloc((size_t)N * 2 * sizeof(double));
-    for (int64_t o = 0; o < N; o++)
-        ndt_get(nd->data.ndarray.data, (size_t)o, dt, &buf[2 * o], &buf[2 * o + 1]);
+    if (!buf) return NULL;
+    nd_gather_interleaved(nd->data.ndarray.data, dt, N, buf);
 
     double* out = dct_transform_buf(buf, dims, rank, type, sine);
     if (!out) return NULL;
-    return machine_build_ndarray(out, N, dims, rank);
+    return machine_build_ndarray(out, N, dims, rank, nd);
 }
 
 #ifdef USE_MPFR

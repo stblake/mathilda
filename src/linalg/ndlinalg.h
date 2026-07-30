@@ -56,6 +56,14 @@ Expr* ndla_linearsolve(Expr* res);  /* LinearSolve[m, b]              */
 Expr* ndla_matrixrank(Expr* res);   /* MatrixRank[m]                  */
 Expr* ndla_tr(Expr* res);           /* Tr[m] (2-D, default Plus)      */
 Expr* ndla_norm(Expr* res);         /* Norm[v] / Norm[v, p] / Norm[m] */
+/* Induced matrix norm of an NDArray, straight to LAPACK (dlange/zlange, or
+ * gesdd for the spectral 2-norm). `pe` may be NULL for the default 2-norm.
+ *
+ * Unlike ndla_norm this NEVER defers via linalg_delist_and_reeval -- it returns
+ * NULL on anything it does not handle. src/linalg/norm.c calls it to give a
+ * plain machine-numeric matrix the same answer a packed one gets, and deferring
+ * there would re-enter builtin_norm and recurse without bound. */
+Expr* ndla_matrix_norm_direct(Expr* v, Expr* pe);
 Expr* ndla_normalize(Expr* res);    /* Normalize[v]                   */
 Expr* ndla_cross(Expr* res);        /* Cross[u, v] (3-vectors)        */
 

@@ -38,10 +38,15 @@ Expr* builtin_rotateleft(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     Expr* expr = res->data.function.args[0];
     Expr* n_spec = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
-    /* An NDArray is atomic, so the element walk below looks straight past one
-     * and the call comes back UNEVALUATED, while the identical List call works.
-     * Materialise, reuse the List implementation, repack — see ndstruct.h. */
-    if (is_ndarray(expr)) return ndstruct_delist_repack(res, expr);
+    /* Native buffer rotate first: a rotation permutes contiguous blocks, so it is
+     * memcpy work. ndstruct_delist_repack below is still the fallback for a spec
+     * outside the fast domain, but it costs one Expr per element -- 42.6 ms on a
+     * 512x512 matrix, which dominated every stencil written with RotateLeft. */
+    if (is_ndarray(expr)) {
+        Expr* fast = ndstruct_rotate(res, true);
+        if (fast) return fast;
+        return ndstruct_delist_repack(res, expr);
+    }
 
     Expr* default_n = NULL;
     if (!n_spec) {
@@ -58,10 +63,12 @@ Expr* builtin_rotateright(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     Expr* expr = res->data.function.args[0];
     Expr* n_spec = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
-    /* An NDArray is atomic, so the element walk below looks straight past one
-     * and the call comes back UNEVALUATED, while the identical List call works.
-     * Materialise, reuse the List implementation, repack — see ndstruct.h. */
-    if (is_ndarray(expr)) return ndstruct_delist_repack(res, expr);
+    /* Native buffer rotate first; see the note in builtin_rotateleft. */
+    if (is_ndarray(expr)) {
+        Expr* fast = ndstruct_rotate(res, false);
+        if (fast) return fast;
+        return ndstruct_delist_repack(res, expr);
+    }
 
     Expr* neg_n_spec = NULL;
     if (!n_spec) {

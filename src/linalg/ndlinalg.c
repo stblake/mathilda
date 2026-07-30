@@ -42,6 +42,37 @@ bool linalg_call_has_ndarray(const Expr* res)
     return false;
 }
 
+/*
+ * Give a freshly built array result the PRESENTATION the call's operands imply.
+ *
+ * na_build_vector / na_build_matrix have no source array to inherit from, so
+ * they always produce the visible NDArray[...] form. That was right while the
+ * only way into these paths was for the user to type NDArray[...] -- naming the
+ * head is a request for machine-buffer semantics, so a machine buffer comes
+ * back. Once ordinary Lists pack automatically it is wrong: Inverse of a packed
+ * 3x3 answered NDArray[{{...}}] where the same value as a plain List answered
+ * {{...}}, which is a visible change of head from an invisible optimisation.
+ *
+ * `a` and `b` are the call's operands (b may be NULL for a one-argument head);
+ * nd_present_src2 applies the same visible-dominates-packed rule the elementwise
+ * paths use, so NDArray[m] . packedVector stays visible.
+ *
+ * ONLY a top-level array is stamped. A head that answers with a LIST of arrays
+ * (QRDecomposition, LUDecomposition, SingularValueDecomposition, Eigenvectors)
+ * must leave them materialised: List is deliberately not packed-aware -- that is
+ * what makes the transparency gate an O(argc) top-level scan instead of an
+ * O(tree) walk -- so a buffer sitting inside a plain List would be reachable by
+ * an unaware head with no gate between them. Those heads already return plain
+ * Lists and are left alone.
+ */
+static Expr* nd_result_like(const Expr* a, const Expr* b, Expr* out)
+{
+    if (!out || !is_ndarray(out)) return out;
+    const Expr* src = nd_present_src2(a, b);
+    if (src) out->data.ndarray.present_as = src->data.ndarray.present_as;
+    return out;
+}
+
 Expr* linalg_delist_and_reeval(Expr* res)
 {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
@@ -214,7 +245,8 @@ Expr* ndla_inverse(Expr* res)
             info = mat_lapack_dgetri(n, A, n, piv);
             free(piv);
             if (info != 0) { free(A); return linalg_delist_and_reeval(res); }
-            Expr* out = na_build_matrix(A, n, n, false, true);
+            Expr* out = nd_result_like(arg, NULL,
+                                       na_build_matrix(A, n, n, false, true));
             free(A);
             return out;
         }
@@ -231,7 +263,8 @@ Expr* ndla_inverse(Expr* res)
             nd_lu_solve_col(A, n, piv, col);
             for (int i = 0; i < n; i++) X[i + (size_t)j * n] = col[i];
         }
-        Expr* out = na_build_matrix(X, n, n, false, true); /* col-major -> NDArray */
+        Expr* out = nd_result_like(arg, NULL,
+                                   na_build_matrix(X, n, n, false, true));
         free(col); free(X); free(piv); free(A);
         return out;
     }
@@ -246,7 +279,8 @@ Expr* ndla_inverse(Expr* res)
     info = mat_lapack_zgetri(n, A, n, piv);
     free(piv);
     if (info != 0) { free(A); return linalg_delist_and_reeval(res); }
-    Expr* out = na_build_matrix(A, n, n, true, true);
+    Expr* out = nd_result_like(arg, NULL,
+                               na_build_matrix(A, n, n, true, true));
     free(A);
     return out;
 }
@@ -272,7 +306,31 @@ static bool nd_load_rhs(const Expr* b, bool want_complex, int n,
         if (bn != n) { free(*buf); *buf = NULL; return false; }
         *nrhs = bc; *is_vec = false; return true;
     }
-    return false;   /* rhs is a plain List: defer to keep behaviour uniform */
+    /*
+     * A PLAIN LIST rhs. This used to defer "to keep behaviour uniform", and
+     * that deferral was a crash: automatic packing keys on total element count,
+     * so LinearSolve[m, b] on a 90x90 system arrives with m packed (8100
+     * elements) and b NOT packed (90) -- the single commonest shape there is.
+     * Deferring sent a machine-real solve to linalg_delist_and_reeval, whose
+     * ordinary path is fraction-free Bareiss elimination with a polynomial GCD
+     * per pivot, and it STACK-OVERFLOWED.
+     *
+     * na_load_vector / na_load_matrix already accept an ordinary numeric List
+     * (see numarray.h) and fail cleanly on a symbolic or non-machine leaf, so
+     * accepting one here needs no new marshalling and cannot widen what the
+     * fast path claims. Vector is tried first: a nested List presents its rows
+     * as non-numeric leaves, so na_load_vector rejects it, which discriminates
+     * rank 1 from rank 2 without a separate shape probe.
+     */
+    if (na_load_vector(b, want_complex, &bn, buf)) {
+        if (bn != n) { free(*buf); *buf = NULL; return false; }
+        *nrhs = 1; *is_vec = true; return true;
+    }
+    if (na_load_matrix(b, want_complex, true, &bn, &bc, buf)) {
+        if (bn != n) { free(*buf); *buf = NULL; return false; }
+        *nrhs = bc; *is_vec = false; return true;
+    }
+    return false;
 }
 
 Expr* ndla_linearsolve(Expr* res)
@@ -300,8 +358,9 @@ Expr* ndla_linearsolve(Expr* res)
             int info = mat_lapack_dgesv(n, nrhs, A, n, piv, B, n);
             free(piv); free(A);
             if (info != 0) { free(B); return linalg_delist_and_reeval(res); }
-            Expr* out = is_vec ? na_build_vector(B, n, false)
-                               : na_build_matrix(B, n, nrhs, false, true);
+            Expr* out = nd_result_like(m, b, is_vec
+                            ? na_build_vector(B, n, false)
+                            : na_build_matrix(B, n, nrhs, false, true));
             free(B);
             return out;
         }
@@ -311,8 +370,9 @@ Expr* ndla_linearsolve(Expr* res)
             return linalg_delist_and_reeval(res);
         }
         for (int j = 0; j < nrhs; j++) nd_lu_solve_col(A, n, piv, B + (size_t)j * n);
-        Expr* out = is_vec ? na_build_vector(B, n, false)
-                           : na_build_matrix(B, n, nrhs, false, true);
+        Expr* out = nd_result_like(m, b, is_vec
+                        ? na_build_vector(B, n, false)
+                        : na_build_matrix(B, n, nrhs, false, true));
         free(piv); free(A); free(B);
         return out;
     }
@@ -329,8 +389,9 @@ Expr* ndla_linearsolve(Expr* res)
     int info = mat_lapack_zgesv(n, nrhs, A, n, piv, B, n);
     free(piv); free(A);
     if (info != 0) { free(B); return linalg_delist_and_reeval(res); }
-    Expr* out = is_vec ? na_build_vector(B, n, true)
-                       : na_build_matrix(B, n, nrhs, true, true);
+    Expr* out = nd_result_like(m, b, is_vec
+                    ? na_build_vector(B, n, true)
+                    : na_build_matrix(B, n, nrhs, true, true));
     free(B);
     return out;
 }
@@ -414,7 +475,7 @@ Expr* ndla_tr(Expr* res)
  * largest singular value, via LAPACK gesdd); p==1 / Infinity / "Frobenius" go
  * through LAPACK lange. Returns NULL to signal "defer" (no LAPACK, or an
  * unsupported p). */
-static Expr* nd_matrix_norm(Expr* v, Expr* pe)
+Expr* ndla_matrix_norm_direct(Expr* v, Expr* pe)
 {
     char kind = 'S';                                  /* S = spectral (2-norm) */
     if (pe) {
@@ -456,7 +517,7 @@ Expr* ndla_norm(Expr* res)
     if (!is_ndarray(v)) return linalg_delist_and_reeval(res);
 
     if (v->data.ndarray.rank == 2) {                  /* matrix norm via LAPACK */
-        Expr* r = nd_matrix_norm(v, argc == 2 ? res->data.function.args[1] : NULL);
+        Expr* r = ndla_matrix_norm_direct(v, argc == 2 ? res->data.function.args[1] : NULL);
         return r ? r : linalg_delist_and_reeval(res);
     }
     if (v->data.ndarray.rank != 1)
@@ -528,7 +589,7 @@ Expr* ndla_normalize(Expr* res)
         int comps = cplx ? 2 * n : n;
         for (int i = 0; i < comps; i++) buf[i] /= nrm;
     }
-    Expr* out = na_build_vector(buf, n, cplx);
+    Expr* out = nd_result_like(v, NULL, na_build_vector(buf, n, cplx));
     free(buf);
     return out;
 }
@@ -579,5 +640,5 @@ Expr* ndla_cross(Expr* res)
         #undef DI
     }
     free(U); free(V);
-    return na_build_vector(out, 3, cplx);
+    return nd_result_like(u, v, na_build_vector(out, 3, cplx));
 }

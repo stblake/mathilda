@@ -12,6 +12,8 @@
 #include "sym_names.h"
 #include "numeric.h"
 #include "arithmetic.h"
+#include "pack.h"
+#include "ndarray.h"   /* is_packed_list — Map over a packed List */
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -640,8 +642,15 @@ static bool value_is_inexact(const Expr* v) {
  *  goes, which is why it carries a `done` counter to free the prefix.)
  * ---------------------------------------------------------------------- */
 
-/* Box n doubles as List[Real...]. */
+/* Box n doubles as List[Real...]. Every value here is a machine real by
+ * construction, so a big enough result goes straight into a packed buffer -- one
+ * memcpy instead of n Expr allocations. The four callers (NestList, FoldList and
+ * the two growable-accumulator loops) all reach this with a plain array. */
 static Expr* reals_to_list(const double* v, size_t n) {
+    double* buf = NULL;
+    Expr* packed = ndbuild_open_f64((int64_t)n, &buf);
+    if (packed) { memcpy(buf, v, n * sizeof(double)); return packed; }
+
     Expr** items = malloc((n ? n : 1) * sizeof(Expr*));
     if (!items) return NULL;
     for (size_t i = 0; i < n; i++) items[i] = expr_new_real(v[i]);
@@ -697,7 +706,7 @@ static Expr* numloop_nest_array(const Expr* f, const Expr* x0, int64_t n) {
     free(stack);
     prog_free(&p);
     if (bail) { free(buf); return NULL; }   /* interpreter re-runs the whole Nest */
-    return expr_new_ndarray(x0->data.ndarray.rank, x0->data.ndarray.dims,
+    return expr_new_ndarray_like(x0, x0->data.ndarray.rank, x0->data.ndarray.dims,
                             buf, NDT_FLOAT64);   /* takes ownership of buf */
 }
 
@@ -764,8 +773,28 @@ Expr* numloop_nestlist(const Expr* f, const Expr* x0, int64_t n) {
  * ---------------------------------------------------------------------- */
 static Expr* numloop_map_impl(const Expr* f, const Expr* expr, bool as_scan) {
     if (numloop_off()) return NULL;
-    if (expr->type != EXPR_FUNCTION) return NULL;
-    size_t n = expr->data.function.arg_count;
+
+    /* A PACKED List is accepted alongside a plain one, and that is not a
+     * convenience: without it Map over a packed list fell past this fast path to
+     * the ndarray leading-axis walk, which applies f through the INTERPRETER per
+     * element. Measured at 10^6 elements, Map[#^2 &, x] was 424 ms packed against
+     * 222 ms plain and Map[Sin[#] Exp[-#] &, x] 1120 ms against 180 ms -- so
+     * automatic packing made the most-used functional head up to 6x SLOWER. Only
+     * rank 1: Map over a matrix maps over its ROWS, and this body takes a scalar.
+     */
+    size_t n;
+    bool   packed_src = false;
+    NDType sdt = NDT_FLOAT64;
+    if (is_packed_list(expr) && expr->data.ndarray.rank == 1) {
+        sdt = expr->data.ndarray.dtype;
+        if (sdt != NDT_FLOAT64 && sdt != NDT_INT64) return NULL;   /* not ours */
+        n = (size_t)expr->data.ndarray.dims[0];
+        packed_src = true;
+    } else if (expr->type == EXPR_FUNCTION) {
+        n = expr->data.function.arg_count;
+    } else {
+        return NULL;
+    }
     if (n == 0) return NULL;   /* trivial; let the interpreter handle it */
 
     NumProg p;
@@ -776,9 +805,25 @@ static Expr* numloop_map_impl(const Expr* f, const Expr* expr, bool as_scan) {
     double* vals = malloc(n * sizeof(double));
     if (!vals) { prog_free(&p); return NULL; }
     bool all_inexact = true, ok = true;
+    if (packed_src) {
+        /* THE O(1) TYPE DECISION. A buffer's dtype answers for every element at
+         * once -- float64 means all of them are inexact machine reals, int64 that
+         * all are exact Integers -- so the per-element probe the plain path has to
+         * run disappears entirely. int64 widens through `double` exactly as
+         * to_machine_double does for an Integer, rounding past 2^53 the same way,
+         * because matching the plain List is the contract here. */
+        all_inexact = (sdt == NDT_FLOAT64);
+        if (sdt == NDT_FLOAT64) {
+            memcpy(vals, expr->data.ndarray.data, n * sizeof(double));
+        } else {
+            const int64_t* src = (const int64_t*)expr->data.ndarray.data;
+            for (size_t i = 0; i < n; i++) vals[i] = (double)src[i];
+        }
+    } else {
     for (size_t i = 0; i < n; i++) {
         if (!to_machine_double(expr->data.function.args[i], &vals[i])) { ok = false; break; }
         if (!value_is_inexact(expr->data.function.args[i])) all_inexact = false;
+    }
     }
     /* Every result element must be inexact. Element i's is, if the body carries
      * a Real literal (so every element computes to a Real) or element i is
@@ -789,16 +834,39 @@ static Expr* numloop_map_impl(const Expr* f, const Expr* expr, bool as_scan) {
 
     double* stack = malloc(p.max_stack * sizeof(double));
     if (!stack) { free(vals); prog_free(&p); return NULL; }
+
+    /* Every result element is a machine real (checked just above), so a List
+     * result of any size worth packing is written straight into a buffer. Only
+     * for a List head: Map[f, g[1., 2.]] keeps the head g, which no buffer can
+     * carry. A bail discards the whole result either way -- the interpreter
+     * re-runs the Map -- so there is nothing to abandon partially. */
+    double* pbuf = NULL;
+    Expr* packed = NULL;
+    if (!as_scan && packed_src) {
+        /* DERIVED from a buffer, so no threshold and no switch: Sin[packed] is
+         * packed at any length and Map must be too. See ndbuild_open_like. */
+        int64_t d1 = (int64_t)n;
+        void* vb = NULL;
+        packed = ndbuild_open_like(expr, 1, &d1, NDT_FLOAT64, &vb);
+        pbuf = (double*)vb;
+    } else if (!as_scan &&
+               expr->data.function.head->type == EXPR_SYMBOL &&
+               expr->data.function.head->data.symbol.name == SYM_List) {
+        /* PRODUCED from a plain List: the producer rule, threshold and all. */
+        packed = ndbuild_open_f64((int64_t)n, &pbuf);
+    }
+
     /* Scan discards every f[element]; only Map builds a result. */
-    Expr** out = as_scan ? NULL : malloc(n * sizeof(Expr*));
-    if (!as_scan && !out) { free(stack); free(vals); prog_free(&p); return NULL; }
+    Expr** out = (as_scan || packed) ? NULL : malloc(n * sizeof(Expr*));
+    if (!as_scan && !packed && !out) { free(stack); free(vals); prog_free(&p); return NULL; }
 
     bool bail = false;
     size_t done = 0;
     for (size_t i = 0; i < n; i++) {
         double r = numprog_run(&p, &vals[i], stack);
         if (!isfinite(r)) { bail = true; break; }
-        if (!as_scan) { out[i] = expr_new_real(r); done++; }
+        if (packed) pbuf[i] = r;
+        else if (!as_scan) { out[i] = expr_new_real(r); done++; }
     }
     free(stack);
     free(vals);
@@ -806,10 +874,17 @@ static Expr* numloop_map_impl(const Expr* f, const Expr* expr, bool as_scan) {
     if (bail) {
         for (size_t i = 0; i < done; i++) expr_free(out[i]);
         free(out);
+        if (packed) expr_free(packed);
         return NULL;
     }
     if (as_scan) return expr_new_symbol(SYM_Null);
-    Expr* result = expr_new_function(expr_copy(expr->data.function.head), out, n);
+    if (packed) return packed;
+    /* A packed source always has the List head, and always takes the buffer path
+     * above unless ndbuild_open declined (packing off, or under the threshold) --
+     * in which case the result is a plain List of that head. */
+    Expr* head = packed_src ? expr_new_symbol(SYM_List)
+                            : expr_copy(expr->data.function.head);
+    Expr* result = expr_new_function(head, out, n);
     free(out);
     return result;
 }
@@ -1123,7 +1198,7 @@ static bool numblock_step_array(NumBlock* b, double* elem, double* stack) {
 static void numblock_writeback_array(NumBlock* b) {
     for (size_t i = 0; i < b->nvars; i++) {
         if (!b->assigned[i]) continue;
-        Expr* nd = expr_new_ndarray(b->arr_rank, b->arr_dims, b->abuf[i], NDT_FLOAT64);
+        Expr* nd = expr_new_ndarray_raw(b->arr_rank, b->arr_dims, b->abuf[i], NDT_FLOAT64);
         b->abuf[i] = NULL;   /* ownership moved into nd */
         writeback_symbol(b->syms[i], nd);
     }
@@ -1240,7 +1315,7 @@ static bool partloop_step(PartLoop* pl, int64_t i, double* regs, double* stack,
 
 /* Write the mutated buffer back as a float64 NDArray (ownership transfers). */
 static void partloop_writeback(PartLoop* pl) {
-    Expr* nd = expr_new_ndarray(pl->rank, pl->dims, pl->buf, NDT_FLOAT64);
+    Expr* nd = expr_new_ndarray_raw(pl->rank, pl->dims, pl->buf, NDT_FLOAT64);
     pl->buf = NULL;   /* ownership moved into nd */
     for (int k = 0; k < pl->rank; k++) prog_free(&pl->idx_prog[k]);
     prog_free(&pl->rhs_prog);

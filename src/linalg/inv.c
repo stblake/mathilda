@@ -284,6 +284,15 @@ static Expr* inverse_divfree(Expr* arg, int n) {
  * ------------------------------------------------------------------ */
 static Expr* inverse_onestep(Expr* arg, int n) {
     int cols = 2 * n;
+    /* The augmented identity block and each normalised pivot cell must match the
+     * INPUT's exactness. Writing the exact Integer 1 into a Real elimination made
+     * Inverse[{{1.,2.,3.},{4.,5.,6.},{7.,8.,10.}}] answer {1, -2.0, 1} -- exact
+     * Integers sitting in a machine-real result, where Mathematica gives all
+     * Reals. Only reachable since Method -> Automatic started selecting OneStep
+     * for an inexact matrix (see matsol_resolve_automatic). */
+    const bool inexact = matsol_is_inexact(arg);
+    #define ONESTEP_ONE  (inexact ? expr_new_real(1.0) : expr_new_integer(1))
+    #define ONESTEP_ZERO (inexact ? expr_new_real(0.0) : expr_new_integer(0))
 
     Expr** matrix = malloc(sizeof(Expr*) * (size_t)n * (size_t)cols);
     Expr** flat_a = malloc(sizeof(Expr*) * (size_t)n * (size_t)n);
@@ -296,7 +305,7 @@ static Expr* inverse_onestep(Expr* arg, int n) {
             matrix[i * cols + j] = flat_a[i * n + j]; /* take ownership */
         }
         for (int j = 0; j < n; j++) {
-            matrix[i * cols + n + j] = expr_new_integer(i == j ? 1 : 0);
+            matrix[i * cols + n + j] = (i == j) ? ONESTEP_ONE : ONESTEP_ZERO;
         }
     }
     free(flat_a);
@@ -331,7 +340,7 @@ static Expr* inverse_onestep(Expr* arg, int n) {
         for (int j = 0; j < cols; j++) {
             if (j == c) {
                 expr_free(matrix[c * cols + j]);
-                matrix[c * cols + j] = expr_new_integer(1);
+                matrix[c * cols + j] = ONESTEP_ONE;
             } else if (!is_zero_poly(matrix[c * cols + j])) {
                 Expr* old = matrix[c * cols + j];
                 matrix[c * cols + j] = matsol_div_entry(old, pivot);
@@ -406,6 +415,9 @@ static Expr* inverse_onestep(Expr* arg, int n) {
  *  Time complexity is O(n! * n^2) -- intended for small n and for     *
  *  the closed-form symbolic inverse of small matrices.                *
  * ------------------------------------------------------------------ */
+    #undef ONESTEP_ONE
+    #undef ONESTEP_ZERO
+
 static Expr* inverse_cofactor(Expr* arg, int n) {
     Expr** flat = malloc(sizeof(Expr*) * (size_t)n * (size_t)n);
     {
@@ -569,6 +581,19 @@ Expr* builtin_inverse(Expr* res) {
         if (fout) return fout;
     }
 
+    /* NOTE: Automatic deliberately stays DivisionFreeRowReduction here, unlike
+     * LinearSolve and RowReduce (see matsol_resolve_automatic). Switching Inverse
+     * to OneStep for an inexact matrix exposes a separate, pre-existing exactness
+     * bug in the elimination arithmetic: both OneStepRowReduction and
+     * CofactorExpansion answer
+     *     Inverse[{{1.,2.,3.},{4.,5.,6.},{7.,8.,10.}}]
+     *       = {{-0.666667, -1.33333, 1.0}, {-0.666667, 3.66667, -2.0}, {1, -2.0, 1}}
+     * with exact Integer 1s among the Reals, where DivisionFreeRowReduction and
+     * Mathematica both give 1.0. It is not the augmented identity block (that now
+     * follows the input's exactness) but the divide/eliminate steps themselves.
+     * Until that is fixed, Inverse of a large Real matrix relies on being packed
+     * and reaching LAPACK; with $AutoArrayPacking = False it can still overflow
+     * the stack at n >= 90. */
     switch (method) {
         case MATSOL_AUTOMATIC:
         case MATSOL_DIVFREE:    return inverse_divfree(arg, n);

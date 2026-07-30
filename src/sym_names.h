@@ -28,6 +28,7 @@ extern const char* SYM_Abort;
 extern const char* SYM_Abs;
 extern const char* SYM_AbsRules;
 extern const char* SYM_AbsoluteTime;
+extern const char* SYM_AbsoluteTiming;
 extern const char* SYM_Accumulate;
 extern const char* SYM_AccuracyGoal;
 extern const char* SYM_Algebraics;
@@ -292,8 +293,11 @@ extern const char* SYM_PrimeNu;
 extern const char* SYM_List;
 extern const char* SYM_Listable;
 extern const char* SYM_ListQ;
-/* NDArray (dense machine-precision ndarray) data-structure family. */
+/* NDArray (dense machine-precision ndarray) data-structure family, and the
+ * packed-List surface over the same storage (see pack.h). */
 extern const char* SYM_NDArray;
+extern const char* SYM_ToNDArray;
+extern const char* SYM_FromNDArray;
 /* Association (Wolfram-Language <| ... |>) data-structure family. */
 extern const char* SYM_Association;
 extern const char* SYM_AssociationQ;
@@ -672,6 +676,8 @@ extern const char* SYM_DollarLine;
 extern const char* SYM_DollarMaxExtraPrecision;
 extern const char* SYM_DollarModuleNumber;
 extern const char* SYM_DollarRecursionLimit;
+extern const char* SYM_DollarAutoCompilation;
+extern const char* SYM_DollarAutoArrayPacking;
 extern const char* SYM_DollarSimplifyDebug;
 extern const char* SYM_DollarruSimplify;
 extern const char* SYM_DollarVersion;

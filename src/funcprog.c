@@ -10,6 +10,7 @@
 #include "numloop.h"
 #include "ndarray.h"
 #include "ndstruct.h"   /* ndstruct_delist_repack — packed-argument fallback */
+#include "pack.h"       /* pack_offer — Select narrows one numeric list to another */
 #include "part.h"
 #include <string.h>
 #include <stdlib.h>
@@ -260,9 +261,18 @@ static Expr* map_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec 
  * NDArray of dtype `dt` (freeing `list`), so mapping a numeric function over a
  * packed array yields a packed array again — matching Sin[arr], arr + 1, etc.
  * A symbolic or non-rectangular result is returned unchanged as a List. */
-static Expr* map_try_repack(Expr* list, NDType dt) {
+/* Repack a result whose input was the array `src`, inheriting src's dtype AND
+ * its presentation -- packed in, packed out; visible in, visible out. Consumes
+ * `list` on success, returns it untouched when the result is not packable. */
+static Expr* map_try_repack(const Expr* src, Expr* list, NDType dt) {
     if (!list || list->type != EXPR_FUNCTION) return list;
-    Expr* packed = ndarray_from_nested_list(list, dt);
+    /* A packed source re-sniffs, for the same reason ndstruct_delist_repack does:
+     * f can return a different exactness than it was given, and repacking at the
+     * SOURCE dtype would coerce it -- Map[If[# > 150., #, 1] &, Range[1., 300.]]
+     * would turn every exact 1 into 1.. A visible NDArray[...] keeps coercing,
+     * which is its documented machine-buffer behaviour. */
+    if (is_packed_list(src)) return pack_repack_like(src, list);
+    Expr* packed = ndarray_from_nested_list_like(src, list, dt);
     if (packed) { expr_free(list); return packed; }
     return list;
 }
@@ -287,7 +297,7 @@ static Expr* map_ndarray_axis(Expr* f, Expr* a) {
     }
     Expr* list = expr_new_function(expr_new_symbol(SYM_List), results, count);
     free(results);
-    return map_try_repack(list, a->data.ndarray.dtype);
+    return map_try_repack(a, list, a->data.ndarray.dtype);
 }
 
 Expr* builtin_map(Expr* res) {
@@ -327,7 +337,7 @@ Expr* builtin_map(Expr* res) {
         expr_free(nested);
         /* map_at_level leaves the f[...] applications unreduced, but repacking
          * needs actual machine numbers -- evaluate before offering it back. */
-        return map_try_repack(eval_and_free(out), expr->data.ndarray.dtype);
+        return map_try_repack(expr, eval_and_free(out), expr->data.ndarray.dtype);
     }
 
     return map_at_level(f, expr, 0, spec);
@@ -634,7 +644,7 @@ Expr* builtin_map_at(Expr* res) {
         if (!out) return NULL;
         /* mapat_leaf leaves f[part] unreduced, but repacking needs actual
          * machine numbers -- evaluate before offering the result back. */
-        return map_try_repack(eval_and_free(out), expr->data.ndarray.dtype);
+        return map_try_repack(expr, eval_and_free(out), expr->data.ndarray.dtype);
     }
 
     return expr_apply_at_positions(expr, pos, mapat_leaf, f);
@@ -722,7 +732,10 @@ Expr* builtin_select(Expr* res) {
     Expr* result = expr_new_function(expr_copy(list->data.function.head), kept_args, kept_count);
     if (kept_args) free(kept_args);
 
-    return result;
+    /* The kept elements are copies of the input's, already evaluated, so
+     * offering the filtered list is safe -- and it is the one Select case worth
+     * packing, where a large numeric list is being narrowed to another one. */
+    return pack_offer(result);
 }
 
 /* ------------------- TakeWhile / LengthWhile -------------------
@@ -2040,6 +2053,12 @@ static Expr* ebuf_finalize(ExprBuf* b, bool as_list, Expr* out_head) {
     if (as_list) {
         result = expr_new_function(out_head, b->items, b->count);
         free(b->items);
+        /* The iterate history of NestList / FoldList / NestWhileList /
+         * FixedPointList. Offered here rather than at each of the four call
+         * sites, and it also keeps this path in step with numloop's compiled one
+         * (reals_to_list packs), so whether the body happened to compile does not
+         * decide the result's representation. */
+        result = pack_offer(result);
     } else {
         expr_free(out_head);
         if (b->count == 0) {
@@ -2302,8 +2321,10 @@ static Expr* fold_impl(Expr* res, bool as_list) {
      * because both the seed and each element are copied on the way into the
      * history buffer. */
     Expr* materialized = NULL;
+    const Expr* list_src = NULL;      /* the array we materialised, for the repack */
     NDType list_src_dtype = NDT_FLOAT64;
     if (is_ndarray(list)) {
+        list_src = list;
         list_src_dtype = list->data.ndarray.dtype;
         materialized = ndarray_to_nested_list(list);
         if (!materialized) return NULL;
@@ -2346,7 +2367,7 @@ static Expr* fold_impl(Expr* res, bool as_list) {
 
     /* A packed argument gives a packed history back, matching Map[f, NDArray[...]]. */
     if (materialized && as_list && out && r == ITER_RUN_OK)
-        out = map_try_repack(out, list_src_dtype);
+        out = map_try_repack(list_src, out, list_src_dtype);
     expr_free(materialized);
     return out;
 }
@@ -3007,9 +3028,10 @@ Expr* builtin_mapthread(Expr* res) {
      * NDArrays does not silently unpack the data. */
     if (any_nd && out) {
         NDType dt = NDT_FLOAT64;
+        const Expr* src_nd = NULL;
         for (size_t j = 0; j < k; j++)
-            if (is_ndarray(entries0[j])) { dt = entries0[j]->data.ndarray.dtype; break; }
-        out = map_try_repack(out, dt);
+            if (is_ndarray(entries0[j])) { src_nd = entries0[j]; dt = src_nd->data.ndarray.dtype; break; }
+        out = map_try_repack(src_nd, out, dt);
     }
     return out;
 }

@@ -100,10 +100,13 @@ Expr* builtin_differences(Expr* res) {
 
     Expr* lst = res->data.function.args[0];
 
-    /* An NDArray is atomic, so the element walk below looks straight past one
-     * and the call comes back UNEVALUATED, while the identical List call works.
-     * Materialise, reuse the List implementation, repack — see ndstruct.h. */
-    if (is_ndarray(lst)) return ndstruct_delist_repack(res, lst);
+    /* Native buffer path first; ndstruct_delist_repack below stays the fallback
+     * for every form it declines. See ndstruct.h. */
+    if (is_ndarray(lst)) {
+        Expr* fast = ndstruct_differences(res);
+        if (fast) return fast;
+        return ndstruct_delist_repack(res, lst);
+    }
 
     /* Differences[assoc] gives the successive value differences, keyed by the
      * trailing key of each pair (so the leading key drops, as in Wolfram). */

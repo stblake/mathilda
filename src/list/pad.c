@@ -1,4 +1,6 @@
 #include "list_common.h"
+#include "ndarray.h"    /* is_ndarray */
+#include "ndstruct.h"   /* ndstruct_pad / ndstruct_delist_repack */
 #include "pad.h"
 
 /* =====================================================================
@@ -216,10 +218,48 @@ static Expr* pad_dispatch(Expr* res, int pad_left, const char* name) {
     return out;
 }
 
+/*
+ * An NDArray is atomic, so pad_dispatch's List walk looks straight past one.
+ * Try the native buffer path first (rank 1, with a dtype-compatible fill or pure
+ * truncation), then materialise ONCE and run the ordinary List implementation.
+ *
+ * Deliberately NOT ndstruct_delist_repack on the decline: that rebuilds the call
+ * and re-EVALUATES it, which costs a second full traversal, and its closing
+ * repack attempt is guaranteed to fail in exactly the case that gets here.
+ * Padding with the default exact Integer 0 into a float64 array must produce
+ * {0, 0, 1., 2., 3.} -- a mixed exact/inexact list, which is what Mathematica
+ * gives too and which no uniform buffer can hold. Going through delist_repack
+ * made PadRight on a 10^6 vector 186 ms against 114 ms for simply letting the
+ * transparency gate materialise it; this path is the 114 ms one, with the
+ * packable cases now fast on top.
+ */
+static Expr* pad_entry(Expr* res, bool left, const char* name) {
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 1
+        && is_ndarray(res->data.function.args[0])) {
+        Expr* fast = ndstruct_pad(res, left);
+        if (fast) return fast;
+
+        size_t argc = res->data.function.arg_count;
+        Expr* plain = ndarray_to_nested_list(res->data.function.args[0]);
+        if (!plain) return NULL;
+        Expr** args = malloc(sizeof(Expr*) * argc);
+        if (!args) { expr_free(plain); return NULL; }
+        args[0] = plain;
+        for (size_t i = 1; i < argc; i++)
+            args[i] = expr_copy(res->data.function.args[i]);
+        Expr* call = expr_new_function(expr_copy(res->data.function.head), args, argc);
+        free(args);
+        Expr* out = pad_dispatch(call, left ? 1 : 0, name);
+        expr_free(call);
+        return out;
+    }
+    return pad_dispatch(res, left ? 1 : 0, name);
+}
+
 Expr* builtin_padright(Expr* res) {
-    return pad_dispatch(res, /*pad_left=*/0, "PadRight");
+    return pad_entry(res, false, "PadRight");
 }
 
 Expr* builtin_padleft(Expr* res) {
-    return pad_dispatch(res, /*pad_left=*/1, "PadLeft");
+    return pad_entry(res, true, "PadLeft");
 }

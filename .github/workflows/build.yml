@@ -72,6 +72,11 @@ jobs:
       - name: Portability gate (make check-c99)
         run: make check-c99
 
+      # A head with an NDArray fast path that is not on pack.c's AWARE list is
+      # correct, silent and 30x-658x slow. Source-level, so it needs no build.
+      - name: Packed-array opt-in audit (make check-packed-aware)
+        run: make check-packed-aware
+
       # The definitive check — glibc headers, -std=c99, the real flag set.
       - name: Build
         run: make -j"$(nproc)" EXTRA_LIBS="${{ steps.deps.outputs.extra_libs }}"

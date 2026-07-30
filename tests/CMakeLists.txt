@@ -258,6 +258,7 @@ set(COMMON_SRC
     ../src/ndkernels.c
     ../src/ndreduce.c
     ../src/ndstruct.c
+    ../src/pack.c
     ../src/print.c
     ../src/print_latex.c
     ../src/plus.c
@@ -971,6 +972,11 @@ target_link_libraries(bench_eval m)
 target_include_directories(bench_eval PRIVATE ../src)
 add_test(NAME bench_eval COMMAND bench_eval)
 
+add_executable(bench_pack bench_pack.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(bench_pack m)
+target_include_directories(bench_pack PRIVATE ../src)
+add_test(NAME bench_pack COMMAND bench_pack)
+
 # Compile[] engine gate: asserts every benchmarked body actually COMPILES (a
 # silent bail costs 10-40x and looks exactly like success), and that the
 # optimiser never makes a body slower than the code it started from.
@@ -995,6 +1001,11 @@ add_executable(ndarray_tests test_ndarray.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(ndarray_tests m)
 target_include_directories(ndarray_tests PRIVATE ../src)
 add_test(NAME ndarray_tests COMMAND ndarray_tests)
+
+add_executable(packed_list_tests test_packed_list.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(packed_list_tests m)
+target_include_directories(packed_list_tests PRIVATE ../src)
+add_test(NAME packed_list_tests COMMAND packed_list_tests)
 
 add_executable(ndarray_functions_tests test_ndarray_functions.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(ndarray_functions_tests m)

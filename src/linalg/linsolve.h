@@ -39,6 +39,22 @@ typedef enum {
  * argument isn't a Method rule with a recognised RHS. */
 MatsolMethod matsol_parse_method_option(Expr* opt);
 
+/* Resolve Method -> Automatic for the matrix argument `m`.
+ *
+ * Returns MATSOL_ONESTEP when `m` has any inexact (Real / MPFR) leaf and
+ * MATSOL_DIVFREE otherwise. Fraction-free elimination is pointless over
+ * floating point and its per-pivot polynomial GCD recursion overflowed the
+ * stack on a 90x90 Real matrix; see the definition in linsolve.c. */
+MatsolMethod matsol_resolve_automatic(const Expr* m);
+
+/* True when `e` contains any inexact (Real / MPFR, including inside a Complex
+ * or a nested List) leaf. Used both to resolve Method -> Automatic and to pick
+ * the TYPE of the identity element in the OneStep eliminators: normalising a
+ * pivot cell to the exact Integer 1 inside a Real computation puts an exact
+ * value in an inexact result, and Inverse of a Real matrix came back with
+ * {1, -2.0, 1} instead of {1.0, -2.0, 1.0}. */
+bool matsol_is_inexact(const Expr* e);
+
 /* Rate-limit a per-call warning so test loops don't spew.  `key` is
  * hashed to detect repeated invocations of the same call. */
 void matsol_warn_once(uint64_t* last_hash, Expr* key, const char* msg);

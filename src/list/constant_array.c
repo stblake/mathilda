@@ -1,5 +1,7 @@
 #include "list_common.h"
 #include "constant_array.h"
+#include "../ndarray.h"
+#include "../pack.h"
 
 /* ConstantArray[c, n]            -> a flat list of n copies of c.
  * ConstantArray[c, {n1, ..., nk}] -> a nested n1 x ... x nk array of copies of c.
@@ -70,6 +72,35 @@ Expr* builtin_constant_array(Expr* res) {
         if (n_array[i]->type != EXPR_INTEGER || n_array[i]->data.integer < 0) {
             free(n_array);
             return NULL;
+        }
+    }
+
+    /* A machine-number constant over a rectangular shape is the one case where
+     * the whole result is known before anything is built, so fill the buffer
+     * directly rather than allocating one Expr per element and packing after.
+     * ndbuild_open declines a zero dimension, which routes the ConstantArray[c,
+     * {0, ...}] shapes back to ca_helper unchanged. */
+    if ((c->type == EXPR_REAL || c->type == EXPR_INTEGER) &&
+        dim_count >= 1 && dim_count < NDARRAY_MAX_RANK) {
+        int64_t d[NDARRAY_MAX_RANK];
+        int64_t total = 1;
+        for (size_t i = 0; i < dim_count; i++) {
+            d[i] = n_array[i]->data.integer;
+            total *= d[i];
+        }
+        NDType dt = (c->type == EXPR_INTEGER) ? NDT_INT64 : NDT_FLOAT64;
+        void* vbuf = NULL;
+        Expr* packed = ndbuild_open((int)dim_count, d, dt, &vbuf);
+        if (packed) {
+            if (dt == NDT_INT64) {
+                int64_t v = c->data.integer, *buf = (int64_t*)vbuf;
+                for (int64_t i = 0; i < total; i++) buf[i] = v;
+            } else {
+                double v = c->data.real, *buf = (double*)vbuf;
+                for (int64_t i = 0; i < total; i++) buf[i] = v;
+            }
+            free(n_array);
+            return packed;
         }
     }
 

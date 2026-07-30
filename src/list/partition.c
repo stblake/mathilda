@@ -73,10 +73,13 @@ Expr* builtin_partition(Expr* res) {
     Expr* n_spec = res->data.function.args[1];
     Expr* d_spec = (res->data.function.arg_count == 3) ? res->data.function.args[2] : NULL;
 
-    /* An NDArray is atomic, so the element walk below looks straight past one
-     * and the call comes back UNEVALUATED, while the identical List call works.
-     * Materialise, reuse the List implementation, repack — see ndstruct.h. */
-    if (is_ndarray(list)) return ndstruct_delist_repack(res, list);
+    /* Native buffer path first; ndstruct_delist_repack below stays the fallback
+     * for every form it declines. See ndstruct.h. */
+    if (is_ndarray(list)) {
+        Expr* fast = ndstruct_partition(res);
+        if (fast) return fast;
+        return ndstruct_delist_repack(res, list);
+    }
 
     if (list->type != EXPR_FUNCTION) return expr_copy(list);
 

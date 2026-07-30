@@ -11,6 +11,8 @@
 
 #include "linalg.h"
 #include "ndlinalg.h"
+#include "linsolve.h"  /* matsol_is_inexact — the exact/inexact gate below */
+#include "ndarray.h"   /* ndarray_from_nested_list, NDT_* */
 #include "eval.h"
 #include "sym_names.h"
 #include <stdlib.h>
@@ -98,6 +100,44 @@ Expr* builtin_norm(Expr* res) {
             free(flat);
         }
         return result;
+    }
+
+    /*
+     * Matrix norms other than Frobenius -- the induced 1-, 2- and Infinity-norms
+     * -- have no symbolic implementation here, but ndla_norm does have one
+     * (LAPACK dlange/zlange, and an SVD for the 2-norm). So rather than stay
+     * unevaluated, pack a machine-numeric matrix and use it.
+     *
+     * This closed an observable inconsistency rather than adding a feature:
+     * once ordinary Lists pack automatically, Norm[m] on a 300x300 matrix took
+     * the ND path and answered, while the SAME value written small enough to
+     * stay unpacked answered Norm[{{...}}] unevaluated. A differential sweep
+     * (every head, packed against MATHILDA_NO_PACK=1) is what surfaced it; the
+     * values agree with Mathematica to the last digit on the five test matrices.
+     *
+     * A symbolic or exact-but-non-machine matrix still returns NULL and stays
+     * symbolic, which is the documented behaviour for those.
+     */
+    /* INEXACT matrices only. Norm of an EXACT matrix is an exact algebraic
+     * number -- Mathematica answers Norm[{{1,2},{4,5}}] with
+     * Sqrt[23 + 2 Sqrt[130]] -- and Mathilda has no symbolic SVD to produce it,
+     * so the honest answer for exact input is to stay unevaluated, as before.
+     * Packing it to float64 and returning 6.76783 would be a machine-real answer
+     * to an exact question; normalize_tests caught exactly that, via
+     * Normalize[{{1,2},{4,5}}, Norm]. */
+    if (rank == 2 && matsol_is_inexact(expr)) {
+        Expr* packed = ndarray_from_nested_list(expr, NDT_FLOAT64);
+        if (!packed) packed = ndarray_from_nested_list(expr, NDT_COMPLEX64);
+        if (packed) {
+            /* ndla_matrix_norm_direct, NOT ndla_norm: ndla_norm's fallback is
+             * linalg_delist_and_reeval, which would rebuild Norm[plainMatrix]
+             * and evaluate it -- straight back into this branch, forever. The
+             * direct entry returns NULL instead of deferring, so the recursion
+             * cannot form. */
+            Expr* out = ndla_matrix_norm_direct(packed, p);
+            expr_free(packed);
+            if (out) return out;
+        }
     }
 
     // Fallback for unhandled matrix norm (e.g. SVD max singular value)

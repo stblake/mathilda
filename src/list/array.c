@@ -1,5 +1,6 @@
 #include "list_common.h"
 #include "array.h"
+#include "../pack.h"
 
 static Expr* array_helper(Expr* f, Expr** n_array, Expr** r_array, size_t dim_count, size_t current_dim, Expr** current_args) {
     if (current_dim == dim_count) {
@@ -118,5 +119,8 @@ Expr* builtin_array(Expr* res) {
     free(n_array);
     free(r_array);
     
-    return result;
+    /* Offered rather than direct-built: array_helper runs evaluate(f[i]) per leaf
+     * with no advance knowledge of the result type, so a buffer opened up front
+     * would be abandoned in the common (symbolic) case. */
+    return pack_offer(result);
 }

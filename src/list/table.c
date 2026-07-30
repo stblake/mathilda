@@ -1,6 +1,7 @@
 #include "list_common.h"
 #include "table.h"
 #include "compile/autocompile.h"
+#include "../pack.h"
 
 Expr* builtin_table(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
@@ -87,6 +88,52 @@ Expr* builtin_table(Expr* res) {
         double val = min_val;
         int steps = 0;
         Expr* curr_e = ac ? NULL : expr_copy(imin_e);
+
+        /* Packed fast path: a compiled body whose result type is CT_REAL emits
+         * nothing but machine reals, so the whole list can be written straight
+         * into a buffer. Counted first with the loop's own recurrence -- doubles
+         * only, no evaluation -- so the packed and interpreted paths produce the
+         * same number of elements from the same sequence of `val`s.
+         *
+         * compiled_eval_real still self-guards finiteness, so an element where
+         * the interpreter would give ComplexInfinity or a complex value returns
+         * false. That abandons the buffer, hands back the elements already
+         * written, and the ordinary loop below picks up from exactly where it
+         * stopped -- same fallback the boxed path has always had, per element. */
+        if (ac && autocompiled_result_is_real(ac)) {
+            size_t total = 0;
+            double v = min_val;
+            while ((di_val > 0 && v <= max_val + 1e-14) || (di_val < 0 && v >= max_val - 1e-14)) {
+                total++;
+                v += di_val;
+                if (total > 1000000) break;
+            }
+            double* buf = NULL;
+            Expr* packed = ndbuild_open_f64((int64_t)total, &buf);
+            if (packed) {
+                size_t i = 0;
+                while (i < total && autocompiled_eval_real(ac, &val, &buf[i])) {
+                    i++;
+                    val += di_val;
+                }
+                if (i == total) {
+                    autocompiled_free(ac);
+                    iter_spec_restore(var_sym, old_own);
+                    iter_spec_free(&s);
+                    free(results);
+                    return packed;
+                }
+                /* Element i is not machine-real: finish on the List path. */
+                if (total > results_cap) {
+                    results_cap = total;
+                    results = realloc(results, sizeof(Expr*) * results_cap);
+                }
+                ndbuild_abandon(packed, i, results);
+                results_count = i;
+                steps = (int)i;
+            }
+        }
+
         while ((di_val > 0 && val <= max_val + 1e-14) || (di_val < 0 && val >= max_val - 1e-14)) {
             /* Boxed (not _eval_real) so an integer-valued body stays an Integer
              * — the element type is user-visible in the returned list. */
@@ -122,5 +169,8 @@ Expr* builtin_table(Expr* res) {
 
     Expr* result_list = expr_new_function(expr_new_symbol(SYM_List), results, results_count);
     free(results);
-    return result_list;
+    /* Catches every branch the direct path above does not: the exact-iterator
+     * loop, Table[expr, {n}], Table[expr, {i, list}], and a body that compiled to
+     * an integer or complex result. Declines in O(1) on anything symbolic. */
+    return pack_offer(result_list);
 }

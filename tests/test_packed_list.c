@@ -1,0 +1,1065 @@
+/* Packed lists: the invisibility contract.
+ *
+ * A packed list (ToNDArray[...], and in due course anything the system packs on
+ * its own) must be indistinguishable from the nested List it stands for. Most
+ * of that falls out of the evaluator's transparency gate, but three functions
+ * sit BELOW the evaluator and have to be got right by hand: expr_eq, expr_hash
+ * and expr_compare. Each walks the buffer and reproduces what
+ * ndarray_to_nested_list would have built, WITHOUT building it -- so a drift
+ * between the two is silent, shows up only in a hash table or a Sort, and no
+ * other test in the tree would catch it.
+ *
+ * So the assertions here are deliberately differential: they compare the packed
+ * value against the REAL materialised form, computed at run time, rather than
+ * against a hand-written expectation that could be wrong in the same direction
+ * as the code. */
+
+#include "test_utils.h"
+#include "expr.h"
+#include "parse.h"
+#include "eval.h"
+#include "symtab.h"
+#include "core.h"
+#include "ndarray.h"
+#include "print_latex.h"
+#include "pack.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+static Expr* ev(const char* src) {
+    Expr* p = parse_expression(src);
+    ASSERT(p != NULL);
+    Expr* r = evaluate(p);
+    expr_free(p);
+    return r;
+}
+
+/* The core differential check: for a source expression that evaluates to a
+ * packed list, every observable must agree with its own materialised form. */
+static void check_invisible(const char* src) {
+    Expr* packed = ev(src);
+    ASSERT(is_packed_list(packed));
+
+    Expr* plain = ndarray_to_nested_list(packed);
+    ASSERT(plain != NULL);
+
+    /* Identity: equal both ways, and hashing to the same bucket. A packed list
+     * that hashes differently cannot be looked up in an Association keyed by
+     * the plain form, and Union splits one value into two. */
+    ASSERT(expr_eq(packed, plain));
+    ASSERT(expr_eq(plain, packed));
+    ASSERT(expr_hash(packed) == expr_hash(plain));
+    ASSERT(expr_compare(packed, plain) == 0);
+    ASSERT(expr_compare(plain, packed) == 0);
+
+    /* Printing, in every form. */
+    char* sp = expr_to_string(packed);
+    char* sl = expr_to_string(plain);
+    if (strcmp(sp, sl) != 0)
+        fprintf(stderr, "FAIL: print mismatch for %s\n  packed: %s\n  plain:  %s\n",
+                src, sp, sl);
+    ASSERT(strcmp(sp, sl) == 0);
+    free(sp); free(sl);
+
+    char* fp = expr_to_string_fullform(packed);
+    char* fl = expr_to_string_fullform(plain);
+    if (strcmp(fp, fl) != 0)
+        fprintf(stderr, "FAIL: fullform mismatch for %s\n  packed: %s\n  plain:  %s\n",
+                src, fp, fl);
+    ASSERT(strcmp(fp, fl) == 0);
+    free(fp); free(fl);
+
+    expr_free(plain);
+    expr_free(packed);
+}
+
+void test_invisible_across_ranks_and_dtypes(void) {
+    /* Rank 1-3, float64 and int64, including the values whose bit patterns are
+     * easiest to get wrong (negative zero, denormals, large exact integers). */
+    check_invisible("ToNDArray[{1., 2., 3.}]");
+    check_invisible("ToNDArray[{1, 2, 3}]");
+    check_invisible("ToNDArray[{{1., 2.}, {3., 4.}}]");
+    check_invisible("ToNDArray[{{1, 2}, {3, 4}}]");
+    check_invisible("ToNDArray[{{{1., 2.}, {3., 4.}}, {{5., 6.}, {7., 8.}}}]");
+    check_invisible("ToNDArray[{-0., 0., 1.5, -2.25}]");
+    check_invisible("ToNDArray[{9007199254740993, -9007199254740993}]");
+    check_invisible("ToNDArray[Table[N[k], {k, 300}]]");
+    check_invisible("ToNDArray[Table[k, {k, 300}]]");
+}
+
+/* ---------- What the user sees ---------- */
+
+void test_presents_as_list(void) {
+    assert_eval_eq("ToNDArray[{1., 2., 3.}]", "{1.0, 2.0, 3.0}", 0);
+    assert_eval_eq("Head[ToNDArray[{1., 2., 3.}]]", "List", 0);
+    assert_eval_eq("AtomQ[ToNDArray[{1., 2., 3.}]]", "False", 0);
+    assert_eval_eq("NDArrayQ[ToNDArray[{1., 2., 3.}]]", "True", 0);
+    assert_eval_eq("FullForm[ToNDArray[{1., 2.}]]", "List[1.0, 2.0]", 0);
+    assert_eval_eq("InputForm[ToNDArray[{1., 2.}]]", "{1.0, 2.0}", 0);
+    /* SameQ against the plain List, in both argument orders. */
+    assert_eval_eq("ToNDArray[{1., 2., 3.}] === {1., 2., 3.}", "True", 0);
+    assert_eval_eq("{1., 2., 3.} === ToNDArray[{1., 2., 3.}]", "True", 0);
+}
+
+void test_visible_ndarray_unchanged(void) {
+    /* The explicit NDArray[...] head keeps every bit of its old behaviour: it
+     * is a DIFFERENT value from the List, with a different Head, and it is
+     * atomic. Packing must not have leaked into it. */
+    assert_eval_eq("NDArray[{1., 2., 3.}]", "NDArray[{1.0, 2.0, 3.0}]", 0);
+    assert_eval_eq("Head[NDArray[{1., 2., 3.}]]", "NDArray", 0);
+    assert_eval_eq("AtomQ[NDArray[{1., 2., 3.}]]", "True", 0);
+    assert_eval_eq("NDArray[{1., 2., 3.}] === {1., 2., 3.}", "False", 0);
+    assert_eval_eq("NDArray[{1., 2., 3.}] === ToNDArray[{1., 2., 3.}]", "False", 0);
+}
+
+/* ---------- Exactness ---------- */
+
+void test_exactness_preserved(void) {
+    /* An all-Integer list packs to an int64 buffer and its elements come back
+     * as Integers. Packing may not turn {1, 2, 3} into {1., 2., 3.}. */
+    assert_eval_eq("DataType[ToNDArray[{1, 2, 3}]]", "\"int64\"", 0);
+    assert_eval_eq("Head[ToNDArray[{1, 2, 3}][[2]]]", "Integer", 0);
+    assert_eval_eq("ToNDArray[{1, 2, 3}] === {1, 2, 3}", "True", 0);
+    assert_eval_eq("ToNDArray[{1, 2, 3}] === {1., 2., 3.}", "False", 0);
+    /* Exact integers beyond 2^53, where the generic ndt_get/ndt_set pair (which
+     * routes through double) would round. */
+    assert_eval_eq("ToNDArray[{9007199254740993}][[1]]", "9007199254740993", 0);
+}
+
+/* An int64 buffer must give the SAME answer as the ordinary integer list, for
+ * every head -- value, head and all.
+ *
+ * This is the one place packing came closest to shipping wrong answers. Most of
+ * the ND layer reads elements through ndt_get, which routes via `double` and is
+ * exact only to 2^53; that was safe while only Compile[] could create an
+ * integer buffer, and stopped being safe the moment an all-Integer list packed
+ * to one. Before the int64 gate, `Total[{1,2,3}]` came back as 6. instead of 6
+ * and `Sin[{1,2,3}]` as {0,0,0} instead of symbolic.
+ *
+ * Written as a differential rather than as fixed expectations: each expression
+ * is evaluated over the packed list and over the plain one, and the two printed
+ * results must be identical. That way it keeps testing the right thing even if
+ * an answer legitimately changes for unrelated reasons. */
+static void same_as_plain(const char* fmt_packed, const char* fmt_plain) {
+    Expr* a = ev(fmt_packed);
+    Expr* b = ev(fmt_plain);
+    char* sa = expr_to_string(a);
+    char* sb = expr_to_string(b);
+    if (strcmp(sa, sb) != 0)
+        fprintf(stderr, "FAIL: packed and plain disagree\n  %s -> %s\n  %s -> %s\n",
+                fmt_packed, sa, fmt_plain, sb);
+    ASSERT(strcmp(sa, sb) == 0);
+    free(sa); free(sb);
+    expr_free(a); expr_free(b);
+}
+
+void test_int64_matches_plain_integer_lists(void) {
+    static const char* const EXPRS[] = {
+        "Total[%s]",  "Head[Total[%s]]", "Mean[%s]",   "Median[%s]",
+        "Max[%s]",    "Min[%s]",         "Variance[%s]",
+        "%s . %s",    "%s + 1",          "%s * 2",     "%s * 5/2",
+        "Sin[%s]",    "Sqrt[%s]",        "Exp[%s]",    "Abs[%s]",
+        "Sort[%s]",   "Reverse[%s]",     "Accumulate[%s]", "Differences[%s]",
+        "Precision[%s]", "Length[%s]",   "Dimensions[%s]", "Depth[%s]",
+        "%s[[2]]",    "Head[%s[[2]]]",   "Map[#^2 &, %s]", "Total[%s^3]",
+    };
+    const char* packed_src = "ToNDArray[{1, 2, 3, 4}]";
+    const char* plain_src  = "{1, 2, 3, 4}";
+    char bufp[256], bufl[256];
+    for (size_t i = 0; i < sizeof(EXPRS) / sizeof(EXPRS[0]); i++) {
+        /* The one two-slot pattern is `%s . %s`; snprintf with a repeated
+         * argument covers both shapes. */
+        snprintf(bufp, sizeof(bufp), EXPRS[i], packed_src, packed_src);
+        snprintf(bufl, sizeof(bufl), EXPRS[i], plain_src, plain_src);
+        same_as_plain(bufp, bufl);
+    }
+    /* Exactness that a double buffer could not hold: the sum overflows past
+     * what 2^53 can represent, and the interpreter promotes to a bigint. */
+    same_as_plain("Total[ToNDArray[Table[k, {k, 1000000}]]]",
+                  "Total[Table[k, {k, 1000000}]]");
+    same_as_plain("Total[ToNDArray[{1000000000, 1000000000, 1000000000}]^3]",
+                  "Total[{1000000000, 1000000000, 1000000000}^3]");
+}
+
+void test_declines_what_it_cannot_represent(void) {
+    /* Each of these must come back as the ORIGINAL list, unpacked. A mixed
+     * exact/inexact list is the important one: a uniform buffer cannot hold an
+     * Integer head on one element and a Real head on another, so widening it
+     * would silently change {1, 2.5} into {1., 2.5}. */
+    assert_eval_eq("NDArrayQ[ToNDArray[{1, 2.5}]]", "False", 0);
+    assert_eval_eq("ToNDArray[{1, 2.5}]", "{1, 2.5}", 0);
+    assert_eval_eq("NDArrayQ[ToNDArray[{1, 2, x}]]", "False", 0);
+    assert_eval_eq("NDArrayQ[ToNDArray[{1/2, 1/3}]]", "False", 0);
+    assert_eval_eq("NDArrayQ[ToNDArray[{{1., 2.}, {3.}}]]", "False", 0);   /* ragged */
+    assert_eval_eq("NDArrayQ[ToNDArray[{}]]", "False", 0);
+    assert_eval_eq("NDArrayQ[ToNDArray[{2^70, 1}]]", "False", 0);          /* BigInt */
+    /* An explicit DataType may widen an exact list, but never round an inexact
+     * one into an integer buffer -- that would change values, not storage. */
+    assert_eval_eq("NDArrayQ[ToNDArray[{1, 2, 3}, DataType -> \"float64\"]]", "True", 0);
+    assert_eval_eq("DataType[ToNDArray[{1, 2, 3}, DataType -> \"float64\"]]", "\"float64\"", 0);
+    assert_eval_eq("NDArrayQ[ToNDArray[{1., 2.5}, DataType -> \"int64\"]]", "False", 0);
+}
+
+/* ---------- Ordering ---------- */
+
+/* Sorting a packed list against a plain one must give the same answer as
+ * sorting two plain ones. The buffer fast path is only valid when the shapes
+ * match exactly: element-wise, {2., 0.} sorts AFTER {1., 9., 9.} on its first
+ * element but BEFORE it on length, and List order settles length first. */
+void test_ordering_matches_plain_lists(void) {
+    assert_eval_eq("Sort[{ToNDArray[{2., 1.}], ToNDArray[{1., 9.}]}]",
+                   "{{1.0, 9.0}, {2.0, 1.0}}", 0);
+    assert_eval_eq("Sort[{{2., 1.}, {1., 9.}}]",
+                   "{{1.0, 9.0}, {2.0, 1.0}}", 0);
+    /* Differing shapes: the fast path must decline and materialise. */
+    assert_eval_eq("Sort[{ToNDArray[{2., 0.}], {1., 9., 9.}}]",
+                   "{{2.0, 0.0}, {1.0, 9.0, 9.0}}", 0);
+    assert_eval_eq("Sort[{{2., 0.}, {1., 9., 9.}}]",
+                   "{{2.0, 0.0}, {1.0, 9.0, 9.0}}", 0);
+    /* An int64 buffer must order exactly above 2^53, where comparing through
+     * double would call two distinct values equal and break the total order
+     * that Sort and Union depend on. */
+    assert_eval_eq("Sort[{ToNDArray[{9007199254740993}], ToNDArray[{9007199254740992}]}]",
+                   "{{9007199254740992}, {9007199254740993}}", 0);
+}
+
+void test_hash_consumers(void) {
+    /* These are the reason expr_hash has to agree bit for bit. */
+    assert_eval_eq("Union[{ToNDArray[{1., 2.}], {1., 2.}}]", "{{1.0, 2.0}}", 0);
+    assert_eval_eq("DeleteDuplicates[{ToNDArray[{1., 2.}], {1., 2.}}]", "{{1.0, 2.0}}", 0);
+    assert_eval_eq("<|ToNDArray[{1., 2.}] -> \"x\"|>[{1., 2.}]", "\"x\"", 0);
+    assert_eval_eq("<|{1., 2.} -> \"x\"|>[ToNDArray[{1., 2.}]]", "\"x\"", 0);
+}
+
+/* ---------- Storage semantics ---------- */
+
+void test_value_semantics_on_assignment(void) {
+    /* Copy-on-write: a packed list assigned to a second symbol and then mutated
+     * through that symbol must not disturb the first. The buffer is shared by
+     * refcount until written, so a missing unshare here would be invisible
+     * until exactly this test. */
+    assert_eval_eq("Module[{p, q}, p = ToNDArray[{1., 2., 3.}]; q = p; "
+                   "q[[1]] = 9.; {p, q}]",
+                   "{{1.0, 2.0, 3.0}, {9.0, 2.0, 3.0}}", 0);
+}
+
+/* Writing into a packed list must give the same answer as writing into the
+ * plain one, INCLUDING each element's head. The buffer path coerces, which is
+ * right for a visible NDArray[...] but would be a silent answer change here:
+ * p[[1]] = 1 into a float64 buffer reads back as 1., where the ordinary list
+ * keeps the exact Integer. So a right-hand side that cannot be stored with its
+ * head intact unpacks first.
+ *
+ * Each case is asserted against the plain-list answer written out in full,
+ * because that is exactly what a user would compare against. */
+void test_part_assignment_preserves_heads(void) {
+    /* exact Integer into a float64 buffer */
+    assert_eval_eq("Module[{p}, p = ToNDArray[{1., 2., 3.}]; p[[1]] = 1; p]",
+                   "{1, 2.0, 3.0}", 0);
+    assert_eval_eq("Module[{p}, p = {1., 2., 3.}; p[[1]] = 1; p]",
+                   "{1, 2.0, 3.0}", 0);
+    /* Rational into a float64 buffer */
+    assert_eval_eq("Module[{p}, p = ToNDArray[{1., 2., 3.}]; p[[1]] = 1/3; p]",
+                   "{1/3, 2.0, 3.0}", 0);
+    /* Real into an int64 buffer */
+    assert_eval_eq("Module[{p}, p = ToNDArray[{1, 2, 3}]; p[[1]] = 2.5; p]",
+                   "{2.5, 2, 3}", 0);
+    /* BigInt into an int64 buffer */
+    assert_eval_eq("Module[{p}, p = ToNDArray[{1, 2, 3}]; p[[1]] = 2^70; p]",
+                   "{1180591620717411303424, 2, 3}", 0);
+    /* A symbolic value unpacks too. */
+    assert_eval_eq("Module[{p}, p = ToNDArray[{1., 2., 3.}]; p[[1]] = zz; p]",
+                   "{zz, 2.0, 3.0}", 0);
+    /* The representable case still takes the buffer path and stays packed. */
+    assert_eval_eq("Module[{p}, p = ToNDArray[{1., 2., 3.}]; p[[1]] = 9.; p]",
+                   "{9.0, 2.0, 3.0}", 0);
+    assert_eval_eq("Module[{p}, p = ToNDArray[{1., 2., 3.}]; p[[1]] = 9.; NDArrayQ[p]]",
+                   "True", 0);
+    /* A visible NDArray[...] keeps its coercing behaviour: the user asked for a
+     * machine buffer, and its dtype is part of the value. */
+    assert_eval_eq("Module[{p}, p = NDArray[{1., 2., 3.}]; p[[1]] = 1; p]",
+                   "NDArray[{1.0, 2.0, 3.0}]", 0);
+}
+
+void test_part_inherits_presentation(void) {
+    /* A sub-array carved out of a packed list is itself a packed LIST, not a
+     * visible NDArray -- this is the expr_new_ndarray_like propagation. If it
+     * regresses, transparency breaks at the first Part of a matrix. */
+    assert_eval_eq("ToNDArray[{{1., 2.}, {3., 4.}}][[2]]", "{3.0, 4.0}", 0);
+    assert_eval_eq("Head[ToNDArray[{{1., 2.}, {3., 4.}}][[2]]]", "List", 0);
+    assert_eval_eq("NDArrayQ[ToNDArray[{{1., 2.}, {3., 4.}}][[2]]]", "True", 0);
+    assert_eval_eq("ToNDArray[{{1., 2.}, {3., 4.}}][[2, 1]]", "3.0", 0);
+}
+
+void test_roundtrip_builtins(void) {
+    assert_eval_eq("FromNDArray[ToNDArray[{1., 2., 3.}]]", "{1.0, 2.0, 3.0}", 0);
+    assert_eval_eq("NDArrayQ[FromNDArray[ToNDArray[{1., 2., 3.}]]]", "False", 0);
+    assert_eval_eq("Head[FromNDArray[ToNDArray[{1., 2., 3.}]]]", "List", 0);
+    /* FromNDArray also undoes an explicit NDArray[...]. */
+    assert_eval_eq("FromNDArray[NDArray[{1., 2.}]]", "{1.0, 2.0}", 0);
+    /* And leaves anything else alone. */
+    assert_eval_eq("FromNDArray[{1, 2, x}]", "{1, 2, x}", 0);
+    assert_eval_eq("FromNDArray[7]", "7", 0);
+    /* ToNDArray of an already-packed list is a no-op, not a double wrap. */
+    assert_eval_eq("NDArrayQ[ToNDArray[ToNDArray[{1., 2., 3.}]]]", "True", 0);
+    assert_eval_eq("ToNDArray[ToNDArray[{1., 2., 3.}]]", "{1.0, 2.0, 3.0}", 0);
+    /* ToNDArray of a visible NDArray restates it as a List. */
+    assert_eval_eq("Head[ToNDArray[NDArray[{1., 2.}]]]", "List", 0);
+}
+
+void test_kill_switch(void) {
+    /* pack_set_enabled(false) must stop automatic packing without changing any
+     * answer -- that property is what the differential suite rests on. It does
+     * NOT disable ToNDArray, which is an explicit request. */
+    pack_set_enabled(false);
+    assert_eval_eq("NDArrayQ[ToNDArray[{1., 2., 3.}]]", "True", 0);
+    assert_eval_eq("ToNDArray[{1., 2., 3.}]", "{1.0, 2.0, 3.0}", 0);
+    pack_set_enabled(true);
+}
+
+/* ---------- The transparency gate ---------- */
+
+/* Heads that know nothing about packing must still be right. They get a
+ * materialised List from the gate in evaluate_step, so none of them needed a
+ * line of packing-specific code -- which is the whole point, and also why this
+ * has to be tested: if the gate regresses, every one of these silently returns
+ * a confident wrong answer (Count would say 0) rather than crashing. */
+void test_unaware_heads_are_correct(void) {
+    assert_eval_eq("Count[ToNDArray[{1., 2., 3., 4.}], _Real]", "4", 0);
+    assert_eval_eq("Cases[ToNDArray[{1., 2., 3., 4.}], x_ /; x > 2.]", "{3.0, 4.0}", 0);
+    assert_eval_eq("Position[ToNDArray[{1., 2., 3.}], 2.]", "{{2}}", 0);
+    assert_eval_eq("Level[ToNDArray[{1., 2.}], {1}]", "{1.0, 2.0}", 0);
+    assert_eval_eq("ToNDArray[{1., 2., 3.}] /. 2. -> 9.", "{1.0, 9.0, 3.0}", 0);
+    assert_eval_eq("LeafCount[ToNDArray[{1., 2., 3.}]]", "4", 0);
+    assert_eval_eq("Insert[ToNDArray[{1., 2.}], 9., 2]", "{1.0, 9.0, 2.0}", 0);
+    assert_eval_eq("Delete[ToNDArray[{1., 2., 3.}], 1]", "{2.0, 3.0}", 0);
+    assert_eval_eq("ReplacePart[ToNDArray[{1., 2.}], 1 -> 7.]", "{7.0, 2.0}", 0);
+    assert_eval_eq("Append[ToNDArray[{1., 2.}], 3.]", "{1.0, 2.0, 3.0}", 0);
+    assert_eval_eq("Prepend[ToNDArray[{1., 2.}], 0.]", "{0.0, 1.0, 2.0}", 0);
+    assert_eval_eq("ListQ[ToNDArray[{1., 2.}]]", "True", 0);
+    assert_eval_eq("VectorQ[ToNDArray[{1., 2.}]]", "True", 0);
+    assert_eval_eq("MatrixQ[ToNDArray[{{1., 2.}, {3., 4.}}]]", "True", 0);
+}
+
+void test_pattern_matching(void) {
+    /* The matcher cannot descend a buffer, so these all rely on the gate
+     * running BEFORE DownValues are tried. */
+    assert_eval_eq("MatchQ[ToNDArray[{1., 2.}], {__Real}]", "True", 0);
+    assert_eval_eq("MatchQ[ToNDArray[{1., 2.}], _List]", "True", 0);
+    assert_eval_eq("MatchQ[ToNDArray[{1., 2.}], {_, _}]", "True", 0);
+    assert_eval_eq("Module[{f}, f[x_List] := Length[x]; f[ToNDArray[{1., 2., 3.}]]]",
+                   "3", 0);
+    assert_eval_eq("Module[{g}, g[{a_, b_}] := a + b; g[ToNDArray[{1., 2.}]]]",
+                   "3.0", 0);
+}
+
+void test_no_nesting_invariant(void) {
+    /* List is deliberately NOT packed-aware, so a packed value placed inside an
+     * ordinary List is materialised as that List is built. This is what keeps
+     * the gate's top-level scan complete: a packed node can never hide inside a
+     * plain EXPR_FUNCTION tree where an unaware recursive walker would meet it.
+     * If this ever reports True, the gate has become unsound and needs to be
+     * deep (or the flag-bit design in the plan). */
+    assert_eval_eq("NDArrayQ[{ToNDArray[{1., 2.}], 5}[[1]]]", "False", 0);
+    assert_eval_eq("Head[{ToNDArray[{1., 2.}], 5}[[1]]]", "List", 0);
+    assert_eval_eq("{ToNDArray[{1., 2.}], 5}", "{{1.0, 2.0}, 5}", 0);
+
+    /* The hole this nearly shipped with. An unevaluated application like
+     * gg[xx][p] has a non-symbol head and no builtin to run, so it comes to
+     * REST -- and if the gate exempts it as though it were a pure function, a
+     * packed node stays nested inside a plain function node where the shallow
+     * scan at the enclosing level never looks. Every one of these returned a
+     * confident wrong answer while that exemption was too broad. */
+    assert_eval_eq("Count[gg[xx][ToNDArray[{1., 2., 3., 4.}]], _Real, 2]", "4", 0);
+    assert_eval_eq("Count[gg[xx][{1., 2., 3., 4.}], _Real, 2]", "4", 0);
+    assert_eval_eq("LeafCount[gg[xx][ToNDArray[{1., 2., 3., 4.}]]]", "7", 0);
+    assert_eval_eq("LeafCount[gg[xx][{1., 2., 3., 4.}]]", "7", 0);
+    assert_eval_eq("Cases[gg[xx][ToNDArray[{1., 2.}]], _Real, 2]", "{1.0, 2.0}", 0);
+    assert_eval_eq("gg[xx][ToNDArray[{1., 2.}]] /. 2. -> 9.", "gg[xx][{1.0, 9.0}]", 0);
+    assert_eval_eq("NDArrayQ[gg[xx][ToNDArray[{1., 2.}]][[1]]]", "False", 0);
+
+    /* A genuine pure Function IS exempt, and must stay so: substitution drops
+     * the value into the body where every head is gated on the next pass, so
+     * nothing comes to rest nested and the fast path is kept. */
+    assert_eval_eq("(# + 1. &)[ToNDArray[{1., 2.}]]", "{2.0, 3.0}", 0);
+    assert_eval_eq("NDArrayQ[(# + 1. &)[ToNDArray[{1., 2.}]]]", "True", 0);
+}
+
+/* Packed in, packed out. Every one of these took the materialise-reuse-repack
+ * detour at some point in its implementation, and each would silently hand back
+ * a VISIBLE NDArray[...] if the repack forgot to inherit the presentation. */
+void test_aware_heads_stay_packed(void) {
+    static const char* const SRCS[] = {
+        "Map[#^2 &, ToNDArray[{1., 2., 3., 4.}]]",
+        "Select[ToNDArray[{1., 2., 3., 4.}], # > 2. &]",
+        "Rest[ToNDArray[{1., 2., 3.}]]",
+        "Most[ToNDArray[{1., 2., 3.}]]",
+        "Join[ToNDArray[{1., 2.}], {3.}]",
+        "Partition[ToNDArray[{1., 2., 3., 4.}], 2]",
+        "RotateLeft[ToNDArray[{1., 2., 3.}], 1]",
+        "Differences[ToNDArray[{1., 2., 4.}]]",
+        "Riffle[ToNDArray[{1., 2.}], 0.]",
+        "TakeWhile[ToNDArray[{1., 2., 3.}], # < 3. &]",
+        "FoldList[Plus, 0., ToNDArray[{1., 2.}]]",
+        "Take[ToNDArray[{1., 2., 3.}], 2]",
+        "Drop[ToNDArray[{1., 2., 3.}], 1]",
+        "Accumulate[ToNDArray[{1., 2.}]]",
+        "Reverse[ToNDArray[{1., 2.}]]",
+        "Sort[ToNDArray[{2., 1.}]]",
+        "Transpose[ToNDArray[{{1., 2.}, {3., 4.}}]]",
+        "ToNDArray[{1., 2.}] + 1.",
+        "ToNDArray[{1., 2.}] * 2.",
+        "Sin[ToNDArray[{1., 2.}]]",
+    };
+    for (size_t i = 0; i < sizeof(SRCS) / sizeof(SRCS[0]); i++) {
+        Expr* r = ev(SRCS[i]);
+        if (!is_packed_list(r)) {
+            char* s = expr_to_string(r);
+            fprintf(stderr, "FAIL: %s\n  did not stay packed; got %s\n", SRCS[i], s);
+            free(s);
+        }
+        ASSERT(is_packed_list(r));
+        expr_free(r);
+    }
+
+    /* Clip USED to be on this list and had to come off: Clip clamps to its
+     * EXACT bounds, so a clipped element comes back as the Integer 1 where a
+     * float64 buffer can only hold 1.. It is correct but unpacked now -- the
+     * value is what matters, and the value has to be the plain list's. */
+    same_as_plain("Clip[ToNDArray[{1., 5.}], {2., 3.}]", "Clip[{1., 5.}, {2., 3.}]");
+    same_as_plain("Clip[ToNDArray[{1., 2., 3.}]]", "Clip[{1., 2., 3.}]");
+}
+
+/* The known, DELIBERATE cost of the no-nesting invariant.
+ *
+ * A head whose argument is a List *containing* arrays -- MapThread and
+ * Transpose over several vectors are the two that matter -- never sees packed
+ * elements at all: List is not packed-aware, so building {p, q} materialises
+ * both. The answers stay right, they are just computed the ordinary way.
+ *
+ * This is the price of keeping the transparency gate a top-level O(argc) scan
+ * instead of an O(tree) walk on every unaware head, and it is pinned here so
+ * that a future change to the invariant shows up as a test to update rather
+ * than as an unexplained performance cliff. Lifting it needs the transitive
+ * "contains a packed node" bit described in docs/design/packed_arrays.md. */
+void test_nesting_limitation_is_correct_but_unpacked(void) {
+    assert_eval_eq("MapThread[Plus, {ToNDArray[{1., 2.}], ToNDArray[{3., 4.}]}]",
+                   "{4.0, 6.0}", 0);
+    Expr* r = ev("MapThread[Plus, {ToNDArray[{1., 2.}], ToNDArray[{3., 4.}]}]");
+    ASSERT(!is_packed_list(r));     /* correct value, ordinary List storage */
+    expr_free(r);
+
+    /* MapIndexed is a separate, PRE-EXISTING gap, not a packing one: it never
+     * repacked, on either surface. MapIndexed[f, NDArray[{1.,2.}]] has always
+     * come back as a plain List while Map[f, NDArray[{1.,2.}]] comes back as an
+     * NDArray -- mi_ndarray_axis returns unevaluated f[part, {i}] nodes for the
+     * evaluator to reduce and never repacks the reduced result. Recorded here
+     * so the inconsistency is visible; fixing it belongs with MapIndexed, not
+     * with packing. */
+    assert_eval_eq("MapIndexed[#1 &, ToNDArray[{1., 2.}]]", "{1.0, 2.0}", 0);
+    Expr* mi = ev("MapIndexed[#1 &, ToNDArray[{1., 2.}]]");
+    ASSERT(!is_packed_list(mi));
+    expr_free(mi);
+
+    /* Whereas a DIRECT packed argument does keep its packing. */
+    assert_eval_eq("Join[ToNDArray[{1., 2.}], {3.}]", "{1.0, 2.0, 3.0}", 0);
+    Expr* j = ev("Join[ToNDArray[{1., 2.}], {3.}]");
+    ASSERT(is_packed_list(j));
+    expr_free(j);
+}
+
+/* The mirror image: a VISIBLE NDArray[...] must not become a List just because
+ * the same repack machinery now knows about presentations. */
+void test_visible_stays_visible(void) {
+    assert_eval_eq("Map[# + 1. &, NDArray[{1., 2.}]]", "NDArray[{2.0, 3.0}]", 0);
+    assert_eval_eq("Select[NDArray[{1., 2., 3.}], # > 1. &]", "NDArray[{2.0, 3.0}]", 0);
+    assert_eval_eq("Rest[NDArray[{1., 2., 3.}]]", "NDArray[{2.0, 3.0}]", 0);
+    assert_eval_eq("Sort[NDArray[{2., 1.}]]", "NDArray[{1.0, 2.0}]", 0);
+    /* A visible operand dominates a packed one in a binary op: the user asked
+     * for an NDArray on one side, so they get one back. */
+    assert_eval_eq("NDArray[{1., 2.}] + ToNDArray[{1., 2.}]", "NDArray[{2.0, 4.0}]", 0);
+    assert_eval_eq("ToNDArray[{1., 2.}] + ToNDArray[{1., 2.}]", "{2.0, 4.0}", 0);
+}
+
+
+/* ---------------------------------------------------------------- Phase 4:
+ * automatic packing at the producers.
+ *
+ * Everything above exercises packing through the explicit ToNDArray. These test
+ * that the producers pack on their own, that the 250-element threshold is not
+ * observable, and that the specific defects automatic packing exposed stay
+ * fixed. Each of the last group was a WRONG ANSWER reachable from code that
+ * never mentions an array. */
+
+void test_producers_pack(void) {
+    /* Direct construction: the buffer is written, the elements never built. */
+    assert_eval_eq("NDArrayQ[Range[1., 300.]]", "True", 0);
+    assert_eval_eq("NDArrayQ[Range[300]]", "True", 0);
+    assert_eval_eq("DataType[Range[300]]", "\"int64\"", 0);
+    assert_eval_eq("DataType[Range[1., 300.]]", "\"float64\"", 0);
+    assert_eval_eq("NDArrayQ[ConstantArray[1., 300]]", "True", 0);
+    assert_eval_eq("NDArrayQ[ConstantArray[7, {3, 100}]]", "True", 0);
+    assert_eval_eq("NDArrayQ[RandomReal[1, 300]]", "True", 0);
+    assert_eval_eq("NDArrayQ[Table[i^2, {i, 1., 300.}]]", "True", 0);
+    /* Offered after building. */
+    assert_eval_eq("NDArrayQ[Table[i^2, {i, 1, 300}]]", "True", 0);
+    assert_eval_eq("NDArrayQ[Table[i, {i, 300}]]", "True", 0);
+    assert_eval_eq("NDArrayQ[RandomInteger[10, 300]]", "True", 0);
+    assert_eval_eq("NDArrayQ[Sort[RandomReal[1, 300]]]", "True", 0);
+    assert_eval_eq("NDArrayQ[Select[Range[1., 300.], # > 0. &]]", "True", 0);
+    assert_eval_eq("NDArrayQ[NestList[# + 1. &, 0., 300]]", "True", 0);
+    assert_eval_eq("NDArrayQ[FoldList[Plus, 0., Range[1., 300.]]]", "True", 0);
+    /* A body whose result is an Integer must NOT take the float64 direct path:
+     * Table[1, {i, 1., 300.}] is a list of Integers, and the compiled result
+     * type is what gates it. */
+    assert_eval_eq("Head[Table[1, {i, 1., 300.}][[1]]]", "Integer", 0);
+    assert_eval_eq("DataType[Table[1, {i, 1., 300.}]]", "\"int64\"", 0);
+    /* Nested producers give a real rank-2 array, not a list of packed rows --
+     * the packer absorbs rows that are already buffers. */
+    assert_eval_eq("NDArrayQ[Table[i j, {i, 300}, {j, 300}]]", "True", 0);
+    assert_eval_eq("Dimensions[Table[i j, {i, 300}, {j, 300}]]", "{300, 300}", 0);
+    assert_eval_eq("Total[Table[i j, {i, 20}, {j, 20}], 2]", "44100", 0);
+    /* Nothing symbolic or mixed packs, at any size. */
+    assert_eval_eq("NDArrayQ[Table[x, {300}]]", "False", 0);
+    assert_eval_eq("NDArrayQ[Table[k/2, {k, 300}]]", "False", 0);
+    assert_eval_eq("NDArrayQ[Array[Sqrt[#] &, 300]]", "False", 0);
+}
+
+void test_threshold_is_not_observable(void) {
+    /* 249 is under the threshold and 250 over it, so the two run through
+     * different representations. Every observable except NDArrayQ must agree. */
+    assert_eval_eq("NDArrayQ[Range[249]]", "False", 0);
+    assert_eval_eq("NDArrayQ[Range[250]]", "True", 0);
+    assert_eval_eq("NDArrayQ[Range[251]]", "True", 0);
+    for (int n = 249; n <= 251; n++) {
+        char a[192], b[192];
+        static const char* const EXPRS[] = {
+            "Total[Range[%d]]", "Head[Range[%d][[1]]]", "Mean[Range[%d]]",
+            "Length[Range[%d]]", "Head[Range[%d]]", "Depth[Range[%d]]",
+            "Total[Range[1., %d.]]", "Count[Range[%d], _Integer]",
+            "MatchQ[Range[%d], {__Integer}]", "Last[Sort[Reverse[Range[%d]]]]",
+            "LeafCount[Range[%d]]", "Position[Range[%d], 7]",
+            "Range[%d] === Table[k, {k, %d}]",
+        };
+        for (size_t i = 0; i < sizeof(EXPRS) / sizeof(EXPRS[0]); i++) {
+            snprintf(a, sizeof(a), EXPRS[i], n, n);
+            /* The same expression with packing off is the reference. */
+            pack_set_enabled(false);
+            Expr* off = ev(a);
+            pack_set_enabled(true);
+            Expr* on = ev(a);
+            char* so = expr_to_string(off);
+            char* sn = expr_to_string(on);
+            if (strcmp(so, sn) != 0)
+                fprintf(stderr, "FAIL: threshold observable at n=%d\n  %s\n"
+                                "  packed: %s\n  plain:  %s\n", n, a, sn, so);
+            ASSERT(strcmp(so, sn) == 0);
+            free(so); free(sn);
+            expr_free(off); expr_free(on);
+        }
+        snprintf(b, sizeof(b), "Range[%d]", n);
+        (void)b;
+    }
+}
+
+void test_exact_int64_arithmetic_on_a_buffer(void) {
+    /* Every one of these arrives as an int64 buffer now that Range packs, and
+     * each head below is on the verified int64 list -- so these run ON the
+     * buffer rather than materialising. The answers must still be the exact ones.
+     * Before the exact paths, Total[Range[10^6]] was 1.55x SLOWER packed than
+     * plain, because the gate had to materialise first. */
+    assert_eval_eq("Total[Range[300]]", "45150", 0);
+    assert_eval_eq("Head[Total[Range[300]]]", "Integer", 0);
+    assert_eval_eq("Mean[Range[300]]", "301/2", 0);
+    assert_eval_eq("Median[Range[300]]", "301/2", 0);
+    assert_eval_eq("Median[Range[299]]", "150", 0);
+    assert_eval_eq("Max[Range[300]]", "300", 0);
+    assert_eval_eq("Min[Range[300]]", "1", 0);
+    assert_eval_eq("Last[Accumulate[Range[300]]]", "45150", 0);
+    assert_eval_eq("Take[Range[300] + 1, 2]", "{2, 3}", 0);
+    assert_eval_eq("Take[2 Range[300], 2]", "{2, 4}", 0);
+    assert_eval_eq("Take[Range[300]^2, 2]", "{1, 4}", 0);
+    assert_eval_eq("Take[Sort[-Range[300]], 2]", "{-300, -299}", 0);
+    /* Overflow must promote, never wrap. */
+    same_as_plain("Total[Range[1000000]^3]",
+                  "Total[Table[k, {k, 1000000}]^3]");
+    same_as_plain("Range[1000000] . Range[1000000]",
+                  "Table[k, {k, 1000000}] . Table[k, {k, 1000000}]");
+    /* A Real scalar widens; anything exact-but-not-integer goes to the List
+     * path, where the answer is Rationals, radicals or exact Complex. */
+    assert_eval_eq("Take[Range[300] 2.5, 2]", "{2.5, 5.0}", 0);
+    assert_eval_eq("Take[Range[300] 5/2, 2]", "{5/2, 5}", 0);
+    assert_eval_eq("Take[Range[300]^-1, 2]", "{1, 1/2}", 0);
+    assert_eval_eq("Take[Range[300]^(1/2), 2]", "{1, Sqrt[2]}", 0);
+    assert_eval_eq("Take[Range[300] + I, 2]", "{1 + I, 2 + I}", 0);
+    assert_eval_eq("Take[2^Range[300], 3]", "{2, 4, 8}", 0);
+    /* Sort in int64: past 2^53 two integers compare equal as doubles, so a
+     * double sort would reorder them and round every element. */
+    assert_eval_eq("Sort[ToNDArray[{9007199254740995, 9007199254740993, "
+                   "9007199254740994}]]",
+                   "{9007199254740993, 9007199254740994, 9007199254740995}", 0);
+    /* Deliberately degraded: the exact answer is a Rational or a radical. */
+    assert_eval_eq("Variance[Range[300]]", "7525", 0);
+    assert_eval_eq("Quartiles[Range[300]]", "{151/2, 301/2, 451/2}", 0);
+    assert_eval_eq("Take[Clip[Range[300], {3, 7}], 4]", "{3, 3, 3, 4}", 0);
+    /* Precision is Listable in Mathilda, so a list answers per element -- the
+     * point is that the packed list agrees with the plain one, not that it
+     * collapses to a scalar. Its buffer fast path DID collapse it, which is why
+     * Precision and Accuracy are on pack.c's NOT_AWARE list. */
+    assert_eval_eq("First[Precision[Range[300]]]", "Infinity", 0);
+    assert_eval_eq("Length[Precision[Range[300]]]", "300", 0);
+    same_as_plain("Precision[Range[1., 300.]]", "Precision[Table[1. k, {k, 300}]]");
+    same_as_plain("Accuracy[Range[1., 300.]]", "Accuracy[Table[1. k, {k, 300}]]");
+    /* Same class, found by the same sweep: a real-closed kernel keeps the
+     * float64 dtype, so Floor and friends wrote 1.0 where the list gives the
+     * exact Integer 1, and Clip clamped to a Real where the list uses its exact
+     * bound. */
+    assert_eval_eq("Take[Floor[Range[1., 300.]/4], 4]", "{0, 0, 0, 1}", 0);
+    assert_eval_eq("Take[Ceiling[Range[1., 300.]/4], 4]", "{1, 1, 1, 1}", 0);
+    assert_eval_eq("Take[Round[Range[1., 300.]/4], 4]", "{0, 0, 1, 1}", 0);
+    assert_eval_eq("Take[IntegerPart[Range[1., 300.]/4], 4]", "{0, 0, 0, 1}", 0);
+    assert_eval_eq("Take[Sign[Range[1., 300.]], 2]", "{1, 1}", 0);
+    assert_eval_eq("Take[Im[Range[1., 300.]], 2]", "{0, 0}", 0);
+    assert_eval_eq("Take[Clip[Range[1., 300.]], 3]", "{1.0, 1, 1}", 0);
+    /* An aware Listable head skips threading so its kernel can fire; when no
+     * kernel matches the arity, the post-gate materialises the buffer so the
+     * resting expression is the one the plain list gives. */
+    same_as_plain("Mod[ToNDArray[{1., 2., 3.}]]", "Mod[{1., 2., 3.}]");
+}
+
+void test_regressions_automatic_packing_exposed(void) {
+    /* (1) The evaluator's fixed-point test used to discard the gate's work.
+     * expr_eq is blind to packing by design, so a step whose only effect was
+     * materialising looked like no progress and the packed form was kept -- and
+     * a nested Table came back as a List of 300 packed rows, so Dimensions was
+     * {300} and Total[m, 2] a list instead of a number. */
+    assert_eval_eq("Dimensions[Table[i j, {i, 300}, {j, 300}]]", "{300, 300}", 0);
+    assert_eval_eq("Head[Table[i j, {i, 300}, {j, 300}][[1]]]", "List", 0);
+    assert_eval_eq("Total[Table[i j, {i, 300}, {j, 300}], 2]", "2038522500", 0);
+
+    /* (2) A Listable head with BOTH a plain list and a buffer threaded on the
+     * plain one only and broadcast the buffer, giving an outer product. */
+    assert_eval_eq("ToNDArray[{1., 2., 3.}] * {10, 20, 30}", "{10.0, 40.0, 90.0}", 0);
+    assert_eval_eq("ToNDArray[{1., 2., 3.}] + {10, 20, 30}", "{11.0, 22.0, 33.0}", 0);
+    assert_eval_eq("{10, 20, 30} * ToNDArray[{1., 2., 3.}]", "{10.0, 40.0, 90.0}", 0);
+    /* Both packed still runs on the buffers. */
+    assert_eval_eq("NDArrayQ[ToNDArray[Range[1., 300.]] * "
+                   "ToNDArray[Range[1., 300.]]]", "True", 0);
+
+    /* (3) A repack coerced elements the operation had introduced: Join and
+     * Riffle repacked at the SOURCE dtype, turning an appended exact 1 into 1.. */
+    same_as_plain("Take[Join[Range[1., 300.], {1}], -2]",
+                  "Take[Join[Table[1. k, {k, 300}], {1}], -2]");
+    assert_eval_eq("Take[Join[Range[1., 300.], {1}], -2]", "{300.0, 1}", 0);
+    assert_eval_eq("Take[Riffle[Range[1., 300.], 1], 4]", "{1.0, 1, 2.0, 1}", 0);
+    assert_eval_eq("Take[Map[If[# > 150., #, 1] &, Range[1., 300.]], 2]",
+                   "{1, 1}", 0);
+
+    /* (4) Range's exact branch was driven by the double shadow of its bounds,
+     * and one ulp at 10^18 is 128 -- so val += 1 never advanced and this ran to
+     * the 10^6-element safety cap. */
+    assert_eval_eq("Range[1000000000000000000, 1000000000000000003]",
+                   "{1000000000000000000, 1000000000000000001, "
+                   "1000000000000000002, 1000000000000000003}", 0);
+    assert_eval_eq("Length[Range[1000000000000000000, 1000000000000000003]]", "4", 0);
+
+    /* (5) An internal evaluate() bypasses the gate: Median builds Sort[data],
+     * evaluates it, then indexes the result's args -- and once Sort packed, that
+     * result was a buffer, so Median[Range[300]] came back UNEVALUATED. */
+    assert_eval_eq("Median[Table[k, {k, 300}]]", "301/2", 0);
+    assert_eval_eq("Quartiles[Table[k, {k, 300}]]", "{151/2, 301/2, 451/2}", 0);
+
+    /* (6) expr_to_latex had no arm for a buffer, so every packed result came
+     * back with an empty latex field over the NDJSON pipe. */
+    {
+        Expr* p = ev("Range[1., 300.]");
+        ASSERT(is_packed_list(p));
+        Expr* plain = ndarray_to_nested_list(p);
+        char* lp = expr_to_latex(p);
+        char* ll = expr_to_latex(plain);
+        ASSERT(lp != NULL && ll != NULL);
+        ASSERT(lp[0] != '\0');
+        if (strcmp(lp, ll) != 0)
+            fprintf(stderr, "FAIL: latex mismatch\n  packed: %.80s\n  plain:  %.80s\n",
+                    lp, ll);
+        ASSERT(strcmp(lp, ll) == 0);
+        free(lp); free(ll);
+        expr_free(plain); expr_free(p);
+    }
+}
+
+
+/* ------------------------------------------------------- $-flags and aliases
+ *
+ * $AutoCompilation and $AutoArrayPacking each switch off an optimisation that is
+ * invisible by construction, so the assertions below are about three things:
+ * that the flag actually reaches the C-side switch, that reading the symbol back
+ * never lies about which path is running, and that turning one off changes speed
+ * and nothing else. ToPackedArray / FromPackedArray are Mathematica's names for
+ * ToNDArray / FromNDArray and must be the same function, not a near-copy. */
+
+void test_dollar_autoarraypacking(void) {
+    assert_eval_eq("$AutoArrayPacking", "True", 0);
+    assert_eval_eq("NDArrayQ[Range[1., 300.]]", "True", 0);
+
+    /* Off: nothing packs, from any producer. */
+    assert_eval_eq("$AutoArrayPacking = False", "False", 0);
+    assert_eval_eq("$AutoArrayPacking", "False", 0);
+    assert_eval_eq("NDArrayQ[Range[1., 300.]]", "False", 0);
+    assert_eval_eq("NDArrayQ[Range[300]]", "False", 0);
+    assert_eval_eq("NDArrayQ[ConstantArray[1., 300]]", "False", 0);
+    assert_eval_eq("NDArrayQ[RandomReal[1, 300]]", "False", 0);
+    assert_eval_eq("NDArrayQ[Table[i^2, {i, 1., 300.}]]", "False", 0);
+    assert_eval_eq("NDArrayQ[Sort[RandomReal[1, 300]]]", "False", 0);
+    assert_eval_eq("NDArrayQ[NestList[# + 1. &, 0., 300]]", "False", 0);
+    /* But the answers are unchanged, and the explicit requests still work --
+     * ToNDArray is the user asking, not the system guessing. */
+    assert_eval_eq("Total[Range[300]]", "45150", 0);
+    assert_eval_eq("Mean[Range[300]]", "301/2", 0);
+    assert_eval_eq("NDArrayQ[ToNDArray[{1., 2., 3.}]]", "True", 0);
+    assert_eval_eq("NDArrayQ[ToPackedArray[{1., 2., 3.}]]", "True", 0);
+    assert_eval_eq("Head[NDArray[{1., 2.}]]", "NDArray", 0);
+
+    assert_eval_eq("$AutoArrayPacking = True", "True", 0);
+    assert_eval_eq("$AutoArrayPacking", "True", 0);
+    assert_eval_eq("NDArrayQ[Range[1., 300.]]", "True", 0);
+
+    /* Anything but True/False is refused, and the symbol is rolled back to the
+     * LIVE state rather than keeping a value that does not describe it. */
+    assert_eval_eq("$AutoArrayPacking = 7", "7", 0);          /* Set returns its rhs */
+    assert_eval_eq("$AutoArrayPacking", "True", 0);           /* not 7 */
+    assert_eval_eq("NDArrayQ[Range[1., 300.]]", "True", 0);   /* still on */
+    assert_eval_eq("$AutoArrayPacking = \"no\"", "\"no\"", 0);
+    assert_eval_eq("$AutoArrayPacking", "True", 0);
+}
+
+void test_dollar_autocompilation(void) {
+    assert_eval_eq("$AutoCompilation", "True", 0);
+
+    /* The contract is that the compiled and interpreted paths agree, so the
+     * assertion is a differential: the same expressions with the flag off must
+     * give exactly what they give with it on. Covers the autocompile adapter
+     * (Table over an inexact iterator) and numloop (Map, Nest, Do bodies). */
+    static const char* const EXPRS[] = {
+        "Take[Table[i^2, {i, 1., 20.}], 4]",
+        "Take[Table[Sin[t] Exp[-t], {t, 0., 2., 0.1}], 3]",
+        "Take[Table[1, {i, 1., 20.}], 3]",
+        "Head[Table[1, {i, 1., 20.}][[1]]]",
+        "Take[Map[#^2 &, {1., 2., 3., 4.}], 2]",
+        "Nest[3.5 # (1 - #) &, 0.31, 40]",
+        "Take[NestList[# + 1. &, 0., 20], 3]",
+        "Fold[Plus, 0., Table[1. k, {k, 20}]]",
+        "q1 = 1.; Do[q1 = 2. q1, {5}]; q1",
+        "Total[Table[i^2, {i, 1., 300.}]]",
+        "Take[Table[i j, {i, 1., 5.}, {j, 1., 5.}], 2]",
+    };
+    for (size_t i = 0; i < sizeof(EXPRS) / sizeof(EXPRS[0]); i++) {
+        Expr* pr = parse_expression("$AutoCompilation = True");
+        expr_free(evaluate(pr)); expr_free(pr);
+        Expr* on = ev(EXPRS[i]);
+        pr = parse_expression("$AutoCompilation = False");
+        expr_free(evaluate(pr)); expr_free(pr);
+        Expr* off = ev(EXPRS[i]);
+        char* so = expr_to_string(on);
+        char* sf = expr_to_string(off);
+        if (strcmp(so, sf) != 0)
+            fprintf(stderr, "FAIL: $AutoCompilation changed an answer\n  %s\n"
+                            "  True:  %s\n  False: %s\n", EXPRS[i], so, sf);
+        ASSERT(strcmp(so, sf) == 0);
+        free(so); free(sf);
+        expr_free(on); expr_free(off);
+    }
+    assert_eval_eq("$AutoCompilation = False", "False", 0);
+    assert_eval_eq("$AutoCompilation", "False", 0);
+    /* An explicitly built CompiledFunction is NOT affected -- the user asked for
+     * that one. Only the compilation nobody asked for is switched off. */
+    assert_eval_eq("cf = Compile[{{u, _Real}}, u^2 + 1.]; cf[3.]", "10.0", 0);
+    /* (Head[] of a CompiledFunction object comes back unevaluated -- a
+     * pre-existing gap in builtin_head for EXPR_COMPILED, unrelated to these
+     * flags, so the check above is that the object still WORKS.) */
+    assert_eval_eq("$AutoCompilation = True", "True", 0);
+    assert_eval_eq("$AutoCompilation", "True", 0);
+
+    assert_eval_eq("$AutoCompilation = 0", "0", 0);
+    assert_eval_eq("$AutoCompilation", "True", 0);
+}
+
+void test_flags_are_independent(void) {
+    /* The two switches must not be wired to each other: Table's direct packed
+     * path needs BOTH (it is gated on the compiled result type), so a bug that
+     * conflated them would still look right on that one producer. Range needs
+     * only packing, and Nest needs only compilation. */
+    assert_eval_eq("$AutoCompilation = False; $AutoArrayPacking = True; "
+                   "NDArrayQ[Range[1., 300.]]", "True", 0);
+    assert_eval_eq("$AutoCompilation = True; $AutoArrayPacking = False; "
+                   "NDArrayQ[Range[1., 300.]]", "False", 0);
+    /* Both off, then both on: the answers never move. */
+    assert_eval_eq("$AutoCompilation = False; $AutoArrayPacking = False; "
+                   "Total[Table[i^2, {i, 1., 300.}]]", "9.04505e+06", 0);
+    assert_eval_eq("$AutoCompilation = True; $AutoArrayPacking = True; "
+                   "Total[Table[i^2, {i, 1., 300.}]]", "9.04505e+06", 0);
+    assert_eval_eq("{$AutoCompilation, $AutoArrayPacking}", "{True, True}", 0);
+}
+
+void test_sysflag_hook_touches_only_the_flags(void) {
+    /* The assignment hook is reached by EVERY $-prefixed symbol, and it builds a
+     * probe value -- evaluating the right-hand side when the assignment is
+     * delayed -- so that it can validate the flag. That must happen for the two
+     * flags and for nothing else: the REPL hooks ($Pre, $PreRead, $Post,
+     * $PrePrint, $Epilog) live in the same namespace with deliberately HELD
+     * right-hand sides, and evaluating one of those probes broke them
+     * (repl_hooks_tests caught it). The name is now checked before any probe is
+     * built.
+     *
+     * The observable: a delayed assignment to a $-symbol that is not a flag must
+     * not evaluate its right-hand side even once. A counter in the RHS makes that
+     * visible. */
+    assert_eval_eq("hookCount = 0; $NotAFlagXyz := (hookCount = hookCount + 1; 5); "
+                   "hookCount", "0", 0);
+    /* Reading it once evaluates it once, not twice. */
+    assert_eval_eq("$NotAFlagXyz", "5", 0);
+    assert_eval_eq("hookCount", "1", 0);
+    /* And the flags themselves still validate through the same hook. */
+    assert_eval_eq("$AutoArrayPacking = False; $AutoArrayPacking", "False", 0);
+    assert_eval_eq("$AutoArrayPacking = True; $AutoArrayPacking", "True", 0);
+    /* A DELAYED assignment to a flag is validated from its evaluated value, so
+     * the symbol still describes the live state rather than holding a rule. */
+    assert_eval_eq("$AutoArrayPacking := False; NDArrayQ[Range[1., 300.]]", "False", 0);
+    assert_eval_eq("$AutoArrayPacking = True; NDArrayQ[Range[1., 300.]]", "True", 0);
+}
+
+void test_packedarray_aliases(void) {
+    /* Same function under Mathematica's name, so every property has to match --
+     * including the ones an approximate re-implementation would get wrong. */
+    assert_eval_eq("ToPackedArray[{1., 2., 3.}] === ToNDArray[{1., 2., 3.}]", "True", 0);
+    assert_eval_eq("NDArrayQ[ToPackedArray[{1., 2., 3.}]]", "True", 0);
+    assert_eval_eq("Head[ToPackedArray[{1., 2., 3.}]]", "List", 0);
+    assert_eval_eq("ToPackedArray[{1., 2., 3.}]", "{1.0, 2.0, 3.0}", 0);
+    assert_eval_eq("DataType[ToPackedArray[{1, 2, 3}]]", "\"int64\"", 0);
+    assert_eval_eq("DataType[ToPackedArray[{1., 2.}, DataType -> \"float32\"]]",
+                   "\"float32\"", 0);
+    assert_eval_eq("Dimensions[ToPackedArray[{{1., 2.}, {3., 4.}}]]", "{2, 2}", 0);
+    /* Declines identically, rather than throwing or half-packing. */
+    assert_eval_eq("ToPackedArray[{1, 2.5}]", "{1, 2.5}", 0);
+    assert_eval_eq("NDArrayQ[ToPackedArray[{1, 2.5}]]", "False", 0);
+    assert_eval_eq("NDArrayQ[ToPackedArray[{1, 2, x}]]", "False", 0);
+    assert_eval_eq("NDArrayQ[ToPackedArray[{}]]", "False", 0);
+    /* Idempotent, and inverse of the other alias in both directions. */
+    assert_eval_eq("NDArrayQ[ToPackedArray[ToPackedArray[{1., 2., 3.}]]]", "True", 0);
+    assert_eval_eq("FromPackedArray[ToPackedArray[{1., 2., 3.}]]", "{1.0, 2.0, 3.0}", 0);
+    assert_eval_eq("NDArrayQ[FromPackedArray[ToPackedArray[{1., 2., 3.}]]]", "False", 0);
+    assert_eval_eq("FromNDArray[ToPackedArray[{1., 2.}]] === "
+                   "FromPackedArray[ToNDArray[{1., 2.}]]", "True", 0);
+    /* FromPackedArray also un-packs the VISIBLE head, like FromNDArray. */
+    assert_eval_eq("FromPackedArray[NDArray[{1., 2.}]]", "{1.0, 2.0}", 0);
+    assert_eval_eq("Head[FromPackedArray[NDArray[{1., 2.}]]]", "List", 0);
+    /* Anything that is not an array at all comes back untouched. */
+    assert_eval_eq("FromPackedArray[{1, 2, x}]", "{1, 2, x}", 0);
+    assert_eval_eq("FromPackedArray[7]", "7", 0);
+    assert_eval_eq("ToPackedArray[7]", "7", 0);
+    /* Attributes and docstrings, which the project requires of every builtin. */
+    assert_eval_eq("Attributes[ToPackedArray]", "{Protected}", 0);
+    assert_eval_eq("Attributes[FromPackedArray]", "{Protected}", 0);
+    ASSERT(symtab_get_docstring("ToPackedArray") != NULL);
+    ASSERT(symtab_get_docstring("FromPackedArray") != NULL);
+    ASSERT(symtab_get_docstring("$AutoCompilation") != NULL);
+    ASSERT(symtab_get_docstring("$AutoArrayPacking") != NULL);
+    /* The whole packed surface works through the alias, not just its identity. */
+    assert_eval_eq("Total[ToPackedArray[{1, 2, 3}]]", "6", 0);
+    assert_eval_eq("Head[Total[ToPackedArray[{1, 2, 3}]]]", "Integer", 0);
+    assert_eval_eq("Take[ToPackedArray[Table[1. k, {k, 300}]], 2]", "{1.0, 2.0}", 0);
+}
+
+
+/* --------------------------------------------------------- the Compile[] boundary
+ *
+ * A CompiledFunction must answer with the head the INTERPRETER would give for the
+ * same input, and automatic packing added a third possible input where there were
+ * two. Before this, a packed argument had its buffer materialised by the gate
+ * before compiled_function_apply ever saw it, so f[Range[1., 200000.]] measured
+ * ~75x slower than f[NDArray[Range[1., 200000.]]] -- values differing only in
+ * `present_as`. The assertions below are about the head rules and the exactness
+ * rules; the speed is in the changelog. */
+
+void test_compile_boundary_presentation(void) {
+    assert_eval_eq("fr = Compile[{{u, _Real, 1}}, u^2 + 1.]; 0", "0", 0);
+    /* Packed in -> packed out, at any size: a DERIVED array inherits its source's
+     * presentation, exactly as Sin[packed] does, with no threshold re-applied. */
+    assert_eval_eq("NDArrayQ[fr[ToNDArray[{1., 2., 3.}]]]", "True", 0);
+    assert_eval_eq("Head[fr[ToNDArray[{1., 2., 3.}]]]", "List", 0);
+    assert_eval_eq("fr[ToNDArray[{1., 2., 3.}]]", "{2.0, 5.0, 10.0}", 0);
+    assert_eval_eq("NDArrayQ[fr[Range[1., 300.]]]", "True", 0);
+    /* Plain List in -> plain List out, because that is what the interpreter's own
+     * threading gives. */
+    assert_eval_eq("NDArrayQ[fr[{1., 2., 3.}]]", "False", 0);
+    assert_eval_eq("fr[{1., 2., 3.}]", "{2.0, 5.0, 10.0}", 0);
+    /* The visible head is untouched, and dominates in a mixed call. */
+    assert_eval_eq("fr[NDArray[{1., 2., 3.}]]", "NDArray[{2.0, 5.0, 10.0}]", 0);
+    assert_eval_eq("Head[fr[NDArray[{1., 2., 3.}]]]", "NDArray", 0);
+
+    /* A BUILT result has no presentation to inherit, so it follows the PRODUCER
+     * rule -- the threshold and $AutoArrayPacking, exactly like ConstantArray
+     * itself. Below the threshold that still yields a plain List, which is why
+     * the rule is pack_offer and not a flag flip. */
+    assert_eval_eq("fb = Compile[{{n, _Integer}}, ConstantArray[1., n]]; "
+                   "{NDArrayQ[fb[300]], Length[fb[300]]}", "{True, 300}", 0);
+    assert_eval_eq("{NDArrayQ[fb[5]], fb[5]}",
+                   "{False, {1.0, 1.0, 1.0, 1.0, 1.0}}", 0);
+
+    /* A COMPLEX result never wears the packed presentation. A zero imaginary part
+     * materialises as Complex[re, 0.], which the evaluator never produces (it
+     * folds to a Real), so a packed complex list would not round-trip: the same
+     * call printed {1. + 0.*I, 4. + 0.*I} against the plain List's {1., 4.}. */
+    assert_eval_eq("fc = Compile[{{u, _Complex, 1}}, u^2]; fc[ToNDArray[{1., 2.}]]",
+                   "{1.0, 4.0}", 0);
+    assert_eval_eq("NDArrayQ[fc[ToNDArray[{1., 2.}]]]", "False", 0);
+    same_as_plain("fc[ToNDArray[{1., 2., 3.}]]", "fc[{1., 2., 3.}]");
+}
+
+void test_compile_boundary_exactness(void) {
+    /* An int64 buffer reaching an _Integer parameter stays exact, elements and
+     * heads. This combination could not arise while only the compiler made int64
+     * buffers; Range[n] makes them now. */
+    assert_eval_eq("fi = Compile[{{u, _Integer, 1}}, u * 2 + 1]; "
+                   "Take[fi[Range[300]], 3]", "{3, 5, 7}", 0);
+    assert_eval_eq("Head[fi[Range[300]][[1]]]", "Integer", 0);
+    same_as_plain("Take[fi[Range[300]], 4]", "Take[fi[Table[k, {k, 300}]], 4]");
+    /* Exact past 2^53, where a double round trip would lose the low bits. */
+    assert_eval_eq("fi[ToNDArray[{9007199254740993, 9007199254740995}]]",
+                   "{18014398509481987, 18014398509481991}", 0);
+    /* Overflow inside a compiled body abandons and the interpreter promotes,
+     * the same contract the scalar path has. */
+    same_as_plain("Compile[{{u, _Integer, 1}}, u^3][Range[3000000, 3000002]]",
+                  "Range[3000000, 3000002]^3");
+
+    /* An int64 buffer at a _Real parameter is CAST in one O(n) pass rather than
+     * declining the whole call to the interpreter (which is what the VM's own
+     * dtype guard did, at ~31x the cost). */
+    assert_eval_eq("Take[fr[Range[300]], 3]", "{2.0, 5.0, 10.0}", 0);
+    same_as_plain("Take[fr[Range[300]], 3]", "Take[fr[Table[1. k, {k, 300}]], 3]");
+    /* But the cast DECLINES rather than rounds when there is no exact double, so
+     * the interpreter gives the answer instead. */
+    same_as_plain("fr[ToNDArray[{9007199254740993, 9007199254740995}]]",
+                  "fr[{9007199254740993, 9007199254740995}]");
+    /* Narrowing a float buffer into an _Integer slot is a value change, not a
+     * representation change: declined, and the interpreter answers. */
+    same_as_plain("fi[ToNDArray[{1., 2., 3.}]]", "fi[{1., 2., 3.}]");
+}
+
+void test_compile_boundary_listable(void) {
+    /* RuntimeAttributes -> Listable threads by RANK and repacks by re-sniffing the
+     * dtype. Forcing float64 (which the repack used to do) turned an
+     * integer-valued body over a packed integer list into a list of Reals. */
+    assert_eval_eq("fL = Compile[{{x, _Real}}, x^2 + 1., "
+                   "RuntimeAttributes -> {Listable}]; "
+                   "NDArrayQ[fL[Range[1., 300.]]]", "True", 0);
+    assert_eval_eq("Take[fL[Range[1., 300.]], 3]", "{2.0, 5.0, 10.0}", 0);
+    assert_eval_eq("fLi = Compile[{{x, _Integer}}, x + 1, "
+                   "RuntimeAttributes -> {Listable}]; "
+                   "Take[fLi[Range[300]], 3]", "{2, 3, 4}", 0);
+    assert_eval_eq("Head[fLi[Range[300]][[1]]]", "Integer", 0);
+    /* Plain List and visible NDArray keep their own answers. */
+    assert_eval_eq("fL[{1., 2.}]", "{2.0, 5.0}", 0);
+    assert_eval_eq("fL[NDArray[{1., 2.}]]", "NDArray[{2.0, 5.0}]", 0);
+    /* Rank-2 threading over a packed matrix. */
+    assert_eval_eq("Dimensions[fL[Table[1. i j, {i, 20}, {j, 20}]]]", "{20, 20}", 0);
+    same_as_plain("fL[ToNDArray[{{1., 2.}, {3., 4.}}]]", "fL[{{1., 2.}, {3., 4.}}]");
+}
+
+void test_compile_integer_array_scalar_exactness(void) {
+    /* Found while wiring the boundary, and older than packing: a scalar operand of
+     * an array op could only be Real or Complex, so the literal in
+     * Compile[{{u, _Integer, 1}}, u * 2] was loaded into a REAL register and boxed
+     * as a Real -- and the interpreter's elementwise path then correctly widened
+     * the int64 buffer, answering {2., 4., 6.} where Range[3] * 2 is {2, 4, 6}.
+     * A wrong COMPILED answer, which the engine may not produce. Fixed with an
+     * AK_INT operand kind. */
+    assert_eval_eq("Compile[{{u, _Integer, 1}}, u * 2][{1, 2, 3}]", "{2, 4, 6}", 0);
+    assert_eval_eq("Compile[{{u, _Integer, 1}}, u + 1][{1, 2, 3}]", "{2, 3, 4}", 0);
+    assert_eval_eq("Compile[{{u, _Integer, 1}}, u * 2 + 3][{1, 2, 3}]", "{5, 7, 9}", 0);
+    same_as_plain("Compile[{{u, _Integer, 1}}, u * 2][{1, 2, 3}]", "{1, 2, 3} * 2");
+    /* A Part assignment writes an exact right-hand side into an int64 buffer for
+     * the same reason. */
+    assert_eval_eq("Compile[{{u, _Integer, 1}}, Module[{v = u}, v[[1]] = 5; v]]"
+                   "[{1, 2, 3}]", "{5, 2, 3}", 0);
+    /* A Real element type still makes the whole operation inexact, which is the
+     * interpreter's answer too. */
+    assert_eval_eq("Compile[{{u, _Real, 1}}, u * 2][{1., 2., 3.}]", "{2.0, 4.0, 6.0}", 0);
+    assert_eval_eq("Compile[{{u, _Integer, 1}}, u * 2.][{1, 2, 3}]", "{2.0, 4.0, 6.0}", 0);
+}
+
+void test_map_over_a_packed_list_stays_compiled(void) {
+    /* Map over a packed list must reach numloop's COMPILED loop, not the ndarray
+     * leading-axis walk that applies f through the interpreter per element.
+     * Measured at 10^6: Map[#^2 &, x] was 424 ms packed against 222 ms plain and
+     * Map[Sin[#] Exp[-#] &, x] 1120 ms against 180 ms -- automatic packing made
+     * the most-used functional head up to 6x SLOWER until numloop_map learned to
+     * read a buffer. */
+    assert_eval_eq("NDArrayQ[Map[#^2 &, ToNDArray[{1., 2., 3.}]]]", "True", 0);
+    assert_eval_eq("Map[#^2 &, ToNDArray[{1., 2., 3.}]]", "{1.0, 4.0, 9.0}", 0);
+    /* Derived, so packed at ANY size -- four elements are under the producer
+     * threshold and must not be materialised by it. */
+    assert_eval_eq("NDArrayQ[Map[#^2 &, ToNDArray[{1., 2., 3., 4.}]]]", "True", 0);
+    same_as_plain("Map[#^2 &, ToNDArray[{1., 2., 3.}]]", "Map[#^2 &, {1., 2., 3.}]");
+    same_as_plain("Take[Map[Sin[#] Exp[-#] &, Range[1., 300.]], 3]",
+                  "Take[Map[Sin[#] Exp[-#] &, Table[1. k, {k, 300}]], 3]");
+    /* An exact int64 source: the dtype answers "every element is exact" in O(1),
+     * and the all-inexact rule then needs the body to carry a Real -- so
+     * Map[# &, packedInts] passes them through exactly, as the plain List does. */
+    same_as_plain("Take[Map[# &, Range[300]], 3]", "Take[Map[# &, Table[k, {k, 300}]], 3]");
+    same_as_plain("Take[Map[#^2. &, Range[300]], 3]",
+                  "Take[Map[#^2. &, Table[k, {k, 300}]], 3]");
+    /* A non-numeric body still falls through to the general mapper. */
+    same_as_plain("Take[Map[f, Range[1., 300.]], 2]",
+                  "Take[Map[f, Table[1. k, {k, 300}]], 2]");
+    /* Rank 2 maps over ROWS, which numloop's scalar body cannot do -- it must
+     * decline and leave that to the ndarray path. */
+    same_as_plain("Map[Total, ToNDArray[{{1., 2.}, {3., 4.}}]]",
+                  "Map[Total, {{1., 2.}, {3., 4.}}]");
+    /* Scan over a packed list answers Null and still stops where the interpreter
+     * stops. */
+    assert_eval_eq("Scan[#^2 &, ToNDArray[{1., 2., 3.}]]", "Null", 0);
+}
+
+int main(void) {
+    symtab_init();
+    core_init();
+
+    TEST(test_invisible_across_ranks_and_dtypes);
+    TEST(test_presents_as_list);
+    TEST(test_visible_ndarray_unchanged);
+    TEST(test_exactness_preserved);
+    TEST(test_int64_matches_plain_integer_lists);
+    TEST(test_declines_what_it_cannot_represent);
+    TEST(test_ordering_matches_plain_lists);
+    TEST(test_hash_consumers);
+    TEST(test_value_semantics_on_assignment);
+    TEST(test_part_assignment_preserves_heads);
+    TEST(test_part_inherits_presentation);
+    TEST(test_roundtrip_builtins);
+    TEST(test_unaware_heads_are_correct);
+    TEST(test_pattern_matching);
+    TEST(test_no_nesting_invariant);
+    TEST(test_aware_heads_stay_packed);
+    TEST(test_nesting_limitation_is_correct_but_unpacked);
+    TEST(test_visible_stays_visible);
+    TEST(test_kill_switch);
+    TEST(test_producers_pack);
+    TEST(test_threshold_is_not_observable);
+    TEST(test_exact_int64_arithmetic_on_a_buffer);
+    TEST(test_regressions_automatic_packing_exposed);
+    TEST(test_dollar_autoarraypacking);
+    TEST(test_dollar_autocompilation);
+    TEST(test_flags_are_independent);
+    TEST(test_sysflag_hook_touches_only_the_flags);
+    TEST(test_packedarray_aliases);
+    TEST(test_compile_boundary_presentation);
+    TEST(test_compile_boundary_exactness);
+    TEST(test_compile_boundary_listable);
+    TEST(test_compile_integer_array_scalar_exactness);
+    TEST(test_map_over_a_packed_list_stays_compiled);
+
+    printf("All packed-list tests passed.\n");
+    return 0;
+}

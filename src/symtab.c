@@ -170,11 +170,37 @@ const char* symtab_get_docstring(const char* symbol_name) {
 }
 
 void symtab_set_ndarray_unary_kernel(const char* symbol_name, const void* kernel) {
-    symtab_get_def(symbol_name)->ndarray_unary_kernel = kernel;
+    SymbolDef* def = symtab_get_def(symbol_name);
+    def->ndarray_unary_kernel = kernel;
+    /* A registered kernel reads the buffer directly and degrades to the List
+     * path when it declines, so the head is packed-aware by construction. */
+    def->packed_aware = 1;
 }
 
 void symtab_set_ndarray_binary_kernel(const char* symbol_name, const void* kernel) {
-    symtab_get_def(symbol_name)->ndarray_binary_kernel = kernel;
+    SymbolDef* def = symtab_get_def(symbol_name);
+    def->ndarray_binary_kernel = kernel;
+    def->packed_aware = 1;
+}
+
+void symtab_set_packed_aware(const char* symbol_name) {
+    symtab_get_def(symbol_name)->packed_aware = 1;
+}
+
+/* Undo packed_aware, for a head that acquired it implicitly from a kernel
+ * registration but whose kernel answers with different element HEADS than the
+ * ordinary List does (Floor of a Real is an Integer; Clip clamps to its exact
+ * bounds). See the NOT_AWARE list in src/pack.c for why each one is there. */
+void symtab_clear_packed_aware(const char* symbol_name) {
+    SymbolDef* def = symtab_get_def(symbol_name);
+    def->packed_aware = 0;
+    def->packed_int64_ok = 0;
+}
+
+void symtab_set_packed_int64_ok(const char* symbol_name) {
+    SymbolDef* def = symtab_get_def(symbol_name);
+    def->packed_aware = 1;
+    def->packed_int64_ok = 1;
 }
 
 void symtab_set_ndarray_nary_kernel(const char* symbol_name, const void* kernel) {

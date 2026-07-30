@@ -29,6 +29,19 @@
 
 typedef struct AutoCompiled AutoCompiled;
 
+/* Master switch, mirroring the user-visible $AutoCompilation. Defaults on; off
+ * when the environment sets MATHILDA_NO_AUTOCOMPILE (read once, lazily) or the
+ * user assigns $AutoCompilation = False.
+ *
+ * Auto-compilation is invisible by construction -- Plot, Table, NIntegrate and
+ * friends compile behind the caller's back purely as an optimisation, and the
+ * compiled answer is contracted to agree with the interpreter's. So the switch
+ * is not there to change behaviour but to make the two paths comparable: a
+ * differential run flips it and diffs, and a user who suspects the compiled path
+ * has it wrong can turn it off and confirm in one line. */
+bool autocompile_enabled(void);
+void autocompile_set_enabled(bool on);
+
 /* Compile `body` (borrowed) as a function of `nvars` variable symbols (borrowed
  * EXPR_SYMBOL nodes — e.g. the plot / integration / iteration variable).  All
  * inputs are typed CT_REAL.  Returns NULL if the body does not compile or any
@@ -48,6 +61,17 @@ AutoCompiled* autocompile_new(const Expr* body, const Expr* const* vars, size_t 
 AutoCompiled* autocompile_new_z(const Expr* body, const Expr* const* vars, size_t nvars);
 
 size_t autocompiled_num_vars(const AutoCompiled* ac);
+
+/* True when the program has an all-real SIGNATURE and a CT_REAL result type, so
+ * every value it produces is a machine real and autocompiled_eval_boxed can only
+ * ever return expr_new_real(...) or NULL.
+ *
+ * The gate a collection builtin needs before filling a float64 buffer directly:
+ * without it a body like If[p, 1, 2] or a complex-valued one would have its
+ * element HEADS changed by the buffer (Integer or Complex becoming Real), which
+ * is user-visible. A `false` result still means "fall back for this element",
+ * so a producer using this must handle abandonment, not assume success. */
+bool autocompiled_result_is_real(const AutoCompiled* ac);
 
 /* Evaluate at real inputs xs[nvars].  Writes a real *out and returns true, or
  * returns false when the result is non-finite OR not real-valued (a complex

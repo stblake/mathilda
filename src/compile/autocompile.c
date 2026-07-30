@@ -46,9 +46,25 @@ struct AutoCompiled {
     CompileType      arg_type;      /* CT_REAL, or CT_COMPLEX for an _z program */
 };
 
+/* -1 = not yet read from the environment. Same shape as src/numloop.c's and
+ * src/pack.c's switches. */
+static int g_autocompile_enabled = -1;
+
+bool autocompile_enabled(void) {
+    if (g_autocompile_enabled < 0)
+        g_autocompile_enabled = getenv("MATHILDA_NO_AUTOCOMPILE") ? 0 : 1;
+    return g_autocompile_enabled != 0;
+}
+
+void autocompile_set_enabled(bool on) { g_autocompile_enabled = on ? 1 : 0; }
+
 static AutoCompiled* ac_make(const Expr* body, const Expr* const* vars, size_t nvars,
                              CompileType argt) {
     if (!body || nvars == 0) return NULL;
+    /* Off: every caller sees the same NULL it sees for a body outside the
+     * compilable subset, so each keeps its interpreter path with no other
+     * change. */
+    if (!autocompile_enabled()) return NULL;
     const char** names = malloc(nvars * sizeof(*names));
     CompileType* types = malloc(nvars * sizeof(*types));
     if (!names || !types) { free(names); free(types); return NULL; }
@@ -100,6 +116,10 @@ AutoCompiled* autocompile_new_z(const Expr* body, const Expr* const* vars, size_
 }
 
 size_t autocompiled_num_vars(const AutoCompiled* ac) { return ac->nvars; }
+
+bool autocompiled_result_is_real(const AutoCompiled* ac) {
+    return ac && ac->real_result;
+}
 
 bool autocompiled_eval_real(const AutoCompiled* ac, const double* xs, double* out) {
     if (ac->real_result)

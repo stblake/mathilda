@@ -30,6 +30,39 @@ Expr* ndstruct_take(Expr* res);       /* Take[a, spec] */
 Expr* ndstruct_drop(Expr* res);       /* Drop[a, spec] */
 Expr* ndstruct_clip(Expr* res);       /* Clip[a] / Clip[a, {min,max}] */
 
+/* RotateLeft[a, n] / RotateRight[a, n], with n an Integer or a List of Integers
+ * (one per leading axis). `left` selects the direction.
+ *
+ * Returns NULL -- not a degrade call -- when the spec is outside the fast domain
+ * (a non-Integer entry, or more entries than the array has axes), so the caller
+ * keeps its existing ndstruct_delist_repack fallback and the List path continues
+ * to define those cases.
+ *
+ * A rotation permutes contiguous blocks, so this is memcpy work, not an element
+ * walk. It matters because rotation is how array-style code names a shifted
+ * neighbour: going through delist_repack cost 42.6 ms on a 512x512 float64
+ * matrix (85x an elementwise add of the same array) and dominated every stencil
+ * built out of it. */
+Expr* ndstruct_rotate(Expr* res, bool left);
+
+/* Join / Partition / Differences / Riffle / PadLeft / PadRight on the buffer.
+ *
+ * Same NULL-to-decline contract as ndstruct_rotate: the caller keeps its
+ * ndstruct_delist_repack fallback, which still defines every form these do not
+ * handle (level specs, offsets, higher-order differences, a cycling List
+ * separator, rank >= 2 padding).
+ *
+ * A head that introduces a NEW element (Riffle's separator, Pad's fill) only
+ * uses the buffer when that element is exactly representable at the buffer's
+ * dtype with a matching head. PadLeft[{1.,2.,3.}, 5] is {0, 0, 1., 2., 3.} in
+ * both Mathilda and Mathematica -- exact zeros beside Reals, which no uniform
+ * buffer holds -- so it declines and the List path answers. */
+Expr* ndstruct_join(Expr* res);
+Expr* ndstruct_partition(Expr* res);
+Expr* ndstruct_differences(Expr* res);
+Expr* ndstruct_riffle(Expr* res);
+Expr* ndstruct_pad(Expr* res, bool left);
+
 /* Faithful-degrade primitive for a head that has NO native buffer walk.
  *
  * Re-runs `call` with every NDArray argument materialised into a nested List,

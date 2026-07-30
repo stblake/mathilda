@@ -17,6 +17,7 @@
 #include "print.h"          /* expr_to_string, for fallback */
 #include "sym_names.h"
 #include "expr.h"
+#include "ndarray.h"     /* packed-list and NDArray[...] rendering */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -246,6 +247,25 @@ static const FuncTeX* find_func(const char* sym) {
 static void render_times(LBuf* b, const Expr* e, int ctx_prec);
 static void render_plus (LBuf* b, const Expr* e, int ctx_prec);
 
+/* One level of a dense buffer as {...}, recursing on rank. `idx` walks the
+ * row-major buffer; ndarray_buffer_element_to_expr is the single place that
+ * decides an element's HEAD, so an int64 buffer typesets as integers. */
+static void to_latex_packed(LBuf* b, const Expr* a, int level, size_t* idx) {
+    const NDArrayData* nd = &a->data.ndarray;
+    if (level == nd->rank) {
+        Expr* leaf = ndarray_buffer_element_to_expr(nd->data, (*idx)++, nd->dtype);
+        to_latex_prec(b, leaf, PREC_ADD);
+        expr_free(leaf);
+        return;
+    }
+    lb_cat(b, "\\{");
+    for (int64_t i = 0; i < nd->dims[level]; i++) {
+        if (i) lb_cat(b, ", ");
+        to_latex_packed(b, a, level + 1, idx);
+    }
+    lb_cat(b, "\\}");
+}
+
 static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
     if (!b->s || !e) return;
 
@@ -284,6 +304,21 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
         lb_cat(b, "\\text{\xe2\x80\x9c");
         lb_cat(b, e->data.string);
         lb_cat(b, "\xe2\x80\x9d}");
+        return;
+    }
+
+    /* ---- A dense buffer: packed List, or an explicit NDArray[...] ----
+     * Streamed from the buffer one element at a time, the same way print.c does
+     * it, so a 10^6-element value does not materialise 10^6 Expr nodes just to
+     * be typeset. Without this arm the LaTeX came back EMPTY for every packed
+     * result (and always had for a visible NDArray[...]), because the
+     * EXPR_FUNCTION test below is the printer's only gate. */
+    if (e->type == EXPR_NDARRAY) {
+        bool visible = (e->data.ndarray.present_as == NDA_HEAD_NDARRAY);
+        if (visible) lb_cat(b, "\\text{NDArray}\\left[");
+        size_t idx = 0;
+        to_latex_packed(b, e, 0, &idx);
+        if (visible) lb_cat(b, "\\right]");
         return;
     }
 

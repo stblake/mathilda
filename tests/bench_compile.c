@@ -151,7 +151,7 @@ static void bench_par(const char* name, const char* src, size_t len, int iters) 
     int64_t dims[1]; dims[0] = (int64_t)len;
     double* buf = malloc(len * sizeof(double));
     for (size_t i = 0; i < len; i++) buf[i] = 0.3 + 1.7 * (double)i / (double)len;
-    Expr* v = expr_new_ndarray(1, dims, buf, NDT_FLOAT64);
+    Expr* v = expr_new_ndarray_raw(1, dims, buf, NDT_FLOAT64);
 
     double ts = time_arr(ps, v, AT[0], iters);
     double tp = time_arr(pp, v, AT[0], iters);
@@ -190,7 +190,7 @@ static void bench_arr(const char* name, const char* src, size_t len, int iters) 
     int64_t dims[1]; dims[0] = (int64_t)len;
     double* buf = malloc(len * sizeof(double));
     for (size_t i = 0; i < len; i++) buf[i] = 0.3 + 1.7 * (double)i / (double)len;
-    Expr* v = expr_new_ndarray(1, dims, buf, NDT_FLOAT64);
+    Expr* v = expr_new_ndarray_raw(1, dims, buf, NDT_FLOAT64);
 
     double tf = time_arr(pf, v, AT[0], iters);
     double td = time_arr(pd, v, AT[0], iters);

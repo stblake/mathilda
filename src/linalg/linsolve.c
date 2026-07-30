@@ -76,6 +76,51 @@ MatsolMethod matsol_parse_method_option(Expr* opt) {
     return MATSOL_INVALID;
 }
 
+/*
+ * Resolve Method -> Automatic for a matrix argument.
+ *
+ * Automatic used to be a plain alias for DivisionFreeRowReduction. Bareiss-like
+ * fraction-free elimination exists to stop rational coefficients exploding in
+ * EXACT arithmetic; over machine floating point there are no fractions to keep
+ * free, so it buys nothing and costs a polynomial GCD per pivot -- which
+ * recurses. LinearSolve / Inverse / RowReduce of a 90x90 matrix of Reals
+ * STACK-OVERFLOWED, and the file header above already said machine precision
+ * should use OneStep. So: any inexact leaf selects OneStep.
+ *
+ * Under default settings a matrix that large is packed and reaches LAPACK long
+ * before this, but MATHILDA_NO_PACK=1 / $AutoArrayPacking = False must not turn
+ * a crash back on -- that switch is what the whole packing differential test
+ * strategy rests on.
+ *
+ * "Inexact" is decided by the presence of a Real / MPFR leaf (including inside
+ * a Complex), not by the absence of exact ones: a mixed exact/inexact matrix is
+ * inexact overall, which is the same rule the evaluator's numeric contagion
+ * uses. An all-exact matrix -- Integer, Rational, BigInt or symbolic -- keeps
+ * DivisionFreeRowReduction, where being fraction-free is the entire point.
+ */
+bool matsol_is_inexact(const Expr* e) {
+    if (!e) return false;
+    switch (e->type) {
+        case EXPR_REAL: return true;
+        case EXPR_MPFR: return true;
+        case EXPR_FUNCTION:
+            /* Complex[re, im], and any nested List row. */
+            for (size_t i = 0; i < e->data.function.arg_count; i++)
+                if (matsol_is_inexact(e->data.function.args[i])) return true;
+            return false;
+        case EXPR_NDARRAY:
+            /* NDT_INT64 is the only exact dtype. Unreachable from the three
+             * call sites (they run only after linalg_call_has_ndarray is
+             * false), but a buffer nested in a List would land here. */
+            return e->data.ndarray.dtype != NDT_INT64;
+        default: return false;
+    }
+}
+
+MatsolMethod matsol_resolve_automatic(const Expr* m) {
+    return matsol_is_inexact(m) ? MATSOL_ONESTEP : MATSOL_DIVFREE;
+}
+
 /* Rate-limit a per-call warning so test loops don't spew. */
 void matsol_warn_once(uint64_t* last_hash, Expr* key, const char* msg) {
     uint64_t h = expr_hash(key);
@@ -1016,6 +1061,8 @@ Expr* builtin_rowreduce(Expr* res) {
         }
     }
 
+    if (method == MATSOL_AUTOMATIC) method = matsol_resolve_automatic(arg);
+
     switch (method) {
         case MATSOL_AUTOMATIC:
         case MATSOL_DIVFREE:    return rowreduce_divfree(arg);
@@ -1115,6 +1162,11 @@ Expr* builtin_linearsolve(Expr* res) {
     int64_t* trail_dims = b_dims + lead;
     int k = 1;
     for (int i = 0; i < trail_rank; i++) k *= (int)trail_dims[i];
+
+    if (method == MATSOL_AUTOMATIC)
+        method = (matsol_resolve_automatic(m) == MATSOL_ONESTEP
+                  || matsol_resolve_automatic(b) == MATSOL_ONESTEP)
+               ? MATSOL_ONESTEP : MATSOL_DIVFREE;
 
     switch (method) {
         case MATSOL_AUTOMATIC:

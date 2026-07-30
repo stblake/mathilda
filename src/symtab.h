@@ -88,6 +88,38 @@ typedef struct SymbolDef {
     const void* ndarray_unary_kernel;
     const void* ndarray_binary_kernel;
     const void* ndarray_nary_kernel;   /* const NDNaryKernel*, arity >= 3 */
+    /* Packed-list opt-in. A PACKED LIST is an ordinary List stored as a dense
+     * buffer (EXPR_NDARRAY, present_as == NDA_HEAD_LIST -- see pack.h). It is
+     * a single node with no args[] array, so a builtin that walks
+     * arg->data.function.args past one either crashes or, worse, takes the
+     * "not a function" branch and returns a confidently wrong answer:
+     * Count[packed, _Real] would say 0.
+     *
+     * There are ~7100 sites in the tree that touch data.function.args
+     * directly, so this cannot be retrofitted behind an accessor. Instead the
+     * evaluator MATERIALISES every packed argument before calling any head
+     * that has not set this flag. That makes the ~400 files that know nothing
+     * about packing correct by construction, at the cost of one unpack -- and
+     * it means opting a head in is a claim that it has actually been checked,
+     * not a default.
+     *
+     * Implied for any head with an ndarray kernel above; set explicitly with
+     * symtab_set_packed_aware for the rest. */
+    uint8_t  packed_aware;
+    /* Narrower still: this head is packed-aware AND exact on an NDT_INT64
+     * buffer. The generic ndt_get/ndt_set pair routes through `double` and is
+     * exact only to 2^53, and most of the ND layer was written when only
+     * Compile[] could create an integer buffer, so it uses that pair freely.
+     * Packed lists infer int64 from an all-Integer list, which puts integer
+     * buffers in front of that code for the first time.
+     *
+     * Until each site has an exact int64 path, the gate materialises an int64
+     * packed argument for every head NOT marked here -- so `Total[{1,2,3}]`
+     * stays the Integer 6 rather than 6., and `Sin[{1,2,3}]` stays symbolic
+     * rather than becoming {0,0,0}. Both of those were live before this bit
+     * existed. Marking a head here is a claim it reads the buffer through
+     * ndt_get_i / memcpy only. */
+    uint8_t  packed_int64_ok;
     struct SymbolDef* next;   // hash-bucket chain (replaces the old SymEntry)
 } SymbolDef;
 
@@ -140,6 +172,23 @@ const char* symtab_get_docstring(const char* symbol_name);
 void symtab_set_ndarray_unary_kernel(const char* symbol_name, const void* kernel);
 void symtab_set_ndarray_binary_kernel(const char* symbol_name, const void* kernel);
 void symtab_set_ndarray_nary_kernel(const char* symbol_name, const void* kernel);
+
+/* Declare that `symbol_name` handles a PACKED LIST argument correctly -- see
+ * SymbolDef.packed_aware. Implied by the kernel setters above. Setting this on
+ * a head that has not actually been checked is a silent-wrong-answer bug, so
+ * the list of heads that use it lives in one place (pack_mark_aware_heads) and
+ * is reviewed as a unit rather than sprinkled across modules. */
+void symtab_set_packed_aware(const char* symbol_name);
+/* Clear packed_aware. Needed because the ndarray kernel setters set it
+ * implicitly, and a handful of kernels change an element's HEAD (Floor,
+ * Ceiling, Round, IntegerPart, Sign, Im, Clip) or collapse a Listable answer to
+ * a scalar (Precision, Accuracy) -- correct for a visible NDArray[...], wrong
+ * for a packed List, which must answer exactly as the plain List does. */
+void symtab_clear_packed_aware(const char* symbol_name);
+
+/* Additionally declare that `symbol_name` is EXACT on an int64 buffer -- see
+ * SymbolDef.packed_int64_ok. Implies packed_aware. */
+void symtab_set_packed_int64_ok(const char* symbol_name);
 
 // Set/get the default option settings (a List[Rule[name,val], ...]) for a
 // symbol -- the store behind Options[f] and SetOptions[f]. symtab_set_options

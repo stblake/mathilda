@@ -9,6 +9,7 @@
 #include "assoc.h"
 #include "ndarray.h"
 #include "ndreduce.h"
+#include "pack.h"      /* pack_eval_plain — the internal Sort can return a buffer */
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -552,8 +553,12 @@ Expr* builtin_median(Expr* res) {
     }
 
     // Sort the list
+    /* pack_eval_plain, not evaluate: Sort now returns a PACKED list for a large
+     * machine-number input, and the args walk below reads .data.function.args.
+     * The gate only covers a builtin's arguments, never what its own internal
+     * evaluate() hands back. */
     Expr* sort_expr = expr_new_function(expr_new_symbol(SYM_Sort), (Expr*[]){expr_copy(data)}, 1);
-    Expr* sorted = evaluate(sort_expr);
+    Expr* sorted = pack_eval_plain(sort_expr);
     expr_free(sort_expr);
 
     if (sorted->type != EXPR_FUNCTION || sorted->data.function.arg_count != n) {
@@ -675,8 +680,12 @@ Expr* builtin_quartiles(Expr* res) {
         d = expr_new_integer(1);
     }
 
+    /* pack_eval_plain, not evaluate: Sort now returns a PACKED list for a large
+     * machine-number input, and the args walk below reads .data.function.args.
+     * The gate only covers a builtin's arguments, never what its own internal
+     * evaluate() hands back. */
     Expr* sort_expr = expr_new_function(expr_new_symbol(SYM_Sort), (Expr*[]){expr_copy(data)}, 1);
-    Expr* sorted = evaluate(sort_expr);
+    Expr* sorted = pack_eval_plain(sort_expr);
     expr_free(sort_expr);
 
     if (sorted->type != EXPR_FUNCTION || sorted->data.function.arg_count != n) {

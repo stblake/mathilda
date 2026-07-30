@@ -53,6 +53,7 @@
 #include "list.h"
 #include "assoc.h"
 #include "ndarray.h"
+#include "pack.h"
 #include "ndstruct.h"
 #include "replace.h"
 #include "patterns.h"
@@ -749,6 +750,7 @@ void core_init(void) {
     assoc_init();
     ndarray_init();
     ndkernels_init();   /* elementary-function NDArray element-wise kernels */
+    pack_init();        /* ToNDArray / FromNDArray over the same storage */
     replace_init();
     patterns_init();
     cond_init();
@@ -2072,6 +2074,11 @@ Expr* builtin_atomq(Expr* res) {
     }
 
     Expr* arg = res->data.function.args[0];
+
+    /* A packed list is a List, and a List is not an atom -- even though it is
+     * physically a single EXPR_NDARRAY node. A visible NDArray[...] stays
+     * atomic. */
+    if (is_packed_list(arg)) return expr_new_symbol(SYM_False);
 
     if (arg->type == EXPR_FUNCTION) {
         if (arg->data.function.head->type == EXPR_SYMBOL) {

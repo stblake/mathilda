@@ -55,6 +55,14 @@ void ndt_get(const void* buf, size_t k, NDType dt, double* re, double* im);
 /* Write (re, im) into element k of `buf` (dtype dt), narrowing to the stored
  * component type; im is ignored for real dtypes. */
 void ndt_set(void* buf, size_t k, NDType dt, double re, double im);
+/* int64 audit tripwire -- see the comment at the definition in ndarray.c.
+ * Called from the NDT_INT64 arm of ndt_get/ndt_set, i.e. exactly where a
+ * value that must stay exact is being routed through `double`. A stable
+ * breakpoint target: `break nd_int64_lossy_hit`. MATHILDA_PACK_DIAG=1 warns,
+ * =abort aborts. `nd_int64_lossy_count` is the running total. */
+void nd_int64_lossy_hit(const char* what);
+extern unsigned long nd_int64_lossy_count;
+
 /* EXACT int64 element access. The pair above routes through `double` and is
  * therefore exact only to 2^53, so every read or write of an NDT_INT64 buffer
  * that must be faithful goes through these two instead. */
@@ -71,12 +79,42 @@ NDType ndt_promote(NDType a, NDType b);
 /* Move a dtype onto the complex axis preserving component width (float32 ->
  * complex32, float64 -> complex64). */
 NDType ndt_as_complex(NDType dt);
-/* Build the Expr leaf for element k of NDArray `a`: expr_new_real for real
- * dtypes, Complex[re, im] for complex dtypes. Caller owns the result. */
+/* Build the Expr leaf for element k of a raw `dt` buffer: an exact Integer for
+ * NDT_INT64 (read through ndt_get_i, since ndt_get is exact only to 2^53),
+ * expr_new_real for real dtypes, Complex[re, im] for complex dtypes. Caller owns
+ * the result.
+ *
+ * This is the ONE place that decides what head an element materialises as. Every
+ * unpack path routes through it -- ndarray_element_to_expr, rebuild_level,
+ * ndarray_part's two scalar leaves, ndarray_dot2's rank-0 result -- so none of
+ * them can drift from the others (an Integer silently becoming a Real is the
+ * exact bug class this centralisation exists to prevent). */
+Expr* ndarray_buffer_element_to_expr(const void* buf, size_t k, NDType dt);
+
+/* Build the Expr leaf for element k of NDArray `a`. Thin wrapper over
+ * ndarray_buffer_element_to_expr with `a`'s buffer and dtype. */
 Expr* ndarray_element_to_expr(const Expr* a, size_t k);
 
-/* True when `e` is an EXPR_NDARRAY node. */
+/* True when `e` is an EXPR_NDARRAY node -- EITHER surface, a visible
+ * `NDArray[...]` or a packed List. Every existing fast path wants this, because
+ * a fast path cares about the buffer, not how the value prints. */
 bool is_ndarray(const Expr* e);
+
+/* True when `e` is an EXPR_NDARRAY presenting as a packed List (present_as ==
+ * NDA_HEAD_LIST): a value the user sees as an ordinary List. This is the
+ * predicate for the handful of places that must tell the two surfaces apart --
+ * Head, AtomQ, ListQ, printing, and the Part-assignment exactness rule. */
+bool is_packed_list(const Expr* e);
+
+/* Which of two array operands decides a binary result's presentation.
+ *
+ * A VISIBLE NDArray[...] dominates a packed List: if the user wrote NDArray on
+ * either side of a Dot or a Plus they asked for an NDArray, and they get one
+ * back. Two packed Lists give a packed List; two visible arrays give a visible
+ * array. Either argument may be NULL or a non-array scalar (a broadcast
+ * operand contributes nothing). Returns NULL when neither is an array, which
+ * expr_new_ndarray_like treats as "raw". */
+const Expr* nd_present_src2(const Expr* a, const Expr* b);
 
 /* Total element count (product of dims). */
 size_t ndarray_size(const Expr* a);
@@ -89,6 +127,16 @@ size_t ndarray_size(const Expr* a);
  * element type; for real dtypes leaves must be Integer/Real, for complex dtypes
  * Integer/Real/Complex are all accepted. */
 Expr* ndarray_from_nested_list(const Expr* list, NDType dtype);
+
+/* ndarray_from_nested_list, but inheriting `src`'s presentation (visible
+ * NDArray[...] vs packed List). Use this for a REPACK: whenever the List being
+ * packed came from materialising an existing array, because a builtin took the
+ * materialise-reuse-repack detour. Packing it raw instead turns a packed list
+ * into a visible NDArray at the first such builtin -- which is a user-visible
+ * wrong answer with no crash to find it by. `src` may be NULL (treated as raw).
+ *
+ * Same relationship as expr_new_ndarray_like to expr_new_ndarray_raw. */
+Expr* ndarray_from_nested_list_like(const Expr* src, const Expr* list, NDType dtype);
 
 /* Inverse of ndarray_from_nested_list: rebuilds the equivalent nested
  * List[...] tree from an NDArray's flat buffer. Caller owns the result. */
@@ -233,6 +281,12 @@ Expr* ndarray_map_binary(const Expr* a0, const Expr* a1, const NDBinaryKernel* k
  * (Listable threads element-wise, poles yield ComplexInfinity, etc.). Borrows
  * `call` (never frees it); caller owns the returned Expr. */
 Expr* ndarray_delist_and_reeval(const Expr* call);
+
+/* Degrade path for an exact-integer buffer whose answer is not machine
+ * representable (Rational, radical, exact Complex). Returns the re-evaluated
+ * call on a List, or NULL when no operand is an int64 buffer. See the
+ * definition. */
+Expr* ndarray_int64_delist_retry(const Expr* call);
 
 /* When every operand in args[0..n) is an NDArray but they are not all the same
  * shape, print a one-line `NDArray::shape` warning naming the two offending

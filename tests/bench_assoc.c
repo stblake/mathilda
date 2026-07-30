@@ -70,6 +70,13 @@ static void setup(int n) {
     snprintf(buf, sizeof(buf), "rules%d = Table[k -> Mod[k, 100], {k, %d}]", n, n);   eval_discard(buf);
     snprintf(buf, sizeof(buf), "vals%d = Table[Mod[k, 100], {k, %d}]", n, n);         eval_discard(buf);
     snprintf(buf, sizeof(buf), "keys%d = Range[%d]", n, n);                            eval_discard(buf);
+    /* The calibration list. Deliberately Rationals, which no machine buffer can
+     * hold, so a change in how ordinary Lists are STORED cannot move the divisor.
+     * Total[keys<n>] was the calibration until automatic packed arrays made it
+     * ~114x faster and inflated every normalized cost by the same factor, failing
+     * all nine ops at once with nothing actually slower. Same landmine, and same
+     * fix, as tests/bench_eval.c's. */
+    snprintf(buf, sizeof(buf), "calib%d = Table[k/3, {k, %d}]", n, n);                 eval_discard(buf);
     snprintf(buf, sizeof(buf), "assoc%d = Association @@ rules%d", n, n);             eval_discard(buf);
     snprintf(buf, sizeof(buf), "assoc2%d = Association @@ Table[k -> k, {k, %d, %d}]",
              n, n / 2, n + n / 2);                                                     eval_discard(buf);
@@ -107,18 +114,24 @@ typedef struct { const char* label; const char* fmt; double baseline_norm; } Op;
  * variation, tight enough to catch a real "it got much slower" regression. */
 #define SLOWDOWN_MAX 2.5
 
-/* baseline_norm recorded on an Apple M-series build, USE_ECM=OFF, 2026-07-06.
- * Stable to a few percent across runs; the SLOWDOWN_MAX margin swamps that. */
+/* baseline_norm recorded on an Apple M-series build, USE_ECM=OFF, 2026-07-30 --
+ * median of three quiet runs. RE-RECORDED from the 2026-07-06 set because the
+ * CALIBRATION changed, not because any operation did: it was Total[Range[n]],
+ * which automatic packed arrays made ~114x faster, so every normalized cost
+ * inflated by the same factor and all nine operations failed at once with
+ * nothing actually slower. The divisor is now a Rational list, which no machine
+ * buffer can hold. Run-to-run spread is ~15% on the association-heavy rows;
+ * SLOWDOWN_MAX swamps it. */
 static Op OPS[] = {
-    { "Association @@ rules", "Association @@ rules%d", 7.2 },
-    { "Counts",               "Counts[vals%d]",         0.35 },
-    { "CountsBy",             "CountsBy[keys%d, EvenQ]", 5.1 },
-    { "GroupBy",              "GroupBy[keys%d, Mod[#, 100] &]", 6.4 },
-    { "Merge (Total)",        "Merge[{assoc%d, assoc2%d}, Total]", 39.0 },
-    { "KeyUnion",             "KeyUnion[{assoc%d, assoc2%d}]", 23.0 },
-    { "Lookup (bulk keys)",   "Lookup[assoc%d, keys%d]", 4.4 },
-    { "Map over values",      "Map[# + 1 &, assoc%d]",   17.2 },
-    { "KeySort",              "KeySort[assoc%d]",         4.7 },
+    { "Association @@ rules", "Association @@ rules%d", 5.5 },
+    { "Counts",               "Counts[vals%d]", 0.5 },
+    { "CountsBy",             "CountsBy[keys%d, EvenQ]", 1.4 },
+    { "GroupBy",              "GroupBy[keys%d, Mod[#, 100] &]", 4.6 },
+    { "Merge (Total)",        "Merge[{assoc%d, assoc2%d}, Total]", 24.0 },
+    { "KeyUnion",             "KeyUnion[{assoc%d, assoc2%d}]", 18.6 },
+    { "Lookup (bulk keys)",   "Lookup[assoc%d, keys%d]", 3.0 },
+    { "Map over values",      "Map[# + 1 &, assoc%d]", 14.8 },
+    { "KeySort",              "KeySort[assoc%d]", 3.9 },
 };
 #define N_OPS ((int)(sizeof(OPS) / sizeof(OPS[0])))
 
@@ -178,11 +191,11 @@ int main(void) {
      * machine-independent, so we can gate on it: fail if an op is > SLOWDOWN_MAX x
      * its recorded baseline. */
     char calib_expr[64];
-    snprintf(calib_expr, sizeof(calib_expr), "Total[keys%d]", N_LARGE);
+    snprintf(calib_expr, sizeof(calib_expr), "Total[calib%d]", N_LARGE);
     double calib_us = median_us(calib_expr);
     if (calib_us <= 0.0) calib_us = 1e-6;    /* guard against a zero divide */
 
-    printf("Absolute cost vs. calibration (Total[list] of the same size)\n");
+    printf("Absolute cost vs. calibration (Total[Rational list] of the same size)\n");
     printf("  fail if an op is > %.1fx its recorded baseline cost\n\n", SLOWDOWN_MAX);
     printf("%-22s %10s %10s %8s\n", "operation", "norm", "baseline", "x base");
     printf("--------------------------------------------------------------------\n");

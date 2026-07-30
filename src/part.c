@@ -138,12 +138,38 @@ static Expr* nd_part_assign(Expr* arr, Expr** indices, size_t nindices, Expr* rh
     void* nb = malloc(bytes ? bytes : 1);
     if (!nb) return expr_copy(arr);
     memcpy(nb, arr->data.ndarray.data, bytes);
-    Expr* fresh = expr_new_ndarray(arr->data.ndarray.rank, arr->data.ndarray.dims,
+    Expr* fresh = expr_new_ndarray_like(arr, arr->data.ndarray.rank, arr->data.ndarray.dims,
                                    nb, arr->data.ndarray.dtype);   /* adopts nb */
     if (!fresh) { free(nb); return expr_copy(arr); }
     if (ndarray_part_set(fresh, (Expr* const*)indices, nindices, rhs)) return fresh;
     expr_free(fresh);
     return expr_copy(arr);
+}
+
+/* True when every leaf of `rhs` can go into a `dt` buffer with its HEAD intact:
+ * an exact Integer for int64, a machine Real for a float dtype.
+ *
+ * Deliberately stricter than "is this a machine number". Writing the exact
+ * Integer 1 into a float64 buffer reads back as 1., so `p[[1]] = 1` would
+ * answer {1., 2., 3.} where the same assignment on an ordinary list answers
+ * {1, 2., 3.} -- an exact head on an inexact tail, which a uniform buffer
+ * cannot express (src/numloop.h states the same rule for compiled loops).
+ * Rationals, BigInts, arbitrary-precision reals, Complex and symbols all fail
+ * here for the same reason.
+ *
+ * A List right-hand side distributes its elements across the selected
+ * positions, so every leaf has to qualify. */
+static bool nd_rhs_fits_dtype(const Expr* rhs, NDType dt) {
+    if (!rhs) return false;
+    if (rhs->type == EXPR_FUNCTION &&
+        rhs->data.function.head->type == EXPR_SYMBOL &&
+        rhs->data.function.head->data.symbol.name == SYM_List) {
+        for (size_t i = 0; i < rhs->data.function.arg_count; i++)
+            if (!nd_rhs_fits_dtype(rhs->data.function.args[i], dt)) return false;
+        return true;
+    }
+    return (dt == NDT_INT64) ? (rhs->type == EXPR_INTEGER)
+                             : (rhs->type == EXPR_REAL);
 }
 
 static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, Expr* rhs, size_t* rhs_idx, bool is_rhs_list) {
@@ -158,9 +184,29 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
         return expr_copy(rhs);
     }
 
-    /* Dense NDArray element assignment (a[[i]] = v, a[[i,j]] = v). */
-    if (expr->type == EXPR_NDARRAY)
+    /* Dense NDArray element assignment (a[[i]] = v, a[[i,j]] = v).
+     *
+     * A PACKED LIST unpacks first when the value being written cannot be stored
+     * with its head intact. The buffer path coerces -- which is right for a
+     * visible NDArray[...], where the user asked for a machine buffer and the
+     * dtype is part of the value -- but on a packed list that would be a silent
+     * answer change on ordinary list code: `p[[1]] = 1` must give {1, 2., 3.},
+     * not {1., 2., 3.}, and `p[[1]] = 1/3` must give the exact Rational.
+     *
+     * The result is left unpacked. That is not laziness: every case that lands
+     * here produces a list the buffer could not have held anyway (mixed heads,
+     * a Rational, a symbol), so there is nothing to repack. */
+    if (expr->type == EXPR_NDARRAY) {
+        if (is_packed_list(expr) &&
+            !nd_rhs_fits_dtype(rhs, expr->data.ndarray.dtype)) {
+            Expr* plain = ndarray_to_nested_list(expr);
+            Expr* out = expr_part_assign_rec(plain, indices, nindices,
+                                             rhs, rhs_idx, is_rhs_list);
+            expr_free(plain);
+            return out;
+        }
         return nd_part_assign(expr, indices, nindices, rhs);
+    }
 
     if (is_atomic(expr)) return expr_copy(expr);
 
@@ -380,7 +426,14 @@ Expr* expr_head(Expr* e) {
 #ifdef USE_MPFR
         case EXPR_MPFR: return expr_new_symbol(SYM_Real);
 #endif
-        case EXPR_NDARRAY: return expr_new_symbol(SYM_NDArray);
+        /* A packed list IS a List and must say so. Note is_atomic() above
+         * deliberately still reports true for it: the 13 sites that consult it
+         * all go on to read data.function.arg_count, which aliases the ndarray
+         * payload's `data` pointer, so flipping that predicate would turn a
+         * heap pointer into an element count. Presentation is decided here and
+         * in the AtomQ builtin, not in the internal walker guard. */
+        case EXPR_NDARRAY:
+            return expr_new_symbol(is_packed_list(e) ? SYM_List : SYM_NDArray);
         case EXPR_SYMBOL: return expr_new_symbol(SYM_Symbol);
         case EXPR_STRING: return expr_new_symbol(SYM_String);
         case EXPR_FUNCTION: return expr_copy(e->data.function.head);

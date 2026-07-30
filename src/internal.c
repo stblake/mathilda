@@ -2,6 +2,7 @@
 #include "eval.h"
 #include "symtab.h"
 #include "sym_names.h"
+#include "ndarray.h"   /* is_packed_list, ndarray_to_nested_list */
 #include <string.h>
 #include <stdlib.h>
 extern Expr* builtin_table(Expr* res);
@@ -194,6 +195,17 @@ Expr* internal_call_impl(const char* name, Expr* (*builtin_func)(Expr*), Expr** 
     Expr* evaluated = builtin_func(res);
     if (evaluated) {
         expr_free(res);
+        /* An internal_* call bypasses evaluate_step entirely, so its result never
+         * passes the packed-list gate -- and its caller is always C code holding
+         * an Expr* it means to inspect. Materialising here covers all 181
+         * wrappers and their ~721 call sites at once, including internal_range /
+         * internal_table / internal_array, which are producers. The cost is a
+         * test on a result that is a buffer only if a producer just made one. */
+        if (is_packed_list(evaluated)) {
+            Expr* plain = ndarray_to_nested_list(evaluated);
+            expr_free(evaluated);
+            return plain;
+        }
         return evaluated;
     }
     return res;

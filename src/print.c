@@ -132,6 +132,33 @@ static void print_string_literal(const char* s) {
     putchar('"');
 }
 
+/* Print a packed list as the nested List it stands for, STREAMING one element
+ * at a time off the buffer. Materialising the whole tree first (as the visible
+ * NDArray[...] path does) would allocate an Expr per element just to print --
+ * fine for a value the user explicitly wrapped, unacceptable for an ordinary
+ * List that happens to be packed and may hold 10^6 entries. One leaf is built
+ * at a time so element formatting stays byte-identical to the List path
+ * (Real formatting, Complex[a,b] -> "a + b I", FullForm quoting) rather than
+ * being reimplemented here and drifting.
+ *
+ * `fullform` selects List[...] over {...}; the leaves follow suit. */
+static void print_packed_level(Expr* a, int level, size_t* idx, bool fullform) {
+    const NDArrayData* nd = &a->data.ndarray;
+    if (level == nd->rank) {
+        Expr* leaf = ndarray_buffer_element_to_expr(nd->data, (*idx)++, nd->dtype);
+        if (fullform) expr_print_fullform(leaf);
+        else          print_standard(leaf, 0);
+        expr_free(leaf);
+        return;
+    }
+    printf(fullform ? "List[" : "{");
+    for (int64_t i = 0; i < nd->dims[level]; i++) {
+        if (i) printf(", ");
+        print_packed_level(a, level + 1, idx, fullform);
+    }
+    printf(fullform ? "]" : "}");
+}
+
 static void print_function_fullform(Expr* e) {
     expr_print_fullform(e->data.function.head);
     printf("[");
@@ -157,8 +184,16 @@ void expr_print_fullform(Expr* e) {
         case EXPR_STRING: print_string_literal(e->data.string); break;
         case EXPR_FUNCTION: print_function_fullform(e); break;
         case EXPR_NDARRAY: {
-            /* Always wrapped in NDArray[...] so it can never be mistaken
-             * for a bare nested List, even in FullForm/InputForm. The
+            /* A packed list must be indistinguishable from the nested List it
+             * stands for, in every form including FullForm -- so List[...],
+             * with no hint that the storage is a buffer. */
+            if (is_packed_list(e)) {
+                size_t idx = 0;
+                print_packed_level(e, 0, &idx, true);
+                break;
+            }
+            /* A visible NDArray[...] is always wrapped so it can never be
+             * mistaken for a bare nested List, even in FullForm/InputForm. The
              * inner braces use the standard {..} rendering (not a further
              * List[...] FullForm expansion) so the payload stays readable. */
             printf("NDArray[");
@@ -216,6 +251,14 @@ void expr_print_fullform(Expr* e) {
 
 static void print_standard(Expr* e, int parent_prec) {
     if (!e) { printf("Null"); return; }
+    /* Intercept before the delegation below: a packed list is not an
+     * EXPR_FUNCTION, so it would otherwise fall through to
+     * expr_print_fullform and come out as List[...] instead of {...}. */
+    if (is_packed_list(e)) {
+        size_t idx = 0;
+        print_packed_level(e, 0, &idx, false);
+        return;
+    }
     if (e->type != EXPR_FUNCTION) {
         expr_print_fullform(e);
         return;
@@ -1264,6 +1307,16 @@ static void print_tex(Expr* e, int parent_prec) {
     if (e->type == EXPR_SYMBOL) { print_tex_symbol(e->data.symbol.name); return; }
     if (e->type == EXPR_STRING) { printf("\\text{\"%s\"}", e->data.string); return; }
     if (e->type == EXPR_NDARRAY) {
+        if (is_packed_list(e)) {
+            /* Renders as the List it is. Materialises rather than streaming,
+             * unlike print_standard: TeX output is for display, so it is never
+             * asked for on the 10^6-element values where streaming matters,
+             * and print_tex's List branch handles nesting and separators. */
+            Expr* nested = ndarray_to_nested_list(e);
+            print_tex(nested, 0);
+            expr_free(nested);
+            return;
+        }
         printf("\\text{NDArray}\\left[");
         Expr* nested = ndarray_to_nested_list(e);
         print_tex(nested, 0);

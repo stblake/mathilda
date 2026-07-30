@@ -1,3 +1,11 @@
+/* AbsoluteTiming uses clock_gettime(CLOCK_MONOTONIC), which is POSIX, not C99.
+ * glibc hides it under -std=c99 while Darwin exposes it implicitly, so the
+ * feature-test macro must come before the first #include -- below it the header
+ * has already been parsed with the wrong namespace.  Matches src/core.c. */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "datetime.h"
 #include "common.h"
 #include "eval.h"
@@ -10,19 +18,62 @@
 #include <math.h>
 #include <gmp.h>
 
+/*
+ * Elapsed wall-clock seconds from a monotonic source.
+ *
+ * WHY THIS IS NOT clock().  clock() reports CPU time summed across threads, so
+ * any operation that uses nd_parallel_for / nd_parallel_reduce or the platform
+ * BLAS reports roughly cores x its true duration -- Timing[Total[bigArray]] on
+ * an 8-core host reads ~8x the time the user actually waited.  That makes
+ * Timing[] unusable for benchmarking the threaded NDArray paths, and it is why
+ * comparisons/NDARRAY_REDUCTIONS_COMPARISON.md carries a warning about it.
+ *
+ * CLOCK_MONOTONIC rather than CLOCK_REALTIME so an NTP step or a manual clock
+ * change during a long evaluation cannot produce a negative interval.
+ */
+static double dt_wall_seconds(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
+        return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+    /* No monotonic clock: fall back to CPU time, which is at least a duration.
+     * Over-reports threaded work, exactly as Timing[] does. */
+    return (double)clock() / (double)CLOCKS_PER_SEC;
+}
+
+Expr* builtin_absolute_timing(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
+        return NULL;
+    }
+
+    Expr* arg = res->data.function.args[0];
+
+    double start = dt_wall_seconds();
+    Expr* evaluated = evaluate(arg);
+    double elapsed = dt_wall_seconds() - start;
+
+    Expr** results = malloc(sizeof(Expr*) * 2);
+    if (!results) { expr_free(evaluated); return NULL; }
+    results[0] = expr_new_real(elapsed);
+    results[1] = evaluated;
+
+    Expr* final_res = expr_new_function(expr_new_symbol(SYM_List), results, 2);
+    free(results);
+    return final_res;
+}
+
 Expr* builtin_timing(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
         return NULL;
     }
-    
+
     Expr* arg = res->data.function.args[0];
-    
+
     clock_t start = clock();
     Expr* evaluated = evaluate(arg);
     clock_t end = clock();
-    
+
     double time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-    
+
     Expr** results = malloc(sizeof(Expr*) * 2);
     results[0] = expr_new_real(time_used);
     results[1] = evaluated;
@@ -249,6 +300,7 @@ Expr* builtin_absolute_time(Expr* res) {
 
 void datetime_init(void) {
     symtab_add_builtin("Timing", builtin_timing);
+    symtab_add_builtin("AbsoluteTiming", builtin_absolute_timing);
     symtab_add_builtin("RepeatedTiming", builtin_repeated_timing);
     symtab_add_builtin("AbsoluteTime", builtin_absolute_time);
     symtab_get_def("AbsoluteTime")->attributes |= ATTR_PROTECTED;

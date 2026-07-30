@@ -65,6 +65,48 @@ typedef enum {
     NDT_INT64
 } NDType;
 
+/* How an EXPR_NDARRAY presents itself to the user. ONE node type, TWO surfaces.
+ *
+ *   NDA_HEAD_NDARRAY  the explicit `NDArray[...]` a user typed. Head is
+ *                     NDArray, prints as NDArray[{...}], AtomQ is True, ListQ
+ *                     is False, and a Part assignment COERCES the rhs into the
+ *                     machine buffer (the user asked for a machine buffer).
+ *
+ *   NDA_HEAD_LIST     a PACKED LIST: an ordinary List that the system chose to
+ *                     store as a dense buffer, or that ToNDArray[] packed on
+ *                     request. Indistinguishable from the equivalent nested
+ *                     List -- Head is List, prints as {1., 2.}, ListQ/VectorQ/
+ *                     MatrixQ are True, AtomQ is False, patterns match, and
+ *                     expr_eq/expr_hash/expr_compare agree with the plain List
+ *                     element for element. Only NDArrayQ[] tells them apart.
+ *                     A Part assignment that is not exactly representable at
+ *                     the buffer's dtype (INCLUDING its head: writing an exact
+ *                     Integer into a float64 buffer counts) UNPACKS first, so
+ *                     packing can never change a value or a head.
+ *
+ * Zero is NDA_HEAD_NDARRAY so every pre-existing construction site keeps its
+ * historical meaning. Deriving a new array FROM an existing one must inherit
+ * the field -- use expr_new_ndarray_like, not expr_new_ndarray_raw, or a packed
+ * list turns visible at the first operation applied to it.
+ *
+ * This IS part of a value's identity, unlike `refcount` or `last_evaluated_at`:
+ * it decides the value's Head, and two values with different Heads are never
+ * SameQ. So `NDArray[{1.,2.}] === {1.,2.}` is False (NDArray vs List) while
+ * `ToNDArray[{1.,2.}] === {1.,2.}` is True. expr_eq, expr_hash and expr_compare
+ * each fork on it:
+ *   - packed vs packed     elementwise; dtype is NOT observable (a packed list
+ *                          of float32 equals the float64 one with equal values,
+ *                          because both materialise to the same Reals)
+ *   - packed vs plain List elementwise against the List's leaves
+ *   - visible vs anything  today's rule: dtype and raw bytes are identity
+ * and expr_hash of a packed list must equal expr_hash of the List it
+ * materialises to, or Association keys and Union stop working.
+ * See docs/design/packed_arrays.md. */
+typedef enum {
+    NDA_HEAD_NDARRAY = 0,
+    NDA_HEAD_LIST
+} NDPresentation;
+
 /* Dense machine-precision ndarray payload for EXPR_NDARRAY. Row-major flat
  * storage: `data` holds dims[0]*dims[1]*...*dims[rank-1] elements of type
  * `dtype` (each element is ndt_elem_size(dtype) bytes). Always privately owned
@@ -76,6 +118,7 @@ typedef struct {
     int64_t* dims;   /* rank entries, owned */
     void* data;      /* owned, row-major; element type given by dtype */
     NDType dtype;    /* element data type */
+    NDPresentation present_as;  /* NDArray[...] or a packed List; see above */
 } NDArrayData;
 
 typedef struct Expr {
@@ -180,8 +223,26 @@ Expr* expr_new_bigint_from_str(const char* str);
 /* NDArray constructor. Takes ownership of `dims` (copied internally, caller
  * keeps its own copy) and `data` (moved, not copied — caller must not free
  * or reuse it afterwards). `rank` >= 1, `dims[i]` >= 1, `data` must have
- * exactly product(dims) elements of `dtype` (ndt_elem_size(dtype) bytes each). */
-Expr* expr_new_ndarray(int rank, const int64_t* dims, void* data, NDType dtype);
+ * exactly product(dims) elements of `dtype` (ndt_elem_size(dtype) bytes each).
+ *
+ * The result presents as NDA_HEAD_NDARRAY — a VISIBLE `NDArray[...]`. That is
+ * correct only for a genuine constructor, i.e. one building an array from
+ * something that was not already an array: `NDArray[...]` itself, a producer
+ * like Range/Table, an Import, the Compile[] boundary.
+ *
+ * If you are computing a NEW array FROM an existing one — elementwise map,
+ * reduction, reshape, sub-array, transpose, anything — use
+ * expr_new_ndarray_like instead. Using this function there silently turns a
+ * packed List back into a visible NDArray at the first operation applied to it,
+ * which is a user-visible wrong answer with no crash to find it by. The name
+ * carries `_raw` so the choice has to be made deliberately at every site. */
+Expr* expr_new_ndarray_raw(int rank, const int64_t* dims, void* data, NDType dtype);
+
+/* Derive a new NDArray FROM `src`, inheriting its presentation (visible
+ * NDArray[...] vs packed List). Identical to expr_new_ndarray_raw otherwise;
+ * `src` is only read for its presentation and may be NULL (treated as raw). */
+Expr* expr_new_ndarray_like(const Expr* src, int rank, const int64_t* dims,
+                            void* data, NDType dtype);
 
 /* EXPR_COMPILED constructor.  Takes ownership of one reference to `cf` (the
  * caller must not free it afterwards; expr_free will dec-ref).  See

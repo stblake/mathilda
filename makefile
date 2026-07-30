@@ -392,7 +392,16 @@ docs-serve:
 check-c99:
 	python3 tools/check_c99_portability.py
 
-.PHONY: all clean docs docs-build docs-serve check-c99
+# `make check-packed-aware` — does every head with an NDArray fast path opt in
+# to it? The packing gate materialises for any head NOT on src/pack.c's AWARE
+# list, so a missing opt-in is correct, silent, and 30x-658x slow. That has
+# happened four times; this reads the dispatch sites out of the source and
+# diffs them against the list. Same "needs python3, so not part of `all`"
+# status as check-c99.
+check-packed-aware:
+	python3 tools/check_packed_aware.py
+
+.PHONY: all clean docs docs-build docs-serve check-c99 check-packed-aware
 
 # Pull in the auto-generated header dependencies. The leading `-` silences the
 # "no such file" notice on a fresh tree (no .d files exist until the first

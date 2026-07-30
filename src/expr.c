@@ -293,7 +293,7 @@ Expr* expr_new_bigint_from_str(const char* str) {
     return e;
 }
 
-Expr* expr_new_ndarray(int rank, const int64_t* dims, void* data, NDType dtype) {
+Expr* expr_new_ndarray_raw(int rank, const int64_t* dims, void* data, NDType dtype) {
     Expr* e = expr_alloc_node();
     if (!e) return NULL;
     e->type = EXPR_NDARRAY;
@@ -305,6 +305,15 @@ Expr* expr_new_ndarray(int rank, const int64_t* dims, void* data, NDType dtype) 
     memcpy(e->data.ndarray.dims, dims, sizeof(int64_t) * (size_t)rank);
     e->data.ndarray.data = data;
     e->data.ndarray.dtype = dtype;
+    e->data.ndarray.present_as = NDA_HEAD_NDARRAY;
+    return e;
+}
+
+Expr* expr_new_ndarray_like(const Expr* src, int rank, const int64_t* dims,
+                            void* data, NDType dtype) {
+    Expr* e = expr_new_ndarray_raw(rank, dims, data, dtype);
+    if (e && src && src->type == EXPR_NDARRAY)
+        e->data.ndarray.present_as = src->data.ndarray.present_as;
     return e;
 }
 
@@ -483,6 +492,10 @@ Expr* expr_unshare(Expr* e) {
             size_t bytes = ndt_elem_size(dt) * n;
             fresh->data.ndarray.rank = rank;
             fresh->data.ndarray.dtype = dt;
+            /* A private copy is the SAME value, so it must present the same
+             * way: a copy-on-write of a packed List that came back a visible
+             * NDArray would break transparency on any mutation path. */
+            fresh->data.ndarray.present_as = e->data.ndarray.present_as;
             fresh->data.ndarray.dims = malloc(sizeof(int64_t) * (size_t)rank);
             memcpy(fresh->data.ndarray.dims, e->data.ndarray.dims, sizeof(int64_t) * (size_t)rank);
             fresh->data.ndarray.data = malloc(bytes);
@@ -598,9 +611,105 @@ Expr* expr_copy(Expr* e) {
     return e;
 }
 
+/* ---------------------------------------------------------------------------
+ * Packed-List identity.
+ *
+ * A packed list (EXPR_NDARRAY with present_as == NDA_HEAD_LIST) must be
+ * indistinguishable from the nested List it materialises to. That obligation
+ * lands on exactly three functions -- expr_eq, expr_hash and expr_compare --
+ * because they sit BELOW the evaluator, where the transparency gate that
+ * protects every builtin cannot reach them.
+ *
+ * All three answer the same question: "what would ndarray_to_nested_list give?"
+ * None of them may actually call it -- these run on 10^6-element values in
+ * Association lookups and Union, and materialising there would be a disaster --
+ * so each walks the buffer and mirrors rebuild_level's shape instead. The unit
+ * tests assert agreement with the materialised form directly, since a drift
+ * here is silent.
+ * ------------------------------------------------------------------------- */
+
+/* Element k of `a`'s buffer against an arbitrary Expr leaf. Fast paths for the
+ * heads ndarray_buffer_element_to_expr actually produces; anything else falls
+ * back to building the leaf and using the general expr_eq (which picks up e.g.
+ * the cross-type Integer/BigInt case). */
+static bool nd_leaf_eq(const Expr* a, size_t k, const Expr* leaf) {
+    const void* buf = a->data.ndarray.data;
+    NDType dt = a->data.ndarray.dtype;
+    if (!leaf) return false;
+    if (dt == NDT_INT64) {
+        if (leaf->type == EXPR_INTEGER)
+            return leaf->data.integer == ndt_get_i(buf, k, dt);
+    } else if (!ndt_is_complex(dt) && leaf->type == EXPR_REAL) {
+        double re, im;
+        ndt_get(buf, k, dt, &re, &im);
+        if (isnan(re) && isnan(leaf->data.real)) return true;
+        return re == leaf->data.real;
+    }
+    Expr* tmp = ndarray_buffer_element_to_expr(buf, k, dt);
+    bool r = expr_eq(tmp, leaf);
+    expr_free(tmp);
+    return r;
+}
+
+/* Walk `a`'s axes against a nested List Expr, in row-major order. */
+static bool nd_eq_level(const Expr* a, int level, size_t* idx, const Expr* node) {
+    const NDArrayData* nd = &a->data.ndarray;
+    if (level == nd->rank) return nd_leaf_eq(a, (*idx)++, node);
+    if (!node || node->type != EXPR_FUNCTION) return false;
+    const Expr* h = node->data.function.head;
+    if (h->type != EXPR_SYMBOL || h->data.symbol.name != SYM_List) return false;
+    if (node->data.function.arg_count != (size_t)nd->dims[level]) return false;
+    for (int64_t i = 0; i < nd->dims[level]; i++)
+        if (!nd_eq_level(a, level + 1, idx, node->data.function.args[i])) return false;
+    return true;
+}
+
+/* Two packed lists. Shapes must match; dtype must NOT be compared directly,
+ * only through what it materialises as -- an int64 buffer produces Integers and
+ * a float buffer produces Reals, so those never match, but float32 and float64
+ * both produce Reals and do. */
+static bool nd_packed_eq(const Expr* a, const Expr* b) {
+    const NDArrayData* x = &a->data.ndarray;
+    const NDArrayData* y = &b->data.ndarray;
+    if (x->rank != y->rank) return false;
+    size_t n = 1;
+    for (int i = 0; i < x->rank; i++) {
+        if (x->dims[i] != y->dims[i]) return false;
+        n *= (size_t)x->dims[i];
+    }
+    bool xi = (x->dtype == NDT_INT64), yi = (y->dtype == NDT_INT64);
+    if (xi != yi) return false;                      /* Integer vs Real heads */
+    if (xi) {
+        for (size_t k = 0; k < n; k++)
+            if (ndt_get_i(x->data, k, x->dtype) != ndt_get_i(y->data, k, y->dtype))
+                return false;
+        return true;
+    }
+    if (ndt_is_complex(x->dtype) != ndt_is_complex(y->dtype))
+        return false;                                /* Complex[..] vs Real heads */
+    for (size_t k = 0; k < n; k++) {
+        double xr, xim, yr, yim;
+        ndt_get(x->data, k, x->dtype, &xr, &xim);
+        ndt_get(y->data, k, y->dtype, &yr, &yim);
+        if (!((isnan(xr) && isnan(yr)) || xr == yr)) return false;
+        if (!((isnan(xim) && isnan(yim)) || xim == yim)) return false;
+    }
+    return true;
+}
+
 bool expr_eq(const Expr* a, const Expr* b) {
     if (a == b) return true;
     if (!a || !b) return false;
+    /* A packed list is a List, so it must compare equal to the nested List it
+     * materialises to. A VISIBLE NDArray[...] must not -- its Head is NDArray. */
+    if (is_packed_list(a) && b->type == EXPR_FUNCTION) {
+        size_t idx = 0;
+        return nd_eq_level(a, 0, &idx, b);
+    }
+    if (is_packed_list(b) && a->type == EXPR_FUNCTION) {
+        size_t idx = 0;
+        return nd_eq_level(b, 0, &idx, a);
+    }
     if (a->type != b->type) {
         // Cross-type equality: EXPR_INTEGER vs EXPR_BIGINT
         if ((a->type == EXPR_INTEGER && b->type == EXPR_BIGINT) ||
@@ -638,9 +747,16 @@ bool expr_eq(const Expr* a, const Expr* b) {
         case EXPR_BIGINT:
             return mpz_cmp(a->data.bigint, b->data.bigint) == 0;
         case EXPR_NDARRAY: {
-            /* dtype is part of identity (a float32 array is not SameQ to a
-             * float64 one with equal values, matching the MPFR-precision rule
-             * below). */
+            /* The two surfaces are different values: one has Head NDArray, the
+             * other Head List, and nothing with different Heads is SameQ. */
+            if (a->data.ndarray.present_as != b->data.ndarray.present_as) return false;
+            /* Packed lists compare as the Lists they are, so dtype is invisible
+             * (float32 and float64 both materialise to Reals). */
+            if (a->data.ndarray.present_as == NDA_HEAD_LIST)
+                return nd_packed_eq(a, b);
+            /* Visible NDArray[...]: dtype is part of identity (a float32 array
+             * is not SameQ to a float64 one with equal values, matching the
+             * MPFR-precision rule below). */
             if (a->data.ndarray.dtype != b->data.ndarray.dtype) return false;
             if (a->data.ndarray.rank != b->data.ndarray.rank) return false;
             size_t n = 1;
@@ -671,6 +787,66 @@ bool expr_eq(const Expr* a, const Expr* b) {
  * one place alongside the user-facing Sort/OrderedQ builtins.  The
  * helpers it needs (is_atomic_numeric, expr_poly_degree, etc.) are
  * static there. */
+
+/* ---------------------------------------------------------------------------
+ * Packed-List hashing.
+ *
+ * expr_hash is FNV-1a, and the crucial property here is that it composes: a
+ * child's hash is an independent full run seeded at FNV_OFFSET, folded into the
+ * parent with (h ^= child; h *= FNV_PRIME) -- see the EXPR_FUNCTION arm. That is
+ * what lets a packed list reproduce its materialised List's hash by walking the
+ * buffer, with no allocation and no ndarray_to_nested_list call.
+ *
+ * Each helper below must stay byte-identical to expr_hash of the node
+ * ndarray_buffer_element_to_expr would have built. tests/test_packed_list.c
+ * asserts exactly that against the real materialised form, at every rank and
+ * dtype, because a drift here fails silently and only in a hash table.
+ * ------------------------------------------------------------------------- */
+#define FNV_OFFSET 14695981039346656037ULL
+#define FNV_PRIME  1099511628211ULL
+
+static uint64_t fnv_mix(uint64_t h, uint64_t x) { return (h ^ x) * FNV_PRIME; }
+
+static uint64_t hash_as_real(double v) {
+    uint64_t bits; memcpy(&bits, &v, 8);
+    return fnv_mix(fnv_mix(FNV_OFFSET, (uint64_t)EXPR_REAL), bits);
+}
+static uint64_t hash_as_integer(int64_t v) {
+    uint64_t bits; memcpy(&bits, &v, 8);
+    return fnv_mix(fnv_mix(FNV_OFFSET, (uint64_t)EXPR_INTEGER), bits);
+}
+/* Hashes the bytes AS STORED in data.symbol.name -- symbols are interned, so
+ * passing the SYM_* pointer hashes exactly what a real head node would. */
+static uint64_t hash_as_symbol(const char* name) {
+    uint64_t h = fnv_mix(FNV_OFFSET, (uint64_t)EXPR_SYMBOL);
+    for (const char* s = name; s && *s; s++) h = fnv_mix(h, (uint8_t)*s);
+    return h;
+}
+static uint64_t hash_as_complex(double re, double im) {
+    uint64_t h = fnv_mix(FNV_OFFSET, (uint64_t)EXPR_FUNCTION);
+    h = fnv_mix(h, hash_as_symbol(SYM_Complex));
+    h = fnv_mix(h, hash_as_real(re));
+    h = fnv_mix(h, hash_as_real(im));
+    return h;
+}
+
+/* One axis level, mirroring rebuild_level's tree exactly. */
+static uint64_t hash_packed_level(const Expr* a, int level, size_t* idx) {
+    const NDArrayData* nd = &a->data.ndarray;
+    if (level == nd->rank) {
+        size_t k = (*idx)++;
+        if (nd->dtype == NDT_INT64)
+            return hash_as_integer(ndt_get_i(nd->data, k, nd->dtype));
+        double re, im;
+        ndt_get(nd->data, k, nd->dtype, &re, &im);
+        return ndt_is_complex(nd->dtype) ? hash_as_complex(re, im) : hash_as_real(re);
+    }
+    uint64_t h = fnv_mix(FNV_OFFSET, (uint64_t)EXPR_FUNCTION);
+    h = fnv_mix(h, hash_as_symbol(SYM_List));
+    for (int64_t i = 0; i < nd->dims[level]; i++)
+        h = fnv_mix(h, hash_packed_level(a, level + 1, idx));
+    return h;
+}
 
 uint64_t expr_hash(const Expr* e) {
     if (!e) return 0;
@@ -724,6 +900,14 @@ uint64_t expr_hash(const Expr* e) {
             break;
         }
         case EXPR_NDARRAY: {
+            /* A packed list must hash EXACTLY as the nested List it
+             * materialises to, or an Association keyed by one cannot be looked
+             * up with the other, and Union/DeleteDuplicates split a value in
+             * two. See hash_packed_level. */
+            if (e->data.ndarray.present_as == NDA_HEAD_LIST) {
+                size_t idx = 0;
+                return hash_packed_level(e, 0, &idx);
+            }
             h ^= (uint64_t)e->data.ndarray.rank;
             h *= prime;
             h ^= (uint64_t)e->data.ndarray.dtype;

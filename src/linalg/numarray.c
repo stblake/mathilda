@@ -219,7 +219,7 @@ Expr* na_build_vector(const double* buf, int n, bool is_complex)
         if (!data) return NULL;
         memcpy(data, buf, (size_t)n * sizeof(double));
         int64_t dims[1] = { n };
-        return expr_new_ndarray(1, dims, data, NDT_FLOAT64);   /* moves `data` */
+        return expr_new_ndarray_raw(1, dims, data, NDT_FLOAT64);   /* moves `data` */
     }
     /* Complex result → complex64 NDArray (interleaved re,im matches `buf`),
      * keeping NDArray a closed system under the linalg bridges. */
@@ -227,7 +227,7 @@ Expr* na_build_vector(const double* buf, int n, bool is_complex)
     if (!data) return NULL;
     memcpy(data, buf, (size_t)n * 2 * sizeof(double));
     int64_t dims[1] = { n };
-    return expr_new_ndarray(1, dims, data, NDT_COMPLEX64);     /* moves `data` */
+    return expr_new_ndarray_raw(1, dims, data, NDT_COMPLEX64);     /* moves `data` */
 }
 
 Expr* na_build_matrix(const double* buf, int rows, int cols, bool is_complex,
@@ -243,7 +243,7 @@ Expr* na_build_matrix(const double* buf, int rows, int cols, bool is_complex,
                 data[(size_t)i * (size_t)cols + (size_t)j] =
                     buf[na_index(i, j, rows, cols, colmajor)];
         int64_t dims[2] = { rows, cols };
-        return expr_new_ndarray(2, dims, data, NDT_FLOAT64);    /* moves `data` */
+        return expr_new_ndarray_raw(2, dims, data, NDT_FLOAT64);    /* moves `data` */
     }
 
     /* Complex result → complex64 NDArray (row-major, interleaved re,im),
@@ -258,5 +258,5 @@ Expr* na_build_matrix(const double* buf, int rows, int cols, bool is_complex,
             data[dst + 1] = buf[off + 1];
         }
     int64_t dims[2] = { rows, cols };
-    return expr_new_ndarray(2, dims, data, NDT_COMPLEX64);     /* moves `data` */
+    return expr_new_ndarray_raw(2, dims, data, NDT_COMPLEX64);     /* moves `data` */
 }

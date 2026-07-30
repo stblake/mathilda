@@ -1,6 +1,7 @@
 /* NDArray — see ndarray.h for the design rationale. */
 
 #include "ndarray.h"
+#include "checked_int.h"   /* ci_*_i64 — exact int64 arithmetic, bail on overflow */
 #include "ndarray_internal.h"
 #include "sym_names.h"
 #include "attr.h"
@@ -15,6 +16,20 @@
 
 bool is_ndarray(const Expr* e) {
     return e && e->type == EXPR_NDARRAY;
+}
+
+bool is_packed_list(const Expr* e) {
+    return e && e->type == EXPR_NDARRAY &&
+           e->data.ndarray.present_as == NDA_HEAD_LIST;
+}
+
+const Expr* nd_present_src2(const Expr* a, const Expr* b) {
+    /* Visible dominates packed, so scan for a visible array first. */
+    if (is_ndarray(a) && !is_packed_list(a)) return a;
+    if (is_ndarray(b) && !is_packed_list(b)) return b;
+    if (is_ndarray(a)) return a;
+    if (is_ndarray(b)) return b;
+    return NULL;
 }
 
 size_t ndarray_size(const Expr* a) {
@@ -45,6 +60,40 @@ size_t ndt_elem_size(NDType dt) {
     return ndt_comp_size(dt) * (size_t)ndt_components(dt);
 }
 
+/* ---------------------------------------------------------------------------
+ * int64 audit tripwire.
+ *
+ * ndt_get/ndt_set route through `double` and are therefore exact only to 2^53.
+ * Historically that was safe because NDT_INT64 was reachable only from
+ * Compile[], which uses the exact ndt_get_i/ndt_set_i pair. Packed lists infer
+ * int64 from an all-Integer list (see pack.c), so integer buffers can now reach
+ * code that was written when they could not, and every lossy site is a wrong
+ * answer waiting for one -- silently, since the values below 2^53 look right.
+ *
+ * This makes the audit executable instead of by-inspection. Run the suite with
+ * MATHILDA_PACK_DIAG=1: every lossy touch of an int64 buffer prints and, with
+ * MATHILDA_PACK_DIAG=abort, aborts so a debugger shows the caller. Either way
+ * `nd_int64_lossy_hit` is a stable breakpoint target -- `break
+ * nd_int64_lossy_hit` catches them without any environment variable at all.
+ *
+ * Costs nothing for other dtypes: the check lives INSIDE the existing
+ * `case NDT_INT64` arm, which the switch was already going to select.
+ * -------------------------------------------------------------------------- */
+unsigned long nd_int64_lossy_count = 0;
+
+void nd_int64_lossy_hit(const char* what) {
+    static int mode = -1;      /* -1 unread, 0 off, 1 warn, 2 abort */
+    nd_int64_lossy_count++;
+    if (mode < 0) {
+        const char* v = getenv("MATHILDA_PACK_DIAG");
+        mode = !v ? 0 : (strcmp(v, "abort") == 0 ? 2 : 1);
+    }
+    if (mode == 0) return;
+    fprintf(stderr, "PACKDIAG: lossy %s on an NDT_INT64 buffer "
+                    "(exact only to 2^53) -- hit #%lu\n", what, nd_int64_lossy_count);
+    if (mode == 2) abort();
+}
+
 void ndt_get(const void* buf, size_t k, NDType dt, double* re, double* im) {
     switch (dt) {
         case NDT_FLOAT64:
@@ -61,6 +110,7 @@ void ndt_get(const void* buf, size_t k, NDType dt, double* re, double* im) {
             /* Exact only to 2^53. Every read of an int64 array that must be
              * exact goes through ndt_get_i instead; this case exists so the
              * generic dtype-agnostic consumers stay total. */
+            nd_int64_lossy_hit("read");
             *re = (double)((const int64_t*)buf)[k]; *im = 0.0; break;
         default:
             /* Unreachable for a valid dtype, but makes the switch total so the
@@ -83,6 +133,7 @@ void ndt_set(void* buf, size_t k, NDType dt, double re, double im) {
             ((float*)buf)[2 * k] = (float)re;
             ((float*)buf)[2 * k + 1] = (float)im; break;
         case NDT_INT64:
+            nd_int64_lossy_hit("write");
             ((int64_t*)buf)[k] = (int64_t)re; break;      /* see ndt_set_i */
     }
 }
@@ -108,6 +159,11 @@ bool ndt_from_string(const char* s, NDType* out) {
     if (strcmp(s, "float32") == 0) { *out = NDT_FLOAT32; return true; }
     if (strcmp(s, "complex64") == 0) { *out = NDT_COMPLEX64; return true; }
     if (strcmp(s, "complex32") == 0) { *out = NDT_COMPLEX32; return true; }
+    /* "int64" is accepted because ndt_to_string already EMITS it, so
+     * DataType[x] must round-trip back through DataType -> ... . Packed lists
+     * infer this dtype from an all-Integer list anyway (see pack.c), so the
+     * option adds no reach the system did not already have. */
+    if (strcmp(s, "int64") == 0) { *out = NDT_INT64; return true; }
     return false;
 }
 
@@ -145,17 +201,26 @@ NDType ndt_as_complex(NDType dt) {
     return (ndt_comp_size(dt) == sizeof(double)) ? NDT_COMPLEX64 : NDT_COMPLEX32;
 }
 
-Expr* ndarray_element_to_expr(const Expr* a, size_t k) {
-    NDType dt = a->data.ndarray.dtype;
+Expr* ndarray_buffer_element_to_expr(const void* buf, size_t k, NDType dt) {
+    /* THE single decision of what head an element of dtype `dt` materialises
+     * as. Every unpack path in the tree routes through here so none of them can
+     * drift: an NDT_INT64 element is an exact Integer read through the exact
+     * accessor (ndt_get/ndt_set are exact only to 2^53), everything else is a
+     * Real or a Complex[Real, Real]. */
     if (dt == NDT_INT64)
-        return expr_new_integer(ndt_get_i(a->data.ndarray.data, k, dt));
+        return expr_new_integer(ndt_get_i(buf, k, dt));
     double re, im;
-    ndt_get(a->data.ndarray.data, k, dt, &re, &im);
+    ndt_get(buf, k, dt, &re, &im);
     if (ndt_is_complex(dt)) {
         Expr* args[2] = { expr_new_real(re), expr_new_real(im) };
         return expr_new_function(expr_new_symbol(SYM_Complex), args, 2);
     }
     return expr_new_real(re);
+}
+
+Expr* ndarray_element_to_expr(const Expr* a, size_t k) {
+    return ndarray_buffer_element_to_expr(a->data.ndarray.data, k,
+                                          a->data.ndarray.dtype);
 }
 
 /* Integer or Real scalar → double. Used for the components of a Complex[] leaf
@@ -260,7 +325,7 @@ Expr* ndarray_from_nested_list(const Expr* list, NDType dtype) {
     size_t idx = 0;
     flatten_into(list, data, &idx, dtype);
 
-    return expr_new_ndarray(rank, dims, data, dtype); /* takes ownership of data */
+    return expr_new_ndarray_raw(rank, dims, data, dtype); /* takes ownership of data */
 }
 
 /* Recursive rebuild of one axis-level of the nested List tree, mirroring
@@ -291,6 +356,13 @@ static Expr* rebuild_level(const int64_t* dims, int rank, int level,
     Expr* result = expr_new_function(expr_new_symbol(SYM_List), args, (size_t)len);
     free(args);
     return result;
+}
+
+Expr* ndarray_from_nested_list_like(const Expr* src, const Expr* list, NDType dtype) {
+    Expr* out = ndarray_from_nested_list(list, dtype);
+    if (out && src && is_ndarray(src))
+        out->data.ndarray.present_as = src->data.ndarray.present_as;
+    return out;
 }
 
 Expr* ndarray_to_nested_list(const Expr* a) {
@@ -441,15 +513,8 @@ Expr* ndarray_part(const Expr* a, Expr** indices, size_t nindices, bool* degrade
             for (int j = (int)i + 1; j < rank; j++) stride *= dims[j];
             offset += (size_t)p * (size_t)stride;
         }
-        if ((size_t)rank == nindices) {           /* fully indexed -> scalar leaf */
-            double re, im;
-            ndt_get(a->data.ndarray.data, offset, dt, &re, &im);
-            if (ndt_is_complex(dt)) {
-                Expr* cargs[2] = { expr_new_real(re), expr_new_real(im) };
-                return expr_new_function(expr_new_symbol(SYM_Complex), cargs, 2);
-            }
-            return expr_new_real(re);
-        }
+        if ((size_t)rank == nindices)             /* fully indexed -> scalar leaf */
+            return ndarray_buffer_element_to_expr(a->data.ndarray.data, offset, dt);
         int subrank = rank - (int)nindices;
         int64_t subdims[NDARRAY_MAX_RANK];
         size_t subsize = 1;
@@ -461,7 +526,7 @@ Expr* ndarray_part(const Expr* a, Expr** indices, size_t nindices, bool* degrade
         void* out = malloc(esz * subsize);
         if (!out) return NULL;
         memcpy(out, (const char*)a->data.ndarray.data + offset * esz, esz * subsize);
-        return expr_new_ndarray(subrank, subdims, out, dt); /* takes ownership */
+        return expr_new_ndarray_like(a, subrank, subdims, out, dt); /* takes ownership */
     }
 
     /* General path: a mix of Integer / All / Span / List subscripts (plus
@@ -507,24 +572,22 @@ Expr* ndarray_part(const Expr* a, Expr** indices, size_t nindices, bool* degrade
             rem /= (size_t)d;
             src += (size_t)sel[i].pos[digit] * (size_t)stride[i];
         }
-        double re, im;
-        ndt_get(a->data.ndarray.data, src, dt, &re, &im);
-        ndt_set(out, oi, dt, re, im);
+        /* Source and destination share `dt`, so this is a copy, not a
+         * conversion -- move the bytes rather than round-tripping through the
+         * (double, double) pair, which is both slower and inexact above 2^53
+         * for an int64 buffer. */
+        memcpy((char*)out + oi * esz,
+               (const char*)a->data.ndarray.data + src * esz, esz);
     }
 
     for (int i = 0; i < rank; i++) free(sel[i].pos);
 
     if (subrank == 0) {                           /* all axes dropped -> scalar */
-        double re, im;
-        ndt_get(out, 0, dt, &re, &im);
+        Expr* leaf = ndarray_buffer_element_to_expr(out, 0, dt);
         free(out);
-        if (ndt_is_complex(dt)) {
-            Expr* cargs[2] = { expr_new_real(re), expr_new_real(im) };
-            return expr_new_function(expr_new_symbol(SYM_Complex), cargs, 2);
-        }
-        return expr_new_real(re);
+        return leaf;
     }
-    return expr_new_ndarray(subrank, subdims, out, dt); /* takes ownership */
+    return expr_new_ndarray_like(a, subrank, subdims, out, dt); /* takes ownership */
 }
 
 /* ---------------------------------------------------------------------------
@@ -630,6 +693,28 @@ Expr* ndarray_dot2(const Expr* a, const Expr* b, bool* shape_error) {
     size_t count = (size_t)(Ra * Sb);
     void* out = malloc(ndt_elem_size(dtc) * count);
 
+    if (dta == NDT_INT64 || dtb == NDT_INT64) {
+        /* Range[10^6] . Range[10^6] is about 3.3e17 -- well past 2^53, so the
+         * double path would answer with a rounded Real. Accumulate exactly, and
+         * abandon on the first overflow so the List path gives the bigint. Mixed
+         * int/float is left to the promoted double path below, where inexactness
+         * is already the right answer. */
+        if (dta == NDT_INT64 && dtb == NDT_INT64) {
+            int64_t* od = (int64_t*)out;
+            for (int64_t r = 0; r < Ra; r++)
+                for (int64_t s = 0; s < Sb; s++) {
+                    int64_t sum = 0;
+                    for (int64_t k = 0; k < K; k++) {
+                        int64_t t;
+                        if (ci_mul_i64(((const int64_t*)pa)[r * K + k],
+                                       ((const int64_t*)pb)[k * Sb + s], &t) ||
+                            ci_add_i64(sum, t, &sum)) { free(out); return NULL; }
+                    }
+                    od[r * Sb + s] = sum;
+                }
+            goto dot_done;
+        }
+    }
     if (dta == NDT_FLOAT64 && dtb == NDT_FLOAT64) {
         /* Preserved hot path: real double triple loop, no per-element widening. */
         double* od = (double*)out;
@@ -656,21 +741,17 @@ Expr* ndarray_dot2(const Expr* a, const Expr* b, bool* shape_error) {
             }
     }
 
+dot_done:;
     int rankC = rankA + rankB - 2;
     if (rankC == 0) {
-        double re, im;
-        ndt_get(out, 0, dtc, &re, &im);
+        Expr* leaf = ndarray_buffer_element_to_expr(out, 0, dtc);
         free(out);
-        if (ndt_is_complex(dtc)) {
-            Expr* cargs[2] = { expr_new_real(re), expr_new_real(im) };
-            return expr_new_function(expr_new_symbol(SYM_Complex), cargs, 2);
-        }
-        return expr_new_real(re);
+        return leaf;
     }
     int64_t dimsC[2];
     if (rankC == 1) dimsC[0] = (rankA == 2) ? Ra : Sb;
     else { dimsC[0] = Ra; dimsC[1] = Sb; }
-    return expr_new_ndarray(rankC, dimsC, out, dtc); /* takes ownership of out */
+    return expr_new_ndarray_like(nd_present_src2(a, b), rankC, dimsC, out, dtc); /* takes ownership of out */
 }
 
 static bool same_shape(const Expr* a, const Expr* b) {
@@ -760,8 +841,22 @@ Expr* ndarray_elementwise(Expr** args, size_t n, bool is_plus) {
     if (n == 0) return NULL;
 
     const Expr* first_nd = NULL;
+    /* Presentation of the result, joined over every array operand: a visible
+     * NDArray on any side dominates a packed List (see nd_present_src2).
+     * Distinct from first_nd, which is the SHAPE reference. */
+    const Expr* present_src = NULL;
     NDType dtc = NDT_FLOAT64;
     bool have_dt = false, scalar_complex = false, all_nd_f64 = true;
+    /* Exactness bookkeeping for an int64 result. `all_nd_int` == every array
+     * operand is an integer buffer; the two scalar flags say whether the folded
+     * scalar keeps the result exact (all operands exact Integers) or at least
+     * machine-representable (a plain Real, which widens the result to float64).
+     * Anything else -- Rational, BigInt, MPFR, Complex -- has no place in a
+     * machine buffer alongside exact integers, because Range[10]/2 is a list of
+     * Rationals and Range[10] + I a list of exact Complex; those go to the List
+     * path where the interpreter builds them. */
+    bool all_nd_int = true, sc_all_exact_int = true, sc_all_machine = true;
+    int64_t sc_i = is_plus ? 0 : 1;
     /* Separate array operands from scalars; fold the scalars into one constant. */
     Expr** ndops = malloc(n * sizeof(Expr*));
     size_t mnd = 0;
@@ -770,13 +865,23 @@ Expr* ndarray_elementwise(Expr** args, size_t n, bool is_plus) {
         if (args[i]->type == EXPR_NDARRAY) {
             if (!first_nd) first_nd = args[i];
             else if (!same_shape(first_nd, args[i])) { free(ndops); return NULL; }
+            present_src = nd_present_src2(present_src, args[i]);
             NDType d = args[i]->data.ndarray.dtype;
             if (d != NDT_FLOAT64) all_nd_f64 = false;
+            if (d != NDT_INT64)   all_nd_int = false;
             dtc = have_dt ? ndt_promote(dtc, d) : d;
             have_dt = true;
             ndops[mnd++] = args[i];
         } else {
             double re, im; bool isc;
+            if (args[i]->type == EXPR_INTEGER) {
+                int64_t v = args[i]->data.integer;
+                if (is_plus ? ci_add_i64(sc_i, v, &sc_i) : ci_mul_i64(sc_i, v, &sc_i))
+                    sc_all_exact_int = false;      /* folded past int64 */
+            } else {
+                sc_all_exact_int = false;
+                if (args[i]->type != EXPR_REAL) sc_all_machine = false;
+            }
             if (!scalar_value(args[i], &re, &im, &isc)) { free(ndops); return NULL; }
             if (isc) scalar_complex = true;
             if (is_plus) { sc_re += re; sc_im += im; }
@@ -788,6 +893,36 @@ Expr* ndarray_elementwise(Expr** args, size_t n, bool is_plus) {
         }
     }
     if (!first_nd) { free(ndops); return NULL; }  /* no array operand — not ours */
+
+    if (all_nd_int) {
+        if (sc_all_exact_int) {
+            /* Exact: Total[Range[10^6]^3] must promote to a BigInt rather than
+             * wrap, so the first overflow abandons the whole result and the List
+             * path recomputes it under GMP. */
+            size_t szi = ndarray_size(first_nd);
+            int64_t* o = malloc(sizeof(int64_t) * (szi ? szi : 1));
+            if (!o) { free(ndops); return NULL; }
+            for (size_t k = 0; k < szi; k++) {
+                int64_t acc = sc_i;
+                for (size_t j = 0; j < mnd; j++) {
+                    int64_t v = ((const int64_t*)ndops[j]->data.ndarray.data)[k];
+                    if (is_plus ? ci_add_i64(acc, v, &acc) : ci_mul_i64(acc, v, &acc)) {
+                        free(o); free(ndops); return NULL;
+                    }
+                }
+                o[k] = acc;
+            }
+            free(ndops);
+            return expr_new_ndarray_like(present_src, first_nd->data.ndarray.rank,
+                                    first_nd->data.ndarray.dims, o, NDT_INT64);
+        }
+        if (!sc_all_machine || scalar_complex) { free(ndops); return NULL; }
+        /* A Real scalar makes every element inexact, so the buffer widens. Without
+         * this the result kept dtype int64 and ndt_set TRUNCATED: Range[10] * 2.5
+         * came out as {2, 5, 7, ...}. */
+        dtc = NDT_FLOAT64;
+        all_nd_f64 = false;
+    }
     if (scalar_complex && !ndt_is_complex(dtc)) dtc = ndt_as_complex(dtc);
 
     size_t sz = ndarray_size(first_nd);
@@ -797,7 +932,7 @@ Expr* ndarray_elementwise(Expr** args, size_t n, bool is_plus) {
     nd_parallel_for(sz, nd_ew_chunk, &ctx);
     free(ndops);
     /* takes ownership of out */
-    return expr_new_ndarray(first_nd->data.ndarray.rank,
+    return expr_new_ndarray_like(present_src, first_nd->data.ndarray.rank,
                             first_nd->data.ndarray.dims, out, dtc);
 }
 
@@ -895,6 +1030,22 @@ Expr* ndarray_elementwise_power(const Expr* a, const Expr* b) {
     NDType dta = a->data.ndarray.dtype, dtb = b->data.ndarray.dtype;
     size_t sz = ndarray_size(a);
 
+    if (dta == NDT_INT64 || dtb == NDT_INT64) {
+        /* Exact only when BOTH sides are integer buffers and every exponent is
+         * non-negative; a mixed int/float pair or any negative exponent has an
+         * exact answer the buffer cannot express. */
+        if (dta != NDT_INT64 || dtb != NDT_INT64) return NULL;
+        const int64_t* pa = (const int64_t*)a->data.ndarray.data;
+        const int64_t* pb = (const int64_t*)b->data.ndarray.data;
+        for (size_t k = 0; k < sz; k++) if (pb[k] < 0) return NULL;
+        int64_t* o = malloc(sizeof(int64_t) * (sz ? sz : 1));
+        if (!o) return NULL;
+        for (size_t k = 0; k < sz; k++)
+            if (ci_powi(pa[k], pb[k], &o[k])) { free(o); return NULL; }
+        return expr_new_ndarray_like(a, a->data.ndarray.rank, a->data.ndarray.dims,
+                                o, NDT_INT64);
+    }
+
     /* Result promotes to complex if either operand is complex, or a real base
      * escapes the real axis at any element. */
     NDType dtc = ndt_promote(dta, dtb);
@@ -911,13 +1062,19 @@ Expr* ndarray_elementwise_power(const Expr* a, const Expr* b) {
     nd_pow_ctx c = { a->data.ndarray.data, dta, 0, 0,
                      b->data.ndarray.data, dtb, 0, 0, out, dtc };
     nd_parallel_for(sz, nd_pow_chunk, &c);
-    return expr_new_ndarray(a->data.ndarray.rank, a->data.ndarray.dims, out, dtc);
+    return expr_new_ndarray_like(a, a->data.ndarray.rank, a->data.ndarray.dims, out, dtc);
 }
 
 Expr* ndarray_base_scalar_power(double br, double bi, const Expr* exp_arr) {
     if (!is_ndarray(exp_arr)) return NULL;
     NDType dte = exp_arr->data.ndarray.dtype;
     size_t sz = ndarray_size(exp_arr);
+
+    /* 2^Range[300] is a list of exact Integers, but the base arrives here already
+     * flattened to a double, so this routine cannot tell an Integer base from a
+     * Real one. Rather than guess, hand an integer exponent buffer to the List
+     * path -- rare shape, exact answer. */
+    if (dte == NDT_INT64) return NULL;
 
     /* Result is complex if the base is complex, the exponent array is complex,
      * or a negative real base is raised to a non-integer exponent anywhere. */
@@ -935,7 +1092,7 @@ Expr* ndarray_base_scalar_power(double br, double bi, const Expr* exp_arr) {
     nd_pow_ctx c = { NULL, dte, br, bi,             /* scalar base */
                      exp_arr->data.ndarray.data, dte, 0, 0, out, dtc };
     nd_parallel_for(sz, nd_pow_chunk, &c);
-    return expr_new_ndarray(exp_arr->data.ndarray.rank,
+    return expr_new_ndarray_like(exp_arr, exp_arr->data.ndarray.rank,
                             exp_arr->data.ndarray.dims, out, dtc);
 }
 
@@ -943,6 +1100,22 @@ Expr* ndarray_scalar_power(const Expr* a, double er, double ei) {
     if (!is_ndarray(a)) return NULL;
     NDType dta = a->data.ndarray.dtype;
     size_t sz = ndarray_size(a);
+
+    if (dta == NDT_INT64) {
+        /* Range[300]^2 must stay a list of Integers. Only a NON-NEGATIVE integer
+         * exponent keeps an integer result: a negative one gives Rationals and a
+         * fractional one gives radicals, neither of which a buffer can hold, so
+         * both go to the List path. ci_powi abandons on overflow the same way, so
+         * Total[Range[10^6]^3] still reaches GMP and answers exactly. */
+        if (ei != 0.0 || er != floor(er) || er < 0.0) return NULL;
+        int64_t* o = malloc(sizeof(int64_t) * (sz ? sz : 1));
+        if (!o) return NULL;
+        const int64_t* p = (const int64_t*)a->data.ndarray.data;
+        for (size_t k = 0; k < sz; k++)
+            if (ci_powi(p[k], (int64_t)er, &o[k])) { free(o); return NULL; }
+        return expr_new_ndarray_like(a, a->data.ndarray.rank, a->data.ndarray.dims,
+                                o, NDT_INT64);
+    }
 
     NDType dtc = dta;
     if (ei != 0.0) dtc = ndt_as_complex(dtc);
@@ -953,7 +1126,7 @@ Expr* ndarray_scalar_power(const Expr* a, double er, double ei) {
     nd_pow_ctx c = { a->data.ndarray.data, dta, 0, 0,
                      NULL, dta, er, ei, out, dtc };   /* scalar exponent */
     nd_parallel_for(sz, nd_pow_chunk, &c);
-    return expr_new_ndarray(a->data.ndarray.rank, a->data.ndarray.dims, out, dtc);
+    return expr_new_ndarray_like(a, a->data.ndarray.rank, a->data.ndarray.dims, out, dtc);
 }
 
 /* -------------------- parallel element-wise map ------------------------- */
@@ -1189,7 +1362,7 @@ Expr* ndarray_map_unary(const Expr* a, const NDUnaryKernel* k) {
         void* out = malloc(ndt_elem_size(dtr) * sz);
         ndu_proj_ctx ctx = { in, out, dta, dtr, k };
         if (!nd_parallel_for(sz, ndu_proj_chunk, &ctx)) { free(out); return NULL; }
-        return expr_new_ndarray(rank, dims, out, dtr);
+        return expr_new_ndarray_like(a, rank, dims, out, dtr);
     }
 
     /* Complex input: complex output, straight map. A real-only kernel (no cplx)
@@ -1199,7 +1372,7 @@ Expr* ndarray_map_unary(const Expr* a, const NDUnaryKernel* k) {
         void* out = malloc(ndt_elem_size(dta) * sz);
         ndu_map_ctx ctx = { in, out, dta, k };
         if (!nd_parallel_for(sz, ndu_cplx_chunk, &ctx)) { free(out); return NULL; }
-        return expr_new_ndarray(rank, dims, out, dta);
+        return expr_new_ndarray_like(a, rank, dims, out, dta);
     }
 
     /* Real input, function stays on the real axis: real output. */
@@ -1213,7 +1386,7 @@ Expr* ndarray_map_unary(const Expr* a, const NDUnaryKernel* k) {
             ndu_map_ctx ctx = { in, out, dta, k };
             if (!nd_parallel_for(sz, ndu_realgen_chunk, &ctx)) { free(out); return NULL; }
         }
-        return expr_new_ndarray(rank, dims, out, dta);
+        return expr_new_ndarray_like(a, rank, dims, out, dta);
     }
 
     /* Real input, function may leave the real axis (Sqrt/Log/ArcSin/...):
@@ -1225,13 +1398,13 @@ Expr* ndarray_map_unary(const Expr* a, const NDUnaryKernel* k) {
     int any_imag = 0;
     ndu_esc_ctx ectx = { in, dta, tmp, dtcplx, k, &any_imag };
     if (!nd_parallel_for(sz, ndu_esc_chunk, &ectx)) { free(tmp); return NULL; }
-    if (any_imag) return expr_new_ndarray(rank, dims, tmp, dtcplx);
+    if (any_imag) return expr_new_ndarray_like(a, rank, dims, tmp, dtcplx);
     /* Narrow back to the original real dtype. */
     void* out = malloc(ndt_elem_size(dta) * sz);
     ndu_narrow_ctx nctx = { tmp, dtcplx, out, dta };
     nd_parallel_for(sz, ndu_narrow_chunk, &nctx);
     free(tmp);
-    return expr_new_ndarray(rank, dims, out, dta);
+    return expr_new_ndarray_like(a, rank, dims, out, dta);
 }
 
 Expr* ndarray_map_binary(const Expr* a0, const Expr* a1, const NDBinaryKernel* k) {
@@ -1257,7 +1430,7 @@ Expr* ndarray_map_binary(const Expr* a0, const Expr* a1, const NDBinaryKernel* k
         void* out = malloc(ndt_elem_size(dtc) * sz);
         ndb_ctx ctx = { in, out, dta, dtc, k, sre, sim, arr_first };
         if (!nd_parallel_for(sz, ndb_map_chunk, &ctx)) { free(out); return NULL; }
-        return expr_new_ndarray(rank, dims, out, dtc);
+        return expr_new_ndarray_like(arr, rank, dims, out, dtc);
     }
 
     /* Real inputs, real-closed function: real output. */
@@ -1265,7 +1438,7 @@ Expr* ndarray_map_binary(const Expr* a0, const Expr* a1, const NDBinaryKernel* k
         void* out = malloc(ndt_elem_size(dta) * sz);
         ndb_ctx ctx = { in, out, dta, dta, k, sre, 0.0, arr_first };
         if (!nd_parallel_for(sz, ndb_map_chunk, &ctx)) { free(out); return NULL; }
-        return expr_new_ndarray(rank, dims, out, dta);
+        return expr_new_ndarray_like(arr, rank, dims, out, dta);
     }
 
     /* Real inputs, may escape (Log[b, x] on negatives): compute complex, narrow
@@ -1282,7 +1455,7 @@ Expr* ndarray_map_binary(const Expr* a0, const Expr* a1, const NDBinaryKernel* k
         if (oii != 0.0) any_imag = true;
         ndt_set(tmp, j, dtcplx, orr, oii);
     }
-    if (any_imag) return expr_new_ndarray(rank, dims, tmp, dtcplx);
+    if (any_imag) return expr_new_ndarray_like(arr, rank, dims, tmp, dtcplx);
     void* out = malloc(ndt_elem_size(dta) * sz);
     for (size_t j = 0; j < sz; j++) {
         double re, im;
@@ -1290,7 +1463,7 @@ Expr* ndarray_map_binary(const Expr* a0, const Expr* a1, const NDBinaryKernel* k
         ndt_set(out, j, dta, re, im);
     }
     free(tmp);
-    return expr_new_ndarray(rank, dims, out, dta);
+    return expr_new_ndarray_like(arr, rank, dims, out, dta);
 }
 
 Expr* ndarray_delist_and_reeval(const Expr* call) {
@@ -1304,6 +1477,28 @@ Expr* ndarray_delist_and_reeval(const Expr* call) {
     Expr* rebuilt = expr_new_function(expr_copy(call->data.function.head), args, n);
     free(args);
     return eval_and_free(rebuilt);
+}
+
+/* An exact-integer operand whose true answer no machine buffer can hold: 5/2 *
+ * Range[300] is a list of Rationals, Range[300]^(1/2) a list of radicals,
+ * Range[300] + I a list of exact Complex. The elementwise fast paths decline
+ * those by returning NULL -- and the arithmetic heads' usual degrade for a NULL
+ * ("warn that an array met a symbolic operand, leave the call unevaluated") is
+ * exactly wrong here, because the List path computes the answer perfectly well.
+ *
+ * Returns the re-evaluated call when some operand is an integer buffer, else NULL
+ * so the caller keeps its existing degrade. Borrows `call`. */
+Expr* ndarray_int64_delist_retry(const Expr* call) {
+    if (!call || call->type != EXPR_FUNCTION) return NULL;
+    bool any = false;
+    for (size_t i = 0; i < call->data.function.arg_count; i++) {
+        const Expr* a = call->data.function.args[i];
+        if (a && a->type == EXPR_NDARRAY && a->data.ndarray.dtype == NDT_INT64) {
+            any = true;
+            break;
+        }
+    }
+    return any ? ndarray_delist_and_reeval(call) : NULL;
 }
 
 /* Format an NDArray's shape as "{d0, d1, ...}" into buf. */

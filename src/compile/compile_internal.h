@@ -17,87 +17,8 @@
 #include <limits.h>
 #include <complex.h>
 #include "../expr.h"
+#include "../checked_int.h"   /* ci_add / ci_sub / ci_mul / ci_neg / ci_abs / ci_powi */
 #include "compile.h"      /* CompileType, CompiledProgram — completed below */
-
-/* ------------------------------------------------------------------ *
- *  Checked machine-integer arithmetic                                 *
- * ------------------------------------------------------------------ *
- * The interpreter promotes an int64 that overflows to a GMP bigint, so a
- * compiled body that wrapped would answer DIFFERENTLY from the interpreter on
- * the same input rather than merely faster — the one thing the engine forbids.
- * Every integer opcode that can overflow therefore tests for it and aborts the
- * call, and the caller re-runs the body through the interpreter, which gives the
- * exact answer.  (This is also what the Wolfram Language does by default, under
- * RuntimeOptions -> "CatchMachineIntegerOverflow".)
- *
- * Each helper returns TRUE ON OVERFLOW, matching the __builtin_*_overflow
- * convention, and writes the wrapped result either way — callers must test
- * before using it.
- *
- * The builtins compile to the machine's own overflow flag plus a branch the
- * predictor never takes; the C99 fallback below costs a compare or two more.
- * Both are exercised: `-DCOMPILE_NO_OVERFLOW_BUILTIN` selects the fallback, and
- * a test asserts the two agree at the boundaries. */
-#if defined(__GNUC__) && !defined(COMPILE_NO_OVERFLOW_BUILTIN)
-#define ci_add(a, b, out)  __builtin_add_overflow((a), (b), (out))
-#define ci_sub(a, b, out)  __builtin_sub_overflow((a), (b), (out))
-#define ci_mul(a, b, out)  __builtin_mul_overflow((a), (b), (out))
-#else
-/* Strict C99: no GNU builtins, and signed overflow is undefined, so every test
- * has to be made on operands that have NOT yet overflowed. */
-static inline bool ci_add_fn(long long a, long long b, long long* out) {
-    bool ovf = (b > 0 && a > LLONG_MAX - b) || (b < 0 && a < LLONG_MIN - b);
-    *out = ovf ? (long long)((unsigned long long)a + (unsigned long long)b) : a + b;
-    return ovf;
-}
-static inline bool ci_sub_fn(long long a, long long b, long long* out) {
-    bool ovf = (b < 0 && a > LLONG_MAX + b) || (b > 0 && a < LLONG_MIN + b);
-    *out = ovf ? (long long)((unsigned long long)a - (unsigned long long)b) : a - b;
-    return ovf;
-}
-static inline bool ci_mul_fn(long long a, long long b, long long* out) {
-    bool ovf = false;
-    if (a != 0 && b != 0) {
-        if (a > 0) ovf = (b > 0) ? (a > LLONG_MAX / b) : (b < LLONG_MIN / a);
-        else       ovf = (b > 0) ? (a < LLONG_MIN / b)
-                                 : (a < LLONG_MAX / b);   /* both negative */
-    }
-    *out = ovf ? (long long)((unsigned long long)a * (unsigned long long)b) : a * b;
-    return ovf;
-}
-#define ci_add(a, b, out)  ci_add_fn((a), (b), (out))
-#define ci_sub(a, b, out)  ci_sub_fn((a), (b), (out))
-#define ci_mul(a, b, out)  ci_mul_fn((a), (b), (out))
-#endif
-
-/* Negation and absolute value overflow at exactly one point: -LLONG_MIN is not
- * representable.  Easy to forget precisely because it is a single input. */
-static inline bool ci_neg(long long a, long long* out) {
-    *out = (a == LLONG_MIN) ? a : -a;
-    return a == LLONG_MIN;
-}
-static inline bool ci_abs(long long a, long long* out) {
-    *out = (a < 0) ? ((a == LLONG_MIN) ? a : -a) : a;
-    return a == LLONG_MIN;
-}
-
-/* Binary exponentiation, overflow-checked at every step.  Mirrors the shape of
- * the unchecked `ipow_i` it replaces, so a folded constant and a computed value
- * still agree bit for bit.  `n` must be >= 0: a negative exponent on integers is
- * a Rational in the interpreter and is rejected before reaching here. */
-static inline bool ci_powi(long long b, long long n, long long* out) {
-    long long r = 1;
-    while (n > 0) {
-        if (n & 1) { if (ci_mul(r, b, &r)) return true; }
-        n >>= 1;
-        /* Squaring on the final round is dead work, and squaring a large base
-         * is exactly where a spurious overflow would be reported for a result
-         * that fits. */
-        if (n > 0 && ci_mul(b, b, &b)) return true;
-    }
-    *out = r;
-    return false;
-}
 
 /* A register (or an instruction's immediate).  `p` carries a machine-kernel
  * function pointer in an immediate; `arr` carries the OWNED EXPR_NDARRAY handle
@@ -376,7 +297,17 @@ enum { OPLIST OP__COUNT };
 #define AF_A(f)       (((f) >> AF_A_SHIFT) & 7u)
 #define AF_B(f)       (((f) >> AF_B_SHIFT) & 7u)
 #define AF_R(f)       (((f) >> AF_R_SHIFT) & 3u)
-enum { AK_ARR = 0, AK_REAL = 1, AK_COMPLEX = 2 };   /* operand kinds */
+/* Operand kinds for the array opcodes. Three bits each (AF_A/AF_B), so there is
+ * room; AK_INT was added when int64 buffers stopped being internal to the
+ * compiler.
+ *
+ * AK_INT is load-bearing, not tidiness. Without it a scalar operand of an array
+ * op was only ever Real or Complex, so `Compile[{{u, _Integer, 1}}, u * 2]`
+ * loaded the literal 2 into a real register and boxed it as a Real -- and the
+ * interpreter's elementwise path then correctly widened the int64 buffer to
+ * float64, answering {2., 4., 6.} where Range[3] * 2 is {2, 4, 6}. A wrong
+ * compiled answer, which is the one thing this engine may not produce. */
+enum { AK_ARR = 0, AK_REAL = 1, AK_COMPLEX = 2, AK_INT = 3 };
 
 /* Scalar-integer opcodes: do not abandon the call on overflow, keep the wrapped
  * value (COMPILE_WRAP_INT / "CatchMachineIntegerOverflow" -> False).

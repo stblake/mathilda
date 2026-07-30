@@ -50,10 +50,13 @@ Expr* builtin_riffle(Expr* res) {
     Expr* list = res->data.function.args[0];
     Expr* sep = res->data.function.args[1];
 
-    /* An NDArray is atomic, so the element walk below looks straight past one
-     * and the call comes back UNEVALUATED, while the identical List call works.
-     * Materialise, reuse the List implementation, repack — see ndstruct.h. */
-    if (is_ndarray(list)) return ndstruct_delist_repack(res, list);
+    /* Native buffer path first; ndstruct_delist_repack below stays the fallback
+     * for every form it declines. See ndstruct.h. */
+    if (is_ndarray(list)) {
+        Expr* fast = ndstruct_riffle(res);
+        if (fast) return fast;
+        return ndstruct_delist_repack(res, list);
+    }
 
     /* Anything without arguments to interleave — an atom — stays unevaluated. */
     if (list->type != EXPR_FUNCTION) return NULL;

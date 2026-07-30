@@ -14,10 +14,12 @@
  * validated against a committed baseline on the *same* machine.
  *
  * Design mirrors bench_assoc.c: median-of-trials wall time, plus a
- * machine-normalized cost (each workload's time divided by a plain
- * Total[Range[...]] measured on the same run) so a checked-in baseline gives a
- * portable "it got much slower" tripwire. Absolute microseconds are printed for
- * eyeballing but never gate; the normalized ratio does.
+ * machine-normalized cost (each workload's time divided by a calibration
+ * workload measured on the same run) so a checked-in baseline gives a portable
+ * "it got much slower" tripwire. Absolute microseconds are printed for
+ * eyeballing but never gate; the normalized ratio does. See the calibration in
+ * main() for the one constraint that matters: it must be immune to whatever is
+ * being optimised, or a large speedup fails every row at once.
  *
  * FIRST RUN: every baseline_norm is 0.0, so every row prints "(record as
  * baseline)" and the run passes. Copy the printed `norm` values into
@@ -102,9 +104,21 @@ typedef struct { const char* label; const char* expr; double baseline_norm; } Be
  * History (norm on the pure-dispatch row, the primary dispatch signal):
  *   2026-07-13  Phase 0 (before rework)                  0.60
  *   2026-07-13  Phase 1 (base-attr fold in get_attributes) 0.40  (-33%)
- * Values below are the post-Phase-1 floor. The dispatch-light rows (orderless
- * sort, replacerepeated fold) are matcher/compare-bound and did not move; their
- * baselines are unchanged. */
+ *   2026-07-29  calibration moved off Total[Range[...]]  0.36
+ *
+ * 2026-07-29 re-record. Two rows had drifted a long way from their recorded
+ * values BEFORE this commit touched anything, and re-recording is burying that
+ * unless it is written down, so:
+ *   - orderless sort (Plus 1200)   0.92 -> 0.27   3.4x FASTER than recorded.
+ *     An intended speedup landed without the baseline being re-recorded, so this
+ *     row has been gating against a ceiling 3.4x above the real floor and could
+ *     not have caught a regression short of tripling.
+ *   - replacerepeated fold (400)   3.00 -> 7.2    2.4x SLOWER than recorded,
+ *     i.e. it was sitting at 0.96 of the 2.5x FAIL threshold and would have
+ *     tripped on any bad day. This one is worth a look on its own: it is the
+ *     only matcher-bound row, so a matcher or expr_compare regression is the
+ *     likely cause. Not investigated here -- flagged, not fixed.
+ * The other four rows moved by only the ~6% the calibration change accounts for. */
 static Bench BENCHES[] = {
     /* 8000 structurally DISTINCT undefined nodes hh[k, k] (k differs each row),
      * so no eval-clock cache hit or refcount DAG-sharing collapses them. No rule
@@ -112,28 +126,28 @@ static Bench BENCHES[] = {
      * apply_down_values miss + builtin-lookup miss. The cleanest dispatch signal
      * in the set. (A Nest[f[u,u]] tree would instead share args by refcount and
      * collapse to a ~13-node DAG -- not a dispatch test.) */
-    { "pure dispatch (8k distinct)", "Length[Table[hh[k, k], {k, 8000}]]", 0.42 },
+    { "pure dispatch (8k distinct)", "Length[Table[hh[k, k], {k, 8000}]]", 0.36 },
 
     /* 4000 sequential DownValue rewrites g[k] -> k+1. Exercises
      * apply_down_values + get_attributes on the user symbol g every step. */
-    { "downvalue rewrite (Nest 4k)", "Nest[g, 0, 4000]", 0.16 },
+    { "downvalue rewrite (Nest 4k)", "Nest[g, 0, 4000]", 0.20 },
 
     /* Listable threading of Cos over a 4000-element list: 4000 threaded
      * sub-evaluations, each dispatching Cos[k] (stays symbolic). */
-    { "listable thread (Cos 4k)", "Length[Cos[Range[4000]]]", 0.13 },
+    { "listable thread (Cos 4k)", "Length[Cos[Range[4000]]]", 0.12 },
 
     /* Build a 1200-term Plus and let Orderless sort it: stresses eval_sort_args
      * + expr_compare in addition to per-term dispatch. */
-    { "orderless sort (Plus 1200)", "Length[Plus @@ Table[c[k] x, {k, 1200}]]", 0.92 },
+    { "orderless sort (Plus 1200)", "Length[Plus @@ Table[c[k] x, {k, 1200}]]", 0.27 },
 
     /* Pairwise fold of a 400-element list to a fixed point via ReplaceRepeated:
      * ~399 rewrites, each a full matcher + re-evaluation pass (O(n^2), so kept
      * small). Stresses the pattern matcher, not just dispatch. */
-    { "replacerepeated fold (400)", "First[Range[400] //. {a_, b_, r___} :> {a + b, r}]", 3.00 },
+    { "replacerepeated fold (400)", "First[Range[400] //. {a_, b_, r___} :> {a + b, r}]", 7.20 },
 
     /* 3000 sequential Plus re-evaluations (each Nest step re-evaluates the
      * running sum). Exercises Flat/Orderless combination on every pass. */
-    { "nested plus collapse (3k)", "Nest[# + a &, x, 3000] /. a -> 0", 0.37 },
+    { "nested plus collapse (3k)", "Nest[# + a &, x, 3000] /. a -> 0", 0.35 },
 };
 #define N_BENCH ((int)(sizeof(BENCHES) / sizeof(BENCHES[0])))
 
@@ -148,12 +162,25 @@ int main(void) {
     printf("  norm = workload_us / calibration_us (machine-independent)\n");
     printf("  gate: fail if norm > %.1fx its recorded baseline\n\n", SLOWDOWN_MAX);
 
-    /* Calibration: a plain arithmetic reduction over a list. Cheap, dispatch-
-     * light, and its wall time tracks raw machine speed, so dividing by it
-     * cancels most machine/measurement variance. */
-    double calib_us = median_us("Total[Range[40000]]");
+    /* Calibration: building a list with a little arithmetic per element. Cheap,
+     * dispatch-light, and its wall time tracks raw machine speed, so dividing by
+     * it cancels most machine/measurement variance.
+     *
+     * The elements are RATIONALS on purpose, and this must stay that way. The
+     * calibration was `Total[Range[40000]]` until automatic packed arrays
+     * (docs/design/packed_arrays.md) made that expression ~20x faster -- which
+     * would have divided every norm below by ~20 at once and failed all six rows
+     * simultaneously, reporting a catastrophic regression on the day of a large
+     * speedup. A calibration must be immune to the work being measured.
+     *
+     * Rationals give that immunity permanently rather than by luck: a packed
+     * array is a buffer of machine numbers, so an exact Rational leaf can never
+     * live in one. ndarray_from_nested_list's probe rejects the FIRST element
+     * here, so a packing attempt is O(1) and does not perturb the timing either.
+     * Do not "simplify" this back to a list of Integers or Reals. */
+    double calib_us = median_us("Length[Table[k/3, {k, 12000}]]");
     if (calib_us <= 0.0) calib_us = 1e-6;
-    printf("calibration  Total[Range[40000]]  = %.1f us\n\n", calib_us);
+    printf("calibration  Length[Table[k/3, {k, 12000}]]  = %.1f us\n\n", calib_us);
 
     printf("%-30s %12s %10s %10s %8s\n",
            "workload", "median(us)", "norm", "baseline", "x base");

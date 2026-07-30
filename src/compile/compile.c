@@ -571,7 +571,11 @@ static Val kern_binop(Ctx* c, uint16_t op, Val a, Val b, CompileType rt, const v
 /* Runtime operand kind of a compile-time type. */
 static unsigned ak_of(CompileType t) {
     if (CT_IS_ARRAY(t)) return (unsigned)AK_ARR;
-    return t == CT_COMPLEX ? (unsigned)AK_COMPLEX : (unsigned)AK_REAL;
+    if (t == CT_COMPLEX) return (unsigned)AK_COMPLEX;
+    /* An exact integer scalar stays exact: see AK_INT in compile_internal.h. A
+     * Bool has no arithmetic meaning here and never reaches an array op. */
+    if (t == CT_INT) return (unsigned)AK_INT;
+    return (unsigned)AK_REAL;
 }
 
 /* Emit an array opcode.  The operand frees are encoded in the instruction's
@@ -599,6 +603,12 @@ static Val arr_noop_val(void) { Val v = { 0, false, CT_REAL, false }; return v; 
  * VM knows which half of the slot to read. */
 static void arr_prep(Ctx* c, Val* v, CompileType elem) {
     if (CT_IS_ARRAY(v->type)) return;
+    /* An INTEGER-element result keeps an integer scalar exact rather than
+     * widening it to Real -- the widening is what made u * 2 over an _Integer
+     * array answer {2., 4., 6.}. Everything else widens as before: a Real
+     * element type genuinely makes the whole operation inexact, which is the
+     * interpreter's answer too (Range[1., 3.] * 2 is {2., 4., 6.}). */
+    if (elem == CT_INT && v->type == CT_INT) return;
     coerce(c, v, elem == CT_COMPLEX ? CT_COMPLEX : CT_REAL);
 }
 
@@ -1497,7 +1507,8 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     if ((!strcmp(h, "Increment") || !strcmp(h, "Decrement")) && na == 1 && A[0]->type == EXPR_SYMBOL) {
         CompileType vt; if (scope_find(c, A[0]->data.symbol.name, &vt, NULL) < 0) return false; *out = vt; return true;
     }
-    if ((!strcmp(h, "Do") && na >= 2) || (!strcmp(h, "While") && na == 2) || (!strcmp(h, "For") && na == 4)) { *out = CT_INT; return true; }
+    if ((!strcmp(h, "Do") && na >= 2) || (!strcmp(h, "While") && na == 2) || (!strcmp(h, "For") && na == 4)
+        || (!strcmp(h, "If") && na == 2)) { *out = CT_INT; return true; }
     if (!strcmp(h, "Nest") && na == 3) {
         FnSpec s; CompileType tn, tx;
         if (!fn_resolve(A[0], 1, &s) || !infer_type(c, A[2], &tn) || tn != CT_INT
@@ -2448,7 +2459,9 @@ static bool stmt_valued_head(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
     const char* h = e->data.function.head->data.symbol.name;
     return strcmp(h, "Do") == 0 || strcmp(h, "While") == 0
-        || strcmp(h, "For") == 0 || strcmp(h, "Scan") == 0;
+        || strcmp(h, "For") == 0 || strcmp(h, "Scan") == 0
+        /* If[c, t] answers Null when c is False; the compiled form answers 0. */
+        || (strcmp(h, "If") == 0 && e->data.function.arg_count == 2);
 }
 
 /* SameQ opcode for an accumulator type.
@@ -3370,6 +3383,36 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         *out = unop(c, OP_NOT, a, CT_BOOL); return c->ok;
     }
 
+    /*
+     * If[cond, then] -- no else branch. A STATEMENT, not a value: the
+     * interpreter answers Null when cond is False, so this lowers exactly like
+     * While (guard, jump over the body, answer the integer 0) and joins
+     * stmt_valued_head so the 0 can never be the program's result.
+     *
+     * Omitting this was not a small gap. The compilable subset is a cliff, not a
+     * slope -- one head outside it costs the WHOLE body -- and `If[test, var =
+     * val]` is how anyone writes a running maximum or a conditional store. Both
+     * a Sieve of Eratosthenes and a Collatz longest-chain search failed to
+     * compile on this single form, and so ran interpreted: Collatz to 10^6 took
+     * 240 s instead of 0.35 s. docs/design/compile.md section 11 specified it
+     * ("If[c,t] -> f = Null only valid where the value is unused"); it was simply
+     * never emitted.
+     */
+    if (strcmp(h, "If") == 0 && na == 2) {
+        Slot z = { 0 };
+        Val cond; if (!emit(c, A[0], &cond)) return false;
+        if (cond.type != CT_BOOL) { c->ok = false; return false; }
+        size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)cond.reg, 0, z);
+        free_if_tmp(c, cond);
+        Val th; if (!emit(c, A[1], &th)) return false;
+        free_if_tmp(c, th);                    /* value discarded, as While's body is */
+        if (c->ok) c->code[jz].b = (uint32_t)c->n;   /* end label */
+        int r0 = alloc_temp(c); Slot s0; s0.i = 0;
+        ins(c, OP_CONST, (uint32_t)r0, 0, 0, s0);
+        out->reg = r0; out->tmp = true; out->type = CT_INT;
+        return c->ok;
+    }
+
     /* If[cond, then, else]: branch control flow.  Result lands in one register
      * that whichever branch runs writes; the other branch is jumped over. */
     if (strcmp(h, "If") == 0 && na == 3) {
@@ -3628,7 +3671,12 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
             else {
                 coerce(c, &val, elem);
                 if (!c->ok) return false;
-                ps->rhs_kind = (elem == CT_COMPLEX) ? AK_COMPLEX : AK_REAL;
+                /* Same exactness rule as arr_prep's: writing 5 into an int64
+                 * buffer must box as the Integer 5, or ndarray_part_set's
+                 * mixed-exactness check sees an inexact right-hand side. */
+                ps->rhs_kind = (elem == CT_COMPLEX) ? AK_COMPLEX
+                             : (elem == CT_INT)     ? AK_INT
+                                                    : AK_REAL;
             }
             Slot ip; memset(&ip, 0, sizeof ip); ip.p = ps;
             ins_f(c, OP_A_PARTSET, (uint16_t)ns, (uint32_t)arr.reg, (uint32_t)base,
@@ -4900,8 +4948,9 @@ static double _Complex ipow_c(double _Complex b, long long n) { if (n < 0) { b =
 
 /* Read a scalar register as a (re, im) pair, per its compile-time operand kind. */
 static void vm_scalar_pair(const Slot* s, unsigned kind, double* re, double* im) {
-    if (kind == AK_COMPLEX) { *re = creal(s->z); *im = cimag(s->z); }
-    else                    { *re = s->r;        *im = 0.0; }
+    if      (kind == AK_COMPLEX) { *re = creal(s->z);   *im = cimag(s->z); }
+    else if (kind == AK_INT)     { *re = (double)s->i;  *im = 0.0; }
+    else                         { *re = s->r;          *im = 0.0; }
 }
 
 /* Box a scalar register as a temporary numeric Expr, because the ND helpers
@@ -4909,6 +4958,10 @@ static void vm_scalar_pair(const Slot* s, unsigned kind, double* re, double* im)
  * nothing, and it keeps one implementation of the broadcast and dtype-promotion
  * rules instead of a second copy here. */
 static Expr* vm_box_scalar(const Slot* s, unsigned kind) {
+    /* An integer register boxes as an Integer, so the ND layer sees an EXACT
+     * scalar and keeps an int64 buffer exact instead of promoting it. Reading it
+     * back through the double pair would defeat the whole point of AK_INT. */
+    if (kind == AK_INT) return expr_new_integer((int64_t)s->i);
     double re, im;
     vm_scalar_pair(s, kind, &re, &im);
     if (im == 0.0) return expr_new_real(re);
@@ -4985,7 +5038,7 @@ static Expr* nd_own_copy(const Expr* x, unsigned relem) {
         if (im != 0.0 && dt != NDT_COMPLEX64) { free(buf); return NULL; }
         ndt_set(buf, k, dt, re, im);
     }
-    Expr* nw = expr_new_ndarray(x->data.ndarray.rank, x->data.ndarray.dims, buf, dt);
+    Expr* nw = expr_new_ndarray_like(x, x->data.ndarray.rank, x->data.ndarray.dims, buf, dt);
     if (!nw) free(buf);
     return nw;
 }
@@ -5025,7 +5078,7 @@ static bool vm_range_array_op(const Instr* c, Slot* R) {
             NDType dt = ct_elem_ndt((unsigned)c->imm.i);
             void* buf = calloc(n ? n : 1, ndt_elem_size(dt));
             if (!buf) return false;
-            Expr* nw = expr_new_ndarray(rank, dims, buf, dt);
+            Expr* nw = expr_new_ndarray_raw(rank, dims, buf, dt);
             if (!nw) { free(buf); return false; }
             expr_free(R[c->dst].arr);             /* register reused from a prior call */
             R[c->dst].arr = nw;
@@ -5152,7 +5205,7 @@ static bool vm_array_op(const Instr* c, Slot* d, Slot* a, Slot* b) {
             size_t esz = ndt_elem_size(dt);
             void* buf = calloc(nelem ? nelem : 1, esz);
             if (!buf) return false;
-            Expr* nw = expr_new_ndarray(x->data.ndarray.rank, x->data.ndarray.dims, buf, dt);
+            Expr* nw = expr_new_ndarray_like(x, x->data.ndarray.rank, x->data.ndarray.dims, buf, dt);
             if (!nw) { free(buf); return false; }
             expr_free(d->arr);            /* reused register from a prior call */
             d->arr = nw;
