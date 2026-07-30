@@ -1337,8 +1337,20 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 bool aware = ((hdef && hdef->packed_aware && !hdef->down_values)
                               || pure_fn || compiled_head
                               || dv_binds_opaquely(hdef)) && !listable_mixed;
+                /* A head that binds opaquely is exact on an int64 buffer for
+                 * exactly the reason it is aware at all: it reads no element.
+                 * `f[x_] := body` binds the whole value and substitutes it, and
+                 * whatever the body then does is gated at the next head.
+                 *
+                 * Without this the exemption covered only float64, because a
+                 * user symbol's packed_int64_ok is false -- so an INTEGER grid
+                 * still materialised at every helper call. That is the whole of
+                 * the vectorised Game of Life benchmark, whose grid is integer:
+                 * `probe[q_] := NDArrayQ[q]` answered False for a packed integer
+                 * argument while answering True for a real one. */
                 bool int64_ok = pure_fn || compiled_head ||
-                                (hdef && hdef->packed_int64_ok);
+                                (hdef && hdef->packed_int64_ok) ||
+                                dv_binds_opaquely(hdef);
                 for (size_t i = 0; i < res->data.function.arg_count; i++) {
                     Expr* pa = res->data.function.args[i];
                     if (!is_packed_list(pa)) continue;

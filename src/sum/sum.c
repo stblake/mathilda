@@ -27,6 +27,7 @@
  */
 
 #include "sum.h"
+#include "ndarray.h"   /* is_ndarray — see sum_body_is_array */
 #include "symtab.h"
 #include "eval.h"
 #include "expr.h"
@@ -302,6 +303,81 @@ static Expr* expand_range(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
 
 /* Handle Sum[f, spec] for one already-isolated spec, with the parsed method.
  * Returns the summed value, or NULL to leave the Sum[...] unevaluated. */
+/* Above this many terms, keep trying the closed form even for an array-valued
+ * body: the expansion is O(terms x elements) and the closed form, when it works,
+ * is O(1) in the number of terms. Below it the expansion is certainly cheap, and
+ * the attempt is certainly not. */
+#define SUM_ARRAY_EXPAND_MAX 256
+
+/*
+ * Is the body array-valued at the first index? One extra evaluation of `f`,
+ * which the expansion is about to do anyway.
+ *
+ * WHY THIS IS ASKED AT ALL. The closed-form stages (polynomial / geometric /
+ * hypergeometric antidifference) cost time proportional to the SIZE OF THE BODY,
+ * not to the number of terms, because they take the body apart symbolically. On
+ * a scalar body that is nothing. On a 256x256 packed grid it measured **214 ms
+ * per Sum**, and then failed and fell through to the expansion anyway -- which
+ * took 0.256 ms. That single fixed cost was the whole of the vectorised Game of
+ * Life benchmark: Sum[RotateLeft[m,{i,j}], {i,-1,1}, {j,-1,1}] took 463 ms where
+ * the same nine terms written as an explicit Plus took 0.81 ms, 572x, and the
+ * result came back UNPACKED as well.
+ *
+ * The attempt is not skipped in general, because it genuinely works on array
+ * bodies and is worth a great deal there: Sum[m, {i, 1, 10^5}] for a constant
+ * matrix m answers in 0.53 ms via the closed form and would cost 10^5 buffer
+ * adds by expansion. Only the SHORT range skips it, where the expansion is
+ * bounded and cheap no matter what the body is.
+ */
+/* Could this held body plausibly evaluate to an array? True when it mentions a
+ * symbol whose OwnValue is one.
+ *
+ * A pre-filter for the probe below, and it earns its place: the probe is one
+ * extra evaluation of the body, which is nothing beside a 214 ms closed-form
+ * attempt but is NOT nothing beside an ordinary scalar Sum -- paying it
+ * unconditionally took Sum[i j, {i,-1,1}, {j,-1,1}] from 31 to 60 us. A purely
+ * arithmetic body mentions no array-bound symbol, so it never probes and never
+ * pays.
+ *
+ * Conservative in the useful direction: a body that produces an array WITHOUT
+ * naming one (Sum[Range[1., 300.] i, {i,1,3}]) simply misses the optimisation
+ * and behaves exactly as before. It cannot produce a wrong answer either way --
+ * this only chooses which of two correct paths runs. */
+static bool sum_body_names_array(const Expr* e) {
+    if (!e) return false;
+    /* An array LITERAL sitting in the body. This is not a corner case, it is the
+     * common one: a helper like nb[q_] := Sum[RotateLeft[q,{i,j}], ...] binds q
+     * by SUBSTITUTION, so by the time Sum sees the body there is no symbol left
+     * to look up -- the packed grid is spliced in directly. Checking only for
+     * array-valued symbols found nothing here and left the whole Game of Life
+     * benchmark on the slow path. */
+    if (is_ndarray(e)) return true;
+    if (e->type == EXPR_SYMBOL) {
+        SymbolDef* d = symtab_lookup(e->data.symbol.name);
+        if (d && d->own_values && d->own_values->replacement)
+            return is_ndarray(d->own_values->replacement);
+        return false;
+    }
+    if (e->type != EXPR_FUNCTION) return false;
+    if (sum_body_names_array(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (sum_body_names_array(e->data.function.args[i])) return true;
+    return false;
+}
+
+static bool sum_body_is_array(Expr* f, Expr* var, Expr* imin) {
+    if (var->type != EXPR_SYMBOL) return false;
+    Rule* saved = iter_spec_shadow(var);
+    Expr* i_val = expr_copy(imin);
+    symtab_add_own_value(var->data.symbol.name, var, i_val);
+    Expr* probe = evaluate(f);
+    expr_free(i_val);
+    iter_spec_restore(var, saved);
+    bool arr = probe && is_ndarray(probe);
+    if (probe) expr_free(probe);
+    return arr;
+}
+
 static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
     /* Indefinite form Sum[f, i]: spec is a bare symbol. */
     if (spec->type == EXPR_SYMBOL) {
@@ -340,7 +416,13 @@ static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
          *                telescoping form (which would give a wrong value).
          * The iterator is shadowed because Sum is HoldAll: an outer binding of
          * var would otherwise leak into the held body and the stage args. */
-        if (!is_real && di_val == 1.0 && min_val <= max_val) {
+        double nterms = (max_val - min_val) / di_val + 1.0;
+        bool short_array_body =
+            nterms <= (double)SUM_ARRAY_EXPAND_MAX &&
+            sum_body_names_array(f) &&
+            sum_body_is_array(f, s.var, s.imin);
+
+        if (!is_real && di_val == 1.0 && min_val <= max_val && !short_array_body) {
             Rule* saved = iter_spec_shadow(s.var);
             Expr* cf = dispatch_def(method, f, s.var, s.imin, s.imax);
             iter_spec_restore(s.var, saved);

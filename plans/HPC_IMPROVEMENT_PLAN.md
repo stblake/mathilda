@@ -343,6 +343,23 @@ Breaking each down:
   path at all. That, not `UnitStep`, is the whole of the remaining 65 s.
   **New item: `Sum`/`Product` accumulation over array-valued bodies.**
 
+  **Done 2026-07-30 — 65.7 s → 260 ms (253×), now 2.90×.** And the first thing it
+  found was not a performance bug at all: `RotateLeft[list, i]` with a symbolic
+  `i` returned the list UNROTATED (`rotate_rec` defaulted its amount to 0 and
+  never rejected a non-integer spec), so `Sum`'s closed-form stage saw a body
+  with no `i` dependence and returned `9 m`.
+  `Sum[RotateLeft[{1,2,3},i],{i,0,2}]` gave `{3,6,9}` against Mathematica's
+  `{6,6,6}`. **This benchmark had been measuring a wrong computation from the
+  day it was written**, which no timing could have revealed — only an answer
+  check. Mathilda and Mathematica now agree on a 40×40 evolution.
+
+  The other two: `Sum` no longer attempts its closed form for a short range over
+  an array-valued body (that attempt costs time proportional to the BODY, so a
+  one-term Sum over a 256² grid cost 197 ms and then fell through anyway), and
+  the DownValue exemption from §"Defining a helper function cost 100×" was
+  extended to int64 — it had covered only float64, and Life's grid is integer, so
+  every helper call materialised.
+
 Both were invisible before this phase: `UnitStep` at 500 ns/element was large
 enough to hide them.
 

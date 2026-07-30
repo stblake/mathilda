@@ -158,8 +158,8 @@ of the two, by 1.29×.
 
 | Benchmark | Mathilda | Mathematica 14.0 | |
 |---|---:|---:|---|
-| Jacobi 5-point relaxation, 512², 100 sweeps | 132 ms | **110 ms** | 1.20× |
-| Game of Life, 256², 100 generations | 67.9 s | **94.0 ms** | 722× |
+| Jacobi 5-point relaxation, 512², 100 sweeps | 147 ms | **114 ms** | 1.29× |
+| Game of Life, 256², 100 generations | **260 ms** | 89.9 ms | 2.90× |
 
 The Jacobi row is the classical vectorised stencil,
 
@@ -190,13 +190,33 @@ head. A **narrowing** category — real in, `NDT_INT64` out — was added
 faster (44 ms), with `Floor`, `Ceiling`, `Round`, `IntegerPart` and `Sign` off
 `NOT_AWARE` as well.
 
-**That did not move this row at all**, because measurement then showed Life was
-never `UnitStep`-bound. `Sum[RotateLeft[m,{i,j}], {i,-1,1}, {j,-1,1}]` on a
-packed 256² grid takes **463 ms** and returns an unpacked result, where the same
-nine terms written as an explicit `Plus` take **0.81 ms** — 572× for identical
-arithmetic. `Sum` over an array-valued body does not use the buffer path, and
-that is the whole of the remaining 65 s. The `UnitStep` cost had simply been
-large enough to hide it.
+**That did not move this row at all** — Life was never `UnitStep`-bound. Chasing
+it found three more things, the first of which was a wrong answer:
+
+1. **`RotateLeft[list, i]` with a symbolic `i` returned the list unrotated.**
+   `rotate_rec` defaulted its per-axis amount to 0 and never rejected a
+   non-integer spec, so it silently rotated by zero where Mathematica — and
+   Mathilda's own `RotateRight` — leave the call unevaluated. `Sum`'s closed-form
+   stage then saw a body with no `i` dependence, concluded it was constant, and
+   returned `9 m` instead of the neighbourhood sum:
+   `Sum[RotateLeft[{1,2,3},i],{i,0,2}]` gave `{3,6,9}` where Mathematica gives
+   `{6,6,6}`. **This benchmark had been measuring a wrong computation all along**,
+   in both the packed and unpacked paths.
+2. **`Sum` attempted its closed form on array-valued bodies at fixed cost.** The
+   polynomial/geometric stages take the body apart symbolically, so the cost
+   scales with the *body*, not the range: a **one-term** `Sum` over a 256² grid
+   cost 197 ms. It is now skipped for a short range over an array body, where the
+   expansion is bounded and cheap — but kept for long ranges, where it genuinely
+   works (`Sum[m, {i,1,10^5}]` for constant `m` answers in 0.4 ms).
+3. **The packed-array DownValue exemption covered only float64.** A user helper
+   `f[x_] := …` binds opaquely and reads no element, so it was exempted from
+   materialising — but `packed_int64_ok` was never extended to match, and Life's
+   grid is *integer*. `probe[q_] := NDArrayQ[q]` answered `False` for a packed
+   integer argument and `True` for a real one.
+
+Together: **65.7 s → 260 ms, 253×**, now 2.90× off Mathematica, and Mathilda and
+Mathematica agree on the answer (both report 320 live cells after 15 generations
+of the same 40×40 grid — the check that should have been there from the start).
 
 ---
 

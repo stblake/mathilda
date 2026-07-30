@@ -83,6 +83,12 @@ EXEMPT = {
                  "propagation from src/sort.c; maximal_minimal_by walks "
                  "data.function.args directly and has no NDArray handling at all",
     "MaximalBy": "as MinimalBy",
+    "Sum": "HoldAll, so a packed value never arrives as a top-level ARGUMENT -- "
+           "the gate has nothing to materialise. Its is_ndarray call is a probe "
+           "on the already-evaluated body (sum_body_is_array, which decides "
+           "whether the closed-form stage is worth attempting), not a dispatch "
+           "on an argument. This is the marker heuristic's blind spot: it cannot "
+           "tell 'notices the tag' from 'dispatches on the tag'",
 }
 
 

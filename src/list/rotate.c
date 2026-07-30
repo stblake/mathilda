@@ -3,6 +3,36 @@
 #include "ndstruct.h"   /* ndstruct_delist_repack — packed-argument fallback */
 #include "rotate.h"
 
+/*
+ * Is the rotation spec usable -- an Integer, or a List of Integers?
+ *
+ * rotate_rec defaults its per-level amount to 0 and only overwrites it for an
+ * EXPR_INTEGER, so a SYMBOLIC spec silently rotated by zero and returned the
+ * input unchanged: RotateLeft[{1,2,3}, i] answered {1,2,3} where Mathematica
+ * (and Mathilda's own RotateRight, which declines) leave it unevaluated.
+ *
+ * That is a wrong answer on its own, and it propagates. Sum's closed-form stage
+ * analyses its body for dependence on the iterator; with RotateLeft[b, {i,j}]
+ * collapsing to b the body looks CONSTANT in i and j, so
+ *     Sum[RotateLeft[b,{i,j}], {i,-1,1}, {j,-1,1}]
+ * returned 9*b instead of the 3x3 neighbourhood sum -- which is the whole of the
+ * vectorised Game of Life benchmark, computing something else entirely, slowly.
+ * Mathematica gives {6,6,6} for Sum[RotateLeft[{1,2,3},i],{i,0,2}]; Mathilda
+ * gave {3,6,9}.
+ */
+static bool rotate_spec_ok(const Expr* n_spec) {
+    if (!n_spec) return true;                       /* absent: defaults to 1 */
+    if (n_spec->type == EXPR_INTEGER) return true;
+    if (n_spec->type == EXPR_FUNCTION
+        && n_spec->data.function.head->type == EXPR_SYMBOL
+        && n_spec->data.function.head->data.symbol.name == SYM_List) {
+        for (size_t i = 0; i < n_spec->data.function.arg_count; i++)
+            if (n_spec->data.function.args[i]->type != EXPR_INTEGER) return false;
+        return true;
+    }
+    return false;
+}
+
 static Expr* rotate_rec(Expr* expr, Expr* n_spec, size_t level_idx) {
     if (expr->type != EXPR_FUNCTION) return expr_copy(expr);
 
@@ -38,6 +68,7 @@ Expr* builtin_rotateleft(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     Expr* expr = res->data.function.args[0];
     Expr* n_spec = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
+    if (!rotate_spec_ok(n_spec)) return NULL;   /* symbolic amount: stay unevaluated */
     /* Native buffer rotate first: a rotation permutes contiguous blocks, so it is
      * memcpy work. ndstruct_delist_repack below is still the fallback for a spec
      * outside the fast domain, but it costs one Expr per element -- 42.6 ms on a
@@ -63,6 +94,7 @@ Expr* builtin_rotateright(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     Expr* expr = res->data.function.args[0];
     Expr* n_spec = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
+    if (!rotate_spec_ok(n_spec)) return NULL;   /* symbolic amount: stay unevaluated */
     /* Native buffer rotate first; see the note in builtin_rotateleft. */
     if (is_ndarray(expr)) {
         Expr* fast = ndstruct_rotate(res, false);
