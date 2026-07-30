@@ -367,13 +367,45 @@ fix, `LinearSolve` at 1000² samples as roughly:
                       ~1034 samples   (~27%)
     na_load_matrix     ~376 samples   (10%)
 
-**A quarter of the time is the kernel mapping and unmapping memory.** A 1000×1000
-double matrix is 8 MB, and macOS's allocator serves allocations that large
-straight from `mmap`, returning them with `munmap`/`madvise` — so every call pays
-page-table work for buffers that are immediately discarded and re-requested. A
-small size-keyed scratch pool in the linalg bridges would remove it. That is now
-the largest remaining item here, and it was not in this plan: it only became
-visible once the element-wise loop stopped hiding it.
+A quarter of the time is the kernel mapping and unmapping memory.
+
+**A scratch pool was built for this, measured, and REJECTED (2026-07-30).** The
+reasoning looked sound — a 1000×1000 double matrix is 8 MB, macOS serves
+allocations that large straight from `mmap` and returns them with
+`munmap`/`madvise`, and `LinearSolve` discards and re-requests exactly that size
+every call. A size-keyed pool of parked blocks was implemented in `numarray.c`
+(header-prefixed sizes, mutex-guarded, opt-in via `na_load_matrix_scratch` so the
+~116 plain `free()` calls elsewhere could not turn into heap bugs) and the three
+measured paths converted.
+
+It made no difference at all. Min-of-five, two runs each:
+
+| | with pool | without |
+|---|---|---|
+| `LinearSolve`, 1000² | 15.45, 15.42 ms | 15.56, 15.12 ms |
+| `Inverse`, 500² | 8.24, 8.94 ms | 8.49, 8.02 ms |
+| `Det`, 500² | 1.75, 1.54 ms | 1.44, 1.63 ms |
+
+**Why it was the wrong target, and the lesson.** The flat "top of stack" profile
+attributes samples to a symbol, not to a culprit. Reading the CALL GRAPH instead
+shows those allocations belong to Accelerate:
+
+    30 ??? (in libBLAS.dylib)
+     : 29 _szone_free (in libsystem_malloc.dylib)
+     : | 13 free_large
+     : | + 13 madvise
+
+They are libBLAS's own per-call internal workspace, inside its threaded
+implementation — nothing Mathilda allocates, and nothing a pool on our side can
+reach. Our 8 MB load buffer is a single `malloc`/`free` pair per call and was
+never the problem.
+
+*A flat profile says where the time goes; only the call graph says whose it is.*
+The pool was reverted rather than kept "in case it helps later": it is ~150 lines
+carrying a class of heap bug (a pooled pointer reaching `free`) for no measured
+benefit.
+
+That leaves the transpose-avoidance bullet below as the remaining item here.
 
 The plan's third bullet — **avoid the transpose entirely** — is still the
 structurally right answer and is untouched. Solving with a row-major `A` is
