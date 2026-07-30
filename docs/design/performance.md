@@ -59,11 +59,11 @@ written for performance, and both systems get the same treatment.
 |---|---:|---:|---|
 | Matrix multiply, 1000×1000 | 8.04 ms | **6.71 ms** | 1.20× |
 | `Det`, 500×500 | 2.99 ms | **1.82 ms** | 1.64× |
-| `LinearSolve`, 1000×1000 | 17.5 ms | **6.89 ms** | 2.54× |
+| `LinearSolve`, 1000×1000 | 17.0 ms | **6.23 ms** | 2.73× |
 | `Inverse`, 500×500 | 8.18 ms | **2.99 ms** | 2.74× |
 | `SingularValueDecomposition`, 300×300 | 54.6 ms | **8.40 ms** | 6.50× |
 | `Eigenvalues`, 300×300 symmetric | 21.5 ms | **3.08 ms** | 7.00× |
-| `QRDecomposition`, 500×500 | 83.0 ms | **4.43 ms** | 18.7× |
+| `QRDecomposition`, 500×500 | 58.4 ms | **4.18 ms** | 14.0× |
 
 Matrix multiply and `Det` are close, because both systems reach the same
 Accelerate kernels. The spread widens exactly where Mathilda stops using LAPACK:
@@ -73,8 +73,12 @@ preference to LAPACK because the eigenvalue *ordering* convention (|λ| ties bro
 by position) cannot be reproduced from LAPACK output without risking parity —
 a deliberate trade recorded in
 [`NDARRAY_REDUCTIONS_COMPARISON.md`](../../comparisons/NDARRAY_REDUCTIONS_COMPARISON.md).
-`QRDecomposition` at 18.7× is the largest gap here and has no such excuse:
-`mat_lapack_dgeqrf` is already bound and used by other paths.
+`QRDecomposition` was 18.7× and is now 14.0×: it now routes to `dgeqrf`+`dorgqr`
+(plan phase 1.3), but LAPACK's own factorisation is only a few milliseconds of
+that. The rest is the boundary — `na_load_matrix`/`na_build_matrix` convert
+element by element (phase 3) — plus ~24 ms materialising the `{q, r}` pair to
+plain Lists, which the no-nesting invariant requires and Mathematica does not.
+That is the case for doing phase 3 before the remaining decomposition work.
 
 ---
 
@@ -125,7 +129,7 @@ itself.
 | `Partition[x, 2]` | 17.8 ms | 12.6 ms | 1.42× |
 | `Join` (two 10⁷ vectors) | 95.9 ms | 65.9 ms | 1.46× |
 | `Reverse` | 33.8 ms | 15.1 ms | 2.23× |
-| `Dot` (inner product) | 12.3 ms | 5.19 ms | 2.37× |
+| `Dot` (inner product) | **5.84 ms** | 5.08 ms | 1.15× |
 | `PadRight`, default (exact `0`) fill | 1.19 s | 483 ms | 2.46× |
 | `RotateLeft` | 37.1 ms | 12.9 ms | 2.88× |
 | `Differences` | 56.6 ms | 15.1 ms | 3.75× |

@@ -181,7 +181,23 @@ marshalling, not the FFT.
 *Projected: 855 ms → ~25 ms; 1.54 s → ~22 ms.* Risk: low. `Fourier`'s existing
 numeric path stays as the fallback and is the differential reference.
 
-### 1.2 `Dot` rank-1 → `cblas_ddot` (2.37×)
+### 1.2 `Dot` rank-1 → `cblas_ddot` (2.37×)  ✅ DONE (2026-07-30)
+
+**Result: 2.37× → 1.15×** (12.3 ms → 5.84 ms at n = 10^7).
+
+`dot2` tried `nd_blas_matmul` (rank 2 only) then fell to `ndarray_dot2`'s scalar
+loop; `cblas_ddot` was bound but reached only by the LAPACK availability probe.
+The BLAS path now covers every shape BLAS has: `dgemm`, `dgemv` both ways, and
+`ddot`. Nothing needed marshalling — an NDArray is already the contiguous
+row-major float64 buffer BLAS wants.
+
+The plan's contingency turned out to be needed: Accelerate's `ddot` is
+single-threaded, and one core reached 20 GB/s against Mathematica's 31 GB/s on a
+160 MB working set. Chunking it across `nd_parallel_reduce` — the same machinery
+`Total` already uses, for the same reason — took 7.86 ms to 5.84 ms. Summation
+order therefore reassociates for large n, as it already does for `Total`;
+`nd_parallel_reduce` runs one serial chunk below its threading threshold, so
+small vectors stay bit-identical.
 
 `dot2` tries `nd_blas_matmul` (rank-2 only) and then falls to `ndarray_dot2`,
 Mathilda's own scalar loop. `cblas_ddot` is bound (`blas_bridge.c:73`) but reached
@@ -193,7 +209,47 @@ to `cblas_dgemv` (also already bound, `:216`).
 Accelerate's `ddot` is single-threaded, this needs `nd_parallel_reduce` over
 chunked `cblas_ddot` calls instead.
 
-### 1.3 `QRDecomposition` → LAPACK (18.7×)
+### 1.3 `QRDecomposition` → LAPACK (18.7×)  ⚠️ PARTIAL (2026-07-30)
+
+**Result: 18.7× → 14.0×** (83.0 ms → 58.4 ms). Correct, verified bit-identical
+on 240 matrices — and a long way short of the ~6 ms this plan projected.
+
+The routing itself works: `mat_qr_mathilda` (dgeqrf + dorgqr) is wired in ahead
+of the delist, so a packed matrix goes straight to LAPACK. Three gates were
+needed and each was found by a test rather than by reading:
+
+- **Inexact matrices only.** `QRDecomposition[{{1,2},{3,4}}]` is exact
+  (`1/Sqrt[10]`), and `na_load_matrix` would have flattened it to `-0.316228`,
+  with the opposite sign too. Same gate `builtin_norm` needed.
+- **Real matrices only.** Mathilda's complex convention is
+  `m == ConjugateTranspose[q].r`, so `q` is `conj(Q^T)`, not the plain transpose.
+- **Comfortably full rank only.** The in-house Gram-Schmidt truncates its answer
+  to the numerical rank (`q` is `rank x n`), which the test suite asserts and
+  which neither LAPACK nor Mathematica do. That decision comes out of the
+  orthogonalisation residual and cannot be reproduced from `R`, so near-singular
+  input falls back.
+
+**Why it stalled, and what it means for 1.4 and 1.5.** LAPACK's own dgeqrf +
+dorgqr on a 500x500 is a few milliseconds. The rest is marshalling:
+
+  - `na_load_matrix` converts to column-major **element by element**, through an
+    out-of-line `ndt_get` per element with a cache-hostile scattered write —
+    this is exactly Phase 3.
+  - `na_build_matrix` builds each output the same way.
+  - `{q, r}` is a **List of two arrays**, and the no-nesting invariant forbids a
+    packed array inside a plain List, so both outputs are materialised: 500k
+    `Expr` nodes, measured at ~24 ms of the 58 ms. Mathematica has no such
+    restriction and returns packed arrays inside the list.
+
+This plan's own sequencing note said "Phase 3 should land before or alongside
+Phase 1.3–1.5 so the new LAPACK paths are not built on the slow boundary."
+That was right and I did not follow it. **Phase 3 should be done next**, before
+1.4 (SVD) and 1.5 (Eigenvalues), which return two and three arrays respectively
+and will hit the same two walls harder.
+
+The output-materialisation half is not a marshalling bug but a structural
+consequence of the no-nesting invariant, and deserves its own decision rather
+than being absorbed into Phase 3.
 
 The largest linear-algebra gap and the one with no excuse: `mat_lapack_dgeqrf` is
 already bound and used elsewhere (`lapack_bridge.c:238`). `builtin_qrdecomposition`

@@ -15,26 +15,102 @@
 
 #ifdef USE_LAPACK
 #include "lapack.h"   /* pulls in Accelerate.h / cblas.h (CBLAS declarations) */
+#include "ndarray_internal.h"   /* nd_parallel_reduce — threaded inner product */
 
-/* Real matrix*matrix via the platform BLAS dgemm (Apple Accelerate or system
- * CBLAS — multithreaded + vectorized). Both operands must be rank-2 float64
- * NDArrays with compatible inner dims; returns NULL otherwise so the caller
- * falls back to ndarray_dot2 (rank-1, complex, shape errors). This is the
- * difference between a naive O(m·n·k) scalar loop and a tuned kernel. */
+/* Threaded inner product: each chunk is its own cblas_ddot, the partials are
+ * summed afterwards.
+ *
+ * Accelerate's cblas_ddot appears to be single-threaded. A 10^7 inner product
+ * touches 160 MB, and one core reached 20 GB/s (7.9 ms) against Mathematica's
+ * 5.19 ms == 31 GB/s -- the shape of a memory-bound reduction that has not been
+ * split. This is the same treatment nd_full_sum already gives Total, for the
+ * same reason, and reuses the same machinery.
+ *
+ * Summation order therefore differs from a single ddot, as it already does for
+ * Total. nd_parallel_reduce runs ONE serial chunk below its threading
+ * threshold, so small vectors are bit-identical to the serial path and only
+ * large ones -- where floating-point summation order was never pinned down
+ * anyway -- reassociate. */
+typedef struct { const double* x; const double* y; } nd_ddot_ctx;
+
+static void nd_ddot_reduce(void* c, size_t lo, size_t hi, double* slot) {
+    const nd_ddot_ctx* d = (const nd_ddot_ctx*)c;
+    slot[0] = cblas_ddot((int)(hi - lo), d->x + lo, 1, d->y + lo, 1);
+}
+
+static double nd_ddot_threaded(const double* x, const double* y, size_t n) {
+    nd_ddot_ctx c = { x, y };
+    double slots[NDARRAY_MAX_THREADS];
+    int k = nd_parallel_reduce(n, nd_ddot_reduce, &c, 1, slots);
+    double acc = 0.0;
+    for (int t = 0; t < k; t++) acc += slots[t];
+    return acc;
+}
+
+/* Real contraction via the platform BLAS (Apple Accelerate or system CBLAS —
+ * multithreaded + vectorized), for every rank combination BLAS covers:
+ *
+ *     rank 2 . rank 2   ->  dgemm   matrix * matrix
+ *     rank 2 . rank 1   ->  dgemv   matrix * vector
+ *     rank 1 . rank 2   ->  dgemv   vector * matrix (transposed)
+ *     rank 1 . rank 1   ->  ddot    inner product, a scalar
+ *
+ * Both operands must be float64 NDArrays with compatible inner dims; anything
+ * else returns NULL so the caller falls back to ndarray_dot2 (complex dtypes,
+ * higher ranks, shape errors, which ndarray_dot2 reports).
+ *
+ * The three non-dgemm shapes were added 2026-07-30. cblas_ddot has been bound
+ * since the LAPACK bridge landed but was reached only by the runtime
+ * availability probe: an ordinary `x . y` on two rank-1 buffers fell through to
+ * ndarray_dot2's scalar loop, measured at 12.3 ms for 10^7 elements against
+ * Mathematica's 5.19 ms. Nothing needs marshalling here -- an NDArray is already
+ * a contiguous row-major float64 buffer, which is exactly what BLAS wants. */
 static Expr* nd_blas_matmul(const Expr* a, const Expr* b) {
-    if (a->data.ndarray.rank != 2 || b->data.ndarray.rank != 2) return NULL;
     if (a->data.ndarray.dtype != NDT_FLOAT64 ||
         b->data.ndarray.dtype != NDT_FLOAT64) return NULL;
+    int ra = a->data.ndarray.rank, rb = b->data.ndarray.rank;
+    const double* A = (const double*)a->data.ndarray.data;
+    const double* B = (const double*)b->data.ndarray.data;
+
+    if (ra == 1 && rb == 1) {                          /* inner product */
+        int64_t k = a->data.ndarray.dims[0];
+        if (k != b->data.ndarray.dims[0]) return NULL;
+        /* A scalar, so there is no presentation to inherit. */
+        return expr_new_real(nd_ddot_threaded(A, B, (size_t)k));
+    }
+
+    if (ra == 2 && rb == 1) {                          /* matrix * vector */
+        int64_t m = a->data.ndarray.dims[0], k = a->data.ndarray.dims[1];
+        if (k != b->data.ndarray.dims[0]) return NULL;
+        double* out = malloc(sizeof(double) * (size_t)m);
+        if (!out) return NULL;
+        cblas_dgemv(CblasRowMajor, CblasNoTrans, (int)m, (int)k,
+                    1.0, A, (int)k, B, 1, 0.0, out, 1);
+        int64_t dims[1] = { m };
+        return expr_new_ndarray_like(nd_present_src2(a, b), 1, dims, out, NDT_FLOAT64);
+    }
+
+    if (ra == 1 && rb == 2) {                          /* vector * matrix */
+        int64_t k = a->data.ndarray.dims[0];
+        int64_t k2 = b->data.ndarray.dims[0], n = b->data.ndarray.dims[1];
+        if (k != k2) return NULL;
+        double* out = malloc(sizeof(double) * (size_t)n);
+        if (!out) return NULL;
+        /* x^T B == (B^T x), so gemv over B with the transpose flag. */
+        cblas_dgemv(CblasRowMajor, CblasTrans, (int)k2, (int)n,
+                    1.0, B, (int)n, A, 1, 0.0, out, 1);
+        int64_t dims[1] = { n };
+        return expr_new_ndarray_like(nd_present_src2(a, b), 1, dims, out, NDT_FLOAT64);
+    }
+
+    if (ra != 2 || rb != 2) return NULL;
     int64_t m = a->data.ndarray.dims[0], k = a->data.ndarray.dims[1];
     int64_t k2 = b->data.ndarray.dims[0], n = b->data.ndarray.dims[1];
     if (k != k2) return NULL;                 /* shape error: let ndarray_dot2 report */
     double* out = malloc(sizeof(double) * (size_t)m * (size_t)n);
     if (!out) return NULL;
     cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                (int)m, (int)n, (int)k, 1.0,
-                (const double*)a->data.ndarray.data, (int)k,
-                (const double*)b->data.ndarray.data, (int)n,
-                0.0, out, (int)n);
+                (int)m, (int)n, (int)k, 1.0, A, (int)k, B, (int)n, 0.0, out, (int)n);
     int64_t dims[2] = { m, n };
     return expr_new_ndarray_like(nd_present_src2(a, b), 2, dims, out, NDT_FLOAT64); /* adopts out */
 }

@@ -17,6 +17,8 @@
 #ifndef MATHILDA_LINALG_LAPACK_BRIDGE_H
 #define MATHILDA_LINALG_LAPACK_BRIDGE_H
 
+#include "expr.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -28,5 +30,16 @@ void lapack_bridge_init(void);
 #ifdef __cplusplus
 }
 #endif
+
+/* Economy QR of a numeric rank-2 matrix in MATHILDA's QRDecomposition
+ * convention: {q, r} with mat == Transpose[q].r, q being k x n and r k x n,
+ * both plain nested Lists. `cplx` selects the z* routines.
+ *
+ * Returns NULL to DECLINE -- non-numeric, wrong rank, LAPACK error, or a matrix
+ * that is not comfortably full rank. The last case matters: the in-house path
+ * truncates its answer to the numerical rank (which the test suite asserts and
+ * which LAPACK and Mathematica do not do), and that decision cannot be
+ * reproduced from R, so anything near-singular falls back to it. */
+Expr* mat_qr_mathilda(const Expr* mat, int cplx);
 
 #endif /* MATHILDA_LINALG_LAPACK_BRIDGE_H */
