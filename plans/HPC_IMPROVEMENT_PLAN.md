@@ -340,7 +340,50 @@ pass with them off it.
 
 ---
 
-## Phase 3 — the LAPACK boundary
+## Phase 3 — the LAPACK boundary  ◐ PARTIAL (2026-07-30)
+
+**Done: the element-wise marshalling.** `na_load_matrix` / `na_build_matrix`
+converted between row-major and LAPACK's column-major **element by element**,
+through an out-of-line `ndt_get` per element with a cache-hostile scattered
+write. For the float64 real case — which is every measured path — that is not
+marshalling at all, only a layout change: same-layout is a `memcpy`, and
+row-major to column-major IS a transpose, now 32x32 cache-blocked like
+`ndstruct_transpose`.
+
+| | before | after | vs WL |
+|---|---:|---:|---:|
+| `Det`, 500² | 2.88 ms | **1.45 ms** | **1.09× FASTER** |
+| `Inverse`, 500² | 9.29 ms | 7.37 ms | 2.43× (was 3.02×) |
+| `LinearSolve`, 1000² | 17.0 ms | 15.7 ms | 2.44× (was 2.73×) |
+
+`Det` now beats Mathematica. `QRDecomposition` did not move (59 ms): its cost is
+`dorgqr` plus the output materialisation, not the load.
+
+**Still open, and re-profiling changed what the next item should be.** After the
+fix, `LinearSolve` at 1000² samples as roughly:
+
+    BLAS/LAPACK       ~2400 samples   (63%)
+    mach_vm_map / mach_vm_deallocate / madvise
+                      ~1034 samples   (~27%)
+    na_load_matrix     ~376 samples   (10%)
+
+**A quarter of the time is the kernel mapping and unmapping memory.** A 1000×1000
+double matrix is 8 MB, and macOS's allocator serves allocations that large
+straight from `mmap`, returning them with `munmap`/`madvise` — so every call pays
+page-table work for buffers that are immediately discarded and re-requested. A
+small size-keyed scratch pool in the linalg bridges would remove it. That is now
+the largest remaining item here, and it was not in this plan: it only became
+visible once the element-wise loop stopped hiding it.
+
+The plan's third bullet — **avoid the transpose entirely** — is still the
+structurally right answer and is untouched. Solving with a row-major `A` is
+solving `Aᵀ`, so `dgetrf` on the row-major buffer followed by `dgetrs` with
+`trans='T'` gives `A x = b` with no transposition at all. It needs `dgetrs`
+bound, which it is not yet.
+
+---
+
+### Original analysis
 
 *Cost: ~2 days. Fixes three rows at once and everything Phase 1 adds inherits it.*
 

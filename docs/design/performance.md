@@ -57,16 +57,19 @@ written for performance, and both systems get the same treatment.
 
 | Benchmark | Mathilda | Mathematica 14.0 | |
 |---|---:|---:|---|
-| Matrix multiply, 1000×1000 | 8.04 ms | **6.71 ms** | 1.20× |
-| `Det`, 500×500 | 2.99 ms | **1.82 ms** | 1.64× |
-| `LinearSolve`, 1000×1000 | 17.0 ms | **6.23 ms** | 2.73× |
-| `Inverse`, 500×500 | 8.18 ms | **2.99 ms** | 2.74× |
-| `SingularValueDecomposition`, 300×300 | 54.6 ms | **8.40 ms** | 6.50× |
-| `Eigenvalues`, 300×300 symmetric | 21.5 ms | **3.08 ms** | 7.00× |
-| `QRDecomposition`, 500×500 | 58.4 ms | **4.18 ms** | 14.0× |
+| Matrix multiply, 1000×1000 | 8.09 ms | **6.54 ms** | 1.24× |
+| `Det`, 500×500 | **1.45 ms** | 1.58 ms | 1.09× faster |
+| `LinearSolve`, 1000×1000 | 15.7 ms | **6.45 ms** | 2.44× |
+| `Inverse`, 500×500 | 7.37 ms | **3.03 ms** | 2.43× |
+| `SingularValueDecomposition`, 300×300 | 51.5 ms | **8.62 ms** | 5.97× |
+| `Eigenvalues`, 300×300 symmetric | 22.5 ms | **3.14 ms** | 7.18× |
+| `QRDecomposition`, 500×500 | 59.3 ms | **4.70 ms** | 12.6× |
 
-Matrix multiply and `Det` are close, because both systems reach the same
-Accelerate kernels. The spread widens exactly where Mathilda stops using LAPACK:
+`Det` is now *faster* than Mathematica and matrix multiply is close, because both
+systems reach the same Accelerate kernels and the conversion into them is no
+longer element-wise (plan phase 3: `na_load_matrix` converted row-major to
+column-major one `ndt_get` at a time; it is now a cache-blocked transpose, or a
+`memcpy` where no transpose is needed). The spread widens exactly where Mathilda stops using LAPACK:
 `QRDecomposition`, `Eigenvalues` and `SingularValueDecomposition` run in-house
 numeric kernels. `Eigenvalues` uses Mathilda's own QR iteration, kept in
 preference to LAPACK because the eigenvalue *ordering* convention (|λ| ties broken
