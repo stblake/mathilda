@@ -159,7 +159,7 @@ of the two, by 1.29×.
 | Benchmark | Mathilda | Mathematica 14.0 | |
 |---|---:|---:|---|
 | Jacobi 5-point relaxation, 512², 100 sweeps | 132 ms | **110 ms** | 1.20× |
-| Game of Life, 256², 100 generations | 65.7 s | **99.8 ms** | 658× |
+| Game of Life, 256², 100 generations | 67.9 s | **94.0 ms** | 722× |
 
 The Jacobi row is the classical vectorised stencil,
 
@@ -181,18 +181,22 @@ life[g_] := With[{k = nb[g]},
   UnitStep[k-3] UnitStep[3-k] + UnitStep[k-2] UnitStep[2-k] g];
 ```
 
-`UnitStep` has **no NDArray kernel**, so it costs ~500 ns/element — a measured
-5.0 s for a single `UnitStep` over 10⁷ elements. Four `UnitStep` calls per
-generation over 65536 cells for 100 generations is where the 65 s goes; the
-`RotateLeft` sums underneath are now fast.
+`UnitStep` had **no NDArray kernel** and cost ~500 ns/element — 5.0 s for a
+single `UnitStep` over 10⁷ elements. It could not be given an ordinary real
+kernel, because it answers with *exact Integers* (`UnitStep[{-1., 1.}]` is
+`{0, 1}`, not `{0., 1.}`) and a float64-closed kernel would change an element's
+head. A **narrowing** category — real in, `NDT_INT64` out — was added
+([plan phase 2](../../plans/HPC_IMPROVEMENT_PLAN.md)) and `UnitStep` is now 113×
+faster (44 ms), with `Floor`, `Ceiling`, `Round`, `IntegerPart` and `Sign` off
+`NOT_AWARE` as well.
 
-It cannot be fixed by adding an ordinary real kernel. `UnitStep` answers with
-*exact Integers* (`UnitStep[{-1., 1.}]` is `{0, 1}`, not `{0., 1.}`), so a
-float64-closed kernel would change an element's head — the same reason
-`Floor`, `Ceiling`, `Round`, `IntegerPart` and `Sign` are on `pack.c`'s
-`NOT_AWARE` list. What is needed is a *narrowing* kernel category: float64 in,
-`NDT_INT64` out. That single addition would fix this row, the Monte Carlo row in
-§6, and let five existing kernels back onto the fast path.
+**That did not move this row at all**, because measurement then showed Life was
+never `UnitStep`-bound. `Sum[RotateLeft[m,{i,j}], {i,-1,1}, {j,-1,1}]` on a
+packed 256² grid takes **463 ms** and returns an unpacked result, where the same
+nine terms written as an explicit `Plus` take **0.81 ms** — 572× for identical
+arithmetic. `Sum` over an array-valued body does not use the buffer path, and
+that is the whole of the remaining 65 s. The `UnitStep` cost had simply been
+large enough to hide it.
 
 ---
 
@@ -203,7 +207,7 @@ float64-closed kernel would change an element's head — the same reason
 | Lennard-Jones energy, 1452 bodies, all pairs | **150 ms** | 326 ms | 2.17× faster |
 | Mandelbrot, 800×800, 100 iterations | **785 ms** | 1.67 s | 2.13× faster |
 | Logistic map, 10⁷ iterations | **178 ms** | 257 ms | 1.44× faster |
-| Monte Carlo π, 10⁷ samples (vectorised) | 6.75 s | **253 ms** | 26.7× |
+| Monte Carlo π, 10⁷ samples (vectorised) | **2.73 s** | 275 ms | 9.94× |
 
 **Mathilda's compiled scalar code is faster than Wolfram's on all three compiled
 kernels**, by 1.4–2.2×. This is the same result
@@ -213,8 +217,11 @@ all-pairs `For` loop with indexed array reads (Lennard-Jones), an escape-time
 loop with a compound `&&` guard (Mandelbrot), and a bare arithmetic recurrence
 (logistic map).
 
-Monte Carlo π is the `UnitStep` gap of §5 again, in vectorised form:
-`Total[UnitStep[1. - u^2 - v^2]]`.
+Monte Carlo π was the `UnitStep` gap of §5 and is now **RNG-bound**: after the
+narrowing kernels it is 2.73 s, of which `RandomReal[{0,1}, 10^7]` — called
+twice — accounts for 2.4 s. The arithmetic and reduction together are ~130 ms.
+Mathematica runs the whole benchmark in 275 ms, so its generator is roughly 10×
+faster than `src/random.c`.
 
 ---
 

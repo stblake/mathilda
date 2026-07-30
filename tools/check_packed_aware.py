@@ -46,13 +46,13 @@ SRC = os.path.join(ROOT, "src")
 EXEMPT = {
     "List": "enforces the no-nesting invariant -- a buffer must never sit inside "
             "a plain List, which is what keeps the gate an O(argc) top-level scan",
-    "Floor": "real in, exact Integer out; needs a narrowing float64->int64 kernel "
-             "(HPC_IMPROVEMENT_PLAN.md phase 2)",
-    "Ceiling": "as Floor",
-    "Round": "as Floor",
-    "IntegerPart": "as Floor",
-    "Sign": "as Floor",
-    "Im": "as Floor",
+    # Floor / Ceiling / Round / IntegerPart / Sign were exempt here until
+    # 2026-07-30 for want of a narrowing float64->int64 kernel category. They
+    # have one now (NDUnaryKernel.to_int), are off NOT_AWARE, and answer with the
+    # exact Integers the List path does -- so they are no longer exceptions.
+    "Im": "projection kernel (to_real), so a real input yields a real 0.0 where "
+          "the List gives the exact Integer 0; it needs the narrowing treatment "
+          "Floor and friends got, which its to_real category cannot express",
     "Clip": "clamps to the EXACT bounds, so a clipped element comes back Integer",
     "Precision": "Listable here, so the list answers per element and a buffer "
                  "path would answer with one scalar",
@@ -202,12 +202,21 @@ def kernel_heads():
     return out
 
 
+def strip_comments(text):
+    """Remove /* ... */ and // ... so quoted prose in a comment is not mistaken
+    for a list entry. It was: a comment inside the NOT_AWARE initialiser reading
+    `the "optimisation, not a correctness question" the note below anticipated`
+    was parsed as a head named exactly that."""
+    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
+    return re.sub(r"//[^\n]*", " ", text)
+
+
 def string_list(text, varname):
     """Parse `static const char* const VARNAME[] = { "A", "B", ... };`."""
     m = re.search(r'\b' + varname + r'\s*\[\s*\]\s*=\s*\{(.*?)\}\s*;', text, re.S)
     if not m:
         return None
-    return set(re.findall(r'"([^"]+)"', m.group(1)))
+    return set(re.findall(r'"([^"]+)"', strip_comments(m.group(1))))
 
 
 def main():
@@ -224,11 +233,18 @@ def main():
     fast = heads_with_fast_paths(reg)
     kernels = kernel_heads()
 
+    # symtab_set_ndarray_*_kernel sets packed_aware itself, so a head with a
+    # registered kernel is aware WITHOUT appearing in the AWARE list -- and is
+    # un-aware only by appearing in NOT_AWARE. Both checks below have to reason
+    # about the effective set, not the literal list; UnitStep, which is aware
+    # purely through its kernel, was reported as a problem when they did not.
+    effective_aware = (aware | kernels) - not_aware
+
     problems = []
 
     # (1) A head with an NDArray dispatch that is not aware and not exempt.
     for head, (path, marker) in sorted(fast.items()):
-        if head in aware or head in EXEMPT:
+        if head in effective_aware or head in EXEMPT:
             continue
         problems.append(
             f"{head}: has an NDArray fast path ({marker} in {path}) but is not in\n"
@@ -237,7 +253,7 @@ def main():
             f"    Add it to AWARE, or add it to EXEMPT in this script with a reason.")
 
     # (2) INT64_OK implies packed_aware; an entry that is not aware does nothing.
-    for head in sorted(int64_ok - aware):
+    for head in sorted(int64_ok - effective_aware):
         if head in EXEMPT:
             continue
         problems.append(

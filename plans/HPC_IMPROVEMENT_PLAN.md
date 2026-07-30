@@ -296,7 +296,57 @@ which is why it is last in it.
 
 ---
 
-## Phase 2 — the narrowing kernel category
+## Phase 2 — the narrowing kernel category  ◐ DONE, targets still blocked (2026-07-30)
+
+**The category works.** `NDUnaryKernel` gained `to_int_r` / `to_int_i` / `to_int`
+(additive, so the Compile VM and every other kernel consumer are untouched), and
+`ndarray_map_unary` writes an `NDT_INT64` result for them. `UnitStep` — which had
+no kernel at all — is registered, and `Floor`, `Ceiling`, `Round`, `IntegerPart`
+and `Sign` came **off** `NOT_AWARE`.
+
+| 10⁷ elements | before | after | |
+|---|---:|---:|---|
+| `UnitStep`, real | 5004 ms | 44 ms | **113×** |
+| `UnitStep`, int64 | 5004 ms | 27 ms | **185×** |
+| `Floor` | materialised | 37 ms | |
+| `Sign` | materialised | 76 ms | |
+| `Round` | materialised | 101 ms | |
+
+Both arms were needed, not just the narrowing one: Monte Carlo π's `UnitStep`
+sees float64, but Game of Life's sees **int64** (its neighbour count is an
+integer grid). Verified by a 66-case differential sweep including past-int64
+values, infinities, complex, Rationals and MPFR — a real input that will not fit
+an int64 abandons the whole array so the List path answers with a bignum.
+
+**Neither headline benchmark reached parity, because neither was actually
+`UnitStep`-bound once measured.**
+
+| | before | after | vs WL |
+|---|---:|---:|---:|
+| Monte Carlo π, 10⁷ | 6.75 s | **2.73 s** | 9.94× (was 26.7×) |
+| Game of Life, 256², 100 gen | 65.7 s | 67.9 s | 722× (unchanged) |
+
+Breaking each down:
+
+- **Monte Carlo is now RNG-bound.** `RandomReal[{0,1}, 10^7]` alone is **1.22 s**,
+  and the benchmark calls it twice — 2.4 s of the 2.73 s. Everything else totals
+  ~0.13 s (`u^2` 13 ms, the subtraction 84 ms, `UnitStep` 27 ms, `Total` 7 ms).
+  Mathematica does the *whole* benchmark in 275 ms, so its RNG produces 2×10⁷
+  doubles in a fraction of that. **New item: `random.c` throughput**, roughly 10×.
+
+- **Game of Life is `Sum`-bound, and spectacularly.**
+  `Sum[RotateLeft[m,{i,j}], {i,-1,1}, {j,-1,1}]` on a packed 256² integer grid
+  takes **463 ms** and returns an **unpacked** result, where writing the same nine
+  terms as an explicit `Plus` takes **0.81 ms** — a **572× gap** for identical
+  arithmetic. A single `RotateLeft` is 57 µs, so the nine shifts plus eight adds
+  should be under 1 ms. `Sum` over an array-valued body is not using the buffer
+  path at all. That, not `UnitStep`, is the whole of the remaining 65 s.
+  **New item: `Sum`/`Product` accumulation over array-valued bodies.**
+
+Both were invisible before this phase: `UnitStep` at 500 ns/element was large
+enough to hide them.
+
+### Original analysis
 
 *Cost: ~3 days. Fixes the single largest gap (658×) and a 27× one, and unblocks
 five kernels that are currently forbidden from the fast path.*

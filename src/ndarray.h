@@ -240,6 +240,31 @@ typedef struct {
      * complex input. The engine writes a real-dtype array, taking `ore` from
      * `cplx` as the value (`oim` ignored). Overrides real_closed. */
     bool to_real;
+
+    /* ---------------------------------------------------------------- *
+     *  NARROWING: real in, EXACT INTEGER out.
+     * ---------------------------------------------------------------- *
+     * Floor, Ceiling, Round, IntegerPart, Sign and UnitStep all answer with an
+     * exact Integer -- Floor[{0.25, 0.5, 1.0}] is {0, 0, 1}, not {0., 0., 1.}.
+     * The two categories above cannot express that: real_closed keeps the input
+     * dtype and would write 1.0 where the List gives the exact 1, and to_real
+     * likewise. That is why all six sat on pack.c's NOT_AWARE list, materialising
+     * rather than computing -- and why UnitStep, which has no other sensible
+     * category at all, had no kernel whatsoever and cost ~500 ns/element.
+     *
+     * When `to_int` is set the engine writes an NDT_INT64 array:
+     *   to_int_r   from a real element; false = not representable as an exact
+     *              int64 (non-finite, or beyond the range), which ABANDONS the
+     *              whole array so the List path answers with a bignum.
+     *   to_int_i   from an exact int64 element; NULL declines, leaving int64
+     *              input to materialise as before.
+     *
+     * These are additive: `cplx`, `real` and `real_closed` keep whatever they
+     * already said, so the Compile VM and every other kernel consumer are
+     * unaffected -- only ndarray_map_unary prefers this path. */
+    bool (*to_int_r)(double x, int64_t* out);
+    bool (*to_int_i)(int64_t x, int64_t* out);
+    bool to_int;
 } NDUnaryKernel;
 
 /* Binary scalar-index kernel: f[scalar, array] or f[array, scalar] — one

@@ -1353,6 +1353,45 @@ Expr* ndarray_map_unary(const Expr* a, const NDUnaryKernel* k) {
     int rank = a->data.ndarray.rank;
     const int64_t* dims = a->data.ndarray.dims;
 
+    /* Narrowing (Floor/Ceiling/Round/IntegerPart/Sign/UnitStep): a real or
+     * exact-integer input gives an EXACT INTEGER, so the result is NDT_INT64.
+     *
+     * Deliberately serial and all-or-nothing rather than threaded: a single
+     * element that is not representable as an int64 (non-finite, or past the
+     * range) abandons the WHOLE array so the ordinary List path can answer with
+     * a bignum, and that early exit is worth more than the threading. It is also
+     * the same contract the compile engine and Total's int64 accumulate use --
+     * abandon, never wrap, never round.
+     *
+     * Complex input has no integer answer here (Sign[z] is z/|z|), so it falls
+     * through to the categories below, which decline for these kernels. */
+    if (k->to_int && !ndt_is_complex(dta)) {
+        bool from_int = (dta == NDT_INT64);
+        if (from_int ? (k->to_int_i != NULL) : (k->to_int_r != NULL)) {
+            int64_t* out = (int64_t*)malloc(sizeof(int64_t) * (sz ? sz : 1));
+            if (!out) return NULL;
+            bool ok = true;
+            if (from_int) {
+                const int64_t* src = (const int64_t*)in;
+                for (size_t i = 0; i < sz && ok; i++)
+                    ok = k->to_int_i(src[i], &out[i]);
+            } else if (dta == NDT_FLOAT64) {
+                const double* src = (const double*)in;
+                for (size_t i = 0; i < sz && ok; i++)
+                    ok = k->to_int_r(src[i], &out[i]);
+            } else {
+                for (size_t i = 0; i < sz && ok; i++) {
+                    double re, im;
+                    ndt_get(in, i, dta, &re, &im);
+                    ok = k->to_int_r(re, &out[i]);
+                }
+            }
+            if (!ok) { free(out); return NULL; }   /* degrade to the List path */
+            return expr_new_ndarray_like(a, rank, dims, out, NDT_INT64);
+        }
+        return NULL;                                /* int64 in, no int64 kernel */
+    }
+
     /* Projection (Abs/Re/Im/Arg): always a real output, even for complex input.
      * The real dtype keeps the input's component width. */
     if (k->to_real) {

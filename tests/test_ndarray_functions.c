@@ -166,8 +166,19 @@ static void test_rounding(void) {
     };
     for (unsigned i = 0; i < sizeof(fns)/sizeof(fns[0]); i++)
         chk_matches(fns[i], d);
-    /* Round is half-to-even: 2.5->2, 3.5->4, -2.5->-2. */
-    chk_eq("Round[NDArray[{2.5, 3.5, -2.5}]]", "NDArray[{2.0, 4.0, -2.0}]");
+    /* Round is half-to-even: 2.5->2, 3.5->4, -2.5->-2 -- and the result is an
+     * INT64 buffer of exact Integers, not float64.
+     *
+     * This expectation was NDArray[{2.0, 4.0, -2.0}] until 2026-07-30. That was
+     * the old limitation showing through: with no narrowing kernel category the
+     * only thing a real-closed kernel could do was keep the float64 dtype, so
+     * the visible NDArray surface disagreed with BOTH the List path and
+     * Mathematica, which give exact Integers -- while this very test's stated
+     * purpose (line above) is that the two match. NDUnaryKernel.to_int now
+     * writes NDT_INT64, and all three agree. */
+    chk_eq("Round[NDArray[{2.5, 3.5, -2.5}]]", "NDArray[{2, 4, -2}]");
+    chk_eq("DataType[Round[NDArray[{2.5, 3.5, -2.5}]]]", "\"int64\"");
+    chk_eq("Head[Round[NDArray[{2.5}]][[1]]]", "Integer");
     /* Stays packed on real input; complex input degrades to the List path. */
     chk_eq("Head[Floor[NDArray[{1.5, 2.5}]]]", "NDArray");
     chk_eq("Head[Floor[NDArray[{1.5 + 0.5 I}, DataType -> \"complex64\"]]]", "List");

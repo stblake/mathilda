@@ -496,7 +496,13 @@ static void pack_mark_aware_heads(void) {
      * int64 output buffer for Floor and friends) would let them back on this
      * list -- an optimisation, not a correctness question. */
     static const char* const NOT_AWARE[] = {
-        "Floor", "Ceiling", "Round", "IntegerPart", "Sign", "Im",
+        /* Floor, Ceiling, Round, IntegerPart and Sign came OFF this list on
+         * 2026-07-30: they now have narrowing kernels (real in, NDT_INT64 out --
+         * see NDUnaryKernel.to_int in ndarray.h), so the buffer path produces the
+         * exact Integers the List does instead of 1.0 where the List gives 1.
+         * That was the "optimisation, not a correctness question" the note below
+         * anticipated. `Im` stays: its kernel is a projection, not a narrowing. */
+        "Im",
         "Clip", "Precision", "Accuracy",
         /* Quotient joined this list on 2026-07-30, found by sweeping all 79
          * registered kernel heads packed-against-plain. Real in, exact Integer
@@ -583,6 +589,12 @@ static void pack_mark_aware_heads(void) {
          * applies a function, so exactness is entirely the function's business. */
         "Nest", "NestList", "NestWhile", "NestWhileList",
         "FixedPoint", "FixedPointList",
+        /* The narrowing kernels. Exact on an int64 buffer because that arm is
+         * written in int64 throughout: Floor/Ceiling/Round/IntegerPart are the
+         * identity on an integer, Sign and UnitStep are trivial comparisons, and
+         * a real input that will not fit an int64 abandons the whole array so
+         * the List path answers with a bignum. */
+        "Floor", "Ceiling", "Round", "IntegerPart", "Sign", "UnitStep",
     };
     for (size_t i = 0; i < sizeof(INT64_OK) / sizeof(INT64_OK[0]); i++)
         symtab_set_packed_int64_ok(INT64_OK[i]);
