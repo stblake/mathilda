@@ -19,12 +19,17 @@ modelled on numpy's `ndarray`.
   explicit option). `Options[NDArray]` is `{DataType -> "float64"}`; `DataType[a]` gives an
   array's dtype as a string. dtype is part of an array's identity, so
   `NDArray[{1,2},DataType->"float32"]` is not `SameQ` to the `"float64"` one.
-- Unlike Mathematica's packed arrays -- an invisible internal optimization a
-  list may or may not have -- `NDArray[...]` is always exactly what it says:
-  `Head[NDArray[{{1, 2}, {3, 4}}]]` is `NDArray`, never `List`; `NDArrayQ`,
-  `MatrixQ`, `VectorQ`, and `ListQ` never disagree about which one a value is;
-  and it always prints as `NDArray[{{1.0, 2.0}, {3.0, 4.0}}]`, never as bare
-  `{{1.0, 2.0}, {3.0, 4.0}}`.
+- `NDArray[...]` is always exactly what it says: `Head[NDArray[{{1, 2}, {3,
+  4}}]]` is `NDArray`, never `List`; `MatrixQ`, `VectorQ` and `ListQ` all report
+  `False` for it; and it always prints as `NDArray[{{1.0, 2.0}, {3.0, 4.0}}]`,
+  never as bare `{{1.0, 2.0}, {3.0, 4.0}}`.
+- The *invisible* form of the same storage is a **packed list** -- an ordinary
+  `List` that happens to be held as a dense buffer, which `Head`, `ListQ`,
+  printing and pattern matching cannot distinguish from any other `List`. That
+  is what `ToNDArray` produces and what automatic packing uses; see
+  [`packed-arrays.md`](packed-arrays.md). `NDArrayQ` is the one predicate that
+  answers `True` for both forms, since it asks about storage rather than about
+  what the value claims to be.
 - **Every linear-algebra routine accepts `NDArray` input** (see
   `src/linalg/ndlinalg.c`). The heavy/common consumers — `Det`, `Inverse`,
   `LinearSolve`, `MatrixRank`, `Tr`, `Norm`, `Normalize`, `Cross` — take a fast

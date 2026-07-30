@@ -111,6 +111,13 @@ Generates a list of expressions.
   Nested iterators compile too: the outer variables are folded in as the
   constants they currently hold. Calls to a `CompiledFunction` inside the body
   are inlined rather than dispatched per point.
+- **Large machine-number results pack.** A result of 250 or more elements that
+  is a rectangular block of uniformly exact or uniformly inexact machine numbers
+  is returned as a [packed list](packed-arrays.md): an ordinary `List` held as a
+  dense buffer, distinguishable only by `NDArrayQ`. A machine-real compiled body writes the
+  buffer directly, without building the elements first; every other branch is
+  offered for packing once built. `Table[i j, {i, 300}, {j, 300}]` is one rank-2
+  packed array, not a list of packed rows.
 
 ```mathematica
 In[1]:= Table[i^2, {i, 4}]
@@ -118,9 +125,21 @@ Out[1]= {1, 4, 9, 16}
 ```
 
 ## Range
-Generates a list of values.
+Generates a list of values. Attributes: `Protected`.
 - `Range[imax]`
 - `Range[imin, imax, di]`
+
+The element count is decided before anything is built, and an all-`Integer`
+`Range` computes it in `int64` — so `Range[10^18, 10^18 + 3]` gives four
+elements. (It previously ran to the 10^6-element safety cap: the loop was driven
+by the `double` shadow of its bounds, and one ulp at 10^18 is 128.)
+
+- **Large machine-number results pack.** A result of 250 or more elements that
+  is a rectangular block of uniformly exact or uniformly inexact machine numbers
+  is returned as a [packed list](packed-arrays.md): an ordinary `List` held as a
+  dense buffer, distinguishable only by `NDArrayQ`. Both branches write the buffer directly rather
+than building the elements and packing afterwards, which is worth ~135x at
+n = 10^6.
 
 ## Subdivide
 Generates equally spaced points spanning an interval, **including both
@@ -171,6 +190,12 @@ Generates an array by applying a function to indices.
 - `Array[f, n]`
 - `Array[f, {n1, n2, ...}]`
 
+- **Large machine-number results pack.** A result of 250 or more elements that
+  is a rectangular block of uniformly exact or uniformly inexact machine numbers
+  is returned as a [packed list](packed-arrays.md): an ordinary `List` held as a
+  dense buffer, distinguishable only by `NDArrayQ`. Offered after building, not written directly:
+`Array` evaluates `f[i]` per leaf with no advance knowledge of the result type.
+
 ## ConstantArray
 Generates a list (or nested array) filled with copies of a fixed element.
 Attributes: `Protected`.
@@ -189,6 +214,12 @@ Out[1]= {c, c, c, c, c}
 In[2]:= ConstantArray[0, {2, 3}]
 Out[2]= {{0, 0, 0}, {0, 0, 0}}
 ```
+
+- **Large machine-number results pack.** A result of 250 or more elements that
+  is a rectangular block of uniformly exact or uniformly inexact machine numbers
+  is returned as a [packed list](packed-arrays.md): an ordinary `List` held as a
+  dense buffer, distinguishable only by `NDArrayQ`. A machine-number `c` over a rectangular shape is
+written straight into the buffer.
 
 ## UnitVector
 Generates a coordinate unit vector. Attributes: `Protected`.
@@ -265,7 +296,6 @@ Interleaves separators into the gaps between successive elements of `list`.
   `Riffle[{a, b, c}, f[x, y]]` puts the whole `f[x, y]` in each gap.
 - The object `list` need not have head `List`; its head is preserved on the
   result.
-- Not yet handled: packed arrays (`NDArray`) are left unevaluated.
 
 ```mathematica
 In[1]:= Riffle[{1, 2, 3}, 0]

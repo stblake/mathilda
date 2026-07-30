@@ -14,6 +14,11 @@ Gives pseudorandom integers.
 - RandomInteger[] gives 0 or 1 with probability 1/2.
 - RandomInteger gives a different sequence of pseudorandom integers whenever you run Mathilda. You can start with a particular seed using SeedRandom.
 - Returns bignums when the range exceeds 64-bit integer limits.
+- **Large machine-integer results pack.** A list or array of 250 or more values
+  is returned as a [packed list](packed-arrays.md) -- an ordinary `List` held as
+  a dense `int64` buffer, distinguishable only by `NDArrayQ`. Offered after
+  building rather than written directly, because a wide range can yield bignums,
+  which decline packing for the whole result.
 
 ```mathematica
 In[1]:= SeedRandom[42]; RandomInteger[]
@@ -52,6 +57,12 @@ Gives pseudorandom real numbers.
 - RandomReal[{xmin, xmax}] chooses reals with a uniform probability distribution in the range xmin to xmax.
 - RandomReal gives a different sequence of pseudorandom reals whenever you run Mathilda. You can start with a particular seed using SeedRandom.
 - Uses 53 bits of randomness for full double-precision mantissa coverage.
+- **Large results pack.** A list or array of 250 or more machine reals is
+  written straight into a dense buffer and returned as a
+  [packed list](packed-arrays.md): an ordinary `List` distinguishable only by
+  `NDArrayQ`. The draw order is unchanged (row-major), so a seeded stream gives
+  the same values either way. Does not apply to `WorkingPrecision` above
+  `MachinePrecision`, which yields MPFR atoms.
 - Accepts integer, real, rational, and bigint range arguments, as well as symbolic-but-numeric bounds that `N[]` can reduce to a machine (or MPFR) number, e.g. `RandomReal[{-Pi, Pi}]` or `RandomReal[{0, Sqrt[2]}]`.
 - `WorkingPrecision -> n` accepts `MachinePrecision` (the default) or a positive number of decimal digits. Digit counts above MachinePrecision route generation through MPFR, so range bounds keep their full working precision and the result is an MPFR atom.
 

@@ -7,7 +7,23 @@ Evaluates `expr` and returns a list of the time in seconds used, together with t
 **Features**:
 - `HoldAll`, `Protected`, `SequenceHold`.
 - Returns `{timing, result}`.
-- Includes only CPU time spent evaluating the expression.
+- Includes only CPU time spent evaluating the expression, **summed over threads**.
+  A threaded NDArray path or a BLAS call is therefore over-reported by roughly the
+  core count — use `AbsoluteTiming` to measure how long something actually took.
+
+## AbsoluteTiming
+Evaluates `expr` and returns a list of the absolute number of seconds of elapsed
+wall-clock time, together with the result obtained.
+- `AbsoluteTiming[expr]`
+
+**Features**:
+- `HoldAll`, `Protected`, `SequenceHold`.
+- Returns `{seconds, result}`.
+- Elapsed real time from a monotonic clock, so a clock adjustment during a long
+  evaluation cannot produce a negative interval.
+- This, not `Timing`, is the right measurement for anything threaded: the
+  multithreaded reductions and elementwise kernels, `Dot` and the LAPACK-backed
+  decompositions all run on several cores at once.
 
 ## RepeatedTiming
 Evaluates `expr` repeatedly and returns a list of the average time in seconds used, together with the result obtained.

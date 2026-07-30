@@ -31,6 +31,8 @@ PICOMATH-80.
 - [`docs/spec/`](docs/spec/) — per-category built-in docs and changelog.
 - [`docs/extending.md`](docs/extending.md) — how to add builtins, modules,
   patterns, internal rules, and operators.
+- [`docs/design/performance.md`](docs/design/performance.md) — Mathilda against
+  Mathematica 14.0 on 38 classical HPC kernels, with the method and the gaps.
 - [`CLAUDE.md`](CLAUDE.md) — contributor workflow.
 
 ---

@@ -203,6 +203,26 @@ so the "interpreted" side is not interpreted. Packed in and packed out at 200k
 elements: `Map[u^2 + 1. &]` 277x, `Map[Sin[u] Exp[-u] + Sqrt[u] &]` 109x,
 `Map[If[…] &]` (general loop) 47x, `Fold[Plus, 0.]` 19x.
 
+**Update (2026-07-30): the boundary is gone, and it was never the marshalling.**
+Automatic packed arrays (`docs/design/packed_arrays.md`) mean an ordinary
+`Range[1., 200000.]` *is* a buffer, so the packed-in half now happens without the
+caller arranging it, and the boundary returns the result buffer with its
+presentation set instead of materialising it. Measured against the same value with
+`MATHILDA_NO_PACK=1`: `u^2 + 1.` **50x**, a compiled `Map` body **4.8x**,
+`Fold[Plus, 0.]` **4.2x** — and each now matches the *visible*-`NDArray` timing to
+within a few percent, which is the real test that no marshalling is left.
+
+What actually cost the 50x was the transparency gate, not the copying. A
+`CompiledFunction`'s head is an `EXPR_COMPILED` with no `SymbolDef`, so the gate's
+allowlist read it as unaware and materialised the very buffer the boundary exists
+to borrow. An allowlist keyed on the symbol table cannot see a head that is not a
+symbol.
+
+The list of heads above that "return unevaluated on a packed argument" is also
+stale: `Fold`, `Select`, `Join`, `First`, `Differences`, `RotateLeft/Right`,
+`Riffle`, `Partition` and `TakeWhile` all have interpreter paths now, and the
+remaining gap is recorded in `packed_arrays.md` §6.
+
 ---
 
 ## 0c. M3c — indexed arrays, and what a stencil costs
@@ -717,3 +737,31 @@ Buffer = row-major flat, complex interleaved (re,im), NOT C99 `_Complex`.
   evaluates its first argument before binding.
 - Verify the `CompiledFunction` `expr_free` path frees an array-returning
   program's result correctly once the user argspec lands.
+
+---
+
+## Two-argument `If` (2026-07-30)
+
+`If[test, var = val]` — with no else branch, in statement position — had no
+lowering. Because the compilable subset is a **cliff, not a slope**, that one
+form cost the whole body: a Sieve of Eratosthenes and a Collatz longest-chain
+search, both otherwise entirely within the subset, silently ran interpreted.
+
+It lowers exactly like `While`: emit the guard, `JZ` over the body, answer the
+integer 0, and join `stmt_valued_head` so that 0 can never be a program's result
+(the interpreter answers `Null` when the test is False). `compile.md` §11 had
+specified this — *"`If[c,t]` → `f = Null` only valid where the value is
+unused (statement position)"* — it was simply never emitted.
+
+- Collatz longest chain below 10⁶: **240 s → 4.65 s** (52×)
+- Sieve of Eratosthenes to 10⁷: did not compile at all → **666 ms**
+
+Both are now *faster than Wolfram's* `Compile` on the same source (1.50× and
+1.18×). The general lesson stands and is worth repeating: **audit which
+spellings the interpreter accepts that the compiler does not.** `If[c, t]` is
+not an exotic construct — it is how anyone writes a conditional store — and it
+was missing for as long as control flow has existed.
+
+`CompileDiagnostics` named the cause exactly (`"Subexpression" -> "If[len > bl,
+bl = len]"`), which is the whole reason it exists; the failure was in not asking
+it about these bodies sooner.

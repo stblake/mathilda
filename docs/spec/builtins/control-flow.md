@@ -509,7 +509,10 @@ expression would.
     otherwise numeric list still gives the symbolic answer for that element).
   - An `NDArray` argument threads by the same rank rule and the result is packed
     back into an `NDArray`, so a packed array and the `List` it packs give the
-    same answer.
+    same answer. A [packed `List`](packed-arrays.md) threads the same way and
+    comes back packed, with the element type **re-sniffed** rather than forced to
+    `Real` — so an integer-valued body over a packed integer list returns
+    `Integer`s.
   - `Options[Compile]` reports the default and `SetOptions[Compile, …]` changes
     it. An unrecognised option, or a `RuntimeAttributes` setting other than the
     two above, leaves `Compile[…]` unevaluated rather than quietly ignoring it.
@@ -532,6 +535,58 @@ expression would.
   `3/2`. That divergence is inherent rather than an oversight: Rationals and
   symbolic radicals are not machine numbers, and the Wolfram Language's `Compile`
   behaves the same way.
+
+- **Packed array arguments.** A [packed `List`](packed-arrays.md) — an ordinary
+  `List` that Mathilda stores as a dense buffer — is borrowed at the boundary and
+  returned packed, so packing survives a compiled call:
+
+  ```mathematica
+  In[1]:= f = Compile[{{u, _Real, 1}}, u^2 + 1.];
+          r = f[Range[1., 200000.]]; {NDArrayQ[r], Head[r]}
+  Out[1]= {True, List}
+  ```
+
+  The result's presentation follows its argument: a plain `List` gives a plain
+  `List`, a packed one gives a packed one (at any size — a *derived* array
+  inherits presentation, so no threshold applies), and `NDArray[...]` gives
+  `NDArray[...]`. A body that BUILDS its array (`ConstantArray`, `Table`,
+  `NestList`) has nothing to inherit and follows the producer rule instead. A
+  complex result is never packed, because `Complex[re, 0.]` is not a form the
+  evaluator produces.
+
+  A dtype mismatch — `Range[n]` infers `int64` and can reach a `_Real` parameter —
+  costs one O(n) cast rather than declining the call to the interpreter. The cast
+  declines rather than rounds: an `int64` magnitude past 2^53 has no exact
+  `double`, and narrowing a float into an `_Integer` slot would change values.
+  Both cases leave the interpreter to answer.
+
+- **`$AutoCompilation`.** Many builtins compile a body *behind the caller's
+  back*, purely as an optimisation: `Plot`, `Plot3D`, `ContourPlot`,
+  `DensityPlot`, the parametric and vector plots, `Table` over an inexact
+  iterator, `NIntegrate`, `NSum`, `FindRoot`, `NDSolve`, and the bodies of `Do`,
+  `For`, `While`, `Map`, `Nest`, `Fold` and `FixedPoint`. `$AutoCompilation` is
+  `True` by default and switches all of that off when set to `False`.
+
+  ```mathematica
+  In[1]:= $AutoCompilation = False; Table[i^2, {i, 1., 4.}]
+  Out[1]= {1., 4., 9., 16.}
+  ```
+
+  An automatically compiled body is contracted to give the interpreter's answer,
+  so this changes speed and nothing else. It is there so the two paths can be
+  compared — a differential run flips it and diffs every output, and a user who
+  suspects a compiled path has it wrong can confirm in one line.
+
+  `Compile[]` and any `CompiledFunction` the user built are **not** affected:
+  those were asked for. Only `True` or `False` is accepted; anything else is
+  refused with an `$AutoCompilation::flagset` message and the symbol is rolled
+  back to the live state, so reading it back never lies about which path is
+  running. The environment variable `MATHILDA_NO_AUTOCOMPILE` starts a session
+  with it off (and `MATHILDA_NO_NUMLOOP` covers the loop-body compiler alone).
+
+  The companion switch for the other invisible optimisation is
+  `$AutoArrayPacking` — see
+  [`packed-arrays.md`](packed-arrays.md#turning-it-off--autoarraypacking).
 
 - **`RuntimeOptions`.** `RuntimeOptions -> {"CatchMachineIntegerOverflow" ->
   False}` keeps the wrapped `int64` instead of deferring to the interpreter;

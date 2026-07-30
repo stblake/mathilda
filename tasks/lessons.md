@@ -1438,3 +1438,136 @@ Rules this session earned:
   the fast path is byte-identical. Reporting it as a semantics switch (and naming
   the build flag that DOES recover the 4%) is more useful than quietly shipping a
   knob that does nothing for the stated reason.
+
+## Automatic packed arrays (2026-07-30)
+
+- **A representation change is invisible to value tests by construction, so
+  differential sweeping is the only thing that finds its bugs.** Switching on
+  automatic packing exposed six wrong answers, none of which was visible by
+  reading the code. All six came from one mechanical technique: evaluate the same
+  expression over a packed value and over the identical plain list
+  (`MATHILDA_NO_PACK=1`), for every packed-aware head (134 cases) and every
+  registered ndarray kernel (166 cases), and diff. Hand-enumeration found none of
+  them; the sweep found all of them in two runs. When adding a second
+  representation for an existing value, write the sweep before the producers.
+
+- **An invariant enforced by mutation is not safe under a convergence test that
+  cannot see the mutation.** The transparency gate materialises a buffer in place
+  and reports `*changed`. But `evaluate`'s fixed point is `expr_eq(current,
+  next)`, and `expr_eq` is *deliberately* blind to packing — that blindness is
+  what makes Association lookups work. So a step whose only effect was
+  materialising looked like no progress and was discarded. Cost: a nested `Table`
+  came back as a List of packed rows. If a pass's only effect is invisible to the
+  comparison that decides whether to keep it, the pass needs its own signal.
+
+- **An implicit opt-in is the opposite of an audited claim.** `packed_aware` was
+  meant to mean "I have been checked against a buffer". But the ndarray kernel
+  setters set it as a side effect, so ~80 heads claimed it without anyone
+  checking, and six of them (`Floor`, `Ceiling`, `Round`, `IntegerPart`, `Sign`,
+  `Im`) answer with different element HEADS than the list does. Having a machine
+  kernel is a different claim from matching the list's heads; the registration
+  conflated them. Needed a `symtab_clear_packed_aware` to undo.
+
+- **A namespace prefix is not a membership test.** The `$AutoCompilation` /
+  `$AutoArrayPacking` assignment hook keyed on the `$` sigil for cheapness, then
+  built a probe value — evaluating a delayed right-hand side. The REPL hooks
+  (`$Pre`, `$PreRead`, `$Post`, `$PrePrint`, `$Epilog`) share that namespace with
+  held right-hand sides, so all of them began evaluating at definition time.
+  Check the name against the actual set *before* doing anything with a cost or a
+  side effect.
+
+- **A performance gate calibrated on ordinary work is a landmine for any change
+  that makes ordinary work faster — and it will be in more than one file.**
+  Phase 0 moved `bench_eval`'s calibration off `Total[Range[40000]]` precisely
+  because packing would make it ~20x faster. `bench_assoc` had the *same*
+  divisor, was missed, and failed all nine of its operations at once with nothing
+  actually slower. When defusing a calibration landmine, grep for the pattern
+  rather than fixing the file that prompted it.
+
+- **A performance win in one direction can be a regression in the other, and only
+  measurement tells you which.** Packing exact-integer lists made `Length` 87000x
+  faster and `Total[Range[10^6]]` **1.55x slower**, because the safety gate had to
+  materialise every integer buffer before any reduction. The int64 exact paths
+  were filed as "pure optimisation, not correctness" — switching on the producers
+  promoted them to load-bearing. Benchmark the whole surface after a
+  representation change, not just the case that motivated it.
+
+## The Compile[] boundary and packed arrays (2026-07-30)
+
+- **When a fast path is mysteriously not firing, check the GATE before the path.**
+  A packed argument to a `CompiledFunction` measured 75x slower than the identical
+  visible `NDArray` — two values differing in one enum field. The boundary code was
+  fine; the transparency gate was materialising the buffer before
+  `compiled_function_apply` ever saw it, because a `CompiledFunction`'s head is an
+  `EXPR_COMPILED` with no `SymbolDef` and the gate's allowlist is keyed on the
+  symbol table. An allowlist cannot see a head that is not a symbol. Diagnosing
+  this by reading the boundary code would have taken arbitrarily long; comparing
+  two values that differ only in presentation found it in one measurement.
+
+- **"Derived" and "produced" are different rules and must not share code.** A
+  derived array inherits its source's presentation with NO size threshold —
+  `Sin[packedList]` is packed however short it is. A producer applies the
+  threshold. Using the producer opener for a derived result made
+  `Map[#^2 &, ToNDArray[{1., 2., 3., 4.}]]` come back unpacked while `Sin` on the
+  same value stayed packed. Two openers (`ndbuild_open` vs `ndbuild_open_like`),
+  not one with a flag.
+
+- **One boolean answering two questions is a latent bug waiting for a third
+  case.** `packed[i]` at the compile boundary meant both "we own this" and "the
+  argument was not an NDArray, so unpack the result". That was sound while a
+  borrowed `EXPR_NDARRAY` could only be the visible head. Packing added a third
+  input kind and a dtype cast that makes a temporary out of a borrowed argument —
+  and the two meanings came apart. Split it into ownership + a three-way kind.
+
+- **Fix the wrong answer in the area before you widen its reach.**
+  `Compile[{{u, _Integer, 1}}, u * 2][{1, 2, 3}]` gave `{2., 4., 6.}` — an array
+  opcode's scalar operand could only be Real or Complex. Pre-existing, nothing to
+  do with packing, and reproducible on a three-element plain List. But returning
+  int64 buffers from the boundary would have made it far more visible, so it was a
+  prerequisite rather than a separate ticket.
+
+- **Measure the workload you made slower, not only the one you made faster.**
+  Automatic packing made `Map[#^2 &, x]` at 10^6 **1.9x slower** and
+  `Map[Sin[#] Exp[-#] &, x]` **6.2x slower**, because a packed argument bypassed
+  numloop's compiled loop (it tested `EXPR_FUNCTION`) and fell to a per-element
+  interpreter walk. Every value test passed. The regression was found only by
+  timing the head that matters most on both representations — which is now a habit
+  worth keeping for any representation change.
+
+## A missing fast-path opt-in has no symptom — only a timing comparison finds it (2026-07-30)
+
+Writing `docs/design/performance.md` (38 HPC kernels vs Mathematica) found more
+defects than any code review of the same subsystem had. Every one was *correct*
+and *quiet*: right answer, slow path, no failing test.
+
+The packed-array transparency gate's rule is "materialise for any head that has
+not opted in". That makes a missing opt-in fail **safe**, which is the right
+design — and it also makes it **invisible**. `Nest` was materialising a 512×512
+buffer on every iteration (2.19 s where the same `Do` loop took 0.017 s) and
+nothing anywhere said so.
+
+Rules for next time:
+
+1. **When a subsystem is gated by an allowlist, the allowlist is a to-do list.**
+   Enumerate the heads that dispatch on the fast path (`grep -l` for the guard)
+   and diff that against the allowlist. Three of this round's fixes were exactly
+   that diff: 26 linear-algebra heads, the `Nest` family, the structural family.
+2. **A missing opt-in can be a crash, not just a slowdown**, when the same test
+   selects both the fast path and the correct algorithm. `linalg_call_has_ndarray`
+   read false after the gate materialised, so a machine-real solve took the exact
+   fraction-free path and overflowed the stack.
+3. **Ask the diagnostic tool about the bodies you already believe compile.**
+   `CompileDiagnostics` reported `"Compiled" -> False` on a Sieve and a Collatz
+   search for one missing form (two-argument `If`). It had existed the whole time;
+   nobody asked it.
+4. **Benchmark against another system, not against yourself.** A self-comparison
+   ("packed vs unpacked") cannot show that both arms are 100× off. Every gap above
+   was visible only as a ratio against Wolfram.
+5. **A benchmark can be wrong the way a program can.** The Lennard-Jones point set
+   built from `Mod[a k, m]` cycles, so it repeated *points*; two coincident bodies
+   overflowed the 1/r¹² term, the compiled call correctly bailed on the non-finite
+   result, and it read as an 89× performance cliff. Put an answer next to every
+   timing — the value column is what caught it.
+6. **Measure wall clock.** `Timing[]` is CPU time summed over threads and
+   over-reports every threaded/BLAS path by ~the core count. `AbsoluteTiming` had
+   to be added before any of this could be measured honestly.
