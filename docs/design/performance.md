@@ -227,7 +227,7 @@ of the same 40×40 grid — the check that should have been there from the start
 | Lennard-Jones energy, 1452 bodies, all pairs | **150 ms** | 326 ms | 2.17× faster |
 | Mandelbrot, 800×800, 100 iterations | **785 ms** | 1.67 s | 2.13× faster |
 | Logistic map, 10⁷ iterations | **178 ms** | 257 ms | 1.44× faster |
-| Monte Carlo π, 10⁷ samples (vectorised) | **2.73 s** | 275 ms | 9.94× |
+| Monte Carlo π, 10⁷ samples (vectorised) | **203 ms** | 286 ms | 1.41× faster |
 
 **Mathilda's compiled scalar code is faster than Wolfram's on all three compiled
 kernels**, by 1.4–2.2×. This is the same result
@@ -237,11 +237,25 @@ all-pairs `For` loop with indexed array reads (Lennard-Jones), an escape-time
 loop with a compound `&&` guard (Mandelbrot), and a bare arithmetic recurrence
 (logistic map).
 
-Monte Carlo π was the `UnitStep` gap of §5 and is now **RNG-bound**: after the
-narrowing kernels it is 2.73 s, of which `RandomReal[{0,1}, 10^7]` — called
-twice — accounts for 2.4 s. The arithmetic and reduction together are ~130 ms.
-Mathematica runs the whole benchmark in 275 ms, so its generator is roughly 10×
-faster than `src/random.c`.
+Monte Carlo π was the `UnitStep` gap of §5, then became RNG-bound at 2.73 s —
+of which `RandomReal[{0,1}, 10^7]`, called twice, was 2.4 s. Every
+machine-precision draw went through GMP: `random_uniform_01` did two `mpz_init`s,
+recomputed 2^53 with `mpz_ui_pow_ui`, called `mpz_urandomm` and cleared both, so
+producing 53 bits cost **117 ns**.
+
+A xoshiro256++ generator now serves the machine-precision paths (GMP keeps the
+bignum and MPFR draws), at **2.4 ns**:
+
+| | before | after | |
+|---|---:|---:|---|
+| `RandomReal[{0,1}, 10⁷]` | 1.22 s | 22.9 ms | 53× |
+| `RandomInteger[{0,100}, 10⁷]` | 1.73 s | 24.8 ms | 70× |
+
+`RandomInteger` needed three things beyond the generator: an `int64` result built
+without an `mpz` round trip, a direct packed-buffer producer like `RandomReal`'s,
+and Lemire's nearly-divisionless bounded draw — the textbook rejection form costs
+*two* 64-bit divisions per element, which alone made it 3× slower than
+`RandomReal`. Power-of-two ranges take a mask and are faster still (19.7 ms).
 
 ---
 

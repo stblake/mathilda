@@ -25,13 +25,13 @@ In[1]:= SeedRandom[42]; RandomInteger[]
 Out[1]= 1
 
 In[2]:= SeedRandom[42]; RandomInteger[10]
-Out[2]= 6
+Out[2]= 8
 
 In[3]:= SeedRandom[42]; RandomInteger[{1, 6}]
-Out[3]= 4
+Out[3]= 5
 
 In[4]:= SeedRandom[42]; RandomInteger[{0, 9}, 5]
-Out[4]= {6, 9, 4, 1, 3}
+Out[4]= {8, 3, 9, 7, 7}
 
 In[5]:= SeedRandom[42]; Dimensions[RandomInteger[{0, 1}, {3, 4}]]
 Out[5]= {3, 4}
@@ -68,13 +68,13 @@ Gives pseudorandom real numbers.
 
 ```mathematica
 In[1]:= SeedRandom[42]; RandomReal[]
-Out[1]= 0.376082
+Out[1]= 0.814305
 
 In[2]:= SeedRandom[42]; RandomReal[10]
-Out[2]= 3.76082
+Out[2]= 8.14305
 
 In[3]:= SeedRandom[42]; RandomReal[{-1, 1}]
-Out[3]= -0.247836
+Out[3]= 0.62861
 
 In[4]:= SeedRandom[42]; Length[RandomReal[{0, 1}, 5]]
 Out[4]= 5
@@ -89,7 +89,7 @@ In[7]:= RandomReal[x]
 Out[7]= RandomReal[x]
 
 In[8]:= SeedRandom[42]; Precision[RandomReal[1, WorkingPrecision -> 40]]
-Out[8]= 40.1242
+Out[8]= 40.037
 ```
 
 ## SeedRandom
@@ -132,7 +132,7 @@ In[1]:= SeedRandom[42]; Head[RandomComplex[]]
 Out[1]= Complex
 
 In[2]:= SeedRandom[42]; RandomComplex[2 + 3 I]
-Out[2]= 0.752164 + 1.30654 I
+Out[2]= 1.62861 + 0.956463*I
 
 In[3]:= SeedRandom[42]; Length[RandomComplex[{0, 1 + I}, 5]]
 Out[3]= 5
@@ -144,7 +144,7 @@ In[5]:= RandomComplex[x]
 Out[5]= RandomComplex[x]
 
 In[6]:= SeedRandom[42]; z = RandomComplex[1 + I, WorkingPrecision -> 30]; {Precision[Re[z]], Precision[Im[z]]}
-Out[6]= {30.0103, 30.0103}
+Out[6]= {30.103, 30.103}
 ```
 
 ## RandomChoice
@@ -165,10 +165,10 @@ Gives pseudorandom choices from a list of elements.
 
 ```mathematica
 In[1]:= SeedRandom[42]; RandomChoice[{a, b, c, d, e}]
-Out[1]= c
+Out[1]= e
 
 In[2]:= SeedRandom[42]; RandomChoice[{a, b, c}, 5]
-Out[2]= {b, c, b, a, a}
+Out[2]= {c, a, c, c, c}
 
 In[3]:= SeedRandom[42]; Dimensions[RandomChoice[{1, 2, 3}, {3, 4}]]
 Out[3]= {3, 4}
@@ -202,7 +202,7 @@ Gives a pseudorandom sample of elements without replacement.
 
 ```mathematica
 In[1]:= SeedRandom[42]; RandomSample[{a, b, c, d, e}, 3]
-Out[1]= {d, e, b}
+Out[1]= {e, c, a}
 
 In[2]:= Sort[RandomSample[{1, 2, 3, 4, 5}, 5]]
 Out[2]= {1, 2, 3, 4, 5}

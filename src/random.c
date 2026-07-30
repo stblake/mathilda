@@ -33,6 +33,7 @@
  */
 
 #include "random.h"
+#include "checked_int.h"   /* ci_add_i64 */
 #include "arithmetic.h"
 #include "symtab.h"
 #include "eval.h"
@@ -50,16 +51,130 @@
 #include <mpfr.h>
 #endif
 
-/* Global GMP random state */
+/* Global GMP random state. Retained for everything that genuinely needs
+ * arbitrary precision: bignum integer ranges and the MPFR draws. */
 static gmp_randstate_t g_rand_state;
 static int g_rand_initialized = 0;
+
+/* --------------------------------------------------------------------------
+ * Machine-precision generator: xoshiro256++
+ * --------------------------------------------------------------------------
+ *
+ * WHY A SECOND GENERATOR. Every machine-precision draw used to go through GMP:
+ * random_uniform_01 did mpz_init x2, recomputed 2^53 with mpz_ui_pow_ui, called
+ * mpz_urandomm, then mpz_clear x2 -- two heap allocations and a BIGNUM MODULAR
+ * draw to produce 53 bits. Measured at 117 ns per double, which was essentially
+ * the entire cost of RandomReal: RandomReal[{0,1}, 10^7] took 1.22 s, and 10^7 x
+ * 117 ns is 1.17 s of it.
+ *
+ * Measured alternatives, same machine, 10^7 draws:
+ *     mpz per call (what this replaced)   117.2 ns
+ *     hoisted mpz scratch + modulus        18.3 ns   (6.4x)
+ *     gmp_urandomb_ui, no mpz               9.0 ns   (13x)
+ *     xoshiro256++                          2.4 ns   (49x)
+ *
+ * xoshiro256++ is the standard choice for exactly this job: 256 bits of state,
+ * period 2^256-1, passes BigCrush, and one call is a handful of shifts and xors.
+ * It is NOT cryptographic, which RandomReal never claimed to be.
+ *
+ * GMP KEEPS the bignum and MPFR paths, so arbitrary-precision draws are
+ * unchanged. Both generators are seeded together and saved/restored together
+ * (see seed_all and random_push_seed), so SeedRandom stays a single coherent
+ * operation over both.
+ * -------------------------------------------------------------------------- */
+
+static uint64_t g_xs[4];
+
+/* splitmix64: the reference seeder for xoshiro. One 64-bit seed expands to the
+ * 256-bit state with good avalanche, so adjacent seeds give unrelated streams --
+ * seeding the state directly from a small integer would leave most of it zero. */
+static uint64_t splitmix64(uint64_t* x) {
+    uint64_t z = (*x += 0x9E3779B97F4A7C15ULL);
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+    return z ^ (z >> 31);
+}
+
+static void xs_seed(uint64_t seed) {
+    uint64_t sm = seed;
+    for (int i = 0; i < 4; i++) g_xs[i] = splitmix64(&sm);
+    /* The all-zero state is xoshiro's one fixed point; splitmix64 cannot produce
+     * it from any seed, but a corrupted restore could. */
+    if (!(g_xs[0] | g_xs[1] | g_xs[2] | g_xs[3])) g_xs[0] = 0x9E3779B97F4A7C15ULL;
+}
+
+static inline uint64_t xs_rotl(uint64_t x, int k) { return (x << k) | (x >> (64 - k)); }
+
+static inline uint64_t xs_next(void) {
+    uint64_t r = xs_rotl(g_xs[0] + g_xs[3], 23) + g_xs[0];
+    uint64_t t = g_xs[1] << 17;
+    g_xs[2] ^= g_xs[0];
+    g_xs[3] ^= g_xs[1];
+    g_xs[1] ^= g_xs[2];
+    g_xs[0] ^= g_xs[3];
+    g_xs[2] ^= t;
+    g_xs[3] = xs_rotl(g_xs[3], 45);
+    return r;
+}
+
+/*
+ * Uniform in [0, m), with no modulo bias and -- in the overwhelmingly common
+ * case -- no division either.
+ *
+ * The obvious rejection form computes `threshold = 2^64 mod m` and then
+ * `r % m`: TWO 64-bit divisions per draw, each ~20-40 cycles. That made
+ * RandomInteger ~3x slower per element than RandomReal, which is only a shift
+ * and a multiply. Two ways out, both taken:
+ *
+ *   - A power-of-two range is a mask. No division, and no rejection either,
+ *     since 2^64 is an exact multiple. RandomInteger[1] and RandomInteger[{0,
+ *     255}] and friends land here.
+ *   - Otherwise Lemire's nearly-divisionless method: one 128-bit multiply, and
+ *     the high half is already uniform on [0, m). The division survives only
+ *     inside a branch entered with probability m/2^64 -- for any range a person
+ *     writes, never.
+ *
+ * __uint128_t is a compiler extension, so it is guarded on __SIZEOF_INT128__
+ * with the plain double-division form as the fallback. Both are exactly
+ * uniform; they differ only in speed and in which value a given draw yields, so
+ * a build without 128-bit integers has a different stream. That is acceptable
+ * for the same reason SeedRandom does not promise a stream across versions.
+ */
+static inline uint64_t xs_below(uint64_t m) {
+    if (m <= 1) return 0;
+    if ((m & (m - 1)) == 0) return xs_next() & (m - 1);    /* power of two */
+#if defined(__SIZEOF_INT128__)
+    __uint128_t prod = (__uint128_t)xs_next() * (__uint128_t)m;
+    uint64_t low = (uint64_t)prod;
+    if (low < m) {                                  /* p = m/2^64: essentially never */
+        uint64_t threshold = (uint64_t)(-(int64_t)m) % m;   /* == 2^64 mod m */
+        while (low < threshold) {
+            prod = (__uint128_t)xs_next() * (__uint128_t)m;
+            low = (uint64_t)prod;
+        }
+    }
+    return (uint64_t)(prod >> 64);
+#else
+    uint64_t threshold = (uint64_t)(-(int64_t)m) % m;
+    uint64_t r;
+    do { r = xs_next(); } while (r < threshold);
+    return r % m;
+#endif
+}
+
+/* Seed both generators from one value, so SeedRandom is coherent across the
+ * machine and arbitrary-precision paths. */
+static void seed_all(uint64_t seed) {
+    gmp_randseed_ui(g_rand_state, (unsigned long)seed);
+    xs_seed(seed);
+}
 
 /* Ensure RNG is initialized */
 static void ensure_rand_init(void) {
     if (!g_rand_initialized) {
         gmp_randinit_mt(g_rand_state);
-        gmp_randseed_ui(g_rand_state, (unsigned long)time(NULL) ^ (unsigned long)clock());
         g_rand_initialized = 1;
+        seed_all((uint64_t)time(NULL) ^ (uint64_t)clock());
     }
 }
 
@@ -67,6 +182,11 @@ static void ensure_rand_init(void) {
  * the only caller (PossibleZeroQ's sampler) does not recurse into the RNG. */
 #define RANDOM_SEED_STACK_DEPTH 4
 static gmp_randstate_t g_rand_saved[RANDOM_SEED_STACK_DEPTH];
+/* The xoshiro state is saved alongside it: a push/pop that restored only GMP
+ * would leave the machine-precision stream advanced by whatever ran in between,
+ * so PossibleZeroQ's sampler would perturb the user's RandomReal sequence --
+ * exactly what random.h promises it does not do. */
+static uint64_t g_xs_saved[RANDOM_SEED_STACK_DEPTH][4];
 static int g_rand_saved_depth = 0;
 
 void random_push_seed(uint64_t seed) {
@@ -74,13 +194,14 @@ void random_push_seed(uint64_t seed) {
     if (g_rand_saved_depth >= RANDOM_SEED_STACK_DEPTH) {
         /* Stack full (unexpected): reseed without saving so behaviour stays
          * deterministic; the matching pop is a no-op (see guard below). */
-        gmp_randseed_ui(g_rand_state, (unsigned long)seed);
+        seed_all(seed);
         g_rand_saved_depth++;
         return;
     }
     gmp_randinit_set(g_rand_saved[g_rand_saved_depth], g_rand_state);
+    for (int i = 0; i < 4; i++) g_xs_saved[g_rand_saved_depth][i] = g_xs[i];
     g_rand_saved_depth++;
-    gmp_randseed_ui(g_rand_state, (unsigned long)seed);
+    seed_all(seed);
 }
 
 void random_pop_seed(void) {
@@ -90,6 +211,44 @@ void random_pop_seed(void) {
     gmp_randclear(g_rand_state);
     gmp_randinit_set(g_rand_state, g_rand_saved[g_rand_saved_depth]);
     gmp_randclear(g_rand_saved[g_rand_saved_depth]);
+    for (int i = 0; i < 4; i++) g_xs[i] = g_xs_saved[g_rand_saved_depth][i];
+}
+
+/*
+ * Internal sampling draw: uniform in [lo, hi], from the GMP stream.
+ *
+ * Deliberately NOT the xoshiro path that RandomInteger now uses. The zero-test
+ * sampler (src/zero_test.c) draws its Schwartz-Zippel points through this, and
+ * those points are part of a DECISION PROCEDURE, not a user-visible random
+ * sequence: PossibleZeroQ seeds them from the expression's structural hash so a
+ * verdict is a pure function of the input.
+ *
+ * Sharing the user-facing generator meant that speeding up RandomInteger moved
+ * those sample points -- and the integrator's answers with them.
+ * `Integrate[E^(Log[x]^2), x]` is non-elementary and must stay unintegrated;
+ * with a different point set the zero test reached a different verdict and the
+ * integrator claimed to solve it. That is a real pre-existing fragility (the
+ * verdict should not be that sensitive), but it is not something an RNG
+ * optimisation gets to change, so the sampler keeps the generator it was tuned
+ * against and the coupling is removed.
+ */
+int64_t random_internal_int_range(int64_t lo, int64_t hi) {
+    ensure_rand_init();
+    if (hi < lo) return lo;
+    static mpz_t span, draw;
+    static int ready = 0;
+    if (!ready) { mpz_init(span); mpz_init(draw); ready = 1; }
+    mpz_set_si(span, (long)hi);
+    mpz_sub_ui(span, span, (unsigned long)0);
+    {   /* span = hi - lo + 1, computed in mpz so hi-lo cannot overflow */
+        mpz_t lo_z; mpz_init_set_si(lo_z, (long)lo);
+        mpz_sub(span, span, lo_z);
+        mpz_add_ui(span, span, 1);
+        mpz_urandomm(draw, g_rand_state, span);
+        mpz_add(draw, draw, lo_z);
+        mpz_clear(lo_z);
+    }
+    return (int64_t)mpz_get_si(draw);
 }
 
 /*
@@ -100,31 +259,46 @@ void random_pop_seed(void) {
 static Expr* random_integer_range(const mpz_t imin, const mpz_t imax) {
     ensure_rand_init();
 
-    /* range_size = imax - imin + 1 */
-    mpz_t range_size, result;
-    mpz_init(range_size);
-    mpz_init(result);
+    /* Scratch reused across calls rather than mpz_init/mpz_clear per draw: this
+     * is called once per element of RandomInteger[range, n], and two heap
+     * allocations per element dominated the actual work. */
+    static mpz_t range_size, result;
+    static int scratch_ready = 0;
+    if (!scratch_ready) { mpz_init(range_size); mpz_init(result); scratch_ready = 1; }
 
     mpz_sub(range_size, imax, imin);
     mpz_add_ui(range_size, range_size, 1);
 
-    /* If range_size <= 0, the range is empty or invalid */
-    if (mpz_sgn(range_size) <= 0) {
-        mpz_clear(range_size);
-        mpz_clear(result);
-        return NULL;
+    if (mpz_sgn(range_size) <= 0) return NULL;   /* empty or invalid range */
+
+    /* Machine-width range AND a machine-width base: draw from xoshiro and build
+     * the Expr straight from an int64. No mpz is touched at all.
+     *
+     * Building through expr_bigint_normalize(expr_new_bigint_from_mpz(...)) is
+     * what kept RandomInteger slow after the generator was replaced -- an
+     * mpz-backed Expr allocated and then normalised back down to a machine
+     * integer, once per element. The draw is ~3 ns; that round trip was ~170. */
+    if (mpz_fits_ulong_p(range_size) && mpz_fits_slong_p(imin)) {
+        uint64_t span = (uint64_t)mpz_get_ui(range_size);
+        int64_t  base = (int64_t)mpz_get_si(imin);
+        int64_t  draw = (int64_t)xs_below(span);
+        int64_t  out;
+        /* imin + draw can still leave int64 even when both fit; fall through to
+         * the exact path rather than wrap. */
+        if (!ci_add_i64(base, draw, &out)) return expr_new_integer(out);
     }
 
-    /* result = random in [0, range_size) */
+    /* Wide range (or a base past int64): GMP draws it uniformly. */
+    if (mpz_fits_ulong_p(range_size)) {
+        mpz_set_ui(result, (unsigned long)xs_below((uint64_t)mpz_get_ui(range_size)));
+        mpz_add(result, result, imin);
+        return expr_bigint_normalize(expr_new_bigint_from_mpz(result));
+    }
+
+    /* Genuine bignum range: GMP is the only thing that can draw it uniformly. */
     mpz_urandomm(result, g_rand_state, range_size);
-
-    /* result = result + imin */
     mpz_add(result, result, imin);
-
-    Expr* e = expr_bigint_normalize(expr_new_bigint_from_mpz(result));
-    mpz_clear(range_size);
-    mpz_clear(result);
-    return e;
+    return expr_bigint_normalize(expr_new_bigint_from_mpz(result));
 }
 
 /*
@@ -260,6 +434,44 @@ Expr* builtin_randominteger(Expr* res) {
         if (dim_arg->type == EXPR_INTEGER && dim_arg->data.integer >= 0) {
             /* Flat list of n values */
             size_t n = (size_t)dim_arg->data.integer;
+
+            /* Straight into a packed int64 buffer when the whole range is
+             * machine-width, mirroring what RandomReal does. Every value is an
+             * exact machine Integer by construction, so there is nothing to
+             * decide per element -- and this skips an Expr allocation and a
+             * pack_offer re-sniff per element, which was the difference between
+             * 100 ns and 3 ns each. A wide range still builds the List below and
+             * offers it afterwards, because random_integer_range can return a
+             * BigInt and pack_offer must then decline for the whole list. */
+            if (mpz_fits_slong_p(imin) && mpz_fits_slong_p(imax)) {
+                int64_t lo = (int64_t)mpz_get_si(imin);
+                int64_t hi = (int64_t)mpz_get_si(imax);
+                int64_t span_m1;
+                if (hi >= lo && !ci_sub_i64(hi, lo, &span_m1)) {
+                    uint64_t span = (uint64_t)span_m1 + 1u;   /* inclusive */
+                    int64_t* buf = NULL;
+                    Expr* packed = ndbuild_open_i64((int64_t)n, &buf);
+                    if (packed) {
+                        /* The span is fixed for the whole array, so the shape of
+                         * the draw is decided ONCE rather than re-tested per
+                         * element. xs_below re-checks `m <= 1` and the
+                         * power-of-two case on every call, which is nothing on
+                         * its own and measurable across 10^7 of them. */
+                        if ((span & (span - 1)) == 0) {
+                            uint64_t mask = span - 1;    /* exact, no rejection */
+                            for (size_t i = 0; i < n; i++)
+                                buf[i] = lo + (int64_t)(xs_next() & mask);
+                        } else {
+                            for (size_t i = 0; i < n; i++)
+                                buf[i] = lo + (int64_t)xs_below(span);
+                        }
+                        mpz_clear(imin);
+                        mpz_clear(imax);
+                        return packed;
+                    }
+                }
+            }
+
             Expr** elems = malloc(sizeof(Expr*) * n);
             if (!elems) {
                 mpz_clear(imin);
@@ -372,17 +584,11 @@ static bool expr_to_real(Expr* e, double* out) {
  */
 static double random_uniform_01(void) {
     ensure_rand_init();
-    mpz_t big;
-    mpz_init(big);
-    /* 2^53 = 9007199254740992 — enough bits for full double mantissa */
-    mpz_t modulus;
-    mpz_init(modulus);
-    mpz_ui_pow_ui(modulus, 2, 53);
-    mpz_urandomm(big, g_rand_state, modulus);
-    double val = mpz_get_d(big) / 9007199254740992.0;
-    mpz_clear(big);
-    mpz_clear(modulus);
-    return val;
+    /* Top 53 bits scaled by 2^-53: uniform on [0, 1) with a full double mantissa,
+     * the same 53 bits of randomness the GMP version delivered, at 2.4 ns instead
+     * of 117 ns. The high bits are used because xoshiro's low bits are the
+     * weakest -- that is the documented way to take a double from this family. */
+    return (double)(xs_next() >> 11) * 0x1.0p-53;
 }
 
 /*
@@ -833,7 +1039,7 @@ Expr* builtin_seedrandom(Expr* res) {
     if (argc == 0) {
         /* Re-seed from system entropy */
         ensure_rand_init();
-        gmp_randseed_ui(g_rand_state, (unsigned long)time(NULL) ^ (unsigned long)clock());
+        seed_all((uint64_t)time(NULL) ^ (uint64_t)clock());
         return expr_new_symbol(SYM_Null);
     }
 
@@ -841,12 +1047,16 @@ Expr* builtin_seedrandom(Expr* res) {
         Expr* arg = res->data.function.args[0];
         if (arg->type == EXPR_INTEGER) {
             ensure_rand_init();
-            gmp_randseed_ui(g_rand_state, (unsigned long)arg->data.integer);
+            seed_all((uint64_t)arg->data.integer);
             return expr_new_symbol(SYM_Null);
         }
         if (arg->type == EXPR_BIGINT) {
             ensure_rand_init();
             gmp_randseed(g_rand_state, arg->data.bigint);
+            /* Derive the machine seed from the same bignum, so SeedRandom[huge]
+             * is as reproducible as SeedRandom[small]. */
+            xs_seed((uint64_t)mpz_get_ui(arg->data.bigint) ^
+                    ((uint64_t)mpz_sizeinbase(arg->data.bigint, 2) << 32));
             return expr_new_symbol(SYM_Null);
         }
         return NULL; /* Non-integer seed */
@@ -1242,15 +1452,7 @@ Expr* builtin_randomcomplex(Expr* res) {
  */
 static size_t random_index(size_t n) {
     ensure_rand_init();
-    mpz_t modulus, result;
-    mpz_init(modulus);
-    mpz_init(result);
-    mpz_set_ui(modulus, (unsigned long)n);
-    mpz_urandomm(result, g_rand_state, modulus);
-    size_t idx = (size_t)mpz_get_ui(result);
-    mpz_clear(modulus);
-    mpz_clear(result);
-    return idx;
+    return (size_t)xs_below((uint64_t)n);   /* rejection: no modulo bias */
 }
 
 /*

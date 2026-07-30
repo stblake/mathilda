@@ -901,22 +901,13 @@ static ZeroTestResult screen_point(const Expr* e) {
  * a Mathilda-level RandomInteger[{lo, hi}] call and evaluate it. This
  * adds a few allocations per sample, which is fine for k=4 trials. */
 static int64_t draw_int_range(int64_t lo, int64_t hi) {
-    Expr* low  = expr_new_integer(lo);
-    Expr* high = expr_new_integer(hi);
-    Expr* list_args[] = {low, high};
-    Expr* range = expr_new_function(expr_new_symbol(SYM_List), list_args, 2);
-    Expr* call_args[] = {range};
-    Expr* call = expr_new_function(expr_new_symbol(SYM_RandomInteger), call_args, 1);
-    /* eval_and_free consumes `call`; plain evaluate() would leak the
-     * RandomInteger[List[...]] wrapper, which it does not take ownership of. */
-    Expr* r = eval_and_free(call);
-    int64_t out = 0;
-    if (r) {
-        if (r->type == EXPR_INTEGER) out = r->data.integer;
-        else if (r->type == EXPR_BIGINT) out = (int64_t)mpz_get_si(r->data.bigint);
-        expr_free(r);
-    }
-    return out;
+    /* random_internal_int_range, not a RandomInteger[] call: these points are
+     * part of the decision procedure, and routing them through the user-facing
+     * builtin tied them to whichever generator it happens to use. When
+     * RandomInteger moved to xoshiro the point set changed and the integrator
+     * began claiming to solve the non-elementary Integrate[E^(Log[x]^2), x].
+     * This also drops a handful of Expr allocations per sample. */
+    return random_internal_int_range(lo, hi);
 }
 
 /* Build a random REAL sample value of moderate magnitude. A Real leaf
