@@ -386,8 +386,19 @@ the baselines only after an *intended* performance change.
     after the first `#include` it does nothing: the header has already been
     parsed with the wrong namespace.
 
-  `make check-c99` catches both before the compiler does, and the Linux CI job
-  compiles the tree against glibc so nothing in this class reaches a user.
+  - **`int64_t` is not `long long`.** Darwin typedefs it to `long long`, glibc
+    to `long` — same width, distinct types. `src/checked_int.h` therefore ships
+    two families of overflow-checked helpers (`ci_mul` on `long long`,
+    `ci_mul_i64` on `int64_t`) and they are not interchangeable: a mix-up
+    compiles clean on macOS and is an *error* under GCC 14 on Linux (issue #40).
+    Only `src/compile/` may use the `long long` family — its Slot register is a
+    `long long`; every other module holds `int64_t` buffers.
+
+  `make check-c99` catches all three before the compiler does, and the Linux CI
+  job compiles the tree against glibc so nothing in this class reaches a user.
+  `CFLAGS` additionally promotes the diagnostics GCC 14 made errors
+  (`-Werror=incompatible-pointer-types`, `-int-conversion`, `-implicit-int`), so
+  the CI build gates on them whichever GCC the runner ships.
 - **Memory safety.** Trace ownership; valgrind regularly. See §4.
 - **GMP-ECM is a system dependency**, not vendored — do not re-add it to the
   tree.

@@ -181,6 +181,14 @@ void test_int64_matches_plain_integer_lists(void) {
                   "Total[Table[k, {k, 1000000}]]");
     same_as_plain("Total[ToNDArray[{1000000000, 1000000000, 1000000000}]^3]",
                   "Total[{1000000000, 1000000000, 1000000000}^3]");
+    /* Both operands int64 buffers -- ndarray_elementwise_power's exact path,
+     * which the %s-templated cases above never reach (their exponent is either
+     * a scalar or a Real list). The second pair overflows int64, which must
+     * abandon to the List path and reach GMP rather than wrap. */
+    same_as_plain("ToNDArray[{2, 3, 4, 5}]^ToNDArray[{3, 2, 5, 4}]",
+                  "{2, 3, 4, 5}^{3, 2, 5, 4}");
+    same_as_plain("ToNDArray[{1000000, 1000000}]^ToNDArray[{4, 4}]",
+                  "{1000000, 1000000}^{4, 4}");
 }
 
 void test_declines_what_it_cannot_represent(void) {

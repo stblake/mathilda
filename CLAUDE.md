@@ -95,7 +95,8 @@ After any change or improvement to the system is made, a summary of the features
         #endif
         ```
       Do NOT use `#define _USE_MATH_DEFINES` — that is an MSVC/Windows mechanism and has no effect on glibc.
-    - Both rules are enforced by `make check-c99` (`tools/check_c99_portability.py`), and backstopped by the Linux CI job in `.github/workflows/build.yml`, which compiles the whole tree against glibc on every push and PR. Adding a POSIX symbol the checker does not yet know about is one line in its `FUNCTIONS` table.
+    - `int64_t` is `long long` on macOS and `long` on glibc — same width, different types. The two families in `src/checked_int.h` are therefore NOT interchangeable: `ci_mul`/`ci_powi`/… take `long long`, `ci_mul_i64`/`ci_powi_i64`/… take `int64_t`. Mixing them compiles clean on macOS and is an error under GCC 14 on Linux (issue #40). Only `src/compile/` may use the `long long` family; everything else holds `int64_t` buffers and uses `_i64`.
+    - All three rules are enforced by `make check-c99` (`tools/check_c99_portability.py`), and backstopped by the Linux CI job in `.github/workflows/build.yml`, which compiles the whole tree against glibc on every push and PR. Adding a POSIX symbol the checker does not yet know about is one line in its `FUNCTIONS` table.
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph

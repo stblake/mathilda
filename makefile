@@ -42,7 +42,18 @@ endif
 # older GCC and clang only warn, and a warning in a -j12 build scrolls past.
 # Promote it everywhere so the failure is loud rather than a wrong answer.
 # `make check-c99` catches the same class before the compiler ever sees it.
-CFLAGS = -O3 -std=c99 -Wall -Wextra -Werror=implicit-function-declaration -g -I./src -I./src/list -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/graph -I./src/strings -I./src/strings/regex -I./src/ffi -I/usr/include -I/usr/local/include
+#
+# `-Werror=incompatible-pointer-types` / `-int-conversion` / `-implicit-int`:
+# the other diagnostics GCC 14 promoted to errors. Every one of them is a real
+# type confusion, and each can be latent on macOS and fatal on Linux — issue #40
+# was `ci_powi` handed an `int64_t*` where a `long long*` was expected, which is
+# the SAME type on Darwin and a different one under glibc. The Linux CI job runs
+# whatever GCC the runner ships (13 at the time of writing), where these are
+# warnings that pass the build; promoting them here makes that job a real gate
+# no matter which compiler version it lands on.
+CFLAGS = -O3 -std=c99 -Wall -Wextra -Werror=implicit-function-declaration \
+         -Werror=incompatible-pointer-types -Werror=int-conversion \
+         -Werror=implicit-int -g -I./src -I./src/list -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/graph -I./src/strings -I./src/strings/regex -I./src/ffi -I/usr/include -I/usr/local/include
 
 # Readline is available on macOS and Linux but not on Windows (MinGW).
 # Build with USE_READLINE=0 to disable it explicitly (e.g. for cross-builds

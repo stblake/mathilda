@@ -20,12 +20,21 @@
  *
  * Two families, same semantics:
  *   ci_add / ci_sub / ci_mul / ci_neg / ci_abs / ci_powi   `long long`
- *   ci_*_i64                                               `int64_t`
+ *   ci_*_i64  (incl. ci_powi_i64)                          `int64_t`
  * The compiler (src/compile/) uses the first because its Slot register is a
  * `long long`; the NDArray layer uses the second because a buffer is `int64_t*`.
  * They are the same operation and, on every target Mathilda builds for, the same
- * width — but C99 does not guarantee that, and passing an `int64_t*` where a
+ * width — but they are not the same TYPE, and passing an `int64_t*` where a
  * `long long*` is expected is a diagnosable error, so both spellings exist.
+ *
+ * That distinction is invisible on the development machine and fatal on the
+ * target: Darwin typedefs `int64_t` to `long long`, so the two families are
+ * interchangeable there and a mix-up compiles clean; glibc typedefs it to
+ * `long`, a distinct type, and GCC 14 rejects the call outright (issue #40 —
+ * `ci_powi` with an `int64_t*` out-pointer, missed here because `ci_powi_i64`
+ * did not yet exist). Reach for the family that matches your data, never the
+ * one that happens to compile. `make check-c99` enforces it: the `long long`
+ * family is confined to src/compile/.
  *
  * This header was originally private to src/compile/compile_internal.h; it moved
  * out when the NDArray layer gained exact int64 buffers and needed the identical
@@ -146,6 +155,19 @@ static inline bool ci_neg_i64(int64_t a, int64_t* out) {
 static inline bool ci_abs_i64(int64_t a, int64_t* out) {
     *out = (a < 0) ? ((a == INT64_MIN) ? a : -a) : a;
     return a == INT64_MIN;
+}
+static inline bool ci_powi_i64(int64_t b, int64_t n, int64_t* out) {
+    int64_t r = 1;
+    while (n > 0) {
+        if (n & 1) { if (ci_mul_i64(r, b, &r)) return true; }
+        n >>= 1;
+        /* Squaring on the final round is dead work, and squaring a large base
+         * is exactly where a spurious overflow would be reported for a result
+         * that fits. */
+        if (n > 0 && ci_mul_i64(b, b, &b)) return true;
+    }
+    *out = r;
+    return false;
 }
 
 /* True when `v` is exactly representable as a double, i.e. |v| <= 2^53.  The

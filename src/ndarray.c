@@ -1198,7 +1198,7 @@ Expr* ndarray_elementwise_power(const Expr* a, const Expr* b) {
         int64_t* o = malloc(sizeof(int64_t) * (sz ? sz : 1));
         if (!o) return NULL;
         for (size_t k = 0; k < sz; k++)
-            if (ci_powi(pa[k], pb[k], &o[k])) { free(o); return NULL; }
+            if (ci_powi_i64(pa[k], pb[k], &o[k])) { free(o); return NULL; }
         return expr_new_ndarray_like(a, a->data.ndarray.rank, a->data.ndarray.dims,
                                 o, NDT_INT64);
     }
@@ -1262,14 +1262,14 @@ Expr* ndarray_scalar_power(const Expr* a, double er, double ei) {
         /* Range[300]^2 must stay a list of Integers. Only a NON-NEGATIVE integer
          * exponent keeps an integer result: a negative one gives Rationals and a
          * fractional one gives radicals, neither of which a buffer can hold, so
-         * both go to the List path. ci_powi abandons on overflow the same way, so
-         * Total[Range[10^6]^3] still reaches GMP and answers exactly. */
+         * both go to the List path. ci_powi_i64 abandons on overflow the same
+         * way, so Total[Range[10^6]^3] still reaches GMP and answers exactly. */
         if (ei != 0.0 || er != floor(er) || er < 0.0) return NULL;
         int64_t* o = malloc(sizeof(int64_t) * (sz ? sz : 1));
         if (!o) return NULL;
         const int64_t* p = (const int64_t*)a->data.ndarray.data;
         for (size_t k = 0; k < sz; k++)
-            if (ci_powi(p[k], (int64_t)er, &o[k])) { free(o); return NULL; }
+            if (ci_powi_i64(p[k], (int64_t)er, &o[k])) { free(o); return NULL; }
         return expr_new_ndarray_like(a, a->data.ndarray.rank, a->data.ndarray.dims,
                                 o, NDT_INT64);
     }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard against POSIX-only <math.h>/libc symbols that break the Linux build.
+"""Guard against constructs that compile on macOS and break the Linux build.
 
 `src/` is compiled with `-std=c99`. Under that flag glibc defines
 `__STRICT_ANSI__` and hides everything outside ISO C99 -- `M_PI`, `jn`, `yn`,
@@ -33,14 +33,27 @@ Ordering matters: a feature-test macro defined after the first `#include` has
 no effect, because the header it was meant to unlock has already been parsed
 with the wrong namespace. That case is reported separately.
 
+The third check covers a different platform difference with the same shape.
+`int64_t` is `long long` on Darwin and `long` under glibc -- the same width,
+but not the same type. `src/checked_int.h` therefore ships two families of
+overflow-checked helpers, and mixing them is invisible on macOS and a hard
+error under GCC 14 on Linux, which is issue #40: `ci_powi` was handed an
+`int64_t*` out-pointer. Only `src/compile/` may use the `long long` family --
+its Slot register is a `long long`; everything else holds `int64_t` buffers and
+must use the `_i64` spelling.
+
+Note that a compile flag cannot catch this one on the development machine: on
+Darwin the two types coincide, so there is nothing for the compiler to object
+to. A source-level rule is the only thing that fails locally.
+
 Run via `make check-c99`; it exits nonzero and names every offending file.
 
 Scope
 -----
-Constants are checked across `src/` and `tests/`. Functions are checked in
-`src/` only: the test suite is built by CMake at the compiler's default
-standard (gnu17), where the whole POSIX surface is visible, so flagging it
-would be noise rather than signal.
+Constants are checked across `src/` and `tests/`. Functions and the
+checked-integer families are checked in `src/` only: the test suite is built by
+CMake at the compiler's default standard (gnu17), where the whole POSIX surface
+is visible, so flagging it would be noise rather than signal.
 
 Extending
 ---------
@@ -48,6 +61,9 @@ Extending
 symbols this project plausibly reaches for. Adding an entry is one line: map
 the name to the feature-test macros (and minimum values) that expose it in
 glibc. `_GNU_SOURCE` is accepted for every symbol and need not be listed.
+
+`WIDE_INT_FAMILY` is the `long long` half of `src/checked_int.h`; a new helper
+added there in both spellings gets one more name in that tuple.
 """
 
 import os
@@ -143,6 +159,26 @@ FUNCTIONS = {
 CALL_RE = {
     sym: re.compile(r"(?<![\w.])(?<!->)\b" + sym + r"\s*\(")
     for sym in FUNCTIONS
+}
+
+# ---------------------------------------------------------------------------
+# Check 3: the `long long` checked-integer family outside src/compile/
+# ---------------------------------------------------------------------------
+
+# The `long long` half of src/checked_int.h. Each has an `_i64` twin with
+# identical semantics on int64_t; see this module's docstring for why the two
+# are not interchangeable off Darwin.
+WIDE_INT_FAMILY = ("ci_add", "ci_sub", "ci_mul", "ci_neg", "ci_abs", "ci_powi")
+
+# The compiler's Slot register genuinely is a `long long`, so src/compile/ is
+# the one legitimate caller. checked_int.h itself defines them.
+WIDE_INT_HOME = "src/compile/"
+WIDE_INT_DEFN = "src/checked_int.h"
+
+# `ci_add(` but not `ci_add_i64(` -- the `(` must follow the name directly.
+WIDE_INT_RE = {
+    sym: re.compile(r"(?<![\w.])(?<!->)\b" + sym + r"\s*\(")
+    for sym in WIDE_INT_FAMILY
 }
 
 # `#define _POSIX_C_SOURCE 200809L` -- the trailing L is optional, and a bare
@@ -299,6 +335,11 @@ def scan_functions(text):
     return unguarded, late
 
 
+def scan_wide_int_family(text):
+    """Return the sorted `long long` checked-int helpers called in `text`."""
+    return sorted(sym for sym in WIDE_INT_FAMILY if WIDE_INT_RE[sym].search(text))
+
+
 def suggest(alternatives):
     """The feature-test macro we recommend for a symbol, as source lines."""
     if not alternatives:
@@ -318,6 +359,7 @@ def main():
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     const_offenders, func_offenders, late_offenders = [], [], []
+    wide_offenders = []
 
     for path in source_files(repo_root):
         raw = read(repo_root, path)
@@ -338,7 +380,13 @@ def main():
             if late:
                 late_offenders.append((path, late))
 
-    if not (const_offenders or func_offenders or late_offenders):
+            if not path.startswith(WIDE_INT_HOME) and path != WIDE_INT_DEFN:
+                wide = scan_wide_int_family(text)
+                if wide:
+                    wide_offenders.append((path, wide))
+
+    if not (const_offenders or func_offenders or late_offenders
+            or wide_offenders):
         return 0
 
     if const_offenders:
@@ -379,8 +427,26 @@ def main():
             sys.stderr.write("  %s  (%s)\n" % (path, ", ".join(syms)))
         sys.stderr.write("\n")
 
+    if wide_offenders:
+        sys.stderr.write(
+            "error: the `long long` half of src/checked_int.h used outside\n"
+            "       src/compile/. Only the compiler's Slot register is a\n"
+            "       `long long`; every other caller holds int64_t buffers and\n"
+            "       must use the _i64 spelling. Darwin typedefs int64_t to\n"
+            "       `long long`, so a mix-up compiles clean here and is an\n"
+            "       ERROR under GCC 14 on glibc, where it is `long`\n"
+            "       (issue #40). Rename the call:\n\n"
+        )
+        for path, syms in wide_offenders:
+            sys.stderr.write("  %s\n" % path)
+            for sym in syms:
+                sys.stderr.write("      %s(...)   ->   %s_i64(...)\n"
+                                 % (sym, sym))
+        sys.stderr.write("\n")
+
     total = len(set(p for p, _ in
-                    const_offenders + func_offenders + late_offenders))
+                    const_offenders + func_offenders + late_offenders
+                    + wide_offenders))
     sys.stderr.write("%d file(s) affected.\n" % total)
     return 1
 
