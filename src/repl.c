@@ -41,15 +41,19 @@
 
 #define MAX_INPUT_LEN 10240
 
-/* True if `s` consists only of whitespace and (* ... *) comments
- * (nested comments allowed). Used to distinguish a no-op line from a
- * genuine parse failure, so the REPL doesn't shout "Parse error" at a
- * stray comment. */
-static int is_blank_or_comment_only(const char* s) {
+/* Advance past whitespace and (* ... *) comments (nested comments allowed),
+ * returning the first character that is neither — the terminating NUL if the
+ * text holds nothing else. An unterminated comment is deliberately NOT
+ * skipped: the returned pointer is its opening '(', because that is a genuine
+ * error and that is where it starts. Script mode uses the position to point
+ * at the offending token; is_blank_or_comment_only() only asks whether
+ * anything is left. */
+static const char* skip_blanks_and_comments(const char* s) {
     while (*s) {
         if (isspace((unsigned char)*s)) {
             s++;
         } else if (s[0] == '(' && s[1] == '*') {
+            const char* open = s;
             int depth = 1;
             s += 2;
             while (*s && depth > 0) {
@@ -57,12 +61,19 @@ static int is_blank_or_comment_only(const char* s) {
                 else if (s[0] == '*' && s[1] == ')') { depth--; s += 2; }
                 else { s++; }
             }
-            if (depth > 0) return 0;  /* unterminated comment is a real error */
+            if (depth > 0) return open;  /* unterminated comment is a real error */
         } else {
-            return 0;
+            return s;
         }
     }
-    return 1;
+    return s;
+}
+
+/* True if `s` consists only of whitespace and (* ... *) comments. Used to
+ * distinguish a no-op line from a genuine parse failure, so the REPL doesn't
+ * shout "Parse error" at a stray comment. */
+static int is_blank_or_comment_only(const char* s) {
+    return *skip_blanks_and_comments(s) == '\0';
 }
 
 void process_input(const char* input, int line_number) {
@@ -562,16 +573,212 @@ static void pipe_mode_loop(void) {
     }
 }
 
-int main(void) {
+/* =====================================================================
+ * Script mode:  Mathilda -file script.m
+ *
+ * Runs a file the way `wolframscript -file` does: every expression in the
+ * file is parsed and evaluated in order and nothing is echoed, so the
+ * script's output is exactly what it Print[]s. This is the same evaluation
+ * the Get["file"] builtin performs, but reached without a live session — the
+ * loop below is spelled out here rather than delegating to
+ * mathilda_run_file() because a script runner owes the caller a real
+ * diagnostic and a nonzero exit status when the file has a syntax error,
+ * where Get[] simply stops reading.
+ * ===================================================================*/
+
+/* Read all of `path` into a freshly malloc'd, NUL-terminated buffer.
+ * Returns NULL if the file cannot be opened or read (caller reports). */
+static char* read_whole_file(const char* path) {
+    FILE* fp = fopen(path, "rb");
+    if (!fp) return NULL;
+
+    if (fseek(fp, 0, SEEK_END) != 0) { fclose(fp); return NULL; }
+    long fsize = ftell(fp);
+    if (fsize < 0) { fclose(fp); return NULL; }
+    rewind(fp);
+
+    char* buffer = malloc((size_t)fsize + 1);
+    if (!buffer) { fclose(fp); return NULL; }
+
+    size_t read_len = fread(buffer, 1, (size_t)fsize, fp);
+    buffer[read_len] = '\0';          /* short read (text mode/CRLF) is fine */
+    fclose(fp);
+    return buffer;
+}
+
+/* Report an error at `pos` within the script text `buf`, in the
+ * "file:line: message" form editors and CI logs already know how to read,
+ * followed by the offending source line. */
+static void report_error_at(const char* path, const char* buf, const char* pos,
+                            const char* message) {
+    int line = 1;
+    const char* line_start = buf;
+    for (const char* p = buf; p < pos && *p; p++) {
+        if (*p == '\n') { line++; line_start = p + 1; }
+    }
+    const char* line_end = line_start;
+    while (*line_end && *line_end != '\n' && *line_end != '\r') line_end++;
+
+    fprintf(stderr, "%s:%d: %s\n", path, line, message);
+    fprintf(stderr, "  %.*s\n", (int)(line_end - line_start), line_start);
+}
+
+/* Locate an unterminated string literal or (* ... *) comment in `buf`,
+ * returning a pointer to its opener (and naming the construct in *what), or
+ * NULL if the text is well formed.
+ *
+ * The lexer treats both as running to end of file, so in a script a single
+ * stray `(*` would silently swallow every statement after it: the run would
+ * exit 0 having quietly done half the work. Checking up front turns that into
+ * a diagnostic before anything is evaluated. The scan alternates between the
+ * two constructs deliberately — a `"` inside a comment and a `(*` inside a
+ * string are both just text, and whichever opens first consumes the other. */
+static const char* find_unterminated(const char* buf, const char** what) {
+    const char* p = buf;
+    while (*p) {
+        if (*p == '"') {
+            const char* open = p++;
+            while (*p && *p != '"') p += (*p == '\\' && p[1]) ? 2 : 1;
+            if (!*p) { *what = "string"; return open; }
+            p++;
+        } else if (p[0] == '(' && p[1] == '*') {
+            const char* open = p;
+            int depth = 1;
+            p += 2;
+            while (*p && depth > 0) {
+                if (p[0] == '(' && p[1] == '*') { depth++; p += 2; }
+                else if (p[0] == '*' && p[1] == ')') { depth--; p += 2; }
+                else { p++; }
+            }
+            if (depth > 0) { *what = "comment"; return open; }
+        } else {
+            p++;
+        }
+    }
+    return NULL;
+}
+
+/* Evaluate every expression in `path`. Returns the process exit status:
+ * 0 on success, 1 if the file could not be read or contained a syntax
+ * error. */
+static int run_script_file(const char* path) {
+    char* buffer = read_whole_file(path);
+    if (!buffer) {
+        fprintf(stderr, "Mathilda: cannot open file: %s\n", path);
+        return 1;
+    }
+
+    /* Up-front lexical check: an unterminated string or comment would make
+     * the parser swallow the rest of the file as if it were not there. */
+    const char* what = NULL;
+    const char* opener = find_unterminated(buffer, &what);
+    if (opener) {
+        char message[64];
+        snprintf(message, sizeof(message), "unterminated %s", what);
+        report_error_at(path, buffer, opener, message);
+        free(buffer);
+        return 1;
+    }
+
+    int status = 0;
+    const char* ptr = buffer;
+    while (*ptr != '\0') {
+        const char* stmt_start = ptr;
+        Expr* parsed = parse_next_expression(&ptr);
+        if (!parsed) {
+            /* parse_next_expression returns NULL both at end of input and on
+             * a syntax error. Trailing whitespace or comments are a normal
+             * end of file; anything else left unconsumed is a real error,
+             * and it starts at the first significant character — not at
+             * stmt_start, which is still sitting on the newline that ended
+             * the previous statement. */
+            const char* err = skip_blanks_and_comments(stmt_start);
+            if (*err != '\0') {
+                report_error_at(path, buffer, err, "syntax error");
+                status = 1;
+            }
+            break;
+        }
+        /* evaluate() borrows its argument and returns a new tree; both are
+         * ours to free. The result is discarded: a script speaks via
+         * Print[], not via echoed values. */
+        Expr* evaluated = evaluate(parsed);
+        expr_free(evaluated);
+        expr_free(parsed);
+    }
+
+    free(buffer);
+
+    /* A script run is a session; give $Epilog its one evaluation, exactly as
+     * the interactive loop does on exit. */
+    repl_apply_epilog();
+    fflush(stdout);
+    return status;
+}
+
+static void print_usage(FILE* out, const char* prog) {
+    fprintf(out,
+        "Mathilda " MATHILDA_VERSION_STRING " - a small, open source computer algebra system.\n"
+        "\n"
+        "Usage: %s [options] [file]\n"
+        "\n"
+        "  -file <path>    evaluate every expression in <path>, then exit\n"
+        "  -h, --help      show this message and exit\n"
+        "  -v, --version   print version information and exit\n"
+        "\n"
+        "A bare <file> argument is equivalent to -file <file>. With no file,\n"
+        "Mathilda starts the interactive REPL when stdin is a terminal, and\n"
+        "otherwise speaks the NDJSON pipe protocol on stdio.\n",
+        prog);
+}
+
+int main(int argc, char** argv) {
+    const char* prog   = (argc > 0 && argv[0]) ? argv[0] : "Mathilda";
+    const char* script = NULL;
+
+    for (int i = 1; i < argc; i++) {
+        const char* arg = argv[i];
+        if (strcmp(arg, "-file") == 0 || strcmp(arg, "--file") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "%s: %s requires a path\n", prog, arg);
+                return 2;
+            }
+            script = argv[++i];
+        } else if (strcmp(arg, "-h") == 0 || strcmp(arg, "--help") == 0) {
+            print_usage(stdout, prog);
+            return 0;
+        } else if (strcmp(arg, "-v") == 0 || strcmp(arg, "--version") == 0) {
+            printf("%s\n", mathilda_version());
+            return 0;
+        } else if (arg[0] == '-' && arg[1] != '\0') {
+            fprintf(stderr, "%s: unknown option: %s\n", prog, arg);
+            print_usage(stderr, prog);
+            return 2;
+        } else if (!script) {
+            script = arg;               /* bare path: Mathilda script.m */
+        } else {
+            fprintf(stderr, "%s: unexpected argument: %s\n", prog, arg);
+            return 2;
+        }
+    }
+
     /* Detect pipe mode: when stdin is not a terminal the frontend has
      * spawned us as a sidecar and we communicate via NDJSON over stdio.
+     * A -file run is a script, not a session, so it takes precedence: the
+     * script's own output must not be wrapped in the pipe protocol just
+     * because it was launched from a shell script with redirected stdin.
      * The interactive readline REPL is preserved when stdin is a tty. */
-    int pipe_mode = !isatty(fileno(stdin));
+    int pipe_mode = !script && !isatty(fileno(stdin));
 
     if (pipe_mode) {
         /* Disable libc's stdout buffer so every response line is delivered
          * to the pipe immediately rather than accumulating. */
         setvbuf(stdout, NULL, _IONBF, 0);
+    } else if (script && !isatty(fileno(stdout))) {
+        /* Redirected script output is block-buffered by default, which holds
+         * back a long benchmark's progress until it exits. Line-buffer it so
+         * `Mathilda -file bench.m | tee log` streams as it runs. */
+        setvbuf(stdout, NULL, _IOLBF, BUFSIZ);
     }
 
     symtab_init();
@@ -584,6 +791,9 @@ int main(void) {
      * far better than the previous silent load of a non-functional kernel. */
     mathilda_load_module("init.m");
 
+    if (script) {
+        return run_script_file(script);
+    }
     if (pipe_mode) {
         pipe_mode_loop();
     } else {

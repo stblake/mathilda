@@ -160,6 +160,7 @@ The `.msi` installer is in `frontend\src-tauri\target\release\bundle\msi\`.
 ```bash
 make USE_ECM=0 -j$(nproc)   # macOS/Linux
 ./Mathilda                   # interactive REPL
+./Mathilda -file script.m    # run a .m file as a script, then exit
 ```
 
 On Windows (MinGW64):

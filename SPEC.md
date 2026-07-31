@@ -32,7 +32,11 @@ PICOMATH-80.
 - [`docs/extending.md`](docs/extending.md) — how to add builtins, modules,
   patterns, internal rules, and operators.
 - [`docs/design/performance.md`](docs/design/performance.md) — Mathilda against
-  Mathematica 14.0 on 38 classical HPC kernels, with the method and the gaps.
+  Mathematica 14.0 and NumPy on 70+ HPC kernels, with the method and the gaps.
+- [`docs/experiments/`](docs/experiments/) — nineteen execution-speed
+  experiments, one folder each: the write-up, the Mathilda/Wolfram source, the
+  NumPy source, and a rendered PDF. Every experiment states, for each row where
+  Mathilda is not the fastest of the three, why and what it would take.
 - [`CLAUDE.md`](CLAUDE.md) — contributor workflow.
 
 ---
@@ -400,12 +404,33 @@ the baselines only after an *intended* performance change.
 
 ---
 
-## 11. REPL
+## 11. REPL and command line
+
+```
+Mathilda [options] [file]
+
+  -file <path>    evaluate every expression in <path>, then exit
+  -h, --help      usage
+  -v, --version   version, with the libraries it was compiled against
+```
 
 `repl.c` reads with GNU Readline (history, multiline via trailing `\`), parses
 to an `Expr*`, evaluates to a fixed point, stores `In[n]`/`Out[n]` as
 DownValues for back-reference, prints the result, and frees both trees. Exits
 on `Quit[]` or EOF.
+
+`-file` (a bare path is the same thing) runs a script the way
+`wolframscript -file` does: every expression in the file is evaluated in order
+and **nothing is echoed**, so the output is exactly what the script `Print`s.
+The three startup modes are chosen in this order — a script file wins, then a
+non-tty stdin selects the NDJSON pipe protocol (§ `pipe_mode_loop`), otherwise
+the interactive loop runs.
+
+The file is checked for an unterminated string or comment before anything is
+evaluated: the lexer treats both as running to end of file, so without that
+check one stray `(*` would silently skip every statement after it and still
+exit 0. A syntax error is reported as `file:line: syntax error` with the
+offending source line, and exits 1 — where `Get["file"]` merely stops reading.
 
 ---
 

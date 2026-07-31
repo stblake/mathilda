@@ -173,6 +173,12 @@ The `makefile` auto-discovers `src/*.c`, configures and compiles internal depend
    ```bash
    ./Mathilda
    ```
+   Or run a `.m` file as a script and exit — nothing is echoed, so the output
+   is exactly what the file `Print`s:
+   ```bash
+   ./Mathilda -file script.m       # a bare ./Mathilda script.m works too
+   ./Mathilda --help               # all options
+   ```
 
 ### Running the Test Suite
 
