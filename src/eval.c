@@ -1304,6 +1304,41 @@ Expr* evaluate_step(Expr* e, bool* changed) {
              * The `!down_values` term is load-bearing, not caution: Protected
              * is opt-in per symbol, so even an aware head can carry a user
              * DownValue, and the matcher cannot descend a buffer. */
+            /* A List being BUILT out of packed rows: absorb them into one array
+             * instead of materialising every one.
+             *
+             * `List` is not, and must not be, a packed-aware head -- a plain List
+             * node holding EXPR_NDARRAY elements is precisely the malformed shape
+             * the gate below exists to prevent, and ~7100 sites would read it
+             * wrongly. But the answer is not to unpack the rows either. It is to
+             * pack the WHOLE thing: pack_sniff already absorbs already-packed rows
+             * (that is how Table[i j, {i,300},{j,300}] becomes rank 2), so a list
+             * of n packed vectors is exactly a rank-2 buffer, and the result is a
+             * genuine packed list that every consumer handles correctly.
+             *
+             * Without this, a function that returns several arrays destroys them
+             * all on the way out, and the caller pays on the NEXT operation, not
+             * this one. Measured on the N-body step, which returns six 1024-vectors:
+             * the first call took 42 ms with a packed argument and the second
+             * 5.75 s, because its own result came back as six plain Lists and
+             * Outer, the elementwise arithmetic and the reductions all fell off the
+             * buffer path together. 137x, from the return statement.
+             *
+             * pack_offer declines (ragged rows, mixed exact/inexact, under the
+             * threshold) by returning the node unchanged, and the gate below then
+             * materialises the rows exactly as before -- so this can only turn a
+             * materialise into a pack, never into anything new. */
+            if (pack_any_created() && head->type == EXPR_SYMBOL &&
+                head->data.symbol.name == SYM_List) {
+                bool any_packed = false;
+                for (size_t i = 0; i < res->data.function.arg_count; i++)
+                    if (is_packed_list(res->data.function.args[i])) { any_packed = true; break; }
+                if (any_packed) {
+                    Expr* packed = pack_offer(res);
+                    if (packed != res) { *changed = true; return packed; }
+                }
+            }
+
             if (pack_any_created()) {
                 bool pure_fn = head->type == EXPR_FUNCTION &&
                                head->data.function.head->type == EXPR_SYMBOL &&
@@ -1333,6 +1368,32 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                  * it declines, cf_fallback re-runs the body through the
                  * evaluator, where every head inside is gated on the next pass. */
                 bool compiled_head = head->type == EXPR_COMPILED;
+                /* MIXED PACKED/PLAIN: pack the List UP, do not unpack the buffer
+                 * DOWN.
+                 *
+                 * `listable_mixed` below exists because apply_listable walks its
+                 * arguments as ordinary Lists, so a buffer alongside a plain List
+                 * has to be materialised for threading to work. That is correct
+                 * and it is also ruinous: the cost is set by the LARGEST operand,
+                 * and one plain operand forfeits the buffer path for the whole
+                 * call. On 10^6 elements `a + b` measured 418 ms with `b` plain
+                 * against 2.1 ms with both packed -- the same 200x as the fully
+                 * unpacked `b + b`, from a single unpacked argument. Plain
+                 * numeric Lists are easy to come by: anything under
+                 * PACK_MIN_ELEMENTS, a literal, or any producer without a packed
+                 * path.
+                 *
+                 * Packing instead is value-preserving by contract (pack.h), and
+                 * it hands the call to the head's own buffer kernel rather than
+                 * to threading. Restricted to shapes those kernels actually
+                 * cover: equal shapes, which every ND kernel handles, or -- for a
+                 * head claiming packed_broadcast_ok -- a lower-rank operand whose
+                 * dims prefix the higher one's. Any other combination is left
+                 * exactly as it was, to thread. */
+                if ((attrs & ATTR_LISTABLE) && hdef && hdef->packed_aware &&
+                    !hdef->down_values && pack_any_created())
+                    pack_lift_listable_args(res, hdef->packed_broadcast_ok != 0,
+                                            hdef->packed_int64_ok != 0, changed);
                 bool listable_mixed = (attrs & ATTR_LISTABLE) && has_list_arg(res);
                 bool aware = ((hdef && hdef->packed_aware && !hdef->down_values)
                               || pure_fn || compiled_head

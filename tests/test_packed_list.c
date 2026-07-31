@@ -163,6 +163,7 @@ void test_int64_matches_plain_integer_lists(void) {
         "Sort[%s]",   "Reverse[%s]",     "Accumulate[%s]", "Differences[%s]",
         "Precision[%s]", "Length[%s]",   "Dimensions[%s]", "Depth[%s]",
         "%s[[2]]",    "Head[%s[[2]]]",   "Map[#^2 &, %s]", "Total[%s^3]",
+        "Tally[%s]",  "Head[Tally[%s][[1,1]]]",
     };
     const char* packed_src = "ToNDArray[{1, 2, 3, 4}]";
     const char* plain_src  = "{1, 2, 3, 4}";
@@ -207,6 +208,52 @@ void test_declines_what_it_cannot_represent(void) {
  * sorting two plain ones. The buffer fast path is only valid when the shapes
  * match exactly: element-wise, {2., 0.} sorts AFTER {1., 9., 9.} on its first
  * element but BEFORE it on length, and List order settles length first. */
+/* Tally hashes the machine word rather than the Expr (src/ndreduce.c), which is
+ * the one fast path here that builds its OWN keys instead of moving elements.
+ * Everything that can differ between keying on a word and keying on an
+ * expression is checked against the plain list: the first-appearance ordering,
+ * the element heads of the reconstructed values, integers past 2^53 (a float64
+ * gather would merge them), the two zeros, and the custom-test form -- which
+ * must not take the fast path at all, since a user test has to see expressions.
+ */
+void test_tally_matches_plain_lists(void) {
+    static const char* const CASES[][2] = {
+        /* Repeats, and first-appearance order -- NOT sorted order. */
+        { "Tally[ToNDArray[{3, 1, 3, 2, 1, 3}]]",   "Tally[{3, 1, 3, 2, 1, 3}]" },
+        { "Tally[ToNDArray[{5, 5, 5, 5}]]",         "Tally[{5, 5, 5, 5}]" },
+        { "Tally[ToNDArray[{-2, 0, -2, 7}]]",       "Tally[{-2, 0, -2, 7}]" },
+        /* Every value distinct, and every value identical: the two ends of the
+         * table-growth path. */
+        { "Tally[ToNDArray[Range[500]]]",           "Tally[Range[500]]" },
+        { "Tally[ToNDArray[ConstantArray[4, 500]]]","Tally[ConstantArray[4, 500]]" },
+        { "Length[Tally[ToNDArray[Mod[Range[1000]^2, 37]]]]",
+          "Length[Tally[Mod[Range[1000]^2, 37]]]" },
+        /* Past 2^53: 9007199254740993 and 9007199254740992 are the same double
+         * and must stay two tallies. */
+        { "Tally[ToNDArray[{9007199254740993, 9007199254740992, 9007199254740993}]]",
+          "Tally[{9007199254740993, 9007199254740992, 9007199254740993}]" },
+        /* Reals, including the two zeros, which are ONE value in both paths. */
+        { "Tally[ToNDArray[{3.5, 1.5, 3.5}]]",      "Tally[{3.5, 1.5, 3.5}]" },
+        { "Tally[ToNDArray[{0., -0., 1.}]]",        "Tally[{0., -0., 1.}]" },
+        { "Tally[ToNDArray[{1., 2., 1., 2., 3.}]]", "Tally[{1., 2., 1., 2., 3.}]" },
+        /* Heads of the rebuilt values and of the counts. */
+        { "Head[Tally[ToNDArray[{1, 2, 1}]][[1, 1]]]",   "Head[Tally[{1, 2, 1}][[1, 1]]]" },
+        { "Head[Tally[ToNDArray[{1., 2., 1.}]][[1, 1]]]","Head[Tally[{1., 2., 1.}][[1, 1]]]" },
+        { "Head[Tally[ToNDArray[{1, 2, 1}]][[1, 2]]]",   "Head[Tally[{1, 2, 1}][[1, 2]]]" },
+        /* A custom test must reach the ordinary implementation. Handing an
+         * NDArray to it unchanged answered {} -- the generic code indexes its
+         * argument as a List and an NDArray is not one. */
+        { "Tally[ToNDArray[{1, 2, 3}], Divisible[#2, #1] &]",
+          "Tally[{1, 2, 3}, Divisible[#2, #1] &]" },
+        { "Tally[ToNDArray[{1., 2., 4.}], Abs[#1 - #2] < 3 &]",
+          "Tally[{1., 2., 4.}, Abs[#1 - #2] < 3 &]" },
+        /* Rank 2 tallies ROWS, which are not machine words. */
+        { "Tally[ToNDArray[{{1, 2}, {1, 2}, {3, 4}}]]", "Tally[{{1, 2}, {1, 2}, {3, 4}}]" },
+    };
+    for (size_t i = 0; i < sizeof(CASES) / sizeof(CASES[0]); i++)
+        same_as_plain(CASES[i][0], CASES[i][1]);
+}
+
 void test_ordering_matches_plain_lists(void) {
     assert_eval_eq("Sort[{ToNDArray[{2., 1.}], ToNDArray[{1., 9.}]}]",
                    "{{1.0, 9.0}, {2.0, 1.0}}", 0);
@@ -354,16 +401,341 @@ void test_pattern_matching(void) {
                    "3.0", 0);
 }
 
+/* The third HPC sweep's fast paths, each as a differential against the identical
+ * plain list. Every one of these was added because the packed form was SLOWER
+ * than the plain form, or because a small unpacked operand disabled the buffer
+ * path for a large packed one -- so "same answer" is the whole acceptance
+ * criterion, and the sizes are above PACK_MIN_ELEMENTS so the fast paths
+ * actually run. */
+void test_third_sweep_fast_paths(void) {
+    /* Dot with one operand a plain List: the small side gets packed, and the
+     * result must equal the fully-plain product exactly. */
+    same_as_plain("ToNDArray[Table[N[i + j], {i, 40}, {j, 8}]] . {1., 2., 3., 4., 5., 6., 7., 8.}",
+                  "Table[N[i + j], {i, 40}, {j, 8}] . {1., 2., 3., 4., 5., 6., 7., 8.}");
+    same_as_plain("ToNDArray[Table[i + j, {i, 40}, {j, 8}]] . {1, 2, 3, 4, 5, 6, 7, 8}",
+                  "Table[i + j, {i, 40}, {j, 8}] . {1, 2, 3, 4, 5, 6, 7, 8}");
+    /* ... and the exact/symbolic operands it must NOT touch. */
+    same_as_plain("ToNDArray[{{1., 2.}, {3., 4.}}] . {1/2, 1/3}",
+                  "{{1., 2.}, {3., 4.}} . {1/2, 1/3}");
+    same_as_plain("ToNDArray[{{1., 2.}, {3., 4.}}] . {aa, bb}",
+                  "{{1., 2.}, {3., 4.}} . {aa, bb}");
+
+    /* Total with a level SPEC, which used to fall through to the List path. */
+    static const char* const TOT[] = {
+        "Total[%s]", "Total[%s, {1}]", "Total[%s, {2}]", "Total[%s, {1,2}]",
+        "Total[%s, {2,Infinity}]", "Total[%s, 2]", "Total[%s, {0}]",
+        "Total[%s, {3}]", "Total[%s, {-1}]", "Head[Total[%s, {2}][[1]]]",
+    };
+    char bp[320], bl[320];
+    for (size_t i = 0; i < sizeof(TOT) / sizeof(TOT[0]); i++) {
+        snprintf(bp, sizeof(bp), TOT[i], "ToNDArray[Table[i*10 + j, {i, 30}, {j, 20}]]");
+        snprintf(bl, sizeof(bl), TOT[i], "Table[i*10 + j, {i, 30}, {j, 20}]");
+        same_as_plain(bp, bl);
+    }
+
+    /* Outer over two real vectors, and the forms nd_outer2 declines. */
+    static const char* const OUT[] = {
+        "Outer[Subtract, %s, %s]", "Outer[Plus, %s, %s]", "Outer[Times, %s, %s]",
+        "Outer[Min, %s, %s]", "Outer[Max, %s, %s]",
+        "Outer[Divide, %s, %s]", "Outer[List, %s, %s]", "Outer[ff, %s, %s]",
+        "Dimensions[Outer[Times, %s, %s]]",
+    };
+    for (size_t i = 0; i < sizeof(OUT) / sizeof(OUT[0]); i++) {
+        snprintf(bp, sizeof(bp), OUT[i], "ToNDArray[Range[1., 30.]]",
+                 "ToNDArray[Range[1., 20.]]");
+        snprintf(bl, sizeof(bl), OUT[i], "Range[1., 30.]", "Range[1., 20.]");
+        same_as_plain(bp, bl);
+    }
+    /* Integer operands keep the tree path: exactness, not speed, decides. */
+    same_as_plain("Outer[Times, ToNDArray[Range[30]], ToNDArray[Range[20]]]",
+                  "Outer[Times, Range[30], Range[20]]");
+
+    /* Leading-axis broadcast: rank-2 against rank-1, both orders, both packed
+     * and with the smaller side left as a plain List. */
+    static const char* const BC[] = {
+        "%s + {10., 20., 30.}", "%s - {10., 20., 30.}", "%s * {10., 20., 30.}",
+        "{10., 20., 30.} + %s", "Total[(%s - {10., 20., 30.})^2]",
+        "%s + {10, 20, 30}", "%s ^ {2., 3., 2.}",
+        "%s + {10., 20.}",                       /* length mismatch: stays put */
+    };
+    for (size_t i = 0; i < sizeof(BC) / sizeof(BC[0]); i++) {
+        snprintf(bp, sizeof(bp), BC[i], "ToNDArray[Table[N[i*100 + j], {i, 3}, {j, 100}]]");
+        snprintf(bl, sizeof(bl), BC[i], "Table[N[i*100 + j], {i, 3}, {j, 100}]");
+        same_as_plain(bp, bl);
+    }
+
+    /* A Listable head with one packed and one plain operand of the SAME shape:
+     * the List is lifted rather than the buffer materialised. Includes the
+     * symbolic case, where lifting must decline and threading must still win. */
+    same_as_plain("ToNDArray[Range[1., 300.]] + Normal[Range[1., 300.]]",
+                  "Normal[Range[1., 300.]] + Normal[Range[1., 300.]]");
+    same_as_plain("ToNDArray[Range[1., 300.]] * Normal[Range[1., 300.]]",
+                  "Normal[Range[1., 300.]] * Normal[Range[1., 300.]]");
+    same_as_plain("Total[ToNDArray[Range[1., 300.]] + Normal[Range[1., 300.]] + zz]",
+                  "Total[Normal[Range[1., 300.]] + Normal[Range[1., 300.]] + zz]");
+    same_as_plain("ToNDArray[Range[300]] + Normal[Range[300]]",
+                  "Normal[Range[300]] + Normal[Range[300]]");
+    same_as_plain("ToNDArray[Range[300]] + Table[1/2, {300}]",
+                  "Normal[Range[300]] + Table[1/2, {300}]");
+
+    /* MapThread's column fold, and the heads it declines. */
+    static const char* const MT[] = {
+        "MapThread[Min, %s]", "MapThread[Max, %s]", "MapThread[Plus, %s]",
+        "MapThread[Times, %s]", "MapThread[List, %s]", "MapThread[Subtract, %s]",
+        "MapThread[ff, %s]", "MapThread[Plus, %s, 1]",
+    };
+    for (size_t i = 0; i < sizeof(MT) / sizeof(MT[0]); i++) {
+        snprintf(bp, sizeof(bp), MT[i], "ToNDArray[Table[N[Mod[i*7 + j, 11]], {i, 4}, {j, 80}]]");
+        snprintf(bl, sizeof(bl), MT[i], "Table[N[Mod[i*7 + j, 11]], {i, 4}, {j, 80}]");
+        same_as_plain(bp, bl);
+    }
+    same_as_plain("MapThread[Plus, ToNDArray[Table[Mod[i*7 + j, 11], {i, 4}, {j, 80}]]]",
+                  "MapThread[Plus, Table[Mod[i*7 + j, 11], {i, 4}, {j, 80}]]");
+
+    /* A List of packed rows absorbs into one array -- ragged and mixed
+     * exact/inexact must decline, and every one must equal the plain form. */
+    same_as_plain("{Range[1., 300.], Range[1., 300.]}",
+                  "{Normal[Range[1., 300.]], Normal[Range[1., 300.]]}");
+    same_as_plain("Total[{Range[1., 300.], Range[1., 300.]}, {2}]",
+                  "Total[{Normal[Range[1., 300.]], Normal[Range[1., 300.]]}, {2}]");
+    same_as_plain("{Range[1., 300.], Range[1., 299.]}",
+                  "{Normal[Range[1., 300.]], Normal[Range[1., 299.]]}");
+    same_as_plain("{Range[300], Range[1., 300.]}",
+                  "{Normal[Range[300]], Normal[Range[1., 300.]]}");
+    same_as_plain("{Range[300], Range[300]}",
+                  "{Normal[Range[300]], Normal[Range[300]]}");
+    same_as_plain("Head[{Range[300], Range[300]}[[1, 1]]]",
+                  "Head[{Normal[Range[300]], Normal[Range[300]]}[[1, 1]]]");
+}
+
+/* Fourth sweep (2026-07-31) -- the structural, scan and convolution paths.
+ *
+ * Same acceptance criterion as the third sweep above: the packed form must give
+ * the byte-identical answer the plain form does, at sizes ABOVE
+ * PACK_MIN_ELEMENTS so the fast paths actually run. (A test written below the
+ * threshold tests nothing -- two stale claims survived the last sweep exactly
+ * that way.) Each group names the defect it guards.
+ */
+void test_fourth_sweep_fast_paths(void) {
+    /* First / Last / Most / Rest read the buffer instead of materialising it.
+     * First and Last were asymptotically wrong: an O(1) element read cost O(n). */
+    static const char* const HEADTAIL[] = {
+        "First[%s]", "Last[%s]", "Most[%s]", "Rest[%s]",
+        "Head[First[%s]]", "Head[Last[%s]]",
+        "Length[Rest[%s]]", "Length[Most[%s]]",
+        "First[%s, zz]", "Last[%s, zz]",
+    };
+    static const char* const HT_SRC[][2] = {
+        /* real rank 1, int rank 1 (exactness), rank 2 (the axis must DROP) */
+        { "ToNDArray[Table[N[i], {i, 300}]]",          "Table[N[i], {i, 300}]" },
+        { "ToNDArray[Table[i, {i, 300}]]",             "Table[i, {i, 300}]" },
+        { "ToNDArray[Table[N[i j], {i, 60}, {j, 5}]]", "Table[N[i j], {i, 60}, {j, 5}]" },
+        { "ToNDArray[Table[i j, {i, 60}, {j, 5}]]",    "Table[i j, {i, 60}, {j, 5}]" },
+    };
+    for (size_t e = 0; e < sizeof(HEADTAIL) / sizeof(HEADTAIL[0]); e++)
+        for (size_t k = 0; k < sizeof(HT_SRC) / sizeof(HT_SRC[0]); k++) {
+            char pk[512], pl[512];
+            snprintf(pk, sizeof(pk), HEADTAIL[e], HT_SRC[k][0]);
+            snprintf(pl, sizeof(pl), HEADTAIL[e], HT_SRC[k][1]);
+            same_as_plain(pk, pl);
+        }
+    /* Rest/Most of a SINGLE row is {}, which no buffer shape holds -- it must
+     * degrade to the List path rather than answer with something else. */
+    same_as_plain("Rest[ToNDArray[Table[N[i], {i, 300}]][[1 ;; 1]]]", "Rest[{1.}]");
+    same_as_plain("Most[ToNDArray[Table[N[i], {i, 300}]][[1 ;; 1]]]", "Most[{1.}]");
+
+    /* Clip is back on the buffer, gated on the BOUNDS: Real bounds are uniform,
+     * an exact bound is safe only when nothing is clipped. */
+    static const char* const CLIPS[] = {
+        "Clip[%s, {1.2, 1.8}]",     /* Real bounds -> buffer */
+        "Clip[%s, {1, 2}]",         /* exact bounds, clipping -> exact Integers */
+        "Clip[%s, {-99, 99}]",      /* exact bounds, nothing clipped -> input */
+        "Clip[%s]",                 /* 1-arg: default bounds are exact */
+        "Clip[%s, {1.2, 1.8}, {0., 9.}]",   /* 3-arg replacement form */
+        "Head[First[Clip[%s, {1, 2}]]]",
+        "Head[Last[Clip[%s, {1, 2}]]]",
+    };
+    static const char* const CLIP_SRC[][2] = {
+        { "ToNDArray[Table[N[i]/100., {i, 300}]]", "Table[N[i]/100., {i, 300}]" },
+        { "ToNDArray[Table[i, {i, 300}]]",         "Table[i, {i, 300}]" },
+    };
+    for (size_t e = 0; e < sizeof(CLIPS) / sizeof(CLIPS[0]); e++)
+        for (size_t k = 0; k < sizeof(CLIP_SRC) / sizeof(CLIP_SRC[0]); k++) {
+            char pk[512], pl[512];
+            snprintf(pk, sizeof(pk), CLIPS[e], CLIP_SRC[k][0]);
+            snprintf(pl, sizeof(pl), CLIPS[e], CLIP_SRC[k][1]);
+            same_as_plain(pk, pl);
+        }
+
+    /* Scans. Both spellings of the operator must agree -- and BOTH must agree
+     * with the plain list, which is what separates "fast" from "right". */
+    static const char* const SCANS[] = {
+        "FoldList[Max, 0., %s]",  "FoldList[Min, 9999., %s]",
+        "FoldList[Plus, 0., %s]", "FoldList[Times, 1., %s]",
+        "Fold[Max, 0., %s]",      "Fold[Plus, 0., %s]",
+        "FoldList[Max, %s]",      "FoldList[Plus, %s]",          /* seedless */
+        "FoldList[Max[#1, #2] &, 0., %s]",                        /* pure-function */
+        "FoldList[#1 + #2 &, 0., %s]",
+        "FoldList[Function[{p, q}, p + q^2], 0., %s]",            /* general body */
+        "FoldList[Subtract, 0., %s]",                             /* NOT a scan op */
+        "FoldList[ff, 0., %s]",                                   /* symbolic f */
+        "Head[First[FoldList[Max, 0, %s]]]",
+        "Length[FoldList[Max, 0., %s]]",
+    };
+    static const char* const SCAN_SRC[][2] = {
+        { "ToNDArray[Table[N[Mod[7 i, 13]], {i, 300}]]", "Table[N[Mod[7 i, 13]], {i, 300}]" },
+        { "ToNDArray[Table[Mod[7 i, 13], {i, 300}]]",    "Table[Mod[7 i, 13], {i, 300}]" },
+    };
+    for (size_t e = 0; e < sizeof(SCANS) / sizeof(SCANS[0]); e++)
+        for (size_t k = 0; k < sizeof(SCAN_SRC) / sizeof(SCAN_SRC[0]); k++) {
+            char pk[512], pl[512];
+            snprintf(pk, sizeof(pk), SCANS[e], SCAN_SRC[k][0]);
+            snprintf(pl, sizeof(pl), SCANS[e], SCAN_SRC[k][1]);
+            same_as_plain(pk, pl);
+        }
+    /* An exact seed beside a Real buffer: Max hands back one of its ARGUMENTS,
+     * so the exact 0 can survive into the answer and the scan must decline. */
+    same_as_plain("FoldList[Max, 0, ToNDArray[Table[N[i]/1000., {i, 300}]]]",
+                  "FoldList[Max, 0, Table[N[i]/1000., {i, 300}]]");
+    /* Times over an int64 buffer overflows int64; the List answer is a bigint,
+     * which no buffer holds, so the whole scan is abandoned. */
+    same_as_plain("FoldList[Times, 1, ToNDArray[Table[10^3, {i, 300}]]]",
+                  "FoldList[Times, 1, Table[10^3, {i, 300}]]");
+
+    /* PRESENTATION PARITY. A visible NDArray[...] argument gives a visible
+     * NDArray[...] result, whichever internal path answered. The compiled-VM
+     * scan lost this and only a cross-spelling comparison caught it: the SAME
+     * FoldList answered with head NDArray for Plus and head List for the
+     * equivalent lambda. */
+    same_as_plain("Head[FoldList[Plus, 0., NDArray[Table[N[i], {i, 300}]]]]",
+                  "Head[FoldList[Function[{p, q}, p + q], 0., NDArray[Table[N[i], {i, 300}]]]]");
+    same_as_plain("Head[Map[Sqrt, NDArray[Table[N[i], {i, 300}]]]]",
+                  "Head[FoldList[Function[{p, q}, p + q^2], 0., NDArray[Table[N[i], {i, 300}]]]]");
+
+    /* ListConvolve / ListCorrelate on the buffer, including every form that
+     * must degrade: exact data, symbolic kernel, custom g/h. */
+    static const char* const CONVS[] = {
+        "ListCorrelate[%s, %s]", "ListConvolve[%s, %s]",
+        "ListCorrelate[%s, %s, 1]", "ListCorrelate[%s, %s, -1]",
+        "ListCorrelate[%s, %s, {-1, 1}]",
+        "ListCorrelate[%s, %s, {1, -1}, 0.]",
+        "ListCorrelate[%s, %s, {-1, 1}, {}]",
+        "ListCorrelate[%s, %s, {-1, 1}, {}, Times, Plus]",
+        "ListCorrelate[%s, %s, {-1, 1}, {}, List, Plus]",
+    };
+    static const char* const CV_K[2] = { "ToNDArray[{1., 2., 3.}]", "{1., 2., 3.}" };
+    static const char* const CV_L[2] = { "ToNDArray[Table[N[Mod[7 i, 11]], {i, 300}]]",
+                                         "Table[N[Mod[7 i, 11]], {i, 300}]" };
+    for (size_t e = 0; e < sizeof(CONVS) / sizeof(CONVS[0]); e++) {
+        char pk[512], pl[512];
+        snprintf(pk, sizeof(pk), CONVS[e], CV_K[0], CV_L[0]);
+        snprintf(pl, sizeof(pl), CONVS[e], CV_K[1], CV_L[1]);
+        same_as_plain(pk, pl);
+        /* ...and each side packed ALONE: a mixed pair must not change the answer. */
+        snprintf(pk, sizeof(pk), CONVS[e], CV_K[0], CV_L[1]);
+        same_as_plain(pk, pl);
+        snprintf(pk, sizeof(pk), CONVS[e], CV_K[1], CV_L[0]);
+        same_as_plain(pk, pl);
+    }
+    /* Exact data stays exact -- an int64 buffer must NOT come back as Reals. */
+    same_as_plain("ListCorrelate[ToNDArray[{1, 2, 3}], ToNDArray[Table[Mod[7 i, 11], {i, 300}]]]",
+                  "ListCorrelate[{1, 2, 3}, Table[Mod[7 i, 11], {i, 300}]]");
+    same_as_plain("Head[First[ListCorrelate[ToNDArray[{1, 2, 3}], ToNDArray[Table[Mod[7 i, 11], {i, 300}]]]]]",
+                  "Head[First[ListCorrelate[{1, 2, 3}, Table[Mod[7 i, 11], {i, 300}]]]]");
+    /* Symbolic kernel: no buffer anywhere in the answer. */
+    same_as_plain("ListCorrelate[{aa, bb}, ToNDArray[Table[N[Mod[7 i, 11]], {i, 300}]]]",
+                  "ListCorrelate[{aa, bb}, Table[N[Mod[7 i, 11]], {i, 300}]]");
+    /* Rank 2, both engines: small takes the direct loop, large takes the FFT. */
+    same_as_plain("ListCorrelate[ToNDArray[Table[N[Mod[i + j, 3]], {i, 3}, {j, 3}]], "
+                  "ToNDArray[Table[N[Mod[i j, 7]], {i, 40}, {j, 40}]]]",
+                  "ListCorrelate[Table[N[Mod[i + j, 3]], {i, 3}, {j, 3}], "
+                  "Table[N[Mod[i j, 7]], {i, 40}, {j, 40}]]");
+    same_as_plain("ListCorrelate[ToNDArray[Table[N[Mod[i, 5]], {i, 300}]], "
+                  "ToNDArray[Table[N[Mod[3 i, 13]], {i, 2000}]]]",
+                  "ListCorrelate[Table[N[Mod[i, 5]], {i, 300}], "
+                  "Table[N[Mod[3 i, 13]], {i, 2000}]]");
+
+    /* Accumulate / Differences float64 arms, and the exact arms beside them. */
+    static const char* const REDUCE[] = {
+        "Accumulate[%s]", "Differences[%s]",
+        "Head[First[Accumulate[%s]]]", "Head[First[Differences[%s]]]",
+    };
+    for (size_t e = 0; e < sizeof(REDUCE) / sizeof(REDUCE[0]); e++)
+        for (size_t k = 0; k < sizeof(SCAN_SRC) / sizeof(SCAN_SRC[0]); k++) {
+            char pk[512], pl[512];
+            snprintf(pk, sizeof(pk), REDUCE[e], SCAN_SRC[k][0]);
+            snprintf(pl, sizeof(pl), REDUCE[e], SCAN_SRC[k][1]);
+            same_as_plain(pk, pl);
+        }
+    same_as_plain("Accumulate[ToNDArray[Table[N[i j], {i, 60}, {j, 5}]]]",
+                  "Accumulate[Table[N[i j], {i, 60}, {j, 5}]]");
+
+    /* Part: the contiguous-span block copy, and every selector that is NOT
+     * contiguous and must keep the general gather (steps, reversals, position
+     * lists, out-of-order position lists). */
+    static const char* const PARTS[] = {
+        "%s[[2 ;; -1]]", "%s[[1 ;; 100]]", "%s[[-50 ;; -1]]",
+        "%s[[1 ;; -1 ;; 3]]", "%s[[300 ;; 1 ;; -1]]",
+        "%s[[{1, 5, 9}]]", "%s[[{9, 1, 5}]]", "%s[[{3, 3, 3}]]",
+    };
+    for (size_t e = 0; e < sizeof(PARTS) / sizeof(PARTS[0]); e++)
+        for (size_t k = 0; k < sizeof(SCAN_SRC) / sizeof(SCAN_SRC[0]); k++) {
+            char pk[512], pl[512];
+            snprintf(pk, sizeof(pk), PARTS[e], SCAN_SRC[k][0]);
+            snprintf(pl, sizeof(pl), PARTS[e], SCAN_SRC[k][1]);
+            same_as_plain(pk, pl);
+        }
+    static const char* const PARTS2[] = {
+        "%s[[3 ;; 7, 2 ;; 4]]", "%s[[All, 3 ;; 5]]", "%s[[2 ;; 4]]",
+        "%s[[All, 4]]", "%s[[5, All]]", "%s[[{1, 3, 5}, All]]",
+        "%s[[All, {2, 4}]]", "%s[[{3, 1, 2}, All]]",
+    };
+    for (size_t e = 0; e < sizeof(PARTS2) / sizeof(PARTS2[0]); e++) {
+        char pk[512], pl[512];
+        snprintf(pk, sizeof(pk), PARTS2[e], "ToNDArray[Table[N[i j], {i, 60}, {j, 5}]]");
+        snprintf(pl, sizeof(pl), PARTS2[e], "Table[N[i j], {i, 60}, {j, 5}]");
+        same_as_plain(pk, pl);
+    }
+
+    /* Outer with ONE operand below the packing threshold -- the small-operand
+     * trap again, this time costing 849 ms on a 100000 x 16 product. */
+    same_as_plain("Outer[Plus, ToNDArray[Table[N[i], {i, 300}]], {1., 2., 3.}]",
+                  "Outer[Plus, Table[N[i], {i, 300}], {1., 2., 3.}]");
+    same_as_plain("Outer[Times, {1., 2., 3.}, ToNDArray[Table[N[i], {i, 300}]]]",
+                  "Outer[Times, {1., 2., 3.}, Table[N[i], {i, 300}]]");
+    /* ...and the operands it must still decline. */
+    same_as_plain("Outer[Plus, ToNDArray[Table[N[i], {i, 300}]], {1, 2, 3}]",
+                  "Outer[Plus, Table[N[i], {i, 300}], {1, 2, 3}]");
+    same_as_plain("Outer[Plus, ToNDArray[Table[N[i], {i, 300}]], {aa, bb}]",
+                  "Outer[Plus, Table[N[i], {i, 300}], {aa, bb}]");
+    same_as_plain("Outer[ff, ToNDArray[Table[N[i], {i, 300}]], {1., 2.}]",
+                  "Outer[ff, Table[N[i], {i, 300}], {1., 2.}]");
+}
+
 void test_no_nesting_invariant(void) {
-    /* List is deliberately NOT packed-aware, so a packed value placed inside an
-     * ordinary List is materialised as that List is built. This is what keeps
-     * the gate's top-level scan complete: a packed node can never hide inside a
-     * plain EXPR_FUNCTION tree where an unaware recursive walker would meet it.
-     * If this ever reports True, the gate has become unsound and needs to be
-     * deep (or the flag-bit design in the plan). */
+    /* THE INVARIANT: a packed node may never come to rest inside a plain
+     * EXPR_FUNCTION tree, where an unaware recursive walker would meet it. That
+     * is what keeps the gate's top-level scan complete. If any of these reports
+     * True the gate has become unsound and needs to be deep (or the flag-bit
+     * design in the plan).
+     *
+     * There are two ways to honour it, and List uses BOTH. When the rows can
+     * form one array they are absorbed into a single rank-2 buffer (see
+     * test_list_of_packed_rows_absorbs); when they cannot -- a mixed list like
+     * this one -- they are materialised as the List is built. What is never
+     * allowed is the third outcome, a plain List holding buffers. */
     assert_eval_eq("NDArrayQ[{ToNDArray[{1., 2.}], 5}[[1]]]", "False", 0);
     assert_eval_eq("Head[{ToNDArray[{1., 2.}], 5}[[1]]]", "List", 0);
     assert_eval_eq("{ToNDArray[{1., 2.}], 5}", "{{1.0, 2.0}, 5}", 0);
+    /* Absorbed rather than materialised, and STILL not a nested buffer: the
+     * element of a packed rank-2 is a fresh packed row, not an interior node of
+     * a plain List. */
+    {
+        Expr* r = ev("{Range[1., 300.], Range[1., 300.]}");
+        ASSERT(is_packed_list(r));
+        ASSERT(r->data.ndarray.rank == 2);
+        expr_free(r);
+    }
 
     /* The hole this nearly shipped with. An unevaluated application like
      * gg[xx][p] has a non-symbol head and no builtin to run, so it comes to
@@ -444,11 +816,30 @@ void test_aware_heads_stay_packed(void) {
  * than as an unexplained performance cliff. Lifting it needs the transitive
  * "contains a packed node" bit described in docs/design/packed_arrays.md. */
 void test_nesting_limitation_is_correct_but_unpacked(void) {
+    /* Below PACK_MIN_ELEMENTS the two rows are materialised rather than
+     * absorbed, so MapThread gets an ordinary List of ordinary lists and
+     * answers from the generic path. Correct value, ordinary storage. */
     assert_eval_eq("MapThread[Plus, {ToNDArray[{1., 2.}], ToNDArray[{3., 4.}]}]",
                    "{4.0, 6.0}", 0);
     Expr* r = ev("MapThread[Plus, {ToNDArray[{1., 2.}], ToNDArray[{3., 4.}]}]");
     ASSERT(!is_packed_list(r));     /* correct value, ordinary List storage */
     expr_free(r);
+
+    /* Above it the same expression absorbs into a rank-2 buffer and MapThread's
+     * column fold answers instead -- same value, packed storage. The two arms
+     * together are the point: which one runs is a size decision, and it is not
+     * observable in the answer. */
+    {
+        Expr* big = ev("MapThread[Plus, {Range[1., 300.], Range[1., 300.]}]");
+        Expr* plain = ev("MapThread[Plus, {Normal[Range[1., 300.]], "
+                         "Normal[Range[1., 300.]]}]");
+        char* sa = expr_to_string(big);
+        char* sb = expr_to_string(plain);
+        ASSERT(strcmp(sa, sb) == 0);
+        ASSERT(is_packed_list(big));
+        free(sa); free(sb);
+        expr_free(big); expr_free(plain);
+    }
 
     /* MapIndexed is a separate, PRE-EXISTING gap, not a packing one: it never
      * repacked, on either surface. MapIndexed[f, NDArray[{1.,2.}]] has always
@@ -1031,6 +1422,7 @@ int main(void) {
     TEST(test_visible_ndarray_unchanged);
     TEST(test_exactness_preserved);
     TEST(test_int64_matches_plain_integer_lists);
+    TEST(test_tally_matches_plain_lists);
     TEST(test_declines_what_it_cannot_represent);
     TEST(test_ordering_matches_plain_lists);
     TEST(test_hash_consumers);
@@ -1040,6 +1432,8 @@ int main(void) {
     TEST(test_roundtrip_builtins);
     TEST(test_unaware_heads_are_correct);
     TEST(test_pattern_matching);
+    TEST(test_third_sweep_fast_paths);
+    TEST(test_fourth_sweep_fast_paths);
     TEST(test_no_nesting_invariant);
     TEST(test_aware_heads_stay_packed);
     TEST(test_nesting_limitation_is_correct_but_unpacked);

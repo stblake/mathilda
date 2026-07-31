@@ -51,6 +51,46 @@ Expr* ndred_rms(Expr* res);         /* RootMeanSquare[a] */
 Expr* ndred_median(Expr* res);      /* Median[a] */
 Expr* ndred_quartiles(Expr* res);   /* Quartiles[a] */
 
+/* Tally[a] — an IRREGULAR reduction: a scatter-add into a keyed table rather
+ * than a fixed-stride sweep. Distinct enough from the reductions above to be
+ * worth naming: the win is not vectorising a loop but never boxing the input at
+ * all, since the generic path must materialise one Expr per element and then
+ * hash and compare Exprs. Returns the {value, count} pairs in first-appearance
+ * order, exactly as the List path does. */
+Expr* ndred_tally(Expr* res);           /* Tally[a] */
+
+/* ------------------------------------------------------------------- scans
+ *
+ * Fold / FoldList over an ASSOCIATIVE machine operator, straight on the buffer.
+ *
+ * A scan is the one shape an array language cannot vectorise away, so it is
+ * where an evaluator is most exposed: `FoldList[Max, First[v], Rest[v]]` — the
+ * running maximum, i.e. numpy's `np.maximum.accumulate` — cost 605 ms on a 10^6
+ * float64 vector against 2.7 ms in NumPy, because every step applied `Max`
+ * through the evaluator and every element was boxed on the way in and out.
+ *
+ * Only four operators matter in practice (running sum, product, max, min) and
+ * all four are a two-line C loop. The general case is NOT this function's job:
+ * a non-associative or user-written body stays with numloop's compiled VM, which
+ * reads the same buffer.
+ *
+ * `seed` may be NULL for the 2-arg spelling FoldList[f, a], which seeds from
+ * element 0 and scans the rest. `as_list` selects FoldList over Fold.
+ *
+ * DECLINES (returns NULL, caller keeps its existing path) for rank >= 2, a
+ * complex dtype, a seed that is not a machine number, and — this is the
+ * exactness gate — any combination whose List answer would NOT be uniform:
+ * Max returns one of its ARGUMENTS, so an exact seed beside a Real buffer
+ * (Fold[Max, 1, {0.5}] -> the exact 1) escapes the buffer's dtype. */
+typedef enum { ND_SCAN_PLUS, ND_SCAN_TIMES, ND_SCAN_MAX, ND_SCAN_MIN } NDScanOp;
+
+/* True, setting *op, when `f` names one of the four scan operators — either as
+ * a bare symbol (Max) or as the equivalent pure function (Max[#1, #2] &). Both
+ * spellings mean the same scan and used to differ by 130 ms. */
+bool ndred_scan_op_for(const Expr* f, NDScanOp* op);
+
+Expr* ndred_scan(const Expr* a, NDScanOp op, const Expr* seed, bool as_list);
+
 Expr* ndred_moving_average(Expr* res);  /* MovingAverage[a, r] */
 Expr* ndred_moving_median(Expr* res);   /* MovingMedian[a, r] */
 Expr* ndred_ema(Expr* res);             /* ExponentialMovingAverage[a, alpha] */

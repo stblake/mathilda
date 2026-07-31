@@ -125,6 +125,16 @@ Expr* pack_repack_like(const Expr* src, Expr* list);
 
 /* Materialise a packed list (or a visible NDArray) to a nested List. Returns
  * NULL if `e` is not an ndarray at all. Caller owns the result. */
+/* Pack every plain numeric List argument of a Listable call up to a buffer, so
+ * the head's own NDArray kernel takes the call instead of the buffer being
+ * materialised to meet the List. Rewrites `call`'s args in place and sets
+ * *changed when it does. All or nothing; see the definition for the four
+ * conditions under which it declines and leaves the call to thread.
+ *
+ * `broadcast_ok` and `int64_ok` are the head's SymbolDef claims. */
+void pack_lift_listable_args(Expr* call, bool broadcast_ok, bool int64_ok,
+                             bool* changed);
+
 Expr* pack_unpack(const Expr* e);
 
 /* evaluate(), then materialise a packed result. Borrows `e`, exactly like

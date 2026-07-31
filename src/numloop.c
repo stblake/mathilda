@@ -1571,8 +1571,18 @@ Expr* numloop_while(const Expr* test, const Expr* body) {
 static Expr* numloop_fold_impl(const Expr* f, const Expr* x0, const Expr* list,
                                bool as_list) {
     if (numloop_off()) return NULL;
-    if (list->type != EXPR_FUNCTION) return NULL;
-    size_t m = list->data.function.arg_count;
+    /* A PACKED list is the common case once anything upstream has been packed,
+     * and it used to bail here — so Fold over a buffer was not merely un-
+     * accelerated, it was SLOWER than over the equivalent plain List (1246 ms
+     * against 143 ms for the same EMA), because the interpreter then
+     * materialised the whole array to walk it. A rank-1 real buffer is a
+     * contiguous double array; read it. */
+    bool packed = is_ndarray(list);
+    if (!packed && list->type != EXPR_FUNCTION) return NULL;
+    if (packed && (list->data.ndarray.rank != 1 ||
+                   ndt_is_complex(list->data.ndarray.dtype))) return NULL;
+    size_t m = packed ? (size_t)list->data.ndarray.dims[0]
+                      : list->data.function.arg_count;
     if (m == 0) return NULL;   /* Fold[f,x0,{}] = x0 (possibly exact); let interp */
 
     double acc;
@@ -1584,15 +1594,28 @@ static Expr* numloop_fold_impl(const Expr* f, const Expr* x0, const Expr* list,
     if (!compile_function(&p, f, 2, &body_inexact)) return NULL;
 
     /* Every list element must already be a machine number; gather them and note
-     * whether they are ALL inexact. */
+     * whether they are ALL inexact. An int64 buffer holds exact Integers, so it
+     * fails the same inexactness test the boxed walk applies below. */
     double* elems = malloc(m * sizeof(double));
     if (!elems) { prog_free(&p); return NULL; }
     bool elems_inexact = true;
     bool ok = true;
-    for (size_t i = 0; i < m; i++) {
-        const Expr* el = list->data.function.args[i];
-        if (!to_machine_double(el, &elems[i])) { ok = false; break; }
-        if (!value_is_inexact(el)) elems_inexact = false;
+    if (packed) {
+        NDType dt = list->data.ndarray.dtype;
+        elems_inexact = (dt != NDT_INT64);
+        if (dt == NDT_FLOAT64)
+            memcpy(elems, list->data.ndarray.data, m * sizeof(double));
+        else
+            for (size_t i = 0; i < m; i++) {
+                double im;
+                ndt_get(list->data.ndarray.data, i, dt, &elems[i], &im);
+            }
+    } else {
+        for (size_t i = 0; i < m; i++) {
+            const Expr* el = list->data.function.args[i];
+            if (!to_machine_double(el, &elems[i])) { ok = false; break; }
+            if (!value_is_inexact(el)) elems_inexact = false;
+        }
     }
     if (!ok) { free(elems); prog_free(&p); return NULL; }
 
@@ -1624,7 +1647,23 @@ static Expr* numloop_fold_impl(const Expr* f, const Expr* x0, const Expr* list,
     free(elems);
     prog_free(&p);
     if (bail) { free(out); return NULL; }
-    Expr* r = as_list ? reals_to_list(out, m + 1) : expr_new_real(acc);
+    if (!as_list) { free(out); return expr_new_real(acc); }
+    if (packed) {
+        /* Build the history LIKE the source, not merely packed. A visible
+         * NDArray[...] argument gives a visible NDArray[...] result -- that is
+         * what Map and every other ND path do, and reals_to_list (which always
+         * produces the packed-List presentation) quietly broke it: the same
+         * FoldList answered with head NDArray for a Plus operator and head List
+         * for the equivalent lambda. */
+        double* buf = malloc((m + 1) * sizeof(double));
+        if (buf) {
+            memcpy(buf, out, (m + 1) * sizeof(double));
+            free(out);
+            int64_t dims[1] = { (int64_t)m + 1 };
+            return expr_new_ndarray_like(list, 1, dims, buf, NDT_FLOAT64);
+        }
+    }
+    Expr* r = reals_to_list(out, m + 1);
     free(out);
     return r;
 }

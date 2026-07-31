@@ -493,6 +493,144 @@ static bool nd_moving_window(Expr* res, Expr** a_out, size_t* r_out) {
     return true;
 }
 
+/* --- Tally ------------------------------------------------------------
+ *
+ * The generic Tally already hashes, so this is not an algorithmic fix -- it is
+ * a boxing fix. Tally[list] reads list->args[i], so a packed buffer had to be
+ * materialised into one Expr per element before the builtin could start, and
+ * then every probe hashed and compared Expr NODES. Measured over 10^6 packed
+ * int64: 147 ms, of which ~51 ms was the materialisation and ~96 ms the boxed
+ * hash walk -- and 96 ms was ALSO what the same data cost as a plain List, so
+ * being packed made Tally slower than not being packed.
+ *
+ * Here the key is the machine word itself. Open addressing, linear probing,
+ * power-of-two capacity; the unique values are appended in first-appearance
+ * order and the table stores indices into that array, which is what makes the
+ * output order match the List path by construction rather than by a sort.
+ */
+
+/* 64-bit finalizer from splitmix64: cheap, and it avalanches the low bits,
+ * which matters because the mask below keeps only those. Small consecutive
+ * integers -- exactly what Tally is usually given -- would otherwise collide in
+ * long runs under linear probing. */
+static uint64_t tally_mix(uint64_t z) {
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+    return z ^ (z >> 31);
+}
+
+Expr* ndred_tally(Expr* res) {
+    if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
+    Expr* a = res->data.function.args[0];
+    NDType dt = a->data.ndarray.dtype;
+    /* Rank 1 only: Tally of a matrix tallies its ROWS, which are not machine
+     * words. Complex dtypes go the generic way for the same reason. */
+    if (a->data.ndarray.rank != 1 || ndt_is_complex(dt))
+        return ndarray_delist_and_reeval(res);
+    if (dt != NDT_INT64 && dt != NDT_FLOAT64)
+        return ndarray_delist_and_reeval(res);
+
+    size_t n = (size_t)a->data.ndarray.dims[0];
+    if (n == 0) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+
+    /* Sized by the DISTINCT count, which is discovered, not by n. Sizing for n
+     * up front is the obvious thing and it is badly wrong at the scale this
+     * exists for: a 10^7-element tally over 10^4 distinct values wanted a
+     * 2^25-slot table -- 268 MB to zero and then random-probe, for 10^4 live
+     * entries -- and that allocation, not the hashing, was most of the time.
+     * Growing costs one rehash of the LIVE keys per doubling, so the whole
+     * sequence of rehashes is O(nuniq), against O(n) probes either way. */
+    size_t cap = 1024, nuniq = 0, ucap = 512;
+    size_t  mask = cap - 1;
+    size_t* slot = calloc(cap, sizeof(size_t));         /* index+1, 0 = empty */
+    uint64_t* key = malloc(sizeof(uint64_t) * ucap);    /* unique keys, in order */
+    int64_t*  cnt = malloc(sizeof(int64_t) * ucap);
+    if (!slot || !key || !cnt) {
+        free(slot); free(key); free(cnt);
+        return ndarray_delist_and_reeval(res);
+    }
+
+    const int64_t* iv = (const int64_t*)a->data.ndarray.data;
+    const double*  dv = (const double*)a->data.ndarray.data;
+    for (size_t i = 0; i < n; i++) {
+        uint64_t k;
+        if (dt == NDT_INT64) {
+            k = (uint64_t)iv[i];
+        } else {
+            double x = dv[i];
+            /* A non-finite element cannot be keyed on its bits and stay
+             * faithful: NaN != NaN, so the Expr path gives every NaN its own
+             * bucket while identical bit patterns would share one. Rare enough
+             * that handing the whole call back is the right trade. */
+            if (!(x == x) || x > 1.7976931348623157e308 || x < -1.7976931348623157e308) {
+                free(slot); free(key); free(cnt);
+                return ndarray_delist_and_reeval(res);
+            }
+            /* The key is the bit pattern, deliberately UNnormalised, so -0.0
+             * and 0.0 stay two tallies. Folding them together is the obvious
+             * thing to do and it is wrong here: Mathilda's List path compares
+             * them with expr_eq, which distinguishes them, so normalising made
+             * Tally[{0., -0., 1.}] answer {{0.,2},{1.,1}} over a buffer and
+             * {{0.,1},{-0.,1},{1.,1}} over the identical plain list. Whether
+             * that List behaviour is itself right is a separate question -- what
+             * cannot happen is the two disagreeing. The differential test in
+             * tests/test_packed_list.c is what caught it. */
+            memcpy(&k, &x, sizeof(k));
+        }
+        size_t h = (size_t)tally_mix(k) & mask;
+        while (slot[h] && key[slot[h] - 1] != k) h = (h + 1) & mask;
+        if (slot[h]) { cnt[slot[h] - 1]++; continue; }
+
+        if (nuniq == ucap) {                       /* grow the ordered arrays */
+            size_t nu = ucap * 2;
+            uint64_t* k2 = realloc(key, sizeof(uint64_t) * nu);
+            int64_t*  c2 = realloc(cnt, sizeof(int64_t) * nu);
+            if (k2) key = k2;
+            if (c2) cnt = c2;
+            if (!k2 || !c2) { free(slot); free(key); free(cnt);
+                              return ndarray_delist_and_reeval(res); }
+            ucap = nu;
+        }
+        key[nuniq] = k;
+        cnt[nuniq] = 1;
+        slot[h] = ++nuniq;
+
+        if (nuniq * 10 >= cap * 7) {               /* grow the table, rehash */
+            size_t nc = cap * 2;
+            size_t* s2 = calloc(nc, sizeof(size_t));
+            if (!s2) { free(slot); free(key); free(cnt);
+                       return ndarray_delist_and_reeval(res); }
+            free(slot);
+            slot = s2; cap = nc; mask = cap - 1;
+            for (size_t u = 0; u < nuniq; u++) {
+                size_t g = (size_t)tally_mix(key[u]) & mask;
+                while (slot[g]) g = (g + 1) & mask;
+                slot[g] = u + 1;
+            }
+        }
+    }
+    free(slot);
+
+    Expr** out = malloc(sizeof(Expr*) * nuniq);
+    if (!out) { free(key); free(cnt); return ndarray_delist_and_reeval(res); }
+    for (size_t i = 0; i < nuniq; i++) {
+        Expr* pair[2];
+        if (dt == NDT_INT64) {
+            pair[0] = expr_new_integer((int64_t)key[i]);
+        } else {
+            double x;
+            memcpy(&x, &key[i], sizeof(x));
+            pair[0] = expr_new_real(x);
+        }
+        pair[1] = expr_new_integer(cnt[i]);
+        out[i] = expr_new_function(expr_new_symbol(SYM_List), pair, 2);
+    }
+    free(key); free(cnt);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), out, nuniq);
+    free(out);
+    return list;
+}
+
 Expr* ndred_moving_average(Expr* res) {
     Expr* a; size_t r;
     if (!nd_moving_window(res, &a, &r)) return ndarray_delist_and_reeval(res);
@@ -618,6 +756,67 @@ static Expr* nd_total_leading(const Expr* a, int m) {
     return expr_new_ndarray_like(a, rank - m, dims + m, out, dt); /* adopts out */
 }
 
+/* Sum a CONTIGUOUS RANGE of axes [p, q) with p > 0, i.e. Total[a, {n1, n2}]
+ * where the summed levels do not start at the top. The surviving axes are
+ * dims[0..p) followed by dims[q..rank).
+ *
+ * With outer = prod(dims[0..p)), mid = prod(dims[p..q)) and
+ * inner = prod(dims[q..rank)), a row-major buffer gives
+ *
+ *     out[o*inner + i] = sum over k < mid of buf[(o*mid + k)*inner + i]
+ *
+ * so every output element is again a strided sum -- the same shape of work
+ * nd_total_leading does, just with a base that walks two indices instead of
+ * one. p == 0 is left to nd_total_leading, which is the hot path (plain
+ * Total[a]) and does not need the div/mod. */
+typedef struct { const void* buf; NDType dt; void* out; size_t inner, mid; } nd_axes_ctx;
+static bool nd_total_axes_cols(void* c, size_t lo, size_t hi) {
+    const nd_axes_ctx* x = (const nd_axes_ctx*)c;
+    for (size_t j = lo; j < hi; j++) {
+        size_t o = j / x->inner, i = j % x->inner;
+        double re, im;
+        nd_sum_strided(x->buf, x->dt, o * x->mid * x->inner + i,
+                       x->inner, x->mid, &re, &im);
+        ndt_set(x->out, j, x->dt, re, im);
+    }
+    return true;
+}
+
+static Expr* nd_total_axes(const Expr* a, int p, int q) {
+    int rank = a->data.ndarray.rank;
+    const int64_t* dims = a->data.ndarray.dims;
+    NDType dt = a->data.ndarray.dtype;
+    const void* buf = a->data.ndarray.data;
+
+    size_t outer = nd_dim_prod(dims, 0, p);
+    size_t mid   = nd_dim_prod(dims, p, q);
+    size_t inner = nd_dim_prod(dims, q, rank);
+    size_t T = outer * inner;                    /* output element count */
+
+    int64_t odims[64];
+    int orank = 0;
+    for (int i = 0; i < p; i++)        odims[orank++] = dims[i];
+    for (int i = q; i < rank; i++)     odims[orank++] = dims[i];
+
+    void* out = malloc(ndt_elem_size(dt) * (T ? T : 1));
+    if (!out) return NULL;
+    if (dt == NDT_INT64) {
+        /* Serial and un-pairwise, as in nd_total_leading: integer addition is
+         * exact and associative, and one overflow anywhere abandons the whole
+         * result rather than silently widening. */
+        for (size_t j = 0; j < T; j++) {
+            int64_t s;
+            if (!nd_sum_i64(buf, dt, (j / inner) * mid * inner + (j % inner),
+                            inner, mid, &s)) { free(out); return NULL; }
+            ndt_set_i(out, j, dt, s);
+        }
+        return expr_new_ndarray_like(a, orank, odims, out, dt);
+    }
+    nd_axes_ctx c = { buf, dt, out, inner, mid };
+    nd_parallel_for(T, nd_total_axes_cols, &c);
+    return expr_new_ndarray_like(a, orank, odims, out, dt);   /* adopts out */
+}
+
 Expr* ndred_total(Expr* res) {
     Expr* a = res->data.function.args[0];
     int rank = a->data.ndarray.rank;
@@ -631,8 +830,37 @@ Expr* ndred_total(Expr* res) {
             m = (int)n;
         } else if (spec->type == EXPR_SYMBOL && spec->data.symbol.name == SYM_Infinity) {
             m = rank;                            /* Total[a, Infinity] flattens fully */
+        } else if (spec->type == EXPR_FUNCTION && spec->data.function.head &&
+                   spec->data.function.head->type == EXPR_SYMBOL &&
+                   spec->data.function.head->data.symbol.name == SYM_List) {
+            /* Total[a, {n}] sums level n only; Total[a, {n1, n2}] sums levels
+             * n1..n2. Both are a contiguous axis range, which the buffer can do
+             * directly -- and had to, because these were the ONLY spellings
+             * falling through to the List path. Total[m] and Total[m, {1}] are
+             * the same value by definition and read 1.36 ms against 258 ms, a
+             * 190x penalty for writing the level as a list. Negative and
+             * out-of-range levels still take the List path, which is always
+             * right. */
+            size_t nspec = spec->data.function.arg_count;
+            if (nspec < 1 || nspec > 2) return ndarray_delist_and_reeval(res);
+            Expr* lo = spec->data.function.args[0];
+            if (lo->type != EXPR_INTEGER) return ndarray_delist_and_reeval(res);
+            int64_t n1 = lo->data.integer, n2 = n1;
+            if (nspec == 2) {
+                Expr* hi = spec->data.function.args[1];
+                if (hi->type == EXPR_SYMBOL && hi->data.symbol.name == SYM_Infinity)
+                    n2 = rank;
+                else if (hi->type == EXPR_INTEGER)
+                    n2 = hi->data.integer;
+                else
+                    return ndarray_delist_and_reeval(res);
+            }
+            if (n1 < 1 || n2 < n1 || n2 > rank) return ndarray_delist_and_reeval(res);
+            Expr* r = (n1 == 1) ? nd_total_leading(a, (int)n2)
+                                : nd_total_axes(a, (int)n1 - 1, (int)n2);
+            return r ? r : ndarray_delist_and_reeval(res);
         } else {
-            return ndarray_delist_and_reeval(res); /* {k}, {n1,n2}, ... -> List path */
+            return ndarray_delist_and_reeval(res);
         }
     } else if (res->data.function.arg_count != 1) {
         return ndarray_delist_and_reeval(res);
@@ -858,6 +1086,133 @@ Expr* ndred_min(Expr* res) { return nd_extreme(res, false); }
 
 /* Prefix sum along the leading axis, same shape/dtype:
  *   out[b, j] = Sum_{b' <= b} in[b', j],  j over the trailing block. */
+/* ------------------------------------------------------------------- scans */
+
+/* Recognise the scan operator — see ndreduce.h. */
+bool ndred_scan_op_for(const Expr* f, NDScanOp* op) {
+    const char* nm = NULL;
+    if (f->type == EXPR_SYMBOL) {
+        nm = f->data.symbol.name;
+    } else if (f->type == EXPR_FUNCTION &&
+               f->data.function.head->type == EXPR_SYMBOL &&
+               f->data.function.head->data.symbol.name == SYM_Function &&
+               f->data.function.arg_count == 1) {
+        /* Function[h[Slot[1], Slot[2]]] — the `h[#1, #2] &` spelling. */
+        const Expr* b = f->data.function.args[0];
+        if (b->type != EXPR_FUNCTION || b->data.function.arg_count != 2 ||
+            b->data.function.head->type != EXPR_SYMBOL) return false;
+        for (int i = 0; i < 2; i++) {
+            const Expr* s = b->data.function.args[i];
+            if (s->type != EXPR_FUNCTION || s->data.function.arg_count != 1 ||
+                s->data.function.head->type != EXPR_SYMBOL ||
+                s->data.function.head->data.symbol.name != SYM_Slot ||
+                s->data.function.args[0]->type != EXPR_INTEGER ||
+                s->data.function.args[0]->data.integer != i + 1) return false;
+        }
+        nm = b->data.function.head->data.symbol.name;
+    } else {
+        return false;
+    }
+    if (nm == SYM_Plus)  { *op = ND_SCAN_PLUS;  return true; }
+    if (nm == SYM_Times) { *op = ND_SCAN_TIMES; return true; }
+    if (nm == SYM_Max)   { *op = ND_SCAN_MAX;   return true; }
+    if (nm == SYM_Min)   { *op = ND_SCAN_MIN;   return true; }
+    return false;
+}
+
+Expr* ndred_scan(const Expr* a, NDScanOp op, const Expr* seed, bool as_list) {
+    if (!a || !is_ndarray(a) || a->data.ndarray.rank != 1) return NULL;
+    NDType dt = a->data.ndarray.dtype;
+    if (ndt_is_complex(dt)) return NULL;
+    size_t n = (size_t)a->data.ndarray.dims[0];
+
+    /* Uniformity of the ANSWER decides whether a buffer can hold it. Max and Min
+     * hand back one of their arguments unchanged, and Plus/Times over exact
+     * inputs stay exact, so seed and elements must agree in exactness — a Real
+     * seed over an int64 buffer would give Reals only where the seed won. */
+    bool want_exact = (dt == NDT_INT64);
+    if (seed) {
+        if (want_exact) { if (seed->type != EXPR_INTEGER) return NULL; }
+        else            { if (seed->type != EXPR_REAL)    return NULL; }
+    } else {
+        if (n == 0) return NULL;      /* FoldList[f, {}] -> {}; List path */
+    }
+    /* Seedless (2-arg) form scans elements 1.. from element 0. */
+    size_t start = seed ? 0 : 1;
+    size_t outn = seed ? n + 1 : n;
+    if (outn == 0) return NULL;
+
+    if (want_exact) {
+        const int64_t* in = (const int64_t*)a->data.ndarray.data;
+        int64_t acc = seed ? seed->data.integer : in[0];
+        int64_t* out = as_list ? malloc(sizeof(int64_t) * outn) : NULL;
+        if (as_list && !out) return NULL;
+        if (as_list) out[0] = acc;
+        for (size_t i = start, k = 1; i < n; i++, k++) {
+            int64_t x = in[i];
+            switch (op) {
+            /* Overflow abandons the whole scan: the List answer promotes to a
+             * bigint and no int64 buffer can hold it. */
+            case ND_SCAN_PLUS:  if (ci_add_i64(acc, x, &acc)) { free(out); return NULL; } break;
+            case ND_SCAN_TIMES: if (ci_mul_i64(acc, x, &acc)) { free(out); return NULL; } break;
+            case ND_SCAN_MAX:   if (x > acc) acc = x; break;
+            case ND_SCAN_MIN:   if (x < acc) acc = x; break;
+            }
+            if (as_list) out[k] = acc;
+        }
+        if (!as_list) return expr_new_integer(acc);
+        int64_t dims[1] = { (int64_t)outn };
+        return expr_new_ndarray_like(a, 1, dims, out, dt);
+    }
+
+    /* Real dtypes. float64 reads the buffer directly (the common case and the
+     * one that vectorises); float32 goes through the ndt_get/ndt_set choke
+     * point so the stored precision is respected. */
+    double* out = as_list ? malloc(sizeof(double) * outn) : NULL;
+    if (as_list && !out) return NULL;
+    double acc;
+    if (seed) acc = seed->data.real;
+    else { double im; ndt_get(a->data.ndarray.data, 0, dt, &acc, &im); }
+    if (as_list) out[0] = acc;
+
+    if (dt == NDT_FLOAT64) {
+        const double* in = (const double*)a->data.ndarray.data;
+        for (size_t i = start, k = 1; i < n; i++, k++) {
+            double x = in[i];
+            switch (op) {
+            case ND_SCAN_PLUS:  acc += x; break;
+            case ND_SCAN_TIMES: acc *= x; break;
+            case ND_SCAN_MAX:   if (x > acc) acc = x; break;
+            case ND_SCAN_MIN:   if (x < acc) acc = x; break;
+            }
+            if (as_list) out[k] = acc;
+        }
+    } else {
+        for (size_t i = start, k = 1; i < n; i++, k++) {
+            double x, im;
+            ndt_get(a->data.ndarray.data, i, dt, &x, &im);
+            switch (op) {
+            case ND_SCAN_PLUS:  acc += x; break;
+            case ND_SCAN_TIMES: acc *= x; break;
+            case ND_SCAN_MAX:   if (x > acc) acc = x; break;
+            case ND_SCAN_MIN:   if (x < acc) acc = x; break;
+            }
+            if (as_list) out[k] = acc;
+        }
+    }
+    if (!as_list) { free(out); return expr_new_real(acc); }
+    /* A float32 source keeps its dtype, so the partials are stored at the
+     * source's precision — same as every other structural path here. */
+    int64_t dims[1] = { (int64_t)outn };
+    if (dt == NDT_FLOAT64)
+        return expr_new_ndarray_like(a, 1, dims, out, dt);
+    void* nb = malloc(ndt_elem_size(dt) * outn);
+    if (!nb) { free(out); return NULL; }
+    for (size_t i = 0; i < outn; i++) ndt_set(nb, i, dt, out[i], 0.0);
+    free(out);
+    return expr_new_ndarray_like(a, 1, dims, nb, dt);
+}
+
 Expr* ndred_accumulate(Expr* res) {
     if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
     Expr* a = res->data.function.args[0];
@@ -882,6 +1237,31 @@ Expr* ndred_accumulate(Expr* res) {
                     free(out);
                     return ndarray_delist_and_reeval(res);   /* bigint answer */
                 }
+        return expr_new_ndarray_like(a, rank, dims, out, dt);
+    }
+    if (dt == NDT_FLOAT64) {
+        /* Direct on the buffer: the generic arm below pays two indirect calls
+         * per element through the ndt_get/ndt_set choke point, which is what
+         * kept Accumulate at 4x np.cumsum on data that is one subtraction away
+         * from a plain double loop. Same values, same order of summation. */
+        const double* in = (const double*)buf;
+        double* o = (double*)out;
+        if (T == 1) {
+            /* Rank 1 -- the overwhelmingly common Accumulate. Written flat
+             * rather than as the T-inner loop below, because T is a RUNTIME
+             * value: at T == 1 the compiler still emits the whole loop prologue,
+             * the index multiplies and the trip test around a single add, which
+             * is ~10 operations per element instead of one. That, not the serial
+             * dependency, was the 4x against np.cumsum. */
+            double acc = in[0];
+            o[0] = acc;
+            for (size_t b = 1; b < blocks; b++) { acc += in[b]; o[b] = acc; }
+            return expr_new_ndarray_like(a, rank, dims, out, dt);
+        }
+        for (size_t j = 0; j < T; j++) o[j] = in[j];
+        for (size_t b = 1; b < blocks; b++)
+            for (size_t j = 0; j < T; j++)
+                o[b * T + j] = o[(b - 1) * T + j] + in[b * T + j];
         return expr_new_ndarray_like(a, rank, dims, out, dt);
     }
     /* First block copies through; each later block adds the running total. */

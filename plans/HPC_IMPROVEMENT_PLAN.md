@@ -609,6 +609,137 @@ There is nothing to win here.
 
 ---
 
+## Phase 7 — the second sweep's leftovers (added 2026-07-31)
+
+*Five kernels were added to `hpc_bench.py` to probe subsystems the original 38
+never touched — a Krylov solver, direct convolution, ODE integration, an
+irregular hash-keyed reduction, interpolation. Three of the five found something
+and were fixed on the spot (see `docs/design/performance.md` §8); what is below
+is what those fixes did not finish.*
+
+Results, after the fixes:
+
+| | benchmark | Mathilda | WL 14.0 | status |
+|---:|---|---:|---:|---|
+| 2.60× faster | `Interpolation`, 10⁴ nodes / 10⁴ evals | 7.65 ms | 19.9 ms | ✅ was 74× behind |
+| 1.52× faster | `NDSolve`, Lorenz to t = 200 | 31.5 ms | 47.8 ms | ✅ no work needed |
+| 1.84× | Conjugate gradient, 256², 100 its | 155 ms | 84.0 ms | 7.3 |
+| 7.21× | `Tally`, 10⁷ → 10⁴ bins | 129 ms | 17.9 ms | 7.2 (was 69×) |
+| 9.27× | `ListConvolve`, 1024², 5×5 | 312 ms | 33.7 ms | 7.1 (was 12.8×) |
+
+**7.1 `ListConvolve` / `ListCorrelate` are not packed-aware.** The engine choice
+and the direct engine's inner loop are both fixed, and what is left is boxing:
+10⁶ input `Expr` nodes materialised from the buffer, 10⁶ output nodes allocated
+and freed, `expr_free` alone a sixth of the profile. At 13 ns per multiply-add
+the arithmetic is no longer the cost. Needs the standard treatment — accept
+`EXPR_NDARRAY` input, write an NDArray result, join `AWARE`/`INT64_OK`. This is
+the single largest remaining ratio in the second sweep and the most mechanical.
+*Projected: within 2× of Wolfram, from 9.27×.*
+
+**7.2 `Tally`'s probe.** `ndred_tally` now hashes machine words and the table
+grows to the distinct count, which took it from 69× to 7.2×. The remaining
+16 ns/element is one random probe per element against a table that fits in L2.
+Options, in order of appeal: a direct-mapped counter array when the value range
+is small and dense (the common case — histogramming into bins), which removes
+hashing entirely; storing the key inline in the slot to remove one dependent
+load; a narrower slot type for a smaller footprint. Measure before choosing.
+*Projected: 2–3×, from 7.21×.*
+
+**7.3 The conjugate-gradient row (1.84×) is a composition cost, not a kernel
+one.** Every operation in the loop already has a buffer path — `RotateLeft`,
+elementwise `Plus`/`Times`, `Total` with a level spec — and the Jacobi row built
+from the same pieces sits at 1.29×. The difference is that a Krylov iteration
+alternates stencil work with *global reductions*, so it has more temporaries and
+more scalar-to-array broadcasts per sweep. Profile before proposing anything;
+this is a candidate for Phase 5's allocation work rather than a new kernel.
+
+**7.4 `NDSolve` segfaults when a dependent variable already has a value.** Found
+while running the second sweep, not caused by it — it reproduces on a clean
+checkout:
+
+```mathematica
+x = RandomReal[{0, 1}, 100000];
+NDSolve[{x'[t] == 10.(y[t] - x[t]), ...}, {x, y, z}, {t, 0, 5}]   (* SIGSEGV *)
+```
+
+Size-dependent: 10⁵ elements crashes, 10³ does not, and a scalar `x = 1.` does
+not — so it looks like unbounded recursion over the materialised list rather than
+a bad pointer. Wolfram solves the (different, and wrong) problem and returns.
+This is a crash under default settings from ordinary user input — a symbol left
+bound from earlier in a session — and should be fixed ahead of the performance
+items above.
+
+**7.5 Re-examine what else has no fast path** — *done, see Phase 8.* `Outer` was
+the flagged item and is fixed; the sweep that found it found six more.
+
+---
+
+## Phase 8 — the third sweep's leftovers (added 2026-07-31)
+
+*Eight pipeline-shaped kernels from real applications, run against Mathematica
+**and NumPy** (`docs/design/performance.md` §9). Seven fixes came out of it; what
+is below is what they did not finish. Items 7.1 and 7.4 above are unchanged and
+remain the highest-value entries on this list.*
+
+Results, after the fixes:
+
+| | benchmark | Mathilda | WL 14.0 | NumPy | status |
+|---:|---|---:|---:|---:|---|
+| 15.9× faster | N-body all-pairs, 1024 bodies | 439 ms | 6.98 s | 396 ms | ✅ was 55.5 s |
+| 3.24× faster | k-means, 100000×8, k=16 | 2.26 s | 7.33 s | 765 ms | ✅ was unbounded |
+| 1.01× | Black–Scholes MC, 10⁷ paths | 565 ms | 349 ms | 560 ms | ✅ at NumPy parity |
+| 1.26× | Logistic regression, 200000×32 | 2.71 s | 2.15 s | 839 ms | 8.3 |
+| 1.43× | 3D heat equation, 128³ | 3.63 s | 2.55 s | 2.25 s | — |
+| 1.66× | Welch PSD, 1024 blocks | 150 ms | 90.2 ms | 93.9 ms | — |
+| 13.5× | Return series (EMA/vol/drawdown) | 2.02 s | 149 ms | 30.4 ms | 8.1 |
+| 22.5× | Gaussian blur + Sobel, 1024² | 2.19 s | 97.0 ms | 113 ms | 7.1 |
+
+**8.1 No vectorized scan.** `Accumulate` is the only one, and it only does
+`Plus`. An exponential moving average is a general linear recurrence and a
+maximum drawdown needs a running maximum; both are written `FoldList[f, x0,
+rest]` with a pure function, which is one interpreted evaluation per element.
+Mathilda 2.02 s, Mathematica 149 ms, SciPy `lfilter` + `np.maximum.accumulate`
+30.4 ms — so this is the one row where Mathilda is far behind *both* other
+systems, and the only structural gap the third sweep found that is not a missing
+buffer path. Two tractable pieces: `FoldList[Max, …]` / `FoldList[Min, …]` as a
+buffer scan (running extremum is common and trivially vectorizable), and a
+first-order linear recurrence recogniser for `a #1 + b #2 &`. The general case
+needs the `Compile[]` engine, which already exists — routing `FoldList` with a
+compilable pure function through it is the principled answer.
+*Projected: 5–10×, from 13.5× behind Wolfram.*
+
+**8.2 The remaining ML composition costs.** Logistic regression is 3.22× behind
+NumPy and k-means 2.95×, both after large wins, and neither now has a hot spot —
+the time is spread across allocation and evaluation overhead on many
+medium-sized array temporaries. Same category as 7.3 (conjugate gradient) and
+the same recommendation: this is Phase 5 allocation work, not a new kernel, and
+nothing should start before a profile attributes the cost to a structure.
+
+**8.3 `Outer` covers only float64 and five heads.** `nd_outer2` handles `Plus`,
+`Subtract`, `Times`, `Min`, `Max` on float64 operands and declines everything
+else to the tree-building path — so `Outer[Times, intVector, intVector]` is still
+~750 ns per element. Extending it to int64 needs the `ci_*_i64` overflow-abandon
+contract; extending it to `Divide`/`Power` needs the non-finite cases to agree
+with the interpreter's symbolic forms (`ComplexInfinity`, `Indeterminate`), which
+is why they were left out rather than because they are hard.
+
+**8.4 The gate materialises rather than packs in the remaining mixed cases.**
+`pack_lift_listable_args` lifts a plain List to meet a buffer only when the
+shapes are equal, or a prefix under `packed_broadcast_ok` (Plus and Times).
+`Power` with a rank mismatch still threads, because
+`ndarray_elementwise_power` requires `same_shape`. Giving Power the same
+broadcast pre-pass `ndarray_elementwise` has would let it join the list.
+
+**8.5 Packing a large plain List is itself the cost now.** `a + b` with one
+plain 10⁶ operand went 418 ms → 50.5 ms, and ~26 ms of what remains is
+`pack_force` reading a million boxed `Expr` nodes once. That is inherent to
+meeting an unpacked value, but it means the fix pays best when the plain operand
+is *small* — which is the case it was written for. Worth knowing before
+optimising further: the answer is for the producer to pack, not for the consumer
+to keep re-packing.
+
+---
+
 ## 7. Sequencing
 
 ```
@@ -685,6 +816,56 @@ Per item:
 And per phase: re-run `comparisons/hpc_bench.py` and update
 `docs/design/performance.md`'s tables and its §9 counts. The document is the
 scoreboard; it should never be stale relative to the code.
+
+---
+
+## Phase 9 — the fourth sweep's leftovers (added 2026-07-31)
+
+Phase 8's items 8.1 (no vectorized scan), 8.3 (`Outer` coverage) and HPC 7.1
+(`ListConvolve`/`ListCorrelate` packed-aware) are **DONE** — see
+`docs/experiments/HPC_SWEEP_3_NUMPY_GAP.md` and `performance.md` §10. What that
+sweep left, in value order:
+
+**9.1 — `Transpose` copies where NumPy views. (largest application gap)**
+Logistic regression is 3.06× NumPy for one reason: `Transpose[X]` on a
+200000×32 matrix costs 27 ms and the kernel does it 100 times, because it is
+loop-invariant but re-evaluated. NumPy's `.T` is a view and costs nothing.
+
+The clean fix is a strided/transposed NDArray view, which **every consumer must
+honour** — that is a design change, not a fast path, and it interacts with the
+no-nesting invariant. A cheaper 80% is to teach `ndarray_dot2` to accept a
+transpose flag and have `Dot` recognise `Transpose[a] . b` *before* the argument
+is evaluated, which needs `Dot` to hold its arguments — also not free. Decide
+which before building either.
+
+**9.2 — No interpreter-level fusion.** k-means is 2.92× NumPy: three passes over
+6.4 MB where one would do. `Compile[]` fuses (experiment 2); ordinary array code
+does not. This is the same 3× that shows on every unfused ML-shaped kernel.
+
+**9.3 — `dgemm` slows the next threaded loop by 1.45×.** Reproducible to ±1%
+(`performance.md` §10). Accelerate's worker threads persist and compete with
+`nd_parallel_for`. Options: yield before our own parallel region, pin, cap our
+thread count when Accelerate has been used, or share its pool. **Measure which,
+do not guess** — the last thread-pool hypothesis in this plan (the linalg
+scratch pool) was wrong and cost 150 lines.
+
+**9.4 — 1-D convolution is 11× NumPy.** The per-output interior test is now the
+cost. Splitting the output range into boundary/interior/boundary would let the
+interior run as a flat loop with no test at all.
+
+**9.5 — `Part` with a span still materialises a position array per axis.**
+14.0 → 7.4 ms came from the block copy; the remaining 7.4 ms is
+`build_axis_selector` writing 10⁶ int64 positions before the copy. A
+`start/step/n` selector representation makes it a pure memcpy.
+
+**9.6 — `Tally` at 7.17×** and **9.7 — `Reverse`/`RotateLeft` at 2.9–3.8×** are
+unchanged from Phase 7.
+
+**9.8 — `ArrayReshape` does not exist.** Reshaping a buffer is a metadata
+change; it is currently unavailable at any speed.
+
+**Still the highest priority overall: HPC 7.4, the pre-existing `NDSolve`
+segfault.** It is a crash, not a slowdown, and it has now outlived two sweeps.
 
 ---
 

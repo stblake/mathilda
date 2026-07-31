@@ -1571,3 +1571,157 @@ Rules for next time:
 6. **Measure wall clock.** `Timing[]` is CPU time summed over threads and
    over-reports every threaded/BLAS path by ~the core count. `AbsoluteTiming` had
    to be added before any of this could be measured honestly.
+
+## A fast path that bypasses initialisation is worse than a slow one (2026-07-31)
+
+`RandomInteger[{1,10}, 300]` **hung** on `main`, and `RandomInteger[{1,1024}, 300]`
+answered 300 copies of `1`. Both needed the same two conditions: `n` past the
+packing threshold, and no earlier random call in the process.
+
+The cause was a fast path added for speed that drew from the xoshiro generator
+directly, where every per-element helper called `ensure_rand_init()` for itself.
+Against an all-zero state — xoshiro's one fixed point — `xs_next()` returns 0
+forever: a power-of-two span silently answers the range minimum, and any other
+span spins in the rejection loop.
+
+Rules:
+
+1. **When adding a fast path, list what the slow path does per element that the
+   fast path now does once — or not at all.** Seeding, validation, precision
+   checks, error reporting. Each is a candidate for exactly this bug. The slow
+   path here called `ensure_rand_init()` per element; the fast path called it
+   never, and that difference is invisible in a diff that only shows the new loop.
+2. **Put the invariant where it cannot be bypassed, and measure the cost rather
+   than assuming it.** `ensure_rand_init()` now lives inside `xs_next()` itself.
+   The branch was already being paid by `RandomReal` per element, which still
+   draws at 2.3 ns — so the argument against it was never true.
+3. **Do not make a loud failure quiet in the name of robustness.** The first fix
+   also gave the generator state a plausible nonzero default. That removed the
+   hang, and it removed the *regression test's ability to fail* — an unseeded
+   generator would then produce a valid but identical stream on every run, which
+   is a far worse bug than a hang. Reverted: the state is deliberately left zero.
+4. **A regression test for a fresh-process bug must run first.** In
+   `test_random.c` any earlier test seeds the generator and makes the check
+   vacuous. Its position in `main()` *is* the test, and it says so in a comment.
+   Verified by removing the fix and confirming it hangs.
+
+## Per-call costs that scale with the data are invisible until you vary the data (2026-07-31)
+
+`Interpolation` evaluation cost time proportional to the size of its own table —
+151 µs per point at 10⁴ nodes, 906 µs at 5×10⁴ — so resampling was quadratic and
+a 10⁵-node table could not be benchmarked at all (228 s). Four separate causes,
+and the interesting part is that a previous round had already found and fixed a
+*fifth* one, leaving a comment about it in the file.
+
+Rules:
+
+1. **Hold each input dimension fixed in turn.** One timing tells you nothing.
+   Table size fixed / points varied, then points fixed / table varied, separated
+   "cost per point" from "cost per call" in two measurements and pointed straight
+   at the remaining O(n²) in the grid build.
+2. **Profile before the second fix.** The first fix (memoising the value tensor)
+   won 27× and the row still looked quadratic; guessing again would have been
+   cheap and wrong. `sample` named `interp_apply` and `common_scan_inexact`
+   directly.
+3. **A memo keyed on `Expr` identity is sound here and O(1) where `expr_eq` is
+   O(n)**, because `expr_copy` is a refcount bump — the cache holds a reference,
+   so the address cannot be recycled underneath it. The grid cache was already
+   testing its own hit with a full structural compare of the table, which cost as
+   much per point as it saved.
+4. **An insertion sort over already-sorted input is the worst case, not the
+   best.** `grid_insert` scanned from the front, and every table built by
+   `Table[{x, f[x]}, {x, a, b, dx}]` arrives ascending.
+
+## A representation decision made about one value is paid for by another (2026-07-31)
+
+The third HPC sweep produced seven fixes and six were the same defect: an
+operation had a working buffer path and a working List path, and quietly took the
+second whenever the two representations met. `PACK_MIN_ELEMENTS` is 250 — a
+32-element vector is *correctly* left unpacked — but `X . w` for a 20000×40 `X`
+then ran the symbolic loop, 320 ms against 0.31 ms.
+
+Rules:
+
+1. **At a binary operation, pack the small operand up; never materialise the
+   large one down.** The threshold judges a value in isolation. A binary
+   operation's cost is set by its largest operand, so the isolated judgement is
+   the wrong one. Packing is value-preserving by contract, so there is nothing to
+   weigh: converting 40 doubles to save 800,000 symbolic multiplies is free.
+2. **A fast path that is not opted in does not exist.** Twice in one day I wrote
+   a correct fast path, verified it against the List path, and measured no
+   change — once because the head was not in `pack.c`'s `AWARE` list so the gate
+   had already materialised the arguments, once because the operand needing
+   conversion was below the threshold so the function returned NULL before
+   reaching the new code. Both times the *values* were right, which is what made
+   it silent. **Measure the thing you just changed before believing you changed
+   it**, and if the timing does not move, the code is not running.
+3. **Check the OUTPUT of a hot function, not just its input.** The single largest
+   win was a return statement: a step function took 42 ms on a packed argument
+   and 5.75 s on its own output, because building `{a, b, c}` out of packed rows
+   materialised every one. The cost appeared in the *next* iteration, so
+   profiling the slow call pointed at `Outer` and the arithmetic — all of which
+   were innocent and had already been fixed.
+4. **Probe the other system before writing a cross-system benchmark.** Two of my
+   eight kernels were wrong on the first draft because I assumed
+   `matrix - vector` broadcasts. It does not, in either language — `Plus` is
+   Listable and threads the *outer* level. One `wolframscript` probe would have
+   cost a minute; the wrong assumption cost two rewrites.
+5. **A test asserting a fallback is not asserting an invariant.** The `Total[m,
+   {k}]` test read `... == Total[list, {k}]` and passed because the spec fell
+   through to the List path. When the spec grew a real implementation the test
+   failed — correctly — and the right response was to rewrite it to compare
+   values across every level range, not to restore the fallback. Comments that
+   describe *why the slow path is taken* rot the moment it stops being taken;
+   two `packed-arrays.md` claims and two tests had to be rewritten for the same
+   reason, and the tests still passed because they used sizes below the
+   threshold.
+6. **A third measurement separates "slower than a competitor" from "slower than
+   the machine".** Adding NumPy — which links the same Accelerate BLAS — moved
+   three rows from acceptable to obviously wrong. The sieve is 1.20× *ahead* of
+   Mathematica and 26.9× behind NumPy; nothing in a two-system comparison could
+   have said so.
+
+## Fourth HPC sweep (2026-07-31)
+
+- **A passing test can be describing the wrong behaviour.** Three ways it
+  happened in this codebase, all of which passed for months:
+  (a) the assertion compared numeric *distance* where the defect was in element
+  *heads* (`Clip` returning `{-1., 0., 1.}` for the List path's `{-1, 0., 1}`);
+  (b) the assertion described a *fallback* as though it were an invariant
+  (`Total[m, {k}]` "degrades to the List path"); (c) the test data was **below
+  `PACK_MIN_ELEMENTS`**, so the path under test never ran. Before trusting a
+  test that guards a fast path, check that the path actually executes and that
+  the comparison is sensitive to the thing that can break.
+
+- **Compare two spellings of the same operation, not just one against a
+  reference.** `FoldList[Plus, 0., NDArray[…]]` and
+  `FoldList[Function[{p,q}, p+q], 0., NDArray[…]]` are the same computation;
+  after a change they returned different *heads*. No single-path test sees that.
+
+- **An O(1) operation that costs O(n) will not look wrong in a profile** — it
+  looks like the function you called. `First[v]` at 123 ms on 10⁶ elements only
+  became visible next to `Drop[v, 250]` at 0.88 ms on the same data. When
+  probing, always include an operation that *should* cost the same, as a control.
+
+- **An integer division in an inner loop can hide a vectorisable loop behind
+  it.** The convolution's affine-stride fast path measured *worse* than the step
+  before it, because `(o / stride) % dim` per output was swamping everything. The
+  strides are runtime values, so the compiler cannot strength-reduce them; use
+  an odometer.
+
+- **A dtype choke point is the right default and the wrong inner loop.**
+  `ndt_get`/`ndt_set` is the one place that knows every dtype, which is why it
+  should be the fallback — and it is two indirect calls per element where a
+  float64 arm is one instruction. `Accumulate` and `Differences` were 4× and 16×
+  off NumPy for this reason alone.
+
+- **A loop whose trip count is a runtime 1 still pays a full loop.**
+  `Accumulate`'s rank-1 case ran the generic `T`-inner loop with `T == 1`: the
+  prologue, the index multiplies and the trip test, all around a single add.
+  Specialising it was 3×.
+
+- **Measure the benchmark harness, not just the benchmark.** One row (Jacobi)
+  read 223 ms in a full run and 128 ms alone. Bisecting the *prefix* found the
+  cause — a preceding `dgemm` leaves Accelerate's threads competing with ours,
+  reproducibly, at 1.45×. That is a real finding about the system, and it would
+  have been written off as noise.

@@ -10,11 +10,13 @@
 #include "numloop.h"
 #include "ndarray.h"
 #include "ndstruct.h"   /* ndstruct_delist_repack — packed-argument fallback */
+#include "ndreduce.h"   /* ndred_scan — Fold/FoldList over an associative operator */
 #include "pack.h"       /* pack_offer — Select narrows one numeric list to another */
 #include "part.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>       /* isfinite — Outer's buffer path abandons on overflow */
 
 typedef struct {
     int64_t min;
@@ -1649,10 +1651,113 @@ if (arg_idx + 1 == num_tensors) {
     return ret;
 }
 
+/* Outer[f, a, b] over two rank-1 float64 buffers, for the arithmetic heads.
+ *
+ * The generic path builds the ENTIRE result as a symbolic tree -- one
+ * f[a_i, b_j] node per output element -- and then calls evaluate() on it, so a
+ * 1000x1000 outer product allocates and evaluates a million nodes: 753 ms, or
+ * ~750 ns per element, against ~3 ms for the same product written into a
+ * buffer. That is the shape an all-pairs kernel is written in (displacement
+ * matrices in an N-body step, a Gram matrix, a distance matrix), and it was the
+ * single slowest thing in the third benchmark sweep.
+ *
+ * Only float64 in, and only total functions of two finite doubles. Integer
+ * operands keep the generic path, where exactness and bignum promotion are
+ * already handled; a non-finite result anywhere abandons the buffer and lets
+ * the generic path produce whatever symbolic form it produces (DirectedInfinity
+ * and friends), so this can only ever be faster, never different. */
+/* A plain numeric List lifted to a float64 buffer so it can pair with one.
+ * Threshold-ignoring (pack_force): the decision here is about the PAIR, and the
+ * pair is already large. NULL when the list is not uniformly machine-numeric. */
+static Expr* outer_pack_operand(Expr* list) {
+    if (!list || list->type != EXPR_FUNCTION) return NULL;
+    Expr* cand = pack_force(expr_copy(list), false, NDT_FLOAT64);
+    if (cand && cand->type == EXPR_NDARRAY) return cand;
+    if (cand) expr_free(cand);
+    return NULL;
+}
+
+static Expr* nd_outer2(const Expr* f, const Expr* a, const Expr* b) {
+    if (!f || f->type != EXPR_SYMBOL) return NULL;
+    if (a->type != EXPR_NDARRAY || b->type != EXPR_NDARRAY) return NULL;
+    if (a->data.ndarray.rank != 1 || b->data.ndarray.rank != 1) return NULL;
+    if (a->data.ndarray.dtype != NDT_FLOAT64 ||
+        b->data.ndarray.dtype != NDT_FLOAT64) return NULL;
+
+    const char* op = f->data.symbol.name;
+    enum { OP_PLUS, OP_SUB, OP_TIMES, OP_MIN, OP_MAX } k;
+    if      (op == SYM_Plus)     k = OP_PLUS;
+    else if (op == SYM_Subtract) k = OP_SUB;
+    else if (op == SYM_Times)    k = OP_TIMES;
+    else if (op == SYM_Min)      k = OP_MIN;
+    else if (op == SYM_Max)      k = OP_MAX;
+    else return NULL;
+
+    int64_t m = a->data.ndarray.dims[0], n = b->data.ndarray.dims[0];
+    const double* A = (const double*)a->data.ndarray.data;
+    const double* B = (const double*)b->data.ndarray.data;
+    size_t total = (size_t)m * (size_t)n;
+    double* out = malloc(sizeof(double) * (total ? total : 1));
+    if (!out) return NULL;
+
+    bool bad = false;
+    for (int64_t i = 0; i < m; i++) {
+        double ai = A[i];
+        double* row = out + (size_t)i * (size_t)n;
+        switch (k) {
+        case OP_PLUS:  for (int64_t j = 0; j < n; j++) row[j] = ai + B[j]; break;
+        case OP_SUB:   for (int64_t j = 0; j < n; j++) row[j] = ai - B[j]; break;
+        case OP_TIMES: for (int64_t j = 0; j < n; j++) row[j] = ai * B[j]; break;
+        case OP_MIN:   for (int64_t j = 0; j < n; j++) row[j] = ai < B[j] ? ai : B[j]; break;
+        case OP_MAX:   for (int64_t j = 0; j < n; j++) row[j] = ai > B[j] ? ai : B[j]; break;
+        }
+        for (int64_t j = 0; j < n; j++) if (!isfinite(row[j])) { bad = true; break; }
+        if (bad) break;
+    }
+    if (bad) { free(out); return NULL; }
+
+    int64_t dims[2] = { m, n };
+    return expr_new_ndarray_like(nd_present_src2(a, b), 2, dims, out, NDT_FLOAT64);
+}
+
 Expr* builtin_outer(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
-    
+
     Expr* f = res->data.function.args[0];
+
+    if (res->data.function.arg_count == 3) {
+        /* One operand packed and the other an ordinary List: pack the plain one
+         * so the PAIR can take the buffer path — the same rule dot2 keeps, for
+         * the same reason. Outer's cost is the PRODUCT of its operands' lengths,
+         * but PACK_MIN_ELEMENTS judges each one alone, so a k-means with 16
+         * centroids had its 16-element operand correctly left unpacked and paid
+         * for it across 1.6 million output cells: 849 ms, against 4 ms once both
+         * sides are buffers. Packing is value-preserving, so lifting the small
+         * side costs nothing and there is nothing to weigh. */
+        Expr *ta = NULL, *tb = NULL;
+        Expr *a = res->data.function.args[1], *b = res->data.function.args[2];
+        if (pack_any_created()) {
+            if (a->type == EXPR_NDARRAY && b->type != EXPR_NDARRAY) {
+                tb = outer_pack_operand(b);
+                if (tb) b = tb;
+            } else if (b->type == EXPR_NDARRAY && a->type != EXPR_NDARRAY) {
+                ta = outer_pack_operand(a);
+                if (ta) a = ta;
+            }
+        }
+        Expr* fast = nd_outer2(f, a, b);
+        expr_free(ta);
+        expr_free(tb);
+        if (fast) return fast;
+    }
+    /* Outer is packed-aware ONLY so nd_outer2 can see a buffer. Everything below
+     * this point walks the operands as nested Lists (outer_rec indexes
+     * data.function.args), which an NDArray does not have, so anything the fast
+     * path declined has to be handed back materialised. */
+    for (size_t i = 1; i < res->data.function.arg_count; i++) {
+        if (is_ndarray(res->data.function.args[i]))
+            return ndarray_delist_and_reeval(res);
+    }
     
     size_t num_depths = 0;
     for (int64_t i = res->data.function.arg_count - 1; i >= 1; i--) {
@@ -2281,6 +2386,21 @@ static Expr* fold_impl(Expr* res, bool as_list) {
             if (keyed) { expr_free(r); return keyed; }
         }
         return r;
+    }
+
+    /* An associative machine operator over a packed argument is a two-line C
+     * loop — the running max/min/sum/product. Taken before the compiled VM
+     * below because the VM cannot express Max/Min at all (there is no OP_MAX)
+     * and pays per-element dispatch for the two it can. See ndreduce.h. */
+    {
+        Expr* coll = res->data.function.args[coll_idx];
+        NDScanOp sop;
+        if (is_ndarray(coll) && ndred_scan_op_for(res->data.function.args[0], &sop)) {
+            Expr* fast = ndred_scan(coll, sop,
+                                    argc == 3 ? res->data.function.args[1] : NULL,
+                                    as_list);
+            if (fast) return fast;
+        }
     }
 
     /* Automatic numeric fast-path for the seeded Fold[f, x0, list] over machine
@@ -2971,6 +3091,56 @@ static Expr* mapthread_rec(Expr* f, Expr** exprs, size_t k, int64_t level) {
     return NULL;  /* mixed / non-threadable shapes -> leave unevaluated */
 }
 
+/* MapThread[f, arr] over a rank-2 float64 buffer: fold f down each column.
+ *
+ * MapThread[f, {l1, ..., lk}] pairs the j-th element of every list, so over a
+ * k x n buffer it is exactly a reduction along the LEADING axis -- the same
+ * shape of work Total[a, {1}] does, for a different operator. Restricted to the
+ * associative n-ary heads, which is what "fold down the column" means at all.
+ *
+ * The generic path builds one f[x1, ..., xk] node per column and evaluates the
+ * lot: 365 ms for a 16 x 100000 buffer, which was more than half of the k-means
+ * benchmark (the assignment step takes an elementwise minimum across k centroid
+ * distance rows, once per iteration).
+ *
+ * Accumulation is in row order, matching the left-to-right fold builtin_plus
+ * does on the same arguments, so Plus and Times are bit-identical to the List
+ * path rather than merely close. */
+static Expr* nd_mapthread2(const Expr* f, const Expr* a) {
+    if (!f || f->type != EXPR_SYMBOL) return NULL;
+    if (a->type != EXPR_NDARRAY || a->data.ndarray.rank != 2 ||
+        a->data.ndarray.dtype != NDT_FLOAT64) return NULL;
+
+    const char* op = f->data.symbol.name;
+    enum { M_MIN, M_MAX, M_PLUS, M_TIMES } k;
+    if      (op == SYM_Min)   k = M_MIN;
+    else if (op == SYM_Max)   k = M_MAX;
+    else if (op == SYM_Plus)  k = M_PLUS;
+    else if (op == SYM_Times) k = M_TIMES;
+    else return NULL;
+
+    int64_t rows = a->data.ndarray.dims[0], n = a->data.ndarray.dims[1];
+    if (rows < 1) return NULL;
+    const double* A = (const double*)a->data.ndarray.data;
+    double* out = malloc(sizeof(double) * (size_t)(n > 0 ? n : 1));
+    if (!out) return NULL;
+    for (int64_t j = 0; j < n; j++) out[j] = A[j];
+    for (int64_t i = 1; i < rows; i++) {
+        const double* row = A + (size_t)i * (size_t)n;
+        switch (k) {
+        case M_MIN:   for (int64_t j = 0; j < n; j++) if (row[j] < out[j]) out[j] = row[j]; break;
+        case M_MAX:   for (int64_t j = 0; j < n; j++) if (row[j] > out[j]) out[j] = row[j]; break;
+        case M_PLUS:  for (int64_t j = 0; j < n; j++) out[j] += row[j]; break;
+        case M_TIMES: for (int64_t j = 0; j < n; j++) out[j] *= row[j]; break;
+        }
+    }
+    for (int64_t j = 0; j < n; j++)
+        if (!isfinite(out[j])) { free(out); return NULL; }  /* let the List path form it */
+
+    int64_t dims[1] = { n };
+    return expr_new_ndarray_like(a, 1, dims, out, NDT_FLOAT64);
+}
+
 Expr* builtin_mapthread(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -2979,6 +3149,11 @@ Expr* builtin_mapthread(Expr* res) {
 
     Expr* f     = res->data.function.args[0];
     Expr* lists = res->data.function.args[1];
+
+    if (argc == 2) {                          /* level 1, the default */
+        Expr* fast = nd_mapthread2(f, lists);
+        if (fast) return fast;
+    }
 
     int64_t level = 1;                       /* default threading level */
     if (argc == 3) {

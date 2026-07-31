@@ -187,6 +187,14 @@ void symtab_set_packed_aware(const char* symbol_name) {
     symtab_get_def(symbol_name)->packed_aware = 1;
 }
 
+/* See SymbolDef.packed_broadcast_ok. Implies packed_aware: a head cannot claim
+ * to handle a rank mismatch on a buffer without handling the buffer at all. */
+void symtab_set_packed_broadcast_ok(const char* symbol_name) {
+    SymbolDef* def = symtab_get_def(symbol_name);
+    def->packed_broadcast_ok = 1;
+    def->packed_aware = 1;
+}
+
 /* Undo packed_aware, for a head that acquired it implicitly from a kernel
  * registration but whose kernel answers with different element HEADS than the
  * ordinary List does (Floor of a Real is an Integer; Clip clamps to its exact

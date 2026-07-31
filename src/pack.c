@@ -7,6 +7,7 @@
 #include "sym_names.h"
 #include "attr.h"
 #include "eval.h"
+#include "common.h"   /* head_is */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -225,6 +226,77 @@ Expr* pack_repack_like(const Expr* src, Expr* list) {
     return packed;
 }
 
+/* Pack every plain numeric List argument of a Listable call up to a buffer, so
+ * the head's own NDArray kernel handles the call instead of apply_listable
+ * materialising the buffer that is already there. See the call site in
+ * evaluate_step for why this direction is the right one.
+ *
+ * All or nothing: a partial lift would leave a plain List behind, `listable_mixed`
+ * would stay true, and the gate would then materialise the arrays we had just
+ * built. Declines outright -- leaving the call exactly as it was, to thread --
+ * when any of these hold:
+ *
+ *   - an operand is symbolic or otherwise not a machine scalar. Threading is
+ *     what makes `packedA + plainB + x` work at all: hand the same call to
+ *     ndarray_elementwise and it returns NULL on the symbolic term, and Plus
+ *     warns and leaves the sum unevaluated.
+ *   - a List does not pack (Rationals, symbols, mixed exact/inexact).
+ *   - a List packs to int64 and the head is not exact on int64 buffers.
+ *   - the packed shape is not one the head's kernel covers: equal to the widest
+ *     array operand's, or -- with packed_broadcast_ok -- a prefix of it. */
+void pack_lift_listable_args(Expr* call, bool broadcast_ok, bool int64_ok,
+                             bool* changed) {
+    if (!call || call->type != EXPR_FUNCTION) return;
+    size_t n = call->data.function.arg_count;
+
+    const Expr* ref = NULL;                      /* widest array operand */
+    size_t nlists = 0;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* a = call->data.function.args[i];
+        if (!a) return;
+        if (a->type == EXPR_NDARRAY) {
+            if (!ref || a->data.ndarray.rank > ref->data.ndarray.rank) ref = a;
+        } else if (head_is(a, SYM_List)) {
+            nlists++;
+        } else if (a->type != EXPR_INTEGER && a->type != EXPR_REAL) {
+            return;
+        }
+    }
+    if (!ref || nlists == 0) return;             /* nothing to lift toward */
+
+    Expr** lifted = calloc(n, sizeof(Expr*));
+    if (!lifted) return;
+    bool ok = true;
+    for (size_t i = 0; i < n && ok; i++) {
+        Expr* a = call->data.function.args[i];
+        if (!head_is(a, SYM_List)) continue;
+        Expr* p = pack_force(expr_copy(a), false, NDT_FLOAT64);
+        if (!p || p->type != EXPR_NDARRAY ||
+            (p->data.ndarray.dtype == NDT_INT64 && !int64_ok)) {
+            expr_free(p);
+            ok = false;
+            break;
+        }
+        int rp = p->data.ndarray.rank, rr = ref->data.ndarray.rank;
+        bool shape_ok = (rp == rr) || (broadcast_ok && rp < rr);
+        for (int k = 0; shape_ok && k < rp; k++)
+            if (p->data.ndarray.dims[k] != ref->data.ndarray.dims[k]) shape_ok = false;
+        if (!shape_ok) { expr_free(p); ok = false; break; }
+        lifted[i] = p;
+    }
+    if (ok) {
+        for (size_t i = 0; i < n; i++) {
+            if (!lifted[i]) continue;
+            expr_free(call->data.function.args[i]);
+            call->data.function.args[i] = lifted[i];
+            lifted[i] = NULL;
+            *changed = true;
+        }
+    }
+    for (size_t i = 0; i < n; i++) expr_free(lifted[i]);
+    free(lifted);
+}
+
 Expr* pack_unpack(const Expr* e) {
     if (!is_ndarray(e)) return NULL;
     return ndarray_to_nested_list(e);
@@ -390,15 +462,40 @@ static void pack_mark_aware_heads(void) {
         "RotateLeft", "RotateRight", "Partition", "Riffle", "Join",
         "Differences", "First", "Last", "Most", "Rest",
         "PadLeft", "PadRight",
+        /* ListConvolve / ListCorrelate (src/convolutions.c). Both engines --
+         * the direct O(L*m) loop and the FFT -- already worked on flat double
+         * arrays; what they lacked was a way to GET one without boxing every
+         * pixel first. A 1024^2 float64 image through a 5x5 kernel spent its
+         * time building 2 million Expr nodes, not convolving. */
+        "ListConvolve", "ListCorrelate",
         /* Reductions and order statistics (src/ndreduce.c, src/stats.c). */
         "Total", "Mean", "Min", "Max", "Median", "Variance",
         "StandardDeviation", "RootMeanSquare", "Quartiles", "Accumulate",
         "MovingAverage", "MovingMedian", "ExponentialMovingAverage",
-        /* Note the absentees just below this list -- Clip, Precision and
-         * Accuracy USED to be here and had to come out. */
+        /* Tally is a keyed (irregular) reduction, not a sweep, but the reason it
+         * belongs here is the same: ndred_tally hashes the machine words, where
+         * materialising boxed one Expr per element just to hash it. */
+        "Tally",
+        /* Clip came BACK on 2026-07-31. It was pulled because an exact bound
+         * makes Clip[reals, {1, 2}] answer with exact Integers where it clipped,
+         * which no uniform buffer holds -- but clearing the whole head to fix the
+         * bounds cost 356 ms on a 10^6 vector (np.clip: 4.7 ms). ndstruct_clip
+         * now gates on the BOUNDS instead: Real bounds stay on the buffer, and an
+         * exact bound is taken only when an in-range scan proves nothing is
+         * clipped, where the answer is the input. Everything else degrades. */
+        "Clip",
+        /* Note the absentees just below this list -- Precision and Accuracy
+         * USED to be here and had to come out. */
         /* Functional heads with packed paths (src/funcprog.c). */
         "Map", "MapIndexed", "MapAt", "MapAll", "Select", "TakeWhile",
         "LengthWhile", "SelectFirst", "Scan", "MapThread", "Fold", "FoldList",
+        /* Outer, for nd_outer2 -- the all-pairs buffer path. Same story as
+         * Fourier below: the fast path was written first and was unreachable
+         * until the head opted in, because the gate had already turned both
+         * operands into Lists. builtin_outer materialises again for every case
+         * nd_outer2 declines (symbolic f, integer dtypes, three or more
+         * tensors), so only the float64 arithmetic shapes see a buffer. */
+        "Outer",
         /* The iteration family. These NEVER inspect the value's structure --
          * nest_impl expr_copy's it and hands it to the function, so the next head
          * is what the gate actually has to protect, exactly as for Fold.
@@ -501,9 +598,13 @@ static void pack_mark_aware_heads(void) {
          * see NDUnaryKernel.to_int in ndarray.h), so the buffer path produces the
          * exact Integers the List does instead of 1.0 where the List gives 1.
          * That was the "optimisation, not a correctness question" the note below
-         * anticipated. `Im` stays: its kernel is a projection, not a narrowing. */
+         * anticipated. `Im` stays: its kernel is a projection, not a narrowing.
+         *
+         * Clip left this list on 2026-07-31 for the same reason -- the exactness
+         * problem was real but belonged to the BOUNDS, not to the head. See the
+         * note beside it in AWARE. */
         "Im",
-        "Clip", "Precision", "Accuracy",
+        "Precision", "Accuracy",
         /* Quotient joined this list on 2026-07-30, found by sweeping all 79
          * registered kernel heads packed-against-plain. Real in, exact Integer
          * out, exactly like Floor -- and it was OBSERVABLE from ordinary code,
@@ -566,6 +667,13 @@ static void pack_mark_aware_heads(void) {
          * answer with Integers; Mean and Median build the exact reduced
          * Rational (Mean[Range[10]] is 11/2, Median[Range[300]] is 301/2). */
         "Total", "Mean", "Median", "Max", "Min", "Accumulate",
+        /* Tally keys on the raw int64 word, so two integers past 2^53 stay
+         * distinct -- the failure a float64 gather would have introduced -- and
+         * each distinct value is rebuilt with expr_new_integer, so no element's
+         * head changes. Integer data is also the usual case: an int64 buffer
+         * that could not keep its dtype here would leave the common Tally
+         * exactly where it started. */
+        "Tally",
         /* Exact int64 structure (src/ndstruct.c): Sort orders the buffer in
          * int64 -- through doubles, two integers past 2^53 would compare equal
          * and be reordered -- and Transpose moves elements by memcpy. */
@@ -598,6 +706,17 @@ static void pack_mark_aware_heads(void) {
     };
     for (size_t i = 0; i < sizeof(INT64_OK) / sizeof(INT64_OK[0]); i++)
         symtab_set_packed_int64_ok(INT64_OK[i]);
+
+    /* ------------------------------------------------------------------
+     * Heads whose buffer path also handles operands of DIFFERENT RANK --
+     * see SymbolDef.packed_broadcast_ok. Only these two: ndarray_elementwise
+     * grew a leading-axis broadcast pre-pass, ndarray_elementwise_power did
+     * not and still requires same_shape, so Power stays off this list and a
+     * mixed-rank Power keeps threading through the interpreter.
+     * ------------------------------------------------------------------ */
+    static const char* const BROADCAST_OK[] = { "Plus", "Times" };
+    for (size_t i = 0; i < sizeof(BROADCAST_OK) / sizeof(BROADCAST_OK[0]); i++)
+        symtab_set_packed_broadcast_ok(BROADCAST_OK[i]);
 }
 
 /* --------------------------------------------------------------------------

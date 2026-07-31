@@ -71,8 +71,44 @@ static void test_total(void) {
     /* Total[m, 2] and Total[m, Infinity] -> scalar full sum */
     chk_eq("Total[NDArray[{{1.,2.},{3.,4.}}], 2] == Total[{{1.,2.},{3.,4.}}, 2]", "True");
     chk_eq("Total[NDArray[{{1.,2.},{3.,4.}}], Infinity] == 10.", "True");
-    /* {k} level spec degrades to the exact List result */
-    chk_eq("Total[NDArray[{{1.,2.},{3.,4.}}], {2}] == Total[{{1.,2.},{3.,4.}}, {2}]", "True");
+    /* {k} and {n1,n2} level specs are computed on the buffer, not degraded to
+     * the List path. This assertion used to read `... == Total[list, {2}]` and
+     * pass because the spec fell through and materialised; a contiguous axis
+     * range is now summed in place, so the result stays an NDArray and is
+     * compared the same way every other supported spec is. (Total[m, {1}] and
+     * Total[m] are the same operation by definition and used to differ by 190x.) */
+    snprintf(nd, sizeof(nd), "NDArray[%s]", m);
+    chk_array("Total[%s, {1}]", nd, m);
+    chk_array("Total[%s, {2}]", nd, m);
+    chk_array("Total[%s, {1,2}]", nd, m);
+    chk_eq("NDArrayQ[Total[NDArray[{{1.,2.},{3.,4.}}], {2}]]", "True");
+    /* rank 3: every contiguous range of levels, against the List path */
+    {
+        const char* t = "{{{1.,2.},{3.,4.}},{{5.,6.},{7.,8.}},{{9.,10.},{11.,12.}}}";
+        char nd3[256];
+        snprintf(nd3, sizeof(nd3), "NDArray[%s]", t);
+        chk_array("Total[%s, {1}]", nd3, t);
+        chk_array("Total[%s, {2}]", nd3, t);
+        chk_array("Total[%s, {3}]", nd3, t);
+        chk_array("Total[%s, {1,2}]", nd3, t);
+        chk_array("Total[%s, {2,3}]", nd3, t);
+        chk_array("Total[%s, {2,Infinity}]", nd3, t);
+        chk_scalar("Total[%s, {1,3}]", nd3, t);
+    }
+    /* Exactness survives: an int64 buffer keeps Integer heads, and a sum that
+     * overflows int64 abandons the buffer rather than wrapping.
+     *
+     * ToNDArray, not NDArray[...]: the bare constructor defaults to float64, so
+     * NDArray[{{1,2},{3,4}}] holds 1., 2., ... and answering Real to Head is
+     * correct there (Total[..., 2] has always done so). Only the dtype-inferring
+     * spelling gives an int64 buffer, which is the one with something to prove. */
+    chk_eq("Head[Total[ToNDArray[{{1,2},{3,4}}], {2}][[1]]]", "Integer");
+    chk_eq("Total[ToNDArray[{{4611686018427387904, 4611686018427387904},{1,2}}], {2}] == "
+           "Total[{{4611686018427387904, 4611686018427387904},{1,2}}, {2}]", "True");
+    /* Specs outside 1..rank still degrade faithfully to the List path. */
+    chk_eq("Total[NDArray[{{1.,2.},{3.,4.}}], {0}] == Total[{{1.,2.},{3.,4.}}, {0}]", "True");
+    chk_eq("Total[NDArray[{{1.,2.},{3.,4.}}], {3}] == Total[{{1.,2.},{3.,4.}}, {3}]", "True");
+    chk_eq("Total[NDArray[{{1.,2.},{3.,4.}}], {-1}] == Total[{{1.,2.},{3.,4.}}, {-1}]", "True");
 }
 
 static void test_mean_variance(void) {
@@ -141,10 +177,36 @@ static void test_structural(void) {
     chk_array("Drop[%s, 2]", "NDArray[{1.,2.,3.,4.,5.}]", "{1.,2.,3.,4.,5.}");
     chk_array("Drop[%s, -1]", "NDArray[{1.,2.,3.,4.,5.}]", "{1.,2.,3.,4.,5.}");
     chk_array("Drop[%s, {2,4}]", "NDArray[{1.,2.,3.,4.,5.}]", "{1.,2.,3.,4.,5.}");
-    /* Clip default [-1,1] and explicit bounds */
+    /* Clip default [-1,1] and explicit bounds.
+     *
+     * Clip returns the BOUND at every clipped position, with the bound's own
+     * head -- so on a Real array an EXACT bound produces exact Integers and the
+     * result is not uniform:
+     *
+     *     Clip[{-2., 0., 2.}]           ->  {-1, 0., 1}     (default bounds are exact)
+     *     Clip[{-2., 0., 2.}, {-1., 1.}] ->  {-1., 0., 1.}   (Real bounds)
+     *
+     * This used to assert NDArrayQ -> True for the FIRST of those, i.e. that
+     * Clip answered {-1., 0., 1.} where the List path answered {-1, 0., 1}. The
+     * chk_array checks beside it could not catch that: they compare numeric
+     * distance, and the two differ only in their element HEADS. The invariant is
+     * that the packed answer equals the List answer, so that is what is asserted
+     * now -- through a comparison that is sensitive to exactness. */
     chk_array("Clip[%s]", "NDArray[{-2.,-0.5,0.5,2.}]", "{-2.,-0.5,0.5,2.}");
     chk_array("Clip[%s, {2.,8.}]", "NDArray[{1.,5.,10.}]", "{1.,5.,10.}");
-    chk_eq("NDArrayQ[Clip[NDArray[{-2.,0.,2.}]]]", "True");
+    chk_eq("Clip[NDArray[{-2.,0.,2.}]] === Clip[{-2.,0.,2.}]", "True");
+    chk_eq("Map[Head, Clip[NDArray[{-2.,0.,2.}]]] === {Integer, Real, Integer}", "True");
+    chk_eq("Clip[NDArray[{-2.,0.,2.}], {-1,1}] === Clip[{-2.,0.,2.}, {-1,1}]", "True");
+    /* Real bounds ARE uniform, so those stay on the buffer... */
+    chk_eq("NDArrayQ[Clip[NDArray[{-2.,0.,2.}], {-1.,1.}]]", "True");
+    /* Normal[] on the left because a VISIBLE NDArray[...] argument gives a
+     * visible NDArray[...] result -- that presentation is the point of naming
+     * the head, and it is not SameQ to a List. The VALUES are what must agree. */
+    chk_eq("Normal[Clip[NDArray[{-2.,0.,2.}], {-1.,1.}]] === Clip[{-2.,0.,2.}, {-1.,1.}]", "True");
+    /* ...and so does an exact bound that nothing reaches, where the answer is
+     * just the input. */
+    chk_eq("NDArrayQ[Clip[NDArray[{-2.,0.,2.}], {-99,99}]]", "True");
+    chk_eq("Normal[Clip[NDArray[{-2.,0.,2.}], {-99,99}]] === Clip[{-2.,0.,2.}, {-99,99}]", "True");
 }
 
 /* ------------------------------------------------------------ moving stats */

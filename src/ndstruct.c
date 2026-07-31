@@ -360,6 +360,18 @@ Expr* ndstruct_differences(Expr* res) {
         }
         return expr_new_ndarray_like(a, 1, odims, o, dt);
     }
+    if (dt == NDT_FLOAT64) {
+        /* The ndt_get/ndt_set choke point is the right default -- it is the one
+         * place that knows every dtype -- but on float64 it is two indirect
+         * calls where the loop is one subtract, and the compiler can neither
+         * inline through it nor vectorise around it. float64 is also the dtype
+         * essentially all of this data is in. Same values either way. */
+        const double* sd = (const double*)a->data.ndarray.data;
+        double* od = malloc(sizeof(double) * (size_t)m);
+        if (!od) return NULL;
+        for (int64_t i = 0; i < m; i++) od[i] = sd[i + 1] - sd[i];
+        return expr_new_ndarray_like(a, 1, odims, od, dt);
+    }
     void* o = malloc(ndt_elem_size(dt) * (size_t)m);
     if (!o) return NULL;
     for (int64_t i = 0; i < m; i++) {
@@ -538,6 +550,61 @@ static Expr* nd_rows(const Expr* a, size_t start, size_t count) {
     return expr_new_ndarray_like(a, rank, odims, out, dt);
 }
 
+/* ------------------------------------------------- First / Last / Most / Rest
+ *
+ * All four are leading-axis slices of exactly the shape nd_rows already cuts —
+ * one row for First/Last, all-but-one for Most/Rest — so each is a pointer read
+ * or a single memcpy. They reached the buffer through ndstruct_delist_repack
+ * instead, which materialises every element to build a List and then repacks the
+ * answer, and that made First and Last **asymptotically wrong**: reading one
+ * element of a 10^6 float64 vector cost 123 ms, against 0.88 ms for the
+ * identical Drop[v, 250] beside it and an unmeasurable v[0] in NumPy.
+ *
+ * A rank-1 First/Last yields a SCALAR, so it leaves the buffer entirely and goes
+ * through ndarray_element_to_expr — the one place that decides an element's head
+ * (ndarray.h:87), so an int64 buffer still yields an exact Integer.
+ *
+ * Empty results degrade: Rest and Most of a one-row array are {}, and an empty
+ * NDArray is not a shape this layer builds. */
+Expr* ndstruct_head_tail(Expr* res, NDHeadTail which) {
+    Expr* a = res->data.function.args[0];
+    /* First[a, default] / Last[a, default] never reach the default on a packed
+     * array (it is non-empty by construction), so the 2-arg form is fine here;
+     * every other arity is not ours. */
+    size_t argc = res->data.function.arg_count;
+    bool is_end = (which == ND_FIRST || which == ND_LAST);
+    if (argc != 1 && !(is_end && argc == 2)) return NULL;
+
+    int rank = a->data.ndarray.rank;
+    size_t blocks = (size_t)a->data.ndarray.dims[0];
+    if (blocks == 0) return NULL;
+
+    switch (which) {
+    case ND_FIRST:
+    case ND_LAST: {
+        size_t row = (which == ND_FIRST) ? 0 : blocks - 1;
+        if (rank == 1) return ndarray_element_to_expr(a, row);
+        /* Rank >= 2: one row, with the (now length-1) leading axis DROPPED —
+         * First of a 3x4 is a length-4 vector, not a 1x4 matrix. */
+        const int64_t* dims = a->data.ndarray.dims;
+        NDType dt = a->data.ndarray.dtype;
+        size_t rowbytes = nd_prod(dims, 1, rank) * ndt_elem_size(dt);
+        char* out = malloc(rowbytes);
+        if (!out) return NULL;
+        memcpy(out, (const char*)a->data.ndarray.data + row * rowbytes, rowbytes);
+        int64_t odims[NDARRAY_MAX_RANK];
+        for (int i = 1; i < rank; i++) odims[i - 1] = dims[i];
+        return expr_new_ndarray_like(a, rank - 1, odims, out, dt);
+    }
+    case ND_REST:
+    case ND_MOST: {
+        if (blocks < 2) return NULL;   /* -> {} */
+        return nd_rows(a, which == ND_REST ? 1 : 0, blocks - 1);
+    }
+    }
+    return NULL;
+}
+
 /* Resolve a leading-axis spec into a 1-based inclusive [lo, hi] range over
  * `blocks` rows. Handles an integer n (n>0: first n; n<0: last |n|) and a list
  * {i} / {i, j} with 1-based, possibly-negative endpoints. Returns false (caller
@@ -632,7 +699,21 @@ static bool nd_clip_chunk(void* c, size_t lo_k, size_t hi_k) {
 }
 
 /* Clip[a] clamps to [-1, 1]; Clip[a, {min, max}] to [min, max]. Elementwise,
- * real dtype only, threaded. The 3-arg replacement form and complex dtypes degrade. */
+ * real dtype only, threaded. The 3-arg replacement form and complex dtypes degrade.
+ *
+ * THE EXACTNESS GATE. Clip returns the BOUND at every clipped position, with the
+ * bound's own head — so on a Real array an exact bound produces exact Integers:
+ *
+ *     Clip[{0.5, 1.5, -2.5}, {1, 2}]   ->  {1, 1.5, 1}     (mixed, unpackable)
+ *     Clip[{0.5, 1.5, -2.5}, {1., 2.}] ->  {1., 1.5, 1.}   (uniform float64)
+ *     Clip[{0.5, 1.5, -2.5}]           ->  {0.5, 1, -1}    (default bounds are exact)
+ *
+ * Clip was removed from pack.c's AWARE list over exactly this, which cost the
+ * head its buffer path entirely: 356 ms on a 10^6 float64 vector against 4.7 ms
+ * for np.clip. The correct gate is narrower than the head — Real bounds are
+ * uniform and safe, and an EXACT bound is still safe when NOTHING is clipped,
+ * because then the answer just IS the input. One in-range scan decides that, and
+ * it is the same pass the clamp would have run. */
 Expr* ndstruct_clip(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return ndarray_delist_and_reeval(res);
@@ -645,6 +726,8 @@ Expr* ndstruct_clip(Expr* res) {
     if (ndt_is_complex(dt) || dt == NDT_INT64) return ndarray_delist_and_reeval(res);
 
     double lo = -1.0, hi = 1.0;
+    /* The 1-arg default bounds are the exact Integers -1 and 1. */
+    bool bounds_real = false;
     if (argc == 2) {
         Expr* iv = res->data.function.args[1];
         if (iv->type != EXPR_FUNCTION ||
@@ -654,9 +737,28 @@ Expr* ndstruct_clip(Expr* res) {
             !nd_real_value(iv->data.function.args[0], &lo) ||
             !nd_real_value(iv->data.function.args[1], &hi))
             return ndarray_delist_and_reeval(res);
+        bounds_real = iv->data.function.args[0]->type == EXPR_REAL &&
+                      iv->data.function.args[1]->type == EXPR_REAL;
     }
 
     size_t sz = ndarray_size(a);
+
+    if (!bounds_real) {
+        /* An exact bound would put an Integer into the result at every clipped
+         * position. Safe only if there is no such position — in which case the
+         * result is the input, unchanged and still uniformly Real. */
+        for (size_t k = 0; k < sz; k++) {
+            double r, im;
+            ndt_get(a->data.ndarray.data, k, dt, &r, &im);
+            if (r < lo || r > hi) return ndarray_delist_and_reeval(res);
+        }
+        void* same = malloc(ndt_elem_size(dt) * (sz ? sz : 1));
+        if (!same) return ndarray_delist_and_reeval(res);
+        memcpy(same, a->data.ndarray.data, ndt_elem_size(dt) * sz);
+        return expr_new_ndarray_like(a, a->data.ndarray.rank, a->data.ndarray.dims,
+                                     same, dt);
+    }
+
     void* out = malloc(ndt_elem_size(dt) * sz);
     if (!out) return ndarray_delist_and_reeval(res);
     nd_clip_ctx c = { a->data.ndarray.data, out, dt, lo, hi };

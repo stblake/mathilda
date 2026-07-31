@@ -57,6 +57,18 @@ Expr* ndstruct_rotate(Expr* res, bool left);
  * dtype with a matching head. PadLeft[{1.,2.,3.}, 5] is {0, 0, 1., 2., 3.} in
  * both Mathilda and Mathematica -- exact zeros beside Reals, which no uniform
  * buffer holds -- so it declines and the List path answers. */
+/* First / Last / Most / Rest on the buffer.
+ *
+ * Each is a leading-axis slice — one row, or all-but-one — so each is a pointer
+ * read or a single memcpy. They previously went through ndstruct_delist_repack,
+ * which made First and Last asymptotically wrong: reading ONE element of a 10^6
+ * float64 vector cost 123 ms, next to 0.88 ms for the identical Drop[v, 250].
+ *
+ * Degrades (delist_and_reeval) for the empty results the buffer layer has no
+ * shape for: Rest/Most of a single row is {}. */
+typedef enum { ND_FIRST, ND_LAST, ND_MOST, ND_REST } NDHeadTail;
+Expr* ndstruct_head_tail(Expr* res, NDHeadTail which);
+
 Expr* ndstruct_join(Expr* res);
 Expr* ndstruct_partition(Expr* res);
 Expr* ndstruct_differences(Expr* res);

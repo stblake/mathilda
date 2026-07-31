@@ -120,6 +120,19 @@ typedef struct SymbolDef {
      * existed. Marking a head here is a claim it reads the buffer through
      * ndt_get_i / memcpy only. */
     uint8_t  packed_int64_ok;
+    /* This head's buffer path handles operands of DIFFERENT RANK, by pairing
+     * the lower-rank one against the leading axes of the higher (Listable
+     * threading across levels: {{1,2,3},{4,5,6}} + {10,20}). Only Plus and
+     * Times, via ndarray_elementwise's broadcast pre-pass.
+     *
+     * Consulted only by the gate in evaluate_step, and only to decide whether a
+     * plain numeric List argument may be PACKED UP to meet a buffer instead of
+     * the buffer being materialised down to meet it. Same-shape operands need no
+     * flag -- every ND kernel handles those -- but a rank mismatch is dispatched
+     * differently by different heads (ndarray_elementwise_power still requires
+     * same_shape), and packing there would route the call somewhere its kernel
+     * declines. So this is the narrow claim: "a rank mismatch is still mine". */
+    uint8_t  packed_broadcast_ok;
     struct SymbolDef* next;   // hash-bucket chain (replaces the old SymEntry)
 } SymbolDef;
 
@@ -189,6 +202,8 @@ void symtab_clear_packed_aware(const char* symbol_name);
 /* Additionally declare that `symbol_name` is EXACT on an int64 buffer -- see
  * SymbolDef.packed_int64_ok. Implies packed_aware. */
 void symtab_set_packed_int64_ok(const char* symbol_name);
+/* SymbolDef.packed_broadcast_ok. Implies packed_aware. */
+void symtab_set_packed_broadcast_ok(const char* symbol_name);
 
 // Set/get the default option settings (a List[Rule[name,val], ...]) for a
 // symbol -- the store behind Options[f] and SetOptions[f]. symtab_set_options

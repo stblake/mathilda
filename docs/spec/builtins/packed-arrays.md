@@ -195,14 +195,83 @@ special functions (`Sin`, `Exp`, `Gamma`, …), `Total`, `Mean`, `Min`, `Max`,
 `Median`, `Variance`, `Accumulate`, `Sort`, `Reverse`, `Transpose`, `Flatten`,
 `Take`, `Drop`, `Partition`, `RotateLeft`/`RotateRight`, `Riffle`, `Join`,
 `Differences`, `Clip`, `First`, `Last`, `Most`, `Rest`, `Part`, `Map`,
-`Select`, `TakeWhile`, `FoldList`.
+`Select`, `TakeWhile`, `FoldList`, `Outer`, `MapThread`.
+
+`ListConvolve` and `ListCorrelate` read a packed kernel, a packed list, or both,
+and produce a packed real result; exact data, a symbolic kernel and a custom
+`g`/`h` pair take the ordinary path and give the same answer.
+
+`Fold` and `FoldList` use the buffer when the operator is one of `Plus`,
+`Times`, `Max`, `Min` — written either as the bare symbol or as the equivalent
+pure function (`Max[#1, #2] &`) — and the seed matches the buffer's exactness.
+Any other operator still runs on the buffer through the numeric compiler, so a
+general linear recurrence such as an exponential moving average stays packed
+too:
+
+```
+In[1]:= v = RandomReal[{0, 1}, 10^6];
+        NDArrayQ[FoldList[Max, First[v], Rest[v]]]
+Out[1]= True
+```
+
+`Clip` keeps the buffer when both bounds are `Real`, and when an exact bound
+clips nothing. It does **not** when an exact bound is actually reached, because
+`Clip` returns the bound itself and the result is then a mixture of exact and
+inexact numbers, which no uniform buffer holds:
+
+```
+In[2]:= Clip[{-2., 0., 2.}, {-1., 1.}]
+Out[2]= {-1., 0., 1.}                     (* packed *)
+
+In[3]:= Clip[{-2., 0., 2.}, {-1, 1}]
+Out[3]= {-1, 0., 1}                       (* exact bounds reached; ordinary list *)
+```
+
+`First` and `Last` of a rank-1 packed array return a scalar with the head the
+element has — an exact `Integer` from an integer buffer — and of a higher-rank
+array return the sub-array with the leading axis dropped. `Rest` and `Most` of a
+single-row array are `{}` and take the ordinary path.
+
+`Outer` and `MapThread` cover the machine-float cases and hand the rest back:
+`Outer[f, a, b]` uses the buffer for `Plus`/`Subtract`/`Times`/`Min`/`Max` on
+real data, and `MapThread[f, arr]` for `Plus`/`Times`/`Min`/`Max`. Any other `f`,
+an integer buffer, or three or more arrays takes the ordinary path and gives the
+same answer.
+
+`Plus` and `Times` also thread a lower-rank operand across the leading axes on
+the buffer, which is what `matrix - rowVector` means:
+
+```
+In[1]:= m = RandomReal[{0, 1}, {3, 100000}];
+        NDArrayQ[m - {0.1, 0.2, 0.3}]
+Out[1]= True
+```
+
+`Tally` reads the buffer without producing one: its result is a list of
+`{value, count}` pairs, which does not nest into a buffer, but it hashes the
+machine words rather than materialising an expression per element. Only the
+one-argument form — `Tally[list, test]` has to show the elements to `test`.
 
 Two limits worth knowing:
 
-- **Packing does not nest.** A packed list placed inside an ordinary list is
-  materialised as that list is built, so `{p, q}` holds two ordinary lists.
-  Heads whose argument is a list *of* lists — `MapThread`, multi-vector
-  `Transpose` — therefore never see packed elements. Answers are unaffected.
+- **A list of packed lists becomes one array, or none.** Building `{p, q}` from
+  two packed vectors of the same length and element class gives a single rank-2
+  packed list, not two buffers inside an ordinary list — that second shape is not
+  representable and is what the transparency gate exists to prevent. When the
+  rows do not agree (ragged, or one exact and one inexact) the result is an
+  ordinary list of ordinary lists, as before. Either way the value is the same:
+
+  ```
+  In[2]:= p = Range[1., 300.]; {NDArrayQ[{p, p}], Dimensions[{p, p}]}
+  Out[2]= {True, {2, 300}}
+
+  In[3]:= NDArrayQ[{p, Range[1., 299.]}]          (* ragged: declines *)
+  Out[3]= False
+  ```
+
+  This matters most for a function that returns several arrays: without it every
+  one of them is materialised at the `return`, and the caller pays for it on the
+  *next* operation rather than on any it can see.
 - Every other head materialises its packed arguments and runs normally. That is
   what makes `Count`, `Cases`, `Position`, `Level`, `ReplaceAll`, `Insert`,
   `Append`, pattern matching, and user-defined rules correct on a packed list

@@ -83,6 +83,11 @@ static int g_rand_initialized = 0;
  * operation over both.
  * -------------------------------------------------------------------------- */
 
+/* All zero until xs_seed runs, which xs_next() guarantees for itself -- see the
+ * comment there. Left uninitialised deliberately: the all-zero state is
+ * xoshiro's fixed point and so is a LOUD failure (a hang), which is what a
+ * missing seed should be. A plausible-looking default would turn the same
+ * omission into a silently identical stream on every run. */
 static uint64_t g_xs[4];
 
 /* splitmix64: the reference seeder for xoshiro. One 64-bit seed expands to the
@@ -105,7 +110,26 @@ static void xs_seed(uint64_t seed) {
 
 static inline uint64_t xs_rotl(uint64_t x, int k) { return (x << k) | (x >> (64 - k)); }
 
+static void ensure_rand_init(void);   /* seeds BOTH generators; defined below */
+
+/*
+ * THE GENERATOR SEEDS ITSELF. This is not a convenience -- it closes a bug
+ * class. Every per-element helper (random_integer_range, random_uniform_01)
+ * called ensure_rand_init() for itself, so a new caller that drew from xoshiro
+ * DIRECTLY inherited none of it: RandomInteger's packed producer did exactly
+ * that, and in a fresh process the state was still all zero. All zero is
+ * xoshiro's one fixed point, so xs_next() returned 0 forever --
+ * RandomInteger[{1,1024}, 300] answered 300 copies of 1, and
+ * RandomInteger[{1,10}, 300] never returned at all, spinning in xs_below()'s
+ * rejection loop.
+ *
+ * The check is free at the rate this is called: RandomReal has always paid this
+ * same branch per element (random_uniform_01 line ~600) and still draws at
+ * 2.3 ns. A predictable branch on a hot global costs nothing next to the shifts
+ * and xors below, and it is the only placement a future caller cannot bypass.
+ */
 static inline uint64_t xs_next(void) {
+    ensure_rand_init();
     uint64_t r = xs_rotl(g_xs[0] + g_xs[3], 23) + g_xs[0];
     uint64_t t = g_xs[1] << 17;
     g_xs[2] ^= g_xs[0];

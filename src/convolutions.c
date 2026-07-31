@@ -38,6 +38,8 @@
 #include "arithmetic.h"
 #include "numeric.h"
 #include "fourier.h"
+#include "ndarray.h"          /* packed operands read their buffer directly */
+#include "ndarray_internal.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -143,6 +145,20 @@ static void nest_flatten(const Expr* e, int level, int rank, Expr** out, size_t*
         nest_flatten(e->data.function.args[i], level + 1, rank, out, idx);
 }
 
+/* Shape of a convolution operand, from either representation. An NDArray
+ * already carries its rank and dims; a nested List has to be verified
+ * rectangular and measured. */
+static bool conv_operand_dims(const Expr* e, int64_t* dims, int* rank_out) {
+    if (is_ndarray(e)) {
+        int r = e->data.ndarray.rank;
+        if (r < 1 || r > CONV_MAX_RANK) return false;
+        for (int i = 0; i < r; i++) dims[i] = e->data.ndarray.dims[i];
+        *rank_out = r;
+        return true;
+    }
+    return nest_dims(e, dims, rank_out);
+}
+
 /* ==================================================================== *
  *  Convolution specification
  * ==================================================================== */
@@ -159,15 +175,23 @@ typedef struct {
     int64_t  KR[CONV_MAX_RANK];
     int64_t  kstride[CONV_MAX_RANK];
     int64_t  lstride[CONV_MAX_RANK];
-    Expr**   ker_leaves;             /* borrowed, row-major */
-    Expr**   list_leaves;            /* borrowed, row-major */
+    Expr**   ker_leaves;             /* borrowed, row-major; NULL if ker_arr */
+    Expr**   list_leaves;            /* borrowed, row-major; NULL if list_arr */
+    /* Packed operands. An NDArray IS a row-major machine buffer already, so the
+     * leaf array it would have been flattened into is pure overhead: one boxed
+     * Expr per pixel on the way in, and another on the way out. Non-NULL here
+     * means "read this buffer instead of those leaves" -- see convnum_operand. */
+    const Expr* ker_arr;
+    const Expr* list_arr;
+    const Expr* pad_arr;
+    bool     want_packed;            /* an operand was packed -> emit a buffer */
 
     PadKind  pad_kind;
     bool     cyclic_default;         /* padding absent => list treated cyclic */
     Expr*    pad_scalar;             /* PAD_CONST (borrowed) */
     int64_t  pdims[CONV_MAX_RANK];   /* PAD_LIST */
     int64_t  pstride[CONV_MAX_RANK];
-    Expr**   pad_leaves;             /* PAD_LIST (borrowed) */
+    Expr**   pad_leaves;             /* PAD_LIST (borrowed); NULL if pad_arr */
 
     const Expr* g_head;              /* NULL => Times */
     const Expr* h_head;              /* NULL => Plus */
@@ -206,6 +230,50 @@ static Expr* listval_leaf(const ConvSpec* s, const int64_t* jvec, bool* dropped)
         flat += idx * s->pstride[ax];
     }
     return s->pad_leaves[flat];
+}
+
+/* Numeric sibling of listval_leaf: resolve the list value at jvec straight to a
+ * machine complex, reading a packed operand's buffer where there is one. Returns
+ * false only for a leaf that is not machine-numeric (the caller abandons the
+ * fast path); *dropped marks the empty-padding out-of-range case, for which the
+ * value is left at zero and the caller drops the term. */
+static bool listval_value(const ConvSpec* s, const int64_t* jvec,
+                          double* re, double* im, bool* dropped) {
+    *re = 0.0; *im = 0.0;
+    if (!s->list_arr && !s->pad_arr) {
+        Expr* v = listval_leaf(s, jvec, dropped);
+        if (*dropped) return true;
+        return v && leaf_to_cdouble(v, re, im);
+    }
+    *dropped = false;
+    bool inrange = true;
+    for (int ax = 0; ax < s->rank; ax++)
+        if (jvec[ax] < 1 || jvec[ax] > s->ldims[ax]) { inrange = false; break; }
+    if (inrange) {
+        int64_t flat = 0;
+        for (int ax = 0; ax < s->rank; ax++) flat += (jvec[ax] - 1) * s->lstride[ax];
+        if (s->list_arr) {
+            ndt_get(s->list_arr->data.ndarray.data, (size_t)flat,
+                    s->list_arr->data.ndarray.dtype, re, im);
+            return true;
+        }
+        return leaf_to_cdouble(s->list_leaves[flat], re, im);
+    }
+    if (s->pad_kind == PAD_EMPTY) { *dropped = true; return true; }
+    if (s->pad_kind == PAD_CONST) return leaf_to_cdouble(s->pad_scalar, re, im);
+    int64_t flat = 0;
+    for (int ax = 0; ax < s->rank; ax++) {
+        int64_t P = s->pdims[ax], j = jvec[ax], n = s->ldims[ax], idx;
+        if (s->cyclic_default || s->rank > 1) idx = floormod(j - 1, P);
+        else idx = (j > n) ? floormod(j - n - 1, P) : floormod(j - 1, P);
+        flat += idx * s->pstride[ax];
+    }
+    if (s->pad_arr) {
+        ndt_get(s->pad_arr->data.ndarray.data, (size_t)flat,
+                s->pad_arr->data.ndarray.dtype, re, im);
+        return true;
+    }
+    return leaf_to_cdouble(s->pad_leaves[flat], re, im);
 }
 
 /* ==================================================================== *
@@ -251,7 +319,11 @@ static Expr* combine_axis(const ConvSpec* s, const int64_t* tvec, int kax, int64
 /* Recurse over the output multi-index, building the nested result list. */
 static Expr* build_output(const ConvSpec* s, int oax, int64_t* tvec) {
     if (oax == s->rank) {
-        int64_t rvec[CONV_MAX_RANK];
+        /* Zeroed, not merely declared: combine_axis fills rvec[kax] on the way
+         * down and make_term reads all `rank` entries at the bottom, so every
+         * slot IS written before use -- but the recursion hides that from the
+         * optimiser, which warns. Cheap enough to just be obviously correct. */
+        int64_t rvec[CONV_MAX_RANK] = {0};
         return eval_and_free(combine_axis(s, tvec, 0, rvec));
     }
     int64_t L = s->Ldims[oax];
@@ -283,40 +355,301 @@ static Expr* num_leaf(double re, double im, bool any_complex) {
     return make_complex(expr_new_real(re), expr_new_real(im));
 }
 
-static Expr* conv_direct_machine(const ConvSpec* s, bool any_complex) {
-    int64_t Ltot = 1, Lstr[CONV_MAX_RANK];
-    for (int ax = 0; ax < s->rank; ax++) Ltot *= s->Ldims[ax];
-    row_major_strides(s->Ldims, s->rank, Lstr);
-    int64_t mtot = 1;
-    for (int ax = 0; ax < s->rank; ax++) mtot *= s->kdims[ax];
+/*
+ * The numeric image of a ConvSpec: every leaf converted to a machine complex
+ * ONCE, so the accumulation loop is arithmetic and indexing only.
+ *
+ * The loop below runs (output elements) x (kernel elements) times -- 26 million
+ * for a 1024^2 image and a 5x5 kernel -- and it used to call leaf_to_cdouble on
+ * BOTH operands on every one of those iterations. The kernel is the worse of
+ * the two: 25 leaves, re-parsed out of their Expr nodes 1.04 million times
+ * each. Converting up front is O(list + kernel) instead of O(product).
+ */
+typedef struct {
+    double *kr, *ki;    /* kernel, mtot entries */
+    double *lr, *li;    /* list, ltot entries */
+    double *pr, *pi;    /* explicit pad list, ptot entries (PAD_LIST only) */
+    double  sr, si;     /* pad scalar (PAD_CONST only) */
+} ConvNum;
 
-    Expr** leaves = malloc((size_t)Ltot * sizeof(Expr*));
+static void convnum_free(ConvNum* c) {
+    free(c->kr); free(c->ki); free(c->lr); free(c->li); free(c->pr); free(c->pi);
+    memset(c, 0, sizeof(*c));
+}
+
+/* Convert `n` leaves into a fresh (re, im) pair of arrays. false if any leaf is
+ * not machine-numeric -- the caller then abandons the fast path entirely, which
+ * is the same outcome the old per-iteration check produced. */
+static bool convnum_leaves(Expr** leaves, int64_t n, double** re, double** im) {
+    *re = malloc((size_t)(n ? n : 1) * sizeof(double));
+    *im = malloc((size_t)(n ? n : 1) * sizeof(double));
+    if (!*re || !*im) return false;
+    for (int64_t i = 0; i < n; i++)
+        if (!leaf_to_cdouble(leaves[i], &(*re)[i], &(*im)[i])) return false;
+    return true;
+}
+
+/* Fill (re, im) from an NDArray buffer -- the packed analogue of
+ * convnum_leaves. Always succeeds for a real or complex dtype: a machine buffer
+ * cannot hold a leaf that is not machine-numeric, which is the only thing the
+ * leaf version can fail on. */
+static bool convnum_ndarray(const Expr* a, int64_t n, double** re, double** im) {
+    *re = malloc((size_t)(n ? n : 1) * sizeof(double));
+    *im = malloc((size_t)(n ? n : 1) * sizeof(double));
+    if (!*re || !*im) return false;
+    NDType dt = a->data.ndarray.dtype;
+    if (dt == NDT_FLOAT64) {
+        memcpy(*re, a->data.ndarray.data, (size_t)n * sizeof(double));
+        memset(*im, 0, (size_t)n * sizeof(double));
+        return true;
+    }
+    for (int64_t i = 0; i < n; i++)
+        ndt_get(a->data.ndarray.data, (size_t)i, dt, &(*re)[i], &(*im)[i]);
+    return true;
+}
+
+/* One operand's numeric image, from whichever representation it arrived in. */
+static bool convnum_operand(const Expr* arr, Expr** leaves, int64_t n,
+                            double** re, double** im) {
+    return arr ? convnum_ndarray(arr, n, re, im)
+               : convnum_leaves(leaves, n, re, im);
+}
+
+/* The result of a machine convolution over packed input, as a buffer.
+ * Real values only -- a complex result keeps the nested-List shape, which is
+ * what the List path produces for it too. */
+static Expr* conv_pack_result(const ConvSpec* s, const double* vals, int64_t n) {
+    double* out = malloc((size_t)(n ? n : 1) * sizeof(double));
+    if (!out) return NULL;
+    memcpy(out, vals, (size_t)n * sizeof(double));
+    const Expr* like = s->list_arr ? s->list_arr : s->ker_arr;
+    return expr_new_ndarray_like(like, s->rank, s->Ldims, out, NDT_FLOAT64);
+}
+
+/*
+ * Which engine is cheaper -- a COST COMPARISON, not a size threshold.
+ *
+ * The rule used to be "total work >= CONV_FFT_MIN_WORK => FFT", where the work
+ * is (output elements) x (kernel elements). But that quantity is the cost of the
+ * DIRECT engine; the FFT engine's cost does not depend on the kernel size at
+ * all, so a threshold on it sends every large problem to the transform however
+ * small its kernel. Image filtering is exactly that shape: a 1024^2 image with a
+ * 5x5 kernel is 26 million multiply-adds direct, against three 1024^2 complex
+ * transforms -- and it took the transforms, at 495 ms.
+ *
+ * Direct costs Ltot*mtot fused multiply-adds. FFT costs three transforms over
+ * the padded shape, ~5*P*log2(P) flops each, on COMPLEX data with far worse
+ * locality and two full-size temporaries. The weight below is deliberately
+ * conservative (it under-charges the FFT), so the transform still wins wherever
+ * it genuinely does; near the crossover the two are within a factor of two of
+ * each other and the choice barely matters.
+ */
+#define CONV_FFT_WEIGHT 3.0
+
+static bool conv_prefer_fft(const ConvSpec* s) {
+    double direct = 1.0, ptot = 1.0;
+    int lg = 0;
+    for (int ax = 0; ax < s->rank; ax++) {
+        direct *= (double)s->Ldims[ax] * (double)s->kdims[ax];
+        /* The transform is taken over the linear-convolution length, rounded up
+         * to a power of two -- close enough to what fft_window picks for a
+         * decision that only has to get the order of magnitude right. */
+        double need = (double)s->Ldims[ax] + (double)s->kdims[ax] - 1.0;
+        double p = 1.0;
+        while (p < need) { p *= 2.0; lg++; }
+        ptot *= p;
+    }
+    if (lg < 1) lg = 1;
+    return direct > CONV_FFT_WEIGHT * ptot * (double)lg;
+}
+
+/* Advance a 1-based row-major multi-index by one position. */
+static void conv_odometer_next(int64_t* tvec, const int64_t* dims, int rank) {
+    for (int ax = rank - 1; ax >= 0; ax--) {
+        if (++tvec[ax] <= dims[ax]) return;
+        tvec[ax] = 1;
+    }
+}
+
+static Expr* conv_direct_machine(const ConvSpec* s, bool any_complex) {
+    const bool real_only = !any_complex;
+    int64_t Ltot = 1;
+    for (int ax = 0; ax < s->rank; ax++) Ltot *= s->Ldims[ax];
+    int64_t mtot = 1, ltot = 1, ptot = 1;
+    for (int ax = 0; ax < s->rank; ax++) mtot *= s->kdims[ax];
+    for (int ax = 0; ax < s->rank; ax++) ltot *= s->ldims[ax];
+    for (int ax = 0; ax < s->rank; ax++) ptot *= s->pdims[ax];
+
+    ConvNum c;
+    memset(&c, 0, sizeof(c));
+    if (!convnum_operand(s->ker_arr, s->ker_leaves, mtot, &c.kr, &c.ki) ||
+        !convnum_operand(s->list_arr, s->list_leaves, ltot, &c.lr, &c.li)) {
+        convnum_free(&c);
+        return NULL;
+    }
+    if (s->pad_kind == PAD_LIST) {
+        if (!convnum_operand(s->pad_arr, s->pad_leaves, ptot, &c.pr, &c.pi)) {
+            convnum_free(&c);
+            return NULL;
+        }
+    } else if (s->pad_kind == PAD_CONST) {
+        if (!leaf_to_cdouble(s->pad_scalar, &c.sr, &c.si)) {
+            convnum_free(&c);
+            return NULL;
+        }
+    }
+
+    /* The kernel's multi-index per flat position, decomposed ONCE.
+     *
+     * `(kf / kstride[ax]) % kdims[ax]` is two 64-bit integer divisions, and it
+     * sat in the innermost loop -- so a rank-2 convolution paid four divisions,
+     * ~100 cycles, per multiply-add, and the direct engine ran at 46 ns per MAC
+     * against the ~1 ns the arithmetic costs. The decomposition depends only on
+     * kf, and there are mtot of those (25 for a 5x5 kernel), not Ltot*mtot. */
+    int64_t* rv = malloc((size_t)(mtot ? mtot : 1) * CONV_MAX_RANK * sizeof(int64_t));
+    if (!rv) { convnum_free(&c); return NULL; }
+    for (int64_t kf = 0; kf < mtot; kf++)
+        for (int ax = 0; ax < s->rank; ax++)
+            rv[kf * CONV_MAX_RANK + ax] = (kf / s->kstride[ax]) % s->kdims[ax] + 1;
+
+    /* A packed real result is written straight into a double array and handed to
+     * expr_new_ndarray_like; only the List path needs one Expr per output. */
+    const bool pack_out = s->want_packed && real_only;
+    Expr** leaves = pack_out ? NULL : malloc((size_t)Ltot * sizeof(Expr*));
+    double* vals = pack_out ? malloc((size_t)(Ltot ? Ltot : 1) * sizeof(double)) : NULL;
+    if ((!leaves && !pack_out) || (pack_out && !vals)) {
+        convnum_free(&c); free(rv); free(leaves); free(vals); return NULL;
+    }
+    /* Flat list offset per kernel position, for the INTERIOR case.
+     *
+     * axis_j is affine in r -- j = base_ax +/- (r - 1) -- so once an output is
+     * known to touch no padding, the list index for kernel element kf is just
+     * flat_base + koff[kf], with koff fixed for the whole sweep. That collapses
+     * the innermost body from a per-axis index rebuild plus a range test plus a
+     * padding branch down to one load and one multiply-add, which is what lets
+     * the compiler vectorise it. The general body below still defines every
+     * boundary output, so nothing about the ANSWER changes -- only the interior,
+     * which is almost all of a large convolution, gets the short path. */
+    int64_t* koff = malloc((size_t)(mtot ? mtot : 1) * sizeof(int64_t));
+    if (!koff) { convnum_free(&c); free(rv); free(leaves); free(vals); return NULL; }
+    const int64_t jdir = (s->mode == CONV_MODE_CORRELATE) ? 1 : -1;
+    for (int64_t kf = 0; kf < mtot; kf++) {
+        int64_t off = 0;
+        for (int ax = 0; ax < s->rank; ax++)
+            off += jdir * (rv[kf * CONV_MAX_RANK + ax] - 1) * s->lstride[ax];
+        koff[kf] = off;
+    }
+    /* When koff is an arithmetic progression the interior body is a strided dot
+     * product, and at stride +/-1 a contiguous one -- which is the shape a
+     * compiler will vectorise and the koff[] indirection is not. Every rank-1
+     * convolution is this case (lstride[0] == 1, so koff[kf] == +/-kf), and a
+     * rank-1 filter over a signal is the common one: it was running at 6 ns per
+     * multiply-add against the ~0.3 ns NumPy's np.convolve manages. */
+    bool koff_affine = true;
+    int64_t koff_step = 0;
+    if (mtot > 1) {
+        koff_step = koff[1] - koff[0];
+        for (int64_t kf = 2; kf < mtot; kf++)
+            if (koff[kf] - koff[kf - 1] != koff_step) { koff_affine = false; break; }
+    }
+
+    /* The output multi-index as an ODOMETER, not as (o / Lstr[ax]) % Ldims[ax].
+     * That expression is a 64-bit integer division PER AXIS PER OUTPUT, ~20-40
+     * cycles each, and the strides are runtime values so the compiler cannot
+     * strength-reduce them. On a rank-1 filter it was the whole cost: 10^6
+     * divisions swamping 5x10^6 multiply-adds, and the interior loop below --
+     * already contiguous and vectorisable -- never got to show. Incrementing
+     * costs one compare and one add on the fast axis. */
+    int64_t tvec[CONV_MAX_RANK];
+    for (int ax = 0; ax < s->rank; ax++) tvec[ax] = 1;
     for (int64_t o = 0; o < Ltot; o++) {
-        int64_t tvec[CONV_MAX_RANK];
-        for (int ax = 0; ax < s->rank; ax++) tvec[ax] = (o / Lstr[ax]) % s->Ldims[ax] + 1;
+        /* Interior test: axis_j is monotonic in r, so the two extreme kernel
+         * indices bracket every index this output touches. */
+        bool interior = true;
+        int64_t flat_base = 0;
+        for (int ax = 0; ax < s->rank; ax++) {
+            int64_t j1 = axis_j(s, ax, tvec[ax], 1);
+            int64_t jm = axis_j(s, ax, tvec[ax], s->kdims[ax]);
+            int64_t lo = j1 < jm ? j1 : jm, hi = j1 < jm ? jm : j1;
+            if (lo < 1 || hi > s->ldims[ax]) { interior = false; break; }
+            flat_base += (j1 - 1) * s->lstride[ax];
+        }
+        if (interior && real_only) {
+            double ar = 0.0;
+            if (koff_affine) {
+                const double* lr = c.lr + flat_base + koff[0];
+                if (koff_step == 1)
+                    for (int64_t kf = 0; kf < mtot; kf++) ar += c.kr[kf] * lr[kf];
+                else if (koff_step == -1)
+                    for (int64_t kf = 0; kf < mtot; kf++) ar += c.kr[kf] * lr[-kf];
+                else
+                    for (int64_t kf = 0; kf < mtot; kf++) ar += c.kr[kf] * lr[kf * koff_step];
+            } else {
+                const double* lr = c.lr + flat_base;
+                for (int64_t kf = 0; kf < mtot; kf++) ar += c.kr[kf] * lr[koff[kf]];
+            }
+            if (pack_out) vals[o] = ar;
+            else          leaves[o] = num_leaf(ar, 0.0, any_complex);
+            conv_odometer_next(tvec, s->Ldims, s->rank);
+            continue;
+        }
+
         double ar = 0.0, ai = 0.0;
         for (int64_t kf = 0; kf < mtot; kf++) {
+            /* Index resolution mirrors listval_leaf exactly -- same range test,
+             * same pad tiling -- but lands on a double array. */
             int64_t jvec[CONV_MAX_RANK];
+            bool inrange = true;
             for (int ax = 0; ax < s->rank; ax++) {
-                int64_t r = (kf / s->kstride[ax]) % s->kdims[ax] + 1;
-                jvec[ax] = axis_j(s, ax, tvec[ax], r);
+                jvec[ax] = axis_j(s, ax, tvec[ax], rv[kf * CONV_MAX_RANK + ax]);
+                if (jvec[ax] < 1 || jvec[ax] > s->ldims[ax]) inrange = false;
             }
-            double kr, ki;
-            if (!leaf_to_cdouble(s->ker_leaves[kf], &kr, &ki)) goto fail;
-            bool dropped;
-            Expr* v = listval_leaf(s, jvec, &dropped);
-            if (dropped) { ar += kr; ai += ki; continue; }   /* Times[ker] = ker */
+            double kr = c.kr[kf], ki = c.ki[kf];
             double vr, vi;
-            if (!leaf_to_cdouble(v, &vr, &vi)) goto fail;
-            ar += kr * vr - ki * vi;
-            ai += kr * vi + ki * vr;
+            if (inrange) {
+                int64_t flat = 0;
+                for (int ax = 0; ax < s->rank; ax++)
+                    flat += (jvec[ax] - 1) * s->lstride[ax];
+                vr = c.lr[flat]; vi = c.li[flat];
+            } else if (s->pad_kind == PAD_EMPTY) {
+                ar += kr; if (!real_only) ai += ki;   /* Times[ker] = ker */
+                continue;
+            } else if (s->pad_kind == PAD_CONST) {
+                vr = c.sr; vi = c.si;
+            } else {
+                int64_t flat = 0;
+                for (int ax = 0; ax < s->rank; ax++) {
+                    int64_t P = s->pdims[ax], j = jvec[ax], n = s->ldims[ax], idx;
+                    if (s->cyclic_default || s->rank > 1) idx = floormod(j - 1, P);
+                    else idx = (j > n) ? floormod(j - n - 1, P) : floormod(j - 1, P);
+                    flat += idx * s->pstride[ax];
+                }
+                vr = c.pr[flat]; vi = c.pi[flat];
+            }
+            /* Real data is the overwhelming case (an image, a signal, a
+             * stencil), and it was paying the full complex product: four
+             * multiplies and two adds where one multiply-add will do, with every
+             * imaginary operand known to be zero. classify_leaves has already
+             * established that, so the branch is hoisted out of the arithmetic
+             * and predicts perfectly. */
+            if (real_only) {
+                ar += kr * vr;
+            } else {
+                ar += kr * vr - ki * vi;
+                ai += kr * vi + ki * vr;
+            }
         }
-        leaves[o] = num_leaf(ar, ai, any_complex);
-        continue;
-    fail:
-        for (int64_t q = 0; q < o; q++) expr_free(leaves[q]);
-        free(leaves);
-        return NULL;
+        if (pack_out) vals[o] = ar;
+        else          leaves[o] = num_leaf(ar, ai, any_complex);
+        conv_odometer_next(tvec, s->Ldims, s->rank);
+    }
+    convnum_free(&c);
+    free(rv);
+    free(koff);
+    if (pack_out) {
+        Expr* packed = conv_pack_result(s, vals, Ltot);
+        free(vals);
+        return packed;
     }
     size_t idx = 0;
     Expr* result = build_nested(leaves, s->Ldims, s->rank, 0, &idx);
@@ -440,7 +773,12 @@ static Expr* conv_fft_machine(const ConvSpec* s, bool any_complex) {
             pos += p * Pstr[ax];
         }
         double re, im;
-        if (!leaf_to_cdouble(s->ker_leaves[o], &re, &im)) { free(Kbuf); free(Abuf); return NULL; }
+        if (s->ker_arr) {
+            ndt_get(s->ker_arr->data.ndarray.data, (size_t)o,
+                    s->ker_arr->data.ndarray.dtype, &re, &im);
+        } else if (!leaf_to_cdouble(s->ker_leaves[o], &re, &im)) {
+            free(Kbuf); free(Abuf); return NULL;
+        }
         Kbuf[2 * pos] = re; Kbuf[2 * pos + 1] = im;
     }
 
@@ -456,9 +794,8 @@ static Expr* conv_fft_machine(const ConvSpec* s, bool any_complex) {
             pos += p * Pstr[ax];
         }
         bool dropped;
-        Expr* v = listval_leaf(s, jvec, &dropped);
         double re, im;
-        if (!v || !leaf_to_cdouble(v, &re, &im)) { free(Kbuf); free(Abuf); return NULL; }
+        if (!listval_value(s, jvec, &re, &im, &dropped)) { free(Kbuf); free(Abuf); return NULL; }
         Abuf[2 * pos] = re; Abuf[2 * pos + 1] = im;
     }
 
@@ -478,7 +815,12 @@ static Expr* conv_fft_machine(const ConvSpec* s, bool any_complex) {
     int64_t Ltot = 1, Lstr[CONV_MAX_RANK];
     for (int ax = 0; ax < s->rank; ax++) Ltot *= s->Ldims[ax];
     row_major_strides(s->Ldims, s->rank, Lstr);
-    Expr** leaves = malloc((size_t)Ltot * sizeof(Expr*));
+    const bool pack_out = s->want_packed && !any_complex;
+    Expr** leaves = pack_out ? NULL : malloc((size_t)Ltot * sizeof(Expr*));
+    double* vals = pack_out ? malloc((size_t)(Ltot ? Ltot : 1) * sizeof(double)) : NULL;
+    if ((!leaves && !pack_out) || (pack_out && !vals)) {
+        free(Kbuf); free(Abuf); free(leaves); free(vals); return NULL;
+    }
     for (int64_t o = 0; o < Ltot; o++) {
         int64_t pos = 0;
         for (int ax = 0; ax < s->rank; ax++) {
@@ -486,7 +828,9 @@ static Expr* conv_fft_machine(const ConvSpec* s, bool any_complex) {
             pos += (oc + s->kdims[ax] - 1) * Pstr[ax];
         }
         double re = Kbuf[2 * pos] * invP, im = Kbuf[2 * pos + 1] * invP;
-        if (!any_complex) {
+        if (pack_out) {
+            vals[o] = re;
+        } else if (!any_complex) {
             leaves[o] = expr_new_real(re);
         } else if (fabs(im) <= 16.0 * DBL_EPSILON * (fabs(re) + fabs(im))) {
             leaves[o] = expr_new_real(re);
@@ -496,6 +840,11 @@ static Expr* conv_fft_machine(const ConvSpec* s, bool any_complex) {
     }
     free(Kbuf); free(Abuf);
 
+    if (pack_out) {
+        Expr* packed = conv_pack_result(s, vals, Ltot);
+        free(vals);
+        return packed;
+    }
     size_t idx = 0;
     Expr* result = build_nested(leaves, s->Ldims, s->rank, 0, &idx);
     free(leaves);
@@ -780,8 +1129,13 @@ Expr* conv_engine(Expr* res, ConvMode mode) {
 
     /* Shapes. */
     int krank = 0, lrank = 0;
-    if (!nest_dims(ker, s.kdims, &krank)) return NULL;
-    if (!nest_dims(list, s.ldims, &lrank)) return NULL;
+    if (!conv_operand_dims(ker, s.kdims, &krank)) return NULL;
+    if (!conv_operand_dims(list, s.ldims, &lrank)) return NULL;
+    /* A packed operand keeps its buffer; only an unpacked one is flattened into
+     * leaves below. Every value in a machine buffer is machine-numeric, so a
+     * packed operand also settles the classification without a scan. */
+    if (is_ndarray(ker))  { s.ker_arr = ker;   s.want_packed = true; }
+    if (is_ndarray(list)) { s.list_arr = list; s.want_packed = true; }
     if (krank != lrank) return NULL;          /* differing ranks: unsupported */
     s.rank = krank;
     for (int ax = 0; ax < s.rank; ax++)
@@ -811,11 +1165,16 @@ Expr* conv_engine(Expr* res, ConvMode mode) {
     /* Kernel + list leaves. */
     int64_t ktot = 1, ltot = 1;
     for (int ax = 0; ax < s.rank; ax++) { ktot *= s.kdims[ax]; ltot *= s.ldims[ax]; }
-    s.ker_leaves  = malloc((size_t)ktot * sizeof(Expr*));
-    s.list_leaves = malloc((size_t)ltot * sizeof(Expr*));
-    size_t kidx = 0, lidx = 0;
-    nest_flatten(ker, 0, s.rank, s.ker_leaves, &kidx);
-    nest_flatten(list, 0, s.rank, s.list_leaves, &lidx);
+    if (!s.ker_arr) {
+        s.ker_leaves = malloc((size_t)ktot * sizeof(Expr*));
+        size_t kidx = 0;
+        nest_flatten(ker, 0, s.rank, s.ker_leaves, &kidx);
+    }
+    if (!s.list_arr) {
+        s.list_leaves = malloc((size_t)ltot * sizeof(Expr*));
+        size_t lidx = 0;
+        nest_flatten(list, 0, s.rank, s.list_leaves, &lidx);
+    }
 
     /* Padding. */
     Expr** pad_leaves_owned = NULL;
@@ -825,14 +1184,16 @@ Expr* conv_engine(Expr* res, ConvMode mode) {
         memcpy(s.pdims, s.ldims, sizeof(s.pdims));
         memcpy(s.pstride, s.lstride, sizeof(s.pstride));
         s.pad_leaves = s.list_leaves;
+        s.pad_arr = s.list_arr;          /* cyclic default tiles the list itself */
     } else if (head_is(pad_arg, SYM_List)) {
         if (pad_arg->data.function.arg_count == 0) {
             s.pad_kind = PAD_EMPTY;
         } else {
             int prank = 0;
-            if (!nest_dims(pad_arg, s.pdims, &prank) || prank != s.rank) {
+            if (!conv_operand_dims(pad_arg, s.pdims, &prank) || prank != s.rank) {
                 free(s.ker_leaves); free(s.list_leaves); return NULL;
             }
+            if (is_ndarray(pad_arg)) s.pad_arr = pad_arg;
             s.pad_kind = PAD_LIST;
             int64_t ptot = 1;
             for (int ax = 0; ax < s.rank; ax++) {
@@ -840,10 +1201,12 @@ Expr* conv_engine(Expr* res, ConvMode mode) {
                 ptot *= s.pdims[ax];
             }
             row_major_strides(s.pdims, s.rank, s.pstride);
-            pad_leaves_owned = malloc((size_t)ptot * sizeof(Expr*));
-            size_t pidx = 0;
-            nest_flatten(pad_arg, 0, s.rank, pad_leaves_owned, &pidx);
-            s.pad_leaves = pad_leaves_owned;
+            if (!s.pad_arr) {
+                pad_leaves_owned = malloc((size_t)ptot * sizeof(Expr*));
+                size_t pidx = 0;
+                nest_flatten(pad_arg, 0, s.rank, pad_leaves_owned, &pidx);
+                s.pad_leaves = pad_leaves_owned;
+            }
         }
     } else {
         s.pad_kind = PAD_CONST;
@@ -859,9 +1222,33 @@ Expr* conv_engine(Expr* res, ConvMode mode) {
     if (default_gh) {
         bool any_complex = false;
         long arb_bits = 0;
-        NumClass cls = classify_leaves(s.ker_leaves, ktot, s.list_leaves, ltot,
+        /* classify_leaves scans boxed leaves; a packed operand has none, and
+         * needs none -- a machine buffer is machine-numeric by construction, and
+         * its dtype already says whether it is complex. Pass only the unpacked
+         * side, and fold the packed side's dtype in afterwards. */
+        NumClass cls = classify_leaves(s.ker_arr  ? NULL : s.ker_leaves,
+                                       s.ker_arr  ? 0    : ktot,
+                                       s.list_arr ? NULL : s.list_leaves,
+                                       s.list_arr ? 0    : ltot,
                                        &any_complex, &arb_bits);
-        bool big = (s.pad_kind != PAD_EMPTY && work >= CONV_FFT_MIN_WORK);
+        if (s.ker_arr || s.list_arr) {
+            /* A buffer contributes exactness, not symbols: an int64 buffer is
+             * exact (so an all-exact call must keep the exact engine and its
+             * Integer result), every other dtype is inexact. CLS_SYMBOLIC and
+             * CLS_ARB come from the unpacked side and stand -- both walk leaves,
+             * so a packed call carrying either degrades below. */
+            bool packed_inexact = false;
+            const Expr* pk[2] = { s.ker_arr, s.list_arr };
+            for (int i = 0; i < 2; i++) {
+                if (!pk[i]) continue;
+                NDType dt = pk[i]->data.ndarray.dtype;
+                if (dt != NDT_INT64) packed_inexact = true;
+                if (ndt_is_complex(dt)) any_complex = true;
+            }
+            if (cls == CLS_EXACT && packed_inexact) cls = CLS_MACHINE;
+        }
+        bool big = (s.pad_kind != PAD_EMPTY && work >= CONV_FFT_MIN_WORK
+                    && conv_prefer_fft(&s));
         if (cls == CLS_MACHINE) {
             /* FFT above the threshold, tight O(L*m) numeric loop below it;
              * either may return NULL (unrepresentable leaf) -> fall through. */
@@ -876,7 +1263,17 @@ Expr* conv_engine(Expr* res, ConvMode mode) {
     }
 
     /* Symbolic, exact, custom g/h, or a numeric leaf the fast paths could not
-     * represent: the general Expr-building engine (exact stays exact). */
+     * represent: the general Expr-building engine (exact stays exact). It walks
+     * leaves, which a packed operand does not have -- so a packed call that gets
+     * this far degrades instead, re-running against materialised Lists. The
+     * answer is then the List path's by construction, which is the contract the
+     * rest of the ND layer keeps (ndstruct.h:14). */
+    if (!result && (s.ker_arr || s.list_arr || s.pad_arr)) {
+        free(s.ker_leaves);
+        free(s.list_leaves);
+        free(pad_leaves_owned);
+        return ndarray_delist_and_reeval(res);
+    }
     if (!result) result = conv_direct(&s);
 
     free(s.ker_leaves);

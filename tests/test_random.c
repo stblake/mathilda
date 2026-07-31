@@ -105,6 +105,35 @@ void test_randominteger_range(void) {
 }
 
 /* ---- RandomInteger[range, n] - flat list ---- */
+/* ---- The packed producer must seed the generator itself ----
+ *
+ * THIS TEST MUST RUN FIRST. It is a regression test for a fresh-process bug, and
+ * its position in main() is the whole test: RandomInteger[range, n] with n past
+ * the packing threshold draws from xoshiro DIRECTLY, bypassing the per-element
+ * helpers that call ensure_rand_init(). With no earlier random call to seed it,
+ * the state was all zero -- xoshiro's one fixed point -- so xs_next() returned 0
+ * forever. A power-of-two span then answered n copies of the range minimum, and
+ * any other span HUNG in xs_below()'s rejection loop.
+ *
+ * Any test that touches the RNG before this one seeds the generator and makes
+ * this pass vacuously, which is exactly how the bug shipped: the 2D form
+ * (RandomInteger[1, {n, n}]) goes through random_integer_range and is seeded, so
+ * every existing caller happened to be safe. */
+void test_randominteger_packed_seeds_itself(void) {
+    /* Non-power-of-two span: this call is the one that used to never return. */
+    char* s = eval_to_str("Length[Union[RandomInteger[{1, 10}, 512]]] > 1");
+    ASSERT_STR_EQ(s, "True");
+    free(s);
+
+    /* Power-of-two span takes the mask branch, which did not hang -- it silently
+     * answered 512 copies of 1. A length check would have passed; only a check
+     * on the VALUES catches it. */
+    s = eval_to_str("Length[Union[RandomInteger[{1, 1024}, 512]]] > 1");
+    ASSERT_STR_EQ(s, "True");
+    free(s);
+}
+
+/* ---- RandomInteger[range, n] - flat list ---- */
 void test_randominteger_flat_list(void) {
     /* RandomInteger[{0, 9}, 5] should give a list of 5 elements */
     char* s = eval_to_str("Length[RandomInteger[{0, 9}, 5]]");
@@ -1135,6 +1164,10 @@ void test_randomsample_sample_zero(void) {
 int main(void) {
     symtab_init();
     core_init();
+
+    /* FIRST, deliberately: it is a fresh-process regression test and any earlier
+     * RNG use seeds the generator and makes it vacuous. See its comment. */
+    TEST(test_randominteger_packed_seeds_itself);
 
     TEST(test_randominteger_no_args);
     TEST(test_randominteger_single_arg);

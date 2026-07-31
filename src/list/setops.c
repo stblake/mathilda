@@ -1,6 +1,8 @@
 #include "list_common.h"
 #include "setops.h"
 #include "assoc.h"
+#include "ndarray.h"    /* is_ndarray */
+#include "ndreduce.h"   /* ndred_tally — Tally's packed-buffer fast path */
 
 typedef struct HashNode {
     Expr* key;
@@ -422,6 +424,13 @@ Expr* builtin_tally(Expr* res) {
 
     /* Tally[assoc] (and Tally[assoc, test]) tallies the association's values. */
     if (is_association(list)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
+
+    /* A packed buffer hashes as machine words. A user-supplied test has to see
+     * the elements as expressions, so that form is handed back as a List call --
+     * NOT left to fall through, because everything below indexes `list` as an
+     * EXPR_FUNCTION and an NDArray is not one: it would answer {}. */
+    if (is_ndarray(list))
+        return test ? ndarray_delist_and_reeval(res) : ndred_tally(res);
 
     if (list->type != EXPR_FUNCTION) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
 
