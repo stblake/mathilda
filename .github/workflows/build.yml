@@ -51,8 +51,12 @@ jobs:
             echo 'extra_libs=-llapack -lblas' >> "$GITHUB_OUTPUT"
           fi
 
+      # `make print-cc`, not `gcc --version`: the makefile prefers a versioned
+      # gcc-NN over the plain name, so on this runner a bare `gcc --version`
+      # reports 13.3.0 while the build actually uses gcc-14. That mismatch sent
+      # issue #40's diagnosis to the wrong compiler.
       - name: Report toolchain
-        run: gcc --version
+        run: make print-cc
 
       # Optional dependencies degrade silently by design, which means a code
       # path can quietly stop being covered here. Surface why each one was or

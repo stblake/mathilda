@@ -412,7 +412,18 @@ check-c99:
 check-packed-aware:
 	python3 tools/check_packed_aware.py
 
-.PHONY: all clean docs docs-build docs-serve check-c99 check-packed-aware
+# Report the compiler the build will ACTUALLY use. `gcc --version` does not
+# answer that: the autodetection above prefers a versioned `gcc-NN` over the
+# plain name, so on a host with both, a bare `gcc --version` names one compiler
+# while every compile line names another. The Linux CI job printed 13.3.0 that
+# way while building with gcc-14, which is how issue #40's diagnosis started
+# off pointing at the wrong toolchain.
+print-cc:
+	@echo "CC = $(CC)"
+	@$(CC) --version 2>/dev/null | head -1
+
+.PHONY: all clean docs docs-build docs-serve check-c99 check-packed-aware \
+        print-cc
 
 # Pull in the auto-generated header dependencies. The leading `-` silences the
 # "no such file" notice on a fresh tree (no .d files exist until the first
