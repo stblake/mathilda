@@ -13,6 +13,7 @@
 #include "eval.h"
 #include "expand.h"
 #include "poly.h"
+#include "linsolve.h"   /* matsol_is_inexact -- a zero keeps its numerator's exactness */
 #include "sym_names.h"
 #include <stdlib.h>
 
@@ -47,7 +48,16 @@ void flatten_tensor(Expr* e, Expr** flat, size_t* idx) {
 }
 
 Expr* exact_div_wrapper(Expr* num, Expr* den) {
-    if (is_zero_poly(num)) return expr_new_integer(0);
+    /* A zero numerator divides to zero -- but at the NUMERATOR's own exactness.
+     * Returning the exact Integer 0 unconditionally put exact zeros into Real
+     * results: Inverse[{{2., 0.}, {0., 4.}}] answered {{0.5, 0}, {0, 0.25}}
+     * where Mathematica gives all Reals (0./5 is 0., not 0). The heads are the
+     * visible half of it; the other half is that a matrix of mixed exact and
+     * inexact entries cannot be packed, so every operation downstream of an
+     * inverse or a row reduction with a structural zero in it falls off the
+     * buffer path. */
+    if (is_zero_poly(num))
+        return matsol_is_inexact(num) ? expr_new_real(0.0) : expr_new_integer(0);
     if (den->type == EXPR_INTEGER && den->data.integer == 1) return expr_expand(num);
 
     Expr* exp_num = expr_expand(num);

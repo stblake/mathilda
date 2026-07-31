@@ -89,6 +89,18 @@
 static Expr* inverse_divfree(Expr* arg, int n) {
     int cols = 2 * n;
 
+    /* The augmented identity block and every eliminated cell must carry the
+     * INPUT's exactness, for the same reason inverse_onestep does: writing the
+     * exact Integer 0 into a Real elimination made
+     * Inverse[{{2., 0.}, {0., 4.}}] answer {{0.5, 0}, {0, 0.25}} -- exact
+     * Integers sitting in a machine-real matrix, where Mathematica gives all
+     * Reals. Numerically identical, but the heads are wrong and a mixed
+     * exact/inexact matrix cannot be packed, so every operation downstream of an
+     * inverse with a structural zero in it falls off the buffer path. */
+    const bool dfinexact = matsol_is_inexact(arg);
+    #define DIVFREE_ONE  (dfinexact ? expr_new_real(1.0) : expr_new_integer(1))
+    #define DIVFREE_ZERO (dfinexact ? expr_new_real(0.0) : expr_new_integer(0))
+
     /* Build augmented matrix [A | I] */
     Expr** matrix = malloc(sizeof(Expr*) * n * cols);
     size_t idx = 0;
@@ -99,7 +111,7 @@ static Expr* inverse_divfree(Expr* arg, int n) {
             matrix[i * cols + j] = flat_a[i * n + j]; /* take ownership */
         }
         for (int j = 0; j < n; j++) {
-            matrix[i * cols + n + j] = expr_new_integer(i == j ? 1 : 0);
+            matrix[i * cols + n + j] = (i == j) ? DIVFREE_ONE : DIVFREE_ZERO;
         }
     }
     free(flat_a); /* elements transferred to matrix */
@@ -176,7 +188,7 @@ static Expr* inverse_divfree(Expr* arg, int n) {
                 }
             }
             expr_free(matrix[i * cols + c]);
-            matrix[i * cols + c] = expr_new_integer(0);
+            matrix[i * cols + c] = DIVFREE_ZERO;
         }
 
         expr_free(P);
@@ -265,6 +277,8 @@ static Expr* inverse_divfree(Expr* arg, int n) {
     }
     free(matrix);
 
+    #undef DIVFREE_ONE
+    #undef DIVFREE_ZERO
     return result;
 }
 

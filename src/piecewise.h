@@ -9,6 +9,7 @@ Expr* builtin_round(Expr* res);
 Expr* builtin_integerpart(Expr* res);
 Expr* builtin_fractionalpart(Expr* res);
 Expr* builtin_unitstep(Expr* res);
+Expr* builtin_ramp(Expr* res);
 
 void piecewise_init(void);
 

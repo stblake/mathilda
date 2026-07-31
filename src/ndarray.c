@@ -486,6 +486,37 @@ static int build_axis_selector(const Expr* spec, int64_t len, NDAxisSel* sel) {
         }
     }
 
+    /* A PACKED list of positions -- the same fancy gather as the List arm
+     * above, arriving in the representation the rest of the system now hands
+     * back. Flatten, Range, RandomInteger, Ordering and every int64 kernel
+     * produce a packed list, so without this arm `x[[idx]]` -- the operation
+     * every sparse-matrix and graph kernel is built out of -- degraded the
+     * whole Part and materialised BOTH arrays: a 1.6e6-index gather out of a
+     * 100000-element vector cost 389 ms against 15.7 ms once the index buffer
+     * is read directly, and a PageRank built on it 14.1 s against 486 ms.
+     *
+     * is_packed_list, not is_ndarray: a VISIBLE NDArray[...] is not a List and
+     * the List path would not have accepted one, so the two surfaces must not
+     * start disagreeing here. Rank 1 only, and int64 only -- a Real position is
+     * Part::pkspec1 in Mathematica, and the List arm above rejects it too. */
+    if (is_packed_list(spec) &&
+        spec->data.ndarray.rank == 1 &&
+        spec->data.ndarray.dtype == NDT_INT64) {
+        int64_t m = spec->data.ndarray.dims[0];
+        if (m <= 0) return NDPART_DEGRADE;          /* {} -> exact List path */
+        sel->pos = malloc(sizeof(int64_t) * (size_t)m);
+        if (!sel->pos) return NDPART_DEGRADE;
+        const int64_t* src = (const int64_t*)spec->data.ndarray.data;
+        for (int64_t i = 0; i < m; i++) {
+            if (!nd_resolve_index(src[i], len, &sel->pos[i])) {
+                free(sel->pos); sel->pos = NULL;
+                return NDPART_INVALID;
+            }
+        }
+        sel->n = m; sel->keep = true;
+        return NDPART_OK;
+    }
+
     return NDPART_DEGRADE;   /* unrecognised spec (Key, pattern, ...) */
 }
 
@@ -1546,7 +1577,13 @@ Expr* ndarray_map_unary(const Expr* a, const NDUnaryKernel* k) {
             if (!ok) { free(out); return NULL; }   /* degrade to the List path */
             return expr_new_ndarray_like(a, rank, dims, out, NDT_INT64);
         }
-        return NULL;                                /* int64 in, no int64 kernel */
+        /* No arm for THIS dtype: fall through to the categories below rather
+         * than declining the whole call. `to_int` means "prefer the exact
+         * integer answer where one exists", not "only integers" -- Abs is
+         * exactly that shape: |x| is an exact Integer on an int64 buffer and a
+         * projection (to_real) on a Real or complex one, and before this it had
+         * to choose one of the two. The six narrowing kernels supply both arms,
+         * so nothing they do changes. */
     }
 
     /* Projection (Abs/Re/Im/Arg): always a real output, even for complex input.

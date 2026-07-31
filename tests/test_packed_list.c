@@ -720,6 +720,285 @@ void test_fourth_sweep_fast_paths(void) {
                   "Outer[ff, Table[N[i], {i, 300}], {1., 2.}]");
 }
 
+/* ---------------------------------------------------------------------------
+ *  Fifth sweep (2026-07-31): the packed index, the integer scan and thread,
+ *  Ramp, the infinite Clip bound, and the packed set operations.
+ *
+ *  Every case below is the SAME source evaluated twice -- once with automatic
+ *  packing on, once with it off -- so what is compared is the new buffer path
+ *  against the interpreter's List path on identical input. That is stronger
+ *  than comparing against a written-down expectation, which can be wrong in the
+ *  same direction as the code, and it is the form the third and fourth sweeps
+ *  arrived at after three separate tests turned out to assert nothing.
+ *
+ *  Every source is ABOVE PACK_MIN_ELEMENTS. A differential case built on 3
+ *  elements never runs the path it claims to test (experiment 10, experiment 11).
+ * ------------------------------------------------------------------------- */
+static void both_ways(const char* src) {
+    Expr* on = ev(src);
+    pack_set_enabled(false);
+    Expr* off = ev(src);
+    pack_set_enabled(true);
+    char* sa = expr_to_string(on);
+    char* sb = expr_to_string(off);
+    if (strcmp(sa, sb) != 0)
+        fprintf(stderr, "FAIL: packed and unpacked disagree\n  %s\n"
+                        "  packed:   %s\n  unpacked: %s\n", src, sa, sb);
+    ASSERT(strcmp(sa, sb) == 0);
+    free(sa); free(sb);
+    expr_free(on); expr_free(off);
+}
+
+void test_fifth_sweep_fast_paths(void) {
+    /* ---- 1. Part with a PACKED index list -- the gather. ------------------
+     * build_axis_selector accepted a List of Integer positions but not a packed
+     * one, and every producer of an index list (Flatten, Range, RandomInteger,
+     * arithmetic on any of them) now hands back a packed one -- so x[[idx]]
+     * degraded the whole Part and materialised BOTH arrays. */
+    static const char* const GATHER[] = {
+        "Table[N[i]/7., {i, 300}][[Table[Mod[7 i, 300] + 1, {i, 300}]]]",
+        "Table[i, {i, 300}][[Table[Mod[7 i, 300] + 1, {i, 300}]]]",
+        "Table[N[i]/7., {i, 300}][[Range[300]]]",
+        "Table[N[i]/7., {i, 300}][[-Range[300]]]",
+        "Table[N[i], {i, 300}][[Table[1, {300}]]]",
+        "Table[N[i j], {i, 60}, {j, 5}][[Table[Mod[3 i, 60] + 1, {i, 300}]]]",
+        "Table[N[i j], {i, 60}, {j, 5}][[Table[Mod[3 i, 60] + 1, {i, 300}], 2]]",
+        "Table[N[i j], {i, 60}, {j, 5}][[All, Table[Mod[i, 5] + 1, {i, 300}]]]",
+        "Table[i j, {i, 60}, {j, 5}][[Table[Mod[3 i, 60] + 1, {i, 300}]]]",
+        /* The answer's ELEMENT HEADS, not just its values: an int64 source must
+         * still gather exact Integers. */
+        "Head[Table[i, {i, 300}][[Range[300]]][[1]]]",
+        "Head[Table[N[i], {i, 300}][[Range[300]]][[1]]]",
+        "Total[Table[N[i], {i, 300}][[Table[Mod[11 i, 300] + 1, {i, 300}]]]]",
+        "Length[Table[N[i], {i, 300}][[Table[Mod[11 i, 300] + 1, {i, 300}]]]]",
+    };
+    for (size_t i = 0; i < sizeof(GATHER) / sizeof(GATHER[0]); i++)
+        both_ways(GATHER[i]);
+
+    /* Forms the gather must DECLINE, each for its own reason. All four have to
+     * answer exactly what the List path answers, which for three of them is an
+     * error or an unevaluated Part. */
+    both_ways("Table[N[i], {i, 300}][[Table[1., {300}]]]");        /* Real positions */
+    both_ways("Table[N[i], {i, 300}][[Table[400, {300}]]]");       /* out of range */
+    both_ways("Table[N[i], {i, 300}][[Table[-400, {300}]]]");      /* out of range, negative */
+    both_ways("Table[N[i], {i, 300}][[{}]]");                      /* empty spec */
+    both_ways("Table[N[i], {i, 300}][[Table[Mod[i, 300] + 1, {i, 60}, {j, 5}]]]");  /* rank-2 spec */
+
+    /* ---- 2. MapThread over an INTEGER buffer. ----------------------------
+     * nd_mapthread2 was float64-only and MapThread was absent from INT64_OK, so
+     * an integer pair materialised twice over. */
+    static const char* const MT[] = {
+        "MapThread[Max, {Table[Mod[7 i, 97], {i, 300}], Table[Mod[11 i, 89], {i, 300}]}]",
+        "MapThread[Min, {Table[Mod[7 i, 97], {i, 300}], Table[Mod[11 i, 89], {i, 300}]}]",
+        "MapThread[Plus, {Table[Mod[7 i, 97], {i, 300}], Table[Mod[11 i, 89], {i, 300}]}]",
+        "MapThread[Times, {Table[Mod[7 i, 97], {i, 300}], Table[Mod[11 i, 89], {i, 300}]}]",
+        "MapThread[Max, {Table[Mod[7 i, 97], {i, 300}], Table[Mod[11 i, 89], {i, 300}],"
+        " Table[Mod[13 i, 83], {i, 300}]}]",
+        /* Element heads: an integer thread must not come back Real. */
+        "Head[MapThread[Max, {Table[Mod[7 i, 97], {i, 300}],"
+        " Table[Mod[11 i, 89], {i, 300}]}][[1]]]",
+        /* The float64 control, unchanged by this sweep. */
+        "MapThread[Max, {Table[N[Mod[7 i, 97]], {i, 300}], Table[N[Mod[11 i, 89]], {i, 300}]}]",
+        /* Mixed exactness never packs in the first place, so this exercises the
+         * List path on both sides and must still agree. */
+        "MapThread[Max, {Table[Mod[7 i, 97], {i, 300}], Table[N[Mod[11 i, 89]], {i, 300}]}]",
+        /* OVERFLOW abandons the whole array so GMP answers exactly -- the one
+         * behaviour a wrapping int64 loop would get silently wrong. */
+        "MapThread[Times, {Table[10^18, {300}], Table[10^18, {300}]}][[1]]",
+        "MapThread[Plus, {Table[9223372036854775807, {300}], Table[1, {300}]}][[1]]",
+    };
+    for (size_t i = 0; i < sizeof(MT) / sizeof(MT[0]); i++) both_ways(MT[i]);
+
+    /* ---- 3. Fold / FoldList over an INTEGER buffer -- the scan. ----------- */
+    static const char* const SCAN[] = {
+        "FoldList[Max, 0, Table[Mod[7 i, 97], {i, 300}]]",
+        "FoldList[Min, 999, Table[Mod[7 i, 97], {i, 300}]]",
+        "FoldList[Plus, 0, Table[Mod[7 i, 97], {i, 300}]]",
+        "Fold[Max, 0, Table[Mod[7 i, 97], {i, 300}]]",
+        "Fold[Plus, 0, Table[Mod[7 i, 97], {i, 300}]]",
+        "FoldList[Max, Table[Mod[7 i, 97], {i, 300}]]",           /* seedless */
+        "Head[FoldList[Max, 0, Table[Mod[7 i, 97], {i, 300}]][[1]]]",
+        "Head[FoldList[Plus, 0, Table[Mod[7 i, 97], {i, 300}]][[-1]]]",
+        /* A REAL seed over an integer buffer is the exactness trap: Max hands
+         * back one of its arguments, so the answer is Real exactly where the
+         * seed won and exact everywhere else -- mixed, and unpackable. */
+        "FoldList[Max, 0., Table[Mod[7 i, 97], {i, 300}]]",
+        "FoldList[Max, 1000., Table[Mod[7 i, 97], {i, 300}]]",
+        /* Overflow, again: the product leaves int64 and must reach GMP. */
+        "Fold[Times, 1, Table[If[i <= 5, 10^15, 1], {i, 300}]]",
+        /* The pure-function spelling must agree with the bare symbol -- the
+         * presentation-parity trap of experiment 11. */
+        "FoldList[Max[#1, #2] &, 0, Table[Mod[7 i, 97], {i, 300}]]",
+        "Head[FoldList[Max[#1, #2] &, 0, Table[Mod[7 i, 97], {i, 300}]]]",
+        "Head[FoldList[Max, 0, Table[Mod[7 i, 97], {i, 300}]]]",
+    };
+    for (size_t i = 0; i < sizeof(SCAN) / sizeof(SCAN[0]); i++) both_ways(SCAN[i]);
+
+    /* ---- 4. Ramp -- a new builtin, and its buffer kernel. ----------------- */
+    /* Against the Mathematica 14.0 reference, read off directly. */
+    assert_eval_eq("Ramp[{-1., 0., 2.5}]", "{0.0, 0.0, 2.5}", 0);
+    assert_eval_eq("Head /@ Ramp[{-1., 0., 2.5}]", "{Real, Real, Real}", 0);
+    assert_eval_eq("Ramp[{-3, 0, 4}]", "{0, 0, 4}", 0);
+    assert_eval_eq("Ramp[{-1/2, 3/4}]", "{0, 3/4}", 0);
+    assert_eval_eq("Ramp[x]", "Ramp[x]", 0);
+    assert_eval_eq("Ramp[1. + 2. I]", "Ramp[1.0 + 2.0*I]", 0);
+    assert_eval_eq("Attributes[Ramp]", "{Listable, NumericFunction, Protected}", 0);
+    /* An exact symbolic argument whose sign IS decidable resolves; Ramp is not
+     * allowed to give up on it just because it is not a machine number. */
+    assert_eval_eq("Ramp[Sqrt[2] - 1]", "-1 + Sqrt[2]", 0);
+    assert_eval_eq("Ramp[1 - Sqrt[2]]", "0", 0);
+
+    static const char* const RAMP[] = {
+        "Ramp[Table[N[i] - 150., {i, 300}]]",
+        "Ramp[Table[i - 150, {i, 300}]]",
+        "Ramp[Table[N[i j] - 150., {i, 60}, {j, 5}]]",
+        "Head[Ramp[Table[N[i] - 150., {i, 300}]][[1]]]",
+        "Head[Ramp[Table[i - 150, {i, 300}]][[1]]]",
+        "Total[Ramp[Table[N[i] - 150., {i, 300}]]]",
+        "Total[Ramp[Table[i - 150, {i, 300}]]]",
+        "Ramp[Table[i/7, {i, 300}] - 20]",          /* Rationals never pack */
+        "Ramp[Table[If[i == 7, xx, N[i] - 150.], {i, 300}]]",   /* one symbol: no pack */
+    };
+    for (size_t i = 0; i < sizeof(RAMP) / sizeof(RAMP[0]); i++) both_ways(RAMP[i]);
+
+    /* ---- 5. Clip with an INFINITE bound. ---------------------------------
+     * Clip[x, {0., Infinity}] is how the positive part is spelled, and the
+     * bound simply failed to parse: every such call returned unevaluated. */
+    assert_eval_eq("Clip[{-2., 0.5, 3.}, {0., Infinity}]", "{0.0, 0.5, 3.0}", 0);
+    assert_eval_eq("Clip[{-2., 0.5, 3.}, {-Infinity, 1.}]", "{-2.0, 0.5, 1.0}", 0);
+    assert_eval_eq("Clip[{-2., 0.5, 3.}, {-Infinity, Infinity}]", "{-2.0, 0.5, 3.0}", 0);
+    assert_eval_eq("Clip[{-2, 5}, {0, Infinity}]", "{0, 5}", 0);
+    assert_eval_eq("Head /@ Clip[{-2., 0.5, 3.}, {0., Infinity}]", "{Real, Real, Real}", 0);
+
+    static const char* const CLIPINF[] = {
+        "Clip[Table[N[i] - 150., {i, 300}], {0., Infinity}]",
+        "Clip[Table[N[i] - 150., {i, 300}], {-Infinity, 0.}]",
+        "Clip[Table[N[i] - 150., {i, 300}], {-Infinity, Infinity}]",
+        /* An EXACT bound beside Real data still has to put an exact head at
+         * every clipped position, infinite partner or not. */
+        "Clip[Table[N[i] - 150., {i, 300}], {0, Infinity}]",
+        "Head[Clip[Table[N[i] - 150., {i, 300}], {0, Infinity}][[1]]]",
+        "Head[Clip[Table[N[i] - 150., {i, 300}], {0., Infinity}][[1]]]",
+        "Clip[Table[i - 150, {i, 300}], {0, Infinity}]",
+        "Total[Clip[Table[N[i] - 150., {i, 300}], {0., Infinity}]]",
+    };
+    for (size_t i = 0; i < sizeof(CLIPINF) / sizeof(CLIPINF[0]); i++) both_ways(CLIPINF[i]);
+
+    /* ---- 6. The packed set operations. ------------------------------------
+     * Union / Intersection / Complement over integer LABELS is what a graph
+     * traversal is made of; the generic path allocates one Expr per element and
+     * sorts through expr_compare. */
+    static const char* const SETOPS[] = {
+        "Union[Table[Mod[7 i, 97], {i, 300}]]",
+        "Union[Table[Mod[7 i, 97], {i, 300}], Table[Mod[11 i, 89], {i, 300}]]",
+        "Union[Table[Mod[7 i, 97], {i, 300}], Table[Mod[11 i, 89], {i, 300}],"
+        " Table[Mod[13 i, 83], {i, 300}]]",
+        "Intersection[Table[Mod[7 i, 97], {i, 300}], Table[Mod[11 i, 89], {i, 300}]]",
+        "Complement[Table[Mod[7 i, 97], {i, 300}], Table[Mod[11 i, 89], {i, 300}]]",
+        "Complement[Table[i, {i, 300}], Table[i, {i, 300}]]",           /* empty */
+        "Complement[Table[i, {i, 300}], Table[2 i, {i, 300}]]",
+        "Intersection[Table[i, {i, 300}], Table[i + 1000, {i, 300}]]",  /* empty */
+        "Length[Union[Table[Mod[7 i, 97], {i, 300}]]]",
+        "Head[Union[Table[Mod[7 i, 97], {i, 300}]][[1]]]",
+        /* Forms that must degrade: Reals (0. and -0. compare equal and print
+         * differently, so which representative survives would differ), a
+         * SameTest, and a mix of packed and plain operands. */
+        "Union[Table[N[Mod[7 i, 97]], {i, 300}]]",
+        "Union[Table[Mod[7 i, 97], {i, 300}], SameTest -> (Abs[#1 - #2] < 2 &)]",
+        "Union[Table[Mod[7 i, 97], {i, 300}], {1000, 2000}]",
+        "Complement[Table[Mod[7 i, 97], {i, 300}], {1, 2, 3}]",
+        "Union[Table[Mod[7 i, 97], {i, 300}], {a, b}]",                 /* symbolic */
+    };
+    for (size_t i = 0; i < sizeof(SETOPS) / sizeof(SETOPS[0]); i++) both_ways(SETOPS[i]);
+
+    /* ---- 6b. Round two: the int64 arms the first pass missed, Join's small
+     * operands, and a gather whose SOURCE is below the threshold. Each was found
+     * by re-profiling a kernel that had not moved, not by reading the code. */
+
+    /* Abs of an exact integer is an exact integer -- a projection kernel writes
+     * a real dtype, so this arm has to exist for the buffer to answer the same
+     * thing the List path does. |INT64_MIN| abandons to GMP. */
+    assert_eval_eq("Abs[{-3, 2, -1}]", "{3, 2, 1}", 0);
+    assert_eval_eq("Head /@ Abs[{-3, 2, -1}]", "{Integer, Integer, Integer}", 0);
+    assert_eval_eq("Abs[{-3., 2.}]", "{3.0, 2.0}", 0);
+    assert_eval_eq("Abs[3. + 4. I]", "5.0", 0);
+
+    static const char* const R2[] = {
+        /* Abs: integer, real, and the overflow that must reach a bignum. */
+        "Abs[Table[i - 150, {i, 300}]]",
+        "Head[Abs[Table[i - 150, {i, 300}]][[1]]]",
+        "Total[Abs[Table[i - 150, {i, 300}]]]",
+        "Abs[Table[N[i] - 150., {i, 300}]]",
+        "Abs[Table[If[i == 3, -9223372036854775808, -i], {i, 300}]][[3]]",
+        "Head[Abs[Table[If[i == 3, -9223372036854775808, -i], {i, 300}]][[1]]]",
+        /* First / Last / Most / Rest on an INTEGER buffer. */
+        "Most[Table[i, {i, 300}]]", "Rest[Table[i, {i, 300}]]",
+        "First[Table[i, {i, 300}]]", "Last[Table[i, {i, 300}]]",
+        "Head[Most[Table[i, {i, 300}]][[1]]]", "Head[First[Table[i, {i, 300}]]]",
+        "Most[Table[i j, {i, 60}, {j, 5}]]", "First[Table[i j, {i, 60}, {j, 5}]]",
+        /* Join with small plain operands beside a buffer -- the explicit
+         * finite-difference boundary. The lifted operand must SNIFF to the same
+         * dtype, so an exact 1 beside Real data still gives a mixed answer. */
+        "Join[{0.}, Table[N[i], {i, 300}], {9.}]",
+        "Head[Join[{0.}, Table[N[i], {i, 300}], {9.}][[1]]]",
+        "Length[Join[{0.}, Table[N[i], {i, 300}], {9.}]]",
+        "Join[{1}, Table[N[i], {i, 300}]]",
+        "Head[Join[{1}, Table[N[i], {i, 300}]][[1]]]",
+        "Join[{1}, Table[i, {i, 300}]]",
+        "Join[Table[N[i], {i, 300}], {a, b}]",              /* symbolic: declines */
+        "Join[{{1., 2.}}, Table[{N[i], N[i]}, {i, 300}]]",  /* rank 2 */
+        "Join[{{1., 2.}}, {{3., 4.}}, 2]",                  /* the level form */
+        "Join[Table[N[i], {i, 300}], Table[i, {i, 300}]]",  /* dtype mismatch */
+        /* Partition with an OFFSET -- the sliding window. The default d == k
+         * tiles and is one memcpy; any other d overlaps and is `rows` strided
+         * copies. Only complete rows, matching the List path; the padded 4-arg
+         * form is declined. */
+        "Partition[Table[N[i], {i, 300}], 5, 3]",
+        "Partition[Table[N[i], {i, 300}], 5]",
+        "Partition[Table[N[i], {i, 300}], 7, 4]",
+        "Partition[Table[N[i], {i, 300}], 5, 7]",       /* d > k: rows do not overlap */
+        "Partition[Table[N[i], {i, 300}], 300, 1]",     /* exactly one row */
+        "Partition[Table[N[i], {i, 300}], 301, 1]",     /* shorter than k: {} */
+        "Partition[Table[N[i], {i, 300}], 5, 3, 1]",    /* padded: declines */
+        "Partition[Table[i, {i, 300}], 5, 3]",
+        "Head[Partition[Table[i, {i, 300}], 5, 3][[1, 1]]]",
+        "Dimensions[Partition[Table[N[i], {i, 300}], 12, 1]]",
+        "Total[Partition[Table[N[i], {i, 300}], 12, 1], 2]",
+        "Partition[Table[N[i j], {i, 60}, {j, 5}], 7, 3]",   /* rank 2: declines */
+        /* A gather whose SOURCE is below the packing threshold and whose INDEX
+         * is above it. Lifting must not change the answer, an out-of-range
+         * diagnostic included. */
+        "Table[N[i], {i, 65}][[Table[Mod[7 i, 65] + 1, {i, 300}]]]",
+        "Total[Table[N[i], {i, 65}][[Table[Mod[7 i, 65] + 1, {i, 300}]]]]",
+        "Table[i, {i, 65}][[Table[Mod[7 i, 65] + 1, {i, 300}]]]",
+        "Head[Table[i, {i, 65}][[Table[Mod[7 i, 65] + 1, {i, 300}]]][[1]]]",
+        "Table[N[i], {i, 65}][[Table[100, {300}]]]",        /* out of range */
+        "Table[i/7, {i, 65}][[Table[Mod[7 i, 65] + 1, {i, 300}]]]",  /* Rationals */
+        "{a, b, c}[[Table[Mod[i, 3] + 1, {i, 300}]]]",      /* symbolic source */
+    };
+    for (size_t i = 0; i < sizeof(R2) / sizeof(R2[0]); i++) both_ways(R2[i]);
+
+    /* ---- 7. The compositions the sweep was actually built out of. ---------
+     * A fast path can be right in isolation and wrong where it meets the next
+     * one; these are the four inner loops from experiments 12, 14 and 19. */
+    both_ways("Module[{p = Table[1./300., {300}], f = Table[Mod[7 i, 300] + 1, {i, 1200}]},"
+              " Total[Total[Partition[p[[f]], 4], {2}]]]");                  /* SpMV */
+    both_ways("Module[{v = Table[Mod[3 i, 61], {i, 300}], w = Table[Mod[5 i, 47], {i, 300}]},"
+              " Total[FoldList[Max, 0, MapThread[Max, {v, w}] + Range[300]]]]");  /* NW row */
+    both_ways("Module[{a = Table[Mod[7 i, 97] + 1, {i, 300}]},"
+              " Length[Complement[Union[a], Table[i, {i, 50}]]]]");          /* BFS level */
+    both_ways("Module[{t = Table[N[i] - 150., {i, 300}], c = Table[Mod[i, 40] + 1, {i, 300}]},"
+              " Total[Ramp[t] Table[N[i]/7., {i, 40}][[c]]]]");              /* shade + gather */
+    both_ways("Module[{v = Table[N[i]/300., {i, 300}], p = Table[N[i]/600., {i, 300}], k = 0},"
+              " While[k < 5, v = Join[{0.}, 0.25 Most[Most[v]] + 0.5 Take[v, {2, -2}]"
+              " + 0.25 Rest[Rest[v]], {1.}]; v = MapThread[Max, {v, p}]; k = k + 1];"
+              " Total[v]]");                                                  /* explicit FD sweep */
+    both_ways("Module[{s = Table[Mod[7 i, 4], {i, 300}], c = 2},"
+              " Total[2 - 3 UnitStep[Abs[s - c] - 1]]]");                      /* NW substitution */
+    both_ways("Module[{c = Table[Mod[i^2 + 3 i, 4], {i, 300}], p = Table[4^(6 - j), {j, 6}]},"
+              " Length[Union[Partition[c, 6, 1] . p]]]");                      /* k-mer count */
+}
+
 void test_no_nesting_invariant(void) {
     /* THE INVARIANT: a packed node may never come to rest inside a plain
      * EXPR_FUNCTION tree, where an unaware recursive walker would meet it. That
@@ -1442,6 +1721,7 @@ int main(void) {
     TEST(test_pattern_matching);
     TEST(test_third_sweep_fast_paths);
     TEST(test_fourth_sweep_fast_paths);
+    TEST(test_fifth_sweep_fast_paths);
     TEST(test_no_nesting_invariant);
     TEST(test_aware_heads_stay_packed);
     TEST(test_nesting_limitation_is_correct_but_unpacked);

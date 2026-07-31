@@ -138,6 +138,23 @@ UK_ESC(ArcSech, cacosh(1.0 / z));
 
 /* ---- projections & sign ------------------------------------------------- */
 UK_PROJ(Abs, hypot(ar, ai));
+/* Abs of an EXACT integer is an exact integer, and hypot() is not that: a
+ * projection kernel writes a real dtype, so Abs[{-1, 2}] would be {1., 2.}
+ * where the List path gives {1, 2}. The integer arm below makes the buffer
+ * answer the same thing, and ndarray_map_unary now falls through to the
+ * projection above for every dtype this arm does not cover.
+ *
+ * |INT64_MIN| is not representable, so that abandons the whole array and the
+ * List path answers with the exact bignum -- the same contract as every other
+ * integer kernel here. Sequence alignment is what found this: its substitution
+ * row is Abs[seq - ch] over an int64 buffer, once per row. */
+static bool ndk_Abs_ii(int64_t x, int64_t* o) {
+    if (x == INT64_MIN) return false;
+    *o = (x < 0) ? -x : x;
+    return true;
+}
+static const NDUnaryKernel NDKU_AbsInt =
+    { ndk_Abs_c, NULL, false, true, NULL, ndk_Abs_ii, true };
 UK_PROJ(Re,  ar);
 UK_PROJ(Im,  ai);
 UK_PROJ(Arg, atan2(ai, ar));
@@ -253,6 +270,31 @@ static const NDUnaryKernel NDKU_Ceiling        = { NULL, ndk_Ceiling_r,        t
 static const NDUnaryKernel NDKU_Round          = { NULL, ndk_Round_r,          true, false, ndk_Round_i,       ndk_ident_ii, true };
 static const NDUnaryKernel NDKU_IntegerPart    = { NULL, ndk_IntegerPart_r,    true, false, ndk_IntegerPart_i, ndk_ident_ii, true };
 static const NDUnaryKernel NDKU_FractionalPart = { ndk_FractionalPart_c, ndk_FractionalPart_r, true, false, NULL, NULL, false };
+
+/* Ramp: the positive part, and the reason it belongs HERE rather than with the
+ * narrowing six above is its exactness rule. Floor and UnitStep answer with an
+ * exact Integer whatever they are given; Ramp answers at the ARGUMENT's own
+ * exactness (Ramp[-1.] is 0., Ramp[-3] is the exact 0), which is precisely what
+ * real_closed means. So a Real buffer maps to a Real buffer of the same width
+ * and nothing has to be gated.
+ *
+ * No complex kernel: Ramp[1. + 2. I] is unevaluated in Mathematica, and a NULL
+ * cplx makes ndarray_map_unary decline a complex buffer, which degrades to the
+ * List path and reproduces that exactly.
+ *
+ * NaN returns false, abandoning the whole array, because the scalar builtin
+ * cannot decide the sign of a NaN either and leaves Ramp[x] unevaluated -- the
+ * buffer must not answer where the List would not.
+ *
+ * No int64 arm: `to_int` is for real-in/integer-out, which is a different
+ * function. An int64 buffer therefore materialises, as it does for every head
+ * absent from pack.c's INT64_OK list, and the exact Integer answer is unchanged. */
+static bool ndk_Ramp_r(double x, double* o) {
+    if (isnan(x)) return false;
+    *o = (x < 0.0) ? 0.0 : x;
+    return true;
+}
+static const NDUnaryKernel NDKU_Ramp = { NULL, ndk_Ramp_r, true, false, NULL, NULL, false };
 
 /* ---- binary (scalar-index) ---------------------------------------------- */
 
@@ -534,9 +576,10 @@ void ndkernels_init(void) {
     REG_U(ArcCot); REG_U(ArcSec); REG_U(ArcCsc);
     REG_U(ArcSinh); REG_U(ArcCosh); REG_U(ArcTanh);
     REG_U(ArcCoth); REG_U(ArcSech); REG_U(ArcCsch);
-    REG_U(Abs); REG_U(Re); REG_U(Im); REG_U(Arg);
+    symtab_set_ndarray_unary_kernel("Abs", &NDKU_AbsInt);
+    REG_U(Re); REG_U(Im); REG_U(Arg);
     REG_U(Conjugate); REG_U(Sign);
-    REG_U(UnitStep);
+    REG_U(UnitStep); REG_U(Ramp);
     REG_U(Floor); REG_U(Ceiling); REG_U(Round);
     REG_U(IntegerPart); REG_U(FractionalPart);
 

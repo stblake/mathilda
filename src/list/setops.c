@@ -2,7 +2,115 @@
 #include "setops.h"
 #include "assoc.h"
 #include "ndarray.h"    /* is_ndarray */
+#include "ndarray_internal.h"  /* nd_sort_i64_asc — the packed set-op fast path */
 #include "ndreduce.h"   /* ndred_tally — Tally's packed-buffer fast path */
+
+/* ---------------------------------------------------------------------------
+ *  Packed integer set operations.
+ *
+ *  Union / Intersection / Complement are written generically above: expr_copy
+ *  every element, qsort through a function pointer calling expr_compare, then
+ *  dedup with expr_eq. On a packed integer list that is one Expr allocation and
+ *  two indirect calls per element -- Union of 10^6 integers cost 745 ms, against
+ *  ~60 ms for np.unique on the same data -- and it is the shape that matters,
+ *  because a set operation over integer LABELS is what a graph traversal and a
+ *  k-mer count are made of. Breadth-first search is literally
+ *      Complement[Union[Flatten[adj[[frontier]]]], visited]
+ *  once per level.
+ *
+ *  Restricted to int64 on purpose. Two Reals that compare equal but print
+ *  differently (0. and -0.) would let the buffer path keep a different
+ *  representative than the List path keeps, and a set operation whose ANSWER
+ *  depends on which of two equal elements survived is not a fast path, it is a
+ *  second implementation. Integers have no such pair.
+ * ------------------------------------------------------------------------- */
+
+/* True when `e` is a rank-1 packed list of int64 -- the only shape below. */
+static bool setop_i64(const Expr* e) {
+    return is_packed_list(e) && e->data.ndarray.rank == 1 &&
+           e->data.ndarray.dtype == NDT_INT64;
+}
+
+/* Sorted, deduplicated copy of `a`'s buffer. Caller owns `*out`. */
+static bool setop_sorted_unique(const Expr* a, int64_t** out, size_t* n_out) {
+    size_t n = (size_t)a->data.ndarray.dims[0];
+    int64_t* v = malloc(sizeof(int64_t) * (n ? n : 1));
+    if (!v) return false;
+    memcpy(v, a->data.ndarray.data, sizeof(int64_t) * n);
+    nd_sort_i64_asc(v, n);
+    size_t m = 0;
+    for (size_t i = 0; i < n; i++)
+        if (m == 0 || v[i] != v[m - 1]) v[m++] = v[i];
+    *out = v; *n_out = m;
+    return true;
+}
+
+/* Wrap an owned int64 buffer as a packed list shaped like `src`. Frees `v` and
+ * returns NULL on allocation failure, so callers can degrade. */
+static Expr* setop_emit(const Expr* src, int64_t* v, size_t m) {
+    int64_t dims[1] = { (int64_t)m };
+    if (m == 0) { free(v); return expr_new_function(expr_new_symbol(SYM_List), NULL, 0); }
+    int64_t* buf = malloc(sizeof(int64_t) * m);
+    if (!buf) { free(v); return NULL; }
+    memcpy(buf, v, sizeof(int64_t) * m);
+    free(v);
+    return expr_new_ndarray_like(src, 1, dims, buf, NDT_INT64);
+}
+
+/* Union / Intersection / Complement over `nl` packed int64 lists. `mode` is 0,
+ * 1, 2 respectively. Returns NULL when the shape is outside the fast domain. */
+static Expr* setop_packed(Expr** args, size_t nl, int mode) {
+    for (size_t i = 0; i < nl; i++) if (!setop_i64(args[i])) return NULL;
+    if (nl == 0) return NULL;
+
+    int64_t* acc; size_t accn;
+    if (!setop_sorted_unique(args[0], &acc, &accn)) return NULL;
+
+    for (size_t i = 1; i < nl; i++) {
+        int64_t* b; size_t bn;
+        if (!setop_sorted_unique(args[i], &b, &bn)) { free(acc); return NULL; }
+        size_t p = 0, q = 0, m = 0;
+        if (mode == 0) {                              /* Union: merge */
+            size_t cap = accn + bn;
+            int64_t* merged = malloc(sizeof(int64_t) * (cap ? cap : 1));
+            if (!merged) { free(acc); free(b); return NULL; }
+            while (p < accn || q < bn) {
+                int64_t v;
+                if (q >= bn)                 v = acc[p++];
+                else if (p >= accn)          v = b[q++];
+                else if (acc[p] < b[q])      v = acc[p++];
+                else if (b[q] < acc[p])      v = b[q++];
+                else                       { v = acc[p++]; q++; }
+                if (m == 0 || v != merged[m - 1]) merged[m++] = v;
+            }
+            free(acc); free(b); acc = merged; accn = m;
+        } else if (mode == 1) {                       /* Intersection */
+            while (p < accn && q < bn) {
+                if (acc[p] < b[q]) p++;
+                else if (b[q] < acc[p]) q++;
+                else { acc[m++] = acc[p++]; q++; }
+            }
+            free(b); accn = m;
+        } else {                                      /* Complement: acc \ b */
+            while (p < accn) {
+                while (q < bn && b[q] < acc[p]) q++;
+                if (q < bn && b[q] == acc[p]) p++;
+                else acc[m++] = acc[p++];
+            }
+            free(b); accn = m;
+        }
+    }
+    return setop_emit(args[0], acc, accn);
+}
+
+/* True when any of args[0..n) is an ndarray -- the guard every generic set
+ * operation needs before it runs, because the code below tests
+ * `type != EXPR_FUNCTION` and an NDArray is not one, so it would answer with
+ * the array itself or with {}. */
+static bool setop_any_nd(Expr** args, size_t n) {
+    for (size_t i = 0; i < n; i++) if (is_ndarray(args[i])) return true;
+    return false;
+}
 
 typedef struct HashNode {
     Expr* key;
@@ -82,7 +190,18 @@ Expr* builtin_union(Expr* res) {
     }
     
     if (last_arg == 0) return NULL;
-    
+
+    /* Packed operands: take the buffer merge, or degrade. Never fall through --
+     * the test just below is `type != EXPR_FUNCTION`, and an NDArray is not one,
+     * so Union[packedList] would answer with the array itself unchanged. */
+    if (setop_any_nd(res->data.function.args, last_arg)) {
+        if (!same_test) {
+            Expr* fast = setop_packed(res->data.function.args, last_arg, 0);
+            if (fast) return fast;
+        }
+        return ndarray_delist_and_reeval(res);
+    }
+
     // Check if first arg is a function
     Expr* first_list = res->data.function.args[0];
     if (first_list->type != EXPR_FUNCTION) return expr_copy(first_list);
@@ -200,6 +319,14 @@ Expr* builtin_intersection(Expr* res) {
     }
 
     if (last_arg == 0) return NULL;   /* only an option, no list operands */
+
+    if (setop_any_nd(res->data.function.args, last_arg)) {
+        if (!same_test) {
+            Expr* fast = setop_packed(res->data.function.args, last_arg, 1);
+            if (fast) return fast;
+        }
+        return ndarray_delist_and_reeval(res);
+    }
 
     Expr* first = res->data.function.args[0];
     if (first->type != EXPR_FUNCTION) return expr_copy(first);
@@ -332,6 +459,14 @@ Expr* builtin_complement(Expr* res) {
         same_test = NULL;
 
     if (last_arg == 0) return NULL;   /* only an option, no list operands */
+
+    if (setop_any_nd(res->data.function.args, last_arg)) {
+        if (!same_test) {
+            Expr* fast = setop_packed(res->data.function.args, last_arg, 2);
+            if (fast) return fast;
+        }
+        return ndarray_delist_and_reeval(res);
+    }
 
     Expr* first = res->data.function.args[0];
     if (first->type != EXPR_FUNCTION) return expr_copy(first);

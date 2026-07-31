@@ -25,6 +25,7 @@ void piecewise_init(void) {
     symtab_add_builtin("IntegerPart", builtin_integerpart);
     symtab_add_builtin("FractionalPart", builtin_fractionalpart);
     symtab_add_builtin("UnitStep", builtin_unitstep);
+    symtab_add_builtin("Ramp", builtin_ramp);
 
     const char* funcs[] = {"Floor", "Ceiling", "Round", "IntegerPart", "FractionalPart", NULL};
     for (int i = 0; funcs[i] != NULL; i++) {
@@ -35,6 +36,11 @@ void piecewise_init(void) {
      * Orderless because UnitStep[x1,...,xn] is symmetric in its arguments. */
     symtab_get_def("UnitStep")->attributes |=
         (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE | ATTR_ORDERLESS);
+
+    /* Ramp: Listable, NumericFunction, Protected -- Mathematica's attribute
+     * set exactly. NOT Orderless: Ramp is unary. */
+    symtab_get_def("Ramp")->attributes |=
+        (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
 }
 
 enum { OP_FLOOR, OP_CEILING, OP_ROUND, OP_INTPART, OP_FRACPART };
@@ -550,6 +556,39 @@ Expr* builtin_unitstep(Expr* res) {
     Expr* out = expr_new_function(expr_new_symbol(SYM_UnitStep), new_args, keep);
     free(new_args);
     return out;
+}
+
+/*
+ * Ramp[x] -- the positive part, max(x, 0). This is the standard spelling of a
+ * rectified linear unit, and until it existed the only way to write one here
+ * was `x UnitStep[x]`: two passes over the data, and a mixed Real/Integer
+ * product.
+ *
+ * The zero returned for a negative argument carries the ARGUMENT's exactness,
+ * which is what makes a uniform buffer answer legal: Ramp[-1.] is 0. and
+ * Ramp[-3] is the exact 0, so a Real vector maps to a Real vector and an
+ * integer vector to an integer one. (Clip does not have this property -- an
+ * exact bound beside Real data answers with mixed heads -- which is why Clip
+ * needs a gate on its bounds and Ramp needs none.)
+ *
+ * A genuine complex argument, or one whose sign cannot be decided, is left
+ * unevaluated; ustep_class already draws both of those lines.
+ */
+Expr* builtin_ramp(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1) return NULL;
+
+    Expr* x = res->data.function.args[0];
+    int cls = ustep_class(x);
+    if (cls == USTEP_UNKNOWN) return NULL;
+    if (cls == USTEP_NONNEG) return expr_copy(x);
+
+    /* Negative: zero, at the argument's own precision. */
+    if (x->type == EXPR_REAL) return expr_new_real(0.0);
+#ifdef USE_MPFR
+    if (x->type == EXPR_MPFR) return expr_new_mpfr_bits(mpfr_get_prec(x->data.mpfr));
+#endif
+    return expr_new_integer(0);
 }
 
 Expr* builtin_floor(Expr* res) { return do_piecewise(res, OP_FLOOR, "Floor", true); }

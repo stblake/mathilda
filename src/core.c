@@ -1704,10 +1704,21 @@ Expr* builtin_clip(Expr* res) {
         goto cleanup;
     }
 
+    /* An infinite BOUND means "no limit on that side". clip_to_double_value
+     * cannot produce one -- it rejects a non-finite numericalization on purpose,
+     * because an infinite VALUE of x is a different question and is answered
+     * above -- so the two are classified separately here. Without this,
+     * Clip[x, {0., Infinity}] returned unevaluated, which is how the positive
+     * part is spelled and so was the only working ReLU in the language. */
     double dx, dmin, dmax;
-    if (!clip_to_double_value(x, &dx)
-        || !clip_to_double_value(min_expr, &dmin)
-        || !clip_to_double_value(max_expr, &dmax)) {
+    int min_inf = clip_classify_infinity(min_expr);
+    int max_inf = clip_classify_infinity(max_expr);
+    bool ok_min, ok_max;
+    if (min_inf != 0) { dmin = (min_inf > 0) ? HUGE_VAL : -HUGE_VAL; ok_min = true; }
+    else              { ok_min = clip_to_double_value(min_expr, &dmin); }
+    if (max_inf != 0) { dmax = (max_inf > 0) ? HUGE_VAL : -HUGE_VAL; ok_max = true; }
+    else              { ok_max = clip_to_double_value(max_expr, &dmax); }
+    if (!clip_to_double_value(x, &dx) || !ok_min || !ok_max) {
         /* Can't decide -- leave unevaluated. */
         goto cleanup;
     }

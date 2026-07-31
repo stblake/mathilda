@@ -119,7 +119,19 @@ static int get_expr_prec(Expr* e) {
  * characters that the lexer decodes (`\n`, `\t`, `\r`) so the output is a
  * faithful, re-parseable rendering. Quote/backslash are printed verbatim,
  * matching the historical printer behaviour. */
+/* Print uses OutputForm, in which a String is rendered as its CHARACTERS and
+ * not as a quoted literal -- and recursively, so Print[{1, "a"}] is `{1, a}`.
+ * Every other consumer of the printer (the REPL's Out[], ToString, FullForm,
+ * InputForm, the LaTeX writer) keeps the quoted form, so this is a flag around
+ * Print's own traversal rather than a change to the literal printer's contract.
+ *
+ * Without it every Print of a string in a script differed from Mathematica's,
+ * which makes a side-by-side run of the same .m file in the two systems
+ * needlessly hard to compare -- see docs/experiments/. */
+static bool g_print_output_form = false;
+
 static void print_string_literal(const char* s) {
+    if (g_print_output_form) { fputs(s, stdout); return; }
     putchar('"');
     for (const char* p = s; *p; p++) {
         switch (*p) {
@@ -900,9 +912,12 @@ char* expr_to_string_fullform(Expr* e) {
 
 Expr* builtin_print(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    bool saved = g_print_output_form;
+    g_print_output_form = true;
     for (size_t i = 0; i < res->data.function.arg_count; i++) {
         print_standard(res->data.function.args[i], 0);
     }
+    g_print_output_form = saved;
     printf("\n");
     return expr_new_symbol(SYM_Null);
 }

@@ -476,6 +476,11 @@ static void pack_mark_aware_heads(void) {
          * belongs here is the same: ndred_tally hashes the machine words, where
          * materialising boxed one Expr per element just to hash it. */
         "Tally",
+        /* The set operations (src/list/setops.c), for the same reason as Tally:
+         * a sorted merge over int64 words, where the generic path allocates one
+         * Expr per element and sorts through expr_compare. Each guards itself
+         * with setop_any_nd and degrades for every shape outside int64. */
+        "Union", "Intersection", "Complement",
         /* Clip came BACK on 2026-07-31. It was pulled because an exact bound
          * makes Clip[reals, {1, 2}] answer with exact Integers where it clipped,
          * which no uniform buffer holds -- but clearing the whole head to fix the
@@ -684,6 +689,17 @@ static void pack_mark_aware_heads(void) {
          * Sort[Reverse[intList]] on the buffer end to end, which was the last
          * measured place where packing was slower than a plain List. */
         "Reverse", "Flatten", "Take", "Drop",
+        /* The leading-axis slices, added 2026-07-31 with the fourth sweep's
+         * ndstruct_head_tail. A rank-1 First/Last is one element through
+         * ndarray_element_to_expr, which yields an exact Integer from an int64
+         * buffer; rank >= 2, and Most/Rest at any rank, are whole-row memcpys.
+         * There is no arithmetic to be exact about, and leaving them off cost
+         * the sequence-alignment kernel its whole inner row: Most[prev] and
+         * Rest[prev] on a 2000-element int64 buffer materialised twice per row,
+         * 2000 rows, and then poisoned the MapThread that consumed them. */
+        "First", "Last", "Most", "Rest",
+        /* Abs, with the integer arm in ndkernels.c (NDKU_AbsInt). */
+        "Abs",
         /* Also pure moves, added with the native buffer paths in ndstruct.c:
          * Rotate/Join/Partition/Riffle/Pad move whole elements by memcpy and
          * refuse any fill or separator that is not an exact Integer at int64
@@ -697,6 +713,32 @@ static void pack_mark_aware_heads(void) {
          * applies a function, so exactness is entirely the function's business. */
         "Nest", "NestList", "NestWhile", "NestWhileList",
         "FixedPoint", "FixedPointList",
+        /* The scan and the elementwise thread, added 2026-07-31 with the integer
+         * arms in ndreduce.c and funcprog.c. Each was verified individually:
+         *
+         *   Fold / FoldList  ndred_scan's want_exact branch runs the whole scan
+         *                    in int64 and requires an exact SEED, so a Real seed
+         *                    over an integer buffer declines rather than
+         *                    silently returning Reals where Max picked the seed.
+         *                    Plus and Times go through ci_add_i64 / ci_mul_i64
+         *                    and abandon the array on overflow. The compiled-VM
+         *                    path beside it already refuses an int64 buffer
+         *                    outright (elems_inexact is false), so there is no
+         *                    second route that could compute in double.
+         *   MapThread       nd_mapthread2's int64 arm is Min/Max by comparison
+         *                    (exact by construction -- the answer is one of the
+         *                    inputs) and Plus/Times through the same checked
+         *                    helpers.
+         *
+         * Needleman-Wunsch is the workload that found these: its inner row is
+         * MapThread[Max, {diag, up}] followed by FoldList[Max, ...], both int64,
+         * and materialising for each cost 853 ms and 302 ms per 10^6 against
+         * 12 ms and 1.0 ms for the identical Real pair. */
+        "Fold", "FoldList", "MapThread",
+        /* The set operations: int64 IS their fast domain (setop_packed handles
+         * nothing else), and each element is rebuilt with expr_new_integer, so
+         * no head changes. */
+        "Union", "Intersection", "Complement",
         /* The narrowing kernels. Exact on an int64 buffer because that arm is
          * written in int64 throughout: Floor/Ceiling/Round/IntegerPart are the
          * identity on an integer, Sign and UnitStep are trivial comparisons, and

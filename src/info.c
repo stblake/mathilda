@@ -2416,6 +2416,16 @@ void info_init(void) {
         "arguments are resolved by numerical certification; non-real or\n"
         "unresolved arguments are left unevaluated. UnitStep is Listable and\n"
         "Orderless.");
+    symtab_set_docstring("Ramp",
+        "Ramp[x]\n"
+        "\tgives x for x >= 0 and 0 for x < 0 -- the positive part of x, and\n"
+        "\tthe standard spelling of a rectified linear unit.\n"
+        "\n"
+        "The zero returned for a negative argument carries the argument's own\n"
+        "exactness: Ramp[-1.] is 0. and Ramp[-3] is the exact 0, so a Real\n"
+        "list maps to a Real list and an integer list to an integer one.\n"
+        "Non-real arguments, and symbolic ones whose sign cannot be decided,\n"
+        "are left unevaluated. Ramp is Listable and a NumericFunction.");
     symtab_set_docstring("Chop",
         "Chop[expr]\n"
         "\treplaces approximate real numbers in expr that are close to zero\n"

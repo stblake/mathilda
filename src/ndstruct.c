@@ -11,6 +11,7 @@
 #include "sym_names.h"
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>   /* HUGE_VAL -- the infinite Clip bound and Ramp's upper limit */
 
 /* Product of dims[lo..hi). */
 static size_t nd_prod(const int64_t* dims, int lo, int hi) {
@@ -19,10 +20,31 @@ static size_t nd_prod(const int64_t* dims, int lo, int hi) {
     return p;
 }
 
-/* An Integer/Real Expr as a double (Clip bounds); false for anything else. */
-static bool nd_real_value(const Expr* e, double* out) {
+/* An Integer/Real Expr as a double (Clip bounds); false for anything else.
+ *
+ * Infinity and -Infinity are accepted and map to +/-HUGE_VAL. A one-sided Clip
+ * is how the positive part is spelled -- Clip[x, {0., Infinity}] -- and without
+ * this the bound simply failed to parse, so `Clip` returned UNEVALUATED on every
+ * ReLU in the system. `*infinite` reports which bounds were infinite, because an
+ * infinite bound is never ATTAINED and so cannot put its own head into the
+ * answer: it is exempt from the exactness gate below. */
+static bool nd_real_value(const Expr* e, double* out, bool* infinite) {
+    if (infinite) *infinite = false;
     if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer; return true; }
     if (e->type == EXPR_REAL)    { *out = e->data.real; return true; }
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity) {
+        *out = HUGE_VAL; if (infinite) *infinite = true; return true;
+    }
+    /* -Infinity is Times[-1, Infinity] after canonicalisation. */
+    if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Times &&
+        e->data.function.args[0]->type == EXPR_INTEGER &&
+        e->data.function.args[0]->data.integer == -1 &&
+        e->data.function.args[1]->type == EXPR_SYMBOL &&
+        e->data.function.args[1]->data.symbol.name == SYM_Infinity) {
+        *out = -HUGE_VAL; if (infinite) *infinite = true; return true;
+    }
     return false;
 }
 
@@ -277,57 +299,135 @@ static void nd_fill_run(void* buf, NDType dt, size_t at, size_t count,
 Expr* ndstruct_join(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 1) return NULL;
-    Expr* a0 = res->data.function.args[0];
-    if (!is_ndarray(a0)) return NULL;
+
+    /* PACK THE SMALL OPERANDS UP. Join's cost is set by its LARGEST operand,
+     * but the packing decision was made about each one in isolation -- so a
+     * two-element boundary list beside a 100000-element buffer used to send the
+     * whole call down the List path and materialise the buffer. That is exactly
+     * how an explicit finite-difference sweep is written:
+     *     v = Join[{lo}, interior, {hi}]
+     * once per time step, and it was the dominant cost of a 25000-step American
+     * option pricer. Same rule as Dot, Plus/Times, Outer and the Listable gate:
+     * pack the small operand up, never materialise the large one down.
+     *
+     * The lifted list must SNIFF to the same dtype -- never coerce. Join[{1},
+     * realBuffer] is a mixed exact/inexact answer in Mathematica, and forcing
+     * the exact 1 into a float64 slot would silently make it 1.. An exact list
+     * therefore sniffs to int64, fails the dtype test, and the whole call
+     * declines to the List path, which gives the mixed answer. */
+    Expr** args = malloc(sizeof(Expr*) * argc);
+    bool* owned = calloc(argc, sizeof(bool));
+    if (!args || !owned) { free(args); free(owned); return NULL; }
+    for (size_t i = 0; i < argc; i++) args[i] = res->data.function.args[i];
+
+    Expr* a0 = NULL;
+    for (size_t i = 0; i < argc && !a0; i++)
+        if (is_ndarray(args[i])) a0 = args[i];
+    if (!a0) { free(args); free(owned); return NULL; }
+
     int rank = a0->data.ndarray.rank;
     NDType dt = a0->data.ndarray.dtype;
     size_t esz = ndt_elem_size(dt);
     size_t rowelts = nd_prod(a0->data.ndarray.dims, 1, rank);
 
+    if (pack_enabled()) {
+        for (size_t i = 0; i < argc; i++) {
+            if (is_ndarray(args[i])) continue;
+            Expr* p = pack_force(expr_copy(args[i]), false, dt);
+            if (is_ndarray(p) && p->data.ndarray.dtype == dt) {
+                args[i] = p; owned[i] = true;
+            } else {
+                expr_free(p);
+                break;                      /* declines below on the type test */
+            }
+        }
+    }
+
     int64_t lead = 0;
-    for (size_t i = 0; i < argc; i++) {
-        Expr* a = res->data.function.args[i];
+    bool ok = true;
+    for (size_t i = 0; i < argc && ok; i++) {
+        Expr* a = args[i];
         if (!is_ndarray(a) || a->data.ndarray.rank != rank
-            || a->data.ndarray.dtype != dt) return NULL;
+            || a->data.ndarray.dtype != dt) { ok = false; break; }
         for (int d = 1; d < rank; d++)
-            if (a->data.ndarray.dims[d] != a0->data.ndarray.dims[d]) return NULL;
-        lead += a->data.ndarray.dims[0];
+            if (a->data.ndarray.dims[d] != a0->data.ndarray.dims[d]) { ok = false; break; }
+        if (ok) lead += a->data.ndarray.dims[0];
+    }
+
+    char* out = NULL;
+    if (ok) {
+        size_t total_bytes = (size_t)lead * rowelts * esz;
+        out = malloc(total_bytes ? total_bytes : 1);  /* malloc(0) is impl-defined */
+        if (!out) ok = false;
+    }
+    if (!ok) {
+        for (size_t i = 0; i < argc; i++) if (owned[i]) expr_free(args[i]);
+        free(args); free(owned);
+        return NULL;
+    }
+
+    size_t off = 0;
+    for (size_t i = 0; i < argc; i++) {
+        Expr* a = args[i];
+        size_t bytes = (size_t)a->data.ndarray.dims[0] * rowelts * esz;
+        memcpy(out + off, a->data.ndarray.data, bytes);
+        off += bytes;
     }
     int64_t odims[NDARRAY_MAX_RANK];
     for (int d = 0; d < rank; d++) odims[d] = a0->data.ndarray.dims[d];
     odims[0] = lead;
 
-    size_t total_bytes = (size_t)lead * rowelts * esz;
-    char* out = malloc(total_bytes ? total_bytes : 1);   /* malloc(0) is impl-defined */
-    if (!out) return NULL;
-    size_t off = 0;
-    for (size_t i = 0; i < argc; i++) {
-        Expr* a = res->data.function.args[i];
-        size_t bytes = (size_t)a->data.ndarray.dims[0] * rowelts * esz;
-        memcpy(out + off, a->data.ndarray.data, bytes);
-        off += bytes;
-    }
+    for (size_t i = 0; i < argc; i++) if (owned[i]) expr_free(args[i]);
+    free(args); free(owned);
     return expr_new_ndarray_like(a0, rank, odims, out, dt);
 }
 
 /* Partition[a, k] on a rank-1 buffer: rank 2, dims {n/k, k}, one memcpy of the
  * whole usable prefix. The offset form Partition[a, k, d] and rank >= 2 decline. */
+/* Partition[a, k] and Partition[a, k, d] on a rank-1 buffer: rank 2, dims
+ * {rows, k}. With d == k (the default) the rows tile the input and the whole
+ * thing is one memcpy; with any other d they OVERLAP and it is `rows` strided
+ * copies of k elements each.
+ *
+ * The offset form is the sliding window -- rolling statistics, n-grams, time
+ * series embedding, the setup for a correlation -- and it had no buffer path at
+ * all, so `Partition[seq, 12, 1]` over 500000 integers materialised 6 million
+ * elements and cost 439 ms. That single call was the whole of a k-mer counting
+ * kernel; the Dot that consumed it costs 5.3 ms and the Union after that 11.7.
+ *
+ * Only complete rows are produced, matching the 2- and 3-argument List path.
+ * The padded forms (Partition[a, k, d, spec] and a cyclic overhang) take four
+ * or more arguments and are declined here. */
 Expr* ndstruct_partition(Expr* res) {
-    if (res->data.function.arg_count != 2) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 2 && argc != 3) return NULL;
     Expr* a = res->data.function.args[0];
     Expr* ks = res->data.function.args[1];
     if (!is_ndarray(a) || a->data.ndarray.rank != 1) return NULL;
     if (ks->type != EXPR_INTEGER || ks->data.integer <= 0) return NULL;
     int64_t k = ks->data.integer;
+    int64_t d = k;
+    if (argc == 3) {
+        Expr* ds = res->data.function.args[2];
+        if (ds->type != EXPR_INTEGER || ds->data.integer <= 0) return NULL;
+        d = ds->data.integer;
+    }
     int64_t n = a->data.ndarray.dims[0];
-    int64_t rows = n / k;                      /* Partition drops the remainder */
-    if (rows <= 0) return NULL;                /* {} -- let the List path answer */
+    if (n < k) return NULL;                    /* {} -- let the List path answer */
+    int64_t rows = (n - k) / d + 1;            /* complete rows only */
+    if (rows <= 0) return NULL;
     NDType dt = a->data.ndarray.dtype;
     size_t esz = ndt_elem_size(dt);
-    size_t bytes = (size_t)rows * (size_t)k * esz;
-    char* out = malloc(bytes);
+    size_t rowbytes = (size_t)k * esz;
+    char* out = malloc((size_t)rows * rowbytes);
     if (!out) return NULL;
-    memcpy(out, a->data.ndarray.data, bytes);
+    const char* in = (const char*)a->data.ndarray.data;
+    if (d == k) {
+        memcpy(out, in, (size_t)rows * rowbytes);      /* contiguous tiling */
+    } else {
+        for (int64_t r = 0; r < rows; r++)
+            memcpy(out + (size_t)r * rowbytes, in + (size_t)(r * d) * esz, rowbytes);
+    }
     int64_t odims[2] = { rows, k };
     return expr_new_ndarray_like(a, 2, odims, out, dt);
 }
@@ -730,15 +830,20 @@ Expr* ndstruct_clip(Expr* res) {
     bool bounds_real = false;
     if (argc == 2) {
         Expr* iv = res->data.function.args[1];
+        bool lo_inf = false, hi_inf = false;
         if (iv->type != EXPR_FUNCTION ||
             iv->data.function.head->type != EXPR_SYMBOL ||
             iv->data.function.head->data.symbol.name != SYM_List ||
             iv->data.function.arg_count != 2 ||
-            !nd_real_value(iv->data.function.args[0], &lo) ||
-            !nd_real_value(iv->data.function.args[1], &hi))
+            !nd_real_value(iv->data.function.args[0], &lo, &lo_inf) ||
+            !nd_real_value(iv->data.function.args[1], &hi, &hi_inf))
             return ndarray_delist_and_reeval(res);
-        bounds_real = iv->data.function.args[0]->type == EXPR_REAL &&
-                      iv->data.function.args[1]->type == EXPR_REAL;
+        /* Per side: a Real bound is safe because the clipped positions get a
+         * Real; an INFINITE bound is safe because no position is ever clipped to
+         * it. Anything else (an exact Integer or Rational bound) can put its own
+         * exact head into a Real answer, and falls to the in-range scan below. */
+        bounds_real = (iv->data.function.args[0]->type == EXPR_REAL || lo_inf) &&
+                      (iv->data.function.args[1]->type == EXPR_REAL || hi_inf);
     }
 
     size_t sz = ndarray_size(a);

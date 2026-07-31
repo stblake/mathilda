@@ -13,6 +13,7 @@
 #include "ndreduce.h"   /* ndred_scan — Fold/FoldList over an associative operator */
 #include "pack.h"       /* pack_offer — Select narrows one numeric list to another */
 #include "part.h"
+#include "checked_int.h"  /* ci_add_i64 / ci_mul_i64 — the int64 MapThread arm */
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -3109,7 +3110,8 @@ static Expr* mapthread_rec(Expr* f, Expr** exprs, size_t k, int64_t level) {
 static Expr* nd_mapthread2(const Expr* f, const Expr* a) {
     if (!f || f->type != EXPR_SYMBOL) return NULL;
     if (a->type != EXPR_NDARRAY || a->data.ndarray.rank != 2 ||
-        a->data.ndarray.dtype != NDT_FLOAT64) return NULL;
+        (a->data.ndarray.dtype != NDT_FLOAT64 &&
+         a->data.ndarray.dtype != NDT_INT64)) return NULL;
 
     const char* op = f->data.symbol.name;
     enum { M_MIN, M_MAX, M_PLUS, M_TIMES } k;
@@ -3121,6 +3123,41 @@ static Expr* nd_mapthread2(const Expr* f, const Expr* a) {
 
     int64_t rows = a->data.ndarray.dims[0], n = a->data.ndarray.dims[1];
     if (rows < 1) return NULL;
+
+    /* int64 arm. Min and Max hand back one of their arguments, so they are
+     * exact on an integer buffer by construction; Plus and Times compute, so
+     * they go through the checked helpers and ABANDON the whole result on the
+     * first overflow -- the List path then re-runs it and GMP answers exactly,
+     * rather than a wrapped sum reaching the user.
+     *
+     * Without this arm every integer MapThread materialised: the two rows of a
+     * Needleman-Wunsch DP -- MapThread[Max, {diag, up}] over 2000 int64 columns,
+     * once per row -- cost 853 ms per 10^6 columns where the identical Real
+     * pair cost 12 ms. */
+    if (a->data.ndarray.dtype == NDT_INT64) {
+        const int64_t* A = (const int64_t*)a->data.ndarray.data;
+        int64_t* out = malloc(sizeof(int64_t) * (size_t)(n > 0 ? n : 1));
+        if (!out) return NULL;
+        for (int64_t j = 0; j < n; j++) out[j] = A[j];
+        for (int64_t i = 1; i < rows; i++) {
+            const int64_t* row = A + (size_t)i * (size_t)n;
+            switch (k) {
+            case M_MIN: for (int64_t j = 0; j < n; j++) if (row[j] < out[j]) out[j] = row[j]; break;
+            case M_MAX: for (int64_t j = 0; j < n; j++) if (row[j] > out[j]) out[j] = row[j]; break;
+            case M_PLUS:
+                for (int64_t j = 0; j < n; j++)
+                    if (ci_add_i64(out[j], row[j], &out[j])) { free(out); return NULL; }
+                break;
+            case M_TIMES:
+                for (int64_t j = 0; j < n; j++)
+                    if (ci_mul_i64(out[j], row[j], &out[j])) { free(out); return NULL; }
+                break;
+            }
+        }
+        int64_t idims[1] = { n };
+        return expr_new_ndarray_like(a, 1, idims, out, NDT_INT64);
+    }
+
     const double* A = (const double*)a->data.ndarray.data;
     double* out = malloc(sizeof(double) * (size_t)(n > 0 ? n : 1));
     if (!out) return NULL;
