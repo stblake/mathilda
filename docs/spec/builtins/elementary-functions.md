@@ -620,6 +620,45 @@ In[6]:= D[UnitStep[x, y, z], z]
 Out[6]= UnitStep[x, y] Piecewise[{{Indeterminate, z == 0}}, 0]
 ```
 
+## Ramp
+
+`Ramp[x]` is the positive part of `x`: `x` for $x \ge 0$ and `0` for $x < 0$.
+It is the standard spelling of a rectified linear unit, and the vectorised form
+`Ramp[list]` is how array code writes one.
+
+**Features**:
+- `Listable`, `NumericFunction`, `Protected`.
+- The zero returned for a negative argument carries the **argument's own
+  exactness**: `Ramp[-1.]` is `0.` and `Ramp[-3]` is the exact `0`. A `Real`
+  list therefore maps to a `Real` list and an integer list to an integer one,
+  with no mixed-head result -- unlike `Clip`, which returns the *bound* at a
+  clipped position and so can put an exact `Integer` into a machine-real answer.
+- **Exact symbolic real arguments** are resolved by the same numerical
+  certification `UnitStep` uses, so `Ramp[Sqrt[2] - 1]` gives `-1 + Sqrt[2]`
+  and `Ramp[1 - Sqrt[2]]` gives `0`.
+- Non-real arguments (a `Complex` with non-zero imaginary part) and symbolic
+  arguments whose sign cannot be certified are left unevaluated.
+- A packed list of `Real`s is handled by a threaded buffer kernel (see
+  [`packed-arrays.md`](packed-arrays.md)); an integer buffer materialises, which
+  changes speed and not the answer.
+
+```mathematica
+In[1]:= Ramp[{-1., 0., 2.5}]
+Out[1]= {0., 0., 2.5}
+
+In[2]:= Ramp[{-3, 0, 4}]
+Out[2]= {0, 0, 4}
+
+In[3]:= Ramp[{-1/2, 3/4}]
+Out[3]= {0, 3/4}
+
+In[4]:= Ramp[1 - Sqrt[2]]
+Out[4]= 0
+
+In[5]:= Ramp[1. + 2. I]
+Out[5]= Ramp[1. + 2. I]
+```
+
 ## Chop
 
 `Chop[expr]` replaces approximate real numbers in `expr` whose absolute
@@ -694,6 +733,14 @@ need not be numeric.
   the numeric approximation.
 - `Infinity` and `-Infinity` are handled directly: `Clip[Infinity]`
   yields `vmax` (or the default `1`), `Clip[-Infinity]` yields `vmin`.
+- An **infinite bound** means "no limit on that side":
+  `Clip[x, {0., Infinity}]` is the positive part and `Clip[x, {-Infinity, 1.}]`
+  caps from above only. An infinite bound is never attained, so it cannot put
+  its own head into the answer and the result keeps the input's exactness --
+  `Clip[{-2., 0.5, 3.}, {0., Infinity}]` is `{0., 0.5, 3.}`, all `Real`. A
+  *finite exact* bound beside `Real` data still returns that exact bound where
+  it clips (`Clip[{-2., 0.5}, {0, Infinity}]` gives `{0, 0.5}`), which is why
+  the two are gated separately on the packed path.
 - Complex (non-real) input emits a one-shot `Clip::ncompl` warning and
   the call stays unevaluated.  Use `Re[z]`, `Im[z]` to clip the parts
   separately.

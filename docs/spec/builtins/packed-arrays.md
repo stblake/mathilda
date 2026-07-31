@@ -194,8 +194,9 @@ Packed in, packed out: `Plus`, `Times`, `Power`, `Dot`, the elementary and
 special functions (`Sin`, `Exp`, `Gamma`, …), `Total`, `Mean`, `Min`, `Max`,
 `Median`, `Variance`, `Accumulate`, `Sort`, `Reverse`, `Transpose`, `Flatten`,
 `Take`, `Drop`, `Partition`, `RotateLeft`/`RotateRight`, `Riffle`, `Join`,
-`Differences`, `Clip`, `First`, `Last`, `Most`, `Rest`, `Part`, `Map`,
-`Select`, `TakeWhile`, `FoldList`, `Outer`, `MapThread`.
+`Differences`, `Clip`, `Ramp`, `First`, `Last`, `Most`, `Rest`, `Part`, `Map`,
+`Select`, `TakeWhile`, `FoldList`, `Outer`, `MapThread`, `Union`,
+`Intersection`, `Complement`.
 
 `ListConvolve` and `ListCorrelate` read a packed kernel, a packed list, or both,
 and produce a packed real result; exact data, a symbolic kernel and a custom
@@ -232,11 +233,34 @@ element has — an exact `Integer` from an integer buffer — and of a higher-ra
 array return the sub-array with the leading axis dropped. `Rest` and `Most` of a
 single-row array are `{}` and take the ordinary path.
 
-`Outer` and `MapThread` cover the machine-float cases and hand the rest back:
+`Outer` and `MapThread` cover the machine cases and hand the rest back:
 `Outer[f, a, b]` uses the buffer for `Plus`/`Subtract`/`Times`/`Min`/`Max` on
-real data, and `MapThread[f, arr]` for `Plus`/`Times`/`Min`/`Max`. Any other `f`,
-an integer buffer, or three or more arrays takes the ordinary path and gives the
-same answer.
+real data, and `MapThread[f, arr]` for `Plus`/`Times`/`Min`/`Max` on real **or
+integer** data. Any other `f`, or three or more arrays for `Outer`, takes the
+ordinary path and gives the same answer. An integer `MapThread` of `Plus` or
+`Times` that overflows `int64` abandons the whole array so the ordinary path
+answers exactly, in GMP — never a wrapped sum.
+
+`Part` gathers through a packed index list as well as a plain one:
+`x[[idx]]` where `idx` is an integer packed list — which is what `Flatten`,
+`Range`, `RandomInteger` and any arithmetic on them produce — reads the buffer
+directly. This is the operation every sparse-matrix and graph kernel is built
+out of, and until it read the index buffer it degraded the whole `Part` and
+materialised *both* arrays. Positions must be integers and rank 1; a `Real`
+position, an out-of-range one, a rank-2 index array or an empty list all take
+the ordinary path and give the ordinary answer.
+
+`Union`, `Intersection` and `Complement` merge **integer** buffers directly —
+a sort and a linear merge, where the ordinary path allocates an expression per
+element and sorts through `expr_compare`. Real data takes the ordinary path on
+purpose: `0.` and `-0.` compare equal and print differently, so which of two
+equal elements survives is a question the two paths must not be allowed to
+answer differently. A `SameTest` option, symbolic elements, or a mixture of
+packed and plain operands also take the ordinary path.
+
+`Ramp` keeps a `Real` buffer packed. Its zero carries the *argument's*
+exactness, so unlike `Clip` there is no bound whose head could leak into the
+answer and nothing to gate. An integer buffer materialises.
 
 `Plus` and `Times` also thread a lower-rank operand across the leading axes on
 the buffer, which is what `matrix - rowVector` means:
