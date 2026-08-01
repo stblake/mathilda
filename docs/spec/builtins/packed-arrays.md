@@ -79,10 +79,29 @@ at least **250 elements in total** (the product of its dimensions, so a
 | `ConstantArray` | writes the buffer directly |
 | `RandomReal` | writes the buffer directly |
 | `Table` (machine-real compiled body) | writes the buffer directly |
+| `Subdivide` (a machine-real interval) | writes the buffer directly |
+| `IdentityMatrix` | writes the buffer directly (`int64`) |
+| `DiagonalMatrix` | writes the buffer directly (`int64` or `float64`) |
+| `UnitVector` | writes the buffer directly (`int64`, or `float64` under `WorkingPrecision -> MachinePrecision`) |
 | `Table` (all other branches) | offered after building |
 | `Array`, `RandomInteger` | offered after building |
 | `Sort`, `Select` | offered after building |
 | `NestList`, `FoldList`, `NestWhileList`, `FixedPointList` | offered after building |
+
+A producer writes a buffer only where every element it would otherwise have
+boxed has the **same head**, which is what keeps the representation invisible.
+For a producer that *invents* elements — the zeros in `DiagonalMatrix`, the
+interior points of `Subdivide` — that is a question about the input's exactness,
+and the answer is the ordinary numeric-tower one: **a machine `Real` anywhere
+makes the whole result machine-real**, so `DiagonalMatrix[{1, 2, 3.}]` is
+`{{1., 0., 0.}, {0., 2., 0.}, {0., 0., 3.}}` and `Subdivide[0, 1., 4]` is
+`{0., 0.25, 0.5, 0.75, 1.}`. One dtype, so both pack.
+
+Only *machine* `Real` is contagious, and the exceptions are what the rule is
+for: an MPFR entry keeps the exact zeros (`DiagonalMatrix[{1.\`30, 2}]` has an
+exact `0`), an all-exact input stays exact and packs as `int64`, and a symbolic
+entry keeps the result unpacked while the zeros around it still turn `Real`
+(`DiagonalMatrix[{a, 1.}]` is `{{a, 0.}, {0., 1.}}`).
 
 The direct producers never build the expression nodes at all, which is where most
 of the win is: packing `Range[1., 10^6]` after the fact costs 340 ms + 52 ms,
@@ -192,11 +211,12 @@ everything else produces an ordinary list with the same value.
 
 Packed in, packed out: `Plus`, `Times`, `Power`, `Dot`, the elementary and
 special functions (`Sin`, `Exp`, `Gamma`, …), `Total`, `Mean`, `Min`, `Max`,
-`Median`, `Variance`, `Accumulate`, `Sort`, `Reverse`, `Transpose`, `Flatten`,
+`MinMax`, `Median`, `Variance`, `Accumulate`, `Sort`, `Reverse`, `Transpose`, `Flatten`,
 `Take`, `Drop`, `Partition`, `RotateLeft`/`RotateRight`, `Riffle`, `Join`,
-`Differences`, `Clip`, `Ramp`, `First`, `Last`, `Most`, `Rest`, `Part`, `Map`,
-`Select`, `TakeWhile`, `FoldList`, `Outer`, `MapThread`, `Union`,
-`Intersection`, `Complement`.
+`Differences`, `Clip`, `Ramp`, `First`, `Last`, `Most`, `Rest`, `Part`,
+`Extract`, `Map`, `Select`, `TakeWhile`, `FoldList`, `Outer`, `MapThread`,
+`Union`, `Intersection`, `Complement`, `Rescale`, `MatrixPower`,
+`PseudoInverse`, `LeastSquares`.
 
 `ListConvolve` and `ListCorrelate` read a packed kernel, a packed list, or both,
 and produce a packed real result; exact data, a symbolic kernel and a custom

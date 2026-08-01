@@ -1,5 +1,144 @@
 # Lessons learned
 
+## "Aware and slow" is a category the audit cannot see (2026-08-01)
+
+`tools/check_packed_aware.py` answers one question: *does every head with an
+NDArray fast path opt in?* It reported clean while `Extract`, `MatrixPower`,
+`PseudoInverse` and `LeastSquares` were all on the `AWARE` list AND all
+throwing the buffer away on their own first line — two of them by 3-4 orders of
+magnitude. The opt-in is necessary and not sufficient.
+
+The static check cannot close this: it looks for the *presence* of a dispatch,
+and every one of those four had a dispatch (`linalg_delist_and_reeval` is a
+dispatch). What sees it is `MATHILDA_PACK_DIAG=gate`, because its report covers
+the **post**-gate — the materialisation that happens when a node comes to rest
+with a buffer still in it. Run that before believing the audit.
+
+Rule: when a head is on `AWARE` and still measures slow, do not re-read the
+allowlist. Run `MATHILDA_PACK_DIAG=gate` and look at whether it appears; if it
+does, the builtin is declining, not the gate.
+
+## A fast kernel with a slow twin is where wrong answers hide (2026-08-01)
+
+`sf_machine_productlog` returned **-338.392** for `ProductLog[1.01]` (answer:
+0.5707) and nothing caught it, because the interpreter's scalar `ProductLog`
+goes to MPFR and was always right. The two paths were never compared, so the
+value tests all exercised the correct one. The *only* symptom was a speed row on
+a coverage sweep: the array kernel failed on ~1 element in 10^5 and abandoned
+the buffer to MPFR, which showed up as 28 us/element.
+
+Two rules out of it:
+
+1. **Whenever a head has both an MPFR path and a machine kernel, the test must
+   name the machine one** — `Compile[{x}, f[x]]` or a packed array. An
+   `assert_eval_eq("f[1.01]", ...)` tests neither.
+2. **A kernel should verify its own answer when the algorithm is iterative.**
+   Checking the defining equation costs one `log` against four Halley steps, and
+   returning `false` is not an error — it is the kernel contract's "no usable
+   value", which degrades to the correct path. "The iteration converges" is a
+   claim about the starting guess, and starting guesses have domains.
+
+## Making a head PACK breaks every internal consumer that walks its result (2026-08-01)
+
+Adding `pack_offer` to `RowReduce`'s result was a one-line bonus on top of an
+exactness fix. It silently broke `NullSpace`, `MatrixRank`, `PseudoInverse`,
+`Inverse`, `Apart` and the eigen solver — six internal call sites that take
+`RowReduce`'s output and walk it with `get_tensor_dims` / `flatten_tensor` /
+`data.function.arg_count`. `get_tensor_dims` returns 0 for an `EXPR_NDARRAY`, so
+`NullSpace` of a machine matrix came back **UNEVALUATED at 16x16 and worked at
+14x14** — the break appears only above the 250-element packing threshold.
+
+`pack.h` documents this precisely ("THE ONE GAP THE GATE DOES NOT COVER ... use
+`pack_eval_plain` at any internal evaluate() whose result is then walked
+structurally") and even lists the heads to watch. `RowReduce` was not on that
+list because it had never packed before — which is the point: **the list is of
+heads that pack TODAY, so adding a new one makes the list stale in the same
+commit.**
+
+Rules:
+
+1. Before adding `pack_offer` to a head, `grep -rn "SYM_<Head>" src/` and fix
+   every internal caller with `pack_eval_plain` in the same change.
+2. Then add the head to pack.h's list, so the next person greps a current one.
+3. **Test on both sides of the 250-element threshold.** A test at one size only
+   proves whichever side it happened to land on, and the natural small test case
+   lands on the safe side.
+
+Found by asking "what else consumes this?" after the change was already green —
+the full suite did not catch it, because no existing test crossed the threshold
+for these heads.
+
+## Reasoning by analogy from a fix that just worked is still guessing (2026-08-01)
+
+Having found that `DiagonalMatrix`'s exact zeros were wrong against Mathematica,
+I filed `RowReduce` as the same bug — "of a machine-real matrix it should be
+uniformly machine-real, exactly as `DiagonalMatrix` should be". It reads like a
+deduction. It was an analogy, and it was false: Mathematica's
+`RowReduce[{{2., 4.}, {1., 3.}}]` is `{{1, 0.}, {0, 1}}`, heads
+`{Integer, Real, Integer, Integer}`, `PackedArrayQ` False. Mathematica's own
+RREF of a machine matrix is two-headed.
+
+So within one day the SAME unverified-claim mistake happened twice, the second
+time immediately after writing a lesson about the first. The pattern is not
+"assume Mathematica agrees" — it is **stating a fact about another system in
+prose instead of running it**, which costs ten seconds.
+
+The durable fix is not a resolution, it is a mechanism:
+`tools/check_array_exactness.py` will not accept an EXEMPT entry without the
+Mathematica output pasted into it. If the claim cannot be quoted, it cannot be
+relied on.
+
+(The `RowReduce` change shipped anyway — but as a *stated divergence* from
+Mathematica on the project's own rule, which is a different and honest thing
+from an unnoticed one.)
+
+## A constraint that excuses a slow path must be tested (2026-08-01)
+
+`DiagonalMatrix` of a `Real` diagonal was 320x behind NumPy, and I wrote down
+why: the off-diagonal zeros are exact `Integer`s, so the matrix has two heads
+and no uniform buffer holds it — *"that is Mathematica's answer too"*. I put
+that in a code comment, in the changelog, in `performance.md`, and filed the row
+in the HPC plan against item 10.1 as a known design gap.
+
+It took one `wolframscript` call to disprove. Mathematica gives
+`{{1., 0., 0.}, {0., 2., 0.}, {0., 0., 3.}}` — all `Real`, packed array. The
+*constraint was the bug*, and it was the only thing keeping the slow path alive.
+Correcting the exactness made the matrix one dtype: 70.2 ms → 263 µs.
+
+Rule: when a measurement is bad and the explanation is "we can't, because
+correctness requires X", **verify X before writing it down**. A constraint that
+conveniently excuses a slow path is exactly the one to check, and the check is
+usually cheaper than the sentence justifying it. `wolframscript` is at
+`/Applications/Mathematica.app/Contents/MacOS/wolframscript` on this machine.
+
+Corollary: the same session had the same defect in `Subdivide`
+(`Subdivide[0, 1., 4]` kept an exact `0`) and I did not notice it until the
+Mathematica probe, because I had reasoned from the same wrong premise in both
+places.
+
+## An EXEMPT entry needs its reason, and then it pays (2026-08-01)
+
+`ConjugateTranspose` sat in the packed-aware audit's `EXEMPT` table with:
+"its NDArray path does not handle rank 1 and comes back UNEVALUATED as
+Conjugate[Transpose[v]]". That note turned a 195x-vs-NumPy row into a ten-minute
+fix, because it named the precondition instead of just recording a decision.
+Keep writing them; the difference between "considered and rejected" and "never
+noticed" is worth more than the exemption itself.
+
+## Do not reproduce an Orderless fold's rounding (2026-08-01)
+
+`Subdivide` built `Times[i, span, Power[n, -1]]` per point and let the evaluator
+fold it. `Times` is `Orderless`, so its factors are sorted **by value** and
+folded left to right — meaning the exact-to-Real transition happens at whichever
+factor the `Real` operand happens to sort after, and the last bit of the answer
+depends on the magnitudes of the inputs. There is nothing there to preserve.
+
+When replacing such a path, do not try to match it bit-for-bit (I tried; 349719
+of 10^6 points agreed). Pick the rule the reference systems use, check
+bit-for-bit against **them**, and write down in the code that the change was
+deliberate. `numpy.linspace` and Mathematica both compute `min + i*step`, and
+Mathilda now agrees with `linspace` on every element.
+
 ## No NIntegrate crosscheck inside Integrate — verify correct-by-construction (2026-07-08)
 
 The definite-integral methods in `Integrate` must NEVER validate a symbolic

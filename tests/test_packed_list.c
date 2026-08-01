@@ -999,6 +999,273 @@ void test_fifth_sweep_fast_paths(void) {
               " Length[Union[Partition[c, 6, 1] . p]]]");                      /* k-mer count */
 }
 
+/* The seventh round: the coverage register's fast paths (2026-08-01).
+ *
+ * What makes this set worth its own function is that FOUR of the heads in it
+ * were already on pack.c's AWARE list and were slow anyway -- Extract,
+ * MatrixPower, PseudoInverse and LeastSquares each declined the buffer on their
+ * own first line. No static check sees that, so the only guard is a
+ * differential one. */
+void test_seventh_round_fast_paths(void) {
+    /* ---- 1. Extract reads the buffer. -----------------------------------
+     * expr_part cannot index an NDArray (is_atomic is true for one), so Extract
+     * returned NULL and the POST-gate materialised on the way to rest. The
+     * declines matter as much as the hits: an out-of-range position and [[0]]
+     * must answer exactly what the List path answers. */
+    static const char* const EXTRACT[] = {
+        "Extract[Table[N[i], {i, 300}], {{1}, {2}, {300}}]",
+        "Extract[Table[i, {i, 300}], {{1}, {2}, {300}}]",
+        "Head[Extract[Table[i, {i, 300}], {{7}}][[1]]]",       /* exact Integer out */
+        "Head[Extract[Table[N[i], {i, 300}], {{7}}][[1]]]",
+        "Extract[Table[N[i], {i, 300}], 5]",                   /* scalar position */
+        "Extract[Table[N[i], {i, 300}], {5}]",
+        "Extract[Table[N[i], {i, 300}], {-1}]",
+        "Extract[Table[N[i j], {i, 60}, {j, 5}], {{3, 4}, {7, 1}}]",
+        "Extract[Table[N[i], {i, 300}], {0}]",                 /* head extraction */
+        "Extract[Table[N[i], {i, 300}], {{999}}]",             /* out of range */
+        "Extract[Table[N[i], {i, 300}], {{1}}, Hold]",
+    };
+    for (size_t i = 0; i < sizeof(EXTRACT) / sizeof(EXTRACT[0]); i++)
+        both_ways(EXTRACT[i]);
+
+    /* ---- 2. MatrixPower keeps the buffer. --------------------------------
+     * It used to delist and run square-and-multiply over boxed matrices. An
+     * INTEGER matrix must still materialise and stay exact -- MatrixPower is
+     * deliberately not on INT64_OK, because the exact fourth power of an
+     * integer matrix does not fit a float64 buffer past 2^53. */
+    static const char* const MATPOW[] = {
+        "Total[Flatten[MatrixPower[Table[N[1/(i + j)], {i, 20}, {j, 20}], 3]]]",
+        "Head[MatrixPower[Table[i + j, {i, 20}, {j, 20}], 3][[1, 1]]]",
+        "MatrixPower[Table[i + j, {i, 20}, {j, 20}], 0][[1, 1]]",
+        "Head[MatrixPower[Table[N[i + j], {i, 20}, {j, 20}], 2][[1, 1]]]",
+        "MatrixPower[Table[N[i + j], {i, 20}, {j, 20}], nn]",  /* symbolic: unevaluated */
+    };
+    for (size_t i = 0; i < sizeof(MATPOW) / sizeof(MATPOW[0]); i++)
+        both_ways(MATPOW[i]);
+
+    /* ---- 3. The SVD pair. -------------------------------------------------
+     * PseudoInverse and LeastSquares on a machine matrix take one gesdd, and on
+     * an EXACT one keep the rationalised pipeline. Only the second is testable
+     * both ways bit-for-bit: the machine path is a different algorithm from the
+     * exact one, so the assertions on it are the Moore-Penrose identities. */
+    both_ways("PseudoInverse[Table[If[i == j, 2, 1], {i, 20}, {j, 20}]][[1, 1]]");
+    both_ways("Head[PseudoInverse[Table[If[i == j, 2, 1], {i, 20}, {j, 20}]][[1, 1]]]");
+    assert_eval_eq("Module[{a = Table[N[Mod[7 i + 3 j, 11]] + If[i == j, 30., 0.],"
+                   "                    {i, 20}, {j, 20}]},"
+                   " Max[Abs[Flatten[a . PseudoInverse[a] . a - a]]] < 1.*^-9]", "True", 0);
+    assert_eval_eq("Module[{a = Table[N[Mod[7 i + 3 j, 11]], {i, 30}, {j, 12}],"
+                   "        b = Table[N[Mod[5 i, 7]], {i, 30}]},"
+                   " Max[Abs[Transpose[a] . (a . LeastSquares[a, b] - b)]] < 1.*^-9]", "True", 0);
+    /* An exact system stays exact and is unaffected by the SVD path. */
+    assert_eval_eq("LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {1, 2, 3}]", "{0, 1}", 0);
+
+    /* ---- 4. The producers. ------------------------------------------------
+     * Each writes a buffer only where every element it would have boxed has the
+     * same head, so the mixed cases below must come back UNPACKED and identical
+     * to the List path -- that is the whole of the rule. */
+    static const char* const PRODUCE[] = {
+        "Subdivide[0., 1., 300]",
+        "Subdivide[3., 1., 300]",              /* descending */
+        "Subdivide[5., 5., 300]",              /* degenerate */
+        "Subdivide[0, 1., 300]",               /* one Real endpoint: all Real */
+        "Subdivide[3., 1, 300]",
+        "Subdivide[1/2, 1., 300]",             /* the Rational numericalises */
+        "Subdivide[10, 300]",                  /* exact: Rationals, no pack */
+        "Subdivide[a, b, 4]",                  /* symbolic */
+        "Head[Subdivide[0., 1., 300][[1]]]",
+        "Head[Subdivide[0, 1., 300][[1]]]",
+        "IdentityMatrix[20]",
+        "Head[IdentityMatrix[20][[1, 1]]]",
+        "IdentityMatrix[{3, 5}]",
+        "DiagonalMatrix[Table[i, {i, 20}]]",
+        "DiagonalMatrix[Table[N[i], {i, 20}]]",
+        "Head[DiagonalMatrix[Table[N[i], {i, 20}]][[1, 2]]]",
+        "DiagonalMatrix[Table[If[i == 1, 1., i], {i, 20}]]",   /* one Real widens all */
+        "Head[DiagonalMatrix[Table[If[i == 1, 1., i], {i, 20}]][[5, 5]]]",
+        "DiagonalMatrix[Table[i, {i, 20}], 2]",
+        "DiagonalMatrix[Table[i, {i, 20}], -2]",
+        "UnitVector[300, 7]",
+        "Head[UnitVector[300, 7][[1]]]",
+        "UnitVector[300, 7, WorkingPrecision -> MachinePrecision]",
+        "Rescale[Table[N[i], {i, 300}]]",
+        "Rescale[Table[i, {i, 300}]]",            /* exact: Rationals */
+        "Rescale[Table[N[i], {i, 300}], {0., 10.}]",
+        "Rescale[Table[N[i], {i, 300}], {0., 10.}, {1., 2.}]",
+        "Rescale[Table[i, {i, 20}, {j, 3}]]",     /* nested threading */
+        "Head[Rescale[Table[N[i], {i, 300}]][[1]]]",
+    };
+    for (size_t i = 0; i < sizeof(PRODUCE) / sizeof(PRODUCE[0]); i++)
+        both_ways(PRODUCE[i]);
+
+    /* MACHINE-REAL CONTAGION. One machine Real makes the WHOLE result Real --
+     * the zeros a producer invents and the exact entries it was given alike.
+     * Every expected value below is Mathematica 14.0's, checked against it
+     * directly; each was WRONG here before 2026-08-01, writing an exact Integer
+     * 0 (or keeping an exact endpoint) and thereby making the result
+     * two-headed, which is what stopped it packing. Only MACHINE Real is
+     * contagious: the MPFR and exact rows must keep their exact zeros. */
+    assert_eval_eq("DiagonalMatrix[{1., 2., 3.}]",
+                   "{{1.0, 0.0, 0.0}, {0.0, 2.0, 0.0}, {0.0, 0.0, 3.0}}", 0);
+    assert_eval_eq("DiagonalMatrix[{1, 2, 3.}]",
+                   "{{1.0, 0.0, 0.0}, {0.0, 2.0, 0.0}, {0.0, 0.0, 3.0}}", 0);
+    assert_eval_eq("DiagonalMatrix[{1/2, 1.}]", "{{0.5, 0.0}, {0.0, 1.0}}", 0);
+    assert_eval_eq("DiagonalMatrix[{a, 1.}]", "{{a, 0.0}, {0.0, 1.0}}", 0);
+    assert_eval_eq("DiagonalMatrix[{1, 2, 3}]",
+                   "{{1, 0, 0}, {0, 2, 0}, {0, 0, 3}}", 0);
+    assert_eval_eq("DiagonalMatrix[{1/2, 3/4}]", "{{1/2, 0}, {0, 3/4}}", 0);
+    assert_eval_eq("DiagonalMatrix[{a, b}]", "{{a, 0}, {0, b}}", 0);
+    assert_eval_eq("Subdivide[0, 1., 4]", "{0.0, 0.25, 0.5, 0.75, 1.0}", 0);
+    assert_eval_eq("Subdivide[3., 1, 4]", "{3.0, 2.5, 2.0, 1.5, 1.0}", 0);
+    assert_eval_eq("Subdivide[1/2, 1., 4]", "{0.5, 0.625, 0.75, 0.875, 1.0}", 0);
+    assert_eval_eq("Subdivide[10, 4]", "{0, 5/2, 5, 15/2, 10}", 0);
+    /* An MPFR endpoint is NOT machine-real, so the exact 0 survives. */
+    assert_eval_eq("Head[Subdivide[0, 1.`30, 4][[1]]]", "Integer", 0);
+    assert_eval_eq("Head[DiagonalMatrix[{1.`30, 2}][[1, 2]]]", "Integer", 0);
+    /* And it is the exactness, not the packing, that decides: a Real diagonal
+     * now packs precisely because it is one dtype. */
+    assert_eval_eq("NDArrayQ[DiagonalMatrix[Table[N[i], {i, 300}]]]", "True", 0);
+    assert_eval_eq("NDArrayQ[Subdivide[0, 1., 300]]", "True", 0);
+
+    /* Subdivide's interior points are min + i*step, which is what both
+     * Mathematica and numpy.linspace compute -- checked bit-for-bit against
+     * linspace. The fourth point of {0., 1., 10} is the discriminating one. */
+    /* Not spelled with ==: compare_numeric treats two inexact operands as equal
+     * when they agree to a relative 2^-46, so 0.30000000000000004 == 0.3 is
+     * True. Scaling to an exact Integer is the only way to see the last bit. */
+    assert_eval_eq("Round[10^17 Subdivide[0., 1., 10][[4]]]", "30000000000000004", 0);
+    assert_eval_eq("Round[10^17 Subdivide[0., 1., 10][[7]]]", "60000000000000008", 0);
+    assert_eval_eq("Subdivide[0., 1., 10][[1]] === 0. && Subdivide[0., 1., 10][[11]] === 1.",
+                   "True", 0);
+
+    /* ---- 5. ConjugateTranspose. -------------------------------------------
+     * Its NDArray path handed a rank-1 buffer to Transpose, which declines one,
+     * so the composite came back unevaluated -- which is why the head was
+     * EXEMPT from the packed-aware audit rather than aware. */
+    static const char* const CT[] = {
+        "ConjugateTranspose[Table[N[i j], {i, 20}, {j, 20}]] == "
+        "Transpose[Table[N[i j], {i, 20}, {j, 20}]]",
+        "ConjugateTranspose[Table[N[i], {i, 300}]]",       /* rank 1: shape kept */
+        "ConjugateTranspose[Table[i, {i, 300}]]",
+        "Head[ConjugateTranspose[Table[i, {i, 20}, {j, 20}]][[1, 1]]]",
+        "ConjugateTranspose[Table[i j, {i, 20}, {j, 20}], {2, 1}]",
+        "ConjugateTranspose[Table[N[i j], {i, 20}, {j, 20}], bad]",   /* bad spec */
+    };
+    for (size_t i = 0; i < sizeof(CT) / sizeof(CT[0]); i++) both_ways(CT[i]);
+
+    /* ---- 6. ProductLog's machine kernel was WRONG just above x = 1. -------
+     * The asymptotic seed log x - log log x + log log x / log x was used for
+     * every x >= 1; it is log(0)/0 at x = 1 and diverges above it, and Halley
+     * cannot recover. ProductLog[1.01] returned -338.392 for an answer of
+     * 0.5707. Only the compiled and packed paths used that kernel, so the
+     * assertion has to name them: the interpreter went to MPFR and was right. */
+    assert_eval_eq("Module[{f = Compile[{x}, ProductLog[x]]},"
+                   " Abs[f[1.01] - 0.570752468] < 1.*^-6]", "True", 0);
+    static const char* const PLOG[] = {
+        "Total[ProductLog[Table[1. + N[i]/1000., {i, 300}]]]",
+        "Max[Abs[Module[{w = ProductLog[Table[1. + N[i]/1000., {i, 300}]]},"
+        " w Exp[w] - Table[1. + N[i]/1000., {i, 300}]]]] < 1.*^-12",
+        "Total[ProductLog[Table[N[i]/100., {i, 300}]]]",
+    };
+    for (size_t i = 0; i < sizeof(PLOG) / sizeof(PLOG[0]); i++) both_ways(PLOG[i]);
+}
+
+/* NO TWO-HEADED RESULT FROM A MACHINE INPUT (2026-08-01).
+ *
+ * The rule: a routine handed a machine array answers with a machine array. The
+ * elements a routine INVENTS -- a pad zero, an identity's 1, a pivot's 1, a
+ * free variable's 1, a Vandermonde x^0 -- take the input's exactness, they do
+ * not default to exact.
+ *
+ * Every expected value here was checked against Mathematica 14.0 except the
+ * RowReduce block, which is a stated divergence and says so. `Head /@ Flatten`
+ * rather than the printed form, because the printed form of a two-headed
+ * matrix is easy to read past: {{1, 0.}, {0, 1}} looks fine.
+ *
+ * tools/check_array_exactness.py is the sweep this pins; these are the rows it
+ * found. */
+static void test_no_two_headed_results(void) {
+    /* --- constructors: the elements are invented outright ---------------- */
+    assert_eval_eq("Union[Head /@ Flatten[HankelMatrix[{1, 2, 3.}]]]", "{Real}", 0);
+    assert_eval_eq("HankelMatrix[{1, 2, 3.}]",
+                   "{{1.0, 2.0, 3.0}, {2.0, 3.0, 0.0}, {3.0, 0.0, 0.0}}", 0);
+    assert_eval_eq("HankelMatrix[{1, 2, 3}]",
+                   "{{1, 2, 3}, {2, 3, 0}, {3, 0, 0}}", 0);
+    assert_eval_eq("Union[Head /@ Flatten[ToeplitzMatrix[{1, 2, 3.}]]]", "{Real}", 0);
+    assert_eval_eq("Union[Head /@ Flatten[VandermondeMatrix[{1., 2., 3.}]]]", "{Real}", 0);
+    assert_eval_eq("VandermondeMatrix[{1., 2., 3.}]",
+                   "{{1.0, 1.0, 1.0}, {1.0, 2.0, 4.0}, {1.0, 3.0, 9.0}}", 0);
+    assert_eval_eq("VandermondeMatrix[{1, 2, 3}]",
+                   "{{1, 1, 1}, {1, 2, 4}, {1, 3, 9}}", 0);
+
+    /* --- MatrixPower[m, 0] is the identity at m's exactness -------------- */
+    assert_eval_eq("MatrixPower[{{2., 0.}, {0., 2.}}, 0]",
+                   "{{1.0, 0.0}, {0.0, 1.0}}", 0);
+    assert_eval_eq("MatrixPower[{{2, 0}, {0, 2}}, 0]", "{{1, 0}, {0, 1}}", 0);
+
+    /* --- NullSpace's free-variable slot ---------------------------------- */
+    assert_eval_eq("Union[Head /@ Flatten[NullSpace[{{1., 2.}, {2., 4.}}]]]", "{Real}", 0);
+    assert_eval_eq("NullSpace[{{1, 2}, {2, 4}}]", "{{-2, 1}}", 0);
+
+    /* --- RowReduce: a DELIBERATE divergence ------------------------------
+     * Mathematica writes the exact 1 and 0 regardless of the input, so its
+     * RowReduce[{{2., 0.}, {0., 4.}}] has heads {Integer, Real, Integer,
+     * Integer} and PackedArrayQ False. Mathilda follows the project rule: a
+     * machine matrix in, a machine matrix out. Values agree; only the heads of
+     * the structural entries differ, and only for an inexact input. */
+    assert_eval_eq("Union[Head /@ Flatten[RowReduce[{{2., 0.}, {0., 4.}}]]]", "{Real}", 0);
+    assert_eval_eq("RowReduce[{{1., 2.}, {3., 4.}}]", "{{1.0, 0.0}, {0.0, 1.0}}", 0);
+    assert_eval_eq("RowReduce[{{1, 2}, {3, 4}}]", "{{1, 0}, {0, 1}}", 0);
+
+    /* --- and the mixtures that are CORRECT, so the rule is not overreached
+     * into a coercion. Both match Mathematica. */
+    assert_eval_eq("Chop[{1., 1.*^-12, 2.}]", "{1.0, 0, 2.0}", 0);
+    assert_eval_eq("PadRight[{1., 2.}, 4]", "{1.0, 2.0, 0, 0}", 0);
+    assert_eval_eq("Riffle[{1., 2.}, 0]", "{1.0, 0, 2.0}", 0);
+
+    /* --- and MPFR does NOT trigger the contagion ------------------------- */
+    assert_eval_eq("Head[HankelMatrix[{1.`30, 2}][[2, 2]]]", "Integer", 0);
+
+    /* THE HAZARD THAT COMES WITH MAKING A HEAD PACK.
+     *
+     * Once RowReduce answers with a BUFFER, every internal consumer that walks
+     * its result structurally breaks -- silently, and only above the
+     * 250-element packing threshold. get_tensor_dims returns 0 for an NDArray,
+     * so NullSpace of any machine matrix at 16x16 or larger came back
+     * UNEVALUATED while 14x14 was fine. Six call sites (NullSpace x2,
+     * MatrixRank x2, Inverse's mat_rref, parfrac, eigen_common) now use
+     * pack_eval_plain, which is what pack.h prescribes for exactly this.
+     *
+     * The sizes straddle the threshold on purpose: a test at one size only
+     * proves whichever side it landed on. */
+    static const char* const THRESHOLD[] = {
+        /* {rank-1 matrix, so the null space has dimension n-1} */
+        "Length[NullSpace[Table[1. i j, {i, 14}, {j, 14}]]] == 13",
+        "Length[NullSpace[Table[1. i j, {i, 16}, {j, 16}]]] == 15",
+        "Length[NullSpace[Table[1. i j, {i, 20}, {j, 20}]]] == 19",
+        "MatrixRank[Table[1. i j, {i, 14}, {j, 14}]] == 1",
+        "MatrixRank[Table[1. i j, {i, 20}, {j, 20}]] == 1",
+        "MatrixRank[Table[If[i == j, 20., 1./(1. + Abs[i - j])], {i, 20}, {j, 20}]] == 20",
+        "Head[PseudoInverse[Table[1. i j, {i, 20}, {j, 20}]]] === List",
+        "Dimensions[Inverse[Table[If[i == j, 20., 1./(1. + Abs[i - j])], {i, 20}, {j, 20}]]] == {20, 20}",
+        "Length[Eigenvalues[Table[If[i == j, 20., 1./(1. + Abs[i - j])], {i, 20}, {j, 20}]]] == 20",
+    };
+    for (size_t i = 0; i < sizeof(THRESHOLD) / sizeof(THRESHOLD[0]); i++)
+        assert_eval_eq(THRESHOLD[i], "True", 0);
+    /* Apart goes through parfrac.c's RowReduce. */
+    assert_eval_eq("Apart[1/(x^2 - 1)]", "-1/2/(1 + x) + 1/2/(-1 + x)", 0);
+
+    /* The point of all of the above: single-headed means packable. */
+    static const char* const PACKS[] = {
+        "NDArrayQ[HankelMatrix[Table[N[i], {i, 30}]]]",
+        "NDArrayQ[ToeplitzMatrix[Table[N[i], {i, 30}]]]",
+        "NDArrayQ[VandermondeMatrix[Table[N[i], {i, 30}]]]",
+        "NDArrayQ[MatrixPower[Table[N[1./(1. + Abs[i - j])], {i, 20}, {j, 20}], 0]]",
+        "NDArrayQ[RowReduce[Table[If[i == j, 20., 1./(1. + Abs[i - j])], {i, 20}, {j, 20}]]]",
+    };
+    for (size_t i = 0; i < sizeof(PACKS) / sizeof(PACKS[0]); i++)
+        assert_eval_eq(PACKS[i], "True", 0);
+}
+
 void test_no_nesting_invariant(void) {
     /* THE INVARIANT: a packed node may never come to rest inside a plain
      * EXPR_FUNCTION tree, where an unaware recursive walker would meet it. That
@@ -1722,6 +1989,8 @@ int main(void) {
     TEST(test_third_sweep_fast_paths);
     TEST(test_fourth_sweep_fast_paths);
     TEST(test_fifth_sweep_fast_paths);
+    TEST(test_seventh_round_fast_paths);
+    TEST(test_no_two_headed_results);
     TEST(test_no_nesting_invariant);
     TEST(test_aware_heads_stay_packed);
     TEST(test_nesting_limitation_is_correct_but_unpacked);

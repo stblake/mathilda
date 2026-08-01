@@ -1,176 +1,238 @@
-# Fourth HPC sweep — closing the distance to NumPy (2026-07-31)
+# Seventh round — closing the coverage sweep's NumPy gaps (2026-08-01)
 
-Plus: eleven per-experiment writeups covering 2026-07-26 → 07-31, in
-`docs/experiments/`.
+Working from `plans/HPC_IMPROVEMENT_PLAN.md` §11 (the coverage sweep's register,
+experiment 20). Every item below is a **measured** row from
+`tools/numeric_sweep.py`, re-confirmed on this machine before starting.
 
-Previous sweeps: `plans/PACKED_ARRAYS_TODO.md`, `docs/design/performance.md`
-§8–§10.
+Previous rounds: `docs/design/performance.md` §8–§13, `docs/experiments/`.
 
-## Plan
+Re-measured 2026-08-01, before any change:
 
-- [x] Probe every primitive the eight application kernels use, against NumPy
-- [x] Fix 1 — `First`/`Last`/`Most`/`Rest` read the buffer instead of delisting
-- [x] Fix 2 — `Clip` back on the buffer, with an exactness gate that is correct
-- [x] Fix 3 — the scan (`Fold`/`FoldList`) reads a buffer and emits a buffer
-- [x] Fix 4 — scan kernels for a bare `Max`/`Min`/`Plus`/`Times` operator
-- [x] Fix 5 — `ListConvolve`/`ListCorrelate` on the buffer (HPC plan 7.1)
-- [x] Fix 6 — `Accumulate`, `Differences`, `Part` spans, `Outer` (re-probe)
-- [x] Verify: differential tests, full suite, gates, valgrind
-- [x] Re-run the 51-benchmark comparison, three systems
-- [x] Write `docs/experiments/<NAME>.md` for every experiment of the last 4 days
-- [x] Document: `performance.md` §10, weekly changelog, HPC plan Phase 9
-
-## Results
-
-### The probe that chose the work (10⁶ float64, before)
-
-| op | Mathilda | NumPy | ratio |
+| probe | Mathilda | NumPy | ratio |
 |---|---:|---:|---:|
-| `Most[v]` | 270 ms | 0.48 ms | 563× |
-| `Rest[v]` | 223 ms | 0.48 ms | 466× |
-| `FoldList[a #1+b #2 &, …]` packed | 1246 ms | 3.02 ms | 413× |
-| `FoldList[Max, …]` | 605 ms | 2.73 ms | 222× |
-| `ListConvolve[k, v]` | 263 ms | 1.40 ms | 188× |
-| `First[v]` | 123 ms | ~0 | O(1) done in O(n) |
-| `Clip[v, {a,b}]` | 356 ms | 4.66 ms | 76× |
-| `v v` | 0.81 ms | 0.45 ms | 1.8× ✓ |
-| `Log[v]` | 8.8 ms | 6.8 ms | 1.3× ✓ |
+| `Extract[v, {{1},{2},{3}}]` | 99.7 ms | 1.0 µs | 97139× |
+| `MatrixPower[A300, 4]` | 14.7 s | 865 µs | ~17000× |
+| `LeastSquares[A500, b500]` | **does not finish in 180 s** | — | — |
+| `PseudoInverse[A300]` | **does not finish** | — | — |
+| `Subdivide[0., 1., 999999]` | 1.87 s | 1.08 ms | 1740× |
+| `Array[N, 10^6]` | 446 ms | 468 µs | 953× |
+| `Table[N[i], {i, 10^6}]` | 428 ms | 474 µs | 902× |
+| `UnitVector[10^6, 1]` | 130 ms | 267 µs | 487× |
+| `IdentityMatrix[1000]` | 77.3 ms | 231 µs | 334× |
+| `DiagonalMatrix[b1000]` | 68.0 ms | 231 µs | 294× |
 
-The last two rows are the control, and they settled where to look: **the
-elementwise kernels were already at the memory floor**, so nothing above them
-was about arithmetic. Everything expensive was structural or a scan.
+## The finding that orders the work
 
-### After
+`Extract`, `MatrixPower`, `LeastSquares` and `PseudoInverse` are **already on
+`pack.c`'s `AWARE` list**, so the transparency gate does *not* materialise for
+them. They are slow for a different reason, and it is the same reason in all
+four: the builtin itself declines the buffer on its first line —
+`linalg_delist_and_reeval(res)`, or (for `Extract`) `expr_part` rejecting an
+atomic NDArray and the **post-gate** materialising on the way to rest. The
+answer is right, the buffer is thrown away, and a 300×300 machine matrix runs
+the exact symbolic path.
 
-| primitive | before | after |
-|---|---:|---:|
-| `First` / `Last` | 123 / 103 ms | **0.01 / 0.00 ms** |
-| `Most` / `Rest` | 270 / 223 ms | **3.42 / 0.71 ms** |
-| `Clip` | 356 ms | **0.93 ms** |
-| `FoldList[Max, …]` | 605 ms | **2.00 ms** (NumPy 2.73) |
-| EMA `FoldList` | 1246 ms | **22.6 ms** |
-| `ListCorrelate` 5×5 / 1024² | 376 ms | **46.5 ms** (SciPy 52.5) |
-| `ListConvolve` 5-tap / 10⁶ | 263 ms | **16.1 ms** |
-| `Accumulate` | 7.9 ms | **3.5 ms** |
-| `Differences` | 6.6 ms | **0.97 ms** |
-| `Part` span | 14.0 ms | **7.4 ms** |
-| `Outer`, one small operand | 849 ms | **10.9 ms** |
+`MATHILDA_PACK_DIAG=gate` is what found it — the *post*-gate report names the
+head. It is a fifth instance of this document's recurring defect in a new
+disguise: not "the head is not aware", but "the head is aware and declines
+anyway".
 
-| benchmark | before | after | WL 14.0 | NumPy | |
-|---|---:|---:|---:|---:|---|
-| Return series, 10⁶ | 2.02 s | **55.6 ms** | 154 ms | 30.4 ms | **2.78× faster than WL** |
-| Gaussian blur + Sobel, 1024² | 2.19 s | **103 ms** | 94.5 ms | 114 ms | **1.10× ahead of NumPy** |
-| `ListConvolve`, 1024², 5×5 | 312 ms | **35.7 ms** | 33.8 ms | 39.7 ms | **1.11× ahead of NumPy** |
-| `Differences`, 10⁷ | 56.6 ms | **16.3 ms** | 14.3 ms | 15.6 ms | |
-| `Accumulate`, 10⁷ | 63.8 ms | **19.4 ms** | 15.1 ms | 28.7 ms | **1.48× ahead of NumPy** |
+## Items
 
-Full run: 51 benchmarks, three systems, no value mismatches. Of 51, Mathilda is
-faster than Mathematica on 15 and within 1.5× on 18 more; against NumPy, faster
-on 20 and within 1.5× on 10 more.
+- [x] **C.11a `LeastSquares` on a machine matrix does not terminate.** Fixed via
+      one thin `gesdd` (not `dgels`: the SVD handles rank deficiency, which is
+      what `Direct`'s documented "minimum-norm minimiser" requires).
+- [x] **C.11b `PseudoInverse` likewise** — same SVD, `A⁺ = V Σ⁺ Uᵀ`.
+- [x] **C.2 `MatrixPower`** — binary exponentiation over `dot2`.
+- [x] **C.4 `Extract`** — `ndarray_part`, and `INT64_OK`.
+- [x] **C.5 the producers** — `Subdivide`, `IdentityMatrix`, `UnitVector`,
+      `DiagonalMatrix`, `Rescale` done. **`Array` and `Table` with an exact
+      iterator deliberately NOT done** — see Review.
+- [x] **Not on the list: `ProductLog`'s machine kernel returned a wrong value**
+      for `1 < x < ~1.05`. Found while diagnosing C.3.
+- [x] **Not on the list: `ConjugateTranspose` was 195× NumPy.** Turned up while
+      re-measuring the linalg group.
+- [x] Verify: differential sweep, full test suite, bench gates, valgrind
+- [x] Document: `performance.md` §14, weekly changelog, HPC plan register,
+      six `docs/spec/builtins/` pages, `tasks/lessons.md`
+
+## Non-negotiables carried from the plan
+
+- **N1** — never trade an exact answer for a fast one. An integer producer
+  writes `NDT_INT64`, never float64.
+- **N2** — representation is never observable. Every item ships with a
+  differential sweep: the same expression packed and unpacked, printed forms
+  byte-identical.
 
 ## Review
 
-### What the probe method was worth
+### Results
 
-The previous three sweeps started from *applications* and worked inward. This
-one started from *primitives measured against NumPy*, and that ordering is why
-`First[v]` was found: at the application level a 123 ms element read is
-invisible, and in a profile it looks like the function you called. It only
-became obvious next to `Drop[v, 250]` at 0.88 ms on the same data.
+One uncontended `tools/numeric_sweep.py` run, so both columns are the same
+measurement on the same data. The last three rows have no probe at those shapes
+and are `AbsoluteTiming` minimum-of-five.
 
-**Always probe with a control that should cost the same.** Two of the eleven
-rows in the probe existed only as controls, and they are what said "stop looking
-at arithmetic".
+| probe | before | vs NumPy then | after | vs NumPy now |
+|---|---:|---:|---:|---:|
+| `pseudoinverse` | **did not finish in 180 s** | — | 19.8 ms | **1/1.07×** |
+| `matrixpower` | 14.7 s | 20924× | 827 µs | 1.08× |
+| `leastsquares` | **did not finish** | — | 70.9 ms | 1.69× |
+| `extract` | 99.7 ms | 97139× | **1.0 µs** | **1/1.35×** |
+| `conjugatetranspose` | 430 ms | 195× | 2.18 ms | **1/1.15×** |
+| `subdivide` | 1.87 s | 1740× | 707 µs | **1/1.29×** |
+| `diagonalmatrix` | 70.2 ms | 320× | 263 µs | **1.09×** |
+| `identitymatrix` | 77.3 ms | 334× | 223 µs | 1.16× |
+| `unitvector` | 130 ms | 487× | 720 µs | 3.33× |
+| `Rescale[v]`, 10⁶ | 2.17 s | — | 3.1 ms | — |
+| `ProductLog[v]`, 10⁵ | 2.77 s | — | 14.3 ms | — |
 
-### Two fixes that were not what they looked like
+**Every probed row is now within 1.2× of NumPy or ahead of it**, except
+`unitvector` at 3.33× on a 720 µs absolute, and `Extract` moved by four orders
+of magnitude.
 
-**The convolution's cost was an integer division.** After the buffer path and
-the interior hoist, I added an affine-stride inner loop for the rank-1 case —
-and it measured *worse*. Not because it was wrong, but because
-`(o / Lstr[ax]) % Ldims[ax]` per output was swamping it: 10⁶ 64-bit divisions
-against 5×10⁶ multiply-adds, with runtime strides the compiler cannot
-strength-reduce. Replacing it with an odometer took 31.5 ms → 16.1 ms and let
-the vectorisable loop that was already there finally show.
+### What the plan got wrong, which is the useful part
 
-**`Clip` had been disabled at the wrong granularity.** It was struck from the
-aware list entirely because an exact bound makes the result non-uniform. The
-exactness problem was real, but it belonged to the **bounds**, not to the head —
-and the blanket fix cost 356 ms per call on data where nothing was wrong. Worse,
-it left the visible-`NDArray[…]` case *incorrect*, because the gate never
-materialises those, so `ndstruct_clip` ran anyway with the exact bounds coerced
-to doubles.
+- **"They are not packed-aware."** All four of `Extract`, `MatrixPower`,
+  `PseudoInverse` and `LeastSquares` were *already* on `AWARE`. They declined
+  the buffer themselves — three by `linalg_delist_and_reeval`, one by returning
+  `NULL` and letting the **post**-gate materialise. `check_packed_aware.py`
+  reports clean on all four; only `MATHILDA_PACK_DIAG=gate` sees it.
+- **"C.11: something is not terminating."** Nothing hangs. `PseudoInverse` and
+  `LeastSquares` run the *exact* pipeline on 90000 doubles, which is a wrong
+  algorithm rather than a loop. `MatrixExp` does not exist and returns in 2 µs;
+  the 180 s was the harness's Python side.
+- **"C.3: probably an MPFR fallback per element."** `ProductLog` was a **wrong
+  answer** — `ProductLog[1.01]` gave −338.392 — and the slow array was the
+  *symptom* of the kernel failing and abandoning the buffer. The four Bessel
+  heads are blocked by a third thing again: DownValues, which switch off the
+  gate's aware test entirely.
+- **"C.5: mechanical, no open question."** `Rescale` was not a buffer problem;
+  `DiagonalMatrix` of a `Real` diagonal *cannot* be packed.
 
-### Things that were wrong about my own work
+### Deliberately not done
 
-- **I put three NumPy figures into an experiment writeup that I had not
-  measured.** Caught and replaced with placeholders before anything else was
-  written, then filled from a real run. Numbers in a document that were guessed
-  are worse than no numbers.
-- **My first summary counts in `performance.md` were wrong** (15/13/22 and
-  17/12/20). They are now computed from the run's own JSON: 15/18/17 against
-  Mathematica, 20/10/19 against NumPy.
-- **My `numloop` change lost the NDArray presentation**, so the same `FoldList`
-  answered with head `NDArray` for a `Plus` operator and head `List` for the
-  equivalent lambda. Caught by `compile_tests`' cross-spelling parity check, not
-  by anything I wrote.
-
-### What the tests missed — three times
-
-1. **A test asserted the fallback, not the invariant.**
-   `chk_eq("NDArrayQ[Clip[NDArray[{-2.,0.,2.}]]]", "True")` asserted that `Clip`
-   answered `{-1., 0., 1.}` where the List path answers `{-1, 0., 1}` — it was
-   enshrining a wrong answer. The `chk_array` checks beside it could not catch
-   it: they compare numeric *distance*, and the difference is in element
-   **heads**.
-2. **A regression visible only across two spellings** (the `FoldList` one above).
-3. **Tests below `PACK_MIN_ELEMENTS` test nothing.** Second appearance; every
-   new case in `test_fourth_sweep_fast_paths` uses data above the threshold.
-
-### A finding that was not part of the plan
-
-The Jacobi row read 223 ms in a full benchmark run and 128 ms measured alone,
-while every other row was stable. Bisecting the benchmark *prefix* found one
-trigger: running a single 1000×1000 `dgemm` first makes Mathilda's threaded
-stencil **1.45× slower**, reproducibly to ±1%. Accelerate's worker threads
-persist and compete with `nd_parallel_for`.
-
-That is a real property of the system, not benchmark noise, and it affects any
-program that multiplies a matrix and then does array work. Recorded as HPC plan
-item 9.3 rather than fixed — the fix is a thread-pool policy question, and the
-last thread-pool hypothesis in this plan (the linalg scratch pool) was wrong.
+- **`Array` / `Table` with an exact iterator.** The cost is one interpreter
+  evaluation per element, so a buffer alone does not fix it — the body has to
+  compile. Compiling with a `CT_REAL` iterator would answer `Table[i^2, …]` in
+  floats. The sound version declares the iterator `CT_INT` and accepts only a
+  `CT_INT` result type; `CT_REAL` out of `CT_INT` in must be refused (`i/2` is a
+  Rational, `Sqrt[i]` is symbolic). Scoped in the HPC plan, not attempted.
+- **The Bessel heads.** Making them aware without also giving the *scalar* path
+  the libm kernel would leave the packed and plain paths disagreeing in the last
+  ulp. The fix is real and needs its own accuracy comparison against MPFR.
+- ~~**`DiagonalMatrix` of a `Real` diagonal.**~~ **Done, and it was a wrong
+  answer.** I claimed its exact zeros were Mathematica's answer too and filed
+  the row under plan item 10.1. Mathematica gives all `Real`s. The rule is
+  machine-real contagion — one `Real` makes the whole result `Real`, invented
+  zeros included — and `Subdivide` had the identical defect at its endpoints.
+  Correcting the exactness made both one dtype, so both now pack: 320× → 1.09×.
+  See `tasks/lessons.md`.
 
 ### Verification
 
-- Full 395-binary suite: clean apart from one **pre-existing** `simplify_tests`
-  failure (a symbolic radical case), confirmed pre-existing in the third sweep.
-- `test_fourth_sweep_fast_paths` — ~200 differential cases over all six paths,
-  each packed form against the identical plain one, every form each path must
-  **decline**, and explicit presentation-parity assertions.
-- `test_ndarray_reduce.c`'s `Clip` assertions rewritten to be sensitive to
-  element heads.
-- `make check-c99`, `make check-packed-aware` pass.
-- Valgrind unchanged from the macOS start-up baseline.
+1. **Differential sweep** — `test_seventh_round_fast_paths` in
+   `tests/test_packed_list.c`: 60+ expressions evaluated packed and unpacked
+   with byte-identical printed output, including every case that must *decline*
+   (mixed-head `Subdivide`, `Real` `DiagonalMatrix`, out-of-range `Extract`,
+   symbolic `MatrixPower`, a bad `ConjugateTranspose` spec).
+2. **`Subdivide` against `numpy.linspace`** — bit-identical on four intervals
+   including a descending one, scaled to exact Integers to see the last bit.
+3. **`ProductLog`** — zero residual on `w e^w = x` across ~1100 probe points
+   from the branch point at −1/e out to 10³⁰⁰.
+4. **Full suite, 396 binaries, rebuilt against the final tree** — one stable
+   failure, the documented-stale `simplify_tests` printing expectation
+   (`x^2^(3/2)` vs `(x^2)^(3/2)`).
+   `moebiusmu_tests` also fails intermittently. **Measured at 4 failures in 12
+   runs on an idle machine** — my first note said "load-dependent, 3/3 idle",
+   which was three samples and wrong. The cause is `MoebiusMu[10^50 + 1]`
+   needing `FactorInteger` to crack a 29-digit composite, and ECM's curve
+   search is randomized per process against a fixed budget: the same call
+   succeeds 4/4 from a standalone `./Mathilda`. Pre-existing and unrelated —
+   no number-theory, factoring or RNG file is touched by this work. Worth its
+   own fix (a deterministic seed for the test, or a larger budget), which is
+   not this task.
+5. **Gates** — `bench_pack`, `bench_eval`, `bench_assoc`,
+   `bench_ndarray_linalg`, `make check-c99`, `make check-packed-aware` all pass.
+   `ConjugateTranspose` came *out* of the audit's `EXEMPT` table.
+6. **Valgrind** — definitely-lost byte-identical to the macOS start-up baseline
+   (13,376 B / 418 blocks) over a script exercising every new path.
 
-## The experiment writeups
+---
 
-`docs/experiments/` — eleven files, one per experiment, 2026-07-26 → 07-31, each
-comparing Mathilda against **both** Mathematica 14.0 and Python.
+# Follow-up: no two-headed result from a fast path (2026-08-01)
 
-The reason for both columns, stated once in the index and borne out repeatedly:
-Mathematica says whether we are behind a *competitor*; NumPy — on this host
-linking the same Accelerate BLAS — says whether we are behind *the machine*. A
-row can read acceptably against one and badly against the other, and that
-difference is usually the finding.
+**The invariant**, as stated by the user: a routine handed a packed array /
+NDArray returns a scalar or an NDArray — never a mixture of exact and inexact
+element heads. A mixture is wrong twice: it disagrees with Mathematica's numeric
+tower, and because no uniform buffer holds it, every consumer downstream falls
+off the fast path.
 
-## Left open (HPC plan Phase 9)
+`DiagonalMatrix` and `Subdivide` were two instances, fixed above. This is the
+sweep for the rest.
 
-1. **`Transpose` copies where NumPy views** — the largest application gap
-   (logistic regression, 3.06× NumPy). Needs a strided NDArray view, which is a
-   design change rather than a fast path.
-2. **No interpreter-level fusion** — k-means, 2.92× NumPy.
-3. **`dgemm` vs our thread pool**, above.
-4. 1-D convolution at 11× NumPy; `Part` span's position array; `Tally`;
-   `Reverse`/`RotateLeft`; `ArrayReshape` does not exist.
+**Why it needs a new tool.** The defect is invisible to all three existing
+checks. `check_packed_aware.py` asks whether a head opted in — these had. The
+differential tests in `test_packed_list.c` compare the packed and unpacked paths
+*against each other*, and a producer that invents an exact zero does so on both,
+so they agree on the wrong answer. No timing catches it either. What is left is
+to look at the element heads, which is what `tools/check_array_exactness.py`
+does.
 
-**Still the highest priority overall: the pre-existing `NDSolve` segfault
-(HPC 7.4).** It is a crash, not a slowdown, and it has now outlived two sweeps.
+- [x] Write `tools/check_array_exactness.py` — reuses `numeric_sweep`'s 283
+      probes for valid call sites, plus a 60-probe corpus chosen to be *read*
+      rather than timed (constructors, every matrix-rebuilding linalg routine,
+      fills and pads, the narrowing kernels)
+- [x] Run it; triage every MIXED row against `wolframscript`
+- [x] Fix the divergences; EXEMPT the genuine ones **with the Mathematica output
+      as evidence** — the whole reason this file exists is that "Mathematica
+      does it too" was once asserted without being checked
+- [x] Regression test (`test_no_two_headed_results`) + `make
+      check-array-exactness` + documented in `performance.md` §14, the
+      changelog, the plan's 10.6/10.6a and `tasks/lessons.md`
+
+## Result
+
+| of 342 probes | before | after |
+|---|---:|---:|
+| packed | 180 | **184** |
+| single-headed plain List | 147 | **148** |
+| **MIXED** | **7** | **0** |
+| mixed and exempt, with evidence | 8 | 10 |
+| no result | 1 | **0** |
+
+(The `no result` row was `NullSpace[A300]`, which turned out to be the same
+`pack_offer` breakage rather than a timeout.)
+
+Six routines were inventing an exact element inside a machine-real result:
+
+| | was | now | Mathematica |
+|---|---|---|---|
+| `VandermondeMatrix[{1., 2., 3.}]` | `x^0` column exact | all `Real` | agrees |
+| `HankelMatrix[{1, 2, 3.}]` | pad zeros exact | all `Real` | agrees |
+| `ToeplitzMatrix[{1, 2, 3.}]` | entries not widened | all `Real` | agrees |
+| `MatrixPower[{{2., 0.}, {0., 2.}}, 0]` | `{{1, 0}, {0, 1}}` | all `Real` | agrees |
+| `NullSpace[{{1., 2.}, {2., 4.}}]` | `{{-2., 1}}` | `{{-2., 1.}}` | agrees |
+| `RowReduce[{{2., 0.}, {0., 4.}}]` | `{{1, 0.}, {0., 1}}` | all `Real` | **differs** |
+
+All six now pack. The rule — invented elements take the input's exactness — is
+`common_has_machine_real` / `common_machine_real_value` in `src/common.h`;
+`inverse_onestep` had been doing it by hand since the fifth sweep.
+
+**`RowReduce` is a stated divergence.** Mathematica writes the exact `1` and `0`
+regardless: its `RowReduce[{{2., 4.}, {1., 3.}}]` has heads
+`{Integer, Real, Integer, Integer}` and `PackedArrayQ` `False`, so its own RREF
+of a machine matrix is two-headed and unpacked. Mathilda follows the project
+rule instead. Values agree; only the structural entries' heads differ.
+
+**The eight exemptions are where the rule stops**, each carrying the Mathematica
+output in the tool: `Chop`'s zero is exact on purpose; the
+`PadRight`/`PadLeft`/`ArrayPad`/`Riffle`/`Insert`/`Append`/`ReplacePart` family
+places a caller-supplied element verbatim; `Join` mixes what it was given;
+`Tally` returns `{value, count}` pairs; `LUDecomposition`'s exact elements are
+its permutation vector.
+
+**Still open:** `NullSpace` of an inexact matrix is not orthonormalized
+(Mathematica gives `{{-0.894…, 0.447…}}` where we give `{{-2., 1.}}`) — same
+basis, different normalisation, a larger change than exactness. And
+`CholeskyDecomposition`, `Orthogonalize` and `ArrayPad` return **unevaluated**
+on a machine matrix; that is the C.12 coverage gap, not an exactness one.

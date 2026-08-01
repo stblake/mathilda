@@ -1,4 +1,5 @@
 #include "expr.h"
+#include "pack.h"
 #include "symtab.h"
 #include "eval.h"
 #include "parse.h"
@@ -484,7 +485,13 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
     Expr* matrix_expr = expr_new_function(expr_new_symbol(SYM_List), row_args, S);
     free(row_args);
     
-    Expr* reduced = eval_and_free(expr_new_function(expr_new_symbol(SYM_RowReduce), (Expr*[]){matrix_expr}, 1));
+    /* pack_eval_plain, not evaluate: RowReduce now answers with a BUFFER for a
+     * uniform machine matrix, and the loop below walks the result's args. See
+     * pack.h -- the transparency gate protects a builtin's arguments, never the
+     * value it gets back from its own internal evaluate(). */
+    Expr* rr_call = expr_new_function(expr_new_symbol(SYM_RowReduce), (Expr*[]){matrix_expr}, 1);
+    Expr* reduced = pack_eval_plain(rr_call);
+    expr_free(rr_call);
     
     Expr* pfrac_sum = expr_new_integer(0);
     if (reduced->type == EXPR_FUNCTION && reduced->data.function.head->data.symbol.name == SYM_List && reduced->data.function.arg_count == (size_t)S) {

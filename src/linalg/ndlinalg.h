@@ -67,6 +67,28 @@ Expr* ndla_matrix_norm_direct(Expr* v, Expr* pe);
 Expr* ndla_normalize(Expr* res);    /* Normalize[v]                   */
 Expr* ndla_cross(Expr* res);        /* Cross[u, v] (3-vectors)        */
 
+/* ------------------------------------------------------------------------
+ * The SVD pair: PseudoInverse[m] and LeastSquares[m, b].
+ *
+ * These do NOT take the call and do NOT defer via linalg_delist_and_reeval,
+ * for the reason plans/HPC_IMPROVEMENT_PLAN.md item 10.2 records: a fast path
+ * that declines by re-evaluating the call re-enters the builtin that dispatched
+ * to it. `NULL` means "I decline"; the caller then runs its own path with the
+ * arguments it already has, and there is no way back in.
+ *
+ * Both are restricted to a REAL rank-2 float64 buffer, which is what makes them
+ * safe rather than merely fast: the exact pipeline in inv.c is the right answer
+ * for an exact matrix, and an integer buffer never arrives here because neither
+ * head is on pack.c's INT64_OK list. Complex input declines.
+ *
+ * `tol_automatic` / `tol_value` carry the call's Tolerance option. Automatic is
+ * the LAPACK convention max(m,n) * eps * sigma_max; an explicit value is taken
+ * as a fraction of sigma_max, matching Mathematica's documented meaning.
+ * ---------------------------------------------------------------------- */
+Expr* ndla_pseudoinverse_direct(const Expr* a, bool tol_automatic, double tol_value);
+Expr* ndla_leastsquares_direct(const Expr* a, const Expr* b,
+                               bool tol_automatic, double tol_value);
+
 #ifdef __cplusplus
 }
 #endif

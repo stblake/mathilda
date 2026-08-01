@@ -457,8 +457,14 @@ static void pack_mark_aware_heads(void) {
         /* Arithmetic and algebra: scan for an ndarray operand themselves
          * (src/plus.c, times.c, power.c, linalg/dot.c). */
         "Plus", "Times", "Power", "Dot",
-        /* Structural ops over the buffer (src/ndstruct.c). */
-        "Reverse", "Sort", "Flatten", "Transpose", "Take", "Drop",
+        /* Structural ops over the buffer (src/ndstruct.c). ConjugateTranspose
+         * joined 2026-08-01: it delegates to Transpose and Conjugate, both of
+         * which have had buffer paths all along, but its rank-1 one-argument
+         * form handed a vector to Transpose (which declines one) and came back
+         * unevaluated -- so it was EXEMPT rather than aware, and a packed
+         * 1000x1000 cost 430 ms against NumPy's 2.20 ms. */
+        "Reverse", "Sort", "Flatten", "Transpose", "ConjugateTranspose",
+        "Take", "Drop",
         "RotateLeft", "RotateRight", "Partition", "Riffle", "Join",
         "Differences", "First", "Last", "Most", "Rest",
         "PadLeft", "PadRight",
@@ -468,8 +474,16 @@ static void pack_mark_aware_heads(void) {
          * pixel first. A 1024^2 float64 image through a 5x5 kernel spent its
          * time building 2 million Expr nodes, not convolving. */
         "ListConvolve", "ListCorrelate",
-        /* Reductions and order statistics (src/ndreduce.c, src/stats.c). */
-        "Total", "Mean", "Min", "Max", "Median", "Variance",
+        /* Reductions and order statistics (src/ndreduce.c, src/stats.c).
+         * MinMax joined on 2026-07-31 from the coverage sweep (experiment 20).
+         * It delegates to Min and Max, each of which has had a buffer path all
+         * along -- but the head was not here, so the gate materialised 10^6
+         * Expr nodes first and both delegates then ran the generic List code on
+         * the boxed copy: 307 ms against 426 us for NumPy's
+         * [v.min(), v.max()], while Min[v] and Max[v] called directly cost
+         * 255 us and 232 us. The same defect as Nest, Fourier and Outer before
+         * it, found this time by enumeration rather than by a workload. */
+        "Total", "Mean", "Min", "Max", "MinMax", "Median", "Variance",
         "StandardDeviation", "RootMeanSquare", "Quartiles", "Accumulate",
         "MovingAverage", "MovingMedian", "ExponentialMovingAverage",
         /* Tally is a keyed (irregular) reduction, not a sweep, but the reason it
@@ -489,6 +503,12 @@ static void pack_mark_aware_heads(void) {
          * exact bound is taken only when an in-range scan proves nothing is
          * clipped, where the answer is the input. Everything else degrades. */
         "Clip",
+        /* Rescale rewrites its call into (x - min)/(max - min) over the WHOLE
+         * argument and lets Listable Plus/Times thread it, so it never reads an
+         * element and the buffer flows straight into the elementwise kernels.
+         * Deliberately not int64_ok: Rescale[Range[10]] is a list of exact
+         * Rationals, which no buffer holds. */
+        "Rescale",
         /* Note the absentees just below this list -- Precision and Accuracy
          * USED to be here and had to come out. */
         /* Functional heads with packed paths (src/funcprog.c). */
@@ -656,8 +676,11 @@ static void pack_mark_aware_heads(void) {
         /* Read rank/dims/dtype only, never an element. */
         "Length", "Dimensions", "Depth", "Head", "ByteCount",
         "NDArrayQ", "DataType",
-        /* Materialise or index through the exact accessors. */
-        "Part", "Normal", "ToNDArray", "FromNDArray",
+        /* Materialise or index through the exact accessors. Extract joined
+         * 2026-08-01 with its buffer gather: it is Part's own selector, so the
+         * justification is Part's -- ndarray_element_to_expr yields an exact
+         * Integer from an int64 buffer, so no element's head changes. */
+        "Part", "Extract", "Normal", "ToNDArray", "FromNDArray",
         "ToPackedArray", "FromPackedArray",
         /* Move the value without inspecting it. */
         "Set", "SetDelayed", "CompoundExpression", "If", "Which", "Module",
@@ -671,7 +694,7 @@ static void pack_mark_aware_heads(void) {
         /* Exact int64 reductions (src/ndreduce.c). Total/Max/Min/Accumulate
          * answer with Integers; Mean and Median build the exact reduced
          * Rational (Mean[Range[10]] is 11/2, Median[Range[300]] is 301/2). */
-        "Total", "Mean", "Median", "Max", "Min", "Accumulate",
+        "Total", "Mean", "Median", "Max", "Min", "MinMax", "Accumulate",
         /* Tally keys on the raw int64 word, so two integers past 2^53 stay
          * distinct -- the failure a float64 gather would have introduced -- and
          * each distinct value is rebuilt with expr_new_integer, so no element's

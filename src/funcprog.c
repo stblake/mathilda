@@ -676,6 +676,167 @@ Expr* builtin_map_all(Expr* res) {
     return map_at_level(f, expr, 0, spec);
 }
 
+/* ------------------- compiled predicates -------------------
+ *
+ * Seven heads apply a boolean test to every element -- Select, AllTrue,
+ * AnyTrue, NoneTrue, TakeWhile, LengthWhile, SelectFirst -- and every one of
+ * them opened with ndstruct_delist_repack: materialise the buffer into one Expr
+ * per element, then call the test through the interpreter for each. Map has had
+ * a compiled path since the auto-compilation experiment (numloop_map); the
+ * boolean half was never written, and it left these the slowest numeric heads
+ * in the system. AllTrue[v, # > 0 &] over 10^6 measured 416 ms against
+ * np.all(v > 0)'s 319 us.
+ *
+ * numloop_pred_compile turns an ordinary comparison predicate into bytecode;
+ * these three helpers are the loop shapes the seven heads need. Everything
+ * outside the compilable subset returns NULL here and the caller runs exactly
+ * the code it ran before.
+ *
+ * FLOAT64 ONLY, and that is a correctness bound rather than an omission: the
+ * compiled comparison reproduces the interpreter's INEXACT rule, which carries
+ * a relative tolerance of 2^-46. Two exact Integers compare through GMP with no
+ * tolerance at all, so an int64 buffer must not come down here. See the
+ * contract note in numloop.h. */
+
+/* The common opening: `v` a rank-1 float64 buffer and `f` a compilable
+ * predicate. On success the caller owns *pred and must numloop_pred_free it. */
+static bool pred_open(const Expr* f, const Expr* v, NumPred** pred,
+                      const double** data, size_t* n) {
+    if (!is_packed_list(v) && !is_ndarray(v)) return false;
+    if (v->data.ndarray.rank != 1) return false;
+    if (v->data.ndarray.dtype != NDT_FLOAT64) return false;
+    size_t len = (size_t)v->data.ndarray.dims[0];
+    if (len == 0) return false;            /* trivial; let the interpreter do it */
+    NumPred* p = numloop_pred_compile(f);
+    if (!p) return false;
+    *pred = p;
+    *data = (const double*)v->data.ndarray.data;
+    *n = len;
+    return true;
+}
+
+/* AllTrue / AnyTrue / NoneTrue. `want` is the value that short-circuits.
+ * Returns NULL to fall back; otherwise True or False. */
+static Expr* pred_quantify(const Expr* f, const Expr* v, int mode) {
+    NumPred* p; const double* d; size_t n;
+    if (!pred_open(f, v, &p, &d, &n)) return NULL;
+    bool fired = false, ok = true;
+    for (size_t i = 0; i < n; i++) {
+        bool t;
+        if (!numloop_pred_run(p, d[i], &t)) { ok = false; break; }
+        /* mode 0 AllTrue: a False decides it. mode 1 AnyTrue and mode 2
+         * NoneTrue: a True decides it. */
+        if (mode == 0 ? !t : t) { fired = true; break; }
+    }
+    numloop_pred_free(p);
+    if (!ok) return NULL;                  /* non-finite -> interpreter answers */
+    bool val;
+    if (mode == 0)      val = !fired;      /* All: True unless a False appeared */
+    else if (mode == 1) val = fired;       /* Any: True iff a True appeared */
+    else                val = !fired;      /* None: True unless a True appeared */
+    return expr_new_symbol(val ? SYM_True : SYM_False);
+}
+
+/* Select[list, crit] with no count limit. */
+static Expr* pred_select(const Expr* f, const Expr* v) {
+    NumPred* p; const double* d; size_t n;
+    if (!pred_open(f, v, &p, &d, &n)) return NULL;
+
+    unsigned char* keep = malloc(n);
+    if (!keep) { numloop_pred_free(p); return NULL; }
+    size_t kept = 0;
+    bool ok = true;
+    for (size_t i = 0; i < n; i++) {
+        bool t;
+        if (!numloop_pred_run(p, d[i], &t)) { ok = false; break; }
+        keep[i] = (unsigned char)t;
+        if (t) kept++;
+    }
+    numloop_pred_free(p);
+    if (!ok) { free(keep); return NULL; }
+
+    /* DERIVED from a buffer, so no threshold: a filtered packed list stays
+     * packed however few elements survive, matching Sin[packedList]. If
+     * ndbuild_open_like declines (rank/dtype it will not carry) the plain List
+     * below is built instead, which is what Select produced before. */
+    int64_t dk = (int64_t)kept;
+    void* vb = NULL;
+    Expr* packed = kept ? ndbuild_open_like(v, 1, &dk, NDT_FLOAT64, &vb) : NULL;
+    if (packed) {
+        double* out = (double*)vb;
+        size_t k = 0;
+        for (size_t i = 0; i < n; i++) if (keep[i]) out[k++] = d[i];
+        free(keep);
+        return packed;
+    }
+    Expr** args = kept ? malloc(kept * sizeof(Expr*)) : NULL;
+    if (kept && !args) { free(keep); return NULL; }
+    size_t k = 0;
+    for (size_t i = 0; i < n; i++) if (keep[i]) args[k++] = expr_new_real(d[i]);
+    free(keep);
+    Expr* r = expr_new_function(expr_new_symbol(SYM_List), args, kept);
+    free(args);
+    return r;
+}
+
+/* The first `k` elements of a rank-1 float64 buffer, as a buffer. A leading
+ * slice is contiguous, so this is one memcpy -- the whole reason TakeWhile can
+ * answer without materialising. */
+static Expr* pred_leading_slice(const Expr* v, size_t k) {
+    const double* d = (const double*)v->data.ndarray.data;
+    int64_t dk = (int64_t)k;
+    void* vb = NULL;
+    Expr* packed = k ? ndbuild_open_like(v, 1, &dk, NDT_FLOAT64, &vb) : NULL;
+    if (packed) {
+        memcpy(vb, d, k * sizeof(double));
+        return packed;
+    }
+    Expr** args = k ? malloc(k * sizeof(Expr*)) : NULL;
+    if (k && !args) return NULL;
+    for (size_t i = 0; i < k; i++) args[i] = expr_new_real(d[i]);
+    Expr* r = expr_new_function(expr_new_symbol(SYM_List), args, k);
+    free(args);
+    return r;
+}
+
+/* pred_find_first's two non-index answers. PRED_FALL_BACK keeps the caller's
+ * old path; PRED_NO_MATCH means the scan ran and nothing satisfied it, which is
+ * a real answer and not a decline. */
+#define PRED_FALL_BACK (-1)
+#define PRED_NO_MATCH  (-2)
+
+/* Index of the first element satisfying the predicate, or one of the two
+ * sentinels above. */
+static int64_t pred_find_first(const Expr* f, const Expr* v) {
+    NumPred* p; const double* d; size_t n;
+    if (!pred_open(f, v, &p, &d, &n)) return PRED_FALL_BACK;
+    int64_t at = PRED_NO_MATCH;
+    bool ok = true;
+    for (size_t i = 0; i < n; i++) {
+        bool t;
+        if (!numloop_pred_run(p, d[i], &t)) { ok = false; break; }
+        if (t) { at = (int64_t)i; break; }
+    }
+    numloop_pred_free(p);
+    return ok ? at : PRED_FALL_BACK;
+}
+
+/* The length of the leading run satisfying the predicate. Returns -1 to fall
+ * back, which TakeWhile and LengthWhile both read as "run the old path". */
+static int64_t pred_run_length(const Expr* f, const Expr* v) {
+    NumPred* p; const double* d; size_t n;
+    if (!pred_open(f, v, &p, &d, &n)) return -1;
+    size_t i = 0;
+    bool ok = true;
+    for (; i < n; i++) {
+        bool t;
+        if (!numloop_pred_run(p, d[i], &t)) { ok = false; break; }
+        if (!t) break;
+    }
+    numloop_pred_free(p);
+    return ok ? (int64_t)i : -1;
+}
+
 /* ------------------- Select ------------------- */
 
 Expr* builtin_select(Expr* res) {
@@ -701,6 +862,13 @@ Expr* builtin_select(Expr* res) {
      * Select[<|k -> v|>, p, n] keeps the first n such entries. */
     if (is_association(list))
         return assoc_select_values(crit, list, n_max);
+
+    /* Compiled-predicate fast path (numloop.h). Falls through to the
+     * materialising path below for any predicate outside the subset. */
+    if (n_max < 0) {
+        Expr* fast = pred_select(crit, list);
+        if (fast) return fast;
+    }
 
     /* An NDArray is atomic, so the element walk below looks straight past one
      * and the call comes back UNEVALUATED, while the identical List call works.
@@ -771,6 +939,15 @@ Expr* builtin_takewhile(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* coll = res->data.function.args[0];
     Expr* crit = res->data.function.args[1];
+    /* Compiled-predicate fast path: the leading run is found on the buffer and
+     * Take does the copy, so neither the scan nor the result materialises. */
+    {
+        int64_t k = pred_run_length(crit, coll);
+        if (k >= 0) {
+            Expr* r = pred_leading_slice(coll, (size_t)k);
+            if (r) return r;
+        }
+    }
     /* An NDArray is atomic, so the element walk below looks straight past one
      * and the call comes back UNEVALUATED, while the identical List call works.
      * Materialise, reuse the List implementation, repack — see ndstruct.h. */
@@ -795,6 +972,12 @@ Expr* builtin_lengthwhile(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* coll = res->data.function.args[0];
     Expr* crit = res->data.function.args[1];
+    /* Compiled-predicate fast path: LengthWhile needs only the count, so
+     * nothing is built at all. */
+    {
+        int64_t k = pred_run_length(crit, coll);
+        if (k >= 0) return expr_new_integer(k);
+    }
     /* An NDArray is atomic, so the element walk below looks straight past one
      * and the call comes back UNEVALUATED, while the identical List call works.
      * Materialise, reuse the List implementation, repack — see ndstruct.h. */
@@ -820,6 +1003,21 @@ Expr* builtin_select_first(Expr* res) {
     Expr* coll = res->data.function.args[0];
     Expr* pred = res->data.function.args[1];
     Expr* deflt = (argc == 3) ? res->data.function.args[2] : NULL;
+
+    /* Compiled-predicate fast path. Cheap when a match comes early, but a
+     * predicate nothing satisfies is a full scan and paid the interpreted
+     * per-element cost like the rest of the family. */
+    {
+        int64_t at = pred_find_first(pred, coll);
+        if (at >= 0)
+            return expr_new_real(
+                ((const double*)coll->data.ndarray.data)[at]);
+        if (at == PRED_NO_MATCH) {
+            if (deflt) return expr_copy(deflt);
+            Expr* ma[1] = { expr_new_string("NotFound") };
+            return expr_new_function(expr_new_symbol(SYM_Missing), ma, 1);
+        }
+    }
 
     /* An NDArray is atomic, so the element walk below looks straight past one
      * and the call comes back UNEVALUATED, while the identical List call works.
@@ -1085,6 +1283,10 @@ static Expr* all_any_none_true(Expr* res, int mode) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* coll = res->data.function.args[0];
     Expr* test = res->data.function.args[1];
+
+    /* Compiled-predicate fast path (numloop.h) before the materialising one:
+     * this is the head the sweep measured at 416 ms against np.all's 319 us. */
+    { Expr* fast = pred_quantify(test, coll, mode); if (fast) return fast; }
 
     /* An NDArray is atomic, so the element walk below looks straight past one
      * and the call comes back UNEVALUATED, while the identical List call works.

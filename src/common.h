@@ -115,6 +115,43 @@ Expr* common_rationalize_input(const Expr* e, long bits);
 Expr* common_numericalize_result(const Expr* e, long bits);
 
 /* ---------------------------------------------------------------------- *
+ * Machine-real contagion, for the array producers                         *
+ * ---------------------------------------------------------------------- *
+ *
+ * A machine `Real` anywhere in a producer's input makes its WHOLE result
+ * machine-real -- the zeros it invents included, and the exact entries it was
+ * given too:
+ *
+ *     DiagonalMatrix[{1, 2, 3.}]  is  {{1., 0., 0.}, {0., 2., 0.}, {0., 0., 3.}}
+ *     Subdivide[0, 1., 4]         is  {0., 0.25, 0.5, 0.75, 1.}
+ *
+ * both in Mathematica and, since 2026-08-01, here. Only MACHINE Real is
+ * contagious: an MPFR leaf keeps the exact zeros
+ * (`DiagonalMatrix[{1.\`30, 2}]` is `{{1.\`30, 0}, {0, 2.\`30}}`), and a
+ * symbolic leaf stays symbolic while the zeros around it still turn Real
+ * (`DiagonalMatrix[{a, 1.}]` is `{{a, 0.}, {0., 1.}}`).
+ *
+ * That matters for more than fidelity: it is what makes the result ONE dtype,
+ * so the producer can write a buffer instead of 10^6 Expr nodes. The exact
+ * zeros cost `DiagonalMatrix` of a Real diagonal 320x against NumPy.
+ *
+ * Reads one leaf as that machine double. True for EXPR_REAL, EXPR_INTEGER,
+ * EXPR_BIGINT and `Rational[p, q]`; false for MPFR, Complex, symbols and
+ * everything else -- so a caller can tell "carry this into the buffer" from
+ * "leave this element alone". */
+bool common_machine_real_value(const Expr* e, double* out);
+
+/* Does `e` contain a MACHINE Real anywhere? The trigger half of the same rule:
+ * a producer asks this of its input to decide whether the elements it invents
+ * -- a pad zero, an identity's 1, a free variable's 1 -- are `0`/`1` or
+ * `0.`/`1.`.
+ *
+ * Recursive through Lists, and true for a float64 NDArray. Deliberately NOT
+ * common_scan_inexact, which also reports true for MPFR: MPFR does not trigger
+ * the contagion, so `HankelMatrix[{1.`30, 2}]` keeps its exact pad zeros. */
+bool common_has_machine_real(const Expr* e);
+
+/* ---------------------------------------------------------------------- *
  * Per-method head aliases                                                 *
  *                                                                         *
  * A builtin that runs a cascade of strategies behind `Method -> m` also   *

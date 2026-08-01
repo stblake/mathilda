@@ -412,6 +412,18 @@ check-c99:
 check-packed-aware:
 	python3 tools/check_packed_aware.py
 
+# `make check-array-exactness` — does any routine hand back a TWO-HEADED array
+# from a machine input? A routine given a packed array must answer with a scalar
+# or an array of one element head; an exact 0 invented inside a machine-real
+# result is both wrong against Mathematica's numeric tower and unpackable, so
+# every consumer downstream falls off the fast path. Six heads were doing it.
+#
+# Unlike the two checks above this one RUNS the binary (342 probes, ~5 min), so
+# it is a release/pre-merge gate rather than a per-push one. Needs ./Mathilda
+# built.
+check-array-exactness:
+	python3 tools/check_array_exactness.py
+
 # Report the compiler the build will ACTUALLY use. `gcc --version` does not
 # answer that: the autodetection above prefers a versioned `gcc-NN` over the
 # plain name, so on a host with both, a bare `gcc --version` names one compiler
@@ -423,7 +435,7 @@ print-cc:
 	@$(CC) --version 2>/dev/null | head -1
 
 .PHONY: all clean docs docs-build docs-serve check-c99 check-packed-aware \
-        print-cc
+        check-array-exactness print-cc
 
 # Pull in the auto-generated header dependencies. The leading `-` silences the
 # "no such file" notice on a fresh tree (no .d files exist until the first

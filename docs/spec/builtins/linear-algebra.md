@@ -812,10 +812,21 @@ rank-deficient) matrix.
   pivot columns, then returns
   `PseudoInverse[m] = ConjugateTranspose[C] . Inverse[C . ConjugateTranspose[C]] . Inverse[ConjugateTranspose[B] . B] . ConjugateTranspose[B]`.
 - For the `m x n` zero matrix, returns the `n x m` zero matrix.
-- Inexact (`Real` / MPFR) matrices are rationalised at the input
-  precision, computed exactly to preserve rank, and numericalised back.
+- **A machine-real matrix takes the SVD instead.** `A⁺ = V Σ⁺ Uᵀ` from one thin
+  LAPACK `gesdd`, with the singular values at or below the cutoff zeroed. The
+  rationalise-and-row-reduce pipeline described above is the right answer for an
+  exact or symbolic matrix and an unusable one for a machine matrix — it did not
+  finish on a 300 × 300 in 180 s, where the SVD path takes 23 ms. An exact
+  matrix is unaffected and still answers exactly.
+- MPFR matrices, and any `Real` matrix small enough not to be held as a
+  [packed list](packed-arrays.md), are rationalised at the input precision,
+  computed exactly to preserve rank, and numericalised back.
 - The `Tolerance` option accepts `Automatic` (default), a non-negative
-  number, or a non-negative `Rational`.
+  number, or a non-negative `Rational`. It takes effect on the SVD path, where
+  there are singular values to truncate: `Automatic` is
+  `max(m, n) × $MachineEpsilon × σ₁` — LAPACK's own rank criterion, and NumPy's
+  default `rcond` — and an explicit `t` is a fraction of the largest singular
+  value `σ₁`. The exact pipeline has no singular values and ignores it.
 - Issues `PseudoInverse::matrix` warning and returns unevaluated if the
   argument is not a non-empty rank-2 tensor.
 - Returns unevaluated when an unknown option name is supplied or
@@ -855,6 +866,12 @@ Gives the matrix power of a square matrix.
 - `MatrixPower[m, 0]` returns `IdentityMatrix[Length[m]]`.
 - `MatrixPower` works only on square matrices.
 - Uses binary exponentiation (repeated squaring) for efficient computation.
+- **A machine-real matrix stays a [packed list](packed-arrays.md) throughout**,
+  so each squaring is one `Dot` and reaches BLAS `dgemm`: `MatrixPower[A, 4]` on
+  a 300 x 300 costs 0.69 ms, the two matrix products it is. An *integer* matrix
+  is materialised first and stays exact, because the exact fourth power of an
+  integer matrix is an integer matrix and a float64 buffer cannot hold one past
+  2^53.
 - Fractional matrix powers are not currently supported and generate a warning.
 
 ```mathematica
@@ -1558,6 +1575,20 @@ Generates a matrix with specified elements on a diagonal.
 - For `k > 0`, places elements `k` positions above the leading diagonal.
 - For `k < 0`, places elements `k` positions below the leading diagonal.
 - By default, size is optimally bounded to fit the full array cleanly. Extraneous elements are dropped if manual constraints fall short of required lengths.
+- **The zeros take the diagonal's exactness.** A machine `Real` anywhere on the
+  diagonal makes the whole matrix machine-real — the invented zeros and the
+  exact entries alike — so `DiagonalMatrix[{1, 2, 3.}]` is
+  `{{1., 0., 0.}, {0., 2., 0.}, {0., 0., 3.}}` and `DiagonalMatrix[{1/2, 1.}]`
+  is `{{0.5, 0.}, {0., 1.}}`. An exact diagonal keeps exact zeros. Only
+  *machine* `Real` is contagious: an MPFR entry keeps them exact
+  (``DiagonalMatrix[{1.`30, 2}]``), and a symbolic entry stays symbolic while
+  the zeros around it still turn `Real` (`DiagonalMatrix[{a, 1.}]` is
+  `{{a, 0.}, {0., 1.}}`).
+- A uniformly exact-integer or uniformly machine-real result is a
+  [packed list](packed-arrays.md) written directly, without building the
+  elements — which is what the exactness rule above buys: a matrix of two heads
+  fits no buffer, and the exact zeros used to cost a `Real` diagonal 320×
+  against NumPy's `np.diag`.
 
 ```mathematica
 In[1]:= DiagonalMatrix[{a, b, c}]
@@ -1568,6 +1599,9 @@ Out[2]= {{0, a, 0}, {0, 0, b}, {0, 0, 0}}
 
 In[3]:= DiagonalMatrix[{1, 2, 3}, 0, {3, 5}]
 Out[3]= {{1, 0, 0, 0, 0}, {0, 2, 0, 0, 0}, {0, 0, 3, 0, 0}}
+
+In[4]:= DiagonalMatrix[{1., 2., 3.}]
+Out[4]= {{1., 0., 0.}, {0., 2., 0.}, {0., 0., 3.}}
 ```
 
 ## HilbertMatrix
@@ -1868,7 +1902,7 @@ i.e. an `x` minimising `Norm[m . x - b]`.
   call unevaluated.
 - Accepted Method names:
   - `Method -> Automatic` or `Method -> "Automatic"` — alias for `"Direct"` (default).
-  - `Method -> "Direct"` — Moore-Penrose solve `PseudoInverse[m] . b`. Works on every input family (dense or sparse, exact or numeric, real or complex). The workhorse method.
+  - `Method -> "Direct"` — Moore-Penrose solve `PseudoInverse[m] . b`. Works on every input family (dense or sparse, exact or numeric, real or complex). The workhorse method. A **machine-real** coefficient matrix takes the same thin SVD `PseudoInverse` does, applying `V`, `S^+` and `U^T` to `b` in turn rather than forming the pseudo-inverse and multiplying: `LeastSquares[A500, b500]` did not finish in 180 s on the exact pipeline and costs 77 ms here. The iterative methods below are deliberately left on the exact path — they are chosen for their iteration, not their answer.
   - `Method -> "IterativeRefinement"` — residual-correction loop on top of Direct: `x <- PseudoInverse[m] . b`, then repeatedly `r = b - m . x`, `dx = PseudoInverse[m] . r`, `x <- x + dx`, capped at 50 iterations and terminated when `Total[Flatten[dx]^2] <= Tolerance^2`. For exact inputs the first correction is exactly zero (Moore-Penrose identity) so the loop converges in one pass; for inexact inputs the loop drives round-off down to Tolerance.
   - `Method -> "Krylov"` — Conjugate-Gradient-on-Least-Squares (Hestenes-Stiefel CG applied to the normal equations). Iterates `q = A p`, `alpha = |s|^2 / |q|^2`, `x <- x + alpha p`, `r <- r - alpha q`, `s = A^T r`, `beta = |s_new|^2 / |s|^2`, `p <- s_new + beta p` from `x_0 = 0` (so the iterate stays in `range(A^T)` and converges to the minimum-norm LS solution for rank-deficient `m`). Capped at `2 cols(m) + 10` iterations. Matrix RHS are solved column-by-column and recombined via `Transpose`. Symbolic inputs (the convergence test is undecidable for them) fall back to Direct.
   - `Method -> "LSQR"` — Paige-Saunders LSQR (ACM TOMS 1982): Lanczos bidiagonalisation of `m` with a Givens-rotation update of the resulting upper triangular factor. Dispatches by input grammar: free-symbol inputs go to Direct; exact (Integer / Rational) and Complex inputs go to Krylov / CGLS (mathematically equivalent without the square-root growth in exact arithmetic); pure-real inputs with at least one Real entry run the canonical double-precision algorithm. Uses the Paige-Saunders estimate `|phi_bar * alpha_{k+1}|` of `||A^T r||` for the convergence test, scaled against the initial gradient `||A^T b||`. Cap is `2 cols(m) + 10` iterations. Detects rank deficiency by monitoring `alpha_new / max(|A_ij|)` and `beta_new / max(|A_ij|)`, avoiding the catastrophic blowup of dividing by a near-zero `alpha`.

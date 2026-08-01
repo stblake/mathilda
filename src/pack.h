@@ -151,7 +151,17 @@ Expr* pack_unpack(const Expr* e);
  * Use this at any internal evaluate() whose result is then walked structurally.
  * The surface is small and greppable: only a head that can now produce a packed
  * list matters -- Range, Table, ConstantArray, Array, RandomReal, RandomInteger,
- * Sort, Select, NestList, FoldList, Map. */
+ * Sort, Select, NestList, FoldList, Map, and since 2026-08-01 RowReduce,
+ * HankelMatrix, ToeplitzMatrix, VandermondeMatrix, DiagonalMatrix,
+ * IdentityMatrix, UnitVector, Subdivide and MatrixPower.
+ *
+ * THE LIST GOES STALE THE MOMENT A NEW HEAD PACKS, which is how RowReduce broke
+ * six callers at once: NullSpace, MatrixRank, Inverse's mat_rref, parfrac and
+ * the eigen solver all took its result and walked it with get_tensor_dims or
+ * flatten_tensor, and get_tensor_dims answers 0 for an EXPR_NDARRAY -- so
+ * NullSpace of a machine matrix came back UNEVALUATED at 16x16 and worked at
+ * 14x14. Before giving a head a pack_offer, grep its SYM_ name across src/ and
+ * convert every internal caller in the same change. */
 Expr* pack_eval_plain(Expr* e);
 
 /* ---------------------------------------------------------------------------

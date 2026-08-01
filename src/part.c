@@ -727,6 +727,31 @@ Expr* builtin_part(Expr* res) {
     return expr_part(expr, indices, nindices);
 }
 
+/* Part of `expr` at one position path, honouring a BUFFER.
+ *
+ * expr_part cannot index an NDArray: is_atomic() deliberately reports true for
+ * one (see the note beside expr_head), so it returns NULL, builtin_extract
+ * returns NULL with it, and the call comes to rest -- where the POST-gate
+ * materialises the buffer and the ordinary List path answers. Correct, and
+ * 99.7 ms to read three elements out of 10^6 (HPC plan item C.4), because the
+ * cost is the million Expr nodes nobody wanted.
+ *
+ * ndarray_part is the gather Part has used since experiment 12. Extract is the
+ * same operation on the same value and was simply never wired to it; [[0]] is
+ * excluded here exactly as it is in builtin_part, because head extraction is
+ * expr_head's job and an NDArray's head is not one of its elements.
+ *
+ * NULL preserves the old behaviour exactly rather than being an error: the
+ * caller declines, the post-gate materialises, the ordinary path answers. */
+static Expr* extract_part(Expr* expr, Expr** indices, size_t nindices) {
+    if (nindices > 0 && is_ndarray(expr) &&
+        !(indices[0]->type == EXPR_INTEGER && indices[0]->data.integer == 0)) {
+        bool degrade = false;
+        return ndarray_part(expr, indices, nindices, &degrade);
+    }
+    return expr_part(expr, indices, nindices);
+}
+
 static Expr* extract_single(Expr* expr, Expr* pos, Expr* h) {
     size_t nindices;
     Expr** indices;
@@ -742,7 +767,7 @@ static Expr* extract_single(Expr* expr, Expr* pos, Expr* h) {
         indices = single_index_buf;
         nindices = 1;
     }
-    Expr* part = expr_part(expr, indices, nindices);
+    Expr* part = extract_part(expr, indices, nindices);
     if (!part) {
         return NULL;
     }

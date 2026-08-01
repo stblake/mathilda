@@ -1030,7 +1030,6 @@ static Expr* lsqr_solve(Expr* m, Expr* b, Expr* tol_opt_or_null,
  * and Krylov currently dispatch to Direct (see the file header).
  * ------------------------------------------------------------------ */
 Expr* builtin_leastsquares(Expr* res) {
-    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 2) return NULL;
@@ -1070,6 +1069,24 @@ Expr* builtin_leastsquares(Expr* res) {
         /* Unknown option -> stay unevaluated. */
         return NULL;
     }
+
+    /* A machine coefficient matrix takes the SVD path, for the Direct family.
+     * Direct IS "PseudoInverse[m] . b", and PseudoInverse on a machine matrix
+     * ran the exact rationalised pipeline: LeastSquares[A500, b500] on random
+     * Reals did not finish in 180 s (plan item C.11). ndla_leastsquares_direct
+     * computes the same minimum-norm minimiser from one thin SVD, applying the
+     * factors to b rather than forming the pseudo-inverse.
+     *
+     * The iterative methods are left alone deliberately: LSQR / Krylov /
+     * IterativeRefinement are chosen for their iteration, not their answer, and
+     * silently replacing them with a direct solve would make the Method option
+     * a no-op. They still delist. */
+    if (linalg_call_has_ndarray(res) &&
+        (method == LSTSQ_AUTOMATIC || method == LSTSQ_DIRECT)) {
+        Expr* fast = ndla_leastsquares_direct(m, b, tol_is_automatic, tol_val);
+        if (fast) return fast;
+    }
+    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
 
     /* Shape validation -- shared by every method. */
     int64_t m_dims[64];

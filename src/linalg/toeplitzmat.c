@@ -23,6 +23,8 @@
  */
 
 #include "linalg.h"
+#include "common.h"
+#include "pack.h"
 #include "ndlinalg.h"
 #include "sym_names.h"
 #include "print.h"
@@ -54,9 +56,27 @@ static bool tz_positive_int(const Expr* e, int64_t* out) {
  * Source entries are deep-copied; the inputs keep their ownership.  The c
  * index reaches m-1 (needs |c| = m) and the r index reaches n-1 (needs
  * |r| = n), which the callers guarantee. */
+/* True when any of the `n` given values is a machine Real. ToeplitzMatrix
+ * invents no zeros -- every cell comes from the column or the row -- so the
+ * only exactness question is WIDENING: Mathematica's ToeplitzMatrix[{1, 2, 3.}]
+ * is all Real, where copying each entry verbatim leaves a matrix of two heads
+ * that no buffer can hold. See common.h on machine-real contagion. */
+static bool tz_any_real(Expr* const* vals, int64_t n) {
+    if (!vals) return false;
+    for (int64_t i = 0; i < n; i++)
+        if (vals[i] && vals[i]->type == EXPR_REAL) return true;
+    return false;
+}
+
+static Expr* tz_cell(const Expr* e, bool real) {
+    double d;
+    if (real && common_machine_real_value(e, &d)) return expr_new_real(d);
+    return expr_copy((Expr*)e);
+}
+
 static Expr* tz_build(int64_t m, int64_t n,
                       Expr* const* cvals, Expr* const* rvals,
-                      bool integer_form) {
+                      bool integer_form, bool real) {
     Expr** rows = malloc(sizeof(Expr*) * (size_t)m);
     for (int64_t i = 0; i < m; i++) {
         Expr** cells = malloc(sizeof(Expr*) * (size_t)n);
@@ -65,9 +85,9 @@ static Expr* tz_build(int64_t m, int64_t n,
                 int64_t d = i >= j ? i - j : j - i;
                 cells[j] = expr_new_integer(d + 1);
             } else if (i >= j) {
-                cells[j] = expr_copy(cvals[i - j]);
+                cells[j] = tz_cell(cvals[i - j], real);
             } else {
-                cells[j] = expr_copy(rvals[j - i]);
+                cells[j] = tz_cell(rvals[j - i], real);
             }
         }
         rows[i] = expr_new_function(expr_new_symbol(SYM_List), cells, (size_t)n);
@@ -75,7 +95,9 @@ static Expr* tz_build(int64_t m, int64_t n,
     }
     Expr* result = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)m);
     free(rows);
-    return result;
+    /* Uniform now, so it can be a buffer -- offered rather than built directly
+     * because the entries may be symbolic, which pack_offer declines. */
+    return pack_offer(result);
 }
 
 Expr* builtin_toeplitzmatrix(Expr* res) {
@@ -95,7 +117,7 @@ Expr* builtin_toeplitzmatrix(Expr* res) {
     /* Form 1: ToeplitzMatrix[n] — successive integers, symmetric. */
     int64_t nint;
     if (argc == 1 && tz_positive_int(a0, &nint)) {
-        return tz_build(nint, nint, NULL, NULL, true);
+        return tz_build(nint, nint, NULL, NULL, true, false);
     }
 
     /* Form 2: ToeplitzMatrix[{c1,...,cn}] — symmetric, first column given
@@ -104,7 +126,8 @@ Expr* builtin_toeplitzmatrix(Expr* res) {
         size_t nn = a0->data.function.arg_count;
         if (nn == 0) return NULL;  /* empty list: leave unevaluated */
         return tz_build((int64_t)nn, (int64_t)nn,
-                        a0->data.function.args, a0->data.function.args, false);
+                        a0->data.function.args, a0->data.function.args, false,
+                        tz_any_real(a0->data.function.args, (int64_t)nn));
     }
 
     /* Form 3: ToeplitzMatrix[{c1,...,cm}, {r1,...,rn}] — first column and
@@ -132,7 +155,9 @@ Expr* builtin_toeplitzmatrix(Expr* res) {
             free(rs);
         }
         return tz_build((int64_t)mm, (int64_t)nn,
-                        a0->data.function.args, a1->data.function.args, false);
+                        a0->data.function.args, a1->data.function.args, false,
+                        tz_any_real(a0->data.function.args, (int64_t)mm) ||
+                        tz_any_real(a1->data.function.args, (int64_t)nn));
     }
 
     /* Any other shape (e.g. a non-list, non-integer spec): leave the call

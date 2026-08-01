@@ -1653,6 +1653,16 @@ through a single complex-MPFR Halley core built on the shared `ncpx` toolkit
   `Table[ProductLog[k, 2.3], {k, -2, 2}]` spans the five lowest branches.
   Precision tracks the input: `N[ProductLog[1/3], 100]` and `ProductLog[7/3\`100]`
   are accurate to 100 digits.
+- **The machine kernel.** A separate double-precision Halley core
+  (`sf_machine_productlog`) serves `Compile[]` and the packed-array path, where
+  the MPFR core would cost ~30 µs per element. Its region split is the same
+  idea, with one correction the MPFR core does not need: the asymptotic seed is
+  taken only where `Log z > 1`, because `L2/L1` diverges as `L1 → 0` and is
+  `Log[0]/0` at `z = 1` exactly. `1 ≤ z ≤ e` seeds from `Log[1 + z]` instead.
+  The kernel then **verifies** `w + Log w = Log z` before answering (the log
+  form, since `w e^w` overflows for large `z`) and declines when the residual is
+  not small, which degrades the caller to the MPFR core rather than returning an
+  unconverged iterate.
 - **Derivative.** `D[ProductLog[z], z] = ProductLog[z]/(z (1 + ProductLog[z]))`;
   the two-argument form differentiates the same way in the argument `z`.
 - **Series at 0.** `Series[ProductLog[x], {x, 0, n}]` gives the closed-form

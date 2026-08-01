@@ -133,16 +133,39 @@ static void test_factorisations_evaluate(void) {
     assert_eval_eq("MatrixQ[QRDecomposition[NDArray[{{1., 2.}, {3., 4.}}]][[1]]]", "True", 0);
     assert_eval_eq("MatrixQ[LUDecomposition[NDArray[{{2., 1.}, {1., 3.}}]][[1]]]", "True", 0);
     assert_eval_eq("Length[SingularValueDecomposition[NDArray[{{1., 0.}, {0., 2.}}]]]", "3", 0);
-    /* LeastSquares on a square system reproduces LinearSolve. */
-    assert_eval_startswith("LeastSquares[NDArray[{{1., 0.}, {0., 2.}}], NDArray[{2., 6.}]]", "{");
+}
+
+/* ---------------- The SVD pair: PseudoInverse / LeastSquares ---------------- */
+static void test_svd_pair(void) {
+    /* Both used to delist and run the exact rationalised pipeline in inv.c,
+     * which does not terminate on a machine matrix of any size worth timing.
+     * They now go through one thin gesdd, so a visible NDArray operand answers
+     * with a visible NDArray -- the same convention Normalize, Cross and
+     * LinearSolve already follow, and the reason the assertion below is exact
+     * where it used to only check for a leading brace. */
+    assert_eval_eq("LeastSquares[NDArray[{{1., 0.}, {0., 2.}}], NDArray[{2., 6.}]]",
+                   "NDArray[{2.0, 3.0}]", 0);
+    /* LeastSquares on a square nonsingular system reproduces LinearSolve. */
+    assert_eval_eq("LeastSquares[NDArray[{{1., 0.}, {0., 2.}}], NDArray[{2., 6.}]] == "
+                   "LinearSolve[NDArray[{{1., 0.}, {0., 2.}}], NDArray[{2., 6.}]]", "True", 0);
+    assert_eval_eq("PseudoInverse[NDArray[{{2., 0.}, {0., 4.}}]]",
+                   "NDArray[{{0.5, 0.0}, {0.0, 0.25}}]", 0);
+    /* The Moore-Penrose identity A A^+ A == A, on a rank-deficient matrix the
+     * exact pipeline could not have been asked for at this size. */
+    assert_eval_eq("Module[{a = NDArray[{{1., 2.}, {2., 4.}}]}, "
+                   "Max[Abs[Flatten[a . PseudoInverse[a] . a - a]]] < 1.*^-12]", "True", 0);
+    /* An EXACT matrix keeps the exact pipeline: no buffer, no SVD. */
+    assert_eval_eq("PseudoInverse[{{1, 2}, {3, 4}}]", "{{-2, 1}, {3/2, -1/2}}", 0);
 }
 
 static void test_predicates_and_constructors(void) {
     assert_eval_eq("PositiveDefiniteMatrixQ[NDArray[{{2., 0.}, {0., 3.}}]]", "True", 0);
     assert_eval_eq("PositiveDefiniteMatrixQ[NDArray[{{-2., 0.}, {0., 3.}}]]", "False", 0);
     assert_eval_eq("NegativeDefiniteMatrixQ[NDArray[{{-2., 0.}, {0., -3.}}]]", "True", 0);
-    /* Constructor accepts an NDArray vector. */
-    assert_eval_eq("DiagonalMatrix[NDArray[{1., 2.}]]", "{{1.0, 0}, {0, 2.0}}", 0);
+    /* Constructor accepts an NDArray vector. The zeros are REAL, not exact:
+     * a machine Real on the diagonal makes the whole matrix machine-real, which
+     * is Mathematica's answer and what lets the result pack. */
+    assert_eval_eq("DiagonalMatrix[NDArray[{1., 2.}]]", "{{1.0, 0.0}, {0.0, 2.0}}", 0);
 }
 
 int main(void) {
@@ -162,6 +185,7 @@ int main(void) {
     TEST(test_cross);
     TEST(test_eigen);
     TEST(test_factorisations_evaluate);
+    TEST(test_svd_pair);
     TEST(test_predicates_and_constructors);
 
     printf("All NDArray linalg fast-path tests passed.\n");

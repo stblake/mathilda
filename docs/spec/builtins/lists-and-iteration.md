@@ -166,6 +166,19 @@ and need not land on its upper bound.
 - Bigint, rational, real, and purely symbolic endpoints all work; arithmetic
   outside the machine-integer fast path is deferred to the core evaluator. Real
   endpoints give machine reals, as elsewhere in the system.
+- **A machine-real interval makes every point a machine real**, the endpoints
+  included, so `Subdivide[0, 1., 4]` is `{0., 0.25, 0.5, 0.75, 1.}` — the exact
+  `0` is carried across as `0.` — and `Subdivide[1/2, 1., 4]` is
+  `{0.5, 0.625, 0.75, 0.875, 1.}`. Endpoints are still taken from the input
+  rather than computed; the interval's exactness decides *which* value gets
+  taken. Only **machine** `Real` is contagious: an MPFR endpoint keeps the exact
+  one (``Subdivide[0, 1.`30, 4]`` starts at `0`) and a symbolic endpoint keeps
+  the general path.
+- Such a result is a [packed list](packed-arrays.md) built directly, with no
+  `Expr` node constructed at all. The interior points are `min + i (max - min)/n`
+  in doubles, which is the rule `numpy.linspace` uses and which Mathematica
+  agrees with: `Subdivide[0., 1., 10]` gives `0.30000000000000004` for its
+  fourth point, not `0.3`.
 - `n` must be a **positive integer**. Zero, negative, rational, real, and
   symbolic `n` leave the expression unevaluated, as does an `n` large enough
   that the result list would be unbuildable.
@@ -259,6 +272,13 @@ maps over matrices), and works uniformly on exact integers/rationals, reals
 (output precision tracks the input), arbitrary-precision numbers, complex
 numbers, and purely symbolic quantities, deferring all arithmetic to the core
 evaluator.
+
+The threading is not done by `Rescale` itself: it builds `(x - min)/(max - min)`
+once with the whole first argument in it, and `Plus`, `Times` and `Power` — all
+`Listable` — do the threading at every level. A [packed list](packed-arrays.md)
+therefore stays packed and reaches the element-wise machine kernels, while the
+arithmetic per element is unchanged, so `Rescale[Range[3]]` is still the exact
+`{0, 1/2, 1}`.
 
 ```
 In[1]:= Rescale[2.5, {-10, 10}]

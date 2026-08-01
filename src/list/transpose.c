@@ -117,14 +117,36 @@ Expr* builtin_conjugate_transpose(Expr* res) {
 
     /* ConjugateTranspose[ndarray, ...] = Conjugate[Transpose[ndarray, ...]]:
      * Transpose has a native NDArray path (ndstruct_transpose) and Conjugate is
-     * an NDArray element-wise kernel, so build the composite and let both fire. */
+     * an NDArray element-wise kernel, so build the composite and let both fire.
+     *
+     * RANK 1 IS NOT A TRANSPOSE. The one-argument form on a vector keeps the
+     * shape and only conjugates (the branch below does this for a List), and
+     * Transpose declines a rank-1 buffer -- so the composite came back as an
+     * unevaluated Conjugate[Transpose[v]]. That is why this head sat in
+     * tools/check_packed_aware.py's EXEMPT table rather than on pack.c's AWARE
+     * list, and why a packed 1000x1000 ConjugateTranspose cost 430 ms against
+     * NumPy's 2.20 ms: the gate materialised 10^6 elements first. Handling the
+     * vector here is what lets the head opt in. */
     if (is_ndarray(m)) {
+        if (argc == 1 && m->data.ndarray.rank < 2) {
+            if (m->data.ndarray.rank != 1) return NULL;
+            Expr* ca[1] = { expr_copy(m) };
+            return eval_and_free(expr_new_function(expr_new_symbol(SYM_Conjugate), ca, 1));
+        }
         Expr** tr = malloc(sizeof(Expr*) * argc);
         for (size_t i = 0; i < argc; i++) tr[i] = expr_copy(res->data.function.args[i]);
         Expr* tcall = eval_and_free(expr_new_function(expr_new_symbol(SYM_Transpose), tr, argc));
         free(tr);
-        Expr** ca = malloc(sizeof(Expr*) * 1);
-        ca[0] = tcall;
+        /* Transpose could not reduce (a bad spec): surface the unevaluated
+         * ConjugateTranspose, as the List path below does, rather than a
+         * Conjugate[Transpose[...]] wrapper. */
+        if (head_is(tcall, SYM_Transpose)) { expr_free(tcall); return NULL; }
+        /* Conjugation of REAL data is the identity, and running it anyway is a
+         * second full pass over the buffer -- 6 ms of the 7.8 ms a 1000x1000
+         * took, for a kernel that copies each element to itself. */
+        if (is_ndarray(tcall) && !ndt_is_complex(tcall->data.ndarray.dtype))
+            return tcall;
+        Expr* ca[1] = { tcall };
         return eval_and_free(expr_new_function(expr_new_symbol(SYM_Conjugate), ca, 1));
     }
 

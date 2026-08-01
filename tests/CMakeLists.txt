@@ -1174,6 +1174,9 @@ target_include_directories(funcprog_through_tests PRIVATE ../src)
 add_executable(numloop_tests test_numloop.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(numloop_tests PRIVATE ../src)
 
+add_executable(pred_compile_tests test_pred_compile.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(pred_compile_tests PRIVATE ../src)
+
 add_executable(mapat_tests test_mapat.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(mapat_tests PRIVATE ../src)
 

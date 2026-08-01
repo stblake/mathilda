@@ -1,4 +1,5 @@
 #include "eigen.h"
+#include "pack.h"
 #include "eigen_internal.h"
 #include "linalg.h"
 #include "eval.h"
@@ -459,7 +460,11 @@ Expr** eigen_null_space(Expr* M, int n, size_t* count_out) {
     *count_out = 0;
     Expr* rr_call = expr_new_function(expr_new_symbol(SYM_RowReduce),
         (Expr*[]){ expr_copy(M) }, 1);
-    Expr* R = eval_and_free(rr_call);
+    /* pack_eval_plain: RowReduce answers with a BUFFER for a uniform machine
+     * matrix, and the shape test below reads data.function.arg_count -- which
+     * on an EXPR_NDARRAY aliases the payload pointer. See pack.h. */
+    Expr* R = pack_eval_plain(rr_call);
+    expr_free(rr_call);
     if (!R || R->type != EXPR_FUNCTION
         || R->data.function.head->type != EXPR_SYMBOL
         || R->data.function.head->data.symbol.name != SYM_List

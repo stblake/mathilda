@@ -29,6 +29,7 @@
 #include "numeric.h"
 #include "sym_names.h"
 #include "print.h"
+#include "pack.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -192,6 +193,35 @@ Expr* builtin_unit_vector(Expr* res) {
         const char* name = opt->data.function.args[0]->data.symbol.name;
         if (name == SYM_WorkingPrecision) {
             uv_parse_working_precision(opt->data.function.args[1], &mode, &bits);
+        }
+    }
+
+    /* THE BUFFER PATH. Every component has the same head -- all Integer for the
+     * exact mode, all Real for machine precision -- so the whole vector is one
+     * dtype and can be written straight into an array. Nothing is boxed and
+     * nothing is thrown away: UnitVector[10^6, 1] built 10^6 Expr nodes for one
+     * nonzero, 130 ms against NumPy's 267 us for the same value (HPC plan item
+     * C.5). MPFR components have no buffer representation and keep the List.
+     *
+     * calloc-shaped: ndbuild_open does not zero, so the zeros are written
+     * explicitly. ndbuild_open declining (packing off, or n under the
+     * threshold) falls through to the List path below unchanged. */
+    if (mode == UV_PREC_EXACT || mode == UV_PREC_MACHINE) {
+        void* raw = NULL;
+        Expr* packed = ndbuild_open(1, &n,
+                                    (mode == UV_PREC_EXACT) ? NDT_INT64 : NDT_FLOAT64,
+                                    &raw);
+        if (packed) {
+            if (mode == UV_PREC_EXACT) {
+                int64_t* b = (int64_t*)raw;
+                for (int64_t i = 0; i < n; i++) b[i] = 0;
+                b[k - 1] = 1;
+            } else {
+                double* b = (double*)raw;
+                for (int64_t i = 0; i < n; i++) b[i] = 0.0;
+                b[k - 1] = 1.0;
+            }
+            return packed;
         }
     }
 

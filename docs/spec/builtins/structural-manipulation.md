@@ -35,6 +35,11 @@ Extracts the part of an expression at the position specified by `pos`.
 - `Extract[expr, {i, j, ...}]` is equivalent to `Part[expr, i, j, ...]`.
 - `pos` can be of the more general form `{part1, part2, ...}` where `parti` are `Part` specifications such as an integer `i`, `All` or `Span`.
 - You can use `Extract[expr, ..., Hold]` to extract parts without evaluation.
+- Reads a [packed list](packed-arrays.md) through the buffer, the same gather
+  `Part` uses, so pulling three elements out of a 10^6-element array costs three
+  reads rather than a materialisation of the whole array. An element from an
+  integer buffer comes back as an exact `Integer`. `Extract[expr, {0}]` is head
+  extraction and is unaffected.
 
 ## Span
 - `i;;j`: Represents a span of elements `i` through `j`.
@@ -206,6 +211,9 @@ Conjugate transpose (Hermitian transpose) of an array.
 - For symbolic entries, `Conjugate[x]` is left wrapped around `x`.
 - Works on higher-rank tensors with the same `spec` semantics as
   `Transpose`.
+- Reads and returns a [packed list](packed-arrays.md) at every rank, including
+  the rank-1 form. A **real** buffer skips the conjugation entirely — it is the
+  identity there, and running it would be a second full pass over the data.
 
 ```mathematica
 In[1]:= ConjugateTranspose[{{1, 2 I, 3}, {3 + 4 I, 5, I}}]
@@ -588,6 +596,13 @@ Out[3]= Infinity
 `MinMax[list]` gives `{Min[list], Max[list]}` in one shot — the range of the
 data, handy for plot bounds. Over an association it uses the values. Delegates
 to `Min` / `Max`, so it inherits their numeric handling.
+
+Packed-array aware, and `int64`-exact, since 2026-07-31: it accepts a buffer and
+passes it to `Min` and `Max` intact, each of which takes its own buffer path
+(`ndred_min` / `ndred_max`). Before that the head was absent from `pack.c`'s
+`AWARE` list, so the transparency gate materialised one `Expr` per element and
+both delegates ran the generic List code on the boxed copy — 307 ms on a 10⁶
+vector against 483 µs now.
 
 ```mathematica
 In[1]:= MinMax[{3, 1, 4, 1, 5, 9, 2}]

@@ -66,6 +66,19 @@ Expr* builtin_total(Expr* res) {
     Expr* list = res->data.function.args[0];
     Expr* level_spec = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
 
+    /* Total of an empty list is the additive identity, at any level spec:
+     * Total[{}] is 0, as Plus @@ {} already was. The level walk below has no
+     * element to fold and handed the empty List straight back, so Total[{}]
+     * answered {} -- an empty LIST where a number is expected, which then
+     * propagates as a non-number through whatever consumes it.
+     *
+     * Found by the coverage sweep (experiment 20): a Select that matched
+     * nothing fed Total, and the checksum came back {} instead of 0. Nothing in
+     * the suite covered the empty case because nothing in the suite produced an
+     * empty result by accident. */
+    if (is_listq(list) && list->data.function.arg_count == 0)
+        return expr_new_integer(0);
+
     int64_t n1 = 1, n2 = 1;
     int64_t depth = get_depth_for_total(list);
 

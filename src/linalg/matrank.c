@@ -41,6 +41,7 @@
  */
 
 #include "matrank.h"
+#include "pack.h"
 #include "linalg.h"
 #include "ndlinalg.h"
 #include "linsolve.h"
@@ -325,7 +326,11 @@ static Expr* call_rowreduce(Expr* m, MatsolMethod method) {
         args[0] = expr_copy(m);
         Expr* call = expr_new_function(expr_new_symbol(SYM_RowReduce), args, 1);
         free(args);
-        return eval_and_free(call);
+        /* pack_eval_plain: RowReduce answers with a BUFFER for a uniform
+         * machine matrix and count_nonzero_rows walks the result. See pack.h. */
+        Expr* out = pack_eval_plain(call);
+        expr_free(call);
+        return out;
     }
     const char* name = NULL;
     switch (method) {
@@ -345,7 +350,9 @@ static Expr* call_rowreduce(Expr* m, MatsolMethod method) {
     args[1] = opt;
     Expr* call = expr_new_function(expr_new_symbol(SYM_RowReduce), args, 2);
     free(args);
-    return eval_and_free(call);
+    Expr* out = pack_eval_plain(call);   /* see the note above */
+    expr_free(call);
+    return out;
 }
 
 static int count_nonzero_rows(Expr* rref, int rows, int cols) {

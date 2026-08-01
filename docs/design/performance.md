@@ -272,7 +272,7 @@ logistic-map row is the one that is not a library comparison — read 2.51× as
 
 Monte Carlo π was the `UnitStep` gap of §5, then became RNG-bound at 2.73 s — of
 which `RandomReal[{0,1}, 10^7]`, called twice, was 2.4 s. See
-[`RANDOM_NUMBER_GENERATION.md`](../experiments/RANDOM_NUMBER_GENERATION.md) for
+[`RANDOM_NUMBER_GENERATION.md`](../experiments/08-random-number-generation/README.md) for
 what that turned out to be and what fixing it cost.
 
 ---
@@ -659,7 +659,7 @@ with this in mind.**
 | `Accumulate`, 10⁷ | 63.8 ms | **19.4 ms** | 15.1 ms | 28.7 ms | **1.48× ahead of NumPy** |
 
 Per-experiment detail:
-[`docs/experiments/HPC_SWEEP_3_NUMPY_GAP.md`](../experiments/HPC_SWEEP_3_NUMPY_GAP.md).
+[`docs/experiments/11-hpc-sweep-numpy-gap/README.md`](../experiments/11-hpc-sweep-numpy-gap/README.md).
 
 ---
 
@@ -788,10 +788,457 @@ program can.**
 
 ---
 
-## 12. Summary
+## 12. Fifth sweep — eight application domains (2026-07-31)
+
+Experiments 12–19. Eight domains chosen so that each one runs somewhere the
+first four sweeps did not, selected by a mechanical rule: name the subsystem the
+candidate would exercise that no existing row does, and drop anything that could
+not answer. What survived stresses, in order — irregular gather, cut-off masked
+all-pairs interaction, integer dynamic programming, shrinking-array iteration,
+FFT inside a time loop, transposed GEMM chains, small dense matrices in a long
+loop, and branch-free ray/scene intersection.
+
+One file per domain under [`../experiments/`](../experiments/); the per-domain
+diagnosis lives there and is not repeated here.
+
+### Results
+
+| Benchmark | before | after | Mathematica 14.0 | NumPy 2.4.4 | vs WL | vs NumPy |
+|---|---:|---:|---:|---:|---:|---:|
+| Gather, 1.6e6 indices into 100000 | 389 ms | **15.7 ms** | 9.7 ms | 5.7 ms | 1/1.62× | 1/2.73× |
+| SpMV, 100000 × 16 CSR | 438 ms | **20.5 ms** | 17.9 ms | 9.7 ms | 1/1.14× | 1/2.12× |
+| PageRank, 1.6e6 edges, 20 iterations | 14.102 s | **486 ms** | 355 ms | 168 ms | 1/1.37× | 1/2.89× |
+| Breadth-first search, 5 levels | 482 ms | **121 ms** | 51.9 ms | 78.2 ms | 1/2.33× | 1/1.54× |
+| Lennard-Jones force, 2048 atoms | 416 ms | **394 ms** | 2.732 s | 152 ms | **6.93×** | 1/2.59× |
+| Velocity-Verlet MD, 10 steps | 5.14 s | **6.50 s** ᵃ | 32.230 s | 1.734 s | **4.96×** | 1/3.75× |
+| Cell-list binning, 100000 atoms | 4.4 ms | **4.7 ms** | 1.1 ms | 1.4 ms | 1/4.20× | 1/3.48× |
+| Needleman-Wunsch, 2000 × 2000 | 11.114 s | **186 ms** | 1.841 s | 51.4 ms | **9.91×** | 1/3.61× |
+| k-mer encode + distinct count | 492 ms | **25.0 ms** | 49.2 ms | 6.5 ms | **1.97×** | 1/3.82× |
+| Rolling GC content, 10⁷ bases | 134 ms | **137 ms** | 80.8 ms | 44.7 ms | 1/1.70× | 1/3.07× |
+| Binomial American put, 4000 steps | 13.652 s | **148 ms** | 3.248 s | 44.7 ms | **21.91×** | 1/3.32× |
+| Explicit FD American put, 1000 × 25000 | 42.597 s | **316 ms** | 11.202 s | 204 ms | **35.45×** | 1/1.55× |
+| Monte-Carlo VaR, 250000 × 64 | 12.9 ms | **12.3 ms** | 22.7 ms | 7.5 ms | **1.85×** | 1/1.63× |
+| Kuramoto-Sivashinsky, 2048 modes | 322 ms | **332 ms** | 250 ms | 173 ms | 1/1.33× | 1/1.92× |
+| 2D Navier-Stokes, 128², 200 steps | 554 ms | **551 ms** | 10.127 s | 246 ms | **18.37×** | 1/2.24× |
+| FFT Poisson solve, 512², 30 solves | 291 ms | **312 ms** | 187 ms | 199 ms | 1/1.67× | 1/1.56× |
+| MLP training, 785-128-10, 100 steps | 44.688 s | **3.899 s** | 364 ms | 356 ms | 1/10.72× | 1/10.97× |
+| MLP inference, 8192 × 785 | 344 ms | **17.9 ms** | 10.8 ms | 19.5 ms | 1/1.67× | **1.09×** |
+| Kalman filter, 6 states, 20000 steps | 8.749 s | **9.162 s** ᵃ | 824 ms | 435 ms | 1/11.12× | 1/21.04× |
+| Ensemble Kalman, 4096 members | 3.622 s | **3.766 s** ᵃ | 2.960 s | 92.7 ms | 1/1.27× | 1/40.63× |
+| Ray trace, 512² × 64 spheres | 1.454 s | **1.013 s** | 7.540 s | 322 ms | **7.44×** | 1/3.15× |
+
+ᵃ Inside the ±20% run-to-run band these three rows carry (working sets of
+hundreds of megabytes, measured after other rows in the same session). A
+standalone A/B of the two binaries has the fixed one marginally ahead on every
+one — see [`MOLECULAR_DYNAMICS.md`](../experiments/13-molecular-dynamics/README.md).
+
+21 benchmarks, three systems, **no value mismatches**. Nine rows are now ahead of
+Mathematica, four of them by more than 7×.
+
+### What was fixed
+
+| # | | measured |
+|---|---|---|
+| 1 | `Part` reads a **packed index** — `build_axis_selector` accepted a `List` of positions but not a buffer, so `x[[idx]]` degraded the whole `Part` and materialised both arrays | 389 → 15.7 ms; row gather 506 → 13.7 ms |
+| 2 | `Union`/`Intersection`/`Complement` merge integer buffers | 745 → 40.9 ms per 10⁶ |
+| 3 | `MapThread` gained an `int64` arm (`Min`/`Max` exact by construction, `Plus`/`Times` abandon on overflow) | 853 → 13.7 ms per 10⁶ |
+| 4 | `Fold`/`FoldList` added to `INT64_OK`; `ndred_scan`'s exact arm was already there and unreachable | 302 → 1.36 ms per 10⁶ |
+| 5 | **`Ramp` did not exist** and `Clip[x, {0., Infinity}]` returned *unevaluated*, so the positive part had no working spelling. New builtin with a threaded kernel; infinite `Clip` bounds parse | 1.41 ms per 10⁶, **10× the `x UnitStep[x]` workaround** |
+| 6 | `Abs` gained an exact `int64` arm; `ndarray_map_unary` now falls through per-dtype instead of declining | 460 → 7.5 µs per 2000 |
+| 7 | `First`/`Last`/`Most`/`Rest` added to `INT64_OK` — buffer paths since §10, never registered | 138 → 0.74 µs per 2000 |
+| 8 | `Partition[a, k, d]` — the **sliding window** — on the buffer; only the tiling form was there | 439 → 20.1 ms per 5 × 10⁵ |
+| 9 | `Join` packs its small operands up (the FD boundary `Join[{lo}, interior, {hi}]`) | FD row 1.66 s → 316 ms |
+| 10 | `Part` lifts a **below-threshold source** when the index is packed (a 65-entry lookup table) | 52.7 → 3.1 ms |
+| 11 | `exact_div_wrapper` returns a zero at the *numerator's* exactness — `Inverse[{{2., 0.}, {0., 4.}}]` was `{{0.5, 0}, {0, 0.25}}` with exact `Integer` zeros | correctness; also unblocks packing |
+
+### What it exposed and did not fix
+
+- **A mixed-dtype tuple return destroys every array in it.** `{a, b}` of two
+  float64 matrices costs 0.55 ms and packs; `{a, b, mask}` with an `int64` mask
+  costs 53 ms and does not, and the caller pays **120×** on its next operation.
+  `List` cannot be made packed-aware without breaking the no-nesting invariant,
+  and widening the integer row is a value change. Workaround: `1. UnitStep[…]`.
+- **The packing threshold is a floor under numeric linear algebra.** A 6×6
+  `Inverse` is 36 elements, never packed, and therefore never reaches LAPACK —
+  it runs a fraction-free symbolic elimination at ~800 µs. Routing small machine
+  matrices to the numeric kernels has a re-entrancy trap documented in
+  [`STATE_ESTIMATION.md`](../experiments/18-state-estimation/README.md).
+- **Mixed `float64 × int64` elementwise is ~25× a pure float multiply** — the
+  shape every comparison mask produces.
+- **Per-call dispatch on a short loop body** is now the dominant term in three
+  separate experiments (15, 16, 18) and no further packing work will move it.
+
+---
+
+## 13. Sixth sweep — every builtin, not every workload (2026-07-31)
+
+Experiment 20. The first sweep here that is not driven by a workload: it
+enumerates all **676 registered builtins**, joins them against the registries
+that decide dispatch (`ndkernels.c`'s kernel table, `pack.c`'s `AWARE` and
+`INT64_OK`), and times the 339 numeric ones against NumPy/SciPy on the same
+data. Detail in
+[`docs/experiments/20-numeric-coverage-sweep/README.md`](../experiments/20-numeric-coverage-sweep/README.md).
+
+The reason for doing it: every sweep above chose kernels and saw which builtins
+they reached, so the coverage is genuine but accidental, and nothing in the tree
+could answer *"which builtins have never been measured?"*
+
+### Where the numeric surface actually stands
+
+Median ratio to NumPy/SciPy over the comparable probes in each group (223 of 283
+probes have both columns; 31 heads are unevaluated because the function does not
+exist, 2 did not finish).
+
+| group | n | median vs NumPy | worst |
+|---|---:|---:|---:|
+| elementwise | 57 | **1/1.07×** | 2199× |
+| special | 32 | **1/1.34×** | 207× |
+| transform | 5 | **1/1.26×** | 8.2× |
+| reduce | 15 | 1.3× | 1470× |
+| linalg | 18 | 1.6× | 20924× |
+| scan | 8 | 1.7× | 338× |
+| struct | 36 | 3.8× | 106841× |
+| functional | 12 | 7.7× | 1023× |
+| build | 13 | 26.7× | 1679× |
+| integer | 8 | 70.4× | 443× |
+| linalg-small | 4 | 84.6× | 122× |
+| mask | 14 | 1466× | 5221× |
+
+**The elementwise and special-function surface is finished work.** Its median is
+at parity with NumPy and ahead of SciPy, with individual rows well past that —
+`Exp` 4.2× ahead, `Cot` 6.6×, `AiryBi` 11.8×, `ExpIntegralEi` 10.5×. That is the
+threaded-kernel work of §§9–12 paying off across a surface no single workload had
+exercised.
+
+The distance is concentrated in *kinds* of operation — masks, construction,
+integer arrays, small matrices — which is what a coverage sweep can see and a
+workload sweep cannot.
+
+### What was fixed
+
+| | before | after | |
+|---|---:|---:|---|
+| `MinMax` was not on the AWARE list | 307 ms | **483 µs** | **636×** |
+| `AllTrue` — compiled predicate | 396 ms | **9.90 ms** | **40×** |
+| `AnyTrue` | 382 ms | **9.75 ms** | **39×** |
+| `TakeWhile` | 315 ms | **6.22 ms** | **51×** |
+| `Select` | 82.6 ms | **2.36 ms** | **35×** |
+| `Select` with a band `0.25 < # < 0.75 &` | 496 ms | **21.9 ms** | **23×** |
+| `Norm` — `na_load_vector` memcpy | 3.95 ms | **1.58 ms** | 2.5× |
+| `Normalize` | 5.56 ms | **3.18 ms** | 1.7× |
+| `Total[{}]` answered `{}`, not `0` | — | — | correctness |
+
+**`MinMax` is the fourth appearance of this document's recurring defect** — after
+the 26 linear-algebra heads, `Nest`, and `Fourier` — and the first found by
+enumerating the registry rather than by a workload tripping over it. It
+delegates to `Min` and `Max`, both of which have had buffer paths all along; the
+head was simply not on the `AWARE` list, so the gate boxed 10⁶ elements before
+either delegate saw them.
+
+**The predicate family was the boolean half of `numloop_map` that never got
+written.** Seven heads — `Select`, `AllTrue`, `AnyTrue`, `NoneTrue`,
+`TakeWhile`, `LengthWhile`, `SelectFirst` — materialised the buffer and called
+the test through the interpreter per element. A predicate now compiles as a tree
+of comparisons over `NumProg`s, reusing `compile_function` unchanged for each
+comparison operand.
+
+Two things about that are worth keeping:
+
+1. **The comparison tolerance is the correctness question, not the arithmetic.**
+   `compare_numeric` treats two inexact operands as equal when they agree to a
+   relative 2⁻⁴⁶, so `Less[1., 1. + 2.^-47]` is `False` where a compiled `<`
+   says `True`. Invisible on ordinary data, wrong on exactly the near-tie data a
+   numerical program produces. The compiled comparison reproduces that branch,
+   constant included, and is restricted to float64 for the same reason — two
+   exact Integers compare through GMP with no tolerance at all.
+2. **`0.25 < # < 0.75` is not a three-argument `Less`.** It is
+   `Inequality[0.25, Less, Slot[1], Less, 0.75]`. Generalising `Less` to
+   `argc >= 2` compiled cleanly, passed every test, and moved the row by nothing.
+   `FullForm` said why in one line.
+
+### The gap register
+
+The sweep's whole output is a work list; the full table is in the experiment.
+The largest items:
+
+1. **No boolean array dtype** — `Map[# > 0.5 &, v]` builds 10⁶ `True`/`False`
+   symbols and every consumer walks a boxed list: **1813×**. `UnitStep[v - 0.5]`
+   is the fast spelling at 3.6 ms, so the *arithmetic* mask works and the
+   *boolean* one does not. Predicate fusion sidesteps it for seven heads;
+   `Pick`, `Count`, `Position` and boolean algebra still pay.
+2. **`MatrixPower`** runs an exact path on a machine matrix: 18.1 s vs 865 µs.
+3. **The Bessel and `ProductLog` kernels are registered but not reaching machine
+   code** — `BesselK` 44 s per 10⁶. Registration is not speed, which is the
+   reason this sweep has both a static and a dynamic half.
+4. **`Extract`** materialises the whole buffer to read three elements (`Part` was
+   fixed in experiment 12; `Extract` is the same operation and was not).
+5. **Array construction** — `Subdivide` 2.02 s, `Rescale` 2.17 s,
+   `Table[N[i], …]` 453 ms. `Range`, `ConstantArray` and `RandomReal` build
+   buffers; the other producers do not.
+6. **96 numeric heads do not exist at all**, including
+   `CholeskyDecomposition`, `KroneckerProduct`, `MatrixExp`, `Diagonal`,
+   `ArrayReshape`, `Ordering`, `Quantile`, `Correlation` and the orthogonal
+   polynomials. A coverage gap rather than a speed gap, and the reason
+   `numeric_coverage.py --missing` asks the running binary: from the source,
+   "no fast path" and "no function" look identical.
+
+---
+
+## 14. Seventh round — the register worked through (2026-08-01)
+
+Not a sweep: this round has no new probes at all. It works the sixth sweep's
+gap register (§13, and `plans/HPC_IMPROVEMENT_PLAN.md` §11) top-down, and is
+recorded here because *what the register got wrong* is more useful than what it
+got right.
+
+### The one-line finding
+
+Four of the heads on the list — `Extract`, `MatrixPower`, `PseudoInverse`,
+`LeastSquares` — were **already on `pack.c`'s `AWARE` list**. The transparency
+gate was not materialising for any of them. They were slow because the builtin
+itself threw the buffer away on its own first line, either by calling
+`linalg_delist_and_reeval` or (for `Extract`) by declining and letting the
+**post**-gate materialise on the way to rest.
+
+That is the fifth appearance of this document's recurring defect and the first
+in this disguise. The previous four were *"the head is not aware"*; this one is
+*"the head is aware and declines anyway"*, and no static check sees it —
+`tools/check_packed_aware.py` reports these heads as correctly opted in, because
+they are. What found it was `MATHILDA_PACK_DIAG=gate`, whose report includes the
+post-gate.
+
+| probe | before | vs NumPy then | after | vs NumPy now |
+|---|---:|---:|---:|---:|
+| `pseudoinverse` `PseudoInverse[A₃₀₀]` | **did not finish in 180 s** | — | 19.8 ms | **1/1.07×** |
+| `matrixpower` `MatrixPower[A₃₀₀, 4]` | 14.7 s | 20924× | 827 µs | 1.08× |
+| `leastsquares` `LeastSquares[A₅₀₀, b₅₀₀]` | **did not finish** | — | 70.9 ms | 1.69× |
+| `extract` `Extract[v, {{1},{2},{3}}]`, 10⁶ | 99.7 ms | 97139× | **1.0 µs** | **1/1.35×** |
+| `conjugatetranspose` `[A₁₀₀₀]` | 430 ms | 195× | 2.18 ms | **1/1.15×** |
+| `subdivide` `Subdivide[0., 1., 999999]` | 1.87 s | 1740× | 707 µs | **1/1.29×** |
+| `diagonalmatrix` `DiagonalMatrix[b₁₀₀₀]` | 70.2 ms | 320× | 263 µs | **1.09×** |
+| `identitymatrix` `IdentityMatrix[1000]` | 77.3 ms | 334× | 223 µs | 1.16× |
+| `unitvector` `UnitVector[10⁶, 1]` | 130 ms | 487× | 720 µs | 3.33× |
+| `Rescale[v]`, 10⁶ | 2.17 s | — | 3.1 ms | — |
+| `ProductLog[v]`, 10⁵ | 2.77 s | — | 14.3 ms | — |
+
+**Every probed row is now within 1.2× of NumPy or ahead of it, except
+`unitvector` at 3.3× on a 720 µs absolute**, and `Extract` moved by four orders
+of magnitude. Both columns of the probed rows come from uncontended
+`tools/numeric_sweep.py` runs on the machine at the top of this document, so
+they are the same measurement on the same data; the last two have no probe at
+those shapes and are `AbsoluteTiming` minimum-of-five.
+
+`table_num` and `array_fn` stay at ~900×, and why is in "Still open" below.
+
+`PseudoInverse` and `LeastSquares` had never terminated on a machine matrix at
+sweep size: `inv.c`'s pipeline rationalises every entry, row-reduces over ℚ and
+inverts two Gram matrices, which is the right algorithm for an exact matrix and
+the wrong one for 90000 doubles. Both now take one thin LAPACK `gesdd`, and
+`LeastSquares` applies `V`, `Σ⁺` and `Uᵀ` **to b** rather than forming the
+pseudo-inverse first.
+
+### A speed row that was a wrong answer
+
+`ProductLog` was on the register at 28 µs/element, filed under "registration is
+not speed — probably an MPFR fallback firing per element". The measurement was
+right and the diagnosis was wrong in an instructive way.
+
+The array kernel was failing on roughly one element in 10⁵ and abandoning the
+whole buffer to MPFR — so the *symptom* was a slow array. The *cause* was that
+`sf_machine_productlog` seeded Halley's iteration with the `x → ∞` expansion
+`log x − log log x + log log x / log x` for **every** `x ≥ 1`. That term diverges
+as `log x → 0` and is `log(0)/0` at `x = 1` exactly:
+
+```
+ProductLog[1.01]   returned  -338.392     (the answer is 0.570752)
+ProductLog[1.001]  returned  -6784.78
+```
+
+Halley moves `w` by about 2 per step and cannot walk back from −10⁴, so sixty
+iterations later the function returned whatever it had reached — finite, and
+wrong. **Only the fast path was affected**: the interpreter's scalar
+`ProductLog` goes to MPFR and was always right, which is precisely why nothing
+caught it. `Compile[{x}, ProductLog[x]]` and every packed `ProductLog` used the
+broken kernel.
+
+Fixed by seeding from `log(1 + x)` on `1 ≤ x ≤ e`, and — more durably — by
+having the kernel **verify `w + log w = log x` before it answers** and decline
+when the residual is not small. A decline is not an error; it is the kernel
+contract's "no usable value", and it degrades the caller to MPFR. Zero residual
+across ~1100 probe points from the branch point out to 10³⁰⁰.
+
+*A kernel that is wrong is worse than one that declines, and a kernel with a
+faster twin that disagrees with it will not be caught by any value test that
+runs only one of them.*
+
+### `Subdivide`'s last bit, and what "unchanged" means
+
+`Subdivide` with two `Real` endpoints now writes a buffer, and its interior
+points changed in the last bit. That was a decision, not a side effect: the old
+value came out of `Times` sorting its `Orderless` factors **by value** and
+folding left to right, so `Subdivide[0., 1., 10]` gave `0.3` for its fourth
+point because `1/10` happened to sort before the `Real` span. A different
+interval folded in a different order. There was no rounding rule to preserve.
+
+The new rule is `min + i × step`, which Mathematica and `numpy.linspace` both
+use — checked bit-for-bit against `linspace` on four intervals including a
+descending one, where Mathilda now agrees on every element. Endpoints are still
+copied verbatim by both paths, because `min + n × step` is not `max`.
+
+### The 320× row was a wrong answer, and the "constraint" was never checked
+
+`DiagonalMatrix` of a `Real` diagonal was the one row of item C.5 that did not
+move, and this document said why: the off-diagonal zeros are exact `Integer`s,
+so the matrix has two heads and no uniform buffer holds it — *"that is
+Mathematica's answer too"*.
+
+It is not. Mathematica gives `{{1., 0., 0.}, {0., 2., 0.}, {0., 0., 3.}}`, all
+`Real`, and a packed array. **The claimed fidelity constraint was itself the
+bug**, and it was the only reason the slow path existed:
+
+| | Mathilda was | Mathematica |
+|---|---|---|
+| `DiagonalMatrix[{1., 2., 3.}]` | `{{1., 0, 0}, …}` | `{{1., 0., 0.}, …}` |
+| `DiagonalMatrix[{1, 2, 3.}]` | `{{1, 0, 0}, {0, 2, 0}, {0, 0, 3.}}` | all `Real` |
+| `DiagonalMatrix[{1/2, 1.}]` | `{{1/2, 0}, {0, 1.}}` | `{{0.5, 0.}, {0., 1.}}` |
+| `Subdivide[0, 1., 4]` | `{0, 0.25, …}` | `{0., 0.25, …}` |
+| `Subdivide[3., 1, 4]` | `{…, 1}` | `{…, 1.}` |
+
+The rule is the ordinary numeric-tower one and it had simply never been written
+down for *invented* elements: **a machine `Real` anywhere makes the whole result
+machine-real**, the zeros a producer creates and the exact entries it was given
+alike. Only machine `Real` is contagious — an MPFR entry keeps exact zeros, and
+a symbolic entry stays symbolic while the zeros around it still turn `Real`.
+`common_machine_real_value` in `src/common.h` is that rule, shared by both
+producers.
+
+Getting it right made the result one dtype, which is what let it pack:
+**70.2 ms → 263 µs, 320× → 1.09× NumPy.** `Subdivide` with one exact endpoint
+packs now for the same reason.
+
+*The lesson is not "check against Mathematica" — it is that a claimed constraint
+which happens to excuse a slow path deserves the same scrutiny as the path.
+This one was asserted in a code comment, repeated in the changelog, and filed in
+the plan against item 10.1 as though it were a known design gap. It was never
+tested, and it took ten minutes to disprove.*
+
+### The sweep that followed, and the check that was missing
+
+`DiagonalMatrix` was not alone, and finding the rest needed a fourth kind of
+check. The three that existed cannot see this defect:
+
+| check | what it asks | why it misses this |
+|---|---|---|
+| `check_packed_aware.py` | did the head opt in? | these heads had |
+| the differential tests | do the packed and unpacked paths agree? | a producer invents the same wrong zero on both, so they agree |
+| the timing sweeps | is it slow? | the answer is right enough to print |
+
+What was left is to look at the element **heads** of the result, which is
+`tools/check_array_exactness.py`. It reuses `numeric_sweep`'s 283 probes for
+valid call sites, adds 60 chosen to be *read* rather than timed, and classifies
+each result PACKED / single-headed / MIXED.
+
+| of 342 probes | before | after |
+|---|---:|---:|
+| packed (uniform by construction) | 180 | **184** |
+| single-headed plain List | 147 | **148** |
+| **MIXED** | **7** | **0** |
+| mixed and exempt, with evidence | 8 | 10 |
+| no result | 1 | **0** |
+
+Five more routines were inventing an exact element inside a machine-real
+result — `VandermondeMatrix`'s `x^0` column, `HankelMatrix`'s pad zeros,
+`ToeplitzMatrix`'s un-widened entries, `MatrixPower[m, 0]`'s identity,
+`NullSpace`'s free-variable slot — plus `RowReduce`'s pivot 1 and eliminated 0.
+All six now follow the input's exactness and all six now pack.
+`inverse_onestep` in `inv.c` had had this right since the fifth sweep, by hand;
+the rule is now `common_has_machine_real` / `common_machine_real_value` in
+`src/common.h`, shared.
+
+**`RowReduce` is a deliberate divergence and the only one in this class.**
+Mathematica writes the exact `1` and `0` regardless: the heads of its
+`RowReduce[{{2., 4.}, {1., 3.}}]` are `{Integer, Real, Integer, Integer}` and
+`PackedArrayQ` is `False`, so its own RREF of a machine matrix is two-headed and
+unpacked. Mathilda takes the project rule instead — a machine array in, a
+machine array out.
+
+One fix bit back, and the way it did is worth more than the fix. Giving
+`RowReduce` a `pack_offer` — a one-line bonus on top of its exactness change —
+broke six internal callers at once: `NullSpace`, `MatrixRank`, `Inverse`'s
+`mat_rref`, `PseudoInverse`, `Apart` and the eigen solver all take its result
+and walk it with `get_tensor_dims` / `flatten_tensor`, and `get_tensor_dims`
+answers 0 for an `EXPR_NDARRAY`. `NullSpace` of a machine matrix came back
+**unevaluated at 16 × 16 and correct at 14 × 14**: the break exists only above
+the 250-element threshold, and every natural test case lands below it. `pack.h`
+documents this exact hazard and even lists the heads to watch — but the list is
+of heads that pack *today*, so adding one makes the list stale in the same
+commit. All six now use `pack_eval_plain`; the list is updated; the regression
+test straddles the threshold on purpose.
+
+The eight exemptions are as interesting as the fixes, because they are where the
+rule stops: `Chop`'s zero is exact *on purpose* (Mathematica agrees),
+`PadRight`'s default fill and `Riffle`/`Insert`/`Append`/`ReplacePart`'s
+separator are caller-supplied, `Join` mixes what it was given, `Tally` returns
+`{value, count}` pairs, and `LUDecomposition`'s exact elements are the
+permutation vector inside a three-part tuple. Every one carries the Mathematica
+output that justifies it, in the tool's `EXEMPT` table — because "Mathematica
+does it too" is exactly the claim that went unchecked the first time.
+
+### `ConjugateTranspose` was 195× NumPy, and the audit knew
+
+Not on the register — the sweep turned it up while the linalg group was being
+re-measured, at **430 ms against NumPy's 2.20 ms** on a 1000 × 1000. It has had
+an NDArray path since the packed work (`Conjugate[Transpose[buffer]]`, both of
+which are buffer ops), and it was nevertheless *deliberately* excluded from
+`pack.c`'s `AWARE` list, with the reason written down in
+`tools/check_packed_aware.py`'s `EXEMPT` table:
+
+> its NDArray path does not handle rank 1 and comes back UNEVALUATED as
+> `Conjugate[Transpose[v]]`; a real gap, but fixing it is not a packing change
+
+Exactly right, and the note is why the fix took ten minutes: the one-argument
+form on a *vector* keeps the shape and only conjugates, and `Transpose` declines
+a rank-1 buffer. Handling that case is what let the head opt in. Two smaller
+things came with it — the composite leaked its argument array on every call, and
+conjugating a **real** buffer is the identity, which was a second full pass over
+16 MB (6 ms of the 7.8 ms the first fix left).
+
+An `EXEMPT` entry with a reason is the difference between "considered and
+rejected" and "never noticed", and this is the first time that distinction has
+paid for itself.
+
+### What the register said and what was actually there
+
+| register said | what it was |
+|---|---|
+| C.2 `MatrixPower` "likely a one-line dispatch" | It was one line — but a `linalg_delist_and_reeval`, not a missing `AWARE` entry |
+| C.3 Bessel/`ProductLog` "probably an MPFR fallback per element" | `ProductLog` was a wrong answer (above). The four Bessel heads are blocked by something else again: they carry **DownValues** from `internal/*.m`, and the gate's test is `packed_aware && !down_values`, so a registered kernel becomes unreachable the moment a head acquires a rewrite rule. Every one of those rules is guarded by `Not[NumberQ[z]]` and cannot fire on numeric data — nothing knows that |
+| C.4 `Extract` "materialises the whole buffer" | True, but by the **post**-gate, not the gate: `expr_part` cannot index an NDArray, so `Extract` returned `NULL` and the node materialised on its way to rest |
+| C.5 producers "mechanical, no open question" | Two of the seven were not. `Rescale` was not a buffer problem at all — it built a fresh `Rescale[element, range]` call *per element*, and the fix was to build the arithmetic once over the whole argument and let Listable `Plus`/`Times` thread. `DiagonalMatrix` was **an exactness bug wearing a performance costume** — see below |
+| C.11 "does not complete in 180 s — something is not terminating" | Nothing was hanging. `LeastSquares` and `PseudoInverse` terminate, on a wildly wrong algorithm for the size. `MatrixExp` does not exist and returns unevaluated in 2 µs; the 180 s was the Python side of the harness |
+
+### Still open, in the order the measurements put them
+
+1. **The Bessel heads** — `BesselK` 44 s per 10⁶. Making them aware is not
+   enough: the scalar builtin uses `mpfr_jn` and the ND kernel uses libm `jn`,
+   so the packed and plain paths would disagree in the last ulp. The fix is to
+   give the *scalar* path the libm kernel, which makes them consistent and
+   ~300× faster, and it needs its own accuracy comparison against MPFR first.
+2. **`Table` and `Array` with an exact iterator** — the open half of C.5. The
+   cost is one interpreter evaluation per element, so the fix is to compile the
+   body with a `CT_INT` iterator and accept only a `CT_INT` result type. See the
+   note under §11 of the HPC plan for why `CT_REAL` out of `CT_INT` in must not
+   be accepted.
+3. The register's remaining rows: C.1 (boolean dtype), C.6–C.10, C.12.
+
+---
+
+## 15. Summary
 
 Counts from the full three-system run of 2026-07-31, after the fourth sweep, and
-computed from the run's own JSON rather than by eye.
+computed from the run's own JSON rather than by eye. The fifth sweep's 21 rows
+are tabulated in §12 and the sixth sweep's 283 probes in §13; neither is folded
+into these counts.
 
 Of 51 benchmarks, Mathilda is **faster than Mathematica on 15**, within 1.5× of
 it on a further 18, and more than 1.5× behind on 17 (`PrimePi` has no comparable
@@ -812,7 +1259,7 @@ independently on a stencil.
 The list is shorter than it was; items struck through were closed by §10.
 
 1. ~~**No narrowing (float→int64) kernel category.**~~ Closed 2026-07-30 — see
-   [`MACHINE_INTEGERS.md`](../experiments/MACHINE_INTEGERS.md).
+   [`MACHINE_INTEGERS.md`](../experiments/05-machine-integers/README.md).
 2. **`QRDecomposition`, `Eigenvalues`, `SVD` bypass LAPACK** — 6–14×. Partly
    deliberate: `Eigenvalues`' ordering convention cannot be reproduced from
    LAPACK output without risking parity.
@@ -861,7 +1308,7 @@ passed for months.
 
 ---
 
-## 13. Reproducing
+## 16. Reproducing
 
 ```bash
 make -j$(sysctl -n hw.ncpu)

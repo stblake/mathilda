@@ -32,6 +32,7 @@
  */
 
 #include "linsolve.h"
+#include "pack.h"
 #include "linalg.h"
 #include "ndlinalg.h"
 #include "eval.h"
@@ -357,6 +358,25 @@ static Expr* rowreduce_onestep(Expr* arg) {
     int m = (int)dims[0];
     int n = (int)dims[1];
 
+    /* THE PIVOT 1 AND THE ELIMINATED 0 ARE INVENTED, so they take the input's
+     * exactness -- `inverse_onestep` in inv.c has had ONESTEP_ONE/ONESTEP_ZERO
+     * doing exactly this since the fifth sweep, and RowReduce, which shares the
+     * algorithm, never got them. Writing an exact 1 into a machine-real matrix
+     * left RowReduce[{{2., 0.}, {0., 4.}}] as {{1, 0.}, {0., 1}}: a result of
+     * two heads, from an input of one.
+     *
+     * DELIBERATE DIVERGENCE FROM MATHEMATICA, and the only one in this class.
+     * Mathematica writes the exact 1 and 0 regardless -- its
+     * RowReduce[{{2., 0.}, {0., 4.}}] is {{1, 0.}, {0, 1}}, whose element heads
+     * are {Integer, Real, Integer, Integer} and for which PackedArrayQ is
+     * False. So Mathematica's own RREF of a machine matrix is two-headed and
+     * unpacked. Mathilda follows the project rule instead: a routine handed a
+     * machine array answers with a machine array. The values agree; only the
+     * heads of the structural entries differ, and only for an inexact input. */
+    bool rr_inexact = matsol_is_inexact(arg);
+    #define RR_ONE  (rr_inexact ? expr_new_real(1.0) : expr_new_integer(1))
+    #define RR_ZERO (rr_inexact ? expr_new_real(0.0) : expr_new_integer(0))
+
     Expr** matrix = malloc(sizeof(Expr*) * (size_t)m * (size_t)n);
     size_t idx = 0;
     flatten_tensor(arg, matrix, &idx);
@@ -386,7 +406,7 @@ static Expr* rowreduce_onestep(Expr* arg) {
         for (int j = 0; j < n; j++) {
             if (j == c) {
                 expr_free(matrix[r * n + j]);
-                matrix[r * n + j] = expr_new_integer(1);
+                matrix[r * n + j] = RR_ONE;
             } else if (!is_zero_poly(matrix[r * n + j])) {
                 Expr* old = matrix[r * n + j];
                 matrix[r * n + j] = matsol_div_entry(old, pivot);
@@ -418,12 +438,14 @@ static Expr* rowreduce_onestep(Expr* arg) {
                 matrix[i * n + j] = updated_c;
             }
             expr_free(matrix[i * n + c]);
-            matrix[i * n + c] = expr_new_integer(0);
+            matrix[i * n + c] = RR_ZERO;
         }
 
         expr_free(pivot);
         r++;
     }
+    #undef RR_ONE
+    #undef RR_ZERO
 
     Expr** rows = malloc(sizeof(Expr*) * (size_t)m);
     for (int i = 0; i < m; i++) {
@@ -437,7 +459,12 @@ static Expr* rowreduce_onestep(Expr* arg) {
     Expr* result = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)m);
     free(rows);
     free(matrix);
-    return result;
+    /* Single-headed now, so it can be a buffer -- which is the point of the
+     * RR_ONE / RR_ZERO rule above rather than a bonus on top of it. The call
+     * arrived here having been delisted (builtin_rowreduce opens with
+     * linalg_delist_and_reeval), so without this the machine matrix goes back
+     * to its caller boxed and everything downstream is off the fast path. */
+    return pack_offer(result);
 }
 
 /* ------------------------------------------------------------------

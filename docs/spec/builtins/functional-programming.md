@@ -919,6 +919,29 @@ Filters elements from an expression matching a criterion.
 - **Compilable** inside `Compile[]` over a rank-1 array argument, together with
   `TakeWhile`, `LengthWhile`, `AllTrue`, `AnyTrue`, `NoneTrue`, `First` and
   `Last`. See [`control-flow.md`](control-flow.md) § Compile.
+- **Compiled predicate** (2026-07-31). Over a rank-1 `float64` buffer, a
+  criterion that is an ordinary comparison is compiled to bytecode and run
+  without the interpreter — `Select`, `AllTrue`, `AnyTrue`, `NoneTrue`,
+  `TakeWhile`, `LengthWhile` and `SelectFirst` all take it. The subset is a tree
+  of order comparisons (`<`, `<=`, `>`, `>=`, including chains like
+  `0.25 < # < 0.75 &`) whose operands are ordinary numeric bodies, combined with
+  `And`, `Or` and `Not`:
+
+  ```mathematica
+  # > 0.5 &        0.1 < # < 0.9 &       Abs[#] > 2. &
+  #^2 + 1. > 3. &  Not[# > 0.] &         # < 0. || # > 1. &
+  ```
+
+  Anything else — `PrimeQ`, `Equal`, a pattern test, a symbolic body — runs the
+  interpreter exactly as before. Measured over 10⁶: `AllTrue` 396 ms → 9.90 ms,
+  `TakeWhile` 315 ms → 6.22 ms, `Select` 82.6 ms → 2.36 ms.
+
+  The compiled comparison reproduces the interpreter's **relative 2⁻⁴⁶
+  tolerance** on inexact operands (`Less[1., 1. + 2.^-47]` is `False`), which is
+  why it is confined to `float64`: two exact Integers compare through GMP with
+  no tolerance at all, so an `int64` buffer declines. Every case is pinned by
+  `tests/test_pred_compile.c`, which evaluates each source twice — compiled and
+  interpreted — and requires identical output.
 
 ```mathematica
 In[0]:= Select[NDArray[{1., 2., 3.}], # > 1 &]

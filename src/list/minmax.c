@@ -14,7 +14,18 @@ Expr* builtin_minmax(Expr* res) {
     bool is_list = arg->type == EXPR_FUNCTION &&
                    arg->data.function.head->type == EXPR_SYMBOL &&
                    arg->data.function.head->data.symbol.name == SYM_List;
-    if (!is_list && !is_association(arg)) return NULL;
+    /* A packed buffer is accepted here so that MinMax can go on pack.c's AWARE
+     * list. Without both halves the head is the recurring defect of
+     * docs/experiments/README.md wearing another costume: the transparency gate
+     * materialised 10^6 Expr nodes, and the Min and Max calls built below --
+     * each of which HAS a buffer path (ndred_min / ndred_max) -- then ran the
+     * generic List code on the boxed copy. Measured 313 ms on a 10^6 vector
+     * against 426 us for np.array([v.min(), v.max()]), 735x, while the same
+     * Min[v] and Max[v] called directly cost 255 us and 232 us.
+     *
+     * Nothing below needs changing: expr_copy is a refcount bump, so the buffer
+     * is handed to Min and Max intact and each takes its own fast path. */
+    if (!is_list && !is_ndarray(arg) && !is_association(arg)) return NULL;
 
     Expr* min_arg[1] = { expr_copy(arg) };
     Expr* min_call = expr_new_function(expr_new_symbol(SYM_Min), min_arg, 1);

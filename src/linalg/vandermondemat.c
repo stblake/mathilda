@@ -26,6 +26,8 @@
  */
 
 #include "linalg.h"
+#include "pack.h"
+#include "eval.h"
 #include "ndlinalg.h"
 #include "sym_names.h"
 #include <stdio.h>
@@ -59,12 +61,18 @@ static bool vm_is_matrix(const Expr* list) {
     return true;
 }
 
-/* Build a single entry x^e.  The exponent-0 column is the literal integer 1
- * (so 0^0 reads as 1); every other entry is a Power[x, e] node which the
- * evaluator simplifies (folding numeric powers and Power[x, 1] -> x). */
-static Expr* vm_entry(Expr* node, int64_t exp) {
+/* Build a single entry x^e.  The exponent-0 column is the literal 1 (so 0^0
+ * reads as 1); every other entry is a Power[x, e] node which the evaluator
+ * simplifies (folding numeric powers and Power[x, 1] -> x).
+ *
+ * That leading 1 is INVENTED, so it takes the node list's exactness rather than
+ * a default of exact Integer -- Mathematica's VandermondeMatrix[{1., 2., 3.}]
+ * is {{1., 1., 1.}, {1., 2., 4.}, {1., 3., 9.}}, all Real. Writing an exact 1
+ * there left an entire column of a machine matrix with the wrong head, which no
+ * buffer can hold. See common.h on machine-real contagion. */
+static Expr* vm_entry(Expr* node, int64_t exp, bool real) {
     if (exp == 0) {
-        return expr_new_integer(1);
+        return real ? expr_new_real(1.0) : expr_new_integer(1);
     }
     Expr** args = malloc(sizeof(Expr*) * 2);
     args[0] = expr_copy(node);
@@ -78,18 +86,28 @@ static Expr* vm_entry(Expr* node, int64_t exp) {
  * nodes[i]^(j) for 0-based i in [0, n) and j in [0, k).  Source nodes are
  * deep-copied; the input keeps its ownership. */
 static Expr* vm_build(int64_t n, int64_t k, Expr* const* nodes) {
+    bool real = false;
+    for (int64_t i = 0; i < n && !real; i++)
+        if (nodes[i] && nodes[i]->type == EXPR_REAL) real = true;
+
     Expr** rows = malloc(sizeof(Expr*) * (size_t)n);
     for (int64_t i = 0; i < n; i++) {
         Expr** cells = malloc(sizeof(Expr*) * (size_t)k);
         for (int64_t j = 0; j < k; j++) {
-            cells[j] = vm_entry(nodes[i], j);
+            cells[j] = vm_entry(nodes[i], j, real);
         }
         rows[i] = expr_new_function(expr_new_symbol(SYM_List), cells, (size_t)k);
         free(cells);
     }
     Expr* result = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)n);
     free(rows);
-    return result;
+    /* The cells are Power[x, e] NODES; the evaluator folds them. Doing that
+     * here rather than on the way out is what lets the finished matrix be
+     * offered for packing -- pack_offer sees machine numbers instead of Power
+     * expressions, and declines harmlessly for a symbolic node list. Evaluating
+     * once inside is idempotent: the evaluator re-evaluates the returned value
+     * to a fixed point anyway. */
+    return pack_offer(eval_and_free(result));
 }
 
 Expr* builtin_vandermondematrix(Expr* res) {

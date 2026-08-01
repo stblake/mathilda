@@ -102,6 +102,48 @@ Expr* common_rationalize_input(const Expr* e, long bits) {
     return internal_force_rationalize_bits(e, bits);
 }
 
+bool common_has_machine_real(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL) return true;
+    if (e->type == EXPR_NDARRAY)
+        return e->data.ndarray.dtype != NDT_INT64;
+    if (e->type == EXPR_FUNCTION) {
+        if (common_has_machine_real(e->data.function.head)) return true;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (common_has_machine_real(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
+bool common_machine_real_value(const Expr* e, double* out) {
+    if (!e || !out) return false;
+    switch (e->type) {
+        case EXPR_REAL:    *out = e->data.real;              return true;
+        case EXPR_INTEGER: *out = (double)e->data.integer;   return true;
+        case EXPR_BIGINT:  *out = mpz_get_d(e->data.bigint); return true;
+        case EXPR_FUNCTION: {
+            /* Rational[p, q]. Deliberately NOT a general numeric reader: MPFR
+             * and Complex are excluded because the contagion rule this serves
+             * is about MACHINE reals, and neither is one. An MPFR diagonal
+             * keeps its exact zeros in Mathematica, so it must decline here. */
+            const Expr* h = e->data.function.head;
+            if (h && h->type == EXPR_SYMBOL &&
+                h->data.symbol.name == SYM_Rational &&
+                e->data.function.arg_count == 2) {
+                double p, q;
+                if (common_machine_real_value(e->data.function.args[0], &p) &&
+                    common_machine_real_value(e->data.function.args[1], &q) &&
+                    q != 0.0) {
+                    *out = p / q;
+                    return true;
+                }
+            }
+            return false;
+        }
+        default: return false;
+    }
+}
+
 Expr* common_numericalize_result(const Expr* e, long bits) {
     if (!e) return NULL;
     NumericSpec spec = numeric_machine_spec();

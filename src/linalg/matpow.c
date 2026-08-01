@@ -7,6 +7,9 @@
 
 #include "linalg.h"
 #include "ndlinalg.h"
+#include "ndarray.h"
+#include "common.h"
+#include "pack.h"
 #include "eval.h"
 #include "print.h"
 #include "sym_names.h"
@@ -22,7 +25,6 @@ static Expr* mat_dot(Expr* a, Expr* b) {
 }
 
 Expr* builtin_matrixpower(Expr* res) {
-    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 2 || argc > 3) return NULL;
@@ -30,9 +32,30 @@ Expr* builtin_matrixpower(Expr* res) {
     Expr* m = res->data.function.args[0];
     Expr* exp_arg = res->data.function.args[1];
 
-    /* Validate matrix: must be rank 2, square, non-empty */
+    /* Validate matrix: must be rank 2, square, non-empty.
+     *
+     * A BUFFER carries its own shape. This head used to open with
+     * linalg_delist_and_reeval, which threw the buffer away and left every
+     * mat_dot below contracting boxed Expr nodes: MatrixPower[A300, 4] on
+     * random Reals took 14.7 s, where the same three products written A.A.A.A
+     * reach dgemm and cost 2.6 ms each (plan item C.2). Nothing else in this
+     * function reads an element -- the whole algorithm is square-and-multiply
+     * over dot2, and dot2 has had the BLAS path since the Phase 1 routing work
+     * -- so keeping the buffer needs only a shape probe that understands one.
+     *
+     * An INTEGER matrix still materialises, upstream: MatrixPower is not on
+     * pack.c's INT64_OK list, so the transparency gate hands this function a
+     * plain List and the exact path runs. That is the intended split -- the
+     * exact fourth power of an integer matrix is an integer matrix, and a
+     * float64 buffer cannot hold one past 2^53. */
     int64_t dims[64];
-    int rank = get_tensor_dims(m, dims);
+    int rank;
+    if (is_ndarray(m)) {
+        rank = m->data.ndarray.rank;
+        for (int i = 0; i < rank && i < 64; i++) dims[i] = m->data.ndarray.dims[i];
+    } else {
+        rank = get_tensor_dims(m, dims);
+    }
     if (rank != 2 || dims[0] != dims[1] || dims[0] == 0) {
         if (rank >= 0) {
             char* m_str = expr_to_string(m);
@@ -84,7 +107,13 @@ Expr* builtin_matrixpower(Expr* res) {
     if (argc == 3) {
         vec = res->data.function.args[2];
         int64_t vdims[64];
-        int vrank = get_tensor_dims(vec, vdims);
+        int vrank;
+        if (is_ndarray(vec)) {
+            vrank = vec->data.ndarray.rank;
+            for (int i = 0; i < vrank && i < 64; i++) vdims[i] = vec->data.ndarray.dims[i];
+        } else {
+            vrank = get_tensor_dims(vec, vdims);
+        }
         if (vrank != 1 || vdims[0] != n) {
             char* v_str = expr_to_string(vec);
             fprintf(stderr, "MatrixPower::vecsh: Vector %s has incompatible length for matrix of size %d.\n", v_str, n);
@@ -119,13 +148,41 @@ Expr* builtin_matrixpower(Expr* res) {
     Expr* result = NULL;
 
     if (abs_exp == 0) {
-        /* M^0 = IdentityMatrix[n] */
+        /* M^0 IS THE IDENTITY, AT M's OWN EXACTNESS. Mathematica's
+         * MatrixPower[{{2., 0.}, {0., 2.}}, 0] is {{1., 0.}, {0., 1.}} and the
+         * exact matrix's is {{1, 0}, {0, 1}}. Going through IdentityMatrix[n]
+         * gave the exact one either way, which for a machine matrix is both
+         * wrong and unpackable -- see common.h on machine-real contagion. */
         expr_free(base);
-        Expr* id_args[1];
-        id_args[0] = expr_new_integer(n);
-        Expr* id_call = expr_new_function(expr_new_symbol(SYM_IdentityMatrix), id_args, 1);
-        result = evaluate(id_call);
-        expr_free(id_call);
+        if (common_has_machine_real(m)) {
+            int64_t dims[2] = { n, n };
+            void* raw = NULL;
+            result = ndbuild_open(2, dims, NDT_FLOAT64, &raw);
+            if (result) {
+                double* b = (double*)raw;
+                for (int64_t z = 0; z < (int64_t)n * n; z++) b[z] = 0.0;
+                for (int i = 0; i < n; i++) b[(int64_t)i * n + i] = 1.0;
+            } else {
+                /* Under the packing threshold, or packing off: the same matrix,
+                 * boxed. */
+                Expr** rows = malloc(sizeof(Expr*) * (size_t)n);
+                for (int i = 0; i < n; i++) {
+                    Expr** cells = malloc(sizeof(Expr*) * (size_t)n);
+                    for (int j = 0; j < n; j++)
+                        cells[j] = expr_new_real(i == j ? 1.0 : 0.0);
+                    rows[i] = expr_new_function(expr_new_symbol(SYM_List), cells, (size_t)n);
+                    free(cells);
+                }
+                result = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)n);
+                free(rows);
+            }
+        } else {
+            Expr* id_args[1];
+            id_args[0] = expr_new_integer(n);
+            Expr* id_call = expr_new_function(expr_new_symbol(SYM_IdentityMatrix), id_args, 1);
+            result = evaluate(id_call);
+            expr_free(id_call);
+        }
     } else {
         /* Binary exponentiation: square-and-multiply */
         result = NULL;

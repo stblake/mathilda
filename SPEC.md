@@ -33,10 +33,13 @@ PICOMATH-80.
   patterns, internal rules, and operators.
 - [`docs/design/performance.md`](docs/design/performance.md) — Mathilda against
   Mathematica 14.0 and NumPy on 70+ HPC kernels, with the method and the gaps.
-- [`docs/experiments/`](docs/experiments/) — nineteen execution-speed
+- [`docs/experiments/`](docs/experiments/) — twenty execution-speed
   experiments, one folder each: the write-up, the Mathilda/Wolfram source, the
   NumPy source, and a rendered PDF. Every experiment states, for each row where
   Mathilda is not the fastest of the three, why and what it would take.
+  Experiments 1–19 are workload-driven; experiment 20 is the coverage sweep,
+  which enumerates all 676 builtins instead of choosing kernels, and is what
+  `tools/numeric_coverage.py` and `tools/numeric_sweep.py` re-run.
 - [`CLAUDE.md`](CLAUDE.md) — contributor workflow.
 
 ---
@@ -325,7 +328,9 @@ for t in *_tests; do ./$t; done
 
 valgrind --leak-check=full ./Mathilda
 
-make check-c99         # portability gate; see §10
+make check-c99             # portability gate; see §10
+make check-packed-aware    # does every head with a buffer path opt in?
+make check-array-exactness # does any head return a two-headed array?
 ```
 
 `make check-c99` runs `tools/check_c99_portability.py`, which flags POSIX-only
@@ -341,6 +346,18 @@ The definitive check is a real glibc compile, which
 and pull request: `make check-c99` for a message that names the symbol and
 prints the fix, then a full `make` with the optional dependencies installed so
 the autodetected code paths are actually compiled.
+
+Two further audits guard the packed-array surface, each catching a class the
+other cannot see. `make check-packed-aware` is static: it reads the NDArray
+dispatch sites out of the source and diffs them against `src/pack.c`'s `AWARE`
+list, so a head with a fast path it never opted into is named. `make
+check-array-exactness` runs the binary over 342 probes and looks at the element
+**heads** of each result: a routine handed a machine array must answer with a
+scalar or an array of ONE head, and an exact `0` invented inside a machine-real
+result is both wrong and unpackable. Six heads were doing that. Its `EXEMPT`
+table carries the Mathematica output for every deliberate mixture, because
+"Mathematica does it too" is precisely the claim that went unchecked before the
+tool existed.
 
 The makefile auto-discovers `src/*.c`. GMP-ECM is linked by default when the
 system library is present (`USE_ECM=1`, autodetected); install it with

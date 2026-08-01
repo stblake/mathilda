@@ -22,6 +22,8 @@
  */
 
 #include "linalg.h"
+#include "common.h"
+#include "pack.h"
 #include "ndlinalg.h"
 #include "sym_names.h"
 #include "print.h"
@@ -53,9 +55,29 @@ static bool hk_positive_int(const Expr* e, int64_t* out) {
  *   - rvals[s - m] when rvals != NULL;
  *   - the integer 0 otherwise (square first-column form).
  * Source entries are deep-copied; the inputs keep their ownership. */
+/* True when any of the `n` given values is a machine Real, so the pad zeros
+ * this builder invents -- and the exact entries it was given -- are Real too.
+ * See common.h on machine-real contagion; Mathematica's
+ * HankelMatrix[{1, 2, 3.}] is {{1., 2., 3.}, {2., 3., 0.}, {3., 0., 0.}}, all
+ * Real, where this used to write an exact 0 in the corner and leave a matrix of
+ * two heads that no buffer can hold. */
+static bool hk_any_real(Expr* const* vals, int64_t n) {
+    if (!vals) return false;
+    for (int64_t i = 0; i < n; i++)
+        if (vals[i] && vals[i]->type == EXPR_REAL) return true;
+    return false;
+}
+
+/* One entry, coerced when the data is machine-real. */
+static Expr* hk_cell(const Expr* e, bool real) {
+    double d;
+    if (real && common_machine_real_value(e, &d)) return expr_new_real(d);
+    return expr_copy((Expr*)e);
+}
+
 static Expr* hk_build(int64_t m, int64_t n,
                       Expr* const* cvals, Expr* const* rvals,
-                      bool integer_form) {
+                      bool integer_form, bool real) {
     Expr** rows = malloc(sizeof(Expr*) * (size_t)m);
     for (int64_t i = 0; i < m; i++) {
         Expr** cells = malloc(sizeof(Expr*) * (size_t)n);
@@ -64,11 +86,11 @@ static Expr* hk_build(int64_t m, int64_t n,
             if (integer_form) {
                 cells[j] = expr_new_integer(s <= m ? s : 0);
             } else if (s <= m) {
-                cells[j] = expr_copy(cvals[s - 1]);
+                cells[j] = hk_cell(cvals[s - 1], real);
             } else if (rvals != NULL) {
-                cells[j] = expr_copy(rvals[s - m]);
+                cells[j] = hk_cell(rvals[s - m], real);
             } else {
-                cells[j] = expr_new_integer(0);
+                cells[j] = real ? expr_new_real(0.0) : expr_new_integer(0);
             }
         }
         rows[i] = expr_new_function(expr_new_symbol(SYM_List), cells, (size_t)n);
@@ -76,7 +98,9 @@ static Expr* hk_build(int64_t m, int64_t n,
     }
     Expr* result = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)m);
     free(rows);
-    return result;
+    /* Uniform now, so it can be a buffer -- offered rather than built directly
+     * because the entries may be symbolic, which pack_offer declines. */
+    return pack_offer(result);
 }
 
 Expr* builtin_hankelmatrix(Expr* res) {
@@ -96,7 +120,7 @@ Expr* builtin_hankelmatrix(Expr* res) {
     /* Form 1: HankelMatrix[n] — successive integers, zeros below. */
     int64_t nint;
     if (argc == 1 && hk_positive_int(a0, &nint)) {
-        return hk_build(nint, nint, NULL, NULL, true);
+        return hk_build(nint, nint, NULL, NULL, true, false);
     }
 
     /* Form 2: HankelMatrix[{c1,...,cm}] — square, first column given. */
@@ -104,7 +128,8 @@ Expr* builtin_hankelmatrix(Expr* res) {
         size_t mm = a0->data.function.arg_count;
         if (mm == 0) return NULL;  /* empty list: leave unevaluated */
         return hk_build((int64_t)mm, (int64_t)mm,
-                        a0->data.function.args, NULL, false);
+                        a0->data.function.args, NULL, false,
+                        hk_any_real(a0->data.function.args, (int64_t)mm));
     }
 
     /* Form 3: HankelMatrix[{c1,...,cm}, {r1,...,rn}] — first column and
@@ -132,7 +157,9 @@ Expr* builtin_hankelmatrix(Expr* res) {
             free(rs);
         }
         return hk_build((int64_t)mm, (int64_t)nn,
-                        a0->data.function.args, a1->data.function.args, false);
+                        a0->data.function.args, a1->data.function.args, false,
+                        hk_any_real(a0->data.function.args, (int64_t)mm) ||
+                        hk_any_real(a1->data.function.args, (int64_t)nn));
     }
 
     /* Any other shape (e.g. a non-list, non-integer spec): leave the call

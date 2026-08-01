@@ -170,6 +170,13 @@ Gives the total of elements in a list.
 - Supports negative levels to count from the bottom (`-1` is the last dimension).
 - Handles ragged arrays correctly by summing from the inside out when multiple levels are specified.
 - `Total[list, Infinity]` totals all atoms in the expression.
+- `Total[{}]` is `0` — the additive identity, at any level spec, matching
+  `Plus @@ {}`. It answered `{}` until 2026-07-31, which then propagated as a
+  non-number through anything consuming it (a `Select` that matched nothing is
+  the usual way to reach it).
+- Reads a packed buffer directly (`ndred_total`), exactly on an `int64` buffer:
+  the accumulation abandons the whole result on overflow so the List path
+  re-runs it and GMP answers.
 
 ```mathematica
 In[1]:= Total[{a, b, c, d}]

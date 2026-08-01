@@ -77,30 +77,26 @@ Expr* builtin_rescale(Expr* res) {
         if (!is_listq(yrange) || yrange->data.function.arg_count != 2) return NULL;
     }
 
-    /* Thread over a List first argument: Rescale[{e1, ...}, range, ...]
-     * -> {Rescale[e1, range, ...], ...}. */
-    if (is_listq(x)) {
-        size_t n = x->data.function.arg_count;
-        Expr** out_args = malloc(sizeof(Expr*) * n);
-        for (size_t i = 0; i < n; i++) {
-            Expr* el = x->data.function.args[i];
-            Expr* call;
-            if (argc == 2) {
-                call = expr_new_function(expr_new_symbol(SYM_Rescale),
-                    (Expr*[]){ expr_copy(el), expr_copy(range) }, 2);
-            } else {
-                call = expr_new_function(expr_new_symbol(SYM_Rescale),
-                    (Expr*[]){ expr_copy(el), expr_copy(range), expr_copy(yrange) }, 3);
-            }
-            out_args[i] = evaluate(call);
-            expr_free(call);
-        }
-        Expr* out = expr_new_function(expr_new_symbol(SYM_List), out_args, n);
-        free(out_args);
-        return out;
-    }
+    /* A LIST IS NOT THREADED HERE. The formula below is built once with the
+     * whole `x` in it and handed to the evaluator, and Plus / Times / Power are
+     * Listable, so they do the threading -- at every level, for a nested list,
+     * exactly as the explicit per-element recursion used to.
+     *
+     * Doing it this way is the difference between an interpreted loop and a
+     * buffer op. The old code built a fresh Rescale[el, range] call per element
+     * and evaluated it: Rescale[v] over 10^6 packed reals cost 2.17 s against
+     * NumPy's 12 ms for the identical arithmetic (HPC plan item C.5), all of it
+     * in 10^6 evaluator entries and ~5 x 10^6 Expr nodes. Handing the whole
+     * array to Plus and Times instead reaches the elementwise ND kernels, which
+     * have been threaded and vectorised since the fourth sweep.
+     *
+     * Nothing about the ARITHMETIC changes: the tree per element is the tree
+     * the recursion used to build, so exact input stays exact
+     * (Rescale[Range[3]] is {0, 1/2, 1}) and a symbolic element passes through.
+     * `Rescale` joins pack.c's AWARE list on the strength of that -- it does not
+     * read an element itself, it only rewrites the call. */
 
-    /* Scalar: (x - min)/(max - min). */
+    /* (x - min)/(max - min). */
     Expr* frac = rescale_div(rescale_sub(expr_copy(x), expr_copy(min_v)),
                              rescale_sub(expr_copy(max_v), expr_copy(min_v)));
 

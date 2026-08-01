@@ -40,6 +40,7 @@
  */
 
 #include "inv.h"
+#include "pack.h"
 #include "linalg.h"
 #include "ndlinalg.h"
 #include "linsolve.h"
@@ -661,9 +662,16 @@ static Expr* mat_invert(Expr* m) {
 
 /* RowReduce[m] via the registered builtin, fully evaluated.  Caller owns. */
 static Expr* mat_rref(Expr* m) {
-    return eval_and_free(expr_new_function(
+    /* pack_eval_plain, not evaluate: RowReduce answers with a BUFFER for a
+     * uniform machine matrix, and find_pivots / extract_rows below walk this
+     * result's args. See pack.h -- the gate protects a builtin's arguments,
+     * never the value it gets back from its own internal evaluate(). */
+    Expr* call = expr_new_function(
         expr_new_symbol(SYM_RowReduce),
-        (Expr*[]){expr_copy(m)}, 1));
+        (Expr*[]){expr_copy(m)}, 1);
+    Expr* out = pack_eval_plain(call);
+    expr_free(call);
+    return out;
 }
 
 /* Locate pivot columns of a row-reduced matrix.  Writes the column index
@@ -870,7 +878,6 @@ static Expr* pseudoinverse_exact(Expr* a, int m, int n) {
  * ------------------------------------------------------------------ */
 Expr* builtin_pseudoinverse(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
-    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
     size_t argc = res->data.function.arg_count;
     if (argc < 1) return NULL;
 
@@ -891,6 +898,18 @@ Expr* builtin_pseudoinverse(Expr* res) {
             tol_automatic = false;
             tol_value = tv;
         }
+    }
+    /* A machine matrix takes the SVD path. The exact pipeline below is the
+     * right answer for an exact or symbolic matrix and an unusable one for a
+     * machine matrix: it rationalises every entry, row-reduces over Q and
+     * inverts two Gram matrices, so PseudoInverse[A300] on random Reals did not
+     * finish in 180 s (plan item C.11). Note this is where Tolerance acquires a
+     * meaning -- the exact pipeline has never consulted it, having no singular
+     * values to truncate. */
+    if (linalg_call_has_ndarray(res)) {
+        Expr* fast = ndla_pseudoinverse_direct(arg, tol_automatic, tol_value);
+        if (fast) return fast;
+        return linalg_delist_and_reeval(res);
     }
     (void)tol_automatic;
     (void)tol_value;

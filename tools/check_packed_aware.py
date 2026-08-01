@@ -70,9 +70,6 @@ EXEMPT = {
     "LeafCount": "counts a packed list as ONE node (1 against 5 for a "
                  "4-element vector), which would perturb Simplify's complexity "
                  "metric -- the reason it was excluded by design",
-    "ConjugateTranspose": "its NDArray path does not handle rank 1 and comes "
-                          "back UNEVALUATED as Conjugate[Transpose[v]]; a real "
-                          "gap, but fixing it is not a packing change",
     "Series": "has no NDArray handling; the call stays unevaluated either way, "
               "but the packed form prints its argument differently",
     "SortBy": "its NDArray path does not sort -- SortBy[buffer, Abs] returns the "

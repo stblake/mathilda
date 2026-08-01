@@ -642,3 +642,177 @@ Expr* ndla_cross(Expr* res)
     free(U); free(V);
     return nd_result_like(u, v, na_build_vector(out, 3, cplx));
 }
+
+/* ------------------------------------------------------------------ */
+/*  PseudoInverse / LeastSquares (real, from one gesdd)                */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Both heads were on pack.c's AWARE list already, so the transparency gate did
+ * NOT materialise for them -- and both were still unusable on a machine matrix,
+ * because each opened with linalg_delist_and_reeval and then ran the exact
+ * pipeline in inv.c: rationalise every entry, row-reduce over Q, invert two
+ * Gram matrices, numericalise. PseudoInverse[A300] and LeastSquares[A500,b500]
+ * did not finish in 180 s. That is a hang under ordinary input, not a slow row.
+ *
+ * The shared kernel is one thin SVD. A = U S V^T with U m x k and V^T k x n
+ * (k = min(m,n)); then
+ *
+ *     A^+   = V S^+ U^T                 (n x m)
+ *     x     = V S^+ U^T b               (the minimum-norm least-squares x)
+ *
+ * where S^+ inverts the singular values above the cutoff and zeroes the rest.
+ * LeastSquares does NOT form A^+ and multiply -- it applies the three factors
+ * to b in order, which is O(k(m + n)) per right-hand side instead of O(mn) plus
+ * an n x m product, and is the same value.
+ *
+ * Neither routine may defer by re-evaluating the call: builtin_pseudoinverse
+ * dispatches here, so a linalg_delist_and_reeval decline would re-enter it.
+ * NULL means decline, and the caller carries on with its own arguments.
+ */
+
+/* Singular-value cutoff. Automatic is LAPACK's own rank criterion, which is
+ * also NumPy's default rcond for pinv/lstsq; an explicit Tolerance is a
+ * fraction of the largest singular value, which is what Mathematica documents.
+ * smax is S[0] -- gesdd returns the singular values in descending order. */
+static double nd_svd_cutoff(int m, int n, double smax,
+                            bool tol_automatic, double tol_value)
+{
+    if (!tol_automatic) return tol_value * smax;
+    return (double)((m > n) ? m : n) * 2.220446049250313e-16 * smax;
+}
+
+/* A real rank-2 float64 buffer is the entire domain of both routines: the
+ * exact pipeline is the RIGHT answer for an exact matrix, and an int64 buffer
+ * cannot arrive because neither head is on pack.c's INT64_OK list. */
+static bool nd_svd_arg_ok(const Expr* a)
+{
+    return a && is_ndarray(a) && a->data.ndarray.rank == 2
+             && a->data.ndarray.dims[0] > 0 && a->data.ndarray.dims[1] > 0
+             && !nd_arg_is_complex(a) && mathilda_lapack_probe();
+}
+
+/* Thin SVD of `a`. On success the caller owns *S, *U and *VT and must free all
+ * three; U is column-major m x k, VT column-major k x n, both as gesdd leaves
+ * them. Returns false on a load failure or a gesdd that did not converge. */
+static bool nd_thin_svd(const Expr* a, int* m_out, int* n_out, int* k_out,
+                        double** S_out, double** U_out, double** VT_out)
+{
+    int m, n; double* A = NULL;                       /* column-major m x n */
+    if (!na_load_matrix(a, false, true, &m, &n, &A)) return false;
+    int k = (m < n) ? m : n;
+
+    double* S  = (double*)malloc(sizeof(double) * (size_t)k);
+    double* U  = (double*)malloc(sizeof(double) * (size_t)m * (size_t)k);
+    double* VT = (double*)malloc(sizeof(double) * (size_t)k * (size_t)n);
+    if (!S || !U || !VT) {
+        free(A); free(S); free(U); free(VT);
+        return false;
+    }
+    int info = mat_lapack_dgesdd('S', m, n, A, m, S, U, m, VT, k);
+    free(A);                                          /* gesdd destroys A */
+    if (info != 0) { free(S); free(U); free(VT); return false; }
+
+    *m_out = m; *n_out = n; *k_out = k;
+    *S_out = S; *U_out = U; *VT_out = VT;
+    return true;
+}
+
+Expr* ndla_pseudoinverse_direct(const Expr* a, bool tol_automatic, double tol_value)
+{
+    if (!nd_svd_arg_ok(a)) return NULL;
+
+    int m, n, k; double *S = NULL, *U = NULL, *VT = NULL;
+    if (!nd_thin_svd(a, &m, &n, &k, &S, &U, &VT)) return NULL;
+
+    double cutoff = nd_svd_cutoff(m, n, S[0], tol_automatic, tol_value);
+
+    /* Scale V^T's rows by 1/sigma in place, so the product below is a plain
+     * V * (S^+ U^T). A singular value at or below the cutoff zeroes its row,
+     * which is exactly the Moore-Penrose truncation. */
+    for (int t = 0; t < k; t++) {
+        double f = (S[t] > cutoff) ? 1.0 / S[t] : 0.0;
+        for (int j = 0; j < n; j++) VT[t + (size_t)j * k] *= f;
+    }
+
+    /* P = (V^T)^T . U^T, i.e. n x m, column-major. */
+    double* P = (double*)malloc(sizeof(double) * (size_t)n * (size_t)m);
+    if (!P) { free(S); free(U); free(VT); return NULL; }
+#ifdef USE_LAPACK
+    /* Column-major: dgemm with CblasColMajor, C = A^T B^T for A = VT (k x n)
+     * and B = U (m x k) gives P[i + j*n] = sum_t VT[t + i*k] * U[j + t*m]. */
+    cblas_dgemm(CblasColMajor, CblasTrans, CblasTrans,
+                n, m, k, 1.0, VT, k, U, m, 0.0, P, n);
+#else
+    for (size_t z = 0; z < (size_t)n * (size_t)m; z++) P[z] = 0.0;
+    for (int j = 0; j < m; j++)
+        for (int t = 0; t < k; t++) {
+            double c = U[j + (size_t)t * m];
+            if (c == 0.0) continue;
+            for (int i = 0; i < n; i++)
+                P[i + (size_t)j * n] += VT[t + (size_t)i * k] * c;
+        }
+#endif
+    free(S); free(U); free(VT);
+
+    Expr* out = na_build_matrix(P, n, m, false, true);
+    free(P);
+    return nd_result_like(a, NULL, out);
+}
+
+Expr* ndla_leastsquares_direct(const Expr* a, const Expr* b,
+                               bool tol_automatic, double tol_value)
+{
+    if (!nd_svd_arg_ok(a)) return NULL;
+    int rows = (int)a->data.ndarray.dims[0];
+
+    /* The right-hand side may be a vector or a matrix, packed or plain. A plain
+     * List is accepted for the reason ndla_linearsolve accepts one: packing
+     * keys on element count, so LeastSquares[A500, b90] arrives with the matrix
+     * packed and the vector not, and deferring on that would send a machine
+     * solve back to the pipeline this function exists to avoid. `a` being a
+     * float64 buffer already makes the answer inexact, so loading an exact b
+     * through doubles loses nothing the result would have kept. */
+    int nrhs = 1; bool is_vec = true; int bn = 0, bc = 0; double* B = NULL;
+    if (na_load_vector(b, false, &bn, &B)) {
+        if (bn != rows) { free(B); return NULL; }
+    } else if (na_load_matrix(b, false, true, &bn, &bc, &B)) {
+        if (bn != rows) { free(B); return NULL; }
+        nrhs = bc; is_vec = false;
+    } else {
+        return NULL;
+    }
+
+    int m, n, k; double *S = NULL, *U = NULL, *VT = NULL;
+    if (!nd_thin_svd(a, &m, &n, &k, &S, &U, &VT)) { free(B); return NULL; }
+
+    double cutoff = nd_svd_cutoff(m, n, S[0], tol_automatic, tol_value);
+
+    /* X (n x nrhs, column-major) = V S^+ U^T B, applied factor by factor. */
+    double* X = (double*)malloc(sizeof(double) * (size_t)n * (size_t)nrhs);
+    double* t = (double*)malloc(sizeof(double) * (size_t)k);
+    if (!X || !t) { free(X); free(t); free(B); free(S); free(U); free(VT); return NULL; }
+
+    for (int j = 0; j < nrhs; j++) {
+        const double* bj = B + (size_t)j * rows;
+        for (int q = 0; q < k; q++) {                 /* t = S^+ U^T b */
+            double s = 0.0;
+            const double* uq = U + (size_t)q * m;     /* U column q */
+            for (int i = 0; i < m; i++) s += uq[i] * bj[i];
+            t[q] = (S[q] > cutoff) ? s / S[q] : 0.0;
+        }
+        double* xj = X + (size_t)j * n;
+        for (int i = 0; i < n; i++) {                 /* x = V t */
+            double s = 0.0;
+            const double* vi = VT + (size_t)i * k;    /* V^T column i == V row i */
+            for (int q = 0; q < k; q++) s += vi[q] * t[q];
+            xj[i] = s;
+        }
+    }
+    free(t); free(B); free(S); free(U); free(VT);
+
+    Expr* out = is_vec ? na_build_vector(X, n, false)
+                       : na_build_matrix(X, n, nrhs, false, true);
+    free(X);
+    return nd_result_like(a, is_ndarray(b) ? b : NULL, out);
+}

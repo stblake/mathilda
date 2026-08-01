@@ -38,7 +38,9 @@
  */
 
 #include "nullspace.h"
+#include "pack.h"
 #include "linalg.h"
+#include "common.h"
 #include "ndlinalg.h"
 #include "linsolve.h"
 #include "eval.h"
@@ -71,7 +73,14 @@ static Expr* call_rowreduce(Expr* m, MatsolMethod method) {
         args[0] = expr_copy(m);
         Expr* call = expr_new_function(expr_new_symbol(SYM_RowReduce), args, 1);
         free(args);
-        return eval_and_free(call);
+        /* pack_eval_plain, not evaluate: RowReduce answers with a BUFFER for a
+         * uniform machine matrix, and the caller walks this result with
+         * get_tensor_dims and flatten_tensor. See pack.h -- this is the one gap
+         * the transparency gate does not cover. Without it NullSpace of any
+         * machine matrix past the 250-element threshold came back UNEVALUATED. */
+        Expr* out = pack_eval_plain(call);
+        expr_free(call);
+        return out;
     }
 
     const char* name = NULL;
@@ -92,7 +101,9 @@ static Expr* call_rowreduce(Expr* m, MatsolMethod method) {
     args[1] = opt;
     Expr* call = expr_new_function(expr_new_symbol(SYM_RowReduce), args, 2);
     free(args);
-    return eval_and_free(call);
+    Expr* out = pack_eval_plain(call);   /* see the note above */
+    expr_free(call);
+    return out;
 }
 
 /* If every entry of v is an exact rational (Integer, Bignum, or
@@ -207,6 +218,17 @@ static Expr* nullspace_core(Expr* m, MatsolMethod method) {
         }
     }
 
+    /* The free variable's slot, and the zeros beside it, are INVENTED -- so
+     * they take the matrix's exactness, not a default of exact 1 and 0. A
+     * machine-real matrix used to give NullSpace[{{1., 2.}, {2., 4.}}] as
+     * {{-2., 1}}: a vector of two heads, which no buffer holds and which is not
+     * what an inexact input should produce. See common.h on machine-real
+     * contagion. (Mathematica additionally ORTHONORMALIZES an inexact null
+     * space, so its answer here is {{-0.894..., 0.447...}}; that is a different
+     * and larger difference, recorded in the HPC plan rather than changed
+     * here.) */
+    bool nsp_real = common_has_machine_real(m);
+
     /* Build basis vectors -- one per free column, rightmost first. */
     Expr** basis_rows = NULL;
     int basis_count = 0;
@@ -218,7 +240,7 @@ static Expr* nullspace_core(Expr* m, MatsolMethod method) {
         Expr** v = malloc(sizeof(Expr*) * (size_t)cols);
         for (int j = 0; j < cols; j++) {
             if (j == f) {
-                v[j] = expr_new_integer(1);
+                v[j] = nsp_real ? expr_new_real(1.0) : expr_new_integer(1);
             } else if (pivot_for_col[j] != -1) {
                 int pr = pivot_for_col[j];
                 Expr** neg_args = malloc(sizeof(Expr*) * 2);
@@ -228,7 +250,7 @@ static Expr* nullspace_core(Expr* m, MatsolMethod method) {
                     expr_new_symbol(SYM_Times), neg_args, 2));
                 free(neg_args);
             } else {
-                v[j] = expr_new_integer(0);
+                v[j] = nsp_real ? expr_new_real(0.0) : expr_new_integer(0);
             }
         }
 

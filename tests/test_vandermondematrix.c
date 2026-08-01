@@ -177,8 +177,16 @@ static void test_machine_via_n(void) {
 }
 
 static void test_machine_nodes_pass_through(void) {
+    /* The x^0 column is INVENTED, so it takes the node list's exactness --
+     * Mathematica's VandermondeMatrix[{2., 3.}] is {{1., 2.}, {1., 3.}}, all
+     * Real. This used to assert the exact 1, i.e. a matrix of two heads, which
+     * no buffer can hold. See common.h on machine-real contagion. */
     assert_eval_eq("VandermondeMatrix[{2., 3.}]",
-                   "{{1, 2.0}, {1, 3.0}}", 0);
+                   "{{1.0, 2.0}, {1.0, 3.0}}", 0);
+    assert_eval_eq("Union[Head /@ Flatten[VandermondeMatrix[{2., 3.}]]]",
+                   "{Real}", 0);
+    /* An exact node list is unaffected. */
+    assert_eval_eq("VandermondeMatrix[{2, 3}]", "{{1, 2}, {1, 3}}", 0);
 }
 
 static void test_mpfr_precision_via_n(void) {

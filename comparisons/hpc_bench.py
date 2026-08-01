@@ -772,6 +772,647 @@ bench(id="imgpipe", group=SG, name="Gaussian blur + Sobel edges, 1024^2",
                "               for i in range(1,65)])",
       py="edge(imr)", py_check="float(edge(ichk).sum())")
 
+# --------------------------------------------------------------------------
+# Fifth sweep (2026-07-31). Eight application domains, chosen so that each one
+# runs somewhere the first four sweeps never went. The third sweep established
+# that a composition can be slow in ways none of its parts are; this sweep
+# pushes that further by taking whole PROGRAMS out of eight fields and running
+# them unmodified.
+#
+# The selection rule was mechanical: for each candidate, name the subsystem it
+# would exercise that no existing row does. Anything that could not answer was
+# dropped. What survived stresses, in order: irregular gather (graph and sparse
+# work), cut-off masked all-pairs interaction (molecular dynamics), integer
+# dynamic programming and scans (sequence alignment), shrinking-array iteration
+# (option trees), FFT inside a time-stepping loop (spectral PDE), transposed
+# GEMM chains (neural-network training), small dense matrices in a long loop
+# (Kalman filtering), and data-dependent branch-free ray/scene intersection
+# (rendering).
+#
+# Every kernel has a deterministic scalar check that all three systems compute,
+# and where the timed data must be random the check runs a separate
+# deterministic instance of the same code (the `conv2d` precedent).
+# --------------------------------------------------------------------------
+GR = "Graph analytics and sparse linear algebra"
+MD = "Molecular dynamics"
+BI = "Bioinformatics"
+QF = "Computational finance (trees and PDE)"
+SP5 = "Spectral PDE (FFT in a time loop)"
+DL = "Deep learning"
+KF = "State estimation"
+RD = "Rendering"
+
+# ---- 1. graph analytics ---------------------------------------------------
+# A d-regular directed graph in the only representation a system without
+# SparseArray has: a dense gn x gdeg matrix of neighbour ids. That is not a
+# workaround, it is how CSR is actually stored once the degree is uniform --
+# k-nearest-neighbour graphs, structured meshes and Graph500's Kronecker
+# generator all produce one -- and it isolates the operation that dominates
+# every sparse kernel: the GATHER x[[colindex]].
+#
+# 200000 nodes x degree 16 = 3.2e6 edges, the size of a mid-sized citation or
+# road network. The check runs on a separate deterministic 4096-node graph,
+# because the three systems cannot be made to draw the same random one.
+GSET = ("relu[zz_]:=Ramp[zz]; gn=100000; gdeg=16; gadj=RandomInteger[{1,gn},{gn,gdeg}]; "
+        "gflat=Flatten[gadj]; gv=RandomReal[{0,1},gn]; gw=RandomReal[{0,1},gn gdeg]; "
+        "gcn=4096; gcd=8; gca=Table[Mod[i j + j, gcn]+1,{i,1,gcn},{j,1,gcd}]; "
+        "gcf=Flatten[gca]; gcw=Table[N[Mod[i,7]+1]/7.,{i,1,gcn gcd}]; "
+        "pgrk[f_,nn_,dd_,m_]:=Module[{p,k}, p=Table[1./nn,{nn}]; k=0; "
+        "While[k<m, p=0.15/nn + 0.85 Total[Partition[p[[f]],dd],{2}]/dd; k=k+1]; p]; "
+        "bfsr[a_,st_,lev_]:=Module[{vis,fr,nx,k}, vis={st}; fr={st}; k=0; "
+        "While[k<lev && Length[fr]>0, nx=Complement[Union[Flatten[a[[fr]]]],vis]; "
+        "vis=Union[vis,nx]; fr=nx; k=k+1]; Length[vis]];")
+GSETP = ("def relu(z): return np.maximum(z,0.0)\n"
+         "gn=100000; gdeg=16\n"
+         "gadj=np.random.randint(1,gn+1,(gn,gdeg))\n"
+         "gflat=gadj.ravel()\n"
+         "gv=np.random.rand(gn); gw=np.random.rand(gn*gdeg)\n"
+         "gcn=4096; gcd=8\n"
+         "gca=(np.arange(1,gcn+1)[:,None]*np.arange(1,gcd+1)[None,:]\n"
+         "     + np.arange(1,gcd+1)[None,:]) % gcn + 1\n"
+         "gcf=gca.ravel()\n"
+         "gcw=((np.arange(1,gcn*gcd+1) % 7)+1)/7.0\n"
+         "def pgrk(f,nn,dd,m):\n"
+         "    p=np.full(nn,1.0/nn)\n"
+         "    for _ in range(m):\n"
+         "        p=0.15/nn + 0.85*p[f-1].reshape(nn,dd).sum(1)/dd\n"
+         "    return p\n"
+         "def bfsr(a,st,lev):\n"
+         "    vis=np.array([st]); fr=np.array([st]); k=0\n"
+         "    while k<lev and fr.size>0:\n"
+         "        nx=np.setdiff1d(np.unique(a[fr-1].ravel()), vis)\n"
+         "        vis=np.union1d(vis,nx); fr=nx; k+=1\n"
+         "    return int(vis.size)")
+
+bench(id="gather", group=GR, name="Gather, 1.6e6 indices into a 100000 vector",
+      setup=GSET, expr="gv[[gflat]];",
+      check="Total[gcw[[Table[Mod[7 i, 4096]+1,{i,1,32768}]]]]", reps=3,
+      py_setup=GSETP, py="gv[gflat-1]",
+      py_check="float(gcw[(7*np.arange(1,32769)) % 4096].sum())")
+bench(id="spmv", group=GR, name="Sparse matrix-vector product, 100000 x 16 CSR",
+      setup="", expr="Total[Partition[gw gv[[gflat]], gdeg], {2}];",
+      check="Total[Total[Partition[gcw gcw[[gcf]], gcd], {2}]]", reps=3,
+      py_setup="", py="(gw*gv[gflat-1]).reshape(gn,gdeg).sum(1)",
+      py_check="float((gcw*gcw[gcf-1]).reshape(gcn,gcd).sum(1).sum())")
+bench(id="pagerank", group=GR, name="PageRank, 100000 nodes, 1.6e6 edges, 20 iterations",
+      setup="", expr="pgrk[gflat, gn, gdeg, 20];",
+      check="Total[pgrk[gcf, gcn, gcd, 20]]", reps=2,
+      py_setup="", py="pgrk(gflat,gn,gdeg,20)",
+      py_check="float(pgrk(gcf,gcn,gcd,20).sum())")
+bench(id="bfs", group=GR, name="Breadth-first search, 5 levels from one source",
+      setup="", expr="bfsr[gadj, 1, 5];", check="bfsr[gca, 1, 5]", reps=2,
+      py_setup="", py="bfsr(gadj,1,5)", py_check="bfsr(gca,1,5)")
+
+# ---- 2. molecular dynamics ------------------------------------------------
+# Lennard-Jones with a cut-off, and velocity-Verlet time integration: the inner
+# loop of every MD code there is. The N-body row of the third sweep is the
+# closest existing benchmark and it is a different kernel -- gravity has no
+# cut-off, so it is pure arithmetic, where LJ multiplies through a
+# DATA-DEPENDENT mask and so tests whether a comparison result can stay on the
+# buffer.
+#
+# The configuration is a deterministically perturbed simple-cubic lattice, so
+# the whole benchmark -- not just the check -- is reproducible across systems,
+# and the check is the potential energy, which is sensitive to every pair.
+MDSET = ("nmd=2048; mdrc2=6.25; mddt=0.0005; "
+         "mdx=Table[N[Mod[i,13]] + 0.13 Sin[1.7 i],{i,0,nmd-1}]; "
+         "mdy=Table[N[Mod[Quotient[i,13],13]] + 0.13 Cos[2.3 i],{i,0,nmd-1}]; "
+         "mdz=Table[N[Quotient[i,169]] + 0.13 Sin[0.9 i],{i,0,nmd-1}]; "
+         "mdbig=1.0*^12 IdentityMatrix[nmd]; mdzero=Table[0.,{nmd}]; "
+         "ljf[xs_,ys_,zs_]:=Module[{dx,dy,dz,r2,mk,i2,i6,ff}, "
+         "dx=Outer[Subtract,xs,xs]; dy=Outer[Subtract,ys,ys]; dz=Outer[Subtract,zs,zs]; "
+         "r2=dx dx + dy dy + dz dz + mdbig; mk=UnitStep[mdrc2-r2]; "
+         "i2=1./r2; i6=i2 i2 i2; ff=(48. i6 i6 - 24. i6) i2 mk; "
+         "{Total[ff dx,{2}], Total[ff dy,{2}], Total[ff dz,{2}]}]; "
+         "lje[xs_,ys_,zs_]:=Module[{dx,dy,dz,r2,mk,i2,i6}, "
+         "dx=Outer[Subtract,xs,xs]; dy=Outer[Subtract,ys,ys]; dz=Outer[Subtract,zs,zs]; "
+         "r2=dx dx + dy dy + dz dz + mdbig; mk=UnitStep[mdrc2-r2]; "
+         "i2=1./r2; i6=i2 i2 i2; Total[4.(i6 i6 - i6) mk, 2]/2.]; "
+         "mdstep[st_]:=Module[{p,v,f,vh,pn,fn}, p=st[[1]]; v=st[[2]]; f=st[[3]]; "
+         "vh=v + (0.5 mddt) f; pn=p + mddt vh; fn=ljf[pn[[1]],pn[[2]],pn[[3]]]; "
+         "{pn, vh + (0.5 mddt) fn, fn}]; "
+         "mdrun[m_]:=Module[{st}, st=Nest[mdstep, "
+         "{{mdx,mdy,mdz},{mdzero,mdzero,mdzero},ljf[mdx,mdy,mdz]}, m]; "
+         "lje[st[[1,1]],st[[1,2]],st[[1,3]]]]; "
+         "nmc=100000; mcx=Table[8. Mod[1.7 i, 1.], {i,1,nmc}]; "
+         "mcy=Table[8. Mod[2.3 i, 1.], {i,1,nmc}]; mcz=Table[8. Mod[3.1 i, 1.], {i,1,nmc}]; "
+         "mdcells[]:=Module[{ci,tl}, ci=Floor[mcx] + 8 Floor[mcy] + 64 Floor[mcz] + 1; "
+         "tl=Tally[Sort[ci]]; Total[Accumulate[tl[[All,2]]]]];")
+MDSETP = ("nmd=2048; mdrc2=6.25; mddt=0.0005\n"
+          "_i=np.arange(0,nmd,dtype=float)\n"
+          "mdx=(_i.astype(int)%13).astype(float)+0.13*np.sin(1.7*_i)\n"
+          "mdy=((_i.astype(int)//13)%13).astype(float)+0.13*np.cos(2.3*_i)\n"
+          "mdz=(_i.astype(int)//169).astype(float)+0.13*np.sin(0.9*_i)\n"
+          "mdbig=1e12*np.eye(nmd); mdzero=np.zeros(nmd)\n"
+          "def ljf(xs,ys,zs):\n"
+          "    dx=xs[:,None]-xs[None,:]; dy=ys[:,None]-ys[None,:]; dz=zs[:,None]-zs[None,:]\n"
+          "    r2=dx*dx+dy*dy+dz*dz+mdbig\n"
+          "    mk=(mdrc2-r2>=0).astype(float)\n"
+          "    i2=1.0/r2; i6=i2*i2*i2\n"
+          "    ff=(48.0*i6*i6-24.0*i6)*i2*mk\n"
+          "    return [(ff*dx).sum(1),(ff*dy).sum(1),(ff*dz).sum(1)]\n"
+          "def lje(xs,ys,zs):\n"
+          "    dx=xs[:,None]-xs[None,:]; dy=ys[:,None]-ys[None,:]; dz=zs[:,None]-zs[None,:]\n"
+          "    r2=dx*dx+dy*dy+dz*dz+mdbig\n"
+          "    mk=(mdrc2-r2>=0).astype(float)\n"
+          "    i2=1.0/r2; i6=i2*i2*i2\n"
+          "    return float((4.0*(i6*i6-i6)*mk).sum()/2.0)\n"
+          "def mdstep(st):\n"
+          "    p,v,f=st\n"
+          "    vh=[v[i]+0.5*mddt*f[i] for i in range(3)]\n"
+          "    pn=[p[i]+mddt*vh[i] for i in range(3)]\n"
+          "    fn=ljf(pn[0],pn[1],pn[2])\n"
+          "    return [pn,[vh[i]+0.5*mddt*fn[i] for i in range(3)],fn]\n"
+          "def mdrun(m):\n"
+          "    st=nest(mdstep,[[mdx,mdy,mdz],[mdzero,mdzero,mdzero],ljf(mdx,mdy,mdz)],m)\n"
+          "    return lje(st[0][0],st[0][1],st[0][2])\n"
+          "nmc=100000\n"
+          "_j=np.arange(1,nmc+1,dtype=float)\n"
+          "mcx=8.0*np.mod(1.7*_j,1.0); mcy=8.0*np.mod(2.3*_j,1.0); mcz=8.0*np.mod(3.1*_j,1.0)\n"
+          "def mdcells():\n"
+          "    ci=(np.floor(mcx)+8*np.floor(mcy)+64*np.floor(mcz)+1).astype(np.int64)\n"
+          "    _,c=np.unique(np.sort(ci),return_counts=True)\n"
+          "    return int(np.cumsum(c).sum())")
+
+bench(id="ljforce", group=MD, name="Lennard-Jones force, 2048 atoms, cut-off",
+      setup=MDSET, expr="ljf[mdx,mdy,mdz];", check="lje[mdx,mdy,mdz]", reps=3,
+      py_setup=MDSETP, py="ljf(mdx,mdy,mdz)", py_check="lje(mdx,mdy,mdz)")
+bench(id="mdverlet", group=MD, name="Velocity-Verlet MD, 2048 atoms, 10 steps",
+      setup="", expr="mdrun[10];", check="mdrun[10]", reps=3,
+      py_setup="", py="mdrun(10)", py_check="mdrun(10)")
+bench(id="mdcell", group=MD, name="Cell-list binning, 100000 atoms into 512 cells",
+      setup="", expr="mdcells[];", check="mdcells[]", reps=3,
+      py_setup="", py="mdcells()", py_check="mdcells()")
+
+# ---- 3. bioinformatics ----------------------------------------------------
+# Needleman-Wunsch global alignment of two 2000-base sequences, written in the
+# form a vectorising implementer actually uses: the within-row gap recurrence
+# h[j] = max(cand[j], h[j-1] - g) is a max-plus prefix scan, and substituting
+# H[j] = h[j] + g j turns it into a plain running maximum. All three systems run
+# THAT algorithm -- FoldList[Max, ...] here, np.maximum.accumulate in NumPy -- so
+# the columns compare execution and not cleverness.
+#
+# Everything is int64 end to end, which is the point: the fourth sweep put the
+# float64 scan and elementwise paths on the buffer and this is the first
+# benchmark that runs the integer ones at scale.
+BSET = ("bm=2000; bgap=1; "
+        "bs1=Table[Mod[i^2+3 i,4],{i,1,bm}]; bs2=Table[Mod[7 i+Quotient[i,3],4],{i,1,bm}]; "
+        "brng1=Range[bm]; brng0=Range[0,bm]; "
+        "nwrow[prev_,ch_]:=Module[{sco,dg,up,cand,hh}, "
+        "sco=2-3 UnitStep[Abs[bs2-ch]-1]; "
+        "dg=Most[prev]+sco; up=Rest[prev]-bgap; "
+        "cand=MapThread[Max,{dg,up}] + bgap brng1; "
+        "hh=FoldList[Max, prev[[1]]-bgap, cand]; hh - bgap brng0]; "
+        "nwalign[]:=Last[Fold[nwrow, -bgap brng0, bs1]]; "
+        "bkn=500000; bk=12; bcode=Table[Mod[i^2+3 i+Quotient[i,7],4],{i,1,bkn}]; "
+        "bpow=Table[4^(bk-j),{j,1,bk}]; "
+        "kmers[]:=Length[Union[Partition[bcode,bk,1] . bpow]]; "
+        "bgn=10^7; bgw=1000; bgseq=RandomInteger[{0,1},bgn]; "
+        "bgcs=Table[Mod[i^3+i+Quotient[i,3],2],{i,1,100000}]; "
+        "gcwin[s_,w_]:=Module[{cs}, cs=Accumulate[s]; Total[Drop[cs,w]-Drop[cs,-w]]];")
+BSETP = ("bm=2000; bgap=1\n"
+         "_b=np.arange(1,bm+1,dtype=np.int64)\n"
+         "bs1=(_b*_b+3*_b)%4; bs2=(7*_b+_b//3)%4\n"
+         "brng1=np.arange(1,bm+1,dtype=np.int64); brng0=np.arange(0,bm+1,dtype=np.int64)\n"
+         "def nwrow(prev,ch):\n"
+         "    sco=2-3*(np.abs(bs2-ch)-1>=0).astype(np.int64)\n"
+         "    dg=prev[:-1]+sco; up=prev[1:]-bgap\n"
+         "    cand=np.maximum(dg,up)+bgap*brng1\n"
+         "    hh=np.maximum.accumulate(np.concatenate(([prev[0]-bgap],cand)))\n"
+         "    return hh-bgap*brng0\n"
+         "def nwalign():\n"
+         "    row=-bgap*brng0\n"
+         "    for ch in bs1: row=nwrow(row,ch)\n"
+         "    return int(row[-1])\n"
+         "bkn=500000; bk=12\n"
+         "_k=np.arange(1,bkn+1,dtype=np.int64)\n"
+         "bcode=(_k*_k+3*_k+_k//7)%4\n"
+         "bpow=(4**(bk-np.arange(1,bk+1))).astype(np.int64)\n"
+         "def kmers():\n"
+         "    w=np.lib.stride_tricks.sliding_window_view(bcode,bk)\n"
+         "    return int(np.unique(w @ bpow).size)\n"
+         "bgn=10**7; bgw=1000\n"
+         "bgseq=np.random.randint(0,2,bgn)\n"
+         "_g=np.arange(1,100001,dtype=np.int64)\n"
+         "bgcs=(_g**3+_g+_g//3)%2\n"
+         "def gcwin(s,w):\n"
+         "    cs=np.cumsum(s)\n"
+         "    return int((cs[w:]-cs[:-w]).sum())")
+
+bench(id="nwalign", group=BI, name="Needleman-Wunsch alignment, 2000 x 2000",
+      setup=BSET, expr="nwalign[];", check="nwalign[]", reps=3,
+      py_setup=BSETP, py="nwalign()", py_check="nwalign()")
+bench(id="kmer", group=BI, name="k-mer encode + distinct count, 5e5 bases, k = 12",
+      setup="", expr="kmers[];", check="kmers[]", reps=3,
+      py_setup="", py="kmers()", py_check="kmers()")
+bench(id="gcwin", group=BI, name="Rolling GC content, 10^7 bases, window 1000",
+      setup="", expr="gcwin[bgseq, bgw];", check="gcwin[bgcs, 100]", reps=3,
+      py_setup="", py="gcwin(bgseq,bgw)", py_check="gcwin(bgcs,100)")
+
+# ---- 4. computational finance --------------------------------------------
+# Two American-put pricers that must agree with each other, which is a stronger
+# cross-check than either alone.
+#
+# The binomial tree is here for a property no other benchmark in the suite has:
+# its working vector SHRINKS, 4000 elements down to 1, so the last few hundred
+# iterations run BELOW the packing threshold. It is the natural test of what
+# happens at the boundary the whole packed-array design is built around.
+QFSET = ("relu[zz_]:=Ramp[zz]; btn=4000; btt=1.; btr=0.03; btsig=0.25; btk=100.; bts0=100.; "
+         "btdt=btt/btn; btu=Exp[btsig Sqrt[btdt]]; btp=(Exp[btr btdt]-1./btu)/(btu-1./btu); "
+         "btdc=Exp[-btr btdt]; btq=1.-btp; "
+         "amtree[]:=Module[{v,s,k}, s=Table[bts0 btu^(2. j - btn),{j,0,btn}]; "
+         "v=relu[btk-s]; k=btn; "
+         "While[k>0, s=btu Most[s]; v=btdc (btp Rest[v] + btq Most[v]); "
+         "v=MapThread[Max,{v, relu[btk-s]}]; k=k-1]; First[v]]; "
+         "fdm=1000; fdn=25000; fdxl=1.2; fddx=2. fdxl/(fdm-1); fddt=1./fdn; "
+         "fdx=Table[-fdxl + (j-1) fddx,{j,1,fdm}]; fdpay=relu[btk - bts0 Exp[fdx]]; "
+         "fda=0.5 btsig^2 fddt/fddx^2 - 0.5 (btr-0.5 btsig^2) fddt/fddx; "
+         "fdc=0.5 btsig^2 fddt/fddx^2 + 0.5 (btr-0.5 btsig^2) fddt/fddx; "
+         "fdb=1. - btsig^2 fddt/fddx^2 - btr fddt; "
+         "fdlo=btk - bts0 Exp[-fdxl]; fdmid=Quotient[fdm+1,2]; "
+         "amfd[]:=Module[{v,k,vi}, v=fdpay; k=0; "
+         "While[k<fdn, vi=fda Most[Most[v]] + fdb Take[v,{2,-2}] + fdc Rest[Rest[v]]; "
+         "v=Join[{fdlo}, vi, {0.}]; v=MapThread[Max,{v,fdpay}]; k=k+1]; v[[fdmid]]]; "
+         "vrn=250000; vrk=64; vrs=RandomReal[{-0.02,0.02},{vrn,vrk}]; "
+         "vrw=Table[1./vrk,{vrk}]; "
+         "vrcs=Table[N[Mod[7 i + 3 j, 41] - 20]/1000.,{i,1,20000},{j,1,vrk}]; "
+         "mcvar[s_,w_,q_]:=Module[{pnl}, pnl=Sort[s . w]; Total[Take[pnl,q]]/q];")
+QFSETP = ("def relu(z): return np.maximum(z,0.0)\n"
+          "btn=4000; btt=1.0; btr=0.03; btsig=0.25; btk=100.0; bts0=100.0\n"
+          "btdt=btt/btn; btu=math.exp(btsig*math.sqrt(btdt))\n"
+          "btp=(math.exp(btr*btdt)-1.0/btu)/(btu-1.0/btu)\n"
+          "btdc=math.exp(-btr*btdt); btq=1.0-btp\n"
+          "def amtree():\n"
+          "    s=bts0*btu**(2.0*np.arange(0,btn+1)-btn)\n"
+          "    v=np.maximum(btk-s,0.0); k=btn\n"
+          "    while k>0:\n"
+          "        s=btu*s[:-1]\n"
+          "        v=btdc*(btp*v[1:]+btq*v[:-1])\n"
+          "        v=np.maximum(v,np.maximum(btk-s,0.0)); k-=1\n"
+          "    return float(v[0])\n"
+          "fdm=1000; fdn=25000; fdxl=1.2; fddx=2.0*fdxl/(fdm-1); fddt=1.0/fdn\n"
+          "fdx=-fdxl+np.arange(0,fdm)*fddx\n"
+          "fdpay=np.maximum(btk-bts0*np.exp(fdx),0.0)\n"
+          "fda=0.5*btsig**2*fddt/fddx**2 - 0.5*(btr-0.5*btsig**2)*fddt/fddx\n"
+          "fdc=0.5*btsig**2*fddt/fddx**2 + 0.5*(btr-0.5*btsig**2)*fddt/fddx\n"
+          "fdb=1.0 - btsig**2*fddt/fddx**2 - btr*fddt\n"
+          "fdlo=btk-bts0*math.exp(-fdxl); fdmid=(fdm+1)//2\n"
+          "def amfd():\n"
+          "    v=fdpay.copy(); k=0\n"
+          "    while k<fdn:\n"
+          "        vi=fda*v[:-2]+fdb*v[1:-1]+fdc*v[2:]\n"
+          "        v=np.concatenate(([fdlo],vi,[0.0]))\n"
+          "        v=np.maximum(v,fdpay); k+=1\n"
+          "    return float(v[fdmid-1])\n"
+          "vrn=250000; vrk=64\n"
+          "vrs=np.random.uniform(-0.02,0.02,(vrn,vrk))\n"
+          "vrw=np.full(vrk,1.0/vrk)\n"
+          "vrcs=((7*np.arange(1,20001)[:,None]+3*np.arange(1,vrk+1)[None,:])%41-20)/1000.0\n"
+          "def mcvar(s,w,q):\n"
+          "    pnl=np.sort(s@w)\n"
+          "    return float(pnl[:q].sum()/q)")
+
+bench(id="amtree", group=QF, name="Binomial American put, 4000 steps",
+      setup=QFSET, expr="amtree[];", check="amtree[]", reps=3,
+      py_setup=QFSETP, py="amtree()", py_check="amtree()")
+bench(id="amfd", group=QF, name="Explicit FD American put, 1000 x 25000",
+      setup="", expr="amfd[];", check="amfd[]", reps=2,
+      py_setup="", py="amfd()", py_check="amfd()")
+bench(id="mcvar", group=QF, name="Monte-Carlo VaR, 250000 scenarios x 64 assets",
+      setup="", expr="mcvar[vrs, vrw, 10000];",
+      check="mcvar[vrcs, vrw, 200]", reps=3,
+      py_setup="", py="mcvar(vrs,vrw,10000)", py_check="mcvar(vrcs,vrw,200)")
+
+# ---- 5. spectral PDE ------------------------------------------------------
+# FFT inside a time-stepping loop. The existing spectral rows time ONE large
+# transform; a pseudo-spectral solver runs thousands of medium ones with
+# complex elementwise algebra between them, which is a completely different cost
+# profile -- per-call overhead and complex-array arithmetic instead of FFTW's
+# inner kernels.
+#
+# Convention: Wolfram's Fourier is (1/sqrt n) sum x e^{+2 pi i}, which is NumPy's
+# ifft(norm="ortho"), and InverseFourier is fft(norm="ortho"). Getting that
+# backwards produces a plausible-looking wrong answer, which is exactly what the
+# cross-system check exists to catch.
+#
+# The checks are SHORT runs. Kuramoto-Sivashinsky is chaotic, so its state at
+# t = 20 is a property of the arithmetic and not of the equation, and requiring
+# three systems to agree on it to six figures would be meaningless.
+KSSET = ("ksn=2048; ksll=64. Pi; ksdt=0.01; "
+         "ksxx=Table[ksll (j-1)/ksn,{j,1,ksn}]; "
+         "kskk=Table[(2. Pi/ksll) If[j<=ksn/2, j-1, j-1-ksn],{j,1,ksn}]; "
+         "kslin=kskk^2 - kskk^4; ksden=1./(1. - ksdt kslin); "
+         "ksu0=Cos[ksxx/16.](1. + Sin[ksxx/16.]); ksh0=Fourier[ksu0]; "
+         "ksstep[uh_]:=Module[{u,nl}, u=Re[InverseFourier[uh]]; "
+         "nl=(0.5 I kskk) Fourier[u u]; (uh + ksdt nl) ksden]; "
+         "ksrun[m_]:=Total[Abs[Nest[ksstep, ksh0, m]]^2]; "
+         "nsn=128; nsdt=0.002; nsnu=0.002; "
+         "nsk1=Table[If[j<=nsn/2, j-1, j-1-nsn],{j,1,nsn}]; "
+         "nskx=Table[nsk1[[j]],{i,1,nsn},{j,1,nsn}]; "
+         "nsky=Table[nsk1[[i]],{i,1,nsn},{j,1,nsn}]; "
+         "nsk2=nskx^2 + nsky^2; nsk2i=1./(nsk2 + Table[If[i==1&&j==1,1.,0.],{i,1,nsn},{j,1,nsn}]); "
+         "nsdeal=Table[If[nsk1[[i]]^2 + nsk1[[j]]^2 <= (nsn/3)^2, 1., 0.],{i,1,nsn},{j,1,nsn}]; "
+         "nsw0=Fourier[Table[Sin[2. Pi i/nsn] Cos[4. Pi j/nsn] + 0.4 Sin[6. Pi (i+j)/nsn],"
+         "{i,1,nsn},{j,1,nsn}]]; "
+         "nsstep[wh_]:=Module[{ph,u,v,wx,wy,nl}, ph=wh nsk2i; "
+         "u=Re[InverseFourier[(-I nsky) ph]]; v=Re[InverseFourier[(I nskx) ph]]; "
+         "wx=Re[InverseFourier[(-I nskx) wh]]; wy=Re[InverseFourier[(-I nsky) wh]]; "
+         "nl=Fourier[u wx + v wy] nsdeal; "
+         "(wh - nsdt nl)/(1. + nsdt nsnu nsk2)]; "
+         "nsrun[m_]:=Total[Abs[Nest[nsstep, nsw0, m]]^2, 2]; "
+         "psn=512; pssrc=Table[Sin[2. Pi i/psn] Cos[6. Pi j/psn],{i,1,psn},{j,1,psn}]; "
+         "psk1=Table[If[j<=psn/2, j-1, j-1-psn],{j,1,psn}]; "
+         "psk2=Table[N[psk1[[i]]^2 + psk1[[j]]^2],{i,1,psn},{j,1,psn}]; "
+         "psk2i=1./(psk2 + Table[If[i==1&&j==1,1.,0.],{i,1,psn},{j,1,psn}]); "
+         "psolve[m_]:=Module[{r,k}, r=0.; k=0; "
+         "While[k<m, r=Total[Abs[InverseFourier[Fourier[pssrc (1.+0.001 k)] psk2i]]^2,2]; k=k+1]; r];")
+KSSETP = ("ksn=2048; ksll=64.0*np.pi; ksdt=0.01\n"
+          "ksxx=ksll*np.arange(0,ksn)/ksn\n"
+          "_j=np.arange(1,ksn+1)\n"
+          "kskk=(2.0*np.pi/ksll)*np.where(_j<=ksn/2, _j-1, _j-1-ksn)\n"
+          "kslin=kskk**2-kskk**4; ksden=1.0/(1.0-ksdt*kslin)\n"
+          "def _F(a): return np.fft.ifft(a, norm='ortho')\n"
+          "def _IF(a): return np.fft.fft(a, norm='ortho')\n"
+          "def _F2(a): return np.fft.ifft2(a, norm='ortho')\n"
+          "def _IF2(a): return np.fft.fft2(a, norm='ortho')\n"
+          "ksu0=np.cos(ksxx/16.0)*(1.0+np.sin(ksxx/16.0)); ksh0=_F(ksu0)\n"
+          "def ksstep(uh):\n"
+          "    u=_IF(uh).real\n"
+          "    nl=(0.5j*kskk)*_F(u*u)\n"
+          "    return (uh+ksdt*nl)*ksden\n"
+          "def ksrun(m): return float((np.abs(nest(ksstep,ksh0,m))**2).sum())\n"
+          "nsn=128; nsdt=0.002; nsnu=0.002\n"
+          "_j2=np.arange(1,nsn+1)\n"
+          "nsk1=np.where(_j2<=nsn/2,_j2-1,_j2-1-nsn).astype(float)\n"
+          "nskx=np.tile(nsk1,(nsn,1)); nsky=np.tile(nsk1[:,None],(1,nsn))\n"
+          "nsk2=nskx**2+nsky**2\n"
+          "_e=np.zeros((nsn,nsn)); _e[0,0]=1.0\n"
+          "nsk2i=1.0/(nsk2+_e)\n"
+          "nsdeal=(nsk1[:,None]**2+nsk1[None,:]**2 <= (nsn/3)**2).astype(float)\n"
+          "_ii=np.arange(1,nsn+1)[:,None]; _jj=np.arange(1,nsn+1)[None,:]\n"
+          "nsw0=_F2(np.sin(2*np.pi*_ii/nsn)*np.cos(4*np.pi*_jj/nsn)\n"
+          "         +0.4*np.sin(6*np.pi*(_ii+_jj)/nsn))\n"
+          "def nsstep(wh):\n"
+          "    ph=wh*nsk2i\n"
+          "    u=_IF2((-1j*nsky)*ph).real; v=_IF2((1j*nskx)*ph).real\n"
+          "    wx=_IF2((-1j*nskx)*wh).real; wy=_IF2((-1j*nsky)*wh).real\n"
+          "    nl=_F2(u*wx+v*wy)*nsdeal\n"
+          "    return (wh-nsdt*nl)/(1.0+nsdt*nsnu*nsk2)\n"
+          "def nsrun(m): return float((np.abs(nest(nsstep,nsw0,m))**2).sum())\n"
+          "psn=512\n"
+          "_pi=np.arange(1,psn+1)[:,None]; _pj=np.arange(1,psn+1)[None,:]\n"
+          "pssrc=np.sin(2*np.pi*_pi/psn)*np.cos(6*np.pi*_pj/psn)\n"
+          "_p1=np.arange(1,psn+1)\n"
+          "psk1=np.where(_p1<=psn/2,_p1-1,_p1-1-psn).astype(float)\n"
+          "psk2=psk1[:,None]**2+psk1[None,:]**2\n"
+          "_pe=np.zeros((psn,psn)); _pe[0,0]=1.0\n"
+          "psk2i=1.0/(psk2+_pe)\n"
+          "def psolve(m):\n"
+          "    r=0.0; k=0\n"
+          "    while k<m:\n"
+          "        r=float((np.abs(_IF2(_F2(pssrc*(1.0+0.001*k))*psk2i))**2).sum()); k+=1\n"
+          "    return r")
+
+bench(id="ks", group=SP5, name="Kuramoto-Sivashinsky, 2048 modes, 2000 steps",
+      setup=KSSET, expr="ksrun[2000];", check="ksrun[50]", reps=3,
+      py_setup=KSSETP, py="ksrun(2000)", py_check="ksrun(50)")
+bench(id="ns2d", group=SP5, name="2D Navier-Stokes vorticity, 128^2, 200 steps",
+      setup="", expr="nsrun[200];", check="nsrun[20]", reps=3,
+      py_setup="", py="nsrun(200)", py_check="nsrun(20)")
+bench(id="poissonfft", group=SP5, name="FFT Poisson solve, 512^2, 30 solves",
+      setup="", expr="psolve[30];", check="psolve[2]", reps=3,
+      py_setup="", py="psolve(30)", py_check="psolve(2)")
+
+# ---- 6. deep learning -----------------------------------------------------
+# A two-layer MLP trained by minibatch SGD: forward, softmax cross-entropy,
+# backward, update. The logistic-regression row of the third sweep is the
+# nearest existing benchmark and it has ONE weight matrix, so it never runs the
+# chain of transposed GEMMs that dominates real training.
+#
+# Biases are folded in as a constant column of X rather than added separately,
+# which is what a performance-minded implementation does in every one of the
+# three languages and keeps the three columns identical -- Wolfram's Plus
+# threads the OUTER level, so `matrix + rowvector` is not a broadcast and the
+# honest spelling would otherwise differ per system.
+DLSET = ("relu[zz_]:=Ramp[zz]; nnb=1024; nni=785; nnh=128; nno=10; nnlr=0.05; "
+         "nnX=Join[RandomReal[{-1,1},{nnb,nni-1}], Table[{1.},{nnb}], 2]; "
+         "nnY=Table[If[j == Mod[i,nno]+1, 1., 0.],{i,1,nnb},{j,1,nno}]; "
+         "nnW1=Table[0.05 Sin[1. (i + nni j)],{i,1,nni},{j,1,nnh}]; "
+         "nnW2=Table[0.05 Cos[1. (i + nnh j)],{i,1,nnh},{j,1,nno}]; "
+         "sfmax[z_]:=Module[{ex}, ex=Exp[z - Map[Max,z]]; ex/Total[ex,{2}]]; "
+         "mlpstep[w_]:=Module[{z1,a1,z2,sm,d2,d1,g1,g2}, "
+         "z1=nnX . w[[1]]; a1=relu[z1]; z2=a1 . w[[2]]; "
+         "sm=sfmax[z2]; d2=(sm-nnY)/nnb; "
+         "d1=(d2 . Transpose[w[[2]]]) UnitStep[z1]; "
+         "g2=Transpose[a1] . d2; g1=Transpose[nnX] . d1; "
+         "{w[[1]] - nnlr g1, w[[2]] - nnlr g2}]; "
+         "mlptrain[m_]:=Nest[mlpstep, {nnW1,nnW2}, m]; "
+         "cb=256; ci=17; ch=8; co=4; clr=0.1; "
+         "cX=Join[Table[Sin[0.3 (i + ci j)],{i,1,cb},{j,1,ci-1}], Table[{1.},{cb}], 2]; "
+         "cY=Table[If[j == Mod[i,co]+1, 1., 0.],{i,1,cb},{j,1,co}]; "
+         "cW1=Table[0.2 Sin[1. (i + ci j)],{i,1,ci},{j,1,ch}]; "
+         "cW2=Table[0.2 Cos[1. (i + ch j)],{i,1,ch},{j,1,co}]; "
+         "cstep[w_]:=Module[{z1,a1,z2,sm,d2,d1,g1,g2}, "
+         "z1=cX . w[[1]]; a1=relu[z1]; z2=a1 . w[[2]]; "
+         "sm=sfmax[z2]; d2=(sm-cY)/cb; "
+         "d1=(d2 . Transpose[w[[2]]]) UnitStep[z1]; "
+         "g2=Transpose[a1] . d2; g1=Transpose[cX] . d1; "
+         "{w[[1]] - clr g1, w[[2]] - clr g2}]; "
+         "closs[m_]:=Module[{w,sm}, w=Nest[cstep,{cW1,cW2},m]; "
+         "sm=sfmax[relu[cX . w[[1]]] . w[[2]]]; "
+         "-Total[cY Log[sm + 1.0*^-12], 2]/cb]; "
+         "nnq=8192; nnXq=Join[RandomReal[{-1,1},{nnq,nni-1}], Table[{1.},{nnq}], 2]; "
+         "mlpinfer[]:=Total[sfmax[relu[nnXq . nnW1] . nnW2], 2];")
+DLSETP = ("def relu(z): return np.maximum(z,0.0)\n"
+          "nnb=1024; nni=785; nnh=128; nno=10; nnlr=0.05\n"
+          "nnX=np.concatenate([np.random.uniform(-1,1,(nnb,nni-1)),np.ones((nnb,1))],1)\n"
+          "nnY=np.zeros((nnb,nno))\n"
+          "nnY[np.arange(nnb),(np.arange(1,nnb+1)%nno)]=1.0\n"
+          "nnW1=0.05*np.sin(np.arange(1,nni+1)[:,None]+nni*np.arange(1,nnh+1)[None,:])\n"
+          "nnW2=0.05*np.cos(np.arange(1,nnh+1)[:,None]+nnh*np.arange(1,nno+1)[None,:])\n"
+          "def sfmax(z):\n"
+          "    ex=np.exp(z-z.max(1)[:,None]); return ex/ex.sum(1)[:,None]\n"
+          "def mlpstep(w):\n"
+          "    z1=nnX@w[0]; a1=np.maximum(z1,0.0); z2=a1@w[1]\n"
+          "    sm=sfmax(z2); d2=(sm-nnY)/nnb\n"
+          "    d1=(d2@w[1].T)*(z1>=0)\n"
+          "    g2=a1.T@d2; g1=nnX.T@d1\n"
+          "    return [w[0]-nnlr*g1, w[1]-nnlr*g2]\n"
+          "def mlptrain(m): return nest(mlpstep,[nnW1,nnW2],m)\n"
+          "cb=256; ci=17; ch=8; co=4; clr=0.1\n"
+          "cX=np.concatenate([np.sin(0.3*(np.arange(1,cb+1)[:,None]+ci*np.arange(1,ci)[None,:])),\n"
+          "                   np.ones((cb,1))],1)\n"
+          "cY=np.zeros((cb,co)); cY[np.arange(cb),(np.arange(1,cb+1)%co)]=1.0\n"
+          "cW1=0.2*np.sin(np.arange(1,ci+1)[:,None]+ci*np.arange(1,ch+1)[None,:])\n"
+          "cW2=0.2*np.cos(np.arange(1,ch+1)[:,None]+ch*np.arange(1,co+1)[None,:])\n"
+          "def cstep(w):\n"
+          "    z1=cX@w[0]; a1=np.maximum(z1,0.0); z2=a1@w[1]\n"
+          "    sm=sfmax(z2); d2=(sm-cY)/cb\n"
+          "    d1=(d2@w[1].T)*(z1>=0)\n"
+          "    g2=a1.T@d2; g1=cX.T@d1\n"
+          "    return [w[0]-clr*g1, w[1]-clr*g2]\n"
+          "def closs(m):\n"
+          "    w=nest(cstep,[cW1,cW2],m)\n"
+          "    sm=sfmax(np.maximum(cX@w[0],0.0)@w[1])\n"
+          "    return float(-(cY*np.log(sm+1e-12)).sum()/cb)\n"
+          "nnq=8192\n"
+          "nnXq=np.concatenate([np.random.uniform(-1,1,(nnq,nni-1)),np.ones((nnq,1))],1)\n"
+          "def mlpinfer(): return sfmax(np.maximum(nnXq@nnW1,0.0)@nnW2).sum(1)")
+
+bench(id="mlptrain", group=DL, name="MLP training, 785-128-10, batch 1024, 100 steps",
+      setup=DLSET, expr="mlptrain[100];", check="closs[20]", reps=3,
+      py_setup=DLSETP, py="mlptrain(100)", py_check="closs(20)")
+bench(id="mlpinfer", group=DL, name="MLP inference, 8192 x 785 forward pass",
+      setup="", expr="mlpinfer[];", check="closs[1]", reps=3,
+      py_setup="", py="mlpinfer()", py_check="closs(1)")
+
+# ---- 7. state estimation --------------------------------------------------
+# A 6-state constant-acceleration Kalman filter over 20000 measurements. Every
+# other benchmark in the suite is dominated by the cost of ARRAYS; this one is
+# dominated by the cost of a CALL -- the matrices are 6x6 and 2x2, the flop
+# count is trivial, and what is being measured is per-operation dispatch in a
+# 20000-iteration loop. NumPy is not fast here either, and that is the point:
+# the row shows where all three systems live when the data is small.
+#
+# The ensemble filter beside it is the same estimator written the array way,
+# 4096 members at once, and exists so the two regimes can be read side by side.
+KFSET = ("kfn=20000; kfdt=0.01; "
+         "kfF=Table[Which[i==j,1., j==i+2 && i<=4, kfdt, j==i+4 && i<=2, 0.5 kfdt^2, "
+         "True, 0.],{i,1,6},{j,1,6}]; kfFT=Transpose[kfF]; "
+         "kfH=Table[If[i==j,1.,0.],{i,1,2},{j,1,6}]; kfHT=Transpose[kfH]; "
+         "kfQ=Table[If[i==j, 0.001, 0.],{i,1,6},{j,1,6}]; "
+         "kfR=Table[If[i==j, 0.05, 0.],{i,1,2},{j,1,2}]; "
+         "kfI=Table[If[i==j,1.,0.],{i,1,6},{j,1,6}]; "
+         "kfx0=Table[0.,{6}]; kfP0=Table[If[i==j,1.,0.],{i,1,6},{j,1,6}]; "
+         "kfz[k_]:={Sin[0.01 k] + 0.02 Sin[7.1 k], Cos[0.013 k] + 0.02 Cos[5.3 k]}; "
+         "kfstep[st_,k_]:=Module[{xp,pp,yy,ss,kk}, "
+         "xp=kfF . st[[1]]; pp=kfF . st[[2]] . kfFT + kfQ; "
+         "yy=kfz[k] - kfH . xp; ss=kfH . pp . kfHT + kfR; "
+         "kk=pp . kfHT . Inverse[ss]; "
+         "{xp + kk . yy, (kfI - kk . kfH) . pp}]; "
+         "kalman[m_]:=Module[{st,k}, st={kfx0,kfP0}; k=1; "
+         "While[k<=m, st=kfstep[st,k]; k=k+1]; Tr[st[[2]]]]; "
+         "enn=4096; ens=200; "
+         "enE0=Table[0.01 Sin[1. (i + 6 j)],{i,1,enn},{j,1,6}]; "
+         "enstep[e_,k_]:=Module[{pr,mn,an,pc,kk,inn}, "
+         "pr=e . kfFT; mn=Total[pr]/enn; an=pr - Table[mn,{enn}]; "
+         "pc=Transpose[an] . an/(enn-1.); "
+         "kk=pc . kfHT . Inverse[kfH . pc . kfHT + kfR]; "
+         "inn=Table[kfz[k],{enn}] - pr . kfHT; pr + inn . Transpose[kk]]; "
+         "enkf[m_]:=Module[{e,k}, e=enE0; k=1; While[k<=m, e=enstep[e,k]; k=k+1]; "
+         "Total[Total[e]/enn]];")
+KFSETP = ("kfn=20000; kfdt=0.01\n"
+          "kfF=np.zeros((6,6))\n"
+          "for i in range(6):\n"
+          "    kfF[i,i]=1.0\n"
+          "    if i<4: kfF[i,i+2]=kfdt\n"
+          "    if i<2: kfF[i,i+4]=0.5*kfdt**2\n"
+          "kfFT=kfF.T.copy()\n"
+          "kfH=np.zeros((2,6)); kfH[0,0]=1.0; kfH[1,1]=1.0\n"
+          "kfHT=kfH.T.copy()\n"
+          "kfQ=0.001*np.eye(6); kfR=0.05*np.eye(2); kfI=np.eye(6)\n"
+          "kfx0=np.zeros(6); kfP0=np.eye(6)\n"
+          "def kfz(k): return np.array([math.sin(0.01*k)+0.02*math.sin(7.1*k),\n"
+          "                             math.cos(0.013*k)+0.02*math.cos(5.3*k)])\n"
+          "def kfstep(st,k):\n"
+          "    xp=kfF@st[0]; pp=kfF@st[1]@kfFT+kfQ\n"
+          "    yy=kfz(k)-kfH@xp; ss=kfH@pp@kfHT+kfR\n"
+          "    kk=pp@kfHT@np.linalg.inv(ss)\n"
+          "    return [xp+kk@yy,(kfI-kk@kfH)@pp]\n"
+          "def kalman(m):\n"
+          "    st=[kfx0,kfP0]; k=1\n"
+          "    while k<=m: st=kfstep(st,k); k+=1\n"
+          "    return float(np.trace(st[1]))\n"
+          "enn=4096; ens=200\n"
+          "enE0=0.01*np.sin(np.arange(1,enn+1)[:,None]+6*np.arange(1,7)[None,:])\n"
+          "def enstep(e,k):\n"
+          "    pr=e@kfFT; mn=pr.sum(0)/enn; an=pr-mn[None,:]\n"
+          "    pc=an.T@an/(enn-1.0)\n"
+          "    kk=pc@kfHT@np.linalg.inv(kfH@pc@kfHT+kfR)\n"
+          "    inn=np.tile(kfz(k),(enn,1))-pr@kfHT\n"
+          "    return pr+inn@kk.T\n"
+          "def enkf(m):\n"
+          "    e=enE0; k=1\n"
+          "    while k<=m: e=enstep(e,k); k+=1\n"
+          "    return float((e.sum(0)/enn).sum())")
+
+bench(id="kalman", group=KF, name="Kalman filter, 6 states, 20000 steps",
+      setup=KFSET, expr="kalman[kfn];", check="kalman[2000]", reps=3,
+      py_setup=KFSETP, py="kalman(kfn)", py_check="kalman(2000)")
+bench(id="enkf", group=KF, name="Ensemble Kalman filter, 4096 members, 200 steps",
+      setup="", expr="enkf[ens];", check="enkf[20]", reps=3,
+      py_setup="", py="enkf(ens)", py_check="enkf(20)")
+
+# ---- 8. rendering ---------------------------------------------------------
+# A ray tracer, vectorised over 262144 rays and looping over 64 spheres: the
+# standard way this is written when the language has no cheap scalar loop. It
+# is branch-free by construction -- every conditional becomes a UnitStep mask --
+# and it ends with a GATHER of sphere parameters by the winning-sphere index,
+# so it exercises the graph kernel's central operation from a 65-element source,
+# which is BELOW the packing threshold. That is the small-operand trap of the
+# third sweep in its most natural setting.
+RTSET = ("rtw=512; rth=512; rtnp=rtw rth; rtns=64; rtr=0.35; rtr2=rtr^2; "
+         "rtjs=Flatten[Table[(j - (rtw+1)/2.)/rtw,{i,1,rth},{j,1,rtw}]]; "
+         "rtis=Flatten[Table[(i - (rth+1)/2.)/rth,{i,1,rth},{j,1,rtw}]]; "
+         "rtnm=1./Sqrt[rtjs^2 + rtis^2 + 1.]; "
+         "rtdx=rtjs rtnm; rtdy=rtis rtnm; rtdz=rtnm; "
+         "rtcx=Table[-3.5 + Mod[s-1,8],{s,1,rtns}]; "
+         "rtcy=Table[-3.5 + Quotient[s-1,8],{s,1,rtns}]; "
+         "rtcz=Table[6. + 0.4 Sin[1.7 s],{s,1,rtns}]; "
+         "rtcxp=Prepend[rtcx,0.]; rtcyp=Prepend[rtcy,0.]; rtczp=Prepend[rtcz,0.]; "
+         "rtlx=0.577; rtly=-0.577; rtlz=-0.577; "
+         "rtrender[]:=Module[{tmin,cid,s,cx,cy,cz,tca,d2,disc,tt,ok,cand,bt,hx,hy,hz,gx,gy,gz,nx,ny,nz,lam,vis}, "
+         "tmin=Table[1.0*^9,{rtnp}]; cid=Table[0,{rtnp}]; s=1; "
+         "While[s<=rtns, cx=rtcx[[s]]; cy=rtcy[[s]]; cz=rtcz[[s]]; "
+         "tca=rtdx cx + rtdy cy + rtdz cz; "
+         "d2=(cx cx + cy cy + cz cz) - tca tca; disc=rtr2 - d2; "
+         "tt=tca - Sqrt[Clip[disc,{0.,1.0*^9}]]; "
+         "ok=UnitStep[disc] UnitStep[tt - 0.001]; "
+         "cand=ok tt + (1-ok) 1.0*^9; "
+         "bt=UnitStep[tmin - cand - 1.0*^-6]; cid=bt s + (1-bt) cid; "
+         "tmin=MapThread[Min,{tmin,cand}]; s=s+1]; "
+         "hx=rtdx tmin; hy=rtdy tmin; hz=rtdz tmin; "
+         "gx=rtcxp[[cid+1]]; gy=rtcyp[[cid+1]]; gz=rtczp[[cid+1]]; "
+         "nx=(hx-gx)/rtr; ny=(hy-gy)/rtr; nz=(hz-gz)/rtr; "
+         "lam=Clip[nx rtlx + ny rtly + nz rtlz, {0.,1.}]; "
+         "vis=UnitStep[1.0*^8 - tmin]; Total[lam vis]/rtnp];")
+RTSETP = ("rtw=512; rth=512; rtnp=rtw*rth; rtns=64; rtr=0.35; rtr2=rtr**2\n"
+          "_ri=np.arange(1,rth+1)[:,None]; _rj=np.arange(1,rtw+1)[None,:]\n"
+          "rtjs=np.broadcast_to((_rj-(rtw+1)/2.0)/rtw,(rth,rtw)).ravel().copy()\n"
+          "rtis=np.broadcast_to((_ri-(rth+1)/2.0)/rth,(rth,rtw)).ravel().copy()\n"
+          "rtnm=1.0/np.sqrt(rtjs**2+rtis**2+1.0)\n"
+          "rtdx=rtjs*rtnm; rtdy=rtis*rtnm; rtdz=rtnm\n"
+          "_s=np.arange(1,rtns+1)\n"
+          "rtcx=(-3.5+(_s-1)%8).astype(float)\n"
+          "rtcy=(-3.5+(_s-1)//8).astype(float)\n"
+          "rtcz=6.0+0.4*np.sin(1.7*_s)\n"
+          "rtcxp=np.concatenate(([0.0],rtcx)); rtcyp=np.concatenate(([0.0],rtcy))\n"
+          "rtczp=np.concatenate(([0.0],rtcz))\n"
+          "rtlx=0.577; rtly=-0.577; rtlz=-0.577\n"
+          "def rtrender():\n"
+          "    tmin=np.full(rtnp,1e9); cid=np.zeros(rtnp,dtype=np.int64); s=1\n"
+          "    while s<=rtns:\n"
+          "        cx=rtcx[s-1]; cy=rtcy[s-1]; cz=rtcz[s-1]\n"
+          "        tca=rtdx*cx+rtdy*cy+rtdz*cz\n"
+          "        d2=(cx*cx+cy*cy+cz*cz)-tca*tca; disc=rtr2-d2\n"
+          "        tt=tca-np.sqrt(np.clip(disc,0.0,1e9))\n"
+          "        ok=(disc>=0).astype(np.int64)*(tt-0.001>=0).astype(np.int64)\n"
+          "        cand=ok*tt+(1-ok)*1e9\n"
+          "        bt=(tmin-cand-1e-6>=0).astype(np.int64)\n"
+          "        cid=bt*s+(1-bt)*cid\n"
+          "        tmin=np.minimum(tmin,cand); s+=1\n"
+          "    hx=rtdx*tmin; hy=rtdy*tmin; hz=rtdz*tmin\n"
+          "    gx=rtcxp[cid]; gy=rtcyp[cid]; gz=rtczp[cid]\n"
+          "    nx=(hx-gx)/rtr; ny=(hy-gy)/rtr; nz=(hz-gz)/rtr\n"
+          "    lam=np.clip(nx*rtlx+ny*rtly+nz*rtlz,0.0,1.0)\n"
+          "    vis=(1e8-tmin>=0).astype(float)\n"
+          "    return float((lam*vis).sum()/rtnp)")
+
+bench(id="raytrace", group=RD, name="Ray trace, 512^2 rays x 64 spheres, diffuse",
+      setup=RTSET, expr="rtrender[];", check="rtrender[]", reps=3,
+      py_setup=RTSETP, py="rtrender()", py_check="rtrender()")
+
+
 SCALED = {  # id -> (pattern, replacement-fn) applied to setup+expr under --scale
     "matmul": [("n=1000", "n")], "solve": [("n=1000", "n")],
     "inverse": [("n=500", "n")], "det": [("n=500", "n")],

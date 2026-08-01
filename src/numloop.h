@@ -131,4 +131,42 @@ Expr* numloop_nestwhilelist(const Expr* f, const Expr* x0, const Expr* test);
  * list keeps an exact prefix, which a double buffer cannot express). */
 Expr* numloop_accumulate(const Expr* list);
 
+/* ------------------------------------------------------------------------
+ *  Compiled boolean predicates
+ *
+ *  The boolean counterpart of numloop_map, for the heads that apply a TEST to
+ *  every element rather than a value-returning function: Select, AllTrue,
+ *  AnyTrue, NoneTrue, TakeWhile, LengthWhile, SelectFirst. All seven ran the
+ *  test through the interpreter once per element, which made them the slowest
+ *  numeric heads in the system (AllTrue over 10^6 was 416 ms against NumPy's
+ *  319 us).
+ *
+ *  The compilable subset is a tree of order comparisons (<, <=, >, >=) whose
+ *  operands are ordinary numeric bodies, combined with And, Or and Not:
+ *
+ *      # > 0.5 &            0.1 < # < 0.9 &         Abs[#] > 2. &
+ *      #^2 + 1. > 3. &      Not[# > 0.] &           # < 0. || # > 1. &
+ *
+ *  Anything else -- PrimeQ, a pattern test, Equal, a symbolic body -- returns
+ *  NULL and the caller runs the interpreter as before.
+ *
+ *  CALLER CONTRACT, and it is not optional: this reproduces the interpreter's
+ *  comparison of two INEXACT operands, which carries a relative tolerance of
+ *  2^-46 (see compare_numeric in src/comparisons.c). It is therefore valid ONLY
+ *  for machine reals. Do not run it over an int64 buffer: two exact Integers
+ *  compare through GMP with no tolerance, which is a different rule. ---------- */
+typedef struct NumPred NumPred;
+
+/* Compile `f` as a predicate of one argument, or NULL if it is outside the
+ * subset above. The caller must numloop_pred_free the result. */
+NumPred* numloop_pred_compile(const Expr* f);
+void     numloop_pred_free(NumPred* p);
+
+/* Evaluate at the machine real `x`, writing the truth value to *out. Returns
+ * false when an arithmetic intermediate is non-finite -- the interpreter would
+ * have gone complex or produced Infinity there, so the caller must abandon the
+ * whole fast path and let the interpreter answer, exactly as numloop_map does
+ * on a non-finite element. */
+bool numloop_pred_run(NumPred* p, double x, bool* out);
+
 #endif /* NUMLOOP_H */

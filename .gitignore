@@ -73,3 +73,9 @@ src/external/ecm/
 # ~200 KB bundle (rendered PDF + snapshot PNG) that no build, test or docs
 # target consumes, so it only ever cost clone size.
 docs/compile_example/
+
+# Experiment sources are runnable scripts; their bytecode caches are not
+docs/experiments/**/__pycache__/
+tools/__pycache__/
+comparisons/__pycache__/
+docs/experiments/**/*.pyc

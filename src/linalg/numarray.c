@@ -104,6 +104,26 @@ bool na_load_vector(const Expr* e, bool want_complex, int* n, double** buf)
         NDType dt = e->data.ndarray.dtype;
         double* out = (double*)malloc(stride * (size_t)len * sizeof(double));
         if (!out) return false;
+
+        /* THE COPY IS ALREADY THE RIGHT BYTES. A float64 buffer asked for as
+         * real doubles is bit-identical to what the loop below would write, so
+         * the loop is 10^6 indirect ndt_get calls producing a memcpy. This is
+         * the same boundary cost performance.md §2 removed from na_load_matrix
+         * ("na_load_matrix converted row-major to column-major one ndt_get at a
+         * time; it is now a cache-blocked transpose, or a memcpy where no
+         * transpose is needed") -- the vector loader was simply never given the
+         * same treatment, and every BLAS bridge entry point, Norm and Normalize
+         * pay for it. Measured on Norm of a 10^6 vector: 4.76 ms against
+         * np.linalg.norm's 242 us, of which the marshalling was most.
+         *
+         * ndt_get sets im = 0.0 unconditionally for a real dtype, so the
+         * `im != 0.0` rejection below cannot fire here and nothing is skipped. */
+        if (dt == NDT_FLOAT64 && !want_complex) {
+            memcpy(out, e->data.ndarray.data, (size_t)len * sizeof(double));
+            *n = len; *buf = out;
+            return true;
+        }
+
         for (int i = 0; i < len; i++) {
             double re, im;
             ndt_get(e->data.ndarray.data, (size_t)i, dt, &re, &im);
