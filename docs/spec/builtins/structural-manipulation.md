@@ -560,6 +560,13 @@ Gives a list of the elements that are the most common in an expression.
 - `Commonest[list, n]` returns the `n` commonest elements in the order they appear in `list`.
 - `Commonest[list, UpTo[n]]` returns the `n` commonest elements, or as many as are available.
 - A message `Commonest::dstlms` is generated if there are fewer distinct elements than requested by an integer `n`.
+- `n` zero or negative selects nothing.
+- **Packed / NDArray fast path.** A rank-1 `int64` or `float64` buffer is
+  counted on the machine words, sharing `Tally`'s counting routine so the two
+  agree on how a count tie breaks. The selected elements come out of the buffer,
+  so the result keeps the input's dtype and stays packed. Everything else (rank
+  ≥ 2, a complex dtype, a count that is neither an `Integer` nor
+  `UpTo[Integer]`) is answered by the ordinary list code.
 
 ```mathematica
 In[1]:= Commonest[{b, a, c, 2, a, b, 1, 2}]

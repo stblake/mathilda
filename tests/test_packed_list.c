@@ -333,6 +333,59 @@ void test_setops_match_plain_lists(void) {
         same_as_plain(CASES[i][0], CASES[i][1]);
 }
 
+/* Commonest shares Tally's counting routine (ndred_tally / ndred_commonest in
+ * src/ndreduce.c), so what needs pinning is the SELECTION: which distinct values
+ * a count tie picks, and in what order they come back. Both are decided by
+ * first-appearance index, and both surfaces must decide them identically. */
+void test_commonest_matches_plain_lists(void) {
+    static const char* const CASES[][2] = {
+        /* A tie at the top count: BOTH survivors, in first-appearance order. */
+        { "Commonest[ToNDArray[{5, 1, 5, 3, 1, 9}]]", "Commonest[{5, 1, 5, 3, 1, 9}]" },
+        { "Commonest[ToNDArray[{3, 1, 1, 3, 2}]]",    "Commonest[{3, 1, 1, 3, 2}]" },
+        /* No tie, all distinct, and a single repeated value. */
+        { "Commonest[ToNDArray[{1, 2, 3}]]",          "Commonest[{1, 2, 3}]" },
+        { "Commonest[ToNDArray[{4, 4, 4, 4}]]",       "Commonest[{4, 4, 4, 4}]" },
+        { "Commonest[ToNDArray[{-2, -5, -2, 0}]]",    "Commonest[{-2, -5, -2, 0}]" },
+        { "Commonest[ToNDArray[{7}]]",                "Commonest[{7}]" },
+        /* The count forms. n past the distinct count is clamped (and warns);
+         * UpTo asks for "at most" and is silent; zero or less selects nothing. */
+        { "Commonest[ToNDArray[{5, 1, 5, 3, 1, 9}], 2]", "Commonest[{5, 1, 5, 3, 1, 9}, 2]" },
+        { "Commonest[ToNDArray[{5, 1, 5, 3, 1, 9}], 4]", "Commonest[{5, 1, 5, 3, 1, 9}, 4]" },
+        { "Commonest[ToNDArray[{1, 1, 2}], UpTo[7]]",    "Commonest[{1, 1, 2}, UpTo[7]]" },
+        { "Commonest[ToNDArray[{1, 1, 2}], UpTo[1]]",    "Commonest[{1, 1, 2}, UpTo[1]]" },
+        { "Commonest[ToNDArray[{1, 1, 2}], 0]",          "Commonest[{1, 1, 2}, 0]" },
+        { "Commonest[ToNDArray[{1, 1, 2}], -1]",         "Commonest[{1, 1, 2}, -1]" },
+        { "Commonest[ToNDArray[{1, 1, 2}], -2]",         "Commonest[{1, 1, 2}, -2]" },
+        /* A count that is neither an Integer nor UpTo[Integer] is not the fast
+         * path's to interpret: both surfaces leave the call unevaluated. */
+        { "Commonest[ToNDArray[{1, 1, 2}], nn]",         "Commonest[{1, 1, 2}, nn]" },
+        { "Commonest[ToNDArray[{1, 1, 2}], 2.5]",        "Commonest[{1, 1, 2}, 2.5]" },
+        /* Range too wide to direct-index -- the inline-key hash. */
+        { "Commonest[ToNDArray[{0, 1000000000000, 0, -1000000000000}]]",
+          "Commonest[{0, 1000000000000, 0, -1000000000000}]" },
+        /* Past 2^53: keyed on the raw word, so these stay three distinct values
+         * and the answer is the one that really does appear twice. */
+        { "Commonest[ToNDArray[{9007199254740993, 9007199254740992, 9007199254740993}]]",
+          "Commonest[{9007199254740993, 9007199254740992, 9007199254740993}]" },
+        /* Reals. 0. and -0. print differently and expr_eq holds them apart, so
+         * the bit-pattern key must NOT normalise them -- the same trap Tally
+         * has. Here it is visible in the ANSWER, not just in the count. */
+        { "Commonest[ToNDArray[{1.5, 2.5, 1.5}]]",  "Commonest[{1.5, 2.5, 1.5}]" },
+        { "Commonest[ToNDArray[{0., -0., 1.}]]",    "Commonest[{0., -0., 1.}]" },
+        { "Commonest[ToNDArray[{1., 2., 3.}], 2]",  "Commonest[{1., 2., 3.}, 2]" },
+        /* A non-finite element cannot be keyed on its bits and stay faithful, so
+         * the whole call is handed back. */
+        { "Commonest[ToNDArray[Exp[{1000., 1000., 2.}]]]", "Commonest[Exp[{1000., 1000., 2.}]]" },
+        /* Rank 2: the ELEMENTS are rows, which are not machine words. */
+        { "Commonest[ToNDArray[{{1, 2}, {1, 2}, {3, 4}}]]", "Commonest[{{1, 2}, {1, 2}, {3, 4}}]" },
+        /* Element heads survive the round trip, for both dtypes. */
+        { "Head[Commonest[ToNDArray[{1, 2, 1}]][[1]]]",    "Head[Commonest[{1, 2, 1}][[1]]]" },
+        { "Head[Commonest[ToNDArray[{1., 2., 1.}]][[1]]]", "Head[Commonest[{1., 2., 1.}][[1]]]" },
+    };
+    for (size_t i = 0; i < sizeof(CASES) / sizeof(CASES[0]); i++)
+        same_as_plain(CASES[i][0], CASES[i][1]);
+}
+
 void test_ordering_matches_plain_lists(void) {
     assert_eval_eq("Sort[{ToNDArray[{2., 1.}], ToNDArray[{1., 9.}]}]",
                    "{{1.0, 9.0}, {2.0, 1.0}}", 0);
@@ -1408,6 +1461,10 @@ void test_aware_heads_stay_packed(void) {
         "ToNDArray[{1., 2.}] + 1.",
         "ToNDArray[{1., 2.}] * 2.",
         "Sin[ToNDArray[{1., 2.}]]",
+        /* Every element Commonest returns was copied out of the buffer, so the
+         * answer is one dtype and stays packed for whatever reads it next. */
+        "Commonest[ToNDArray[{1., 2., 2., 3.}]]",
+        "Commonest[ToNDArray[{1., 2., 2., 3., 3.}], 2]",
     };
     for (size_t i = 0; i < sizeof(SRCS) / sizeof(SRCS[0]); i++) {
         Expr* r = ev(SRCS[i]);
@@ -2069,6 +2126,7 @@ int main(void) {
     TEST(test_int64_matches_plain_integer_lists);
     TEST(test_tally_matches_plain_lists);
     TEST(test_setops_match_plain_lists);
+    TEST(test_commonest_matches_plain_lists);
     TEST(test_declines_what_it_cannot_represent);
     TEST(test_ordering_matches_plain_lists);
     TEST(test_hash_consumers);

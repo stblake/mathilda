@@ -384,6 +384,8 @@ P("position", "struct", "Position[jv, 0]", None, chk="N[Length[r]]",
 P("count", "struct", "Count[jv, 0]", "int(np.count_nonzero(jv == 0))")
 P("tally", "struct", "Tally[jv]", None, chk="N[Length[r]]",
   pychk="float(len(r))")
+P("commonest", "struct", "Commonest[jv, 3]", None, chk="N[Length[r]]",
+  pychk="float(len(r))")
 P("counts", "struct", "Counts[jv]", None, chk="N[Length[r]]",
   pychk="float(len(r))")
 P("bincounts", "struct", "BinCounts[jv, {0, 1000, 1}]",

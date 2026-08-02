@@ -17,6 +17,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdio.h>           /* Commonest::dstlms — the same message the List path prints */
+#include <inttypes.h>        /* PRId64, for that message's argument */
 #include <math.h>
 
 /* Below this many summands a strided range is summed by a plain loop; above it
@@ -565,7 +567,35 @@ static Expr* tally_pack_i64(const Expr* src, int64_t* buf, size_t nuniq) {
     return expr_new_ndarray_like(src, 2, dims, buf, NDT_INT64);
 }
 
-static Expr* tally_direct_i64(const Expr* a, const int64_t* iv, size_t n) {
+/* The counted distinct values of a rank-1 machine buffer, in FIRST-APPEARANCE
+ * order. This is the substrate under both Tally and Commonest: they need the
+ * same three arrays and differ only in what they build from them. One
+ * implementation is not merely tidier -- Commonest breaks a count tie by first
+ * appearance, so a second counting routine that inserted in a different order
+ * would answer differently on ties without either being "wrong", and nothing
+ * downstream would catch it. */
+typedef struct {
+    uint64_t* keys;    /* the distinct machine words, first-appearance order */
+    int64_t*  cnts;    /* keys[u]'s multiplicity */
+    size_t    nuniq;
+} NDWordTally;
+
+static void ndwt_free(NDWordTally* t) {
+    free(t->keys); free(t->cnts);
+    t->keys = NULL; t->cnts = NULL; t->nuniq = 0;
+}
+
+/* Rank 1 only: a tally of a matrix tallies its ROWS, which are not machine
+ * words. Complex dtypes go the generic way for the same reason, and the narrow
+ * dtypes because widening them to a key would merge values the List path keeps
+ * apart. */
+static bool nd_word_keyable(const Expr* a) {
+    NDType dt = a->data.ndarray.dtype;
+    return a->data.ndarray.rank == 1 && !ndt_is_complex(dt) &&
+           (dt == NDT_INT64 || dt == NDT_FLOAT64);
+}
+
+static bool nd_tally_direct_i64(const int64_t* iv, size_t n, NDWordTally* out) {
     int64_t mn = iv[0], mx = iv[0];
     for (size_t i = 1; i < n; i++) {
         if (iv[i] < mn) mn = iv[i];
@@ -575,13 +605,13 @@ static Expr* tally_direct_i64(const Expr* a, const int64_t* iv, size_t n) {
      * spread (mn near INT64_MIN, mx near INT64_MAX), and that is UB, not a large
      * number. In uint64 the difference of two int64 is exact whenever mx >= mn. */
     uint64_t span = (uint64_t)mx - (uint64_t)mn;
-    if (span >= TALLY_DIRECT_MAX_RANGE || span + 1 > (uint64_t)n) return NULL;
+    if (span >= TALLY_DIRECT_MAX_RANGE || span + 1 > (uint64_t)n) return false;
     uint64_t range = span + 1;
 
     int64_t*  cnt = calloc((size_t)range, sizeof(int64_t));
     size_t    ocap = 1024, nuniq = 0;
     uint32_t* ord = malloc(sizeof(uint32_t) * ocap);   /* offsets, in first-seen order */
-    if (!cnt || !ord) { free(cnt); free(ord); return NULL; }
+    if (!cnt || !ord) { free(cnt); free(ord); return false; }
 
     for (size_t i = 0; i < n; i++) {
         uint64_t idx = (uint64_t)iv[i] - (uint64_t)mn;
@@ -589,21 +619,23 @@ static Expr* tally_direct_i64(const Expr* a, const int64_t* iv, size_t n) {
             if (nuniq == ocap) {
                 size_t nc = ocap * 2;
                 uint32_t* o2 = realloc(ord, sizeof(uint32_t) * nc);
-                if (!o2) { free(cnt); free(ord); return NULL; }
+                if (!o2) { free(cnt); free(ord); return false; }
                 ord = o2; ocap = nc;
             }
             ord[nuniq++] = (uint32_t)idx;              /* idx < 2^25, fits */
         }
     }
 
-    int64_t* buf = malloc(sizeof(int64_t) * 2 * (nuniq ? nuniq : 1));
-    if (!buf) { free(cnt); free(ord); return NULL; }
+    uint64_t* keys = malloc(sizeof(uint64_t) * (nuniq ? nuniq : 1));
+    int64_t*  cs   = malloc(sizeof(int64_t)  * (nuniq ? nuniq : 1));
+    if (!keys || !cs) { free(cnt); free(ord); free(keys); free(cs); return false; }
     for (size_t u = 0; u < nuniq; u++) {
-        buf[2 * u]     = mn + (int64_t)ord[u];
-        buf[2 * u + 1] = cnt[ord[u]];
+        keys[u] = (uint64_t)(mn + (int64_t)ord[u]);
+        cs[u]   = cnt[ord[u]];
     }
     free(cnt); free(ord);
-    return tally_pack_i64(a, buf, nuniq);
+    out->keys = keys; out->cnts = cs; out->nuniq = nuniq;
+    return true;
 }
 
 /* One table entry. Keeping the key beside its count is the point: the probe
@@ -613,29 +645,11 @@ static Expr* tally_direct_i64(const Expr* a, const int64_t* iv, size_t n) {
  * cnt == 0 marks an empty slot -- every live entry has cnt >= 1. */
 typedef struct { uint64_t key; int64_t cnt; } TallyEnt;
 
-Expr* ndred_tally(Expr* res) {
-    if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
-    Expr* a = res->data.function.args[0];
-    NDType dt = a->data.ndarray.dtype;
-    /* Rank 1 only: Tally of a matrix tallies its ROWS, which are not machine
-     * words. Complex dtypes go the generic way for the same reason. */
-    if (a->data.ndarray.rank != 1 || ndt_is_complex(dt))
-        return ndarray_delist_and_reeval(res);
-    if (dt != NDT_INT64 && dt != NDT_FLOAT64)
-        return ndarray_delist_and_reeval(res);
-
-    size_t n = (size_t)a->data.ndarray.dims[0];
-    if (n == 0) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
-
-    const int64_t* iv = (const int64_t*)a->data.ndarray.data;
-    const double*  dv = (const double*)a->data.ndarray.data;
-
-    /* Integer keys: try direct indexing first. It declines on a range too wide
-     * to index, and only then is the hash the right structure. */
-    if (dt == NDT_INT64) {
-        Expr* direct = tally_direct_i64(a, iv, n);
-        if (direct) return direct;
-    }
+/* Returns false when the buffer cannot be keyed faithfully or an allocation
+ * fails; the caller then hands the whole call back to the List path. */
+static bool nd_tally_hash(const void* data, NDType dt, size_t n, NDWordTally* out) {
+    const int64_t* iv = (const int64_t*)data;
+    const double*  dv = (const double*)data;
 
     /* Sized by the DISTINCT count, which is discovered, not by n. Sizing for n
      * up front is the obvious thing and it is badly wrong at the scale this
@@ -648,10 +662,7 @@ Expr* ndred_tally(Expr* res) {
     size_t    mask = cap - 1;
     TallyEnt* tab = calloc(cap, sizeof(TallyEnt));
     uint32_t* ord = malloc(sizeof(uint32_t) * ocap);   /* table slots, first-seen order */
-    if (!tab || !ord) {
-        free(tab); free(ord);
-        return ndarray_delist_and_reeval(res);
-    }
+    if (!tab || !ord) { free(tab); free(ord); return false; }
     for (size_t i = 0; i < n; i++) {
         uint64_t k;
         if (dt == NDT_INT64) {
@@ -664,7 +675,7 @@ Expr* ndred_tally(Expr* res) {
              * that handing the whole call back is the right trade. */
             if (!(x == x) || x > 1.7976931348623157e308 || x < -1.7976931348623157e308) {
                 free(tab); free(ord);
-                return ndarray_delist_and_reeval(res);
+                return false;
             }
             /* The key is the bit pattern, deliberately UNnormalised, so -0.0
              * and 0.0 stay two tallies. Folding them together is the obvious
@@ -685,8 +696,7 @@ Expr* ndred_tally(Expr* res) {
                 if (nuniq == ocap) {
                     size_t nc = ocap * 2;
                     uint32_t* o2 = realloc(ord, sizeof(uint32_t) * nc);
-                    if (!o2) { free(tab); free(ord);
-                               return ndarray_delist_and_reeval(res); }
+                    if (!o2) { free(tab); free(ord); return false; }
                     ord = o2; ocap = nc;
                 }
                 ord[nuniq++] = (uint32_t)h;
@@ -702,11 +712,9 @@ Expr* ndred_tally(Expr* res) {
              * DISTINCT keys, so this is unreachable for any array that fits in
              * memory -- but truncating silently would corrupt the output order,
              * so hand the call back rather than assume. */
-            if (nc > 0xFFFFFFFFu) { free(tab); free(ord);
-                                    return ndarray_delist_and_reeval(res); }
+            if (nc > 0xFFFFFFFFu) { free(tab); free(ord); return false; }
             TallyEnt* t2 = calloc(nc, sizeof(TallyEnt));
-            if (!t2) { free(tab); free(ord);
-                       return ndarray_delist_and_reeval(res); }
+            if (!t2) { free(tab); free(ord); return false; }
             /* Rehash through `ord` so first-appearance order is carried across
              * the resize -- the slot indices it holds are all about to move. */
             for (size_t u = 0; u < nuniq; u++) {
@@ -721,31 +729,200 @@ Expr* ndred_tally(Expr* res) {
         }
     }
 
-    if (dt == NDT_INT64) {                      /* uniform int64 -> packed matrix */
+    uint64_t* keys = malloc(sizeof(uint64_t) * (nuniq ? nuniq : 1));
+    int64_t*  cs   = malloc(sizeof(int64_t)  * (nuniq ? nuniq : 1));
+    if (!keys || !cs) { free(tab); free(ord); free(keys); free(cs); return false; }
+    for (size_t u = 0; u < nuniq; u++) {
+        keys[u] = tab[ord[u]].key;
+        cs[u]   = tab[ord[u]].cnt;
+    }
+    free(tab); free(ord);
+    out->keys = keys; out->cnts = cs; out->nuniq = nuniq;
+    return true;
+}
+
+/* Integer keys try direct indexing first; it declines on a range too wide to
+ * index, and only then is the hash the right structure. Borrows `a`; on true
+ * the caller owns *out and must ndwt_free it. */
+static bool nd_tally_words(const Expr* a, NDWordTally* out) {
+    NDType      dt   = a->data.ndarray.dtype;
+    size_t      n    = (size_t)a->data.ndarray.dims[0];
+    const void* data = a->data.ndarray.data;
+    out->keys = NULL; out->cnts = NULL; out->nuniq = 0;
+    if (dt == NDT_INT64 && nd_tally_direct_i64((const int64_t*)data, n, out))
+        return true;
+    return nd_tally_hash(data, dt, n, out);
+}
+
+Expr* ndred_tally(Expr* res) {
+    if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
+    Expr* a = res->data.function.args[0];
+    if (!nd_word_keyable(a)) return ndarray_delist_and_reeval(res);
+
+    size_t n = (size_t)a->data.ndarray.dims[0];
+    if (n == 0) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+
+    NDWordTally t;
+    if (!nd_tally_words(a, &t)) return ndarray_delist_and_reeval(res);
+    size_t nuniq = t.nuniq;
+
+    if (a->data.ndarray.dtype == NDT_INT64) {   /* uniform int64 -> packed matrix */
         int64_t* buf = malloc(sizeof(int64_t) * 2 * (nuniq ? nuniq : 1));
-        if (!buf) { free(tab); free(ord); return ndarray_delist_and_reeval(res); }
+        if (!buf) { ndwt_free(&t); return ndarray_delist_and_reeval(res); }
         for (size_t u = 0; u < nuniq; u++) {
-            buf[2 * u]     = (int64_t)tab[ord[u]].key;
-            buf[2 * u + 1] = tab[ord[u]].cnt;
+            buf[2 * u]     = (int64_t)t.keys[u];
+            buf[2 * u + 1] = t.cnts[u];
         }
-        free(tab); free(ord);
+        ndwt_free(&t);
         return tally_pack_i64(a, buf, nuniq);
     }
 
     Expr** out = malloc(sizeof(Expr*) * (nuniq ? nuniq : 1));
-    if (!out) { free(tab); free(ord); return ndarray_delist_and_reeval(res); }
+    if (!out) { ndwt_free(&t); return ndarray_delist_and_reeval(res); }
     for (size_t u = 0; u < nuniq; u++) {
         Expr* pair[2];
         double x;
-        memcpy(&x, &tab[ord[u]].key, sizeof(x));
+        memcpy(&x, &t.keys[u], sizeof(x));
         pair[0] = expr_new_real(x);
-        pair[1] = expr_new_integer(tab[ord[u]].cnt);
+        pair[1] = expr_new_integer(t.cnts[u]);
         out[u] = expr_new_function(expr_new_symbol(SYM_List), pair, 2);
     }
-    free(tab); free(ord);
+    ndwt_free(&t);
     Expr* list = expr_new_function(expr_new_symbol(SYM_List), out, nuniq);
     free(out);
     return list;
+}
+
+/* ------------------------------------------------------------ Commonest ---
+ *
+ * Commonest IS a tally plus a selection, and before this it paid for the tally
+ * the expensive way. On the workload that prompted it -- 10^7 int64, four
+ * distinct values -- the transparency gate materialised 20 million boxed Expr
+ * across the two calls, and Commonest cost 1.19 s against 22.6 ms for Tally of
+ * the identical buffer. Sharing nd_tally_words closes the whole gap: what
+ * remains is one O(u log u) sort over the DISTINCT values, u = 4 here, which is
+ * unmeasurable beside the count pass.
+ *
+ * The selection is the List path's, transcribed: order the distinct values by
+ * count descending and first appearance ascending, take the first target_n, then
+ * restore first-appearance order among those -- which is why the two agree on
+ * ties rather than merely on the multiset. */
+typedef struct { uint64_t key; int64_t cnt; size_t first; } CommonWord;
+
+static int commonest_by_count(const void* pa, const void* pb) {
+    const CommonWord* a = (const CommonWord*)pa;
+    const CommonWord* b = (const CommonWord*)pb;
+    if (a->cnt != b->cnt) return (b->cnt > a->cnt) ? 1 : -1;
+    return (a->first > b->first) ? 1 : -1;
+}
+
+static int commonest_by_first(const void* pa, const void* pb) {
+    const CommonWord* a = (const CommonWord*)pa;
+    const CommonWord* b = (const CommonWord*)pb;
+    if (a->first == b->first) return 0;
+    return (a->first > b->first) ? 1 : -1;
+}
+
+/* Reads `n` out of Commonest's second argument. Sets *n to the count and
+ * *upto to whether the UpTo[] wrapper suppressed the too-few message; returns
+ * false for anything that is not an exact Integer or UpTo[Integer], which is
+ * not ours to interpret and goes back to the List path. */
+static bool commonest_count_arg(const Expr* na, int64_t* n, bool* upto) {
+    if (na->type == EXPR_INTEGER) { *n = na->data.integer; *upto = false; return true; }
+    if (na->type == EXPR_FUNCTION && na->data.function.head->type == EXPR_SYMBOL &&
+        na->data.function.head->data.symbol.name == SYM_UpTo &&
+        na->data.function.arg_count == 1 &&
+        na->data.function.args[0]->type == EXPR_INTEGER) {
+        *n = na->data.function.args[0]->data.integer;
+        *upto = true;
+        return true;
+    }
+    return false;
+}
+
+Expr* ndred_commonest(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return ndarray_delist_and_reeval(res);
+    Expr* a = res->data.function.args[0];
+    if (!nd_word_keyable(a)) return ndarray_delist_and_reeval(res);
+
+    int64_t n = 0;
+    bool have_n = (argc == 2), upto = false;
+    if (have_n && !commonest_count_arg(res->data.function.args[1], &n, &upto))
+        return ndarray_delist_and_reeval(res);
+
+    size_t len = (size_t)a->data.ndarray.dims[0];
+    if (len == 0) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+
+    NDWordTally t;
+    if (!nd_tally_words(a, &t)) return ndarray_delist_and_reeval(res);
+    size_t nuniq = t.nuniq;              /* >= 1: len > 0 and every element counts */
+
+    /* The chosen keys, in first-appearance order -- which is the order the answer
+     * comes back in, for both spellings. */
+    uint64_t* sel = malloc(sizeof(uint64_t) * nuniq);
+    size_t nsel = 0;
+    if (!sel) { ndwt_free(&t); return ndarray_delist_and_reeval(res); }
+
+    if (!have_n) {
+        /* Everything attaining the top count. t.keys is ALREADY in
+         * first-appearance order, so this is a max scan and a filter -- no sort.
+         * Worth separating from the branch below: the distinct count is the
+         * thing that can be large (10^6 distinct values in a 10^7 buffer is an
+         * ordinary case), and sorting all of it to read off a leading run is
+         * O(u log u) for an answer that costs O(u). */
+        int64_t top = t.cnts[0];
+        for (size_t u = 1; u < nuniq; u++) if (t.cnts[u] > top) top = t.cnts[u];
+        for (size_t u = 0; u < nuniq; u++) if (t.cnts[u] == top) sel[nsel++] = t.keys[u];
+    } else {
+        size_t target;
+        if (n < 0) {
+            target = 0;
+        } else if ((uint64_t)n > (uint64_t)nuniq) {
+            if (!upto)                   /* UpTo[n] asks for "at most", and is silent */
+                printf("Commonest::dstlms: The requested number of elements %" PRId64
+                       " is greater than the number of distinct elements %zu."
+                       " Only %zu elements will be returned.\n", n, nuniq, nuniq);
+            target = nuniq;
+        } else {
+            target = (size_t)n;
+        }
+        if (target > 0) {
+            /* A genuine ranking is needed here, so: order by count descending
+             * and first appearance ascending, keep the leading `target`, then
+             * restore first-appearance order among those. Both sorts are the
+             * List path's, transcribed, which is why the two agree on ties. */
+            CommonWord* w = malloc(sizeof(CommonWord) * nuniq);
+            if (!w) { free(sel); ndwt_free(&t); return ndarray_delist_and_reeval(res); }
+            for (size_t u = 0; u < nuniq; u++) {
+                w[u].key = t.keys[u]; w[u].cnt = t.cnts[u]; w[u].first = u;
+            }
+            qsort(w, nuniq, sizeof(CommonWord), commonest_by_count);
+            qsort(w, target, sizeof(CommonWord), commonest_by_first);
+            for (size_t i = 0; i < target; i++) sel[nsel++] = w[i].key;
+            free(w);
+        }
+    }
+    ndwt_free(&t);
+
+    if (nsel == 0) { free(sel); return expr_new_function(expr_new_symbol(SYM_List), NULL, 0); }
+
+    /* Every selected element came OUT of the buffer, so they share its dtype and
+     * the answer is one head -- unlike Tally, whose {value, count} pairs pack
+     * only when the value is itself an integer. Keeping it packed matters
+     * because Commonest is usually read by something else. */
+    NDType   dt = a->data.ndarray.dtype;
+    int64_t  dims[1] = { (int64_t)nsel };
+    void*    buf = malloc(ndt_elem_size(dt) * nsel);
+    if (!buf) { free(sel); return ndarray_delist_and_reeval(res); }
+    if (dt == NDT_INT64) {
+        int64_t* iv = (int64_t*)buf;
+        for (size_t i = 0; i < nsel; i++) iv[i] = (int64_t)sel[i];
+    } else {
+        memcpy(buf, sel, sizeof(double) * nsel);   /* the keys ARE the bit patterns */
+    }
+    free(sel);
+    return expr_new_ndarray_like(a, 1, dims, buf, dt);
 }
 
 Expr* ndred_moving_average(Expr* res) {

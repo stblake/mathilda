@@ -537,7 +537,25 @@ void test_commonest() {
         {"Commonest[{1, 2, 2, 3, 3, 3, 4}]", "{3}"},
         {"Commonest[{a, E, Sin[y], E, a, 7}]", "{a, E}"},
         {"Commonest[{1., 2., 2., 3., 3., 3., 4.}]", "{3.0}"},
-        {"Commonest[{a, E, Sin[y], E, a, 1.5, 3}, 10]", "{a, E, Sin[y], 1.5, 3}"}
+        {"Commonest[{a, E, Sin[y], E, a, 1.5, 3}, 10]", "{a, E, Sin[y], 1.5, 3}"},
+        {"Commonest[{}]", "{}"},
+        {"Commonest[{}, 2]", "{}"},
+        /* A count of zero or fewer selects nothing. -1 is the case worth
+         * pinning: it used to be the internal "no count given" sentinel, so it
+         * answered {1} where every other negative count answered {}. */
+        {"Commonest[{1, 1, 2}, 0]", "{}"},
+        {"Commonest[{1, 1, 2}, -1]", "{}"},
+        {"Commonest[{1, 1, 2}, -2]", "{}"},
+        /* The buffer path (src/ndreduce.c). Same answers, and the packed List
+         * prints as a List -- see test_packed_list.c for the differential. */
+        {"Commonest[ToNDArray[{5, 1, 5, 3, 1, 9}]]", "{5, 1}"},
+        {"Commonest[ToNDArray[{5, 1, 5, 3, 1, 9}], 2]", "{5, 1}"},
+        {"Commonest[ToNDArray[{1., 2., 2., 3., 3., 3., 4.}]]", "{3.0}"},
+        /* A VISIBLE NDArray keeps its presentation, as every ndred_* path does. */
+        {"Commonest[NDArray[{1, 2, 2}, DataType -> \"int64\"]]", "NDArray[{2}]"},
+        /* Rank 2 has no machine-word key -- the rows are the elements -- so the
+         * call is handed back and the List path answers. */
+        {"Commonest[ToNDArray[{{1, 2}, {1, 2}, {3, 4}}]]", "{{1, 2}}"}
     };
 
     for (int i = 0; i < (int)(sizeof(tests) / sizeof(tests[0])); i++) {

@@ -250,7 +250,7 @@ special functions (`Sin`, `Exp`, `Gamma`, …), `Total`, `Mean`, `Min`, `Max`,
 `Differences`, `Ratios`, `Clip`, `Ramp`, `First`, `Last`, `Most`, `Rest`, `Part`,
 `Extract`, `Append`, `Prepend`, `Catenate`, `TakeLargest`, `TakeSmallest`,
 `Map`, `Select`, `TakeWhile`, `FoldList`, `Outer`, `MapThread`, `Inner`,
-`Union`, `Intersection`, `Complement`, `Rescale`, `MatrixPower`,
+`Union`, `Intersection`, `Complement`, `Commonest`, `Rescale`, `MatrixPower`,
 `PseudoInverse`, `LeastSquares`, `Mod`, `Quotient`, `RandomSample`,
 `RandomChoice`, and the integer heads `GCD`, `LCM`, `DivisorSigma`, `EulerPhi`,
 `MoebiusMu`, `IntegerLength`, `PowerMod`, `Prime`.
@@ -365,6 +365,15 @@ Out[1]= True
 `{value, count}` pairs, which does not nest into a buffer, but it hashes the
 machine words rather than materialising an expression per element. Only the
 one-argument form — `Tally[list, test]` has to show the elements to `test`.
+(An `int64` tally is the exception: both halves of each pair are integers, so it
+comes back as a rank-2 packed matrix.)
+
+`Commonest` counts with the same routine and *does* produce a buffer, because
+every element it returns was copied out of one — so `Commonest[packed]` and
+`Commonest[packed, n]` keep the input's dtype and stay packed. `Commonest[a, n]`
+and `Commonest[a, UpTo[n]]` are both on the fast path; a count that is neither an
+`Integer` nor `UpTo[Integer]` takes the ordinary path, as does a rank ≥ 2
+argument, whose *elements* are rows rather than machine words.
 
 Two limits worth knowing:
 

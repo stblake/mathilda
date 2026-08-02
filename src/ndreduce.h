@@ -59,6 +59,13 @@ Expr* ndred_quartiles(Expr* res);   /* Quartiles[a] */
  * order, exactly as the List path does. */
 Expr* ndred_tally(Expr* res);           /* Tally[a] */
 
+/* Commonest[a] / Commonest[a, n] / Commonest[a, UpTo[n]] — the same count, then
+ * a sort of the DISTINCT values by count descending, first appearance ascending.
+ * Both share one counting routine, so their tie-breaking cannot drift apart.
+ * The selected elements come out of the buffer, so the answer keeps the input's
+ * dtype and stays packed. */
+Expr* ndred_commonest(Expr* res);       /* Commonest[a], Commonest[a, n] */
+
 /* ------------------------------------------------------------------- scans
  *
  * Fold / FoldList over an ASSOCIATIVE machine operator, straight on the buffer.

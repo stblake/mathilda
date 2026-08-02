@@ -508,6 +508,11 @@ static void pack_mark_aware_heads(void) {
          * belongs here is the same: ndred_tally hashes the machine words, where
          * materialising boxed one Expr per element just to hash it. */
         "Tally",
+        /* Commonest joined it on 2026-08-02: it IS a tally plus a top-n
+         * selection, and shares ndred_tally's counting routine. Off this list it
+         * paid 1.19 s for 10^7 int64 where Tally of the same buffer cost 22.6 ms
+         * -- the entire difference being the 10^7 Expr the gate built first. */
+        "Commonest",
         /* The set operations (src/list/setops.c), for the same reason as Tally:
          * a sorted merge over int64 words, where the generic path allocates one
          * Expr per element and sorts through expr_compare. Each guards itself
@@ -775,6 +780,10 @@ static void pack_mark_aware_heads(void) {
          * that could not keep its dtype here would leave the common Tally
          * exactly where it started. */
         "Tally",
+        /* Commonest keys on the same raw word, and every element it returns was
+         * COPIED out of the int64 buffer -- there is no arithmetic to be exact
+         * about, and no element's head can change. */
+        "Commonest",
         /* Exact int64 structure (src/ndstruct.c): Sort orders the buffer in
          * int64 -- through doubles, two integers past 2^53 would compare equal
          * and be reordered -- and Transpose moves elements by memcpy. */

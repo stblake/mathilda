@@ -991,18 +991,27 @@ Expr* builtin_commonest(Expr* res) {
     /* Commonest[assoc] (and Commonest[assoc, n]) uses the association's values. */
     if (is_association(list)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
 
+    /* A packed buffer counts as machine words -- Commonest is a Tally plus a
+     * selection, and ndred_commonest shares Tally's counting routine so the two
+     * cannot disagree on how count ties break. It hands back every shape it does
+     * not handle (rank >= 2, a complex dtype, an n that is not an Integer or
+     * UpTo[Integer]) rather than falling through, because everything below
+     * indexes `list` as an EXPR_FUNCTION and an NDArray is not one. */
+    if (is_ndarray(list)) return ndred_commonest(res);
+
     if (list->type != EXPR_FUNCTION) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
 
     size_t count = list->data.function.arg_count;
     if (count == 0) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
 
     Expr* n_arg = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
-    int64_t n = -1;
+    int64_t n = 0;
+    bool have_n = (n_arg != NULL);
     bool n_upto = false;
     if (n_arg) {
         if (n_arg->type == EXPR_INTEGER) {
             n = n_arg->data.integer;
-        } else if (n_arg->type == EXPR_FUNCTION && n_arg->data.function.head->type == EXPR_SYMBOL && 
+        } else if (n_arg->type == EXPR_FUNCTION && n_arg->data.function.head->type == EXPR_SYMBOL &&
                    n_arg->data.function.head->data.symbol.name == SYM_UpTo && n_arg->data.function.arg_count == 1) {
             if (n_arg->data.function.args[0]->type == EXPR_INTEGER) {
                 n = n_arg->data.function.args[0]->data.integer;
@@ -1043,8 +1052,11 @@ Expr* builtin_commonest(Expr* res) {
     // Sort by count DESC, first_index ASC
     qsort(items, unique_count, sizeof(CommonestItem), compare_commonest_items_desc);
 
+    /* `have_n` rather than a sentinel value of n: n == -1 used to mean "no count
+     * given", which made Commonest[list, -1] answer with the most common
+     * elements where every other negative count gives {}. */
     size_t target_n;
-    if (n == -1) {
+    if (!have_n) {
         // Just the most common ones (highest count)
         int64_t max_count = items[0].count;
         target_n = 0;
@@ -1078,5 +1090,10 @@ Expr* builtin_commonest(Expr* res) {
     }
     free(items);
 
-    return expr_new_function(expr_new_symbol(SYM_List), result_args, target_n);
+    /* expr_new_function COPIES the argument array (it does not adopt it), so
+     * result_args is ours to release -- valgrind found this leaking one array
+     * per call. */
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), result_args, target_n);
+    free(result_args);
+    return out;
 }
