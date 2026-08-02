@@ -298,6 +298,12 @@ In[3]:= Positive[Sqrt[-2]]
 Out[3]= False
 ```
 
+> **Packed arrays.** `Positive`, `Negative`, `NonNegative` and `NonPositive`
+> read a packed list or an `NDArray` straight off the buffer. The answer is a
+> list of `True`/`False`, which no buffer holds, so the result is an ordinary
+> list. An `Indeterminate` element is unordered and takes the ordinary path,
+> where it stays symbolic rather than answering `False`.
+
 ## Negative
 - `Negative[x]`: `True` if `x` is a negative real number; `False` if `x` is a
   manifestly non-negative real number (including zero) or a non-real complex

@@ -4,6 +4,31 @@
 #include "ndstruct.h"
 
 static void flatten_rec(Expr* e, const char* h, int64_t level, Expr*** results, size_t* count, size_t* cap) {
+    /* A visible NDArray nested inside an ordinary List. `head_is` is false for
+     * it -- an EXPR_NDARRAY is not an EXPR_FUNCTION headed List -- so it was
+     * collected as one opaque element and `Flatten[{ndA, ndB}]` answered with
+     * the list unchanged where `Flatten[{{1., 2.}, {3., 4.}}]` gives
+     * `{1., 2., 3., 4.}`. It IS a list of values by every other measure
+     * (`ArrayQ`, `Dimensions`, `Length` all say so), so descending is the
+     * answer that agrees with the other surface.
+     *
+     * This is why the sweep read `Dot`/`Inverse`/`LinearSolve` on a 6x6 as
+     * ND-UNSUPPORTED: all three answered correctly and it was the probe's own
+     * checksum, `N[Total[Flatten[{r}]]]` over a List of 200 result arrays, that
+     * could not reduce to a number.
+     *
+     * The PACKED form cannot reach here -- the no-nesting invariant means a
+     * packed node never sits inside a plain List (pack.c) -- so this is a
+     * visible-surface repair only, and Flatten[ndarray] at the top level still
+     * takes ndstruct_flatten's reshape below. */
+    if (level != 0 && is_ndarray(e) && h == SYM_List) {
+        Expr* rows = ndarray_to_nested_list(e);
+        for (size_t i = 0; i < rows->data.function.arg_count; i++)
+            flatten_rec(rows->data.function.args[i], h,
+                        level == -1 ? -1 : level - 1, results, count, cap);
+        expr_free(rows);
+        return;
+    }
     if (level != 0 && head_is(e, intern_symbol(h))) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             flatten_rec(e->data.function.args[i], h, level == -1 ? -1 : level - 1, results, count, cap);

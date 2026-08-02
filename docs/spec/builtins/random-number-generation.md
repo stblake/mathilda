@@ -232,3 +232,7 @@ In[10]:= RandomSample[x]
 Out[10]= RandomSample[x]
 ```
 
+> **Packed arrays.** `RandomSample` and `RandomChoice` gather from a packed
+> list or an `NDArray` directly, drawing from the **same generator sequence**
+> the ordinary path uses — so `SeedRandom[n]` gives the same answer whether
+> the argument is packed or not.

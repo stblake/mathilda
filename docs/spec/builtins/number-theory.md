@@ -9,6 +9,12 @@ Integer and number-theoretic functions: greatest common divisor and least common
 
 Both fold through GMP when any argument is a bigint, so results that exceed `int64` (e.g. `LCM[20!, 10^100 + 3]`) are computed exactly rather than left symbolic.
 
+> **Packed arrays.** Over an `int64` buffer both run on the machine words —
+> `GCD[list, n]`, `LCM[list, n]` and the two-array forms — and answer with a
+> packed result. A product that would overflow `int64` abandons the buffer so
+> the ordinary path answers exactly in GMP; never a wrapped value. See
+> [Packed arrays](packed-arrays.md).
+
 ## Divisible
 
 - `Divisible[n, m]`: yields `True` if `n` is divisible by `m`, and `False` otherwise. Attributes: `Listable`, `Protected`.
@@ -124,6 +130,12 @@ Out[5]= 10
 In[6]:= PowerMod[2, 1/2, 10^18 + 9]
 Out[6]= 742174169206529574
 ```
+
+> **Packed arrays.** `PowerMod[list, e, m]` over an `int64` buffer is
+> square-and-multiply on the machine words, with no GMP allocation per
+> element. Taken for a non-negative `e` and a modulus small enough that the
+> squaring step cannot overflow; a negative exponent is a modular inverse,
+> which exists only for some elements, and takes the ordinary path.
 
 ## MultiplicativeOrder
 
@@ -373,6 +385,11 @@ In[3]:= Prime[10^10]
 Out[3]= 252097800623
 ```
 
+> **Packed arrays.** `Prime[list]` over an `int64` buffer is one **sieve** to
+> the largest requested index followed by a gather, rather than a separate
+> prime count per element — so the whole array costs about what its largest
+> single index used to.
+
 ## PrimePi
 
 - `PrimePi[x]`: the number of primes less than or equal to `x`.
@@ -569,6 +586,11 @@ In[9]:= DivisorSigma[2, 6, GaussianIntegers -> True]
 Out[9]= -30 + 20 I
 ```
 
+> **Packed arrays.** `DivisorSigma[k, list]` over an `int64` buffer factors
+> each element by trial division in `int64`, with no GMP allocation per
+> element. A non-negative integer `k` only: `DivisorSigma[-1, n]` is a
+> `Rational`, which no buffer holds.
+
 ## MoebiusMu
 
 - `MoebiusMu[n]`: the Möbius function `mu(n)`. For
@@ -607,6 +629,10 @@ Out[5]= -1
 In[6]:= MoebiusMu[5 + 6 I]
 Out[6]= -1
 ```
+
+> **Packed arrays.** Runs on an `int64` buffer. `MoebiusMu[0]` is undefined,
+> so an array containing `0` takes the ordinary path and leaves that element
+> unevaluated exactly as the scalar does.
 
 ## LiouvilleLambda
 
@@ -763,6 +789,10 @@ Out[1]= 4
 In[2]:= EulerPhi[2^89 - 1]
 Out[2]= 618970019642690137449562110
 ```
+
+> **Packed arrays.** Runs on an `int64` buffer, factoring by trial division
+> in `int64`. `EulerPhi[3.]` is not `EulerPhi[3]`, so a real buffer takes the
+> ordinary path.
 
 ## SquareFreeQ
 

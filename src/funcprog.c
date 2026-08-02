@@ -1467,6 +1467,28 @@ static bool freeq_at_level(Expr* expr, Expr* form, int64_t current_level, LevelS
 
 Expr* builtin_freeq(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
+    /* A visible NDArray has no args[] for the level walk below to descend into,
+     * so FreeQ[NDArray[Range[300]], 5] answered True where FreeQ[Range[300], 5]
+     * answers False. Materialise and re-evaluate, exactly as the pattern family
+     * in patterns.c does — see patterns_delist_visible there for why this is a
+     * correctness fix and not a missing fast path. A packed argument has already
+     * been materialised by the gate, so this fires only for a visible array.
+     *
+     * args[0] only, never the form being searched FOR: a visible NDArray[...]
+     * and the plain List of the same values are distinct expressions, so
+     * materialising the form would change what FreeQ is looking for. */
+    if (is_ndarray(res->data.function.args[0])) {
+        size_t n_ = res->data.function.arg_count;
+        Expr** a_ = malloc(sizeof(Expr*) * n_);
+        if (a_) {
+            a_[0] = ndarray_to_nested_list(res->data.function.args[0]);
+            for (size_t i = 1; i < n_; i++)
+                a_[i] = expr_copy(res->data.function.args[i]);
+            Expr* rb_ = expr_new_function(expr_copy(res->data.function.head), a_, n_);
+            free(a_);
+            return eval_and_free(rb_);
+        }
+    }
     Expr* expr = res->data.function.args[0];
     Expr* form = res->data.function.args[1];
 
@@ -1785,7 +1807,35 @@ Expr* builtin_inner(Expr* res) {
     Expr* g = (res->data.function.arg_count >= 4) ? res->data.function.args[3] : expr_new_symbol(SYM_Plus);
     
     Expr* n_expr = (res->data.function.arg_count >= 5) ? res->data.function.args[4] : NULL;
-    
+
+    /* Inner[Times, a, b, Plus] IS Dot -- that is the definition of a Dot, and
+     * the pair is how a contraction gets written when the reader wants the
+     * operators named. With two buffers that is ndarray_dot2, i.e. BLAS, where
+     * the generic path below builds one Times Expr per element pair and folds
+     * them through the evaluator. Only this operator pair qualifies: Inner's
+     * whole point is that f and g may be anything, and anything else has no
+     * kernel. */
+    if (is_ndarray(A) && is_ndarray(B) && !n_expr &&
+        f->type == EXPR_SYMBOL && f->data.symbol.name == SYM_Times &&
+        g->type == EXPR_SYMBOL && g->data.symbol.name == SYM_Plus) {
+        bool shape_error = false;
+        Expr* dot = ndarray_dot2(A, B, &shape_error);
+        if (dot) {
+            if (res->data.function.arg_count < 4) expr_free(g);
+            return dot;
+        }
+    }
+
+    /* Any other operator pair, or a shape ndarray_dot2 declines: materialise
+     * and let the generic contraction below answer. Inner is on pack.c's AWARE
+     * list for the Dot case above, so without this an f other than Times would
+     * reach the EXPR_FUNCTION test with a buffer and fall out UNEVALUATED --
+     * the exact regression that marking a head aware invites. */
+    if (is_ndarray(A) || is_ndarray(B)) {
+        if (res->data.function.arg_count < 4) expr_free(g);
+        return ndarray_delist_and_reeval(res);
+    }
+
     if (A->type != EXPR_FUNCTION || B->type != EXPR_FUNCTION) {
         if (res->data.function.arg_count < 4) expr_free(g);
         return NULL;

@@ -34,7 +34,7 @@ static void run_infix(const char* input, const char* expected) {
  * elements approximate `expected` within tolerance. */
 static void run_real_list_approx(const char* input, const double* expected, size_t n, double tol) {
     Expr* e = parse_expression(input);
-    Expr* r = evaluate(e);
+    Expr* r = test_delist(evaluate(e));   /* storage-agnostic: see test_utils.h */
     ASSERT_MSG(r->type == EXPR_FUNCTION, "NestList %s: expected List, got non-function", input);
     ASSERT_MSG(r->data.function.head->type == EXPR_SYMBOL &&
                strcmp(r->data.function.head->data.symbol.name, "List") == 0,

@@ -296,9 +296,19 @@ static void nd_fill_run(void* buf, NDType dt, size_t at, size_t count,
  * dims. Same dtype rather than a widening promotion on purpose: Join of an
  * int64 and a float64 buffer is a list of Integers followed by Reals in the
  * interpreter, and widening would silently turn the Integers into Reals. */
+/* The concatenation itself, over an argument VECTOR rather than a call node, so
+ * Catenate can reach it: `Catenate[{v, w}]` is `Join[v, w]` with the operands
+ * one level deeper, and reproducing 60 lines of pack-lift-and-memcpy to say that
+ * would be two implementations of one thing. */
+static Expr* nd_concat_leading(Expr** in, size_t argc);
+
 Expr* ndstruct_join(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 1) return NULL;
+    return nd_concat_leading(res->data.function.args, argc);
+}
+
+static Expr* nd_concat_leading(Expr** in, size_t argc) {
 
     /* PACK THE SMALL OPERANDS UP. Join's cost is set by its LARGEST operand,
      * but the packing decision was made about each one in isolation -- so a
@@ -318,7 +328,7 @@ Expr* ndstruct_join(Expr* res) {
     Expr** args = malloc(sizeof(Expr*) * argc);
     bool* owned = calloc(argc, sizeof(bool));
     if (!args || !owned) { free(args); free(owned); return NULL; }
-    for (size_t i = 0; i < argc; i++) args[i] = res->data.function.args[i];
+    for (size_t i = 0; i < argc; i++) args[i] = in[i];
 
     Expr* a0 = NULL;
     for (size_t i = 0; i < argc && !a0; i++)
@@ -893,4 +903,233 @@ Expr* ndstruct_delist_repack(const Expr* call, const Expr* src) {
     if (!packed) return out;            /* symbolic, ragged, or empty */
     expr_free(out);
     return packed;
+}
+
+/* ==================================================================== *
+ *  The ninth round: heads that had no buffer path on EITHER surface.
+ *
+ *  Each of these answered a visible NDArray with the unevaluated call and a
+ *  packed List with one Expr per element, because there was no fast path to
+ *  reach -- the class both static audits are blind to (see ndstruct.h).
+ * ==================================================================== */
+
+/* ---------------------------------------------------------------- Ratios */
+
+/* Ratios[a]: the multiplicative Differences, out[i] = a[i+1]/a[i].
+ *
+ * INEXACT dtypes only, and that is the whole subtlety. Ratios of an int64
+ * buffer is a list of exact Rationals -- Ratios[{1, 2, 3}] is {2, 3/2} -- which
+ * no machine buffer holds, so an integer argument declines and the List path
+ * answers exactly. A zero element declines for the same reason: the answer is
+ * ComplexInfinity, not a double. */
+Expr* ndstruct_ratios(Expr* res) {
+    if (res->data.function.arg_count != 1) return NULL;
+    Expr* a = res->data.function.args[0];
+    if (!is_ndarray(a) || a->data.ndarray.rank != 1) return NULL;
+    NDType dt = a->data.ndarray.dtype;
+    if (dt == NDT_INT64 || ndt_is_complex(dt)) return NULL;
+    int64_t n = a->data.ndarray.dims[0];
+    if (n < 2) return NULL;                    /* {} -- let the List path answer */
+    int64_t m = n - 1, odims[1];
+    odims[0] = m;
+
+    if (dt == NDT_FLOAT64) {
+        const double* s = (const double*)a->data.ndarray.data;
+        for (int64_t i = 0; i < m; i++) if (s[i] == 0.0) return NULL;
+        double* o = malloc(sizeof(double) * (size_t)m);
+        if (!o) return NULL;
+        for (int64_t i = 0; i < m; i++) o[i] = s[i + 1] / s[i];
+        return expr_new_ndarray_like(a, 1, odims, o, dt);
+    }
+    void* o = malloc(ndt_elem_size(dt) * (size_t)m);
+    if (!o) return NULL;
+    for (int64_t i = 0; i < m; i++) {
+        double hi, lo, dummy;
+        ndt_get(a->data.ndarray.data, (size_t)(i + 1), dt, &hi, &dummy);
+        ndt_get(a->data.ndarray.data, (size_t)i, dt, &lo, &dummy);
+        if (lo == 0.0) { free(o); return NULL; }
+        ndt_set(o, (size_t)i, dt, hi / lo, 0.0);
+    }
+    return expr_new_ndarray_like(a, 1, odims, o, dt);
+}
+
+/* ------------------------------------------------------- Append / Prepend */
+
+/* Append[a, x] / Prepend[a, x] on the buffer: one allocation and two memcpys.
+ *
+ * These were on pack.c's "correct by omission" list -- the gate materialised
+ * for them and the List code answered -- which is right for correctness and
+ * costs a full 10^6-element boxing to add one element. numpy calls the same
+ * thing np.append, and it is how a growing series is written.
+ *
+ * Two element shapes:
+ *   rank 1, x a scalar   nd_fill_value's exactness rule applies verbatim, so
+ *                        an exact Integer into a float64 buffer DECLINES.
+ *                        Append[Range[1., 10.], 0] is a mixed exact/inexact
+ *                        list in Mathematica and coercing the 0 to 0. would be
+ *                        a different answer.
+ *   rank N, x an array   Append[matrix, row]: x's shape must equal a's
+ *                        trailing dims and its dtype must match exactly, the
+ *                        same never-widen rule as Join. */
+Expr* ndstruct_append(Expr* res, bool prepend) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* a = res->data.function.args[0];
+    Expr* x = res->data.function.args[1];
+    if (!is_ndarray(a)) return NULL;
+    NDType dt = a->data.ndarray.dtype;
+    int rank = a->data.ndarray.rank;
+    const int64_t* dims = a->data.ndarray.dims;
+    size_t esz = ndt_elem_size(dt);
+    size_t rowelts = nd_prod(dims, 1, rank);
+    size_t rowbytes = rowelts * esz;
+    size_t oldbytes = (size_t)dims[0] * rowbytes;
+
+    char* out = NULL;
+    if (rank == 1) {
+        double re = 0.0; int64_t iv = 0;
+        if (!nd_fill_value(x, dt, &re, &iv)) return NULL;
+        out = malloc(oldbytes + esz);
+        if (!out) return NULL;
+        size_t at = prepend ? 0 : (size_t)dims[0];
+        memcpy(out + (prepend ? esz : 0), a->data.ndarray.data, oldbytes);
+        nd_fill_run(out, dt, at, 1, re, iv);
+    } else {
+        if (!is_ndarray(x) || x->data.ndarray.dtype != dt) return NULL;
+        if (x->data.ndarray.rank != rank - 1) return NULL;
+        for (int d = 1; d < rank; d++)
+            if (x->data.ndarray.dims[d - 1] != dims[d]) return NULL;
+        out = malloc(oldbytes + rowbytes);
+        if (!out) return NULL;
+        if (prepend) {
+            memcpy(out, x->data.ndarray.data, rowbytes);
+            memcpy(out + rowbytes, a->data.ndarray.data, oldbytes);
+        } else {
+            memcpy(out, a->data.ndarray.data, oldbytes);
+            memcpy(out + oldbytes, x->data.ndarray.data, rowbytes);
+        }
+    }
+    int64_t odims[NDARRAY_MAX_RANK];
+    for (int d = 0; d < rank; d++) odims[d] = dims[d];
+    odims[0] = dims[0] + 1;
+    return expr_new_ndarray_like(a, rank, odims, out, dt);
+}
+
+/* -------------------------------------------------------------- Catenate */
+
+/* Catenate[{l1, l2, ...}] = Join[l1, l2, ...], one level down.
+ *
+ * Two argument shapes reach here and they are the same operation seen twice:
+ *
+ *   an ARRAY of rank >= 2   the sublists are its rows, and a row-major buffer
+ *                           already stores them consecutively -- so catenating
+ *                           is a RESHAPE, dims {r, c, ...} -> {r*c, ...}, and
+ *                           the copy exists only because inputs are immutable.
+ *                           This is the shape a packed argument arrives in:
+ *                           pack_sniff absorbs a List of packed vectors into
+ *                           one rank-2 array before Catenate is ever called.
+ *   a LIST of arrays        which is what a VISIBLE NDArray argument gives,
+ *                           since the packing gate never absorbs those. Exactly
+ *                           Join over the elements. */
+Expr* ndstruct_catenate(Expr* res) {
+    if (res->data.function.arg_count != 1) return NULL;
+    Expr* a = res->data.function.args[0];
+
+    if (is_ndarray(a)) {
+        int rank = a->data.ndarray.rank;
+        if (rank < 2) return NULL;             /* Catenate of a vector is an error */
+        NDType dt = a->data.ndarray.dtype;
+        size_t total = nd_prod(a->data.ndarray.dims, 0, rank);
+        size_t bytes = total * ndt_elem_size(dt);
+        void* out = malloc(bytes ? bytes : 1);
+        if (!out) return NULL;
+        memcpy(out, a->data.ndarray.data, bytes);
+        int64_t odims[NDARRAY_MAX_RANK];
+        odims[0] = a->data.ndarray.dims[0] * a->data.ndarray.dims[1];
+        for (int d = 2; d < rank; d++) odims[d - 1] = a->data.ndarray.dims[d];
+        return expr_new_ndarray_like(a, rank - 1, odims, out, dt);
+    }
+
+    if (a->type != EXPR_FUNCTION || a->data.function.head->type != EXPR_SYMBOL ||
+        a->data.function.head->data.symbol.name != SYM_List) return NULL;
+    size_t argc = a->data.function.arg_count;
+    if (argc < 1) return NULL;
+    return nd_concat_leading(a->data.function.args, argc);
+}
+
+/* ------------------------------------------ TakeLargest / TakeSmallest */
+
+/* A bounded binary heap over (value) doubles, used to keep the running best k.
+ * `want_max` selects a MIN-heap (so the root is the weakest of the current best
+ * and is what a new candidate displaces) and vice versa. */
+static void nd_heap_sift_down(double* h, size_t n, size_t i, bool minheap) {
+    for (;;) {
+        size_t l = 2 * i + 1, r = l + 1, best = i;
+        if (l < n && (minheap ? h[l] < h[best] : h[l] > h[best])) best = l;
+        if (r < n && (minheap ? h[r] < h[best] : h[r] > h[best])) best = r;
+        if (best == i) return;
+        double t = h[i]; h[i] = h[best]; h[best] = t;
+        i = best;
+    }
+}
+
+/* TakeLargest[a, k] / TakeSmallest[a, k] over a real rank-1 buffer.
+ *
+ * O(n log k), not O(n log n): the whole point of asking for the top ten of a
+ * million is that sorting the million is unnecessary. The List path builds n
+ * Exprs and sorts them through expr_compare; NumPy's own idiom for this row is
+ * a full np.sort, so the heap is ahead of the reference as well as of the
+ * interpreter.
+ *
+ * Declines a NaN element -- an unordered value has no k-th largest, and the
+ * List path's answer for it is the one to keep. Ties are by value, and since
+ * every element is a machine number two equal elements are indistinguishable,
+ * so which one is reported cannot be observed. */
+Expr* ndstruct_take_extreme(Expr* res, bool largest) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* a = res->data.function.args[0];
+    Expr* kx = res->data.function.args[1];
+    if (!is_ndarray(a) || a->data.ndarray.rank != 1) return NULL;
+    NDType dt = a->data.ndarray.dtype;
+    if (ndt_is_complex(dt)) return NULL;
+    /* int64 is exact only to 2^53 through `double`, so ordering it here could
+     * reorder two large integers that compare equal. The List path sorts them
+     * exactly; leave it to do so. */
+    if (dt == NDT_INT64) return NULL;
+    if (kx->type != EXPR_INTEGER || kx->data.integer < 0) return NULL;
+    size_t n = (size_t)a->data.ndarray.dims[0];
+    size_t k = (size_t)kx->data.integer;
+    if (k == 0 || k > n) return NULL;     /* Take::take diagnostics: List path */
+
+    double* h = malloc(sizeof(double) * k);
+    if (!h) return NULL;
+    for (size_t i = 0; i < n; i++) {
+        double v, im;
+        ndt_get(a->data.ndarray.data, i, dt, &v, &im);
+        if (!(v == v)) { free(h); return NULL; }          /* NaN: degrade */
+        if (i < k) {
+            h[i] = v;
+            if (i + 1 == k) for (size_t j = k / 2; j-- > 0; )
+                nd_heap_sift_down(h, k, j, largest);
+        } else if (largest ? (v > h[0]) : (v < h[0])) {
+            h[0] = v;
+            nd_heap_sift_down(h, k, 0, largest);
+        }
+    }
+    /* Heap-sort the k survivors in place, and the two cases need no separate
+     * code because the heap already differs. `largest` used a MIN-heap, so
+     * moving the root to the end of the shrinking region deposits the smallest
+     * survivor last and leaves the array DESCENDING -- what TakeLargest wants.
+     * `!largest` used a max-heap and leaves it ASCENDING, what TakeSmallest
+     * wants. Both are then read front to back. */
+    for (size_t m = k; m > 1; m--) {
+        double t = h[0]; h[0] = h[m - 1]; h[m - 1] = t;
+        nd_heap_sift_down(h, m - 1, 0, largest);
+    }
+    void* out = malloc(ndt_elem_size(dt) * k);
+    if (!out) { free(h); return NULL; }
+    for (size_t i = 0; i < k; i++) ndt_set(out, i, dt, h[i], 0.0);
+    free(h);
+    int64_t odims[1];
+    odims[0] = (int64_t)k;
+    return expr_new_ndarray_like(a, 1, odims, out, dt);
 }

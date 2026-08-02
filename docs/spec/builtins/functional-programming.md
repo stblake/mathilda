@@ -1046,6 +1046,11 @@ In[3]:= TakeLargestBy[{-9, 2, -3, 5}, Abs, 2]
 Out[3]= {-9, 5}
 ```
 
+> **Packed arrays.** Over a real buffer these keep a bounded heap, so the
+> cost is `O(n log k)` rather than a full sort. An **integer** buffer takes
+> the ordinary path: ordering it through `double` would compare two integers
+> past 2^53 equal.
+
 ## ReverseSort, ReverseSortBy
 Sort into descending order.
 - `ReverseSort[list]`: descending order (Reverse of `Sort`).

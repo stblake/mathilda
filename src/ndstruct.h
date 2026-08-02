@@ -75,6 +75,30 @@ Expr* ndstruct_differences(Expr* res);
 Expr* ndstruct_riffle(Expr* res);
 Expr* ndstruct_pad(Expr* res, bool left);
 
+/* The ninth round's additions: heads that had no buffer path on EITHER surface,
+ * so a visible NDArray came back unevaluated and a packed List was materialised
+ * first. Each returns NULL for anything outside its fast domain, and the caller
+ * degrades so the answer still matches the List path exactly.
+ *
+ *   ndstruct_ratios         Ratios[a]                inexact dtypes only:
+ *                           ratios of integers are Rationals, which no buffer
+ *                           holds
+ *   ndstruct_append         Append[a, x] (prepend=false) / Prepend[a, x]
+ *                           one allocation, two memcpys. Both were on pack.c's
+ *                           "correct by omission" list, which cost a full
+ *                           materialise to add a single element
+ *   ndstruct_catenate       Catenate[arr] (rank >= 2: a reshape, since a
+ *                           row-major buffer already stores the rows
+ *                           consecutively) and Catenate[{a1, a2, ...}] (Join)
+ *   ndstruct_take_extreme   TakeLargest[a, k] / TakeSmallest[a, k] in
+ *                           O(n log k) through a bounded heap -- ahead of the
+ *                           full sort NumPy's own idiom for this uses
+ */
+Expr* ndstruct_ratios(Expr* res);
+Expr* ndstruct_append(Expr* res, bool prepend);
+Expr* ndstruct_catenate(Expr* res);
+Expr* ndstruct_take_extreme(Expr* res, bool largest);
+
 /* Faithful-degrade primitive for a head that has NO native buffer walk.
  *
  * Re-runs `call` with every NDArray argument materialised into a nested List,

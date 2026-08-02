@@ -142,6 +142,14 @@ Expr* builtin_join(Expr* res) {
 Expr* builtin_catenate(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* lst = res->data.function.args[0];
+    /* Both buffer shapes of the same operation. A PACKED argument arrives as one
+     * rank-2 array, because pack_sniff absorbs a List of packed vectors before
+     * Catenate is called -- and a row-major buffer already stores those rows
+     * consecutively, so catenating them is a reshape. A VISIBLE NDArray argument
+     * arrives as a plain List of arrays, which the gate never absorbs, and that
+     * is Join. ndstruct_catenate handles both; anything else falls through. */
+    { Expr* nd = ndstruct_catenate(res); if (nd) return nd; }
+    if (is_ndarray(lst)) return ndarray_delist_and_reeval(res);
     if (!(lst->type == EXPR_FUNCTION && lst->data.function.head->type == EXPR_SYMBOL &&
           lst->data.function.head->data.symbol.name == SYM_List))
         return NULL;

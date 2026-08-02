@@ -1474,6 +1474,97 @@ Expr* builtin_randomcomplex(Expr* res) {
 /*
  * Pick a random index in [0, n) using uniform distribution.
  */
+static size_t* fisher_yates_sample(size_t total, size_t n);   /* defined below */
+static size_t  random_index(size_t n);                        /* defined below */
+static bool    is_upto(Expr* e, int64_t* val);                /* defined below */
+
+/* ---------------------------------------------------------------------------
+ *  NDArray buffer paths for RandomSample / RandomChoice.
+ *
+ *  Both heads had no fast path on either surface: a visible NDArray came back
+ *  unevaluated, and a packed List was materialised into one Expr per element so
+ *  that indices into it could be gathered.
+ *
+ *  THE DRAW SEQUENCE IS THE SAME ONE. Each of these calls exactly the routine
+ *  the List path calls -- fisher_yates_sample for the sample, random_index per
+ *  element for the choice -- and differs only in gathering int64/double words
+ *  instead of copying Exprs. That is deliberate and it is the whole design
+ *  constraint here: a producer that consumed the generator differently would
+ *  make SeedRandom[1]; RandomSample[v] give one permutation for a packed v and
+ *  another for the identical plain v, which is a surface disagreement in the
+ *  one place a user cannot see it coming.
+ *
+ *  Returns NULL for anything outside the fast domain; the caller degrades.
+ * ------------------------------------------------------------------------- */
+
+/* Gather `n` elements of `a` at `idx` into a fresh buffer shaped like `a`. */
+static Expr* nd_gather_indices(const Expr* a, const size_t* idx, size_t n) {
+    NDType dt = a->data.ndarray.dtype;
+    size_t esz = ndt_elem_size(dt);
+    const char* src = (const char*)a->data.ndarray.data;
+    char* out = malloc(esz * (n ? n : 1));
+    if (!out) return NULL;
+    for (size_t i = 0; i < n; i++)
+        memcpy(out + i * esz, src + idx[i] * esz, esz);
+    int64_t odims[1];
+    odims[0] = (int64_t)n;
+    return expr_new_ndarray_like(a, 1, odims, out, dt);
+}
+
+/* RandomSample[a] / RandomSample[a, n] over a rank-1 buffer. */
+static Expr* nd_random_sample(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return NULL;
+    Expr* a = res->data.function.args[0];
+    if (!is_ndarray(a) || a->data.ndarray.rank != 1) return NULL;
+    size_t total = (size_t)a->data.ndarray.dims[0];
+    if (total == 0) return NULL;
+
+    size_t want = total;
+    if (argc == 2) {
+        Expr* n_arg = res->data.function.args[1];
+        int64_t upto_val;
+        if (n_arg->type == EXPR_INTEGER && n_arg->data.integer >= 0) {
+            if ((uint64_t)n_arg->data.integer > (uint64_t)total) return NULL;
+            want = (size_t)n_arg->data.integer;
+        } else if (is_upto(n_arg, &upto_val) && upto_val >= 0) {
+            want = ((uint64_t)upto_val > (uint64_t)total) ? total : (size_t)upto_val;
+        } else {
+            return NULL;
+        }
+    }
+    size_t* sel = fisher_yates_sample(total, want);
+    if (!sel) return NULL;
+    Expr* out = nd_gather_indices(a, sel, want);
+    free(sel);
+    return out;
+}
+
+/* RandomChoice[a, n] over a rank-1 buffer -- n independent draws WITH
+ * replacement. The bare RandomChoice[a] returns one element, which is a scalar
+ * and has no buffer to build, so it is left to the List path. */
+static Expr* nd_random_choice(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* a = res->data.function.args[0];
+    Expr* n_arg = res->data.function.args[1];
+    if (!is_ndarray(a) || a->data.ndarray.rank != 1) return NULL;
+    if (n_arg->type != EXPR_INTEGER || n_arg->data.integer < 0) return NULL;
+    size_t total = (size_t)a->data.ndarray.dims[0];
+    if (total == 0) return NULL;
+    size_t n = (size_t)n_arg->data.integer;
+
+    NDType dt = a->data.ndarray.dtype;
+    size_t esz = ndt_elem_size(dt);
+    const char* src = (const char*)a->data.ndarray.data;
+    char* out = malloc(esz * (n ? n : 1));
+    if (!out) return NULL;
+    for (size_t i = 0; i < n; i++)
+        memcpy(out + i * esz, src + random_index(total) * esz, esz);
+    int64_t odims[1];
+    odims[0] = (int64_t)n;
+    return expr_new_ndarray_like(a, 1, odims, out, dt);
+}
+
 static size_t random_index(size_t n) {
     ensure_rand_init();
     return (size_t)xs_below((uint64_t)n);   /* rejection: no modulo bias */
@@ -1630,6 +1721,10 @@ Expr* builtin_randomchoice(Expr* res) {
     if (argc < 1 || argc > 2) return NULL;
 
     Expr* first_arg = res->data.function.args[0];
+    if (is_ndarray(first_arg)) {
+        Expr* nd = nd_random_choice(res);
+        return nd ? nd : ndarray_delist_and_reeval(res);
+    }
     Expr *wlist_expr, *elist_expr;
 
     /* Check if first arg is Rule[wlist, elist] (weighted form) */
@@ -1863,6 +1958,10 @@ Expr* builtin_randomsample(Expr* res) {
     if (argc < 1 || argc > 2) return NULL;
 
     Expr* first_arg = res->data.function.args[0];
+    if (is_ndarray(first_arg)) {
+        Expr* nd = nd_random_sample(res);
+        return nd ? nd : ndarray_delist_and_reeval(res);
+    }
     Expr *wlist_expr, *elist_expr;
 
     /* Determine the sample size */

@@ -70,8 +70,8 @@ Out[9]= 9007199254740993
 
 A list packs automatically when a **producer** builds one that is rectangular,
 holds nothing but uniformly exact or uniformly inexact machine numbers, and has
-at least **250 elements in total** (the product of its dimensions, so a
-3 x 100000 matrix qualifies). `ToNDArray` ignores the threshold.
+at least **4 elements in total** (the product of its dimensions, so a
+3 x 100000 matrix qualifies, and so does a 2 x 2). `ToNDArray` ignores the threshold.
 
 | producer | how |
 |---|---|
@@ -107,11 +107,24 @@ The direct producers never build the expression nodes at all, which is where mos
 of the win is: packing `Range[1., 10^6]` after the fact costs 340 ms + 52 ms,
 while writing 10^6 doubles costs under 1 ms.
 
-The 250-element threshold is chosen for blast radius, not for cost — the
-break-even is around two elements. Below it lives essentially all symbolic and
-pattern-matching code, where a sub-microsecond saving is not worth routing a
-value through a second representation. The threshold is not observable: a list
-of 249 elements and one of 251 behave identically apart from `NDArrayQ`.
+The threshold is 4 — the element count of a 2 x 2 matrix, so the rule is *any
+matrix packs*. It was 250 until 2026-08-02, chosen for blast radius rather than
+for cost (the break-even is around two elements), and the margin turned out to
+be expensive: a 6 x 6 is 36 elements, so it never packed, and the LAPACK path is
+unreachable from an unpacked list. `Det` of a 6 x 6 cost 102.8 ms against
+0.189 ms packed. Lowering it was swept against pattern matching, rule
+application, `Table`, `Expand`, `Solve`, `D`, `Integrate`, `Sort` and
+`Simplify`: no regression at 4, while at 2 the linear-algebra numbers stop
+improving and `Integrate` gives back 7%.
+
+A **literal** list is a separate matter and never packs, at any size:
+`NDArrayQ[Table[1., {400}]]` is `True` and `NDArrayQ[{1., 2., 3., 4.}]` is
+`False`. Packing is opt-in per producer, and a list written out in the source
+has no producer to opt in — so `Inverse[{{4., 1.}, {1., 3.}}]` takes the
+ordinary path whatever the threshold is. `ToNDArray` packs it on request.
+
+Set `MATHILDA_PACK_MIN` in the environment to override the threshold for a
+session.
 
 Nested producers give a genuine rank-N array rather than a list of buffers:
 `Table[i j, {i, 300}, {j, 300}]` is one rank-2 packed array.
@@ -139,6 +152,27 @@ Out[9]= {{5/2, 5}, {2.5, 5.}, {1, 1/2}}
 ordinary list. Where a buffer cannot hold the exact answer — an overflow, a
 `Rational`, a radical, a symbolic result — the operation abandons and the list
 implementation runs.
+
+The same rule holds for a **visible** `NDArray`, and it has to be enforced in a
+different place. A packed list is protected by the transparency gate, which
+materialises an `int64` buffer for any head that has not declared itself exact
+on one; a visible array is deliberately *not* gated, so the guard lives in the
+kernel engine instead. An `int64` array handed to a kernel with no exact integer
+arm declines and the list path answers:
+
+```mathematica
+In[10]:= Sin[NDArray[{1, 2, 3}, DataType -> "int64"]]
+Out[10]= {Sin[1], Sin[2], Sin[3]}
+
+In[11]:= Floor[NDArray[{1, 2, 3}, DataType -> "int64"]]   (* has an exact arm *)
+Out[11]= NDArray[{1, 2, 3}]
+```
+
+Before 2026-08-01 the second rule was missing and `Out[10]` was
+`NDArray[{0, 0, 0}]` — the double result truncated into the integer slot. Every
+`real_closed` kernel did it. `Mod`, `Quotient`, `Floor`, `Ceiling`, `Round`,
+`IntegerPart`, `Sign`, `UnitStep` and `Abs` have exact integer arms and keep
+their buffer fast path.
 
 ## `ToNDArray`
 
@@ -213,10 +247,46 @@ Packed in, packed out: `Plus`, `Times`, `Power`, `Dot`, the elementary and
 special functions (`Sin`, `Exp`, `Gamma`, …), `Total`, `Mean`, `Min`, `Max`,
 `MinMax`, `Median`, `Variance`, `Accumulate`, `Sort`, `Reverse`, `Transpose`, `Flatten`,
 `Take`, `Drop`, `Partition`, `RotateLeft`/`RotateRight`, `Riffle`, `Join`,
-`Differences`, `Clip`, `Ramp`, `First`, `Last`, `Most`, `Rest`, `Part`,
-`Extract`, `Map`, `Select`, `TakeWhile`, `FoldList`, `Outer`, `MapThread`,
+`Differences`, `Ratios`, `Clip`, `Ramp`, `First`, `Last`, `Most`, `Rest`, `Part`,
+`Extract`, `Append`, `Prepend`, `Catenate`, `TakeLargest`, `TakeSmallest`,
+`Map`, `Select`, `TakeWhile`, `FoldList`, `Outer`, `MapThread`, `Inner`,
 `Union`, `Intersection`, `Complement`, `Rescale`, `MatrixPower`,
-`PseudoInverse`, `LeastSquares`.
+`PseudoInverse`, `LeastSquares`, `Mod`, `Quotient`, `RandomSample`,
+`RandomChoice`, and the integer heads `GCD`, `LCM`, `DivisorSigma`, `EulerPhi`,
+`MoebiusMu`, `IntegerLength`, `PowerMod`, `Prime`.
+
+Four more read the buffer without returning one, because their answer is not a
+uniform machine array: `Positive`/`Negative`/`NonNegative`/`NonPositive` answer
+with a list of `True`/`False` (there is no boolean buffer), `IntegerDigits` with
+a ragged list of digit lists, and `Counts` with an `Association`. They still
+read the elements straight out of the buffer rather than materialising it.
+
+`Ratios` keeps the buffer only for inexact data. `Ratios[{1, 2, 3}]` is
+`{2, 3/2}` — exact `Rational`s, which no buffer holds — so an integer argument
+takes the ordinary path. `TakeLargest` and `TakeSmallest` likewise decline an
+integer buffer, because ordering it through `double` would compare two integers
+past 2^53 equal; they use a bounded heap on real data, so the cost is
+`O(n log k)` rather than a full sort.
+
+`Append` and `Prepend` refuse an element that does not belong to the buffer's
+dtype rather than coercing it. `Append[{1., 2.}, 0]` is the mixed
+`{1., 2., 0}` — an exact `0` after two `Real`s, as `Mathematica` gives — and no
+uniform buffer holds that, so the result is an ordinary list. `Append[{1., 2.},
+0.]` stays packed.
+
+`RandomSample` and `RandomChoice` draw from the same generator sequence the
+ordinary path uses, so `SeedRandom[n]` gives the same answer whether the
+argument is packed or not.
+
+`Mod` and `Quotient` are worth naming explicitly because until 2026-08-01 they
+were the break in the chain for integer work: both had a kernel that computed in
+`double`, so neither could keep an `int64` buffer, and
+`Mod[Range[10^6] 7919, 1000]` handed 10⁶ separate `Integer`s to whatever came
+next. The heads downstream — `Union`, `Tally`, `DeleteDuplicates`, `Sort`,
+`BinCounts` — were already buffer-capable and simply never received one. They
+have exact integer arms now, and `Quotient` narrows: `Quotient[{1., 2., 3.}, 3]`
+is the exact `{0, 0, 1}`, as `Mathematica` gives, while `Mod` keeps the
+argument's exactness (`Mod[{1., 2., 3.}, 3]` is `{1., 2., 0.}`).
 
 `ListConvolve` and `ListCorrelate` read a packed kernel, a packed list, or both,
 and produce a packed real result; exact data, a symbolic kernel and a custom

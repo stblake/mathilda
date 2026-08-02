@@ -565,6 +565,11 @@ In[3]:= Inner[Times, {a1, a2, a3}, {b1, b2, b3}, Plus]
 Out[3]= a1 b1 + a2 b2 + a3 b3
 ```
 
+> **Packed arrays.** `Inner[Times, a, b, Plus]` **is** a `Dot`, so with two
+> buffers it runs as one — the same BLAS path `a . b` takes. Any other
+> operator pair has no kernel and takes the ordinary path with the same
+> answer.
+
 ## Outer
 Gives the generalized outer product of the `listi`, forming all possible combinations of the lowest-level elements in each of them, and feeding them as arguments to `f`.
 - `Outer[f, list1, list2, ...]`

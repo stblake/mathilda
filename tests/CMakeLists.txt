@@ -255,6 +255,7 @@ set(COMMON_SRC
     ../src/vectors.c
     ../src/assoc.c
     ../src/ndarray.c
+    ../src/ndinteger.c
     ../src/ndkernels.c
     ../src/ndreduce.c
     ../src/ndstruct.c

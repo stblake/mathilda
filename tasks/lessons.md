@@ -1864,3 +1864,218 @@ Rules:
   cause — a preceding `dgemm` leaves Accelerate's threads competing with ours,
   reproducibly, at 1.45×. That is a real finding about the system, and it would
   have been written off as noise.
+
+## Round 8 — two representations, opposite gates (2026-08-01)
+
+- **A safety guard on one representation can be the reason another is
+  unguarded.** The packing transparency gate materialises an `int64` buffer for
+  any head that has not claimed exactness on one, which is why `Sin` of a
+  *packed* integer list has always been right. A **visible** `NDArray` is
+  deliberately not gated — naming the head is the request for the buffer — and
+  nothing else stood between an integer buffer and a `double` kernel. So every
+  `real_closed` kernel truncated: `Sin[NDArray[{1,2,3}, DataType -> "int64"]]`
+  was `{0, 0, 0}` and `Exp` was `{2, 7, 20}`. When a guard exists, ask which
+  paths *bypass* it, not just whether it works.
+
+- **Timing one operation at a time attributes the cost to the consumer and
+  never names the producer.** `Union` at 807 ms, `Tally` at 68 ms and
+  `DeleteDuplicates` at 67 ms were all one defect: `Mod` dropped the buffer, so
+  they were handed 10⁶ boxed Integers. All three were already on `AWARE` *and*
+  `INT64_OK` and were fast the moment the data arrived packed. Packing is a
+  chain — audit whether a head **returns** a packed array (`--survival`), not
+  only whether it consumes one quickly.
+
+- **`ToNDArray` does not make an `NDArray`.** It returns a *packed List*
+  (`Head` is `List`); `NDArray[...]` is the visible constructor. Building the
+  audit's third surface out of `ToNDArray` would have made it a force-repack of
+  the second and left the surface with no gate in front of it untested — the
+  surface where the wrong answers were. Check what a constructor actually
+  returns before making it the basis of a comparison.
+
+- **A checksum can disagree with itself across representations.** The sweep's
+  `ck` is `Total[Flatten[{x}]]`, and `Flatten` descends only into `List` heads —
+  so on a visible `NDArray` it does not reduce, `Total` stays unevaluated, and
+  *every correct row* read as a value mismatch. Before believing a wall of
+  DISAGREE rows, verify the comparison on a case known to be right.
+
+- **A test that pins the buffer path to the buffer path proves nothing.**
+  `test_ndarray_functions.c` asserted
+  `Quotient[NDArray[{1.,2.,3.,4.,5.}], 3] == NDArray[{0.0, 0.0, 1.0, 1.0, 1.0}]`
+  — Reals. The List path has always given the exact `{0, 0, 1, 1, 1}`, and so
+  does Mathematica. The assertion enshrined the defect it was meant to guard,
+  because it was written against the implementation rather than against the
+  other path. Assert buffer output equals **List** output.
+
+- **`is_packed_list` where `is_ndarray` was meant is a silent 100× cliff.**
+  `setop_i64` tested the packed form only, so the whole rank-1 int64 set-op path
+  was unreachable from a visible `NDArray` (`Union` 850 ms against 5.85 ms). The
+  two predicates read almost identically and mean quite different things; a
+  *dispatch* gate almost always wants `is_ndarray`, and only a *presentation*
+  decision wants `is_packed_list`.
+
+- **The same asymmetry surfaced three times, in three unrelated subsystems.**
+  The kernel engine truncated a visible int64 array; `setop_i64` could not see
+  one; and `MemberQ`/`Count`/`Position`/`Cases`/`FreeQ` searched one for
+  elements it does not expose and answered `False`/`0`/`{}` — a *confident wrong
+  answer*. In all three the packed form was fine, because the transparency gate
+  had already materialised it. **Nothing in `patterns.c` mentions arrays at
+  all**, so no amount of reading dispatch sites could have found the third. When
+  a guard protects one representation, enumerate what reaches the code *without*
+  passing through it.
+
+- **"Answered nowhere" is not "answered differently."** The audit's first
+  classifier reported 29 rows as `DISAGREE` that were simply undefined
+  functions, because `numeric_sweep.agree()` returns False for `"UNEVAL"`
+  against itself — correct by its own contract, wrong as a building block. A
+  wall of red findings is itself a signal to re-check the classifier before
+  chasing any of them.
+
+- **A tool that over-reports is worth fixing before its output is acted on.**
+  The survival check flagged `Extract` (3 elements), `TakeLargest` (10) and
+  `Cross` (3) as producers that "dropped packing" — but `ToNDArray` deliberately
+  ignores `PACK_MIN_ELEMENTS`, so a short result reads as packable when not
+  packing it is correct. Six of 44 findings were noise until the threshold was
+  applied.
+
+## Ninth round — buffer paths for the 26 heads that declined a visible NDArray (2026-08-02)
+
+- **"Make it evaluate" is not "make it fast", and an audit row cannot tell them
+  apart.** The plan inherited from the eighth round was a post-gate in `eval.c`
+  that materialises a visible array when a node comes to rest. It would have
+  cleared all 26 `ND-UNSUPPORTED` rows and left every one of them materialising
+  10⁶ `Expr` nodes — the audit would have gone green while nothing got faster.
+  The user's correction ("the fix should be highly efficient, fast paths for
+  NDArray objects") is the general rule: **when a metric can be satisfied by
+  making the symptom disappear, satisfying it is not evidence the cause is
+  gone.** `check_packed_aware.py` and `numeric_coverage.py` are already
+  documented as failing this way — registration is not speed — and a post-gate
+  is the same mistake with evaluation in place of registration.
+
+- **Count the heads that share a missing capability before writing head-level
+  code.** `ArcTan[a, b]` and `Beta[p, q]` looked like two separate gaps. Both
+  were `ndarray_map_binary` requiring exactly ONE array operand, and so were
+  thirteen other registered-but-unreachable kernels. One function
+  (`ndarray_map_binary2`) fixed fifteen heads. The tell was that the kernels
+  were already *registered*: a registered kernel that never fires is an engine
+  question, not a head question.
+
+- **Marking a head `AWARE` changes what reaches its SLOW path too.** The gate
+  stops materialising, so a buffer now arrives at code that tests
+  `type == EXPR_FUNCTION` and falls out unevaluated. `Inner` did exactly that
+  for any operator pair but `Times`/`Plus`; `Prime`, `PowerMod`,
+  `IntegerDigits` and `HypergeometricPFQ` each needed an explicit
+  `ndarray_delist_and_reeval` degrade. **Adding a head to `AWARE` is a promise
+  about every input it can receive, not only the ones the new fast path
+  handles.**
+
+- **A checksum comparison validates the algorithm; only `===` validates the
+  kernel.** `ndk_ArcTan2_c` computed `arg` via `csqrt`/`clog` where the scalar
+  builtin calls `atan2`, and had been 1–2 ulp out on 68 of 400 elements since it
+  was written. The sweep's tolerance is 1e-5 — correctly, since it compares
+  three systems that print differently — so it was never going to report it. A
+  kernel and its scalar twin are the *same* system and should be held to
+  element-wise identity.
+
+- **A negative performance result is worth recording precisely.** A float64 hot
+  lane was added to both binary map chunks by analogy with `ndu_hot_chunk`,
+  which is most of the unary elementary set's win. Measured: **8% on `ArcTan`,
+  nothing on `Beta`.** Two-argument kernels are libm-bound, not marshalling-
+  bound. Writing "8% and nothing" into the comment stops the next round
+  re-deriving the same disappointment.
+
+- **Checking whether a finding is *right* is worth as much as fixing it.** The
+  eighth round listed the 6×6 `Dot`/`Inverse`/`LinearSolve` rows among the 26.
+  Re-probed, all three answered correctly and always had — and running down why
+  the row existed found `Flatten` treating a visible `NDArray` inside a `List`
+  as an atom, a fourth instance of the same asymmetry in a fourth subsystem. The
+  bug was in the *checksum*, which nobody would have audited.
+
+- **The RNG is part of the answer.** `RandomSample`/`RandomChoice` gather from
+  the buffer through the *same* `fisher_yates_sample` / `random_index` calls the
+  List path makes, not a new shuffle. A separate implementation would have made
+  `SeedRandom[1]; RandomSample[v]` depend on whether `v` happened to be packed —
+  a surface disagreement with no error message and no way to see it coming.
+
+- **`chk_eq` compares against a literal string, not an evaluated expression.**
+  Half the first draft of the new tests asserted `f[NDArray[...]]` against
+  `"f[{...}]"` and compared an `NDArray[...]` printout to that text. Use
+  `Normal[lhs] === rhs` → `"True"`, and remember the printer writes `2.0`, not
+  `2.`.
+
+- **A control row is what turns a measurement into a diagnosis.** `GCD` and
+  `LCM` measured 2.6×/3.8× slower packed than visible and could have been
+  written down as "packed set-op weirdness". Timing `Mod` and `Quotient`
+  alongside them — same kernel machinery, same shape, **not** `Orderless` —
+  gave 2.19 ms on both surfaces and named the cause in one step:
+  `expr_compare` materialises a packed list to compare it against a scalar, and
+  `Orderless` is what makes that comparison happen. Pick the control by the
+  attribute you suspect, not by size.
+
+- **A timed expression that constructs its own operands measures the
+  constructor.** The first measurement pass here built the second `NDArray`
+  operand *inside* the timed call for `ArcTan[v, w]` and `Beta[p, p]`:
+  `t["ArcTan visible", ArcTan[vn, NDArray[Reverse[v], …]]]`. A ~90 ms
+  conversion in front of a ~2.5 ms kernel does not add noise, it **is** the
+  measurement. Reported 3.6× and 2.7× where the truth is 112× and 222×.
+  Worse than the wrong numbers was the wrong *conclusion* they supported —
+  "these two are libm-bound, marshalling is not the cost" — which then made a
+  float64 hot lane look worthless (8% and nothing) when a real A/B gives 23%
+  and 6%. **Hoist every conversion into a preamble**, which is exactly what
+  `nd_surface_audit.py` does and why its numbers disagreed with mine by two
+  orders of magnitude.
+
+- **When your harness and the project's tool disagree, the tool is right until
+  proven otherwise.** The disagreement was visible for hours in
+  `AbsoluteTiming` numbers I had already written into three documents. Treating
+  a 30× discrepancy as "different data sizes" instead of stopping to reconcile
+  it is how a wrong number reaches a changelog.
+
+- **Prefer the existing tool's output to a hand-rolled table.** The audit
+  computes plain/packed/visible, gain and skew per probe with its arrays built
+  in a preamble. Every hand-rolled table is a second harness that has to be got
+  right again, and this one was not.
+
+- **A safety margin is a claim about a trade, and a trade has two measurable
+  sides.** `PACK_MIN_ELEMENTS = 250` carried its own reasoning in a comment —
+  chosen for "blast radius, not cost", with break-even already known to be
+  around n = 2. The reasoning was sound and the constant still cost **544×** on
+  `Det` of a 6×6, because neither side had been measured: not what the margin
+  bought (swept: no regression anywhere down to 4) nor what it cost (a complete
+  LAPACK path unreachable). When a constant is defended by an argument rather
+  than a number, that is the constant to sweep.
+
+- **The fast path for "this comparison cannot depend on the contents" should
+  still call the real comparison.** Fixing `expr_compare`'s packed-vs-scalar
+  materialise, the short version was `return 1`. The version that shipped builds
+  an empty `List` stand-in and calls `expr_compare` on it — same tier, same
+  answer, but the ordering rule stays in exactly one place. A hardcoded verdict
+  in a fast path is a second copy of a rule that something else owns.
+
+- **Lowering a threshold does not add behaviour, it makes existing behaviour
+  reachable — including the parts nobody looked at.** `PACK_MIN_ELEMENTS`
+  250 → 4 put a 2×2 on the LAPACK path, and LAPACK's `-0.0` for a
+  subtraction-reached zero had been there all along at ≥250 elements. Nobody
+  had seen it because a matrix small enough to read had never been packed. The
+  changed sizes are exactly the sizes a human inspects, so a latent cosmetic
+  wart became a visible one. **Before changing a size gate, ask what code the
+  new sizes will now reach, not just what the new sizes will cost.**
+
+- **Five test failures from a threshold change were all test-side assumptions,
+  and that was still the useful signal.** Every one asserted
+  `type == EXPR_FUNCTION` on a result that had merely started packing — no value
+  changed. But it is exactly the "blast radius" the old constant was defending:
+  code that assumes a numeric List is an `EXPR_FUNCTION`. Product code is
+  protected by the transparency gate; C tests bypass it. Hence `test_delist()`
+  in `test_utils.h`, and `pack_set_min_elements()` in the one test whose subject
+  IS the threshold — a test about what happens below a boundary must name the
+  boundary rather than inherit it.
+
+- **A timing tool sharing a machine with anything else is measuring the other
+  thing too.** The final audit ran in the same job as a
+  `check-array-exactness` pass and reported four `ND-SLOW` rows. The tell was
+  internal inconsistency: `nonnegative` tripped at 0.59× while `positive` and
+  `negative` — the same operation on the same data — sat at 0.74/0.73. Idle,
+  `nonnegative` costs 24.6 ms against the 65–110 ms the audit recorded, and all
+  four probes are level. Same lesson as the hand-rolled harness earlier in the
+  round, one level up: **check a surprising row against a control that should
+  behave identically before writing it down.**

@@ -66,6 +66,12 @@ src/
   rat.c / parfrac.c / expand.c
   modular.c / facint.c / piecewise.c / stats.c
   load.c / info.c / datetime.c
+  ndarray.{c,h}     Dense machine-precision array: storage, dtypes, the
+                    element-wise kernel maps, Dot/Power/elementwise
+  ndkernels.c       Machine kernels for the elementary and special functions
+  ndinteger.{c,h}   Exact-integer kernels (GCD, EulerPhi, Prime, PowerMod, ...)
+  ndreduce.{c,h} / ndstruct.{c,h}   Buffer reductions and structural ops
+  pack.{c,h}        Automatic packing + the evaluator's transparency gate
   numbertheory/     GCD/LCM/ExtendedGCD/PowerMod/Factorial/Binomial/
                     PrimitiveRoot/MultiplicativeOrder/Divisors/DivisorSigma/...
                     (one builtin per file; shared helpers in nt_util.c /
@@ -331,6 +337,7 @@ valgrind --leak-check=full ./Mathilda
 make check-c99             # portability gate; see §10
 make check-packed-aware    # does every head with a buffer path opt in?
 make check-array-exactness # does any head return a two-headed array?
+make check-nd-surfaces     # do the packed and NDArray surfaces agree?
 ```
 
 `make check-c99` runs `tools/check_c99_portability.py`, which flags POSIX-only
@@ -347,8 +354,8 @@ and pull request: `make check-c99` for a message that names the symbol and
 prints the fix, then a full `make` with the optional dependencies installed so
 the autodetected code paths are actually compiled.
 
-Two further audits guard the packed-array surface, each catching a class the
-other cannot see. `make check-packed-aware` is static: it reads the NDArray
+Three further audits guard the packed-array surface, each catching a class the
+others cannot see. `make check-packed-aware` is static: it reads the NDArray
 dispatch sites out of the source and diffs them against `src/pack.c`'s `AWARE`
 list, so a head with a fast path it never opted into is named. `make
 check-array-exactness` runs the binary over 342 probes and looks at the element
@@ -358,6 +365,21 @@ result is both wrong and unpackable. Six heads were doing that. Its `EXEMPT`
 table carries the Mathematica output for every deliberate mixture, because
 "Mathematica does it too" is precisely the claim that went unchecked before the
 tool existed.
+
+`make check-nd-surfaces` covers what both of those miss, because both are
+blind to a head with no fast path on *either* surface — which is how
+`DeleteDuplicates` stayed at 72× NumPy through four sweeps. It runs the same
+expression over all three representations (plain `List`, packed `List`, visible
+`NDArray`) and requires them to agree on the answer and to reach the same fast
+path. The two gate behaviours are opposite: the transparency gate materialises a
+*packed* buffer for any head not on `AWARE`, and never touches a *visible*
+`NDArray`. So the guard that keeps the packed surface safe is exactly what left
+the visible one unguarded, and until 2026-08-01 every real kernel silently
+truncated a visible `int64` array — `Sin[NDArray[{1, 2, 3}, DataType ->
+"int64"]]` was `{0, 0, 0}`. Its `--survival` half asks the cheaper, separate
+question of which *producers* hand back a plain List that would have packed,
+since packing is a chain and a producer that drops it makes its consumers slow
+rather than itself.
 
 The makefile auto-discovers `src/*.c`. GMP-ECM is linked by default when the
 system library is present (`USE_ECM=1`, autodetected); install it with

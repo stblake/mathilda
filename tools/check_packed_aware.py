@@ -64,9 +64,12 @@ EXEMPT = {
     "Chop": "replaces a negligible element with the EXACT Integer 0, so "
             "Chop[{1.*^-14, 1.}] is {0, 1.} and a float64 buffer makes it "
             "{0., 1.} -- the Floor class again",
-    "Quotient": "real in, exact Integer out: Quotient[{1.,2.,3.,4.}, 2] is "
-                "{0,1,1,2} and the buffer path gives {0.,1.,1.,2.} "
-                "(HPC_IMPROVEMENT_PLAN.md phase 2 narrowing kernels)",
+    # Quotient was exempt here until 2026-08-01 for want of a BINARY narrowing
+    # kernel: real in, exact Integer out, which NDBinaryKernel could not express,
+    # so Quotient[{1.,2.,3.,4.}, 2] gave {0.,1.,1.,2.} on the buffer against
+    # {0,1,1,2} on the List. NDBinaryKernel now carries the same to_int trio as
+    # NDUnaryKernel and Quotient supplies both arms, so it is no longer an
+    # exception -- and neither is Mod, which supplies the int64 arm.
     "LeafCount": "counts a packed list as ONE node (1 against 5 for a "
                  "4-element vector), which would perturb Simplify's complexity "
                  "metric -- the reason it was excluded by design",
@@ -80,6 +83,24 @@ EXEMPT = {
                  "propagation from src/sort.c; maximal_minimal_by walks "
                  "data.function.args directly and has no NDArray handling at all",
     "MaximalBy": "as MinimalBy",
+    # The pattern-matching family, added 2026-08-01. Each gained an is_ndarray
+    # test in src/patterns.c -- but it is a MATERIALISE guard, not a fast path:
+    # a visible NDArray exposes no args[] for the matcher to walk, so
+    # MemberQ[NDArray[Range[1., 300.]], 5.] answered False. They must NOT go on
+    # AWARE: they have no buffer path to reach, and opting in would stop the gate
+    # materialising the packed form, which is the only reason that form has ever
+    # been right. This is the marker heuristic's other blind spot -- it cannot
+    # tell "reads the buffer" from "refuses the buffer".
+    "Cases": "is_ndarray in patterns.c is a materialise guard for the VISIBLE "
+             "surface, not a fast path; the packed form must keep being "
+             "materialised by the gate",
+    "MemberQ": "as Cases",
+    "Count": "as Cases",
+    "Position": "as Cases",
+    "FirstCase": "as Cases",
+    "DeleteCases": "as Cases",
+    "FreeQ": "as Cases, in funcprog.c",
+
     "Sum": "HoldAll, so a packed value never arrives as a top-level ARGUMENT -- "
            "the gate has nothing to materialise. Its is_ndarray call is a probe "
            "on the already-evaluated body (sum_body_is_array, which decides "

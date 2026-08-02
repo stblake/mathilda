@@ -1,4 +1,6 @@
 #include "list_common.h"
+#include "ndarray.h"    /* is_ndarray, ndarray_delist_and_reeval */
+#include "ndstruct.h"   /* NDArray buffer fast paths */
 #include "ratios.h"
 #include "assoc.h"
 
@@ -96,6 +98,14 @@ Expr* builtin_ratios(Expr* res) {
     if (argc < 1 || argc > 2) return NULL;
 
     Expr* lst = res->data.function.args[0];
+
+    /* Successive quotients straight off the buffer. Declines an integer dtype
+     * (the ratios are exact Rationals) and a zero element (ComplexInfinity),
+     * both of which the List path answers correctly. */
+    if (is_ndarray(lst)) {
+        Expr* nd = ndstruct_ratios(res);
+        return nd ? nd : ndarray_delist_and_reeval(res);
+    }
 
     /* Ratios[assoc] gives the successive value ratios, keyed by the trailing key
      * of each pair (the leading key drops, as in Wolfram and like Differences). */

@@ -447,6 +447,19 @@ In[2]:= Union[{a, b, a, c}, {d, a, e, b}, {c, a}]
 Out[2]= {a, b, c, d, e}
 ```
 
+`Union`, `Intersection`, `Complement` and `DeleteDuplicates` have a machine
+fast path over a rank-1 buffer of exact integers — the domain where a set
+operation is most often a graph traversal or a k-mer count. It is reached from
+**either** array representation, the invisible packed `List` and an explicit
+`NDArray[...]`, and the result keeps whichever it was given. Until 2026-08-01
+only the packed form reached it, so the same call on the same values ran 145×
+slower when the argument was written as an `NDArray`.
+
+Reals are deliberately excluded: `0.` and `-0.` compare equal and print
+differently, so which of two equal elements survived would depend on the
+representation. A custom `SameTest`, a non-`List` head, or any other element
+type takes the general path and gives the same answer.
+
 ## Intersection
 Gives a sorted list of the elements common to all of the inputs.
 - `Intersection[list]`

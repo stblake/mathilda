@@ -274,6 +274,44 @@ typedef struct {
     bool (*cplx)(double are, double aim, double bre, double bim,
                  double* ore, double* oim);
     bool real_closed;
+
+    /* ---------------------------------------------------------------- *
+     *  EXACT INTEGER arms, the binary twin of NDUnaryKernel's `to_int`.
+     * ---------------------------------------------------------------- *
+     * Five heads need this and they need different halves of it:
+     *
+     *   Mod       exactness FOLLOWS the argument. Mod[{1,2,3}, 2] is the exact
+     *             {1, 0, 1}; Mod[{1.,2.,3.}, 2.] is {1., 0., 1.}. So Mod has
+     *             `to_int_i` (int64 in, int64 out) and NO `to_int_r` -- a real
+     *             element must stay real, which `real_closed` already handles.
+     *   Quotient  NARROWING: the answer is an exact Integer whatever it is
+     *             given, matching builtin_quotient, which ends in
+     *             expr_new_integer on every branch. So Quotient has both arms.
+     *   GCD, LCM, DivisorSigma (src/ndinteger.c)
+     *             INTEGER-ONLY: defined on Z, with no `cplx` at all. They have
+     *             `to_int_i` and nothing else, so a real buffer declines and
+     *             the List path answers -- GCD[2.5, 5.] is a Rational question,
+     *             not a machine one. This is why the `!k->cplx` test at the top
+     *             of both map functions had to move down to the branches that
+     *             actually call `cplx`: as a top-level guard it meant "sentinel,
+     *             degrade" and made an integer-only kernel inexpressible.
+     *
+     * Both arms take the operands in CALL order (m, n): ndarray_map_binary
+     * composes (element, scalar) or (scalar, element) from `arr_first` and
+     * ndarray_map_binary2 composes (element_a, element_b), so a kernel never
+     * has to know which side the buffer was on -- or that there were two.
+     *
+     * `to_int_i` additionally requires the broadcast scalar to be an exact
+     * Integer; a Real scalar is not an int64 operand and falls to `to_int_r`,
+     * or declines when there is none. Returning false ABANDONS the whole array
+     * so the List path answers exactly -- the same never-wrap contract as
+     * ci_*_i64 and the unary narrowing arms.
+     *
+     * Additive: `cplx` and `real_closed` keep whatever they already said, so
+     * the Compile VM and every other kernel consumer are unaffected. */
+    bool (*to_int_r)(double m, double n, int64_t* out);
+    bool (*to_int_i)(int64_t m, int64_t n, int64_t* out);
+    bool to_int;
 } NDBinaryKernel;
 
 /* N-ary scalar kernel: f[a1, ..., an] for n >= 3 (LerchPhi, Hypergeometric1F1,
@@ -300,6 +338,14 @@ Expr* ndarray_map_unary(const Expr* a, const NDUnaryKernel* k);
  * broadcast numeric scalar. Returns NULL if the operands aren't that shape or
  * any element's kernel reports failure. */
 Expr* ndarray_map_binary(const Expr* a0, const Expr* a1, const NDBinaryKernel* k);
+
+/* Map binary kernel `k` over TWO same-shape NDArray operands, elementwise (the
+ * numpy `arctan2(v, w)` shape). Result dtype is the promotion of the two inputs;
+ * presentation follows nd_present_src2, so a visible NDArray on either side
+ * gives a visible answer. Returns NULL if either operand isn't an NDArray, the
+ * shapes disagree, or any element's kernel reports failure -- in every case the
+ * caller degrades through ndarray_delist_and_reeval. */
+Expr* ndarray_map_binary2(const Expr* a0, const Expr* a1, const NDBinaryKernel* k);
 
 /* Faithful degrade path: rebuild `call` with every NDArray arg replaced by its
  * equivalent nested List and re-evaluate, so the result matches f[{...}] exactly

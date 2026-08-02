@@ -3,6 +3,8 @@
  * numbertheory_internal.h for the subsystem layout. */
 
 #include "numbertheory.h"
+#include "ndarray.h"      /* is_ndarray, ndarray_delist_and_reeval */
+#include "ndinteger.h"   /* NDArray buffer fast path */
 #include "numbertheory_internal.h"
 #include "arithmetic.h"
 #include "eval.h"
@@ -338,10 +340,19 @@ static int modular_root(mpz_t x, const mpz_t c, const mpz_t r, const mpz_t m) {
  * inverse path) or Rational[p,q] (modular q-th root of a^p mod m). */
 Expr* builtin_powermod(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
-
     Expr* a_expr = res->data.function.args[0];
     Expr* b_expr = res->data.function.args[1];
     Expr* m_expr = res->data.function.args[2];
+
+    /* Buffer of bases, scalar exponent and modulus: square-and-multiply in
+     * int64, no mpz_init per element. Anything it declines -- a negative
+     * exponent, a modulus past the no-overflow bound, a non-integer buffer --
+     * degrades explicitly, since expr_is_integer_like below is false for an
+     * NDArray and would leave the call unevaluated. */
+    if (is_ndarray(a_expr)) {
+        Expr* nd = ndint_powermod(res);
+        return nd ? nd : ndarray_delist_and_reeval(res);
+    }
 
     if (!expr_is_integer_like(a_expr) || !expr_is_integer_like(m_expr)) return NULL;
 

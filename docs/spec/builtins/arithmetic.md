@@ -291,6 +291,10 @@ In[5]:= FoldList[Times, a, Ratios[{a, b, c, d, e}]]
 Out[5]= {a, b, c, d, e}
 ```
 
+> **Packed arrays.** `Ratios[list]` divides in place on a real buffer. An
+> **integer** buffer takes the ordinary path: `Ratios[{1, 2, 3}]` is
+> `{2, 3/2}`, exact `Rational`s that no buffer holds.
+
 ## Times (*)
 
 Symbolic product.
@@ -422,6 +426,22 @@ seconds (`Sqrt[3141592653589793238]` took 24 s while
   flooring and disagreed with both the real branch and `Floor`.
 - `QuotientRemainder[n, m]`: Returns `{Quotient[n, m], Mod[n, m]}`.
 
+Over a list, both run on the machine buffer and keep the result packed. Their
+exactness rules differ, and the difference is the point: `Quotient` **narrows** —
+its answer is an exact `Integer` whatever it is given, so
+`Quotient[{1., 2., 3.}, 3]` is `{0, 0, 1}` — while `Mod` takes the *argument's*
+exactness, so `Mod[{1., 2., 3.}, 3]` is `{1., 2., 0.}` and `Mod[{1, 2, 3}, 3]`
+is `{1, 2, 0}`. Both match Mathematica.
+
+Before 2026-08-01 neither could hold an integer buffer, which made them the
+break in the chain for integer work: `Mod[Range[10^6] 7919, 1000]` handed 10⁶
+separate `Integer`s to whatever came next, and `Union`, `Tally` and
+`DeleteDuplicates` downstream ran 176×, 36× and 37× slower than on the same
+values packed. `Quotient` was worse than slow — it answered `{0., 1., 1., 2.}`
+on a list long enough to pack and the exact `{0, 1, 1, 2}` on one that was not,
+the same expression giving different element heads either side of the
+250-element threshold.
+
 ## IntegerDigits
 
 - `IntegerDigits[n]`: List of the decimal digits of the integer `n`, most
@@ -455,6 +475,10 @@ Out[3]= {{0, 0, 0}, {0, 0, 1}, {0, 1, 0}, {0, 1, 1}, {1, 0, 0}, {1, 0, 1}, {1, 1
 In[4]:= IntegerDigits[6345354, 10, 4]
 Out[4]= {5, 3, 5, 4}
 ```
+
+> **Packed arrays.** The one-argument form reads an `int64` buffer directly
+> rather than materialising it. The result is ragged — a list per element, of
+> differing lengths — so it is an ordinary list either way.
 
 ## IntegerLength
 
@@ -509,6 +533,9 @@ In[6]:= IntegerLength[1.1234]
         IntegerLength::int: Integer expected at position 1 in IntegerLength[1.1234].
 Out[6]= IntegerLength[1.1234]
 ```
+
+> **Packed arrays.** The one-argument form runs on an `int64` buffer and
+> answers with a packed result.
 
 ## IntegerExponent
 

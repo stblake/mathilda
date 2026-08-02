@@ -32,7 +32,25 @@ bool pack_enabled(void) {
 void pack_set_enabled(bool on) { g_pack_enabled = on ? 1 : 0; }
 
 void   pack_set_min_elements(size_t n) { g_pack_min = n; }
-size_t pack_min_elements(void) { return g_pack_min ? g_pack_min : PACK_MIN_ELEMENTS; }
+
+/* MATHILDA_PACK_MIN overrides the threshold for a whole session, the same
+ * family of knob as MATHILDA_NO_PACK and MATHILDA_PACK_DIAG. It exists because
+ * the threshold is the ONE packing parameter whose right value is empirical:
+ * it trades the buffer path on small values against the cost of routing
+ * symbolic and pattern-matching code through a second representation, and that
+ * trade can only be swept, not derived. Read once, lazily; an unparseable or
+ * zero value leaves the compiled-in default alone. The C setter still wins, so
+ * the differential suite is unaffected. */
+size_t pack_min_elements(void) {
+    if (g_pack_min) return g_pack_min;
+    static int env_min = -1;                       /* -1 = not yet read */
+    if (env_min < 0) {
+        const char* s = getenv("MATHILDA_PACK_MIN");
+        long v = s ? strtol(s, NULL, 10) : 0;
+        env_min = (v > 0 && v < 1000000000L) ? (int)v : 0;
+    }
+    return env_min ? (size_t)env_min : PACK_MIN_ELEMENTS;
+}
 
 /* --------------------------------------------------------------------------
  * Sniff: shape, rectangularity and element class in ONE pass, allocating
@@ -495,6 +513,12 @@ static void pack_mark_aware_heads(void) {
          * Expr per element and sorts through expr_compare. Each guards itself
          * with setop_any_nd and degrades for every shape outside int64. */
         "Union", "Intersection", "Complement",
+        /* DeleteDuplicates joined them on 2026-08-01. It was the last head the
+         * gate diagnostic still named on a set-op workload: with no NDArray path
+         * it materialised the whole buffer just to hash it, 1.31 s over 10^7
+         * int64. It now dedups on the machine words -- direct-indexed when the
+         * value range is bounded, an inline-key hash set otherwise. */
+        "DeleteDuplicates",
         /* Clip came BACK on 2026-07-31. It was pulled because an exact bound
          * makes Clip[reals, {1, 2}] answer with exact Integers where it clipped,
          * which no uniform buffer holds -- but clearing the whole head to fix the
@@ -586,6 +610,52 @@ static void pack_mark_aware_heads(void) {
         "DiagonalMatrix", "HankelMatrix", "ToeplitzMatrix", "VandermondeMatrix",
         "PositiveDefiniteMatrixQ", "NegativeDefiniteMatrixQ",
         "LatticeReduce", "FindIntegerNullVector",
+        /* ------------------------------------------------------------------
+         * The integer domain (src/ndinteger.c). Every one of these answered a
+         * packed List with one Expr per element and a visible NDArray with the
+         * unevaluated call, because neither surface had a path at all -- the
+         * class tools/check_packed_aware.py is blind to by construction, since
+         * there was no dispatch site for it to read.
+         *
+         * Prime, PowerMod and IntegerDigits are the ones that needed care: each
+         * has a head-level path rather than an element kernel, and each tests
+         * for EXPR_INTEGER below it. Marking them aware stops the gate
+         * materialising, so their buffer now arrives where an integer test
+         * fails -- they degrade through ndarray_delist_and_reeval explicitly
+         * instead of falling out unevaluated. */
+        "GCD", "LCM", "DivisorSigma", "EulerPhi", "MoebiusMu",
+        "IntegerLength", "PowerMod", "Prime", "IntegerDigits",
+        /* The elementwise sign predicates. Their answer is a List of True/False
+         * -- there is no boolean dtype (§13 gap C.1) -- so this buys the INPUT
+         * side only: the buffer is read directly instead of being materialised
+         * into 10^6 Reals that are then each compared to zero. */
+        "Positive", "Negative", "NonNegative", "NonPositive",
+        /* ------------------------------------------------------------------
+         * The structural batch (src/ndstruct.c, src/random.c, src/assoc.c).
+         *
+         * Append and Prepend were named in the "correct by omission" note just
+         * above this list -- the gate materialised, the generic walk answered,
+         * and adding one element to a 10^6-element vector cost 10^6 Expr
+         * allocations. They now have buffer paths, so the note no longer
+         * applies to them and they have moved here.
+         *
+         * Catenate reads a rank-2 buffer as a reshape; Ratios divides in
+         * place; TakeLargest/TakeSmallest keep a bounded heap; RandomSample and
+         * RandomChoice gather from the buffer through the SAME draw sequence
+         * the List path uses, so a seeded run agrees across surfaces; Counts
+         * relabels Tally's machine-word count. */
+        "Append", "Prepend", "Catenate", "Ratios",
+        "TakeLargest", "TakeSmallest",
+        "RandomSample", "RandomChoice", "Counts", "Inner",
+        /* The hypergeometric family. The three convenience heads rewrite to
+         * HypergeometricPFQ and pass the argument straight through, so ALL FOUR
+         * have to be aware: the gate fires at whichever head is holding the
+         * buffer, and marking only PFQ would have materialised at the rewrite,
+         * one step before the path that can use it. Deliberately not int64_ok:
+         * the series runs in double, and an exact-integer argument is evaluated
+         * in its own right by the List path. */
+        "HypergeometricPFQ", "Hypergeometric0F1",
+        "Hypergeometric1F1", "Hypergeometric2F1",
     };
     for (size_t i = 0; i < sizeof(AWARE) / sizeof(AWARE[0]); i++)
         symtab_set_packed_aware(AWARE[i]);
@@ -630,15 +700,18 @@ static void pack_mark_aware_heads(void) {
          * note beside it in AWARE. */
         "Im",
         "Precision", "Accuracy",
-        /* Quotient joined this list on 2026-07-30, found by sweeping all 79
-         * registered kernel heads packed-against-plain. Real in, exact Integer
-         * out, exactly like Floor -- and it was OBSERVABLE from ordinary code,
-         * because packing keys on length:
+        /* Quotient joined this list on 2026-07-30 and came OFF it on
+         * 2026-08-01, the same way Floor and friends did. It was here because
+         * real in / exact Integer out could not be expressed -- and it was
+         * OBSERVABLE from ordinary code, because packing keys on length:
          *     Quotient[Range[1., 300.], 2]  ->  {0., 1., 1., 2.}   (packed)
          *     Quotient[Range[1., 200.], 2]  ->  {0, 1, 1, 2}       (not packed)
          * the same expression answering with different element heads either
-         * side of the threshold. Mathematica gives the exact Integers. */
-        "Quotient",
+         * side of the threshold, where Mathematica gives the exact Integers
+         * throughout. NDBinaryKernel now carries the same to_int trio as
+         * NDUnaryKernel (ndarray.h) and NDKB_Quotient supplies both arms, so
+         * the buffer path produces those exact Integers itself instead of
+         * having to be kept away from the data. */
     };
     for (size_t i = 0; i < sizeof(NOT_AWARE) / sizeof(NOT_AWARE[0]); i++)
         symtab_clear_packed_aware(NOT_AWARE[i]);
@@ -760,14 +833,61 @@ static void pack_mark_aware_heads(void) {
         "Fold", "FoldList", "MapThread",
         /* The set operations: int64 IS their fast domain (setop_packed handles
          * nothing else), and each element is rebuilt with expr_new_integer, so
-         * no head changes. */
-        "Union", "Intersection", "Complement",
+         * no head changes. DeleteDuplicates is int64-only for the same reason
+         * spelled out at the top of setops.c: 0. and -0. compare equal but print
+         * differently, so over Reals WHICH of two equal elements survives would
+         * differ between the buffer and the List path. */
+        "Union", "Intersection", "Complement", "DeleteDuplicates",
         /* The narrowing kernels. Exact on an int64 buffer because that arm is
          * written in int64 throughout: Floor/Ceiling/Round/IntegerPart are the
          * identity on an integer, Sign and UnitStep are trivial comparisons, and
          * a real input that will not fit an int64 abandons the whole array so
          * the List path answers with a bignum. */
         "Floor", "Ceiling", "Round", "IntegerPart", "Sign", "UnitStep",
+        /* Mod and Quotient, once ndkernels.c gave them exact int64 arms
+         * (NDKB_Mod.to_int_i, NDKB_Quotient.to_int_i / .to_int_r). Until then
+         * their kernel computed m - n*floor(m/n) in double and would have
+         * written {0., 1.} where the List gives the exact {0, 1}, so they had
+         * to stay off this list -- and the cost of that landed on their
+         * CONSUMERS, not on them: Mod[Range[10^6] 7919, 1000] answered with
+         * 10^6 boxed Integers and the Union / Tally / DeleteDuplicates that
+         * read it ran 182x / 45.8x / 34.0x slower than the same data packed.
+         *
+         * An int64 buffer with a REAL scalar (Mod[{1,2,3}, 2.] = {1., 0., 1.})
+         * has no int64 answer; ndarray_map_binary declines it and the List path
+         * answers with the Real elements, exactly as before. */
+        "Mod", "Quotient",
+        /* The number-theoretic heads, once src/ndinteger.c gave them int64
+         * kernels. int64 IS their domain -- EulerPhi[3.] is not EulerPhi[3] --
+         * so unlike every other entry on this list the int64 claim is not an
+         * extension of a float64 one, it is the only claim there is. Each
+         * kernel is written in int64 end to end through the ci_*_i64 helpers
+         * and abandons the whole array on overflow, on a factor past the
+         * trial-division ceiling, or on an argument the scalar builtin leaves
+         * unevaluated (MoebiusMu[0], DivisorSigma[k, 0]) -- so the List path
+         * and GMP still answer every case the buffer cannot. */
+        "GCD", "LCM", "DivisorSigma", "EulerPhi", "MoebiusMu",
+        "IntegerLength", "PowerMod", "Prime", "IntegerDigits",
+        /* The sign predicates answer with True/False, which no dtype holds --
+         * but they READ an int64 buffer exactly, by comparison, and comparison
+         * is the one operation on integers that needs no arithmetic to be
+         * exact about. */
+        "Positive", "Negative", "NonNegative", "NonPositive",
+        /* Pure element MOVES over an int64 buffer, exact for the same reason
+         * Join and Take are: whole elements travel by memcpy and there is no
+         * arithmetic to be exact about. Append/Prepend additionally refuse any
+         * appended value that is not an exact Integer at int64 (nd_fill_value),
+         * so Append[Range[10], 1.] declines rather than coercing the 1. into an
+         * integer slot. Counts keys on the raw word exactly as Tally does.
+         *
+         * Deliberate absentees: RATIOS, whose int64 answer is a list of exact
+         * Rationals -- Ratios[{1,2,3}] is {2, 3/2} -- and TAKELARGEST /
+         * TAKESMALLEST, which order through `double` and would compare two
+         * integers past 2^53 equal. Both decline an int64 buffer in the kernel
+         * as well; leaving them off here is what routes the whole call to the
+         * List path instead of round-tripping through a decline. */
+        "Append", "Prepend", "Catenate",
+        "RandomSample", "RandomChoice", "Counts",
     };
     for (size_t i = 0; i < sizeof(INT64_OK) / sizeof(INT64_OK[0]); i++)
         symtab_set_packed_int64_ok(INT64_OK[i]);

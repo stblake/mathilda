@@ -23,7 +23,7 @@ static void run_full(const char* input, const char* expected) {
 /* Compare each element of a List result element-wise, allowing tolerance on reals. */
 static void run_real_list(const char* input, const double* expected, size_t n, double tol) {
     Expr* e = parse_expression(input);
-    Expr* r = evaluate(e);
+    Expr* r = test_delist(evaluate(e));   /* storage-agnostic: see test_utils.h */
     ASSERT_MSG(r->type == EXPR_FUNCTION &&
                r->data.function.head->type == EXPR_SYMBOL &&
                strcmp(r->data.function.head->data.symbol.name, "List") == 0,

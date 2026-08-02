@@ -9,6 +9,8 @@
  * -------------------------------------------------------------------------- */
 
 #include "assoc.h"
+#include "ndreduce.h"
+#include "ndarray.h"
 #include "sym_names.h"
 #include "symtab.h"
 #include "attr.h"
@@ -578,9 +580,80 @@ Expr* builtin_associationthread(Expr* res) {
  * Counts[list] — <|element -> count, ...|> by first appearance.
  * Hash-indexed: one pass, O(n).
  * ====================================================================== */
+/* Counts[buffer]: run Tally over the machine words and relabel its {key, count}
+ * pairs as key -> count rules. Returns NULL if Tally did not answer with the
+ * pair-list shape, in which case the caller carries on as before. */
+static Expr* counts_from_ndarray(Expr* list) {
+    Expr** targs = malloc(sizeof(Expr*) * 1);
+    if (!targs) return NULL;
+    targs[0] = expr_copy(list);
+    Expr* tcall = expr_new_function(expr_new_symbol("Tally"), targs, 1);
+    free(targs);
+    Expr* tally = ndred_tally(tcall);
+    expr_free(tcall);
+    if (!tally) return NULL;
+
+    /* Tally answers in EITHER of two shapes and both have to be read here.
+     * Over an int64 buffer its {key, count} pairs are themselves machine
+     * words, so it hands back a rank-2 ARRAY -- which is the whole point of
+     * the direct-indexed path -- while the float64 route builds an ordinary
+     * List of pairs. Reading only the List shape silently left Counts
+     * unevaluated for exactly the integer data it exists for. */
+    size_t nd;
+    if (is_ndarray(tally)) {
+        if (tally->data.ndarray.rank != 2 || tally->data.ndarray.dims[1] != 2) {
+            expr_free(tally); return NULL;
+        }
+        nd = (size_t)tally->data.ndarray.dims[0];
+    } else if (head_is(tally, SYM_List)) {
+        nd = tally->data.function.arg_count;
+    } else {
+        expr_free(tally); return NULL;
+    }
+
+    Expr** rules = malloc(sizeof(Expr*) * (nd ? nd : 1));
+    if (!rules) { expr_free(tally); return NULL; }
+    for (size_t i = 0; i < nd; i++) {
+        Expr *key, *cnt;
+        if (is_ndarray(tally)) {
+            /* ndarray_element_to_expr is the one place that decides an
+             * element's head, so an int64 count comes back an exact Integer. */
+            key = ndarray_element_to_expr(tally, 2 * i);
+            cnt = ndarray_element_to_expr(tally, 2 * i + 1);
+        } else {
+            Expr* pair = tally->data.function.args[i];
+            if (!head_is(pair, SYM_List) || pair->data.function.arg_count != 2) {
+                for (size_t j = 0; j < i; j++) expr_free(rules[j]);
+                free(rules); expr_free(tally);
+                return NULL;
+            }
+            key = expr_copy(pair->data.function.args[0]);
+            cnt = expr_copy(pair->data.function.args[1]);
+        }
+        rules[i] = make_rule(key, cnt);
+    }
+    Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association), rules, nd);
+    free(rules);
+    expr_free(tally);
+    return assoc;
+}
+
 Expr* builtin_counts(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
     Expr* list = res->data.function.args[0];
+    /* A buffer is counted by Tally's machine-word hash, then relabelled.
+     *
+     * Counts and Tally answer the same question in two presentations -- a
+     * key -> count Association against a list of {key, count} pairs -- and
+     * ndred_tally already does the counting on the raw int64/float64 words,
+     * direct-indexed when the value range allows and hashed otherwise. Running
+     * it and rewriting the pairs as rules costs one pass over the DISTINCT
+     * values, which is the small number here; the alternative was ki_lookup
+     * over 10^6 boxed Exprs. Tally declines exactly the dtypes and ranks it
+     * cannot key faithfully (complex, rank > 1, non-finite floats) and returns
+     * the List-path answer for them, which arrives here as an ordinary List of
+     * pairs and is rewritten the same way. */
+    if (is_ndarray(list)) { Expr* r = counts_from_ndarray(list); if (r) return r; }
     /* Counts over an association tallies its values (Counts[Values[assoc]]). */
     if (is_association(list)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
     if (!head_is(list, SYM_List)) return NULL;

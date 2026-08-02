@@ -257,6 +257,77 @@ void test_tally_matches_plain_lists(void) {
           "Tally[{1., 2., 4.}, Abs[#1 - #2] < 3 &]" },
         /* Rank 2 tallies ROWS, which are not machine words. */
         { "Tally[ToNDArray[{{1, 2}, {1, 2}, {3, 4}}]]", "Tally[{{1, 2}, {1, 2}, {3, 4}}]" },
+        /* The direct-index path (src/ndreduce.c) is chosen on the value RANGE,
+         * so both sides of that decision need pinning. It is taken when the
+         * range is no wider than the input and declines to the hash otherwise;
+         * the two must agree, including on the exact boundary. */
+        { "Tally[ToNDArray[{0, 4, 2, 4, 0}]]",  "Tally[{0, 4, 2, 4, 0}]" },   /* range == n */
+        { "Tally[ToNDArray[{0, 100, 200}]]",    "Tally[{0, 100, 200}]" },     /* range > n  */
+        { "Tally[ToNDArray[{-1000000000000, 0, 1000000000000, 0}]]",
+          "Tally[{-1000000000000, 0, 1000000000000, 0}]" },                   /* hash path  */
+        /* A negative minimum: the offset is computed in unsigned arithmetic
+         * precisely so this cannot wrap. */
+        { "Tally[ToNDArray[{-5, -3, -5, -4}]]", "Tally[{-5, -3, -5, -4}]" },
+    };
+    for (size_t i = 0; i < sizeof(CASES) / sizeof(CASES[0]); i++)
+        same_as_plain(CASES[i][0], CASES[i][1]);
+}
+
+/* DeleteDuplicates / Union / Intersection / Complement over packed int64
+ * (src/list/setops.c). Like Tally these build their own answer rather than
+ * moving elements, and each is chosen by the value RANGE: a bounded range is
+ * direct-indexed, anything wider falls back (a hash set for DeleteDuplicates, a
+ * sort-merge for the rest). Both sides of every such decision are pinned here
+ * against the plain-list result.
+ *
+ * The custom-SameTest rows are the important ones. Putting DeleteDuplicates on
+ * pack.c's AWARE list stops the transparency gate materialising for EVERY call,
+ * not just the ones the fast path handles -- and the generic implementation
+ * tests `type != EXPR_FUNCTION`, which an NDArray is not, so it returned its
+ * argument unchanged and deduplicated nothing. Silent, and no gate can see it. */
+void test_setops_match_plain_lists(void) {
+    static const char* const CASES[][2] = {
+        /* First-appearance order, which is DeleteDuplicates' contract. */
+        { "DeleteDuplicates[ToNDArray[{5, 1, 5, 3, 1, 9}]]", "DeleteDuplicates[{5, 1, 5, 3, 1, 9}]" },
+        { "DeleteDuplicates[ToNDArray[{4, 4, 4, 4}]]",       "DeleteDuplicates[{4, 4, 4, 4}]" },
+        { "DeleteDuplicates[ToNDArray[{-2, -5, -2, 0}]]",    "DeleteDuplicates[{-2, -5, -2, 0}]" },
+        { "DeleteDuplicates[ToNDArray[Range[500]]]",         "DeleteDuplicates[Range[500]]" },
+        /* Range too wide to index -- the inline-key hash set. */
+        { "DeleteDuplicates[ToNDArray[{0, 1000000000000, 0, -1000000000000}]]",
+          "DeleteDuplicates[{0, 1000000000000, 0, -1000000000000}]" },
+        /* Past 2^53: must stay distinct, as for Tally. */
+        { "DeleteDuplicates[ToNDArray[{9007199254740993, 9007199254740992, 9007199254740993}]]",
+          "DeleteDuplicates[{9007199254740993, 9007199254740992, 9007199254740993}]" },
+        /* A custom SameTest must reach the ordinary implementation. */
+        { "DeleteDuplicates[ToNDArray[{1, 2, 3, 4}], Mod[#1 - #2, 2] == 0 &]",
+          "DeleteDuplicates[{1, 2, 3, 4}, Mod[#1 - #2, 2] == 0 &]" },
+        { "DeleteDuplicates[ToNDArray[{2, 4, 5}], Divisible[#2, #1] &]",
+          "DeleteDuplicates[{2, 4, 5}, Divisible[#2, #1] &]" },
+        /* Union of one list is sorted-unique; the range walk emits it ascending
+         * without sorting, so the ORDER is the thing to check. */
+        { "Union[ToNDArray[{5, 1, 5, 3, 1, 9}]]", "Union[{5, 1, 5, 3, 1, 9}]" },
+        { "Union[ToNDArray[{-3, 7, -3}]]",        "Union[{-3, 7, -3}]" },
+        { "Union[ToNDArray[{0, 1000000000000}]]", "Union[{0, 1000000000000}]" },
+        /* Two- and three-list forms: one bitmask per value, same walk, different
+         * predicate. Disjoint, identical, and empty operands are the edges. */
+        { "Union[ToNDArray[{3, 1}], ToNDArray[{2, 1}]]", "Union[{3, 1}, {2, 1}]" },
+        { "Union[ToNDArray[{3}], ToNDArray[{2}], ToNDArray[{1}]]", "Union[{3}, {2}, {1}]" },
+        { "Intersection[ToNDArray[{3, 1, 2}], ToNDArray[{2, 1}]]", "Intersection[{3, 1, 2}, {2, 1}]" },
+        { "Intersection[ToNDArray[{1, 2}], ToNDArray[{5, 6}]]",    "Intersection[{1, 2}, {5, 6}]" },
+        { "Intersection[ToNDArray[{1, 2, 3}], ToNDArray[{2, 3}], ToNDArray[{3}]]",
+          "Intersection[{1, 2, 3}, {2, 3}, {3}]" },
+        { "Complement[ToNDArray[{3, 1, 2}], ToNDArray[{2}]]",   "Complement[{3, 1, 2}, {2}]" },
+        { "Complement[ToNDArray[{1, 2}], ToNDArray[{1, 2}]]",   "Complement[{1, 2}, {1, 2}]" },
+        { "Complement[ToNDArray[{1, 2, 3}], ToNDArray[{2}], ToNDArray[{3}]]",
+          "Complement[{1, 2, 3}, {2}, {3}]" },
+        /* An empty operand on either side. */
+        { "Union[ToNDArray[{3, 1}], ToNDArray[{}]]",        "Union[{3, 1}, {}]" },
+        { "Intersection[ToNDArray[{3, 1}], ToNDArray[{}]]", "Intersection[{3, 1}, {}]" },
+        { "Complement[ToNDArray[{3, 1}], ToNDArray[{}]]",   "Complement[{3, 1}, {}]" },
+        { "Complement[ToNDArray[{}], ToNDArray[{3}]]",      "Complement[{}, {3}]" },
+        /* Element heads survive the round trip. */
+        { "Head[DeleteDuplicates[ToNDArray[{1, 2, 1}]][[1]]]", "Head[DeleteDuplicates[{1, 2, 1}][[1]]]" },
+        { "Head[Union[ToNDArray[{2, 1, 2}]][[1]]]",            "Head[Union[{2, 1, 2}][[1]]]" },
     };
     for (size_t i = 0; i < sizeof(CASES) / sizeof(CASES[0]); i++)
         same_as_plain(CASES[i][0], CASES[i][1]);
@@ -1372,12 +1443,32 @@ void test_aware_heads_stay_packed(void) {
 void test_nesting_limitation_is_correct_but_unpacked(void) {
     /* Below PACK_MIN_ELEMENTS the two rows are materialised rather than
      * absorbed, so MapThread gets an ordinary List of ordinary lists and
-     * answers from the generic path. Correct value, ordinary storage. */
+     * answers from the generic path. Correct value, ordinary storage.
+     *
+     * The threshold is PINNED here rather than assumed. This arm is about what
+     * happens BELOW it, so it has to name a size that is below it -- and the
+     * default moved (250 -> 4 on 2026-08-02, so a 4-element result began
+     * packing and this assertion began failing on a value that had not
+     * changed). pack_set_min_elements exists for exactly this; 0 restores the
+     * compiled-in default. */
+    pack_set_min_elements(1000);
     assert_eval_eq("MapThread[Plus, {ToNDArray[{1., 2.}], ToNDArray[{3., 4.}]}]",
                    "{4.0, 6.0}", 0);
     Expr* r = ev("MapThread[Plus, {ToNDArray[{1., 2.}], ToNDArray[{3., 4.}]}]");
     ASSERT(!is_packed_list(r));     /* correct value, ordinary List storage */
     expr_free(r);
+    pack_set_min_elements(0);
+
+    /* And the SAME expression packs once the threshold is below its size --
+     * which is the real content of the arm above: storage follows the
+     * threshold, the answer does not. */
+    {
+        Expr* small = ev("MapThread[Plus, {ToNDArray[{1., 2.}], ToNDArray[{3., 4.}]}]");
+        char* ss = expr_to_string(small);
+        ASSERT(strcmp(ss, "{4.0, 6.0}") == 0);
+        free(ss);
+        expr_free(small);
+    }
 
     /* Above it the same expression absorbs into a rank-2 buffer and MapThread's
      * column fold answers instead -- same value, packed storage. The two arms
@@ -1977,6 +2068,7 @@ int main(void) {
     TEST(test_exactness_preserved);
     TEST(test_int64_matches_plain_integer_lists);
     TEST(test_tally_matches_plain_lists);
+    TEST(test_setops_match_plain_lists);
     TEST(test_declines_what_it_cannot_represent);
     TEST(test_ordering_matches_plain_lists);
     TEST(test_hash_consumers);

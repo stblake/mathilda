@@ -12,6 +12,8 @@
  * GMP's nextprime/prevprime to land exactly on p_n. */
 
 #include "numbertheory.h"
+#include "ndarray.h"      /* is_ndarray, ndarray_delist_and_reeval */
+#include "ndinteger.h"   /* NDArray buffer fast path */
 #include "primecount.h"
 #include "arithmetic.h"
 #include "expr.h"
@@ -174,6 +176,18 @@ static Expr* prime_emit_intpp(Expr* res) {
 
 Expr* builtin_prime(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    /* An array of indices is one SIEVE, not one Meissel count per element.
+     *
+     * The degrade is not optional. Marking Prime packed-aware stops the gate
+     * materialising its argument, so the buffer now reaches here on BOTH
+     * surfaces -- and every branch below tests for EXPR_INTEGER / EXPR_BIGINT
+     * and would answer an NDArray with the unevaluated call. Whatever the sieve
+     * declines has to go back through the List path explicitly. */
+    if (res->data.function.arg_count == 1 &&
+        is_ndarray(res->data.function.args[0])) {
+        Expr* nd = ndint_prime(res);
+        return nd ? nd : ndarray_delist_and_reeval(res);
+    }
     size_t argc = res->data.function.arg_count;
     if (argc != 1) {
         if (!arith_warnings_muted()) {

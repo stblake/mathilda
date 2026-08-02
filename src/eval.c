@@ -1528,8 +1528,19 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                         nd = ndarray_map_unary(aa[0], hdef->ndarray_unary_kernel);
                         if (!nd) nd = ndarray_delist_and_reeval(res);
                     } else if (na == 2 && hdef->ndarray_binary_kernel &&
-                               (is_ndarray(aa[0]) ^ is_ndarray(aa[1]))) {
-                        nd = ndarray_map_binary(aa[0], aa[1], hdef->ndarray_binary_kernel);
+                               (is_ndarray(aa[0]) || is_ndarray(aa[1]))) {
+                        /* BOTH operands may be arrays. The test used to be an
+                         * XOR -- one array, one broadcast scalar -- so a kernel
+                         * registered for a genuinely two-argument function was
+                         * unreachable whenever both arguments were arrays, which
+                         * is the ordinary way to call it: ArcTan[v, w] is
+                         * numpy's arctan2 of two vectors and Beta[p, q] takes
+                         * two. Both stayed unevaluated on a visible NDArray and
+                         * boxed every element on a packed List, with NDKB_ArcTan
+                         * and NDKB_Beta sitting registered and unused. */
+                        nd = (is_ndarray(aa[0]) && is_ndarray(aa[1]))
+                                 ? ndarray_map_binary2(aa[0], aa[1], hdef->ndarray_binary_kernel)
+                                 : ndarray_map_binary(aa[0], aa[1], hdef->ndarray_binary_kernel);
                         if (!nd) nd = ndarray_delist_and_reeval(res);
                     }
                     if (nd) {

@@ -307,6 +307,37 @@ int expr_compare(const Expr* a, const Expr* b) {
             int c = nd_packed_compare_fast(a, b, &ok);
             if (ok) return c;
         }
+        /* ONE packed list against a NUMBER, a literal Complex or a String.
+         *
+         * Steps 1, 1b and 2 below settle those three tiers on membership
+         * alone: whichever side is the number/complex/string wins, and the
+         * other side's CONTENTS are never read. Materialising to discover that
+         * is pure waste, and it is not a rare shape -- it is what `Orderless`
+         * does on every call. The evaluator sorts `GCD[1234, cv]` before
+         * dispatching, that comparison is packed-against-scalar, and 200000
+         * Expr nodes were being built and thrown away per sort. Measured at
+         * 10^6/200000 elements: GCD 38.6 ms packed against 16.7 ms visible and
+         * LCM 29.4 against 8.3, purely from this -- `Mod` and `Quotient`, the
+         * same kernels without ATTR_ORDERLESS, showed no gap at all.
+         *
+         * The stand-in is an EMPTY List rather than a hardcoded verdict. A
+         * packed list IS a List, so `List[]` lands in exactly the same tier and
+         * the existing code computes the answer; writing `return 1` here would
+         * restate an ordering rule in a second place and let the two drift.
+         * Restricted to the three tiers where the result provably cannot depend
+         * on the elements -- a Symbol or a general expression on the other side
+         * reaches step 3's polynomial-degree walk, which does read them, and
+         * still materialises. */
+        const Expr* other = is_packed_list(a) ? b : a;
+        if (is_atomic_numeric(other) || is_complex_number(other) ||
+            other->type == EXPR_STRING) {
+            Expr* stub = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+            int c = is_packed_list(a) ? expr_compare(stub, b)
+                                      : expr_compare(a, stub);
+            expr_free(stub);
+            return c;
+        }
+
         Expr* ma = is_packed_list(a) ? ndarray_to_nested_list(a) : NULL;
         Expr* mb = is_packed_list(b) ? ndarray_to_nested_list(b) : NULL;
         int c = expr_compare(ma ? ma : a, mb ? mb : b);
@@ -811,6 +842,12 @@ static Expr* take_extreme(Expr* coll, Expr* f, int64_t nreq, bool largest) {
 
 Expr* builtin_take_largest(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    /* O(n log k) through a bounded heap rather than the full O(n log n) sort
+     * take_extreme does below -- and without one Expr per element to sort. */
+    if (is_ndarray(res->data.function.args[0])) {
+        Expr* nd = ndstruct_take_extreme(res, true);
+        return nd ? nd : ndarray_delist_and_reeval(res);
+    }
     Expr* nexpr = res->data.function.args[1];
     if (nexpr->type != EXPR_INTEGER) return NULL;
     return take_extreme(res->data.function.args[0], NULL, nexpr->data.integer, true);
@@ -818,6 +855,10 @@ Expr* builtin_take_largest(Expr* res) {
 
 Expr* builtin_take_smallest(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    if (is_ndarray(res->data.function.args[0])) {   /* see builtin_take_largest */
+        Expr* nd = ndstruct_take_extreme(res, false);
+        return nd ? nd : ndarray_delist_and_reeval(res);
+    }
     Expr* nexpr = res->data.function.args[1];
     if (nexpr->type != EXPR_INTEGER) return NULL;
     return take_extreme(res->data.function.args[0], NULL, nexpr->data.integer, false);

@@ -335,7 +335,7 @@ reduction, and interpolation.
 | `Interpolation`, 10⁴ nodes, 10⁴ evaluations | **7.65 ms** | 19.9 ms | 2.60× faster | 1.494 s |
 | `NDSolve`, Lorenz system to t = 200 | **31.5 ms** | 47.8 ms | 1.52× faster | — |
 | Conjugate gradient, 2D Poisson 256², 100 iterations | 155 ms | **84.0 ms** | 1.84× | — |
-| `Tally`, 10⁷ integers into 10⁴ bins | 129 ms | **17.9 ms** | 7.21× | 1.230 s |
+| `Tally`, 10⁷ integers into 10⁴ bins | **19.0 ms** | 17.9 ms | 1.06× | 1.230 s |
 | `ListConvolve`, 1024² image, 5×5 kernel | 312 ms | **33.7 ms** | 9.27× | 420 ms |
 
 All five are from one full `hpc_bench.py` run, so they share a kernel session with
@@ -1233,7 +1233,407 @@ paid for itself.
 
 ---
 
-## 15. Summary
+## 15. Eighth round — the same operation on all three representations (2026-08-01)
+
+Every round up to here measured **one** representation. This one measures the
+three that exist, side by side, and the reason is that `DeleteDuplicates` sat at
+72× NumPy through four sweeps with no NDArray path at all and neither audit
+could see it.
+
+### Why the static audits could not see it
+
+| audit | reads | blind to |
+|---|---|---|
+| `check_packed_aware.py` | dispatch **sites** in the source | a head with no fast path on *either* surface has no dispatch site to read |
+| `numeric_coverage.py` | the three **registries** | registration is not speed |
+
+Both are static, and the question that matters is not answerable statically:
+*run the same expression on each representation and see whether it is actually
+fast.* `tools/nd_surface_audit.py` does that, over `numeric_sweep.py`'s 284
+probes.
+
+### The three representations have opposite gate behaviour
+
+|  | the gate | consequence |
+|---|---|---|
+| plain `List` | — | one `Expr` per element: the floor |
+| **packed** `List` | `eval.c` **materialises** it for any head not on `pack.c`'s `AWARE` list | a missing opt-in fails *safe*, therefore *silent* |
+| **visible `NDArray`** | never touches it (`is_packed_list` is false, by design) | reaches the builtin whatever `AWARE` says |
+
+Opposite signs. So a head can be fast on one surface and slow on the other on
+identical data — and it can be *wrong* on one and right on the other, which is
+the finding this round opened with.
+
+### A silent wrong answer on the unguarded surface
+
+```
+Sin[NDArray[{1, 2, 3}, DataType -> "int64"]]   ->  NDArray[{0, 0, 0}]
+Exp[NDArray[{1, 2, 3}, DataType -> "int64"]]   ->  NDArray[{2, 7, 20}]
+```
+
+`ndarray_map_unary` sizes its output from the *input* dtype and writes through
+`ndt_set`, whose `NDT_INT64` case is `(int64_t)re`. Every `real_closed` kernel —
+56 of the 85 registered — truncated its double result into the integer slot. `Cos`,
+`Tanh`, `Erf`, `BesselJ` and `Log[b, ·]` all did it.
+
+The packed representation was never exposed to this, because the gate
+materialises an int64 buffer for any head that has not claimed
+`packed_int64_ok`. The visible surface has no gate, and nothing else stood
+between an integer buffer and a double kernel. **The guard that made the packed
+surface safe is exactly what left the visible one unguarded**, and no test
+looked at both.
+
+Both map functions now decline an int64 input with no exact arm, degrading to
+the List path — the gate's own rule, applied where the gate does not reach.
+
+### `Mod` was not slow; it made everything after it slow
+
+`jv = Mod[Range[10^6] 7919, 1000]` came back as 10⁶ boxed Integers. `Mod` is
+packed-aware but was absent from `INT64_OK`, correctly, because its kernel
+computes in `double` and would write `{0., 1.}` for the exact `{0, 1}`. So the
+gate materialised, and the cost landed on the consumers:
+
+| 10⁶ elements | before | after |
+|---|---:|---:|
+| `Union[kv]` | 807 ms | **4.58 ms** |
+| `Tally[jv]` | 68.1 ms | **1.89 ms** |
+| `DeleteDuplicates[jv]` | 67.1 ms | **1.80 ms** |
+
+The set operations were never at fault — they are on `AWARE` *and* `INT64_OK`
+and are fast when handed a buffer. Nothing upstream ever handed them one.
+`NDBinaryKernel` gained the exact-integer arms `NDUnaryKernel` has had since the
+narrowing kernels, and `Mod`/`Quotient` joined `INT64_OK`.
+
+This is why `--survival` exists as a separate question. Packing is a *chain*;
+timing a head one call at a time attributes the cost to the consumer and never
+names the producer that dropped the buffer.
+
+### And the converse, which nothing had looked for
+
+`setop_i64` tested `is_packed_list`, so the rank-1 int64 set-operation path was
+unreachable from a visible `NDArray`: `Union` ran 850 ms against 5.85 ms packed,
+`DeleteDuplicates` 147 ms against 2.05 ms, on identical data. It tests
+`is_ndarray` now.
+
+That is the mirror image of the `Fourier` defect of §11 — there the fast path
+existed and the *packed* surface could not reach it. Both directions are now
+audited, which is the point of measuring three columns rather than one.
+
+### The same asymmetry again, in an unrelated subsystem
+
+`MemberQ`, `Count`, `Position`, `Cases`, `FirstCase`, `DeleteCases` and `FreeQ`
+walk `data.function.args`. A visible `NDArray` has none, so each searched an
+expression with no elements and answered, confidently, that it found nothing:
+
+| | visible `NDArray` | `List` |
+|---|---|---|
+| `MemberQ[·, 5.]` | **False** | True |
+| `Count[·, 5]` | **0** | 1 |
+| `Position[·, 5]` | **{}** | `{{5}}` |
+| `FreeQ[·, 5]` | **True** | False |
+
+The packed form was fine, for the third time and the same reason: these heads
+are not on `AWARE`, so the gate materialises their arguments. **Nothing in
+`patterns.c` mentions arrays at all**, so no source-reading audit could have
+named it — which is the argument for auditing surfaces rather than sites.
+
+### What the register looks like now
+
+| kind | n | meaning |
+|---|---:|---|
+| `DISAGREE` | 4 | the surfaces compute different things (was 11; seven were the pattern family) |
+| `ND-UNSUPPORTED` | 26 | answers on plain and packed, **unevaluated** on a visible array |
+| `ND-SLOW` | 9 | visible array materially slower than packed |
+| `NO-PATH` | 98 | packed no faster than plain |
+| `NO-ANSWER` | 29 | answered on **no** surface — the undefined heads of §13's item 6 |
+
+The 26 `ND-UNSUPPORTED` heads all fail *loudly*. `eval.c`'s post-gate already
+materialises a packed argument when a node comes to rest; the same rule for a
+visible array would close all 26 at once, and needs an exclusion for
+`NDArray[...]` itself, which comes to rest holding an array by construction.
+That is a core-evaluator change and is left for its own round.
+
+### The methodological point
+
+Every defect in this round was invisible to the audit written for the previous
+one, and each was found the same way: **hold the values fixed, vary only the
+representation, and require the answers and the timings to agree.** A single
+column cannot express that requirement, however carefully it is measured.
+
+One correction worth keeping, because it cost an hour of reading a wall of red:
+the first classifier reported all 29 `NO-ANSWER` rows as `DISAGREE`, because
+`numeric_sweep.agree()` returns False for `"UNEVAL"` against itself — correctly,
+by its own contract. "Answered nowhere" and "answered differently" are different
+findings and needed different names.
+
+---
+
+## 16. Ninth round — the twenty-six heads that declined a buffer (2026-08-02)
+
+The eighth round's audit left one correctness class open: `ND-UNSUPPORTED`,
+**26 heads that answer on a plain List and on a packed List and leave the call
+unevaluated on a visible `NDArray`**. §15 wrote down a general fix — extend
+`eval.c`'s materialise-on-rest post-gate from packed arguments to visible ones —
+and deferred it as a core-evaluator change.
+
+That is not the fix taken, and the reason is not the hazard §15 named. **A
+post-gate makes the call evaluate; it does not make it fast.** It would have
+turned 26 unevaluated calls into 26 calls that materialise 10⁶ `Expr` nodes and
+run the generic List code — closing the audit row and leaving the cost exactly
+where it was, which is the mistake `check_packed_aware.py` and
+`numeric_coverage.py` are already documented as making in their own way.
+Registration is not speed, and neither is evaluation.
+
+### What the 26 actually were
+
+Sorted by what was missing, which is not how the audit groups them:
+
+| n | missing | heads |
+|---:|---|---|
+| 2 | an **engine** capability | `ArcTan[a, b]`, `Beta[p, q]` — `ndarray_map_binary` required exactly ONE array operand |
+| 9 | the exact-integer **domain** | `GCD`, `LCM`, `DivisorSigma`, `EulerPhi`, `MoebiusMu`, `IntegerLength`, `PowerMod`, `Prime`, `IntegerDigits` |
+| 4 | a non-buffer **output** shape | `Positive`, `Negative`, `NonNegative`, `NonPositive` |
+| 8 | a **structural** walk | `Ratios`, `Append`, `Prepend`, `Catenate`, `TakeLargest`, `TakeSmallest`, `Counts`, `Inner` |
+| 2 | a **producer** path | `RandomSample`, `RandomChoice` |
+| 2 | reach past a **rewrite** | `Hypergeometric1F1`, `Hypergeometric2F1` (both become `HypergeometricPFQ` first) |
+
+The 6×6 `Dot`/`Inverse`/`LinearSolve` rows §15 listed alongside them were
+misclassified, and running down *why* found a real bug in a fourth head. All
+three answer a visible `NDArray` correctly and always did; what could not
+answer was the probe's own checksum, `N[Total[Flatten[{r}]]]` over a `List` of
+200 result arrays — because **`Flatten` treated a visible `NDArray` nested in an
+ordinary `List` as an atom**:
+
+```
+Flatten[{{1., 2.}, {3., 4.}}]                    -> {1., 2., 3., 4.}
+Flatten[{NDArray[{1., 2.}], NDArray[{3., 4.}]}]  -> unchanged
+```
+
+`head_is` is false for an `EXPR_NDARRAY` — it is not an `EXPR_FUNCTION` headed
+`List` — so each array was collected as one opaque element. It is a list of
+values by every other measure (`ArrayQ`, `Dimensions` and `Length` all say so),
+so `flatten_rec` now descends into it. The packed form was never affected: the
+no-nesting invariant means a packed node never sits inside a plain `List`, which
+is the same asymmetry as §15's int64 kernels and the pattern family, in a third
+subsystem.
+
+### The engine gap was one gap, not fifteen
+
+`ndarray_map_binary` required exactly one array and one broadcast scalar, and
+the dispatch in `eval.c` enforced it with an XOR. A kernel registered for a
+genuinely two-argument function was therefore unreachable whenever both
+arguments were arrays — the ordinary way to call one. `NDKB_ArcTan` and
+`NDKB_Beta` had been registered and unused since they were written, and so had
+thirteen others: `Log[b, ·]`, `BesselJ`/`Y`/`I`/`K`, `Binomial`, `Pochhammer`,
+`PolyGamma`, `HurwitzZeta`, `LegendreP`, `PolyLog`, `QPochhammer`,
+`Hypergeometric0F1`, and the integer `Mod`/`Quotient` pair.
+
+`ndarray_map_binary2` mirrors the scalar-broadcast form branch for branch and
+reads the second operand at the same index. Fifteen heads gained the two-array
+form from one function.
+
+### And it surfaced a 1-ulp divergence that predated it
+
+`ndk_ArcTan2_c` computed `arg(x + I y)` through `csqrt`/`clog` where the scalar
+builtin calls `atan2`. On real data that is 1–2 ulp out: **68 of 400 elements**
+differ on the sweep's own `arctan2` probe, and the already-shipping array/scalar
+route had it too (44 of 400). The sweep's tolerance is 1e-5 — set by Mathilda's
+six-figure printing, §8 — so nothing was ever going to report it. It took
+comparing the two array routes against each other, at `===` rather than at a
+checksum, to see it.
+
+That is the generalisable finding of this round. **A checksum comparison
+validates the algorithm; only an element-wise identity comparison validates the
+kernel.** The audit is right to use a checksum — it is comparing three systems,
+two of which print differently — but a kernel and its scalar twin are the same
+system and should be held to `===`.
+
+`Beta` and `1F1`/`0F1` remain ~1 ulp from their MPFR twins (2.1e-16 and 1.6e-16
+relative), which is the register's outstanding "MPFR-vs-libm accuracy
+comparison", now carried out: it is the same relationship `Gamma`, `Erf` and the
+Bessel kernels have always had.
+
+### Where the remaining cost is, per head
+
+26 rows, all three surfaces, measured by the audit tool itself. The full table
+is in `tasks/todo.md` and the changelog; the shape of it is what belongs here.
+**Only four rows sit under 5×**, and both reasons are structural:
+
+* `Positive`/`Negative`/`NonNegative` (≈4×) and `IntegerDigits` (2.5×) must
+  build one `Expr` per **output** element whatever happens — a list of
+  `True`/`False` and a ragged list of digit lists are not buffers. Reading the
+  input off the buffer is the whole of the available win.
+* `GCD` and `LCM` (2.1×, 2.5×) are held down by their *packed* column alone; on
+  the visible surface they are 4.9× and 8.7×. That gap is the `Orderless`
+  finding below, not a limit of the kernels.
+
+Everything else lands between 7× and 267×.
+
+**A measurement error worth recording, because it inverted two conclusions.**
+The first pass through this table was hand-rolled, and for `ArcTan[v, w]` and
+`Beta[p, p]` it built the second `NDArray` operand *inside* the timed
+expression. That reported 3.6× and 2.7× and produced a confident, wrong story —
+"these two are libm-bound, the marshalling is not the cost" — which then made a
+float64 hot lane in the binary map chunks look worthless (measured 8% and
+nothing). With the conversions hoisted out, the same two rows are **112× and
+222×**, and A/B'ing the lane by building the tree with and without it gives
+`ArcTan` 3.26 → 2.49 ms (23%) and `Beta` 5.27 → 4.94 ms (6%).
+
+The general form: **a timed expression that constructs its own operands
+measures the constructor.** A 90 ms conversion in front of a 2.5 ms kernel does
+not merely add noise, it swamps the signal and every ratio taken from it is a
+statement about the conversion. The audit tool builds its arrays in a preamble
+for exactly this reason, which is why its numbers and the hand-rolled ones
+disagreed by two orders of magnitude — and why the tool's are the ones in the
+table.
+
+### Both open skews, closed
+
+The round first left two `SKEW` classes open with their causes named. Both were
+then fixed, and the shape of each fix is the interesting part.
+
+**`Orderless` was materialising the buffer.** `GCD` and `LCM` ran 2.3× and 3.5×
+slower packed than visible; `Mod` and `Quotient` — same kernels, same shapes,
+not `Orderless` — showed no gap, which is what named the cause in one step.
+`expr_compare` orders a packed list as the List it is, correctly, but reached
+that answer via `ndarray_to_nested_list` when only one operand was packed. The
+evaluator sorts `GCD[1234, cv]` before dispatch, so 200 000 `Expr` nodes were
+built and discarded per call to settle an ordering that steps 1–2 decide by tier
+membership without reading an element.
+
+The fix compares against an **empty `List` stand-in** rather than a materialised
+copy, and only where the result provably cannot depend on the elements (the
+other operand a number, a literal `Complex`, or a `String`). A hardcoded
+`return 1` would have been shorter and would have restated an ordering rule in a
+second place; the stand-in lets the existing tier logic compute it, so the two
+cannot drift. `GCD` 46.7 → **17.1 ms**, `LCM` 31.5 → **7.44 ms**, both now
+level with the visible surface.
+
+**The packing threshold was hiding LAPACK behind a safety margin.** A 6×6 is 36
+elements, under `PACK_MIN_ELEMENTS` = 250, so it never packed and the LAPACK
+path was unreachable from it. The old value's own comment gave the reasoning —
+chosen for *blast radius*, not cost, with break-even already known to be around
+n = 2 — and that reasoning is what proved wrong: the margin was deliberate but
+measured in neither direction.
+
+| `Table[…, {200}]` over a 6×6 | 250 | **4** |
+|---|---:|---:|
+| `Det[A6]` | 102.8 ms | **0.189 ms** |
+| `Inverse[A6]` | 120.8 ms | **0.473 ms** |
+| `LinearSolve[A6, b6]` | 134.2 ms | **0.397 ms** |
+| `A6 . A6` | 12.9 ms | **0.108 ms** |
+
+So the cost was measured, and then so was the benefit — swept across 250, 64,
+36, 16, 8, 4, 2 against pattern matching, rule application, `Cases`/`MatchQ`,
+`Table`, `Expand`, `Solve`, `D`, `Integrate`, `Sort`, `Join`, `Nest`, `Counts`
+and `Simplify`. **Down to 4, no regression on any of them**, and the nested
+`Table` gets 19% faster. At 2 the linalg numbers stop improving and `Integrate`
+gives back 7%. 4 is the element count of a 2×2 matrix, so the rule is "any
+matrix packs".
+
+**The generalisable point.** Both were constants defended by an argument rather
+than a measurement — "materialising is correct, so it is fine" and "250 is safe"
+— and in both cases the argument was true and the conclusion still cost two to
+three orders of magnitude. A safety margin is a claim about a trade, and a trade
+has two sides that can each be measured.
+
+Lowering the threshold also forced a third change. It put a 2×2 on the LAPACK
+path, and LAPACK emits `-0.0` for a zero reached through a subtraction — so
+`Inverse[{{2., 0.}, {0., 2.}}]` printed `{{0.5, -0.0}, {0.0, 0.5}}` packed and
+`{{0.5, 0.0}, {0.0, 0.5}}` plain. Pre-existing (a 20×20 did it at the old
+threshold too) but newly visible at sizes people read, and a printed difference
+between surfaces for one input is the thing the packing contract forbids. The
+two shared linalg result builders normalise it now. Worth noting how it was
+found: a regression test, not the benchmark — the value is unchanged under
+`SameQ`, so no comparison of results would have caught it.
+
+A third gate turned up while checking the second and is **not** closed: a
+literal `List` never packs at any size, because packing is opt-in per producer
+and a parser-built list has no producer to call `pack_offer`. `Inverse[{{4.,
+1.}, {1., 3.}}]` typed literally still takes the unpacked path. Closing it means
+offering every list node that comes to rest — the blast radius the design avoids
+— so it is recorded rather than attempted.
+
+### The audit's verdict on this round's heads
+
+`tools/nd_surface_audit.py --only …` over the 30 probes for the heads changed
+here plus four controls, all three representations, after every fix in this
+round:
+
+| kind | before | after |
+|---|---:|---:|
+| `ND-UNSUPPORTED` | 26 | **0** |
+| `SKEW` | 7 | **0** |
+| `NO-PATH` | 4 | **0** |
+| `DISAGREE` | 0 | **0** |
+| `NO-ANSWER` | 0 | **0** |
+| `ND-SLOW` | 0 | 4 — noise, see below |
+
+The small-matrix rows are the clearest single result: `Det[A6]` **617×**,
+`LinearSolve[A6, b6]` **341×**, `Inverse[A6]` **277×**, `A6 . A6` **119×**
+against the plain-List floor, with packed and visible now within 5% of each
+other (158 µs against 166 µs for `Det`). `GCD` and `LCM` come in at 16.4/16.6 ms
+and 7.46/7.44 ms — the two surfaces level, where they were 2.3× and 3.5× apart.
+
+**The four `ND-SLOW` rows are a measurement artefact and were checked rather
+than reported.** `nonnegative` tripped at 0.59× while `positive` and `negative`
+— the same operation, the same data — sat at 0.74 and 0.73, which is not how a
+real property behaves. That run shared the machine with a
+`check-array-exactness` pass: re-measured idle, `nonnegative` costs 24.6 ms
+rather than the 65–110 ms the audit recorded, and all four probes come out level
+across two rounds:
+
+| 10⁶ elements, idle | packed | visible |
+|---|---:|---:|
+| `Ratios[v]` | 1.65 / 2.08 ms | 1.93 / 1.98 ms |
+| `Counts[jv]` | 1.86 / 2.02 ms | 1.85 / 2.01 ms |
+| `NonNegative[u]` | 24.6 / 28.5 ms | 24.8 / 26.7 ms |
+| `Union[kv]` | 4.54 / 4.27 ms | 4.12 / 3.84 ms |
+
+A timing tool sharing a machine with anything else is measuring the other thing
+too — the same lesson as the hand-rolled harness earlier in this round, one
+level up.
+
+The full 284-probe three-surface run does not finish inside 90 minutes (killed
+at 228/284), so the targeted subset is what is recorded. Heads outside this
+round's set rest on the eighth round's run.
+
+### `--survival`: 38 producers that drop packing → 20
+
+Eighteen of the register's producers now hand back a packed array: `catenate`,
+`ratios`, `append`, `prepend`, `takelargest`, `takesmallest`, `arctan2`,
+`gcd_arr`, `lcm_arr`, `integerlength`, `powermod`, `eulerphi`, `moebiusmu`,
+`divisorsigma`, `prime_arr`, `beta_fn`, `hyper1f1`, `hyper2f1`, plus
+`randomsample` and `randomchoice`. What is left is the four groups this round
+did not touch: the `Im`/`Boole` dtype cases, the gather/scatter structural
+family (`split`, `position`, `gatherby`, `sortby`, `mapindexed`,
+`replacepart`, `insert`, `delete`), the linalg decompositions that do not pack
+their outputs (`qr`, `svd`, `eigenvalues`, `eigenvectors`), and the four Bessel
+rows.
+
+### The standing hazard of marking a head `AWARE`
+
+Three defects surfaced during the work, all the same shape and all introduced by
+this round: **giving a head a fast path changes what reaches its slow path
+too**, because `AWARE` stops the gate materialising and the buffer now arrives
+at code that tests `type == EXPR_FUNCTION`.
+
+`Inner` fell out unevaluated for any operator pair other than `Times`/`Plus`;
+`Prime`, `PowerMod`, `IntegerDigits` and `HypergeometricPFQ` each needed the same
+explicit `ndarray_delist_and_reeval` degrade. Separately, `Counts` stayed
+unevaluated on integer data because `Tally` answers with a rank-2 **array** there
+and a List of pairs elsewhere, and `Append[NDArray[{1., 2.}], 0]` coerced the
+exact `0` because its decline path repacked at the source dtype.
+
+None of the three is visible to a static audit, and the first two are invisible
+to a checksum sweep as well — they are "unevaluated", which every tool reports
+as a coverage gap rather than a regression. The differential test across all
+three representations is what found them, which is the same argument §15 makes
+for auditing surfaces rather than sites, applied one level down.
+
+---
+
+## 17. Summary
 
 Counts from the full three-system run of 2026-07-31, after the fourth sweep, and
 computed from the run's own JSON rather than by eye. The fifth sweep's 21 rows
@@ -1267,9 +1667,13 @@ The list is shorter than it was; items struck through were closed by §10.
    band. `Differences`, `Accumulate` and `Dot` left it in §10.
 4. **Pattern-match dispatch** — 2.65× on naive recursive `fib`, and the one row
    where CPython beats both CAS.
-5. ~~**Heads with no NDArray path pay for boxing** (`ListConvolve`).~~ Closed in
-   §10: `ListConvolve` is now 1.05× Mathematica and **1.11× ahead of NumPy**.
-   `Tally` remains, at 7.17×.
+5. ~~**Heads with no NDArray path pay for boxing** (`ListConvolve`, `Tally`).~~
+   Closed. `ListConvolve` is 1.05× Mathematica and **1.11× ahead of NumPy** (§10);
+   `Tally` went 7.21× → **1.06×** on 2026-08-01 by direct-indexing the bounded
+   integer range, inlining the hash entries, and returning the int64 result as a
+   packed rank-2 matrix instead of `nuniq` boxed pairs. The same index closed
+   `DeleteDuplicates` (72–79×, it had no NDArray path at all), `Union` (23×) and
+   `Intersection`/`Complement` (~10×). See the 2026-07-27 changelog.
 6. ~~**No vectorized scan.**~~ Closed in §10. The running maximum is now faster
    than `np.maximum.accumulate`; the general linear recurrence is 7.5× `lfilter`,
    down from 413×.
@@ -1308,7 +1712,7 @@ passed for months.
 
 ---
 
-## 16. Reproducing
+## 18. Reproducing
 
 ```bash
 make -j$(sysctl -n hw.ncpu)

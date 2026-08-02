@@ -52,6 +52,8 @@
  */
 
 #include "int.h"
+#include "ndarray.h"      /* is_ndarray, ndarray_delist_and_reeval */
+#include "ndinteger.h"   /* NDArray buffer fast path */
 #include "symtab.h"
 #include "attr.h"
 #include "print.h"
@@ -124,6 +126,15 @@ static Expr* int_emit_int(size_t pos, Expr* res) {
 
 Expr* builtin_integerdigits(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    /* Base-10 digits of a rank-1 int64 buffer, read element by element out of
+     * the buffer instead of materialising it first. A base argument, a higher
+     * rank or a non-integer dtype degrades explicitly -- expr_is_integer_like
+     * below is false for an NDArray. */
+    if (res->data.function.arg_count >= 1 &&
+        is_ndarray(res->data.function.args[0])) {
+        Expr* nd = ndint_integerdigits(res);
+        return nd ? nd : ndarray_delist_and_reeval(res);
+    }
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 3) return int_emit_argb(argc);
 

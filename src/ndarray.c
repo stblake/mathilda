@@ -1488,12 +1488,70 @@ typedef struct {
 } ndb_ctx;
 static bool ndb_map_chunk(void* c, size_t lo, size_t hi) {
     const ndb_ctx* x = (const ndb_ctx*)c;
+    /* float64 in and out: raw doubles, no ndt_get/ndt_set indirection. Same
+     * lane as ndb2_map_chunk below -- see the note there. Reached whenever the
+     * result is real, i.e. the real_closed branch; the complex branch has a
+     * complex `dto` and falls to the generic loop. */
+    if (x->dti == NDT_FLOAT64 && x->dto == NDT_FLOAT64) {
+        const double* in = (const double*)x->in;
+        double* o = (double*)x->out;
+        double s = x->sre;
+        for (size_t j = lo; j < hi; j++) {
+            double orr, oii;
+            bool ok = x->arr_first ? x->k->cplx(in[j], 0.0, s, 0.0, &orr, &oii)
+                                   : x->k->cplx(s, 0.0, in[j], 0.0, &orr, &oii);
+            if (!ok) return false;
+            o[j] = orr;
+        }
+        return true;
+    }
     for (size_t j = lo; j < hi; j++) {
         double re, im, orr, oii;
         ndt_get(x->in, j, x->dti, &re, &im);
         bool ok = x->arr_first ? x->k->cplx(re, im, x->sre, x->sim, &orr, &oii)
                                : x->k->cplx(x->sre, x->sim, re, im, &orr, &oii);
         if (!ok) return false;
+        ndt_set(x->out, j, x->dto, orr, oii);
+    }
+    return true;
+}
+
+/* The same map with TWO array operands rather than one array and a broadcast
+ * scalar: element j of the result comes from element j of each input. */
+typedef struct {
+    const void* in0; const void* in1; void* out;
+    NDType dt0, dt1, dto; const NDBinaryKernel* k;
+} ndb2_ctx;
+static bool ndb2_map_chunk(void* c, size_t lo, size_t hi) {
+    const ndb2_ctx* x = (const ndb2_ctx*)c;
+    /* float64 throughout: read and write the raw doubles, the binary twin of
+     * ndu_hot_chunk. ndt_get/ndt_set are the right default -- they are the one
+     * place that knows every dtype -- but they are indirect calls the compiler
+     * cannot inline through, and there are three of them per element here
+     * against the kernel's one.
+     *
+     * Measured by building the tree with and without it, 10^6 elements:
+     * ArcTan[v, w] 3.26 ms -> 2.49 ms (23%) and Beta[p, p] 5.27 ms -> 4.94 ms
+     * (6%). Beta gains less because three lgammas per element dominate what the
+     * marshalling costs, where atan2 does not -- so the lane is worth most
+     * exactly where the kernel is cheapest, which is the same reason it is most
+     * of the win for the unary elementary set (ndu_hot_chunk). */
+    if (x->dt0 == NDT_FLOAT64 && x->dt1 == NDT_FLOAT64 && x->dto == NDT_FLOAT64) {
+        const double* a = (const double*)x->in0;
+        const double* b = (const double*)x->in1;
+        double* o = (double*)x->out;
+        for (size_t j = lo; j < hi; j++) {
+            double orr, oii;
+            if (!x->k->cplx(a[j], 0.0, b[j], 0.0, &orr, &oii)) return false;
+            o[j] = orr;
+        }
+        return true;
+    }
+    for (size_t j = lo; j < hi; j++) {
+        double are, aim, bre, bim, orr, oii;
+        ndt_get(x->in0, j, x->dt0, &are, &aim);
+        ndt_get(x->in1, j, x->dt1, &bre, &bim);
+        if (!x->k->cplx(are, aim, bre, bim, &orr, &oii)) return false;
         ndt_set(x->out, j, x->dto, orr, oii);
     }
     return true;
@@ -1586,6 +1644,40 @@ Expr* ndarray_map_unary(const Expr* a, const NDUnaryKernel* k) {
          * so nothing they do changes. */
     }
 
+    /* AN int64 BUFFER WITH NO EXACT ARM HAS NO HONEST ANSWER BELOW.
+     *
+     * Every remaining branch sizes its output buffer from the INPUT dtype and
+     * writes through ndt_set, whose NDT_INT64 case is `(int64_t)re` -- so a
+     * double result lands in an integer slot and is TRUNCATED. Measured, before
+     * this guard:
+     *
+     *     Sin[NDArray[{1, 2, 3}, DataType -> "int64"]]  ->  {0, 0, 0}
+     *     Exp[NDArray[{1, 2, 3}, DataType -> "int64"]]  ->  {2, 7, 20}
+     *     Erf, Tanh, Cos, BesselJ, Log[2, .]            ->  likewise
+     *
+     * silently, for every real_closed kernel without an exact arm -- 56 of the
+     * 85 registered. The to_real projections were wrong here too, differently:
+     * Re/Im/Arg wrote a FLOAT64 result from an integer buffer, so Re[intArray]
+     * gave {1., 2., 3.} where the List gives the exact {1, 2, 3}. That is why
+     * Im sits on pack.c's NOT_AWARE list; this guard covers the visible surface
+     * the same way.
+     *
+     * A PACKED list never reached this: src/eval.c's transparency gate
+     * materialises an int64 buffer for any head that has not claimed
+     * packed_int64_ok, so the List path answered. The VISIBLE NDArray surface
+     * has no such gate (`is_packed_list` is false for it, by design), and
+     * nothing else stood between an integer buffer and a double kernel.
+     *
+     * Declining is the same rule the gate applies, for the same reason:
+     * materialising is always an option, being wrong is not. The caller
+     * degrades to ndarray_delist_and_reeval and the answer is exactly what
+     * Sin[{1, 2, 3}] gives, so all three representations now agree.
+     *
+     * This does not touch the exact arms: Floor/Ceiling/Round/IntegerPart/
+     * Sign/UnitStep/Abs (and Mod/Quotient below) return above via to_int_i and
+     * keep their integer fast path. */
+    if (dta == NDT_INT64) return NULL;
+
     /* Projection (Abs/Re/Im/Arg): always a real output, even for complex input.
      * The real dtype keeps the input's component width. */
     if (k->to_real) {
@@ -1641,7 +1733,12 @@ Expr* ndarray_map_unary(const Expr* a, const NDUnaryKernel* k) {
 }
 
 Expr* ndarray_map_binary(const Expr* a0, const Expr* a1, const NDBinaryKernel* k) {
-    if (!k || !k->cplx) return NULL;   /* !cplx => sentinel: degrade to List */
+    /* A kernel with no `cplx` is not necessarily a sentinel any more: GCD, LCM
+     * and DivisorSigma are defined on the integers and have `to_int_i` only.
+     * The test therefore moved down to each branch that actually calls `cplx`,
+     * where a sentinel still declines and the caller still degrades to the List
+     * path -- unchanged behaviour for every kernel that has one. */
+    if (!k) return NULL;
     /* Exactly one operand is an NDArray; the other is a broadcast scalar. */
     const Expr* arr; const Expr* scal; bool arr_first;
     if (is_ndarray(a0) && !is_ndarray(a1))      { arr = a0; scal = a1; arr_first = true; }
@@ -1656,6 +1753,62 @@ Expr* ndarray_map_binary(const Expr* a0, const Expr* a1, const NDBinaryKernel* k
     size_t sz = ndarray_size(arr);
     int rank = arr->data.ndarray.rank;
     const int64_t* dims = arr->data.ndarray.dims;
+
+    /* EXACT INTEGER arms (Mod, Quotient) -- the binary twin of the narrowing
+     * branch in ndarray_map_unary, and it comes FIRST for the same reason: an
+     * exact answer that exists must not be computed in double and rounded back.
+     *
+     * Serial and all-or-nothing on purpose: one element that has no exact int64
+     * answer (a zero divisor, an INT64_MIN / -1 overflow, a real too large to
+     * narrow) abandons the whole array so the List path answers with GMP.
+     * Abandon, never wrap. */
+    if (k->to_int && !ndt_is_complex(dta) && !s_cplx) {
+        int64_t nsi = 0;
+        bool scal_exact_int = (scal->type == EXPR_INTEGER);
+        if (scal_exact_int) nsi = scal->data.integer;
+
+        bool use_i = (dta == NDT_INT64) && scal_exact_int && k->to_int_i;
+        /* The real arm reads elements through ndt_get, which routes an int64
+         * through `double` and is exact only to 2^53. That is faithful for a
+         * buffer whose elements are ALREADY inexact and a wrong answer for one
+         * whose elements are not: Quotient[{10^17, ...}, 1/2] would divide a
+         * rounded element where the List path divides in mpq. So an int64
+         * buffer takes the exact arm or nothing, and "nothing" means the
+         * NDT_INT64 guard below declines and the List path answers. */
+        bool use_r = !use_i && k->to_int_r && dta != NDT_INT64;
+        if (use_i || use_r) {
+            int64_t* out = (int64_t*)malloc(sizeof(int64_t) * (sz ? sz : 1));
+            if (!out) return NULL;
+            bool ok = true;
+            for (size_t i = 0; i < sz && ok; i++) {
+                if (use_i) {
+                    int64_t e = ndt_get_i(in, i, dta);
+                    ok = arr_first ? k->to_int_i(e, nsi, &out[i])
+                                   : k->to_int_i(nsi, e, &out[i]);
+                } else {
+                    double re, im;
+                    ndt_get(in, i, dta, &re, &im);
+                    ok = arr_first ? k->to_int_r(re, sre, &out[i])
+                                   : k->to_int_r(sre, re, &out[i]);
+                }
+            }
+            if (!ok) { free(out); return NULL; }   /* degrade to the List path */
+            return expr_new_ndarray_like(arr, rank, dims, out, NDT_INT64);
+        }
+        /* No arm for THIS dtype/scalar pair -- an int64 buffer with a Real
+         * scalar, which is Mod[{1,2,3}, 2.] = {1., 0., 1.}. Falls through to
+         * the guard below, which declines so the List path answers with the
+         * Real elements the buffer could not have held. */
+    }
+
+    /* An int64 buffer with no exact arm above: see the same guard in
+     * ndarray_map_unary. Every branch below sizes its output from the INPUT
+     * dtype and writes through ndt_set, so a double result would be truncated
+     * into an integer slot. Decline instead, and the caller's
+     * ndarray_delist_and_reeval answers exactly as the List does. */
+    if (dta == NDT_INT64) return NULL;
+
+    if (!k->cplx) return NULL;   /* integer-only kernel, or sentinel: degrade */
 
     /* Genuinely-complex output: complex input or complex scalar. Map directly. */
     if (ndt_is_complex(dta) || s_cplx) {
@@ -1697,6 +1850,108 @@ Expr* ndarray_map_binary(const Expr* a0, const Expr* a1, const NDBinaryKernel* k
     }
     free(tmp);
     return expr_new_ndarray_like(arr, rank, dims, out, dta);
+}
+
+/* Both operands are arrays. Same branch structure as the scalar-broadcast form
+ * above, and deliberately so: the two must agree element for element, since a
+ * user can write either and a packed pipeline chooses between them without
+ * being asked. The only differences are that the second operand is read through
+ * ndt_get at the same index instead of being hoisted out of the loop, and that
+ * the result dtype is the PROMOTION of the two inputs rather than the one
+ * input's.
+ *
+ * `ndarray_map_binary` declined this shape outright -- it required exactly one
+ * array -- and so did eval.c's dispatch, with the consequence that a
+ * two-argument kernel was reachable only when one argument happened to be a
+ * scalar. `ArcTan[v, w]`, the numpy `arctan2` of two vectors, and `Beta[p, p]`
+ * both fell straight through to the unevaluated call on the visible surface and
+ * to one Expr per element on the packed one, despite NDKB_ArcTan and NDKB_Beta
+ * having existed all along. Fifteen registered kernels were in the same
+ * position, so this is the engine gap rather than fifteen head-level ones. */
+Expr* ndarray_map_binary2(const Expr* a0, const Expr* a1, const NDBinaryKernel* k) {
+    if (!k) return NULL;               /* `cplx` is tested per branch, as above */
+    if (!is_ndarray(a0) || !is_ndarray(a1)) return NULL;
+
+    int rank = a0->data.ndarray.rank;
+    if (a1->data.ndarray.rank != rank) return NULL;
+    const int64_t* dims = a0->data.ndarray.dims;
+    for (int d = 0; d < rank; d++)
+        if (a1->data.ndarray.dims[d] != dims[d]) return NULL;
+
+    NDType dt0 = a0->data.ndarray.dtype, dt1 = a1->data.ndarray.dtype;
+    const void* in0 = a0->data.ndarray.data;
+    const void* in1 = a1->data.ndarray.data;
+    size_t sz = ndarray_size(a0);
+    /* A visible NDArray on either side wins the presentation, which is what
+     * nd_present_src2 encodes -- Beta[packed, visible] is a visible answer. */
+    const Expr* psrc = nd_present_src2(a0, a1);
+
+    /* EXACT INTEGER arm, as in the scalar form: an exact answer that exists must
+     * not be computed in double and rounded back. Both operands have to be
+     * int64 for it; a mixed int64/real pair has an inexact answer and falls to
+     * the guard below. Serial and all-or-nothing -- one element with no exact
+     * int64 answer abandons the whole array so the List path answers in GMP. */
+    if (k->to_int && dt0 == NDT_INT64 && dt1 == NDT_INT64 && k->to_int_i) {
+        int64_t* out = (int64_t*)malloc(sizeof(int64_t) * (sz ? sz : 1));
+        if (!out) return NULL;
+        bool ok = true;
+        for (size_t i = 0; i < sz && ok; i++)
+            ok = k->to_int_i(ndt_get_i(in0, i, dt0), ndt_get_i(in1, i, dt1), &out[i]);
+        if (!ok) { free(out); return NULL; }
+        return expr_new_ndarray_like(psrc, rank, dims, out, NDT_INT64);
+    }
+
+    /* An int64 operand with no exact arm: every branch below reads through
+     * ndt_get, which routes an int64 through `double` and is exact only to
+     * 2^53. Decline, and ndarray_delist_and_reeval answers as the List does. */
+    if (dt0 == NDT_INT64 || dt1 == NDT_INT64) return NULL;
+
+    if (!k->cplx) return NULL;   /* integer-only kernel, or sentinel: degrade */
+
+    NDType dtp = ndt_promote(dt0, dt1);
+
+    /* Genuinely-complex output: either operand complex. */
+    if (ndt_is_complex(dtp)) {
+        void* out = malloc(ndt_elem_size(dtp) * (sz ? sz : 1));
+        if (!out) return NULL;
+        ndb2_ctx ctx = { in0, in1, out, dt0, dt1, dtp, k };
+        if (!nd_parallel_for(sz, ndb2_map_chunk, &ctx)) { free(out); return NULL; }
+        return expr_new_ndarray_like(psrc, rank, dims, out, dtp);
+    }
+
+    /* Real inputs, real-closed function: real output. */
+    if (k->real_closed) {
+        void* out = malloc(ndt_elem_size(dtp) * (sz ? sz : 1));
+        if (!out) return NULL;
+        ndb2_ctx ctx = { in0, in1, out, dt0, dt1, dtp, k };
+        if (!nd_parallel_for(sz, ndb2_map_chunk, &ctx)) { free(out); return NULL; }
+        return expr_new_ndarray_like(psrc, rank, dims, out, dtp);
+    }
+
+    /* Real inputs, may escape the real axis (Log[b, x] on a negative x):
+     * compute complex, narrow back iff every element came out real. */
+    NDType dtcplx = ndt_as_complex(dtp);
+    void* tmp = malloc(ndt_elem_size(dtcplx) * (sz ? sz : 1));
+    if (!tmp) return NULL;
+    bool any_imag = false;
+    for (size_t j = 0; j < sz; j++) {
+        double are, bre, im, orr, oii;
+        ndt_get(in0, j, dt0, &are, &im);
+        ndt_get(in1, j, dt1, &bre, &im);
+        if (!k->cplx(are, 0.0, bre, 0.0, &orr, &oii)) { free(tmp); return NULL; }
+        if (oii != 0.0) any_imag = true;
+        ndt_set(tmp, j, dtcplx, orr, oii);
+    }
+    if (any_imag) return expr_new_ndarray_like(psrc, rank, dims, tmp, dtcplx);
+    void* out = malloc(ndt_elem_size(dtp) * (sz ? sz : 1));
+    if (!out) { free(tmp); return NULL; }
+    for (size_t j = 0; j < sz; j++) {
+        double re, im;
+        ndt_get(tmp, j, dtcplx, &re, &im);
+        ndt_set(out, j, dtp, re, im);
+    }
+    free(tmp);
+    return expr_new_ndarray_like(psrc, rank, dims, out, dtp);
 }
 
 Expr* ndarray_delist_and_reeval(const Expr* call) {

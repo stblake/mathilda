@@ -292,6 +292,32 @@ Expr* na_scalar(double re, double im)
     return expr_new_function(expr_new_symbol("Complex"), args, 2);
 }
 
+/* Normalise negative zero in a machine linalg result.
+ *
+ * LAPACK's factorisations produce -0.0 wherever a zero entry came out of a
+ * subtraction or a sign flip: `Inverse[{{2., 0.}, {0., 2.}}]` came back as
+ * {{0.5, -0.0}, {0.0, 0.5}}. The sign of a zero in a matrix result carries no
+ * information -- the entry is exactly zero, and which way it was reached is an
+ * artefact of the pivoting -- but it PRINTS, and it printed differently from
+ * the exact path, which answers the same expression with 0.0.
+ *
+ * That divergence was invisible while PACK_MIN_ELEMENTS was 250, because a
+ * matrix small enough to read was never packed and so never reached LAPACK.
+ * Lowering it to 4 on 2026-08-02 put a 2x2 on this path and made the two
+ * surfaces print different answers for the same input, which is exactly what
+ * pack.h's "a representation may never change a value" exists to prevent.
+ *
+ * Only ever turns -0.0 into 0.0, so no non-zero value can be touched.
+ *
+ * The assignment is NOT a no-op and should not be "simplified" away: -0.0
+ * compares equal to 0.0 and has a different bit pattern, so the store is the
+ * whole point. Written as a compare-and-store rather than `x + 0.0` because
+ * that identity holds only under round-to-nearest. */
+static void na_fix_negative_zero(double* data, size_t n)
+{
+    for (size_t i = 0; i < n; i++) if (data[i] == 0.0) data[i] = 0.0;
+}
+
 Expr* na_build_vector(const double* buf, int n, bool is_complex)
 {
     if (n <= 0) return NULL;
@@ -299,6 +325,7 @@ Expr* na_build_vector(const double* buf, int n, bool is_complex)
         double* data = (double*)malloc((size_t)n * sizeof(double));
         if (!data) return NULL;
         memcpy(data, buf, (size_t)n * sizeof(double));
+        na_fix_negative_zero(data, (size_t)n);
         int64_t dims[1] = { n };
         return expr_new_ndarray_raw(1, dims, data, NDT_FLOAT64);   /* moves `data` */
     }
@@ -307,6 +334,7 @@ Expr* na_build_vector(const double* buf, int n, bool is_complex)
     double* data = (double*)malloc((size_t)n * 2 * sizeof(double));
     if (!data) return NULL;
     memcpy(data, buf, (size_t)n * 2 * sizeof(double));
+    na_fix_negative_zero(data, (size_t)n * 2);
     int64_t dims[1] = { n };
     return expr_new_ndarray_raw(1, dims, data, NDT_COMPLEX64);     /* moves `data` */
 }
@@ -326,6 +354,7 @@ Expr* na_build_matrix(const double* buf, int rows, int cols, bool is_complex,
         } else {
             memcpy(data, buf, (size_t)rows * (size_t)cols * sizeof(double));
         }
+        na_fix_negative_zero(data, (size_t)rows * (size_t)cols);
         int64_t dims[2] = { rows, cols };
         return expr_new_ndarray_raw(2, dims, data, NDT_FLOAT64);    /* moves `data` */
     }
@@ -341,6 +370,7 @@ Expr* na_build_matrix(const double* buf, int rows, int cols, bool is_complex,
             data[dst]     = buf[off];
             data[dst + 1] = buf[off + 1];
         }
+    na_fix_negative_zero(data, (size_t)rows * (size_t)cols * 2);
     int64_t dims[2] = { rows, cols };
     return expr_new_ndarray_raw(2, dims, data, NDT_COMPLEX64);     /* moves `data` */
 }

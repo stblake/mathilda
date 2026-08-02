@@ -5,8 +5,65 @@
 #include "core.h"
 #include "sym_names.h"
 #include "assoc.h"
+#include "ndarray.h"   /* is_ndarray — see patterns_delist_visible */
 #include <stdlib.h>
 #include <string.h>
+
+/* A VISIBLE NDArray[...] is an ATOM to everything in this file.
+ *
+ * The matcher walks `data.function.args`, and an EXPR_NDARRAY has none — so
+ * every head here searched an expression with no elements and answered, with
+ * complete confidence, that it found nothing:
+ *
+ *     MemberQ[NDArray[Range[1., 300.]], 5.]   ->  False   (List: True)
+ *     Count[NDArray[Range[300]], 5]           ->  0       (List: 1)
+ *     Position[NDArray[Range[300]], 5]        ->  {}      (List: {{5}})
+ *     Cases[NDArray[Range[300]], 5]           ->  {}      (List: {5})
+ *
+ * That is worse than declining: a wrong answer that looks like a right one.
+ *
+ * The PACKED representation was never affected, because these heads are not on
+ * pack.c's AWARE list and the transparency gate materialises their arguments
+ * before they run. This is the same asymmetry that let every real kernel
+ * truncate a visible int64 buffer (ndarray_map_unary): the gate protects one
+ * representation and the other has to be handled where it arrives.
+ *
+ * Materialising is the right answer rather than a buffer-aware matcher: a
+ * pattern here is an arbitrary expression, so there is no fast path to reach —
+ * only a correct answer to produce. By the time a builtin runs, a packed
+ * argument has already been materialised by the gate, so this fires only for a
+ * genuinely visible array and costs nothing otherwise.
+ *
+ * ONLY args[0], the expression being searched -- never the PATTERN. The two
+ * arguments are not the same kind of thing: materialising the searched
+ * expression preserves the answer by the transparency contract, while
+ * materialising a pattern would change what it matches, since a visible
+ * NDArray[...] and the plain List of the same values are distinct expressions.
+ * `MemberQ[list, NDArray[{1., 2.}]]` asks for elements equal to that array and
+ * must keep asking for exactly that. The single-argument OPERATOR forms
+ * (`Cases[patt]`, `MemberQ[patt]`) are skipped for the same reason: their one
+ * argument is the pattern.
+ *
+ * Rebuilt by hand rather than through ndarray_delist_and_reeval, which
+ * materialises EVERY array argument -- the pattern included, which is precisely
+ * what must not happen here.
+ *
+ * Returns the re-evaluated call, or NULL when args[0] is not an array. */
+static Expr* patterns_delist_visible(Expr* res) {
+    if (!res || res->type != EXPR_FUNCTION) return NULL;
+    size_t n = res->data.function.arg_count;
+    if (n < 2) return NULL;                                 /* operator form */
+    if (!is_ndarray(res->data.function.args[0])) return NULL;
+
+    Expr** args = malloc(sizeof(Expr*) * n);
+    if (!args) return NULL;
+    args[0] = ndarray_to_nested_list(res->data.function.args[0]);
+    for (size_t i = 1; i < n; i++)
+        args[i] = expr_copy(res->data.function.args[i]);
+    Expr* rebuilt = expr_new_function(expr_copy(res->data.function.head), args, n);
+    free(args);
+    return eval_and_free(rebuilt);
+}
 
 static int64_t get_expr_depth_patterns(Expr* e, bool heads) {
     if (e->type != EXPR_FUNCTION) return 1;
@@ -82,6 +139,9 @@ static void do_cases_at_level(Expr* e, int64_t current_level, int64_t min_l, int
  * pattern and association-value threading) and takes the first match. */
 Expr* builtin_first_case(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    /* A visible NDArray is an atom to the matcher; materialise it first.
+     * See patterns_delist_visible. */
+    { Expr* nd_ = patterns_delist_visible(res); if (nd_) return nd_; }
     size_t argc = res->data.function.arg_count;
     if (argc != 2 && argc != 3) return NULL;
 
@@ -122,6 +182,9 @@ Expr* builtin_delete_missing(Expr* res) {
 
 Expr* builtin_cases(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    /* A visible NDArray is an atom to the matcher; materialise it first.
+     * See patterns_delist_visible. */
+    { Expr* nd_ = patterns_delist_visible(res); if (nd_) return nd_; }
     size_t argc = res->data.function.arg_count;
     
     if (argc == 1) {
@@ -319,6 +382,9 @@ static Expr* do_delete_cases_at_level(Expr* e, int64_t current_level, int64_t mi
 
 Expr* builtin_delete_cases(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    /* A visible NDArray is an atom to the matcher; materialise it first.
+     * See patterns_delist_visible. */
+    { Expr* nd_ = patterns_delist_visible(res); if (nd_) return nd_; }
     size_t argc = res->data.function.arg_count;
 
     if (argc == 1) {
@@ -445,6 +511,9 @@ static void do_position_at_level(Expr* e, int64_t current_level, int64_t min_l, 
 
 Expr* builtin_position(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    /* A visible NDArray is an atom to the matcher; materialise it first.
+     * See patterns_delist_visible. */
+    { Expr* nd_ = patterns_delist_visible(res); if (nd_) return nd_; }
     size_t argc = res->data.function.arg_count;
     
     if (argc == 1) {
@@ -593,6 +662,9 @@ static void do_count_at_level(Expr* e, int64_t current_level, int64_t min_l, int
 
 Expr* builtin_count(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    /* A visible NDArray is an atom to the matcher; materialise it first.
+     * See patterns_delist_visible. */
+    { Expr* nd_ = patterns_delist_visible(res); if (nd_) return nd_; }
     size_t argc = res->data.function.arg_count;
     
     if (argc == 1) {
@@ -692,6 +764,9 @@ static bool do_member_at_level(Expr* e, int64_t current_level, int64_t min_l, in
 
 Expr* builtin_memberq(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    /* A visible NDArray is an atom to the matcher; materialise it first.
+     * See patterns_delist_visible. */
+    { Expr* nd_ = patterns_delist_visible(res); if (nd_) return nd_; }
     size_t argc = res->data.function.arg_count;
     
     if (argc == 1) {

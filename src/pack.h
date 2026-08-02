@@ -48,16 +48,40 @@
 #include <stdint.h>
 
 /* Minimum TOTAL element count (product of dims, not the leading dimension) for
- * automatic packing. Matches Mathematica's $MinPackedArrayLength default.
+ * automatic packing.
  *
- * The performance break-even in this codebase is around n = 2: packing costs
- * ~26 ns/element and saves ~30 ns/element on the very next evaluation pass. So
- * 250 is chosen for BLAST RADIUS, not for cost. Below it lives essentially all
- * symbolic and pattern-matching code, where a 300 ns saving is not worth
- * routing a value through a second representation. Counting total elements
- * rather than length is deliberate: a 3 x 100000 matrix is the single
- * best-value shape in the space and a length test would refuse it. */
-#define PACK_MIN_ELEMENTS ((size_t)250)
+ * 4 = a 2x2 matrix, the smallest thing anyone does linear algebra on, so the
+ * rule this encodes is "any matrix packs". Counting total elements rather than
+ * length is what makes that expressible, and is deliberate for the other end of
+ * the range too: a 3 x 100000 matrix is the single best-value shape in the space
+ * and a length test would refuse it.
+ *
+ * IT WAS 250 -- Mathematica's $MinPackedArrayLength default -- and the reason
+ * given was BLAST RADIUS, not cost: below it lives essentially all symbolic and
+ * pattern-matching code, where a 300 ns saving is not worth routing a value
+ * through a second representation. The break-even was already known to be around
+ * n = 2 (packing costs ~26 ns/element and saves ~30 ns/element on the very next
+ * pass), so this was a deliberate margin, not a measurement.
+ *
+ * What that margin actually cost, measured 2026-08-02 on `Table[..., {200}]`
+ * over a 6x6 (36 elements, so it never packed):
+ *
+ *     Det[A6]            102.8 ms  ->  0.189 ms      544x
+ *     Inverse[A6]        120.8 ms  ->  0.473 ms      255x
+ *     LinearSolve[A6,b6] 134.2 ms  ->  0.397 ms      338x
+ *     A6 . A6             12.9 ms  ->  0.108 ms      120x
+ *
+ * A 6x6 never reaching LAPACK is not a 300 ns question. The threshold was
+ * hiding a complete fast path behind a margin chosen for safety, and the safety
+ * was never measured either -- so it was swept: 250, 64, 36, 16, 8, 4, 2 against
+ * pattern matching, rule application, Cases/MatchQ, Table, Expand, Solve, D,
+ * Integrate, Sort, Join, Nest and Simplify. Down to 4 there is NO regression on
+ * any of them (`Table[Table[i j, {i,8},{j,8}], {5000}]` gets 19% faster, since
+ * 64 elements now packs). At 2 the linalg numbers stop improving and Integrate
+ * gives back 7%, which is why the boundary sits at a matrix and not a pair.
+ *
+ * MATHILDA_PACK_MIN overrides this per session; see pack_min_elements(). */
+#define PACK_MIN_ELEMENTS ((size_t)4)
 
 /* Master switch. Off when MATHILDA_NO_PACK is set in the environment (read
  * once, lazily), or when pack_set_enabled(false) has been called. The

@@ -309,11 +309,25 @@ static bool ndk_LogB_c(double bre, double bim, double zre, double zim,
     *rr = creal(w); *ri = cimag(w);
     return isfinite(*rr) && isfinite(*ri);
 }
-static const NDBinaryKernel NDKB_Log = { ndk_LogB_c, false };
+static const NDBinaryKernel NDKB_Log = { ndk_LogB_c, false, NULL, NULL, false };
 
 /* ArcTan[x, y] = arg(x + I y). Real for real inputs (real_closed). */
 static bool ndk_ArcTan2_c(double xre, double xim, double yre, double yim,
                           double* rr, double* ri) {
+    /* REAL inputs go straight to atan2, which is what the scalar builtin calls
+     * (src/trig.c). The complex form below is arg via csqrt and clog, and on
+     * real data it lands 1-2 ulp away from atan2 -- 68 of 400 elements differed
+     * on the sweep's `arctan2` probe. Under the sweep's 1e-5 tolerance that
+     * never showed, but the contract this file states at the top is that a
+     * kernel reproduces the scalar builtin's libc computation, and here it
+     * simply had not. atan2 also gets the branch at (0, 0), the negative-zero
+     * sign convention and the infinities right by definition, where the
+     * csqrt/clog route declines on s == 0 and abandoned the whole array for one
+     * such pair. */
+    if (xim == 0.0 && yim == 0.0) {
+        *rr = atan2(yre, xre); *ri = 0.0;
+        return isfinite(*rr);
+    }
     double complex x = xre + xim * I, y = yre + yim * I;
     double complex s = csqrt(x * x + y * y);
     if (s == 0.0) return false;
@@ -321,7 +335,7 @@ static bool ndk_ArcTan2_c(double xre, double xim, double yre, double yim,
     *rr = creal(w); *ri = cimag(w);
     return isfinite(*rr) && isfinite(*ri);
 }
-static const NDBinaryKernel NDKB_ArcTan = { ndk_ArcTan2_c, true };
+static const NDBinaryKernel NDKB_ArcTan = { ndk_ArcTan2_c, true, NULL, NULL, false };
 
 /* Mod[m, n] = m - n floor(m/n) and Quotient[m, n] = floor(m/n) over real
  * arrays (floored division, result carrying the divisor's sign — matches
@@ -339,8 +353,71 @@ static bool ndk_Quotient_c(double mre, double mim, double nre, double nim,
     double v = floor(mre / nre);
     *rr = v; *ri = 0.0; return isfinite(v);
 }
-static const NDBinaryKernel NDKB_Mod      = { ndk_Mod_c,      true };
-static const NDBinaryKernel NDKB_Quotient = { ndk_Quotient_c, true };
+/* ---- Mod / Quotient: the EXACT integer arms ------------------------------ *
+ *
+ * WHY THESE EXIST. `Mod` had a kernel and was packed_aware, but was absent from
+ * pack.c's INT64_OK -- correctly, because the double kernel above would write
+ * {0., 1.} where the List path gives the exact {0, 1}. The consequence was not
+ * that Mod was slow. It was that Mod DESTROYED PACKING, and everything
+ * downstream of it paid:
+ *
+ *     jv = Mod[Range[10^6] 7919, 1000]      came back a plain List of 10^6
+ *                                           boxed Integers
+ *     Union[kv]        807 ms   ->  4.58 ms once the buffer survives  (176x)
+ *     Tally[jv]        68.1 ms  ->  1.89 ms                            (36x)
+ *     DeleteDuplicates 67.1 ms  ->  1.80 ms                            (37x)
+ *
+ * The set operations were never the problem: they are on AWARE and INT64_OK and
+ * are fast when handed a buffer. They never were, because the very first
+ * operation in the pipeline dropped it. That is the shape of finding this
+ * round's audit was written to see -- a head whose own row looks fine and whose
+ * cost lands on its consumers.
+ *
+ * SEMANTICS, matched to builtin_mod / builtin_quotient in core.c rather than to
+ * C's operators, which truncate toward zero where these floor:
+ *   Quotient[m, n] = Floor[m/n]           (core.c: mpz_fdiv_q)
+ *   Mod[m, n]      = m - n Floor[m/n]     so the result carries n's sign
+ * Checked against Mathematica: Mod[-7, 3] = 2, Mod[7, -3] = -2,
+ * Quotient[-7, 3] = -3, Quotient[7, -3] = -3.
+ *
+ * Every "return false" abandons the whole array to the List path, which answers
+ * with GMP:
+ *   n == 0        Mod[m, 0] and Quotient[m, 0] are unevaluated, not a trap
+ *   n == -1       m % -1 and m / -1 are UB at m == INT64_MIN. Mod is 0 for all
+ *                 m, so that one is answered directly; Quotient[INT64_MIN, -1]
+ *                 overflows int64 and declines.
+ *   real, unrepresentable  ndk_narrow_ok's range test, as for Floor. */
+static bool ndk_Mod_ii(int64_t m, int64_t n, int64_t* o) {
+    if (n == 0) return false;
+    if (n == -1 || n == 1) { *o = 0; return true; }   /* also dodges the UB */
+    int64_t r = m % n;
+    if (r != 0 && ((r < 0) != (n < 0))) r += n;       /* truncated -> floored */
+    *o = r;
+    return true;
+}
+
+static bool ndk_Quotient_ii(int64_t m, int64_t n, int64_t* o) {
+    if (n == 0) return false;
+    if (n == -1 && m == INT64_MIN) return false;      /* overflows int64 */
+    int64_t q = m / n, r = m % n;
+    if (r != 0 && ((r < 0) != (n < 0))) q -= 1;       /* truncated -> floored */
+    *o = q;
+    return true;
+}
+
+/* Quotient NARROWS: real in, exact Integer out, matching builtin_quotient's
+ * real fallback, which ends in expr_new_integer((int64_t)floor(...)). Mod has
+ * no such arm on purpose -- its result takes the argument's exactness, and
+ * `real_closed` already says that. */
+static bool ndk_Quotient_ri(double m, double n, int64_t* o) {
+    if (n == 0.0) return false;
+    return ndk_narrow_ok(floor(m / n), o);
+}
+
+static const NDBinaryKernel NDKB_Mod =
+    { ndk_Mod_c,      true, NULL,             ndk_Mod_ii,      true };
+static const NDBinaryKernel NDKB_Quotient =
+    { ndk_Quotient_c, true, ndk_Quotient_ri,  ndk_Quotient_ii, true };
 
 /* ---- special functions: real machine kernels ---------------------------- */
 /* These cover the common real-array case at C speed via libc; a complex NDArray
@@ -387,8 +464,8 @@ static bool ndk_BesselY_c(double nre, double nim, double zre, double zim,
     if (nim != 0.0 || zim != 0.0 || nre != floor(nre)) return false;
     *rr = yn((int)nre, zre); *ri = 0.0; return isfinite(*rr);
 }
-static const NDBinaryKernel NDKB_BesselJ = { ndk_BesselJ_c, true };
-static const NDBinaryKernel NDKB_BesselY = { ndk_BesselY_c, true };
+static const NDBinaryKernel NDKB_BesselJ = { ndk_BesselJ_c, true, NULL, NULL, false };
+static const NDBinaryKernel NDKB_BesselY = { ndk_BesselY_c, true, NULL, NULL, false };
 
 /* Beta[a, b] = Gamma[a] Gamma[b] / Gamma[a+b] over real arrays via libc. */
 static bool ndk_Beta_c(double are, double aim, double bre, double bim,
@@ -397,7 +474,7 @@ static bool ndk_Beta_c(double are, double aim, double bre, double bim,
     double v = tgamma(are) * tgamma(bre) / tgamma(are + bre);
     *rr = v; *ri = 0.0; return isfinite(v);
 }
-static const NDBinaryKernel NDKB_Beta = { ndk_Beta_c, true };
+static const NDBinaryKernel NDKB_Beta = { ndk_Beta_c, true, NULL, NULL, false };
 
 /* Exponential-integral family and friends.  These modules compute in MPFR and
  * round at the end, so there was no double path to reuse — the kernels in
@@ -491,9 +568,9 @@ static bool ndk_LegendreP_c(double nre, double nim, double xre, double xim,
     double v; if (!sf_machine_legendre_p(nre, xre, &v)) return false;
     *rr = v; *ri = 0.0; return true;
 }
-static const NDBinaryKernel NDKB_Pochhammer = { ndk_Pochhammer_c, true };
-static const NDBinaryKernel NDKB_Binomial   = { ndk_Binomial_c,   true };
-static const NDBinaryKernel NDKB_LegendreP  = { ndk_LegendreP_c,  true };
+static const NDBinaryKernel NDKB_Pochhammer = { ndk_Pochhammer_c, true, NULL, NULL, false };
+static const NDBinaryKernel NDKB_Binomial   = { ndk_Binomial_c,   true, NULL, NULL, false };
+static const NDBinaryKernel NDKB_LegendreP  = { ndk_LegendreP_c,  true, NULL, NULL, false };
 
 #define NDK_BIN2(NAME, FN)                                                     \
 static bool ndk_##NAME##_c(double are, double aim, double bre, double bim,     \
@@ -502,7 +579,7 @@ static bool ndk_##NAME##_c(double are, double aim, double bre, double bim,     \
     double v; if (!FN(are, bre, &v)) return false;                             \
     *rr = v; *ri = 0.0; return true;                                           \
 }                                                                              \
-static const NDBinaryKernel NDKB_##NAME = { ndk_##NAME##_c, true };
+static const NDBinaryKernel NDKB_##NAME = { ndk_##NAME##_c, true, NULL, NULL, false };
 NDK_BIN2(BesselI,           sf_machine_bessel_i)
 NDK_BIN2(BesselK,           sf_machine_bessel_k)
 NDK_BIN2(PolyLog,           sf_machine_polylog)
@@ -549,8 +626,8 @@ static const NDNaryKernel NDKN_LerchPhi            = { ndk_LerchPhi_n, 3, true }
 static const NDNaryKernel NDKN_Hypergeometric1F1   = { ndk_Hyper1F1_n, 3, true };
 static const NDNaryKernel NDKN_Hypergeometric2F1   = { ndk_Hyper2F1_n, 4, true };
 #define REG_N(NAME) symtab_set_ndarray_nary_kernel(#NAME, &NDKN_##NAME)
-static const NDBinaryKernel NDKB_PolyGamma   = { ndk_PolyGamma_c,   true };
-static const NDBinaryKernel NDKB_HurwitzZeta = { ndk_HurwitzZeta_c, true };
+static const NDBinaryKernel NDKB_PolyGamma   = { ndk_PolyGamma_c,   true, NULL, NULL, false };
+static const NDBinaryKernel NDKB_HurwitzZeta = { ndk_HurwitzZeta_c, true, NULL, NULL, false };
 
 /* ---- registration ------------------------------------------------------- */
 

@@ -424,6 +424,25 @@ check-packed-aware:
 check-array-exactness:
 	python3 tools/check_array_exactness.py
 
+# `make check-nd-surfaces` — does every head reach the SAME fast path from a
+# packed List and from a visible NDArray, and agree on the answer?
+#
+# The two checks above are static: one reads dispatch sites, the other reads the
+# registries. Neither can see a head that has no fast path on EITHER surface
+# (which is how DeleteDuplicates stayed at 72x NumPy through four sweeps), and
+# neither can see the two surfaces DISAGREEING — which they did, silently, until
+# 2026-08-01: every real kernel truncated a visible int64 NDArray, so
+# Sin[NDArray[{1,2,3}, DataType -> "int64"]] was {0, 0, 0}. The gate that keeps
+# the packed surface safe is exactly what leaves the visible one unguarded.
+#
+# This runs the binary over numeric_sweep.py's 284 probes on all three
+# representations, so it is a release/pre-merge gate rather than a per-push one.
+# `--survival` is the cheap half and answers a different question: which
+# producers hand back a plain List that would have packed, making their
+# CONSUMERS slow. Needs ./Mathilda built.
+check-nd-surfaces:
+	python3 tools/nd_surface_audit.py --survival
+
 # Report the compiler the build will ACTUALLY use. `gcc --version` does not
 # answer that: the autodetection above prefers a versioned `gcc-NN` over the
 # plain name, so on a host with both, a bare `gcc --version` names one compiler
@@ -435,7 +454,7 @@ print-cc:
 	@$(CC) --version 2>/dev/null | head -1
 
 .PHONY: all clean docs docs-build docs-serve check-c99 check-packed-aware \
-        check-array-exactness print-cc
+        check-array-exactness check-nd-surfaces print-cc
 
 # Pull in the auto-generated header dependencies. The leading `-` silences the
 # "no such file" notice on a fresh tree (no .d files exist until the first

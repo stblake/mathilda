@@ -100,6 +100,11 @@ comes **first** in `Beta[z, a, b]`.
 - Symbolic arguments (`Beta[a, b]`, `Beta[z, a, b]`, `Beta[z0, z1, a, b]`)
   stay unevaluated.
 
+> **Packed arrays.** `Beta[a, b]` runs elementwise over buffers, including
+> the case where **both** arguments are arrays. The machine kernel sits about
+> one ulp from the arbitrary-precision path, as every machine special-function
+> kernel does.
+
 ## Erf
 
 - `Erf[z]` — the error function erf(z) = (2/√π) ∫₀^z e^(−t²) dt.
@@ -796,6 +801,13 @@ Out[6]= 530.19188827362590438855961685444087792733053398358
 In[7]:= D[HypergeometricPFQ[{a1, a2}, {b1, b2, b3}, x], x]
 Out[7]= (a1 a2 HypergeometricPFQ[{1 + a1, 1 + a2}, {1 + b1, 1 + b2, 1 + b3}, x])/(b1 b2 b3)
 ```
+
+> **Packed arrays.** With a real buffer as `z` and every parameter inexact,
+> the series is summed elementwise over the buffer. `Hypergeometric0F1`,
+> `1F1` and `2F1` all rewrite to `HypergeometricPFQ`, so they take the same
+> path. **Exact** parameters do not: the parameter-cancellation, terminating
+> and closed-form reductions answer with exact or symbolic results
+> (`Hypergeometric2F1[1, 1, 2, z]` is `-Log[1 - z]/z`) and must keep running.
 
 ## Hypergeometric0F1
 

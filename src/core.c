@@ -53,6 +53,7 @@
 #include "list.h"
 #include "assoc.h"
 #include "ndarray.h"
+#include "ndinteger.h"
 #include "pack.h"
 #include "ndstruct.h"
 #include "replace.h"
@@ -750,6 +751,7 @@ void core_init(void) {
     assoc_init();
     ndarray_init();
     ndkernels_init();   /* elementary-function NDArray element-wise kernels */
+    ndinteger_init();   /* exact-integer NDArray kernels (GCD, EulerPhi, ...) */
     pack_init();        /* ToNDArray / FromNDArray over the same storage */
     replace_init();
     patterns_init();
@@ -1773,6 +1775,20 @@ Expr* builtin_append(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* expr = res->data.function.args[0];
     Expr* elem = res->data.function.args[1];
+    /* One allocation and two memcpys on the buffer. Until this existed Append
+     * was "correct by omission" in pack.c -- the gate materialised 10^6 Exprs
+     * so the generic walk below could add one element to the end. */
+    if (is_ndarray(expr)) {
+        Expr* nd = ndstruct_append(res, false);
+        /* ndarray_delist_and_reeval, NOT ndstruct_delist_repack. The repack
+         * variant re-packs a VISIBLE array's result at the source dtype, and
+         * the whole reason this declined is that the appended element does not
+         * belong to that dtype -- so repacking would coerce it and answer
+         * Append[NDArray[{1., 2.}], 0] with a trailing 0. where the List gives
+         * the exact 0. Mixed exact/inexact is the correct answer and no buffer
+         * holds it. */
+        return nd ? nd : ndarray_delist_and_reeval(res);
+    }
     if (expr->type != EXPR_FUNCTION) return NULL;
     
     size_t new_count = expr->data.function.arg_count + 1;
@@ -1790,6 +1806,10 @@ Expr* builtin_prepend(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* expr = res->data.function.args[0];
     Expr* elem = res->data.function.args[1];
+    if (is_ndarray(expr)) {                       /* see builtin_append above */
+        Expr* nd = ndstruct_append(res, true);
+        return nd ? nd : ndarray_delist_and_reeval(res);
+    }
     if (expr->type != EXPR_FUNCTION) return NULL;
     
     size_t new_count = expr->data.function.arg_count + 1;
@@ -2238,6 +2258,17 @@ Expr* builtin_positive(Expr* res) {
 
     Expr* arg = res->data.function.args[0];
 
+    /* A machine buffer answers in one pass: read the elements straight out of
+     * it and emit the List of True/False, with no Expr built for any input and
+     * no evaluator round-trip per element. Declines every shape it does not
+     * cover (complex, rank > 1, an Indeterminate element), and the ordinary
+     * path below then answers exactly as before. */
+    if (is_ndarray(arg)) {
+        Expr* nd = ndint_sign_predicate(res, NDSP_POSITIVE);
+        if (nd) return nd;
+        return ndarray_delist_and_reeval(res);
+    }
+
     /* Only decide for numeric quantities; symbolic arguments stay unevaluated. */
     if (!is_numeric_quantity(arg)) return NULL;
 
@@ -2259,6 +2290,17 @@ Expr* builtin_negative(Expr* res) {
     }
 
     Expr* arg = res->data.function.args[0];
+
+    /* A machine buffer answers in one pass: read the elements straight out of
+     * it and emit the List of True/False, with no Expr built for any input and
+     * no evaluator round-trip per element. Declines every shape it does not
+     * cover (complex, rank > 1, an Indeterminate element), and the ordinary
+     * path below then answers exactly as before. */
+    if (is_ndarray(arg)) {
+        Expr* nd = ndint_sign_predicate(res, NDSP_NEGATIVE);
+        if (nd) return nd;
+        return ndarray_delist_and_reeval(res);
+    }
 
     /* Only decide for numeric quantities; symbolic arguments stay unevaluated. */
     if (!is_numeric_quantity(arg)) return NULL;
@@ -2285,6 +2327,17 @@ Expr* builtin_nonnegative(Expr* res) {
 
     Expr* arg = res->data.function.args[0];
 
+    /* A machine buffer answers in one pass: read the elements straight out of
+     * it and emit the List of True/False, with no Expr built for any input and
+     * no evaluator round-trip per element. Declines every shape it does not
+     * cover (complex, rank > 1, an Indeterminate element), and the ordinary
+     * path below then answers exactly as before. */
+    if (is_ndarray(arg)) {
+        Expr* nd = ndint_sign_predicate(res, NDSP_NONNEGATIVE);
+        if (nd) return nd;
+        return ndarray_delist_and_reeval(res);
+    }
+
     /* Only decide for numeric quantities; symbolic arguments stay unevaluated. */
     if (!is_numeric_quantity(arg)) return NULL;
 
@@ -2309,6 +2362,17 @@ Expr* builtin_nonpositive(Expr* res) {
     }
 
     Expr* arg = res->data.function.args[0];
+
+    /* A machine buffer answers in one pass: read the elements straight out of
+     * it and emit the List of True/False, with no Expr built for any input and
+     * no evaluator round-trip per element. Declines every shape it does not
+     * cover (complex, rank > 1, an Indeterminate element), and the ordinary
+     * path below then answers exactly as before. */
+    if (is_ndarray(arg)) {
+        Expr* nd = ndint_sign_predicate(res, NDSP_NONPOSITIVE);
+        if (nd) return nd;
+        return ndarray_delist_and_reeval(res);
+    }
 
     /* Only decide for numeric quantities; symbolic arguments stay unevaluated. */
     if (!is_numeric_quantity(arg)) return NULL;

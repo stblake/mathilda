@@ -198,6 +198,10 @@ In[2]:= Counts[<|"a" -> 1, "b" -> 1, "c" -> 2|>]
 Out[2]= <|1 -> 2, 2 -> 1|>
 ```
 
+> **Packed arrays.** Over a packed list or an `NDArray`, `Counts` keys on the
+> raw machine words — the same count `Tally` does — and relabels the result as
+> an `Association`, at one pass over the *distinct* values.
+
 ## GroupBy
 Groups the elements of a list by the value of `f` applied to each element.
 Hash-indexed grouping in `O(n)` plus the cost of `f`.

@@ -2,6 +2,7 @@
 
 #pragma once
 #include <stdio.h>
+#include "ndarray.h"   /* is_packed_list / ndarray_to_nested_list */
 #include <assert.h>
 #include <string.h>
 #include <unistd.h>
@@ -54,6 +55,22 @@ static inline void assert_eval_startswith(const char* input, const char* prefix)
  * builds with CMAKE_BUILD_TYPE=Release pass -DNDEBUG, which silently
  * compiles every assert() to (void)0.  We need test failures to abort
  * the binary unconditionally so CTest sees the non-zero exit code. */
+/* Normalise a result to an ORDINARY List so a test can walk data.function.args.
+ *
+ * A packed list is an EXPR_NDARRAY with no args[] array, and it is a List by
+ * every language-level measure (`Head` is List, `ListQ` is True) -- so a C test
+ * that asserts `type == EXPR_FUNCTION` is asserting a storage decision, not a
+ * value. That decision moves: PACK_MIN_ELEMENTS went from 250 to 4 on
+ * 2026-08-02 and five test files began failing on results that had simply
+ * started packing, none of which had changed value. Consumes `r` and returns a
+ * List the caller owns; a non-packed argument is returned unchanged. */
+static inline Expr* test_delist(Expr* r) {
+    if (!r || !is_packed_list(r)) return r;
+    Expr* out = ndarray_to_nested_list(r);
+    expr_free(r);
+    return out;
+}
+
 #define ASSERT(cond) do { \
     if (!(cond)) { \
         fprintf(stderr, "FAIL: assertion failed: %s\n    at %s:%d\n", \

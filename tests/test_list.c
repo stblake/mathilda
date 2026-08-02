@@ -219,7 +219,9 @@ void test_table_list() {
 
 void test_table_nested() {
     Expr* t = parse_expression("Table[i + j, {i, 2}, {j, 3}]");
-    Expr* res = evaluate(t);
+    /* 6 elements packs at PACK_MIN_ELEMENTS = 4; the value is unchanged and a
+     * packed list is a List, but this walks args[] directly. */
+    Expr* res = test_delist(evaluate(t));
     ASSERT(res->type == EXPR_FUNCTION);
     ASSERT_STR_EQ(res->data.function.head->data.symbol.name, "List");
     ASSERT(res->data.function.arg_count == 2);

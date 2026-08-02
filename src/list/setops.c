@@ -25,9 +25,21 @@
  *  second implementation. Integers have no such pair.
  * ------------------------------------------------------------------------- */
 
-/* True when `e` is a rank-1 packed list of int64 -- the only shape below. */
+/* True when `e` is a rank-1 int64 buffer -- the only shape below.
+ *
+ * `is_ndarray`, NOT `is_packed_list`: a VISIBLE NDArray[...] holds the same
+ * int64 buffer and is the same fast domain. Testing for the packed form alone
+ * meant the visible surface fell straight through to ndarray_delist_and_reeval
+ * and ran the boxed hash path on a materialised List -- measured at 10^6
+ * elements, Union 5.85 ms packed against 850 ms visible (145x) and
+ * DeleteDuplicates 2.05 ms against 147 ms (72x), on identical data.
+ *
+ * Presentation follows the input either way: every result here is built with
+ * expr_new_ndarray_like(args[0], ...), which copies `present_as` from the
+ * operand, so a packed argument still answers with a packed List and a visible
+ * one with a visible NDArray. */
 static bool setop_i64(const Expr* e) {
-    return is_packed_list(e) && e->data.ndarray.rank == 1 &&
+    return is_ndarray(e) && e->data.ndarray.rank == 1 &&
            e->data.ndarray.dtype == NDT_INT64;
 }
 
@@ -57,11 +69,207 @@ static Expr* setop_emit(const Expr* src, int64_t* v, size_t m) {
     return expr_new_ndarray_like(src, 1, dims, buf, NDT_INT64);
 }
 
+/* ---- Direct-index membership -------------------------------------------
+ *
+ * Sorting to deduplicate costs O(n log n) comparisons and a full permutation of
+ * the buffer. When the values come from a bounded range -- labels, ids, indices,
+ * RandomInteger bounds, which is what integer set operations are usually made of
+ * -- membership is just a byte lookup, and walking the range in order emits the
+ * unique values ALREADY SORTED, so Union needs no sort at all.
+ *
+ * The table is one byte per value in the range and is only built when the range
+ * is no wider than the input it replaces, so it is never larger than the buffer
+ * already in hand. Returns 0 (decline) otherwise, and the caller keeps the
+ * sort-merge path, which has no range restriction. */
+#define SETOP_DIRECT_MAX_RANGE ((uint64_t)1 << 26)
+
+static uint64_t setop_direct_range(const int64_t* v, size_t n, int64_t* mn_out) {
+    if (n == 0) return 0;
+    int64_t mn = v[0], mx = v[0];
+    for (size_t i = 1; i < n; i++) {
+        if (v[i] < mn) mn = v[i];
+        if (v[i] > mx) mx = v[i];
+    }
+    /* Unsigned: mx - mn as int64 overflows on a full-width spread, which is UB
+     * rather than a big number. The uint64 difference is exact when mx >= mn. */
+    uint64_t span = (uint64_t)mx - (uint64_t)mn;
+    if (span >= SETOP_DIRECT_MAX_RANGE || span + 1 > (uint64_t)n) return 0;
+    *mn_out = mn;
+    return span + 1;
+}
+
+/* Deduplicate `a`'s buffer by direct indexing. `sorted` picks the output order:
+ * true walks the range (ascending -- Union), false walks the input (first
+ * appearance -- DeleteDuplicates). Returns NULL when the range declines. */
+static Expr* setop_direct_unique(const Expr* a, bool sorted) {
+    size_t n = (size_t)a->data.ndarray.dims[0];
+    const int64_t* v = (const int64_t*)a->data.ndarray.data;
+    int64_t mn = 0;
+    uint64_t range = setop_direct_range(v, n, &mn);
+    if (!range) return NULL;
+
+    unsigned char* seen = calloc((size_t)range, 1);
+    if (!seen) return NULL;
+    int64_t* out = malloc(sizeof(int64_t) * n);
+    if (!out) { free(seen); return NULL; }
+
+    size_t m = 0;
+    if (sorted) {
+        for (size_t i = 0; i < n; i++) seen[(uint64_t)v[i] - (uint64_t)mn] = 1;
+        for (uint64_t d = 0; d < range; d++)
+            if (seen[d]) out[m++] = mn + (int64_t)d;
+    } else {
+        for (size_t i = 0; i < n; i++) {
+            uint64_t d = (uint64_t)v[i] - (uint64_t)mn;
+            if (!seen[d]) { seen[d] = 1; out[m++] = v[i]; }
+        }
+    }
+    free(seen);
+
+    int64_t dims[1] = { (int64_t)m };
+    if (m == 0) { free(out); return expr_new_function(expr_new_symbol(SYM_List), NULL, 0); }
+    int64_t* buf = realloc(out, sizeof(int64_t) * m);   /* shrink to fit */
+    if (buf) out = buf;
+    return expr_new_ndarray_like(a, 1, dims, out, NDT_INT64);
+}
+
+/* The two- and many-list forms, by the same direct index. One int32 per value
+ * in the global range holds a BITMASK of which lists contain it, which makes all
+ * three operations the same walk with a different predicate:
+ *
+ *      Union         mask != 0
+ *      Intersection  mask == all-lists
+ *      Complement    mask == 1          (in the first list and no other)
+ *
+ * Walking the range ascending emits sorted-and-deduplicated output directly, so
+ * none of the three sorts. Capped at 32 lists because the mask is 32 bits; past
+ * that (and for a range too wide to index) the sort-merge below still runs, and
+ * it has no such restriction. */
+static Expr* setop_direct_multi(Expr** args, size_t nl, int mode) {
+    if (nl < 2 || nl > 32) return NULL;
+
+    int64_t mn = 0, mx = 0;
+    size_t total = 0;
+    bool seeded = false;
+    for (size_t i = 0; i < nl; i++) {
+        size_t ni = (size_t)args[i]->data.ndarray.dims[0];
+        const int64_t* vi = (const int64_t*)args[i]->data.ndarray.data;
+        total += ni;
+        for (size_t j = 0; j < ni; j++) {
+            if (!seeded) { mn = mx = vi[j]; seeded = true; continue; }
+            if (vi[j] < mn) mn = vi[j];
+            if (vi[j] > mx) mx = vi[j];
+        }
+    }
+    if (!seeded || total == 0)                     /* every list empty */
+        return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+
+    uint64_t span = (uint64_t)mx - (uint64_t)mn;
+    if (span >= SETOP_DIRECT_MAX_RANGE || span + 1 > (uint64_t)total) return NULL;
+    uint64_t range = span + 1;
+
+    uint32_t* mask = calloc((size_t)range, sizeof(uint32_t));
+    if (!mask) return NULL;
+    for (size_t i = 0; i < nl; i++) {
+        size_t ni = (size_t)args[i]->data.ndarray.dims[0];
+        const int64_t* vi = (const int64_t*)args[i]->data.ndarray.data;
+        uint32_t bit = (uint32_t)1 << i;
+        for (size_t j = 0; j < ni; j++)
+            mask[(uint64_t)vi[j] - (uint64_t)mn] |= bit;
+    }
+
+    uint32_t all = (nl == 32) ? 0xFFFFFFFFu : (((uint32_t)1 << nl) - 1);
+    int64_t* out = malloc(sizeof(int64_t) * (size_t)range);
+    if (!out) { free(mask); return NULL; }
+    size_t m = 0;
+    for (uint64_t d = 0; d < range; d++) {
+        uint32_t k = mask[d];
+        bool keep = (mode == 0) ? (k != 0)
+                  : (mode == 1) ? (k == all)
+                                : (k == 1u);
+        if (keep) out[m++] = mn + (int64_t)d;
+    }
+    free(mask);
+
+    int64_t dims[1] = { (int64_t)m };
+    if (m == 0) { free(out); return expr_new_function(expr_new_symbol(SYM_List), NULL, 0); }
+    int64_t* buf = realloc(out, sizeof(int64_t) * m);
+    if (buf) out = buf;
+    return expr_new_ndarray_like(args[0], 1, dims, out, NDT_INT64);
+}
+
+/* Wide-range fallback for DeleteDuplicates: an open-addressed int64 set. The
+ * key sits in the slot rather than behind an index, so a probe is ONE dependent
+ * load -- the same reason ndred_tally stores its entries inline. Still far
+ * cheaper than the generic path, which boxes every element into an Expr first. */
+typedef struct { int64_t key; uint8_t used; } SetSlot;
+
+static Expr* setop_hash_first_unique(const Expr* a) {
+    size_t n = (size_t)a->data.ndarray.dims[0];
+    const int64_t* v = (const int64_t*)a->data.ndarray.data;
+
+    size_t cap = 1024;
+    while (cap * 7 < n * 10) {              /* keep load factor under 0.7 */
+        if (cap > ((size_t)1 << 40)) return NULL;
+        cap *= 2;
+    }
+    size_t mask = cap - 1;
+    SetSlot* tab = calloc(cap, sizeof(SetSlot));
+    if (!tab) return NULL;
+    int64_t* out = malloc(sizeof(int64_t) * n);
+    if (!out) { free(tab); return NULL; }
+
+    size_t m = 0;
+    for (size_t i = 0; i < n; i++) {
+        uint64_t k = (uint64_t)v[i];
+        /* splitmix64 finalizer: consecutive integers would otherwise collide in
+         * long runs under linear probing. */
+        uint64_t z = k;
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+        size_t h = (size_t)(z ^ (z >> 31)) & mask;
+        for (;;) {
+            if (!tab[h].used) { tab[h].used = 1; tab[h].key = v[i]; out[m++] = v[i]; break; }
+            if (tab[h].key == v[i]) break;
+            h = (h + 1) & mask;
+        }
+    }
+    free(tab);
+
+    int64_t dims[1] = { (int64_t)m };
+    if (m == 0) { free(out); return expr_new_function(expr_new_symbol(SYM_List), NULL, 0); }
+    int64_t* buf = realloc(out, sizeof(int64_t) * m);
+    if (buf) out = buf;
+    return expr_new_ndarray_like(a, 1, dims, out, NDT_INT64);
+}
+
+/* DeleteDuplicates[packed int64 list] -- first-appearance order, like the List
+ * path. NULL means "not my shape", and the caller degrades. */
+static Expr* setop_packed_delete_duplicates(const Expr* a) {
+    if (!setop_i64(a)) return NULL;
+    if ((size_t)a->data.ndarray.dims[0] == 0)
+        return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+    Expr* direct = setop_direct_unique(a, false);
+    return direct ? direct : setop_hash_first_unique(a);
+}
+
 /* Union / Intersection / Complement over `nl` packed int64 lists. `mode` is 0,
  * 1, 2 respectively. Returns NULL when the shape is outside the fast domain. */
 static Expr* setop_packed(Expr** args, size_t nl, int mode) {
     for (size_t i = 0; i < nl; i++) if (!setop_i64(args[i])) return NULL;
     if (nl == 0) return NULL;
+
+    /* Union[list] is the overwhelmingly common single-list call, and it is
+     * exactly "sorted unique" -- which direct indexing produces without a sort,
+     * because walking the range emits ascending by construction. */
+    if (nl == 1 && mode == 0 && (size_t)args[0]->data.ndarray.dims[0] > 0) {
+        Expr* direct = setop_direct_unique(args[0], true);
+        if (direct) return direct;
+    }
+    if (nl > 1) {
+        Expr* direct = setop_direct_multi(args, nl, mode);
+        if (direct) return direct;
+    }
 
     int64_t* acc; size_t accn;
     if (!setop_sorted_unique(args[0], &acc, &accn)) return NULL;
@@ -647,6 +855,24 @@ Expr* builtin_deleteduplicates(Expr* res) {
      * returning an association (Wolfram semantics). Only the default (no custom
      * test) case is hash-indexed here; a custom test falls through unhandled. */
     if (test == NULL && is_association(list)) return assoc_delete_duplicate_values(list);
+
+    /* Packed int64 with the default test: dedup on the machine words. Without
+     * this the transparency gate materialised the whole buffer into one Expr per
+     * element before the hash table below could start -- 1.3 s over 10^7.
+     *
+     * EVERY other array shape must delist here, not fall through. Once this head
+     * is on pack.c's AWARE list the gate stops materialising for it, so an
+     * NDArray reaches the code below -- which tests `type != EXPR_FUNCTION` and
+     * would return the input UNCHANGED, silently deduplicating nothing. That is
+     * what a custom SameTest over a packed list did until this branch covered
+     * it; the differential check in tests/test_packed_list.c pins it. */
+    if (is_ndarray(list)) {
+        if (test == NULL) {
+            Expr* fast = setop_packed_delete_duplicates(list);
+            if (fast) return fast;
+        }
+        return ndarray_delist_and_reeval(res);
+    }
 
     if (list->type != EXPR_FUNCTION) return expr_copy(list);
     

@@ -28,6 +28,8 @@
  */
 
 #include "hypergeopfq.h"
+#include "ndarray.h"
+#include "sf_machine.h"    /* NDArray buffer path for the elementwise argument */
 #include "symtab.h"
 #include "attr.h"
 #include "eval.h"
@@ -696,6 +698,61 @@ Expr* builtin_hypergeometric_pfq(Expr* res) {
     Expr* b = res->data.function.args[1];
     Expr* z = res->data.function.args[2];
     if (!is_list(a) || !is_list(b)) return NULL;
+
+    /* (1b) A machine buffer as the argument: map the double series over it.
+     *
+     * This is what Hypergeometric1F1[a, b, arr] and Hypergeometric2F1[...] turn
+     * into -- both rewrite to PFQ before anything else sees them -- so without
+     * it a visible NDArray came back unevaluated and a packed List was
+     * materialised into one Expr per element, each going round the evaluator.
+     *
+     * EVERY PARAMETER MUST BE INEXACT, and that restriction is the correctness
+     * argument rather than a convenience. Steps (3)-(6) below are not slower
+     * routes to the same number: try_cancel, try_terminate and try_reduce
+     * answer with EXACT or CLOSED FORMS -- 2F1[1, 1, 2, z] is -Log[1-z]/z, and
+     * a terminating upper parameter gives a polynomial -- and those fire on
+     * exact parameters. A Real parameter cannot match them, so the series
+     * really is what the scalar path would have computed. Anything else, and
+     * any element the kernel declines, falls through to the code below
+     * unchanged. */
+    if (is_ndarray(z)) {
+        NDType zdt = z->data.ndarray.dtype;
+        size_t p = a->data.function.arg_count, q = b->data.function.arg_count;
+        /* An exact-integer buffer has no place here: the series is computed in
+         * double, and Hypergeometric1F1[0.5, 1.5, {1, 2, 3}] over the List path
+         * evaluates each exact argument in its own right. Complex likewise --
+         * sf_machine_pfq is real-valued. Both degrade below. */
+        bool all_real = (zdt != NDT_INT64) && !ndt_is_complex(zdt);
+        for (size_t i = 0; i < p && all_real; i++)
+            if (a->data.function.args[i]->type != EXPR_REAL) all_real = false;
+        for (size_t i = 0; i < q && all_real; i++)
+            if (b->data.function.args[i]->type != EXPR_REAL) all_real = false;
+        if (all_real) {
+            double* pa = malloc(sizeof(double) * (p ? p : 1));
+            double* pb = malloc(sizeof(double) * (q ? q : 1));
+            if (pa && pb) {
+                for (size_t i = 0; i < p; i++) pa[i] = a->data.function.args[i]->data.real;
+                for (size_t i = 0; i < q; i++) pb[i] = b->data.function.args[i]->data.real;
+                NDType dt = zdt;
+                size_t sz = ndarray_size(z);
+                void* out = malloc(ndt_elem_size(dt) * (sz ? sz : 1));
+                bool ok = (out != NULL);
+                for (size_t i = 0; i < sz && ok; i++) {
+                    double zr, zi, v;
+                    ndt_get(z->data.ndarray.data, i, dt, &zr, &zi);
+                    ok = sf_machine_pfq(pa, p, pb, q, zr, &v);
+                    if (ok) ndt_set(out, i, dt, v, 0.0);
+                }
+                free(pa); free(pb);
+                if (ok) return expr_new_ndarray_like(z, z->data.ndarray.rank,
+                                                     z->data.ndarray.dims, out, dt);
+                free(out);
+            } else { free(pa); free(pb); }
+        }
+        /* Declined: the buffer must not reach the scalar steps below, which
+         * test z for Integer/Real and would leave the call unevaluated. */
+        return ndarray_delist_and_reeval(res);
+    }
 
     /* (2) Thread over a List third argument. */
     if (is_list(z)) {
