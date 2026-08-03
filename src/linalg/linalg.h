@@ -45,4 +45,11 @@ Expr* exact_div_wrapper(Expr* num, Expr* den);
 #endif
 Expr* dot2(Expr* a, Expr* b, bool* error_printed);
 
+/* nd_dot_machine: BLAS-aware two-operand Dot for the Compile[] lowering
+ * (src/compile/, A_NDFN2 / V_NDFN2).  Both operands must be dense NDArrays;
+ * tries BLAS then the in-house kernel and returns NULL SILENTLY on a shape
+ * mismatch or overflow -- no diagnostic, the interpreter fallback reports it.
+ * A scalar for vector.vector, an NDArray otherwise.  Caller owns the result. */
+Expr* nd_dot_machine(const Expr* a, const Expr* b);
+
 #endif // LINALG_H

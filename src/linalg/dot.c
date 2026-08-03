@@ -117,6 +117,26 @@ static Expr* nd_blas_matmul(const Expr* a, const Expr* b) {
 }
 #endif
 
+/* Machine Dot for the compiler (COMPILE_MISSING.md §3, A_NDFN2 / V_NDFN2).
+ *
+ * Both operands are already dense NDArrays -- the compiled path never holds a
+ * plain-List operand -- so there is nothing to pack and nothing to marshal.
+ * Tries the threaded BLAS path FIRST (bit-identical to dot2's, so a compiled
+ * matrix product matches the REPL and is not slower than it), then the in-house
+ * kernel for the complex case BLAS declines.  Returns NULL SILENTLY on any
+ * shape mismatch or int64 overflow -- with NO diagnostic -- because a declined
+ * compiled op re-runs in the interpreter, which reports the error exactly once.
+ * Returns a scalar leaf for vector.vector and an EXPR_NDARRAY for matrix shapes,
+ * matching dot2.  The caller owns the result. */
+Expr* nd_dot_machine(const Expr* a, const Expr* b) {
+#ifdef USE_LAPACK
+    Expr* bl = nd_blas_matmul(a, b);   /* real f64: ddot / dgemv / dgemm */
+    if (bl) return bl;
+#endif
+    bool shape_error = false;          /* swallowed: the interpreter fallback reports it */
+    return ndarray_dot2(a, b, &shape_error);
+}
+
 /* Build a nested-List tensor of shape dims[0..rank-1] by consuming leaves
  * from `flat` in row-major order.  Each leaf is deep-copied. */
 static Expr* build_tensor(int64_t* dims, int rank, Expr** flat, size_t* idx) {

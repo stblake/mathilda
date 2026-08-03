@@ -232,6 +232,12 @@ enum {
      * integer vector is a Rational, which no machine slot holds) and so needs \
      * no such split.  imm.p is the NdRedSpec. */                              \
     X(V_NDRED, K_ARR)                                                       \
+    /* Delegated TWO-array heads (COMPILE_MISSING.md §3).  A_NDFN2 reads two    \
+     * array registers and produces an array (Dot matrix shapes, LinearSolve,   \
+     * Cross, LeastSquares, ListConvolve/Correlate, Join); V_NDFN2 the SCALAR    \
+     * form (Dot's vector.vector inner product).  Both rebuild the whole call    \
+     * and delegate, like A_NDFN.  imm.p is the NdFn2Spec. */                    \
+    X(A_NDFN2, K_ARR) X(V_NDFN2, K_ARR)                                     \
     X(A_SIZE, K_UN)   X(A_NEWLIKE, K_ARR) X(A_SHAPECHK, K_ASTORE)          \
     X(A_LOAD_R, K_ALOAD) X(A_LOAD_C, K_ALOAD) X(A_LOAD_I, K_ALOAD)         \
     X(A_STORE_R, K_ASTORE) X(A_STORE_C, K_ASTORE) X(A_STORE_I, K_ASTORE)   \
@@ -458,5 +464,7 @@ bool compile_optimize(Instr* code, size_t* n, int nreg, int arr_base, int tile_b
  * point of having a dump.  `imm` is the instruction's Slot.p; NULL-safe. */
 const char* nd_fn_head_name(const void* imm);
 const char* nd_red_head_name(const void* imm);
+/* The head an A_NDFN2 / V_NDFN2 delegates to (ND_FN2S in compile.c). */
+const char* nd_fn2_head_name(const void* imm);
 
 #endif /* MATHILDA_COMPILE_INTERNAL_H */

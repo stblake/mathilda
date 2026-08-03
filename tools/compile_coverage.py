@@ -85,6 +85,11 @@ SHAPES = [
     ("m_r",   "array",  "{{m, _Real, 2}}",                 "%s[m]"),
     ("m_rr",  "array",  "{{m, _Real, 2}, {p, _Real, 2}}",  "%s[m, p]"),
     ("m_rv",  "array",  "{{m, _Real, 2}, {v, _Real, 1}}",  "%s[m, v]"),
+    # A matrix with an integer scalar.  MatrixPower[m, k] has no valid 1-arg
+    # spelling (MatrixPower[m] is unevaluated), so without this shape the tool
+    # probes MatrixPower[m] and reports the probe's gap, not the head's — the
+    # same failure the functional spellings below fix for Map / Fold.
+    ("m_rk",  "array",  "{{m, _Real, 2}, {k, _Integer}}",  "%s[m, k]"),
     # Functional spellings.  Leaving these out is what made the first run of
     # this tool report Map, Select, Scan, Fold and Nest as gaps: every one of
     # them compiles, just not as H[v].  A probe list that cannot express a
@@ -263,20 +268,27 @@ EXEMPT = {
 # ---------------------------------------------------------------------------
 
 BASELINE = {
-    # An array x array opcode.  A_NDFN carries one array plus trailing
-    # integers, which none of these fit.
-    "Dot", "Cross", "Inner", "Outer",
-    "Inverse", "PseudoInverse", "LinearSolve", "LeastSquares",
-    "RowReduce", "NullSpace", "MatrixPower",
-    "Normalize",
-    # (Tr, Det, MatrixRank, Norm were the COMPILE_MISSING.md §1 rank-2 -> scalar
-    #  reductions; they now lower via ND_REDS / V_NDRED — src/compile/compile.c.)
+    # Two ARRAY operands whose extra operand is a FUNCTION head, not a plain
+    # array — Inner[f, a, b, g] / Outer[f, a, b].  The A_NDFN2 opcode (added with
+    # COMPILE_MISSING.md §2/§3) carries two array registers; these also want the
+    # callback lowering Map / Fold have, so they wait on that rather than on the
+    # opcode.  (Dot, Cross, LinearSolve, LeastSquares, ListConvolve/Correlate and
+    # Join now lower via A_NDFN2 / V_NDFN2; Inverse, Normalize, MatrixPower,
+    # ReverseSort, ConjugateTranspose, PseudoInverse via ND_FNS / A_NDFN.  Tr,
+    # Det, MatrixRank, Norm were the §1 rank-2 -> scalar reductions.)
+    "Inner", "Outer",
+    # No buffer fast path in the interpreter EITHER (COMPILE_MISSING.md §9): both
+    # materialise on the first line and run the exact fraction-free path, so a
+    # compiled form would delegate to a fast path that does not exist.  A LAPACK
+    # path comes first, then a lowering.
+    "RowReduce", "NullSpace",
     "Fourier", "InverseFourier", "FourierDCT", "FourierDST",
-    "ListConvolve", "ListCorrelate",
-    # ND_FNS entries whose extra argument is not an integer (a list, a real, a
-    # second array), so the table's shape does not reach them yet.
-    "Join", "Riffle", "Partition", "PadLeft", "PadRight", "Append", "Prepend",
-    "Catenate", "ConjugateTranspose", "ReverseSort", "Extract", "Rescale",
+    # ND_FNS entries whose extra argument is not an integer (a list, a real, or a
+    # scalar separator), so the table's shape does not reach them yet.  Riffle is
+    # array + SEPARATOR (a scalar or list), not two arrays, so A_NDFN2 does not
+    # fit it — it belongs with this group, not §3.
+    "Riffle", "Partition", "PadLeft", "PadRight", "Append", "Prepend",
+    "Catenate", "Extract", "Rescale",
     "ExponentialMovingAverage",
     # Matrix PRODUCERS: the argument is a vector or a pair of integers and the
     # result is rank 2.  Needs a producing opcode, not a delegating one.

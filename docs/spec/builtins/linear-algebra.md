@@ -531,6 +531,12 @@ Gives products of vectors, matrices, and tensors.
 - Product of two matrices yields a matrix.
 - When arguments are not lists, `Dot` remains unevaluated.
 - Gives an error message `Dot::dotsh` if the shapes of the inputs are not compatible.
+- **Compilable.** Over machine arrays `Dot` lowers inside `Compile[]` and
+  auto-compilation: matrix shapes through a BLAS-first path (`A_NDFN2`), the
+  `vector·vector` inner product to a scalar (`V_NDFN2`), real and complex.
+  Together with `Inverse`, `LinearSolve`, `Cross`, `LeastSquares`, `Normalize`,
+  `MatrixPower`, `PseudoInverse`, and `ConjugateTranspose` — see
+  [packed-arrays.md](packed-arrays.md#which-array-heads-compile).
 
 ```mathematica
 In[1]:= {a, b, c} . {x, y, z}

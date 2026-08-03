@@ -465,15 +465,22 @@ point, so the compiled answer is bit-identical, rounding included:
 
 | shape | heads |
 |---|---|
-| array → array | `Reverse` `Sort` `Accumulate` `Flatten` `Transpose` `Take` `Drop` `Differences` `Ratios` `Most` `Rest` `Clip` `RotateLeft` `RotateRight` `MovingAverage` `MovingMedian` `TakeLargest` `TakeSmallest` |
-| array → scalar | `Total` `Length` `Mean` `Median` `Variance` `StandardDeviation` `RootMeanSquare` `Max` `Min` |
+| array → array | `Reverse` `Sort` `Ordering` `Accumulate` `Flatten` `Transpose` `Diagonal` `Take` `Drop` `Differences` `Ratios` `Most` `Rest` `Clip` `RotateLeft` `RotateRight` `MovingAverage` `MovingMedian` `TakeLargest` `TakeSmallest` `Inverse` `Normalize` `MatrixPower` `ReverseSort` `ConjugateTranspose` `PseudoInverse` |
+| array → scalar | `Total` `Length` `Mean` `Median` `Variance` `StandardDeviation` `RootMeanSquare` `Max` `Min` `Tr` `Det` `MatrixRank` `Norm` |
+| two arrays → array | `Dot` (matrix) `LinearSolve` `Cross` `LeastSquares` `ListConvolve` `ListCorrelate` `Join` |
+| two arrays → scalar | `Dot` (vector·vector inner product) |
 | elementwise | every registered kernel, including the narrowing ones (`Floor`, `Ceiling`, `Round`, `Sign`, `IntegerPart`, `UnitStep`) and the exact-integer ones (`Mod`, `Quotient`, `GCD`, `LCM`, `DivisorSigma`, `MoebiusMu`, `EulerPhi`, `IntegerLength`) |
 
-The reductions are **real element type only**, because their exact answer is
-not a machine number: `Mean[{1, 2}]` is `3/2` and `Variance[Range[10]]` is
-`55/6`. An integer vector declines and the interpreter answers exactly. `Max`
+The statistics reductions are **real element type only**, because their exact
+answer is not a machine number: `Mean[{1, 2}]` is `3/2` and `Variance[Range[10]]`
+is `55/6`. An integer vector declines and the interpreter answers exactly. `Max`
 and `Min` are the exceptions — they *select* an element, so an integer vector
-gives an `Integer`.
+gives an `Integer`. The linear-algebra heads carry the same kind of gate per
+head: `Inverse`, `Normalize`, `MatrixPower`, `Dot`, `LinearSolve`, `Cross` accept
+real or complex (an int matrix inverse is exact Rationals → declines);
+`LeastSquares`/`PseudoInverse` are real only; `ReverseSort`/`ConjugateTranspose`/
+`Join` preserve any dtype. `Dot` delegates through a BLAS-first path
+(`dgemm`/`dgemv`/`ddot`), so a compiled matrix product is as fast as the REPL's.
 
 Anything a delegated head cannot handle comes back as a materialised `List`,
 which the VM reads as "not a buffer" and hands to the interpreter — so

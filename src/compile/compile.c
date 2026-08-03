@@ -15,8 +15,12 @@
 #include "../attr.h"      /* ATTR_LISTABLE — the gate on elementwise fusion */
 #include "../ndarray.h"    /* NDUnaryKernel / NDBinaryKernel — shared kernel layer */
 #include "../ndreduce.h"   /* ndred_total / ndred_accumulate — array reductions */
-#include "../ndstruct.h"   /* ndstruct_reverse / _sort / _diagonal — delegated structure */
-#include "../linalg/ndlinalg.h"  /* ndla_tr / _det / _matrixrank / _norm — delegated linalg reductions */
+#include "../ndstruct.h"   /* ndstruct_reverse / _sort / _diagonal / _join — delegated structure */
+#include "../linalg/ndlinalg.h"  /* ndla_tr / _det / _matrixrank / _norm / _inverse / _linearsolve / _cross ... */
+#include "../linalg/linalg.h"    /* builtin_matrixpower, nd_dot_machine — §2/§3 delegated linalg heads */
+#include "../list/transpose.h"   /* builtin_conjugate_transpose — §2 */
+#include "../sort.h"             /* builtin_reverse_sort — §2 */
+#include "../convolutions.h"     /* builtin_list_convolve / _correlate — §3 */
 #include "../ndarray_internal.h"  /* nd_parallel_for — threading the fused map loop */
 #include "../print.h"      /* expr_to_string — printing the node a bail choked on */
 #include "../sym_names.h" /* SYM_All / SYM_Span / SYM_List — Part subscript specs */
@@ -1098,7 +1102,21 @@ static Expr* fn_head_call(const char* head, int n) {
  *
  * `rank_rule`: 0 = same rank as the operand, 1 = rank 1 (Flatten), 2 = rank 2
  * in and out (Transpose), 3 = rank 2 in -> rank 1 out (Diagonal: matrix ->
- * vector).  Every entry preserves the element type. */
+ * vector), 4 = rank 1 in and out (Normalize).  Each entry preserves the element
+ * type, restricted to the `elems` gate below (0 = any). */
+/* Allowed OPERAND element types, one bit per CompileType element (CT_INT etc.).
+ * `elems == 0` means "any element type" — the value for every pre-§2 row, so
+ * their behaviour is unchanged.  A head whose fast path CONVERTS a dtype
+ * (Inverse of an int matrix is exact Rationals no machine slot holds) must
+ * exclude that type here, because A_NDFN carries no result-dtype field to catch
+ * a promise/result mismatch at run time (its `flags` word is the extra-arg
+ * count); the gate bars the bad promise at compile time instead.  Every gated
+ * head is dtype-CONSISTENT on the types it does accept (real→real,
+ * complex→complex), so the promised element type always matches the result. */
+#define NDF_INT   (1u << (unsigned)CT_INT)
+#define NDF_REAL  (1u << (unsigned)CT_REAL)
+#define NDF_CPLX  (1u << (unsigned)CT_COMPLEX)
+
 typedef struct {
     const char* head;
     Expr* (*fn)(Expr*);
@@ -1106,6 +1124,7 @@ typedef struct {
     int rank_rule;
     bool int_result;   /* result is an int64 array regardless of the operand's
                         * element type (Ordering: a permutation is integer) */
+    unsigned elems;    /* allowed operand element types (NDF_* bits); 0 = any */
 } NdFnSpec;
 
 /* ndstruct_rotate / _head_tail / _take_extreme take a second C-level argument
@@ -1117,6 +1136,70 @@ static Expr* nd_most(Expr* r)         { return ndstruct_head_tail(r, ND_MOST); }
 static Expr* nd_rest(Expr* r)         { return ndstruct_head_tail(r, ND_REST); }
 static Expr* nd_take_largest(Expr* r) { return ndstruct_take_extreme(r, true); }
 static Expr* nd_take_smallest(Expr* r){ return ndstruct_take_extreme(r, false); }
+
+/* COMPILE_MISSING.md §2/§3 adapters.  Two shapes need one:
+ *   - a DIRECT-args entry point (ndla_pseudoinverse_direct / _leastsquares_direct
+ *     take the extracted matrix + Tolerance values, not the call);
+ *   - a call-shaped entry point that PRINTS a diagnostic or runs an expensive
+ *     delist-and-reeval on a structural mismatch its fast path cannot use.  A
+ *     cheap dimension check declines (NULL) BEFORE the noisy path, so a compiled
+ *     degrade stays silent — the interpreter fallback then reports it once.
+ * Each fits the table's `Expr* (*)(Expr*)` shape, BORROWS the call (the VM frees
+ * it) and returns a freshly-owned result or NULL/non-NDArray to decline. */
+static bool nd_square_matrix(const Expr* a) {
+    return a && a->type == EXPR_NDARRAY && a->data.ndarray.rank == 2
+        && a->data.ndarray.dims[0] == a->data.ndarray.dims[1];
+}
+static bool nd_rank2(const Expr* a) {
+    return a && a->type == EXPR_NDARRAY && a->data.ndarray.rank == 2;
+}
+static bool nd_vec3(const Expr* a) {
+    return a && a->type == EXPR_NDARRAY && a->data.ndarray.rank == 1
+        && a->data.ndarray.dims[0] == 3;
+}
+/* §2 single-array */
+static Expr* nd_inverse(Expr* call) {          /* non-square declines silently */
+    if (call->data.function.arg_count != 1
+        || !nd_square_matrix(call->data.function.args[0])) return NULL;
+    return ndla_inverse(call);
+}
+static Expr* nd_matrixpower(Expr* call) {      /* MatrixPower[m, e]: m square */
+    if (call->data.function.arg_count != 2
+        || !nd_square_matrix(call->data.function.args[0])) return NULL;
+    return builtin_matrixpower(call);
+}
+static Expr* nd_pseudoinverse(Expr* call) {    /* direct-args, real float64 only */
+    if (call->data.function.arg_count != 1) return NULL;
+    const Expr* a = call->data.function.args[0];
+    if (!nd_rank2(a)) return NULL;
+    return ndla_pseudoinverse_direct(a, true, 0.0);
+}
+/* §3 two-array */
+static Expr* nd_dot2(Expr* call) {             /* BLAS-first; scalar or matrix out */
+    if (call->data.function.arg_count != 2) return NULL;
+    return nd_dot_machine(call->data.function.args[0], call->data.function.args[1]);
+}
+static Expr* nd_linearsolve(Expr* call) {      /* non-conformable declines silently */
+    if (call->data.function.arg_count != 2) return NULL;
+    const Expr* a = call->data.function.args[0];
+    const Expr* b = call->data.function.args[1];
+    if (!nd_rank2(a) || !b || b->type != EXPR_NDARRAY
+        || b->data.ndarray.dims[0] != a->data.ndarray.dims[0]) return NULL;
+    return ndla_linearsolve(call);
+}
+static Expr* nd_cross(Expr* call) {            /* two length-3 vectors */
+    if (call->data.function.arg_count != 2
+        || !nd_vec3(call->data.function.args[0])
+        || !nd_vec3(call->data.function.args[1])) return NULL;
+    return ndla_cross(call);
+}
+static Expr* nd_leastsquares(Expr* call) {     /* direct-args, real float64 only */
+    if (call->data.function.arg_count != 2) return NULL;
+    const Expr* a = call->data.function.args[0];
+    const Expr* b = call->data.function.args[1];
+    if (!nd_rank2(a) || !b || b->type != EXPR_NDARRAY) return NULL;
+    return ndla_leastsquares_direct(a, b, true, 0.0);
+}
 
 static const NdFnSpec ND_FNS[] = {
     { "Reverse",    ndstruct_reverse,   0, 0 },
@@ -1160,6 +1243,20 @@ static const NdFnSpec ND_FNS[] = {
     { "MovingMedian",  ndred_moving_median,  1, 0 },
     { "TakeLargest",   nd_take_largest,      1, 0 },
     { "TakeSmallest",  nd_take_smallest,     1, 0 },
+    /* COMPILE_MISSING.md §2: single array -> array linalg heads, each delegating
+     * to its interpreter entry point (an adapter where that entry takes direct
+     * args or prints on a structural mismatch — see the adapter block above).
+     * `elems` bars an operand dtype the fast path would CONVERT: Inverse /
+     * Normalize / MatrixPower / PseudoInverse of an int operand are exact
+     * Rationals/reals no int slot holds, so real (+complex where supported)
+     * only; ReverseSort's buffer path declines complex (int+real); Conjugate-
+     * Transpose preserves any dtype.  rank_rule 4 = require rank 1 -> rank 1. */
+    { "Inverse",            nd_inverse,                   0, 2, false, NDF_REAL | NDF_CPLX },
+    { "Normalize",          ndla_normalize,               0, 4, false, NDF_REAL | NDF_CPLX },
+    { "MatrixPower",        nd_matrixpower,               1, 2, false, NDF_REAL | NDF_CPLX },
+    { "ReverseSort",        builtin_reverse_sort,         0, 0, false, NDF_INT | NDF_REAL },
+    { "ConjugateTranspose", builtin_conjugate_transpose,  0, 2, false, NDF_INT | NDF_REAL | NDF_CPLX },
+    { "PseudoInverse",      nd_pseudoinverse,             0, 2, false, NDF_REAL },
 };
 
 /* ---- delegated array -> scalar reductions ---------------------------------
@@ -1248,17 +1345,105 @@ static const NdFnSpec* nd_fn_lookup(const char* h, size_t na) {
 }
 
 /* Result type of a delegated head over an operand of type `ta`, or CT_ERR.
- * `int_result` forces the element type to CT_INT (Ordering returns an int64
- * permutation whatever the input dtype); otherwise the operand's element type is
- * preserved, so for every existing head this is identical to returning `ta`. */
+ * `elems` (when non-zero) gates the operand's element type — a head is declined
+ * for a dtype its fast path would convert, since A_NDFN cannot check the result
+ * dtype against the promise.  `int_result` forces CT_INT (Ordering returns an
+ * int64 permutation whatever the input dtype); otherwise the operand's element
+ * type is preserved.  rank_rule: 0 = same rank, 1 = rank 1, 2 = rank 2 in/out,
+ * 3 = rank 2 -> rank 1 (Diagonal), 4 = rank 1 in/out (Normalize). */
 static CompileType nd_fn_result(const NdFnSpec* s, CompileType ta) {
     if (!CT_IS_ARRAY(ta)) return CT_ERR;
+    if (s->elems && !((s->elems >> (unsigned)CT_ELEM(ta)) & 1u)) return CT_ERR;  /* operand gate */
     int rank = CT_RANK(ta);
     CompileType elem = s->int_result ? CT_INT : CT_ELEM(ta);
     if (s->rank_rule == 1) return CT_ARRAY(elem, 1);
     if (s->rank_rule == 2) return rank == 2 ? CT_ARRAY(elem, 2) : CT_ERR;
     if (s->rank_rule == 3) return rank == 2 ? CT_ARRAY(elem, 1) : CT_ERR;  /* Diagonal */
+    if (s->rank_rule == 4) return rank == 1 ? CT_ARRAY(elem, 1) : CT_ERR;  /* Normalize */
     return CT_ARRAY(elem, rank);
+}
+
+/* ---- delegated TWO-array heads (COMPILE_MISSING.md §3) --------------------
+ *
+ * The binary counterpart of ND_FNS: two machine arrays in, an array (opcode
+ * A_NDFN2) or a scalar (V_NDFN2 — only Dot's vector.vector) out.  Same contract
+ * as the single-array table — each `fn` takes the whole rebuilt call and either
+ * returns the interpreter's own answer or declines — so the compiled subset is
+ * the interpreted one by construction.  The scalar branch exists because a body
+ * containing `a.b` (an inner product) would otherwise bail wholesale: the subset
+ * is a cliff.
+ *
+ * `rank2`: the result rank as a function of the operand ranks (ra, rb):
+ *   R2_DOT   ra + rb - 2  (matrix.matrix -> 2, matrix.vector -> 1,
+ *            vector.vector -> 0 == a SCALAR, which the emitter routes to V_NDFN2)
+ *   R2_SOLVE result rank = rb, requires ra == 2  (LinearSolve, LeastSquares)
+ *   R2_VEC   requires ra == rb == 1, result rank 1  (Cross, ListConvolve/Correlate)
+ *   R2_JOIN  requires ra == rb, result rank = ra
+ * `elem`: the result element type: PROMOTE (complex iff either operand is
+ *   complex, else real) for the numeric contractions; SAME (require equal
+ *   operand dtypes, preserve) for the structural Join.  `elems` gates BOTH
+ *   operands exactly as NdFnSpec.elems gates the one. */
+typedef enum { R2_DOT, R2_SOLVE, R2_VEC, R2_JOIN } NdFn2Rank;
+typedef enum { NDF2_PROMOTE, NDF2_SAME } NdFn2Elem;
+
+typedef struct {
+    const char* head;
+    Expr* (*fn)(Expr*);
+    unsigned  elems;      /* allowed operand element types (NDF_* bits), both operands */
+    NdFn2Rank rank2;
+    NdFn2Elem elem;
+} NdFn2Spec;
+
+static const NdFn2Spec ND_FN2S[] = {
+    { "Dot",           nd_dot2,                NDF_REAL | NDF_CPLX,           R2_DOT,   NDF2_PROMOTE },
+    { "LinearSolve",   nd_linearsolve,         NDF_REAL | NDF_CPLX,           R2_SOLVE, NDF2_PROMOTE },
+    { "Cross",         nd_cross,               NDF_REAL | NDF_CPLX,           R2_VEC,   NDF2_PROMOTE },
+    { "LeastSquares",  nd_leastsquares,        NDF_REAL,                      R2_SOLVE, NDF2_PROMOTE },
+    { "ListConvolve",  builtin_list_convolve,  NDF_REAL | NDF_CPLX,           R2_VEC,   NDF2_PROMOTE },
+    { "ListCorrelate", builtin_list_correlate, NDF_REAL | NDF_CPLX,           R2_VEC,   NDF2_PROMOTE },
+    { "Join",          ndstruct_join,          NDF_INT | NDF_REAL | NDF_CPLX, R2_JOIN,  NDF2_SAME },
+};
+
+/* Name accessor for the disassembler; see compile_internal.h. */
+const char* nd_fn2_head_name(const void* imm) {
+    return imm ? ((const NdFn2Spec*)imm)->head : NULL;
+}
+
+static const NdFn2Spec* nd_fn2_lookup(const char* h, size_t na) {
+    if (na != 2) return NULL;
+    for (size_t i = 0; i < sizeof ND_FN2S / sizeof ND_FN2S[0]; i++)
+        if (strcmp(h, ND_FN2S[i].head) == 0) return &ND_FN2S[i];
+    return NULL;
+}
+
+/* Result type of a delegated two-array head over operands `ta`, `tb`, or CT_ERR.
+ * A rank-0 result is a SCALAR CompileType (Dot's vector.vector), which the emit
+ * path recognises via !CT_IS_ARRAY to pick V_NDFN2 over A_NDFN2. */
+static CompileType nd_fn2_result(const NdFn2Spec* s, CompileType ta, CompileType tb) {
+    if (!CT_IS_ARRAY(ta) || !CT_IS_ARRAY(tb)) return CT_ERR;
+    unsigned ea = (unsigned)CT_ELEM(ta), eb = (unsigned)CT_ELEM(tb);
+    if (!((s->elems >> ea) & 1u) || !((s->elems >> eb) & 1u)) return CT_ERR;  /* gate both */
+    int ra = CT_RANK(ta), rb = CT_RANK(tb);
+
+    CompileType elem;
+    if (s->elem == NDF2_SAME) {
+        if (ea != eb) return CT_ERR;                 /* Join needs equal operand dtypes */
+        elem = CT_ELEM(ta);
+    } else {                                          /* PROMOTE */
+        elem = (ea == (unsigned)CT_COMPLEX || eb == (unsigned)CT_COMPLEX) ? CT_COMPLEX : CT_REAL;
+    }
+
+    int rr;
+    switch (s->rank2) {
+        case R2_DOT:   if (ra < 1 || rb < 1) return CT_ERR; rr = ra + rb - 2; break;
+        case R2_SOLVE: if (ra != 2 || rb < 1 || rb > 2) return CT_ERR; rr = rb; break;
+        case R2_VEC:   if (ra != 1 || rb != 1) return CT_ERR; rr = 1; break;
+        case R2_JOIN:  if (ra != rb) return CT_ERR; rr = ra; break;
+        default: return CT_ERR;
+    }
+    if (rr < 0 || rr > CT_MAX_RANK) return CT_ERR;
+    if (rr == 0) return elem;                         /* scalar -> V_NDFN2 */
+    return CT_ARRAY(elem, rr);
 }
 
 /* ---- counted-loop iterator specs -------------------------------------------
@@ -1790,6 +1975,21 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
                 if (!infer_type(c, A[1 + i], &te) || te != CT_INT) return false;
             }
             CompileType rt = nd_fn_result(nf, ta);
+            if ((int)rt < 0) return false;
+            *out = rt; return true;
+        }
+    }
+    /* Delegated two-array heads (COMPILE_MISSING.md §3).  Required, not optional:
+     * compile_expr emits without pre-inferring, so a STANDALONE Dot[m,v] would
+     * compile from the emit branch alone — but a COMPOSED body (Total[Dot[m,v]],
+     * a.b + 1.0) infers its subterms, and without this it would bail wholesale,
+     * which is exactly the cliff this lowering exists to remove. */
+    {
+        const NdFn2Spec* nf2 = nd_fn2_lookup(h, na);
+        if (nf2) {
+            CompileType ta, tb;
+            if (!infer_type(c, A[0], &ta) || !infer_type(c, A[1], &tb)) return false;
+            CompileType rt = nd_fn2_result(nf2, ta, tb);
             if ((int)rt < 0) return false;
             *out = rt; return true;
         }
@@ -4253,6 +4453,25 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         }
     }
 
+    /* Dot / LinearSolve / Cross / LeastSquares / ListConvolve / ListCorrelate /
+     * Join over TWO machine arrays, delegated (COMPILE_MISSING.md §3).  arr_op
+     * reads both array registers, frees each per its tmp flag and allocates the
+     * result — an array bank register (A_NDFN2) or a scalar temp (V_NDFN2, the
+     * vector.vector Dot) depending on whether nd_fn2_result gave an array type. */
+    {
+        const NdFn2Spec* nf2 = nd_fn2_lookup(h, na);
+        if (nf2) {
+            Val a, b;
+            if (!emit(c, A[0], &a)) return false;
+            if (!emit(c, A[1], &b)) return false;
+            CompileType rt = nd_fn2_result(nf2, a.type, b.type);
+            if ((int)rt < 0) { c->ok = false; return false; }
+            Slot ip; memset(&ip, 0, sizeof ip); ip.p = nf2;
+            *out = arr_op(c, CT_IS_ARRAY(rt) ? OP_A_NDFN2 : OP_V_NDFN2, a, b, rt, ip);
+            return c->ok;
+        }
+    }
+
     /* Select / TakeWhile / LengthWhile / AllTrue / AnyTrue / NoneTrue over a
      * rank-1 array: one predicate loop, four things done with the answer.
      *
@@ -5625,6 +5844,47 @@ static bool vm_array_op(const Instr* c, Slot* d, Slot* a, Slot* b) {
             return ok;
         }
 
+        case OP_A_NDFN2: {                /* Dot (matrix) / LinearSolve / Cross / Join / ... */
+            const NdFn2Spec* fn = (const NdFn2Spec*)c->imm.p;
+            if (!a->arr || a->arr->type != EXPR_NDARRAY
+                || !b->arr || b->arr->type != EXPR_NDARRAY) return false;
+            /* Rebuild the whole call and delegate, exactly as A_NDFN — expr_copy
+             * is a refcount bump, so this costs two nodes and never a buffer. */
+            Expr* args2[2] = { expr_copy(a->arr), expr_copy(b->arr) };
+            Expr* call = expr_new_function(expr_new_symbol(fn->head), args2, 2);
+            if (!call) { expr_free(args2[0]); expr_free(args2[1]); return false; }
+            r = fn->fn(call);
+            expr_free(call);
+            /* Positive result-dtype guard: the promised element type (AF_R) must
+             * match the buffer the delegate returned, or a downstream fused loop
+             * would read it at the wrong element width.  A mismatch — or a
+             * declined non-NDArray (a scalar vector.vector Dot, a nested List)
+             * — falls through the shared tail below to the interpreter. */
+            if (r && r->type == EXPR_NDARRAY
+                && r->data.ndarray.dtype != ct_elem_ndt(AF_R(f))) {
+                expr_free(r); r = NULL;
+            }
+            break;   /* -> shared array tail: frees both operands, stores or declines */
+        }
+
+        case OP_V_NDFN2: {                /* Dot's vector.vector inner product -> scalar */
+            const NdFn2Spec* fn = (const NdFn2Spec*)c->imm.p;
+            if (!a->arr || a->arr->type != EXPR_NDARRAY
+                || !b->arr || b->arr->type != EXPR_NDARRAY) return false;
+            Expr* args2[2] = { expr_copy(a->arr), expr_copy(b->arr) };
+            Expr* call = expr_new_function(expr_new_symbol(fn->head), args2, 2);
+            if (!call) { expr_free(args2[0]); expr_free(args2[1]); return false; }
+            Expr* s = fn->fn(call);
+            expr_free(call);
+            /* BOTH operands are freed here — V_NDRED, its unary template, frees
+             * only one; a binary op that dropped the second would leak it. */
+            if (f & AF_FREE_A) { expr_free(a->arr); a->arr = NULL; }
+            if (f & AF_FREE_B) { expr_free(b->arr); b->arr = NULL; }
+            bool ok = s && vm_write_scalar(s, AF_R(f), d);
+            expr_free(s);
+            return ok;
+        }
+
         case OP_V_EW: {
             Expr* boxa = (ka == AK_ARR) ? NULL : vm_box_scalar(a, ka);
             Expr* boxb = (kb == AK_ARR) ? NULL : vm_box_scalar(b, kb);
@@ -6005,6 +6265,8 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(V_KERN2):  ARROP();
             OP(V_TOTAL):  ARROP();
             OP(V_NDRED):  ARROP();
+            OP(A_NDFN2):  ARROP();
+            OP(V_NDFN2):  ARROP();
             OP(V_LEN):    ARROP();
             /* ---- fused elementwise loop (M3b) ----------------------------
              * A_LOAD/A_STORE are the whole point of fusion: an elementwise

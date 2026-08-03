@@ -1,9 +1,12 @@
 # Heads with a numeric fast path that `Compile[]` cannot lower
 
-**48 of 236.** Recorded 2026-08-02 by `make check-compile-coverage`
+**35 of 238.** Recorded 2026-08-03 by `make check-compile-coverage`
 (`tools/compile_coverage.py`), which joins the NDArray kernel registry and
 `src/pack.c`'s `AWARE` list against the binary's own `CompileDiagnostics`.
-The §1 group (`Tr`, `Det`, `MatrixRank`, `Norm`) closed 2026-08-03.
+Closed 2026-08-03: the §1 reductions (`Tr`, `Det`, `MatrixRank`, `Norm`), the §2
+single-array heads (`Inverse`, `Normalize`, `MatrixPower`, `ReverseSort`,
+`ConjugateTranspose`, `PseudoInverse`), and the §3 two-array heads (`Dot`,
+`LinearSolve`, `Cross`, `LeastSquares`, `ListConvolve`, `ListCorrelate`, `Join`).
 
 ## Why this is a defect list and not a wish list
 
@@ -37,16 +40,18 @@ The sections are the compiler-side mechanism that would close the group, and
 heads in a group close together — which is the whole reason to group them
 rather than list 48 names.
 
-Two extension points already exist in `src/compile/compile.c`:
+Four table-driven extension points exist in `src/compile/compile.c`:
 
 | table | shape | opcode |
 |---|---|---|
 | `ND_FNS` | array → array, plus trailing **integer** arguments | `A_NDFN` |
-| `ND_REDS` | rank-1 array → **scalar** | `V_NDRED` |
+| `ND_REDS` | rank-1 (or, per entry, rank-2) array → **scalar** | `V_NDRED` |
+| `ND_FN2S` | two arrays → array | `A_NDFN2` |
+| `ND_FN2S` | two arrays → **scalar** (`Dot`'s inner product) | `V_NDFN2` |
 
-Both delegate to the interpreter's own entry point, so a new row is a lowering
+Each delegates to the interpreter's own entry point, so a new row is a lowering
 whose answer is bit-identical to the interpreted one by construction. Most of
-what follows is a statement about why a head does not fit one of those two
+what follows is a statement about why a head does not fit one of those
 shapes yet.
 
 ---
@@ -71,37 +76,48 @@ interpreter (all four are on `AWARE`), so the compiled answer is identical by
 construction; an int or complex operand declines to the interpreter, which is
 right to answer the exact number no machine slot holds.
 
-## 2. Nearly free: array → array with a single array operand
+## 2. Closed 2026-08-03: single array → array now lowers
 
-Same story for `ND_FNS`: one array in, one array out, an entry point that takes
-the whole call.
+`Inverse`, `Normalize`, `MatrixPower`, `ReverseSort`, `ConjugateTranspose`, and
+`PseudoInverse` now lower through the existing `ND_FNS` / `A_NDFN` opcode, each
+delegating to its call-shaped interpreter entry point (with a one-line adapter
+where the entry takes direct args — `PseudoInverse` — or prints on a structural
+mismatch a cheap pre-check can pre-empt — `Inverse`, `MatrixPower`).
 
-| head | note |
-|---|---|
-| `Inverse` | `ndla_inverse`; rank 2 → rank 2, which `rank_rule 2` already expresses (`Transpose` uses it) |
-| `Normalize` | `ndla_normalize`; same rank in and out |
-| `MatrixPower` | `src/linalg/matpow.c` reads the buffer directly; array + **integer** is exactly `nextra = 1` |
-| `ReverseSort` | `reverse_top_level` + `ndstruct_sort` (`src/sort.c`); wants a single wrapper entry point |
-| `ConjugateTranspose` | delegates to `Transpose` ∘ `Conjugate`, both already lowerable; wants a wrapper or a two-opcode lowering |
-| `PseudoInverse` | one array, but `ndla_pseudoinverse_direct` takes `(a, tol_automatic, tol_value)` rather than the call — deliberately, so that declining cannot re-enter the builtin that dispatched to it (`plans/HPC_IMPROVEMENT_PLAN.md` 10.2). Needs a call-shaped adapter that returns `NULL` rather than re-evaluating. |
+| head | entry point | note |
+|---|---|---|
+| `Inverse` | `ndla_inverse` | `rank_rule 2`; real + complex (an int matrix is exact Rationals → declines) |
+| `Normalize` | `ndla_normalize` | new `rank_rule 4` (require rank 1 → rank 1) |
+| `MatrixPower` | `builtin_matrixpower` | array + **integer** is the `nextra = 1` slot |
+| `ReverseSort` | `builtin_reverse_sort` | `rank_rule 0`, int + real (`Sort`'s buffer path declines complex) |
+| `ConjugateTranspose` | `builtin_conjugate_transpose` | `rank_rule 2`, any dtype |
+| `PseudoInverse` | `nd_pseudoinverse` → `ndla_pseudoinverse_direct(a, true, 0.0)` | real only |
 
-## 3. Two ARRAY operands — needs an array × array opcode
+`NdFnSpec` gained an `elems` operand-element gate (0 = any) — a head whose fast
+path converts a dtype is barred from that operand type at compile time, since
+`A_NDFN` carries no result-dtype field to catch a promise/result mismatch.
 
-`A_NDFN` carries **one** array register plus trailing integers, so none of these
-fit however the table is extended. This is the single largest blocker on the
-list: eleven heads wait on it, though `MapThread` also wants §7's callback
-lowering and `LeastSquares` an adapter besides.
+## 3. Closed 2026-08-03: two ARRAY operands now lower
 
-| head | entry point / note |
-|---|---|
-| `Dot` | the most valuable single entry here — matrix × vector is the commonest numeric kernel there is |
-| `LinearSolve` | `ndla_linearsolve` |
-| `Cross` | `ndla_cross` |
-| `LeastSquares` | `ndla_leastsquares_direct` — takes `(a, b, tol…)`, not the call, so it needs an adapter as well as the opcode |
-| `Inner`, `Outer` | general contraction |
-| `Join`, `Riffle` | structural, n-ary over arrays |
-| `ListConvolve`, `ListCorrelate` | both engines already work on flat `double` arrays |
-| `MapThread` | callback *and* two arrays |
+`Dot`, `LinearSolve`, `Cross`, `LeastSquares`, `ListConvolve`, `ListCorrelate`,
+and `Join` now lower through two new opcodes sharing one `ND_FN2S` table:
+`A_NDFN2` (two arrays → array) and `V_NDFN2` (two arrays → scalar, for `Dot`'s
+`vector·vector` inner product). Both are `K_ARR` and rebuild the whole call, like
+`A_NDFN`; the optimiser treats them opaque by kind, so no optimiser change.
+
+| head | entry point | result rank rule |
+|---|---|---|
+| `Dot` | `nd_dot2` → `nd_dot_machine` (BLAS-first, non-printing) | `ra + rb − 2`; `0` → scalar (`V_NDFN2`) |
+| `LinearSolve` | `nd_linearsolve` → `ndla_linearsolve` | result rank = rhs rank |
+| `Cross` | `nd_cross` → `ndla_cross` | rank 1 |
+| `LeastSquares` | `nd_leastsquares` → `ndla_leastsquares_direct` | result rank = rhs rank; real only |
+| `ListConvolve`, `ListCorrelate` | `builtin_list_convolve` / `_correlate` | rank 1 |
+| `Join` | `ndstruct_join` | require equal rank; preserve dtype |
+
+Still open here: **`Inner`, `Outer`** — their operands include function heads
+(`Inner[f, a, b, g]`), so they want §7's callback lowering, not a plain
+array × array opcode. **`Riffle`** is array + a scalar/list SEPARATOR, not two
+arrays, so it belongs to §6 below. **`MapThread`** is a callback (§7).
 
 ## 4. Transforms — real in, complex out
 
@@ -125,6 +141,7 @@ The blocker is the table, not the head: `ND_FNS` passes trailing operands as
 
 | head | the argument that does not fit |
 |---|---|
+| `Riffle` | the separator — a scalar or a cycling list, not an array (so `A_NDFN2` does not fit it) |
 | `PadLeft`, `PadRight` | the padding value (any element) |
 | `Partition` | offset / a list spec |
 | `Append`, `Prepend` | the element being added |

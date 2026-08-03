@@ -694,6 +694,11 @@ static void render_meaning(DBuf* b, const CompiledProgram* p, size_t i, ProgList
                     db_catf(b, "%s = %s[%s]", rd, hn ? hn : "reduce", ra);
                     return;
                 }
+                case OP_A_NDFN2: case OP_V_NDFN2: {
+                    const char* hn = nd_fn2_head_name(c->imm.p);
+                    db_catf(b, "%s = %s[%s, %s]", rd, hn ? hn : "ndfn2", ra, rb);
+                    return;
+                }
                 case OP_V_EW:      db_catf(b, "%s = %s %s %s", rd, ra,
                                            c->imm.i ? "+" : "*", rb); return;
                 case OP_V_POW:     db_catf(b, "%s = %s^%s", rd, ra, rb); return;
