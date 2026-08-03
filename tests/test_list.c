@@ -294,6 +294,44 @@ void test_range_real() {
     expr_free(t); expr_free(res);
 }
 
+/* Range used to TRUNCATE SILENTLY at 10^6 elements: `Range[2000000]` answered
+ * with 1000001 of them and said nothing, so every downstream Length, Total and
+ * Plot was quietly computed on half the data.  A resource limit is legitimate;
+ * one that changes the answer instead of declining is not, and one that does so
+ * without a message cannot even be noticed.  Found on 2026-08-02 while sizing a
+ * benchmark vector -- by accident, downstream of the damage, which is how a
+ * silent truncation always gets found.
+ *
+ * The ceiling is now on BYTES (2 GiB, ~268 million int64 elements), and
+ * reaching it leaves the call UNEVALUATED with a Range::toobig message. */
+void test_range_no_silent_truncation() {
+    /* The exact length, past the old cap, on the packed and the plain path. */
+    assert_eval_eq("Length[Range[2000000]]", "2000000", 0);
+    assert_eval_eq("Last[Range[2000000]]", "2000000", 0);
+    assert_eval_eq("Length[Range[5000000]]", "5000000", 0);
+    assert_eval_eq("Total[Range[2000000]] == 2000000*2000001/2", "True", 0);
+    /* And the two-argument and stepped forms, which count the same way. */
+    assert_eval_eq("Length[Range[1000000, 3000000]]", "2000001", 0);
+    assert_eval_eq("Length[Range[1, 4000000, 2]]", "2000000", 0);
+    /* An inexact range past the old cap. */
+    assert_eval_eq("Length[Range[0., 2000000.]]", "2000001", 0);
+
+    /* Past the resource ceiling the call DECLINES -- head Range, not a
+     * plausible short List.  This is the whole point: a caller can test for it. */
+    assert_eval_eq("Head[Range[10^12]]", "Range", 0);
+    assert_eval_eq("Head[Range[0., 1., 10^-12]]", "Range", 0);
+
+    /* Everything small is untouched, including the exact branch past 2^53 that
+     * the count-up-front rewrite fixed. */
+    assert_eval_eq("Range[10]", "{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}", 0);
+    assert_eval_eq("Range[2, 10, 3]", "{2, 5, 8}", 0);
+    assert_eval_eq("Range[10, 1]", "{}", 0);
+    assert_eval_eq("Range[0., 1., 0.25]", "{0.0, 0.25, 0.5, 0.75, 1.0}", 0);
+    assert_eval_eq("Range[10^18, 10^18 + 3]",
+                   "{1000000000000000000, 1000000000000000001, "
+                   "1000000000000000002, 1000000000000000003}", 0);
+}
+
 void test_array_n() {
     Expr* t = parse_expression("Array[f, 3]");
     Expr* res = evaluate(t);
@@ -946,6 +984,7 @@ int main() {
     TEST(test_range_imin_imax);
     TEST(test_range_imin_imax_di);
     TEST(test_range_real);
+    TEST(test_range_no_silent_truncation);
     
     TEST(test_array_n);
     TEST(test_array_n_r);

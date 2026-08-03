@@ -2,6 +2,7 @@
 #include "range.h"
 #include "../pack.h"
 #include "../checked_int.h"
+#include "../ndarray.h"   /* ndarray_warn_once */
 
 /* Range[] is the system's most-used list producer, so it is the first place
  * automatic packing pays for itself. Both branches below now decide the element
@@ -15,9 +16,43 @@
  * safety cap instead of giving four elements. The exact branch now counts in
  * int64. */
 
-/* Elements beyond this are refused rather than built. Pre-existing limit, kept
- * bit-identical on the packed and plain paths so packing stays unobservable. */
-#define RANGE_MAX_STEPS 1000000
+/* How much a Range result may occupy before the call is refused.
+ *
+ * This replaces a 10^6-ELEMENT cap that TRUNCATED SILENTLY: `Range[2000000]`
+ * answered with 1000001 elements and said nothing, so every downstream length,
+ * total and plot was quietly computed on half the data. A resource limit is
+ * legitimate; a resource limit that changes the answer instead of declining is
+ * not, and one that does so without a message cannot even be noticed. Found on
+ * 2026-08-02 while sizing a benchmark vector, which is exactly how a silent
+ * truncation gets found — by accident, downstream of the damage.
+ *
+ * Two things changed. The ceiling is now on BYTES rather than elements, which
+ * is what actually runs out, and it is ~268 million int64 elements instead of
+ * 10^6. And reaching it is REPORTED and leaves the call unevaluated, so the
+ * caller sees a Range[...] it can act on rather than a plausible short list. */
+#define RANGE_MAX_BYTES ((int64_t)1 << 31)          /* 2 GiB of result */
+#define RANGE_MAX_ELEMENTS (RANGE_MAX_BYTES / (int64_t)sizeof(int64_t))
+
+/* The ceiling is deliberately the SAME for the packed and the boxed paths,
+ * even though a boxed element costs an order of magnitude more than the eight
+ * bytes it is sized from. Giving the boxed path a tighter one would make
+ * MATHILDA_NO_PACK=1 refuse a Range that packing accepts, and the two
+ * representations agreeing on what is admissible is worth more than a
+ * better-calibrated number. The boxed paths check their allocation instead and
+ * report the same refusal if it fails. */
+
+/* Report the refusal once and let the caller return the call unevaluated. */
+static void range_too_large(double count) {
+    char msg[192];
+    snprintf(msg, sizeof msg,
+             "Range::toobig: Range of about %.0f elements exceeds the "
+             "%lld-element limit; the expression is left unevaluated.\n",
+             count, (long long)RANGE_MAX_ELEMENTS);
+    /* Once per evaluation: returning NULL leaves the node unevaluated and the
+     * fixed-point loop comes back to it, so a bare fprintf printed this five
+     * times for one Range. */
+    ndarray_warn_once(msg);
+}
 
 /* The inexact recurrence, in one place so the counting pass and the filling
  * pass cannot drift apart. Accumulating `val += di` rather than computing
@@ -95,9 +130,13 @@ Expr* builtin_range(Expr* res) {
             /* span and s share a sign, so C99's truncation toward zero is
              * floor() here. */
             int64_t count = span / s + 1;
-            if (count > RANGE_MAX_STEPS + 1) count = RANGE_MAX_STEPS + 1;
+            if (count > RANGE_MAX_ELEMENTS) {
+                range_too_large((double)count);
+                goto L_fail_range;          /* unevaluated, not truncated */
+            }
 
             expr_free(imin_e); expr_free(imax_e); expr_free(di_e);
+            imin_e = imax_e = di_e = NULL;
 
             /* Every element lies between a and b, so `cur += s` cannot leave
              * int64 -- no overflow check needed inside either loop. */
@@ -109,6 +148,7 @@ Expr* builtin_range(Expr* res) {
                 return packed;
             }
             Expr** results = malloc(sizeof(Expr*) * (size_t)count);
+            if (!results) { range_too_large((double)count); return NULL; }
             int64_t cur = a;
             for (int64_t i = 0; i < count; i++) {
                 results[i] = expr_new_integer(cur);
@@ -126,6 +166,21 @@ Expr* builtin_range(Expr* res) {
         return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     }
 
+    /* How many elements this can possibly be, arithmetically, BEFORE the
+     * counting loop runs. The loop below accumulates `val += di` one step at a
+     * time -- deliberately, so the count agrees with the fill bit for bit --
+     * and `Range[0., 1., 10^-300]` would spin in it for the rest of the
+     * universe. The estimate bounds that work without deciding the count: a
+     * range that cannot fit is refused here, and everything else is counted
+     * exactly the way it always was. */
+    {
+        double est = (max_val - min_val) / di_val + 1.0;
+        if (!(est >= 0.0) || est > (double)RANGE_MAX_ELEMENTS) {
+            range_too_large(est);
+            goto L_fail_range;
+        }
+    }
+
     /* Counting pass. Doubles only -- no allocation, no evaluation. */
     size_t count = 0;
     {
@@ -133,7 +188,14 @@ Expr* builtin_range(Expr* res) {
         while (RANGE_MORE(val, max_val, di_val)) {
             count++;
             val += di_val;
-            if (count > RANGE_MAX_STEPS) break;
+            /* The estimate above is arithmetic and this loop accumulates, so
+             * rounding can carry it one or two past. Stopping a little beyond
+             * the ceiling keeps the two consistent without ever truncating a
+             * range the ceiling admitted. */
+            if ((int64_t)count > RANGE_MAX_ELEMENTS + 2) {
+                range_too_large((double)count);
+                goto L_fail_range;
+            }
         }
     }
 
@@ -149,6 +211,7 @@ Expr* builtin_range(Expr* res) {
     }
 
     Expr** results = malloc(sizeof(Expr*) * (count ? count : 1));
+    if (!results) { range_too_large((double)count); goto L_fail_range; }
     size_t results_count = 0;
 
     double val = min_val;

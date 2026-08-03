@@ -131,12 +131,20 @@ Generates a list of values. Attributes: `Protected`.
 
 The element count is decided before anything is built, and an all-`Integer`
 `Range` computes it in `int64` — so `Range[10^18, 10^18 + 3]` gives four
-elements. (It previously ran to the 10^6-element safety cap: the loop was driven
+elements. (It previously ran to a 10^6-element safety cap: the loop was driven
 by the `double` shadow of its bounds, and one ulp at 10^18 is 128.)
 
-- **Large machine-number results pack.** A result of 250 or more elements that
-  is a rectangular block of uniformly exact or uniformly inexact machine numbers
-  is returned as a [packed list](packed-arrays.md): an ordinary `List` held as a
+A result larger than **2 GiB** — about 268 million `int64` elements — is
+refused: `Range::toobig` is reported and the call is left unevaluated, so
+`Head[Range[10^12]]` is `Range`. Until 2026-08-02 the limit was 10^6 elements
+and it **truncated silently**: `Length[Range[2000000]]` was `1000001`, with no
+message, so every downstream length and total was quietly computed on part of
+the data. A resource limit that changes the answer instead of declining is not
+a limit, it is a wrong answer.
+
+- **Large machine-number results pack.** A result at or above the packing
+  threshold that is a rectangular block of uniformly exact or uniformly inexact
+  machine numbers is returned as a [packed list](packed-arrays.md): an ordinary `List` held as a
   dense buffer, distinguishable only by `NDArrayQ`. Both branches write the buffer directly rather
 than building the elements and packing afterwards, which is worth ~135x at
 n = 10^6.
