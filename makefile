@@ -443,6 +443,49 @@ check-array-exactness:
 check-nd-surfaces:
 	python3 tools/nd_surface_audit.py --survival
 
+# `make check-compile-coverage` — does every head with a numeric fast path also
+# COMPILE?
+#
+# A head earns a numeric fast path by being something a numeric workload runs
+# over machine numbers, and Compile[] exists to run those workloads: a head fast
+# at the REPL and unlowerable inside Compile[] is a contradiction. It is not
+# merely a missed speedup, because the compilable subset is a CLIFF — one
+# unlowered head sends the WHOLE body to the interpreter, silently, so
+# Compile[{{v,_Real,1}}, Total[v]/Mean[v]] used to lose the compiled Total too.
+#
+# Joins the kernel registry and pack.c's AWARE list against the binary's own
+# CompileDiagnostics over every typed argument shape. Exits non-zero while any
+# head is unlowered without a recorded exemption, so the gap list is a work
+# queue that cannot quietly grow. Needs ./Mathilda built.
+check-compile-coverage:
+	python3 tools/compile_coverage.py
+
+# `make check-fastpath-sweep` — is every head that CAN take a machine array
+# actually reaching the buffer, measured rather than declared?
+#
+# The three audits above all either read the source or read a curated list of
+# expressions, and share one blind spot: a head nobody thought to name. All
+# three were green on the day Commonest was found costing 880 ms where Tally of
+# the identical 10^7 buffer cost 21.5 ms. This names nobody — it enumerates
+# every registered builtin, discovers by TRIAL which call shapes each accepts,
+# and times the survivors packed and under MATHILDA_NO_PACK=1. A head that is
+# both expensive per element AND indifferent to whether its input was packed is
+# not on the buffer.
+#
+# The gate pass is the DETECTOR and is what this target runs: it counts, per
+# head, how many elements the transparency gate materialised — a count, not a
+# duration, so it is deterministic and immune to load. Drop --gate-only to add
+# the timing half, which ranks severity and must have an idle machine (a timing
+# tool sharing a machine with anything else is measuring the other thing too).
+#
+# Ratchets against a checked-in OFF_BUFFER list, so it fails on a head that has
+# NEWLY fallen off the buffer and merely reports the standing backlog. A gate
+# that fails on everything from the day it lands is noise within a week.
+#
+# Minutes, not seconds: a release gate, not a per-push one. Needs ./Mathilda.
+check-fastpath-sweep:
+	python3 tools/nd_fastpath_sweep.py --gate-only
+
 # Report the compiler the build will ACTUALLY use. `gcc --version` does not
 # answer that: the autodetection above prefers a versioned `gcc-NN` over the
 # plain name, so on a host with both, a bare `gcc --version` names one compiler
@@ -454,7 +497,8 @@ print-cc:
 	@$(CC) --version 2>/dev/null | head -1
 
 .PHONY: all clean docs docs-build docs-serve check-c99 check-packed-aware \
-        check-array-exactness check-nd-surfaces print-cc
+        check-array-exactness check-nd-surfaces check-compile-coverage \
+        check-fastpath-sweep print-cc
 
 # Pull in the auto-generated header dependencies. The leading `-` silences the
 # "no such file" notice on a fresh tree (no .d files exist until the first

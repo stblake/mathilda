@@ -2079,3 +2079,143 @@ Rules:
   four probes are level. Same lesson as the hand-rolled harness earlier in the
   round, one level up: **check a surprising row against a control that should
   behave identically before writing it down.**
+
+## 2026-08-02 — the sixth sweep: auditing the Compile surface, and a tool that names nobody
+
+- **An audit that reads a curated list can only find what someone already
+  thought of.** Four tools guarded the packed surface and all four were green
+  on the day `Commonest` cost 880 ms where `Tally` of the identical buffer cost
+  21.5 ms. Two read the *source* (so a head with no dispatch is invisible), one
+  read *element heads* (Commonest's were right), and one *measured* but from a
+  hand-written probe list with no `commonest` entry. The fix is not a better
+  list — it is a tool that enumerates the whole symbol table and **discovers
+  each head's call shapes by trial**, so nothing depends on remembering a name.
+
+- **One signal is never enough to separate "slow" from "not on the buffer".**
+  Cost per element cannot tell a missing fast path from an expensive function;
+  the packed/unpacked ratio cannot tell one from a head that never touches
+  elements. Both together are decisive. Design the discriminator before the
+  harness — otherwise you get a ranked list you cannot act on.
+
+- **A wrong answer can need the head to be nested before it shows.**
+  `Compile[{{v,_Real,1}}, Max[v]]` was *rejected*, so nothing looked wrong;
+  `Max[v] + 1.` compiled to `v + 1.` and returned a list where the interpreter
+  returns a number. Likewise `Floor[v]` alone was right and `Total[Floor[v]]`
+  returned `2.96439*10^-323`. **Probing a head in isolation is not probing the
+  head.** Every new coverage probe should have a nested form beside the bare
+  one.
+
+- **A declared type is a promise to the CONSUMER, not a description.** The
+  narrowing kernels declared Real and wrote `NDT_INT64`. Standalone that is
+  invisible, because the caller re-reads the buffer's real dtype. Inside one
+  program the next opcode reads the slot as declared and gets the integer's
+  bits as a double. Wherever two layers each decide a type, one must be derived
+  from the other — `nd_unary_elem` now mirrors `ndarray_map_unary` condition
+  for condition.
+
+- **A missing arm is not one fact.** `!k->cplx` meant "degrade sentinel" for
+  years. It now means three different things (sentinel / narrowing-only /
+  integer-only), and a guard keyed on the wrong field re-breaks a class the
+  previous fix just closed: keying on `to_int_r` instead of `to_int` left
+  `MoebiusMu` uncompilable *after* the narrowing case was fixed. When a
+  sentinel gains meanings, grep every test of it, not just the one you came for.
+
+- **A gate that fails from the day it lands is not a gate.** 52 heads are
+  legitimately still unlowered. Shipping `check-compile-coverage` as
+  "non-empty ⇒ fail" would have made it noise within a week. It ratchets
+  against a checked-in `BASELINE` instead: a NEW gap fails, the backlog is
+  reported, and a head that starts compiling is named so the line gets deleted.
+
+- **The sweep's own hazards were the expensive part.** `PadLeft[vi, wi]` reads
+  its second argument as a dimension spec — two 200000-element integer vectors
+  ask for `prod(wi)` elements — and hung the first full run for half an hour
+  behind 90-second single-probe retries. Enumerating dangerous heads by name
+  missed `ParametricPlot3D`; matching by suffix does not. **For an exhaustive
+  prober, the skip table and the timeout budget are the design, not the
+  boilerplate.**
+
+## 2026-08-02 (later) — what the sweep's own bugs taught
+
+- **A `Listable` head accepts everything, so "the head changed" is not a test.**
+  The first gate run reported half the symbol table, because `BesselJ[v]`
+  threads into a List of 50000 *unevaluated* `BesselJ` calls and the result's
+  head is `List`. The test has to be `FreeQ[result, H]` — the head must not
+  appear anywhere in the answer. Before trusting a probe's notion of "this
+  worked", ask what the answer looks like when it *didn't*.
+
+- **`symtab_add_builtin` is not the symbol table.** 313 live names have no C
+  registration — everything in `src/internal/*.m`, plus options and colours. A
+  source scan cannot even name them. Ask the binary (`Names["*"]`); the
+  discovery step drops the ones that are not functions for free, which is
+  cheaper than a hand-maintained exclusion list and cannot go stale.
+
+- **A per-process counter needs a per-process question.** The gate diagnostic
+  totals by head over the whole run, so gating every shape at once mixed the
+  accepted calls with the unevaluated ones and the element count stopped
+  belonging to the call being reported. Discover first, then gate only the
+  shapes that mean something.
+
+- **A cap that changes the answer is a wrong answer, not a limit.**
+  `Length[Range[2000000]]` was `1000001`, silently. Found by accident while
+  sizing a benchmark vector — the only way a silent truncation is ever found is
+  downstream of the damage. Two rules follow: put the ceiling on the resource
+  that actually runs out (bytes, not elements), and *decline* rather than
+  truncate, so the caller has something to test for. Worth grepping for other
+  `if (count > CAP) count = CAP;`.
+
+- **Marking a head packed-aware is a commitment to its REWRITE TARGET's shapes
+  too.** `Subtract` and `Divide` rewrite to `Plus`/`Times`/`Power`, so making
+  them aware would have inherited those heads' handling of a symbolic operand —
+  which was to leave `packedList + x` unevaluated. The bug had to be fixed at
+  the source rather than propagated to two more heads.
+
+- **A benchmark helper that is not `HoldAll` measures nothing.**
+  `best[e_] := ... Do[t = Min[t, First[AbsoluteTiming[r = e]]], {5}]` evaluates
+  `e` once on the way in and then times an assignment: every row read 0.001 ms.
+  Generate the timing code textually, with a DIFFERENT constant per repetition
+  so no cache can answer it.
+
+- **Measure the "before", do not infer it.** The gate diagnostic said `Subtract`
+  materialised 200000 elements, and the obvious conclusion — `v - 1.` is slow —
+  was wrong: the parser desugars infix `-` to `Plus`, so only the *explicit*
+  `Subtract[v, 1.]` was ever slow. A `git stash` of `src/`, a rebuild and one
+  measurement is four minutes and turns a plausible number into a real one.
+
+- **A diagnostic can name something you never probed.** The first
+  baseline-validation run of `nd_fastpath_sweep.py` died with
+  `KeyError: 'List'`: an internal `List[...]` assembling a result materialises
+  a buffer too, and `MATHILDA_PACK_DIAG=gate` records it by name like any other
+  head — so the verify phase went looking for a probe expression that never
+  existed. When you join a diagnostic's output back against your own input,
+  the diagnostic's key set is not a subset of yours. Filter, do not index.
+
+- **A zero-test that is sound in one direction is not a pivot test.**
+  `is_zero_poly` proves zero by polynomial identity: when it says *zero* it is
+  right, when it says *nonzero* it may just have failed. `RowReduce` consumes
+  precisely the unreliable answer — it needs "this entry is nonzero, pivot on
+  it" — so for a *casus irreducibilis* eigenvalue it row-reduced a singular
+  matrix to the **identity** and `Eigenvectors` returned three zero vectors.
+  Before wiring a partial decision procedure into a caller, ask which of its
+  two answers the caller actually acts on.
+
+- **Prefer removing the need for a hard test to strengthening it.** The
+  tempting fix was a stronger algebraic zero test (qqbar) inside `RowReduce` —
+  broad blast radius, and slow. The adjugate identity
+  `M · adj(M) = det(M) · I ≡ 0 (mod q)` yields the same eigenvector out of
+  cofactor determinants: no division, no pivoting, so nothing has to be decided
+  zero *while it is computed*. The one test left runs after reduction mod the
+  minimal polynomial, on a univariate polynomial over `Q`, where the same
+  `is_zero_poly` is exact and complete. Move the test to where it is decidable.
+
+- **A test the defining identity cannot fail is not a test.** `m.v == λv` holds
+  trivially for `v = 0`, which was exactly the bug — so the regression test has
+  to assert *nonzero* first. Same shape as the SVD lesson that reconstruction
+  cannot see a wrong basis for a zero singular value: when the wrong answer is a
+  zero, every identity that multiplies by it passes.
+
+- **Check the make target exists before believing "tests pass".**
+  `make -j8 test_eigen` in `tests/build` prints `No rule to make target` — which
+  contains neither "error" nor "Error", so a `grep -E "error|Error"` filter
+  reports a clean build and the stale binaries from the last session run
+  happily and pass. The targets are `eigen_tests`, not `test_eigen`. Grep the
+  build for `No rule` too, or confirm the new test's name appears in the run.
