@@ -67,4 +67,13 @@ void nd_sort_ascending(double* scratch, size_t n);
  * equal and the sort would reorder them silently. */
 void nd_sort_i64_asc(int64_t* v, size_t n);
 
+/* Stable argsort: fill idx[0..n) with a permutation p such that v[p[0]] <=
+ * v[p[1]] <= ..., ties broken by ASCENDING ORIGINAL INDEX. Powers Ordering[]:
+ * the tie-break is the stability Ordering promises (Ordering[{2,2,1}] is
+ * {3,1,2}). Returns false only on scratch-allocation failure, having still
+ * filled idx with the identity permutation; the caller then degrades. The int64
+ * variant compares in int64 (exact past 2^53); the real variant on doubles. */
+bool nd_argsort_i64(const int64_t* v, size_t n, int64_t* idx);
+bool nd_argsort_real(const double* v, size_t n, int64_t* idx);
+
 #endif /* MATHILDA_NDARRAY_INTERNAL_H */

@@ -112,6 +112,58 @@ void test_order() {
     run_test("Order[a, b, c]", "Order[a, b, c]");
 }
 
+void test_ordering() {
+    /* Basic permutation and the defining identity list[[Ordering[list]]] == Sort[list]. */
+    run_test("Ordering[{c, a, b}]", "List[2, 3, 1]");
+    run_test("{c, a, b}[[Ordering[{c, a, b}]]]", "List[a, b, c]");
+    run_test("Ordering[{2, 6, 1, 9, 1, 2, 3}]", "List[3, 5, 1, 6, 7, 2, 4]");
+    run_test("{2, 6, 1, 9, 1, 2, 3}[[Ordering[{2, 6, 1, 9, 1, 2, 3}]]] === Sort[{2, 6, 1, 9, 1, 2, 3}]",
+             "True");
+
+    /* n smallest / n largest, and the empty selection. */
+    run_test("Ordering[{2, 6, 1, 9, 1, 2, 3}, 4]", "List[3, 5, 1, 6]");
+    run_test("Ordering[{2, 6, 1, 9, 1, 2, 3}, -1]", "List[4]");
+    run_test("Ordering[{4, 5, -2, 3}, -1]", "List[2]");
+    run_test("Ordering[{2, 6, 1, 9, 1, 2, 3}, 0]", "List[]");
+
+    /* seq is a full Take spec: a {m, n} span, UpTo (clamped), and All. */
+    run_test("Ordering[{2, 6, 1, 9, 1, 2, 3}, {4, -1}]", "List[6, 7, 2, 4]");
+    run_test("Ordering[{2, 6, 1, 9, 2}, UpTo[6]]", "List[3, 1, 5, 2, 4]");
+    run_test("Ordering[{3, 1, 2}, All]", "List[2, 3, 1]");
+
+    /* Custom ordering function. With no ties the permutation is deterministic. */
+    run_test("Ordering[{3, 1, 2}, All, Greater]", "List[1, 3, 2]");
+    run_test("Ordering[{3, 1, 2}, 1, Greater]", "List[1]");
+    /* With ties under a custom (strict) comparator, only the defining invariant
+     * list[[ord]] == Sort[list, p] is guaranteed -- the tie order is qsort-defined,
+     * exactly as it is for Sort[list, p]. */
+    run_test("{2, 6, 1, 9, 1, 2, 3}[[Ordering[{2, 6, 1, 9, 1, 2, 3}, All, Greater]]] "
+             "=== Sort[{2, 6, 1, 9, 1, 2, 3}, Greater]", "True");
+
+    /* Inverse permutation. */
+    run_test("Ordering[{4, 5, 1, 2, 3}]", "List[3, 4, 5, 1, 2]");
+
+    /* Any head, and an Association (ordered by its values). */
+    run_test("Ordering[f[3, 1, 2]]", "List[2, 3, 1]");
+    run_test("Ordering[<|1 -> c, 2 -> a, 3 -> b|>]", "List[2, 3, 1]");
+
+    /* Stability: ties break by original position (documented for the default order). */
+    run_test("Ordering[{2, 2, 1}]", "List[3, 1, 2]");
+    run_test("Ordering[{1, 1, 1}]", "List[1, 2, 3]");
+    run_test("Ordering[{5, 5, 5, 5}, 1]", "List[1]");
+
+    /* Reals and mixed exact/inexact. */
+    run_test("Ordering[{1.5, 1, 2}]", "List[2, 1, 3]");
+
+    /* Edge cases: empty and singleton. */
+    run_test("Ordering[{}]", "List[]");
+    run_test("Ordering[{5}]", "List[1]");
+
+    /* Atom -> unevaluated; too many arguments -> unevaluated. */
+    run_test("Ordering[5]", "Ordering[5]");
+    run_test("Ordering[a, b, c, d]", "Ordering[a, b, c, d]");
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -124,6 +176,7 @@ int main() {
     TEST(test_sort_custom);
     TEST(test_orderedq);
     TEST(test_order);
+    TEST(test_ordering);
 
     printf("All sort tests passed!\n");
     return 0;

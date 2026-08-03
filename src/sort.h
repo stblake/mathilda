@@ -15,5 +15,6 @@ Expr* builtin_reverse_sort(Expr* res);
 Expr* builtin_reverse_sort_by(Expr* res);
 Expr* builtin_orderedq(Expr* res);
 Expr* builtin_order(Expr* res);
+Expr* builtin_ordering(Expr* res);
 
 #endif // SORT_H

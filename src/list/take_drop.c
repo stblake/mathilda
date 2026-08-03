@@ -3,7 +3,7 @@
 #include "ndarray.h"
 #include "ndstruct.h"
 
-static bool get_seq_spec_indices(Expr* spec, int64_t len, int64_t** out_indices, size_t* out_count) {
+bool get_seq_spec_indices(Expr* spec, int64_t len, int64_t** out_indices, size_t* out_count) {
     int64_t m = 0, n = 0, s = 1;
     bool is_all = false;
     bool is_none = false;

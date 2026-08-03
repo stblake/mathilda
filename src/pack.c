@@ -475,6 +475,22 @@ static void pack_mark_aware_heads(void) {
         /* Arithmetic and algebra: scan for an ndarray operand themselves
          * (src/plus.c, times.c, power.c, linalg/dot.c). */
         "Plus", "Times", "Power", "Dot",
+        /* Subtract and Divide joined on 2026-08-02, found by the gate pass of
+         * tools/nd_fastpath_sweep.py. Neither reads an element: builtin_subtract
+         * ALWAYS rewrites to Plus[a, Times[-1, b]], and builtin_divide falls
+         * through to Times[a, Power[b, -1]] for anything that is not a scalar
+         * Real or Rational -- which an NDArray never is. So the fast path was
+         * already there, one rewrite away, and the gate was firing at the head
+         * that does the rewriting rather than at the head that can use the
+         * buffer. Exactly the MinMax / Nest / Fourier defect, and `a - 1` and
+         * `a/2` are about as common as an array expression gets: the gate boxed
+         * every element, and Listable then threaded one Subtract call PER
+         * ELEMENT over the boxed copy.
+         *
+         * Subtract is int64_ok below (integer minus integer is an integer);
+         * Divide deliberately is NOT, because Range[10]/2 is a list of exact
+         * Rationals and no buffer holds one. */
+        "Subtract", "Divide",
         /* Structural ops over the buffer (src/ndstruct.c). ConjugateTranspose
          * joined 2026-08-01: it delegates to Transpose and Conjugate, both of
          * which have had buffer paths all along, but its rank-1 one-argument
@@ -483,6 +499,11 @@ static void pack_mark_aware_heads(void) {
          * 1000x1000 cost 430 ms against NumPy's 2.20 ms. */
         "Reverse", "Sort", "Flatten", "Transpose", "ConjugateTranspose",
         "Take", "Drop",
+        /* Ordering (src/ndstruct.c) argsorts the buffer and returns the int64
+         * permutation of positions -- so, unlike Sort, its result dtype is int64
+         * regardless of the input dtype. Still a single-headed (Integer) result,
+         * so it stays exact and packable. */
+        "Ordering",
         "RotateLeft", "RotateRight", "Partition", "Riffle", "Join",
         "Differences", "First", "Last", "Most", "Rest",
         "PadLeft", "PadRight",
@@ -769,6 +790,12 @@ static void pack_mark_aware_heads(void) {
          * scalar widens the buffer to float64; a Rational, BigInt, MPFR or
          * Complex scalar bails, because Range[10]/2 is a list of Rationals. */
         "Plus", "Times", "Power", "Dot",
+        /* Subtract rewrites to Plus[a, Times[-1, b]] and inherits both arms'
+         * exactness, so an integer buffer stays one. Divide is NOT here on
+         * purpose: it rewrites to Times[a, Power[b, -1]], and Range[10]/2 is a
+         * list of exact Rationals -- the integer buffer has to materialise for
+         * the List path to give them. */
+        "Subtract",
         /* Exact int64 reductions (src/ndreduce.c). Total/Max/Min/Accumulate
          * answer with Integers; Mean and Median build the exact reduced
          * Rational (Mean[Range[10]] is 11/2, Median[Range[300]] is 301/2). */
@@ -786,8 +813,10 @@ static void pack_mark_aware_heads(void) {
         "Commonest",
         /* Exact int64 structure (src/ndstruct.c): Sort orders the buffer in
          * int64 -- through doubles, two integers past 2^53 would compare equal
-         * and be reordered -- and Transpose moves elements by memcpy. */
-        "Sort", "Transpose",
+         * and be reordered -- and Transpose moves elements by memcpy. Ordering
+         * argsorts in int64 for the same reason, so the permutation is correct
+         * past 2^53 too. */
+        "Sort", "Transpose", "Ordering",
         /* Pure element MOVES: whole rows by memcpy, never through ndt_get, so
          * exactness is not in question -- there is no arithmetic to be exact
          * about. Verified individually in src/ndstruct.c; Reverse also keeps

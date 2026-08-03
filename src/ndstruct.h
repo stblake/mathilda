@@ -23,6 +23,7 @@
 bool ndstruct_call_has_ndarray(const Expr* res);
 
 Expr* ndstruct_sort(Expr* res);       /* Sort[a] */
+Expr* ndstruct_ordering(Expr* res);   /* Ordering[a] / Ordering[a, seq] -> int64 positions */
 Expr* ndstruct_reverse(Expr* res);    /* Reverse[a] */
 Expr* ndstruct_transpose(Expr* res);  /* Transpose[a] (rank 2) */
 Expr* ndstruct_flatten(Expr* res);    /* Flatten[a] */

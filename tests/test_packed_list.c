@@ -495,6 +495,43 @@ void test_ordering_matches_plain_lists(void) {
                    "{{9007199254740992}, {9007199254740993}}", 0);
 }
 
+/* The Ordering BUILTIN (distinct from test_ordering_matches_plain_lists above,
+ * which pins Sort's canonical order of packed sublists). Ordering[a] argsorts the
+ * buffer and returns an int64 permutation; every case must agree with the plain
+ * List Ordering, and the int64 argsort must be exact past 2^53. */
+void test_ordering_builtin_matches_plain(void) {
+    same_as_plain("Ordering[ToNDArray[{2, 6, 1, 9, 1, 2, 3}]]",
+                  "Ordering[{2, 6, 1, 9, 1, 2, 3}]");
+    same_as_plain("Ordering[ToNDArray[{2., 6., 1., 9., 1., 2., 3.}]]",
+                  "Ordering[{2., 6., 1., 9., 1., 2., 3.}]");
+    /* The 2nd-argument Take-spec forms, on the buffer. */
+    same_as_plain("Ordering[ToNDArray[{2, 6, 1, 9, 1, 2, 3}], 4]",
+                  "Ordering[{2, 6, 1, 9, 1, 2, 3}, 4]");
+    same_as_plain("Ordering[ToNDArray[{2, 6, 1, 9, 1, 2, 3}], -2]",
+                  "Ordering[{2, 6, 1, 9, 1, 2, 3}, -2]");
+    same_as_plain("Ordering[ToNDArray[{2, 6, 1, 9, 1, 2, 3}], {4, -1}]",
+                  "Ordering[{2, 6, 1, 9, 1, 2, 3}, {4, -1}]");
+    same_as_plain("Ordering[ToNDArray[{2., 6., 1., 9., 2.}], UpTo[6]]",
+                  "Ordering[{2., 6., 1., 9., 2.}, UpTo[6]]");
+    /* Result element is Integer regardless of the input dtype. */
+    assert_eval_eq("Head[Ordering[ToNDArray[{1., 2., 1.}]][[1]]]", "Integer", 0);
+    assert_eval_eq("Head[Ordering[ToNDArray[{1, 2, 1}]][[1]]]", "Integer", 0);
+    /* int64 exactness past 2^53: comparing through a double would call these two
+     * equal and stably keep {1, 2}; the int64 argsort orders them {2, 1}. */
+    assert_eval_eq("Ordering[ToNDArray[{9007199254740993, 9007199254740992}]]",
+                   "{2, 1}", 0);
+    /* Ordering is an aware head: its packed input yields a packed permutation. */
+    {
+        Expr* r = ev("Ordering[ToNDArray[Range[300]]]");
+        ASSERT(is_packed_list(r));
+        expr_free(r);
+    }
+    /* Rank 2 declines to the List path (rows order by canonical Expr order), and
+     * must still agree with the plain form. */
+    same_as_plain("Ordering[ToNDArray[{{2, 1}, {1, 9}, {1, 2}}]]",
+                  "Ordering[{{2, 1}, {1, 9}, {1, 2}}]");
+}
+
 void test_hash_consumers(void) {
     /* These are the reason expr_hash has to agree bit for bit. */
     assert_eval_eq("Union[{ToNDArray[{1., 2.}], {1., 2.}}]", "{{1.0, 2.0}}", 0);
@@ -1713,7 +1750,15 @@ void test_producers_pack(void) {
 
 void test_threshold_is_not_observable(void) {
     /* 249 is under the threshold and 250 over it, so the two run through
-     * different representations. Every observable except NDArrayQ must agree. */
+     * different representations. Every observable except NDArrayQ must agree.
+     *
+     * The boundary is PINNED here with the test-only override rather than read
+     * off PACK_MIN_ELEMENTS, because this test is about the threshold being
+     * unobservable, not about where it sits: when the constant moved 250 -> 4
+     * on 2026-08-02 (so a small matrix reaches LAPACK) these three assertions
+     * were the only thing in the suite that noticed, and they were measuring
+     * the constant instead of the invariant. */
+    pack_set_min_elements(250);
     assert_eval_eq("NDArrayQ[Range[249]]", "False", 0);
     assert_eval_eq("NDArrayQ[Range[250]]", "True", 0);
     assert_eval_eq("NDArrayQ[Range[251]]", "True", 0);
@@ -1746,6 +1791,7 @@ void test_threshold_is_not_observable(void) {
         snprintf(b, sizeof(b), "Range[%d]", n);
         (void)b;
     }
+    pack_set_min_elements(0);   /* restore PACK_MIN_ELEMENTS */
 }
 
 void test_exact_int64_arithmetic_on_a_buffer(void) {
@@ -2089,8 +2135,10 @@ void test_compile_boundary_presentation(void) {
      * the rule is pack_offer and not a flag flip. */
     assert_eval_eq("fb = Compile[{{n, _Integer}}, ConstantArray[1., n]]; "
                    "{NDArrayQ[fb[300]], Length[fb[300]]}", "{True, 300}", 0);
-    assert_eval_eq("{NDArrayQ[fb[5]], fb[5]}",
-                   "{False, {1.0, 1.0, 1.0, 1.0, 1.0}}", 0);
+    /* Length 3, not 5: PACK_MIN_ELEMENTS moved 250 -> 4 on 2026-08-02 and this
+     * assertion, which is about the producer rule and not about where the
+     * threshold sits, went on naming a length that is now ABOVE it. */
+    assert_eval_eq("{NDArrayQ[fb[3]], fb[3]}", "{False, {1.0, 1.0, 1.0}}", 0);
 
     /* A COMPLEX result never wears the packed presentation. A zero imaginary part
      * materialises as Complex[re, 0.], which the evaluator never produces (it
@@ -2218,9 +2266,11 @@ int main(void) {
     TEST(test_int64_matches_plain_integer_lists);
     TEST(test_tally_matches_plain_lists);
     TEST(test_setops_match_plain_lists);
+    TEST(test_arithmetic_rewrites_match_plain_lists);
     TEST(test_commonest_matches_plain_lists);
     TEST(test_declines_what_it_cannot_represent);
     TEST(test_ordering_matches_plain_lists);
+    TEST(test_ordering_builtin_matches_plain);
     TEST(test_hash_consumers);
     TEST(test_value_semantics_on_assignment);
     TEST(test_part_assignment_preserves_heads);

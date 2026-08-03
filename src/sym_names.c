@@ -395,6 +395,7 @@ const char* SYM_SetOptions = NULL;
 const char* SYM_ZeroTest = NULL;
 const char* SYM_Or = NULL;
 const char* SYM_Order = NULL;
+const char* SYM_Ordering = NULL;
 const char* SYM_Orderless = NULL;
 const char* SYM_Overflow = NULL;
 const char* SYM_ParameterVariables = NULL;
@@ -1214,6 +1215,7 @@ void sym_names_init(void) {
     SYM_ZeroTest                   = intern_symbol("ZeroTest");
     SYM_Or                         = intern_symbol("Or");
     SYM_Order                      = intern_symbol("Order");
+    SYM_Ordering                   = intern_symbol("Ordering");
     SYM_Orderless                  = intern_symbol("Orderless");
     SYM_Overflow                   = intern_symbol("Overflow");
     SYM_ParameterVariables         = intern_symbol("ParameterVariables");

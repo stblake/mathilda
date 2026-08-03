@@ -626,6 +626,8 @@ void core_init(void) {
     symtab_get_def("OrderedQ")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Order", builtin_order);
     symtab_get_def("Order")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("Ordering", builtin_ordering);
+    symtab_get_def("Ordering")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("PolynomialQ", builtin_polynomialq);
     symtab_add_builtin("Variables", builtin_variables);
     symtab_add_builtin("Level", builtin_level);

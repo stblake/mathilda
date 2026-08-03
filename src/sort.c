@@ -5,9 +5,10 @@
 #include "arithmetic.h"
 #include "assoc.h"
 #include "ndarray.h"   /* ndt_get for NDArray canonical ordering */
-#include "ndstruct.h"  /* ndstruct_sort NDArray fast path */
+#include "ndstruct.h"  /* ndstruct_sort / ndstruct_ordering NDArray fast paths */
 #include "pack.h"      /* pack_offer — a sorted machine list packs */
 #include "common.h"    /* builtin_arg_error */
+#include "take_drop.h" /* get_seq_spec_indices — Ordering[list, seq] reuses Take's spec */
 #include <ctype.h>
 #include <math.h>
 #include <stdbool.h>
@@ -485,26 +486,26 @@ int expr_compare(const Expr* a, const Expr* b) {
 
 static Expr* current_sort_p = NULL;
 
-static int custom_compare(const void* a, const void* b) {
-    Expr* ea = *(Expr**)a;
-    Expr* eb = *(Expr**)b;
-    
-    if (current_sort_p == NULL) {
+/* Compare ea against eb the way the sort family does: canonical order when p is
+ * NULL, else the user ordering function p invoked as p[ea, eb]. Returns a
+ * qsort-style sign — negative when ea sorts before eb, positive after, 0 equal.
+ * "In order" for a custom p means it returns True or 1 (the Order/OrderedQ
+ * surface convention); anything unrecognised defaults to "in order". Shared by
+ * Sort's custom_compare and Ordering's index comparator so the two never drift. */
+static int cmp_with_p(Expr* ea, Expr* eb, Expr* p) {
+    if (p == NULL) {
         return expr_compare(ea, eb);
     }
-    
-    // Call p[ea, eb]
+
+    /* Call p[ea, eb]. */
     Expr* args[2] = { expr_copy(ea), expr_copy(eb) };
-    Expr* call = expr_new_function(expr_copy(current_sort_p), args, 2);
+    Expr* call = expr_new_function(expr_copy(p), args, 2);
     Expr* result = evaluate(call);
     expr_free(call);
-    
-    int cmp = -1; // Default to "in order" (e1 < e2)
-    
+
+    int cmp = -1; /* default to "in order" (ea before eb) */
     if (result->type == EXPR_INTEGER) {
-        // 1: e1 before e2 (e1 < e2)
-        // 0: same
-        // -1: e1 after e2 (e1 > e2)
+        /* 1: ea before eb; 0: same; -1: ea after eb. */
         if (result->data.integer == 1) cmp = -1;
         else if (result->data.integer == 0) cmp = 0;
         else if (result->data.integer == -1) cmp = 1;
@@ -512,9 +513,13 @@ static int custom_compare(const void* a, const void* b) {
         if (result->data.symbol.name == SYM_True) cmp = -1;
         else if (result->data.symbol.name == SYM_False) cmp = 1;
     }
-    
+
     expr_free(result);
     return cmp;
+}
+
+static int custom_compare(const void* a, const void* b) {
+    return cmp_with_p(*(Expr**)a, *(Expr**)b, current_sort_p);
 }
 
 Expr* builtin_sort(Expr* res) {
@@ -952,4 +957,103 @@ Expr* builtin_order(Expr* res) {
     int cmp = expr_compare(res->data.function.args[0],
                            res->data.function.args[1]);
     return expr_new_integer(cmp < 0 ? 1 : (cmp > 0 ? -1 : 0));
+}
+
+/* ------------------- Ordering ------------------- */
+
+/* File-static context for the index comparator, saved/restored around each sort
+ * so a custom ordering function that itself calls Ordering nests correctly. */
+static Expr** ordering_subjects = NULL;
+static Expr*  ordering_p        = NULL;
+
+/* qsort over 0-based indices: order by the subject each points at, ties broken by
+ * the original index ascending. That tie-break is what turns libc's unstable
+ * qsort into a STABLE argsort, so equal elements keep their input order --
+ * Ordering[{2,2,1}] is {3,1,2}, and Ordering[list, 1] names the first minimum. */
+static int ordering_index_compare(const void* a, const void* b) {
+    int64_t ia = *(const int64_t*)a;
+    int64_t ib = *(const int64_t*)b;
+    int c = cmp_with_p(ordering_subjects[ia], ordering_subjects[ib], ordering_p);
+    if (c != 0) return c;
+    return (ia < ib) ? -1 : 1;
+}
+
+/* Ordering[list] -- the permutation of 1-based positions that sorts list, so that
+ * list[[Ordering[list]]] === Sort[list]. Ordering[list, seq] == Take[Ordering[list],
+ * seq] (seq an Integer n / -n, a {m,n[,s]} span, UpTo[k], or All). Ordering[list,
+ * seq, p] orders by the function p as in Sort[list, p]. The result is always a
+ * List of integers, regardless of list's head; for an Association the ordering is
+ * of the VALUES. */
+Expr* builtin_ordering(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 3)
+        return builtin_arg_error("Ordering", argc, 1, 3);
+
+    Expr* list = res->data.function.args[0];
+
+    /* Packed/visible NDArray fast path: argsort straight off the buffer. It
+     * declines (rank >= 2, complex dtype, or a custom comparator) by
+     * materialising and re-evaluating, which re-enters this builtin on a plain
+     * List, so a NULL return can only mean "genuinely unevaluated". */
+    if (is_ndarray(list)) {
+        Expr* nd = ndstruct_ordering(res);
+        if (nd) return nd;
+    }
+
+    if (list->type != EXPR_FUNCTION) return NULL;  /* Ordering[atom]: leave unevaluated */
+
+    Expr* seq = (argc >= 2) ? res->data.function.args[1] : NULL;
+    Expr* p   = (argc == 3) ? res->data.function.args[2] : NULL;
+
+    size_t n = list->data.function.arg_count;
+    bool assoc = is_association(list);
+
+    /* Borrowed subject pointers -- the comparator only reads them, never frees.
+     * For an Association order by each entry's VALUE (the Rule's second arg);
+     * otherwise by the element itself. */
+    Expr** subjects = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        Expr* elem = list->data.function.args[i];
+        if (assoc && elem->type == EXPR_FUNCTION && elem->data.function.arg_count == 2)
+            subjects[i] = elem->data.function.args[1];
+        else
+            subjects[i] = elem;
+    }
+
+    int64_t* idx = malloc(sizeof(int64_t) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) idx[i] = (int64_t)i;
+
+    Expr** old_subjects = ordering_subjects;
+    Expr*  old_p        = ordering_p;
+    ordering_subjects = subjects;
+    ordering_p = p;
+    qsort(idx, n, sizeof(int64_t), ordering_index_compare);
+    ordering_subjects = old_subjects;
+    ordering_p = old_p;
+
+    /* Which ranks of the permutation to emit: all of it, or a Take-style slice. */
+    int64_t* sel = NULL;      /* 1-based ranks into the permutation */
+    size_t sel_count = n;
+    if (seq != NULL) {
+        if (!get_seq_spec_indices(seq, (int64_t)n, &sel, &sel_count)) {
+            free(subjects);
+            free(idx);
+            return NULL;      /* malformed / out-of-range spec: leave unevaluated */
+        }
+    }
+
+    Expr** out = (sel_count > 0) ? malloc(sizeof(Expr*) * sel_count) : NULL;
+    for (size_t i = 0; i < sel_count; i++) {
+        int64_t rank = sel ? sel[i] : (int64_t)(i + 1);   /* 1-based rank */
+        out[i] = expr_new_integer(idx[rank - 1] + 1);      /* 1-based position */
+    }
+
+    free(sel);
+    free(subjects);
+    free(idx);
+
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, sel_count);
+    if (out) free(out);
+    return pack_offer(result);   /* a list of positions packs; often used as Part indices next */
 }

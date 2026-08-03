@@ -8,6 +8,7 @@
 #include "checked_int.h"  /* ci_sub_i64 — Differences abandons on int64 overflow */
 #include "ndarray.h"
 #include "ndarray_internal.h"
+#include "take_drop.h"  /* get_seq_spec_indices — Ordering[a, seq] slices the permutation */
 #include "sym_names.h"
 #include <stdlib.h>
 #include <string.h>
@@ -92,6 +93,69 @@ Expr* ndstruct_sort(Expr* res) {
     free(s);
     int64_t dims[1] = { (int64_t)n };
     return expr_new_ndarray_like(a, 1, dims, out, dt);
+}
+
+/* --------------------------------------------------------------- Ordering */
+
+/* Ordering[a] / Ordering[a, seq]: the argsort permutation of 1-based positions,
+ * straight off the buffer. The result is ALWAYS an NDT_INT64 array regardless of
+ * the input dtype (a permutation is integer), which is why it needs its own entry
+ * point rather than riding ndstruct_sort's same-dtype rebuild.
+ *
+ * Real rank-1 only: rank >= 2 (Ordering compares whole rows by canonical Expr
+ * order), a complex dtype (canonical complex order differs from numeric order),
+ * or a custom ordering function (the 3-arg form) all degrade to the List path.
+ * The stable argsort (ties by original position) matches the interpreter's
+ * Ordering exactly, which the Compile[] delegation depends on. */
+Expr* ndstruct_ordering(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc > 2) return ndarray_delist_and_reeval(res);   /* custom comparator */
+    Expr* a = res->data.function.args[0];
+    NDType dt = a->data.ndarray.dtype;
+    if (a->data.ndarray.rank != 1 || ndt_is_complex(dt))
+        return ndarray_delist_and_reeval(res);
+
+    size_t n = (size_t)a->data.ndarray.dims[0];
+    int64_t* idx = malloc(sizeof(int64_t) * (n ? n : 1));
+    if (!idx) return ndarray_delist_and_reeval(res);
+
+    bool ok;
+    if (dt == NDT_INT64) {
+        /* Argsort in int64 -- the double gather is exact only to 2^53, so two
+         * large integers would tie and the permutation would order them wrong. */
+        ok = nd_argsort_i64((const int64_t*)a->data.ndarray.data, n, idx);
+    } else {
+        double* vals = malloc(sizeof(double) * (n ? n : 1));
+        if (!vals) { free(idx); return ndarray_delist_and_reeval(res); }
+        nd_gather_real(a->data.ndarray.data, dt, 0, 1, n, vals);
+        ok = nd_argsort_real(vals, n, idx);
+        free(vals);
+    }
+    if (!ok) { free(idx); return ndarray_delist_and_reeval(res); }
+
+    for (size_t i = 0; i < n; i++) idx[i] += 1;            /* 1-based positions */
+
+    if (argc == 2) {                                       /* Ordering[a, seq] */
+        int64_t* sel = NULL;
+        size_t sel_count = 0;
+        if (!get_seq_spec_indices(res->data.function.args[1], (int64_t)n, &sel, &sel_count)) {
+            free(idx);
+            return ndarray_delist_and_reeval(res);
+        }
+        /* An empty selection has no buffer shape (dims must be >= 1); let the
+         * List path answer {} for it. */
+        if (sel_count == 0) { free(sel); free(idx); return ndarray_delist_and_reeval(res); }
+        int64_t* out = malloc(sizeof(int64_t) * sel_count);
+        if (!out) { free(sel); free(idx); return ndarray_delist_and_reeval(res); }
+        for (size_t i = 0; i < sel_count; i++) out[i] = idx[sel[i] - 1];
+        free(sel);
+        free(idx);
+        int64_t dims[1] = { (int64_t)sel_count };
+        return expr_new_ndarray_like(a, 1, dims, out, NDT_INT64);
+    }
+
+    int64_t dims[1] = { (int64_t)n };
+    return expr_new_ndarray_like(a, 1, dims, idx, NDT_INT64);
 }
 
 /* ---------------------------------------------------------------- Reverse */

@@ -121,6 +121,62 @@ void nd_sort_i64_asc(int64_t* v, size_t n) {
 }
 #define nd_sort_i64 nd_sort_i64_asc
 
+/* Stable argsort via bottom-up merge sort of an index array.
+ *
+ * The value radix sorts above cannot serve Ordering: the permutation has to be
+ * carried alongside the keys, and Ordering must break ties by original position.
+ * A bottom-up merge is stable BY CONSTRUCTION -- each merge takes from the left
+ * run on a tie, and the left run always holds the lower original indices -- so it
+ * delivers the ties-by-index order for free, with no separate tie-break pass. It
+ * is O(n log n) with one O(n) scratch buffer, and its keys are read indirectly
+ * through `idx`, which is exactly what an argsort is; the radix sorts' advantage
+ * (no comparisons, contiguous keys) does not transfer to a permutation.
+ *
+ * KEYCMP(x, y) must be a strict "x sorts before y" test. Written as a macro so
+ * the int64 and real variants share the merge and differ only in the comparison,
+ * with no function-pointer call per comparison. */
+#define ND_ARGSORT_BODY(KEYCMP)                                               \
+    do {                                                                      \
+        for (size_t i = 0; i < n; i++) idx[i] = (int64_t)i;                   \
+        if (n < 2) return true;                                              \
+        int64_t* scratch = malloc(n * sizeof(int64_t));                       \
+        if (!scratch) return false;                                          \
+        int64_t* src = idx;                                                   \
+        int64_t* dst = scratch;                                               \
+        for (size_t width = 1; width < n; width *= 2) {                       \
+            for (size_t lo = 0; lo < n; lo += 2 * width) {                    \
+                size_t mid = lo + width;   if (mid > n) mid = n;              \
+                size_t hi  = lo + 2*width; if (hi  > n) hi  = n;              \
+                size_t i = lo, j = mid, k = lo;                              \
+                while (i < mid && j < hi) {                                   \
+                    /* strict "right before left" -> ties keep left (lower i) */ \
+                    if (KEYCMP(src[j], src[i])) dst[k++] = src[j++];          \
+                    else                         dst[k++] = src[i++];         \
+                }                                                             \
+                while (i < mid) dst[k++] = src[i++];                          \
+                while (j < hi)  dst[k++] = src[j++];                          \
+            }                                                                 \
+            int64_t* t = src; src = dst; dst = t;                             \
+        }                                                                     \
+        if (src != idx) memcpy(idx, src, n * sizeof(int64_t));               \
+        free(scratch);                                                        \
+        return true;                                                          \
+    } while (0)
+
+bool nd_argsort_i64(const int64_t* v, size_t n, int64_t* idx) {
+#define ND_I64_LT(pa, pb) (v[(pa)] < v[(pb)])
+    ND_ARGSORT_BODY(ND_I64_LT);
+#undef ND_I64_LT
+}
+
+bool nd_argsort_real(const double* v, size_t n, int64_t* idx) {
+#define ND_REAL_LT(pa, pb) (v[(pa)] < v[(pb)])
+    ND_ARGSORT_BODY(ND_REAL_LT);
+#undef ND_REAL_LT
+}
+
+#undef ND_ARGSORT_BODY
+
 /* Max/Min over an int64 range: always exact, no overflow to worry about. */
 static int64_t nd_extreme_i64(const int64_t* p, size_t n, bool want_max) {
     int64_t b = p[0];
