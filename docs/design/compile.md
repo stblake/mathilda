@@ -299,8 +299,17 @@ in `src/compile/compile.c`:
 
 | table | shape | opcode | heads |
 |---|---|---|---|
-| `ND_FNS` | array → array, plus trailing **integer** arguments | `A_NDFN` | `Reverse` `Sort` `Accumulate` `Flatten` `Transpose` `Take` `Drop` `Differences` `Ratios` `Most` `Rest` `Clip` `RotateLeft` `RotateRight` `MovingAverage` `MovingMedian` `TakeLargest` `TakeSmallest` |
+| `ND_FNS` | array → array, plus trailing **integer** arguments | `A_NDFN` | `Reverse` `Sort` `Accumulate` `Flatten` `Transpose` `Take` `Drop` `Differences` `Ratios` `Most` `Rest` `Clip` `RotateLeft` `RotateRight` `MovingAverage` `MovingMedian` `TakeLargest` `TakeSmallest` `Fourier` `InverseFourier` `FourierDCT` `FourierDST` `DiagonalMatrix` `HankelMatrix` `ToeplitzMatrix` `VandermondeMatrix` |
 | `ND_REDS` | array → **scalar** | `V_NDRED` | `Mean` `Median` `Variance` `StandardDeviation` `RootMeanSquare` `Max` `Min` |
+
+`A_NDFN` reuses the operand's rank and element type by default, but the entry
+carries two overrides that let a delegate change either without a new opcode —
+because the VM stores whatever NDArray the delegate returns and the compiler only
+tracks `CT_ARRAY(elem, rank)` statically. `complex_result` promises `CT_COMPLEX`
+from a real/int operand (`Fourier`/`InverseFourier`, real→complex; their delegate
+always builds a complex buffer so it matches the promise). `rank_rule 5` promises
+rank 2 from a rank-1 operand (the matrix producers, rank-1 vector → rank-2
+matrix). Both are `nd_fn_result` rules, not VM changes.
 
 `Total` keeps its own `V_TOTAL` because an int64 sum must stay exact past
 2^53; everything in `ND_REDS` is real-valued, so it needs no such split.

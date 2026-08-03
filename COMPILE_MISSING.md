@@ -1,12 +1,25 @@
 # Heads with a numeric fast path that `Compile[]` cannot lower
 
-**35 of 238.** Recorded 2026-08-03 by `make check-compile-coverage`
+**32 of 239.** Recorded 2026-08-03 by `make check-compile-coverage`
 (`tools/compile_coverage.py`), which joins the NDArray kernel registry and
 `src/pack.c`'s `AWARE` list against the binary's own `CompileDiagnostics`.
 Closed 2026-08-03: the §1 reductions (`Tr`, `Det`, `MatrixRank`, `Norm`), the §2
 single-array heads (`Inverse`, `Normalize`, `MatrixPower`, `ReverseSort`,
-`ConjugateTranspose`, `PseudoInverse`), and the §3 two-array heads (`Dot`,
-`LinearSolve`, `Cross`, `LeastSquares`, `ListConvolve`, `ListCorrelate`, `Join`).
+`ConjugateTranspose`, `PseudoInverse`), the §3 two-array heads (`Dot`,
+`LinearSolve`, `Cross`, `LeastSquares`, `ListConvolve`, `ListCorrelate`, `Join`),
+the §4 transforms (`Fourier`, `InverseFourier`, `FourierDCT`, `FourierDST`), and
+the §5 matrix producers (`DiagonalMatrix`, `HankelMatrix`, `ToeplitzMatrix`,
+`VandermondeMatrix`).
+
+**No new opcode was needed for §4 or §5.** The framing below ("needs a
+result-dtype field", "wants a producing opcode closer to `A_NEW`") was
+conservative: `A_NDFN` rebuilds the whole call and stores *whatever* NDArray the
+interpreter delegate returns, so the runtime dtype and dimensions are the
+delegate's — the compiler tracks only `CT_ARRAY(elem, rank)` statically, to type
+*downstream* opcodes. A real→complex result is therefore one flag
+(`NdFnSpec.complex_result`, with a compile-facing Fourier wrapper that always
+builds `NDT_COMPLEX64`) and a rank-1→rank-2 producer is one rank rule
+(`rank_rule 5`), both inside `nd_fn_result`.
 
 ## Why this is a defect list and not a wish list
 
@@ -119,20 +132,41 @@ Still open here: **`Inner`, `Outer`** — their operands include function heads
 array × array opcode. **`Riffle`** is array + a scalar/list SEPARATOR, not two
 arrays, so it belongs to §6 below. **`MapThread`** is a callback (§7).
 
-## 4. Transforms — real in, complex out
+## 4. Closed 2026-08-03: transforms — real in, complex out
 
-| head | note |
-|---|---|
-| `Fourier`, `InverseFourier`, `FourierDCT`, `FourierDST` | `machine_path_ndarray` / `dct_machine_path_ndarray` in `src/fourier.c` are **`static`** and take `(nd, a, b, sign)` rather than the call. Needs a non-static entry point of the delegating shape; the result is a complex array from a real one, which `A_NDFN`'s "preserves the element type" rule does not currently express. |
+`Fourier`, `InverseFourier`, `FourierDCT`, `FourierDST` now lower through
+`ND_FNS` / `A_NDFN`.
 
-## 5. Matrix producers — rank 2 out of a rank-1 argument
+- `Fourier` / `InverseFourier` are **real→complex**. `NdFnSpec` gained a
+  `complex_result` flag so `nd_fn_result` promises `CT_ARRAY(CT_COMPLEX, rank)`.
+  Their delegate is a new non-static `fourier_compile` / `inverse_fourier_compile`
+  (`src/fourier.c`) that **always** builds `NDT_COMPLEX64` — the interpreter's
+  `machine_build_ndarray` collapses complex→real at run time via a tolerance
+  test, which a statically-typed register cannot track, so the compiled form
+  commits to complex (values identical; only the cosmetic collapse differs).
+- `FourierDCT` / `FourierDST` are **real→real** (deterministically, for a real
+  operand), so they delegate straight to `builtin_fourier_dct` / `_dst` and are
+  gated `NDF_REAL` (an int operand would mis-promise `CT_INT` for a real buffer;
+  a complex operand would break the real promise).
 
-| head |
-|---|
-| `DiagonalMatrix`, `HankelMatrix`, `ToeplitzMatrix`, `VandermondeMatrix` |
+## 5. Closed 2026-08-03: matrix producers — rank 2 out of a rank-1 argument
 
-`A_NDFN` delegates and *reuses* an operand's shape; these **produce** a shape.
-Wants a producing opcode, closer to `A_NEW` than to `A_NDFN`.
+`DiagonalMatrix`, `HankelMatrix`, `ToeplitzMatrix`, `VandermondeMatrix` now lower
+through `ND_FNS` / `A_NDFN` with a new `rank_rule 5` (rank 1 → rank 2). No
+producing opcode was needed: `A_NDFN` stores whatever NDArray the delegate
+returns, so the rank-2 shape is the interpreter builtin's at run time; only the
+static rank rule lives in the compiler. Gated `NDF_INT | NDF_REAL` (a complex
+operand keeps the interpreter's exact delist path). Single-vector form only
+(`H[v]`) — the two-vector `Hankel`/`Toeplitz[c, r]` form is a rank-1 × rank-1 →
+rank-2 `A_NDFN2` lowering, still open.
+
+The producers also gained a **direct rank-2 machine-buffer output** in the
+interpreter (`hk_build`/`tz_build`/`vm_build` in `src/linalg/`): an all-integer
+or all-machine-real numeric argument writes the flat buffer via `ndbuild_open`
+instead of building O(n²) `Expr` cells and offering them to the packer —
+bit-identical to the nested path, faster at the REPL too. `DiagonalMatrix`
+already did this. `VandermondeMatrix`'s integer path uses checked powers
+(`ci_powi_i64`) and falls back to the exact bignum path on overflow.
 
 ## 6. Extra argument is not an integer
 

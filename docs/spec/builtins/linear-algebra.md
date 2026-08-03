@@ -1647,7 +1647,9 @@ Generates a matrix with specified elements on a diagonal.
   [packed list](packed-arrays.md) written directly, without building the
   elements — which is what the exactness rule above buys: a matrix of two heads
   fits no buffer, and the exact zeros used to cost a `Real` diagonal 320×
-  against NumPy's `np.diag`.
+  against NumPy's `np.diag`. The single-vector form **compiles**
+  (`Compile[{{v, _Real, 1}}, DiagonalMatrix[v]]`, rank 1 → rank 2). See
+  [`packed-arrays.md`](packed-arrays.md#which-array-heads-compile).
 
 ```mathematica
 In[1]:= DiagonalMatrix[{a, b, c}]
@@ -1734,6 +1736,11 @@ processing.
 - The shared corner element `c_m` must equal `r_1`. If they differ, the
   column element `c_m` is used (the formula never reads `r_1`) and a
   `HankelMatrix::crs` warning is emitted; the matrix is still produced.
+- An all-integer or all-machine-real argument writes the rank-2 result buffer
+  directly (`ndbuild_open`) instead of building `m*n` `Expr` cells — packed out,
+  bit-identical to the boxed path. The single-vector form **compiles**:
+  `Compile[{{v, _Real, 1}}, HankelMatrix[v]]` (rank 1 → rank 2), delegating to
+  this builtin. See [`packed-arrays.md`](packed-arrays.md#which-array-heads-compile).
 
 **Diagnostics**:
 ```
@@ -1786,6 +1793,10 @@ and time series.
   column element `c_1` is used (the formula never reads `r_1`, which sits on
   the diagonal as `c_1`) and a `ToeplitzMatrix::crs` warning is emitted; the
   matrix is still produced.
+- An all-integer or all-machine-real argument writes the rank-2 result buffer
+  directly (`ndbuild_open`); the single-vector form **compiles**
+  (`Compile[{{v, _Real, 1}}, ToeplitzMatrix[v]]`, rank 1 → rank 2). See
+  [`packed-arrays.md`](packed-arrays.md#which-array-heads-compile).
 
 **Diagnostics**:
 ```
@@ -1833,6 +1844,13 @@ in computing moments in the monomial basis.
   recovers the coefficients `{a0, a1, ...}` of the polynomial
   `p(x) = a0 + a1 x + ...` through the points `{xi, bi}`. The determinant is the
   product of node differences `prod_{i<j} (xj - xi)`.
+- An all-integer or all-machine-real node list writes the rank-2 result buffer
+  directly. The integer path uses checked powers and falls back to the exact
+  bignum path on `int64` overflow, so `VandermondeMatrix[{2, 100}, 20]` is still
+  exact. (A *mixed* int+real list keeps its unpacked, two-head result, since the
+  `Power` cells of an integer node stay exact beside a real one.) The
+  single-vector form **compiles** (`Compile[{{v, _Real, 1}}, VandermondeMatrix[v]]`,
+  rank 1 → rank 2). See [`packed-arrays.md`](packed-arrays.md#which-array-heads-compile).
 
 **Diagnostics**:
 ```

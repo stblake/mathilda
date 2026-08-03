@@ -274,7 +274,6 @@ BASELINE = {
     # compiled form would delegate to a fast path that does not exist.  A LAPACK
     # path comes first, then a lowering.
     "RowReduce", "NullSpace",
-    "Fourier", "InverseFourier", "FourierDCT", "FourierDST",
     # ND_FNS entries whose extra argument is not an integer (a list, a real, or a
     # scalar separator), so the table's shape does not reach them yet.  Riffle is
     # array + SEPARATOR (a scalar or list), not two arrays, so A_NDFN2 does not
@@ -282,9 +281,6 @@ BASELINE = {
     "Riffle", "Partition", "PadLeft", "PadRight", "Append", "Prepend",
     "Catenate", "Extract", "Rescale",
     "ExponentialMovingAverage",
-    # Matrix PRODUCERS: the argument is a vector or a pair of integers and the
-    # result is rank 2.  Needs a producing opcode, not a delegating one.
-    "DiagonalMatrix", "HankelMatrix", "ToeplitzMatrix", "VandermondeMatrix",
     # A callback lowering, as Map / Select / Fold already have.
     "Scan", "MapAll", "MapAt", "MapIndexed", "MapThread", "SelectFirst",
     "NestWhile", "NestWhileList",
@@ -301,6 +297,12 @@ BASELINE = {
     # (A_STORE_B).  No such lowering yet: they moved here from EXEMPT because the
     # dtype that blocked them is no longer missing, only the lowering is.
     "Positive", "Negative", "NonNegative", "NonPositive",
+    # Boole: the CONVERSE bridge, a bool array -> an int64 one.  Joined pack.c's
+    # AWARE with the NDT_BOOL work; a compiled array form (bool -> A_STORE_I) is
+    # possible but likewise undone.  Its real call shape is Boole[boolArray],
+    # which the probe list cannot express (no _Boolean array shape), so the tool
+    # reports it at the real/int shapes it can — either way, no lowering yet.
+    "Boole",
 }
 
 

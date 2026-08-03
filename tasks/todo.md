@@ -1,51 +1,75 @@
-# Task: Boolean NDArray dtype + Compile support
+# Todo: Compile lowering for COMPILE_MISSING.md §4 (Fourier) + §5 (matrix producers)
 
-Full plan: `~/.claude/plans/let-s-extend-ndarray-to-memoized-stonebraker.md`
+Plan: /Users/user/.claude/plans/let-s-continue-with-out-quirky-eclipse.md
 
-## Plan (checklist)
+## Part A — §4 Fourier lowering
+- [x] `src/fourier.c`: add `force_complex` param to `machine_build_ndarray`; update 4 callers
+- [x] `src/fourier.c`: add `fourier_compile_core` + `fourier_compile` / `inverse_fourier_compile`
+- [x] `src/fourier.h`: declare the two compile entry points
+- [x] `src/compile/compile.c`: `#include ../fourier.h`; `NdFnSpec.complex_result`; `nd_fn_result` elem line; 4 Fourier `ND_FNS` rows
 
-- [x] **Phase 1** — `NDT_BOOL` storage dtype (`src/expr.h`, `src/ndarray.c`): the
-  ~13 `ndt_*` choke points, string↔enum, element→Expr → `True`/`False`,
-  `leaf_to_component`, constructor error/docstring. Numeric engines DECLINE bool
-  (delist to symbolic).
-- [x] **Phase 2** — auto-packing of `True`/`False` lists (`src/pack.c`: `PK_BOOL`).
-- [x] **Phase 3** — producers/consumers (gap C.1): sign predicates → packed bool
-  array (`ndint_sign_predicate`), `Boole` → int64, `AllTrue`/`AnyTrue`/`NoneTrue`
-  byte-scan (`funcprog.c`). `Boole` added to `pack.c` AWARE.
-- [x] **Phase 4** — `Compile[]` bool arrays: `SYM_Boolean`, argspec, boundary
-  marshalling, `A_LOAD_B`/`A_STORE_B` opcodes, `ct_elem_ndt`, `ct_is_elem`.
-- [x] **Phase 5** — tests, docs, audit baselines.
+## Part B — §5 producer lowering
+- [x] `src/compile/compile.c`: `nd_fn_result` `rank_rule 5`; 4 producer `ND_FNS` rows
+
+## Part C — §5 buffer producers (interpreter efficiency)
+- [x] `src/linalg/hankelmat.c`: `ndbuild_open` buffer branch in `hk_build`
+- [x] `src/linalg/toeplitzmat.c`: buffer branch in `tz_build`
+- [x] `src/linalg/vandermondemat.c`: buffer branch in `vm_build` (checked int power, overflow fallback)
+
+## Part D — audits, docs, changelog
+- [x] `tools/compile_coverage.py`: drop 8 heads from BASELINE (+ record pre-existing `Boole` gap)
+- [x] `COMPILE_MISSING.md`: close §4/§5, update count (35→32/239), record "no new opcode" insight
+- [x] `docs/spec/changelog/2026-08-03.md`: changelog entry
+- [x] `docs/spec/builtins/{packed-arrays,fourier-transforms,linear-algebra}.md` + `docs/design/compile.md` §8a.1
+
+## Part E — tests
+- [x] `tests/test_compile_transforms.c` (new) + `tests/CMakeLists.txt`
+- [x] producer packed-output correctness + Vandermonde overflow fallback
+
+## Verification
+- [x] `make` clean (C99); `make check-c99` green
+- [x] `make check-compile-coverage` green (8 target heads no longer gaps; `Boole` recorded)
+- [x] `make check-packed-aware` green
+- [x] 13 affected test suites pass, 0 FAILs (incl. new compile_transforms, existing producer/fourier/compile suites)
+- [x] valgrind: leak profile byte-identical to a pre-existing suite (macOS objc baseline) — zero new leaks
+- [x] `make check-array-exactness` green (343 probes, **0 MIXED**)
 
 ## Review
 
-**What shipped.** A `"bool"` NDArray dtype (`"Boolean"` alias), 1 byte/element,
-storable/printable/constructible/auto-packable. Sign predicates now emit packed
-bool arrays (closing performance.md §13 gap C.1); `Boole`/`AllTrue`/`AnyTrue`/
-`NoneTrue` consume them off the buffer. `Compile[]` takes/returns/indexes bool
-arrays and declares `_Boolean` scalars (which were internally `CT_BOOL` but had
-no argspec spelling until now).
+**What shipped.** The `COMPILE_MISSING.md §4` transforms (`Fourier`,
+`InverseFourier`, `FourierDCT`, `FourierDST`) and `§5` matrix producers
+(`DiagonalMatrix`, `HankelMatrix`, `ToeplitzMatrix`, `VandermondeMatrix`) now
+lower inside `Compile[]` and auto-compilation, closing their cliffs. The three
+non-`DiagonalMatrix` producers also gained a direct rank-2 machine-buffer output
+(REPL win too).
 
-**Two load-bearing design decisions.**
-1. *Bool is not numeric.* Arithmetic/transcendentals over a bool array return
-   `NULL` from every numeric engine and delist to the symbolic `List`
-   (`Sin[True]`, `True + True` unevaluated — Mathematica-faithful; mirrors the
-   compiler's existing "Bool is not numeric" `num_common` invariant).
-   `ndarray_int64_delist_retry` was broadened to also delist bool so Plus/Times/
-   Power thread correctly.
-2. *Bool producer results present as a `List`, not the input's presentation.* The
-   sign predicates have always answered with a `List`; `test_ndarray_functions.c`
-   pins it. So the result is a PACKED bool List (observably identical, now on a
-   buffer), unlike `Sin` which inherits its input's presentation. Same for `Boole`.
+**Key finding — no new opcode.** `A_NDFN` stores whatever NDArray the delegate
+returns; the compiler tracks only `CT_ARRAY(elem, rank)` statically. So §4 is one
+flag (`NdFnSpec.complex_result`, plus a Fourier wrapper that always builds
+`NDT_COMPLEX64`) and §5 is one rank rule (`rank_rule 5`), both in `nd_fn_result`.
+The speculative "producing opcode" / "result-dtype field" the doc called for were
+unnecessary.
 
-**Verification.** Clean build (`-std=c99 -O3`), `make check-c99` green.
-`check-compile-coverage` green (sign predicates moved EXEMPT→BASELINE — a bool
-lowering is now *possible*, only undone). `check-packed-aware` green
-(`Boole` added to AWARE). `check-array-exactness` green on the final binary
-(0 MIXED). 21+ test suites pass, including new bool cases in `test_ndarray.c`,
-`test_packed_list.c`, `test_compiledfunction.c`. `check-nd-surfaces` /
-`check-fastpath-sweep` deliberately NOT run (slow; per project guidance).
+**Two load-bearing subtleties.**
+1. *Fourier commits to complex.* `machine_build_ndarray` collapses complex→real
+   at run time by tolerance; a static register can't track that, so the compiled
+   wrapper never collapses. Values match; only a tiny-nonzero-imaginary case
+   differs (roundoff, not pinned by tests).
+2. *Vandermonde does not coerce.* Its `Power[node,e]` cells keep the node's head,
+   so a mixed int+real list stays unpacked (two heads). The buffer path is gated
+   to a *uniform* node head — stricter than Hankel/Toeplitz, which coerce via
+   `hk_cell`/`tz_cell`. Integer powers use `ci_powi_i64` and fall back to the
+   exact bignum path on overflow.
 
-**Deferred / non-goals (as agreed).** Comparison operators do not thread over
-arrays (not Listable in WL). No fused whole-array logical ops in Compile. No bool
-arithmetic. A Compile *array* lowering for the sign predicates is now possible but
-undone (tracked in `compile_coverage.py` BASELINE).
+**Also fixed (pre-existing).** `Boole` was on `AWARE` (from the bool-dtype
+commit) but neither lowered nor in `BASELINE`, so `check-compile-coverage` was
+already red before this work; recorded it in `BASELINE`.
+
+**Verification.** Clean `-std=c99 -O3` build; `check-c99`, `check-compile-coverage`
+(8 heads no longer gaps), `check-packed-aware` all green. 13 affected test suites
+pass (new `test_compile_transforms.c` + existing producer/fourier/compile suites).
+Valgrind leak profile byte-identical to a pre-existing suite → zero new leaks.
+`check-array-exactness` run separately.
+
+**Deferred (documented).** The two-vector `Hankel`/`Toeplitz[c, r]` forms
+(rank-1 × rank-1 → rank-2) want an `A_NDFN2` lowering, still in `COMPILE_MISSING.md`.

@@ -75,9 +75,63 @@ static Expr* hk_cell(const Expr* e, bool real) {
     return expr_copy((Expr*)e);
 }
 
+/* Every value a machine Integer (int64, not bignum) / machine-real-valued —
+ * the two cases the buffer fast path in hk_build can write directly. */
+static bool hk_all_machine_int(Expr* const* v, int64_t n) {
+    for (int64_t i = 0; i < n; i++)
+        if (!v[i] || v[i]->type != EXPR_INTEGER) return false;
+    return true;
+}
+static bool hk_all_machine_real(Expr* const* v, int64_t n) {
+    double d;
+    for (int64_t i = 0; i < n; i++)
+        if (!v[i] || !common_machine_real_value(v[i], &d)) return false;
+    return true;
+}
+
 static Expr* hk_build(int64_t m, int64_t n,
                       Expr* const* cvals, Expr* const* rvals,
                       bool integer_form, bool real) {
+    /* Buffer fast path — bit-identical to the nested build below (same cell
+     * formula, same machine-real contagion), it just writes the flat row-major
+     * machine buffer directly instead of allocating m*n Expr cells and offering
+     * them to the packer.  An all-integer or all-machine-real Hankel matrix is a
+     * uniform machine array; complex / symbolic / bignum entries fail both
+     * guards and take the nested path (where pack_offer packs or declines as it
+     * always has). */
+    bool all_int = integer_form ||
+        (!real && hk_all_machine_int(cvals, m) && (!rvals || hk_all_machine_int(rvals, n)));
+    bool all_real = real && hk_all_machine_real(cvals, m) &&
+        (!rvals || hk_all_machine_real(rvals, n));
+    if (all_int || all_real) {
+        int64_t dims[2] = { m, n };
+        void* raw = NULL;
+        Expr* packed = ndbuild_open(2, dims, all_int ? NDT_INT64 : NDT_FLOAT64, &raw);
+        if (packed) {
+            int64_t* bi = (int64_t*)raw;
+            double*  bd = (double*)raw;
+            for (int64_t i = 0; i < m; i++) {
+                for (int64_t j = 0; j < n; j++) {
+                    int64_t s = i + j + 1;  /* 1-based antidiagonal index */
+                    const Expr* el = NULL;
+                    if (!integer_form) {
+                        if (s <= m)      el = cvals[s - 1];
+                        else if (rvals)  el = rvals[s - m];
+                    }
+                    if (all_int) {
+                        bi[i * n + j] = integer_form ? (s <= m ? s : 0)
+                                      : el ? el->data.integer : 0;
+                    } else {
+                        double d = 0.0;
+                        if (el) common_machine_real_value(el, &d);
+                        bd[i * n + j] = d;
+                    }
+                }
+            }
+            return packed;
+        }
+    }
+
     Expr** rows = malloc(sizeof(Expr*) * (size_t)m);
     for (int64_t i = 0; i < m; i++) {
         Expr** cells = malloc(sizeof(Expr*) * (size_t)n);

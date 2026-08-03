@@ -30,6 +30,8 @@
 #include "eval.h"
 #include "ndlinalg.h"
 #include "sym_names.h"
+#include "checked_int.h"   /* ci_powi_i64 — exact integer powers, overflow flag */
+#include <math.h>          /* pow — matches power.c's real^integer branch */
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -89,6 +91,57 @@ static Expr* vm_build(int64_t n, int64_t k, Expr* const* nodes) {
     bool real = false;
     for (int64_t i = 0; i < n && !real; i++)
         if (nodes[i] && nodes[i]->type == EXPR_REAL) real = true;
+
+    /* Buffer fast path — bit-identical to the nested Power/eval/pack path below,
+     * but only for the two UNIFORM cases that path actually packs: all nodes
+     * Integer (exact integer powers -> an int64 buffer) or all nodes machine
+     * Real (pow(), matching power.c's real^integer branch -> a float64 buffer).
+     *
+     * The triggers are STRICTER than Hankel/Toeplitz's on purpose.  vm_entry
+     * copies each node into Power[node, e] WITHOUT the machine-real coercion
+     * hk_cell/tz_cell apply, so a MIXED list like {1, 2, 3.} keeps its Integer
+     * nodes' powers Integer beside the Real ones -- the nested path leaves that
+     * a mixed-head, UNPACKED List (VandermondeMatrix[{1,2,3.}] is
+     * {{1.,1,1},{1.,2,4},{1.,3.,9.}}), which no uniform buffer reproduces.
+     * Requiring every node to be the same numeric head keeps this exact.
+     * Rational / symbolic / complex nodes fail both guards -> nested path. */
+    bool all_int = true, all_real = true;
+    for (int64_t i = 0; i < n; i++) {
+        if (nodes[i]->type != EXPR_INTEGER) all_int = false;
+        if (nodes[i]->type != EXPR_REAL)    all_real = false;
+    }
+    if (all_int) {
+        int64_t dims[2] = { n, k };
+        void* raw = NULL;
+        Expr* packed = ndbuild_open(2, dims, NDT_INT64, &raw);
+        if (packed) {
+            int64_t* bi = (int64_t*)raw;
+            bool overflow = false;
+            for (int64_t i = 0; i < n && !overflow; i++) {
+                int64_t base = nodes[i]->data.integer;
+                for (int64_t j = 0; j < k; j++)
+                    if (ci_powi_i64(base, j, &bi[i * k + j])) { overflow = true; break; }
+            }
+            if (!overflow) return packed;
+            /* A power exceeded int64: abandon the buffer and fall through to the
+             * exact nested path, which promotes to a bignum (and then pack_offer
+             * declines, so the whole matrix stays exact). */
+            expr_free(packed);
+        }
+    } else if (all_real) {
+        int64_t dims[2] = { n, k };
+        void* raw = NULL;
+        Expr* packed = ndbuild_open(2, dims, NDT_FLOAT64, &raw);
+        if (packed) {
+            double* bd = (double*)raw;
+            for (int64_t i = 0; i < n; i++) {
+                double base = nodes[i]->data.real;
+                for (int64_t j = 0; j < k; j++)
+                    bd[i * k + j] = pow(base, (double)j);
+            }
+            return packed;
+        }
+    }
 
     Expr** rows = malloc(sizeof(Expr*) * (size_t)n);
     for (int64_t i = 0; i < n; i++) {

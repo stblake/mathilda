@@ -1540,6 +1540,13 @@ if(USE_ECM)
 endif()
 add_test(NAME compile_linalg_tests COMMAND compile_linalg_tests)
 
+add_executable(compile_transforms_tests test_compile_transforms.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(compile_transforms_tests PRIVATE ../src ../src/compile)
+if(USE_ECM)
+    add_dependencies(compile_transforms_tests build_ecm)
+endif()
+add_test(NAME compile_transforms_tests COMMAND compile_transforms_tests)
+
 add_executable(toeplitzmatrix_tests test_toeplitzmatrix.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(toeplitzmatrix_tests PRIVATE ../src)
 if(USE_ECM)

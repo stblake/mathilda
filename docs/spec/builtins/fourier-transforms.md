@@ -52,6 +52,14 @@ the transform reads the packed buffer directly (no `List` round trip) and
 returns an `NDArray`, complex or real-collapsed. `Head[Fourier[NDArray[…]]]` is
 `NDArray`.
 
+All four transforms **compile** (and auto-compile) over a machine array —
+`Compile[{{v, _Real, 1}}, Fourier[v]]` — delegating to this same fast path. One
+difference from the interpreter: a compiled `Fourier`/`InverseFourier` always
+answers a **complex** array, because a compiled register has a static element
+type and the run-time collapse-to-real above cannot be tracked (the values are
+identical). `FourierDCT`/`FourierDST` are real→real and gated to a real operand.
+See [`packed-arrays.md`](packed-arrays.md#which-array-heads-compile).
+
 ```
 In[1]:= Fourier[{1, 1, 2, 2, 1, 1, 0, 0}]
 Out[1]= {2.82843, -0.5 + 1.20711 I, 0., 0.5 - 0.207107 I, 0., 0.5 + 0.207107 I, 0., -0.5 - 1.20711 I}

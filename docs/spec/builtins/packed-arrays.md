@@ -487,7 +487,9 @@ point, so the compiled answer is bit-identical, rounding included:
 
 | shape | heads |
 |---|---|
-| array → array | `Reverse` `Sort` `Ordering` `Accumulate` `Flatten` `Transpose` `Diagonal` `Take` `Drop` `Differences` `Ratios` `Most` `Rest` `Clip` `RotateLeft` `RotateRight` `MovingAverage` `MovingMedian` `TakeLargest` `TakeSmallest` `Inverse` `Normalize` `MatrixPower` `ReverseSort` `ConjugateTranspose` `PseudoInverse` |
+| array → array | `Reverse` `Sort` `Ordering` `Accumulate` `Flatten` `Transpose` `Diagonal` `Take` `Drop` `Differences` `Ratios` `Most` `Rest` `Clip` `RotateLeft` `RotateRight` `MovingAverage` `MovingMedian` `TakeLargest` `TakeSmallest` `Inverse` `Normalize` `MatrixPower` `ReverseSort` `ConjugateTranspose` `PseudoInverse` `FourierDCT` `FourierDST` |
+| array → complex array | `Fourier` `InverseFourier` (real/int in, complex out) |
+| vector → matrix | `DiagonalMatrix` `HankelMatrix` `ToeplitzMatrix` `VandermondeMatrix` (rank 1 → rank 2) |
 | array → scalar | `Total` `Length` `Mean` `Median` `Variance` `StandardDeviation` `RootMeanSquare` `Max` `Min` `Tr` `Det` `MatrixRank` `Norm` |
 | two arrays → array | `Dot` (matrix) `LinearSolve` `Cross` `LeastSquares` `ListConvolve` `ListCorrelate` `Join` |
 | two arrays → scalar | `Dot` (vector·vector inner product) |
@@ -503,6 +505,13 @@ real or complex (an int matrix inverse is exact Rationals → declines);
 `LeastSquares`/`PseudoInverse` are real only; `ReverseSort`/`ConjugateTranspose`/
 `Join` preserve any dtype. `Dot` delegates through a BLAS-first path
 (`dgemm`/`dgemv`/`ddot`), so a compiled matrix product is as fast as the REPL's.
+`Fourier`/`InverseFourier` always answer a **complex** array (a compiled register
+has a static type, so the interpreter's data-dependent collapse-to-real on
+symmetric input is not available — the values are the same); `FourierDCT`/
+`FourierDST` are real→real and gated to a real operand. The matrix producers
+(`DiagonalMatrix`/`HankelMatrix`/`ToeplitzMatrix`/`VandermondeMatrix`) take a
+rank-1 int or real vector and answer a packed rank-2 matrix, delegating to the
+interpreter builtin, which fills the result buffer directly.
 
 Anything a delegated head cannot handle comes back as a materialised `List`,
 which the VM reads as "not a buffer" and hands to the interpreter — so

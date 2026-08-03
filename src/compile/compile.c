@@ -21,6 +21,7 @@
 #include "../list/transpose.h"   /* builtin_conjugate_transpose — §2 */
 #include "../sort.h"             /* builtin_reverse_sort — §2 */
 #include "../convolutions.h"     /* builtin_list_convolve / _correlate — §3 */
+#include "../fourier.h"          /* fourier_compile / inverse_fourier_compile, builtin_fourier_dct/_dst — §4 */
 #include "../ndarray_internal.h"  /* nd_parallel_for — threading the fused map loop */
 #include "../print.h"      /* expr_to_string — printing the node a bail choked on */
 #include "../sym_names.h" /* SYM_All / SYM_Span / SYM_List — Part subscript specs */
@@ -1104,8 +1105,11 @@ static Expr* fn_head_call(const char* head, int n) {
  *
  * `rank_rule`: 0 = same rank as the operand, 1 = rank 1 (Flatten), 2 = rank 2
  * in and out (Transpose), 3 = rank 2 in -> rank 1 out (Diagonal: matrix ->
- * vector), 4 = rank 1 in and out (Normalize).  Each entry preserves the element
- * type, restricted to the `elems` gate below (0 = any). */
+ * vector), 4 = rank 1 in and out (Normalize), 5 = rank 1 in -> rank 2 out
+ * (the matrix producers DiagonalMatrix / HankelMatrix / ToeplitzMatrix /
+ * VandermondeMatrix — COMPILE_MISSING.md §5).  Each entry preserves the element
+ * type, restricted to the `elems` gate below (0 = any), unless `complex_result`
+ * forces CT_COMPLEX (Fourier / InverseFourier: real in, complex out — §4). */
 /* Allowed OPERAND element types, one bit per CompileType element (CT_INT etc.).
  * `elems == 0` means "any element type" — the value for every pre-§2 row, so
  * their behaviour is unchanged.  A head whose fast path CONVERTS a dtype
@@ -1127,6 +1131,11 @@ typedef struct {
     bool int_result;   /* result is an int64 array regardless of the operand's
                         * element type (Ordering: a permutation is integer) */
     unsigned elems;    /* allowed operand element types (NDF_* bits); 0 = any */
+    bool complex_result; /* result is a complex array from a REAL/INT operand
+                          * (Fourier / InverseFourier: real in, complex out).
+                          * The delegate must ALWAYS return NDT_COMPLEX64 (its
+                          * fourier_compile wrapper does) so the buffer matches
+                          * the CT_COMPLEX register the compiler promises here. */
 } NdFnSpec;
 
 /* ndstruct_rotate / _head_tail / _take_extreme take a second C-level argument
@@ -1259,6 +1268,33 @@ static const NdFnSpec ND_FNS[] = {
     { "ReverseSort",        builtin_reverse_sort,         0, 0, false, NDF_INT | NDF_REAL },
     { "ConjugateTranspose", builtin_conjugate_transpose,  0, 2, false, NDF_INT | NDF_REAL | NDF_CPLX },
     { "PseudoInverse",      nd_pseudoinverse,             0, 2, false, NDF_REAL },
+    /* COMPILE_MISSING.md §4: the transforms.  Fourier / InverseFourier are
+     * real-in complex-out — the ONLY heads that need complex_result (their
+     * fourier_compile wrapper always builds NDT_COMPLEX64 so the buffer matches
+     * the CT_COMPLEX promise; the interpreter's data-dependent real-collapse is
+     * not statically typeable).  rank_rule 0 preserves rank, so 1-D and n-D FFT
+     * both lower.  FourierDCT / FourierDST are real->real (deterministically for
+     * a real operand), so they delegate straight to their builtins and are gated
+     * NDF_REAL — an int operand would mis-promise CT_INT for a real buffer, a
+     * complex operand would break the real result promise. */
+    { "Fourier",            fourier_compile,          0, 0, false, NDF_INT | NDF_REAL | NDF_CPLX, true },
+    { "InverseFourier",     inverse_fourier_compile,  0, 0, false, NDF_INT | NDF_REAL | NDF_CPLX, true },
+    { "FourierDCT",         builtin_fourier_dct,      0, 0, false, NDF_REAL },
+    { "FourierDST",         builtin_fourier_dst,      0, 0, false, NDF_REAL },
+    /* COMPILE_MISSING.md §5: the matrix producers.  rank_rule 5 = rank 1 -> rank
+     * 2; the delegate rebuilds H[ndarray] and the interpreter builtin returns a
+     * packed rank-2 NDArray (DiagonalMatrix fills its buffer directly; Hankel /
+     * Toeplitz / Vandermonde now do too — see their ndbuild_open branch).  This
+     * needs no producing opcode: A_NDFN already stores whatever NDArray the
+     * delegate returns, so the runtime shape is the delegate's; only the STATIC
+     * rank+element rule lives here.  Gated NDF_INT|NDF_REAL: a complex operand
+     * keeps the interpreter's exact delist path.  Single-vector form only (what
+     * the coverage probe H[v] tests); the two-vector Hankel/Toeplitz[c, r] form
+     * is a rank-1 x rank-1 -> rank-2 A_NDFN2 lowering, not done here. */
+    { "DiagonalMatrix",     builtin_diagonalmatrix,    0, 5, false, NDF_INT | NDF_REAL },
+    { "HankelMatrix",       builtin_hankelmatrix,      0, 5, false, NDF_INT | NDF_REAL },
+    { "ToeplitzMatrix",     builtin_toeplitzmatrix,    0, 5, false, NDF_INT | NDF_REAL },
+    { "VandermondeMatrix",  builtin_vandermondematrix, 0, 5, false, NDF_INT | NDF_REAL },
 };
 
 /* ---- delegated array -> scalar reductions ---------------------------------
@@ -1350,18 +1386,23 @@ static const NdFnSpec* nd_fn_lookup(const char* h, size_t na) {
  * `elems` (when non-zero) gates the operand's element type — a head is declined
  * for a dtype its fast path would convert, since A_NDFN cannot check the result
  * dtype against the promise.  `int_result` forces CT_INT (Ordering returns an
- * int64 permutation whatever the input dtype); otherwise the operand's element
- * type is preserved.  rank_rule: 0 = same rank, 1 = rank 1, 2 = rank 2 in/out,
- * 3 = rank 2 -> rank 1 (Diagonal), 4 = rank 1 in/out (Normalize). */
+ * int64 permutation whatever the input dtype); complex_result forces CT_COMPLEX
+ * (Fourier: real in, complex out); otherwise the operand's element type is
+ * preserved.  rank_rule: 0 = same rank, 1 = rank 1, 2 = rank 2 in/out,
+ * 3 = rank 2 -> rank 1 (Diagonal), 4 = rank 1 in/out (Normalize),
+ * 5 = rank 1 -> rank 2 (matrix producers). */
 static CompileType nd_fn_result(const NdFnSpec* s, CompileType ta) {
     if (!CT_IS_ARRAY(ta)) return CT_ERR;
     if (s->elems && !((s->elems >> (unsigned)CT_ELEM(ta)) & 1u)) return CT_ERR;  /* operand gate */
     int rank = CT_RANK(ta);
-    CompileType elem = s->int_result ? CT_INT : CT_ELEM(ta);
+    CompileType elem = s->complex_result ? CT_COMPLEX
+                     : s->int_result     ? CT_INT
+                     : CT_ELEM(ta);
     if (s->rank_rule == 1) return CT_ARRAY(elem, 1);
     if (s->rank_rule == 2) return rank == 2 ? CT_ARRAY(elem, 2) : CT_ERR;
     if (s->rank_rule == 3) return rank == 2 ? CT_ARRAY(elem, 1) : CT_ERR;  /* Diagonal */
     if (s->rank_rule == 4) return rank == 1 ? CT_ARRAY(elem, 1) : CT_ERR;  /* Normalize */
+    if (s->rank_rule == 5) return rank == 1 ? CT_ARRAY(elem, 2) : CT_ERR;  /* matrix producers */
     return CT_ARRAY(elem, rank);
 }
 
